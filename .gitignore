@@ -8,3 +8,6 @@ dist/
 .sites-runtime/
 __pycache__/
 *.pyc
+数据备份/
+*.shiyepwa
+*.shiyebackup

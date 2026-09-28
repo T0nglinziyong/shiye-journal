@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
+    "start:local": "node server/server.mjs",
     "build": "vite build && node scripts/precache.mjs",
     "test": "node --test tests/*.test.js",
     "test:ui": "npm run build && node tests/ui-smoke.mjs"

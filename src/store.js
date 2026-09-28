@@ -1,6 +1,19 @@
 const DB='shiye-pwa-full-v1';
 const STORES=['assets','blobs','series','projects','meta','trash'];
 let connection;
+const CONFIG_KEY='shiye-data-server-v1';
+let backend;
+export function storageConfig(){try{return JSON.parse(localStorage.getItem(CONFIG_KEY)||'null');}catch{return null;}}
+export function setStorageConfig(config){if(config)localStorage.setItem(CONFIG_KEY,JSON.stringify(config));else localStorage.removeItem(CONFIG_KEY);backend=undefined;}
+export async function storageMode(){return (await resolveBackend())?.url?'server':'browser';}
+async function resolveBackend(){
+  if(backend)return backend;
+  const config=storageConfig();
+  if(config?.url){const url=new URL(config.url);if(url.protocol!=='https:'&&!['localhost','127.0.0.1','[::1]'].includes(url.hostname))throw Error('远程数据地址必须使用 HTTPS');const candidate={url:url.origin,token:config.token||''},health=await serverRequest('/api/health',{backend:candidate});if(health.server!=='shiye-local')throw Error('该地址不是拾页数据服务');await serverRequest('/api/store/meta',{backend:candidate});return backend=candidate;}
+  try{const r=await fetch('/api/health',{cache:'no-store'});if(r.ok&&(await r.json()).server==='shiye-local')return backend={url:location.origin,token:''};}catch{}
+  return backend={};
+}
+async function serverRequest(path,{backend:target,method='GET',data}={}){const b=target||await resolveBackend(),r=await fetch(b.url+path,{method,headers:{...(b.token?{Authorization:`Bearer ${b.token}`}:{ }),...(data?{'Content-Type':'application/json'}:{})},body:data?JSON.stringify(data):undefined,cache:'no-store'});let result;try{result=await r.json();}catch{throw Error('数据服务没有返回有效 JSON');}if(!r.ok)throw Error(result.error||`数据服务 HTTP ${r.status}`);return result;}
 export async function database(){
   if(connection)return connection;
   connection=new Promise((resolve,reject)=>{
@@ -9,12 +22,15 @@ export async function database(){
     req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);
   });return connection;
 }
-export async function all(name){const db=await database();return new Promise((resolve,reject)=>{const r=db.transaction(name).objectStore(name).getAll();r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});}
-export async function get(name,id){const db=await database();return new Promise((resolve,reject)=>{const r=db.transaction(name).objectStore(name).get(id);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});}
-export async function put(name,item){const db=await database();return new Promise((resolve,reject)=>{const tx=db.transaction(name,'readwrite');tx.objectStore(name).put(item);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);});}
-export async function remove(name,id){const db=await database();return new Promise((resolve,reject)=>{const tx=db.transaction(name,'readwrite');tx.objectStore(name).delete(id);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);});}
-export async function transaction(names,fn){const db=await database();return new Promise((resolve,reject)=>{const tx=db.transaction(names,'readwrite');try{fn(tx);}catch(e){tx.abort();reject(e);return;}tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);});}
+async function localAll(name){const db=await database();return new Promise((resolve,reject)=>{const r=db.transaction(name).objectStore(name).getAll();r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});}
+export async function all(name){if((await resolveBackend()).url)return Promise.all((await serverRequest(`/api/store/${name}`)).map(decodeItem.bind(null,name)));return localAll(name);}
+export async function get(name,id){if((await resolveBackend()).url){try{return await decodeItem(name,await serverRequest(`/api/store/${name}/${encodeURIComponent(id)}`));}catch(e){if(e.message==='不存在')return undefined;throw e;}}const db=await database();return new Promise((resolve,reject)=>{const r=db.transaction(name).objectStore(name).get(id);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});}
+export async function put(name,item){if((await resolveBackend()).url)return transaction([name],tx=>tx.objectStore(name).put(item));const db=await database();return new Promise((resolve,reject)=>{const tx=db.transaction(name,'readwrite');tx.objectStore(name).put(item);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);});}
+export async function remove(name,id){if((await resolveBackend()).url)return transaction([name],tx=>tx.objectStore(name).delete(id));const db=await database();return new Promise((resolve,reject)=>{const tx=db.transaction(name,'readwrite');tx.objectStore(name).delete(id);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);});}
+export async function transaction(names,fn){if((await resolveBackend()).url){const operations=[],tx={objectStore(name){if(!names.includes(name))throw Error('此表未加入事务');return {put:item=>operations.push({action:'put',store:name,item}),delete:id=>operations.push({action:'delete',store:name,id}),clear:()=>operations.push({action:'clear',store:name})};}};fn(tx);for(const op of operations)if(op.store==='blobs'&&op.action==='put')op.item={...op.item,data:await toBase64(op.item.data)};await serverRequest('/api/transaction',{method:'POST',data:{operations}});return;}const db=await database();return new Promise((resolve,reject)=>{const tx=db.transaction(names,'readwrite');try{fn(tx);}catch(e){tx.abort();reject(e);return;}tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);});}
 const toBase64=blob=>new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=()=>reject(r.error);r.readAsDataURL(blob);});
 function fromBase64(value){const [prefix,body]=value.split(',');const type=/data:([^;]+)/.exec(prefix)?.[1]||'application/octet-stream';const b=atob(body);const arr=new Uint8Array(b.length);for(let i=0;i<b.length;i++)arr[i]=b.charCodeAt(i);return new Blob([arr],{type});}
+async function decodeItem(name,item){return name==='blobs'?{...item,data:fromBase64(item.data)}:item;}
+export async function migrateBrowserData(){const target=await resolveBackend();if(!target.url)throw Error('请先连接数据服务');const stores={};for(const name of STORES)stores[name]=await localAll(name);stores.blobs=await Promise.all(stores.blobs.map(async x=>({...x,data:await toBase64(x.data)})));await serverRequest('/api/migrate',{method:'POST',data:{format:'shiye-pwa',version:1,stores}});return Object.fromEntries(STORES.map(name=>[name,stores[name].length]));}
 export async function createBackup(){const data={format:'shiye-pwa',version:1,createdAt:new Date().toISOString(),stores:{}};for(const name of STORES)data.stores[name]=await all(name);data.stores.blobs=await Promise.all(data.stores.blobs.map(async x=>({...x,data:await toBase64(x.data)})));return new Blob([JSON.stringify(data)],{type:'application/json'});}
 export async function restoreBackup(file){if(file.size>1024*1024*1024)throw Error('备份超过 1 GB，请在电脑端转换或分批导入');const data=JSON.parse(await file.text());if(data.format!=='shiye-pwa'||data.version!==1||!data.stores||STORES.some(x=>!Array.isArray(data.stores[x])))throw Error('不是拾页 PWA 完整备份');const values={...data.stores,blobs:data.stores.blobs.map(x=>({...x,data:fromBase64(x.data)}))};await transaction(STORES,tx=>{for(const name of STORES){tx.objectStore(name).clear();for(const item of values[name])tx.objectStore(name).put(item);}});}
