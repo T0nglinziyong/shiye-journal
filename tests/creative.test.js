@@ -1,0 +1,13 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {draft} from '../src/domain.js';import {applyToolCalls} from '../src/creative.js';
+const asset={id:'a',title:'贴纸',physicalWidthMM:20,physicalHeightMM:30,supply:{quantity:1}};
+test('valid prefix survives a malformed later tool',()=>{const d=draft();const result=applyToolCalls({tools:[{name:'place_materials',arguments:{items:[{asset:'m1',x:.5,y:.5}]}},{name:'upsert_text',arguments:{items:[{key:'t1',content:'今日有一阵温柔的风',width:.4}]}},{name:'upsert_primitives',arguments:{items:[{key:'bad',kind:'ellipse',fill:'red'}]}}]},d,[asset],{m1:'a'});assert.deepEqual(result.results.map(x=>x.ok),[true,true,false]);assert.equal(result.draft.items.length,1);assert.equal(result.draft.textBlocks[0].content,'今日有一阵温柔的风');assert.equal(result.draft.primitives.length,0);});
+test('model cannot set physical width or duplicate a unique material',()=>{const d=draft();const result=applyToolCalls({tools:[{name:'place_materials',arguments:{items:[{asset:'m1',x:.3,y:.5,width:800},{asset:'m1',x:.7,y:.5}]}}]},d,[asset],{m1:'a'});assert.equal(result.draft.items.length,1);assert.ok(Math.abs(result.draft.items[0].width-20/297*1000)<.001);});
+test('malformed later JSON does not roll back valid first call',()=>{const result=applyToolCalls({tools:[{name:'upsert_text',arguments:'{"items":[{"key":"t1","content":"一段正文","width":0.5}]}'},{name:'upsert_primitives',arguments:'{oops'}]},draft(),[]);assert.deepEqual(result.results.map(x=>x.ok),[true,false]);assert.equal(result.draft.textBlocks.length,1);});
+test('rectangular cut uses source millimetres and rejects tiny pieces',()=>{const first=applyToolCalls({tools:[{name:'place_materials',arguments:{items:[{asset:'m1',piece:'p1',x:.5,y:.5}]}}]},draft(),[asset],{m1:'a'}).draft;
+  const good=applyToolCalls({tools:[{name:'edit_materials',arguments:{items:[{piece:'p1',operations:[{type:'rectangularCut',cropRect:{x:.1,y:.1,width:.5,height:.6}}]}]}}]},first,[asset]);
+  assert.equal(good.results[0].ok,true);assert.ok(Math.abs(good.draft.items[0].width-10/297*1000)<.001);
+  assert.equal(good.draft.items[0].cropRect.width,.5);
+  const bad=applyToolCalls({tools:[{name:'edit_materials',arguments:{items:[{piece:'p1',operations:[{type:'rectangularCut',cropRect:{x:0,y:0,width:.1,height:.1}}]}]}}]},good.draft,[asset]);
+  assert.equal(bad.results[0].ok,false);assert.equal(bad.draft.items[0].cropRect.width,.5);
+});
