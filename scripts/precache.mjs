@@ -1,0 +1,9 @@
+import {readdir,readFile,writeFile} from 'node:fs/promises';
+import {join,relative} from 'node:path';
+import {createHash} from 'node:crypto';
+const root=new URL('../dist/',import.meta.url).pathname;
+async function files(dir){let out=[];for(const entry of await readdir(dir,{withFileTypes:true})){const path=join(dir,entry.name);if(entry.isDirectory())out.push(...await files(path));else out.push(path);}return out;}
+const list=(await files(root)).filter(x=>!x.endsWith('/sw.js')&&!/\/(starter-styles|style-expansion|cece|sample)\//.test(x)).map(x=>'/'+relative(root,x).replaceAll('\\','/'));
+const hash=createHash('sha256').update(list.join('|')).digest('hex').slice(0,12);
+const source=await readFile(join(root,'sw.js'),'utf8');
+await writeFile(join(root,'sw.js'),source.replace('__BUILD_ID__',hash).replace('__ASSETS__',JSON.stringify(['/',...list])));
