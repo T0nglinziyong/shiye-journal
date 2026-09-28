@@ -1,0 +1,8 @@
+.canvas-page.pen .ink-layer { pointer-events: auto; z-index: 10000; }
+.muted { color: #718073; font-size: 14px; line-height: 1.5; }
+.paper-correction { margin: 14px 0; padding: 12px; border: 1px solid #cfddd2; border-radius: 12px; background: #f8fbf8; }
+.paper-correction p { margin: 0 0 10px; }
+.paper-corner-overlay { position: absolute; z-index: 5; pointer-events: none; touch-action: none; }
+.paper-corner-overlay svg { position: absolute; width: 100%; height: 100%; overflow: visible; }
+.paper-handle { position: absolute; width: 32px; height: 32px; border-radius: 50%; transform: translate(-50%, -50%); border: 2px solid white; background: #277454; color: white; font-weight: 700; pointer-events: auto; touch-action: none; box-shadow: 0 1px 6px #183a2a88; }
+.corrected-preview { display: block; width: min(100%, 180px); max-height: 180px; object-fit: contain; margin: 8px auto 0; border: 1px solid #cbd9cd; }
