@@ -1,0 +1,10 @@
+node_modules/
+node_modules
+dist/
+.vercel/
+.env
+.env.*
+!.env.example
+.sites-runtime/
+__pycache__/
+*.pyc

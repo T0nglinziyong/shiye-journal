@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="zh-CN"><head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#fffefa"><meta name="apple-mobile-web-app-capable" content="yes">
+  <link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/icon-192.png">
+  <title>拾页 · 本地创作</title><meta name="description" content="本地保存真实手账素材与可编辑作品">
+</head><body>
+  <div id="app">
+    <header class="topbar"><div class="brand"><b>♧</b><div><strong>拾页</strong><small>COLLECT. COMPOSE.</small></div></div><nav class="main-nav" aria-label="主导航">
+      <button data-route="library"><span aria-hidden="true">▣</span> 素材</button><button data-route="matching"><span aria-hidden="true">✦</span> 搭配</button><button data-route="works"><span aria-hidden="true">▤</span> 作品</button>
+    </nav><div class="top-actions"><button type="button" id="top-basket" aria-label="本次创作">本次创作 <span id="basket-count">0</span></button><button type="button" id="top-settings" aria-label="设置">⚙</button><span id="save-state" class="save-state">本机存储</span></div></header>
+    <main id="view" aria-live="polite"></main>
+    <div id="toast" role="status" aria-live="polite"></div>
+  </div>
+  <dialog id="modal"><form method="dialog"><button class="modal-close" aria-label="关闭">×</button><div id="modal-body"></div></form></dialog>
+  <input id="file-input" type="file" accept="image/*" multiple hidden><input id="backup-input" type="file" accept=".shiyepwa,.json" hidden>
+  <script type="module" src="/src/app.js"></script>
+</body></html>
