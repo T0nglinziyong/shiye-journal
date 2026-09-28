@@ -13,7 +13,7 @@ export function normalizeCalls(raw){
   if(!Array.isArray(list))throw Error('未找到 tools / tool_calls 数组');
   return list.map(x=>({name:x.name||x.function?.name,arguments:x.arguments??x.function?.arguments??{},id:x.id||uid()}));
 }
-function executeOne(d,assets,aliases,call){
+function executeOne(d,assets,aliases,call,options={}){
   const a=call.arguments||{},name=call.name;
   if(name==='place_materials'){
     if(!Array.isArray(a.items)||!a.items.length||a.items.length>12)throw Error('items 应含 1–12 件素材');
@@ -33,6 +33,8 @@ function executeOne(d,assets,aliases,call){
       if(!Array.isArray(entry.operations)||entry.operations.length!==1)throw Error('当前仅支持单次直线矩形裁切');
       const operation=entry.operations[0],source=assets.find(x=>x.id===item.assetID);
       if(!source)throw Error('缺少原素材');
+      const permission=options.assetProcessing?.[source.id]||options.processing;
+      if(operation.type==='rectangularCut'&&permission==='保留完整')throw Error(source.title+' 设置为保留完整，不允许裁切');
       if(operation.type==='useWhole'){
         item.cropRect=null;item.width=source.physicalWidthMM/(d.physicalPageHeightMM||297)*d.canvas.height;
         item.height=source.physicalHeightMM/(d.physicalPageHeightMM||297)*d.canvas.height;
@@ -40,6 +42,7 @@ function executeOne(d,assets,aliases,call){
         const rect=operation.cropRectMM?{x:operation.cropRectMM.x/source.physicalWidthMM,y:operation.cropRectMM.y/source.physicalHeightMM,width:operation.cropRectMM.width/source.physicalWidthMM,height:operation.cropRectMM.height/source.physicalHeightMM}:operation.cropRect;
         if(!rect||[rect.x,rect.y,rect.width,rect.height].some(v=>!Number.isFinite(v))||rect.x<0||rect.y<0||rect.width<=0||rect.height<=0||rect.x+rect.width>1.00001||rect.y+rect.height>1.00001)throw Error('裁片必须在原素材范围内');
         if(rect.width*source.physicalWidthMM<6||rect.height*source.physicalHeightMM<6)throw Error('裁片短边不得小于 6 mm');
+        if(permission==='少量裁剪'&&rect.width*rect.height<.6)throw Error(source.title+' 仅允许少量裁剪，须保留至少 60% 面积');
         item.cropRect=rect;item.width=rect.width*source.physicalWidthMM/(d.physicalPageHeightMM||297)*d.canvas.height;
         item.height=rect.height*source.physicalHeightMM/(d.physicalPageHeightMM||297)*d.canvas.height;
       }else throw Error('当前未实现 '+operation.type+' 的图像加工');
@@ -63,12 +66,12 @@ function executeOne(d,assets,aliases,call){
   if(name==='set_paper'){if(a.color&&!color(a.color))throw Error('纸张颜色不合法');if(a.color)d.paperColor=a.color;if(a.pattern)d.paperPattern=a.pattern==='lined'?'lines':a.pattern;d.compositionIntent=a.intent||d.compositionIntent;return '已更新纸张';}
   if(name==='move_elements'){if(!Array.isArray(a.items)||!a.items.length)throw Error('缺少移动条目');for(const entry of a.items){const target=keyIndex(d).get(entry.key);if(!target)throw Error('图层不存在：'+entry.key);if(entry.x!==undefined)target.x=position(entry.x,d.canvas.width);if(entry.y!==undefined)target.y=position(entry.y,d.canvas.height);if(entry.rotation!==undefined)target.rotation=number(entry.rotation,'旋转',-180,180);if(entry.z!==undefined)target.zIndex=number(entry.z,'图层',-1000,1000);if(target.generationBaseline){target.generationBaseline.x=target.x;target.generationBaseline.y=target.y;}}const errors=validatePhysicalDraft(d,assets);if(errors.length)throw Error(errors[0]);return '已移动图层';}
   if(name==='delete_elements'){if(!Array.isArray(a.keys))throw Error('缺少图层编号');for(const key of a.keys){const target=keyIndex(d).get(key);if(!target)throw Error('图层不存在：'+key);for(const field of ['items','primitives','textBlocks'])d[field]=d[field].filter(x=>x!==target);}return '已移除图层';}
-  if(name==='finish_design'){if(!d.textBlocks.some(x=>x.content?.trim()))throw Error('完成前需要加入可读的文字内容');const errors=validatePhysicalDraft(d,assets);if(errors.length)throw Error(errors[0]);d.agentRun={status:'finished',note:a.summary||'',turns:1};return '方案完成';}
+  if(name==='finish_design'){if(!d.textBlocks.some(x=>x.content?.trim()))throw Error('完成前需要加入可读的文字内容');for(const [id,required] of Object.entries(options.materialUseRequired||{})){if(!required)continue;const item=d.items.find(i=>i.assetID===id&&!i.isParked);if(!item)throw Error('必做用法的素材尚未放入页面：'+(assets.find(x=>x.id===id)?.title||id));const hint=options.materialUseHints?.[id];if(['截段固定','取一块真实区域'].includes(hint)&&!item.cropRect)throw Error('必做用法尚未裁切：'+hint);if(hint==='完整保留'&&item.cropRect)throw Error('必做用法要求完整保留：'+(assets.find(x=>x.id===id)?.title||id));}const errors=validatePhysicalDraft(d,assets);if(errors.length)throw Error(errors[0]);d.agentRun={status:'finished',note:a.summary||'',turns:1};return '方案完成';}
   throw Error(`暂不支持 ${name}；之前成功的调用已保留`);
 }
-export function applyToolCalls(source,base,assets,aliases={}){
+export function applyToolCalls(source,base,assets,aliases={},options={}){
   const calls=normalizeCalls(source),draft=structuredClone(base),results=[];
-  for(const call of calls){const snapshot=structuredClone(draft);try{if(typeof call.arguments==='string')call.arguments=JSON.parse(call.arguments);const detail=executeOne(draft,assets,aliases,call);results.push({id:call.id,name:call.name,ok:true,detail});}
+  for(const call of calls){const snapshot=structuredClone(draft);try{if(typeof call.arguments==='string')call.arguments=JSON.parse(call.arguments);const detail=executeOne(draft,assets,aliases,call,options);results.push({id:call.id,name:call.name,ok:true,detail});}
     catch(error){Object.keys(draft).forEach(k=>delete draft[k]);Object.assign(draft,snapshot);results.push({id:call.id,name:call.name,ok:false,detail:error.message});}}
   return {draft,results,committed:results.some(x=>x.ok)};
 }

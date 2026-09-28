@@ -35,7 +35,7 @@ function mountLibrary(c){
   if(!parity.selection&&state.basket.length){const tray=document.createElement('div');tray.className='swift-tray';tray.innerHTML=`<strong>已选 ${state.basket.length} · 核心 ${state.matchCore?1:0}</strong><div class="tray-items">${state.basket.map(id=>{const a=state.assets.find(x=>x.id===id);return a?`<span>${esc(a.title)}</span>`:'';}).join('')}</div>`;tray.append(button('去搭配',()=>route('matching'),'primary'));view.append(tray);}
   if(!parity.selection)return;
   const tray=document.createElement('div');tray.className='swift-tray manage';tray.innerHTML=`<strong>本次选中 ${parity.selected.size} 件</strong>`;
-  tray.append(button('全选当前结果',()=>{view.querySelectorAll('.card[data-act="detail"]').forEach(card=>parity.selected.add(card.dataset.id));syncLibrarySelection(view);}));
+  tray.append(button('全选当前结果',()=>{view.querySelectorAll('.card[data-act="detail"]:not([hidden])').forEach(card=>parity.selected.add(card.dataset.id));syncLibrarySelection(view);}));
   tray.append(button('清空选择',()=>{parity.selected.clear();syncLibrarySelection(view);}));
   tray.append(button('加入搭配',()=>{state.basket=[...new Set([...state.basket,...parity.selected])];parity.selected.clear();parity.selection=false;render();toast('已添加，在搭配页面中查看');},'primary'));
   tray.append(button('加入系列',()=>seriesPicker(c)));

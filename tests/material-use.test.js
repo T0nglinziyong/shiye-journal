@@ -1,0 +1,21 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {draft} from '../src/domain.js';
+import {applyToolCalls} from '../src/creative.js';
+const paper={id:'paper',title:'纸张',physicalWidthMM:80,physicalHeightMM:100,supply:{quantity:1}};
+const invoke=(base,name,args,options={})=>applyToolCalls({tools:[{name,arguments:args}]},base,[paper],{m1:'paper'},options);
+test('per-material processing and required use constrain the completed design',()=>{
+  const placed=invoke(draft(),'place_materials',{items:[{asset:'m1',piece:'p1',x:.5,y:.5}]}).draft;
+  const cut={items:[{piece:'p1',operations:[{type:'rectangularCut',cropRect:{x:.1,y:.1,width:.7,height:.7}}]}]};
+  const blocked=invoke(placed,'edit_materials',cut,{processing:'自由拆解',assetProcessing:{paper:'保留完整'}});
+  assert.equal(blocked.results[0].ok,false);
+  const light=invoke(placed,'edit_materials',cut,{assetProcessing:{paper:'少量裁剪'}});
+  assert.equal(light.results[0].ok,false);
+  const allowed=invoke(placed,'edit_materials',cut,{assetProcessing:{paper:'自由拆解'}});
+  assert.equal(allowed.results[0].ok,true);
+  const text=invoke(placed,'upsert_text',{items:[{key:'body',content:'写在一页纸上',width:.4}]}).draft;
+  const required={materialUseRequired:{paper:true},materialUseHints:{paper:'取一块真实区域'}};
+  assert.equal(invoke(text,'finish_design',{},required).results[0].ok,false);
+  const completed=invoke(allowed.draft,'upsert_text',{items:[{key:'body',content:'写在一页纸上',width:.4}]}).draft;
+  assert.equal(invoke(completed,'finish_design',{},required).results[0].ok,true);
+});
