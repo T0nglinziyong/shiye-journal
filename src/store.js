@@ -1,4 +1,5 @@
 import {openDB,unwrap} from 'idb';
+import {createStorageRouter} from './storage-router.js';
 import {cloudEnabled} from './cloud-session.js';
 import {cloudAll,cloudGet,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudPreview,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudFlushProjects,cloudProjectDocument} from './cloud-store.js';
 // Exceptional destructive imports require an acknowledged atomic cloud commit.
@@ -20,7 +21,7 @@ let sameOriginServer=false;
 export function storageConfig(){try{return JSON.parse(localStorage.getItem(CONFIG_KEY)||'null');}catch{return null;}}
 export function setStorageConfig(config){if(config)localStorage.setItem(CONFIG_KEY,JSON.stringify(config));else localStorage.removeItem(CONFIG_KEY);backend=undefined;sameOriginServer=false;}
 export function isSameOriginServer(){return sameOriginServer;}
-export async function storageMode(){return cloudEnabled?'cloud':(await resolveBackend())?.url?'server':'browser';}
+export async function storageMode(){return storageRouter.mode();}
 async function resolveBackend(){
   if(cloudEnabled)return {cloud:true};
   if(backend)return backend;
@@ -39,13 +40,33 @@ async function localDatabase(){
 // Preserve the public raw-IDB contract for existing integrations.
 export async function database(){return unwrap(await localDatabase());}
 async function localAll(name){return (await localDatabase()).getAll(name);}
-export async function all(name){if(cloudEnabled)return cloudAll(name);if((await resolveBackend()).url)return Promise.all((await serverRequest(`/api/store/${name}`)).map(decodeItem.bind(null,name)));return localAll(name);}
-export async function get(name,id){if(cloudEnabled)return cloudGet(name,id);if((await resolveBackend()).url){try{return await decodeItem(name,await serverRequest(`/api/store/${name}/${encodeURIComponent(id)}`));}catch(e){if(e.message==='不存在')return undefined;throw e;}}return (await localDatabase()).get(name,id);}
+async function serverAll(name){return Promise.all((await serverRequest(`/api/store/${name}`)).map(decodeItem.bind(null,name)));}
+async function serverGet(name,id){try{return await decodeItem(name,await serverRequest(`/api/store/${name}/${encodeURIComponent(id)}`));}catch(e){if(e.message==='不存在')return undefined;throw e;}}
+async function serverTransaction(names,fn){
+  const operations=[],tx={objectStore(name){if(!names.includes(name))throw Error('此表未加入事务');return {put:item=>operations.push({action:'put',store:name,item}),delete:id=>operations.push({action:'delete',store:name,id}),clear:()=>operations.push({action:'clear',store:name})};}};
+  const result=fn(tx);if(result?.then)throw Error('事务回调必须同步，网络及图像处理请在事务外完成');
+  for(const op of operations)if(op.store==='blobs'&&op.action==='put')op.item={...op.item,data:await toBase64(op.item.data)};
+  await serverRequest('/api/transaction',{method:'POST',data:{operations}});
+}
+async function browserTransaction(names,fn){
+  const tx=(await localDatabase()).transaction(names,'readwrite');
+  try{const result=fn(unwrap(tx));if(result?.then)throw Error('事务回调必须同步，网络及图像处理请在事务外完成');}
+  catch(e){tx.abort();await tx.done.catch(()=>{});throw e;}
+  await tx.done;
+}
+const storageRouter=createStorageRouter(
+  async()=>cloudEnabled?'cloud':(await resolveBackend()).url?'server':'browser',
+  {
+    cloud:{all:cloudAll,get:cloudGet,transaction:cloudStageMutation},
+    server:{all:serverAll,get:serverGet,transaction:serverTransaction},
+    browser:{all:localAll,get:(name,id)=>localDatabase().then(db=>db.get(name,id)),transaction:browserTransaction}
+  }
+);
+export const all=name=>storageRouter.all(name);
+export const get=(name,id)=>storageRouter.get(name,id);
 export async function put(name,item){return transaction([name],tx=>tx.objectStore(name).put(item));}
 export async function remove(name,id){return transaction([name],tx=>tx.objectStore(name).delete(id));}
-export async function transaction(names,fn){
-  if(cloudEnabled)return cloudStageMutation(names,fn);
-  if((await resolveBackend()).url){const operations=[],tx={objectStore(name){if(!names.includes(name))throw Error('此表未加入事务');return {put:item=>operations.push({action:'put',store:name,item}),delete:id=>operations.push({action:'delete',store:name,id}),clear:()=>operations.push({action:'clear',store:name})};}};const result=fn(tx);if(result?.then)throw Error('事务回调必须同步，网络及图像处理请在事务外完成');for(const op of operations)if(op.store==='blobs'&&op.action==='put')op.item={...op.item,data:await toBase64(op.item.data)};await serverRequest('/api/transaction',{method:'POST',data:{operations}});return;}const tx=(await localDatabase()).transaction(names,'readwrite');try{const result=fn(unwrap(tx));if(result?.then)throw Error('事务回调必须同步，网络及图像处理请在事务外完成');}catch(e){tx.abort();await tx.done.catch(()=>{});throw e;}await tx.done;}
+export const transaction=(names,fn)=>storageRouter.transaction(names,fn);
 const toBase64=blob=>new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=()=>reject(r.error);r.readAsDataURL(blob);});
 function fromBase64(value){const [prefix,body]=value.split(',');const type=/data:([^;]+)/.exec(prefix)?.[1]||'application/octet-stream';const b=atob(body);const arr=new Uint8Array(b.length);for(let i=0;i<b.length;i++)arr[i]=b.charCodeAt(i);return new Blob([arr],{type});}
 async function decodeItem(name,item){return name==='blobs'?{...item,data:fromBase64(item.data)}:item;}

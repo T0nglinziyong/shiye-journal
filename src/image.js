@@ -3,24 +3,17 @@ import {visionTask} from './vision-runtime.js';
 import {recognitionProfile} from './recognition-profiles.js';
 // Analyze a small copy, but re-extract accepted cuts from the full source.
 export async function detectPaperCandidates(bitmap,box,smallestMM=6,{balanceLight=false,paperWidthMM=210,paperHeightMM=297,recognition='auto',onProgress=()=>{}}={}){
-  const ratio=Math.min(1,recognitionProfile(recognition).analysisMaxDimension/Math.max(bitmap.width*box.w,bitmap.height*box.h));
+  const profile=recognitionProfile(recognition);
+  const ratio=Math.min(1,profile.analysisMaxDimension/Math.max(bitmap.width*box.w,bitmap.height*box.h));
   const w=Math.max(1,Math.round(bitmap.width*box.w*ratio)),h=Math.max(1,Math.round(bitmap.height*box.h*ratio));
   const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;
   const ctx=canvas.getContext('2d',{willReadFrequently:true});
   ctx.drawImage(bitmap,bitmap.width*box.x,bitmap.height*box.y,bitmap.width*box.w,bitmap.height*box.h,0,0,w,h);
   const frame=ctx.getImageData(0,0,w,h),balanced=balanceLight?await visionTask('balance',{pixels:frame.data,width:w,height:h}):null;
   const candidates=await segmentPaperMaterials(balanced?{data:balanced.pixels,width:w,height:h}:frame,{smallestMM,paperWidthMM,paperHeightMM,sourcePixels:frame.data});
-  if(recognition!=='slimsam'||!candidates.length)return candidates;
-  const {refineMaterialsInBrowser}=await import('./slimsam-runtime.js'),boxes=candidates.map(c=>[c.x*w,c.y*h,(c.x+c.w)*w,(c.y+c.h)*h]);
-  const seeds=candidates.map(c=>{const m=c.mask,points=[];if(!m)return points;for(const fy of [.25,.5,.75])for(const fx of [.25,.5,.75]){const x=Math.floor(m.width*fx),y=Math.floor(m.height*fy),radius=Math.max(2,Math.round(Math.min(m.width,m.height)*.04));if([[0,0],[-radius,0],[radius,0],[0,-radius],[0,radius]].every(([dx,dy])=>m.alpha[(y+dy)*m.width+x+dx]>127))points.push([(c.x+c.w*x/m.width)*w,(c.y+c.h*y/m.height)*h]);}return points;});
-  const masks=await refineMaterialsInBrowser(frame.data,w,h,boxes,onProgress,seeds),result=[];let rejected=0;
-  for(let i=0;i<candidates.length;i++){
-    const m=masks[i];if(!m){result.push(candidates[i]);rejected++;continue;}
-    const region=await visionTask('material-mask',{alpha:m.alpha,width:w,height:h});
-    if(!region){result.push(candidates[i]);rejected++;}else result.push({...region,modelConfidence:m.score});
-  }
-  if(rejected)onProgress({status:'fallback',count:rejected});
-  return result;
+  return profile.refineCandidates&&candidates.length
+    ? profile.refineCandidates({candidates,frame,width:w,height:h,onProgress})
+    : candidates;
 }
 export async function cropBitmap(bitmap,paper,region,{raw=false}={}){
   const x=Math.max(0,Math.round(bitmap.width*(paper.x+region.x*paper.w))),y=Math.max(0,Math.round(bitmap.height*(paper.y+region.y*paper.h)));

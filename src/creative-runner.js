@@ -1,6 +1,6 @@
 import {applyToolCalls} from './creative.js';
-import {agentTools,directPageContract,directPageToTools} from './creative-contract.js';
 export {agentTools} from './creative-contract.js';
+import {creativeProtocol} from './creative-delivery.js';
 import {reviewCreativeDraft} from './creative-quality.js';
 import {creativeTypographyGuide} from './creative-typography.js';
 import {requestChat} from './chat-transport.js';
@@ -16,7 +16,7 @@ export function buildCreativeMessages(o){
  const list=Object.entries(aliases).flatMap(([label,id])=>{const a=assets.find(x=>x.id===id);return a?[`${label}: ${a.title}，${a.kind}，${a.role}，${a.physicalWidthMM||'未确认'}×${a.physicalHeightMM||'未确认'} mm，库存 ${a.supply?.quantity??1}，加工 ${assetProcessing[id]||processing||'保留完整'}，用法 ${materialUseHints[id]||'由生成器选择'}${materialUseRequired[id]?'（每个方案必做）':''}${requiredAssetIDs.includes(id)?'（每版必用）':''}，标签 ${(a.tags||[]).join('、')}`]:[];});
  const policy=textMode==='none'?'不生成文字。':textMode==='requested'?'仅用户明确要求文字时配文。':'按用途生成真实内容的图文手账。';
  const reference=includeStructureReference?`匿名结构参考第${referencePage}页：${['左主图，右标题及两段正文，下方短注','上标题，中间错层主图，底部两栏文字','左叙述，右图文收藏，边缘少量点缀','上主视觉，中间有内容的网格，底部短注'][Math.max(0,Math.min(3,referencePage-1))]}。只参考阅读结构，必须按真实尺寸重排，不含私人日记。`:'';
- const native=resolveNative(o),mode=o.generationMode==='direct'?`一次返回完整JSON页面数据，不返回tools或Markdown。合同：${JSON.stringify(directPageContract)}`:!native?`仅返回JSON {"tools":[{"name":"工具名","arguments":{}}]}。完整合同：${JSON.stringify(agentTools)}`:'调用本地工具搭建，满意后finish_design必须是本轮最后一个工具。';
+ const mode=creativeProtocol(o).instruction;
  const first=[{type:'text',text:`页面：${draft.pageRatio} ${draft.pageMode==='spread'?'双页':'单页'}，物理高${draft.physicalPageHeightMM}mm。风格：${styles.join('、')}。用途：${pagePurposes.map(p=>p+'：'+(purposes[p]||'遵守主题要求。')).join('\n')}\n素材台：\n${list.join('\n')}\n用户要求：${prompt||'按用途和素材创作。'}\n实际初始画布：${JSON.stringify(creativeScene(draft,aliases))}`}];
  images.slice(0,8).forEach((input,i)=>{const url=typeof input==='string'?input:input.url,label=typeof input==='string'?Object.keys(aliases)[i]:input.asset;if(url)first.push({type:'text',text:'素材 '+label+' 的图片：'},{type:'image_url',image_url:{url}});});
  referenceImages.forEach(url=>first.push({type:'text',text:'用户明确开启发送的参考页，仅作风格参考。'},{type:'image_url',image_url:{url}}));
@@ -24,10 +24,9 @@ export function buildCreativeMessages(o){
  const printType=creativeTypographyGuide(draft);
  return [{role:'system',content:[system,geometry,printType,policy,customLayoutPrompt,reference,mode].join('\n')},{role:'user',content:first}];
 }
-function resolveNative(o){const transport=o.transport||'native';return o.generationMode!=='direct'&&(transport==='native'||transport==='auto');}
 export function buildCreativePayload(o,messages){
  const deepseek=new URL(o.endpoint||'https://api.deepseek.com/chat/completions').host==='api.deepseek.com',mode=o.reasoningMode||'automatic',thinking=deepseek?(mode==='automatic'||o.disableThinking!==false?{type:'disabled'}:mode==='low'?{type:'enabled'}:null):null;
- return {model:o.model||'deepseek-flash',messages,stream:false,temperature:o.temperature??.75,...(o.sendOutputLimit!==false?{max_tokens:o.maxTokens||6000}:{}),...(resolveNative(o)?{tools:agentTools,tool_choice:thinking?.type==='enabled'?'auto':'required'}:{response_format:{type:'json_object'}}),...(thinking?{thinking}:{}),...(thinking?.type==='enabled'&&mode==='low'?{reasoning_effort:'low'}:{})};
+ return {model:o.model||'deepseek-flash',messages,stream:false,temperature:o.temperature??.75,...(o.sendOutputLimit!==false?{max_tokens:o.maxTokens||6000}:{}),...creativeProtocol(o).request(thinking),...(thinking?{thinking}:{}),...(thinking?.type==='enabled'&&mode==='low'?{reasoning_effort:'low'}:{})};
 }
 export async function runCreativeAgent(o){
  const {draft,assets,aliases,key,endpoint='https://api.deepseek.com/chat/completions',maxTurns=5,requestTimeout=75,signal,onTurn=()=>{},request=fetch,onScene,onInspection}=o;
@@ -36,12 +35,12 @@ export async function runCreativeAgent(o){
  let working=structuredClone(draft),turn=0,failures=0;if(working.agentRun?.status==='finished')working.agentRun={...working.agentRun,status:'editing'};const messages=buildCreativeMessages({...o,draft:working}),limit=maxTurns===0?5:Math.max(1,Math.min(5,maxTurns));
  for(;turn<limit;){
   if(signal?.aborted)throw signal.reason||Error('创作已停止');turn++;
-  const payload=buildCreativePayload(o,messages),native=!!payload.tools;
+  const payload=buildCreativePayload(o,messages),protocol=creativeProtocol(o),native=protocol.native;
   const data=await requestChat({endpoint,key,payload,request,signal,timeout:requestTimeout,onProgress:p=>o.onProgress?.({...p,turn})}),choice=data.choices?.[0],message=choice?.message;if(!message)throw Error('模型没有返回可用消息');
   await o.onResponse?.(data);
   if(choice.finish_reason==='length'){messages.push({role:'user',content:'输出截断，整轮未执行。返回较小完整批次。实际状态：'+JSON.stringify(creativeScene(working,aliases))});await onTurn({turn,results:[{name:'response',ok:false,detail:'输出截断，整轮未执行'}],draft:working,text:''});continue;}
-  let calls=message.tool_calls||[];
-  if(!native){try{const parsed=JSON.parse((message.content||'{}').replace(/^\x60\x60\x60(?:json)?\s*|\s*\x60\x60\x60$/g,'')),tools=o.generationMode==='direct'?directPageToTools(parsed):(parsed.tools||parsed.tool_calls||[]);calls=tools.map((x,i)=>({id:'json-'+turn+'-'+i,type:'function',function:{name:x.name||x.function?.name,arguments:JSON.stringify(x.arguments||x.function?.arguments||{})}}));}catch(e){messages.push({role:'user',content:'页面/JSON不符合合同：'+e.message+'。未执行；修正后完整返回。'});await onTurn({turn,results:[{name:'response',ok:false,detail:e.message}],draft:working,text:''});continue;}}
+  let calls;
+  try{calls=protocol.calls(message,turn);}catch(e){messages.push({role:'user',content:'页面/JSON不符合合同：'+e.message+'。未执行；修正后完整返回。'});await onTurn({turn,results:[{name:'response',ok:false,detail:e.message}],draft:working,text:''});continue;}
   if(!calls.length)throw Error('第 '+turn+' 轮没有返回创作操作；画布未因此标记为完成。');
   messages.push(native?{role:'assistant',content:message.content||null,...(message.reasoning_content?{reasoning_content:message.reasoning_content}:{}),tool_calls:calls}:{role:'assistant',content:message.content||''});
   const result=applyToolCalls({tool_calls:calls},working,assets,aliases,options);working=result.draft;

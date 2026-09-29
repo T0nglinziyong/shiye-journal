@@ -156,9 +156,10 @@ body:has(.library-management-tray):not(:has(.library-management-tray:not([hidden
 .recently-deleted-grid[data-kind=project] .deleted-row{padding:10px}
 .recently-deleted-grid .deleted-row>.card-image{flex:none;height:auto;min-height:0;aspect-ratio:1.22;border-radius:10px}
 .recently-deleted-grid[data-kind=project] .deleted-row>.card-image{height:175px;aspect-ratio:auto;border-radius:12px}
-.recently-deleted-grid .deleted-row>.card-body{flex:none}
-.recently-deleted-grid .deleted-actions{position:absolute;inset:auto 4px 4px;display:flex;gap:4px;z-index:1}
-.recently-deleted-grid .deleted-actions button{font-size:11px;flex:1;padding:5px 2px;white-space:nowrap;background:#fffefaed}
+.recently-deleted-grid .deleted-row>.card-body{flex:none;padding:7px 0 0}
+.recently-deleted-grid .deleted-row .card-body h3{margin-bottom:3px}
+.recently-deleted-grid .deleted-actions{display:flex;gap:4px;margin-top:7px}
+.recently-deleted-grid .deleted-actions button{font-size:11px;flex:1;padding:5px 2px;white-space:nowrap;background:#fffefa}
 .recently-deleted-grid .card-image>img{position:absolute;inset:8px;width:calc(100% - 16px);height:calc(100% - 16px);object-fit:contain}
 .recently-deleted-grid .thumb-sheet{aspect-ratio:auto;width:auto!important;height:auto;max-width:none;max-height:none;container-type:inline-size}
 .detail-tags,.project-preview-tags{display:flex;flex-wrap:wrap;gap:7px;margin:14px 0 3px;min-height:18px}
