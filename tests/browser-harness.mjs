@@ -1,5 +1,6 @@
 import {execFileSync} from 'node:child_process';
 export async function browserHarness(name,url,beforeNavigate=async()=>{}){
+  name=process.env.SHIYE_BROWSER_SESSION||name;
   const cli=args=>execFileSync('npx',['--yes','agent-browser','--session',name,...args],{encoding:'utf8',timeout:60000});
   cli(['--args',process.env.SHIYE_BROWSER_ARGS||'--no-sandbox','open','about:blank']);const ws=new WebSocket(cli(['get','cdp-url']).trim());await new Promise((resolve,reject)=>{ws.onopen=resolve;ws.onerror=reject;});
   let number=0,session,context;const pending=new Map(),errors=[],pausedRequests=[];
