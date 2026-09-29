@@ -19,6 +19,7 @@ import {shapeSVG,drawInk,textFont,textLineHeight,textLines} from './editor-tools
 import {shapeTag} from './shape-preview.js';
 import {importPrivateCollection} from './private-collection.js';
 import {importHistoryReferences} from './history-reference.js';
+import {confirmHistoryImport} from './history-import-confirmation.js';
 import {ImageNodeCache} from './image-node-cache.js';
 import {imagePlaceholder,mountPrivateImages} from './lazy-private-images.js';
 import {showAssetEditor} from './asset-editor.js';
@@ -504,7 +505,7 @@ for(const e of editorEntry(d)){const i=e.value;ctx.save();ctx.translate(i.x,i.y)
 drawInk(ctx,d.strokes||[]);return canvas;}finally{release();}}
 fileInput.onchange=async()=>{const files=[...(fileInput.files||[])].filter(f=>f.type.startsWith('image/')).slice(0,Math.max(0,12-state.importRecords.length));if(!files.length)return;try{saveActiveImportRecord();const start=state.importRecords.length;for(const file of files)state.importRecords.push({file,url:URL.createObjectURL(file),confirmed:false,selectedCandidates:[],selection:[],candidates:[]});state.importStep='inspect';state.route='import';await switchImportRecord(start,true);}catch(e){console.error(e);toast('照片处理失败：'+e.message);}finally{fileInput.value='';}};
 backupInput.onchange=async()=>{const file=backupInput.files?.[0];backupInput.value='';if(!file)return;
-  if(file.name.endsWith('.shiyeversions')){if(!confirm('补回四页 CeCe 原始历史快照？仅更新恢复点，保留当前编辑内容和所有其他资料。'))return;try{await flushSave();await importHistoryReferences(file,db);state.activeProject=null;await refresh();toast('四页最初方案的恢复点已补回，当前作品未被替换');}catch(error){toast('历史参考导入失败：'+error.message);}return;}
+  if(file.name.endsWith('.shiyeversions')){if(!await confirmHistoryImport(modal,body))return;try{await flushSave();await importHistoryReferences(file,db);state.activeProject=null;await refresh();toast('四页最初方案的恢复点已补回，当前作品未被替换');}catch(error){toast('历史参考导入失败：'+error.message);}return;}
   if(file.name.endsWith('.shiyecollection')){if(!confirm('用 Goodnotes 原生重建替换四页旧 CeCe 作品？其他作品与素材不会被删除。'))return;try{await flushSave();await document.fonts.load('12px "Ma Shan Zheng"');await importPrivateCollection(file,{db,onProgress:toast,prepare:data=>{const ctx=document.createElement("canvas").getContext("2d");for(const p of data.projects)for(const d of p.drafts)for(const t of d.textBlocks){ctx.font=textFont(t);const width=Math.max(...String(t.content).split("\n").map(line=>ctx.measureText(line).width));if(width>t.width-8)t.fontSize*=Math.max(1,t.width-8)/width;}}});state.activeProject=null;privateImages.invalidate();await refresh();route('works');toast('四页 Goodnotes 原生作品已保存');}catch(error){toast('私人作品导入失败，未切换到本机保存：'+error.message);}return;}
   if(!confirm('恢复完整备份会替换当前 PWA 中的全部资料。请先确认旧资料已导出。继续吗？'))return;try{await flushSave();await db.flushProjects();state.activeProject=null;await db.restoreBackup(file);state.basket=[];await refresh();toast('完整备份已恢复');}catch(e){console.error(e);toast('恢复失败：'+e.message);}};
 window.addEventListener('pagehide',()=>{if(saveTimer)flushSave().catch(console.error);});

@@ -31,6 +31,10 @@ try{
     const shot=await b.command('Page.captureScreenshot',{format:'png'});await writeFile(`${dir}/${width}x${height}.png`,Buffer.from(shot.data,'base64'));
     await b.click('[data-act="back-works"]','.works-grid');
   }
+  await b.click('#top-settings','[data-act="settings-open"]');await b.click('[data-val="数据与诊断"]','[data-act="restore"]');
+  const syntheticHistory=dir+'/invalid-test.shiyeversions';await writeFile(syntheticHistory,'{}');
+  const documentNode=await b.command('DOM.getDocument'),inputNode=await b.command('DOM.querySelector',{nodeId:documentNode.root.nodeId,selector:'#backup-input'});
+  await b.command('DOM.setFileInputFiles',{nodeId:inputNode.nodeId,files:[syntheticHistory]});await b.wait('[data-history-cancel]');await b.click('[data-history-cancel]');assert.ok(!await b.evaluate('document.querySelector("#modal").open'));
   const staged=await b.evaluate(`(async()=>{
     const {createCloudStore}=await import('/src/cloud-store.js'),{createPrivateCache}=await import('/src/private-cache.js'),{saveImportBatch}=await import('/src/import-save.js');
     const cache=createPrivateCache({name:'synthetic-import-regression'});let release,revision=0,commits=0;
