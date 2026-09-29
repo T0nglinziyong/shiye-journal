@@ -12,7 +12,6 @@ export function mountParityControls(ctx){
   if(state.route==='works')mountWorks(ctx);
   if(state.route==='matching')mountMatching(ctx);
   if(state.route==='import')mountImport(ctx);
-  if(state.route==='editor')mountEditor(ctx);
 }
 function tabs(labels,active,onClick){const bar=document.createElement('div');bar.className='swift-tabs';for(const [id,label] of labels){const b=document.createElement('button');b.type='button';b.className=id===active?'selected':'';b.textContent=label;b.onclick=()=>onClick(id);bar.append(b);}return bar;}
 function button(label,fn,kind=''){const b=document.createElement('button');b.type='button';b.className=`btn ${kind}`;b.textContent=label;b.onclick=fn;return b;}
@@ -75,43 +74,3 @@ function mountWorks(c){const {state,view,render}=c,header=view.querySelector('.v
 }
 function mountMatching(c){const {state,view}=c;for(const [id,key] of [['match-style','matchStyle'],['match-ratio','matchRatio'],['match-mode','matchMode'],['match-intent','matchIntent'],['match-purpose','matchPurpose'],['match-processing','matchProcessing'],['match-paper-width','customPaperWidth'],['match-paper-height','customPaperHeight']]){const el=view.querySelector('#'+id);if(!el)continue;if(id==='match-purpose'||id==='match-processing')el.value=state[key];el.onchange=()=>{state[key]=el.value;if(id==='match-ratio')view.querySelector('.matching-page')?.classList.toggle('custom-paper',el.value==='custom');};}}
 function mountImport(c){ /* Import navigation and source buttons are rendered by app.js. */ }
-function mountEditor(c){const {state,view,current,checkpoint,saveProject,render,toast}=c,tools=view.querySelector('.editor-tools'),page=view.querySelector('#canvas-page'),ink=page?.querySelector('#ink');if(!tools||!ink)return;
-  const heading=view.querySelector('.view-head'),actions=heading?.querySelector('.actions'),shell=view.querySelector('.editor-shell');
-  if(heading&&actions&&shell){
-    heading.classList.add('swift-editor-head');
-    const back=actions.querySelector('[data-act="back-works"]');if(back){back.textContent='‹ 返回';heading.prepend(back);}
-    const undo=tools.querySelector('[data-val="undo"]')||tools.querySelector('[data-act="undo"]');
-    const redo=tools.querySelector('[data-act="redo"]');if(redo)actions.prepend(redo);if(undo)actions.prepend(undo);
-    const saved=document.createElement('span');saved.className='swift-auto-saved';saved.textContent='已自动保存';actions.prepend(saved);
-    const archive=tools.querySelector('[data-act="save-archive"]')||view.querySelector('.editor-inspector [data-act="save-archive"]');
-    if(archive){archive.textContent='存档';actions.append(archive);}
-    actions.append(button('完成',async()=>{state.activeProject.isDraft=false;c.saveProject();await c.flushSave();c.route('works');},'primary'));
-    const bar=document.createElement('div');bar.className='swift-editor-toolbar';shell.before(bar);bar.append(tools);
-    const insertion=document.createElement('div');insertion.className='swift-insertion-tools';bar.append(insertion);
-    const paper=view.querySelector('.object-toolbar [data-act="paper-menu"]');if(paper)insertion.append(paper);
-    const zoom=view.querySelector('.object-toolbar span');if(zoom){const fit=button(`↗ 适合页面 ${zoom.textContent}`,()=>{state.zoom=1;render();});insertion.append(fit);}
-    insertion.append(button('▤',()=>{state.editorPanel=!state.editorPanel;render();}));
-    insertion.append(button('▦',()=>{state.editorPanel=!state.editorPanel;render();}));
-    insertion.append(button('☷',()=>{state.editorPanel=!state.editorPanel;render();}));
-    insertion.append(button('选择范围',()=>{state.tool='select';render();}));
-    const hint=document.createElement('span');hint.className='swift-editor-hint';hint.textContent='单指滚动画布 · 点击选择 · 选框内拖动 · 双指缩放';insertion.append(hint);
-    const stage=view.querySelector('.editor-stage'),inspector=view.querySelector('.editor-inspector');
-    if(stage&&inspector){shell.classList.add('swift-editor-workspace');shell.classList.toggle('show-inspector',!!state.editorPanel);inspector.classList.add('swift-editor-panel');}
-  }
-  const select=tools.querySelector('[data-val="select"]');if(select)select.textContent='选择';
-  const pen=tools.querySelector('[data-val="pen"]');if(pen)pen.textContent='钢笔';
-  const insert=(label,mode)=>{const b=button(label,()=>{state.tool=mode;render();},state.tool===mode?'primary':'');b.dataset.val=mode;tools.insertBefore(b,tools.querySelector('[data-val="text"]'));};
-  insert('荧光笔','highlighter');insert('橡皮擦','eraser');
-  const labels={select:['➤','选择'],pen:['╱','钢笔'],highlighter:['✎','荧光笔'],eraser:['◇','橡皮擦'],text:['Aa','文字'],shape:['▢','图形'],material:['▧','添加素材']};
-  for(const b of tools.querySelectorAll('[data-val]')){const [glyph,title]=labels[b.dataset.val]||[b.textContent,b.textContent];b.textContent=glyph;b.setAttribute('aria-label',title);b.title=title;}
-  const lasso=button('◌',()=>{state.tool='lasso';render();});lasso.title='套索对象';lasso.setAttribute('aria-label','套索对象');lasso.classList.toggle('primary',state.tool==='lasso');tools.insertBefore(lasso,tools.querySelector('[data-val="text"]'));
-  page.classList.toggle('pen',['pen','highlighter','eraser'].includes(state.tool));
-  if(!['highlighter','eraser'].includes(state.tool))return;
-  const d=current(),ctx=ink.getContext('2d');let stroke=null;
-  const point=e=>{const r=ink.getBoundingClientRect();return {x:(e.clientX-r.left)/r.width*d.canvas.width,y:(e.clientY-r.top)/r.height*d.canvas.height,p:e.pressure||.5};};
-  ink.onpointerdown=e=>{e.preventDefault();checkpoint();const p=point(e);if(state.tool==='eraser'){
-      const before=d.strokes.length;d.strokes=d.strokes.filter(line=>!line.points?.some(q=>Math.hypot(q.x-p.x,q.y-p.y)<22));if(before!==d.strokes.length){saveProject();render();}return;}
-    stroke={id:e.pointerId,points:[p],width:18,color:'#efd264',opacity:.45};ink.setPointerCapture(e.pointerId);};
-  ink.onpointermove=e=>{if(!stroke||stroke.id!==e.pointerId)return;const p=point(e),last=stroke.points.at(-1);stroke.points.push(p);ctx.globalAlpha=stroke.opacity;ctx.strokeStyle=stroke.color;ctx.lineWidth=stroke.width;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(last.x,last.y);ctx.lineTo(p.x,p.y);ctx.stroke();ctx.globalAlpha=1;};
-  ink.onpointerup=e=>{if(!stroke||stroke.id!==e.pointerId)return;const {id,...line}=stroke;d.strokes.push(line);stroke=null;saveProject();render();};ink.onpointercancel=ink.onpointerup;
-}

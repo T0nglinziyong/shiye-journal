@@ -1,4 +1,5 @@
 import {Window} from 'happy-dom';
+import {stubCanvas} from './dom-canvas-stub.mjs';
 import {indexedDB,IDBKeyRange} from 'fake-indexeddb';
 import {readFile,readdir} from 'node:fs/promises';
 import assert from 'node:assert/strict';
@@ -9,6 +10,7 @@ const bundle=(await readdir(new URL('assets/',root))).find(name=>name.endsWith('
 const code=await readFile(new URL(`assets/${bundle}`,root),'utf8');
 const win=new Window({url:'https://shiye.test/',settings:{enableJavaScriptEvaluation:true,disableJavaScriptFileLoading:true}});
 win.document.body.innerHTML=html.match(/<body>([\s\S]*)<\/body>/)[1];
+stubCanvas(win);
 win.indexedDB=indexedDB;win.IDBKeyRange=IDBKeyRange;
 win.structuredClone=structuredClone;
 win.fetch=async()=>({ok:true,blob:async()=>new Blob(['image'],{type:'image/png'}),json:async()=>JSON.parse(await readFile(new URL('cece/collection.json',root),'utf8'))});

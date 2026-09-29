@@ -104,7 +104,7 @@ try {
   // and preserves sizes. No synthetic PointerEvent bypasses capture semantics.
   await command('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
   await click('[data-route="works"]','.works-grid');await click('#work-create','#canvas-page');
-  await click('[data-act="tool"][data-val="shape"]');await click('[data-act="tool"][data-val="shape"]');
+  for(let i=0;i<2;i++){await click('[data-act="tool"][data-val="shape"]','[data-shape-kind="roundedRectangle"]');await click('[data-shape-kind="roundedRectangle"]');}
   await click('[aria-label="套索对象"]');
   await evaluate('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');
   const canvas=await evaluate('(()=>{const r=document.querySelector("#canvas-page").getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height};})()');
@@ -136,7 +136,7 @@ try {
   for(let i=0;i<250&&await evaluate('!!document.querySelector(".multi-box-editor")');i++)await sleep(20);
   assert.equal(await evaluate('!!document.querySelector(".multi-box-editor")'),false,'Manual extraction must finish');
   assert.equal(await evaluate('document.querySelectorAll(".import-candidate-tile").length'),3);
-  await click('[data-act="import-confirm-photo"]');await sleep(200);await click('[data-act="import-confirm-photo"]','.review-candidates');
+  await click('[data-act="import-confirm-photo"]');await wait('.queue-item.active[data-id="1"]');await wait('.import-candidate-tile.selected');await click('[data-act="import-confirm-photo"]','.review-candidates');
   await evaluate('document.querySelector(".review-candidate").dispatchEvent(new MouseEvent("contextmenu",{bubbles:true,cancelable:true}))');
   await wait('#candidate-menu');await evaluate('[...document.querySelectorAll("#candidate-menu button")].find(b=>b.textContent==="编辑素材信息").click()');await wait('#candidate-edit-name');
   await fill('#candidate-edit-name','合成素材验收');await fill('#candidate-edit-quantity','3');await fill('#candidate-edit-status','ready');await click('#candidate-edit-save');await fill('.record-series','__none__');

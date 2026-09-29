@@ -2,7 +2,7 @@ import * as db from './store.js';
 
 const MARKER='cece-samples-v2';
 
-export async function seedBundledExamples(){
+export async function seedBundledExamples({isProjectOpen=()=>false}={}){
   if(await db.get('meta',MARKER))return;
   // A slow overseas CDN must not hold the first usable screen indefinitely.
   // Failure leaves the seed marker unset so the next visit can retry safely.
@@ -20,6 +20,7 @@ export async function seedBundledExamples(){
   const projects=collection.projects.filter(p=>!existingProjects.has(p.id)).map(({sampleParagraphUpgrades,...p},i)=>({...p,coverStaticPath:`/cece/cece-reference-${i+1}.jpg`,coverBaselineUpdatedAt:p.updatedAt}));
   const upgraded=[];
   for(const sample of collection.projects.filter(p=>existingProjects.has(p.id))){
+    if(isProjectOpen(sample.id))continue;
     const saved=await db.get('projects',sample.id);
     const blocks=saved?.drafts?.[0]?.textBlocks;
     if(!blocks)continue;
@@ -36,7 +37,7 @@ export async function seedBundledExamples(){
   const series=await db.get('series',collection.series.id);
   await db.transaction(['assets','projects','series','meta'],tx=>{
     for(const asset of assets){const {sampleFile,...record}=asset;tx.objectStore('assets').put({...record,staticPath:'/cece/'+encodeURIComponent(sampleFile)});}
-    for(const project of [...projects,...upgraded])tx.objectStore('projects').put(project);
+    for(const project of [...projects,...upgraded])if(!isProjectOpen(project.id))tx.objectStore('projects').put(project);
     if(!series)tx.objectStore('series').put(collection.series);
     tx.objectStore('meta').put({id:MARKER,createdAt:new Date().toISOString()});
   });

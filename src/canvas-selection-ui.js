@@ -6,12 +6,13 @@ export function mountCanvasSelection(c) {
   if(state.selectionDraft!==d.id){state.selectionDraft=d.id;state.multiSelected=[];}
   state.selectionFilter ||= {material:true,text:true,shape:true};state.multiSelected ||= [];
   const active=()=>canvasObjects(d).filter(e=>state.multiSelected.includes(e.value.id));
-  const controls=view.querySelector('.swift-insertion-tools');
+  const controls=view.querySelector('.canvas-context-tools');
   const range=[...controls.querySelectorAll('button')].find(b=>b.textContent==='选择范围');
   const filter=document.createElement('details');filter.className='selection-filter';
   filter.innerHTML='<summary>选择范围</summary><div>'+[['material','素材／照片'],['text','文字'],['shape','图形']].map(([key,label])=>'<label><input type="checkbox" data-selection-filter="'+key+'" '+(state.selectionFilter[key]?'checked':'')+'>'+label+'</label>').join('')+'<small>锁定和隐藏的对象不参与选择</small></div>';
-  range?.replaceWith(filter);filter.querySelectorAll('input').forEach(el=>el.onchange=()=>state.selectionFilter[el.dataset.selectionFilter]=el.checked);
-  const toolbar=document.createElement('div');toolbar.className='multi-selection-toolbar';controls.after(toolbar);
+  // Settings now use the tool's anchored popover; keep one shared filter state.
+  filter.querySelectorAll('input').forEach(el=>el.onchange=()=>state.selectionFilter[el.dataset.selectionFilter]=el.checked);
+  const toolbar=document.createElement('div');toolbar.className='multi-selection-toolbar';toolbar.hidden=!['lasso','marquee'].includes(state.tool)&&active().length<2;controls.append(toolbar);
   const button=(label,fn)=>{const b=document.createElement('button');b.type='button';b.className='btn mini';b.textContent=label;b.onclick=fn;toolbar.append(b);return b;};
   const change=fn=>{if(!active().length)return;checkpoint();fn(active());saveProject();render();};
   toolbar.append(Object.assign(document.createElement('span'),{textContent:'已选 '+active().length+' 个对象'}));
@@ -36,11 +37,11 @@ export function mountCanvasSelection(c) {
   // Capture before app.js' single-object drag so a lasso starts over any
   // object and a selected set moves together, with one undo checkpoint.
   page.addEventListener('pointerdown',e=>{
-    if(!['select','lasso'].includes(state.tool)||e.button>0)return;
+    if(!['select','lasso','marquee'].includes(state.tool)||e.button>0||e.target.closest('.object-handle,.selected-object-actions'))return;
     const target=e.target.closest('[data-object]'),entry=canvasObjects(d).find(x=>x.value.id===target?.dataset.object);
     if(target&&!entry&&state.tool==='select'){e.stopImmediatePropagation();return;}
     const p=point(e);let ids=state.multiSelected;
-    if(state.tool==='lasso')gesture={id:e.pointerId,path:[p],start:p};
+    if(['lasso','marquee'].includes(state.tool))gesture={id:e.pointerId,path:[p],start:p,marquee:state.tool==='marquee'};
     else if(entry) {
       if(e.shiftKey){state.multiSelected=ids.includes(entry.value.id)?ids.filter(id=>id!==entry.value.id):[...ids,entry.value.id];state.selected=null;e.preventDefault();e.stopImmediatePropagation();render();return;}
       if(!ids.includes(entry.value.id))ids=entry.value.creativeGroupID?canvasObjects(d).filter(x=>x.value.creativeGroupID===entry.value.creativeGroupID).map(x=>x.value.id):[entry.value.id];
@@ -51,7 +52,7 @@ export function mountCanvasSelection(c) {
   },true);
   page.addEventListener('pointermove',e=>{
     if(!gesture||gesture.id!==e.pointerId)return;e.preventDefault();e.stopImmediatePropagation();const p=point(e);
-    if(gesture.path){gesture.path.push(p);paint(gesture.path);return;}
+    if(gesture.path){if(gesture.marquee){const a=gesture.start;gesture.path=[a,{x:p.x,y:a.y},p,{x:a.x,y:p.y}];}else gesture.path.push(p);paint(gesture.path);return;}
     if(!gesture.checkpoint&&Math.hypot(p.x-gesture.start.x,p.y-gesture.start.y)>.5){checkpoint();gesture.checkpoint=true;}
     if(gesture.checkpoint){moveSelection(d,gesture.starts,p.x-gesture.start.x,p.y-gesture.start.y);const scale=page.clientWidth/d.canvas.width;for(const {value:o} of active()){const el=page.querySelector('[data-object="'+o.id+'"]');if(el){el.style.left=(o.x-o.width/2)*scale+'px';el.style.top=(o.y-o.height/2)*scale+'px';}}paint();}
   },true);

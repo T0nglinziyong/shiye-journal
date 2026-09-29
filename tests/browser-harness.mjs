@@ -1,5 +1,5 @@
 import {execFileSync} from 'node:child_process';
-export async function browserHarness(name,url){
+export async function browserHarness(name,url,beforeNavigate=async()=>{}){
   const cli=args=>execFileSync('npx',['--yes','agent-browser','--session',name,...args],{encoding:'utf8',timeout:60000});
   cli(['--args','--no-sandbox','open','about:blank']);const ws=new WebSocket(cli(['get','cdp-url']).trim());await new Promise((resolve,reject)=>{ws.onopen=resolve;ws.onerror=reject;});
   let number=0,session,context;const pending=new Map(),errors=[];
@@ -9,6 +9,6 @@ export async function browserHarness(name,url){
   const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
   const wait=async selector=>{for(let i=0;i<1500;i++){if(await evaluate('!!document.querySelector('+JSON.stringify(selector)+')'))return;await sleep(20);}throw Error('Missing '+selector);};
   const click=async(selector,next)=>{await wait(selector);await evaluate('document.querySelector('+JSON.stringify(selector)+').click()');if(next)await wait(next);};
-  context=(await command('Target.createBrowserContext',{},null)).browserContextId;const target=(await command('Target.createTarget',{url:'about:blank',browserContextId:context},null)).targetId;session=(await command('Target.attachToTarget',{targetId:target,flatten:true},null)).sessionId;await command('Target.activateTarget',{targetId:target},null);await command('Page.enable');await command('Runtime.enable');await command('Page.navigate',{url});
+  context=(await command('Target.createBrowserContext',{},null)).browserContextId;const target=(await command('Target.createTarget',{url:'about:blank',browserContextId:context},null)).targetId;session=(await command('Target.attachToTarget',{targetId:target,flatten:true},null)).sessionId;await command('Target.activateTarget',{targetId:target},null);await command('Page.enable');await command('Runtime.enable');await beforeNavigate({command});await command('Page.navigate',{url});
   return {command,evaluate,wait,click,sleep,errors,close:async()=>{await command('Target.disposeBrowserContext',{browserContextId:context},null);ws.close();cli(['close']);}};
 }
