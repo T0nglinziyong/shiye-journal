@@ -4,7 +4,7 @@
 
 ## 本地运行
 
-后续代码统一提交到 `T0nglinziyong/shiye-journal`，唯一测试入口固定为 [拾页测试站](https://shiye-journal-test.vercel.app)。GitHub 自动检查见 `.github/workflows/verify.yml`；2026-09-29 已核对 Vercel 项目连接此私有仓库的 `main` 分支和固定域名，后续推送须核对准确提交的自动部署结果，步骤与状态见 [DEPLOYMENT.md](DEPLOYMENT.md)。更新不会创建新测试网址，也不自动迁移各设备的私人浏览器数据。
+后续代码统一提交到 `T0nglinziyong/shiye-journal`，唯一测试入口固定为 [拾页测试站](https://shiye-journal-test.vercel.app)。GitHub 自动检查见 `.github/workflows/verify.yml`；2026-09-29 已实测 `main` 推送产生准确提交、来源 `git` 的 READY 生产部署，固定网址同步更新。后续推送仍须逐次核对部署结果，步骤与状态见 [DEPLOYMENT.md](DEPLOYMENT.md)。更新不会创建新测试网址，也不自动迁移各设备的私人浏览器数据。
 
 需要 Node.js 20+。在工程目录执行 `npm ci`、`npm run build`、`npm test`、`python3 -m unittest discover -s tests -p 'test_*.py'`。可用静态文件服务器把 `dist/` 作为站点根目录预览；PWA 离线安装需要 HTTPS 或同机 localhost。不要直接双击 `index.html` 的 `file://` 路径。
 
