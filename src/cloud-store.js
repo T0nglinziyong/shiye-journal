@@ -12,6 +12,7 @@ const imageSizes=new Map();
 const uploads=new Map();
 const snapshots=new Map();
 const documents=new Map();
+function retainImage(path,data){images.set(path,Promise.resolve(data));imageSizes.delete(path);imageSizes.set(path,data.size);let bytes=[...imageSizes.values()].reduce((a,b)=>a+b,0);for(const [key,size] of imageSizes){if(bytes<=64*1024*1024&&imageSizes.size<=48)break;if(key===path)continue;images.delete(key);imageSizes.delete(key);bytes-=size;}}
 let cacheDisabled=false;
 const account=async()=>`${namespace}:${await identity()}`;
 const projectSync=createProjectSync({
@@ -96,6 +97,7 @@ async function encode(store,record){
   // does not need the original. Legacy records generate and cache it on demand.
   let thumbnailPath;
   try{const thumbnail=await makeThumbnail(record.data);if(thumbnail){const path=storagePath+'-preview360.webp';const result=await cloudClient().storage.from(BUCKET).upload(path,thumbnail,{upsert:false,contentType:'image/webp'});if(!result.error||String(result.error.statusCode)==='409'){thumbnailPath=path;await remember('thumbnail:'+storagePath,thumbnail);}}}catch{/* Optional thumbnail failure must not lose an otherwise valid original. */}
+  await remember('image:'+storagePath,record.data);retainImage(storagePath,record.data);
   const {data,thumbnailPath:_oldThumbnail,...metadata}=record;return {...metadata,storagePath,...(thumbnailPath?{thumbnailPath}:{})};
 }
 function cloudTransaction(names,fn){
@@ -106,6 +108,7 @@ function cloudTransaction(names,fn){
     const previous=revision;
     const puts=operations.filter(op=>op.action==='put');for(let offset=0;offset<puts.length;offset+=3)await Promise.all(puts.slice(offset,offset+3).map(async op=>{op.item=await encode(op.store,op.item);}));
     const data=checked(await cloudClient().rpc('shiye_commit',{operations,expected_revision:previous}));revision=Number(data);
+    for(const op of operations)if(op.store==='blobs'&&op.action==='put')await remember('blob-record:'+op.item.id,{revision,record:op.item});
     // Patch only cached collections belonging to the committed base revision.
     // Remote conflicts never write to this cache or silently become local edits.
     for(const store of ['assets','series','projects','trash','meta','blobs']){

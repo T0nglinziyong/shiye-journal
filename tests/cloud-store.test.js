@@ -25,6 +25,12 @@ test('cloud reads all pages, not just the server default first 1000 records',asy
   assert.equal((await db.cloudAll('assets')).length,1001);
 });
 function memoryCache(){const rows=new Map();return {async get(owner,key){return structuredClone(rows.get(owner+':'+key));},async put(owner,key,value){rows.set(owner+':'+key,structuredClone(value));},async clear(owner){for(const key of rows.keys())if(key.startsWith(owner+':'))rows.delete(key);}};}
+test('uploaded originals are immediately reusable and survive a fresh cloud store without re-download',async()=>{
+  const cache=memoryCache(),a=fixture(cache),data=new Blob(['new private original'],{type:'image/png'});
+  await a.db.cloudTransaction(['blobs'],tx=>tx.objectStore('blobs').put({id:'new-blob',data}));
+  assert.equal(await (await a.db.cloudGet('blobs','new-blob')).data.text(),'new private original');assert.equal(a.state.downloads,0);
+  const b=fixture(cache);b.state.revision=a.state.revision;assert.equal(await (await b.db.cloudGet('blobs','new-blob')).data.text(),'new private original');assert.equal(b.state.downloads,0);
+});
 test('warm cloud reads reuse revision snapshots and hashes across store instances',async()=>{
   const cache=memoryCache(),a=fixture(cache);a.state.rows=[{id:'a',title:'cached'}];await a.db.cloudAll('assets');
   const b=fixture(cache);assert.equal((await b.db.cloudCachedCollections()),null,'partial cache must not hydrate four collections');
