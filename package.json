@@ -8,7 +8,7 @@
     "start:local": "node server/server.mjs",
     "build": "vite build && node scripts/precache.mjs",
     "test": "node --test tests/*.test.js",
-    "test:ui": "npm run build && node tests/ui-smoke.mjs"
+    "test:ui": "npm run build && node tests/ui-smoke.mjs && node tests/route-parity-smoke.mjs && node tests/self-host-smoke.mjs"
   },
   "devDependencies": {
     "fake-indexeddb": "^6.2.5",

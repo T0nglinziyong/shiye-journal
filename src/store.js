@@ -3,17 +3,21 @@ const STORES=['assets','blobs','series','projects','meta','trash'];
 let connection;
 const CONFIG_KEY='shiye-data-server-v1';
 let backend;
+let sameOriginServer=false;
 export function storageConfig(){try{return JSON.parse(localStorage.getItem(CONFIG_KEY)||'null');}catch{return null;}}
-export function setStorageConfig(config){if(config)localStorage.setItem(CONFIG_KEY,JSON.stringify(config));else localStorage.removeItem(CONFIG_KEY);backend=undefined;}
+export function setStorageConfig(config){if(config)localStorage.setItem(CONFIG_KEY,JSON.stringify(config));else localStorage.removeItem(CONFIG_KEY);backend=undefined;sameOriginServer=false;}
+export function isSameOriginServer(){return sameOriginServer;}
 export async function storageMode(){return (await resolveBackend())?.url?'server':'browser';}
 async function resolveBackend(){
   if(backend)return backend;
   const config=storageConfig();
-  if(config?.url){const url=new URL(config.url);if(url.protocol!=='https:'&&!['localhost','127.0.0.1','[::1]'].includes(url.hostname))throw Error('远程数据地址必须使用 HTTPS');const candidate={url:url.origin,token:config.token||''},health=await serverRequest('/api/health',{backend:candidate});if(health.server!=='shiye-local')throw Error('该地址不是拾页数据服务');await serverRequest('/api/store/meta',{backend:candidate});return backend=candidate;}
-  try{const r=await fetch('/api/health',{cache:'no-store'});if(r.ok&&(await r.json()).server==='shiye-local')return backend={url:location.origin,token:''};}catch{}
+  if(config?.url){const url=new URL(config.url);if(url.protocol!=='https:'&&!['localhost','127.0.0.1','[::1]'].includes(url.hostname))throw Error('远程数据地址必须使用 HTTPS');if(document.querySelector('meta[name="shiye-server"]')&&url.origin!==location.origin)throw Error('自托管站点只允许使用同域名数据服务，请清除旧服务器配置');const candidate={url:url.origin,token:config.token||''},health=await serverRequest('/api/health',{backend:candidate});if(health.server!=='shiye-local')throw Error('该地址不是拾页数据服务');sameOriginServer=url.origin===location.origin;await serverRequest('/api/store/meta',{backend:candidate});return backend=candidate;}
+  let r;try{r=await fetch('/api/health',{cache:'no-store'});}catch(error){if(document.querySelector('meta[name="shiye-server"]'))throw Error('拾页服务器暂时不可用，请检查 4090 电脑及网络；未切换到浏览器存储');return backend={};}
+  if(r.ok){let health;try{health=await r.json();}catch{}if(health?.server==='shiye-local'){sameOriginServer=true;const candidate={url:location.origin,token:''};await serverRequest('/api/store/meta',{backend:candidate});return backend=candidate;}}
+  if(document.querySelector('meta[name="shiye-server"]'))throw Error('拾页数据服务响应异常；未切换到浏览器存储');
   return backend={};
 }
-async function serverRequest(path,{backend:target,method='GET',data}={}){const b=target||await resolveBackend(),r=await fetch(b.url+path,{method,headers:{...(b.token?{Authorization:`Bearer ${b.token}`}:{ }),...(data?{'Content-Type':'application/json'}:{})},body:data?JSON.stringify(data):undefined,cache:'no-store'});let result;try{result=await r.json();}catch{throw Error('数据服务没有返回有效 JSON');}if(!r.ok)throw Error(result.error||`数据服务 HTTP ${r.status}`);return result;}
+async function serverRequest(path,{backend:target,method='GET',data}={}){const b=target||await resolveBackend(),r=await fetch(b.url+path,{method,headers:{...(b.token?{Authorization:`Bearer ${b.token}`}:{ }),...(data?{'Content-Type':'application/json'}:{})},body:data?JSON.stringify(data):undefined,cache:'no-store'});let result;try{result=await r.json();}catch{throw Error('数据服务没有返回有效 JSON');}if(!r.ok){const error=Error(result.error||`数据服务 HTTP ${r.status}`);error.status=r.status;throw error;}return result;}
 export async function database(){
   if(connection)return connection;
   connection=new Promise((resolve,reject)=>{

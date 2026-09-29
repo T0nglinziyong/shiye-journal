@@ -1,0 +1,131 @@
+/* Viewport rules shared by every Swift-equivalent screen. Keep the order of
+   controls unchanged; only their available width and scrolling adapt. */
+#view { width:100%; max-width:1440px; min-width:0; }
+.view-head,.view-head>div,.view-head .actions,.filters,.panel,.card,
+.matching-page,.matching-layout,.detail-page,.project-preview-page,
+.settings-page,.import-inspect,.import-review,.swift-editor-workspace { min-width:0; }
+.actions,.swift-tabs,.swift-editor-toolbar,.swift-editor-head .actions,
+.match-chips,.queue-strip { -webkit-overflow-scrolling:touch; overscroll-behavior-inline:contain; }
+.actions button,.swift-tabs button,.swift-editor-head .actions button { flex-shrink:0; }
+.asset-grid { grid-template-columns:repeat(auto-fill,minmax(clamp(125px,14vw,190px),1fr)); }
+.series-grid { grid-template-columns:repeat(auto-fill,minmax(clamp(150px,18vw,205px),1fr)); }
+.works-grid { grid-template-columns:repeat(auto-fill,minmax(clamp(155px,17vw,205px),1fr)); }
+.detail-columns { grid-template-columns:minmax(0,1.25fr) minmax(290px,1fr); }
+.detail-picture { min-height:0; height:min(58dvh,560px); }
+.detail-picture img { max-width:100%; max-height:100%; }
+.matching-layout { grid-template-columns:minmax(230px,26%) minmax(0,1fr); }
+.match-rec-grid { grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); }
+.import-nav { width:100%; }
+.inspect-columns { grid-template-columns:minmax(0,2fr) minmax(270px,1fr); }
+.review-candidates { grid-template-columns:repeat(auto-fill,minmax(125px,1fr)); }
+.swift-editor-toolbar { min-width:0; }
+.swift-editor-toolbar .editor-tools { flex:0 0 auto; }
+.swift-insertion-tools { overflow-x:auto; overflow-y:hidden; justify-content:flex-start; }
+.swift-editor-workspace .page-wrap { min-width:0; min-height:0; }
+.project-preview-cover { min-width:0; }
+.project-preview-cover .preview-paper { max-width:100%; }
+.project-preview-actions { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; width:min(720px,100%); margin-top:12px; }
+.project-preview-actions .btn { flex:1 1 170px; }
+dialog { width:min(700px,calc(100vw - 24px)); max-height:calc(100dvh - 24px); overflow:auto; }
+
+/* iPad portrait and compact desktop: the centered nav must never overlap
+   the brand or the basket. The same controls remain in their Swift order. */
+@media (min-width:700px) and (max-width:1100px) {
+  .topbar { gap:10px; padding-inline:14px; }
+  .brand { min-width:120px; flex:0 0 auto; }
+  .main-nav { position:static; transform:none; margin-inline:auto; flex:0 1 auto; }
+  .main-nav button { min-width:70px; padding-inline:9px; }
+  .top-actions { flex:0 0 auto; margin-left:0; }
+  .save-state { display:none; }
+  #view { padding-inline:18px; }
+  .filters { flex-wrap:wrap; }
+  .filters input[type=search] { flex:1 1 260px; }
+  .matching-layout { grid-template-columns:minmax(220px,32%) minmax(0,1fr); }
+  .match-rec-grid { grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); }
+  .inspect-columns { grid-template-columns:minmax(0,1.5fr) minmax(245px,1fr); }
+  .swift-editor-toolbar .editor-tools { max-width:52%; overflow-x:auto; }
+  .swift-insertion-tools { flex:1 1 auto; }
+}
+
+/* Swift uses a bottom navigation on narrow screens. The creation editor and
+   import workspace remain full-screen, with their own toolbar/navigation. */
+@media (max-width:699px) {
+  .topbar { height:60px; min-height:60px; flex-wrap:nowrap; padding:0 12px; gap:8px; }
+  .brand { min-width:0; flex:1; }
+  .brand small { display:none; }
+  .top-actions { margin-left:auto; flex:none; }
+  .top-actions #top-basket { font-size:0; min-width:42px; min-height:42px; }
+  #basket-count { font-size:14px; }
+  #top-settings { min-width:42px; min-height:42px; }
+  .main-nav { position:fixed; left:0; right:0; top:auto; bottom:0;
+    transform:none; order:initial; width:100%; height:auto; margin:0;
+    display:flex; justify-content:space-around; padding:7px 8px calc(7px + env(safe-area-inset-bottom));
+    border-top:1px solid #e3e5dc; border-radius:0; background:#fffefa; z-index:30; }
+  .main-nav button { flex:1; min-width:0; min-height:42px; white-space:nowrap; }
+  #view { padding:14px 12px calc(95px + env(safe-area-inset-bottom)); }
+  .view-head { align-items:flex-start; gap:8px; }
+  .view-head .actions { width:100%; flex-wrap:nowrap; overflow-x:auto; }
+  .filters { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+  .filters input[type=search] { grid-column:1/-1; width:100%; min-width:0; flex-basis:auto; }
+  .filters select { width:100%; max-width:none; min-width:0; }
+  .filters span { grid-column:1/-1; }
+  .asset-grid,.series-grid,.works-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+  .asset-grid .card-image { aspect-ratio:1.15; }
+  .series-cover,.series-entry-cover { aspect-ratio:1.1; }
+  .works-grid .card-body p { gap:4px; min-width:0; }
+  .works-grid .card-body p span { overflow:hidden; text-overflow:ellipsis; }
+  .swift-series-controls { flex-wrap:wrap; }
+  .swift-series-controls input { flex-basis:100%; }
+  .swift-series-controls select { flex:1; }
+  .swift-tray { bottom:calc(72px + env(safe-area-inset-bottom)); max-height:36dvh; overflow-y:auto; }
+  .swift-tray .tray-items { width:100%; flex-basis:100%; }
+  .matching-layout { grid-template-columns:minmax(0,1fr); }
+  .matching-layout>.basket,.matching-layout>.panel { height:auto; max-height:min(42dvh,390px); }
+  .match-rec-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .match-style-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .match-generate .btn { flex:1 1 190px; white-space:normal; }
+  .inspect-columns,.detail-columns { grid-template-columns:minmax(0,1fr); }
+  .import-nav { max-width:none; height:auto; min-height:70px; justify-content:flex-start; overflow-x:auto; }
+  .import-progress { flex:none; }
+  .import-inspect,.import-intro { padding:16px 12px 100px; }
+  .import-preparation .photo-preview { height:min(44dvh,380px); }
+  .import-inspector { min-height:0; }
+  .import-photo-tools,.review-actions { flex-wrap:wrap; }
+  .review-candidates { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .detail-page { padding:8px 0 90px; }
+  .detail-picture { height:min(44dvh,380px); }
+  .detail-copy h1 { margin:14px 0; }
+  .detail-links { flex-wrap:wrap; }
+  .detail-links .btn { flex:1 1 110px; }
+  .project-preview-page { min-height:calc(100dvh - 130px); }
+  .settings-page { padding-bottom:70px; }
+  .editing #view,body:has(.import-nav) #view { padding:0; }
+  .editing .topbar,body:has(.import-nav) .topbar { display:none; }
+  .editing .main-nav,body:has(.import-nav) .main-nav { display:none; }
+  .swift-editor-toolbar { overflow-x:auto; overflow-y:hidden; }
+  .swift-editor-toolbar .editor-tools { max-width:none; overflow:visible; }
+  .swift-insertion-tools { flex:none; min-width:max-content; overflow:visible; }
+  .swift-editor-workspace { height:calc(100dvh - 150px); min-height:220px; }
+  .swift-editor-workspace .editor-stage { height:100%; min-height:0; }
+  .swift-editor-workspace.show-inspector .editor-inspector { right:4px; top:140px;
+    width:min(320px,calc(100vw - 8px)); height:calc(100dvh - 145px); }
+  .inline-ai-panel { width:calc(100% - 20px); }
+}
+
+@media (max-width:380px) {
+  .brand strong { font-size:16px; }
+  .main-nav button { font-size:12px; padding-inline:3px; }
+  .asset-grid,.series-grid,.works-grid { gap:8px; }
+  .match-rec-grid,.matching-page .match-options { grid-template-columns:minmax(0,1fr); }
+  .review-candidates { grid-template-columns:minmax(0,1fr) minmax(0,1fr); }
+  .settings-detail label { align-items:stretch; flex-direction:column; }
+  .settings-detail input,.settings-detail select { max-width:100%; width:100%; }
+}
+
+@media (max-width:699px) and (orientation:landscape) {
+  .swift-editor-workspace { height:calc(100dvh - 132px); min-height:160px; }
+  .swift-editor-workspace.show-inspector .editor-inspector { top:105px; height:calc(100dvh - 110px); }
+  .editing .swift-editor-head { min-height:75px; }
+  .editing .swift-editor-head h1 { font-size:18px; }
+  .import-preparation .photo-preview { height:min(58dvh,300px); }
+}
