@@ -35,4 +35,14 @@ try{
 // Pause only the optional sample request. The library and manual creation must
 // remain usable without waiting for that request's 15-second timeout.
 const startup=await browserHarness('shiye-startup-test',process.env.SHIYE_TEST_URL||'http://127.0.0.1:5173',async({command})=>{await command('Fetch.enable',{patterns:[{urlPattern:'*/cece/collection.json'}]});});
-try{await startup.wait('.series-grid');const ready=await startup.evaluate('performance.now()');assert.ok(ready<5000,'Optional examples blocked the first screen: '+ready);await startup.click('[data-route="works"]','.works-grid');await startup.click('#work-create','#canvas-page');assert.ok(await startup.evaluate('!!document.querySelector("[data-val=pen]")'));assert.deepEqual(startup.errors,[]);console.log('First usable screen with optional request paused:',Math.round(ready),'ms');}finally{await startup.close();}
+try{
+  await startup.wait('.series-grid');const ready=await startup.evaluate('performance.now()');assert.ok(ready<5000,'Optional examples blocked the first screen: '+ready);
+  await startup.click('[data-route="works"]','.works-grid');await startup.click('#work-create','#canvas-page');assert.ok(await startup.evaluate('!!document.querySelector("[data-val=pen]")'));
+  await startup.click('[data-act="back-works"]','.works-grid');await startup.click('[data-route="library"]','.series-grid');await startup.click('.swift-tabs button:nth-child(2)','.asset-grid');await startup.click('[data-filter-heading="排序依据"]','.swift-menu');
+  await startup.evaluate('globalThis.__openFilter=document.querySelector(".swift-popover")');assert.equal(startup.pausedRequests.length,1);
+  const collection={format:'shiye-bundled-cece',version:2,series:{id:'synthetic-delayed-series',title:'延迟样例验收',createdAt:new Date().toISOString()},assets:[],projects:[]};
+  await startup.command('Fetch.fulfillRequest',{requestId:startup.pausedRequests[0].requestId,responseCode:200,responseHeaders:[{name:'Content-Type',value:'application/json'}],body:Buffer.from(JSON.stringify(collection)).toString('base64')});
+  const seeded=()=>startup.evaluate('(async()=>{const db=await new Promise(r=>{const q=indexedDB.open("shiye-pwa-full-v1");q.onsuccess=()=>r(q.result);});const result=await new Promise(r=>{const q=db.transaction("meta").objectStore("meta").get("cece-samples-v2");q.onsuccess=()=>r(!!q.result);});db.close();return result;})()');
+  for(let i=0;i<200&&!await seeded();i++)await startup.sleep(20);assert.ok(await seeded());await startup.sleep(100);assert.ok(await startup.evaluate('document.querySelector(".swift-popover")===globalThis.__openFilter'),'Delayed examples closed the active filter');
+  await startup.evaluate('[...document.querySelectorAll(".swift-menu button")].find(b=>b.textContent==="名称").click()');assert.equal(await startup.evaluate('document.querySelector("#sort-basis").value'),'name');assert.deepEqual(startup.errors,[]);console.log('First usable screen with optional request paused:',Math.round(ready),'ms; delayed completion preserves active menu');
+}finally{await startup.close();}

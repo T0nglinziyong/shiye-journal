@@ -4,6 +4,8 @@
 
 2026-09-29 创作交互增量在本地通过 39 项单元、UI 冒烟及 214 张 Chromium 浏览器截图后推送；发布仍仅采用下述项目的 `main` Git 自动构建与固定网址，不上传私人原图、测试产物、密钥或实时数据。逐次部署核对 Git SHA、`source=git`、READY、生产别名和线上浏览器结果；具体本轮部署证据将在发布后补充。此前 30 项和 20 张线上记录为历史范围，不应当作最新代码上线证明。
 
+功能提交 `8a98f16ea298f8dfb2a01d41aa8781d123e9af97` 已由 Git 自动生成 `dpl_7Ghyq3b2ysG4pzCyaKQ6TNnjt6y1`：生产 READY，Vite 构建约 9.5 秒，固定别名准确指向此部署。线上主流程 109 张通过，但创作专项发现可选样例异步完成会关闭已打开筛选菜单；此失败没有计作通过。后续补丁禁止可选样例在菜单／输入交互期间重绘，并用暂停／释放请求验证同一菜单节点仍存在。独立线上导入首轮启动未完成，已终止测试进程；不能把该次算通过。最新线上完整复查另行记录。
+
 用户要求后续验收通过的代码全部提交、推送至私有仓库 `T0nglinziyong/shiye-journal`。按用户最新指定，唯一测试入口为 `https://shiye-journal-test.vercel.app`，使用现有 Vercel 项目 `shiye-journal-test`（`prj_96WRMneQ8J6gF1X7DUuzDqk5bWrE`），不创建新项目、不改变网址，也不改 `shiyejournal.vip` 的 DNS。旧临时项目不再作为发布目标；不要删除旧站或其浏览器资料。
 
 2026-09-29 用户重新关联后实查：项目 Git `link.type=github`，仓库为 `T0nglinziyong/shiye-journal`，Production Branch 为 `main`；项目域名列表包含已验证的 `shiye-journal-test.vercel.app`，无分支限制、无重定向。此前授权失败已解除。框架 Vite、构建 `npm run build`、输出 `dist`；后续以每次推送的准确 Git 提交触发 `READY` 部署，并更新同一生产别名为验收依据，仅关联成功不代表最新代码已发布。不要通过更换项目或借用密钥绕过授权。
