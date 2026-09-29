@@ -2,6 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import cvModule from '@techstark/opencv-js';
 import {processVision} from '../src/opencv-worker.js';
+test('almost rectangular paper repairs a small bitten edge without a jagged contour',async()=>{
+  const cv=await cvModule,width=120,height=160,alpha=new Uint8Array(width*height);
+  for(let y=20;y<140;y++)for(let x=20;x<100;x++)alpha[y*width+x]=255;
+  for(let y=110;y<122;y++)for(let x=20;x<26;x++)alpha[y*width+x]=0;
+  const r=await processVision(cv,'material-mask',{alpha,width,height});assert.equal(r.edgeMethod,'slimsam-rectangular-prior');assert.equal(r.mask.polygons[0].length,4);
+  assert.equal(r.mask.alpha[(115-Math.round(r.y*height))*r.mask.width+22-Math.round(r.x*width)],255);
+});
 test('model contour fills printed white holes but preserves a concave material boundary',async()=>{
   const cv=await cvModule,width=100,height=100,alpha=new Uint8Array(width*height);
   for(let y=20;y<80;y++)for(let x=20;x<80;x++)if(!(x>55&&y>55))alpha[y*width+x]=255;

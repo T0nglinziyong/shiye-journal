@@ -40,15 +40,19 @@ export async function processVision(cv,operation,p){
       cv.findContours(src,contours,hierarchy,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_SIMPLE);
       let largest=null,area=0;for(let i=0;i<contours.size();i++){const c=own(contours.get(i)),a=cv.contourArea(c);if(a>area){area=a;largest=c;}}
       if(!largest||area<16)return null;
-      const bounds=cv.boundingRect(largest),x=Math.max(0,bounds.x-2),y=Math.max(0,bounds.y-2),w=Math.min(p.width,bounds.x+bounds.width+2)-x,h=Math.min(p.height,bounds.y+bounds.height+2)-y;
-      const polygon=own(new cv.Mat());cv.approxPolyDP(largest,polygon,.7,true);
+      let boundary=largest,edgeMethod='slimsam-contour';const rectangle=cv.minAreaRect(largest),fill=area/Math.max(1,rectangle.size.width*rectangle.size.height);
+      // Only almost-complete rectangular paper gets a straight-edge prior.
+      // Never apply a convex hull to genuinely concave stickers.
+      if(fill>=.96){boundary=own(cv.matFromArray(4,1,cv.CV_32SC2,cv.boxPoints(rectangle).flatMap(p=>[Math.round(p.x),Math.round(p.y)])));edgeMethod='slimsam-rectangular-prior';}
+      const bounds=cv.boundingRect(boundary),x=Math.max(0,bounds.x-2),y=Math.max(0,bounds.y-2),w=Math.min(p.width,bounds.x+bounds.width+2)-x,h=Math.min(p.height,bounds.y+bounds.height+2)-y;
+      const polygon=own(new cv.Mat());cv.approxPolyDP(boundary,polygon,.7,true);
       const points=Array.from({length:polygon.rows},(_,i)=>[polygon.data32S[i*2]-x,polygon.data32S[i*2+1]-y]);
       // A material is the whole printed paper, not holes in its white artwork.
       // External contour keeps real concavity; unlike a convex hull it does
       // not bridge the gap between the basketball players' legs.
-      const filled=own(cv.Mat.zeros(p.height,p.width,cv.CV_8UC1)),one=own(new cv.MatVector());one.push_back(largest);cv.drawContours(filled,one,-1,new cv.Scalar(255),cv.FILLED);
-      const local=own(filled.roi(new cv.Rect(x,y,w,h))),packed=own(local.clone());
-      return {x:x/p.width,y:y/p.height,w:w/p.width,h:h/p.height,pixels:area,mask:{width:w,height:h,alpha:new Uint8Array(packed.data),polygons:[points]}};
+      const filled=own(cv.Mat.zeros(p.height,p.width,cv.CV_8UC1)),one=own(new cv.MatVector());one.push_back(boundary);cv.drawContours(filled,one,-1,new cv.Scalar(255),cv.FILLED);
+      const local=own(filled.roi(new cv.Rect(x,y,w,h))),packed=own(new cv.Mat());local.copyTo(packed);
+      return {x:x/p.width,y:y/p.height,w:w/p.width,h:h/p.height,pixels:area,edgeMethod,mask:{width:w,height:h,alpha:new Uint8Array(packed.data),polygons:[points]}};
     }
     if(operation==='components'){
       const src=own(cv.matFromArray(p.height,p.width,cv.CV_8UC1,p.mask)),closed=own(new cv.Mat()),kernel=own(cv.getStructuringElement(cv.MORPH_CROSS,new cv.Size(3,3))),labels=own(new cv.Mat()),stats=own(new cv.Mat()),centroids=own(new cv.Mat());cv.morphologyEx(src,closed,cv.MORPH_CLOSE,kernel);const count=cv.connectedComponentsWithStats(closed,labels,stats,centroids,4,cv.CV_32S),result=[],w=p.width,h=p.height,minArea=Math.max(20,(p.smallestMM/p.paperWidthMM*w)*(p.smallestMM/p.paperHeightMM*h)*.12),rgba=p.pixels?own(cv.matFromArray(h,w,cv.CV_8UC4,p.pixels)):null;

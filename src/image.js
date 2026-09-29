@@ -17,7 +17,7 @@ export async function detectPaperCandidates(bitmap,box,smallestMM=6,{balanceLigh
   for(let i=0;i<candidates.length;i++){
     const m=masks[i];if(!m){result.push(candidates[i]);rejected++;continue;}
     const region=await visionTask('material-mask',{alpha:m.alpha,width:w,height:h});
-    if(!region){result.push(candidates[i]);rejected++;}else result.push({...region,modelConfidence:m.score,edgeMethod:'slimsam-contour'});
+    if(!region){result.push(candidates[i]);rejected++;}else result.push({...region,modelConfidence:m.score});
   }
   if(rejected)onProgress({status:'fallback',count:rejected});
   return result;
