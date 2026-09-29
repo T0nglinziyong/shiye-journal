@@ -97,6 +97,13 @@ test('automatic organization starts after commit and does not delay continuing i
   state.importStep='review';db.transaction=async()=>{throw Error('offline');};called=false;
   await assert.rejects(saveImportBatch({state,db,urls,render:()=>{},onSaved:()=>{called=true;}}),/offline/);assert.equal(called,false);
 });
+test('saved import announces queued organization before remote upload finishes',async()=>{
+  const blob=new Blob(['synthetic']),state={importMode:'material',importStep:'review',assets:[],projects:[],importRecords:[{confirmed:true,file:blob,selectedCandidates:[{selected:true,title:'素材 1',blob,region:{x:0,y:0,w:1,h:1}}]}]},urls=new Map();
+  let release,announced=false,organized=false;const remote=new Promise(r=>release=r);
+  await saveImportBatch({state,db:{stageImport:async()=>({pending:true}),flushProjects:()=>remote},urls,render:()=>{},onSaved:async(records,{waitForSave})=>{announced=true;await waitForSave();organized=true;}});
+  assert.equal(state.importStep,'done');assert.ok(announced);assert.equal(organized,false);
+  release();await new Promise(r=>setImmediate(r));assert.ok(organized);for(const url of urls.values())URL.revokeObjectURL(url);
+});
 test('AI metrics contain no private body; opt-in context redacts credentials before persistence',async()=>{
   const values=new Map(),db={get:async(_,id)=>values.get(id),put:async(_,value)=>values.set(value.id,structuredClone(value)),all:async()=>[...values.values()],transaction:async(_,fn)=>fn({objectStore:()=>({delete:id=>values.delete(id)})})};
   const response=()=>new Response(JSON.stringify({usage:{prompt_tokens:7,completion_tokens:3},choices:[{message:{content:'private-reply'}}]}));

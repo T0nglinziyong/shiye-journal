@@ -5,6 +5,8 @@ import './mobile-ai.css';
 import './responsive.css';
 import './swift-controls.css';
 import './icons.css';
+import './asset-organization.css';
+import {createAssetOrganization,mountOrganizationBadges} from './asset-organization.js';
 import '@fontsource/ma-shan-zheng/chinese-simplified-400.css';
 import {mountIcons} from './icons.js';
 import {startCloudSession} from './entry.js';
@@ -56,6 +58,8 @@ modal.querySelector('.modal-close').onclick=()=>modal.close();
 const fileInput=document.querySelector('#file-input'),backupInput=document.querySelector('#backup-input');
 const state={route:'series',assets:[],series:[],projects:[],trash:[],basket:[],history:[],selected:null,activeProject:null,activeDraft:null,detailAssetID:null,previewProjectID:null,settingsSection:null,selfHosted:false,aiSettings:loadAISettings(),preferences:loadPreferences(),aiPanel:false,aiBusy:false,aiPrompt:'',aiProgress:'',tool:'select',zoom:1,sort:'newest',query:'',kind:'all',status:'all',seriesID:'all',matchCore:null,matchRatio:'a4',matchMode:'single',matchStyle:'韩系清新',matchStyles:['韩系清新'],matchPurposes:['日常记录'],matchIntent:'',matchPurpose:'日常记录',matchProcessing:'保留完整',materialUseHints:{},materialUseRequired:{},assetProcessing:{},customPaperWidth:210,customPaperHeight:297,recommendFilter:'全部',coreIDs:[],importStep:'inspect',importRecords:[],importIndex:0,importFile:null,importBitmap:null,importBox:{x:0,y:0,w:1,h:1},importCandidate:null,importRemoveWhite:false,undo:[],redo:[],drawing:false};
 const urls=new Map(),staticSources=new Map();
+const assetOrganization=createAssetOrganization();
+mountOrganizationBadges(view,assetOrganization);
 const imageNodes=new ImageNodeCache();
 const libraryHistory=[];
 function openLibraryAsset(id){libraryHistory.push({route:state.route,seriesID:state.seriesID,detailAssetID:state.detailAssetID});state.detailAssetID=id;route('assetDetail');}
@@ -92,7 +96,7 @@ function route(name,{back=false}={}){
   if(name==='settings'&&!settingsSession)settingsSession={ai:structuredClone(state.aiSettings),preferences:structuredClone(state.preferences),returnRoute:state.route};
   if(state.route==='settings'&&name!=='settings'&&settingsSession){state.aiSettings=settingsSession.ai;state.preferences=settingsSession.preferences;settingsSession=null;state.settingsSection=null;}
 if(state.route==='editor'&&name!=='editor'&&aiController)aiController.abort(Error('已离开创作页面'));state.route=name;if(name==='import'&&typeof Worker!=='undefined')Promise.resolve().then(()=>visionTask('warmup',{})).catch(()=>{});if(name==='series'){state.seriesID='all';state.addingToSeries=null;libraryHistory.length=0;}if(name!=='library')state.addingToSeries=null;if(name!=='settings'&&!fromSettings)state.selected=null;render();window.scrollTo(0,routeScroll.get(name+':'+state.seriesID)||0);}
-function imgTag(a){const src=a&&(image(a.blobId)||a.staticPath);return src?`<img loading="lazy" decoding="async" src="${esc(src)}" alt="${esc(a.title)}">`:'<span>无预览</span>';}
+function imgTag(a){const src=a&&(image(a.blobId)||a.staticPath);return src?`<img data-asset-image-id="${esc(a.id)}" loading="lazy" decoding="async" src="${esc(src)}" alt="${esc(a.title)}">`:'<span>无预览</span>';}
 function assetCard(a){return `<button class="card" data-act="detail" data-id="${a.id}"><div class="card-image">${imgTag(a)}</div><div class="card-body"><h3>${esc(a.title)}</h3><p>${esc(kindName(a.kind))} · ${a.physicalWidthMM?`${fmt(a.physicalWidthMM)} × ${fmt(a.physicalHeightMM)} mm`:'尺寸待确认'}</p><span class="chip ${a.reviewStatus==='ready'?'':'warn'}">${a.reviewStatus==='ready'?'已整理':'待检查'}</span></div></button>`;}
 const fmt=n=>Number(n).toFixed(1).replace(/\.0$/,'');
 function head(title,subtitle,actions=''){return `<div class="view-head"><div><h1>${title}</h1><p>${subtitle}</p></div><div class="actions">${actions}</div></div>`;}
@@ -473,22 +477,21 @@ async function confirmImportPhoto(){
   const rec=state.importRecords[state.importIndex];rec.selectedCandidates=(state.importCandidateData||[]).map((c,i)=>({...c,selected:state.importCandidateSelection.has(i)}));rec.confirmed=true;saveActiveImportRecord();
   const next=state.importRecords.findIndex(r=>!r.confirmed);if(next>=0)await switchImportRecord(next);else{state.importStep='review';render();}
 }
-async function organizeSavedAssets(records){
+async function organizeSavedAssets(records,{waitForSave}={}){
   if(state.preferences.autoOrganize&&records.length){
     const cfg=structuredClone(state.aiSettings);
     if(cfg.key&&cfg.includeThumbnails&&supportsVision(cfg)){
-      try{for(const record of records){
+      await assetOrganization.run(records,{waitForSave,organize:async record=>{
         const result=await classifyRecord({kind:'asset',record,settings:cfg,image:await modelImage(record),assets:[]});
         // Read the saved object again: a rename, deletion or series assignment
         // made while the model was running must never be overwritten.
-        const latest=await db.get('assets',record.id);if(!latest)continue;
+        const latest=await db.get('assets',record.id);if(!latest)return;
         const update={...latest,autoOrganized:true};
         if(latest.title===record.title&&/^素材 \d+$/.test(record.title||''))update.title=result.title;
         if(JSON.stringify(latest.tags||[])===JSON.stringify(record.tags||[])&&!record.tags?.length)update.tags=result.tags;
         await db.put('assets',update);const current=state.assets.find(a=>a.id===record.id);if(current)Object.assign(current,update);
         for(const label of view.querySelectorAll('[data-id] .card-body h3'))if(label.closest('[data-id]').dataset.id===record.id){const mark=label.querySelector('.basket-card-check');label.textContent=update.title;if(mark)label.append(mark);}
-      }}
-      catch{toast('素材已保存；自动整理未完成，可稍后重新识别');}
+      },onError:()=>toast('素材已保存；自动整理未完成，可稍后重新识别')});
     }else toast('未配置可用的视觉接口，素材保留待检查；可在设置关闭自动整理');
   }
 }
