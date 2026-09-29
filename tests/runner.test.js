@@ -19,7 +19,7 @@ test('multi-turn tool feedback preserves valid prefix after malformed call',asyn
   assert.equal(calls[0].thinking.type,'disabled');
   assert.equal(calls[0].tool_choice,'required');
   assert.equal(calls[1].messages.filter(x=>x.role==='tool').length,2);
-  assert.match(calls[1].messages.at(-1).content,/false/);
+  assert.match(calls[1].messages.find(x=>x.role==='tool'&&x.tool_call_id==='two').content,/false/);
 });
 
 test('empty model response cannot mark a blank page complete',async()=>{

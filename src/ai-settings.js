@@ -6,24 +6,30 @@ export const AI_PROVIDERS=Object.freeze({
   siliconflow:{label:'硅基流动',endpoint:'https://api.siliconflow.cn/v1/chat/completions',models:[['Qwen/Qwen2.5-VL-72B-Instruct','Qwen2.5-VL 72B',true],['deepseek-ai/DeepSeek-V3','DeepSeek V3',false]]},
   custom:{label:'自定义兼容接口',endpoint:'',models:[]}
 });
-export const AI_DEFAULTS=Object.freeze({provider:'deepseek',key:'',keys:{},endpoint:AI_PROVIDERS.deepseek.endpoint,model:'deepseek-flash',temperature:.75,maxTokens:6000,maxTurns:16,imageCount:4,includeThumbnails:true,customVision:false,requestTimeout:75,sendOutputLimit:true,disableThinking:true,transport:'native',textMode:'automatic',reasoningMode:'automatic',customLayoutPrompt:''});
+export const AI_DEFAULTS=Object.freeze({provider:'deepseek',key:'',keys:{},endpoint:AI_PROVIDERS.deepseek.endpoint,model:'deepseek-flash',generationMode:'agent',directPageOutput:'editable',temperature:.75,maxTokens:6000,maxTurns:5,imageCount:4,includeThumbnails:true,customVision:false,requestTimeout:75,sendOutputLimit:true,disableThinking:true,transport:'auto',textMode:'automatic',reasoningMode:'automatic',includeStructureReference:true,sendReference:false,referencePage:1,customLayoutPrompt:''});
 const limit=(value,min,max,fallback)=>Number.isFinite(+value)?Math.min(max,Math.max(min,+value)):fallback;
 export function normalizeAISettings(value={}){
+  if(!value||typeof value!=='object'||Array.isArray(value))value={};
   const provider=AI_PROVIDERS[value.provider]?value.provider:'deepseek',preset=AI_PROVIDERS[provider];
   const keys={...value.keys};if(!keys[provider]&&value.key)keys[provider]=value.key;
   const model=typeof value.model==='string'&&value.model.trim()?value.model.trim():preset.models[0]?.[0]||'';
   return {
     provider,keys,key:String(keys[provider]||'').trim(),endpoint:typeof value.endpoint==='string'&&value.endpoint.trim()?value.endpoint.trim():preset.endpoint,model,
+    generationMode:['agent','direct'].includes(value.generationMode)?value.generationMode:AI_DEFAULTS.generationMode,
+    directPageOutput:['editable','flattened'].includes(value.directPageOutput)?value.directPageOutput:AI_DEFAULTS.directPageOutput,
     temperature:limit(value.temperature,0,2,AI_DEFAULTS.temperature),
     maxTokens:Math.round(limit(value.maxTokens,2000,16000,AI_DEFAULTS.maxTokens)),
-    maxTurns:Math.round(limit(value.maxTurns,0,40,AI_DEFAULTS.maxTurns)),
+    maxTurns:Math.round(limit(value.maxTurns===0?5:value.maxTurns,1,5,AI_DEFAULTS.maxTurns)),
     imageCount:Math.round(limit(value.imageCount,0,8,AI_DEFAULTS.imageCount)),
     includeThumbnails:value.includeThumbnails!==false,customVision:value.customVision===true,
     requestTimeout:limit(value.requestTimeout,20,180,AI_DEFAULTS.requestTimeout),
     sendOutputLimit:value.sendOutputLimit!==false,disableThinking:value.disableThinking!==false,
-    transport:['native','json'].includes(value.transport)?value.transport:'native',
-    textMode:['automatic','minimal','rich'].includes(value.textMode)?value.textMode:'automatic',
-    reasoningMode:['automatic','concise','thorough'].includes(value.reasoningMode)?value.reasoningMode:'automatic',
+    transport:['auto','native','json'].includes(value.transport)?value.transport:AI_DEFAULTS.transport,
+    textMode:['automatic','requested','none','minimal','rich'].includes(value.textMode)?value.textMode:'automatic',
+    reasoningMode:['automatic','low','providerDefault'].includes(value.reasoningMode)?value.reasoningMode:value.reasoningMode==='concise'?'low':value.reasoningMode==='thorough'?'providerDefault':'automatic',
+    includeStructureReference:value.includeStructureReference!==false,
+    sendReference:value.sendReference===true,
+    referencePage:Math.round(limit(value.referencePage,1,4,AI_DEFAULTS.referencePage)),
     customLayoutPrompt:typeof value.customLayoutPrompt==='string'?value.customLayoutPrompt:''
   };
 }

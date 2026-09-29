@@ -6,7 +6,17 @@ import {classifyRecord} from './classification.js';
 import {pagePDF,canvasPDFPage,materialPrintPlacements} from './pdf-export.js';
 import {showAIDiagnostics,showAIContexts} from './ai-diagnostics.js';
 import {mountImportCandidateMenus} from './import-workspace-ui.js';
-import {mountFourFilters} from './filter-controls.js';
+import {mountFourFilters,mountFilterControl} from './filter-controls.js';
+import {containBox} from './preview-geometry.js';
+
+const previewObservers=new WeakMap();
+function mountWorkPreviews(c){
+  previewObservers.get(c.view)?.disconnect();previewObservers.delete(c.view);
+  const frames=[...c.view.querySelectorAll('.works-grid .thumb-sheet,.project-preview-cover .preview-paper')];
+  if(!frames.length)return;
+  const fit=()=>{for(const frame of frames){const p=c.state.projects.find(p=>p.id===(frame.closest('[data-act="open-project"]')?.dataset.id||c.state.previewProjectID));const d=frame.matches('.thumb-sheet')?p?.drafts[0]:p?.drafts.find(d=>d.id===p.activeDraftID)||p?.drafts[0];if(!d)continue;const host=frame.parentElement,r=host.getBoundingClientRect(),box=containBox(d.canvas.width,d.canvas.height,r.width,r.height,16);frame.style.setProperty('width',box.width+'px','important');Object.assign(frame.style,{height:box.height+'px',aspectRatio:d.canvas.width+'/'+d.canvas.height});}};
+  const observer=new ResizeObserver(fit);frames.forEach(frame=>observer.observe(frame.parentElement));previewObservers.set(c.view,observer);fit();
+}
 
 function button(text, action, className='') {
   const b=document.createElement('button');b.type='button';b.className='btn '+className;b.textContent=text;
@@ -14,6 +24,7 @@ function button(text, action, className='') {
 }
 export function mountWorkflowControls(c) {
   mountFourFilters(c);
+  mountWorkPreviews(c);
   if(c.state.route==='series')mountSeries(c);
   if(c.state.route==='works')mountProjectBatch(c);
   if(['library','series'].includes(c.state.route))mountAssetBatch(c);
@@ -27,7 +38,7 @@ export function mountWorkflowControls(c) {
       const height=d.physicalPageHeightMM||297,width=height*d.canvas.width/d.canvas.height;
       const scale=Math.min(height*300/25.4/d.canvas.height,8192/Math.max(d.canvas.width,d.canvas.height));
       const canvas=await c.rasterize(d,scale);
-      c.download(pagePDF([await canvasPDFPage(canvas,width,height)]),c.state.activeProject.title+'.pdf');
+      c.download(await pagePDF([await canvasPDFPage(canvas,width,height)]),c.state.activeProject.title+'.pdf');
     }));
   }
 }
@@ -37,8 +48,8 @@ function mountSeries(c) {
   actions.append(button(parity.selection?'完成':'选择',()=>{parity.selection?finishSelection(parity):beginSelection(parity,'series');render();}));
   const controls=view.querySelector('.swift-series-controls'),input=controls.querySelector('input'),sort=controls.querySelector('select'),count=controls.querySelector('span');
   input.value=parity.seriesQuery||'';sort.value=parity.seriesSort||'recent';
-  const ascending=button(parity.seriesAscending?'升序 ↑':'降序 ↓',()=>{parity.seriesAscending=!parity.seriesAscending;ascending.textContent=parity.seriesAscending?'升序 ↑':'降序 ↓';update();});
-  sort.after(ascending);
+  const order=document.createElement('select');order.innerHTML='<option value="desc">降序</option><option value="asc">升序</option>';order.value=parity.seriesAscending?'asc':'desc';order.onchange=()=>{parity.seriesAscending=order.value==='asc';update();};
+  const bar=document.createElement('div');bar.className='four-filter-controls';sort.after(order,bar);mountFilterControl(sort,bar,'排序依据','≡');mountFilterControl(order,bar,'排序顺序','↕',{toggle:true});
   const cards=[...view.querySelectorAll('[data-act="series-detail"]')];
   const update=()=>{parity.seriesQuery=input.value;parity.seriesSort=sort.value;const q=input.value.trim().toLocaleLowerCase();let visible=0;
     cards.sort((a,b)=>{const x=state.series.find(s=>s.id===a.dataset.id),y=state.series.find(s=>s.id===b.dataset.id);const value=sort.value==='name'?x.title.localeCompare(y.title,'zh-CN'):(x.updatedAt||'').localeCompare(y.updatedAt||'');return (parity.seriesAscending?value:-value)||x.id.localeCompare(y.id);});
@@ -102,7 +113,7 @@ async function exportMaterials(c,ids) {
     }
     pages.push(await canvasPDFPage(canvas,210,297));
   }
-  c.download(pagePDF(pages),'拾页-素材实际尺寸.pdf');
+  c.download(await pagePDF(pages),'拾页-素材实际尺寸.pdf');
 }
 function mountAssetDetail(c) {
   const a=c.asset(c.state.detailAssetID);

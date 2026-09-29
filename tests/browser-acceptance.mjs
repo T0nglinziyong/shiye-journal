@@ -134,7 +134,7 @@ try {
   assert.equal(await evaluate('document.querySelectorAll(".import-region").length'),3,JSON.stringify(overlay));
   await evaluate('[...document.querySelectorAll("button")].find(b=>b.textContent==="完成标记").click()');
   for(let i=0;i<250&&await evaluate('!!document.querySelector(".multi-box-editor")');i++)await sleep(20);
-  assert.equal(await evaluate('!!document.querySelector(".multi-box-editor")'),false,'Manual extraction must finish');
+  assert.equal(await evaluate('!!document.querySelector(".multi-box-editor")'),false,'Manual extraction must finish: '+await evaluate('document.querySelector("#toast").textContent'));
   assert.equal(await evaluate('document.querySelectorAll(".import-candidate-tile").length'),3);
   await click('[data-act="import-confirm-photo"]');await wait('.queue-item.active[data-id="1"]');await wait('.import-candidate-tile.selected');await click('[data-act="import-confirm-photo"]','.review-candidates');
   await evaluate('document.querySelector(".review-candidate").dispatchEvent(new MouseEvent("contextmenu",{bubbles:true,cancelable:true}))');

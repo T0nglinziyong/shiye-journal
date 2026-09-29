@@ -1,25 +1,13 @@
-const encoder = new TextEncoder();
-const bytes = text => encoder.encode(text);
-const join = arrays => { const out=new Uint8Array(arrays.reduce((n,a)=>n+a.length,0)); let offset=0; for(const a of arrays){out.set(a,offset);offset+=a.length;} return out; };
 // JPEG pages embedded in a PDF with an explicit millimetre MediaBox. The
 // document contains no browser chrome and never relies on print-dialog scaling.
-export function pagePDF(pages) {
-  const objects = [], add = data => {objects.push(typeof data==='string'?bytes(data):data);return objects.length;};
-  add('<< /Type /Catalog /Pages 2 0 R >>'); add('');
-  const kids=[];
-  for(const {jpeg,width,height,pixelWidth,pixelHeight} of pages) {
-    const w=width*72/25.4,h=height*72/25.4;
-    const image=add(join([bytes('<< /Type /XObject /Subtype /Image /Width '+pixelWidth+' /Height '+pixelHeight+' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length '+jpeg.length+' >>\nstream\n'),jpeg,bytes('\nendstream')]));
-    const commands='q '+w.toFixed(4)+' 0 0 '+h.toFixed(4)+' 0 0 cm /Im0 Do Q';
-    const content=add('<< /Length '+bytes(commands).length+' >>\nstream\n'+commands+'\nendstream');
-    const page=add('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 '+w.toFixed(4)+' '+h.toFixed(4)+'] /Resources << /XObject << /Im0 '+image+' 0 R >> >> /Contents '+content+' 0 R >>'); kids.push(page);
+export async function pagePDF(pages) {
+  if(!Array.isArray(pages)||!pages.length)throw Error('没有可导出的页面');
+  const {PDFDocument}=await import('pdf-lib'),pdf=await PDFDocument.create();
+  for(const {jpeg,width,height} of pages){
+    if(!Number.isFinite(width)||!Number.isFinite(height)||width<=0||height<=0)throw Error('PDF 纸张尺寸无效');
+    const w=width*72/25.4,h=height*72/25.4,image=await pdf.embedJpg(Uint8Array.from(jpeg)),page=pdf.addPage([w,h]);page.drawImage(image,{x:0,y:0,width:w,height:h});
   }
-  objects[1]=bytes('<< /Type /Pages /Count '+kids.length+' /Kids ['+kids.map(n=>n+' 0 R').join(' ')+'] >>');
-  const chunks=[bytes('%PDF-1.4\n')], offsets=[0]; let length=chunks[0].length;
-  objects.forEach((o,i)=>{offsets.push(length);const chunk=join([bytes((i+1)+' 0 obj\n'),o,bytes('\nendobj\n')]);chunks.push(chunk);length+=chunk.length;});
-  const xref=length;
-  chunks.push(bytes('xref\n0 '+(objects.length+1)+'\n0000000000 65535 f \n'+offsets.slice(1).map(n=>String(n).padStart(10,'0')+' 00000 n \n').join('')+'trailer\n<< /Size '+(objects.length+1)+' /Root 1 0 R >>\nstartxref\n'+xref+'\n%%EOF\n'));
-  return new Blob(chunks,{type:'application/pdf'});
+  return new Blob([await pdf.save()],{type:'application/pdf'});
 }
 export async function canvasPDFPage(canvas,width,height) {
   // Flatten alpha to white before JPEG encoding.

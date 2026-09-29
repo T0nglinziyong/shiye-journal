@@ -1,4 +1,5 @@
 import {parseTags} from './library-model.js';
+import {onDialogClosed} from './dialog-lifecycle.js';
 
 export function assetEditorValue(old,values) {
   if(!values.title.trim())throw Error('请填写素材名称');
@@ -51,6 +52,6 @@ export function showAssetEditor(c,id) {
   const groups=[['基本信息',['asset-title','asset-kind','asset-role','asset-texture']],['尺寸与库存',['asset-width','asset-height','asset-quantity','tape-stock']],['分类与标签',['asset-content-tags','asset-style-tags','asset-material-tags','asset-tags','asset-series','asset-status']]];
   groups.forEach(([title,ids],index)=>{const panel=document.createElement('div');panel.className='stack material-info-panel';panel.hidden=index!==0;for(const id of ids){const field=c.body.querySelector('#'+id);if(!field)continue;let row=field.closest('label')||field;if(row.parentElement?.classList.contains('form-grid'))row=row.parentElement;if(!panel.contains(row))panel.append(row);}const tab=document.createElement('button');tab.type='button';tab.textContent=title;tab.classList.toggle('selected',index===0);tab.onclick=()=>{controls.querySelectorAll('.material-info-panel').forEach(p=>p.hidden=p!==panel);tabs.querySelectorAll('button').forEach(b=>b.classList.toggle('selected',b===tab));};tabs.append(tab);controls.append(panel);});
   while(stack.firstChild)controls.append(stack.firstChild);stack.replaceWith(controls);
-  c.modal.classList.add('material-editor-dialog');c.modal.addEventListener('close',()=>c.modal.classList.remove('material-editor-dialog'),{once:true});
+  c.modal.classList.add('material-editor-dialog');onDialogClosed(c.modal,()=>c.modal.classList.remove('material-editor-dialog'));
   if(!c.modal.open)c.modal.showModal();
 }

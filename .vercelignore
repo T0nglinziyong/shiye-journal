@@ -12,6 +12,7 @@
 !scripts
 scripts/*
 !scripts/precache.mjs
+!scripts/license-notices.mjs
 **/.env
 **/.env.*
 **/*.shiyepwa

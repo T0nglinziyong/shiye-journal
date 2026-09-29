@@ -1,6 +1,6 @@
 /* Swift JournalTheme: forest, tint, compact bordered menus, segmented pickers. */
 .four-filter-controls{display:flex;flex:0 1 auto;gap:8px;min-width:0;max-width:100%;overflow-x:auto;scrollbar-width:none;padding:2px 0}
-.filters .filter-control,.series-filter-menus .filter-control{display:inline-flex;align-items:center;justify-content:center;gap:6px;flex:none;min-height:34px;height:34px;min-width:0;padding:0 12px;border:1px solid #e3e5dc;border-radius:9px;background:#e9eee3;color:#52634b;font-size:14px;font-weight:400;line-height:1;white-space:nowrap;text-align:center}
+.filters .filter-control,.series-filter-menus .filter-control,.swift-series-controls .filter-control{display:inline-flex;align-items:center;justify-content:center;gap:6px;flex:none;min-height:34px;height:34px;min-width:0;padding:0 12px;border:1px solid #e3e5dc;border-radius:9px;background:#e9eee3;color:#52634b;font-size:14px;font-weight:400;line-height:1;white-space:nowrap;text-align:center}
 .four-filter-controls .filter-control{flex-direction:row}.filters .four-filter-controls{grid-column:1/-1;min-width:0;width:auto;flex-basis:auto}.filter-control span{font-size:inherit;line-height:inherit;overflow:visible;text-overflow:clip}.filter-control i{font-style:normal;font-size:16px}
 .swift-popover{position:fixed;z-index:200;background:#fffefaed;backdrop-filter:blur(24px);border:1px solid #e3e5dc;border-radius:22px;box-shadow:0 12px 40px #243b2933;overflow:auto;color:#303b32;padding:0;overscroll-behavior:contain}
 .swift-popover h3{margin:0;padding:18px;text-align:center;font-size:17px;background:#f7f7f280;font-weight:600;border-bottom:1px solid #e3e5dc}
@@ -38,14 +38,13 @@
 .material-processing-layout{display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:18px}.material-processing-layout section{display:grid;align-content:start;gap:12px}.material-processing-preview{position:relative;min-height:340px;height:min(60dvh,500px);background:#f7f7f2;border-radius:12px;overflow:hidden}.processing-photo{position:absolute}.processing-photo>img{width:100%;height:100%;object-fit:fill}.processing-region{position:absolute;border:2px dashed #52634b;background:#52634b22;touch-action:none}.processing-region[hidden]{display:none}.material-processing-layout p{font-size:13px;margin:4px 0}.material-processing-layout #processing-error{color:#b94032}#processing-parameters{display:grid;gap:12px}
 .object-handle:not(.rotate){width:44px;height:44px;border:0;background:transparent;border-radius:0}.object-handle:not(.rotate)::after{content:'';position:absolute;top:17px;left:17px;width:10px;height:10px;border:1px solid #52634b;border-radius:2px;background:white}.object-handle.nw{top:-22px;left:-22px}.object-handle.ne{top:-22px;right:-22px}.object-handle.sw{bottom:-22px;left:-22px}.object-handle.se{bottom:-22px;right:-22px}
 @media(max-width:819px){.material-processing-layout{grid-template-columns:minmax(0,1fr)}.material-processing-preview{height:300px;min-height:300px}.editing .swift-editor-toolbar .editor-tools{min-width:0}.editing .swift-editor-toolbar .swift-insertion-tools{min-width:0}}
-@media(max-width:699px){.four-filter-controls{gap:6px}.filters .filter-control,.series-filter-menus .filter-control{padding:0 8px;gap:5px}.filter-control i{font-size:14px}}
-@media(max-width:380px){.four-filter-controls{gap:5px}.filters .filter-control,.series-filter-menus .filter-control{padding:0 6px;gap:4px;font-size:13px}.filter-control i{font-size:12px}}
+@media(max-width:699px){.four-filter-controls{gap:6px}.filters .filter-control,.series-filter-menus .filter-control,.swift-series-controls .filter-control{padding:0 8px;gap:5px}.filter-control i{font-size:14px}}
+@media(max-width:380px){.four-filter-controls{gap:5px}.filters .filter-control,.series-filter-menus .filter-control,.swift-series-controls .filter-control{padding:0 6px;gap:4px;font-size:13px}.filter-control i{font-size:12px}}
 @media(max-width:819px){.swift-editor-workspace.with-steps{display:flex;flex-direction:column}.with-steps .editor-stage{flex:1;min-height:0;height:auto}.canvas-steps-panel{height:210px;flex:none;border-top:1px solid #e3e5dc}.editing .swift-editor-toolbar{padding:0 6px}.swift-editor-toolbar .editor-tools{padding-right:5px}.swift-editor-toolbar .swift-insertion-tools{padding:0 5px}.canvas-context-tools{padding-left:6px}.swift-auto-saved{display:none}.editing .swift-editor-head h1{max-width:150px}.swift-editor-head .actions{gap:4px}.swift-editor-head .actions .btn{padding:7px 10px}.editing .swift-editor-workspace{height:calc(100dvh - 112px);min-height:0}.editing .swift-editor-head{min-height:56px}.cutout-modal .cutout-compare button{font-size:13px;padding:8px}}
 @media(prefers-reduced-motion:no-preference){.grid .card-image img,.series-cover img{animation:image-ready .12s ease-out}@keyframes image-ready{from{opacity:.85}to{opacity:1}}}
 #modal.canvas-settings-dialog .modal-close{display:none}
 .canvas-object-settings .swift-segments button{background:transparent}
 .canvas-object-settings .swift-segments button.selected{background:white}
-.filters .filter-control[data-filter-heading="类型"],.filters .filter-control[data-filter-heading="状态"],.series-filter-menus .filter-control[data-filter-heading="类型"],.series-filter-menus .filter-control[data-filter-heading="状态"]{border:0;border-radius:999px;background:#e6e8df}
 .library-filter-menu{border-radius:28px;border:1px solid #ffffff99;background:#fffefaaf;backdrop-filter:blur(28px);box-shadow:0 8px 25px #303b3218;padding:7px}
 .library-filter-menu button{font-size:16px;padding:9px 14px;min-height:44px;line-height:1.3;border-radius:12px}
 .library-filter-menu button[aria-checked=true]::after{display:none}
@@ -57,8 +56,24 @@
 .selection-submenu{z-index:201;overflow:auto;display:grid;gap:0}.selection-submenu button{display:block;text-align:left;width:100%;min-height:42px;font-size:15px}
 .swift-popover [hidden]{display:none!important}
 body:has(.library-management-tray) #view{padding-bottom:160px}
-@media(max-width:699px){.library-management-tray{bottom:calc(74px + env(safe-area-inset-bottom));gap:6px;padding:10px;justify-content:center}.library-management-tray strong{flex-basis:100%;text-align:center}.library-management-tray button{font-size:12px;padding:7px 9px}.filters .filter-control{font-size:12px;padding:0 5px;gap:4px}}
+@media(max-width:699px){.library-management-tray{bottom:calc(74px + env(safe-area-inset-bottom));gap:6px;padding:10px;justify-content:center}.library-management-tray strong{flex-basis:100%;text-align:center}.library-management-tray button{font-size:12px;padding:7px 9px}.filters .filter-control,.series-filter-menus .filter-control,.swift-series-controls .filter-control{font-size:12px;padding:0 5px;gap:4px}}
 .filters .library-count{order:3}.series-result-count{align-self:center}
 body:has(.library-management-tray) #toast{bottom:100px;z-index:90}
 @media(max-width:699px){body:has(.library-management-tray) #toast{bottom:235px}}
 .library-select-toggle{border:0;border-radius:999px;background:#e3e5dc;color:#52634b;padding:9px 16px;font-weight:400;min-height:36px}.library-select-toggle:hover{background:#dbe0d2}
+
+/* Each image has a stable frame; the visible content fits inside it. */
+.asset-grid .card-image>img{position:absolute;inset:8px;width:calc(100% - 16px);height:calc(100% - 16px);object-fit:contain}
+.series-cover,.series-detail-cover{gap:6px}
+.series-cover img,.series-detail-cover img{flex:1 1 0;width:0;min-width:0;max-width:none;height:calc(100% - 16px);max-height:none;object-fit:contain;margin:0}
+.works-grid .thumb-sheet{aspect-ratio:auto;width:auto!important;height:auto;max-width:none;max-height:none}
+.work-material{position:absolute;overflow:hidden;display:block}
+.work-material>img{position:absolute;inset:0;width:100%;height:100%;object-fit:fill}
+.project-preview-cover{flex:none;height:min(55dvh,500px);min-height:0}
+.project-preview-cover .preview-paper{max-width:none;max-height:none}
+.work-shape svg{width:100%;height:100%;display:block}
+.material-editor-dialog .material-editor-preview,.cutout-dialog .cutout-preview{width:min(100%,44dvh,360px);height:auto;min-height:0;aspect-ratio:1;flex:none;margin-inline:auto;background:#f2f4ed}
+.material-editor-preview>img{padding:12px;object-fit:contain}
+.material-info-panel,.material-info-panel label{min-width:0}
+.material-info-panel input,.material-info-panel select{width:100%;min-width:0;max-width:100%}
+.swift-series-controls .four-filter-controls{flex:none}

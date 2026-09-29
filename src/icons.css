@@ -1,0 +1,19 @@
+.shiye-icon{display:inline-block;width:24px;height:24px;flex:0 0 24px;vertical-align:middle;pointer-events:none;color:inherit;overflow:visible}
+button.shiye-icon-host:not(.card){gap:7px}
+button.shiye-icon-host>.shiye-icon{margin-right:5px}
+.canvas-icon.shiye-icon-host>.shiye-icon,.canvas-main-tools .shiye-icon-host>.shiye-icon,#top-settings>.shiye-icon{margin:0}
+.shiye-icon-host>svg:only-child{margin:0}
+.main-nav .shiye-icon-host,.filter-control i.shiye-icon-host,.settings-icon.shiye-icon-host,.brand>b.shiye-icon-host{display:inline-flex;align-items:center;justify-content:center}
+.filter-control i .shiye-icon{width:18px;height:18px;flex-basis:18px}
+.batch-check .shiye-icon,.basket-card-check .shiye-icon,.card h3>span .shiye-icon{width:18px;height:18px;flex-basis:18px}
+.settings-icon .shiye-icon{width:23px;height:23px;flex-basis:23px}
+.brand>b .shiye-icon{width:25px;height:25px;flex-basis:25px}
+.selected-object-actions .shiye-icon{width:19px;height:19px;flex-basis:19px}
+.series-entry-cover .shiye-icon,.action-card>.card-image .shiye-icon,.work-entry>.card-image .shiye-icon{width:38px;height:38px;flex-basis:38px}
+.object-handle.rotate .shiye-icon{width:15px;height:15px;flex-basis:15px}
+.shiye-search{position:relative;display:inline-flex;align-items:center;min-width:0}
+.shiye-search>input{width:100%;padding-left:36px}
+.shiye-search>.shiye-icon{position:absolute;left:10px;width:18px;height:18px;flex-basis:18px;color:#587263}
+.filters>.shiye-search{flex:1 1 230px}
+.swift-series-controls>.shiye-search{flex:1 1 220px}
+@media(max-width:699px){.filters>.shiye-search{flex-basis:100%}.main-nav .shiye-icon{width:21px;height:21px;flex-basis:21px}}

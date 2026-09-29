@@ -1,5 +1,6 @@
 import {paintMask,maskOrientation,refineMaskStroke} from './mask-model.js';
 import {containBox} from './preview-geometry.js';
+import {onDialogClosed} from './dialog-lifecycle.js';
 const wrap=a=>((a+180)%360+360)%360-180;
 const png=c=>new Promise((resolve,reject)=>c.toBlob(b=>b?resolve(b):reject(Error('图像处理失败')),'image/png'));
 export async function showCutoutEditor({body,modal,original,saved,recognition=saved,title,processing={},onApply,toast}) {
@@ -35,5 +36,5 @@ export async function showCutoutEditor({body,modal,original,saved,recognition=sa
   body.querySelector('#cutout-cancel').onclick=()=>{if(!busy)modal.close();};
   const apply=async()=>{if(busy||stroke)return;if(!mask.some(a=>a>0)){toast('没有可见素材，请用补回画笔恢复区域');return;}busy=true;for(const b of body.querySelectorAll('button'))b.disabled=true;try{const blob=await png(composed());await onApply(blob,{appearance,intensity,displayRotationDegrees:rotation,recognitionRotationDegrees:processing.recognitionRotationDegrees||0,sourcePixelWidth:w,sourcePixelHeight:h},recognition);modal.close();}catch(e){toast(e.message);busy=false;body.querySelectorAll('button').forEach(b=>b.disabled=false);panel();}};
   body.querySelector('#cutout-apply').onclick=apply;body.querySelector('#cutout-apply-bottom').onclick=apply;
-  const cancel=e=>{if(busy)e.preventDefault();};modal.addEventListener('cancel',cancel);modal.addEventListener('close',()=>{resize.disconnect();modal.removeEventListener('cancel',cancel);modal.classList.remove('cutout-dialog','material-editor-dialog');source.close();initial.close();recognized.close();},{once:true});panel();draw();
+  const cancel=e=>{if(busy)e.preventDefault();};modal.addEventListener('cancel',cancel);onDialogClosed(modal,()=>{resize.disconnect();modal.removeEventListener('cancel',cancel);modal.classList.remove('cutout-dialog','material-editor-dialog');source.close();initial.close();recognized.close();});panel();draw();
 }

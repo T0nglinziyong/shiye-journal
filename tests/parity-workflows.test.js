@@ -51,12 +51,12 @@ test('material PDF packs A4 at true sizes and refuses unmeasured/oversized mater
   assert.throws(()=>materialPrintPlacements([{title:'未测量'}]),/校准/);
   assert.throws(()=>materialPrintPlacements([{title:'大',physicalWidthMM:195,physicalHeightMM:100}]),/放不进/);
 });
-test('PDF has explicit physical MediaBox and correct byte offsets',async()=>{
-  const pdf=pagePDF([{jpeg:new Uint8Array([255,216,255,217]),width:210,height:297,pixelWidth:1,pixelHeight:1}]);
-  const text=await pdf.text();assert.match(text,/MediaBox \[0 0 595\.2756 841\.8898\]/);
-  const start=Number(/startxref\n(\d+)/.exec(text)[1]);assert.equal(text.slice(start,start+4),'xref');
-  const offsets=[...text.matchAll(/(\d{10}) 00000 n/g)].map(m=>Number(m[1]));
-  offsets.forEach((offset,i)=>assert.ok(text.slice(offset).startsWith((i+1)+' 0 obj')));
+test('mature PDF encoder produces parseable pages at exact physical size',async()=>{
+  const {PDFDocument}=await import('pdf-lib');
+  const jpeg=Buffer.from('/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICAgMCAgIDAwMDBAYEBAQEBAgGBgUGCQgKCgkICQkKDA8MCgsOCwkJDRENDg8QEBEQCgwSExIQEw8QEBD/2wBDAQMDAwQDBAgEBAgQCwkLEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBD/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAn/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFAEBAAAAAAAAAAAAAAAAAAAAAP/EABQRAQAAAAAAAAAAAAAAAAAAAAD/2gAMAwEAAhEDEQA/AJVAA//Z','base64');
+  const pdf=await pagePDF([{jpeg,width:210,height:297,pixelWidth:1,pixelHeight:1},{jpeg,width:148,height:210,pixelWidth:1,pixelHeight:1}]),parsed=await PDFDocument.load(await pdf.arrayBuffer());
+  assert.equal(parsed.getPageCount(),2);assert.ok(Math.abs(parsed.getPages()[0].getWidth()-210*72/25.4)<1e-8);assert.ok(Math.abs(parsed.getPages()[1].getHeight()-210*72/25.4)<1e-8);assert.equal(pdf.type,'application/pdf');
+  await assert.rejects(pagePDF([{jpeg,width:NaN,height:297}]),/尺寸/);await assert.rejects(pagePDF([]),/页面/);await assert.rejects(pagePDF([{jpeg:new Uint8Array([255]),width:210,height:297}]));
 });
 test('import records preserve candidate metadata and explicit unassigned series',()=>{
   const c={title:'票据',width:30.5,height:60,quantity:3,kind:'paper',role:'support',reviewStatus:'ready',seriesID:'__none__'};
