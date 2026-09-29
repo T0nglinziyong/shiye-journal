@@ -1,10 +1,10 @@
 # 4090 自托管（Ubuntu）
 
-目标：`https://shiyejournal.vip` → Caddy HTTPS → 本机 `127.0.0.1:4173` → PWA + API → `数据备份/实时数据`。域名以用户 2026-09-29 提供的阿里云注册记录为准。模板已更新，不代表 DNS、证书或公网入口已经配置。
+目标：`https://shiyejournal.vip` → Caddy HTTPS → 本机 `127.0.0.1:4173` → PWA + API → `数据备份/实时数据`。域名由用户于 2026-09-28 在阿里云注册。具体解析表和阿里云控制台入口见 [`ALIYUN_DOMAIN.md`](ALIYUN_DOMAIN.md)。模板已更新，不代表 DNS、证书或公网入口已经配置。
 
 当前电脑位于公司内部网络。局域网 IP 不能填写为公网 A 记录；直连需要网络管理员提供公网入口并允许端口转发。若无法提供，需在公司允许的范围内另选从本机主动建立连接的可信隧道／公网反向代理，资料仍可保存在本机。不要在未确认网络政策与中转方案前安装隧道或暴露服务。
 
-1. 确认机器能从公网被访问：有可用公网 IPv4/IPv6，域名的 A/AAAA 指向它，路由器将 TCP 80/443 转发至 Ubuntu，防火墙只开放 80/443。**不要**把 Node 的 4173 端口直接暴露到公网。若处于 CGNAT 或校园网无法映射端口，需另选可信的隧道或公网反向代理，届时访问路径与隐私边界会变化。
+1. 确认机器能从公网被访问：有可用公网 IPv4/IPv6，域名的 A/AAAA 指向它，路由器将 TCP 80/443 转发至 Ubuntu，防火墙只开放 80/443。**不要**把 Node 的 4173 端口直接暴露到公网。若处于 CGNAT 或校园网无法映射端口，需另选可信的隧道或公网反向代理，届时访问路径与隐私边界会变化。没有确认公网地址之前不要填写猜测的 DNS 记录值。
 2. 安装 Node.js 20+、Git、Caddy。将项目放到实际桌面目录；如果目录名不是 `Desktop`，请修改服务模板中的绝对路径。运行 `npm ci && npm test && npm run build`。
 3. `openssl rand -hex 32` 生成独立随机令牌。将 `shiye.env.example` 复制至 `/etc/shiye/shiye.env`，填入真实用户名、数据目录与令牌，并将文件权限设为 `0600`。令牌不要写进 Git、聊天记录或网页源码。
 4. 按实际用户名和路径编辑 `shiye.service.example`，安装为 `/etc/systemd/system/shiye.service`，执行 `sudo systemctl daemon-reload && sudo systemctl enable --now shiye`。确保 `数据备份/实时数据` 由该用户可写。
