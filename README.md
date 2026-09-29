@@ -43,7 +43,7 @@ Swift 备份里的未知数据字段尽量原样保留，但转换器不证明�
 
 ### 不使用 Vercel 的正式入口
 
-Ubuntu 4090 自托管模板见 [`deploy/self-host/README.md`](deploy/self-host/README.md)。域名 `shiyejounery.top` 直接指向 4090 公网入口；Caddy 提供 HTTPS 并代理到仅监听 `127.0.0.1:4173` 的 Node 服务。同一域名同时承载 PWA 和 API，不需要 Vercel 或跨域请求。配置 `SHIYE_PUBLIC_ORIGIN` 时强制至少 32 字符随机令牌；首次打开网站需输入令牌。此时作品、素材与图片以服务器为唯一持久数据源；服务离线或鉴权失败时不会退回浏览器 IndexedDB。离线缓存只保留程序静态资源，不缓存 `/api/` 私有数据。
+Ubuntu 4090 自托管模板见 [`deploy/self-host/README.md`](deploy/self-host/README.md)。域名 `shiyejournal.vip` 直接指向 4090 公网入口；Caddy 提供 HTTPS 并代理到仅监听 `127.0.0.1:4173` 的 Node 服务。同一域名同时承载 PWA 和 API，不需要 Vercel 或跨域请求。配置 `SHIYE_PUBLIC_ORIGIN` 时强制至少 32 字符随机令牌；首次打开网站需输入令牌。此时作品、素材与图片以服务器为唯一持久数据源；服务离线或鉴权失败时不会退回浏览器 IndexedDB。离线缓存只保留程序静态资源，不缓存 `/api/` 私有数据。
 
 旧 Vercel 网址的数据仍在旧域名的浏览器存储中，必须在原设备导出 `.shiyepwa`，再于新域名的“数据与诊断”恢复。恢复前先备份服务器现有资料。直接切换 DNS 不会搬移浏览器数据。
 

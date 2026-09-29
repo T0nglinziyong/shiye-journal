@@ -11,4 +11,4 @@ npm ci
 npm test
 npm run build
 sudo systemctl restart shiye
-printf '拾页已更新；请检查 systemctl status shiye 和 https://shiyejounery.top/api/health\n'
+printf '拾页已更新；请检查 systemctl status shiye 和 https://shiyejournal.vip/api/health\n'
