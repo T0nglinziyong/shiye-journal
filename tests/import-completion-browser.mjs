@@ -21,6 +21,7 @@ try{
   await command('Page.reload');await wait('.series-grid');await click('.swift-tabs button:nth-child(4)','.recently-deleted-grid');
   for(const [w,h] of [[390,844],[768,1024],[1024,768],[1440,900]]){
     await command('Emulation.setDeviceMetricsOverride',{width:w,height:h,deviceScaleFactor:1,mobile:w<700});
+    await wait('.recently-deleted-grid img[src^="blob:"]');
     const image=await evaluate('(async()=>{const im=document.querySelector(".recently-deleted-grid img");await im.decode();return {loaded:im.naturalWidth>0,height:im.parentElement.getBoundingClientRect().height,imageHeight:im.getBoundingClientRect().height};})()');assert.ok(image.loaded&&image.height>=140&&image.imageHeight>=120,JSON.stringify(image));await capture('deleted-cover',w,h);
   }
   assert.deepEqual(b.errors,[]);console.log('Import completion and recently deleted: 8 screenshots, full saved Blob cover, compact buttons and continue flow verified',dir);

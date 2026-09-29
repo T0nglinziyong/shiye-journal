@@ -8,7 +8,16 @@ export async function processVision(cv,operation,p){
     if(operation==='warmup')return {ready:true};
     if(operation==='balance'){
       const src=own(cv.matFromArray(p.height,p.width,cv.CV_8UC4,p.pixels)),rgb=own(new cv.Mat()),lab=own(new cv.Mat()),channels=own(new cv.MatVector()),balanced=own(new cv.Mat()),output=own(new cv.Mat());
-      cv.cvtColor(src,rgb,cv.COLOR_RGBA2RGB);cv.cvtColor(rgb,lab,cv.COLOR_RGB2Lab);cv.split(lab,channels);const light=own(channels.get(0)),equalized=own(new cv.Mat()),clahe=own(new cv.CLAHE(2,new cv.Size(8,8)));clahe.apply(light,equalized);channels.set(0,equalized);cv.merge(channels,balanced);cv.cvtColor(balanced,rgb,cv.COLOR_Lab2RGB);cv.cvtColor(rgb,output,cv.COLOR_RGB2RGBA);const pixels=new Uint8ClampedArray(output.data);for(let i=3;i<pixels.length;i+=4)pixels[i]=p.pixels[i];return {pixels,width:p.width,height:p.height};
+      cv.cvtColor(src,rgb,cv.COLOR_RGBA2RGB);cv.cvtColor(rgb,lab,cv.COLOR_RGB2Lab);cv.split(lab,channels);const light=own(channels.get(0)),small=own(new cv.Mat()),background=own(new cv.Mat()),blurred=own(new cv.Mat()),field=own(new cv.Mat()),normalized=own(new cv.Mat()),equalized=own(new cv.Mat()),sharp=own(new cv.Mat());
+      // Document-scanner style illumination estimation BEFORE local contrast.
+      // Work only on Lab luminance; do not whiten away coloured paper or ink.
+      const scale=Math.min(1,128/Math.max(p.width,p.height));cv.resize(light,small,new cv.Size(Math.max(1,Math.round(p.width*scale)),Math.max(1,Math.round(p.height*scale))),0,0,cv.INTER_AREA);
+      const kernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(21,21)));cv.morphologyEx(small,background,cv.MORPH_CLOSE,kernel);cv.GaussianBlur(background,blurred,new cv.Size(15,15),0);cv.resize(blurred,field,new cv.Size(p.width,p.height),0,0,cv.INTER_LINEAR);
+      const samples=Array.from(blurred.data).sort((a,b)=>a-b),reference=samples[Math.floor(samples.length*.9)]||1;light.copyTo(normalized);
+      for(let i=0;i<light.data.length;i++){const gain=Math.max(.9,Math.min(1.35,reference/Math.max(1,field.data[i])));normalized.data[i]=Math.min(255,Math.round(light.data[i]*gain));}
+      const clahe=own(new cv.CLAHE(1.25,new cv.Size(8,8)));clahe.apply(normalized,equalized);
+      // Gentle unsharp masking, never used to create foreground evidence.
+      cv.GaussianBlur(equalized,blurred,new cv.Size(3,3),0);cv.addWeighted(equalized,1.12,blurred,-.12,0,sharp);channels.set(0,sharp);cv.merge(channels,balanced);cv.cvtColor(balanced,rgb,cv.COLOR_Lab2RGB);cv.cvtColor(rgb,output,cv.COLOR_RGB2RGBA);const pixels=new Uint8ClampedArray(output.data);for(let i=3;i<pixels.length;i+=4)pixels[i]=p.pixels[i];return {pixels,width:p.width,height:p.height};
     }
     if(operation==='quad'){
       const src=own(cv.matFromArray(p.height,p.width,cv.CV_8UC4,p.pixels)),gray=own(new cv.Mat()),binary=own(new cv.Mat());cv.cvtColor(src,gray,cv.COLOR_RGBA2GRAY);let best=null;

@@ -2,6 +2,7 @@ import './styles.css';
 import './cloud.css';
 import {cloudEnabled,cloudClient,requireCloudUser} from './cloud-session.js';
 import {createBackup} from './store.js';
+import {cloudClearCache} from './cloud-store.js';
 
 const app=document.querySelector('#app');
 export async function startCloudSession(onReady){
@@ -20,10 +21,10 @@ export async function startCloudSession(onReady){
     toggle.onclick=()=>{menu.hidden=!menu.hidden;toggle.setAttribute('aria-expanded',String(!menu.hidden));};
     document.addEventListener('click',event=>{if(!account.contains(event.target)){menu.hidden=true;toggle.setAttribute('aria-expanded','false');}});
     account.onkeydown=event=>{if(event.key==='Escape'){menu.hidden=true;toggle.setAttribute('aria-expanded','false');toggle.focus();}};
-    account.querySelector('[data-logout]').onclick=async()=>{const {error}=await cloudClient().auth.signOut({scope:'local'});if(error){alert('退出失败，请检查网络');return;}location.reload();};
+    account.querySelector('[data-logout]').onclick=async()=>{try{const detail={tasks:[]};window.dispatchEvent(new CustomEvent('shiye-flush-before-logout',{detail}));await Promise.all(detail.tasks);}catch{alert('有修改尚未同步到云端，请保存成功后再退出');return;}try{await cloudClearCache();}catch{alert('本机私人缓存清理失败，请重试退出');return;}const {error}=await cloudClient().auth.signOut({scope:'local'});if(error){alert('退出失败，请检查网络');return;}location.reload();};
     account.querySelector('[data-old-backup]').onclick=async()=>{try{const blob=await createBackup({browserOnly:true}),link=document.createElement('a'),url=URL.createObjectURL(blob);link.href=url;link.download='拾页本机旧资料.shiyepwa';link.click();setTimeout(()=>URL.revokeObjectURL(url),60000);}catch(error){alert('旧资料导出失败：'+error.message);}};
     document.querySelector('.top-actions').append(account);
-    cloudClient().auth.onAuthStateChange(event=>{if(event==='SIGNED_OUT')location.reload();});
+    cloudClient().auth.onAuthStateChange(event=>{if(event==='SIGNED_OUT'){app.hidden=true;void cloudClearCache().catch(console.warn).finally(()=>location.reload());}});
   }
   gate.querySelector('form').onsubmit=async event=>{
     event.preventDefault();const form=event.target,button=form.querySelector('button');button.disabled=true;status.textContent='正在验证账号…';

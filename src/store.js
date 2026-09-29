@@ -1,6 +1,13 @@
 import {openDB,unwrap} from 'idb';
 import {cloudEnabled} from './cloud-session.js';
-import {cloudAll,cloudGet,cloudTransaction,cloudCheckpoint} from './cloud-store.js';
+import {cloudAll,cloudGet,cloudTransaction,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudPreview,cloudStageProject,cloudPendingProjects,cloudFlushProjects,cloudProjectDocument} from './cloud-store.js';
+export const stageProject=record=>cloudEnabled?cloudStageProject(record):put('projects',record);
+export const pendingProjects=()=>cloudEnabled?cloudPendingProjects():Promise.resolve([]);
+export const flushProjects=()=>cloudEnabled?cloudFlushProjects():Promise.resolve();
+export const completeProject=record=>cloudEnabled?cloudProjectDocument(record):Promise.resolve(record);
+export const cachedCollections=()=>cloudEnabled?cloudCachedCollections():Promise.resolve(null);
+export const refreshCloud=()=>cloudEnabled?cloudRefresh():Promise.resolve(null);
+export const previewBlob=id=>cloudEnabled?cloudPreview(id):get('blobs',id).then(r=>r?.data);
 const DB='shiye-pwa-full-v1';
 const STORES=['assets','blobs','series','projects','meta','trash'];
 let connection;
@@ -45,6 +52,7 @@ export async function createBackup({browserOnly=false}={}){
   const snapshot=cloudEnabled&&!browserOnly?await cloudCheckpoint():null;
   if(!browserOnly&&(cloudEnabled||(await resolveBackend()).url)){for(const name of STORES)data.stores[name]=await all(name);}else{const tx=(await localDatabase()).transaction(STORES);const values=await Promise.all(STORES.map(name=>tx.objectStore(name).getAll()));await tx.done;STORES.forEach((name,i)=>{data.stores[name]=values[i];});}
   data.stores.blobs=await Promise.all(data.stores.blobs.map(async x=>({...x,data:await toBase64(x.data)})));
+  if(snapshot!==null){data.stores.projects=await Promise.all(data.stores.projects.map(cloudProjectDocument));data.stores.trash=await Promise.all(data.stores.trash.map(async row=>row.kind==='project'?{...row,item:await cloudProjectDocument(row.item)}:row));}
   if(snapshot!==null&&await cloudCheckpoint()!==snapshot)throw Error('备份期间资料已变化，请重试');
   return new Blob([JSON.stringify(data)],{type:'application/json'});
 }

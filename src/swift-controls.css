@@ -72,6 +72,9 @@ body:has(.library-management-tray:not([hidden])) #toast{bottom:100px;z-index:90}
 .project-preview-cover{flex:none;height:min(55dvh,500px);min-height:0}
 .project-preview-cover .preview-paper{max-width:none;max-height:none}
 .work-shape svg{width:100%;height:100%;display:block}
+.shape-preview{display:block;width:100%;height:100%;object-fit:fill;pointer-events:none}
+.canvas-object.shape>.shape-preview,.work-shape>.shape-preview{position:absolute;inset:0;min-width:0;min-height:0;max-width:none;max-height:none}
+.canvas-picker-grid .shape-preview{width:100%;height:68px;object-fit:contain}
 .material-editor-dialog .material-editor-preview,.cutout-dialog .cutout-preview{width:min(100%,44dvh,360px);height:auto;min-height:0;aspect-ratio:1;flex:none;margin-inline:auto;background:#f2f4ed}
 .material-editor-preview>img{padding:12px;object-fit:contain}
 .material-info-panel,.material-info-panel label{min-width:0}

@@ -4,6 +4,7 @@ import {textFont} from './editor-tools-model.js';
 const MARKER='cece-samples-v4';
 
 export async function seedBundledExamples({isProjectOpen=()=>false,db=defaultDB}={}){
+  if(await db.get('meta','cece-native-goodnotes-v1'))return;
   if(await db.get('meta',MARKER))return;
   // A slow overseas CDN must not hold the first usable screen indefinitely.
   // Failure leaves the seed marker unset so the next visit can retry safely.

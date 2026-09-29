@@ -1,0 +1,18 @@
+const EMPTY='data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>');
+export const imagePlaceholder=id=>id?EMPTY+'#shiye-image='+encodeURIComponent(id):'';
+export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=console.warn}){
+  const pending=new Map(),previews=new Map(),sizes=new Map(),retained=new Map(),queue=[];let active=0,generation=0;
+  function trim(){let bytes=[...sizes.values()].reduce((a,b)=>a+b,0);if(bytes<=96*1024*1024&&sizes.size<=96)return;const live=new Set([...root.querySelectorAll('img')].map(im=>im.getAttribute('src')));for(const [id,size] of sizes){const url=urls.get(id);if(live.has(url)||retained.has(id))continue;URL.revokeObjectURL(url);urls.delete(id);sizes.delete(id);bytes-=size;if(bytes<=96*1024*1024&&sizes.size<=96)break;}}
+  async function load(id,full=false){
+    if(urls.has(id)){if(sizes.has(id)){const size=sizes.get(id);sizes.delete(id);sizes.set(id,size);}return urls.get(id);}if(!full&&previews.has(id))return previews.get(id);
+    const key=(full?'original:':'preview:')+id;if(pending.has(key))return pending.get(key);
+    const epoch=generation,task=new Promise((resolve,reject)=>{queue.push({run:async()=>{const blob=full?(await db.get('blobs',id))?.data:await db.previewBlob(id);if(!blob||epoch!==generation)return '';const url=URL.createObjectURL(blob);(full?urls:previews).set(id,url);if(full)sizes.set(id,blob.size);setTimeout(trim,0);return url;},resolve,reject});pump();});
+    pending.set(key,task);task.finally(()=>{if(pending.get(key)===task)pending.delete(key);}).catch(()=>{});return task;
+  }
+  function pump(){while(active<4&&queue.length){const job=queue.shift();active++;job.run().then(job.resolve,job.reject).finally(()=>{active--;pump();});}}
+  function resolve(img){const src=img.getAttribute('src')||'',marker='#shiye-image=',at=src.indexOf(marker);if(at<0)return;const id=decodeURIComponent(src.slice(at+marker.length));const full=fullView(img);void load(id,full).then(url=>{if(url&&img.isConnected&&img.getAttribute('src')===src)img.src=url;}).catch(error=>{img.dataset.imageError='true';img.alt+='（图片加载失败）';onError(error);});}
+  const observer=typeof IntersectionObserver==='function'?new IntersectionObserver(entries=>{for(const e of entries)if(e.isIntersecting){observer.unobserve(e.target);resolve(e.target);}},{rootMargin:'100px'}):null;
+  function scan(node){if(node.nodeType!==1)return;const images=node.matches('img')?[node]:node.querySelectorAll('img');for(const img of images)if(img.getAttribute('src')?.includes('#shiye-image=')){if(observer)observer.observe(img);else resolve(img);}}
+  const changes=new MutationObserver(records=>{for(const r of records){if(r.type==='attributes')scan(r.target);else for(const node of r.addedNodes)scan(node);}});changes.observe(root,{childList:true,subtree:true,attributes:true,attributeFilter:['src']});scan(root);
+  return {load,retain(ids){for(const id of ids)retained.set(id,(retained.get(id)||0)+1);let released=false;return()=>{if(released)return;released=true;for(const id of ids){const n=retained.get(id)||0;if(n>1)retained.set(id,n-1);else retained.delete(id);}trim();};},invalidate(ids){if(ids&&!ids.length)return;generation++;pending.clear();for(const map of [urls,previews]){for(const [id,url] of map){if(ids&&!ids.includes(id))continue;URL.revokeObjectURL(url);map.delete(id);sizes.delete(id);}}scan(root);},dispose(){generation++;changes.disconnect();observer?.disconnect();for(const map of [urls,previews]){for(const url of map.values())URL.revokeObjectURL(url);map.clear();}sizes.clear();retained.clear();}};
+}

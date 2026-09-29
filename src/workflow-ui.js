@@ -80,6 +80,7 @@ function mountProjectBatch(c) {
   tray.append(button('重新识别',()=>classifyBatch(c,'project')),
     button('删除',async()=>{
       if(!parity.selected.size||!confirm('将所选作品移到最近删除？'))return;
+      await c.flushSave();await c.db.flushProjects();
       const entries=c.state.projects.filter(p=>parity.selected.has(p.id)).map(item=>({id:crypto.randomUUID(),kind:'project',item:structuredClone(item),date:new Date().toISOString()}));
       await c.db.transaction(['projects','trash'],tx=>{for(const entry of entries){tx.objectStore('projects').delete(entry.item.id);tx.objectStore('trash').put(entry);}});
       c.state.projects=c.state.projects.filter(p=>!parity.selected.has(p.id));c.state.trash.push(...entries);parity.selected.clear();c.render();
@@ -92,7 +93,8 @@ async function classifyBatch(c,kind) {
   let count=0;
   for(const record of records) {
     c.toast('正在识别 '+(count+1)+' / '+records.length);
-    const image=kind==='asset'?await c.modelImage(record):(await c.rasterize(record.drafts[0],.5)).toDataURL('image/jpeg',.8);
+    const complete=kind==='asset'?record:await c.db.completeProject(record);
+    const image=kind==='asset'?await c.modelImage(record):(await c.rasterize(complete.drafts[0],.5)).toDataURL('image/jpeg',.8);
     const result=await classifyRecord({kind,record,settings:c.state.aiSettings,image,assets:c.state.assets,onProgress:p=>c.toast(p.phase+' · '+p.seconds+' 秒 · '+p.received+' 字符')});
     const next={...record,...result,updatedAt:new Date().toISOString()};await c.db.put(kind==='asset'?'assets':'projects',next);Object.assign(record,next);count++;
   }
@@ -106,9 +108,9 @@ async function exportMaterials(c,ids) {
     ctx.fillText('拾页 · 素材打印 '+(page+1),8*scale,8*scale);ctx.font=(2.4*scale)+'px sans-serif';ctx.fillText('实际尺寸 100%，不要缩放以适合纸张',8*scale,13*scale);
     ctx.beginPath();ctx.moveTo(187*scale,12*scale);ctx.lineTo(197*scale,12*scale);ctx.stroke();ctx.fillText('10 mm',187*scale,8*scale);
     for(const p of placements.filter(p=>p.page===page)) {
-      const im=new Image(),src=c.imgTag(p.asset).match(/src="([^"]+)"/)?.[1];if(!src)throw Error('「'+p.asset.title+'」的原图无法读取');im.src=src;await im.decode();
+      const blob=(await c.db.get('blobs',p.asset.blobId))?.data;if(!(blob instanceof Blob))throw Error('「'+p.asset.title+'」的原图无法读取');const im=new Image(),src=URL.createObjectURL(blob);im.src=src;try{await im.decode();
       ctx.fillText(p.asset.title+' · '+p.width+' × '+p.height+' mm',p.x*scale,(p.y-2)*scale,p.width*scale);
-      ctx.drawImage(im,p.x*scale,p.y*scale,p.width*scale,p.height*scale);
+      ctx.drawImage(im,p.x*scale,p.y*scale,p.width*scale,p.height*scale);}finally{URL.revokeObjectURL(src);}
     }
     pages.push(await canvasPDFPage(canvas,210,297));
   }
@@ -140,7 +142,7 @@ function mountData(c) {
   section.append(button('清理未使用的图片',async()=>{
     const blobs=await db.all('blobs'),referenced=new Set();
     const visit=value=>{if(typeof value==='string')referenced.add(value);else if(Array.isArray(value))value.forEach(visit);else if(value&&typeof value==='object')Object.values(value).forEach(visit);};
-    for(const store of ['assets','projects','series','trash','meta'])visit(await db.all(store));
+    for(const store of ['assets','projects','series','trash','meta']){let rows=await db.all(store);if(store==='projects')rows=await Promise.all(rows.map(db.completeProject));if(store==='trash')rows=await Promise.all(rows.map(async row=>row.kind==='project'?{...row,item:await db.completeProject(row.item)}:row));visit(rows);}
     const orphans=blobs.filter(b=>!referenced.has(b.id));
     await db.transaction(['blobs'],tx=>{for(const b of orphans)tx.objectStore('blobs').delete(b.id);});await refresh();c.toast('已清理 '+orphans.length+' 张未使用图片');
   }));
