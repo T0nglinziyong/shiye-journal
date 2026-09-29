@@ -1,0 +1,22 @@
+# Allow only the static application's build inputs. Never upload local data,
+# deployment credentials, backups, server files, or handoff/private notes.
+/*
+!package.json
+!package-lock.json
+!index.html
+!vercel.json
+!src
+!src/**
+!public
+!public/**
+!scripts
+scripts/*
+!scripts/precache.mjs
+**/.env
+**/.env.*
+**/*.shiyepwa
+**/*.shiyebackup
+**/数据备份/**
+**/实时数据/**
+**/auth.json
+**/credentials.json

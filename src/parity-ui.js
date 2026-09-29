@@ -1,10 +1,12 @@
 // Interaction placement follows the Swift 2.0.10 views. Core records remain
 // owned by app.js; this module adds the missing screen controls and actions.
-const parity={libraryTab:'series',selection:false,selected:new Set(),workTab:'all'};
+import {mountSeriesContents,mountSeriesAddition} from './series-contents.js';
+export const parity={libraryTab:'series',selection:false,selected:new Set(),workTab:'all',route:null};
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 export function mountParityControls(ctx){
   const {state,view}=ctx;
+  if(parity.route!==state.route){parity.selection=false;parity.selected.clear();parity.route=state.route;}
   if(state.route==='library')mountLibrary(ctx);
   if(state.route==='series')mountSeries(ctx);
   if(state.route==='works')mountWorks(ctx);
@@ -15,6 +17,8 @@ export function mountParityControls(ctx){
 function tabs(labels,active,onClick){const bar=document.createElement('div');bar.className='swift-tabs';for(const [id,label] of labels){const b=document.createElement('button');b.type='button';b.className=id===active?'selected':'';b.textContent=label;b.onclick=()=>onClick(id);bar.append(b);}return bar;}
 function button(label,fn,kind=''){const b=document.createElement('button');b.type='button';b.className=`btn ${kind}`;b.textContent=label;b.onclick=fn;return b;}
 function mountLibrary(c){
+  if(c.state.series.some(s=>s.id===c.state.seriesID)){mountSeriesContents(c,parity);return;}
+  if(c.state.addingToSeries&&mountSeriesAddition(c,parity))return;
   const {state,view,render,route,toast,db}=c,header=view.querySelector('.view-head'),actions=header?.querySelector('.actions');
   const insideSeries=state.seriesID!=='all';
   header?.querySelector('h1')?.replaceChildren(insideSeries?(state.series.find(s=>s.id===state.seriesID)?.title||'系列'):'我的素材');
@@ -24,7 +28,7 @@ function mountLibrary(c){
   const bar=tabs([['series','系列'],['all','全部素材'],['recent','最近添加'],['pending','待检查']],parity.libraryTab,id=>{
     parity.libraryTab=id;
     if(id==='series'){route('series');return;}
-    state.seriesID='all';state.status=id==='pending'?'pendingReview':'all';state.sort='newest';render();
+    state.seriesID='all';state.status=id==='pending'?'pendingReview':'all';state.libraryRecent=id==='recent';state.sort='newest';render();
   });if(!insideSeries)header?.after(bar);
   if(insideSeries){header?.querySelector('.actions')?.append(button('编辑系列',()=>c.openSeriesEditor?.(state.seriesID)));}
   for(const card of view.querySelectorAll('.card[data-act="detail"]')){
@@ -49,7 +53,7 @@ function seriesPicker(c){const {state,body,modal,db,render,toast}=c;if(!parity.s
   body.querySelectorAll('[data-series]').forEach(b=>b.onclick=()=>assign(b.dataset.series||null));
   body.querySelector('#create-batch-series').onclick=async()=>{const title=body.querySelector('#new-batch-series').value.trim();if(!title){toast('请填写系列名称');return;}const series={id:crypto.randomUUID(),title,introduction:'',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};await db.put('series',series);state.series.push(series);await assign(series.id);};
 }
-function mountSeries(c){const {view,route,state,render}=c,header=view.querySelector('.view-head'),grid=view.querySelector('.grid');header?.querySelector('h1')?.replaceChildren('我的素材');const bar=tabs([['series','系列'],['all','全部素材'],['recent','最近添加'],['pending','待检查']],'series',id=>{if(id==='series')return;parity.libraryTab=id;route('library');});header?.after(bar);
+function mountSeries(c){const {view,route,state,render}=c,header=view.querySelector('.view-head'),grid=view.querySelector('.grid');header?.querySelector('h1')?.replaceChildren('我的素材');const bar=tabs([['series','系列'],['all','全部素材'],['recent','最近添加'],['pending','待检查']],'series',id=>{if(id==='series')return;parity.libraryTab=id;state.status=id==='pending'?'pendingReview':'all';state.libraryRecent=id==='recent';route('library');});header?.after(bar);
   const controls=document.createElement('div');controls.className='swift-series-controls';controls.innerHTML='<input type="search" placeholder="搜索系列、素材或标签" aria-label="搜索系列"><select aria-label="系列排序"><option value="recent">最近更新</option><option value="name">名称</option></select><span></span>';bar.after(controls);
   const cards=[...view.querySelectorAll('.grid .card[data-act="series-detail"]')], count=controls.querySelector('span');
   const filter=()=>{const q=controls.querySelector('input').value.trim().toLocaleLowerCase();let shown=0;for(const card of cards){const series=state.series.find(x=>x.id===card.dataset.id);card.hidden=!!q&&!(`${series?.title||''} ${series?.introduction||''} ${state.assets.filter(a=>a.seriesID===series?.id).map(a=>a.title).join(' ')}`.toLocaleLowerCase().includes(q));if(!card.hidden)shown++;}count.textContent=`${shown} 项`;};
@@ -69,7 +73,7 @@ function mountWorks(c){const {state,view,render}=c,header=view.querySelector('.v
       cards.forEach(card=>{const p=state.projects.find(x=>x.id===card.dataset.id);const tabOK=parity.workTab==='draft'?!!p.isDraft:!p.isDraft&&(parity.workTab!=='recent'||Date.now()-Date.parse(p.updatedAt)<=30*864e5);const qOK=!q||`${p.title} ${(p.styleTags||p.tags||[]).join(' ')}`.toLocaleLowerCase().includes(q);const kindOK=kind.value==='all'||(kind.value==='created'?p.source!=='imported':p.source==='imported');const statusOK=status.value==='all'||(status.value==='template'?!!p.isTemplate:status.value==='normal'?!p.isTemplate:status.value==='used'?!!p.isUsed:!p.isUsed);card.hidden=!(tabOK&&qOK&&kindOK&&statusOK);if(!card.hidden)shown++;grid.append(card);});count.textContent=`${shown} 项`;};
     for(const el of [search,kind,status,sort])el.addEventListener(el===search?'input':'change',update);update();}
 }
-function mountMatching(c){const {state,view}=c;for(const [id,key] of [['match-ratio','matchRatio'],['match-mode','matchMode'],['match-intent','matchIntent'],['match-purpose','matchPurpose'],['match-processing','matchProcessing'],['match-paper-width','customPaperWidth'],['match-paper-height','customPaperHeight']]){const el=view.querySelector('#'+id);if(!el)continue;if(id==='match-purpose'||id==='match-processing')el.value=state[key];el.onchange=()=>{state[key]=el.value;if(id==='match-ratio')view.querySelector('.matching-page')?.classList.toggle('custom-paper',el.value==='custom');};}}
+function mountMatching(c){const {state,view}=c;for(const [id,key] of [['match-style','matchStyle'],['match-ratio','matchRatio'],['match-mode','matchMode'],['match-intent','matchIntent'],['match-purpose','matchPurpose'],['match-processing','matchProcessing'],['match-paper-width','customPaperWidth'],['match-paper-height','customPaperHeight']]){const el=view.querySelector('#'+id);if(!el)continue;if(id==='match-purpose'||id==='match-processing')el.value=state[key];el.onchange=()=>{state[key]=el.value;if(id==='match-ratio')view.querySelector('.matching-page')?.classList.toggle('custom-paper',el.value==='custom');};}}
 function mountImport(c){ /* Import navigation and source buttons are rendered by app.js. */ }
 function mountEditor(c){const {state,view,current,checkpoint,saveProject,render,toast}=c,tools=view.querySelector('.editor-tools'),page=view.querySelector('#canvas-page'),ink=page?.querySelector('#ink');if(!tools||!ink)return;
   const heading=view.querySelector('.view-head'),actions=heading?.querySelector('.actions'),shell=view.querySelector('.editor-shell');
@@ -81,7 +85,7 @@ function mountEditor(c){const {state,view,current,checkpoint,saveProject,render,
     const saved=document.createElement('span');saved.className='swift-auto-saved';saved.textContent='已自动保存';actions.prepend(saved);
     const archive=tools.querySelector('[data-act="save-archive"]')||view.querySelector('.editor-inspector [data-act="save-archive"]');
     if(archive){archive.textContent='存档';actions.append(archive);}
-    actions.append(button('完成',async()=>{await c.flushSave();c.route('works');},'primary'));
+    actions.append(button('完成',async()=>{state.activeProject.isDraft=false;c.saveProject();await c.flushSave();c.route('works');},'primary'));
     const bar=document.createElement('div');bar.className='swift-editor-toolbar';shell.before(bar);bar.append(tools);
     const insertion=document.createElement('div');insertion.className='swift-insertion-tools';bar.append(insertion);
     const paper=view.querySelector('.object-toolbar [data-act="paper-menu"]');if(paper)insertion.append(paper);

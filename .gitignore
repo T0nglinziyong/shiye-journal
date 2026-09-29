@@ -11,3 +11,7 @@ __pycache__/
 数据备份/
 *.shiyepwa
 *.shiyebackup
+实时数据/
+ShiyeJournalFresh.swiftpm/
+auth.json
+credentials.json

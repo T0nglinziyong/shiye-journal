@@ -1,8 +1,10 @@
 # 拾页 PWA 迁移工程（联网测试版）
 
-本工程以 `ShiyeJournal_2.0.10_Playgrounds_Build_Fix.zip` 为对照基线。它不是把 `.swiftpm` 改名为网页，也尚不是 2.0.10 的等价正式版。现可作为私有网络测试站点发布，素材、作品和备份仍存于当前浏览器设备。
+本工程现在以用户新提供的 `ShiyeJournal_2.0.2_Journal_Layouts.zip` 为主要对照基线，本机解压源码在 `../../ShiyeJournalFresh.swiftpm`；旧 `../../Swift原项目/ShiyeJournalFresh.swiftpm` 仅作历史比较。用户较新的明确修改要求优先。它不是把 `.swiftpm` 改名为网页，也尚不是 Swift 的等价正式版。现可作为测试站点发布，素材、作品和备份仍存于当前浏览器设备。Swift 包内的个人凭据不迁入网页或仓库。
 
 ## 本地运行
+
+后续代码统一提交到 `T0nglinziyong/shiye-journal`，测试入口固定为 [拾页测试站](https://temporary-fleet-oxygen-f2279rt.vercel.app)。GitHub 自动检查见 `.github/workflows/verify.yml`；Vercel Git 自动发布仍需该私有仓库的正常授权，当前未接通，步骤与状态见 [DEPLOYMENT.md](DEPLOYMENT.md)。更新不会创建新测试网址，也不自动迁移各设备的私人浏览器数据。
 
 需要 Node.js 20+。在工程目录执行 `npm ci`、`npm run build`、`npm test`、`python3 -m unittest discover -s tests -p 'test_*.py'`。可用静态文件服务器把 `dist/` 作为站点根目录预览；PWA 离线安装需要 HTTPS 或同机 localhost。不要直接双击 `index.html` 的 `file://` 路径。
 
@@ -12,10 +14,10 @@
 
 - 本机 IndexedDB 保存原图、候选图、素材元数据、系列、作品、笔迹、手动存档及最近删除；完整 JSON+图片备份和原子恢复。
 - 八件 Swift 示例素材、两个可编辑初始模板；新素材导入可用四角手动透视校正或白纸连通域初步建议，校正后检出候选并从高清图裁切；毫米尺寸需人工核对，可选去白底。自动四角建议仍是实验性，浅色纸品必须人工确认。
-- 素材搜索、类型/状态/系列筛选、排序、详情编辑；系列建立；按标签、角色、材质和配色的本地搭配；严格实物毫米尺寸的初稿布局。
-- 画布支持纸色与纸型、单页/双页比例、素材/文字/数字图形、笔迹、拖动、旋转、镜像、透明度、复制、撤销/重做、备选栏、手动存档、PNG 和浏览器打印 PDF。
-- AI 创作可在用户主动输入 DeepSeek API 密钥后，把选中素材的最多四张缩略图和尺寸发送到官方接口；逐轮执行 `place_materials`、单次 `rectangularCut`、`upsert_text`、`upsert_primitives`、`move_elements`、`delete_elements`、`set_paper`、`finish_design`，每轮保存有效步骤。密钥不写入本机存储和备份；实际接口和 iPad 浏览器跨站请求尚未完成实测，可能因 CORS 失败。另有离线 JSON 工具入口。
-- AI 创作弹窗可导出不含 API 密钥及图片的逐轮工具诊断 JSON，便于复核失败轮次；诊断只在当次弹窗内保存，关闭前请导出。
+- 素材搜索、类型/状态/系列筛选、排序、详情编辑、零库存排除；系列标签与最多五张自选封面、批量管理；按标签、角色、材质和配色的本地搭配；严格实物毫米尺寸的初稿布局。素材／作品批量重识别调用设置里的接口，需用户主动使用；尚未以真实密钥验收。
+- 画布支持纸色与纸型、单页/双页比例、素材/文字/基础图形、笔迹、拖动、旋转、镜像、透明度、复制、撤销/重做、备选栏、手动存档、PNG、套索多选与组平移、明确毫米 MediaBox 的 PDF；导入支持多框编辑、候选元数据及作品可见元素。
+- AI 创作采用设置中的服务商、模型与密钥，把选中素材的缩略图和尺寸发送到该接口；逐轮执行 `place_materials`、单次 `rectangularCut`、`upsert_text`、`upsert_primitives`、`move_elements`、`delete_elements`、`set_paper`、`finish_design`，每轮保存有效步骤。AI 配置（包括密钥）保存在当前设备浏览器的 localStorage，勿在共享浏览器保存；完整资料备份不包含该浏览器配置。不要将密钥提交 Git 或放进日志。真实接口和 iPad 跨站请求未实测，可能因 CORS 失败；另有离线 JSON 工具入口。
+- 数据与诊断提供最近删除恢复／彻底删除／清空、请求诊断和完整上下文管理。普通诊断不含私有请求正文；完整上下文默认关闭，需明确同意后才记录素材图、提示、响应、工具及草稿，导出文件仍是私人资料，勿提交 Git。保存前脱敏密钥／令牌，限制为最近五次及总容量；真实接口的所有分支仍待核对。
 - `scripts/convert_swift_backup.py` 可把 Swift v2–v4 二进制 plist `.shiyebackup` 转成 PWA `.shiyepwa`。示例：`python3 scripts/convert_swift_backup.py 拾页备份.shiyebackup 拾页迁移.shiyepwa`，再在 PWA“设置 → 从备份恢复”。主图、封面、原始区域、颜色区域及两类遮罩都随转换保存；API 密钥不会复制到网页。转换不修改源备份。
 
 ## 尚未等价迁移——不要将当前工程当作完整替代品
@@ -25,15 +27,19 @@
 | Apple Vision 前景实例遮罩、A4 自动四角与透视校正、浅色纸品精细分割、旋转最小矩形、光照校正 | 网页替代实现了四角拖动与透视校正、白纸候选建议和可选去白底；没有达到实例级精细抠图和自动毫米测量的可靠度。 |
 | DeepSeek/GPT 多轮视觉观察、完整原生工具合同、审美审查、直接页数据、图片生成 | 有 DeepSeek 多轮接口代码与最多四张视觉输入、逐条工具回执，但只覆盖工具子集；未以真实密钥做多轮稳定性验证，静态站点直接请求可能被浏览器跨站策略阻挡。 |
 | 材料连续加工、裁片/负形/胶带、来源账本、复杂物理关系 | 支持单件矩形裁切及其显示/导出；连续加工、同源多片、负形、胶带与完整库存账本仍待移植。 |
-| PencilKit 笔迹、压感细节、套索、橡皮、形状全集、层组 | 新画笔只有基本 Pointer Events 压力采集；从 Swift 备份读取的 PencilKit 二进制保留在 `legacyPencilKitData`，但尚不能渲染或编辑。 |
-| Swift 原生 PDF 的 A4 毫米印刷与校准线 | 目前是浏览器打印与 PNG，不承诺打印 100% 物理校准。 |
-| 跨设备同步 | 未做。此版只存当前设备网页应用空间。 |
+| PencilKit 笔迹、压感细节、套索、橡皮、形状全集、层组 | 套索多选、类型过滤、锁定和组平移已补；独立图层面板、多选旋转缩放、完整形状及笔触仍缺。Swift PencilKit 二进制保留在 `legacyPencilKitData`，不能渲染或编辑。 |
+| Swift 原生 PDF 的 A4 毫米印刷与校准线 | 已补真实毫米 PDF、素材分页与 10mm 标尺，拒绝未测量／放不下的素材；尚未用实体打印机验证 100% 校准。原浏览器打印入口保留，不作为校准依据。 |
+| 跨设备同步 | 可选单机 HTTPS 数据 API 作为唯一数据源；需部署并获网络授权，尚未进行真实多设备验收。默认 IndexedDB 仍仅当前浏览器。 |
 
 Swift 备份里的未知数据字段尽量原样保留，但转换器不证明所有旧作品能正确显示。已有原生材质加工记录、PencilKit 字节及蒙版文件虽保存，却未完成网页渲染。请只在**保留原 Swift 备份**的前提下试迁移，核对素材张数、图片、尺寸、图层和作品；PWA 不会访问 Swift App 私有目录。
 
 ## 验证范围
 
-`npm test` 覆盖实物尺寸/数量、单次裁切、透视几何、不合法创作调用的前缀提交及模拟的多轮工具回执；Python 测试覆盖模拟 Swift plist 转换；`npm run test:ui` 用 DOM 模拟器检查素材、导航与编辑器初始显示；`npm run build` 检查生产构建及离线资源清单。当前运行环境不能在 iPad Safari 上做 Pencil、拍摄、离线重开、真实模型接口和打印实测；这些仍需设备验收。
+最新本地回归：30 项单元测试、UI 冒烟通过；主流程浏览器 109 张截图，以及 `node tests/import-browser-acceptance.mjs` 的 25 张导入／检查截图通过。新版检查窗口操作与滚动已覆盖，自动分割、光照与创作工具全集仍不等价。当前 Vercel 测试站尚未更新这一批本地改动。下方早期数量为历史记录，不是当前完整等价证明。
+
+`npm test` 本轮 26 项，覆盖模型/物理尺寸/存储安全、封面、多选几何、PDF、导入重复保存保护、诊断隐私等；Python 转换器 1 项。`npm run test:ui` 检查构建、DOM 路由与 HTTP 鉴权，不是视觉验收。
+
+新增真实浏览器回归：先运行 `npm run dev -- --port 5173 --strictPort`，再运行 `npm run test:browser`。测试需要 Node.js 22+ 和 `agent-browser` 的 Chromium（首次可执行 `npx agent-browser install`）。使用隔离浏览器上下文及合成照片，默认截图／报告保存到 `/tmp/shiye-browser-acceptance/`（可设 `SHIYE_SCREENSHOT_DIR`），不接触私人数据服务。本轮 7 种手机／平板横竖／桌面视口、95 张截图和设置、封面、原生触摸套索、多框导入、素材／作品持久化、完整备份恢复通过。具体范围与剩余差异见 [`SWIFT_PARITY_AUDIT.md`](SWIFT_PARITY_AUDIT.md)。视口模拟不是实体 iPad Safari；Pencil、相机、离线重开、真实模型/CORS 和打印仍需设备验收。
 
 ## 4090 本地唯一数据源（可选）
 
@@ -43,7 +49,9 @@ Swift 备份里的未知数据字段尽量原样保留，但转换器不证明�
 
 ### 不使用 Vercel 的正式入口
 
-Ubuntu 4090 自托管模板见 [`deploy/self-host/README.md`](deploy/self-host/README.md)。域名 `shiyejounery.top` 直接指向 4090 公网入口；Caddy 提供 HTTPS 并代理到仅监听 `127.0.0.1:4173` 的 Node 服务。同一域名同时承载 PWA 和 API，不需要 Vercel 或跨域请求。配置 `SHIYE_PUBLIC_ORIGIN` 时强制至少 32 字符随机令牌；首次打开网站需输入令牌。此时作品、素材与图片以服务器为唯一持久数据源；服务离线或鉴权失败时不会退回浏览器 IndexedDB。离线缓存只保留程序静态资源，不缓存 `/api/` 私有数据。
+Ubuntu 4090 自托管模板见 [`deploy/self-host/README.md`](deploy/self-host/README.md)。域名 `shiyejournal.vip` 直接指向 4090 公网入口；Caddy 提供 HTTPS 并代理到仅监听 `127.0.0.1:4173` 的 Node 服务。同一域名同时承载 PWA 和 API，不需要 Vercel 或跨域请求。配置 `SHIYE_PUBLIC_ORIGIN` 时强制至少 32 字符随机令牌；首次打开网站需输入令牌。此时作品、素材与图片以服务器为唯一持久数据源；服务离线或鉴权失败时不会退回浏览器 IndexedDB。离线缓存只保留程序静态资源，不缓存 `/api/` 私有数据。
+
+此处是模板方案，不表示已部署。当前电脑在公司内网，私网地址不能直接用公网 DNS 对外访问；需要公司批准的公网入口／端口转发，或政策允许的出站隧道／公网反向代理。域名注册与实名并不自动提供服务器、访问权限或网站备案；先完成代码与设备验收，再确认网络与部署条件。
 
 旧 Vercel 网址的数据仍在旧域名的浏览器存储中，必须在原设备导出 `.shiyepwa`，再于新域名的“数据与诊断”恢复。恢复前先备份服务器现有资料。直接切换 DNS 不会搬移浏览器数据。
 

@@ -1,5 +1,6 @@
 // Projective rectification runs entirely on the user's device. Coordinates are
 // normalized against the original bitmap; output uses the A4 aspect ratio.
+import {detectPaperQuad} from './paper-analysis.js';
 const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
 export function solveHomography(from,to){
   const m=[];
@@ -21,17 +22,19 @@ export function mapPoint(h,x,y){const d=h[6]*x+h[7]*y+1;return {x:(h[0]*x+h[1]*y
 export function validateCorners(c){
   if(!Array.isArray(c)||c.length!==4||c.some(p=>!Number.isFinite(p.x)||!Number.isFinite(p.y)||p.x<0||p.x>1||p.y<0||p.y>1))throw Error('四角需位于照片内');
   const area=Math.abs(c.reduce((sum,p,i)=>sum+p.x*c[(i+1)%4].y-p.y*c[(i+1)%4].x,0))/2;
+  for(let i=0;i<4;i++){const a=c[i],b=c[(i+1)%4],d=c[(i+2)%4];if((b.x-a.x)*(d.y-b.y)-(b.y-a.y)*(d.x-b.x)<=.00001)throw Error('四角不能交叉，请按顺时针调整');}
   if(area<.03)throw Error('纸张四角区域太小');
   return c;
 }
-export async function rectifyA4(bitmap,corners,maxDimension=4096){
+export async function rectifyA4(bitmap,corners,maxDimension=4096,paperRatio=210/297){
   validateCorners(corners);
   const p=corners.map(v=>({x:v.x*bitmap.width,y:v.y*bitmap.height}));
   const length=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
   const rawWidth=(length(p[0],p[1])+length(p[3],p[2]))/2;
   const rawHeight=(length(p[0],p[3])+length(p[1],p[2]))/2;
-  const size=Math.min(maxDimension,Math.max(300,Math.round(Math.max(rawWidth*297/210,rawHeight))));
-  const height=size,width=Math.round(size*210/297);
+  if(!Number.isFinite(paperRatio)||paperRatio<=0)throw Error('纸张比例无效');
+  const size=Math.min(maxDimension,Math.max(300,Math.round(Math.max(rawWidth,rawHeight))));
+  const height=Math.round(size/Math.max(1,paperRatio)),width=Math.round(height*paperRatio);
   // Inverse mapping: every output pixel samples the corresponding source point.
   const h=solveHomography([{x:0,y:0},{x:width,y:0},{x:width,y:height},{x:0,y:height}],p);
   const source=document.createElement('canvas');source.width=bitmap.width;source.height=bitmap.height;
@@ -51,31 +54,9 @@ export async function rectifyA4(bitmap,corners,maxDimension=4096){
   ctx.putImageData(frame,0,0);
   return new Promise((resolve,reject)=>result.toBlob(blob=>blob?resolve(blob):reject(Error('校正图像失败')),'image/png'));
 }
-export async function suggestPaperCorners(bitmap){
-  const max=600,ratio=Math.min(1,max/Math.max(bitmap.width,bitmap.height));
-  const w=Math.max(1,Math.round(bitmap.width*ratio)),h=Math.max(1,Math.round(bitmap.height*ratio));
+export async function suggestPaperCorners(bitmap,paperRatio=210/297){
+  const ratio=Math.min(1,800/Math.max(bitmap.width,bitmap.height)),w=Math.max(1,Math.round(bitmap.width*ratio)),h=Math.max(1,Math.round(bitmap.height*ratio));
   const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;
   const ctx=canvas.getContext('2d',{willReadFrequently:true});ctx.drawImage(bitmap,0,0,w,h);
-  const data=ctx.getImageData(0,0,w,h).data,seen=new Uint8Array(w*h),queue=new Int32Array(w*h);
-  let best=null;
-  for(let y=0;y<h;y++)for(let x=0;x<w;x++){
-    const start=y*w+x,p=start*4,bright=Math.min(data[p],data[p+1],data[p+2])>175;
-    if(seen[start]||!bright)continue;seen[start]=1;queue[0]=start;
-    let tail=1,head=0,minX=x,maxX=x,minY=y,maxY=y;
-    while(head<tail){const n=queue[head++],px=n%w,py=(n/w)|0;
-      minX=Math.min(minX,px);maxX=Math.max(maxX,px);minY=Math.min(minY,py);maxY=Math.max(maxY,py);
-      for(const v of [n-1,n+1,n-w,n+w]){
-        if(v<0||v>=w*h||seen[v]||Math.abs(v%w-px)+Math.abs(((v/w)|0)-py)!==1)continue;
-        const j=v*4;if(Math.min(data[j],data[j+1],data[j+2])<=175)continue;
-        seen[v]=1;queue[tail++]=v;
-      }
-    }
-    if(tail>w*h*.16&&(!best||tail>best.count))best={count:tail,minX,maxX,minY,maxY};
-  }
-  if(!best)return null;
-  const inset=.004;
-  return [{x:clamp(best.minX/w,inset,1-inset),y:clamp(best.minY/h,inset,1-inset)},
-    {x:clamp(best.maxX/w,inset,1-inset),y:clamp(best.minY/h,inset,1-inset)},
-    {x:clamp(best.maxX/w,inset,1-inset),y:clamp(best.maxY/h,inset,1-inset)},
-    {x:clamp(best.minX/w,inset,1-inset),y:clamp(best.maxY/h,inset,1-inset)}];
+  return detectPaperQuad(ctx.getImageData(0,0,w,h),paperRatio);
 }

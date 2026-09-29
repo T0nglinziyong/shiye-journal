@@ -1,5 +1,23 @@
 # 拾页：大陆访问与托管迁移
 
+## GitHub 自动更新与固定测试网址
+
+用户要求后续验收通过的代码全部提交、推送至私有仓库 `T0nglinziyong/shiye-journal`。生产入口固定为 `https://temporary-fleet-oxygen-f2279rt.vercel.app`，继续使用现有 Vercel 项目 `temporary-fleet-oxygen-f2279rt`，不创建新项目、不改变网址，也不改 `shiyejournal.vip` 的 DNS。
+
+2026-09-29 检查：仓库访问正常，Vercel CLI 登录正常，现有项目的 Git `link` 为 `null`；`vercel git connect` 因无法访问此私有仓库而失败。**自动部署尚未接通**。需要用户在该项目 Settings → Git 中连接 `T0nglinziyong/shiye-journal`，并在 GitHub 授权 Vercel App 仅访问该仓库。连接成功后确认 Production Branch 为 `main`，框架 Vite、构建 `npm run build`、输出 `dist`；以实际 Git 提交触发的 `READY` 部署与相同生产别名为验收依据。不要通过更换项目或借用密钥绕过授权。
+
+新增 `.github/workflows/verify.yml`：推送 `main` 或 PR 时以只读权限运行 Node.js 24 单元／构建／UI 冒烟，以及合成 Swift 备份转换测试；不读取私人备份、不配置服务密钥。这个检查与 Vercel 的 Git 构建是独立的，不宣称它自动阻止生产发布。每次本地仍须验收后再推送。自动构建／发布的官方说明见 [Vercel GitHub 集成](https://vercel.com/docs/git/vercel-for-github)。
+
+## 2026-09-29 临时 Vercel 测试发布
+
+用户要求暂时发布最新本地改动进行测试，使用 Vercel CLI 60.1.3 的 `vercel deploy --temporary --yes --json` 创建可认领的匿名部署，不连接 GitHub、不覆盖旧站点、不修改 `shiyejournal.vip` 的 DNS。构建为纯静态 Vite；未部署 Node 数据服务，线上默认仍是当前网址／设备的 IndexedDB。
+
+本次生成的测试网址是 `https://temporary-fleet-oxygen-f2279rt.vercel.app`。该项目后来已由用户认领，本机通过正常登录关联到同一项目，并通过 `vercel build --prod`、`vercel deploy --prebuilt --prod` 发布；当次返回 `READY`。它不再是未认领的 60 分钟匿名部署。认领链接、认证文件与令牌均不写入 Git 或文档。**后续导入／素材检查／筛选及新 Swift 基准的本地改动尚未再次发布**，不能用线上旧版本验收这些改动。
+
+部署技能用于核对上传范围和构建：新增 `vercel.json` 固定 Vite 构建与 `dist` 输出、Service Worker 不缓存旧版本；`.vercelignore` 仅允许静态程序构建输入，排除环境文件、服务器代码、交接文档、密钥配置与备份。CLI 生成的 `.vercel/anonymous.json` 含临时凭据，整个 `.vercel/` 已被 Git 忽略，勿提交或公开。部署前 `npm test && npm run test:ui` 再次通过；上线后的真实浏览器检查使用隔离上下文和合成数据，不读取私人资料。
+
+默认样例及浏览器测试基线不是用户 iPad 的私人数据。若用户要迁移旧网址资料，请先在原设备原网址导出完整备份；新 URL 不会自动读取旧域名的 IndexedDB。测试期间也应自行导出备份，托管项目不提供浏览器私人资料的备份保证。
+
 ## 当前发布模型
 
 `npm ci && npm run build` 生成纯静态 `dist/`，可发布在 Vercel、Cloudflare Pages 或其他能提供 HTTPS 的静态站点。PWA 需要 HTTPS 和站点根路径。静态前端、样例图片、Service Worker 都随构建输出，不依赖某个托管商的运行时。用户新导入的私有素材、作品和笔迹保存在浏览器的 IndexedDB 中；部署更新不会自动同步不同设备。

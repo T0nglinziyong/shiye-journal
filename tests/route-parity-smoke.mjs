@@ -10,6 +10,7 @@ const code=await readFile(new URL(`assets/${bundle}`,root),'utf8');
 const win=new Window({url:'https://shiye.test/',settings:{enableJavaScriptEvaluation:true,disableJavaScriptFileLoading:true}});
 win.document.body.innerHTML=html.match(/<body>([\s\S]*)<\/body>/)[1];
 win.indexedDB=indexedDB;win.IDBKeyRange=IDBKeyRange;
+win.structuredClone=structuredClone;
 win.fetch=async()=>({ok:true,blob:async()=>new Blob(['image'],{type:'image/png'}),json:async()=>JSON.parse(await readFile(new URL('cece/collection.json',root),'utf8'))});
 win.URL.createObjectURL=()=>`blob:test-${Math.random()}`;win.URL.revokeObjectURL=()=>{};
 win.eval(code);
@@ -42,7 +43,7 @@ for(const [width,height] of [[320,640],[390,844],[700,1024],[768,1024],[1024,768
   click('.work-entry');assert.ok($('.import-nav'));
   assert.ok($('.import-source-actions'));
   click('[data-act="import-exit"]');
-  click('[data-act="open-project"]');assert.ok($('.swift-editor-workspace'));
+  click('[data-act="open-project"]');await new Promise(resolve=>setTimeout(resolve,100));assert.ok($('.swift-editor-workspace'));
   const canvas=$('#canvas-page');
   assert.ok(Number.isFinite(parseFloat(canvas.style.width))&&parseFloat(canvas.style.width)>0);
   assert.ok(Number.isFinite(parseFloat(canvas.style.height))&&parseFloat(canvas.style.height)>0);
