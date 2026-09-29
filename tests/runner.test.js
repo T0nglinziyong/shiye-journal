@@ -26,3 +26,10 @@ test('empty model response cannot mark a blank page complete',async()=>{
   const request=async()=>({ok:true,json:async()=>({choices:[{message:{role:'assistant',content:null,tool_calls:[]}}]})});
   await assert.rejects(runCreativeAgent({draft:draft(),assets:[],aliases:{},key:'test-key',request}),/没有返回创作操作/);
 });
+
+test('inspection images follow ALL native tool replies, including failed calls',async()=>{
+ const replies=[{choices:[{message:{tool_calls:[{id:'inspect',function:{name:'inspect_materials',arguments:'{"keys":["m1"]}'}},{id:'bad',function:{name:'set_paper',arguments:'{"color": #fff}'}},{id:'place',function:{name:'place_materials',arguments:'{"items":[{"asset":"m1","x":0.2,"y":0.2}]}' }},{id:'text',function:{name:'upsert_text',arguments:'{"items":[{"key":"t","content":"今天的春风落在纸上","width":0.6}]}'}}]}}]},{choices:[{message:{tool_calls:[{id:'finish',function:{name:'finish_design',arguments:'{}'}}]}}]}];
+ const payloads=[],asset={id:'a',title:'绿色叶片',physicalWidthMM:20,physicalHeightMM:30,supply:{quantity:1}};
+ const result=await runCreativeAgent({draft:draft(),assets:[asset],aliases:{m1:'a'},key:'synthetic-test',onInspection:async()=>[{type:'text',text:'inspection image marker'}],request:async(_,options)=>{payloads.push(JSON.parse(options.body));return {ok:true,json:async()=>replies.shift()};}});
+ const messages=payloads[1].messages,index=messages.findIndex(x=>x.role==='assistant');assert.deepEqual(messages.slice(index+1,index+5).map(x=>[x.role,x.tool_call_id]),[['tool','inspect'],['tool','bad'],['tool','place'],['tool','text']]);assert.equal(messages[index+5].role,'user');assert.equal(messages[index+5].content[0].text,'inspection image marker');assert.equal(result.finished,true);
+});

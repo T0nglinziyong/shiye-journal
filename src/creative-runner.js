@@ -45,7 +45,11 @@ export async function runCreativeAgent(o){
   if(!calls.length)throw Error('第 '+turn+' 轮没有返回创作操作；画布未因此标记为完成。');
   messages.push(native?{role:'assistant',content:message.content||null,...(message.reasoning_content?{reasoning_content:message.reasoning_content}:{}),tool_calls:calls}:{role:'assistant',content:message.content||''});
   const result=applyToolCalls({tool_calls:calls},working,assets,aliases,options);working=result.draft;
-  for(const r of result.results){const content=JSON.stringify({ok:r.ok,detail:r.detail,...(r.data?{data:r.data}:{})});messages.push(native?{role:'tool',tool_call_id:r.id,content}:{role:'user',content:r.name+': '+content});if(r.ok&&r.name==='inspect_materials'&&onInspection){const previews=await onInspection(r.data);if(previews?.length)messages.push({role:'user',content:previews});}}
+  const inspectionParts=[];
+  for(const r of result.results){const content=JSON.stringify({ok:r.ok,detail:r.detail,...(r.data?{data:r.data}:{})});messages.push(native?{role:'tool',tool_call_id:r.id,content}:{role:'user',content:r.name+': '+content});if(r.ok&&r.name==='inspect_materials'&&onInspection){const previews=await onInspection(r.data);if(previews?.length)inspectionParts.push(...previews);}}
+  // Every native call needs its contiguous tool reply before any user image.
+  // Interleaving inspection previews makes the provider reject the next turn.
+  if(inspectionParts.length)messages.push({role:'user',content:inspectionParts});
   const review=reviewCreativeDraft(working,{allowNoText:options.allowNoText,purposes:o.pagePurposes});await onTurn({turn,results:result.results,draft:working,text:message.content||'',review});
   failures=result.results.some(x=>x.ok)?0:failures+1;
   if(working.agentRun?.status==='finished')return {draft:working,turns:turn,finished:true,messages,review};
