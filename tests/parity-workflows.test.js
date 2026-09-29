@@ -29,11 +29,12 @@ test('series contents independently filter tags, organization and actual used wo
   assert.deepEqual(seriesMembers('s',assets,projects,{sort:'name',ascending:true}).map(a=>a.id),['a','b']);
   assert.equal(seriesMembers('s',assets,projects,{status:'outside'}).length,0);
 });
-test('lasso intersects rotated edges, excludes locked and hidden objects, honors type filter',()=>{
+test('lasso requires full enclosure of rotated objects and honors type and lock filters',()=>{
   const item={id:'a',x:50,y:50,width:40,height:10,rotation:45};
   const d={canvas:{width:100,height:100},items:[item,{...item,id:'locked',isLocked:true},{...item,id:'parked',isParked:true}],textBlocks:[{...item,id:'text'}],primitives:[{...item,id:'hidden',hidden:true}]};
   const p=[{x:35,y:35},{x:39,y:35},{x:39,y:39},{x:35,y:39}];
-  assert.deepEqual(selectPolygon(d,p,{material:true}),['a']);
+  assert.deepEqual(selectPolygon(d,p,{material:true}),[]);
+  assert.deepEqual(selectPolygon(d,[{x:20,y:20},{x:80,y:20},{x:80,y:80},{x:20,y:80}],{material:true}),['a']);
   assert.equal(canvasObjects(d).length,2);
   assert.equal(objectCorners(item).length,4);
   assert.deepEqual(selectPolygon(d,[{x:NaN,y:0},...p]),[]);

@@ -1,8 +1,9 @@
 import {segmentPaperMaterials} from './paper-analysis.js';
 import {visionTask} from './vision-runtime.js';
+import {recognitionProfile} from './recognition-profiles.js';
 // Analyze a small copy, but re-extract accepted cuts from the full source.
-export async function detectPaperCandidates(bitmap,box,smallestMM=6,{balanceLight=false,paperWidthMM=210,paperHeightMM=297}={}){
-  const ratio=Math.min(1,1000/Math.max(bitmap.width*box.w,bitmap.height*box.h));
+export async function detectPaperCandidates(bitmap,box,smallestMM=6,{balanceLight=false,paperWidthMM=210,paperHeightMM=297,recognition='auto'}={}){
+  const ratio=Math.min(1,recognitionProfile(recognition).analysisMaxDimension/Math.max(bitmap.width*box.w,bitmap.height*box.h));
   const w=Math.max(1,Math.round(bitmap.width*box.w*ratio)),h=Math.max(1,Math.round(bitmap.height*box.h*ratio));
   const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;
   const ctx=canvas.getContext('2d',{willReadFrequently:true});

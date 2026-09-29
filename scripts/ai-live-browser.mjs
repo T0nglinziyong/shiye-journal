@@ -33,7 +33,7 @@ try{
  await command('Page.reload');await wait('.series-grid');
  if(phases.includes('recognition')){
  await click('.swift-tabs button:nth-child(2)','.asset-grid');await click('.library-select-toggle');await click('.asset-grid [data-id="live-synthetic-asset"]');await named('.library-management-tray','更多操作');await wait('.selection-more-menu');const startCount=(await evaluate('__liveRequests')).length;await named('.selection-more-menu','重新识别');
- const recognized=await monitor('recognition',async()=>{const a=(await records('assets')).find(a=>a.id==='live-synthetic-asset');if(a.reviewStatus==='ready')return a;const calls=await evaluate('__liveRequests');if(calls.length>startCount&&calls.at(-1).status&&calls.at(-1).status!==200)throw Error('Recognition HTTP '+calls.at(-1).status);return null;});
+ const recognized=await monitor('recognition',async()=>{const a=(await records('assets')).find(a=>a.id==='live-synthetic-asset');if(a.reviewStatus==='ready')return a;const calls=await evaluate('__liveRequests');if(calls.length>startCount){const last=calls.at(-1);if(last.status&&last.status!==200)throw Error('Recognition HTTP '+last.status);if(last.error)throw Error('Recognition connection failed after '+last.totalSeconds.toFixed(1)+' seconds ('+last.error+')');}return null;});
  report.phases.push({name:'recognition',result:{title:recognized.title,kind:recognized.kind,tags:recognized.tags},requests:await evaluate('__liveRequests')});console.log('Recognition saved valid structured metadata.');
  }
  await click('[data-route="matching"]','.match-previews');

@@ -21,7 +21,7 @@ export async function rectifyA4(bitmap,corners,maxDimension=4096,paperRatio=210/
   const sourceCtx=source.getContext('2d',{willReadFrequently:true});sourceCtx.drawImage(bitmap,0,0);
   const src=sourceCtx.getImageData(0,0,source.width,source.height).data;
   const result=document.createElement('canvas');result.width=width;result.height=height;
-  const processed=await visionTask('warp',{pixels:src,sourceWidth:bitmap.width,sourceHeight:bitmap.height,corners,width,height});
+  const processed=await visionTask('warp',{pixels:src,transferInput:true,sourceWidth:bitmap.width,sourceHeight:bitmap.height,corners,width,height});
   const ctx=result.getContext('2d');const frame=new ImageData(processed.pixels,width,height);
   ctx.putImageData(frame,0,0);
   return new Promise((resolve,reject)=>result.toBlob(blob=>blob?resolve(blob):reject(Error('校正图像失败')),'image/png'));

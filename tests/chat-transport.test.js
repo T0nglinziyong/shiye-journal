@@ -10,7 +10,11 @@ test('streamed partial JSON tool arguments assemble before execution, comments a
 test('truncated stream never returns executable tools',async()=>{await assert.rejects(requestChat({...base,request:async()=>sse(['data: {"choices":[{"delta":{"content":"{"}}]}\n\n'])}),/连接中断/);});
 test('idle timeout and cancellation return meaningful errors without keys',async()=>{
  const request=(_,o)=>new Promise((_,reject)=>o.signal.addEventListener('abort',()=>reject(o.signal.reason)));
- await assert.rejects(requestChat({...base,timeout:.015,request}),/等待模型响应超时/);
+ await assert.rejects(requestChat({...base,timeout:.015,request}),/等待响应头超时/);
  const controller=new AbortController();controller.abort(Error('用户停止'));await assert.rejects(requestChat({...base,signal:controller.signal,request:(_,o)=>Promise.reject(o.signal.reason)}),/用户停止/);
 });
 test('HTTP authentication failures are distinguished',async()=>{await assert.rejects(requestChat({...base,request:async()=>new Response('',{status:401})}),/密钥无效/);});
+test('keep-alive without text reports provider waiting, not fictitious output',async()=>{
+ const progress=[];await requestChat({...base,onProgress:p=>progress.push(p),request:async()=>sse([': keep-alive\n\n','data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}\n\n','data: [DONE]\n\n'])});
+ assert.ok(progress.some(p=>p.keepAlives===1&&p.received===0&&p.phase.includes('服务保活中')));assert.ok(progress.at(-1).networkBytes>0);assert.equal(progress.at(-1).received,2);
+});

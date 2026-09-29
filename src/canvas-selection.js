@@ -17,18 +17,19 @@ export function polygonContains(p, polygon) {
   }
   return inside;
 }
-function intersects(a,b) {
-  if(a.some(p=>polygonContains(p,b)) || b.some(p=>polygonContains(p,a))) return true;
-  return a.some((p,i)=>b.some((q,j)=>{
-    const r=a[(i+1)%a.length], s=b[(j+1)%b.length];
-    return cross(p,r,q)*cross(p,r,s)<0 && cross(q,s,p)*cross(q,s,r)<0 || onSegment(p,r,q) || onSegment(p,r,s) || onSegment(q,s,p) || onSegment(q,s,r);
-  }));
+function fullyContains(polygon,corners) {
+  if(!corners.every(p=>polygonContains(p,polygon)))return false;
+  // Concave lassos may contain all corners while cutting through an edge.
+  return corners.every((a,i)=>{const b=corners[(i+1)%corners.length],cuts=[0,1],dx=b.x-a.x,dy=b.y-a.y;
+    for(let j=0;j<polygon.length;j++){const q=polygon[j],r=polygon[(j+1)%polygon.length],ex=r.x-q.x,ey=r.y-q.y,den=dx*ey-dy*ex;
+      if(Math.abs(den)<1e-9)continue;const t=((q.x-a.x)*ey-(q.y-a.y)*ex)/den,u=((q.x-a.x)*dy-(q.y-a.y)*dx)/den;if(t>0&&t<1&&u>=0&&u<=1)cuts.push(t);}
+    cuts.sort((a,b)=>a-b);return cuts.slice(1).every((t,j)=>{const m=(t+cuts[j])/2;return polygonContains({x:a.x+dx*m,y:a.y+dy*m},polygon);});});
 }
 export function selectPolygon(draft, polygon, filter) {
   if(polygon.length<3 || !polygon.every(p=>Number.isFinite(p.x)&&Number.isFinite(p.y))) return [];
   const bounds=selectionBounds(polygon);
   if(bounds.width<.01 || bounds.height<.01) return [];
-  return canvasObjects(draft,filter).filter(e=>intersects(polygon,objectCorners(e.value))).map(e=>e.value.id);
+  return canvasObjects(draft,filter).filter(e=>fullyContains(polygon,objectCorners(e.value))).map(e=>e.value.id);
 }
 export function selectionBounds(points) {
   const x=Math.min(...points.map(p=>p.x)), y=Math.min(...points.map(p=>p.y));

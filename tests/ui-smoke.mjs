@@ -9,6 +9,9 @@ const html=await readFile(new URL('index.html',root),'utf8');
 const window=new Window({url:'https://shiye.test/',settings:{enableJavaScriptEvaluation:true,disableJavaScriptFileLoading:true}});
 window.document.body.innerHTML=html.match(/<body>([\s\S]*)<\/body>/)[1];
 stubCanvas(window);
+// Happy DOM cannot fetch/render font faces with file loading disabled. Real
+// typography is covered separately by Chromium's CeCe render acceptance.
+Object.defineProperty(window.document,'fonts',{value:{load:async()=>[]},configurable:true});
 window.indexedDB=indexedDB;window.IDBKeyRange=IDBKeyRange;
 window.structuredClone=structuredClone;
 window.fetch=async url=>({ok:true,blob:async()=>new Blob(['sample'],{type:'image/png'}),json:async()=>JSON.parse(await readFile(new URL('cece/collection.json',root),'utf8'))});
@@ -63,7 +66,7 @@ window.document.querySelector('[data-act="settings-save"]').click();
 assert.equal(JSON.parse(window.localStorage.getItem('shiye-ai-settings-v1')).temperature,1.2);
 window.document.querySelector('[data-route="works"]').click();
 window.document.querySelector('[data-act="open-project"]').click();
-await new Promise(resolve=>setTimeout(resolve,100));
+await waitFor(()=>window.document.querySelector('.swift-editor-head [aria-label="历史记录"]'));
 window.document.querySelector('.swift-editor-head [aria-label="历史记录"]').click();
 window.document.querySelector('[data-editor-ai]').click();
 assert.ok(window.document.querySelector('.inline-ai-panel'));

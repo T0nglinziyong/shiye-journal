@@ -85,3 +85,8 @@ Ubuntu 4090 自托管模板见 [`deploy/self-host/README.md`](deploy/self-host/R
 搭配页点击“进行AI创作”，进度和结果留在“版本方案”，不跳转；方案保存到当前数据源，只有“重新搭配”会清空匹配结果。点击方案进入草稿，编辑页“保存”转为作品。API 密钥仍仅保存在当前浏览器；新方案记录不含密钥。流式请求以连续无响应秒数作为超时，单轮最多10分钟；取消或中断保留之前完整成功的步骤，不自动重试。
 
 新增浏览器回归：`SHIYE_TEST_URL=http://localhost:5175 node tests/matching-browser.mjs`，使用合成素材与模拟流式回复验证持久化和保存语义，不是实际模型创作质量测试。图像模型与云存储评估见 `IMAGE_STORAGE_REVIEW.md`。
+# CeCe 图形与导入验收补充
+
+CeCe 随 Swift 提供的109个图形可在创作工具“添加图形 → CeCe 图形”复用，复合图形保留可改色的数值矢量色层。重新生成 bundled data 使用 `python scripts/prepare_cece.py`（仅需 Pillow、NumPy；需本机完整 Swift 参考包）。该命令不读取私人素材库、备份或凭据。
+
+导入立即显示选中照片与处理阶段，候选点击局部更新。`node tests/latest-fixes-browser.mjs` 和 `node tests/matching-browser.mjs` 验证组合图形、层级控件、返回路径及自动草稿；私有导入照片只用显式 `SHIYE_IMPORT_PHOTO` 临时本机测试，不提交或上传。所有浏览器脚本使用 `SHIYE_TEST_URL` 指定测试站。

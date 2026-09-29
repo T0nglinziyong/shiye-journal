@@ -10,6 +10,7 @@ const html=await readFile(new URL('index.html',root),'utf8');
 const win=new Window({url:'https://shiye.test/',settings:{enableJavaScriptEvaluation:true,disableJavaScriptFileLoading:true}});
 win.document.body.innerHTML=html.match(/<body>([\s\S]*)<\/body>/)[1];
 stubCanvas(win);
+Object.defineProperty(win.document,'fonts',{value:{load:async()=>[]},configurable:true});
 win.indexedDB=indexedDB;win.IDBKeyRange=IDBKeyRange;
 win.structuredClone=structuredClone;
 win.fetch=async()=>({ok:true,blob:async()=>new Blob(['image'],{type:'image/png'}),json:async()=>JSON.parse(await readFile(new URL('cece/collection.json',root),'utf8'))});

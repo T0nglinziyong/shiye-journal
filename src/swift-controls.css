@@ -118,6 +118,8 @@ body:has(.library-management-tray):not(:has(.library-management-tray:not([hidden
 .canvas-page .object-handle,.canvas-page .selected-object-actions button{display:grid;place-items:center;min-height:0;padding:0;line-height:1}
 .canvas-page .object-handle>.shiye-icon,.canvas-page .selected-object-actions button>.shiye-icon{margin:0}
 .canvas-page .canvas-object.with-selection-handles{outline-offset:0}
+.selected-object-overlay{position:absolute;z-index:2147483647;pointer-events:none;outline:1px dashed #52634b;overflow:visible;transform-origin:center}
+.selected-object-overlay .object-handle,.selected-object-overlay .selected-object-actions{pointer-events:auto}
 .canvas-setting{display:grid;grid-template-columns:minmax(0,1fr);gap:8px;align-content:start;min-width:0}
 .canvas-setting input[type=range]{display:block;min-width:0;max-width:100%;width:100%;height:30px;margin:0;padding:0;appearance:none;-webkit-appearance:none}
 .canvas-setting input[type=range]::-moz-range-track{height:6px;border-radius:4px;background:#e3e5de}
@@ -156,3 +158,10 @@ body:has(.library-management-tray):not(:has(.library-management-tray:not([hidden
 .match-result .thumb-sheet{width:min(100%,calc(230px * var(--thumb-ratio)))!important;height:auto;aspect-ratio:var(--thumb-ratio);max-height:230px;overflow:hidden;container-type:inline-size;margin:auto}
 .match-result .thumb-inner{width:100%;height:100%;aspect-ratio:var(--thumb-ratio);position:relative}
 .match-progress{font:inherit;white-space:pre-wrap;overflow-wrap:anywhere;max-height:220px;overflow:auto;font-size:14px;line-height:1.6}
+.match-multi-trigger{width:100%;min-height:44px;padding:10px 14px;border:0;border-radius:10px;background:#fff;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.match-multi-option{display:flex;align-items:center;gap:12px;padding:10px 8px;margin:0!important;cursor:pointer}
+.match-multi-option input{width:18px!important;height:18px;flex:none}
+.match-style-purpose select[hidden]{display:none!important}
+.import-processing{margin:0 0 12px;color:var(--accent,#52684c);min-height:1.5em}
+.import-processing:empty{display:none}
+.import-inspect[aria-busy="true"] .inspect-columns button,.import-inspect[aria-busy="true"] .inspect-columns input,.import-inspect[aria-busy="true"] .inspect-columns select{pointer-events:none;opacity:.55}

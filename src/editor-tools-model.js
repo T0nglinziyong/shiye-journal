@@ -9,6 +9,11 @@ export function configureShape(shape,kind){Object.assign(shape,{kind,fill:['fram
 export function shapeSVG(s){
   const safe=v=>String(v).replace(/["<>&]/g,'');
   const stroke=safe(s.stroke||'none'),fill=safe(s.fill||'none'),sw=Math.max(0,s.lineWidth??2)/Math.max(1,s.width,s.height);let geometry='';
+  if(Array.isArray(s.vectorLayers)){
+    const geometry=s.vectorLayers.map(layer=>{const data=Array.isArray(layer.rects)?layer.rects.filter(r=>Array.isArray(r)&&r.length===4&&r.every(Number.isFinite)&&r[2]>0&&r[3]>0).map(([x,y,w,h])=>'M'+x+' '+y+'h'+w+'v'+h+'h-'+w+'Z').join(' '):(layer.paths||[]).filter(Array.isArray).map(path=>{const points=path.filter(p=>Array.isArray(p)&&p.length===2&&p.every(Number.isFinite));return points.length?points.map(([x,y],i)=>(i?'L':'M')+x+' '+y).join(' ')+' Z':'';}).join(' ');return data?'<path fill-rule="evenodd" fill="'+safe(layer.fill||'none')+'" stroke="none" opacity="'+Math.max(0,Math.min(1,layer.opacity??1))+'" d="'+data+'"/>':'';}).join('');
+    const size=Array.isArray(s.vectorSize)&&s.vectorSize.length===2&&s.vectorSize.every(v=>Number.isFinite(v)&&v>0)?s.vectorSize:[1,1];
+    return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+size.join(' ')+'" preserveAspectRatio="none" style="width:100%;height:100%" shape-rendering="crispEdges">'+geometry+'</svg>';
+  }
   const paths=Array.isArray(s.vectorPaths)?s.vectorPaths:shapePaths(s.kind);if(paths){const data=paths.filter(Array.isArray).map(p=>{const points=p.filter(point=>Array.isArray(point)&&point.length===2&&point.every(Number.isFinite));return points.length?points.map(([x,y],i)=>(i?'L':'M')+x+' '+y).join(' ')+' Z':'';}).join(' ');geometry=data?'<path fill-rule="evenodd" d="'+data+'"/>':'';}
   else if(s.kind==='ellipse')geometry='<ellipse cx=".5" cy=".5" rx=".48" ry=".48"/>';
   else if(s.kind==='heart')geometry='<path d="M.5 .95 C-.1 .55 -.05 .05 .25 .05 C.4 .05 .5 .2 .5 .25 C.5 .2 .6 .05 .75 .05 C1.05 .05 1.1 .55 .5 .95 Z"/>';
