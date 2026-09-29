@@ -21,9 +21,11 @@
     "vite": "^6.3.5"
   },
   "dependencies": {
+    "@fontsource/ma-shan-zheng": "5.3.1",
     "@panzoom/panzoom": "4.6.2",
     "@techstark/opencv-js": "5.0.0-release.1",
     "ajv": "8.20.0",
+    "eventsource-parser": "4.1.1",
     "idb": "8.0.3",
     "lucide": "1.48.0",
     "pdf-lib": "1.17.1"

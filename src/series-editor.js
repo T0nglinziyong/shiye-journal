@@ -1,4 +1,5 @@
 import {parseTags, seriesCovers} from './library-model.js';
+import {onDialogClosed} from './dialog-lifecycle.js';
 
 export function showSeriesEditor({id, state, body, modal, db, uid, esc, imgTag, render, toast}) {
   const series = state.series.find(s => s.id === id);
@@ -43,5 +44,6 @@ export function showSeriesEditor({id, state, body, modal, db, uid, esc, imgTag, 
       modal.close(); render(); toast('系列已保存');
     } catch (error) { button.disabled = false; body.querySelector('#series-error').textContent = error.message; }
   };
+  modal.classList.add('series-editor-dialog');onDialogClosed(modal,()=>modal.classList.remove('series-editor-dialog'));
   modal.showModal();
 }

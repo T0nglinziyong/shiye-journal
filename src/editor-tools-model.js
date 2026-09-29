@@ -9,7 +9,7 @@ export function configureShape(shape,kind){Object.assign(shape,{kind,fill:['fram
 export function shapeSVG(s){
   const safe=v=>String(v).replace(/["<>&]/g,'');
   const stroke=safe(s.stroke||'none'),fill=safe(s.fill||'none'),sw=Math.max(0,s.lineWidth??2)/Math.max(1,s.width,s.height);let geometry='';
-  const paths=Array.isArray(s.vectorPaths)?s.vectorPaths:shapePaths(s.kind);if(paths)geometry=paths.filter(Array.isArray).map(p=>{const points=p.filter(point=>Array.isArray(point)&&point.length===2&&point.every(Number.isFinite));return points.length?'<path d="'+points.map(([x,y],i)=>(i?'L':'M')+x+' '+y).join(' ')+' Z"/>':'';}).join('');
+  const paths=Array.isArray(s.vectorPaths)?s.vectorPaths:shapePaths(s.kind);if(paths){const data=paths.filter(Array.isArray).map(p=>{const points=p.filter(point=>Array.isArray(point)&&point.length===2&&point.every(Number.isFinite));return points.length?points.map(([x,y],i)=>(i?'L':'M')+x+' '+y).join(' ')+' Z':'';}).join(' ');geometry=data?'<path fill-rule="evenodd" d="'+data+'"/>':'';}
   else if(s.kind==='ellipse')geometry='<ellipse cx=".5" cy=".5" rx=".48" ry=".48"/>';
   else if(s.kind==='heart')geometry='<path d="M.5 .95 C-.1 .55 -.05 .05 .25 .05 C.4 .05 .5 .2 .5 .25 C.5 .2 .6 .05 .75 .05 C1.05 .05 1.1 .55 .5 .95 Z"/>';
   else if(s.kind==='arrow')geometry='<path d="M.03 .35 H.62 V.08 L.97 .5 L.62 .92 V.65 H.03 Z"/>';

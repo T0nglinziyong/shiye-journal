@@ -3,6 +3,7 @@ import {agentTools,directPageContract,directPageToTools} from './creative-contra
 export {agentTools} from './creative-contract.js';
 import {reviewCreativeDraft} from './creative-quality.js';
 import {creativeTypographyGuide} from './creative-typography.js';
+import {requestChat} from './chat-transport.js';
 
 const system='你是拾页手账创作者。只使用素材台中的真实素材；尺寸、库存和加工由本地工具判定，不得缩放或复制实物。文字和数字图形是可编辑图层。根据用途与风格建立主视觉、连续阅读区、细节与留白，避免堆在中央、遮住正文、重复空相框或每段机械加白底。未提供经历时只能写客观观察或通用主题内容，不编日期地点经历。位置默认页面比例，文字遵守本页字号与层级建议。加工只能用合同中安全操作，不假装识别未提供的图案，不执行网址、脚本或文件。每轮以实际画布和回执修正，完成前审阅整个页面。';
 const purposes={日常记录:'标题、至少两段关联观察与图像穿插，不做仅口号的封面。',旅途记录:'有依据的地点路线、图、票据及短段落，不编地名日期。',图文收藏:'不同大小的图、标签及有内容的文字格位，禁止空相框。',清单计划:'实际清单或记录区；缺少事项时写通用可编辑主题条目，不虚构日程。',影像故事:'主图与相关小图建立阅读顺序，穿插说明细节。',主题封面:'允许大主视觉、短标题及明显留白。'};
@@ -35,10 +36,9 @@ export async function runCreativeAgent(o){
  let working=structuredClone(draft),turn=0,failures=0;if(working.agentRun?.status==='finished')working.agentRun={...working.agentRun,status:'editing'};const messages=buildCreativeMessages({...o,draft:working}),limit=maxTurns===0?5:Math.max(1,Math.min(5,maxTurns));
  for(;turn<limit;){
   if(signal?.aborted)throw signal.reason||Error('创作已停止');turn++;
-  const payload=buildCreativePayload(o,messages),native=!!payload.tools,timeoutSignal=AbortSignal.timeout(Math.max(20,requestTimeout)*1000),combined=signal?AbortSignal.any([signal,timeoutSignal]):timeoutSignal;
-  const response=await request(endpoint,{method:'POST',signal:combined,headers:{'Content-Type':'application/json',Authorization:'Bearer '+key},body:JSON.stringify(payload)});
-  if(!response.ok){await response.text();throw Error('模型请求失败 HTTP '+response.status+'（响应正文未写入日志）');}
-  const data=await response.json(),choice=data.choices?.[0],message=choice?.message;if(!message)throw Error('模型没有返回可用消息');
+  const payload=buildCreativePayload(o,messages),native=!!payload.tools;
+  const data=await requestChat({endpoint,key,payload,request,signal,timeout:requestTimeout,onProgress:p=>o.onProgress?.({...p,turn})}),choice=data.choices?.[0],message=choice?.message;if(!message)throw Error('模型没有返回可用消息');
+  await o.onResponse?.(data);
   if(choice.finish_reason==='length'){messages.push({role:'user',content:'输出截断，整轮未执行。返回较小完整批次。实际状态：'+JSON.stringify(creativeScene(working,aliases))});await onTurn({turn,results:[{name:'response',ok:false,detail:'输出截断，整轮未执行'}],draft:working,text:''});continue;}
   let calls=message.tool_calls||[];
   if(!native){try{const parsed=JSON.parse((message.content||'{}').replace(/^\x60\x60\x60(?:json)?\s*|\s*\x60\x60\x60$/g,'')),tools=o.generationMode==='direct'?directPageToTools(parsed):(parsed.tools||parsed.tool_calls||[]);calls=tools.map((x,i)=>({id:'json-'+turn+'-'+i,type:'function',function:{name:x.name||x.function?.name,arguments:JSON.stringify(x.arguments||x.function?.arguments||{})}}));}catch(e){messages.push({role:'user',content:'页面/JSON不符合合同：'+e.message+'。未执行；修正后完整返回。'});await onTurn({turn,results:[{name:'response',ok:false,detail:e.message}],draft:working,text:''});continue;}}

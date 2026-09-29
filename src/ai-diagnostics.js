@@ -7,6 +7,7 @@ export function redact(value,key='') {
 }
 export async function createAIRecorder({db,model,key,request=fetch,storage=localStorage}) {
   const enabled=storage.getItem(CAPTURE)==='true';
+  let streamMetric;
   const session=enabled?{id:'ai-context-'+crypto.randomUUID(),model,createdAt:new Date().toISOString(),status:'running',complete:true,events:[],bytes:0}:null;
   const save=async event=>{
     if(!session)return;
@@ -25,15 +26,23 @@ export async function createAIRecorder({db,model,key,request=fetch,storage=local
       try {
         await save({type:'request',date:new Date().toISOString(),payload:JSON.parse(options.body)});
         const response=await request(url,options);status=response.status;
+        if(response.headers.get('content-type')?.includes('text/event-stream')){
+          succeeded=response.ok;
+          streamMetric={date:new Date().toISOString(),stage:'创作',model,status,start};
+          await save({type:'response-stream-started',status});
+          return response;
+        }
         const text=await response.clone().text();let data;try{data=JSON.parse(text);}catch{}
         usage=data?.usage; succeeded=response.ok;
         await save({type:'response',status,seconds:(performance.now()-start)/1000,body:data||text});
         return response;
       }catch(error){await save({type:'request-error',message:error.message});throw error;}
-      finally{await recordMetric({date:new Date().toISOString(),stage:'创作',model,status,succeeded,seconds:(performance.now()-start)/1000,inputTokens:usage?.prompt_tokens??null,outputTokens:usage?.completion_tokens??null,cachedTokens:usage?.prompt_tokens_details?.cached_tokens??null});}
+      finally{if(!streamMetric)await recordMetric({date:new Date().toISOString(),stage:'创作',model,status,succeeded,seconds:(performance.now()-start)/1000,inputTokens:usage?.prompt_tokens??null,outputTokens:usage?.completion_tokens??null,cachedTokens:usage?.prompt_tokens_details?.cached_tokens??null});}
     },
     async turn(turn,results,draft) {await save({type:'tools',turn,results,draft});},
+    async response(data){await save({type:'response-stream-completed',body:data});if(streamMetric){const {start,...metric}=streamMetric;streamMetric=null;await recordMetric({...metric,succeeded:true,seconds:(performance.now()-start)/1000,inputTokens:data.usage?.prompt_tokens??null,outputTokens:data.usage?.completion_tokens??null,cachedTokens:data.usage?.prompt_tokens_details?.cached_tokens??null});}},
     async finish(status) {
+      if(streamMetric){const {start,...metric}=streamMetric;streamMetric=null;await recordMetric({...metric,succeeded:false,seconds:(performance.now()-start)/1000,inputTokens:null,outputTokens:null,cachedTokens:null});}
       if(!session)return;session.status=status;session.endedAt=new Date().toISOString();await save({type:'ended',status});
       const sessions=(await db.all('meta')).filter(x=>x.id.startsWith('ai-context-')&&x.status!=='running').sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
       let total=0;const discarded=[];sessions.forEach((s,i)=>{total+=s.bytes||0;if(i>=5||total>MAX_TOTAL)discarded.push(s.id);});

@@ -4,6 +4,13 @@ import {Window} from 'happy-dom';
 import {bindLongPress} from '../src/long-press.js';
 import {mountFilterControl} from '../src/filter-controls.js';
 
+test('touch hold tolerates finger jitter and pointerup detects a delayed timer',()=>{
+  const win=new Window(),node=win.document.createElement('button'),oldSet=globalThis.setTimeout,oldClear=globalThis.clearTimeout,oldPerformance=globalThis.performance;let clock=0,pending=null,held=0,clicked=0;
+  globalThis.performance={now:()=>clock};globalThis.setTimeout=fn=>{pending=fn;return 1;};globalThis.clearTimeout=()=>pending=null;
+  const emit=(type,x=10)=>node.dispatchEvent(new win.PointerEvent(type,{bubbles:true,cancelable:true,clientX:x,clientY:10,pointerType:'touch',pointerId:1,button:0,isPrimary:true}));
+  try{bindLongPress(node,()=>held++);node.addEventListener('click',()=>clicked++);emit('pointerdown');emit('pointermove',24);assert.ok(pending);clock=530;emit('pointerup');node.click();assert.equal(held,1);assert.equal(clicked,0);emit('pointerdown');emit('pointermove',40);clock=1200;emit('pointerup');assert.equal(held,1);emit('pointerdown');emit('pointercancel');assert.equal(pending,null);}finally{globalThis.performance=oldPerformance;globalThis.setTimeout=oldSet;globalThis.clearTimeout=oldClear;win.happyDOM.abort();}
+});
+
 test('filter reserves the longest option independently of the selected label',()=>{
   const win=new Window(),oldDocument=globalThis.document;globalThis.document=win.document;
   try{const select=win.document.createElement('select'),bar=win.document.createElement('div');select.innerHTML='<option value="name">名称</option><option value="updated">最近修改</option>';const button=mountFilterControl(select,bar,'排序依据','≡');const reserve=button.querySelector('.filter-width-reserve');assert.equal(reserve.textContent,'最近修改');assert.equal(reserve.getAttribute('aria-hidden'),'true');select.value='updated';select.dispatchEvent(new win.Event('change'));assert.equal(button.querySelector('span').textContent,'最近修改');select.value='name';select.dispatchEvent(new win.Event('change'));assert.equal(reserve.textContent,'最近修改');assert.equal(button.querySelector('span').textContent,'名称');}finally{globalThis.document=oldDocument;win.happyDOM.abort();}

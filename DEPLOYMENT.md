@@ -85,3 +85,8 @@ Vercel 和 Cloudflare Pages 的构建命令均为 `npm run build`，输出目录
 Vercel 和 Cloudflare 上的静态 PWA 只有在设置中连接可达的 HTTPS 拾页数据服务时才使用 4090 机器作为唯一数据源；本地 Node 服务是标准 HTTP/JSON，不绑定托管商。公网代理需配置 SHIYE_TOKEN 和 SHIYE_ALLOWED_ORIGINS，并备份 SHIYE_DATA_DIR。未经网络配置，线上版本继续使用各浏览器 IndexedDB。
 
 若整个站点直接部署在 4090 上，改用 `deploy/self-host/` 中的 Caddy、systemd 与环境文件模板。网页和 API 同源，`SHIYE_ALLOWED_ORIGINS` 不需要设置，令牌与数据目录留在 4090；Vercel 项目不再参与新域名的发布。旧 Vercel 网址独立保留，不自动迁移原有浏览器资料。
+# AI 超时与搭配方案批次：发布前验收（2026-09-29）
+
+78 项单元及 `npm test && npm run test:ui` 通过；真实 Chromium 交互40张、布局64张、匹配方案4种视口通过。匹配专项使用合成素材和模拟SSE，验证不跳页、刷新保留、草稿→保存作品、重置不删除作品；不是有效 API 密钥的真实生成验收。当前机器浏览器直连 DeepSeek 以无效测试密钥取得401，只有连通性证据。两张经许可在线分割照片和返回蒙版仅在/tmp，详见 IMAGE_STORAGE_REVIEW。
+
+只推送现有 origin/main，由现有 shiye-journal-test 自动构建；待随后记录准确 Git SHA、READY 和同一固定别名。未手动部署、新建项目、修改 DNS、迁移数据库或发布任何凭据／私人备份。

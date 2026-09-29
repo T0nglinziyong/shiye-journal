@@ -1,6 +1,6 @@
 import * as db from './store.js';
 
-const MARKER='cece-samples-v2';
+const MARKER='cece-samples-v3';
 
 export async function seedBundledExamples({isProjectOpen=()=>false}={}){
   if(await db.get('meta',MARKER))return;
@@ -22,17 +22,11 @@ export async function seedBundledExamples({isProjectOpen=()=>false}={}){
   for(const sample of collection.projects.filter(p=>existingProjects.has(p.id))){
     if(isProjectOpen(sample.id))continue;
     const saved=await db.get('projects',sample.id);
-    const blocks=saved?.drafts?.[0]?.textBlocks;
-    if(!blocks)continue;
-    let changed=false;
-    for(const {sources,replacement} of sample.sampleParagraphUpgrades||[]){
-      if(!sources.every(original=>blocks.some(block=>block.id===original.id&&block.content===original.content&&Math.abs(block.x-original.x)<.01&&Math.abs(block.y-original.y)<.01)))continue;
-      const ids=new Set(sources.map(source=>source.id));
-      saved.drafts[0].textBlocks= saved.drafts[0].textBlocks.filter(block=>!ids.has(block.id));
-      saved.drafts[0].textBlocks.push(replacement);
-      changed=true;
+    // Only refresh untouched bundled examples, never an edited user copy.
+    if(saved?.updatedAt===sample.updatedAt&&saved?.createdAt===sample.createdAt&&saved?.drafts?.length===1&&!saved.manualArchives?.length&&!saved.editHistory?.undo?.length){
+      const {sampleParagraphUpgrades,...replacement}=sample;upgraded.push(replacement);continue;
     }
-    if(changed)upgraded.push(saved);
+    // Any edited copy belongs to the user; do not migrate individual paragraphs.
   }
   const series=await db.get('series',collection.series.id);
   await db.transaction(['assets','projects','series','meta'],tx=>{

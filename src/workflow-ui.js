@@ -93,7 +93,7 @@ async function classifyBatch(c,kind) {
   for(const record of records) {
     c.toast('正在识别 '+(count+1)+' / '+records.length);
     const image=kind==='asset'?await c.modelImage(record):(await c.rasterize(record.drafts[0],.5)).toDataURL('image/jpeg',.8);
-    const result=await classifyRecord({kind,record,settings:c.state.aiSettings,image,assets:c.state.assets});
+    const result=await classifyRecord({kind,record,settings:c.state.aiSettings,image,assets:c.state.assets,onProgress:p=>c.toast(p.phase+' · '+p.seconds+' 秒 · '+p.received+' 字符')});
     const next={...record,...result,updatedAt:new Date().toISOString()};await c.db.put(kind==='asset'?'assets':'projects',next);Object.assign(record,next);count++;
   }
   c.render();c.toast('已整理 '+count+' 件');

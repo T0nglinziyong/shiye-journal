@@ -1,0 +1,28 @@
+import assert from 'node:assert/strict';
+import {mkdir,writeFile} from 'node:fs/promises';
+import {browserHarness} from './browser-harness.mjs';
+const out='/tmp/shiye-matching-flow';await mkdir(out,{recursive:true});
+const b=await browserHarness('shiye-matching-flow',process.env.SHIYE_TEST_URL||'http://localhost:5175',async({command})=>{
+ await command('Page.addScriptToEvaluateOnNewDocument',{source:`
+ localStorage.setItem('shiye-ai-settings-v1',JSON.stringify({provider:'custom',endpoint:'https://mock.invalid/chat',model:'test',key:'synthetic-key',includeThumbnails:false,generationMode:'agent'}));
+ const original=fetch;globalThis.fetch=async(url,options)=>{if(url!=='https://mock.invalid/chat')return original(url,options);
+ const calls=[{id:'a',type:'function',function:{name:'place_materials',arguments:JSON.stringify({items:[{asset:'m1',piece:'p1',x:.5,y:.5}]})}},{id:'b',type:'function',function:{name:'upsert_text',arguments:JSON.stringify({items:[{key:'title',content:'春日收藏',x:.5,y:.2,width:.7,fontSize:28}]})}},{id:'c',type:'function',function:{name:'finish_design',arguments:'{}'}}];
+ return new Response(new ReadableStream({async start(c){c.enqueue(new TextEncoder().encode(': keep-alive\\n\\n'));await new Promise(r=>setTimeout(r,300));c.enqueue(new TextEncoder().encode('data: '+JSON.stringify({choices:[{delta:{tool_calls:calls.map((t,index)=>({...t,index}))},finish_reason:'tool_calls'}]})+'\\n\\ndata: [DONE]\\n\\n'));c.close();}}),{headers:{'Content-Type':'text/event-stream'}});};`});
+});
+const {command,evaluate,wait,click,sleep}=b;
+const records=store=>evaluate(`(async()=>{const db=await new Promise(r=>{const q=indexedDB.open('shiye-pwa-full-v1');q.onsuccess=()=>r(q.result)});return await new Promise(r=>{const q=db.transaction('${store}').objectStore('${store}').getAll();q.onsuccess=()=>r(q.result)})})()`);
+try{
+ await wait('.series-grid');
+ await evaluate(`(async()=>{const db=await new Promise(r=>{const q=indexedDB.open('shiye-pwa-full-v1');q.onsuccess=()=>r(q.result)});await new Promise(r=>{const tx=db.transaction(['assets','meta'],'readwrite');tx.objectStore('assets').put({id:'match-test-material',blobId:'match-test-material',staticPath:'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2220%22 height=%2230%22%3E%3Crect width=%2220%22 height=%2230%22 fill=%22%2387ae7d%22/%3E%3C/svg%3E',title:'春日贴纸',kind:'sticker',tags:[],physicalWidthMM:20,physicalHeightMM:30,supply:{quantity:1},createdAt:new Date().toISOString()});tx.objectStore('meta').put({id:'matching-session-v1',context:{basket:['match-test-material'],coreIDs:[],matchPurpose:'主题封面',matchPurposes:['主题封面']},variants:[]});tx.oncomplete=r;});})()`);
+ await command('Page.reload');await wait('.series-grid');await click('[data-route="matching"]','.match-previews');
+ assert.equal(await evaluate('document.querySelector("[data-act=match-generate]").textContent.trim()'),'进行AI创作');
+ const before=(await records('projects')).filter(p=>p.title==='新的手账').length;await click('[data-act="match-generate"]');await wait('.match-progress');assert.ok(await evaluate('!!document.querySelector(".matching-page")&&!document.querySelector("#canvas-page")'));
+ for(let i=0;i<100;i++){if(await evaluate('document.querySelector(".match-progress").textContent.includes("创作完成")'))break;await sleep(100);}
+ assert.match(await evaluate('document.querySelector(".match-progress").textContent'),/创作完成/);assert.equal((await records('projects')).filter(p=>p.title==='新的手账').length,before);
+ for(const [w,h] of [[390,844],[768,1024],[1024,768],[1440,900]]){await command('Emulation.setDeviceMetricsOverride',{width:w,height:h,deviceScaleFactor:1,mobile:w<700});await sleep(100);await evaluate('document.querySelector(".match-previews").scrollIntoView({block:"center"})');const png=await command('Page.captureScreenshot',{format:'png'});await writeFile(out+'/'+w+'x'+h+'.png',Buffer.from(png.data,'base64'));assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1'));}
+ await command('Page.reload');await wait('.series-grid');await click('[data-route="matching"]','.match-result');assert.match(await evaluate('document.querySelector(".match-progress").textContent'),/创作完成/);
+ await click('[data-act="match-open-result"]','#canvas-page');let projects=await records('projects');const p=projects.find(x=>x.title==='新的手账');assert.ok(p?.isDraft);assert.equal(p.drafts[0].items.length,1);assert.equal(p.drafts[0].textBlocks.length,1);
+ await click('[data-act="save-work"]');await sleep(200);projects=await records('projects');assert.equal(projects.find(x=>x.id===p.id).isDraft,false);
+ await click('[data-route="matching"]','.match-previews');await evaluate('globalThis.confirm=()=>true');await click('[data-act="reset-match"]');await sleep(200);assert.equal((await records('meta')).find(x=>x.id==='matching-session-v1').variants.length,0);assert.ok((await records('projects')).find(x=>x.id===p.id));assert.deepEqual(b.errors,[]);
+ console.log('Matching flow passed: streamed progress, no navigation, reload persistence, draft promotion, reset preserves work, 4 viewport screenshots. Synthetic model response only.');
+}finally{await b.close();}

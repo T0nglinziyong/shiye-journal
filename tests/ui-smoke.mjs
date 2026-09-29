@@ -39,7 +39,7 @@ await waitFor(()=>window.document.body.classList.contains('editing'));
 assert.ok(window.document.body.classList.contains('editing'),window.happyDOM.virtualConsolePrinter.readAsString()+' '+window.document.querySelector('#view').textContent.slice(0,120)+' '+window.document.querySelector('#toast').textContent);
 assert.match(window.document.querySelector('#view').textContent,/导入创作指令/);
 assert.ok(window.document.body.classList.contains('editing'));
-assert.equal(window.document.querySelector('.swift-editor-head [data-act="save-archive"]')?.textContent,'存档',window.happyDOM.virtualConsolePrinter.readAsString());
+assert.equal(window.document.querySelector('.swift-editor-head [data-act="save-work"]')?.textContent,'保存',window.happyDOM.virtualConsolePrinter.readAsString());
 window.document.querySelector('.swift-editor-head [data-act="back-works"]').click();
 window.document.querySelector('#top-settings').click();
 window.document.querySelector('[data-val="数据与诊断"]').click();
