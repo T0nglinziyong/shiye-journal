@@ -43,7 +43,7 @@ async function workBackground(source,candidates) {
   }
   return png(canvas);
 }
-export async function saveImportBatch({state,db,urls,render}) {
+export async function saveImportBatch({state,db,urls,render,onSaved}) {
   if(state.importSaving||state.importStep==='done')return;
   state.importSaving=true;
   try {
@@ -90,5 +90,8 @@ export async function saveImportBatch({state,db,urls,render}) {
   await db.transaction(['assets','blobs','projects'],tx=>{for(const a of assets)tx.objectStore('assets').put(a);for(const b of blobs)tx.objectStore('blobs').put(b);for(const p of projects)tx.objectStore('projects').put(p);});
   state.assets.push(...assets);state.projects.push(...projects);for(const b of blobs)urls.set(b.id,URL.createObjectURL(b.data));
   state.importSavedCount=savedCount;state.importStep='done';render();
+  // Remote enrichment starts only after the entire batch is safely committed.
+  // It must not block the success screen or the next import batch.
+  if(state.importMode!=='work'&&onSaved)void Promise.resolve().then(()=>onSaved(assets.map(a=>structuredClone(a)))).catch(console.warn);
   } finally {state.importSaving=false;}
 }

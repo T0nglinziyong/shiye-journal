@@ -87,6 +87,16 @@ test('import saves once under double-click and permits retry after transaction f
   db.transaction=async()=>{throw Error('offline');};
   await assert.rejects(saveImportBatch(options),/offline/);assert.equal(state.assets.length,0);assert.equal(state.importSaving,false);
 });
+test('automatic organization starts after commit and does not delay continuing import',async()=>{
+  const blob=new Blob(['synthetic']),state={importMode:'material',importStep:'review',assets:[],projects:[],importRecords:[{confirmed:true,file:blob,selectedCandidates:[{selected:true,title:'素材 1',blob,region:{x:0,y:0,w:1,h:1}}]}]},urls=new Map();
+  let committed=false,called=false,release;
+  const work=new Promise(r=>release=r),db={transaction:async()=>{committed=true;}};
+  await saveImportBatch({state,db,urls,render:()=>{},onSaved:async assets=>{assert.ok(committed);assert.equal(state.importStep,'done');assert.equal(assets.length,1);assets[0].title='background mutation';called=true;await work;}});
+  assert.ok(called);assert.equal(state.assets[0].title,'素材 1');assert.equal(state.importSaving,false);
+  release();for(const url of urls.values())URL.revokeObjectURL(url);
+  state.importStep='review';db.transaction=async()=>{throw Error('offline');};called=false;
+  await assert.rejects(saveImportBatch({state,db,urls,render:()=>{},onSaved:()=>{called=true;}}),/offline/);assert.equal(called,false);
+});
 test('AI metrics contain no private body; opt-in context redacts credentials before persistence',async()=>{
   const values=new Map(),db={get:async(_,id)=>values.get(id),put:async(_,value)=>values.set(value.id,structuredClone(value)),all:async()=>[...values.values()],transaction:async(_,fn)=>fn({objectStore:()=>({delete:id=>values.delete(id)})})};
   const response=()=>new Response(JSON.stringify({usage:{prompt_tokens:7,completion_tokens:3},choices:[{message:{content:'private-reply'}}]}));

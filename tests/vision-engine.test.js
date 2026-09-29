@@ -2,6 +2,25 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import cvModule from '@techstark/opencv-js';
 import {processVision} from '../src/opencv-worker.js';
+test('model contour fills printed white holes but preserves a concave material boundary',async()=>{
+  const cv=await cvModule,width=100,height=100,alpha=new Uint8Array(width*height);
+  for(let y=20;y<80;y++)for(let x=20;x<80;x++)if(!(x>55&&y>55))alpha[y*width+x]=255;
+  for(let y=30;y<40;y++)for(let x=30;x<40;x++)alpha[y*width+x]=0;
+  const r=await processVision(cv,'material-mask',{alpha,width,height}),left=Math.round(r.x*width),top=Math.round(r.y*height),at=(x,y)=>r.mask.alpha[(y-top)*r.mask.width+x-left];
+  assert.equal(at(35,35),255);assert.equal(at(70,70),0);assert.equal(at(0+left,0+top),0);
+});
+test('GrabCut removes an attached neutral shadow without clipping coloured paper',async()=>{
+  const cv=await cvModule,width=160,height=180,pixels=new Uint8ClampedArray(width*height*4),mask=new Uint8Array(width*height),evidence=new Uint8Array(width*height),foregroundSeeds=new Uint8Array(width*height);
+  for(let y=0;y<height;y++)for(let x=0;x<width;x++){
+    const i=y*width+x,p=i*4,paper=x>=40&&x<110&&y>=40&&y<140,shadow=x>=40&&x<125&&y>=40&&y<150;
+    pixels.set(paper?[60,140,210,255]:shadow?[205,205,205,255]:[245,245,245,255],p);
+    mask[i]=shadow?1:0;evidence[i]=foregroundSeeds[i]=paper?1:0;
+  }
+  const before=pixels.slice(),result=await processVision(cv,'components',{mask,evidence,foregroundSeeds,pixels,width,height,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
+  assert.equal(result.length,1);const r=result[0],a=r.mask,at=(x,y)=>a.alpha[(y-Math.round(r.y*height))*a.width+x-Math.round(r.x*width)];
+  assert.equal(at(70,80),255);assert.equal(at(118,80),0);assert.equal(at(70,146),0);assert.deepEqual(pixels,before);
+  assert.ok(a.polygons[0].length<=8,'straight paper must not have a staircase contour');
+});
 test('OpenCV contours preserve candidate bounds, fill printed detail and reject page-sized components',async()=>{
   const cv=await cvModule,width=100,height=150,mask=new Uint8Array(width*height);for(let y=30;y<110;y++)for(let x=20;x<65;x++)mask[y*width+x]=1;for(let y=45;y<60;y++)for(let x=30;x<40;x++)mask[y*width+x]=0;
   const result=await processVision(cv,'components',{mask,width,height,smallestMM:6,paperWidthMM:210,paperHeightMM:297});assert.equal(result.length,1);assert.equal(result[0].mask.width,51);assert.equal(result[0].mask.height,86);assert.equal(result[0].mask.alpha[25*51+15],255);assert.equal(result[0].mask.alpha[0],0);

@@ -143,6 +143,8 @@ body:has(.library-management-tray):not(:has(.library-management-tray:not([hidden
 .series-editor-dialog .dialog-head,.material-editor-dialog .dialog-head{margin-bottom:12px}
 .dialog-head button{font-size:16px;line-height:1.2}
 .recently-deleted-grid .deleted-row{display:flex;flex-direction:column;padding:0;gap:0;border:1px solid #e3e5dc;align-items:stretch}
+.recently-deleted-grid .deleted-row>.card-image{flex:none;height:auto;aspect-ratio:1.22;min-height:140px}
+.recently-deleted-grid .deleted-row>.card-body{flex:none}
 .recently-deleted-grid .deleted-actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
 .recently-deleted-grid .deleted-actions button{font-size:13px;flex:1;padding:8px;white-space:nowrap}
 .recently-deleted-grid .card-image>img{position:absolute;inset:8px;width:calc(100% - 16px);height:calc(100% - 16px);object-fit:contain}

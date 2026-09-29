@@ -1,5 +1,6 @@
 .cloud-login .panel{padding:28px}
 .cloud-login form{display:grid;gap:18px;margin-top:24px}
+.cloud-login form[hidden]{display:none}
 .cloud-login label{display:grid;gap:8px}
 .cloud-login input{box-sizing:border-box;width:100%;min-height:46px;font-size:16px}
 .cloud-login [role=status]{min-height:24px;margin-bottom:0}

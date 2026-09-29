@@ -10,7 +10,8 @@ export async function startCloudSession(onReady){
   const gate=document.createElement('main');gate.className='cloud-login';
   gate.innerHTML='<section class="panel"><h1>登录拾页</h1><p>测试阶段仅开放指定账号。数据不会公开。</p><form><label>用户名<input name="username" autocomplete="username" required></label><label>密码<input name="password" type="password" autocomplete="current-password" required></label><button class="btn primary" type="submit">登录</button></form><p role="status"></p></section>';
   gate.style.cssText='max-width:420px;margin:12vh auto;padding:16px';document.body.append(gate);
-  const status=gate.querySelector('[role=status]');
+  const status=gate.querySelector('[role=status]'),loginForm=gate.querySelector('form');
+  loginForm.hidden=true;status.textContent='正在恢复登录…';
   async function enter(){
     await requireCloudUser();gate.remove();app.hidden=false;await onReady();
     const account=document.createElement('div');account.className='cloud-account';
@@ -19,7 +20,7 @@ export async function startCloudSession(onReady){
     toggle.onclick=()=>{menu.hidden=!menu.hidden;toggle.setAttribute('aria-expanded',String(!menu.hidden));};
     document.addEventListener('click',event=>{if(!account.contains(event.target)){menu.hidden=true;toggle.setAttribute('aria-expanded','false');}});
     account.onkeydown=event=>{if(event.key==='Escape'){menu.hidden=true;toggle.setAttribute('aria-expanded','false');toggle.focus();}};
-    account.querySelector('[data-logout]').onclick=async()=>{await cloudClient().auth.signOut();location.reload();};
+    account.querySelector('[data-logout]').onclick=async()=>{const {error}=await cloudClient().auth.signOut({scope:'local'});if(error){alert('退出失败，请检查网络');return;}location.reload();};
     account.querySelector('[data-old-backup]').onclick=async()=>{try{const blob=await createBackup({browserOnly:true}),link=document.createElement('a'),url=URL.createObjectURL(blob);link.href=url;link.download='拾页本机旧资料.shiyepwa';link.click();setTimeout(()=>URL.revokeObjectURL(url),60000);}catch(error){alert('旧资料导出失败：'+error.message);}};
     document.querySelector('.top-actions').append(account);
     cloudClient().auth.onAuthStateChange(event=>{if(event==='SIGNED_OUT')location.reload();});
@@ -34,5 +35,5 @@ export async function startCloudSession(onReady){
       form.elements.password.value='';if(error)throw Error('用户名或密码不正确');await enter();
     }catch(error){status.textContent=error.message||'登录失败，请检查网络';}finally{button.disabled=false;}
   };
-  try{await enter();}catch(error){if(error.status!==401)status.textContent=error.message;}
+  try{await enter();}catch(error){loginForm.hidden=false;status.textContent=error.status===401?'登录后，同一浏览器会自动保持登录，直到主动退出。':error.message;}
 }

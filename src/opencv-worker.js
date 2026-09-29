@@ -35,20 +35,54 @@ export async function processVision(cv,operation,p){
       let degrees=-r.angle;while(degrees>45)degrees-=90;while(degrees<-45)degrees+=90;
       return {degrees:Math.abs(degrees)>=1.5&&elongation>=1.18&&fillRatio>=.78?degrees:0,fillRatio,elongation};
     }
+    if(operation==='material-mask'){
+      const src=own(cv.matFromArray(p.height,p.width,cv.CV_8UC1,p.alpha)),contours=own(new cv.MatVector()),hierarchy=own(new cv.Mat());
+      cv.findContours(src,contours,hierarchy,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_SIMPLE);
+      let largest=null,area=0;for(let i=0;i<contours.size();i++){const c=own(contours.get(i)),a=cv.contourArea(c);if(a>area){area=a;largest=c;}}
+      if(!largest||area<16)return null;
+      const bounds=cv.boundingRect(largest),x=Math.max(0,bounds.x-2),y=Math.max(0,bounds.y-2),w=Math.min(p.width,bounds.x+bounds.width+2)-x,h=Math.min(p.height,bounds.y+bounds.height+2)-y;
+      const polygon=own(new cv.Mat());cv.approxPolyDP(largest,polygon,.7,true);
+      const points=Array.from({length:polygon.rows},(_,i)=>[polygon.data32S[i*2]-x,polygon.data32S[i*2+1]-y]);
+      // A material is the whole printed paper, not holes in its white artwork.
+      // External contour keeps real concavity; unlike a convex hull it does
+      // not bridge the gap between the basketball players' legs.
+      const filled=own(cv.Mat.zeros(p.height,p.width,cv.CV_8UC1)),one=own(new cv.MatVector());one.push_back(largest);cv.drawContours(filled,one,-1,new cv.Scalar(255),cv.FILLED);
+      const local=own(filled.roi(new cv.Rect(x,y,w,h))),packed=own(local.clone());
+      return {x:x/p.width,y:y/p.height,w:w/p.width,h:h/p.height,pixels:area,mask:{width:w,height:h,alpha:new Uint8Array(packed.data),polygons:[points]}};
+    }
     if(operation==='components'){
-      const src=own(cv.matFromArray(p.height,p.width,cv.CV_8UC1,p.mask)),closed=own(new cv.Mat()),kernel=own(cv.getStructuringElement(cv.MORPH_CROSS,new cv.Size(3,3))),labels=own(new cv.Mat()),stats=own(new cv.Mat()),centroids=own(new cv.Mat());cv.morphologyEx(src,closed,cv.MORPH_CLOSE,kernel);const count=cv.connectedComponentsWithStats(closed,labels,stats,centroids,4,cv.CV_32S),result=[],w=p.width,h=p.height,minArea=Math.max(20,(p.smallestMM/p.paperWidthMM*w)*(p.smallestMM/p.paperHeightMM*h)*.12);
+      const src=own(cv.matFromArray(p.height,p.width,cv.CV_8UC1,p.mask)),closed=own(new cv.Mat()),kernel=own(cv.getStructuringElement(cv.MORPH_CROSS,new cv.Size(3,3))),labels=own(new cv.Mat()),stats=own(new cv.Mat()),centroids=own(new cv.Mat());cv.morphologyEx(src,closed,cv.MORPH_CLOSE,kernel);const count=cv.connectedComponentsWithStats(closed,labels,stats,centroids,4,cv.CV_32S),result=[],w=p.width,h=p.height,minArea=Math.max(20,(p.smallestMM/p.paperWidthMM*w)*(p.smallestMM/p.paperHeightMM*h)*.12),rgba=p.pixels?own(cv.matFromArray(h,w,cv.CV_8UC4,p.pixels)):null;
       for(let label=1;label<count;label++){
         const [left,top,bw,bh,area]=Array.from(stats.data32S.slice(label*5,label*5+5));if(area<minArea||bw/w*p.paperWidthMM<p.smallestMM||bh/h*p.paperHeightMM<p.smallestMM||bw>w*.94||bh>h*.94)continue;if((left<2||left+bw>w-2||top<2||top+bh>h-2)&&(bw<w*.055||bh<h*.055))continue;
         if(p.evidence){let signal=0;for(let y=top;y<top+bh;y++)for(let x=left;x<left+bw;x++){const i=y*w+x;if(labels.data32S[i]===label&&p.evidence[i])signal++;}if(signal<Math.max(10,area*.04))continue;}
         const touchesBorder=left<3||top<3||left+bw>w-3||top+bh>h-3;
         if(touchesBorder&&Math.max(bw/bh,bh/bw)>8&&(bw<w*.08||bh<h*.08))continue;
         if(touchesBorder&&area/(bw*bh)<.65&&(bw>w*.5||bh>h*.5))continue;
+        const resourceCheckpoint=resources.length;
         const x=Math.max(0,left-3),y=Math.max(0,top-3),rw=Math.min(w,left+bw+3)-x,rh=Math.min(h,top+bh+3)-y,roi=own(labels.roi(new cv.Rect(x,y,rw,rh))),lo=own(new cv.Mat(rh,rw,cv.CV_32SC1,new cv.Scalar(label))),hi=own(new cv.Mat(rh,rw,cv.CV_32SC1,new cv.Scalar(label))),local=own(new cv.Mat()),alpha=own(cv.Mat.zeros(rh,rw,cv.CV_8UC1)),contours=own(new cv.MatVector()),hierarchy=own(new cv.Mat());cv.inRange(roi,lo,hi,local);cv.findContours(local,contours,hierarchy,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_SIMPLE);cv.drawContours(alpha,contours,-1,new cv.Scalar(255),cv.FILLED);
-        // Approximate at sub-pixel scale, not with an aggressive convex hull:
-        // preserve concave stickers while removing staircase noise. Very
-        // rectangular paper gets a stricter four-edge prior only when the
-        // polygon matches >98% of the contour area and all corners are square.
-        const polygons=[];let edgeMethod='contour-smoothed';
+        // Brightness thresholding is only a proposal. Refit the foreground
+        // with OpenCV's colour GMM / graph cut before tracing its boundary;
+        // attached neutral cast shadows must not become definite foreground.
+        if(rgba){
+          const imageROI=own(rgba.roi(new cv.Rect(x,y,rw,rh))),rgb=own(new cv.Mat()),gc=own(new cv.Mat(rh,rw,cv.CV_8UC1,new cv.Scalar(cv.GC_PR_BGD))),inside=own(new cv.Mat()),core=own(new cv.Mat()),smallKernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(5,5))),coreKernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(21,21)));
+          cv.cvtColor(imageROI,rgb,cv.COLOR_RGBA2RGB);cv.erode(alpha,inside,smallKernel);cv.erode(alpha,core,coreKernel);
+          let foreground=0,background=0;
+          for(let py=0;py<rh;py++)for(let px=0;px<rw;px++){
+            const at=py*rw+px,original=(y+py)*w+x+px;
+            gc.data[at]=core.data[at]?cv.GC_PR_FGD:cv.GC_PR_BGD;
+            if(inside.data[at]&&(p.foregroundSeeds||p.evidence)?.[original]){gc.data[at]=cv.GC_FGD;foreground++;}
+            if(px<2||py<2||px>=rw-2||py>=rh-2){gc.data[at]=cv.GC_BGD;background++;}
+          }
+          if(foreground>=10&&background>=10){
+            const bgModel=own(new cv.Mat()),fgModel=own(new cv.Mat());
+            cv.grabCut(rgb,gc,new cv.Rect(),bgModel,fgModel,2,cv.GC_INIT_WITH_MASK);
+            let kept=0;for(let k=0;k<gc.data.length;k++){local.data[k]=(gc.data[k]===cv.GC_FGD||gc.data[k]===cv.GC_PR_FGD)?255:0;if(local.data[k])kept++;}
+            // Refuse a collapse rather than silently losing a pale material.
+            if(kept>=area*.45&&kept<=area*1.15){cv.findContours(local,contours,hierarchy,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_SIMPLE);alpha.setTo(new cv.Scalar(0));cv.drawContours(alpha,contours,-1,new cv.Scalar(255),cv.FILLED);}
+          }
+        }
+        // Preserve concave stickers; do not replace their boundary by a hull.
+        const polygons=[];let edgeMethod=rgba?'graphcut-contour-smoothed':'contour-smoothed';
         for(let j=0;j<contours.size();j++){
           const contour=own(contours.get(j));if(cv.contourArea(contour)<4)continue;
           const polygon=own(new cv.Mat()),rect=own(new cv.Mat());
@@ -59,6 +93,8 @@ export async function processVision(cv,operation,p){
           if(rightAngles&&cv.isContourConvex(rect)&&ratio>.98&&ratio<1.02){polygons.push(q);edgeMethod='rectangular-prior';}else polygons.push(points(polygon));
         }
         result.push({x:x/w,y:y/h,w:rw/w,h:rh/h,pixels:area,edgeMethod,mask:{width:rw,height:rh,alpha:new Uint8Array(alpha.data),polygons}});
+        // Bound WASM memory by one candidate, not all 48 candidates.
+        while(resources.length>resourceCheckpoint)resources.pop().delete();
       }
       return result.filter((a,i)=>!result.some((b,j)=>i!==j&&a.x>=b.x&&a.y>=b.y&&a.x+a.w<=b.x+b.w&&a.y+a.h<=b.y+b.h)).sort((a,b)=>a.y-b.y||a.x-b.x).slice(0,48);
     }
@@ -73,4 +109,4 @@ export async function processVision(cv,operation,p){
     throw Error('未知图像操作');
   }finally{for(const resource of resources.reverse())resource.delete();}
 }
-if(typeof self!=='undefined')self.onmessage=async({data})=>{try{const result=await processVision((await ready).cv,data.operation,data.parameters);self.postMessage({id:data.id,result},result?.pixels?[result.pixels.buffer]:[]);}catch(e){self.postMessage({id:data.id,error:'本机图像处理失败：'+e.message});}};
+if(typeof self!=='undefined')self.onmessage=async({data})=>{try{const result=await processVision((await ready).cv,data.operation,data.parameters);self.postMessage({id:data.id,result},ArrayBuffer.isView(result?.pixels)?[result.pixels.buffer]:[]);}catch(e){self.postMessage({id:data.id,error:'本机图像处理失败：'+e.message});}};

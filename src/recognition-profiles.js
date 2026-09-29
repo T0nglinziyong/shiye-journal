@@ -1,5 +1,5 @@
-export const recognitionOptions=[['auto','自动 · 按设备'],['fast','传统识别 · 快速'],['standard','传统识别 · 标准'],['detail','传统识别 · 精细']];
+export const recognitionOptions=[['auto','自动 · 按设备'],['fast','传统识别 · 快速'],['standard','传统识别 · 标准'],['detail','传统识别 · 精细'],['slimsam','浏览器模型 · SlimSAM（试用）']];
 export function recognitionProfile(value='auto',{maxTouchPoints=globalThis.navigator?.maxTouchPoints||0,coarsePointer=globalThis.matchMedia?.('(pointer:coarse)').matches||false}={}){
-  const mode=['fast','standard','detail'].includes(value)?value:maxTouchPoints>0&&coarsePointer?'fast':'standard';
-  return {mode,analysisMaxDimension:{fast:600,standard:1000,detail:1600}[mode]};
+  const mode=['fast','standard','detail','slimsam'].includes(value)?value:maxTouchPoints>0&&coarsePointer?'fast':'standard';
+  return {mode,analysisMaxDimension:{fast:600,standard:1000,detail:1600,slimsam:1000}[mode]};
 }
