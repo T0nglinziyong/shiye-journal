@@ -89,4 +89,6 @@ Vercel 和 Cloudflare 上的静态 PWA 只有在设置中连接可达的 HTTPS �
 
 78 项单元及 `npm test && npm run test:ui` 通过；真实 Chromium 交互40张、布局64张、匹配方案4种视口通过。匹配专项使用合成素材和模拟SSE，验证不跳页、刷新保留、草稿→保存作品、重置不删除作品；不是有效 API 密钥的真实生成验收。当前机器浏览器直连 DeepSeek 以无效测试密钥取得401，只有连通性证据。两张经许可在线分割照片和返回蒙版仅在/tmp，详见 IMAGE_STORAGE_REVIEW。
 
-只推送现有 origin/main，由现有 shiye-journal-test 自动构建；待随后记录准确 Git SHA、READY 和同一固定别名。未手动部署、新建项目、修改 DNS、迁移数据库或发布任何凭据／私人备份。
+功能提交 `0262f17afabaa51aeb563f76490f84201ddf6b46` 已由 Git 自动生成生产部署 `dpl_EiQt1di6TftYzosio6nACNfR3F88`，`source=git`、READY、Git SHA 完全匹配，别名包含 `shiye-journal-test.vercel.app`。线上主脚本 `index-CdYQqi9d.js` 与本地构建相同。未手动部署、新建项目、修改 DNS、迁移数据库或发布任何凭据／私人备份。
+
+普通网络首轮匹配／交互浏览器均停在首屏，未计通过。curl 主脚本15秒只取得19379字节后超时（HTTP200不是完整加载证明）。同域名临时指定可达节点64.29.17.131后取得完整513363字节，线上匹配流程4视口与交互40张回归通过；仅测试进程使用网络覆盖，没有修改系统／域名 DNS。实体 Safari、用户有效 DeepSeek 密钥的完整识别与生成未验收。追加本机检查素材外观／方向8种画面无控件重叠，均为合成图片。截图仅/tmp。
