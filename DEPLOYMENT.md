@@ -6,6 +6,8 @@
 
 2026-09-29 用户重新关联后实查：项目 Git `link.type=github`，仓库为 `T0nglinziyong/shiye-journal`，Production Branch 为 `main`；项目域名列表包含已验证的 `shiye-journal-test.vercel.app`，无分支限制、无重定向。此前授权失败已解除。框架 Vite、构建 `npm run build`、输出 `dist`；后续以每次推送的准确 Git 提交触发 `READY` 部署，并更新同一生产别名为验收依据，仅关联成功不代表最新代码已发布。不要通过更换项目或借用密钥绕过授权。
 
+本次实测：推送 `544bc45fa05631987a2fe824dea98538c96ecd03` 后未出现自动部署，GitHub combined status 为空，Vercel 活动记录没有新的自动构建或失败原因；不能据此认定自动发布正常，也没有证据锁定具体阻挡原因。随后以现有正常 CLI 授权，从该 GitHub 提交创建一次生产部署 `dpl_B17YrFgSTCXaZpEz1UEREYmqNLhi`（`source=cli`、`gitSource.type=github`），构建约 16 秒，状态 `READY`，固定网址已指向该部署。这是手动 Git 源部署，不是推送自动触发，不上传本机环境文件、私人照片或备份。后续仍须检查 Vercel Account Settings → Authentication 的 GitHub 登录关联及仓库集成事件。检查过去一小时的 error 日志未返回日志；Drains 为 0，没有配置持续监控，不将空日志称为完整健康证明。
+
 新增 `.github/workflows/verify.yml`：推送 `main` 或 PR 时以只读权限运行 Node.js 24 单元／构建／UI 冒烟，以及合成 Swift 备份转换测试；不读取私人备份、不配置服务密钥。这个检查与 Vercel 的 Git 构建是独立的，不宣称它自动阻止生产发布。每次本地仍须验收后再推送。自动构建／发布的官方说明见 [Vercel GitHub 集成](https://vercel.com/docs/git/vercel-for-github)。
 
 ## 历史：2026-09-29 临时 Vercel 测试发布
