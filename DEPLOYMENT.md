@@ -2,6 +2,8 @@
 
 ## COS 私有对象接入（可选）
 
+本轮功能 e8a6b772b77dab976645d433a16ef3cb60c72bbb 自动 Git 部署 dpl_EMNm2EwDXum3mVgV4U5GganYRhBp：READY/source=git/准确 SHA/原固定别名已核对。127项单元、构建及 UI/HTTP 冒烟和四视口真实 Chromium 回归通过。COS 接口线上已部署，但当前服务器授权未配置，故新写入仍为 Supabase；未声称实际 COS 速度或可达性验收。私人 CeCe 历史补全云版本74，四页当前作品不变，其他记录及图片字节精确保留。
+
 仍由 Supabase Auth/allowlist 与关系记录控制账号权限。Vercel `/api/cos` 只对已验证账号签发自己的哈希对象 GET/PUT，签名60秒，响应 private,no-store。腾讯官方 cos-nodejs-sdk-v5 仅服务端使用。
 
 服务端变量：SHIYE_COS_SECRET_ID、SHIYE_COS_SECRET_KEY、SHIYE_COS_BUCKET、SHIYE_COS_REGION。只允许最小权限子账号读写指定私有桶对象，不授予删除、ACL或其他产品权限。桶 CORS 限 https://shiye-journal-test.vercel.app、GET/PUT、content-type/x-cos-forbid-overwrite。不得公开桶或将密钥放进前端变量。先验私有测试对象的鉴权、上传、下载及哈希，再设置 VITE_SHIYE_OBJECT_STORAGE=cos 开启新写入。
