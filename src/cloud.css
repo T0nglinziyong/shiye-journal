@@ -1,0 +1,10 @@
+.cloud-login .panel{padding:28px}
+.cloud-login form{display:grid;gap:18px;margin-top:24px}
+.cloud-login label{display:grid;gap:8px}
+.cloud-login input{box-sizing:border-box;width:100%;min-height:46px;font-size:16px}
+.cloud-login [role=status]{min-height:24px;margin-bottom:0}
+.cloud-account{position:relative}
+.cloud-account>.btn{cursor:pointer}
+.cloud-account-menu{position:absolute;right:0;top:calc(100% + 8px);z-index:100;width:210px;max-width:calc(100vw - 32px);padding:12px;background:var(--paper,#fff);border:1px solid #dce1d6;border-radius:14px;box-shadow:0 8px 28px #26382b20;display:grid;gap:8px}
+.cloud-account-menu .btn{width:100%;justify-content:center;white-space:nowrap}
+.cloud-account-menu[hidden]{display:none}

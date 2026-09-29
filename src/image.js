@@ -21,7 +21,13 @@ export async function cropBitmap(bitmap,paper,region,{raw=false}={}){
     const m=region.mask,mask=document.createElement('canvas');mask.width=m.width;mask.height=m.height;
     const mc=mask.getContext('2d'),frame=mc.createImageData(m.width,m.height);
     for(let i=0;i<m.alpha.length;i++){frame.data[i*4]=frame.data[i*4+1]=frame.data[i*4+2]=255;frame.data[i*4+3]=m.alpha[i];}
-    mc.putImageData(frame,0,0);ctx.globalCompositeOperation='destination-in';ctx.imageSmoothingEnabled=true;ctx.drawImage(mask,0,0,w,h);ctx.globalCompositeOperation='source-over';
+    mc.putImageData(frame,0,0);
+    let output=mask;
+    if(m.polygons?.length){
+      output=document.createElement('canvas');output.width=w;output.height=h;const v=output.getContext('2d');v.fillStyle='#fff';
+      for(const polygon of m.polygons){v.beginPath();polygon.forEach(([px,py],i)=>v[i?'lineTo':'moveTo'](px/m.width*w,py/m.height*h));v.closePath();v.fill();}
+    }
+    ctx.globalCompositeOperation='destination-in';ctx.imageSmoothingEnabled=true;ctx.drawImage(output,0,0,w,h);ctx.globalCompositeOperation='source-over';
   }
   return new Promise((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(Error('素材裁图失败')),'image/png'));
 }

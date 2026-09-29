@@ -44,7 +44,21 @@ export async function processVision(cv,operation,p){
         if(touchesBorder&&Math.max(bw/bh,bh/bw)>8&&(bw<w*.08||bh<h*.08))continue;
         if(touchesBorder&&area/(bw*bh)<.65&&(bw>w*.5||bh>h*.5))continue;
         const x=Math.max(0,left-3),y=Math.max(0,top-3),rw=Math.min(w,left+bw+3)-x,rh=Math.min(h,top+bh+3)-y,roi=own(labels.roi(new cv.Rect(x,y,rw,rh))),lo=own(new cv.Mat(rh,rw,cv.CV_32SC1,new cv.Scalar(label))),hi=own(new cv.Mat(rh,rw,cv.CV_32SC1,new cv.Scalar(label))),local=own(new cv.Mat()),alpha=own(cv.Mat.zeros(rh,rw,cv.CV_8UC1)),contours=own(new cv.MatVector()),hierarchy=own(new cv.Mat());cv.inRange(roi,lo,hi,local);cv.findContours(local,contours,hierarchy,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_SIMPLE);cv.drawContours(alpha,contours,-1,new cv.Scalar(255),cv.FILLED);
-        result.push({x:x/w,y:y/h,w:rw/w,h:rh/h,pixels:area,mask:{width:rw,height:rh,alpha:new Uint8Array(alpha.data)}});
+        // Approximate at sub-pixel scale, not with an aggressive convex hull:
+        // preserve concave stickers while removing staircase noise. Very
+        // rectangular paper gets a stricter four-edge prior only when the
+        // polygon matches >98% of the contour area and all corners are square.
+        const polygons=[];let edgeMethod='contour-smoothed';
+        for(let j=0;j<contours.size();j++){
+          const contour=own(contours.get(j));if(cv.contourArea(contour)<4)continue;
+          const polygon=own(new cv.Mat()),rect=own(new cv.Mat());
+          cv.approxPolyDP(contour,polygon,.7,true);cv.approxPolyDP(contour,rect,Math.min(2,cv.arcLength(contour,true)*.008),true);
+          const points=m=>Array.from({length:m.rows},(_,k)=>[m.data32S[k*2],m.data32S[k*2+1]]),q=points(rect);
+          const rightAngles=q.length===4&&q.every((b,k)=>{const a=q[(k+3)%4],c=q[(k+1)%4],u=[a[0]-b[0],a[1]-b[1]],v=[c[0]-b[0],c[1]-b[1]];return Math.abs(u[0]*v[0]+u[1]*v[1])/Math.max(1,Math.hypot(...u)*Math.hypot(...v))<.12;});
+          const ratio=cv.contourArea(contour)/Math.max(1,cv.contourArea(rect));
+          if(rightAngles&&cv.isContourConvex(rect)&&ratio>.98&&ratio<1.02){polygons.push(q);edgeMethod='rectangular-prior';}else polygons.push(points(polygon));
+        }
+        result.push({x:x/w,y:y/h,w:rw/w,h:rh/h,pixels:area,edgeMethod,mask:{width:rw,height:rh,alpha:new Uint8Array(alpha.data),polygons}});
       }
       return result.filter((a,i)=>!result.some((b,j)=>i!==j&&a.x>=b.x&&a.y>=b.y&&a.x+a.w<=b.x+b.w&&a.y+a.h<=b.y+b.h)).sort((a,b)=>a.y-b.y||a.x-b.x).slice(0,48);
     }

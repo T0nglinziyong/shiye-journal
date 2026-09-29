@@ -1,5 +1,17 @@
 # 拾页：大陆访问与托管迁移
 
+## 云接入准备：未发布、未启用
+
+后续验收更新：用户已通过正常控制台创建测试账号，白名单授权成功。真实 SDK 登录、六表恢复、图片原字节、失败事务回滚、匿名及越权拒绝通过；实际应用完整备份恢复及四视口布局也通过。本批准备通过 Git 自动发布单用户云模式，只设置生产环境的可发布 URL/key，未使用服务角色密钥。新 Goodnotes/CeCe v5 覆盖迁移不纳入本批。最终部署以对应 Git SHA、READY 和固定别名核验为准，不从推送成功推断。
+
+安全扫描提示泄露密码防护未开启，参见 [Supabase 密码安全](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection)。测试弱密码必须在正式使用前更换。云端当前只含应用自带样例；原网址原设备的私人资料需“账号 → 导出本机旧资料”后显式恢复，开启云端不代表已迁移旧库。账号菜单原生自动化输入本轮未生效，DOM 激活验证通过，实体设备触控仍待验收。
+
+Supabase 已连接已有项目 `zyhmbxrzlwsefblkvsuv`，schema 在 `deploy/supabase/schema.sql`，已应用一次，勿盲目重复执行。`shiye-private` 桶为私有。Auth 用户尚未创建，先由用户正常控制台创建测试账号，再用真实 UID 授予白名单，验收登录与完整恢复后才启用。
+
+启用时 Vercel 仅配置 `VITE_SHIYE_SUPABASE_URL` 与可发布的 `VITE_SHIYE_SUPABASE_PUBLISHABLE_KEY`，绝不配置前端 service-role 密钥；不要提交任何环境值、用户密码或私人附件。账号密码仅交给正常 Auth 控制台输入。当前没有部署账号引导 Edge Function；被审批拒绝的高权限无 JWT 入口不得重试或绕过。
+
+现有浏览器数据不自动上传、不静默清空。先从原网址原设备导出完整 `.shiyepwa`，在云模式登录后显式恢复；云端 CAS 冲突必须报错，不覆盖另一设备的更新、不回退本机。新配置须同时验未登录阻断、跨账号隔离、私有图片、完整备份恢复与错误路径，再通过 Git 自动发布到原固定网址。本地准备代码当前尚未提交/推送。
+
 ## 最新代码批：原路返回、完整图形与导入识别
 
 功能提交 `d472004d5ed33339be0aaeabb0baaa261934a106` 已自动Git生产部署 `dpl_7brfrS31muPkYA2E4SmsHLANfNAk` READY，固定别名精确匹配，线上 `index-DcrI409a.js` 与本地HEAD构建一致；普通解析下搭配4视口、导入25幅和3档合成识别通过。CeCe图形目录线上下载超过测试原先固定250ms等待，非模型或图形缺失；验收改等实际内容，补载入状态、会话缓存和切换菜单的过期请求防护，随后仍需核对追加提交READY。没有临时节点覆盖、DNS变更或手动发布。

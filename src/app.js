@@ -7,6 +7,8 @@ import './swift-controls.css';
 import './icons.css';
 import '@fontsource/ma-shan-zheng/chinese-simplified-400.css';
 import {mountIcons} from './icons.js';
+import {startCloudSession} from './entry.js';
+import {cloudEnabled} from './cloud-session.js';
 import {mountCanvasEditor} from './canvas-editor-ui.js';
 import {closePopover} from './swift-popover.js';
 import {drawPaper} from './paper-rendering.js';
@@ -52,7 +54,7 @@ function openLibraryAsset(id){libraryHistory.push({route:state.route,seriesID:st
 function libraryBack(){const previous=libraryHistory.pop();if(!previous){navigateBack('series');return;}navigationHistory.pop();state.seriesID=previous.seriesID;state.detailAssetID=previous.detailAssetID;route(previous.route,{back:true});}
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const toast=s=>{const el=document.querySelector('#toast');el.textContent=s;el.classList.add('show');clearTimeout(toast.timer);toast.timer=setTimeout(()=>el.classList.remove('show'),3500);};
-const saveStatus=s=>document.querySelector('#save-state').textContent=s;
+const saveStatus=s=>document.querySelector('#save-state').textContent=cloudEnabled?({'已保存到本机':'已保存到云端','本机存储':'云端存储'}[s]||s):s;
 const asset=id=>state.assets.find(x=>x.id===id)||state.trash.find(t=>t.kind==='asset'&&t.item.id===id)?.item;
 const image=id=>urls.get(id)||staticSources.get(id)||state.trash.find(t=>t.kind==='asset'&&t.item.blobId===id)?.item.staticPath||'';
 let settingsSession=null;
@@ -139,7 +141,7 @@ function pageInspector(d){return `<div class="stack"><label>纸张颜色<input i
 function importSourceButtons(){return `<div class="import-source-actions"><button class="btn primary" data-act="select-file" data-val="gallery">▣　从图库中选择</button><button class="btn" data-act="select-file" data-val="camera">▣　拍摄图片</button><button class="btn" data-act="select-file" data-val="files">▱　从文件中导入</button></div>`;}
 function importSteps(){return `<div class="import-nav"><button class="import-back" data-act="import-back" aria-label="返回">‹</button><strong>导入${state.importMode==='work'?'作品':'素材'}</strong><div class="import-progress">${[['inspect','检查照片'],['review','确认归类'],['done','完成']].map(([key,label],i)=>`<span class="${state.importStep===key?'current':(i<['inspect','review','done'].indexOf(state.importStep)?'passed':'')}"><b>${i<['inspect','review','done'].indexOf(state.importStep)?'✓':i+1}</b>${label}</span>`).join('')}</div><button class="import-cancel" data-act="import-exit">${state.importStep==='done'?'完成':'取消导入'}</button></div>`;}
 function renderImport(){const b=state.importBox,rec=state.importRecords[state.importIndex];let content='';
-  if(state.importStep==='done')content=`<div class="import-done"><div>✓</div><h1>已保存 ${state.importSavedCount||0} 个${state.importMode==='work'?'作品':'素材'}</h1><p>可以在${state.importMode==='work'?'作品':'素材'}页面查看并继续整理。</p><button class="btn primary" data-act="import-exit">返回${state.importMode==='work'?'作品':'素材库'}</button></div>`;
+  if(state.importStep==='done')content=`<div class="import-done"><div>✓</div><h1>已保存 ${state.importSavedCount||0} 个${state.importMode==='work'?'作品':'素材'}</h1><p>可以继续导入下一批照片，本机识别引擎会保持就绪。</p><div class="review-actions"><button class="btn" data-act="import-exit">返回${state.importMode==='work'?'作品':'素材库'}</button><button class="btn primary" data-act="import-continue">继续导入</button></div></div>`;
   else if(state.importStep==='review')content=renderImportReview({state,esc,fmt});
   else if(!rec)content=`<section class="import-intro"><div class="eyebrow">FROM YOUR DESK TO YOUR PAGES</div><h1>${state.importMode==='work'?'收进完成的作品':'先认出纸，再留住喜欢的'}</h1><p>从相册多选，逐张确认纸张和${state.importMode==='work'?'页面':'素材'}。</p><div class="import-empty"><div class="photo-symbol">▧</div><h2>添加照片</h2><p>从相册多选，或拍摄一张白纸上的素材。</p>${importSourceButtons()}<small>每批最多 12 张；使用较小图像识别，从原始工作图提取素材</small></div></section>`;
   else content=renderImportInspection({state,esc,fmt});
@@ -207,6 +209,7 @@ async function handle(action,id,value){try{switch(action){
   case 'select-file':if(value==='camera')fileInput.setAttribute('capture','environment');else fileInput.removeAttribute('capture');fileInput.click();break;case 'preview-crop':await previewCorrection();break;case 'confirm-import':await saveImportBatch({state,db,urls,render});break;
   case 'import-switch':await switchImportRecord(Number(id));break;case 'import-back':if(state.importStep==='review'){state.importStep='inspect';render();}else if(state.importStep==='done'){navigateBack(state.importMode==='work'?'works':'library');}else if(!state.importRecords.length||confirm('放弃未保存的照片？'))navigateBack(state.importMode==='work'?'works':'library');break;
   case 'import-exit':if(state.importStep==='done'||!state.importRecords.length||confirm('放弃未保存的照片？'))navigateBack(state.importMode==='work'?'works':'library');break;
+  case 'import-continue':if(state.importStep==='done'){resetImportBatch();render();}break;
   case 'manual-import-box':await openManualImportBox();break;case 'readjust-paper':state.showCorrectionPreview=false;discardPaperPreview();render();break;case 'apply-paper-preview':await applyPaperPreview();break;
   case 'rotate-photo':await rotateImportPhoto();break;
   case 'import-toggle-candidate':state.importCandidateSelection||=new Set();state.importCandidateSelection.has(Number(id))?state.importCandidateSelection.delete(Number(id)):state.importCandidateSelection.add(Number(id));state.importRecords[state.importIndex].confirmed=false;saveActiveImportRecord();{const tile=view.querySelector('[data-act="import-toggle-candidate"][data-id="'+id+'"]'),selected=state.importCandidateSelection.has(Number(id));tile?.classList.toggle('selected',selected);tile?.setAttribute('aria-pressed',String(selected));if(tile)tile.querySelectorAll('span')[1].textContent='素材 '+(Number(id)+1)+' '+(selected?'✓':'○');}break;
@@ -341,6 +344,16 @@ function saveActiveImportRecord(){
   const rec=state.importRecords[state.importIndex];if(!rec)return;
   Object.assign(rec,{bitmap:state.importBitmap,file:state.importFile,url:state.importURL,box:structuredClone(state.importBox),corners:state.paperCorners?structuredClone(state.paperCorners):null,correctedBitmap:state.correctedBitmap,correctedURL:state.correctedURL,candidates:state.importCandidates||[],candidateURLs:state.importCandidateURLs||[],candidateData:state.importCandidateData||[],selection:[...(state.importCandidateSelection||[])],wholePaper:state.wholePaper,paperSize:state.paperSize,paperOrientation:state.paperOrientation,balanceLight:state.balanceLight,recognition:state.importRecognition,customImportWidth:state.customImportWidth,customImportHeight:state.customImportHeight});
 }
+function resetImportBatch(){
+  // Dispose only photo-owned resources, not the shared model/Worker. Saved
+  // library images have independent object URLs maintained by the store.
+  state.importLoadGeneration=(state.importLoadGeneration||0)+1;
+  discardPaperPreview();
+  const bitmaps=new Set(),objectURLs=new Set();
+  for(const r of state.importRecords){for(const b of [r.bitmap,r.correctedBitmap])if(b)bitmaps.add(b);for(const u of [r.url,r.correctedURL,...(r.candidateURLs||[])])if(u)objectURLs.add(u);}
+  for(const b of bitmaps)b.close?.();for(const u of objectURLs)URL.revokeObjectURL(u);
+  Object.assign(state,{importStep:'inspect',importRecords:[],importIndex:0,importFile:null,importBitmap:null,importURL:null,correctedBitmap:null,correctedURL:null,paperCorners:null,importCandidates:[],importCandidateURLs:[],importCandidateData:[],importCandidateSelection:new Set(),importProcessing:'',importOrganizing:false,importSavedCount:0,showManualBox:false,showCorrectionPreview:false,importBatchSeriesID:null});
+}
 async function switchImportRecord(index,skipSave=false){
   if(!skipSave)saveActiveImportRecord();const rec=state.importRecords[index];if(!rec)return;
   const generation=state.importLoadGeneration=(state.importLoadGeneration||0)+1,isCurrent=()=>state.route==='import'&&state.importLoadGeneration===generation;
@@ -416,7 +429,11 @@ async function previewCrop(){
   if(state.route!=='import'||record!==state.importRecords[state.importIndex])return;
   // Swift leaves unreliable automatic results empty; work import still saves
   // the page as its locked base, without inventing a full-page material.
-  await refreshImportCandidates(regions);render();
+  if(await refreshImportCandidates(regions)){
+    // No expensive work remains. Unlock before the first candidate render;
+    // users must not wait for another full-page render to confirm the photo.
+    state.importProcessing='';render();
+  }
 }
 function recalibrateImport(){
   const [pw,ph]=paperDimensions(),calibrated=state.paperSize!=='none'&&(state.correctedBitmap||state.wholePaper),rec=state.importRecords[state.importIndex];
@@ -426,19 +443,29 @@ function recalibrateImport(){
 async function chooseCandidate(index){if(index>=0){state.importCandidateSelection=new Set([index]);render();}else await previewCrop();}
 function paperDimensions(){return importPaperDimensions({paperSize:state.paperSize,paperOrientation:state.paperOrientation,bitmap:state.importBitmap,corners:state.paperCorners,customImportWidth:state.customImportWidth||state.preferences.customPaperWidth,customImportHeight:state.customImportHeight||state.preferences.customPaperHeight});}
 async function confirmImportPhoto(){
-  if(state.importOrganizing)return;
+  if(state.importProcessing)return;
   const selected=[...(state.importCandidateSelection||[])];if(!selected.length&&state.importMode!=='work'){toast('请选择至少一件素材，或使用手动补框');return;}
+  const rec=state.importRecords[state.importIndex];rec.selectedCandidates=(state.importCandidateData||[]).map((c,i)=>({...c,selected:state.importCandidateSelection.has(i)}));rec.confirmed=true;saveActiveImportRecord();
+  // Metadata enrichment must not hold the navigation hostage to a remote API.
+  // Capture this record, and never overwrite a manual rename or a saved batch.
+  void organizeImportRecord(rec);
+  const next=state.importRecords.findIndex(r=>!r.confirmed);if(next>=0)await switchImportRecord(next);else{state.importStep='review';render();}
+}
+async function organizeImportRecord(rec){
   if(state.preferences.autoOrganize&&state.importMode!=='work'){
-    const rec=state.importRecords[state.importIndex],cfg=state.aiSettings;
+    const cfg=structuredClone(state.aiSettings),active=()=>state.route==='import'&&state.importStep!=='done'&&!state.importSaving&&state.importRecords.includes(rec);
     if(cfg.key&&cfg.includeThumbnails&&supportsVision(cfg)){
-      state.importOrganizing=true;
-      try{for(const index of selected){const c=state.importCandidateData[index];if(c.autoOrganized)continue;const im=await createImageBitmap(c.blob),canvas=document.createElement('canvas'),scale=Math.min(1,512/Math.max(im.width,im.height));canvas.width=Math.round(im.width*scale);canvas.height=Math.round(im.height*scale);const ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(im,0,0,canvas.width,canvas.height);im.close();const result=await classifyRecord({kind:'asset',record:c,settings:cfg,image:canvas.toDataURL('image/jpeg',.8),assets:[]});if(rec!==state.importRecords[state.importIndex])return;if(/^素材 \d+$/.test(c.title||''))c.title=result.title;if(!c.tags?.length)c.tags=result.tags;c.autoOrganized=true;}}
-      catch{toast('自动整理未完成，保留原名称与标签，可手动修改后保存');}
-      finally{state.importOrganizing=false;}
+      rec.organizing=true;
+      try{for(const c of rec.selectedCandidates.filter(c=>c.selected&&!c.autoOrganized)){
+        if(!active())return;const title=c.title,tags=c.tags,im=await createImageBitmap(c.blob),canvas=document.createElement('canvas'),scale=Math.min(1,512/Math.max(im.width,im.height));canvas.width=Math.round(im.width*scale);canvas.height=Math.round(im.height*scale);const ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(im,0,0,canvas.width,canvas.height);im.close();
+        const result=await classifyRecord({kind:'asset',record:c,settings:cfg,image:canvas.toDataURL('image/jpeg',.8),assets:[]});if(!active())return;
+        if(c.title===title&&/^素材 \d+$/.test(title||''))c.title=result.title;if(c.tags===tags&&!c.tags?.length)c.tags=result.tags;c.autoOrganized=true;
+        const ri=state.importRecords.indexOf(rec),ci=rec.selectedCandidates.indexOf(c),label=view.querySelector(`.review-candidate[data-index="${ri}"][data-candidate="${ci}"] strong`);if(label)label.textContent=c.title;
+      }}
+      catch{if(active())toast('自动整理未完成，保留原名称与标签，可手动修改后保存');}
+      finally{rec.organizing=false;const status=view.querySelector(`[data-organizing-record="${state.importRecords.indexOf(rec)}"]`);if(status)status.remove();}
     }else toast('未配置可用的视觉接口，素材保留待检查；可在设置关闭自动整理');
   }
-  const rec=state.importRecords[state.importIndex];rec.selectedCandidates=(state.importCandidateData||[]).map((c,i)=>({...c,selected:state.importCandidateSelection.has(i)}));rec.confirmed=true;saveActiveImportRecord();
-  const next=state.importRecords.findIndex(r=>!r.confirmed);if(next>=0)await switchImportRecord(next);else{state.importStep='review';render();}
 }
 
 
@@ -468,5 +495,5 @@ document.querySelector('#top-basket').onclick=()=>route('matching');document.que
 async function init(){try{await db.storageMode();state.selfHosted=db.isSameOriginServer();await seedIfEmpty();await seedStarterStyles();await seedSwiftBundledMaterials();await matchingSession.restore();await refresh();loadOptionalExamples();if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('/sw.js').catch(console.warn);}saveStatus((await db.storageMode())==='server'?'已连接服务器':'已保存到本机');}catch(e){console.error(e);const auth=e.status===401;if(auth){view.innerHTML=`<div class="empty"><strong>连接拾页数据服务器</strong><p>此网站的数据保存在 4090 电脑上。请输入服务器访问令牌；连接失败时不会另存到浏览器。</p><form id="server-login"><input type="password" name="token" required autocomplete="off" placeholder="服务器访问令牌" aria-label="服务器访问令牌"><button class="btn primary" type="submit">连接</button></form><p id="server-login-error">${esc(e.message)}</p></div>`;view.querySelector('#server-login').onsubmit=event=>{event.preventDefault();db.setStorageConfig({url:db.storageConfig()?.url||location.origin,token:event.target.elements.token.value.trim()});init();};}else{view.innerHTML=`<div class="empty"><strong>无法读取资料</strong><p>${esc(e.message||'请检查设备剩余空间和数据服务连接。')}</p><button class="btn" id="storage-retry">重试连接</button></div>`;view.querySelector('#storage-retry').onclick=()=>init();}saveStatus('存储不可用');}}
 mountIcons(document);
 const matchingSession=createMatchingSession({state,db,uid,esc,asset,modelImage,rasterize,workCover:p=>{const d=p.drafts.find(d=>d.id===p.activeDraftID)||p.drafts[0];return `<div class="thumb-sheet" style="--thumb-ratio:${d.canvas.width/d.canvas.height};background:${esc(d.paperColor)}"><div class="thumb-inner" style="position:relative">${workCover(d)}</div></div>`;},createProject:()=>createMatchingProject(),flattenResult:p=>flattenGeneratedPage(p.drafts[0],p,false),runCreativeAgent,createAIRecorder,supportsVision,flushSave,route,handle,mountIcons,toast});
-init();
+startCloudSession(init).catch(error=>{document.querySelector('#app').hidden=true;const p=document.createElement('p');p.textContent='无法连接认证服务，请稍后刷新。未打开私人资料。';document.body.append(p);console.warn(error.name);});
 import {createMatchingSession} from './matching-session.js';
