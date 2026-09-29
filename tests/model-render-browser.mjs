@@ -18,6 +18,8 @@ try{
       await b.click('[data-act="preview-continue"]','#canvas-page');
       const counts=await b.evaluate('({materials:document.querySelectorAll("#canvas-page [data-object][data-kind=material]").length,texts:document.querySelectorAll("#canvas-page [data-object][data-kind=text]").length})'),expected=fixtures.find(f=>f.name===name).draft;
       assert.equal(counts.materials,expected.items.length);assert.equal(counts.texts,expected.textBlocks.length);
+      const typeScale=await b.evaluate('(()=>{const page=document.querySelector("#canvas-page"),t=page.querySelector("[data-kind=text]");return parseFloat(getComputedStyle(t).fontSize)/page.getBoundingClientRect().width;})()');
+      assert.ok(Math.abs(typeScale-expected.textBlocks[0].fontSize/expected.canvas.width)<.00001,'Text must scale with the page, not remain fixed screen pixels');
       await b.sleep(100);const editor=await b.command('Page.captureScreenshot',{format:'png'});await writeFile(directory+'/'+w+'-'+name+'-editable.png',Buffer.from(editor.data,'base64'));
     }
   }

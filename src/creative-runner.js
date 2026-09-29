@@ -2,8 +2,9 @@ import {applyToolCalls} from './creative.js';
 import {agentTools,directPageContract,directPageToTools} from './creative-contract.js';
 export {agentTools} from './creative-contract.js';
 import {reviewCreativeDraft} from './creative-quality.js';
+import {creativeTypographyGuide} from './creative-typography.js';
 
-const system='你是拾页手账创作者。只使用素材台中的真实素材；尺寸、库存和加工由本地工具判定，不得缩放或复制实物。文字和数字图形是可编辑图层。根据用途与风格建立主视觉、连续阅读区、细节与留白，避免堆在中央、遮住正文、重复空相框或每段机械加白底。未提供经历时只能写客观观察或通用主题内容，不编日期地点经历。位置默认页面比例，文字标题46–90、正文32–55、旁注24–36。加工只能用合同中安全操作，不假装识别未提供的图案，不执行网址、脚本或文件。每轮以实际画布和回执修正，完成前审阅整个页面。';
+const system='你是拾页手账创作者。只使用素材台中的真实素材；尺寸、库存和加工由本地工具判定，不得缩放或复制实物。文字和数字图形是可编辑图层。根据用途与风格建立主视觉、连续阅读区、细节与留白，避免堆在中央、遮住正文、重复空相框或每段机械加白底。未提供经历时只能写客观观察或通用主题内容，不编日期地点经历。位置默认页面比例，文字遵守本页字号与层级建议。加工只能用合同中安全操作，不假装识别未提供的图案，不执行网址、脚本或文件。每轮以实际画布和回执修正，完成前审阅整个页面。';
 const purposes={日常记录:'标题、至少两段关联观察与图像穿插，不做仅口号的封面。',旅途记录:'有依据的地点路线、图、票据及短段落，不编地名日期。',图文收藏:'不同大小的图、标签及有内容的文字格位，禁止空相框。',清单计划:'实际清单或记录区；缺少事项时写通用可编辑主题条目，不虚构日程。',影像故事:'主图与相关小图建立阅读顺序，穿插说明细节。',主题封面:'允许大主视觉、短标题及明显留白。'};
 export function creativeScene(d,aliases={}){
  const map=Object.fromEntries(Object.entries(aliases).map(([k,v])=>[v,k])),g=x=>({key:x.creativePieceID||x.agentKey||x.key||x.id,x:x.x/d.canvas.width,y:x.y/d.canvas.height,width:x.width/d.canvas.width,height:x.height/d.canvas.height,rotation:x.rotation||0,z:x.zIndex||0});
@@ -19,7 +20,7 @@ export function buildCreativeMessages(o){
  images.slice(0,8).forEach((input,i)=>{const url=typeof input==='string'?input:input.url,label=typeof input==='string'?Object.keys(aliases)[i]:input.asset;if(url)first.push({type:'text',text:'素材 '+label+' 的图片：'},{type:'image_url',image_url:{url}});});
  referenceImages.forEach(url=>first.push({type:'text',text:'用户明确开启发送的参考页，仅作风格参考。'},{type:'image_url',image_url:{url}}));
  const geometry='所有 placement 与文字/图形 x,y 都是中心点而非左上角。ratio 默认归一化到当前画布；毫米材料宽/纸宽和高/纸高决定可用中心范围，旋转还会扩大边界。unit 从0开始，库存1必须 unit:0。piece 是唯一片段ID，不是工序名称，各材料不得共用 whole 等ID。relation.target、relative_to、fit target 指已创建的 piece/key，不能填素材 alias 或 canvas。直接页文字 x,y 同样为中心（不是左上），完整行高可能扩展；长段请分栏或降低字号，保持框间间距。完成检查会拒绝任何文字框互相遮挡、文字不完整或对比不足。窄栏标题应短或缩小字号，不能把标题与长正文放在同一位置。没有素材图片时，你只知道名称、标签、尺寸：禁止猜测色彩深浅、星月具体形状/位置、人物姿态/动作/持球手方向、纸面纹理，只能写已给的色名、主题关联与这次排版的尺寸和留白关系。';
- const printType=Number.isFinite(draft.physicalPageHeightMM)&&draft.physicalPageHeightMM>0?`印刷文字至少7pt，本页对应font_size至少${Math.ceil(7*25.4/72*draft.canvas.height/draft.physicalPageHeightMM)}画布单位；正文应更大。文字放不下时扩大框、缩短内容或重排，不可无限缩字号。`:'';
+ const printType=creativeTypographyGuide(draft);
  return [{role:'system',content:[system,geometry,printType,policy,customLayoutPrompt,reference,mode].join('\n')},{role:'user',content:first}];
 }
 function resolveNative(o){const transport=o.transport||'native';return o.generationMode!=='direct'&&(transport==='native'||transport==='auto');}
