@@ -8,7 +8,7 @@ const base=process.env.SHIYE_TEST_URL||'http://127.0.0.1:5173';
 const directory=process.env.SHIYE_SCREENSHOT_DIR||'/tmp/shiye-browser-acceptance';
 await mkdir(directory,{recursive:true});
 const cli=args=>execFileSync('npx',['--yes','agent-browser','--session','shiye-browser-test',...args],{encoding:'utf8',timeout:60000});
-cli(['--args','--no-sandbox','open','about:blank']);
+cli(['--args',process.env.SHIYE_BROWSER_ARGS||'--no-sandbox','open','about:blank']);
 const url=cli(['get','cdp-url']).trim();
 const ws=new WebSocket(url);await new Promise((resolve,reject)=>{ws.onopen=resolve;ws.onerror=reject;});
 let id=0,session,context;const pending=new Map(),errors=[],report=[];
