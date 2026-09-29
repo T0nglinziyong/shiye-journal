@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {seriesCovers,parseTags,searchableSeries,seriesMembers,usedAssetIDs} from '../src/library-model.js';
+import {seriesCovers,parseTags,searchableSeries,seriesMembers,usedAssetIDs,withUsageStatus,projectAssetIDs} from '../src/library-model.js';
 import {canvasObjects,objectCorners,selectPolygon,moveSelection} from '../src/canvas-selection.js';
 import {materialPrintPlacements,pagePDF} from '../src/pdf-export.js';
 import {candidateMetadata,importPaperDimensions,saveImportBatch} from '../src/import-save.js';
@@ -28,6 +28,17 @@ test('series contents independently filter tags, organization and actual used wo
   assert.deepEqual(seriesMembers('s',assets,projects,{status:'unused'}).map(a=>a.id),['b']);
   assert.deepEqual(seriesMembers('s',assets,projects,{sort:'name',ascending:true}).map(a=>a.id),['a','b']);
   assert.equal(seriesMembers('s',assets,projects,{status:'outside'}).length,0);
+});
+test('latest manual or project use event controls asset status without losing legacy projects',()=>{
+  const work={isDraft:false,isUsed:true,drafts:[{items:[{assetID:'a'},{assetID:'b',isParked:true}]}]};
+  assert.deepEqual([...projectAssetIDs(work)],['a']);
+  assert.deepEqual([...usedAssetIDs([work],[{id:'a'},{id:'b'}])],['a']);
+  const unused=withUsageStatus({id:'a',title:'素材'},false,'2026-09-30T00:00:00.000Z');
+  assert.equal(unused.usageStatus,'unused');
+  assert.deepEqual([...usedAssetIDs([work],[unused])],[]);
+  const used=withUsageStatus(unused,true,'2026-09-30T01:00:00.000Z');
+  assert.deepEqual([...usedAssetIDs([work],[used])],['a']);
+  assert.deepEqual([...usedAssetIDs([],[used])],['a']);
 });
 test('lasso requires full enclosure of rotated objects and honors type and lock filters',()=>{
   const item={id:'a',x:50,y:50,width:40,height:10,rotation:45};

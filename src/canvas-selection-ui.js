@@ -40,7 +40,7 @@ export function mountCanvasSelection(c) {
   // object and a selected set moves together, with one undo checkpoint.
   page.addEventListener('pointerdown',e=>{
     view.selectionClickConsumed=false;
-    if(!['select','lasso','marquee'].includes(state.tool)||e.button>0||e.target.closest('.object-handle,.selected-object-actions,.canvas-inline-text'))return;
+    if(!['select','lasso','marquee'].includes(state.tool)||e.button>0||e.target.closest('.selected-object-overlay,.object-handle,.selected-object-actions,.canvas-inline-text'))return;
     if(state.editingTextID&&e.target.closest('[data-object]')?.dataset.object!==state.editingTextID)view.endTextEditing?.();
     const target=e.target.closest('[data-object]'),entry=canvasObjects(d).find(x=>x.value.id===target?.dataset.object);
     if(target&&!entry&&state.tool==='select'){e.stopImmediatePropagation();return;}
@@ -51,7 +51,7 @@ export function mountCanvasSelection(c) {
       if(!ids.includes(entry.value.id))ids=entry.value.creativeGroupID?canvasObjects(d).filter(x=>x.value.creativeGroupID===entry.value.creativeGroupID).map(x=>x.value.id):[entry.value.id];
       state.multiSelected=ids;state.selected=ids.length===1?entry.value.id:null;
       gesture={id:e.pointerId,start:p,starts:new Map(canvasObjects(d).filter(x=>ids.includes(x.value.id)).map(x=>[x.value.id,{x:x.value.x,y:x.value.y}]))};
-    }else{state.multiSelected=[];state.selected=null;paint();return;}
+    }else{state.multiSelected=[];state.selected=null;paint();view.editorRefresh?.();return;}
     e.preventDefault();e.stopImmediatePropagation();page.setPointerCapture(e.pointerId);view.editorRefresh?.();paint();
   },true);
   page.addEventListener('pointermove',e=>{
