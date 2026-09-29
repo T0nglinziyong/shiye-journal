@@ -152,7 +152,7 @@ body:has(.import-nav){background:#f7f7f2}body:has(.import-nav) .topbar{display:n
 .swift-editor-hint{color:#899184;font-size:11px;overflow:hidden;text-overflow:ellipsis}
 .swift-editor-head .actions [data-act="export-png"]{font-size:0;border:0;background:transparent}.swift-editor-head .actions [data-act="export-png"]::after{content:'↥';font-size:25px;color:#303b32}
 .swift-editor-head .actions [data-act="print"]{display:none}
-.swift-editor-head .actions [data-act="undo"],.swift-editor-head .actions [data-act="redo"]{font-size:0;border:0;background:transparent}.swift-editor-head .actions [data-act="undo"]::after{content:'↶';font-size:27px;color:#303b32}.swift-editor-head .actions [data-act="redo"]::after{content:'↷';font-size:27px;color:#303b32}
+.swift-editor-head .actions [data-act="undo"],.swift-editor-head .actions [data-act="redo"]{font-size:0;border:0;background:transparent}
 .swift-editor-head .actions [data-act="save-archive"]{background:#52634b;color:#fff;border-radius:8px;padding:8px 16px}
 .swift-editor-head .actions [data-act="new-draft"]{display:none}
 .works-grid .card{position:relative}.work-card-detail{position:absolute;right:9px;top:9px;background:#fffefa;border-radius:50%;width:30px;height:30px;z-index:1;padding:0}

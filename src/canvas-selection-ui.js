@@ -3,7 +3,8 @@ import {canvasObjects,objectCorners,selectPolygon,selectionBounds,moveSelection}
 export function mountCanvasSelection(c) {
   const {state,view,current,checkpoint,saveProject,render}=c,d=current(),page=view.querySelector('#canvas-page');if(!d||!page)return;
   page.classList.toggle('lasso',state.tool==='lasso');
-  if(state.selectionDraft!==d.id){state.selectionDraft=d.id;state.multiSelected=[];}
+  const selectionDraft=state.activeProject.id+':'+d.id;
+  if(state.selectionDraft!==selectionDraft){state.selectionDraft=selectionDraft;state.multiSelected=[];}
   state.selectionFilter ||= {material:true,text:true,shape:true};state.multiSelected ||= [];
   const active=()=>canvasObjects(d).filter(e=>state.multiSelected.includes(e.value.id));
   const controls=view.querySelector('.canvas-context-tools');
@@ -37,7 +38,9 @@ export function mountCanvasSelection(c) {
   // Capture before app.js' single-object drag so a lasso starts over any
   // object and a selected set moves together, with one undo checkpoint.
   page.addEventListener('pointerdown',e=>{
-    if(!['select','lasso','marquee'].includes(state.tool)||e.button>0||e.target.closest('.object-handle,.selected-object-actions'))return;
+    view.selectionClickConsumed=false;
+    if(!['select','lasso','marquee'].includes(state.tool)||e.button>0||e.target.closest('.object-handle,.selected-object-actions,.canvas-inline-text'))return;
+    if(state.editingTextID&&e.target.closest('[data-object]')?.dataset.object!==state.editingTextID)view.endTextEditing?.();
     const target=e.target.closest('[data-object]'),entry=canvasObjects(d).find(x=>x.value.id===target?.dataset.object);
     if(target&&!entry&&state.tool==='select'){e.stopImmediatePropagation();return;}
     const p=point(e);let ids=state.multiSelected;
@@ -56,8 +59,10 @@ export function mountCanvasSelection(c) {
     if(!gesture.checkpoint&&Math.hypot(p.x-gesture.start.x,p.y-gesture.start.y)>.5){checkpoint();gesture.checkpoint=true;}
     if(gesture.checkpoint){moveSelection(d,gesture.starts,p.x-gesture.start.x,p.y-gesture.start.y);const scale=page.clientWidth/d.canvas.width;for(const {value:o} of active()){const el=page.querySelector('[data-object="'+o.id+'"]');if(el){el.style.left=(o.x-o.width/2)*scale+'px';el.style.top=(o.y-o.height/2)*scale+'px';}}paint();}
   },true);
-  const finish=e=>{if(!gesture||gesture.id!==e.pointerId)return;e.stopImmediatePropagation();const g=gesture;gesture=null;if(g.path){state.multiSelected=selectPolygon(d,g.path,state.selectionFilter);state.selected=null;}else if(g.checkpoint)saveProject();render();};
+  const finish=e=>{if(!gesture||gesture.id!==e.pointerId)return;e.stopImmediatePropagation();view.selectionClickConsumed=true;const g=gesture;gesture=null;if(g.path){state.multiSelected=selectPolygon(d,g.path,state.selectionFilter);state.selected=null;}else if(g.checkpoint)saveProject();render();};
   page.addEventListener('pointerup',finish,true);page.addEventListener('pointercancel',finish,true);
+  view.cancelObjectGesture=()=>{if(!gesture)return;const g=gesture;gesture=null;if(g.checkpoint){for(const {value:o} of canvasObjects(d)){const start=g.starts?.get(o.id);if(start)Object.assign(o,start);}state.undo.pop();}if(page.hasPointerCapture?.(g.id))page.releasePointerCapture(g.id);render();};
+  view.canvasSelectionRefresh=()=>{toolbar.hidden=!['lasso','marquee'].includes(state.tool)&&active().length<2;controls.append(toolbar);toolbar.querySelector('span').textContent='已选 '+active().length+' 个对象';group.disabled=active().filter(e=>e.kind==='material').length<2;paint();};
   // Existing per-object inspector remains available; bulk unlock does not
   // require locked objects to participate in selection.
   const locked=[...(d.items||[]),...(d.textBlocks||[]),...(d.primitives||[])].filter(o=>o.locked||o.isLocked);

@@ -61,7 +61,7 @@ try {
     assert.ok(Math.abs(rows.style-rows.purpose)<2,'style and purpose share a row');assert.ok(Math.abs(rows.processing-rows.mode)<2&&Math.abs(rows.mode-rows.paper)<2,'processing, mode and paper share a row');assert.ok(rows.processing>rows.style);
     await evaluate('document.querySelector(".match-direction").scrollIntoView({block:"start"})');await capture('matching-controls',width,height);await evaluate('scrollTo(0,0)');
     await click('[data-route="works"]','.works-grid');await capture('works',width,height);
-    await click('.work-card-detail','.project-preview-cover');await capture('work-preview',width,height);
+    await evaluate('document.querySelector(".card[data-act=open-project]").dispatchEvent(new MouseEvent("contextmenu",{bubbles:true}))');await click('#project-meta-preview','.project-preview-cover');await capture('work-preview',width,height);
     await click('[data-act="preview-back"]','.works-grid');await click('[data-act="open-project"]','#canvas-page');await sleep(150);await capture('editor',width,height);
     await click('.swift-editor-head [data-act="back-works"]','.works-grid');
     await click('.work-entry','.import-nav');await capture('import',width,height);await click('[data-act="import-exit"]','.works-grid');
@@ -133,7 +133,7 @@ try {
   await capture('manual-box',2560,1440);
   assert.equal(await evaluate('document.querySelectorAll(".import-region").length'),3,JSON.stringify(overlay));
   await evaluate('[...document.querySelectorAll("button")].find(b=>b.textContent==="完成标记").click()');
-  for(let i=0;i<250&&await evaluate('!!document.querySelector(".multi-box-editor")');i++)await sleep(20);
+  for(let i=0;i<Math.ceil(Number(process.env.SHIYE_WAIT_MS||30000)/20)&&await evaluate('!!document.querySelector(".multi-box-editor")');i++)await sleep(20);
   assert.equal(await evaluate('!!document.querySelector(".multi-box-editor")'),false,'Manual extraction must finish: '+await evaluate('document.querySelector("#toast").textContent'));
   assert.equal(await evaluate('document.querySelectorAll(".import-candidate-tile").length'),3);
   await click('[data-act="import-confirm-photo"]');await wait('.queue-item.active[data-id="1"]');await wait('.import-candidate-tile.selected');await click('[data-act="import-confirm-photo"]','.review-candidates');

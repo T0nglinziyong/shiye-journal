@@ -23,7 +23,7 @@ export function showAssetEditor(c,id) {
   const a=c.state.assets.find(a=>a.id===id);if(!a)return;
   const input=(label,key,value,type='text')=>'<label>'+label+'<input id="asset-'+key+'" type="'+type+'" value="'+c.esc(value??'')+'"></label>';
   const select=(label,key,choices,value)=>'<label>'+label+'<select id="asset-'+key+'">'+choices.map(([id,text])=>'<option value="'+id+'" '+(id===value?'selected':'')+'>'+text+'</option>').join('')+'</select></label>';
-  c.body.innerHTML='<div class="dialog-head"><h2>编辑素材</h2><button type="button" id="asset-dialog-close" aria-label="关闭">取消</button></div><div class="detail-layout"><div>'+c.imgTag(a)+'</div><div class="stack">'+
+  c.body.innerHTML='<div class="dialog-head"><h2>编辑素材</h2><button type="button" id="asset-dialog-close" aria-label="取消编辑">取消</button></div><div class="detail-layout"><div>'+c.imgTag(a)+'</div><div class="stack">'+
     input('名称','title',a.title)+select('类型','kind',[['sticker','贴纸'],['paper','纸张'],['tape','胶带'],['photo','照片'],['text','文字'],['reference','参考']],a.kind)+
     select('画面作用','role',[['focal','主角'],['support','陪衬'],['background','背景'],['connector','连接'],['annotation','注释']],a.role)+input('材质','texture',a.texture)+
     '<div class="form-grid">'+input('实物宽 mm','width',a.physicalWidthMM,'number')+input('实物高 mm','height',a.physicalHeightMM,'number')+'</div>'+input('数量（0–999）','quantity',a.supply?.quantity??1,'number')+

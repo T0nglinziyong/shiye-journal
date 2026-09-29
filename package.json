@@ -12,6 +12,7 @@
     "test:editor-browser": "node tests/editor-browser-acceptance.mjs",
     "test:selection-browser": "node tests/library-selection-browser.mjs",
     "test:layout-browser": "node tests/layout-preview-browser.mjs",
+    "test:interaction-browser": "node tests/interaction-browser.mjs",
     "test:ui": "npm run build && node tests/ui-smoke.mjs && node tests/route-parity-smoke.mjs && node tests/self-host-smoke.mjs"
   },
   "devDependencies": {
@@ -20,6 +21,7 @@
     "vite": "^6.3.5"
   },
   "dependencies": {
+    "@panzoom/panzoom": "4.6.2",
     "@techstark/opencv-js": "5.0.0-release.1",
     "ajv": "8.20.0",
     "idb": "8.0.3",

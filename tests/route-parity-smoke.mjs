@@ -36,7 +36,7 @@ for(const [width,height] of [[320,640],[390,844],[700,1024],[768,1024],[1024,768
   assert.equal($('#work-kind').options.length,3);
   assert.equal($('#work-status').options.length,5);
   assert.equal($('#work-sort').options.length,6);
-  click('.work-card-detail');assert.ok($('.project-preview-cover'));
+  $('.card[data-act="open-project"]').dispatchEvent(new win.MouseEvent('contextmenu',{bubbles:true}));click('#project-meta-preview');assert.ok($('.project-preview-cover'));
   click('[data-act="project-meta"]');assert.ok($('#project-meta-template'));
   $('#project-meta-used').value='used';click('#project-meta-save');
   assert.ok($('.project-preview-actions'));

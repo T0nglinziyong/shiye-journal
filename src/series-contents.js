@@ -37,7 +37,7 @@ export function mountSeriesContents(c,p) {
   view.querySelector('#series-order').onclick=()=>{f.ascending=!f.ascending;view.querySelector('#series-order').textContent=f.ascending?'升序 ↑':'降序 ↓';update();};
   const add=()=>{state.addingToSeries=id;state.seriesID='all';state.query='';state.kind='all';state.status='all';state.libraryRecent=false;beginSelection(p,'asset');route('library');};
   view.querySelector('#series-add-assets').onclick=add;view.querySelector('#series-add-assets').disabled=p.selection;
-  const actions=view.querySelector('#series-actions');actions.append(button(p.selection?'完成':'选择',()=>{p.selection?finishSelection(p):beginSelection(p,'asset');render();}));
+  const actions=view.querySelector('#series-actions');actions.append(button(p.selection?'完成':'选择',()=>{p.selection?finishSelection(p):beginSelection(p,'asset');view.selectionRefresh?.()||render();}));
   for(const card of cards) {
     const menu=()=>{const aid=card.dataset.id;body.innerHTML='<h2>素材操作</h2><div class="stack" id="series-member-menu"></div>';const list=body.querySelector('#series-member-menu');list.append(button('查看详情',()=>{modal.close();c.openLibraryAsset(aid);}),button('设为系列封面',async()=>{const next={...s,coverAssetIDs:[aid],coverAssetID:aid,updatedAt:new Date().toISOString()};await c.db.put('series',next);Object.assign(s,next);modal.close();render();}),button('移出系列',async()=>{await assign(c,new Set([aid]),null);modal.close();render();}));modal.showModal();};
     card.oncontextmenu=e=>{e.preventDefault();menu();};card.onkeydown=e=>{if(e.key==='ContextMenu'||(e.shiftKey&&e.key==='F10')){e.preventDefault();menu();}};
