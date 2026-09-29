@@ -4,7 +4,7 @@
 
 ## 文件和版本
 
-- 私有 GitHub：`T0nglinziyong/shiye-journal`，交接时 `main` 为 `185e904ee613508b2cec1feafb68863b55c3bbfc`。Git 仓库只包含 PWA 源码与可公开的内置资源。
+- 私有 GitHub：`T0nglinziyong/shiye-journal`；功能基线提交 `185e904ee613508b2cec1feafb68863b55c3bbfc`，本交接文件在其后的提交中。以 `git log -1` 核对最新 `main`。Git 仓库只包含 PWA 源码与可公开的内置资源。
 - 完整项目包 `拾页完整桌面项目-2026-09-29.zip` 解压后为 `拾页项目/`：`网页应用/shiye-journal-main`、`Swift原项目/ShiyeJournalFresh.swiftpm`、`数据备份/`、启动和 Git 连接脚本。先确认 ZIP 与 GitHub 版本一致；进入网页目录后可以运行上级 `连接Git仓库.sh` 关联 Git 历史。
 - `数据备份/云浏览器测试基线-2026-09-29.shiyepwa` 是浏览器测试基线，约 202 件素材、4 件作品；**不是**用户 iPad Safari 的私人资料。服务器实际数据在 `数据备份/实时数据`，不属于 Git。
 - `../../设计参考/聊天上传截图/` 含用户此前上传的 20 张关键界面／问题截图，仅随完整项目包提供，不在 Git 仓库中。源码列出的是全部页面，截图只用于校对视觉和具体 bug。
