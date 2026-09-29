@@ -1,5 +1,5 @@
-# Allow only the static application's build inputs. Never upload local data,
-# deployment credentials, backups, server files, or handoff/private notes.
+# Allow the application and private COS ticket function's build inputs only.
+# Never upload local data, credentials, backups or other local server files.
 /*
 !package.json
 !package-lock.json
@@ -7,6 +7,12 @@
 !vercel.json
 !src
 !src/**
+!api
+api/*
+!api/cos.js
+!server
+server/*
+!server/cos-tickets.mjs
 !public
 !public/**
 !scripts

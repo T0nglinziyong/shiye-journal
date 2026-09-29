@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {createCloudStore} from '../src/cloud-store.js';
 import {projectBlobText} from '../src/project-document.js';
 
-function fixture(cache=null){
+function fixture(cache=null,objectStorage=null){
   const state={revision:0,rows:[],calls:[],fail:false,authError:false,uploads:[],downloads:0};
   const client={from(table){
     const filters={};const query={select(){return query;},eq(k,v){filters[k]=v;return query;},order(){return query;},
@@ -13,16 +13,48 @@ function fixture(cache=null){
     if(table==='shiye_changes')return {select(){return this;},eq(){return this;},gt(){return this;},lte(){return this;},order(){return this;},async range(){return {error:{message:'change log not installed'}};}};
     assert.ok(['shiye_records','shiye_revisions'].includes(table));return query;
   },storage:{from(bucket){assert.equal(bucket,'shiye-private');return {
-    async upload(path,data,options){state.uploads.push({path,data,options});return {error:state.fail?{statusCode:500}:null};},
+    async upload(path,data,options){state.uploads.push({path,data,options});await state.uploadGate;return {error:state.fail?{statusCode:500}:null};},
     async download(path){state.downloads++;return {data:state.uploads.find(row=>row.path===path)?.data||new Blob(['private image'])};}};}},
     async rpc(name,args){assert.equal(name,'shiye_commit');state.calls.push(args);if(state.fail||args.expected_revision!==state.revision)return {error:{message:'conflict'}};return {data:++state.revision};}
   };
-  const db=createCloudStore({cache,cloudClient:()=>client,requireCloudUser:async()=>{if(state.authError)throw Error('not authorized');return {id:'owner-uuid'};}});
+  const db=createCloudStore({cache,objectStorage,cloudClient:()=>client,requireCloudUser:async()=>{if(state.authError)throw Error('not authorized');return {id:'owner-uuid'};}});
   return {state,db};
 }
 test('cloud reads all pages, not just the server default first 1000 records',async()=>{
   const {state,db}=fixture();state.rows=Array.from({length:1001},(_,i)=>({id:String(i)}));
   assert.equal((await db.cloudAll('assets')).length,1001);
+});
+test('imports finish durable staging while image uploads are blocked; pending bytes survive reopening',async()=>{
+  const cache=memoryCache(),a=fixture(cache);let release;a.state.uploadGate=new Promise(r=>release=r);
+  await a.db.cloudAll('assets');
+  const batch={assets:[{id:'new',blobId:'img'}],blobs:[{id:'img',data:new Blob(['pending-original'])}],projects:[]};
+  assert.deepEqual(await a.db.cloudStageImport(batch),{pending:true});assert.equal(a.state.calls.length,0);
+  assert.equal((await a.db.cloudAll('assets'))[0].id,'new');assert.equal(await (await a.db.cloudGet('blobs','img')).data.text(),'pending-original');
+  const reopened=fixture(cache);assert.equal((await reopened.db.cloudAll('assets'))[0].id,'new');assert.equal(await (await reopened.db.cloudPreview('img')).text(),'pending-original');assert.equal(reopened.state.downloads,0);
+  release();await a.db.cloudFlushProjects();assert.equal(a.state.calls.length,1);assert.equal(a.state.calls[0].operations.length,2);
+  assert.deepEqual(await cache.get('cloud:owner-uuid','import-outbox'),[]);
+});
+test('failed import uploads retain the entire batch; rejected auth/quota never creates a ghost import',async()=>{
+  const cache=memoryCache(),a=fixture(cache);a.state.fail=true;
+  await a.db.cloudStageImport({assets:[{id:'a'}],blobs:[{id:'b',data:new Blob(['image'])}],projects:[]});await assert.rejects(a.db.cloudFlushProjects(),/图片上传失败/);
+  assert.equal((await cache.get('cloud:owner-uuid','import-outbox')).length,1);assert.equal(a.state.calls.length,0);
+  const reopened=fixture(cache);reopened.state.authError=true;await assert.rejects(reopened.db.cloudGet('blobs','b'),/not authorized/);
+  const quota=fixture({...memoryCache(),put:async()=>{throw Error('quota');}});await assert.rejects(quota.db.cloudStageImport({assets:[{id:'ghost'}]}),/quota/);assert.deepEqual(await quota.db.cloudAll('assets'),[]);assert.equal(quota.state.calls.length,0);
+});
+test('COS writes retain provider metadata; old Supabase objects still read without provider fallback',async()=>{
+  const files=new Map(),cos={enabled:true,async upload(path,blob){files.set(path,blob);},async download(path){if(!files.has(path))throw Error('COS offline');return files.get(path);}},a=fixture(null,cos);
+  await a.db.cloudTransaction(['blobs'],tx=>tx.objectStore('blobs').put({id:'cos-image',data:new Blob(['COS bytes'])}));const record=a.state.calls[0].operations[0].item;
+  assert.equal(record.storageProvider,'cos');assert.equal(a.state.uploads.length,0);
+  const b=fixture(null,cos);b.state.rows=[record];assert.equal(await (await b.db.cloudGet('blobs','cos-image')).data.text(),'COS bytes');assert.equal(b.state.downloads,0);
+  const old=fixture(null,cos);old.state.rows=[{id:'old',storagePath:'owner-uuid/old'}];await old.db.cloudGet('blobs','old');assert.equal(old.state.downloads,1);
+  files.clear();const failed=fixture(null,cos);failed.state.rows=[record];await assert.rejects(failed.db.cloudGet('blobs','cos-image'),/COS offline/);assert.equal(failed.state.downloads,0);
+});
+test('ordinary cutout updates and deletes are durable and immediately readable without waiting for uploads',async()=>{
+  const cache=memoryCache(),a=fixture(cache);let release;a.state.uploadGate=new Promise(r=>release=r);await a.db.cloudAll('assets');
+  await a.db.cloudStageMutation(['assets','blobs'],tx=>{tx.objectStore('assets').put({id:'a',title:'edited',blobId:'cut'});tx.objectStore('blobs').put({id:'cut',data:new Blob(['new-cutout'])});});
+  assert.equal((await a.db.cloudGet('assets','a')).title,'edited');assert.equal(await (await a.db.cloudGet('blobs','cut')).data.text(),'new-cutout');assert.equal(a.state.calls.length,0);
+  await a.db.cloudStageMutation(['assets'],tx=>tx.objectStore('assets').delete('a'));assert.equal(await a.db.cloudGet('assets','a'),undefined);assert.deepEqual(await a.db.cloudAll('assets'),[]);
+  release();await a.db.cloudFlushProjects();assert.equal(a.state.calls.length,2);assert.equal(a.state.calls[1].operations[0].action,'delete');assert.deepEqual(await cache.get('cloud:owner-uuid','import-outbox'),[]);
 });
 function memoryCache(){const rows=new Map();return {async get(owner,key){return structuredClone(rows.get(owner+':'+key));},async put(owner,key,value){rows.set(owner+':'+key,structuredClone(value));},async clear(owner){for(const key of rows.keys())if(key.startsWith(owner+':'))rows.delete(key);}};}
 test('uploaded originals are immediately reusable and survive a fresh cloud store without re-download',async()=>{

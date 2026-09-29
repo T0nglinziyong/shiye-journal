@@ -1,5 +1,15 @@
 # 拾页：大陆访问与托管迁移
 
+## COS 私有对象接入（可选）
+
+仍由 Supabase Auth/allowlist 与关系记录控制账号权限。Vercel `/api/cos` 只对已验证账号签发自己的哈希对象 GET/PUT，签名60秒，响应 private,no-store。腾讯官方 cos-nodejs-sdk-v5 仅服务端使用。
+
+服务端变量：SHIYE_COS_SECRET_ID、SHIYE_COS_SECRET_KEY、SHIYE_COS_BUCKET、SHIYE_COS_REGION。只允许最小权限子账号读写指定私有桶对象，不授予删除、ACL或其他产品权限。桶 CORS 限 https://shiye-journal-test.vercel.app、GET/PUT、content-type/x-cos-forbid-overwrite。不得公开桶或将密钥放进前端变量。先验私有测试对象的鉴权、上传、下载及哈希，再设置 VITE_SHIYE_OBJECT_STORAGE=cos 开启新写入。
+
+旧 Supabase 记录保留，按 storageProvider/projectDocumentProvider 读取。COS 未配置或失败明确报错，不迁移、不回退。DNS 不会直接加速图片；固定网址不改，COS 原站签名不能替代 CDN 鉴权。
+
+日常上传先写账号隔离持久队列，切换页面不取消上传；必须经云端事务确认才删除队列。备份、退出及覆盖恢复等待确认属于必要顺序。缓存不绕过登录；强制关闭浏览器无法保证后台 JavaScript 继续运行，重开恢复上传。未同步时清除网站数据可能丢失待上传资料。
+
 ## 账号缓存与私人作品：2026-09-29
 
 更新：caded69自动Git部署dpl_4Jz5yN8yjGNobSas5eQEaDkTaXfM为READY，准确SHA和原固定别名已核对。经用户确认，线上正常登录界面成功导入四页原生私人作品；版本56，4份gzip作品文件、26素材与30新图片/封面，42旧CeCe素材已专项替换。其他189素材/10系列/20最近删除/6元数据与真实迁移前备份规范化内容摘要完全相同；未清空旧私有二进制文件，完整本机备份可恢复。后续渐进图片和新上传原图零重复下载补丁正在验收。

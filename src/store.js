@@ -1,6 +1,9 @@
 import {openDB,unwrap} from 'idb';
 import {cloudEnabled} from './cloud-session.js';
-import {cloudAll,cloudGet,cloudTransaction,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudPreview,cloudStageProject,cloudPendingProjects,cloudFlushProjects,cloudProjectDocument} from './cloud-store.js';
+import {cloudAll,cloudGet,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudPreview,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudFlushProjects,cloudProjectDocument} from './cloud-store.js';
+// Exceptional destructive imports require an acknowledged atomic cloud commit.
+export async function confirmedTransaction(names,fn){if(cloudEnabled){await cloudFlushProjects();return cloudTransaction(names,fn);}return transaction(names,fn);}
+export async function stageImport(batch){if(cloudEnabled)return cloudStageImport(batch);await transaction(['assets','blobs','projects'],tx=>{for(const store of ['assets','blobs','projects'])for(const record of batch[store]||[])tx.objectStore(store).put(record);});return {pending:false};}
 export const stageProject=record=>cloudEnabled?cloudStageProject(record):put('projects',record);
 export const pendingProjects=()=>cloudEnabled?cloudPendingProjects():Promise.resolve([]);
 export const flushProjects=()=>cloudEnabled?cloudFlushProjects():Promise.resolve();
@@ -41,7 +44,7 @@ export async function get(name,id){if(cloudEnabled)return cloudGet(name,id);if((
 export async function put(name,item){return transaction([name],tx=>tx.objectStore(name).put(item));}
 export async function remove(name,id){return transaction([name],tx=>tx.objectStore(name).delete(id));}
 export async function transaction(names,fn){
-  if(cloudEnabled)return cloudTransaction(names,fn);
+  if(cloudEnabled)return cloudStageMutation(names,fn);
   if((await resolveBackend()).url){const operations=[],tx={objectStore(name){if(!names.includes(name))throw Error('此表未加入事务');return {put:item=>operations.push({action:'put',store:name,item}),delete:id=>operations.push({action:'delete',store:name,id}),clear:()=>operations.push({action:'clear',store:name})};}};const result=fn(tx);if(result?.then)throw Error('事务回调必须同步，网络及图像处理请在事务外完成');for(const op of operations)if(op.store==='blobs'&&op.action==='put')op.item={...op.item,data:await toBase64(op.item.data)};await serverRequest('/api/transaction',{method:'POST',data:{operations}});return;}const tx=(await localDatabase()).transaction(names,'readwrite');try{const result=fn(unwrap(tx));if(result?.then)throw Error('事务回调必须同步，网络及图像处理请在事务外完成');}catch(e){tx.abort();await tx.done.catch(()=>{});throw e;}await tx.done;}
 const toBase64=blob=>new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=()=>reject(r.error);r.readAsDataURL(blob);});
 function fromBase64(value){const [prefix,body]=value.split(',');const type=/data:([^;]+)/.exec(prefix)?.[1]||'application/octet-stream';const b=atob(body);const arr=new Uint8Array(b.length);for(let i=0;i<b.length;i++)arr[i]=b.charCodeAt(i);return new Blob([arr],{type});}
@@ -56,4 +59,4 @@ export async function createBackup({browserOnly=false}={}){
   if(snapshot!==null&&await cloudCheckpoint()!==snapshot)throw Error('备份期间资料已变化，请重试');
   return new Blob([JSON.stringify(data)],{type:'application/json'});
 }
-export async function restoreBackup(file){if(file.size>1024*1024*1024)throw Error('备份超过 1 GB，请在电脑端转换或分批导入');const data=JSON.parse(await file.text());if(data.format!=='shiye-pwa'||data.version!==1||!data.stores||STORES.some(x=>!Array.isArray(data.stores[x])))throw Error('不是拾页 PWA 完整备份');const values={...data.stores,blobs:data.stores.blobs.map(x=>({...x,data:fromBase64(x.data)}))};await transaction(STORES,tx=>{for(const name of STORES){tx.objectStore(name).clear();for(const item of values[name])tx.objectStore(name).put(item);}});}
+export async function restoreBackup(file){if(file.size>1024*1024*1024)throw Error('备份超过 1 GB，请在电脑端转换或分批导入');const data=JSON.parse(await file.text());if(data.format!=='shiye-pwa'||data.version!==1||!data.stores||STORES.some(x=>!Array.isArray(data.stores[x])))throw Error('不是拾页 PWA 完整备份');const values={...data.stores,blobs:data.stores.blobs.map(x=>({...x,data:fromBase64(x.data)}))};await confirmedTransaction(STORES,tx=>{for(const name of STORES){tx.objectStore(name).clear();for(const item of values[name])tx.objectStore(name).put(item);}});}

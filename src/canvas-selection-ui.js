@@ -1,4 +1,5 @@
 import {canvasObjects,objectCorners,selectPolygon,selectionBounds,moveSelection} from './canvas-selection.js';
+import {syncSelectionGeometry} from './selection-geometry.js';
 
 export function mountCanvasSelection(c) {
   const {state,view,current,checkpoint,saveProject,render}=c,d=current(),page=view.querySelector('#canvas-page');if(!d||!page)return;
@@ -51,13 +52,13 @@ export function mountCanvasSelection(c) {
       state.multiSelected=ids;state.selected=ids.length===1?entry.value.id:null;
       gesture={id:e.pointerId,start:p,starts:new Map(canvasObjects(d).filter(x=>ids.includes(x.value.id)).map(x=>[x.value.id,{x:x.value.x,y:x.value.y}]))};
     }else{state.multiSelected=[];state.selected=null;paint();return;}
-    e.preventDefault();e.stopImmediatePropagation();page.setPointerCapture(e.pointerId);paint();
+    e.preventDefault();e.stopImmediatePropagation();page.setPointerCapture(e.pointerId);view.editorRefresh?.();paint();
   },true);
   page.addEventListener('pointermove',e=>{
     if(!gesture||gesture.id!==e.pointerId)return;e.preventDefault();e.stopImmediatePropagation();const p=point(e);
     if(gesture.path){if(gesture.marquee){const a=gesture.start;gesture.path=[a,{x:p.x,y:a.y},p,{x:a.x,y:p.y}];}else gesture.path.push(p);paint(gesture.path);return;}
     if(!gesture.checkpoint&&Math.hypot(p.x-gesture.start.x,p.y-gesture.start.y)>.5){checkpoint();gesture.checkpoint=true;}
-    if(gesture.checkpoint){moveSelection(d,gesture.starts,p.x-gesture.start.x,p.y-gesture.start.y);const scale=page.clientWidth/d.canvas.width;for(const {value:o} of active()){const el=page.querySelector('[data-object="'+o.id+'"]');if(el){el.style.left=(o.x-o.width/2)*scale+'px';el.style.top=(o.y-o.height/2)*scale+'px';}}paint();}
+    if(gesture.checkpoint){moveSelection(d,gesture.starts,p.x-gesture.start.x,p.y-gesture.start.y);const scale=page.clientWidth/d.canvas.width;for(const {value:o} of active()){const el=page.querySelector('[data-object="'+o.id+'"]');if(el){el.style.left=(o.x-o.width/2)*scale+'px';el.style.top=(o.y-o.height/2)*scale+'px';syncSelectionGeometry(page,o.id);}}paint();}
   },true);
   const finish=e=>{if(!gesture||gesture.id!==e.pointerId)return;e.stopImmediatePropagation();view.selectionClickConsumed=true;const g=gesture;gesture=null;if(g.path){state.multiSelected=selectPolygon(d,g.path,state.selectionFilter);state.selected=null;}else if(g.checkpoint)saveProject();render();};
   page.addEventListener('pointerup',finish,true);page.addEventListener('pointercancel',finish,true);

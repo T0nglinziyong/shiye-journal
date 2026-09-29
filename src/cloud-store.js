@@ -3,8 +3,12 @@ import {privateCache} from './private-cache.js';
 import {createProjectSync} from './project-sync.js';
 import {readCloudDelta} from './cloud-delta.js';
 import {LARGE_PROJECT_BYTES,projectSummary,mergeProjectSummary,projectBlobText} from './project-document.js';
-export function createCloudStore({cloudClient,requireCloudUser,cache=null,namespace='cloud',projectPreview=()=>null}){
+import {createCOSStore} from './cos-store.js';
+export function createCloudStore({cloudClient,requireCloudUser,cache=null,namespace='cloud',projectPreview=()=>null,objectStorage=null}){
 const BUCKET='shiye-private';
+const writeProvider=()=>objectStorage?.enabled?'cos':'supabase';
+async function downloadObject(path,provider){if(provider==='cos'){if(!objectStorage)throw Error('COS 私有读取尚未配置');return objectStorage.download(path);}if(provider&&provider!=='supabase')throw Error('不支持的存储服务');return checked(await cloudClient().storage.from(BUCKET).download(path));}
+async function uploadObject(path,blob,type,provider=writeProvider()){if(provider==='cos'){await objectStorage.upload(path,blob,type);return {error:null};}return cloudClient().storage.from(BUCKET).upload(path,blob,{upsert:false,contentType:type});}
 let owner,revision;
 let queue=Promise.resolve();
 const images=new Map();
@@ -15,12 +19,24 @@ const documents=new Map();
 function retainImage(path,data){images.set(path,Promise.resolve(data));imageSizes.delete(path);imageSizes.set(path,data.size);let bytes=[...imageSizes.values()].reduce((a,b)=>a+b,0);for(const [key,size] of imageSizes){if(bytes<=64*1024*1024&&imageSizes.size<=48)break;if(key===path)continue;images.delete(key);imageSizes.delete(key);bytes-=size;}}
 let cacheDisabled=false;
 const account=async()=>`${namespace}:${await identity()}`;
+function reportSync(){if(typeof window!=='undefined'){const a=projectSync.status(),b=importSync.status();window.dispatchEvent(new CustomEvent('shiye-project-sync',{detail:{pending:a.pending+b.pending,error:b.error||a.error}}));}}
 const projectSync=createProjectSync({
   load:async()=>cache?await cache.get(await account(),'project-outbox'):[],
   write:async rows=>{if(!cache||cacheDisabled)throw Error('无法安全保存待同步作品');await cache.put(await account(),'project-outbox',rows);},
   commit:record=>cloudTransaction(['projects'],tx=>tx.objectStore('projects').put(record)),revision:()=>revision,
-  onStatus:status=>{if(typeof window!=='undefined')window.dispatchEvent(new CustomEvent('shiye-project-sync',{detail:status}));},
+  onStatus:reportSync,
 });
+// This durable, account-scoped outbox retains the complete batch, including
+// original bytes. Only a successful cloud acknowledgement removes it.
+const importSync=createProjectSync({
+  load:async()=>cache?await cache.get(await account(),'import-outbox'):[],
+  write:async rows=>{if(!cache||cacheDisabled)throw Error('无法安全暂存导入资料，请勿关闭页面');await cache.put(await account(),'import-outbox',rows);},
+  commit:batch=>batch.operations?cloudTransaction(batch.names,tx=>{for(const op of batch.operations){const store=tx.objectStore(op.store);if(op.action==='put')store.put(op.item);else if(op.action==='delete')store.delete(op.id);else store.clear();}}):cloudTransaction(['assets','blobs','projects'],tx=>{for(const store of ['assets','blobs','projects'])for(const record of batch[store]||[])tx.objectStore(store).put(record);}),
+  revision:()=>revision,onStatus:reportSync,
+});
+async function pendingOperations(store){await identity();return (await importSync.pending()).flatMap(row=>row.record.operations?.filter(op=>op.store===store)||(row.record[store]||[]).map(item=>({action:'put',store,item})));}
+async function pendingOverride(store,id){let result;for(const op of await pendingOperations(store)){if(op.action==='clear'||op.action==='delete'&&op.id===id)result={found:true};else if(op.action==='put'&&op.item.id===id)result={found:true,record:op.item};}return result;}
+async function overlayImports(store,records){const map=new Map(records.map(r=>[r.id,r]));for(const op of await pendingOperations(store)){if(op.action==='clear')map.clear();else if(op.action==='delete')map.delete(op.id);else map.set(op.item.id,op.item);}return [...map.values()];}
 const cached=async key=>{try{const id=await account();return cacheDisabled?undefined:await cache?.get(id,key);}catch{return undefined;}};
 const remember=async(key,value)=>{try{const id=await account();if(!cacheDisabled)await cache?.put(id,key,value);}catch{/* Cache quota/failure cannot fail a cloud operation. */}};
 const checked=result=>{if(result.error)throw Error(result.error.message||'云端数据服务不可用');return result.data;};
@@ -29,13 +45,14 @@ async function version(){const id=await identity();const row=checked(await cloud
 async function cloudAll(store){
   await identity();if(revision===undefined)await version();
   const saved=snapshots.get(store)||await cached('records:'+store);
-  if(saved?.revision===revision){snapshots.set(store,saved);return Promise.all(saved.records.map(r=>decode(store,structuredClone(r))));}
+  if(saved?.revision===revision){snapshots.set(store,saved);return overlayImports(store,await Promise.all(saved.records.map(r=>decode(store,structuredClone(r)))));}
   const rows=[],readRevision=revision;
   for(let offset=0;;offset+=500){const page=checked(await cloudClient().from('shiye_records').select('record').eq('user_id',owner).eq('store',store).order('id').range(offset,offset+499));rows.push(...page);if(page.length<500)break;}
   const snapshot={revision:readRevision,records:rows.map(row=>row.record)};snapshots.set(store,snapshot);await remember('records:'+store,snapshot);
-  return Promise.all(snapshot.records.map(record=>decode(store,structuredClone(record))));
+  return overlayImports(store,await Promise.all(snapshot.records.map(record=>decode(store,structuredClone(record)))));
 }
 async function cloudGet(store,id){
+  const pending=await pendingOverride(store,id);if(pending)return structuredClone(pending.record);
   if(store==='blobs'&&id.startsWith('project-cover:'))return {id,data:await cloudPreview(id)};
   const record=await cloudRecord(store,id);return record?store==='projects'?cloudProjectDocument(record):decode(store,record):undefined;
 }
@@ -43,7 +60,7 @@ async function cloudProjectDocument(record){
   const path=record.projectDocumentPath;if(!path)return record;
   if(!path.startsWith((await identity())+'/'))throw Error('作品不属于当前账号');
   if(!documents.has(path)){
-    const task=(async()=>{let blob=await cached('project-document:'+path);if(!(blob instanceof Blob)){blob=checked(await cloudClient().storage.from(BUCKET).download(path));await remember('project-document:'+path,blob);}const full=JSON.parse(await projectBlobText(blob,record.projectDocumentEncoding));if(full.id!==record.id||!Array.isArray(full.drafts))throw Error('作品完整数据损坏');return full;})().catch(error=>{documents.delete(path);throw error;});documents.set(path,task);if(documents.size>8)documents.delete(documents.keys().next().value);
+    const task=(async()=>{let blob=await cached('project-document:'+path);if(!(blob instanceof Blob)){blob=await downloadObject(path,record.projectDocumentProvider);await remember('project-document:'+path,blob);}const full=JSON.parse(await projectBlobText(blob,record.projectDocumentEncoding));if(full.id!==record.id||!Array.isArray(full.drafts))throw Error('作品完整数据损坏');return full;})().catch(error=>{documents.delete(path);throw error;});documents.set(path,task);if(documents.size>8)documents.delete(documents.keys().next().value);
   }
   return mergeProjectSummary(structuredClone(await documents.get(path)),record);
 }
@@ -55,14 +72,15 @@ async function cloudRecord(store,id){
   if(row&&store==='blobs')await remember('blob-record:'+id,{revision,record:row.record});return row?.record;
 }
 async function cloudPreview(id){
-  if(id.startsWith('project-cover:')){const path=id.slice('project-cover:'.length);if(!path.startsWith((await identity())+'/'))throw Error('作品封面不属于当前账号');const key='thumbnail:'+path,saved=await cached(key);if(saved instanceof Blob)return saved;const blob=checked(await cloudClient().storage.from(BUCKET).download(path));await remember(key,blob);return blob;}
+  const pending=await pendingOverride('blobs',id);if(pending)return pending.record?await makeThumbnail(pending.record.data)||pending.record.data:undefined;
+  if(id.startsWith('project-cover:')){const raw=id.slice('project-cover:'.length),provider=raw.startsWith('cos:')?'cos':undefined,path=provider?raw.slice(4):raw;if(!path.startsWith((await identity())+'/'))throw Error('作品封面不属于当前账号');const key='thumbnail:'+path,saved=await cached(key);if(saved instanceof Blob)return saved;const blob=await downloadObject(path,provider);await remember(key,blob);return blob;}
   await identity();const old=revision===undefined?await cached('blob-record:'+id):null;
   const record=old?.record||await cloudRecord('blobs',id);if(!record)return undefined;
   if(!record.storagePath?.startsWith(owner+'/'))throw Error('图片不属于当前账号');
   const thumbnailKey='thumbnail:'+record.storagePath,saved=await cached(thumbnailKey);if(saved instanceof Blob)return saved;
   if(record.thumbnailPath){
     if(!record.thumbnailPath.startsWith(owner+'/'))throw Error('缩略图不属于当前账号');
-    const thumbnail=checked(await cloudClient().storage.from(BUCKET).download(record.thumbnailPath));await remember(thumbnailKey,thumbnail);return thumbnail;
+    const thumbnail=await downloadObject(record.thumbnailPath,record.storageProvider);await remember(thumbnailKey,thumbnail);return thumbnail;
   }
   const {data}=await decode('blobs',record);
   const blob=await makeThumbnail(data);if(blob){await remember(thumbnailKey,blob);return blob;}return data;
@@ -72,7 +90,7 @@ async function decode(store,record){
   if(store!=='blobs')return record;
   const {storagePath,...metadata}=record;
   if(!storagePath?.startsWith((await identity())+'/'))throw Error('图片不属于当前账号');
-  if(!images.has(storagePath)){const pending=(async()=>{const saved=await cached('image:'+storagePath);if(saved instanceof Blob)return saved;const data=checked(await cloudClient().storage.from(BUCKET).download(storagePath));await remember('image:'+storagePath,data);return data;})().catch(error=>{images.delete(storagePath);throw error;});images.set(storagePath,pending);}
+  if(!images.has(storagePath)){const pending=(async()=>{const saved=await cached('image:'+storagePath);if(saved instanceof Blob)return saved;const data=await downloadObject(storagePath,record.storageProvider);await remember('image:'+storagePath,data);return data;})().catch(error=>{images.delete(storagePath);throw error;});images.set(storagePath,pending);}
   const data=await images.get(storagePath);imageSizes.delete(storagePath);imageSizes.set(storagePath,data.size);let bytes=[...imageSizes.values()].reduce((a,b)=>a+b,0);for(const [path,size] of imageSizes){if(bytes<=64*1024*1024&&imageSizes.size<=48)break;if(path===storagePath)continue;images.delete(path);imageSizes.delete(path);bytes-=size;}return {...metadata,data};
 }
 async function encode(store,record){
@@ -82,23 +100,23 @@ async function encode(store,record){
     if(blob.size<=LARGE_PROJECT_BYTES)return record;
     if(typeof CompressionStream==='function'&&typeof DecompressionStream==='function'){blob=await new Response(blob.stream().pipeThrough(new CompressionStream('gzip'))).blob();encoding='gzip';}
     const digest=await crypto.subtle.digest('SHA-256',await blob.arrayBuffer()),hash=[...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,'0')).join(''),path=`${await identity()}/${hash}-project.json${encoding?'.gz':''}`;
-    const uploaded=await cloudClient().storage.from(BUCKET).upload(path,blob,{upsert:false,contentType:encoding?'application/gzip':'application/json'});if(uploaded.error&&String(uploaded.error.statusCode)!=='409')throw Error('作品完整数据上传失败，未修改云端元数据');
-    const summary=projectSummary(record,path,encoding);
-    try{const preview=await projectPreview(record);if(preview instanceof Blob){const cover=path+'-preview.webp',result=await cloudClient().storage.from(BUCKET).upload(cover,preview,{upsert:false,contentType:preview.type||'image/webp'});if(!result.error||String(result.error.statusCode)==='409'){const d=summary.drafts.find(d=>d.id===record.activeDraftID)||summary.drafts[0];d.coverImageID='project-cover:'+cover;await remember('thumbnail:'+cover,preview);}}}catch{/* A missing optional preview cannot discard the editable work. */}
+    const provider=writeProvider(),uploaded=await uploadObject(path,blob,encoding?'application/gzip':'application/json',provider);if(uploaded.error&&String(uploaded.error.statusCode)!=='409')throw Error('作品完整数据上传失败，未修改云端元数据');
+    const summary={...projectSummary(record,path,encoding),projectDocumentProvider:provider};
+    try{const preview=await projectPreview(record);if(preview instanceof Blob){const cover=path+'-preview.webp',result=await uploadObject(cover,preview,preview.type||'image/webp',provider);if(!result.error||String(result.error.statusCode)==='409'){const d=summary.drafts.find(d=>d.id===record.activeDraftID)||summary.drafts[0];d.coverImageID='project-cover:'+(provider==='cos'?'cos:':'')+cover;await remember('thumbnail:'+cover,preview);}}}catch{/* A missing optional preview cannot discard the editable work. */}
     await remember('project-document:'+path,blob);documents.set(path,Promise.resolve(structuredClone(record)));if(documents.size>8)documents.delete(documents.keys().next().value);return summary;
   }
   if(store!=='blobs')return record;
   if(!(record.data instanceof Blob))throw Error('图片必须是完整 Blob');
   const bytes=await record.data.arrayBuffer(),digest=await crypto.subtle.digest('SHA-256',bytes);
   const hash=[...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,'0')).join('');
-  const storagePath=`${await identity()}/${hash}`;
-  if(!uploads.has(storagePath)){const task=(async()=>{const uploaded=await cloudClient().storage.from(BUCKET).upload(storagePath,record.data,{upsert:false,contentType:record.data.type||'application/octet-stream'});if(uploaded.error&&uploaded.error.statusCode!=='409'&&uploaded.error.statusCode!==409)throw Error('图片上传失败，未保存元数据');})().catch(error=>{uploads.delete(storagePath);throw error;});uploads.set(storagePath,task);}await uploads.get(storagePath);
+  const storagePath=`${await identity()}/${hash}`,provider=writeProvider();
+  if(!uploads.has(storagePath)){const task=(async()=>{const uploaded=await uploadObject(storagePath,record.data,record.data.type||'application/octet-stream',provider);if(uploaded.error&&uploaded.error.statusCode!=='409'&&uploaded.error.statusCode!==409)throw Error('图片上传失败，未保存元数据');})().catch(error=>{uploads.delete(storagePath);throw error;});uploads.set(storagePath,task);}await uploads.get(storagePath);
   // New records get a private, immutable thumbnail, so first-screen loading
   // does not need the original. Legacy records generate and cache it on demand.
   let thumbnailPath;
-  try{const thumbnail=await makeThumbnail(record.data);if(thumbnail){const path=storagePath+'-preview360.webp';const result=await cloudClient().storage.from(BUCKET).upload(path,thumbnail,{upsert:false,contentType:'image/webp'});if(!result.error||String(result.error.statusCode)==='409'){thumbnailPath=path;await remember('thumbnail:'+storagePath,thumbnail);}}}catch{/* Optional thumbnail failure must not lose an otherwise valid original. */}
+  try{const thumbnail=await makeThumbnail(record.data);if(thumbnail){const path=storagePath+'-preview360.webp';const result=await uploadObject(path,thumbnail,'image/webp',provider);if(!result.error||String(result.error.statusCode)==='409'){thumbnailPath=path;await remember('thumbnail:'+storagePath,thumbnail);}}}catch{/* Optional thumbnail failure must not lose an otherwise valid original. */}
   await remember('image:'+storagePath,record.data);retainImage(storagePath,record.data);
-  const {data,thumbnailPath:_oldThumbnail,...metadata}=record;return {...metadata,storagePath,...(thumbnailPath?{thumbnailPath}:{})};
+  const {data,thumbnailPath:_oldThumbnail,...metadata}=record;return {...metadata,storagePath,storageProvider:provider,...(thumbnailPath?{thumbnailPath}:{})};
 }
 function cloudTransaction(names,fn){
   const operations=[];const result=fn({objectStore(store){if(!names.includes(store))throw Error('此表未加入事务');return {put:record=>operations.push({action:'put',store,item:structuredClone(record)}),delete:id=>operations.push({action:'delete',store,id}),clear:()=>operations.push({action:'clear',store})};}});
@@ -117,6 +135,7 @@ function cloudTransaction(names,fn){
       const next={revision,records:[...records.values()]};snapshots.set(store,next);await remember('records:'+store,next);
     }
     await projectSync.advance(previous,revision);
+    await importSync.advance(previous,revision);
   };
   const pending=queue.then(run);queue=pending.catch(()=>{});return pending;
 }
@@ -126,7 +145,7 @@ async function cloudCheckpoint(){
   if(revision!==undefined&&revision!==current)throw Error('另一设备已更新资料，请刷新后重试；未导出不一致的备份');
   return current;
 }
-async function cloudCachedCollections(){await identity();const result={},savedRows=[];for(const store of ['assets','series','projects','trash']){const saved=await cached('records:'+store);if(!saved||savedRows.length&&saved.revision!==savedRows[0].revision)return null;savedRows.push(saved);result[store]=structuredClone(saved.records);}revision=savedRows[0].revision;return result;}
+async function cloudCachedCollections(){await identity();const result={},savedRows=[];for(const store of ['assets','series','projects','trash']){const saved=await cached('records:'+store);if(!saved||savedRows.length&&saved.revision!==savedRows[0].revision)return null;savedRows.push(saved);result[store]=await overlayImports(store,structuredClone(saved.records));}revision=savedRows[0].revision;return result;}
 async function cloudRefresh(){
   await queue;
   const before=revision,current=await version(),changed=before!==undefined&&before!==current;
@@ -137,14 +156,20 @@ async function cloudRefresh(){
   return {revision:current,changed:true,incremental:false,allBlobs:true};
 }
 async function cloudStageProject(record){await identity();if(revision===undefined)await version();return projectSync.stage(record);}
+async function cloudStageImport(batch){await identity();if(revision===undefined)await version();await importSync.stage({...batch,id:crypto.randomUUID()});return {pending:true};}
+async function cloudStageMutation(names,fn){
+  const operations=[],result=fn({objectStore(store){if(!names.includes(store))throw Error('此表未加入事务');return {put:item=>operations.push({action:'put',store,item:structuredClone(item)}),delete:id=>operations.push({action:'delete',store,id}),clear:()=>operations.push({action:'clear',store})};}});
+  if(result?.then)throw Error('事务回调必须同步');if(!operations.length)return;
+  await identity();if(revision===undefined)await version();await importSync.stage({id:crypto.randomUUID(),names,operations});
+}
 async function cloudPendingProjects(){await identity();return projectSync.pending();}
-async function cloudFlushProjects(){await identity();if(revision===undefined)await version();return projectSync.flush();}
+async function cloudFlushProjects(){await identity();if(revision===undefined)await version();await importSync.flush();return projectSync.flush();}
 async function cloudClearCache(){cacheDisabled=true;const id=await account();images.clear();imageSizes.clear();documents.clear();snapshots.clear();await cache?.clear(id);}
-return {cloudAll,cloudGet,cloudPreview,cloudTransaction,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudClearCache,cloudStageProject,cloudPendingProjects,cloudFlushProjects,cloudProjectDocument};
+return {cloudAll,cloudGet,cloudPreview,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudClearCache,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudFlushProjects,cloudProjectDocument};
 }
 let projectPreview=()=>null;
 export const setCloudProjectPreview=producer=>{projectPreview=producer;};
-const current=createCloudStore({cloudClient,requireCloudUser,cache:privateCache,namespace:import.meta.env?.VITE_SHIYE_SUPABASE_URL||'cloud',projectPreview:record=>projectPreview(record)});
+const current=createCloudStore({cloudClient,requireCloudUser,cache:privateCache,namespace:import.meta.env?.VITE_SHIYE_SUPABASE_URL||'cloud',projectPreview:record=>projectPreview(record),objectStorage:createCOSStore({client:cloudClient,enabled:import.meta.env?.VITE_SHIYE_OBJECT_STORAGE==='cos'})});
 export const cloudAll=(...args)=>current.cloudAll(...args);
 export const cloudGet=(...args)=>current.cloudGet(...args);
 export const cloudTransaction=(...args)=>current.cloudTransaction(...args);
@@ -154,6 +179,8 @@ export const cloudRefresh=(...args)=>current.cloudRefresh(...args);
 export const cloudClearCache=(...args)=>current.cloudClearCache(...args);
 export const cloudPreview=(...args)=>current.cloudPreview(...args);
 export const cloudStageProject=(...args)=>current.cloudStageProject(...args);
+export const cloudStageImport=(...args)=>current.cloudStageImport(...args);
+export const cloudStageMutation=(...args)=>current.cloudStageMutation(...args);
 export const cloudPendingProjects=(...args)=>current.cloudPendingProjects(...args);
 export const cloudFlushProjects=(...args)=>current.cloudFlushProjects(...args);
 export const cloudProjectDocument=(...args)=>current.cloudProjectDocument(...args);

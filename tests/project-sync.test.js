@@ -22,5 +22,5 @@ test('local successful transactions advance pending base revisions without disca
 });
 test('failed durable staging never reports a cloud commit',async()=>{
   let calls=0;const q=createProjectSync({load:async()=>[],write:async()=>{throw Error('quota');},revision:()=>0,commit:async()=>{calls++;}});
-  await assert.rejects(q.stage({id:'a'}),/quota/);assert.equal(calls,0);
+  await assert.rejects(q.stage({id:'a'}),/quota/);assert.equal(calls,0);assert.deepEqual(await q.pending(),[]);
 });

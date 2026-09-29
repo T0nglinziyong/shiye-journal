@@ -7,8 +7,8 @@ export function createProjectSync({load,write,commit,revision,onStatus=()=>{}}){
   const report=()=>onStatus({pending:entries.size,error});
   const persist=()=>write(structuredClone([...entries.values()]));
   function stage(record){
-    const task=staging.catch(()=>{}).then(async()=>{await initialize();const row={record:structuredClone(record),serial:++serial,baseRevision:revision()};entries.set(record.id,row);await persist();error=null;report();});
-    staging=task;void task.then(()=>kick()).catch(()=>{});return task;
+    const task=staging.catch(()=>{}).then(async()=>{await initialize();const previous=entries.get(record.id),row={record:structuredClone(record),serial:++serial,baseRevision:revision()};entries.set(record.id,row);try{await persist();}catch(e){if(previous)entries.set(record.id,previous);else entries.delete(record.id);throw e;}error=null;report();});
+    staging=task.catch(()=>{});void task.then(()=>kick()).catch(()=>{});return task;
   }
   function kick(){
     if(network)return network;

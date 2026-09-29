@@ -1,10 +1,10 @@
 export const LARGE_PROJECT_BYTES=128*1024;
 export function projectSummary(project,path,encoding){
-  const {editHistory,manualArchives,...summary}=project;
+  const {editHistory,manualArchives,initialEditorSnapshot,manualEditorSnapshot,draftHistorySnapshots,...summary}=project;
   return {...summary,projectDocumentPath:path,...(encoding?{projectDocumentEncoding:encoding}:{}),drafts:project.drafts.map(d=>{const {items,primitives,textBlocks,strokes,makingSteps,...meta}=d;return {...meta,items:[],primitives:[],textBlocks:[],strokes:[],makingSteps:[]};})};
 }
 export function mergeProjectSummary(document,summary){
-  const {projectDocumentPath,projectDocumentEncoding,drafts,...metadata}=summary;
+  const {projectDocumentPath,projectDocumentEncoding,projectDocumentProvider,drafts,...metadata}=summary;
   return {...document,...metadata,drafts:document.drafts.map(d=>{const latest=drafts.find(row=>row.id===d.id);if(!latest)return d;const {items,primitives,textBlocks,strokes,makingSteps,...meta}=latest;return {...d,...meta};})};
 }
 export async function projectBlobText(blob,encoding){

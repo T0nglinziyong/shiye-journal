@@ -11,12 +11,14 @@ import {startCloudSession} from './entry.js';
 import {cloudEnabled} from './cloud-session.js';
 import {setCloudProjectPreview} from './cloud-store.js';
 import {snapshotDraft} from './draft-snapshot.js';
+import {captureHistory} from './project-history.js';
 import {mountCanvasEditor} from './canvas-editor-ui.js';
 import {closePopover} from './swift-popover.js';
 import {drawPaper} from './paper-rendering.js';
 import {shapeSVG,drawInk,textFont,textLineHeight,textLines} from './editor-tools-model.js';
 import {shapeTag} from './shape-preview.js';
 import {importPrivateCollection} from './private-collection.js';
+import {importHistoryReferences} from './history-reference.js';
 import {ImageNodeCache} from './image-node-cache.js';
 import {imagePlaceholder,mountPrivateImages} from './lazy-private-images.js';
 import {showAssetEditor} from './asset-editor.js';
@@ -147,7 +149,7 @@ function pageInspector(d){return `<div class="stack"><label>纸张颜色<input i
 function importSourceButtons(){return `<div class="import-source-actions"><button class="btn primary" data-act="select-file" data-val="gallery">▣　从图库中选择</button><button class="btn" data-act="select-file" data-val="camera">▣　拍摄图片</button><button class="btn" data-act="select-file" data-val="files">▱　从文件中导入</button></div>`;}
 function importSteps(){return `<div class="import-nav"><button class="import-back" data-act="import-back" aria-label="返回">‹</button><strong>导入${state.importMode==='work'?'作品':'素材'}</strong><div class="import-progress">${[['inspect','检查照片'],['review','确认归类'],['done','完成']].map(([key,label],i)=>`<span class="${state.importStep===key?'current':(i<['inspect','review','done'].indexOf(state.importStep)?'passed':'')}"><b>${i<['inspect','review','done'].indexOf(state.importStep)?'✓':i+1}</b>${label}</span>`).join('')}</div><button class="import-cancel" data-act="import-exit">${state.importStep==='done'?'完成':'取消导入'}</button></div>`;}
 function renderImport(){const b=state.importBox,rec=state.importRecords[state.importIndex];let content='';
-  if(state.importStep==='done')content=`<div class="import-done"><div>✓</div><h1>已保存 ${state.importSavedCount||0} 个${state.importMode==='work'?'作品':'素材'}</h1><p>可以继续导入下一批照片，本机识别引擎会保持就绪。</p><div class="review-actions"><button class="btn" data-act="import-exit">返回${state.importMode==='work'?'作品':'素材库'}</button><button class="btn primary" data-act="import-continue">继续导入</button></div></div>`;
+  if(state.importStep==='done')content=`<div class="import-done"><div>✓</div><h1>导入完成 · ${state.importSavedCount||0} 个${state.importMode==='work'?'作品':'素材'}</h1><p>${state.importPending?'资料已可靠暂存，云端同步和自动整理在后台进行。':'资料已保存。'}可以继续导入下一批照片，本机识别引擎会保持就绪。</p><div class="review-actions"><button class="btn" data-act="import-exit">返回${state.importMode==='work'?'作品':'素材库'}</button><button class="btn primary" data-act="import-continue">继续导入</button></div></div>`;
   else if(state.importStep==='review')content=renderImportReview({state,esc,fmt});
   else if(!rec)content=`<section class="import-intro"><div class="eyebrow">FROM YOUR DESK TO YOUR PAGES</div><h1>${state.importMode==='work'?'收进完成的作品':'先认出纸，再留住喜欢的'}</h1><p>从相册多选，逐张确认纸张和${state.importMode==='work'?'页面':'素材'}。</p><div class="import-empty"><div class="photo-symbol">▧</div><h2>添加照片</h2><p>从相册多选，或拍摄一张白纸上的素材。</p>${importSourceButtons()}<small>每批最多 12 张；使用较小图像识别，从原始工作图提取素材</small></div></section>`;
   else content=renderImportInspection({state,esc,fmt});
@@ -197,7 +199,7 @@ function bindPage(){view.querySelectorAll('[data-act]').forEach(el=>el.addEventL
 function bindInspector(){const d=current(),e=d&&editorEntry(d).find(x=>x.value.id===state.selected);if(!d)return;
   const change=(id,fn)=>{const el=view.querySelector('#'+id);if(el)el.addEventListener('change',()=>{checkpoint();fn(el.value);saveProject();render();});};
   if(e){for(const [id,key] of [['inspector-width','width'],['inspector-height','height'],['inspector-rotation','rotation'],['inspector-z','zIndex'],['inspector-opacity','opacity'],['inspector-font-size','fontSize']])change(id,v=>{e.value[key]=Number(v);if(e.kind==='material')e.value.userOverrideFlags=[...new Set([...(e.value.userOverrideFlags||[]),key==='width'||key==='height'?'resized':key])];});change('inspector-text',v=>e.value.content=v);change('inspector-font',v=>e.value.style=v);}else{change('paper-color',v=>d.paperColor=v);change('paper-pattern',v=>d.paperPattern=v);change('page-ratio',v=>{d.pageRatio=v;d.canvas=canvasSize(d.pageMode,v);d.physicalPageHeightMM=({a4:297,a5:210,a6:148,b5:250}[v]||297);});change('page-mode',v=>{d.pageMode=v;d.canvas=canvasSize(v,d.pageRatio);});}}
-function checkpoint(){const d=current();if(!d)return;state.undo.push(snapshotDraft(d));if(state.undo.length>40)state.undo.shift();state.redo=[];}
+function checkpoint(){const d=current();if(!d)return;captureHistory(state.activeProject);state.undo.push(snapshotDraft(d));if(state.undo.length>40)state.undo.shift();state.redo=[];}
 let saveTimer,saveChain=Promise.resolve(),savingProjects=0;
 const dirtyProjects=new Map();
 const saveVersions=new Map();
@@ -261,7 +263,7 @@ async function handle(action,id,value){try{switch(action){
   case 'restore-baseline':editSelected(e=>{const b=e.value.generationBaseline;if(b){Object.assign(e.value,structuredClone(b));e.value.userOverrideFlags=[];}});break;
   case 'park':editSelected(e=>{if(e.kind==='material'){e.value.isParked=true;state.selected=null;}});break;
   case 'unpark':editSelected((e,d)=>{const item=d.items.find(x=>x.id===id);if(item)item.isParked=false;});break;
-  case 'save-work':state.activeProject.isDraft=false;saveProject();await flushSave();await db.flushProjects();toast('作品已保存');break;
+  case 'save-work':state.activeProject.isDraft=false;saveProject();await flushSave();toast(cloudEnabled?'作品已暂存，正在后台同步':'作品已保存');break;
   case 'match-open-result':await matchingSession.open(id);break;
   case 'match-stop':matchingSession.stop();break;
   case 'save-archive':{const p=state.activeProject;(p.manualArchives||=[]).push({id:uid(),date:new Date().toISOString(),drafts:structuredClone(p.drafts),activeDraftID:p.activeDraftID});saveProject();render();toast('手动存档已保存');break;}
@@ -502,6 +504,7 @@ for(const e of editorEntry(d)){const i=e.value;ctx.save();ctx.translate(i.x,i.y)
 drawInk(ctx,d.strokes||[]);return canvas;}finally{release();}}
 fileInput.onchange=async()=>{const files=[...(fileInput.files||[])].filter(f=>f.type.startsWith('image/')).slice(0,Math.max(0,12-state.importRecords.length));if(!files.length)return;try{saveActiveImportRecord();const start=state.importRecords.length;for(const file of files)state.importRecords.push({file,url:URL.createObjectURL(file),confirmed:false,selectedCandidates:[],selection:[],candidates:[]});state.importStep='inspect';state.route='import';await switchImportRecord(start,true);}catch(e){console.error(e);toast('照片处理失败：'+e.message);}finally{fileInput.value='';}};
 backupInput.onchange=async()=>{const file=backupInput.files?.[0];backupInput.value='';if(!file)return;
+  if(file.name.endsWith('.shiyeversions')){if(!confirm('补回四页 CeCe 原始历史快照？仅更新恢复点，保留当前编辑内容和所有其他资料。'))return;try{await flushSave();await importHistoryReferences(file,db);state.activeProject=null;await refresh();toast('四页最初方案的恢复点已补回，当前作品未被替换');}catch(error){toast('历史参考导入失败：'+error.message);}return;}
   if(file.name.endsWith('.shiyecollection')){if(!confirm('用 Goodnotes 原生重建替换四页旧 CeCe 作品？其他作品与素材不会被删除。'))return;try{await flushSave();await document.fonts.load('12px "Ma Shan Zheng"');await importPrivateCollection(file,{db,onProgress:toast,prepare:data=>{const ctx=document.createElement("canvas").getContext("2d");for(const p of data.projects)for(const d of p.drafts)for(const t of d.textBlocks){ctx.font=textFont(t);const width=Math.max(...String(t.content).split("\n").map(line=>ctx.measureText(line).width));if(width>t.width-8)t.fontSize*=Math.max(1,t.width-8)/width;}}});state.activeProject=null;privateImages.invalidate();await refresh();route('works');toast('四页 Goodnotes 原生作品已保存');}catch(error){toast('私人作品导入失败，未切换到本机保存：'+error.message);}return;}
   if(!confirm('恢复完整备份会替换当前 PWA 中的全部资料。请先确认旧资料已导出。继续吗？'))return;try{await flushSave();await db.flushProjects();state.activeProject=null;await db.restoreBackup(file);state.basket=[];await refresh();toast('完整备份已恢复');}catch(e){console.error(e);toast('恢复失败：'+e.message);}};
 window.addEventListener('pagehide',()=>{if(saveTimer)flushSave().catch(console.error);});

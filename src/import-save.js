@@ -87,11 +87,11 @@ export async function saveImportBatch({state,db,urls,render,onSaved}) {
   if(!savedCount)throw Error('请选择至少一件素材');
   // Commit the whole batch once. A failed transaction never leaves a partly
   // imported batch that would be duplicated when the user retries.
-  await db.transaction(['assets','blobs','projects'],tx=>{for(const a of assets)tx.objectStore('assets').put(a);for(const b of blobs)tx.objectStore('blobs').put(b);for(const p of projects)tx.objectStore('projects').put(p);});
+  const result=db.stageImport?await db.stageImport({assets,blobs,projects}):await db.transaction(['assets','blobs','projects'],tx=>{for(const a of assets)tx.objectStore('assets').put(a);for(const b of blobs)tx.objectStore('blobs').put(b);for(const p of projects)tx.objectStore('projects').put(p);});
   state.assets.push(...assets);state.projects.push(...projects);for(const b of blobs)urls.set(b.id,URL.createObjectURL(b.data));
-  state.importSavedCount=savedCount;state.importStep='done';render();
+  state.importSavedCount=savedCount;state.importPending=!!result?.pending;state.importStep='done';render();
   // Remote enrichment starts only after the entire batch is safely committed.
   // It must not block the success screen or the next import batch.
-  if(state.importMode!=='work'&&onSaved)void Promise.resolve().then(()=>onSaved(assets.map(a=>structuredClone(a)))).catch(console.warn);
+  if(state.importMode!=='work'&&onSaved)void Promise.resolve().then(()=>{const organize=()=>onSaved(assets.map(a=>structuredClone(a)));return db.flushProjects?db.flushProjects().then(organize):organize();}).catch(console.warn);
   } finally {state.importSaving=false;}
 }

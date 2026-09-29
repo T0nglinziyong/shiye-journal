@@ -1,4 +1,5 @@
 const NAMESPACE='cece-native-goodnotes-v1';
+import {captureHistory} from './project-history.js';
 const projectID=id=>/^cece-p[1-4]-project$/.test(id);
 function imageBlob(record){
   const match=/^data:(image\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/=]+)$/.exec(record.data||'');if(!match)throw Error('私人作品包中有无效图片');
@@ -16,6 +17,7 @@ export async function importPrivateCollection(file,{db,onProgress=()=>{},prepare
   if(file.size>150*1024*1024)throw Error('私人作品包超过150 MB');
   const data=validatePrivateCollection(JSON.parse(await file.text()));
   await prepare(data);
+  data.projects.forEach(captureHistory);
   await db.flushProjects?.();onProgress('正在核对迁移前资料…');
   // Keep a verified in-memory snapshot until atomic commit. No old private
   // files are published, and no unrelated project is part of the replacement.
@@ -30,7 +32,7 @@ export async function importPrivateCollection(file,{db,onProgress=()=>{},prepare
   for(const project of otherProjects)for(const draft of project.drafts||[])if(draft.coverBlobId)keepBlobIDs.add(draft.coverBlobId);
   const oldBlobs=new Set(oldAssets.flatMap(a=>[a.blobId,a.originalBlobId,a.originalCutoutBlobId].filter(id=>id&&!keepBlobIDs.has(id))));
   onProgress('正在保存四页原生作品和私人素材…');
-  await db.transaction(['assets','blobs','projects','series','meta'],tx=>{
+  await (db.confirmedTransaction||db.transaction)(['assets','blobs','projects','series','meta'],tx=>{
     for(const p of removed)tx.objectStore('projects').delete(p.id);
     for(const a of oldAssets)tx.objectStore('assets').delete(a.id);
     for(const id of oldBlobs)tx.objectStore('blobs').delete(id);
