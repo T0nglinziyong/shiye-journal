@@ -97,8 +97,8 @@ try {
   await click('[data-act="detail"][data-id="'+picked.id+'"]');await evaluate('[...document.querySelectorAll(".swift-tray button")].find(b=>b.textContent==="加入系列并返回").click()');await wait('.series-contents');
   assert.equal((await storeRecords('assets')).find(a=>a.id===picked.id).seriesID,temporarySeries.id);assert.equal((await storeRecords('assets')).length,beforeAssets.length);
   await click('[data-act="detail"]','.detail-columns');await click('[data-act="detail-series"]','.series-contents');await click('#series-return','.detail-columns');await click('[data-act="detail-back"]','.series-contents');
-  await evaluate('[...document.querySelectorAll("#series-actions button")].find(b=>b.textContent==="批量").click()');await wait('#series-batch-menu');
-  await evaluate('window.confirm=()=>true;[...document.querySelectorAll("#series-batch-menu button")].find(b=>b.textContent==="删除系列").click()');await wait('.series-grid');
+  await click('#all-series','.series-grid');await evaluate('[...document.querySelectorAll(".view-head .actions button")].find(b=>b.textContent==="选择").click()');await click('[data-act="series-detail"][data-id="'+temporarySeries.id+'"]');
+  await evaluate('window.confirm=()=>true;[...document.querySelectorAll(".library-management-tray button")].find(b=>b.textContent==="删除系列").click()');await wait('.series-grid');for(let i=0;i<250&&(await storeRecords('series')).some(s=>s.id===temporarySeries.id);i++)await sleep(20);
   assert.equal((await storeRecords('assets')).find(a=>a.id===picked.id).seriesID,null);assert.equal((await storeRecords('assets')).length,beforeAssets.length);assert.ok(!(await storeRecords('series')).some(s=>s.id===temporarySeries.id));
   // Real touch events select two editable objects; moving the set is one edit
   // and preserves sizes. No synthetic PointerEvent bypasses capture semantics.

@@ -1,3 +1,5 @@
+import {beginSelection,finishSelection} from './library-selection-model.js';
+import {mountAssetSelection} from './library-selection-ui.js';
 import {parity} from './parity-ui.js';
 import {searchableSeries} from './library-model.js';
 import {classifyRecord} from './classification.js';
@@ -14,7 +16,7 @@ export function mountWorkflowControls(c) {
   mountFourFilters(c);
   if(c.state.route==='series')mountSeries(c);
   if(c.state.route==='works')mountProjectBatch(c);
-  if(c.state.route==='library')mountAssetBatch(c);
+  if(['library','series'].includes(c.state.route))mountAssetBatch(c);
   if(c.state.route==='assetDetail')mountAssetDetail(c);
   if(c.state.route==='settings'&&c.state.settingsSection==='数据与诊断')mountData(c);
   if(c.state.route==='import')mountImport(c);
@@ -31,8 +33,8 @@ export function mountWorkflowControls(c) {
 }
 function mountSeries(c) {
   const {state,view,render,openSeriesEditor}=c,actions=view.querySelector('.view-head .actions');
-  actions.append(button('批量',()=>{parity.selection=true;render();}));
-  actions.append(button(parity.selection?'完成':'选择',()=>{parity.selection=!parity.selection;parity.selected.clear();render();}));
+  const seriesActive=parity.selection&&parity.selectionMode==='series';
+  actions.append(button(parity.selection?'完成':'选择',()=>{parity.selection?finishSelection(parity):beginSelection(parity,'series');render();}));
   const controls=view.querySelector('.swift-series-controls'),input=controls.querySelector('input'),sort=controls.querySelector('select'),count=controls.querySelector('span');
   input.value=parity.seriesQuery||'';sort.value=parity.seriesSort||'recent';
   const ascending=button(parity.seriesAscending?'升序 ↑':'降序 ↓',()=>{parity.seriesAscending=!parity.seriesAscending;ascending.textContent=parity.seriesAscending?'升序 ↑':'降序 ↓';update();});
@@ -40,22 +42,22 @@ function mountSeries(c) {
   const cards=[...view.querySelectorAll('[data-act="series-detail"]')];
   const update=()=>{parity.seriesQuery=input.value;parity.seriesSort=sort.value;const q=input.value.trim().toLocaleLowerCase();let visible=0;
     cards.sort((a,b)=>{const x=state.series.find(s=>s.id===a.dataset.id),y=state.series.find(s=>s.id===b.dataset.id);const value=sort.value==='name'?x.title.localeCompare(y.title,'zh-CN'):(x.updatedAt||'').localeCompare(y.updatedAt||'');return (parity.seriesAscending?value:-value)||x.id.localeCompare(y.id);});
-    for(const card of cards){const s=state.series.find(s=>s.id===card.dataset.id);card.hidden=!!q&&!searchableSeries(s,state.assets).includes(q);if(!card.hidden)visible++;card.parentElement.append(card);}count.textContent=visible+' 项';};
+    for(const card of cards){const s=state.series.find(s=>s.id===card.dataset.id);card.hidden=(seriesActive&&parity.showOnlySelected?!parity.selected.has(s.id):!!q&&!searchableSeries(s,state.assets).includes(q));if(!card.hidden)visible++;card.parentElement.append(card);}count.textContent=visible+' 项';};
   input.oninput=update;sort.onchange=update;update();
   for(const card of cards) {
-    card.classList.toggle('batch-selected',parity.selection&&parity.selected.has(card.dataset.id));
-    if(parity.selection){card.setAttribute('aria-pressed',String(parity.selected.has(card.dataset.id)));card.addEventListener('click',e=>{e.stopImmediatePropagation();e.preventDefault();const id=card.dataset.id;parity.selected.has(id)?parity.selected.delete(id):parity.selected.add(id);render();},true);}
+    card.classList.toggle('batch-selected',seriesActive&&parity.selected.has(card.dataset.id));
+    if(seriesActive){card.setAttribute('aria-pressed',String(parity.selected.has(card.dataset.id)));card.addEventListener('click',e=>{e.stopImmediatePropagation();e.preventDefault();const id=card.dataset.id;parity.selected.has(id)?parity.selected.delete(id):parity.selected.add(id);render();},true);}
     else {const menu=()=>{c.body.innerHTML='<h2>系列操作</h2><div class="stack" id="series-card-menu"></div>';const list=c.body.querySelector('#series-card-menu');list.append(button('查看系列详情',()=>{c.modal.close();card.click();}),button('编辑信息与标签',()=>{c.modal.close();openSeriesEditor(card.dataset.id);}));c.modal.showModal();};card.oncontextmenu=e=>{e.preventDefault();menu();};card.onkeydown=e=>{if(e.key==='ContextMenu'||(e.shiftKey&&e.key==='F10')){e.preventDefault();menu();}};}
   }
-  const entry=view.querySelector('.series-entry');entry.disabled=parity.selection;
-  if(!parity.selection)return;
-  const tray=document.createElement('div');tray.className='swift-tray manage';tray.innerHTML='<strong>本次选中 '+parity.selected.size+' 个系列</strong>';
-  tray.append(button('全选当前结果',()=>{cards.filter(b=>!b.hidden).forEach(b=>parity.selected.add(b.dataset.id));render();}),button('清空选择',()=>{parity.selected.clear();render();}),button('删除系列',async()=>{
+  const entry=view.querySelector('.series-entry');entry.disabled=seriesActive;
+  if(!seriesActive)return;
+  const tray=document.createElement('div');tray.className='swift-tray manage library-management-tray';tray.dataset.selectionMode='series';tray.innerHTML='<strong>本次选中 '+parity.selected.size+' 个系列</strong>';
+  tray.append(button('全选页面',()=>{cards.filter(b=>!b.hidden).forEach(b=>parity.selected.add(b.dataset.id));render();}),button('清空选择',()=>{parity.selected.clear();parity.showOnlySelected=false;render();}),button(parity.showOnlySelected?'返回筛选':'查看所选',()=>{parity.showOnlySelected=!parity.showOnlySelected;render();}),button('删除系列',async()=>{
     if(!parity.selected.size||!confirm('删除所选系列？系列中的素材会保留在全部素材中。'))return;
     const revised=state.assets.filter(a=>parity.selected.has(a.seriesID)).map(a=>({...a,seriesID:null}));
     await c.db.transaction(['series','assets'],tx=>{for(const id of parity.selected)tx.objectStore('series').delete(id);for(const a of revised)tx.objectStore('assets').put(a);});
     state.series=state.series.filter(s=>!parity.selected.has(s.id));for(const a of revised)Object.assign(state.assets.find(x=>x.id===a.id),a);parity.selected.clear();render();
-  },'danger'));view.append(tray);
+  },'danger'));tray.querySelectorAll('button').forEach((b,i)=>b.disabled=i>0&&!parity.selected.size);view.append(tray);
 }
 function selectedTray(c, selector) {
   const {view,render}=c,tray=document.createElement('div');tray.className='swift-tray manage';tray.innerHTML='<strong>本次选中 '+parity.selected.size+' 件</strong>';
@@ -73,12 +75,7 @@ function mountProjectBatch(c) {
       c.state.projects=c.state.projects.filter(p=>!parity.selected.has(p.id));c.state.trash.push(...entries);parity.selected.clear();c.render();
     },'danger'));
 }
-function mountAssetBatch(c) {
-  if(c.state.addingToSeries||c.view.querySelector('.series-contents'))return;
-  const tray=c.view.querySelector('.swift-tray.manage');if(!tray)return;
-  tray.append(button('重新识别',()=>classifyBatch(c,'asset')),button('导出打印 PDF',()=>exportMaterials(c,[...parity.selected])));
-  const entry=c.view.querySelector('.action-card');if(entry)entry.disabled=true;
-}
+function mountAssetBatch(c) {mountAssetSelection(c,parity);}
 async function classifyBatch(c,kind) {
   const records=(kind==='asset'?c.state.assets:c.state.projects).filter(x=>parity.selected.has(x.id));
   if(!records.length)throw Error('请先选择要识别的内容');

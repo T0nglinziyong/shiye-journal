@@ -10,6 +10,7 @@
     "test": "node --test tests/*.test.js",
     "test:browser": "node tests/browser-acceptance.mjs",
     "test:editor-browser": "node tests/editor-browser-acceptance.mjs",
+    "test:selection-browser": "node tests/library-selection-browser.mjs",
     "test:ui": "npm run build && node tests/ui-smoke.mjs && node tests/route-parity-smoke.mjs && node tests/self-host-smoke.mjs"
   },
   "devDependencies": {

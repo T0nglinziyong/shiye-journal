@@ -1,3 +1,4 @@
+import {beginSelection,finishSelection} from './library-selection-model.js';
 import {seriesCovers,seriesMembers} from './library-model.js';
 
 const filtersByID=new Map();
@@ -34,27 +35,20 @@ export function mountSeriesContents(c,p) {
     const el=view.querySelector(selector);el.oninput=el.onchange=()=>{f[key]=el.value;update();};
   }
   view.querySelector('#series-order').onclick=()=>{f.ascending=!f.ascending;view.querySelector('#series-order').textContent=f.ascending?'升序 ↑':'降序 ↓';update();};
-  const add=()=>{state.addingToSeries=id;state.seriesID='all';state.query='';state.kind='all';state.status='all';state.libraryRecent=false;p.selection=true;p.selected.clear();route('library');};
+  const add=()=>{state.addingToSeries=id;state.seriesID='all';state.query='';state.kind='all';state.status='all';state.libraryRecent=false;beginSelection(p,'asset');route('library');};
   view.querySelector('#series-add-assets').onclick=add;view.querySelector('#series-add-assets').disabled=p.selection;
-  const sync=()=>{for(const card of cards){const selected=p.selected.has(card.dataset.id);card.classList.toggle('batch-selected',selected);if(p.selection)card.setAttribute('aria-pressed',String(selected));}const n=view.querySelector('.swift-tray.manage strong');if(n)n.textContent='本次选中 '+p.selected.size+' 件';view.querySelectorAll('[data-requires-selection]').forEach(b=>b.disabled=!p.selected.size);};
-  const clear=()=>{p.selected.clear();sync();},select=()=>{p.selection=true;cards.filter(b=>!b.hidden).forEach(b=>p.selected.add(b.dataset.id));render();};
-  const addBasket=()=>{state.basket=[...new Set([...state.basket,...p.selected])];p.selected.clear();p.selection=false;render();c.toast('已添加，在搭配页面中查看');};
-  const move=()=>{if(!p.selected.size)return;body.innerHTML='<div class="dialog-head"><h2>移动 '+p.selected.size+' 件素材</h2></div><input id="series-target-search" placeholder="搜索目标系列" aria-label="搜索目标系列"><div class="stack" id="series-target-list"></div>';const list=body.querySelector('#series-target-list');
-    const show=()=>{list.replaceChildren();for(const target of [{id:null,title:'不归入系列'},...state.series].filter(x=>!x.id||x.title.includes(body.querySelector('#series-target-search').value)))list.append(button(target.title,async()=>{await assign(c,p.selected,target.id);p.selected.clear();p.selection=false;modal.close();render();}));};body.querySelector('#series-target-search').oninput=show;show();modal.showModal();};
-  const remove=async()=>{if(!confirm('删除这个系列并保留素材？系列中的素材仍会留在素材库。'))return;const revised=state.assets.filter(a=>a.seriesID===id).map(a=>({...a,seriesID:null}));await c.db.transaction(['assets','series'],tx=>{tx.objectStore('series').delete(id);for(const a of revised)tx.objectStore('assets').put(a);});state.series=state.series.filter(x=>x.id!==id);for(const a of revised)Object.assign(state.assets.find(x=>x.id===a.id),a);route('series');};
-  const actions=view.querySelector('#series-actions');actions.append(button('批量',()=>{body.innerHTML='<h2>系列批量操作</h2><div class="stack" id="series-batch-menu"></div>';const list=body.querySelector('#series-batch-menu');for(const [label,fn] of [['全选当前结果',select],['清空选择',()=>{p.selected.clear();render();}],['编辑系列',()=>c.openSeriesEditor(id)],['全系列加入搭配',()=>{state.basket=[...new Set([...state.basket,...state.assets.filter(a=>a.seriesID===id&&!a.isProjectInternal).map(a=>a.id)])];c.toast('已添加，在搭配页面中查看');}],['删除系列',remove]])list.append(button(label,async()=>{modal.close();await fn();}));modal.showModal();}),button(p.selection?'完成':'选择',()=>{p.selection=!p.selection;p.selected.clear();render();}));
+  const actions=view.querySelector('#series-actions');actions.append(button(p.selection?'完成':'选择',()=>{p.selection?finishSelection(p):beginSelection(p,'asset');render();}));
   for(const card of cards) {
-    card.addEventListener('click',e=>{if(!p.selection)return;e.stopImmediatePropagation();e.preventDefault();p.selected.has(card.dataset.id)?p.selected.delete(card.dataset.id):p.selected.add(card.dataset.id);sync();},true);
     const menu=()=>{const aid=card.dataset.id;body.innerHTML='<h2>素材操作</h2><div class="stack" id="series-member-menu"></div>';const list=body.querySelector('#series-member-menu');list.append(button('查看详情',()=>{modal.close();c.openLibraryAsset(aid);}),button('设为系列封面',async()=>{const next={...s,coverAssetIDs:[aid],coverAssetID:aid,updatedAt:new Date().toISOString()};await c.db.put('series',next);Object.assign(s,next);modal.close();render();}),button('移出系列',async()=>{await assign(c,new Set([aid]),null);modal.close();render();}));modal.showModal();};
     card.oncontextmenu=e=>{e.preventDefault();menu();};card.onkeydown=e=>{if(e.key==='ContextMenu'||(e.shiftKey&&e.key==='F10')){e.preventDefault();menu();}};
   }
-  if(p.selection){const tray=document.createElement('div');tray.className='swift-tray manage';tray.innerHTML='<strong></strong>';tray.append(button('全选当前结果',select),button('清空选择',clear));for(const [label,fn] of [['加入搭配',addBasket],['加入系列',move]]){const b=button(label,fn);b.dataset.requiresSelection='';tray.append(b);}view.querySelector('.series-contents').append(tray);}sync();update();
+  update();
 }
 export function mountSeriesAddition(c,p) {
   const id=c.state.addingToSeries,s=c.state.series.find(s=>s.id===id);if(!s){c.state.addingToSeries=null;return false;}
   const {view,state,render,route}=c;view.querySelector('.view-head h1').textContent='为「'+s.title+'」添加素材';
-  const done=async()=>{await assign(c,p.selected,id);state.addingToSeries=null;p.selection=false;p.selected.clear();state.seriesID=id;render();c.toast('素材已加入系列');};
-  view.querySelector('.view-head .actions').append(button('取消',()=>{state.addingToSeries=null;p.selection=false;p.selected.clear();state.seriesID=id;route('library');}));
+  const done=async()=>{await assign(c,p.selected,id);state.addingToSeries=null;finishSelection(p);state.seriesID=id;render();c.toast('素材已加入系列');};
+  view.querySelector('.view-head .actions').append(button('取消',()=>{state.addingToSeries=null;finishSelection(p);state.seriesID=id;route('library');}));
   const tray=document.createElement('div');tray.className='swift-tray manage';const n=document.createElement('strong');tray.append(n);
   const save=button('加入系列并返回',done,'primary');tray.append(save);view.append(tray);const sync=()=>{n.textContent='本次选中 '+p.selected.size+' 件';save.disabled=!p.selected.size;for(const card of view.querySelectorAll('[data-act="detail"]')){card.classList.toggle('batch-selected',p.selected.has(card.dataset.id));card.setAttribute('aria-pressed',String(p.selected.has(card.dataset.id)));}};
   for(const card of view.querySelectorAll('[data-act="detail"]'))card.addEventListener('click',e=>{e.stopImmediatePropagation();e.preventDefault();p.selected.has(card.dataset.id)?p.selected.delete(card.dataset.id):p.selected.add(card.dataset.id);sync();},true);

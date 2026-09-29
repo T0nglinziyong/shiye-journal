@@ -1,12 +1,13 @@
 // Interaction placement follows the Swift 2.0.10 views. Core records remain
 // owned by app.js; this module adds the missing screen controls and actions.
 import {mountSeriesContents,mountSeriesAddition} from './series-contents.js';
-export const parity={libraryTab:'series',selection:false,selected:new Set(),workTab:'all',route:null};
+import {beginSelection,finishSelection,syncSelectionScope} from './library-selection-model.js';
+export const parity={libraryTab:'series',selection:false,selectionMode:null,showOnlySelected:false,selected:new Set(),workTab:'all',route:null};
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 export function mountParityControls(ctx){
   const {state,view}=ctx;
-  if(parity.route!==state.route){parity.selection=false;parity.selected.clear();parity.route=state.route;}
+  syncSelectionScope(parity,state.route);
   if(state.route==='library')mountLibrary(ctx);
   if(state.route==='series')mountSeries(ctx);
   if(state.route==='works')mountWorks(ctx);
@@ -22,35 +23,13 @@ function mountLibrary(c){
   const insideSeries=state.seriesID!=='all';
   header?.querySelector('h1')?.replaceChildren(insideSeries?(state.series.find(s=>s.id===state.seriesID)?.title||'系列'):'我的素材');
   if(insideSeries){const back=button('‹ 返回素材库',()=>route('series'));back.classList.add('series-back');header?.prepend(back);}
-  actions?.prepend(button(parity.selection?'完成':'选择',()=>{parity.selection=!parity.selection;if(!parity.selection)parity.selected.clear();render();}));
-  const batch=button('批量',()=>{parity.selection=true;render();});actions?.prepend(batch);
+  actions?.prepend(button(parity.selection?'完成':'选择',()=>{parity.selection?finishSelection(parity):beginSelection(parity,'asset');render();}));
   const bar=tabs([['series','系列'],['all','全部素材'],['recent','最近添加'],['pending','待检查']],parity.libraryTab,id=>{
     parity.libraryTab=id;
     if(id==='series'){route('series');return;}
     state.seriesID='all';state.status=id==='pending'?'pendingReview':'all';state.libraryRecent=id==='recent';state.sort='newest';render();
   });if(!insideSeries)header?.after(bar);
   if(insideSeries){header?.querySelector('.actions')?.append(button('编辑系列',()=>c.openSeriesEditor?.(state.seriesID)));}
-  for(const card of view.querySelectorAll('.card[data-act="detail"]')){
-    const id=card.dataset.id;
-    if(parity.selection){card.classList.toggle('batch-selected',parity.selected.has(id));card.setAttribute('aria-pressed',String(parity.selected.has(id)));card.insertAdjacentHTML('beforeend',`<span class="batch-check">${parity.selected.has(id)?'☑':'□'}</span>`);}
-    card.addEventListener('click',event=>{if(!parity.selection)return;event.stopImmediatePropagation();event.preventDefault();parity.selected.has(id)?parity.selected.delete(id):parity.selected.add(id);syncLibrarySelection(view);},true);
-  }
-  if(!parity.selection&&state.basket.length){const tray=document.createElement('div');tray.className='swift-tray';tray.innerHTML=`<strong>已选 ${state.basket.length} · 核心 ${state.matchCore?1:0}</strong><div class="tray-items">${state.basket.map(id=>{const a=state.assets.find(x=>x.id===id);return a?`<span>${esc(a.title)}</span>`:'';}).join('')}</div>`;tray.append(button('去搭配',()=>route('matching'),'primary'));view.append(tray);}
-  if(!parity.selection)return;
-  const tray=document.createElement('div');tray.className='swift-tray manage';tray.innerHTML=`<strong>本次选中 ${parity.selected.size} 件</strong>`;
-  tray.append(button('全选当前结果',()=>{view.querySelectorAll('.card[data-act="detail"]:not([hidden])').forEach(card=>parity.selected.add(card.dataset.id));syncLibrarySelection(view);}));
-  tray.append(button('清空选择',()=>{parity.selected.clear();syncLibrarySelection(view);}));
-  tray.append(button('加入搭配',()=>{state.basket=[...new Set([...state.basket,...parity.selected])];parity.selected.clear();parity.selection=false;render();toast('已添加，在搭配页面中查看');},'primary'));
-  tray.append(button('加入系列',()=>seriesPicker(c)));
-  tray.append(button('删除',async()=>{if(!parity.selected.size||!confirm(`将 ${parity.selected.size} 件素材移到最近删除？`))return;const now=new Date().toISOString(),records=[...parity.selected].map(id=>state.assets.find(a=>a.id===id)).filter(Boolean),entries=records.map(a=>({id:crypto.randomUUID(),kind:'asset',item:structuredClone(a),date:now}));await db.transaction(['assets','trash'],tx=>{for(let i=0;i<records.length;i++){tx.objectStore('assets').delete(records[i].id);tx.objectStore('trash').put(entries[i]);}});state.assets=state.assets.filter(a=>!parity.selected.has(a.id));state.trash.push(...entries);state.basket=state.basket.filter(id=>!parity.selected.has(id));parity.selected.clear();parity.selection=false;render();},'danger'));
-  view.append(tray);
-}
-function syncLibrarySelection(view){for(const card of view.querySelectorAll('.card[data-act="detail"]')){const selected=parity.selected.has(card.dataset.id);card.classList.toggle('batch-selected',selected);card.setAttribute('aria-pressed',String(selected));const check=card.querySelector('.batch-check');if(check)check.textContent=selected?'☑':'□';}const count=view.querySelector('.swift-tray.manage strong');if(count)count.textContent=`本次选中 ${parity.selected.size} 件`;}
-function seriesPicker(c){const {state,body,modal,db,render,toast}=c;if(!parity.selected.size){toast('请先选择素材');return;}
-  body.innerHTML=`<h2>加入系列</h2><p>选中的 ${parity.selected.size} 件素材会归入同一系列。</p><div class="stack"><button type="button" class="btn" data-series="">不归入系列</button>${state.series.map(s=>`<button type="button" class="btn" data-series="${s.id}">${esc(s.title)}</button>`).join('')}<label>新建系列<input id="new-batch-series" placeholder="系列名称"></label><button type="button" class="btn primary" id="create-batch-series">新建系列并归入</button></div>`;
-  modal.showModal();const assign=async id=>{for(const aid of parity.selected){const a=state.assets.find(x=>x.id===aid);if(a){a.seriesID=id;await db.put('assets',a);}}parity.selected.clear();parity.selection=false;modal.close();render();toast('已加入系列');};
-  body.querySelectorAll('[data-series]').forEach(b=>b.onclick=()=>assign(b.dataset.series||null));
-  body.querySelector('#create-batch-series').onclick=async()=>{const title=body.querySelector('#new-batch-series').value.trim();if(!title){toast('请填写系列名称');return;}const series={id:crypto.randomUUID(),title,introduction:'',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};await db.put('series',series);state.series.push(series);await assign(series.id);};
 }
 function mountSeries(c){const {view,route,state,render}=c,header=view.querySelector('.view-head'),grid=view.querySelector('.grid');header?.querySelector('h1')?.replaceChildren('我的素材');const bar=tabs([['series','系列'],['all','全部素材'],['recent','最近添加'],['pending','待检查']],'series',id=>{if(id==='series')return;parity.libraryTab=id;state.status=id==='pending'?'pendingReview':'all';state.libraryRecent=id==='recent';route('library');});header?.after(bar);
   const controls=document.createElement('div');controls.className='swift-series-controls';controls.innerHTML='<input type="search" placeholder="搜索系列、素材或标签" aria-label="搜索系列"><select aria-label="系列排序"><option value="recent">最近更新</option><option value="name">名称</option></select><span></span>';bar.after(controls);
@@ -59,7 +38,7 @@ function mountSeries(c){const {view,route,state,render}=c,header=view.querySelec
   controls.querySelector('input').oninput=filter;controls.querySelector('select').onchange=e=>{if(e.target.value==='name')cards.sort((a,b)=>(state.series.find(x=>x.id===a.dataset.id)?.title||'').localeCompare(state.series.find(x=>x.id===b.dataset.id)?.title||''));else cards.sort((a,b)=>(state.series.find(x=>x.id===b.dataset.id)?.updatedAt||'').localeCompare(state.series.find(x=>x.id===a.dataset.id)?.updatedAt||''));cards.forEach(card=>grid.append(card));};filter();
   if(grid){const tile=document.createElement('button');tile.type='button';tile.className='series-entry';tile.innerHTML='<div class="series-entry-cover">＋</div><strong>新建系列</strong><small>把喜欢的素材放在一起</small>';tile.onclick=()=>c.openSeriesEditor();grid.prepend(tile);}}
 function mountWorks(c){const {state,view,render}=c,header=view.querySelector('.view-head'),filters=view.querySelector('.filters');
-  const actions=header?.querySelector('.actions');if(actions){actions.append(button('批量',()=>{parity.selection=true;render();}));actions.append(button(parity.selection?'完成':'选择',()=>{parity.selection=!parity.selection;parity.selected.clear();render();}));}
+  const actions=header?.querySelector('.actions');if(actions){actions.append(button(parity.selection?'完成':'选择',()=>{parity.selection?finishSelection(parity):beginSelection(parity,'work');render();},'library-select-toggle'));}
   const bar=tabs([['all','全部作品'],['recent','最近创作'],['draft','草稿']],parity.workTab,id=>{parity.workTab=id;render();});header?.after(bar);
   for(const card of view.querySelectorAll('.grid .card[data-act="open-project"]')){const p=state.projects.find(x=>x.id===card.dataset.id);if(p)card.hidden=parity.workTab==='draft'?!p.isDraft:parity.workTab==='recent'?p.isDraft||Date.now()-Date.parse(p.updatedAt)>30*864e5:!!p.isDraft;
     const detail=button('⋯',()=>{},'work-card-detail');detail.setAttribute('aria-label','作品详情');detail.onclick=e=>{e.stopPropagation();state.previewProjectID=card.dataset.id;c.route('projectPreview');};card.append(detail);

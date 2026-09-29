@@ -1,0 +1,7 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {beginSelection,finishSelection,syncSelectionScope} from '../src/library-selection-model.js';
+const state=()=>({selection:false,selectionMode:null,selected:new Set(),showOnlySelected:false});
+test('opening an asset detail inside the library preserves its management selection',()=>{const p=state();beginSelection(p,'asset');p.selected.add('a');syncSelectionScope(p,'assetDetail');assert.ok(p.selection&&p.selected.has('a'));syncSelectionScope(p,'settings');assert.equal(p.selection,false);});
+test('asset selection survives library / series switches and finishes outside the library',()=>{const p=state();beginSelection(p,'asset');p.selected.add('one');for(const route of ['series','library','series','library']){syncSelectionScope(p,route);assert.equal(p.selection,true);assert.ok(p.selected.has('one'));}syncSelectionScope(p,'matching');assert.equal(p.selection,false);assert.equal(p.selected.size,0);});
+test('series and work selections cannot leak into other pages or modes',()=>{const p=state();beginSelection(p,'series');p.selected.add('s');syncSelectionScope(p,'series');assert.ok(p.selected.has('s'));syncSelectionScope(p,'library');assert.equal(p.selection,false);beginSelection(p,'asset');p.selected.add('a');p.showOnlySelected=true;beginSelection(p,'series');assert.equal(p.selected.size,0);assert.equal(p.showOnlySelected,false);finishSelection(p);assert.equal(p.selectionMode,null);beginSelection(p,'work');syncSelectionScope(p,'editor');assert.equal(p.selection,false);});
