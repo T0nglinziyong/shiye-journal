@@ -2,17 +2,17 @@
 
 ## GitHub 自动更新与固定测试网址
 
-用户要求后续验收通过的代码全部提交、推送至私有仓库 `T0nglinziyong/shiye-journal`。生产入口固定为 `https://temporary-fleet-oxygen-f2279rt.vercel.app`，继续使用现有 Vercel 项目 `temporary-fleet-oxygen-f2279rt`，不创建新项目、不改变网址，也不改 `shiyejournal.vip` 的 DNS。
+用户要求后续验收通过的代码全部提交、推送至私有仓库 `T0nglinziyong/shiye-journal`。按用户最新指定，唯一测试入口为 `https://shiye-journal-test.vercel.app`，使用现有 Vercel 项目 `shiye-journal-test`（`prj_96WRMneQ8J6gF1X7DUuzDqk5bWrE`），不创建新项目、不改变网址，也不改 `shiyejournal.vip` 的 DNS。旧临时项目不再作为发布目标；不要删除旧站或其浏览器资料。
 
-2026-09-29 检查：仓库访问正常，Vercel CLI 登录正常，现有项目的 Git `link` 为 `null`；`vercel git connect` 因无法访问此私有仓库而失败。**自动部署尚未接通**。需要用户在该项目 Settings → Git 中连接 `T0nglinziyong/shiye-journal`，并在 GitHub 授权 Vercel App 仅访问该仓库。连接成功后确认 Production Branch 为 `main`，框架 Vite、构建 `npm run build`、输出 `dist`；以实际 Git 提交触发的 `READY` 部署与相同生产别名为验收依据。不要通过更换项目或借用密钥绕过授权。
+2026-09-29 用户重新关联后实查：项目 Git `link.type=github`，仓库为 `T0nglinziyong/shiye-journal`，Production Branch 为 `main`；项目域名列表包含已验证的 `shiye-journal-test.vercel.app`，无分支限制、无重定向。此前授权失败已解除。框架 Vite、构建 `npm run build`、输出 `dist`；后续以每次推送的准确 Git 提交触发 `READY` 部署，并更新同一生产别名为验收依据，仅关联成功不代表最新代码已发布。不要通过更换项目或借用密钥绕过授权。
 
 新增 `.github/workflows/verify.yml`：推送 `main` 或 PR 时以只读权限运行 Node.js 24 单元／构建／UI 冒烟，以及合成 Swift 备份转换测试；不读取私人备份、不配置服务密钥。这个检查与 Vercel 的 Git 构建是独立的，不宣称它自动阻止生产发布。每次本地仍须验收后再推送。自动构建／发布的官方说明见 [Vercel GitHub 集成](https://vercel.com/docs/git/vercel-for-github)。
 
-## 2026-09-29 临时 Vercel 测试发布
+## 历史：2026-09-29 临时 Vercel 测试发布
 
 用户要求暂时发布最新本地改动进行测试，使用 Vercel CLI 60.1.3 的 `vercel deploy --temporary --yes --json` 创建可认领的匿名部署，不连接 GitHub、不覆盖旧站点、不修改 `shiyejournal.vip` 的 DNS。构建为纯静态 Vite；未部署 Node 数据服务，线上默认仍是当前网址／设备的 IndexedDB。
 
-本次生成的测试网址是 `https://temporary-fleet-oxygen-f2279rt.vercel.app`。该项目后来已由用户认领，本机通过正常登录关联到同一项目，并通过 `vercel build --prod`、`vercel deploy --prebuilt --prod` 发布；当次返回 `READY`。它不再是未认领的 60 分钟匿名部署。认领链接、认证文件与令牌均不写入 Git 或文档。**后续导入／素材检查／筛选及新 Swift 基准的本地改动尚未再次发布**，不能用线上旧版本验收这些改动。
+当时生成的测试网址是 `https://temporary-fleet-oxygen-f2279rt.vercel.app`。该项目后来已由用户认领，本机通过正常登录关联到同一项目，并通过 `vercel build --prod`、`vercel deploy --prebuilt --prod` 发布；当次返回 `READY`。它不再是未认领的 60 分钟匿名部署。认领链接、认证文件与令牌均不写入 Git 或文档。该记录仅作历史，之后用户指定 `shiye-journal-test.vercel.app` 为唯一测试入口；旧临时站不能用来验收后续改动。
 
 部署技能用于核对上传范围和构建：新增 `vercel.json` 固定 Vite 构建与 `dist` 输出、Service Worker 不缓存旧版本；`.vercelignore` 仅允许静态程序构建输入，排除环境文件、服务器代码、交接文档、密钥配置与备份。CLI 生成的 `.vercel/anonymous.json` 含临时凭据，整个 `.vercel/` 已被 Git 忽略，勿提交或公开。部署前 `npm test && npm run test:ui` 再次通过；上线后的真实浏览器检查使用隔离上下文和合成数据，不读取私人资料。
 
