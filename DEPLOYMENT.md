@@ -87,6 +87,14 @@ Vercel 和 Cloudflare 上的静态 PWA 只有在设置中连接可达的 HTTPS �
 若整个站点直接部署在 4090 上，改用 `deploy/self-host/` 中的 Caddy、systemd 与环境文件模板。网页和 API 同源，`SHIYE_ALLOWED_ORIGINS` 不需要设置，令牌与数据目录留在 4090；Vercel 项目不再参与新域名的发布。旧 Vercel 网址独立保留，不自动迁移原有浏览器资料。
 # AI 超时与搭配方案批次：发布前验收（2026-09-29）
 
+## 有效凭据的真实线上验收（后续更新）
+
+修复提交 `3b61d84e318c6866a824f1a99c34f273d2e2f173` 已自动生成生产部署 `dpl_89ipEqKXXpRqXbNY3urQDwCBDyjR`：READY、source=git、准确 SHA、固定 `shiye-journal-test.vercel.app` 别名均核对，公开入口为 `index-YPdHeZHL.js`。修复原生多工具回执中途插入用户图片导致 DeepSeek HTTP400 的问题，79项单元及UI冒烟通过。
+
+用户授权的真实密钥只通过非回显stdin传入线上隔离浏览器，实际调用 DeepSeek Flash（流式，75秒无数据超时，6000 tokens，最多5轮），只用临时合成叶片图片。识别1.252秒保存有效元数据；工具模式4轮0.548/1.924/1.430/1.038秒完成；直接模式1.639秒完成。共6次请求全部HTTP200，无超时或浏览器异常；两种生成结果均实际打开可编辑草稿并保存作品，截图已查看。报告及图片仅在 `/tmp/shiye-ai-live`，密钥已从隔离上下文移除，不在仓库／Vercel设置中。
+
+复测网站仍采用测试进程同域名可达节点64.29.17.131覆盖，未修改DNS；模型接口正常直连。仅证明本次简单封面与识别样例成功，不保证所有复杂任务、网络和设备永不超时。下述“未有效密钥验收”是此前阶段记录，已由本段更新。
+
 78 项单元及 `npm test && npm run test:ui` 通过；真实 Chromium 交互40张、布局64张、匹配方案4种视口通过。匹配专项使用合成素材和模拟SSE，验证不跳页、刷新保留、草稿→保存作品、重置不删除作品；不是有效 API 密钥的真实生成验收。当前机器浏览器直连 DeepSeek 以无效测试密钥取得401，只有连通性证据。两张经许可在线分割照片和返回蒙版仅在/tmp，详见 IMAGE_STORAGE_REVIEW。
 
 功能提交 `0262f17afabaa51aeb563f76490f84201ddf6b46` 已由 Git 自动生成生产部署 `dpl_EiQt1di6TftYzosio6nACNfR3F88`，`source=git`、READY、Git SHA 完全匹配，别名包含 `shiye-journal-test.vercel.app`。线上主脚本 `index-CdYQqi9d.js` 与本地构建相同。未手动部署、新建项目、修改 DNS、迁移数据库或发布任何凭据／私人备份。
