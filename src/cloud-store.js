@@ -247,9 +247,11 @@ async function cloudStageMutation(names,fn){
   await identity();if(revision===undefined)await version();await importSync.stage({id:crypto.randomUUID(),names,operations});
 }
 async function cloudPendingProjects(){await identity();return projectSync.pending();}
+async function cloudPendingDetails(){await identity();const [projects,imports]=await Promise.all([projectSync.pending(),importSync.pending()]);return {projects:projects.map(row=>({id:row.record.id,title:row.record.title||'未命名作品',baseRevision:row.baseRevision})),batches:imports.map(row=>({id:row.record.id,baseRevision:row.baseRevision,items:row.record.operations?.map(op=>({store:op.store,action:op.action,title:op.item?.title||op.item?.name||op.id||'',id:op.item?.id||op.id||''}))||['assets','projects','blobs'].flatMap(store=>(row.record[store]||[]).map(item=>({store,action:'put',title:item.title||'',id:item.id})))})),error:importSync.status().error?.message||projectSync.status().error?.message||null};}
+async function cloudDiscardPending(){await identity();if(writesInFlight||!importSync.canDiscard()||!projectSync.canDiscard())throw Error('上传正在进行，请等待当前请求结束');const count=(await importSync.discard())+(await projectSync.discard());reportSync();return count;}
 async function cloudFlushProjects(){await identity();if(revision===undefined)await version();await importSync.flush();return projectSync.flush();}
 async function cloudClearCache(){cacheDisabled=true;const id=await account();images.clear();imageSizes.clear();documents.clear();snapshots.clear();await cache?.clear(id);}
-return {cloudAll,cloudGet,cloudPreview,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudClearCache,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudFlushProjects,cloudProjectDocument};
+return {cloudAll,cloudGet,cloudPreview,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudClearCache,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudPendingDetails,cloudDiscardPending,cloudFlushProjects,cloudProjectDocument};
 }
 let projectPreview=()=>null;
 export const setCloudProjectPreview=producer=>{projectPreview=producer;};
@@ -266,5 +268,7 @@ export const cloudStageProject=(...args)=>current.cloudStageProject(...args);
 export const cloudStageImport=(...args)=>current.cloudStageImport(...args);
 export const cloudStageMutation=(...args)=>current.cloudStageMutation(...args);
 export const cloudPendingProjects=(...args)=>current.cloudPendingProjects(...args);
+export const cloudPendingDetails=(...args)=>current.cloudPendingDetails(...args);
+export const cloudDiscardPending=(...args)=>current.cloudDiscardPending(...args);
 export const cloudFlushProjects=(...args)=>current.cloudFlushProjects(...args);
 export const cloudProjectDocument=(...args)=>current.cloudProjectDocument(...args);

@@ -30,3 +30,18 @@ test('re-pairing clears context only after durable staging and rolls back on fai
   await assert.rejects(session.reset(clear),/quota/);assert.deepEqual(state.basket,['a']);assert.equal(state.matchCore,'a');
   fail=false;await session.reset(clear);assert.deepEqual(state.basket,[]);assert.equal(state.matchCore,null);
 });
+test('opening or rerendering matching does not stage an unchanged session',async()=>{
+ const state={basket:['a'],projects:[]},record=matchingSnapshot(state,[]);let writes=0;
+ const db={get:async()=>record,put:async()=>{writes++;throw Error('offline');}};
+ const session=createMatchingSession({state,db});
+ await session.persist();assert.equal(writes,0);
+ await session.restore();await session.persist();await session.persist();assert.equal(writes,0);
+ state.basket=['a','b'];await assert.rejects(session.persist(),/offline/);assert.equal(writes,1);
+});
+test('reloading after local outbox discard resets an unsaved basket without saving it again',async()=>{
+ const state={basket:[],coreIDs:[],projects:[]};let writes=0;
+ const db={get:async()=>undefined,put:async()=>{writes++;}};
+ const session=createMatchingSession({state,db});await session.restore();
+ state.basket=['unsent'];await session.restore();await session.persist();
+ assert.deepEqual(state.basket,[]);assert.equal(writes,0);
+});

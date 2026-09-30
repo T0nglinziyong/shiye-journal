@@ -1,12 +1,14 @@
 import {openDB,unwrap} from 'idb';
 import {createStorageRouter} from './storage-router.js';
 import {cloudEnabled} from './cloud-session.js';
-import {cloudAll,cloudGet,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudPreview,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudFlushProjects,cloudProjectDocument} from './cloud-store.js';
+import {cloudAll,cloudGet,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudPreview,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudPendingDetails,cloudDiscardPending,cloudFlushProjects,cloudProjectDocument} from './cloud-store.js';
 // Exceptional destructive imports require an acknowledged atomic cloud commit.
 export async function confirmedTransaction(names,fn){if(cloudEnabled){await cloudFlushProjects();return cloudTransaction(names,fn);}return transaction(names,fn);}
 export async function stageImport(batch){if(cloudEnabled)return cloudStageImport(batch);await transaction(['assets','blobs','projects'],tx=>{for(const store of ['assets','blobs','projects'])for(const record of batch[store]||[])tx.objectStore(store).put(record);});return {pending:false};}
 export const stageProject=record=>cloudEnabled?cloudStageProject(record):put('projects',record);
 export const pendingProjects=()=>cloudEnabled?cloudPendingProjects():Promise.resolve([]);
+export const pendingSyncDetails=()=>cloudEnabled?cloudPendingDetails():Promise.resolve({projects:[],batches:[],error:null});
+export const discardPendingSync=()=>cloudEnabled?cloudDiscardPending():Promise.resolve(0);
 export const flushProjects=()=>cloudEnabled?cloudFlushProjects():Promise.resolve();
 export const completeProject=record=>cloudEnabled?cloudProjectDocument(record):Promise.resolve(record);
 export const cachedCollections=()=>cloudEnabled?cloudCachedCollections():Promise.resolve(null);

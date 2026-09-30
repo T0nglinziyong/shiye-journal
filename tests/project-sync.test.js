@@ -56,3 +56,18 @@ test('a newer edit survives the older edit losing its acknowledgement',async()=>
   gate.resolve();await sync.flush();
   assert.deepEqual(commits,['first','second']);assert.deepEqual(rows,[]);
 });
+test('discard removes only idle local outbox entries and leaves committed cloud data untouched',async()=>{
+  let rows=[{record:{id:'local',title:'draft'},serial:1,baseRevision:2}],commits=0;
+  const sync=createProjectSync({load:async()=>rows,write:async next=>rows=structuredClone(next),revision:()=>2,commit:async()=>{commits++;}});
+  assert.equal((await sync.pending()).length,1);
+  assert.equal(await sync.discard(),1);
+  assert.deepEqual(rows,[]);assert.equal(commits,0);
+});
+test('discard refuses an in-flight cloud request',async()=>{
+  let rows=[{record:{id:'local'},serial:1,baseRevision:2}],release;
+  const waiting=new Promise(resolve=>release=resolve);
+  const sync=createProjectSync({load:async()=>rows,write:async next=>rows=structuredClone(next),revision:()=>2,commit:async()=>waiting});
+  const flushing=sync.flush();await new Promise(resolve=>setTimeout(resolve,0));
+  await assert.rejects(sync.discard(),/上传正在进行/);assert.equal(rows.length,1);
+  release();await flushing;
+});

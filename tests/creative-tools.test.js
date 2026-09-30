@@ -59,6 +59,15 @@ test('nonoverlapping source slices share one inventory unit; overlapping copies 
   const over=run(base,[call('place_materials',{items:[{asset:'m2',piece:'p3',unit:2}]})]);assert.equal(over.results[0].ok,false);
 });
 
+test('continuous tape can supply repeated pieces without enlarging the calibrated strip',()=>{
+  const strips=[{asset:'m3',piece:'tape-a',unit:0,operations:[crop([0,0,.35,1])],placement:{x:.3,y:.3,rotation:0,z:1}},{asset:'m3',piece:'tape-b',unit:1,operations:[crop([0,0,.35,1])],placement:{x:.7,y:.3,rotation:0,z:2}}];
+  const d=success(draft(),[call('upsert_materials',{items:strips,remove:[]})]);
+  assert.equal(d.items.length,2);
+  assert.ok(d.items.every(item=>Math.abs(item.width-35/297*1000)<1e-6));
+  const copy=run(d,[call('upsert_materials',{items:[{asset:'m1',piece:'paper-copy',unit:1,operations:[{op:'whole'}],placement:{x:.5,y:.7,rotation:0,z:3}}],remove:[]})]);
+  assert.equal(copy.results[0].ok,false);
+});
+
 test('arrange preserves all material dimensions in row, column and unequal grid',()=>{
   for(const mode of ['row','column','grid']){const d=placed(),sizes=d.items.map(i=>[i.width,i.height]);const arranged=success(d,[call('arrange_elements',{keys:['p1','p2'],mode,x:.5,y:.5,gap_mm:3,columns:2})]);assert.deepEqual(arranged.items.map(i=>[i.width,i.height]),sizes);assert.ok(arranged.items.every(i=>i.generationBaseline.x===i.x&&i.generationBaseline.y===i.y));}
 });

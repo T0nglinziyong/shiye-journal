@@ -31,13 +31,12 @@ function checkDraft(d,assets){
     const a=assets.find(a=>a.id===i.assetID);if(!a)throw Error('缺少素材 '+i.assetID);
     if(!i.generationBaseline)throw Error(a.title+' 缺少生成基线');
     const unit=i.materialUnitIndex??0;finite(unit,'实物单位',0,10000);if(!Number.isInteger(unit))throw Error('实物单位必须是整数');
-    const quantity=a.supply?.quantity??1;if(!Number.isFinite(quantity)||unit>=quantity)throw Error(a.title+' 超出实物数量');
+    const quantity=a.supply?.quantity??1;if(!Number.isFinite(quantity)||quantity<=0||(a.kind!=='tape'&&unit>=quantity))throw Error(a.title+' 超出实物数量');
     const crop=cropOf(i);assertRect(crop);
     const expectedW=crop.width*a.physicalWidthMM*scale(d),expectedH=crop.height*a.physicalHeightMM*scale(d);
     if(!Number.isFinite(expectedW)||!Number.isFinite(expectedH)||Math.abs(i.width-expectedW)>EPS||Math.abs(i.height-expectedH)>EPS)throw Error(a.title+' 实物尺寸与来源不一致');
-    const group=a.id+':'+unit,used=usage.get(group)||[];if(used.some(r=>overlap(r,crop)))throw Error(a.title+' 同一实物单位的裁片重叠或重复使用');used.push(crop);usage.set(group,used);
+    if(a.kind!=='tape'){const group=a.id+':'+unit,used=usage.get(group)||[];if(used.some(r=>overlap(r,crop)))throw Error(a.title+' 同一实物单位的裁片重叠或重复使用');used.push(crop);usage.set(group,used);}
   }
-  for(const a of assets){if(a.kind!=='tape'||a.supply?.availableLengthMM==null)continue;const available=finite(a.supply.availableLengthMM,'胶带剩余长度',0,1000000),horizontal=a.physicalWidthMM>=a.physicalHeightMM,used=d.items.filter(i=>i.assetID===a.id).reduce((sum,i)=>sum+(horizontal?cropOf(i).width*a.physicalWidthMM:cropOf(i).height*a.physicalHeightMM),0);if(used>available+EPS)throw Error(a.title+' 超出胶带剩余长度');}
 }
 function measure(t,options){
   if(typeof options.measureText==='function')return text=>options.measureText(text,t);
@@ -77,7 +76,8 @@ function process(d,item,asset,operations,mode,options){
       if(asset.kind!=='tape')throw Error('tape 仅适用于已登记胶带');
       const horizontal=asset.physicalWidthMM>=asset.physicalHeightMM,extent=horizontal?wMM:hMM,start=op.unit==='mm'?op.start/extent:op.start,length=op.unit==='mm'?op.length/extent:op.length;
       if(horizontal)r={x:start,y:0,width:length,height:1};else r={x:0,y:start,width:1,height:length};
-      // Never infer a repeatable roll or stretch the photographed strip.
+      // Each piece keeps the calibrated width and a real source segment;
+      // tape can be cut repeatedly from a continuous roll without stretching.
     }else throw Error('尚未实现工序 '+op.op);
     assertRect(r);current={x:current.x+r.x*current.width,y:current.y+r.y*current.height,width:current.width*r.width,height:current.height*r.height};assertRect(current);
     if(current.width*asset.physicalWidthMM<6-EPS||current.height*asset.physicalHeightMM<6-EPS)throw Error('裁片短边不得小于 6 mm');

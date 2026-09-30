@@ -89,7 +89,7 @@ function updateSyncIndicator(){
 function mountPageSyncIndicator(){
   if(!cloudEnabled)return;
   const target=state.route==='editor'?view.querySelector('.swift-editor-head .actions'):state.route==='import'?view.querySelector('.import-nav'):null;
-  if(target){const button=document.querySelector('#sync-indicator').cloneNode(true);button.removeAttribute('id');button.dataset.syncIndicator='';button.onclick=()=>void flushSave().then(()=>db.flushProjects()).catch(error=>toast(error.message));target.append(button);}
+  if(target){const button=document.querySelector('#sync-indicator').cloneNode(true);button.removeAttribute('id');button.dataset.syncIndicator='';button.onclick=()=>void openSyncDetails();target.append(button);}
   updateSyncIndicator();
 }
 const asset=id=>state.assets.find(x=>x.id===id)||state.trash.find(t=>t.kind==='asset'&&t.item.id===id)?.item;
@@ -219,9 +219,13 @@ function readAIForm(){const q=id=>view.querySelector('#setting-ai-'+id),old=stat
 
 function bindPage(){view.querySelectorAll('[data-act]').forEach(el=>el.addEventListener('click',()=>handle(el.dataset.act,el.dataset.id,el.dataset.val)));
   if(state.route==='matching'){
+    const saveMatching=()=>matchingSession.persist().catch(e=>{syncDisplay.error=e;updateSyncIndicator();console.warn('搭配自动保存待重试',e);});
     const fields={'match-style':'matchStyle','match-purpose':'matchPurpose','match-intent':'matchIntent','match-processing':'matchProcessing','match-mode':'matchMode','match-ratio':'matchRatio','match-paper-width':'customPaperWidth','match-paper-height':'customPaperHeight'};
-    for(const [id,key] of Object.entries(fields))view.querySelector('#'+id)?.addEventListener('change',e=>{state[key]=e.target.type==='number'?Number(e.target.value):e.target.value;if(id==='match-style')state.matchStyles=readMatchSelection(id,state.matchStyle);if(id==='match-purpose')state.matchPurposes=readMatchSelection(id,state.matchPurpose);matchingSession.persist().catch(e=>toast('搭配保存失败：'+e.message));});
-    matchingSession.persist().catch(e=>toast('搭配保存失败：'+e.message));
+    for(const [id,key] of Object.entries(fields))view.querySelector('#'+id)?.addEventListener('change',e=>{state[key]=e.target.type==='number'?Number(e.target.value):e.target.value;if(id==='match-style')state.matchStyles=readMatchSelection(id,state.matchStyle);if(id==='match-purpose')state.matchPurposes=readMatchSelection(id,state.matchPurpose);void saveMatching();});
+    // Entering or rerendering this page is not an explicit save action. Any
+    // changed session is staged in the background; sync errors use the global
+    // indicator instead of interrupting navigation with a toast.
+    void saveMatching();
   }
   const provider=view.querySelector('#setting-ai-provider');if(provider)provider.onchange=()=>{const old=readAIForm(),next=provider.value,preset=AI_PROVIDERS[next];state.aiSettings={...old,provider:next,endpoint:preset.endpoint,model:preset.models[0]?.[0]||'',keys:{...old.keys,[old.provider]:old.key},key:old.keys[next]||'',includeThumbnails:preset.models[0]?.[2]===true};render();};
   const modelSelect=view.querySelector('#setting-ai-model');if(modelSelect)modelSelect.onchange=()=>{view.querySelector('#setting-ai-custom-model-row').hidden=modelSelect.value!=='__custom__';if(modelSelect.value!=='__custom__')view.querySelector('#setting-ai-thumbnails').checked=AI_PROVIDERS[state.aiSettings.provider].models.find(m=>m[0]===modelSelect.value)?.[2]===true;};
@@ -621,8 +625,16 @@ document.addEventListener('visibilitychange',()=>{backgroundCloudCheck();if(docu
 window.addEventListener('online',()=>{backgroundCloudCheck();privateImages.retryMissing();void cloudResumer.wake();});
 window.addEventListener('offline',updateSyncIndicator);
 window.addEventListener('online',updateSyncIndicator);
-document.querySelector('#save-state').addEventListener('click',()=>{if(cloudEnabled)void flushSave().then(()=>db.flushProjects()).catch(error=>toast(error.message));});
-document.querySelector('#sync-indicator').onclick=()=>void flushSave().then(()=>db.flushProjects()).catch(error=>toast(error.message));
+async function openSyncDetails(){if(!cloudEnabled)return;cloudResumer.suspend();try{
+  const details=await db.pendingSyncDetails(),projects=details.projects||[],batches=details.batches||[],local=[...dirtyProjects.values()],total=projects.length+batches.length+local.length;
+  const rows=[...projects.map(row=>`<li>作品：${esc(row.title)} <small>${esc(row.id)}</small></li>`),...batches.map(row=>`<li>待传批次 ${esc(row.id)}：${row.items.length} 条变更<ul>${row.items.slice(0,12).map(item=>`<li>${esc(item.store)} · ${esc(item.action)} · ${esc(item.title||item.id)}</li>`).join('')}</ul></li>`),...local.map(row=>`<li>尚未暂存的作品：${esc(row.title||row.id)}</li>`)];
+  body.innerHTML=`<h2>同步详情</h2><p>状态：${esc(syncDisplay.error?'待重试':syncDisplay.pending||local.length?'上传中':'已同步')}</p><p>最近错误：${esc(details.error||syncDisplay.error?.message||'无')}</p><p>本机待同步：${total} 项。这里展示的是本机修改，不代表云端已经收到。</p><div class="sync-pending-list">${rows.length?`<ul>${rows.join('')}</ul>`:'<p>没有待同步项目。</p>'}</div><div class="actions"><button type="button" class="btn primary" id="sync-retry-now">立即重试</button><button type="button" class="btn danger" id="sync-discard-local" ${total?'':'disabled'}>强制不再同步 · 丢弃本机待传修改</button></div><p>放弃后不能从拾页恢复尚未传到云端的修改；已经到云端的资料不会删除。正在发送的请求不能中途丢弃。</p>`;
+  modal.showModal();modal.addEventListener('close',()=>{void cloudResumer.resume();},{once:true});
+  body.querySelector('#sync-retry-now').onclick=()=>{modal.close();void flushSave().then(()=>db.flushProjects()).catch(error=>toast('重试失败：'+error.message));};
+  body.querySelector('#sync-discard-local').onclick=async()=>{if(savingProjects){toast('本机暂存仍在进行，请稍后重试');return;}if(!confirm(`将放弃 ${total} 项本机待同步修改。云端已保存版本不会删除，未上传的修改无法恢复。确定吗？`))return;clearTimeout(saveTimer);saveTimer=null;const button=body.querySelector('#sync-discard-local');button.disabled=true;try{await db.discardPendingSync();dirtyProjects.clear();syncDisplay.localPending=false;syncDisplay.error=null;state.activeProject=null;state.activeDraft=null;const cached=await db.cachedCollections();if(cached){Object.assign(state,cached);await matchingSession.restore({archive:false});state.basket=state.basket.filter(id=>state.assets.some(a=>a.id===id));privateImages.invalidate();modal.close();route(state.route==='editor'?'works':state.route);}else{modal.close();await refresh();await matchingSession.restore({archive:false});}toast('本机待同步修改已放弃；云端资料未删除');}catch(error){button.disabled=false;if(dirtyProjects.size)saveTimer=setTimeout(()=>flushSave().catch(console.error),150);toast('未能放弃待同步修改：'+error.message);}};
+ }catch(error){cloudResumer.resume();toast('同步详情读取失败：'+error.message);}}
+document.querySelector('#save-state').addEventListener('click',()=>{if(cloudEnabled)void openSyncDetails();});
+document.querySelector('#sync-indicator').onclick=()=>void openSyncDetails();
 let viewportTimer;
 // Rebuilding the page during an active pointer gesture drops native capture.
 // In particular, delayed viewport events must not interrupt lasso or ink.

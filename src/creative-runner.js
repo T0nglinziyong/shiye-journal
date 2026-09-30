@@ -5,7 +5,7 @@ import {reviewCreativeDraft} from './creative-quality.js';
 import {creativeTypographyGuide} from './creative-typography.js';
 import {requestChat} from './chat-transport.js';
 
-const system='你是拾页手账创作者。只使用素材台中的真实素材；尺寸、库存和加工由本地工具判定，不得缩放或复制实物。文字和数字图形是可编辑图层。根据用途与风格建立主视觉、连续阅读区、细节与留白，避免堆在中央、遮住正文、重复空相框或每段机械加白底。未提供经历时只能写客观观察或通用主题内容，不编日期地点经历。位置默认页面比例，文字遵守本页字号与层级建议。加工只能用合同中安全操作，不假装识别未提供的图案，不执行网址、脚本或文件。每轮以实际画布和回执修正，完成前审阅整个页面。';
+const system='你是拾页手账创作者。只使用素材台中的真实素材；尺寸、库存和加工由本地工具判定，不得缩放或复制纸张、照片、贴纸，同一件裁下的非重叠余料可继续使用。胶带视为连续可裁取，但不能拉伸已校准的宽度或图案。文字和数字图形是可编辑图层。根据用途与风格建立主视觉、连续阅读区、细节与留白，避免堆在中央、遮住正文、重复空相框或每段机械加白底。未提供经历时只能写客观观察或通用主题内容，不编日期地点经历。位置默认页面比例，文字遵守本页字号与层级建议。加工只能用合同中安全操作，不假装识别未提供的图案，不执行网址、脚本或文件。每轮以实际画布和回执修正，完成前审阅整个页面。';
 const purposes={日常记录:'标题、至少两段关联观察与图像穿插，不做仅口号的封面。',旅途记录:'有依据的地点路线、图、票据及短段落，不编地名日期。',图文收藏:'不同大小的图、标签及有内容的文字格位，禁止空相框。',清单计划:'实际清单或记录区；缺少事项时写通用可编辑主题条目，不虚构日程。',影像故事:'主图与相关小图建立阅读顺序，穿插说明细节。',主题封面:'允许大主视觉、短标题及明显留白。'};
 export function creativeScene(d,aliases={}){
  const map=Object.fromEntries(Object.entries(aliases).map(([k,v])=>[v,k])),g=x=>({key:x.creativePieceID||x.agentKey||x.key||x.id,x:x.x/d.canvas.width,y:x.y/d.canvas.height,width:x.width/d.canvas.width,height:x.height/d.canvas.height,rotation:x.rotation||0,z:x.zIndex||0});
@@ -13,7 +13,7 @@ export function creativeScene(d,aliases={}){
 }
 export function buildCreativeMessages(o){
  const {draft,assets,aliases,images=[],prompt='',customLayoutPrompt='',textMode='automatic',styles=[draft.style],pagePurposes=['日常记录'],processing,assetProcessing={},materialUseHints={},materialUseRequired={},requiredAssetIDs=[],includeStructureReference=true,referencePage=1,referenceImages=[]}=o;
- const list=Object.entries(aliases).flatMap(([label,id])=>{const a=assets.find(x=>x.id===id);return a?[`${label}: ${a.title}，${a.kind}，${a.role}，${a.physicalWidthMM||'未确认'}×${a.physicalHeightMM||'未确认'} mm，库存 ${a.supply?.quantity??1}，加工 ${assetProcessing[id]||processing||'保留完整'}，用法 ${materialUseHints[id]||'由生成器选择'}${materialUseRequired[id]?'（每个方案必做）':''}${requiredAssetIDs.includes(id)?'（每版必用）':''}，标签 ${(a.tags||[]).join('、')}`]:[];});
+ const list=Object.entries(aliases).flatMap(([label,id])=>{const a=assets.find(x=>x.id===id);return a?[`${label}: ${a.title}，${a.kind}，${a.role}，${a.physicalWidthMM||'未确认'}×${a.physicalHeightMM||'未确认'} mm，库存 ${a.kind==='tape'?'连续胶带，可多次裁取但宽度与图案不得拉伸':a.supply?.quantity??1}，加工 ${assetProcessing[id]||processing||'保留完整'}，用法 ${materialUseHints[id]||'由生成器选择'}${materialUseRequired[id]?'（每个方案必做）':''}，标签 ${(a.tags||[]).join('、')}`]:[];});
  const policy=textMode==='none'?'不生成文字。':textMode==='requested'?'仅用户明确要求文字时配文。':'按用途生成真实内容的图文手账。';
  const reference=includeStructureReference?`匿名结构参考第${referencePage}页：${['左主图，右标题及两段正文，下方短注','上标题，中间错层主图，底部两栏文字','左叙述，右图文收藏，边缘少量点缀','上主视觉，中间有内容的网格，底部短注'][Math.max(0,Math.min(3,referencePage-1))]}。只参考阅读结构，必须按真实尺寸重排，不含私人日记。`:'';
  const mode=creativeProtocol(o).instruction;

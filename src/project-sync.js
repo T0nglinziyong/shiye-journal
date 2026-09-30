@@ -59,5 +59,6 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
     })().catch(e=>{error=e;report();throw e;}).finally(()=>{network=null;});
     network.catch(()=>{});return network;
   }
-  return {stage,async flush(){await initialize();await staging;await kick();},async pending(){await initialize();await staging;return structuredClone([...entries.values()]);},async advance(before,after){await initialize();await staging;for(const row of entries.values())if(row.baseRevision===before)row.baseRevision=after;if(entries.size)await persist();},resume:()=>kick(),status:()=>({pending:entries.size,error})};
+  async function discard(){await initialize();await staging;if(network)throw Error('上传正在进行，请等待请求结束后再放弃待同步修改');const previous=[...entries.values()];entries.clear();try{await persist();}catch(failure){for(const row of previous)entries.set(row.record.id,row);throw failure;}error=null;report();return previous.length;}
+  return {stage,async flush(){await initialize();await staging;await kick();},async pending(){await initialize();await staging;return structuredClone([...entries.values()]);},async advance(before,after){await initialize();await staging;for(const row of entries.values())if(row.baseRevision===before)row.baseRevision=after;if(entries.size)await persist();},discard,canDiscard:()=>!network,resume:()=>kick(),status:()=>({pending:entries.size,error,uploading:!!network})};
 }
