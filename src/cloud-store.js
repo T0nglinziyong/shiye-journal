@@ -54,7 +54,7 @@ const importSync=createProjectSync({
     const result=await recoverImportOutbox(rows,async(asset,ids)=>{
       const user=await identity();
       if(!ids.length)return false;
-      const copies=checked(await cloudClient().from('shiye_records').select('id').eq('user_id',user).eq('store','blobs').in('id',ids).limit(1));
+      const copies=checked(await cloudClient().from('shiye_records').select('id').eq('user_id',user).eq('store','blobs').in('id',ids).limit(1).abortSignal(AbortSignal.timeout(2500)));
       return copies.length>0;
     });
     if(!result.removed)return rows;

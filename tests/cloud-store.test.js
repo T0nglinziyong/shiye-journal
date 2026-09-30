@@ -6,7 +6,7 @@ import {projectBlobText} from '../src/project-document.js';
 function fixture(cache=null,objectStorage=null){
   const state={revision:0,rows:[],calls:[],fail:false,authError:false,uploads:[],downloads:0};
   const client={from(table){
-    const filters={};const query={select(){return query;},eq(k,v){filters[k]=v;return query;},in(k,v){filters[k]=v;return query;},limit(){return query;},order(){return query;},
+    const filters={};const query={select(){return query;},eq(k,v){filters[k]=v;return query;},in(k,v){filters[k]=v;return query;},limit(){return query;},abortSignal(){return query;},order(){return query;},
       then(resolve){return Promise.resolve(resolve({data:(state.cloudCopies||[]).filter(row=>!filters.id||row.id===filters.id)}));},
       async range(start,end){state.reads=(state.reads||0)+1;return {data:state.rows.slice(start,end+1).map(record=>({record}))};},
       async single(){return {data:{revision:state.revision}};},

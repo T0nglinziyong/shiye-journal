@@ -11,15 +11,14 @@ export async function recoverImportOutbox(rows,remoteHas){
     const batch=row.record;
     if(batch.operations||batch.projects?.length||!batch.assets?.length){recovered.push(row);continue;}
     const blobs=new Map((batch.blobs||[]).map(blob=>[blob.id,blob.data]));
-    const assets=[];
-    for(const asset of batch.assets){
+    const keep=await Promise.all(batch.assets.map(async asset=>{
       const ids=imageIDs(asset);
-      if(ids.some(id=>usable(blobs.get(id)))){assets.push(asset);continue;}
+      if(ids.some(id=>usable(blobs.get(id))))return true;
       // A failed network/authorization probe is not evidence of data loss.
-      let exists=true;
-      try{exists=await remoteHas(asset,ids);}catch{}
-      if(exists)assets.push(asset);else removed++;
-    }
+      try{return await remoteHas(asset,ids)!==false;}catch{return true;}
+    }));
+    const assets=batch.assets.filter((_,index)=>keep[index]);
+    removed+=batch.assets.length-assets.length;
     if(!assets.length)continue;
     if(assets.length===batch.assets.length){recovered.push(row);continue;}
     const needed=new Set(assets.flatMap(imageIDs));
