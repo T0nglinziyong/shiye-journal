@@ -1,10 +1,13 @@
+import {usableProjectSnapshot} from './project-outbox-recovery.js';
 const ID='matching-session-v1';
 const KEYS=['basket','coreIDs','matchCore','matchRatio','matchMode','matchStyle','matchStyles','matchPurposes','matchIntent','matchPurpose','matchProcessing','materialUseHints','materialUseRequired','assetProcessing','customPaperWidth','customPaperHeight'];
 export function matchingSnapshot(state,variants){return {id:ID,context:Object.fromEntries(KEYS.map(k=>[k,structuredClone(state[k])])),variants:structuredClone(variants)};}
 export function restoreMatchingSession(record,state){
  if(!record)return [];
  for(const key of KEYS)if(record.context?.[key]!==undefined)state[key]=record.context[key];
- return (record.variants||[]).map(v=>v.status==='running'?{...v,status:'interrupted',progress:'页面曾关闭，生成已中断；已保留收到的完整步骤。'}:v);
+ return (Array.isArray(record.variants)?record.variants:[])
+  .filter(v=>v&&typeof v.id==='string'&&usableProjectSnapshot(v.project))
+  .map(v=>v.status==='running'?{...v,status:'interrupted',progress:'页面曾关闭，生成已中断；已保留收到的完整步骤。'}:v);
 }
 export function variantDraftProject(variant,existing,newID){
  if(existing?.isDraft)return existing;

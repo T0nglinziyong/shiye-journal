@@ -7,6 +7,10 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
   const report=()=>onStatus({pending:entries.size,error});
   const persist=()=>write(structuredClone([...entries.values()]));
   async function acknowledge(row){
+    // A confirmed operation advanced exactly one revision. Newer local edits
+    // based on its old revision can follow it; never jump across an unrelated
+    // remote edit (which would silently overwrite another device).
+    if(revision()===row.baseRevision+1)for(const pending of entries.values())if(pending.serial!==row.serial&&pending.baseRevision===row.baseRevision)pending.baseRevision=revision();
     const current=entries.get(row.record.id);
     const removed=current?.serial===row.serial;
     if(removed)entries.delete(row.record.id);
@@ -29,7 +33,7 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
           // The app may have closed after the server committed but before the
           // acknowledgement was removed from IndexedDB. Verify the exact
           // operation instead of replaying it or reporting a false conflict.
-          const resolution=await reconcile(row.record,row.operationID);
+          const resolution=await reconcile(row.record,row.operationID,row.baseRevision);
           if(resolution==='committed'){
             await acknowledge(row);continue;
           }
@@ -43,12 +47,11 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
           // The server may have committed before its response disappeared.
           // Confirm the exact durable operation ID before surfacing an error.
           let resolved;
-          try{resolved=await reconcile(row.record,row.operationID);}catch{/* Keep the row if verification is offline. */}
+          try{resolved=await reconcile(row.record,row.operationID,row.baseRevision);}catch{/* Keep the row if verification is offline. */}
           if(resolved==='committed'){await acknowledge(row);continue;}
           throw failure;
         }
         await staging;
-        for(const pending of entries.values())if(pending.serial!==row.serial)pending.baseRevision=revision();
         await acknowledge(row);
       }
       error=null;report();

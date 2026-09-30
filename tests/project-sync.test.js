@@ -45,3 +45,14 @@ test('failed local acknowledgement remains pending and can be reconciled without
   await sync.flush();
   assert.equal(commits,1);assert.deepEqual(rows,[]);
 });
+test('a newer edit survives the older edit losing its acknowledgement',async()=>{
+  let rows=[],revision=0;const gate=defer(),started=defer(),commits=[];
+  const sync=createProjectSync({load:async()=>rows,write:async next=>rows=structuredClone(next),revision:()=>revision,
+    commit:async record=>{commits.push(record.title);if(record.title==='first'){started.resolve();await gate.promise;revision++;throw Error('reply lost');}revision++;},
+    reconcile:async record=>record.title==='first'?'committed':'conflict'});
+  await sync.stage({id:'work',title:'first'});
+  await started.promise;
+  await sync.stage({id:'work',title:'second'});
+  gate.resolve();await sync.flush();
+  assert.deepEqual(commits,['first','second']);assert.deepEqual(rows,[]);
+});

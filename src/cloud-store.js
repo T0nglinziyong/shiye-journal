@@ -27,17 +27,25 @@ const projectSync=createProjectSync({
   load:async()=>{if(!cache)return [];const key=await account(),saved=await cache.get(key,'project-outbox')||[],result=recoverProjectOutbox(saved);if(result.removed)try{await cache.put(key,'project-outbox',result.rows);}catch{/* The valid cloud version still takes precedence in this session. */}return result.rows;},
   write:async rows=>{if(!cache||cacheDisabled)throw Error('无法安全保存待同步作品');await cache.put(await account(),'project-outbox',rows);},
   commit:(record,operationID)=>cloudTransaction(['projects'],tx=>tx.objectStore('projects').put(record),operationID),revision:()=>revision,
-  reconcile:async(_record,operationID)=>await wasCommitted(operationID)?'committed':'conflict',
+  reconcile:async(_record,operationID,baseRevision)=>await wasCommitted(operationID,baseRevision)?'committed':'conflict',
   onStatus:reportSync,
 });
-async function wasCommitted(operationID){
+async function wasCommitted(operationID,baseRevision){
   if(!operationID)return false; // Legacy outbox: never guess that a write succeeded.
   const row=checked(await cloudClient().from('shiye_commits').select('revision').eq('user_id',await identity()).eq('operation_id',operationID).maybeSingle());
-  if(row)await version(); // Invalidate stale snapshots after a lost response.
+  if(row){
+    const latest=await version(); // Invalidate stale snapshots after a lost response.
+    // Only our one confirmed revision can rebase other local outboxes. Never
+    // advance them over a subsequent edit made by another device.
+    if(Number(row.revision)===latest&&latest===baseRevision+1){
+      await projectSync.advance(baseRevision,latest);
+      await importSync.advance(baseRevision,latest);
+    }
+  }
   return !!row;
 }
-async function reconcileImport(batch,operationID){
-  if(await wasCommitted(operationID))return 'committed';
+async function reconcileImport(batch,operationID,baseRevision){
+  if(await wasCommitted(operationID,baseRevision))return 'committed';
   // Only an append-only import has unique IDs that prove an interrupted RPC
   // already committed atomically, or can be safely retried after an unrelated
   // revision. Never infer success or rebase for edits, deletes, or partial data.

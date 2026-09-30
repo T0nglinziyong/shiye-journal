@@ -1,13 +1,20 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {matchingSnapshot,restoreMatchingSession,variantDraftProject,createMatchingSession} from '../src/matching-session.js';
+const draft={id:'d',canvas:{width:700,height:1000},items:[],textBlocks:[],primitives:[],strokes:[]};
+const work={id:'p',activeDraftID:'d',drafts:[draft]};
 test('matching results survive reload without credentials; interrupted requests do not resume',()=>{
- const state={basket:['a'],aiSettings:{key:'never-store'},matchIntent:'春日'},record=matchingSnapshot(state,[{id:'v',status:'running',project:{id:'p'}}]);
+ const state={basket:['a'],aiSettings:{key:'never-store'},matchIntent:'春日'},record=matchingSnapshot(state,[{id:'v',status:'running',project:work}]);
  assert.ok(!JSON.stringify(record).includes('never-store'));const restored={};const variants=restoreMatchingSession(record,restored);assert.deepEqual(restored.basket,['a']);assert.equal(variants[0].status,'interrupted');
+});
+test('damaged or partial generated plans do not reappear as unopenable shells',()=>{
+ const result=restoreMatchingSession({context:{basket:['a']},variants:[{id:'broken',status:'completed',project:{id:'p'}},{id:'good',status:'running',project:work}]},{});
+ assert.deepEqual(result.map(v=>v.id),['good']);assert.equal(result[0].status,'interrupted');
+ assert.deepEqual(restoreMatchingSession({variants:{}},{}),[]);
 });
 test('completed unopened variants become drafts before reset; reload never duplicates them',async()=>{
  const tables={projects:new Map(),meta:new Map()},state={projects:[]};let id=0;
  const db={get:async(s,id)=>tables[s].get(id),put:async(s,r)=>tables[s].set(r.id,structuredClone(r)),transaction:async(_,fn)=>fn({objectStore:s=>({put:r=>tables[s].set(r.id,structuredClone(r))})})};
- tables.meta.set('matching-session-v1',{context:{},variants:[{id:'v',status:'completed',project:{id:'p',drafts:[{id:'d'}]}}]});
+ tables.meta.set('matching-session-v1',{context:{},variants:[{id:'v',status:'completed',project:work}]});
  const c={state,db,uid:()=>String(++id)},session=createMatchingSession(c);await session.restore();assert.equal(tables.projects.size,1);assert.ok([...tables.projects.values()][0].isDraft);
  state.projects=[];await createMatchingSession(c).restore();assert.equal(tables.projects.size,1);await session.reset();assert.equal(tables.meta.get('matching-session-v1').variants.length,0);assert.equal(tables.projects.size,1);
 });
