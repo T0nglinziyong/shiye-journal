@@ -12,6 +12,11 @@ test('AI review reports overlapping full text boxes rather than declaring finish
  const d=draft(14);d.textBlocks.push({...d.textBlocks[0],id:'second',y:210});
  assert.ok(reviewCreativeDraft(d).warnings.some(w=>w.includes('文字框相互遮挡')));
 });
+test('non-cover journal pages reject a nearly empty layout but permit intentionally simple covers',()=>{
+ const sparse=draft(14);
+ assert.ok(reviewCreativeDraft(sparse,{purposes:['旅途记录']}).warnings.some(w=>w.includes('过于稀疏')));
+ assert.ok(!reviewCreativeDraft(sparse,{purposes:['主题封面']}).warnings.some(w=>w.includes('过于稀疏')));
+});
 test('both creation modes receive role sizes converted to the actual paper, not screen pixels',()=>{
  const a5=draft(14),a4={...a5,physicalPageHeightMM:297},small=creativeTypographyGuide(a5),large=creativeTypographyGuide(a4);
  assert.match(small,/主标题建议18–26pt（本页font_size约31–43/);
@@ -34,4 +39,13 @@ test('text-only API receives the matching preset descriptions without image payl
  assert.match(messages[0].content,/韩系清新 × 清单计划/);
  assert.match(messages[0].content,/实验方案/);
  assert.equal(messages[1].content.filter(part=>part.type==='image_url').length,0);
+});
+test('API labels material priorities and has a meaningful-content rule for sparse non-cover pages',()=>{
+ const assets=['required','preferred','available','excluded'].map((id,i)=>({id,title:id,kind:'sticker',role:'focal',physicalWidthMM:20,physicalHeightMM:20,supply:{quantity:1},tags:[]}));
+ const aliases={m1:'required',m2:'preferred',m3:'available'};
+ const messages=buildCreativeMessages({draft:{...draft(14),pageRatio:'a5',pageMode:'single'},assets,aliases,requiredAssetIDs:['required'],materialPriority:{required:['required'],preferred:['preferred'],available:['available'],excluded:['excluded']}});
+ const text=messages[1].content[0].text;
+ assert.match(text,/优先级 必须使用/);assert.match(text,/优先级 优先使用/);assert.match(text,/优先级 可以使用（仅备选）/);
+ assert.doesNotMatch(text,/excluded/);
+ assert.match(messages[0].content,/不要把大片空白当成完成/);
 });

@@ -84,6 +84,19 @@ test('offline ZIP includes each selected material as its own image, not only API
   await assert.rejects(createOfflineHandoff({project:project(),assets,aliases,previews:previews.slice(0,1),settings:{includeThumbnails:true,imageCount:1}}),/缺少素材预览/);
 });
 
+test('GPT ZIP carries required/preferred/available priorities but never sends excluded material',async()=>{
+  const second={...asset,id:'asset-2',title:'备选图片'},excluded={...asset,id:'asset-3',title:'不使用的图片'};
+  const p=project('优先级'),priority={required:[asset.id],preferred:[],available:[second.id],excluded:[excluded.id]};
+  p.requiredAssetIDs=[asset.id];p.materialPriority=priority;
+  const handoff=await createOfflineHandoff({project:p,assets:[asset,second,excluded],aliases:{m1:asset.id,m2:second.id},settings:{includeThumbnails:false}});
+  const files=unzipSync(new Uint8Array(await handoff.blob.arrayBuffer())),context=JSON.parse(strFromU8(files['context.json']));
+  assert.deepEqual(context.source.materialPriority,{required:[asset.id],preferred:[],available:[second.id]});
+  assert.deepEqual(context.materials.map(x=>x.assetID),[asset.id,second.id]);
+  assert.doesNotMatch(strFromU8(files['START_HERE.txt']),/不使用的图片|asset-3/);
+  assert.match(strFromU8(files['START_HERE.txt']),/必须使用/);
+  assert.match(strFromU8(files['START_HERE.txt']),/可以使用（仅备选）/);
+});
+
 test('offline ZIP preserves transparent PNG preview bytes and paths',async()=>{
   const transparentPixel=Uint8Array.from(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/5uoAAAAASUVORK5CYII=','base64'));
   const result=await createOfflineHandoff({project:project('透明素材'),assets:[asset],aliases:{m1:asset.id},previews:[{alias:'m1',bytes:transparentPixel}],settings:{includeThumbnails:true,imageCount:1}});
