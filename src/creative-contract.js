@@ -70,7 +70,7 @@ export function validateTool(name,args){if(!Object.hasOwn(toolContracts,name))th
 const directText=object({content:string(1500),font_style:enums(['serif','sans','rounded']),x:num(0,1),y:num(0,1),width:num(.01,1),height:num(.01,1),font_size:num(12,96),color},['content','font_style','x','y','width','height','font_size','color']);
 const directOperations={anyOf:operationContract.anyOf.map(s=>({...s,required:Object.keys(s.properties)}))};
 const directMaterial=object({...material.properties,operations:array(directOperations,1,12)},Object.keys(material.properties));
-export const directPageContract=object({version:{type:'integer',minimum:3,maximum:3,enum:[3]},style:enums(['留白叙事','密集拼贴','杂志网格','胶片日记','手作便签','自由构图']),intent:nullable(string(240)),items:array(directMaterial,1,30),text_blocks:array(directText,0,10),paper:object({color,pattern:enums(['plain','lined','grid','dots','columns'])},['color','pattern'])},['version','style','intent','items','text_blocks','paper']);
+export const directPageContract=object({version:{type:'integer',minimum:3,maximum:3,enum:[3]},style:enums(['留白叙事','密集拼贴','杂志网格','胶片日记','手作便签','自由构图']),intent:nullable(string(240)),items:array(directMaterial,1,30),graphics:array(primitive,0,20),text_blocks:array(directText,0,10),paper:object({color,pattern:enums(['plain','lined','grid','dots','columns'])},['color','pattern'])},['version','style','intent','items','text_blocks','paper']);
 export function directPageToTools(page){
   validateValue(page,directPageContract);
   // A single composite call keeps the direct page atomic, including 13–30 materials.

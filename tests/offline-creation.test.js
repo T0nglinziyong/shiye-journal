@@ -46,6 +46,8 @@ test('web ChatGPT handoff is one uploadable file plus a copyable, mode-specific 
   const toolFiles=unzipSync(new Uint8Array(await tool.blob.arrayBuffer()));
   assert.equal(JSON.parse(strFromU8(toolFiles['context.json'])).source.bundleId,tool.source.bundleId);
   assert.match(strFromU8(toolFiles['START_HERE.txt']),/compose_page/);
+  const agentContract=JSON.parse(strFromU8(toolFiles['contract.json']));
+  assert.ok(agentContract.edit_materials&&agentContract.upsert_primitives&&agentContract.move_elements);
   assert.ok(tool.prompt.length<130);assert.match(tool.prompt,/START_HERE.txt/);
   const direct=await createOfflineHandoff({...args,settings:{generationMode:'direct',includeThumbnails:false}});
   const directFiles=unzipSync(new Uint8Array(await direct.blob.arrayBuffer()));
@@ -60,15 +62,26 @@ test('offline ZIP includes each selected material as its own image, not only API
   const previews=assets.map((_,i)=>({alias:`m${i+1}`,bytes:new Uint8Array([i+1,9,8])}));
   const result=await createOfflineHandoff({project:project('四件素材'),assets,aliases,previews,settings:{includeThumbnails:true,imageCount:1}});
   const files=unzipSync(new Uint8Array(await result.blob.arrayBuffer()));
-  assert.deepEqual(Object.keys(files).filter(name=>name.startsWith('materials/')).sort(),['materials/m1.jpg','materials/m2.jpg','materials/m3.jpg','materials/m4.jpg']);
+  assert.deepEqual(Object.keys(files).filter(name=>name.startsWith('materials/')).sort(),['materials/m1.png','materials/m2.png','materials/m3.png','materials/m4.png']);
+  assert.equal(JSON.parse(strFromU8(files['context.json'])).materials[0].preview,'materials/m1.png');
   assert.equal(result.imageCount,4);
   await assert.rejects(createOfflineHandoff({project:project(),assets,aliases,previews:previews.slice(0,1),settings:{includeThumbnails:true,imageCount:1}}),/缺少素材预览/);
 });
 
+test('offline ZIP preserves transparent PNG preview bytes and paths',async()=>{
+  const transparentPixel=Uint8Array.from(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/5uoAAAAASUVORK5CYII=','base64'));
+  const result=await createOfflineHandoff({project:project('透明素材'),assets:[asset],aliases:{m1:asset.id},previews:[{alias:'m1',bytes:transparentPixel}],settings:{includeThumbnails:true,imageCount:1}});
+  const files=unzipSync(new Uint8Array(await result.blob.arrayBuffer()));
+  assert.deepEqual(files['materials/m1.png'],transparentPixel);
+  assert.equal(JSON.parse(strFromU8(files['context.json'])).materials[0].preview,'materials/m1.png');
+  assert.match(strFromU8(files['START_HERE.txt']),/不要给贴纸添加白底/);
+});
+
 test('direct page returned as an editable file imports into layers, not a flattened preview',async()=>{
   const {source}=await createOfflineHandoff({project:project('直接页'),assets:[asset],aliases:{m1:asset.id},settings:{generationMode:'direct',includeThumbnails:false}});source.purposes=['主题封面'];
-  const page={version:3,style:'留白叙事',intent:null,items:[{asset:'m1',piece:'paper',unit:0,role:null,operations:[{op:'whole'}],placement:{x:.5,y:.4,rotation:0,z:1},relation:null}],text_blocks:[{content:'这一页的主题',font_style:'serif',x:.5,y:.15,width:.6,height:.1,font_size:28,color:'#30463d'}],paper:{color:'#fcfaf0',pattern:'plain'}};
+  const page={version:3,style:'留白叙事',intent:null,items:[{asset:'m1',piece:'paper',unit:0,role:null,operations:[{op:'whole'}],placement:{x:.5,y:.4,rotation:0,z:1},relation:null}],graphics:[{key:'line-1',kind:'line',x:.5,y:.2,width:.5,height:.004,stroke:'#30463d',fill:null,line_width:2}],text_blocks:[{content:'这一页的主题',font_style:'serif',x:.5,y:.15,width:.6,height:.1,font_size:28,color:'#30463d'}],paper:{color:'#fcfaf0',pattern:'plain'}};
   const imported=importEditableWork(JSON.stringify({format:EDITABLE_WORK_FORMAT,version:1,source,title:'直接返回的作品',page}),[asset]);
   assert.equal(imported.isDraft,true);assert.equal(imported.drafts[0].items[0].assetID,asset.id);
   assert.equal(imported.drafts[0].textBlocks[0].content,'这一页的主题');
+  assert.equal(imported.drafts[0].primitives[0].kind,'line');
 });
