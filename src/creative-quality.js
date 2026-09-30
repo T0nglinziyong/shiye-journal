@@ -5,7 +5,7 @@ export function reviewCreativeDraft(d,{allowNoText=false,purposes=[],measureText
  const warnings=[],texts=(d.textBlocks||[]).filter(x=>!x.isHidden),materials=(d.items||[]).filter(x=>!x.isParked),visible=[...texts,...materials,...(d.primitives||[]).filter(x=>!x.hidden)],rgb=c=>/^#[0-9a-f]{6}$/i.test(c||'')?[1,3,5].map(i=>parseInt(c.slice(i,i+2),16)/255):null,lum=c=>{const a=rgb(c);return a?a.map(v=>v<=.04045?v/12.92:((v+.055)/1.055)**2.4).reduce((s,v,i)=>s+v*[.2126,.7152,.0722][i],0):null;};
  if(!allowNoText&&!texts.some(x=>x.content?.trim()))warnings.push('缺少文字内容');
  if(purposes.includes('日常记录')&&!allowNoText&&texts.filter(x=>x.content?.length>=18).length<2)warnings.push('日常记录建议两段关联正文，而非仅封面标题');
- if(!allowNoText&&purposes.some(x=>['旅途记录','图文收藏','清单计划','影像故事'].includes(x))&&visible.length<4)warnings.push('页面内容过于稀疏：请用可编辑文字或数字图形补充有意义的内容，不要新增不存在的实体素材');
+ if(!allowNoText&&d.style!=='极简留白'&&['旅途记录','图文收藏','清单计划','影像故事'].includes(purposes[0])&&visible.length<4)warnings.push('页面内容过于稀疏：请用可编辑文字或数字图形补充有意义的内容，不要新增不存在的实体素材');
  for(const x of visible)if(x.x-x.width/2<0||x.y-x.height/2<0||x.x+x.width/2>d.canvas.width||x.y+x.height/2>d.canvas.height)warnings.push('元素超出画布：'+(x.agentKey||x.creativePieceID||x.key||x.id));
  const canvas=globalThis.document?.createElement?.('canvas'),ctx=canvas?.getContext?.('2d');
  // AI completion policy in physical print points, independent of viewport zoom.

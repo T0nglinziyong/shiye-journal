@@ -16,6 +16,7 @@ test('non-cover journal pages reject a nearly empty layout but permit intentiona
  const sparse=draft(14);
  assert.ok(reviewCreativeDraft(sparse,{purposes:['旅途记录']}).warnings.some(w=>w.includes('过于稀疏')));
  assert.ok(!reviewCreativeDraft(sparse,{purposes:['主题封面']}).warnings.some(w=>w.includes('过于稀疏')));
+ assert.ok(!reviewCreativeDraft({...sparse,style:'极简留白'},{purposes:['旅途记录']}).warnings.some(w=>w.includes('过于稀疏')));
 });
 test('both creation modes receive role sizes converted to the actual paper, not screen pixels',()=>{
  const a5=draft(14),a4={...a5,physicalPageHeightMM:297},small=creativeTypographyGuide(a5),large=creativeTypographyGuide(a4);
