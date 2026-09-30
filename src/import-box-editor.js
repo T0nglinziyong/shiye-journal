@@ -17,7 +17,7 @@ export function mountImportBoxEditor({state,view,render,saveActiveImportRecord,t
   const done=button('完成标记',async()=>{
     done.disabled=true;
     try {
-      if(await refreshImportCandidates(boxes)===false){done.disabled=false;return;}
+      if(await refreshImportCandidates(boxes,{manual:true})===false){done.disabled=false;return;}
       state.showManualBox=false;state.importRecords[state.importIndex].manualEdits=true;
       state.importRecords[state.importIndex].confirmed=false;saveActiveImportRecord();render();toast('已更新素材框，请核对候选预览');
     }catch(error){toast(error.message);done.disabled=false;}

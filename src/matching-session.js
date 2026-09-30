@@ -12,8 +12,8 @@ export function variantDraftProject(variant,existing,newID){
 }
 export function createMatchingSession(c){
  let variants=[],queue=Promise.resolve(),controller=null,opening=false;
- const save=()=>{const record=matchingSnapshot(c.state,variants);queue=queue.catch(()=>{}).then(()=>c.db.put('meta',record));return queue;};
- const archiveCompleted=async()=>{await queue;for(const v of variants.filter(v=>v.status==='completed')){if(v.linkedProjectID&&await c.db.get('projects',v.linkedProjectID))continue;const p=variantDraftProject(v,null,c.uid());v.linkedProjectID=p.id;await c.db.transaction(['projects','meta'],tx=>{tx.objectStore('projects').put(p);tx.objectStore('meta').put(matchingSnapshot(c.state,variants));});c.state.projects.push(p);}};
+ const save=()=>{const record=matchingSnapshot(c.state,variants),task=queue.then(()=>c.db.put('meta',record));queue=task.catch(()=>{});return task;};
+ const archiveCompleted=async()=>{await queue;for(const v of variants.filter(v=>v.status==='completed')){if(v.linkedProjectID&&c.state.projects.some(p=>p.id===v.linkedProjectID))continue;const p=variantDraftProject(v,null,v.linkedProjectID||c.uid());v.linkedProjectID=p.id;await c.db.transaction(['projects','meta'],tx=>{tx.objectStore('projects').put(p);tx.objectStore('meta').put(matchingSnapshot(c.state,variants));});c.state.projects.push(p);}};
  const markup=()=>`<h2>版本方案</h2><p>完成方案自动保存为草稿；“重新搭配”只清空这里的方案，不删除草稿或作品。</p><div class="match-variant-grid">${variants.map(v=>`<article class="match-variant" data-variant="${c.esc(v.id)}"><button class="match-result" data-act="match-open-result" data-id="${c.esc(v.id)}" ${v.status==='running'?'disabled':''}>${c.workCover(v.project)}<strong>${c.esc(v.title)}</strong></button><pre class="match-progress" aria-live="polite">${c.esc(v.progress)}</pre>${v.status==='running'?'<button class="btn" data-act="match-stop">停止创作</button>':''}</article>`).join('')||'<p>尚未生成方案。</p>'}</div>`;
  const update=()=>{if(c.state.route!=='matching')return;const el=document.querySelector('.match-previews');if(el){el.innerHTML=markup();el.onclick=e=>{const b=e.target.closest('[data-act]');if(b)c.handle(b.dataset.act,b.dataset.id);};c.mountIcons?.(el);}};
  return {
@@ -21,7 +21,7 @@ export function createMatchingSession(c){
   render(){return `<section class="panel match-previews">${markup()}</section>`;},
   persist:save,
   stop(){controller?.abort(Error('已停止创作，成功步骤已保留'));},
-  async reset(){await archiveCompleted();controller?.abort(Error('已重新搭配'));variants=[];await save();},
+  async reset(clearContext=()=>{}){await archiveCompleted();const before=matchingSnapshot(c.state,variants),saved=variants;clearContext();variants=[];try{await save();}catch(error){variants=saved;restoreMatchingSession(before,c.state);throw error;}controller?.abort(Error('已重新搭配'));},
   async open(id){const v=variants.find(x=>x.id===id);if(!v||v.status==='running'||opening)return;opening=true;try{await queue;await c.flushSave();const existing=c.state.projects.find(p=>p.id===v.linkedProjectID),p=variantDraftProject(v,existing,c.uid());v.linkedProjectID=p.id;await c.db.transaction(['projects','meta'],tx=>{tx.objectStore('projects').put(p);tx.objectStore('meta').put(matchingSnapshot(c.state,variants));});if(!existing?.isDraft)c.state.projects.push(p);c.state.activeProject=p;c.state.activeDraft=p.activeDraftID;c.state.selected=null;c.state.undo=[];c.state.redo=[];c.state.tool='select';c.state.zoom=1;c.route('editor');}finally{opening=false;}},
   async generate(){
    if(controller){c.toast('已有方案正在创作，请先停止或等待完成');return;}

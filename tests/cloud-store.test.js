@@ -14,7 +14,7 @@ function fixture(cache=null,objectStorage=null){
     assert.ok(['shiye_records','shiye_revisions'].includes(table));return query;
   },storage:{from(bucket){assert.equal(bucket,'shiye-private');return {
     async upload(path,data,options){state.uploads.push({path,data,options});await state.uploadGate;return {error:state.fail?{statusCode:500}:null};},
-    async download(path){state.downloads++;return {data:state.uploads.find(row=>row.path===path)?.data||new Blob(['private image'])};}};}},
+    async download(path){state.downloads++;return {data:state.uploads.find(row=>row.path===path)?.data||new Blob(['private image']),error:state.missingThumbnail&&path.includes('preview360')?{message:'thumbnail missing'}:null};}};}},
     async rpc(name,args){assert.equal(name,'shiye_commit');state.calls.push(args);if(state.fail||args.expected_revision!==state.revision)return {error:{message:'conflict'}};return {data:++state.revision};}
   };
   const db=createCloudStore({cache,objectStorage,cloudClient:()=>client,requireCloudUser:async()=>{if(state.authError)throw Error('not authorized');return {id:'owner-uuid'};}});
@@ -40,6 +40,21 @@ test('failed import uploads retain the entire batch; rejected auth/quota never c
   assert.equal((await cache.get('cloud:owner-uuid','import-outbox')).length,1);assert.equal(a.state.calls.length,0);
   const reopened=fixture(cache);reopened.state.authError=true;await assert.rejects(reopened.db.cloudGet('blobs','b'),/not authorized/);
   const quota=fixture({...memoryCache(),put:async()=>{throw Error('quota');}});await assert.rejects(quota.db.cloudStageImport({assets:[{id:'ghost'}]}),/quota/);assert.deepEqual(await quota.db.cloudAll('assets'),[]);assert.equal(quota.state.calls.length,0);
+});
+test('reopening after an import commit but before local acknowledgement clears the outbox safely',async()=>{
+  const cache=memoryCache(),first=fixture(cache);
+  first.state.uploadGate=new Promise(()=>{});
+  await first.db.cloudStageImport({assets:[{id:'new-asset',blobId:'new-blob'}],blobs:[{id:'new-blob',data:new Blob(['image'])}],projects:[]});
+  const reopened=fixture(cache);reopened.state.revision=1;reopened.state.rows=[{id:'new-asset',blobId:'new-blob'},{id:'new-blob',storagePath:'owner-uuid/hash'}];
+  await reopened.db.cloudFlushProjects();
+  assert.equal(reopened.state.calls.length,0);assert.deepEqual(await cache.get('cloud:owner-uuid','import-outbox'),[]);
+});
+test('reopening an unfinished import after an unrelated remote update resumes upload',async()=>{
+  const cache=memoryCache(),first=fixture(cache);first.state.uploadGate=new Promise(()=>{});
+  await first.db.cloudStageImport({assets:[{id:'retry-asset',blobId:'retry-blob'}],blobs:[{id:'retry-blob',data:new Blob(['image'])}],projects:[]});
+  const reopened=fixture(cache);reopened.state.revision=1;reopened.state.rows=[{id:'other-device',title:'unrelated'}];
+  await reopened.db.cloudFlushProjects();assert.equal(reopened.state.calls.length,1);
+  assert.equal(reopened.state.calls[0].expected_revision,1);assert.deepEqual(await cache.get('cloud:owner-uuid','import-outbox'),[]);
 });
 test('COS writes retain provider metadata; old Supabase objects still read without provider fallback',async()=>{
   const files=new Map(),cos={enabled:true,async upload(path,blob){files.set(path,blob);},async download(path){if(!files.has(path))throw Error('COS offline');return files.get(path);}},a=fixture(null,cos);
@@ -102,6 +117,10 @@ test('private thumbnails download without the original and reuse persistent hash
   await a.db.cloudPreview('b');assert.equal(a.state.downloads,1);
   const b=fixture(cache);b.state.rows=a.state.rows;await b.db.cloudPreview('b');assert.equal(b.state.downloads,0);
   const denied=fixture();denied.state.rows=[{id:'b',storagePath:'owner-uuid/hash',thumbnailPath:'other/hash-preview360.webp'}];await assert.rejects(denied.db.cloudPreview('b'),/缩略图不属于当前账号/);assert.equal(denied.state.downloads,0);
+});
+test('a missing remote thumbnail is rebuilt from its original instead of showing a broken card',async()=>{
+  const a=fixture();a.state.missingThumbnail=true;a.state.rows=[{id:'b',storagePath:'owner-uuid/hash',thumbnailPath:'owner-uuid/hash-preview360.webp'}];
+  assert.equal(await (await a.db.cloudPreview('b')).text(),'private image');assert.equal(a.state.downloads,2);
 });
 test('large works list only metadata; opening reuses the cached editable document and metadata edits preserve geometry',async()=>{
   const cache=memoryCache(),a=fixture(cache),full={id:'p',title:'before',activeDraftID:'d',drafts:[{id:'d',canvas:{width:100,height:100},items:[],textBlocks:[],strokes:[],makingSteps:[],primitives:Array.from({length:4000},(_,i)=>({id:String(i),kind:'vector',vectorLayers:[{fill:'#ff0000',rects:[[0,0,12,12]]}]}))}]};

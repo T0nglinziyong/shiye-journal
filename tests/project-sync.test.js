@@ -1,6 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createProjectSync} from '../src/project-sync.js';
+
+test('reopened outbox recognizes an acknowledged import instead of replaying it',async()=>{
+  let rows=[{record:{id:'batch',assets:[{id:'a'}]},serial:1,baseRevision:4}],calls=0;
+  const sync=createProjectSync({load:async()=>rows,write:async next=>rows=structuredClone(next),commit:async()=>calls++,revision:()=>5,reconcile:async batch=>batch.id==='batch'?'committed':'conflict'});
+  await sync.flush();assert.equal(calls,0);assert.deepEqual(rows,[]);
+});
+test('append-only import retries after an unrelated cloud revision',async()=>{
+  let rows=[{record:{id:'batch',assets:[{id:'new'}]},serial:1,baseRevision:4}],calls=0;
+  const sync=createProjectSync({load:async()=>rows,write:async next=>rows=structuredClone(next),commit:async()=>calls++,revision:()=>5,reconcile:async()=> 'rebase'});
+  await sync.flush();assert.equal(calls,1);assert.deepEqual(rows,[]);
+});
 const defer=()=>{let resolve;const promise=new Promise(r=>resolve=r);return {promise,resolve};};
 test('project edits are durably staged before slow cloud commits, and newer edits are retained',async()=>{
   let rows=[],revision=0;const gate=defer(),commits=[];

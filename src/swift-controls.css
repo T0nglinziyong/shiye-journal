@@ -123,6 +123,8 @@ body:has(.library-management-tray):not(:has(.library-management-tray:not([hidden
 .canvas-page .canvas-object.with-selection-handles{outline-offset:0}
 .canvas-page .canvas-object.selected{outline:none!important}
 .selected-object-overlay{position:absolute;z-index:2147483647;pointer-events:auto;outline:1px dashed #52634b;overflow:visible;transform-origin:center;touch-action:none;background:transparent}
+.selected-object-overlay.dragging{outline:0;box-shadow:inset 0 0 0 1px #52634b;will-change:left,top}
+.selected-object-overlay.dragging .selected-object-actions{visibility:hidden}
 .selected-object-overlay .object-handle,.selected-object-overlay .selected-object-actions{pointer-events:auto}
 .selected-object-overlay .object-handle:not(.rotate){width:18px;height:18px;min-width:0;min-height:0;border:0;background:transparent;border-radius:0;box-shadow:none;outline:none;-webkit-tap-highlight-color:transparent;touch-action:none}
 .selected-object-overlay .object-handle:not(.rotate)::after{width:8px;height:8px;top:5px;left:5px;box-shadow:none}

@@ -1,6 +1,6 @@
 // Durable edits are an explicit outbox, not a replacement for cloud records.
 // Commit acknowledgement is the only point at which an entry is removed.
-export function createProjectSync({load,write,commit,revision,onStatus=()=>{}}){
+export function createProjectSync({load,write,commit,revision,reconcile=async()=> 'conflict',onStatus=()=>{}}){
   let initialized,staging=Promise.resolve(),network,serial=0,error;
   const entries=new Map();
   const initialize=()=>initialized??=(async()=>{for(const row of await load()||[]){entries.set(row.record.id,row);serial=Math.max(serial,row.serial);}})();
@@ -17,7 +17,20 @@ export function createProjectSync({load,write,commit,revision,onStatus=()=>{}}){
       while(entries.size){
         const row=[...entries.values()][0];
         // A restarted queue must not overwrite changes made by another device.
-        if(row.baseRevision!==revision())throw Error('云端版本已变化；待同步作品已保留，未覆盖其他设备的资料');
+        if(row.baseRevision!==revision()){
+          // The app may have closed after the server committed but before the
+          // acknowledgement was removed from IndexedDB. Verify the exact
+          // operation instead of replaying it or reporting a false conflict.
+          const resolution=await reconcile(row.record);
+          if(resolution==='committed'){
+            if(entries.get(row.record.id)?.serial===row.serial)entries.delete(row.record.id);
+            await persist();report();continue;
+          }
+          // An import batch consists only of new, globally unique IDs. If no
+          // ID is present remotely, it can be retried after an unrelated edit.
+          if(resolution==='rebase'){row.baseRevision=revision();await persist();}
+          else throw Error('云端版本已变化；待同步作品已保留，未覆盖其他设备的资料');
+        }
         await commit(row.record);
         await staging;
         if(entries.get(row.record.id)?.serial===row.serial)entries.delete(row.record.id);

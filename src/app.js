@@ -29,6 +29,7 @@ import {showAssetEditor} from './asset-editor.js';
 import {createAIRecorder} from './ai-diagnostics.js';
 import {mountImportBoxEditor} from './import-box-editor.js';
 import {saveImportBatch,importPaperDimensions} from './import-save.js';
+import {refineManualBoxes,paddedRegion,chooseManualCandidate} from './manual-import-recognition.js';
 import {seriesCovers,usedAssetIDs,projectAssetIDs,withUsageStatus} from './library-model.js';
 import {renderSeriesContents} from './series-contents.js';
 import {showSeriesEditor} from './series-editor.js';
@@ -267,7 +268,7 @@ async function handle(action,id,value){try{switch(action){
   case 'match-starter':state.matchStyle=value;state.basket=state.assets.filter(a=>state.series.find(s=>s.id===a.seriesID)?.title===value).map(a=>a.id);state.matchCore=state.basket[0];render();break;
   case 'match-generate':state.matchPurpose=view.querySelector('#match-purpose')?.value||'日常记录';state.matchProcessing=view.querySelector('#match-processing')?.value||'保留完整';state.matchStyle=view.querySelector('#match-style')?.value||state.matchStyle;state.matchIntent=view.querySelector('#match-intent')?.value||'';state.matchMode=view.querySelector('#match-mode')?.value||'single';state.matchRatio=readMatchPaper();state.matchStyles=readMatchSelection('match-style',state.matchStyle);state.matchPurposes=readMatchSelection('match-purpose',state.matchPurpose);await matchingSession.generate();break;
   case 'basket':state.basket=state.basket.includes(id)?state.basket.filter(x=>x!==id):[...state.basket,id];render();break;
-  case 'reset-match':if(!confirm('重新搭配？已有保存作品不会被删除。'))break;state.matchCore=null;state.basket=[];state.coreIDs=[];await matchingSession.reset();render();break;case 'try-match':state.basket=[state.matchCore,...recommend(asset(state.matchCore),state.assets).filter(x=>!state.basket.includes(x.asset.id)).slice(Math.floor(Math.random()*3),6).map(x=>x.asset.id)];render();break;
+  case 'reset-match':if(!confirm('重新搭配？已有保存作品不会被删除。'))break;await matchingSession.reset(()=>{state.matchCore=null;state.basket=[];state.coreIDs=[];});render();break;case 'try-match':state.basket=[state.matchCore,...recommend(asset(state.matchCore),state.assets).filter(x=>!state.basket.includes(x.asset.id)).slice(Math.floor(Math.random()*3),6).map(x=>x.asset.id)];render();break;
   case 'create-from-basket':state.matchRatio=readMatchPaper();state.matchPurpose=view.querySelector('#match-purpose')?.value||'日常记录';state.matchStyle=view.querySelector('#match-style')?.value||state.matchStyle;state.matchProcessing=view.querySelector('#match-processing')?.value||state.matchProcessing;await createFromBasket();break;case 'new-project':{void flushSave().catch(console.error);const p=project();state.projects.push(p);state.activeProject=p;state.activeDraft=p.activeDraftID;state.tool=state.toolHighlight='select';state.zoom=1;route('editor');saveProject();break;}
   case 'open-project':{void flushSave().catch(console.error);let p=state.projects.find(p=>p.id===id);if(!p)break;if(p.projectDocumentPath){toast('正在读取完整作品…');p=await db.get('projects',p.id);state.projects=state.projects.map(old=>old.id===p.id?p:old);}const copied=p.isTemplate;if(copied){p={...structuredClone(p),id:uid(),title:p.title+' · 副本',isTemplate:false,isDraft:false,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};state.projects.push(p);}state.activeProject=p;state.activeDraft=p.activeDraftID;state.undo=[];state.redo=[];state.tool=state.toolHighlight='select';state.zoom=state.canvasViewports?.get(p.id+':'+state.activeDraft)?.scale||1;route('editor');if(copied)saveProject();break;}
   case 'preview-back':navigateBack('works');break;case 'preview-continue':{await handle('open-project',state.previewProjectID);break;}
@@ -457,12 +458,19 @@ async function openManualImportBox(){
   state.showManualBox=true;render();
 }
 function bindManualBox(){mountImportBoxEditor({state,view,render,saveActiveImportRecord,toast,refreshImportCandidates});}
-async function refreshImportCandidates(regions,{preserve=false}={}){
+async function refreshImportCandidates(regions,{manual=false}={}){
   const source=state.correctedBitmap||state.importBitmap,b=state.correctedBitmap?{x:0,y:0,w:1,h:1}:state.importBox,previous=state.importCandidateData||[],record=state.importRecords[state.importIndex];
   const next=[];const [pw,ph]=paperDimensions(),calibrated=state.paperSize!=='none'&&(state.correctedBitmap||state.wholePaper);
-  for(let i=0;i<regions.length;i++){
-    const region=regions[i],old=preserve&&previous.find(c=>c.region===region);if(old){next.push(old);continue;}
-    toast('正在提取素材 '+(i+1)+' / '+regions.length);
+  const plans=manual?await refineManualBoxes(regions,previous,async(box,index)=>{
+    toast('正在识别新增或调整的素材框 '+(index+1)+' / '+regions.length);
+    const search=paddedRegion(box),bitmapBox={x:b.x+search.x*b.w,y:b.y+search.y*b.h,w:search.w*b.w,h:search.h*b.h};
+    const found=await detectPaperCandidates(source,bitmapBox,2.5,{balanceLight:state.balanceLight,paperWidthMM:pw*search.w,paperHeightMM:ph*search.h,recognition:state.importRecognition||state.preferences.recognition});
+    return chooseManualCandidate(box,found,search);
+  }):regions.map(region=>({region,original:null}));
+  if(record!==state.importRecords[state.importIndex]||state.route!=='import')return false;
+  for(let i=0;i<plans.length;i++){
+    const {region,original}=plans[i];if(original){next.push(original);continue;}
+    toast('正在提取素材 '+(i+1)+' / '+plans.length);
     const cut=await cropBitmap(source,b,region),raw=region.mask?await cropBitmap(source,b,region,{raw:true}):cut;
     // Work layers stay in photographed coordinates; library materials get a
     // conservative rectangular correction. Originals use the same raster map.
@@ -472,7 +480,7 @@ async function refreshImportCandidates(regions,{preserve=false}={}){
   }
   if(record!==state.importRecords[state.importIndex]){for(const c of next)if(!previous.includes(c))URL.revokeObjectURL(c.url);return false;}
   for(const c of previous)if(!next.includes(c))URL.revokeObjectURL(c.url);
-  state.importCandidates=regions;state.importCandidateData=next;state.importCandidateURLs=next.map(c=>c.url);state.importCandidateSelection=new Set(next.flatMap((c,i)=>c.selected?[i]:[]));saveActiveImportRecord();return true;
+  state.importCandidates=plans.map(plan=>plan.region);state.importCandidateData=next;state.importCandidateURLs=next.map(c=>c.url);state.importCandidateSelection=new Set(next.flatMap((c,i)=>c.selected?[i]:[]));saveActiveImportRecord();return true;
 }
 async function previewCrop(){
   if(!state.importBitmap)return;
@@ -542,13 +550,13 @@ window.addEventListener('pagehide',()=>{if(saveTimer)flushSave().catch(console.e
 window.addEventListener('beforeunload',event=>{if(saveTimer||savingProjects||dirtyProjects.size){event.preventDefault();event.returnValue='';}});
 window.addEventListener('shiye-flush-before-logout',event=>event.detail.tasks.push(flushSave().then(()=>db.flushProjects())));
 let lastSyncError;
-window.addEventListener('shiye-project-sync',event=>{const {pending,error}=event.detail;if(error){saveStatus('待同步 · 修改已保留在本机');if(lastSyncError!==error.message)toast(error.message);lastSyncError=error.message;}else{lastSyncError=null;saveStatus(pending?'修改已暂存 · 后台同步中':'已保存到云端');}});
+window.addEventListener('shiye-project-sync',event=>{const {pending,error}=event.detail;if(error){saveStatus('待同步 · 修改已保留在本机');if(lastSyncError!==error.message)toast(error.message);lastSyncError=error.message;}else{lastSyncError=null;saveStatus(pending?'修改已暂存 · 后台同步中':'已保存到云端');privateImages.retryMissing();}});
 let cloudCheck,cloudCheckAt=0,cloudSessionReady=false;
 const cloudResumer=createSyncResumer({flush:()=>db.flushProjects(),canRun:()=>cloudEnabled&&cloudSessionReady&&navigator.onLine!==false,onError:error=>console.warn('后台同步待重试',error?.message)});
 function backgroundCloudCheck(){if(!cloudEnabled||document.visibilityState==='hidden'||cloudCheck||Date.now()-cloudCheckAt<15000)return;cloudCheckAt=Date.now();cloudCheck=refresh({background:true,onlyChanged:true}).catch(error=>console.warn('后台版本检查失败；保留已验证缓存',error)).finally(()=>{cloudCheck=null;});}
-window.addEventListener('focus',()=>{backgroundCloudCheck();void cloudResumer.wake();});
-document.addEventListener('visibilitychange',()=>{backgroundCloudCheck();if(document.visibilityState==='visible')void cloudResumer.wake();});
-window.addEventListener('online',()=>{backgroundCloudCheck();void cloudResumer.wake();});
+window.addEventListener('focus',()=>{backgroundCloudCheck();privateImages.retryMissing();void cloudResumer.wake();});
+document.addEventListener('visibilitychange',()=>{backgroundCloudCheck();if(document.visibilityState==='visible'){privateImages.retryMissing();void cloudResumer.wake();}});
+window.addEventListener('online',()=>{backgroundCloudCheck();privateImages.retryMissing();void cloudResumer.wake();});
 document.querySelector('#save-state').addEventListener('click',()=>{if(cloudEnabled)void flushSave().then(()=>db.flushProjects()).catch(error=>toast(error.message));});
 let viewportTimer;
 // Rebuilding the page during an active pointer gesture drops native capture.
@@ -566,7 +574,7 @@ async function init(){let cachedShown=false;cloudSessionReady=true;try{
   await db.storageMode();state.selfHosted=db.isSameOriginServer();
   // startCloudSession has validated Auth and the allowlist before this runs.
   const cached=await db.cachedCollections();if(cached){Object.assign(state,cached);await restorePendingProjects();for(const a of state.assets)if(a.staticPath)staticSources.set(a.blobId,a.staticPath);render();cachedShown=true;saveStatus('本机缓存 · 正在核对云端');}
-  const initialSync=await db.refreshCloud();if(initialSync?.changed)privateImages.invalidate(initialSync.allBlobs?undefined:initialSync.blobIDs);await seedIfEmpty();await seedStarterStyles();await seedSwiftBundledMaterials();await matchingSession.restore();await refresh({background:cachedShown});loadOptionalExamples();if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('/sw.js').catch(console.warn);}saveStatus((await db.storageMode())==='server'?'已连接服务器':'已保存到本机');if(cloudEnabled)void cloudResumer.wake();
+  const initialSync=await db.refreshCloud();if(initialSync?.changed)privateImages.invalidate(initialSync.allBlobs?undefined:initialSync.blobIDs);await seedIfEmpty();await seedStarterStyles();await seedSwiftBundledMaterials();await refresh({background:cachedShown});await matchingSession.restore();loadOptionalExamples();if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('/sw.js').catch(console.warn);}saveStatus((await db.storageMode())==='server'?'已连接服务器':'已保存到本机');if(cloudEnabled)void cloudResumer.wake();
   }catch(e){console.error(e);const auth=e.status===401;if(auth)cloudSessionReady=false;
   if(cachedShown&&!auth){saveStatus('云端核对失败 · 缓存仅供查看');toast('云端连接失败，未改为本机保存：'+e.message);if(cloudEnabled)void cloudResumer.wake();return;}
   if(auth){view.innerHTML=`<div class="empty"><strong>连接拾页数据服务器</strong><p>请输入服务器访问令牌；连接失败时不会另存到浏览器。</p><form id="server-login"><input type="password" name="token" required autocomplete="off" placeholder="服务器访问令牌" aria-label="服务器访问令牌"><button class="btn primary" type="submit">连接</button></form><p id="server-login-error">${esc(e.message)}</p></div>`;view.querySelector('#server-login').onsubmit=event=>{event.preventDefault();db.setStorageConfig({url:db.storageConfig()?.url||location.origin,token:event.target.elements.token.value.trim()});init();};}else{view.innerHTML=`<div class="empty"><strong>无法读取资料</strong><p>${esc(e.message||'请检查设备剩余空间和数据服务连接。')}</p><button class="btn" id="storage-retry">重试连接</button></div>`;view.querySelector('#storage-retry').onclick=()=>init();}saveStatus('存储不可用');}}

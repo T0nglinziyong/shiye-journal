@@ -26,13 +26,30 @@ const projectSync=createProjectSync({
   commit:record=>cloudTransaction(['projects'],tx=>tx.objectStore('projects').put(record)),revision:()=>revision,
   onStatus:reportSync,
 });
+async function reconcileImport(batch){
+  // Only an append-only import has unique IDs that prove an interrupted RPC
+  // already committed atomically, or can be safely retried after an unrelated
+  // revision. Never infer success or rebase for edits, deletes, or partial data.
+  if(batch.operations)return 'conflict';
+  const records=['assets','blobs','projects'].flatMap(store=>(batch[store]||[]).map(item=>({store,id:item.id})));
+  if(!records.length||!(batch.assets?.length||batch.projects?.length))return 'conflict';
+  let present=0;
+  for(let offset=0;offset<records.length;offset+=5){
+    const found=await Promise.all(records.slice(offset,offset+5).map(async({store,id})=>{
+      const result=cloudClient().from('shiye_records').select('record').eq('user_id',await identity()).eq('store',store).eq('id',id).maybeSingle();
+      return checked(await result)?.record?.id===id;
+    }));
+    present+=found.filter(Boolean).length;
+  }
+  return present===records.length?'committed':present===0?'rebase':'conflict';
+}
 // This durable, account-scoped outbox retains the complete batch, including
 // original bytes. Only a successful cloud acknowledgement removes it.
 const importSync=createProjectSync({
   load:async()=>cache?await cache.get(await account(),'import-outbox'):[],
   write:async rows=>{if(!cache||cacheDisabled)throw Error('无法安全暂存导入资料，请勿关闭页面');await cache.put(await account(),'import-outbox',rows);},
   commit:batch=>batch.operations?cloudTransaction(batch.names,tx=>{for(const op of batch.operations){const store=tx.objectStore(op.store);if(op.action==='put')store.put(op.item);else if(op.action==='delete')store.delete(op.id);else store.clear();}}):cloudTransaction(['assets','blobs','projects'],tx=>{for(const store of ['assets','blobs','projects'])for(const record of batch[store]||[])tx.objectStore(store).put(record);}),
-  revision:()=>revision,onStatus:reportSync,
+  revision:()=>revision,reconcile:reconcileImport,onStatus:reportSync,
 });
 async function pendingOperations(store){await identity();return (await importSync.pending()).flatMap(row=>row.record.operations?.filter(op=>op.store===store)||(row.record[store]||[]).map(item=>({action:'put',store,item})));}
 async function pendingOverride(store,id){let result;for(const op of await pendingOperations(store)){if(op.action==='clear'||op.action==='delete'&&op.id===id)result={found:true};else if(op.action==='put'&&op.item.id===id)result={found:true,record:op.item};}return result;}
@@ -80,7 +97,8 @@ async function cloudPreview(id){
   const thumbnailKey='thumbnail:'+record.storagePath,saved=await cached(thumbnailKey);if(saved instanceof Blob)return saved;
   if(record.thumbnailPath){
     if(!record.thumbnailPath.startsWith(owner+'/'))throw Error('缩略图不属于当前账号');
-    const thumbnail=await downloadObject(record.thumbnailPath,record.storageProvider);await remember(thumbnailKey,thumbnail);return thumbnail;
+    try{const thumbnail=await downloadObject(record.thumbnailPath,record.storageProvider);await remember(thumbnailKey,thumbnail);return thumbnail;}
+    catch(error){console.warn('缩略图暂不可读，尝试从原图恢复',error?.message);}
   }
   const {data}=await decode('blobs',record);
   const blob=await makeThumbnail(data);if(blob){await remember(thumbnailKey,blob);return blob;}return data;

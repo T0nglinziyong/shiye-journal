@@ -6,7 +6,11 @@ export const cloudEnabled=!!url;
 let client;
 export function cloudClient(){
   if(!url||!key)throw Error('云端配置不完整；未切换到本机存储');
-  return client??=createClient(url,key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false},global:{fetch:async(input,init)=>fetch(input,{...init,signal:init?.signal||AbortSignal.timeout(30000)})}});
+  return client??=createClient(url,key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false},global:{fetch:async(input,init)=>{
+    const path=input instanceof Request?input.url:String(input),method=(init?.method||(input instanceof Request?input.method:'GET')).toUpperCase();
+    const storage=/\/storage\/v1\/object\//.test(path),timeout=storage?['POST','PUT','PATCH'].includes(method)?180000:90000:30000;
+    return fetch(input,{...init,signal:init?.signal||AbortSignal.timeout(timeout)});
+  }}});
 }
 export async function requireCloudUser(){
   const {data,error}=await cloudClient().auth.getUser();

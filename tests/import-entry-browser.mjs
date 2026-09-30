@@ -11,10 +11,15 @@ try{
     await click('[data-route="library"]','.series-grid');await click('.swift-tabs button:nth-child(2)','.asset-grid');
     const before=await evaluate('window.__galleryOpens');await click('[data-act="import"]','.import-nav');
     assert.equal(await evaluate('window.__galleryOpens'),before+1,'素材入口应直接打开图库');
+    const sourceBefore=await evaluate('window.__galleryOpens');await click('[data-act="select-file"][data-val="gallery"]');
+    assert.equal(await evaluate('window.__galleryOpens'),sourceBefore+1,'导入页“从图库中选择”必须直接激活系统文件选择器');
+    assert.equal(await evaluate('document.querySelectorAll(".import-source-actions").length'),1,'不能再打开应用自己的二级菜单');
     await click('[data-act="import-exit"]','.asset-grid');
     await click('[data-route="works"]','.works-grid');
     const prior=await evaluate('window.__galleryOpens');await evaluate('[...document.querySelectorAll(".work-entry")].find(e=>e.textContent.includes("导入作品")).click()');await wait('.import-nav');
     assert.equal(await evaluate('window.__galleryOpens'),prior+1,'作品入口应直接打开图库');
+    const workBefore=await evaluate('window.__galleryOpens');await click('[data-act="select-file"][data-val="gallery"]');
+    assert.equal(await evaluate('window.__galleryOpens'),workBefore+1,'作品导入页相同按钮也应直接激活系统选择器');
     await click('[data-act="import-exit"]','.works-grid');
   }
   assert.deepEqual(b.errors,[]);
