@@ -29,9 +29,9 @@ export function mountCanvasSelection(c) {
     const entries=active(),points=entries.flatMap(e=>objectCorners(e.value));
     svg.replaceChildren();
     const outline=(polygon,className)=>{const p=document.createElementNS(svg.namespaceURI,'polygon');p.setAttribute('points',polygon.map(p=>p.x+','+p.y).join(' '));p.setAttribute('class',className);svg.append(p);};
-    entries.forEach(e=>outline(objectCorners(e.value),'selected-object-outline'));
+    if(entries.length>1||state.tool!=='select')entries.forEach(e=>outline(objectCorners(e.value),'selected-object-outline'));
     if(path.length)outline(path,'lasso-outline');
-    else if(points.length){const b=selectionBounds(points);outline([{x:b.x,y:b.y},{x:b.x+b.width,y:b.y},{x:b.x+b.width,y:b.y+b.height},{x:b.x,y:b.y+b.height}],'selection-bounds');}
+    else if(points.length&&(entries.length>1||state.tool!=='select')){const b=selectionBounds(points);outline([{x:b.x,y:b.y},{x:b.x+b.width,y:b.y},{x:b.x+b.width,y:b.y+b.height},{x:b.x,y:b.y+b.height}],'selection-bounds');}
     page.querySelectorAll('[data-object]').forEach(el=>el.classList.toggle('multi-selected',state.multiSelected.includes(el.dataset.object)));
   };paint();
   let gesture=null;

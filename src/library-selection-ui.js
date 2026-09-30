@@ -9,7 +9,7 @@ export function mountAssetSelection(c,p){
   const {state,view,render}=c,isActive=()=>p.selectionMode==='asset'&&p.selection;
   view.querySelectorAll('.view-head .actions button,#series-actions button').forEach(b=>{if(['选择','完成'].includes(b.textContent))b.classList.add('library-select-toggle');});
   if(state.addingToSeries)return;
-  if(!view.querySelector('.asset-grid,.series-grid'))return;
+  if(!view.querySelector('.asset-grid'))return;
   let cards=[...view.querySelectorAll('.card[data-act="detail"]')];
   if(isActive()&&p.showOnlySelected){
     view.querySelectorAll('.asset-grid,.series-grid').forEach(grid=>grid.style.display='none');

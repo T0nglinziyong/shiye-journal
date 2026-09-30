@@ -8,6 +8,9 @@
 | AI 创作 | `src/creative-delivery.js` 的响应协议 | `src/creative-runner.js` 控制轮次；`src/creative-contract.js` 验证合同；`src/creative.js` 执行可编辑工具。原生工具、JSON 工具和直接页都要转换为同一工具调用格式 | `tests/creative-delivery.test.js`、`tests/runner.test.js`、`tests/matching-browser.mjs` |
 | 数据位置 | `src/storage-router.js` 的 CRUD 路由 | `src/store.js` 保持公开的 `all/get/transaction` 和备份合同；云端特有的后台暂存、缩略图和增量同步留在 `src/cloud-store.js`，自托管请求留在 `src/store.js`，本机 IndexedDB 用同一表名 | `tests/storage-router.test.js`、`tests/cloud-store.test.js`、`tests/server-persistence.test.js`、`tests/cloud-cache-browser.mjs` |
 | 页面组件 | `src/app.js` 的页面路由 | 大交互逐步拆出独立 UI/模型模块；最近删除由 `src/recently-deleted-ui.js` 渲染，仍使用原 `trash` 表 | `tests/recently-deleted.test.js`、`tests/library-canvas-latest-browser.mjs` |
+| 素材库选择 | `src/library-selection-model.js` 的选择模式 | 系列详情与全部素材共享一份 `parity` 选择状态；结束模式后必须同步并卸载底部栏。卡片短按和长按统一由 `src/long-press.js` 判定 | `tests/library-selection.test.js`、`tests/interaction-controls.test.js`、`tests/library-canvas-latest-browser.mjs` |
+| 画布对象操作 | `src/canvas-selection.js` 的可见对象和移动边界 | `src/canvas-selection-ui.js` 负责圈选；`src/canvas-editor-ui.js` 负责唯一单对象选框，两者调用同一移动函数；`src/canvas-viewport.js` 只管适合页面以上的导航缩放。`app.js` 不再注册另一套对象拖动/画笔事件 | `tests/parity-workflows.test.js`、`tests/library-canvas-latest-browser.mjs` |
+| 云端续传 | `src/project-sync.js` 的账号隔离持久队列 | `src/sync-resumer.js` 在重新打开、回前台与恢复网络时重试 `cloud-store.js` 的两类待同步队列；冲突不得自动覆盖，云端确认才移出队列 | `tests/project-sync.test.js`、`tests/sync-resumer.test.js`、`tests/cloud-store.test.js` |
 
 ## 加一个实现时
 

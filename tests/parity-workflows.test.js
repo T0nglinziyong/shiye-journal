@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {seriesCovers,parseTags,searchableSeries,seriesMembers,usedAssetIDs,withUsageStatus,projectAssetIDs} from '../src/library-model.js';
-import {canvasObjects,objectCorners,selectPolygon,moveSelection} from '../src/canvas-selection.js';
+import {canvasObjects,objectCorners,selectPolygon,moveSelection,clampCanvasPosition} from '../src/canvas-selection.js';
 import {materialPrintPlacements,pagePDF} from '../src/pdf-export.js';
 import {candidateMetadata,importPaperDimensions,saveImportBatch} from '../src/import-save.js';
 import {classificationResult,classifyRecord} from '../src/classification.js';
@@ -56,6 +56,9 @@ test('group movement uses gesture starts and preserves physical sizes and locked
   moveSelection(d,starts,10,20);moveSelection(d,starts,15,25);
   assert.equal(a.x,20);assert.equal(b.x,30);assert.equal(a.width,20);assert.equal(locked.x,1);
   moveSelection(d,starts,Infinity,0);assert.equal(a.x,20);
+  moveSelection(d,starts,-10000,-10000);assert.equal(a.x,0);assert.equal(b.x,10);assert.equal(a.y,0);
+  moveSelection(d,starts,10000,10000);assert.equal(b.x,100);assert.equal(b.y,100);
+  assert.deepEqual(clampCanvasPosition(d,a,-200,500),{x:0,y:100});
 });
 test('material PDF packs A4 at true sizes and refuses unmeasured/oversized material',()=>{
   const assets=[{title:'a',physicalWidthMM:190,physicalHeightMM:200},{title:'b',physicalWidthMM:190,physicalHeightMM:200}];

@@ -38,7 +38,7 @@ export function mountSeriesContents(c,p) {
   view.querySelector('#series-order').onclick=()=>{f.ascending=!f.ascending;view.querySelector('#series-order').textContent=f.ascending?'升序 ↑':'降序 ↓';update();};
   const add=()=>{state.addingToSeries=id;state.seriesID='all';state.query='';state.kind='all';state.status='all';state.libraryRecent=false;beginSelection(p,'asset');route('library');};
   view.querySelector('#series-add-assets').onclick=add;view.querySelector('#series-add-assets').disabled=p.selection;
-  const actions=view.querySelector('#series-actions');actions.append(button(p.selection?'完成':'选择',()=>{if(p.selection)finishSelection(p);else beginSelection(p,'asset');render();}));
+  const actions=view.querySelector('#series-actions');actions.append(button(p.selection?'完成':'选择',()=>{if(p.selection)finishSelection(p);else beginSelection(p,'asset');view.selectionRefresh?.();render();}));
   for(const card of cards) {
     bindLongPress(card,()=>c.openAssetEditor(card.dataset.id),()=>!(p.selection&&p.selectionMode==='asset'));
   }

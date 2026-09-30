@@ -35,14 +35,19 @@ export function selectionBounds(points) {
   const x=Math.min(...points.map(p=>p.x)), y=Math.min(...points.map(p=>p.y));
   return {x,y,width:Math.max(...points.map(p=>p.x))-x,height:Math.max(...points.map(p=>p.y))-y};
 }
+export function clampCanvasPosition(draft,object,x,y){
+  return {x:Math.max(0,Math.min(draft.canvas.width,x)),y:Math.max(0,Math.min(draft.canvas.height,y))};
+}
 export function moveSelection(draft, starts, dx, dy) {
   if(!Number.isFinite(dx)||!Number.isFinite(dy)) return;
   const movable=canvasObjects(draft).filter(e=>starts.has(e.value.id));
   for(const {value:o} of movable) { const p=starts.get(o.id); if(!Number.isFinite(p.x)||!Number.isFinite(p.y)) return; }
-  const minX=Math.max(-Infinity,...movable.map(e=>-2*draft.canvas.width-starts.get(e.value.id).x));
-  const maxX=Math.min(Infinity,...movable.map(e=>3*draft.canvas.width-starts.get(e.value.id).x));
-  const minY=Math.max(-Infinity,...movable.map(e=>-2*draft.canvas.height-starts.get(e.value.id).y));
-  const maxY=Math.min(Infinity,...movable.map(e=>3*draft.canvas.height-starts.get(e.value.id).y));
+  // Keep at least the object's centre on the page, even for objects wider
+  // than the paper. A dragged object must always remain recoverable.
+  const minX=Math.max(-Infinity,...movable.map(e=>-starts.get(e.value.id).x));
+  const maxX=Math.min(Infinity,...movable.map(e=>draft.canvas.width-starts.get(e.value.id).x));
+  const minY=Math.max(-Infinity,...movable.map(e=>-starts.get(e.value.id).y));
+  const maxY=Math.min(Infinity,...movable.map(e=>draft.canvas.height-starts.get(e.value.id).y));
   dx=Math.min(maxX,Math.max(minX,dx)); dy=Math.min(maxY,Math.max(minY,dy));
   for(const {kind,value:o} of movable) { const p=starts.get(o.id); o.x=p.x+dx; o.y=p.y+dy; if(kind==='material') o.userOverrideFlags=[...new Set([...(o.userOverrideFlags||[]),'moved'])]; }
 }

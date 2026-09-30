@@ -26,7 +26,7 @@ function mountLibrary(c){
   const insideSeries=state.seriesID!=='all';
   header?.querySelector('h1')?.replaceChildren(insideSeries?(state.series.find(s=>s.id===state.seriesID)?.title||'系列'):'我的素材');
   if(insideSeries){const back=button('‹ 返回素材库',()=>route('series'));back.classList.add('series-back');header?.prepend(back);}
-  actions?.prepend(button(parity.selection?'完成':'选择',()=>{parity.selection?finishSelection(parity):beginSelection(parity,'asset');view.selectionRefresh?.()||render();},'library-select-toggle'));
+  actions?.prepend(button(parity.selection?'完成':'选择',()=>{parity.selection?finishSelection(parity):beginSelection(parity,'asset');view.selectionRefresh?.();render();},'library-select-toggle'));
   const bar=tabs([['series','系列'],['all','全部素材'],['pending','待检测'],['trash','最近删除']],parity.libraryTab,id=>{
     parity.libraryTab=id;
     if(id==='series'){route('series');return;}

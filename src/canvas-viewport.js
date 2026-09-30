@@ -9,7 +9,7 @@ export function mountCanvasViewport(c,page){
   host.style.alignItems='flex-start';host.style.justifyContent='flex-start';
   page.style.marginLeft=Math.max(0,(host.clientWidth-page.clientWidth)/2)+'px';page.style.marginTop=Math.max(0,(host.clientHeight-page.clientHeight)/2)+'px';
   state.canvasViewports||=new Map();const saved=state.canvasViewports.get(key)||{x:0,y:0,scale:state.zoom};
-  const zoom=Panzoom(page,{noBind:true,minScale:.4,maxScale:4,startScale:saved.scale,startX:saved.x,startY:saved.y,pinchAndPan:true,canvas:true,cursor:'',touchAction:'none',handleStartEvent:e=>e.preventDefault()});
+  const zoom=Panzoom(page,{noBind:true,minScale:1,maxScale:4,startScale:Math.max(1,Math.min(4,saved.scale)),startX:saved.x,startY:saved.y,pinchAndPan:true,canvas:true,cursor:'',touchAction:'none',handleStartEvent:e=>e.preventDefault()});
   const points=new Map();let navigating=false,pinching=false,moved=false,timer=null,origin=null;
   const stop=e=>{e.preventDefault();e.stopImmediatePropagation();};
   const start=e=>{navigating=true;origin={x:e.clientX,y:e.clientY};zoom.handleDown(e);try{host.setPointerCapture(e.pointerId);}catch{}};
@@ -25,7 +25,7 @@ export function mountCanvasViewport(c,page){
     else if(background&&state.tool==='select'&&e.pointerType==='mouse'){moved=false;origin={x:e.clientX,y:e.clientY};timer=setTimeout(()=>{view.cancelObjectGesture?.();start(e);moved=true;},250);}
   };
   const move=e=>{if(points.has(e.pointerId))points.set(e.pointerId,e);if(!navigating)return;if(origin&&Math.hypot(e.clientX-origin.x,e.clientY-origin.y)>4)moved=true;zoom.handleMove(e);stop(e);};
-  const up=e=>{clearTimeout(timer);timer=null;points.delete(e.pointerId);if(!navigating)return;zoom.handleUp(e);if(!points.size){if(!moved&&!pinching&&origin?.background&&origin.tool==='select'&&state.selected){state.selected=null;state.multiSelected=[];view.editorRefresh?.();}navigating=false;pinching=false;view.navigationSuppressedUntil=moved?performance.now()+200:0;}else view.navigationSuppressedUntil=Infinity;stop(e);};
+  const up=e=>{clearTimeout(timer);timer=null;points.delete(e.pointerId);if(!navigating)return;zoom.handleUp(e);if(!points.size){if(!moved&&!pinching&&origin?.background&&origin.tool==='select'&&(state.selected||state.multiSelected?.length)){state.selected=null;state.multiSelected=[];view.editorRefresh?.();view.canvasSelectionRefresh?.();}navigating=false;pinching=false;view.navigationSuppressedUntil=moved?performance.now()+200:0;}else view.navigationSuppressedUntil=Infinity;stop(e);};
   const click=e=>{if(performance.now()<(view.navigationSuppressedUntil||0))stop(e);};
   const wheel=e=>{if(!e.ctrlKey)return;zoom.zoomWithWheel(e);e.stopImmediatePropagation();};
   let clampFrame=0;
