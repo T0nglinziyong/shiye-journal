@@ -25,6 +25,12 @@ test('cloud reads all pages, not just the server default first 1000 records',asy
   const {state,db}=fixture();state.rows=Array.from({length:1001},(_,i)=>({id:String(i)}));
   assert.equal((await db.cloudAll('assets')).length,1001);
 });
+test('direct cloud uploads also appear in the global sync indicator until committed',async()=>{
+  const events=[],previous=globalThis.window;globalThis.window={dispatchEvent:event=>events.push(event.detail)};
+  try{const {db}=fixture();await db.cloudTransaction(['blobs'],tx=>tx.objectStore('blobs').put({id:'direct',data:new Blob(['bytes'])}));
+    assert.ok(events.some(event=>event.pending>0));assert.equal(events.at(-1).pending,0);
+  }finally{if(previous===undefined)delete globalThis.window;else globalThis.window=previous;}
+});
 test('imports finish durable staging while image uploads are blocked; pending bytes survive reopening',async()=>{
   const cache=memoryCache(),a=fixture(cache);let release;a.state.uploadGate=new Promise(r=>release=r);
   await a.db.cloudAll('assets');

@@ -11,7 +11,7 @@ const writeProvider=()=>objectStorage?.enabled?'cos':'supabase';
 const usableBlob=value=>value instanceof Blob&&value.size>0;
 async function downloadObject(path,provider){if(provider==='cos'){if(!objectStorage)throw Error('COS 私有读取尚未配置');return objectStorage.download(path);}if(provider&&provider!=='supabase')throw Error('不支持的存储服务');return checked(await cloudClient().storage.from(BUCKET).download(path));}
 async function uploadObject(path,blob,type,provider=writeProvider()){if(provider==='cos'){await objectStorage.upload(path,blob,type);return {error:null};}return cloudClient().storage.from(BUCKET).upload(path,blob,{upsert:false,contentType:type});}
-let owner,revision;
+let owner,revision,writesInFlight=0;
 let queue=Promise.resolve();
 const images=new Map();
 const imageSizes=new Map();
@@ -21,7 +21,7 @@ const documents=new Map();
 function retainImage(path,data){images.set(path,Promise.resolve(data));imageSizes.delete(path);imageSizes.set(path,data.size);let bytes=[...imageSizes.values()].reduce((a,b)=>a+b,0);for(const [key,size] of imageSizes){if(bytes<=64*1024*1024&&imageSizes.size<=48)break;if(key===path)continue;images.delete(key);imageSizes.delete(key);bytes-=size;}}
 let cacheDisabled=false;
 const account=async()=>`${namespace}:${await identity()}`;
-function reportSync(){if(typeof window!=='undefined'){const a=projectSync.status(),b=importSync.status();window.dispatchEvent(new CustomEvent('shiye-project-sync',{detail:{pending:a.pending+b.pending,error:b.error||a.error}}));}}
+function reportSync(){if(typeof window!=='undefined'){const a=projectSync.status(),b=importSync.status();window.dispatchEvent(new CustomEvent('shiye-project-sync',{detail:{pending:a.pending+b.pending+writesInFlight,error:b.error||a.error}}));}}
 const projectSync=createProjectSync({
   load:async()=>cache?await cache.get(await account(),'project-outbox'):[],
   write:async rows=>{if(!cache||cacheDisabled)throw Error('无法安全保存待同步作品');await cache.put(await account(),'project-outbox',rows);},
@@ -160,6 +160,8 @@ function cloudTransaction(names,fn){
   const operations=[];const result=fn({objectStore(store){if(!names.includes(store))throw Error('此表未加入事务');return {put:record=>operations.push({action:'put',store,item:structuredClone(record)}),delete:id=>operations.push({action:'delete',store,id}),clear:()=>operations.push({action:'clear',store})};}});
   if(result?.then)throw Error('事务回调必须同步');
   const run=async()=>{
+    writesInFlight++;reportSync();
+    try{
     await identity();if(revision===undefined)await version();
     const previous=revision;
     const puts=operations.filter(op=>op.action==='put');for(let offset=0;offset<puts.length;offset+=3)await Promise.all(puts.slice(offset,offset+3).map(async op=>{op.item=await encode(op.store,op.item);}));
@@ -174,6 +176,7 @@ function cloudTransaction(names,fn){
     }
     await projectSync.advance(previous,revision);
     await importSync.advance(previous,revision);
+    }finally{writesInFlight--;reportSync();}
   };
   const pending=queue.then(run);queue=pending.catch(()=>{});return pending;
 }
