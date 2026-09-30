@@ -14,11 +14,13 @@ export function shapeSVG(s){
     const size=Array.isArray(s.vectorSize)&&s.vectorSize.length===2&&s.vectorSize.every(v=>Number.isFinite(v)&&v>0)?s.vectorSize:[1,1];
     return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+size.join(' ')+'" preserveAspectRatio="none" style="width:100%;height:100%" shape-rendering="crispEdges">'+geometry+'</svg>';
   }
+  // A line often has a very shallow editable box. Normalizing its stroke by
+  // the long width made the visible stroke sub-pixel after SVG nonuniform scaling.
+  if(s.kind==='line')return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" preserveAspectRatio="none" style="width:100%;height:100%"><path d="M1 50 H99" fill="none" stroke="'+stroke+'" stroke-width="'+Math.max(1,Number(s.lineWidth)||2)+'" vector-effect="non-scaling-stroke" stroke-linecap="round"/></svg>';
   const paths=Array.isArray(s.vectorPaths)?s.vectorPaths:shapePaths(s.kind);if(paths){const data=paths.filter(Array.isArray).map(p=>{const points=p.filter(point=>Array.isArray(point)&&point.length===2&&point.every(Number.isFinite));return points.length?points.map(([x,y],i)=>(i?'L':'M')+x+' '+y).join(' ')+' Z':'';}).join(' ');geometry=data?'<path fill-rule="evenodd" d="'+data+'"/>':'';}
   else if(s.kind==='ellipse')geometry='<ellipse cx=".5" cy=".5" rx=".48" ry=".48"/>';
   else if(s.kind==='heart')geometry='<path d="M.5 .95 C-.1 .55 -.05 .05 .25 .05 C.4 .05 .5 .2 .5 .25 C.5 .2 .6 .05 .75 .05 C1.05 .05 1.1 .55 .5 .95 Z"/>';
   else if(s.kind==='arrow')geometry='<path d="M.03 .35 H.62 V.08 L.97 .5 L.62 .92 V.65 H.03 Z"/>';
-  else if(s.kind==='line')geometry='<path d="M.01 .5 H.99" fill="none"/>';
   else if(['grid','dots','stripes'].includes(s.kind)){const id='shape-pattern-'+String(s.id||'sample').replace(/[^\w-]/g,''),px=18/Math.max(1,s.width),py=18/Math.max(1,s.height);geometry='<defs><pattern id="'+id+'" width="'+px+'" height="'+py+'" patternUnits="userSpaceOnUse">'+(s.kind==='dots'?'<circle cx="'+px/2+'" cy="'+py/2+'" r="'+sw+'" fill="'+stroke+'"/>':'<path d="M0 '+py+' V0 H'+px+'" fill="none"'+(s.kind==='stripes'?' transform="rotate(45)"':'')+'/>')+'</pattern></defs><rect width="1" height="1" fill="url(#'+id+')" stroke="none"/>';}
   else geometry='<rect x=".015" y=".015" width=".97" height=".97" rx="'+(['roundedRectangle','frame','checkbox'].includes(s.kind)?'.1':'0')+'"/>';
   // Imported backups are not trusted markup: escape colors and retain numeric paths only.

@@ -31,7 +31,7 @@ export function mountCanvasEditor(c){
   actions.replaceChildren();const saved=document.createElement('span');saved.className='swift-auto-saved';saved.textContent=document.querySelector('#save-state').textContent;actions.append(saved);
   actions.append(button('◷',e=>historyMenu(e.currentTarget),'canvas-icon'));actions.lastChild.setAttribute('aria-label','历史记录');actions.append(topAction('undo','↶'),topAction('redo','↷'));
   actions.append(topAction('save-work','保存'));// Archives remain separate from promoting a draft to a work.
-  actions.append(button('完成',()=>{state.activeProject.isDraft=false;saveProject();void flushSave().catch(console.error);route('works');},'btn primary'));
+  actions.append(button('完成',()=>handle('editor-done'),'btn primary'));
   const share=button('↥',e=>{const p=openPopover(e.currentTarget,{title:'导出',width:220,menu:true});for(const [name,fn] of [['导出 PNG',()=>handle('export-png')],['导出 PDF',()=>pdf?.click()||handle('print')],['打印',()=>handle('print')],['导入创作指令',()=>handle('creative-json')]])p.content.append(button(name,()=>{p.close();fn();}));},'canvas-icon');share.setAttribute('aria-label','导出作品');actions.append(share);if(json){json.hidden=true;actions.append(json);}
   const toolbar=document.createElement('div');toolbar.className='swift-editor-toolbar';shell.before(toolbar);toolbar.append(tools);tools.replaceChildren();
   const insertion=document.createElement('div');insertion.className='swift-insertion-tools';toolbar.append(insertion);

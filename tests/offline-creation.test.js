@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {unzipSync,strFromU8} from 'fflate';
 import {project} from '../src/domain.js';
 import {createOfflineCreationPackage,createOfflineHandoff,importEditableWork,EDITABLE_WORK_FORMAT} from '../src/offline-creation.js';
+import {shapeSVG} from '../src/editor-tools-model.js';
 
 const asset={id:'asset-1',title:'蓝色纸',kind:'sticker',role:'focal',physicalWidthMM:40,physicalHeightMM:50,supply:{quantity:1},tags:['蓝色']};
 const packageFor=()=>createOfflineCreationPackage({project:project('测试创作',{style:'韩系清新'}),assets:[asset],aliases:{m1:asset.id},previews:[{alias:'m1',bytes:new Uint8Array([1,2,3])}]});
@@ -52,6 +53,8 @@ test('web ChatGPT handoff is one uploadable file plus a copyable, mode-specific 
   assert.match(strFromU8(toolFiles['START_HERE.txt']),/compose_page/);
   assert.match(strFromU8(toolFiles['START_HERE.txt']),/图片预览/);
   assert.match(strFromU8(toolFiles['START_HERE.txt']),/可下载的 UTF-8 文件/);
+  assert.ok(strFromU8(toolFiles['START_HERE.txt']).length<2000,'task brief should point to contracts instead of inlining them');
+  assert.match(strFromU8(toolFiles['START_HERE.txt']),/【本次任务】[\s\S]*【素材与物理规则】[\s\S]*【输出合同】/);
   const agentContract=JSON.parse(strFromU8(toolFiles['contract.json']));
   assert.ok(agentContract.edit_materials&&agentContract.upsert_primitives&&agentContract.move_elements);
   assert.ok(tool.prompt.length<130);assert.match(tool.prompt,/START_HERE.txt/);
@@ -61,6 +64,11 @@ test('web ChatGPT handoff is one uploadable file plus a copyable, mode-specific 
   assert.match(strFromU8(directFiles['START_HERE.txt']),/不要返回 tools/);
   assert.match(strFromU8(directFiles['START_HERE.txt']),/单独的 ```json 代码块/);
   assert.ok(JSON.parse(strFromU8(directFiles['example-response.shiyeproject.json'])).page);
+  assert.ok(JSON.parse(strFromU8(toolFiles['example-response.shiyeproject.json'])).tools);
+  assert.equal(JSON.parse(strFromU8(toolFiles['composition-ideas.json'])).length,3);
+  assert.match(tool.prompts.json,/不要生成文件/);
+  assert.match(tool.prompts.file,/可下载/);
+  assert.ok(tool.packageBytes>=tool.imageBytes);
 });
 
 test('offline ZIP includes each selected material as its own image, not only API imageCount',async()=>{
@@ -86,9 +94,10 @@ test('offline ZIP preserves transparent PNG preview bytes and paths',async()=>{
 
 test('direct page returned as an editable file imports into layers, not a flattened preview',async()=>{
   const {source}=await createOfflineHandoff({project:project('直接页'),assets:[asset],aliases:{m1:asset.id},settings:{generationMode:'direct',includeThumbnails:false}});source.purposes=['主题封面'];
-  const page={version:3,style:'留白叙事',intent:null,items:[{asset:'m1',piece:'paper',unit:0,role:null,operations:[{op:'whole'}],placement:{x:.5,y:.4,rotation:0,z:1},relation:null}],graphics:[{key:'line-1',kind:'line',x:.5,y:.2,width:.5,height:.004,stroke:'#30463d',fill:null,line_width:2}],text_blocks:[{content:'这一页的主题',font_style:'serif',x:.5,y:.15,width:.6,height:.1,font_size:28,color:'#30463d'}],paper:{color:'#fcfaf0',pattern:'plain'}};
+  const page={version:3,style:'留白叙事',intent:null,items:[{asset:'m1',piece:'paper',unit:0,role:null,operations:[{op:'whole'}],placement:{x:.5,y:.4,rotation:0,z:1},relation:null}],graphics:[{key:'line-1',kind:'line',x:.5,y:.2,width:.5,height:.004,stroke:'#30463d',fill:null,line_width:2},{key:'frame-1',kind:'frame',x:.5,y:.7,width:.5,height:.08,stroke:'#30463d',fill:null,line_width:2},{key:'block-1',kind:'rectangle',x:.8,y:.8,width:.07,height:.06,fill:'#8ba99b',stroke:null}],text_blocks:[{content:'这一页的主题',font_style:'serif',x:.5,y:.15,width:.6,height:.1,font_size:28,color:'#30463d'}],paper:{color:'#fcfaf0',pattern:'plain'}};
   const imported=importEditableWork(JSON.stringify({format:EDITABLE_WORK_FORMAT,version:1,source,title:'直接返回的作品',page}),[asset]);
   assert.equal(imported.isDraft,true);assert.equal(imported.drafts[0].items[0].assetID,asset.id);
   assert.equal(imported.drafts[0].textBlocks[0].content,'这一页的主题');
-  assert.equal(imported.drafts[0].primitives[0].kind,'line');
+  assert.deepEqual(imported.drafts[0].primitives.map(g=>g.kind),['line','frame','rectangle']);
+  assert.match(shapeSVG(imported.drafts[0].primitives[0]),/vector-effect="non-scaling-stroke"/);
 });

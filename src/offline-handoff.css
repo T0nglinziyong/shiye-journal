@@ -1,0 +1,29 @@
+.matching-page .match-generate .btn{display:inline-flex;align-items:center;justify-content:center;gap:9px;text-align:center}
+.matching-page .match-generate .btn .shiye-icon{width:21px;height:21px;flex:none;margin:0}
+.offline-handoff{display:grid;gap:13px;color:#304238}
+.offline-handoff-heading{display:flex;align-items:center;gap:13px;padding-right:32px}
+.offline-handoff-heading h2{margin:2px 0 0;font-size:clamp(22px,3vw,28px);line-height:1.25}
+.offline-handoff-heading small{font-size:11px;letter-spacing:.14em;color:#809283}
+.offline-handoff-emblem{width:44px;height:44px;display:grid;place-items:center;border-radius:14px;color:#52654d;background:#e9efe5;flex:none}
+.offline-handoff-emblem svg{width:25px;height:25px}
+.offline-handoff-intro{margin:0;color:#6f7d71;font-size:14px;line-height:1.55}
+.offline-handoff-delivery{display:flex;gap:4px;padding:4px;border-radius:12px;background:#f0f3ed}
+.offline-handoff-delivery button{flex:1;min-height:36px;border:0;border-radius:9px;background:transparent;color:#607464;font-size:13px;font-weight:600}
+.offline-handoff-delivery button.selected{background:#fff;color:#304d3a;box-shadow:0 1px 6px #243b2914}
+.offline-handoff-step{display:flex;gap:11px;align-items:flex-start;margin-top:3px}
+.offline-handoff-step>div{display:grid;gap:3px}
+.offline-handoff-step strong{font-size:15px}
+.offline-handoff-step small{color:#829084;font-size:13px;line-height:1.45}
+.offline-handoff-number{display:grid;place-items:center;width:24px;height:24px;flex:none;border-radius:50%;background:#e4eadf;color:#51664f;font-size:13px;font-weight:700}
+#offline-gpt-prompt{min-height:64px;height:64px;resize:none;border-radius:12px;background:#f7f8f4;border-color:#e3e8de;font-size:13px;line-height:1.5}
+.offline-handoff-main{width:100%;min-height:47px;display:inline-flex;justify-content:center;align-items:center;gap:9px;border-radius:13px}
+.offline-handoff-main svg,.offline-handoff-alternatives svg{width:19px;height:19px;flex:none}
+#offline-handoff-status{margin:-4px 0 1px;color:#678071;font-size:12px;line-height:1.4}
+.offline-handoff-alternatives{display:flex;gap:9px;flex-wrap:wrap}
+.offline-handoff-alternatives .btn{display:inline-flex;justify-content:center;align-items:center;gap:8px;min-height:42px;flex:1 1 145px;border-radius:11px}
+.offline-handoff-return{padding-top:13px;border-top:1px solid #e7ebe4}
+.offline-handoff-paste{display:grid;gap:9px}
+.offline-handoff-paste[hidden]{display:none}
+.offline-handoff-paste textarea{min-height:94px;max-height:180px}
+.offline-handoff-footnote{margin:1px 0 0;color:#8a9389;font-size:11px;line-height:1.5}
+@media(max-width:600px){#modal:has(.offline-handoff){padding:20px 18px;width:min(100vw - 24px,540px);max-height:min(88dvh,760px)}.offline-handoff{gap:11px}.offline-handoff-intro{font-size:13px}.offline-handoff-alternatives .btn{flex-basis:120px;font-size:13px;padding:8px 9px}}

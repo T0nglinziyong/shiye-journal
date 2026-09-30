@@ -5,7 +5,7 @@ import {
   FileSearch, Search, Plus, Check, CircleCheck, SquareCheck, Square, X, ChevronLeft,
   ChevronRight, ArrowRight, Undo2, Redo2, RotateCcw, Share, Copy, Trash2,
   LockKeyhole, LockKeyholeOpen, Eye, EyeOff, Star, HardDrive, Scan, Camera, File,
-  ShoppingBasket, CircleEllipsis, CircleHelp
+  ShoppingBasket, CircleEllipsis, CircleHelp, FileDown, FileUp
 } from 'lucide';
 
 // Named imports keep the bundle limited to the SVGs actually used.
@@ -21,7 +21,7 @@ const iconNodes=Object.freeze({
   rotate:RotateCcw,share:Share,copy:Copy,trash:Trash2,lock:LockKeyhole,
   unlock:LockKeyholeOpen,eye:Eye,eyeOff:EyeOff,star:Star,use:Copy,drive:HardDrive,
   viewfinder:Scan,camera:Camera,file:File,basket:ShoppingBasket,pencilCircle:PenLine,
-  more:CircleEllipsis,help:CircleHelp
+  more:CircleEllipsis,help:CircleHelp,fileDown:FileDown,fileUp:FileUp
 });
 
 export function createIcon(name){
@@ -35,7 +35,7 @@ export const swiftIconSymbols=Object.freeze({leaf:'leaf',folder:'folder',sparkle
 export function iconMarkup(name){return createIcon(name)?.outerHTML||'';}
 
 const tools={select:['cursor','选择'],marquee:['marquee','矩形框选'],pen:['pen','钢笔'],highlighter:['marker','荧光笔'],eraser:['eraser','橡皮擦'],lasso:['lasso','套索对象'],text:['text','文字'],shape:['shape','添加图形'],material:['material','添加素材']};
-const actions={'match-library':'folder','match-context':'context','reset-match':'rotate','match-use':'use','match-generate':'sparkles','create-from-basket':'pen',undo:'undo',redo:'redo','back-works':'back','settings-back':'back','detail-back':'back','import-back':'back','detail-series':'folder','similar':'search','detail-match':'sparkles','edit-asset':'pen','delete-object':'trash',duplicate:'copy','export-png':'share',print:'share','paper-menu':'paper','new-draft':'plus','new-project':'plus','new-series':'plus'};
+const actions={'match-library':'folder','match-context':'context','reset-match':'rotate','match-use':'use','match-generate':'sparkles','match-export-gpt':'fileDown','match-import-gpt':'fileUp','create-from-basket':'pen',undo:'undo',redo:'redo','back-works':'back','settings-back':'back','detail-back':'back','import-back':'back','detail-series':'folder','similar':'search','detail-match':'sparkles','edit-asset':'pen','delete-object':'trash',duplicate:'copy','export-png':'share',print:'share','paper-menu':'paper','new-draft':'plus','new-project':'plus','new-series':'plus'};
 const labels={'设置':'settings','关闭':'close','返回':'back','历史记录':'history','使用 Apple Pencil':'pencilCircle','导出作品':'share','图层':'layers','画布背景':'paper','底纸':'paper','制作步骤与迭代记录':'history','复制对象':'copy','删除对象':'trash','编辑对象':'history','旋转对象':'rotate','锁定图层':'lock','解锁图层':'unlock','隐藏图层':'eye','显示图层':'eyeOff','调整图层顺序':'sort','已加入搭配素材篮':'check','设为必用':'star','取消必用':'star','移出素材篮':'close','作品详情':'more'};
 const categories={'AI 与创作':'sparkles','导入与识别':'viewfinder','界面与素材库':'grid','数据与诊断':'drive'};
 const glyphPrefix=/^[\s]*[♧♙♜▣▤▱▦▧▢☷≡✦✣⚙↶↷↥➤◇◌◉◷⊞⊗⊙★☆☑□✓＋+‹›→↑↓↕⟳×✕✖⋯]+[\s　]*/u;
