@@ -1,4 +1,5 @@
 import {usableProjectSnapshot} from './project-outbox-recovery.js';
+import {presetReferencePlans,renderPresetReferences} from './creative-reference-presets.js';
 const ID='matching-session-v1';
 const KEYS=['basket','coreIDs','matchCore','matchRatio','matchMode','matchStyle','matchStyles','matchPurposes','matchIntent','matchPurpose','matchProcessing','materialUseHints','materialUseRequired','assetProcessing','customPaperWidth','customPaperHeight'];
 export function matchingSnapshot(state,variants){return {id:ID,context:Object.fromEntries(KEYS.map(k=>[k,structuredClone(state[k])])),variants:structuredClone(variants)};}
@@ -44,7 +45,7 @@ export function createMatchingSession(c){
     await save();
     recorder=await c.createAIRecorder({db:c.db,model:cfg.model,key:cfg.key});const vision=cfg.includeThumbnails&&c.supportsVision(cfg);
     const images=vision?(await Promise.all(ids.slice(0,cfg.imageCount).map(async(id,i)=>({asset:'m'+(i+1),url:await c.modelImage(c.asset(id))})))).filter(x=>x.url):[];
-    const references=[];if(vision&&cfg.sendReference){const ref=c.state.projects.filter(x=>!x.isDraft)[cfg.referencePage-1];if(ref)references.push((await c.rasterize(ref.drafts.find(d=>d.id===ref.activeDraftID)||ref.drafts[0],.7)).toDataURL('image/jpeg',.8));}
+    const references=[];if(cfg.sendPresetReferences&&c.supportsVision(cfg))references.push(...(await renderPresetReferences(presetReferencePlans({styles:p.styles,purposes:p.purposes,mode:p.drafts[0].pageMode}))).map(entry=>entry.url));
     let steps='';const output=await c.runCreativeAgent({...cfg,draft:p.drafts[0],assets:c.state.assets,aliases,styles:p.styles,pagePurposes:p.purposes,requiredAssetIDs:p.requiredAssetIDs,processing:p.processing,assetProcessing:p.assetProcessing,materialUseHints:p.materialUseHints,materialUseRequired:p.materialUseRequired,prompt:c.state.matchIntent,images,referenceImages:references,request:recorder.request,signal:run.signal,
      onResponse:recorder.response,
      onScene:vision?async d=>(await c.rasterize(d,.7)).toDataURL('image/jpeg',.8):undefined,

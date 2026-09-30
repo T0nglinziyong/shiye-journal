@@ -22,3 +22,16 @@ test('both creation modes receive role sizes converted to the actual paper, not 
    assert.match(text,/同一作品不因换设备改写字号/);assert.doesNotMatch(text,/文字标题46–90/);
  }
 });
+test('API receives four anonymous style-and-purpose studies without referencing saved private works',()=>{
+ const messages=buildCreativeMessages({draft:{...draft(14),style:'复古旧物',pageMode:'single'},assets:[],aliases:{},styles:['复古旧物'],pagePurposes:['旅途记录'],referenceImages:['data:image/png;base64,one','data:image/png;base64,two','data:image/png;base64,three','data:image/png;base64,four']});
+ assert.match(messages[0].content,/简洁方案/);
+ assert.match(messages[0].content,/复古旧物 × 旅途记录/);
+ assert.equal(messages[1].content.filter(part=>part.type==='image_url').length,4);
+ assert.doesNotMatch(messages[0].content,/私人日记原图|已保存作品/);
+});
+test('text-only API receives the matching preset descriptions without image payloads',()=>{
+ const messages=buildCreativeMessages({draft:{...draft(14),style:'韩系清新',pageMode:'single'},assets:[],aliases:{},styles:['韩系清新'],pagePurposes:['清单计划'],sendPresetReferences:true});
+ assert.match(messages[0].content,/韩系清新 × 清单计划/);
+ assert.match(messages[0].content,/实验方案/);
+ assert.equal(messages[1].content.filter(part=>part.type==='image_url').length,0);
+});

@@ -10,6 +10,11 @@ try{
   await wait('.series-grid');
   const previewSize=await evaluate(`(async()=>{const {offlinePreviewBytes}=await import('/src/offline-preview.js');const canvas=document.createElement('canvas');canvas.width=canvas.height=1200;const ctx=canvas.getContext('2d'),image=ctx.createImageData(1200,1200);let seed=7;for(let p=0;p<image.data.length;p+=4){seed=(seed*1664525+1013904223)>>>0;image.data[p]=seed&255;image.data[p+1]=(seed>>>8)&255;image.data[p+2]=(seed>>>16)&255;image.data[p+3]=(p/4)%4===0?0:255;}ctx.putImageData(image,0,0);const input=await new Promise(r=>canvas.toBlob(r,'image/png'));const output=await offlinePreviewBytes(input);const bitmap=await createImageBitmap(new Blob([output],{type:'image/png'}));const sample=document.createElement('canvas');sample.width=sample.height=1;sample.getContext('2d').drawImage(bitmap,0,0,1,1);return {before:input.size,after:output.length,width:bitmap.width,alpha:sample.getContext('2d').getImageData(0,0,1,1).data[3]}})()`);
   assert.ok(previewSize.after<previewSize.before&&previewSize.after<=850_000&&previewSize.width<=640);
+  const presets=await evaluate(`(async()=>{const {presetReferencePlans,renderPresetReferences}=await import('/src/creative-reference-presets.js');const plans=presetReferencePlans({styles:['复古旧物'],purposes:['旅途记录']});const images=await renderPresetReferences(plans);const shelf=document.createElement('div');shelf.id='preset-test-shelf';shelf.style='position:fixed;inset:0;z-index:999999;background:#eee;display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:20px;overflow:auto';for(const image of images){const img=document.createElement('img');img.src=image.url;img.style='width:100%;height:100%;object-fit:contain';shelf.append(img);}document.body.append(shelf);return {levels:plans.map(x=>x.level),sizes:images.map(x=>x.bytes.length),different:new Set(images.map(x=>x.url)).size}})()`);
+  assert.deepEqual(presets.levels,['简洁','均衡','丰富','实验']);
+  assert.equal(presets.different,4);assert.ok(presets.sizes.every(size=>size>1000&&size<200_000));
+  const referenceShot=await command('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});await writeFile(`${directory}/preset-reference-four.png`,Buffer.from(referenceShot.data,'base64'));
+  await evaluate('document.querySelector("#preset-test-shelf").remove()');
   let sampleAssetID;
   for(const [width,height] of [[390,844],[768,1024],[1024,768],[1440,900]]){
     await command('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:width<700});
@@ -46,6 +51,22 @@ try{
     await click('.modal-close');
     assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1'));
   }
+  await click('#top-settings','.settings-list');
+  await click('[data-act="settings-open"][data-val="AI 与创作"]','#setting-ai-send-reference');
+  assert.ok(await evaluate('document.querySelector("#setting-ai-send-reference").closest("label").textContent.includes("四张预设样例")'));
+  await command('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
+  await evaluate('document.querySelector("#setting-ai-send-reference").scrollIntoView({block:"center"})');
+  const settingsShot=await command('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});await writeFile(`${directory}/390x844-preset-setting.png`,Buffer.from(settingsShot.data,'base64'));
+  await click('#setting-ai-send-reference');
+  await click('[data-act="settings-save"]','.matching-page');
+  await click('[data-act="match-export-gpt"]','#offline-gpt-prompt');
+  assert.ok(await evaluate('document.querySelector(".offline-handoff-intro").textContent.includes("四张预设参考")'));
+  for(const [width,height] of [[390,844],[768,1024],[1024,768],[1440,900]]){
+    await command('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:width<700});
+    const shot=await command('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});await writeFile(`${directory}/${width}x${height}-preset-enabled.png`,Buffer.from(shot.data,'base64'));
+    assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1'));
+  }
+  await click('.modal-close');
   const source={bundleId:'offline-browser-test',title:'测试',mode:'single',ratio:'a4',styles:['韩系清新'],purposes:['主题封面'],intent:'',processing:'保留完整',requiredAssetIDs:[],materialUseHints:{},materialUseRequired:{},assetProcessing:{},materials:[{alias:'m1',assetID:sampleAssetID}]};
   const page={version:3,style:'留白叙事',intent:null,items:[{asset:'m1',piece:'main',unit:0,role:null,operations:[{op:'whole'}],placement:{x:.5,y:.5,rotation:0,z:1},relation:null}],graphics:[{key:'visible-rule',kind:'line',x:.5,y:.18,width:.5,height:.004,stroke:'#30463d',fill:null,line_width:2}],text_blocks:[],paper:{color:'#fcfaf0',pattern:'plain'}};
   await click('[data-act="match-import-gpt"]','#offline-gpt-result');

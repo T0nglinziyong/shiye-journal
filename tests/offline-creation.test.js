@@ -4,6 +4,7 @@ import {unzipSync,strFromU8} from 'fflate';
 import {project} from '../src/domain.js';
 import {createOfflineCreationPackage,createOfflineHandoff,importEditableWork,EDITABLE_WORK_FORMAT} from '../src/offline-creation.js';
 import {shapeSVG} from '../src/editor-tools-model.js';
+import {presetReferenceGuide,presetReferencePlans} from '../src/creative-reference-presets.js';
 
 const asset={id:'asset-1',title:'蓝色纸',kind:'sticker',role:'focal',physicalWidthMM:40,physicalHeightMM:50,supply:{quantity:1},tags:['蓝色']};
 const packageFor=()=>createOfflineCreationPackage({project:project('测试创作',{style:'韩系清新'}),assets:[asset],aliases:{m1:asset.id},previews:[{alias:'m1',bytes:new Uint8Array([1,2,3])}]});
@@ -90,6 +91,30 @@ test('offline ZIP preserves transparent PNG preview bytes and paths',async()=>{
   assert.deepEqual(files['materials/m1.png'],transparentPixel);
   assert.equal(JSON.parse(strFromU8(files['context.json'])).materials[0].preview,'materials/m1.png');
   assert.match(strFromU8(files['START_HERE.txt']),/不要给贴纸添加白底/);
+});
+
+test('selected style and purpose produce four anonymous alternatives from simple to experimental',async()=>{
+  const plans=presetReferencePlans({styles:['复古旧物','杂志编辑'],purposes:['旅途记录','图文收藏']});
+  assert.deepEqual(plans.map(plan=>plan.level),['简洁','均衡','丰富','实验']);
+  assert.equal(plans[0].purpose,'旅途记录');
+  assert.match(presetReferenceGuide(plans),/兼顾 杂志编辑/);
+  assert.match(presetReferenceGuide(plans),/简洁、均衡、丰富到实验/);
+  assert.notDeepEqual(plans[0].zones,plans[3].zones);
+  const other=presetReferencePlans({styles:['韩系清新'],purposes:['清单计划']});
+  assert.notDeepEqual(plans[0].palette,other[0].palette);
+  assert.match(other[0].labels.join('、'),/清单/);
+  const spread=presetReferencePlans({styles:['杂志网格'],purposes:['影像故事'],mode:'spread'});
+  assert.ok(spread.every(plan=>plan.zones.every(([x,,width])=>x<.5?x+width<=.47:x>=.5)),'double-page references must respect the fold');
+  const bytes=[1,2,3,4].map(i=>({id:`preset-${i}`,bytes:new Uint8Array([137,80,78,71,i])}));
+  const result=await createOfflineHandoff({project:project('参考'),assets:[asset],aliases:{m1:asset.id},settings:{includeThumbnails:false,sendPresetReferences:true},referenceImages:bytes});
+  const files=unzipSync(new Uint8Array(await result.blob.arrayBuffer()));
+  assert.deepEqual(Object.keys(files).filter(name=>name.startsWith('references/preset-')).sort(),[1,2,3,4].map(i=>`references/preset-${i}.png`));
+  assert.match(strFromU8(files['START_HERE.txt']),/四张匿名预设/);
+  assert.match(strFromU8(files['CREATIVE_GUIDE.txt']),/先理解素材/);
+  assert.match(strFromU8(files['CREATIVE_GUIDE.txt']),/实体纸、照片、贴纸/);
+  assert.ok(strFromU8(files['CREATIVE_GUIDE.txt']).length>1800);
+  assert.doesNotMatch(Object.keys(files).join(' '),/私人|cece/);
+  await assert.rejects(createOfflineHandoff({project:project(),assets:[asset],aliases:{m1:asset.id},settings:{includeThumbnails:false,sendPresetReferences:true},referenceImages:bytes.slice(0,3)}),/四张预设参考图/);
 });
 
 test('direct page returned as an editable file imports into layers, not a flattened preview',async()=>{
