@@ -36,6 +36,7 @@ export function mountCanvasSelection(c) {
   };paint();
   let gesture=null;
   const point=e=>{const r=page.getBoundingClientRect();return {x:(e.clientX-r.left)/r.width*d.canvas.width,y:(e.clientY-r.top)/r.height*d.canvas.height};};
+  view.pickCanvasObject=(id,shift=false)=>{const entry=canvasObjects(d).find(x=>x.value.id===id);if(!entry)return;const ids=state.multiSelected||[];if(shift){state.multiSelected=ids.includes(id)?ids.filter(x=>x!==id):[...ids,id];state.selected=state.multiSelected.length===1?state.multiSelected[0]:null;}else{state.multiSelected=entry.value.creativeGroupID?canvasObjects(d).filter(x=>x.value.creativeGroupID===entry.value.creativeGroupID).map(x=>x.value.id):[id];state.selected=state.multiSelected.length===1?id:null;}view.editorRefresh?.();paint();};
   // Capture before app.js' single-object drag so a lasso starts over any
   // object and a selected set moves together, with one undo checkpoint.
   page.addEventListener('pointerdown',e=>{

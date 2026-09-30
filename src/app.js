@@ -53,6 +53,10 @@ import {applyToolCalls} from './creative.js';
 import {runCreativeAgent} from './creative-runner.js';
 import {AI_PROVIDERS,supportsVision,loadAISettings,saveAISettings} from './ai-settings.js';
 import {mountParityControls as mountSwiftParity} from './parity-ui.js';
+import {parity} from './parity-ui.js';
+import {syncSelectionScope,reconcileSelectedRecords} from './library-selection-model.js';
+import {canApplyBackgroundView} from './view-update-policy.js';
+import {resetSelectionPresenters} from './selection-presenter.js';
 
 const view=document.querySelector('#view'),modal=document.querySelector('#modal'),body=document.querySelector('#modal-body');
 modal.querySelector('.modal-close').onclick=()=>modal.close();
@@ -83,6 +87,21 @@ function captureSettings(){
 const routeScroll=new Map();
 let viewInteractionRevision=0;
 for(const event of ['click','input','pointerdown'])view.addEventListener(event,()=>viewInteractionRevision++,true);
+let backgroundViewPending=false,backgroundViewTimer=null;
+const activeViewPointers=new Set();
+view.addEventListener('pointerdown',event=>activeViewPointers.add(event.pointerId),true);
+for(const event of ['pointerup','pointercancel'])document.addEventListener(event,e=>{activeViewPointers.delete(e.pointerId);scheduleBackgroundReconcile();},true);
+function scheduleBackgroundReconcile(){
+  if(!backgroundViewPending||backgroundViewTimer)return;
+  backgroundViewTimer=setTimeout(()=>{
+    backgroundViewTimer=null;
+    const inputFocused=view.contains(document.activeElement)&&document.activeElement.matches('input,textarea,select,[contenteditable],[contenteditable="true"]');
+    if(canApplyBackgroundView({route:state.route,selectionMode:parity.selectionMode,modalOpen:modal.open,popoverOpen:!!document.querySelector('.swift-popover'),inputFocused,gestureActive:!!activeViewPointers.size}))render();
+  },180);
+}
+document.addEventListener('click',scheduleBackgroundReconcile);
+document.addEventListener('focusout',scheduleBackgroundReconcile);
+modal.addEventListener('close',scheduleBackgroundReconcile);
 const navigationHistory=[];
 function navigateBack(fallback='series'){
   const previous=navigationHistory.pop();
@@ -98,20 +117,20 @@ function route(name,{back=false}={}){
   routeScroll.set(state.route+':'+state.seriesID,window.scrollY);
   if(name==='settings'&&!settingsSession)settingsSession={ai:structuredClone(state.aiSettings),preferences:structuredClone(state.preferences),returnRoute:state.route};
   if(state.route==='settings'&&name!=='settings'&&settingsSession){state.aiSettings=settingsSession.ai;state.preferences=settingsSession.preferences;settingsSession=null;state.settingsSection=null;}
-if(state.route==='editor'&&name!=='editor'&&aiController)aiController.abort(Error('已离开创作页面'));state.route=name;if(name==='import'&&typeof Worker!=='undefined')Promise.resolve().then(()=>visionTask('warmup',{})).catch(()=>{});if(name==='series'){state.seriesID='all';state.addingToSeries=null;libraryHistory.length=0;}if(name!=='library')state.addingToSeries=null;if(name!=='settings'&&!fromSettings)state.selected=null;render();window.scrollTo(0,routeScroll.get(name+':'+state.seriesID)||0);}
+if(state.route==='editor'&&name!=='editor'&&aiController)aiController.abort(Error('已离开创作页面'));syncSelectionScope(parity,name);state.route=name;if(name==='import'&&typeof Worker!=='undefined')Promise.resolve().then(()=>visionTask('warmup',{})).catch(()=>{});if(name==='series'){state.seriesID='all';state.addingToSeries=null;libraryHistory.length=0;}if(name!=='library')state.addingToSeries=null;if(name!=='settings'&&!fromSettings)state.selected=null;render();window.scrollTo(0,routeScroll.get(name+':'+state.seriesID)||0);}
 function imgTag(a){const src=a&&(image(a.blobId)||a.staticPath);return src?`<img data-asset-image-id="${esc(a.id)}" loading="lazy" decoding="async" src="${esc(src)}" alt="${esc(a.title)}">`:'<span>无预览</span>';}
 function assetCard(a){return `<button class="card" data-act="detail" data-id="${a.id}"><div class="card-image">${imgTag(a)}</div><div class="card-body"><h3>${esc(a.title)}</h3><p>${esc(kindName(a.kind))} · ${a.physicalWidthMM?`${fmt(a.physicalWidthMM)} × ${fmt(a.physicalHeightMM)} mm`:'尺寸待确认'}</p><span class="chip ${a.reviewStatus==='ready'?'':'warn'}">${a.reviewStatus==='ready'?'已整理':'待检查'}</span></div></button>`;}
 const fmt=n=>Number(n).toFixed(1).replace(/\.0$/,'');
 function head(title,subtitle,actions=''){return `<div class="view-head"><div><h1>${title}</h1><p>${subtitle}</p></div><div class="actions">${actions}</div></div>`;}
 function render(){document.body.classList.toggle('editing',state.route==='editor');document.body.dataset.backdrop=state.preferences.backdrop;document.querySelectorAll('.main-nav button').forEach(b=>b.classList.toggle('active',b.dataset.route===state.route||(b.dataset.route==='library'&&['series','import'].includes(state.route))));document.querySelector('#basket-count').textContent=state.basket.length;
   if(state.route==='editor'&&refreshCanvas())return;
-  view.editorDispose?.();view.editorDispose=null;view.editorRefresh=null;view.selectionRefresh=null;
+  view.editorDispose?.();view.editorDispose=null;view.manualBoxDispose?.();view.manualBoxDispose=null;view.editorRefresh=null;resetSelectionPresenters(view);
   if(view.onshowsimilar){view.removeEventListener('show-similar',view.onshowsimilar);view.onshowsimilar=null;}
   closePopover();imageNodes.remember(view.querySelectorAll('img[src]'));
   view.editorLayoutSize={width:window.innerWidth,height:window.innerHeight};
   const pages={library:renderLibrary,series:renderSeries,matching:renderMatching,works:renderWorks,editor:renderEditor,import:renderImport,assetDetail:renderAssetDetail,projectPreview:renderProjectPreview,settings:renderSettings};view.innerHTML=(pages[state.route]||renderLibrary)();
   for(const fresh of view.querySelectorAll('img[src]')){const old=imageNodes.take(fresh);if(old)fresh.replaceWith(old);}
-  mountParityControls();bindPage();mountWorkflowControls({state,view,body,modal,db,render,route,toast,imgTag,assetCard,esc,asset,refresh,download,modelImage,rasterize,backup,openSeriesEditor,openAssetEditor:openDetail,openCutoutCheck,switchImportRecord,saveActiveImportRecord,saveProject,flushSave});if(state.route==='editor'){view.editorDraft=current();view.editorInk=current().strokes;view.editorLayoutKey=editorLayoutKey();mountCanvasEditor({state,view,body,modal,current,checkpoint,saveProject,render,route,flushSave,toast,esc,imgTag,asset,handle,openCutoutCheck,openAICreation});mountCanvasSelection({state,view,current,checkpoint,saveProject,render,toast});}}
+  mountParityControls();bindPage();mountWorkflowControls({state,view,body,modal,db,render,route,toast,imgTag,assetCard,esc,asset,refresh,download,modelImage,rasterize,backup,openSeriesEditor,openAssetEditor:openDetail,openCutoutCheck,switchImportRecord,saveActiveImportRecord,saveProject,flushSave});if(state.route==='editor'){view.editorDraft=current();view.editorInk=current().strokes;view.editorLayoutKey=editorLayoutKey();mountCanvasEditor({state,view,body,modal,current,checkpoint,saveProject,render,route,flushSave,toast,esc,imgTag,asset,handle,openCutoutCheck,openAICreation});mountCanvasSelection({state,view,current,checkpoint,saveProject,render,toast});}backgroundViewPending=false;}
 function editorLayoutKey(){const size=view.editorLayoutSize||{width:window.innerWidth,height:window.innerHeight};return [size.width,size.height,current()?.canvas.width,current()?.canvas.height,!!state.workspacePanel,!!state.aiPanel].join(':');}
 function refreshCanvas(){
   const d=current(),page=view.querySelector('#canvas-page');if(!page||view.editorDraft!==d||view.editorLayoutKey!==editorLayoutKey()||!view.editorRefresh)return false;
@@ -225,8 +244,8 @@ function initializeCanvasSurface(page){const d=current();const paper=page.queryS
 }
 
 async function handle(action,id,value){try{switch(action){
-  case 'import-work':state.importMode='work';state.importStep='inspect';state.importRecords=[];state.importFile=null;state.importBitmap=null;state.importCandidateURLs=[];state.importCandidates=[];route('import');break;
-  case 'import':state.importMode='material';state.importStep='inspect';state.importRecords=[];state.importFile=null;state.importBitmap=null;state.importCandidateURLs=[];state.importCandidates=[];route('import');break;case 'back-library':navigateBack('library');break;case 'back-works':navigateBack('works');break;case 'editor-done':await flushSave();route('works');break;
+  case 'import-work':openImportGallery('work');break;
+  case 'import':openImportGallery('material');break;case 'back-library':navigateBack('library');break;case 'back-works':navigateBack('works');break;case 'editor-done':await flushSave();route('works');break;
   case 'select-file':if(value==='camera')fileInput.setAttribute('capture','environment');else fileInput.removeAttribute('capture');fileInput.click();break;case 'preview-crop':await previewCorrection();break;case 'confirm-import':await saveImportBatch({state,db,urls,render,onSaved:organizeSavedAssets});break;
   case 'import-switch':await switchImportRecord(Number(id));break;case 'import-back':if(state.importStep==='review'){state.importStep='inspect';render();}else if(state.importStep==='done'){navigateBack(state.importMode==='work'?'works':'library');}else if(!state.importRecords.length||confirm('放弃未保存的照片？'))navigateBack(state.importMode==='work'?'works':'library');break;
   case 'import-exit':if(state.importStep==='done'||!state.importRecords.length||confirm('放弃未保存的照片？'))navigateBack(state.importMode==='work'?'works':'library');break;
@@ -322,8 +341,8 @@ async function flattenGeneratedPage(d,p=state.activeProject,persistProject=true)
  await db.transaction(['assets','blobs','projects'],tx=>{tx.objectStore('assets').put(a);tx.objectStore('blobs').put({id:blobId,data:blob});if(persistProject)tx.objectStore('projects').put(updated);});state.assets.push(a);urls.set(blobId,URL.createObjectURL(blob));Object.assign(p,updated);
 }
 async function restorePendingProjects(){const pending=await db.pendingProjects();for(const row of pending){const index=state.projects.findIndex(p=>p.id===row.record.id);if(index<0)state.projects.push(row.record);else state.projects[index]=state.activeProject?.id===row.record.id?state.activeProject:row.record;}return pending.length;}
-async function refresh({background=false,onlyChanged=false}={}){const interaction=viewInteractionRevision,sync=await db.refreshCloud();if(onlyChanged&&!sync?.changed)return;if(sync?.changed)privateImages.invalidate(sync.allBlobs?undefined:sync.blobIDs);[state.assets,state.series,state.projects,state.trash]=await Promise.all(['assets','series','projects','trash'].map(db.all));await restorePendingProjects();staticSources.clear();for(const a of state.assets)if(a.staticPath)staticSources.set(a.blobId,a.staticPath);if(!background||interaction===viewInteractionRevision&&!modal.open&&!document.querySelector('.swift-popover'))render();}
-async function loadOptionalExamples(){const revision=viewInteractionRevision,initialRoute=state.route;try{await seedBundledExamples({isProjectOpen:id=>state.activeProject?.id===id});const [assets,series,projects]=await Promise.all(['assets','series','projects'].map(db.all));state.assets=assets.map(a=>state.assets.find(old=>old.id===a.id)||a);state.series=series.map(s=>state.series.find(old=>old.id===s.id)||s);state.projects=projects.map(p=>p.id===state.activeProject?.id?state.activeProject:p);await restorePendingProjects();for(const a of assets)if(a.staticPath)staticSources.set(a.blobId,a.staticPath);if(revision===viewInteractionRevision&&initialRoute===state.route&&['series','library','works'].includes(state.route)&&!modal.open&&!document.querySelector('.swift-popover')&&!view.contains(document.activeElement)&&!view.querySelector('.library-management-tray:not([hidden])'))render();}catch(e){console.warn('内置样例暂未加载，下次打开重试',e);}}
+async function refresh({background=false,onlyChanged=false}={}){const sync=await db.refreshCloud();if(onlyChanged&&!sync?.changed)return;if(sync?.changed)privateImages.invalidate(sync.allBlobs?undefined:sync.blobIDs);[state.assets,state.series,state.projects,state.trash]=await Promise.all(['assets','series','projects','trash'].map(db.all));await restorePendingProjects();staticSources.clear();for(const a of state.assets)if(a.staticPath)staticSources.set(a.blobId,a.staticPath);if(reconcileSelectedRecords(parity,state))view.selectionRefresh?.();if(background){backgroundViewPending=true;scheduleBackgroundReconcile();}else render();}
+async function loadOptionalExamples(){try{await seedBundledExamples({isProjectOpen:id=>state.activeProject?.id===id});const [assets,series,projects]=await Promise.all(['assets','series','projects'].map(db.all));state.assets=assets.map(a=>state.assets.find(old=>old.id===a.id)||a);state.series=series.map(s=>state.series.find(old=>old.id===s.id)||s);state.projects=projects.map(p=>p.id===state.activeProject?.id?state.activeProject:p);await restorePendingProjects();for(const a of assets)if(a.staticPath)staticSources.set(a.blobId,a.staticPath);backgroundViewPending=true;scheduleBackgroundReconcile();}catch(e){console.warn('内置样例暂未加载，下次打开重试',e);}}
 async function openCutoutCheck(id,candidate=null){
   const a=candidate?{title:candidate.title}:asset(id);if(!a)return;
   const stored=async blobId=>blobId?(await db.get('blobs',blobId))?.data:null;
@@ -381,6 +400,11 @@ function resetImportBatch(){
   for(const r of state.importRecords){for(const b of [r.bitmap,r.correctedBitmap])if(b)bitmaps.add(b);for(const u of [r.url,r.correctedURL,...(r.candidateURLs||[])])if(u)objectURLs.add(u);}
   for(const b of bitmaps)b.close?.();for(const u of objectURLs)URL.revokeObjectURL(u);
   Object.assign(state,{importStep:'inspect',importRecords:[],importIndex:0,importFile:null,importBitmap:null,importURL:null,correctedBitmap:null,correctedURL:null,paperCorners:null,importCandidates:[],importCandidateURLs:[],importCandidateData:[],importCandidateSelection:new Set(),importProcessing:'',importOrganizing:false,importSavedCount:0,showManualBox:false,showCorrectionPreview:false,importBatchSeriesID:null});
+}
+function openImportGallery(mode){
+  resetImportBatch();state.importMode=mode;route('import');
+  // Keep this in the original click activation; Safari blocks delayed file pickers.
+  fileInput.removeAttribute('capture');fileInput.click();
 }
 async function switchImportRecord(index,skipSave=false){
   if(!skipSave)saveActiveImportRecord();const rec=state.importRecords[index];if(!rec)return;

@@ -1,16 +1,15 @@
 // Interaction placement follows the Swift 2.0.10 views. Core records remain
 // owned by app.js; this module adds the missing screen controls and actions.
 import {mountSeriesContents,mountSeriesAddition} from './series-contents.js';
-import {beginSelection,finishSelection,syncSelectionScope} from './library-selection-model.js';
+import {finishSelection,toggleSelection,selectionActive} from './library-selection-model.js';
 import {mountRecentlyDeleted} from './recently-deleted-ui.js';
 import {bindLongPress} from './long-press.js';
 import {openPopover,closePopover} from './swift-popover.js';
-export const parity={libraryTab:'series',selection:false,selectionMode:null,showOnlySelected:false,selected:new Set(),workTab:'all',route:null};
+export const parity={libraryTab:'series',selectionMode:null,showOnlySelected:false,selected:new Set(),workTab:'all',route:null};
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 export function mountParityControls(ctx){
   const {state,view}=ctx;
-  syncSelectionScope(parity,state.route);
   if(state.route==='library')mountLibrary(ctx);
   if(state.route==='series')mountSeries(ctx);
   if(state.route==='works')mountWorks(ctx);
@@ -26,7 +25,7 @@ function mountLibrary(c){
   const insideSeries=state.seriesID!=='all';
   header?.querySelector('h1')?.replaceChildren(insideSeries?(state.series.find(s=>s.id===state.seriesID)?.title||'系列'):'我的素材');
   if(insideSeries){const back=button('‹ 返回素材库',()=>route('series'));back.classList.add('series-back');header?.prepend(back);}
-  actions?.prepend(button(parity.selection?'完成':'选择',()=>{parity.selection?finishSelection(parity):beginSelection(parity,'asset');view.selectionRefresh?.();render();},'library-select-toggle'));
+  actions?.prepend(button(parity.selectionMode?'完成':'选择',()=>{toggleSelection(parity,'asset');view.selectionRefresh?.();},'library-select-toggle'));
   const bar=tabs([['series','系列'],['all','全部素材'],['pending','待检测'],['trash','最近删除']],parity.libraryTab,id=>{
     parity.libraryTab=id;
     if(id==='series'){route('series');return;}
@@ -42,12 +41,12 @@ function mountSeries(c){const {view,route,state,render}=c,header=view.querySelec
   controls.querySelector('input').oninput=filter;controls.querySelector('select').onchange=e=>{if(e.target.value==='name')cards.sort((a,b)=>(state.series.find(x=>x.id===a.dataset.id)?.title||'').localeCompare(state.series.find(x=>x.id===b.dataset.id)?.title||''));else cards.sort((a,b)=>(state.series.find(x=>x.id===b.dataset.id)?.updatedAt||'').localeCompare(state.series.find(x=>x.id===a.dataset.id)?.updatedAt||''));cards.forEach(card=>grid.append(card));};filter();
   if(grid){const tile=document.createElement('button');tile.type='button';tile.className='series-entry';tile.innerHTML='<div class="series-entry-cover">＋</div><strong>新建系列</strong><small>把喜欢的素材放在一起</small>';tile.onclick=()=>c.openSeriesEditor();grid.prepend(tile);}}
 function mountWorks(c){const {state,view,render}=c,header=view.querySelector('.view-head'),filters=view.querySelector('.filters');
-  const actions=header?.querySelector('.actions');if(actions){actions.append(button(parity.selection?'完成':'选择',()=>{parity.selection?finishSelection(parity):beginSelection(parity,'work');view.selectionRefresh?.()||render();},'library-select-toggle'));}
+  const actions=header?.querySelector('.actions');if(actions){actions.append(button(parity.selectionMode?'完成':'选择',()=>{toggleSelection(parity,'work');view.selectionRefresh?.();},'library-select-toggle'));}
   const bar=tabs([['template','模板'],['all','全部作品'],['draft','草稿'],['trash','最近删除']],parity.workTab,id=>{parity.workTab=id;if(id==='trash')finishSelection(parity);render();});header?.after(bar);
   if(parity.workTab==='trash'){actions?.replaceChildren();mountRecentlyDeleted(c,'project');return;}
-  for(const card of view.querySelectorAll('.grid .card[data-act="open-project"]')){const p=state.projects.find(x=>x.id===card.dataset.id);if(p)card.hidden=parity.workTab==='draft'?!p.isDraft:parity.workTab==='recent'?p.isDraft||Date.now()-Date.parse(p.updatedAt)>30*864e5:!!p.isDraft;
-    bindLongPress(card,()=>{state.previewProjectID=card.dataset.id;c.handle('project-meta');},()=>!parity.selection);
-    card.addEventListener('click',e=>{if(!parity.selection)return;e.stopImmediatePropagation();parity.selected.has(card.dataset.id)?parity.selected.delete(card.dataset.id):parity.selected.add(card.dataset.id);view.selectionRefresh?.();},true);
+  for(const card of view.querySelectorAll('.grid .card[data-act="open-project"]')){const p=state.projects.find(x=>x.id===card.dataset.id);if(p)card.hidden=parity.workTab==='draft'?!p.isDraft:!!p.isDraft;
+    bindLongPress(card,()=>{state.previewProjectID=card.dataset.id;c.handle('project-meta');},()=>!parity.selectionMode);
+    card.addEventListener('click',e=>{if(!selectionActive(parity,'work'))return;e.stopImmediatePropagation();parity.selected.has(card.dataset.id)?parity.selected.delete(card.dataset.id):parity.selected.add(card.dataset.id);view.selectionRefresh?.();},true);
   }
   if(parity.workTab==='all'){const grid=view.querySelector('.grid');if(grid){for(const [label,action] of [['导入作品','import'],['空白创作','new-project']].reverse()){const tile=document.createElement('button');tile.type='button';tile.className='card work-entry';tile.innerHTML=`<div class="card-image">＋</div><div class="card-body"><h3>${label}</h3><p>${action==='import'?'从照片或文件收进作品':'从一张空白页面开始'}</p></div>`;tile.onclick=()=>view.querySelector(action==='import'?'#work-import':'#work-create')?.click();grid.prepend(tile);}}}
   if(filters){const grid=view.querySelector('.works-grid'),search=filters.querySelector('#work-search'),kind=filters.querySelector('#work-kind'),status=filters.querySelector('#work-status'),sort=filters.querySelector('#work-sort'),count=filters.querySelector('span');

@@ -1,11 +1,13 @@
-import {cropBitmap} from './image.js';
+import {paperOverlayRect} from './import-coordinate.js';
 export function mountImportBoxEditor({state,view,render,saveActiveImportRecord,toast,refreshImportCandidates}) {
   const base=view.querySelector('#crop-preview'),source=state.correctedBitmap||state.importBitmap;if(!base||!source)return;
   let boxes=structuredClone(state.importCandidates||[]),selected=null,drag=null;
   const overlay=document.createElement('div');overlay.className='manual-box-layer multi-box-editor';
-  const scale=Math.min(base.clientWidth/source.width,base.clientHeight/source.height);
   const paper=state.correctedBitmap?{x:0,y:0,w:1,h:1}:state.importBox;
-  overlay.style.cssText='left:'+((base.clientWidth-source.width*scale)/2+paper.x*source.width*scale)+'px;top:'+((base.clientHeight-source.height*scale)/2+paper.y*source.height*scale)+'px;width:'+source.width*scale*paper.w+'px;height:'+source.height*scale*paper.h+'px';base.append(overlay);
+  const position=()=>{if(!base.isConnected)return;const rect=paperOverlayRect(base.clientWidth,base.clientHeight,source.width,source.height,paper);Object.assign(overlay.style,{left:rect.left+'px',top:rect.top+'px',width:rect.width+'px',height:rect.height+'px'});};
+  base.append(overlay);position();requestAnimationFrame(position);
+  const observer=new ResizeObserver(position);observer.observe(base);base.querySelector(':scope > img')?.addEventListener('load',position);
+  view.manualBoxDispose=()=>{observer.disconnect();base.querySelector(':scope > img')?.removeEventListener('load',position);};
   const frame=base.querySelector('#crop-frame');if(frame)frame.style.display='none';
   const actions=document.createElement('div');actions.className='import-photo-tools';base.after(actions);
   const button=(label,fn)=>{const b=document.createElement('button');b.type='button';b.className='btn';b.textContent=label;b.onclick=fn;actions.append(b);return b;};
