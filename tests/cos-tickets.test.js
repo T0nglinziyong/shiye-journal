@@ -25,4 +25,7 @@ test('COS adapter batches authorization, never exposes credentials, and does not
   await Promise.all([store.download('owner/'+hash),store.download('owner/'+'b'.repeat(64)),store.preview('owner/'+hash)]);assert.equal(authorizationCalls,1);assert.equal(objectCalls,3);
   const denied=createCOSStore({client:()=>({auth:{getSession:async()=>({data:{session:null}})}}),fetcher:async()=>{throw Error('should not fetch');}});await assert.rejects(denied.download('owner/'+hash),/请先登录/);
   const failed=createCOSStore({client:()=>({auth:{getSession:async()=>({data:{session:{access_token:token}}})}}),fetcher:async()=>({ok:false,status:503})});await assert.rejects(failed.download('owner/'+hash),/503/);
+  let tries=0;const flaky=createCOSStore({client:()=>({auth:{getSession:async()=>({data:{session:{access_token:token}}})}}),fetcher:async(url,options)=>{if(url==='/api/cos'){tries++;if(tries===1)throw Error('transient network');const {objects}=JSON.parse(options.body);return {ok:true,json:async()=>({tickets:objects.map(row=>({...row,url:'https://example.test/'+row.path,headers:{}}))})};}return {ok:true,blob:async()=>new Blob(['recovered'])};}});
+  assert.equal(await (await flaky.download('owner/'+hash)).text(),'recovered');assert.equal(tries,2);
+  let deniedTries=0;const authDenied=createCOSStore({client:()=>({auth:{getSession:async()=>({data:{session:{access_token:token}}})}}),fetcher:async()=>{deniedTries++;return {ok:false,status:403};}});await assert.rejects(authDenied.download('owner/'+hash),/403/);assert.equal(deniedTries,1);
 });

@@ -1,6 +1,12 @@
 # 拾页：大陆访问与托管迁移
 
-## COS 私有对象接入（可选）
+## 当前生产存储（2026-09-30）
+
+固定测试站仍为 `https://shiye-journal-test.vercel.app`，由 GitHub `main` 自动发布；本轮 CI 预览代码的提交 `3cd0331` 已核对 Git SHA、READY 和固定别名。Supabase 继续负责登录、白名单、关系记录和版本；私有原图、缩略图及作品文件现由腾讯 COS 保存。旧 Supabase Storage 对象在完整备份隔离恢复、全量逐字节复制、COS 再校验、元数据原子切换及空缓存浏览器读图／作品验收后清理；迁移用的短期删除策略已撤销。见 [DATA_LOADING_ARCHITECTURE.md](DATA_LOADING_ARCHITECTURE.md)。
+
+COS 基础 CI 只在缺失缩略图时按固定参数生成 360px WebP；原图不参与 CI 锐化、阴影或裁剪，素材识别不因此宣称提升。COS 保持私有，CDN 因备案与私人鉴权边界尚未启用。用户曾在聊天中公开过长期 COS 凭据，迁移后应在腾讯云轮换，并同步更新 Vercel 环境变量；不要把旧凭据写入 Git。
+
+## COS 私有对象接入（历史阶段）
 
 本轮功能 e8a6b772b77dab976645d433a16ef3cb60c72bbb 自动 Git 部署 dpl_EMNm2EwDXum3mVgV4U5GganYRhBp：READY/source=git/准确 SHA/原固定别名已核对。127项单元、构建及 UI/HTTP 冒烟和四视口真实 Chromium 回归通过。COS 接口线上已部署，但当前服务器授权未配置，故新写入仍为 Supabase；未声称实际 COS 速度或可达性验收。私人 CeCe 历史补全云版本74，四页当前作品不变，其他记录及图片字节精确保留。
 
@@ -8,7 +14,7 @@
 
 服务端变量：SHIYE_COS_SECRET_ID、SHIYE_COS_SECRET_KEY、SHIYE_COS_BUCKET、SHIYE_COS_REGION。只允许最小权限子账号读写指定私有桶对象，不授予删除、ACL或其他产品权限。桶 CORS 限 https://shiye-journal-test.vercel.app、GET/PUT、content-type/x-cos-forbid-overwrite。不得公开桶或将密钥放进前端变量。先验私有测试对象的鉴权、上传、下载及哈希，再设置 VITE_SHIYE_OBJECT_STORAGE=cos 开启新写入。
 
-旧 Supabase 记录保留，按 storageProvider/projectDocumentProvider 读取。COS 未配置或失败明确报错，不迁移、不回退。DNS 不会直接加速图片；固定网址不改，COS 原站签名不能替代 CDN 鉴权。
+本段以下描述的是接入前的历史状态，不代表当前数据仍在 Supabase Storage。COS 未配置或失败应明确报错，不能静默回退到另一份浏览器资料。DNS 不会直接加速图片；固定网址不改，COS 原站签名不能替代 CDN 鉴权。
 
 日常上传先写账号隔离持久队列，切换页面不取消上传；必须经云端事务确认才删除队列。备份、退出及覆盖恢复等待确认属于必要顺序。缓存不绕过登录；强制关闭浏览器无法保证后台 JavaScript 继续运行，重开恢复上传。未同步时清除网站数据可能丢失待上传资料。
 
