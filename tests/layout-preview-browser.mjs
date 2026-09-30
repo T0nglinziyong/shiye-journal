@@ -17,7 +17,7 @@ try{
     await command('Emulation.setDeviceMetricsOverride',{width:w,height:h,deviceScaleFactor:1,mobile:w<700});
     await click('[data-route="library"]','.series-grid');await styles('.swift-series-controls');await toggle('.swift-series-controls');
     const series='[data-act="series-detail"][data-id="layout-series"]';await evaluate('document.querySelector('+JSON.stringify(series)+').scrollIntoView({block:"center"})');assert.ok(await evaluate('[...document.querySelectorAll('+JSON.stringify(series+' img')+')].every(e=>getComputedStyle(e).objectFit==="contain"&&e.getBoundingClientRect().width>0)'));await capture('series-cover',w,h);
-    await click(series,'.series-contents');await styles('.series-filter-menus');await toggle('.series-filter-menus');await capture('series-filters',w,h);await click('#all-series','.series-grid');await click('.swift-tabs button:nth-child(2)','.asset-grid');await styles('.filters');await toggle('.filters');
+    await click(series,'.series-contents');await styles('.series-filter-menus');await toggle('.series-filter-menus');await capture('series-filters',w,h);await click('#series-return','.series-grid');await click('.swift-tabs button:nth-child(2)','.asset-grid');await styles('.filters');await toggle('.filters');
     await evaluate('document.querySelector("#search").value="完整预览";document.querySelector("#search").dispatchEvent(new Event("input"))');await capture('asset-full-previews',w,h);
     for(const [name,width,height] of [['tall',80,2400],['wide',2400,80],['square',400,400]]){
       await click('[data-act="detail"][data-id="layout-'+name+'"]','.detail-columns');await click('[data-act="detail-edit"]','#asset-title');

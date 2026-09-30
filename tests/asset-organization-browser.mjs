@@ -33,7 +33,7 @@ try{
   for(let i=0;i<100;i++){if(await evaluate(`!document.querySelector('${card} .asset-organization-badge')`))break;await sleep(30);}
   assert.ok(await evaluate(`!document.querySelector('${card} .asset-organization-badge')&&document.querySelector('${card} img')===window.__organizationImage&&document.querySelector('${card}').classList.contains('batch-selected')&&scrollY===window.__organizationScroll`));
   assert.match(await evaluate(`document.querySelector('${card} h3').textContent`),/蓝色长方形纸片/);
-  await click('.library-select-toggle');await click('#all-series','.series-grid');await click('.card[data-id="'+seriesID+'"]','.series-contents');
+  await click('.library-select-toggle');await click('#series-return','.series-grid');await click('.card[data-id="'+seriesID+'"]','.series-contents');
   assert.ok(await evaluate(`!!document.querySelector('${card}')`));assert.equal(await evaluate(`document.querySelector('${card} .asset-organization-badge')`),null);
   assert.deepEqual(b.errors,[]);console.log('Organization status: 10 screenshots, actual import/model queue, route continuity, selection/scroll/image identity preserved. Synthetic model only.',out);
 }finally{await b.close();}

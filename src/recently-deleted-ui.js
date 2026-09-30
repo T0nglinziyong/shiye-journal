@@ -1,12 +1,16 @@
 // Recently deleted is a view over the existing trash store, never a second copy
 // of the library. Keep image blobs: other works may still reference them.
 import {changeTrash} from './trash-actions.js';
+import {imagePlaceholder} from './lazy-private-images.js';
+import {applyCatalogPage} from './catalog-pagination.js';
 
 function deletedPreview(record, kind, {esc, imgTag, workCover}) {
   if (kind === 'asset') return imgTag(record);
   const draft = record.drafts?.find(item => item.id === record.activeDraftID) || record.drafts?.[0];
   const staticCover = record.coverStaticPath && record.updatedAt === record.coverBaselineUpdatedAt;
-  const cover = staticCover
+  const cover = record.isSnapshot&&record.snapshotBlobId
+    ? `<img class="work-reference" src="${imagePlaceholder(record.snapshotBlobId)}" alt="${esc(record.title)} 快照">`
+    : staticCover
     ? `<img class="work-reference" src="${esc(record.coverStaticPath)}" alt="${esc(record.title)}">`
     : workCover?.(draft) || '';
   return `<div class="thumb-sheet" style="aspect-ratio:${draft?.canvas?.width || 1}/${draft?.canvas?.height || 1};background:${esc(draft?.paperColor || '#fff')}">${cover}</div>`;
@@ -41,6 +45,10 @@ export function mountRecentlyDeleted(c, kind) {
   list.innerHTML = records.length
     ? records.map(entry => deletedCardHTML(entry, kind, {esc, imgTag, workCover})).join('')
     : `<p class="empty">没有最近删除的${kind === 'asset' ? '素材' : '作品'}。</p>`;
+  const toolbar=document.createElement('div');toolbar.className='filters deleted-toolbar';toolbar.innerHTML='<div class="four-filter-controls"></div><span class="catalog-total"></span>';
+  (view.querySelector('.swift-tabs')||view.querySelector('.view-head'))?.after(toolbar);
+  const update=()=>applyCatalogPage({view,key:'trash:'+kind,cards:[...list.querySelectorAll('[data-trash-id]')],matched:()=>true,countNode:toolbar.querySelector('.catalog-total'),size:state.preferences.maxPageItems});
+  view.catalogRefresh=update;
 
   const tray=document.createElement('div');
   tray.className='swift-tray manage deleted-selection-tray';
@@ -52,7 +60,7 @@ export function mountRecentlyDeleted(c, kind) {
   function sync(){select.textContent=choosing?'完成':'选择';tray.hidden=!choosing;list.classList.toggle('selecting',choosing);tray.querySelector('strong').textContent=`已选 ${selected.size} 项`;for(const button of tray.querySelectorAll('[data-trash-recover],[data-trash-remove]'))button.disabled=!selected.size||busy;for(const card of list.querySelectorAll('[data-trash-id]')){const checked=selected.has(card.dataset.trashId);card.classList.toggle('batch-selected',choosing&&checked);card.setAttribute('aria-selected',String(choosing&&checked));let mark=card.querySelector('.batch-check');if(choosing&&!mark){mark=document.createElement('span');mark.className='batch-check';card.querySelector('.card-image').append(mark);}if(mark){mark.hidden=!choosing;mark.textContent=checked?'☑':'□';}}}
   select.onclick=()=>{choosing=!choosing;selected.clear();sync();};
   list.addEventListener('click',event=>{if(!choosing||event.target.closest('.deleted-actions'))return;const card=event.target.closest('[data-trash-id]');if(!card)return;const id=card.dataset.trashId;selected.has(id)?selected.delete(id):selected.add(id);sync();});
-  tray.querySelector('[data-trash-all]').onclick=()=>{for(const entry of records)selected.add(entry.id);sync();};
+  tray.querySelector('[data-trash-all]').onclick=()=>{for(const card of list.querySelectorAll('[data-trash-id]:not([hidden])'))selected.add(card.dataset.trashId);sync();};
   tray.querySelector('[data-trash-clear]').onclick=()=>{selected.clear();sync();};
   const act = async (ids, recover) => {
     const entries=state.trash.filter(item=>ids.includes(item.id)&&item.kind===kind);
@@ -76,6 +84,7 @@ export function mountRecentlyDeleted(c, kind) {
   view.append(list);
   const note=document.createElement('p');note.className='deleted-retention-note';note.textContent='最近删除保留 7 天，到期自动清除。';view.append(note);
   view.append(tray);
+  update();
 
   if (kind === 'project') list.querySelectorAll('.thumb-sheet').forEach((frame, index) => {
     const record = records[index].item;

@@ -1,6 +1,7 @@
 import {beginSelection,finishSelection,toggleSelection,selectionActive} from './library-selection-model.js';
 import {seriesCovers,seriesMembers} from './library-model.js';
 import {bindLongPress} from './long-press.js';
+import {applyCatalogPage,resetCatalogPage} from './catalog-pagination.js';
 
 const filtersByID=new Map();
 const filters=id=>{if(!filtersByID.has(id))filtersByID.set(id,{query:'',kind:'all',status:'all',sort:'recent',ascending:false});return filtersByID.get(id);};
@@ -13,7 +14,7 @@ export function renderSeriesContents({state,esc,imgTag,assetCard}) {
   const s=state.series.find(s=>s.id===state.seriesID);if(!s)return '<p>系列已移走</p>';
   const f=filters(s.id),members=seriesMembers(s.id,state.assets,state.projects,f),all=state.assets.filter(a=>a.seriesID===s.id&&!a.isProjectInternal);
   const options=(list,value)=>list.map(([v,label])=>'<option value="'+v+'" '+(v===value?'selected':'')+'>'+label+'</option>').join('');
-  return '<section class="series-contents"><div class="series-navigation"><button type="button" class="btn" id="series-return">‹ 返回素材库</button><button type="button" class="btn" id="all-series">所有系列</button></div>'+
+  return '<section class="series-contents"><div class="series-navigation"><button type="button" class="btn" id="series-return">‹ 返回素材库</button></div>'+
     '<div class="view-head series-heading"><div class="series-identity"><div class="series-detail-cover">'+seriesCovers(s,state.assets).map(imgTag).join('')+'</div><div class="series-copy"><div class="eyebrow">COLLECTION</div><h1><button type="button" id="series-edit-title" aria-label="编辑系列信息与标签">'+esc(s.title)+' <span aria-hidden="true">✎</span></button></h1>'+
     (s.introduction?'<p>'+esc(s.introduction)+'</p>':'')+'<p class="series-tags">'+esc([...(s.styleTags||[]),...(s.semanticTags||[])].join(' · '))+'</p><p>'+all.length+' 件素材</p></div></div><div class="actions" id="series-actions"></div></div>'+
     '<div class="series-filters"><input type="search" id="series-search" aria-label="在这个系列中搜索" placeholder="在这个系列中搜索" value="'+esc(f.query)+'"><div class="series-filter-menus"><select id="series-kind" aria-label="系列素材类型">'+options([['all','全部类型'],...kinds],f.kind)+'</select><select id="series-status" aria-label="系列素材状态">'+options([['all','全部状态'],['ready','已整理'],['unready','未整理'],['used','已使用'],['unused','未使用'],['inside','系列中'],['outside','系列外']],f.status)+'</select><select id="series-sort" aria-label="系列素材排序">'+options([['recent','最近添加'],['name','名称']],f.sort)+'</select><button class="btn" id="series-order">'+(f.ascending?'升序 ↑':'降序 ↓')+'</button></div></div>'+
@@ -27,13 +28,13 @@ async function assign(c,ids,to) {
 export function mountSeriesContents(c,p) {
   const {state,view,render,route,body,modal}=c,id=state.seriesID,s=state.series.find(s=>s.id===id);if(!s)return;
   const f=filters(id),cards=[...view.querySelectorAll('[data-act="detail"]')];
-  view.querySelector('#series-return').onclick=()=>c.libraryBack();view.querySelector('#all-series').onclick=()=>route('series');
+  view.querySelector('#series-return').onclick=()=>c.libraryBack();
   view.querySelector('#series-edit-title').onclick=()=>c.openSeriesEditor(id);
   const update=()=>{const members=seriesMembers(id,state.assets,state.projects,f),ids=new Set(members.map(a=>a.id)),grid=view.querySelector('.asset-grid');
-    for(const a of members){const card=cards.find(b=>b.dataset.id===a.id);if(card)grid.append(card);}for(const card of cards)card.hidden=!ids.has(card.dataset.id);view.querySelector('.series-result-count').textContent=members.length+' 项';};
+    for(const a of members){const card=cards.find(b=>b.dataset.id===a.id);if(card)grid.append(card);}applyCatalogPage({view,key:'series:'+id,cards,matched:card=>ids.has(card.dataset.id),countNode:view.querySelector('.series-result-count'),size:state.preferences.maxPageItems});};view.catalogRefresh=update;
   // Render every member once, then filter without losing search focus.
   for(const [selector,key] of [['#series-search','query'],['#series-kind','kind'],['#series-status','status'],['#series-sort','sort']]) {
-    const el=view.querySelector(selector);el.oninput=el.onchange=()=>{f[key]=el.value;update();};
+    const el=view.querySelector(selector);el.oninput=el.onchange=()=>{f[key]=el.value;resetCatalogPage('series:'+id);update();};
   }
   view.querySelector('#series-order').onclick=()=>{f.ascending=!f.ascending;view.querySelector('#series-order').textContent=f.ascending?'升序 ↑':'降序 ↓';update();};
   const add=()=>{state.addingToSeries=id;state.seriesID='all';state.query='';state.kind='all';state.status='all';state.libraryRecent=false;beginSelection(p,'asset');route('library');};

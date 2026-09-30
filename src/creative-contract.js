@@ -69,10 +69,12 @@ export function validateValue(value,schema,path='$'){
   const reason=error.keyword==='additionalProperties'?'未实现或未知字段':error.keyword==='required'?'缺少字段':error.keyword==='enum'?'未实现或未知值':'合同不合法';throw Error(location+' '+reason+'：'+error.message);
 }
 export function validateTool(name,args){if(!Object.hasOwn(toolContracts,name))throw Error('未知工具 '+name);validateValue(args,toolContracts[name],'$.'+name);}
-const directText=object({content:string(1500),font_style:enums(['serif','sans','rounded']),x:num(0,1),y:num(0,1),width:num(.01,1),height:num(.01,1),font_size:num(8,160),color,z:integer(-1000,1000),role:enums(['title','body','caption','label']),alignment:enums(['left','center','right']),bold:{type:'boolean'},italic:{type:'boolean'},line_spacing:num(0,60),letter_spacing:num(-2,12)},['content','font_style','x','y','width','height','font_size','color']);
+const directText=object({content:string(1500),font_style:enums(['serif','sans','rounded','hand']),x:num(0,1),y:num(0,1),width:num(.01,1),height:num(.01,1),font_size:num(8,160),color,z:integer(-1000,1000),role:enums(['title','body','caption','label']),alignment:enums(['left','center','right']),bold:{type:'boolean'},italic:{type:'boolean'},line_spacing:num(0,60),letter_spacing:num(-2,12)},['content','font_style','x','y','width','height','font_size','color']);
+const inkPoint=object({x:num(0,1),y:num(0,1),pressure:num(0,1)},['x','y']);
+const inkStroke=object({points:array(inkPoint,1,512),width:num(.5,60),color,opacity:num(0,1),pen_style:enums(['fountain','ballpoint','brush','marker'])},['points','width','color','pen_style']);
 const directOperations={anyOf:operationContract.anyOf.map(s=>({...s,required:Object.keys(s.properties)}))};
 const directMaterial=object({...material.properties,operations:array(directOperations,1,12)},Object.keys(material.properties));
-export const directPageContract=object({version:{type:'integer',minimum:3,maximum:3,enum:[3]},style:enums(['留白叙事','密集拼贴','杂志网格','胶片日记','手作便签','自由构图']),intent:nullable(string(240)),items:array(directMaterial,0,100),graphics:array(primitive,0,48),text_blocks:array(directText,0,24),paper:object({color,pattern:enums(['plain','lined','grid','dots','columns'])},['color','pattern'])},['version','style','intent','items','text_blocks','paper']);
+export const directPageContract=object({version:{type:'integer',minimum:3,maximum:3,enum:[3]},style:enums(['留白叙事','密集拼贴','杂志网格','胶片日记','手作便签','自由构图']),intent:nullable(string(240)),items:array(directMaterial,0,100),graphics:array(primitive,0,48),ink_strokes:array(inkStroke,0,32),text_blocks:array(directText,0,24),paper:object({color,pattern:enums(['plain','lined','grid','dots','columns'])},['color','pattern'])},['version','style','intent','items','text_blocks','paper']);
 export function directPageToTools(page){
   validateValue(page,directPageContract);
   // A single composite call keeps the direct page atomic, including large baskets.

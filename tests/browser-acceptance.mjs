@@ -51,14 +51,14 @@ try {
     await click('[data-route="library"]','.series-grid');await capture('series',width,height);
     assert.equal(await evaluate('document.querySelectorAll(".series-card-edit").length'),0);
     await click('[data-act="series-detail"]','.series-contents');await capture('series-contents',width,height);
-    await click('#all-series','.series-grid');
+    await click('#series-return','.series-grid');
     await click('.swift-tabs button:nth-child(2)','.asset-grid');await capture('assets',width,height);
     await click('[data-act="detail"]','.detail-columns');await capture('asset-detail',width,height);
     await click('[data-act="detail-edit"]','#asset-title');await capture('asset-editor',width,height);await click('#asset-dialog-close');
     await click('[data-act="detail-add"]');
     await click('[data-route="matching"]','.matching-page');await capture('matching',width,height);
-    const rows=await evaluate('(()=>{const y=id=>document.querySelector("#"+id).closest("label").getBoundingClientRect().top;return {style:y("match-style"),purpose:y("match-purpose"),processing:y("match-processing"),mode:y("match-mode"),paper:y("match-ratio")};})()');
-    assert.ok(Math.abs(rows.style-rows.purpose)<2,'style and purpose share a row');assert.ok(Math.abs(rows.processing-rows.mode)<2&&Math.abs(rows.mode-rows.paper)<2,'processing, mode and paper share a row');assert.ok(rows.processing>rows.style);
+    const rows=await evaluate('(()=>{const y=selector=>document.querySelector(selector).closest("label").getBoundingClientRect().top;return {style:y("[data-direction=style]"),purpose:y("[data-direction=purpose]"),processing:y("#match-processing"),mode:y("#match-mode"),paper:y("#match-ratio")};})()');
+    assert.ok(Math.abs(rows.purpose-rows.processing)<2,'purpose and processing share a row');assert.ok(Math.abs(rows.mode-rows.paper)<2,'mode and paper share a row');assert.ok(rows.purpose>rows.style);
     await evaluate('document.querySelector(".match-direction").scrollIntoView({block:"start"})');await capture('matching-controls',width,height);await evaluate('scrollTo(0,0)');
     await click('[data-route="works"]','.works-grid');await capture('works',width,height);
     await evaluate('document.querySelector(".card[data-act=open-project]").dispatchEvent(new MouseEvent("contextmenu",{bubbles:true}))');await click('#project-meta-preview','.project-preview-cover');await capture('work-preview',width,height);
@@ -90,14 +90,14 @@ try {
   await fill('#series-search','');assert.equal(await evaluate('document.querySelectorAll("[data-act=detail]:not([hidden])").length'),allMembers);
   await click('#series-add-assets','.asset-grid');assert.ok(await evaluate('document.querySelector(".view-head h1").textContent.includes("添加素材")'));
   await evaluate('[...document.querySelectorAll(".view-head .actions button")].find(b=>b.textContent==="取消").click()');await wait('.series-contents');
-  await click('#all-series','.series-grid');await click('.series-entry','#series-name');await fill('#series-name','浏览器验收临时系列');await click('#series-save');
+  await click('#series-return','.series-grid');await click('.series-entry','#series-name');await fill('#series-name','浏览器验收临时系列');await click('#series-save');
   const temporarySeries=(await storeRecords('series')).find(s=>s.title==='浏览器验收临时系列');const beforeAssets=await storeRecords('assets');
   await click('[data-act="series-detail"][data-id="'+temporarySeries.id+'"]','.series-contents');await click('#series-add-assets','.asset-grid');
   const picked=beforeAssets.find(a=>!a.isProjectInternal&&a.seriesID!==saved.id);
   await click('[data-act="detail"][data-id="'+picked.id+'"]');await evaluate('[...document.querySelectorAll(".swift-tray button")].find(b=>b.textContent==="加入系列并返回").click()');await wait('.series-contents');
   assert.equal((await storeRecords('assets')).find(a=>a.id===picked.id).seriesID,temporarySeries.id);assert.equal((await storeRecords('assets')).length,beforeAssets.length);
   await click('[data-act="detail"]','.detail-columns');await click('[data-act="detail-series"]','.series-contents');await click('#series-return','.detail-columns');await click('[data-act="detail-back"]','.series-contents');
-  await click('#all-series','.series-grid');await evaluate('[...document.querySelectorAll(".view-head .actions button")].find(b=>b.textContent==="选择").click()');await click('[data-act="series-detail"][data-id="'+temporarySeries.id+'"]');
+  await click('#series-return','.series-grid');await evaluate('[...document.querySelectorAll(".view-head .actions button")].find(b=>b.textContent==="选择").click()');await click('[data-act="series-detail"][data-id="'+temporarySeries.id+'"]');
   await evaluate('window.confirm=()=>true;[...document.querySelectorAll(".library-management-tray button")].find(b=>b.textContent==="删除系列").click()');await wait('.series-grid');for(let i=0;i<250&&(await storeRecords('series')).some(s=>s.id===temporarySeries.id);i++)await sleep(20);
   assert.equal((await storeRecords('assets')).find(a=>a.id===picked.id).seriesID,null);assert.equal((await storeRecords('assets')).length,beforeAssets.length);assert.ok(!(await storeRecords('series')).some(s=>s.id===temporarySeries.id));
   // Real touch events select two editable objects; moving the set is one edit

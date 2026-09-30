@@ -169,10 +169,12 @@ test('selected style and purpose produce four anonymous alternatives from simple
 
 test('direct page returned as an editable file imports into layers, not a flattened preview',async()=>{
   const {source}=await createOfflineHandoff({project:project('直接页'),assets:[asset],aliases:{m1:asset.id},settings:{generationMode:'direct',includeThumbnails:false}});source.purposes=['主题封面'];
-  const page={version:3,style:'留白叙事',intent:null,items:[{asset:'m1',piece:'paper',unit:0,role:null,operations:[{op:'whole'}],placement:{x:.5,y:.4,rotation:0,z:1},relation:null}],graphics:[{key:'line-1',kind:'line',x:.5,y:.2,width:.5,height:.004,stroke:'#30463d',fill:null,line_width:2},{key:'frame-1',kind:'frame',x:.5,y:.7,width:.5,height:.08,stroke:'#30463d',fill:null,line_width:2},{key:'block-1',kind:'rectangle',x:.8,y:.8,width:.07,height:.06,fill:'#8ba99b',stroke:null}],text_blocks:[{content:'这一页的主题',font_style:'serif',x:.5,y:.15,width:.6,height:.1,font_size:28,color:'#30463d'}],paper:{color:'#fcfaf0',pattern:'plain'}};
+  const page={version:3,style:'留白叙事',intent:null,items:[{asset:'m1',piece:'paper',unit:0,role:null,operations:[{op:'whole'}],placement:{x:.5,y:.4,rotation:0,z:1},relation:null}],graphics:[{key:'line-1',kind:'line',x:.5,y:.2,width:.5,height:.004,stroke:'#30463d',fill:null,line_width:2},{key:'frame-1',kind:'frame',x:.5,y:.7,width:.5,height:.08,stroke:'#30463d',fill:null,line_width:2},{key:'block-1',kind:'rectangle',x:.8,y:.8,width:.07,height:.06,fill:'#8ba99b',stroke:null}],ink_strokes:[{points:[{x:.2,y:.84},{x:.3,y:.86},{x:.4,y:.84}],width:3,color:'#567ba8',pen_style:'brush'}],text_blocks:[{content:'这一页的主题',font_style:'hand',x:.5,y:.15,width:.6,height:.1,font_size:28,color:'#30463d'}],paper:{color:'#fcfaf0',pattern:'plain'}};
   const imported=importEditableWork(JSON.stringify({format:EDITABLE_WORK_FORMAT,version:1,source,title:'直接返回的作品',page}),[asset]);
   assert.equal(imported.isDraft,true);assert.equal(imported.drafts[0].items[0].assetID,asset.id);
   assert.equal(imported.drafts[0].textBlocks[0].content,'这一页的主题');
   assert.deepEqual(imported.drafts[0].primitives.map(g=>g.kind),['line','frame','rectangle']);
+  assert.equal(imported.drafts[0].strokes[0].penStyle,'brush');
+  assert.equal(imported.drafts[0].textBlocks[0].style,'hand');
   assert.match(shapeSVG(imported.drafts[0].primitives[0]),/vector-effect="non-scaling-stroke"/);
 });

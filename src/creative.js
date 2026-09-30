@@ -113,6 +113,10 @@ function putGraphics(d,list){for(const g of list){
   else if(g.padding_mm)throw Error('padding_mm 需要 match_size_to');
   if(old)Object.assign(old,data);else d.primitives.push({id:uid(),...data});
 }}
+function putInk(d,list){for(const stroke of list){
+  d.strokes||=[];
+  d.strokes.push({id:uid(),points:stroke.points.map(point=>({x:point.x*d.canvas.width,y:point.y*d.canvas.height,p:point.pressure??.5})),width:stroke.width,color:stroke.color,opacity:stroke.opacity??(stroke.pen_style==='marker'?.4:1),penStyle:stroke.pen_style});
+}}
 function setPaper(d,a){if(a.color)d.paperColor=a.color;if(a.pattern)d.paperPattern=a.pattern==='lined'?'lines':a.pattern;if(a.intent)d.compositionIntent=a.intent;}
 function relations(d,list){for(const e of list){if(!e.relation){delete find(d,e.piece).materialRelation;continue;}const i=find(d,e.piece),target=find(d,e.relation.target);if(target===i)throw Error('片段不可相对自身');const mm=e.relation.exposed_mm*scale(d),relation=e.relation.kind;
   if((target.rotation||0)!==0||(i.rotation||0)!==0)throw Error('实体叠放关系目前只支持未旋转的片段');
@@ -183,7 +187,7 @@ function execute(d,assets,aliases,name,a,options){
   switch(name){
     case 'compose_story_page':story(d,assets,aliases,a,options);break;
     case 'compose_page':compose(d,assets,aliases,a,options);break;
-    case 'compose_direct_page':validateValue(a,directPageContract);d.style=({'留白叙事':'airy','密集拼贴':'layered','杂志网格':'editorial','胶片日记':'film','手作便签':'memo','自由构图':'free'})[a.style];setPaper(d,{...a.paper,intent:a.intent});upsertMaterials(d,assets,aliases,{items:a.items},options);putGraphics(d,a.graphics||[]);putTexts(d,a.text_blocks.map((t,n)=>({...t,key:'direct-t'+(n+1)})),options);finish(d,assets,{summary:a.intent||''},options);return {detail:'直接页已通过实物与必用约束并完成',mutation:true};
+    case 'compose_direct_page':validateValue(a,directPageContract);d.style=({'留白叙事':'airy','密集拼贴':'layered','杂志网格':'editorial','胶片日记':'film','手作便签':'memo','自由构图':'free'})[a.style];setPaper(d,{...a.paper,intent:a.intent});upsertMaterials(d,assets,aliases,{items:a.items},options);putGraphics(d,a.graphics||[]);putTexts(d,a.text_blocks.map((t,n)=>({...t,key:'direct-t'+(n+1)})),options);putInk(d,a.ink_strokes||[]);finish(d,assets,{summary:a.intent||''},options);return {detail:'直接页已通过实物与必用约束并完成',mutation:true};
     case 'place_materials':addMaterials(d,assets,aliases,a.items);break;
     case 'edit_materials':for(const e of a.items){const item=find(d,e.piece);if(!d.items.includes(item))throw Error('加工目标必须是实物');process(d,item,assets.find(a=>a.id===item.assetID),e.operations,e.mode||'append',options);}break;
     case 'upsert_materials':upsertMaterials(d,assets,aliases,a,options);break;
