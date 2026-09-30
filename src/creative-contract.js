@@ -9,7 +9,8 @@ const integer=(minimum,maximum)=>({type:'integer',minimum,maximum});
 const enums=values=>({type:'string',enum:values});
 const array=(items,minItems=0,maxItems=12)=>({type:'array',items,minItems,maxItems});
 const nullable=schema=>({anyOf:[schema,{type:'null'}]});
-const key=string(),color={...string(7),pattern:'^#[0-9a-fA-F]{6}$'};
+// Stable asset aliases encode a UUID, so they are longer than positional m1.
+const key=string(192),color={...string(7),pattern:'^#[0-9a-fA-F]{6}$'};
 const unit=enums(['ratio','pt','mm']);
 const coordinates={x:num(),y:num(),coordinate_unit:unit,relative_to:key,offset:array(num(-4,4),2,2),rotation:num(-180,180),z:integer(-1000,1000)};
 const finish=object({line:enums(['straight']),depthMM:num(0,0),periodMM:num(.5,100),corner:enums(['square']),radiusMM:num(0,0)},['line','depthMM','periodMM','corner','radiusMM']);
@@ -23,18 +24,19 @@ export const operationContract={anyOf:[
 const simple=object({asset:key,piece:key,unit:integer(0,10000),...coordinates,role:string(80)},['asset']);
 const material=object({asset:key,piece:key,unit:integer(0,10000),role:nullable(string(80)),operations:array(operationContract,1,12),placement:object({x:num(-2,3),y:num(-2,3),rotation:num(-180,180),z:integer(-1000,1000)},['x','y','rotation','z']),relation:nullable(object({kind:enums(['revealLeft','revealRight','revealBottom','behind','anchorCorner']),target:key,exposed_mm:num(0,40)},['kind','target','exposed_mm']))},['asset','piece','operations','placement']);
 const text=object({key,content:string(1500),width:num(.001,20000),height:num(.001,20000),...coordinates,size_unit:unit,font_size:num(8,160),font_style:enums(['serif','sans','rounded']),style:enums(['serif','sans','rounded','hand']),color,role:enums(['title','body','caption','label']),bold:{type:'boolean'},italic:{type:'boolean'},alignment:enums(['left','center','right']),line_spacing:num(0,60),letter_spacing:num(-2,12)},['key','content','width']);
-const primitive=object({key,kind:enums(['rectangle','roundedRectangle','ellipse','line','frame','star','heart','arrow','checkbox','triangle','diamond','hexagon','grid','dots','stripes','ribbon','tag','bubble','chevron','burst','scallop']),...coordinates,width:num(.001,20000),height:num(.001,20000),size_unit:unit,fill:nullable(color),stroke:nullable(color),line_width:num(0,30),opacity:num(0,1),match_size_to:key,padding_mm:array(num(-100,100),4,4)},['key','kind']);
+const vectorPath=array(array(num(0,1),2,2),2,512);
+const primitive=object({key,kind:enums(['rectangle','roundedRectangle','ellipse','line','frame','star','heart','arrow','checkbox','triangle','diamond','hexagon','grid','dots','stripes','ribbon','tag','bubble','chevron','burst','scallop','vector']),...coordinates,width:num(.001,20000),height:num(.001,20000),size_unit:unit,fill:nullable(color),stroke:nullable(color),line_width:num(0,30),opacity:num(0,1),vector_paths:array(vectorPath,1,24),match_size_to:key,padding_mm:array(num(-100,100),4,4)},['key','kind']);
 const paper=object({color,pattern:enums(['plain','lined','lines','grid','dots','columns']),intent:string(240)});
 export const toolContracts={
   compose_story_page:object({grammar:enums(['diary','ephemera']),title:string(80),lead:string(320),notes:array(string(320),2,2),microcopy:string(60),focal:key,support:key,tape:key,ticket:key,illustration:key,paper:color,ink:color,accent:color},['grammar','title','lead','notes','microcopy','focal','support','paper','ink','accent']),
-  compose_page:object({materials:array(object({...simple.properties,crop:array(num(0,1),4,4),crop_px:array(num(0,20000),4,4)},['asset']),0,12),graphics:array(primitive,0,20),texts:array(text,0,12),paper}),
+  compose_page:object({materials:array(object({...simple.properties,crop:array(num(0,1),4,4),crop_px:array(num(0,20000),4,4)},['asset']),0,12),graphics:array(primitive,0,48),texts:array(text,0,24),paper}),
   place_materials:object({items:array(simple,1,12)},['items']),
   edit_materials:object({items:array(object({piece:key,mode:enums(['append','replace']),operations:array(operationContract,1,12)},['piece','operations']),1,12)},['items']),
   upsert_materials:object({items:array(material,0,12),remove:array(key,0,12)},['items']),
   move_elements:object({items:array(object({key,...coordinates},['key']),1,12)},['items']),
   arrange_elements:object({keys:array(key,2,12),mode:enums(['row','column','grid']),...Object.fromEntries(Object.entries(coordinates).filter(([k])=>!['rotation','z'].includes(k))),gap_mm:num(0,80),columns:integer(1,6)},['keys','mode']),
   fit_text_to:object({key,target:key,padding_mm:array(num(0,40),4,4),visible_bounds:{type:'boolean'},color,font_size:num(8,160)},['key','target']),
-  upsert_primitives:object({items:array(primitive,1,12)},['items']),
+  upsert_primitives:object({items:array(primitive,1,48)},['items']),
   upsert_text:object({items:array(text,1,12)},['items']),
   delete_elements:object({keys:array(key,1,24)},['keys']),
   set_paper:paper,
@@ -67,12 +69,12 @@ export function validateValue(value,schema,path='$'){
   const reason=error.keyword==='additionalProperties'?'未实现或未知字段':error.keyword==='required'?'缺少字段':error.keyword==='enum'?'未实现或未知值':'合同不合法';throw Error(location+' '+reason+'：'+error.message);
 }
 export function validateTool(name,args){if(!Object.hasOwn(toolContracts,name))throw Error('未知工具 '+name);validateValue(args,toolContracts[name],'$.'+name);}
-const directText=object({content:string(1500),font_style:enums(['serif','sans','rounded']),x:num(0,1),y:num(0,1),width:num(.01,1),height:num(.01,1),font_size:num(12,96),color},['content','font_style','x','y','width','height','font_size','color']);
+const directText=object({content:string(1500),font_style:enums(['serif','sans','rounded']),x:num(0,1),y:num(0,1),width:num(.01,1),height:num(.01,1),font_size:num(8,160),color,z:integer(-1000,1000),role:enums(['title','body','caption','label']),alignment:enums(['left','center','right']),bold:{type:'boolean'},italic:{type:'boolean'},line_spacing:num(0,60),letter_spacing:num(-2,12)},['content','font_style','x','y','width','height','font_size','color']);
 const directOperations={anyOf:operationContract.anyOf.map(s=>({...s,required:Object.keys(s.properties)}))};
 const directMaterial=object({...material.properties,operations:array(directOperations,1,12)},Object.keys(material.properties));
-export const directPageContract=object({version:{type:'integer',minimum:3,maximum:3,enum:[3]},style:enums(['留白叙事','密集拼贴','杂志网格','胶片日记','手作便签','自由构图']),intent:nullable(string(240)),items:array(directMaterial,0,30),graphics:array(primitive,0,20),text_blocks:array(directText,0,10),paper:object({color,pattern:enums(['plain','lined','grid','dots','columns'])},['color','pattern'])},['version','style','intent','items','text_blocks','paper']);
+export const directPageContract=object({version:{type:'integer',minimum:3,maximum:3,enum:[3]},style:enums(['留白叙事','密集拼贴','杂志网格','胶片日记','手作便签','自由构图']),intent:nullable(string(240)),items:array(directMaterial,0,100),graphics:array(primitive,0,48),text_blocks:array(directText,0,24),paper:object({color,pattern:enums(['plain','lined','grid','dots','columns'])},['color','pattern'])},['version','style','intent','items','text_blocks','paper']);
 export function directPageToTools(page){
   validateValue(page,directPageContract);
-  // A single composite call keeps the direct page atomic, including 13–30 materials.
+  // A single composite call keeps the direct page atomic, including large baskets.
   return [{name:'compose_direct_page',arguments:structuredClone(page)}];
 }

@@ -16,6 +16,14 @@ test('four material states are disjoint and excluded records never enter model i
  assert.deepEqual(scope.required,['photo']);assert.deepEqual(scope.preferred,['paper']);assert.deepEqual(scope.available,['ticket']);assert.deepEqual(scope.excluded,['flower']);assert.deepEqual(scope.candidateAssetIDs,['photo','paper','ticket']);
  assert.deepEqual(buildMaterialScope({...scope,basket:['photo','paper'],coreIDs:['photo'],recommendations:[{asset:assets[2]}],autoIncludeRecommendations:false}).candidateAssetIDs,['photo','paper']);
 });
+test('all candidates become required by default setting, while off keeps pinned required and others preferred',()=>{
+ const options={basket:['photo','paper'],coreIDs:['photo'],recommendations:[{asset:assets[2]},{asset:assets[3]}],excluded:['flower'],autoIncludeRecommendations:true};
+ const all=buildMaterialScope({...options,requireAllCandidates:true});
+ assert.deepEqual(all.required,['photo','paper','ticket']);assert.deepEqual(all.preferred,[]);assert.deepEqual(all.available,[]);
+ assert.deepEqual(all.candidateAssetIDs,['photo','paper','ticket']);
+ const relaxed=buildMaterialScope({...options,requireAllCandidates:false});
+ assert.deepEqual(relaxed.required,['photo']);assert.deepEqual(relaxed.preferred,['paper']);assert.deepEqual(relaxed.available,['ticket']);
+});
 test('matching view places direction above recommendations and explains AI inclusion',()=>{
  const state={assets,basket:[],coreIDs:[],excludedAssetIDs:['flower'],matchStyle:'旅行票据',matchStyles:['旅行票据'],matchPurpose:'旅途记录',matchPurposes:['旅途记录'],matchMode:'single',matchRatio:'a4',matchProcessing:'保留完整',matchIntent:'',materialUseHints:{},materialUseRequired:{},recommendFilter:'全部',customPaperWidth:210,customPaperHeight:297,aiSettings:{autoIncludeRecommendations:true}};
  assert.ok(matchingRecommendations(state).length);

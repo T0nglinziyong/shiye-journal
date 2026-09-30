@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {mkdir,writeFile} from 'node:fs/promises';
 import {browserHarness} from './browser-harness.mjs';
+import {zipSync,strToU8} from 'fflate';
 
 const directory=process.env.SHIYE_OFFLINE_SCREENSHOTS||'/tmp/shiye-offline-handoff';
 await mkdir(directory,{recursive:true});
@@ -92,5 +93,11 @@ try{
   assert.ok(await evaluate('document.querySelector(".match-variant-grid").textContent.includes("网页 GPT 完成测试")'));
   await command('Page.reload');await wait('.series-grid');await click('[data-route="matching"]','.match-previews');
   assert.ok(await evaluate('document.querySelector(".match-variant-grid").textContent.includes("网页 GPT 测试作品")&&document.querySelector(".match-variant-grid").textContent.includes("网页 GPT 完成测试")'));
+  const packed=zipSync({'project.shiyeproject.json':strToU8(JSON.stringify({format:'shiye-editable-project',version:1,source:{...source,bundleId:'offline-browser-zip'},title:'ZIP 可编辑作品',page}))});
+  const encoded=Buffer.from(packed).toString('base64');
+  await evaluate(`(()=>{const bytes=Uint8Array.from(atob(${JSON.stringify(encoded)}),c=>c.charCodeAt(0)),input=document.querySelector('#work-file-input'),transfer=new DataTransfer();transfer.items.add(new File([bytes],'作品.shiyeproject.zip',{type:'application/zip'}));input.files=transfer.files;input.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+  await wait('#canvas-page');
+  assert.ok(await evaluate('document.querySelector(".swift-editor-head h1")?.textContent.includes("ZIP 可编辑作品")'));
+  await click('[data-act="back-works"]','.match-previews');
   assert.deepEqual(b.errors,[]);console.log('Offline GPT handoff verified in four viewports; preview benchmark:',previewSize,'screenshots:',directory);
 }finally{await b.close();}

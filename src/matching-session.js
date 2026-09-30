@@ -1,6 +1,7 @@
 import {usableProjectSnapshot} from './project-outbox-recovery.js';
 import {presetReferencePlans,renderPresetReferences} from './creative-reference-presets.js';
 import {prepareMaterialPreviews} from './creative-previews.js';
+import {materialAliases} from './material-alias.js';
 const ID='matching-session-v1';
 const KEYS=['basket','coreIDs','excludedAssetIDs','matchCore','matchRatio','matchMode','matchStyle','matchStyles','matchPurposes','matchIntent','matchPurpose','matchProcessing','materialUseHints','materialUseRequired','assetProcessing','customPaperWidth','customPaperHeight'];
 export function matchingSnapshot(state,variants){return {id:ID,context:Object.fromEntries(KEYS.map(k=>[k,structuredClone(state[k])])),variants:structuredClone(variants)};}
@@ -39,7 +40,7 @@ export function createMatchingSession(c){
   async generate(){
    if(controller){c.toast('已有方案正在创作，请先停止或等待完成');return;}
    const cfg=structuredClone(c.state.aiSettings);if(!cfg.key)throw Error('请先在设置 → AI 与创作中保存 API 密钥');
-   const p=c.createProject(),ids=p.candidateAssetIDs,aliases=Object.fromEntries(ids.map((id,i)=>['m'+(i+1),id]));
+   const p=c.createProject(),ids=p.candidateAssetIDs,aliases=materialAliases(ids);
    const v={id:c.uid(),title:'方案 '+(variants.length+1),createdAt:new Date().toISOString(),status:'running',progress:'正在准备素材预览…',project:p};variants.unshift(v);const run=new AbortController();controller=run;let recorder;
    update();
    try {

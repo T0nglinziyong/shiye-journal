@@ -7,7 +7,7 @@ const memoryStorage=()=>{const entries=new Map();return {getItem:key=>entries.ge
 
 test('creative delivery settings survive save and reload without changing provider parameters',()=>{
   const storage=memoryStorage();
-  const settings={generationMode:'direct',directPageOutput:'flattened',provider:'custom',key:'test-value',endpoint:'https://example.invalid/chat/completions',model:'example-model',temperature:1.25,maxTokens:10000,maxTurns:4,includeThumbnails:false,transport:'json',textMode:'none',reasoningMode:'providerDefault',requestTimeout:120,sendOutputLimit:false,disableThinking:false,includeStructureReference:false,sendPresetReferences:true,autoIncludeRecommendations:true,customLayoutPrompt:'保留大块留白'};
+  const settings={generationMode:'direct',directPageOutput:'flattened',provider:'custom',key:'test-value',endpoint:'https://example.invalid/chat/completions',model:'example-model',temperature:1.25,maxTokens:10000,maxTurns:4,includeThumbnails:false,transport:'json',textMode:'none',reasoningMode:'providerDefault',requestTimeout:120,sendOutputLimit:false,disableThinking:false,includeStructureReference:false,sendPresetReferences:true,autoIncludeRecommendations:true,requireAllCandidates:false,customLayoutPrompt:'保留大块留白'};
   const saved=saveAISettings(settings,storage),restored=loadAISettings(storage);
   assert.deepEqual(restored,saved);
   for(const [key,value] of Object.entries(settings))assert.deepEqual(restored[key],value,key);
@@ -32,6 +32,9 @@ test('old and invalid creative settings migrate to bounded safe defaults',()=>{
   assert.equal(normalizeAISettings({textMode:'rich'}).textMode,'rich');
   assert.equal(AI_DEFAULTS.sendPresetReferences,false);
   assert.equal(AI_DEFAULTS.autoIncludeRecommendations,false);
+  assert.equal(AI_DEFAULTS.requireAllCandidates,true);
+  assert.equal(normalizeAISettings({}).requireAllCandidates,true);
+  assert.equal(normalizeAISettings({requireAllCandidates:false}).requireAllCandidates,false);
   assert.equal(AI_DEFAULTS.includeStructureReference,true);
   assert.equal('imageCount' in normalizeAISettings({imageCount:1}),false);
 });

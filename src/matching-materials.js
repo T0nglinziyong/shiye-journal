@@ -36,10 +36,12 @@ export function recommendForDirection({assets=[],basket=[],styles=[],purposes=[]
       return {asset:a,score,reasons};
     }).sort((a,b)=>b.score-a.score||a.asset.title.localeCompare(b.asset.title,'zh-CN'));
 }
-export function buildMaterialScope({basket=[],coreIDs=[],recommendations=[],excluded=[],autoIncludeRecommendations=false}={}){
+export function buildMaterialScope({basket=[],coreIDs=[],recommendations=[],excluded=[],autoIncludeRecommendations=false,requireAllCandidates=false}={}){
   const excludedSet=new Set(excluded),selected=uniq(basket).filter(id=>!excludedSet.has(id));
   const required=selected.filter(id=>coreIDs.includes(id)),preferred=selected.filter(id=>!coreIDs.includes(id));
   const available=autoIncludeRecommendations?uniq(recommendations.map(r=>typeof r==='string'?r:r.asset?.id)).filter(id=>!selected.includes(id)&&!excludedSet.has(id)):[];
   const candidateAssetIDs=[...required,...preferred,...available];
-  return {required,preferred,available,excluded:uniq(excluded),candidateAssetIDs};
+  return requireAllCandidates
+    ?{required:candidateAssetIDs,preferred:[],available:[],excluded:uniq(excluded),candidateAssetIDs}
+    :{required,preferred,available,excluded:uniq(excluded),candidateAssetIDs};
 }

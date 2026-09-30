@@ -1,10 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {unzipSync,strFromU8} from 'fflate';
+import {unzipSync,zipSync,strToU8,strFromU8} from 'fflate';
 import {project} from '../src/domain.js';
-import {createOfflineCreationPackage,createOfflineHandoff,importEditableWork,EDITABLE_WORK_FORMAT} from '../src/offline-creation.js';
+import {createOfflineCreationPackage,createOfflineHandoff,importEditableWork,importEditableWorkPackage,EDITABLE_WORK_FORMAT,EDITABLE_PACKAGE_ENTRY} from '../src/offline-creation.js';
 import {shapeSVG} from '../src/editor-tools-model.js';
 import {presetReferenceGuide,presetReferencePlans} from '../src/creative-reference-presets.js';
+import {materialAlias,materialAliases} from '../src/material-alias.js';
 
 const asset={id:'asset-1',title:'蓝色纸',kind:'sticker',role:'focal',physicalWidthMM:40,physicalHeightMM:50,supply:{quantity:1},tags:['蓝色']};
 const packageFor=()=>createOfflineCreationPackage({project:project('测试创作',{style:'韩系清新'}),assets:[asset],aliases:{m1:asset.id},previews:[{alias:'m1',bytes:new Uint8Array([1,2,3])}]});
@@ -31,6 +32,42 @@ test('editable GPT response becomes an editable draft without replacing existing
   const copied=`这页的预览图已展示。\n\n\`\`\`json\n${response}\n\`\`\``;
   assert.equal(importEditableWork(copied,[asset]).drafts[0].items[0].assetID,asset.id);
 });
+test('stable material IDs survive library reordering in an editable JSON import',async()=>{
+  const second={...asset,id:'asset-2',title:'绿色纸'};
+  const aliases=materialAliases([asset.id,second.id]);
+  assert.deepEqual(materialAliases([second.id,asset.id]),Object.fromEntries([[materialAlias(second.id),second.id],[materialAlias(asset.id),asset.id]]));
+  const bundle=createOfflineCreationPackage({project:project('稳定编号'),assets:[asset,second],aliases,previews:Object.keys(aliases).map(alias=>({alias,bytes:new Uint8Array([1,2,3])}))});
+  const files=unzipSync(new Uint8Array(await bundle.blob.arrayBuffer()));
+  const response=strFromU8(files['example-response.json']);
+  assert.equal(importEditableWork(response,[second,asset]).drafts[0].items[0].assetID,asset.id);
+  assert.ok(files[`materials/${materialAlias(asset.id)}.jpg`]);
+});
+test('UUID material aliases fit the creative contract and resolve the original',async()=>{
+  const uuid=crypto.randomUUID(),original={...asset,id:uuid};
+  const aliases=materialAliases([uuid]);
+  assert.ok(Object.keys(aliases)[0].length>48);
+  const bundle=createOfflineCreationPackage({project:project('UUID'),assets:[original],aliases,previews:[{alias:materialAlias(uuid),bytes:new Uint8Array([1,2,3])}]});
+  const files=unzipSync(new Uint8Array(await bundle.blob.arrayBuffer()));
+  assert.equal(importEditableWork(strFromU8(files['example-response.json']),[original]).drafts[0].items[0].assetID,uuid);
+});
+test('direct editable import keeps layered typography and free vector geometry',async()=>{
+  const output=await createOfflineHandoff({project:project('分层示例'),assets:[asset],aliases:materialAliases([asset.id]),settings:{generationMode:'direct',includeThumbnails:false}});
+  const files=unzipSync(new Uint8Array(await output.blob.arrayBuffer()));
+  const response=JSON.parse(strFromU8(files['example-response.shiyeproject.json']));
+  response.page.graphics.push({key:'drawn-leaf',kind:'vector',x:.2,y:.5,width:.08,height:.12,fill:'#7a9d77',stroke:null,z:70,vector_paths:[[[.5,0],[1,.5],[.5,1],[0,.5]]]});
+  const imported=importEditableWork(JSON.stringify(response),[asset]);
+  assert.equal(imported.drafts[0].primitives.find(p=>p.key==='drawn-leaf')?.vectorPaths.length,1);
+  assert.equal(imported.drafts[0].textBlocks.find(t=>t.role==='body')?.lineSpacing,4);
+  assert.equal(imported.drafts[0].textBlocks.find(t=>t.role==='body')?.zIndex,900);
+  assert.match(shapeSVG(imported.drafts[0].primitives.find(p=>p.key==='drawn-leaf')),/<path/);
+});
+test('editable ZIP is a validated document container and resolves the local original asset',async()=>{
+  const files=unzipSync(new Uint8Array(await packageFor().blob.arrayBuffer()));
+  const response=strFromU8(files['example-response.json']);
+  const result=zipSync({[EDITABLE_PACKAGE_ENTRY]:strToU8(response),'preview.svg':strToU8('<svg/>')});
+  assert.equal(importEditableWorkPackage(result,[asset]).drafts[0].items[0].assetID,asset.id);
+  assert.throws(()=>importEditableWorkPackage(zipSync({'preview.svg':strToU8('<svg/>')}),[asset]),/缺少/);
+});
 
 test('invalid or incomplete editable file is rejected before persistence',async()=>{
   const files=unzipSync(new Uint8Array(await packageFor().blob.arrayBuffer()));
@@ -53,7 +90,7 @@ test('web ChatGPT handoff is one uploadable file plus a copyable, mode-specific 
   assert.equal(JSON.parse(strFromU8(toolFiles['context.json'])).source.bundleId,tool.source.bundleId);
   assert.match(strFromU8(toolFiles['START_HERE.txt']),/compose_page/);
   assert.match(strFromU8(toolFiles['START_HERE.txt']),/图片预览/);
-  assert.match(strFromU8(toolFiles['START_HERE.txt']),/可下载的 UTF-8 文件/);
+  assert.match(strFromU8(toolFiles['START_HERE.txt']),/可下载的「作品\.shiyeproject\.zip」/);
   assert.ok(strFromU8(toolFiles['START_HERE.txt']).length<2000,'task brief should point to contracts instead of inlining them');
   assert.match(strFromU8(toolFiles['START_HERE.txt']),/【本次任务】[\s\S]*【素材与物理规则】[\s\S]*【输出合同】/);
   const agentContract=JSON.parse(strFromU8(toolFiles['contract.json']));
@@ -61,7 +98,7 @@ test('web ChatGPT handoff is one uploadable file plus a copyable, mode-specific 
   assert.ok(tool.prompt.length<130);assert.match(tool.prompt,/START_HERE.txt/);
   const direct=await createOfflineHandoff({...args,settings:{generationMode:'direct',includeThumbnails:false}});
   const directFiles=unzipSync(new Uint8Array(await direct.blob.arrayBuffer()));
-  assert.match(strFromU8(directFiles['START_HERE.txt']),/可下载的 UTF-8 文件/);
+  assert.match(strFromU8(directFiles['START_HERE.txt']),/可下载的「作品\.shiyeproject\.zip」/);
   assert.match(strFromU8(directFiles['START_HERE.txt']),/不要返回 tools/);
   assert.match(strFromU8(directFiles['START_HERE.txt']),/单独的 ```json 代码块/);
   assert.ok(JSON.parse(strFromU8(directFiles['example-response.shiyeproject.json'])).page);

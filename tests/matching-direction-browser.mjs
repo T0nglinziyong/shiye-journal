@@ -15,6 +15,7 @@ try{
  await click('.match-rec [data-act="match-skip"]','.match-recommendations');
  assert.ok(await evaluate('document.querySelector(".match-recommendations").textContent.includes("已排除 1 件")'));
  await click('#top-settings','.settings-list');await click('[data-act="settings-open"][data-val="AI 与创作"]','#setting-ai-auto-recommendations');
+ assert.equal(await evaluate('document.querySelector("#setting-ai-require-all").checked'),true);
  await evaluate('document.querySelector("#setting-ai-auto-recommendations").checked=true');await click('[data-act="settings-save"]','.match-recommendations');
  assert.ok(await evaluate('document.querySelector(".basket>.muted").textContent.includes("AI 备选")'));
  assert.equal(await evaluate('document.querySelector("[data-act=match-generate]").disabled'),false);

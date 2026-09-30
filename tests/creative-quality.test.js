@@ -26,6 +26,8 @@ test('both creation modes receive role sizes converted to the actual paper, not 
    const text=buildCreativeMessages({draft:a5,assets:[],aliases:{},generationMode:mode})[0].content;
    assert.match(text,/次标题／小节标题/);assert.match(text,/正文建议9–12pt/);assert.match(text,/图片说明／日期／注释建议7–9pt/);
    assert.match(text,/同一作品不因换设备改写字号/);assert.doesNotMatch(text,/文字标题46–90/);
+   assert.match(text,/不必让每段文字独占整行/);
+   assert.match(text,/荧光笔色带/);
  }
 });
 test('API receives four anonymous style-and-purpose studies without referencing saved private works',()=>{

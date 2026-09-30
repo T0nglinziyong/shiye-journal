@@ -7,7 +7,7 @@ const b=await browserHarness('shiye-matching-flow',process.env.SHIYE_TEST_URL||'
  localStorage.setItem('shiye-ai-settings-v1',JSON.stringify({provider:'custom',endpoint:'https://mock.invalid/chat',model:'test',key:'synthetic-key',includeThumbnails:false,generationMode:'agent'}));
  const original=fetch;globalThis.fetch=async(url,options)=>{if(url!=='https://mock.invalid/chat')return original(url,options);
  const tool=(id,name,args)=>({id,type:'function',function:{name,arguments:JSON.stringify(args)}});
- const first=[tool('a','place_materials',{items:[{asset:'m1',piece:'p1',x:.2,y:.3}]}),tool('b','upsert_text',{items:[{key:'title',content:'春日收藏',x:.5,y:.1,width:.7,fontSize:34}]}),tool('c','finish_design',{})];
+ const first=[tool('a','place_materials',{items:[1,2,3,4].map((i)=>({asset:'asset_'+btoa('match-test-material-'+i).replace(/=+$/,''),piece:'p'+i,x:.14+i*.18,y:.3}))}),tool('b','upsert_text',{items:[{key:'title',content:'春日收藏',x:.5,y:.1,width:.7,fontSize:34}]}),tool('c','finish_design',{})];
  const calls=first;
  return new Response(new ReadableStream({async start(c){c.enqueue(new TextEncoder().encode(': keep-alive\\n\\n'));await new Promise(r=>setTimeout(r,300));c.enqueue(new TextEncoder().encode('data: '+JSON.stringify({choices:[{delta:{tool_calls:calls.map((t,index)=>({...t,index}))},finish_reason:'tool_calls'}]})+'\\n\\ndata: [DONE]\\n\\n'));c.close();}}),{headers:{'Content-Type':'text/event-stream'}});};`});
 });
@@ -24,7 +24,7 @@ try{
  assert.match(await evaluate('document.querySelector(".match-progress").textContent'),/创作完成/);assert.equal((await records('projects')).filter(p=>p.title==='新的手账').length,before+1);
  for(const [w,h] of [[390,844],[768,1024],[1024,768],[1440,900]]){await command('Emulation.setDeviceMetricsOverride',{width:w,height:h,deviceScaleFactor:1,mobile:w<700});await sleep(100);await evaluate('document.querySelector(".match-previews").scrollIntoView({block:"center"})');const png=await command('Page.captureScreenshot',{format:'png'});await writeFile(out+'/'+w+'x'+h+'.png',Buffer.from(png.data,'base64'));assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1'));}
  await command('Page.reload');await wait('.series-grid');await click('[data-route="matching"]','.match-result');assert.match(await evaluate('document.querySelector(".match-progress").textContent'),/创作完成/);
- await click('[data-act="match-open-result"]','#canvas-page');let projects=await records('projects');const p=projects.find(x=>x.title==='新的手账');assert.ok(p?.isDraft);assert.equal(p.drafts[0].items.length,1);assert.equal(p.drafts[0].textBlocks.length,1);
+ await click('[data-act="match-open-result"]','#canvas-page');let projects=await records('projects');const p=projects.find(x=>x.title==='新的手账');assert.ok(p?.isDraft);assert.equal(p.drafts[0].items.length,4);assert.equal(p.drafts[0].textBlocks.length,1);
  for(const [w,h] of [[390,844],[768,1024],[1024,768],[1440,900]]){await command('Emulation.setDeviceMetricsOverride',{width:w,height:h,deviceScaleFactor:1,mobile:w<700});await sleep(80);const png=await command('Page.captureScreenshot',{format:'png'});await writeFile(out+'/editor-'+w+'x'+h+'.png',Buffer.from(png.data,'base64'));assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1'));}
  await click('[data-act="back-works"]','.matching-page');await click('[data-act="match-open-result"]','#canvas-page');
  await click('[data-act="save-work"]');await sleep(200);projects=await records('projects');assert.equal(projects.find(x=>x.id===p.id).isDraft,false);

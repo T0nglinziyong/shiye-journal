@@ -70,13 +70,13 @@ try {
     await click('[data-act="settings-back"]','.works-grid');
   }
   // Settings draft crosses subsections, returns to its caller, and persists.
-  await click('#top-settings','.settings-list');await click('[data-val="AI 与创作"]','#setting-ai-temperature');await fill('#setting-ai-temperature','1.15');
+  await click('#top-settings','.settings-list');await click('[data-val="AI 与创作"]','#setting-ai-temperature');await evaluate('document.querySelector("#ai-model-group").open=true');await fill('#setting-ai-temperature','1.15');
   await click('[data-act="settings-back"]','.settings-list');await click('[data-val="界面与素材库"]','#setting-display');await fill('#setting-display','list');
   await click('[data-act="settings-back"]','.settings-list');await click('[data-val="AI 与创作"]','#setting-ai-temperature');
   assert.equal(await evaluate('document.querySelector("#setting-ai-temperature").value'),'1.15');
   await click('[data-act="settings-back"]','.settings-list');await click('[data-act="settings-save"]','.works-grid');
   assert.equal(await evaluate('JSON.parse(localStorage.getItem("shiye-ai-settings-v1")).temperature'),1.15);
-  await click('#top-settings','.settings-list');await click('[data-val="AI 与创作"]','#setting-ai-temperature');await fill('#setting-ai-temperature','.3');await click('[data-act="settings-back"]','.settings-list');await click('[data-act="settings-back"]','.works-grid');
+  await click('#top-settings','.settings-list');await click('[data-val="AI 与创作"]','#setting-ai-temperature');await evaluate('document.querySelector("#ai-model-group").open=true');await fill('#setting-ai-temperature','.3');await click('[data-act="settings-back"]','.settings-list');await click('[data-act="settings-back"]','.works-grid');
   assert.equal(await evaluate('JSON.parse(localStorage.getItem("shiye-ai-settings-v1")).temperature'),1.15);
   // Custom covers and tags survive reload; cancellation does not save.
   await click('[data-route="library"]','.series-grid');await click('[data-act="series-detail"]','.series-contents');await click('#series-edit-title','#series-name');await fill('#series-style-tags','浏览器验收，植物、植物');
