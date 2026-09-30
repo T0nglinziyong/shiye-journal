@@ -12,6 +12,6 @@ export function usableProjectSnapshot(project){
 }
 
 export function recoverProjectOutbox(rows){
-  const kept=(rows||[]).filter(row=>usableProjectSnapshot(row?.record));
+  const kept=(rows||[]).filter(row=>usableProjectSnapshot(row?.record)&&Number.isSafeInteger(row.serial)&&row.serial>0&&Number.isSafeInteger(row.baseRevision)&&row.baseRevision>=0);
   return {rows:kept,removed:(rows||[]).length-kept.length};
 }

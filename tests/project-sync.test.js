@@ -35,3 +35,13 @@ test('failed durable staging never reports a cloud commit',async()=>{
   let calls=0;const q=createProjectSync({load:async()=>[],write:async()=>{throw Error('quota');},revision:()=>0,commit:async()=>{calls++;}});
   await assert.rejects(q.stage({id:'a'}),/quota/);assert.equal(calls,0);assert.deepEqual(await q.pending(),[]);
 });
+test('failed local acknowledgement remains pending and can be reconciled without another write',async()=>{
+  let rows=[],revision=0,writes=0,commits=0,diskFull=true;
+  const sync=createProjectSync({load:async()=>rows,write:async next=>{if(++writes>=2&&diskFull)throw Error('disk full');rows=structuredClone(next);},revision:()=>revision,commit:async()=>{commits++;revision++;},reconcile:async()=> 'committed'});
+  await sync.stage({id:'work',title:'saved'});
+  await assert.rejects(sync.flush(),/disk full/);
+  assert.equal(sync.status().pending,1);
+  diskFull=false;
+  await sync.flush();
+  assert.equal(commits,1);assert.deepEqual(rows,[]);
+});

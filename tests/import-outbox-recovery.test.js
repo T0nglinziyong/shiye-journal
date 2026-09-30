@@ -60,3 +60,24 @@ test('a remote primary survives missing local bytes; uncertain network never del
   assert.equal(uncertain.changed,false);
   assert.deepEqual(uncertain.rows,input);
 });
+test('an interrupted work import is atomic: a lost background removes the pending work',async()=>{
+  const work={id:'work',activeDraftID:'page',drafts:[{id:'page',canvas:{width:700,height:1000},items:[],textBlocks:[],primitives:[],strokes:[]}]};
+  const input=[{...row([asset('background','lost'),asset('cutout','good')],[{id:'lost',data:new Blob([])},{id:'good',data:new Blob(['visible'])}]),record:{id:'batch',assets:[asset('background','lost'),asset('cutout','good')],blobs:[{id:'lost',data:new Blob([])},{id:'good',data:new Blob(['visible'])}],projects:[work]}}];
+  const result=await recoverImportOutbox(input,async()=>false);
+  assert.deepEqual(result.rows,[]);assert.equal(result.removed,1);
+  const uncertain=await recoverImportOutbox(input,async()=>{throw Error('offline');});
+  assert.deepEqual(uncertain.rows,input);
+});
+test('a truncated queued edit is dropped instead of replaying an incomplete mutation',async()=>{
+  const input=[{record:{id:'mutation',names:['assets'],operations:[{action:'put',store:'assets'}]},serial:1,baseRevision:2}];
+  const result=await recoverImportOutbox(input,async()=>false);
+  assert.equal(result.changed,true);assert.deepEqual(result.rows,[]);
+});
+test('a cutout edit missing its local image falls back to the acknowledged cloud asset',async()=>{
+  const input=[{record:{id:'edit',names:['assets','blobs'],operations:[
+    {action:'put',store:'assets',item:{id:'asset',title:'incomplete',blobId:'replacement'}},
+    {action:'put',store:'blobs',item:{id:'replacement',data:new Blob([])}}
+  ]},serial:1,baseRevision:2}];
+  const result=await recoverImportOutbox(input,async()=>false);
+  assert.equal(result.changed,true);assert.deepEqual(result.rows,[]);
+});

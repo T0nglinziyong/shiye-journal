@@ -26,10 +26,18 @@ function reportSync(){if(typeof window!=='undefined'){const a=projectSync.status
 const projectSync=createProjectSync({
   load:async()=>{if(!cache)return [];const key=await account(),saved=await cache.get(key,'project-outbox')||[],result=recoverProjectOutbox(saved);if(result.removed)try{await cache.put(key,'project-outbox',result.rows);}catch{/* The valid cloud version still takes precedence in this session. */}return result.rows;},
   write:async rows=>{if(!cache||cacheDisabled)throw Error('无法安全保存待同步作品');await cache.put(await account(),'project-outbox',rows);},
-  commit:record=>cloudTransaction(['projects'],tx=>tx.objectStore('projects').put(record)),revision:()=>revision,
+  commit:(record,operationID)=>cloudTransaction(['projects'],tx=>tx.objectStore('projects').put(record),operationID),revision:()=>revision,
+  reconcile:async(_record,operationID)=>await wasCommitted(operationID)?'committed':'conflict',
   onStatus:reportSync,
 });
-async function reconcileImport(batch){
+async function wasCommitted(operationID){
+  if(!operationID)return false; // Legacy outbox: never guess that a write succeeded.
+  const row=checked(await cloudClient().from('shiye_commits').select('revision').eq('user_id',await identity()).eq('operation_id',operationID).maybeSingle());
+  if(row)await version(); // Invalidate stale snapshots after a lost response.
+  return !!row;
+}
+async function reconcileImport(batch,operationID){
+  if(await wasCommitted(operationID))return 'committed';
   // Only an append-only import has unique IDs that prove an interrupted RPC
   // already committed atomically, or can be safely retried after an unrelated
   // revision. Never infer success or rebase for edits, deletes, or partial data.
@@ -79,7 +87,7 @@ const importSync=createProjectSync({
     catch{return rows;}
   },
   write:async rows=>{if(!cache||cacheDisabled)throw Error('无法安全暂存导入资料，请勿关闭页面');await cache.put(await account(),'import-outbox',rows);},
-  commit:batch=>batch.operations?cloudTransaction(batch.names,tx=>{for(const op of batch.operations){const store=tx.objectStore(op.store);if(op.action==='put')store.put(op.item);else if(op.action==='delete')store.delete(op.id);else store.clear();}}):cloudTransaction(['assets','blobs','projects'],tx=>{for(const store of ['assets','blobs','projects'])for(const record of batch[store]||[])tx.objectStore(store).put(record);}),
+  commit:(batch,operationID)=>batch.operations?cloudTransaction(batch.names,tx=>{for(const op of batch.operations){const store=tx.objectStore(op.store);if(op.action==='put')store.put(op.item);else if(op.action==='delete')store.delete(op.id);else store.clear();}},operationID):cloudTransaction(['assets','blobs','projects'],tx=>{for(const store of ['assets','blobs','projects'])for(const record of batch[store]||[])tx.objectStore(store).put(record);},operationID),
   revision:()=>revision,reconcile:reconcileImport,onStatus:reportSync,
 });
 async function pendingOperations(store){await identity();return (await importSync.pending()).flatMap(row=>row.record.operations?.filter(op=>op.store===store)||(row.record[store]||[]).map(item=>({action:'put',store,item})));}
@@ -179,7 +187,7 @@ async function encode(store,record){
   await remember('image:'+storagePath,record.data);retainImage(storagePath,record.data);
   const {data,thumbnailPath:_oldThumbnail,...metadata}=record;return {...metadata,storagePath,storageProvider:provider,...(thumbnailPath?{thumbnailPath}:{})};
 }
-function cloudTransaction(names,fn){
+function cloudTransaction(names,fn,operationID=crypto.randomUUID()){
   const operations=[];const result=fn({objectStore(store){if(!names.includes(store))throw Error('此表未加入事务');return {put:record=>operations.push({action:'put',store,item:structuredClone(record)}),delete:id=>operations.push({action:'delete',store,id}),clear:()=>operations.push({action:'clear',store})};}});
   if(result?.then)throw Error('事务回调必须同步');
   const run=async()=>{
@@ -188,7 +196,7 @@ function cloudTransaction(names,fn){
     await identity();if(revision===undefined)await version();
     const previous=revision;
     const puts=operations.filter(op=>op.action==='put');for(let offset=0;offset<puts.length;offset+=3)await Promise.all(puts.slice(offset,offset+3).map(async op=>{op.item=await encode(op.store,op.item);}));
-    const data=checked(await cloudClient().rpc('shiye_commit',{operations,expected_revision:previous}));revision=Number(data);
+    const data=checked(await cloudClient().rpc('shiye_commit_v2',{operations,expected_revision:previous,operation_id:operationID}));revision=Number(data);
     for(const op of operations)if(op.store==='blobs'&&op.action==='put')await remember('blob-record:'+op.item.id,{revision,record:op.item});
     // Patch only cached collections belonging to the committed base revision.
     // Remote conflicts never write to this cache or silently become local edits.

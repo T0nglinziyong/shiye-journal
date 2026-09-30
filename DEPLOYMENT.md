@@ -6,6 +6,10 @@
 
 COS 基础 CI 只在缺失缩略图时按固定参数生成 360px WebP；原图不参与 CI 锐化、阴影或裁剪，素材识别不因此宣称提升。COS 保持私有，CDN 因备案与私人鉴权边界尚未启用。用户曾在聊天中公开过长期 COS 凭据，迁移后应在腾讯云轮换，并同步更新 Vercel 环境变量；不要把旧凭据写入 Git。
 
+### 意外退出后的提交确认
+
+`deploy/supabase/idempotent-commits.sql` 已在现有项目应用。新客户端调用 `shiye_commit_v2`，为每条本机持久队列记录保存唯一提交编号。云端原子事务与提交日志一起写入；若上传成功但回执丢失，重开时只核对该编号，不重放修改。此迁移只新增表和 RPC；原 `shiye_commit` 仍可用，已有资料不改写。新环境须先应用 `schema.sql`、`incremental-sync.sql`，再应用此迁移，最后发布客户端。强制退出期间浏览器 JavaScript 不会继续上传；下一次登录/联网才恢复。清除网站数据、设备损坏且上传尚未到云端时无法保证恢复，因此不可把未同步状态当作云端备份。
+
 ## COS 私有对象接入（历史阶段）
 
 本轮功能 e8a6b772b77dab976645d433a16ef3cb60c72bbb 自动 Git 部署 dpl_EMNm2EwDXum3mVgV4U5GganYRhBp：READY/source=git/准确 SHA/原固定别名已核对。127项单元、构建及 UI/HTTP 冒烟和四视口真实 Chromium 回归通过。COS 接口线上已部署，但当前服务器授权未配置，故新写入仍为 Supabase；未声称实际 COS 速度或可达性验收。私人 CeCe 历史补全云版本74，四页当前作品不变，其他记录及图片字节精确保留。

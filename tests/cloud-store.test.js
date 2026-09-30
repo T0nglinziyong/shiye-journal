@@ -4,19 +4,19 @@ import {createCloudStore} from '../src/cloud-store.js';
 import {projectBlobText} from '../src/project-document.js';
 
 function fixture(cache=null,objectStorage=null){
-  const state={revision:0,rows:[],calls:[],fail:false,authError:false,uploads:[],downloads:0};
+  const state={revision:0,rows:[],calls:[],commits:new Map(),fail:false,authError:false,uploads:[],downloads:0};
   const client={from(table){
     const filters={};const query={select(){return query;},eq(k,v){filters[k]=v;return query;},in(k,v){filters[k]=v;return query;},limit(){return query;},abortSignal(){return query;},order(){return query;},
       then(resolve){return Promise.resolve(resolve({data:(state.cloudCopies||[]).filter(row=>!filters.id||(Array.isArray(filters.id)?filters.id.includes(row.id):row.id===filters.id))}));},
       async range(start,end){state.reads=(state.reads||0)+1;return {data:state.rows.slice(start,end+1).map(record=>({record}))};},
       async single(){return {data:{revision:state.revision}};},
-      async maybeSingle(){return {data:state.rows.filter(r=>r.id===filters.id).map(record=>({record}))[0]||null};}};
+      async maybeSingle(){return {data:table==='shiye_commits'?(state.commits.has(filters.operation_id)?{revision:state.commits.get(filters.operation_id)}:null):state.rows.filter(r=>r.id===filters.id).map(record=>({record}))[0]||null};}};
     if(table==='shiye_changes')return {select(){return this;},eq(){return this;},gt(){return this;},lte(){return this;},order(){return this;},async range(){return {error:{message:'change log not installed'}};}};
-    assert.ok(['shiye_records','shiye_revisions'].includes(table));return query;
+    assert.ok(['shiye_records','shiye_revisions','shiye_commits'].includes(table));return query;
   },storage:{from(bucket){assert.equal(bucket,'shiye-private');return {
     async upload(path,data,options){state.uploads.push({path,data,options});await state.uploadGate;return {error:state.fail?{statusCode:500}:null};},
     async download(path){state.downloads++;return {data:state.uploads.find(row=>row.path===path)?.data||new Blob(['private image']),error:state.missingThumbnail&&path.includes('preview360')?{message:'thumbnail missing'}:null};}};}},
-    async rpc(name,args){assert.equal(name,'shiye_commit');state.calls.push(args);if(state.fail||args.expected_revision!==state.revision)return {error:{message:'conflict'}};return {data:++state.revision};}
+    async rpc(name,args){assert.equal(name,'shiye_commit_v2');state.calls.push(args);if(state.commits.has(args.operation_id))return state.loseAck?{error:{message:'network response lost'}}:{data:state.commits.get(args.operation_id)};if(state.fail||args.expected_revision!==state.revision)return {error:{message:'conflict'}};const revision=++state.revision;state.commits.set(args.operation_id,revision);if(state.loseAck)return {error:{message:'network response lost'}};return {data:revision};}
   };
   const db=createCloudStore({cache,objectStorage,cloudClient:()=>client,requireCloudUser:async()=>{if(state.authError)throw Error('not authorized');return {id:'owner-uuid'};}});
   return {state,db};
@@ -55,6 +55,30 @@ test('reopening after an import commit but before local acknowledgement clears t
   const reopened=fixture(cache);reopened.state.revision=1;reopened.state.rows=[{id:'new-asset',blobId:'new-blob'},{id:'new-blob',storagePath:'owner-uuid/hash'}];
   await reopened.db.cloudFlushProjects();
   assert.equal(reopened.state.calls.length,0);assert.deepEqual(await cache.get('cloud:owner-uuid','import-outbox'),[]);
+});
+test('lost acknowledgement for a material edit is recognized immediately and again after reopening',async()=>{
+  const cache=memoryCache(),first=fixture(cache);first.state.loseAck=true;
+  await first.db.cloudStageMutation(['assets'],tx=>tx.objectStore('assets').put({id:'asset',title:'renamed'}));
+  await first.db.cloudFlushProjects();
+  assert.deepEqual(await cache.get('cloud:owner-uuid','import-outbox'),[]);
+  const operationID=first.state.calls[0].operation_id;
+  await cache.put('cloud:owner-uuid','import-outbox',[{record:{id:'edit',names:['assets'],operations:[{action:'put',store:'assets',item:{id:'asset',title:'renamed'}}]},serial:1,baseRevision:0,operationID}]);
+  const reopened=fixture(cache);reopened.state.revision=first.state.revision;reopened.state.commits=first.state.commits;
+  await reopened.db.cloudFlushProjects();
+  assert.equal(reopened.state.calls.length,0,'an acknowledged edit must never be replayed');
+  assert.deepEqual(await cache.get('cloud:owner-uuid','import-outbox'),[]);
+});
+test('lost acknowledgement for a project snapshot restores the saved cloud version without a stuck outbox',async()=>{
+  const cache=memoryCache(),first=fixture(cache);first.state.loseAck=true;
+  const work={id:'work',title:'saved',activeDraftID:'d',drafts:[{id:'d',canvas:{width:700,height:1000},items:[],textBlocks:[],primitives:[],strokes:[]}]};
+  await first.db.cloudStageProject(work);
+  await first.db.cloudFlushProjects();
+  const operationID=first.state.calls[0].operation_id;
+  await cache.put('cloud:owner-uuid','project-outbox',[{record:work,serial:1,baseRevision:0,operationID}]);
+  const reopened=fixture(cache);reopened.state.revision=first.state.revision;reopened.state.commits=first.state.commits;reopened.state.rows=[work];
+  await reopened.db.cloudFlushProjects();
+  assert.equal(reopened.state.calls.length,0);assert.deepEqual(await cache.get('cloud:owner-uuid','project-outbox'),[]);
+  assert.equal((await reopened.db.cloudAll('projects'))[0].title,'saved');
 });
 test('reopening an unfinished import after an unrelated remote update resumes upload',async()=>{
   const cache=memoryCache(),first=fixture(cache);first.state.uploadGate=new Promise(()=>{});
