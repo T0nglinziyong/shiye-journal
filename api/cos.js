@@ -11,9 +11,9 @@ export default async function handler(req,res){
       const {data,error}=await client.auth.getUser(token);if(error||!data.user||data.user.is_anonymous)return null;
       const allowed=await client.from('shiye_accounts').select('user_id').eq('user_id',data.user.id).maybeSingle();if(allowed.error)throw Error('authorization unavailable');return allowed.data?data.user.id:null;
     },
-    sign:async({path,method,headers})=>{
+    sign:async({path,method,headers,variant})=>{
       const cos=new COS({SecretId:env.SHIYE_COS_SECRET_ID,SecretKey:env.SHIYE_COS_SECRET_KEY});
-      return new Promise((resolve,reject)=>cos.getObjectUrl({Bucket:env.SHIYE_COS_BUCKET,Region:env.SHIYE_COS_REGION,Key:path,Method:method,Protocol:'https:',Sign:true,Expires:60,Headers:headers},(error,data)=>error?reject(error):resolve(data.Url)));
+      return new Promise((resolve,reject)=>cos.getObjectUrl({Bucket:env.SHIYE_COS_BUCKET,Region:env.SHIYE_COS_REGION,Key:path,Method:method,Protocol:'https:',Sign:true,Expires:60,Headers:headers,...(variant==='preview360'?{QueryString:'imageMogr2/thumbnail/360x360/format/webp'}:{})},(error,data)=>error?reject(error):resolve(data.Url)));
     },
   });
   const result=await run({method:req.method,origin:req.headers.origin,authorization:req.headers.authorization,body:req.body});

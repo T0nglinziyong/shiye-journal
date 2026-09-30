@@ -138,6 +138,14 @@ test('a missing remote thumbnail is rebuilt from its original instead of showing
   const a=fixture();a.state.missingThumbnail=true;a.state.rows=[{id:'b',storagePath:'owner-uuid/hash',thumbnailPath:'owner-uuid/hash-preview360.webp'}];
   assert.equal(await (await a.db.cloudPreview('b')).text(),'private image');assert.equal(a.state.downloads,2);
 });
+test('COS CI fills only missing previews and never changes the original',async()=>{
+  const cache=memoryCache(),calls=[],cos={enabled:true,async preview(path){calls.push('ci:'+path);return new Blob(['small webp'],{type:'image/webp'});},async download(path){calls.push('original:'+path);return new Blob(['original pixels']);}},a=fixture(cache,cos);
+  a.state.rows=[{id:'b',storagePath:'owner-uuid/'+'a'.repeat(64),storageProvider:'cos'}];
+  assert.equal(await (await a.db.cloudPreview('b')).text(),'small webp');assert.deepEqual(calls,['ci:owner-uuid/'+'a'.repeat(64)]);
+  const b=fixture(cache,cos);b.state.rows=a.state.rows;
+  assert.equal(await (await b.db.cloudPreview('b')).text(),'small webp');assert.equal(calls.length,1);
+  assert.equal(await (await b.db.cloudGet('blobs','b')).data.text(),'original pixels');assert.equal(calls.length,2);
+});
 test('large works list only metadata; opening reuses the cached editable document and metadata edits preserve geometry',async()=>{
   const cache=memoryCache(),a=fixture(cache),full={id:'p',title:'before',activeDraftID:'d',drafts:[{id:'d',canvas:{width:100,height:100},items:[],textBlocks:[],strokes:[],makingSteps:[],primitives:Array.from({length:4000},(_,i)=>({id:String(i),kind:'vector',vectorLayers:[{fill:'#ff0000',rects:[[0,0,12,12]]}]}))}]};
   await a.db.cloudTransaction(['projects'],tx=>tx.objectStore('projects').put(full));const summary=a.state.calls[0].operations[0].item;a.state.rows=[summary];assert.ok(summary.projectDocumentPath);assert.equal(summary.drafts[0].primitives.length,0);

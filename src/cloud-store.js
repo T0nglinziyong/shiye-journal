@@ -120,6 +120,12 @@ async function cloudPreview(id){
     try{const thumbnail=await downloadObject(record.thumbnailPath,record.storageProvider);if(!usableBlob(thumbnail))throw Error('缩略图为空');await remember(thumbnailKey,thumbnail);return thumbnail;}
     catch(error){console.warn('缩略图暂不可读，尝试从原图恢复',error?.message);}
   }
+  // Only missing COS thumbnails use CI. The original remains byte-identical
+  // for segmentation, editing, coordinates, and export.
+  if(record.storageProvider==='cos'&&objectStorage?.preview){
+    try{const preview=await objectStorage.preview(record.storagePath);if(usableBlob(preview)){await remember(thumbnailKey,preview);return preview;}}
+    catch(error){console.warn('CI 预览暂不可读，尝试原图',error?.message);}
+  }
   const {data}=await decode('blobs',record);
   const blob=await makeThumbnail(data);if(blob){await remember(thumbnailKey,blob);return blob;}return data;
 }

@@ -1,6 +1,7 @@
 # 拾页 PWA 迁移工程（联网测试版）
 
 识别、创作响应、数据源与页面组件的扩展接缝及回归要求见 [ARCHITECTURE.md](ARCHITECTURE.md)。
+当前私有图片读写、COS/CI 缩略图、缓存、安全边界与迁移验收见 [DATA_LOADING_ARCHITECTURE.md](DATA_LOADING_ARCHITECTURE.md)。历史章节记录当时阶段，不代表当前存储状态。
 
 ## 私人缓存与后台保存
 

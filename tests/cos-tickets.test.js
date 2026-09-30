@@ -11,6 +11,9 @@ test('COS authorizes only authenticated owner hash paths and validates a whole b
   assert.equal((await run({...req,body:{objects:[...req.body.objects,{method:'GET',path:'other/'+hash}]}})).status,403);assert.equal(signs,0);
   for(const path of ['owner/../'+hash,'owner/'+hash+'/extra','owner/private-name.png'])assert.equal((await run({...req,body:{objects:[{method:'GET',path}]}})).status,403);
   assert.equal((await run(req)).status,200);
+  const preview=await run({...req,body:{objects:[{method:'GET',path:'owner/'+hash,variant:'preview360'}]}});
+  assert.equal(preview.status,200);assert.equal(preview.body.tickets[0].variant,'preview360');
+  for(const row of [{method:'PUT',path:'owner/'+hash,type:'image/png',variant:'preview360'},{method:'GET',path:'owner/'+hash,variant:'sharpen'},{method:'GET',path:'owner/'+hash+'-preview360.webp',variant:'preview360'}])assert.equal((await run({...req,body:{objects:[row]}})).status,403);
   const put=await run({...req,body:{objects:[{method:'PUT',path:'owner/'+hash,type:'image/png'}]}});assert.equal(put.body.tickets[0].headers['x-cos-forbid-overwrite'],'true');
   assert.equal((await run({...req,method:'DELETE'})).status,405);
 });
@@ -19,7 +22,7 @@ test('COS adapter batches authorization, never exposes credentials, and does not
     if(url==='/api/cos'){authorizationCalls++;assert.equal(options.headers.Authorization,'Bearer '+token);const {objects}=JSON.parse(options.body);return {ok:true,json:async()=>({tickets:objects.map(r=>({...r,url:'https://example.test/'+r.path,headers:{}}))})};}
     objectCalls++;return {ok:true,blob:async()=>new Blob(['image'])};
   }});
-  await Promise.all([store.download('owner/'+hash),store.download('owner/'+'b'.repeat(64))]);assert.equal(authorizationCalls,1);assert.equal(objectCalls,2);
+  await Promise.all([store.download('owner/'+hash),store.download('owner/'+'b'.repeat(64)),store.preview('owner/'+hash)]);assert.equal(authorizationCalls,1);assert.equal(objectCalls,3);
   const denied=createCOSStore({client:()=>({auth:{getSession:async()=>({data:{session:null}})}}),fetcher:async()=>{throw Error('should not fetch');}});await assert.rejects(denied.download('owner/'+hash),/请先登录/);
   const failed=createCOSStore({client:()=>({auth:{getSession:async()=>({data:{session:{access_token:token}}})}}),fetcher:async()=>({ok:false,status:503})});await assert.rejects(failed.download('owner/'+hash),/503/);
 });
