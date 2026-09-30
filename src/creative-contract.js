@@ -55,7 +55,7 @@ const descriptions={
   delete_elements:'移走作品图层，不修改素材库或实际库存。锁定图层不可移除。',
   set_paper:'设置纸色、纸型与构图意图，不创建实物底纸。',
   inspect_materials:'查看最多4个现有素材/裁片的真实尺寸、可见边界和原图来源描述；只接受已知ID。',
-  finish_design:'仅能作为本轮最后调用，且前面全部成功；核验文字、主视觉、必用素材和实际库存。'
+  finish_design:'仅能作为本轮最后调用，且前面全部成功；核验真实素材尺寸、裁片、必用素材和实际库存。文字、留白与构图由创作者决定。'
 };
 export const agentTools=Object.entries(toolContracts).map(([name,parameters])=>({type:'function',function:{name,description:descriptions[name],parameters}}));
 function safeContract(schema){
@@ -70,7 +70,7 @@ export function validateTool(name,args){if(!Object.hasOwn(toolContracts,name))th
 const directText=object({content:string(1500),font_style:enums(['serif','sans','rounded']),x:num(0,1),y:num(0,1),width:num(.01,1),height:num(.01,1),font_size:num(12,96),color},['content','font_style','x','y','width','height','font_size','color']);
 const directOperations={anyOf:operationContract.anyOf.map(s=>({...s,required:Object.keys(s.properties)}))};
 const directMaterial=object({...material.properties,operations:array(directOperations,1,12)},Object.keys(material.properties));
-export const directPageContract=object({version:{type:'integer',minimum:3,maximum:3,enum:[3]},style:enums(['留白叙事','密集拼贴','杂志网格','胶片日记','手作便签','自由构图']),intent:nullable(string(240)),items:array(directMaterial,1,30),graphics:array(primitive,0,20),text_blocks:array(directText,0,10),paper:object({color,pattern:enums(['plain','lined','grid','dots','columns'])},['color','pattern'])},['version','style','intent','items','text_blocks','paper']);
+export const directPageContract=object({version:{type:'integer',minimum:3,maximum:3,enum:[3]},style:enums(['留白叙事','密集拼贴','杂志网格','胶片日记','手作便签','自由构图']),intent:nullable(string(240)),items:array(directMaterial,0,30),graphics:array(primitive,0,20),text_blocks:array(directText,0,10),paper:object({color,pattern:enums(['plain','lined','grid','dots','columns'])},['color','pattern'])},['version','style','intent','items','text_blocks','paper']);
 export function directPageToTools(page){
   validateValue(page,directPageContract);
   // A single composite call keeps the direct page atomic, including 13–30 materials.

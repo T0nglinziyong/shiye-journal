@@ -53,6 +53,8 @@ try{
   }
   await click('#top-settings','.settings-list');
   await click('[data-act="settings-open"][data-val="AI 与创作"]','#setting-ai-send-reference');
+  assert.ok(await evaluate('!document.querySelector("#setting-ai-images")'));
+  assert.ok(await evaluate('!document.querySelector("#setting-ai-reference-page")'));
   assert.ok(await evaluate('document.querySelector("#setting-ai-send-reference").closest("label").textContent.includes("四张预设样例")'));
   await command('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
   await evaluate('document.querySelector("#setting-ai-send-reference").scrollIntoView({block:"center"})');

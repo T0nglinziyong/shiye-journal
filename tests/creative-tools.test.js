@@ -100,11 +100,12 @@ test('unsupported decorative cuts, malicious fields, NaN, rotation overflow and 
   assert.throws(()=>validateTool('move_elements',{items:[{key:'p1',width:20}]}),/未知字段/);
 });
 
-test('finish must be last, follows no failures, requires core materials and respects no-text requests',()=>{
+test('finish must be last, follows no failures and respects explicitly required materials without text quotas',()=>{
   const d=placed(),withText=success(d,[call('upsert_text',{items:[{key:'t',content:'完整的叙述',width:.5}]})]);
   const priorFailure=run(withText,[call('set_paper',{color:'red'}),call('finish_design',{})]);assert.deepEqual(priorFailure.results.map(r=>r.ok),[false,false]);assert.notEqual(priorFailure.draft.agentRun?.status,'finished');
   const early=run(withText,[call('finish_design',{}),call('set_paper',{color:'#FFFFFF'})]);assert.deepEqual(early.results.map(r=>r.ok),[false,true]);assert.notEqual(early.draft.agentRun?.status,'finished');
-  assert.equal(run(d,[call('finish_design',{})]).results[0].ok,false);assert.equal(run(d,[call('finish_design',{})],{allowNoText:true}).results[0].ok,true);
+  assert.equal(run(d,[call('finish_design',{})]).results[0].ok,true);assert.equal(run(d,[call('finish_design',{})],{allowNoText:true}).results[0].ok,true);
+  assert.equal(run(draft(),[call('finish_design',{})]).results[0].ok,true);
   assert.equal(run(withText,[call('finish_design',{})],{requiredAssetIDs:['tape']}).results[0].ok,false);
   const overflow=run(withText,Array.from({length:13},(_,n)=>call(n===12?'finish_design':'set_paper',n===12?{}:{color:'#FFFFFF'})));assert.ok(overflow.results.slice(0,12).every(r=>r.ok));assert.equal(overflow.results[12].ok,false);assert.notEqual(overflow.draft.agentRun?.status,'finished');
   const previouslyFinished=success(withText,[call('finish_design',{})]);const retry=run(previouslyFinished,[call('set_paper',{color:'red'}),call('finish_design',{})]);assert.deepEqual(retry.results.map(r=>r.ok),[false,false]);assert.equal(retry.draft.agentRun.status,'editing');

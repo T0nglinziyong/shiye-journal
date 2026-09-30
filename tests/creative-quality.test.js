@@ -4,19 +4,19 @@ import {reviewCreativeDraft} from '../src/creative-quality.js';
 import {creativeTypographyGuide} from '../src/creative-typography.js';
 import {buildCreativeMessages} from '../src/creative-runner.js';
 const draft=size=>({canvas:{width:700,height:1000},physicalPageHeightMM:210,paperColor:'#ffffff',items:[],primitives:[],textBlocks:[{id:'body',content:'真实毫米尺寸对应的正文',x:350,y:200,width:600,height:200,fontSize:size,color:'#000000'}]});
-test('AI review rejects illegibly small print text even when every box fits',()=>{
- assert.ok(reviewCreativeDraft(draft(9)).warnings.some(w=>w.includes('印刷字号过小')));
- assert.ok(!reviewCreativeDraft(draft(14)).warnings.some(w=>w.includes('印刷字号过小')));
+test('AI review offers print-size advice without making it a completion threshold',()=>{
+ assert.ok(reviewCreativeDraft(draft(9)).warnings.some(w=>w.includes('文字可能偏小')));
+ assert.ok(!reviewCreativeDraft(draft(14)).warnings.some(w=>w.includes('文字可能偏小')));
 });
 test('AI review reports overlapping full text boxes rather than declaring finish',()=>{
  const d=draft(14);d.textBlocks.push({...d.textBlocks[0],id:'second',y:210});
  assert.ok(reviewCreativeDraft(d).warnings.some(w=>w.includes('文字框相互遮挡')));
 });
-test('non-cover journal pages reject a nearly empty layout but permit intentionally simple covers',()=>{
+test('creative review does not impose density, word-count or material-count quotas',()=>{
  const sparse=draft(14);
- assert.ok(reviewCreativeDraft(sparse,{purposes:['旅途记录']}).warnings.some(w=>w.includes('过于稀疏')));
- assert.ok(!reviewCreativeDraft(sparse,{purposes:['主题封面']}).warnings.some(w=>w.includes('过于稀疏')));
- assert.ok(!reviewCreativeDraft({...sparse,style:'极简留白'},{purposes:['旅途记录']}).warnings.some(w=>w.includes('过于稀疏')));
+ for(const purpose of ['旅途记录','主题封面'])assert.ok(!reviewCreativeDraft(sparse,{purposes:[purpose],materialPriority:{preferred:['a','b','c']}}).warnings.some(w=>/稀疏|正文内容不足|素材使用不足|实际占页/.test(w)));
+ const graphics={...sparse,textBlocks:[],primitives:[{x:350,y:500,width:120,height:80,fill:'#98b0a2'}]};
+ assert.deepEqual(reviewCreativeDraft(graphics).warnings,[]);
 });
 test('both creation modes receive role sizes converted to the actual paper, not screen pixels',()=>{
  const a5=draft(14),a4={...a5,physicalPageHeightMM:297},small=creativeTypographyGuide(a5),large=creativeTypographyGuide(a4);
@@ -48,5 +48,7 @@ test('API labels material priorities and has a meaningful-content rule for spars
  const text=messages[1].content[0].text;
  assert.match(text,/优先级 必须使用/);assert.match(text,/优先级 优先使用/);assert.match(text,/优先级 可以使用（仅备选）/);
  assert.doesNotMatch(text,/excluded/);
- assert.match(messages[0].content,/不要把大片空白当成完成/);
+ assert.match(messages[0].content,/留白是否服务于主题/);
+ assert.match(messages[1].content[0].text,/不按数量或覆盖率评分/);
+ assert.doesNotMatch(messages[1].content[0].text,/至少\d+字|覆盖约 \d+%/);
 });

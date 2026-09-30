@@ -172,13 +172,11 @@ function inspect(d,assets,aliases,a,options){return {materials:a.keys.map(key=>{
   return {key,piece:item?keyOf(item):null,assetID:asset.id,cropRect:crop,widthMM:crop.width*asset.physicalWidthMM,heightMM:crop.height*asset.physicalHeightMM,sourceWidthMM:asset.physicalWidthMM,sourceHeightMM:asset.physicalHeightMM,visibleBounds:visible.rect,boundsKnown:visible.known,visibleWidthMM:crop.width*asset.physicalWidthMM*visible.rect.width,visibleHeightMM:crop.height*asset.physicalHeightMM*visible.rect.height,sourceDescription:[asset.title,asset.kind,asset.role,asset.texture,...(asset.tags||[])].filter(Boolean).join(' · '),sourceRef:{blobId:asset.blobId||null,staticPath:asset.staticPath||null},operations:structuredClone(item?.materialSteps||[])};
 })};}
 function finish(d,assets,a,options){
-  if(!options.allowNoText&&!d.textBlocks.some(t=>t.content?.trim()&&!t.hidden&&!t.isHidden))throw Error('完成前需要加入可读的文字内容');
-  if(assets.length&&!d.items.some(i=>!i.isParked&&!i.isHidden&&!i.hidden))throw Error('完成前需要真实素材主视觉');
   for(const id of new Set([...(options.requiredAssetIDs||[]),...Object.keys(options.materialUseRequired||{}).filter(id=>options.materialUseRequired[id])])){
     const items=d.items.filter(i=>i.assetID===id&&!i.isParked&&!i.isHidden&&!i.hidden);if(!items.length)throw Error('必用素材尚未放入页面：'+(assets.find(a=>a.id===id)?.title||id));
     const hint=options.materialUseHints?.[id];if(['截段固定','取一块真实区域'].includes(hint)&&!items.some(i=>i.cropRect))throw Error('必做用法尚未裁切：'+hint);
     if(hint==='完整保留'&&items.some(i=>i.cropRect))throw Error('必做用法要求完整保留：'+(assets.find(a=>a.id===id)?.title||id));
-  }checkDraft(d,assets);const review=reviewCreativeDraft(d,{allowNoText:options.allowNoText,purposes:options.pagePurposes,measureText:options.measureText});if(review.warnings.length)throw Error('完成检查未通过：'+review.warnings.join('；')+'；自动换行后的文字中心与实际宽高 ratio：'+JSON.stringify(d.textBlocks.map(t=>({key:keyOf(t),x:t.x/d.canvas.width,y:t.y/d.canvas.height,width:t.width/d.canvas.width,height:t.height/d.canvas.height,fontSize:t.fontSize}))));d.agentRun={...d.agentRun,status:'finished',note:a.summary||'',visualReview:'最后修改后的画面需由代理另行审阅'};
+  }checkDraft(d,assets);const review=reviewCreativeDraft(d,{measureText:options.measureText});d.agentRun={...d.agentRun,status:'finished',note:a.summary||'',qualityNotes:review.warnings,visualReview:'最后修改后的画面需由代理另行审阅'};
 }
 function execute(d,assets,aliases,name,a,options){
   switch(name){

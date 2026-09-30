@@ -29,6 +29,7 @@ test('direct editable page remains a single atomic compose call', () => {
   const calls = direct.calls({content:JSON.stringify(page)}, 1);
   assert.equal(calls.length, 1);
   assert.equal(calls[0].function.name, 'compose_direct_page');
+  assert.equal(direct.calls({content:JSON.stringify({...page,items:[]})},1).length,1);
   // Invalid output is rejected before any canvas mutation is possible.
   assert.throws(() => direct.calls({content:JSON.stringify({...page, style:'unsupported-style'})}, 1), /未知值/);
   assert.equal(direct.native, false);

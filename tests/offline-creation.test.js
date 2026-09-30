@@ -72,16 +72,16 @@ test('web ChatGPT handoff is one uploadable file plus a copyable, mode-specific 
   assert.ok(tool.packageBytes>=tool.imageBytes);
 });
 
-test('offline ZIP includes each selected material as its own image, not only API imageCount',async()=>{
+test('offline ZIP includes each selected material as its own image',async()=>{
   const assets=Array.from({length:4},(_,i)=>({...asset,id:`a${i+1}`,title:`素材 ${i+1}`}));
   const aliases=Object.fromEntries(assets.map((item,i)=>[`m${i+1}`,item.id]));
   const previews=assets.map((_,i)=>({alias:`m${i+1}`,bytes:new Uint8Array([i+1,9,8])}));
-  const result=await createOfflineHandoff({project:project('四件素材'),assets,aliases,previews,settings:{includeThumbnails:true,imageCount:1}});
+  const result=await createOfflineHandoff({project:project('四件素材'),assets,aliases,previews,settings:{includeThumbnails:true}});
   const files=unzipSync(new Uint8Array(await result.blob.arrayBuffer()));
   assert.deepEqual(Object.keys(files).filter(name=>name.startsWith('materials/')).sort(),['materials/m1.png','materials/m2.png','materials/m3.png','materials/m4.png']);
   assert.equal(JSON.parse(strFromU8(files['context.json'])).materials[0].preview,'materials/m1.png');
-  assert.equal(result.imageCount,4);
-  await assert.rejects(createOfflineHandoff({project:project(),assets,aliases,previews:previews.slice(0,1),settings:{includeThumbnails:true,imageCount:1}}),/缺少素材预览/);
+  assert.equal(result.previewCount,4);
+  await assert.rejects(createOfflineHandoff({project:project(),assets,aliases,previews:previews.slice(0,1),settings:{includeThumbnails:true}}),/缺少素材预览/);
 });
 
 test('GPT ZIP carries required/preferred/available priorities but never sends excluded material',async()=>{
@@ -99,7 +99,7 @@ test('GPT ZIP carries required/preferred/available priorities but never sends ex
 
 test('offline ZIP preserves transparent PNG preview bytes and paths',async()=>{
   const transparentPixel=Uint8Array.from(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/5uoAAAAASUVORK5CYII=','base64'));
-  const result=await createOfflineHandoff({project:project('透明素材'),assets:[asset],aliases:{m1:asset.id},previews:[{alias:'m1',bytes:transparentPixel}],settings:{includeThumbnails:true,imageCount:1}});
+  const result=await createOfflineHandoff({project:project('透明素材'),assets:[asset],aliases:{m1:asset.id},previews:[{alias:'m1',bytes:transparentPixel}],settings:{includeThumbnails:true}});
   const files=unzipSync(new Uint8Array(await result.blob.arrayBuffer()));
   assert.deepEqual(files['materials/m1.png'],transparentPixel);
   assert.equal(JSON.parse(strFromU8(files['context.json'])).materials[0].preview,'materials/m1.png');
