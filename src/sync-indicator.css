@@ -4,9 +4,9 @@
 .sync-indicator[data-status="checking"] .sync-indicator-symbol,.sync-indicator[data-status="uploading"] .sync-indicator-symbol{border-right-color:transparent;animation:shiye-sync-spin .8s linear infinite}
 .sync-indicator[data-status="synced"] .sync-indicator-symbol{border-radius:50%;background:#52634b}
 .sync-indicator[data-status="synced"] .sync-indicator-symbol::after{content:'';position:absolute;left:3px;top:1px;width:4px;height:7px;border:solid #fff;border-width:0 1.5px 1.5px 0;transform:rotate(45deg)}
-.sync-indicator[data-status="error"],.sync-indicator[data-status="offline"]{background:#f8eee2!important;color:#916e35!important}
-.sync-indicator[data-status="error"] .sync-indicator-symbol,.sync-indicator[data-status="offline"] .sync-indicator-symbol{border:0;border-radius:0;width:auto;height:auto}
-.sync-indicator[data-status="error"] .sync-indicator-symbol::before,.sync-indicator[data-status="offline"] .sync-indicator-symbol::before{content:'!';font-weight:800}
+.sync-indicator[data-status="error"],.sync-indicator[data-status="offline"],.sync-indicator[data-status="conflict"]{background:#f8eee2!important;color:#916e35!important}
+.sync-indicator[data-status="error"] .sync-indicator-symbol,.sync-indicator[data-status="offline"] .sync-indicator-symbol,.sync-indicator[data-status="conflict"] .sync-indicator-symbol{border:0;border-radius:0;width:auto;height:auto}
+.sync-indicator[data-status="error"] .sync-indicator-symbol::before,.sync-indicator[data-status="offline"] .sync-indicator-symbol::before,.sync-indicator[data-status="conflict"] .sync-indicator-symbol::before{content:'!';font-weight:800}
 @keyframes shiye-sync-spin{to{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){.sync-indicator-symbol{animation:none!important}}
 body:has(#sync-indicator:not([hidden])) #save-state{display:none}

@@ -49,6 +49,7 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
           let resolved;
           try{resolved=await reconcile(row.record,row.operationID,row.baseRevision);}catch{/* Keep the row if verification is offline. */}
           if(resolved==='committed'){await acknowledge(row);continue;}
+          if(resolved==='rebase'&&revision()>row.baseRevision){row.baseRevision=revision();await persist();continue;}
           throw failure;
         }
         await staging;

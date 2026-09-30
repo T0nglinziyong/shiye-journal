@@ -32,3 +32,22 @@ export async function readCloudDelta({client,owner,before,after,snapshots}){
   if(check.error||Number(check.data?.revision)!==after)return null;
   return {snapshots:patched,blobIDs,allBlobs:cleared.has('blobs')};
 }
+
+// A pending write may follow another tab's commit only when the complete
+// revision log proves that none of its records were touched. Missing logs are
+// a conflict, never permission to overwrite remote data.
+export async function canRebaseUnchangedKeys({client,owner,before,after,operations}){
+  const count=after-before;
+  if(!Number.isSafeInteger(before)||!Number.isSafeInteger(after)||count<1||count>250||!operations?.length)return false;
+  const result=await client.from('shiye_changes').select('revision,keys').eq('user_id',owner).gt('revision',before).lte('revision',after).order('revision').range(0,249);
+  if(result.error||!Array.isArray(result.data)||result.data.length!==count)return false;
+  for(let i=0;i<result.data.length;i++){
+    const row=result.data[i];if(Number(row.revision)!==before+i+1||!Array.isArray(row.keys))return false;
+    for(const remote of row.keys){
+      if(!remote||typeof remote.store!=='string'||!['put','delete','clear'].includes(remote.action))return false;
+      if(remote.action!=='clear'&&typeof remote.id!=='string')return false;
+      if(operations.some(local=>local.store===remote.store&&(local.action==='clear'||remote.action==='clear'||(local.item?.id??local.id)===remote.id)))return false;
+    }
+  }
+  return true;
+}

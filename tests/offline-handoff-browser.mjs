@@ -14,7 +14,9 @@ try{
     await click('.asset-grid [data-act="detail"]','.detail-columns');await click('[data-act="detail-add"]');
     await click('[data-route="matching"]','[data-act="match-export-gpt"]');
     await click('[data-act="match-export-gpt"]','#offline-gpt-prompt');
-    assert.ok(await evaluate('document.querySelector("#offline-gpt-prompt").value.includes("不要审查软件")'));
+    assert.ok(await evaluate('document.querySelector("#offline-gpt-prompt").value.includes("START_HERE.txt")'));
+    assert.ok(await evaluate('document.querySelector("#offline-gpt-prompt").value.length<130'));
+    assert.ok(await evaluate('document.querySelector("#modal-body").textContent.includes(".zip")'));
     assert.ok(await evaluate('document.querySelector("#modal-body").textContent.includes("验证并导入参数")'));
     const shot=await command('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});await writeFile(`${directory}/${width}x${height}-handoff.png`,Buffer.from(shot.data,'base64'));
     await click('.modal-close');

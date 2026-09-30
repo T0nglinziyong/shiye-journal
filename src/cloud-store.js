@@ -1,7 +1,7 @@
 import {cloudClient,requireCloudUser} from './cloud-session.js';
 import {privateCache} from './private-cache.js';
 import {createProjectSync} from './project-sync.js';
-import {readCloudDelta} from './cloud-delta.js';
+import {readCloudDelta,canRebaseUnchangedKeys} from './cloud-delta.js';
 import {LARGE_PROJECT_BYTES,projectSummary,mergeProjectSummary,projectBlobText} from './project-document.js';
 import {createCOSStore} from './cos-store.js';
 import {recoverImportOutbox} from './import-outbox-recovery.js';
@@ -27,7 +27,11 @@ const projectSync=createProjectSync({
   load:async()=>{if(!cache)return [];const key=await account(),saved=await cache.get(key,'project-outbox')||[],result=recoverProjectOutbox(saved);if(result.removed)try{await cache.put(key,'project-outbox',result.rows);}catch{/* The valid cloud version still takes precedence in this session. */}return result.rows;},
   write:async rows=>{if(!cache||cacheDisabled)throw Error('无法安全保存待同步作品');await cache.put(await account(),'project-outbox',rows);},
   commit:(record,operationID)=>cloudTransaction(['projects'],tx=>tx.objectStore('projects').put(record),operationID),revision:()=>revision,
-  reconcile:async(_record,operationID,baseRevision)=>await wasCommitted(operationID,baseRevision)?'committed':'conflict',
+  reconcile:async(record,operationID,baseRevision)=>{
+    if(await wasCommitted(operationID,baseRevision))return 'committed';
+    const latest=await version();
+    return await canRebaseUnchangedKeys({client:cloudClient(),owner:await identity(),before:baseRevision,after:latest,operations:[{store:'projects',action:'put',item:record}]})?'rebase':'conflict';
+  },
   onStatus:reportSync,
 });
 async function wasCommitted(operationID,baseRevision){
@@ -46,10 +50,10 @@ async function wasCommitted(operationID,baseRevision){
 }
 async function reconcileImport(batch,operationID,baseRevision){
   if(await wasCommitted(operationID,baseRevision))return 'committed';
-  // Only an append-only import has unique IDs that prove an interrupted RPC
-  // already committed atomically, or can be safely retried after an unrelated
-  // revision. Never infer success or rebase for edits, deletes, or partial data.
-  if(batch.operations)return 'conflict';
+  const latest=await version();
+  // Edits/deletes rebase only over a complete, disjoint change log. An
+  // append-only import may instead prove absence by its unique record IDs.
+  if(batch.operations)return await canRebaseUnchangedKeys({client:cloudClient(),owner:await identity(),before:baseRevision,after:latest,operations:batch.operations})?'rebase':'conflict';
   const records=['assets','blobs','projects'].flatMap(store=>(batch[store]||[]).map(item=>({store,id:item.id})));
   if(!records.length||!(batch.assets?.length||batch.projects?.length))return 'conflict';
   let present=0;

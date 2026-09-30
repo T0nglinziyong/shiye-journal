@@ -11,7 +11,7 @@ function fixture(cache=null,objectStorage=null){
       async range(start,end){state.reads=(state.reads||0)+1;return {data:state.rows.slice(start,end+1).map(record=>({record}))};},
       async single(){return {data:{revision:state.revision}};},
       async maybeSingle(){return {data:table==='shiye_commits'?(state.commits.has(filters.operation_id)?{revision:state.commits.get(filters.operation_id)}:null):state.rows.filter(r=>r.id===filters.id).map(record=>({record}))[0]||null};}};
-    if(table==='shiye_changes')return {select(){return this;},eq(){return this;},gt(){return this;},lte(){return this;},order(){return this;},async range(){return {error:{message:'change log not installed'}};}};
+    if(table==='shiye_changes')return {select(){return this;},eq(){return this;},gt(){return this;},lte(){return this;},order(){return this;},async range(){return state.changes?{data:state.changes}:{error:{message:'change log not installed'}};}};
     assert.ok(['shiye_records','shiye_revisions','shiye_commits'].includes(table));return query;
   },storage:{from(bucket){assert.equal(bucket,'shiye-private');return {
     async upload(path,data,options){state.uploads.push({path,data,options});await state.uploadGate;return {error:state.fail?{statusCode:500}:null};},
@@ -57,6 +57,35 @@ test('trash restore survives AbortError: local stage is immediate and reopen ret
   const reopened=fixture(cache);await reopened.db.cloudFlushProjects();
   assert.deepEqual(await cache.get('cloud:owner-uuid','import-outbox'),[]);
   assert.deepEqual(reopened.state.calls[0].operations.map(op=>op.store+':'+op.action),['trash:delete','assets:put']);
+});
+test('aborted delete resumes after another tab edits an unrelated record, but not the same record',async()=>{
+  const cache=memoryCache(),first=fixture(cache);first.state.rpcAbort=true;
+  await first.db.cloudStageMutation(['trash'],tx=>tx.objectStore('trash').delete('mine'));
+  await assert.rejects(first.db.cloudFlushProjects(),{name:'AbortError'});
+  first.state.rpcAbort=false;first.state.revision=1;
+  first.state.changes=[{revision:1,keys:[{store:'assets',action:'put',id:'other'}]}];
+  await first.db.cloudFlushProjects();
+  assert.equal(first.state.calls.at(-1).expected_revision,1);
+  assert.deepEqual(await cache.get('cloud:owner-uuid','import-outbox'),[]);
+
+  const secondCache=memoryCache(),second=fixture(secondCache);second.state.rpcAbort=true;
+  await second.db.cloudStageMutation(['trash'],tx=>tx.objectStore('trash').delete('mine'));
+  await assert.rejects(second.db.cloudFlushProjects(),{name:'AbortError'});
+  second.state.rpcAbort=false;second.state.revision=1;
+  second.state.changes=[{revision:1,keys:[{store:'trash',action:'put',id:'mine'}]}];
+  await assert.rejects(second.db.cloudFlushProjects(),/conflict/);
+  assert.equal((await secondCache.get('cloud:owner-uuid','import-outbox')).length,1);
+});
+test('aborted work edit resumes across an unrelated cloud revision without overwriting it',async()=>{
+  const cache=memoryCache(),first=fixture(cache);first.state.rpcAbort=true;
+  const work={id:'my-work',title:'locally edited',activeDraftID:'d',drafts:[{id:'d',canvas:{width:700,height:1000},items:[],textBlocks:[],primitives:[],strokes:[]}]};
+  await first.db.cloudStageProject(work);
+  await assert.rejects(first.db.cloudFlushProjects(),{name:'AbortError'});
+  first.state.rpcAbort=false;first.state.revision=1;
+  first.state.changes=[{revision:1,keys:[{store:'assets',action:'put',id:'other'}]}];
+  await first.db.cloudFlushProjects();
+  assert.equal(first.state.calls.at(-1).expected_revision,1);
+  assert.deepEqual(await cache.get('cloud:owner-uuid','project-outbox'),[]);
 });
 test('reopening after an import commit but before local acknowledgement clears the outbox safely',async()=>{
   const cache=memoryCache(),first=fixture(cache);

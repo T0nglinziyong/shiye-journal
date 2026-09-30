@@ -3,7 +3,7 @@
 export function createSyncResumer({flush,canRun=()=>true,onError=()=>{},setTimer=setTimeout,clearTimer=clearTimeout}){
   let active=null,timer=null,attempt=0,stopped=false;
   const cancel=()=>{if(timer!==null){clearTimer(timer);timer=null;}};
-  const conflict=error=>/云端版本已变化|另一设备已更新/.test(error?.message||'');
+  const conflict=error=>/云端版本已变化|另一设备已更新|\bconflict\b/i.test(error?.message||'');
   const wake=()=>{
     if(stopped||!canRun())return Promise.resolve();
     cancel();if(active)return active;
