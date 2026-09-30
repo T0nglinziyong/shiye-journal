@@ -17,7 +17,8 @@ try{
     assert.ok(await evaluate('document.querySelector("#offline-gpt-prompt").value.includes("START_HERE.txt")'));
     assert.ok(await evaluate('document.querySelector("#offline-gpt-prompt").value.length<130'));
     assert.ok(await evaluate('document.querySelector("#modal-body").textContent.includes(".zip")'));
-    assert.ok(await evaluate('document.querySelector("#modal-body").textContent.includes("验证并导入参数")'));
+    assert.ok(await evaluate('document.querySelector("#modal-body").textContent.includes("验证并导入")'));
+    assert.ok(await evaluate('document.querySelector("#modal-body").textContent.includes("粘贴剪贴板")'));
     const shot=await command('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});await writeFile(`${directory}/${width}x${height}-handoff.png`,Buffer.from(shot.data,'base64'));
     await click('.modal-close');
     await click('[data-act="match-import-gpt"]','#offline-gpt-result');

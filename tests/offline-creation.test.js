@@ -26,6 +26,8 @@ test('editable GPT response becomes an editable draft without replacing existing
   assert.equal(imported.drafts[0].textBlocks[0].content,'这一页的主题');
   assert.equal(imported.drafts[0].agentRun.status,'finished');
   assert.equal(imported.offlineBundleId,JSON.parse(response).source.bundleId);
+  const copied=`这页的预览图已展示。\n\n\`\`\`json\n${response}\n\`\`\``;
+  assert.equal(importEditableWork(copied,[asset]).drafts[0].items[0].assetID,asset.id);
 });
 
 test('invalid or incomplete editable file is rejected before persistence',async()=>{
@@ -37,6 +39,8 @@ test('invalid or incomplete editable file is rejected before persistence',async(
   assert.throws(()=>importEditableWork(JSON.stringify({...response,tools:[response.tools[0]]}),[asset]),/finish_design/);
   assert.throws(()=>importEditableWork(JSON.stringify({...response,tools:[{name:'delete_elements',arguments:{}},response.tools[1]]}),[asset]),/compose_page/);
   assert.throws(()=>importEditableWork('not-json',[asset]),/不是有效 JSON/);
+  const duplicate=JSON.stringify(response);
+  assert.throws(()=>importEditableWork(`\`\`\`json\n${duplicate}\n\`\`\`\n\`\`\`json\n${duplicate}\n\`\`\``,[asset]),/多个可编辑数据块/);
 });
 
 test('web ChatGPT handoff is one uploadable file plus a copyable, mode-specific instruction',async()=>{
@@ -46,6 +50,8 @@ test('web ChatGPT handoff is one uploadable file plus a copyable, mode-specific 
   const toolFiles=unzipSync(new Uint8Array(await tool.blob.arrayBuffer()));
   assert.equal(JSON.parse(strFromU8(toolFiles['context.json'])).source.bundleId,tool.source.bundleId);
   assert.match(strFromU8(toolFiles['START_HERE.txt']),/compose_page/);
+  assert.match(strFromU8(toolFiles['START_HERE.txt']),/图片预览/);
+  assert.match(strFromU8(toolFiles['START_HERE.txt']),/可下载的 UTF-8 文件/);
   const agentContract=JSON.parse(strFromU8(toolFiles['contract.json']));
   assert.ok(agentContract.edit_materials&&agentContract.upsert_primitives&&agentContract.move_elements);
   assert.ok(tool.prompt.length<130);assert.match(tool.prompt,/START_HERE.txt/);
@@ -53,6 +59,7 @@ test('web ChatGPT handoff is one uploadable file plus a copyable, mode-specific 
   const directFiles=unzipSync(new Uint8Array(await direct.blob.arrayBuffer()));
   assert.match(strFromU8(directFiles['START_HERE.txt']),/可下载的 UTF-8 文件/);
   assert.match(strFromU8(directFiles['START_HERE.txt']),/不要返回 tools/);
+  assert.match(strFromU8(directFiles['START_HERE.txt']),/单独的 ```json 代码块/);
   assert.ok(JSON.parse(strFromU8(directFiles['example-response.shiyeproject.json'])).page);
 });
 
