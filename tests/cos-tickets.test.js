@@ -29,6 +29,16 @@ test('COS adapter batches authorization, never exposes credentials, and does not
   assert.equal(await (await flaky.download('owner/'+hash)).text(),'recovered');assert.equal(tries,2);
   let deniedTries=0;const authDenied=createCOSStore({client:()=>({auth:{getSession:async()=>({data:{session:{access_token:token}}})}}),fetcher:async()=>{deniedTries++;return {ok:false,status:403};}});await assert.rejects(authDenied.download('owner/'+hash),/403/);assert.equal(deniedTries,1);
 });
+test('COS object probe distinguishes a missing object from a temporary or forbidden read',async()=>{
+  let status=404,readOptions;
+  const store=createCOSStore({enabled:true,client:()=>({auth:{getSession:async()=>({data:{session:{access_token:token}}})}}),fetcher:async(url,options)=>{
+    if(url==='/api/cos'){const objects=JSON.parse(options.body).objects;return {ok:true,json:async()=>({tickets:objects.map(row=>({...row,url:'https://example.test/'+row.path,headers:{}}))})};}
+    readOptions=options;return {ok:status>=200&&status<300,status,body:{cancel:async()=>{}}};
+  }});
+  assert.equal(await store.probe('owner/'+hash),false);assert.equal(readOptions.headers.Range,'bytes=0-0');
+  status=206;assert.equal(await store.probe('owner/'+hash),true);
+  status=403;await assert.rejects(store.probe('owner/'+hash),/403/);
+});
 test('COS uploads leave read capacity available and do not sign queued PUTs early',async()=>{
   const user='owner/',paths=Array.from({length:5},(_,i)=>user+String(i).repeat(64));
   let started=0,releaseRead;const releases=[];let signedWrites=0;

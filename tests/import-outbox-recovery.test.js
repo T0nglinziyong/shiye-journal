@@ -34,3 +34,29 @@ test('partial loss retains other cards and only their referenced image records',
   assert.deepEqual(result.rows[0].record.assets,[second]);
   assert.deepEqual(result.rows[0].record.blobs.map(b=>b.id),['good']);
 });
+
+test('a source photo alone does not keep an unrenderable cutout card',async()=>{
+  const input=[row([{id:'lost',blobId:'cutout',photoBlobId:'photo'}],[{id:'cutout',data:new Blob([])},{id:'photo',data:new Blob(['source photo'])}])];
+  const result=await recoverImportOutbox(input,async()=>[]);
+  assert.equal(result.removed,1);
+  assert.deepEqual(result.rows,[]);
+});
+
+test('surviving cutout restores the display reference and removes empty pending bytes',async()=>{
+  const input=[row([{id:'repair',blobId:'missing',originalCutoutBlobId:'original-cutout',photoBlobId:'photo'}],[{id:'missing',data:new Blob([])},{id:'original-cutout',data:new Blob(['visible'])},{id:'photo',data:new Blob(['source'])}])];
+  const result=await recoverImportOutbox(input,async()=>[]);
+  assert.equal(result.removed,0);
+  assert.equal(result.rows[0].record.assets[0].blobId,'original-cutout');
+  assert.deepEqual(result.rows[0].record.blobs.map(blob=>blob.id),['original-cutout','photo']);
+});
+
+test('a remote primary survives missing local bytes; uncertain network never deletes them',async()=>{
+  const input=[row([{id:'remote',blobId:'cutout',photoBlobId:'photo'}],[{id:'cutout',data:new Blob([])}])];
+  const available=await recoverImportOutbox(input,async()=>['cutout']);
+  assert.equal(available.removed,0);
+  assert.deepEqual(available.rows[0].record.blobs,[]);
+  const uncertain=await recoverImportOutbox(input,async()=>{throw Error('AbortError');});
+  assert.equal(uncertain.removed,0);
+  assert.equal(uncertain.changed,false);
+  assert.deepEqual(uncertain.rows,input);
+});

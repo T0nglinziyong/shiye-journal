@@ -7,7 +7,7 @@ function fixture(cache=null,objectStorage=null){
   const state={revision:0,rows:[],calls:[],fail:false,authError:false,uploads:[],downloads:0};
   const client={from(table){
     const filters={};const query={select(){return query;},eq(k,v){filters[k]=v;return query;},in(k,v){filters[k]=v;return query;},limit(){return query;},abortSignal(){return query;},order(){return query;},
-      then(resolve){return Promise.resolve(resolve({data:(state.cloudCopies||[]).filter(row=>!filters.id||row.id===filters.id)}));},
+      then(resolve){return Promise.resolve(resolve({data:(state.cloudCopies||[]).filter(row=>!filters.id||(Array.isArray(filters.id)?filters.id.includes(row.id):row.id===filters.id))}));},
       async range(start,end){state.reads=(state.reads||0)+1;return {data:state.rows.slice(start,end+1).map(record=>({record}))};},
       async single(){return {data:{revision:state.revision}};},
       async maybeSingle(){return {data:state.rows.filter(r=>r.id===filters.id).map(record=>({record}))[0]||null};}};
@@ -72,6 +72,21 @@ test('reopening removes only an unrecoverable local import card, not a recoverab
   assert.deepEqual(staged.assets.map(card=>card.id),['safe']);
   assert.deepEqual(staged.blobs.map(blob=>blob.id),['valid']);
 });
+test('remote metadata without a COS object does not keep a broken import card',async()=>{
+  const cache=memoryCache(),first=fixture(cache);first.state.uploadGate=new Promise(()=>{});
+  await first.db.cloudStageImport({assets:[{id:'ghost',blobId:'ghost-image'}],blobs:[{id:'ghost-image',data:new Blob([])}],projects:[]});
+  const cos={enabled:true,probe:async()=>false};const reopened=fixture(cache,cos);
+  reopened.state.cloudCopies=[{id:'ghost-image',record:{storagePath:'owner-uuid/'+'a'.repeat(64),storageProvider:'cos'}}];
+  assert.deepEqual(await reopened.db.cloudAll('assets'),[]);
+  assert.deepEqual(await cache.get('cloud:owner-uuid','import-outbox'),[]);
+});
+test('confirmed remote COS object preserves a missing local import image',async()=>{
+  const cache=memoryCache(),first=fixture(cache);first.state.uploadGate=new Promise(()=>{});
+  await first.db.cloudStageImport({assets:[{id:'recoverable',blobId:'image'}],blobs:[{id:'image',data:new Blob([])}],projects:[]});
+  const cos={enabled:true,probe:async()=>true};const reopened=fixture(cache,cos);
+  reopened.state.cloudCopies=[{id:'image',record:{storagePath:'owner-uuid/'+'a'.repeat(64),storageProvider:'cos'}}];
+  assert.equal((await reopened.db.cloudAll('assets'))[0].id,'recoverable');
+});
 test('COS writes retain provider metadata; old Supabase objects still read without provider fallback',async()=>{
   const files=new Map(),cos={enabled:true,async upload(path,blob){files.set(path,blob);},async download(path){if(!files.has(path))throw Error('COS offline');return files.get(path);}},a=fixture(null,cos);
   await a.db.cloudTransaction(['blobs'],tx=>tx.objectStore('blobs').put({id:'cos-image',data:new Blob(['COS bytes'])}));const record=a.state.calls[0].operations[0].item;
@@ -99,6 +114,23 @@ test('ordinary cutout updates and deletes are durable and immediately readable w
   assert.equal((await a.db.cloudGet('assets','a')).title,'edited');assert.equal(await (await a.db.cloudGet('blobs','cut')).data.text(),'new-cutout');assert.equal(a.state.calls.length,0);
   await a.db.cloudStageMutation(['assets'],tx=>tx.objectStore('assets').delete('a'));assert.equal(await a.db.cloudGet('assets','a'),undefined);assert.deepEqual(await a.db.cloudAll('assets'),[]);
   release();await a.db.cloudFlushProjects();assert.equal(a.state.calls.length,2);assert.equal(a.state.calls[1].operations[0].action,'delete');assert.deepEqual(await cache.get('cloud:owner-uuid','import-outbox'),[]);
+});
+test('deleting a pending imported asset hides it immediately even while its upload is blocked',async()=>{
+  const cache=memoryCache(),first=fixture(cache);first.state.uploadGate=new Promise(()=>{});
+  await first.db.cloudAll('assets');
+  await first.db.cloudStageImport({assets:[{id:'pending',blobId:'pending-image'}],blobs:[{id:'pending-image',data:new Blob(['bytes'])}],projects:[]});
+  await first.db.cloudStageMutation(['assets'],tx=>tx.objectStore('assets').delete('pending'));
+  assert.deepEqual(await first.db.cloudAll('assets'),[]);
+  const reopened=fixture(cache);assert.deepEqual(await reopened.db.cloudAll('assets'),[]);
+});
+test('damaged pending work falls back to its last saved cloud edit on reopen',async()=>{
+  const cache=memoryCache(),saved={id:'work',title:'已保存的编辑',activeDraftID:'draft',drafts:[{id:'draft',canvas:{width:707,height:1000},items:[],textBlocks:[{id:'saved-text',content:'上次保存'}],primitives:[],strokes:[]}]};
+  await cache.put('cloud:owner-uuid','project-outbox',[{record:{...saved,drafts:[{...saved.drafts[0],textBlocks:undefined}]},serial:1,baseRevision:0}]);
+  const reopened=fixture(cache);reopened.state.rows=[saved];
+  assert.deepEqual(await reopened.db.cloudPendingProjects(),[]);
+  assert.equal((await reopened.db.cloudAll('projects'))[0].drafts[0].textBlocks[0].content,'上次保存');
+  assert.deepEqual(await cache.get('cloud:owner-uuid','project-outbox'),[]);
+  await assert.rejects(reopened.db.cloudStageProject({...saved,drafts:[]}),/不完整/);
 });
 function memoryCache(){const rows=new Map();return {async get(owner,key){return structuredClone(rows.get(owner+':'+key));},async put(owner,key,value){rows.set(owner+':'+key,structuredClone(value));},async clear(owner){for(const key of rows.keys())if(key.startsWith(owner+':'))rows.delete(key);}};}
 test('uploaded originals are immediately reusable and survive a fresh cloud store without re-download',async()=>{

@@ -5,6 +5,7 @@ import {readCloudDelta} from './cloud-delta.js';
 import {LARGE_PROJECT_BYTES,projectSummary,mergeProjectSummary,projectBlobText} from './project-document.js';
 import {createCOSStore} from './cos-store.js';
 import {recoverImportOutbox} from './import-outbox-recovery.js';
+import {recoverProjectOutbox,usableProjectSnapshot} from './project-outbox-recovery.js';
 export function createCloudStore({cloudClient,requireCloudUser,cache=null,namespace='cloud',projectPreview=()=>null,objectStorage=null}){
 const BUCKET='shiye-private';
 const writeProvider=()=>objectStorage?.enabled?'cos':'supabase';
@@ -23,7 +24,7 @@ let cacheDisabled=false;
 const account=async()=>`${namespace}:${await identity()}`;
 function reportSync(){if(typeof window!=='undefined'){const a=projectSync.status(),b=importSync.status();window.dispatchEvent(new CustomEvent('shiye-project-sync',{detail:{pending:a.pending+b.pending+writesInFlight,error:b.error||a.error}}));}}
 const projectSync=createProjectSync({
-  load:async()=>cache?await cache.get(await account(),'project-outbox'):[],
+  load:async()=>{if(!cache)return [];const key=await account(),saved=await cache.get(key,'project-outbox')||[],result=recoverProjectOutbox(saved);if(result.removed)try{await cache.put(key,'project-outbox',result.rows);}catch{/* The valid cloud version still takes precedence in this session. */}return result.rows;},
   write:async rows=>{if(!cache||cacheDisabled)throw Error('无法安全保存待同步作品');await cache.put(await account(),'project-outbox',rows);},
   commit:record=>cloudTransaction(['projects'],tx=>tx.objectStore('projects').put(record)),revision:()=>revision,
   onStatus:reportSync,
@@ -54,10 +55,24 @@ const importSync=createProjectSync({
     const result=await recoverImportOutbox(rows,async(asset,ids)=>{
       const user=await identity();
       if(!ids.length)return false;
-      const copies=checked(await cloudClient().from('shiye_records').select('id').eq('user_id',user).eq('store','blobs').in('id',ids).limit(1).abortSignal(AbortSignal.timeout(2500)));
-      return copies.length>0;
+      const copies=checked(await cloudClient().from('shiye_records').select('id,record').eq('user_id',user).eq('store','blobs').in('id',ids).abortSignal(AbortSignal.timeout(5000)));
+      const available=[];
+      for(const copy of copies){
+        const record=copy.record;
+        // Metadata alone is not a cloud backup. A crash can leave a row whose
+        // COS object was never uploaded. Check only broken local imports, and
+        // treat 404 as loss; timeout/403 remain indeterminate and are retried.
+        if(!record?.storagePath){available.push(copy.id);continue;}
+        if(!record.storagePath.startsWith(user+'/'))throw Error('图片不属于当前账号');
+        const cachedImage=await cached('image:'+record.storagePath);
+        if(usableBlob(cachedImage)){available.push(copy.id);continue;}
+        if(record.storageProvider==='cos'&&objectStorage?.probe){if(await objectStorage.probe(record.storagePath))available.push(copy.id);continue;}
+        try{if(usableBlob(await downloadObject(record.storagePath,record.storageProvider)))available.push(copy.id);}
+        catch(error){if(!/\b404\b|NoSuchKey|Object not found/i.test(error?.message||''))throw error;}
+      }
+      return available;
     });
-    if(!result.removed)return rows;
+    if(!result.changed)return rows;
     // Do not show a local ghost after a confirmed cloud miss. This changes
     // only the broken, uncommitted outbox row; no cloud data is deleted.
     try{await cache.put(key,'import-outbox',result.rows);return result.rows;}
@@ -204,7 +219,7 @@ async function cloudRefresh(){
   if(delta){for(const [store,snapshot] of delta.snapshots){snapshots.set(store,snapshot);await remember('records:'+store,snapshot);}return {revision:current,changed:true,incremental:true,blobIDs:delta.blobIDs,allBlobs:delta.allBlobs};}
   return {revision:current,changed:true,incremental:false,allBlobs:true};
 }
-async function cloudStageProject(record){await identity();if(revision===undefined)await version();return projectSync.stage(record);}
+async function cloudStageProject(record){if(!usableProjectSnapshot(record))throw Error('作品编辑数据不完整；云端已保存版本未被覆盖');await identity();if(revision===undefined)await version();return projectSync.stage(record);}
 async function cloudStageImport(batch){await identity();if(revision===undefined)await version();await importSync.stage({...batch,id:crypto.randomUUID()});return {pending:true};}
 async function cloudStageMutation(names,fn){
   const operations=[],result=fn({objectStore(store){if(!names.includes(store))throw Error('此表未加入事务');return {put:item=>operations.push({action:'put',store,item:structuredClone(item)}),delete:id=>operations.push({action:'delete',store,id}),clear:()=>operations.push({action:'clear',store})};}});
