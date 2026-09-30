@@ -1,7 +1,7 @@
 import {zipSync,strToU8} from 'fflate';
 import {project} from './domain.js';
 import {applyToolCalls} from './creative.js';
-import {toolContracts} from './creative-contract.js';
+import {toolContracts,directPageContract,directPageToTools} from './creative-contract.js';
 import {buildCreativeMessages} from './creative-runner.js';
 
 export const OFFLINE_PACKAGE_FORMAT='shiye-gpt-creation-package';
@@ -27,6 +27,41 @@ export function createOfflineCreationPackage({project:p,assets,aliases,previews=
   if(selected.some(m=>!files[m.preview]))throw Error('创作包缺少素材预览，未导出不完整文件');
   return {blob:new Blob([zipSync(files,{level:6})],{type:'application/zip'}),source};
 }
+// The web ChatGPT handoff is one readable file plus a separate copyable prompt.
+// A ZIP was easy to generate but ChatGPT often treats it as an opaque code archive.
+export async function createOfflineHandoff({project:p,assets,aliases,previews=[],settings={},referenceImages=[]}){
+  const source=sourceFor(p,aliases),selected=source.materials.map(({alias,assetID})=>{
+    const asset=assets.find(item=>item.id===assetID);
+    if(!asset||!validAlias(alias))throw Error('素材篮中有无效素材编号');
+    return {alias,assetID,title:asset.title,kind:asset.kind,role:asset.role,physicalWidthMM:asset.physicalWidthMM,physicalHeightMM:asset.physicalHeightMM,quantity:asset.supply?.quantity??1,tags:asset.tags||[]};
+  });
+  if(!selected.length)throw Error('请先选择素材');
+  const showImages=settings.includeThumbnails!==false&&Number(settings.imageCount)!==0;
+  const maxImages=Math.max(0,Math.min(8,Number(settings.imageCount)||4));
+  const chosen=showImages?previews.slice(0,maxImages):[];
+  const mode=settings.generationMode==='direct'?'direct':'agent';
+  const messages=buildCreativeMessages({draft:p.drafts[0],assets,aliases,styles:source.styles,pagePurposes:source.purposes,processing:source.processing,requiredAssetIDs:source.requiredAssetIDs,assetProcessing:source.assetProcessing,materialUseHints:source.materialUseHints,materialUseRequired:source.materialUseRequired,prompt:source.intent,generationMode:mode,transport:'json',includeStructureReference:settings.includeStructureReference!==false,referencePage:settings.referencePage||1,textMode:settings.textMode||'automatic',customLayoutPrompt:settings.customLayoutPrompt||''});
+  const context={format:OFFLINE_PACKAGE_FORMAT,version:1,source,materials:selected};
+  let blob,filename;
+  if(chosen.length||referenceImages.length&&showImages&&settings.sendReference){
+    // Keep PDF generation out of the initial library/editor bundle.
+    const {PDFDocument,StandardFonts,rgb}=await import('pdf-lib');
+    const pdf=await PDFDocument.create(),font=await pdf.embedFont(StandardFonts.Helvetica);
+    const entries=[...chosen.map(entry=>({label:entry.alias,bytes:entry.bytes})),...(showImages&&settings.sendReference?referenceImages.map((entry,index)=>({label:`reference-${index+1}`,bytes:entry.bytes})):[])];
+    for(let offset=0;offset<entries.length;offset+=6){const page=pdf.addPage([595,842]);page.drawText('Shiye Journal - visual references',{x:35,y:804,size:15,font,color:rgb(.22,.32,.25)});
+      for(let i=0;i<Math.min(6,entries.length-offset);i++){const entry=entries[offset+i],x=35+i%2*280,y=760-Math.floor(i/2)*242;
+        page.drawText(entry.label,{x,y,size:12,font});const image=await pdf.embedJpg(entry.bytes);const fit=Math.min(245/image.width,205/image.height);page.drawImage(image,{x:x+(245-image.width*fit)/2,y:y-215,width:image.width*fit,height:image.height*fit});
+      }
+    }
+    blob=new Blob([await pdf.save()],{type:'application/pdf'});filename='拾页-GPT创作参考.pdf';
+  }else{blob=new Blob([JSON.stringify(context,null,2)],{type:'application/json'});filename='拾页-GPT创作参考.json';}
+  const envelope={format:EDITABLE_WORK_FORMAT,version:1,source,title:'新的手帐'};
+  const directExample={...envelope,page:{version:3,style:'留白叙事',intent:null,items:[{asset:selected[0].alias,piece:'主素材',unit:0,role:null,operations:[{op:'whole'}],placement:{x:.5,y:.43,rotation:0,z:1},relation:null}],text_blocks:[{content:'这一页的主题',font_style:'serif',x:.5,y:.13,width:.7,height:.09,font_size:30,color:'#30463d'},{content:'第一段可编辑正文，根据真实主题填写。',font_style:'sans',x:.5,y:.72,width:.75,height:.08,font_size:20,color:'#30463d'},{content:'第二段可编辑正文，接续上一段的内容。',font_style:'sans',x:.5,y:.84,width:.75,height:.08,font_size:20,color:'#30463d'}],paper:{color:'#fcfaf0',pattern:'plain'}}};
+  const contract=mode==='direct'?`页面数据须符合以下 JSON Schema：${JSON.stringify(directPageContract)}`:`只使用 compose_page、place_materials、upsert_materials、upsert_primitives、upsert_text、set_paper、finish_design。工具参数合同：${JSON.stringify(Object.fromEntries([...allowedTools].map(name=>[name,toolContracts[name]])))}`;
+  const output=mode==='direct'?`以下是一个结构完整的示例（内容和构图应按本次素材重新创作）：${JSON.stringify(directExample)}。返回根对象必须保留同样的 format、version、source，填写 page；不要返回 tools。请先在聊天中展示这页的视觉预览，再提供一个可下载的 UTF-8 文件「作品.shiyeproject.json」。预览图仅供查看，文件中的可编辑页面数据才是导入依据。若当前聊天不能提供文件，请直接输出完整 JSON，不加代码围栏，供我复制导入。`:`返回根对象为 ${JSON.stringify({...envelope,tools:[{name:'compose_page',arguments:{}},{name:'finish_design',arguments:{summary:'完成'}}]})}，填写 tools。首先用 compose_page 放置真实素材、图形和文字，最后一个操作必须是 finish_design。只输出完整 JSON，不加代码围栏；我会复制参数回拾页，由拾页执行和验证。`;
+  const prompt=`请直接按以下拾页创作任务完成手帐，不要审查软件或询问我下一步。附件是视觉参考${showImages?'；其中 m1、m2 等编号与下方素材表对应':'（本次关闭了素材预览，只能依据文字资料）'}。一轮完成，不做多轮创作。\n\n${messages[0].content}\n${messages[1].content.find(item=>item.type==='text')?.text||''}\n\n素材表与精确来源：${JSON.stringify(context)}\n\n${contract}\n\n${output}\n\n保持 source 原样，不改 bundleId 或素材 ID，不编造用户经历与素材图像细节。作品中至少使用一件真实素材；文字仍需是可编辑文本，不要把整页展平成图片。`;
+  return {blob,filename,prompt,source,mode,imageCount:chosen.length};
+}
 export function importEditableWork(text,assets){
   if(text.length>2_000_000)throw Error('可编辑作品文件过大');
   let input;try{input=JSON.parse(text);}catch{throw Error('可编辑作品不是有效 JSON');}
@@ -34,14 +69,16 @@ export function importEditableWork(text,assets){
   const source=input.source;
   if(!source||typeof source.bundleId!=='string'||!Array.isArray(source.materials)||!source.materials.length||source.materials.length>100)throw Error('创作包来源无效');
   if(!['single','spread'].includes(source.mode)||!/^a[456]$|^b5$|^custom:\d{2,4}x\d{2,4}$/.test(source.ratio||''))throw Error('纸张规格无效');
-  if(!Array.isArray(input.tools)||!input.tools.length||input.tools.length>12||input.tools.at(-1)?.name!=='finish_design'||!input.tools.some(t=>t.name==='compose_page'))throw Error('作品需要 compose_page 与最后的 finish_design');
-  if(input.tools.some(t=>!allowedTools.has(t?.name)))throw Error('作品包含不支持的创作操作');
+  const direct=input.page!==undefined;
+  const tools=direct?directPageToTools(input.page):input.tools;
+  if(!Array.isArray(tools)||!tools.length||tools.length>12||(direct?tools.length!==1||tools[0].name!=='compose_direct_page':tools.at(-1)?.name!=='finish_design'||!tools.some(t=>t.name==='compose_page')))throw Error('作品需要 compose_page 与最后的 finish_design，或完整可编辑页面');
+  if(!direct&&tools.some(t=>!allowedTools.has(t?.name)))throw Error('作品包含不支持的创作操作');
   const aliases={},seen=new Set();for(const m of source.materials){if(!validAlias(m.alias)||typeof m.assetID!=='string'||seen.has(m.alias)||!assets.some(a=>a.id===m.assetID))throw Error('作品引用了不存在或重复的素材');seen.add(m.alias);aliases[m.alias]=m.assetID;}
   if(!Array.isArray(source.requiredAssetIDs)||source.requiredAssetIDs.some(id=>!Object.values(aliases).includes(id)))throw Error('必用素材不在创作包中');
   const title=typeof input.title==='string'&&input.title.trim()?input.title.trim().slice(0,80):'导入的可编辑作品';
   const p=project(title,{mode:source.mode,ratio:source.ratio,style:Array.isArray(source.styles)?source.styles[0]:'韩系清新'});
   const selectedAssets=assets.filter(a=>Object.values(aliases).includes(a.id));
-  const result=applyToolCalls({tools:input.tools},p.drafts[0],selectedAssets,aliases,{requiredAssetIDs:source.requiredAssetIDs,materialUseHints:source.materialUseHints||{},materialUseRequired:source.materialUseRequired||{},assetProcessing:source.assetProcessing||{},pagePurposes:source.purposes||['日常记录'],allowNoText:source.purposes?.every(x=>x==='主题封面')});
+  const result=applyToolCalls({tools},p.drafts[0],selectedAssets,aliases,{requiredAssetIDs:source.requiredAssetIDs,materialUseHints:source.materialUseHints||{},materialUseRequired:source.materialUseRequired||{},assetProcessing:source.assetProcessing||{},pagePurposes:source.purposes||['日常记录'],allowNoText:source.purposes?.every(x=>x==='主题封面')});
   const error=result.results.find(x=>!x.ok);if(error)throw Error(`${error.name}：${error.detail}`);
   if(!result.committed||result.draft.agentRun?.status!=='finished')throw Error('作品没有完成可编辑页面校验');
   p.drafts[0]=result.draft;p.candidateAssetIDs=Object.values(aliases);p.requiredAssetIDs=[...source.requiredAssetIDs];p.styles=source.styles;p.purposes=source.purposes;p.processing=source.processing;p.offlineBundleId=source.bundleId;

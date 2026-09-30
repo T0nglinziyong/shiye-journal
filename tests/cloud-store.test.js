@@ -16,7 +16,7 @@ function fixture(cache=null,objectStorage=null){
   },storage:{from(bucket){assert.equal(bucket,'shiye-private');return {
     async upload(path,data,options){state.uploads.push({path,data,options});await state.uploadGate;return {error:state.fail?{statusCode:500}:null};},
     async download(path){state.downloads++;return {data:state.uploads.find(row=>row.path===path)?.data||new Blob(['private image']),error:state.missingThumbnail&&path.includes('preview360')?{message:'thumbnail missing'}:null};}};}},
-    async rpc(name,args){assert.equal(name,'shiye_commit_v2');state.calls.push(args);if(state.commits.has(args.operation_id))return state.loseAck?{error:{message:'network response lost'}}:{data:state.commits.get(args.operation_id)};if(state.fail||args.expected_revision!==state.revision)return {error:{message:'conflict'}};const revision=++state.revision;state.commits.set(args.operation_id,revision);if(state.loseAck)return {error:{message:'network response lost'}};return {data:revision};}
+    async rpc(name,args){assert.equal(name,'shiye_commit_v2');state.calls.push(args);if(state.rpcAbort)throw new DOMException('request aborted','AbortError');if(state.commits.has(args.operation_id))return state.loseAck?{error:{message:'network response lost'}}:{data:state.commits.get(args.operation_id)};if(state.fail||args.expected_revision!==state.revision)return {error:{message:'conflict'}};const revision=++state.revision;state.commits.set(args.operation_id,revision);if(state.loseAck)return {error:{message:'network response lost'}};return {data:revision};}
   };
   const db=createCloudStore({cache,objectStorage,cloudClient:()=>client,requireCloudUser:async()=>{if(state.authError)throw Error('not authorized');return {id:'owner-uuid'};}});
   return {state,db};
@@ -47,6 +47,16 @@ test('failed import uploads retain the entire batch; rejected auth/quota never c
   assert.equal((await cache.get('cloud:owner-uuid','import-outbox')).length,1);assert.equal(a.state.calls.length,0);
   const reopened=fixture(cache);reopened.state.authError=true;await assert.rejects(reopened.db.cloudGet('blobs','b'),/not authorized/);
   const quota=fixture({...memoryCache(),put:async()=>{throw Error('quota');}});await assert.rejects(quota.db.cloudStageImport({assets:[{id:'ghost'}]}),/quota/);assert.deepEqual(await quota.db.cloudAll('assets'),[]);assert.equal(quota.state.calls.length,0);
+});
+test('trash restore survives AbortError: local stage is immediate and reopen retries the same operation',async()=>{
+  const cache=memoryCache(),first=fixture(cache);first.state.rpcAbort=true;
+  await first.db.cloudStageMutation(['trash','assets'],tx=>{tx.objectStore('trash').delete('t');tx.objectStore('assets').put({id:'restored',title:'safe'});});
+  assert.deepEqual((await first.db.cloudAll('assets')).map(row=>row.id),['restored']);
+  await assert.rejects(first.db.cloudFlushProjects(),{name:'AbortError'});
+  assert.equal((await cache.get('cloud:owner-uuid','import-outbox')).length,1);
+  const reopened=fixture(cache);await reopened.db.cloudFlushProjects();
+  assert.deepEqual(await cache.get('cloud:owner-uuid','import-outbox'),[]);
+  assert.deepEqual(reopened.state.calls[0].operations.map(op=>op.store+':'+op.action),['trash:delete','assets:put']);
 });
 test('reopening after an import commit but before local acknowledgement clears the outbox safely',async()=>{
   const cache=memoryCache(),first=fixture(cache);
