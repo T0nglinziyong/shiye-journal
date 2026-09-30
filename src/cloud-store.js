@@ -154,11 +154,13 @@ async function encode(store,record){
   const bytes=await record.data.arrayBuffer(),digest=await crypto.subtle.digest('SHA-256',bytes);
   const hash=[...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,'0')).join('');
   const storagePath=`${await identity()}/${hash}`,provider=writeProvider();
-  if(!uploads.has(storagePath)){const task=(async()=>{const uploaded=await uploadObject(storagePath,record.data,record.data.type||'application/octet-stream',provider);if(uploaded.error&&uploaded.error.statusCode!=='409'&&uploaded.error.statusCode!==409)throw Error('图片上传失败，未保存元数据');})().catch(error=>{uploads.delete(storagePath);throw error;});uploads.set(storagePath,task);}await uploads.get(storagePath);
-  // New records get a private, immutable thumbnail, so first-screen loading
-  // does not need the original. Legacy records generate and cache it on demand.
+  if(!uploads.has(storagePath)){const task=(async()=>{const uploaded=await uploadObject(storagePath,record.data,record.data.type||'application/octet-stream',provider);if(uploaded.error&&uploaded.error.statusCode!=='409'&&uploaded.error.statusCode!==409)throw Error('图片上传失败，未保存元数据');})().catch(error=>{uploads.delete(storagePath);throw error;});uploads.set(storagePath,task);}
+  // The optional thumbnail is independent of the original PUT. Start both
+  // together, but never commit metadata until the original is acknowledged.
+  // This avoids serial upload latency without changing the safety boundary.
+  const thumbnailTask=(async()=>{try{const thumbnail=await makeThumbnail(record.data);if(!thumbnail)return null;const path=storagePath+'-preview360.webp',result=await uploadObject(path,thumbnail,'image/webp',provider);if(result.error&&String(result.error.statusCode)!=='409')return null;await remember('thumbnail:'+storagePath,thumbnail);return path;}catch{return null;}})();
   let thumbnailPath;
-  try{const thumbnail=await makeThumbnail(record.data);if(thumbnail){const path=storagePath+'-preview360.webp';const result=await uploadObject(path,thumbnail,'image/webp',provider);if(!result.error||String(result.error.statusCode)==='409'){thumbnailPath=path;await remember('thumbnail:'+storagePath,thumbnail);}}}catch{/* Optional thumbnail failure must not lose an otherwise valid original. */}
+  await uploads.get(storagePath);thumbnailPath=await thumbnailTask;
   await remember('image:'+storagePath,record.data);retainImage(storagePath,record.data);
   const {data,thumbnailPath:_oldThumbnail,...metadata}=record;return {...metadata,storagePath,storageProvider:provider,...(thumbnailPath?{thumbnailPath}:{})};
 }

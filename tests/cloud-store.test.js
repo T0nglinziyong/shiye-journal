@@ -80,6 +80,19 @@ test('COS writes retain provider metadata; old Supabase objects still read witho
   const old=fixture(null,cos);old.state.rows=[{id:'old',storagePath:'owner-uuid/old'}];await old.db.cloudGet('blobs','old');assert.equal(old.state.downloads,1);
   files.clear();const failed=fixture(null,cos);failed.state.rows=[record];await assert.rejects(failed.db.cloudGet('blobs','cos-image'),/COS offline/);assert.equal(failed.state.downloads,0);
 });
+test('original and optional preview upload overlap but metadata waits for the original',async()=>{
+  const oldBitmap=globalThis.createImageBitmap,oldDocument=globalThis.document;
+  globalThis.createImageBitmap=async()=>({width:720,height:720,close(){}});
+  globalThis.document={createElement:()=>({getContext:()=>({drawImage(){}}),toBlob:callback=>callback(new Blob(['preview'],{type:'image/webp'}))})};
+  try{
+    let releaseOriginal;const gate=new Promise(resolve=>releaseOriginal=resolve),started=[];
+    const cos={enabled:true,async upload(path){started.push(path);if(!path.endsWith('-preview360.webp'))await gate;}};
+    const {state,db}=fixture(null,cos);const commit=db.cloudTransaction(['blobs'],tx=>tx.objectStore('blobs').put({id:'parallel',data:new Blob(['original'],{type:'image/png'})}));
+    for(let i=0;i<100&&started.length<2;i++)await new Promise(resolve=>setTimeout(resolve,1));
+    assert.equal(started.length,2);assert.equal(state.calls.length,0,'cloud metadata must not precede the original');
+    releaseOriginal();await commit;assert.equal(state.calls.length,1);
+  }finally{if(oldBitmap===undefined)delete globalThis.createImageBitmap;else globalThis.createImageBitmap=oldBitmap;if(oldDocument===undefined)delete globalThis.document;else globalThis.document=oldDocument;}
+});
 test('ordinary cutout updates and deletes are durable and immediately readable without waiting for uploads',async()=>{
   const cache=memoryCache(),a=fixture(cache);let release;a.state.uploadGate=new Promise(r=>release=r);await a.db.cloudAll('assets');
   await a.db.cloudStageMutation(['assets','blobs'],tx=>{tx.objectStore('assets').put({id:'a',title:'edited',blobId:'cut'});tx.objectStore('blobs').put({id:'cut',data:new Blob(['new-cutout'])});});

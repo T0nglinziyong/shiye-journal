@@ -29,3 +29,18 @@ test('COS adapter batches authorization, never exposes credentials, and does not
   assert.equal(await (await flaky.download('owner/'+hash)).text(),'recovered');assert.equal(tries,2);
   let deniedTries=0;const authDenied=createCOSStore({client:()=>({auth:{getSession:async()=>({data:{session:{access_token:token}}})}}),fetcher:async()=>{deniedTries++;return {ok:false,status:403};}});await assert.rejects(authDenied.download('owner/'+hash),/403/);assert.equal(deniedTries,1);
 });
+test('COS uploads leave read capacity available and do not sign queued PUTs early',async()=>{
+  const user='owner/',paths=Array.from({length:5},(_,i)=>user+String(i).repeat(64));
+  let started=0,releaseRead;const releases=[];let signedWrites=0;
+  const store=createCOSStore({enabled:true,client:()=>({auth:{getSession:async()=>({data:{session:{access_token:token}}})}}),fetcher:async(url,options)=>{
+    if(url==='/api/cos'){const objects=JSON.parse(options.body).objects;signedWrites+=objects.filter(row=>row.method==='PUT').length;return {ok:true,json:async()=>({tickets:objects.map(row=>({...row,url:'https://example.test/'+row.path,headers:{}}))})};}
+    if(options?.method==='PUT'){started++;await new Promise(resolve=>releases.push(resolve));return {ok:true};}
+    await new Promise(resolve=>releaseRead=resolve);return {ok:true,blob:async()=>new Blob(['visible'])};
+  }});
+  const uploads=paths.map(path=>store.upload(path,new Blob(['bytes'])));
+  for(let i=0;i<30&&started<3;i++)await new Promise(resolve=>setTimeout(resolve,1));assert.equal(started,3);
+  const read=store.download(paths[0]);for(let i=0;i<30&&!releaseRead;i++)await new Promise(resolve=>setTimeout(resolve,1));assert.ok(releaseRead);
+  releases.shift()();await new Promise(resolve=>setTimeout(resolve,5));assert.equal(started,3,'a queued write must not take the visible read lane');
+  releaseRead();assert.equal(await (await read).text(),'visible');for(let i=0;i<30&&started<4;i++)await new Promise(resolve=>setTimeout(resolve,1));assert.equal(started,4);
+  while(releases.length)releases.shift()();for(let i=0;i<30&&started<5;i++)await new Promise(resolve=>setTimeout(resolve,1));while(releases.length)releases.shift()();await Promise.all(uploads);assert.equal(signedWrites,5);
+});

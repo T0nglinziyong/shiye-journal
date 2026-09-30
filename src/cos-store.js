@@ -1,5 +1,10 @@
 export function createCOSStore({client,enabled=false,endpoint='/api/cos',fetcher=(...args)=>fetch(...args)}){
-  let pending=[],scheduled=false;
+  let pending=[],scheduled=false,activeWrites=0,activeReads=0;
+  const waitingWrites=[];
+  const writeLimit=typeof matchMedia==='function'&&matchMedia('(pointer: coarse)').matches?2:3;
+  function pumpWrites(){while(waitingWrites.length&&activeWrites<writeLimit&&(!activeReads||activeWrites===0)){const job=waitingWrites.shift();activeWrites++;job().finally(()=>{activeWrites--;pumpWrites();});}}
+  const scheduleWrite=run=>new Promise((resolve,reject)=>{waitingWrites.push(()=>Promise.resolve().then(run).then(resolve,reject));pumpWrites();});
+  async function read(path,variant){activeReads++;try{const signed=await ticket(path,'GET',undefined,variant),response=await fetcher(signed.url,{signal:AbortSignal.timeout(60000)});if(!response.ok)throw Error('COS '+(variant?'缩略图':'图片')+'读取失败（'+response.status+'）');return response.blob();}finally{activeReads--;pumpWrites();}}
   const ticket=(path,method,type,variant)=>new Promise((resolve,reject)=>{pending.push({path,method,type,variant,resolve,reject});if(!scheduled){scheduled=true;queueMicrotask(drain);}});
   async function drain(){scheduled=false;const batch=pending.splice(0,24);if(pending.length){scheduled=true;queueMicrotask(drain);}
     try{const {data,error}=await client().auth.getSession();if(error||!data.session?.access_token)throw Error('请先登录');
@@ -15,8 +20,8 @@ export function createCOSStore({client,enabled=false,endpoint='/api/cos',fetcher
     }catch(error){batch.forEach(row=>row.reject(error));}
   }
   return {enabled,
-    async download(path){const signed=await ticket(path,'GET'),response=await fetcher(signed.url,{signal:AbortSignal.timeout(60000)});if(!response.ok)throw Error('COS 图片读取失败（'+response.status+'）');return response.blob();},
-    async preview(path){const signed=await ticket(path,'GET',undefined,'preview360'),response=await fetcher(signed.url,{signal:AbortSignal.timeout(60000)});if(!response.ok)throw Error('COS 缩略图读取失败（'+response.status+'）');return response.blob();},
-    async upload(path,blob,type=blob.type||'application/octet-stream'){const signed=await ticket(path,'PUT',type),response=await fetcher(signed.url,{method:'PUT',headers:signed.headers,body:blob,signal:AbortSignal.timeout(120000)});if(!response.ok&&response.status!==409)throw Error('COS 上传失败（'+response.status+'）；未保存元数据');},
+    download:path=>read(path),
+    preview:path=>read(path,'preview360'),
+    upload:(path,blob,type=blob.type||'application/octet-stream')=>scheduleWrite(async()=>{const signed=await ticket(path,'PUT',type),response=await fetcher(signed.url,{method:'PUT',headers:signed.headers,body:blob,signal:AbortSignal.timeout(120000)});if(!response.ok&&response.status!==409)throw Error('COS 上传失败（'+response.status+'）；未保存元数据');}),
   };
 }
