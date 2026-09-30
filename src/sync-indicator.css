@@ -1,0 +1,14 @@
+.sync-indicator{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:66px;min-height:30px;padding:4px 7px!important;border-radius:999px!important;color:#52634b!important;background:#edf2ea!important;font-size:12px!important;line-height:1.1;white-space:nowrap;flex:none}
+.sync-indicator[hidden]{display:none!important}
+.sync-indicator-symbol{display:block;width:13px;height:13px;flex:none;border:1.5px solid currentColor;border-radius:50%;position:relative}
+.sync-indicator[data-status="checking"] .sync-indicator-symbol,.sync-indicator[data-status="uploading"] .sync-indicator-symbol{border-right-color:transparent;animation:shiye-sync-spin .8s linear infinite}
+.sync-indicator[data-status="synced"] .sync-indicator-symbol{border-radius:50%;background:#52634b}
+.sync-indicator[data-status="synced"] .sync-indicator-symbol::after{content:'';position:absolute;left:3px;top:1px;width:4px;height:7px;border:solid #fff;border-width:0 1.5px 1.5px 0;transform:rotate(45deg)}
+.sync-indicator[data-status="error"],.sync-indicator[data-status="offline"]{background:#f8eee2!important;color:#916e35!important}
+.sync-indicator[data-status="error"] .sync-indicator-symbol,.sync-indicator[data-status="offline"] .sync-indicator-symbol{border:0;border-radius:0;width:auto;height:auto}
+.sync-indicator[data-status="error"] .sync-indicator-symbol::before,.sync-indicator[data-status="offline"] .sync-indicator-symbol::before{content:'!';font-weight:800}
+@keyframes shiye-sync-spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.sync-indicator-symbol{animation:none!important}}
+body:has(#sync-indicator:not([hidden])) #save-state{display:none}
+.swift-editor-head .sync-indicator,.import-nav .sync-indicator{margin-left:auto}
+@media(max-width:699px){.top-actions{gap:2px!important}.top-actions .sync-indicator{min-width:62px;padding-inline:5px!important}.cloud-account .btn{padding-inline:4px!important}}

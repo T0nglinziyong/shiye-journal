@@ -4,9 +4,11 @@ import {createProjectSync} from './project-sync.js';
 import {readCloudDelta} from './cloud-delta.js';
 import {LARGE_PROJECT_BYTES,projectSummary,mergeProjectSummary,projectBlobText} from './project-document.js';
 import {createCOSStore} from './cos-store.js';
+import {recoverImportOutbox} from './import-outbox-recovery.js';
 export function createCloudStore({cloudClient,requireCloudUser,cache=null,namespace='cloud',projectPreview=()=>null,objectStorage=null}){
 const BUCKET='shiye-private';
 const writeProvider=()=>objectStorage?.enabled?'cos':'supabase';
+const usableBlob=value=>value instanceof Blob&&value.size>0;
 async function downloadObject(path,provider){if(provider==='cos'){if(!objectStorage)throw Error('COS 私有读取尚未配置');return objectStorage.download(path);}if(provider&&provider!=='supabase')throw Error('不支持的存储服务');return checked(await cloudClient().storage.from(BUCKET).download(path));}
 async function uploadObject(path,blob,type,provider=writeProvider()){if(provider==='cos'){await objectStorage.upload(path,blob,type);return {error:null};}return cloudClient().storage.from(BUCKET).upload(path,blob,{upsert:false,contentType:type});}
 let owner,revision;
@@ -46,7 +48,21 @@ async function reconcileImport(batch){
 // This durable, account-scoped outbox retains the complete batch, including
 // original bytes. Only a successful cloud acknowledgement removes it.
 const importSync=createProjectSync({
-  load:async()=>cache?await cache.get(await account(),'import-outbox'):[],
+  load:async()=>{
+    if(!cache)return [];
+    const key=await account(),rows=await cache.get(key,'import-outbox')||[];
+    const result=await recoverImportOutbox(rows,async(asset,ids)=>{
+      const user=await identity();
+      if(!ids.length)return false;
+      const copies=checked(await cloudClient().from('shiye_records').select('id').eq('user_id',user).eq('store','blobs').in('id',ids).limit(1));
+      return copies.length>0;
+    });
+    if(!result.removed)return rows;
+    // Do not show a local ghost after a confirmed cloud miss. This changes
+    // only the broken, uncommitted outbox row; no cloud data is deleted.
+    try{await cache.put(key,'import-outbox',result.rows);return result.rows;}
+    catch{return rows;}
+  },
   write:async rows=>{if(!cache||cacheDisabled)throw Error('无法安全暂存导入资料，请勿关闭页面');await cache.put(await account(),'import-outbox',rows);},
   commit:batch=>batch.operations?cloudTransaction(batch.names,tx=>{for(const op of batch.operations){const store=tx.objectStore(op.store);if(op.action==='put')store.put(op.item);else if(op.action==='delete')store.delete(op.id);else store.clear();}}):cloudTransaction(['assets','blobs','projects'],tx=>{for(const store of ['assets','blobs','projects'])for(const record of batch[store]||[])tx.objectStore(store).put(record);}),
   revision:()=>revision,reconcile:reconcileImport,onStatus:reportSync,
@@ -69,7 +85,11 @@ async function cloudAll(store){
   return overlayImports(store,await Promise.all(snapshot.records.map(record=>decode(store,structuredClone(record)))));
 }
 async function cloudGet(store,id){
-  const pending=await pendingOverride(store,id);if(pending)return structuredClone(pending.record);
+  const pending=await pendingOverride(store,id);
+  if(pending&&!(store==='blobs'&&pending.record&&!usableBlob(pending.record.data)))return structuredClone(pending.record);
+  // Safari can restore an outbox row without its Blob bytes after a forced
+  // termination. A valid cloud copy takes precedence over that broken row.
+  if(pending?.record){const remote=await cloudRecord(store,id);return remote?decode(store,remote):undefined;}
   if(store==='blobs'&&id.startsWith('project-cover:'))return {id,data:await cloudPreview(id)};
   const record=await cloudRecord(store,id);return record?store==='projects'?cloudProjectDocument(record):decode(store,record):undefined;
 }
@@ -89,15 +109,15 @@ async function cloudRecord(store,id){
   if(row&&store==='blobs')await remember('blob-record:'+id,{revision,record:row.record});return row?.record;
 }
 async function cloudPreview(id){
-  const pending=await pendingOverride('blobs',id);if(pending)return pending.record?await makeThumbnail(pending.record.data)||pending.record.data:undefined;
-  if(id.startsWith('project-cover:')){const raw=id.slice('project-cover:'.length),provider=raw.startsWith('cos:')?'cos':undefined,path=provider?raw.slice(4):raw;if(!path.startsWith((await identity())+'/'))throw Error('作品封面不属于当前账号');const key='thumbnail:'+path,saved=await cached(key);if(saved instanceof Blob)return saved;const blob=await downloadObject(path,provider);await remember(key,blob);return blob;}
+  const pending=await pendingOverride('blobs',id);if(pending&&(!pending.record||usableBlob(pending.record.data)))return pending.record?await makeThumbnail(pending.record.data)||pending.record.data:undefined;
+  if(id.startsWith('project-cover:')){const raw=id.slice('project-cover:'.length),provider=raw.startsWith('cos:')?'cos':undefined,path=provider?raw.slice(4):raw;if(!path.startsWith((await identity())+'/'))throw Error('作品封面不属于当前账号');const key='thumbnail:'+path,saved=await cached(key);if(usableBlob(saved))return saved;const blob=await downloadObject(path,provider);if(!usableBlob(blob))throw Error('作品封面为空');await remember(key,blob);return blob;}
   await identity();const old=revision===undefined?await cached('blob-record:'+id):null;
   const record=old?.record||await cloudRecord('blobs',id);if(!record)return undefined;
   if(!record.storagePath?.startsWith(owner+'/'))throw Error('图片不属于当前账号');
-  const thumbnailKey='thumbnail:'+record.storagePath,saved=await cached(thumbnailKey);if(saved instanceof Blob)return saved;
+  const thumbnailKey='thumbnail:'+record.storagePath,saved=await cached(thumbnailKey);if(usableBlob(saved))return saved;
   if(record.thumbnailPath){
     if(!record.thumbnailPath.startsWith(owner+'/'))throw Error('缩略图不属于当前账号');
-    try{const thumbnail=await downloadObject(record.thumbnailPath,record.storageProvider);await remember(thumbnailKey,thumbnail);return thumbnail;}
+    try{const thumbnail=await downloadObject(record.thumbnailPath,record.storageProvider);if(!usableBlob(thumbnail))throw Error('缩略图为空');await remember(thumbnailKey,thumbnail);return thumbnail;}
     catch(error){console.warn('缩略图暂不可读，尝试从原图恢复',error?.message);}
   }
   const {data}=await decode('blobs',record);
@@ -108,7 +128,7 @@ async function decode(store,record){
   if(store!=='blobs')return record;
   const {storagePath,...metadata}=record;
   if(!storagePath?.startsWith((await identity())+'/'))throw Error('图片不属于当前账号');
-  if(!images.has(storagePath)){const pending=(async()=>{const saved=await cached('image:'+storagePath);if(saved instanceof Blob)return saved;const data=await downloadObject(storagePath,record.storageProvider);await remember('image:'+storagePath,data);return data;})().catch(error=>{images.delete(storagePath);throw error;});images.set(storagePath,pending);}
+  if(!images.has(storagePath)){const pending=(async()=>{const saved=await cached('image:'+storagePath);if(usableBlob(saved))return saved;const data=await downloadObject(storagePath,record.storageProvider);if(!usableBlob(data))throw Error('云端图片为空');await remember('image:'+storagePath,data);return data;})().catch(error=>{images.delete(storagePath);throw error;});images.set(storagePath,pending);}
   const data=await images.get(storagePath);imageSizes.delete(storagePath);imageSizes.set(storagePath,data.size);let bytes=[...imageSizes.values()].reduce((a,b)=>a+b,0);for(const [path,size] of imageSizes){if(bytes<=64*1024*1024&&imageSizes.size<=48)break;if(path===storagePath)continue;images.delete(path);imageSizes.delete(path);bytes-=size;}return {...metadata,data};
 }
 async function encode(store,record){
@@ -124,7 +144,7 @@ async function encode(store,record){
     await remember('project-document:'+path,blob);documents.set(path,Promise.resolve(structuredClone(record)));if(documents.size>8)documents.delete(documents.keys().next().value);return summary;
   }
   if(store!=='blobs')return record;
-  if(!(record.data instanceof Blob))throw Error('图片必须是完整 Blob');
+  if(!usableBlob(record.data))throw Error('图片字节丢失或为空；云端元数据未修改');
   const bytes=await record.data.arrayBuffer(),digest=await crypto.subtle.digest('SHA-256',bytes);
   const hash=[...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,'0')).join('');
   const storagePath=`${await identity()}/${hash}`,provider=writeProvider();

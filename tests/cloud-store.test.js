@@ -6,7 +6,8 @@ import {projectBlobText} from '../src/project-document.js';
 function fixture(cache=null,objectStorage=null){
   const state={revision:0,rows:[],calls:[],fail:false,authError:false,uploads:[],downloads:0};
   const client={from(table){
-    const filters={};const query={select(){return query;},eq(k,v){filters[k]=v;return query;},order(){return query;},
+    const filters={};const query={select(){return query;},eq(k,v){filters[k]=v;return query;},in(k,v){filters[k]=v;return query;},limit(){return query;},order(){return query;},
+      then(resolve){return Promise.resolve(resolve({data:(state.cloudCopies||[]).filter(row=>!filters.id||row.id===filters.id)}));},
       async range(start,end){state.reads=(state.reads||0)+1;return {data:state.rows.slice(start,end+1).map(record=>({record}))};},
       async single(){return {data:{revision:state.revision}};},
       async maybeSingle(){return {data:state.rows.filter(r=>r.id===filters.id).map(record=>({record}))[0]||null};}};
@@ -55,6 +56,15 @@ test('reopening an unfinished import after an unrelated remote update resumes up
   const reopened=fixture(cache);reopened.state.revision=1;reopened.state.rows=[{id:'other-device',title:'unrelated'}];
   await reopened.db.cloudFlushProjects();assert.equal(reopened.state.calls.length,1);
   assert.equal(reopened.state.calls[0].expected_revision,1);assert.deepEqual(await cache.get('cloud:owner-uuid','import-outbox'),[]);
+});
+test('reopening removes only an unrecoverable local import card, not a recoverable neighbor',async()=>{
+  const cache=memoryCache(),a=fixture(cache);a.state.uploadGate=new Promise(()=>{});
+  await a.db.cloudStageImport({assets:[{id:'lost',blobId:'empty'},{id:'safe',blobId:'valid'}],blobs:[{id:'empty',data:new Blob([])},{id:'valid',data:new Blob(['safe image'])}],projects:[]});
+  const reopened=fixture(cache);const cards=await reopened.db.cloudAll('assets');
+  assert.deepEqual(cards.map(card=>card.id),['safe']);
+  const staged=(await cache.get('cloud:owner-uuid','import-outbox'))[0].record;
+  assert.deepEqual(staged.assets.map(card=>card.id),['safe']);
+  assert.deepEqual(staged.blobs.map(blob=>blob.id),['valid']);
 });
 test('COS writes retain provider metadata; old Supabase objects still read without provider fallback',async()=>{
   const files=new Map(),cos={enabled:true,async upload(path,blob){files.set(path,blob);},async download(path){if(!files.has(path))throw Error('COS offline');return files.get(path);}},a=fixture(null,cos);
