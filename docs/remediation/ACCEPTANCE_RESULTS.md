@@ -127,6 +127,9 @@
 | 第二十三批固定项目 Git 部署 | Vercel 控制台 `shiye-journal-test` Production Deployment | `4e1451a580ccbbbe1a8a8835bd0108fab1105c30`，Git `main`，Ready；固定域名未变，无手动部署 |
 | 第二十四批能力表局部 | `node --test tests/creative-delivery.test.js tests/ai-settings.test.js tests/runner.test.js` | 17/17，退出码 0；未知地址/模型 auto 显式拒绝，明确 native/json 保留，图片发送限精确已核对组合或用户明确确认；无付费模型调用 |
 | 第二十四批集成/浏览器 | `npm test` / `npm run test:ui` / `SHIYE_TEST_URL=http://localhost:5192 SHIYE_WAIT_MS=30000 node tests/browser-acceptance.mjs` | 298/298；build/UI smoke/route parity/自托管 smoke 通过；真实 Chromium 109 个画面、7 种模拟视口及备份往返通过；无实体设备/真实服务商调用 |
+| 第二十四批固定项目 Git 部署 | Vercel 控制台 `shiye-journal-test` Production Deployment | `48cb51ce07e009b7797defabbc6b21ef08af683d`，Git `main`，Ready；固定域名未变，无手动部署 |
+| 第二十五批 patch 基线局部 | `node --test tests/scene-patch.test.js tests/runner.test.js` | 13/13，退出码 0；旧 hash 不覆盖手改、合法独立前缀保留而错误后 finish 拒绝、未指明图层保留，在线 runner 仍通过既有多轮回归。非真实并发编辑器验收 |
+| 第二十五批集成/浏览器 | `npm test` / `npm run test:ui` / `SHIYE_TEST_URL=http://localhost:5192 SHIYE_WAIT_MS=30000 node tests/browser-acceptance.mjs` | 301/301；build/UI smoke/route parity/自托管 smoke 通过；真实 Chromium 109 个画面、7 种模拟视口及备份往返通过。仍未做实体 Safari/iPad 与在线真实模型测试 |
 
 能力表依据：[DeepSeek Chat Completions](https://api-docs.deepseek.com/api/create-chat-completion/)、[DeepSeek JSON Output](https://api-docs.deepseek.com/guides/json_mode/)、[OpenAI API Reference](https://platform.openai.com/docs/api-reference/chat/create)、[SiliconFlow 多模态输入](https://docs.siliconflow.cn/docs/userguide/capabilities/multimodal-vision)。文档支持不等于本账号模型可用；仍需用户配置实际可访问的模型并做真实请求验收。
 
