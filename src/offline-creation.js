@@ -44,6 +44,7 @@ export function createOfflineCreationPackage({project:p,assets,aliases,previews=
 // The upload is a task package, not a source archive. Keep the chat prompt
 // short and put exact context, contracts, examples and separate images inside.
 export async function createOfflineHandoff({project:p,assets,aliases,previews=[],settings={},referenceImages=[]}){
+  const {offlineValidateSource}=await import('./generated/offline-validate-source.js');
   const source=sourceFor(p,aliases);source.taskBinding='local-v1';source.textMode=settings.textMode||'automatic';const selected=source.materials.map(({alias,assetID})=>{
     const asset=assets.find(item=>item.id===assetID);
     if(!asset||!validAlias(alias))throw Error('素材篮中有无效素材编号');
@@ -54,7 +55,7 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
   const chosen=showImages?previews:[];
   if(showImages&&selected.some(item=>!chosen.some(preview=>preview.alias===item.alias&&preview.bytes instanceof Uint8Array&&preview.bytes.length)))throw Error('创作包缺少素材预览，未导出不完整文件');
   const mode=settings.generationMode==='direct'?'direct':'agent';
-  source.capabilities={cropPx:false};
+  source.capabilities={cropPx:false,validateOffline:true,renderOffline:false,packOffline:false};
   const exportedContract=offlineContract(mode,source.capabilities);
   source.schemaHash=schemaFingerprint(exportedContract);
   source.previewHashes=showImages?Object.fromEntries(await Promise.all(chosen.map(async entry=>[entry.alias,`sha256:${await sha256Hex(entry.bytes)}`]))):null;
@@ -89,8 +90,8 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
     example.tools[0].arguments.graphics=layeredGraphics;
     example.tools[0].arguments.texts=layeredTexts.map((item,index)=>({...item,key:'example-text-'+index}));
   }
-  const handoffInstructions=instructions.replace('文件模式附可下载的 UTF-8 文件「作品.shiyeproject.json」；复制模式仅给一个单独的','文件模式附可下载的「作品.shiyeproject.zip」，包内放一个 UTF-8 文件 project.shiyeproject.json，可另外放 preview.svg；复制模式仅给一个单独的').replace('两种方式都只含一个完整 JSON 对象，不是 PDF、HTML 或位图。','文件包内的 project.shiyeproject.json 与复制模式的 JSON 代码块使用相同可编辑图层合同；材料 ID 引用本机高清原图，图形可用 vector_paths 表达自由矢量轮廓。不要只交付 PDF、HTML 或扁平位图。');
-  const files={'START_HERE.txt':strToU8(handoffInstructions),'CREATIVE_GUIDE.txt':strToU8(creativeDesignGuide(source,{hasImages:showImages,hasPresets})),'context.json':strToU8(JSON.stringify(context,null,2)),'contract.json':strToU8(JSON.stringify(exportedContract,null,2)),'capabilities.json':strToU8(JSON.stringify({schemaHash:source.schemaHash,sourcePixelCoordinates:false,cropPx:false,previewOnly:showImages},null,2)),'composition-ideas.json':strToU8(JSON.stringify(compositionIdeas,null,2)),'example-response.shiyeproject.json':strToU8(JSON.stringify(example,null,2))};
+  const handoffInstructions=instructions.replace('文件模式附可下载的 UTF-8 文件「作品.shiyeproject.json」；复制模式仅给一个单独的','文件模式附可下载的「作品.shiyeproject.zip」，包内放一个 UTF-8 文件 project.shiyeproject.json，可另外放 preview.svg；复制模式仅给一个单独的').replace('两种方式都只含一个完整 JSON 对象，不是 PDF、HTML 或位图。','文件包内的 project.shiyeproject.json 与复制模式的 JSON 代码块使用相同可编辑图层合同；材料 ID 引用本机高清原图，图形可用 vector_paths 表达自由矢量轮廓。不要只交付 PDF、HTML 或扁平位图。').concat('\n\n【可选离线验证】runtime/validate.cjs 可在已有 Node.js 20+ 的环境中对返回场景执行同源结构与现行物理规则检查。它不渲染页面、不核对字体或阅读；无法运行时请直接把可编辑场景交回拾页，不要声称已完成视觉验收。');
+  const files={'START_HERE.txt':strToU8(handoffInstructions),'CREATIVE_GUIDE.txt':strToU8(creativeDesignGuide(source,{hasImages:showImages,hasPresets})),'context.json':strToU8(JSON.stringify(context,null,2)),'contract.json':strToU8(JSON.stringify(exportedContract,null,2)),'capabilities.json':strToU8(JSON.stringify({schemaHash:source.schemaHash,sourcePixelCoordinates:false,cropPx:false,previewOnly:showImages,runtime:{validate:'node20',render:null,pack:null,visualReview:false}},null,2)),'composition-ideas.json':strToU8(JSON.stringify(compositionIdeas,null,2)),'example-response.shiyeproject.json':strToU8(JSON.stringify(example,null,2)),'runtime/validate.cjs':strToU8(offlineValidateSource),'runtime/README.txt':strToU8('可选：将结果保存为任务根目录 project.shiyeproject.json，在已安装 Node.js 20+ 的环境于任务根目录执行 node runtime/validate.cjs。报告写入 output/validation-report.json。此工具离线检查同源结构与现行物理规则，不渲染图片，不验证字体或阅读；无法运行时将结果交回拾页核对。')};
   for(const entry of chosen)if(validAlias(entry.alias)&&source.materials.some(item=>item.alias===entry.alias))files[`materials/${entry.alias}.png`]=entry.bytes;
   if(hasPresets){
     files['references/GUIDE.txt']=strToU8(presetReferenceGuide(presetReferencePlans({styles:source.styles,purposes:source.purposes,mode:source.mode})));
