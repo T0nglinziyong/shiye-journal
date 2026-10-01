@@ -1,5 +1,6 @@
 // Anonymous layout studies. These are generated from the selected directions;
 // no saved project, private journal text, or material image is read here.
+import {canvasSize} from './domain.js';
 const paletteFor=style=>{
   if(/复古|旅行|手作|胶片/.test(style))return ['#faf4e9','#aa765a','#e4c7a5','#63534a'];
   if(/美式|童趣|可爱|密集/.test(style))return ['#fff8ec','#da6d60','#f3c96d','#465d81'];
@@ -42,9 +43,9 @@ function tailoredZones(entry,{style,purpose,mode}){
     return [mode==='spread'?x:x+(w-nw)/2,y+(h-nh)/2,nw,nh];
   });
 }
-export function presetReferencePlans({styles=['韩系清新'],purposes=['日常记录'],mode='single'}={}){
+export function presetReferencePlans({styles=['韩系清新'],purposes=['日常记录'],mode='single',ratio='a5'}={}){
   const style=styles[0]||'韩系清新',purpose=purposes[0]||'日常记录',labels=purposeParts[purpose]||purposeParts.日常记录,palette=paletteFor(style);
-  return arrangements.map((entry,index)=>({index:index+1,id:entry.id,level:entry.level,title:entry.title,source:entry.source,style,purpose,mode,idea:entry.idea,labels, zones:tailoredZones(entry,{style,purpose,mode}),palette,secondaryStyles:styles.slice(1),secondaryPurposes:purposes.slice(1)}));
+  return arrangements.map((entry,index)=>({index:index+1,id:entry.id,level:entry.level,title:entry.title,source:entry.source,style,purpose,mode,ratio,idea:entry.idea,labels, zones:tailoredZones(entry,{style,purpose,mode}),palette,secondaryStyles:styles.slice(1),secondaryPurposes:purposes.slice(1)}));
 }
 export function presetReferenceGuide(plans){
   return '四张匿名预设构图示意｜仅标示区域关系，不含用户作品、照片或日记。\n'+
@@ -55,7 +56,7 @@ export function presetReferenceGuide(plans){
 export async function renderPresetReferences(plans,{width=400}={}){
   const output=[];
   for(const plan of plans){
-    const canvas=document.createElement('canvas'),spread=plan.mode==='spread';canvas.width=spread?Math.round(width*1.42):width;canvas.height=560;
+    const canvas=document.createElement('canvas'),spread=plan.mode==='spread';canvas.width=spread?Math.round(width*1.4):width;canvas.height=Math.round(canvas.width/(canvasSize(plan.mode,plan.ratio).width/1000));
     const c=canvas.getContext('2d'),[paper,accent,pale,ink]=plan.palette,W=canvas.width,H=canvas.height;
     c.fillStyle=paper;c.fillRect(0,0,W,H);c.strokeStyle='#d9d9ce';c.strokeRect(12,12,W-24,H-24);
     if(spread){c.beginPath();c.moveTo(W/2,15);c.lineTo(W/2,H-15);c.stroke();}
@@ -70,7 +71,7 @@ export async function renderPresetReferences(plans,{width=400}={}){
     }
     c.fillStyle=ink;c.globalAlpha=.55;c.font='12px sans-serif';c.fillText('匿名构图示意 · 不代表真实素材尺寸',28,H-24);c.globalAlpha=1;
     const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));if(!blob)throw Error('无法生成预设样例');
-    output.push({id:plan.id,title:plan.title,bytes:new Uint8Array(await blob.arrayBuffer()),url:canvas.toDataURL('image/png')});
+    output.push({id:plan.id,title:plan.title,width:canvas.width,height:canvas.height,bytes:new Uint8Array(await blob.arrayBuffer()),url:canvas.toDataURL('image/png')});
   }
   return output;
 }

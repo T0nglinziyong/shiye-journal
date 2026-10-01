@@ -380,7 +380,7 @@ async function exportOfflineCreation(){
     // selected material so ChatGPT can inspect the whole basket. Limit parallel
     // decoding to keep iPad memory and the foreground responsive.
     if(cfg.includeThumbnails){const entries=Object.entries(aliases);for(let offset=0;offset<entries.length;offset+=3){const group=await Promise.all(entries.slice(offset,offset+3).map(async([alias,id])=>{const chosen=assetsSnapshot.find(item=>item.id===id);if(!chosen)throw Error('创作素材已变更，请重新导出任务包');const bytes=await offlinePreviewBytes(chosen);if(!bytes)throw Error('素材「'+chosen.title+'」缺少预览图，请先检查同步状态');return {alias,bytes};}));previews.push(...group);}}
-    if(cfg.sendPresetReferences)referenceImages.push(...await renderPresetReferences(presetReferencePlans({styles:p.styles,purposes:p.purposes,mode:p.drafts[0].pageMode})));
+    if(cfg.sendPresetReferences)referenceImages.push(...await renderPresetReferences(presetReferencePlans({styles:p.styles,purposes:p.purposes,mode:p.drafts[0].pageMode,ratio:p.drafts[0].pageRatio})));
     const result=await createOfflineHandoff({project:p,assets:assetsSnapshot,aliases,previews,referenceImages,settings:cfg});
     await offlineTaskStore.save(await offlineTaskAccount(),result.source);
     const fileSize=n=>n<1024*1024?`${Math.ceil(n/1024)} KB`:`${(n/1024/1024).toFixed(1)} MB`;
@@ -461,7 +461,7 @@ async function startAICreation(){
   recorder=await createAIRecorder({db,model,key});const aliases=materialAliases(ids),vision=cfg.includeThumbnails&&supportsVision(cfg);
   const images=vision?await prepareMaterialPreviews(ids,{findAsset:asset,createImage:modelImage}):[];
   checkpoint();const p=state.activeProject,referenceImages=[];
-  if(cfg.sendPresetReferences&&supportsVision(cfg)){const plans=presetReferencePlans({styles:p.styles||[current().style],purposes:p.purposes||[p.purpose||state.matchPurpose],mode:current().pageMode});referenceImages.push(...(await renderPresetReferences(plans)).map(entry=>entry.url));}
+  if(cfg.sendPresetReferences&&supportsVision(cfg)){const plans=presetReferencePlans({styles:p.styles||[current().style],purposes:p.purposes||[p.purpose||state.matchPurpose],mode:current().pageMode,ratio:current().pageRatio});referenceImages.push(...(await renderPresetReferences(plans)).map(entry=>entry.url));}
   const output=await runCreativeAgent({...cfg,draft:current(),assets:state.assets,aliases,styles:p.styles||[current().style],pagePurposes:p.purposes||[p.purpose||state.matchPurpose],requiredAssetIDs:p.requiredAssetIDs||[],materialPriority:p.materialPriority,processing:p.processing,assetProcessing:p.assetProcessing||{},materialUseHints:p.materialUseHints||{},materialUseRequired:p.materialUseRequired||{},prompt:state.aiPrompt,images,referenceImages,request:recorder.request,signal:controller.signal,
    onResponse:recorder.response,
    onProgress:progress=>{state.aiProgress='第 '+progress.turn+' 轮 · '+progress.phase+' · '+progress.seconds+' 秒 · 已接收 '+progress.received+' 字符';const el=view.querySelector('#ai-progress');if(el)el.textContent=state.aiProgress;},

@@ -14,6 +14,9 @@ try{
   const presets=await evaluate(`(async()=>{const {presetReferencePlans,renderPresetReferences}=await import('/src/creative-reference-presets.js');const plans=presetReferencePlans({styles:['复古旧物'],purposes:['旅途记录']});const images=await renderPresetReferences(plans);const shelf=document.createElement('div');shelf.id='preset-test-shelf';shelf.style='position:fixed;inset:0;z-index:999999;background:#eee;display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:20px;overflow:auto';for(const image of images){const img=document.createElement('img');img.src=image.url;img.style='width:100%;height:100%;object-fit:contain';shelf.append(img);}document.body.append(shelf);return {levels:plans.map(x=>x.level),sizes:images.map(x=>x.bytes.length),different:new Set(images.map(x=>x.url)).size}})()`);
   assert.deepEqual(presets.levels,['简洁','均衡','丰富','实验']);
   assert.equal(presets.different,4);assert.ok(presets.sizes.every(size=>size>1000&&size<200_000));
+  const paperRatios=await evaluate(`(async()=>{const {presetReferencePlans,renderPresetReferences}=await import('/src/creative-reference-presets.js');const single=(await renderPresetReferences(presetReferencePlans({ratio:'custom:200x200'}).slice(0,1)))[0];const spread=(await renderPresetReferences(presetReferencePlans({ratio:'a5',mode:'spread'}).slice(0,1)))[0];return {single:single.width/single.height,spread:spread.width/spread.height}})()`);
+  assert.ok(Math.abs(paperRatios.single-1)<.01);
+  assert.ok(Math.abs(paperRatios.spread-296/210)<.01);
   const referenceShot=await command('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});await writeFile(`${directory}/preset-reference-four.png`,Buffer.from(referenceShot.data,'base64'));
   await evaluate('document.querySelector("#preset-test-shelf").remove()');
   let sampleAssetID;

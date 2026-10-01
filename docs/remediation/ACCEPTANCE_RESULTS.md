@@ -80,5 +80,10 @@
 | 第十四批内容局部 | `node --test tests/creative-quality.test.js tests/offline-creation.test.js` | 22/22，退出码 0；明显占位语/重复生成文字仅诊断、不改原文；任务包语法例标明非成品。Q-01/Q-02 尚未验收。 |
 | 第十四批集成 | `npm test` | 278/278，退出码 0 |
 | 第十四批集成 | `npm run test:ui` | build/UI smoke/route parity/自托管 smoke 通过，退出码 0；仍有原有大模块提示 |
+| 第十四批固定项目 Git 部署 | Vercel 控制台 `shiye-journal-test` Production Deployment | `dae3c00c255244f505d3a8a72e285c29a132a538`，Git `main`，状态 Ready，固定域名未变；无手动部署 |
+| 第十五批纸张参考局部 | `node --test tests/offline-creation.test.js tests/creative-quality.test.js` | 22/22，退出码 0 |
+| 第十五批真实浏览器 | `SHIYE_TEST_URL=http://localhost:5192 node tests/offline-handoff-browser.mjs` | 四种模拟视口交接流程及 A5 双页约 296:210、自定 200:200 匿名参考画布比例通过，退出码 0；非真实设备 |
+| 第十五批集成 | `npm test` | 278/278，退出码 0 |
+| 第十五批集成 | `npm run test:ui` | build/UI smoke/route parity/自托管 smoke 通过，退出码 0；原有大模块提示未解决 |
 
 上面的浏览器运行在桌面 Chromium 中，模拟不同视口；它**不是**实体手机或 iPad 验收。未使用真实账号/私人素材；尚未运行在线 AI、双标签共享 IDB、隔离数据库 CAS、完整工程包往返。保留有意留白、叠压、半藏与出血，不以固定占页率、最低图层数或零重叠判成败。
