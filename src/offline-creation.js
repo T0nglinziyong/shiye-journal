@@ -12,6 +12,7 @@ import {canonicalTaskSource} from './task-source.js';
 import {sha256Hex,taskFingerprint,assertTaskFingerprint} from './task-fingerprint.js';
 import {reviewExternalResultFiles} from './offline-result-review.js';
 import {creativeContentBrief} from './creative-content-brief.js';
+import {creativePageBrief} from './creative-page-brief.js';
 import {imagePrompt} from './ai-image-generation.js';
 
 export const OFFLINE_PACKAGE_FORMAT='shiye-gpt-creation-package';
@@ -31,7 +32,7 @@ function sourceFor(p,aliases){
   return structuredClone({bundleId:crypto.randomUUID(),title:p.title,mode:d.pageMode,ratio:d.pageRatio,styles:p.styles||[d.style],purposes:p.purposes||[p.purpose||'日常记录'],intent:p.intent||'',contentPolicy:p.contentPolicy||'documentary',userText:p.userText||'',providedFacts:p.providedFacts||'',processing:p.processing||'保留完整',requiredAssetIDs:p.requiredAssetIDs||[],materialPriority:{required:priority.required||[],preferred:priority.preferred||[],available:priority.available||[]},materialUseHints:p.materialUseHints||{},materialUseRequired:p.materialUseRequired||{},assetProcessing:p.assetProcessing||{},materials:Object.entries(aliases).map(([alias,assetID])=>({alias,assetID}))});
 }
 function instructions(source){
-  return `拾页可编辑手帐创作包。按 context.json 的风格（${source.styles.map(name=>`${name}：${visualStyleBrief(name)}`).join('；')}）、用途（${source.purposes.join('、')}）、纸张（${source.ratio} ${source.mode}）一次完成。\n${creativeContentBrief({policy:source.contentPolicy,userText:source.userText,providedFacts:source.providedFacts,topic:source.intent})}\n查看 materials/ 中每件素材预览；预览不是原图，最终文件只引用 context.json 的素材编号，不嵌入图像。保持真实尺寸和库存，胶带可按真实宽度截段；文字、线条和图形用可编辑图层表示。工具参数见 contract.json，可参考 example-response.json 的结构，但不要照抄示例构图和正文。先用 compose_page，最后用 finish_design；不要编造图片细节。只返回一个 UTF-8 .shiyeproject.json 文件，保留 source 原样。`;
+  return `拾页可编辑手帐创作包。按 context.json 的风格（${source.styles.map(name=>`${name}：${visualStyleBrief(name)}`).join('；')}）、用途（${source.purposes.join('、')}）、纸张（${source.ratio} ${source.mode}）一次完成。\n${creativeContentBrief({policy:source.contentPolicy,userText:source.userText,providedFacts:source.providedFacts,topic:source.intent})}\n${creativePageBrief({styles:source.styles,purposes:source.purposes,contentPolicy:source.contentPolicy,userText:source.userText,theme:source.intent})}\n查看 materials/ 中每件素材预览；预览不是原图，最终文件只引用 context.json 的素材编号，不嵌入图像。保持真实尺寸和库存，胶带可按真实宽度截段；文字、线条和图形用可编辑图层表示。工具参数见 contract.json，可参考 example-response.json 的结构，但不要照抄示例构图和正文。先用 compose_page，最后用 finish_design；不要编造图片细节。只返回一个 UTF-8 .shiyeproject.json 文件，保留 source 原样。`;
 }
 export function createOfflineCreationPackage({project:p,assets,aliases,previews=[]}){
   const source=sourceFor(p,aliases);
@@ -113,7 +114,7 @@ async function createOfflineImageHandoff({source,project:p,assets,selected,chose
   const context={format:OFFLINE_PACKAGE_FORMAT,version:1,deliveryMode:'image',source,materials:selected.map(item=>({...item,preview:showImages?`materials/${item.alias}.png`:null}))};
   // Reuse the exact creative brief sent to the API image model. Only the
   // transport and the final handoff format differ for the web conversation.
-  const brief=imagePrompt({project:p,draft:p.drafts[0],assets,ids:selected.map(item=>item.assetID),theme:p.intent||'',requireAll:settings.requireAllCandidates!==false,includeImages:showImages});
+  const brief=imagePrompt({project:p,draft:p.drafts[0],assets,ids:selected.map(item=>item.assetID),theme:p.intent||'',requireAll:settings.requireAllCandidates!==false,includeImages:showImages,textMode:source.textMode});
   const imageOrder=selected.map((item,index)=>`${index+1} = ${item.alias}${showImages?` (materials/${item.alias}.png)`:''}`).join('；');
   const instructions=`拾页手帐画面图片任务｜一次完成\n\n你收到的是创作参考 ZIP，不是要返回的作品格式。请先读 context.json，并${showImages?'查看 materials/ 中每件素材的透明 PNG':'依据素材名称、标签与尺寸'}；素材编号对应：${imageOrder}。${hasPresets?'references/ 中的四张匿名示意仅供构图启发；':''}按以下与拾页 API 图像创作一致的要求完成：\n\n${brief}\n\n请在聊天中展示最终画面，并提供可下载的 PNG 图片。图片是不可逐层编辑的画面快照；不要输出可编辑工程包、数据文件或代码。保持纸张比例，导入拾页后存入「画面快照」。`;
   const files={'START_HERE.txt':strToU8(instructions),'context.json':strToU8(JSON.stringify(context,null,2))};

@@ -1,6 +1,7 @@
 // Research-informed creative vocabulary. This is a design aid, not a fixed
 // template or an exception to the physical material / editable-layer rules.
 import {creativeLayeringGuide} from './creative-layering-guide.js';
+import {creativePageBrief} from './creative-page-brief.js';
 const styleMethods={
   韩系清新:'低饱和浅绿与浅粉、轻纸感和有节奏的间距；主素材之外用短标题、多行记录与少量柔和色块承托内容，避免每块都加白底。',
   美式拼贴:'对比鲜明的色块与有方向的错层、票据/字块/贴纸互相搭接；保持一个最醒目的标题和可追踪的阅读路线。',
@@ -25,7 +26,7 @@ const styleMethods={
   自定义风格:'以本次创作要求中的风格描述为主；只借用视觉层级、对齐与留白等通用原则。'
 };
 const purposeMethods={
-  日常记录:'用一个可见细节引出标题，正文写两三段相互关联的观察或通用主题句；照片/贴纸贴近对应段落。没有经历证据不写「今天我去了」。',
+  日常记录:'用可见细节引出标题，让连贯的多行观察与照片/贴纸彼此靠近；没有经历证据不写「今天我去了」。',
   旅途记录:'有票据、地图或照片时可按「出发—路途—回望」编排；无地点或日期证据时写关于旅途的通用观察，不杜撰真实行程。',
   图文收藏:'将素材按形状、颜色或主题分组，每组有短标题、可编辑图注和明确的阅读顺序；不建无内容的空相框。',
   清单计划:'列出具体可编辑条目、勾选标记和可读的分组；未给具体计划时写可通用的主题清单，不假装已完成事件。',
@@ -38,7 +39,7 @@ export function creativeDesignGuide(source,{hasImages=true,hasPresets=false}={})
   const purposes=(source.purposes||[]).map((name,i)=>`${i+1}. ${name}：${purposeMethod(name)}`).join('\n');
   const text=source.textMode==='none'?'本次不生成文字；可用可编辑图形建立视觉层级。':source.textMode==='requested'?'没有明确文字要求时不主动配文；若有要求，全部以可编辑文本实现。':'根据主题选择标题、图注、正文或条目，避免空洞占位；需要较长段落时尽量合并为可编辑的多行文本框，不逐字拆层。';
   return `拾页创作方法指南｜辅助构思，不是固定模板\n\n`+
-    `一、先理解素材，再构图\n${hasImages?'逐件查看 materials/ 透明图片及 context.json 中的名称、尺寸、类型、角色、库存；区分轮廓、色彩、方向、印刷文字与空白处。':'本包不带素材图片，只能依据 context.json 给出的事实创作；未知外观不猜。'}\n选择一个能讲清主题的主件，其他素材承担补充、引导或留白的作用。必用清单逐件落实；其余候选尽量使用，但不必勉强塞入。同一批素材在不同用途下应得到不同的信息顺序。\n\n`+
+    `一、先理解素材，再构图\n${hasImages?'逐件查看 materials/ 透明图片及 context.json 中的名称、尺寸、类型、角色、库存；区分轮廓、色彩、方向、印刷文字与空白处。':'本包不带素材图片，只能依据 context.json 给出的事实创作；未知外观不猜。'}\n让适合的素材围绕主题形成主次和呼应，不把其余素材机械地排在边上。必用清单逐件落实；其余候选尽量使用，但不必勉强塞入。同一批素材在不同用途下应得到不同的信息顺序。\n${creativePageBrief({styles:source.styles,purposes:source.purposes,textMode:source.textMode,contentPolicy:source.contentPolicy,userText:source.userText,theme:source.intent})}\n\n`+
     `二、所选风格如何落地\n${styles||'按素材决定视觉语言。'}\n多风格时第一项是主语，后续只提取一两种可兼容特征，避免把互相冲突的颜色/纹理全堆进去。风格指排版与色彩方法，不是购买或凭空造出新纸片。\n\n`+
     `三、所选用途决定内容\n${purposes||purposeMethods.日常记录}\n多用途时先满足第一项的核心信息，再用第二项补充一个小区块；例如「日常记录＋清单」仍是故事页面，清单只辅助回顾。\n\n`+
     `四、版式推演\n可比较主图＋旁注、错层叙事、分栏收藏、留白封面、时间/路线、任务清单等构图，再选与本次素材形状及用途最匹配的一种。让主图、标题、正文、图注形成清楚的视线顺序与大小差；有意错层或留白也可以成立。双页考虑跨页节奏与装订中线。数字线、荧光笔、色块、图框只在能组织信息时添加，并写入可编辑 graphics/tools，不只画进预览图。从用户提供的四页手帐可抽象出一种方法：多行正文与小图注穿插，矢量图形有时作为内容容器、有时只作边角节奏，真实贴纸与文字形成层次；四页的密度不同，因此不照搬固定图层或数量。这里仅是文字化方法，不代表原页已随任务包提供。素材少时可用原创但不杜撰经历的文字、图注或数字图形补充；若安静的留白更贴合主题，就保留留白。不要创造不存在的实体贴纸。\n${hasPresets?'references/ 是四张根据本次风格与用途生成的匿名区域示意；先读 references/GUIDE.txt。它们不是你的私人作品，也不是最终页面模板。':'不附加图片样例时，也可使用 composition-ideas.json 的文字构图思路。'}\n\n`+
