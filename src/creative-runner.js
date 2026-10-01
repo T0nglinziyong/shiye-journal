@@ -59,13 +59,16 @@ export async function runCreativeAgent(o){
   if(signal?.aborted)throw signal.reason||Error('创作已停止');
   messages.push(native?{role:'assistant',content:message.content||null,...(message.reasoning_content?{reasoning_content:message.reasoning_content}:{}),tool_calls:calls}:{role:'assistant',content:message.content||''});
   const result=applyToolCalls({tool_calls:calls},working,assets,aliases,options);working=result.draft;
-  const inspectionParts=[];
-  for(const r of result.results){const content=JSON.stringify({ok:r.ok,detail:r.detail,...(r.data?{data:r.data}:{})});messages.push(native?{role:'tool',tool_call_id:r.id,content}:{role:'user',content:r.name+': '+content});if(r.ok&&r.name==='inspect_materials'&&onInspection){const previews=await onInspection(r.data);if(previews?.length)inspectionParts.push(...previews);}}
-  // Every native call needs its contiguous tool reply before any user image.
-  // Interleaving inspection previews makes the provider reject the next turn.
-  if(inspectionParts.length)messages.push({role:'user',content:inspectionParts});
+  const inspections=[];
+  for(const r of result.results){const content=JSON.stringify({ok:r.ok,detail:r.detail,...(r.data?{data:r.data}:{})});messages.push(native?{role:'tool',tool_call_id:r.id,content}:{role:'user',content:r.name+': '+content});if(r.ok&&r.name==='inspect_materials'&&onInspection)inspections.push(r.data);}
   if(signal?.aborted)throw signal.reason||Error('创作已停止');
   const review=reviewCreativeDraft(working,{allowNoText:options.allowNoText,purposes:o.pagePurposes,styles:o.styles,materialPriority:o.materialPriority,assets});await onTurn({turn,results:result.results,draft:working,text:message.content||'',review});
+  // The successful scene checkpoint is durable before optional image lookup.
+  // Observation failure must not replay already applied tools next turn.
+  const inspectionParts=[];
+  for(const data of inspections){if(signal?.aborted)throw signal.reason||Error('创作已停止');try{const previews=await onInspection(data);if(previews?.length)inspectionParts.push(...previews);}catch{if(signal?.aborted)throw signal.reason||Error('创作已停止');inspectionParts.push({type:'text',text:'素材局部预览暂不可用。已成功执行的工具无需重放；可继续或稍后重新检查。'});}}
+  // Every native call needs its contiguous tool reply before any user image.
+  if(inspectionParts.length)messages.push({role:'user',content:inspectionParts});
   failures=result.results.some(x=>x.ok)?0:failures+1;
   if(working.agentRun?.status==='finished')return {draft:working,turns:turn,finished:true,messages,review};
   const scene=[{type:'text',text:'实际画布状态：'+JSON.stringify(creativeScene(working,aliases))+'\n排版检查（非美感评分）：'+JSON.stringify(review)+'\n按成功回执修正，不重复已放置实物。'}],image=await onScene?.(working);if(image)scene.push({type:'image_url',image_url:{url:image}});messages.push({role:'user',content:scene});

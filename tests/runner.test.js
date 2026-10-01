@@ -39,6 +39,14 @@ test('inspection images follow ALL native tool replies, including failed calls',
  const result=await runCreativeAgent({draft:draft(),assets:[asset],aliases:{m1:'a'},key:'synthetic-test',onInspection:async()=>[{type:'text',text:'inspection image marker'}],request:async(_,options)=>{payloads.push(JSON.parse(options.body));return {ok:true,json:async()=>replies.shift()};}});
  const messages=payloads[1].messages,index=messages.findIndex(x=>x.role==='assistant');assert.deepEqual(messages.slice(index+1,index+5).map(x=>[x.role,x.tool_call_id]),[['tool','inspect'],['tool','bad'],['tool','place'],['tool','text']]);assert.equal(messages[index+5].role,'user');assert.equal(messages[index+5].content[0].text,'inspection image marker');assert.equal(result.finished,true);
 });
+test('A-07: preview inspection failure cannot discard or replay a committed tool turn',async()=>{
+ const asset={id:'a',title:'纸片',physicalWidthMM:20,physicalHeightMM:30,supply:{quantity:1}},calls=(name,args,id)=>({id,function:{name,arguments:JSON.stringify(args)}});
+ const replies=[{choices:[{message:{tool_calls:[calls('place_materials',{items:[{asset:'m1',piece:'paper',x:.5,y:.5}]},'place'),calls('inspect_materials',{keys:['paper']},'inspect')]}}]},{choices:[{message:{tool_calls:[calls('finish_design',{},'finish')]}}]}];
+ const turns=[],payloads=[];let inspections=0;
+ const result=await runCreativeAgent({draft:draft(),assets:[asset],aliases:{m1:'a'},key:'synthetic-test',onInspection:async()=>{inspections++;throw Error('preview decode failed');},onTurn:turn=>turns.push(turn),request:async(_url,options)=>{payloads.push(JSON.parse(options.body));return {ok:true,json:async()=>replies.shift()};}});
+ assert.equal(result.finished,true);assert.equal(result.draft.items.length,1);assert.equal(inspections,1);assert.equal(turns.length,2);
+ assert.equal(turns[0].draft.items.length,1);assert.match(JSON.stringify(payloads[1].messages),/无需重放/);
+});
 test('intentional sparse composition may finish; only explicit physical requirements block it',async()=>{
  const assets=Array.from({length:4},(_,i)=>({id:'asset-'+i,title:'纸片 '+i,kind:'sticker',role:'support',physicalWidthMM:20,physicalHeightMM:25,supply:{quantity:1}}));
  const aliases=Object.fromEntries(assets.map((a,i)=>['m'+(i+1),a.id]));
