@@ -28,7 +28,7 @@ export function createMatchingSession(c){
   render(){return `<section class="panel match-previews">${markup()}</section>`;},
   persist:save,
   async importProject(p){
-   const v={id:c.uid(),title:p.title,createdAt:new Date().toISOString(),status:'completed',progress:'GPT 可编辑结果已导入；返回时保留草稿，保存后成为作品。',project:structuredClone(p),linkedProjectID:p.id};
+   const v={id:c.uid(),title:p.title,createdAt:new Date().toISOString(),status:'completed',progress:p.creationVerification?.preview==='unverified'?'可编辑结构已导入并通过当前规则校验；预览与正文尚待在拾页内复核。返回时保留草稿，保存后成为作品。':'可编辑结果已导入；返回时保留草稿，保存后成为作品。',project:structuredClone(p),linkedProjectID:p.id};
    variants.unshift(v);
    try{await queue;await c.db.transaction(['projects','meta'],tx=>{tx.objectStore('projects').put(p);tx.objectStore('meta').put(matchingSnapshot(c.state,variants));});lastSnapshot=JSON.stringify(matchingSnapshot(c.state,variants));c.state.projects.push(p);update();return v;}
    catch(error){variants.shift();throw error;}

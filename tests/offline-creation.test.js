@@ -29,6 +29,7 @@ test('editable GPT response becomes an editable draft without replacing existing
   assert.equal(imported.drafts[0].textBlocks[0].content,'这一页的主题');
   assert.equal(imported.drafts[0].agentRun.status,'finished');
   assert.equal(imported.offlineBundleId,JSON.parse(response).source.bundleId);
+  assert.deepEqual(imported.creationVerification,{structure:'passed',physical:'current-rules-passed',preview:'unverified',reading:'pending',sourceTaskId:imported.offlineBundleId});
   const copied=`这页的预览图已展示。\n\n\`\`\`json\n${response}\n\`\`\``;
   assert.equal(importEditableWork(copied,[asset]).drafts[0].items[0].assetID,asset.id);
 });

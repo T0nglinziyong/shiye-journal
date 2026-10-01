@@ -70,3 +70,14 @@ test('I-01/I-02: external IDs are rebuilt and invalid geometry is rejected',asyn
   p.drafts[0].textBlocks[0].width=-1;
   assert.throws(()=>importNativeProjectPackage(zipSync({'native.shiyeproject.json':strToU8(JSON.stringify({format:'shiye-native-project',version:1,project:p}))}),[]),/几何/);
 });
+
+test('O-14: a supplied preview cannot mark an imported editable scene as visually verified',async()=>{
+  const asset={id:'preview-asset',title:'素材',kind:'sticker',physicalWidthMM:25,physicalHeightMM:25,supply:{quantity:1}};
+  const handoff=await createOfflineHandoff({project:project('预览校验'),assets:[asset],aliases:{m1:asset.id},settings:{includeThumbnails:false}});
+  const files=unzipSync(await bytes(handoff.blob));
+  const response=JSON.parse(new TextDecoder().decode(files['example-response.shiyeproject.json']));
+  response.previewVerified=true;response.manifest={reviewed:true};
+  const imported=importEditableWork(JSON.stringify(response),[asset],{trustedSource:handoff.source});
+  assert.equal(imported.creationVerification.preview,'unverified');
+  assert.equal(imported.creationVerification.reading,'pending');
+});
