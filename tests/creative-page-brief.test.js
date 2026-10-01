@@ -26,6 +26,18 @@ test('art direction encourages connected text, materials and graphics without fi
   assert.match(cover,/不强塞长正文/);
 });
 
+test('spread direction balances both pages and keeps the gutter readable without forbidding intentional bleed',()=>{
+  const spread=creativePageBrief({pageMode:'spread',styles:['手作便签'],purposes:['日常记录']});
+  assert.match(spread,/左右两张相互呼应的独立页面/);
+  assert.match(spread,/每页都有自己的视觉焦点和可辨识内容/);
+  assert.match(spread,/不要让标题、段落、主体素材、便签或边框无意跨页/);
+  assert.match(spread,/若某页有一整块无意空洞/);
+  assert.match(spread,/只有主题确实需要且跨页后仍完整可读时/);
+  assert.doesNotMatch(spread,/填充率.{0,4}\d|至少\d|所有对象不得跨页/);
+  const single=creativePageBrief({pageMode:'single'});
+  assert.doesNotMatch(single,/装订中缝/);
+});
+
 test('API editable, web editable and API/web image handoffs share the same composition intent',async()=>{
   const p=task();
   const api=buildCreativeMessages({draft:p.drafts[0],assets:[asset],aliases:{m1:asset.id},prompt:p.intent,styles:p.styles,pagePurposes:p.purposes,textMode:'rich'});
@@ -44,6 +56,21 @@ test('API editable, web editable and API/web image handoffs share the same compo
   const webImage=await createOfflineHandoff({project:p,assets:[asset],aliases:{m1:asset.id},settings:{deliveryMode:'image',includeThumbnails:false,textMode:'rich'}});
   const imageFiles=unzipSync(new Uint8Array(await webImage.blob.arrayBuffer()));
   assert.ok(strFromU8(imageFiles['START_HERE.txt']).includes(image));
+});
+
+test('both editable and image transports receive the same spread-specific page balance direction',async()=>{
+  const p=project('双页茶记',{mode:'spread',ratio:'a5'});p.styles=['手作便签'];p.purposes=['日常记录'];
+  const draft=p.drafts[0],marker=/不要让标题、段落、主体素材、便签或边框无意跨页/;
+  const api=buildCreativeMessages({draft,assets:[asset],aliases:{m1:asset.id},styles:p.styles,pagePurposes:p.purposes});
+  assert.match(api[1].content[0].text,marker);
+  const web=await createOfflineHandoff({project:p,assets:[asset],aliases:{m1:asset.id},settings:{includeThumbnails:false}});
+  const webFiles=unzipSync(new Uint8Array(await web.blob.arrayBuffer()));
+  assert.match(strFromU8(webFiles['CREATIVE_GUIDE.txt']),marker);
+  const image=imagePrompt({project:p,draft,assets:[asset],ids:[asset.id],includeImages:false});
+  assert.match(image,marker);
+  const webImage=await createOfflineHandoff({project:p,assets:[asset],aliases:{m1:asset.id},settings:{deliveryMode:'image',includeThumbnails:false}});
+  const imageFiles=unzipSync(new Uint8Array(await webImage.blob.arrayBuffer()));
+  assert.match(strFromU8(imageFiles['START_HERE.txt']),marker);
 });
 
 test('image API forwards no-text setting and does not quietly request copy',async()=>{

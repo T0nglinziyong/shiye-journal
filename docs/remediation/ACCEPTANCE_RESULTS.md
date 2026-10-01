@@ -144,6 +144,8 @@
 | 第二十九批集成 | `npm test` / `npm run test:ui` | 304/304；构建、UI smoke、7 模拟视口的路由 parity、自托管 smoke 通过；真实移动设备未验 |
 | 第三十批图像文字提示局部 | `node --test tests/creative-page-brief.test.js tests/creative-content-brief.test.js tests/offline-creation.test.js` | 20/20；API 与网页直接图像任务共用可读文字/自然分行要求；可编辑任务仍可使用较长正文。仅核对发出的指令，未付费生成真实图像 |
 | 第三十批集成/真实 Chromium | `npm test` / `npm run test:ui` / `node tests/offline-handoff-browser.mjs` | 311/311；构建/UI smoke/路由 parity/自托管 smoke 通过；Chromium 390×844、768×1024、1024×768、1440×900 四个模拟视口的网页任务包流程通过。另跑通用 `browser-acceptance.mjs` 在第二个视口的素材详情选择器超时：前一视口将素材加入搭配篮后页面操作状态保留，此用例未在视口间复位；非本批提示词回归，也不能据此声称完整浏览器套件通过。实体手机/iPad 和真实图像模型输出仍未验 |
+| 第三十一批双页构图局部 | `node --test tests/creative-page-brief.test.js` | 5/5；单页不带中缝指导，网页/API、图片/可编辑四条路径均带双页左右独立、无意跨页与空洞复查指导。只验证生成的提示内容，不等于模型遵循。 |
+| 第三十一批集成/真实 Chromium | `npm test` / `npm run test:ui` / `SHIYE_TEST_URL=http://localhost:5192 node tests/offline-handoff-browser.mjs` | 313/313；构建/UI smoke/路由 parity/自托管 smoke 通过；Chromium 四个模拟视口网页任务包交接通过。实体手机/iPad、真实模型成图、双页视觉审美和旧作品自动重排未验。 |
 
 能力表依据：[DeepSeek Chat Completions](https://api-docs.deepseek.com/api/create-chat-completion/)、[DeepSeek JSON Output](https://api-docs.deepseek.com/guides/json_mode/)、[OpenAI API Reference](https://platform.openai.com/docs/api-reference/chat/create)、[SiliconFlow 多模态输入](https://docs.siliconflow.cn/docs/userguide/capabilities/multimodal-vision)。文档支持不等于本账号模型可用；仍需用户配置实际可访问的模型并做真实请求验收。
 
