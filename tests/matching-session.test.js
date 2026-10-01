@@ -64,3 +64,15 @@ test('I-05: a failed editable import never leaks a variant into a concurrent mat
  assert.doesNotMatch(session.render(),/应当拒绝的作品/);
  assert.deepEqual(records.get('matching-session-v1')?.variants||[],[]);
 });
+test('web image import links an already staged snapshot without writing a duplicate project',async()=>{
+ const state={basket:[],projects:[],route:'library'},records=new Map(),scopes=[];
+ const db={get:async(_store,id)=>records.get(id),put:async(_store,record)=>records.set(record.id,structuredClone(record)),transaction:async(stores,fn)=>{scopes.push(stores);fn({objectStore:name=>({put:record=>records.set(record.id,structuredClone(record))})});}};
+ const session=createMatchingSession({state,db,uid:()=>crypto.randomUUID(),esc:value=>String(value),workCover:()=>''});await session.restore();
+ const snapshot={id:'image-1',title:'生成画面',isSnapshot:true,snapshotBlobId:'blob-1',createdAt:new Date().toISOString()};
+ await session.importProject(snapshot,{alreadyStored:true});
+ assert.deepEqual(scopes,[['meta']]);
+ assert.equal(records.has('image-1'),false);
+ assert.equal(state.projects[0].id,'image-1');
+ assert.match(session.render(),/画面图片已导入快照/);
+ assert.doesNotMatch(session.render(),/返回时保留草稿/);
+});

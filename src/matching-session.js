@@ -27,13 +27,13 @@ export function createMatchingSession(c){
   async restore({archive=true}={}){const record=await c.db.get('meta',ID);for(const key of KEYS)if(defaults[key]!==undefined)c.state[key]=structuredClone(defaults[key]);variants=restoreMatchingSession(record,c.state);if(archive)await archiveCompleted();lastSnapshot=JSON.stringify(matchingSnapshot(c.state,variants));ready=true;},
   render(){return `<section class="panel match-previews">${markup()}</section>`;},
   persist:save,
-  async importProject(p){
+  async importProject(p,{alreadyStored=false}={}){
    const verification=p.creationVerification;
-   const reviewProgress=verification?.preview==='mismatch'?'可编辑结构已导入，外部预览或清单有差异；请在拾页核对实际画面和正文。':verification?.preview==='unverified'?'可编辑结构已导入并通过当前规则校验；预览与正文尚待在拾页内复核。':'可编辑结果已导入。';
-   const v={id:c.uid(),title:p.title,createdAt:new Date().toISOString(),status:'completed',progress:reviewProgress+'返回时保留草稿，保存后成为作品。',project:structuredClone(p),linkedProjectID:p.id};
+   const reviewProgress=p.isSnapshot?'画面图片已导入快照；点击查看，图片不可逐层编辑。':verification?.preview==='mismatch'?'可编辑结构已导入，外部预览或清单有差异；请在拾页核对实际画面和正文。':verification?.preview==='unverified'?'可编辑结构已导入并通过当前规则校验；预览与正文尚待在拾页内复核。':'可编辑结果已导入。返回时保留草稿，保存后成为作品。';
+   const v={id:c.uid(),title:p.title,createdAt:new Date().toISOString(),status:'completed',progress:reviewProgress,project:structuredClone(p),linkedProjectID:p.id};
    const task=queue.then(async()=>{
     const next=[v,...variants],record=matchingSnapshot(c.state,next);
-    await c.db.transaction(['projects','meta'],tx=>{tx.objectStore('projects').put(p);tx.objectStore('meta').put(record);});
+    await c.db.transaction(alreadyStored?['meta']:['projects','meta'],tx=>{if(!alreadyStored)tx.objectStore('projects').put(p);tx.objectStore('meta').put(record);});
     // The transaction is the commit point. Before it succeeds neither the
     // in-memory project list nor later queued matching saves may see a ghost.
     variants=next;lastSnapshot=JSON.stringify(record);c.state.projects.push(p);update();return v;

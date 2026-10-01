@@ -12,6 +12,7 @@ import {canonicalTaskSource} from './task-source.js';
 import {sha256Hex,taskFingerprint,assertTaskFingerprint} from './task-fingerprint.js';
 import {reviewExternalResultFiles} from './offline-result-review.js';
 import {creativeContentBrief} from './creative-content-brief.js';
+import {imagePrompt} from './ai-image-generation.js';
 
 export const OFFLINE_PACKAGE_FORMAT='shiye-gpt-creation-package';
 export const EDITABLE_WORK_FORMAT='shiye-editable-project';
@@ -45,7 +46,6 @@ export function createOfflineCreationPackage({project:p,assets,aliases,previews=
 // The upload is a task package, not a source archive. Keep the chat prompt
 // short and put exact context, contracts, examples and separate images inside.
 export async function createOfflineHandoff({project:p,assets,aliases,previews=[],settings={},referenceImages=[]}){
-  const {offlineValidateSource}=await import('./generated/offline-validate-source.js');
   const source=sourceFor(p,aliases);source.taskBinding='local-v1';source.textMode=source.contentPolicy==='visual'?'none':settings.textMode||'automatic';const selected=source.materials.map(({alias,assetID})=>{
     const asset=assets.find(item=>item.id===assetID);
     if(!asset||!validAlias(alias))throw Error('素材篮中有无效素材编号');
@@ -55,6 +55,8 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
   const showImages=settings.includeThumbnails!==false;
   const chosen=showImages?previews:[];
   if(showImages&&selected.some(item=>!chosen.some(preview=>preview.alias===item.alias&&preview.bytes instanceof Uint8Array&&preview.bytes.length)))throw Error('创作包缺少素材预览，未导出不完整文件');
+  if(settings.deliveryMode==='image')return createOfflineImageHandoff({source,project:p,assets,selected,chosen,settings,referenceImages,showImages});
+  const {offlineValidateSource}=await import('./generated/offline-validate-source.js');
   const mode=settings.generationMode==='direct'?'direct':'agent';
   source.capabilities={cropPx:false,validateOffline:true,renderOffline:false,packOffline:true};
   const exportedContract=offlineContract(mode,source.capabilities);
@@ -101,6 +103,28 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
   const bytes=await new Promise((resolve,reject)=>zip(files,{level:4},(error,result)=>error?reject(error):resolve(result)));
   const prompts={file:'请读 ZIP 中的 START_HERE.txt，一次完成可编辑手帐；若能同源渲染则展示预览，否则说明待复核，再交付可下载的「作品.shiyeproject.zip」。',json:'请读 ZIP 中的 START_HERE.txt，一次完成可编辑手帐；若能同源渲染则展示预览，否则说明待复核，再给一个可复制的 JSON 代码块，不要生成文件。'};
   return {blob:new Blob([bytes],{type:'application/zip'}),filename:'拾页-GPT创作任务.zip',prompt:prompts.file,prompts,source,mode,previewCount:chosen.length,imageBytes:[...chosen,...(hasPresets?referenceImages:[])].reduce((total,item)=>total+item.bytes.length,0),packageBytes:bytes.length};
+}
+async function createOfflineImageHandoff({source,project:p,assets,selected,chosen,settings,referenceImages,showImages}){
+  const hasPresets=settings.sendPresetReferences===true;
+  if(hasPresets&&(referenceImages.length!==4||referenceImages.some(entry=>!(entry.bytes instanceof Uint8Array)||!entry.bytes.length)))throw Error('四张预设参考图尚未准备完整');
+  source.deliveryMode='image';
+  source.previewHashes=showImages?Object.fromEntries(await Promise.all(chosen.map(async entry=>[entry.alias,`sha256:${await sha256Hex(entry.bytes)}`]))):null;
+  source.taskHash=await taskFingerprint(source);
+  const context={format:OFFLINE_PACKAGE_FORMAT,version:1,deliveryMode:'image',source,materials:selected.map(item=>({...item,preview:showImages?`materials/${item.alias}.png`:null}))};
+  // Reuse the exact creative brief sent to the API image model. Only the
+  // transport and the final handoff format differ for the web conversation.
+  const brief=imagePrompt({project:p,draft:p.drafts[0],assets,ids:selected.map(item=>item.assetID),theme:p.intent||'',requireAll:settings.requireAllCandidates!==false,includeImages:showImages});
+  const imageOrder=selected.map((item,index)=>`${index+1} = ${item.alias}${showImages?` (materials/${item.alias}.png)`:''}`).join('；');
+  const instructions=`拾页手帐画面图片任务｜一次完成\n\n你收到的是创作参考 ZIP，不是要返回的作品格式。请先读 context.json，并${showImages?'查看 materials/ 中每件素材的透明 PNG':'依据素材名称、标签与尺寸'}；素材编号对应：${imageOrder}。${hasPresets?'references/ 中的四张匿名示意仅供构图启发；':''}按以下与拾页 API 图像创作一致的要求完成：\n\n${brief}\n\n请在聊天中展示最终画面，并提供可下载的 PNG 图片。图片是不可逐层编辑的画面快照；不要输出可编辑工程包、数据文件或代码。保持纸张比例，导入拾页后存入「画面快照」。`;
+  const files={'START_HERE.txt':strToU8(instructions),'context.json':strToU8(JSON.stringify(context,null,2))};
+  for(const entry of chosen)if(validAlias(entry.alias)&&source.materials.some(item=>item.alias===entry.alias))files[`materials/${entry.alias}.png`]=entry.bytes;
+  if(hasPresets){
+    files['references/GUIDE.txt']=strToU8(presetReferenceGuide(presetReferencePlans({styles:source.styles,purposes:source.purposes,mode:source.mode,ratio:source.ratio})));
+    for(const [index,entry] of referenceImages.entries())files[`references/preset-${index+1}.png`]=entry.bytes;
+  }
+  const bytes=await new Promise((resolve,reject)=>zip(files,{level:4},(error,result)=>error?reject(error):resolve(result)));
+  const prompt='请读 ZIP 中的 START_HERE.txt，直接创作并展示最终手帐画面，再交付一张可下载的 PNG 图片。输入 ZIP 只是素材任务包。';
+  return {blob:new Blob([bytes],{type:'application/zip'}),filename:'拾页-AI画面任务.zip',prompt,prompts:{image:prompt},source,mode:'image',deliveryMode:'image',previewCount:chosen.length,imageBytes:[...chosen,...(hasPresets?referenceImages:[])].reduce((total,item)=>total+item.bytes.length,0),packageBytes:bytes.length};
 }
 export function inspectEditableSource(text){
   if(text.length>2_000_000)throw Error('可编辑作品文件过大');

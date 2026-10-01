@@ -7,6 +7,7 @@ import {createOfflineCreationPackage,createOfflineHandoff,verifyOfflineTaskPacka
 import {shapeSVG} from '../src/editor-tools-model.js';
 import {presetReferenceGuide,presetReferencePlans} from '../src/creative-reference-presets.js';
 import {materialAlias,materialAliases} from '../src/material-alias.js';
+import {imagePrompt} from '../src/ai-image-generation.js';
 
 const asset={id:'asset-1',title:'蓝色纸',kind:'sticker',role:'focal',physicalWidthMM:40,physicalHeightMM:50,supply:{quantity:1},tags:['蓝色']};
 const packageFor=()=>createOfflineCreationPackage({project:project('测试创作',{style:'韩系清新'}),assets:[asset],aliases:{m1:asset.id},previews:[{alias:'m1',bytes:new Uint8Array([1,2,3])}]});
@@ -110,6 +111,22 @@ test('web ChatGPT handoff is one uploadable file plus a copyable, mode-specific 
   assert.match(tool.prompts.json,/不要生成文件/);
   assert.match(tool.prompts.file,/可下载/);
   assert.ok(tool.packageBytes>=tool.imageBytes);
+});
+test('web image delivery reuses the API image brief and requests a downloadable image, not editable data',async()=>{
+  const p=project('画面测试',{style:'韩系清新'});
+  p.styles=['韩系清新'];p.purposes=['日常记录'];p.intent='午后散步';
+  const settings={deliveryMode:'image',generationMode:'direct',includeThumbnails:false};
+  const output=await createOfflineHandoff({project:p,assets:[asset],aliases:materialAliases([asset.id]),settings});
+  const files=unzipSync(new Uint8Array(await output.blob.arrayBuffer()));
+  const guide=strFromU8(files['START_HERE.txt']);
+  assert.equal(output.deliveryMode,'image');
+  assert.equal(output.mode,'image');
+  assert.match(output.prompt,/可下载的 PNG 图片/);
+  assert.match(guide,/可下载的 PNG 图片/);
+  assert.ok(guide.includes(imagePrompt({project:p,draft:p.drafts[0],assets:[asset],ids:[asset.id],theme:p.intent,requireAll:true,includeImages:false})));
+  assert.equal(JSON.parse(strFromU8(files['context.json'])).deliveryMode,'image');
+  assert.ok(!files['contract.json']&&!files['example-response.shiyeproject.json']&&!files['runtime/validate.cjs']);
+  assert.doesNotMatch(output.prompt,/shiyeproject|JSON|可编辑/);
 });
 
 test('offline ZIP includes each selected material as its own image',async()=>{
