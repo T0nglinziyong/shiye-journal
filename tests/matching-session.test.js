@@ -6,6 +6,12 @@ test('matching results survive reload without credentials; interrupted requests 
  const state={basket:['a'],aiSettings:{key:'never-store'},matchIntent:'春日'},record=matchingSnapshot(state,[{id:'v',status:'running',project:work}]);
  assert.ok(!JSON.stringify(record).includes('never-store'));const restored={};const variants=restoreMatchingSession(record,restored);assert.deepEqual(restored.basket,['a']);assert.equal(variants[0].status,'interrupted');
 });
+test('content policy, original wording and facts survive matching-page reload',()=>{
+ const record=matchingSnapshot({matchContentPolicy:'original',matchUserText:'保留原文',matchFacts:'用户确认的事实',basket:[]},[]);
+ const restored={matchContentPolicy:'documentary',matchUserText:'',matchFacts:''};
+ restoreMatchingSession(record,restored);
+ assert.equal(restored.matchContentPolicy,'original');assert.equal(restored.matchUserText,'保留原文');assert.equal(restored.matchFacts,'用户确认的事实');
+});
 test('damaged or partial generated plans do not reappear as unopenable shells',()=>{
  const result=restoreMatchingSession({context:{basket:['a']},variants:[{id:'broken',status:'completed',project:{id:'p'}},{id:'good',status:'running',project:work}]},{});
  assert.deepEqual(result.map(v=>v.id),['good']);assert.equal(result[0].status,'interrupted');

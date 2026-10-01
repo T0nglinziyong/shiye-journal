@@ -3,7 +3,7 @@ import {presetReferencePlans,renderPresetReferences} from './creative-reference-
 import {prepareMaterialPreviews} from './creative-previews.js';
 import {materialAliases} from './material-alias.js';
 const ID='matching-session-v1';
-const KEYS=['basket','coreIDs','excludedAssetIDs','matchCore','matchRatio','matchMode','matchStyle','matchStyles','matchPurposes','matchIntent','matchPurpose','matchProcessing','materialUseHints','materialUseRequired','assetProcessing','customPaperWidth','customPaperHeight'];
+const KEYS=['basket','coreIDs','excludedAssetIDs','matchCore','matchRatio','matchMode','matchStyle','matchStyles','matchPurposes','matchIntent','matchContentPolicy','matchUserText','matchFacts','matchPurpose','matchProcessing','materialUseHints','materialUseRequired','assetProcessing','customPaperWidth','customPaperHeight'];
 export function matchingSnapshot(state,variants){return {id:ID,context:Object.fromEntries(KEYS.map(k=>[k,structuredClone(state[k])])),variants:structuredClone(variants)};}
 export function restoreMatchingSession(record,state){
  if(!record)return [];
@@ -48,13 +48,13 @@ export function createMatchingSession(c){
    try {
     await save();
     if(cfg.deliveryMode==='image'){
-     const blob=await c.generatePageImage({settings:cfg,project:p,draft:p.drafts[0],assets:c.state.assets,ids,theme:c.state.matchIntent,createImage:c.modelImage,signal:run.signal,onProgress:message=>{v.progress=message;const el=document.querySelector(`[data-variant="${v.id}"] .match-progress`);if(el)el.textContent=message;}});
+     const blob=await c.generatePageImage({settings:cfg,project:p,draft:p.drafts[0],assets:c.state.assets,ids,theme:p.intent||'',createImage:c.modelImage,signal:run.signal,onProgress:message=>{v.progress=message;const el=document.querySelector(`[data-variant="${v.id}"] .match-progress`);if(el)el.textContent=message;}});
      const snapshot=await c.saveGeneratedImageSnapshot(blob,p);v.project=snapshot;v.linkedProjectID=snapshot.id;v.status='completed';v.progress='GPT 直接生成的图片已保存到画面快照；点击查看。';return;
     }
     recorder=await c.createAIRecorder({db:c.db,model:cfg.model,key:cfg.key});const vision=cfg.includeThumbnails&&c.supportsVision(cfg);
     const images=vision?await prepareMaterialPreviews(ids,{findAsset:c.asset,createImage:c.modelImage}):[];
     const references=[];if(cfg.sendPresetReferences&&c.supportsVision(cfg))references.push(...(await renderPresetReferences(presetReferencePlans({styles:p.styles,purposes:p.purposes,mode:p.drafts[0].pageMode,ratio:p.drafts[0].pageRatio}))).map(entry=>entry.url));
-    let steps='';const output=await c.runCreativeAgent({...cfg,draft:p.drafts[0],assets:c.state.assets,aliases,styles:p.styles,pagePurposes:p.purposes,requiredAssetIDs:p.requiredAssetIDs,materialPriority:p.materialPriority,processing:p.processing,assetProcessing:p.assetProcessing,materialUseHints:p.materialUseHints,materialUseRequired:p.materialUseRequired,prompt:c.state.matchIntent,images,referenceImages:references,request:recorder.request,signal:run.signal,
+    let steps='';const output=await c.runCreativeAgent({...cfg,draft:p.drafts[0],assets:c.state.assets,aliases,styles:p.styles,pagePurposes:p.purposes,contentPolicy:p.contentPolicy||'documentary',userText:p.userText||'',providedFacts:p.providedFacts||'',requiredAssetIDs:p.requiredAssetIDs,materialPriority:p.materialPriority,processing:p.processing,assetProcessing:p.assetProcessing,materialUseHints:p.materialUseHints,materialUseRequired:p.materialUseRequired,prompt:p.intent||'',images,referenceImages:references,request:recorder.request,signal:run.signal,
      onResponse:recorder.response,
      onScene:vision?async d=>(await c.rasterize(d,.7)).toDataURL('image/jpeg',.8):undefined,
      onInspection:vision?async data=>{const parts=[];for(const m of data?.materials||[]){const a=c.asset(m.assetID);if(a){const url=await c.modelImage(a,m.cropRect);if(url)parts.push({type:'text',text:m.key+' 的局部预览'},{type:'image_url',image_url:{url}});}}return parts;}:undefined,

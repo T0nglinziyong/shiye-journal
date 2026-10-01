@@ -11,6 +11,7 @@ import {readProjectPackageEntries} from './project-package-archive.js';
 import {canonicalTaskSource} from './task-source.js';
 import {sha256Hex,taskFingerprint,assertTaskFingerprint} from './task-fingerprint.js';
 import {reviewExternalResultFiles} from './offline-result-review.js';
+import {creativeContentBrief} from './creative-content-brief.js';
 
 export const OFFLINE_PACKAGE_FORMAT='shiye-gpt-creation-package';
 export const EDITABLE_WORK_FORMAT='shiye-editable-project';
@@ -26,10 +27,10 @@ const validAlias=validMaterialAlias;
 function sourceFor(p,aliases){
   const d=p.drafts[0];
   const priority=p.materialPriority||{required:p.requiredAssetIDs||[],preferred:Object.values(aliases).filter(id=>!(p.requiredAssetIDs||[]).includes(id)),available:[]};
-  return structuredClone({bundleId:crypto.randomUUID(),title:p.title,mode:d.pageMode,ratio:d.pageRatio,styles:p.styles||[d.style],purposes:p.purposes||[p.purpose||'日常记录'],intent:p.intent||'',processing:p.processing||'保留完整',requiredAssetIDs:p.requiredAssetIDs||[],materialPriority:{required:priority.required||[],preferred:priority.preferred||[],available:priority.available||[]},materialUseHints:p.materialUseHints||{},materialUseRequired:p.materialUseRequired||{},assetProcessing:p.assetProcessing||{},materials:Object.entries(aliases).map(([alias,assetID])=>({alias,assetID}))});
+  return structuredClone({bundleId:crypto.randomUUID(),title:p.title,mode:d.pageMode,ratio:d.pageRatio,styles:p.styles||[d.style],purposes:p.purposes||[p.purpose||'日常记录'],intent:p.intent||'',contentPolicy:p.contentPolicy||'documentary',userText:p.userText||'',providedFacts:p.providedFacts||'',processing:p.processing||'保留完整',requiredAssetIDs:p.requiredAssetIDs||[],materialPriority:{required:priority.required||[],preferred:priority.preferred||[],available:priority.available||[]},materialUseHints:p.materialUseHints||{},materialUseRequired:p.materialUseRequired||{},assetProcessing:p.assetProcessing||{},materials:Object.entries(aliases).map(([alias,assetID])=>({alias,assetID}))});
 }
 function instructions(source){
-  return `拾页可编辑手帐创作包。按 context.json 的风格（${source.styles.map(name=>`${name}：${visualStyleBrief(name)}`).join('；')}）、用途（${source.purposes.join('、')}）、纸张（${source.ratio} ${source.mode}）、主题（${source.intent||'自由创作'}）一次完成。查看 materials/ 中每件素材预览；预览不是原图，最终文件只引用 context.json 的素材编号，不嵌入图像。保持真实尺寸和库存，胶带可按真实宽度截段；文字、线条和图形用可编辑图层表示。工具参数见 contract.json，可参考 example-response.json 的结构，但不要照抄示例构图。先用 compose_page，最后用 finish_design；不要编造经历或图片细节。只返回一个 UTF-8 .shiyeproject.json 文件，保留 source 原样。`;
+  return `拾页可编辑手帐创作包。按 context.json 的风格（${source.styles.map(name=>`${name}：${visualStyleBrief(name)}`).join('；')}）、用途（${source.purposes.join('、')}）、纸张（${source.ratio} ${source.mode}）一次完成。\n${creativeContentBrief({policy:source.contentPolicy,userText:source.userText,providedFacts:source.providedFacts,topic:source.intent})}\n查看 materials/ 中每件素材预览；预览不是原图，最终文件只引用 context.json 的素材编号，不嵌入图像。保持真实尺寸和库存，胶带可按真实宽度截段；文字、线条和图形用可编辑图层表示。工具参数见 contract.json，可参考 example-response.json 的结构，但不要照抄示例构图和正文。先用 compose_page，最后用 finish_design；不要编造图片细节。只返回一个 UTF-8 .shiyeproject.json 文件，保留 source 原样。`;
 }
 export function createOfflineCreationPackage({project:p,assets,aliases,previews=[]}){
   const source=sourceFor(p,aliases);
@@ -45,7 +46,7 @@ export function createOfflineCreationPackage({project:p,assets,aliases,previews=
 // short and put exact context, contracts, examples and separate images inside.
 export async function createOfflineHandoff({project:p,assets,aliases,previews=[],settings={},referenceImages=[]}){
   const {offlineValidateSource}=await import('./generated/offline-validate-source.js');
-  const source=sourceFor(p,aliases);source.taskBinding='local-v1';source.textMode=settings.textMode||'automatic';const selected=source.materials.map(({alias,assetID})=>{
+  const source=sourceFor(p,aliases);source.taskBinding='local-v1';source.textMode=source.contentPolicy==='visual'?'none':settings.textMode||'automatic';const selected=source.materials.map(({alias,assetID})=>{
     const asset=assets.find(item=>item.id===assetID);
     if(!asset||!validAlias(alias))throw Error('素材篮中有无效素材编号');
     return {alias,assetID,title:asset.title,kind:asset.kind,role:asset.role,physicalWidthMM:asset.physicalWidthMM,physicalHeightMM:asset.physicalHeightMM,quantity:asset.kind==='tape'?null:asset.supply?.quantity??1,continuousTape:asset.kind==='tape',tags:asset.tags||[]};
@@ -77,7 +78,7 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
   directExample.page.ink_strokes=[{points:[{x:.20,y:.63},{x:.24,y:.62},{x:.29,y:.64},{x:.34,y:.62}],width:3,color:'#5278a7',pen_style:'brush',opacity:.8}];
   directExample.page.text_blocks=layeredTexts;
   const textRule={none:'不生成文字',requested:'仅按明确要求配文',minimal:'少量可编辑文字',rich:'丰富且可读的可编辑文字',automatic:'按用途生成可编辑文字'}[source.textMode]||'按用途生成可编辑文字';
-  const task=[`风格：${source.styles.map(name=>`${name}（${visualStyleBrief(name)}）`).join('；')||'不预设，由素材和主题决定'}`,`用途：${source.purposes.join('、')||'不预设，由主题决定'}`,`纸张：${source.ratio.toUpperCase()} · ${source.mode==='spread'?'双页':'单页'}`,`加工：${source.processing}`,`文字：${textRule}`,`主题：${source.intent||'按用途和素材自由创作'}`].join('\n');
+  const task=[creativeContentBrief({policy:source.contentPolicy,userText:source.userText,providedFacts:source.providedFacts,topic:source.intent}),`风格：${source.styles.map(name=>`${name}（${visualStyleBrief(name)}）`).join('；')||'不预设，由素材和主题决定'}`,`用途：${source.purposes.join('、')||'不预设，由主题决定'}`,`纸张：${source.ratio.toUpperCase()} · ${source.mode==='spread'?'双页':'单页'}`,`加工：${source.processing}`,`文字：${textRule}`].join('\n');
   const materialRules=selected.map(item=>`${item.alias} ${item.title}｜${source.materialPriority.required.includes(item.assetID)?'必须使用':source.materialPriority.available.includes(item.assetID)?'可以使用（仅备选）':'优先使用'}｜${item.kind}｜${item.physicalWidthMM||'?'}×${item.physicalHeightMM||'?'} mm｜${item.continuousTape?'连续胶带':`库存 ${item.quantity}`}｜${source.assetProcessing[item.assetID]||source.processing}｜${source.materialUseHints[item.assetID]||'自由选择用法'}${source.materialUseRequired[item.assetID]?'（必须体现该用法）':''}`).join('\n');
   const densePage=source.purposes[0]!=='主题封面'&&source.styles[0]!=='极简留白';
   const purposeNotes=source.purposes.map(name=>`${name}：${purposeMethod(name)}`).join('；');
