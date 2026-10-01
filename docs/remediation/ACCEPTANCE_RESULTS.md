@@ -26,5 +26,10 @@
 | 第三批集成 | `npm test` | 261/261，退出码 0 |
 | 第三批集成 | `npm run test:ui` | 构建/UI smoke/route parity/自托管 smoke 通过，退出码 0 |
 | 第三批真实浏览器 | `SHIYE_TEST_URL=http://localhost:5192 node tests/offline-handoff-browser.mjs` | 四种视口的网页 AI 交接、预览压缩及旧包导入流程通过，退出码 0；本机截图 `/tmp/shiye-offline-handoff`。1200px 合成图从 3,439,121 B 降至 461,677 B、宽 384px；不代表真实用户素材画质验收。 |
+| 第三批固定项目 Git 部署 | Vercel 控制台 `shiye-journal-test` Production Deployment | `0c20712516c47e71f19a9f8171cdbd1c26b10a26`，Git `main`，状态 Ready，固定域名未变；无手动部署 |
+| 第四批合同局部 | `node --test tests/remediation-contract.test.js tests/offline-creation.test.js tests/remediation-import.test.js` | 20/20，退出码 0；O-07/O-08 合成语料通过 |
+| 第四批集成 | `npm test` | 264/264，退出码 0；旧安全测试改为拒绝未知事件字段，另增脚本样文本的转义验证，未删测试 |
+| 第四批集成 | `npm run test:ui` | build/UI smoke/route parity/自托管 smoke 通过，退出码 0；真实设备和云账号未测 |
+| 第四批编辑器浏览器 | `SHIYE_TEST_URL=http://localhost:5192 npm run test:editor-browser` | 88 张截屏流程通过，退出码 0，首个可用画面 322 ms；是桌面 Chromium 模拟视口，非实体设备 |
 
 上面的浏览器运行在桌面 Chromium 中，模拟不同视口；它**不是**实体手机或 iPad 验收。未使用真实账号/私人素材；尚未运行在线 AI、双标签共享 IDB、隔离数据库 CAS、完整工程包往返。保留有意留白、叠压、半藏与出血，不以固定占页率、最低图层数或零重叠判成败。

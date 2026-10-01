@@ -65,11 +65,8 @@ const descriptions={
   finish_design:'仅能作为本轮最后调用，且前面全部成功；核验真实素材尺寸、裁片、必用素材和实际库存。文字、留白与构图由创作者决定。'
 };
 export const agentTools=Object.entries(toolContracts).map(([name,parameters])=>({type:'function',function:{name,description:descriptions[name],parameters}}));
-function safeContract(schema){
-  const result=structuredClone(schema),visit=s=>{if(s.type==='string')s.allOf=[...(s.allOf||[]),{pattern:'^(?!\\s*$)[^<>\\u0000]*$'}];for(const c of s.anyOf||[])visit(c);if(s.items)visit(s.items);for(const c of Object.values(s.properties||{}))visit(c);};visit(result);return result;
-}
 export function validateValue(value,schema,path='$'){
-  let check=compiled.get(schema);if(!check){check=validator.compile(safeContract(schema));compiled.set(schema,check);}if(check(value))return;
+  let check=compiled.get(schema);if(!check){check=validator.compile(schema);compiled.set(schema,check);}if(check(value))return;
   const error=check.errors[0],field=error.params.additionalProperty||error.params.missingProperty||'',location=path+error.instancePath+(field?'.'+field:'');
   const reason=error.keyword==='additionalProperties'?'未实现或未知字段':error.keyword==='required'?'缺少字段':error.keyword==='enum'?'未实现或未知值':'合同不合法';throw Error(location+' '+reason+'：'+error.message);
 }
@@ -80,6 +77,21 @@ const inkStroke=object({points:array(inkPoint,1,512),width:num(.5,60),color,opac
 const directOperations=operationContract;
 const directMaterial=object({...material.properties,operations:array(directOperations,1,12)},['asset','piece','operations','placement']);
 export const directPageContract=object({version:{type:'integer',minimum:3,maximum:3,enum:[3]},style:enums(['留白叙事','密集拼贴','杂志网格','胶片日记','手作便签','自由构图']),intent:nullable(string(240)),items:array(directMaterial,0,100),graphics:array(primitive,0,48),ink_strokes:array(inkStroke,0,32),text_blocks:array(directText,0,24),paper:object({color,pattern:enums(['plain','lined','grid','dots','columns']),ruling:num(0,100),center_gutter:{type:'boolean'}},['color','pattern'])},['version','style','intent','items','text_blocks','paper']);
+// A task exports exactly the schema used to validate its return. Pixel crops
+// are unavailable when the task only contains downsampled preview images.
+export function offlineContract(mode,{cropPx=false}={}){
+  if(mode==='direct')return directPageContract;
+  const contracts=Object.fromEntries(Object.entries(toolContracts).filter(([name])=>name!=='compose_story_page'&&name!=='inspect_materials'));
+  if(cropPx)return contracts;
+  const taskContracts={...contracts,compose_page:structuredClone(contracts.compose_page)};
+  delete taskContracts.compose_page.properties.materials.items.properties.crop_px;
+  return taskContracts;
+}
+export function schemaFingerprint(schema){
+  const serialized=JSON.stringify(schema);let hash=2166136261;
+  for(let index=0;index<serialized.length;index++){hash^=serialized.charCodeAt(index);hash=Math.imul(hash,16777619);}
+  return `fnv1a32:${(hash>>>0).toString(16).padStart(8,'0')}`;
+}
 export function directPageToTools(page){
   validateValue(page,directPageContract);
   // A single composite call keeps the direct page atomic, including large baskets.

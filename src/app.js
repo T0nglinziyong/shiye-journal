@@ -17,7 +17,7 @@ import {cloudEnabled,requireCloudUser} from './cloud-session.js';
 import {createSyncResumer} from './sync-resumer.js';
 import {setCloudProjectPreview} from './cloud-store.js';
 import {snapshotDraft} from './draft-snapshot.js';
-import {reconcileCanvasText} from './canvas-text-content.js';
+import {reconcileCanvasText,textParagraphMarkup} from './canvas-text-content.js';
 import {ensureEditorHistory,resetEditorHistory,takeEditorHistoryStep} from './editor-history-scope.js';
 import {captureHistory} from './project-history.js';
 import {mountCanvasEditor} from './canvas-editor-ui.js';
@@ -197,7 +197,6 @@ function renderMatching(){return renderMatchingPage({state,head,imgTag,esc,kindN
 function matchingScope(){return buildMaterialScope({basket:state.basket,coreIDs:state.coreIDs,recommendations:matchingRecommendations(state),excluded:state.excludedAssetIDs,autoIncludeRecommendations:state.aiSettings.autoIncludeRecommendations,requireAllCandidates:state.aiSettings.requireAllCandidates});}
 function refreshMatchingRecommendations(){const current=view.querySelector('.match-recommendations');if(!current)return;const template=document.createElement('template');template.innerHTML=renderMatching();const next=template.content.querySelector('.match-recommendations');if(!next)return;current.replaceWith(next);next.querySelectorAll('[data-act]').forEach(el=>el.addEventListener('click',()=>handle(el.dataset.act,el.dataset.id,el.dataset.val)));mountIcons(next);const summary=view.querySelector('.basket>.muted'),fresh=template.content.querySelector('.basket>.muted');if(summary&&fresh)summary.textContent=fresh.textContent;}
 function workInkPreview(d){if(!d.strokes?.length)return '';const paths=d.strokes.map(s=>{const points=(s.points||[]).filter(p=>Number.isFinite(p.x)&&Number.isFinite(p.y));if(!points.length)return '';const color=esc(s.color||'#2b5245'),width=Math.max(.5,Number(s.width)||3),opacity=Math.max(0,Math.min(1,Number(s.opacity??1)));if(points.length===1)return `<circle cx="${points[0].x}" cy="${points[0].y}" r="${width/2}" fill="${color}" opacity="${opacity}"/>`;return `<path d="${points.map((p,n)=>`${n?'L':'M'}${p.x} ${p.y}`).join(' ')}" fill="none" stroke="${color}" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round" opacity="${opacity}"/>`;}).join('');return `<svg class="work-ink-preview" viewBox="0 0 ${d.canvas.width} ${d.canvas.height}" preserveAspectRatio="none" aria-hidden="true">${paths}</svg>`;}
-function textParagraphMarkup(i,spacing){if(!i.paragraphSpacing)return esc(i.content);return String(i.content).split('\n').map((part,index)=>`<span style="display:block;${index?`margin-top:${spacing};`:''}">${esc(part)||'&#8203;'}</span>`).join('');}
 function workCover(d){
  if(!d)return '';
  if((d.coverImageID||d.coverBlobId)&&![d.items,d.primitives,d.textBlocks,d.strokes].some(list=>list?.length))return `<img class="work-reference" loading="lazy" decoding="async" src="${image(d.coverImageID||d.coverBlobId)}" alt="作品完整封面">`;

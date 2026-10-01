@@ -1,6 +1,11 @@
 // Only this node owns rendered copy. Selection handles and the live IME input
 // are siblings, so a canvas refresh cannot accidentally prepend the source a
 // second time or replace an in-progress composition.
+const escapeText=value=>String(value??'').replace(/[&<>"']/g,character=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character]));
+export function textParagraphMarkup(item,spacing){
+  if(!item.paragraphSpacing)return escapeText(item.content);
+  return String(item.content??'').split('\n').map((part,index)=>`<span style="display:block;${index?`margin-top:${spacing};`:''}">${escapeText(part)||'&#8203;'}</span>`).join('');
+}
 export function reconcileCanvasText(node, next){
   if(node.querySelector('.canvas-inline-text') || node.classList.contains('typing'))return false;
   const fresh=next.querySelector('[data-text-content]');

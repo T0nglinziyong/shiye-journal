@@ -1,7 +1,7 @@
 import {zip,zipSync,unzipSync,strToU8,strFromU8} from 'fflate';
 import {project} from './domain.js';
 import {applyToolCalls} from './creative.js';
-import {toolContracts,directPageContract,directPageToTools} from './creative-contract.js';
+import {toolContracts,directPageContract,directPageToTools,offlineContract,schemaFingerprint,validateValue} from './creative-contract.js';
 import {visualStyleBrief} from './creative-style-brief.js';
 import {creativeDesignGuide,purposeMethod} from './creative-design-guide.js';
 import {presetReferenceGuide,presetReferencePlans} from './creative-reference-presets.js';
@@ -52,6 +52,9 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
   const chosen=showImages?previews:[];
   if(showImages&&selected.some(item=>!chosen.some(preview=>preview.alias===item.alias&&preview.bytes instanceof Uint8Array&&preview.bytes.length)))throw Error('创作包缺少素材预览，未导出不完整文件');
   const mode=settings.generationMode==='direct'?'direct':'agent';
+  source.capabilities={cropPx:false};
+  const exportedContract=offlineContract(mode,source.capabilities);
+  source.schemaHash=schemaFingerprint(exportedContract);
   const context={format:OFFLINE_PACKAGE_FORMAT,version:1,source,materials:selected.map(item=>({...item,preview:showImages?`materials/${item.alias}.png`:null}))};
   const envelope={format:EDITABLE_WORK_FORMAT,version:1,source,title:'新的手帐'};
   const directExample={...envelope,page:{version:3,style:'留白叙事',intent:null,items:[{asset:selected[0].alias,piece:'主素材',unit:0,role:null,operations:[{op:'whole'}],placement:{x:.5,y:.43,rotation:0,z:1},relation:null}],graphics:[{key:'title-rule',kind:'line',x:.5,y:.21,width:.55,height:.004,stroke:'#8ba99b',fill:null,line_width:2}],text_blocks:[{content:'这一页的主题',font_style:'serif',x:.5,y:.13,width:.7,height:.09,font_size:30,color:'#30463d'},{content:'第一段可编辑正文，根据真实主题填写。',font_style:'sans',x:.5,y:.72,width:.75,height:.08,font_size:20,color:'#30463d'},{content:'第二段可编辑正文，接续上一段的内容。',font_style:'sans',x:.5,y:.84,width:.75,height:.08,font_size:20,color:'#30463d'}],paper:{color:'#fcfaf0',pattern:'plain'}}};
@@ -83,7 +86,7 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
     example.tools[0].arguments.texts=layeredTexts.map((item,index)=>({...item,key:'example-text-'+index}));
   }
   const handoffInstructions=instructions.replace('文件模式附可下载的 UTF-8 文件「作品.shiyeproject.json」；复制模式仅给一个单独的','文件模式附可下载的「作品.shiyeproject.zip」，包内放一个 UTF-8 文件 project.shiyeproject.json，可另外放 preview.svg；复制模式仅给一个单独的').replace('两种方式都只含一个完整 JSON 对象，不是 PDF、HTML 或位图。','文件包内的 project.shiyeproject.json 与复制模式的 JSON 代码块使用相同可编辑图层合同；材料 ID 引用本机高清原图，图形可用 vector_paths 表达自由矢量轮廓。不要只交付 PDF、HTML 或扁平位图。');
-  const files={'START_HERE.txt':strToU8(handoffInstructions),'CREATIVE_GUIDE.txt':strToU8(creativeDesignGuide(source,{hasImages:showImages,hasPresets})),'context.json':strToU8(JSON.stringify(context,null,2)),'contract.json':strToU8(JSON.stringify(mode==='direct'?directPageContract:Object.fromEntries([...allowedTools].map(name=>[name,toolContracts[name]])),null,2)),'composition-ideas.json':strToU8(JSON.stringify(compositionIdeas,null,2)),'example-response.shiyeproject.json':strToU8(JSON.stringify(example,null,2))};
+  const files={'START_HERE.txt':strToU8(handoffInstructions),'CREATIVE_GUIDE.txt':strToU8(creativeDesignGuide(source,{hasImages:showImages,hasPresets})),'context.json':strToU8(JSON.stringify(context,null,2)),'contract.json':strToU8(JSON.stringify(exportedContract,null,2)),'capabilities.json':strToU8(JSON.stringify({schemaHash:source.schemaHash,sourcePixelCoordinates:false,cropPx:false,previewOnly:showImages},null,2)),'composition-ideas.json':strToU8(JSON.stringify(compositionIdeas,null,2)),'example-response.shiyeproject.json':strToU8(JSON.stringify(example,null,2))};
   for(const entry of chosen)if(validAlias(entry.alias)&&source.materials.some(item=>item.alias===entry.alias))files[`materials/${entry.alias}.png`]=entry.bytes;
   if(hasPresets){
     files['references/GUIDE.txt']=strToU8(presetReferenceGuide(presetReferencePlans({styles:source.styles,purposes:source.purposes,mode:source.mode})));
@@ -112,6 +115,12 @@ export function importEditableWork(text,assets,{trustedSource=null}={}){
   const tools=direct?directPageToTools(input.page):input.tools;
   if(!Array.isArray(tools)||!tools.length||tools.length>12||(direct?tools.length!==1||tools[0].name!=='compose_direct_page':tools.at(-1)?.name!=='finish_design'||!tools.some(t=>t.name==='compose_page')))throw Error('作品需要 compose_page 与最后的 finish_design，或完整可编辑页面');
   if(!direct&&tools.some(t=>!allowedTools.has(t?.name)))throw Error('作品包含不支持的创作操作');
+  if(source.schemaHash){
+    const contract=offlineContract(direct?'direct':'agent',source.capabilities);
+    if(schemaFingerprint(contract)!==source.schemaHash)throw Error('创作包合同版本不匹配');
+    if(direct)validateValue(input.page,contract,'$.page');
+    else for(const [index,tool] of tools.entries())validateValue(tool.arguments,contract[tool.name],`$.tools[${index}].arguments`);
+  }
   const aliases={},seen=new Set();for(const m of source.materials){if(!validAlias(m.alias)||typeof m.assetID!=='string'||seen.has(m.alias)||!assets.some(a=>a.id===m.assetID))throw Error('作品引用了不存在或重复的素材');seen.add(m.alias);aliases[m.alias]=m.assetID;}
   if(!Array.isArray(source.requiredAssetIDs)||source.requiredAssetIDs.some(id=>!Object.values(aliases).includes(id)))throw Error('必用素材不在创作包中');
   const sourcePriority=source.materialPriority,allowedIDs=new Set(Object.values(aliases));
