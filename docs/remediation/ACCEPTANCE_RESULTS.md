@@ -139,6 +139,9 @@
 | 第二十七批固定项目 Git 部署 | Vercel 控制台 `shiye-journal-test` Production Deployment | `67ef273962e03f63c28b514e8c9cc7bf075e9ef5`，Git `main`，Ready；固定域名未变，无手动部署 |
 | 第二十八批可见性局部 | `node --test tests/remediation-constraints.test.js tests/creative.test.js` | 9/9，退出码 0；纯色高层矩形完全盖住必用素材拒绝，部分叠压、半透明叠压和页边出血允许。不以统一填充率或零重叠评分 |
 | 第二十八批集成/浏览器 | `npm test` / `npm run test:ui` / `SHIYE_TEST_URL=http://localhost:5192 SHIYE_WAIT_MS=30000 node tests/browser-acceptance.mjs` | 304/304；build/UI smoke/route parity/自托管 smoke 通过；真实 Chromium 109 画面、7 模拟视口和备份往返通过；复杂图层/透明像素可见性及实体设备未验 |
+| 第二十八批固定项目 Git 部署 | Vercel 控制台 `shiye-journal-test` Production Deployment | `1562daf871b8903559d48e808339d23569779b81`，Git `main`，Ready；固定域名未变，无手动部署 |
+| 第二十九批离线校验器生成 | `node scripts/build-offline-runtime.mjs` 两次 SHA-256 核对 | 两次一致：`5555b6bf71875c68f1c1d86ba711132dcf241ce9fc8c7a2eb9f9a73947e88c9f`；与第 27–28 批源码同步，仍不提供视觉验收 |
+| 第二十九批集成 | `npm test` / `npm run test:ui` | 304/304；构建、UI smoke、7 模拟视口的路由 parity、自托管 smoke 通过；真实移动设备未验 |
 
 能力表依据：[DeepSeek Chat Completions](https://api-docs.deepseek.com/api/create-chat-completion/)、[DeepSeek JSON Output](https://api-docs.deepseek.com/guides/json_mode/)、[OpenAI API Reference](https://platform.openai.com/docs/api-reference/chat/create)、[SiliconFlow 多模态输入](https://docs.siliconflow.cn/docs/userguide/capabilities/multimodal-vision)。文档支持不等于本账号模型可用；仍需用户配置实际可访问的模型并做真实请求验收。
 
