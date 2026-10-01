@@ -56,7 +56,7 @@ import {seedBundledExamples} from './cece-seed.js';
 import {seedStarterStyles} from './starter-seed.js';
 import {seedSwiftBundledMaterials} from './swift-bundled-seed.js';
 import {applyToolCalls} from './creative.js';
-import {createOfflineHandoff,inspectEditableSource,inspectOfflinePackage,verifyOfflineTaskPackage,importEditableWork,importEditableWorkPackage} from './offline-creation.js';
+import {createOfflineHandoff,inspectEditableSource,inspectOfflinePackage,verifyOfflineTaskPackage,importEditableWork,importEditableWorkPackageReviewed} from './offline-creation.js';
 import {offlineTaskStore} from './offline-task-store.js';
 import {offlinePreviewBytes as encodeOfflinePreview} from './offline-preview.js';
 import {buildMaterialScope} from './matching-materials.js';
@@ -408,7 +408,7 @@ function openOfflineImportDialog(){
   body.querySelector('#offline-import-file').onclick=()=>workFileInput.click();
 }
 async function pasteOfflineResult(){try{body.querySelector('#offline-gpt-result').value=await navigator.clipboard.readText();toast('已粘贴 GPT 的可编辑数据');}catch{toast('无法读取剪贴板，请长按输入框粘贴');}}
-async function importOfflineProject(p){await flushSave();p.aiGenerated=true;await matchingSession.importProject(p);state.activeProject=p;state.activeDraft=p.activeDraftID;resetEditorHistory(state);state.offlineEditingReturnID=p.id;state.tool='select';if(modal.open)modal.close();if(state.route!=='matching')route('matching');route('editor');toast('已加入版本方案；可编辑数据已检查，预览与正文仍需复核');}
+async function importOfflineProject(p){await flushSave();p.aiGenerated=true;await matchingSession.importProject(p);state.activeProject=p;state.activeDraft=p.activeDraftID;resetEditorHistory(state);state.offlineEditingReturnID=p.id;state.tool='select';if(modal.open)modal.close();if(state.route!=='matching')route('matching');route('editor');toast(p.creationVerification?.preview==='mismatch'?'已保存可编辑草稿；外部预览或清单有差异，请核对画面':'已加入版本方案；可编辑数据已检查，预览与正文仍需复核');}
 async function offlineTaskAccount(){return cloudEnabled?(await requireCloudUser()).id:'browser';}
 async function trustedOfflineSource(source){if(!source?.bundleId)return null;const trusted=await offlineTaskStore.load(await offlineTaskAccount(),source.bundleId);if(!trusted&&source.taskBinding==='local-v1')throw Error('未找到此网页版 AI 任务的原始快照；请先在此设备导入原始创作任务 ZIP，再导入 AI 结果');return trusted;}
 async function importOfflineText(text){const trustedSource=await trustedOfflineSource(inspectEditableSource(text)?.source);return importOfflineProject(importEditableWork(text,state.assets,{trustedSource}));}
@@ -729,7 +729,7 @@ async function importEditableFile(file){
       toast('原始任务已登记；现在请选择 AI 返回的可编辑作品包');return;
     }
     const trustedSource=await trustedOfflineSource(inspected.source);
-    await importOfflineProject(importEditableWorkPackage(bytes,state.assets,{trustedSource}));
+    await importOfflineProject(await importEditableWorkPackageReviewed(bytes,state.assets,{trustedSource}));
     return;
   }
   if(!/\.json$/i.test(file.name))throw Error('请选择 .shiyeproject.zip 可编辑作品包，或 JSON 备选文件');

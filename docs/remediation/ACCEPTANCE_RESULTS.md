@@ -57,5 +57,10 @@
 | 第九批编辑器浏览器 | `SHIYE_TEST_URL=http://localhost:5192 npm run test:editor-browser` | 88 张模拟视口截屏通过，退出码 0，首个可用画面 298 ms；未执行真实双账号切换 |
 | 第九批集成 | `npm test` | 274/274，退出码 0 |
 | 第九批集成 | `npm run test:ui` | build/UI smoke/route parity/自托管 smoke 通过，退出码 0 |
+| 第九批固定项目 Git 部署 | Vercel 控制台 `shiye-journal-test` Production Deployment | `1cdedeef404271c1b4406b58c0e6f6e7df7ec70f`，Git `main`，状态 Ready，固定域名未变；无手动部署 |
+| 第十批可编辑包局部 | `node --test tests/remediation-import.test.js tests/offline-creation.test.js tests/offline-task-store.test.js` | 23/23，退出码 0；O-14/O-16 仅清单字节自洽、错误预览保留草稿，非独立视觉渲染 |
+| 第十批集成 | `npm test` | 275/275，退出码 0 |
+| 第十批集成 | `npm run test:ui` | build/UI smoke/route parity/自托管 smoke 通过，退出码 0 |
+| 第十批真实浏览器 | `SHIYE_TEST_URL=http://localhost:5192 node tests/offline-handoff-browser.mjs` | 四种模拟视口交接流程通过，退出码 0；未在浏览器中对外部真实预览做像素比较 |
 
 上面的浏览器运行在桌面 Chromium 中，模拟不同视口；它**不是**实体手机或 iPad 验收。未使用真实账号/私人素材；尚未运行在线 AI、双标签共享 IDB、隔离数据库 CAS、完整工程包往返。保留有意留白、叠压、半藏与出血，不以固定占页率、最低图层数或零重叠判成败。

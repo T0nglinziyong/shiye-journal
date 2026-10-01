@@ -10,6 +10,7 @@ import {importNativeProjectPackage,validatePackageValue} from './native-project-
 import {readProjectPackageEntries} from './project-package-archive.js';
 import {canonicalTaskSource} from './task-source.js';
 import {sha256Hex,taskFingerprint,assertTaskFingerprint} from './task-fingerprint.js';
+import {reviewExternalResultFiles} from './offline-result-review.js';
 
 export const OFFLINE_PACKAGE_FORMAT='shiye-gpt-creation-package';
 export const EDITABLE_WORK_FORMAT='shiye-editable-project';
@@ -183,4 +184,13 @@ export function importEditableWorkPackage(bytes,assets,options={}){
   const scene=files[EDITABLE_PACKAGE_ENTRY];
   if(!scene)throw Error('作品包缺少 '+EDITABLE_PACKAGE_ENTRY);
   return importEditableWork(strFromU8(scene),assets,options);
+}
+export async function importEditableWorkPackageReviewed(bytes,assets,options={}){
+  const imported=importEditableWorkPackage(bytes,assets,options);
+  const {kind,files}=readProjectPackageEntries(bytes);
+  if(kind!=='editable'||!imported.creationVerification)return imported;
+  const scene=inspectEditableSource(strFromU8(files[EDITABLE_PACKAGE_ENTRY]));
+  const review=await reviewExternalResultFiles(files,scene);
+  imported.creationVerification={...imported.creationVerification,...review};
+  return imported;
 }
