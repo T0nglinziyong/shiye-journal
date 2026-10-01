@@ -32,6 +32,18 @@ try{
     assert.ok(result.topZ>result.toolbarZ,JSON.stringify({width,result}));
     assert.equal(result.isolated,'isolate',JSON.stringify({width,result}));
     assert.ok(result.overlaps&&result.coverHit&&result.menuHit,JSON.stringify({width,result}));
+    // The same high-z ink is rendered outside the works grid in details,
+    // matching variants and trash; these frames must not cover the top bar.
+    const previews=await b.evaluate(`(()=>['thumb-sheet','preview-paper'].map(name=>{
+      const frame=document.createElement('div');frame.className=name;
+      frame.style.cssText='position:relative;width:150px;height:150px;margin-top:-100px';
+      const ink=document.createElement('div');ink.style.cssText='position:absolute;inset:0;z-index:2140000000;background:red';
+      frame.append(ink);document.querySelector('#view').prepend(frame);
+      const topbar=document.querySelector('.topbar'),a=frame.getBoundingClientRect(),b=topbar.getBoundingClientRect();
+      const result={name,isolation:getComputedStyle(frame).isolation,overlaps:a.top<b.bottom&&a.bottom>b.top,barHit:document.elementFromPoint(a.left+20,b.top+20)?.closest('.topbar')===topbar};
+      frame.remove();return result;
+    }))()`);
+    assert.ok(previews.every(item=>item.isolation==='isolate'&&item.overlaps&&item.barHit),JSON.stringify({width,previews}));
     const image=await b.command('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});
     await writeFile(join(output,`${width}x${height}.png`),Buffer.from(image.data,'base64'));
   }
