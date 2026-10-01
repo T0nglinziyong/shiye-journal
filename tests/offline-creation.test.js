@@ -93,6 +93,7 @@ test('web ChatGPT handoff is one uploadable file plus a copyable, mode-specific 
   assert.match(strFromU8(toolFiles['START_HERE.txt']),/compose_page/);
   assert.match(strFromU8(toolFiles['START_HERE.txt']),/图片预览/);
   assert.match(strFromU8(toolFiles['START_HERE.txt']),/可下载的「作品\.shiyeproject\.zip」/);
+  assert.match(strFromU8(toolFiles['START_HERE.txt']),/仅示意语法字段，不是成品或本次正文/);
   assert.ok(strFromU8(toolFiles['START_HERE.txt']).length<2000,'task brief should point to contracts instead of inlining them');
   assert.match(strFromU8(toolFiles['START_HERE.txt']),/【本次任务】[\s\S]*【素材与物理规则】[\s\S]*【输出合同】/);
   const agentContract=JSON.parse(strFromU8(toolFiles['contract.json']));

@@ -5,10 +5,20 @@ import {minimumPrintPoints} from './creative-typography.js';
 
 export function reviewCreativeDraft(d,{measureText}={}){
  const warnings=[],texts=(d.textBlocks||[]).filter(x=>!x.isHidden&&!x.hidden);
+ const generated=new Map();
  const rgb=c=>/^#[0-9a-f]{6}$/i.test(c||'')?[1,3,5].map(i=>parseInt(c.slice(i,i+2),16)/255):null;
  const lum=c=>{const a=rgb(c);return a?a.map(v=>v<=.04045?v/12.92:((v+.055)/1.055)**2.4).reduce((s,v,i)=>s+v*[.2126,.7152,.0722][i],0):null;};
  const ctx=globalThis.document?.createElement?.('canvas')?.getContext?.('2d');
  for(const t of texts){
+  // Diagnostic only: never erase or rewrite text, including a user's quote.
+  if(t.agentKey){
+   const content=String(t.content||'').trim().replace(/\s+/g,' ');
+   if(/(?:在这里(?:写|填写|输入)|写在这里|第一段可编辑正文|第二段可编辑正文|示例正文|占位文字|待填写)/u.test(content))warnings.push('生成正文疑似占位说明：'+t.agentKey);
+   if(content.length>=8){
+    if(generated.has(content))warnings.push('生成正文重复：'+generated.get(content)+' / '+t.agentKey);
+    else generated.set(content,t.agentKey);
+   }
+  }
   if(Number.isFinite(d.physicalPageHeightMM)&&d.physicalPageHeightMM>0){
    const points=t.fontSize*d.physicalPageHeightMM/d.canvas.height*72/25.4;
    if(points<minimumPrintPoints)warnings.push('文字可能偏小：'+(t.agentKey||t.id)+'（'+points.toFixed(1)+'pt；如是刻意的小注可保留）');

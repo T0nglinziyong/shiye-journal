@@ -76,5 +76,9 @@
 | 第十三批集成 | `npm test` | 277/277，退出码 0；一次文案改动触发既有“可下载”断言失败，恢复明确可下载语义后重跑通过，未删测试 |
 | 第十三批集成 | `npm run test:ui` | build/UI smoke/route parity/自托管 smoke 通过，退出码 0 |
 | 第十三批真实浏览器 | `SHIYE_TEST_URL=http://localhost:5192 node tests/offline-handoff-browser.mjs` | 四种模拟视口交接流程通过，退出码 0；合成预览 3,439,121 B → 461,677 B，非实体设备/真实材料验收 |
+| 第十三批固定项目 Git 部署 | Vercel 控制台 `shiye-journal-test` Production Deployment | `1873aea1def3479cf307cc4f470b2a2625035f61`，Git `main`，状态 Ready，固定域名未变；无手动部署 |
+| 第十四批内容局部 | `node --test tests/creative-quality.test.js tests/offline-creation.test.js` | 22/22，退出码 0；明显占位语/重复生成文字仅诊断、不改原文；任务包语法例标明非成品。Q-01/Q-02 尚未验收。 |
+| 第十四批集成 | `npm test` | 278/278，退出码 0 |
+| 第十四批集成 | `npm run test:ui` | build/UI smoke/route parity/自托管 smoke 通过，退出码 0；仍有原有大模块提示 |
 
 上面的浏览器运行在桌面 Chromium 中，模拟不同视口；它**不是**实体手机或 iPad 验收。未使用真实账号/私人素材；尚未运行在线 AI、双标签共享 IDB、隔离数据库 CAS、完整工程包往返。保留有意留白、叠压、半藏与出血，不以固定占页率、最低图层数或零重叠判成败。

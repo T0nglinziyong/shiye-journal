@@ -18,6 +18,23 @@ test('creative review does not impose density, word-count or material-count quot
  const graphics={...sparse,textBlocks:[],primitives:[{x:350,y:500,width:120,height:80,fill:'#98b0a2'}]};
  assert.deepEqual(reviewCreativeDraft(graphics).warnings,[]);
 });
+test('Q-03: generated copy receives placeholder and duplicate advice without altering user text',()=>{
+ const d=draft(14);
+ d.textBlocks=[
+  {...d.textBlocks[0],id:'a',agentKey:'a',content:'把正文写在这里'},
+  {...d.textBlocks[0],id:'b',agentKey:'b',y:450,content:'一句可以保留的真实描述'},
+  {...d.textBlocks[0],id:'c',agentKey:'c',y:700,content:'一句可以保留的真实描述'}
+ ];
+ const before=structuredClone(d.textBlocks);
+ const review=reviewCreativeDraft(d);
+ assert.ok(review.warnings.some(w=>w.includes('生成正文疑似占位说明：a')));
+ assert.ok(review.warnings.some(w=>w.includes('生成正文重复：b / c')));
+ assert.deepEqual(d.textBlocks,before);
+ const userCopy={...d,textBlocks:[{...d.textBlocks[0],agentKey:undefined}]};
+ assert.ok(!reviewCreativeDraft(userCopy).warnings.some(w=>w.includes('占位说明')));
+ const normal={...d,textBlocks:[{...d.textBlocks[0],content:'在这里，纸张与光线有了自己的节奏。'}]};
+ assert.ok(!reviewCreativeDraft(normal).warnings.some(w=>w.includes('占位说明')));
+});
 test('both creation modes receive role sizes converted to the actual paper, not screen pixels',()=>{
  const a5=draft(14),a4={...a5,physicalPageHeightMM:297},small=creativeTypographyGuide(a5),large=creativeTypographyGuide(a4);
  assert.match(small,/主标题建议18–26pt（本页font_size约31–43/);
