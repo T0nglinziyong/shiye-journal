@@ -4,6 +4,7 @@
 .matching-page .match-action h2{font-size:20px;margin:0 0 4px}
 .matching-page .match-action p{font-size:13px;color:#78877a;margin:0 0 12px}
 .matching-page .match-action .match-generate{flex-wrap:wrap}
+.matching-page .match-action .match-generate>.btn{display:inline-flex;align-items:center;justify-content:flex-start;text-align:left}
 .matching-page .match-priority{font-size:11px;color:#667963}
 .matching-page .match-priority.required{color:#385d42;font-weight:700}
 .matching-page .match-priority.available{color:#596c57}

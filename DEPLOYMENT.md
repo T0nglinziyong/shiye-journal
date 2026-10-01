@@ -1,5 +1,11 @@
 # 拾页：大陆访问与托管迁移
 
+## 多用户账号（2026-10-01）
+
+现有项目已应用 `deploy/supabase/multi-user-accounts.sql` 与 `multi-user-permissions.sql`；旧账号和资料不迁移、不改写。`lrx` 是唯一管理员，其他用户由管理员在「账号 → 新建账号」创建。服务端 `shiye-account-admin` Edge Function 验证登录 JWT 和数据库管理员角色，再使用 Supabase 托管的服务端密钥创建/重置账号；该密钥不进入 Vercel 或浏览器。公开自助注册已关闭，因为当前免费项目未配置自有 SMTP，默认邮件不能发给普通新用户。新用户凭用户名和初始密码登录，登录后可以输入旧密码修改；忘记密码由管理员重置。Supabase Auth 的服务端「修改密码必须提供当前密码」已开启。注册回调 Site URL 指向固定测试站；邮箱确认设置仍保持开启，不以关闭确认作为邮件问题的规避方式。
+
+`shiye_accounts` 对普通会话仅开放 SELECT；数据库 RLS 使普通用户只能读取/修改自己的元数据。所有新图片与作品文件继续按账号 UUID 前缀存入私有 COS，COS 签名接口只准本人读写，管理员只准跨账号 GET。管理员的其他用户窗口只在内存中读取，不把对方资料写进本人的 IndexedDB、编辑器或同步队列。新环境先按 `schema.sql`、`incremental-sync.sql`、`idempotent-commits.sql`、上述两个多用户迁移的顺序应用，部署 Edge Function 时必须保留 `verify_jwt=true`，然后发布客户端。不要把服务角色密钥或初始密码放进 Git。当前 Supabase Free 无泄露密码检测，参见 [密码安全说明](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection)。
+
 ## 当前生产存储（2026-09-30）
 
 固定测试站仍为 `https://shiye-journal-test.vercel.app`，由 GitHub `main` 自动发布；本轮 CI 预览代码的提交 `3cd0331` 已核对 Git SHA、READY 和固定别名。Supabase 继续负责登录、白名单、关系记录和版本；私有原图、缩略图及作品文件现由腾讯 COS 保存。旧 Supabase Storage 对象在完整备份隔离恢复、全量逐字节复制、COS 再校验、元数据原子切换及空缓存浏览器读图／作品验收后清理；迁移用的短期删除策略已撤销。见 [DATA_LOADING_ARCHITECTURE.md](DATA_LOADING_ARCHITECTURE.md)。

@@ -9,7 +9,7 @@ export default async function handler(req,res){
     authenticate:async token=>{
       const client=createClient(env.VITE_SHIYE_SUPABASE_URL,env.VITE_SHIYE_SUPABASE_PUBLISHABLE_KEY,{auth:{persistSession:false,autoRefreshToken:false},global:{headers:{Authorization:'Bearer '+token},fetch:(input,init)=>fetch(input,{...init,signal:AbortSignal.timeout(15000)})}});
       const {data,error}=await client.auth.getUser(token);if(error||!data.user||data.user.is_anonymous)return null;
-      const allowed=await client.from('shiye_accounts').select('user_id').eq('user_id',data.user.id).maybeSingle();if(allowed.error)throw Error('authorization unavailable');return allowed.data?data.user.id:null;
+      const allowed=await client.from('shiye_accounts').select('user_id,is_admin').eq('user_id',data.user.id).maybeSingle();if(allowed.error)throw Error('authorization unavailable');return allowed.data?{userID:data.user.id,isAdmin:allowed.data.is_admin===true}:null;
     },
     sign:async({path,method,headers,variant})=>{
       const cos=new COS({SecretId:env.SHIYE_COS_SECRET_ID,SecretKey:env.SHIYE_COS_SECRET_KEY});

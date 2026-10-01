@@ -17,6 +17,17 @@ test('COS authorizes only authenticated owner hash paths and validates a whole b
   const put=await run({...req,body:{objects:[{method:'PUT',path:'owner/'+hash,type:'image/png'}]}});assert.equal(put.body.tickets[0].headers['x-cos-forbid-overwrite'],'true');
   assert.equal((await run({...req,method:'DELETE'})).status,405);
 });
+test('administrator may read another account in COS but can never write to its prefix',async()=>{
+  const other='f217ac42-52ae-4d71-9b95-65e190034815';
+  let signed=0;
+  const run=createTicketHandler({ready:true,origin:'https://shiye-journal-test.vercel.app',authenticate:async()=>({userID:'owner',isAdmin:true}),sign:async()=>{signed++;return 'https://example.test/private';}});
+  const req={method:'POST',authorization:'Bearer '+token,body:{objects:[{method:'GET',path:other+'/'+hash}]}};
+  assert.equal((await run(req)).status,200);
+  assert.equal(signed,1);
+  assert.equal((await run({...req,body:{objects:[{method:'PUT',path:other+'/'+hash,type:'image/png'}]}})).status,403);
+  assert.equal((await run({...req,body:{objects:[{method:'GET',path:'arbitrary/'+hash}]}})).status,403);
+  assert.equal(signed,1);
+});
 test('COS adapter batches authorization, never exposes credentials, and does not fall back on failure',async()=>{
   let authorizationCalls=0,objectCalls=0;const store=createCOSStore({enabled:true,client:()=>({auth:{getSession:async()=>({data:{session:{access_token:token}}})}}),fetcher:async(url,options)=>{
     if(url==='/api/cos'){authorizationCalls++;assert.equal(options.headers.Authorization,'Bearer '+token);const {objects}=JSON.parse(options.body);return {ok:true,json:async()=>({tickets:objects.map(r=>({...r,url:'https://example.test/'+r.path,headers:{}}))})};}

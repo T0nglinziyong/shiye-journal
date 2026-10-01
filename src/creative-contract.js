@@ -21,7 +21,9 @@ export const operationContract={anyOf:[
   object({op:enums(['crop']),box,angle:num(0,0),finish:nullable(finish)},['op','box']),
   object({op:enums(['trim']),edge:enums(['left','right','top','bottom']),quantity:object({unit:enums(['ratio','mm']),mode:enums(['keep','remove']),value:num(0,10000)},['unit','mode','value']),finish:nullable(finish)},['op','edge','quantity']),
   object({op:enums(['tape']),unit:enums(['ratio','mm']),start:num(0,100000),length:num(.001,100000)},['op','unit','start','length']),
-  object({op:enums(['mask']),shape:enums(['polygon','rounded','scallop']),points:array(maskPoint,3,256),radius:num(.005,.5),depth:num(.005,.2),waves:integer(2,20)},['op','shape'])
+  object({op:enums(['mask']),shape:enums(['polygon','rounded','scallop']),points:array(maskPoint,3,256),radius:num(.005,.5),depth:num(.005,.2),waves:integer(2,20)},['op','shape']),
+  object({op:enums(['diagonal']),from:maskPoint,to:maskPoint,keep:enums(['left','right'])},['op','from','to','keep']),
+  object({op:enums(['window']),shape:enums(['rectangle','ellipse']),box:array(num(0,1),4,4)},['op','shape','box'])
 ]};
 const simple=object({asset:key,piece:key,unit:integer(0,10000),...coordinates,role:string(80)},['asset']);
 const material=object({asset:key,piece:key,unit:integer(0,10000),role:nullable(string(80)),operations:array(operationContract,1,12),placement:object({x:num(-2,3),y:num(-2,3),rotation:num(-180,180),z:integer(-1000,1000)},['x','y','rotation','z']),relation:nullable(object({kind:enums(['revealLeft','revealRight','revealBottom','behind','anchorCorner']),target:key,exposed_mm:num(0,40)},['kind','target','exposed_mm'])),opacity:num(0,1),flip_horizontal:{type:'boolean'}},['asset','piece','operations','placement']);
@@ -50,7 +52,7 @@ const descriptions={
   compose_story_page:'将主题、两段观察与真实素材编成可编辑的日记/拼贴图层；实物尺寸不缩放。失败整体回滚。',
   compose_page:'原子编排材料、图形、文字、纸张；坐标 ratio/pt/mm，relative_to + offset 为目标宽高倍数。crop 为源比例，crop_px 为源像素。失败整体回滚。',
   place_materials:'放置整件真实素材；尺寸来自素材库，同件已放置时更新位置。piece 与 unit 指定片段及库存单位。',
-  edit_materials:'连续加工现有片段：append 接着当前片加工，replace 从原材料开始。支持矩形裁片、胶带截段，以及最后一步 mask 的不规则多边形、圆角或花边可见边缘；开窗与斜裁仍会拒绝。短边至少2mm。',
+  edit_materials:'连续加工现有片段：append 接着当前片加工，replace 从原材料开始。先矩形裁片/胶带截段，再以 mask 设圆角、花边或多边形外轮廓；diagonal 以源片比例坐标 from/to 的直线裁去一侧，keep 为 left/right；window 在片段内部开透明矩形或椭圆孔，box=[x,y,宽,高]。外轮廓、斜裁和多个不重叠开窗可组合，不会变成白色填充；实物尺寸保持原比例。',
   upsert_materials:'整体替换片段的完整工序；remove 先移走旧片，再核验尺寸、库存单位与裁片不重叠。',
   move_elements:'修改现有图层的位置、旋转、层序；实物大小保持不变。ratio/pt/mm 或 relative_to + offset。',
   arrange_elements:'把图层排成行/列/不等尺寸网格，保留实物大小，以毫米间距和整体中心布局。',

@@ -1,7 +1,7 @@
 import {uid,itemFromAsset} from './domain.js';
 import {textLines,textFont} from './editor-tools-model.js';
 import {reviewCreativeDraft} from './creative-quality.js';
-import {materialMaskPoints} from './material-mask.js';
+import {materialMaskPoints,materialMaskArea,cutMaterialDiagonal,addMaterialWindow} from './material-mask.js';
 import {agentTools,directPageContract,directPageToTools,validateTool,validateValue} from './creative-contract.js';
 export {agentTools,directPageContract,directPageToTools};
 const EPS=1e-6,fields=['items','primitives','textBlocks'];
@@ -68,7 +68,18 @@ function process(d,item,asset,operations,mode,options){
       mask={shape:op.shape,...(op.shape==='polygon'?{points:structuredClone(op.points)}:op.shape==='rounded'?{radius:op.radius??.1}:{depth:op.depth??.05,waves:op.waves??8})};
       materialMaskPoints(mask);steps.push(structuredClone(op));continue;
     }
-    if(mask)throw Error('不规则边缘须是最后一道加工工序');
+    if(op.op==='diagonal'){
+      mask=cutMaterialDiagonal(mask,op.from,op.to,op.keep);
+      if(permission(options,asset)==='少量裁剪'&&current.width*current.height*materialMaskArea(mask)<.6-EPS)throw Error(asset.title+' 仅允许少量裁剪，须保留至少60%面积');
+      steps.push(structuredClone(op));continue;
+    }
+    if(op.op==='window'){
+      if(op.box[2]*current.width*asset.physicalWidthMM<2-EPS||op.box[3]*current.height*asset.physicalHeightMM<2-EPS)throw Error('开窗宽高不得小于 2 mm');
+      mask=addMaterialWindow(mask,{shape:op.shape,box:op.box});
+      if(permission(options,asset)==='少量裁剪'&&current.width*current.height*materialMaskArea(mask)<.6-EPS)throw Error(asset.title+' 仅允许少量裁剪，须保留至少60%面积');
+      steps.push(structuredClone(op));continue;
+    }
+    if(mask)throw Error('外轮廓和开窗之后不能再改变来源裁片；请先裁片，再加工边缘');
     if(op.finish&&(op.finish.line!=='straight'||op.finish.corner!=='square'||op.finish.depthMM!==0||op.finish.radiusMM!==0))throw Error('尚未实现波浪、撕边或圆角加工');
     if(op.angle)throw Error('尚未实现斜向裁切');
     const wMM=current.width*asset.physicalWidthMM,hMM=current.height*asset.physicalHeightMM;

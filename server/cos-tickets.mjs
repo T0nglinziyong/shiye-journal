@@ -7,10 +7,18 @@ export function createTicketHandler({ready,origin,authenticate,sign}){
     if(!ready)return fail(503,'COS 服务端授权尚未配置，原数据未迁移');
     const match=/^Bearer ([A-Za-z0-9._-]{20,4096})$/.exec(req.authorization||'');if(!match)return fail(401,'请先登录');
     try{
-      const owner=await authenticate(match[1]);if(!owner)return fail(403,'账号无权访问');
+      const identity=await authenticate(match[1]);if(!identity)return fail(403,'账号无权访问');
+      const owner=typeof identity==='string'?identity:identity.userID;
+      const admin=typeof identity==='object'&&identity.isAdmin===true;
+      if(typeof owner!=='string'||!owner)return fail(403,'账号无权访问');
       let body=req.body;if(typeof body==='string'){if(body.length>32768)return fail(413,'请求过大');try{body=JSON.parse(body);}catch{return fail(400,'请求无效');}}
       const rows=body?.objects;if(!Array.isArray(rows)||!rows.length||rows.length>24)return fail(400,'每批最多24个对象');
-      const valid=rows.every(row=>row&&['GET','PUT'].includes(row.method)&&typeof row.path==='string'&&row.path.startsWith(owner+'/')&&leaf.test(row.path.slice(owner.length+1))&&(row.variant===undefined||row.variant==='preview360'&&row.method==='GET'&&/^[a-f0-9]{64}$/.test(row.path.slice(owner.length+1)))&&(row.method!=='PUT'||typeof row.type==='string'&&/^(image\/(png|jpeg|webp)|application\/(json|gzip|octet-stream))$/.test(row.type)));
+      const valid=rows.every(row=>{
+        if(!row||!['GET','PUT'].includes(row.method)||typeof row.path!=='string')return false;
+        const slash=row.path.indexOf('/'),target=slash<0?'':row.path.slice(0,slash),name=row.path.slice(slash+1);
+        if(!leaf.test(name)||!(target===owner||admin&&row.method==='GET'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(target)))return false;
+        return (row.variant===undefined||row.variant==='preview360'&&row.method==='GET'&&/^[a-f0-9]{64}$/.test(name))&&(row.method!=='PUT'||target===owner&&typeof row.type==='string'&&/^(image\/(png|jpeg|webp)|application\/(json|gzip|octet-stream))$/.test(row.type));
+      });
       if(!valid)return fail(403,'对象路径或操作不允许');
       const tickets=await Promise.all(rows.map(async row=>{
         const headers=row.method==='PUT'?{'content-type':row.type,'x-cos-forbid-overwrite':'true'}:{};
