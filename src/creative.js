@@ -25,8 +25,9 @@ function checkDraft(d,assets){
     const key=keyOf(i);if(keys.has(key))throw Error('图层编号重复：'+key);keys.add(key);
     for(const k of ['x','y','width','height'])finite(i[k],k,k==='width'||k==='height'?EPS:-20000);
     finite(i.rotation??0,'旋转',-180,180);finite(i.zIndex??0,'图层',-1000,20000);
-    if(i.isParked||i.hidden||i.isHidden)continue;
-    const bounds=dimensions(i);if(i.x-bounds.width/2<-EPS||i.x+bounds.width/2>d.canvas.width+EPS||i.y-bounds.height/2<-EPS||i.y+bounds.height/2>d.canvas.height+EPS){const fixed=v=>Number(v.toFixed(4));throw Error('图层超出纸张：'+key+'；实际中心 ratio='+JSON.stringify([fixed(i.x/d.canvas.width),fixed(i.y/d.canvas.height)])+'，实际宽高 ratio='+JSON.stringify([fixed(bounds.width/d.canvas.width),fixed(bounds.height/d.canvas.height)])+'；中心 x 必须在 '+JSON.stringify([fixed(bounds.width/2/d.canvas.width),fixed(1-bounds.width/2/d.canvas.width)])+'，y 必须在 '+JSON.stringify([fixed(bounds.height/2/d.canvas.height),fixed(1-bounds.height/2/d.canvas.height)])+'。文字自动换行会扩大高度，请短标题、缩小字号或移动中心。'+(i.materialRelation?'该层位置由relation覆盖：必须调整目标片段位置或设relation:null，改变自身placement无效。'+JSON.stringify(i.materialRelation):''));}
+    // The page is a print crop, not a limit on where a real sheet may lie.
+    // Intentional bleed/overhang is clipped by the page renderer; dimensions,
+    // source crops and inventory are still checked below.
   }
   for(const i of d.items){
     const a=assets.find(a=>a.id===i.assetID);if(!a)throw Error('缺少素材 '+i.assetID);

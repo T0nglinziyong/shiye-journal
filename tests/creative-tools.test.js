@@ -35,8 +35,24 @@ test('the advertised 14 Swift tools all execute editable changes or inspection',
 });
 
 test('compose_page is atomic and prior calls survive an invalid component',()=>{
-  const r=run(draft(),[call('set_paper',{color:'#EAF0EE'}),call('compose_page',{paper:{color:'#FFFFFF'},materials:[{asset:'m2',piece:'p',x:.5,y:.5}],texts:[{key:'bad',content:'越界文字',x:2,y:.5,width:.4}]})]);
+  const r=run(draft(),[call('set_paper',{color:'#EAF0EE'}),call('compose_page',{paper:{color:'#FFFFFF'},materials:[{asset:'m2',piece:'p',x:.5,y:.5}],texts:[{key:'bad',content:'无效字号',x:.5,y:.5,width:.4,font_size:401}]})]);
   assert.deepEqual(r.results.map(r=>r.ok),[true,false]);assert.equal(r.draft.paperColor,'#EAF0EE');assert.equal(r.draft.items.length,0);assert.equal(r.draft.textBlocks.length,0);
+});
+
+test('page bleed and oversized text remain editable without changing real material size',()=>{
+  const paper={...assets[0],physicalWidthMM:163.63,physicalHeightMM:212.75};
+  const result=applyToolCalls(directPageToTools({version:3,style:'自由构图',intent:null,
+    paper:{color:'#FCFAF0',pattern:'plain'},
+    items:[{asset:'m1',piece:'底纸',unit:0,operations:[{op:'whole'}],placement:{x:.255,y:.505,rotation:-1,z:2},relation:null}],
+    text_blocks:[{content:'多行文字可有意跨过纸边，不应被误认作实物违规。'.repeat(8),font_style:'sans',x:.3,y:.9,width:.24,height:.04,font_size:28,color:'#30463d'}]
+  }),draft({mode:'spread',ratio:'a5'}),[paper],{m1:'paper'});
+  assert.equal(result.results[0].ok,true,JSON.stringify(result.results));
+  const page=result.draft,placed=page.items[0];
+  assert.equal(page.agentRun.status,'finished');
+  assert.ok(placed.y+placed.height/2>page.canvas.height);
+  assert.ok(Math.abs(placed.width-paper.physicalWidthMM/page.physicalPageHeightMM*page.canvas.height)<1e-6);
+  assert.ok(Math.abs(placed.height-paper.physicalHeightMM/page.physicalPageHeightMM*page.canvas.height)<1e-6);
+  assert.ok(page.textBlocks[0].height>.04*page.canvas.height);
 });
 
 test('ratio/pt/mm and relative positions share the same physical scale',()=>{
@@ -89,13 +105,14 @@ test('Swift v3 direct pages decode atomically into real editable layers and rela
   const page={version:3,style:'留白叙事',intent:'光与纹理',paper:{color:'#FCFAF0',pattern:'dots'},items:[{asset:'m1',piece:'p1',unit:0,role:'衬底',operations:[{op:'whole'}],placement:{x:.5,y:.5,rotation:0,z:10},relation:null},{asset:'m2',piece:'p2',unit:0,role:'主角',operations:[{op:'whole'}],placement:{x:.5,y:.5,rotation:0,z:11},relation:{kind:'behind',target:'p1',exposed_mm:0}}],text_blocks:[{content:'窗边的光',font_style:'serif',x:.5,y:.8,width:.6,height:.1,font_size:32,color:'#30463D'}]};
   const calls=directPageToTools(page);assert.equal(calls.length,1);const d=success(draft(),calls);assert.equal(d.style,'airy');assert.equal(d.items.length,2);assert.equal(d.textBlocks.length,1);assert.equal(d.items[1].x,d.items[0].x);assert.equal(d.items[1].zIndex,9);
   const decoded=applyToolCalls(JSON.stringify(page),draft(),assets,aliases);assert.equal(decoded.results[0].ok,true);
-  const bad=structuredClone(page);bad.items[1].placement.x=3;bad.items[1].relation=null;const rejected=run(draft(),directPageToTools(bad));assert.equal(rejected.results[0].ok,false);assert.equal(rejected.draft.items.length,0);
+  const bleed=structuredClone(page);bleed.items[1].placement.x=3;bleed.items[1].relation=null;const accepted=run(draft(),directPageToTools(bleed));assert.equal(accepted.results[0].ok,true);
+  const bad=structuredClone(page);bad.items[1].placement.x=4;bad.items[1].relation=null;assert.throws(()=>directPageToTools(bad),/合同不合法/);
 });
 
 test('unsupported decorative cuts, malicious fields, NaN, rotation overflow and locked edits fail explicitly',()=>{
   const d=placed();const badCalls=[call('edit_materials',{items:[{piece:'p1',operations:[{op:'windowFrame',box:{unit:'ratio',mode:'keep',values:[0,0,.5,.5]}}]}]}),call('edit_materials',{items:[{piece:'p1',operations:[{...crop([0,0,.5,.5]),finish:{line:'wave',depthMM:2,periodMM:5,corner:'square',radiusMM:0}}]}]}),call('upsert_text',{items:[{key:'t',content:'<script>alert(1)</script>',width:.3}]}),call('move_elements',{items:[{key:'p1',x:NaN}]}),call('upsert_primitives',{items:[{key:'g',kind:'fake'}]}),call('set_paper',{color:'#FFFFFF',url:'https://example.com'})];
   const rejected=run(d,badCalls);assert.ok(rejected.results.every(r=>!r.ok));assert.deepEqual(rejected.draft,d);
-  const edge=success(draft(),[call('place_materials',{items:[{asset:'m1',piece:'p',x:.5,y:50/297}]})]);const rotation=run(edge,[call('move_elements',{items:[{key:'p',rotation:45}]})]);assert.equal(rotation.results[0].ok,false);
+  const edge=success(draft(),[call('place_materials',{items:[{asset:'m1',piece:'p',x:.5,y:50/297}]})]);const rotation=run(edge,[call('move_elements',{items:[{key:'p',rotation:45}]})]);assert.equal(rotation.results[0].ok,true);
   d.items[0].isLocked=true;for(const c of [call('move_elements',{items:[{key:'p1',x:.4}]}),call('delete_elements',{keys:['p1']}),call('edit_materials',{items:[{piece:'p1',operations:[crop([0,0,.8,.8])]}]}),call('arrange_elements',{keys:['p1','p2'],mode:'row'})])assert.equal(run(d,[c]).results[0].ok,false);
   assert.throws(()=>validateTool('move_elements',{items:[{key:'p1',width:20}]}),/未知字段/);
 });

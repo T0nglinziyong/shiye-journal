@@ -99,5 +99,12 @@ try{
   await wait('#canvas-page');
   assert.ok(await evaluate('document.querySelector(".swift-editor-head h1")?.textContent.includes("ZIP 可编辑作品")'));
   await click('[data-act="back-works"]','.match-previews');
+  const bleedPage={...page,items:[{...page.items[0],piece:'bleed-piece',placement:{x:.01,y:.01,rotation:8,z:1}}],text_blocks:[{content:'多行文字可以延伸到页边。'.repeat(10),font_style:'sans',x:.96,y:.95,width:.08,height:.02,font_size:28,color:'#30463d'}]};
+  await click('[data-act="match-import-gpt"]','#offline-gpt-result');
+  await evaluate(`document.querySelector('#offline-gpt-result').value=${JSON.stringify(JSON.stringify({format:'shiye-editable-project',version:1,source:{...source,bundleId:'offline-browser-bleed'},title:'出血裁边测试',page:bleedPage}))}`);
+  await click('#offline-import-text','#canvas-page');
+  const bleed=await evaluate('(()=>{const page=document.querySelector("#canvas-page"),material=page.querySelector(".canvas-object.material"),text=page.querySelector(".canvas-object.text");return {clips:getComputedStyle(page).overflow==="hidden",materialOverhang:parseFloat(material.style.left)<0,textOverhang:parseFloat(text.style.top)+parseFloat(text.style.height)>page.clientHeight}})()');
+  assert.deepEqual(bleed,{clips:true,materialOverhang:true,textOverhang:true});
+  const bleedShot=await command('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});await writeFile(`${directory}/imported-bleed-editor.png`,Buffer.from(bleedShot.data,'base64'));
   assert.deepEqual(b.errors,[]);console.log('Offline GPT handoff verified in four viewports; preview benchmark:',previewSize,'screenshots:',directory);
 }finally{await b.close();}
