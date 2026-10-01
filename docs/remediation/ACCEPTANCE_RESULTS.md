@@ -67,5 +67,9 @@
 | 第十一批集成 | `npm test` | 276/276，退出码 0 |
 | 第十一批集成 | `npm run test:ui` | build/UI smoke/route parity/自托管 smoke 通过，退出码 0；构建保留原有大模块提示 |
 | 第十一批真实浏览器 | `SHIYE_TEST_URL=http://localhost:5192 node tests/offline-handoff-browser.mjs` | 四种模拟视口交接流程通过，退出码 0；合成预览图 3,439,121 B → 461,677 B；非实体设备及真实素材验收 |
+| 第十一批 Git 部署 | Vercel Git `main` | `42381098866df5d2be530feb95a903b3c4b32a26` 构建失败：`.vercelignore` 漏放 `scripts/build-offline-runtime.mjs`，线上维持上一 Ready 版本；未冒充发布成功 |
+| 第十二批发布修复局部 | `node --test tests/vercel-build-inputs.test.js` | 1/1，退出码 0；核对 `npm run build` 的所有 Node 脚本均在 Vercel 上传白名单 |
+| 第十二批集成 | `npm test` | 277/277，退出码 0 |
+| 第十二批集成 | `npm run test:ui` | build/UI smoke/route parity/自托管 smoke 通过，退出码 0；待 Git 自动部署复核 |
 
 上面的浏览器运行在桌面 Chromium 中，模拟不同视口；它**不是**实体手机或 iPad 验收。未使用真实账号/私人素材；尚未运行在线 AI、双标签共享 IDB、隔离数据库 CAS、完整工程包往返。保留有意留白、叠压、半藏与出血，不以固定占页率、最低图层数或零重叠判成败。

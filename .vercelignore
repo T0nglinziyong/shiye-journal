@@ -19,6 +19,7 @@ server/*
 scripts/*
 !scripts/precache.mjs
 !scripts/license-notices.mjs
+!scripts/build-offline-runtime.mjs
 **/.env
 **/.env.*
 **/*.shiyepwa
