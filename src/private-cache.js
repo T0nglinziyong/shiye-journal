@@ -22,7 +22,9 @@ export function createPrivateCache({name='shiye-private-read-cache-v1',limit=160
         return priority(a)-priority(b)||a.time-b.time;
       });let size=rows.reduce((n,r)=>n+r.bytes,0);const tx=d.transaction(['entries','sizes'],'readwrite');for(const r of rows){if(size<=limit)break;tx.objectStore('entries').delete(r.key);tx.objectStore('sizes').delete(r.key);size-=r.bytes;}await tx.done;}
     },
-    async clear(account){const d=await db(),rows=await d.getAll('sizes'),tx=d.transaction(['entries','sizes'],'readwrite');for(const r of rows)if(r.account===account){tx.objectStore('entries').delete(r.key);tx.objectStore('sizes').delete(r.key);}await tx.done;},
+    // Logout clears disposable reads, never unacknowledged edits or their Blob
+    // payloads. The explicit outbox discard flow owns deletion of these keys.
+    async clear(account){const d=await db(),rows=await d.getAll('sizes'),tx=d.transaction(['entries','sizes'],'readwrite');for(const r of rows)if(r.account===account&&!['project-outbox','import-outbox'].includes(JSON.parse(r.key)[1])){tx.objectStore('entries').delete(r.key);tx.objectStore('sizes').delete(r.key);}await tx.done;},
   };
 }
 export const privateCache=createPrivateCache();

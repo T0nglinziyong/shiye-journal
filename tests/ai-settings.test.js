@@ -24,7 +24,7 @@ test('old and invalid creative settings migrate to bounded safe defaults',()=>{
   assert.equal(defaults.reasoningMode,'low');
   assert.equal(defaults.sendPresetReferences,false);
   assert.equal('referencePage' in defaults,false);
-  assert.equal(defaults.maxTurns,5);
+  assert.equal(defaults.maxTurns,16);
   assert.equal(normalizeAISettings({maxTurns:0}).maxTurns,5);
   assert.equal(normalizeAISettings({maxTurns:-1}).maxTurns,1);
   assert.equal(normalizeAISettings({reasoningMode:'thorough'}).reasoningMode,'providerDefault');

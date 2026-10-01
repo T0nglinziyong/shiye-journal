@@ -16,3 +16,17 @@ test('a newly cached original evicts originals before already loaded thumbnails'
   assert.equal(await cache.get('user','image:first'),undefined);
   assert.equal(await (await cache.get('user','thumbnail:first')).text(),'preview');
 });
+test('logout clears disposable reads but preserves account-scoped pending edits',async()=>{
+  const name='private-cache-logout-'+Date.now(),cache=createPrivateCache({name});
+  const pending=new Blob(['uncommitted photo']);
+  await cache.put('user-a','project-outbox',[{record:{id:'draft-a'}}]);
+  await cache.put('user-a','import-outbox',[{record:{id:'import-a',data:pending}}]);
+  await cache.put('user-a','records:assets',{revision:2});
+  await cache.put('user-b','records:assets',{revision:3});
+  await cache.clear('user-a');
+  const reopened=createPrivateCache({name});
+  assert.deepEqual(await reopened.get('user-a','project-outbox'),[{record:{id:'draft-a'}}]);
+  assert.equal(await (await reopened.get('user-a','import-outbox'))[0].record.data.text(),'uncommitted photo');
+  assert.equal(await reopened.get('user-a','records:assets'),undefined);
+  assert.deepEqual(await reopened.get('user-b','records:assets'),{revision:3});
+});

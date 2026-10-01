@@ -42,7 +42,7 @@ export async function runCreativeAgent(o){
  const {draft,assets,aliases,key,endpoint='https://api.deepseek.com/chat/completions',maxTurns=5,requestTimeout=75,signal,onTurn=()=>{},request=fetch,onScene,onInspection}=o;
  if(!key?.trim())throw Error('请输入自己的 API 密钥');if(new URL(endpoint).protocol!=='https:')throw Error('API 地址必须使用 HTTPS');
  const options={...o,allowNoText:o.textMode==='none'||o.textMode==='requested'&&!/文字|正文|标题|写|清单/.test(o.prompt||'')};
- let working=structuredClone(draft),turn=0,failures=0;if(working.agentRun?.status==='finished')working.agentRun={...working.agentRun,status:'editing'};const messages=buildCreativeMessages({...o,draft:working}),limit=maxTurns===0?5:Math.max(1,Math.min(5,maxTurns));
+ let working=structuredClone(draft),turn=0,failures=0;if(working.agentRun?.status==='finished')working.agentRun={...working.agentRun,status:'editing'};const messages=buildCreativeMessages({...o,draft:working}),limit=maxTurns===0?5:Math.max(1,Math.min(20,maxTurns));
  for(;turn<limit;){
   if(signal?.aborted)throw signal.reason||Error('创作已停止');turn++;
   const payload=buildCreativePayload(o,messages),protocol=creativeProtocol(o),native=protocol.native;

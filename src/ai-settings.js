@@ -21,7 +21,7 @@ export function normalizeAISettings(value={}){
     deliveryMode,...deliveryProfile(deliveryMode),imageModel:IMAGE_MODELS.includes(value.imageModel)?value.imageModel:AI_DEFAULTS.imageModel,
     temperature:limit(value.temperature,0,2,AI_DEFAULTS.temperature),
     maxTokens:Math.round(limit(value.maxTokens,2000,16000,AI_DEFAULTS.maxTokens)),
-    maxTurns:Math.round(limit(value.maxTurns===0?5:value.maxTurns,1,5,AI_DEFAULTS.maxTurns)),
+    maxTurns:Math.round(limit(value.maxTurns===0?5:value.maxTurns,1,20,AI_DEFAULTS.maxTurns)),
     includeThumbnails:value.includeThumbnails!==false,customVision:value.customVision===true,
     requestTimeout:limit(value.requestTimeout,20,180,AI_DEFAULTS.requestTimeout),
     sendOutputLimit:value.sendOutputLimit!==false,disableThinking:value.disableThinking!==false,

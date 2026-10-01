@@ -67,7 +67,9 @@ function process(d,item,asset,operations,mode,options){
     if(op.op==='mask'){
       if(mask)throw Error('一个素材片段只能使用一道可见边缘工序');
       mask={shape:op.shape,...(op.shape==='polygon'?{points:structuredClone(op.points)}:op.shape==='rounded'?{radius:op.radius??.1}:{depth:op.depth??.05,waves:op.waves??8})};
-      materialMaskPoints(mask);steps.push(structuredClone(op));continue;
+      materialMaskPoints(mask);
+      if(permission(options,asset)==='少量裁剪'&&current.width*current.height*materialMaskArea(mask)<.6-EPS)throw Error(asset.title+' 仅允许少量裁剪，须保留至少60%面积');
+      steps.push(structuredClone(op));continue;
     }
     if(op.op==='diagonal'){
       mask=cutMaterialDiagonal(mask,op.from,op.to,op.keep);
@@ -119,7 +121,7 @@ function addMaterials(d,assets,aliases,list){
     Object.assign(item,place(d,entry));if(entry.rotation!==undefined)item.rotation=entry.rotation;if(entry.z!==undefined)item.zIndex=entry.z;if(entry.role!==undefined)item.creativeRole=entry.role;if(entry.opacity!==undefined)item.opacity=entry.opacity;if(entry.flip_horizontal!==undefined)item.isFlippedHorizontally=entry.flip_horizontal;baseline(item);output.push(item);
   }return output;
 }
-function putTexts(d,list,options){for(const t of list){
+function putTexts(d,list,options){if(options.textMode==='none'&&list.length)throw Error('本次创作设置为不新增文字图层');for(const t of list){
   const old=d.textBlocks.find(i=>keyOf(i)===t.key);if(old)locked(old);else if(index(d).has(t.key))throw Error('图层编号已被占用：'+t.key);
   const role=t.role||old?.role||'body',font=t.font_size??old?.fontSize??(role==='title'?58:role==='caption'?28:38),sizeUnit=t.size_unit||'ratio';
   const data={agentKey:t.key,content:t.content,...place(d,t,old),width:converted(t.width,sizeUnit,d,'width'),fontSize:font,style:t.font_style||t.style||old?.style||'serif',fontName:t.font_name??old?.fontName??null,color:t.color||old?.color||'#30463d',zIndex:t.z??old?.zIndex??900,role,rotation:t.rotation??old?.rotation??0,alignment:t.alignment||old?.alignment||'left',bold:t.bold??old?.bold??false,italic:t.italic??old?.italic??false,underline:t.underline??old?.underline??false,strikethrough:t.strikethrough??old?.strikethrough??false,opacity:t.opacity??old?.opacity??1,lineSpacing:t.line_spacing??old?.lineSpacing??0,fixedLineHeight:t.fixed_line_height??old?.fixedLineHeight??null,paragraphSpacing:t.paragraph_spacing??old?.paragraphSpacing??0,letterSpacing:t.letter_spacing??old?.letterSpacing??0};
@@ -200,6 +202,7 @@ function inspect(d,assets,aliases,a,options){return {materials:a.keys.map(key=>{
 function finish(d,assets,a,options){
   for(const id of new Set([...(options.requiredAssetIDs||[]),...Object.keys(options.materialUseRequired||{}).filter(id=>options.materialUseRequired[id])])){
     const items=d.items.filter(i=>i.assetID===id&&!i.isParked&&!i.isHidden&&!i.hidden);if(!items.length)throw Error('必用素材尚未放入页面：'+(assets.find(a=>a.id===id)?.title||id));
+    if(!items.some(i=>{const bounds=dimensions(i);return (i.opacity??1)>0&&i.x+bounds.width/2>0&&i.x-bounds.width/2<d.canvas.width&&i.y+bounds.height/2>0&&i.y-bounds.height/2<d.canvas.height;}))throw Error('必用素材在页面中完全不可见：'+(assets.find(a=>a.id===id)?.title||id));
     const hint=options.materialUseHints?.[id];if(['截段固定','取一块真实区域'].includes(hint)&&!items.some(i=>i.cropRect))throw Error('必做用法尚未裁切：'+hint);
     if(hint==='完整保留'&&items.some(i=>i.cropRect))throw Error('必做用法要求完整保留：'+(assets.find(a=>a.id===id)?.title||id));
   }checkDraft(d,assets);const review=reviewCreativeDraft(d,{measureText:options.measureText});d.agentRun={...d.agentRun,status:'finished',note:a.summary||'',qualityNotes:review.warnings,visualReview:'最后修改后的画面需由代理另行审阅'};
