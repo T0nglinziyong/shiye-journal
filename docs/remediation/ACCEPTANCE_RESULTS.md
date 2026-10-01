@@ -95,5 +95,10 @@
 | 第十七批集成 | `npm test` | 281/281，退出码 0 |
 | 第十七批集成 | `npm run test:ui` | build/UI smoke/route parity/自托管 smoke 通过，退出码 0；保留原有大模块提示 |
 | 第十七批真实浏览器 | `SHIYE_TEST_URL=http://localhost:5192 node tests/offline-handoff-browser.mjs` | 四种模拟视口交接通过，退出码 0；非实体设备/真实模型文字质量验收 |
+| 第十七批固定项目 Git 部署 | Vercel 控制台 `shiye-journal-test` Production Deployment | `23a7d865aa2ee05b9843bf5d8b23a90edd4b8b4f`，Git `main`，状态 Ready，固定域名未变；无手动部署 |
+| 第十八批在线会话局部 | `node --test tests/ai-run-target.test.js tests/runner.test.js` | 8/8，退出码 0；冻结目标 ID、手改时分流候选、取消发生在模型回执后则不执行工具。非真实多标签/网络 barrier 验收 |
+| 第十八批集成 | `npm test` | 285/285，退出码 0 |
+| 第十八批集成 | `npm run test:ui` | build/UI smoke/route parity/自托管 smoke 通过，退出码 0；保留原有大模块提示 |
+| 第十八批真实浏览器 | `SHIYE_TEST_URL=http://localhost:5192 node tests/offline-handoff-browser.mjs` | 四种模拟视口交接通过，退出码 0；未在实体设备进行在线 AI 切稿竞态测试 |
 
 上面的浏览器运行在桌面 Chromium 中，模拟不同视口；它**不是**实体手机或 iPad 验收。未使用真实账号/私人素材；尚未运行在线 AI、双标签共享 IDB、隔离数据库 CAS、完整工程包往返。保留有意留白、叠压、半藏与出血，不以固定占页率、最低图层数或零重叠判成败。

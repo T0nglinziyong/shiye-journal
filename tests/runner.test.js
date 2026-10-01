@@ -26,6 +26,12 @@ test('empty model response cannot mark a blank page complete',async()=>{
   const request=async()=>({ok:true,json:async()=>({choices:[{message:{role:'assistant',content:null,tool_calls:[]}}]})});
   await assert.rejects(runCreativeAgent({draft:draft(),assets:[],aliases:{},key:'test-key',request}),/没有返回创作操作/);
 });
+test('A-06: cancellation during response inspection never executes the returned tools',async()=>{
+ const controller=new AbortController(),turns=[];
+ const request=async()=>({ok:true,json:async()=>({choices:[{message:{role:'assistant',content:'',tool_calls:[{id:'paper',function:{name:'set_paper',arguments:'{"color":"#cc0000"}'}}]}}]})});
+ await assert.rejects(runCreativeAgent({draft:draft(),assets:[],aliases:{},key:'test-key',request,signal:controller.signal,onResponse:async()=>controller.abort(Error('用户停止')),onTurn:value=>turns.push(value)}),/用户停止/);
+ assert.equal(turns.length,0);
+});
 
 test('inspection images follow ALL native tool replies, including failed calls',async()=>{
  const replies=[{choices:[{message:{tool_calls:[{id:'inspect',function:{name:'inspect_materials',arguments:'{"keys":["m1"]}'}},{id:'bad',function:{name:'set_paper',arguments:'{"color": #fff}'}},{id:'place',function:{name:'place_materials',arguments:'{"items":[{"asset":"m1","x":0.2,"y":0.2}]}' }},{id:'text',function:{name:'upsert_text',arguments:'{"items":[{"key":"t","content":"今天的春风落在纸上","width":0.6}]}'}}]}}]},{choices:[{message:{tool_calls:[{id:'finish',function:{name:'finish_design',arguments:'{}'}}]}}]}];

@@ -51,10 +51,12 @@ export async function runCreativeAgent(o){
   const payload=buildCreativePayload(o,messages),protocol=creativeProtocol(o),native=protocol.native;
   const data=await requestChat({endpoint,key,payload,request,signal,timeout:requestTimeout,onProgress:p=>o.onProgress?.({...p,turn})}),choice=data.choices?.[0],message=choice?.message;if(!message)throw Error('模型没有返回可用消息');
   await o.onResponse?.(data);
+  if(signal?.aborted)throw signal.reason||Error('创作已停止');
   if(choice.finish_reason==='length'){messages.push({role:'user',content:'输出截断，整轮未执行。返回较小完整批次。实际状态：'+JSON.stringify(creativeScene(working,aliases))});await onTurn({turn,results:[{name:'response',ok:false,detail:'输出截断，整轮未执行'}],draft:working,text:''});continue;}
   let calls;
   try{calls=protocol.calls(message,turn);}catch(e){messages.push({role:'user',content:'页面/JSON不符合合同：'+e.message+'。未执行；修正后完整返回。'});await onTurn({turn,results:[{name:'response',ok:false,detail:e.message}],draft:working,text:''});continue;}
   if(!calls.length)throw Error('第 '+turn+' 轮没有返回创作操作；画布未因此标记为完成。');
+  if(signal?.aborted)throw signal.reason||Error('创作已停止');
   messages.push(native?{role:'assistant',content:message.content||null,...(message.reasoning_content?{reasoning_content:message.reasoning_content}:{}),tool_calls:calls}:{role:'assistant',content:message.content||''});
   const result=applyToolCalls({tool_calls:calls},working,assets,aliases,options);working=result.draft;
   const inspectionParts=[];
@@ -62,6 +64,7 @@ export async function runCreativeAgent(o){
   // Every native call needs its contiguous tool reply before any user image.
   // Interleaving inspection previews makes the provider reject the next turn.
   if(inspectionParts.length)messages.push({role:'user',content:inspectionParts});
+  if(signal?.aborted)throw signal.reason||Error('创作已停止');
   const review=reviewCreativeDraft(working,{allowNoText:options.allowNoText,purposes:o.pagePurposes,styles:o.styles,materialPriority:o.materialPriority,assets});await onTurn({turn,results:result.results,draft:working,text:message.content||'',review});
   failures=result.results.some(x=>x.ok)?0:failures+1;
   if(working.agentRun?.status==='finished')return {draft:working,turns:turn,finished:true,messages,review};
