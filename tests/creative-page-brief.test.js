@@ -36,8 +36,11 @@ test('API editable, web editable and API/web image handoffs share the same compo
   assert.match(strFromU8(webFiles['CREATIVE_GUIDE.txt']),/连贯的多行正文/);
   assert.match(strFromU8(webFiles['CREATIVE_GUIDE.txt']),/避免所有内容挤在一角/);
   const image=imagePrompt({project:p,draft:p.drafts[0],assets:[asset],ids:[asset.id],theme:p.intent,includeImages:false,textMode:'rich'});
-  assert.match(image,/连贯的多行正文/);
-  assert.match(image,/不用伪文字或乱码代替正文/);
+  assert.match(image,/自然换行的短段/);
+  assert.match(image,/不绘制反斜杠、转义序列/);
+  assert.match(image,/不把整段话或清单挤成一条横线/);
+  assert.match(image,/不要把配色分析、素材介绍或排版说明印成正文/);
+  assert.doesNotMatch(image,/充分展开连贯的多行正文/);
   const webImage=await createOfflineHandoff({project:p,assets:[asset],aliases:{m1:asset.id},settings:{deliveryMode:'image',includeThumbnails:false,textMode:'rich'}});
   const imageFiles=unzipSync(new Uint8Array(await webImage.blob.arrayBuffer()));
   assert.ok(strFromU8(imageFiles['START_HERE.txt']).includes(image));
@@ -50,5 +53,5 @@ test('image API forwards no-text setting and does not quietly request copy',asyn
   const result=await generatePageImage({settings:{keys:{openai:'test-only'},includeThumbnails:false,textMode:'none'},project:p,draft:p.drafts[0],assets:[asset],ids:[asset.id],createImage:async()=>null,request});
   assert.equal(result.type,'image/png');
   assert.match(sent,/不生成标题、正文或图注/);
-  assert.doesNotMatch(sent,/不用伪文字或乱码代替正文/);
+  assert.doesNotMatch(sent,/最终图像中的印刷文字/);
 });

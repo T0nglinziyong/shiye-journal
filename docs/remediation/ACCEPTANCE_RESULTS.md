@@ -142,6 +142,8 @@
 | 第二十八批固定项目 Git 部署 | Vercel 控制台 `shiye-journal-test` Production Deployment | `1562daf871b8903559d48e808339d23569779b81`，Git `main`，Ready；固定域名未变，无手动部署 |
 | 第二十九批离线校验器生成 | `node scripts/build-offline-runtime.mjs` 两次 SHA-256 核对 | 两次一致：`5555b6bf71875c68f1c1d86ba711132dcf241ce9fc8c7a2eb9f9a73947e88c9f`；与第 27–28 批源码同步，仍不提供视觉验收 |
 | 第二十九批集成 | `npm test` / `npm run test:ui` | 304/304；构建、UI smoke、7 模拟视口的路由 parity、自托管 smoke 通过；真实移动设备未验 |
+| 第三十批图像文字提示局部 | `node --test tests/creative-page-brief.test.js tests/creative-content-brief.test.js tests/offline-creation.test.js` | 20/20；API 与网页直接图像任务共用可读文字/自然分行要求；可编辑任务仍可使用较长正文。仅核对发出的指令，未付费生成真实图像 |
+| 第三十批集成/真实 Chromium | `npm test` / `npm run test:ui` / `node tests/offline-handoff-browser.mjs` | 311/311；构建/UI smoke/路由 parity/自托管 smoke 通过；Chromium 390×844、768×1024、1024×768、1440×900 四个模拟视口的网页任务包流程通过。另跑通用 `browser-acceptance.mjs` 在第二个视口的素材详情选择器超时：前一视口将素材加入搭配篮后页面操作状态保留，此用例未在视口间复位；非本批提示词回归，也不能据此声称完整浏览器套件通过。实体手机/iPad 和真实图像模型输出仍未验 |
 
 能力表依据：[DeepSeek Chat Completions](https://api-docs.deepseek.com/api/create-chat-completion/)、[DeepSeek JSON Output](https://api-docs.deepseek.com/guides/json_mode/)、[OpenAI API Reference](https://platform.openai.com/docs/api-reference/chat/create)、[SiliconFlow 多模态输入](https://docs.siliconflow.cn/docs/userguide/capabilities/multimodal-vision)。文档支持不等于本账号模型可用；仍需用户配置实际可访问的模型并做真实请求验收。
 

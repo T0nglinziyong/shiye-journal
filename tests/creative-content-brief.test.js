@@ -11,6 +11,7 @@ test('Q-01/Q-02: content policies distinguish documentary facts, originals and n
   const empty=creativeContentBrief();
   assert.match(empty,/真实记录/);assert.match(empty,/用户未提供可核实的个人事实/);
   assert.match(empty,/绝不编造日期、地点、人物和事件/);
+  assert.match(empty,/不把“这一页用了什么颜色、纸张、素材、留白、排版”写成正文/);
   const original=creativeContentBrief({policy:'original',topic:'春天',userText:'小白去了苏州',providedFacts:'2026 年 4 月拍摄'});
   assert.match(original,/原创主题短文/);assert.match(original,/小白去了苏州/);
   assert.match(original,/不把虚构经历写成用户真实日记/);
