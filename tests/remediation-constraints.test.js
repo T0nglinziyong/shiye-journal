@@ -43,6 +43,19 @@ test('C-06: a required material outside the page or fully transparent cannot fin
   assert.equal(finish().ok,true,'partial intentional bleed remains legal');
 });
 
+test('C-06: an opaque foreground fully covering required material is rejected, partial overlap remains legal',()=>{
+  const p=project('遮挡与半藏'),d=p.drafts[0],item=itemFromAsset(asset,d,d.canvas.width/2,d.canvas.height/2);
+  d.items.push(item);
+  const cover={id:'solid-cover',kind:'rectangle',x:item.x,y:item.y,width:item.width,height:item.height,zIndex:item.zIndex+1,rotation:0,fill:'#ffffff',opacity:1};
+  d.primitives.push(cover);
+  const finish=()=>applyToolCalls({tools:[{name:'finish_design',arguments:{summary:'完成'}}]},d,[asset],{}, {requiredAssetIDs:[asset.id],allowNoText:true}).results[0];
+  assert.match(finish().detail,/完全不可见/);
+  cover.width=item.width/2;
+  assert.equal(finish().ok,true,'intentional partial occlusion must not be rejected');
+  cover.width=item.width;cover.opacity=.8;
+  assert.equal(finish().ok,true,'a translucent overlay cannot prove the material is invisible');
+});
+
 test('C-02: polygon mask cannot bypass the existing 60% small-trim rule',()=>{
   const p=project('多边形裁切');
   const page={version:3,style:'自由构图',intent:null,paper:{color:'#ffffff',pattern:'plain'},graphics:[],text_blocks:[],items:[{asset:'m1',piece:'piece-1',unit:0,role:null,operations:[{op:'whole'},{op:'mask',shape:'polygon',points:[[0,0],[.2,0],[0,.2]]}],placement:{x:.5,y:.5,rotation:0,z:1},relation:null}]};
