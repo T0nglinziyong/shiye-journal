@@ -19,7 +19,7 @@ export function variantDraftProject(variant,existing,newID){
 export function createMatchingSession(c){
  let variants=[],queue=Promise.resolve(),controller=null,opening=false,lastSnapshot,ready=false;
  const defaults=matchingSnapshot(c.state,[]).context;
- const save=()=>{if(!ready)return queue;const record=matchingSnapshot(c.state,variants),snapshot=JSON.stringify(record);if(snapshot===lastSnapshot)return queue;const task=queue.then(()=>c.db.put('meta',record));queue=task.then(()=>{lastSnapshot=snapshot;},()=>{});return task;};
+ const save=()=>{if(!ready)return queue;const task=queue.then(async()=>{const record=matchingSnapshot(c.state,variants),snapshot=JSON.stringify(record);if(snapshot===lastSnapshot)return;await c.db.put('meta',record);lastSnapshot=snapshot;});queue=task.then(()=>{},()=>{});return task;};
  const archiveCompleted=async()=>{await queue;for(const v of variants.filter(v=>v.status==='completed')){if(v.linkedProjectID&&c.state.projects.some(p=>p.id===v.linkedProjectID))continue;const p=variantDraftProject(v,null,v.linkedProjectID||c.uid());v.linkedProjectID=p.id;await c.db.transaction(['projects','meta'],tx=>{tx.objectStore('projects').put(p);tx.objectStore('meta').put(matchingSnapshot(c.state,variants));});c.state.projects.push(p);}};
  const markup=()=>`<h2>版本方案</h2><p>完成方案自动保存为草稿或快照；“重新搭配”只清空这里的方案，不删除已保存作品。</p><div class="match-variant-grid">${variants.map(v=>`<article class="match-variant" data-variant="${c.esc(v.id)}"><button class="match-result" data-act="match-open-result" data-id="${c.esc(v.id)}" ${v.status==='running'?'disabled':''}>${c.workCover(v.project)}<strong>${c.esc(v.title)}</strong></button><pre class="match-progress" aria-live="polite">${c.esc(v.progress)}</pre>${v.status==='running'?'<button class="btn" data-act="match-stop">停止创作</button>':v.project.deliveryMode==='zip'?`<button class="btn" data-act="download-project-zip" data-id="${c.esc(v.linkedProjectID||v.project.id)}">下载可编辑 ZIP</button>`:''}</article>`).join('')||'<p>尚未生成方案。</p>'}</div>`;
  const update=()=>{if(c.state.route!=='matching')return;const el=document.querySelector('.match-previews');if(el){el.innerHTML=markup();el.onclick=e=>{const b=e.target.closest('[data-act]');if(b)c.handle(b.dataset.act,b.dataset.id);};c.mountIcons?.(el);}};
@@ -31,9 +31,15 @@ export function createMatchingSession(c){
    const verification=p.creationVerification;
    const reviewProgress=verification?.preview==='mismatch'?'可编辑结构已导入，外部预览或清单有差异；请在拾页核对实际画面和正文。':verification?.preview==='unverified'?'可编辑结构已导入并通过当前规则校验；预览与正文尚待在拾页内复核。':'可编辑结果已导入。';
    const v={id:c.uid(),title:p.title,createdAt:new Date().toISOString(),status:'completed',progress:reviewProgress+'返回时保留草稿，保存后成为作品。',project:structuredClone(p),linkedProjectID:p.id};
-   variants.unshift(v);
-   try{await queue;await c.db.transaction(['projects','meta'],tx=>{tx.objectStore('projects').put(p);tx.objectStore('meta').put(matchingSnapshot(c.state,variants));});lastSnapshot=JSON.stringify(matchingSnapshot(c.state,variants));c.state.projects.push(p);update();return v;}
-   catch(error){variants.shift();throw error;}
+   const task=queue.then(async()=>{
+    const next=[v,...variants],record=matchingSnapshot(c.state,next);
+    await c.db.transaction(['projects','meta'],tx=>{tx.objectStore('projects').put(p);tx.objectStore('meta').put(record);});
+    // The transaction is the commit point. Before it succeeds neither the
+    // in-memory project list nor later queued matching saves may see a ghost.
+    variants=next;lastSnapshot=JSON.stringify(record);c.state.projects.push(p);update();return v;
+   });
+   queue=task.then(()=>{},()=>{});
+   return task;
   },
   async reflectProject(p){const v=variants.find(item=>item.linkedProjectID===p?.id);if(!v)return;v.project=structuredClone(p);v.title=p.title;await save();update();},
   stop(){controller?.abort(Error('已停止创作，成功步骤已保留'));},

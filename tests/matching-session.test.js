@@ -51,3 +51,16 @@ test('reloading after local outbox discard resets an unsaved basket without savi
  state.basket=['unsent'];await session.restore();await session.persist();
  assert.deepEqual(state.basket,[]);assert.equal(writes,0);
 });
+test('I-05: a failed editable import never leaks a variant into a concurrent matching save',async()=>{
+ const state={basket:[],projects:[],route:'library'},records=new Map();let release;
+ const blocked=new Promise(resolve=>release=resolve);
+ const db={get:async(_store,id)=>records.get(id),put:async(_store,record)=>records.set(record.id,structuredClone(record)),transaction:async()=>{await blocked;throw Error('storage transaction failed');}};
+ const session=createMatchingSession({state,db,uid:()=>crypto.randomUUID()});await session.restore();
+ const incoming={...work,title:'应当拒绝的作品',isDraft:true};
+ const attempt=session.importProject(incoming);
+ const otherSave=session.persist();
+ release();await assert.rejects(attempt,/storage transaction failed/);await otherSave;
+ assert.deepEqual(state.projects,[]);
+ assert.doesNotMatch(session.render(),/应当拒绝的作品/);
+ assert.deepEqual(records.get('matching-session-v1')?.variants||[],[]);
+});
