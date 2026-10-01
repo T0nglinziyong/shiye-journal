@@ -9,7 +9,7 @@ import './asset-organization.css';
 import './sync-indicator.css';
 import './offline-handoff.css';
 import './matching-view.css';
-import {createAssetOrganization,mountOrganizationBadges} from './asset-organization.js';
+import {createAssetOrganization,mountOrganizationBadges,updateOrganizedAssetView} from './asset-organization.js';
 import '@fontsource/ma-shan-zheng/chinese-simplified-400.css';
 import {mountIcons,iconMarkup} from './icons.js';
 import {startCloudSession} from './entry.js';
@@ -170,7 +170,7 @@ function render(){document.body.classList.toggle('editing',state.route==='editor
   view.editorLayoutSize={width:window.innerWidth,height:window.innerHeight};
   const pages={library:renderLibrary,series:renderSeries,matching:renderMatching,works:renderWorks,editor:renderEditor,import:renderImport,assetDetail:renderAssetDetail,projectPreview:renderProjectPreview,settings:renderSettings};view.innerHTML=(pages[state.route]||renderLibrary)();
   for(const fresh of view.querySelectorAll('img[src]')){const old=imageNodes.take(fresh);if(old)fresh.replaceWith(old);}
-  mountParityControls();bindPage();mountWorkflowControls({state,view,body,modal,db,render,route,toast,imgTag,assetCard,esc,asset,refresh,download,modelImage,rasterize,backup,openSeriesEditor,openAssetEditor:openDetail,openCutoutCheck,switchImportRecord,saveActiveImportRecord,saveProject,flushSave});view.catalogRefresh?.();if(state.route==='editor'){view.editorDraft=current();view.editorInk=current().strokes;view.editorLayoutKey=editorLayoutKey();mountCanvasEditor({state,view,body,modal,current,checkpoint,saveProject,render,route,flushSave,toast,esc,imgTag,asset,handle,openCutoutCheck,openAICreation});mountCanvasSelection({state,view,current,checkpoint,saveProject,render,toast});}mountPageSyncIndicator();backgroundViewPending=false;}
+  mountParityControls();bindPage();mountWorkflowControls({state,view,body,modal,db,render,route,toast,imgTag,assetCard,esc,asset,refresh,download,modelImage,rasterize,backup,openSeriesEditor,openAssetEditor:openDetail,openCutoutCheck,switchImportRecord,saveActiveImportRecord,saveProject,flushSave,assetOrganization,applyAssetClassification});view.catalogRefresh?.();if(state.route==='editor'){view.editorDraft=current();view.editorInk=current().strokes;view.editorLayoutKey=editorLayoutKey();mountCanvasEditor({state,view,body,modal,current,checkpoint,saveProject,render,route,flushSave,toast,esc,imgTag,asset,handle,openCutoutCheck,openAICreation});mountCanvasSelection({state,view,current,checkpoint,saveProject,render,toast});}mountPageSyncIndicator();backgroundViewPending=false;}
 function editorLayoutKey(){const size=view.editorLayoutSize||{width:window.innerWidth,height:window.innerHeight};return [size.width,size.height,current()?.canvas.width,current()?.canvas.height,!!state.workspacePanel,!!state.aiPanel].join(':');}
 function refreshCanvas(){
   const d=current(),page=view.querySelector('#canvas-page');if(!page||view.editorDraft!==d||view.editorLayoutKey!==editorLayoutKey()||!view.editorRefresh)return false;
@@ -693,21 +693,38 @@ async function confirmImportPhoto(){
 }
 async function organizeSavedAssets(records,{waitForSave}={}){
   if(state.preferences.autoOrganize&&records.length){
-    const cfg=structuredClone(state.aiSettings);
+    const cfg=structuredClone(state.aiSettings),accountID=state.accountId;
     if(cfg.key&&cfg.includeThumbnails&&supportsVision(cfg)){
-      await assetOrganization.run(records,{waitForSave,organize:async record=>{
-        const result=await classifyRecord({kind:'asset',record,settings:cfg,image:await modelImage(record),assets:[]});
-        // Read the saved object again: a rename, deletion or series assignment
-        // made while the model was running must never be overwritten.
-        const latest=await db.get('assets',record.id);if(!latest)return;
-        const update={...latest,autoOrganized:true};
-        if(latest.title===record.title&&/^素材 \d+$/.test(record.title||''))update.title=result.title;
-        if(JSON.stringify(latest.tags||[])===JSON.stringify(record.tags||[])&&!record.tags?.length)update.tags=result.tags;
-        await db.put('assets',update);const current=state.assets.find(a=>a.id===record.id);if(current)Object.assign(current,update);
-        for(const label of view.querySelectorAll('[data-id] .card-body h3'))if(label.closest('[data-id]').dataset.id===record.id){const mark=label.querySelector('.basket-card-check');label.textContent=update.title;if(mark)label.append(mark);}
-      },onError:()=>toast('素材已保存；自动整理未完成，可稍后重新识别')});
+      let warned=false;
+      await assetOrganization.run(records,{waitForSave,organize:async(record,isCurrent)=>{
+        if(state.accountId!==accountID||!isCurrent())return;
+        const image=await modelImage(record);if(!image)throw Error('素材图像无法读取');
+        const result=await classifyRecord({kind:'asset',record,settings:cfg,image,assets:[]});
+        await applyAssetClassification(record,result,{isCurrent:()=>state.accountId===accountID&&isCurrent()});
+      },onError:()=>{if(state.accountId===accountID&&!warned){warned=true;toast('部分素材自动整理未完成，可稍后重新识别');}}});
     }else toast('未配置可用的视觉接口，素材保留待检查；可在设置关闭自动整理');
   }
+}
+
+async function applyAssetClassification(record,result,{manual=false,isCurrent=()=>true}={}){
+  if(!isCurrent())return false;
+  // Persist each finished answer independently; a late answer must not
+  // overwrite a rename, deletion or series change made during inference.
+  const latest=await db.get('assets',record.id);if(!latest||!isCurrent())return false;
+  const update={...latest,autoOrganized:true};
+  if(manual){for(const [key,value] of Object.entries(result))if(JSON.stringify(latest[key])===JSON.stringify(record[key]))update[key]=value;update.updatedAt=new Date().toISOString();}
+  else {
+    if(latest.title===record.title&&/^素材 \d+$/.test(record.title||''))update.title=result.title;
+    if(JSON.stringify(latest.tags||[])===JSON.stringify(record.tags||[])&&!record.tags?.length)update.tags=result.tags;
+    for(const key of ['contentTags','styleTags','materialTags','placementHints','semanticColorNames'])if(!latest[key]?.length&&!record[key]?.length)update[key]=result[key]||[];
+  }
+  if(!isCurrent())return false;
+  await db.put('assets',update);
+  if(!isCurrent())return false;
+  const current=state.assets.find(a=>a.id===record.id);if(current)Object.assign(current,update);
+  updateOrganizedAssetView(view,update,{kindName,formatSize:fmt});
+  view.catalogRefresh?.();
+  return true;
 }
 
 
@@ -791,7 +808,7 @@ window.addEventListener('resize',refitEditor);
 window.visualViewport?.addEventListener('resize',refitEditor);
 document.querySelectorAll('.main-nav button').forEach(b=>b.onclick=()=>route(b.dataset.route==='library'?'series':b.dataset.route));
 document.querySelector('#top-basket').onclick=()=>route('matching');document.querySelector('#top-settings').onclick=()=>route('settings');
-async function init(user){let cachedShown=false;cloudSessionReady=true;const accountId=user?.id||'browser';state.accountId=accountId;try{
+async function init(user){let cachedShown=false;cloudSessionReady=true;const accountId=user?.id||'browser';if(state.accountId&&state.accountId!==accountId)assetOrganization.clear();state.accountId=accountId;try{
   await db.storageMode();state.selfHosted=db.isSameOriginServer();
   // startCloudSession has validated Auth and the allowlist before this runs.
   const cached=await db.cachedCollections();if(cached){Object.assign(state,cached);state.accountId=accountId;await restorePendingProjects();for(const a of state.assets)if(a.staticPath)staticSources.set(a.blobId,a.staticPath);render();cachedShown=true;saveStatus('本机缓存 · 正在核对云端');}

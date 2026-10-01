@@ -1,6 +1,7 @@
 import {finishSelection,selectionActive,toggleSelected} from './library-selection-model.js';
 import {openPopover} from './swift-popover.js';
 import {classifyRecord} from './classification.js';
+import {supportsVision} from './ai-settings.js';
 import {bindLongPress} from './long-press.js';
 import {withUsageStatus} from './library-model.js';
 import {registerSelectionPresenter} from './selection-presenter.js';
@@ -32,7 +33,16 @@ export function mountAssetSelection(c,p){
   }));tray.lastChild.classList.add('danger');view.append(tray);registerSelectionPresenter(view,sync);
 }
 function moreMenu(c,p,anchor){const menu=openPopover(anchor,{menu:true,width:230});menu.surface.classList.add('selection-more-menu');menu.content.append(action('重新识别',async()=>{
-  const records=c.state.assets.filter(a=>p.selected.has(a.id));menu.close();for(const [i,a] of records.entries()){c.toast('正在识别 '+(i+1)+' / '+records.length);const result=await classifyRecord({kind:'asset',record:a,settings:c.state.aiSettings,image:await c.modelImage(a),assets:c.state.assets,onProgress:p=>c.toast(p.phase+' · '+p.seconds+' 秒 · '+p.received+' 字符')});const next={...a,...result,updatedAt:new Date().toISOString()};await c.db.put('assets',next);Object.assign(a,next);}c.render();c.toast('已整理 '+records.length+' 件');
+  const records=c.state.assets.filter(a=>p.selected.has(a.id)).map(a=>structuredClone(a)),cfg=structuredClone(c.state.aiSettings),accountID=c.state.accountId;
+  if(!cfg.key||!cfg.includeThumbnails||!supportsVision(cfg))throw Error('请先配置可用的视觉模型并开启素材图片');
+  menu.close();let completed=0,failed=0;
+  await c.assetOrganization.run(records,{priority:'foreground',organize:async(record,isCurrent)=>{
+    if(c.state.accountId!==accountID||!isCurrent())return;
+    const image=await c.modelImage(record);if(!image)throw Error('素材图像无法读取');
+    const result=await classifyRecord({kind:'asset',record,settings:cfg,image,assets:[]});
+    if(await c.applyAssetClassification(record,result,{manual:true,isCurrent:()=>c.state.accountId===accountID&&isCurrent()}))completed++;
+  },onError:()=>{failed++;}});
+  if(c.state.accountId===accountID)c.toast(failed?`已整理 ${completed} 件，${failed} 件未完成；可稍后重试`:`已整理 ${completed} 件`);
 }),action('加入系列 ›',b=>submenu(menu,b,'加入系列',(series,newSeries)=>assignSeries(c,p,series,newSeries))),action('导出图像 ›',b=>submenu(menu,b,'导出图像',null)),action('设置状态 ›',b=>submenu(menu,b,'设置状态','usage')));
   let closeChild=null,childTitle=null;
   function submenu(parent,b,title,assign){const same=childTitle===title;closeChild?.();closeChild=null;childTitle=null;if(same){parent.position();b.focus({preventScroll:true});return;}const panel=document.createElement('section');panel.className='swift-popover swift-menu selection-submenu';panel.setAttribute('role','menu');panel.setAttribute('aria-label',title);const width=Math.min(230,(innerWidth-32)/2);parent.surface.style.width=width+'px';panel.style.width=width+'px';const remove=parent.addSurface(panel,()=>{const r=parent.surface.getBoundingClientRect(),w=width,side=r.right+w+8<=innerWidth-12?r.right+8:r.left-w-8>=12?r.left-w-8:12;panel.style.left=Math.max(12,Math.min(side,innerWidth-w-12))+'px';panel.style.maxHeight=(innerHeight-24)+'px';panel.style.top=Math.max(12,Math.min(r.top,innerHeight-panel.offsetHeight-12))+'px';});
