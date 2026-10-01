@@ -18,7 +18,7 @@ test('series covers follow current membership, five-cover limit, and Swift fallb
   assert.ok(searchableSeries({id:'s',title:'系列',styleTags:['复古']},assets).includes('复古'));
 });
 test('series contents independently filter tags, organization and actual used works',()=>{
-  const assets=[{id:'a',seriesID:'s',title:'A',reviewStatus:'ready',kind:'paper',createdAt:'2026-01-01',styleTags:['植物']},{id:'b',seriesID:'s',title:'B',kind:'tape',createdAt:'2026-01-02'},{id:'c',seriesID:'other',title:'C'},{id:'internal',seriesID:'s',isProjectInternal:true,title:'内置'}];
+  const assets=[{id:'a',seriesID:'s',title:'A',reviewStatus:'ready',kind:'paper',createdAt:'2026-01-01',styleTags:['植物'],isFavorite:true},{id:'b',seriesID:'s',title:'B',kind:'tape',createdAt:'2026-01-02'},{id:'c',seriesID:'other',title:'C'},{id:'internal',seriesID:'s',isProjectInternal:true,title:'内置'}];
   const projects=[{isDraft:false,isUsed:true,drafts:[{items:[{assetID:'a'},{assetID:'b',isParked:true}]}]},{isDraft:true,isUsed:true,drafts:[{items:[{assetID:'b'}]}]},{isDraft:false,isUsed:false,drafts:[{items:[{assetID:'b'}]}]}];
   assert.deepEqual([...usedAssetIDs(projects)],['a']);
   assert.deepEqual(seriesMembers('s',assets,projects).map(a=>a.id),['b','a']);
@@ -26,6 +26,7 @@ test('series contents independently filter tags, organization and actual used wo
   assert.deepEqual(seriesMembers('s',assets,projects,{status:'unready'}).map(a=>a.id),['b']);
   assert.deepEqual(seriesMembers('s',assets,projects,{status:'used'}).map(a=>a.id),['a']);
   assert.deepEqual(seriesMembers('s',assets,projects,{status:'unused'}).map(a=>a.id),['b']);
+  assert.deepEqual(seriesMembers('s',assets,projects,{status:'favorite'}).map(a=>a.id),['a']);
   assert.deepEqual(seriesMembers('s',assets,projects,{sort:'name',ascending:true}).map(a=>a.id),['a','b']);
   assert.equal(seriesMembers('s',assets,projects,{status:'outside'}).length,0);
 });

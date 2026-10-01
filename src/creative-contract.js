@@ -15,18 +15,21 @@ const unit=enums(['ratio','pt','mm']);
 const coordinates={x:num(),y:num(),coordinate_unit:unit,relative_to:key,offset:array(num(-4,4),2,2),rotation:num(-180,180),z:integer(-1000,1000)};
 const finish=object({line:enums(['straight']),depthMM:num(0,0),periodMM:num(.5,100),corner:enums(['square']),radiusMM:num(0,0)},['line','depthMM','periodMM','corner','radiusMM']);
 const box=object({unit:enums(['ratio','mm']),mode:enums(['keep']),values:array(num(0,10000),4,4)},['unit','mode','values']);
+const maskPoint=array(num(0,1),2,2);
 export const operationContract={anyOf:[
   object({op:enums(['whole'])},['op']),
   object({op:enums(['crop']),box,angle:num(0,0),finish:nullable(finish)},['op','box']),
   object({op:enums(['trim']),edge:enums(['left','right','top','bottom']),quantity:object({unit:enums(['ratio','mm']),mode:enums(['keep','remove']),value:num(0,10000)},['unit','mode','value']),finish:nullable(finish)},['op','edge','quantity']),
-  object({op:enums(['tape']),unit:enums(['ratio','mm']),start:num(0,100000),length:num(.001,100000)},['op','unit','start','length'])
+  object({op:enums(['tape']),unit:enums(['ratio','mm']),start:num(0,100000),length:num(.001,100000)},['op','unit','start','length']),
+  object({op:enums(['mask']),shape:enums(['polygon','rounded','scallop']),points:array(maskPoint,3,256),radius:num(.005,.5),depth:num(.005,.2),waves:integer(2,20)},['op','shape'])
 ]};
 const simple=object({asset:key,piece:key,unit:integer(0,10000),...coordinates,role:string(80)},['asset']);
-const material=object({asset:key,piece:key,unit:integer(0,10000),role:nullable(string(80)),operations:array(operationContract,1,12),placement:object({x:num(-2,3),y:num(-2,3),rotation:num(-180,180),z:integer(-1000,1000)},['x','y','rotation','z']),relation:nullable(object({kind:enums(['revealLeft','revealRight','revealBottom','behind','anchorCorner']),target:key,exposed_mm:num(0,40)},['kind','target','exposed_mm']))},['asset','piece','operations','placement']);
-const text=object({key,content:string(1500),width:num(.001,20000),height:num(.001,20000),...coordinates,size_unit:unit,font_size:num(8,160),font_style:enums(['serif','sans','rounded']),style:enums(['serif','sans','rounded','hand']),color,role:enums(['title','body','caption','label']),bold:{type:'boolean'},italic:{type:'boolean'},alignment:enums(['left','center','right']),line_spacing:num(0,60),letter_spacing:num(-2,12)},['key','content','width']);
+const material=object({asset:key,piece:key,unit:integer(0,10000),role:nullable(string(80)),operations:array(operationContract,1,12),placement:object({x:num(-2,3),y:num(-2,3),rotation:num(-180,180),z:integer(-1000,1000)},['x','y','rotation','z']),relation:nullable(object({kind:enums(['revealLeft','revealRight','revealBottom','behind','anchorCorner']),target:key,exposed_mm:num(0,40)},['kind','target','exposed_mm'])),opacity:num(0,1),flip_horizontal:{type:'boolean'}},['asset','piece','operations','placement']);
+const text=object({key,content:string(1500),width:num(.001,20000),height:num(.001,20000),...coordinates,size_unit:unit,font_size:num(5,400),font_style:enums(['serif','sans','rounded','hand']),font_name:string(120),style:enums(['serif','sans','rounded','hand']),color,role:enums(['title','body','caption','label']),bold:{type:'boolean'},italic:{type:'boolean'},underline:{type:'boolean'},strikethrough:{type:'boolean'},opacity:num(0,1),alignment:enums(['left','center','right']),line_spacing:num(0,80),fixed_line_height:num(5,400),paragraph_spacing:num(0,80),letter_spacing:num(-5,30)},['key','content','width']);
 const vectorPath=array(array(num(0,1),2,2),2,512);
-const primitive=object({key,kind:enums(['rectangle','roundedRectangle','ellipse','line','frame','star','heart','arrow','checkbox','triangle','diamond','hexagon','grid','dots','stripes','ribbon','tag','bubble','chevron','burst','scallop','vector']),...coordinates,width:num(.001,20000),height:num(.001,20000),size_unit:unit,fill:nullable(color),stroke:nullable(color),line_width:num(0,30),opacity:num(0,1),vector_paths:array(vectorPath,1,24),match_size_to:key,padding_mm:array(num(-100,100),4,4)},['key','kind']);
-const paper=object({color,pattern:enums(['plain','lined','lines','grid','dots','columns']),intent:string(240)});
+const vectorLayer=object({fill:nullable(color),opacity:num(0,1),paths:array(vectorPath,0,48),rects:array(array(num(0,1),4,4),0,512)},['fill']);
+const primitive=object({key,kind:enums(['rectangle','roundedRectangle','ellipse','line','frame','star','heart','arrow','checkbox','triangle','diamond','hexagon','grid','dots','stripes','ribbon','tag','bubble','chevron','burst','scallop','vector']),...coordinates,width:num(.001,20000),height:num(.001,20000),size_unit:unit,fill:nullable(color),stroke:nullable(color),line_width:num(0,30),corner_radius:num(0,.5),opacity:num(0,1),vector_paths:array(vectorPath,1,24),vector_layers:array(vectorLayer,1,64),match_size_to:key,padding_mm:array(num(-100,100),4,4)},['key','kind']);
+const paper=object({color,pattern:enums(['plain','lined','lines','grid','dots','columns']),intent:string(240),ruling:num(0,100),center_gutter:{type:'boolean'}});
 export const toolContracts={
   compose_story_page:object({grammar:enums(['diary','ephemera']),title:string(80),lead:string(320),notes:array(string(320),2,2),microcopy:string(60),focal:key,support:key,tape:key,ticket:key,illustration:key,paper:color,ink:color,accent:color},['grammar','title','lead','notes','microcopy','focal','support','paper','ink','accent']),
   compose_page:object({materials:array(object({...simple.properties,crop:array(num(0,1),4,4),crop_px:array(num(0,20000),4,4)},['asset']),0,12),graphics:array(primitive,0,48),texts:array(text,0,24),paper}),
@@ -35,7 +38,7 @@ export const toolContracts={
   upsert_materials:object({items:array(material,0,12),remove:array(key,0,12)},['items']),
   move_elements:object({items:array(object({key,...coordinates},['key']),1,12)},['items']),
   arrange_elements:object({keys:array(key,2,12),mode:enums(['row','column','grid']),...Object.fromEntries(Object.entries(coordinates).filter(([k])=>!['rotation','z'].includes(k))),gap_mm:num(0,80),columns:integer(1,6)},['keys','mode']),
-  fit_text_to:object({key,target:key,padding_mm:array(num(0,40),4,4),visible_bounds:{type:'boolean'},color,font_size:num(8,160)},['key','target']),
+  fit_text_to:object({key,target:key,padding_mm:array(num(0,40),4,4),visible_bounds:{type:'boolean'},color,font_size:num(5,400)},['key','target']),
   upsert_primitives:object({items:array(primitive,1,48)},['items']),
   upsert_text:object({items:array(text,1,12)},['items']),
   delete_elements:object({keys:array(key,1,24)},['keys']),
@@ -47,7 +50,7 @@ const descriptions={
   compose_story_page:'将主题、两段观察与真实素材编成可编辑的日记/拼贴图层；实物尺寸不缩放。失败整体回滚。',
   compose_page:'原子编排材料、图形、文字、纸张；坐标 ratio/pt/mm，relative_to + offset 为目标宽高倍数。crop 为源比例，crop_px 为源像素。失败整体回滚。',
   place_materials:'放置整件真实素材；尺寸来自素材库，同件已放置时更新位置。piece 与 unit 指定片段及库存单位。',
-  edit_materials:'连续加工现有片段：append 接着当前片加工，replace 从原材料开始。只支持 whole/crop/直线trim/tape；波浪、撕边、斜裁及开窗会明确拒绝。短边至少6mm。',
+  edit_materials:'连续加工现有片段：append 接着当前片加工，replace 从原材料开始。支持矩形裁片、胶带截段，以及最后一步 mask 的不规则多边形、圆角或花边可见边缘；开窗与斜裁仍会拒绝。短边至少2mm。',
   upsert_materials:'整体替换片段的完整工序；remove 先移走旧片，再核验尺寸、库存单位与裁片不重叠。',
   move_elements:'修改现有图层的位置、旋转、层序；实物大小保持不变。ratio/pt/mm 或 relative_to + offset。',
   arrange_elements:'把图层排成行/列/不等尺寸网格，保留实物大小，以毫米间距和整体中心布局。',
@@ -69,12 +72,12 @@ export function validateValue(value,schema,path='$'){
   const reason=error.keyword==='additionalProperties'?'未实现或未知字段':error.keyword==='required'?'缺少字段':error.keyword==='enum'?'未实现或未知值':'合同不合法';throw Error(location+' '+reason+'：'+error.message);
 }
 export function validateTool(name,args){if(!Object.hasOwn(toolContracts,name))throw Error('未知工具 '+name);validateValue(args,toolContracts[name],'$.'+name);}
-const directText=object({content:string(1500),font_style:enums(['serif','sans','rounded','hand']),x:num(0,1),y:num(0,1),width:num(.01,1),height:num(.01,1),font_size:num(8,160),color,z:integer(-1000,1000),role:enums(['title','body','caption','label']),alignment:enums(['left','center','right']),bold:{type:'boolean'},italic:{type:'boolean'},line_spacing:num(0,60),letter_spacing:num(-2,12)},['content','font_style','x','y','width','height','font_size','color']);
+const directText=object({content:string(1500),font_style:enums(['serif','sans','rounded','hand']),font_name:string(120),x:num(0,1),y:num(0,1),width:num(.01,1),height:num(.01,1),font_size:num(5,400),color,z:integer(-1000,1000),rotation:num(-180,180),opacity:num(0,1),role:enums(['title','body','caption','label']),alignment:enums(['left','center','right']),bold:{type:'boolean'},italic:{type:'boolean'},underline:{type:'boolean'},strikethrough:{type:'boolean'},line_spacing:num(0,80),fixed_line_height:num(5,400),paragraph_spacing:num(0,80),letter_spacing:num(-5,30)},['content','font_style','x','y','width','height','font_size','color']);
 const inkPoint=object({x:num(0,1),y:num(0,1),pressure:num(0,1)},['x','y']);
 const inkStroke=object({points:array(inkPoint,1,512),width:num(.5,60),color,opacity:num(0,1),pen_style:enums(['fountain','ballpoint','brush','marker'])},['points','width','color','pen_style']);
-const directOperations={anyOf:operationContract.anyOf.map(s=>({...s,required:Object.keys(s.properties)}))};
-const directMaterial=object({...material.properties,operations:array(directOperations,1,12)},Object.keys(material.properties));
-export const directPageContract=object({version:{type:'integer',minimum:3,maximum:3,enum:[3]},style:enums(['留白叙事','密集拼贴','杂志网格','胶片日记','手作便签','自由构图']),intent:nullable(string(240)),items:array(directMaterial,0,100),graphics:array(primitive,0,48),ink_strokes:array(inkStroke,0,32),text_blocks:array(directText,0,24),paper:object({color,pattern:enums(['plain','lined','grid','dots','columns'])},['color','pattern'])},['version','style','intent','items','text_blocks','paper']);
+const directOperations=operationContract;
+const directMaterial=object({...material.properties,operations:array(directOperations,1,12)},['asset','piece','operations','placement']);
+export const directPageContract=object({version:{type:'integer',minimum:3,maximum:3,enum:[3]},style:enums(['留白叙事','密集拼贴','杂志网格','胶片日记','手作便签','自由构图']),intent:nullable(string(240)),items:array(directMaterial,0,100),graphics:array(primitive,0,48),ink_strokes:array(inkStroke,0,32),text_blocks:array(directText,0,24),paper:object({color,pattern:enums(['plain','lined','grid','dots','columns']),ruling:num(0,100),center_gutter:{type:'boolean'}},['color','pattern'])},['version','style','intent','items','text_blocks','paper']);
 export function directPageToTools(page){
   validateValue(page,directPageContract);
   // A single composite call keeps the direct page atomic, including large baskets.

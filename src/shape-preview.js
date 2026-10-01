@@ -6,7 +6,7 @@ export function shapePreview(shape){
   const saved=previews.get(shape);
   let style,geometry;
   if(shape.sourceIdentifier==='cece-native-goodnotes-v1'&&shape.vectorLayers){
-    geometry=shape.vectorLayers.map(layer=>{const value=layer.rects||layer.paths;if(value&&!Object.isFrozen(value)){for(const row of value){if(layer.paths)for(const point of row)Object.freeze(point);Object.freeze(row);}Object.freeze(value);}return value;});
+    geometry=shape.vectorLayers.flatMap(layer=>[layer.rects,layer.paths].filter(Boolean).map(value=>{if(!Object.isFrozen(value)){for(const row of value){if(value===layer.paths)for(const point of row)Object.freeze(point);Object.freeze(row);}Object.freeze(value);}return value;}));
     style=JSON.stringify([shape.kind,shape.vectorSize,shape.width,shape.height,shape.fill,shape.stroke,shape.lineWidth,shape.vectorLayers.map(({rects,paths,...layer})=>layer)]);
     if(saved?.style===style&&geometry.length===saved.geometry?.length&&geometry.every((value,i)=>value===saved.geometry[i]))return saved.url;
   }

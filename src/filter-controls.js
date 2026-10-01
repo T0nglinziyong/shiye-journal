@@ -1,4 +1,4 @@
-import {openPopover} from './swift-popover.js';
+import {openPopover,closePopover} from './swift-popover.js';
 // The order control changes immediately; only the other values open menus.
 export function mountFilterControl(select,bar,heading,glyph,{toggle=false}={}){
   select.hidden=true;
@@ -14,6 +14,7 @@ export function mountFilterControl(select,bar,heading,glyph,{toggle=false}={}){
   sync();select.addEventListener('change',sync);
   b.onclick=()=>{
     if(toggle){select.value=select.value==='asc'?'desc':'asc';select.dispatchEvent(new Event('change',{bubbles:true}));return;}
+    if(b.getAttribute('aria-expanded')==='true'){closePopover();return;}
     const {content,close,surface}=openPopover(b,{width:250,menu:true});surface.classList.add('library-filter-menu');
     for(const option of select.options){const choice=document.createElement('button');choice.type='button';choice.setAttribute('role','menuitemradio');choice.setAttribute('aria-checked',String(option.value===select.value));choice.textContent=option.textContent;choice.onclick=()=>{close(true);select.value=option.value;select.dispatchEvent(new Event('change',{bubbles:true}));};content.append(choice);}
   };

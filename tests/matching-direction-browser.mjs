@@ -21,6 +21,12 @@ try{
  assert.equal(await evaluate('document.querySelector("[data-act=match-generate]").disabled'),false);
  await command('Page.reload');await wait('.series-grid');await click('[data-route="matching"]','.match-recommendations');
  assert.ok(await evaluate('document.querySelector(".match-recommendations").textContent.includes("已排除 1 件")'));
- for(const [w,h] of [[390,844],[768,1024],[1024,768],[1440,900]]){await command('Emulation.setDeviceMetricsOverride',{width:w,height:h,deviceScaleFactor:1,mobile:w<700});await sleep(120);await evaluate('scrollTo(0,0)');const png=await command('Page.captureScreenshot',{format:'png'});await writeFile(out+'/'+w+'x'+h+'.png',Buffer.from(png.data,'base64'));assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1'));}
+ await click('.match-rec [data-act="basket"]','.match-basket-item');
+ assert.equal(await evaluate('document.querySelector("[data-act=match-core]").disabled'),false);
+ await click('[data-act="match-core"]','.match-basket-item [aria-pressed="true"]');
+ assert.deepEqual(await evaluate('[...document.querySelectorAll(".match-generate button")].map(button=>button.textContent.trim())'),['进行AI创作','导出给网页版 AI','导入 AI 结果','不使用 AI，手动创作']);
+ assert.ok(await evaluate('(()=>{const sizes=[...document.querySelectorAll(".match-basket-actions button")].map(button=>{const r=button.getBoundingClientRect();return [r.width,r.height];});return sizes.length===3&&sizes.every(([w,h])=>w===sizes[0][0]&&h===sizes[0][1]&&h<=28);})()'));
+ for(const [w,h] of [[390,844],[768,1024],[1024,768],[1440,900]]){await command('Emulation.setDeviceMetricsOverride',{width:w,height:h,deviceScaleFactor:1,mobile:w<700});await sleep(120);await evaluate('scrollTo(0,0)');const png=await command('Page.captureScreenshot',{format:'png'});await writeFile(out+'/'+w+'x'+h+'.png',Buffer.from(png.data,'base64'));if(w===390){await evaluate('document.querySelector(".basket").scrollIntoView({block:"center"})');const basket=await command('Page.captureScreenshot',{format:'png'});await writeFile(out+'/390x844-basket.png',Buffer.from(basket.data,'base64'));}assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1'));}
+ await click('[data-act="create-from-basket"]','#modal .manual-layout-dialog');assert.equal(await evaluate('document.querySelectorAll("[data-manual-template]").length'),5);assert.ok(await evaluate('document.querySelector("[data-manual-template]").textContent.includes("推荐")'));await click('[data-manual-template]','#canvas-page');
  assert.deepEqual(b.errors,[]);console.log('Direction-first matching passed: recommendation changes on purpose, exclusion persists, and four viewport layouts do not overflow.');
 }finally{await b.close();}

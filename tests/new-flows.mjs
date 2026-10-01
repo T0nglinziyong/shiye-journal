@@ -27,6 +27,6 @@ assert.ok(window.document.querySelector('[data-act="detail-check"]'));
 window.document.querySelector('[data-route="matching"]').click();window.document.querySelector('[data-act="match-starter"]').click();
 assert.ok(window.document.querySelector('#match-purpose'));assert.ok(window.document.querySelector('#match-paper-width'));
 window.document.querySelector('#match-ratio').value='custom';window.document.querySelector('#match-paper-width').value='180';window.document.querySelector('#match-paper-height').value='280';
-window.document.querySelector('[data-act="create-from-basket"]').click();await waitFor(()=>!!window.document.querySelector('#canvas-page'));
+window.document.querySelector('[data-act="create-from-basket"]').click();assert.equal(window.document.querySelector('#modal').open,true);window.document.querySelector('[data-manual-template=""]').click();await waitFor(()=>!!window.document.querySelector('#canvas-page'));
 assert.ok(window.document.body.classList.contains('editing'));assert.ok(window.document.querySelector('#canvas-page'));const canvas=window.document.querySelector('#canvas-page');assert.ok(Math.abs(parseFloat(canvas.style.width)/parseFloat(canvas.style.height)-180/280)<.01);assert.match(window.document.querySelector('#page-ratio').textContent,/自定义 180x280 mm/);
 await window.happyDOM.abort();console.log('selection preserved image node; detail dialogs close; custom paper creates editor');

@@ -1,6 +1,7 @@
 import {uid,itemFromAsset} from './domain.js';
 import {textLines,textFont} from './editor-tools-model.js';
 import {reviewCreativeDraft} from './creative-quality.js';
+import {materialMaskPoints} from './material-mask.js';
 import {agentTools,directPageContract,directPageToTools,validateTool,validateValue} from './creative-contract.js';
 export {agentTools,directPageContract,directPageToTools};
 const EPS=1e-6,fields=['items','primitives','textBlocks'];
@@ -16,7 +17,7 @@ const dimensions=i=>{const a=(i.rotation||0)*Math.PI/180;return {width:Math.abs(
 const cropOf=i=>i.cropRect||{x:0,y:0,width:1,height:1};
 const overlap=(a,b)=>Math.min(a.x+a.width,b.x+b.width)-Math.max(a.x,b.x)>EPS&&Math.min(a.y+a.height,b.y+b.height)-Math.max(a.y,b.y)>EPS;
 function assertRect(r){if(!r||[r.x,r.y,r.width,r.height].some(v=>!Number.isFinite(v))||r.x<0||r.y<0||r.width<=0||r.height<=0||r.x+r.width>1+EPS||r.y+r.height>1+EPS)throw Error('裁片必须在原素材范围内');}
-function baseline(i){i.generationBaseline={...i.generationBaseline,x:i.x,y:i.y,width:i.width,height:i.height,rotation:i.rotation,zIndex:i.zIndex,cropRect:i.cropRect,operation:i.operation,materialSteps:structuredClone(i.materialSteps||[])};}
+function baseline(i){i.generationBaseline={...i.generationBaseline,x:i.x,y:i.y,width:i.width,height:i.height,rotation:i.rotation,zIndex:i.zIndex,cropRect:i.cropRect,materialMask:i.materialMask?structuredClone(i.materialMask):null,operation:i.operation,materialSteps:structuredClone(i.materialSteps||[])};}
 function checkDraft(d,assets){
   finite(d.canvas?.width,'画布宽度',1,20000);finite(d.canvas?.height,'画布高度',1,20000);
   const keys=new Set(),usage=new Map();
@@ -33,6 +34,7 @@ function checkDraft(d,assets){
     const unit=i.materialUnitIndex??0;finite(unit,'实物单位',0,10000);if(!Number.isInteger(unit))throw Error('实物单位必须是整数');
     const quantity=a.supply?.quantity??1;if(!Number.isFinite(quantity)||quantity<=0||(a.kind!=='tape'&&unit>=quantity))throw Error(a.title+' 超出实物数量');
     const crop=cropOf(i);assertRect(crop);
+    if(i.materialMask)materialMaskPoints(i.materialMask);
     const expectedW=crop.width*a.physicalWidthMM*scale(d),expectedH=crop.height*a.physicalHeightMM*scale(d);
     if(!Number.isFinite(expectedW)||!Number.isFinite(expectedH)||Math.abs(i.width-expectedW)>EPS||Math.abs(i.height-expectedH)>EPS)throw Error(a.title+' 实物尺寸与来源不一致');
     if(a.kind!=='tape'){const group=a.id+':'+unit,used=usage.get(group)||[];if(used.some(r=>overlap(r,crop)))throw Error(a.title+' 同一实物单位的裁片重叠或重复使用');used.push(crop);usage.set(group,used);}
@@ -55,12 +57,18 @@ function setPosition(d,i,data){locked(i);Object.assign(i,place(d,data,i));if(dat
 function remove(d,keys){for(const key of keys){const target=find(d,key);locked(target);for(const field of fields)d[field]=d[field].filter(i=>i!==target);}}
 function permission(options,asset){return options.assetProcessing?.[asset.id]||options.processing;}
 function process(d,item,asset,operations,mode,options){
-  locked(item);let current=mode==='replace'?{x:0,y:0,width:1,height:1}:cropOf(item);
+  locked(item);let current=mode==='replace'?{x:0,y:0,width:1,height:1}:cropOf(item),mask=mode==='replace'?null:item.materialMask||null;
   const steps=mode==='replace'?[]:structuredClone(item.materialSteps||[]);
   if(steps.length+operations.length>12)throw Error('连续工序不得超过12步');
   for(const op of operations){
     if(op.op==='whole'){steps.push(op);continue;}
     if(permission(options,asset)==='保留完整')throw Error(asset.title+' 设置为保留完整，不允许加工');
+    if(op.op==='mask'){
+      if(mask)throw Error('一个素材片段只能使用一道可见边缘工序');
+      mask={shape:op.shape,...(op.shape==='polygon'?{points:structuredClone(op.points)}:op.shape==='rounded'?{radius:op.radius??.1}:{depth:op.depth??.05,waves:op.waves??8})};
+      materialMaskPoints(mask);steps.push(structuredClone(op));continue;
+    }
+    if(mask)throw Error('不规则边缘须是最后一道加工工序');
     if(op.finish&&(op.finish.line!=='straight'||op.finish.corner!=='square'||op.finish.depthMM!==0||op.finish.radiusMM!==0))throw Error('尚未实现波浪、撕边或圆角加工');
     if(op.angle)throw Error('尚未实现斜向裁切');
     const wMM=current.width*asset.physicalWidthMM,hMM=current.height*asset.physicalHeightMM;
@@ -80,10 +88,11 @@ function process(d,item,asset,operations,mode,options){
       // tape can be cut repeatedly from a continuous roll without stretching.
     }else throw Error('尚未实现工序 '+op.op);
     assertRect(r);current={x:current.x+r.x*current.width,y:current.y+r.y*current.height,width:current.width*r.width,height:current.height*r.height};assertRect(current);
-    if(current.width*asset.physicalWidthMM<6-EPS||current.height*asset.physicalHeightMM<6-EPS)throw Error('裁片短边不得小于 6 mm');
+    if(current.width*asset.physicalWidthMM<2-EPS||current.height*asset.physicalHeightMM<2-EPS)throw Error('裁片短边不得小于 2 mm');
     if(permission(options,asset)==='少量裁剪'&&current.width*current.height<.6-EPS)throw Error(asset.title+' 仅允许少量裁剪，须保留至少60%面积');steps.push(structuredClone(op));
   }
   item.cropRect=current.width===1&&current.height===1&&current.x===0&&current.y===0?null:current;
+  item.materialMask=mask;
   item.width=current.width*asset.physicalWidthMM*scale(d);item.height=current.height*asset.physicalHeightMM*scale(d);
   item.materialSteps=steps;item.operation=steps.at(-1)||{op:'whole'};baseline(item);
 }
@@ -95,20 +104,20 @@ function addMaterials(d,assets,aliases,list){
     if(!entry.piece&&!item)item=d.items.find(i=>i.assetID===asset.id&&(i.materialUnitIndex??0)===unit&&!i.cropRect);
     if(item){locked(item);if(item.assetID!==asset.id)throw Error('不能改变已有片段来源：'+piece);if(entry.unit!==undefined&&item.materialUnitIndex!==unit)throw Error('不能改变已有片段库存单位');}
     else{if(index(d).has(piece))throw Error('图层编号已被占用：'+piece);item=itemFromAsset(asset,d,0,0,entry.z??10+d.items.length,true);item.creativePieceID=piece;item.materialUnitIndex=unit;d.items.push(item);}
-    Object.assign(item,place(d,entry));if(entry.rotation!==undefined)item.rotation=entry.rotation;if(entry.z!==undefined)item.zIndex=entry.z;if(entry.role!==undefined)item.creativeRole=entry.role;baseline(item);output.push(item);
+    Object.assign(item,place(d,entry));if(entry.rotation!==undefined)item.rotation=entry.rotation;if(entry.z!==undefined)item.zIndex=entry.z;if(entry.role!==undefined)item.creativeRole=entry.role;if(entry.opacity!==undefined)item.opacity=entry.opacity;if(entry.flip_horizontal!==undefined)item.isFlippedHorizontally=entry.flip_horizontal;baseline(item);output.push(item);
   }return output;
 }
 function putTexts(d,list,options){for(const t of list){
   const old=d.textBlocks.find(i=>keyOf(i)===t.key);if(old)locked(old);else if(index(d).has(t.key))throw Error('图层编号已被占用：'+t.key);
   const role=t.role||old?.role||'body',font=t.font_size??old?.fontSize??(role==='title'?58:role==='caption'?28:38),sizeUnit=t.size_unit||'ratio';
-  const data={agentKey:t.key,content:t.content,...place(d,t,old),width:converted(t.width,sizeUnit,d,'width'),fontSize:font,style:t.font_style||t.style||old?.style||'serif',color:t.color||old?.color||'#30463d',zIndex:t.z??old?.zIndex??900,role,rotation:t.rotation??old?.rotation??0,alignment:t.alignment||old?.alignment||'left',bold:t.bold??old?.bold??false,italic:t.italic??old?.italic??false,lineSpacing:t.line_spacing??old?.lineSpacing??0,letterSpacing:t.letter_spacing??old?.letterSpacing??0};
+  const data={agentKey:t.key,content:t.content,...place(d,t,old),width:converted(t.width,sizeUnit,d,'width'),fontSize:font,style:t.font_style||t.style||old?.style||'serif',fontName:t.font_name??old?.fontName??null,color:t.color||old?.color||'#30463d',zIndex:t.z??old?.zIndex??900,role,rotation:t.rotation??old?.rotation??0,alignment:t.alignment||old?.alignment||'left',bold:t.bold??old?.bold??false,italic:t.italic??old?.italic??false,underline:t.underline??old?.underline??false,strikethrough:t.strikethrough??old?.strikethrough??false,opacity:t.opacity??old?.opacity??1,lineSpacing:t.line_spacing??old?.lineSpacing??0,fixedLineHeight:t.fixed_line_height??old?.fixedLineHeight??null,paragraphSpacing:t.paragraph_spacing??old?.paragraphSpacing??0,letterSpacing:t.letter_spacing??old?.letterSpacing??0};
   data.height=Math.max(t.height===undefined?0:converted(t.height,sizeUnit,d,'height'),layoutText(data,options).height);
   if(old)Object.assign(old,data);else d.textBlocks.push({id:uid(),...data});
 }}
 function putGraphics(d,list){for(const g of list){
-  if(g.kind==='vector'&&!g.vector_paths?.length)throw Error('自由矢量图形缺少 vector_paths');
+  if(g.kind==='vector'&&!g.vector_paths?.length&&!g.vector_layers?.length)throw Error('自由矢量图形缺少 vector_paths 或 vector_layers');
   const old=d.primitives.find(i=>keyOf(i)===g.key);if(old)locked(old);else if(index(d).has(g.key))throw Error('图层编号已被占用：'+g.key);
-  const data={key:g.key,kind:g.kind,...place(d,g,old),width:converted(g.width??.2,g.size_unit||'ratio',d,'width'),height:converted(g.height??.1,g.size_unit||'ratio',d,'height'),rotation:g.rotation??old?.rotation??0,zIndex:g.z??old?.zIndex??500,fill:Object.hasOwn(g,'fill')?g.fill:(g.kind==='frame'?null:'#e7eef7'),stroke:Object.hasOwn(g,'stroke')?g.stroke:'#547da4',lineWidth:g.line_width??old?.lineWidth??3,opacity:g.opacity??old?.opacity??1,vectorPaths:g.kind==='vector'?structuredClone(g.vector_paths):undefined};
+  const data={key:g.key,kind:g.kind,...place(d,g,old),width:converted(g.width??.2,g.size_unit||'ratio',d,'width'),height:converted(g.height??.1,g.size_unit||'ratio',d,'height'),rotation:g.rotation??old?.rotation??0,zIndex:g.z??old?.zIndex??500,fill:Object.hasOwn(g,'fill')?g.fill:(g.kind==='frame'?null:'#e7eef7'),stroke:Object.hasOwn(g,'stroke')?g.stroke:'#547da4',lineWidth:g.line_width??old?.lineWidth??3,cornerRadius:g.corner_radius??old?.cornerRadius??.1,opacity:g.opacity??old?.opacity??1,vectorPaths:g.kind==='vector'&&g.vector_paths?structuredClone(g.vector_paths):undefined,vectorLayers:g.vector_layers?structuredClone(g.vector_layers):undefined,vectorSize:g.vector_layers?[1,1]:undefined};
   if(g.match_size_to){const target=find(d,g.match_size_to),[l,t,r,b]=g.padding_mm||[0,0,0,0],s=scale(d),angle=(target.rotation||0)*Math.PI/180,dx=(r-l)*s/2,dy=(b-t)*s/2;data.width=target.width+(l+r)*s;data.height=target.height+(t+b)*s;data.x=target.x+dx*Math.cos(angle)-dy*Math.sin(angle);data.y=target.y+dx*Math.sin(angle)+dy*Math.cos(angle);data.rotation=target.rotation||0;}
   else if(g.padding_mm)throw Error('padding_mm 需要 match_size_to');
   if(old)Object.assign(old,data);else d.primitives.push({id:uid(),...data});
@@ -117,7 +126,7 @@ function putInk(d,list){for(const stroke of list){
   d.strokes||=[];
   d.strokes.push({id:uid(),points:stroke.points.map(point=>({x:point.x*d.canvas.width,y:point.y*d.canvas.height,p:point.pressure??.5})),width:stroke.width,color:stroke.color,opacity:stroke.opacity??(stroke.pen_style==='marker'?.4:1),penStyle:stroke.pen_style});
 }}
-function setPaper(d,a){if(a.color)d.paperColor=a.color;if(a.pattern)d.paperPattern=a.pattern==='lined'?'lines':a.pattern;if(a.intent)d.compositionIntent=a.intent;}
+function setPaper(d,a){if(a.color)d.paperColor=a.color;if(a.pattern)d.paperPattern=a.pattern==='lined'?'lines':a.pattern;if(a.intent)d.compositionIntent=a.intent;if(a.ruling!==undefined){const h=d.canvas.height,step=Math.max(4,a.ruling);d.paperRuling={rowPositions:Array.from({length:Math.ceil(h/step)-1},(_,i)=>(i+1)*step/h).filter(y=>y<1),spans:[{from:0,to:1}],color:'#d0d2d3',relativeLineWidth:1/h};}if(a.center_gutter!==undefined)d.drawCenterGutter=a.center_gutter;}
 function relations(d,list){for(const e of list){if(!e.relation){delete find(d,e.piece).materialRelation;continue;}const i=find(d,e.piece),target=find(d,e.relation.target);if(target===i)throw Error('片段不可相对自身');const mm=e.relation.exposed_mm*scale(d),relation=e.relation.kind;
   if((target.rotation||0)!==0||(i.rotation||0)!==0)throw Error('实体叠放关系目前只支持未旋转的片段');
   i.x=target.x;i.y=target.y;i.zIndex=(target.zIndex||0)-1;
@@ -130,7 +139,7 @@ function relations(d,list){for(const e of list){if(!e.relation){delete find(d,e.
 }}
 function upsertMaterials(d,assets,aliases,a,options){
   remove(d,a.remove||[]);
-  for(const e of a.items){const [item]=addMaterials(d,assets,aliases,[{asset:e.asset,piece:e.piece,unit:e.unit,...e.placement,role:e.role}]);const asset=materialAsset(assets,aliases,e.asset);process(d,item,asset,e.operations,'replace',options);}relations(d,a.items);
+  for(const e of a.items){const [item]=addMaterials(d,assets,aliases,[{asset:e.asset,piece:e.piece,unit:e.unit,...e.placement,role:e.role,opacity:e.opacity,flip_horizontal:e.flip_horizontal}]);const asset=materialAsset(assets,aliases,e.asset);process(d,item,asset,e.operations,'replace',options);}relations(d,a.items);
 }
 function compose(d,assets,aliases,a,options){
   if(a.paper)setPaper(d,a.paper);const added=addMaterials(d,assets,aliases,a.materials||[]);

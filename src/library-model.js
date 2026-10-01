@@ -40,6 +40,7 @@ export function seriesMembers(seriesID, assets, projects, filters = {}) {
     if (filters.status === 'unready' && a.reviewStatus === 'ready') return false;
     if (filters.status === 'used' && !used.has(a.id)) return false;
     if (filters.status === 'unused' && used.has(a.id)) return false;
+    if (filters.status === 'favorite' && !a.isFavorite) return false;
     if (filters.status === 'outside') return false;
     return !q || [a.title, ...(a.tags || []), ...(a.styleTags || []), ...(a.contentTags || []), ...(a.semanticTags || [])].join(' ').toLocaleLowerCase().includes(q);
   }).sort((a,b) => {

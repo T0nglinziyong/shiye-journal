@@ -39,12 +39,16 @@ export function createMatchingSession(c){
   async open(id){const v=variants.find(x=>x.id===id);if(!v||v.status==='running'||opening)return;opening=true;try{await queue;await c.flushSave();const existing=c.state.projects.find(p=>p.id===v.linkedProjectID);if(v.project.isSnapshot){c.state.previewProjectID=existing?.id||v.project.id;c.route('projectPreview');return;}const p=variantDraftProject(v,existing,c.uid());v.linkedProjectID=p.id;await c.db.transaction(['projects','meta'],tx=>{tx.objectStore('projects').put(p);tx.objectStore('meta').put(matchingSnapshot(c.state,variants));});if(!existing?.isDraft)c.state.projects.push(p);c.state.activeProject=p;c.state.activeDraft=p.activeDraftID;c.state.offlineEditingReturnID=p.offlineBundleId?p.id:null;c.state.selected=null;c.state.undo=[];c.state.redo=[];c.state.tool='select';c.state.zoom=1;c.route('editor');}finally{opening=false;}},
   async generate(){
    if(controller){c.toast('已有方案正在创作，请先停止或等待完成');return;}
-   const cfg=structuredClone(c.state.aiSettings);if(!cfg.key)throw Error('请先在设置 → AI 与创作中保存 API 密钥');
+   const cfg=structuredClone(c.state.aiSettings);if(cfg.deliveryMode!=='image'&&!cfg.key)throw Error('请先在设置 → AI 与创作中保存 API 密钥');
    const p=c.createProject(),ids=p.candidateAssetIDs,aliases=materialAliases(ids);
    const v={id:c.uid(),title:'方案 '+(variants.length+1),createdAt:new Date().toISOString(),status:'running',progress:'正在准备素材预览…',project:p};variants.unshift(v);const run=new AbortController();controller=run;let recorder;
    update();
    try {
     await save();
+    if(cfg.deliveryMode==='image'){
+     const blob=await c.generatePageImage({settings:cfg,project:p,draft:p.drafts[0],assets:c.state.assets,ids,theme:c.state.matchIntent,createImage:c.modelImage,signal:run.signal,onProgress:message=>{v.progress=message;const el=document.querySelector(`[data-variant="${v.id}"] .match-progress`);if(el)el.textContent=message;}});
+     const snapshot=await c.saveGeneratedImageSnapshot(blob,p);v.project=snapshot;v.linkedProjectID=snapshot.id;v.status='completed';v.progress='GPT 直接生成的图片已保存到画面快照；点击查看。';return;
+    }
     recorder=await c.createAIRecorder({db:c.db,model:cfg.model,key:cfg.key});const vision=cfg.includeThumbnails&&c.supportsVision(cfg);
     const images=vision?await prepareMaterialPreviews(ids,{findAsset:c.asset,createImage:c.modelImage}):[];
     const references=[];if(cfg.sendPresetReferences&&c.supportsVision(cfg))references.push(...(await renderPresetReferences(presetReferencePlans({styles:p.styles,purposes:p.purposes,mode:p.drafts[0].pageMode}))).map(entry=>entry.url));

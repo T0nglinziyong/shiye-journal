@@ -1,4 +1,5 @@
 import {deliveryProfile} from './ai-delivery.js';
+import {IMAGE_MODELS} from './ai-image-generation.js';
 const STORAGE_KEY='shiye-ai-settings-v1';
 export const AI_PROVIDERS=Object.freeze({
   openai:{label:'OpenAI',endpoint:'https://api.openai.com/v1/chat/completions',models:[['gpt-4o','GPT-4o',true],['gpt-4.1-mini','GPT-4.1 mini',true],['gpt-4.1','GPT-4.1',true]]},
@@ -7,7 +8,7 @@ export const AI_PROVIDERS=Object.freeze({
   siliconflow:{label:'硅基流动',endpoint:'https://api.siliconflow.cn/v1/chat/completions',models:[['Qwen/Qwen2.5-VL-72B-Instruct','Qwen2.5-VL 72B',true],['deepseek-ai/DeepSeek-V3','DeepSeek V3',false]]},
   custom:{label:'自定义兼容接口',endpoint:'',models:[]}
 });
-export const AI_DEFAULTS=Object.freeze({provider:'deepseek',key:'',keys:{},endpoint:AI_PROVIDERS.deepseek.endpoint,model:'deepseek-flash',deliveryMode:'tools',generationMode:'agent',directPageOutput:'editable',temperature:.75,maxTokens:6000,maxTurns:5,includeThumbnails:true,customVision:false,requestTimeout:75,sendOutputLimit:true,disableThinking:true,transport:'auto',textMode:'automatic',reasoningMode:'automatic',includeStructureReference:true,sendPresetReferences:false,autoIncludeRecommendations:false,requireAllCandidates:true,customLayoutPrompt:''});
+export const AI_DEFAULTS=Object.freeze({provider:'deepseek',key:'',keys:{},endpoint:AI_PROVIDERS.deepseek.endpoint,model:'deepseek-flash',imageModel:IMAGE_MODELS[0],deliveryMode:'tools',generationMode:'agent',directPageOutput:'editable',temperature:.75,maxTokens:6000,maxTurns:5,includeThumbnails:true,customVision:false,requestTimeout:75,sendOutputLimit:true,disableThinking:true,transport:'auto',textMode:'automatic',reasoningMode:'automatic',includeStructureReference:true,sendPresetReferences:false,autoIncludeRecommendations:false,requireAllCandidates:true,customLayoutPrompt:''});
 const limit=(value,min,max,fallback)=>Number.isFinite(+value)?Math.min(max,Math.max(min,+value)):fallback;
 export function normalizeAISettings(value={}){
   if(!value||typeof value!=='object'||Array.isArray(value))value={};
@@ -17,7 +18,7 @@ export function normalizeAISettings(value={}){
   const deliveryMode=['tools','json','image','pdf','zip'].includes(value.deliveryMode)?value.deliveryMode:value.generationMode==='direct'?(value.directPageOutput==='flattened'?'image':'json'):'tools';
   return {
     provider,keys,key:String(keys[provider]||'').trim(),endpoint:typeof value.endpoint==='string'&&value.endpoint.trim()?value.endpoint.trim():preset.endpoint,model,
-    deliveryMode,...deliveryProfile(deliveryMode),
+    deliveryMode,...deliveryProfile(deliveryMode),imageModel:IMAGE_MODELS.includes(value.imageModel)?value.imageModel:AI_DEFAULTS.imageModel,
     temperature:limit(value.temperature,0,2,AI_DEFAULTS.temperature),
     maxTokens:Math.round(limit(value.maxTokens,2000,16000,AI_DEFAULTS.maxTokens)),
     maxTurns:Math.round(limit(value.maxTurns===0?5:value.maxTurns,1,5,AI_DEFAULTS.maxTurns)),

@@ -29,6 +29,19 @@ test('matching view places direction above recommendations and explains AI inclu
  assert.ok(matchingRecommendations(state).length);
  const html=renderMatchingPage({state,head:()=>'<header></header>',imgTag:()=>'<img>',esc:String,kindName:String,session:{render:()=>'<footer></footer>'}});
  assert.ok(html.indexOf('match-direction')<html.indexOf('match-recommendations'));
- assert.match(html,/可以使用 · AI 备选/);
+ assert.doesNotMatch(html,/未发送给 AI/);
  assert.doesNotMatch(html,/花朵贴纸/);
+});
+test('basket star remains clickable with require-all setting and actions share a size class',()=>{
+ const state={assets,basket:['paper'],coreIDs:[],excludedAssetIDs:[],matchStyles:[],matchPurposes:[],matchMode:'single',matchRatio:'a4',matchProcessing:'保留完整',matchIntent:'',materialUseHints:{},materialUseRequired:{},recommendFilter:'全部',customPaperWidth:210,customPaperHeight:297,aiSettings:{requireAllCandidates:true,autoIncludeRecommendations:false}};
+ const html=renderMatchingPage({state,head:()=>'<header></header>',imgTag:()=>'<img>',esc:String,kindName:String,session:{render:()=>''}});
+ assert.match(html,/class="match-basket-actions"/);assert.match(html,/data-act="match-core"/);
+ assert.doesNotMatch(html,/data-act="match-core"[^>]*disabled/);
+});
+test('recommendations use all semantic tags and selected basket context',()=>{
+ const selected=make('base','photo','旅行照片',['旅途']);selected.semanticColorNames=['蓝色'];selected.materialTags=['光面'];
+ const related=make('related','tape','浅蓝胶带');related.semanticColorNames=['蓝色'];related.placementHints=['旅途'];related.materialTags=['光面'];
+ const unrelated=make('unrelated','tape','纯红胶带');unrelated.semanticColorNames=['红色'];
+ const result=recommendForDirection({assets:[selected,related,unrelated],basket:['base'],purposes:['旅途记录']});
+ assert.equal(result[0].asset.id,'related');assert.ok(result[0].reasons.includes('配色关系'));
 });

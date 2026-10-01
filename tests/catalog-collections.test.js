@@ -6,7 +6,12 @@ import {styleGroups,purposeGroups,selectedDirections} from '../src/matching-dire
 import {createNativeProjectPackage,importNativeProjectPackage} from '../src/native-project-package.js';
 import {project,itemFromAsset} from '../src/domain.js';
 import {applyToolCalls} from '../src/creative.js';
-import {buildCreativeMessages} from '../src/creative-runner.js';
+import {buildCreativeMessages,creativeScene} from '../src/creative-runner.js';
+import {generatePageImage,imagePrompt} from '../src/ai-image-generation.js';
+import {materialMaskCSS,materialMaskPoints} from '../src/material-mask.js';
+import {shapeSVG,textLines} from '../src/editor-tools-model.js';
+import {parseMaskPoints} from '../src/material-processing-editor.js';
+import {parseEditableGeometry} from '../src/editable-geometry.js';
 
 test('page controls clamp input while counts remain independent of the page',()=>{
   assert.equal(pageSize(0),0);assert.equal(pageSize(40),40);assert.equal(pageSize(13),0);
@@ -66,4 +71,64 @@ test('snapshot prompt leaves composition open while editable prompt advertises l
   const editable=buildCreativeMessages({draft:base,assets:[],aliases:{},generationMode:'direct',deliveryMode:'json'});
   assert.match(editable[0].content,/ink_strokes/);
   assert.match(editable[0].content,/文字围绕图片侧边/);
+});
+test('GPT image delivery uses actual image edits and only accepts returned PNG bytes',async()=>{
+  const asset={id:'a1',title:'小纸片',kind:'paper',physicalWidthMM:20,physicalHeightMM:30,supply:{quantity:1}};
+  const p=project('直接成图'),draft=p.drafts[0],png=Uint8Array.from([137,80,78,71,13,10,26,10]);
+  const input='data:image/png;base64,'+Buffer.from(png).toString('base64');let endpoint,body;
+  const result=await generatePageImage({settings:{keys:{openai:'test-key'},imageModel:'gpt-image-2.5-flare',includeThumbnails:true},project:p,draft,assets:[asset],ids:['a1'],theme:'春天',createImage:async()=>input,request:async(url,options)=>{
+    if(url.startsWith('data:'))return fetch(url);
+    endpoint=url;body=options.body;
+    return new Response(JSON.stringify({data:[{b64_json:Buffer.from(png).toString('base64')}]}),{status:200,headers:{'Content-Type':'application/json'}});
+  }});
+  assert.equal(endpoint,'https://api.openai.com/v1/images/edits');
+  assert.equal(body.get('model'),'gpt-image-2.5-flare');
+  assert.equal([...body.getAll('image[]')].length,1);
+  assert.equal(result.type,'image/png');assert.deepEqual(new Uint8Array(await result.arrayBuffer()),png);
+  assert.match(imagePrompt({project:p,draft,assets:[asset],ids:['a1']}),/不设素材数量、留白比例/);
+  await assert.rejects(generatePageImage({settings:{keys:{}},project:p,draft,assets:[asset],ids:['a1']}),/OpenAI API 密钥/);
+});
+test('editable mask operations preserve irregular, rounded and scalloped cutouts in ZIP',async()=>{
+  const asset={id:'a1',title:'纸片',kind:'paper',physicalWidthMM:60,physicalHeightMM:80,supply:{quantity:3}};
+  const p=project('裁片');const masks=[
+    {op:'mask',shape:'polygon',points:[[0,0],[1,0],[.8,.6],[.3,1],[0,.8]]},
+    {op:'mask',shape:'rounded',radius:.18},
+    {op:'mask',shape:'scallop',depth:.06,waves:7}
+  ];
+  const page={version:3,style:'自由构图',intent:null,paper:{color:'#ffffff',pattern:'plain'},graphics:[],text_blocks:[{content:'可编辑文字',font_style:'sans',x:.5,y:.8,width:.5,height:.1,font_size:24,color:'#333333'}],items:masks.map((mask,index)=>({asset:'a1',piece:'piece-'+index,unit:index,role:null,operations:[{op:'whole'},mask],placement:{x:.18+index*.31,y:.4,rotation:0,z:index},relation:null}))};
+  const result=applyToolCalls(page,p.drafts[0],[asset]);assert.deepEqual(result.results.map(x=>x.ok),[true]);
+  assert.deepEqual(result.draft.items.map(x=>x.materialMask.shape),['polygon','rounded','scallop']);
+  for(const item of result.draft.items){assert.ok(materialMaskPoints(item.materialMask).length>=3);assert.match(materialMaskCSS(item),/clip-path:polygon/);}
+  p.drafts[0]=result.draft;const imported=importNativeProjectPackage(new Uint8Array(await createNativeProjectPackage(p).arrayBuffer()),[asset]);
+  assert.deepEqual(imported.drafts[0].items.map(x=>x.materialMask),result.draft.items.map(x=>x.materialMask));
+  const invalid=structuredClone(page);invalid.items[0].operations[1].points[0]=[-1,0];
+  assert.throws(()=>applyToolCalls(invalid,p.drafts[0],[asset]),/合同不合法|边缘无效|未实现或未知字段/);
+});
+test('editable JSON maps visual controls to native layers and preserves them in ZIP',async()=>{
+  const asset={id:'a1',title:'纸',kind:'paper',physicalWidthMM:35,physicalHeightMM:45,supply:{quantity:1}};
+  const p=project('表达完整性'),page={version:3,style:'自由构图',intent:'多层表达',paper:{color:'#fffaf2',pattern:'lined',ruling:28,center_gutter:false},
+    items:[{asset:'a1',piece:'paper',unit:0,operations:[{op:'whole'},{op:'mask',shape:'rounded',radius:.13}],placement:{x:.25,y:.4,rotation:0,z:1},opacity:.65,flip_horizontal:true}],
+    graphics:[{key:'round',kind:'roundedRectangle',x:.7,y:.25,width:.25,height:.1,corner_radius:.3,fill:'#ffeeaa',stroke:null},{key:'ornament',kind:'vector',x:.7,y:.6,width:.2,height:.2,vector_layers:[{fill:'#ff0000',opacity:.5,paths:[[[0,0],[1,0],[.5,1]]]},{fill:'#0000ff',rects:[[.2,.2,.3,.3]]}]}],
+    text_blocks:[{content:'第一行\n第二行',font_style:'sans',font_name:'Songti SC',x:.5,y:.8,width:.5,height:.1,font_size:24,color:'#333333',underline:true,strikethrough:true,opacity:.6,fixed_line_height:35,paragraph_spacing:7}],ink_strokes:[]};
+  const result=applyToolCalls(page,p.drafts[0],[asset]);assert.deepEqual(result.results.map(x=>x.ok),[true]);
+  const d=result.draft;assert.equal(d.items[0].opacity,.65);assert.equal(d.items[0].isFlippedHorizontally,true);
+  assert.equal(d.paperRuling.rowPositions[0],28/d.canvas.height);assert.equal(d.drawCenterGutter,false);
+  assert.match(shapeSVG(d.primitives[0]),/rx="0.3"/);assert.equal(d.primitives[1].vectorLayers.length,2);
+  assert.equal(d.textBlocks[0].fontName,'Songti SC');assert.equal(d.textBlocks[0].fixedLineHeight,35);assert.equal(d.textBlocks[0].paragraphSpacing,7);
+  const scene=creativeScene(d,{a1:'a1'});assert.equal(scene.materials[0].materialMask.shape,'rounded');assert.equal(scene.texts[0].fontName,'Songti SC');assert.equal(scene.graphics[0].cornerRadius,.3);
+  assert.equal(textLines(d.textBlocks[0],text=>text.length*10).lines.length,2);
+  p.drafts[0]=d;const roundtrip=importNativeProjectPackage(new Uint8Array(await createNativeProjectPackage(p).arrayBuffer()),[asset]);
+  assert.deepEqual(roundtrip.drafts[0].items[0].materialMask,d.items[0].materialMask);
+  assert.deepEqual(roundtrip.drafts[0].primitives[1].vectorLayers,d.primitives[1].vectorLayers);
+  assert.equal(roundtrip.drafts[0].textBlocks[0].underline,true);
+});
+test('manual geometry editors accept the same paths and masks as AI, rejecting unsafe coordinates',()=>{
+  assert.deepEqual(parseMaskPoints('0, 0\n1, 0\n.7, 1\n0, 1'),[[0,0],[1,0],[.7,1],[0,1]]);
+  assert.deepEqual(parseEditableGeometry('[[[0,0],[1,0],[0.5,1]]]','paths'),[[[0,0],[1,0],[.5,1]]]);
+  const layers=[{fill:'#ffcc00',opacity:.8,paths:[[[0,0],[1,0],[.5,1]]],rects:[[.1,.1,.2,.2]]}];
+  assert.deepEqual(parseEditableGeometry(JSON.stringify(layers),'layers'),layers);
+  assert.match(shapeSVG({id:'test',kind:'vector',width:100,height:100,vectorLayers:layers}),/M0.1 0.1h0.2v0.2h-0.2Z M0 0 L1 0 L0.5 1 Z/);
+  assert.throws(()=>parseMaskPoints('-1, 0; 1, 0; 1, 1'),/无效/);
+  assert.throws(()=>parseEditableGeometry('[[[0,0],[2,0]]]','paths'),/0–1/);
+  assert.throws(()=>parseEditableGeometry(JSON.stringify([{fill:'#ffcc00',paths:[[[0,0],[2,0]]],rects:[[.1,.1,.2,.2]]}]),'layers'),/0–1/);
 });
