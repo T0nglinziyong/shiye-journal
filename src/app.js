@@ -56,7 +56,7 @@ import {seedBundledExamples} from './cece-seed.js';
 import {seedStarterStyles} from './starter-seed.js';
 import {seedSwiftBundledMaterials} from './swift-bundled-seed.js';
 import {applyToolCalls} from './creative.js';
-import {createOfflineHandoff,inspectEditableSource,inspectOfflinePackage,importEditableWork,importEditableWorkPackage} from './offline-creation.js';
+import {createOfflineHandoff,inspectEditableSource,inspectOfflinePackage,verifyOfflineTaskPackage,importEditableWork,importEditableWorkPackage} from './offline-creation.js';
 import {offlineTaskStore} from './offline-task-store.js';
 import {offlinePreviewBytes as encodeOfflinePreview} from './offline-preview.js';
 import {buildMaterialScope} from './matching-materials.js';
@@ -723,6 +723,7 @@ async function importEditableFile(file){
     const bytes=new Uint8Array(await file.arrayBuffer()),inspected=inspectOfflinePackage(bytes);
     if(inspected.kind==='task'){
       if(inspected.source.materials.some(item=>!state.assets.some(asset=>asset.id===item.assetID)))throw Error('原始任务中的素材不在当前账号资料里');
+      await verifyOfflineTaskPackage(bytes,inspected.source);
       if(!confirm('这是网页版 AI 的原始创作任务包。将它登记为后续 AI 作品的校验基线，确认这是你导出的原件吗？'))return;
       await offlineTaskStore.save(await offlineTaskAccount(),inspected.source);
       toast('原始任务已登记；现在请选择 AI 返回的可编辑作品包');return;

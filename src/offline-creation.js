@@ -9,6 +9,7 @@ import {validMaterialAlias} from './material-alias.js';
 import {importNativeProjectPackage,validatePackageValue} from './native-project-package.js';
 import {readProjectPackageEntries} from './project-package-archive.js';
 import {canonicalTaskSource} from './task-source.js';
+import {sha256Hex,taskFingerprint,assertTaskFingerprint} from './task-fingerprint.js';
 
 export const OFFLINE_PACKAGE_FORMAT='shiye-gpt-creation-package';
 export const EDITABLE_WORK_FORMAT='shiye-editable-project';
@@ -55,6 +56,8 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
   source.capabilities={cropPx:false};
   const exportedContract=offlineContract(mode,source.capabilities);
   source.schemaHash=schemaFingerprint(exportedContract);
+  source.previewHashes=showImages?Object.fromEntries(await Promise.all(chosen.map(async entry=>[entry.alias,`sha256:${await sha256Hex(entry.bytes)}`]))):null;
+  source.taskHash=await taskFingerprint(source);
   const context={format:OFFLINE_PACKAGE_FORMAT,version:1,source,materials:selected.map(item=>({...item,preview:showImages?`materials/${item.alias}.png`:null}))};
   const envelope={format:EDITABLE_WORK_FORMAT,version:1,source,title:'新的手帐'};
   const directExample={...envelope,page:{version:3,style:'留白叙事',intent:null,items:[{asset:selected[0].alias,piece:'主素材',unit:0,role:null,operations:[{op:'whole'}],placement:{x:.5,y:.43,rotation:0,z:1},relation:null}],graphics:[{key:'title-rule',kind:'line',x:.5,y:.21,width:.55,height:.004,stroke:'#8ba99b',fill:null,line_width:2}],text_blocks:[{content:'这一页的主题',font_style:'serif',x:.5,y:.13,width:.7,height:.09,font_size:30,color:'#30463d'},{content:'第一段可编辑正文，根据真实主题填写。',font_style:'sans',x:.5,y:.72,width:.75,height:.08,font_size:20,color:'#30463d'},{content:'第二段可编辑正文，接续上一段的内容。',font_style:'sans',x:.5,y:.84,width:.75,height:.08,font_size:20,color:'#30463d'}],paper:{color:'#fcfaf0',pattern:'plain'}}};
@@ -153,6 +156,20 @@ export function inspectOfflinePackage(bytes){
   if(context?.format!==OFFLINE_PACKAGE_FORMAT||context.version!==1||context.source?.taskBinding!=='local-v1'||!Array.isArray(context.materials)||!context.source?.materials?.length)throw Error('不是可登记的网页 AI 原始任务包');
   if(canonicalTaskSource(context.materials.map(({alias,assetID})=>({alias,assetID})))!==canonicalTaskSource(context.source.materials))throw Error('原始任务包素材映射不一致');
   return {kind,source:context.source};
+}
+export async function verifyOfflineTaskPackage(bytes,source){
+  await assertTaskFingerprint(source);
+  if(source.previewHashes===undefined)return;
+  const expected=source.previewHashes;
+  if(expected===null)return;
+  if(!expected||typeof expected!=='object'||Array.isArray(expected)||Object.keys(expected).length!==source.materials.length)throw Error('原始任务的素材预览指纹不完整');
+  // The archive has already passed the bounded entry/path inspection.
+  readProjectPackageEntries(bytes,{allowTask:true});
+  const previews=unzipSync(bytes,{filter:entry=>entry.name.startsWith('materials/')});
+  for(const item of source.materials){
+    const fingerprint=expected[item.alias],image=previews[`materials/${item.alias}.png`];
+    if(!/^sha256:[a-f0-9]{64}$/.test(fingerprint||'')||!image||`sha256:${await sha256Hex(image)}`!==fingerprint)throw Error(`原始任务素材 ${item.alias} 的预览与指纹不一致`);
+  }
 }
 export function importEditableWorkPackage(bytes,assets,options={}){
   if(!(bytes instanceof Uint8Array)||bytes.byteLength>20_000_000)throw Error('可编辑作品包不能超过 20 MB');

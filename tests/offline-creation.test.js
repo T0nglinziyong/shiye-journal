@@ -1,8 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {unzipSync,zipSync,strToU8,strFromU8} from 'fflate';
+import {createHash} from 'node:crypto';
 import {project} from '../src/domain.js';
-import {createOfflineCreationPackage,createOfflineHandoff,importEditableWork,importEditableWorkPackage,EDITABLE_WORK_FORMAT,EDITABLE_PACKAGE_ENTRY} from '../src/offline-creation.js';
+import {createOfflineCreationPackage,createOfflineHandoff,verifyOfflineTaskPackage,importEditableWork,importEditableWorkPackage,EDITABLE_WORK_FORMAT,EDITABLE_PACKAGE_ENTRY} from '../src/offline-creation.js';
 import {shapeSVG} from '../src/editor-tools-model.js';
 import {presetReferenceGuide,presetReferencePlans} from '../src/creative-reference-presets.js';
 import {materialAlias,materialAliases} from '../src/material-alias.js';
@@ -142,6 +143,21 @@ test('offline ZIP preserves transparent PNG preview bytes and paths',async()=>{
   assert.deepEqual(files['materials/m1.png'],transparentPixel);
   assert.equal(JSON.parse(strFromU8(files['context.json'])).materials[0].preview,'materials/m1.png');
   assert.match(strFromU8(files['START_HERE.txt']),/不要给贴纸添加白底/);
+});
+
+test('O-11: task source fingerprints the exact preview bytes and refuses a changed registered ZIP',async()=>{
+  const preview=new Uint8Array([137,80,78,71,1,2,3,4]);
+  const output=await createOfflineHandoff({project:project('指纹任务'),assets:[asset],aliases:{m1:asset.id},previews:[{alias:'m1',bytes:preview}],settings:{includeThumbnails:true}});
+  const bytes=new Uint8Array(await output.blob.arrayBuffer()),files=unzipSync(bytes);
+  assert.equal(output.source.previewHashes.m1,'sha256:'+createHash('sha256').update(preview).digest('hex'));
+  assert.match(output.source.taskHash,/^sha256:[a-f0-9]{64}$/);
+  await verifyOfflineTaskPackage(bytes,output.source);
+  const changed={...files,'materials/m1.png':new Uint8Array([137,80,78,71,9,9,9,9])};
+  await assert.rejects(verifyOfflineTaskPackage(zipSync(changed),output.source),/预览与指纹不一致/);
+  await assert.rejects(verifyOfflineTaskPackage(bytes,{...output.source,title:'篡改的任务'}),/任务指纹不匹配/);
+  const textOnly=await createOfflineHandoff({project:project('无视觉输入'),assets:[asset],aliases:{m1:asset.id},settings:{includeThumbnails:false}});
+  assert.equal(textOnly.source.previewHashes,null);
+  await verifyOfflineTaskPackage(new Uint8Array(await textOnly.blob.arrayBuffer()),textOnly.source);
 });
 
 test('selected style and purpose produce four anonymous alternatives from simple to experimental',async()=>{
