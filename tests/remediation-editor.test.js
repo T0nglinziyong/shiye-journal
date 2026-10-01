@@ -40,6 +40,20 @@ test('R-03: IME textarea remains the same node during a canvas refresh',()=>{
   assert.strictEqual(node.firstChild,input);
   assert.equal(input.value,'输入中的中文');
 });
+test('R-02: a selected paragraph keeps its text range through a markup refresh',()=>{
+  const window=new Window(),document=window.document;
+  const node=document.createElement('div');
+  node.innerHTML='<div data-text-content><span>第一段</span><span>第二段</span></div>';
+  document.body.append(node);
+  const old=node.querySelectorAll('span'),range=document.createRange(),selection=window.getSelection();
+  range.setStart(old[0].firstChild,1);range.setEnd(old[1].firstChild,2);
+  selection.removeAllRanges();selection.addRange(range);
+  const next=node.cloneNode(true);
+  next.querySelectorAll('span')[1].style.marginTop='12px';
+  assert.equal(reconcileCanvasText(node,next),true);
+  assert.equal(selection.toString(),'一段第二');
+  assert.equal(node.querySelectorAll('[data-text-content]').length,1);
+});
 
 test('E-01: undo snapshots cannot cross project or draft identity',()=>{
   const first={id:'draft-A',textBlocks:[{content:'A'}]};

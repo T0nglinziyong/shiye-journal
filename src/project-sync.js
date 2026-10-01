@@ -3,7 +3,9 @@
 export function createProjectSync({load,write,commit,revision,reconcile=async()=> 'conflict',onStatus=()=>{}}){
   let initialized,staging=Promise.resolve(),network,serial=0,error;
   const entries=new Map();
-  const initialize=()=>initialized??=(async()=>{for(const row of await load()||[]){entries.set(row.record.id,row);serial=Math.max(serial,row.serial);}report();})();
+  // A transient IndexedDB/auth read failure must not poison this instance for
+  // the rest of the session: the resumer will retry the durable outbox later.
+  const initialize=()=>initialized??=(async()=>{for(const row of await load()||[]){entries.set(row.record.id,row);serial=Math.max(serial,row.serial);}report();})().catch(failure=>{initialized=undefined;throw failure;});
   const report=()=>onStatus({pending:entries.size,error});
   const persist=()=>write(structuredClone([...entries.values()]));
   async function acknowledge(row){

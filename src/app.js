@@ -734,7 +734,9 @@ backupInput.onchange=async()=>{const file=backupInput.files?.[0];backupInput.val
   if(!confirm('恢复完整备份会替换当前 PWA 中的全部资料。请先确认旧资料已导出。继续吗？'))return;try{await flushSave();await db.flushProjects();state.activeProject=null;await db.restoreBackup(file);state.basket=[];await refresh();toast('完整备份已恢复');}catch(e){console.error(e);toast('恢复失败：'+e.message);}};
 window.addEventListener('pagehide',()=>{if(saveTimer)flushSave().catch(console.error);});
 window.addEventListener('beforeunload',event=>{if(saveTimer||savingProjects||dirtyProjects.size){event.preventDefault();event.returnValue='';}});
-window.addEventListener('shiye-flush-before-logout',event=>event.detail.tasks.push(flushSave().then(()=>db.flushProjects())));
+// Logout requires a durable local checkpoint, not a successful network round
+// trip. Unacknowledged edits remain in the account-scoped outbox for re-login.
+window.addEventListener('shiye-flush-before-logout',event=>event.detail.tasks.push(flushSave()));
 let lastSyncError;
 window.addEventListener('shiye-project-sync',event=>{const {pending,error}=event.detail;syncDisplay.pending=pending;syncDisplay.error=error;syncDisplay.checking=false;if(!dirtyProjects.size&&!savingProjects)syncDisplay.localPending=false;updateSyncIndicator();if(error){saveStatus('待同步 · 修改已保留在本机');const message=error.name==='AbortError'||/abort|timed? ?out/i.test(error.message||'')?'网络请求中断，本机修改已保留，将自动重试同步':error.message||'云端暂不可用，本机修改已保留，将自动重试';if(lastSyncError!==message)toast(message);lastSyncError=message;}else{lastSyncError=null;saveStatus(pending?'修改已暂存 · 后台同步中':'已保存到云端');privateImages.retryMissing();}});
 let cloudCheck,cloudCheckAt=0,cloudSessionReady=false;

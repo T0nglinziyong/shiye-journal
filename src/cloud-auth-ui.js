@@ -1,6 +1,6 @@
 import {cloudEnabled,cloudClient,requireCloudUser} from './cloud-session.js';
 import {createBackup} from './store.js';
-import {cloudClearCache} from './cloud-store.js';
+import {cloudClearCache,cloudPendingLocalSummary,cloudResumeCache} from './cloud-store.js';
 import {openAdminView} from './admin-view.js';
 import {openAccountManagement} from './account-management.js';
 
@@ -50,7 +50,7 @@ export async function startCloudSession(onReady){
     menuHost.onkeydown=event=>{if(event.key==='Escape'){menu.hidden=true;toggle.setAttribute('aria-expanded','false');toggle.focus();}};
     menuHost.querySelector('[data-change-password]').onclick=()=>{menu.hidden=true;changePasswordDialog(client);};
     if(account.is_admin===true){const create=menuHost.querySelector('[data-create-account]');create.hidden=false;create.onclick=()=>{menu.hidden=true;openAccountManagement(client);};const button=menuHost.querySelector('[data-admin-view]');button.hidden=false;button.onclick=async()=>{menu.hidden=true;try{await openAdminView(client,user.id);}catch(error){alert('无法查看其他用户：'+(error.message||'请检查网络'));}};}
-    menuHost.querySelector('[data-logout]').onclick=async()=>{try{const detail={tasks:[]};window.dispatchEvent(new CustomEvent('shiye-flush-before-logout',{detail}));await Promise.all(detail.tasks);}catch{alert('有修改尚未同步到云端，请保存成功后再退出');return;}try{await cloudClearCache();}catch{alert('本机私人缓存清理失败，请重试退出');return;}const {error}=await client.auth.signOut({scope:'local'});if(error){alert('退出失败，请检查网络');return;}location.reload();};
+    menuHost.querySelector('[data-logout]').onclick=async()=>{try{const detail={tasks:[]};window.dispatchEvent(new CustomEvent('shiye-flush-before-logout',{detail}));await Promise.all(detail.tasks);}catch{alert('本机暂存失败，修改还在当前页面；请先解决后再退出');return;}let pending;try{pending=await cloudPendingLocalSummary();}catch{alert('无法检查本机待同步资料，请先重试');return;}const count=pending.projects+pending.imports;if(count&&!confirm(`本机还有 ${count} 项待同步修改。退出登录会保留这些原稿；下次用同一账号登录后继续上传。确定退出吗？`))return;try{await cloudClearCache();}catch{alert('本机私人缓存清理失败，请重试退出');return;}let result;try{result=await client.auth.signOut({scope:'local'});}catch(error){cloudResumeCache();alert('退出失败，请检查网络');return;}if(result.error){cloudResumeCache();alert('退出失败，请检查网络');return;}location.reload();};
     menuHost.querySelector('[data-old-backup]').onclick=async()=>{try{const blob=await createBackup({browserOnly:true}),link=document.createElement('a'),url=URL.createObjectURL(blob);link.href=url;link.download='拾页本机旧资料.shiyepwa';link.click();setTimeout(()=>URL.revokeObjectURL(url),60000);}catch(error){alert('旧资料导出失败：'+error.message);}};
     document.querySelector('.top-actions').append(menuHost);
     client.auth.onAuthStateChange(event=>{if(event==='SIGNED_OUT'){app.hidden=true;void cloudClearCache().catch(console.warn).finally(()=>location.reload());}});

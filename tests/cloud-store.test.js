@@ -41,6 +41,15 @@ test('imports finish durable staging while image uploads are blocked; pending by
   release();await a.db.cloudFlushProjects();assert.equal(a.state.calls.length,1);assert.equal(a.state.calls[0].operations.length,2);
   assert.deepEqual(await cache.get('cloud:owner-uuid','import-outbox'),[]);
 });
+test('logout summary reads the shared account outbox without waiting for upload',async()=>{
+  const cache=memoryCache(),first=fixture(cache);let release;
+  first.state.uploadGate=new Promise(resolve=>release=resolve);
+  await first.db.cloudStageImport({assets:[{id:'a',blobId:'image'}],blobs:[{id:'image',data:new Blob(['bytes'])}],projects:[]});
+  assert.deepEqual(await first.db.cloudPendingLocalSummary(),{projects:0,imports:1});
+  const second=fixture(cache);
+  assert.deepEqual(await second.db.cloudPendingLocalSummary(),{projects:0,imports:1});
+  release();await first.db.cloudFlushProjects();
+});
 test('failed import uploads retain the entire batch; rejected auth/quota never creates a ghost import',async()=>{
   const cache=memoryCache(),a=fixture(cache);a.state.fail=true;
   await a.db.cloudStageImport({assets:[{id:'a'}],blobs:[{id:'b',data:new Blob(['image'])}],projects:[]});await assert.rejects(a.db.cloudFlushProjects(),/图片上传失败/);

@@ -71,3 +71,18 @@ test('discard refuses an in-flight cloud request',async()=>{
   await assert.rejects(sync.discard(),/上传正在进行/);assert.equal(rows.length,1);
   release();await flushing;
 });
+test('transient outbox load failure can recover in the same session',async()=>{
+  const rows=[{record:{id:'draft',title:'preserved'},serial:1,baseRevision:2}];
+  let reads=0,commits=0,revision=2;
+  const sync=createProjectSync({
+    load:async()=>{if(++reads===1)throw Error('temporary IndexedDB read failure');return rows;},
+    write:async next=>{rows.splice(0,rows.length,...structuredClone(next));},
+    revision:()=>revision,
+    commit:async()=>{commits++;revision++;},
+  });
+  await assert.rejects(sync.flush(),/temporary IndexedDB read failure/);
+  await sync.flush();
+  assert.equal(reads,2);
+  assert.equal(commits,1);
+  assert.deepEqual(rows,[]);
+});
