@@ -1,7 +1,7 @@
 import {agentTools} from './creative-contract.js';
 const CAPTURE='shiye-ai-context-capture-v1',MAX_SESSION=128*1024*1024,MAX_TOTAL=512*1024*1024;
 const SAFE_TOOLS=new Set(['response',...agentTools.map(tool=>tool.function.name)]);
-const SAFE_REASONS=new Set(['completed','request-limit','no-progress','cancelled','authentication','permission','rate-limit','context-limit','unsupported-request','http-error','stream-error','incomplete-response','network','idle-timeout','duration-limit','failed','stopped']);
+const SAFE_REASONS=new Set(['completed','request-limit','no-progress','cancelled','authentication','permission','rate-limit','context-limit','unsupported-request','capability-unverified','http-error','stream-error','incomplete-response','network','idle-timeout','duration-limit','failed','stopped']);
 const safeReason=value=>SAFE_REASONS.has(value)?value:'error';
 const numberOrNull=value=>Number.isFinite(value)?value:null;
 export function publicAIDiagnosticReport(report){

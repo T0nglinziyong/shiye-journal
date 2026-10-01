@@ -1,4 +1,5 @@
 import {agentTools, directPageContract, directPageToTools} from './creative-contract.js';
+import {verifiedModelCapabilities} from './ai-capabilities.js';
 
 const jsonTools = parsed => parsed.tools || parsed.tool_calls || [];
 const directTools = parsed => directPageToTools(parsed);
@@ -33,7 +34,14 @@ const protocols = {
 };
 
 export function creativeProtocol(options) {
-  if (options.generationMode === 'direct') return protocols.directPage;
-  return ['native', 'auto'].includes(options.transport || 'native')
-    ? protocols.nativeTools : protocols.jsonTools;
+  const transport=options.transport||'auto',capability=verifiedModelCapabilities(options);
+  if(options.generationMode==='direct'){
+    if(capability?.jsonObject||transport==='json')return protocols.directPage;
+    const error=Error('完整页面需要 JSON 响应；当前模型能力未核对，请在设置中明确选择兼容 JSON 接口');error.code='capability-unverified';throw error;
+  }
+  if(transport==='native')return protocols.nativeTools;
+  if(transport==='json')return protocols.jsonTools;
+  if(capability?.nativeTools)return protocols.nativeTools;
+  if(capability?.jsonObject)return protocols.jsonTools;
+  const error=Error('自动适配未核对当前 API 地址与模型的工具/JSON 能力；请在设置中明确选择接口类型');error.code='capability-unverified';throw error;
 }

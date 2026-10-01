@@ -1,6 +1,7 @@
 import {deliveryProfile} from './ai-delivery.js';
 import {IMAGE_MODELS} from './ai-image-generation.js';
 import {creativeRequestLimit} from './ai-budget.js';
+import {verifiedModelCapabilities} from './ai-capabilities.js';
 const STORAGE_KEY='shiye-ai-settings-v1';
 export const AI_PROVIDERS=Object.freeze({
   openai:{label:'OpenAI',endpoint:'https://api.openai.com/v1/chat/completions',models:[['gpt-4o','GPT-4o',true],['gpt-4.1-mini','GPT-4.1 mini',true],['gpt-4.1','GPT-4.1',true]]},
@@ -36,7 +37,7 @@ export function normalizeAISettings(value={}){
     customLayoutPrompt:typeof value.customLayoutPrompt==='string'?value.customLayoutPrompt:''
   };
 }
-export function supportsVision(settings){const preset=AI_PROVIDERS[settings.provider];return preset.models.find(m=>m[0]===settings.model)?.[2]??!!settings.customVision;}
+export function supportsVision(settings){return verifiedModelCapabilities(settings)?.vision===true||settings.customVision===true;}
 export function loadAISettings(storage=globalThis.localStorage){
   try{return normalizeAISettings(JSON.parse(storage.getItem(STORAGE_KEY)||'{}'));}catch{return normalizeAISettings();}
 }

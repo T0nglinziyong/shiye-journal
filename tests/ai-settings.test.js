@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {AI_DEFAULTS,normalizeAISettings,saveAISettings,loadAISettings} from '../src/ai-settings.js';
+import {AI_DEFAULTS,normalizeAISettings,saveAISettings,loadAISettings,supportsVision} from '../src/ai-settings.js';
 import {normalizePreferences,savePreferences,loadPreferences} from '../src/preferences.js';
 
 const memoryStorage=()=>{const entries=new Map();return {getItem:key=>entries.get(key)||null,setItem:(key,value)=>entries.set(key,value)};};
@@ -55,4 +55,11 @@ test('automatic organization defaults on for old preferences and persists an exp
     if(previous===undefined)delete globalThis.localStorage;
     else globalThis.localStorage=previous;
   }
+});
+
+test('A-12: image input is scoped to the verified endpoint/model or an explicit user override',()=>{
+ assert.equal(supportsVision(normalizeAISettings({provider:'deepseek',model:'deepseek-flash'})),true);
+ assert.equal(supportsVision(normalizeAISettings({provider:'deepseek',endpoint:'https://example.test/chat/completions',model:'deepseek-flash'})),false);
+ assert.equal(supportsVision(normalizeAISettings({provider:'deepseek',endpoint:'https://example.test/chat/completions',model:'deepseek-flash',customVision:true})),true);
+ assert.equal(supportsVision(normalizeAISettings({provider:'siliconflow',model:'Qwen/Qwen2.5-VL-72B-Instruct'})),true);
 });

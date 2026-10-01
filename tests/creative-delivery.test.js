@@ -35,3 +35,14 @@ test('direct editable page remains a single atomic compose call', () => {
   assert.equal(direct.native, false);
   assert.match(direct.instruction, /完整JSON页面数据/);
 });
+
+test('A-12: auto uses only verified endpoint/model capabilities; explicit override stays possible',()=>{
+ const unknown={endpoint:'https://example.test/chat/completions',model:'custom-model',generationMode:'agent',transport:'auto'};
+ assert.throws(()=>creativeProtocol(unknown),error=>error.code==='capability-unverified');
+ assert.equal(creativeProtocol({...unknown,transport:'native'}).native,true);
+ assert.equal(creativeProtocol({...unknown,transport:'json'}).native,false);
+ assert.throws(()=>creativeProtocol({...unknown,generationMode:'direct'}),error=>error.code==='capability-unverified');
+ assert.equal(creativeProtocol({...unknown,generationMode:'direct',transport:'json'}).native,false);
+ assert.equal(creativeProtocol({endpoint:'https://api.deepseek.com/chat/completions',model:'deepseek-flash',transport:'auto'}).native,true);
+ assert.throws(()=>creativeProtocol({endpoint:'https://api.deepseek.com/chat/completions',model:'unknown',transport:'auto',generationMode:'agent'}),error=>error.code==='capability-unverified');
+});
