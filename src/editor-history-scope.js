@@ -2,7 +2,7 @@ import {snapshotDraft} from './draft-snapshot.js';
 
 export function editorHistoryIdentity(state){
   return state.activeProject?.id && state.activeDraft
-    ? `${state.activeProject.id}:${state.activeDraft}` : null;
+    ? `${state.accountId||'browser'}:${state.activeProject.id}:${state.activeDraft}` : null;
 }
 
 export function resetEditorHistory(state){

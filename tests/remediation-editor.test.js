@@ -65,7 +65,7 @@ test('E-01: undo snapshots cannot cross project or draft identity',()=>{
   state.activeDraft='draft-B';
   assert.equal(takeEditorHistoryStep(state,'undo','redo',second),null);
   assert.deepEqual(state.undo,[]);
-  assert.equal(state.editorHistoryScope,'project-B:draft-B');
+  assert.equal(state.editorHistoryScope,'browser:project-B:draft-B');
   state.undo.push(structuredClone(first));
   assert.equal(takeEditorHistoryStep(state,'undo','redo',second),null);
   assert.deepEqual(state.undo,[]);
@@ -76,4 +76,15 @@ test('E-01: undo snapshots cannot cross project or draft identity',()=>{
   state.activeDraft='draft-C';
   ensureEditorHistory(state);
   assert.deepEqual(state.redo,[]);
+});
+
+test('E-01: same project and draft IDs cannot carry undo across accounts',()=>{
+  const draft={id:'shared-draft',textBlocks:[{content:'账号甲的草稿'}]};
+  const state={accountId:'account-A',activeProject:{id:'shared-project'},activeDraft:draft.id,undo:[],redo:[]};
+  resetEditorHistory(state);
+  state.undo.push(structuredClone(draft));
+  state.accountId='account-B';
+  assert.equal(takeEditorHistoryStep(state,'undo','redo',draft),null);
+  assert.deepEqual(state.undo,[]);
+  assert.equal(state.editorHistoryScope,'account-B:shared-project:shared-draft');
 });

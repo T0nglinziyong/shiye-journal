@@ -52,5 +52,10 @@
 | 第八批编辑器浏览器 | `SHIYE_TEST_URL=http://localhost:5192 npm run test:editor-browser` | 88 张模拟视口截屏通过，退出码 0，首个可用画面 307 ms；非实体设备 |
 | 第八批集成 | `npm test` | 273/273，退出码 0 |
 | 第八批集成 | `npm run test:ui` | build/UI smoke/route parity/自托管 smoke 通过，退出码 0；原有大模块提示仍在 |
+| 第八批固定项目 Git 部署 | Vercel 控制台 `shiye-journal-test` Production Deployment | `2cee5fe1f3363a113680a195cec80f98dd3c463a`，Git `main`，状态 Ready，固定域名未变；无手动部署 |
+| 第九批账号历史局部 | `node --test tests/remediation-editor.test.js tests/cloud-store.test.js` | 40/40，退出码 0；E-01 同 ID 跨账号历史隔离合成回归通过 |
+| 第九批编辑器浏览器 | `SHIYE_TEST_URL=http://localhost:5192 npm run test:editor-browser` | 88 张模拟视口截屏通过，退出码 0，首个可用画面 298 ms；未执行真实双账号切换 |
+| 第九批集成 | `npm test` | 274/274，退出码 0 |
+| 第九批集成 | `npm run test:ui` | build/UI smoke/route parity/自托管 smoke 通过，退出码 0 |
 
 上面的浏览器运行在桌面 Chromium 中，模拟不同视口；它**不是**实体手机或 iPad 验收。未使用真实账号/私人素材；尚未运行在线 AI、双标签共享 IDB、隔离数据库 CAS、完整工程包往返。保留有意留白、叠压、半藏与出血，不以固定占页率、最低图层数或零重叠判成败。

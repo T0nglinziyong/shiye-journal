@@ -29,7 +29,7 @@ function changePasswordDialog(client){
 }
 
 export async function startCloudSession(onReady){
-  if(!cloudEnabled){await onReady();return;}
+  if(!cloudEnabled){await onReady(null);return;}
   const app=document.querySelector('#app');app.hidden=true;
   const gate=document.createElement('main');gate.className='cloud-login';
   gate.innerHTML='<section class="panel"><h1>登录拾页</h1><p>每位用户的资料独立保存在私人云端。账号由管理员创建；登录后本浏览器会保持会话，直到主动退出。</p><form data-login><label>用户名<input name="email" type="text" autocomplete="username" required></label><label>密码<input name="password" type="password" autocomplete="current-password" required></label><button class="btn primary" type="submit">登录</button></form><p role="status"></p></section>';
@@ -40,7 +40,7 @@ export async function startCloudSession(onReady){
     const user=await requireCloudUser();
     const {data:account,error}=await client.from('shiye_accounts').select('username,is_admin').eq('user_id',user.id).single();
     if(error||!account)throw Error('无法读取账号资料');
-    gate.remove();app.hidden=false;await onReady();
+    gate.remove();app.hidden=false;await onReady(user);
     const menuHost=document.createElement('div');menuHost.className='cloud-account';
     menuHost.innerHTML='<button type="button" class="btn mini" aria-expanded="false" aria-controls="cloud-account-menu">账号</button><div id="cloud-account-menu" class="cloud-account-menu" hidden><small data-account-name></small><button type="button" class="btn" data-create-account hidden>新建账号</button><button type="button" class="btn" data-admin-view hidden>查看其他用户（只读）</button><button type="button" class="btn" data-change-password>修改密码</button><button type="button" class="btn" data-old-backup>导出本机旧资料</button><button type="button" class="btn" data-logout>退出登录</button></div>';
     menuHost.querySelector('[data-account-name]').textContent=account.username+' · 私人云端资料';
