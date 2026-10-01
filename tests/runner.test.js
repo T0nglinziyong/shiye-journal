@@ -47,6 +47,17 @@ test('A-07: preview inspection failure cannot discard or replay a committed tool
  assert.equal(result.finished,true);assert.equal(result.draft.items.length,1);assert.equal(inspections,1);assert.equal(turns.length,2);
  assert.equal(turns[0].draft.items.length,1);assert.match(JSON.stringify(payloads[1].messages),/无需重放/);
 });
+test('A-08: the final modified scene is rendered and only that scene hash is recorded',async()=>{
+ const tool=(name,args,id)=>({id,function:{name,arguments:JSON.stringify(args)}}),responses=[{choices:[{message:{tool_calls:[tool('upsert_text',{items:[{key:'title',content:'最终版本',x:.5,y:.2,width:.7}]},'write'),tool('finish_design',{},'finish')]}}]}];
+ const renders=[];const output=await runCreativeAgent({draft:draft(),assets:[],aliases:{},key:'synthetic-test',onFinalScene:async scene=>{renders.push(scene.textBlocks.map(t=>t.content));return 'rendered-image';},request:async()=>({ok:true,json:async()=>responses.shift()})});
+ assert.deepEqual(renders,[['最终版本']]);assert.equal(output.draft.agentRun.finalSceneHash,output.sceneHash);
+ assert.equal(output.draft.agentRun.renderedSceneHash,output.sceneHash);assert.equal(output.draft.agentRun.visualReview,'pending');
+});
+test('A-08: renderer failure never claims that the final scene was visually checked',async()=>{
+ const response={choices:[{message:{tool_calls:[{id:'finish',function:{name:'finish_design',arguments:'{}'}}]}}]};
+ const output=await runCreativeAgent({draft:draft(),assets:[],aliases:{},key:'synthetic-test',onFinalScene:async()=>{throw Error('renderer failed');},request:async()=>({ok:true,json:async()=>response})});
+ assert.equal(output.draft.agentRun.renderedSceneHash,null);assert.equal(output.draft.agentRun.visualReview,'render-failed');
+});
 test('intentional sparse composition may finish; only explicit physical requirements block it',async()=>{
  const assets=Array.from({length:4},(_,i)=>({id:'asset-'+i,title:'纸片 '+i,kind:'sticker',role:'support',physicalWidthMM:20,physicalHeightMM:25,supply:{quantity:1}}));
  const aliases=Object.fromEntries(assets.map((a,i)=>['m'+(i+1),a.id]));

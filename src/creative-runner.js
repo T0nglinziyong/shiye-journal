@@ -8,6 +8,7 @@ import {visualStyleBrief} from './creative-style-brief.js';
 import {presetReferenceGuide,presetReferencePlans} from './creative-reference-presets.js';
 import {creativeLayeringGuide} from './creative-layering-guide.js';
 import {creativeContentBrief} from './creative-content-brief.js';
+import {sceneFingerprint} from './offline-result-review.js';
 
 const system='你是拾页手账创作者。只使用素材台中的真实素材；尺寸、库存和加工由本地工具判定，不得缩放或复制纸张、照片、贴纸，同一件裁下的非重叠余料可继续使用。胶带视为连续可裁取，但不能拉伸已校准的宽度或图案。文字和数字图形是可编辑图层。素材可先矩形裁片，再用 mask 做不规则、圆角或花边外轮廓；diagonal 用直线斜裁并指定保留侧，window 在素材内部开透明孔，两者可组合。把直线、自由矢量、手写笔与荧光笔拆成可编辑元素；让文字与素材形成有机关系。根据用途与风格建立主视觉、连续阅读区和细节，避免无意堆在中央、遮住正文、重复空相框或每段机械加白底。判断留白是否服务于主题与阅读：真实素材少时，可用有内容的可编辑文字、线条、底色或图形补充信息与节奏，也可有意识地保留空白；不要为填满面积而添加无关内容。不凭空制造实物。未提供经历时只能写客观观察或通用主题内容，不编日期地点经历。位置默认页面比例，文字参考本页字号与层级建议。加工只能用合同中安全操作，不假装识别未提供的图案，不执行网址、脚本或文件。每轮以实际画布和回执修正，完成前审阅整个页面。';
 const purposes={日常记录:'用相关观察、图像和可编辑文字形成日记感；正文可是一段完整多行记录，也可分成若干短段。',旅途记录:'有依据的地点路线、图、票据及短段落，不编地名日期。',图文收藏:'不同大小的图、标签及有内容的文字格位，避免无意义空相框。',清单计划:'实际清单或记录区；缺少事项时写通用可编辑主题条目，不虚构日程。',影像故事:'主图与相关小图建立阅读顺序，穿插说明细节。',主题封面:'允许大主视觉、短标题及明显留白。'};
@@ -70,7 +71,13 @@ export async function runCreativeAgent(o){
   // Every native call needs its contiguous tool reply before any user image.
   if(inspectionParts.length)messages.push({role:'user',content:inspectionParts});
   failures=result.results.some(x=>x.ok)?0:failures+1;
-  if(working.agentRun?.status==='finished')return {draft:working,turns:turn,finished:true,messages,review};
+  if(working.agentRun?.status==='finished'){
+   const sceneHash=await sceneFingerprint(creativeScene(working,aliases));
+   working.agentRun={...working.agentRun,finalSceneHash:sceneHash,renderedSceneHash:null,visualReview:'pending'};
+   try{const preview=await (o.onFinalScene||onScene)?.(working);if(preview)working.agentRun.renderedSceneHash=sceneHash;}catch{working.agentRun.visualReview='render-failed';}
+   if(signal?.aborted)throw signal.reason||Error('创作已停止');
+   return {draft:working,turns:turn,finished:true,messages,review,sceneHash,renderedSceneHash:working.agentRun.renderedSceneHash};
+  }
   const scene=[{type:'text',text:'实际画布状态：'+JSON.stringify(creativeScene(working,aliases))+'\n排版检查（非美感评分）：'+JSON.stringify(review)+'\n按成功回执修正，不重复已放置实物。'}],image=await onScene?.(working);if(image)scene.push({type:'image_url',image_url:{url:image}});messages.push({role:'user',content:scene});
   if(failures>=4)throw Error('连续四轮没有有效修改，已保留成功步骤');
  }

@@ -110,5 +110,10 @@
 | 第二十批集成 | `npm test` | 288/288，退出码 0 |
 | 第二十批集成 | `npm run test:ui` | build/UI smoke/route parity/自托管 smoke 通过，退出码 0 |
 | 第二十批真实浏览器 | `SHIYE_TEST_URL=http://localhost:5192 node tests/offline-handoff-browser.mjs` | 四种模拟视口交接通过，退出码 0；未在实体设备做真实模型观察故障注入 |
+| 第二十批固定项目 Git 部署 | Vercel 控制台 `shiye-journal-test` Production Deployment | `17d9ca8e052b68308b24202600800891740b64bd`，Git `main`，状态 Ready，固定域名未变；无手动部署 |
+| 第二十一批最终渲染局部 | `node --test tests/runner.test.js` | 8/8，退出码 0；最后修改后渲染与 sceneHash 匹配，渲染失败保持未验状态；无独立视觉模型/人工审阅 |
+| 第二十一批集成 | `npm test` | 290/290，退出码 0 |
+| 第二十一批集成 | `npm run test:ui` | build/UI smoke/route parity/自托管 smoke 通过，退出码 0 |
+| 第二十一批真实浏览器 | `SHIYE_TEST_URL=http://localhost:5192 node tests/offline-handoff-browser.mjs` | 四种模拟视口交接通过，退出码 0；非实体设备/真实模型终稿视觉验收 |
 
 上面的浏览器运行在桌面 Chromium 中，模拟不同视口；它**不是**实体手机或 iPad 验收。未使用真实账号/私人素材；尚未运行在线 AI、双标签共享 IDB、隔离数据库 CAS、完整工程包往返。保留有意留白、叠压、半藏与出血，不以固定占页率、最低图层数或零重叠判成败。

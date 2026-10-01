@@ -57,13 +57,14 @@ export function createMatchingSession(c){
     let steps='';const output=await c.runCreativeAgent({...cfg,draft:p.drafts[0],assets:c.state.assets,aliases,styles:p.styles,pagePurposes:p.purposes,contentPolicy:p.contentPolicy||'documentary',userText:p.userText||'',providedFacts:p.providedFacts||'',requiredAssetIDs:p.requiredAssetIDs,materialPriority:p.materialPriority,processing:p.processing,assetProcessing:p.assetProcessing,materialUseHints:p.materialUseHints,materialUseRequired:p.materialUseRequired,prompt:p.intent||'',images,referenceImages:references,request:recorder.request,signal:run.signal,
      onResponse:recorder.response,
      onScene:vision?async d=>(await c.rasterize(d,.7)).toDataURL('image/jpeg',.8):undefined,
+     onFinalScene:async d=>(await c.rasterize(d,.7)).toDataURL('image/jpeg',.8),
      onInspection:vision?async data=>{const parts=[];for(const m of data?.materials||[]){const a=c.asset(m.assetID);if(a){const url=await c.modelImage(a,m.cropRect);if(url)parts.push({type:'text',text:m.key+' 的局部预览'},{type:'image_url',image_url:{url}});}}return parts;}:undefined,
      onProgress:progress=>{v.progress=steps+'第 '+progress.turn+' 轮 · '+progress.phase+' · '+progress.seconds+' 秒 · 已接收 '+progress.received+' 字符';const el=document.querySelector(`[data-variant="${v.id}"] .match-progress`);if(el)el.textContent=v.progress;},
      onTurn:async({turn,results,draft})=>{await recorder.turn(turn,results,draft);p.drafts=[structuredClone(draft)];p.activeDraftID=draft.id;steps+='第 '+turn+' 轮\n'+results.map(r=>(r.ok?'✓':'×')+' '+r.detail).join('\n')+'\n';v.progress=steps;await save();update();}
     });
     p.drafts=[output.draft];p.activeDraftID=output.draft.id;p.aiGenerated=true;p.deliveryMode=cfg.deliveryMode;
     if(['image','pdf'].includes(cfg.deliveryMode)){const snapshot=await c.saveSnapshotFromDraft(p,{format:cfg.deliveryMode==='pdf'?'application/pdf':'image/png'});v.project=snapshot;v.linkedProjectID=snapshot.id;v.progress+='\n创作完成，已保存为不可编辑快照；点击查看。';}
-    else{v.status='completed';await archiveCompleted();v.progress+='\n创作完成，已自动保存到草稿；点击方案继续编辑。';}
+    else{v.status='completed';await archiveCompleted();v.progress+='\n结构已完成，已自动保存到草稿；最终视觉仍待复核。点击方案继续编辑。';}
     v.status='completed';
    }catch(error){v.status=run.signal.aborted?'stopped':'failed';v.progress+='\n'+String(error.message||'创作失败').replace(/sk-[A-Za-z0-9_-]+/g,'[REDACTED]')+'。完整步骤已保留。';}
    finally {await recorder?.finish(v.status).catch(()=>{});if(controller===run)controller=null;await save();update();}
