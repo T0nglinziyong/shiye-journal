@@ -1,4 +1,19 @@
+import {agentTools} from './creative-contract.js';
 const CAPTURE='shiye-ai-context-capture-v1',MAX_SESSION=128*1024*1024,MAX_TOTAL=512*1024*1024;
+const SAFE_TOOLS=new Set(['response',...agentTools.map(tool=>tool.function.name)]);
+const SAFE_REASONS=new Set(['completed','request-limit','no-progress','cancelled','authentication','permission','rate-limit','context-limit','unsupported-request','http-error','stream-error','incomplete-response','network','idle-timeout','duration-limit','failed','stopped']);
+const safeReason=value=>SAFE_REASONS.has(value)?value:'error';
+const numberOrNull=value=>Number.isFinite(value)?value:null;
+export function publicAIDiagnosticReport(report){
+ const budget=report.budget||{},parameters=report.parameters||{};
+ return {
+  date:report.date,model:redact(String(report.model||'')).slice(0,120),
+  parameters:{generationMode:['agent','direct'].includes(parameters.generationMode)?parameters.generationMode:'unknown',temperature:numberOrNull(parameters.temperature),maxTokens:numberOrNull(parameters.maxTokens),maxTurns:numberOrNull(parameters.maxTurns),materialCount:numberOrNull(parameters.materialCount)},
+  rounds:(report.rounds||[]).map(round=>({turn:numberOrNull(round.turn),tools:(round.tools||[]).map(tool=>({name:SAFE_TOOLS.has(tool.name)?tool.name:'unknown',ok:tool.ok===true})),review:{materials:numberOrNull(round.review?.materials),textBlocks:numberOrNull(round.review?.textBlocks),graphics:numberOrNull(round.review?.graphics),warningCount:round.review?.warnings?.length||0}})),
+  outcome:['completed','failed','stopped','started'].includes(report.outcome)?report.outcome:'failed',stopReason:safeReason(report.stopReason||budget.stopReason||report.outcome),
+  budget:{limit:numberOrNull(budget.limit),totalRequests:numberOrNull(budget.totalRequests),creationRequests:numberOrNull(budget.creationRequests),formatRepairRequests:numberOrNull(budget.formatRepairRequests),visualReviewRequests:numberOrNull(budget.visualReviewRequests)}
+ };
+}
 export function redact(value,key='') {
   if(typeof value==='string')return (key?value.split(key).join('[REDACTED]'):value).replace(/Bearer\s+\S+|sk-[A-Za-z0-9_-]+/g,'[REDACTED]');
   if(Array.isArray(value))return value.map(v=>redact(v,key));
