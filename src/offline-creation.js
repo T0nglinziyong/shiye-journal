@@ -6,7 +6,9 @@ import {visualStyleBrief} from './creative-style-brief.js';
 import {creativeDesignGuide,purposeMethod} from './creative-design-guide.js';
 import {presetReferenceGuide,presetReferencePlans} from './creative-reference-presets.js';
 import {validMaterialAlias} from './material-alias.js';
-import {importNativeProjectPackage} from './native-project-package.js';
+import {importNativeProjectPackage,validatePackageValue} from './native-project-package.js';
+import {readProjectPackageEntries} from './project-package-archive.js';
+import {canonicalTaskSource} from './task-source.js';
 
 export const OFFLINE_PACKAGE_FORMAT='shiye-gpt-creation-package';
 export const EDITABLE_WORK_FORMAT='shiye-editable-project';
@@ -22,7 +24,7 @@ const validAlias=validMaterialAlias;
 function sourceFor(p,aliases){
   const d=p.drafts[0];
   const priority=p.materialPriority||{required:p.requiredAssetIDs||[],preferred:Object.values(aliases).filter(id=>!(p.requiredAssetIDs||[]).includes(id)),available:[]};
-  return {bundleId:crypto.randomUUID(),title:p.title,mode:d.pageMode,ratio:d.pageRatio,styles:p.styles||[d.style],purposes:p.purposes||[p.purpose||'日常记录'],intent:p.intent||'',processing:p.processing||'保留完整',requiredAssetIDs:p.requiredAssetIDs||[],materialPriority:{required:priority.required||[],preferred:priority.preferred||[],available:priority.available||[]},materialUseHints:p.materialUseHints||{},materialUseRequired:p.materialUseRequired||{},assetProcessing:p.assetProcessing||{},materials:Object.entries(aliases).map(([alias,assetID])=>({alias,assetID}))};
+  return structuredClone({bundleId:crypto.randomUUID(),title:p.title,mode:d.pageMode,ratio:d.pageRatio,styles:p.styles||[d.style],purposes:p.purposes||[p.purpose||'日常记录'],intent:p.intent||'',processing:p.processing||'保留完整',requiredAssetIDs:p.requiredAssetIDs||[],materialPriority:{required:priority.required||[],preferred:priority.preferred||[],available:priority.available||[]},materialUseHints:p.materialUseHints||{},materialUseRequired:p.materialUseRequired||{},assetProcessing:p.assetProcessing||{},materials:Object.entries(aliases).map(([alias,assetID])=>({alias,assetID}))});
 }
 function instructions(source){
   return `拾页可编辑手帐创作包。按 context.json 的风格（${source.styles.map(name=>`${name}：${visualStyleBrief(name)}`).join('；')}）、用途（${source.purposes.join('、')}）、纸张（${source.ratio} ${source.mode}）、主题（${source.intent||'自由创作'}）一次完成。查看 materials/ 中每件素材预览；预览不是原图，最终文件只引用 context.json 的素材编号，不嵌入图像。保持真实尺寸和库存，胶带可按真实宽度截段；文字、线条和图形用可编辑图层表示。工具参数见 contract.json，可参考 example-response.json 的结构，但不要照抄示例构图。先用 compose_page，最后用 finish_design；不要编造经历或图片细节。只返回一个 UTF-8 .shiyeproject.json 文件，保留 source 原样。`;
@@ -40,7 +42,7 @@ export function createOfflineCreationPackage({project:p,assets,aliases,previews=
 // The upload is a task package, not a source archive. Keep the chat prompt
 // short and put exact context, contracts, examples and separate images inside.
 export async function createOfflineHandoff({project:p,assets,aliases,previews=[],settings={},referenceImages=[]}){
-  const source=sourceFor(p,aliases);source.textMode=settings.textMode||'automatic';const selected=source.materials.map(({alias,assetID})=>{
+  const source=sourceFor(p,aliases);source.taskBinding='local-v1';source.textMode=settings.textMode||'automatic';const selected=source.materials.map(({alias,assetID})=>{
     const asset=assets.find(item=>item.id===assetID);
     if(!asset||!validAlias(alias))throw Error('素材篮中有无效素材编号');
     return {alias,assetID,title:asset.title,kind:asset.kind,role:asset.role,physicalWidthMM:asset.physicalWidthMM,physicalHeightMM:asset.physicalHeightMM,quantity:asset.kind==='tape'?null:asset.supply?.quantity??1,continuousTape:asset.kind==='tape',tags:asset.tags||[]};
@@ -91,14 +93,20 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
   const prompts={file:'请读 ZIP 中的 START_HERE.txt，一次完成手帐；先展示预览图，再交付可下载的「作品.shiyeproject.zip」。',json:'请读 ZIP 中的 START_HERE.txt，一次完成手帐；先展示预览图，再给一个可复制的 JSON 代码块，不要生成文件。'};
   return {blob:new Blob([bytes],{type:'application/zip'}),filename:'拾页-GPT创作任务.zip',prompt:prompts.file,prompts,source,mode,previewCount:chosen.length,imageBytes:[...chosen,...(hasPresets?referenceImages:[])].reduce((total,item)=>total+item.bytes.length,0),packageBytes:bytes.length};
 }
-export function importEditableWork(text,assets){
+export function inspectEditableSource(text){
   if(text.length>2_000_000)throw Error('可编辑作品文件过大');
   const blocks=[...text.matchAll(/```(?:json|shiyeproject)?\s*([\s\S]*?)```/gi)].map(match=>match[1].trim()).filter(block=>block.includes(EDITABLE_WORK_FORMAT));
   if(blocks.length>1)throw Error('检测到多个可编辑数据块，请只复制其中一个');
   let input;try{input=JSON.parse(blocks[0]||text.trim());}catch{throw Error('可编辑作品不是有效 JSON');}
+  validatePackageValue(input);
+  return input;
+}
+export function importEditableWork(text,assets,{trustedSource=null}={}){
+  const input=inspectEditableSource(text);
   if(input?.format!==EDITABLE_WORK_FORMAT||input.version!==1)throw Error('不是拾页可编辑作品文件');
   const source=input.source;
   if(!source||typeof source.bundleId!=='string'||!Array.isArray(source.materials)||!source.materials.length||source.materials.length>100)throw Error('创作包来源无效');
+  if((source.taskBinding==='local-v1'&&!trustedSource)||(trustedSource&&canonicalTaskSource(source)!==canonicalTaskSource(trustedSource)))throw Error('网页 AI 结果与本机原始任务不一致；未导入作品');
   if(!['single','spread'].includes(source.mode)||!/^a[456]$|^b5$|^custom:\d{2,4}x\d{2,4}$/.test(source.ratio||''))throw Error('纸张规格无效');
   const direct=input.page!==undefined;
   const tools=direct?directPageToTools(input.page):input.tools;
@@ -120,7 +128,21 @@ export function importEditableWork(text,assets){
 // The ZIP is a versioned, extensible document container. Its scene remains
 // individually editable; material references resolve to this account's
 // original library images rather than bundling low-resolution chat previews.
-export function importEditableWorkPackage(bytes,assets){
+export function inspectEditablePackageSource(bytes){
+  const {kind,files}=readProjectPackageEntries(bytes);
+  return kind==='editable'?inspectEditableSource(strFromU8(files[EDITABLE_PACKAGE_ENTRY])).source:null;
+}
+export function inspectOfflinePackage(bytes){
+  const {kind,files}=readProjectPackageEntries(bytes,{allowTask:true});
+  if(kind==='editable')return {kind,source:inspectEditableSource(strFromU8(files[EDITABLE_PACKAGE_ENTRY])).source};
+  if(kind==='native')return {kind,source:null};
+  let context;try{context=JSON.parse(strFromU8(files['context.json']));}catch{throw Error('原始任务包的 context.json 无效');}
+  validatePackageValue(context);
+  if(context?.format!==OFFLINE_PACKAGE_FORMAT||context.version!==1||context.source?.taskBinding!=='local-v1'||!Array.isArray(context.materials)||!context.source?.materials?.length)throw Error('不是可登记的网页 AI 原始任务包');
+  if(canonicalTaskSource(context.materials.map(({alias,assetID})=>({alias,assetID})))!==canonicalTaskSource(context.source.materials))throw Error('原始任务包素材映射不一致');
+  return {kind,source:context.source};
+}
+export function importEditableWorkPackage(bytes,assets,options={}){
   if(!(bytes instanceof Uint8Array)||bytes.byteLength>20_000_000)throw Error('可编辑作品包不能超过 20 MB');
   const native=importNativeProjectPackage(bytes,assets);if(native)return native;
   let files;
@@ -131,5 +153,5 @@ export function importEditableWorkPackage(bytes,assets){
   }});}catch(error){throw Error('无法读取可编辑作品包：'+error.message);}
   const scene=files[EDITABLE_PACKAGE_ENTRY];
   if(!scene)throw Error('作品包缺少 '+EDITABLE_PACKAGE_ENTRY);
-  return importEditableWork(strFromU8(scene),assets);
+  return importEditableWork(strFromU8(scene),assets,options);
 }

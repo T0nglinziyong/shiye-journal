@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {zipSync,strToU8} from 'fflate';
 import {createNativeProjectPackage,importNativeProjectPackage} from '../src/native-project-package.js';
-import {importEditableWorkPackage} from '../src/offline-creation.js';
+import {createOfflineHandoff,importEditableWork,importEditableWorkPackage} from '../src/offline-creation.js';
 import {project,draft} from '../src/domain.js';
 import {captureHistory,restoreHistoryDraft} from '../src/project-history.js';
 
@@ -14,6 +14,25 @@ test('I-03: ambiguous scene entries and traversal paths reject before import',()
   const editable=strToU8('{}');
   assert.throws(()=>importEditableWorkPackage(zipSync({'native.shiyeproject.json':native,'project.shiyeproject.json':editable}),[]),/两个场景入口/);
   assert.throws(()=>importNativeProjectPackage(zipSync({'../escape.txt':strToU8('bad'),'native.shiyeproject.json':native}),[]),/危险路径/);
+  assert.equal(importNativeProjectPackage(zipSync({'materials/':new Uint8Array(),'native.shiyeproject.json':native}),[]).title,p.title);
+});
+
+test('I-01: editable JSON rejects prototype keys before processing tools',async()=>{
+  const asset={id:'asset-safe',title:'安全贴纸',kind:'sticker',physicalWidthMM:25,physicalHeightMM:25,supply:{quantity:1}};
+  const handoff=await createOfflineHandoff({project:project('安全任务'),assets:[asset],aliases:{m1:asset.id},settings:{includeThumbnails:false}});
+  const source=JSON.stringify(handoff.source);
+  const text=`{"format":"shiye-editable-project","version":1,"source":${source},"title":"作品","__proto__":{"isAdmin":true},"tools":[]}`;
+  assert.throws(()=>importEditableWork(text,[asset]),/不安全字段/);
+});
+
+test('O-01: exported task source does not mutate when matching preferences change later',async()=>{
+  const asset={id:'asset-freeze',title:'蓝纸',kind:'sticker',physicalWidthMM:25,physicalHeightMM:25,supply:{quantity:1}};
+  const p=project('冻结任务');p.styles=['韩系清新'];p.requiredAssetIDs=[asset.id];p.assetProcessing={[asset.id]:'少量裁剪'};
+  const result=await createOfflineHandoff({project:p,assets:[asset],aliases:{m1:asset.id},settings:{includeThumbnails:false}});
+  p.styles[0]='复古旧物';p.requiredAssetIDs.length=0;p.assetProcessing[asset.id]='自由拆解';
+  assert.deepEqual(result.source.styles,['韩系清新']);
+  assert.deepEqual(result.source.requiredAssetIDs,[asset.id]);
+  assert.equal(result.source.assetProcessing[asset.id],'少量裁剪');
 });
 
 test('I-04: second active draft and immutable history survive ID remapping',async()=>{

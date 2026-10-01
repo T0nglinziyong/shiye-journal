@@ -16,7 +16,7 @@ export function importNativeProjectPackage(bytes,assets){
   if(envelope?.format!=='shiye-native-project'||envelope.version!==1)throw Error('工程包格式不受支持');
   const source=envelope.project,known=new Set(assets.map(a=>a.id));
   if(!source||typeof source.title!=='string'||!Array.isArray(source.drafts)||!source.drafts.length||source.drafts.length>40)throw Error('工程包缺少可编辑页面');
-  validateValue(source);
+  validatePackageValue(source);
   const draftIDs=new Set();
   for(const draft of source.drafts){
     if(typeof draft.id!=='string'||!draft.id||draftIDs.has(draft.id))throw Error('工程包方案 ID 无效');
@@ -41,7 +41,7 @@ export function importNativeProjectPackage(bytes,assets){
   project.id=uid();project.title=project.title.slice(0,80);project.isSnapshot=false;project.isDraft=true;project.projectDocumentPath=null;project.deliveryBlobId=null;project.activeDraftID=mapped(draftMap,source.activeDraftID);project.editHistory={undo:[],redo:[]};project.createdAt=project.updatedAt=new Date().toISOString();return project;
 }
 
-function validateValue(root){
+export function validatePackageValue(root){
   const stack=[[root,0]];let count=0;
   while(stack.length){
     const [value,depth]=stack.pop();if(++count>100_000||depth>40)throw Error('工程包对象层级或数量超限');
