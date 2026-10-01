@@ -73,6 +73,25 @@ test('I-01/I-02: external IDs are rebuilt and invalid geometry is rejected',asyn
   assert.throws(()=>importNativeProjectPackage(zipSync({'native.shiyeproject.json':strToU8(JSON.stringify({format:'shiye-native-project',version:1,project:p}))}),[]),/几何/);
 });
 
+test('I-01/I-04: native package rejects style injection and broken references, while remapping ink IDs',async()=>{
+  const p=project('输入边界');
+  const d=p.drafts[0];
+  d.strokes.push({id:'old-ink',points:[{x:1,y:2}],width:3,color:'#123456'});
+  const pack=()=>zipSync({'native.shiyeproject.json':strToU8(JSON.stringify({format:'shiye-native-project',version:1,project:p}))});
+  assert.notEqual(importNativeProjectPackage(pack(),[]).drafts[0].strokes[0].id,'old-ink');
+  d.paperColor='red; background:url(https://example.invalid/collect)';
+  assert.throws(()=>importNativeProjectPackage(pack(),[]),/纸张样式/);
+  d.paperColor='#ffffff';
+  d.textBlocks.push({id:'text',content:'安全正文',x:10,y:10,width:100,height:50,alignment:'left; color:red'});
+  assert.throws(()=>importNativeProjectPackage(pack(),[]),/文字样式/);
+  d.textBlocks[0].alignment='left';
+  d.primitives.push({id:'shape',kind:'vector',x:20,y:20,width:30,height:30,vectorLayers:[{fill:'url(https://example.invalid/collect)',paths:[[[0,0],[1,1]]]}]});
+  assert.throws(()=>importNativeProjectPackage(pack(),[]),/多色图形/);
+  d.primitives[0].vectorLayers[0].fill='#abcdef';
+  d.items.push({id:'material',assetID:'material-1',x:30,y:30,width:40,height:40,materialRelation:{target:'missing'}});
+  assert.throws(()=>importNativeProjectPackage(pack(),[{id:'material-1'}]),/关系引用/);
+});
+
 test('O-14: a supplied preview cannot mark an imported editable scene as visually verified',async()=>{
   const asset={id:'preview-asset',title:'素材',kind:'sticker',physicalWidthMM:25,physicalHeightMM:25,supply:{quantity:1}};
   const handoff=await createOfflineHandoff({project:project('预览校验'),assets:[asset],aliases:{m1:asset.id},settings:{includeThumbnails:false}});

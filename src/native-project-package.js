@@ -4,6 +4,22 @@ import {materialMaskPoints} from './material-mask.js';
 import {readProjectPackageEntries} from './project-package-archive.js';
 
 export const NATIVE_ENTRY='native.shiyeproject.json';
+const paint=value=>value==null||typeof value==='string'&&value.length<=64&&(
+  /^#[0-9a-f]{3,8}$/i.test(value)||/^[a-z]{1,32}$/i.test(value)||/^(?:rgba?|hsla?)\([\d\s.,%+\-]+\)$/i.test(value)
+);
+const optionalNumber=(value,min,max)=>value===undefined||Number.isFinite(value)&&value>=min&&value<=max;
+function validateVectorGeometry(shape){
+  const coordinate=n=>Number.isFinite(n)&&Math.abs(n)<=100_000;
+  const point=p=>Array.isArray(p)&&p.length===2&&p.every(coordinate);
+  const path=p=>Array.isArray(p)&&p.length>=2&&p.length<=512&&p.every(point);
+  const rectangle=r=>Array.isArray(r)&&r.length===4&&r.every(coordinate)&&r[2]>0&&r[3]>0;
+  if(shape.vectorPaths!==undefined&&(!Array.isArray(shape.vectorPaths)||shape.vectorPaths.length>48||!shape.vectorPaths.every(path)))throw Error('工程包自由图形坐标无效');
+  if(shape.vectorLayers!==undefined&&(!Array.isArray(shape.vectorLayers)||shape.vectorLayers.length>64||shape.vectorLayers.some(layer=>
+    !layer||typeof layer!=='object'||!paint(layer.fill)||!optionalNumber(layer.opacity,0,1)||
+    layer.paths!==undefined&&(!Array.isArray(layer.paths)||layer.paths.length>48||!layer.paths.every(path))||
+    layer.rects!==undefined&&(!Array.isArray(layer.rects)||layer.rects.length>512||!layer.rects.every(rectangle))
+  )))throw Error('工程包多色图形数据无效');
+}
 export function createNativeProjectPackage(project){
   if(!project?.drafts?.length||project.isSnapshot)throw Error('只有可编辑作品可以打包');
   const {__cloudBaseRevision,__cloudSessionId,...portableProject}=project;
@@ -34,6 +50,7 @@ export function importNativeProjectPackage(bytes,assets){
   const remapDraft=d=>{
     d.id=mapped(draftMap,d.id);
     for(const list of ['items','primitives','textBlocks'])for(const item of d[list]||[]){item.id=mapped(objectMap,item.id);if(item.creativeGroupID)item.creativeGroupID=mapped(groupMap,item.creativeGroupID);}
+    for(const stroke of d.strokes||[])stroke.id=stroke.id?mapped(objectMap,stroke.id):uid();
   };
   project.drafts.forEach(remapDraft);
   if(project.initialEditorSnapshot){project.initialEditorSnapshot.drafts?.forEach(remapDraft);project.initialEditorSnapshot.activeDraftID=mapped(draftMap,project.initialEditorSnapshot.activeDraftID);}
@@ -60,15 +77,20 @@ export function validatePackageValue(root){
 function validateDraft(draft,known){
   const canvas=draft?.canvas;
   if(!canvas||![canvas.width,canvas.height].every(n=>Number.isFinite(n)&&n>0&&n<=10000)||!['items','primitives','textBlocks','strokes'].every(key=>Array.isArray(draft[key])&&draft[key].length<=5000))throw Error('工程包图层数据无效');
+  if(!paint(draft.paperColor)||draft.paperPattern!==undefined&&!['plain','lines','lined','grid','dots','columns'].includes(draft.paperPattern))throw Error('工程包纸张样式无效');
   const ids=new Set();
   for(const list of ['items','primitives','textBlocks'])for(const item of draft[list]){
     if(!item||typeof item.id!=='string'||!item.id||ids.has(item.id)||![item.x,item.y,item.width,item.height].every(n=>Number.isFinite(n)&&Math.abs(n)<=100000)||item.width<=0||item.height<=0)throw Error('工程包图层几何或 ID 无效');
     ids.add(item.id);
+    if(!optionalNumber(item.rotation,-3600,3600)||!optionalNumber(item.zIndex,-100_000,100_000)||!optionalNumber(item.opacity,0,1))throw Error('工程包图层样式数值无效');
     if(list==='items'){
       if(!known.has(item.assetID))throw Error('工程包引用了当前素材库中不存在的素材');
       if(item.materialMask)materialMaskPoints(item.materialMask);
     }
-    if(list==='textBlocks'&&typeof item.content!=='string')throw Error('工程包文字内容无效');
+    if(list==='primitives'){if(!paint(item.fill)||!paint(item.stroke)||!optionalNumber(item.lineWidth,0,1000))throw Error('工程包图形样式无效');validateVectorGeometry(item);}
+    if(list==='textBlocks'&&(typeof item.content!=='string'||!paint(item.color)||item.alignment!==undefined&&!['left','center','right'].includes(item.alignment)||!optionalNumber(item.fontSize,1,1000)))throw Error('工程包文字样式或内容无效');
   }
-  for(const stroke of draft.strokes)if(!Array.isArray(stroke.points)||stroke.points.length>20000||stroke.points.some(point=>![point.x,point.y].every(n=>Number.isFinite(n)&&Math.abs(n)<=100000)))throw Error('工程包笔迹数据无效');
+  const semanticKeys=new Set(draft.items.concat(draft.primitives,draft.textBlocks).flatMap(item=>[item.id,item.creativePieceID,item.agentKey,item.key].filter(Boolean)));
+  for(const item of draft.items)if(item.materialRelation?.target&&!semanticKeys.has(item.materialRelation.target))throw Error('工程包图层关系引用无效');
+  for(const stroke of draft.strokes)if(!Array.isArray(stroke.points)||stroke.points.length>20000||stroke.points.some(point=>![point.x,point.y].every(n=>Number.isFinite(n)&&Math.abs(n)<=100000)||!optionalNumber(point.p,0,1))||!paint(stroke.color)||!optionalNumber(stroke.opacity,0,1)||!optionalNumber(stroke.width,0,1000))throw Error('工程包笔迹数据无效');
 }

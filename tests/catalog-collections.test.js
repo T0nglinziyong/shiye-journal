@@ -57,7 +57,8 @@ test('direct JSON and ZIP preserve crop, organic vectors, pen, marker, text and 
   assert.equal(result.draft.strokes[1].points[0].x,result.draft.canvas.width*.43);
   source.drafts[0]=result.draft;
   const zipped=createNativeProjectPackage(source),imported=importNativeProjectPackage(new Uint8Array(await zipped.arrayBuffer()),[asset]);
-  assert.deepEqual(imported.drafts[0].strokes,result.draft.strokes);
+  assert.deepEqual(imported.drafts[0].strokes.map(({id,...stroke})=>stroke),result.draft.strokes.map(({id,...stroke})=>stroke));
+  assert.notEqual(imported.drafts[0].strokes[0].id,result.draft.strokes[0].id,'imported ink receives a new internal identity');
   assert.deepEqual(imported.drafts[0].primitives[1].vectorPaths,result.draft.primitives[1].vectorPaths);
   assert.equal(imported.drafts[0].primitives[0].opacity,.5);
   assert.equal(imported.drafts[0].textBlocks[0].content,result.draft.textBlocks[0].content);

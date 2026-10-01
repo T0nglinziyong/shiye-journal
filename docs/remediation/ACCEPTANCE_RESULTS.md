@@ -133,6 +133,9 @@
 | 第二十五批固定项目 Git 部署 | Vercel 控制台 `shiye-journal-test` Production Deployment | `cc4dfe9a7a3baf42477d43fc28629a39e334f4e6`，Git `main`，Ready；固定域名未变，无手动部署 |
 | 第二十六批导入原子性局部 | `node --test tests/matching-session.test.js` | 9/9，退出码 0；事务故障与并发搭配保存不会产生幽灵方案。没有测试真实 IndexedDB 中断或全部导入入口 |
 | 第二十六批集成/浏览器 | `npm test` / `npm run test:ui` / `SHIYE_TEST_URL=http://localhost:5192 SHIYE_WAIT_MS=30000 node tests/browser-acceptance.mjs` | 302/302；build/UI smoke/route parity/自托管 smoke 通过；真实 Chromium 109 个画面、7 种模拟视口及备份往返通过。非实体设备/网络中断验收 |
+| 第二十六批固定项目 Git 部署 | Vercel 控制台 `shiye-journal-test` Production Deployment | `171268b96e2d6f84ac8ea0ae565b68d07b7a1653`，Git `main`，Ready；固定域名未变，无手动部署 |
+| 第二十七批工程输入局部 | `node --test tests/remediation-import.test.js tests/offline-creation.test.js` | 23/23，退出码 0；纸张 CSS 外链式颜色、文字对齐注入、矢量填充外链、失效图层关系被拒绝；笔迹 ID 重建。无原始私人 ZIP 回归 |
+| 第二十七批集成/浏览器 | `npm test` / `npm run test:ui` / `SHIYE_TEST_URL=http://localhost:5192 SHIYE_WAIT_MS=30000 node tests/browser-acceptance.mjs` | 首次全套旧断言要求笔迹 ID 不变而失败；保持新导入生成新 ID 的实现，改为断言笔迹内容相同且 ID 必须不同后重跑 303/303；build/UI smoke/route parity/自托管 smoke 通过；真实 Chromium 109 画面/7 模拟视口与备份往返通过。未删断言、未验实体设备 |
 
 能力表依据：[DeepSeek Chat Completions](https://api-docs.deepseek.com/api/create-chat-completion/)、[DeepSeek JSON Output](https://api-docs.deepseek.com/guides/json_mode/)、[OpenAI API Reference](https://platform.openai.com/docs/api-reference/chat/create)、[SiliconFlow 多模态输入](https://docs.siliconflow.cn/docs/userguide/capabilities/multimodal-vision)。文档支持不等于本账号模型可用；仍需用户配置实际可访问的模型并做真实请求验收。
 
