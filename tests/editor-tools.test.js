@@ -1,7 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {containBox} from '../src/preview-geometry.js';
-import {commonShapes,advancedShapes,configureShape,shapeSVG,straightStroke,eraseStrokes,resizeObject,textLines} from '../src/editor-tools-model.js';
+import {commonShapes,advancedShapes,configureShape,shapeSVG,straightStroke,eraseStrokes,resizeObject,textLines,textFont,textFontFamily} from '../src/editor-tools-model.js';
+
+test('R-08: editor, cover, and canvas export share each font family decision',()=>{
+  for(const [style,family] of [['hand','"Kaiti SC",STKaiti,cursive'],['serif','"Songti SC",serif'],['rounded','"Arial Rounded MT Bold",sans-serif'],['sans','sans-serif']]){
+    const block={style,fontSize:28,fontName:null};
+    assert.equal(textFontFamily(block),family);
+    assert.ok(textFont(block).endsWith(`28px ${family}`));
+  }
+  const named={style:'serif',fontName:'Ma Shan Zheng',fontSize:20};
+  assert.equal(textFontFamily(named),'"Ma Shan Zheng","Songti SC",serif');
+  assert.ok(textFont(named).endsWith(`20px ${textFontFamily(named)}`));
+});
 import {composeCrop,validateCrop} from '../src/material-processing-editor.js';
 import {onDialogClosed} from '../src/dialog-lifecycle.js';
 import {ImageNodeCache} from '../src/image-node-cache.js';
