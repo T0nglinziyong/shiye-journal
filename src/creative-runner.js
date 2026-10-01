@@ -9,6 +9,7 @@ import {presetReferenceGuide,presetReferencePlans} from './creative-reference-pr
 import {creativeLayeringGuide} from './creative-layering-guide.js';
 import {creativeContentBrief} from './creative-content-brief.js';
 import {sceneFingerprint} from './offline-result-review.js';
+import {createCreativeBudget} from './ai-budget.js';
 
 const system='你是拾页手账创作者。只使用素材台中的真实素材；尺寸、库存和加工由本地工具判定，不得缩放或复制纸张、照片、贴纸，同一件裁下的非重叠余料可继续使用。胶带视为连续可裁取，但不能拉伸已校准的宽度或图案。文字和数字图形是可编辑图层。素材可先矩形裁片，再用 mask 做不规则、圆角或花边外轮廓；diagonal 用直线斜裁并指定保留侧，window 在素材内部开透明孔，两者可组合。把直线、自由矢量、手写笔与荧光笔拆成可编辑元素；让文字与素材形成有机关系。根据用途与风格建立主视觉、连续阅读区和细节，避免无意堆在中央、遮住正文、重复空相框或每段机械加白底。判断留白是否服务于主题与阅读：真实素材少时，可用有内容的可编辑文字、线条、底色或图形补充信息与节奏，也可有意识地保留空白；不要为填满面积而添加无关内容。不凭空制造实物。未提供经历时只能写客观观察或通用主题内容，不编日期地点经历。位置默认页面比例，文字参考本页字号与层级建议。加工只能用合同中安全操作，不假装识别未提供的图案，不执行网址、脚本或文件。每轮以实际画布和回执修正，完成前审阅整个页面。';
 const purposes={日常记录:'用相关观察、图像和可编辑文字形成日记感；正文可是一段完整多行记录，也可分成若干短段。',旅途记录:'有依据的地点路线、图、票据及短段落，不编地名日期。',图文收藏:'不同大小的图、标签及有内容的文字格位，避免无意义空相框。',清单计划:'实际清单或记录区；缺少事项时写通用可编辑主题条目，不虚构日程。',影像故事:'主图与相关小图建立阅读顺序，穿插说明细节。',主题封面:'允许大主视觉、短标题及明显留白。'};
@@ -16,6 +17,7 @@ export function creativeScene(d,aliases={}){
  const map=Object.fromEntries(Object.entries(aliases).map(([k,v])=>[v,k])),g=x=>({key:x.creativePieceID||x.agentKey||x.key||x.id,x:x.x/d.canvas.width,y:x.y/d.canvas.height,width:x.width/d.canvas.width,height:x.height/d.canvas.height,rotation:x.rotation||0,z:x.zIndex||0});
  return {canvas:d.canvas,pageMode:d.pageMode,pageRatio:d.pageRatio,pageHeightMM:d.physicalPageHeightMM,paper:{color:d.paperColor,pattern:d.paperPattern,ruling:d.paperRuling,centerGutter:d.drawCenterGutter},materials:d.items.filter(x=>!x.isParked).map(x=>({...g(x),asset:map[x.assetID],cropRect:x.cropRect||null,materialMask:x.materialMask||null,opacity:x.opacity??1,flipped:!!x.isFlippedHorizontally})),texts:d.textBlocks.filter(x=>!x.isHidden).map(x=>({...g(x),content:x.content,fontSize:x.fontSize,fontName:x.fontName||null,style:x.style,color:x.color,alignment:x.alignment,letterSpacing:x.letterSpacing||0,lineSpacing:x.lineSpacing||0,fixedLineHeight:x.fixedLineHeight||null,paragraphSpacing:x.paragraphSpacing||0,bold:!!x.bold,italic:!!x.italic,underline:!!x.underline,strikethrough:!!x.strikethrough})),graphics:d.primitives.filter(x=>!x.hidden).map(x=>({...g(x),kind:x.kind,fill:x.fill,stroke:x.stroke,lineWidth:x.lineWidth,cornerRadius:x.cornerRadius,vectorPaths:x.vectorPaths||null,vectorLayers:x.vectorLayers||null})),inkStrokes:(d.strokes||[]).map(s=>({points:s.points?.length||0,color:s.color,width:s.width,opacity:s.opacity,penStyle:s.penStyle}))};
 }
+const editableSceneState=d=>JSON.stringify([d.canvas,d.paperColor,d.paperPattern,d.paperRuling,d.drawCenterGutter,d.items,d.textBlocks,d.primitives,d.strokes]);
 export function buildCreativeMessages(o){
  const {draft,assets,aliases,images=[],prompt='',customLayoutPrompt='',textMode='automatic',contentPolicy='documentary',userText='',providedFacts='',styles=[draft.style],pagePurposes=['日常记录'],processing,assetProcessing={},materialUseHints={},materialUseRequired={},requiredAssetIDs=[],materialPriority={},includeStructureReference=true,referenceImages=[],sendPresetReferences=false}=o;
  const effectiveTextMode=contentPolicy==='visual'?'none':textMode;
@@ -46,16 +48,16 @@ export async function runCreativeAgent(o){
  const {draft,assets,aliases,key,endpoint='https://api.deepseek.com/chat/completions',maxTurns=5,requestTimeout=75,signal,onTurn=()=>{},request=fetch,onScene,onInspection}=o;
  if(!key?.trim())throw Error('请输入自己的 API 密钥');if(new URL(endpoint).protocol!=='https:')throw Error('API 地址必须使用 HTTPS');
  const options={...o,textMode:o.contentPolicy==='visual'?'none':o.textMode,allowNoText:o.contentPolicy==='visual'||o.textMode==='none'||o.textMode==='requested'&&!/文字|正文|标题|写|清单/.test(o.prompt||'')};
- let working=structuredClone(draft),turn=0,failures=0;if(working.agentRun?.status==='finished')working.agentRun={...working.agentRun,status:'editing'};const messages=buildCreativeMessages({...options,draft:working}),limit=maxTurns===0?5:Math.max(1,Math.min(20,maxTurns));
- for(;turn<limit;){
-  if(signal?.aborted)throw signal.reason||Error('创作已停止');turn++;
+ let working=structuredClone(draft),turn=0,noProgress=0,nextPhase='creation';if(working.agentRun?.status==='finished')working.agentRun={...working.agentRun,status:'editing'};const messages=buildCreativeMessages({...options,draft:working}),budget=createCreativeBudget(maxTurns);
+ try {for(;;){
+  if(signal?.aborted)throw signal.reason||Error('创作已停止');const counts=budget.begin(nextPhase);turn=counts.totalRequests;nextPhase='creation';const before=editableSceneState(working);
   const payload=buildCreativePayload(o,messages),protocol=creativeProtocol(o),native=protocol.native;
-  const data=await requestChat({endpoint,key,payload,request,signal,timeout:requestTimeout,onProgress:p=>o.onProgress?.({...p,turn})}),choice=data.choices?.[0],message=choice?.message;if(!message)throw Error('模型没有返回可用消息');
+  const data=await requestChat({endpoint,key,payload,request,signal,timeout:requestTimeout,onProgress:p=>o.onProgress?.({...p,turn,budget:budget.snapshot()})}),choice=data.choices?.[0],message=choice?.message;if(!message)throw Error('模型没有返回可用消息');
   await o.onResponse?.(data);
   if(signal?.aborted)throw signal.reason||Error('创作已停止');
-  if(choice.finish_reason==='length'){messages.push({role:'user',content:'输出截断，整轮未执行。返回较小完整批次。实际状态：'+JSON.stringify(creativeScene(working,aliases))});await onTurn({turn,results:[{name:'response',ok:false,detail:'输出截断，整轮未执行'}],draft:working,text:''});continue;}
+  if(choice.finish_reason==='length'){nextPhase='format-repair';noProgress++;messages.push({role:'user',content:'输出截断，整轮未执行。返回较小完整批次。实际状态：'+JSON.stringify(creativeScene(working,aliases))});await onTurn({turn,results:[{name:'response',ok:false,detail:'输出截断，整轮未执行'}],draft:working,text:'',budget:budget.snapshot()});if(noProgress>=4){const error=Error('连续四轮没有有效修改，已保留成功步骤');error.code='no-progress';throw error;}continue;}
   let calls;
-  try{calls=protocol.calls(message,turn);}catch(e){messages.push({role:'user',content:'页面/JSON不符合合同：'+e.message+'。未执行；修正后完整返回。'});await onTurn({turn,results:[{name:'response',ok:false,detail:e.message}],draft:working,text:''});continue;}
+  try{calls=protocol.calls(message,turn);}catch(e){nextPhase='format-repair';noProgress++;messages.push({role:'user',content:'页面/JSON不符合合同：'+e.message+'。未执行；修正后完整返回。'});await onTurn({turn,results:[{name:'response',ok:false,detail:e.message}],draft:working,text:'',budget:budget.snapshot()});if(noProgress>=4){const error=Error('连续四轮没有有效修改，已保留成功步骤');error.code='no-progress';throw error;}continue;}
   if(!calls.length)throw Error('第 '+turn+' 轮没有返回创作操作；画布未因此标记为完成。');
   if(signal?.aborted)throw signal.reason||Error('创作已停止');
   messages.push(native?{role:'assistant',content:message.content||null,...(message.reasoning_content?{reasoning_content:message.reasoning_content}:{}),tool_calls:calls}:{role:'assistant',content:message.content||''});
@@ -63,23 +65,22 @@ export async function runCreativeAgent(o){
   const inspections=[];
   for(const r of result.results){const content=JSON.stringify({ok:r.ok,detail:r.detail,...(r.data?{data:r.data}:{})});messages.push(native?{role:'tool',tool_call_id:r.id,content}:{role:'user',content:r.name+': '+content});if(r.ok&&r.name==='inspect_materials'&&onInspection)inspections.push(r.data);}
   if(signal?.aborted)throw signal.reason||Error('创作已停止');
-  const review=reviewCreativeDraft(working,{allowNoText:options.allowNoText,purposes:o.pagePurposes,styles:o.styles,materialPriority:o.materialPriority,assets});await onTurn({turn,results:result.results,draft:working,text:message.content||'',review});
+  noProgress=before===editableSceneState(working)?noProgress+1:0;
+  const review=reviewCreativeDraft(working,{allowNoText:options.allowNoText,purposes:o.pagePurposes,styles:o.styles,materialPriority:o.materialPriority,assets});await onTurn({turn,results:result.results,draft:working,text:message.content||'',review,budget:budget.snapshot()});
   // The successful scene checkpoint is durable before optional image lookup.
   // Observation failure must not replay already applied tools next turn.
   const inspectionParts=[];
   for(const data of inspections){if(signal?.aborted)throw signal.reason||Error('创作已停止');try{const previews=await onInspection(data);if(previews?.length)inspectionParts.push(...previews);}catch{if(signal?.aborted)throw signal.reason||Error('创作已停止');inspectionParts.push({type:'text',text:'素材局部预览暂不可用。已成功执行的工具无需重放；可继续或稍后重新检查。'});}}
   // Every native call needs its contiguous tool reply before any user image.
   if(inspectionParts.length)messages.push({role:'user',content:inspectionParts});
-  failures=result.results.some(x=>x.ok)?0:failures+1;
   if(working.agentRun?.status==='finished'){
    const sceneHash=await sceneFingerprint(creativeScene(working,aliases));
    working.agentRun={...working.agentRun,finalSceneHash:sceneHash,renderedSceneHash:null,visualReview:'pending'};
    try{const preview=await (o.onFinalScene||onScene)?.(working);if(preview)working.agentRun.renderedSceneHash=sceneHash;}catch{working.agentRun.visualReview='render-failed';}
    if(signal?.aborted)throw signal.reason||Error('创作已停止');
-   return {draft:working,turns:turn,finished:true,messages,review,sceneHash,renderedSceneHash:working.agentRun.renderedSceneHash};
+   return {draft:working,turns:turn,finished:true,messages,review,sceneHash,renderedSceneHash:working.agentRun.renderedSceneHash,budget:budget.stop('completed')};
   }
+  if(noProgress>=4){const error=Error('连续四轮没有有效修改，已保留成功步骤');error.code='no-progress';throw error;}
   const scene=[{type:'text',text:'实际画布状态：'+JSON.stringify(creativeScene(working,aliases))+'\n排版检查（非美感评分）：'+JSON.stringify(review)+'\n按成功回执修正，不重复已放置实物。'}],image=await onScene?.(working);if(image)scene.push({type:'image_url',image_url:{url:image}});messages.push({role:'user',content:scene});
-  if(failures>=4)throw Error('连续四轮没有有效修改，已保留成功步骤');
- }
- throw Error('已达到 '+limit+' 轮上限，前面成功的步骤仍已保存');
+ }}catch(error){budget.stop(signal?.aborted?'cancelled':error.code||'error');if(error&&typeof error==='object')error.budget=budget.snapshot();throw error;}
 }

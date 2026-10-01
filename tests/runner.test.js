@@ -29,7 +29,7 @@ test('empty model response cannot mark a blank page complete',async()=>{
 test('A-06: cancellation during response inspection never executes the returned tools',async()=>{
  const controller=new AbortController(),turns=[];
  const request=async()=>({ok:true,json:async()=>({choices:[{message:{role:'assistant',content:'',tool_calls:[{id:'paper',function:{name:'set_paper',arguments:'{"color":"#cc0000"}'}}]}}]})});
- await assert.rejects(runCreativeAgent({draft:draft(),assets:[],aliases:{},key:'test-key',request,signal:controller.signal,onResponse:async()=>controller.abort(Error('用户停止')),onTurn:value=>turns.push(value)}),/用户停止/);
+ await assert.rejects(runCreativeAgent({draft:draft(),assets:[],aliases:{},key:'test-key',request,signal:controller.signal,onResponse:async()=>controller.abort(Error('用户停止')),onTurn:value=>turns.push(value)}),error=>/用户停止/.test(error.message)&&error.budget.stopReason==='cancelled'&&error.budget.totalRequests===1);
  assert.equal(turns.length,0);
 });
 
@@ -57,6 +57,22 @@ test('A-08: renderer failure never claims that the final scene was visually chec
  const response={choices:[{message:{tool_calls:[{id:'finish',function:{name:'finish_design',arguments:'{}'}}]}}]};
  const output=await runCreativeAgent({draft:draft(),assets:[],aliases:{},key:'synthetic-test',onFinalScene:async()=>{throw Error('renderer failed');},request:async()=>({ok:true,json:async()=>response})});
  assert.equal(output.draft.agentRun.renderedSceneHash,null);assert.equal(output.draft.agentRun.visualReview,'render-failed');
+});
+test('A-10: eight configured requests are honored; three-request budget stops before a fourth call',async()=>{
+ const tool=(name,args,id)=>({id,function:{name,arguments:JSON.stringify(args)}});
+ const reply=index=>({choices:[{message:{tool_calls:[tool(index===8?'finish_design':'upsert_text',index===8?{}:{items:[{key:'title',content:'第 '+index+' 版',x:.5,y:.2,width:.7}]},'call-'+index)]}}]});
+ let requests=0;const output=await runCreativeAgent({draft:draft(),assets:[],aliases:{},key:'synthetic-test',maxTurns:8,request:async()=>({ok:true,json:async()=>reply(++requests)})});
+ assert.equal(requests,8);assert.equal(output.budget.totalRequests,8);assert.equal(output.budget.creationRequests,8);assert.equal(output.budget.stopReason,'completed');
+ requests=0;await assert.rejects(runCreativeAgent({draft:draft(),assets:[],aliases:{},key:'synthetic-test',maxTurns:3,request:async()=>({ok:true,json:async()=>reply(++requests)})}),error=>error.code==='request-limit'&&error.budget.totalRequests===3&&error.budget.stopReason==='request-limit');
+ assert.equal(requests,3);
+});
+test('A-10/A-11: format repair consumes the same request cap and repeated no-op tools stop early',async()=>{
+ const finish={choices:[{message:{tool_calls:[{id:'finish',function:{name:'finish_design',arguments:'{}'}}]}}]};
+ let requests=0;const repaired=await runCreativeAgent({draft:draft(),assets:[],aliases:{},key:'synthetic-test',maxTurns:2,request:async()=>({ok:true,json:async()=>++requests===1?{choices:[{finish_reason:'length',message:{content:'incomplete'}}]}:finish})});
+ assert.equal(repaired.budget.totalRequests,2);assert.equal(repaired.budget.creationRequests,1);assert.equal(repaired.budget.formatRepairRequests,1);
+ requests=0;const noOp={choices:[{message:{tool_calls:[{id:'same',function:{name:'set_paper',arguments:'{"color":"#ffffff"}'}}]}}]};
+ await assert.rejects(runCreativeAgent({draft:draft(),assets:[],aliases:{},key:'synthetic-test',maxTurns:20,request:async()=>({ok:true,json:async()=>{requests++;return noOp;}})}),error=>error.code==='no-progress'&&error.budget.stopReason==='no-progress');
+ assert.ok(requests<=5);
 });
 test('intentional sparse composition may finish; only explicit physical requirements block it',async()=>{
  const assets=Array.from({length:4},(_,i)=>({id:'asset-'+i,title:'纸片 '+i,kind:'sticker',role:'support',physicalWidthMM:20,physicalHeightMM:25,supply:{quantity:1}}));

@@ -59,7 +59,7 @@ export function createMatchingSession(c){
      onScene:vision?async d=>(await c.rasterize(d,.7)).toDataURL('image/jpeg',.8):undefined,
      onFinalScene:async d=>(await c.rasterize(d,.7)).toDataURL('image/jpeg',.8),
      onInspection:vision?async data=>{const parts=[];for(const m of data?.materials||[]){const a=c.asset(m.assetID);if(a){const url=await c.modelImage(a,m.cropRect);if(url)parts.push({type:'text',text:m.key+' 的局部预览'},{type:'image_url',image_url:{url}});}}return parts;}:undefined,
-     onProgress:progress=>{v.progress=steps+'第 '+progress.turn+' 轮 · '+progress.phase+' · '+progress.seconds+' 秒 · 已接收 '+progress.received+' 字符';const el=document.querySelector(`[data-variant="${v.id}"] .match-progress`);if(el)el.textContent=v.progress;},
+     onProgress:progress=>{v.progress=steps+'请求 '+progress.budget.totalRequests+'/'+progress.budget.limit+'（创作 '+progress.budget.creationRequests+'、格式修复 '+progress.budget.formatRepairRequests+'） · '+progress.phase+' · '+progress.seconds+' 秒 · 已接收 '+progress.received+' 字符';const el=document.querySelector(`[data-variant="${v.id}"] .match-progress`);if(el)el.textContent=v.progress;},
      onTurn:async({turn,results,draft})=>{await recorder.turn(turn,results,draft);p.drafts=[structuredClone(draft)];p.activeDraftID=draft.id;steps+='第 '+turn+' 轮\n'+results.map(r=>(r.ok?'✓':'×')+' '+r.detail).join('\n')+'\n';v.progress=steps;await save();update();}
     });
     p.drafts=[output.draft];p.activeDraftID=output.draft.id;p.aiGenerated=true;p.deliveryMode=cfg.deliveryMode;

@@ -115,5 +115,10 @@
 | 第二十一批集成 | `npm test` | 290/290，退出码 0 |
 | 第二十一批集成 | `npm run test:ui` | build/UI smoke/route parity/自托管 smoke 通过，退出码 0 |
 | 第二十一批真实浏览器 | `SHIYE_TEST_URL=http://localhost:5192 node tests/offline-handoff-browser.mjs` | 四种模拟视口交接通过，退出码 0；非实体设备/真实模型终稿视觉验收 |
+| 第二十一批固定项目 Git 部署 | Vercel 控制台 `shiye-journal-test` Production Deployment | `1233ed776e232ccccd42efc08a12e86280aa648e`，Git `main`，状态 Ready，固定域名未变；无手动部署 |
+| 第二十二批预算/错误局部 | `node --test tests/chat-transport.test.js tests/runner.test.js tests/ai-settings.test.js` | 19/19，退出码 0；A-10 八轮与三轮、格式修复计费、无进展、A-12 分类脱敏；mock provider，无真实付费调用 |
+| 第二十二批集成 | `npm test` | 293/293，退出码 0 |
+| 第二十二批集成 | `npm run test:ui` | build/UI smoke/route parity/自托管 smoke 通过，退出码 0 |
+| 第二十二批真实 Chromium | `SHIYE_TEST_URL=http://localhost:5192 SHIYE_WAIT_MS=30000 node tests/browser-acceptance.mjs` | 109 个画面、7 种模拟视口、工作流与备份往返通过，退出码 0；首次使用默认 5 秒等待在识别候选渲染处超时，按实际识别耗时改用 30 秒测试等待后通过。非实体 Safari/iPad。 |
 
 上面的浏览器运行在桌面 Chromium 中，模拟不同视口；它**不是**实体手机或 iPad 验收。未使用真实账号/私人素材；尚未运行在线 AI、双标签共享 IDB、隔离数据库 CAS、完整工程包往返。保留有意留白、叠压、半藏与出血，不以固定占页率、最低图层数或零重叠判成败。

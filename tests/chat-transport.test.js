@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';
-import {requestChat} from '../src/chat-transport.js';
+import {requestChat,ChatRequestError} from '../src/chat-transport.js';
 const base={endpoint:'https://example.test/chat',key:'test-only',payload:{model:'test'},timeout:1};
 const sse=chunks=>new Response(new ReadableStream({start(c){for(const chunk of chunks)c.enqueue(new TextEncoder().encode(chunk));c.close();}}),{headers:{'Content-Type':'text/event-stream'}});
 test('streamed partial JSON tool arguments assemble before execution, comments are accepted',async()=>{
@@ -14,6 +14,18 @@ test('idle timeout and cancellation return meaningful errors without keys',async
  const controller=new AbortController();controller.abort(Error('用户停止'));await assert.rejects(requestChat({...base,signal:controller.signal,request:(_,o)=>Promise.reject(o.signal.reason)}),/用户停止/);
 });
 test('HTTP authentication failures are distinguished',async()=>{await assert.rejects(requestChat({...base,request:async()=>new Response('',{status:401})}),/密钥无效/);});
+test('A-12: provider errors have safe codes without leaking provider text or credentials',async()=>{
+ const cases=[
+  [401,'authentication',''],[429,'rate-limit',''],
+  [400,'context-limit',JSON.stringify({error:{code:'context_length_exceeded',message:'private text and sk-should-not-leak'}})],
+  [400,'unsupported-request',JSON.stringify({error:{code:'unsupported_response_format',message:'private text and sk-should-not-leak'}})]
+ ];
+ for(const [status,code,body] of cases){
+  await assert.rejects(requestChat({...base,request:async()=>new Response(body,{status})}),error=>error instanceof ChatRequestError&&error.code===code&&!/private text|sk-should-not-leak/.test(error.message));
+ }
+ const pending=(_,options)=>new Promise((_,reject)=>options.signal.addEventListener('abort',()=>reject(options.signal.reason)));
+ await assert.rejects(requestChat({...base,timeout:.01,request:pending}),error=>error.code==='idle-timeout');
+});
 test('keep-alive without text reports provider waiting, not fictitious output',async()=>{
  const progress=[];await requestChat({...base,onProgress:p=>progress.push(p),request:async()=>sse([': keep-alive\n\n','data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}\n\n','data: [DONE]\n\n'])});
  assert.ok(progress.some(p=>p.keepAlives===1&&p.received===0&&p.phase.includes('服务保活中')));assert.ok(progress.at(-1).networkBytes>0);assert.equal(progress.at(-1).received,2);

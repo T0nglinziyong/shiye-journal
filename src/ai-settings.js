@@ -1,5 +1,6 @@
 import {deliveryProfile} from './ai-delivery.js';
 import {IMAGE_MODELS} from './ai-image-generation.js';
+import {creativeRequestLimit} from './ai-budget.js';
 const STORAGE_KEY='shiye-ai-settings-v1';
 export const AI_PROVIDERS=Object.freeze({
   openai:{label:'OpenAI',endpoint:'https://api.openai.com/v1/chat/completions',models:[['gpt-4o','GPT-4o',true],['gpt-4.1-mini','GPT-4.1 mini',true],['gpt-4.1','GPT-4.1',true]]},
@@ -21,7 +22,7 @@ export function normalizeAISettings(value={}){
     deliveryMode,...deliveryProfile(deliveryMode),imageModel:IMAGE_MODELS.includes(value.imageModel)?value.imageModel:AI_DEFAULTS.imageModel,
     temperature:limit(value.temperature,0,2,AI_DEFAULTS.temperature),
     maxTokens:Math.round(limit(value.maxTokens,2000,16000,AI_DEFAULTS.maxTokens)),
-    maxTurns:Math.round(limit(value.maxTurns===0?5:value.maxTurns,1,20,AI_DEFAULTS.maxTurns)),
+    maxTurns:creativeRequestLimit(value.maxTurns),
     includeThumbnails:value.includeThumbnails!==false,customVision:value.customVision===true,
     requestTimeout:limit(value.requestTimeout,20,180,AI_DEFAULTS.requestTimeout),
     sendOutputLimit:value.sendOutputLimit!==false,disableThinking:value.disableThinking!==false,
