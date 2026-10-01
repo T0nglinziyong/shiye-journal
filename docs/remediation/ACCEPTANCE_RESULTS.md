@@ -31,5 +31,11 @@
 | 第四批集成 | `npm test` | 264/264，退出码 0；旧安全测试改为拒绝未知事件字段，另增脚本样文本的转义验证，未删测试 |
 | 第四批集成 | `npm run test:ui` | build/UI smoke/route parity/自托管 smoke 通过，退出码 0；真实设备和云账号未测 |
 | 第四批编辑器浏览器 | `SHIYE_TEST_URL=http://localhost:5192 npm run test:editor-browser` | 88 张截屏流程通过，退出码 0，首个可用画面 322 ms；是桌面 Chromium 模拟视口，非实体设备 |
+| 第四批固定项目 Git 部署 | Vercel 控制台 `shiye-journal-test` Production Deployment | `dce105389e0a65a69dbff0b52ada1b69a688e197`，Git `main`，状态 Ready，当前域名 `shiye-journal-test.vercel.app`；无手动部署 |
+| 第五批数据安全局部 | `node --test tests/remediation-import.test.js tests/project-sync.test.js tests/cloud-store.test.js` | 53/53，退出码 0；D-01–D-04 及连续编辑/工程元数据合成时序通过，未用真实私人稿 |
+| 第五批数据安全集成 | `npm test` | 270/270，退出码 0；真实多标签及隔离数据库条件提交未验 |
+| 第五批数据安全集成 | `npm run test:ui` | build/UI smoke/route parity/自托管 smoke 通过，退出码 0 |
+| 第五批编辑器浏览器 | `SHIYE_TEST_URL=http://localhost:5192 npm run test:editor-browser` | 88 张截屏流程通过，退出码 0，首个可用画面 309 ms；非实体设备 |
+| 线上只读边界核对 | Supabase 现有项目函数元信息 | `shiye_commit_v2` 为 invoker 函数，携带 operation_id 幂等和 expected_revision；底层 `shiye_commit` 对账号 revision 行加锁并检查期望值。未更改线上表或写入用户资料，不能代替文档级 CAS 实测。 |
 
 上面的浏览器运行在桌面 Chromium 中，模拟不同视口；它**不是**实体手机或 iPad 验收。未使用真实账号/私人素材；尚未运行在线 AI、双标签共享 IDB、隔离数据库 CAS、完整工程包往返。保留有意留白、叠压、半藏与出血，不以固定占页率、最低图层数或零重叠判成败。

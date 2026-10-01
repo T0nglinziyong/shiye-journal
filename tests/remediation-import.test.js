@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {zipSync,strToU8} from 'fflate';
+import {zipSync,unzipSync,strToU8} from 'fflate';
 import {createNativeProjectPackage,importNativeProjectPackage} from '../src/native-project-package.js';
 import {createOfflineHandoff,importEditableWork,importEditableWorkPackage} from '../src/offline-creation.js';
 import {project,draft} from '../src/domain.js';
@@ -49,6 +49,16 @@ test('I-04: second active draft and immutable history survive ID remapping',asyn
   assert.ok(restored.draftHistorySnapshots[restored.activeDraftID]);
   restoreHistoryDraft(restored,restored.activeDraftID);
   assert.equal(restored.drafts[1].textBlocks[0].content,'第二方案');
+});
+
+test('D-05: account sync cursor metadata never enters a portable project package',async()=>{
+  const p=project('可携带作品');p.__cloudBaseRevision=17;p.__cloudSessionId='editor-only';
+  const packed=await bytes(createNativeProjectPackage(p));
+  const entry=JSON.parse(new TextDecoder().decode(unzipSync(packed)['native.shiyeproject.json']));
+  assert.equal(entry.project.__cloudBaseRevision,undefined);
+  assert.equal(entry.project.__cloudSessionId,undefined);
+  assert.equal(importNativeProjectPackage(packed,[]).__cloudBaseRevision,undefined);
+  assert.equal(importNativeProjectPackage(packed,[]).__cloudSessionId,undefined);
 });
 
 test('I-01/I-02: external IDs are rebuilt and invalid geometry is rejected',async()=>{

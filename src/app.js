@@ -295,7 +295,7 @@ async function flushSave(){
   saveChain=saveChain.catch(()=>{}).then(async()=>{let failure;for(const {snapshot,version} of batch){try{await db.stageProject(snapshot);}catch(error){if(saveVersions.get(snapshot.id)===version&&!dirtyProjects.has(snapshot.id))dirtyProjects.set(snapshot.id,snapshot);failure??=error;}finally{savingProjects--;}}if(failure)throw failure;});
   try{await saveChain;if(!savingProjects&&!dirtyProjects.size){syncDisplay.localPending=false;updateSyncIndicator();saveStatus(cloudEnabled?'修改已暂存 · 后台同步中':(await db.storageMode())==='server'?'已保存到服务器':'已保存到本机');}}catch(e){console.error(e);syncDisplay.error=e;updateSyncIndicator();saveStatus('暂存失败 · 修改仍在当前页面');toast('修改暂存失败，暂勿关闭页面：'+e.message);throw e;}
 }
-function saveProject(){const p=state.activeProject;if(!p)return;p.updatedAt=new Date().toISOString();saveVersions.set(p.id,(saveVersions.get(p.id)||0)+1);dirtyProjects.set(p.id,p);saveStatus('后台保存中…');syncDisplay.localPending=true;updateSyncIndicator();clearTimeout(saveTimer);saveTimer=setTimeout(()=>flushSave().catch(console.error),150);}
+function saveProject(){const p=state.activeProject;if(!p)return;if(cloudEnabled)p.__cloudSessionId||=crypto.randomUUID();p.updatedAt=new Date().toISOString();saveVersions.set(p.id,(saveVersions.get(p.id)||0)+1);dirtyProjects.set(p.id,p);saveStatus('后台保存中…');syncDisplay.localPending=true;updateSyncIndicator();clearTimeout(saveTimer);saveTimer=setTimeout(()=>flushSave().catch(console.error),150);}
 const pendingAISnapshots=new Set();
 function saveAISnapshotInBackground(p){
   if(!p?.aiGenerated||pendingAISnapshots.has(p.id)||state.projects.some(item=>item.isSnapshot&&item.sourceProjectID===p.id))return;

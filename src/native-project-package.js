@@ -6,7 +6,8 @@ import {readProjectPackageEntries} from './project-package-archive.js';
 export const NATIVE_ENTRY='native.shiyeproject.json';
 export function createNativeProjectPackage(project){
   if(!project?.drafts?.length||project.isSnapshot)throw Error('只有可编辑作品可以打包');
-  const document={format:'shiye-native-project',version:1,project};
+  const {__cloudBaseRevision,__cloudSessionId,...portableProject}=project;
+  const document={format:'shiye-native-project',version:1,project:portableProject};
   return new Blob([zipSync({[NATIVE_ENTRY]:strToU8(JSON.stringify(document))},{level:6})],{type:'application/zip'});
 }
 export function importNativeProjectPackage(bytes,assets){
@@ -38,7 +39,7 @@ export function importNativeProjectPackage(bytes,assets){
   if(project.initialEditorSnapshot){project.initialEditorSnapshot.drafts?.forEach(remapDraft);project.initialEditorSnapshot.activeDraftID=mapped(draftMap,project.initialEditorSnapshot.activeDraftID);}
   if(project.draftHistorySnapshots){const histories={};for(const [oldID,draft] of Object.entries(project.draftHistorySnapshots)){remapDraft(draft);histories[mapped(draftMap,oldID)]=draft;}project.draftHistorySnapshots=histories;}
   for(const archive of project.manualArchives||[]){archive.id=uid();archive.drafts?.forEach(remapDraft);archive.activeDraftID=mapped(draftMap,archive.activeDraftID);}
-  project.id=uid();project.title=project.title.slice(0,80);project.isSnapshot=false;project.isDraft=true;project.projectDocumentPath=null;project.deliveryBlobId=null;project.activeDraftID=mapped(draftMap,source.activeDraftID);project.editHistory={undo:[],redo:[]};project.createdAt=project.updatedAt=new Date().toISOString();return project;
+  project.id=uid();delete project.__cloudBaseRevision;delete project.__cloudSessionId;project.title=project.title.slice(0,80);project.isSnapshot=false;project.isDraft=true;project.projectDocumentPath=null;project.deliveryBlobId=null;project.activeDraftID=mapped(draftMap,source.activeDraftID);project.editHistory={undo:[],redo:[]};project.createdAt=project.updatedAt=new Date().toISOString();return project;
 }
 
 export function validatePackageValue(root){

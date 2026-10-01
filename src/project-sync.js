@@ -1,6 +1,6 @@
 // Durable edits are an explicit outbox, not a replacement for cloud records.
 // Commit acknowledgement is the only point at which an entry is removed.
-export function createProjectSync({load,write,commit,revision,reconcile=async()=> 'conflict',onStatus=()=>{}}){
+export function createProjectSync({load,write,commit,revision,reconcile=async()=> 'conflict',recordKeys=record=>[{store:'projects',id:record.id}],onCommitted=()=>{},onStatus=()=>{}}){
   let initialized,staging=Promise.resolve(),network,serial=0,error;
   const entries=new Map();
   // A transient IndexedDB/auth read failure must not poison this instance for
@@ -8,20 +8,22 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
   const initialize=()=>initialized??=(async()=>{for(const row of await load()||[]){entries.set(row.record.id,row);serial=Math.max(serial,row.serial);}report();})().catch(failure=>{initialized=undefined;throw failure;});
   const report=()=>onStatus({pending:entries.size,error});
   const persist=()=>write(structuredClone([...entries.values()]));
-  async function acknowledge(row){
+  const overlaps=(a,b)=>a.some(left=>b.some(right=>left.store===right.store&&(left.id===right.id||left.id===undefined||right.id===undefined)));
+  async function acknowledge(row,{confirmedHere=false}={}){
     // A confirmed operation advanced exactly one revision. Newer local edits
     // based on its old revision can follow it; never jump across an unrelated
     // remote edit (which would silently overwrite another device).
-    if(revision()===row.baseRevision+1)for(const pending of entries.values())if(pending.serial!==row.serial&&pending.baseRevision===row.baseRevision)pending.baseRevision=revision();
+    if(revision()===row.baseRevision+1)for(const pending of entries.values())if(pending.serial>row.serial&&pending.baseRevision===row.baseRevision&&overlaps(recordKeys(row.record),recordKeys(pending.record)))pending.baseRevision=revision();
     const current=entries.get(row.record.id);
     const removed=current?.serial===row.serial;
     if(removed)entries.delete(row.record.id);
     try{await persist();}
     catch(e){if(removed&&!entries.has(row.record.id))entries.set(row.record.id,row);throw e;}
+    if(confirmedHere)onCommitted(row.record,revision());
     report();
   }
-  function stage(record){
-    const task=staging.catch(()=>{}).then(async()=>{await initialize();const previous=entries.get(record.id),row={record:structuredClone(record),serial:++serial,baseRevision:revision(),operationID:crypto.randomUUID()};entries.set(record.id,row);try{await persist();}catch(e){if(previous)entries.set(record.id,previous);else entries.delete(record.id);throw e;}error=null;report();});
+  function stage(record,{baseRevision=revision()}={}){
+    const task=staging.catch(()=>{}).then(async()=>{await initialize();if(!Number.isSafeInteger(baseRevision)||baseRevision<0)throw Error('作品编辑基线无效，未上传旧稿');const previous=entries.get(record.id),row={record:structuredClone(record),serial:++serial,baseRevision:previous?Math.min(previous.baseRevision,baseRevision):baseRevision,operationID:crypto.randomUUID()};entries.set(record.id,row);try{await persist();}catch(e){if(previous)entries.set(record.id,previous);else entries.delete(record.id);throw e;}error=null;report();});
     staging=task.catch(()=>{});void task.then(()=>kick()).catch(()=>{});return task;
   }
   function kick(){
@@ -55,12 +57,16 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
           throw failure;
         }
         await staging;
-        await acknowledge(row);
+        await acknowledge(row,{confirmedHere:true});
       }
       error=null;report();
     })().catch(e=>{error=e;report();throw e;}).finally(()=>{network=null;});
     network.catch(()=>{});return network;
   }
   async function discard(){await initialize();await staging;if(network)throw Error('上传正在进行，请等待请求结束后再放弃待同步修改');const previous=[...entries.values()];entries.clear();try{await persist();}catch(failure){for(const row of previous)entries.set(row.record.id,row);throw failure;}error=null;report();return previous.length;}
-  return {stage,async flush(){await initialize();await staging;await kick();},async pending(){await initialize();await staging;return structuredClone([...entries.values()]);},async advance(before,after){await initialize();await staging;for(const row of entries.values())if(row.baseRevision===before)row.baseRevision=after;if(entries.size)await persist();},discard,canDiscard:()=>!network,resume:()=>kick(),status:()=>({pending:entries.size,error,uploading:!!network})};
+  return {stage,async flush(){await initialize();await staging;await kick();},async pending(){await initialize();await staging;return structuredClone([...entries.values()]);},async advance(before,after,operations=[]){await initialize();await staging;if(!operations.length)return;let changed=false;for(const row of entries.values()){
+    const keys=recordKeys(row.record);
+    const touched=operations.some(operation=>keys.some(key=>key.store===operation.store&&(key.id===undefined||operation.action==='clear'||key.id===(operation.item?.id??operation.id))));
+    if(row.baseRevision===before&&!touched){row.baseRevision=after;changed=true;}
+  }if(changed)await persist();},discard,canDiscard:()=>!network,resume:()=>kick(),status:()=>({pending:entries.size,error,uploading:!!network})};
 }

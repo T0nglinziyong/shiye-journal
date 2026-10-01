@@ -29,7 +29,15 @@ test('failed network edits survive reload and cannot silently overwrite a differ
 test('local successful transactions advance pending base revisions without discarding them',async()=>{
   let rows=[{record:{id:'a'},serial:1,baseRevision:2}],revision=3;
   const q=createProjectSync({load:async()=>rows,write:async value=>{rows=value;},revision:()=>revision,commit:async()=>{revision++;}});
-  await q.advance(2,3);assert.equal(rows[0].baseRevision,3);await q.flush();assert.deepEqual(rows,[]);
+  await q.advance(2,3,[{store:'assets',action:'put',item:{id:'other'}}]);assert.equal(rows[0].baseRevision,3);await q.flush();assert.deepEqual(rows,[]);
+});
+test('D-03: a local transaction touching the same document does not blindly advance a pending edit',async()=>{
+  let rows=[{record:{id:'a'},serial:1,baseRevision:2}];
+  const q=createProjectSync({load:async()=>rows,write:async value=>{rows=value;},revision:()=>3,commit:async()=>{}});
+  await q.advance(2,3,[{store:'projects',action:'put',item:{id:'a'}}]);
+  assert.equal(rows[0].baseRevision,2);
+  await q.advance(2,3,[{store:'assets',action:'put',item:{id:'other'}}]);
+  assert.equal(rows[0].baseRevision,3);
 });
 test('failed durable staging never reports a cloud commit',async()=>{
   let calls=0;const q=createProjectSync({load:async()=>[],write:async()=>{throw Error('quota');},revision:()=>0,commit:async()=>{calls++;}});
