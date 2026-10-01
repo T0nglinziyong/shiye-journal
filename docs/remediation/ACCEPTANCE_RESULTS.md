@@ -85,5 +85,10 @@
 | 第十五批真实浏览器 | `SHIYE_TEST_URL=http://localhost:5192 node tests/offline-handoff-browser.mjs` | 四种模拟视口交接流程及 A5 双页约 296:210、自定 200:200 匿名参考画布比例通过，退出码 0；非真实设备 |
 | 第十五批集成 | `npm test` | 278/278，退出码 0 |
 | 第十五批集成 | `npm run test:ui` | build/UI smoke/route parity/自托管 smoke 通过，退出码 0；原有大模块提示未解决 |
+| 第十五批固定项目 Git 部署 | Vercel 控制台 `shiye-journal-test` Production Deployment | `44dc25a971856be0c160f3cfe4a3b0937ab49a8d`，Git `main`，状态 Ready，固定域名未变；无手动部署 |
+| 第十六批组合风格局部 | `node --test tests/offline-creation.test.js` | 14/14，退出码 0；韩系清新＋密集拼贴保持配色，同时版式选项改变区域结构与说明。真人视觉评价仍未做。 |
+| 第十六批集成 | `npm test` | 278/278，退出码 0 |
+| 第十六批集成 | `npm run test:ui` | build/UI smoke/route parity/自托管 smoke 通过，退出码 0 |
+| 第十六批真实浏览器 | `SHIYE_TEST_URL=http://localhost:5192 node tests/offline-handoff-browser.mjs` | 四种模拟视口交接与纸张参考比例通过，退出码 0；非实体设备 |
 
 上面的浏览器运行在桌面 Chromium 中，模拟不同视口；它**不是**实体手机或 iPad 验收。未使用真实账号/私人素材；尚未运行在线 AI、双标签共享 IDB、隔离数据库 CAS、完整工程包往返。保留有意留白、叠压、半藏与出血，不以固定占页率、最低图层数或零重叠判成败。

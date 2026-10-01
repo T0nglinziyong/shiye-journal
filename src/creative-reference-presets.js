@@ -1,6 +1,7 @@
 // Anonymous layout studies. These are generated from the selected directions;
 // no saved project, private journal text, or material image is read here.
 import {canvasSize} from './domain.js';
+import {styleGroups} from './matching-directions.js';
 const paletteFor=style=>{
   if(/复古|旅行|手作|胶片/.test(style))return ['#faf4e9','#aa765a','#e4c7a5','#63534a'];
   if(/美式|童趣|可爱|密集/.test(style))return ['#fff8ec','#da6d60','#f3c96d','#465d81'];
@@ -30,9 +31,13 @@ const spreadZones={
   editorial:[[.08,.18,.35,.35],[.56,.1,.35,.09],[.56,.25,.35,.27],[.08,.6,.83,.03],[.08,.68,.35,.18],[.56,.68,.35,.18]],
   diagonal:[[.08,.16,.33,.28],[.58,.11,.32,.08],[.56,.34,.35,.24],[.08,.5,.33,.13],[.08,.72,.34,.15],[.57,.72,.33,.13]]
 };
-function tailoredZones(entry,{style,purpose,mode}){
+function styleDimensions(styles){
+  const [mood,layout,medium]=styleGroups.map(group=>group.options.find(value=>styles.includes(value))||null);
+  return {mood:mood||styles[0]||'不预设',layout:layout||'不预设',medium:medium||'不预设'};
+}
+function tailoredZones(entry,{layout,purpose,mode}){
   const raw=mode==='spread'?spreadZones[entry.id]:entry.zones;
-  const restrained=/极简|留白|韩系|日系/.test(style),dense=/美式|混合媒材|密集拼贴/.test(style);
+  const restrained=/极简|留白/.test(layout),dense=/密集拼贴/.test(layout);
   return raw.map(([x,y,w,h],index)=>{
     const scale=restrained?.94:dense?1.035:1;
     if(index===0&&purpose==='主题封面')w*=1.06;
@@ -44,13 +49,13 @@ function tailoredZones(entry,{style,purpose,mode}){
   });
 }
 export function presetReferencePlans({styles=['韩系清新'],purposes=['日常记录'],mode='single',ratio='a5'}={}){
-  const style=styles[0]||'韩系清新',purpose=purposes[0]||'日常记录',labels=purposeParts[purpose]||purposeParts.日常记录,palette=paletteFor(style);
-  return arrangements.map((entry,index)=>({index:index+1,id:entry.id,level:entry.level,title:entry.title,source:entry.source,style,purpose,mode,ratio,idea:entry.idea,labels, zones:tailoredZones(entry,{style,purpose,mode}),palette,secondaryStyles:styles.slice(1),secondaryPurposes:purposes.slice(1)}));
+  const dimensions=styleDimensions(styles),style=styles[0]||'韩系清新',purpose=purposes[0]||'日常记录',labels=purposeParts[purpose]||purposeParts.日常记录,palette=paletteFor(dimensions.mood);
+  return arrangements.map((entry,index)=>({index:index+1,id:entry.id,level:entry.level,title:entry.title,source:entry.source,style,purpose,mode,ratio,dimensions,idea:entry.idea,labels,zones:tailoredZones(entry,{layout:dimensions.layout,purpose,mode}),palette,secondaryStyles:styles.slice(1),secondaryPurposes:purposes.slice(1)}));
 }
 export function presetReferenceGuide(plans){
   return '四张匿名预设构图示意｜仅标示区域关系，不含用户作品、照片或日记。\n'+
     '这些结构抽象自公开展示的真实手帐：Hobonichi 日页与用户日记、Bullet Journal 用户日志、TRAVELER’S COMPANY 旅行页。没有复制原图、原文、标志或私人资料。参考来源：https://www.1101.com/store/techo/en/magazine/tt_report/202304/ ；https://www.1101.com/store/techo/en/collection/contents/0277/ ；https://bulletjournal.com/blogs/bulletjournalist/show-tell-with-yu ；https://www.travelers-company.com/products/b-sides 。\n把样例视为可改造的起点：先观察本次真实素材的轮廓、方向、尺寸与可读内容，再选用或重组结构。不要复制样例坐标、色块、占位标签或凭空制造实物。\n'+
-    plans.map(p=>`\n${p.index}. ${p.level}方案 · ${p.title}｜${p.style} × ${p.purpose}${p.secondaryStyles.length?'；兼顾 '+p.secondaryStyles.join('、'):''}${p.secondaryPurposes.length?'；兼顾 '+p.secondaryPurposes.join('、'):''}\n来源结构：${p.source}。${p.idea}\n图示区域：${p.labels.slice(0,p.zones.length).join(' → ')}。`).join('\n')+
+    plans.map(p=>`\n${p.index}. ${p.level}方案 · ${p.title}｜${p.style} × ${p.purpose}${p.secondaryStyles.length?'；兼顾 '+p.secondaryStyles.join('、'):''}${p.secondaryPurposes.length?'；兼顾 '+p.secondaryPurposes.join('、'):''}\n风格拆解：配色与氛围=${p.dimensions.mood}；版式与密度=${p.dimensions.layout}；表现方式=${p.dimensions.medium}。这些维度可组合，不将配色当成固定模板。\n来源结构：${p.source}。${p.idea}\n图示区域：${p.labels.slice(0,p.zones.length).join(' → ')}。`).join('\n')+
     '\n\n同一种风格和用途可从简洁、均衡、丰富到实验构图，不按复杂度评分。先比较四种方案，选择最适合本次素材与用途的一种，再形成有个人判断的最终版；无需交付四个版本。';
 }
 export async function renderPresetReferences(plans,{width=400}={}){

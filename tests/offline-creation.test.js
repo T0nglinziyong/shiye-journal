@@ -170,6 +170,11 @@ test('selected style and purpose produce four anonymous alternatives from simple
   assert.notDeepEqual(plans[0].zones,plans[3].zones);
   const other=presetReferencePlans({styles:['韩系清新'],purposes:['清单计划']});
   assert.notDeepEqual(plans[0].palette,other[0].palette);
+  const mixed=presetReferencePlans({styles:['韩系清新','密集拼贴'],purposes:['清单计划']});
+  assert.deepEqual(mixed[0].palette,other[0].palette,'版式选择不能覆盖配色维度');
+  assert.equal(mixed[0].dimensions.layout,'密集拼贴');
+  assert.notDeepEqual(mixed[0].zones,other[0].zones,'第二个版式选择应改变结构示意');
+  assert.match(presetReferenceGuide(mixed),/配色与氛围=韩系清新；版式与密度=密集拼贴/);
   assert.match(other[0].labels.join('、'),/清单/);
   const spread=presetReferencePlans({styles:['杂志网格'],purposes:['影像故事'],mode:'spread'});
   assert.ok(spread.every(plan=>plan.zones.every(([x,,width])=>x<.5?x+width<=.47:x>=.5)),'double-page references must respect the fold');
