@@ -28,6 +28,17 @@ test('administrator may read another account in COS but can never write to its p
   assert.equal((await run({...req,body:{objects:[{method:'GET',path:'arbitrary/'+hash}]}})).status,403);
   assert.equal(signed,1);
 });
+test('numbered preset source images are private reads and admin-only immutable writes',async()=>{
+  const run=admin=>createTicketHandler({ready:true,origin:'https://shiye-journal-test.vercel.app',authenticate:async()=>({userID:'owner',isAdmin:admin}),sign:async()=> 'https://example.test/preset'});
+  const request=(method,path,type)=>({method:'POST',authorization:'Bearer '+token,body:{objects:[{method,path,...(type?{type}:{})}]}});
+  const path='journal-presets/source/36.jpg';
+  assert.equal((await run(false)(request('GET',path))).status,200);
+  assert.equal((await run(false)(request('PUT',path,'image/jpeg'))).status,403);
+  assert.equal((await run(true)(request('PUT',path,'image/jpeg'))).status,200);
+  for(const name of ['0.jpg','71.jpg','36.png','../36.jpg'])assert.equal((await run(true)(request('GET','journal-presets/source/'+name))).status,403);
+  assert.equal((await run(true)(request('PUT',path,'image/png'))).status,403);
+  assert.equal((await run(true)(request('GET',path,'image/jpeg'))).status,200);
+});
 test('COS adapter batches authorization, never exposes credentials, and does not fall back on failure',async()=>{
   let authorizationCalls=0,objectCalls=0;const store=createCOSStore({enabled:true,client:()=>({auth:{getSession:async()=>({data:{session:{access_token:token}}})}}),fetcher:async(url,options)=>{
     if(url==='/api/cos'){authorizationCalls++;assert.equal(options.headers.Authorization,'Bearer '+token);const {objects}=JSON.parse(options.body);return {ok:true,json:async()=>({tickets:objects.map(r=>({...r,url:'https://example.test/'+r.path,headers:{}}))})};}

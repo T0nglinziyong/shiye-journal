@@ -57,7 +57,7 @@ export async function saveImportBatch({state,db,urls,render,onSaved}) {
       const p=project(record.workTitle?.trim()||record.file.name.replace(/\.[^.]+$/,'')||'导入作品',{mode:ratio>1.1?'spread':'single',style:'imported'}),d=p.drafts[0];
       d.canvas={width:1000*ratio,height:1000};d.physicalPageHeightMM=paperHeight;
       d.pageRatio='custom:'+Math.round(paperWidth/(d.pageMode==='spread'?2:1))+'x'+Math.round(paperHeight);
-      p.isDraft=false;p.styleTags=record.workTags||[];p.isTemplate=!!record.isTemplate;p.isUsed=!!record.isUsed;
+      p.isDraft=false;p.styleTags=record.workTags||[];p.isUsed=!!record.isUsed;
       const elements=chosen.filter(c=>c.region.w<.98||c.region.h<.98);
       const background=await workBackground(source,elements),backgroundID=uid(),originalID=uid(),baseID=uid();
       blobs.push({id:backgroundID,data:background},{id:originalID,data:record.originalFile||record.file});

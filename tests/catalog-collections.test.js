@@ -21,9 +21,9 @@ test('page controls clamp input while counts remain independent of the page',()=
 });
 test('snapshot and editable works never share a tab',()=>{
   const picture=snapshotRecord({title:'一页画面',previewBlobId:'preview',width:800,height:1200});
-  assert.deepEqual(WORK_TABS.map(([tab])=>workInTab(picture,tab)),[true,false,false,false]);
-  assert.deepEqual(WORK_TABS.map(([tab])=>workInTab({...picture,isSnapshot:false,isDraft:false},tab)),[false,true,false,false]);
-  assert.deepEqual(WORK_TABS.map(([tab])=>workInTab({...picture,isSnapshot:false,isDraft:true},tab)),[false,false,true,false]);
+  assert.deepEqual(WORK_TABS.map(([tab])=>workInTab(picture,tab)),[true,false,false,false,false]);
+  assert.deepEqual(WORK_TABS.map(([tab])=>workInTab({...picture,isSnapshot:false,isDraft:false},tab)),[false,true,false,false,false]);
+  assert.deepEqual(WORK_TABS.map(([tab])=>workInTab({...picture,isSnapshot:false,isDraft:true},tab)),[false,false,true,false,false]);
 });
 test('style and purpose groups are disjoint and allow no preset',()=>{
   const all=styleGroups.flatMap(group=>group.options);assert.equal(new Set(all).size,all.length);

@@ -23,7 +23,7 @@ export function creativeScene(d,aliases={}){
 }
 const editableSceneState=d=>JSON.stringify([d.canvas,d.paperColor,d.paperPattern,d.paperRuling,d.drawCenterGutter,d.items,d.textBlocks,d.primitives,d.strokes]);
 export function buildCreativeMessages(o){
- const {draft,assets,aliases,images=[],prompt='',customLayoutPrompt='',textMode='automatic',contentPolicy='documentary',userText='',providedFacts='',styles=[draft.style],pagePurposes=['日常记录'],processing,assetProcessing={},materialUseHints={},materialUseRequired={},requiredAssetIDs=[],materialPriority={},includeStructureReference=true,referenceImages=[],sendPresetReferences=false}=o;
+ const {draft,assets,aliases,images=[],prompt='',customLayoutPrompt='',textMode='automatic',contentPolicy='documentary',userText='',providedFacts='',styles=[draft.style],pagePurposes=['日常记录'],processing,assetProcessing={},materialUseHints={},materialUseRequired={},requiredAssetIDs=[],materialPriority={},includeStructureReference=true,referenceImages=[],sendPresetReferences=false,userTemplates=[]}=o;
  const effectiveTextMode=contentPolicy==='visual'?'none':textMode;
  const contentBrief=creativeContentBrief({policy:contentPolicy,userText,providedFacts,topic:prompt,purposes:pagePurposes});
  const priority=id=>requiredAssetIDs.includes(id)||materialPriority.required?.includes(id)?'必须使用':materialPriority.available?.includes(id)?'可以使用（仅备选）':'优先使用';
@@ -36,11 +36,11 @@ export function buildCreativeMessages(o){
  const snapshotMode=['image','pdf'].includes(o.deliveryMode);
  if(snapshotMode)first[0].text=`创作一页将以${o.deliveryMode==='pdf'?'PDF':'图片'}快照交付的手帐。纸张：${draft.pageRatio} ${draft.pageMode==='spread'?'双页':'单页'}，物理高 ${draft.physicalPageHeightMM} mm。风格方向：${styles.join('、')||'不预设'}；用途：${pagePurposes.join('、')||'不预设'}。这些是方向，不是固定模板。\n${contentBrief}\n${pageBrief}\n真实素材与库存：\n${list.join('\n')}\n当前画布：${JSON.stringify(creativeScene(draft,aliases))}`;
  images.forEach((input,i)=>{const url=typeof input==='string'?input:input.url,label=typeof input==='string'?Object.keys(aliases)[i]:input.asset;if(url)first.push({type:'text',text:'素材 '+label+' 的图片：'},{type:'image_url',image_url:{url}});});
- const referenceContext={styles,purposes:pagePurposes,materials:assets.filter(asset=>Object.values(aliases).includes(asset.id))};
+ const referenceContext={styles,purposes:pagePurposes,materials:assets.filter(asset=>Object.values(aliases).includes(asset.id)),userTemplates};
  const selectedCases=selectJournalReferenceCases(referenceContext);
  const selectedTemplates=selectJournalAbstractTemplates(selectedCases,referenceContext);
  const caseBrief=sendPresetReferences||referenceImages.length?`【本次匹配案例】\n${journalReferenceGuide(selectedCases)}\n【来自用户教程的抽象模板】\n${journalAbstractTemplateGuide(selectedTemplates)}`:'';
- referenceImages.forEach((url,i)=>first.push({type:'text',text:`匹配案例 ${i+1}/${referenceImages.length}：${selectedCases[i]?.title||'手帐构图'}。只借鉴真实手帐的布局方法，案例里的照片、文字和贴纸不能当成本次可用素材。`},{type:'image_url',image_url:{url}}));
+ referenceImages.forEach((input,i)=>{const url=typeof input==='string'?input:input.url;first.push({type:'text',text:`${input.kind==='template'?'抽象模板':'匹配案例'} ${i+1}/${referenceImages.length}：${input.title||selectedCases[i]?.title||'手帐构图'}。只借鉴图文关系；参考图里的照片、文字和贴纸不能当成本次可用素材。`},{type:'image_url',image_url:{url}});});
  if(snapshotMode)return [{role:'system',content:`你是自由创作的手帐设计师。画面可大胆使用文字、数字手绘笔迹、荧光笔、自由矢量形状、色层及素材间的有机叠放；风格、用途与样例只是启发，不设素材数量、留白、密度、标题字数或固定版式指标。唯一硬性限制是真实纸张尺寸、实物素材的尺寸与库存、裁片不能重叠重复使用、胶带保持真实宽度。未发送的实体素材不能凭空出现。坐标是画布中心的 0–1 比例，实体宽高始终由素材库决定。\n${caseBrief}\n为让拾页生成快照，必须按机器可读合同返回页面，不要把整页内容当成一个新实体素材。${creativeProtocol(o).instruction}`},{role:'user',content:first}];
  const geometry='所有 placement 与文字/图形 x,y 都是中心点而非左上角。ratio 默认归一化到当前画布；实物按已确认毫米尺寸放置，不缩放、不超库存。图层可有意伸出纸边形成出血，页面预览及导出只显示纸内部分；重要文字与图像内容尽量留在纸内。unit 从0开始，库存1必须 unit:0。piece 是唯一片段ID，不是工序名称，各材料不得共用 whole 等ID。relation.target、relative_to、fit target 指已创建的 piece/key，不能填素材 alias 或 canvas。直接页文字 x,y 同样为中心（不是左上），完整行高可能扩展；长段可分栏或调整字号。文字重叠、对比偏低或框内显示不全会作为排版建议反馈，但不阻止有意的创意处理。没有素材图片时，你只知道名称、标签、尺寸：禁止猜测色彩深浅、星月具体形状/位置、人物姿态/动作/持球手方向、纸面纹理，只能写已给的色名、主题关联与这次排版的尺寸和留白关系。';
  const printType=creativeTypographyGuide(draft);

@@ -86,7 +86,7 @@ function selectedTray(c, selector) {
   tray.append(button('全选当前结果',()=>{view.querySelectorAll(selector).forEach(card=>{if(!card.hidden)parity.selected.add(card.dataset.id);});view.selectionRefresh?.()||render();}),button('清空选择',()=>{parity.selected.clear();view.selectionRefresh?.()||render();}));view.append(tray);return tray;
 }
 function mountProjectBatch(c) {
-  if(!c.view.querySelector('.works-grid'))return;
+  if(parity.workTab==='templates'||!c.view.querySelector('.works-grid'))return;
   const tray=selectedTray(c,'.card[data-act="open-project"]');
   function sync(){const active=selectionActive(parity,'work');tray.hidden=!active;c.view.querySelector('.library-select-toggle').textContent=parity.selectionMode?'完成':'选择';c.view.querySelectorAll('.work-entry').forEach(b=>b.disabled=active);c.view.querySelectorAll('[data-act="open-project"]').forEach(b=>{b.classList.toggle('batch-selected',active&&parity.selected.has(b.dataset.id));if(active)b.setAttribute('aria-pressed',String(parity.selected.has(b.dataset.id)));else b.removeAttribute('aria-pressed');});tray.querySelector('strong').textContent='本次选中 '+parity.selected.size+' 件';return true;}registerSelectionPresenter(c.view,sync);
   tray.append(button('重新识别',()=>classifyBatch(c,'project')),
@@ -182,8 +182,8 @@ function mountImport(c) {
   view.querySelectorAll('.record-series').forEach(el=>{el.value=state.importRecords[+el.dataset.index].seriesID||'';});
   for(const input of view.querySelectorAll('.record-work-title')) {
     const record=state.importRecords[+input.dataset.index],fields=document.createElement('div');fields.className='form-grid';
-    fields.innerHTML='<label>风格标签<input class="import-work-tags" value="'+c.esc((record.workTags||[]).join('、'))+'"></label><label>作品类型<select class="import-template"><option value="normal">普通作品</option><option value="template">模板作品</option></select></label><label>使用标记<select class="import-used"><option value="unused">未使用</option><option value="used">已使用</option></select></label>';
+    fields.innerHTML='<label>风格标签<input class="import-work-tags" value="'+c.esc((record.workTags||[]).join('、'))+'"></label><label>使用标记<select class="import-used"><option value="unused">未使用</option><option value="used">已使用</option></select></label>';
     fields.querySelector('.import-work-tags').oninput=e=>record.workTags=[...new Set(e.target.value.split(/[,，、]/).map(t=>t.trim()).filter(Boolean))];
-    const template=fields.querySelector('.import-template'),used=fields.querySelector('.import-used');template.value=record.isTemplate?'template':'normal';used.value=record.isUsed?'used':'unused';template.onchange=()=>record.isTemplate=template.value==='template';used.onchange=()=>record.isUsed=used.value==='used';input.closest('label').after(fields);
+    const used=fields.querySelector('.import-used');used.value=record.isUsed?'used':'unused';used.onchange=()=>record.isUsed=used.value==='used';input.closest('label').after(fields);
   }
 }

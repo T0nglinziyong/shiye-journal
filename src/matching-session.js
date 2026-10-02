@@ -1,5 +1,6 @@
 import {usableProjectSnapshot} from './project-outbox-recovery.js';
 import {selectJournalReferenceCases,loadJournalReferenceCases} from './journal-reference-catalog.js';
+import {loadJournalTemplateReferences} from './journal-template-references.js';
 import {prepareMaterialPreviews} from './creative-previews.js';
 import {materialAliases} from './material-alias.js';
 const ID='matching-session-v1';
@@ -54,14 +55,14 @@ export function createMatchingSession(c){
    try {
     await save();
     if(cfg.deliveryMode==='image'){
-     const referenceImages=cfg.sendPresetReferences?await loadJournalReferenceCases(selectJournalReferenceCases({styles:p.styles,purposes:p.purposes,materials:c.state.assets.filter(asset=>ids.includes(asset.id))})):[];
-     const blob=await c.generatePageImage({settings:cfg,project:p,draft:p.drafts[0],assets:c.state.assets,ids,theme:p.intent||'',createImage:c.modelImage,referenceImages,signal:run.signal,onProgress:message=>{v.progress=message;const el=document.querySelector(`[data-variant="${v.id}"] .match-progress`);if(el)el.textContent=message;}});
+     const referenceImages=cfg.sendPresetReferences?(await loadJournalTemplateReferences({context:{styles:p.styles,purposes:p.purposes,materials:c.state.assets.filter(asset=>ids.includes(asset.id))},userTemplates:c.state.userTemplates,db:c.db})).referenceImages:[];
+     const blob=await c.generatePageImage({settings:cfg,project:p,draft:p.drafts[0],assets:c.state.assets,ids,theme:p.intent||'',createImage:c.modelImage,referenceImages,userTemplates:c.state.userTemplates,signal:run.signal,onProgress:message=>{v.progress=message;const el=document.querySelector(`[data-variant="${v.id}"] .match-progress`);if(el)el.textContent=message;}});
      const snapshot=await c.saveGeneratedImageSnapshot(blob,p);v.project=snapshot;v.linkedProjectID=snapshot.id;v.status='completed';v.progress='GPT 直接生成的图片已保存到画面快照；点击查看。';return;
     }
     recorder=await c.createAIRecorder({db:c.db,model:cfg.model,key:cfg.key});const vision=cfg.includeThumbnails&&c.supportsVision(cfg);
     const images=vision?await prepareMaterialPreviews(ids,{findAsset:c.asset,createImage:c.modelImage}):[];
-    const references=[];if(cfg.sendPresetReferences&&c.supportsVision(cfg))references.push(...(await loadJournalReferenceCases(selectJournalReferenceCases({styles:p.styles,purposes:p.purposes,materials:c.state.assets.filter(asset=>ids.includes(asset.id))}))).map(entry=>entry.url));
-    let steps='';const output=await c.runCreativeAgent({...cfg,draft:p.drafts[0],assets:c.state.assets,aliases,styles:p.styles,pagePurposes:p.purposes,contentPolicy:p.contentPolicy||'documentary',userText:p.userText||'',providedFacts:p.providedFacts||'',requiredAssetIDs:p.requiredAssetIDs,materialPriority:p.materialPriority,processing:p.processing,assetProcessing:p.assetProcessing,materialUseHints:p.materialUseHints,materialUseRequired:p.materialUseRequired,prompt:p.intent||'',images,referenceImages:references,request:recorder.request,signal:run.signal,
+    const references=[];if(cfg.sendPresetReferences&&c.supportsVision(cfg))references.push(...(await loadJournalTemplateReferences({context:{styles:p.styles,purposes:p.purposes,materials:c.state.assets.filter(asset=>ids.includes(asset.id))},userTemplates:c.state.userTemplates,db:c.db})).referenceImages);
+    let steps='';const output=await c.runCreativeAgent({...cfg,draft:p.drafts[0],assets:c.state.assets,aliases,styles:p.styles,pagePurposes:p.purposes,contentPolicy:p.contentPolicy||'documentary',userText:p.userText||'',providedFacts:p.providedFacts||'',requiredAssetIDs:p.requiredAssetIDs,materialPriority:p.materialPriority,processing:p.processing,assetProcessing:p.assetProcessing,materialUseHints:p.materialUseHints,materialUseRequired:p.materialUseRequired,prompt:p.intent||'',images,referenceImages:references,userTemplates:c.state.userTemplates,request:recorder.request,signal:run.signal,
      onResponse:recorder.response,
      onScene:vision?async d=>(await c.rasterize(d,.7)).toDataURL('image/jpeg',.8):undefined,
      onFinalScene:async d=>(await c.rasterize(d,.7)).toDataURL('image/jpeg',.8),

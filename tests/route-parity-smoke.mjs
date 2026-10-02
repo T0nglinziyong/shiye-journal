@@ -35,13 +35,16 @@ for(const [width,height] of [[320,640],[390,844],[700,1024],[768,1024],[1024,768
   click('[data-route="matching"]');assert.ok($('.matching-page'));
   click('[data-route="works"]');assert.ok($('.works-grid'));
   assert.equal($('#work-kind').options.length,3);
-  assert.equal($('#work-status').options.length,6);
+  assert.equal($('#work-status').options.length,4);
   assert.equal($('#work-sort').options.length,6);
   $('.card[data-act="open-project"]').dispatchEvent(new win.MouseEvent('contextmenu',{bubbles:true}));click('#project-meta-preview');assert.ok($('.project-preview-cover'));
-  click('[data-act="project-meta"]');assert.ok($('#project-meta-template'));
+  click('[data-act="project-meta"]');assert.equal(win.document.querySelector('#project-meta-template'),null);
   $('#project-meta-used').value='used';click('#project-meta-save');
   assert.ok($('.project-preview-actions'));
   click('[data-act="preview-back"]');
+  click('.swift-tabs button:nth-child(4)');assert.ok($('.journal-template-grid'));
+  click('.journal-template-card');assert.ok($('.journal-template-detail-card'));
+  click('[data-template-back]');click('.swift-tabs button:nth-child(2)');
   click('.work-entry');assert.ok($('.import-nav'));
   assert.ok($('.import-source-actions'));
   click('[data-act="import-exit"]');

@@ -1,4 +1,5 @@
 import {journalReferenceCases} from './journal-reference-catalog.js';
+import {rankJournalTemplates} from './journal-template-catalog.js';
 
 // Descriptions of diagrams visible in the user's numbered tutorial images.
 // exampleSourceNumbers is present only when the matching finished page can
@@ -55,29 +56,17 @@ export const journalAbstractTemplates=Object.freeze([
 ]);
 
 export function selectJournalAbstractTemplates(cases=[],context={},limit=3){
-  const familyRank=new Map(cases.map((entry,index)=>[entry.id,index]));
-  const words=(context.materials||[]).map(item=>[item.title,...(item.tags||[])].join(' ')).join(' ');
-  const ranked=journalAbstractTemplates.map((entry,index)=>{
-    if(!familyRank.has(entry.caseId))return null;
-    const relevant=entry.title+entry.structure;
-    const overlap=(context.materials||[]).reduce((count,item)=>count+((item.title&&relevant.includes(item.title))?1:0),0);
-    const tags=(context.materials||[]).flatMap(item=>item.tags||[]).filter(tag=>tag.length>=2&&relevant.includes(tag)).length;
-    return {entry,index,score:overlap*3+Math.min(tags,3)+(entry.exampleSourceNumbers?.length?0.2:0)-familyRank.get(entry.caseId)};
-  }).filter(Boolean).sort((a,b)=>b.score-a.score||a.index-b.index);
+  const families=new Set(cases.map(entry=>entry.id));
+  const candidates=rankJournalTemplates(context,context.userTemplates||[],journalAbstractTemplates.length+(context.userTemplates||[]).length)
+    .filter(entry=>entry.origin==='user'||families.has(entry.caseId));
   const chosen=[],usedFamilies=new Set();
-  for(const item of ranked){
-    if(chosen.length>=Math.max(0,limit))break;
-    if(!usedFamilies.has(item.entry.caseId)){chosen.push(item.entry);usedFamilies.add(item.entry.caseId);}
-  }
-  for(const item of ranked){
-    if(chosen.length>=Math.max(0,limit))break;
-    if(!chosen.includes(item.entry))chosen.push(item.entry);
-  }
+  for(const entry of candidates){if(chosen.length>=limit)break;if(!usedFamilies.has(entry.caseId||entry.id)){chosen.push(entry);usedFamilies.add(entry.caseId||entry.id);}}
+  for(const entry of candidates){if(chosen.length>=limit)break;if(!chosen.includes(entry))chosen.push(entry);}
   return chosen;
 }
 
 export function journalAbstractTemplateGuide(templates){
   if(!templates.length)return '';
   const caseNames=Object.fromEntries(journalReferenceCases.map(entry=>[entry.id,entry.title]));
-  return `以下仅是根据风格、用途和素材选出的几条来源抽象模板，不是新创作的模板或可复制的成品。若有可确认的真实成品，一并标出原图编号；没有成品的模板也可借鉴。原图截图不随包公开；references/ 中的图片是相近风格的原创重构案例，不得误认成模板所对应的原作。不照搬照片、字句、商标或固定坐标；只择取适合本次任务的关系。\n${templates.map((entry,index)=>`${index+1}. ${entry.title}（风格家族：${caseNames[entry.caseId]}；模板原图 ${entry.sourceNumbers.join('、')}${entry.exampleSourceNumbers?.length?`；对应真实案例原图 ${entry.exampleSourceNumbers.join('、')}`:'；尚无可确认对应成品'}）：${entry.structure}`).join('\n')}`;
+  return `以下是按风格、用途、素材标签匹配的少量抽象模板；只借鉴图文关系，不照搬照片、字句或固定坐标。references/ 中若有相应原图，请与文字结构一起看；未附图的模板仍可用结构说明，不要猜测缺失画面。\n${templates.map((entry,index)=>`${index+1}. ${entry.title}（标签：${(entry.tags||[]).slice(0,8).join('、')}；${entry.origin==='user'?'用户导入模板'+(entry.exampleBlobId?'，有配对案例':'，无配对案例'):`风格家族：${caseNames[entry.caseId]}；模板原图 ${entry.sourceNumbers.join('、')}${entry.exampleSourceNumbers?.length?`；对应真实案例原图 ${entry.exampleSourceNumbers.join('、')}`:'；尚无可确认对应成品'}`}）：${entry.structure}`).join('\n')}`;
 }

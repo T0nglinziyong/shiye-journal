@@ -23,8 +23,18 @@ export const EDITABLE_WORK_FORMAT='shiye-editable-project';
 export const EDITABLE_PACKAGE_ENTRY='project.shiyeproject.json';
 const allowedTools=new Set(['compose_page','place_materials','edit_materials','upsert_materials','move_elements','arrange_elements','fit_text_to','upsert_primitives','upsert_text','delete_elements','set_paper','finish_design']);
 const compositionIdeas=source=>relevantJournalFamilies(source).map(({name,purposes,method,materials})=>({name,use:purposes.join('、'),plan:method,materialRoles:materials}));
-const caseStudies=(source,selected=[])=>({note:'上传教程已归入案例索引；本包只选与本次风格、用途、素材相关的原创真实风格重构图，不包含第三方截图或可复制贴纸。案例文字不可当正文。模板与实际成品的配对证据另见 abstract-templates.json 和 source-image-audit.json。',families:relevantJournalFamilies(source),selectedCases:selectJournalReferenceCases({styles:source.styles,purposes:source.purposes,materials:selected}).map(({id,title,method,copy})=>({id,title,method,copy})),materialRoles:journalMaterialRoles});
+const caseStudies=(source,selected=[])=>({note:'包内仅选与本次风格、用途和素材相关的版式参考：原创重构家族案例及已匹配的私有教程原图（如果可读取）。这些参考图不是可用素材，图中文字不可当正文。模板与成品的配对证据见 abstract-templates.json 和 source-image-audit.json。',families:relevantJournalFamilies(source),selectedCases:selectJournalReferenceCases({styles:source.styles,purposes:source.purposes,materials:selected}).map(({id,title,method,copy})=>({id,title,method,copy})),materialRoles:journalMaterialRoles});
 const validAlias=validMaterialAlias;
+function validateTemplateReferences(selectedCases,selectedTemplates,referenceImages){
+  const required=[...selectedCases.map(entry=>entry.id),...selectedTemplates.filter(entry=>entry.templateBlobId).map(entry=>`${entry.id}-template`),...selectedTemplates.filter(entry=>entry.exampleBlobId).map(entry=>`${entry.id}-case`)];
+  const selected=new Set([...required,...selectedTemplates.flatMap(entry=>[`${entry.id}-template`,`${entry.id}-case`])]);
+  const ids=new Set();
+  for(const entry of referenceImages){
+    if(!selected.has(entry.id)||ids.has(entry.id)||!(entry.bytes instanceof Uint8Array)||!entry.bytes.length)throw Error('匹配的手帐案例或模板图尚未准备完整');
+    ids.add(entry.id);
+  }
+  if(required.some(id=>!ids.has(id)))throw Error('匹配的手帐案例或模板图尚未准备完整');
+}
 
 function sourceFor(p,aliases){
   const d=p.drafts[0];
@@ -46,7 +56,7 @@ export function createOfflineCreationPackage({project:p,assets,aliases,previews=
 }
 // The upload is a task package, not a source archive. Keep the chat prompt
 // short and put exact context, contracts, examples and separate images inside.
-export async function createOfflineHandoff({project:p,assets,aliases,previews=[],settings={},referenceImages=[]}){
+export async function createOfflineHandoff({project:p,assets,aliases,previews=[],settings={},referenceImages=[],userTemplates=[]}){
   const source=sourceFor(p,aliases);source.taskBinding='local-v1';source.textMode=source.contentPolicy==='visual'?'none':settings.textMode||'automatic';const selected=source.materials.map(({alias,assetID})=>{
     const asset=assets.find(item=>item.id===assetID);
     if(!asset||!validAlias(alias))throw Error('素材篮中有无效素材编号');
@@ -56,7 +66,7 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
   const showImages=settings.includeThumbnails!==false;
   const chosen=showImages?previews:[];
   if(showImages&&selected.some(item=>!chosen.some(preview=>preview.alias===item.alias&&preview.bytes instanceof Uint8Array&&preview.bytes.length)))throw Error('创作包缺少素材预览，未导出不完整文件');
-  if(settings.deliveryMode==='image')return createOfflineImageHandoff({source,project:p,assets,selected,chosen,settings,referenceImages,showImages});
+  if(settings.deliveryMode==='image')return createOfflineImageHandoff({source,project:p,assets,selected,chosen,settings,referenceImages,showImages,userTemplates});
   const {offlineValidateSource}=await import('./generated/offline-validate-source.js');
   const mode=settings.generationMode==='direct'?'direct':'agent';
   source.capabilities={cropPx:false,validateOffline:true,renderOffline:false,previewOffline:'approximate-svg',packOffline:true};
@@ -89,8 +99,8 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
   const modeRules=mode==='direct'?'直接返回 page 可编辑图层，不要返回 tools；线条、边框、色块、自由矢量（多色层可用 vector_layers）放入 page.graphics，画笔/荧光笔路径放入 page.ink_strokes；真实素材先用 crop 裁片，再用 mask 形成外轮廓、diagonal 斜裁、window 开透明孔，后两者可组合；page.style 从合同的六个版式中选，不直接填风格名称；字段与必填项见 contract.json。':'返回 tools 操作数组，先用 compose_page，最后以 finish_design 结束；线条、边框、色块、多色矢量等放入 graphics 或 upsert_primitives；裁片后可用 edit_materials 的 mask、diagonal 和 window 加工，开窗是透明镂空而非白色覆盖；工具参数见 contract.json。';
   const hasPresets=settings.sendPresetReferences===true;
   const selectedCases=selectJournalReferenceCases({styles:source.styles,purposes:source.purposes,materials:selected});
-  const selectedTemplates=selectJournalAbstractTemplates(selectedCases,{styles:source.styles,purposes:source.purposes,materials:selected});
-  if(hasPresets&&(referenceImages.length!==selectedCases.length||referenceImages.some((entry,index)=>entry.id!==selectedCases[index].id||!(entry.bytes instanceof Uint8Array)||!entry.bytes.length)))throw Error('匹配的手帐案例尚未准备完整');
+  const selectedTemplates=selectJournalAbstractTemplates(selectedCases,{styles:source.styles,purposes:source.purposes,materials:selected,userTemplates});
+  if(hasPresets)validateTemplateReferences(selectedCases,selectedTemplates,referenceImages);
   const instructions=`拾页手帐创作任务｜一次完成，不是软件开发任务\n\n【目标】创作符合纸张与真实素材约束的可编辑手帐，并在聊天中展示预览图。请勿把整页烘焙为图片。\n\n【阅读顺序】先看本文件确认任务，再读 CREATIVE_GUIDE.txt 与 case-studies.json 学习风格、用途和构图方法；看 context.json 与 materials/ 理解本次真实素材；若有 references/，只借鉴匿名版式；最后按 contract.json 和 example-response.shiyeproject.json 输出。\n\n【本次任务】\n${task}\n用途提示：${purposeNotes}\n${settings.customLayoutPrompt?`补充排版：${settings.customLayoutPrompt}\n`:''}${settings.includeStructureReference!==false?`可借鉴匿名图文区域关系，但不能复制固定坐标。\n`:''}\n【素材与物理规则】\n${materialRules}\n必须使用逐件落实；优先使用先考虑，合适时采用；可以使用只是备选，不要求用尽；不使用的素材不在包中，不得猜测或引用。\n${showImages?'查看 materials/ 中每件素材的独立透明 PNG；透明处不是白底，不要给贴纸添加白底。':'本包不含素材图片预览，只能依据名称、标签和尺寸；不得猜测未给的图像细节。'}${hasPresets?' references/ 是按本次风格与用途生成的四张匿名预设示意，没有私人作品。':''}\n所有素材编号与 context.json 一致。纸张、照片、贴纸不能放大、复制或超库存。同一件裁下的非重叠余料可再用；胶带可重复截段，但保持真实宽度与图案。数字文字、线条和图形可自由添加，始终保留可编辑。${densePage?'可以考虑让主素材、辅助素材和有内容的文字形成阅读节奏；若留白能强化主题，也可以保留，不按字数、素材件数或页面填充率评判。':'封面或明确极简可以有意留白，但应有完整焦点。'}composition-ideas.json 是可选构图灵感，不是必须照搬。预览中出现的每一条线、边框和色块都要在可编辑数据中出现。\n\n【输出合同】\n${modeRules} 文件结构与示例见 example-response.shiyeproject.json；原样保留其中的 source（含 bundleId 与素材 ID），只改 title 和 ${mode==='direct'?'page':'tools'}。坐标 x/y 为画布中心的 0–1 比例，实物大小由拾页计算。不要编造经历、日期、地点或图片细节。\n同一条回复先展示最终页面的图片预览。交付方式以聊天中的短提示词为准：文件模式附可下载的 UTF-8 文件「作品.shiyeproject.json」；复制模式仅给一个单独的 \x60\x60\x60json 代码块，不生成文件。两种方式都只含一个完整 JSON 对象，不是 PDF、HTML 或位图。`;
   const example=mode==='direct'?directExample:{...envelope,tools:[{name:'compose_page',arguments:{materials:[{asset:selected[0].alias,piece:'主素材',unit:0,x:.5,y:.42}],graphics:[],texts:[{key:'title',content:'这一页的主题',width:.8,x:.5,y:.12,font_size:44,color:'#30463d',alignment:'center',role:'title'},{key:'body-1',content:'第一段可编辑正文。',width:.75,x:.5,y:.7,font_size:24,color:'#30463d',role:'body'},{key:'body-2',content:'第二段可编辑正文。',width:.75,x:.5,y:.82,font_size:24,color:'#30463d',role:'body'}],paper:{color:'#fcfaf0',pattern:'plain'}}},{name:'finish_design',arguments:{summary:'完成可编辑手帐'}}]};
   if(mode!=='direct'){
@@ -111,17 +121,17 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
     files['abstract-templates.json']=strToU8(JSON.stringify({source:'user-provided-tutorial-images',note:'本次只选少数匹配风格、用途和素材的来源模板；sourceNumbers 是模板原图序号，exampleSourceNumbers 仅在能确认对应真实成品时存在。无配对模板仍可使用，不得猜配或照搬。',templates:selectedTemplates},null,2));
     files['source-image-audit.json']=strToU8(JSON.stringify({note:'case=真实案例，template=抽象版式，mixed=同一截图中两者并列；无配对模板仍可使用，但不得伪称有对应成品。',images:journalSourceAudit,verifiedCrossImagePairs:journalVerifiedPairs},null,2));
     files['references/GUIDE.txt']=strToU8(`${journalReferenceGuide(selectedCases)}\n\n${journalAbstractTemplateGuide(selectedTemplates)}`);
-    for(const entry of referenceImages)files[`references/${entry.id}.png`]=entry.bytes;
+    for(const entry of referenceImages)files[`references/${entry.id}.${entry.extension||'png'}`]=entry.bytes;
   }
   const bytes=await new Promise((resolve,reject)=>zip(files,{level:4},(error,result)=>error?reject(error):resolve(result)));
   const prompts={file:'请读 ZIP 中的 START_HERE.txt，一次完成可编辑手帐；运行包内预览工具，展示构图预览，并交付可下载的「作品.shiyeproject.zip」。',json:'请读 ZIP 中的 START_HERE.txt，一次完成可编辑手帐；运行包内预览工具，展示构图预览，再给一个完整可复制的 JSON 代码块，不要生成作品文件。'};
   return {blob:new Blob([bytes],{type:'application/zip'}),filename:'拾页-GPT创作任务.zip',prompt:prompts.file,prompts,source,mode,previewCount:chosen.length,imageBytes:[...chosen,...(hasPresets?referenceImages:[])].reduce((total,item)=>total+item.bytes.length,0),packageBytes:bytes.length};
 }
-async function createOfflineImageHandoff({source,project:p,assets,selected,chosen,settings,referenceImages,showImages}){
+async function createOfflineImageHandoff({source,project:p,assets,selected,chosen,settings,referenceImages,showImages,userTemplates=[]}){
   const hasPresets=settings.sendPresetReferences===true;
   const selectedCases=selectJournalReferenceCases({styles:source.styles,purposes:source.purposes,materials:selected});
-  const selectedTemplates=selectJournalAbstractTemplates(selectedCases,{styles:source.styles,purposes:source.purposes,materials:selected});
-  if(hasPresets&&(referenceImages.length!==selectedCases.length||referenceImages.some((entry,index)=>entry.id!==selectedCases[index].id||!(entry.bytes instanceof Uint8Array)||!entry.bytes.length)))throw Error('匹配的手帐案例尚未准备完整');
+  const selectedTemplates=selectJournalAbstractTemplates(selectedCases,{styles:source.styles,purposes:source.purposes,materials:selected,userTemplates});
+  if(hasPresets)validateTemplateReferences(selectedCases,selectedTemplates,referenceImages);
   source.deliveryMode='image';
   source.previewHashes=showImages?Object.fromEntries(await Promise.all(chosen.map(async entry=>[entry.alias,`sha256:${await sha256Hex(entry.bytes)}`]))):null;
   source.taskHash=await taskFingerprint(source);
@@ -137,7 +147,7 @@ async function createOfflineImageHandoff({source,project:p,assets,selected,chose
     files['abstract-templates.json']=strToU8(JSON.stringify({source:'user-provided-tutorial-images',note:'本次只选少数匹配风格、用途和素材的来源模板；sourceNumbers 是模板原图序号，exampleSourceNumbers 仅在能确认对应真实成品时存在。无配对模板仍可使用，不得猜配或照搬。',templates:selectedTemplates},null,2));
     files['source-image-audit.json']=strToU8(JSON.stringify({note:'case=真实案例，template=抽象版式，mixed=同一截图中两者并列；无配对模板仍可使用，但不得伪称有对应成品。',images:journalSourceAudit,verifiedCrossImagePairs:journalVerifiedPairs},null,2));
     files['references/GUIDE.txt']=strToU8(`${journalReferenceGuide(selectedCases)}\n\n${journalAbstractTemplateGuide(selectedTemplates)}`);
-    for(const entry of referenceImages)files[`references/${entry.id}.png`]=entry.bytes;
+    for(const entry of referenceImages)files[`references/${entry.id}.${entry.extension||'png'}`]=entry.bytes;
   }
   const bytes=await new Promise((resolve,reject)=>zip(files,{level:4},(error,result)=>error?reject(error):resolve(result)));
   const prompt='请读 ZIP 中的 START_HERE.txt，直接创作并展示最终手帐画面，再交付一张可下载的 PNG 图片。输入 ZIP 只是素材任务包。';

@@ -98,5 +98,5 @@ test('image API places matched journal references after physical material previe
   await generatePageImage({settings:{keys:{openai:'test-only'},includeThumbnails:true},project:p,draft:p.drafts[0],assets:[asset],ids:[asset.id],createImage:async()=>`data:image/png;base64,${png.toString('base64')}`,request:async(url,init)=>url.startsWith('data:')?{blob:async()=>new Blob([png],{type:'image/png'})}:request(url,init),referenceImages:[{id:'quiet-day',bytes:png},{id:'handwritten-observation',bytes:png}]});
   assert.match(endpoint,/\/images\/edits$/);
   assert.deepEqual(names,['material-1.png','layout-case-1.png','layout-case-2.png']);
-  assert.match(sent,/最后 2 张是匹配的手帐案例/);
+  assert.match(sent,/最后 2 张是匹配的抽象模板与真实案例/);
 });

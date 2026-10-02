@@ -1,9 +1,9 @@
 import {project,uid} from './domain.js';
 
-export const WORK_TABS=[['snapshot','画面快照'],['all','可编辑作品'],['draft','草稿'],['trash','最近删除']];
+export const WORK_TABS=[['snapshot','画面快照'],['all','可编辑作品'],['draft','草稿'],['templates','模板'],['trash','最近删除']];
 
 export function workInTab(work,tab){
-  if(tab==='trash')return false;
+  if(tab==='trash'||tab==='templates')return false;
   if(tab==='snapshot')return work.isSnapshot===true;
   if(tab==='draft')return work.isSnapshot!==true&&work.isDraft===true;
   return work.isSnapshot!==true&&work.isDraft!==true;
@@ -15,7 +15,6 @@ export function snapshotRecord({title,previewBlobId,documentBlobId=null,format='
   record.id=uid();
   record.isSnapshot=true;
   record.isDraft=false;
-  record.isTemplate=false;
   record.source='snapshot';
   record.snapshotBlobId=previewBlobId;
   record.snapshotDocumentBlobId=documentBlobId;
