@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {reviewCreativeDraft} from '../src/creative-quality.js';
 import {creativeTypographyGuide} from '../src/creative-typography.js';
 import {buildCreativeMessages} from '../src/creative-runner.js';
+import {imagePrompt} from '../src/ai-image-generation.js';
 const draft=size=>({canvas:{width:700,height:1000},physicalPageHeightMM:210,paperColor:'#ffffff',items:[],primitives:[],textBlocks:[{id:'body',content:'真实毫米尺寸对应的正文',x:350,y:200,width:600,height:200,fontSize:size,color:'#000000'}]});
 test('AI review offers print-size advice without making it a completion threshold',()=>{
  assert.ok(reviewCreativeDraft(draft(9)).warnings.some(w=>w.includes('文字可能偏小')));
@@ -50,6 +51,9 @@ test('both creation modes receive role sizes converted to the actual paper, not 
 test('API receives only matching journal studies without treating their objects as available materials',()=>{
  const messages=buildCreativeMessages({draft:{...draft(14),style:'复古旧物',pageMode:'single'},assets:[],aliases:{},styles:['复古旧物'],pagePurposes:['旅途记录'],referenceImages:['data:image/png;base64,one','data:image/png;base64,two']});
  assert.match(messages[0].content,/匹配的真实风格手帐案例/);
+ assert.match(messages[0].content,/来自用户教程的抽象模板/);
+ assert.match(messages[0].content,/模板原图/);
+ assert.match(messages[0].content,/尚无可确认对应成品/);
  assert.match(messages[0].content,/实物路线与纸片/);
  assert.equal(messages[1].content.filter(part=>part.type==='image_url').length,2);
  assert.match(messages[1].content.filter(part=>part.type==='text').at(-1).text,/不能当成本次可用素材/);
@@ -58,6 +62,7 @@ test('API receives only matching journal studies without treating their objects 
 test('text-only API receives relevant case methods without image payloads',()=>{
  const messages=buildCreativeMessages({draft:{...draft(14),style:'韩系清新',pageMode:'single'},assets:[],aliases:{},styles:['韩系清新'],pagePurposes:['清单计划'],sendPresetReferences:true});
  assert.match(messages[0].content,/浅色清单与书写卡/);
+ assert.match(messages[0].content,/抽象模板/);
  assert.match(messages[0].content,/写可执行计划/);
  assert.equal(messages[1].content.filter(part=>part.type==='image_url').length,0);
 });
@@ -71,4 +76,13 @@ test('API labels material priorities and has a meaningful-content rule for spars
  assert.match(messages[0].content,/留白是否服务于主题/);
  assert.match(messages[1].content[0].text,/不按数量或覆盖率评分/);
  assert.doesNotMatch(messages[1].content[0].text,/至少\d+字|覆盖约 \d+%/);
+});
+test('image API sends a few source templates only when preset references are enabled',()=>{
+ const project={styles:['旅行票据'],purposes:['旅途记录'],contentPolicy:'documentary'};
+ const input={project,draft:{...draft(14),pageMode:'single'},assets:[],ids:[],includeImages:false};
+ const without=imagePrompt(input),withReferences=imagePrompt({...input,includeReferences:true});
+ assert.doesNotMatch(without,/模板原图|尚无可确认对应成品/);
+ assert.match(withReferences,/模板原图/);
+ assert.match(withReferences,/尚无可确认对应成品/);
+ assert.ok((withReferences.match(/模板原图/g)||[]).length<=3);
 });

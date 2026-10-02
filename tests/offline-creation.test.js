@@ -204,6 +204,18 @@ test('selected style and purpose produce four anonymous alternatives from simple
   assert.deepEqual(Object.keys(files).filter(name=>name.startsWith('references/')&&name.endsWith('.png')).sort(),cases.map(entry=>`references/${entry.id}.png`).sort());
   assert.match(strFromU8(files['START_HERE.txt']),/匹配的原创真实风格手帐案例/);
   assert.deepEqual(JSON.parse(strFromU8(files['case-studies.json'])).selectedCases.map(entry=>entry.id),cases.map(entry=>entry.id));
+  const templateFile=JSON.parse(strFromU8(files['abstract-templates.json']));
+  assert.equal(templateFile.source,'user-provided-tutorial-images');
+  assert.ok(templateFile.templates.length>0&&templateFile.templates.length<=3);
+  assert.ok(templateFile.templates.every(entry=>cases.some(item=>item.id===entry.caseId)));
+  assert.match(templateFile.note,/无配对模板仍可使用/);
+  assert.match(strFromU8(files['START_HERE.txt']),/abstract-templates\.json/);
+  assert.match(strFromU8(files['references/GUIDE.txt']),/模板原图/);
+  assert.equal(JSON.parse(strFromU8(files['source-image-audit.json'])).images.length,70);
+  const imageResult=await createOfflineHandoff({project:p,assets:[asset],aliases:{m1:asset.id},settings:{deliveryMode:'image',includeThumbnails:false,sendPresetReferences:true},referenceImages:bytes});
+  const imageFiles=unzipSync(new Uint8Array(await imageResult.blob.arrayBuffer()));
+  assert.deepEqual(JSON.parse(strFromU8(imageFiles['abstract-templates.json'])).templates.map(entry=>entry.id),templateFile.templates.map(entry=>entry.id));
+  assert.match(strFromU8(imageFiles['START_HERE.txt']),/abstract-templates\.json/);
   assert.match(strFromU8(files['CREATIVE_GUIDE.txt']),/先理解素材/);
   assert.match(strFromU8(files['CREATIVE_GUIDE.txt']),/实体纸、照片、贴纸/);
   assert.ok(strFromU8(files['CREATIVE_GUIDE.txt']).length>1800);
