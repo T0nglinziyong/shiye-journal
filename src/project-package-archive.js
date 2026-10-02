@@ -2,7 +2,7 @@ import {unzipSync} from 'fflate';
 
 const NATIVE='native.shiyeproject.json';
 const EDITABLE='project.shiyeproject.json';
-const ADVISORY_ENTRIES=new Map([['manifest.json',64_000],['validation-report.json',256_000],['preview.png',16_000_000],['preview.svg',2_000_000]]);
+const ADVISORY_ENTRIES=new Map([['manifest.json',64_000],['validation-report.json',256_000],['preview.png',16_000_000],['preview.svg',16_000_000]]);
 const ENTRY_LIMIT=128;
 const TOTAL_DECLARED_LIMIT=48_000_000;
 

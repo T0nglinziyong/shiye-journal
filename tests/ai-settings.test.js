@@ -22,7 +22,7 @@ test('old and invalid creative settings migrate to bounded safe defaults',()=>{
   assert.equal(defaults.transport,'auto');
   assert.equal(defaults.textMode,'automatic');
   assert.equal(defaults.reasoningMode,'low');
-  assert.equal(defaults.sendPresetReferences,false);
+  assert.equal(defaults.sendPresetReferences,true);
   assert.equal('referencePage' in defaults,false);
   assert.equal(defaults.maxTurns,16);
   assert.equal(normalizeAISettings({maxTurns:0}).maxTurns,5);
@@ -32,7 +32,8 @@ test('old and invalid creative settings migrate to bounded safe defaults',()=>{
   assert.equal(normalizeAISettings(null).generationMode,'agent');
   assert.equal(normalizeAISettings({textMode:'minimal'}).textMode,'minimal');
   assert.equal(normalizeAISettings({textMode:'rich'}).textMode,'rich');
-  assert.equal(AI_DEFAULTS.sendPresetReferences,false);
+  assert.equal(AI_DEFAULTS.sendPresetReferences,true);
+  assert.equal(normalizeAISettings({sendPresetReferences:false}).sendPresetReferences,false);
   assert.equal(AI_DEFAULTS.autoIncludeRecommendations,false);
   assert.equal(AI_DEFAULTS.requireAllCandidates,true);
   assert.equal(normalizeAISettings({}).requireAllCandidates,true);

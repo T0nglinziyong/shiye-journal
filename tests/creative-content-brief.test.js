@@ -16,6 +16,12 @@ test('Q-01/Q-02: content policies distinguish documentary facts, originals and n
   assert.match(original,/原创主题短文/);assert.match(original,/小白去了苏州/);
   assert.match(original,/不把虚构经历写成用户真实日记/);
   assert.match(creativeContentBrief({policy:'visual'}),/不生成正文、标题或图注/);
+  const list=creativeContentBrief({purposes:['清单计划']});
+  assert.match(list,/可以执行或核对的条目/);
+  assert.match(list,/不写成已经完成的记录/);
+  const travel=creativeContentBrief({purposes:['旅途记录']});
+  assert.match(travel,/有用户提供的地点、时间、路线才写行程/);
+  assert.doesNotMatch(creativeContentBrief({purposes:['日常记录']}),/主要用途「清单计划」/);
 });
 
 test('online and offline tasks carry the same chosen content boundary',async()=>{
@@ -29,7 +35,8 @@ test('online and offline tasks carry the same chosen content boundary',async()=>
   const context=JSON.parse(strFromU8(files['context.json']));
   assert.equal(context.source.contentPolicy,'original');
   assert.equal(context.source.userText,'保留专名：小白');
-  assert.match(strFromU8(files['START_HERE.txt']),/不把虚构经历写成用户真实日记/);
+  assert.match(strFromU8(files['START_HERE.txt']),/CONTENT_BRIEF.txt/);
+  assert.match(strFromU8(files['CONTENT_BRIEF.txt']),/不把虚构经历写成用户真实日记/);
   const legacy=createOfflineCreationPackage({project:p,assets:[asset],aliases:{m1:asset.id},previews:[{alias:'m1',bytes:new Uint8Array([1,2,3])}]});
   const legacyFiles=unzipSync(new Uint8Array(await legacy.blob.arrayBuffer()));
   assert.match(strFromU8(legacyFiles['README.txt']),/原创主题短文/);

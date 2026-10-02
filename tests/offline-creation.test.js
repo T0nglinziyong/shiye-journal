@@ -6,6 +6,7 @@ import {project} from '../src/domain.js';
 import {createOfflineCreationPackage,createOfflineHandoff,verifyOfflineTaskPackage,importEditableWork,importEditableWorkPackage,EDITABLE_WORK_FORMAT,EDITABLE_PACKAGE_ENTRY} from '../src/offline-creation.js';
 import {shapeSVG} from '../src/editor-tools-model.js';
 import {presetReferenceGuide,presetReferencePlans} from '../src/creative-reference-presets.js';
+import {selectJournalReferenceCases} from '../src/journal-reference-catalog.js';
 import {materialAlias,materialAliases} from '../src/material-alias.js';
 import {imagePrompt} from '../src/ai-image-generation.js';
 
@@ -108,7 +109,7 @@ test('web ChatGPT handoff is one uploadable file plus a copyable, mode-specific 
   assert.ok(JSON.parse(strFromU8(directFiles['example-response.shiyeproject.json'])).page);
   assert.ok(JSON.parse(strFromU8(toolFiles['example-response.shiyeproject.json'])).tools);
   assert.equal(JSON.parse(strFromU8(toolFiles['composition-ideas.json'])).length,3);
-  assert.match(tool.prompts.json,/不要生成文件/);
+  assert.match(tool.prompts.json,/不要生成作品文件/);
   assert.match(tool.prompts.file,/可下载/);
   assert.ok(tool.packageBytes>=tool.imageBytes);
 });
@@ -195,16 +196,19 @@ test('selected style and purpose produce four anonymous alternatives from simple
   assert.match(other[0].labels.join('、'),/清单/);
   const spread=presetReferencePlans({styles:['杂志网格'],purposes:['影像故事'],mode:'spread'});
   assert.ok(spread.every(plan=>plan.zones.every(([x,,width])=>x<.5?x+width<=.47:x>=.5)),'double-page references must respect the fold');
-  const bytes=[1,2,3,4].map(i=>({id:`preset-${i}`,bytes:new Uint8Array([137,80,78,71,i])}));
-  const result=await createOfflineHandoff({project:project('参考'),assets:[asset],aliases:{m1:asset.id},settings:{includeThumbnails:false,sendPresetReferences:true},referenceImages:bytes});
+  const p=project('参考');p.styles=['韩系清新'];p.purposes=['日常记录'];
+  const cases=selectJournalReferenceCases({styles:p.styles,purposes:p.purposes,materials:[asset]});
+  const bytes=cases.map((entry,i)=>({id:entry.id,bytes:new Uint8Array([137,80,78,71,i+1])}));
+  const result=await createOfflineHandoff({project:p,assets:[asset],aliases:{m1:asset.id},settings:{includeThumbnails:false,sendPresetReferences:true},referenceImages:bytes});
   const files=unzipSync(new Uint8Array(await result.blob.arrayBuffer()));
-  assert.deepEqual(Object.keys(files).filter(name=>name.startsWith('references/preset-')).sort(),[1,2,3,4].map(i=>`references/preset-${i}.png`));
-  assert.match(strFromU8(files['START_HERE.txt']),/四张匿名预设/);
+  assert.deepEqual(Object.keys(files).filter(name=>name.startsWith('references/')&&name.endsWith('.png')).sort(),cases.map(entry=>`references/${entry.id}.png`).sort());
+  assert.match(strFromU8(files['START_HERE.txt']),/匹配的原创真实风格手帐案例/);
+  assert.deepEqual(JSON.parse(strFromU8(files['case-studies.json'])).selectedCases.map(entry=>entry.id),cases.map(entry=>entry.id));
   assert.match(strFromU8(files['CREATIVE_GUIDE.txt']),/先理解素材/);
   assert.match(strFromU8(files['CREATIVE_GUIDE.txt']),/实体纸、照片、贴纸/);
   assert.ok(strFromU8(files['CREATIVE_GUIDE.txt']).length>1800);
   assert.doesNotMatch(Object.keys(files).join(' '),/私人|cece/);
-  await assert.rejects(createOfflineHandoff({project:project(),assets:[asset],aliases:{m1:asset.id},settings:{includeThumbnails:false,sendPresetReferences:true},referenceImages:bytes.slice(0,3)}),/四张预设参考图/);
+  await assert.rejects(createOfflineHandoff({project:p,assets:[asset],aliases:{m1:asset.id},settings:{includeThumbnails:false,sendPresetReferences:true},referenceImages:bytes.slice(0,1)}),/匹配的手帐案例/);
 });
 
 test('direct page returned as an editable file imports into layers, not a flattened preview',async()=>{

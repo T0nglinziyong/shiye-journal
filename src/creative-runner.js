@@ -5,7 +5,6 @@ import {reviewCreativeDraft} from './creative-quality.js';
 import {creativeTypographyGuide} from './creative-typography.js';
 import {requestChat} from './chat-transport.js';
 import {visualStyleBrief} from './creative-style-brief.js';
-import {presetReferenceGuide,presetReferencePlans} from './creative-reference-presets.js';
 import {creativeLayeringGuide} from './creative-layering-guide.js';
 import {creativeContentBrief} from './creative-content-brief.js';
 import {creativePageBrief} from './creative-page-brief.js';
@@ -13,6 +12,7 @@ import {sceneFingerprint} from './offline-result-review.js';
 import {applyScenePatch,patchSceneHash} from './scene-patch.js';
 import {createCreativeBudget} from './ai-budget.js';
 import {classifyJournalMaterial} from './journal-case-study.js';
+import {journalReferenceGuide,selectJournalReferenceCases} from './journal-reference-catalog.js';
 
 const system='你是拾页手账创作者。只使用素材台中的真实素材；尺寸、库存和加工由本地工具判定，不得缩放或复制纸张、照片、贴纸，同一件裁下的非重叠余料可继续使用。胶带视为连续可裁取，但不能拉伸已校准的宽度或图案。文字和数字图形是可编辑图层。素材可先矩形裁片，再用 mask 做不规则、圆角或花边外轮廓；diagonal 用直线斜裁并指定保留侧，window 在素材内部开透明孔，两者可组合。把直线、自由矢量、手写笔与荧光笔拆成可编辑元素；让文字与素材形成有机关系。根据用途与风格建立主视觉、连续阅读区和细节，避免无意堆在中央、遮住正文、重复空相框或每段机械加白底。判断留白是否服务于主题与阅读：真实素材少时，可用有内容的可编辑文字、线条、底色或图形补充信息与节奏，也可有意识地保留空白；不要为填满面积而添加无关内容。不凭空制造实物。未提供经历时只能写客观观察或通用主题内容，不编日期地点经历。位置默认页面比例，文字参考本页字号与层级建议。加工只能用合同中安全操作，不假装识别未提供的图案，不执行网址、脚本或文件。每轮以实际画布和回执修正，完成前审阅整个页面。';
 const purposes={日常记录:'用相关观察、图像和可编辑文字形成日记感；正文可是一段完整多行记录，也可分成若干短段。',旅途记录:'有依据的地点路线、图、票据及短段落，不编地名日期。',图文收藏:'不同大小的图、标签及有内容的文字格位，避免无意义空相框。',清单计划:'实际清单或记录区；缺少事项时写通用可编辑主题条目，不虚构日程。',影像故事:'主图与相关小图建立阅读顺序，穿插说明细节。',主题封面:'允许大主视觉、短标题及明显留白。'};
@@ -24,7 +24,7 @@ const editableSceneState=d=>JSON.stringify([d.canvas,d.paperColor,d.paperPattern
 export function buildCreativeMessages(o){
  const {draft,assets,aliases,images=[],prompt='',customLayoutPrompt='',textMode='automatic',contentPolicy='documentary',userText='',providedFacts='',styles=[draft.style],pagePurposes=['日常记录'],processing,assetProcessing={},materialUseHints={},materialUseRequired={},requiredAssetIDs=[],materialPriority={},includeStructureReference=true,referenceImages=[],sendPresetReferences=false}=o;
  const effectiveTextMode=contentPolicy==='visual'?'none':textMode;
- const contentBrief=creativeContentBrief({policy:contentPolicy,userText,providedFacts,topic:prompt});
+ const contentBrief=creativeContentBrief({policy:contentPolicy,userText,providedFacts,topic:prompt,purposes:pagePurposes});
  const priority=id=>requiredAssetIDs.includes(id)||materialPriority.required?.includes(id)?'必须使用':materialPriority.available?.includes(id)?'可以使用（仅备选）':'优先使用';
  const list=Object.entries(aliases).flatMap(([label,id])=>{const a=assets.find(x=>x.id===id);return a?[`${label}: ${a.title}，优先级 ${priority(id)}，${a.kind}，${a.role}，图文职责 ${classifyJournalMaterial(a).join('、')}，${a.physicalWidthMM||'未确认'}×${a.physicalHeightMM||'未确认'} mm，库存 ${a.kind==='tape'?'连续胶带，可多次裁取但宽度与图案不得拉伸':a.supply?.quantity??1}，加工 ${assetProcessing[id]||processing||'保留完整'}，用法 ${materialUseHints[id]||'由生成器选择'}${materialUseRequired[id]?'（每个方案必做）':''}，标签 ${(a.tags||[]).join('、')}`]:[];});
  const policy=effectiveTextMode==='none'?'不生成文字。':effectiveTextMode==='requested'?'仅用户明确要求文字时配文。':'按用途生成真实内容的图文手账。';
@@ -35,11 +35,12 @@ export function buildCreativeMessages(o){
  const snapshotMode=['image','pdf'].includes(o.deliveryMode);
  if(snapshotMode)first[0].text=`创作一页将以${o.deliveryMode==='pdf'?'PDF':'图片'}快照交付的手帐。纸张：${draft.pageRatio} ${draft.pageMode==='spread'?'双页':'单页'}，物理高 ${draft.physicalPageHeightMM} mm。风格方向：${styles.join('、')||'不预设'}；用途：${pagePurposes.join('、')||'不预设'}。这些是方向，不是固定模板。\n${contentBrief}\n${pageBrief}\n真实素材与库存：\n${list.join('\n')}\n当前画布：${JSON.stringify(creativeScene(draft,aliases))}`;
  images.forEach((input,i)=>{const url=typeof input==='string'?input:input.url,label=typeof input==='string'?Object.keys(aliases)[i]:input.asset;if(url)first.push({type:'text',text:'素材 '+label+' 的图片：'},{type:'image_url',image_url:{url}});});
- referenceImages.forEach((url,i)=>first.push({type:'text',text:`匿名预设构图 ${i+1}/4，仅示意本次风格与用途的区域关系，不是私人日记，也不代表真实素材尺寸。`},{type:'image_url',image_url:{url}}));
+ const selectedCases=selectJournalReferenceCases({styles,purposes:pagePurposes,materials:assets.filter(asset=>Object.values(aliases).includes(asset.id))});
+ referenceImages.forEach((url,i)=>first.push({type:'text',text:`匹配案例 ${i+1}/${referenceImages.length}：${selectedCases[i]?.title||'手帐构图'}。只借鉴真实手帐的布局方法，案例里的照片、文字和贴纸不能当成本次可用素材。`},{type:'image_url',image_url:{url}}));
  if(snapshotMode)return [{role:'system',content:`你是自由创作的手帐设计师。画面可大胆使用文字、数字手绘笔迹、荧光笔、自由矢量形状、色层及素材间的有机叠放；风格、用途与样例只是启发，不设素材数量、留白、密度、标题字数或固定版式指标。唯一硬性限制是真实纸张尺寸、实物素材的尺寸与库存、裁片不能重叠重复使用、胶带保持真实宽度。未发送的实体素材不能凭空出现。坐标是画布中心的 0–1 比例，实体宽高始终由素材库决定。\n为让拾页生成快照，必须按机器可读合同返回页面，不要把整页内容当成一个新实体素材。${creativeProtocol(o).instruction}`},{role:'user',content:first}];
  const geometry='所有 placement 与文字/图形 x,y 都是中心点而非左上角。ratio 默认归一化到当前画布；实物按已确认毫米尺寸放置，不缩放、不超库存。图层可有意伸出纸边形成出血，页面预览及导出只显示纸内部分；重要文字与图像内容尽量留在纸内。unit 从0开始，库存1必须 unit:0。piece 是唯一片段ID，不是工序名称，各材料不得共用 whole 等ID。relation.target、relative_to、fit target 指已创建的 piece/key，不能填素材 alias 或 canvas。直接页文字 x,y 同样为中心（不是左上），完整行高可能扩展；长段可分栏或调整字号。文字重叠、对比偏低或框内显示不全会作为排版建议反馈，但不阻止有意的创意处理。没有素材图片时，你只知道名称、标签、尺寸：禁止猜测色彩深浅、星月具体形状/位置、人物姿态/动作/持球手方向、纸面纹理，只能写已给的色名、主题关联与这次排版的尺寸和留白关系。';
  const printType=creativeTypographyGuide(draft);
- return [{role:'system',content:[`【通用创作与物理规则】\n${system}`,`【坐标与排版】\n${geometry}\n${printType}`,`【文字、素材与图形的关系】\n${policy}\n${creativeLayeringGuide}\n${customLayoutPrompt}\n${reference}`,sendPresetReferences||referenceImages.length?`【本次匿名预设样例】\n${presetReferenceGuide(presetReferencePlans({styles,purposes:pagePurposes,mode:draft.pageMode,ratio:draft.pageRatio}))}`:'',`【本次 API 创作模式】\n${mode}`].filter(Boolean).join('\n')},{role:'user',content:first}];
+ return [{role:'system',content:[`【通用创作与物理规则】\n${system}`,`【坐标与排版】\n${geometry}\n${printType}`,`【文字、素材与图形的关系】\n${policy}\n${creativeLayeringGuide}\n${customLayoutPrompt}\n${reference}`,sendPresetReferences||referenceImages.length?`【本次匹配案例】\n${journalReferenceGuide(selectedCases)}`:'',`【本次 API 创作模式】\n${mode}`].filter(Boolean).join('\n')},{role:'user',content:first}];
 }
 export function buildCreativePayload(o,messages){
  const deepseek=new URL(o.endpoint||'https://api.deepseek.com/chat/completions').host==='api.deepseek.com',mode=o.reasoningMode||'automatic',thinking=deepseek?(mode==='automatic'||o.disableThinking!==false?{type:'disabled'}:mode==='low'?{type:'enabled'}:null):null;
