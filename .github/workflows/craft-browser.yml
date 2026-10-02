@@ -1,0 +1,68 @@
+name: Craft browser regression
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/craft-*.js'
+      - 'src/material-craft-guide.js'
+      - 'src/creative*.js'
+      - 'src/material-mask.js'
+      - 'src/app.js'
+      - 'src/offline*.js'
+      - 'tests/craft-*'
+      - '.github/workflows/craft-browser.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: craft-browser-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  chromium:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Install pinned browser test driver without changing project dependencies
+        run: |
+          npm install --no-save --package-lock=false agent-browser@0.38.2
+          npx --no-install agent-browser install --with-deps
+          npx --no-install agent-browser --version
+      - name: Build actual sources
+        run: npm run build
+      - name: Verify synthetic materials in four viewports
+        shell: bash
+        env:
+          SHIYE_TEST_URL: http://127.0.0.1:5192
+          SHIYE_CRAFT_SCREENSHOTS: /tmp/shiye-craft-browser
+        run: |
+          set -euo pipefail
+          npm run dev -- --port 5192 --strictPort > /tmp/shiye-craft-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:5192/ >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:5192/ >/dev/null
+          node tests/craft-browser.mjs
+          git diff --exit-code -- package.json package-lock.json src/generated/offline-validate-source.js
+      - name: Retain synthetic screenshots and report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: craft-browser-synthetic-${{ github.run_id }}
+          path: /tmp/shiye-craft-browser/
+          if-no-files-found: warn
+          retention-days: 7
