@@ -3,9 +3,10 @@
 // An unmatched diagram can still be used as a template, but is never
 // presented as a proven template/case pair.
 const mixed=[1,2,4,11,13,16,23,27,28,29,30,39,49,51,52,53,54,61,62,64,65,68];
-const templateOnly=[6,7,14,17,20,21,33,36,38,41,42,43,44,45,46,47,48,50,56,58,60,67,69];
+const templateOnly=[6,7,14,17,20,21,33,36,38,41,42,43,44,45,46,48,50,56,58,60,67,69];
 const caseOnly=[3,5,8,9,10,12,15,18,19,22,24,25,26,31,32,34,35,37,40,55,57,59,63,66,70];
-const categories=new Map([...caseOnly.map(number=>[number,'case']),...mixed.map(number=>[number,'mixed']),...templateOnly.map(number=>[number,'template'])]);
+const referenceOnly=[47]; // paper-size comparison chart, not a layout template
+const categories=new Map([...caseOnly.map(number=>[number,'case']),...mixed.map(number=>[number,'mixed']),...templateOnly.map(number=>[number,'template']),...referenceOnly.map(number=>[number,'reference'])]);
 export const journalSourceAudit=Object.freeze(Array.from({length:70},(_,index)=>{
   const number=index+1;
   return Object.freeze({number,kind:categories.get(number)});

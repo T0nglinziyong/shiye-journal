@@ -1,5 +1,6 @@
 import {presetJournalTemplates,normalizeUserTemplate,templateIndexText,USER_TEMPLATE_PREFIX} from './journal-template-catalog.js';
-import {loadJournalPresetImage,publishJournalPresetImages} from './journal-preset-images.js';
+import {loadJournalPresetPanel,publishJournalPresetImages} from './journal-preset-images.js';
+import {journalTemplatePanel} from './journal-source-panels.js';
 import {cloudEnabled,cloudClient} from './cloud-session.js';
 
 const escapeHTML=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[char]));
@@ -43,27 +44,34 @@ export function mountJournalTemplateGallery(c,viewState){
   toolbar.innerHTML='<label>搜索模板、风格、用途或素材标签<input type="search" aria-label="搜索模板" placeholder="例如：密集拼贴、食物、时间轴"></label><span></span><button type="button" class="btn">导入模板与案例</button>';
   grid.before(toolbar);
   const heading=view.querySelector('.view-head p');if(heading)heading.textContent='预设版式与真实案例独立于我的作品；按多个标签寻找创作方向。';
+  let imageObserver;
   const display=()=>{
+    imageObserver?.disconnect();imageObserver=null;
     const query=toolbar.querySelector('input').value.trim().toLocaleLowerCase();
     const selected=catalog.find(item=>item.id===viewState.templateID);
     if(selected){
       grid.classList.add('journal-template-detail');
       const caseAvailable=!!(selected.exampleBlobId||selected.exampleSourceNumbers?.length);
       const showCase=viewState.templateSide==='case'&&caseAvailable;
-      const visual=showCase?(selected.exampleBlobId?'':'<img src="'+escapeHTML(selected.exampleImage)+'" alt="相近风格的原创重构案例">'):(selected.templateBlobId?'':'<div class="journal-template-outline">'+escapeHTML(selected.title)+'</div>');
+      const visual=showCase?'<span class="journal-template-loading">载入对应案例…</span>':(selected.templateBlobId?'':'<div class="journal-template-outline">'+escapeHTML(selected.title)+'</div>');
       grid.innerHTML=`<article class="journal-template-detail-card"><div class="journal-template-detail-head"><button type="button" class="btn" data-template-back>← 返回模板</button><h2>${escapeHTML(selected.title)}</h2></div><div class="journal-template-switch"><button type="button" class="btn ${showCase?'':'primary'}" data-template-side="template">抽象模板</button><button type="button" class="btn ${showCase?'primary':''}" data-template-side="case" ${caseAvailable?'':'disabled'}>真实案例</button></div><div class="journal-template-detail-image">${visual}</div><p class="journal-template-source">${selected.origin==='preset'?'预设原图存于账号可读的私有图库；若尚未载入，下方仍可查看来源结构说明。':showCase?'用户导入的对应案例。':'用户导入的抽象模板。'}</p><p>${escapeHTML(selected.structure)}</p><div class="journal-template-tags">${(selected.tags||[]).map(tag=>`<span class="chip">${escapeHTML(tag)}</span>`).join('')}</div>${selected.origin==='preset'?`<p class="journal-template-source">模板原图编号：${selected.sourceNumbers.join('、')}${selected.exampleSourceNumbers?.length?'；对应案例编号：'+selected.exampleSourceNumbers.join('、'):''}</p>`:''}</article>`;
       grid.querySelector('[data-template-back]').onclick=()=>{viewState.templateID=null;display();};
       grid.querySelectorAll('[data-template-side]').forEach(button=>button.onclick=()=>{viewState.templateSide=button.dataset.templateSide;display();});
       const blobId=showCase?selected.exampleBlobId:selected.templateBlobId;
-      const sourceNumber=showCase?selected.exampleSourceNumbers?.[0]:selected.sourceNumbers?.[0];
-      if(blobId||sourceNumber)void (blobId?imageURL(db,state.accountId,blobId):loadJournalPresetImage(sourceNumber,{accountId:state.accountId})).then(url=>{if(viewState.templateID!==selected.id||!grid.isConnected||!url)return;const host=grid.querySelector('.journal-template-detail-image');host.replaceChildren();const image=document.createElement('img');image.src=url;image.alt=selected.title+(showCase?' 真实案例':' 抽象模板');host.append(image);}).catch(()=>{});
+      const sourcePanel=journalTemplatePanel(selected,showCase?'case':'template');
+      if(blobId||sourcePanel)void (blobId?imageURL(db,state.accountId,blobId):loadJournalPresetPanel(sourcePanel,{accountId:state.accountId})).then(url=>{if(viewState.templateID!==selected.id||!grid.isConnected||!url)return;const host=grid.querySelector('.journal-template-detail-image');host.replaceChildren();const image=document.createElement('img');image.src=url;image.alt=selected.title+(showCase?' 真实案例':' 抽象模板');host.append(image);}).catch(()=>{if(viewState.templateID===selected.id){const host=grid.querySelector('.journal-template-detail-image');if(host)host.textContent='这张预设原图暂未载入，可先查看结构说明。';}});
     }else{
       grid.classList.remove('journal-template-detail');
       const found=catalog.filter(item=>!query||templateIndexText(item).includes(query));
       toolbar.querySelector('span').textContent=`${found.length} / ${catalog.length} 个模板`;
       grid.innerHTML=found.map(item=>`<button type="button" class="card journal-template-card" data-template-id="${escapeHTML(item.id)}"><div class="card-image">${item.templateBlobId?'<span class="journal-template-loading">载入模板…</span>':'<div class="journal-template-outline">'+escapeHTML(item.title)+'</div>'}</div><div class="card-body"><h3>${escapeHTML(item.title)}</h3><p>${item.origin==='preset'?'预设模板':'我的模板'} · ${item.exampleBlobId||item.exampleSourceNumbers?.length?'有对应案例':'暂无案例'}</p><div class="journal-template-tags">${item.tags.slice(0,3).map(tag=>`<span class="chip">${escapeHTML(tag)}</span>`).join('')}</div></div></button>`).join('')||'<p class="empty">没有匹配的模板，试试其他标签。</p>';
       grid.querySelectorAll('[data-template-id]').forEach(card=>card.onclick=()=>{viewState.templateID=card.dataset.templateId;viewState.templateSide='template';display();});
-      for(const item of found.filter(item=>item.templateBlobId||item.sourceNumbers?.length))void (item.templateBlobId?imageURL(db,state.accountId,item.templateBlobId):loadJournalPresetImage(item.sourceNumbers[0],{accountId:state.accountId})).then(url=>{const card=[...grid.querySelectorAll('[data-template-id]')].find(node=>node.dataset.templateId===item.id);if(card&&url){const image=document.createElement('img');image.src=url;image.alt=item.title+' 抽象模板';card.querySelector('.card-image').replaceChildren(image);}}).catch(()=>{});
+      const byID=new Map(found.map(item=>[item.id,item]));
+      const loadCard=card=>{const item=byID.get(card.dataset.templateId);const sourcePanel=journalTemplatePanel(item,'template');if(!item?.templateBlobId&&!sourcePanel)return;void (item.templateBlobId?imageURL(db,state.accountId,item.templateBlobId):loadJournalPresetPanel(sourcePanel,{accountId:state.accountId})).then(url=>{if(card.isConnected&&grid.contains(card)&&url){const image=document.createElement('img');image.src=url;image.alt=item.title+' 抽象模板';card.querySelector('.card-image').replaceChildren(image);}}).catch(()=>{});};
+      if(typeof IntersectionObserver==='function'){
+        const observer=new IntersectionObserver(entries=>{for(const entry of entries)if(entry.isIntersecting){observer.unobserve(entry.target);loadCard(entry.target);}},{rootMargin:'300px'});
+        imageObserver=observer;grid.querySelectorAll('[data-template-id]').forEach(card=>observer.observe(card));
+      }else grid.querySelectorAll('[data-template-id]').forEach(loadCard);
     }
   };
   toolbar.querySelector('input').oninput=display;

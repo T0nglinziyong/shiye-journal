@@ -36,6 +36,14 @@ test('editable GPT response becomes an editable draft without replacing existing
   const copied=`这页的预览图已展示。\n\n\`\`\`json\n${response}\n\`\`\``;
   assert.equal(importEditableWork(copied,[asset]).drafts[0].items[0].assetID,asset.id);
 });
+test('editable task round-trip keeps a journal-size physical page',async()=>{
+  const task=createOfflineCreationPackage({project:project('随身本',{ratio:'weeks'}),assets:[asset],aliases:{m1:asset.id},previews:[{alias:'m1',bytes:new Uint8Array([1,2,3])}]});
+  const files=unzipSync(new Uint8Array(await task.blob.arrayBuffer()));
+  const result=importEditableWork(strFromU8(files['example-response.json']),[asset]);
+  assert.equal(result.drafts[0].pageRatio,'weeks');
+  assert.equal(result.drafts[0].physicalPageHeightMM,188);
+  assert.ok(Math.abs(result.drafts[0].canvas.width/1000-95/188)<1e-9);
+});
 test('stable material IDs survive library reordering in an editable JSON import',async()=>{
   const second={...asset,id:'asset-2',title:'绿色纸'};
   const aliases=materialAliases([asset.id,second.id]);

@@ -8,7 +8,7 @@ export const journalReferenceCases=Object.freeze([
   {id:'dark-route',title:'深色路线与手绘',image:'/journal-cases/dark-route.png',sourceNumbers:[6,7,8,19,20,21,29,33],styles:['密集拼贴','童趣插画','美式拼贴','自由构图'],purposes:['影像故事','旅途记录','日常记录'],materialWords:['照片','食物','票','旅行'],method:'几组图文沿手绘曲线或 S 形路径前进；深底亮色笔迹强调节点，不把路线变成装饰性占位。',copy:'按确有依据的先后或主题关联写节点，未知顺序不假定。'},
   {id:'gentle-planner',title:'浅色清单与书写卡',image:'/journal-cases/gentle-planner.png',sourceNumbers:[10,12,22,25,37,38,43,44,45,46,48,61,62,68],styles:['清单手帐','韩系清新','日系文具','可爱插画'],purposes:['清单计划','日常记录'],materialWords:['清单','便签','方格','卡片'],method:'可写纸片承载具体条目，边角贴纸和细线建立轻秩序；不同纸片错层但条目仍可逐项阅读。',copy:'写可执行计划、提醒或真实记录；不把空勾选框当内容。'},
   {id:'quiet-day',title:'照片与静物慢记录',image:'/journal-cases/quiet-day.png',sourceNumbers:[18,30,34],styles:['摄影叙事','胶片日记','极简留白','自然植物','留白叙事'],purposes:['日常记录','影像故事','图文收藏'],materialWords:['照片','植物','茶','花'],method:'主照片与一两张细节图形成安静的视觉入口；有内容的短段和小注与照片相邻。',copy:'写可见光影、物件与感受，但不冒充用户的亲身经历。'},
-  {id:'travel-route',title:'实物路线与纸片',image:'/journal-cases/travel-route.png',sourceNumbers:[41,42,47,50,56,58,60,67,69],styles:['旅行票据','胶片日记','自由构图','混合媒材'],purposes:['旅途记录','影像故事','清单计划'],materialWords:['票','地图','路线','旅行'],method:'从教程中的 S 形动线、上下呼应和纸片遮挡抽象阅读路径；照片、票据和文字只按真实素材组织。',copy:'有事实才写地名、日期和行程；否则写可见景物或待补的计划。'}
+  {id:'travel-route',title:'实物路线与纸片',image:'/journal-cases/travel-route.png',sourceNumbers:[41,42,50,56,58,60,67,69],styles:['旅行票据','胶片日记','自由构图','混合媒材'],purposes:['旅途记录','影像故事','清单计划'],materialWords:['票','地图','路线','旅行'],method:'从教程中的 S 形动线、上下呼应和纸片遮挡抽象阅读路径；照片、票据和文字只按真实素材组织。',copy:'有事实才写地名、日期和行程；否则写可见景物或待补的计划。'}
 ]);
 
 const scoreCase=(entry,{styles=[],purposes=[],materials=[]})=>{

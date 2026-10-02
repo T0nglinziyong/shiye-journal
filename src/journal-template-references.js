@@ -1,6 +1,7 @@
 import {selectJournalReferenceCases,loadJournalReferenceCases} from './journal-reference-catalog.js';
 import {selectJournalAbstractTemplates} from './journal-abstract-templates.js';
 import {journalPresetReference} from './journal-preset-images.js';
+import {journalTemplatePanel} from './journal-source-panels.js';
 
 const extension=type=>type==='image/jpeg'?'jpg':type==='image/webp'?'webp':'png';
 const dataURL=blob=>new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(reader.error);reader.readAsDataURL(blob);});
@@ -27,7 +28,7 @@ export async function loadJournalTemplateReferences({context,userTemplates=[],db
       }else if(sourceNumbers?.length){
         // A missing preset source is not a reason to block creation: the
         // audited layout description and reconstructed family case remain.
-        try{const image=await journalPresetReference(sourceNumbers[0],{accountId:context.accountId});if(image)referenceImages.push({...image,id:`${template.id}-${kind}`,kind,title:template.title+(kind==='case'?' · 对应案例':' · 抽象模板')});}catch{/* private preset still pending upload */}
+        try{const panel=journalTemplatePanel(template,kind);const image=await journalPresetReference(panel,{accountId:context.accountId});if(image)referenceImages.push({...image,id:`${template.id}-${kind}`,kind,title:template.title+(kind==='case'?' · 对应案例':' · 抽象模板')});}catch{/* private preset still pending upload */}
       }
     }
   }

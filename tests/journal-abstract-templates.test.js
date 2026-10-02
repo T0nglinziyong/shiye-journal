@@ -6,7 +6,7 @@ import {journalSourceAudit,journalVerifiedPairs} from '../src/journal-source-aud
 
 // These numbers were checked against the user's 70-image contact sheet. Real
 // pages alone are not evidence of an explicit abstract layout diagram.
-const diagramImages=new Set(journalSourceAudit.filter(entry=>entry.kind!=='case').map(entry=>entry.number));
+const diagramImages=new Set(journalSourceAudit.filter(entry=>['template','mixed'].includes(entry.kind)).map(entry=>entry.number));
 
 test('every abstract template points to a diagram actually present in the uploaded images',()=>{
   const cases=new Map(journalReferenceCases.map(entry=>[entry.id,entry]));
@@ -36,7 +36,8 @@ test('the provided red time-axis diagram is paired with its real journal case',(
 
 test('all 70 images are classified; every source diagram remains eligible even without a matched case',()=>{
   assert.deepEqual(journalSourceAudit.map(entry=>entry.number),Array.from({length:70},(_,index)=>index+1));
-  assert.equal(journalSourceAudit.filter(entry=>!['case','template','mixed'].includes(entry.kind)).length,0);
+  assert.equal(journalSourceAudit.filter(entry=>!['case','template','mixed','reference'].includes(entry.kind)).length,0);
+  assert.equal(journalSourceAudit.find(entry=>entry.number===47).kind,'reference','paper dimensions are not a composition template');
   assert.deepEqual(journalSourceAudit.find(entry=>entry.number===35).kind,'case');
   assert.deepEqual(journalSourceAudit.find(entry=>entry.number===36).kind,'template');
   assert.deepEqual(journalSourceAudit.find(entry=>entry.number===30).kind,'mixed');

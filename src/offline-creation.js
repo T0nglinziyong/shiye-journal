@@ -17,6 +17,7 @@ import {classifyJournalMaterial,journalMaterialRoles,relevantJournalFamilies} fr
 import {journalReferenceGuide,selectJournalReferenceCases} from './journal-reference-catalog.js';
 import {journalAbstractTemplateGuide,selectJournalAbstractTemplates} from './journal-abstract-templates.js';
 import {journalSourceAudit,journalVerifiedPairs} from './journal-source-audit.js';
+import {paperDimensions} from './paper-sizes.js';
 
 export const OFFLINE_PACKAGE_FORMAT='shiye-gpt-creation-package';
 export const EDITABLE_WORK_FORMAT='shiye-editable-project';
@@ -167,7 +168,7 @@ export function importEditableWork(text,assets,{trustedSource=null}={}){
   const source=input.source;
   if(!source||typeof source.bundleId!=='string'||!Array.isArray(source.materials)||!source.materials.length||source.materials.length>100)throw Error('创作包来源无效');
   if((source.taskBinding==='local-v1'&&!trustedSource)||(trustedSource&&canonicalTaskSource(source)!==canonicalTaskSource(trustedSource)))throw Error('网页 AI 结果与本机原始任务不一致；未导入作品');
-  if(!['single','spread'].includes(source.mode)||!/^a[456]$|^b5$|^custom:\d{2,4}x\d{2,4}$/.test(source.ratio||''))throw Error('纸张规格无效');
+  if(!['single','spread'].includes(source.mode)||!paperDimensions(source.ratio))throw Error('纸张规格无效');
   const direct=input.page!==undefined;
   const tools=direct?directPageToTools(input.page):input.tools;
   if(!Array.isArray(tools)||!tools.length||tools.length>12||(direct?tools.length!==1||tools[0].name!=='compose_direct_page':tools.at(-1)?.name!=='finish_design'||!tools.some(t=>t.name==='compose_page')))throw Error('作品需要 compose_page 与最后的 finish_design，或完整可编辑页面');

@@ -1,7 +1,9 @@
 import {project,uid} from './domain.js';
+import {paperDimensions} from './paper-sizes.js';
 
 export function importPaperDimensions(record) {
-  let [w,h]=record.paperSize==='custom'?[record.customImportWidth,record.customImportHeight]:({a4:[210,297],a5:[148,210],a6:[105,148],b5:[176,250]}[record.paperSize]||[210,297]);
+  const size=record.paperSize==='custom'?{width:record.customImportWidth,height:record.customImportHeight}:paperDimensions(record.paperSize)||paperDimensions('a4');
+  let [w,h]=[size.width,size.height];
   if(!Number.isFinite(w)||!Number.isFinite(h)||w<1||h<1||w>10000||h>10000)throw Error('纸张宽高需要是 1–10000 mm');
   const bitmap=record.bitmap;
   const distance=(a,b)=>Math.hypot((a.x-b.x)*(bitmap?.width||1),(a.y-b.y)*(bitmap?.height||1)),corners=record.corners;

@@ -3,11 +3,13 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import {journalReferenceCases,selectJournalReferenceCases,journalReferenceGuide} from '../src/journal-reference-catalog.js';
+import {journalSourceAudit} from '../src/journal-source-audit.js';
 
-test('uploaded tutorial index covers all 70 cases without shipping their screenshots',async()=>{
+test('creative reference families exclude the page-size chart without shipping screenshots',async()=>{
   const numbers=journalReferenceCases.flatMap(entry=>entry.sourceNumbers);
-  assert.equal(numbers.length,70);
-  assert.deepEqual([...numbers].sort((a,b)=>a-b),Array.from({length:70},(_,i)=>i+1));
+  assert.equal(numbers.length,69);
+  assert.deepEqual([...numbers].sort((a,b)=>a-b),Array.from({length:70},(_,i)=>i+1).filter(number=>number!==47));
+  assert.equal(journalSourceAudit[46].kind,'reference');
   for(const entry of journalReferenceCases){
     assert.match(entry.image,/^\/journal-cases\/[a-z-]+\.png$/);
     const file=fileURLToPath(new URL(`../public${entry.image}`,import.meta.url));

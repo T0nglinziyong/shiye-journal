@@ -10,7 +10,7 @@ import {loadJournalTemplateReferences} from '../src/journal-template-references.
 
 test('all sourced preset templates have multiple searchable indexes and remain separate from projects',()=>{
   const templates=presetJournalTemplates();
-  assert.equal(templates.length,42);
+  assert.equal(templates.length,70);
   assert.ok(templates.every(item=>item.tags.length>=3&&item.styles.length&&item.purposes.length));
   assert.equal(templates.find(item=>item.id==='red-market-two-column-timeline').exampleSourceNumbers[0],35);
   assert.equal('isTemplate' in project('作品'),false);
