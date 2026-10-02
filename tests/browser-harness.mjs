@@ -1,7 +1,9 @@
 import {execFileSync} from 'node:child_process';
 export async function browserHarness(name,url,beforeNavigate=async()=>{}){
   name=process.env.SHIYE_BROWSER_SESSION||name;
-  const cli=args=>execFileSync('npx',['--yes','agent-browser','--session',name,...args],{encoding:'utf8',timeout:60000});
+  const cli=args=>process.env.SHIYE_BROWSER_BIN
+    ? execFileSync(process.env.SHIYE_BROWSER_BIN,['--session',name,...args],{encoding:'utf8',timeout:60000})
+    : execFileSync('npx',['--yes','agent-browser','--session',name,...args],{encoding:'utf8',timeout:60000});
   cli(['--args',process.env.SHIYE_BROWSER_ARGS||'--no-sandbox','open','about:blank']);const ws=new WebSocket(cli(['get','cdp-url']).trim());await new Promise((resolve,reject)=>{ws.onopen=resolve;ws.onerror=reject;});
   let number=0,session,context;const pending=new Map(),errors=[],pausedRequests=[];
   ws.onmessage=e=>{const m=JSON.parse(e.data);if(m.id){const p=pending.get(m.id);if(!p)return;pending.delete(m.id);clearTimeout(p.timer);m.error?p.reject(Error(m.error.message)):p.resolve(m.result);}else if(m.method==='Runtime.exceptionThrown')errors.push(m.params.exceptionDetails.exception?.description||m.params.exceptionDetails.text);else if(m.method==='Fetch.requestPaused')pausedRequests.push(m.params);};
