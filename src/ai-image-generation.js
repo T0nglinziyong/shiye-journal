@@ -5,13 +5,14 @@ import {creativeContentBrief} from './creative-content-brief.js';
 import {creativePageBrief} from './creative-page-brief.js';
 import {visualStyleBrief} from './creative-style-brief.js';
 import {purposeMethod} from './creative-design-guide.js';
+import {classifyJournalMaterial} from './journal-case-study.js';
 
 export function imagePrompt({project,draft,assets,ids,theme='',requireAll=true,includeImages=true,textMode='automatic'}){
   const widthMM=(draft.physicalPageHeightMM||297)*draft.canvas.width/draft.canvas.height;
   const materials=ids.map((id,index)=>{
     const asset=assets.find(item=>item.id===id);
     if(!asset)throw Error('有素材已不在素材库中，请重新选择');
-    return `${includeImages?'参考图':'文字素材'} ${index+1}：${asset.title}；${asset.kind||'素材'}；实物 ${asset.physicalWidthMM}×${asset.physicalHeightMM} mm；${asset.kind==='tape'?'胶带可连续截取':`库存 ${asset.supply?.quantity??1} 件`}；${(asset.tags||[]).join('、')}`;
+    return `${includeImages?'参考图':'文字素材'} ${index+1}：${asset.title}；${asset.kind||'素材'}；图文职责 ${classifyJournalMaterial(asset).join('、')}；实物 ${asset.physicalWidthMM}×${asset.physicalHeightMM} mm；${asset.kind==='tape'?'胶带可连续截取':`库存 ${asset.supply?.quantity??1} 件`}；${(asset.tags||[]).join('、')}`;
   });
   const content=creativeContentBrief({policy:project.contentPolicy||'documentary',userText:project.userText||'',providedFacts:project.providedFacts||'',topic:theme||project.intent||''});
   const styles=project.styles||[],purposes=project.purposes?.length?project.purposes:[project.purpose||'日常记录'];

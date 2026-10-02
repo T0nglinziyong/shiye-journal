@@ -17,13 +17,13 @@ const purposeParts={
   影像故事:['主图','叙事标题','连续说明','辅图位置','细节图注','数字线条'],
   主题封面:['主视觉','短标题','简短副题','一处可编辑图形','标记文字','色带']
 };
-// Structural abstractions of publicly shown real journals; no images, words or
-// personal entries from the source pages are copied into these presets.
+// Structural abstractions from the supplied journal screenshots. They do not
+// include a cropped sticker, photograph, watermark, or copied diary text.
 const arrangements=[
-  {id:'quiet',level:'简洁',title:'图像旁的日记',source:'Hobonichi 用户日记与 Bullet Journal 日志',idea:'真实日记常让一张图像与多行记录互相呼应；简洁不等于只摆一个素材。记录页至少有标题、正文和短注；封面可减字。',zones:[[.1,.19,.38,.38],[.1,.1,.8,.07],[.54,.21,.36,.24],[.54,.48,.36,.12],[.1,.65,.8,.14],[.1,.83,.8,.025]]},
-  {id:'hero',level:'均衡',title:'主件与连续叙述',source:'Hobonichi 真实日页',idea:'借鉴真实日页中剪贴、图注和书写自然混排的节奏；主件之外要有可读的内容推进。',zones:[[.08,.2,.45,.44],[.58,.12,.34,.09],[.58,.27,.34,.35],[.08,.7,.84,.08],[.08,.81,.62,.08],[.76,.81,.16,.03]]},
-  {id:'editorial',level:'丰富',title:'分栏记录与小物',source:'TRAVELER’S COMPANY 用户旅行手帐',idea:'借鉴真实旅行页中照片、票据、路线和文字共同记录的结构；没有对应实物时用数字线条与文字替代，不虚构票据。',zones:[[.08,.19,.36,.35],[.5,.1,.42,.09],[.5,.24,.42,.26],[.08,.6,.84,.04],[.08,.69,.4,.18],[.53,.68,.39,.2]]},
-  {id:'diagonal',level:'实验',title:'漫画式片段动线',source:'Hobonichi 用户图像日记',idea:'借鉴真实图像日记里多个片段和旁白的阅读动线；图形与文字都可编辑，密度丰富但不遮挡。',zones:[[.08,.16,.35,.27],[.54,.12,.38,.08],[.47,.33,.45,.25],[.08,.5,.32,.14],[.08,.72,.53,.16],[.68,.72,.24,.11]]}
+  {id:'quiet',level:'简洁',title:'图像与长记录',source:'用户案例中的图文日记、问答页',idea:'一件主图靠近完整的多行记录，短注解释可见细节；纸片只在能承载内容时出现。简洁版仍可有连续阅读，不靠单句口号撑页。',zones:[[.1,.19,.38,.38],[.1,.1,.8,.07],[.54,.21,.36,.24],[.54,.48,.36,.12],[.1,.65,.8,.14],[.1,.83,.8,.025]]},
+  {id:'hero',level:'均衡',title:'纸片错层与书写',source:'用户案例中的活页纸片、便签与胶带',idea:'可写底纸与标签错层，文字进入可写区域；连接材料把主件与次件组织起来，保留真实材料的边缘。',zones:[[.08,.2,.45,.44],[.58,.12,.34,.09],[.58,.27,.34,.35],[.08,.7,.84,.08],[.08,.81,.62,.08],[.76,.81,.16,.03]]},
+  {id:'editorial',level:'丰富',title:'图文分栏与票据',source:'用户案例中的旅行记录、食物观察',idea:'主图、票据或生活凭证与文字分组呈现，辅图靠近相关图注；没有实物依据时不能虚构票据、地点或日期。',zones:[[.08,.19,.36,.35],[.5,.1,.42,.09],[.5,.24,.42,.26],[.08,.6,.84,.04],[.08,.69,.4,.18],[.53,.68,.39,.2]]},
+  {id:'diagonal',level:'实验',title:'路线式阅读动线',source:'用户案例中的 S 形路线、时间轴',idea:'让几组有内容的图文沿路线展开，数字线、点号和短图注提示先后；路线不是把所有素材硬串成一条线。',zones:[[.08,.16,.35,.27],[.54,.12,.38,.08],[.47,.33,.45,.25],[.08,.5,.32,.14],[.08,.72,.53,.16],[.68,.72,.24,.11]]}
 ];
 const spreadZones={
   quiet:[[.08,.18,.35,.38],[.08,.1,.82,.06],[.56,.2,.34,.22],[.56,.46,.34,.13],[.08,.68,.82,.13],[.08,.84,.82,.025]],
@@ -54,7 +54,7 @@ export function presetReferencePlans({styles=['韩系清新'],purposes=['日常�
 }
 export function presetReferenceGuide(plans){
   return '四张匿名预设构图示意｜仅标示区域关系，不含用户作品、照片或日记。\n'+
-    '这些结构抽象自公开展示的真实手帐：Hobonichi 日页与用户日记、Bullet Journal 用户日志、TRAVELER’S COMPANY 旅行页。没有复制原图、原文、标志或私人资料。参考来源：https://www.1101.com/store/techo/en/magazine/tt_report/202304/ ；https://www.1101.com/store/techo/en/collection/contents/0277/ ；https://bulletjournal.com/blogs/bulletjournalist/show-tell-with-yu ；https://www.travelers-company.com/products/b-sides 。\n把样例视为可改造的起点：先观察本次真实素材的轮廓、方向、尺寸与可读内容，再选用或重组结构。不要复制样例坐标、色块、占位标签或凭空制造实物。\n'+
+    '这些结构来自用户提供的案例截图的文字化观察，并参考公开手帐方法；没有复制截图、原文、标志或个人照片。公开方法：https://www.1101.com/store/techo/en/magazine/tt_report/202304/ ；https://bulletjournal.com/blogs/faq/how-to-write-a-daily-log ；https://bulletjournal.com/blogs/bulletjournalist/show-tell-with-yu 。\n把样例视为可改造的起点：先观察本次真实素材的轮廓、方向、尺寸与可读内容，再选用或重组结构。不要复制样例坐标、色块、占位标签或凭空制造实物。\n'+
     plans.map(p=>`\n${p.index}. ${p.level}方案 · ${p.title}｜${p.style} × ${p.purpose}${p.secondaryStyles.length?'；兼顾 '+p.secondaryStyles.join('、'):''}${p.secondaryPurposes.length?'；兼顾 '+p.secondaryPurposes.join('、'):''}\n风格拆解：配色与氛围=${p.dimensions.mood}；版式与密度=${p.dimensions.layout}；表现方式=${p.dimensions.medium}。这些维度可组合，不将配色当成固定模板。\n来源结构：${p.source}。${p.idea}\n图示区域：${p.labels.slice(0,p.zones.length).join(' → ')}。`).join('\n')+
     '\n\n同一种风格和用途可从简洁、均衡、丰富到实验构图，不按复杂度评分。先比较四种方案，选择最适合本次素材与用途的一种，再形成有个人判断的最终版；无需交付四个版本。';
 }

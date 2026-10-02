@@ -43,19 +43,27 @@ test('API editable, web editable and API/web image handoffs share the same compo
   const api=buildCreativeMessages({draft:p.drafts[0],assets:[asset],aliases:{m1:asset.id},prompt:p.intent,styles:p.styles,pagePurposes:p.purposes,textMode:'rich'});
   assert.match(api[1].content[0].text,/连贯的多行正文/);
   assert.match(api[1].content[0].text,/避免所有内容挤在一角/);
+  assert.match(api[1].content[0].text,/纸片错层/);
+  assert.match(api[1].content[0].text,/图文职责/);
   const web=await createOfflineHandoff({project:p,assets:[asset],aliases:{m1:asset.id},settings:{includeThumbnails:false,textMode:'rich'}});
   const webFiles=unzipSync(new Uint8Array(await web.blob.arrayBuffer()));
   assert.match(strFromU8(webFiles['CREATIVE_GUIDE.txt']),/连贯的多行正文/);
   assert.match(strFromU8(webFiles['CREATIVE_GUIDE.txt']),/避免所有内容挤在一角/);
+  assert.match(strFromU8(webFiles['CREATIVE_GUIDE.txt']),/纸片错层/);
+  assert.ok(JSON.parse(strFromU8(webFiles['context.json'])).materials[0].journalRoles.includes('writing'));
+  assert.equal(JSON.parse(strFromU8(webFiles['case-studies.json'])).families[0].id,'paper-collage');
   const image=imagePrompt({project:p,draft:p.drafts[0],assets:[asset],ids:[asset.id],theme:p.intent,includeImages:false,textMode:'rich'});
   assert.match(image,/自然换行的短段/);
   assert.match(image,/不绘制反斜杠、转义序列/);
   assert.match(image,/不把整段话或清单挤成一条横线/);
   assert.match(image,/不要把配色分析、素材介绍或排版说明印成正文/);
+  assert.match(image,/纸片错层/);
+  assert.match(image,/图文职责/);
   assert.doesNotMatch(image,/充分展开连贯的多行正文/);
   const webImage=await createOfflineHandoff({project:p,assets:[asset],aliases:{m1:asset.id},settings:{deliveryMode:'image',includeThumbnails:false,textMode:'rich'}});
   const imageFiles=unzipSync(new Uint8Array(await webImage.blob.arrayBuffer()));
   assert.ok(strFromU8(imageFiles['START_HERE.txt']).includes(image));
+  assert.equal(JSON.parse(strFromU8(imageFiles['case-studies.json'])).families[0].id,'paper-collage');
 });
 
 test('both editable and image transports receive the same spread-specific page balance direction',async()=>{
