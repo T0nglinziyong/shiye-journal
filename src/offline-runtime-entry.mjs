@@ -40,27 +40,21 @@ async function main(){
       const browserPage=offlineBrowserPage(imported.drafts[0],context.source,previews,offlineBrowserSource);
       writeFileSync('output/画面预览.html',browserPage);
       report.compiledSceneHash=craftSceneHash(imported.drafts[0]);report.browserRenderer='shiye-canvas-v2';
-      if(context.source.capabilities?.craftPlanV2)writeFileSync('output/material-ledger.json',JSON.stringify(buildMaterialLedger(imported.drafts[0],assets,{strictTape:!!scene.plan}),null,2)+'
-');
+      if(context.source.capabilities?.craftPlanV2)writeFileSync('output/material-ledger.json',JSON.stringify(buildMaterialLedger(imported.drafts[0],assets,{strictTape:!!scene.plan}),null,2)+'\n');
       if(mode==='pack'){
       const manifest={version:1,taskId:context.source.bundleId,taskHash:context.source.taskHash??null,schemaHash:context.source.schemaHash??null,sceneHash:report.sceneHash,previewHash:`sha256:${await sha256Hex(preview)}`,rendererVersion:'shiye-composition-preview-v1',fontSetVersion:null,outputProfile:'editable-approximate-svg',visualReview:false};
       const contents={
         'project.shiyeproject.json':strToU8(sceneText),
         'preview.svg':preview,
-        'manifest.json':strToU8(JSON.stringify(manifest,null,2)+'
-'),
-        'validation-report.json':strToU8(JSON.stringify(report,null,2)+'
-')
+        'manifest.json':strToU8(JSON.stringify(manifest,null,2)+'\n'),
+        'validation-report.json':strToU8(JSON.stringify(report,null,2)+'\n')
       };
       writeFileSync('output/作品.shiyeproject.zip',zipSync(contents,{level:6}));
       }
     }
   }catch(error){report.structure='failed';report.issue=String(error?.message||error).slice(0,500);report.diagnostic=craftDiagnostic(error);process.exitCode=1;}
   mkdirSync('output',{recursive:true});
-  writeFileSync('output/validation-report.json',JSON.stringify(report,null,2)+'
-');
-  process.stdout.write(`拾页验证：${report.structure==='passed'?'结构与现行物理规则通过；'+(report.visual==='approximate-preview'?'已生成构图预览，最终字体与阅读待拾页复核':'视觉、字体和阅读仍未核对'):'失败：'+report.issue}
-`);
+  writeFileSync('output/validation-report.json',JSON.stringify(report,null,2)+'\n');
+  process.stdout.write(`拾页验证：${report.structure==='passed'?'结构与现行物理规则通过；'+(report.visual==='approximate-preview'?'已生成构图预览，最终字体与阅读待拾页复核':'视觉、字体和阅读仍未核对'):'失败：'+report.issue}\n`);
 }
-main().catch(error=>{process.stderr.write('无法写出验证报告：'+String(error?.message||error)+'
-');process.exitCode=1;});
+main().catch(error=>{process.stderr.write('无法写出验证报告：'+String(error?.message||error)+'\n');process.exitCode=1;});
