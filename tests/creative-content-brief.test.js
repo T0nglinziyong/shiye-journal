@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {creativeContentBrief} from '../src/creative-content-brief.js';
 import {buildCreativeMessages} from '../src/creative-runner.js';
 import {project} from '../src/domain.js';
-import {createOfflineHandoff,createOfflineCreationPackage} from '../src/offline-creation.js';
+import {createOfflineHandoff} from '../src/offline-creation.js';
 import {imagePrompt} from '../src/ai-image-generation.js';
 import {unzipSync,strFromU8} from 'fflate';
 
@@ -37,9 +37,6 @@ test('online and offline tasks carry the same chosen content boundary',async()=>
   assert.equal(context.source.userText,'保留专名：小白');
   assert.match(strFromU8(files['START_HERE.txt']),/task\/GUIDE\.txt/);
   assert.match(strFromU8(files['task/GUIDE.txt']),/不把虚构经历写成用户真实日记/);
-  const legacy=createOfflineCreationPackage({project:p,assets:[asset],aliases:{m1:asset.id},previews:[{alias:'m1',bytes:new Uint8Array([1,2,3])}]});
-  const legacyFiles=unzipSync(new Uint8Array(await legacy.blob.arrayBuffer()));
-  assert.match(strFromU8(legacyFiles['README.txt']),/原创主题短文/);
   p.contentPolicy='visual';
   const visual=await createOfflineHandoff({project:p,assets:[asset],aliases:{m1:asset.id},settings:{includeThumbnails:false}});
   assert.equal(visual.source.textMode,'none');
