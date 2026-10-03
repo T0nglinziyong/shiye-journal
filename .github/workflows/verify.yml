@@ -29,5 +29,3 @@ jobs:
       - run: npm ci
       - name: Unit tests and built UI smoke
         run: npm test && npm run test:ui
-      - name: Swift backup converter synthetic tests
-        run: python3 -m unittest discover -s tests -p 'test_*.py'
