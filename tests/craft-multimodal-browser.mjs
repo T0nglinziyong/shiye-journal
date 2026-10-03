@@ -11,6 +11,14 @@ await mkdir(directory,{recursive:true});
 const b=await browserHarness('shiye-multimodal-craft',url);
 const report={synthetic:true,providerCalls:0,physicalDevice:false,viewports:[]};
 const file=new URL('./.portable-craft-test.html',import.meta.url);
+async function pointerSelect(id){
+  const selector='[data-object="'+id+'"]';await b.wait(selector);
+  const point=await b.evaluate(`(()=>{const n=document.querySelector(${JSON.stringify(selector)});n.scrollIntoView({block:'nearest'});const r=n.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`);
+  await b.command('Input.dispatchMouseEvent',{type:'mouseMoved',x:point.x,y:point.y});
+  await b.command('Input.dispatchMouseEvent',{type:'mousePressed',x:point.x,y:point.y,button:'left',buttons:1,clickCount:1});
+  await b.command('Input.dispatchMouseEvent',{type:'mouseReleased',x:point.x,y:point.y,button:'left',buttons:0,clickCount:1});
+  await b.wait('[data-selection-for="'+id+'"]');return point;
+}
 try{
  await b.wait('.series-grid');
  const fixture=await b.evaluate(`(async()=>{
@@ -45,10 +53,10 @@ try{
   await b.click('[data-route="works"]','.works-grid');
   await b.click('[data-act="open-project"][data-id="multi-browser-project"]','#canvas-page');
   await b.evaluate(`(async()=>{for(let n=0;n<240;n++){const images=[...document.querySelectorAll('#canvas-page .material img')];if(images.length===5&&images.every(i=>i.complete&&i.naturalWidth&&!i.src.includes('#shiye-image=')))return;await new Promise(r=>setTimeout(r,25));}throw Error('Five material render projections did not load');})()`);
-  for(let n=0;n<3;n++)await b.click('[data-object="'+fixture.ids.strip+'"]');
+  for(let n=0;n<3;n++)await pointerSelect(fixture.ids.strip);
   const check=await b.evaluate(`(()=>{const nodes=[...document.querySelectorAll('#canvas-page .material')];return {views:nodes.length,owners:new Set(nodes.map(n=>n.dataset.object)).size,keys:new Set(nodes.map(n=>n.dataset.renderKey)).size,overflow:document.documentElement.scrollWidth>innerWidth+1};})()`);
   assert.deepEqual(check,{views:5,owners:3,keys:5,overflow:false});
-  await b.click('[data-object="'+fixture.ids.words+'"]');
+  await pointerSelect(fixture.ids.words);
   await b.click('[aria-label="编辑对象"]','#object-settings-fields');
   await b.evaluate('[...document.querySelectorAll("#object-settings-fields button")].find(b=>b.textContent.includes("打开统一素材加工面板")).click()');await b.wait('#processing-action');
   assert.equal(await b.evaluate('!!document.querySelector("#processing-composite-geometry")'),true);
@@ -56,7 +64,7 @@ try{
   await b.click('#processing-cancel');
   const shot=await b.command('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});
   await writeFile(`${directory}/${width}x${height}-multimodal.png`,Buffer.from(shot.data,'base64'));
-  report.viewports.push({width,height,...check,compositeEditorOpened:true});
+  report.viewports.push({width,height,...check,realPointerSelection:true,compositeEditorOpened:true});
   await b.click('[data-act="back-works"]','.works-grid');
  }
  await b.command('Page.reload');await b.wait('.series-grid');
@@ -71,5 +79,5 @@ try{
  assert.deepEqual(b.errors,[]);
  report.passed=true;report.logicalPieces=3;report.derivedViews=5;report.sourceUnmodified=true;report.reopened=true;report.portableCanvasMatches=true;report.samples=portable.samples;report.sceneHash=portable.report.sceneHash;
  await writeFile(directory+'/multimodal-report.json',JSON.stringify(report,null,2));console.log('MULTIMODAL_CRAFT_BROWSER_PASS',JSON.stringify(report));
-}catch(error){report.passed=false;report.error=error.message;await writeFile(directory+'/multimodal-report.json',JSON.stringify(report,null,2));throw error;}
+}catch(error){try{const shot=await b.command('Page.captureScreenshot',{format:'png'});await writeFile(directory+'/multimodal-failure.png',Buffer.from(shot.data,'base64'));}catch{}report.passed=false;report.error=error.message;await writeFile(directory+'/multimodal-report.json',JSON.stringify(report,null,2));throw error;}
 finally{await rm(file,{force:true});await b.close();}

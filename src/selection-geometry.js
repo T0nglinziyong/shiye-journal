@@ -1,8 +1,15 @@
 // Object geometry is authoritative. Never mirror overlay mutations back into
-// the artwork: an old overlay must not move an object to a stale position.
+// artwork. A woven material has several render projections but one transform;
+// keep every projection together during pointer movement, not only on release.
 export function syncSelectionGeometry(page,id){
-  const object=[...page.querySelectorAll('[data-object]')].find(n=>n.dataset.object===id);
+  const projections=[...page.querySelectorAll('[data-object]')].filter(n=>n.dataset.object===id);
+  const object=projections[0];if(!object)return;
   const overlay=[...page.querySelectorAll('[data-selection-for]')].find(n=>n.dataset.selectionFor===id);
-  if(!object||!overlay)return;
-  for(const key of ['left','top','width','height','transform'])overlay.style[key]=object.style[key];
+  for(const node of [...projections.slice(1),...(overlay?[overlay]:[])]){
+    for(const key of ['left','top','width','height','transform']){
+      if(node.style[key]!==object.style[key])node.style[key]=object.style[key];
+    }
+  }
+  // clip/mask, render keys and z-index belong to individual projections. They
+  // must not be copied from the first fragment or overwrite physical layers.
 }
