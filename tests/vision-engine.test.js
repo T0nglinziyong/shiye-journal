@@ -16,15 +16,16 @@ test('model contour fills printed white holes but preserves a concave material b
   const r=await processVision(cv,'material-mask',{alpha,width,height}),left=Math.round(r.x*width),top=Math.round(r.y*height),at=(x,y)=>r.mask.alpha[(y-top)*r.mask.width+x-left];
   assert.equal(at(35,35),255);assert.equal(at(70,70),0);assert.equal(at(0+left,0+top),0);
 });
-test('GrabCut removes an attached neutral shadow without clipping coloured paper',async()=>{
-  const cv=await cvModule,width=160,height=180,pixels=new Uint8ClampedArray(width*height*4),mask=new Uint8Array(width*height),evidence=new Uint8Array(width*height),foregroundSeeds=new Uint8Array(width*height);
+test('GrabCut treats attached low-chroma shadow as background without clipping coloured paper',async()=>{
+  const cv=await cvModule,width=160,height=180,pixels=new Uint8ClampedArray(width*height*4),mask=new Uint8Array(width*height),evidence=new Uint8Array(width*height),foregroundSeeds=new Uint8Array(width*height),shadowLikelihood=new Uint8Array(width*height);
   for(let y=0;y<height;y++)for(let x=0;x<width;x++){
     const i=y*width+x,p=i*4,paper=x>=40&&x<110&&y>=40&&y<140,shadow=x>=40&&x<125&&y>=40&&y<150;
     pixels.set(paper?[60,140,210,255]:shadow?[205,205,205,255]:[245,245,245,255],p);
-    mask[i]=shadow?1:0;evidence[i]=foregroundSeeds[i]=paper?1:0;
+    mask[i]=shadow?1:0;evidence[i]=foregroundSeeds[i]=paper?1:0;shadowLikelihood[i]=shadow&&!paper?1:0;
   }
-  const before=pixels.slice(),result=await processVision(cv,'components',{mask,evidence,foregroundSeeds,pixels,width,height,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
+  const before=pixels.slice(),result=await processVision(cv,'components',{mask,evidence,foregroundSeeds,shadowLikelihood,pixels,width,height,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
   assert.equal(result.length,1);const r=result[0],a=r.mask,at=(x,y)=>a.alpha[(y-Math.round(r.y*height))*a.width+x-Math.round(r.x*width)];
+  assert.equal(r.edgeMethod,'graphcut-lab-shadow-aware');
   assert.equal(at(70,80),255);assert.equal(at(118,80),0);assert.equal(at(70,146),0);assert.deepEqual(pixels,before);
   assert.ok(a.polygons[0].length<=8,'straight paper must not have a staircase contour');
 });
