@@ -152,8 +152,10 @@ GPT 可以直接看图并在 plan.observations 中提出本次选区；无需先
     'examples/project.shiyeproject.json':strToU8(JSON.stringify(example,null,2)),
     'runtime/glyphs.cjs':strToU8(offlineGlyphSource),
     'runtime/validate.cjs':strToU8(offlineValidateSource),
-    'runtime/preview.cjs':strToU8("process.argv[2]='preview';require('./validate.cjs');\\n"),
-    'runtime/pack.cjs':strToU8("process.argv[2]='pack';require('./validate.cjs');\\n"),
+    'runtime/preview.cjs':strToU8(`process.argv[2]='preview';require('./validate.cjs');
+`),
+    'runtime/pack.cjs':strToU8(`process.argv[2]='pack';require('./validate.cjs');
+`),
     'runtime/README.txt':strToU8('把完整 JSON 保存为任务根目录 project.shiyeproject.json。Node.js 20+：validate.cjs 校验；preview.cjs 生成 output/构图预览.svg 与 output/画面预览.html；pack.cjs 再生成 output/作品.shiyeproject.zip。运行时只读取 task/context.json。glyphs.cjs 只从本地已有字体生成数值轮廓，不携带字体文件。')
   };
   for(const entry of chosen)if(validAlias(entry.alias)&&source.materials.some(item=>item.alias===entry.alias))files[`materials/${entry.alias}.png`]=entry.bytes;
