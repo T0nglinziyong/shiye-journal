@@ -38,9 +38,9 @@ test('visual extraction respects existing protected subject and per-asset permis
  const d=project().drafts[0];assert.equal(run(plan(d,a),d,a).results[0].code,'PROTECTED_REGION_CUT');
  const b=asset('whole'),q=plan(d,b);assert.match(run(q,d,b,{assetProcessing:{whole:'保留完整'}}).results[0].detail,/保留完整/);
 });
-test('new default uses GPT vision without migrating a previously saved provider or unlabelled secret',()=>{
+test('current default uses GPT vision and current provider settings only',()=>{
  assert.equal(normalizeAISettings().provider,'openai');assert.equal(normalizeAISettings().model,'gpt-4.1');assert.equal(normalizeAISettings().finalVisualReview,true);
- assert.equal(normalizeAISettings({provider:'deepseek',key:'old'}).provider,'deepseek');assert.equal(normalizeAISettings({key:'legacy-key'}).provider,'deepseek');
+ assert.equal(normalizeAISettings({provider:'deepseek',key:'value'}).provider,'deepseek');assert.equal(normalizeAISettings({key:'value'}).provider,'openai');
  assert.equal(normalizeAISettings({provider:'custom',endpoint:'https://example.invalid/chat',model:'mine',key:'value'}).endpoint,'https://example.invalid/chat');
  assert.equal(normalizeAISettings({finalVisualReview:false}).finalVisualReview,false);
 });
@@ -49,9 +49,9 @@ test('direct JSON mode accepts the same full craft plan without a preliminary re
  const calls=protocol.calls({content:JSON.stringify(p)},1);assert.equal(calls.length,1);assert.equal(calls[0].function.name,'apply_craft_plan');
  ok(run({tool_calls:calls},d,a));
 });
-test('prior confirmed-only plan schema stays narrow while new multimodal capability allows observations',()=>{
+test('the one current offline plan contract accepts multimodal observations',()=>{
  const a=asset(),d=project().drafts[0],p=plan(d,a);
- assert.throws(()=>validateValue(p,offlinePlanContract({craftPlanV2:true})));validateValue(p,offlinePlanContract({multimodalCraftV2:true}));
+ validateValue(p,offlinePlanContract());
 });
 test('one exported task carries images, exact versions, multimodal instructions and working runtime entry points',async()=>{
  const a=asset(),p=project('one delivery');p.processing='自由拆解';
