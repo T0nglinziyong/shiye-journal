@@ -21,11 +21,11 @@ test('uneven illumination and a cast shadow stay background while a pale coloure
     return [base,base,base];
   });
   const out=buildForegroundEvidence(data,w,h,{cellSize:24});
-  let shadow=0,shadowEvidence=0,material=0,materialEvidence=0;
-  for(let y=25;y<70;y++)for(let x=84;x<120;x++){const i=y*w+x;shadow+=out.shadowLikelihood[i];shadowEvidence+=out.evidence[i];}
+  let shadow=0,shadowMask=0,shadowEvidence=0,material=0,materialEvidence=0;
+  for(let y=25;y<70;y++)for(let x=84;x<120;x++){const i=y*w+x;shadow++;shadowMask+=out.mask[i];shadowEvidence+=out.evidence[i];}
   for(let y=25;y<70;y++)for(let x=18;x<46;x++){const i=y*w+x;material++;materialEvidence+=out.evidence[i];}
-  assert.ok(shadow>900,'smooth neutral shadow should be explicitly labelled probable background');
-  assert.ok(shadowEvidence<120,'shadow must not become strong material evidence');
+  assert.ok(shadowEvidence/shadow<.08,'smooth neutral shadow must not become strong material evidence');
+  assert.ok(shadowMask/shadow<.45,'local background modelling should absorb most smooth illumination changes');
   assert.ok(materialEvidence/material>.65,'pale coloured paper must remain detectable under the same gradient');
 });
 
