@@ -1,65 +1,44 @@
-# 当前多模态实现
+# AI 素材创意加工系统
 
-GPT 看图单次交付、复合工艺、余料、两孔穿插与共用成图的实际入口见 [MULTIMODAL_IMPLEMENTATION.md](MULTIMODAL_IMPLEMENTATION.md)。下文是第一批实现的历史记录；测试成绩以相应准确提交为准。
+本目录只记录当前实现，不保留阶段性兼容说明或历史迁移方案。
 
-# AI 素材创意加工系统 v2：实施入口
+## 当前协议
 
-日期：2026-10-03。起点：`6596992c36dde058bb5907384b0e10f4499a2b9e`。本批是完整 v2 方案的第一条可执行链路，不是宣称整份路线图完成。完整中文重构方案另作为对话交付文档提供；仓库后续实施以本页、代码合同和实际验收记录共同核对。
+- GPT 任务包只使用 compact 目录：`START_HERE.txt`、`task/`、`schema/`、`examples/`、`materials/`、可选 `references/`、`runtime/`。
+- 任务必须具有当前 `taskHash`、`schemaHash`、`sourceSnapshots`、`baseSceneHash` 和 `taskBinding=local`。
+- Craft Plan 只有当前一个合同：`shiye-craft-plan` version 2。
+- material relation 只使用 `peek`、`underlay`、`bridge`；不接受旧 relation 名称。
+- 工艺操作包括 whole、crop、trim、tape、mask、diagonal、window、edge，以及当前区域/拓扑工艺。
+- 物理素材按毫米尺寸、来源快照、库存与源区域账本核验；隐藏、透明和移出画布不释放库存。
 
-## 已实现
+## 多模态单次交付
 
-1. `edit_materials`、`upsert_materials`、直接 `page.items[].operations` 共用新的 `edge` 工序：几何撕边 `torn`、票根缺口 `ticket_notch`、邮票齿 `postage`、保留连接背条的流苏 `fringe`、局部撕口 `partial_tear`。固定毫米参数与 seed，输出既有 polygon mask，保留来源和编辑能力，不用白色遮盖伪造裁剪。
-2. 同一物理单位的库存检查改用实际源轮廓与洞的交集面积，不再仅比较 cropRect 外接矩形。合法窗框与窗芯、互补三角片可以共用一个 unit；真实源区域重复仍拒绝。隐藏、透明或放入备选不释放材料。
-3. 新关系 `peek`、`underlay`、`bridge` 支持旋转目标的局部坐标。统一依赖排序和循环检查；搭桥只移动旋转现有片段，长度不足失败，不拉伸。
-4. 新任务声明 `capabilities.craftV2=true`；旧任务仍使用未扩展的合同快照和原指纹。既有导出包不会因新增枚举失效，也不会被静默授予新能力。
-5. 在线/离线共用工艺指南，质量回执增加实际加工统计。不要求至少加工几件，不把 whole 当作失败。
-6. 搭配页与逐件用法增加“AI 自主加工”选项。纸张/胶带解析为自由拆解，其他类型解析为少量裁剪。既有默认与用户逐件保留完整不修改。
+主路径是一次导出、一次最终交付、一次导入。GPT 可以在内部完成：查看素材预览、提出 observation、选择取材和工艺、运行校验/同源预览、返回最终可编辑项目。
 
-## 使用
+## 关键模块
 
-在“素材搭配 → 素材加工方式”选择“AI 自主加工”或适当的“自由拆解”，并核对每件素材的用法；逐件“保留完整”仍优先。网页版 AI 必须重新导出任务包才能拿到新合同和离线校验器。旧 ZIP 保持旧权限，不能通过修改 source 绕过任务绑定。
+- `src/creative-contract.js`：当前唯一工具与页面合同。
+- `src/craft-plan-contract.js`：当前原子 Craft Plan。
+- `src/creative.js`：合同执行与原子回滚。
+- `src/material-anatomy.js`：素材来源版本、区域与保护信息。
+- `src/craft-topology.js`：布尔几何与源区域运算。
+- `src/craft-geometry.js`：确定性边缘加工与面积核验。
+- `src/craft-relations.js`：peek / underlay / bridge。
+- `src/craft-display.js`：单实体多显示片段与两孔穿插。
+- `src/scene-renderer.js`：应用与便携任务包共用 Canvas 渲染。
+- `src/offline-creation.js`：compact 任务包导出、导入与校验。
+- `src/offline-runtime-entry.mjs`：离线 validate / preview / pack 入口。
 
-```json
-{"op":"edge","style":"torn","edges":["bottom"],"depth_mm":1,"period_mm":8,"seed":42}
-```
+## 不变量
 
-先 crop/trim/tape，再 edge，再按需要 window。已有外轮廓时不能再叠加另一道 edge；修改工序应 replace 重放完整计划。所有操作都只改当前作品的裁切数据，不改原素材图。
+- 不为了审美指标强制裁剪固定数量的素材。
+- 不把数字遮罩伪装成真实裁切。
+- 不拉伸真实纸条或贴纸来满足关系。
+- 不覆盖生成开始前的用户手改。
+- 不把模型 observation 冒充用户确认。
+- 不为旧包、旧字段、旧设置或旧 relation 增加回退解析。
+- 网络重试、事务恢复、浏览器降级和同步冲突处理属于鲁棒性，不属于旧版本兼容。
 
-```json
-{"kind":"peek","target":"main-photo","edge":"right","exposed_mm":8,"along_mm":0,"rotation_offset":0}
-```
+## 验证
 
-`target` 是当前片段的 piece/key，不是素材 alias。关系是本次编译的一次性求解，不是持续自动重排；用户随后拖动时不会被拉回原位。`bridge` 核验锚点距离和片段长度，不等于对任意凹形、洞、三维折叠都给出制作证明。
-
-## 架构与后续任务
-
-路线是“可信素材版本 → 已确认语义区域 → Craft Plan → 源区域账本 → 工艺/组合编译器 → 共用场景渲染 → 审阅与版本化修订”。不能只加 enum、示例或提示语。
-
-| 阶段 | 状态与下一步 |
-|---|---|
-| 第一条工艺链路 | 本批已接入上述五种边缘、三种关系及真实执行/往返回归。 |
-| 语义区域 | 未实现自动识别；必须区分 proposed/confirmed，绑定原图、标定与轮廓版本。沿图案剪取不能只凭文字标签。 |
-| 完整材料账本 | 当前只提供源区域冲突面积核验；自动切分、可回收余料谱系、刀缝、碎片连通性及保护区域待实现。 |
-| 高级工艺 | 文字镂空、复杂负形、嵌片和窗口越界需通用拓扑核，不得以白色形状或重复纸片替代。 |
-| 局部穿插 | 需一个 physicalPiece 对应多个 renderFragment、局部遮挡和可制作性检查；不能按多件库存记账。 |
-| 统一渲染 | 当前离线 SVG 仍是构图预览；最终字体、换行及所有出口像素一致性尚未完成。 |
-| 人工修改保护 | 仍需落实已有审查的生成接管/任务快照/旧手改保护，不能用“未锁定”替代允许覆盖。 |
-| 模型质量 | 需固定任务和素材，比较旧版、仅权限、工艺工具、完整规划四种条件，盲评实际成品；不可用加工件数替代审美。 |
-
-## 几何边界
-
-`craft-geometry.js` 的有界面积核先验证简单多边形，再按全部顶点与相交点的 y 坐标分带，对每带线性交集截面积分；它不是低分辨率像素碰撞，也不是通用布尔多边形输出器。超过点数/交叉工作量显式失败。相交容差为源平面的 `1e-6 mm²`，不能用于改变真实物理标定。
-
-原始透明像素不是可以凭空复用的纸张。已剪轮廓与版面遮挡须分开；只有确认过的物理源区域用于材料分配。不同候选方案可以分别使用同一库存，不做全局自动扣库存。
-
-## 兼容与回滚
-
-无数据库、账号、DNS或原素材迁移。不改现有用户的“保留完整”和“少量裁剪≥60%”语义。旧合同快照保留，新语义显式声明。新几何大部分编译为已有 mask，但旧软件不认识新任务能力/工序，不能将降级导入成功当完整制作验收。回滚前保留新作品的原 JSON 和任务 ZIP，不清缓存、不清待同步原稿。
-
-## 验收边界
-
-实际集成记录见 [IMPLEMENTATION_RESULTS.md](IMPLEMENTATION_RESULTS.md)。首轮隔离分支完整仓库：367 单测通过，build、test:ui、Python 转换及 diff 检查通过。19 项几何/关系测试还在 Node 22 本地执行；300 组独立 Shapely 多边形交集对照最大面积误差约 `9.1e-13`，只证明该样本集中的面积计算。
-
-新增 `tests/craft-geometry.test.js`、`tests/craft-integration.test.js` 覆盖实际执行、原子回滚、尺寸库存、旧/新合同与原生 ZIP。离线源码变更后必须先重建并提交 `src/generated/offline-validate-source.js`，不能让运行时落后于合同。
-
-浏览器自动化、实体 iPad/Safari、真实付费模型审美分别记录，不能从单测推断。后续目标验收清单不是本批已执行清单；不得把路线图直接勾成完成。
+合并前必须通过 `npm run build`、`npm test`、`npm run test:ui` 与 `.github/workflows/craft-browser.yml`。Chromium 回归使用合成数据，只证明实现与交互链路，不等于实体 iPad Safari、Apple Pencil 或真实付费模型审美验收。
