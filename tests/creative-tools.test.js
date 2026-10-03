@@ -101,8 +101,8 @@ test('inspection reports scanned visible bounds and processed source dimensions'
   const unscanned=run(d,[call('fit_text_to',{key:'missing',target:'p1'})]);assert.equal(unscanned.results[0].ok,false);
 });
 
-test('Swift v3 direct pages decode atomically into real editable layers and relations',()=>{
-  const page={version:3,style:'留白叙事',intent:'光与纹理',paper:{color:'#FCFAF0',pattern:'dots'},items:[{asset:'m1',piece:'p1',unit:0,role:'衬底',operations:[{op:'whole'}],placement:{x:.5,y:.5,rotation:0,z:10},relation:null},{asset:'m2',piece:'p2',unit:0,role:'主角',operations:[{op:'whole'}],placement:{x:.5,y:.5,rotation:0,z:11},relation:{kind:'behind',target:'p1',exposed_mm:0}}],text_blocks:[{content:'窗边的光',font_style:'serif',x:.5,y:.8,width:.6,height:.1,font_size:32,color:'#30463D'}]};
+test('page v3 decodes atomically into real editable layers and current relations',()=>{
+  const page={version:3,style:'留白叙事',intent:'光与纹理',paper:{color:'#FCFAF0',pattern:'dots'},items:[{asset:'m1',piece:'p1',unit:0,role:'衬底',operations:[{op:'whole'}],placement:{x:.5,y:.5,rotation:0,z:10},relation:null},{asset:'m2',piece:'p2',unit:0,role:'主角',operations:[{op:'whole'}],placement:{x:.5,y:.5,rotation:0,z:11},relation:{kind:'underlay',target:'p1',offset_mm:[0,0],rotation_offset:0}}],text_blocks:[{content:'窗边的光',font_style:'serif',x:.5,y:.8,width:.6,height:.1,font_size:32,color:'#30463D'}]};
   const calls=directPageToTools(page);assert.equal(calls.length,1);const d=success(draft(),calls);assert.equal(d.style,'airy');assert.equal(d.items.length,2);assert.equal(d.textBlocks.length,1);assert.equal(d.items[1].x,d.items[0].x);assert.equal(d.items[1].zIndex,9);
   const decoded=applyToolCalls(JSON.stringify(page),draft(),assets,aliases);assert.equal(decoded.results[0].ok,true);
   const bleed=structuredClone(page);bleed.items[1].placement.x=3;bleed.items[1].relation=null;const accepted=run(draft(),directPageToTools(bleed));assert.equal(accepted.results[0].ok,true);
