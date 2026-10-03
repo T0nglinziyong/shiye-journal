@@ -72,7 +72,8 @@ jobs:
           curl -fsS http://127.0.0.1:5192/ >/dev/null
           node tests/craft-browser.mjs
           node tests/presentation-browser.mjs
-          git diff --exit-code -- package.json package-lock.json src/generated/offline-validate-source.js
+          node tests/craft-multimodal-browser.mjs
+          git diff --exit-code -- package.json package-lock.json src/generated/offline-validate-source.js src/generated/offline-browser-source.js src/generated/offline-glyph-source.js
       - name: Retain synthetic screenshots and reports
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
