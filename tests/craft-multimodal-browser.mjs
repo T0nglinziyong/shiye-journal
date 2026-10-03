@@ -59,6 +59,8 @@ try{
   await pointerSelect(fixture.ids.words);
   await b.click('[aria-label="编辑对象"]','#object-settings-fields');
   await b.evaluate('[...document.querySelectorAll("#object-settings-fields button")].find(b=>b.textContent.includes("打开统一素材加工面板")).click()');await b.wait('#processing-action');
+  assert.equal(await b.evaluate('document.querySelector("#processing-action").value'),'crop','observed rectangular words keep their existing crop');
+  await b.evaluate('(()=>{const select=document.querySelector("#processing-mask");select.value="region";select.dispatchEvent(new Event("change",{bubbles:true}));})()');
   assert.equal(await b.evaluate('!!document.querySelector("#processing-composite-geometry")'),true);
   assert.equal(await b.evaluate('document.querySelector("#processing-error").textContent'),'');
   await b.click('#processing-cancel');
