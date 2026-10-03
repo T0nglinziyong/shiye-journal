@@ -11,7 +11,7 @@ test('O-01/O-03: original task survives reopen, is account-scoped, and binds imp
   const handoff=await createOfflineHandoff({project:project('任务'),assets:[asset],aliases:{m1:asset.id},settings:{includeThumbnails:false}});
   const files=unzipSync(new Uint8Array(await handoff.blob.arrayBuffer()));
   assert.equal(inspectOfflinePackage(new Uint8Array(await handoff.blob.arrayBuffer())).source.bundleId,handoff.source.bundleId);
-  const response=JSON.parse(strFromU8(files['example-response.shiyeproject.json']));
+  const response=JSON.parse(strFromU8(files['examples/project.shiyeproject.json']));
   const name='offline-task-test-'+crypto.randomUUID(),store=createOfflineTaskStore({name});
   await store.save('account-a',handoff.source);
   const reopened=createOfflineTaskStore({name}),trusted=await reopened.load('account-a',handoff.source.bundleId);
@@ -31,7 +31,7 @@ test('O-01/O-03: original task survives reopen, is account-scoped, and binds imp
   response.source={...trusted};
   response.source=Object.fromEntries(Object.entries(response.source).reverse());
   assert.equal(importEditableWork(JSON.stringify(response),[asset],{trustedSource:trusted}).drafts[0].items.length,1);
-  const tamperedContext=JSON.parse(strFromU8(files['context.json']));
+  const tamperedContext=JSON.parse(strFromU8(files['task/context.json']));
   tamperedContext.materials[0].assetID='other-asset';
-  assert.throws(()=>inspectOfflinePackage(zipSync({'context.json':strToU8(JSON.stringify(tamperedContext))})),/素材映射不一致/);
+  assert.throws(()=>inspectOfflinePackage(zipSync({'task/context.json':strToU8(JSON.stringify(tamperedContext))})),/素材映射不一致/);
 });
