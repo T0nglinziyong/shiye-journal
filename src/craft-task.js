@@ -13,7 +13,6 @@ export function freezeCraftTask(source,draft,assets){
  return source;
 }
 export function validateCraftTask(source,currentAssets,{trusted=false}={}){
- if(!source.capabilities?.craftPlanV2)return;
  craftAssert(trusted,'TASK_NOT_TRUSTED','新工艺任务必须匹配本机登记的原始任务');
  craftAssert(Array.isArray(source.sourceSnapshots)&&source.sourceSnapshots.length===source.materials.length&&source.sourceSnapshots.length<=100,'INVALID_SOURCE_SNAPSHOT','素材来源快照不完整');
  craftAssert(craftDigest(source.sourceSnapshots)===source.sourceVersionHash,'SOURCE_SNAPSHOT_CHANGED','来源快照指纹不匹配');
@@ -45,8 +44,8 @@ export function describeCraftSources(assets,aliases={}){
 }
 export function inheritCreationBrief(project,source){
  for(const key of ['contentPolicy','userText','providedFacts','intent','processing','assetProcessing','materialUseHints','materialUseRequired','textMode'])if(source[key]!==undefined)project[key]=structuredClone(source[key]);
- project.creationSourceVersions=structuredClone(source.sourceSnapshots||[]);
- project.creationBaseSceneHash=source.baseSceneHash||null;
+ project.creationSourceVersions=structuredClone(source.sourceSnapshots);
+ project.creationBaseSceneHash=source.baseSceneHash;
  return project;
 }
 export const craftTaskInstructions=`素材工艺计划：用 apply_craft_plan 可一次提交取材、加工、关系和父片拆分。每件素材的 sourceRevision 与可选用户标注区域见 context.json 的 sourceSnapshots；场景基线见 source.baseSceneHash。新建子片使用独立 id，consume 列出父片，parentId 指回父片，默认保留的余料会进入备选。也可以继续使用普通页面或工具格式。区域的 bounds 与 outline 不是同一种精度；没有用户确认轮廓时，可由 GPT 直接看图提出本次观察轮廓，不得将其标成用户确认。图像/尺寸/库存改变后必须重新导出任务，不修改原 source 蒙混。工艺决策与制作说明不进入正文，完整使用是合法设计选择。`;
