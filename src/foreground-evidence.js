@@ -28,12 +28,17 @@ function globalNeutral(pixels,w,h){
 
 function localBackgrounds(pixels,w,h,cell,fallback){
   const cols=Math.ceil(w/cell),rows=Math.ceil(h/cell),background=Array(cols*rows);
-  const fallbackMean=(fallback[0]+fallback[1]+fallback[2])/3;
+  const fallbackMean=(fallback[0]+fallback[1]+fallback[2])/3,fallbackChroma=fallback.map(v=>v-fallbackMean);
   for(let by=0;by<rows;by++)for(let bx=0;bx<cols;bx++){
     const samples=[[],[],[]];
     for(let y=by*cell;y<Math.min(h,(by+1)*cell);y+=3)for(let x=bx*cell;x<Math.min(w,(bx+1)*cell);x+=3){
-      const p=(y*w+x)*4,r=pixels[p],g=pixels[p+1],b=pixels[p+2],min=Math.min(r,g,b),max=Math.max(r,g,b),mean=(r+g+b)/3;
-      if(max-min<42&&min>90&&Math.abs(mean-fallbackMean)<42){samples[0].push(r);samples[1].push(g);samples[2].push(b);}
+      const p=(y*w+x)*4,r=pixels[p],g=pixels[p+1],b=pixels[p+2],min=Math.min(r,g,b),mean=(r+g+b)/3;
+      // Illumination changes the common RGB level much more than channel
+      // ratios. Compare chroma direction to the page reference so a neutral
+      // cast shadow may become local background while pale blue/yellow paper
+      // cannot teach the background model its colour.
+      const chromaResidual=Math.max(Math.abs((r-mean)-fallbackChroma[0]),Math.abs((g-mean)-fallbackChroma[1]),Math.abs((b-mean)-fallbackChroma[2]));
+      if(chromaResidual<10&&min>80&&Math.abs(mean-fallbackMean)<46){samples[0].push(r);samples[1].push(g);samples[2].push(b);}
     }
     background[by*cols+bx]=samples[0].length>=10?samples.map(median):fallback;
   }
