@@ -5,12 +5,21 @@ on:
     branches: [main]
     paths:
       - 'src/craft-*.js'
-      - 'src/material-craft-guide.js'
+      - 'src/material-*.js'
       - 'src/creative*.js'
-      - 'src/material-mask.js'
       - 'src/app.js'
       - 'src/offline*.js'
+      - 'src/*cache*.js'
+      - 'src/presentation-resources.js'
+      - 'src/lazy-private-images.js'
+      - 'src/library-selection-ui.js'
+      - 'src/swift-popover.js'
+      - 'src/selection-menu.css'
+      - 'src/matching-session.js'
+      - 'src/parity-ui.js'
       - 'tests/craft-*'
+      - 'tests/presentation-*'
+      - 'tests/swift-popover-*'
       - 'tests/browser-harness.mjs'
       - '.github/workflows/craft-browser.yml'
   workflow_dispatch:
@@ -46,7 +55,7 @@ jobs:
           echo "SHIYE_BROWSER_BIN=$BROWSER_BIN" >> "$GITHUB_ENV"
       - name: Build actual sources
         run: npm run build
-      - name: Verify synthetic materials in four viewports
+      - name: Verify materials menus and warm page returns in four viewports
         shell: bash
         env:
           SHIYE_TEST_URL: http://127.0.0.1:5192
@@ -62,17 +71,9 @@ jobs:
           done
           curl -fsS http://127.0.0.1:5192/ >/dev/null
           node tests/craft-browser.mjs
+          node tests/presentation-browser.mjs
           git diff --exit-code -- package.json package-lock.json src/generated/offline-validate-source.js
-      - name: Retain new source modules for independent local verification
-        if: always()
-        shell: bash
-        run: |
-          mkdir -p /tmp/shiye-craft-browser/review-inputs/src /tmp/shiye-craft-browser/review-inputs/tests
-          cp src/craft-geometry.js src/craft-relations.js src/material-craft-guide.js /tmp/shiye-craft-browser/review-inputs/src/
-          cp tests/craft-geometry.test.js /tmp/shiye-craft-browser/review-inputs/tests/
-          printf '{"type":"module"}\n' > /tmp/shiye-craft-browser/review-inputs/package.json
-          git rev-parse HEAD > /tmp/shiye-craft-browser/review-inputs/COMMIT.txt
-      - name: Retain synthetic screenshots and report
+      - name: Retain synthetic screenshots and reports
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
