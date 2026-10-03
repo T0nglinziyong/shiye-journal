@@ -48,7 +48,7 @@ function sourceFor(p,aliases){
 // The upload is a task package, not a source archive. Keep the chat prompt
 // short and put exact context, contracts, examples and separate images inside.
 export async function createOfflineHandoff({project:p,assets,aliases,previews=[],settings={},referenceImages=[],userTemplates=[]}){
-  const source=sourceFor(p,aliases);source.taskBinding='local-v1';source.textMode=source.contentPolicy==='visual'?'none':settings.textMode||'automatic';const selected=source.materials.map(({alias,assetID})=>{
+  const source=sourceFor(p,aliases);source.taskBinding='local';source.textMode=source.contentPolicy==='visual'?'none':settings.textMode||'automatic';const selected=source.materials.map(({alias,assetID})=>{
     const asset=assets.find(item=>item.id===assetID);
     if(!asset||!validAlias(alias))throw Error('素材篮中有无效素材编号');
     return {alias,assetID,title:asset.title,kind:asset.kind,role:asset.role,journalRoles:classifyJournalMaterial(asset),physicalWidthMM:asset.physicalWidthMM,physicalHeightMM:asset.physicalHeightMM,quantity:asset.kind==='tape'?null:asset.supply?.quantity??1,continuousTape:asset.kind==='tape',tags:asset.tags||[]};
@@ -61,14 +61,14 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
   const {offlineValidateSource}=await import('./generated/offline-validate-source.js');
   const {offlineGlyphSource}=await import('./generated/offline-glyph-source.js');
   const mode=settings.generationMode==='direct'?'direct':'agent';
-  source.capabilities={cropPx:false,craftV2:true,craftPlanV2:true,multimodalCraftV2:true,canonicalBrowserPreview:true,validateOffline:true,renderOffline:false,previewOffline:'approximate-svg',packOffline:true};
-  source.packageLayout='compact-v2';
-  const exportedContract=offlineContract(mode,source.capabilities);
+  source.capabilities={cropPx:false,craftPlan:true,multimodalVision:showImages,twoHoleWeave:true,canonicalBrowserPreview:true,validateOffline:true,previewOffline:'approximate-svg',packOffline:true};
+  source.packageLayout='compact';
+  const exportedContract=offlineContract(mode,{cropPx:false});
   source.schemaHash=schemaFingerprint(exportedContract);source.planSchemaHash=schemaFingerprint(toolContracts.apply_craft_plan);
   freezeCraftTask(source,p.drafts[0],assets);
   source.previewHashes=showImages?Object.fromEntries(await Promise.all(chosen.map(async entry=>[entry.alias,`sha256:${await sha256Hex(entry.bytes)}`]))):null;
   source.taskHash=await taskFingerprint(source);
-  const context={format:OFFLINE_PACKAGE_FORMAT,version:1,source,materials:selected.map(item=>({...item,preview:showImages?`materials/${item.alias}.png`:null}))};
+  const context={format:OFFLINE_PACKAGE_FORMAT,version:2,source,materials:selected.map(item=>({...item,preview:showImages?`materials/${item.alias}.png`:null}))};
   const envelope={format:EDITABLE_WORK_FORMAT,version:1,source,title:'新的手帐'};
   const directExample={...envelope,page:{version:3,style:'留白叙事',intent:null,items:[{asset:selected[0].alias,piece:'主素材',unit:0,role:null,operations:[{op:'whole'}],placement:{x:.5,y:.43,rotation:0,z:1},relation:null}],graphics:[{key:'title-rule',kind:'line',x:.5,y:.21,width:.55,height:.004,stroke:'#8ba99b',fill:null,line_width:2}],text_blocks:[{content:'这一页的主题',font_style:'serif',x:.5,y:.13,width:.7,height:.09,font_size:30,color:'#30463d'},{content:'第一段可编辑正文，根据真实主题填写。',font_style:'sans',x:.5,y:.72,width:.75,height:.08,font_size:20,color:'#30463d'},{content:'第二段可编辑正文，接续上一段的内容。',font_style:'sans',x:.5,y:.84,width:.75,height:.08,font_size:20,color:'#30463d'}],paper:{color:'#fcfaf0',pattern:'plain'}}};
   const layeredGraphics=[
@@ -170,7 +170,7 @@ async function createOfflineImageHandoff({source,project:p,assets,selected,chose
   source.deliveryMode='image';source.packageLayout='compact-v2';
   source.previewHashes=showImages?Object.fromEntries(await Promise.all(chosen.map(async entry=>[entry.alias,`sha256:${await sha256Hex(entry.bytes)}`]))):null;
   source.taskHash=await taskFingerprint(source);
-  const context={format:OFFLINE_PACKAGE_FORMAT,version:1,deliveryMode:'image',source,materials:selected.map(item=>({...item,preview:showImages?`materials/${item.alias}.png`:null}))};
+  const context={format:OFFLINE_PACKAGE_FORMAT,version:2,deliveryMode:'image',source,materials:selected.map(item=>({...item,preview:showImages?`materials/${item.alias}.png`:null}))};
   // Reuse the exact creative brief sent to the API image model. Only the
   // transport and the final handoff format differ for the web conversation.
   const brief=imagePrompt({project:p,draft:p.drafts[0],assets,ids:selected.map(item=>item.assetID),theme:p.intent||'',requireAll:settings.requireAllCandidates!==false,includeImages:showImages,includeReferences:hasPresets,textMode:source.textMode});
@@ -213,21 +213,21 @@ export function importEditableWork(text,assets,{trustedSource=null}={}){
   if(input?.format!==EDITABLE_WORK_FORMAT||input.version!==1)throw Error('不是拾页可编辑作品文件');
   const source=input.source;
   if(!source||typeof source.bundleId!=='string'||!Array.isArray(source.materials)||!source.materials.length||source.materials.length>100)throw Error('创作包来源无效');
-  if((source.taskBinding==='local-v1'&&!trustedSource)||(trustedSource&&canonicalTaskSource(source)!==canonicalTaskSource(trustedSource)))throw Error('网页 AI 结果与本机原始任务不一致；未导入作品');
+  if(!trustedSource||source.taskBinding!=='local'||source.packageLayout!=='compact'||canonicalTaskSource(source)!==canonicalTaskSource(trustedSource))throw Error('网页 AI 结果必须匹配本机登记的当前任务原件；未导入作品');
   if(!['single','spread'].includes(source.mode)||!paperDimensions(source.ratio))throw Error('纸张规格无效');
   const direct=input.page!==undefined,planned=input.plan!==undefined;
   if([input.page,input.plan,input.tools].filter(value=>value!==undefined).length!==1)throw Error('作品只能包含 page、plan、tools 中的一种入口');
   const tools=planned?[{name:'apply_craft_plan',arguments:input.plan}]:direct?directPageToTools(input.page):input.tools;
   const standalonePlan=Array.isArray(tools)&&tools.length===1&&tools[0]?.name==='apply_craft_plan';
   if(!Array.isArray(tools)||!tools.length||tools.length>12||(direct?tools.length!==1||tools[0].name!=='compose_direct_page':!standalonePlan&&(tools.at(-1)?.name!=='finish_design'||!tools.some(t=>t.name==='compose_page'||t.name==='apply_craft_plan'))))throw Error('作品需要完整页面、完整工艺计划，或包含 compose_page 并以 finish_design 结束的有效工具数组');
-  if((planned||tools.some(t=>t.name==='apply_craft_plan'))&&!source.capabilities?.craftPlanV2)throw Error('原始任务未声明工艺计划能力');
   const baseDraft=validateCraftTask(source,assets,{trusted:!!trustedSource});
   if(!direct&&tools.some(t=>!allowedTools.has(t?.name)))throw Error('作品包含不支持的创作操作');
   if(planned){
-    if(schemaFingerprint(offlinePlanContract(source.capabilities))!==source.planSchemaHash)throw Error('工艺计划合同版本不匹配');
-    validateValue(input.plan,offlinePlanContract(source.capabilities),'$.plan');
-  }else if(source.schemaHash){
-    const contract=offlineContract(direct?'direct':'agent',source.capabilities);
+    if(schemaFingerprint(offlinePlanContract())!==source.planSchemaHash)throw Error('工艺计划合同版本不匹配');
+    validateValue(input.plan,offlinePlanContract(),'$.plan');
+  }else{
+    if(!source.schemaHash)throw Error('创作任务缺少当前输出合同指纹');
+    const contract=offlineContract(direct?'direct':'agent',{cropPx:false});
     if(schemaFingerprint(contract)!==source.schemaHash)throw Error('创作包合同版本不匹配');
     if(direct)validateValue(input.page,contract,'$.page');
     else for(const [index,tool] of tools.entries())validateValue(tool.arguments,contract[tool.name],`$.tools[${index}].arguments`);
@@ -243,7 +243,7 @@ export function importEditableWork(text,assets,{trustedSource=null}={}){
   const result=applyToolCalls({tools},p.drafts[0],selectedAssets,aliases,{visualAssetIDs:source.materials.filter(m=>source.previewHashes?.[m.alias]).map(m=>m.assetID),requiredAssetIDs:source.requiredAssetIDs,processing:source.processing||'保留完整',textMode:source.textMode||'automatic',materialUseHints:source.materialUseHints||{},materialUseRequired:source.materialUseRequired||{},assetProcessing:source.assetProcessing||{},pagePurposes:source.purposes||['日常记录'],allowNoText:source.textMode==='none'||source.purposes?.every(x=>x==='主题封面')});
   const error=result.results.find(x=>!x.ok);if(error)throw Error(`${error.name}：${error.detail}`);
   if(!result.committed||result.draft.agentRun?.status!=='finished')throw Error('作品没有完成可编辑页面校验');
-  if(source.capabilities?.craftPlanV2)stabilizeImportedCraftScene(result.draft,baseDraft,source.bundleId);
+  stabilizeImportedCraftScene(result.draft,baseDraft,source.bundleId);
   p.drafts[0]=result.draft;p.candidateAssetIDs=Object.values(aliases);p.requiredAssetIDs=[...source.requiredAssetIDs];p.materialPriority=sourcePriority?{required:[...sourcePriority.required],preferred:[...sourcePriority.preferred],available:[...sourcePriority.available],excluded:[]}:{required:[...source.requiredAssetIDs],preferred:Object.values(aliases).filter(id=>!source.requiredAssetIDs.includes(id)),available:[],excluded:[]};p.styles=source.styles;p.purposes=source.purposes;p.processing=source.processing;p.offlineBundleId=source.bundleId;inheritCreationBrief(p,source);
   // An external preview is never evidence that this editable scene rendered
   // correctly. The app must independently render and review the final draft.
@@ -264,13 +264,13 @@ export function inspectOfflinePackage(bytes){
   const contextBytes=files['task/context.json'];
   let context;try{context=JSON.parse(strFromU8(contextBytes));}catch{throw Error('原始任务包的 task/context.json 无效');}
   validatePackageValue(context);
-  if(context?.format!==OFFLINE_PACKAGE_FORMAT||context.version!==1||context.source?.taskBinding!=='local-v1'||!Array.isArray(context.materials)||!context.source?.materials?.length)throw Error('不是可登记的网页 AI 原始任务包');
+  if(context?.format!==OFFLINE_PACKAGE_FORMAT||context.version!==2||context.source?.taskBinding!=='local'||context.source?.packageLayout!=='compact'||!Array.isArray(context.materials)||!context.source?.materials?.length)throw Error('不是可登记的网页 AI 原始任务包');
   if(canonicalTaskSource(context.materials.map(({alias,assetID})=>({alias,assetID})))!==canonicalTaskSource(context.source.materials))throw Error('原始任务包素材映射不一致');
   return {kind,source:context.source};
 }
 export async function verifyOfflineTaskPackage(bytes,source){
   await assertTaskFingerprint(source);
-  if(source.previewHashes===undefined)return;
+  if(!Object.hasOwn(source,'previewHashes'))throw Error('原始任务缺少当前素材预览指纹字段');
   const expected=source.previewHashes;
   if(expected===null)return;
   if(!expected||typeof expected!=='object'||Array.isArray(expected)||Object.keys(expected).length!==source.materials.length)throw Error('原始任务的素材预览指纹不完整');
