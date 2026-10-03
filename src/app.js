@@ -28,9 +28,6 @@ import {closePopover} from './swift-popover.js';
 import {drawPaper} from './paper-rendering.js';
 import {shapeSVG,drawInk,textFont,textFontFamily,textLineHeight,textLines} from './editor-tools-model.js';
 import {shapeTag} from './shape-preview.js';
-import {importPrivateCollection} from './private-collection.js';
-import {importHistoryReferences} from './history-reference.js';
-import {confirmHistoryImport} from './history-import-confirmation.js';
 import {ImageNodeCache} from './image-node-cache.js';
 import {imagePlaceholder,mountPrivateImages} from './lazy-private-images.js';
 import {showAssetEditor} from './asset-editor.js';
@@ -797,9 +794,10 @@ let editableImportReady=false;
 async function consumeEditableHandles(){if(!editableImportReady)return;while(pendingEditableHandles.length){const handle=pendingEditableHandles.shift();try{await importEditableFile(await handle.getFile());}catch(error){console.error(error);toast('可编辑作品导入失败：'+error.message);}}}
 if('launchQueue' in window)window.launchQueue.setConsumer(params=>{if(params.files?.length){pendingEditableHandles.push(...params.files);void consumeEditableHandles();}});
 backupInput.onchange=async()=>{const file=backupInput.files?.[0];backupInput.value='';if(!file)return;
-  if(file.name.endsWith('.shiyeversions')){if(!await confirmHistoryImport(modal,body))return;try{await flushSave();await importHistoryReferences(file,db);state.activeProject=null;await refresh();toast('四页最初方案的恢复点已补回，当前作品未被替换');}catch(error){toast('历史参考导入失败：'+error.message);}return;}
-  if(file.name.endsWith('.shiyecollection')){if(!confirm('用 Goodnotes 原生重建替换四页旧 CeCe 作品？其他作品与素材不会被删除。'))return;try{await flushSave();await document.fonts.load('12px "Ma Shan Zheng"');await importPrivateCollection(file,{db,onProgress:toast,prepare:data=>{const ctx=document.createElement("canvas").getContext("2d");for(const p of data.projects)for(const d of p.drafts)for(const t of d.textBlocks){ctx.font=textFont(t);const width=Math.max(...String(t.content).split("\n").map(line=>ctx.measureText(line).width));if(width>t.width-8)t.fontSize*=Math.max(1,t.width-8)/width;}}});state.activeProject=null;privateImages.invalidate();await refresh();route('works');toast('四页 Goodnotes 原生作品已保存');}catch(error){toast('私人作品导入失败，未切换到本机保存：'+error.message);}return;}
-  if(!confirm('恢复完整备份会替换当前 PWA 中的全部资料。请先确认旧资料已导出。继续吗？'))return;try{await flushSave();await db.flushProjects();state.activeProject=null;await db.restoreBackup(file);state.basket=[];await refresh();toast('完整备份已恢复');}catch(e){console.error(e);toast('恢复失败：'+e.message);}};
+  if(!confirm('恢复完整备份会替换当前拾页中的全部资料。继续吗？'))return;
+  try{await flushSave();await db.flushProjects();state.activeProject=null;await db.restoreBackup(file);state.basket=[];await refresh();toast('完整备份已恢复');}
+  catch(e){console.error(e);toast('恢复失败：'+e.message);}
+};
 window.addEventListener('pagehide',()=>{if(saveTimer)flushSave().catch(console.error);});
 window.addEventListener('beforeunload',event=>{if(saveTimer||savingProjects||dirtyProjects.size){event.preventDefault();event.returnValue='';}});
 // Logout requires a durable local checkpoint, not a successful network round
