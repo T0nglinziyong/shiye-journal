@@ -57,7 +57,7 @@ export async function openAdminView(client,currentUserID){
       if(typeof IntersectionObserver!=='undefined')observer=new IntersectionObserver(entries=>{for(const entry of entries)if(entry.isIntersecting){observer.unobserve(entry.target);void entry.target._loadAdminImage?.();}},{root:panel,rootMargin:'160px'});
       const addHeading=text=>{const h=document.createElement('h3');h.textContent=text;h.className='cloud-admin-section';list.append(h);};
       addHeading('素材');for(const {record:a} of assets){const blob=blobs.get(a.blobId),path=blob?.thumbnailPath||blob?.storagePath;renderCard(a.title,path,blob?.storageProvider,a.kind||'',a);}
-      addHeading('作品');for(const {record:p} of projects){const draft=p.drafts?.find(d=>d.id===p.activeDraftID)||p.drafts?.[0],cover=draft?.coverImageID||'',path=cover.startsWith('project-cover:cos:')?cover.slice('project-cover:cos:'.length):null;renderCard(p.title,path,'cos',p.isDraft?'草稿':'作品',p);}
+      addHeading('作品');for(const {record:p} of projects){const draft=p.drafts?.find(d=>d.id===p.activeDraftID)||p.drafts?.[0],cover=draft?.coverImageID||'',parsed=(()=>{const match=/^project-cover:(cos|supabase):(.+)$/.exec(cover);return match?{provider:match[1],path:match[2]}:null;})();renderCard(p.title,parsed?.path,parsed?.provider,p.isDraft?'草稿':'作品',p);}
       for(const [store,title] of [['series','系列'],['trash','最近删除'],['meta','设置与搭配'],['blobs','图片文件索引']]){
         const entries=byStore(store);if(!entries.length)continue;
         addHeading(title);for(const {id,record} of entries)renderCard(record.title||record.name||id,null,null,store==='blobs'?'COS 私人文件':'只读记录',record);
