@@ -2,7 +2,7 @@ import {stabilizeImportedCraftScene} from './craft-import-identity.js';
 import {multimodalCraftGuide} from './craft-vision.js';
 import {freezeCraftTask,validateCraftTask,inheritCreationBrief,craftTaskInstructions} from './craft-task.js';
 import {validateNativeDraft} from './native-project-package.js';
-import {zip,zipSync,unzipSync,strToU8,strFromU8} from 'fflate';
+import {zip,unzipSync,strToU8,strFromU8} from 'fflate';
 import {project} from './domain.js';
 import {applyToolCalls} from './creative.js';
 import {toolContracts,offlinePlanContract,directPageContract,directPageToTools,offlineContract,schemaFingerprint,validateValue} from './creative-contract.js';
@@ -15,7 +15,6 @@ import {canonicalTaskSource} from './task-source.js';
 import {sha256Hex,taskFingerprint,assertTaskFingerprint} from './task-fingerprint.js';
 import {reviewExternalResultFiles} from './offline-result-review.js';
 import {creativeContentBrief} from './creative-content-brief.js';
-import {creativePageBrief} from './creative-page-brief.js';
 import {imagePrompt} from './ai-image-generation.js';
 import {classifyJournalMaterial,journalMaterialRoles,relevantJournalFamilies} from './journal-case-study.js';
 import {journalReferenceGuide,selectJournalReferenceCases} from './journal-reference-catalog.js';
@@ -45,19 +44,6 @@ function sourceFor(p,aliases){
   const d=p.drafts[0];
   const priority=p.materialPriority||{required:p.requiredAssetIDs||[],preferred:Object.values(aliases).filter(id=>!(p.requiredAssetIDs||[]).includes(id)),available:[]};
   return structuredClone({bundleId:crypto.randomUUID(),title:p.title,mode:d.pageMode,ratio:d.pageRatio,styles:p.styles||[d.style],purposes:p.purposes||[p.purpose||'日常记录'],intent:p.intent||'',contentPolicy:p.contentPolicy||'documentary',userText:p.userText||'',providedFacts:p.providedFacts||'',processing:p.processing||'保留完整',requiredAssetIDs:p.requiredAssetIDs||[],materialPriority:{required:priority.required||[],preferred:priority.preferred||[],available:priority.available||[]},materialUseHints:p.materialUseHints||{},materialUseRequired:p.materialUseRequired||{},assetProcessing:p.assetProcessing||{},materials:Object.entries(aliases).map(([alias,assetID])=>({alias,assetID}))});
-}
-function instructions(source){
-  return `拾页可编辑手帐创作包。按 context.json 的风格（${source.styles.map(name=>`${name}：${visualStyleBrief(name)}`).join('；')}）、用途（${source.purposes.join('、')}）、纸张（${source.ratio} ${source.mode}）一次完成。\n${creativeContentBrief({policy:source.contentPolicy,userText:source.userText,providedFacts:source.providedFacts,topic:source.intent,purposes:source.purposes})}\n${creativePageBrief({styles:source.styles,purposes:source.purposes,contentPolicy:source.contentPolicy,userText:source.userText,theme:source.intent,pageMode:source.mode})}\n查看 materials/ 中每件素材预览；预览不是原图，最终文件只引用 context.json 的素材编号，不嵌入图像。保持真实尺寸和库存，胶带可按真实宽度截段；文字、线条和图形用可编辑图层表示。工具参数见 contract.json，可参考 example-response.json 的结构，但不要照抄示例构图和正文。先用 compose_page，最后用 finish_design；不要编造图片细节。只返回一个 UTF-8 .shiyeproject.json 文件，保留 source 原样。`;
-}
-export function createOfflineCreationPackage({project:p,assets,aliases,previews=[]}){
-  const source=sourceFor(p,aliases);
-  const selected=source.materials.map(({alias,assetID})=>{const a=assets.find(x=>x.id===assetID);if(!a||!validAlias(alias))throw Error('素材篮中有无效素材编号');return {alias,assetID,title:a.title,kind:a.kind,role:a.role,physicalWidthMM:a.physicalWidthMM,physicalHeightMM:a.physicalHeightMM,quantity:a.kind==='tape'?null:a.supply?.quantity??1,continuousTape:a.kind==='tape',tags:a.tags||[],preview:`materials/${alias}.jpg`};});
-  if(!selected.length)throw Error('请先选择素材');
-  const example={format:EDITABLE_WORK_FORMAT,version:1,source,title:'新的手帐',tools:[{name:'compose_page',arguments:{materials:[{asset:selected[0].alias,piece:'piece-1',unit:0,x:.5,y:.42}],graphics:[],texts:[{key:'title',content:'这一页的主题',width:.8,x:.5,y:.12,font_size:44,color:'#30463d',alignment:'center',role:'title'},{key:'body-1',content:'先记下眼前看到的细节，再为它留一块安静的空间。',width:.75,x:.5,y:.68,font_size:24,color:'#30463d',role:'body'},{key:'body-2',content:'接着写下与上一段相关的观察，让画面和文字一起延伸。',width:.75,x:.5,y:.82,font_size:24,color:'#30463d',role:'body'}],paper:{color:'#fcfaf0',pattern:'plain'}}},{name:'finish_design',arguments:{summary:'完成可编辑手帐'}}]};
-  const files={'README.txt':strToU8(instructions(source)),'context.json':strToU8(JSON.stringify({format:OFFLINE_PACKAGE_FORMAT,version:1,source,materials:selected},null,2)),'contract.json':strToU8(JSON.stringify(Object.fromEntries([...allowedTools].map(name=>[name,toolContracts[name]])),null,2)),'example-response.json':strToU8(JSON.stringify(example,null,2))};
-  for(const entry of previews){if(!validAlias(entry.alias)||!source.materials.some(m=>m.alias===entry.alias)||!(entry.bytes instanceof Uint8Array))continue;files[`materials/${entry.alias}.jpg`]=entry.bytes;}
-  if(selected.some(m=>!files[m.preview]))throw Error('创作包缺少素材预览，未导出不完整文件');
-  return {blob:new Blob([zipSync(files,{level:6})],{type:'application/zip'}),source};
 }
 // The upload is a task package, not a source archive. Keep the chat prompt
 // short and put exact context, contracts, examples and separate images inside.
@@ -168,7 +154,7 @@ GPT 可以直接看图并在 plan.observations 中提出本次选区；无需先
     'runtime/validate.cjs':strToU8(offlineValidateSource),
     'runtime/preview.cjs':strToU8("process.argv[2]='preview';require('./validate.cjs');\\n"),
     'runtime/pack.cjs':strToU8("process.argv[2]='pack';require('./validate.cjs');\\n"),
-    'runtime/README.txt':strToU8('把完整 JSON 保存为任务根目录 project.shiyeproject.json。Node.js 20+：validate.cjs 校验；preview.cjs 生成 output/构图预览.svg 与 output/画面预览.html；pack.cjs 再生成 output/作品.shiyeproject.zip。运行时优先读取 task/context.json，同时兼容旧包根目录 context.json。glyphs.cjs 只从本地已有字体生成数值轮廓，不携带字体文件。')
+    'runtime/README.txt':strToU8('把完整 JSON 保存为任务根目录 project.shiyeproject.json。Node.js 20+：validate.cjs 校验；preview.cjs 生成 output/构图预览.svg 与 output/画面预览.html；pack.cjs 再生成 output/作品.shiyeproject.zip。运行时只读取 task/context.json。glyphs.cjs 只从本地已有字体生成数值轮廓，不携带字体文件。')
   };
   for(const entry of chosen)if(validAlias(entry.alias)&&source.materials.some(item=>item.alias===entry.alias))files[`materials/${entry.alias}.png`]=entry.bytes;
   if(hasPresets)for(const entry of referenceImages)files[`references/${entry.id}.${entry.extension||'png'}`]=entry.bytes;
@@ -275,7 +261,8 @@ export function inspectOfflinePackage(bytes){
   const {kind,files}=readProjectPackageEntries(bytes,{allowTask:true});
   if(kind==='editable')return {kind,source:inspectEditableSource(strFromU8(files[EDITABLE_PACKAGE_ENTRY])).source};
   if(kind==='native')return {kind,source:null};
-  const contextBytes=files['task/context.json']||files['context.json'];\n  let context;try{context=JSON.parse(strFromU8(contextBytes));}catch{throw Error('原始任务包的 context.json 无效');}
+  const contextBytes=files['task/context.json'];
+  let context;try{context=JSON.parse(strFromU8(contextBytes));}catch{throw Error('原始任务包的 task/context.json 无效');}
   validatePackageValue(context);
   if(context?.format!==OFFLINE_PACKAGE_FORMAT||context.version!==1||context.source?.taskBinding!=='local-v1'||!Array.isArray(context.materials)||!context.source?.materials?.length)throw Error('不是可登记的网页 AI 原始任务包');
   if(canonicalTaskSource(context.materials.map(({alias,assetID})=>({alias,assetID})))!==canonicalTaskSource(context.source.materials))throw Error('原始任务包素材映射不一致');
