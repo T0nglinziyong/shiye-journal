@@ -1,12 +1,11 @@
 import {openDB} from 'idb';
 
 // Disposable read cache, never an alternative write destination.
-export function createPrivateCache({name='shiye-private-read-cache-v1',limit=160*1024*1024}={}){
+export function createPrivateCache({name='shiye-private-read-cache-v2',limit=160*1024*1024}={}){
   let connection;
-  const db=()=>connection??=openDB(name,2,{async upgrade(d,oldVersion,_newVersion,tx){
-    if(!oldVersion)d.createObjectStore('entries',{keyPath:'key'});
+  const db=()=>connection??=openDB(name,1,{upgrade(d){
+    d.createObjectStore('entries',{keyPath:'key'});
     d.createObjectStore('sizes',{keyPath:'key'});
-    if(oldVersion){let cursor=await tx.objectStore('entries').openCursor();while(cursor){const {key,account,time,bytes}=cursor.value;tx.objectStore('sizes').put({key,account,time,bytes});cursor=await cursor.continue();}}
   }});
   const key=(account,id)=>JSON.stringify([account,id]);
   return {
