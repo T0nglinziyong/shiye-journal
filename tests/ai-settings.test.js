@@ -12,37 +12,35 @@ test('creative delivery settings survive save and reload without changing provid
   assert.deepEqual(restored,saved);
   for(const [key,value] of Object.entries(settings))assert.deepEqual(restored[key],value,key);
   assert.equal(restored.generationMode,'direct');
-  assert.equal(normalizeAISettings({generationMode:'direct',directPageOutput:'flattened'}).deliveryMode,'image');
+  assert.equal(normalizeAISettings({generationMode:'direct',directPageOutput:'flattened'}).deliveryMode,'tools');
 });
 
-test('old and invalid creative settings migrate to bounded safe defaults',()=>{
-  const defaults=normalizeAISettings({generationMode:'unknown',directPageOutput:'unknown',transport:'unknown',textMode:'unknown',sendReference:true,sendPresetReferences:'true',referencePage:99,maxTurns:16,reasoningMode:'concise'});
-  assert.equal(defaults.generationMode,'agent');
-  assert.equal(defaults.directPageOutput,'editable');
+test('invalid current settings normalize to bounded defaults without legacy aliases',()=>{
+  const defaults=normalizeAISettings({transport:'unknown',textMode:'unknown',sendPresetReferences:'true',maxTurns:16,reasoningMode:'concise',generationMode:'direct',directPageOutput:'flattened'});
+  assert.equal(defaults.provider,'openai');
+  assert.equal(defaults.deliveryMode,'tools');
   assert.equal(defaults.transport,'auto');
   assert.equal(defaults.textMode,'automatic');
-  assert.equal(defaults.reasoningMode,'low');
+  assert.equal(defaults.reasoningMode,'automatic');
   assert.equal(defaults.sendPresetReferences,true);
-  assert.equal('referencePage' in defaults,false);
   assert.equal(defaults.maxTurns,16);
   assert.equal(normalizeAISettings({maxTurns:0}).maxTurns,5);
   assert.equal(normalizeAISettings({maxTurns:-1}).maxTurns,1);
-  assert.equal(normalizeAISettings({reasoningMode:'thorough'}).reasoningMode,'providerDefault');
+  assert.equal(normalizeAISettings({reasoningMode:'providerDefault'}).reasoningMode,'providerDefault');
   assert.equal(normalizeAISettings({reasoningMode:'toString'}).reasoningMode,'automatic');
-  assert.equal(normalizeAISettings(null).generationMode,'agent');
+  assert.equal(normalizeAISettings(null).provider,'openai');
   assert.equal(normalizeAISettings({textMode:'minimal'}).textMode,'minimal');
   assert.equal(normalizeAISettings({textMode:'rich'}).textMode,'rich');
   assert.equal(AI_DEFAULTS.sendPresetReferences,true);
   assert.equal(normalizeAISettings({sendPresetReferences:false}).sendPresetReferences,false);
   assert.equal(AI_DEFAULTS.autoIncludeRecommendations,false);
   assert.equal(AI_DEFAULTS.requireAllCandidates,true);
-  assert.equal(normalizeAISettings({}).requireAllCandidates,true);
   assert.equal(normalizeAISettings({requireAllCandidates:false}).requireAllCandidates,false);
-  assert.equal(AI_DEFAULTS.includeStructureReference,true);
+  assert.equal('referencePage' in defaults,false);
   assert.equal('imageCount' in normalizeAISettings({imageCount:1}),false);
 });
 
-test('automatic organization defaults on for old preferences and persists an explicit off choice',()=>{
+test('automatic organization uses current defaults and persists an explicit off choice',()=>{
   assert.equal(normalizePreferences({paperSize:'a5'}).autoOrganize,true);
   assert.equal(normalizePreferences({autoOrganize:'false'}).autoOrganize,true);
   const previous=globalThis.localStorage;
