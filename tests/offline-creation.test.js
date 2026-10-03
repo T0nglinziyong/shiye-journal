@@ -102,7 +102,7 @@ test('web ChatGPT handoff is one uploadable file plus a copyable, mode-specific 
   assert.equal(JSON.parse(strFromU8(toolFiles['task/context.json'])).source.bundleId,tool.source.bundleId);\n  assert.deepEqual(Object.keys(toolFiles).filter(name=>!name.includes('/')).sort(),['START_HERE.txt']);\n
   assert.match(strFromU8(toolFiles['START_HERE.txt']),/compose_page/);
   assert.match(strFromU8(toolFiles['START_HERE.txt']),/runtime\/preview\.cjs/);
-  assert.match(strFromU8(toolFiles['START_HERE.txt']),/可下载的「作品\.shiyeproject\.zip」/);
+  assert.match(strFromU8(toolFiles['START_HERE.txt']),/output\/作品\.shiyeproject\.zip/);
   assert.match(strFromU8(toolFiles['START_HERE.txt']),/只示意字段结构/);
   assert.ok(strFromU8(toolFiles['START_HERE.txt']).length<2000,'task brief should point to contracts instead of inlining them');
   assert.match(strFromU8(toolFiles['START_HERE.txt']),/【本次任务】[\s\S]*【素材规则】[\s\S]*【输出】/);
@@ -111,9 +111,9 @@ test('web ChatGPT handoff is one uploadable file plus a copyable, mode-specific 
   assert.ok(tool.prompt.length<130);assert.match(tool.prompt,/START_HERE.txt/);
   const direct=await createOfflineHandoff({...args,settings:{generationMode:'direct',includeThumbnails:false}});
   const directFiles=unzipSync(new Uint8Array(await direct.blob.arrayBuffer()));
-  assert.match(strFromU8(directFiles['START_HERE.txt']),/可下载的「作品\.shiyeproject\.zip」/);
+  assert.match(strFromU8(directFiles['START_HERE.txt']),/output\/作品\.shiyeproject\.zip/);
   assert.match(strFromU8(directFiles['START_HERE.txt']),/不要返回 tools/);
-  assert.match(strFromU8(directFiles['START_HERE.txt']),/单独的 ```json 代码块/);
+  assert.match(strFromU8(directFiles['START_HERE.txt']),/完整 JSON 代码块/);
   assert.ok(JSON.parse(strFromU8(directFiles['examples/project.shiyeproject.json'])).page);
   assert.ok(JSON.parse(strFromU8(toolFiles['examples/project.shiyeproject.json'])).tools);
   assert.equal(JSON.parse(strFromU8(toolFiles['task/knowledge.json'])).compositionIdeas.length,3);
@@ -131,7 +131,7 @@ test('web image delivery reuses the API image brief and requests a downloadable 
   assert.equal(output.deliveryMode,'image');
   assert.equal(output.mode,'image');
   assert.match(output.prompt,/可下载的 PNG 图片/);
-  assert.match(guide,/可下载的 PNG 图片/);
+  assert.match(guide,/可下载 PNG/);
   assert.ok(strFromU8(files['task/GUIDE.txt']).includes(imagePrompt({project:p,draft:p.drafts[0],assets:[asset],ids:[asset.id],theme:p.intent,requireAll:true,includeImages:false})));
   assert.equal(JSON.parse(strFromU8(files['task/context.json'])).deliveryMode,'image');
   assert.ok(!files['schema/output.json']&&!files['examples/project.shiyeproject.json']&&!files['runtime/validate.cjs']);
@@ -210,9 +210,10 @@ test('selected style and purpose produce four anonymous alternatives from simple
   const result=await createOfflineHandoff({project:p,assets:[asset],aliases:{m1:asset.id},settings:{includeThumbnails:false,sendPresetReferences:true},referenceImages:bytes});
   const files=unzipSync(new Uint8Array(await result.blob.arrayBuffer()));
   assert.deepEqual(Object.keys(files).filter(name=>name.startsWith('references/')&&name.endsWith('.png')).sort(),cases.map(entry=>`references/${entry.id}.png`).sort());
-  assert.match(strFromU8(files['START_HERE.txt']),/匹配的原创真实风格手帐案例/);
-  assert.deepEqual(JSON.parse(strFromU8(files['case-studies.json'])).selectedCases.map(entry=>entry.id),cases.map(entry=>entry.id));
-  const templateFile=JSON.parse(strFromU8(files['abstract-templates.json']));
+  assert.match(strFromU8(files['START_HERE.txt']),/references\/.*构图参考/);
+  const knowledge=JSON.parse(strFromU8(files['task/knowledge.json']));
+  assert.deepEqual(knowledge.caseStudies.selectedCases.map(entry=>entry.id),cases.map(entry=>entry.id));
+  const templateFile=knowledge.abstractTemplates;
   assert.equal(templateFile.source,'user-provided-tutorial-images');
   assert.ok(templateFile.templates.length>0&&templateFile.templates.length<=3);
   assert.ok(templateFile.templates.every(entry=>cases.some(item=>item.id===entry.caseId)));
