@@ -23,7 +23,7 @@ test('O-12/O-13: bundled validator runs from the ZIP without node_modules or clo
     await writeFile(join(directory,'runtime/validate.cjs'),entries['runtime/validate.cjs']);
     await writeFile(join(directory,'runtime/preview.cjs'),entries['runtime/preview.cjs']);
     await writeFile(join(directory,'runtime/pack.cjs'),entries['runtime/pack.cjs']);
-    await writeFile(join(directory,'context.json'),entries['task/context.json']);
+    await writeFile(join(directory,'task/context.json'),entries['task/context.json']);
     await writeFile(join(directory,'project.shiyeproject.json'),entries['examples/project.shiyeproject.json']);
     const run=()=>spawnSync(process.execPath,['runtime/validate.cjs'],{cwd:directory,encoding:'utf8',env:{PATH:process.env.PATH||''},timeout:10000});
     const valid=run();
@@ -67,8 +67,8 @@ test('direct-page preview embeds the supplied transparent material and editable 
   const entries=unzipSync(new Uint8Array(await task.blob.arrayBuffer()));
   const directory=await mkdtemp(join(tmpdir(),'shiye-direct-preview-'));
   try{
-    await mkdir(join(directory,'runtime'));await mkdir(join(directory,'materials'));
-    for(const name of ['context.json','runtime/validate.cjs','runtime/preview.cjs','materials/m1.png'])await writeFile(join(directory,name),entries[name]);
+    await mkdir(join(directory,'runtime'));await mkdir(join(directory,'materials'));await mkdir(join(directory,'task'));
+    for(const name of ['task/context.json','runtime/validate.cjs','runtime/preview.cjs','materials/m1.png'])await writeFile(join(directory,name),entries[name]);
     await writeFile(join(directory,'project.shiyeproject.json'),entries['examples/project.shiyeproject.json']);
     const result=spawnSync(process.execPath,['runtime/preview.cjs'],{cwd:directory,encoding:'utf8',env:{PATH:process.env.PATH||''},timeout:10000});
     assert.equal(result.status,0,result.stderr||result.stdout);
