@@ -1,4 +1,4 @@
-import {regionOperationSchemas,craftPlanContract,craftPlanDescription,multimodalPlanContract} from './craft-plan-contract.js';
+import {regionOperationSchemas,craftPlanContract,craftPlanDescription} from './craft-plan-contract.js';
 // One executable contract is shared by provider tools, offline imports and local validation.
 import Ajv from 'ajv';
 const validator=new Ajv({strict:false,strictNumbers:true,allErrors:false,coerceTypes:false,useDefaults:false,removeAdditional:false});
@@ -85,7 +85,7 @@ const inkStroke=object({points:array(inkPoint,1,512),width:num(.5,60),color,opac
 const directOperations=operationContract;
 const directMaterial=object({...material.properties,operations:array(directOperations,1,12)},['asset','piece','operations','placement']);
 export const directPageContract=object({version:{type:'integer',minimum:3,maximum:3,enum:[3]},style:enums(['留白叙事','密集拼贴','杂志网格','胶片日记','手作便签','自由构图']),intent:nullable(string(240)),items:array(directMaterial,0,100),graphics:array(primitive,0,48),ink_strokes:array(inkStroke,0,32),text_blocks:array(directText,0,24),paper:object({color,pattern:enums(['plain','lines','grid','dots','columns']),ruling:num(0,100),center_gutter:{type:'boolean'}},['color','pattern'])},['version','style','intent','items','text_blocks','paper']);
-toolContracts.apply_craft_plan=multimodalPlanContract(craftPlanContract({operation:operationContract,relation:materialRelation,paper,text,primitive,ink:inkStroke}));
+toolContracts.apply_craft_plan=craftPlanContract({operation:operationContract,relation:materialRelation,paper,text,primitive,ink:inkStroke});
 descriptions.apply_craft_plan=craftPlanDescription+' GPT 已收到图片时，可在同一计划提交 observations 并用 observed_region 取材；不修改原素材标注。';
 export const agentTools=Object.entries(toolContracts).map(([name,parameters])=>({type:'function',function:{name,description:descriptions[name],parameters}}));
 export const offlinePlanContract=()=>toolContracts.apply_craft_plan;
