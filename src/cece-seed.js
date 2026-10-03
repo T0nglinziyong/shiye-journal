@@ -2,6 +2,11 @@ import * as defaultDB from './store.js';
 import {textFont} from './editor-tools-model.js';
 
 const MARKER='cece-samples-current';
+function currentProjectRecord(project,index){
+  const drafts=project.drafts.map(d=>structuredClone(d));
+  const draftHistorySnapshots=Object.fromEntries(drafts.map(d=>[d.id,structuredClone(d)]));
+  return {...project,drafts,activeDraftID:project.activeDraftID||drafts[0]?.id,editHistory:{undo:[],redo:[]},manualArchives:project.manualArchives||[],initialEditorSnapshot:{drafts:drafts.map(d=>structuredClone(d)),activeDraftID:project.activeDraftID||drafts[0]?.id},draftHistorySnapshots,coverStaticPath:`/cece/cece-reference-${index+1}.jpg`,coverBaselineUpdatedAt:project.updatedAt};
+}
 
 export async function seedBundledExamples({isProjectOpen=()=>false,db=defaultDB}={}){
   if(await db.get('meta',MARKER))return;
@@ -23,7 +28,7 @@ export async function seedBundledExamples({isProjectOpen=()=>false,db=defaultDB}
   const existingAssets=new Set((await db.all('assets')).map(a=>a.id));
   const existingProjects=new Set((await db.all('projects')).map(p=>p.id));
   const assets=collection.assets.filter(a=>!existingAssets.has(a.id));
-  const projects=collection.projects.filter(p=>!existingProjects.has(p.id)).map(({sampleParagraphUpgrades,...p},i)=>({...p,coverStaticPath:`/cece/cece-reference-${i+1}.jpg`,coverBaselineUpdatedAt:p.updatedAt}));
+  const projects=collection.projects.filter(p=>!existingProjects.has(p.id)).map((p,i)=>currentProjectRecord(p,i));
   const series=await db.get('series',collection.series.id);
   await db.transaction(['assets','projects','series','meta'],tx=>{
     for(const asset of assets){const {sampleFile,...record}=asset;tx.objectStore('assets').put({...record,staticPath:'/cece/'+encodeURIComponent(sampleFile)});}
