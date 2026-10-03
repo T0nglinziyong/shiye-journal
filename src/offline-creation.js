@@ -75,7 +75,8 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
   const {offlineValidateSource}=await import('./generated/offline-validate-source.js');
   const {offlineGlyphSource}=await import('./generated/offline-glyph-source.js');
   const mode=settings.generationMode==='direct'?'direct':'agent';
-  source.capabilities={cropPx:false,craftV2:true,craftPlanV2:true,multimodalCraftV2:true,canonicalBrowserPreview:true,validateOffline:true,renderOffline:false,previewOffline:'approximate-svg',packOffline:true};\n  source.packageLayout='compact-v2';
+  source.capabilities={cropPx:false,craftV2:true,craftPlanV2:true,multimodalCraftV2:true,canonicalBrowserPreview:true,validateOffline:true,renderOffline:false,previewOffline:'approximate-svg',packOffline:true};
+  source.packageLayout='compact-v2';
   const exportedContract=offlineContract(mode,source.capabilities);
   source.schemaHash=schemaFingerprint(exportedContract);source.planSchemaHash=schemaFingerprint(toolContracts.apply_craft_plan);
   freezeCraftTask(source,p.drafts[0],assets);
