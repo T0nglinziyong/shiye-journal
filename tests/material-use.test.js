@@ -6,7 +6,7 @@ const paper={id:'paper',title:'纸张',physicalWidthMM:80,physicalHeightMM:100,s
 const invoke=(base,name,args,options={})=>applyToolCalls({tools:[{name,arguments:args}]},base,[paper],{m1:'paper'},options);
 test('per-material processing and required use constrain the completed design',()=>{
   const placed=invoke(draft(),'place_materials',{items:[{asset:'m1',piece:'p1',x:.5,y:.5}]}).draft;
-  const cut={items:[{piece:'p1',operations:[{type:'rectangularCut',cropRect:{x:.1,y:.1,width:.7,height:.7}}]}]};
+  const cut={items:[{piece:'p1',operations:[{op:'crop',box:{unit:'ratio',mode:'keep',values:[.1,.1,.7,.7]},angle:0,finish:null}]}]};
   const blocked=invoke(placed,'edit_materials',cut,{processing:'自由拆解',assetProcessing:{paper:'保留完整'}});
   assert.equal(blocked.results[0].ok,false);
   const light=invoke(placed,'edit_materials',cut,{assetProcessing:{paper:'少量裁剪'}});
