@@ -99,14 +99,14 @@ test('web ChatGPT handoff is one uploadable file plus a copyable, mode-specific 
   const tool=await createOfflineHandoff({...args,settings:{generationMode:'agent',includeThumbnails:false,includeStructureReference:false}});
   assert.equal(tool.filename,'拾页-GPT创作任务.zip');
   const toolFiles=unzipSync(new Uint8Array(await tool.blob.arrayBuffer()));
-  assert.equal(JSON.parse(strFromU8(toolFiles['context.json'])).source.bundleId,tool.source.bundleId);
+  assert.equal(JSON.parse(strFromU8(toolFiles['task/context.json'])).source.bundleId,tool.source.bundleId);\n  assert.deepEqual(Object.keys(toolFiles).filter(name=>!name.includes('/')).sort(),['START_HERE.txt']);\n
   assert.match(strFromU8(toolFiles['START_HERE.txt']),/compose_page/);
-  assert.match(strFromU8(toolFiles['START_HERE.txt']),/图片预览/);
+  assert.match(strFromU8(toolFiles['START_HERE.txt']),/runtime\/preview\.cjs/);
   assert.match(strFromU8(toolFiles['START_HERE.txt']),/可下载的「作品\.shiyeproject\.zip」/);
-  assert.match(strFromU8(toolFiles['START_HERE.txt']),/仅示意语法字段，不是成品或本次正文/);
+  assert.match(strFromU8(toolFiles['START_HERE.txt']),/只示意字段结构/);
   assert.ok(strFromU8(toolFiles['START_HERE.txt']).length<2000,'task brief should point to contracts instead of inlining them');
-  assert.match(strFromU8(toolFiles['START_HERE.txt']),/【本次任务】[\s\S]*【素材与物理规则】[\s\S]*【输出合同】/);
-  const agentContract=JSON.parse(strFromU8(toolFiles['contract.json']));
+  assert.match(strFromU8(toolFiles['START_HERE.txt']),/【本次任务】[\s\S]*【素材规则】[\s\S]*【输出】/);
+  const agentContract=JSON.parse(strFromU8(toolFiles['schema/output.json']));
   assert.ok(agentContract.edit_materials&&agentContract.upsert_primitives&&agentContract.move_elements);
   assert.ok(tool.prompt.length<130);assert.match(tool.prompt,/START_HERE.txt/);
   const direct=await createOfflineHandoff({...args,settings:{generationMode:'direct',includeThumbnails:false}});
@@ -114,9 +114,9 @@ test('web ChatGPT handoff is one uploadable file plus a copyable, mode-specific 
   assert.match(strFromU8(directFiles['START_HERE.txt']),/可下载的「作品\.shiyeproject\.zip」/);
   assert.match(strFromU8(directFiles['START_HERE.txt']),/不要返回 tools/);
   assert.match(strFromU8(directFiles['START_HERE.txt']),/单独的 ```json 代码块/);
-  assert.ok(JSON.parse(strFromU8(directFiles['example-response.shiyeproject.json'])).page);
-  assert.ok(JSON.parse(strFromU8(toolFiles['example-response.shiyeproject.json'])).tools);
-  assert.equal(JSON.parse(strFromU8(toolFiles['composition-ideas.json'])).length,3);
+  assert.ok(JSON.parse(strFromU8(directFiles['examples/project.shiyeproject.json'])).page);
+  assert.ok(JSON.parse(strFromU8(toolFiles['examples/project.shiyeproject.json'])).tools);
+  assert.equal(JSON.parse(strFromU8(toolFiles['task/knowledge.json'])).compositionIdeas.length,3);
   assert.match(tool.prompts.json,/不要生成作品文件/);
   assert.match(tool.prompts.file,/可下载/);
   assert.ok(tool.packageBytes>=tool.imageBytes);
@@ -132,9 +132,9 @@ test('web image delivery reuses the API image brief and requests a downloadable 
   assert.equal(output.mode,'image');
   assert.match(output.prompt,/可下载的 PNG 图片/);
   assert.match(guide,/可下载的 PNG 图片/);
-  assert.ok(guide.includes(imagePrompt({project:p,draft:p.drafts[0],assets:[asset],ids:[asset.id],theme:p.intent,requireAll:true,includeImages:false})));
-  assert.equal(JSON.parse(strFromU8(files['context.json'])).deliveryMode,'image');
-  assert.ok(!files['contract.json']&&!files['example-response.shiyeproject.json']&&!files['runtime/validate.cjs']);
+  assert.ok(strFromU8(files['task/GUIDE.txt']).includes(imagePrompt({project:p,draft:p.drafts[0],assets:[asset],ids:[asset.id],theme:p.intent,requireAll:true,includeImages:false})));
+  assert.equal(JSON.parse(strFromU8(files['task/context.json'])).deliveryMode,'image');
+  assert.ok(!files['schema/output.json']&&!files['examples/project.shiyeproject.json']&&!files['runtime/validate.cjs']);
   assert.doesNotMatch(output.prompt,/shiyeproject|JSON|可编辑/);
 });
 
@@ -145,7 +145,7 @@ test('offline ZIP includes each selected material as its own image',async()=>{
   const result=await createOfflineHandoff({project:project('四件素材'),assets,aliases,previews,settings:{includeThumbnails:true}});
   const files=unzipSync(new Uint8Array(await result.blob.arrayBuffer()));
   assert.deepEqual(Object.keys(files).filter(name=>name.startsWith('materials/')).sort(),['materials/m1.png','materials/m2.png','materials/m3.png','materials/m4.png']);
-  assert.equal(JSON.parse(strFromU8(files['context.json'])).materials[0].preview,'materials/m1.png');
+  assert.equal(JSON.parse(strFromU8(files['task/context.json'])).materials[0].preview,'materials/m1.png');
   assert.equal(result.previewCount,4);
   await assert.rejects(createOfflineHandoff({project:project(),assets,aliases,previews:previews.slice(0,1),settings:{includeThumbnails:true}}),/缺少素材预览/);
 });
@@ -155,7 +155,7 @@ test('GPT ZIP carries required/preferred/available priorities but never sends ex
   const p=project('优先级'),priority={required:[asset.id],preferred:[],available:[second.id],excluded:[excluded.id]};
   p.requiredAssetIDs=[asset.id];p.materialPriority=priority;
   const handoff=await createOfflineHandoff({project:p,assets:[asset,second,excluded],aliases:{m1:asset.id,m2:second.id},settings:{includeThumbnails:false}});
-  const files=unzipSync(new Uint8Array(await handoff.blob.arrayBuffer())),context=JSON.parse(strFromU8(files['context.json']));
+  const files=unzipSync(new Uint8Array(await handoff.blob.arrayBuffer())),context=JSON.parse(strFromU8(files['task/context.json']));
   assert.deepEqual(context.source.materialPriority,{required:[asset.id],preferred:[],available:[second.id]});
   assert.deepEqual(context.materials.map(x=>x.assetID),[asset.id,second.id]);
   assert.doesNotMatch(strFromU8(files['START_HERE.txt']),/不使用的图片|asset-3/);
@@ -168,7 +168,7 @@ test('offline ZIP preserves transparent PNG preview bytes and paths',async()=>{
   const result=await createOfflineHandoff({project:project('透明素材'),assets:[asset],aliases:{m1:asset.id},previews:[{alias:'m1',bytes:transparentPixel}],settings:{includeThumbnails:true}});
   const files=unzipSync(new Uint8Array(await result.blob.arrayBuffer()));
   assert.deepEqual(files['materials/m1.png'],transparentPixel);
-  assert.equal(JSON.parse(strFromU8(files['context.json'])).materials[0].preview,'materials/m1.png');
+  assert.equal(JSON.parse(strFromU8(files['task/context.json'])).materials[0].preview,'materials/m1.png');
   assert.match(strFromU8(files['START_HERE.txt']),/不要给贴纸添加白底/);
 });
 
@@ -217,16 +217,16 @@ test('selected style and purpose produce four anonymous alternatives from simple
   assert.ok(templateFile.templates.length>0&&templateFile.templates.length<=3);
   assert.ok(templateFile.templates.every(entry=>cases.some(item=>item.id===entry.caseId)));
   assert.match(templateFile.note,/无配对模板仍可使用/);
-  assert.match(strFromU8(files['START_HERE.txt']),/abstract-templates\.json/);
-  assert.match(strFromU8(files['references/GUIDE.txt']),/模板原图/);
-  assert.equal(JSON.parse(strFromU8(files['source-image-audit.json'])).images.length,70);
+  assert.match(strFromU8(files['START_HERE.txt']),/task\/knowledge\.json/);
+  assert.match(strFromU8(files['task/GUIDE.txt']),/模板原图/);
+  assert.equal(knowledge.sourceImageAudit.images.length,70);
   const imageResult=await createOfflineHandoff({project:p,assets:[asset],aliases:{m1:asset.id},settings:{deliveryMode:'image',includeThumbnails:false,sendPresetReferences:true},referenceImages:bytes});
   const imageFiles=unzipSync(new Uint8Array(await imageResult.blob.arrayBuffer()));
   assert.deepEqual(JSON.parse(strFromU8(imageFiles['abstract-templates.json'])).templates.map(entry=>entry.id),templateFile.templates.map(entry=>entry.id));
   assert.match(strFromU8(imageFiles['START_HERE.txt']),/abstract-templates\.json/);
-  assert.match(strFromU8(files['CREATIVE_GUIDE.txt']),/先理解素材/);
-  assert.match(strFromU8(files['CREATIVE_GUIDE.txt']),/实体纸、照片、贴纸/);
-  assert.ok(strFromU8(files['CREATIVE_GUIDE.txt']).length>1800);
+  assert.match(strFromU8(files['task/GUIDE.txt']),/先理解素材/);
+  assert.match(strFromU8(files['task/GUIDE.txt']),/实体纸、照片、贴纸/);
+  assert.ok(strFromU8(files['task/GUIDE.txt']).length>1800);
   assert.doesNotMatch(Object.keys(files).join(' '),/私人|cece/);
   await assert.rejects(createOfflineHandoff({project:p,assets:[asset],aliases:{m1:asset.id},settings:{includeThumbnails:false,sendPresetReferences:true},referenceImages:bytes.slice(0,1)}),/匹配的手帐案例/);
 });
