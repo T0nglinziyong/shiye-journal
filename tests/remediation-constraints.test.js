@@ -1,34 +1,28 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {unzipSync,strFromU8} from 'fflate';
 import {project,itemFromAsset} from '../src/domain.js';
-import {createOfflineCreationPackage,importEditableWork} from '../src/offline-creation.js';
+import {createOfflineHandoff,importEditableWork} from '../src/offline-creation.js';
 import {applyToolCalls} from '../src/creative.js';
 
 const asset={id:'paper-1',title:'合成条纹纸',kind:'paper',physicalWidthMM:80,physicalHeightMM:100,supply:{quantity:1}};
-async function response(){
-  const output=createOfflineCreationPackage({project:project('约束测试'),assets:[asset],aliases:{m1:asset.id},previews:[{alias:'m1',bytes:new Uint8Array([1,2,3])}]});
-  const files=unzipSync(new Uint8Array(await output.blob.arrayBuffer()));
-  return JSON.parse(strFromU8(files['example-response.json']));
+async function response({processing='保留完整',assetProcessing={},contentPolicy='documentary'}={}){
+  const p=project('约束测试');p.processing=processing;p.assetProcessing=assetProcessing;p.contentPolicy=contentPolicy;
+  const output=await createOfflineHandoff({project:p,assets:[asset],aliases:{m1:asset.id},settings:{generationMode:'direct',includeThumbnails:false}});
+  const page={version:3,style:'自由构图',intent:null,paper:{color:'#ffffff',pattern:'plain'},graphics:[],text_blocks:[{content:'约束测试正文',font_style:'sans',x:.5,y:.8,width:.7,height:.1,font_size:24,color:'#30463d'}],items:[{asset:'m1',piece:'piece-1',unit:0,role:null,operations:[{op:'crop',box:{unit:'ratio',mode:'keep',values:[0,0,.7,1]},angle:0,finish:null}],placement:{x:.5,y:.5,rotation:0,z:1},relation:null}]};
+  return {envelope:{format:'shiye-editable-project',version:1,source:output.source,title:'约束测试',page},trusted:output.source};
 }
 
-test('C-01/C-02: offline import applies global and per-material processing',async()=>{
-  const base=await response();
-  base.tools[0].arguments.materials[0].crop=[0,0,.7,1];
-  assert.throws(()=>importEditableWork(JSON.stringify(base),[asset]),/保留完整/);
-  base.source.processing='自由拆解';
-  base.source.assetProcessing={[asset.id]:'保留完整'};
-  assert.throws(()=>importEditableWork(JSON.stringify(base),[asset]),/保留完整/);
-  base.source.assetProcessing={};
-  assert.equal(importEditableWork(JSON.stringify(base),[asset]).drafts[0].items[0].cropRect.width,.7);
+test('C-01/C-02: current offline import applies global and per-material processing',async()=>{
+  const blocked=await response();assert.throws(()=>importEditableWork(JSON.stringify(blocked.envelope),[asset],{trustedSource:blocked.trusted}),/保留完整/);
+  const perAsset=await response({processing:'自由拆解',assetProcessing:{[asset.id]:'保留完整'}});assert.throws(()=>importEditableWork(JSON.stringify(perAsset.envelope),[asset],{trustedSource:perAsset.trusted}),/保留完整/);
+  const allowed=await response({processing:'自由拆解'});assert.equal(importEditableWork(JSON.stringify(allowed.envelope),[asset],{trustedSource:allowed.trusted}).drafts[0].items[0].cropRect.width,.7);
 });
 
-test('C-07: no-text mode rejects new generated text without deleting printed asset text',async()=>{
-  const base=await response();
-  base.source.textMode='none';
-  assert.throws(()=>importEditableWork(JSON.stringify(base),[asset]),/不新增文字/);
-  base.tools[0].arguments.texts=[];
-  assert.equal(importEditableWork(JSON.stringify(base),[asset]).drafts[0].items.length,1);
+test('C-07: visual-only task rejects generated text but accepts a material-only page',async()=>{
+  const current=await response({processing:'自由拆解',contentPolicy:'visual'});
+  assert.throws(()=>importEditableWork(JSON.stringify(current.envelope),[asset],{trustedSource:current.trusted}),/不新增文字/);
+  current.envelope.page.text_blocks=[];
+  assert.equal(importEditableWork(JSON.stringify(current.envelope),[asset],{trustedSource:current.trusted}).drafts[0].items.length,1);
 });
 
 test('C-06: a required material outside the page or fully transparent cannot finish',()=>{
