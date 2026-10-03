@@ -1,0 +1,72 @@
+name: Integrate craft plan sources
+on:
+  push:
+    branches: [codex/craft-v2-cache-selection-20261003]
+    paths:
+      - '.github/workflows/integrate-craft-plan.yml'
+      - 'scripts/*craft-plan-integration.mjs'
+      - 'scripts/integrate-craft-plan.mjs'
+      - 'src/craft-plan.js'
+      - 'src/craft-plan-contract.js'
+      - 'src/craft-task.js'
+      - 'src/craft-region-ops.js'
+      - 'src/craft-topology.js'
+      - 'src/material-anatomy*.js'
+      - 'src/material-ledger.js'
+      - 'tests/craft-plan.test.js'
+permissions:
+  contents: write
+concurrency:
+  group: integrate-craft-plan
+  cancel-in-progress: true
+jobs:
+  integrate:
+    if: github.ref == 'refs/heads/codex/craft-v2-cache-selection-20261003'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: true
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Apply guarded integration to reviewed existing files
+        run: node scripts/integrate-craft-plan.mjs && node scripts/complete-craft-plan-integration.mjs
+      - name: Test complete integrated application
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm test | tee /tmp/craft-plan-tests.log
+          npm run test:ui
+          python3 -m unittest discover -s tests -p 'test_*.py'
+          git diff --check
+      - name: Commit tested sources only and remove one-time integration workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          BRANCH=codex/craft-v2-cache-selection-20261003
+          git fetch origin "$BRANCH"
+          test "$(git rev-parse FETCH_HEAD)" = "$GITHUB_SHA"
+          mkdir -p docs/ai-craft-v2
+          {
+            echo '# Craft plan integrated-source verification'
+            echo
+            echo "Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            echo "Input commit: $GITHUB_SHA"
+            echo 'The guarded changes ran before all tests below. This is synthetic engineering verification, not paid-model aesthetic or physical iPad/Safari acceptance.'
+            echo
+            tail -12 /tmp/craft-plan-tests.log
+            echo
+            echo 'npm run test:ui, Python converter tests and git diff --check also completed successfully.'
+          } > docs/ai-craft-v2/PLAN_IMPLEMENTATION_RESULTS.md
+          git add src/creative-contract.js src/material-mask.js src/creative.js src/asset-editor.js src/native-project-package.js src/offline-creation.js src/offline-runtime-entry.mjs src/creative-runner.js src/scene-patch.js src/material-anatomy-ui.js src/material-anatomy.css src/craft-plan.js src/craft-task.js src/generated/offline-validate-source.js tests/fixtures/craft-plan-prior-schema-hashes.json docs/ai-craft-v2/PLAN_IMPLEMENTATION_RESULTS.md
+          git rm .github/workflows/integrate-craft-plan.yml scripts/integrate-craft-plan.mjs scripts/complete-craft-plan-integration.mjs
+          git diff --cached --check
+          git diff --cached --stat
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'feat(craft): integrate confirmed regions atomic plans source snapshots and manual ownership'
+          git push origin "HEAD:refs/heads/$BRANCH"
