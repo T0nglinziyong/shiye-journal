@@ -23,7 +23,8 @@ async function main(){
     const context=JSON.parse(readFileSync('task/context.json','utf8'));
     const sceneText=readFileSync('project.shiyeproject.json','utf8');
     const scene=inspectEditableSource(sceneText);
-    const assets=context.source.capabilities?.craftPlanV2?context.source.sourceSnapshots.map(assetFromSourceSnapshot):context.materials.map(item=>({id:item.assetID,title:item.title,kind:item.kind,physicalWidthMM:item.physicalWidthMM,physicalHeightMM:item.physicalHeightMM,supply:{quantity:item.quantity??1}}));
+    if(context?.format!=='shiye-gpt-creation-package'||context.version!==2||context.source?.taskBinding!=='local'||context.source?.packageLayout!=='compact')throw Error('任务包不是当前 compact 格式');
+    const assets=context.source.sourceSnapshots.map(assetFromSourceSnapshot);
     const imported=importEditableWork(sceneText,assets,{trustedSource:context.source});
     Object.assign(report,{structure:'passed',physical:'current-rules-passed',taskId:context.source.bundleId,taskHash:context.source.taskHash??null,sceneHash:await sceneFingerprint(scene)});
     if(mode==='pack'||mode==='preview'){
@@ -39,7 +40,7 @@ async function main(){
       const browserPage=offlineBrowserPage(imported.drafts[0],context.source,previews,offlineBrowserSource);
       writeFileSync('output/画面预览.html',browserPage);
       report.compiledSceneHash=craftSceneHash(imported.drafts[0]);report.browserRenderer='shiye-canvas-v2';
-      if(context.source.capabilities?.craftPlanV2)writeFileSync('output/material-ledger.json',JSON.stringify(buildMaterialLedger(imported.drafts[0],assets,{strictTape:!!scene.plan}),null,2)+'\n');
+      writeFileSync('output/material-ledger.json',JSON.stringify(buildMaterialLedger(imported.drafts[0],assets,{strictTape:!!scene.plan}),null,2)+'\n');
       if(mode==='pack'){
       const manifest={version:1,taskId:context.source.bundleId,taskHash:context.source.taskHash??null,schemaHash:context.source.schemaHash??null,sceneHash:report.sceneHash,previewHash:`sha256:${await sha256Hex(preview)}`,rendererVersion:'shiye-composition-preview-v1',fontSetVersion:null,outputProfile:'editable-approximate-svg',visualReview:false};
       const contents={
