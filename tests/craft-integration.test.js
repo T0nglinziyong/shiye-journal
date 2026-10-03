@@ -1,6 +1,5 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFile} from 'node:fs/promises';
 import {project} from '../src/domain.js';
 import {applyToolCalls} from '../src/creative.js';
 import {offlineContract,schemaFingerprint,validateValue,directPageContract} from '../src/creative-contract.js';
@@ -17,14 +16,14 @@ const page=items=>({version:3,style:'自由构图',intent:null,paper:{color:'#ff
 const execute=(items,options={})=>applyToolCalls(page(items),project('合成工艺').drafts[0],[asset],{m1:asset.id},{processing:'自由拆解',allowNoText:true,...options});
 const edge={op:'edge',style:'torn',edges:['bottom'],depth_mm:1,period_mm:8,seed:42};
 
-test('v2 parameterized cut executes through direct page, not just a new enum',()=>{
+test('parameterized cut executes through the current direct page contract',()=>{
   const result=execute([piece('cut',[edge])]);
   assert.equal(result.results[0].ok,true,result.results[0].detail);assert.equal(result.committed,true);
   const item=result.draft.items[0];
   assert.equal(item.materialSteps[0].style,'torn');assert.equal(item.materialMask.shape,'polygon');
   assert.ok(materialMaskArea(item.materialMask)<1);assert.equal(item.width,100*result.draft.canvas.height/result.draft.physicalPageHeightMM);
 });
-test('v2 parameterized cut executes through agent edit_materials and replace is reproducible',()=>{
+test('parameterized cut executes through current edit_materials and replace is reproducible',()=>{
   const original=execute([piece('cut',[{op:'whole'}])]).draft;
   const call={tools:[{name:'edit_materials',arguments:{items:[{piece:'cut',mode:'replace',operations:[edge]}]}}]};
   const a=applyToolCalls(call,original,[asset],{m1:asset.id},{processing:'自由拆解'});
@@ -60,27 +59,14 @@ test('rotated peek relation executes in a real direct page without material scal
   assert.equal(result.results[0].ok,true,result.results[0].detail);assert.equal(result.draft.items[1].rotation,30);
   assert.equal(result.draft.items[1].width,100*result.draft.canvas.height/result.draft.physicalPageHeightMM);
 });
-test('current offline package advertises v2 while exact prior schema fingerprints remain readable',async()=>{
-  const legacy=JSON.parse(await readFile(new URL('./fixtures/craft-v2-legacy-schema-hashes.json',import.meta.url),'utf8'));
-  assert.equal(schemaFingerprint(offlineContract('agent')),legacy.agent);
-  assert.equal(schemaFingerprint(offlineContract('direct')),legacy.direct);
+test('current offline package exports the one active contract and imports current craft operations',async()=>{
   const p=project('网页工艺');p.processing='自由拆解';
   const handoff=await createOfflineHandoff({project:p,assets:[asset],aliases:{m1:asset.id},settings:{generationMode:'direct',includeThumbnails:false}});
-  assert.equal(handoff.source.capabilities.craftV2,true);
   const envelope={format:'shiye-editable-project',version:1,source:handoff.source,title:'几何撕边',page:page([piece('paper',[edge])])};
+  assert.equal(schemaFingerprint(offlineContract('direct',{cropPx:false})),handoff.source.schemaHash);
+  validateValue(envelope.page,directPageContract);
   const imported=importEditableWork(JSON.stringify(envelope),[asset],{trustedSource:handoff.source});
   assert.equal(imported.drafts[0].items[0].materialMask.shape,'polygon');
-  assert.throws(()=>validateValue(envelope.page,offlineContract('direct')),/合同|未知|缺少/);
-  validateValue(envelope.page,directPageContract);
-});
-test('old bound task accepts old operations but cannot silently request v2 operations',async()=>{
-  const p=project('旧任务');p.processing='自由拆解';
-  const result=await createOfflineHandoff({project:p,assets:[asset],aliases:{m1:asset.id},settings:{generationMode:'direct',includeThumbnails:false}});
-  const source=structuredClone(result.source);delete source.capabilities.craftV2;delete source.capabilities.craftPlanV2;delete source.capabilities.multimodalCraftV2;source.schemaHash=schemaFingerprint(offlineContract('direct',source.capabilities));
-  const envelope={format:'shiye-editable-project',version:1,source,title:'旧任务',page:page([piece('paper',[{op:'whole'}])])};
-  assert.ok(importEditableWork(JSON.stringify(envelope),[asset],{trustedSource:source}));
-  envelope.page.items[0].operations=[edge];
-  assert.throws(()=>importEditableWork(JSON.stringify(envelope),[asset],{trustedSource:source}));
 });
 test('new craft survives native ZIP and approximate preview uses the actual cut polygon',async()=>{
   const p=project('合成往返'),result=execute([piece('paper',[edge])]);p.drafts[0]=result.draft;p.activeDraftID=result.draft.id;
