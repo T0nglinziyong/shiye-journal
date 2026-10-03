@@ -22,7 +22,7 @@ test('creative provider formats are selected independently of the turn loop', ()
 });
 
 test('direct editable page remains a single atomic compose call', () => {
-  const direct = creativeProtocol({generationMode:'direct', transport:'native'});
+  const direct = creativeProtocol({generationMode:'direct', transport:'auto',endpoint:'https://api.openai.com/v1/chat/completions',model:'gpt-4.1'});
   const page = {version:3, style:'留白叙事', intent:null,
     items:[{asset:'m1',piece:'p1',unit:0,role:null,operations:[{op:'whole'}],placement:{x:.5,y:.5,rotation:0,z:0},relation:null}],
     text_blocks:[],paper:{color:'#ffffff',pattern:'plain'}};

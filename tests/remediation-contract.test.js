@@ -14,9 +14,9 @@ const make=()=>createOfflineHandoff({project:project('合同验证'),assets:[ass
 test('O-07: published schema and runtime agree on normal punctuation and rejected fields',async()=>{
   const handoff=await make();
   const files=unzipSync(new Uint8Array(await handoff.blob.arrayBuffer()));
-  const schema=JSON.parse(strFromU8(files['contract.json']));
-  const context=JSON.parse(strFromU8(files['context.json']));
-  const example=JSON.parse(strFromU8(files['example-response.shiyeproject.json']));
+  const schema=JSON.parse(strFromU8(files['schema/output.json']));
+  const context=JSON.parse(strFromU8(files['task/context.json']));
+  const example=JSON.parse(strFromU8(files['examples/project.shiyeproject.json']));
   const ajv=new Ajv({strict:false});
   assert.equal(context.source.schemaHash,schemaFingerprint(schema));
   assert.equal(schemaFingerprint(offlineContract('agent',context.source.capabilities)),context.source.schemaHash);
@@ -33,12 +33,12 @@ test('O-07: published schema and runtime agree on normal punctuation and rejecte
 test('O-08: preview-only task omits source-pixel crop and rejects it on import',async()=>{
   const handoff=await make();
   const files=unzipSync(new Uint8Array(await handoff.blob.arrayBuffer()));
-  const schema=JSON.parse(strFromU8(files['contract.json']));
-  const capability=JSON.parse(strFromU8(files['capabilities.json']));
+  const schema=JSON.parse(strFromU8(files['schema/output.json']));
+  const capability=JSON.parse(strFromU8(files['task/knowledge.json'])).capabilities;
   assert.equal(capability.sourcePixelCoordinates,false);
   assert.equal(capability.cropPx,false);
   assert.equal(schema.compose_page.properties.materials.items.properties.crop_px,undefined);
-  const response=JSON.parse(strFromU8(files['example-response.shiyeproject.json']));
+  const response=JSON.parse(strFromU8(files['examples/project.shiyeproject.json']));
   response.tools[0].arguments.materials[0].crop_px=[0,0,100,100];
   assert.throws(()=>importEditableWork(JSON.stringify(response),[asset],{trustedSource:handoff.source}),/crop_px|未知字段/);
 });

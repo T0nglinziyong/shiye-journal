@@ -43,7 +43,7 @@ test('ZIP project retains editable layers and rejects missing local assets',asyn
 test('direct JSON and ZIP preserve crop, organic vectors, pen, marker, text and page geometry',async()=>{
   const asset={id:'owned-asset',title:'纸片',kind:'paper',physicalWidthMM:20,physicalHeightMM:30,supply:{quantity:1}};
   const source=project('图文层次');
-  const page={version:3,style:'自由构图',intent:'纸片与笔迹互相呼应',paper:{color:'#fdf9ed',pattern:'lined'},
+  const page={version:3,style:'自由构图',intent:'纸片与笔迹互相呼应',paper:{color:'#fdf9ed',pattern:'lines'},
     items:[{asset:asset.id,piece:'paper-piece',unit:0,role:'support',operations:[{op:'crop',box:{unit:'ratio',mode:'keep',values:[0,0,.5,1]},angle:0,finish:null}],placement:{x:.25,y:.35,rotation:8,z:10},relation:null}],
     graphics:[{key:'under-text',kind:'roundedRectangle',x:.62,y:.66,width:.52,height:.19,fill:'#f8e787',stroke:null,z:30,opacity:.5},{key:'leaf',kind:'vector',x:.72,y:.34,width:.12,height:.10,fill:'#a0bd8e',stroke:'#52734e',vector_paths:[[[0,.5],[.4,0],[1,.5],[.4,1]]],z:40}],
     text_blocks:[{content:'在纸片旁写下观察\n让颜色牵起画面',font_style:'hand',x:.62,y:.66,width:.48,height:.16,font_size:24,color:'#30463d',line_spacing:4,z:50}],
@@ -108,7 +108,7 @@ test('editable mask operations preserve irregular, rounded and scalloped cutouts
 });
 test('editable JSON maps visual controls to native layers and preserves them in ZIP',async()=>{
   const asset={id:'a1',title:'纸',kind:'paper',physicalWidthMM:35,physicalHeightMM:45,supply:{quantity:1}};
-  const p=project('表达完整性'),page={version:3,style:'自由构图',intent:'多层表达',paper:{color:'#fffaf2',pattern:'lined',ruling:28,center_gutter:false},
+  const p=project('表达完整性'),page={version:3,style:'自由构图',intent:'多层表达',paper:{color:'#fffaf2',pattern:'lines',ruling:28,center_gutter:false},
     items:[{asset:'a1',piece:'paper',unit:0,operations:[{op:'whole'},{op:'mask',shape:'rounded',radius:.13}],placement:{x:.25,y:.4,rotation:0,z:1},opacity:.65,flip_horizontal:true}],
     graphics:[{key:'round',kind:'roundedRectangle',x:.7,y:.25,width:.25,height:.1,corner_radius:.3,fill:'#ffeeaa',stroke:null},{key:'ornament',kind:'vector',x:.7,y:.6,width:.2,height:.2,vector_layers:[{fill:'#ff0000',opacity:.5,paths:[[[0,0],[1,0],[.5,1]]]},{fill:'#0000ff',rects:[[.2,.2,.3,.3]]}]}],
     text_blocks:[{content:'第一行\n第二行',font_style:'sans',font_name:'Songti SC',x:.5,y:.8,width:.5,height:.1,font_size:24,color:'#333333',underline:true,strikethrough:true,opacity:.6,fixed_line_height:35,paragraph_spacing:7}],ink_strokes:[]};

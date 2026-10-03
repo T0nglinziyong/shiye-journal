@@ -74,7 +74,7 @@ export async function runCreativeAgent(o){
   if(signal?.aborted)throw signal.reason||Error('创作已停止');
   messages.push(native?{role:'assistant',content:message.content||null,...(message.reasoning_content?{reasoning_content:message.reasoning_content}:{}),tool_calls:calls}:{role:'assistant',content:message.content||''});
   const fullScene=calls.some(call=>['compose_page','compose_story_page','compose_direct_page','apply_craft_plan'].includes(call.function?.name||call.name));
-  const result=fullScene?applyToolCalls({tool_calls:calls},working,assets,aliases,options):
+  const result=fullScene?applyToolCalls({tools:calls},working,assets,aliases,options):
     await applyScenePatch({mode:'applyPatch',baseSceneHash:beforePatchHash,tools:calls},working,assets,aliases,options);
   working=result.draft;
   const inspections=[];

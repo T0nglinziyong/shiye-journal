@@ -1,7 +1,6 @@
 // One-shot geometric relation compilation. User drags remain ordinary edits;
 // these records do not silently constrain or reposition future manual edits.
 const keyOf = item => item.creativePieceID || item.agentKey || item.key || item.id;
-const LEGACY = new Set(['revealLeft', 'revealRight', 'revealBottom', 'behind', 'anchorCorner']);
 const radians = degrees => degrees * Math.PI / 180;
 const degrees = value => ((value + 180) % 360 + 360) % 360 - 180;
 const positive = (n, label, max = 10000) => {
@@ -47,16 +46,7 @@ export function solveCraftRelations(objects, entries, pixelsPerMM) {
     const target = resolve(relation.target);
     if (keyOf(target) === id) throw Error('片段不可相对自身');
     const patch = {x: target.x, y: target.y, rotation: source.rotation || 0, zIndex: (target.zIndex || 0) - 1, materialRelation: structuredClone(relation)};
-    if (LEGACY.has(relation.kind)) {
-      // Preserve old saved relation semantics; use peek/underlay for rotated
-      // targets instead of reinterpreting existing packages on upgrade.
-      if ((target.rotation || 0) !== 0 || (source.rotation || 0) !== 0) throw Error('旧式实体叠放关系只支持未旋转片段；可改用 peek 或 underlay');
-      const exposure = positive(relation.exposed_mm, '露出长度', 40) * pixelsPerMM;
-      if (relation.kind === 'revealLeft') patch.x = target.x - target.width / 2 - exposure + source.width / 2;
-      if (relation.kind === 'revealRight') patch.x = target.x + target.width / 2 + exposure - source.width / 2;
-      if (relation.kind === 'revealBottom') patch.y = target.y + target.height / 2 + exposure - source.height / 2;
-      if (relation.kind === 'anchorCorner') Object.assign(patch, {x: target.x + target.width / 2 - source.width / 2, y: target.y + target.height / 2 - source.height / 2, zIndex: (target.zIndex || 0) + 1});
-    } else if (relation.kind === 'peek' || relation.kind === 'underlay') {
+    if (relation.kind === 'peek' || relation.kind === 'underlay') {
       const offset = relation.rotation_offset || 0;
       if (!Number.isFinite(offset) || Math.abs(offset) > 180) throw Error('相对旋转无效');
       patch.rotation = degrees((target.rotation || 0) + offset);

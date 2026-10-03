@@ -6,9 +6,10 @@ test('initial history is named, rename persists and delete keeps a valid active 
   assert.equal(historyTitle(p.drafts[0]),'最初方案');renameHistory(p.drafts[1],' 新排版 ');assert.equal(historyTitle(p.drafts[1],1),'新排版');
   assert.throws(()=>renameHistory(p.drafts[0],''));deleteDraft(p,'a');assert.equal(p.activeDraftID,'b');assert.throws(()=>deleteDraft(p,'b'));assert.equal(p.drafts.length,1);
 });
-test('history snapshots remain immutable across editing, restoring and reopening',()=>{
-  const p={drafts:[{id:'a',items:[{x:10}],primitives:[],textBlocks:[{content:'initial'}]},{id:'b',items:[],primitives:[],textBlocks:[]}],activeDraftID:'a'};
-  assert.equal(captureHistory(p),true);p.drafts[0].items[0].x=80;p.drafts[0].textBlocks[0].content='edited';
+test('current history snapshots remain immutable across editing, restoring and reopening',()=>{
+  const a={id:'a',items:[{x:10}],primitives:[],textBlocks:[{content:'initial'}],strokes:[]},b={id:'b',items:[],primitives:[],textBlocks:[],strokes:[]};
+  const p={drafts:[a,b],activeDraftID:'a',initialEditorSnapshot:{drafts:[structuredClone(a),structuredClone(b)],activeDraftID:'a'},draftHistorySnapshots:{a:structuredClone(a),b:structuredClone(b)}};
+  assert.equal(captureHistory(p),false);p.drafts[0].items[0].x=80;p.drafts[0].textBlocks[0].content='edited';
   assert.equal(captureHistory(p),false);renameHistory(p.drafts[0],'原版');
   const restored=restoreHistoryDraft(p,'a');assert.equal(restored.items[0].x,10);assert.equal(restored.textBlocks[0].content,'initial');assert.equal(restored.title,'原版');
   restored.items[0].x=99;const reopened=structuredClone(p);restoreHistoryDraft(reopened,'a');assert.equal(reopened.drafts[0].items[0].x,10);

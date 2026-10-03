@@ -19,6 +19,12 @@ win.eval(await builtApp(root,html,win));
 await new Promise(resolve=>setTimeout(resolve,500));
 const $=selector=>{const el=win.document.querySelector(selector);assert.ok(el,`missing ${selector}`);return el;};
 const click=selector=>$(selector).click();
+click('[data-route="works"]');
+click('#work-create');
+await waitFor(()=>win.document.body.classList.contains('editing'));
+click('.swift-editor-head [data-act="back-works"]');
+assert.ok($('.card[data-act="open-project"]'));
+
 
 for(const [width,height] of [[320,640],[390,844],[700,1024],[768,1024],[1024,768],[1440,900],[2560,1440]]){
   win.innerWidth=width;win.innerHeight=height;win.dispatchEvent(new win.Event('resize'));
@@ -45,7 +51,7 @@ for(const [width,height] of [[320,640],[390,844],[700,1024],[768,1024],[1024,768
   click('.swift-tabs button:nth-child(4)');assert.ok($('.journal-template-grid'));
   click('.journal-template-card');assert.ok($('.journal-template-detail-card'));
   click('[data-template-back]');click('.swift-tabs button:nth-child(2)');
-  click('.work-entry');assert.ok($('.import-nav'));
+  click('#work-import');assert.ok($('.import-nav'));
   assert.ok($('.import-source-actions'));
   click('[data-act="import-exit"]');
   click('[data-act="open-project"]');await waitFor(()=>win.document.body.classList.contains('editing'));assert.ok($('.swift-editor-workspace'));

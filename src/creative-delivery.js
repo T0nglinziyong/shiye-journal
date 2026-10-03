@@ -1,10 +1,9 @@
 import {agentTools, toolContracts, validateValue, directPageContract, directPageToTools} from './creative-contract.js';
 import {verifiedModelCapabilities} from './ai-capabilities.js';
 
-const jsonTools = parsed => parsed?.format==='shiye-craft-plan'||parsed?.plan?directTools(parsed):parsed.tools || parsed.tool_calls || [];
+const jsonTools = parsed => parsed?.format==='shiye-craft-plan'?directTools(parsed):parsed.tools || [];
 const directTools = parsed => {
- const plan=parsed?.format==='shiye-craft-plan'?parsed:parsed?.plan;
- if(plan){validateValue(plan,toolContracts.apply_craft_plan,'$.plan');return [{name:'apply_craft_plan',arguments:plan}];}
+ if(parsed?.format==='shiye-craft-plan'){validateValue(parsed,toolContracts.apply_craft_plan,'$.plan');return [{name:'apply_craft_plan',arguments:parsed}];}
  return directPageToTools(parsed);
 };
 const parseJSON = content => JSON.parse((content || '{}').replace(/^\x60\x60\x60(?:json)?\s*|\s*\x60\x60\x60$/g, ''));

@@ -32,7 +32,7 @@ export function validateRegion(region){
  craftAssert(region&&typeof region==='object'&&!Array.isArray(region)&&Object.keys(region).every(key=>KEYS.has(key)),'INVALID_REGION','区域含不支持的字段');
  craftAssert(typeof region.id==='string'&&/^[\p{L}\p{N}_-]{1,96}$/u.test(region.id),'INVALID_REGION','区域编号无效');
  craftAssert(REGION_KINDS.includes(region.kind)&&typeof region.label==='string'&&region.label.length<=120,'INVALID_REGION','区域类型或名称无效');
- craftAssert(['proposed','confirmed'].includes(region.status)&&['user','model','imported'].includes(region.provenance),'INVALID_REGION','区域确认状态或来源无效');
+ craftAssert(['proposed','confirmed'].includes(region.status)&&['user','model'].includes(region.provenance),'INVALID_REGION','区域确认状态或来源无效');
  craftAssert(region.preserve===undefined||typeof region.preserve==='boolean','INVALID_REGION','区域保护标记无效');
  const b=region.boundsRatio;
  craftAssert(Array.isArray(b)&&b.length===4&&b.every(Number.isFinite)&&b[0]>=0&&b[1]>=0&&b[2]>0&&b[3]>0&&b[0]+b[2]<=1+1e-9&&b[1]+b[3]<=1+1e-9,'INVALID_REGION','区域矩形必须位于原素材内部');

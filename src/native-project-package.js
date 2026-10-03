@@ -85,7 +85,7 @@ export function validatePackageValue(root){
 export function validateNativeDraft(draft,known){
   const canvas=draft?.canvas;
   if(!canvas||![canvas.width,canvas.height].every(n=>Number.isFinite(n)&&n>0&&n<=10000)||!['items','primitives','textBlocks','strokes'].every(key=>Array.isArray(draft[key])&&draft[key].length<=5000))throw Error('工程包图层数据无效');
-  if(!paint(draft.paperColor)||draft.paperPattern!==undefined&&!['plain','lines','lined','grid','dots','columns'].includes(draft.paperPattern))throw Error('工程包纸张样式无效');
+  if(!paint(draft.paperColor)||draft.paperPattern!==undefined&&!['plain','lines','grid','dots','columns'].includes(draft.paperPattern))throw Error('工程包纸张样式无效');
   const ids=new Set();
   for(const list of ['items','primitives','textBlocks'])for(const item of draft[list]){
     if(!item||typeof item.id!=='string'||!item.id||ids.has(item.id)||![item.x,item.y,item.width,item.height].every(n=>Number.isFinite(n)&&Math.abs(n)<=100000)||item.width<=0||item.height<=0)throw Error('工程包图层几何或 ID 无效');

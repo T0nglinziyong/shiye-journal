@@ -167,7 +167,7 @@ function clearGeneratedScene(d){
   d.primitives=d.primitives.filter(i=>!i.key||!isManagedUnchanged(i));
   d.strokes=(d.strokes||[]).filter(i=>!i.agentGenerated||!isManagedUnchanged(i));
 }
-function setPaper(d,a){if(a.color)d.paperColor=a.color;if(a.pattern)d.paperPattern=a.pattern==='lined'?'lines':a.pattern;if(a.intent)d.compositionIntent=a.intent;if(a.ruling!==undefined){const h=d.canvas.height,step=Math.max(4,a.ruling);d.paperRuling={rowPositions:Array.from({length:Math.ceil(h/step)-1},(_,i)=>(i+1)*step/h).filter(y=>y<1),spans:[{from:0,to:1}],color:'#d0d2d3',relativeLineWidth:1/h};}if(a.center_gutter!==undefined)d.drawCenterGutter=a.center_gutter;}
+function setPaper(d,a){if(a.color)d.paperColor=a.color;if(a.pattern)d.paperPattern=a.pattern;if(a.intent)d.compositionIntent=a.intent;if(a.ruling!==undefined){const h=d.canvas.height,step=Math.max(4,a.ruling);d.paperRuling={rowPositions:Array.from({length:Math.ceil(h/step)-1},(_,i)=>(i+1)*step/h).filter(y=>y<1),spans:[{from:0,to:1}],color:'#d0d2d3',relativeLineWidth:1/h};}if(a.center_gutter!==undefined)d.drawCenterGutter=a.center_gutter;}
 function relations(d,list){
   const updates=solveCraftRelations(entries(d),list,scale(d));
   for(const [key,update] of updates){const item=find(d,key);locked(item);const {materialRelation,...position}=update;Object.assign(item,position);if(materialRelation)item.materialRelation=materialRelation;else delete item.materialRelation;baseline(item);}
@@ -260,21 +260,12 @@ function execute(d,assets,aliases,name,a,options){
     default:throw Error('未知工具 '+name);
   }checkDraft(d,assets);if(d.agentRun?.status==='finished')d.agentRun.status='editing';return {detail:'已执行 '+name,mutation:true};
 }
-// Legacy local imports remain accepted without advertising unsupported provider fields.
-function legacyArgs(name,args){const a=structuredClone(args),warnings=[];
-  if(name==='place_materials')for(const e of a.items||[])for(const k of ['width','height'])if(Object.hasOwn(e,k)){delete e[k];warnings.push('忽略模型提供的实物'+k+'，使用素材库毫米尺寸');}
-  if(name==='upsert_text')for(const e of a.items||[])if(e.fontSize!==undefined){e.font_size=e.fontSize;delete e.fontSize;}
-  if(name==='edit_materials')for(const e of a.items||[])e.operations=(e.operations||[]).map(op=>{
-    if(!op.type)return op;
-    if(op.type==='useWhole'){if(Object.keys(op).some(k=>k!=='type'))throw Error('whole 工序含未知字段');e.mode='replace';return {op:'whole'};}
-    if(op.type!=='rectangularCut')throw Error('尚未实现 '+op.type+' 图像加工');
-    if(Object.keys(op).some(k=>!['type','cropRect','cropRectMM'].includes(k)))throw Error('裁切工序含未实现字段');if(op.cropRect&&op.cropRectMM)throw Error('裁切坐标不能重复提供');const rect=op.cropRectMM||op.cropRect;if(!rect)throw Error('缺少裁切范围');return {op:'crop',box:{unit:op.cropRectMM?'mm':'ratio',mode:'keep',values:[rect.x,rect.y,rect.width,rect.height]}};
-  });return {args:a,warnings};
-}
 export function normalizeCalls(raw){
-  const input=typeof raw==='string'?JSON.parse(raw):raw;if(input?.format==='shiye-craft-plan'&&input.version===2)return [{name:'apply_craft_plan',arguments:input,id:input.commandId}];if(input?.version===3)return directPageToTools(input);
-  const list=Array.isArray(input)?input:input?.tools||input?.tool_calls||input?.choices?.[0]?.message?.tool_calls;
-  if(!Array.isArray(list))throw Error('未找到 tools / tool_calls 数组或Swift v3页面');
+  const input=typeof raw==='string'?JSON.parse(raw):raw;
+  if(input?.format==='shiye-craft-plan'&&input.version===2)return [{name:'apply_craft_plan',arguments:input,id:input.commandId}];
+  if(input?.version===3)return directPageToTools(input);
+  const list=Array.isArray(input)?input:input?.tools;
+  if(!Array.isArray(list))throw Error('未找到当前 tools 数组或 page v3 数据');
   return list.map(x=>({name:x.name||x.function?.name,arguments:x.arguments??x.function?.arguments??{},id:x.id||uid()}));
 }
 export function applyToolCalls(source,base,assets,aliases={},options={}){
@@ -288,7 +279,7 @@ export function applyToolCalls(source,base,assets,aliases={},options={}){
     try{
       if(n>=12)throw Error('每轮最多12个工具调用；此前成功调用已保留');
       if(call.name==='finish_design'&&(n!==calls.length-1||results.some(r=>!r.ok)))throw Error('finish_design 必须是最后调用，且本轮前序调用全部成功');
-      const raw=typeof call.arguments==='string'?JSON.parse(call.arguments):call.arguments,{args,warnings}=legacyArgs(call.name,raw);
+      const args=typeof call.arguments==='string'?JSON.parse(call.arguments):structuredClone(call.arguments??{}),warnings=[];
       if(call.name==='compose_direct_page')validateValue(args,directPageContract);else validateTool(call.name,args);
       if(call.name==='apply_craft_plan'&&args.finish!==false&&(n!==calls.length-1||results.some(r=>!r.ok)))throw Error('完成工艺计划必须是本轮最后操作且前面全部成功');
       const outcome=execute(draft,assets,aliases,call.name,args,options);

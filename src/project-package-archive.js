@@ -2,6 +2,7 @@ import {unzipSync} from 'fflate';
 
 const NATIVE='native.shiyeproject.json';
 const EDITABLE='project.shiyeproject.json';
+const TASK_CONTEXT='task/context.json';
 const ADVISORY_ENTRIES=new Map([['manifest.json',64_000],['validation-report.json',256_000],['preview.png',16_000_000],['preview.svg',16_000_000]]);
 const ENTRY_LIMIT=128;
 const TOTAL_DECLARED_LIMIT=48_000_000;
@@ -24,11 +25,11 @@ export function readProjectPackageEntries(bytes,{allowTask=false}={}){
       if(total>TOTAL_DECLARED_LIMIT)throw Error('作品包解压大小超限');
       if(name===NATIVE)native=true;
       if(name===EDITABLE)editable=true;
-      if(name==='context.json')task=true;
+      if(name===TASK_CONTEXT)task=true;
       if((name===NATIVE||name===EDITABLE)&&entry.originalSize>(name===NATIVE?8_000_000:2_000_000))throw Error('作品图层数据过大');
       if(ADVISORY_ENTRIES.has(name)&&entry.originalSize>ADVISORY_ENTRIES.get(name))throw Error('作品包预览或报告过大');
-      if(allowTask&&name==='context.json'&&entry.originalSize>2_000_000)throw Error('原始任务数据过大');
-      return name===NATIVE||name===EDITABLE||ADVISORY_ENTRIES.has(name)||allowTask&&name==='context.json';
+      if(allowTask&&name===TASK_CONTEXT&&entry.originalSize>2_000_000)throw Error('原始任务数据过大');
+      return name===NATIVE||name===EDITABLE||ADVISORY_ENTRIES.has(name)||allowTask&&name===TASK_CONTEXT;
     }});
   }catch(error){throw Error('无法读取可编辑作品包：'+error.message);}
   if(native&&editable)throw Error('作品包包含两个场景入口，无法确定权威作品');

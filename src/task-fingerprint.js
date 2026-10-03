@@ -13,5 +13,6 @@ export async function taskFingerprint(source){
 // This detects accidental or malicious changes inside a returned package, but
 // trust still comes from the account-scoped task snapshot saved at export.
 export async function assertTaskFingerprint(source){
-  if(source?.taskHash&&source.taskHash!==await taskFingerprint(source))throw Error('原始创作任务指纹不匹配');
+  if(!/^sha256:[a-f0-9]{64}$/.test(source?.taskHash||''))throw Error('原始创作任务缺少当前指纹');
+  if(source.taskHash!==await taskFingerprint(source))throw Error('原始创作任务指纹不匹配');
 }

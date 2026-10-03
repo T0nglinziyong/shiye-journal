@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {webcrypto} from 'node:crypto';
-import {readFile} from 'node:fs/promises';
 import {project} from '../src/domain.js';
 import {applyToolCalls} from '../src/creative.js';
 import {craftDigest,craftSceneHash,isManagedUnchanged} from '../src/craft-fingerprint.js';
@@ -10,7 +9,6 @@ import {rectangleGeometry,normalizeGeometry,geometryArea,geometryIntersection,ge
 import {buildMaterialLedger} from '../src/material-ledger.js';
 import {createOfflineHandoff,importEditableWork,importEditableWorkPackage} from '../src/offline-creation.js';
 import {createNativeProjectPackage} from '../src/native-project-package.js';
-import {offlineContract,schemaFingerprint} from '../src/creative-contract.js';
 
 const material=()=>({id:'plan-paper',title:'合成图案纸',kind:'paper',physicalWidthMM:100,physicalHeightMM:80,blobId:'plan-source',supply:{quantity:1},updatedAt:'2026-10-03T00:00:00.000Z'});
 const region=(extra={})=>({id:'printed-title',kind:'text',label:'标题区域',boundsRatio:[.1,.1,.4,.3],outlineRatio:null,status:'confirmed',provenance:'user',preserve:false,...extra});
@@ -116,14 +114,6 @@ test('all-whole is legal, while explicit per-material protection still rejects c
  const input=plan(d,a,[plannedPiece(a,'trimmed',{extraction:{type:'rect_crop',boxMM:[0,0,60,80]}})]);
  const result=run(input,d,a,{processing:'AI 自主加工',assetProcessing:{[a.id]:'保留完整'}});assert.equal(result.results[0].ok,false);assert.match(result.results[0].detail,/保留完整/);
 });
-test('legacy and first craft-stage exported schema hashes stay exactly unchanged',async()=>{
- const old=JSON.parse(await readFile(new URL('./fixtures/craft-plan-prior-schema-hashes.json',import.meta.url),'utf8'));
- for(const mode of ['agent','direct']){
-  assert.equal(schemaFingerprint(offlineContract(mode)),old[mode]);
-  assert.equal(schemaFingerprint(offlineContract(mode,{craftV2:true})),old['craftV2-'+mode]);
-  assert.notEqual(schemaFingerprint(offlineContract(mode,{craftPlanV2:true})),old['craftV2-'+mode]);
- }
-});
 test('offline task imports a plan using its original source and full creation brief',async()=>{
  const a=material();a.anatomy=createMaterialAnatomy(a,[region()]);const p=project('source',{ratio:'a5'});p.processing='自由拆解';p.contentPolicy='original';p.userText='原文';p.providedFacts='事实';p.assetProcessing={[a.id]:'自由拆解'};
  const handoff=await createOfflineHandoff({project:p,assets:[a],aliases:{m1:a.id},settings:{includeThumbnails:false,generationMode:'direct'}});
@@ -136,7 +126,7 @@ test('offline task imports a plan using its original source and full creation br
 });
 test('native roundtrip preserves current scene and persistent craft geometry while dropping session undo',async()=>{
  const a=material(),p=project('native');const next=successful(run(plan(p.drafts[0],a,[plannedPiece(a,'cut',{treatments:[{op:'cut_shape',shape:'ellipse',mode:'remove',unit:'mm',box:[25,20,40,30]}]})]),p.drafts[0],a));
- p.drafts=[next];p.activeDraftID=next.id;p.editHistory={undo:[{id:'legacy-session'}],redo:[]};
+ p.drafts=[next];p.activeDraftID=next.id;p.editHistory={undo:[{id:'session-step'}],redo:[]};
  const bytes=new Uint8Array(await createNativeProjectPackage(p).arrayBuffer());const reopened=importEditableWorkPackage(bytes,[a]);
  assert.deepEqual(reopened.drafts[0].items[0].materialMask,next.items[0].materialMask);assert.equal(reopened.drafts[0].items[0].aiManaged,undefined);assert.equal(reopened.editHistory.undo.length,0);
 });

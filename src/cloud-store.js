@@ -10,7 +10,7 @@ export function createCloudStore({cloudClient,requireCloudUser,cache=null,namesp
 const BUCKET='shiye-private';
 const writeProvider=()=>objectStorage?.enabled?'cos':'supabase';
 const usableBlob=value=>value instanceof Blob&&value.size>0;
-async function downloadObject(path,provider){if(provider==='cos'){if(!objectStorage)throw Error('COS 私有读取尚未配置');return objectStorage.download(path);}if(provider&&provider!=='supabase')throw Error('不支持的存储服务');return checked(await cloudClient().storage.from(BUCKET).download(path));}
+async function downloadObject(path,provider){if(provider==='cos'){if(!objectStorage)throw Error('COS 私有读取尚未配置');return objectStorage.download(path);}if(provider==='supabase')return checked(await cloudClient().storage.from(BUCKET).download(path));throw Error('云端对象缺少当前 storageProvider');}
 async function uploadObject(path,blob,type,provider=writeProvider()){if(provider==='cos'){await objectStorage.upload(path,blob,type);return {error:null};}return cloudClient().storage.from(BUCKET).upload(path,blob,{upsert:false,contentType:type});}
 let owner,revision,writesInFlight=0;
 let queue=Promise.resolve();
@@ -45,7 +45,7 @@ const projectSync=createProjectSync({
   onStatus:reportSync,
 });
 async function wasCommitted(operationID,baseRevision){
-  if(!operationID)return false; // Legacy outbox: never guess that a write succeeded.
+  if(!operationID)throw Error('待同步记录缺少 operationID');
   const row=checked(await cloudClient().from('shiye_commits').select('revision').eq('user_id',await identity()).eq('operation_id',operationID).maybeSingle());
   if(row)await version(); // Invalidate stale snapshots after a lost response.
   return !!row;
@@ -84,7 +84,7 @@ const importSync=createProjectSync({
         // Metadata alone is not a cloud backup. A crash can leave a row whose
         // COS object was never uploaded. Check only broken local imports, and
         // treat 404 as loss; timeout/403 remain indeterminate and are retried.
-        if(!record?.storagePath){available.push(copy.id);continue;}
+        if(!record?.storagePath||!['cos','supabase'].includes(record.storageProvider))continue;
         if(!record.storagePath.startsWith(user+'/'))throw Error('图片不属于当前账号');
         const cachedImage=await cached('image:'+record.storagePath);
         if(usableBlob(cachedImage)){available.push(copy.id);continue;}
@@ -133,6 +133,7 @@ async function cloudGet(store,id){
 }
 async function cloudProjectDocument(record){
   const path=record.projectDocumentPath;if(!path)return record;
+  if(!['cos','supabase'].includes(record.projectDocumentProvider))throw Error('作品文档缺少当前存储服务标记');
   if(!path.startsWith((await identity())+'/'))throw Error('作品不属于当前账号');
   if(!documents.has(path)){
     const task=(async()=>{let blob=await cached('project-document:'+path);if(!(blob instanceof Blob)){blob=await downloadObject(path,record.projectDocumentProvider);await remember('project-document:'+path,blob);}const full=JSON.parse(await projectBlobText(blob,record.projectDocumentEncoding));if(full.id!==record.id||!Array.isArray(full.drafts))throw Error('作品完整数据损坏');return full;})().catch(error=>{documents.delete(path);throw error;});documents.set(path,task);if(documents.size>8)documents.delete(documents.keys().next().value);
@@ -148,9 +149,10 @@ async function cloudRecord(store,id){
 }
 async function cloudPreview(id){
   const pending=await pendingOverride('blobs',id);if(pending&&(!pending.record||usableBlob(pending.record.data)))return pending.record?await makeThumbnail(pending.record.data)||pending.record.data:undefined;
-  if(id.startsWith('project-cover:')){const raw=id.slice('project-cover:'.length),provider=raw.startsWith('cos:')?'cos':undefined,path=provider?raw.slice(4):raw;if(!path.startsWith((await identity())+'/'))throw Error('作品封面不属于当前账号');const key='thumbnail:'+path,saved=await cached(key);if(usableBlob(saved))return saved;const blob=await downloadObject(path,provider);if(!usableBlob(blob))throw Error('作品封面为空');await remember(key,blob);return blob;}
+  if(id.startsWith('project-cover:')){const match=/^project-cover:(cos|supabase):(.+)$/.exec(id);if(!match)throw Error('作品封面标识不是当前格式');const [,provider,path]=match;if(!path.startsWith((await identity())+'/'))throw Error('作品封面不属于当前账号');const key='thumbnail:'+path,saved=await cached(key);if(usableBlob(saved))return saved;const blob=await downloadObject(path,provider);if(!usableBlob(blob))throw Error('作品封面为空');await remember(key,blob);return blob;}
   await identity();const old=revision===undefined?await cached('blob-record:'+id):null;
   const record=old?.record||await cloudRecord('blobs',id);if(!record)return undefined;
+  if(!['cos','supabase'].includes(record.storageProvider))throw Error('图片缺少当前存储服务标记');
   if(!record.storagePath?.startsWith(owner+'/'))throw Error('图片不属于当前账号');
   const thumbnailKey='thumbnail:'+record.storagePath,saved=await cached(thumbnailKey);if(usableBlob(saved))return saved;
   if(record.thumbnailPath){
@@ -170,9 +172,10 @@ async function cloudPreview(id){
 async function makeThumbnail(data){if(typeof createImageBitmap!=='function'||typeof document==='undefined')return null;const bitmap=await createImageBitmap(data);try{const scale=Math.min(1,360/Math.max(bitmap.width,bitmap.height)),canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));canvas.getContext('2d').drawImage(bitmap,0,0,canvas.width,canvas.height);return await new Promise(resolve=>canvas.toBlob(resolve,'image/webp',.85));}finally{bitmap.close();}}
 async function decode(store,record){
   if(store!=='blobs')return record;
-  const {storagePath,...metadata}=record;
+  const {storagePath,storageProvider,...metadata}=record;
+  if(!['cos','supabase'].includes(storageProvider))throw Error('图片缺少当前存储服务标记');
   if(!storagePath?.startsWith((await identity())+'/'))throw Error('图片不属于当前账号');
-  if(!images.has(storagePath)){const pending=(async()=>{const saved=await cached('image:'+storagePath);if(usableBlob(saved))return saved;const data=await downloadObject(storagePath,record.storageProvider);if(!usableBlob(data))throw Error('云端图片为空');await remember('image:'+storagePath,data);return data;})().catch(error=>{images.delete(storagePath);throw error;});images.set(storagePath,pending);}
+  if(!images.has(storagePath)){const pending=(async()=>{const saved=await cached('image:'+storagePath);if(usableBlob(saved))return saved;const data=await downloadObject(storagePath,storageProvider);if(!usableBlob(data))throw Error('云端图片为空');await remember('image:'+storagePath,data);return data;})().catch(error=>{images.delete(storagePath);throw error;});images.set(storagePath,pending);}
   const data=await images.get(storagePath);imageSizes.delete(storagePath);imageSizes.set(storagePath,data.size);let bytes=[...imageSizes.values()].reduce((a,b)=>a+b,0);for(const [path,size] of imageSizes){if(bytes<=64*1024*1024&&imageSizes.size<=48)break;if(path===storagePath)continue;images.delete(path);imageSizes.delete(path);bytes-=size;}return {...metadata,data};
 }
 async function encode(store,record){
@@ -185,7 +188,7 @@ async function encode(store,record){
     const digest=await crypto.subtle.digest('SHA-256',await blob.arrayBuffer()),hash=[...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,'0')).join(''),path=`${await identity()}/${hash}-project.json${encoding?'.gz':''}`;
     const provider=writeProvider(),uploaded=await uploadObject(path,blob,encoding?'application/gzip':'application/json',provider);if(uploaded.error&&String(uploaded.error.statusCode)!=='409')throw Error('作品完整数据上传失败，未修改云端元数据');
     const summary={...projectSummary(record,path,encoding),projectDocumentProvider:provider};
-    try{const preview=await projectPreview(record);if(preview instanceof Blob){const cover=path+'-preview.webp',result=await uploadObject(cover,preview,preview.type||'image/webp',provider);if(!result.error||String(result.error.statusCode)==='409'){const d=summary.drafts.find(d=>d.id===record.activeDraftID)||summary.drafts[0];d.coverImageID='project-cover:'+(provider==='cos'?'cos:':'')+cover;await remember('thumbnail:'+cover,preview);}}}catch{/* A missing optional preview cannot discard the editable work. */}
+    try{const preview=await projectPreview(record);if(preview instanceof Blob){const cover=path+'-preview.webp',result=await uploadObject(cover,preview,preview.type||'image/webp',provider);if(!result.error||String(result.error.statusCode)==='409'){const d=summary.drafts.find(d=>d.id===record.activeDraftID)||summary.drafts[0];d.coverImageID=`project-cover:${provider}:${cover}`;await remember('thumbnail:'+cover,preview);}}}catch{/* A missing optional preview cannot discard the editable work. */}
     await remember('project-document:'+path,blob);documents.set(path,Promise.resolve(structuredClone(record)));if(documents.size>8)documents.delete(documents.keys().next().value);return summary;
   }
   if(store!=='blobs')return record;

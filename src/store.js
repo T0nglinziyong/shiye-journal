@@ -39,8 +39,6 @@ async function localDatabase(){
   if(connection)return connection;
   connection=openDB(DB,1,{upgrade(db){for(const name of STORES)if(!db.objectStoreNames.contains(name))db.createObjectStore(name,{keyPath:'id'});}}).catch(e=>{connection=undefined;throw e;});return connection;
 }
-// Preserve the public raw-IDB contract for existing integrations.
-export async function database(){return unwrap(await localDatabase());}
 async function localAll(name){return (await localDatabase()).getAll(name);}
 async function serverAll(name){return Promise.all((await serverRequest(`/api/store/${name}`)).map(decodeItem.bind(null,name)));}
 async function serverGet(name,id){try{return await decodeItem(name,await serverRequest(`/api/store/${name}/${encodeURIComponent(id)}`));}catch(e){if(e.message==='不存在')return undefined;throw e;}}
@@ -72,7 +70,6 @@ export const transaction=(names,fn)=>storageRouter.transaction(names,fn);
 const toBase64=blob=>new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=()=>reject(r.error);r.readAsDataURL(blob);});
 function fromBase64(value){const [prefix,body]=value.split(',');const type=/data:([^;]+)/.exec(prefix)?.[1]||'application/octet-stream';const b=atob(body);const arr=new Uint8Array(b.length);for(let i=0;i<b.length;i++)arr[i]=b.charCodeAt(i);return new Blob([arr],{type});}
 async function decodeItem(name,item){return name==='blobs'?{...item,data:fromBase64(item.data)}:item;}
-export async function migrateBrowserData(){const target=await resolveBackend();if(!target.url)throw Error('请先连接数据服务');const stores={};for(const name of STORES)stores[name]=await localAll(name);stores.blobs=await Promise.all(stores.blobs.map(async x=>({...x,data:await toBase64(x.data)})));await serverRequest('/api/migrate',{method:'POST',data:{format:'shiye-pwa',version:1,stores}});return Object.fromEntries(STORES.map(name=>[name,stores[name].length]));}
 export async function createBackup({browserOnly=false}={}){
   const data={format:'shiye-pwa',version:1,createdAt:new Date().toISOString(),stores:{}};
   const snapshot=cloudEnabled&&!browserOnly?await cloudCheckpoint():null;
