@@ -20,8 +20,7 @@ async function main(){
   if(mode==='pack')rmSync('output/作品.shiyeproject.zip',{force:true});
   if(mode==='pack'||mode==='preview'){rmSync('output/构图预览.svg',{force:true});rmSync('output/画面预览.html',{force:true});}
   try{
-    const contextPath=existsSync('task/context.json')?'task/context.json':'context.json';
-    const context=JSON.parse(readFileSync(contextPath,'utf8'));
+    const context=JSON.parse(readFileSync('task/context.json','utf8'));
     const sceneText=readFileSync('project.shiyeproject.json','utf8');
     const scene=inspectEditableSource(sceneText);
     const assets=context.source.capabilities?.craftPlanV2?context.source.sourceSnapshots.map(assetFromSourceSnapshot):context.materials.map(item=>({id:item.assetID,title:item.title,kind:item.kind,physicalWidthMM:item.physicalWidthMM,physicalHeightMM:item.physicalHeightMM,supply:{quantity:item.quantity??1}}));
