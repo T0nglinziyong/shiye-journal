@@ -6,8 +6,8 @@ export const DELIVERY_OPTIONS=[
   ['zip','ZIP 工程包 · 可编辑']
 ];
 export function deliveryProfile(mode){
-  if(mode==='tools')return {generationMode:'agent',directPageOutput:'editable',snapshot:false};
-  if(mode==='image')return {generationMode:'direct',directPageOutput:'editable',snapshot:'image/png'};
-  if(mode==='pdf')return {generationMode:'direct',directPageOutput:'editable',snapshot:'application/pdf'};
-  return {generationMode:'direct',directPageOutput:'editable',snapshot:false};
+  if(mode==='tools')return {generationMode:'agent',snapshot:false};
+  if(mode==='image')return {generationMode:'direct',snapshot:'image/png'};
+  if(mode==='pdf')return {generationMode:'direct',snapshot:'application/pdf'};
+  return {generationMode:'direct',snapshot:false};
 }
