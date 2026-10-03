@@ -17,6 +17,7 @@ const coordinates={x:num(),y:num(),coordinate_unit:unit,relative_to:key,offset:a
 const finish=object({line:enums(['straight']),depthMM:num(0,0),periodMM:num(.5,100),corner:enums(['square']),radiusMM:num(0,0)},['line','depthMM','periodMM','corner','radiusMM']);
 const box=object({unit:enums(['ratio','mm']),mode:enums(['keep']),values:array(num(0,10000),4,4)},['unit','mode','values']);
 const maskPoint=array(num(0,1),2,2);
+const craftEdgeContract=object({op:enums(['edge']),style:enums(['torn','ticket_notch','postage','fringe','partial_tear']),edges:array(enums(['top','right','bottom','left']),1,4),depth_mm:num(.1,100),period_mm:num(.5,1000),seed:integer(0,4294967295),position:num(0,1)},['op','style']);
 export const operationContract={anyOf:[
   object({op:enums(['whole'])},['op']),
   object({op:enums(['crop']),box,angle:num(0,0),finish:nullable(finish)},['op','box']),
@@ -24,15 +25,22 @@ export const operationContract={anyOf:[
   object({op:enums(['tape']),unit:enums(['ratio','mm']),start:num(0,100000),length:num(.001,100000)},['op','unit','start','length']),
   object({op:enums(['mask']),shape:enums(['polygon','rounded','scallop']),points:array(maskPoint,3,256),radius:num(.005,.5),depth:num(.005,.2),waves:integer(2,20)},['op','shape']),
   object({op:enums(['diagonal']),from:maskPoint,to:maskPoint,keep:enums(['left','right'])},['op','from','to','keep']),
-  object({op:enums(['window']),shape:enums(['rectangle','ellipse']),box:array(num(0,1),4,4)},['op','shape','box'])
+  object({op:enums(['window']),shape:enums(['rectangle','ellipse']),box:array(num(0,1),4,4)},['op','shape','box']),
+  craftEdgeContract,
+  ...regionOperationSchemas
 ]};
 const simple=object({asset:key,piece:key,unit:integer(0,10000),...coordinates,role:string(80)},['asset']);
-const material=object({asset:key,piece:key,unit:integer(0,10000),role:nullable(string(80)),operations:array(operationContract,1,12),placement:object({x:num(-2,3),y:num(-2,3),rotation:num(-180,180),z:integer(-1000,1000)},['x','y','rotation','z']),relation:nullable(object({kind:enums(['revealLeft','revealRight','revealBottom','behind','anchorCorner']),target:key,exposed_mm:num(0,40)},['kind','target','exposed_mm'])),opacity:num(0,1),flip_horizontal:{type:'boolean'}},['asset','piece','operations','placement']);
+const materialRelation={anyOf:[
+  object({kind:enums(['peek']),target:key,edge:enums(['left','right','top','bottom']),exposed_mm:num(0,1000),along_mm:num(-1000,1000),rotation_offset:num(-180,180)},['kind','target','edge','exposed_mm']),
+  object({kind:enums(['underlay']),target:key,offset_mm:array(num(-1000,1000),2,2),rotation_offset:num(-180,180)},['kind','target']),
+  object({kind:enums(['bridge']),target:key,target2:key,anchor_from:array(num(0,1),2,2),anchor_to:array(num(0,1),2,2),contact_mm:num(0,100)},['kind','target','target2'])
+]};
+const material=object({asset:key,piece:key,unit:integer(0,10000),role:nullable(string(80)),operations:array(operationContract,1,12),placement:object({x:num(-2,3),y:num(-2,3),rotation:num(-180,180),z:integer(-1000,1000)},['x','y','rotation','z']),relation:nullable(materialRelation),opacity:num(0,1),flip_horizontal:{type:'boolean'}},['asset','piece','operations','placement']);
 const text=object({key,content:string(1500),width:num(.001,20000),height:num(.001,20000),...coordinates,size_unit:unit,font_size:num(5,400),font_style:enums(['serif','sans','rounded','hand']),font_name:string(120),style:enums(['serif','sans','rounded','hand']),color,role:enums(['title','body','caption','label']),bold:{type:'boolean'},italic:{type:'boolean'},underline:{type:'boolean'},strikethrough:{type:'boolean'},opacity:num(0,1),alignment:enums(['left','center','right']),line_spacing:num(0,80),fixed_line_height:num(5,400),paragraph_spacing:num(0,80),letter_spacing:num(-5,30)},['key','content','width']);
 const vectorPath=array(array(num(0,1),2,2),2,512);
 const vectorLayer=object({fill:nullable(color),opacity:num(0,1),paths:array(vectorPath,0,48),rects:array(array(num(0,1),4,4),0,512)},['fill']);
 const primitive=object({key,kind:enums(['rectangle','roundedRectangle','ellipse','line','frame','star','heart','arrow','checkbox','triangle','diamond','hexagon','grid','dots','stripes','ribbon','tag','bubble','chevron','burst','scallop','vector']),...coordinates,width:num(.001,20000),height:num(.001,20000),size_unit:unit,fill:nullable(color),stroke:nullable(color),line_width:num(0,30),corner_radius:num(0,.5),opacity:num(0,1),vector_paths:array(vectorPath,1,24),vector_layers:array(vectorLayer,1,64),match_size_to:key,padding_mm:array(num(-100,100),4,4)},['key','kind']);
-const paper=object({color,pattern:enums(['plain','lined','lines','grid','dots','columns']),intent:string(240),ruling:num(0,100),center_gutter:{type:'boolean'}});
+const paper=object({color,pattern:enums(['plain','lines','grid','dots','columns']),intent:string(240),ruling:num(0,100),center_gutter:{type:'boolean'}});
 export const toolContracts={
   compose_story_page:object({grammar:enums(['diary','ephemera']),title:string(80),lead:string(320),notes:array(string(320),2,2),microcopy:string(60),focal:key,support:key,tape:key,ticket:key,illustration:key,paper:color,ink:color,accent:color},['grammar','title','lead','notes','microcopy','focal','support','paper','ink','accent']),
   compose_page:object({materials:array(object({...simple.properties,crop:array(num(0,1),4,4),crop_px:array(num(0,20000),4,4)},['asset']),0,12),graphics:array(primitive,0,48),texts:array(text,0,24),paper}),
@@ -65,7 +73,6 @@ const descriptions={
   inspect_materials:'查看最多4个现有素材/裁片的真实尺寸、可见边界和原图来源描述；只接受已知ID。',
   finish_design:'仅能作为本轮最后调用，且前面全部成功；核验真实素材尺寸、裁片、必用素材和实际库存。文字、留白与构图由创作者决定。'
 };
-export const agentTools=Object.entries(toolContracts).map(([name,parameters])=>({type:'function',function:{name,description:descriptions[name],parameters}}));
 export function validateValue(value,schema,path='$'){
   let check=compiled.get(schema);if(!check){check=validator.compile(schema);compiled.set(schema,check);}if(check(value))return;
   const error=check.errors[0],field=error.params.additionalProperty||error.params.missingProperty||'',location=path+error.instancePath+(field?'.'+field:'');
@@ -77,42 +84,14 @@ const inkPoint=object({x:num(0,1),y:num(0,1),pressure:num(0,1)},['x','y']);
 const inkStroke=object({points:array(inkPoint,1,512),width:num(.5,60),color,opacity:num(0,1),pen_style:enums(['fountain','ballpoint','brush','marker'])},['points','width','color','pen_style']);
 const directOperations=operationContract;
 const directMaterial=object({...material.properties,operations:array(directOperations,1,12)},['asset','piece','operations','placement']);
-export const directPageContract=object({version:{type:'integer',minimum:3,maximum:3,enum:[3]},style:enums(['留白叙事','密集拼贴','杂志网格','胶片日记','手作便签','自由构图']),intent:nullable(string(240)),items:array(directMaterial,0,100),graphics:array(primitive,0,48),ink_strokes:array(inkStroke,0,32),text_blocks:array(directText,0,24),paper:object({color,pattern:enums(['plain','lined','grid','dots','columns']),ruling:num(0,100),center_gutter:{type:'boolean'}},['color','pattern'])},['version','style','intent','items','text_blocks','paper']);
-// Preserve the exact legacy schema for already exported task snapshots.
-// New tasks opt in with capabilities.craftV2; old fingerprints remain stable.
-const legacyToolContracts=structuredClone(toolContracts);
-const legacyDirectPageContract=structuredClone(directPageContract);
-const craftEdgeContract=object({op:enums(['edge']),style:enums(['torn','ticket_notch','postage','fringe','partial_tear']),edges:array(enums(['top','right','bottom','left']),1,4),depth_mm:num(.1,100),period_mm:num(.5,1000),seed:integer(0,4294967295),position:num(0,1)},['op','style']);
-operationContract.anyOf.push(craftEdgeContract);
-const oldRelation=material.properties.relation.anyOf[0];
-material.properties.relation.anyOf[0]={anyOf:[oldRelation,
-  object({kind:enums(['peek']),target:key,edge:enums(['left','right','top','bottom']),exposed_mm:num(0,1000),along_mm:num(-1000,1000),rotation_offset:num(-180,180)},['kind','target','edge','exposed_mm']),
-  object({kind:enums(['underlay']),target:key,offset_mm:array(num(-1000,1000),2,2),rotation_offset:num(-180,180)},['kind','target']),
-  object({kind:enums(['bridge']),target:key,target2:key,anchor_from:array(num(0,1),2,2),anchor_to:array(num(0,1),2,2),contact_mm:num(0,100)},['kind','target','target2'])
-]};
-for(const tool of agentTools){
-  if(tool.function.name==='edit_materials')tool.function.description+=' edge 提供 torn/ticket_notch/postage/fringe/partial_tear 参数化裁边，使用 edges、depth_mm、period_mm、seed，先取裁片后加工边缘。';
-  if(tool.function.name==='upsert_materials')tool.function.description+=' relation 可用目标局部坐标下的 peek、underlay 或双目标 bridge；不能缩放实物。';
-}
-// Keep both generations of exported tasks byte-compatible. New capabilities
-// are selected explicitly; adding a runtime tool never widens an old task.
-const phaseOneToolContracts=structuredClone(toolContracts);
-const phaseOneDirectPageContract=structuredClone(directPageContract);
-operationContract.anyOf.push(...regionOperationSchemas);
-toolContracts.apply_craft_plan=craftPlanContract({operation:operationContract,relation:material.properties.relation,paper,text,primitive,ink:inkStroke});
-agentTools.push({type:'function',function:{name:'apply_craft_plan',description:craftPlanDescription,parameters:toolContracts.apply_craft_plan}});
-// Preserve the confirmed-region-only generation of already exported plans.
-const phaseTwoToolContracts=structuredClone(toolContracts);
-const phaseTwoDirectPageContract=structuredClone(directPageContract);
-toolContracts.apply_craft_plan=multimodalPlanContract(toolContracts.apply_craft_plan);
-agentTools.find(tool=>tool.function.name==='apply_craft_plan').function.parameters=toolContracts.apply_craft_plan;
-agentTools.find(tool=>tool.function.name==='apply_craft_plan').function.description+=' GPT 已收到图片时，可在同一计划提交 observations 并用 observed_region 取材；不需要预先人工确认，不修改原素材标注。';
-export const offlinePlanContract=capabilities=>capabilities?.multimodalCraftV2?toolContracts.apply_craft_plan:phaseTwoToolContracts.apply_craft_plan;
-// A task exports exactly the schema used to validate its return. Pixel crops
-// are unavailable when the task only contains downsampled preview images.
-export function offlineContract(mode,{cropPx=false,craftV2=false,craftPlanV2=false,multimodalCraftV2=false}={}){
-  if(mode==='direct')return multimodalCraftV2?directPageContract:craftPlanV2?phaseTwoDirectPageContract:craftV2?phaseOneDirectPageContract:legacyDirectPageContract;
-  const contracts=Object.fromEntries(Object.entries(multimodalCraftV2?toolContracts:craftPlanV2?phaseTwoToolContracts:craftV2?phaseOneToolContracts:legacyToolContracts).filter(([name])=>name!=='compose_story_page'&&name!=='inspect_materials'));
+export const directPageContract=object({version:{type:'integer',minimum:3,maximum:3,enum:[3]},style:enums(['留白叙事','密集拼贴','杂志网格','胶片日记','手作便签','自由构图']),intent:nullable(string(240)),items:array(directMaterial,0,100),graphics:array(primitive,0,48),ink_strokes:array(inkStroke,0,32),text_blocks:array(directText,0,24),paper:object({color,pattern:enums(['plain','lines','grid','dots','columns']),ruling:num(0,100),center_gutter:{type:'boolean'}},['color','pattern'])},['version','style','intent','items','text_blocks','paper']);
+toolContracts.apply_craft_plan=multimodalPlanContract(craftPlanContract({operation:operationContract,relation:materialRelation,paper,text,primitive,ink:inkStroke}));
+descriptions.apply_craft_plan=craftPlanDescription+' GPT 已收到图片时，可在同一计划提交 observations 并用 observed_region 取材；不修改原素材标注。';
+export const agentTools=Object.entries(toolContracts).map(([name,parameters])=>({type:'function',function:{name,description:descriptions[name],parameters}}));
+export const offlinePlanContract=()=>toolContracts.apply_craft_plan;
+export function offlineContract(mode,{cropPx=false}={}){
+  if(mode==='direct')return directPageContract;
+  const contracts=Object.fromEntries(Object.entries(toolContracts).filter(([name])=>name!=='compose_story_page'&&name!=='inspect_materials'));
   if(cropPx)return contracts;
   const taskContracts={...contracts,compose_page:structuredClone(contracts.compose_page)};
   delete taskContracts.compose_page.properties.materials.items.properties.crop_px;
