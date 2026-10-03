@@ -61,6 +61,7 @@ export function readMaterialRegions(asset,{confirmedOnly=false,strict=false}={})
 }
 export function sourceRegionGeometry(asset,region,{mode='bounds',marginMM=0}={}){
  validateRegion(region);
+ craftAssert(Number.isFinite(marginMM)&&marginMM>=0&&marginMM<=20,'INVALID_MARGIN','区域留边为 0–20 mm');
  craftAssert(mode==='bounds'||mode==='outline','INVALID_REGION_MODE','取材模式必须是矩形或沿已确认轮廓');
  const width=asset.physicalWidthMM,height=asset.physicalHeightMM;
  craftAssert(Number.isFinite(width)&&width>0&&Number.isFinite(height)&&height>0,'MISSING_CALIBRATION','素材尺寸尚未确认');
@@ -73,7 +74,6 @@ export function sourceRegionGeometry(asset,region,{mode='bounds',marginMM=0}={})
   if(mode==='bounds'){const b=geometryBounds(geometry);geometry=rectangleGeometry(b.x-marginMM,b.y-marginMM,b.width+2*marginMM,b.height+2*marginMM);}
   else geometry=expandGeometry(geometry,marginMM);
  }
- craftAssert(Number.isFinite(marginMM)&&marginMM>=0&&marginMM<=20,'INVALID_MARGIN','区域留边为 0–20 mm');
  return geometryIntersection(geometry,rectangleGeometry(0,0,width,height));
 }
 export function resolveMaterialRegion(asset,{regionId,sourceRevision,mode='bounds',marginMM=0}){

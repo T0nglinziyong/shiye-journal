@@ -17,8 +17,8 @@ function success(base,calls,options={}){const r=run(base,calls,options);assert.o
 const crop=values=>({op:'crop',box:{unit:'ratio',mode:'keep',values},angle:0,finish:null});
 const placed=()=>success(draft(),[call('place_materials',{items:[{asset:'m1',piece:'p1',x:.5,y:.5},{asset:'m2',piece:'p2',x:.2,y:.25}]})]);
 
-test('the advertised 14 Swift tools all execute editable changes or inspection',()=>{
-  const names=['compose_story_page','compose_page','place_materials','edit_materials','upsert_materials','move_elements','arrange_elements','fit_text_to','upsert_primitives','upsert_text','delete_elements','set_paper','inspect_materials','finish_design'];
+test('the advertised Swift tools plus atomic craft plan all execute editable changes or inspection',()=>{
+  const names=['apply_craft_plan','compose_story_page','compose_page','place_materials','edit_materials','upsert_materials','move_elements','arrange_elements','fit_text_to','upsert_primitives','upsert_text','delete_elements','set_paper','inspect_materials','finish_design'];
   assert.deepEqual(agentTools.map(t=>t.function.name).sort(),names.sort());
   assert.deepEqual(Object.keys(toolContracts).sort(),names.sort());
   let d=success(draft(),[call('compose_story_page',{grammar:'diary',title:'光落在纸上',lead:'窗边的光留下柔软的影子。',notes:['纸面的纹理接住了光。','蓝色让这一页安静下来。'],microcopy:'留住一个小片刻',focal:'m2',support:'m1',paper:'#FCFAF0',ink:'#30463D',accent:'#547DA4'})]);
@@ -127,3 +127,5 @@ test('finish must be last, follows no failures and respects explicitly required 
   const overflow=run(withText,Array.from({length:13},(_,n)=>call(n===12?'finish_design':'set_paper',n===12?{}:{color:'#FFFFFF'})));assert.ok(overflow.results.slice(0,12).every(r=>r.ok));assert.equal(overflow.results[12].ok,false);assert.notEqual(overflow.draft.agentRun?.status,'finished');
   const previouslyFinished=success(withText,[call('finish_design',{})]);const retry=run(previouslyFinished,[call('set_paper',{color:'red'}),call('finish_design',{})]);assert.deepEqual(retry.results.map(r=>r.ok),[false,false]);assert.equal(retry.draft.agentRun.status,'editing');
 });
+
+test('additional advertised craft plan has an executable contract and covered implementation',()=>{assert.ok(agentTools.find(t=>t.function.name==='apply_craft_plan')?.function.parameters.properties.pieces);});

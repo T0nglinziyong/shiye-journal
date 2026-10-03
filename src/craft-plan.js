@@ -1,6 +1,9 @@
+import {compileTwoHoleWeaves} from './craft-display.js';
+import {resolveVisualObservations,observedRegionGeometry} from './craft-vision.js';
+import {normalizeGeometry,geometryBounds} from './craft-topology.js';
 import {craftAssert} from './craft-errors.js';
 import {craftDigest,craftSceneHash,isManagedUnchanged} from './craft-fingerprint.js';
-import {assetSourceRevision,resolveMaterialRegion} from './material-anatomy.js';
+import {assetSourceRevision,resolveMaterialRegion,readMaterialRegions,sourceRegionGeometry} from './material-anatomy.js';
 import {itemSourceGeometry,geometryMaterialRecipe} from './craft-region-ops.js';
 import {buildMaterialLedger,compactMaterialLedger,pieceKey} from './material-ledger.js';
 import {geometryDifference,geometryUnion,geometryArea,assertSubset,AREA_EPSILON} from './craft-topology.js';
@@ -8,17 +11,22 @@ import {geometryDifference,geometryUnion,geometryArea,assertSubset,AREA_EPSILON}
 const HASH=/^sha256:[a-f0-9]{64}$/;
 const lookup=(assets,aliases,key)=>assets.find(a=>a.id===(aliases[key]||key));
 const recipeOperations=(geometry,asset)=>{
- const {crop,mask}=geometryMaterialRecipe(geometry,asset);
+ const {crop,mask,box}=geometryMaterialRecipe(geometry,asset);
+ if(!mask.holes.length&&Math.abs(geometryArea(geometry)-box.width*box.height)<=AREA_EPSILON)return [{op:'crop',box:{unit:'ratio',mode:'keep',values:[crop.x,crop.y,crop.width,crop.height]}}];
  return [{op:'crop',box:{unit:'ratio',mode:'keep',values:[crop.x,crop.y,crop.width,crop.height]}},
   {op:'cut_shape',shape:'geometry',mode:'keep',unit:'ratio',geometry:[[mask.outer,...mask.holes]]}];
 };
-function plannedMaterial(piece,asset,draft){
+function plannedMaterial(piece,asset,draft,observations){
  const extraction=piece.extraction||{type:'whole'},operations=[];
  if(extraction.type==='rect_crop'){
   operations.push({op:'crop',box:{unit:'mm',mode:'keep',values:extraction.boxMM}});
  }else if(extraction.type==='region'){
   const result=resolveMaterialRegion(asset,{regionId:extraction.regionId,sourceRevision:piece.sourceRevision,mode:extraction.mode||'bounds',marginMM:extraction.marginMM||0});
   operations.push(...recipeOperations(result.geometry,asset));
+ }else if(extraction.type==='observed_region'){
+  operations.push(...recipeOperations(observedRegionGeometry(observations,extraction.observationId,asset,{mode:extraction.mode||'bounds',marginMM:extraction.marginMM||0}),asset));
+ }else if(extraction.type==='geometry'){
+  operations.push(...recipeOperations(normalizeGeometry(extraction.geometryMM),asset));
  }else craftAssert(extraction.type==='whole','INVALID_EXTRACTION','取材方式尚未实现',{pieceId:piece.id});
  // An outline extraction already has an outer boundary: Boolean cuts can be
  // composed with it; a second parameterized rectangular edge cannot invent
@@ -41,7 +49,8 @@ export function applyCraftPlan({draft,plan,assets,aliases,options,api}){
  if(prior){
   craftAssert(prior.inputHash===inputHash,'COMMAND_ID_REUSED','同一命令编号不能用于另一份计划');
   craftAssert(prior.resultHash===currentHash,'STALE_REPLAY','原计划完成后画布已改变，未重放旧内容');
-  return {detail:'该工艺计划已执行，未重复添加实体',mutation:false,data:prior};
+  if(plan.finish!==false)api.finish({summary:plan.summary||'已执行的工艺计划'});
+  return {detail:'该工艺计划已执行，未重复添加实体',mutation:false,data:{...prior,replayed:true}};
  }
  craftAssert(currentHash===plan.baseSceneHash,'STALE_SCENE_BASE','画布已改变，请基于当前画面修订工艺计划');
  craftAssert(Array.isArray(plan.pieces)&&plan.pieces.length>0&&plan.pieces.length<=24,'PIECE_BUDGET','复合计划需要 1–24 件明确片段');
@@ -54,6 +63,7 @@ export function applyCraftPlan({draft,plan,assets,aliases,options,api}){
   const asset=assets.find(a=>a.id===item.assetID);
   parents.set(key,{item:structuredClone(item),asset,geometry:itemSourceGeometry(item,asset)});
  }
+ const observations=resolveVisualObservations(plan.observations||[],assets,aliases,options);
  const specs=[];
  for(const piece of plan.pieces){
   craftAssert(typeof piece.id==='string'&&!keys.has(piece.id),'DUPLICATE_PIECE','工艺片段编号重复');keys.add(piece.id);
@@ -66,7 +76,7 @@ export function applyCraftPlan({draft,plan,assets,aliases,options,api}){
    const parent=parents.get(piece.parentId);
    craftAssert(parent&&parent.item.assetID===asset.id&&(parent.item.materialUnitIndex??0)===(piece.unit??0),'INVALID_PARENT_SOURCE','子片必须引用同来源、同库存单位且显式消费的父片',{pieceId:piece.id});
   }
-  specs.push({piece,asset,material:plannedMaterial(piece,asset,draft)});
+  specs.push({piece,asset,material:plannedMaterial(piece,asset,draft,observations)});
  }
  for(const [key] of parents)craftAssert(specs.some(s=>s.piece.parentId===key),'UNCLAIMED_PARENT','消费父片必须同时给出它的子片',{pieceId:key});
  api.upsert({items:specs.map(s=>s.material),remove:consume});
@@ -79,9 +89,9 @@ export function applyCraftPlan({draft,plan,assets,aliases,options,api}){
    const outside=geometryDifference(itemSourceGeometry(item,spec.asset),parent.geometry);
    craftAssert(Math.abs(geometryArea(outside)-geometryArea(itemSourceGeometry(item,spec.asset)))<=AREA_EPSILON,'MISSING_PARENT_LINEAGE','取用了本次父片的区域，但没有标注 parentId',{pieceId:spec.piece.id,constraint:id});
   }
-  item.craftProvenance={version:1,commandId:plan.commandId,sourceRevision:spec.piece.sourceRevision,parentId:spec.piece.parentId||null,regionId:spec.piece.extraction?.regionId||null};
+  item.craftProvenance={version:1,commandId:plan.commandId,sourceRevision:spec.piece.sourceRevision,parentId:spec.piece.parentId||null,regionId:spec.piece.extraction?.regionId||null,observation:spec.piece.extraction?.type==='observed_region'?structuredClone(observations.get(spec.piece.extraction.observationId).region):null};
  }
- const lineage=[],offcuts=[];
+ const lineage=[],offcuts=[],scraps=[];
  for(const [id,parent] of parents){
   const children=specs.filter(s=>s.piece.parentId===id).map(s=>created.get(s.piece.id));
   const used=geometryUnion(...children.map(child=>itemSourceGeometry(child,parent.asset))),remaining=geometryDifference(parent.geometry,used);
@@ -91,6 +101,8 @@ export function applyCraftPlan({draft,plan,assets,aliases,options,api}){
   if(plan.keepRemainders!==false){
    for(const [index,polygon] of remaining.entries()){
     const geometry=[polygon];if(geometryArea(geometry)<=AREA_EPSILON)continue;
+    const bounds=geometryBounds(geometry);
+    if(bounds.width<2-1e-8||bounds.height<2-1e-8){scraps.push({parentId:id,assetId:parent.asset.id,unit:parent.item.materialUnitIndex??0,geometryMM:geometry,areaMM2:geometryArea(geometry),reason:'below-editable-piece-size'});continue;}
     const key='offcut-'+craftDigest([plan.commandId,id,index]).slice(7,31);
     offcuts.push({asset:parent.asset.id,piece:key,unit:parent.item.materialUnitIndex??0,operations:recipeOperations(geometry,parent.asset),placement:{x:.5,y:.5,rotation:parent.item.rotation||0,z:parent.item.zIndex||10},relation:null});
     record.childIds.push(key);
@@ -98,18 +110,26 @@ export function applyCraftPlan({draft,plan,assets,aliases,options,api}){
   }else{
    // Discard is explicit in the plan; protected original regions still may
    // not be lost. A tiny or disconnected remainder never disappears silently.
+   for(const region of readMaterialRegions(parent.asset,{confirmedOnly:true}).filter(r=>r.preserve)){
+    const protectedGeometry=sourceRegionGeometry(parent.asset,region,{mode:region.outlineRatio?'outline':'bounds'});
+    const retained=geometryArea(geometryDifference(protectedGeometry,remaining));
+    craftAssert(Math.abs(retained-geometryArea(protectedGeometry))<=AREA_EPSILON,'PROTECTED_REGION_DISCARDED','计划不能把已保护区域作为损耗丢弃',{assetId:parent.asset.id,constraint:region.id});
+   }
    record.wasteAreaMM2=remainingArea;
+   for(const polygon of remaining){const geometry=[polygon];if(geometryArea(geometry)>AREA_EPSILON)scraps.push({parentId:id,assetId:parent.asset.id,unit:parent.item.materialUnitIndex??0,geometryMM:geometry,areaMM2:geometryArea(geometry),reason:'explicit-discard'});}
   }
   lineage.push(record);
  }
  craftAssert(offcuts.length+specs.length<=64,'OFFCUT_BUDGET','拆分产生过多余料，请分批处理');
  if(offcuts.length){api.upsert({items:offcuts,remove:[]});for(const spec of offcuts){const item=draft.items.find(i=>pieceKey(i)===spec.piece);item.isParked=true;item.craftProvenance={version:1,commandId:plan.commandId,sourceRevision:assetSourceRevision(assets.find(a=>a.id===item.assetID)),offcut:true};}}
+ compileTwoHoleWeaves(draft,plan.weaves||[]);
  if(plan.paper)api.paper(plan.paper);
  if(plan.texts?.length)api.texts(plan.texts);
  if(plan.graphics?.length)api.graphics(plan.graphics);
  if(plan.ink?.length)api.ink(plan.ink);
+ draft.craftScraps=[...(draft.craftScraps||[]),...scraps];
  const ledger=buildMaterialLedger(draft,assets,{strictTape:true});api.validate();
- const resultHash=craftSceneHash(draft),receipt={version:1,commandId:plan.commandId,inputHash,baseHash:currentHash,resultHash,pieces:specs.map(s=>s.piece.id),offcuts:offcuts.map(s=>s.piece),lineage};
+ const resultHash=craftSceneHash(draft),receipt={version:1,commandId:plan.commandId,inputHash,baseHash:currentHash,resultHash,pieces:specs.map(s=>s.piece.id),offcuts:offcuts.map(s=>s.piece),lineage,scraps,observations:plan.observations?.length||0};
  draft.craftLedger=compactMaterialLedger(ledger);draft.craftReceipts=[...(draft.craftReceipts||[]),receipt].slice(-32);
  if(plan.finish!==false)api.finish({summary:plan.summary||'工艺计划已通过源区域与实体约束'});
  return {detail:'工艺计划已原子执行；保留 '+specs.length+' 件片段及 '+offcuts.length+' 件余料',mutation:true,data:receipt};

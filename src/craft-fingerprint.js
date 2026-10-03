@@ -24,7 +24,8 @@ export function craftSceneState(draft) {
     items:(draft.items||[]).map(layerState),
     textBlocks:(draft.textBlocks||[]).map(layerState),
     primitives:(draft.primitives||[]).map(layerState),
-    strokes:(draft.strokes||[]).map(layerState)
+    strokes:(draft.strokes||[]).map(layerState),
+    ...(draft.craftScraps?.length?{craftScraps:draft.craftScraps}:{})
   };
 }
 export const craftSceneHash=draft=>craftDigest(craftSceneState(draft));

@@ -10,13 +10,15 @@ export const AI_PROVIDERS=Object.freeze({
   siliconflow:{label:'硅基流动',endpoint:'https://api.siliconflow.cn/v1/chat/completions',models:[['Qwen/Qwen2.5-VL-72B-Instruct','Qwen2.5-VL 72B',true],['deepseek-ai/DeepSeek-V3','DeepSeek V3',false]]},
   custom:{label:'自定义兼容接口',endpoint:'',models:[]}
 });
-export const AI_DEFAULTS=Object.freeze({provider:'deepseek',key:'',keys:{},endpoint:AI_PROVIDERS.deepseek.endpoint,model:'deepseek-flash',imageModel:IMAGE_MODELS[0],deliveryMode:'tools',generationMode:'agent',directPageOutput:'editable',temperature:.75,maxTokens:6000,maxTurns:5,includeThumbnails:true,customVision:false,requestTimeout:75,sendOutputLimit:true,disableThinking:true,transport:'auto',textMode:'automatic',reasoningMode:'automatic',includeStructureReference:true,sendPresetReferences:true,autoIncludeRecommendations:false,requireAllCandidates:true,customLayoutPrompt:''});
+export const AI_DEFAULTS=Object.freeze({provider:'openai',key:'',keys:{},endpoint:AI_PROVIDERS.openai.endpoint,model:'gpt-4.1',imageModel:IMAGE_MODELS[0],deliveryMode:'tools',generationMode:'agent',directPageOutput:'editable',temperature:.75,maxTokens:6000,maxTurns:5,includeThumbnails:true,finalVisualReview:true,customVision:false,requestTimeout:75,sendOutputLimit:true,disableThinking:true,transport:'auto',textMode:'automatic',reasoningMode:'automatic',includeStructureReference:true,sendPresetReferences:true,autoIncludeRecommendations:false,requireAllCandidates:true,customLayoutPrompt:''});
 const limit=(value,min,max,fallback)=>Number.isFinite(+value)?Math.min(max,Math.max(min,+value)):fallback;
 export function normalizeAISettings(value={}){
   if(!value||typeof value!=='object'||Array.isArray(value))value={};
-  const provider=AI_PROVIDERS[value.provider]?value.provider:'deepseek',preset=AI_PROVIDERS[provider];
+  // A provider-less saved secret belongs to the legacy DeepSeek default; never
+  // silently send it to another host. Empty new settings use GPT.
+  const provider=AI_PROVIDERS[value.provider]?value.provider:(value.key||value.endpoint||value.model||Object.keys(value.keys||{}).length?'deepseek':AI_DEFAULTS.provider),preset=AI_PROVIDERS[provider];
   const keys={...value.keys};if(!keys[provider]&&value.key)keys[provider]=value.key;
-  const model=typeof value.model==='string'&&value.model.trim()?value.model.trim():preset.models[0]?.[0]||'';
+  const model=typeof value.model==='string'&&value.model.trim()?value.model.trim():(provider===AI_DEFAULTS.provider?AI_DEFAULTS.model:preset.models[0]?.[0])||'';
   const deliveryMode=['tools','json','image','pdf','zip'].includes(value.deliveryMode)?value.deliveryMode:value.generationMode==='direct'?(value.directPageOutput==='flattened'?'image':'json'):'tools';
   return {
     provider,keys,key:String(keys[provider]||'').trim(),endpoint:typeof value.endpoint==='string'&&value.endpoint.trim()?value.endpoint.trim():preset.endpoint,model,
@@ -24,7 +26,7 @@ export function normalizeAISettings(value={}){
     temperature:limit(value.temperature,0,2,AI_DEFAULTS.temperature),
     maxTokens:Math.round(limit(value.maxTokens,2000,16000,AI_DEFAULTS.maxTokens)),
     maxTurns:creativeRequestLimit(value.maxTurns),
-    includeThumbnails:value.includeThumbnails!==false,customVision:value.customVision===true,
+    includeThumbnails:value.includeThumbnails!==false,finalVisualReview:value.finalVisualReview!==false,customVision:value.customVision===true,
     requestTimeout:limit(value.requestTimeout,20,180,AI_DEFAULTS.requestTimeout),
     sendOutputLimit:value.sendOutputLimit!==false,disableThinking:value.disableThinking!==false,
     transport:['auto','native','json'].includes(value.transport)?value.transport:AI_DEFAULTS.transport,

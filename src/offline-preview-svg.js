@@ -1,3 +1,4 @@
+import {sceneRenderEntries} from './craft-display.js';
 import {materialMaskGeometry} from './material-mask.js';
 import {shapeSVG,textLines} from './editor-tools-model.js';
 
@@ -13,11 +14,7 @@ export function renderOfflinePreviewSVG(draft,source,previewFiles={}){
   const {width,height}=draft.canvas;
   if(![width,height].every(value=>Number.isFinite(value)&&value>0&&value<10000))throw Error('预览画布尺寸无效');
   const images=new Map((source.materials||[]).map(({alias,assetID})=>[assetID,{alias,bytes:previewFiles[alias]}]));
-  const defs=[],layers=[],entries=[];
-  for(const value of draft.items||[])if(visible(value))entries.push({kind:'material',value});
-  for(const value of draft.primitives||[])if(visible(value))entries.push({kind:'shape',value});
-  for(const value of draft.textBlocks||[])if(visible(value))entries.push({kind:'text',value});
-  entries.sort((a,b)=>(a.value.zIndex||0)-(b.value.zIndex||0));
+  const defs=[],layers=[],entries=sceneRenderEntries(draft);
   for(const [index,{kind,value}] of entries.entries()){
     const x=number(value.x),y=number(value.y),w=number(value.width),h=number(value.height),rotation=number(value.rotation||0);
     if(!(w>0&&h>0))continue;
@@ -33,7 +30,7 @@ export function renderOfflinePreviewSVG(draft,source,previewFiles={}){
       const content=bytes?.length
         ?`<image href="data:image/png;base64,${Buffer.from(bytes).toString('base64')}" x="${number(-crop.x*w/crop.width)}" y="${number(-crop.y*h/crop.height)}" width="${number(w/crop.width)}" height="${number(h/crop.height)}" preserveAspectRatio="none"/>`
         :`<rect width="${w}" height="${h}" fill="#e8ebe5" stroke="#8b9a8c"/><text x="8" y="24" font-size="17" fill="#53645a">${xml(image?.alias||'素材')}</text>`;
-      layers.push(`<g transform="${transform}" opacity="${bounded(value.opacity)}"><svg x="${number(-w/2)}" y="${number(-h/2)}" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" overflow="hidden"><g${mask?` clip-path="url(#${clip})"`:''}>${content}</g></svg></g>`);
+      layers.push(`<g transform="${transform}" opacity="${bounded(value.opacity)}"><svg x="${number(-w/2)}" y="${number(-h/2)}" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" overflow="hidden"><g transform="${value.isFlippedHorizontally?`translate(${w} 0) scale(-1 1)`:''}"${mask?` clip-path="url(#${clip})"`:''}>${content}</g></svg></g>`);
     }else if(kind==='shape'){
       layers.push(`<g transform="${transform}" opacity="${bounded(value.opacity)}"><svg x="${number(-w/2)}" y="${number(-h/2)}" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${shapeSVG(value)}</svg></g>`);
     }else{

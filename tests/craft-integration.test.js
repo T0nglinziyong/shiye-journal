@@ -76,7 +76,7 @@ test('current offline package advertises v2 while exact prior schema fingerprint
 test('old bound task accepts old operations but cannot silently request v2 operations',async()=>{
   const p=project('旧任务');p.processing='自由拆解';
   const result=await createOfflineHandoff({project:p,assets:[asset],aliases:{m1:asset.id},settings:{generationMode:'direct',includeThumbnails:false}});
-  const source=structuredClone(result.source);delete source.capabilities.craftV2;source.schemaHash=schemaFingerprint(offlineContract('direct',source.capabilities));
+  const source=structuredClone(result.source);delete source.capabilities.craftV2;delete source.capabilities.craftPlanV2;delete source.capabilities.multimodalCraftV2;source.schemaHash=schemaFingerprint(offlineContract('direct',source.capabilities));
   const envelope={format:'shiye-editable-project',version:1,source,title:'旧任务',page:page([piece('paper',[{op:'whole'}])])};
   assert.ok(importEditableWork(JSON.stringify(envelope),[asset],{trustedSource:source}));
   envelope.page.items[0].operations=[edge];

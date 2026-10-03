@@ -1,8 +1,12 @@
-import {agentTools, directPageContract, directPageToTools} from './creative-contract.js';
+import {agentTools, toolContracts, validateValue, directPageContract, directPageToTools} from './creative-contract.js';
 import {verifiedModelCapabilities} from './ai-capabilities.js';
 
-const jsonTools = parsed => parsed.tools || parsed.tool_calls || [];
-const directTools = parsed => directPageToTools(parsed);
+const jsonTools = parsed => parsed?.format==='shiye-craft-plan'||parsed?.plan?directTools(parsed):parsed.tools || parsed.tool_calls || [];
+const directTools = parsed => {
+ const plan=parsed?.format==='shiye-craft-plan'?parsed:parsed?.plan;
+ if(plan){validateValue(plan,toolContracts.apply_craft_plan,'$.plan');return [{name:'apply_craft_plan',arguments:plan}];}
+ return directPageToTools(parsed);
+};
 const parseJSON = content => JSON.parse((content || '{}').replace(/^\x60\x60\x60(?:json)?\s*|\s*\x60\x60\x60$/g, ''));
 const callsFromJSON = (message, turn, tools) => tools(parseJSON(message.content)).map((entry, index) => ({
   id:`json-${turn}-${index}`,
@@ -27,7 +31,7 @@ const protocols = {
   },
   directPage:{
     native:false,
-    instruction:`一次返回完整JSON页面数据，不返回tools或Markdown。合同：${JSON.stringify(directPageContract)}`,
+    instruction:`一次返回完整JSON页面数据或工艺计划：可以使用可编辑 page v3，也可以直接使用 shiye-craft-plan v2 工艺计划（含本次看图选区、取材、加工、图文）。不返回Markdown。页面合同：${JSON.stringify(directPageContract)}；计划合同：${JSON.stringify(toolContracts.apply_craft_plan)}`,
     request:() => ({response_format:{type:'json_object'}}),
     calls:(message, turn) => callsFromJSON(message, turn, directTools)
   }

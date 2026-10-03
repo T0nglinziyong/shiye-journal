@@ -1,3 +1,4 @@
+import {assetSourceRevision} from './material-anatomy.js';
 import {usableProjectSnapshot} from './project-outbox-recovery.js';
 import {selectJournalReferenceCases,loadJournalReferenceCases} from './journal-reference-catalog.js';
 import {loadJournalTemplateReferences} from './journal-template-references.js';
@@ -51,27 +52,28 @@ export function createMatchingSession(c){
   async generate(){
    if(controller){c.toast('已有方案正在创作，请先停止或等待完成');return;}
    const cfg=structuredClone(c.state.aiSettings);if(cfg.deliveryMode!=='image'&&!cfg.key)throw Error('请先在设置 → AI 与创作中保存 API 密钥');
-   const p=c.createProject(),ids=p.candidateAssetIDs,aliases=materialAliases(ids);
+   const p=c.createProject(),ids=[...p.candidateAssetIDs],aliases=materialAliases(ids),assetsSnapshot=structuredClone(c.state.assets),templatesSnapshot=structuredClone(c.state.userTemplates||[]),findAsset=id=>assetsSnapshot.find(a=>a.id===id);
+   const sourceVersions=new Map(ids.map(id=>[id,assetSourceRevision(findAsset(id))]));
    const v={id:c.uid(),title:'方案 '+(variants.length+1),createdAt:new Date().toISOString(),status:'running',progress:'正在准备素材预览…',project:p};variants.unshift(v);const run=new AbortController();controller=run;let recorder,checkpointFailed=false;
    const accountID=c.state.accountId;
-   const ensureAccount=()=>{if(c.state.accountId!==accountID)throw Error('账号已变化，未把生成内容保存到另一个账号');};
+   const ensureAccount=()=>{if(run.signal.aborted)throw run.signal.reason||Error('创作已停止');if(c.state.accountId!==accountID)throw Error('账号已变化，未把生成内容保存到另一个账号');for(const [id,version] of sourceVersions){const current=c.state.assets.find(a=>a.id===id);if(!current||assetSourceRevision(current)!==version)throw Error('创作期间素材来源或标定已变化；已停止提交旧条件的结果');}};
    update();
    try {
     await save();ensureAccount();
     if(cfg.deliveryMode==='image'){
-     const referenceImages=cfg.sendPresetReferences?(await loadJournalTemplateReferences({context:{styles:p.styles,purposes:p.purposes,materials:c.state.assets.filter(asset=>ids.includes(asset.id))},userTemplates:c.state.userTemplates,db:c.db})).referenceImages:[];
-     const blob=await c.generatePageImage({settings:cfg,project:p,draft:p.drafts[0],assets:c.state.assets,ids,theme:p.intent||'',createImage:c.modelImage,referenceImages,userTemplates:c.state.userTemplates,signal:run.signal,onProgress:message=>{v.progress=message;const el=document.querySelector(`[data-variant="${v.id}"] .match-progress`);if(el)el.textContent=message;}});
+     const referenceImages=cfg.sendPresetReferences?(await loadJournalTemplateReferences({context:{styles:p.styles,purposes:p.purposes,materials:assetsSnapshot.filter(asset=>ids.includes(asset.id))},userTemplates:templatesSnapshot,db:c.db})).referenceImages:[];
+     const blob=await c.generatePageImage({settings:cfg,project:p,draft:p.drafts[0],assets:assetsSnapshot,ids,theme:p.intent||'',createImage:c.modelImage,referenceImages,userTemplates:templatesSnapshot,signal:run.signal,onProgress:message=>{v.progress=message;const el=document.querySelector(`[data-variant="${v.id}"] .match-progress`);if(el)el.textContent=message;}});
      ensureAccount();const snapshot=await c.saveGeneratedImageSnapshot(blob,p);v.project=snapshot;v.linkedProjectID=snapshot.id;v.status='completed';v.progress='GPT 直接生成的图片已保存到画面快照；点击查看。';return;
     }
     recorder=await c.createAIRecorder({db:c.db,model:cfg.model,key:cfg.key});const vision=cfg.includeThumbnails&&c.supportsVision(cfg);
-    const images=vision?await prepareMaterialPreviews(ids,{findAsset:c.asset,createImage:c.modelImage}):[];
-    const references=[];if(cfg.sendPresetReferences&&c.supportsVision(cfg))references.push(...(await loadJournalTemplateReferences({context:{styles:p.styles,purposes:p.purposes,materials:c.state.assets.filter(asset=>ids.includes(asset.id))},userTemplates:c.state.userTemplates,db:c.db})).referenceImages);
+    const images=vision?await prepareMaterialPreviews(ids,{findAsset,createImage:async(...args)=>{ensureAccount();return c.modelImage(...args);}}):[];
+    const references=[];if(cfg.sendPresetReferences&&c.supportsVision(cfg))references.push(...(await loadJournalTemplateReferences({context:{styles:p.styles,purposes:p.purposes,materials:assetsSnapshot.filter(asset=>ids.includes(asset.id))},userTemplates:templatesSnapshot,db:c.db})).referenceImages);
     ensureAccount();
-    let steps='';const output=await c.runCreativeAgent({...cfg,draft:p.drafts[0],assets:c.state.assets,aliases,styles:p.styles,pagePurposes:p.purposes,contentPolicy:p.contentPolicy||'documentary',userText:p.userText||'',providedFacts:p.providedFacts||'',requiredAssetIDs:p.requiredAssetIDs,materialPriority:p.materialPriority,processing:p.processing,assetProcessing:p.assetProcessing,materialUseHints:p.materialUseHints,materialUseRequired:p.materialUseRequired,prompt:p.intent||'',images,referenceImages:references,userTemplates:c.state.userTemplates,request:recorder.request,signal:run.signal,
+    let steps='';const output=await c.runCreativeAgent({...cfg,draft:p.drafts[0],assets:assetsSnapshot,aliases,styles:p.styles,pagePurposes:p.purposes,contentPolicy:p.contentPolicy||'documentary',userText:p.userText||'',providedFacts:p.providedFacts||'',requiredAssetIDs:p.requiredAssetIDs,materialPriority:p.materialPriority,processing:p.processing,assetProcessing:p.assetProcessing,materialUseHints:p.materialUseHints,materialUseRequired:p.materialUseRequired,prompt:p.intent||'',images,referenceImages:references,userTemplates:templatesSnapshot,request:recorder.request,signal:run.signal,
      onResponse:recorder.response,
      onScene:vision?async d=>{ensureAccount();return (await c.rasterize(d,.7)).toDataURL('image/jpeg',.8);}:undefined,
-     onFinalScene:async d=>{ensureAccount();return (await c.rasterize(d,.7)).toDataURL('image/jpeg',.8);},
-     onInspection:vision?async data=>{ensureAccount();const parts=[];for(const m of data?.materials||[]){const a=c.asset(m.assetID);if(a){const url=await c.modelImage(a,m.cropRect);if(url)parts.push({type:'text',text:m.key+' 的局部预览'},{type:'image_url',image_url:{url}});}}return parts;}:undefined,
+     onFinalScene:async d=>{ensureAccount();return (await c.rasterize(d,Math.min(1.6,2000/Math.max(d.canvas.width,d.canvas.height)))).toDataURL('image/jpeg',.88);},
+     onInspection:vision?async data=>{ensureAccount();const parts=[];for(const m of data?.materials||[]){const a=findAsset(m.assetID);if(a){const url=await c.modelImage(a,m.cropRect);if(url)parts.push({type:'text',text:m.key+' 的局部预览'},{type:'image_url',image_url:{url}});}}return parts;}:undefined,
      onProgress:progress=>{v.progress=steps+'请求 '+progress.budget.totalRequests+'/'+progress.budget.limit+'（创作 '+progress.budget.creationRequests+'、格式修复 '+progress.budget.formatRepairRequests+'） · '+progress.phase+' · '+progress.seconds+' 秒 · 已接收 '+progress.received+' 字符';const el=document.querySelector(`[data-variant="${v.id}"] .match-progress`);if(el)el.textContent=v.progress;},
      onTurn:async({turn,results,draft})=>{
       ensureAccount();p.drafts=[structuredClone(draft)];p.activeDraftID=draft.id;
@@ -85,7 +87,7 @@ export function createMatchingSession(c){
     });
     ensureAccount();p.drafts=[output.draft];p.activeDraftID=output.draft.id;p.aiGenerated=true;p.deliveryMode=cfg.deliveryMode;
     if(['image','pdf'].includes(cfg.deliveryMode)){const snapshot=await c.saveSnapshotFromDraft(p,{format:cfg.deliveryMode==='pdf'?'application/pdf':'image/png'});v.project=snapshot;v.linkedProjectID=snapshot.id;v.progress+='\n创作完成，已保存为不可编辑快照；点击查看。';}
-    else{v.status='completed';await archiveCompleted();v.progress+='\n结构已完成，已自动保存到草稿；最终视觉仍待复核。点击方案继续编辑。';}
+    else{v.status='completed';await archiveCompleted();v.progress+='\n结构已完成，已自动保存到草稿。'+(output.draft.agentRun?.visualReview==='model-reviewed'?'GPT 已看过最终画面；这不是人工审美验收。':'最终视觉尚未完成复核。')+'点击方案继续编辑。';}
     v.status='completed';
    }catch(error){v.status=run.signal.aborted?'stopped':'failed';v.progress+='\n'+String(error.message||'创作失败').replace(/sk-[A-Za-z0-9_-]+/g,'[REDACTED]')+(checkpointFailed?'。本轮暂存失败，画面仍在当前页面；暂勿关闭。':'。已暂存的完整步骤仍保留。');}
    finally {

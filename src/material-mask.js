@@ -1,3 +1,4 @@
+import {normalizeGeometry,geometryIntersection,geometryDifference,geometryArea} from './craft-topology.js';
 // One geometry source for the editor, covers, project import and raster export.
 // Coordinates are local to the calibrated rectangular source crop.
 const square=[[0,0],[1,0],[1,1],[0,1]],EPS=1e-7;
@@ -31,9 +32,12 @@ function outerPoints(mask){
     return points;
   }
   if(mask.shape==='scallop'){
-    const depth=mask.depth??.05,waves=mask.waves??8,count=waves*12,edge=t=>depth*(1-Math.cos(2*Math.PI*waves*t))/2;
+    const depth=mask.depth??.05,waves=mask.waves??8,count=waves*12,edge=t=>Math.min(depth*(1-Math.cos(2*Math.PI*waves*t))/2,t*.45,(1-t)*.45);
     if(!Number.isFinite(depth)||depth<.005||depth>.2||!Number.isInteger(waves)||waves<2||waves>20)throw Error('花边参数无效');
-    return [...Array.from({length:count+1},(_,i)=>{const t=i/count;return [t,edge(t)];}),...Array.from({length:count+1},(_,i)=>{const t=i/count;return [1-edge(t),t];}),...Array.from({length:count+1},(_,i)=>{const t=i/count;return [1-t,1-edge(t)];}),...Array.from({length:count+1},(_,i)=>{const t=i/count;return [edge(t),1-t];})];
+    const outline=[...Array.from({length:count+1},(_,i)=>{const t=i/count;return [t,edge(t)];}),...Array.from({length:count+1},(_,i)=>{const t=i/count;return [1-edge(t),t];}),...Array.from({length:count+1},(_,i)=>{const t=i/count;return [1-t,1-edge(t)];}),...Array.from({length:count+1},(_,i)=>{const t=i/count;return [edge(t),1-t];})];
+    const unique=outline.filter((p,i)=>!i||Math.hypot(p[0]-outline[i-1][0],p[1]-outline[i-1][1])>EPS);
+    if(Math.hypot(unique[0][0]-unique.at(-1)[0],unique[0][1]-unique.at(-1)[1])<=EPS)unique.pop();
+    return unique;
   }
   throw Error('不支持的素材边缘形状');
 }
@@ -58,6 +62,13 @@ function windowIsInside(points,outline){
 }
 export function materialMaskGeometry(mask){
   if(!mask)return null;
+  if(mask.shape==='region'){
+    const rings=[mask.outer,...(mask.holes||[])];
+    if(!Array.isArray(mask.holes)||rings.some(r=>!Array.isArray(r)||r.some(p=>!validPoint(p))))throw Error('复合材料轮廓必须在源裁片内部');
+    const geometry=normalizeGeometry([rings]);if(geometry.length!==1)throw Error('一个实体片段必须连通');
+    const open=r=>r.length>3&&r[0][0]===r.at(-1)[0]&&r[0][1]===r.at(-1)[1]?r.slice(0,-1):r;
+    return {outer:open(geometry[0][0]),holes:geometry[0].slice(1).map(open)};
+  }
   const outer=outerPoints(mask.shape==='compound'?mask.outer:mask);
   if(mask.shape!=='compound')return {outer,holes:[]};
   if(!Array.isArray(mask.holes)||mask.holes.length>8)throw Error('开窗数量无效');
@@ -71,12 +82,18 @@ export function materialMaskGeometry(mask){
 }
 export function materialMaskPoints(mask){return materialMaskGeometry(mask)?.outer||null;}
 export function materialMaskArea(mask){const g=materialMaskGeometry(mask);return g?area(g.outer)-g.holes.reduce((sum,hole)=>sum+area(hole),0):1;}
+function regionMask(geometry){
+  if(geometry.length!==1)throw Error('裁切产生分离片段，请用工艺计划显式保留各片');
+  const open=r=>r.slice(0,-1);return {shape:'region',outer:open(geometry[0][0]),holes:geometry[0].slice(1).map(open)};
+}
 export function cutMaterialDiagonal(mask,from,to,keep='left'){
+  if(mask?.shape==='region'){const g=materialMaskGeometry(mask),source=normalizeGeometry([[g.outer,...g.holes]]),clip=normalizeGeometry([[diagonalPoints({from,to,keep})]]),cut=geometryIntersection(source,clip);if(geometryArea(source)-geometryArea(cut)<EPS)throw Error('斜向裁切线没有切到材料');return regionMask(cut);}
   const outer=materialMaskGeometry(mask)?.outer||square,cut=diagonalPoints({from,to,keep},outer);
   const next=mask?.shape==='compound'?{shape:'compound',outer:{shape:'polygon',points:cut},holes:structuredClone(mask.holes)}:{shape:'polygon',points:cut};
   materialMaskGeometry(next);return next;
 }
 export function addMaterialWindow(mask,window){
+  if(mask?.shape==='region'){const g=materialMaskGeometry(mask),hole=windowPoints(window);if(!windowIsInside(hole,g.outer))throw Error('开窗必须留在裁片的可见区域内');const source=normalizeGeometry([[g.outer,...g.holes]]),cut=normalizeGeometry([[hole]]);if(Math.abs(geometryArea(geometryIntersection(source,cut))-geometryArea(cut))>EPS)throw Error('开窗不能重叠或越出有效材料');return regionMask(geometryDifference(source,cut));}
   const next=mask?.shape==='compound'?structuredClone(mask):{shape:'compound',outer:mask?structuredClone(mask):null,holes:[]};
   next.holes.push(structuredClone(window));materialMaskGeometry(next);return next;
 }

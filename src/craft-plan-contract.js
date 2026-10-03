@@ -27,3 +27,18 @@ export function craftPlanContract({operation,relation,paper,text,primitive,ink})
  },['format','version','commandId','baseSceneHash','pieces']);
 }
 export const craftPlanDescription='原子执行带场景基线和来源版本的取材/加工计划；支持已确认区域、父片拆分、真实余料与组合。centerMM 是页面毫米中心；sourceRevision 从素材表读取。consume 必须列出父片，子片用 parentId 关联；keepRemainders 默认 true，余料放入备选。任何错误回滚整个计划；同 commandId 重放不重复物料。不是要求工艺数量，whole 可以是正确选择。';
+
+// Schema extension is applied only after the previous plan contract is frozen.
+export function multimodalPlanContract(contract){
+ const next=structuredClone(contract),ratioPoint=array(num(0,1),2,2);
+ next.properties.observations=array(object({id:str(96),asset:key,sourceRevision:hash,
+  kind:enums(['pattern','text','texture','blank','focal','edge']),label:str(120),
+  boundsRatio:array(num(0,1),4,4),outlineRatio:array(ratioPoint,3,128)
+ },['id','asset','sourceRevision','kind','label','boundsRatio']),0,64);
+ next.properties.pieces.items.properties.extraction.anyOf.push(
+  object({type:enums(['observed_region']),observationId:key,mode:enums(['bounds','outline']),marginMM:num(0,20)},['type','observationId']),
+  object({type:enums(['geometry']),geometryMM:geometry},['type','geometryMM'])
+ );
+ next.properties.weaves=array(object({piece:key,target:key,holes:array({type:'integer',minimum:0,maximum:63},2,2),front:enums(['between','outside'])},['piece','target','holes']),0,8);
+ return next;
+}

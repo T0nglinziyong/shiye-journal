@@ -1,3 +1,7 @@
+import {reviewFinalCreativeScene} from './creative-visual-review.js';
+import {multimodalCraftGuide,visualMaterialIDs} from './craft-vision.js';
+import {craftSceneHash} from './craft-fingerprint.js';
+import {describeCraftSources} from './craft-task.js';
 import {applyToolCalls} from './creative.js';
 export {agentTools} from './creative-contract.js';
 import {creativeProtocol} from './creative-delivery.js';
@@ -35,16 +39,17 @@ export function buildCreativeMessages(o){
  const first=[{type:'text',text:`【本次任务】\n纸张：${draft.pageRatio} ${draft.pageMode==='spread'?'双页':'单页'}，物理高${draft.physicalPageHeightMM}mm。\n风格：${styles.map(name=>`${name}（${visualStyleBrief(name)}）`).join('；')||'不预设，由素材和主题决定'}。\n用途：${pagePurposes.map(p=>p+'：'+(purposes[p]||'遵守主题要求。')).join('\n')||'不预设，由本次主题决定'}\n${contentBrief}\n优先级：必须使用每版落实；优先使用先考虑，合适时采用；可以使用只是备选；不使用的素材未发送，不得猜测或引用。\n【构思参考（非硬性配额）】\n${pageBrief}\n优先素材逐件审视：合适的多用，不适合的可以不放；不按数量或覆盖率评分。数字图形也可以成为视觉主角，但不能伪装成未拥有的真实素材。\n【真实素材】\n${list.join('\n')}\n【当前画布】\n${JSON.stringify(creativeScene(draft,aliases))}`}];
  const snapshotMode=['image','pdf'].includes(o.deliveryMode);
  if(snapshotMode)first[0].text=`创作一页将以${o.deliveryMode==='pdf'?'PDF':'图片'}快照交付的手帐。纸张：${draft.pageRatio} ${draft.pageMode==='spread'?'双页':'单页'}，物理高 ${draft.physicalPageHeightMM} mm。风格方向：${styles.join('、')||'不预设'}；用途：${pagePurposes.join('、')||'不预设'}。这些是方向，不是固定模板。\n${contentBrief}\n${pageBrief}\n真实素材与库存：\n${list.join('\n')}\n当前画布：${JSON.stringify(creativeScene(draft,aliases))}`;
+ first[0].text+='\n【工艺场景基线】'+craftSceneHash(draft)+'\n【可用来源版本与已确认区域】'+JSON.stringify(describeCraftSources(assets,aliases));
  images.forEach((input,i)=>{const url=typeof input==='string'?input:input.url,label=typeof input==='string'?Object.keys(aliases)[i]:input.asset;if(url)first.push({type:'text',text:'素材 '+label+' 的图片：'},{type:'image_url',image_url:{url}});});
  const referenceContext={styles,purposes:pagePurposes,materials:assets.filter(asset=>Object.values(aliases).includes(asset.id)),userTemplates};
  const selectedCases=selectJournalReferenceCases(referenceContext);
  const selectedTemplates=selectJournalAbstractTemplates(selectedCases,referenceContext);
  const caseBrief=sendPresetReferences||referenceImages.length?`【本次匹配案例】\n${journalReferenceGuide(selectedCases)}\n【来自用户教程的抽象模板】\n${journalAbstractTemplateGuide(selectedTemplates)}`:'';
  referenceImages.forEach((input,i)=>{const url=typeof input==='string'?input:input.url;first.push({type:'text',text:`${input.kind==='template'?'抽象模板':'匹配案例'} ${i+1}/${referenceImages.length}：${input.title||selectedCases[i]?.title||'手帐构图'}。只借鉴图文关系；参考图里的照片、文字和贴纸不能当成本次可用素材。`},{type:'image_url',image_url:{url}});});
- if(snapshotMode)return [{role:'system',content:`你是自由创作的手帐设计师。画面可大胆使用文字、数字手绘笔迹、荧光笔、自由矢量形状、色层及素材间的有机叠放；风格、用途与样例只是启发，不设素材数量、留白、密度、标题字数或固定版式指标。唯一硬性限制是真实纸张尺寸、实物素材的尺寸与库存、裁片不能重叠重复使用、胶带保持真实宽度。未发送的实体素材不能凭空出现。坐标是画布中心的 0–1 比例，实体宽高始终由素材库决定。\n${caseBrief}\n为让拾页生成快照，必须按机器可读合同返回页面，不要把整页内容当成一个新实体素材。${creativeProtocol(o).instruction}`},{role:'user',content:first}];
+ if(snapshotMode)return [{role:'system',content:`你是自由创作的手帐设计师。画面可大胆使用文字、数字手绘笔迹、荧光笔、自由矢量形状、色层及素材间的有机叠放；风格、用途与样例只是启发，不设素材数量、留白、密度、标题字数或固定版式指标。唯一硬性限制是真实纸张尺寸、实物素材的尺寸与库存、裁片不能重叠重复使用、胶带保持真实宽度。未发送的实体素材不能凭空出现。坐标是画布中心的 0–1 比例，实体宽高始终由素材库决定。\n${caseBrief}\n${multimodalCraftGuide}\n为让拾页生成快照，必须按机器可读合同返回页面，不要把整页内容当成一个新实体素材。${creativeProtocol(o).instruction}`},{role:'user',content:first}];
  const geometry='所有 placement 与文字/图形 x,y 都是中心点而非左上角。ratio 默认归一化到当前画布；实物按已确认毫米尺寸放置，不缩放、不超库存。图层可有意伸出纸边形成出血，页面预览及导出只显示纸内部分；重要文字与图像内容尽量留在纸内。unit 从0开始，库存1必须 unit:0。piece 是唯一片段ID，不是工序名称，各材料不得共用 whole 等ID。relation.target、relative_to、fit target 指已创建的 piece/key，不能填素材 alias 或 canvas。直接页文字 x,y 同样为中心（不是左上），完整行高可能扩展；长段可分栏或调整字号。文字重叠、对比偏低或框内显示不全会作为排版建议反馈，但不阻止有意的创意处理。没有素材图片时，你只知道名称、标签、尺寸：禁止猜测色彩深浅、星月具体形状/位置、人物姿态/动作/持球手方向、纸面纹理，只能写已给的色名、主题关联与这次排版的尺寸和留白关系。';
  const printType=creativeTypographyGuide(draft);
- return [{role:'system',content:[`【通用创作与物理规则】\n${system}`,`【坐标与排版】\n${geometry}\n${printType}`,`【文字、素材与图形的关系】\n${policy}\n${creativeLayeringGuide}\n${customLayoutPrompt}\n${reference}`,caseBrief,`【本次 API 创作模式】\n${mode}`].filter(Boolean).join('\n')},{role:'user',content:first}];
+ return [{role:'system',content:[`【通用创作与物理规则】\n${system}\n${multimodalCraftGuide}`,`【坐标与排版】\n${geometry}\n${printType}`,`【文字、素材与图形的关系】\n${policy}\n${creativeLayeringGuide}\n${customLayoutPrompt}\n${reference}`,caseBrief,`【本次 API 创作模式】\n${mode}`].filter(Boolean).join('\n')},{role:'user',content:first}];
 }
 export function buildCreativePayload(o,messages){
  const deepseek=new URL(o.endpoint||'https://api.deepseek.com/chat/completions').host==='api.deepseek.com',mode=o.reasoningMode||'automatic',thinking=deepseek?(mode==='automatic'||o.disableThinking!==false?{type:'disabled'}:mode==='low'?{type:'enabled'}:null):null;
@@ -54,7 +59,7 @@ export async function runCreativeAgent(o){
  if(o.deliveryMode==='image')throw Error('画面图片必须由图像模型直接生成，不能把可编辑页面截图伪装成生成图片');
  const {draft,assets,aliases,key,endpoint='https://api.deepseek.com/chat/completions',maxTurns=5,requestTimeout=75,signal,onTurn=()=>{},request=fetch,onScene,onInspection}=o;
  if(!key?.trim())throw Error('请输入自己的 API 密钥');if(new URL(endpoint).protocol!=='https:')throw Error('API 地址必须使用 HTTPS');
- const options={...o,textMode:o.contentPolicy==='visual'?'none':o.textMode,allowNoText:o.contentPolicy==='visual'||o.textMode==='none'||o.textMode==='requested'&&!/文字|正文|标题|写|清单/.test(o.prompt||'')};
+ const options={...o,visualAssetIDs:visualMaterialIDs(o.images,o.aliases),textMode:o.contentPolicy==='visual'?'none':o.textMode,allowNoText:o.contentPolicy==='visual'||o.textMode==='none'||o.textMode==='requested'&&!/文字|正文|标题|写|清单/.test(o.prompt||'')};
  let working=structuredClone(draft),turn=0,noProgress=0,nextPhase='creation';if(working.agentRun?.status==='finished')working.agentRun={...working.agentRun,status:'editing'};const messages=buildCreativeMessages({...options,draft:working}),budget=createCreativeBudget(maxTurns);
  try {for(;;){
   if(signal?.aborted)throw signal.reason||Error('创作已停止');const counts=budget.begin(nextPhase);turn=counts.totalRequests;nextPhase='creation';const before=editableSceneState(working),beforePatchHash=await patchSceneHash(working);
@@ -68,7 +73,7 @@ export async function runCreativeAgent(o){
   if(!calls.length)throw Error('第 '+turn+' 轮没有返回创作操作；画布未因此标记为完成。');
   if(signal?.aborted)throw signal.reason||Error('创作已停止');
   messages.push(native?{role:'assistant',content:message.content||null,...(message.reasoning_content?{reasoning_content:message.reasoning_content}:{}),tool_calls:calls}:{role:'assistant',content:message.content||''});
-  const fullScene=calls.some(call=>['compose_page','compose_story_page','compose_direct_page'].includes(call.function?.name||call.name));
+  const fullScene=calls.some(call=>['compose_page','compose_story_page','compose_direct_page','apply_craft_plan'].includes(call.function?.name||call.name));
   const result=fullScene?applyToolCalls({tool_calls:calls},working,assets,aliases,options):
     await applyScenePatch({mode:'applyPatch',baseSceneHash:beforePatchHash,tools:calls},working,assets,aliases,options);
   working=result.draft;
@@ -84,13 +89,12 @@ export async function runCreativeAgent(o){
   // Every native call needs its contiguous tool reply before any user image.
   if(inspectionParts.length)messages.push({role:'user',content:inspectionParts});
   if(working.agentRun?.status==='finished'){
-   const sceneHash=await sceneFingerprint(creativeScene(working,aliases));
-   working.agentRun={...working.agentRun,finalSceneHash:sceneHash,renderedSceneHash:null,visualReview:'pending'};
-   try{const preview=await (o.onFinalScene||onScene)?.(working);if(preview)working.agentRun.renderedSceneHash=sceneHash;}catch{working.agentRun.visualReview='render-failed';}
+   working=await reviewFinalCreativeScene({draft:working,options,assets,aliases,budget,render:o.onFinalScene||onScene,request,onResponse:o.onResponse,onTurn,signal});
    if(signal?.aborted)throw signal.reason||Error('创作已停止');
-   return {draft:working,turns:turn,finished:true,messages,review,sceneHash,renderedSceneHash:working.agentRun.renderedSceneHash,budget:budget.stop('completed')};
+   const sceneHash=craftSceneHash(working);
+   return {draft:working,turns:budget.snapshot().totalRequests,finished:true,messages,review:reviewCreativeDraft(working),sceneHash,renderedSceneHash:working.agentRun.renderedSceneHash,budget:budget.stop('completed')};
   }
   if(noProgress>=4){const error=Error('连续四轮没有有效修改，已保留成功步骤');error.code='no-progress';throw error;}
-  const scene=[{type:'text',text:'实际画布状态：'+JSON.stringify(creativeScene(working,aliases))+'\n排版检查（非美感评分）：'+JSON.stringify(review)+'\n按成功回执修正，不重复已放置实物。'}],image=await onScene?.(working);if(image)scene.push({type:'image_url',image_url:{url:image}});messages.push({role:'user',content:scene});
+  const scene=[{type:'text',text:'当前工艺场景基线：'+craftSceneHash(working)+'\n实际画布状态：'+JSON.stringify(creativeScene(working,aliases))+'\n排版检查（非美感评分）：'+JSON.stringify(review)+'\n按成功回执修正，不重复已放置实物。'} ];let image;try{image=await onScene?.(working);}catch{if(signal?.aborted)throw signal.reason||Error('创作已停止');scene.push({type:'text',text:'画面观察暂不可用，已提交工具不应重放。'});}if(image)scene.push({type:'image_url',image_url:{url:image}});messages.push({role:'user',content:scene});
  }}catch(error){budget.stop(signal?.aborted?'cancelled':error.code||'error');if(error&&typeof error==='object')error.budget=budget.snapshot();throw error;}
 }

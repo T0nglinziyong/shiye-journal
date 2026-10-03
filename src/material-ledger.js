@@ -1,7 +1,7 @@
 import {craftAssert} from './craft-errors.js';
 import {itemSourceGeometry} from './craft-region-ops.js';
 import {assetSourceRevision,assertProtectedRegions} from './material-anatomy.js';
-import {rectangleGeometry,geometryArea,geometryUnion,geometryIntersection,geometryDifference,assertSubset,AREA_EPSILON} from './craft-topology.js';
+import {normalizeGeometry,rectangleGeometry,geometryArea,geometryUnion,geometryIntersection,geometryDifference,assertSubset,AREA_EPSILON} from './craft-topology.js';
 
 export const pieceKey=item=>item.creativePieceID||item.agentKey||item.key||item.id;
 export function buildMaterialLedger(draft,assets,{strictTape=false}={}){
@@ -31,6 +31,15 @@ export function buildMaterialLedger(draft,assets,{strictTape=false}={}){
   const group=groups.get(groupId)||{assetId:asset.id,unit,sourceRevision:assetSourceRevision(asset),sourceAreaMM2:geometryArea(source),source,allocations:[]};
   for(const prior of group.allocations)craftAssert(geometryArea(geometryIntersection(prior.geometry,geometry))<=AREA_EPSILON,'SOURCE_REGION_OVERLAP','同一实物单位的裁片重叠或重复使用',{assetId:asset.id,pieceId:pieceKey(item),constraint:prior.pieceId});
   group.allocations.push({pieceId:pieceKey(item),geometry,areaMM2:geometryArea(geometry),parked:!!item.isParked});groups.set(groupId,group);
+ }
+ craftAssert(Array.isArray(draft.craftScraps||[])&&(draft.craftScraps||[]).length<=256,'SCRAP_BUDGET','碎屑记录超过上限');
+ for(const [index,scrap] of (draft.craftScraps||[]).entries()){
+  const asset=catalog.get(scrap.assetId);craftAssert(asset,'MISSING_SOURCE','碎屑记录的来源缺失');
+  craftAssert(Number.isInteger(scrap.unit)&&scrap.unit>=0&&scrap.unit<(asset.supply?.quantity??1),'INVALID_UNIT','碎屑库存单位无效');
+  const source=rectangleGeometry(0,0,asset.physicalWidthMM,asset.physicalHeightMM),geometry=normalizeGeometry(scrap.geometryMM);assertSubset(geometry,source);
+  const groupId=JSON.stringify([asset.id,scrap.unit]),group=groups.get(groupId)||{assetId:asset.id,unit:scrap.unit,sourceRevision:assetSourceRevision(asset),sourceAreaMM2:geometryArea(source),source,allocations:[]};
+  for(const prior of group.allocations)craftAssert(geometryArea(geometryIntersection(prior.geometry,geometry))<=AREA_EPSILON,'SOURCE_REGION_OVERLAP','不可复用已记录的碎屑或废料',{assetId:asset.id});
+  group.allocations.push({pieceId:'scrap-'+index,geometry,areaMM2:geometryArea(geometry),parked:true,scrap:true});groups.set(groupId,group);
  }
  const entries=[];
  for(const group of groups.values()){
