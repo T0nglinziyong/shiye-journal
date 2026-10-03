@@ -96,7 +96,7 @@ test('O-14: a supplied preview cannot mark an imported editable scene as visuall
   const asset={id:'preview-asset',title:'素材',kind:'sticker',physicalWidthMM:25,physicalHeightMM:25,supply:{quantity:1}};
   const handoff=await createOfflineHandoff({project:project('预览校验'),assets:[asset],aliases:{m1:asset.id},settings:{includeThumbnails:false}});
   const files=unzipSync(await bytes(handoff.blob));
-  const response=JSON.parse(new TextDecoder().decode(files['example-response.shiyeproject.json']));
+  const response=JSON.parse(new TextDecoder().decode(files['examples/project.shiyeproject.json']));
   response.previewVerified=true;response.manifest={reviewed:true};
   const imported=importEditableWork(JSON.stringify(response),[asset],{trustedSource:handoff.source});
   assert.equal(imported.creationVerification.preview,'unverified');
@@ -107,7 +107,7 @@ test('O-14/O-16: a self-consistent external manifest is advisory; wrong previews
   const asset={id:'manifest-asset',title:'小纸片',kind:'sticker',physicalWidthMM:25,physicalHeightMM:25,supply:{quantity:1}};
   const handoff=await createOfflineHandoff({project:project('结果清单'),assets:[asset],aliases:{m1:asset.id},settings:{includeThumbnails:false}});
   const task=unzipSync(await bytes(handoff.blob));
-  const scene=JSON.parse(new TextDecoder().decode(task['example-response.shiyeproject.json']));
+  const scene=JSON.parse(new TextDecoder().decode(task['examples/project.shiyeproject.json']));
   const preview=new Uint8Array([137,80,78,71,1,2,3,4]);
   const manifest={version:1,taskId:scene.source.bundleId,taskHash:scene.source.taskHash,schemaHash:scene.source.schemaHash,sceneHash:await sceneFingerprint(scene),previewHash:`sha256:${await sha256Hex(preview)}`};
   const makePackage=image=>zipSync({'project.shiyeproject.json':strToU8(JSON.stringify(scene)),'preview.png':image,'manifest.json':strToU8(JSON.stringify(manifest))});
