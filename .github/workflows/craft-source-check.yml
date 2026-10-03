@@ -23,7 +23,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p /tmp/craft-source
-          git ls-files -z src tests scripts server api docs .github '*.md' package.json package-lock.json index.html vite.config.js vercel.json .vercelignore public/sw.js | tar --null -T - --exclude='*.woff*' --exclude='*.ttf' --exclude='*.otf' --exclude='*.png' --exclude='*.jpg' --exclude='*.jpeg' --exclude='*.pdf' --exclude='*.zip' -czf /tmp/craft-source/source.tgz
+          git ls-files -z src tests scripts server api docs .github '*.md' package.json package-lock.json index.html vite.config.js vercel.json .vercelignore public/sw.js | tar --exclude='*.woff*' --exclude='*.ttf' --exclude='*.otf' --exclude='*.png' --exclude='*.jpg' --exclude='*.jpeg' --exclude='*.pdf' --exclude='*.zip' -czf /tmp/craft-source/source.tgz --null -T -
           tar -czf /tmp/craft-source/test-dependencies.tgz --exclude='*.woff*' --exclude='*.ttf' --exclude='*.otf' --exclude='node_modules/@fontsource' --exclude='node_modules/@huggingface' --exclude='node_modules/onnxruntime-*' --exclude='node_modules/@img' --exclude='node_modules/sharp' --exclude='*.wasm' node_modules
           echo "$GITHUB_SHA" > /tmp/craft-source/commit.txt
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
