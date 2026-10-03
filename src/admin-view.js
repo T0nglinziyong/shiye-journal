@@ -48,11 +48,16 @@ export async function openAdminView(client,currentUserID){
         const summary=document.createElement('summary');summary.textContent='查看只读数据';
         const raw=document.createElement('pre');raw.textContent=JSON.stringify(record,null,2);
         metadata.append(summary,raw);card.append(metadata);
-        if(path&&provider==='cos'){
+        if(path&&['cos','supabase'].includes(provider)){
           const img=document.createElement('img');img.alt='';frame.append(img);
-          const load=async()=>{try{const blob=path.endsWith('-preview.webp')||path.endsWith('-preview360.webp')?await cos.download(path):await cos.preview(path);if(current!==epoch)return;const url=URL.createObjectURL(blob);urls.push(url);img.src=url;}catch{if(current===epoch)frame.textContent='图片暂不可读取';}};
+          const load=async()=>{try{
+            let blob;
+            if(provider==='cos')blob=path.endsWith('-preview.webp')||path.endsWith('-preview360.webp')?await cos.download(path):await cos.preview(path);
+            else {const {data,error}=await client.storage.from('shiye-private').download(path);if(error)throw error;blob=data;}
+            if(current!==epoch)return;const url=URL.createObjectURL(blob);urls.push(url);img.src=url;
+          }catch{if(current===epoch)frame.textContent='图片暂不可读取';}};
           card._loadAdminImage=load;if(observer)observer.observe(card);else void load();
-        }else frame.textContent='无 COS 封面';
+        }else frame.textContent='无可读封面';
       };
       if(typeof IntersectionObserver!=='undefined')observer=new IntersectionObserver(entries=>{for(const entry of entries)if(entry.isIntersecting){observer.unobserve(entry.target);void entry.target._loadAdminImage?.();}},{root:panel,rootMargin:'160px'});
       const addHeading=text=>{const h=document.createElement('h3');h.textContent=text;h.className='cloud-admin-section';list.append(h);};
