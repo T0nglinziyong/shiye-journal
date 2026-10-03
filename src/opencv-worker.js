@@ -79,14 +79,18 @@ export async function processVision(cv,operation,p){
         if(rgba){
           const imageROI=own(rgba.roi(new cv.Rect(x,y,rw,rh))),rgb=own(new cv.Mat()),gc=own(new cv.Mat(rh,rw,cv.CV_8UC1,new cv.Scalar(cv.GC_PR_BGD))),inside=own(new cv.Mat()),core=own(new cv.Mat()),smallKernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(5,5))),coreKernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(21,21)));
           cv.cvtColor(imageROI,rgb,cv.COLOR_RGBA2RGB);cv.erode(alpha,inside,smallKernel);cv.erode(alpha,core,coreKernel);
-          let foreground=0,background=0;
+          let foreground=0,background=0,shadowBackground=0;
           for(let py=0;py<rh;py++)for(let px=0;px<rw;px++){
             const at=py*rw+px,original=(y+py)*w+x+px;
             gc.data[at]=core.data[at]?cv.GC_PR_FGD:cv.GC_PR_BGD;
+            // Smooth low-chroma darkening is an illumination cue, not object
+            // evidence. Feed it to GrabCut as probable background even when the
+            // broad proposal is connected to the material.
+            if(p.shadowLikelihood?.[original]){gc.data[at]=cv.GC_PR_BGD;shadowBackground++;}
             if(inside.data[at]&&(p.foregroundSeeds||p.evidence)?.[original]){gc.data[at]=cv.GC_FGD;foreground++;}
             if(px<2||py<2||px>=rw-2||py>=rh-2){gc.data[at]=cv.GC_BGD;background++;}
           }
-          if(foreground>=10&&background>=10){
+          if(foreground>=10&&background+shadowBackground>=10){
             const bgModel=own(new cv.Mat()),fgModel=own(new cv.Mat());
             cv.grabCut(rgb,gc,new cv.Rect(),bgModel,fgModel,2,cv.GC_INIT_WITH_MASK);
             let kept=0;for(let k=0;k<gc.data.length;k++){local.data[k]=(gc.data[k]===cv.GC_FGD||gc.data[k]===cv.GC_PR_FGD)?255:0;if(local.data[k])kept++;}
@@ -95,7 +99,7 @@ export async function processVision(cv,operation,p){
           }
         }
         // Preserve concave stickers; do not replace their boundary by a hull.
-        const polygons=[];let edgeMethod=rgba?'graphcut-contour-smoothed':'contour-smoothed';
+        const polygons=[];let edgeMethod=rgba?(p.shadowLikelihood?'graphcut-lab-shadow-aware':'graphcut-contour-smoothed'):'contour-smoothed';
         for(let j=0;j<contours.size();j++){
           const contour=own(contours.get(j));if(cv.contourArea(contour)<4)continue;
           const polygon=own(new cv.Mat()),rect=own(new cv.Mat());
