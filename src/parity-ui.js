@@ -1,5 +1,6 @@
 // Interaction placement follows the Swift 2.0.10 views. Core records remain
 // owned by app.js; this module adds the missing screen controls and actions.
+import {reusePagePreviews} from './preview-content-cache.js';
 import {mountSeriesContents,mountSeriesAddition} from './series-contents.js';
 import {finishSelection,toggleSelection,selectionActive} from './library-selection-model.js';
 import {mountRecentlyDeleted} from './recently-deleted-ui.js';
@@ -12,6 +13,7 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 
 export function mountParityControls(ctx){
   const {state,view}=ctx;
+  reusePagePreviews(ctx);
   if(state.route==='library')mountLibrary(ctx);
   if(state.route==='series')mountSeries(ctx);
   if(state.route==='works')mountWorks(ctx);
