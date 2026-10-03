@@ -47,7 +47,7 @@ test('current default uses GPT vision and current provider settings only',()=>{
 test('direct JSON mode accepts the same full craft plan without a preliminary request',()=>{
  const a=asset(),d=project().drafts[0],p=plan(d,a),protocol=creativeProtocol({...normalizeAISettings(),generationMode:'direct'});
  const calls=protocol.calls({content:JSON.stringify(p)},1);assert.equal(calls.length,1);assert.equal(calls[0].function.name,'apply_craft_plan');
- ok(run({tool_calls:calls},d,a));
+ ok(run({tools:calls},d,a));
 });
 test('the one current offline plan contract accepts multimodal observations',()=>{
  const a=asset(),d=project().drafts[0],p=plan(d,a);
