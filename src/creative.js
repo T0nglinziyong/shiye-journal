@@ -1,7 +1,9 @@
+import {buildCraftEdge,craftPermission,sourceFootprint,sourceIntersectionArea} from './craft-geometry.js';
+import {solveCraftRelations} from './craft-relations.js';
 import {uid,itemFromAsset} from './domain.js';
 import {textLines,textFont} from './editor-tools-model.js';
 import {reviewCreativeDraft} from './creative-quality.js';
-import {materialMaskPoints,materialMaskArea,cutMaterialDiagonal,addMaterialWindow} from './material-mask.js';
+import {materialMaskPoints,materialMaskArea,materialMaskGeometry,cutMaterialDiagonal,addMaterialWindow} from './material-mask.js';
 import {agentTools,directPageContract,directPageToTools,validateTool,validateValue} from './creative-contract.js';
 export {agentTools,directPageContract,directPageToTools};
 const EPS=1e-6,fields=['items','primitives','textBlocks'];
@@ -38,7 +40,7 @@ function checkDraft(d,assets){
     if(i.materialMask)materialMaskPoints(i.materialMask);
     const expectedW=crop.width*a.physicalWidthMM*scale(d),expectedH=crop.height*a.physicalHeightMM*scale(d);
     if(!Number.isFinite(expectedW)||!Number.isFinite(expectedH)||Math.abs(i.width-expectedW)>EPS||Math.abs(i.height-expectedH)>EPS)throw Error(a.title+' 实物尺寸与来源不一致');
-    if(a.kind!=='tape'){const group=a.id+':'+unit,used=usage.get(group)||[];if(used.some(r=>overlap(r,crop)))throw Error(a.title+' 同一实物单位的裁片重叠或重复使用');used.push(crop);usage.set(group,used);}
+    if(a.kind!=='tape'){const group=a.id+':'+unit,used=usage.get(group)||[],region=sourceFootprint(i,a,materialMaskGeometry(i.materialMask));if(used.some(previous=>sourceIntersectionArea(previous,region)>1e-6))throw Error(a.title+' 同一实物单位的裁片重叠或重复使用');used.push(region);usage.set(group,used);} // Intersection tolerance is in source mm².
   }
 }
 function measure(t,options){
@@ -56,7 +58,7 @@ function place(d,data,fallback){fallback||={x:d.canvas.width/2,y:d.canvas.height
 }
 function setPosition(d,i,data){locked(i);Object.assign(i,place(d,data,i));if(data.rotation!==undefined)i.rotation=data.rotation;if(data.z!==undefined)i.zIndex=data.z;if(i.assetID)baseline(i);}
 function remove(d,keys){for(const key of keys){const target=find(d,key);locked(target);for(const field of fields)d[field]=d[field].filter(i=>i!==target);}}
-function permission(options,asset){return options.assetProcessing?.[asset.id]||options.processing;}
+function permission(options,asset){return craftPermission(options,asset);}
 function process(d,item,asset,operations,mode,options){
   locked(item);let current=mode==='replace'?{x:0,y:0,width:1,height:1}:cropOf(item),mask=mode==='replace'?null:item.materialMask||null;
   const steps=mode==='replace'?[]:structuredClone(item.materialSteps||[]);
@@ -64,6 +66,12 @@ function process(d,item,asset,operations,mode,options){
   for(const op of operations){
     if(op.op==='whole'){steps.push(op);continue;}
     if(permission(options,asset)==='保留完整')throw Error(asset.title+' 设置为保留完整，不允许加工');
+    if(op.op==='edge'){
+      if(mask)throw Error('参数化边缘应先于开窗；修改边缘请 replace 重放完整工序');
+      mask=buildCraftEdge(op,current.width*asset.physicalWidthMM,current.height*asset.physicalHeightMM);
+      if(permission(options,asset)==='少量裁剪'&&current.width*current.height*materialMaskArea(mask)<.6-EPS)throw Error(asset.title+' 仅允许少量裁剪，须保留至少60%面积');
+      steps.push(structuredClone(op));continue;
+    }
     if(op.op==='mask'){
       if(mask)throw Error('一个素材片段只能使用一道可见边缘工序');
       mask={shape:op.shape,...(op.shape==='polygon'?{points:structuredClone(op.points)}:op.shape==='rounded'?{radius:op.radius??.1}:{depth:op.depth??.05,waves:op.waves??8})};
@@ -147,16 +155,10 @@ function clearGeneratedScene(d){
   d.strokes=(d.strokes||[]).filter(i=>!i.agentGenerated||i.isLocked||i.locked);
 }
 function setPaper(d,a){if(a.color)d.paperColor=a.color;if(a.pattern)d.paperPattern=a.pattern==='lined'?'lines':a.pattern;if(a.intent)d.compositionIntent=a.intent;if(a.ruling!==undefined){const h=d.canvas.height,step=Math.max(4,a.ruling);d.paperRuling={rowPositions:Array.from({length:Math.ceil(h/step)-1},(_,i)=>(i+1)*step/h).filter(y=>y<1),spans:[{from:0,to:1}],color:'#d0d2d3',relativeLineWidth:1/h};}if(a.center_gutter!==undefined)d.drawCenterGutter=a.center_gutter;}
-function relations(d,list){for(const e of list){if(!e.relation){delete find(d,e.piece).materialRelation;continue;}const i=find(d,e.piece),target=find(d,e.relation.target);if(target===i)throw Error('片段不可相对自身');const mm=e.relation.exposed_mm*scale(d),relation=e.relation.kind;
-  if((target.rotation||0)!==0||(i.rotation||0)!==0)throw Error('实体叠放关系目前只支持未旋转的片段');
-  i.x=target.x;i.y=target.y;i.zIndex=(target.zIndex||0)-1;
-  if(relation==='revealLeft')i.x=target.x-target.width/2-mm+i.width/2;
-  else if(relation==='revealRight')i.x=target.x+target.width/2+mm-i.width/2;
-  else if(relation==='revealBottom')i.y=target.y+target.height/2+mm-i.height/2;
-  else if(relation==='anchorCorner'){i.x=target.x+target.width/2-i.width/2;i.y=target.y+target.height/2-i.height/2;i.zIndex=(target.zIndex||0)+1;}
-  else if(relation!=='behind')throw Error('尚未实现关系 '+relation);
-  i.materialRelation=structuredClone(e.relation);baseline(i);
-}}
+function relations(d,list){
+  const updates=solveCraftRelations(entries(d),list,scale(d));
+  for(const [key,update] of updates){const item=find(d,key);locked(item);const {materialRelation,...position}=update;Object.assign(item,position);if(materialRelation)item.materialRelation=materialRelation;else delete item.materialRelation;baseline(item);}
+}
 function upsertMaterials(d,assets,aliases,a,options){
   remove(d,a.remove||[]);
   for(const e of a.items){const [item]=addMaterials(d,assets,aliases,[{asset:e.asset,piece:e.piece,unit:e.unit,...e.placement,role:e.role,opacity:e.opacity,flip_horizontal:e.flip_horizontal}]);const asset=materialAsset(assets,aliases,e.asset);process(d,item,asset,e.operations,'replace',options);}relations(d,a.items);

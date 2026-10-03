@@ -77,11 +77,27 @@ const inkStroke=object({points:array(inkPoint,1,512),width:num(.5,60),color,opac
 const directOperations=operationContract;
 const directMaterial=object({...material.properties,operations:array(directOperations,1,12)},['asset','piece','operations','placement']);
 export const directPageContract=object({version:{type:'integer',minimum:3,maximum:3,enum:[3]},style:enums(['留白叙事','密集拼贴','杂志网格','胶片日记','手作便签','自由构图']),intent:nullable(string(240)),items:array(directMaterial,0,100),graphics:array(primitive,0,48),ink_strokes:array(inkStroke,0,32),text_blocks:array(directText,0,24),paper:object({color,pattern:enums(['plain','lined','grid','dots','columns']),ruling:num(0,100),center_gutter:{type:'boolean'}},['color','pattern'])},['version','style','intent','items','text_blocks','paper']);
+// Preserve the exact legacy schema for already exported task snapshots.
+// New tasks opt in with capabilities.craftV2; old fingerprints remain stable.
+const legacyToolContracts=structuredClone(toolContracts);
+const legacyDirectPageContract=structuredClone(directPageContract);
+const craftEdgeContract=object({op:enums(['edge']),style:enums(['torn','ticket_notch','postage','fringe','partial_tear']),edges:array(enums(['top','right','bottom','left']),1,4),depth_mm:num(.1,100),period_mm:num(.5,1000),seed:integer(0,4294967295),position:num(0,1)},['op','style']);
+operationContract.anyOf.push(craftEdgeContract);
+const oldRelation=material.properties.relation.anyOf[0];
+material.properties.relation.anyOf[0]={anyOf:[oldRelation,
+  object({kind:enums(['peek']),target:key,edge:enums(['left','right','top','bottom']),exposed_mm:num(0,1000),along_mm:num(-1000,1000),rotation_offset:num(-180,180)},['kind','target','edge','exposed_mm']),
+  object({kind:enums(['underlay']),target:key,offset_mm:array(num(-1000,1000),2,2),rotation_offset:num(-180,180)},['kind','target']),
+  object({kind:enums(['bridge']),target:key,target2:key,anchor_from:array(num(0,1),2,2),anchor_to:array(num(0,1),2,2),contact_mm:num(0,100)},['kind','target','target2'])
+]};
+for(const tool of agentTools){
+  if(tool.function.name==='edit_materials')tool.function.description+=' edge 提供 torn/ticket_notch/postage/fringe/partial_tear 参数化裁边，使用 edges、depth_mm、period_mm、seed，先取裁片后加工边缘。';
+  if(tool.function.name==='upsert_materials')tool.function.description+=' relation 可用目标局部坐标下的 peek、underlay 或双目标 bridge；不能缩放实物。';
+}
 // A task exports exactly the schema used to validate its return. Pixel crops
 // are unavailable when the task only contains downsampled preview images.
-export function offlineContract(mode,{cropPx=false}={}){
-  if(mode==='direct')return directPageContract;
-  const contracts=Object.fromEntries(Object.entries(toolContracts).filter(([name])=>name!=='compose_story_page'&&name!=='inspect_materials'));
+export function offlineContract(mode,{cropPx=false,craftV2=false}={}){
+  if(mode==='direct')return craftV2?directPageContract:legacyDirectPageContract;
+  const contracts=Object.fromEntries(Object.entries(craftV2?toolContracts:legacyToolContracts).filter(([name])=>name!=='compose_story_page'&&name!=='inspect_materials'));
   if(cropPx)return contracts;
   const taskContracts={...contracts,compose_page:structuredClone(contracts.compose_page)};
   delete taskContracts.compose_page.properties.materials.items.properties.crop_px;

@@ -1,3 +1,4 @@
+import {craftUsage} from './craft-geometry.js';
 // Creative review is advice, not a completion gate. Physical feasibility is
 // checked separately by checkDraft() in creative.js.
 import {textLines,textFont} from './editor-tools-model.js';
@@ -33,5 +34,5 @@ export function reviewCreativeDraft(d,{measureText}={}){
   const a=texts[i],b=texts[j],w=Math.min(a.x+a.width/2,b.x+b.width/2)-Math.max(a.x-a.width/2,b.x-b.width/2),h=Math.min(a.y+a.height/2,b.y+b.height/2)-Math.max(a.y-a.height/2,b.y-b.height/2);
   if(w>2&&h>2)warnings.push('文字框相互遮挡：'+(a.agentKey||a.id)+' / '+(b.agentKey||b.id));
  }
- return {materials:(d.items||[]).filter(x=>!x.isParked&&!x.isHidden&&!x.hidden).length,textBlocks:texts.length,graphics:(d.primitives||[]).length,warnings:[...new Set(warnings)]};
+ return {materials:(d.items||[]).filter(x=>!x.isParked&&!x.isHidden&&!x.hidden).length,textBlocks:texts.length,graphics:(d.primitives||[]).length,warnings:[...new Set(warnings)],craft:craftUsage(d)};
 }

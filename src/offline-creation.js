@@ -70,7 +70,7 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
   if(settings.deliveryMode==='image')return createOfflineImageHandoff({source,project:p,assets,selected,chosen,settings,referenceImages,showImages,userTemplates});
   const {offlineValidateSource}=await import('./generated/offline-validate-source.js');
   const mode=settings.generationMode==='direct'?'direct':'agent';
-  source.capabilities={cropPx:false,validateOffline:true,renderOffline:false,previewOffline:'approximate-svg',packOffline:true};
+  source.capabilities={cropPx:false,craftV2:true,validateOffline:true,renderOffline:false,previewOffline:'approximate-svg',packOffline:true};
   const exportedContract=offlineContract(mode,source.capabilities);
   source.schemaHash=schemaFingerprint(exportedContract);
   source.previewHashes=showImages?Object.fromEntries(await Promise.all(chosen.map(async entry=>[entry.alias,`sha256:${await sha256Hex(entry.bytes)}`]))):null;
