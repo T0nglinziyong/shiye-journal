@@ -14,6 +14,6 @@ const VERIFIED={
   'Qwen/Qwen2.5-VL-72B-Instruct':{nativeTools:false,jsonObject:false,vision:true}
  }
 };
-export function verifiedModelCapabilities({endpoint='https://api.deepseek.com/chat/completions',model='deepseek-flash'}={}){
+export function verifiedModelCapabilities({endpoint='https://api.openai.com/v1/chat/completions',model='gpt-4.1'}={}){
  try{const url=new URL(endpoint);return VERIFIED[url.origin+url.pathname]?.[model]||null;}catch{return null;}
 }
