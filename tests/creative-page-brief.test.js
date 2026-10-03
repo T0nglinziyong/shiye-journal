@@ -47,11 +47,11 @@ test('API editable, web editable and API/web image handoffs share the same compo
   assert.match(api[1].content[0].text,/图文职责/);
   const web=await createOfflineHandoff({project:p,assets:[asset],aliases:{m1:asset.id},settings:{includeThumbnails:false,textMode:'rich'}});
   const webFiles=unzipSync(new Uint8Array(await web.blob.arrayBuffer()));
-  assert.match(strFromU8(webFiles['CREATIVE_GUIDE.txt']),/连贯的多行正文/);
-  assert.match(strFromU8(webFiles['CREATIVE_GUIDE.txt']),/避免所有内容挤在一角/);
-  assert.match(strFromU8(webFiles['CREATIVE_GUIDE.txt']),/纸片错层/);
-  assert.ok(JSON.parse(strFromU8(webFiles['context.json'])).materials[0].journalRoles.includes('writing'));
-  assert.equal(JSON.parse(strFromU8(webFiles['case-studies.json'])).families[0].id,'paper-collage');
+  assert.match(strFromU8(webFiles['task/GUIDE.txt']),/连贯的多行正文/);
+  assert.match(strFromU8(webFiles['task/GUIDE.txt']),/避免所有内容挤在一角/);
+  assert.match(strFromU8(webFiles['task/GUIDE.txt']),/纸片错层/);
+  assert.ok(JSON.parse(strFromU8(webFiles['task/context.json'])).materials[0].journalRoles.includes('writing'));
+  assert.equal(JSON.parse(strFromU8(webFiles['task/knowledge.json'])).caseStudies.families[0].id,'paper-collage');
   const image=imagePrompt({project:p,draft:p.drafts[0],assets:[asset],ids:[asset.id],theme:p.intent,includeImages:false,textMode:'rich'});
   assert.match(image,/自然换行的短段/);
   assert.match(image,/不绘制反斜杠、转义序列/);
@@ -62,8 +62,8 @@ test('API editable, web editable and API/web image handoffs share the same compo
   assert.doesNotMatch(image,/充分展开连贯的多行正文/);
   const webImage=await createOfflineHandoff({project:p,assets:[asset],aliases:{m1:asset.id},settings:{deliveryMode:'image',includeThumbnails:false,textMode:'rich'}});
   const imageFiles=unzipSync(new Uint8Array(await webImage.blob.arrayBuffer()));
-  assert.ok(strFromU8(imageFiles['START_HERE.txt']).includes(image));
-  assert.equal(JSON.parse(strFromU8(imageFiles['case-studies.json'])).families[0].id,'paper-collage');
+  assert.ok(strFromU8(imageFiles['task/GUIDE.txt']).includes(image));
+  assert.equal(JSON.parse(strFromU8(imageFiles['task/knowledge.json'])).caseStudies.families[0].id,'paper-collage');
 });
 
 test('both editable and image transports receive the same spread-specific page balance direction',async()=>{
@@ -73,12 +73,12 @@ test('both editable and image transports receive the same spread-specific page b
   assert.match(api[1].content[0].text,marker);
   const web=await createOfflineHandoff({project:p,assets:[asset],aliases:{m1:asset.id},settings:{includeThumbnails:false}});
   const webFiles=unzipSync(new Uint8Array(await web.blob.arrayBuffer()));
-  assert.match(strFromU8(webFiles['CREATIVE_GUIDE.txt']),marker);
+  assert.match(strFromU8(webFiles['task/GUIDE.txt']),marker);
   const image=imagePrompt({project:p,draft,assets:[asset],ids:[asset.id],includeImages:false});
   assert.match(image,marker);
   const webImage=await createOfflineHandoff({project:p,assets:[asset],aliases:{m1:asset.id},settings:{deliveryMode:'image',includeThumbnails:false}});
   const imageFiles=unzipSync(new Uint8Array(await webImage.blob.arrayBuffer()));
-  assert.match(strFromU8(imageFiles['START_HERE.txt']),marker);
+  assert.match(strFromU8(imageFiles['task/GUIDE.txt']),marker);
 });
 
 test('image API forwards no-text setting and does not quietly request copy',async()=>{
