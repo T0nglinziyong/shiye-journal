@@ -17,8 +17,7 @@ export function searchableSeries(series, assets) {
 export function usedAssetIDs(projects, assets = []) {
   const used = new Set(projects.filter(p => !p.isDraft && p.isUsed).flatMap(p =>
     (p.drafts || []).flatMap(d => (d.items || []).filter(i => !i.isParked).map(i => i.assetID))));
-  // A recorded user action wins over legacy inferred status. New project-use
-  // actions update the affected asset records, so the last action wins.
+  // Explicit user status is authoritative; project contents provide the default.
   for (const asset of assets) {
     if (asset.usageStatus === 'used') used.add(asset.id);
     if (asset.usageStatus === 'unused') used.delete(asset.id);
