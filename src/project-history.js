@@ -1,13 +1,9 @@
-// Titles are persisted separately from visual styles; old projects migrate on
-// their next ordinary save, without mutating the initial artwork.
 import {snapshotDraft} from './draft-snapshot.js';
 export function captureHistory(project){
+  if(!project.initialEditorSnapshot||!project.draftHistorySnapshots)throw Error('作品缺少当前版本历史结构');
   let changed=false;
-  if(!project.initialEditorSnapshot){project.initialEditorSnapshot={drafts:project.drafts.map(snapshotDraft),activeDraftID:project.activeDraftID};changed=true;}
-  project.draftHistorySnapshots||={};
   for(const draft of project.drafts)if(!project.draftHistorySnapshots[draft.id]){
-    const initial=project.initialEditorSnapshot.drafts?.find(d=>d.id===draft.id);
-    project.draftHistorySnapshots[draft.id]=snapshotDraft(initial||draft);changed=true;
+    project.draftHistorySnapshots[draft.id]=snapshotDraft(draft);changed=true;
   }
   return changed;
 }
