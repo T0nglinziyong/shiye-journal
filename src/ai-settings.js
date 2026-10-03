@@ -10,7 +10,7 @@ export const AI_PROVIDERS=Object.freeze({
   siliconflow:{label:'硅基流动',endpoint:'https://api.siliconflow.cn/v1/chat/completions',models:[['Qwen/Qwen2.5-VL-72B-Instruct','Qwen2.5-VL 72B',true],['deepseek-ai/DeepSeek-V3','DeepSeek V3',false]]},
   custom:{label:'自定义兼容接口',endpoint:'',models:[]}
 });
-export const AI_DEFAULTS=Object.freeze({provider:'openai',key:'',keys:{},endpoint:AI_PROVIDERS.openai.endpoint,model:'gpt-4.1',imageModel:IMAGE_MODELS[0],deliveryMode:'tools',generationMode:'agent',directPageOutput:'editable',temperature:.75,maxTokens:6000,maxTurns:5,includeThumbnails:true,finalVisualReview:true,customVision:false,requestTimeout:75,sendOutputLimit:true,disableThinking:true,transport:'auto',textMode:'automatic',reasoningMode:'automatic',includeStructureReference:true,sendPresetReferences:true,autoIncludeRecommendations:false,requireAllCandidates:true,customLayoutPrompt:''});
+export const AI_DEFAULTS=Object.freeze({provider:'openai',key:'',keys:{},endpoint:AI_PROVIDERS.openai.endpoint,model:'gpt-4.1',imageModel:IMAGE_MODELS[0],deliveryMode:'tools',generationMode:'agent',temperature:.75,maxTokens:6000,maxTurns:5,includeThumbnails:true,finalVisualReview:true,customVision:false,requestTimeout:75,sendOutputLimit:true,disableThinking:true,transport:'auto',textMode:'automatic',reasoningMode:'automatic',includeStructureReference:true,sendPresetReferences:true,autoIncludeRecommendations:false,requireAllCandidates:true,customLayoutPrompt:''});
 const limit=(value,min,max,fallback)=>Number.isFinite(+value)?Math.min(max,Math.max(min,+value)):fallback;
 export function normalizeAISettings(value={}){
   if(!value||typeof value!=='object'||Array.isArray(value))value={};
