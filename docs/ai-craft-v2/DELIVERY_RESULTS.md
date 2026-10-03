@@ -22,3 +22,9 @@ Passed: npm run build; npm test; npm run test:ui; Python converter tests; git di
 
 Real-browser workflow must separately verify the final PR tree. These unit/mocked-provider/Happy DOM tests are not real paid-GPT aesthetic or physical Safari/iPad acceptance.
 No production database, private library image, credentials, domain or deployment configuration changed.
+
+## 最终源码与独立浏览器复验
+
+产品源码已经提交为 `878f28c7a678ff1cf245c0871e099634bde8d746`。`8b6fff850c82099fcd45d7e8dfb37f5c9bc5d725` 仅收拢浏览器工作流并删除临时集成工作流；没有扩大 CI 令牌权限或修改产品源码。
+
+正常 PR 验证将独立运行 `Verify Shiye` 与 `Craft browser regression`。后者顺序运行基础工艺、菜单/缓存、多模态选区/两孔穿插/素材加工面板/重开/便携 Canvas 预览像素与场景哈希对照。结果必须以该次工作流的真实退出状态和合成截图为准，此段不预先声明浏览器通过。
