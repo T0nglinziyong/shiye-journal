@@ -8,5 +8,5 @@ export const materialCraftGuide = `【素材工艺 v2：先决定如何用材料
 开窗仍是真实透明孔。现在用实际源轮廓和洞核验同一 unit 的材料占用：可在同一复合 page/upsert_materials 中创建窗框，以及与该窗口准确匹配的窗芯裁片；两件的外接矩形重叠并不等于用料重复。请保持各片 source crop/轮廓不相交；隐藏或放到页面外不能释放库存。
 新的组合 relation 可用 {kind:"peek",target:"main-photo",edge:"right",exposed_mm:8,along_mm:0,rotation_offset:0}；目标旋转时按目标局部方向求解。underlay 使用 target、offset_mm:[0,0]、rotation_offset；bridge 使用 target、target2、anchor_from/anchor_to（目标局部0–1锚点）及 contact_mm。搭桥仅移动/旋转现有真实片段，长度不足会失败，不会拉长纹理。关系 target 填已创建的 piece/key，不填素材 alias；关系不能成环。
 可以一次用 upsert_materials 或直接 page 提交完整工序和关系，无需为每条工艺额外请求一轮。compose_page 仍只提供基础放置/crop；之后可批量 edit_materials。物理边缘、数字手绘、最终正文分别建层。
-目前没有自动确认语义区域、自动生成全部余料、文字镂空或同片局部穿插的可靠工具。不要编造 extract_region/thread_through 字段。需要取词句/纹理时仅在真实预览明确可见且权限允许时使用源区域 crop；看不清就请求局部观察，不猜内容。
+已接入复合工艺计划 apply_craft_plan：可引用用户确认区域，也可在同一计划提出看图选区 observations；后者只在本次任务使用，不伪称用户确认。任意合法正负形用 cut_shape，分离裁片在 plan.pieces 中分别描述。父片拆分默认保留余料，过小碎屑明确记录。两孔平面穿插使用 plan.weaves，只投影显示片段，不额外消耗材料。文字镂空可以将本地字体生成的数值路径作为 cut_shape，保留字腔连接，不用白字遮盖冒充挖孔。目前没有三维折叠仿真，不能把平面穿插称为任意可制作折叠。
 复核实际画面时检查加工是否服务主题、是否保住主体/文字、是否只是换一种机械套路。全是 whole 可以是合理选择；工艺说明、决策理由与错误信息不能写入最终正文。`;

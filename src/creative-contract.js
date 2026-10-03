@@ -1,3 +1,4 @@
+import {regionOperationSchemas,craftPlanContract,craftPlanDescription,multimodalPlanContract} from './craft-plan-contract.js';
 // One executable contract is shared by provider tools, offline imports and local validation.
 import Ajv from 'ajv';
 const validator=new Ajv({strict:false,strictNumbers:true,allErrors:false,coerceTypes:false,useDefaults:false,removeAdditional:false});
@@ -93,11 +94,25 @@ for(const tool of agentTools){
   if(tool.function.name==='edit_materials')tool.function.description+=' edge 提供 torn/ticket_notch/postage/fringe/partial_tear 参数化裁边，使用 edges、depth_mm、period_mm、seed，先取裁片后加工边缘。';
   if(tool.function.name==='upsert_materials')tool.function.description+=' relation 可用目标局部坐标下的 peek、underlay 或双目标 bridge；不能缩放实物。';
 }
+// Keep both generations of exported tasks byte-compatible. New capabilities
+// are selected explicitly; adding a runtime tool never widens an old task.
+const phaseOneToolContracts=structuredClone(toolContracts);
+const phaseOneDirectPageContract=structuredClone(directPageContract);
+operationContract.anyOf.push(...regionOperationSchemas);
+toolContracts.apply_craft_plan=craftPlanContract({operation:operationContract,relation:material.properties.relation,paper,text,primitive,ink:inkStroke});
+agentTools.push({type:'function',function:{name:'apply_craft_plan',description:craftPlanDescription,parameters:toolContracts.apply_craft_plan}});
+// Preserve the confirmed-region-only generation of already exported plans.
+const phaseTwoToolContracts=structuredClone(toolContracts);
+const phaseTwoDirectPageContract=structuredClone(directPageContract);
+toolContracts.apply_craft_plan=multimodalPlanContract(toolContracts.apply_craft_plan);
+agentTools.find(tool=>tool.function.name==='apply_craft_plan').function.parameters=toolContracts.apply_craft_plan;
+agentTools.find(tool=>tool.function.name==='apply_craft_plan').function.description+=' GPT 已收到图片时，可在同一计划提交 observations 并用 observed_region 取材；不需要预先人工确认，不修改原素材标注。';
+export const offlinePlanContract=capabilities=>capabilities?.multimodalCraftV2?toolContracts.apply_craft_plan:phaseTwoToolContracts.apply_craft_plan;
 // A task exports exactly the schema used to validate its return. Pixel crops
 // are unavailable when the task only contains downsampled preview images.
-export function offlineContract(mode,{cropPx=false,craftV2=false}={}){
-  if(mode==='direct')return craftV2?directPageContract:legacyDirectPageContract;
-  const contracts=Object.fromEntries(Object.entries(craftV2?toolContracts:legacyToolContracts).filter(([name])=>name!=='compose_story_page'&&name!=='inspect_materials'));
+export function offlineContract(mode,{cropPx=false,craftV2=false,craftPlanV2=false,multimodalCraftV2=false}={}){
+  if(mode==='direct')return multimodalCraftV2?directPageContract:craftPlanV2?phaseTwoDirectPageContract:craftV2?phaseOneDirectPageContract:legacyDirectPageContract;
+  const contracts=Object.fromEntries(Object.entries(multimodalCraftV2?toolContracts:craftPlanV2?phaseTwoToolContracts:craftV2?phaseOneToolContracts:legacyToolContracts).filter(([name])=>name!=='compose_story_page'&&name!=='inspect_materials'));
   if(cropPx)return contracts;
   const taskContracts={...contracts,compose_page:structuredClone(contracts.compose_page)};
   delete taskContracts.compose_page.properties.materials.items.properties.crop_px;

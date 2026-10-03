@@ -1,3 +1,11 @@
+import {buildMaterialLedger} from './material-ledger.js';
+import {validateDisplaySlices} from './craft-display.js';
+import {applyCraftPlan} from './craft-plan.js';
+import {applyRegionOperation,itemSourceGeometry} from './craft-region-ops.js';
+import {normalizeGeometry,geometryIntersection,geometryArea} from './craft-topology.js';
+import {assertProtectedRegions} from './material-anatomy.js';
+import {isManagedUnchanged,recordManagedChanges,layerFingerprint} from './craft-fingerprint.js';
+import {craftDiagnostic,craftAssert} from './craft-errors.js';
 import {buildCraftEdge,craftPermission,sourceFootprint,sourceIntersectionArea} from './craft-geometry.js';
 import {solveCraftRelations} from './craft-relations.js';
 import {uid,itemFromAsset} from './domain.js';
@@ -37,15 +45,16 @@ function checkDraft(d,assets){
     const unit=i.materialUnitIndex??0;finite(unit,'实物单位',0,10000);if(!Number.isInteger(unit))throw Error('实物单位必须是整数');
     const quantity=a.supply?.quantity??1;if(!Number.isFinite(quantity)||quantity<=0||(a.kind!=='tape'&&unit>=quantity))throw Error(a.title+' 超出实物数量');
     const crop=cropOf(i);assertRect(crop);
-    if(i.materialMask)materialMaskPoints(i.materialMask);
+    if(i.materialMask)materialMaskPoints(i.materialMask);validateDisplaySlices(i);
     const expectedW=crop.width*a.physicalWidthMM*scale(d),expectedH=crop.height*a.physicalHeightMM*scale(d);
     if(!Number.isFinite(expectedW)||!Number.isFinite(expectedH)||Math.abs(i.width-expectedW)>EPS||Math.abs(i.height-expectedH)>EPS)throw Error(a.title+' 实物尺寸与来源不一致');
-    if(a.kind!=='tape'){const group=a.id+':'+unit,used=usage.get(group)||[],region=sourceFootprint(i,a,materialMaskGeometry(i.materialMask));if(used.some(previous=>sourceIntersectionArea(previous,region)>1e-6))throw Error(a.title+' 同一实物单位的裁片重叠或重复使用');used.push(region);usage.set(group,used);} // Intersection tolerance is in source mm².
+    if(a.kind!=='tape'){const group=a.id+':'+unit,used=usage.get(group)||[],region=sourceFootprint(i,a,materialMaskGeometry(i.materialMask));if(used.some(previous=>geometryArea(geometryIntersection(normalizeGeometry([[previous.outer,...previous.holes]]),normalizeGeometry([[region.outer,...region.holes]])))>1e-6))throw Error(a.title+' 同一实物单位的裁片重叠或重复使用');used.push(region);usage.set(group,used);} // Intersection tolerance is in source mm².
   }
+  if(d.craftScraps?.length)buildMaterialLedger(d,assets);
 }
 function measure(t,options){
   if(typeof options.measureText==='function')return text=>options.measureText(text,t);
-  const ctx=globalThis.document?.createElement?.('canvas')?.getContext?.('2d');
+  const ctx=options.deterministicTextLayout?null:globalThis.document?.createElement?.('canvas')?.getContext?.('2d');
   if(ctx){ctx.font=textFont(t);ctx.letterSpacing=(t.letterSpacing||0)+'px';return text=>ctx.measureText(text).width;}
   return text=>Array.from(text).reduce((n,ch)=>n+t.fontSize*(/[\u0000-\u00ff]/u.test(ch)?.65:1)+(t.letterSpacing||0),0);
 }
@@ -66,6 +75,10 @@ function process(d,item,asset,operations,mode,options){
   for(const op of operations){
     if(op.op==='whole'){steps.push(op);continue;}
     if(permission(options,asset)==='保留完整')throw Error(asset.title+' 设置为保留完整，不允许加工');
+    if(op.op==='extract_region'||op.op==='cut_shape'){
+      const next=applyRegionOperation({operation:op,current,mask,asset,permission:permission(options,asset)});
+      current=next.current;mask=next.mask;steps.push(structuredClone(op));continue;
+    }
     if(op.op==='edge'){
       if(mask)throw Error('参数化边缘应先于开窗；修改边缘请 replace 重放完整工序');
       mask=buildCraftEdge(op,current.width*asset.physicalWidthMM,current.height*asset.physicalHeightMM);
@@ -116,7 +129,7 @@ function process(d,item,asset,operations,mode,options){
   item.cropRect=current.width===1&&current.height===1&&current.x===0&&current.y===0?null:current;
   item.materialMask=mask;
   item.width=current.width*asset.physicalWidthMM*scale(d);item.height=current.height*asset.physicalHeightMM*scale(d);
-  item.materialSteps=steps;item.operation=steps.at(-1)||{op:'whole'};baseline(item);
+  item.materialSteps=steps;item.operation=steps.at(-1)||{op:'whole'};assertProtectedRegions(asset,itemSourceGeometry(item,asset));baseline(item);
 }
 function addMaterials(d,assets,aliases,list){
   const output=[];
@@ -149,10 +162,10 @@ function putInk(d,list){for(const stroke of list){
   d.strokes.push({id:uid(),agentGenerated:true,points:stroke.points.map(point=>({x:point.x*d.canvas.width,y:point.y*d.canvas.height,p:point.pressure??.5})),width:stroke.width,color:stroke.color,opacity:stroke.opacity??(stroke.pen_style==='marker'?.4:1),penStyle:stroke.pen_style});
 }}
 function clearGeneratedScene(d){
-  d.items=d.items.filter(i=>!i.creativePieceID||i.isLocked||i.locked);
-  d.textBlocks=d.textBlocks.filter(i=>!i.agentKey||i.isLocked||i.locked);
-  d.primitives=d.primitives.filter(i=>!i.key||i.isLocked||i.locked);
-  d.strokes=(d.strokes||[]).filter(i=>!i.agentGenerated||i.isLocked||i.locked);
+  d.items=d.items.filter(i=>!i.creativePieceID||!isManagedUnchanged(i));
+  d.textBlocks=d.textBlocks.filter(i=>!i.agentKey||!isManagedUnchanged(i));
+  d.primitives=d.primitives.filter(i=>!i.key||!isManagedUnchanged(i));
+  d.strokes=(d.strokes||[]).filter(i=>!i.agentGenerated||!isManagedUnchanged(i));
 }
 function setPaper(d,a){if(a.color)d.paperColor=a.color;if(a.pattern)d.paperPattern=a.pattern==='lined'?'lines':a.pattern;if(a.intent)d.compositionIntent=a.intent;if(a.ruling!==undefined){const h=d.canvas.height,step=Math.max(4,a.ruling);d.paperRuling={rowPositions:Array.from({length:Math.ceil(h/step)-1},(_,i)=>(i+1)*step/h).filter(y=>y<1),spans:[{from:0,to:1}],color:'#d0d2d3',relativeLineWidth:1/h};}if(a.center_gutter!==undefined)d.drawCenterGutter=a.center_gutter;}
 function relations(d,list){
@@ -224,6 +237,11 @@ function finish(d,assets,a,options){
 }
 function execute(d,assets,aliases,name,a,options){
   switch(name){
+    case 'apply_craft_plan':return applyCraftPlan({draft:d,plan:a,assets,aliases,options,api:{
+      upsert:args=>upsertMaterials(d,assets,aliases,args,options),paper:args=>setPaper(d,args),
+      texts:args=>putTexts(d,args,options),graphics:args=>putGraphics(d,args),ink:args=>putInk(d,args),
+      validate:()=>checkDraft(d,assets),finish:args=>finish(d,assets,args,options)
+    }});
     case 'compose_story_page':story(d,assets,aliases,a,options);break;
     case 'compose_page':compose(d,assets,aliases,a,options);break;
     case 'compose_direct_page':validateValue(a,directPageContract);clearGeneratedScene(d);d.style=({'留白叙事':'airy','密集拼贴':'layered','杂志网格':'editorial','手作便签':'memo','胶片日记':'film','自由构图':'free'})[a.style];setPaper(d,{...a.paper,intent:a.intent});upsertMaterials(d,assets,aliases,{items:a.items},options);putGraphics(d,a.graphics||[]);putTexts(d,a.text_blocks.map((t,n)=>({...t,key:'direct-t'+(n+1)})),options);putInk(d,a.ink_strokes||[]);finish(d,assets,{summary:a.intent||''},options);return {detail:'直接页已通过实物与必用约束并完成',mutation:true};
@@ -254,7 +272,7 @@ function legacyArgs(name,args){const a=structuredClone(args),warnings=[];
   });return {args:a,warnings};
 }
 export function normalizeCalls(raw){
-  const input=typeof raw==='string'?JSON.parse(raw):raw;if(input?.version===3)return directPageToTools(input);
+  const input=typeof raw==='string'?JSON.parse(raw):raw;if(input?.format==='shiye-craft-plan'&&input.version===2)return [{name:'apply_craft_plan',arguments:input,id:input.commandId}];if(input?.version===3)return directPageToTools(input);
   const list=Array.isArray(input)?input:input?.tools||input?.tool_calls||input?.choices?.[0]?.message?.tool_calls;
   if(!Array.isArray(list))throw Error('未找到 tools / tool_calls 数组或Swift v3页面');
   return list.map(x=>({name:x.name||x.function?.name,arguments:x.arguments??x.function?.arguments??{},id:x.id||uid()}));
@@ -272,7 +290,15 @@ export function applyToolCalls(source,base,assets,aliases={},options={}){
       if(call.name==='finish_design'&&(n!==calls.length-1||results.some(r=>!r.ok)))throw Error('finish_design 必须是最后调用，且本轮前序调用全部成功');
       const raw=typeof call.arguments==='string'?JSON.parse(call.arguments):call.arguments,{args,warnings}=legacyArgs(call.name,raw);
       if(call.name==='compose_direct_page')validateValue(args,directPageContract);else validateTool(call.name,args);
-      const outcome=execute(draft,assets,aliases,call.name,args,options);mutated||=outcome.mutation;results.push({id:call.id||uid(),name:call.name,ok:true,detail:outcome.detail,...(outcome.data?{data:outcome.data}:{}),...(warnings.length?{warnings}:{})});
-    }catch(error){for(const k of Object.keys(draft))delete draft[k];Object.assign(draft,snapshot);results.push({id:call.id||uid(),name:call.name,ok:false,detail:error.message});}
+      if(call.name==='apply_craft_plan'&&args.finish!==false&&(n!==calls.length-1||results.some(r=>!r.ok)))throw Error('完成工艺计划必须是本轮最后操作且前面全部成功');
+      const outcome=execute(draft,assets,aliases,call.name,args,options);
+      for(const field of ['items','textBlocks','primitives','strokes'])for(const old of snapshot[field]||[]){
+        if(old.aiManaged&&!isManagedUnchanged(old)){
+          const current=(draft[field]||[]).find(item=>item.id===old.id);
+          craftAssert(current&&layerFingerprint(current)===layerFingerprint(old),'MANUAL_EDIT_PROTECTED','该图层已被用户接管；未覆盖已有手改',{pieceId:keyOf(old)});
+        }
+      }
+      if(outcome.mutation)recordManagedChanges(snapshot,draft);mutated||=outcome.mutation;results.push({id:call.id||uid(),name:call.name,ok:true,detail:outcome.detail,...(outcome.data?{data:outcome.data}:{}),...(warnings.length?{warnings}:{})});
+    }catch(error){for(const k of Object.keys(draft))delete draft[k];Object.assign(draft,snapshot);results.push({id:call.id||uid(),name:call.name,ok:false,detail:error.message,...craftDiagnostic(error)});}
   }return {draft,results,committed:mutated};
 }

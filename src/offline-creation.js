@@ -1,7 +1,11 @@
+import {stabilizeImportedCraftScene} from './craft-import-identity.js';
+import {multimodalCraftGuide} from './craft-vision.js';
+import {freezeCraftTask,validateCraftTask,inheritCreationBrief,craftTaskInstructions} from './craft-task.js';
+import {validateNativeDraft} from './native-project-package.js';
 import {zip,zipSync,unzipSync,strToU8,strFromU8} from 'fflate';
 import {project} from './domain.js';
 import {applyToolCalls} from './creative.js';
-import {toolContracts,directPageContract,directPageToTools,offlineContract,schemaFingerprint,validateValue} from './creative-contract.js';
+import {toolContracts,offlinePlanContract,directPageContract,directPageToTools,offlineContract,schemaFingerprint,validateValue} from './creative-contract.js';
 import {visualStyleBrief} from './creative-style-brief.js';
 import {creativeDesignGuide,purposeMethod} from './creative-design-guide.js';
 import {validMaterialAlias} from './material-alias.js';
@@ -22,7 +26,7 @@ import {paperDimensions} from './paper-sizes.js';
 export const OFFLINE_PACKAGE_FORMAT='shiye-gpt-creation-package';
 export const EDITABLE_WORK_FORMAT='shiye-editable-project';
 export const EDITABLE_PACKAGE_ENTRY='project.shiyeproject.json';
-const allowedTools=new Set(['compose_page','place_materials','edit_materials','upsert_materials','move_elements','arrange_elements','fit_text_to','upsert_primitives','upsert_text','delete_elements','set_paper','finish_design']);
+const allowedTools=new Set(['apply_craft_plan','compose_page','place_materials','edit_materials','upsert_materials','move_elements','arrange_elements','fit_text_to','upsert_primitives','upsert_text','delete_elements','set_paper','finish_design']);
 const compositionIdeas=source=>relevantJournalFamilies(source).map(({name,purposes,method,materials})=>({name,use:purposes.join('、'),plan:method,materialRoles:materials}));
 const caseStudies=(source,selected=[])=>({note:'包内仅选与本次风格、用途和素材相关的版式参考：原创重构家族案例及已匹配的私有教程原图（如果可读取）。这些参考图不是可用素材，图中文字不可当正文。模板与成品的配对证据见 abstract-templates.json 和 source-image-audit.json。',families:relevantJournalFamilies(source),selectedCases:selectJournalReferenceCases({styles:source.styles,purposes:source.purposes,materials:selected}).map(({id,title,method,copy})=>({id,title,method,copy})),materialRoles:journalMaterialRoles});
 const validAlias=validMaterialAlias;
@@ -69,10 +73,12 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
   if(showImages&&selected.some(item=>!chosen.some(preview=>preview.alias===item.alias&&preview.bytes instanceof Uint8Array&&preview.bytes.length)))throw Error('创作包缺少素材预览，未导出不完整文件');
   if(settings.deliveryMode==='image')return createOfflineImageHandoff({source,project:p,assets,selected,chosen,settings,referenceImages,showImages,userTemplates});
   const {offlineValidateSource}=await import('./generated/offline-validate-source.js');
+  const {offlineGlyphSource}=await import('./generated/offline-glyph-source.js');
   const mode=settings.generationMode==='direct'?'direct':'agent';
-  source.capabilities={cropPx:false,craftV2:true,validateOffline:true,renderOffline:false,previewOffline:'approximate-svg',packOffline:true};
+  source.capabilities={cropPx:false,craftV2:true,craftPlanV2:true,multimodalCraftV2:true,canonicalBrowserPreview:true,validateOffline:true,renderOffline:false,previewOffline:'approximate-svg',packOffline:true};
   const exportedContract=offlineContract(mode,source.capabilities);
-  source.schemaHash=schemaFingerprint(exportedContract);
+  source.schemaHash=schemaFingerprint(exportedContract);source.planSchemaHash=schemaFingerprint(toolContracts.apply_craft_plan);
+  freezeCraftTask(source,p.drafts[0],assets);
   source.previewHashes=showImages?Object.fromEntries(await Promise.all(chosen.map(async entry=>[entry.alias,`sha256:${await sha256Hex(entry.bytes)}`]))):null;
   source.taskHash=await taskFingerprint(source);
   const context={format:OFFLINE_PACKAGE_FORMAT,version:1,source,materials:selected.map(item=>({...item,preview:showImages?`materials/${item.alias}.png`:null}))};
@@ -109,14 +115,16 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
     example.tools[0].arguments.texts=layeredTexts.map((item,index)=>({...item,key:'example-text-'+index}));
   }
   const handoffInstructions=instructions.replace('并在聊天中展示预览图。请勿把整页烘焙为图片。','并交付可编辑场景。请勿把整页烘焙为图片；若不能用同源渲染器生成预览，明确标记待拾页渲染，勿用另一张独立画作冒充预览。').replace('最后按 contract.json 和 example-response.shiyeproject.json 输出。','最后按 contract.json 输出。example-response.shiyeproject.json 仅示意语法字段，不是成品或本次正文；不要照抄示例文字、坐标和构图。').replace('同一条回复先展示最终页面的图片预览。','若有经过同源渲染并核对的最终预览，同一条回复先展示它；否则不要伪造预览，交回拾页生成。').replace('文件模式附可下载的 UTF-8 文件「作品.shiyeproject.json」；复制模式仅给一个单独的','文件模式附可下载的「作品.shiyeproject.zip」，包内放一个 UTF-8 文件 project.shiyeproject.json；复制模式仅给一个单独的').replace('两种方式都只含一个完整 JSON 对象，不是 PDF、HTML 或位图。','文件包内的 project.shiyeproject.json 与复制模式的 JSON 代码块使用相同可编辑图层合同；材料 ID 引用本机高清原图，图形可用 vector_paths 表达自由矢量轮廓。不要只交付 PDF、HTML 或扁平位图。').concat('\n\n【可选离线工具】在已有 Node.js 20+ 的环境中，先将场景保存为任务根目录 project.shiyeproject.json；node runtime/validate.cjs 检查同源结构与现行物理规则，node runtime/pack.cjs 校验后生成可下载 ZIP。这两个工具都不渲染页面、不核对字体或阅读；无法运行时请直接把可编辑场景交回拾页，不要声称已完成视觉验收。');
-  const files={'START_HERE.txt':strToU8(handoffInstructions),'CONTENT_BRIEF.txt':strToU8(contentBrief),'CREATIVE_GUIDE.txt':strToU8(creativeDesignGuide(source,{hasImages:showImages,hasPresets,referenceCases:selectedCases})),'context.json':strToU8(JSON.stringify(context,null,2)),'contract.json':strToU8(JSON.stringify(exportedContract,null,2)),'capabilities.json':strToU8(JSON.stringify({schemaHash:source.schemaHash,sourcePixelCoordinates:false,cropPx:false,previewOnly:showImages,runtime:{validate:'node20',render:null,pack:'node20',visualReview:false}},null,2)),'composition-ideas.json':strToU8(JSON.stringify(compositionIdeas(source),null,2)),'case-studies.json':strToU8(JSON.stringify(caseStudies(source,selected),null,2)),'example-response.shiyeproject.json':strToU8(JSON.stringify(example,null,2)),'runtime/validate.cjs':strToU8(offlineValidateSource),'runtime/pack.cjs':strToU8("process.argv[2]='pack';require('./validate.cjs');\n"),'runtime/README.txt':strToU8('可选：将结果保存为任务根目录 project.shiyeproject.json，在已安装 Node.js 20+ 的环境于任务根目录执行 node runtime/validate.cjs 或 node runtime/pack.cjs。前者写入 output/validation-report.json，后者在校验通过后还会生成 output/作品.shiyeproject.zip。都不会渲染图片，不验证字体或阅读；无法运行时将场景交回拾页核对。')};
+  const files={'START_HERE.txt':strToU8(handoffInstructions+'\n\n'+craftTaskInstructions+'\n\n'+multimodalCraftGuide),'CRAFT_PLAN.schema.json':strToU8(JSON.stringify(toolContracts.apply_craft_plan,null,2)),'regions.json':strToU8(JSON.stringify(source.sourceSnapshots.map(s=>({assetID:s.assetID,sourceRevision:s.sourceRevision,anatomy:s.anatomy})),null,2)),'CONTENT_BRIEF.txt':strToU8(contentBrief),'CREATIVE_GUIDE.txt':strToU8(creativeDesignGuide(source,{hasImages:showImages,hasPresets,referenceCases:selectedCases})),'context.json':strToU8(JSON.stringify(context,null,2)),'contract.json':strToU8(JSON.stringify(exportedContract,null,2)),'capabilities.json':strToU8(JSON.stringify({schemaHash:source.schemaHash,sourcePixelCoordinates:false,cropPx:false,previewOnly:showImages,runtime:{validate:'node20',preview:'svg',browserRender:'shiye-canvas-v2',render:null,pack:'node20',visualReview:false},craft:{plan:true,observations:showImages,twoHoleWeave:true,glyphGeometry:'local-font-required'}},null,2)),'composition-ideas.json':strToU8(JSON.stringify(compositionIdeas(source),null,2)),'case-studies.json':strToU8(JSON.stringify(caseStudies(source,selected),null,2)),'example-response.shiyeproject.json':strToU8(JSON.stringify(example,null,2)),'runtime/glyphs.cjs':strToU8(offlineGlyphSource),'runtime/validate.cjs':strToU8(offlineValidateSource),'runtime/pack.cjs':strToU8("process.argv[2]='pack';require('./validate.cjs');\n"),'runtime/README.txt':strToU8('可选：将结果保存为任务根目录 project.shiyeproject.json，在已安装 Node.js 20+ 的环境于任务根目录执行 node runtime/validate.cjs 或 node runtime/pack.cjs。前者写入 output/validation-report.json，后者在校验通过后还会生成 output/作品.shiyeproject.zip。都不会渲染图片，不验证字体或阅读；无法运行时将场景交回拾页核对。')};
   files['START_HERE.txt']=strToU8(handoffInstructions.replace('若有经过同源渲染并核对的最终预览，同一条回复先展示它；否则不要伪造预览，交回拾页生成。','运行 runtime/preview.cjs，展示与可编辑图层对应的构图预览；最终字体与阅读待拾页复核。').replace('包内放一个 UTF-8 文件 project.shiyeproject.json','包内放 project.shiyeproject.json 和 preview.svg').replace('【可选离线工具】','【预览与校验】').replace('node runtime/pack.cjs 校验后生成可下载 ZIP。这两个工具都不渲染页面、不核对字体或阅读','node runtime/preview.cjs 生成 output/构图预览.svg；node runtime/pack.cjs 生成预览和可下载 ZIP。两者不核对最终字体与阅读'));
   files['START_HERE.txt']=strToU8(strFromU8(files['START_HERE.txt']).replace('\n\n【预览与校验】在已有 Node.js 20+ 的环境中，先将场景保存为任务根目录 project.shiyeproject.json；node runtime/validate.cjs 检查同源结构与现行物理规则，node runtime/preview.cjs 生成 output/构图预览.svg；node runtime/pack.cjs 生成预览和可下载 ZIP。两者不核对最终字体与阅读；无法运行时请直接把可编辑场景交回拾页，不要声称已完成视觉验收。','\n\n【预览】将 JSON 保存为 project.shiyeproject.json；运行 node runtime/preview.cjs 得到构图预览，或运行 node runtime/pack.cjs 同时得到作品 ZIP。无法运行时须说明没有预览。'));
   files['START_HERE.txt']=strToU8(strFromU8(files['START_HERE.txt']).replace('先看本文件确认任务，再读','先看本文件与 CONTENT_BRIEF.txt 确认任务，再读').replace('只借鉴匿名版式','只借鉴匹配案例的构图，不复制案例对象').replace('可借鉴匿名图文区域关系','可借鉴案例图文关系').replace('references/ 是按本次风格与用途生成的四张匿名预设示意，没有私人作品。','references/ 仅有本次匹配的原创真实风格手帐案例，不是可用素材。'));
   if(hasPresets)files['START_HERE.txt']=strToU8(strFromU8(files['START_HERE.txt']).replace('与 case-studies.json 学习风格、用途和构图方法','、case-studies.json 与 abstract-templates.json 学习风格、用途及原图可核对的版式关系'));
   files['capabilities.json']=strToU8(JSON.stringify({schemaHash:source.schemaHash,sourcePixelCoordinates:false,cropPx:false,previewOnly:showImages,runtime:{validate:'node20',render:null,preview:'approximate-svg',pack:'node20',visualReview:false}},null,2));
+  files['START_HERE.txt']=strToU8(strFromU8(files['START_HERE.txt'])+'\n\n【工艺计划】读 CRAFT_GUIDE.txt 和 CRAFT_PLAN.schema.json。GPT 可以直接看图，在 plan.observations 中提出本次选区并同时完成加工，无需先人工标注。一次交付前可内部试排、渲染和修正，不让用户反复导入导出。');
+  files['CRAFT_GUIDE.txt']=strToU8(craftTaskInstructions+'\n\n'+multimodalCraftGuide);
   files['runtime/preview.cjs']=strToU8("process.argv[2]='preview';require('./validate.cjs');\n");
-  files['runtime/README.txt']=strToU8('将完整 JSON 保存为任务根目录 project.shiyeproject.json。Node.js 20+ 环境：node runtime/validate.cjs 写校验报告；node runtime/preview.cjs 验证并写 output/构图预览.svg；node runtime/pack.cjs 验证并写同一预览及 output/作品.shiyeproject.zip。renderOffline:false 表示没有最终同源渲染；previewOffline:approximate-svg 表示可以生成构图预览。若聊天不内嵌 SVG，可对生成的 SVG 截图为 PNG 后展示，不能另外画一张不对应图层的图。构图预览使用同一可编辑图层和任务包缩略图，不能代替拾页的最终字体、抠图和阅读复核。');
+  files['runtime/README.txt']=strToU8('预览同时生成 output/画面预览.html，浏览器可用时打开即可使用拾页共用 Canvas 渲染并下载 PNG；环境字体与缩略图分辨率仍需核对。不包含字体文件。运行 glyphs.cjs 可从本地已有字体产生数字字形轮廓，参见 CRAFT_GUIDE.txt。将完整 JSON 保存为任务根目录 project.shiyeproject.json。Node.js 20+ 环境：node runtime/validate.cjs 写校验报告；node runtime/preview.cjs 验证并写 output/构图预览.svg；node runtime/pack.cjs 验证并写同一预览及 output/作品.shiyeproject.zip。renderOffline:false 表示没有最终同源渲染；previewOffline:approximate-svg 表示可以生成构图预览。若聊天不内嵌 SVG，可对生成的 SVG 截图为 PNG 后展示，不能另外画一张不对应图层的图。构图预览使用同一可编辑图层和任务包缩略图，不能代替拾页的最终字体、抠图和阅读复核。');
   for(const entry of chosen)if(validAlias(entry.alias)&&source.materials.some(item=>item.alias===entry.alias))files[`materials/${entry.alias}.png`]=entry.bytes;
   if(hasPresets){
     files['abstract-templates.json']=strToU8(JSON.stringify({source:'user-provided-tutorial-images',note:'本次只选少数匹配风格、用途和素材的来源模板；sourceNumbers 是模板原图序号，exampleSourceNumbers 仅在能确认对应真实成品时存在。无配对模板仍可使用，不得猜配或照搬。',templates:selectedTemplates},null,2));
@@ -169,11 +177,18 @@ export function importEditableWork(text,assets,{trustedSource=null}={}){
   if(!source||typeof source.bundleId!=='string'||!Array.isArray(source.materials)||!source.materials.length||source.materials.length>100)throw Error('创作包来源无效');
   if((source.taskBinding==='local-v1'&&!trustedSource)||(trustedSource&&canonicalTaskSource(source)!==canonicalTaskSource(trustedSource)))throw Error('网页 AI 结果与本机原始任务不一致；未导入作品');
   if(!['single','spread'].includes(source.mode)||!paperDimensions(source.ratio))throw Error('纸张规格无效');
-  const direct=input.page!==undefined;
-  const tools=direct?directPageToTools(input.page):input.tools;
-  if(!Array.isArray(tools)||!tools.length||tools.length>12||(direct?tools.length!==1||tools[0].name!=='compose_direct_page':tools.at(-1)?.name!=='finish_design'||!tools.some(t=>t.name==='compose_page')))throw Error('作品需要 compose_page 与最后的 finish_design，或完整可编辑页面');
+  const direct=input.page!==undefined,planned=input.plan!==undefined;
+  if([input.page,input.plan,input.tools].filter(value=>value!==undefined).length!==1)throw Error('作品只能包含 page、plan、tools 中的一种入口');
+  const tools=planned?[{name:'apply_craft_plan',arguments:input.plan}]:direct?directPageToTools(input.page):input.tools;
+  const standalonePlan=Array.isArray(tools)&&tools.length===1&&tools[0]?.name==='apply_craft_plan';
+  if(!Array.isArray(tools)||!tools.length||tools.length>12||(direct?tools.length!==1||tools[0].name!=='compose_direct_page':!standalonePlan&&(tools.at(-1)?.name!=='finish_design'||!tools.some(t=>t.name==='compose_page'||t.name==='apply_craft_plan'))))throw Error('作品需要完整页面、完整工艺计划，或包含 compose_page 并以 finish_design 结束的有效工具数组');
+  if((planned||tools.some(t=>t.name==='apply_craft_plan'))&&!source.capabilities?.craftPlanV2)throw Error('原始任务未声明工艺计划能力');
+  const baseDraft=validateCraftTask(source,assets,{trusted:!!trustedSource});
   if(!direct&&tools.some(t=>!allowedTools.has(t?.name)))throw Error('作品包含不支持的创作操作');
-  if(source.schemaHash){
+  if(planned){
+    if(schemaFingerprint(offlinePlanContract(source.capabilities))!==source.planSchemaHash)throw Error('工艺计划合同版本不匹配');
+    validateValue(input.plan,offlinePlanContract(source.capabilities),'$.plan');
+  }else if(source.schemaHash){
     const contract=offlineContract(direct?'direct':'agent',source.capabilities);
     if(schemaFingerprint(contract)!==source.schemaHash)throw Error('创作包合同版本不匹配');
     if(direct)validateValue(input.page,contract,'$.page');
@@ -186,10 +201,12 @@ export function importEditableWork(text,assets,{trustedSource=null}={}){
   const title=typeof input.title==='string'&&input.title.trim()?input.title.trim().slice(0,80):'导入的可编辑作品';
   const p=project(title,{mode:source.mode,ratio:source.ratio,style:Array.isArray(source.styles)?source.styles[0]:'韩系清新'});
   const selectedAssets=assets.filter(a=>Object.values(aliases).includes(a.id));
-  const result=applyToolCalls({tools},p.drafts[0],selectedAssets,aliases,{requiredAssetIDs:source.requiredAssetIDs,processing:source.processing||'保留完整',textMode:source.textMode||'automatic',materialUseHints:source.materialUseHints||{},materialUseRequired:source.materialUseRequired||{},assetProcessing:source.assetProcessing||{},pagePurposes:source.purposes||['日常记录'],allowNoText:source.textMode==='none'||source.purposes?.every(x=>x==='主题封面')});
+  if(baseDraft){validateNativeDraft(baseDraft,new Set(selectedAssets.map(a=>a.id)));p.drafts[0]=baseDraft;p.activeDraftID=baseDraft.id;}
+  const result=applyToolCalls({tools},p.drafts[0],selectedAssets,aliases,{visualAssetIDs:source.materials.filter(m=>source.previewHashes?.[m.alias]).map(m=>m.assetID),requiredAssetIDs:source.requiredAssetIDs,processing:source.processing||'保留完整',textMode:source.textMode||'automatic',materialUseHints:source.materialUseHints||{},materialUseRequired:source.materialUseRequired||{},assetProcessing:source.assetProcessing||{},pagePurposes:source.purposes||['日常记录'],allowNoText:source.textMode==='none'||source.purposes?.every(x=>x==='主题封面')});
   const error=result.results.find(x=>!x.ok);if(error)throw Error(`${error.name}：${error.detail}`);
   if(!result.committed||result.draft.agentRun?.status!=='finished')throw Error('作品没有完成可编辑页面校验');
-  p.drafts[0]=result.draft;p.candidateAssetIDs=Object.values(aliases);p.requiredAssetIDs=[...source.requiredAssetIDs];p.materialPriority=sourcePriority?{required:[...sourcePriority.required],preferred:[...sourcePriority.preferred],available:[...sourcePriority.available],excluded:[]}:{required:[...source.requiredAssetIDs],preferred:Object.values(aliases).filter(id=>!source.requiredAssetIDs.includes(id)),available:[],excluded:[]};p.styles=source.styles;p.purposes=source.purposes;p.processing=source.processing;p.offlineBundleId=source.bundleId;
+  if(source.capabilities?.craftPlanV2)stabilizeImportedCraftScene(result.draft,baseDraft,source.bundleId);
+  p.drafts[0]=result.draft;p.candidateAssetIDs=Object.values(aliases);p.requiredAssetIDs=[...source.requiredAssetIDs];p.materialPriority=sourcePriority?{required:[...sourcePriority.required],preferred:[...sourcePriority.preferred],available:[...sourcePriority.available],excluded:[]}:{required:[...source.requiredAssetIDs],preferred:Object.values(aliases).filter(id=>!source.requiredAssetIDs.includes(id)),available:[],excluded:[]};p.styles=source.styles;p.purposes=source.purposes;p.processing=source.processing;p.offlineBundleId=source.bundleId;inheritCreationBrief(p,source);
   // An external preview is never evidence that this editable scene rendered
   // correctly. The app must independently render and review the final draft.
   p.creationVerification={structure:'passed',physical:'current-rules-passed',preview:'unverified',reading:'pending',sourceTaskId:source.bundleId};

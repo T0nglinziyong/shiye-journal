@@ -1,12 +1,19 @@
+import './selection-menu.css';
 import {finishSelection,selectionActive,toggleSelected} from './library-selection-model.js';
-import {openPopover} from './swift-popover.js';
+import {togglePopover,closePopoverFor} from './swift-popover.js';
 import {classifyRecord} from './classification.js';
 import {supportsVision} from './ai-settings.js';
 import {bindLongPress} from './long-press.js';
 import {withUsageStatus} from './library-model.js';
 import {registerSelectionPresenter} from './selection-presenter.js';
 
-const action=(name,fn)=>{const b=document.createElement('button');b.type='button';b.className='btn';b.textContent=name;b.onclick=async()=>{b.disabled=true;try{await fn(b);}catch(e){const toast=document.querySelector('#toast');toast.textContent=e.message;toast.classList.add('show');}finally{b.disabled=false;}};return b;};
+const action=(name,fn)=>{
+  const b=document.createElement('button');b.type='button';b.className='btn';
+  const label=document.createElement('span');label.className='selection-action-label';label.textContent=name.replace(/\s*›$/u,'');b.append(label);
+  if(/›$/u.test(name)){const arrow=document.createElement('span');arrow.className='selection-action-chevron';arrow.textContent=' ›';arrow.setAttribute('aria-hidden','true');b.append(arrow);}
+  if(name==='更多操作'){b.dataset.selectionMore='';b.setAttribute('aria-expanded','false');b.setAttribute('aria-haspopup','menu');}
+  b.onclick=async()=>{b.disabled=true;try{await fn(b);}catch(e){const toast=document.querySelector('#toast');toast.textContent=e.message;toast.classList.add('show');}finally{b.disabled=false;}};return b;
+};
 export function mountAssetSelection(c,p){
   const {state,view,render}=c,isActive=()=>selectionActive(p,'asset');
   view.querySelectorAll('.view-head .actions button,#series-actions button').forEach(b=>{if(['选择','完成'].includes(b.textContent))b.classList.add('library-select-toggle');});
@@ -23,7 +30,7 @@ export function mountAssetSelection(c,p){
     baseGrids.forEach(grid=>grid.style.display=shown?'none':'');
     for(const [node,value] of baseCounts)node.textContent=shown?cards.length+' 项':value;
   };
-  const sync=()=>{showResults();const active=isActive();for(const card of cards){const chosen=active&&p.selected.has(card.dataset.id);card.classList.toggle('batch-selected',chosen);if(active)card.setAttribute('aria-pressed',String(chosen));else card.removeAttribute('aria-pressed');let check=card.querySelector('.batch-check');if(active&&!check){check=document.createElement('span');check.className='batch-check';card.append(check);}if(check){check.hidden=!active;check.textContent=chosen?'☑':'□';}const title=card.querySelector('h3');let mark=title?.querySelector('.basket-card-check');const inBasket=state.basket.includes(card.dataset.id);title?.classList.toggle('in-matching-basket',inBasket);if(inBasket&&!mark){mark=document.createElement('span');mark.className='basket-card-check';mark.textContent='✓';mark.setAttribute('aria-label','已加入搭配素材篮');title.append(mark);}if(!inBasket)mark?.remove();}tray.hidden=!active;view.querySelectorAll('.library-select-toggle').forEach(b=>b.textContent=p.selectionMode?'完成':'选择');view.querySelectorAll('.action-card').forEach(b=>b.disabled=active);const n=tray.querySelector('strong');n.textContent='本次选中 '+p.selected.size+' 件';tray.querySelectorAll('[data-selection-required]').forEach(b=>b.disabled=!p.selected.size);const selectedButton=[...tray.querySelectorAll('button')].find(b=>b.textContent==='返回筛选'||b.textContent==='查看所选');if(selectedButton){selectedButton.textContent=p.showOnlySelected?'返回筛选':'查看所选';selectedButton.disabled=!p.selected.size&&!p.showOnlySelected;}return true;};
+  const sync=()=>{showResults();const active=isActive();for(const card of cards){const chosen=active&&p.selected.has(card.dataset.id);card.classList.toggle('batch-selected',chosen);if(active)card.setAttribute('aria-pressed',String(chosen));else card.removeAttribute('aria-pressed');let check=card.querySelector('.batch-check');if(active&&!check){check=document.createElement('span');check.className='batch-check';card.append(check);}if(check){check.hidden=!active;check.textContent=chosen?'☑':'□';}const title=card.querySelector('h3');let mark=title?.querySelector('.basket-card-check');const inBasket=state.basket.includes(card.dataset.id);title?.classList.toggle('in-matching-basket',inBasket);if(inBasket&&!mark){mark=document.createElement('span');mark.className='basket-card-check';mark.textContent='✓';mark.setAttribute('aria-label','已加入搭配素材篮');title.append(mark);}if(!inBasket)mark?.remove();}tray.hidden=!active;if(!active||!p.selected.size)closePopoverFor(tray.querySelector('[data-selection-more]'));view.querySelectorAll('.library-select-toggle').forEach(b=>b.textContent=p.selectionMode?'完成':'选择');view.querySelectorAll('.action-card').forEach(b=>b.disabled=active);const n=tray.querySelector('strong');n.textContent='本次选中 '+p.selected.size+' 件';tray.querySelectorAll('[data-selection-required]').forEach(b=>b.disabled=!p.selected.size);const selectedButton=[...tray.querySelectorAll('button')].find(b=>b.textContent==='返回筛选'||b.textContent==='查看所选');if(selectedButton){selectedButton.textContent=p.showOnlySelected?'返回筛选':'查看所选';selectedButton.disabled=!p.selected.size&&!p.showOnlySelected;}return true;};
   const tray=document.createElement('div');tray.className='swift-tray manage library-management-tray';tray.dataset.selectionMode='asset';tray.innerHTML='<strong></strong>';
   const require=(name,fn)=>{const b=action(name,fn);b.dataset.selectionRequired='';return b;};
   tray.append(action('全选页面',()=>{cards.filter(b=>!b.hidden).forEach(b=>p.selected.add(b.dataset.id));sync();}),require('清空选择',()=>{p.selected.clear();p.showOnlySelected=false;sync();}),require(p.showOnlySelected?'返回筛选':'查看所选',()=>{p.showOnlySelected=!p.showOnlySelected;sync();}),require('加入搭配',()=>{state.basket=[...new Set([...state.basket,...p.selected])];finishSelection(p);sync();document.querySelector('#basket-count').textContent=state.basket.length;c.toast('已加入搭配素材篮');}),require('更多操作',anchor=>moreMenu(c,p,anchor)),require('删除素材',async()=>{
@@ -32,7 +39,7 @@ export function mountAssetSelection(c,p){
     await c.db.transaction(['assets','trash'],tx=>{for(const e of entries){tx.objectStore('assets').delete(e.item.id);tx.objectStore('trash').put(e);}});state.assets=state.assets.filter(a=>!p.selected.has(a.id));state.basket=state.basket.filter(id=>!p.selected.has(id));state.trash.push(...entries);finishSelection(p);render();
   }));tray.lastChild.classList.add('danger');view.append(tray);registerSelectionPresenter(view,sync);
 }
-function moreMenu(c,p,anchor){const menu=openPopover(anchor,{menu:true,width:230});menu.surface.classList.add('selection-more-menu');menu.content.append(action('重新识别',async()=>{
+function moreMenu(c,p,anchor){const menu=togglePopover(anchor,{title:'更多操作',menu:true,width:230});if(!menu)return;menu.surface.classList.add('selection-more-menu');menu.content.append(action('重新识别',async()=>{
   const records=c.state.assets.filter(a=>p.selected.has(a.id)).map(a=>structuredClone(a)),cfg=structuredClone(c.state.aiSettings),accountID=c.state.accountId;
   if(!cfg.key||!cfg.includeThumbnails||!supportsVision(cfg))throw Error('请先配置可用的视觉模型并开启素材图片');
   menu.close();let completed=0,failed=0;

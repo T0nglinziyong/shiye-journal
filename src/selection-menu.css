@@ -1,0 +1,19 @@
+/* Identical icon, label and disclosure columns, including rows without icons. */
+.selection-more-menu .popover-content,
+.selection-submenu { display:flex; flex-direction:column; gap:2px; }
+.selection-more-menu .popover-content > button,
+.selection-submenu > button {
+  box-sizing:border-box;
+  width:100%; min-height:44px; margin:0; padding:10px 12px;
+  display:grid; grid-template-columns:20px minmax(0,1fr) 12px;
+  column-gap:10px; align-items:center; justify-content:stretch;
+  text-align:left; line-height:1.35; white-space:normal;
+}
+.selection-more-menu button > svg.shiye-icon,
+.selection-submenu > button > svg.shiye-icon { grid-column:1; grid-row:1; width:20px; height:20px; margin:0; }
+.selection-more-menu .selection-action-label,
+.selection-submenu .selection-action-label { grid-column:2; grid-row:1; min-width:0; overflow-wrap:anywhere; }
+.selection-more-menu .selection-action-chevron,
+.selection-submenu .selection-action-chevron { grid-column:3; grid-row:1; justify-self:end; margin:0; }
+.selection-more-menu button:focus-visible,
+.selection-submenu button:focus-visible { outline:2px solid currentColor; outline-offset:-3px; }

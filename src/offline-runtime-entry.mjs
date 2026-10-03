@@ -1,3 +1,9 @@
+import {offlineBrowserSource} from './generated/offline-browser-source.js';
+import {offlineBrowserPage} from './offline-browser-page.js';
+import {craftSceneHash} from './craft-fingerprint.js';
+import {buildMaterialLedger} from './material-ledger.js';
+import {craftDiagnostic} from './craft-errors.js';
+import {assetFromSourceSnapshot} from './material-anatomy.js';
 // Bundled into a standalone Node tool placed inside an exported task ZIP.
 // It intentionally reads only fixed files in the current task directory and
 // writes only output/validation-report.json. No account or network access.
@@ -12,12 +18,12 @@ async function main(){
   const report={version:1,validator:'shiye-current-contract',structure:'failed',physical:'not-run',visual:'unavailable',reading:'pending'};
   const mode=process.argv[2];
   if(mode==='pack')rmSync('output/作品.shiyeproject.zip',{force:true});
-  if(mode==='pack'||mode==='preview')rmSync('output/构图预览.svg',{force:true});
+  if(mode==='pack'||mode==='preview'){rmSync('output/构图预览.svg',{force:true});rmSync('output/画面预览.html',{force:true});}
   try{
     const context=JSON.parse(readFileSync('context.json','utf8'));
     const sceneText=readFileSync('project.shiyeproject.json','utf8');
     const scene=inspectEditableSource(sceneText);
-    const assets=context.materials.map(item=>({id:item.assetID,title:item.title,kind:item.kind,physicalWidthMM:item.physicalWidthMM,physicalHeightMM:item.physicalHeightMM,supply:{quantity:item.quantity??1}}));
+    const assets=context.source.capabilities?.craftPlanV2?context.source.sourceSnapshots.map(assetFromSourceSnapshot):context.materials.map(item=>({id:item.assetID,title:item.title,kind:item.kind,physicalWidthMM:item.physicalWidthMM,physicalHeightMM:item.physicalHeightMM,supply:{quantity:item.quantity??1}}));
     const imported=importEditableWork(sceneText,assets,{trustedSource:context.source});
     Object.assign(report,{structure:'passed',physical:'current-rules-passed',taskId:context.source.bundleId,taskHash:context.source.taskHash??null,sceneHash:await sceneFingerprint(scene)});
     if(mode==='pack'||mode==='preview'){
@@ -30,6 +36,10 @@ async function main(){
       Object.assign(report,{visual:'approximate-preview',reading:'pending',previewNote:'构图预览并非拾页最终渲染；字体、文字换行和抠图细节待应用复核'});
       mkdirSync('output',{recursive:true});
       writeFileSync('output/构图预览.svg',preview);
+      const browserPage=offlineBrowserPage(imported.drafts[0],context.source,previews,offlineBrowserSource);
+      writeFileSync('output/画面预览.html',browserPage);
+      report.compiledSceneHash=craftSceneHash(imported.drafts[0]);report.browserRenderer='shiye-canvas-v2';
+      if(context.source.capabilities?.craftPlanV2)writeFileSync('output/material-ledger.json',JSON.stringify(buildMaterialLedger(imported.drafts[0],assets,{strictTape:!!scene.plan}),null,2)+'\n');
       if(mode==='pack'){
       const manifest={version:1,taskId:context.source.bundleId,taskHash:context.source.taskHash??null,schemaHash:context.source.schemaHash??null,sceneHash:report.sceneHash,previewHash:`sha256:${await sha256Hex(preview)}`,rendererVersion:'shiye-composition-preview-v1',fontSetVersion:null,outputProfile:'editable-approximate-svg',visualReview:false};
       const contents={
@@ -41,7 +51,7 @@ async function main(){
       writeFileSync('output/作品.shiyeproject.zip',zipSync(contents,{level:6}));
       }
     }
-  }catch(error){report.issue=String(error?.message||error).slice(0,500);process.exitCode=1;}
+  }catch(error){report.structure='failed';report.issue=String(error?.message||error).slice(0,500);report.diagnostic=craftDiagnostic(error);process.exitCode=1;}
   mkdirSync('output',{recursive:true});
   writeFileSync('output/validation-report.json',JSON.stringify(report,null,2)+'\n');
   process.stdout.write(`拾页验证：${report.structure==='passed'?'结构与现行物理规则通过；'+(report.visual==='approximate-preview'?'已生成构图预览，最终字体与阅读待拾页复核':'视觉、字体和阅读仍未核对'):'失败：'+report.issue}\n`);

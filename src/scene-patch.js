@@ -1,27 +1,11 @@
+import {craftSceneState,craftSceneHash} from './craft-fingerprint.js';
 import {applyToolCalls,normalizeCalls} from './creative.js';
 import {sceneFingerprint} from './offline-result-review.js';
 
 // Only editable scene data belongs to the patch baseline. Sync revisions,
 // diagnostics and AI run status may change without changing the page.
-export function patchSceneState(draft){
-  return {
-    canvas:draft.canvas,
-    pageMode:draft.pageMode,
-    pageRatio:draft.pageRatio,
-    physicalPageHeightMM:draft.physicalPageHeightMM,
-    paperColor:draft.paperColor,
-    paperPattern:draft.paperPattern,
-    paperRuling:draft.paperRuling,
-    drawCenterGutter:draft.drawCenterGutter,
-    style:draft.style,
-    items:draft.items||[],
-    textBlocks:draft.textBlocks||[],
-    primitives:draft.primitives||[],
-    strokes:draft.strokes||[],
-  };
-}
-
-export const patchSceneHash=draft=>sceneFingerprint(patchSceneState(draft));
+export const patchSceneState=craftSceneState;
+export const patchSceneHash=async draft=>craftSceneHash(draft);
 
 // applyPatch deliberately does not accept a complete-page generator. A stale
 // patch is rejected before any tool can mutate the cloned scene; independent
