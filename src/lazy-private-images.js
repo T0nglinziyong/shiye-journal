@@ -1,22 +1,93 @@
+import {bindImageResources,cachedImageSource,notifyImageInvalidation} from './presentation-resources.js';
 const EMPTY='data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>');
-export const imagePlaceholder=id=>id?EMPTY+'#shiye-image='+encodeURIComponent(id):'';
+const placeholder=id=>id?EMPTY+'#shiye-image='+encodeURIComponent(id):'';
+export const imagePlaceholder=id=>id?(cachedImageSource(id)||placeholder(id)):'';
 export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=console.warn}){
-  const pending=new Map(),previews=new Map(),sizes=new Map(),retained=new Map(),queue=[],versions=new Map(),retryTimers=new Map(),retryCounts=new Map(),brokenPreviews=new Set(),observed=new WeakSet();let active=0,generation=0;
+  const pending=new Map(),previews=new Map(),sizes=new Map(),previewSizes=new Map(),retained=new Map(),queue=[],versions=new Map(),retryTimers=new Map(),retryCounts=new Map(),brokenPreviews=new Set(),observed=new WeakSet();
+  let active=0,generation=0,disposed=false,trimTimer=null;
   const version=id=>versions.get(id)||0;
-  function scheduleRetry(id){if(retryTimers.has(id))return;const count=Math.min((retryCounts.get(id)||0)+1,6);retryCounts.set(id,count);retryTimers.set(id,setTimeout(()=>{retryTimers.delete(id);retryMissing(id);},Math.min(30000,1000*2**(count-1))));}
-  function retryMissing(id){for(const img of root.querySelectorAll('img[data-image-error="true"]')){if(id&&img.dataset.privateImageId!==id)continue;delete img.dataset.imageError;if(onScreen(img)||!observer)resolve(img,img.dataset.privateImageId);else observer.observe(img);}}
-  function trim(){let bytes=[...sizes.values()].reduce((a,b)=>a+b,0);if(bytes<=96*1024*1024&&sizes.size<=96)return;const live=new Set([...root.querySelectorAll('img')].map(im=>im.getAttribute('src')));for(const [id,size] of sizes){const url=urls.get(id);if(live.has(url)||retained.has(id))continue;URL.revokeObjectURL(url);urls.delete(id);sizes.delete(id);bytes-=size;if(bytes<=96*1024*1024&&sizes.size<=96)break;}}
+  const touch=(map,id)=>{if(map.has(id)){const v=map.get(id);map.delete(id);map.set(id,v);}};
+  const currentSource=id=>{touch(sizes,id);touch(previewSizes,id);return urls.get(id)||previews.get(id)||'';};
+  const identity=source=>{
+    for(const [id,url] of urls)if(url===source)return {id,version:version(id),full:true};
+    for(const [id,url] of previews)if(url===source)return {id,version:version(id),full:false};
+    return null;
+  };
+  const unbind=bindImageResources({source:currentSource,identity});
+  function scheduleRetry(id){if(disposed||retryTimers.has(id))return;const count=Math.min((retryCounts.get(id)||0)+1,6);retryCounts.set(id,count);retryTimers.set(id,setTimeout(()=>{retryTimers.delete(id);retryMissing(id);},Math.min(30000,1000*2**(count-1))));}
+  function retryMissing(id){if(disposed)return;for(const img of root.querySelectorAll('img[data-image-error="true"]')){if(id&&img.dataset.privateImageId!==id)continue;delete img.dataset.imageError;if(onScreen(img)||!observer)resolve(img,img.dataset.privateImageId);else observer.observe(img);}}
+  function releaseURL(map,accounting,id){const url=map.get(id);if(!url)return;notifyImageInvalidation([id]);map.delete(id);accounting.delete(id);URL.revokeObjectURL(url);}
+  function trim(){
+    trimTimer=null;if(disposed)return;
+    const live=new Set([...root.querySelectorAll('img')].map(im=>im.getAttribute('src')));
+    for(const [map,accounting,maxBytes,maxCount] of [[urls,sizes,96*1024*1024,96],[previews,previewSizes,24*1024*1024,240]]){
+      let bytes=[...accounting.values()].reduce((a,b)=>a+b,0);
+      for(const [id,size] of accounting){
+        if(bytes<=maxBytes&&accounting.size<=maxCount)break;
+        if(live.has(map.get(id))||retained.has(id))continue;
+        releaseURL(map,accounting,id);bytes-=size;
+      }
+    }
+  }
+  const queueTrim=()=>{if(trimTimer===null&&!disposed)trimTimer=setTimeout(trim,0);};
   async function load(id,full=false){
-    if(urls.has(id)){if(sizes.has(id)){const size=sizes.get(id);sizes.delete(id);sizes.set(id,size);}return urls.get(id);}if(!full&&previews.has(id))return previews.get(id);
+    if(disposed)return '';
+    if(urls.has(id)){touch(sizes,id);return urls.get(id);}
+    if(!full&&previews.has(id)){touch(previewSizes,id);return previews.get(id);}
     const key=(full?'original:':'preview:')+id;if(pending.has(key))return pending.get(key);
-    const epoch=generation,itemVersion=version(id),task=new Promise((resolve,reject)=>{queue.push({run:async()=>{const blob=full?(await db.get('blobs',id))?.data:await db.previewBlob(id);if(epoch!==generation||itemVersion!==version(id))return '';if(!blob)throw Error('图片尚未同步到可读取位置');const url=URL.createObjectURL(blob);(full?urls:previews).set(id,url);if(full)sizes.set(id,blob.size);setTimeout(trim,0);return url;},resolve,reject});pump();});
+    const epoch=generation,itemVersion=version(id);
+    const task=new Promise((resolve,reject)=>{queue.push({run:async()=>{
+      if(disposed||epoch!==generation||itemVersion!==version(id))return '';
+      const blob=full?(await db.get('blobs',id))?.data:await db.previewBlob(id);
+      if(disposed||epoch!==generation||itemVersion!==version(id))return '';
+      if(!blob)throw Error('图片尚未同步到可读取位置');
+      const map=full?urls:previews,accounting=full?sizes:previewSizes;
+      if(urls.has(id))return urls.get(id);
+      const url=URL.createObjectURL(blob);map.set(id,url);accounting.set(id,blob.size);queueTrim();return url;
+    },resolve,reject});pump();});
     pending.set(key,task);task.finally(()=>{if(pending.get(key)===task)pending.delete(key);}).catch(()=>{});return task;
   }
-  function pump(){while(active<4&&queue.length){const job=queue.shift();active++;job.run().then(job.resolve,job.reject).finally(()=>{active--;pump();});}}
-  function resolve(img,knownID){const src=img.getAttribute('src')||'',marker='#shiye-image=',at=src.indexOf(marker),id=knownID||(at<0?null:decodeURIComponent(src.slice(at+marker.length)));if(!id||img.dataset.privateImageLoading)return;const epoch=generation,itemVersion=version(id),stamp=epoch+':'+itemVersion;img.dataset.privateImageId=id;img.dataset.privateImageLoading=stamp;const current=()=>epoch===generation&&itemVersion===version(id);const full=fullView(img)||brokenPreviews.has(id);void(async()=>{let shown=src;if(full&&!brokenPreviews.has(id)){try{const preview=await load(id,false);if(!current())return;if(preview&&img.isConnected&&img.getAttribute('src')===src){img.src=preview;shown=preview;}}catch(error){if(current())onError(error);}}const url=await load(id,full);if(!current())return;if(url&&img.isConnected&&img.getAttribute('src')===shown){img.src=url;delete img.dataset.imageError;retryCounts.delete(id);const timer=retryTimers.get(id);if(timer){clearTimeout(timer);retryTimers.delete(id);}}else if(!url&&img.isConnected){img.dataset.imageError='true';scheduleRetry(id);}})().catch(error=>{if(current()&&img.isConnected){img.dataset.imageError='true';img.src=imagePlaceholder(id);scheduleRetry(id);onError(error);}}).finally(()=>{if(img.dataset.privateImageLoading===stamp)delete img.dataset.privateImageLoading;});}
+  function pump(){while(!disposed&&active<4&&queue.length){const job=queue.shift();active++;job.run().then(job.resolve,job.reject).finally(()=>{active--;pump();});}}
+  function resolve(img,knownID){
+    const src=img.getAttribute('src')||'',at=src.indexOf('#shiye-image='),known=identity(src);
+    let id=knownID||known?.id;if(!id&&at>=0){try{id=decodeURIComponent(src.slice(at+13));}catch{return;}}
+    if(!id||img.dataset.privateImageLoading||disposed)return;
+    const epoch=generation,itemVersion=version(id),stamp=epoch+':'+itemVersion;
+    img.dataset.privateImageId=id;img.dataset.privateImageLoading=stamp;
+    const current=()=>!disposed&&epoch===generation&&itemVersion===version(id);
+    const full=fullView(img)||brokenPreviews.has(id);
+    void(async()=>{
+      let shown=src;
+      if(full&&!brokenPreviews.has(id))try{const preview=await load(id,false);if(!current())return;if(preview&&img.isConnected&&img.getAttribute('src')===src){img.src=preview;shown=preview;}}catch(error){if(current())onError(error);}
+      const url=await load(id,full);if(!current())return;
+      if(url&&img.isConnected&&img.getAttribute('src')===shown){if(img.getAttribute('src')!==url)img.src=url;delete img.dataset.imageError;retryCounts.delete(id);const timer=retryTimers.get(id);if(timer){clearTimeout(timer);retryTimers.delete(id);}}
+      else if(!url&&img.isConnected){img.dataset.imageError='true';scheduleRetry(id);}
+    })().catch(error=>{if(current()&&img.isConnected){img.dataset.imageError='true';img.src=placeholder(id);scheduleRetry(id);onError(error);}}).finally(()=>{if(img.dataset.privateImageLoading===stamp)delete img.dataset.privateImageLoading;});
+  }
   const observer=typeof IntersectionObserver==='function'?new IntersectionObserver(entries=>{for(const e of entries)if(e.isIntersecting){observer.unobserve(e.target);resolve(e.target,e.target.dataset.privateImageId);}},{rootMargin:'100px'}):null;
   function onScreen(img){const box=img.getBoundingClientRect();return box.width>0&&box.height>0&&box.bottom>=-100&&box.top<=innerHeight+100&&box.right>=-100&&box.left<=innerWidth+100;}
-  function scan(node){if(node.nodeType!==1)return;const images=node.matches('img')?[node]:node.querySelectorAll('img');for(const img of images){if(!observed.has(img)){observed.add(img);img.addEventListener('error',()=>{const id=img.dataset.privateImageId,src=img.getAttribute('src');if(!id||!src?.startsWith('blob:'))return;if(src===previews.get(id)){brokenPreviews.add(id);previews.delete(id);URL.revokeObjectURL(src);delete img.dataset.privateImageLoading;img.src=imagePlaceholder(id);resolve(img,id);return;}if(src===urls.get(id)){urls.delete(id);sizes.delete(id);URL.revokeObjectURL(src);}img.dataset.imageError='true';img.src=imagePlaceholder(id);scheduleRetry(id);});}if(img.getAttribute('src')?.includes('#shiye-image=')){if(onScreen(img)||!observer)resolve(img);else observer.observe(img);}}}
-  const changes=new MutationObserver(records=>{for(const r of records){if(r.type==='attributes')scan(r.target);else for(const node of r.addedNodes)scan(node);}});changes.observe(root,{childList:true,subtree:true,attributes:true,attributeFilter:['src']});scan(root);
-  return {load,retain(ids){for(const id of ids)retained.set(id,(retained.get(id)||0)+1);let released=false;return()=>{if(released)return;released=true;for(const id of ids){const n=retained.get(id)||0;if(n>1)retained.set(id,n-1);else retained.delete(id);}trim();};},retryMissing(){retryMissing();},invalidate(ids){if(ids&&!ids.length)return;const affected=ids?new Set(ids):null;for(const id of affected||new Set([...urls.keys(),...previews.keys(),...root.querySelectorAll('img[data-private-image-id]')].map(img=>typeof img==='string'?img:img.dataset.privateImageId))){versions.set(id,version(id)+1);for(const kind of ['preview:','original:'])pending.delete(kind+id);const timer=retryTimers.get(id);if(timer)clearTimeout(timer);retryTimers.delete(id);retryCounts.delete(id);brokenPreviews.delete(id);}for(const map of [urls,previews]){for(const [id,url] of map){if(affected&&!affected.has(id))continue;URL.revokeObjectURL(url);map.delete(id);sizes.delete(id);}}for(const img of root.querySelectorAll('img[data-private-image-id]')){const id=img.dataset.privateImageId;if(affected&&!affected.has(id))continue;delete img.dataset.privateImageLoading;delete img.dataset.imageError;img.src=imagePlaceholder(id);if(onScreen(img)||!observer)resolve(img,id);else observer.observe(img);}scan(root);},dispose(){generation++;changes.disconnect();observer?.disconnect();for(const timer of retryTimers.values())clearTimeout(timer);retryTimers.clear();for(const map of [urls,previews]){for(const url of map.values())URL.revokeObjectURL(url);map.clear();}sizes.clear();retained.clear();}};
+  function scan(node){if(disposed||node.nodeType!==1)return;const images=node.matches('img')?[node]:node.querySelectorAll('img');for(const img of images){
+    if(!observed.has(img)){observed.add(img);img.addEventListener('error',()=>{
+      const id=img.dataset.privateImageId,src=img.getAttribute('src');if(!id||!src?.startsWith('blob:'))return;
+      if(src===previews.get(id)){brokenPreviews.add(id);releaseURL(previews,previewSizes,id);delete img.dataset.privateImageLoading;img.src=placeholder(id);resolve(img,id);return;}
+      if(src===urls.get(id))releaseURL(urls,sizes,id);
+      img.dataset.imageError='true';img.src=placeholder(id);scheduleRetry(id);
+    });}
+    const src=img.getAttribute('src')||'',known=identity(src);
+    if(known)img.dataset.privateImageId=known.id;
+    // Warm list thumbnails need no async pass. Editor entry upgrades them.
+    if(src.includes('#shiye-image=')||(known&&!known.full&&fullView(img))){if(onScreen(img)||!observer)resolve(img,known?.id);else observer.observe(img);}
+  }}
+  const changes=new MutationObserver(records=>{for(const r of records){if(r.type==='attributes')scan(r.target);else for(const node of r.addedNodes)scan(node);}});
+  changes.observe(root,{childList:true,subtree:true,attributes:true,attributeFilter:['src']});scan(root);
+  return {load,retain(ids){for(const id of ids)retained.set(id,(retained.get(id)||0)+1);let released=false;return()=>{if(released)return;released=true;for(const id of ids){const n=retained.get(id)||0;if(n>1)retained.set(id,n-1);else retained.delete(id);}trim();};},retryMissing(){retryMissing();},
+    stats:()=>({originals:sizes.size,previews:previewSizes.size,originalBytes:[...sizes.values()].reduce((a,b)=>a+b,0),previewBytes:[...previewSizes.values()].reduce((a,b)=>a+b,0),pending:pending.size}),
+    invalidate(ids){
+      if(ids&&!ids.length)return;const affected=ids?new Set(ids):null;if(!affected){generation++;pending.clear();}notifyImageInvalidation(affected);
+      for(const id of affected||new Set([...urls.keys(),...previews.keys(),...root.querySelectorAll('img[data-private-image-id]')].map(img=>typeof img==='string'?img:img.dataset.privateImageId))){versions.set(id,version(id)+1);for(const kind of ['preview:','original:'])pending.delete(kind+id);const timer=retryTimers.get(id);if(timer)clearTimeout(timer);retryTimers.delete(id);retryCounts.delete(id);brokenPreviews.delete(id);}
+      for(const [map,accounting] of [[urls,sizes],[previews,previewSizes]])for(const [id,url] of map){if(affected&&!affected.has(id))continue;map.delete(id);accounting.delete(id);URL.revokeObjectURL(url);}
+      for(const img of root.querySelectorAll('img[data-private-image-id]')){const id=img.dataset.privateImageId;if(affected&&!affected.has(id))continue;delete img.dataset.privateImageLoading;delete img.dataset.imageError;img.src=placeholder(id);if(onScreen(img)||!observer)resolve(img,id);else observer.observe(img);}scan(root);
+    },
+    dispose(){disposed=true;generation++;unbind();changes.disconnect();observer?.disconnect();if(trimTimer!==null)clearTimeout(trimTimer);for(const timer of retryTimers.values())clearTimeout(timer);retryTimers.clear();for(const job of queue.splice(0))job.resolve('');pending.clear();for(const map of [urls,previews]){for(const url of map.values())URL.revokeObjectURL(url);map.clear();}sizes.clear();previewSizes.clear();retained.clear();}
+  };
 }
