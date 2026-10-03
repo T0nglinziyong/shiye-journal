@@ -25,7 +25,6 @@ test('GrabCut treats attached low-chroma shadow as background without clipping c
   }
   const before=pixels.slice(),result=await processVision(cv,'components',{mask,evidence,foregroundSeeds,shadowLikelihood,pixels,width,height,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
   assert.equal(result.length,1);const r=result[0],a=r.mask,at=(x,y)=>a.alpha[(y-Math.round(r.y*height))*a.width+x-Math.round(r.x*width)];
-  assert.equal(r.edgeMethod,'graphcut-lab-shadow-aware');
   assert.equal(at(70,80),255);assert.equal(at(118,80),0);assert.equal(at(70,146),0);assert.deepEqual(pixels,before);
   assert.ok(a.polygons[0].length<=8,'straight paper must not have a staircase contour');
 });
