@@ -13,18 +13,18 @@ test('O-12/O-13: bundled validator runs from the ZIP without node_modules or clo
   const asset={id:'offline-runtime-asset',title:'蓝纸',kind:'sticker',physicalWidthMM:30,physicalHeightMM:40,supply:{quantity:1}};
   const task=await createOfflineHandoff({project:project('断网验证'),assets:[asset],aliases:{m1:asset.id},settings:{includeThumbnails:false}});
   const entries=unzipSync(new Uint8Array(await task.blob.arrayBuffer()));
-  const capabilities=JSON.parse(strFromU8(entries['capabilities.json']));
+  const capabilities=JSON.parse(strFromU8(entries['task/knowledge.json'])).capabilities;
   assert.equal(capabilities.runtime.render,null);
   assert.equal(capabilities.runtime.preview,'approximate-svg');
   assert.ok(entries['runtime/preview.cjs']);
   const directory=await mkdtemp(join(tmpdir(),'shiye-offline-runtime-'));
   try{
-    await mkdir(join(directory,'runtime'));
+    await mkdir(join(directory,'runtime'));await mkdir(join(directory,'task'));
     await writeFile(join(directory,'runtime/validate.cjs'),entries['runtime/validate.cjs']);
     await writeFile(join(directory,'runtime/preview.cjs'),entries['runtime/preview.cjs']);
     await writeFile(join(directory,'runtime/pack.cjs'),entries['runtime/pack.cjs']);
-    await writeFile(join(directory,'context.json'),entries['context.json']);
-    await writeFile(join(directory,'project.shiyeproject.json'),entries['example-response.shiyeproject.json']);
+    await writeFile(join(directory,'context.json'),entries['task/context.json']);
+    await writeFile(join(directory,'project.shiyeproject.json'),entries['examples/project.shiyeproject.json']);
     const run=()=>spawnSync(process.execPath,['runtime/validate.cjs'],{cwd:directory,encoding:'utf8',env:{PATH:process.env.PATH||''},timeout:10000});
     const valid=run();
     assert.equal(valid.status,0,valid.stderr||valid.stdout);
@@ -48,7 +48,7 @@ test('O-12/O-13: bundled validator runs from the ZIP without node_modules or clo
     const imported=await importEditableWorkPackageReviewed(resultBytes,[asset],{trustedSource:task.source});
     assert.equal(imported.creationVerification.manifest,'self-consistent');
     assert.equal(imported.creationVerification.preview,'unverified');
-    const changed=JSON.parse(strFromU8(entries['example-response.shiyeproject.json']));
+    const changed=JSON.parse(strFromU8(entries['examples/project.shiyeproject.json']));
     changed.source.mode='spread';
     await writeFile(join(directory,'project.shiyeproject.json'),strToU8(JSON.stringify(changed)));
     const invalid=spawnSync(process.execPath,['runtime/pack.cjs'],{cwd:directory,encoding:'utf8',env:{PATH:process.env.PATH||''},timeout:10000});
@@ -69,7 +69,7 @@ test('direct-page preview embeds the supplied transparent material and editable 
   try{
     await mkdir(join(directory,'runtime'));await mkdir(join(directory,'materials'));
     for(const name of ['context.json','runtime/validate.cjs','runtime/preview.cjs','materials/m1.png'])await writeFile(join(directory,name),entries[name]);
-    await writeFile(join(directory,'project.shiyeproject.json'),entries['example-response.shiyeproject.json']);
+    await writeFile(join(directory,'project.shiyeproject.json'),entries['examples/project.shiyeproject.json']);
     const result=spawnSync(process.execPath,['runtime/preview.cjs'],{cwd:directory,encoding:'utf8',env:{PATH:process.env.PATH||''},timeout:10000});
     assert.equal(result.status,0,result.stderr||result.stdout);
     const svg=await readFile(join(directory,'output/构图预览.svg'),'utf8');
