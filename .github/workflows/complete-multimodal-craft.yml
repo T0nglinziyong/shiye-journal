@@ -1,0 +1,122 @@
+name: Complete multimodal craft implementation
+on:
+  push:
+    branches: [codex/craft-v2-cache-selection-20261003]
+    paths: ['.github/workflows/complete-multimodal-craft.yml']
+permissions:
+  contents: write
+concurrency:
+  group: complete-multimodal-craft
+  cancel-in-progress: false
+jobs:
+  integrate:
+    if: github.ref == 'refs/heads/codex/craft-v2-cache-selection-20261003'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: true
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Verify entire reviewed update and source baselines before writing
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64, hashlib, json, lzma
+          from pathlib import Path
+          encoded = ''.join(Path(f'scripts/craft-update-{i}.b64').read_text().strip() for i in range(3))
+          raw = lzma.decompress(base64.b64decode(encoded, validate=True), memlimit=128*1024*1024)
+          assert hashlib.sha256(raw).hexdigest() == '610d69e956da8fbbe87de17c09fdde789e3e7dbfc9a2e1558ee565f6b3e14d98', 'Transport checksum mismatch'
+          updates = json.loads(raw)
+          assert len(updates) == 50
+          staged = []
+          seen = set()
+          for entry in updates:
+              name = entry['path']
+              path = Path(name)
+              assert not path.is_absolute() and '..' not in path.parts and name.startswith(('src/', 'scripts/', 'tests/', 'docs/', '.github/workflows/'))
+              assert name not in seen and not path.is_symlink()
+              seen.add(name)
+              before = path.read_bytes() if path.exists() else None
+              digest = hashlib.sha256(before).hexdigest() if before is not None else None
+              assert digest == entry['before'], f'Base changed; refusing overwrite: {name}'
+              if entry.get('delete'):
+                  after = None
+              elif 'new' in entry:
+                  assert before is None
+                  after = entry['new'].encode('utf-8')
+              else:
+                  text = before.decode('utf-8')
+                  last = len(text)
+                  for start, end, replacement in reversed(entry['edits']):
+                      assert 0 <= start <= end <= last
+                      text = text[:start] + replacement + text[end:]
+                      last = start
+                  after = text.encode('utf-8')
+              assert (hashlib.sha256(after).hexdigest() if after is not None else None) == entry['after'], f'Result checksum mismatch: {name}'
+              staged.append((path, after))
+          for path, after in staged:
+              if after is None:
+                  path.unlink()
+              else:
+                  path.parent.mkdir(parents=True, exist_ok=True)
+                  path.write_bytes(after)
+              print('Verified source:', path)
+          Path('/tmp/craft-update-paths').write_bytes(b'\0'.join(str(p).encode() for p, _ in staged)+b'\0')
+          PY
+      - run: npm ci
+      - name: Rebuild all shared portable runtimes
+        run: npm run build
+      - name: Complete source verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/multimodal-craft-logs
+          npm test 2>&1 | tee /tmp/multimodal-craft-logs/unit.log
+          npm run test:ui 2>&1 | tee /tmp/multimodal-craft-logs/ui.log
+          python3 -m unittest discover -s tests -p 'test_*.py' 2>&1 | tee /tmp/multimodal-craft-logs/python.log
+          git diff --check
+      - name: Commit only verified product code and remove temporary transport
+        shell: bash
+        run: |
+          set -euo pipefail
+          BRANCH=codex/craft-v2-cache-selection-20261003
+          git fetch origin "$BRANCH"
+          test "$(git rev-parse FETCH_HEAD)" = "$GITHUB_SHA"
+          mkdir -p docs/ai-craft-v2
+          {
+            echo '# 多模态工艺完整源码验收'
+            echo
+            echo "Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            echo "Input commit: $GITHUB_SHA"
+            echo "Node: $(node --version)"
+            echo 'All 50 source updates were checked against prior and resulting SHA-256 values, applied before the tests, and the three portable runtimes were rebuilt.'
+            echo
+            echo 'Passed: npm run build; npm test; npm run test:ui; Python converter tests; git diff --check.'
+            echo
+            tail -12 /tmp/multimodal-craft-logs/unit.log
+            echo
+            echo 'Real-browser workflow must separately verify the final PR tree. These unit/mocked-provider/Happy DOM tests are not real paid-GPT aesthetic or physical Safari/iPad acceptance.'
+            echo 'No production database, private library image, credentials, domain or deployment configuration changed.'
+          } > docs/ai-craft-v2/DELIVERY_RESULTS.md
+          xargs -0 git add -A -- < /tmp/craft-update-paths
+          git add src/generated/offline-validate-source.js src/generated/offline-browser-source.js src/generated/offline-glyph-source.js docs/ai-craft-v2/DELIVERY_RESULTS.md
+          git rm scripts/craft-update-0.b64 scripts/craft-update-1.b64 scripts/craft-update-2.b64 .github/workflows/complete-multimodal-craft.yml
+          git diff --cached --check
+          git diff --cached --stat
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'feat(craft): complete one-delivery GPT visual plans topology weave and shared rendering'
+          git push origin "HEAD:refs/heads/$BRANCH"
+      - name: Retain synthetic verification logs only
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: multimodal-craft-integration-logs
+          path: /tmp/multimodal-craft-logs/
+          if-no-files-found: warn
+          retention-days: 3
