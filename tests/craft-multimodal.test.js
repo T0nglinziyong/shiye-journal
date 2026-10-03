@@ -59,7 +59,7 @@ test('one exported task carries images, exact versions, multimodal instructions 
  const handoff=await createOfflineHandoff({project:p,assets:[a],aliases:{m1:a.id},previews:[{alias:'m1',bytes:png}],settings:{generationMode:'direct'}});
  const files=unzipSync(new Uint8Array(await handoff.blob.arrayBuffer()));
  assert.match(strFromU8(files['START_HERE.txt']),/observations/);assert.match(strFromU8(files['START_HERE.txt']),/一次交付/);
- assert.ok(files['runtime/glyphs.cjs']);assert.ok(files['CRAFT_PLAN.schema.json']);assert.ok(files['materials/m1.png']);
+ assert.ok(files['runtime/glyphs.cjs']);assert.ok(files['schema/craft-plan.json']);assert.ok(files['materials/m1.png']);
  const envelope={format:'shiye-editable-project',version:1,source:handoff.source,plan:plan(handoff.source.baseDraft,a)};
  const imported=importEditableWork(JSON.stringify(envelope),[a],{trustedSource:handoff.source});assert.equal(imported.drafts[0].items.length,1);
  assert.equal(imported.processing,'自由拆解');assert.deepEqual(a.anatomy,undefined);
