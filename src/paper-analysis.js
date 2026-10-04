@@ -29,7 +29,12 @@ export async function segmentPaperMaterials({data,width:w,height:h},{smallestMM=
       width:w,height:h,smallestMM,paperWidthMM,paperHeightMM
     })
   ]);
-  const fused=fuseRecognitionCandidates(instances,structural);
+  const reconstructed=instances.length?await visionTask('boundary-reconstruction',{
+    pixels:data,instances,evidence:evidence.evidence,backgroundConnected:evidence.backgroundConnected,
+    shadowLikelihood:evidence.shadowLikelihood,score:evidence.score,
+    width:w,height:h,smallestMM,paperWidthMM,paperHeightMM
+  }):[];
+  const fused=fuseRecognitionCandidates(instances,[...structural,...reconstructed]);
   const completed=fused.length?await visionTask('complete-boundaries',{
     pixels:sourcePixels,width:w,height:h,candidates:fused,smallestMM,paperWidthMM,paperHeightMM,
     evidence:evidence.evidence,backgroundConnected:evidence.backgroundConnected,shadowLikelihood:evidence.shadowLikelihood
