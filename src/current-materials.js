@@ -12,6 +12,14 @@ export const isRetiredSystemAsset=asset=>!!asset&&(String(asset.id||'').startsWi
 export const isRetiredSystemProject=project=>!!project&&/^cece-p\d+-project$/.test(String(project.id||''));
 export const isRetiredSystemSeries=series=>!!series&&retiredSeriesIDs.has(series.id);
 export const isRetiredSystemTrash=entry=>entry?.kind==='asset'?isRetiredSystemAsset(entry.item):entry?.kind==='project'?isRetiredSystemProject(entry.item):false;
+export function filterCurrentCollections(collections={}){
+  return {...collections,
+    assets:(collections.assets||[]).filter(asset=>!isRetiredSystemAsset(asset)),
+    series:(collections.series||[]).filter(series=>!isRetiredSystemSeries(series)),
+    projects:(collections.projects||[]).filter(project=>!isRetiredSystemProject(project)),
+    trash:(collections.trash||[]).filter(entry=>!isRetiredSystemTrash(entry))
+  };
+}
 
 export const currentMaterialDefinitions=Object.freeze([
   {id:fixed(9001),title:'手作纸艺 · 撕边横线便签',kind:'paper',role:'annotation',width:68,height:85,texture:'撕边横线纸',path:'/current-materials/torn-note.svg',content:['便签','书写区'],styles:['手写日记','日系文具','复古旧物'],materials:['暖纸','横线','撕边']},
