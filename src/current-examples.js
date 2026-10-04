@@ -9,9 +9,9 @@ const MARKER='current-example-cece-v1';
 export const isCurrentExampleProject=project=>CURRENT_EXAMPLE_PROJECT_IDS.has(project?.id);
 
 function currentProjectRecord(project,index){
-  const drafts=project.drafts.map(d=>structuredClone(d));
+  const {isTemplate,...current}=project,drafts=current.drafts.map(d=>structuredClone(d));
   const draftHistorySnapshots=Object.fromEntries(drafts.map(d=>[d.id,structuredClone(d)]));
-  return {...project,sourceIdentifier:CURRENT_EXAMPLE_SOURCE,examplePresetID:'cece',drafts,activeDraftID:project.activeDraftID||drafts[0]?.id,editHistory:{undo:[],redo:[]},manualArchives:project.manualArchives||[],initialEditorSnapshot:{drafts:drafts.map(d=>structuredClone(d)),activeDraftID:project.activeDraftID||drafts[0]?.id},draftHistorySnapshots,coverStaticPath:`/builtin-examples/cece/cece-reference-${index+1}.jpg`,coverBaselineUpdatedAt:project.updatedAt};
+  return {...current,sourceIdentifier:CURRENT_EXAMPLE_SOURCE,examplePresetID:'cece',drafts,activeDraftID:project.activeDraftID||drafts[0]?.id,editHistory:{undo:[],redo:[]},manualArchives:project.manualArchives||[],initialEditorSnapshot:{drafts:drafts.map(d=>structuredClone(d)),activeDraftID:project.activeDraftID||drafts[0]?.id},draftHistorySnapshots,coverStaticPath:`/builtin-examples/cece/cece-reference-${index+1}.jpg`,coverBaselineUpdatedAt:project.updatedAt};
 }
 
 export async function syncCurrentExamples({isProjectOpen=()=>false,database=defaultDB}={}){
@@ -40,7 +40,7 @@ export async function syncCurrentExamples({isProjectOpen=()=>false,database=defa
   for(const [index,source] of collection.projects.entries()){
     const existing=existingProjects.get(source.id),coverStaticPath=`/builtin-examples/cece/cece-reference-${index+1}.jpg`;
     if(!existing){projects.push(currentProjectRecord(source,index));continue;}
-    if(existing.sourceIdentifier!==CURRENT_EXAMPLE_SOURCE||existing.examplePresetID!=='cece'||existing.coverStaticPath!==coverStaticPath)projects.push({...existing,sourceIdentifier:CURRENT_EXAMPLE_SOURCE,examplePresetID:'cece',coverStaticPath,coverBaselineUpdatedAt:existing.coverBaselineUpdatedAt||existing.updatedAt});
+    if(existing.sourceIdentifier!==CURRENT_EXAMPLE_SOURCE||existing.examplePresetID!=='cece'||existing.coverStaticPath!==coverStaticPath||'isTemplate' in existing){const normalized={...existing,sourceIdentifier:CURRENT_EXAMPLE_SOURCE,examplePresetID:'cece',coverStaticPath,coverBaselineUpdatedAt:existing.coverBaselineUpdatedAt||existing.updatedAt};delete normalized.isTemplate;projects.push(normalized);}
   }
   const series=await database.get('series',collection.series.id);
   await database.transaction(['assets','projects','series','meta'],tx=>{
