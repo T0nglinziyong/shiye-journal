@@ -1,3 +1,5 @@
+> **Current-only（2026-10-04）**：旧 Swift/CeCe 转换、旧 seed 与旧格式迁移已经退出现行架构，不再作为复用目标；本文其余历史审计只用于理解现有模块来源。
+
 # 通用实现复用审计
 
 审计日期：2026-09-29。范围：`src/`、`server/`、`scripts/`、测试及构建的主要模块与调用关系。下面模块表记录替换前的审计基线，**不表示所有候选已接入**；实际落地及验收见本节。未读取私人照片或备份，不提交凭据、请求正文或模型生成草稿。
@@ -62,8 +64,6 @@ EdgeSAM点／框交互与MobileSAMv2整页候选发现值得分别基准测试�
 | `swift-popover.js`、`filter-controls.js`、`parity-ui.js`、`workflow-ui.js` | `openPopover`定位／越界修正／子菜单、重复button工厂、四筛选与路由挂载 | Floating UI DOM，MIT：[UI]；原生 dialog／按钮 | 建议只替换锚定定位（`computePosition`+offset/flip/shift/autoUpdate）；键盘菜单、焦点返回、子菜单所有权、直接升降序与当前值标签保留。定位库本身不提供完整可访问菜单。 |
 | `dialog-lifecycle.js`、`image-node-cache.js` | 延迟 close保护、`ImageNodeCache` 按节点数／像素预算复用解码节点 | 原生dialog／ResizeObserver；Map／ImageBitmap平台 | 保留小型适配。替换DOM框架不能无故丢弃此生命周期保护与内存预算；Canvas库资源同样要destroy/close并防止旧异步结果覆盖新路由。 |
 | `icons.js`、全部CSS（含 `icons.css`） | 手写SVG图标、响应式及多层覆盖 | Lucide SVG，ISC且保留继承部分MIT：[UI]；CSS平台 | 图标可按实际库名称复用并记录来源；用户需要Swift符号位置关系，不能为统一库强行换含义。CSS先收拢重复覆盖，不为此引入整套框架或改变布局。 |
-| `seed.js`、`swift-bundled-seed.js`、`starter-seed.js`、`cece-seed.js` | 样例结构、素材拷贝、异步seed、版本标记 | fetch／IDB／事务平台 | 保留领域样例及明确来源；仅代码库许可不能授权样例素材。保持样例不阻塞首屏，不上传用户内容，不因新依赖清空seed或私人库。 |
-| `scripts/convert_swift_backup.py` | `normal/blob_record/convert_draft/convert` schema迁移和图像变体保留 | 已用 `plistlib/base64/json`，Python标准库：[SCRIPT] | 已复用成熟二进制plist解析，不再自行实现。保留v2–v4字段映射、PencilKit原字节、未知数据与凭据排除；不因为库不支持而删旧字段。 |
 | `scripts/prepare_cece.py` | 样例坐标／段落／形状转换、copyfile与JSON | 已用 `pathlib/json/shutil`：[SCRIPT] | 保留领域映射；当前SOURCE仍为旧 `swift-source` 路径，后续执行前须显式对应新Swift包的公开样例，不能为修路径扫描私人备份。 |
 | `scripts/precache.mjs` | 递归files、构建资产名单与SW替换 | Node fs/crypto已成熟；Workbox，MIT：[PWA] | 暂保留小脚本，缓存规则扩大后再复用Workbox。新WASM／模型属于可选大资源，不能无差别加入首屏precache；版本checksum与离线可用性单列验收。不要把新Service Worker自动缓存 `/api/` 私人资料。 |
 
