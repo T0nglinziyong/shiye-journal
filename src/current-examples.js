@@ -28,7 +28,7 @@ export async function syncCurrentExamples({isProjectOpen=()=>false,database=defa
   const measure=document.createElement('canvas').getContext('2d');
   for(const p of collection.projects)for(const d of p.drafts||[])for(const t of d.textBlocks||[]){t.fontSize=t.height*.88;measure.font=textFont(t);const width=measure.measureText(t.content).width;if(width>t.width)t.fontSize*=t.width/width;}
   const existingAssets=new Map((await database.all('assets')).map(asset=>[asset.id,asset]));
-  const existingProjects=new Set((await database.all('projects')).map(project=>project.id));
+  const existingProjects=new Map((await database.all('projects')).map(project=>[project.id,project]));
   const assets=[];
   for(const source of collection.assets){
     const existing=existingAssets.get(source.id),{sampleFile,...base}=source;
@@ -36,7 +36,12 @@ export async function syncCurrentExamples({isProjectOpen=()=>false,database=defa
     if(!existing)assets.push(canonical);
     else if(existing.sourceIdentifier!==CURRENT_EXAMPLE_SOURCE||existing.staticPath!==canonical.staticPath||!['used','unused'].includes(existing.usageStatus))assets.push({...existing,sourceIdentifier:CURRENT_EXAMPLE_SOURCE,staticPath:canonical.staticPath,usageStatus:canonical.usageStatus});
   }
-  const projects=collection.projects.map((project,index)=>[project,index]).filter(([project])=>!existingProjects.has(project.id)).map(([project,index])=>currentProjectRecord(project,index));
+  const projects=[];
+  for(const [index,source] of collection.projects.entries()){
+    const existing=existingProjects.get(source.id),coverStaticPath=`/builtin-examples/cece/cece-reference-${index+1}.jpg`;
+    if(!existing){projects.push(currentProjectRecord(source,index));continue;}
+    if(existing.sourceIdentifier!==CURRENT_EXAMPLE_SOURCE||existing.examplePresetID!=='cece'||existing.coverStaticPath!==coverStaticPath)projects.push({...existing,sourceIdentifier:CURRENT_EXAMPLE_SOURCE,examplePresetID:'cece',coverStaticPath,coverBaselineUpdatedAt:existing.coverBaselineUpdatedAt||existing.updatedAt});
+  }
   const series=await database.get('series',collection.series.id);
   await database.transaction(['assets','projects','series','meta'],tx=>{
     for(const asset of assets)tx.objectStore('assets').put(asset);
