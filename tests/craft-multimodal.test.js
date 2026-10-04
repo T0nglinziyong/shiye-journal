@@ -23,7 +23,7 @@ const ok=r=>{assert.equal(r.results.every(r=>r.ok),true,JSON.stringify(r.results
 test('GPT can select and extract printed content from an image in a single atomic plan, with no manual annotation',()=>{
  const a=asset(),d=project().drafts[0],before=structuredClone(a),next=ok(run(plan(d,a),d,a));
  assert.equal(next.items.length,1);assert.equal(next.textBlocks.length,0);assert.equal(next.items[0].cropRect.x,.1);assert.equal(next.items[0].cropRect.width,.4);
- assert.equal(next.items[0].craftProvenance.observation.status,'proposed');assert.equal(next.items[0].craftProvenance.observation.provenance,'model');assert.deepEqual(a,before);
+ assert.deepEqual(next.items[0].craftProvenance.observation.boundsRatio,[.1,.1,.4,.3]);assert.equal('status' in next.items[0].craftProvenance.observation,false);assert.equal('provenance' in next.items[0].craftProvenance.observation,false);assert.deepEqual(a,before);
 });
 test('model observations cannot claim user confirmation, missing images, another source, or a stale revision',()=>{
  const a=asset(),d=project().drafts[0];
