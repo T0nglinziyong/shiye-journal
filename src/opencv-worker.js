@@ -123,7 +123,8 @@ export async function processVision(cv,operation,p){
     }
     if(operation==='complete-boundaries')return completePhysicalBoundaries(cv,p,own);
     if(operation==='instances'){
-      const w=p.width,h=p.height,src=own(cv.matFromArray(h,w,cv.CV_8UC1,p.mask)),closed=own(new cv.Mat()),kernel=own(cv.getStructuringElement(cv.MORPH_CROSS,new cv.Size(3,3)));
+      const w=p.width,h=p.height,pxPerMM=Math.max(.5,((w/p.paperWidthMM)+(h/p.paperHeightMM))/2),oddMM=(mm,min=3,max=21)=>{let n=Math.max(min,Math.min(max,Math.round(pxPerMM*mm)));if(!(n&1))n++;return n;};
+      const instanceKernelSize=oddMM(.55),src=own(cv.matFromArray(h,w,cv.CV_8UC1,p.mask)),closed=own(new cv.Mat()),kernel=own(cv.getStructuringElement(cv.MORPH_CROSS,new cv.Size(instanceKernelSize,instanceKernelSize)));
       cv.morphologyEx(src,closed,cv.MORPH_CLOSE,kernel);
       const labels=own(new cv.Mat()),stats=own(new cv.Mat()),centroids=own(new cv.Mat()),componentCount=cv.connectedComponentsWithStats(closed,labels,stats,centroids,8,cv.CV_32S);
       const dist=own(new cv.Mat());cv.distanceTransform(closed,dist,cv.DIST_L2,5);
@@ -135,7 +136,7 @@ export async function processVision(cv,operation,p){
         if(maximum<=0)continue;const threshold=maximum*.28;
         for(let yy=top;yy<top+bh;yy++)for(let xx=left;xx<left+bw;xx++){const at=yy*w+xx;if(labels.data32S[at]===label&&dist.data32F[at]>threshold)peaks.data[at]=255;}
       }
-      const openKernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(3,3)));cv.morphologyEx(peaks,peaks,cv.MORPH_OPEN,openKernel);
+      const openSize=oddMM(.55),openKernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(openSize,openSize)));cv.morphologyEx(peaks,peaks,cv.MORPH_OPEN,openKernel);
       const peakLabels=own(new cv.Mat()),peakStats=own(new cv.Mat()),peakCentroids=own(new cv.Mat()),peakCount=cv.connectedComponentsWithStats(peaks,peakLabels,peakStats,peakCentroids,8,cv.CV_32S);
       const markers=own(cv.Mat.zeros(h,w,cv.CV_32SC1)),backgroundLabel=peakCount;
       for(let i=0;i<w*h;i++)markers.data32S[i]=closed.data[i]?peakLabels.data32S[i]:backgroundLabel;
@@ -146,7 +147,7 @@ export async function processVision(cv,operation,p){
         for(let yy=0;yy<h;yy++)for(let xx=0;xx<w;xx++){const at=yy*w+xx;if(markers.data32S[at]!==label)continue;area++;if(p.evidence?.[at])signal++;left=Math.min(left,xx);right=Math.max(right,xx);top=Math.min(top,yy);bottom=Math.max(bottom,yy);}
         if(area<minArea||right<left||bottom<top||signal/Math.max(1,area)<.03)continue;
         const bw=right-left+1,bh=bottom-top+1;if(bw/w*p.paperWidthMM<p.smallestMM||bh/h*p.paperHeightMM<p.smallestMM||bw>w*.94||bh>h*.94)continue;
-        const pad=8,x=Math.max(0,left-pad),y=Math.max(0,top-pad),rw=Math.min(w,right+1+pad)-x,rh=Math.min(h,bottom+1+pad)-y;
+        const pad=Math.max(4,Math.round(pxPerMM*1.7)),x=Math.max(0,left-pad),y=Math.max(0,top-pad),rw=Math.min(w,right+1+pad)-x,rh=Math.min(h,bottom+1+pad)-y;
         const checkpoint=resources.length,imageROI=own(rgba.roi(new cv.Rect(x,y,rw,rh))),rgbROI=own(new cv.Mat()),gc=own(new cv.Mat(rh,rw,cv.CV_8UC1,new cv.Scalar(cv.GC_PR_BGD)));
         cv.cvtColor(imageROI,rgbROI,cv.COLOR_RGBA2RGB);let foreground=0,background=0;
         for(let py=0;py<rh;py++)for(let px=0;px<rw;px++){
