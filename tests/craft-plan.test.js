@@ -112,7 +112,7 @@ test('manual edits made before an AI request survive full-page replacement',()=>
 test('all-whole is legal, while explicit per-material protection still rejects cuts',()=>{
  const a=material(),d=base();successful(run(plan(d,a),d,a,{processing:'保留完整'}));
  const input=plan(d,a,[plannedPiece(a,'trimmed',{extraction:{type:'rect_crop',boxMM:[0,0,60,80]}})]);
- const result=run(input,d,a,{processing:'AI 自主加工',assetProcessing:{[a.id]:'保留完整'}});assert.equal(result.results[0].ok,false);assert.match(result.results[0].detail,/保留完整/);
+ const result=run(input,d,a,{processing:'不预设',assetProcessing:{[a.id]:'保留完整'}});assert.equal(result.results[0].ok,false);assert.match(result.results[0].detail,/保留完整/);
 });
 test('offline task imports a plan using its original source and full creation brief',async()=>{
  const a=material();a.anatomy=createMaterialAnatomy(a,[region()]);const p=project('source',{ratio:'a5'});p.processing='自由拆解';p.contentPolicy='original';p.userText='原文';p.providedFacts='事实';p.assetProcessing={[a.id]:'自由拆解'};
