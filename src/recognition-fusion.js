@@ -15,7 +15,7 @@ export function fuseRecognitionCandidates(colourCandidates,structuralCandidates)
   const colours=colourCandidates.map((candidate,index)=>({candidate,index,used:false})),result=[];
   for(const structural of [...structuralCandidates].sort((a,b)=>(b.structuralConfidence||0)-(a.structuralConfidence||0))){
     const matches=colours.filter(entry=>!entry.used&&(overlapOf(entry.candidate,structural)>=.42||overlapSmall(entry.candidate,structural)>=.58||iou(entry.candidate,structural)>=.34));
-    const strong=(structural.structuralConfidence||0)>=.68;
+    const strong=(structural.structuralConfidence||0)>=.88;
     if(!matches.length&&!strong)continue;
     // A trusted closed physical boundary may replace several disjoint colour
     // islands (e.g. three figures printed on one white sticker).
