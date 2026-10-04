@@ -52,7 +52,7 @@ import {recognitionOptions} from './recognition-profiles.js';
 import {classifyRecord} from './classification.js';
 import {mountPaperCorrection,resetPaperCorrection} from './paper-ui.js';
 import {rectifyA4,suggestPaperCorners} from './perspective.js';
-import {syncCurrentMaterials,filterCurrentCollections} from './current-materials.js';
+import {syncCurrentMaterials,filterCurrentCollections,isRetiredSystemProject} from './current-materials.js';
 import {applyToolCalls} from './creative.js';
 import {createOfflineHandoff,inspectEditableSource,inspectOfflinePackage,verifyOfflineTaskPackage,importEditableWork,importEditableWorkPackageReviewed} from './offline-creation.js';
 import {offlineTaskStore} from './offline-task-store.js';
@@ -538,7 +538,7 @@ async function saveGeneratedImageSnapshot(blob,source){
  await db.stageImport({projects:[snapshot],blobs:[{id:blobId,data:blob}]});urls.set(blobId,URL.createObjectURL(blob));state.projects.push(snapshot);
  if(state.route==='works')render();return snapshot;
 }
-async function restorePendingProjects(){const pending=await db.pendingProjects();for(const row of pending){const index=state.projects.findIndex(p=>p.id===row.record.id);if(index<0)state.projects.push(row.record);else state.projects[index]=state.activeProject?.id===row.record.id?state.activeProject:row.record;}return pending.length;}
+async function restorePendingProjects(){const pending=await db.pendingProjects();for(const row of pending){if(isRetiredSystemProject(row.record))continue;const index=state.projects.findIndex(p=>p.id===row.record.id);if(index<0)state.projects.push(row.record);else state.projects[index]=state.activeProject?.id===row.record.id?state.activeProject:row.record;}return pending.length;}
 async function refresh({background=false,onlyChanged=false}={}){const sync=await db.refreshCloud();if(onlyChanged&&!sync?.changed)return;if(sync?.changed)privateImages.invalidate(sync.allBlobs?undefined:sync.blobIDs);const [assets,series,projects,trash,meta]=await Promise.all(['assets','series','projects','trash','meta'].map(db.all));const visible=filterCurrentCollections({assets,series,projects,trash});Object.assign(state,{...visible,userTemplates:journalTemplateRecords(meta)});await restorePendingProjects();staticSources.clear();for(const a of state.assets)if(a.staticPath)staticSources.set(a.blobId,a.staticPath);if(reconcileSelectedRecords(parity,state))view.selectionRefresh?.();if(background){backgroundViewPending=true;scheduleBackgroundReconcile();}else render();}
 let trashSweepActive=false;
 async function purgeExpiredTrash(){if(trashSweepActive)return;const entries=expiredTrash(state.trash);if(!entries.length)return;trashSweepActive=true;try{await changeTrash({db,state,ids:entries.map(entry=>entry.id)});if(parity.libraryTab==='trash'||parity.workTab==='trash')render();}catch(error){console.warn('最近删除到期清理待重试',error?.name||error?.message);}finally{trashSweepActive=false;}}
