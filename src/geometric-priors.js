@@ -178,17 +178,21 @@ export function regularizeContour(cv,contour,own,pxPerMM,{closed=true}={}){
   // Remove consecutive duplicates introduced by corner snapping.
   const clean=[];for(const p of output)if(!clean.length||dist(p,clean[clean.length-1])>.25)clean.push(p);
   if(clean.length>2&&dist(clean[0],clean[clean.length-1])<.25)clean.pop();
-  // Douglas-Peucker here is only a representation compression step: line
-  // runs are already collinear, while smooth curves retain enough samples.
+  // Douglas-Peucker here is only a representation compression step. When
+  // most of the perimeter is already explained by straight runs, use a
+  // stronger physical-scale tolerance so a card edge is represented by one
+  // line rather than dozens of collinear samples. Curved carriers retain the
+  // gentler tolerance.
+  const lineCoverage=isLine.filter(Boolean).length/Math.max(1,n),lineDominant=runs.length>=3&&lineCoverage>=.58;
   let simplified=clean;
   if(clean.length>=4){
-    const raw=matFromPoints(cv,clean,own),poly=own(new cv.Mat());
-    cv.approxPolyDP(raw,poly,Math.max(.45,pxPerMM*.16),true);
+    const raw=matFromPoints(cv,clean,own),poly=own(new cv.Mat()),epsilon=lineDominant?Math.max(.8,pxPerMM*.62):Math.max(.45,pxPerMM*.16);
+    cv.approxPolyDP(raw,poly,epsilon,true);
     if(poly.rows>=3)simplified=contourPoints(poly);
   }
-  const meaningfulCurves=primitives.filter(x=>x.type==='curve'&&(x.samples||0)*spacing>=Math.max(3,pxPerMM*2.4));
+  const meaningfulCurves=primitives.filter(x=>x.type==='curve'&&(x.samples||0)*spacing>=Math.max(lineDominant?pxPerMM*4.5:pxPerMM*2.4,3));
   const linePrimitives=primitives.filter(x=>x.type==='line');
-  return {points:simplified,primitives:[...linePrimitives,...meaningfulCurves],corners:Math.max(0,ordered.length),lineCount:runs.length,curveCount:meaningfulCurves.length};
+  return {points:simplified,primitives:[...linePrimitives,...meaningfulCurves],corners:Math.max(0,ordered.length),lineCount:runs.length,curveCount:meaningfulCurves.length,lineCoverage};
 }
 
 export function regularizeOuterSupport(cv,source,own,pxPerMM){
