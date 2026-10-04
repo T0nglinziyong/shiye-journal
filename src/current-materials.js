@@ -14,10 +14,10 @@ export const isRetiredSystemSeries=series=>!!series&&retiredSeriesIDs.has(series
 export const isRetiredSystemTrash=entry=>entry?.kind==='asset'?isRetiredSystemAsset(entry.item):entry?.kind==='project'?isRetiredSystemProject(entry.item):false;
 
 export const currentMaterialDefinitions=Object.freeze([
-  {id:fixed(9001),title:'手作纸艺 · 撕边横线便签',kind:'paper',role:'annotation',width:68,height:85,texture:'撕边横线纸',path:'/starter-styles/original-torn-note.png',content:['便签','书写区'],styles:['手写日记','日系文具','复古旧物'],materials:['暖纸','横线','撕边']},
-  {id:fixed(9002),title:'手作纸艺 · 绿点纹胶带',kind:'tape',role:'connector',width:45,height:15,texture:'半透明和纸胶带',path:'/starter-styles/original-sage-washi.png',content:['连接','压角'],styles:['日系文具','韩系清新','复古旧物'],materials:['绿色','点纹','和纸'],repeatPeriod:15},
-  {id:fixed(9003),title:'手作纸艺 · 蓝色相框',kind:'paper',role:'support',width:72,height:92,texture:'蓝色纸质相框',path:'/starter-styles/original-blue-photo-frame.png',content:['相框','照片'],styles:['杂志编辑','影像故事','摄影叙事'],materials:['蓝色','开窗','卡纸']},
-  {id:fixed(9004),title:'手作纸艺 · 蓝色方格便签',kind:'paper',role:'annotation',width:70,height:88,texture:'蓝色方格纸',path:'/starter-styles/original-blue-grid-note.png',content:['便签','清单'],styles:['清单手帐','日常记录','日系文具'],materials:['蓝色','方格','可写']},
+  {id:fixed(9001),title:'手作纸艺 · 撕边横线便签',kind:'paper',role:'annotation',width:68,height:85,texture:'撕边横线纸',path:'/current-materials/torn-note.svg',content:['便签','书写区'],styles:['手写日记','日系文具','复古旧物'],materials:['暖纸','横线','撕边']},
+  {id:fixed(9002),title:'手作纸艺 · 绿点纹胶带',kind:'tape',role:'connector',width:45,height:15,texture:'半透明和纸胶带',path:'/current-materials/sage-dot-washi.svg',content:['连接','压角'],styles:['日系文具','韩系清新','复古旧物'],materials:['绿色','点纹','和纸'],repeatPeriod:15},
+  {id:fixed(9003),title:'手作纸艺 · 蓝色相框',kind:'paper',role:'support',width:72,height:92,texture:'蓝色纸质相框',path:'/current-materials/blue-frame.svg',content:['相框','照片'],styles:['杂志编辑','影像故事','摄影叙事'],materials:['蓝色','开窗','卡纸']},
+  {id:fixed(9004),title:'手作纸艺 · 蓝色方格便签',kind:'paper',role:'annotation',width:70,height:88,texture:'蓝色方格纸',path:'/current-materials/blue-grid-note.svg',content:['便签','清单'],styles:['清单手帐','日常记录','日系文具'],materials:['蓝色','方格','可写']},
   {id:fixed(9005),title:'手作纸艺 · 暖棕票据',kind:'paper',role:'support',width:76,height:38,texture:'牛皮票据纸',path:'/current-materials/kraft-ticket.svg',content:['票据','编号区'],styles:['复古旧物','旅行票据','美式拼贴'],materials:['牛皮纸','虚线','暖棕']},
   {id:fixed(9006),title:'手作纸艺 · 奶油收据',kind:'paper',role:'annotation',width:64,height:96,texture:'奶油收据纸',path:'/current-materials/cream-receipt.svg',content:['收据','记录'],styles:['旅行票据','清单手帐','杂志编辑'],materials:['奶油色','细线','纸张']},
   {id:fixed(9007),title:'手作纸艺 · 雾粉波浪标签',kind:'paper',role:'annotation',width:58,height:30,texture:'雾粉标签纸',path:'/current-materials/blush-label.svg',content:['标签','短标题'],styles:['韩系清新','可爱插画','手作便签'],materials:['雾粉','波浪边','标签']},
