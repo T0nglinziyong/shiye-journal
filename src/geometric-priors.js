@@ -195,9 +195,65 @@ export function regularizeContour(cv,contour,own,pxPerMM,{closed=true}={}){
   return {points:simplified,primitives:[...linePrimitives,...meaningfulCurves],corners:Math.max(0,ordered.length),lineCount:runs.length,curveCount:meaningfulCurves.length,lineCoverage};
 }
 
-export function regularizeOuterSupport(cv,source,own,pxPerMM){
+
+function maskIoU(cv,a,b,own){
+  const inter=own(new cv.Mat()),union=own(new cv.Mat());cv.bitwise_and(a,b,inter);cv.bitwise_or(a,b,union);
+  return cv.countNonZero(inter)/Math.max(1,cv.countNonZero(union));
+}
+function lineEnvelope(cv,source,rgb,lab,own,pxPerMM){
+  if(!rgb||!lab)return null;
   const contours=own(new cv.MatVector()),hierarchy=own(new cv.Mat());cv.findContours(source,contours,hierarchy,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_NONE);
-  let largest=null,area=0;for(let i=0;i<contours.size();i++){const c=own(contours.get(i)),a=cv.contourArea(c);if(a>area){area=a;largest=c;}}
+  let contour=null,area=0;for(let i=0;i<contours.size();i++){const q=own(contours.get(i)),a=cv.contourArea(q);if(a>area){area=a;contour=q;}}
+  if(!contour||area<32)return null;
+  const rect=cv.boundingRect(contour),minLine=Math.max(20,Math.round(Math.max(rect.width,rect.height)*.22));
+  const gray=own(new cv.Mat()),blur=own(new cv.Mat()),edges=own(new cv.Mat()),channels=own(new cv.MatVector()),aBlur=own(new cv.Mat()),bBlur=own(new cv.Mat()),aEdge=own(new cv.Mat()),bEdge=own(new cv.Mat());
+  cv.cvtColor(rgb,gray,cv.COLOR_RGB2GRAY);cv.GaussianBlur(gray,blur,new cv.Size(3,3),0);cv.Canny(blur,edges,18,56);
+  cv.split(lab,channels);const ac=own(channels.get(1)),bc=own(channels.get(2));cv.GaussianBlur(ac,aBlur,new cv.Size(3,3),0);cv.GaussianBlur(bc,bBlur,new cv.Size(3,3),0);cv.Canny(aBlur,aEdge,4,14);cv.Canny(bBlur,bEdge,4,14);cv.bitwise_or(edges,aEdge,edges);cv.bitwise_or(edges,bEdge,edges);
+  let ringSize=Math.max(3,Math.min(31,Math.round(pxPerMM*2.3)));if(!(ringSize&1))ringSize++;
+  const ringKernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(ringSize,ringSize))),dil=own(new cv.Mat()),ero=own(new cv.Mat()),ring=own(new cv.Mat());
+  cv.dilate(source,dil,ringKernel);cv.erode(source,ero,ringKernel);cv.subtract(dil,ero,ring);cv.bitwise_and(edges,ring,edges);
+  const lines=own(new cv.Mat());cv.HoughLinesP(edges,lines,1,Math.PI/360,Math.max(18,Math.round(minLine*.18)),minLine,Math.max(6,Math.round(pxPerMM*3)));
+  if(!lines.rows||lines.rows<4)return null;
+  const candidates=[],bins=36,weights=new Array(bins).fill(0);
+  for(let i=0;i<lines.rows;i++){
+    const at=i*4,x1=lines.data32S[at],y1=lines.data32S[at+1],x2=lines.data32S[at+2],y2=lines.data32S[at+3],dx=x2-x1,dy=y2-y1,length=Math.hypot(dx,dy);
+    if(length<minLine)continue;const theta=((Math.atan2(dy,dx)%Math.PI)+Math.PI)%Math.PI,mid=[(x1+x2)/2,(y1+y2)/2],normal=[-Math.sin(theta),Math.cos(theta)],rho=normal[0]*mid[0]+normal[1]*mid[1],bin=Math.floor(theta/Math.PI*bins)%bins;
+    weights[bin]+=length;candidates.push({theta,rho,length});
+  }
+  if(candidates.length<4)return null;
+  const angleDiff=(a,b)=>Math.min(Math.abs(a-b),Math.PI-Math.abs(a-b)),order=[...weights.keys()].sort((a,b)=>weights[b]-weights[a]),modes=[];
+  for(const bin of order){if(weights[bin]<=0)continue;const theta=(bin+.5)*Math.PI/bins;if(modes.every(m=>angleDiff(theta,m)>Math.PI/7))modes.push(theta);if(modes.length===2)break;}
+  if(modes.length<2||angleDiff(modes[0],modes[1])<Math.PI/5)return null;
+  const refined=[];
+  for(const mode of modes){
+    const group=candidates.filter(q=>angleDiff(q.theta,mode)<Math.PI/15);if(group.length<2)return null;
+    let C=0,S=0;for(const q of group){C+=q.length*Math.cos(2*q.theta);S+=q.length*Math.sin(2*q.theta);}refined.push(((.5*Math.atan2(S,C))%Math.PI+Math.PI)%Math.PI);
+  }
+  const points=Array.from({length:contour.rows},(_,i)=>[contour.data32S[i*2],contour.data32S[i*2+1]]),chosen=[];
+  for(const theta of refined){
+    const normal=[-Math.sin(theta),Math.cos(theta)],projections=points.map(p=>normal[0]*p[0]+normal[1]*p[1]).sort((a,b)=>a-b),targets=[projections[Math.floor(projections.length*.04)],projections[Math.floor(projections.length*.96)]],group=candidates.filter(q=>angleDiff(q.theta,theta)<Math.PI/18).map(q=>{
+      const qn=[-Math.sin(q.theta),Math.cos(q.theta)],sign=qn[0]*normal[0]+qn[1]*normal[1]>=0?1:-1;return {rho:q.rho*sign,length:q.length};
+    });
+    if(group.length<2)return null;
+    for(const target of targets){group.sort((a,b)=>(Math.abs(a.rho-target)-a.length*.002)-(Math.abs(b.rho-target)-b.length*.002));chosen.push({theta,rho:group[0].rho});}
+  }
+  const intersect=(a,b)=>{
+    const n1=[-Math.sin(a.theta),Math.cos(a.theta)],n2=[-Math.sin(b.theta),Math.cos(b.theta)],det=n1[0]*n2[1]-n1[1]*n2[0];if(Math.abs(det)<1e-4)return null;
+    return [(a.rho*n2[1]-n1[1]*b.rho)/det,(n1[0]*b.rho-a.rho*n2[0])/det];
+  };
+  const corners=[];for(let i=0;i<2;i++)for(let j=2;j<4;j++){const p=intersect(chosen[i],chosen[j]);if(!p)return null;corners.push(p);}
+  const center=[corners.reduce((s,p)=>s+p[0],0)/4,corners.reduce((s,p)=>s+p[1],0)/4];corners.sort((a,b)=>Math.atan2(a[1]-center[1],a[0]-center[0])-Math.atan2(b[1]-center[1],b[0]-center[0]));
+  const poly=own(cv.matFromArray(4,1,cv.CV_32SC2,corners.flatMap(([x,y])=>[Math.round(x),Math.round(y)]))),mask=contourMask(cv,source.cols,source.rows,poly,own),iou=maskIoU(cv,source,mask,own),ratio=cv.countNonZero(mask)/Math.max(1,cv.countNonZero(source));
+  if(iou<.78||ratio<.62||ratio>1.48)return null;
+  return {mask,boundaryModel:'line-envelope',primitives:[{type:'line'},{type:'line'},{type:'line'},{type:'line'}],cornerCount:4,lineCount:4,curveCount:0,polygon:corners,iou};
+}
+
+export function regularizeOuterSupport(cv,source,own,pxPerMM,{rgb=null,lab=null}={}){
+  let clean=own(new cv.Mat()),kernelSize=Math.max(3,Math.min(11,Math.round(pxPerMM*.75)));if(!(kernelSize&1))kernelSize++;
+  const kernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(kernelSize,kernelSize)));cv.morphologyEx(source,clean,cv.MORPH_CLOSE,kernel);cv.morphologyEx(clean,clean,cv.MORPH_OPEN,kernel);
+  const envelope=lineEnvelope(cv,clean,rgb,lab,own,pxPerMM);if(envelope)return envelope;
+  const contours=own(new cv.MatVector()),hierarchy=own(new cv.Mat());cv.findContours(clean,contours,hierarchy,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_NONE);
+  let largest=null,area=0;for(let i=0;i<contours.size();i++){const q=own(contours.get(i)),a=cv.contourArea(q);if(a>area){area=a;largest=q;}}
   if(!largest||area<16)return {mask:source,boundaryModel:'line-curve',primitives:[],polygon:null};
   const reg=regularizeContour(cv,largest,own,pxPerMM),rContour=matFromPoints(cv,reg.points,own),mask=contourMask(cv,source.cols,source.rows,rContour,own);
   return {mask,boundaryModel:'line-curve',primitives:reg.primitives,cornerCount:reg.corners,lineCount:reg.lineCount,curveCount:reg.curveCount,polygon:reg.points};
