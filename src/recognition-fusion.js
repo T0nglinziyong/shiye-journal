@@ -15,6 +15,13 @@ const containsCenter=(outer,inner)=>{
   return x>=outer.x&&x<=outer.x+outer.w&&y>=outer.y&&y<=outer.y+outer.h;
 };
 const contained=(a,b)=>a.x>=b.x&&a.y>=b.y&&a.x+a.w<=b.x+b.w&&a.y+a.h<=b.y+b.h;
+const effectivelyContained=(child,parent)=>{
+  if(contained(child,parent))return true;
+  if(area(child)>=area(parent)*.20||overlapOf(child,parent)<=.65)return false;
+  const x=child.x+child.w/2,y=child.y+child.h/2,margin=.006;
+  return x>=parent.x-margin&&x<=parent.x+parent.w+margin&&y>=parent.y-margin&&y<=parent.y+parent.h+margin;
+};
+const strongWholeRectangle=s=>(s.rectFill??0)>=.84&&(s.paperContactRatio??0)>=.80&&(s.insideEvidenceRatio??1)<=.65;
 
 export function fuseRecognitionCandidates(instances,structuralCandidates){
   const base=instances.map(candidate=>({candidate,used:false})),accepted=[];
@@ -28,11 +35,12 @@ export function fuseRecognitionCandidates(instances,structuralCandidates){
       .filter(({entry})=>!entry.used&&(containsCenter(structural,entry.candidate)||overlapOf(entry.candidate,structural)>.20));
     let accept=false;
     if(matches.length){
-      // One physical sticker may contain several watershed islands (printed
-      // figures on white stock). But never merge two substantial neighbouring
-      // items merely because an edge contour happened to surround both.
+      // A regular paper/card outer boundary can legitimately reunite several
+      // substantial watershed fragments when a pale/white interior split them.
+      // The shape + direct page-contact + moderate internal evidence jointly
+      // distinguish that case from a loose contour around neighbouring items.
       const shares=matches.map(({entry})=>area(entry.candidate)/Math.max(area(structural),1e-9)).sort((a,b)=>b-a);
-      accept=matches.length===1||shares[1]<.15;
+      accept=strongWholeRectangle(structural)||matches.length===1||shares[1]<.15;
       accept&&=(structural.paperContactRatio??0)>=.70;
     }else{
       // Missing-instance recovery is deliberately strict. It recovers a pale
@@ -44,6 +52,9 @@ export function fuseRecognitionCandidates(instances,structuralCandidates){
         &&area(structural)>=.006;
     }
     if(!accept)continue;
+    // Never replace an already larger physical instance with a smaller
+    // internal print contour merely because that contour has a clean edge.
+    if(matches.length&&area(structural)<Math.max(...matches.map(({entry})=>area(entry.candidate)))*.85)continue;
     accepted.push(structural);
     for(const {entry} of matches)entry.used=true;
   }
@@ -51,7 +62,9 @@ export function fuseRecognitionCandidates(instances,structuralCandidates){
   for(const entry of base)if(!entry.used)accepted.push(entry.candidate);
 
   // Keep the outer accepted physical item, never its internal print detail.
+  // A tiny numerical overshoot from GrabCut/watershed should not let an
+  // internal glyph survive beside an otherwise enclosing physical boundary.
   const ordered=accepted.sort((a,b)=>area(b)-area(a)),kept=[];
-  for(const candidate of ordered)if(!kept.some(parent=>contained(candidate,parent)))kept.push(candidate);
+  for(const candidate of ordered)if(!kept.some(parent=>effectivelyContained(candidate,parent)))kept.push(candidate);
   return kept;
 }
