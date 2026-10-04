@@ -387,6 +387,16 @@ export function carveEnclosedPageRegions(cv,{mask,outer,lab,gray,pageL,pageA,pag
         const radial=radialCurve(cx,cy,expectedRadius);if(radial)accepted.push(radial);
       }
     }
+    // The observed group may itself miss an endpoint. Extrapolate a single
+    // learned spacing on each side, but accept it only when the local image
+    // independently supplies a closed smooth-curve boundary. This recovers an
+    // end aperture hidden by print/shadow without assuming a particular count.
+    for(const t of [projections[0]-spacingPx,projections[projections.length-1]+spacingPx]){
+      const cx=origin[0]+ux*t,cy=origin[1]+uy*t;
+      if(cx<2||cy<2||cx>=cols-2||cy>=rows-2||!outer.data[Math.round(cy)*cols+Math.round(cx)])continue;
+      const edgeDistance=distance.data32F[Math.round(cy)*cols+Math.round(cx)]/pxPerMM;if(Math.abs(edgeDistance-bestPattern.edgeDistanceMM)>Math.max(1.5,bestPattern.edgeDistanceMM*.30))continue;
+      const radial=radialCurve(cx,cy,expectedRadius);if(radial)accepted.push(radial);
+    }
   }
   const deduped=[];
   for(const q of deduped){
