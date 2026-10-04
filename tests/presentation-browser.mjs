@@ -16,7 +16,7 @@ async function decoded(selector){await b.wait(selector);await b.evaluate(`(async
 async function trip(){
  await b.click('[data-route="library"]','.series-grid');await b.evaluate(`document.querySelector(${JSON.stringify(series)}).scrollIntoView({block:'center'})`);await decoded(series);
  await b.click('[data-route="works"]','.works-grid');await b.evaluate(`document.querySelector(${JSON.stringify(work)}).scrollIntoView({block:'center'})`);await decoded(work);
- await b.click('[data-route="matching"]','.matching-page');await b.evaluate(`document.querySelector(${JSON.stringify(variant)}).scrollIntoView({block:'center'})`);await decoded(variant);
+ await b.click('[data-route="matching"]','.matching-page');await b.evaluate(`document.querySelector(${JSON.stringify(variant)}).scrollIntoView({block:'center'})`);await b.wait(variant+' .match-raster-preview');await decoded(variant+' .match-cover-preview');
 }
 try{
  await b.wait('.series-grid');
@@ -36,10 +36,10 @@ try{
   await b.command('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:width<700});
   await trip();await trip();
   const before=await b.evaluate('window.__cacheBlobReads');
-  await b.evaluate(`window.__warmVariant=document.querySelector(${JSON.stringify(variant+' .thumb-inner')})`);
+  await b.evaluate(`window.__warmVariantSrc=document.querySelector(${JSON.stringify(variant+' .match-raster-preview')}).src`);
   await trip();
   const after=await b.evaluate('window.__cacheBlobReads');assert.equal(after,before,'warm route revisit read image again');
-  assert.equal(await b.evaluate(`window.__warmVariant===document.querySelector(${JSON.stringify(variant+' .thumb-inner')})`),true,'unchanged variant DOM was rebuilt');
+  assert.equal(await b.evaluate(`window.__warmVariantSrc===document.querySelector(${JSON.stringify(variant+' .match-raster-preview')}).src`),true,'matching raster preview changed without scene changes');
   await b.click('[data-route="library"]','.series-grid');await b.click(series,'.series-contents');
   await named('#series-actions button,.view-head .actions button','选择');
   await b.click('[data-act="detail"][data-id="cache-test-asset"]');
@@ -54,7 +54,7 @@ try{
   await b.click('[data-selection-more]','.selection-more-menu');await b.evaluate('document.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}))');
   assert.equal(await b.evaluate('!!document.querySelector(".selection-more-menu")'),false);
   await named('#series-actions button,.view-head .actions button','完成');
-  report.viewports.push({width,height,menuAligned:true,toggleClosedChildren:true,selectionPreserved:true,escapeClosed:true,warmImageReads:after-before,coverNodeReused:true});
+  report.viewports.push({width,height,menuAligned:true,toggleClosedChildren:true,selectionPreserved:true,escapeClosed:true,warmImageReads:after-before,rasterPreviewStable:true});
  }
  assert.deepEqual(b.errors,[]);report.passed=true;report.consoleErrors=[];
  await writeFile(directory+'/presentation-report.json',JSON.stringify(report,null,2));console.log('PRESENTATION_BROWSER_PASS',JSON.stringify(report));

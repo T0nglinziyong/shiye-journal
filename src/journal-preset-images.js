@@ -24,36 +24,6 @@ export async function loadJournalPresetImage(number,{accountId,request=fetch}={}
   });pending.set(number,work);try{return await work;}finally{if(pending.get(number)===work)pending.delete(number);}
 }
 
-export async function publishJournalPresetImages(files,{onProgress=()=>{},request=fetch}={}){
-  if(!cloudEnabled)throw Error('预设图库需要云端连接');
-  const entries=[...files].map(file=>({file,number:Number(/^(\d+)-IMG_\d+\.jpe?g$/i.exec(file.name)?.[1])}));
-  if(!entries.length||entries.some(entry=>!Number.isInteger(entry.number)||entry.number<1||entry.number>70||entry.file.size>20*1024*1024)||new Set(entries.map(entry=>entry.number)).size!==entries.length)throw Error('请选择来源图片 1-IMG_*.JPG 至 70-IMG_*.JPG，编号不能重复');
-  const {data,error}=await cloudClient().auth.getSession();if(error||!data.session?.access_token)throw Error('请先登录后发布预设图');
-  let completed=0;const failures=[];
-  for(let start=0;start<entries.length;start+=3){
-    await Promise.all(entries.slice(start,start+3).map(async({file,number})=>{
-      try{
-        const path=`journal-presets/source/${number}.jpg`;
-        const readTicket=await request('/api/cos',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+data.session.access_token},body:JSON.stringify({objects:[{path,method:'GET'}]}),signal:AbortSignal.timeout(15000)});
-        if(!readTicket.ok)throw Error(`检查授权 ${readTicket.status}`);
-        const readURL=(await readTicket.json()).tickets?.[0]?.url;if(!readURL?.startsWith('https://'))throw Error('检查签名无效');
-        const probe=await request(readURL,{headers:{Range:'bytes=0-0'},signal:AbortSignal.timeout(30000)});
-        if(probe.ok){await probe.body?.cancel();completed++;return;}
-        if(probe.status!==404)throw Error(`检查图片 ${probe.status}`);
-        const ticket=await request('/api/cos',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+data.session.access_token},body:JSON.stringify({objects:[{path,method:'PUT',type:'image/jpeg'}]}),signal:AbortSignal.timeout(15000)});
-        if(!ticket.ok)throw Error(`授权 ${ticket.status}`);
-        const {url,headers}=(await ticket.json()).tickets?.[0]||{};
-        if(!url?.startsWith('https://'))throw Error('签名无效');
-        const uploaded=await request(url,{method:'PUT',headers,body:file,signal:AbortSignal.timeout(120000)});
-        if(!uploaded.ok&&uploaded.status!==409&&uploaded.status!==412)throw Error(`上传 ${uploaded.status}`);
-        completed++;
-      }catch(error){failures.push(`${number}: ${error.message}`);}finally{onProgress(completed+failures.length,entries.length);}
-    }));
-  }
-  if(failures.length)throw Error(`${completed}/${entries.length} 张已发布；失败：${failures.slice(0,6).join('、')}`);
-  clearJournalPresetImages();return completed;
-}
-
 export function journalPanelPixels(panel,width,height){
   const {rect}=validateJournalPanel(panel);
   return {x:Math.round(rect[0]*width),y:Math.round(rect[1]*height),width:Math.round(rect[2]*width),height:Math.round(rect[3]*height)};

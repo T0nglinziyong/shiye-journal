@@ -1,4 +1,4 @@
-import {materialSourceSnapshot,assetFromSourceSnapshot,assetSourceRevision,readMaterialRegions} from './material-anatomy.js';
+import {materialSourceSnapshot,assetFromSourceSnapshot,assetSourceRevision} from './material-anatomy.js';
 import {craftSceneHash,craftSceneState,craftDigest} from './craft-fingerprint.js';
 import {craftAssert} from './craft-errors.js';
 
@@ -21,7 +21,6 @@ export function validateCraftTask(source,currentAssets,{trusted=false}={}){
   const snapshot=byID.get(item.assetID),current=currentAssets.find(a=>a.id===item.assetID);
   craftAssert(snapshot&&current,'MISSING_SOURCE','当前素材库找不到任务素材',{assetId:item.assetID});
   craftAssert(assetSourceRevision(assetFromSourceSnapshot(snapshot))===snapshot.sourceRevision,'SOURCE_SNAPSHOT_CHANGED','来源快照与其声明版本不一致',{assetId:item.assetID});
-  craftAssert(craftDigest(current.anatomy??null)===craftDigest(snapshot.anatomy??null),'STALE_REGION_SOURCE','已确认区域在导出后改变，请重新导出任务',{assetId:item.assetID});
   craftAssert(assetSourceRevision(current)===snapshot.sourceRevision,'STALE_SOURCE','导出后素材图像、尺寸或库存已变化；请重新导出任务，不覆盖旧作品',{assetId:item.assetID});
  }
  craftAssert(source.baseDraft&&craftSceneHash(source.baseDraft)===source.baseSceneHash,'BASE_SCENE_CHANGED','任务起始画面指纹不匹配');
@@ -39,7 +38,7 @@ export function validateCraftTask(source,currentAssets,{trusted=false}={}){
 export function describeCraftSources(assets,aliases={}){
  return Object.entries(aliases).map(([alias,id])=>{
   const asset=assets.find(a=>a.id===id);if(!asset)return null;
-  return {alias,sourceRevision:assetSourceRevision(asset),regions:readMaterialRegions(asset,{confirmedOnly:true}).map(({id,kind,label,boundsRatio,outlineRatio,preserve})=>({id,kind,label,boundsRatio,hasOutline:!!outlineRatio,preserve:!!preserve}))};
+  return {alias,sourceRevision:assetSourceRevision(asset)};
  }).filter(Boolean);
 }
 export function inheritCreationBrief(project,source){
@@ -48,4 +47,4 @@ export function inheritCreationBrief(project,source){
  project.creationBaseSceneHash=source.baseSceneHash;
  return project;
 }
-export const craftTaskInstructions=`素材工艺计划：用 apply_craft_plan 可一次提交取材、加工、关系和父片拆分。每件素材的 sourceRevision 与可选用户标注区域见 context.json 的 sourceSnapshots；场景基线见 source.baseSceneHash。新建子片使用独立 id，consume 列出父片，parentId 指回父片，默认保留的余料会进入备选。也可以继续使用普通页面或工具格式。区域的 bounds 与 outline 不是同一种精度；没有用户确认轮廓时，可由 GPT 直接看图提出本次观察轮廓，不得将其标成用户确认。图像/尺寸/库存改变后必须重新导出任务，不修改原 source 蒙混。工艺决策与制作说明不进入正文，完整使用是合法设计选择。`;
+export const craftTaskInstructions=`素材工艺计划：用 apply_craft_plan 可一次提交取材、加工、关系和父片拆分。每件素材的 sourceRevision 见 context.json 的 sourceSnapshots；场景基线见 source.baseSceneHash。新建子片使用独立 id，consume 列出父片，parentId 指回父片，默认保留的余料会进入备选。也可以继续使用普通页面或工具格式。GPT 可直接看图提出本次观察轮廓；该观察只服务本次创作，不写回素材库。图像/尺寸/库存改变后必须重新导出任务，不修改原 source 蒙混。工艺决策与制作说明不进入正文，完整使用是合法设计选择。`;

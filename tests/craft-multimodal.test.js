@@ -4,8 +4,7 @@ import {zipSync,unzipSync,strFromU8,strToU8} from 'fflate';
 import {project} from '../src/domain.js';
 import {applyToolCalls} from '../src/creative.js';
 import {craftSceneHash} from '../src/craft-fingerprint.js';
-import {assetSourceRevision,createMaterialAnatomy} from '../src/material-anatomy.js';
-import {sourceRegionGeometry} from '../src/material-anatomy.js';
+import {assetSourceRevision} from '../src/material-anatomy.js';
 import {projectMaterialViews,compileTwoHoleWeaves,validateDisplaySlices,sceneRenderEntries} from '../src/craft-display.js';
 import {geometryArea,geometryUnion} from '../src/craft-topology.js';
 import {createOfflineHandoff,importEditableWork} from '../src/offline-creation.js';
@@ -24,7 +23,7 @@ const ok=r=>{assert.equal(r.results.every(r=>r.ok),true,JSON.stringify(r.results
 test('GPT can select and extract printed content from an image in a single atomic plan, with no manual annotation',()=>{
  const a=asset(),d=project().drafts[0],before=structuredClone(a),next=ok(run(plan(d,a),d,a));
  assert.equal(next.items.length,1);assert.equal(next.textBlocks.length,0);assert.equal(next.items[0].cropRect.x,.1);assert.equal(next.items[0].cropRect.width,.4);
- assert.equal(next.items[0].craftProvenance.observation.status,'proposed');assert.equal(next.items[0].craftProvenance.observation.provenance,'model');assert.deepEqual(a,before);
+ assert.deepEqual(next.items[0].craftProvenance.observation.boundsRatio,[.1,.1,.4,.3]);assert.equal('status' in next.items[0].craftProvenance.observation,false);assert.equal('provenance' in next.items[0].craftProvenance.observation,false);assert.deepEqual(a,before);
 });
 test('model observations cannot claim user confirmation, missing images, another source, or a stale revision',()=>{
  const a=asset(),d=project().drafts[0];
@@ -33,9 +32,8 @@ test('model observations cannot claim user confirmation, missing images, another
   const p=plan(d,a);change(p.observations[0]);const result=run({tools:[{name:'apply_craft_plan',arguments:p}]},d,a);assert.equal(result.committed,false);assert.equal(result.draft.items.length,0);
  }
 });
-test('visual extraction respects existing protected subject and per-asset permissions',()=>{
- const a=asset();a.anatomy=createMaterialAnatomy(a,[{id:'protected',kind:'focal',label:'主体',boundsRatio:[.3,.2,.4,.4],status:'confirmed',provenance:'user',preserve:true}]);
- const d=project().drafts[0];assert.equal(run(plan(d,a),d,a).results[0].code,'PROTECTED_REGION_CUT');
+test('visual extraction obeys explicit per-asset processing but has no hidden saved-region restriction',()=>{
+ const a=asset(),d=project().drafts[0],next=ok(run(plan(d,a),d,a));assert.equal(next.items.length,1);
  const b=asset('whole'),q=plan(d,b);assert.match(run(q,d,b,{assetProcessing:{whole:'保留完整'}}).results[0].detail,/保留完整/);
 });
 test('current default uses GPT vision and current provider settings only',()=>{
@@ -89,8 +87,4 @@ test('approximate SVG also uses shared fragments and flips source and mask toget
  const d=weaveDraft();compileTwoHoleWeaves(d,[{piece:'strip',target:'frame',holes:[0,1]}]);d.items[0].isFlippedHorizontally=true;
  const svg=renderOfflinePreviewSVG(d,{materials:[{assetID:'s',alias:'m1'},{assetID:'f',alias:'m2'}]});
  assert.match(svg,/scale\(-1 1\)/);assert.equal((svg.match(/opacity="1"><svg/g)||[]).length,4);
-});
-test('invalid region margins are rejected before any expansion',()=>{
- const a=asset(),r={...observation(a),status:'proposed',provenance:'model'};delete r.asset;delete r.sourceRevision;
- assert.throws(()=>sourceRegionGeometry(a,r,{marginMM:Infinity}),{code:'INVALID_MARGIN'});
 });

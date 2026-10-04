@@ -11,7 +11,7 @@ const KEYS=['basket','coreIDs','excludedAssetIDs','matchCore','matchRatio','matc
 export function matchingSnapshot(state,variants){return {id:ID,context:Object.fromEntries(KEYS.map(k=>[k,structuredClone(state[k])])),variants:structuredClone(variants)};}
 export function restoreMatchingSession(record,state){
  if(!record)return [];
- for(const key of KEYS)if(record.context?.[key]!==undefined)state[key]=record.context[key];
+ for(const key of KEYS)if(record.context?.[key]!==undefined)state[key]=key==='matchProcessing'&&record.context[key]==='AI 自主加工'?'不预设':record.context[key];
  return (Array.isArray(record.variants)?record.variants:[])
   .filter(v=>v&&typeof v.id==='string'&&usableProjectSnapshot(v.project))
   .map(v=>v.status==='running'?{...v,status:'interrupted',progress:'页面曾关闭，生成已中断；已保留收到的完整步骤。'}:v);
@@ -26,11 +26,12 @@ export function createMatchingSession(c){
  const defaults=matchingSnapshot(c.state,[]).context;
  const save=()=>{if(!ready)return queue;const task=queue.then(async()=>{const record=matchingSnapshot(c.state,variants),snapshot=JSON.stringify(record);if(snapshot===lastSnapshot)return;await c.db.put('meta',record);lastSnapshot=snapshot;});queue=task.then(()=>{},()=>{});return task;};
  const archiveCompleted=async()=>{await queue;for(const v of variants.filter(v=>v.status==='completed')){if(v.linkedProjectID&&c.state.projects.some(p=>p.id===v.linkedProjectID))continue;const p=variantDraftProject(v,null,v.linkedProjectID||c.uid());v.linkedProjectID=p.id;await c.db.transaction(['projects','meta'],tx=>{tx.objectStore('projects').put(p);tx.objectStore('meta').put(matchingSnapshot(c.state,variants));});c.state.projects.push(p);}};
- const markup=()=>`<h2>版本方案</h2><p>完成方案自动保存为草稿或快照；“重新搭配”只清空这里的方案，不删除已保存作品。</p><div class="match-variant-grid">${variants.map(v=>`<article class="match-variant" data-variant="${c.esc(v.id)}"><button class="match-result" data-act="match-open-result" data-id="${c.esc(v.id)}" ${v.status==='running'?'disabled':''}>${covers.render(v.project)}<strong>${c.esc(v.title)}</strong></button><pre class="match-progress" aria-live="polite">${c.esc(v.progress)}</pre>${v.status==='running'?'<button class="btn" data-act="match-stop">停止创作</button>':v.project.deliveryMode==='zip'?`<button class="btn" data-act="download-project-zip" data-id="${c.esc(v.linkedProjectID||v.project.id)}">下载可编辑 ZIP</button>`:''}</article>`).join('')||'<p>尚未生成方案。</p>'}</div>`;
- const update=()=>{if(c.state.route!=='matching')return;const el=document.querySelector('.match-previews');if(el){el.innerHTML=markup();reusePagePreviews({view:el,state:c.state});el.onclick=e=>{const b=e.target.closest('[data-act]');if(b)c.handle(b.dataset.act,b.dataset.id);};c.mountIcons?.(el);}};
+ const markup=()=>`<h2>版本方案</h2><p>完成方案自动保存为草稿或快照；“重新搭配”只清空这里的方案，不删除已保存作品。</p><div class="match-variant-grid">${variants.map(v=>`<article class="match-variant" data-variant="${c.esc(v.id)}"><button class="match-result" data-act="match-open-result" data-id="${c.esc(v.id)}" ${v.status==='running'?'disabled':''}><div class="match-cover-preview" data-match-raster="${c.esc(v.id)}">${covers.render(v.project)}</div><strong>${c.esc(v.title)}</strong></button><pre class="match-progress" aria-live="polite">${c.esc(v.progress)}</pre>${v.status==='running'?'<button class="btn" data-act="match-stop">停止创作</button>':v.project.deliveryMode==='zip'?`<button class="btn" data-act="download-project-zip" data-id="${c.esc(v.linkedProjectID||v.project.id)}">下载可编辑 ZIP</button>`:''}</article>`).join('')||'<p>尚未生成方案。</p>'}</div>`;
+ const update=()=>{if(c.state.route!=='matching')return;const el=document.querySelector('.match-previews');if(el){el.innerHTML=markup();reusePagePreviews({view:el,state:c.state});covers.hydrate(el,variants);el.onclick=e=>{const b=e.target.closest('[data-act]');if(b)c.handle(b.dataset.act,b.dataset.id);};c.mountIcons?.(el);}};
  return {
   async restore({archive=true}={}){covers.clear();const record=await c.db.get('meta',ID);for(const key of KEYS)if(defaults[key]!==undefined)c.state[key]=structuredClone(defaults[key]);variants=restoreMatchingSession(record,c.state);if(archive)await archiveCompleted();lastSnapshot=JSON.stringify(matchingSnapshot(c.state,variants));ready=true;},
   render(){return `<section class="panel match-previews">${markup()}</section>`;},
+  hydrate(root){covers.hydrate(root,variants);},
   cacheStats:covers.stats,
   persist:save,
   async importProject(p,{alreadyStored=false}={}){

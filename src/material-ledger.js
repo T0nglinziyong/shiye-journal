@@ -1,6 +1,6 @@
 import {craftAssert} from './craft-errors.js';
 import {itemSourceGeometry} from './craft-region-ops.js';
-import {assetSourceRevision,assertProtectedRegions} from './material-anatomy.js';
+import {assetSourceRevision} from './material-anatomy.js';
 import {normalizeGeometry,rectangleGeometry,geometryArea,geometryUnion,geometryIntersection,geometryDifference,assertSubset,AREA_EPSILON} from './craft-topology.js';
 
 export const pieceKey=item=>item.creativePieceID||item.agentKey||item.key||item.id;
@@ -14,7 +14,6 @@ export function buildMaterialLedger(draft,assets){
   craftAssert(isRoll||unit<(asset.supply?.quantity??1),'STOCK_EXCEEDED','裁片超出实际素材数量',{assetId:asset.id});
   const geometry=itemSourceGeometry(item,asset),source=rectangleGeometry(0,0,asset.physicalWidthMM,asset.physicalHeightMM);
   assertSubset(geometry,source,{assetId:asset.id,pieceId:pieceKey(item)});
-  assertProtectedRegions(asset,geometry);
   if(isRoll){
    const remaining=asset.supply.availableLengthMM,period=asset.tapeRepeatPeriodMM;
    craftAssert(Number.isFinite(remaining)&&remaining>0&&Number.isFinite(period)&&period>0&&period<=Math.max(asset.physicalWidthMM,asset.physicalHeightMM),'UNVERIFIED_TAPE','整卷胶带缺少真实剩余长度或已确认周期',{assetId:asset.id});

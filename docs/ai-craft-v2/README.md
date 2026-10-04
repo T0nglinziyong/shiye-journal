@@ -8,7 +8,7 @@
 - 任务必须具有当前 `taskHash`、`schemaHash`、`sourceSnapshots`、`baseSceneHash` 和 `taskBinding=local`。
 - Craft Plan 只有当前一个合同：`shiye-craft-plan` version 2。
 - material relation 只使用 `peek`、`underlay`、`bridge`；不接受旧 relation 名称。
-- 工艺操作包括 whole、crop、trim、tape、mask、diagonal、window、edge，以及当前区域/拓扑工艺。
+- 工艺操作包括 whole、crop、trim、tape、mask、diagonal、window、edge，以及当前拓扑工艺；看图选区只作为本次计划的 observation，不写回素材。
 - 物理素材按毫米尺寸、来源快照、库存与源区域账本核验；隐藏、透明和移出画布不释放库存。
 
 ## 多模态单次交付
@@ -20,7 +20,7 @@
 - `src/creative-contract.js`：当前唯一工具与页面合同。
 - `src/craft-plan-contract.js`：当前原子 Craft Plan。
 - `src/creative.js`：合同执行与原子回滚。
-- `src/material-anatomy.js`：素材来源版本、区域与保护信息。
+- `src/material-anatomy.js`：素材来源版本与任务快照身份；不再保存用户预标注区域。
 - `src/craft-topology.js`：布尔几何与源区域运算。
 - `src/craft-geometry.js`：确定性边缘加工与面积核验。
 - `src/craft-relations.js`：peek / underlay / bridge。

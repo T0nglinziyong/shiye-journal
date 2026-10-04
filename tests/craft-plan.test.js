@@ -4,14 +4,13 @@ import {webcrypto} from 'node:crypto';
 import {project} from '../src/domain.js';
 import {applyToolCalls} from '../src/creative.js';
 import {craftDigest,craftSceneHash,isManagedUnchanged} from '../src/craft-fingerprint.js';
-import {assetSourceRevision,assetFromSourceSnapshot,materialSourceSnapshot,createMaterialAnatomy,resolveMaterialRegion,rebindMetadataAnatomy,readMaterialRegions} from '../src/material-anatomy.js';
+import {assetSourceRevision,assetFromSourceSnapshot,materialSourceSnapshot} from '../src/material-anatomy.js';
 import {rectangleGeometry,normalizeGeometry,geometryArea,geometryIntersection,geometryDifference,geometryUnion,expandGeometry} from '../src/craft-topology.js';
 import {buildMaterialLedger} from '../src/material-ledger.js';
 import {createOfflineHandoff,importEditableWork,importEditableWorkPackage} from '../src/offline-creation.js';
 import {createNativeProjectPackage} from '../src/native-project-package.js';
 
 const material=()=>({id:'plan-paper',title:'合成图案纸',kind:'paper',physicalWidthMM:100,physicalHeightMM:80,blobId:'plan-source',supply:{quantity:1},updatedAt:'2026-10-03T00:00:00.000Z'});
-const region=(extra={})=>({id:'printed-title',kind:'text',label:'标题区域',boundsRatio:[.1,.1,.4,.3],outlineRatio:null,status:'confirmed',provenance:'user',preserve:false,...extra});
 const base=()=>project('工艺计划',{ratio:'a5'}).drafts[0];
 const plannedPiece=(asset,id='p',extra={})=>({id,asset:'m1',sourceRevision:assetSourceRevision(asset),unit:0,extraction:{type:'whole'},centerMM:[65,80],...extra});
 const plan=(draft,asset,pieces=[plannedPiece(asset)],extra={})=>({format:'shiye-craft-plan',version:2,commandId:'command-test',baseSceneHash:craftSceneHash(draft),pieces,...extra});
@@ -29,25 +28,10 @@ test('final scene hash includes actual ink coordinates, alpha and masks, not onl
  const d=structuredClone(a);d.agentRun={status:'editing'};d.craftReceipts=[{fake:true}];assert.equal(craftSceneHash(d),h);
 });
 test('source snapshots reconstruct exact source identities without private asset extras',()=>{
- const a=material();a.privateNote='do not export irrelevant metadata';a.anatomy=createMaterialAnatomy(a,[region()]);
- const snapshot=materialSourceSnapshot(a);assert.equal(snapshot.privateNote,undefined);assert.equal(assetSourceRevision(assetFromSourceSnapshot(snapshot)),assetSourceRevision(a));
+ const a=material();a.privateNote='do not export irrelevant metadata';a.anatomy={legacy:'ignored'};
+ const snapshot=materialSourceSnapshot(a);assert.equal(snapshot.privateNote,undefined);assert.equal(snapshot.anatomy,undefined);assert.equal(assetSourceRevision(assetFromSourceSnapshot(snapshot)),assetSourceRevision(a));
  assert.notEqual(assetSourceRevision({...a,physicalWidthMM:101}),assetSourceRevision(a));
  assert.notEqual(assetSourceRevision({...a,updatedAt:'new'}),assetSourceRevision(a));
-});
-test('only confirmed current regions can be extracted; bounds and outline are distinct',()=>{
- const a=material();a.anatomy=createMaterialAnatomy(a,[region(),region({id:'triangle',kind:'pattern',outlineRatio:[[.1,.1],[.5,.1],[.1,.4]]})]);
- const request={sourceRevision:assetSourceRevision(a),regionId:'triangle'};
- assert.equal(geometryArea(resolveMaterialRegion(a,{...request,mode:'bounds'}).geometry),960);
- assert.ok(Math.abs(geometryArea(resolveMaterialRegion(a,{...request,mode:'outline'}).geometry)-480)<1e-7);
- assert.throws(()=>resolveMaterialRegion(a,{...request,regionId:'printed-title',mode:'outline'}),{code:'REGION_OUTLINE_MISSING'});
- assert.throws(()=>resolveMaterialRegion(a,{...request,sourceRevision:craftDigest('old')}),{code:'STALE_REGION_SOURCE'});
- a.anatomy.regions[1].status='proposed';assert.throws(()=>resolveMaterialRegion(a,{...request,mode:'outline'}),{code:'REGION_NOT_CONFIRMED'});
-});
-test('metadata edits may explicitly rebind confirmed regions but changed images cannot',()=>{
- const a=material();a.anatomy=createMaterialAnatomy(a,[region()]);const b={...a,title:'renamed',updatedAt:'2026-10-03T01:00:00.000Z'};
- b.anatomy=rebindMetadataAnatomy(a,b);assert.equal(readMaterialRegions(b,{confirmedOnly:true}).length,1);
- assert.throws(()=>rebindMetadataAnatomy(a,{...b,blobId:'new'}),{code:'STALE_REGION_SOURCE'});
- assert.equal(readMaterialRegions({...a,physicalWidthMM:99}).length,0);
 });
 test('topology rejects self crossing and escaped holes rather than guessing physical intent',()=>{
  assert.throws(()=>normalizeGeometry([[[[0,0],[3,3],[0,3],[2,0]]]]),{code:'SELF_INTERSECTION'});
@@ -63,11 +47,6 @@ test('an entire high-level plan executes through the real tool contract',()=>{
  const a=material(),d=base(),input=plan(d,a,[plannedPiece(a,'title',{extraction:{type:'rect_crop',boxMM:[10,8,40,24]},treatments:[{op:'edge',style:'torn',edges:['bottom'],depth_mm:1,period_mm:8,seed:42}]})]);
  const result=run(input,d,a),next=successful(result);assert.equal(next.items.length,1);assert.ok(next.items[0].materialMask);assert.ok(isManagedUnchanged(next.items[0]));
  assert.equal(next.craftLedger.units[0].pieces.length,1);assert.equal(next.craftReceipts[0].commandId,input.commandId);assert.equal(next.agentRun.status,'finished');
-});
-test('confirmed printed region extraction retains source pixels and adds no digital text',()=>{
- const a=material();a.anatomy=createMaterialAnatomy(a,[region()]);const d=base();
- const next=successful(run(plan(d,a,[plannedPiece(a,'words',{extraction:{type:'region',regionId:'printed-title',mode:'bounds'}})]),d,a));
- assert.equal(next.textBlocks.length,0);assert.equal(next.items[0].assetID,a.id);assert.ok(Math.abs(next.items[0].cropRect.x-.1)<1e-9);assert.equal(next.items[0].craftProvenance.regionId,'printed-title');
 });
 test('failed third material rolls back the whole compound plan, preserving source and earlier calls',()=>{
  const a=material(),d=base();const input=plan(d,a,[plannedPiece(a,'left',{extraction:{type:'rect_crop',boxMM:[0,0,30,80]}}),plannedPiece(a,'right',{extraction:{type:'rect_crop',boxMM:[30,0,30,80]}}),plannedPiece(a,'invalid',{extraction:{type:'rect_crop',boxMM:[99,0,20,80]}})]);
@@ -96,11 +75,6 @@ test('window plan returns its exact core as a parked offcut instead of duplicati
  const next=successful(run(plan(parent,a,[plannedPiece(a,'frame',{parentId:'parent',treatments:[{op:'window',shape:'rectangle',box:[.3,.25,.4,.375]}]})],{commandId:'window',consume:['parent']}),parent,a));
  assert.equal(next.items.length,2);assert.equal(next.items.filter(i=>i.isParked).length,1);assert.equal(buildMaterialLedger(next,[a]).units[0].usedAreaMM2,8000);
 });
-test('protected printed regions cannot be bisected by a topological cut',()=>{
- const a=material();a.anatomy=createMaterialAnatomy(a,[region({preserve:true})]);const d=base();
- const input=plan(d,a,[plannedPiece(a,'bad',{extraction:{type:'rect_crop',boxMM:[0,0,25,80]}})]);
- const result=run(input,d,a);assert.equal(result.results[0].code,'PROTECTED_REGION_CUT');assert.equal(result.draft.items.length,0);
-});
 test('manual edits made before an AI request survive full-page replacement',()=>{
  const a=material(),d=base();const initial=successful(run({tools:[{name:'upsert_text',arguments:{items:[{key:'copy',content:'original',width:.5}]}}]},d,a));
  initial.textBlocks[0].content='user changed this before the request';
@@ -112,12 +86,12 @@ test('manual edits made before an AI request survive full-page replacement',()=>
 test('all-whole is legal, while explicit per-material protection still rejects cuts',()=>{
  const a=material(),d=base();successful(run(plan(d,a),d,a,{processing:'保留完整'}));
  const input=plan(d,a,[plannedPiece(a,'trimmed',{extraction:{type:'rect_crop',boxMM:[0,0,60,80]}})]);
- const result=run(input,d,a,{processing:'AI 自主加工',assetProcessing:{[a.id]:'保留完整'}});assert.equal(result.results[0].ok,false);assert.match(result.results[0].detail,/保留完整/);
+ const result=run(input,d,a,{processing:'不预设',assetProcessing:{[a.id]:'保留完整'}});assert.equal(result.results[0].ok,false);assert.match(result.results[0].detail,/保留完整/);
 });
 test('offline task imports a plan using its original source and full creation brief',async()=>{
- const a=material();a.anatomy=createMaterialAnatomy(a,[region()]);const p=project('source',{ratio:'a5'});p.processing='自由拆解';p.contentPolicy='original';p.userText='原文';p.providedFacts='事实';p.assetProcessing={[a.id]:'自由拆解'};
+ const a=material();const p=project('source',{ratio:'a5'});p.processing='自由拆解';p.contentPolicy='original';p.userText='原文';p.providedFacts='事实';p.assetProcessing={[a.id]:'自由拆解'};
  const handoff=await createOfflineHandoff({project:p,assets:[a],aliases:{m1:a.id},settings:{includeThumbnails:false,generationMode:'direct'}});
- const input=plan(handoff.source.baseDraft,a,[plannedPiece(a,'words',{extraction:{type:'region',regionId:'printed-title'}})]);
+ const input=plan(handoff.source.baseDraft,a,[plannedPiece(a,'words',{extraction:{type:'rect_crop',boxMM:[10,8,40,24]}})]);
  const envelope={format:'shiye-editable-project',version:1,source:handoff.source,title:'plan',plan:input};
  const imported=importEditableWork(JSON.stringify(envelope),[a],{trustedSource:handoff.source});
  assert.equal(imported.contentPolicy,'original');assert.equal(imported.userText,'原文');assert.deepEqual(imported.assetProcessing,p.assetProcessing);

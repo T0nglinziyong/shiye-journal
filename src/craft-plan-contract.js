@@ -7,7 +7,6 @@ const key=str(),hash={type:'string',pattern:'^sha256:[a-f0-9]{64}$'},point=array
 const ring=array(point,3,1024),polygon=array(ring,1,64),geometry=array(polygon,1,128);
 const cutCommon={op:enums(['cut_shape']),mode:enums(['keep','remove']),unit:enums(['ratio','mm'])};
 export const regionOperationSchemas=[
- object({op:enums(['extract_region']),region:key,source_revision:hash,mode:enums(['bounds','outline']),margin_mm:num(0,20)},['op','region','source_revision']),
  object({...cutCommon,shape:enums(['rectangle','ellipse']),box:array(num(),4,4)},['op','mode','shape','box']),
  object({...cutCommon,shape:enums(['polygon']),points:ring},['op','mode','shape','points']),
  object({...cutCommon,shape:enums(['geometry']),geometry},['op','mode','shape','geometry'])
@@ -19,7 +18,6 @@ export function craftPlanContract({operation,relation,paper,text,primitive,ink})
  const extraction={anyOf:[
   object({type:enums(['whole'])},['type']),
   object({type:enums(['rect_crop']),boxMM:array(num(0,20000),4,4)},['type','boxMM']),
-  object({type:enums(['region']),regionId:key,mode:enums(['bounds','outline']),marginMM:num(0,20)},['type','regionId']),
   observedExtraction,
   geometryExtraction
  ]};
@@ -34,4 +32,4 @@ export function craftPlanContract({operation,relation,paper,text,primitive,ink})
   paper,texts:array(text,0,24),graphics:array(primitive,0,48),ink:array(ink,0,32),finish:{type:'boolean'},summary:str(240)
  },['format','version','commandId','baseSceneHash','pieces']);
 }
-export const craftPlanDescription='原子执行当前素材工艺计划：支持 GPT 图片观察选区、已确认区域、几何取材、父片拆分、真实余料、两孔穿插与组合。centerMM 是页面毫米中心；sourceRevision 必须来自本次任务。consume 列出父片，子片用 parentId 关联，keepRemainders 默认 true。任何错误回滚整个计划；同 commandId 重放不重复物料。whole 可以是正确选择，不按加工数量评分。';
+export const craftPlanDescription='原子执行当前素材工艺计划：支持 GPT 图片观察选区、几何取材、父片拆分、真实余料、两孔穿插与组合。centerMM 是页面毫米中心；sourceRevision 必须来自本次任务。consume 列出父片，子片用 parentId 关联，keepRemainders 默认 true。任何错误回滚整个计划；同 commandId 重放不重复物料。whole 可以是正确选择，不按加工数量评分。';

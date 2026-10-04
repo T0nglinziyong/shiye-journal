@@ -3,7 +3,7 @@ import {resolveVisualObservations,observedRegionGeometry} from './craft-vision.j
 import {normalizeGeometry,geometryBounds} from './craft-topology.js';
 import {craftAssert} from './craft-errors.js';
 import {craftDigest,craftSceneHash,isManagedUnchanged} from './craft-fingerprint.js';
-import {assetSourceRevision,resolveMaterialRegion,readMaterialRegions,sourceRegionGeometry} from './material-anatomy.js';
+import {assetSourceRevision} from './material-anatomy.js';
 import {itemSourceGeometry,geometryMaterialRecipe} from './craft-region-ops.js';
 import {buildMaterialLedger,compactMaterialLedger,pieceKey} from './material-ledger.js';
 import {geometryDifference,geometryUnion,geometryArea,assertSubset,AREA_EPSILON} from './craft-topology.js';
@@ -20,9 +20,6 @@ function plannedMaterial(piece,asset,draft,observations){
  const extraction=piece.extraction||{type:'whole'},operations=[];
  if(extraction.type==='rect_crop'){
   operations.push({op:'crop',box:{unit:'mm',mode:'keep',values:extraction.boxMM}});
- }else if(extraction.type==='region'){
-  const result=resolveMaterialRegion(asset,{regionId:extraction.regionId,sourceRevision:piece.sourceRevision,mode:extraction.mode||'bounds',marginMM:extraction.marginMM||0});
-  operations.push(...recipeOperations(result.geometry,asset));
  }else if(extraction.type==='observed_region'){
   operations.push(...recipeOperations(observedRegionGeometry(observations,extraction.observationId,asset,{mode:extraction.mode||'bounds',marginMM:extraction.marginMM||0}),asset));
  }else if(extraction.type==='geometry'){
@@ -89,7 +86,7 @@ export function applyCraftPlan({draft,plan,assets,aliases,options,api}){
    const outside=geometryDifference(itemSourceGeometry(item,spec.asset),parent.geometry);
    craftAssert(Math.abs(geometryArea(outside)-geometryArea(itemSourceGeometry(item,spec.asset)))<=AREA_EPSILON,'MISSING_PARENT_LINEAGE','取用了本次父片的区域，但没有标注 parentId',{pieceId:spec.piece.id,constraint:id});
   }
-  item.craftProvenance={version:1,commandId:plan.commandId,sourceRevision:spec.piece.sourceRevision,parentId:spec.piece.parentId||null,regionId:spec.piece.extraction?.regionId||null,observation:spec.piece.extraction?.type==='observed_region'?structuredClone(observations.get(spec.piece.extraction.observationId).region):null};
+  item.craftProvenance={version:1,commandId:plan.commandId,sourceRevision:spec.piece.sourceRevision,parentId:spec.piece.parentId||null,observation:spec.piece.extraction?.type==='observed_region'?structuredClone(observations.get(spec.piece.extraction.observationId).region):null};
  }
  const lineage=[],offcuts=[],scraps=[];
  for(const [id,parent] of parents){
@@ -108,13 +105,7 @@ export function applyCraftPlan({draft,plan,assets,aliases,options,api}){
     record.childIds.push(key);
    }
   }else{
-   // Discard is explicit in the plan; protected original regions still may
-   // not be lost. A tiny or disconnected remainder never disappears silently.
-   for(const region of readMaterialRegions(parent.asset,{confirmedOnly:true}).filter(r=>r.preserve)){
-    const protectedGeometry=sourceRegionGeometry(parent.asset,region,{mode:region.outlineRatio?'outline':'bounds'});
-    const retained=geometryArea(geometryDifference(protectedGeometry,remaining));
-    craftAssert(Math.abs(retained-geometryArea(protectedGeometry))<=AREA_EPSILON,'PROTECTED_REGION_DISCARDED','计划不能把已保护区域作为损耗丢弃',{assetId:parent.asset.id,constraint:region.id});
-   }
+   // Explicit discard is allowed; physical area is still accounted as waste.
    record.wasteAreaMM2=remainingArea;
    for(const polygon of remaining){const geometry=[polygon];if(geometryArea(geometry)>AREA_EPSILON)scraps.push({parentId:id,assetId:parent.asset.id,unit:parent.item.materialUnitIndex??0,geometryMM:geometry,areaMM2:geometryArea(geometry),reason:'explicit-discard'});}
   }
@@ -131,6 +122,6 @@ export function applyCraftPlan({draft,plan,assets,aliases,options,api}){
  const ledger=buildMaterialLedger(draft,assets);api.validate();
  const resultHash=craftSceneHash(draft),receipt={version:1,commandId:plan.commandId,inputHash,baseHash:currentHash,resultHash,pieces:specs.map(s=>s.piece.id),offcuts:offcuts.map(s=>s.piece),lineage,scraps,observations:plan.observations?.length||0};
  draft.craftLedger=compactMaterialLedger(ledger);draft.craftReceipts=[...(draft.craftReceipts||[]),receipt].slice(-32);
- if(plan.finish!==false)api.finish({summary:plan.summary||'工艺计划已通过源区域与实体约束'});
+ if(plan.finish!==false)api.finish({summary:plan.summary||'工艺计划已通过实体来源与库存约束'});
  return {detail:'工艺计划已原子执行；保留 '+specs.length+' 件片段及 '+offcuts.length+' 件余料',mutation:true,data:receipt};
 }

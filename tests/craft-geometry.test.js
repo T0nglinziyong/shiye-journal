@@ -26,9 +26,9 @@ test('invalid/overdense geometry fails before allocating unbounded work',()=>{
 });
 test('policy is opt-in and per-asset whole-only always wins',()=>{
   const a={id:'a',kind:'paper'};
-  assert.equal(craftPermission({processing:'AI 自主加工'},a),'自由拆解');
-  assert.equal(craftPermission({processing:'AI 自主加工'},{...a,kind:'photo'}),'少量裁剪');
-  assert.equal(craftPermission({processing:'AI 自主加工',assetProcessing:{a:'保留完整'}},a),'保留完整');
+  assert.equal(craftPermission({processing:'不预设'},a),'自由拆解');
+  assert.equal(craftPermission({processing:'不预设'},{...a,kind:'photo'}),'自由拆解');
+  assert.equal(craftPermission({processing:'不预设',assetProcessing:{a:'保留完整'}},a),'保留完整');
   assert.equal(craftPermission({processing:'保留完整'},a),'保留完整');
   assert.throws(()=>craftPermission({},a),/加工权限/);
 });

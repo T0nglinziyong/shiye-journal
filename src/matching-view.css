@@ -44,3 +44,7 @@
 .card-favorite{float:right;font-size:16px}
 @media(max-width:680px){.matching-page .match-direction{margin-top:0}.matching-page .matching-layout>.panel{max-height:430px}.matching-page .match-recommendations{order:-1}.matching-page .match-generate>.btn{flex:1 1 180px}}
 @media(max-width:520px){.matching-page .match-rec-grid{grid-template-columns:1fr}.matching-page .match-rec{min-height:96px}.matching-page .match-rec>img{width:66px;height:70px}}
+
+.matching-page .match-cover-preview{display:grid;place-items:center;width:100%;min-height:150px;max-height:360px;overflow:hidden;border-radius:12px;background:#f6f4ed}
+.matching-page .match-cover-preview>.thumb-sheet{max-width:100%;max-height:340px}
+.matching-page .match-raster-preview{display:block;width:100%;height:100%;max-height:340px;object-fit:contain;background:#f6f4ed}

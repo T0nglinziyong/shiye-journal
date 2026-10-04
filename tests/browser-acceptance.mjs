@@ -54,9 +54,9 @@ try {
     await click('#series-return','.series-grid');
     await click('.swift-tabs button:nth-child(2)','.asset-grid');await capture('assets',width,height);
     await click('[data-act="detail"]','.detail-columns');await capture('asset-detail',width,height);
-    await click('[data-act="detail-edit"]','#asset-title');await capture('asset-editor',width,height);await click('#asset-dialog-close');
+    await click('[data-act="detail-edit"]','#asset-title');assert.equal(await evaluate('[...document.querySelectorAll(".cutout-tabs button")].some(b=>b.textContent.includes("可取用区域"))'),false);await capture('asset-editor',width,height);await click('#asset-dialog-close');
     await click('[data-act="detail-add"]');
-    await click('[data-route="matching"]','.matching-page');await capture('matching',width,height);
+    await click('[data-route="matching"]','.matching-page');assert.equal(await evaluate('document.querySelector("#match-processing").value'),'不预设');await capture('matching',width,height);
     const rows=await evaluate('(()=>{const y=selector=>document.querySelector(selector).closest("label").getBoundingClientRect().top;return {style:y("[data-direction=style]"),purpose:y("[data-direction=purpose]"),processing:y("#match-processing"),mode:y("#match-mode"),paper:y("#match-ratio")};})()');
     assert.ok(Math.abs(rows.purpose-rows.processing)<2,'purpose and processing share a row');assert.ok(Math.abs(rows.mode-rows.paper)<2,'mode and paper share a row');assert.ok(rows.purpose>rows.style);
     await evaluate('document.querySelector(".match-direction").scrollIntoView({block:"start"})');await capture('matching-controls',width,height);await evaluate('scrollTo(0,0)');
