@@ -130,8 +130,8 @@ test('AI metrics contain no private body; opt-in context redacts credentials bef
 });
 test('asset metadata accepts zero stock, keeps manual dimensions, excludes unavailable recommendations',()=>{
   const old={id:'a',title:'old',physicalWidthMM:20,physicalHeightMM:30,supply:{quantity:1}};
-  const fields={title:'纸品',kind:'paper',role:'support',texture:'牛皮纸',width:'20',height:'30',quantity:'0',tags:'旅行',contentTags:'票据',styleTags:'复古',materialTags:'牛皮纸',seriesID:'s',reviewStatus:'ready'};
-  const a=assetEditorValue(old,fields);assert.equal(a.supply.quantity,0);assert.deepEqual(a.tags,['旅行','票据','复古','牛皮纸']);assert.equal(a.seriesID,'s');assert.equal(old.supply.quantity,1);
+  const fields={title:'纸品',kind:'paper',role:'support',texture:'牛皮纸',width:'20',height:'30',quantity:'0',tags:'旅行',contentTags:'票据',styleTags:'复古',materialTags:'牛皮纸',seriesID:'s',reviewStatus:'ready',usageStatus:'unused'};
+  const a=assetEditorValue(old,fields);assert.equal(a.supply.quantity,0);assert.deepEqual(a.tags,['旅行','票据','复古','牛皮纸']);assert.equal(a.seriesID,'s');assert.equal(a.usageStatus,'unused');assert.equal(old.supply.quantity,1);
   assert.deepEqual(physicalPlacement(draft(),[a],['a']),[]);assert.deepEqual(recommend({...a,id:'core'},[a]),[]);
   assert.throws(()=>assetEditorValue(old,{...fields,width:'-2'}),/宽高/);
 });
