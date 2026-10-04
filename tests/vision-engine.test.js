@@ -116,7 +116,7 @@ test('straight physical edges are introduced only by the final line-curve regula
   const card=result.filter(r=>r.x<.3&&r.x+r.w>.7&&r.y<.25&&r.y+r.h>.78).sort((a,b)=>b.pixels-a.pixels)[0];
   assert.ok(card,'clean physical enclosure should be found');assert.equal(card.edgeMethod,'edge-enclosure');
   const [regular]=await processVision(cv,'complete-boundaries',{pixels,evidence,backgroundConnected,shadowLikelihood,width,height,candidates:[card],smallestMM:6,paperWidthMM:210,paperHeightMM:297});
-  assert.equal(regular.boundaryModel,'line-curve');assert.ok(regular.boundaryLineCount>=4);
+  assert.equal(regular.boundaryModel,'line-envelope');assert.equal(regular.boundaryLineCount,4);
 });
 
 
@@ -187,7 +187,7 @@ test('piecewise prior turns a jagged card into long line segments while preservi
   const card=mkCandidate(cardPoly,[35,35,98,98]);
   for(let y=35;y<133;y++)for(let x=35;x<133;x++){const at=y*width+x;backgroundConnected[at]=0;evidence[at]=1;pixels.set([210,224,214,255],at*4);}
   const [r]=await processVision(cv,'complete-boundaries',{pixels,evidence,backgroundConnected,shadowLikelihood,width,height,candidates:[card],smallestMM:6,paperWidthMM:210,paperHeightMM:297});
-  assert.equal(r.boundaryModel,'line-curve');assert.ok(r.boundaryLineCount>=4);assert.ok(r.mask.polygons[0].length<=16);
+  assert.ok(['line-envelope','line-curve'].includes(r.boundaryModel));assert.ok(r.boundaryLineCount>=4);assert.ok(r.mask.polygons[0].length<=16);
 
   const concavePoly=[[20,20],[80,20],[80,45],[55,45],[55,90],[20,90]],concave=mkCandidate(concavePoly,[20,20,61,71]);
   const [q]=await processVision(cv,'complete-boundaries',{pixels,evidence,backgroundConnected,shadowLikelihood,width,height,candidates:[concave],smallestMM:6,paperWidthMM:210,paperHeightMM:297});
@@ -216,14 +216,14 @@ test('multiple repeated apertures are recovered without a fixed count or side te
     const at=y*width+x,p=at*4,inside=x>=left&&x<=right&&y>=top&&y<=bottom;
     let hole=-1;for(let k=0;k<ys.length;k++)if((x-hx)**2+(y-ys[k])**2<=hr**2){hole=k;break;}
     const border=inside&&(x-left<3||right-x<3||y-top<3||bottom-y<3);
-    const color=!inside?[246,246,246]:hole>=0?[246,246,246]:border?[140,150,145]:[190,216,198];
+    const color=!inside?[246,246,246]:hole>=0?(hole===4?[222,222,222]:[246,246,246]):border?[140,150,145]:[190,216,198];
     pixels.set([...color,255],p);backgroundConnected[at]=inside?0:1;
     if(inside&&hole<0&&(border||x>100&&x<116)){evidence[at]=1;}
   }
   const bw=right-left+1,bh=bottom-top+1,alpha=new Uint8Array(bw*bh).fill(255);
   const carrier={x:left/width,y:top/height,w:bw/width,h:bh/height,evidenceDensity:.3,edgeMethod:'edge-enclosure',mask:{width:bw,height:bh,alpha,polygons:[]}};
   const [out]=await processVision(cv,'complete-boundaries',{pixels,evidence,backgroundConnected,shadowLikelihood,width,height,candidates:[carrier],smallestMM:6,paperWidthMM:210,paperHeightMM:297});
-  assert.ok((out?.apertureCount||0)>=5,JSON.stringify({count:out?.apertureCount,regions:out?.mask?.apertureRegions}));
+  assert.ok((out?.apertureCount||0)>=5,JSON.stringify({count:out?.apertureCount,regions:out?.mask?.apertureRegions}));assert.ok(out.mask.apertureRegions.some(r=>r.source==='radial'),'ambiguous repeated aperture should be recovered from learned spacing plus local curve evidence');
   const at=(gx,gy)=>{const x=Math.round(gx-out.x*width),y=Math.round(gy-out.y*height);return out.mask.alpha[y*out.mask.width+x];};
   for(const y of ys)assert.equal(at(hx,y),0,'every pattern-supported aperture should remain transparent');
 });
