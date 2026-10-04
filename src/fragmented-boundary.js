@@ -102,13 +102,7 @@ export function reconstructFragmentedBoundaries(cv,p,own){
       const reconstructionScore=edgeSupportRatio*.43+Math.min(1,paperContactRatio/.82)*.22+Math.min(1,fillRatio/.72)*.12+matchReward*.13+Math.min(1,insideEvidenceRatio/.20)*.10-scalePenalty-bridgePenalty-pagePenalty;
       if(reconstructionScore<.28)continue;
 
-      let physical=contour,edgeMethod='boundary-reconstruction';
-      const rect=cv.minAreaRect(contour),rectArea=Math.max(1,rect.size.width*rect.size.height),rectFill=pixels/rectArea,shape=own(new cv.Mat());cv.approxPolyDP(contour,shape,Math.max(2,cv.arcLength(contour,true)*.018),true);
-      const edgeCertainStraight=rectFill>=.82&&edgeSupportRatio>=.75&&boundaryShadowFraction<=.35;
-      if(shape.rows===4&&cv.isContourConvex(shape)&&rectFill>=.72&&(paperContactRatio>=.55||edgeCertainStraight)){
-        const points=cv.boxPoints(rect),straight=own(cv.matFromArray(4,1,cv.CV_32SC2,points.flatMap(point=>[Math.round(point.x),Math.round(point.y)])));
-        filled.setTo(new cv.Scalar(0));const rects=own(new cv.MatVector());rects.push_back(straight);cv.drawContours(filled,rects,-1,new cv.Scalar(255),cv.FILLED);physical=straight;edgeMethod='boundary-reconstruction-straight';
-      }
+      const physical=contour,edgeMethod='boundary-reconstruction';
       const bounds=cv.boundingRect(physical),x=Math.max(0,bounds.x-2),y=Math.max(0,bounds.y-2),rw=Math.min(w,bounds.x+bounds.width+2)-x,rh=Math.min(h,bounds.y+bounds.height+2)-y,local=own(filled.roi(new cv.Rect(x,y,rw,rh))),packed=own(new cv.Mat());local.copyTo(packed);
       const poly=own(new cv.Mat());cv.approxPolyDP(physical,poly,Math.max(.7,cv.arcLength(physical,true)*.0015),true);const polygon=Array.from({length:poly.rows},(_,j)=>[poly.data32S[j*2]-x,poly.data32S[j*2+1]-y]);
       proposals.push({x:x/w,y:y/h,w:rw/w,h:rh/h,pixels,edgeMethod,boundaryReconstruction:true,reconstructionScore,edgeSupportRatio,closureScaleMM,bridgeFraction,paperContactRatio,interiorBackgroundRatio,insideEvidenceRatio,fillRatio,matchedInstances:matches.length,matchedOccupancy,matchedPairOverlap,largestMatchShare,boundaryShadowFraction,mask:{width:rw,height:rh,alpha:new Uint8Array(packed.data),polygons:[polygon]}});
