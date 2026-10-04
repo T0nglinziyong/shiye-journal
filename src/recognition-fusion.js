@@ -1,36 +1,57 @@
-// Fuse two independent proposal families:
-// 1) Lab/colour candidates are good at proving "there is material here".
-// 2) closed edge enclosures are good at proving the physical outer boundary,
-//    including pale/white regions that colour segmentation may erase.
+// Instance discovery and boundary refinement are separate responsibilities.
+// Watershed instances prove that a physical item exists. Closed contours may
+// only refine/merge those instances, except for a strict high-paper-contact
+// missing-instance recovery (needed for pale photos/cards whose interior leaks
+// into page background).
+
 const area=r=>Math.max(0,r.w)*Math.max(0,r.h);
 const intersection=(a,b)=>{
   const l=Math.max(a.x,b.x),t=Math.max(a.y,b.y),r=Math.min(a.x+a.w,b.x+b.w),d=Math.min(a.y+a.h,b.y+b.h);
   return Math.max(0,r-l)*Math.max(0,d-t);
 };
-const overlapSmall=(a,b)=>intersection(a,b)/Math.max(1e-9,Math.min(area(a),area(b)));
 const overlapOf=(a,b)=>intersection(a,b)/Math.max(1e-9,area(a));
-const iou=(a,b)=>intersection(a,b)/Math.max(1e-9,area(a)+area(b)-intersection(a,b));
+const containsCenter=(outer,inner)=>{
+  const x=inner.x+inner.w/2,y=inner.y+inner.h/2;
+  return x>=outer.x&&x<=outer.x+outer.w&&y>=outer.y&&y<=outer.y+outer.h;
+};
+const contained=(a,b)=>a.x>=b.x&&a.y>=b.y&&a.x+a.w<=b.x+b.w&&a.y+a.h<=b.y+b.h;
 
-export function fuseRecognitionCandidates(colourCandidates,structuralCandidates){
-  const colours=colourCandidates.map((candidate,index)=>({candidate,index,used:false})),result=[];
-  for(const structural of [...structuralCandidates].sort((a,b)=>(b.structuralConfidence||0)-(a.structuralConfidence||0))){
-    const matches=colours.filter(entry=>!entry.used&&(overlapOf(entry.candidate,structural)>=.42||overlapSmall(entry.candidate,structural)>=.58||iou(entry.candidate,structural)>=.34));
-    const strong=(structural.structuralConfidence||0)>=.88;
-    if(!matches.length&&!strong)continue;
-    // A trusted closed physical boundary may replace several disjoint colour
-    // islands (e.g. three figures printed on one white sticker).
-    for(const entry of matches)entry.used=true;
-    result.push(structural);
-  }
-  for(const entry of colours)if(!entry.used)result.push(entry.candidate);
+export function fuseRecognitionCandidates(instances,structuralCandidates){
+  const base=instances.map(candidate=>({candidate,used:false})),accepted=[];
+  const structures=[...structuralCandidates]
+    .filter(s=>(s.paperContactRatio??0)>=.70)
+    .sort((a,b)=>area(b)-area(a));
 
-  // Final NMS favours structural boundaries over colour proposals when they
-  // describe the same physical object; otherwise keep distinct neighbours.
-  const ordered=result.sort((a,b)=>(b.edgeMethod==='edge-enclosure')-(a.edgeMethod==='edge-enclosure')||area(b)-area(a));
-  const kept=[];
-  for(const candidate of ordered){
-    const duplicate=kept.find(other=>iou(candidate,other)>.62||overlapSmall(candidate,other)>.88);
-    if(!duplicate)kept.push(candidate);
+  for(const structural of structures){
+    const matches=base
+      .map((entry,index)=>({entry,index}))
+      .filter(({entry})=>!entry.used&&(containsCenter(structural,entry.candidate)||overlapOf(entry.candidate,structural)>.20));
+    let accept=false;
+    if(matches.length){
+      // One physical sticker may contain several watershed islands (printed
+      // figures on white stock). But never merge two substantial neighbouring
+      // items merely because an edge contour happened to surround both.
+      const shares=matches.map(({entry})=>area(entry.candidate)/Math.max(area(structural),1e-9)).sort((a,b)=>b-a);
+      accept=matches.length===1||shares[1]<.15;
+      accept&&=(structural.paperContactRatio??0)>=.70;
+    }else{
+      // Missing-instance recovery is deliberately strict. It recovers a pale
+      // photo/card with a real paper-facing perimeter, but internal printed
+      // boxes/squares have almost no direct page-background contact.
+      accept=(structural.paperContactRatio??0)>=.90
+        &&(structural.insideEvidenceRatio??0)>=.20
+        &&(structural.fillRatio??0)>=.45
+        &&area(structural)>=.006;
+    }
+    if(!accept)continue;
+    accepted.push(structural);
+    for(const {entry} of matches)entry.used=true;
   }
-  return kept.sort((a,b)=>a.y-b.y||a.x-b.x);
+
+  for(const entry of base)if(!entry.used)accepted.push(entry.candidate);
+
+  // Keep the outer accepted physical item, never its internal print detail.
+  const ordered=accepted.sort((a,b)=>area(b)-area(a)),kept=[];
+  for(const candidate of ordered)if(!kept.some(parent=>contained(candidate,parent)))kept.push(candidate);
+  return kept;
 }
