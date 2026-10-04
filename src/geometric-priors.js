@@ -313,74 +313,85 @@ export function carveEnclosedPageRegions(cv,{mask,outer,lab,gray,pageL,pageA,pag
   const edgeCandidates=[];
   for(let i=0;i<loops.size();i++){const d=describe(own(loops.get(i)),'edge');if(d)edgeCandidates.push(d);}
 
-  const strongGroups=[];
-  for(let i=0;i<pageCandidates.length;i++)for(let j=i+1;j<pageCandidates.length;j++){
-    const a=pageCandidates[i],b=pageCandidates[j],dx=b.center[0]-a.center[0],dy=b.center[1]-a.center[1],len=Math.hypot(dx,dy);if(len<pxPerMM*2)continue;
-    const ux=dx/len,uy=dy/len,nx=-uy,ny=ux,medianSize=(a.sizeMM+b.sizeMM)/2;
-    const group=pageCandidates.filter(q=>{
-      const vx=q.center[0]-a.center[0],vy=q.center[1]-a.center[1],perp=Math.abs(vx*nx+vy*ny)/pxPerMM;
-      return perp<=Math.max(1.25,medianSize*.55)&&q.sizeMM/medianSize>=.55&&q.sizeMM/medianSize<=1.8;
-    });
-    if(group.length<3)continue;
-    const sorted=[...group].sort((q1,q2)=>(q1.center[0]-a.center[0])*ux+(q1.center[1]-a.center[1])*uy-((q2.center[0]-a.center[0])*ux+(q2.center[1]-a.center[1])*uy));
-    const projections=sorted.map(q=>(q.center[0]-a.center[0])*ux+(q.center[1]-a.center[1])*uy),spacing=[];for(let s=1;s<projections.length;s++)spacing.push((projections[s]-projections[s-1])/pxPerMM);
-    if(cvRatio(spacing)>.16||cvRatio(sorted.map(q=>q.sizeMM))>.32||cvRatio(sorted.map(q=>q.edgeDistance))>.23)continue;
-    strongGroups.push({items:sorted,origin:a.center,dir:[ux,uy],normal:[nx,ny],spacingMM:mean(spacing),sizeMM:mean(sorted.map(q=>q.sizeMM)),edgeDistanceMM:mean(sorted.map(q=>q.edgeDistance))});
+  // Repeated manufacturing apertures are discovered as a geometric pattern,
+  // not from a fixed hole count/side. We combine page-like regions and weak
+  // closed edge loops, then require a collinear, similarly-sized, regularly
+  // spaced group with at least three page-supported members.
+  const candidatePool=[];
+  for(const q of [...pageCandidates,...edgeCandidates].sort((a,b)=>(a.source==='page'?-1:1)-(b.source==='page'?-1:1))){
+    const duplicate=candidatePool.find(r=>Math.hypot(r.center[0]-q.center[0],r.center[1]-q.center[1])<Math.max(pxPerMM*1.2,(r.sizeMM+q.sizeMM)*pxPerMM*.22));
+    if(!duplicate)candidatePool.push(q);
   }
-  strongGroups.sort((a,b)=>b.items.length-a.items.length);
-  const accepted=new Set();
-
-  // Very strong isolated page-like holes may be accepted directly, but only
-  // when the geometry is compact/simple and page similarity is unambiguous.
-  for(const q of pageCandidates){
-    const compact=Math.min(q.widthMM,q.heightMM)/Math.max(q.widthMM,q.heightMM);
-    if(compact>=.55&&q.sizeMM<=9&&(q.reg.lineCount+q.reg.curveCount)<=4)accepted.add(q);
-  }
-
-  for(const group of strongGroups){
-    for(const q of group.items)accepted.add(q);
-    const [ux,uy]=group.dir,[nx,ny]=group.normal,origin=group.origin,spacingPx=group.spacingMM*pxPerMM;
-    const pageProjection=group.items.map(q=>(q.center[0]-origin[0])*ux+(q.center[1]-origin[1])*uy);
-    const base=Math.min(...pageProjection);
-    for(const q of edgeCandidates){
-      const vx=q.center[0]-origin[0],vy=q.center[1]-origin[1],perp=Math.abs(vx*nx+vy*ny)/pxPerMM;if(perp>Math.max(1.2,group.sizeMM*.55))continue;
-      if(q.sizeMM/group.sizeMM<.55||q.sizeMM/group.sizeMM>1.7)continue;
-      if(Math.abs(q.edgeDistance-group.edgeDistanceMM)>Math.max(1.3,group.edgeDistanceMM*.25))continue;
-      const t=vx*ux+vy*uy,lattice=(t-base)/Math.max(spacingPx,1),nearest=Math.round(lattice);
-      if(Math.abs(lattice-nearest)>.24)continue;
-      accepted.add(q);
-    }
-
-    // If one member of an otherwise strong repeated manufacturing pattern is
-    // not page-like enough (for example because a shadow or printed cell sits
-    // beneath the opening), search only at the missing lattice positions with
-    // a lower-threshold local edge detector. This is still category-free: the
-    // pattern is discovered from observed apertures and neither count nor side
-    // is prescribed.
-    const minProj=Math.min(...pageProjection),maxProj=Math.max(...pageProjection),steps=Math.round((maxProj-minProj)/Math.max(spacingPx,1));
-    for(let latticeIndex=-1;latticeIndex<=steps+1;latticeIndex++){
-      const t=minProj+latticeIndex*spacingPx,px=Math.round(origin[0]+ux*t),py=Math.round(origin[1]+uy*t);
-      if(px<3||py<3||px>=cols-3||py>=rows-3||!outer.data[py*cols+px])continue;
-      if(group.items.some(q=>Math.hypot(q.center[0]-px,q.center[1]-py)<spacingPx*.35))continue;
-      const edgeDistance=distance.data32F[py*cols+px]/pxPerMM;
-      if(Math.abs(edgeDistance-group.edgeDistanceMM)>Math.max(1.5,group.edgeDistanceMM*.30))continue;
-      const radius=Math.max(4,Math.min(22,Math.round(group.sizeMM*pxPerMM*.95))),x0=Math.max(0,px-radius),y0=Math.max(0,py-radius),x1=Math.min(cols,px+radius+1),y1=Math.min(rows,py+radius+1),rw=x1-x0,rh=y1-y0;
-      if(rw<7||rh<7)continue;
-      const gROI=own(grayBlur.roi(new cv.Rect(x0,y0,rw,rh))),aaROI=own(aBlur.roi(new cv.Rect(x0,y0,rw,rh))),bbROI=own(bBlur.roi(new cv.Rect(x0,y0,rw,rh))),localEdge=own(new cv.Mat()),localA=own(new cv.Mat()),localB=own(new cv.Mat());
-      cv.Canny(gROI,localEdge,5,18);cv.Canny(aaROI,localA,2,8);cv.Canny(bbROI,localB,2,8);cv.bitwise_or(localEdge,localA,localEdge);cv.bitwise_or(localEdge,localB,localEdge);
-      const lk=Math.max(3,Math.min(7,Math.round(pxPerMM*.7))|1),lkernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(lk,lk)));cv.morphologyEx(localEdge,localEdge,cv.MORPH_CLOSE,lkernel);
-      const lc=own(new cv.MatVector()),lh=own(new cv.Mat());cv.findContours(localEdge,lc,lh,cv.RETR_LIST,cv.CHAIN_APPROX_NONE);
-      let best=null,bestCost=Infinity;
-      for(let ci=0;ci<lc.size();ci++){
-        const localContour=own(lc.get(ci));if(localContour.rows<4||cv.pointPolygonTest(localContour,new cv.Point(px-x0,py-y0),false)<0)continue;
-        const a=cv.contourArea(localContour),sizeMM=Math.sqrt(Math.max(a,1))/pxPerMM,ratio=sizeMM/Math.max(group.sizeMM,.1);if(ratio<.48||ratio>1.9)continue;
-        const points=Array.from({length:localContour.rows},(_,j)=>[localContour.data32S[j*2]+x0,localContour.data32S[j*2+1]+y0]),globalContour=own(cv.matFromArray(points.length,1,cv.CV_32SC2,points.flat()));
-        const d=describe(globalContour,'edge');if(!d)continue;
-        const cost=Math.abs(d.sizeMM/group.sizeMM-1)+Math.hypot(d.center[0]-px,d.center[1]-py)/Math.max(radius,1);
-        if(cost<bestCost){best=d;bestCost=cost;}
+  const projectionStats=(items,origin,ux,uy)=>{
+    const projected=[...items].sort((a,b)=>((a.center[0]-origin[0])*ux+(a.center[1]-origin[1])*uy)-((b.center[0]-origin[0])*ux+(b.center[1]-origin[1])*uy));
+    const values=projected.map(q=>(q.center[0]-origin[0])*ux+(q.center[1]-origin[1])*uy),gaps=[];for(let i=1;i<values.length;i++)gaps.push((values[i]-values[i-1])/pxPerMM);
+    return {items:projected,values,gaps,gapCV:cvRatio(gaps),sizeCV:cvRatio(projected.map(q=>q.sizeMM)),edgeCV:cvRatio(projected.map(q=>Math.max(q.edgeDistance,.2)))};
+  };
+  let bestPattern=null;
+  for(let i=0;i<candidatePool.length;i++)for(let j=i+1;j<candidatePool.length;j++){
+    const a=candidatePool[i],b=candidatePool[j],dx=b.center[0]-a.center[0],dy=b.center[1]-a.center[1],distanceAB=Math.hypot(dx,dy);if(distanceAB<pxPerMM*4)continue;
+    const ux=dx/distanceAB,uy=dy/distanceAB,nx=-uy,ny=ux,baseSize=(a.sizeMM+b.sizeMM)/2;
+    for(let multiple=1;multiple<=4;multiple++){
+      const spacingPx=distanceAB/multiple;if(spacingPx<pxPerMM*3||spacingPx>pxPerMM*35)continue;
+      const byIndex=new Map();
+      for(const q of candidatePool){
+        const vx=q.center[0]-a.center[0],vy=q.center[1]-a.center[1],perp=Math.abs(vx*nx+vy*ny)/pxPerMM,t=vx*ux+vy*uy,index=Math.round(t/spacingPx),latticeError=Math.abs(t/spacingPx-index);
+        if(perp>Math.max(1.6,baseSize*.85)||latticeError>.26||q.sizeMM/baseSize<.48||q.sizeMM/baseSize>1.9)continue;
+        const cost=latticeError+perp/Math.max(spacingPx/pxPerMM,1)+(q.source==='page'?0:.08)+q.evidenceDensity*.18;
+        if(!byIndex.has(index)||cost<byIndex.get(index).cost)byIndex.set(index,{q,cost});
       }
-      if(best&&bestCost<.85)accepted.add(best);
+      let group=[...byIndex.values()].map(v=>v.q);if(group.length<4)continue;
+      let stats=projectionStats(group,a.center,ux,uy);
+      while(group.length>4&&stats.gapCV>.16){
+        let bestRemoval=null;
+        for(let r=0;r<group.length;r++){const trial=group.filter((_,k)=>k!==r),s=projectionStats(trial,a.center,ux,uy);if(!bestRemoval||s.gapCV<bestRemoval.stats.gapCV)bestRemoval={trial,stats:s};}
+        group=bestRemoval.trial;stats=bestRemoval.stats;
+      }
+      const pageCount=group.filter(q=>q.source==='page').length;
+      if(group.length<4||stats.gapCV>.16||stats.sizeCV>.30||stats.edgeCV>.30||pageCount<3)continue;
+      const score=group.length*8-stats.gapCV*12-stats.sizeCV*8-stats.edgeCV*6+pageCount*.8;
+      if(!bestPattern||score>bestPattern.score)bestPattern={score,items:stats.items,origin:a.center,dir:[ux,uy],normal:[nx,ny],spacingPx:mean(stats.gaps)*pxPerMM,sizeMM:mean(group.map(q=>q.sizeMM)),edgeDistanceMM:mean(group.map(q=>q.edgeDistance))};
     }
+  }
+  const accepted=[];
+  const radialCurve=(cx,cy,expectedRadius)=>{
+    const points=[],radii=[],steps=48,r0=Math.max(2,Math.round(expectedRadius*.55)),r1=Math.max(r0+2,Math.round(expectedRadius*1.65));
+    for(let s=0;s<steps;s++){
+      const angle=s*Math.PI*2/steps,ca=Math.cos(angle),sa=Math.sin(angle);let bestR=null,bestDelta=Infinity;
+      for(let radius=r0;radius<=r1;radius++){
+        const x=Math.round(cx+ca*radius),y=Math.round(cy+sa*radius);if(x<1||y<1||x>=cols-1||y>=rows-1)continue;
+        if(edge.data[y*cols+x]){const delta=Math.abs(radius-expectedRadius);if(delta<bestDelta){bestDelta=delta;bestR=radius;}}
+      }
+      if(bestR!==null){points.push([cx+ca*bestR,cy+sa*bestR]);radii.push(bestR);}
+    }
+    if(points.length<steps*.62)return null;
+    const average=mean(radii),variation=cvRatio(radii);if(variation>.28)return null;
+    const contour=matFromPoints(cv,points,own),raw=contourMask(cv,cols,rows,contour,own);if(!enclosed(raw))return null;
+    const reg=regularizeContour(cv,contour,own,pxPerMM),area=cv.contourArea(contour);if(area<pxPerMM*pxPerMM*.35)return null;
+    return {contour,raw,reg,source:'radial',area,center:[cx,cy],edgeDistance:distance.data32F[Math.round(cy)*cols+Math.round(cx)]/pxPerMM,widthMM:average*2/pxPerMM,heightMM:average*2/pxPerMM,sizeMM:Math.sqrt(area)/pxPerMM,evidenceDensity:0};
+  };
+  if(bestPattern){
+    const [ux,uy]=bestPattern.dir,origin=bestPattern.origin,projections=bestPattern.items.map(q=>(q.center[0]-origin[0])*ux+(q.center[1]-origin[1])*uy).sort((a,b)=>a-b),spacingPx=bestPattern.spacingPx,expectedRadius=Math.max(pxPerMM*.8,bestPattern.sizeMM*pxPerMM/Math.sqrt(Math.PI));
+    for(const q of bestPattern.items){
+      const radial=radialCurve(q.center[0],q.center[1],expectedRadius);accepted.push(radial||q);
+    }
+    // Recover only internal missing lattice members. No count or endpoint is
+    // prescribed; a gap approximately twice the learned spacing proposes one
+    // missing aperture and the image edge must independently confirm it.
+    for(let i=1;i<projections.length;i++){
+      const gap=projections[i]-projections[i-1],multiple=Math.round(gap/Math.max(spacingPx,1));if(multiple<2||multiple>3||Math.abs(gap/spacingPx-multiple)>.22)continue;
+      for(let m=1;m<multiple;m++){
+        const t=projections[i-1]+m*spacingPx,cx=origin[0]+ux*t,cy=origin[1]+uy*t;
+        if(cx<2||cy<2||cx>=cols-2||cy>=rows-2||!outer.data[Math.round(cy)*cols+Math.round(cx)])continue;
+        const edgeDistance=distance.data32F[Math.round(cy)*cols+Math.round(cx)]/pxPerMM;if(Math.abs(edgeDistance-bestPattern.edgeDistanceMM)>Math.max(1.5,bestPattern.edgeDistanceMM*.30))continue;
+        const radial=radialCurve(cx,cy,expectedRadius);if(radial)accepted.push(radial);
+      }
+    }
+  }
+  const deduped=[];
+  for(const q of deduped){
+    if(deduped.some(r=>Math.hypot(r.center[0]-q.center[0],r.center[1]-q.center[1])<pxPerMM*1.4))continue;
+    deduped.push(q);
   }
 
   const carved=[];
@@ -388,5 +399,5 @@ export function carveEnclosedPageRegions(cv,{mask,outer,lab,gray,pageL,pageA,pag
     const rContour=matFromPoints(cv,q.reg.points,own),hole=contourMask(cv,cols,rows,rContour,own);mask.setTo(new cv.Scalar(0),hole);
     carved.push({lineCount:q.reg.lineCount,curveCount:q.reg.curveCount,cornerCount:q.reg.corners,area:q.area,widthMM:q.widthMM,heightMM:q.heightMM,source:q.source});
   }
-  return {count:carved.length,regions:carved,patternGroups:strongGroups.length};
+  return {count:carved.length,regions:carved,patternGroups:bestPattern?1:0};
 }
