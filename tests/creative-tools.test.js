@@ -75,13 +75,15 @@ test('nonoverlapping source slices share one inventory unit; overlapping copies 
   const over=run(base,[call('place_materials',{items:[{asset:'m2',piece:'p3',unit:2}]})]);assert.equal(over.results[0].ok,false);
 });
 
-test('continuous tape can supply repeated pieces without enlarging the calibrated strip',()=>{
-  const strips=[{asset:'m3',piece:'tape-a',unit:0,operations:[crop([0,0,.35,1])],placement:{x:.3,y:.3,rotation:0,z:1}},{asset:'m3',piece:'tape-b',unit:1,operations:[crop([0,0,.35,1])],placement:{x:.7,y:.3,rotation:0,z:2}}];
-  const d=success(draft(),[call('upsert_materials',{items:strips,remove:[]})]);
-  assert.equal(d.items.length,2);
-  assert.ok(d.items.every(item=>Math.abs(item.width-35/297*1000)<1e-6));
-  const copy=run(d,[call('upsert_materials',{items:[{asset:'m1',piece:'paper-copy',unit:1,operations:[{op:'whole'}],placement:{x:.5,y:.7,rotation:0,z:3}}],remove:[]})]);
-  assert.equal(copy.results[0].ok,false);
+test('only an explicitly registered repeatable tape roll can supply repeated segments',()=>{
+  const roll={...assets[2],supply:{kind:'tapeRoll',quantity:1,availableLengthMM:120},tapeRepeatMode:'repeatablePattern',tapeRepeatPeriodMM:20};
+  const strips=[{asset:'m3',piece:'tape-a',unit:0,operations:[crop([0,0,.35,1])],placement:{x:.3,y:.3,rotation:0,z:1}},{asset:'m3',piece:'tape-b',unit:0,operations:[crop([.35,0,.35,1])],placement:{x:.7,y:.3,rotation:0,z:2}}];
+  const current=applyToolCalls([call('upsert_materials',{items:strips,remove:[]})],draft(),[roll],aliases,{processing:'自由拆解'});
+  assert.ok(current.results.every(result=>result.ok),JSON.stringify(current.results));
+  assert.equal(current.draft.items.length,2);
+  assert.ok(current.draft.items.every(item=>Math.abs(item.width-35/297*1000)<1e-6));
+  const ordinary=run(draft(),[call('upsert_materials',{items:[{asset:'m3',piece:'ordinary-a',unit:0,operations:[crop([0,0,.35,1])],placement:{x:.3,y:.3,rotation:0,z:1}},{asset:'m3',piece:'ordinary-b',unit:1,operations:[crop([.35,0,.35,1])],placement:{x:.7,y:.3,rotation:0,z:2}}],remove:[]})]);
+  assert.equal(ordinary.results[0].ok,false);
 });
 
 test('arrange preserves all material dimensions in row, column and unequal grid',()=>{
