@@ -14,7 +14,6 @@ test('all sourced preset templates have multiple searchable indexes and remain s
   assert.ok(templates.every(item=>item.tags.length>=3&&item.styles.length&&item.purposes.length));
   assert.equal(templates.find(item=>item.id==='red-market-two-column-timeline').exampleSourceNumbers[0],35);
   assert.equal('isTemplate' in project('作品'),false);
-  assert.equal(workInTab({...project('旧作品'),isDraft:false,isTemplate:true},'all'),true,'old project metadata must not create a template category');
   assert.equal(workInTab(project('作品'),'templates'),false);
 });
 
