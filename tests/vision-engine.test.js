@@ -71,21 +71,18 @@ test('marker watershed rejects a page-only island without material evidence',asy
 });
 
 
-test('generic physical-boundary refinement expands a rough curved instance without a shape-specific fitter',async()=>{
-  const cv=await cvModule,width=220,height=260,pixels=new Uint8ClampedArray(width*height*4),evidence=new Uint8Array(width*height),backgroundConnected=new Uint8Array(width*height),shadowLikelihood=new Uint8Array(width*height);
-  const cx=112,cy=132,outerX=54,outerY=88,innerX=43,innerY=72;
+test('edge enclosure recovers a curved pale physical carrier without an ellipse class',async()=>{
+  const cv=await cvModule,width=220,height=260,pixels=new Uint8ClampedArray(width*height*4),evidence=new Uint8Array(width*height),backgroundConnected=new Uint8Array(width*height),shadowLikelihood=new Uint8Array(width*height),score=new Uint8Array(width*height);
+  const cx=112,cy=132,rx=54,ry=88;
   for(let y=0;y<height;y++)for(let x=0;x<width;x++){
-    const at=y*width+x,p=at*4,n=((x-cx)/outerX)**2+((y-cy)/outerY)**2,edge=Math.abs(n-1)<.045,inside=n<=1;
-    const value=inside?edge?145:235:246;pixels.set([value,value,value,255],p);backgroundConnected[at]=inside?0:1;
-    if(inside&&(edge||((x-cx)/18)**2+((y-cy)/34)**2<1))evidence[at]=1;
+    const at=y*width+x,p=at*4,n=((x-cx)/rx)**2+((y-cy)/ry)**2,inside=n<=1,border=inside&&Math.abs(n-1)<.05;
+    const value=inside?border?145:235:246;pixels.set([value,value,value,255],p);backgroundConnected[at]=inside?0:1;
+    if(border||inside&&((x-cx)/18)**2+((y-cy)/34)**2<1){evidence[at]=1;score[at]=100;}
   }
-  const mw=innerX*2+5,mh=innerY*2+5,alpha=new Uint8Array(mw*mh);
-  for(let y=0;y<mh;y++)for(let x=0;x<mw;x++)if(((x-mw/2)/innerX)**2+((y-mh/2)/innerY)**2<=1)alpha[y*mw+x]=255;
-  const rough={x:(cx-mw/2)/width,y:(cy-mh/2)/height,w:mw/width,h:mh/height,evidenceDensity:.3,edgeMethod:'watershed-grabcut',mask:{width:mw,height:mh,alpha,polygons:[]}};
-  const result=await processVision(cv,'complete-boundaries',{pixels,evidence,backgroundConnected,shadowLikelihood,width,height,candidates:[rough],smallestMM:6,paperWidthMM:210,paperHeightMM:297});
-  assert.equal(result.length,1);assert.equal(result[0].edgeMethod,'physical-boundary');
-  assert.ok(result[0].w>rough.w*1.10&&result[0].h>rough.h*1.08,'outer physical edge must expand beyond the rough instance');
-  assert.notEqual(result[0].edgeMethod,'ellipse-completed');
+  const result=await processVision(cv,'enclosures',{pixels,evidence,backgroundConnected,shadowLikelihood,score,width,height,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
+  const carrier=result.sort((a,b)=>b.pixels-a.pixels)[0];assert.ok(carrier,'curved physical enclosure should be found');
+  assert.notEqual(carrier.edgeMethod,'edge-rectangle');
+  assert.ok(Math.abs(carrier.w-rx*2/width)<.07&&Math.abs(carrier.h-ry*2/height)<.07,'curved boundary should follow the visible outer carrier');
 });
 
 test('generic topology refinement can retain an enclosed page aperture without a punch-hole rule',async()=>{
@@ -96,9 +93,10 @@ test('generic topology refinement can retain an enclosed page aperture without a
     const color=!inside||hole?[246,246,246]:border?[145,145,145]:[224,232,226];pixels.set([...color,255],p);backgroundConnected[at]=inside?0:1;
     if(inside&&!hole&&(border||x<cx-20||x>cx+20))evidence[at]=1;
   }
-  const mw=94,mh=154,alpha=new Uint8Array(mw*mh).fill(255);
-  const rough={x:(cx-mw/2)/width,y:(cy-mh/2)/height,w:mw/width,h:mh/height,evidenceDensity:.4,edgeMethod:'watershed-grabcut',mask:{width:mw,height:mh,alpha,polygons:[]}};
-  const [out]=await processVision(cv,'complete-boundaries',{pixels,evidence,backgroundConnected,shadowLikelihood,width,height,candidates:[rough],smallestMM:6,paperWidthMM:210,paperHeightMM:297});
+  const mw=rx*2+1,mh=ry*2+1,alpha=new Uint8Array(mw*mh);
+  for(let y=0;y<mh;y++)for(let x=0;x<mw;x++)if(((x-mw/2)/rx)**2+((y-mh/2)/ry)**2<=1)alpha[y*mw+x]=255;
+  const outer={x:(cx-mw/2)/width,y:(cy-mh/2)/height,w:mw/width,h:mh/height,evidenceDensity:.4,edgeMethod:'edge-enclosure',mask:{width:mw,height:mh,alpha,polygons:[]}};
+  const [out]=await processVision(cv,'complete-boundaries',{pixels,evidence,backgroundConnected,shadowLikelihood,width,height,candidates:[outer],smallestMM:6,paperWidthMM:210,paperHeightMM:297});
   assert.ok(out?.mask?.topologyPreserved);
   const left=Math.round(out.x*width),top=Math.round(out.y*height),mx=hx-left,my=hy-top;
   assert.ok(mx>=0&&my>=0&&mx<out.mask.width&&my<out.mask.height);
