@@ -23,5 +23,7 @@ export async function segmentPaperMaterials({data,width:w,height:h},{smallestMM=
       width:w,height:h,smallestMM,paperWidthMM,paperHeightMM
     })
   ]);
-  return fuseRecognitionCandidates(instances,structural).sort((a,b)=>a.y-b.y||a.x-b.x).slice(0,48);
+  const fused=fuseRecognitionCandidates(instances,structural);
+  const completed=fused.length?await visionTask('complete-boundaries',{pixels:sourcePixels,width:w,height:h,candidates:fused}):fused;
+  return completed.sort((a,b)=>a.y-b.y||a.x-b.x).slice(0,48);
 }
