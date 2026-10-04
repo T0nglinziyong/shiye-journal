@@ -8,7 +8,7 @@ import {bindLongPress} from './long-press.js';
 import {WORK_TABS,workInTab} from './work-collections.js';
 import {mountJournalTemplateGallery} from './journal-template-ui.js';
 import {applyCatalogPage,resetCatalogPage} from './catalog-pagination.js';
-export const parity={libraryTab:'series',selectionMode:null,showOnlySelected:false,selected:new Set(),workTab:'all',route:null,templateID:null,templateSide:'template'};
+export const parity={libraryTab:'series',selectionMode:null,showOnlySelected:false,selected:new Set(),workTab:'all',route:null,templateID:null,templateSide:'template',seriesScrollY:0,restoreSeriesScroll:false};
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 export function mountParityControls(ctx){
@@ -41,9 +41,10 @@ function mountLibrary(c){
 function mountSeries(c){const {view,route,state,render}=c,header=view.querySelector('.view-head'),grid=view.querySelector('.grid');header?.querySelector('h1')?.replaceChildren('我的素材');const bar=tabs([['series','系列'],['all','全部素材'],['pending','待检测'],['trash','最近删除']],'series',id=>{if(id==='series')return;parity.libraryTab=id;state.status=id==='pending'?'pendingReview':'all';state.libraryRecent=false;route('library');});header?.after(bar);
   const controls=document.createElement('div');controls.className='swift-series-controls';controls.innerHTML='<input type="search" placeholder="搜索系列、素材或标签" aria-label="搜索系列"><select aria-label="系列排序"><option value="recent">最近更新</option><option value="name">名称</option></select><span></span>';bar.after(controls);
   const cards=[...view.querySelectorAll('.grid .card[data-act="series-detail"]')], count=controls.querySelector('span');
+  for(const card of cards)card.addEventListener('click',()=>{if(!selectionActive(parity,'series')){parity.seriesScrollY=window.scrollY;parity.restoreSeriesScroll=true;}});
   const filter=()=>{const q=controls.querySelector('input').value.trim().toLocaleLowerCase();applyCatalogPage({view,key:'series',cards,matched:card=>{const series=state.series.find(x=>x.id===card.dataset.id);return !q||`${series?.title||''} ${series?.introduction||''} ${state.assets.filter(a=>a.seriesID===series?.id).map(a=>a.title).join(' ')}`.toLocaleLowerCase().includes(q);},countNode:count,size:state.preferences.maxPageItems});};view.catalogRefresh=filter;
   controls.querySelector('input').oninput=filter;controls.querySelector('select').onchange=e=>{if(e.target.value==='name')cards.sort((a,b)=>(state.series.find(x=>x.id===a.dataset.id)?.title||'').localeCompare(state.series.find(x=>x.id===b.dataset.id)?.title||''));else cards.sort((a,b)=>(state.series.find(x=>x.id===b.dataset.id)?.updatedAt||'').localeCompare(state.series.find(x=>x.id===a.dataset.id)?.updatedAt||''));cards.forEach(card=>grid.append(card));};filter();
-  if(grid){const tile=document.createElement('button');tile.type='button';tile.className='series-entry';tile.innerHTML='<div class="series-entry-cover">＋</div><strong>新建系列</strong><small>把喜欢的素材放在一起</small>';tile.onclick=()=>c.openSeriesEditor();grid.prepend(tile);}}
+  if(grid){const tile=document.createElement('button');tile.type='button';tile.className='series-entry';tile.innerHTML='<div class="series-entry-cover">＋</div><strong>新建系列</strong><small>把喜欢的素材放在一起</small>';tile.onclick=()=>c.openSeriesEditor();grid.prepend(tile);}if(parity.restoreSeriesScroll)requestAnimationFrame(()=>{window.scrollTo(0,parity.seriesScrollY||0);parity.restoreSeriesScroll=false;});}
 function mountWorks(c){const {state,view,render}=c,header=view.querySelector('.view-head'),filters=view.querySelector('.filters');
   const actions=header?.querySelector('.actions');if(actions&&parity.workTab!=='templates'){actions.append(button(parity.selectionMode?'完成':'选择',()=>{toggleSelection(parity,'work');view.selectionRefresh?.();},'library-select-toggle'));}
   const bar=tabs(WORK_TABS,parity.workTab,id=>{parity.workTab=id;parity.templateID=null;resetCatalogPage('works');if(id==='trash'||id==='templates')finishSelection(parity);render();});header?.after(bar);
