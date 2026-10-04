@@ -90,13 +90,13 @@ test('boundary completion restores a pale physical oval from an inner rough mask
 
 
 test('clean high-contact rectangular enclosure is represented by fitted straight physical edges',async()=>{
-  const cv=await cvModule,width=180,height=180,pixels=new Uint8ClampedArray(width*height*4),evidence=new Uint8Array(width*height);
+  const cv=await cvModule,width=180,height=180,pixels=new Uint8ClampedArray(width*height*4),evidence=new Uint8Array(width*height),backgroundConnected=new Uint8Array(width*height);
   for(let y=0;y<height;y++)for(let x=0;x<width;x++){
     const at=y*width+x,p=at*4,card=x>=42&&x<132&&y>=35&&y<145;
-    const color=card?[210,226,218]:[245,245,245];pixels.set([...color,255],p);
+    const color=card?[210,226,218]:[245,245,245];pixels.set([...color,255],p);backgroundConnected[at]=card?0:1;
     if(card&&(x<52||x>=122||y<45||y>=135))evidence[at]=1;
   }
-  const result=await processVision(cv,'enclosures',{pixels,evidence,width,height,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
+  const result=await processVision(cv,'enclosures',{pixels,evidence,backgroundConnected,width,height,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
   const card=result.filter(r=>r.x<.3&&r.x+r.w>.7&&r.y<.25&&r.y+r.h>.78).sort((a,b)=>b.pixels-a.pixels)[0];
   assert.ok(card,'clean rectangular physical enclosure should be found');
   assert.equal(card.edgeMethod,'edge-rectangle',JSON.stringify({rectFill:card.rectFill,rectangularPrior:card.rectangularPrior,vertices:card.mask.polygons[0].length,paperContactRatio:card.paperContactRatio,insideEvidenceRatio:card.insideEvidenceRatio}));
