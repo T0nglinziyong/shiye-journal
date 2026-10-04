@@ -56,3 +56,14 @@ test('tiny internal detail with a one-pixel-style bbox overshoot is still suppre
   const out=fuseRecognitionCandidates([glyph],[parent]);
   assert.deepEqual(out,[parent]);
 });
+
+
+test('reconstructed fragmented carrier merges sparse pieces but not substantial neighbours',()=>{
+  const f1=c(.10,.60,.06,.23),f2=c(.15,.60,.28,.04),f3=c(.10,.66,.12,.13),f4=c(.39,.62,.07,.06);
+  const carrier=c(.07,.58,.43,.28,{edgeMethod:'boundary-reconstruction',boundaryReconstruction:true,reconstructionScore:.78,edgeSupportRatio:.72,paperContactRatio:.82,interiorBackgroundRatio:.45,fillRatio:.81,matchedOccupancy:.46});
+  assert.deepEqual(fuseRecognitionCandidates([f1,f2,f3,f4],[carrier]),[carrier]);
+  const a=c(.12,.12,.22,.27),b=c(.40,.10,.58,.42);
+  const accidental=c(.10,.08,.88,.45,{edgeMethod:'boundary-reconstruction',boundaryReconstruction:true,reconstructionScore:.82,edgeSupportRatio:.75,paperContactRatio:.80,interiorBackgroundRatio:.16,fillRatio:.50,matchedOccupancy:.84});
+  const out=fuseRecognitionCandidates([a,b],[accidental]);
+  assert.equal(out.length,2);assert.ok(out.includes(a)&&out.includes(b));
+});
