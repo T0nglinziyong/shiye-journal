@@ -63,6 +63,31 @@ export async function processVision(cv,operation,p){
       const local=own(filled.roi(new cv.Rect(x,y,w,h))),packed=own(new cv.Mat());local.copyTo(packed);
       return {x:x/p.width,y:y/p.height,w:w/p.width,h:h/p.height,pixels:area,edgeMethod,mask:{width:w,height:h,alpha:new Uint8Array(packed.data),polygons:[points]}};
     }
+    if(operation==='enclosures'){
+      const src=own(cv.matFromArray(p.height,p.width,cv.CV_8UC4,p.pixels)),gray=own(new cv.Mat()),blurred=own(new cv.Mat()),edges=own(new cv.Mat()),closed=own(new cv.Mat());
+      cv.cvtColor(src,gray,cv.COLOR_RGBA2GRAY);cv.GaussianBlur(gray,blurred,new cv.Size(5,5),0);
+      cv.Canny(blurred,edges,20,65);
+      const closeKernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(5,5))),growKernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(3,3)));
+      cv.morphologyEx(edges,closed,cv.MORPH_CLOSE,closeKernel,new cv.Point(-1,-1),2);cv.dilate(closed,closed,growKernel);
+      const contours=own(new cv.MatVector()),hierarchy=own(new cv.Mat());cv.findContours(closed,contours,hierarchy,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_SIMPLE);
+      const out=[],w=p.width,h=p.height,minArea=Math.max(24,(p.smallestMM/p.paperWidthMM*w)*(p.smallestMM/p.paperHeightMM*h)*.18);
+      for(let i=0;i<contours.size();i++){
+        const contour=own(contours.get(i)),area=cv.contourArea(contour);if(area<minArea||area>w*h*.55)continue;
+        const b=cv.boundingRect(contour),widthMM=b.width/w*p.paperWidthMM,heightMM=b.height/h*p.paperHeightMM;
+        if(widthMM<p.smallestMM||heightMM<p.smallestMM||b.width>w*.94||b.height>h*.94)continue;
+        if(b.x<2||b.y<2||b.x+b.width>w-2||b.y+b.height>h-2)continue;
+        const fill=area/Math.max(1,b.width*b.height);if(fill<.16)continue;
+        const filled=own(cv.Mat.zeros(h,w,cv.CV_8UC1)),one=own(new cv.MatVector());one.push_back(contour);cv.drawContours(filled,one,-1,new cv.Scalar(255),cv.FILLED);
+        let signal=0,inside=0;
+        for(let yy=b.y;yy<b.y+b.height;yy++)for(let xx=b.x;xx<b.x+b.width;xx++){const at=yy*w+xx;if(!filled.data[at])continue;inside++;if(p.evidence?.[at])signal++;}
+        if(signal<Math.max(10,inside*.003))continue;
+        const x=Math.max(0,b.x-2),y=Math.max(0,b.y-2),rw=Math.min(w,b.x+b.width+2)-x,rh=Math.min(h,b.y+b.height+2)-y,local=own(filled.roi(new cv.Rect(x,y,rw,rh))),packed=own(new cv.Mat());local.copyTo(packed);
+        const poly=own(new cv.Mat());cv.approxPolyDP(contour,poly,Math.max(.7,cv.arcLength(contour,true)*.0015),true);
+        const points=Array.from({length:poly.rows},(_,j)=>[poly.data32S[j*2]-x,poly.data32S[j*2+1]-y]);
+        out.push({x:x/w,y:y/h,w:rw/w,h:rh/h,pixels:inside,edgeMethod:'edge-enclosure',structuralConfidence:Math.min(1,.45+fill*.35+Math.min(signal/Math.max(inside*.02,1),1)*.20),mask:{width:rw,height:rh,alpha:new Uint8Array(packed.data),polygons:[points]}});
+      }
+      return out.sort((a,b)=>a.y-b.y||a.x-b.x).slice(0,48);
+    }
     if(operation==='components'){
       const src=own(cv.matFromArray(p.height,p.width,cv.CV_8UC1,p.mask)),closed=own(new cv.Mat()),kernel=own(cv.getStructuringElement(cv.MORPH_CROSS,new cv.Size(3,3))),labels=own(new cv.Mat()),stats=own(new cv.Mat()),centroids=own(new cv.Mat());cv.morphologyEx(src,closed,cv.MORPH_CLOSE,kernel);const count=cv.connectedComponentsWithStats(closed,labels,stats,centroids,4,cv.CV_32S),result=[],w=p.width,h=p.height,minArea=Math.max(20,(p.smallestMM/p.paperWidthMM*w)*(p.smallestMM/p.paperHeightMM*h)*.12),rgba=p.pixels?own(cv.matFromArray(h,w,cv.CV_8UC4,p.pixels)):null;
       for(let label=1;label<count;label++){
