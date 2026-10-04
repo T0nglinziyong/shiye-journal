@@ -1,4 +1,4 @@
-import {regularizeOuterSupport,carveRegularPageApertures} from './geometric-priors.js';
+import {regularizeOuterSupport,carveEnclosedPageRegions} from './geometric-priors.js';
 // Shape-agnostic topology refinement for traditional CV recognition.
 //
 // Physical-boundary discovery belongs to the enclosure stage. This module does
@@ -80,14 +80,15 @@ export function completePhysicalBoundaries(cv,p,own){
       if(largestLabel&&largestArea>=outerArea*.62){for(let i=0;i<labels.data32S.length;i++)refined.data[i]=labels.data32S[i]===largestLabel?255:0;}else outer.copyTo(refined);
     }
 
-    const aperture=carveRegularPageApertures(cv,{mask:refined,outer,lab,gray,pageL,pageA,pageB,pageN,evidence:evidence?own(evidence.roi(new cv.Rect(rx,ry,rw,rh))):null,pxPerMM},own);
+    const aperture=carveEnclosedPageRegions(cv,{mask:refined,outer,lab,gray,pageL,pageA,pageB,pageN,evidence:evidence?own(evidence.roi(new cv.Rect(rx,ry,rw,rh))):null,pxPerMM},own);
     const finalContours=own(new cv.MatVector()),finalHierarchy=own(new cv.Mat());cv.findContours(refined,finalContours,finalHierarchy,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_SIMPLE);
     let largestFinal=null,largestFinalArea=0;for(let i=0;i<finalContours.size();i++){const q=own(finalContours.get(i)),a=cv.contourArea(q);if(a>largestFinalArea){largestFinalArea=a;largestFinal=q;}}
     if(!largestFinal){continue;}
     const bounds=cv.boundingRect(largestFinal),local=own(refined.roi(new cv.Rect(bounds.x,bounds.y,bounds.width,bounds.height))),packed=own(new cv.Mat());local.copyTo(packed);
     const polygon=(prior.polygon||Array.from({length:largestFinal.rows},(_,i)=>[largestFinal.data32S[i*2],largestFinal.data32S[i*2+1]])).map(([px,py])=>[px-bounds.x,py-bounds.y]);
-    result.push({...candidate,x:(rx+bounds.x)/w,y:(ry+bounds.y)/h,w:bounds.width/w,h:bounds.height/h,pixels:cv.countNonZero(local),geometricPrior:prior.model,geometricPriorScore:prior.score,apertureCount:aperture.count,
-      mask:{...m,width:bounds.width,height:bounds.height,alpha:new Uint8Array(packed.data),polygons:[polygon],topologyPreserved:true}});
+    result.push({...candidate,x:(rx+bounds.x)/w,y:(ry+bounds.y)/h,w:bounds.width/w,h:bounds.height/h,pixels:cv.countNonZero(local),
+      boundaryModel:prior.boundaryModel,boundaryLineCount:prior.lineCount||0,boundaryCurveCount:prior.curveCount||0,boundaryCornerCount:prior.cornerCount||0,apertureCount:aperture.count,
+      mask:{...m,width:bounds.width,height:bounds.height,alpha:new Uint8Array(packed.data),polygons:[polygon],topologyPreserved:true,boundaryPrimitives:prior.primitives,apertureRegions:aperture.regions}});
   }
   return result;
 }
