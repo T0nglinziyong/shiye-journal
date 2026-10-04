@@ -23,6 +23,10 @@ export function withUsageStatus(asset, used, at = new Date().toISOString()) {
 export function projectAssetIDs(project) {
   return new Set((project.drafts || []).flatMap(d => (d.items || []).filter(i => !i.isParked).map(i => i.assetID)).filter(Boolean));
 }
+export function markProjectAssetsUsed(project, assets, at = new Date().toISOString()) {
+  const ids = projectAssetIDs(project);
+  return assets.filter(asset => ids.has(asset.id) && asset.usageStatus !== 'used').map(asset => withUsageStatus(asset, true, at));
+}
 export function seriesMembers(seriesID, assets, filters = {}) {
   const used = usedAssetIDs(assets), q = (filters.query || '').trim().toLocaleLowerCase();
   return assets.filter(a => {

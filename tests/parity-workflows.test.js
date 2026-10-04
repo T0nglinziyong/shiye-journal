@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {seriesCovers,parseTags,searchableSeries,seriesMembers,usedAssetIDs,withUsageStatus,projectAssetIDs} from '../src/library-model.js';
+import {seriesCovers,parseTags,searchableSeries,seriesMembers,usedAssetIDs,withUsageStatus,projectAssetIDs,markProjectAssetsUsed} from '../src/library-model.js';
 import {canvasObjects,objectCorners,selectPolygon,moveSelection,clampCanvasPosition} from '../src/canvas-selection.js';
 import {materialPrintPlacements,pagePDF} from '../src/pdf-export.js';
 import {candidateMetadata,importPaperDimensions,saveImportBatch} from '../src/import-save.js';
@@ -29,14 +29,16 @@ test('series contents independently filter tags, organization and explicit usage
   assert.deepEqual(seriesMembers('s',assets,{sort:'name',ascending:true}).map(a=>a.id),['a','b']);
   assert.equal(seriesMembers('s',assets,{status:'outside'}).length,0);
 });
-test('usage status is explicit and project contents do not control it',()=>{
+test('marking a work used explicitly marks its placed materials used and ignores parked materials',()=>{
   const work={isDraft:false,isUsed:true,drafts:[{items:[{assetID:'a'},{assetID:'b',isParked:true}]}]};
+  const assets=[{id:'a',title:'A',usageStatus:'unused'},{id:'b',title:'B',usageStatus:'unused'},{id:'c',title:'C',usageStatus:'unused'}];
   assert.deepEqual([...projectAssetIDs(work)],['a']);
-  assert.deepEqual([...usedAssetIDs([{id:'a'},{id:'b'}])],[]);
-  const unused=withUsageStatus({id:'a',title:'素材'},false,'2026-09-30T00:00:00.000Z');
-  assert.equal(unused.usageStatus,'unused');
-  assert.deepEqual([...usedAssetIDs([unused])],[]);
-  const used=withUsageStatus(unused,true,'2026-09-30T01:00:00.000Z');
+  const changed=markProjectAssetsUsed(work,assets,'2026-09-30T01:00:00.000Z');
+  assert.deepEqual(changed.map(asset=>asset.id),['a']);
+  assert.equal(changed[0].usageStatus,'used');
+  assert.equal(changed[0].usageUpdatedAt,'2026-09-30T01:00:00.000Z');
+  assert.deepEqual([...usedAssetIDs(assets)],[]);
+  const used=withUsageStatus(assets[0],true,'2026-09-30T01:00:00.000Z');
   assert.deepEqual([...usedAssetIDs([used])],['a']);
 });
 test('lasso requires full enclosure of rotated objects and honors type and lock filters',()=>{
