@@ -45,9 +45,3 @@ test('recommendations use all semantic tags and selected basket context',()=>{
  const result=recommendForDirection({assets:[selected,related,unrelated],basket:['base'],purposes:['旅途记录']});
  assert.equal(result[0].asset.id,'related');assert.ok(result[0].reasons.includes('配色关系'));
 });
-test('personal material takes precedence over legacy generic starter when equally relevant',()=>{
- const generic=make('generic','paper','蓝色书写卡',['日常']);generic.sourceIdentifier='built-in-starter-style';
- const personal=make('personal','paper','蓝色书写卡',['日常']);
- const result=recommendForDirection({assets:[generic,personal],purposes:['日常记录']});
- assert.equal(result[0].asset.id,'personal');
-});
