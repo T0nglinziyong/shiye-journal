@@ -42,14 +42,34 @@ function turning(points,i,window){
   return Math.acos(clamp((u[0]*v[0]+u[1]*v[1])/(lu*lv),-1,1));
 }
 function corners(points,pxPerMM){
-  const n=points.length,window=clamp(Math.round(pxPerMM*1.3/Math.max(perimeter(points)/n,1)),2,Math.max(2,Math.floor(n/10))),threshold=.48,minSep=Math.max(4,Math.round(n*.035));
+  // Curvature is estimated on a smoothed copy only for corner discovery.
+  // The original samples are still used for fitting, so smoothing cannot move
+  // the physical boundary itself.
+  const probe=smoothClosed(points,3),n=probe.length,window=clamp(Math.round(pxPerMM*2.2/Math.max(perimeter(probe)/n,1)),3,Math.max(3,Math.floor(n/8))),threshold=.58,minSep=Math.max(5,Math.round(n*.045));
   const raw=[];
-  for(let i=0;i<n;i++){const score=turning(points,i,window);if(score>=threshold)raw.push({i,score});}
+  for(let i=0;i<n;i++){const score=turning(probe,i,window);if(score>=threshold)raw.push({i,score});}
   raw.sort((a,b)=>b.score-a.score);
   const selected=[];
   const circularDistance=(a,b)=>Math.min(Math.abs(a-b),n-Math.abs(a-b));
-  for(const item of raw){if(selected.every(x=>circularDistance(x.i,item.i)>=minSep))selected.push(item);if(selected.length>=24)break;}
+  for(const item of raw){if(selected.every(x=>circularDistance(x.i,item.i)>=minSep))selected.push(item);if(selected.length>=16)break;}
   return selected.map(x=>x.i).sort((a,b)=>a-b);
+}
+function simplifyCorners(points,cut,pxPerMM){
+  const corners=[...cut];
+  let changed=true;
+  // Minimum-description-length step: if the two arcs around a supposed
+  // corner are jointly explained by one long line, paying for an extra corner
+  // is unnecessary. This removes small bites/notches without erasing real 90°
+  // or other strong turns.
+  while(changed&&corners.length>=3){
+    changed=false;
+    for(let j=0;j<corners.length;j++){
+      const prev=corners[wrap(j-1,corners.length)],next=corners[(j+1)%corners.length],fit=lineFit(arc(points,prev,next));
+      const rmsLimit=Math.max(1,pxPerMM*.45),maxLimit=Math.max(3.2,pxPerMM*1.35),ratio=fit.rms/Math.max(fit.length,1);
+      if(fit.length>=Math.max(8,pxPerMM*3)&&fit.rms<=rmsLimit&&fit.max<=maxLimit&&ratio<=.025){corners.splice(j,1);changed=true;break;}
+    }
+  }
+  return corners;
 }
 function arc(points,start,end){
   const n=points.length,out=[points[start]];let i=start;
@@ -89,7 +109,7 @@ function contourMask(cv,width,height,contour,own,value=255){
 export function regularizeContour(cv,contour,own,pxPerMM,{closed=true}={}){
   const raw=contourPoints(contour),spacing=Math.max(1,pxPerMM*.55),points=resampleClosed(raw,spacing);
   if(points.length<8)return {points:raw,primitives:[{type:'curve'}],corners:0,lineCount:0,curveCount:1};
-  const cut=corners(points,pxPerMM);
+  const cut=simplifyCorners(points,corners(points,pxPerMM),pxPerMM);
   if(cut.length<2){
     const smoothed=smoothClosed(points,4);
     return {points:smoothed,primitives:[{type:'curve',closed:true}],corners:0,lineCount:0,curveCount:1};
@@ -98,8 +118,8 @@ export function regularizeContour(cv,contour,own,pxPerMM,{closed=true}={}){
   const segments=[];
   for(let s=0;s<cut.length;s++){
     const a=cut[s],b=cut[(s+1)%cut.length],pts=arc(points,a,b),fit=lineFit(pts);
-    const rmsLimit=Math.max(.65,pxPerMM*.30),maxLimit=Math.max(1.5,pxPerMM*.75),ratio=fit.rms/Math.max(fit.length,1);
-    const isLine=fit.length>=Math.max(7,pxPerMM*2.2)&&fit.rms<=rmsLimit&&fit.max<=maxLimit&&ratio<=.025;
+    const rmsLimit=Math.max(.8,pxPerMM*.35),maxLimit=Math.max(3.2,pxPerMM*1.2),ratio=fit.rms/Math.max(fit.length,1);
+    const isLine=fit.length>=Math.max(7,pxPerMM*2.2)&&fit.rms<=rmsLimit&&fit.max<=maxLimit&&ratio<=.03;
     segments.push({start:a,end:b,points:pts,fit,type:isLine?'line':'curve'});
   }
 
