@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {syncCurrentMaterials,currentMaterialDefinitions,CURRENT_MATERIAL_SOURCE,CURRENT_MATERIAL_REVISION,CURRENT_MATERIAL_SERIES_ID,isCurrentBuiltinAsset} from '../src/current-materials.js';
+import {readFile} from 'node:fs/promises';
+import {syncCurrentMaterials,currentMaterialDefinitions,CURRENT_MATERIAL_SOURCE,CURRENT_MATERIAL_REVISION,CURRENT_MATERIAL_SERIES_ID,isCurrentBuiltinAsset,filterCurrentCollections} from '../src/current-materials.js';
 
 function memoryDB(seed={}){
   const names=['assets','blobs','series','projects','meta','trash'];
@@ -45,4 +46,21 @@ test('current catalog contains varied editable material roles without retired id
   assert.ok(new Set(currentMaterialDefinitions.map(item=>item.kind)).size>=3);
   assert.ok(new Set(currentMaterialDefinitions.map(item=>item.role)).size>=4);
   assert.ok(currentMaterialDefinitions.every(item=>!String(item.path).includes('/cece/')&&!String(item.path).includes('/style-expansion/')));
+});
+
+test('visible collections reject retired system records before persistence cleanup',()=>{
+  const visible=filterCurrentCollections({
+    assets:[{id:'old',sourceIdentifier:'built-in-style-expansion'},{id:'user'}],
+    series:[{id:'cece-sample-series'},{id:'user-series'}],
+    projects:[{id:'cece-p2-project'},{id:'user-project'}],
+    trash:[{id:'old-trash',kind:'asset',item:{id:'cece-x'}},{id:'user-trash',kind:'project',item:{id:'user-project'}}]
+  });
+  assert.deepEqual(visible.assets.map(x=>x.id),['user']);assert.deepEqual(visible.series.map(x=>x.id),['user-series']);assert.deepEqual(visible.projects.map(x=>x.id),['user-project']);assert.deepEqual(visible.trash.map(x=>x.id),['user-trash']);
+});
+
+test('every current built-in material points to a shipped current static asset',async()=>{
+  for(const item of currentMaterialDefinitions){
+    assert.match(item.path,/^\/current-materials\/[a-z0-9-]+\.svg$/);
+    const svg=await readFile(new URL('../public'+item.path,import.meta.url),'utf8');assert.match(svg,/^<svg\b/);assert.match(svg,/<\/svg>$/);
+  }
 });
