@@ -1,3 +1,4 @@
+// Production deployment refresh marker: 2026-10-04
 import {assetSourceRevision} from './material-anatomy.js';
 import {renderSceneCanvas,decodeSceneImage} from './scene-renderer.js';
 import {sceneRenderEntries,projectMaterialViews} from './craft-display.js';
