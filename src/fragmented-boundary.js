@@ -56,6 +56,8 @@ export function reconstructFragmentedBoundaries(cv,p,own){
       const boundary=own(cv.Mat.zeros(h,w,cv.CV_8UC1));cv.drawContours(boundary,one,-1,new cv.Scalar(255),1);
       const supported=own(new cv.Mat());cv.bitwise_and(boundary,supportEdges,supported);
       const boundaryPixels=Math.max(1,cv.countNonZero(boundary)),edgeSupportRatio=cv.countNonZero(supported)/boundaryPixels;
+      let boundaryShadow=0;for(let yy=b.y;yy<b.y+b.height;yy++)for(let xx=b.x;xx<b.x+b.width;xx++){const at=yy*w+xx;if(boundary.data[at]&&p.shadowLikelihood?.[at])boundaryShadow++;}
+      const boundaryShadowFraction=boundaryShadow/boundaryPixels;
 
       let inside=0,insidePage=0,insideEvidence=0;
       for(let yy=b.y;yy<b.y+b.height;yy++)for(let xx=b.x;xx<b.x+b.width;xx++){
@@ -69,6 +71,7 @@ export function reconstructFragmentedBoundaries(cv,p,own){
       }
       const paperContactRatio=paperN/Math.max(1,ringN),fillRatio=pixels/Math.max(1,b.width*b.height),bridgeFraction=1-edgeSupportRatio;
       const matchedOccupancy=matches.reduce((sum,instance)=>sum+intersection(box,instance),0)/Math.max(1e-9,area(box));
+      const largestMatchShare=Math.max(...matches.map(instance=>area(instance)/Math.max(1e-9,area(box))));
       let matchedPairOverlap=0;for(let a=0;a<matches.length;a++)for(let b=a+1;b<matches.length;b++)matchedPairOverlap=Math.max(matchedPairOverlap,intersection(matches[a],matches[b])/Math.max(1e-9,Math.min(area(matches[a]),area(matches[b]))));
       // Large-scale closures are allowed only when the actual original edge
       // still supports most of the resulting perimeter.
@@ -95,7 +98,7 @@ export function reconstructFragmentedBoundaries(cv,p,own){
       }
       const bounds=cv.boundingRect(physical),x=Math.max(0,bounds.x-2),y=Math.max(0,bounds.y-2),rw=Math.min(w,bounds.x+bounds.width+2)-x,rh=Math.min(h,bounds.y+bounds.height+2)-y,local=own(filled.roi(new cv.Rect(x,y,rw,rh))),packed=own(new cv.Mat());local.copyTo(packed);
       const poly=own(new cv.Mat());cv.approxPolyDP(physical,poly,Math.max(.7,cv.arcLength(physical,true)*.0015),true);const polygon=Array.from({length:poly.rows},(_,j)=>[poly.data32S[j*2]-x,poly.data32S[j*2+1]-y]);
-      proposals.push({x:x/w,y:y/h,w:rw/w,h:rh/h,pixels,edgeMethod,boundaryReconstruction:true,reconstructionScore,edgeSupportRatio,closureScaleMM,bridgeFraction,paperContactRatio,interiorBackgroundRatio,insideEvidenceRatio,fillRatio,matchedInstances:matches.length,matchedOccupancy,matchedPairOverlap,mask:{width:rw,height:rh,alpha:new Uint8Array(packed.data),polygons:[polygon]}});
+      proposals.push({x:x/w,y:y/h,w:rw/w,h:rh/h,pixels,edgeMethod,boundaryReconstruction:true,reconstructionScore,edgeSupportRatio,closureScaleMM,bridgeFraction,paperContactRatio,interiorBackgroundRatio,insideEvidenceRatio,fillRatio,matchedInstances:matches.length,matchedOccupancy,matchedPairOverlap,largestMatchShare,boundaryShadowFraction,mask:{width:rw,height:rh,alpha:new Uint8Array(packed.data),polygons:[polygon]}});
     }
   }
 
