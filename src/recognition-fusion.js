@@ -21,7 +21,7 @@ const effectivelyContained=(child,parent)=>{
   const x=child.x+child.w/2,y=child.y+child.h/2,margin=.006;
   return x>=parent.x-margin&&x<=parent.x+parent.w+margin&&y>=parent.y-margin&&y<=parent.y+parent.h+margin;
 };
-const strongWholeRectangle=s=>(s.rectFill??0)>=.84&&(s.paperContactRatio??0)>=.80&&(s.insideEvidenceRatio??1)<=.65;
+const strongWholeRectangle=s=>s.rectangularPrior===true&&(s.paperContactRatio??0)>=.80&&(s.insideEvidenceRatio??1)<=.65;
 
 export function fuseRecognitionCandidates(instances,structuralCandidates){
   const base=instances.map(candidate=>({candidate,used:false})),accepted=[];
