@@ -11,7 +11,8 @@ export function assetEditorValue(old,values) {
     tags:parseTags(values.tags),contentTags:parseTags(values.contentTags),styleTags:parseTags(values.styleTags),materialTags:parseTags(values.materialTags),
     seriesID:values.seriesID||null,reviewStatus:values.reviewStatus,supply:{...old.supply,kind:quantity===1?'single':'quantity',quantity},updatedAt:new Date().toISOString()};
   next.tags=[...new Set([...next.tags,...next.contentTags,...next.styleTags,...next.materialTags])];
-  if(values.usageStatus==='used'||values.usageStatus==='unused')Object.assign(next,withUsageStatus(next,values.usageStatus==='used',next.updatedAt));
+  if(values.usageStatus!=='used'&&values.usageStatus!=='unused')throw Error('使用状态无效');
+  Object.assign(next,withUsageStatus(next,values.usageStatus==='used',next.updatedAt));
   if(width!==old.physicalWidthMM||height!==old.physicalHeightMM)next.dimensionSource=width&&height?'manual':null;
   if(values.kind==='tape') {
     if(values.tapeRoll){const length=Number(values.supplyLength);if(!Number.isFinite(length)||length<=0)throw Error('整卷胶带需要填写实际剩余长度');next.supply={...next.supply,kind:'tapeRoll',availableLengthMM:length};}
@@ -38,8 +39,8 @@ export function showAssetEditor(c,id) {
     const button=c.body.querySelector('#save-asset');button.disabled=true;
     const value=id=>c.body.querySelector('#asset-'+id).value;
     try {
-      const usage=value('usage'),previous=usedAssetIDs(c.state.assets).has(a.id)?'used':'unused';
-      const next=assetEditorValue(a,{title:value('title'),kind:value('kind'),role:value('role'),texture:value('texture'),width:value('width'),height:value('height'),quantity:value('quantity'),tags:value('tags'),contentTags:value('content-tags'),styleTags:value('style-tags'),materialTags:value('material-tags'),seriesID:value('series'),reviewStatus:value('status'),usageStatus:usage===previous?undefined:usage,tapeRoll:c.body.querySelector('#asset-tape-roll').checked,supplyLength:value('supply-length'),repeatable:c.body.querySelector('#asset-repeatable').checked,repeatPeriod:value('repeat-period')});
+      const usage=value('usage');
+      const next=assetEditorValue(a,{title:value('title'),kind:value('kind'),role:value('role'),texture:value('texture'),width:value('width'),height:value('height'),quantity:value('quantity'),tags:value('tags'),contentTags:value('content-tags'),styleTags:value('style-tags'),materialTags:value('material-tags'),seriesID:value('series'),reviewStatus:value('status'),usageStatus:usage,tapeRoll:c.body.querySelector('#asset-tape-roll').checked,supplyLength:value('supply-length'),repeatable:c.body.querySelector('#asset-repeatable').checked,repeatPeriod:value('repeat-period')});
       const anatomy=anatomyEditor?.commit(next);if(anatomy!==undefined)next.anatomy=anatomy;
       await c.db.put('assets',next);Object.assign(a,next);if(next.supply.quantity===0)c.state.basket=c.state.basket.filter(x=>x!==id);c.modal.close();c.render();c.toast('素材信息已保存');
     }catch(error){c.body.querySelector('#asset-save-error').textContent=error.message;button.disabled=false;}
