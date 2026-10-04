@@ -101,10 +101,12 @@ function catalog(){
 }
 export const currentMaterialCatalog=catalog();
 export const CURRENT_MATERIAL_IDS=new Set(currentMaterialCatalog.assets.map(asset=>asset.id));
+const TRANSIENT_REPLACEMENT_IDS=new Set(Array.from({length:12},(_,i)=>fixedID(9005+i)));
 
 export async function syncCurrentMaterials({database=defaultDB}={}){
  const [assets,series,projects]=await Promise.all(['assets','series','projects'].map(name=>database.all(name)));
- const existingAssets=new Map(assets.map(asset=>[asset.id,asset])),existingSeries=new Set(series.map(item=>item.id));
+ const transient=assets.filter(asset=>TRANSIENT_REPLACEMENT_IDS.has(asset.id)&&asset.sourceIdentifier===CURRENT_MATERIAL_SOURCE);
+ const existingAssets=new Map(assets.filter(asset=>!transient.includes(asset)).map(asset=>[asset.id,asset])),existingSeries=new Set(series.map(item=>item.id));
  const usedByWorks=new Set(projects.filter(project=>project.isUsed).flatMap(project=>[...projectAssetIDs(project)]));
  const writes=[];
  for(const desired of currentMaterialCatalog.assets){
@@ -115,7 +117,7 @@ export async function syncCurrentMaterials({database=defaultDB}={}){
    writes.push({...existing,staticPath:desired.staticPath,usageStatus,sourceIdentifier:CURRENT_MATERIAL_SOURCE,builtinRevision:CURRENT_MATERIAL_REVISION});
  }
  const missingSeries=currentMaterialCatalog.series.filter(item=>!existingSeries.has(item.id));
- if(!writes.length&&!missingSeries.length)return {changed:false,assets:currentMaterialCatalog.assets.length,series:currentMaterialCatalog.series.length};
- await database.transaction(['assets','series','meta'],tx=>{for(const asset of writes)tx.objectStore('assets').put(asset);for(const item of missingSeries)tx.objectStore('series').put(item);tx.objectStore('meta').put({id:'current-builtins',revision:CURRENT_MATERIAL_REVISION,updatedAt:new Date().toISOString()});});
+ if(!writes.length&&!missingSeries.length&&!transient.length)return {changed:false,assets:currentMaterialCatalog.assets.length,series:currentMaterialCatalog.series.length};
+ await database.transaction(['assets','series','meta'],tx=>{for(const asset of transient)tx.objectStore('assets').delete(asset.id);for(const asset of writes)tx.objectStore('assets').put(asset);for(const item of missingSeries)tx.objectStore('series').put(item);tx.objectStore('meta').put({id:'current-builtins',revision:CURRENT_MATERIAL_REVISION,updatedAt:new Date().toISOString()});});
  return {changed:true,assets:currentMaterialCatalog.assets.length,series:currentMaterialCatalog.series.length};
 }
