@@ -267,7 +267,6 @@ function smoothNearConvexCurve(cv,contour,own,pxPerMM){
   const smoothArea=polygonArea(smooth);if(!smoothArea)return null;
   const cx=smooth.reduce((s,p)=>s+p[0],0)/smooth.length,cy=smooth.reduce((s,p)=>s+p[1],0)/smooth.length,scale=Math.sqrt(rawArea/smoothArea);
   smooth=smooth.map(([x,y])=>[cx+(x-cx)*scale,cy+(y-cy)*scale]);
-  const rContour=matFromPoints(cv,smooth,own),mask=contourMask(cv,Math.max(1,cv.boundingRect(contour).x+cv.boundingRect(contour).width+4),Math.max(1,cv.boundingRect(contour).y+cv.boundingRect(contour).height+4),rContour,own);
   return {points:smooth,lineCoverage,convexity:rawArea/hullArea};
 }
 
