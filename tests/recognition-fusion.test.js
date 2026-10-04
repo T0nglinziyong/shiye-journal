@@ -35,3 +35,17 @@ test('strict paper-contact recovery can restore a missed pale photo',()=>{
   const photo=c(.55,.12,.2,.18,{edgeMethod:'edge-enclosure',paperContactRatio:.96,insideEvidenceRatio:.55,fillRatio:.8});
   assert.deepEqual(fuseRecognitionCandidates([],[photo]),[photo]);
 });
+
+
+test('complete rectangular paper boundary may reunite several substantial pale-interior fragments',()=>{
+  const top=c(.20,.20,.34,.07),left=c(.18,.27,.08,.24),bottom=c(.22,.48,.30,.08);
+  const card=c(.16,.17,.42,.42,{edgeMethod:'edge-enclosure',paperContactRatio:.96,insideEvidenceRatio:.28,fillRatio:.86,rectFill:.91});
+  assert.deepEqual(fuseRecognitionCandidates([top,left,bottom],[card]),[card]);
+});
+
+test('tiny internal detail with a one-pixel-style bbox overshoot is still suppressed by its physical parent',()=>{
+  const parent=c(.30,.30,.40,.30,{edgeMethod:'edge-enclosure',paperContactRatio:.97,insideEvidenceRatio:.25,fillRatio:.88,rectFill:.93});
+  const glyph=c(.64,.299,.04,.04,{edgeMethod:'watershed-grabcut'});
+  const out=fuseRecognitionCandidates([glyph],[parent]);
+  assert.deepEqual(out,[parent]);
+});
