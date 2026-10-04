@@ -60,7 +60,8 @@ export function completePhysicalBoundaries(cv,p,own){
         // This is a generic background-likelihood seed, not a hole detector:
         // near-neutral pixels that continue the local page field may become
         // background whatever the aperture's shape or purpose.
-        if(chroma<5.5&&dL>=-30&&dL<=6&&texture<8)gc.data[local]=cv.GC_PR_BGD;
+        if(chroma<3.5&&dL>=-10&&dL<=4&&texture<5)gc.data[local]=cv.GC_BGD;
+        else if(chroma<5.5&&dL>=-30&&dL<=6&&texture<8)gc.data[local]=cv.GC_PR_BGD;
       }
     }
 
