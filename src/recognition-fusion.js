@@ -22,16 +22,26 @@ const effectivelyContained=(child,parent)=>{
   return x>=parent.x-margin&&x<=parent.x+parent.w+margin&&y>=parent.y-margin&&y<=parent.y+parent.h+margin;
 };
 const strongPhysicalBoundary=s=>(s.paperContactRatio??0)>=.80&&(s.interiorBackgroundRatio??1)<=.10&&(s.insideEvidenceRatio??1)<=.75;
+const edgeCertainReconstruction=s=>s.boundaryReconstruction===true
+  &&(s.reconstructionScore??0)>=.28
+  &&(s.edgeSupportRatio??0)>=.80
+  &&(s.closureScaleMM??99)<=1.45
+  &&(s.boundaryShadowFraction??1)<=.35
+  &&(s.largestMatchShare??99)>=.45&&(s.largestMatchShare??99)<=1.80
+  &&((s.matchedInstances??1)===1||(s.matchedPairOverlap??0)>=.18);
 const strongReconstruction=s=>s.boundaryReconstruction===true
   &&(s.reconstructionScore??0)>=.28
   &&(s.edgeSupportRatio??0)>=.42
-  &&(s.paperContactRatio??0)>=.48
-  &&((s.interiorBackgroundRatio??1)<=.42||(s.fillRatio??0)>=.64||(s.edgeSupportRatio??0)>=.62);
+  &&(((s.paperContactRatio??0)>=.48
+      &&((s.interiorBackgroundRatio??1)<=.42||(s.fillRatio??0)>=.64||(s.edgeSupportRatio??0)>=.62))
+    ||edgeCertainReconstruction(s));
 
 export function fuseRecognitionCandidates(instances,structuralCandidates){
   const base=instances.map(candidate=>({candidate,used:false})),accepted=[];
   const structures=[...structuralCandidates]
-    .filter(s=>(s.paperContactRatio??0)>=(s.boundaryReconstruction===true?.48:.70))
+    .filter(s=>s.boundaryReconstruction===true
+      ?(s.paperContactRatio??0)>=.48||edgeCertainReconstruction(s)
+      :(s.paperContactRatio??0)>=.70)
     .sort((a,b)=>area(b)-area(a));
 
   for(const structural of structures){
@@ -50,7 +60,7 @@ export function fuseRecognitionCandidates(instances,structuralCandidates){
       accept=matches.length===1||shares[1]<.15
         ||(strongPhysicalBoundary(structural)&&occupancy<=.84)
         ||(strongReconstruction(structural)&&(occupancy<=.72||(structural.matchedPairOverlap??0)>=.18));
-      accept&&=(structural.paperContactRatio??0)>=.48;
+      accept&&=(structural.paperContactRatio??0)>=.48||edgeCertainReconstruction(structural);
     }else{
       // Missing-instance recovery is deliberately strict. It recovers a pale
       // photo/card with a real paper-facing perimeter, but internal printed
