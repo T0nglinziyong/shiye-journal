@@ -99,6 +99,6 @@ test('clean high-contact rectangular enclosure is represented by fitted straight
   const result=await processVision(cv,'enclosures',{pixels,evidence,width,height,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
   const card=result.filter(r=>r.x<.3&&r.x+r.w>.7&&r.y<.25&&r.y+r.h>.78).sort((a,b)=>b.pixels-a.pixels)[0];
   assert.ok(card,'clean rectangular physical enclosure should be found');
-  assert.equal(card.edgeMethod,'edge-rectangle');
+  assert.equal(card.edgeMethod,'edge-rectangle',JSON.stringify({rectFill:card.rectFill,rectangularPrior:card.rectangularPrior,vertices:card.mask.polygons[0].length,paperContactRatio:card.paperContactRatio,insideEvidenceRatio:card.insideEvidenceRatio}));
   assert.equal(card.mask.polygons[0].length,4);
 });
