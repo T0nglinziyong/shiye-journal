@@ -83,9 +83,9 @@ export async function processVision(cv,operation,p){
         if(b.x<2||b.y<2||b.x+b.width>w-2||b.y+b.height>h-2)continue;
         const fill=area/Math.max(1,b.width*b.height);if(fill<.16)continue;const shapeRect=cv.minAreaRect(contour),rectFill=area/Math.max(1,shapeRect.size.width*shapeRect.size.height),shapePoly=own(new cv.Mat());cv.approxPolyDP(contour,shapePoly,Math.max(2,cv.arcLength(contour,true)*.02),true);const rectangularPrior=shapePoly.rows===4&&cv.isContourConvex(shapePoly)&&rectFill>=.70;
         const filled=own(cv.Mat.zeros(h,w,cv.CV_8UC1)),one=own(new cv.MatVector());one.push_back(contour);cv.drawContours(filled,one,-1,new cv.Scalar(255),cv.FILLED);
-        let signal=0,inside=0;
-        for(let yy=b.y;yy<b.y+b.height;yy++)for(let xx=b.x;xx<b.x+b.width;xx++){const at=yy*w+xx;if(!filled.data[at])continue;inside++;if(p.evidence?.[at])signal++;}
-        if(signal<Math.max(10,inside*.003))continue;
+        let signal=0,inside=0,insidePage=0;
+        for(let yy=b.y;yy<b.y+b.height;yy++)for(let xx=b.x;xx<b.x+b.width;xx++){const at=yy*w+xx;if(!filled.data[at])continue;inside++;if(p.evidence?.[at])signal++;if(p.backgroundConnected?.[at])insidePage++;}
+        if(signal<Math.max(10,inside*.003))continue;const interiorBackgroundRatio=insidePage/Math.max(1,inside);
         const ringMask=own(new cv.Mat()),ringKernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(9,9)));cv.dilate(filled,ringMask,ringKernel);
         let ring=0,paperContact=0;
         for(let yy=Math.max(0,b.y-5);yy<Math.min(h,b.y+b.height+5);yy++)for(let xx=Math.max(0,b.x-5);xx<Math.min(w,b.x+b.width+5);xx++){const at=yy*w+xx;if(!ringMask.data[at]||filled.data[at])continue;ring++;if(p.backgroundConnected?.[at])paperContact++;}
@@ -111,7 +111,7 @@ export async function processVision(cv,operation,p){
         const poly=own(new cv.Mat());cv.approxPolyDP(boundary,poly,Math.max(.7,cv.arcLength(boundary,true)*.0015),true);
         const points=Array.from({length:poly.rows},(_,j)=>[poly.data32S[j*2]-x,poly.data32S[j*2+1]-y]);
         const confidence=Math.min(1,.24+fill*.20+Math.min(signal/Math.max(inside*.02,1),1)*.18+Math.min(edgeStrength/75,1)*.28+(1-shadowFraction)*.10);
-        out.push({x:x/w,y:y/h,w:rw/w,h:rh/h,pixels:inside,edgeMethod,structuralConfidence:confidence,boundaryEdgeStrength:edgeStrength,boundaryShadowFraction:shadowFraction,paperContactRatio,insideEvidenceRatio,fillRatio:fill,rectFill,rectangularPrior,mask:{width:rw,height:rh,alpha:new Uint8Array(packed.data),polygons:[points]}});
+        out.push({x:x/w,y:y/h,w:rw/w,h:rh/h,pixels:inside,edgeMethod,structuralConfidence:confidence,boundaryEdgeStrength:edgeStrength,boundaryShadowFraction:shadowFraction,paperContactRatio,insideEvidenceRatio,interiorBackgroundRatio,fillRatio:fill,rectFill,rectangularPrior,mask:{width:rw,height:rh,alpha:new Uint8Array(packed.data),polygons:[points]}});
       }
       // Do not let dozens of tiny, high-contrast printed details evict a
       // physically large outer material boundary. Keep both the largest
