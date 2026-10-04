@@ -35,6 +35,7 @@ window.document.querySelector('[data-act="detail"]').click();
 assert.ok(window.document.querySelector('.detail-columns'));
 window.document.querySelector('[data-act="detail-back"]').click();
 window.document.querySelector('[data-route="works"]').click();
+await waitFor(()=>!!window.document.querySelector('[data-id="cece-p1-project"]'));
 assert.ok(window.document.querySelector('[data-id="cece-p1-project"]'));
 window.document.querySelector('#work-import').click();
 assert.match(window.document.querySelector('.import-nav').textContent,/导入作品/);
