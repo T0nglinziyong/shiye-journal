@@ -23,3 +23,11 @@ test('unrelated neighbouring materials stay separate',()=>{
   const out=fuseRecognitionCandidates([a,b],[struct]);
   assert.equal(out.length,2);assert.ok(out.includes(struct));assert.ok(out.includes(b));
 });
+
+test('fusion chooses inner physical card over a nested outer shadow enclosure',()=>{
+  const colour=c(.18,.18,.42,.42,{edgeMethod:'graphcut-lab-shadow-aware'});
+  const shadow=c(.17,.17,.44,.44,{edgeMethod:'edge-enclosure',structuralConfidence:.70,boundaryShadowFraction:.45});
+  const card=c(.20,.20,.36,.36,{edgeMethod:'edge-enclosure',structuralConfidence:.82,boundaryShadowFraction:.02});
+  const out=fuseRecognitionCandidates([colour],[shadow,card]);
+  assert.equal(out.length,1);assert.equal(out[0],card);
+});
