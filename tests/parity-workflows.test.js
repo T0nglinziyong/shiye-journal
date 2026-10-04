@@ -9,7 +9,7 @@ import {createAIRecorder,redact} from '../src/ai-diagnostics.js';
 import {assetEditorValue} from '../src/asset-editor.js';
 import {draft,physicalPlacement,recommend} from '../src/domain.js';
 
-test('series covers follow current membership, five-cover limit, and Swift fallback',()=>{
+test('series covers follow current membership, five-cover limit, and automatic cover fallback',()=>{
   const assets=Array.from({length:6},(_,i)=>({id:String(i),seriesID:'s'}));
   assert.deepEqual(seriesCovers({id:'s',coverAssetIDs:['gone','4','2']},assets).map(a=>a.id),['4','2']);
   assert.deepEqual(seriesCovers({id:'s',coverAssetIDs:[]},assets).map(a=>a.id),['0','1','2']);
@@ -17,29 +17,27 @@ test('series covers follow current membership, five-cover limit, and Swift fallb
   assert.deepEqual(parseTags('春天，植物、春天,  旅行 '),['春天','植物','旅行']);
   assert.ok(searchableSeries({id:'s',title:'系列',styleTags:['复古']},assets).includes('复古'));
 });
-test('series contents independently filter tags, organization and actual used works',()=>{
-  const assets=[{id:'a',seriesID:'s',title:'A',reviewStatus:'ready',kind:'paper',createdAt:'2026-01-01',styleTags:['植物'],isFavorite:true},{id:'b',seriesID:'s',title:'B',kind:'tape',createdAt:'2026-01-02'},{id:'c',seriesID:'other',title:'C'},{id:'internal',seriesID:'s',isProjectInternal:true,title:'内置'}];
-  const projects=[{isDraft:false,isUsed:true,drafts:[{items:[{assetID:'a'},{assetID:'b',isParked:true}]}]},{isDraft:true,isUsed:true,drafts:[{items:[{assetID:'b'}]}]},{isDraft:false,isUsed:false,drafts:[{items:[{assetID:'b'}]}]}];
-  assert.deepEqual([...usedAssetIDs(projects)],['a']);
-  assert.deepEqual(seriesMembers('s',assets,projects).map(a=>a.id),['b','a']);
-  assert.deepEqual(seriesMembers('s',assets,projects,{query:'植物'}).map(a=>a.id),['a']);
-  assert.deepEqual(seriesMembers('s',assets,projects,{status:'unready'}).map(a=>a.id),['b']);
-  assert.deepEqual(seriesMembers('s',assets,projects,{status:'used'}).map(a=>a.id),['a']);
-  assert.deepEqual(seriesMembers('s',assets,projects,{status:'unused'}).map(a=>a.id),['b']);
-  assert.deepEqual(seriesMembers('s',assets,projects,{status:'favorite'}).map(a=>a.id),['a']);
-  assert.deepEqual(seriesMembers('s',assets,projects,{sort:'name',ascending:true}).map(a=>a.id),['a','b']);
-  assert.equal(seriesMembers('s',assets,projects,{status:'outside'}).length,0);
+test('series contents independently filter tags, organization and explicit usage status',()=>{
+  const assets=[{id:'a',seriesID:'s',title:'A',reviewStatus:'ready',kind:'paper',createdAt:'2026-01-01',styleTags:['植物'],isFavorite:true,usageStatus:'used'},{id:'b',seriesID:'s',title:'B',kind:'tape',createdAt:'2026-01-02',usageStatus:'unused'},{id:'c',seriesID:'other',title:'C',usageStatus:'unused'},{id:'internal',seriesID:'s',isProjectInternal:true,title:'内置',usageStatus:'unused'}];
+  assert.deepEqual([...usedAssetIDs(assets)],['a']);
+  assert.deepEqual(seriesMembers('s',assets).map(a=>a.id),['b','a']);
+  assert.deepEqual(seriesMembers('s',assets,{query:'植物'}).map(a=>a.id),['a']);
+  assert.deepEqual(seriesMembers('s',assets,{status:'unready'}).map(a=>a.id),['b']);
+  assert.deepEqual(seriesMembers('s',assets,{status:'used'}).map(a=>a.id),['a']);
+  assert.deepEqual(seriesMembers('s',assets,{status:'unused'}).map(a=>a.id),['b']);
+  assert.deepEqual(seriesMembers('s',assets,{status:'favorite'}).map(a=>a.id),['a']);
+  assert.deepEqual(seriesMembers('s',assets,{sort:'name',ascending:true}).map(a=>a.id),['a','b']);
+  assert.equal(seriesMembers('s',assets,{status:'outside'}).length,0);
 });
-test('latest manual or project use event controls asset status without losing legacy projects',()=>{
+test('usage status is explicit and project contents do not control it',()=>{
   const work={isDraft:false,isUsed:true,drafts:[{items:[{assetID:'a'},{assetID:'b',isParked:true}]}]};
   assert.deepEqual([...projectAssetIDs(work)],['a']);
-  assert.deepEqual([...usedAssetIDs([work],[{id:'a'},{id:'b'}])],['a']);
+  assert.deepEqual([...usedAssetIDs([{id:'a'},{id:'b'}])],[]);
   const unused=withUsageStatus({id:'a',title:'素材'},false,'2026-09-30T00:00:00.000Z');
   assert.equal(unused.usageStatus,'unused');
-  assert.deepEqual([...usedAssetIDs([work],[unused])],[]);
+  assert.deepEqual([...usedAssetIDs([unused])],[]);
   const used=withUsageStatus(unused,true,'2026-09-30T01:00:00.000Z');
-  assert.deepEqual([...usedAssetIDs([work],[used])],['a']);
-  assert.deepEqual([...usedAssetIDs([],[used])],['a']);
+  assert.deepEqual([...usedAssetIDs([used])],['a']);
 });
 test('lasso requires full enclosure of rotated objects and honors type and lock filters',()=>{
   const item={id:'a',x:50,y:50,width:40,height:10,rotation:45};
@@ -76,7 +74,7 @@ test('mature PDF encoder produces parseable pages at exact physical size',async(
 });
 test('import records preserve candidate metadata and explicit unassigned series',()=>{
   const c={title:'票据',width:30.5,height:60,quantity:3,kind:'paper',role:'support',reviewStatus:'ready',seriesID:'__none__'};
-  const a=candidateMetadata(c,{seriesID:'s'},'batch');assert.equal(a.seriesID,null);assert.equal(a.supply.quantity,3);assert.equal(a.kind,'paper');assert.equal(a.physicalWidthMM,30.5);
+  const a=candidateMetadata(c,{seriesID:'s'},'batch');assert.equal(a.seriesID,null);assert.equal(a.supply.quantity,3);assert.equal(a.kind,'paper');assert.equal(a.physicalWidthMM,30.5);assert.equal(a.usageStatus,'unused');
   assert.throws(()=>candidateMetadata({...c,quantity:1.5},{},null),/正整数/);
   assert.throws(()=>candidateMetadata({...c,width:-1},{},null),/宽高/);
   assert.deepEqual(importPaperDimensions({paperSize:'a5',paperOrientation:'landscape'}),[210,148]);
