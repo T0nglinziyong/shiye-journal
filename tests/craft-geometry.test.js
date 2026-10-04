@@ -30,7 +30,7 @@ test('policy is opt-in and per-asset whole-only always wins',()=>{
   assert.equal(craftPermission({processing:'AI 自主加工'},{...a,kind:'photo'}),'少量裁剪');
   assert.equal(craftPermission({processing:'AI 自主加工',assetProcessing:{a:'保留完整'}},a),'保留完整');
   assert.equal(craftPermission({processing:'保留完整'},a),'保留完整');
-  assert.equal(craftPermission({},a),undefined,'legacy API default is not silently reinterpreted');
+  assert.equal(craftPermission({},a),'保留完整','current default keeps the whole material');
 });
 test('a window frame and its offcut have zero source intersection despite identical bounds',()=>{
   const frame={...rect(0,0,100,80),holes:[rect(30,20,40,30).outer]};
