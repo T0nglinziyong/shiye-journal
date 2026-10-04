@@ -128,7 +128,7 @@ export function applyCraftPlan({draft,plan,assets,aliases,options,api}){
  if(plan.graphics?.length)api.graphics(plan.graphics);
  if(plan.ink?.length)api.ink(plan.ink);
  draft.craftScraps=[...(draft.craftScraps||[]),...scraps];
- const ledger=buildMaterialLedger(draft,assets,{strictTape:true});api.validate();
+ const ledger=buildMaterialLedger(draft,assets);api.validate();
  const resultHash=craftSceneHash(draft),receipt={version:1,commandId:plan.commandId,inputHash,baseHash:currentHash,resultHash,pieces:specs.map(s=>s.piece.id),offcuts:offcuts.map(s=>s.piece),lineage,scraps,observations:plan.observations?.length||0};
  draft.craftLedger=compactMaterialLedger(ledger);draft.craftReceipts=[...(draft.craftReceipts||[]),receipt].slice(-32);
  if(plan.finish!==false)api.finish({summary:plan.summary||'工艺计划已通过源区域与实体约束'});
