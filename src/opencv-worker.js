@@ -1,5 +1,6 @@
 import cvModule from '@techstark/opencv-js';
 import {completePhysicalBoundaries} from './physical-boundary.js';
+import {reconstructFragmentedBoundaries} from './fragmented-boundary.js';
 // OpenCV may expose a thenable module. Keep it inside an object rather than
 // resolving a Promise with the module itself (which can recurse indefinitely).
 const ready=(async()=>{let cv;if(cvModule instanceof Promise)cv=await cvModule;else{cv=cvModule;if(!cv.Mat)await new Promise(resolve=>{cv.onRuntimeInitialized=resolve;});}return {cv};})();
@@ -121,6 +122,7 @@ export async function processVision(cv,operation,p){
       for(const item of [...byArea,...byConfidence]){if(seen.has(item))continue;seen.add(item);selected.push(item);if(selected.length>=96)break;}
       return selected.sort((a,b)=>a.y-b.y||a.x-b.x);
     }
+    if(operation==='boundary-reconstruction')return reconstructFragmentedBoundaries(cv,p,own);
     if(operation==='complete-boundaries')return completePhysicalBoundaries(cv,p,own);
     if(operation==='instances'){
       const w=p.width,h=p.height,pxPerMM=Math.max(.5,((w/p.paperWidthMM)+(h/p.paperHeightMM))/2),oddMM=(mm,min=3,max=21)=>{let n=Math.max(min,Math.min(max,Math.round(pxPerMM*mm)));if(!(n&1))n++;return n;};
