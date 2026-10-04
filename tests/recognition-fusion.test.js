@@ -39,7 +39,7 @@ test('strict paper-contact recovery can restore a missed pale photo',()=>{
 
 test('complete rectangular paper boundary may reunite several substantial pale-interior fragments',()=>{
   const top=c(.20,.20,.34,.07),left=c(.18,.27,.08,.24),bottom=c(.22,.48,.30,.08);
-  const card=c(.16,.17,.42,.42,{edgeMethod:'edge-enclosure',paperContactRatio:.96,insideEvidenceRatio:.28,fillRatio:.86,rectFill:.91});
+  const card=c(.16,.17,.42,.42,{edgeMethod:'edge-enclosure',paperContactRatio:.96,insideEvidenceRatio:.28,fillRatio:.86,rectFill:.91,rectangularPrior:true});
   assert.deepEqual(fuseRecognitionCandidates([top,left,bottom],[card]),[card]);
 });
 
