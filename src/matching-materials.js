@@ -17,7 +17,6 @@ const uniq=items=>[...new Set(items.filter(Boolean))];
 const descriptors=a=>uniq([a.title,a.kind,a.role,a.texture,...(a.tags||[]),...(a.contentTags||[]),...(a.styleTags||[]),...(a.materialTags||[]),...(a.semanticTags||[]),...(a.placementHints||[]),...(a.semanticColorNames||[])]);
 export function recommendForDirection({assets=[],basket=[],styles=[],purposes=[],excluded=[]}={}){
   const selected=assets.filter(a=>basket.includes(a.id)),excludedSet=new Set(excluded),kinds=uniq(purposes.flatMap(p=>purposeKinds[p]||[]));
-  const hasPersonal=assets.some(a=>a?.reviewStatus==='ready'&&!a.isProjectInternal&&!String(a.sourceIdentifier||'').startsWith('built-in-'));
   const desiredRoles=new Set(relevantJournalFamilies({styles,purposes}).flatMap(family=>family.materials));
   const selectedRoles=new Set(selected.flatMap(classifyJournalMaterial));
   const styleWords=uniq(styles.flatMap(s=>styleTerms[s]||[s])),purposeWords=uniq(purposes.flatMap(p=>purposeTerms[p]||[]));
@@ -41,9 +40,6 @@ export function recommendForDirection({assets=[],basket=[],styles=[],purposes=[]
       const usefulRoles=classifyJournalMaterial(a).filter(role=>desiredRoles.has(role)&&!selectedRoles.has(role));
       if(usefulRoles.length){score+=Math.min(2,usefulRoles.length)*3;reasons.push('补足图文结构');}
       if(a.physicalWidthMM&&a.physicalHeightMM)score++;
-      // Legacy generic starters remain readable for saved works, but curated
-      // personal material should lead suggestions when both are available.
-      if(hasPersonal&&String(a.sourceIdentifier||'').startsWith('built-in-'))score-=5;
       return {asset:a,score,reasons};
     }).sort((a,b)=>b.score-a.score||a.asset.title.localeCompare(b.asset.title,'zh-CN'));
 }
