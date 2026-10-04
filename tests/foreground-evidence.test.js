@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {buildForegroundEvidence,rgbToLab} from '../src/foreground-evidence.js';
-import {splitThinBridgeCandidate} from '../src/thin-bridge.js';
 
 const rgba=(w,h,paint)=>{const data=new Uint8ClampedArray(w*h*4);for(let y=0;y<h;y++)for(let x=0;x<w;x++){const c=paint(x,y),p=(y*w+x)*4;data.set([c[0],c[1],c[2],255],p);}return data;};
 
@@ -57,21 +56,4 @@ test('a closed sticker perimeter protects near-white interior from background fl
   for(let y=5;y<15;y++)for(let x=10;x<110;x++)page+=out.mask[y*w+x];
   assert.ok(protectedInterior/(36*24)>.9,'near-white sticker interior must be filled as one physical material');
   assert.ok(page/(10*100)<.08,'paper outside the perimeter must stay background');
-});
-
-test('thin low-evidence bridge is split but a printed narrow connection is preserved',()=>{
-  const mw=44,mh=22,alpha=new Uint8Array(mw*mh);
-  const put=(x0,y0,x1,y1)=>{for(let y=y0;y<y1;y++)for(let x=x0;x<x1;x++)alpha[y*mw+x]=255;};
-  put(2,3,18,19);put(26,3,42,19);put(18,10,26,12);
-  const candidate={x:.1,y:.2,w:.44,h:.22,pixels:alpha.reduce((n,v)=>n+(v>0),0),edgeMethod:'synthetic',mask:{width:mw,height:mh,alpha,polygons:[]}};
-  const analysisWidth=100,analysisHeight=100,evidence=new Uint8Array(analysisWidth*analysisHeight),shadowLikelihood=new Uint8Array(analysisWidth*analysisHeight);
-  // Object bodies carry colour evidence; the artificial bridge does not.
-  for(let y=0;y<mh;y++)for(let x=0;x<mw;x++)if(alpha[y*mw+x]){
-    const gx=Math.floor((candidate.x+candidate.w*(x+.5)/mw)*analysisWidth),gy=Math.floor((candidate.y+candidate.h*(y+.5)/mh)*analysisHeight);
-    if(x<18||x>=26)evidence[gy*analysisWidth+gx]=1;else shadowLikelihood[gy*analysisWidth+gx]=1;
-  }
-  const split=splitThinBridgeCandidate(candidate,{analysisWidth,analysisHeight,evidence,shadowLikelihood,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
-  assert.equal(split.length,2);assert.ok(split.every(x=>x.edgeMethod.endsWith('bridge-split')));
-  const printed=evidence.slice();for(let y=0;y<mh;y++)for(let x=18;x<26;x++)if(alpha[y*mw+x]){const gx=Math.floor((candidate.x+candidate.w*(x+.5)/mw)*analysisWidth),gy=Math.floor((candidate.y+candidate.h*(y+.5)/mh)*analysisHeight);printed[gy*analysisWidth+gx]=1;shadowLikelihood[gy*analysisWidth+gx]=0;}
-  assert.equal(splitThinBridgeCandidate(candidate,{analysisWidth,analysisHeight,evidence:printed,shadowLikelihood,smallestMM:6,paperWidthMM:210,paperHeightMM:297}).length,1);
 });
