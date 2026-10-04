@@ -109,6 +109,10 @@ export async function syncCurrentMaterials({database=defaultDB}={}){
  const existingAssets=new Map(assets.filter(asset=>!transient.includes(asset)).map(asset=>[asset.id,asset])),existingSeries=new Set(series.map(item=>item.id));
  const usedByWorks=new Set(projects.filter(project=>project.isUsed).flatMap(project=>[...projectAssetIDs(project)]));
  const writes=[];
+ for(const asset of assets){
+  if(CURRENT_MATERIAL_IDS.has(asset.id)||transient.includes(asset))continue;
+  if(asset.usageStatus!=='used'&&asset.usageStatus!=='unused')writes.push({...asset,usageStatus:usedByWorks.has(asset.id)?'used':'unused',usageUpdatedAt:new Date().toISOString()});
+ }
  for(const desired of currentMaterialCatalog.assets){
   const existing=existingAssets.get(desired.id);
   if(!existing){writes.push(currentRecord(desired,usedByWorks.has(desired.id)));continue;}
