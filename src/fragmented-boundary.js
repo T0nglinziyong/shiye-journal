@@ -104,7 +104,8 @@ export function reconstructFragmentedBoundaries(cv,p,own){
 
       let physical=contour,edgeMethod='boundary-reconstruction';
       const rect=cv.minAreaRect(contour),rectArea=Math.max(1,rect.size.width*rect.size.height),rectFill=pixels/rectArea,shape=own(new cv.Mat());cv.approxPolyDP(contour,shape,Math.max(2,cv.arcLength(contour,true)*.018),true);
-      if(shape.rows===4&&cv.isContourConvex(shape)&&rectFill>=.72&&paperContactRatio>=.55){
+      const edgeCertainStraight=rectFill>=.82&&edgeSupportRatio>=.75&&boundaryShadowFraction<=.35;
+      if(shape.rows===4&&cv.isContourConvex(shape)&&rectFill>=.72&&(paperContactRatio>=.55||edgeCertainStraight)){
         const points=cv.boxPoints(rect),straight=own(cv.matFromArray(4,1,cv.CV_32SC2,points.flatMap(point=>[Math.round(point.x),Math.round(point.y)])));
         filled.setTo(new cv.Scalar(0));const rects=own(new cv.MatVector());rects.push_back(straight);cv.drawContours(filled,rects,-1,new cv.Scalar(255),cv.FILLED);physical=straight;edgeMethod='boundary-reconstruction-straight';
       }
