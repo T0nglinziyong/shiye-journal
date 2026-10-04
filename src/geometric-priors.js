@@ -164,12 +164,23 @@ export function carveEnclosedPageRegions(cv,{mask,outer,lab,gray,pageL,pageA,pag
   const contours=own(new cv.MatVector()),hierarchy=own(new cv.Mat());cv.findContours(pageLike,contours,hierarchy,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_NONE);
   const outerArea=Math.max(1,cv.countNonZero(outer)),regions=[];
   for(let i=0;i<contours.size();i++){
-    const c=own(contours.get(i)),a=cv.contourArea(c);if(a<Math.max(8,pxPerMM*pxPerMM*.7)||a>outerArea*.08||c.rows<4)continue;
+    const c=own(contours.get(i)),a=cv.contourArea(c);if(a<Math.max(8,pxPerMM*pxPerMM*.7)||a>outerArea*.05||c.rows<4)continue;
+    const b=cv.boundingRect(c),widthMM=b.width/pxPerMM,heightMM=b.height/pxPerMM,smallSide=Math.min(widthMM,heightMM),largeSide=Math.max(widthMM,heightMM);
+    // High-confidence aperture prior is deliberately for small enclosed
+    // negative space. Large windows remain the responsibility of the generic
+    // topology/GrabCut stage; this prevents a large white printed panel from
+    // being mistaken for a hole.
+    if(smallSide<1.2||largeSide>14)continue;
     const raw=contourMask(cv,cols,rows,c,own),ringK=Math.max(3,Math.min(15,Math.round(pxPerMM*.9))|1),ringKernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(ringK,ringK))),dil=own(new cv.Mat()),ring=own(new cv.Mat());
     cv.dilate(raw,dil,ringKernel);cv.subtract(dil,raw,ring);const ringOuter=own(new cv.Mat());cv.bitwise_and(ring,outer,ringOuter);
     if(cv.countNonZero(ringOuter)/Math.max(1,cv.countNonZero(ring))<.90)continue;
-    const reg=regularizeContour(cv,c,own,pxPerMM),rContour=matFromPoints(cv,reg.points,own),hole=contourMask(cv,cols,rows,rContour,own);
-    mask.setTo(new cv.Scalar(0),hole);regions.push({lineCount:reg.lineCount,curveCount:reg.curveCount,cornerCount:reg.corners,area:a});
+    const reg=regularizeContour(cv,c,own,pxPerMM),complexity=reg.lineCount+reg.curveCount;
+    // A real manufactured aperture is usually describable by a few line/curve
+    // primitives. Stars, glyphs and other printed motifs need more pieces and
+    // are therefore kept as material even when they are pale.
+    if(complexity>4||reg.corners>4)continue;
+    const rContour=matFromPoints(cv,reg.points,own),hole=contourMask(cv,cols,rows,rContour,own);
+    mask.setTo(new cv.Scalar(0),hole);regions.push({lineCount:reg.lineCount,curveCount:reg.curveCount,cornerCount:reg.corners,area:a,widthMM,heightMM});
   }
   return {count:regions.length,regions};
 }
