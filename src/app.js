@@ -36,7 +36,7 @@ import {mountImportBoxEditor} from './import-box-editor.js';
 import {saveImportBatch,importPaperDimensions} from './import-save.js';
 import {paperDimensions as presetPaperDimensions,paperSizeOptions} from './paper-sizes.js';
 import {refineManualBoxes,paddedRegion,chooseManualCandidate} from './manual-import-recognition.js';
-import {seriesCovers,usedAssetIDs,projectAssetIDs,withUsageStatus} from './library-model.js';
+import {seriesCovers,usedAssetIDs,markProjectAssetsUsed} from './library-model.js';
 import {renderSeriesContents} from './series-contents.js';
 import {showSeriesEditor} from './series-editor.js';
 import {mountWorkflowControls} from './workflow-ui.js';
@@ -582,8 +582,7 @@ function openProjectMetadata(){
     const now=new Date().toISOString(),markUsed=body.querySelector('#project-meta-used').value==='used'&&(!p.isUsed||usageTouched);
     const next={...p,title,styleTags:body.querySelector('#project-meta-tags').value.split(/[,，]/).map(x=>x.trim()).filter(Boolean),isUsed:body.querySelector('#project-meta-used').value==='used',updatedAt:now};delete next.isTemplate;
     const projectWithLayers=markUsed?await db.completeProject(p):p;
-    const referenced=projectAssetIDs(projectWithLayers);
-    const affected=markUsed?state.assets.filter(a=>referenced.has(a.id)).map(a=>withUsageStatus(a,true,now)):[];
+    const affected=markUsed?markProjectAssetsUsed(projectWithLayers,state.assets,now):[];
     await db.transaction(affected.length?['projects','assets']:['projects'],tx=>{tx.objectStore('projects').put(next);for(const a of affected)tx.objectStore('assets').put(a);});
     Object.assign(p,next);for(const a of affected)Object.assign(state.assets.find(x=>x.id===a.id),a);modal.close();render();toast('作品信息已保存');
   };
