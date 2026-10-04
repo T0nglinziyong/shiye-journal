@@ -12,12 +12,12 @@ const assets=[
 ];
 const aliases={m1:'paper',m2:'photo',m3:'tape'};
 const call=(name,args)=>({name,arguments:args});
-function run(base,calls,options={}){return applyToolCalls(calls,base,assets,aliases,options);}
+function run(base,calls,options={}){return applyToolCalls(calls,base,assets,aliases,{processing:'自由拆解',...options});}
 function success(base,calls,options={}){const r=run(base,calls,options);assert.ok(r.results.every(r=>r.ok),JSON.stringify(r.results));return r.draft;}
 const crop=values=>({op:'crop',box:{unit:'ratio',mode:'keep',values},angle:0,finish:null});
 const placed=()=>success(draft(),[call('place_materials',{items:[{asset:'m1',piece:'p1',x:.5,y:.5},{asset:'m2',piece:'p2',x:.2,y:.25}]})]);
 
-test('the advertised Swift tools plus atomic craft plan all execute editable changes or inspection',()=>{
+test('the advertised current tools plus atomic craft plan all execute editable changes or inspection',()=>{
   const names=['apply_craft_plan','compose_story_page','compose_page','place_materials','edit_materials','upsert_materials','move_elements','arrange_elements','fit_text_to','upsert_primitives','upsert_text','delete_elements','set_paper','inspect_materials','finish_design'];
   assert.deepEqual(agentTools.map(t=>t.function.name).sort(),names.sort());
   assert.deepEqual(Object.keys(toolContracts).sort(),names.sort());
