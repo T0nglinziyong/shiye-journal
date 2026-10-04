@@ -85,6 +85,10 @@ export async function processVision(cv,operation,p){
         let signal=0,inside=0;
         for(let yy=b.y;yy<b.y+b.height;yy++)for(let xx=b.x;xx<b.x+b.width;xx++){const at=yy*w+xx;if(!filled.data[at])continue;inside++;if(p.evidence?.[at])signal++;}
         if(signal<Math.max(10,inside*.003))continue;
+        const ringMask=own(new cv.Mat()),ringKernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(9,9)));cv.dilate(filled,ringMask,ringKernel);
+        let ring=0,paperContact=0;
+        for(let yy=Math.max(0,b.y-5);yy<Math.min(h,b.y+b.height+5);yy++)for(let xx=Math.max(0,b.x-5);xx<Math.min(w,b.x+b.width+5);xx++){const at=yy*w+xx;if(!ringMask.data[at]||filled.data[at])continue;ring++;if(p.backgroundConnected?.[at])paperContact++;}
+        const paperContactRatio=ring?paperContact/ring:0,insideEvidenceRatio=signal/Math.max(1,inside);
         let boundaryScore=0,boundaryShadow=0,boundarySamples=0;
         for(let j=0;j<contour.rows;j++){
           const xx=contour.data32S[j*2],yy=contour.data32S[j*2+1];
@@ -96,7 +100,7 @@ export async function processVision(cv,operation,p){
         const poly=own(new cv.Mat());cv.approxPolyDP(contour,poly,Math.max(.7,cv.arcLength(contour,true)*.0015),true);
         const points=Array.from({length:poly.rows},(_,j)=>[poly.data32S[j*2]-x,poly.data32S[j*2+1]-y]);
         const confidence=Math.min(1,.24+fill*.20+Math.min(signal/Math.max(inside*.02,1),1)*.18+Math.min(edgeStrength/75,1)*.28+(1-shadowFraction)*.10);
-        out.push({x:x/w,y:y/h,w:rw/w,h:rh/h,pixels:inside,edgeMethod:'edge-enclosure',structuralConfidence:confidence,boundaryEdgeStrength:edgeStrength,boundaryShadowFraction:shadowFraction,mask:{width:rw,height:rh,alpha:new Uint8Array(packed.data),polygons:[points]}});
+        out.push({x:x/w,y:y/h,w:rw/w,h:rh/h,pixels:inside,edgeMethod:'edge-enclosure',structuralConfidence:confidence,boundaryEdgeStrength:edgeStrength,boundaryShadowFraction:shadowFraction,paperContactRatio,insideEvidenceRatio,fillRatio:fill,mask:{width:rw,height:rh,alpha:new Uint8Array(packed.data),polygons:[points]}});
       }
       return out.sort((a,b)=>(b.structuralConfidence||0)-(a.structuralConfidence||0)||a.y-b.y||a.x-b.x).slice(0,48);
     }
