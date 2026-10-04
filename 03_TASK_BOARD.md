@@ -1,3 +1,5 @@
+> **Current-only policy (2026-10-04):** 本仓库从现在起只实现现行数据结构、现行 AI 设置、现行任务包与现行识别/创作链路。下文历史记录中关于旧 Swift/CeCe、旧设置键、旧字段、旧任务包、回滚兼容或“保留旧行为”的说明仅作为历史审计记录，不再是实现要求；不得据此重新加入兼容分支。旧格式输入应明确拒绝，而不是迁移、猜测或静默回退。
+
 # 拾页整改任务板（2026-10-01）
 
 依据优化包 `01_IMPLEMENTATION_SPEC.md` 和 `02_ACCEPTANCE_TESTS.md`。本表为**实际进度**，未列为已验证的事项不得视为完成。起点见 [基线](docs/remediation/baseline.md)，执行结果见 [验收记录](docs/remediation/ACCEPTANCE_RESULTS.md)。旧工作区 CeCe 修改不在本批范围。
