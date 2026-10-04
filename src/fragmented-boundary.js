@@ -39,6 +39,17 @@ export function reconstructFragmentedBoundaries(cv,p,own){
   const supportKernelSize=oddMM(.75),supportKernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(supportKernelSize,supportKernelSize))),supportEdges=own(new cv.Mat());
   cv.dilate(baseEdges,supportEdges,supportKernel);
   const proposals=[];
+  const refineExternal=(seed,seedArea,seedBounds,closed)=>{
+    const pad=Math.max(3,Math.round(pxPerMM*2)),rx=Math.max(0,seedBounds.x-pad),ry=Math.max(0,seedBounds.y-pad),rr=Math.min(w,seedBounds.x+seedBounds.width+pad),rb=Math.min(h,seedBounds.y+seedBounds.height+pad),rw=rr-rx,rh=rb-ry;
+    const roi=own(closed.roi(new cv.Rect(rx,ry,rw,rh))),external=own(new cv.MatVector()),hierarchy=own(new cv.Mat());cv.findContours(roi,external,hierarchy,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_SIMPLE);
+    const cx=seedBounds.x+seedBounds.width/2-rx,cy=seedBounds.y+seedBounds.height/2-ry;let bestPoints=null,bestScore=-Infinity;
+    for(let i=0;i<external.size();i++){
+      const contour=own(external.get(i)),a=cv.contourArea(contour);if(a<seedArea*.40||a>seedArea*2.20)continue;
+      const inside=cv.pointPolygonTest(contour,new cv.Point(cx,cy),false)>=0,score=(inside?1:0)-Math.abs(Math.log(Math.max(a,1)/Math.max(seedArea,1)))*.20;
+      if(score<=bestScore)continue;bestScore=score;bestPoints=Array.from({length:contour.rows},(_,j)=>[contour.data32S[j*2]+rx,contour.data32S[j*2+1]+ry]);
+    }
+    return bestPoints?.length>=3?own(cv.matFromArray(bestPoints.length,1,cv.CV_32SC2,bestPoints.flat())):seed;
+  };
 
   for(const closureScaleMM of [.65,1.0,1.45,2.0,2.8,3.8]){
     const closeSize=oddMM(closureScaleMM),growSize=oddMM(.35),closeKernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(closeSize,closeSize))),growKernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(growSize,growSize))),closed=own(new cv.Mat());
@@ -46,7 +57,8 @@ export function reconstructFragmentedBoundaries(cv,p,own){
     const contours=own(new cv.MatVector()),hierarchy=own(new cv.Mat());cv.findContours(closed,contours,hierarchy,cv.RETR_LIST,cv.CHAIN_APPROX_SIMPLE);
 
     for(let i=0;i<contours.size();i++){
-      const contour=own(contours.get(i)),pixels=cv.contourArea(contour);if(pixels<32||pixels>w*h*.55)continue;
+      const seed=own(contours.get(i)),seedPixels=cv.contourArea(seed);if(seedPixels<32||seedPixels>w*h*.55)continue;
+      const seedBounds=cv.boundingRect(seed),contour=refineExternal(seed,seedPixels,seedBounds,closed),pixels=cv.contourArea(contour);if(pixels<32||pixels>w*h*.55)continue;
       const b=cv.boundingRect(contour),widthMM=b.width/w*paperWidth,heightMM=b.height/h*paperHeight;
       if(widthMM<smallest||heightMM<smallest||b.width>w*.94||b.height>h*.94||b.x<2||b.y<2||b.x+b.width>w-2||b.y+b.height>h-2)continue;
       const box={x:b.x/w,y:b.y/h,w:b.width/w,h:b.height/h},matches=(p.instances||[]).filter(instance=>containsCenter(box,instance)||intersection(box,instance)/Math.max(1e-9,area(instance))>.28);
