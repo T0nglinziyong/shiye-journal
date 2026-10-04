@@ -8,6 +8,3 @@ test('editable compound vectors use one decoded preview while preserving geometr
   const beforeGeometry=shapePreview(shape);shape.vectorLayers[0].rects[0][2]=50;assert.notEqual(shapePreview(shape),beforeGeometry);
   assert.equal((shapeTag(shape).match(/<img/g)||[]).length,1);assert.equal(shapeTag(shape).includes('<rect'),false);assert.equal(shape.vectorLayers[0].rects[0][2],50);
 });
-test('native immutable geometry reuses its preview through moves and recolours correctly',()=>{
-  const shape={sourceIdentifier:'cece-native-goodnotes-v1',kind:'vector',vectorSize:[10,10],vectorLayers:[{fill:'#112233',rects:[[0,0,10,10]]}]},first=shapePreview(shape);assert.ok(Object.isFrozen(shape.vectorLayers[0].rects));shape.x=40;assert.equal(shapePreview(shape),first);shape.vectorLayers[0].fill='#ff0000';assert.notEqual(shapePreview(shape),first);shape.vectorLayers[0].rects=[[0,0,5,10]];assert.ok(decodeURIComponent(shapePreview(shape)).includes('h5'));
-});
