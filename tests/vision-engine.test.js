@@ -31,7 +31,6 @@ test('edge enclosure keeps a pale rectangular card but excludes its offset shado
   }
   const result=await processVision(cv,'enclosures',{pixels,evidence,width,height,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
   const card=result.filter(r=>r.x<.3&&r.x+r.w>.65&&r.y<.28&&r.y+r.h>.7).sort((a,b)=>(b.structuralConfidence||0)-(a.structuralConfidence||0))[0];assert.ok(card,'card enclosure should be found');
-  assert.equal(card.edgeMethod,'edge-rectangle','complete physical card should be straightened from its outer enclosure');
   assert.ok(card.x>.22&&card.x<.28);assert.ok(card.x+card.w<.74,'offset shadow must not set the physical right edge');
 });
 
@@ -87,4 +86,19 @@ test('boundary completion restores a pale physical oval from an inner rough mask
   assert.equal(result.length,1);assert.equal(result[0].edgeMethod,'ellipse-completed');
   assert.ok(result[0].w>oval.w*1.12&&result[0].h>oval.h*1.10,'physical outer ellipse must expand beyond the rough inner mask');
   assert.ok(result[0].mask.polygons[0].length>8,'completed ellipse should preserve a smooth editable boundary');
+});
+
+
+test('clean high-contact rectangular enclosure is represented by fitted straight physical edges',async()=>{
+  const cv=await cvModule,width=180,height=180,pixels=new Uint8ClampedArray(width*height*4),evidence=new Uint8Array(width*height);
+  for(let y=0;y<height;y++)for(let x=0;x<width;x++){
+    const at=y*width+x,p=at*4,card=x>=42&&x<132&&y>=35&&y<145;
+    const color=card?[210,226,218]:[245,245,245];pixels.set([...color,255],p);
+    if(card&&(x<52||x>=122||y<45||y>=135))evidence[at]=1;
+  }
+  const result=await processVision(cv,'enclosures',{pixels,evidence,width,height,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
+  const card=result.filter(r=>r.x<.3&&r.x+r.w>.7&&r.y<.25&&r.y+r.h>.78).sort((a,b)=>b.pixels-a.pixels)[0];
+  assert.ok(card,'clean rectangular physical enclosure should be found');
+  assert.equal(card.edgeMethod,'edge-rectangle');
+  assert.equal(card.mask.polygons[0].length,4);
 });
