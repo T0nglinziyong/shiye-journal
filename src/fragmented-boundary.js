@@ -68,12 +68,19 @@ export function reconstructFragmentedBoundaries(cv,p,own){
         const at=yy*w+xx;if(!ring.data[at])continue;ringN++;if(p.backgroundConnected?.[at])paperN++;
       }
       const paperContactRatio=paperN/Math.max(1,ringN),fillRatio=pixels/Math.max(1,b.width*b.height),bridgeFraction=1-edgeSupportRatio;
+      const matchedOccupancy=matches.reduce((sum,instance)=>sum+intersection(box,instance),0)/Math.max(1e-9,area(box));
       // Large-scale closures are allowed only when the actual original edge
       // still supports most of the resulting perimeter.
       if(edgeSupportRatio<.38)continue;
       if(closureScaleMM>2.0&&edgeSupportRatio<.52)continue;
       if(fillRatio<.24&&edgeSupportRatio<.66)continue;
       if(matches.length>1&&interiorBackgroundRatio>.58&&edgeSupportRatio<.62)continue;
+      // A reconstructed carrier is meant to explain FRAGMENTS. If several
+      // already-substantial instance boxes nearly fill the proposal, they are
+      // more likely neighbouring objects than fragments of one carrier. This
+      // rejects the classic "oval + nearby card wrapped by one contour" error
+      // without relying on either object's shape or class.
+      if(matches.length>1&&matchedOccupancy>.72)continue;
 
       const matchReward=Math.min(1,matches.length/3),scalePenalty=Math.min(.18,closureScaleMM*.035),bridgePenalty=Math.min(.28,bridgeFraction*.34),pagePenalty=Math.min(.18,interiorBackgroundRatio*.20);
       const reconstructionScore=edgeSupportRatio*.43+Math.min(1,paperContactRatio/.82)*.22+Math.min(1,fillRatio/.72)*.12+matchReward*.13+Math.min(1,insideEvidenceRatio/.20)*.10-scalePenalty-bridgePenalty-pagePenalty;
@@ -87,7 +94,7 @@ export function reconstructFragmentedBoundaries(cv,p,own){
       }
       const bounds=cv.boundingRect(physical),x=Math.max(0,bounds.x-2),y=Math.max(0,bounds.y-2),rw=Math.min(w,bounds.x+bounds.width+2)-x,rh=Math.min(h,bounds.y+bounds.height+2)-y,local=own(filled.roi(new cv.Rect(x,y,rw,rh))),packed=own(new cv.Mat());local.copyTo(packed);
       const poly=own(new cv.Mat());cv.approxPolyDP(physical,poly,Math.max(.7,cv.arcLength(physical,true)*.0015),true);const polygon=Array.from({length:poly.rows},(_,j)=>[poly.data32S[j*2]-x,poly.data32S[j*2+1]-y]);
-      proposals.push({x:x/w,y:y/h,w:rw/w,h:rh/h,pixels,edgeMethod,boundaryReconstruction:true,reconstructionScore,edgeSupportRatio,closureScaleMM,bridgeFraction,paperContactRatio,interiorBackgroundRatio,insideEvidenceRatio,fillRatio,matchedInstances:matches.length,mask:{width:rw,height:rh,alpha:new Uint8Array(packed.data),polygons:[polygon]}});
+      proposals.push({x:x/w,y:y/h,w:rw/w,h:rh/h,pixels,edgeMethod,boundaryReconstruction:true,reconstructionScore,edgeSupportRatio,closureScaleMM,bridgeFraction,paperContactRatio,interiorBackgroundRatio,insideEvidenceRatio,fillRatio,matchedInstances:matches.length,matchedOccupancy,mask:{width:rw,height:rh,alpha:new Uint8Array(packed.data),polygons:[polygon]}});
     }
   }
 
