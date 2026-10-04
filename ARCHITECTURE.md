@@ -4,7 +4,7 @@
 
 | 能力 | 单一选择入口 | 执行与数据合同 | 回归测试 |
 | --- | --- | --- | --- |
-| 素材识别 | `src/recognition-profiles.js` 的 `recognitionStrategies` | `src/image.js` 负责分析副本、候选与原图裁切；可选的模型修边器按需加载，入参和回参沿用候选区域结构 | `tests/recognition-profiles.test.js`、`tests/vision-engine.test.js`、`tests/import-browser-acceptance.mjs` |
+| 素材识别 | `src/recognition-profiles.js` 的 `recognitionStrategies` | `src/image.js` 负责低分辨率分析与高清回取；`foreground-evidence.js` 生成局部 Lab/边缘/纹理证据，`opencv-worker.js` 并行生成颜色连通域与闭合物理边界，`recognition-fusion.js` 以结构边界修正阴影扩张和浅色缺失；可选模型只做最终候选 refinement | `tests/recognition-profiles.test.js`、`tests/foreground-evidence.test.js`、`tests/recognition-fusion.test.js`、`tests/vision-engine.test.js`、`tests/import-browser-acceptance.mjs` |
 | AI 创作 | `src/creative-delivery.js` 的响应协议 | `src/creative-runner.js` 控制轮次；`src/creative-contract.js` 验证合同；`src/creative.js` 执行可编辑工具。原生工具、JSON 工具和直接页都要转换为同一工具调用格式 | `tests/creative-delivery.test.js`、`tests/runner.test.js`、`tests/matching-browser.mjs` |
 | 数据位置 | `src/storage-router.js` 的 CRUD 路由 | `src/store.js` 保持公开的 `all/get/transaction` 和备份合同；云端特有的后台暂存、缩略图和增量同步留在 `src/cloud-store.js`，自托管请求留在 `src/store.js`，本机 IndexedDB 用同一表名 | `tests/storage-router.test.js`、`tests/cloud-store.test.js`、`tests/server-persistence.test.js`、`tests/cloud-cache-browser.mjs` |
 | 页面组件 | `src/app.js` 的页面路由 | 大交互逐步拆出独立 UI/模型模块；最近删除由 `src/recently-deleted-ui.js` 渲染，仍使用原 `trash` 表 | `tests/recently-deleted.test.js`、`tests/library-canvas-latest-browser.mjs` |
