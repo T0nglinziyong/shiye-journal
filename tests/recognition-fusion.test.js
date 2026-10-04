@@ -37,10 +37,17 @@ test('strict paper-contact recovery can restore a missed pale photo',()=>{
 });
 
 
-test('complete rectangular paper boundary may reunite several substantial pale-interior fragments',()=>{
+test('closed physical carrier may reunite several substantial pale-interior fragments without a shape class',()=>{
   const top=c(.20,.20,.34,.07),left=c(.18,.27,.08,.24),bottom=c(.22,.48,.30,.08);
-  const card=c(.16,.17,.42,.42,{edgeMethod:'edge-enclosure',paperContactRatio:.96,insideEvidenceRatio:.28,fillRatio:.86,rectFill:.91,rectangularPrior:true});
-  assert.deepEqual(fuseRecognitionCandidates([top,left,bottom],[card]),[card]);
+  const carrier=c(.16,.17,.42,.42,{edgeMethod:'edge-enclosure',paperContactRatio:.96,insideEvidenceRatio:.28,interiorBackgroundRatio:.02,fillRatio:.68});
+  assert.deepEqual(fuseRecognitionCandidates([top,left,bottom],[carrier]),[carrier]);
+});
+
+test('page-connected gap prevents an accidental enclosure from merging neighbouring loose items',()=>{
+  const a=c(.15,.20,.18,.22),b=c(.42,.20,.18,.22);
+  const outer=c(.10,.15,.56,.34,{edgeMethod:'edge-enclosure',paperContactRatio:.95,insideEvidenceRatio:.32,interiorBackgroundRatio:.24,fillRatio:.60});
+  const out=fuseRecognitionCandidates([a,b],[outer]);
+  assert.equal(out.length,2);assert.ok(out.includes(a)&&out.includes(b));
 });
 
 test('tiny internal detail with a one-pixel-style bbox overshoot is still suppressed by its physical parent',()=>{
