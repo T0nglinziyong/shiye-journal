@@ -10,7 +10,10 @@ import {fuseRecognitionCandidates} from './recognition-fusion.js';
 // Structural contours are never free-standing "every closed shape is an item"
 // proposals unless they satisfy the much stricter missing-instance rule.
 export async function segmentPaperMaterials({data,width:w,height:h},{smallestMM=6,paperWidthMM=210,paperHeightMM=297,sourcePixels=data}={}) {
-  const evidence=buildForegroundEvidence(data,w,h,{sourcePixels});
+  // Express background-grid scale in physical paper units so fast/standard/
+  // detail profiles see the same scene rather than three different algorithms.
+  const pxPerMM=((w/paperWidthMM)+(h/paperHeightMM))/2,cellSize=Math.max(24,Math.round(pxPerMM*13.5));
+  const evidence=buildForegroundEvidence(data,w,h,{sourcePixels,cellSize});
   const [instances,structural]=await Promise.all([
     visionTask('instances',{
       mask:evidence.mask,evidence:evidence.evidence,foregroundSeeds:evidence.foregroundSeeds,
