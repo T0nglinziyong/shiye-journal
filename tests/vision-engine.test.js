@@ -85,23 +85,24 @@ test('edge enclosure recovers a curved pale physical carrier without an ellipse 
   assert.ok(Math.abs(carrier.w-rx*2/width)<.07&&Math.abs(carrier.h-ry*2/height)<.07,'curved boundary should follow the visible outer carrier');
 });
 
-test('generic topology refinement can retain an enclosed page aperture without a punch-hole rule',async()=>{
+test('generic topology refinement preserves circular and rectangular page apertures without shape-specific rules',async()=>{
   const cv=await cvModule,width=220,height=260,pixels=new Uint8ClampedArray(width*height*4),evidence=new Uint8Array(width*height),backgroundConnected=new Uint8Array(width*height),shadowLikelihood=new Uint8Array(width*height);
-  const cx=112,cy=132,rx=58,ry=92,hx=112,hy=92,hr=12;
+  const cx=112,cy=132,rx=58,ry=92,circle=[112,86,11],rect=[88,145,103,162],print=[124,148,140,165];
   for(let y=0;y<height;y++)for(let x=0;x<width;x++){
-    const at=y*width+x,p=at*4,n=((x-cx)/rx)**2+((y-cy)/ry)**2,inside=n<=1,border=inside&&Math.abs(n-1)<.045,hole=(x-hx)**2+(y-hy)**2<=hr**2;
-    const color=!inside||hole?[246,246,246]:border?[145,145,145]:[224,232,226];pixels.set([...color,255],p);backgroundConnected[at]=inside?0:1;
-    if(inside&&!hole&&(border||x<cx-20||x>cx+20))evidence[at]=1;
+    const at=y*width+x,p=at*4,n=((x-cx)/rx)**2+((y-cy)/ry)**2,inside=n<=1,border=inside&&Math.abs(n-1)<.045;
+    const circular=(x-circle[0])**2+(y-circle[1])**2<=circle[2]**2,rectangular=x>=rect[0]&&x<=rect[2]&&y>=rect[1]&&y<=rect[3],printed=x>=print[0]&&x<=print[2]&&y>=print[1]&&y<=print[3],aperture=inside&&(circular||rectangular);
+    const color=!inside||aperture?[246,246,246]:printed?[236,232,224]:border?[145,145,145]:[224,232,226];pixels.set([...color,255],p);backgroundConnected[at]=inside?0:1;
+    if(inside&&!aperture&&(border||x<cx-20||x>cx+20))evidence[at]=1;
   }
   const mw=rx*2+1,mh=ry*2+1,alpha=new Uint8Array(mw*mh);
   for(let y=0;y<mh;y++)for(let x=0;x<mw;x++)if(((x-mw/2)/rx)**2+((y-mh/2)/ry)**2<=1)alpha[y*mw+x]=255;
   const outer={x:(cx-mw/2)/width,y:(cy-mh/2)/height,w:mw/width,h:mh/height,evidenceDensity:.4,edgeMethod:'edge-enclosure',mask:{width:mw,height:mh,alpha,polygons:[]}};
   const [out]=await processVision(cv,'complete-boundaries',{pixels,evidence,backgroundConnected,shadowLikelihood,width,height,candidates:[outer],smallestMM:6,paperWidthMM:210,paperHeightMM:297});
   assert.ok(out?.mask?.topologyPreserved);
-  const left=Math.round(out.x*width),top=Math.round(out.y*height),mx=hx-left,my=hy-top;
-  assert.ok(mx>=0&&my>=0&&mx<out.mask.width&&my<out.mask.height);
-  assert.equal(out.mask.alpha[my*out.mask.width+mx],0,'page-like enclosed aperture should remain transparent');
-  const solidX=cx-left,solidY=cy+30-top;assert.equal(out.mask.alpha[solidY*out.mask.width+solidX],255,'ordinary material interior should remain foreground');
+  const left=Math.round(out.x*width),top=Math.round(out.y*height),at=(gx,gy)=>out.mask.alpha[(gy-top)*out.mask.width+gx-left];
+  assert.equal(at(circle[0],circle[1]),0,'circular page aperture should remain transparent');
+  assert.equal(at((rect[0]+rect[2])>>1,(rect[1]+rect[3])>>1),0,'rectangular page aperture should remain transparent');
+  assert.equal(at((print[0]+print[2])>>1,(print[1]+print[3])>>1),255,'off-page-colour printed region should remain material');
 });
 
 test('clean high-contact rectangular enclosure is represented by fitted straight physical edges',async()=>{
