@@ -29,8 +29,7 @@ function random(seed) {
 }
 
 export function craftPermission(options, asset) {
-  const selected = options.assetProcessing?.[asset.id] || options.processing;
-  // New opt-in only: never reinterpret a legacy or explicit whole-only choice.
+  const selected = options.assetProcessing?.[asset.id] || options.processing || '保留完整';
   if (selected !== 'AI 自主加工') return selected;
   return ['paper', 'tape'].includes(asset.kind) ? '自由拆解' : '少量裁剪';
 }
