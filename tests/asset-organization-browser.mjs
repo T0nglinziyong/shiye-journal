@@ -5,7 +5,7 @@ const out='/tmp/shiye-organization-status';await mkdir(out,{recursive:true});
 const b=await browserHarness('shiye-organization-status',process.env.SHIYE_TEST_URL||'http://127.0.0.1:5191',async({command})=>{
   await command('Page.addScriptToEvaluateOnNewDocument',{source:`
     localStorage.setItem('shiye-ui-preferences-v1',JSON.stringify({recognition:'standard',autoOrganize:true}));
-    localStorage.setItem('shiye-ai-settings-v1',JSON.stringify({provider:'custom',endpoint:'https://mock.invalid/organization',model:'synthetic',key:'synthetic-only',includeThumbnails:true,customVision:true}));
+    localStorage.setItem('shiye-ai-settings-v2',JSON.stringify({provider:'custom',endpoint:'https://mock.invalid/organization',model:'synthetic',key:'synthetic-only',includeThumbnails:true,customVision:true,deliveryMode:'tools'}));
     window.__organizationReplies=[];const original=fetch;window.fetch=(url,options)=>url==='https://mock.invalid/organization'?new Promise(resolve=>window.__organizationReplies.push(resolve)):original(url,options);
   `});
 });

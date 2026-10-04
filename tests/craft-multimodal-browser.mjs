@@ -32,7 +32,7 @@ try{
   const before=JSON.stringify(assets),result=applyToolCalls(plan,d,assets,aliases,{processing:'自由拆解',allowNoText:true,visualAssetIDs:assets.map(a=>a.id)});
   if(!result.committed||result.results.some(r=>!r.ok))throw Error(JSON.stringify(result.results));
   if(before!==JSON.stringify(assets))throw Error('Source assets were changed');
-  p.id='multi-browser-project';p.drafts=[result.draft];p.activeDraftID=result.draft.id;p.isDraft=false;p.isTemplate=false;
+  p.id='multi-browser-project';p.drafts=[result.draft];p.activeDraftID=result.draft.id;p.isDraft=false;
   const blobs=[],images={},previews={};
   for(const [i,a] of assets.entries()){
    const canvas=document.createElement('canvas');canvas.width=a.physicalWidthMM*4;canvas.height=a.physicalHeightMM*4;const ctx=canvas.getContext('2d');ctx.fillStyle=a.color;ctx.fillRect(0,0,canvas.width,canvas.height);

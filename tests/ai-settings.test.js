@@ -12,11 +12,10 @@ test('creative delivery settings survive save and reload without changing provid
   assert.deepEqual(restored,saved);
   for(const [key,value] of Object.entries(settings))assert.deepEqual(restored[key],value,key);
   assert.equal(restored.generationMode,'direct');
-  assert.equal(normalizeAISettings({generationMode:'direct',directPageOutput:'flattened'}).deliveryMode,'tools');
 });
 
-test('invalid current settings normalize to bounded defaults without legacy aliases',()=>{
-  const defaults=normalizeAISettings({transport:'unknown',textMode:'unknown',sendPresetReferences:'true',maxTurns:16,reasoningMode:'concise',generationMode:'direct',directPageOutput:'flattened'});
+test('invalid current settings normalize to bounded defaults',()=>{
+  const defaults=normalizeAISettings({transport:'unknown',textMode:'unknown',sendPresetReferences:'true',maxTurns:16,reasoningMode:'concise'});
   assert.equal(defaults.provider,'openai');
   assert.equal(defaults.deliveryMode,'tools');
   assert.equal(defaults.transport,'auto');

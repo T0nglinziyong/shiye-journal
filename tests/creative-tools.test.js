@@ -12,12 +12,12 @@ const assets=[
 ];
 const aliases={m1:'paper',m2:'photo',m3:'tape'};
 const call=(name,args)=>({name,arguments:args});
-function run(base,calls,options={}){return applyToolCalls(calls,base,assets,aliases,options);}
+function run(base,calls,options={}){return applyToolCalls(calls,base,assets,aliases,{processing:'自由拆解',...options});}
 function success(base,calls,options={}){const r=run(base,calls,options);assert.ok(r.results.every(r=>r.ok),JSON.stringify(r.results));return r.draft;}
 const crop=values=>({op:'crop',box:{unit:'ratio',mode:'keep',values},angle:0,finish:null});
 const placed=()=>success(draft(),[call('place_materials',{items:[{asset:'m1',piece:'p1',x:.5,y:.5},{asset:'m2',piece:'p2',x:.2,y:.25}]})]);
 
-test('the advertised Swift tools plus atomic craft plan all execute editable changes or inspection',()=>{
+test('the advertised current tools plus atomic craft plan all execute editable changes or inspection',()=>{
   const names=['apply_craft_plan','compose_story_page','compose_page','place_materials','edit_materials','upsert_materials','move_elements','arrange_elements','fit_text_to','upsert_primitives','upsert_text','delete_elements','set_paper','inspect_materials','finish_design'];
   assert.deepEqual(agentTools.map(t=>t.function.name).sort(),names.sort());
   assert.deepEqual(Object.keys(toolContracts).sort(),names.sort());
@@ -75,13 +75,15 @@ test('nonoverlapping source slices share one inventory unit; overlapping copies 
   const over=run(base,[call('place_materials',{items:[{asset:'m2',piece:'p3',unit:2}]})]);assert.equal(over.results[0].ok,false);
 });
 
-test('continuous tape can supply repeated pieces without enlarging the calibrated strip',()=>{
-  const strips=[{asset:'m3',piece:'tape-a',unit:0,operations:[crop([0,0,.35,1])],placement:{x:.3,y:.3,rotation:0,z:1}},{asset:'m3',piece:'tape-b',unit:1,operations:[crop([0,0,.35,1])],placement:{x:.7,y:.3,rotation:0,z:2}}];
-  const d=success(draft(),[call('upsert_materials',{items:strips,remove:[]})]);
-  assert.equal(d.items.length,2);
-  assert.ok(d.items.every(item=>Math.abs(item.width-35/297*1000)<1e-6));
-  const copy=run(d,[call('upsert_materials',{items:[{asset:'m1',piece:'paper-copy',unit:1,operations:[{op:'whole'}],placement:{x:.5,y:.7,rotation:0,z:3}}],remove:[]})]);
-  assert.equal(copy.results[0].ok,false);
+test('only an explicitly registered repeatable tape roll can supply repeated segments',()=>{
+  const roll={...assets[2],supply:{kind:'tapeRoll',quantity:1,availableLengthMM:120},tapeRepeatMode:'repeatablePattern',tapeRepeatPeriodMM:20};
+  const strips=[{asset:'m3',piece:'tape-a',unit:0,operations:[crop([0,0,.35,1])],placement:{x:.3,y:.3,rotation:0,z:1}},{asset:'m3',piece:'tape-b',unit:0,operations:[crop([.35,0,.35,1])],placement:{x:.7,y:.3,rotation:0,z:2}}];
+  const current=applyToolCalls([call('upsert_materials',{items:strips,remove:[]})],draft(),[roll],aliases,{processing:'自由拆解'});
+  assert.ok(current.results.every(result=>result.ok),JSON.stringify(current.results));
+  assert.equal(current.draft.items.length,2);
+  assert.ok(current.draft.items.every(item=>Math.abs(item.width-35/297*1000)<1e-6));
+  const ordinary=run(draft(),[call('upsert_materials',{items:[{asset:'m3',piece:'ordinary-a',unit:0,operations:[crop([0,0,.35,1])],placement:{x:.3,y:.3,rotation:0,z:1}},{asset:'m3',piece:'ordinary-b',unit:1,operations:[crop([.35,0,.35,1])],placement:{x:.7,y:.3,rotation:0,z:2}}],remove:[]})]);
+  assert.equal(ordinary.results[0].ok,false);
 });
 
 test('arrange preserves all material dimensions in row, column and unequal grid',()=>{

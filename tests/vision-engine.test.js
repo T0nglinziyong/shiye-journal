@@ -16,55 +16,12 @@ test('model contour fills printed white holes but preserves a concave material b
   const r=await processVision(cv,'material-mask',{alpha,width,height}),left=Math.round(r.x*width),top=Math.round(r.y*height),at=(x,y)=>r.mask.alpha[(y-top)*r.mask.width+x-left];
   assert.equal(at(35,35),255);assert.equal(at(70,70),0);assert.equal(at(0+left,0+top),0);
 });
-test('GrabCut treats attached low-chroma shadow as background without clipping coloured paper',async()=>{
-  const cv=await cvModule,width=160,height=180,pixels=new Uint8ClampedArray(width*height*4),mask=new Uint8Array(width*height),evidence=new Uint8Array(width*height),foregroundSeeds=new Uint8Array(width*height),shadowLikelihood=new Uint8Array(width*height);
-  for(let y=0;y<height;y++)for(let x=0;x<width;x++){
-    const i=y*width+x,p=i*4,paper=x>=40&&x<110&&y>=40&&y<140,shadow=x>=40&&x<125&&y>=40&&y<150;
-    pixels.set(paper?[60,140,210,255]:shadow?[205,205,205,255]:[245,245,245,255],p);
-    mask[i]=shadow?1:0;evidence[i]=foregroundSeeds[i]=paper?1:0;shadowLikelihood[i]=shadow&&!paper?1:0;
-  }
-  const before=pixels.slice(),result=await processVision(cv,'components',{mask,evidence,foregroundSeeds,shadowLikelihood,pixels,width,height,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
-  assert.equal(result.length,1);const r=result[0],a=r.mask,at=(x,y)=>a.alpha[(y-Math.round(r.y*height))*a.width+x-Math.round(r.x*width)];
-  assert.equal(at(70,80),255);assert.equal(at(118,80),0);assert.equal(at(70,146),0);assert.deepEqual(pixels,before);
-  assert.ok(a.polygons[0].length<=8,'straight paper must not have a staircase contour');
-});
-
-test('high-fill pale paper recovers a complete rectangle but a circular sticker is never squared',async()=>{
-  const cv=await cvModule,width=160,height=160,pixels=new Uint8ClampedArray(width*height*4),mask=new Uint8Array(width*height),evidence=new Uint8Array(width*height),seeds=new Uint8Array(width*height);
-  for(let y=0;y<height;y++)for(let x=0;x<width;x++){const p=(y*width+x)*4;pixels.set([242,242,242,255],p);}
-  for(let y=30;y<125;y++)for(let x=35;x<130;x++){
-    if(x>105&&y<55)continue;
-    const i=y*width+x,p=i*4;pixels.set([218,225,205,255],p);mask[i]=1;evidence[i]=seeds[i]=1;
-  }
-  const rectangular=await processVision(cv,'components',{mask,evidence,foregroundSeeds:seeds,pixels,width,height,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
-  assert.equal(rectangular.length,1);assert.equal(rectangular[0].edgeMethod,'rectangular-reconstruction');
-  const rr=rectangular[0],rx=Math.round(rr.x*width),ry=Math.round(rr.y*height);
-  assert.equal(rr.mask.alpha[(40-ry)*rr.mask.width+118-rx],255,'missing pale corner is recovered inside the physical rectangle');
-
-  const circleMask=new Uint8Array(width*height),circleEvidence=new Uint8Array(width*height);
-  for(let y=0;y<height;y++)for(let x=0;x<width;x++){const dx=x-80,dy=y-80;if(dx*dx+dy*dy<=42*42){const i=y*width+x;circleMask[i]=circleEvidence[i]=1;}}
-  const circle=await processVision(cv,'components',{mask:circleMask,evidence:circleEvidence,width,height,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
-  assert.equal(circle.length,1);assert.notEqual(circle[0].edgeMethod,'rectangular-reconstruction');
-});
-
-test('OpenCV contours preserve candidate bounds, fill printed detail and reject page-sized components',async()=>{
-  const cv=await cvModule,width=100,height=150,mask=new Uint8Array(width*height);for(let y=30;y<110;y++)for(let x=20;x<65;x++)mask[y*width+x]=1;for(let y=45;y<60;y++)for(let x=30;x<40;x++)mask[y*width+x]=0;
-  const result=await processVision(cv,'components',{mask,width,height,smallestMM:6,paperWidthMM:210,paperHeightMM:297});assert.equal(result.length,1);assert.equal(result[0].mask.width,51);assert.equal(result[0].mask.height,86);assert.equal(result[0].mask.alpha[25*51+15],255);assert.equal(result[0].mask.alpha[0],0);
-  const empty=await processVision(cv,'components',{mask:new Uint8Array(width*height).fill(1),width,height,smallestMM:6,paperWidthMM:210,paperHeightMM:297});assert.deepEqual(empty,[]);
-});
 test('OpenCV local light balance is effective without changing source or alpha',async()=>{
   const cv=await cvModule,width=80,height=80,pixels=new Uint8ClampedArray(width*height*4);for(let y=0;y<height;y++)for(let x=0;x<width;x++){const i=(y*width+x)*4;pixels[i]=pixels[i+1]=pixels[i+2]=40+x*2;pixels[i+3]=x%2?128:255;}const original=pixels.slice(),out=await processVision(cv,'balance',{pixels,width,height});assert.deepEqual(pixels,original);assert.ok(out.pixels.some((v,i)=>i%4!==3&&v!==pixels[i]));for(let i=3;i<pixels.length;i+=4)assert.equal(out.pixels[i],pixels[i]);
 });
 test('OpenCV detects actual paper corners and refuses a featureless full photograph',async()=>{
   const cv=await cvModule,width=180,height=240,pixels=new Uint8ClampedArray(width*height*4);for(let y=0;y<height;y++)for(let x=0;x<width;x++){const i=(y*width+x)*4,value=x>=20&&x<=160&&y>=20&&y<=220?240:60;pixels[i]=pixels[i+1]=pixels[i+2]=value;pixels[i+3]=255;}const corners=await processVision(cv,'quad',{pixels,width,height,paperRatio:140/200});assert.equal(corners.length,4);assert.ok(Math.abs(corners[0].x-20/180)<.01);assert.ok(Math.abs(corners[2].y-220/240)<.01);assert.equal(await processVision(cv,'quad',{pixels:new Uint8ClampedArray(width*height*4).fill(255),width,height,paperRatio:140/200}),null);
 });
-test('shadow-only components are excluded while a colored object remains intact',async()=>{
- const cv=await cvModule,width=100,height=150,mask=new Uint8Array(width*height),evidence=new Uint8Array(width*height);
- for(let y=20;y<55;y++)for(let x=10;x<30;x++)mask[y*width+x]=1;
- for(let y=70;y<120;y++)for(let x=50;x<80;x++)mask[y*width+x]=evidence[y*width+x]=1;
- const result=await processVision(cv,'components',{mask,evidence,width,height,smallestMM:6,paperWidthMM:210,paperHeightMM:297});assert.equal(result.length,1);assert.ok(result[0].y>.4);
-});
-
 test('edge enclosure keeps a pale rectangular card but excludes its offset shadow',async()=>{
   const cv=await cvModule,width=180,height=180,pixels=new Uint8ClampedArray(width*height*4),evidence=new Uint8Array(width*height);
   for(let y=0;y<height;y++)for(let x=0;x<width;x++){

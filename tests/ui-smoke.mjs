@@ -9,19 +9,18 @@ const html=await readFile(new URL('index.html',root),'utf8');
 const window=new Window({url:'https://shiye.test/',settings:{enableJavaScriptEvaluation:true,disableJavaScriptFileLoading:true}});
 window.document.body.innerHTML=html.match(/<body>([\s\S]*)<\/body>/)[1];
 stubCanvas(window);
-// Happy DOM cannot fetch/render font faces with file loading disabled. Real
-// typography is covered separately by Chromium's CeCe render acceptance.
+// Happy DOM cannot fetch/render font faces with file loading disabled.
 Object.defineProperty(window.document,'fonts',{value:{load:async()=>[]},configurable:true});
 window.indexedDB=indexedDB;window.IDBKeyRange=IDBKeyRange;
 window.structuredClone=structuredClone;
-window.fetch=async url=>({ok:true,blob:async()=>new Blob(['sample'],{type:'image/png'}),json:async()=>JSON.parse(await readFile(new URL('cece/collection.json',root),'utf8'))});
+window.fetch=async()=>({ok:true,blob:async()=>new Blob(['sample'],{type:'image/png'}),json:async()=>({})});
 window.URL.createObjectURL=()=>`blob:shiye-${Math.random()}`;window.URL.revokeObjectURL=()=>{};
 window.eval(await builtApp(root,html,window));
 await new Promise(resolve=>setTimeout(resolve,500));
 assert.match(window.document.querySelector('#view').textContent,/我的素材/);
 assert.ok(window.document.querySelector('.swift-series-controls input'));
 window.document.querySelector('.swift-tabs button:nth-child(2)').click();
-assert.equal(window.document.querySelectorAll('[data-act="detail"]').length,164);
+assert.equal(window.document.querySelectorAll('[data-act="detail"]').length,4);
 for(const suffix of ['9001','9002','9003','9004'])assert.ok(window.document.querySelector(`[data-id="B7000000-0000-4000-8000-00000000${suffix}"]`));
 assert.equal(window.document.querySelector('.asset-grid > :first-child').dataset.act,'import');
 window.document.querySelector('.asset-grid > :first-child').click();
@@ -71,4 +70,4 @@ window.document.querySelector('[data-editor-ai]').click();
 assert.ok(window.document.querySelector('.inline-ai-panel'));
 assert.equal(window.document.querySelector('#modal').open,false);
 await window.happyDOM.abort();
-console.log('UI smoke: seeded assets, navigation, editor rendered');
+console.log('UI smoke: current assets, navigation, editor rendered');
