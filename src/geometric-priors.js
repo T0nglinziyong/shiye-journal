@@ -99,6 +99,31 @@ function smoothClosed(points,iterations=4){
   for(let it=0;it<iterations;it++){const next=[];for(let i=0;i<n;i++){const a=out[wrap(i-1,n)],b=out[i],c=out[(i+1)%n];next.push([(a[0]+2*b[0]+c[0])/4,(a[1]+2*b[1]+c[1])/4]);}out=next;}
   return out;
 }
+function detectLineRuns(points,pxPerMM){
+  const n=points.length,total=perimeter(points),spacing=total/n,perimeterMM=total/pxPerMM,windowMM=Math.min(14,Math.max(4,perimeterMM/6)),half=clamp(Math.round(windowMM*pxPerMM/Math.max(spacing,1)/2),2,Math.max(2,Math.floor(n/8)));
+  const lineLike=new Array(n).fill(false),rmsLimit=Math.max(.55,pxPerMM*.38),maxLimit=Math.max(1.8,pxPerMM*1.1);
+  for(let i=0;i<n;i++){
+    const sample=[];for(let k=-half;k<=half;k++)sample.push(points[wrap(i+k,n)]);
+    const fit=lineFit(sample),ratio=fit.rms/Math.max(fit.length,1);
+    lineLike[i]=fit.rms<=rmsLimit&&fit.max<=maxLimit&&ratio<=.025;
+  }
+  let groups=[];
+  if(lineLike.every(Boolean))groups=[Array.from({length:n},(_,i)=>i)];
+  else{
+    const firstFalse=lineLike.findIndex(x=>!x);let current=[];
+    for(let step=1;step<=n;step++){const i=wrap(firstFalse+step,n);if(lineLike[i])current.push(i);else if(current.length){groups.push(current);current=[];}}
+    if(current.length)groups.push(current);
+  }
+  const minLineMM=Math.max(3,Math.min(8,perimeterMM*.12)),runs=[];
+  for(const indices of groups){
+    if(indices.length<2)continue;const fit=lineFit(indices.map(i=>points[i]));
+    if(fit.length/pxPerMM>=minLineMM&&fit.rms<=Math.max(.8,pxPerMM*.45))runs.push({indices,fit});
+  }
+  return {runs,lineLike};
+}
+function lineIntersectionUnbounded(a,b,fallback,maxDistance){
+  return lineIntersection(a,b,fallback,maxDistance);
+}
 function matFromPoints(cv,points,own){
   const ints=points.flatMap(([x,y])=>[Math.round(x),Math.round(y)]);return own(cv.matFromArray(points.length,1,cv.CV_32SC2,ints));
 }
@@ -109,38 +134,51 @@ function contourMask(cv,width,height,contour,own,value=255){
 export function regularizeContour(cv,contour,own,pxPerMM,{closed=true}={}){
   const raw=contourPoints(contour),spacing=Math.max(1,pxPerMM*.55),points=resampleClosed(raw,spacing);
   if(points.length<8)return {points:raw,primitives:[{type:'curve'}],corners:0,lineCount:0,curveCount:1};
-  const cut=simplifyCorners(points,corners(points,pxPerMM),pxPerMM);
-  if(cut.length<2){
-    const smoothed=smoothClosed(points,4);
-    return {points:smoothed,primitives:[{type:'curve',closed:true}],corners:0,lineCount:0,curveCount:1};
+  const {runs,lineLike}=detectLineRuns(points,pxPerMM),n=points.length,output=points.map(p=>[...p]),isLine=new Array(n).fill(false),primitives=[];
+  for(const run of runs){
+    const {center,dir}=run.fit;
+    for(const i of run.indices){
+      const p=points[i],dx=p[0]-center[0],dy=p[1]-center[1],t=dx*dir[0]+dy*dir[1];output[i]=[center[0]+t*dir[0],center[1]+t*dir[1]];isLine[i]=true;
+    }
+    primitives.push({type:'line',length:run.fit.length,rms:run.fit.rms});
   }
-
-  const segments=[];
-  for(let s=0;s<cut.length;s++){
-    const a=cut[s],b=cut[(s+1)%cut.length],pts=arc(points,a,b),fit=lineFit(pts);
-    const rmsLimit=Math.max(.8,pxPerMM*.35),maxLimit=Math.max(3.2,pxPerMM*1.2),ratio=fit.rms/Math.max(fit.length,1);
-    const isLine=fit.length>=Math.max(7,pxPerMM*2.2)&&fit.rms<=rmsLimit&&fit.max<=maxLimit&&ratio<=.03;
-    segments.push({start:a,end:b,points:pts,fit,type:isLine?'line':'curve'});
+  // Smooth only the points not explained by a straight run. Straight runs
+  // remain exactly collinear while curved intervals lose pixel serrations.
+  for(let it=0;it<4;it++){
+    const next=output.map(p=>[...p]);
+    for(let i=0;i<n;i++)if(!isLine[i]){
+      const a=output[wrap(i-1,n)],b=output[i],d=output[(i+1)%n];next[i]=[(a[0]+2*b[0]+d[0])/4,(a[1]+2*b[1]+d[1])/4];
+    }
+    for(let i=0;i<n;i++)if(!isLine[i])output[i]=next[i];
   }
-
-  const junctions=cut.map((idx,j)=>{
-    const prev=segments[wrap(j-1,segments.length)],next=segments[j],fallback=points[idx];
-    return prev.type==='line'&&next.type==='line'?lineIntersection(prev.fit,next.fit,fallback,Math.max(3,pxPerMM*1.8)):fallback;
-  });
-  const output=[],primitives=[];
-  for(let s=0;s<segments.length;s++){
-    const seg=segments[s],start=junctions[s],end=junctions[(s+1)%segments.length];
-    if(seg.type==='line'){
-      if(!output.length)output.push(start);output.push(end);
-      primitives.push({type:'line',start,end,rms:seg.fit.rms,length:seg.fit.length});
-    }else{
-      const pts=smoothOpen(seg.points,3);pts[0]=start;pts[pts.length-1]=end;
-      if(!output.length)output.push(pts[0]);for(let i=1;i<pts.length;i++)output.push(pts[i]);
-      primitives.push({type:'curve',start,end,samples:pts.length});
+  // Adjacent dominant lines with only a short curved gap meet at one physical
+  // corner. Snap that tiny transition to their intersection rather than
+  // preserving a rounded Canny corner.
+  const ordered=[...runs].sort((a,b)=>a.indices[0]-b.indices[0]),maxGapPx=pxPerMM*3;
+  for(let r=0;r<ordered.length;r++){
+    const left=ordered[r],right=ordered[(r+1)%ordered.length],end=left.indices[left.indices.length-1],start=right.indices[0];
+    const gap=[];let i=end;while(true){i=wrap(i+1,n);if(i===start)break;gap.push(i);if(gap.length>n)break;}
+    if(!gap.length||gap.length*spacing>maxGapPx)continue;
+    const angle=Math.acos(clamp(Math.abs(left.fit.dir[0]*right.fit.dir[0]+left.fit.dir[1]*right.fit.dir[1]),-1,1));
+    if(angle<.22)continue;
+    const fallback=points[gap[Math.floor(gap.length/2)]],hit=lineIntersectionUnbounded(left.fit,right.fit,fallback,Math.max(4,pxPerMM*3));
+    for(const j of gap)output[j]=[...hit];
+  }
+  // Curve primitives are the remaining non-line runs after corner snapping.
+  const curveFlags=output.map((_,i)=>!isLine[i]),curveGroups=[];
+  if(curveFlags.some(Boolean)){
+    if(curveFlags.every(Boolean))curveGroups.push(Array.from({length:n},(_,i)=>i));
+    else{
+      const firstFalse=curveFlags.findIndex(x=>!x);let current=[];
+      for(let step=1;step<=n;step++){const i=wrap(firstFalse+step,n);if(curveFlags[i])current.push(i);else if(current.length){curveGroups.push(current);current=[];}}
+      if(current.length)curveGroups.push(current);
     }
   }
-  if(output.length>2&&dist(output[0],output[output.length-1])<1)output.pop();
-  return {points:output,primitives,corners:cut.length,lineCount:primitives.filter(x=>x.type==='line').length,curveCount:primitives.filter(x=>x.type==='curve').length};
+  for(const group of curveGroups)if(group.length*spacing>=Math.max(2,pxPerMM*1.2))primitives.push({type:'curve',samples:group.length});
+  // Remove consecutive duplicates introduced by corner snapping.
+  const clean=[];for(const p of output)if(!clean.length||dist(p,clean[clean.length-1])>.25)clean.push(p);
+  if(clean.length>2&&dist(clean[0],clean[clean.length-1])<.25)clean.pop();
+  return {points:clean,primitives,corners:Math.max(0,ordered.length),lineCount:runs.length,curveCount:primitives.filter(x=>x.type==='curve').length};
 }
 
 export function regularizeOuterSupport(cv,source,own,pxPerMM){
