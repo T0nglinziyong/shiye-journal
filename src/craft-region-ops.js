@@ -1,6 +1,6 @@
 import {craftAssert} from './craft-errors.js';
 import {materialMaskGeometry} from './material-mask.js';
-import {resolveMaterialRegion,assetSourceRevision,assertProtectedRegions} from './material-anatomy.js';
+import {assetSourceRevision} from './material-anatomy.js';
 import {normalizeGeometry,rectangleGeometry,geometryArea,geometryBounds,geometryIntersection,geometryDifference,transformGeometry,assertConnected,assertSubset,AREA_EPSILON} from './craft-topology.js';
 
 const unclosed=ring=>ring.length>3&&Math.abs(ring[0][0]-ring.at(-1)[0])<1e-9&&Math.abs(ring[0][1]-ring.at(-1)[1])<1e-9?ring.slice(0,-1):ring;
@@ -47,13 +47,7 @@ export function shapeCutGeometry(operation,widthMM,heightMM){
 export function applyRegionOperation({operation,current,mask,asset,permission}){
  let width=current.width*asset.physicalWidthMM,height=current.height*asset.physicalHeightMM;
  let geometry=maskToGeometry(mask,width,height);
- const sourceX=current.x*asset.physicalWidthMM,sourceY=current.y*asset.physicalHeightMM;
- if(operation.op==='extract_region'){
-  const resolved=resolveMaterialRegion(asset,{regionId:operation.region,sourceRevision:operation.source_revision,mode:operation.mode||'bounds',marginMM:operation.margin_mm||0});
-  const available=transformGeometry(geometry,p=>[p[0]+sourceX,p[1]+sourceY]);
-  assertSubset(resolved.geometry,available,{assetId:asset.id});
-  const recipe=geometryMaterialRecipe(resolved.geometry,asset);current=recipe.crop;mask=recipe.mask;
- }else{
+ {
   craftAssert(operation.op==='cut_shape','UNSUPPORTED_OPERATION','未知拓扑工序');
   craftAssert(operation.mode==='keep'||operation.mode==='remove','INVALID_CUT_MODE','裁切必须明确保留还是移除');
   const cut=shapeCutGeometry(operation,width,height);
@@ -66,6 +60,5 @@ export function applyRegionOperation({operation,current,mask,asset,permission}){
  craftAssert(width>=2-1e-8&&height>=2-1e-8,'PIECE_TOO_SMALL','裁片短边不得小于 2 mm');
  const retained=geometryArea(geometry)/(asset.physicalWidthMM*asset.physicalHeightMM);
  craftAssert(permission!=='少量裁剪'||retained>=.6-1e-6,'PROCESSING_LIMIT','仅允许少量裁剪，须累计保留至少60%面积',{assetId:asset.id});
- assertProtectedRegions(asset,transformGeometry(geometry,p=>[p[0]+current.x*asset.physicalWidthMM,p[1]+current.y*asset.physicalHeightMM]));
  return {current,mask,sourceRevision:assetSourceRevision(asset)};
 }
