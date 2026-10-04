@@ -6,6 +6,9 @@ test('matching results survive reload without credentials; interrupted requests 
  const state={basket:['a'],aiSettings:{key:'never-store'},matchIntent:'春日'},record=matchingSnapshot(state,[{id:'v',status:'running',project:work}]);
  assert.ok(!JSON.stringify(record).includes('never-store'));const restored={};const variants=restoreMatchingSession(record,restored);assert.deepEqual(restored.basket,['a']);assert.equal(variants[0].status,'interrupted');
 });
+test('old autonomous label is normalized once to the current unspecified label',()=>{
+ const state={matchProcessing:'保留完整'};restoreMatchingSession({context:{matchProcessing:'AI 自主加工'},variants:[]},state);assert.equal(state.matchProcessing,'不预设');
+});
 test('content policy, original wording and facts survive matching-page reload',()=>{
  const record=matchingSnapshot({matchContentPolicy:'original',matchUserText:'保留原文',matchFacts:'用户确认的事实',basket:[]},[]);
  const restored={matchContentPolicy:'documentary',matchUserText:'',matchFacts:''};
