@@ -70,7 +70,7 @@ const motifs=[
 ];
 
 const photoHeight=(slug,index)=>80*([0,2,4,8].includes(index)?400/319:[1,3,5,6].includes(index)?576/514:337/377);
-const currentRecord=(record,used)=>({...record,usageStatus:used?'used':'unused',sourceIdentifier:CURRENT_MATERIAL_SOURCE,builtinRevision:CURRENT_MATERIAL_REVISION});
+const currentRecord=(record,used)=>({...record,usageStatus:used?'used':'unused',sourceIdentifier:CURRENT_MATERIAL_SOURCE,isBuiltinMaterial:true,builtinRevision:CURRENT_MATERIAL_REVISION});
 function catalog(){
  const assets=[],series=[];
  for(const [si,[slug,name,introduction]] of styleFamilies.entries()){
@@ -117,8 +117,8 @@ export async function syncCurrentMaterials({database=defaultDB}={}){
   const existing=existingAssets.get(desired.id);
   if(!existing){writes.push(currentRecord(desired,usedByWorks.has(desired.id)));continue;}
   const usageStatus=existing.usageStatus==='used'||existing.usageStatus==='unused'?existing.usageStatus:(usedByWorks.has(existing.id)?'used':'unused');
-  if(existing.sourceIdentifier!==CURRENT_MATERIAL_SOURCE||existing.builtinRevision!==CURRENT_MATERIAL_REVISION||existing.staticPath!==desired.staticPath||existing.usageStatus!==usageStatus)
-   writes.push({...existing,staticPath:desired.staticPath,usageStatus,sourceIdentifier:CURRENT_MATERIAL_SOURCE,builtinRevision:CURRENT_MATERIAL_REVISION});
+  if(existing.sourceIdentifier!==CURRENT_MATERIAL_SOURCE||existing.isBuiltinMaterial!==true||existing.builtinRevision!==CURRENT_MATERIAL_REVISION||existing.staticPath!==desired.staticPath||existing.usageStatus!==usageStatus)
+   writes.push({...existing,staticPath:desired.staticPath,usageStatus,sourceIdentifier:CURRENT_MATERIAL_SOURCE,isBuiltinMaterial:true,builtinRevision:CURRENT_MATERIAL_REVISION});
  }
  const missingSeries=currentMaterialCatalog.series.filter(item=>!existingSeries.has(item.id));
  if(!writes.length&&!missingSeries.length&&!transient.length)return {changed:false,assets:currentMaterialCatalog.assets.length,series:currentMaterialCatalog.series.length};
