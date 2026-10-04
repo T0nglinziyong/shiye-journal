@@ -29,6 +29,36 @@ test('uneven illumination and a cast shadow stay background while a pale coloure
   assert.ok(materialEvidence/material>.65,'pale coloured paper must remain detectable under the same gradient');
 });
 
+
+test('page-connected background removes surrounding paper but preserves a pale rectangular material',()=>{
+  const w=120,h=90,data=rgba(w,h,(x,y)=>{
+    if(x>=35&&x<92&&y>=20&&y<72)return [226,229,212]; // pale yellow-green material
+    return [222,222,222];
+  });
+  const out=buildForegroundEvidence(data,w,h,{cellSize:24});
+  let inside=0,outside=0;
+  for(let y=28;y<64;y++)for(let x=44;x<84;x++)inside+=out.mask[y*w+x];
+  for(let y=8;y<18;y++)for(let x=15;x<105;x++)outside+=out.mask[y*w+x];
+  assert.ok(inside/(36*40)>.9,'pale material interior must remain foreground');
+  assert.ok(outside/(10*90)<.08,'surrounding page must remain connected background');
+});
+
+test('a closed sticker perimeter protects near-white interior from background flooding',()=>{
+  const w=120,h=100,data=rgba(w,h,(x,y)=>{
+    const inside=x>=38&&x<=82&&y>=18&&y<=82;
+    const edge=inside&&(x<=40||x>=80||y<=20||y>=80);
+    if(edge)return [95,95,95];
+    if(inside)return [224,224,222]; // deliberately close to page colour
+    return [226,226,226];
+  });
+  const out=buildForegroundEvidence(data,w,h,{cellSize:24});
+  let protectedInterior=0,page=0;
+  for(let y=32;y<68;y++)for(let x=48;x<72;x++)protectedInterior+=out.mask[y*w+x];
+  for(let y=5;y<15;y++)for(let x=10;x<110;x++)page+=out.mask[y*w+x];
+  assert.ok(protectedInterior/(36*24)>.9,'near-white sticker interior must be filled as one physical material');
+  assert.ok(page/(10*100)<.08,'paper outside the perimeter must stay background');
+});
+
 test('thin low-evidence bridge is split but a printed narrow connection is preserved',()=>{
   const mw=44,mh=22,alpha=new Uint8Array(mw*mh);
   const put=(x0,y0,x1,y1)=>{for(let y=y0;y<y1;y++)for(let x=x0;x<x1;x++)alpha[y*mw+x]=255;};
