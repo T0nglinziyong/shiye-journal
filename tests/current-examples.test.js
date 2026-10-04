@@ -21,6 +21,7 @@ test('current examples preserve the four visible sample works using current meta
     assert.ok([...db.stores.projects.values()].every(isCurrentExampleProject));
     assert.ok([...db.stores.assets.values()].every(asset=>asset.isProjectInternal&&asset.sourceIdentifier===CURRENT_EXAMPLE_SOURCE&&['used','unused'].includes(asset.usageStatus)));
     assert.equal(CURRENT_EXAMPLE_SHAPES_URL,'/builtin-examples/cece/shapes.json');
+    const shapes=JSON.parse(await readFile(new URL('../public/builtin-examples/cece/shapes.json',import.meta.url),'utf8'));assert.ok(shapes.length>50);
     const again=await syncCurrentExamples({database:db});assert.equal(again.changed,false);
   }finally{globalThis.fetch=oldFetch;globalThis.document=oldDocument;}
 });
