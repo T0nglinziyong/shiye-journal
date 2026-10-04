@@ -19,7 +19,7 @@ export const recognitionModeAllowed = value => strategiesByID.has(value);
 
 export function recognitionProfile(value='auto', {maxTouchPoints=globalThis.navigator?.maxTouchPoints||0, coarsePointer=globalThis.matchMedia?.('(pointer:coarse)').matches||false}={}) {
   const mode = value !== 'auto' && strategiesByID.has(value)
-    ? value : maxTouchPoints > 0 && coarsePointer ? 'fast' : 'standard';
+    ? value : 'standard';
   const {analysisMaxDimension, refineCandidates} = strategiesByID.get(mode);
   return {mode, analysisMaxDimension, refineCandidates};
 }
