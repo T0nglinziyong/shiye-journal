@@ -99,16 +99,7 @@ export async function processVision(cv,operation,p){
         }
         const edgeStrength=boundarySamples?boundaryScore/boundarySamples:0,shadowFraction=boundarySamples?boundaryShadow/boundarySamples:0;
         if(shadowFraction>.58&&edgeStrength<38)continue;
-        let boundary=contour,edgeMethod='edge-enclosure';
-        // Once a high-paper-contact enclosure is already strongly rectangular,
-        // the physical sheet/card is better represented by its fitted straight
-        // edges than by Canny's slightly bitten or shadow-wavy contour. This is
-        // geometric completion only; low-fill irregular stickers stay untouched.
-        if(rectangularPrior&&paperContactRatio>=.80){
-          const box=cv.boxPoints(shapeRect),rectContour=own(cv.matFromArray(4,1,cv.CV_32SC2,box.flatMap(point=>[Math.round(point.x),Math.round(point.y)])));
-          filled.setTo(new cv.Scalar(0));const rects=own(new cv.MatVector());rects.push_back(rectContour);cv.drawContours(filled,rects,-1,new cv.Scalar(255),cv.FILLED);
-          boundary=rectContour;edgeMethod='edge-rectangle';
-        }
+        const boundary=contour,edgeMethod='edge-enclosure';
         const bounds=cv.boundingRect(boundary),x=Math.max(0,bounds.x-2),y=Math.max(0,bounds.y-2),rw=Math.min(w,bounds.x+bounds.width+2)-x,rh=Math.min(h,bounds.y+bounds.height+2)-y,local=own(filled.roi(new cv.Rect(x,y,rw,rh))),packed=own(new cv.Mat());local.copyTo(packed);
         const poly=own(new cv.Mat());cv.approxPolyDP(boundary,poly,Math.max(.7,cv.arcLength(boundary,true)*.0015),true);
         const points=Array.from({length:poly.rows},(_,j)=>[poly.data32S[j*2]-x,poly.data32S[j*2+1]-y]);
@@ -168,8 +159,7 @@ export async function processVision(cv,operation,p){
         let largest=null,largestArea=0;for(let j=0;j<contours.size();j++){const c=contours.get(j),a=cv.contourArea(c);if(a>largestArea){largest?.delete?.();largest=c;largestArea=a;}else c.delete();}
         if(!largest||largestArea<minArea){largest?.delete?.();while(resources.length>checkpoint)resources.pop().delete();continue;}
         alpha.setTo(new cv.Scalar(0));const one=own(new cv.MatVector());one.push_back(largest);cv.drawContours(alpha,one,-1,new cv.Scalar(255),cv.FILLED);
-        let boundary=largest,edgeMethod='watershed-grabcut';const rectangle=cv.minAreaRect(largest),rectArea=Math.max(1,rectangle.size.width*rectangle.size.height),rectFill=largestArea/rectArea;
-        if(rectFill>=.90){const box=cv.boxPoints(rectangle),rectContour=own(cv.matFromArray(4,1,cv.CV_32SC2,box.flatMap(point=>[Math.round(point.x),Math.round(point.y)])));alpha.setTo(new cv.Scalar(0));const rects=own(new cv.MatVector());rects.push_back(rectContour);cv.drawContours(alpha,rects,-1,new cv.Scalar(255),cv.FILLED);boundary=rectContour;edgeMethod='watershed-rectangular';}
+        const boundary=largest,edgeMethod='watershed-grabcut';
         const bounds=cv.boundingRect(boundary),fx=x+bounds.x,fy=y+bounds.y,fw=bounds.width,fh=bounds.height,localAlpha=own(alpha.roi(new cv.Rect(bounds.x,bounds.y,fw,fh))),packed=own(new cv.Mat());localAlpha.copyTo(packed);
         const poly=own(new cv.Mat());cv.approxPolyDP(boundary,poly,Math.max(.7,cv.arcLength(boundary,true)*.0015),true);const points=Array.from({length:poly.rows},(_,j)=>[poly.data32S[j*2]-bounds.x,poly.data32S[j*2+1]-bounds.y]);
         result.push({x:fx/w,y:fy/h,w:fw/w,h:fh/h,pixels:largestArea,evidenceDensity:signal/Math.max(1,area),edgeMethod,mask:{width:fw,height:fh,alpha:new Uint8Array(packed.data),polygons:[points]}});
