@@ -22,6 +22,11 @@ const effectivelyContained=(child,parent)=>{
   return x>=parent.x-margin&&x<=parent.x+parent.w+margin&&y>=parent.y-margin&&y<=parent.y+parent.h+margin;
 };
 const strongPhysicalBoundary=s=>(s.paperContactRatio??0)>=.80&&(s.interiorBackgroundRatio??1)<=.10&&(s.insideEvidenceRatio??1)<=.75;
+const strongReconstruction=s=>s.boundaryReconstruction===true
+  &&(s.reconstructionScore??0)>=.28
+  &&(s.edgeSupportRatio??0)>=.42
+  &&(s.paperContactRatio??0)>=.48
+  &&((s.interiorBackgroundRatio??1)<=.42||(s.fillRatio??0)>=.64||(s.edgeSupportRatio??0)>=.62);
 
 export function fuseRecognitionCandidates(instances,structuralCandidates){
   const base=instances.map(candidate=>({candidate,used:false})),accepted=[];
@@ -42,8 +47,10 @@ export function fuseRecognitionCandidates(instances,structuralCandidates){
       // usually contains page-connected gaps and therefore fails this test.
       const shares=matches.map(({entry})=>area(entry.candidate)/Math.max(area(structural),1e-9)).sort((a,b)=>b-a);
       const occupancy=matches.reduce((sum,{entry})=>sum+intersection(entry.candidate,structural),0)/Math.max(area(structural),1e-9);
-      accept=matches.length===1||shares[1]<.15||(strongPhysicalBoundary(structural)&&occupancy<=.84);
-      accept&&=(structural.paperContactRatio??0)>=.70;
+      accept=matches.length===1||shares[1]<.15
+        ||(strongPhysicalBoundary(structural)&&occupancy<=.84)
+        ||(strongReconstruction(structural)&&occupancy<=.88);
+      accept&&=(structural.paperContactRatio??0)>=.48;
     }else{
       // Missing-instance recovery is deliberately strict. It recovers a pale
       // photo/card with a real paper-facing perimeter, but internal printed
