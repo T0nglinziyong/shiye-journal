@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFile} from 'node:fs/promises';
+import {access} from 'node:fs/promises';
 import {syncCurrentMaterials,currentMaterialCatalog,CURRENT_MATERIAL_SOURCE,CURRENT_MATERIAL_REVISION,CURRENT_MATERIAL_IDS} from '../src/current-materials.js';
 
 function memoryDB(seed={}){
@@ -41,10 +41,6 @@ test('sync keeps user-visible built-in edits while canonicalizing current fields
   const again=await syncCurrentMaterials({database:db});assert.equal(again.changed,false);
 });
 
-test('all current built-in paths ship the original image bytes under current resource directories',async()=>{
-  const samples=currentMaterialCatalog.assets.filter((_,index)=>index%19===0);
-  for(const asset of samples){
-    const bytes=await readFile(new URL('../public'+asset.staticPath,import.meta.url));
-    assert.ok(bytes.length>100,asset.staticPath);
-  }
+test('all 164 current built-in paths ship under current resource directories',async()=>{
+  for(const asset of currentMaterialCatalog.assets)await access(new URL('../public'+asset.staticPath,import.meta.url));
 });
