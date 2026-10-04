@@ -26,8 +26,11 @@ export async function cropBitmap(bitmap,paper,region,{raw=false}={}){
     const mc=mask.getContext('2d'),frame=mc.createImageData(m.width,m.height);
     for(let i=0;i<m.alpha.length;i++){frame.data[i*4]=frame.data[i*4+1]=frame.data[i*4+2]=255;frame.data[i*4+3]=m.alpha[i];}
     mc.putImageData(frame,0,0);
+    // Alpha is the canonical physical mask. Polygons are a compact outline
+    // description for geometry/debugging, but drawing only the outer polygons
+    // would silently fill real punch holes and other valid internal cut-outs.
     let output=mask;
-    if(m.polygons?.length){
+    if((!m.alpha||m.alpha.length!==m.width*m.height)&&m.polygons?.length){
       output=document.createElement('canvas');output.width=w;output.height=h;const v=output.getContext('2d');v.fillStyle='#fff';
       for(const polygon of m.polygons){v.beginPath();polygon.forEach(([px,py],i)=>v[i?'lineTo':'moveTo'](px/m.width*w,py/m.height*h));v.closePath();v.fill();}
     }
