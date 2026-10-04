@@ -21,7 +21,10 @@ export async function segmentPaperMaterials({data,width:w,height:h},{smallestMM=
       width:w,height:h,smallestMM,paperWidthMM,paperHeightMM
     }),
     visionTask('enclosures',{
-      pixels:sourcePixels,evidence:evidence.evidence,backgroundConnected:evidence.backgroundConnected,
+      // Boundary discovery uses the working (optionally illumination-balanced)
+      // page. The final topology/crop still uses sourcePixels, so lighting
+      // normalization can reveal edges without changing saved material colour.
+      pixels:data,evidence:evidence.evidence,backgroundConnected:evidence.backgroundConnected,
       shadowLikelihood:evidence.shadowLikelihood,score:evidence.score,
       width:w,height:h,smallestMM,paperWidthMM,paperHeightMM
     })
