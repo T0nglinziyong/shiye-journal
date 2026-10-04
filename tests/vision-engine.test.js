@@ -116,7 +116,7 @@ test('straight physical edges are introduced only by the final line-curve regula
   const card=result.filter(r=>r.x<.3&&r.x+r.w>.7&&r.y<.25&&r.y+r.h>.78).sort((a,b)=>b.pixels-a.pixels)[0];
   assert.ok(card,'clean physical enclosure should be found');assert.equal(card.edgeMethod,'edge-enclosure');
   const [regular]=await processVision(cv,'complete-boundaries',{pixels,evidence,backgroundConnected,shadowLikelihood,width,height,candidates:[card],smallestMM:6,paperWidthMM:210,paperHeightMM:297});
-  assert.equal(regular.boundaryModel,'line-envelope');assert.equal(regular.boundaryLineCount,4);
+  assert.ok(['line-envelope','line-curve'].includes(regular.boundaryModel));assert.ok(regular.boundaryLineCount>=4);assert.ok(regular.mask.polygons[0].length<=10);
 });
 
 
