@@ -6,7 +6,7 @@ export const CURRENT_MATERIAL_SERIES_ID='B7000000-0000-4000-8000-000000009000';
 const CREATED_AT='2026-10-04T00:00:00.000Z';
 const fixed=n=>`B7000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
 const retiredSeriesIDs=new Set([...Array.from({length:10},(_,i)=>fixed((i+1)*100)),'cece-sample-series']);
-const retiredMeta=id=>id==='starter-styles-current'||id==='swift-bundled-materials-current'||String(id||'').startsWith('cece-samples-');
+const isRetiredSystemMeta=id=>id==='starter-styles-current'||id==='swift-bundled-materials-current'||String(id||'').startsWith('cece-samples-');
 const retiredSource=value=>String(value||'').startsWith('built-in-starter')||String(value||'').startsWith('built-in-style-');
 export const isRetiredSystemAsset=asset=>!!asset&&(String(asset.id||'').startsWith('cece-')||asset.seriesID==='cece-sample-series'||retiredSource(asset.sourceIdentifier));
 export const isRetiredSystemProject=project=>!!project&&/^cece-p\d+-project$/.test(String(project.id||''));
@@ -44,14 +44,14 @@ export function isCurrentBuiltinAsset(asset){return asset?.sourceIdentifier===CU
 
 export async function syncCurrentMaterials({database=defaultDB}={}){
   const [assets,series,projects,meta,trash]=await Promise.all(['assets','series','projects','meta','trash'].map(database.all));
-  const retiredAssets=assets.filter(isRetiredSystemAsset),retiredProjects=projects.filter(isRetiredSystemProject),retiredSeries=series.filter(isRetiredSystemSeries),retiredMeta=meta.filter(row=>retiredMeta(row.id)),retiredTrash=trash.filter(isRetiredSystemTrash);
+  const retiredAssets=assets.filter(isRetiredSystemAsset),retiredProjects=projects.filter(isRetiredSystemProject),retiredSeries=series.filter(isRetiredSystemSeries),retiredMetaRows=meta.filter(row=>isRetiredSystemMeta(row.id)),retiredTrash=trash.filter(isRetiredSystemTrash);
   const retiredBlobIDs=new Set(retiredAssets.flatMap(asset=>[asset.blobId,asset.originalBlobId,asset.originalCutoutBlobId,asset.photoBlobId]).filter(Boolean));
   const existing=new Map(assets.filter(asset=>!isRetiredSystemAsset(asset)).map(asset=>[asset.id,asset]));
   const desired=currentMaterialDefinitions.map(item=>currentAsset(item,existing.get(item.id)));
   const currentSeriesRecord=currentSeries(),seriesRecord=series.find(item=>item.id===CURRENT_MATERIAL_SERIES_ID);
   const needsSeries=!seriesRecord||seriesRecord.builtinRevision!==CURRENT_MATERIAL_REVISION;
   const needsAssets=desired.filter(record=>existing.get(record.id)?.builtinRevision!==CURRENT_MATERIAL_REVISION);
-  const changed=retiredAssets.length||retiredProjects.length||retiredSeries.length||retiredMeta.length||retiredTrash.length||needsSeries||needsAssets.length;
+  const changed=retiredAssets.length||retiredProjects.length||retiredSeries.length||retiredMetaRows.length||retiredTrash.length||needsSeries||needsAssets.length;
   if(changed){
     const transaction=database.confirmedTransaction||database.transaction;
     await transaction(['assets','blobs','series','projects','meta','trash'],tx=>{
@@ -59,12 +59,12 @@ export async function syncCurrentMaterials({database=defaultDB}={}){
       for(const id of retiredBlobIDs)tx.objectStore('blobs').delete(id);
       for(const row of retiredProjects)tx.objectStore('projects').delete(row.id);
       for(const row of retiredSeries)tx.objectStore('series').delete(row.id);
-      for(const row of retiredMeta)tx.objectStore('meta').delete(row.id);
+      for(const row of retiredMetaRows)tx.objectStore('meta').delete(row.id);
       for(const row of retiredTrash)tx.objectStore('trash').delete(row.id);
       if(needsSeries)tx.objectStore('series').put(currentSeriesRecord);
       for(const row of needsAssets)tx.objectStore('assets').put(row);
       tx.objectStore('meta').put({id:'current-materials',version:CURRENT_MATERIAL_REVISION,updatedAt:CREATED_AT});
     });
   }
-  return {retired:{assets:retiredAssets.length,projects:retiredProjects.length,series:retiredSeries.length,meta:retiredMeta.length,trash:retiredTrash.length,blobs:retiredBlobIDs.size},current:{assets:desired.length,series:1},changed:!!changed};
+  return {retired:{assets:retiredAssets.length,projects:retiredProjects.length,series:retiredSeries.length,meta:retiredMetaRows.length,trash:retiredTrash.length,blobs:retiredBlobIDs.size},current:{assets:desired.length,series:1},changed:!!changed};
 }
