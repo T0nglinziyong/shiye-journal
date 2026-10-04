@@ -43,14 +43,15 @@ function checkDraft(d,assets){
     const a=assets.find(a=>a.id===i.assetID);if(!a)throw Error('缺少素材 '+i.assetID);
     if(!i.generationBaseline)throw Error(a.title+' 缺少生成基线');
     const unit=i.materialUnitIndex??0;finite(unit,'实物单位',0,10000);if(!Number.isInteger(unit))throw Error('实物单位必须是整数');
-    const quantity=a.supply?.quantity??1;if(!Number.isFinite(quantity)||quantity<=0||(a.kind!=='tape'&&unit>=quantity))throw Error(a.title+' 超出实物数量');
+    const repeatableRoll=a.kind==='tape'&&a.supply?.kind==='tapeRoll'&&a.tapeRepeatMode==='repeatablePattern';
+    const quantity=a.supply?.quantity??1;if(!Number.isFinite(quantity)||quantity<=0||(!repeatableRoll&&unit>=quantity))throw Error(a.title+' 超出实物数量');
     const crop=cropOf(i);assertRect(crop);
     if(i.materialMask)materialMaskPoints(i.materialMask);validateDisplaySlices(i);
     const expectedW=crop.width*a.physicalWidthMM*scale(d),expectedH=crop.height*a.physicalHeightMM*scale(d);
     if(!Number.isFinite(expectedW)||!Number.isFinite(expectedH)||Math.abs(i.width-expectedW)>EPS||Math.abs(i.height-expectedH)>EPS)throw Error(a.title+' 实物尺寸与来源不一致');
-    if(a.kind!=='tape'){const group=a.id+':'+unit,used=usage.get(group)||[],region=sourceFootprint(i,a,materialMaskGeometry(i.materialMask));if(used.some(previous=>geometryArea(geometryIntersection(normalizeGeometry([[previous.outer,...previous.holes]]),normalizeGeometry([[region.outer,...region.holes]])))>1e-6))throw Error(a.title+' 同一实物单位的裁片重叠或重复使用');used.push(region);usage.set(group,used);} // Intersection tolerance is in source mm².
+    if(!repeatableRoll){const group=a.id+':'+unit,used=usage.get(group)||[],region=sourceFootprint(i,a,materialMaskGeometry(i.materialMask));if(used.some(previous=>geometryArea(geometryIntersection(normalizeGeometry([[previous.outer,...previous.holes]]),normalizeGeometry([[region.outer,...region.holes]])))>1e-6))throw Error(a.title+' 同一实物单位的裁片重叠或重复使用');used.push(region);usage.set(group,used);} // Intersection tolerance is in source mm².
   }
-  if(d.craftScraps?.length)buildMaterialLedger(d,assets);
+  buildMaterialLedger(d,assets);
 }
 function measure(t,options){
   if(typeof options.measureText==='function')return text=>options.measureText(text,t);
