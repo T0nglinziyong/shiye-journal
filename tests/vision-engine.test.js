@@ -31,6 +31,7 @@ test('edge enclosure keeps a pale rectangular card but excludes its offset shado
   }
   const result=await processVision(cv,'enclosures',{pixels,evidence,width,height,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
   const card=result.filter(r=>r.x<.3&&r.x+r.w>.65&&r.y<.28&&r.y+r.h>.7).sort((a,b)=>(b.structuralConfidence||0)-(a.structuralConfidence||0))[0];assert.ok(card,'card enclosure should be found');
+  assert.equal(card.edgeMethod,'edge-rectangle','complete physical card should be straightened from its outer enclosure');
   assert.ok(card.x>.22&&card.x<.28);assert.ok(card.x+card.w<.74,'offset shadow must not set the physical right edge');
 });
 
