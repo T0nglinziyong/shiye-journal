@@ -23,5 +23,17 @@ export async function segmentPaperMaterials({data,width:w,height:h},{smallestMM=
       width:w,height:h,smallestMM,paperWidthMM,paperHeightMM
     })
   ]);
-  return fuseRecognitionCandidates(instances,structural).sort((a,b)=>a.y-b.y||a.x-b.x).slice(0,48);
+  const fused=fuseRecognitionCandidates(instances,structural).sort((a,b)=>a.y-b.y||a.x-b.x).slice(0,48);
+  // Discovery and boundary recovery are deliberately separate. Global edge
+  // closure is useful for finding pale items, but it can join two nearby
+  // physical pieces through a cast shadow. Re-run edge recovery inside each
+  // already-discovered instance so the final cut follows that item's own
+  // paper-facing perimeter. Regular paper/card shapes are reconstructed from
+  // their supported rectangle/ellipse, while genuinely concave stickers keep
+  // the measured outer contour.
+  return fused.length?visionTask('refine-boundaries',{
+    candidates:fused,pixels:sourcePixels,backgroundConnected:evidence.backgroundConnected,
+    shadowLikelihood:evidence.shadowLikelihood,score:evidence.score,
+    width:w,height:h,smallestMM,paperWidthMM,paperHeightMM
+  }):fused;
 }
