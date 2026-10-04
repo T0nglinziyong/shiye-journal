@@ -101,6 +101,7 @@ function catalog(){
 }
 export const currentMaterialCatalog=catalog();
 export const CURRENT_MATERIAL_IDS=new Set(currentMaterialCatalog.assets.map(asset=>asset.id));
+export const isCurrentBuiltinMaterial=asset=>!!asset&&(asset.isBuiltinMaterial===true||CURRENT_MATERIAL_IDS.has(asset.id));
 const TRANSIENT_REPLACEMENT_IDS=new Set(Array.from({length:12},(_,i)=>fixedID(9005+i)));
 
 export async function syncCurrentMaterials({database=defaultDB}={}){
