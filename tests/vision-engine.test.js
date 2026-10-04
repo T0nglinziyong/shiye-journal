@@ -136,3 +136,40 @@ test('physical enclosure geometry stays stable when analysis resolution changes'
   const a=await run(1),b=await run(2);assert.ok(a&&b,JSON.stringify({a,b}));
   for(const key of ['x','y','w','h'])assert.ok(Math.abs(a[key]-b[key])<.035,key+': '+a[key]+' vs '+b[key]);
 });
+
+
+test('fragmented boundary reconstruction closes short physical gaps without knowing the carrier shape',async()=>{
+  const cv=await cvModule,width=220,height=180,pixels=new Uint8ClampedArray(width*height*4),evidence=new Uint8Array(width*height),backgroundConnected=new Uint8Array(width*height),shadowLikelihood=new Uint8Array(width*height),score=new Uint8Array(width*height);
+  const left=34,top=24,right=186,bottom=156;
+  for(let y=0;y<height;y++)for(let x=0;x<width;x++){
+    const at=y*width+x,p=at*4,inside=x>=left&&x<=right&&y>=top&&y<=bottom;
+    const border=inside&&(x-left<3||right-x<3||y-top<3||bottom-y<3);
+    const gap=border&&((y<=top+2&&x>88&&x<119)||(x>=right-2&&y>76&&y<104));
+    const patch1=inside&&x>55&&x<83&&y>63&&y<101,patch2=inside&&x>132&&x<162&&y>82&&y<122;
+    const color=!inside?[246,246,246]:gap?[244,244,242]:border?[145,145,145]:patch1?[88,150,198]:patch2?[205,116,145]:[238,240,236];
+    pixels.set([...color,255],p);backgroundConnected[at]=inside?0:1;
+    if((border&&!gap)||patch1||patch2){evidence[at]=1;score[at]=105;}
+  }
+  const instances=[
+    {x:55/width,y:63/height,w:28/width,h:38/height},
+    {x:132/width,y:82/height,w:30/width,h:40/height}
+  ];
+  const out=await processVision(cv,'boundary-reconstruction',{pixels,evidence,backgroundConnected,shadowLikelihood,score,instances,width,height,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
+  const carrier=out.filter(r=>r.matchedInstances>=2).sort((a,b)=>b.reconstructionScore-a.reconstructionScore)[0];
+  assert.ok(carrier,'short broken perimeter should reconstruct one physical carrier');
+  assert.ok(carrier.x<.20&&carrier.x+carrier.w>.82&&carrier.y<.18&&carrier.y+carrier.h>.84,JSON.stringify(carrier));
+  assert.ok(carrier.edgeSupportRatio>.42);assert.ok(carrier.closureScaleMM<=3.8);
+});
+
+test('fragmented boundary reconstruction does not bridge distant independent carriers',async()=>{
+  const cv=await cvModule,width=240,height=160,pixels=new Uint8ClampedArray(width*height*4),evidence=new Uint8Array(width*height),backgroundConnected=new Uint8Array(width*height),shadowLikelihood=new Uint8Array(width*height),score=new Uint8Array(width*height);
+  for(let y=0;y<height;y++)for(let x=0;x<width;x++){
+    const at=y*width+x,p=at*4,a=x>=20&&x<85&&y>=35&&y<125,b=x>=155&&x<220&&y>=30&&y<120;
+    const edge=(a&&(x<23||x>=82||y<38||y>=122))||(b&&(x<158||x>=217||y<33||y>=117));
+    const color=a?[195,220,206]:b?[218,184,202]:[246,246,246];pixels.set([...color,255],p);backgroundConnected[at]=a||b?0:1;
+    if(edge){evidence[at]=1;score[at]=100;}
+  }
+  const instances=[{x:28/width,y:45/height,w:45/width,h:65/height},{x:165/width,y:40/height,w:45/width,h:65/height}];
+  const out=await processVision(cv,'boundary-reconstruction',{pixels,evidence,backgroundConnected,shadowLikelihood,score,instances,width,height,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
+  assert.equal(out.some(r=>r.matchedInstances>=2),false,'large page gap must not be closed into one material');
+});
