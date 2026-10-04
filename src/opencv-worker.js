@@ -63,6 +63,43 @@ export async function processVision(cv,operation,p){
       const local=own(filled.roi(new cv.Rect(x,y,w,h))),packed=own(new cv.Mat());local.copyTo(packed);
       return {x:x/p.width,y:y/p.height,w:w/p.width,h:h/p.height,pixels:area,edgeMethod,mask:{width:w,height:h,alpha:new Uint8Array(packed.data),polygons:[points]}};
     }
+    if(operation==='enclosures'){
+      const src=own(cv.matFromArray(p.height,p.width,cv.CV_8UC4,p.pixels)),gray=own(new cv.Mat()),blurred=own(new cv.Mat()),edges=own(new cv.Mat()),closed=own(new cv.Mat()),rgb=own(new cv.Mat()),lab=own(new cv.Mat()),channels=own(new cv.MatVector()),aBlur=own(new cv.Mat()),bBlur=own(new cv.Mat()),aEdge=own(new cv.Mat()),bEdge=own(new cv.Mat());
+      cv.cvtColor(src,gray,cv.COLOR_RGBA2GRAY);cv.GaussianBlur(gray,blurred,new cv.Size(5,5),0);cv.Canny(blurred,edges,20,65);
+      // Near-white paper, pale coloured material and a grey cast shadow may
+      // have similar luminance. Add Lab chroma edges so physical borders stay
+      // visible even when grayscale Canny prefers the outer shadow boundary.
+      cv.cvtColor(src,rgb,cv.COLOR_RGBA2RGB);cv.cvtColor(rgb,lab,cv.COLOR_RGB2Lab);cv.split(lab,channels);
+      const aChannel=own(channels.get(1)),bChannel=own(channels.get(2));cv.GaussianBlur(aChannel,aBlur,new cv.Size(3,3),0);cv.GaussianBlur(bChannel,bBlur,new cv.Size(3,3),0);cv.Canny(aBlur,aEdge,4,14);cv.Canny(bBlur,bEdge,4,14);cv.bitwise_or(edges,aEdge,edges);cv.bitwise_or(edges,bEdge,edges);
+      const closeKernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(5,5))),growKernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(3,3)));
+      cv.morphologyEx(edges,closed,cv.MORPH_CLOSE,closeKernel,new cv.Point(-1,-1),2);cv.dilate(closed,closed,growKernel);
+      const contours=own(new cv.MatVector()),hierarchy=own(new cv.Mat());cv.findContours(closed,contours,hierarchy,cv.RETR_LIST,cv.CHAIN_APPROX_SIMPLE);
+      const out=[],w=p.width,h=p.height,minArea=Math.max(24,(p.smallestMM/p.paperWidthMM*w)*(p.smallestMM/p.paperHeightMM*h)*.18);
+      for(let i=0;i<contours.size();i++){
+        const contour=own(contours.get(i)),area=cv.contourArea(contour);if(area<minArea||area>w*h*.55)continue;
+        const b=cv.boundingRect(contour),widthMM=b.width/w*p.paperWidthMM,heightMM=b.height/h*p.paperHeightMM;
+        if(widthMM<p.smallestMM||heightMM<p.smallestMM||b.width>w*.94||b.height>h*.94)continue;
+        if(b.x<2||b.y<2||b.x+b.width>w-2||b.y+b.height>h-2)continue;
+        const fill=area/Math.max(1,b.width*b.height);if(fill<.16)continue;
+        const filled=own(cv.Mat.zeros(h,w,cv.CV_8UC1)),one=own(new cv.MatVector());one.push_back(contour);cv.drawContours(filled,one,-1,new cv.Scalar(255),cv.FILLED);
+        let signal=0,inside=0;
+        for(let yy=b.y;yy<b.y+b.height;yy++)for(let xx=b.x;xx<b.x+b.width;xx++){const at=yy*w+xx;if(!filled.data[at])continue;inside++;if(p.evidence?.[at])signal++;}
+        if(signal<Math.max(10,inside*.003))continue;
+        let boundaryScore=0,boundaryShadow=0,boundarySamples=0;
+        for(let j=0;j<contour.rows;j++){
+          const xx=contour.data32S[j*2],yy=contour.data32S[j*2+1];
+          for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const sx=xx+dx,sy=yy+dy;if(sx<0||sx>=w||sy<0||sy>=h)continue;const at=sy*w+sx;boundaryScore+=p.score?.[at]||0;boundaryShadow+=p.shadowLikelihood?.[at]||0;boundarySamples++;}
+        }
+        const edgeStrength=boundarySamples?boundaryScore/boundarySamples:0,shadowFraction=boundarySamples?boundaryShadow/boundarySamples:0;
+        if(shadowFraction>.58&&edgeStrength<38)continue;
+        const x=Math.max(0,b.x-2),y=Math.max(0,b.y-2),rw=Math.min(w,b.x+b.width+2)-x,rh=Math.min(h,b.y+b.height+2)-y,local=own(filled.roi(new cv.Rect(x,y,rw,rh))),packed=own(new cv.Mat());local.copyTo(packed);
+        const poly=own(new cv.Mat());cv.approxPolyDP(contour,poly,Math.max(.7,cv.arcLength(contour,true)*.0015),true);
+        const points=Array.from({length:poly.rows},(_,j)=>[poly.data32S[j*2]-x,poly.data32S[j*2+1]-y]);
+        const confidence=Math.min(1,.24+fill*.20+Math.min(signal/Math.max(inside*.02,1),1)*.18+Math.min(edgeStrength/75,1)*.28+(1-shadowFraction)*.10);
+        out.push({x:x/w,y:y/h,w:rw/w,h:rh/h,pixels:inside,edgeMethod:'edge-enclosure',structuralConfidence:confidence,boundaryEdgeStrength:edgeStrength,boundaryShadowFraction:shadowFraction,mask:{width:rw,height:rh,alpha:new Uint8Array(packed.data),polygons:[points]}});
+      }
+      return out.sort((a,b)=>(b.structuralConfidence||0)-(a.structuralConfidence||0)||a.y-b.y||a.x-b.x).slice(0,48);
+    }
     if(operation==='components'){
       const src=own(cv.matFromArray(p.height,p.width,cv.CV_8UC1,p.mask)),closed=own(new cv.Mat()),kernel=own(cv.getStructuringElement(cv.MORPH_CROSS,new cv.Size(3,3))),labels=own(new cv.Mat()),stats=own(new cv.Mat()),centroids=own(new cv.Mat());cv.morphologyEx(src,closed,cv.MORPH_CLOSE,kernel);const count=cv.connectedComponentsWithStats(closed,labels,stats,centroids,4,cv.CV_32S),result=[],w=p.width,h=p.height,minArea=Math.max(20,(p.smallestMM/p.paperWidthMM*w)*(p.smallestMM/p.paperHeightMM*h)*.12),rgba=p.pixels?own(cv.matFromArray(h,w,cv.CV_8UC4,p.pixels)):null;
       for(let label=1;label<count;label++){
