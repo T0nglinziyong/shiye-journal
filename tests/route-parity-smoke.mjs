@@ -13,7 +13,7 @@ stubCanvas(win);
 Object.defineProperty(win.document,'fonts',{value:{load:async()=>[]},configurable:true});
 win.indexedDB=indexedDB;win.IDBKeyRange=IDBKeyRange;
 win.structuredClone=structuredClone;
-win.fetch=async()=>({ok:true,blob:async()=>new Blob(['image'],{type:'image/png'}),json:async()=>JSON.parse(await readFile(new URL('cece/collection.json',root),'utf8'))});
+win.fetch=async()=>({ok:true,blob:async()=>new Blob(['image'],{type:'image/png'}),json:async()=>({})});
 win.URL.createObjectURL=()=>`blob:test-${Math.random()}`;win.URL.revokeObjectURL=()=>{};
 win.eval(await builtApp(root,html,win));
 await new Promise(resolve=>setTimeout(resolve,500));
