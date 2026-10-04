@@ -31,7 +31,7 @@ const strongReconstruction=s=>s.boundaryReconstruction===true
 export function fuseRecognitionCandidates(instances,structuralCandidates){
   const base=instances.map(candidate=>({candidate,used:false})),accepted=[];
   const structures=[...structuralCandidates]
-    .filter(s=>(s.paperContactRatio??0)>=.70)
+    .filter(s=>(s.paperContactRatio??0)>=(s.boundaryReconstruction===true?.48:.70))
     .sort((a,b)=>area(b)-area(a));
 
   for(const structural of structures){
