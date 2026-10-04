@@ -4,18 +4,18 @@ import {assetSourceRevision,assertProtectedRegions} from './material-anatomy.js'
 import {normalizeGeometry,rectangleGeometry,geometryArea,geometryUnion,geometryIntersection,geometryDifference,assertSubset,AREA_EPSILON} from './craft-topology.js';
 
 export const pieceKey=item=>item.creativePieceID||item.agentKey||item.key||item.id;
-export function buildMaterialLedger(draft,assets,{strictTape=false}={}){
+export function buildMaterialLedger(draft,assets){
  const catalog=new Map(assets.map(asset=>[asset.id,asset])),groups=new Map(),rolls=new Map();
  for(const item of draft.items||[]){
   const asset=catalog.get(item.assetID);craftAssert(asset,'MISSING_SOURCE','源素材不存在',{assetId:item.assetID,pieceId:pieceKey(item)});
   const unit=item.materialUnitIndex??0;
   craftAssert(Number.isInteger(unit)&&unit>=0,'INVALID_UNIT','素材库存单位无效',{assetId:asset.id});
   const isRoll=asset.kind==='tape'&&asset.supply?.kind==='tapeRoll'&&asset.tapeRepeatMode==='repeatablePattern';
-  if(strictTape||asset.kind!=='tape')craftAssert(isRoll||unit<(asset.supply?.quantity??1),'STOCK_EXCEEDED','裁片超出实际素材数量',{assetId:asset.id});
+  craftAssert(isRoll||unit<(asset.supply?.quantity??1),'STOCK_EXCEEDED','裁片超出实际素材数量',{assetId:asset.id});
   const geometry=itemSourceGeometry(item,asset),source=rectangleGeometry(0,0,asset.physicalWidthMM,asset.physicalHeightMM);
   assertSubset(geometry,source,{assetId:asset.id,pieceId:pieceKey(item)});
   assertProtectedRegions(asset,geometry);
-  if(strictTape&&isRoll){
+  if(isRoll){
    const remaining=asset.supply.availableLengthMM,period=asset.tapeRepeatPeriodMM;
    craftAssert(Number.isFinite(remaining)&&remaining>0&&Number.isFinite(period)&&period>0&&period<=Math.max(asset.physicalWidthMM,asset.physicalHeightMM),'UNVERIFIED_TAPE','整卷胶带缺少真实剩余长度或已确认周期',{assetId:asset.id});
    const crop=item.cropRect||{width:1,height:1};
@@ -26,7 +26,6 @@ export function buildMaterialLedger(draft,assets,{strictTape=false}={}){
    roll.pieces.push({pieceId:pieceKey(item),lengthMM:length,offsetMM:roll.usedLengthMM});roll.usedLengthMM+=length;
    craftAssert(roll.usedLengthMM<=remaining+1e-6,'INSUFFICIENT_TAPE_LENGTH','方案使用的胶带超过实际剩余长度',{assetId:asset.id});rolls.set(asset.id,roll);continue;
   }
-  if(asset.kind==='tape'&&!strictTape)continue; // exact legacy behavior stays in the v3 adapter
   const groupId=JSON.stringify([asset.id,unit]);
   const group=groups.get(groupId)||{assetId:asset.id,unit,sourceRevision:assetSourceRevision(asset),sourceAreaMM2:geometryArea(source),source,allocations:[]};
   for(const prior of group.allocations)craftAssert(geometryArea(geometryIntersection(prior.geometry,geometry))<=AREA_EPSILON,'SOURCE_REGION_OVERLAP','同一实物单位的裁片重叠或重复使用',{assetId:asset.id,pieceId:pieceKey(item),constraint:prior.pieceId});
