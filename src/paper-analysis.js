@@ -24,6 +24,9 @@ export async function segmentPaperMaterials({data,width:w,height:h},{smallestMM=
     })
   ]);
   const fused=fuseRecognitionCandidates(instances,structural);
-  const completed=fused.length?await visionTask('complete-boundaries',{pixels:sourcePixels,width:w,height:h,candidates:fused}):fused;
+  const completed=fused.length?await visionTask('complete-boundaries',{
+    pixels:sourcePixels,width:w,height:h,candidates:fused,smallestMM,paperWidthMM,paperHeightMM,
+    evidence:evidence.evidence,backgroundConnected:evidence.backgroundConnected,shadowLikelihood:evidence.shadowLikelihood
+  }):fused;
   return completed.sort((a,b)=>a.y-b.y||a.x-b.x).slice(0,48);
 }
