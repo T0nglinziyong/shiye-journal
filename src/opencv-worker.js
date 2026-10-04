@@ -98,8 +98,27 @@ export async function processVision(cv,operation,p){
             if(kept>=area*.45&&kept<=area*1.15){cv.findContours(local,contours,hierarchy,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_SIMPLE);alpha.setTo(new cv.Scalar(0));cv.drawContours(alpha,contours,-1,new cv.Scalar(255),cv.FILLED);}
           }
         }
+        // A paper/card that still occupies most of its own bounding rectangle
+        // may have a pale corner leaked to page background. Recover only that
+        // high-fill class; circles (pi/4 ~= .785) and genuinely irregular
+        // stickers remain below the threshold and keep their real contour.
+        let recoveredRectangle=null;
+        if(area/(bw*bh)>=.815&&contours.size()){
+          let largest=null,largestArea=0;
+          if(!recoveredRectangle)for(let j=0;j<contours.size();j++){const contour=contours.get(j),candidateArea=cv.contourArea(contour);if(candidateArea>largestArea){largest?.delete?.();largest=contour;largestArea=candidateArea;}else contour.delete();}
+          if(largest){
+            const rectangle=cv.minAreaRect(largest),rectArea=Math.max(1,rectangle.size.width*rectangle.size.height);
+            if(largestArea/rectArea>=.72){
+              const box=cv.boxPoints(rectangle),rectContour=own(cv.matFromArray(4,1,cv.CV_32SC2,box.flatMap(point=>[Math.round(point.x),Math.round(point.y)]))),one=own(new cv.MatVector());
+              alpha.setTo(new cv.Scalar(0));one.push_back(rectContour);cv.drawContours(alpha,one,-1,new cv.Scalar(255),cv.FILLED);
+              recoveredRectangle=box.map(point=>[point.x,point.y]);
+            }
+            largest.delete();
+          }
+        }
         // Preserve concave stickers; do not replace their boundary by a hull.
-        const polygons=[];let edgeMethod=rgba?(p.shadowLikelihood?'graphcut-lab-shadow-aware':'graphcut-contour-smoothed'):'contour-smoothed';
+        const polygons=[];let edgeMethod=recoveredRectangle?'rectangular-reconstruction':rgba?(p.shadowLikelihood?'graphcut-lab-shadow-aware':'graphcut-contour-smoothed'):'contour-smoothed';
+        if(recoveredRectangle)polygons.push(recoveredRectangle);
         for(let j=0;j<contours.size();j++){
           const contour=own(contours.get(j));if(cv.contourArea(contour)<4)continue;
           const polygon=own(new cv.Mat()),rect=own(new cv.Mat());
