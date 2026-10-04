@@ -104,6 +104,88 @@ export async function processVision(cv,operation,p){
       }
       return out.sort((a,b)=>(b.structuralConfidence||0)-(a.structuralConfidence||0)||a.y-b.y||a.x-b.x).slice(0,48);
     }
+    if(operation==='refine-boundaries'){
+      const width=p.width,height=p.height,rgba=own(cv.matFromArray(height,width,cv.CV_8UC4,p.pixels)),result=[];
+      const maskIoU=(a,b)=>{let inter=0,union=0;for(let i=0;i<a.data.length;i++){const aa=!!a.data[i],bb=!!b.data[i];if(aa&&bb)inter++;if(aa||bb)union++;}return union?inter/union:0;};
+      for(const original of p.candidates||[]){
+        const checkpoint=resources.length;
+        try{
+          const bx=Math.max(0,Math.round(original.x*width)),by=Math.max(0,Math.round(original.y*height));
+          const bw=Math.max(1,Math.min(width-bx,Math.round(original.w*width))),bh=Math.max(1,Math.min(height-by,Math.round(original.h*height)));
+          const pad=Math.max(5,Math.min(14,Math.round(Math.min(bw,bh)*.035))),x=Math.max(0,bx-pad),y=Math.max(0,by-pad);
+          const rw=Math.min(width,bx+bw+pad)-x,rh=Math.min(height,by+bh+pad)-y;
+          if(rw<8||rh<8){result.push(original);continue;}
+          const imageROI=own(rgba.roi(new cv.Rect(x,y,rw,rh))),rough=own(cv.Mat.zeros(rh,rw,cv.CV_8UC1));
+          if(original.mask?.alpha?.length&&original.mask.width&&original.mask.height){
+            const sourceMask=own(cv.matFromArray(original.mask.height,original.mask.width,cv.CV_8UC1,original.mask.alpha)),resized=own(new cv.Mat());
+            cv.resize(sourceMask,resized,new cv.Size(bw,bh),0,0,cv.INTER_NEAREST);
+            const target=own(rough.roi(new cv.Rect(bx-x,by-y,bw,bh)));resized.copyTo(target);
+          }else{
+            const target=own(rough.roi(new cv.Rect(bx-x,by-y,bw,bh)));target.setTo(new cv.Scalar(255));
+          }
+          const roughArea=cv.countNonZero(rough);if(roughArea<16){result.push(original);continue;}
+          const roughMoments=cv.moments(rough,true),center=new cv.Point(
+            roughMoments.m00?roughMoments.m10/roughMoments.m00:bx-x+bw/2,
+            roughMoments.m00?roughMoments.m01/roughMoments.m00:by-y+bh/2
+          );
+
+          const gray=own(new cv.Mat()),blurred=own(new cv.Mat()),edges=own(new cv.Mat()),rgb=own(new cv.Mat()),lab=own(new cv.Mat()),channels=own(new cv.MatVector()),aBlur=own(new cv.Mat()),bBlur=own(new cv.Mat()),aEdge=own(new cv.Mat()),bEdge=own(new cv.Mat());
+          cv.cvtColor(imageROI,gray,cv.COLOR_RGBA2GRAY);cv.GaussianBlur(gray,blurred,new cv.Size(3,3),0);cv.Canny(blurred,edges,15,50);
+          cv.cvtColor(imageROI,rgb,cv.COLOR_RGBA2RGB);cv.cvtColor(rgb,lab,cv.COLOR_RGB2Lab);cv.split(lab,channels);
+          const aChannel=own(channels.get(1)),bChannel=own(channels.get(2));cv.GaussianBlur(aChannel,aBlur,new cv.Size(3,3),0);cv.GaussianBlur(bChannel,bBlur,new cv.Size(3,3),0);cv.Canny(aBlur,aEdge,3,12);cv.Canny(bBlur,bEdge,3,12);cv.bitwise_or(edges,aEdge,edges);cv.bitwise_or(edges,bEdge,edges);
+          const closeKernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(3,3)));cv.morphologyEx(edges,edges,cv.MORPH_CLOSE,closeKernel);
+          const contours=own(new cv.MatVector()),hierarchy=own(new cv.Mat());cv.findContours(edges,contours,hierarchy,cv.RETR_LIST,cv.CHAIN_APPROX_NONE);
+
+          let best=null;
+          for(let i=0;i<contours.size();i++){
+            const contour=own(contours.get(i)),area=cv.contourArea(contour);if(area<roughArea*.45||area>roughArea*2.35)continue;
+            const b=cv.boundingRect(contour);if(b.width<8||b.height<8||b.x<=1||b.y<=1||b.x+b.width>=rw-1||b.y+b.height>=rh-1)continue;
+            if(cv.pointPolygonTest(contour,center,false)<0)continue;
+            const filled=own(cv.Mat.zeros(rh,rw,cv.CV_8UC1)),one=own(new cv.MatVector());one.push_back(contour);cv.drawContours(filled,one,-1,new cv.Scalar(255),cv.FILLED);
+            const overlap=own(new cv.Mat());cv.bitwise_and(filled,rough,overlap);const shared=cv.countNonZero(overlap),containment=shared/roughArea,precision=shared/Math.max(1,area);
+            if(containment<.52||precision<.30)continue;
+            const ring=own(new cv.Mat()),ringKernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(9,9)));cv.dilate(filled,ring,ringKernel);cv.subtract(ring,filled,ring);
+            let ringCount=0,paperContact=0;
+            for(let yy=0;yy<rh;yy++)for(let xx=0;xx<rw;xx++)if(ring.data[yy*rw+xx]){
+              const global=(y+yy)*width+x+xx;ringCount++;if(p.backgroundConnected?.[global])paperContact++;
+            }
+            const paperContactRatio=ringCount?paperContact/ringCount:0;
+            let boundaryStrength=0,boundaryShadow=0,boundarySamples=0;
+            for(let j=0;j<contour.rows;j+=Math.max(1,Math.floor(contour.rows/512))){
+              const xx=contour.data32S[j*2],yy=contour.data32S[j*2+1],global=(y+yy)*width+x+xx;
+              boundaryStrength+=p.score?.[global]||0;boundaryShadow+=p.shadowLikelihood?.[global]||0;boundarySamples++;
+            }
+            boundaryStrength=boundarySamples?boundaryStrength/boundarySamples:0;const shadowFraction=boundarySamples?boundaryShadow/boundarySamples:0;
+            if(paperContactRatio<.28&&boundaryStrength<28)continue;
+            if(shadowFraction>.62&&boundaryStrength<42)continue;
+            const areaSimilarity=Math.min(area/roughArea,roughArea/area),candidateScore=containment*.34+precision*.16+paperContactRatio*.24+areaSimilarity*.16+(1-shadowFraction)*.06+Math.min(boundaryStrength/80,1)*.04;
+            if(!best||candidateScore>best.score)best={contour,area,score:candidateScore,paperContactRatio,boundaryStrength,shadowFraction};
+          }
+          if(!best||best.score<.48){result.push(original);continue;}
+
+          const physical=best.contour,physicalMask=own(cv.Mat.zeros(rh,rw,cv.CV_8UC1)),physicalVec=own(new cv.MatVector());physicalVec.push_back(physical);cv.drawContours(physicalMask,physicalVec,-1,new cv.Scalar(255),cv.FILLED);
+          const rectangle=cv.minAreaRect(physical),rectContour=own(cv.matFromArray(4,1,cv.CV_32SC2,cv.boxPoints(rectangle).flatMap(point=>[Math.round(point.x),Math.round(point.y)]))),rectMask=own(cv.Mat.zeros(rh,rw,cv.CV_8UC1)),rectVec=own(new cv.MatVector());rectVec.push_back(rectContour);cv.drawContours(rectMask,rectVec,-1,new cv.Scalar(255),cv.FILLED);
+          const rectIoU=maskIoU(physicalMask,rectMask),coarse=own(new cv.Mat());cv.approxPolyDP(physical,coarse,Math.max(1,cv.arcLength(physical,true)*.015),true);
+          let finalMask=physicalMask,edgeMethod='local-contour',shapeIoU=1;
+          if(physical.rows>=5&&typeof cv.fitEllipse==='function'){
+            const ellipse=cv.fitEllipse(physical),ellipseMask=own(cv.Mat.zeros(rh,rw,cv.CV_8UC1));
+            cv.ellipse(ellipseMask,new cv.Point(Math.round(ellipse.center.x),Math.round(ellipse.center.y)),new cv.Size(Math.max(1,Math.round(ellipse.size.width/2)),Math.max(1,Math.round(ellipse.size.height/2))),ellipse.angle,0,360,new cv.Scalar(255),cv.FILLED);
+            const ellipseIoU=maskIoU(physicalMask,ellipseMask);
+            if(ellipseIoU>=.91&&ellipseIoU>=rectIoU+.06){finalMask=ellipseMask;edgeMethod='local-ellipse';shapeIoU=ellipseIoU;}
+            else if(rectIoU>=.82&&coarse.rows<=8){finalMask=rectMask;edgeMethod='local-rectangle';shapeIoU=rectIoU;}
+          }else if(rectIoU>=.82&&coarse.rows<=8){finalMask=rectMask;edgeMethod='local-rectangle';shapeIoU=rectIoU;}
+
+          const finalContours=own(new cv.MatVector()),finalHierarchy=own(new cv.Mat());cv.findContours(finalMask,finalContours,finalHierarchy,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_SIMPLE);
+          let finalBoundary=null,finalArea=0;for(let i=0;i<finalContours.size();i++){const c=own(finalContours.get(i)),a=cv.contourArea(c);if(a>finalArea){finalArea=a;finalBoundary=c;}}
+          if(!finalBoundary||finalArea<16){result.push(original);continue;}
+          const bounds=cv.boundingRect(finalBoundary),fx=x+bounds.x,fy=y+bounds.y,fw=bounds.width,fh=bounds.height,local=own(finalMask.roi(new cv.Rect(bounds.x,bounds.y,fw,fh))),packed=own(new cv.Mat());local.copyTo(packed);
+          const poly=own(new cv.Mat());cv.approxPolyDP(finalBoundary,poly,Math.max(.7,cv.arcLength(finalBoundary,true)*.0015),true);
+          const points=Array.from({length:poly.rows},(_,j)=>[poly.data32S[j*2]-bounds.x,poly.data32S[j*2+1]-bounds.y]);
+          result.push({...original,x:fx/width,y:fy/height,w:fw/width,h:fh/height,pixels:finalArea,edgeMethod,boundaryRefined:true,boundaryConfidence:best.score,boundaryPaperContact:best.paperContactRatio,boundaryShadowFraction:best.shadowFraction,shapeIoU,mask:{width:fw,height:fh,alpha:new Uint8Array(packed.data),polygons:[points]}});
+        }finally{while(resources.length>checkpoint)resources.pop().delete();}
+      }
+      return result;
+    }
     if(operation==='instances'){
       const w=p.width,h=p.height,src=own(cv.matFromArray(h,w,cv.CV_8UC1,p.mask)),closed=own(new cv.Mat()),kernel=own(cv.getStructuringElement(cv.MORPH_CROSS,new cv.Size(3,3)));
       cv.morphologyEx(src,closed,cv.MORPH_CLOSE,kernel);
