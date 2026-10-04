@@ -122,16 +122,16 @@ test('clean high-contact rectangular enclosure is represented by fitted straight
 test('physical enclosure geometry stays stable when analysis resolution changes',async()=>{
   const cv=await cvModule;
   const run=async scale=>{
-    const width=180*scale,height=240*scale,pixels=new Uint8ClampedArray(width*height*4),evidence=new Uint8Array(width*height),backgroundConnected=new Uint8Array(width*height),shadowLikelihood=new Uint8Array(width*height),score=new Uint8Array(width*height);
-    const cx=.56*width,cy=.50*height,rx=.20*width,ry=.27*height;
+    const width=220*scale,height=260*scale,pixels=new Uint8ClampedArray(width*height*4),evidence=new Uint8Array(width*height),backgroundConnected=new Uint8Array(width*height),shadowLikelihood=new Uint8Array(width*height),score=new Uint8Array(width*height);
+    const cx=.51*width,cy=.51*height,rx=.245*width,ry=.338*height;
     for(let y=0;y<height;y++)for(let x=0;x<width;x++){
-      const at=y*width+x,p=at*4,n=((x-cx)/rx)**2+((y-cy)/ry)**2,inside=n<=1,border=inside&&Math.abs(n-1)<.035*scale;
+      const at=y*width+x,p=at*4,n=((x-cx)/rx)**2+((y-cy)/ry)**2,inside=n<=1,border=inside&&Math.abs(n-1)<.05;
       const value=inside?border?150:232:246;pixels.set([value,value,value,255],p);backgroundConnected[at]=inside?0:1;
-      if(border||inside&&Math.abs(x-cx)<8*scale){evidence[at]=1;score[at]=105;}
+      if(border||inside&&Math.abs(x-cx)<18*scale){evidence[at]=1;score[at]=105;}
     }
     const out=await processVision(cv,'enclosures',{pixels,evidence,backgroundConnected,shadowLikelihood,score,width,height,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
     return out.sort((a,b)=>b.pixels-a.pixels)[0];
   };
-  const a=await run(1),b=await run(2);assert.ok(a&&b);
+  const a=await run(1),b=await run(2);assert.ok(a&&b,JSON.stringify({a,b}));
   for(const key of ['x','y','w','h'])assert.ok(Math.abs(a[key]-b[key])<.035,key+': '+a[key]+' vs '+b[key]);
 });
