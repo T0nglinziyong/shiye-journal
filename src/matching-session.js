@@ -11,7 +11,7 @@ const KEYS=['basket','coreIDs','excludedAssetIDs','matchCore','matchRatio','matc
 export function matchingSnapshot(state,variants){return {id:ID,context:Object.fromEntries(KEYS.map(k=>[k,structuredClone(state[k])])),variants:structuredClone(variants)};}
 export function restoreMatchingSession(record,state){
  if(!record)return [];
- for(const key of KEYS)if(record.context?.[key]!==undefined)state[key]=record.context[key];
+ for(const key of KEYS)if(record.context?.[key]!==undefined)state[key]=key==='matchProcessing'&&record.context[key]==='AI 自主加工'?'不预设':record.context[key];
  return (Array.isArray(record.variants)?record.variants:[])
   .filter(v=>v&&typeof v.id==='string'&&usableProjectSnapshot(v.project))
   .map(v=>v.status==='running'?{...v,status:'interrupted',progress:'页面曾关闭，生成已中断；已保留收到的完整步骤。'}:v);
