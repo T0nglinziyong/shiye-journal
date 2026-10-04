@@ -32,7 +32,7 @@ export function craftPermission(options, asset) {
   const selected = options.assetProcessing?.[asset.id] || options.processing;
   if (!selected) throw Error('缺少当前素材加工权限');
   if (!['不预设','AI 自主加工'].includes(selected)) return selected;
-  return ['paper', 'tape'].includes(asset.kind) ? '自由拆解' : '少量裁剪';
+  return '自由拆解';
 }
 
 export function buildCraftEdge(operation, widthMM, heightMM) {
