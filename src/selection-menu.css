@@ -17,3 +17,18 @@
 .selection-submenu .selection-action-chevron { grid-column:3; grid-row:1; justify-self:end; margin:0; }
 .selection-more-menu button:focus-visible,
 .selection-submenu button:focus-visible { outline:2px solid currentColor; outline-offset:-3px; }
+
+.series-choice-submenu{
+  max-height:min(62vh,520px)!important;
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
+}
+.series-choice-submenu>.selection-submenu-pinned{
+  position:sticky;
+  top:0;
+  z-index:2;
+  background:#fffefa;
+  border-bottom:1px solid #e1e7df;
+  box-shadow:0 6px 12px #233f2b12;
+}
