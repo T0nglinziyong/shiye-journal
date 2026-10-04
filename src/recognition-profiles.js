@@ -18,8 +18,12 @@ export const recognitionOptions = recognitionStrategies.map(({id, label}) => [id
 export const recognitionModeAllowed = value => strategiesByID.has(value);
 
 export function recognitionProfile(value='auto', {maxTouchPoints=globalThis.navigator?.maxTouchPoints||0, coarsePointer=globalThis.matchMedia?.('(pointer:coarse)').matches||false}={}) {
+  // Auto is quality-first on all supported devices. The explicit fast
+  // profile remains available when a user prefers latency over small/pale
+  // boundary recall. A 600px default was the main reason iPad/phone imports
+  // saw weaker physical edges than desktop on the same corrected A4.
   const mode = value !== 'auto' && strategiesByID.has(value)
-    ? value : maxTouchPoints > 0 && coarsePointer ? 'fast' : 'standard';
+    ? value : 'standard';
   const {analysisMaxDimension, refineCandidates} = strategiesByID.get(mode);
   return {mode, analysisMaxDimension, refineCandidates};
 }
