@@ -28,6 +28,25 @@ test('GrabCut treats attached low-chroma shadow as background without clipping c
   assert.equal(at(70,80),255);assert.equal(at(118,80),0);assert.equal(at(70,146),0);assert.deepEqual(pixels,before);
   assert.ok(a.polygons[0].length<=8,'straight paper must not have a staircase contour');
 });
+
+test('high-fill pale paper recovers a complete rectangle but a circular sticker is never squared',async()=>{
+  const cv=await cvModule,width=160,height=160,pixels=new Uint8ClampedArray(width*height*4),mask=new Uint8Array(width*height),evidence=new Uint8Array(width*height),seeds=new Uint8Array(width*height);
+  for(let y=0;y<height;y++)for(let x=0;x<width;x++){const p=(y*width+x)*4;pixels.set([242,242,242,255],p);}
+  for(let y=30;y<125;y++)for(let x=35;x<130;x++){
+    if(x>105&&y<55)continue;
+    const i=y*width+x,p=i*4;pixels.set([218,225,205,255],p);mask[i]=1;evidence[i]=seeds[i]=1;
+  }
+  const rectangular=await processVision(cv,'components',{mask,evidence,foregroundSeeds:seeds,pixels,width,height,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
+  assert.equal(rectangular.length,1);assert.equal(rectangular[0].edgeMethod,'rectangular-reconstruction');
+  const rr=rectangular[0],rx=Math.round(rr.x*width),ry=Math.round(rr.y*height);
+  assert.equal(rr.mask.alpha[(40-ry)*rr.mask.width+118-rx],255,'missing pale corner is recovered inside the physical rectangle');
+
+  const circleMask=new Uint8Array(width*height),circleEvidence=new Uint8Array(width*height);
+  for(let y=0;y<height;y++)for(let x=0;x<width;x++){const dx=x-80,dy=y-80;if(dx*dx+dy*dy<=42*42){const i=y*width+x;circleMask[i]=circleEvidence[i]=1;}}
+  const circle=await processVision(cv,'components',{mask:circleMask,evidence:circleEvidence,width,height,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
+  assert.equal(circle.length,1);assert.notEqual(circle[0].edgeMethod,'rectangular-reconstruction');
+});
+
 test('OpenCV contours preserve candidate bounds, fill printed detail and reject page-sized components',async()=>{
   const cv=await cvModule,width=100,height=150,mask=new Uint8Array(width*height);for(let y=30;y<110;y++)for(let x=20;x<65;x++)mask[y*width+x]=1;for(let y=45;y<60;y++)for(let x=30;x<40;x++)mask[y*width+x]=0;
   const result=await processVision(cv,'components',{mask,width,height,smallestMM:6,paperWidthMM:210,paperHeightMM:297});assert.equal(result.length,1);assert.equal(result[0].mask.width,51);assert.equal(result[0].mask.height,86);assert.equal(result[0].mask.alpha[25*51+15],255);assert.equal(result[0].mask.alpha[0],0);
