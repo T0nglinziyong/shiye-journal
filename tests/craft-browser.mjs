@@ -36,7 +36,7 @@ try{
   assert.equal(fixture.count,7);
   await b.command('Page.reload');await b.wait('.series-grid');
   await b.click('[data-route="matching"]','.matching-page');
-  assert.ok(await b.evaluate('[...document.querySelector("#match-processing").options].some(o=>o.value==="AI 自主加工")'));
+  assert.equal(await b.evaluate('document.querySelector("#match-processing").value'), '不预设');assert.equal(await b.evaluate('[...document.querySelector("#match-processing").options].some(o=>o.value==="AI 自主加工")'),false);
   for(const [width,height] of [[390,844],[768,1024],[1024,768],[1440,900]]){
     await b.command('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:width<700});
     await b.click('[data-route="works"]','.works-grid');
