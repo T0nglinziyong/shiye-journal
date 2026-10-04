@@ -14,15 +14,8 @@ export function searchableSeries(series, assets) {
     .join(' ').toLocaleLowerCase();
 }
 
-export function usedAssetIDs(projects, assets = []) {
-  const used = new Set(projects.filter(p => !p.isDraft && p.isUsed).flatMap(p =>
-    (p.drafts || []).flatMap(d => (d.items || []).filter(i => !i.isParked).map(i => i.assetID))));
-  // Explicit user status is authoritative; project contents provide the default.
-  for (const asset of assets) {
-    if (asset.usageStatus === 'used') used.add(asset.id);
-    if (asset.usageStatus === 'unused') used.delete(asset.id);
-  }
-  return used;
+export function usedAssetIDs(assets = []) {
+  return new Set(assets.filter(asset => asset.usageStatus === 'used').map(asset => asset.id));
 }
 export function withUsageStatus(asset, used, at = new Date().toISOString()) {
   return {...asset, usageStatus: used ? 'used' : 'unused', usageUpdatedAt: at, updatedAt: at};
@@ -30,8 +23,8 @@ export function withUsageStatus(asset, used, at = new Date().toISOString()) {
 export function projectAssetIDs(project) {
   return new Set((project.drafts || []).flatMap(d => (d.items || []).filter(i => !i.isParked).map(i => i.assetID)).filter(Boolean));
 }
-export function seriesMembers(seriesID, assets, projects, filters = {}) {
-  const used = usedAssetIDs(projects, assets), q = (filters.query || '').trim().toLocaleLowerCase();
+export function seriesMembers(seriesID, assets, filters = {}) {
+  const used = usedAssetIDs(assets), q = (filters.query || '').trim().toLocaleLowerCase();
   return assets.filter(a => {
     if (a.isProjectInternal || a.seriesID !== seriesID) return false;
     if (filters.kind && filters.kind !== 'all' && a.kind !== filters.kind) return false;
