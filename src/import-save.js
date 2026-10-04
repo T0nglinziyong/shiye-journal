@@ -17,7 +17,7 @@ export function candidateMetadata(c,record,batchSeriesID) {
   const quantity=c.quantity??1;if(!Number.isInteger(quantity)||quantity<1)throw Error('素材数量必须是正整数');
   const choice=c.seriesID??record.seriesID??batchSeriesID;
   return {title:c.title?.trim()||'新素材',kind:c.kind||'sticker',role:c.role||'focal',tags:c.tags||[],palette:[],texture:'待记录',physicalWidthMM:c.width??null,physicalHeightMM:c.height??null,
-    dimensionSource:c.width&&c.height?(c.dimensionSource||'paper'):'unmeasured',processingRecord:c.processingRecord?structuredClone(c.processingRecord):null,supply:{kind:quantity===1?'single':'multiple',quantity},reviewStatus:c.reviewStatus||'pendingReview',seriesID:choice==='__none__'?null:choice||batchSeriesID||null};
+    dimensionSource:c.width&&c.height?(c.dimensionSource||'paper'):'unmeasured',processingRecord:c.processingRecord?structuredClone(c.processingRecord):null,supply:{kind:quantity===1?'single':'multiple',quantity},reviewStatus:c.reviewStatus||'pendingReview',usageStatus:'unused',seriesID:choice==='__none__'?null:choice||batchSeriesID||null};
 }
 const png=canvas=>new Promise(resolve=>canvas.toBlob(resolve,'image/png'));
 async function workBackground(source,candidates) {
@@ -63,7 +63,7 @@ export async function saveImportBatch({state,db,urls,render,onSaved}) {
       const elements=chosen.filter(c=>c.region.w<.98||c.region.h<.98);
       const background=await workBackground(source,elements),backgroundID=uid(),originalID=uid(),baseID=uid();
       blobs.push({id:backgroundID,data:background},{id:originalID,data:record.originalFile||record.file});
-      const base={id:baseID,title:p.title+' · 底页',kind:'photo',role:'background',tags:[],palette:[],texture:'photo',blobId:backgroundID,originalBlobId:originalID,physicalWidthMM:paperWidth,physicalHeightMM:paperHeight,dimensionSource:'importedPage',supply:{kind:'single',quantity:1},reviewStatus:'ready',seriesID:null,isProjectInternal:true,createdAt:now,sourceIdentifier:'imported-work-page'};
+      const base={id:baseID,title:p.title+' · 底页',kind:'photo',role:'background',tags:[],palette:[],texture:'photo',blobId:backgroundID,originalBlobId:originalID,physicalWidthMM:paperWidth,physicalHeightMM:paperHeight,dimensionSource:'importedPage',supply:{kind:'single',quantity:1},reviewStatus:'ready',usageStatus:'unused',seriesID:null,isProjectInternal:true,createdAt:now,sourceIdentifier:'imported-work-page'};
       assets.push(base);p.candidateAssetIDs=[baseID];
       d.items=[{id:uid(),assetID:baseID,x:d.canvas.width/2,y:500,width:d.canvas.width,height:1000,rotation:0,zIndex:-100,isLocked:true,isParked:false,opacity:1}];
       for(const c of elements) {
