@@ -36,13 +36,32 @@ export function completePhysicalBoundaries(cv,p,own){
     const outer=own(cv.Mat.zeros(rh,rw,cv.CV_8UC1)),outerTarget=own(outer.roi(new cv.Rect(ox,oy,bw,bh)));outerScaled.copyTo(outerTarget);
     const outerArea=cv.countNonZero(outer);if(!outerArea)continue;
 
-    const imageROI=own(rgba.roi(new cv.Rect(rx,ry,rw,rh))),rgb=own(new cv.Mat());cv.cvtColor(imageROI,rgb,cv.COLOR_RGBA2RGB);
+    const imageROI=own(rgba.roi(new cv.Rect(rx,ry,rw,rh))),rgb=own(new cv.Mat()),lab=own(new cv.Mat()),gray=own(new cv.Mat());
+    cv.cvtColor(imageROI,rgb,cv.COLOR_RGBA2RGB);cv.cvtColor(rgb,lab,cv.COLOR_RGB2Lab);cv.cvtColor(rgb,gray,cv.COLOR_RGB2GRAY);
+    // Learn the local page appearance only from page-connected pixels around
+    // the physical support. A true opening may be slightly darker because the
+    // material casts a shadow, so chroma and local texture are stronger cues
+    // than absolute luminance.
+    let pageL=0,pageA=0,pageB=0,pageN=0;
+    if(p.backgroundConnected)for(let py=0;py<rh;py++)for(let px=0;px<rw;px++){
+      const local=py*rw+px,global=(ry+py)*w+(rx+px);if(outer.data[local]||!p.backgroundConnected[global])continue;
+      const at=local*3;pageL+=lab.data[at];pageA+=lab.data[at+1];pageB+=lab.data[at+2];pageN++;
+    }
+    if(pageN){pageL/=pageN;pageA/=pageN;pageB/=pageN;}
     const gc=own(new cv.Mat(rh,rw,cv.CV_8UC1,new cv.Scalar(cv.GC_BGD)));let strongFG=0;
     for(let py=0;py<rh;py++)for(let px=0;px<rw;px++){
       const local=py*rw+px;if(!outer.data[local])continue;gc.data[local]=cv.GC_PR_FGD;
       const global=(ry+py)*w+(rx+px);
-      if(evidence?.data[global]){gc.data[local]=cv.GC_FGD;strongFG++;}
-      else if(shadow?.data[global])gc.data[local]=cv.GC_PR_BGD;
+      if(evidence?.data[global]){gc.data[local]=cv.GC_FGD;strongFG++;continue;}
+      if(shadow?.data[global]){gc.data[local]=cv.GC_PR_BGD;continue;}
+      if(pageN&&px>0&&py>0&&px<rw-1&&py<rh-1){
+        const at=local*3,dL=lab.data[at]-pageL,chroma=Math.hypot(lab.data[at+1]-pageA,lab.data[at+2]-pageB);
+        const center=gray.data[local],texture=Math.abs(center-(gray.data[local-1]+gray.data[local+1]+gray.data[local-rw]+gray.data[local+rw])/4);
+        // This is a generic background-likelihood seed, not a hole detector:
+        // near-neutral pixels that continue the local page field may become
+        // background whatever the aperture's shape or purpose.
+        if(chroma<5.5&&dL>=-30&&dL<=6&&texture<8)gc.data[local]=cv.GC_PR_BGD;
+      }
     }
 
     const refined=own(new cv.Mat());outer.copyTo(refined);
