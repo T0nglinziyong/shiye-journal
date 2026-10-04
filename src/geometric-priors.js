@@ -178,7 +178,17 @@ export function regularizeContour(cv,contour,own,pxPerMM,{closed=true}={}){
   // Remove consecutive duplicates introduced by corner snapping.
   const clean=[];for(const p of output)if(!clean.length||dist(p,clean[clean.length-1])>.25)clean.push(p);
   if(clean.length>2&&dist(clean[0],clean[clean.length-1])<.25)clean.pop();
-  return {points:clean,primitives,corners:Math.max(0,ordered.length),lineCount:runs.length,curveCount:primitives.filter(x=>x.type==='curve').length};
+  // Douglas-Peucker here is only a representation compression step: line
+  // runs are already collinear, while smooth curves retain enough samples.
+  let simplified=clean;
+  if(clean.length>=4){
+    const raw=matFromPoints(cv,clean,own),poly=own(new cv.Mat());
+    cv.approxPolyDP(raw,poly,Math.max(.45,pxPerMM*.16),true);
+    if(poly.rows>=3)simplified=contourPoints(poly);
+  }
+  const meaningfulCurves=primitives.filter(x=>x.type==='curve'&&(x.samples||0)*spacing>=Math.max(3,pxPerMM*2.4));
+  const linePrimitives=primitives.filter(x=>x.type==='line');
+  return {points:simplified,primitives:[...linePrimitives,...meaningfulCurves],corners:Math.max(0,ordered.length),lineCount:runs.length,curveCount:meaningfulCurves.length};
 }
 
 export function regularizeOuterSupport(cv,source,own,pxPerMM){
@@ -195,7 +205,7 @@ export function carveEnclosedPageRegions(cv,{mask,outer,lab,gray,pageL,pageA,pag
   for(let y=1;y<rows-1;y++)for(let x=1;x<cols-1;x++){
     const i=y*cols+x;if(!outer.data[i]||evidence?.data[i])continue;
     const at=i*3,dL=lab.data[at]-pageL,chroma=Math.hypot(lab.data[at+1]-pageA,lab.data[at+2]-pageB),center=gray.data[i],texture=Math.abs(center-(gray.data[i-1]+gray.data[i+1]+gray.data[i-cols]+gray.data[i+cols])/4);
-    if(chroma<4.6&&dL>=-18&&dL<=8&&texture<7)pageLike.data[i]=255;
+    if(chroma<3.6&&dL>=-14&&dL<=5&&texture<5.5)pageLike.data[i]=255;
   }
   let k=Math.max(3,Math.min(9,Math.round(pxPerMM*.55)));if(!(k&1))k++;
   const kernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(k,k)));cv.morphologyEx(pageLike,pageLike,cv.MORPH_OPEN,kernel);cv.morphologyEx(pageLike,pageLike,cv.MORPH_CLOSE,kernel);
