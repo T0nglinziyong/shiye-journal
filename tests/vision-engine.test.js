@@ -69,3 +69,21 @@ test('marker watershed rejects a page-only island without material evidence',asy
   const result=await processVision(cv,'instances',{mask,evidence,pixels,width,height,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
   assert.equal(result.length,1);assert.ok(result[0].y>.5);
 });
+
+
+test('boundary completion restores a pale physical oval from an inner rough mask and rejects a tiny page-edge artifact',async()=>{
+  const cv=await cvModule,width=220,height=260,pixels=new Uint8ClampedArray(width*height*4);
+  const cx=112,cy=132,outerX=54,outerY=88,innerX=43,innerY=72;
+  for(let y=0;y<height;y++)for(let x=0;x<width;x++){
+    const p=(y*width+x)*4,n=((x-cx)/outerX)**2+((y-cy)/outerY)**2,edge=Math.abs(n-1)<.045;
+    const value=n<=1?edge?145:235:246;pixels.set([value,value,value,255],p);
+  }
+  const mw=innerX*2+5,mh=innerY*2+5,alpha=new Uint8Array(mw*mh);
+  for(let y=0;y<mh;y++)for(let x=0;x<mw;x++)if(((x-mw/2)/innerX)**2+((y-mh/2)/innerY)**2<=1)alpha[y*mw+x]=255;
+  const oval={x:(cx-mw/2)/width,y:(cy-mh/2)/height,w:mw/width,h:mh/height,edgeMethod:'watershed-grabcut',mask:{width:mw,height:mh,alpha,polygons:[]}};
+  const edgeArtifact={x:.30,y:.004,w:.10,h:.025,edgeMethod:'watershed-grabcut',mask:{width:22,height:7,alpha:new Uint8Array(154).fill(255),polygons:[]}};
+  const result=await processVision(cv,'complete-boundaries',{pixels,width,height,candidates:[oval,edgeArtifact]});
+  assert.equal(result.length,1);assert.equal(result[0].edgeMethod,'ellipse-completed');
+  assert.ok(result[0].w>oval.w*1.12&&result[0].h>oval.h*1.10,'physical outer ellipse must expand beyond the rough inner mask');
+  assert.ok(result[0].mask.polygons[0].length>8,'completed ellipse should preserve a smooth editable boundary');
+});
