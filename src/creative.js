@@ -3,7 +3,6 @@ import {validateDisplaySlices} from './craft-display.js';
 import {applyCraftPlan} from './craft-plan.js';
 import {applyRegionOperation,itemSourceGeometry} from './craft-region-ops.js';
 import {normalizeGeometry,geometryIntersection,geometryArea} from './craft-topology.js';
-import {assertProtectedRegions} from './material-anatomy.js';
 import {isManagedUnchanged,recordManagedChanges,layerFingerprint} from './craft-fingerprint.js';
 import {craftDiagnostic,craftAssert} from './craft-errors.js';
 import {buildCraftEdge,craftPermission,sourceFootprint,sourceIntersectionArea} from './craft-geometry.js';
@@ -76,7 +75,7 @@ function process(d,item,asset,operations,mode,options){
   for(const op of operations){
     if(op.op==='whole'){steps.push(op);continue;}
     if(permission(options,asset)==='保留完整')throw Error(asset.title+' 设置为保留完整，不允许加工');
-    if(op.op==='extract_region'||op.op==='cut_shape'){
+    if(op.op==='cut_shape'){
       const next=applyRegionOperation({operation:op,current,mask,asset,permission:permission(options,asset)});
       current=next.current;mask=next.mask;steps.push(structuredClone(op));continue;
     }
@@ -130,7 +129,7 @@ function process(d,item,asset,operations,mode,options){
   item.cropRect=current.width===1&&current.height===1&&current.x===0&&current.y===0?null:current;
   item.materialMask=mask;
   item.width=current.width*asset.physicalWidthMM*scale(d);item.height=current.height*asset.physicalHeightMM*scale(d);
-  item.materialSteps=steps;item.operation=steps.at(-1)||{op:'whole'};assertProtectedRegions(asset,itemSourceGeometry(item,asset));baseline(item);
+  item.materialSteps=steps;item.operation=steps.at(-1)||{op:'whole'};baseline(item);
 }
 function addMaterials(d,assets,aliases,list){
   const output=[];
