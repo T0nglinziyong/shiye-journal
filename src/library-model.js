@@ -31,7 +31,7 @@ export function seriesMembers(seriesID, assets, filters = {}) {
     if (filters.status === 'ready' && a.reviewStatus !== 'ready') return false;
     if (filters.status === 'unready' && a.reviewStatus === 'ready') return false;
     if (filters.status === 'used' && !used.has(a.id)) return false;
-    if (filters.status === 'unused' && used.has(a.id)) return false;
+    if (filters.status === 'unused' && a.usageStatus !== 'unused') return false;
     if (filters.status === 'favorite' && !a.isFavorite) return false;
     if (filters.status === 'outside') return false;
     return !q || [a.title, ...(a.tags || []), ...(a.styleTags || []), ...(a.contentTags || []), ...(a.semanticTags || [])].join(' ').toLocaleLowerCase().includes(q);
