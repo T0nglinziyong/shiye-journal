@@ -98,15 +98,15 @@ test('generic topology refinement preserves circular and rectangular page apertu
   for(let y=0;y<mh;y++)for(let x=0;x<mw;x++)if(((x-mw/2)/rx)**2+((y-mh/2)/ry)**2<=1)alpha[y*mw+x]=255;
   const outer={x:(cx-mw/2)/width,y:(cy-mh/2)/height,w:mw/width,h:mh/height,evidenceDensity:.4,edgeMethod:'edge-enclosure',mask:{width:mw,height:mh,alpha,polygons:[]}};
   const [out]=await processVision(cv,'complete-boundaries',{pixels,evidence,backgroundConnected,shadowLikelihood,width,height,candidates:[outer],smallestMM:6,paperWidthMM:210,paperHeightMM:297});
-  assert.ok(out?.mask?.topologyPreserved);assert.ok((out.apertureCount||0)>=1,'regular circular aperture should receive a geometric negative-space prior');
+  assert.ok(out?.mask?.topologyPreserved);assert.ok((out.apertureCount||0)>=2,'enclosed page-like regions of different shapes should be recovered without a shape class');
   const left=Math.round(out.x*width),top=Math.round(out.y*height),at=(gx,gy)=>out.mask.alpha[(gy-top)*out.mask.width+gx-left];
   assert.equal(at(circle[0],circle[1]),0,'circular page aperture should remain transparent');
   assert.equal(at((rect[0]+rect[2])>>1,(rect[1]+rect[3])>>1),0,'rectangular page aperture should remain transparent');
   assert.equal(at((print[0]+print[2])>>1,(print[1]+print[3])>>1),255,'off-page-colour printed region should remain material');
 });
 
-test('clean high-contact rectangular enclosure is represented by fitted straight physical edges',async()=>{
-  const cv=await cvModule,width=180,height=180,pixels=new Uint8ClampedArray(width*height*4),evidence=new Uint8Array(width*height),backgroundConnected=new Uint8Array(width*height);
+test('straight physical edges are introduced only by the final line-curve regularizer',async()=>{
+  const cv=await cvModule,width=180,height=180,pixels=new Uint8ClampedArray(width*height*4),evidence=new Uint8Array(width*height),backgroundConnected=new Uint8Array(width*height),shadowLikelihood=new Uint8Array(width*height);
   for(let y=0;y<height;y++)for(let x=0;x<width;x++){
     const at=y*width+x,p=at*4,card=x>=42&&x<132&&y>=35&&y<145;
     const color=card?[210,226,218]:[245,245,245];pixels.set([...color,255],p);backgroundConnected[at]=card?0:1;
@@ -114,9 +114,9 @@ test('clean high-contact rectangular enclosure is represented by fitted straight
   }
   const result=await processVision(cv,'enclosures',{pixels,evidence,backgroundConnected,width,height,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
   const card=result.filter(r=>r.x<.3&&r.x+r.w>.7&&r.y<.25&&r.y+r.h>.78).sort((a,b)=>b.pixels-a.pixels)[0];
-  assert.ok(card,'clean rectangular physical enclosure should be found');
-  assert.equal(card.edgeMethod,'edge-rectangle',JSON.stringify({rectFill:card.rectFill,rectangularPrior:card.rectangularPrior,vertices:card.mask.polygons[0].length,paperContactRatio:card.paperContactRatio,insideEvidenceRatio:card.insideEvidenceRatio}));
-  assert.equal(card.mask.polygons[0].length,4);
+  assert.ok(card,'clean physical enclosure should be found');assert.equal(card.edgeMethod,'edge-enclosure');
+  const [regular]=await processVision(cv,'complete-boundaries',{pixels,evidence,backgroundConnected,shadowLikelihood,width,height,candidates:[card],smallestMM:6,paperWidthMM:210,paperHeightMM:297});
+  assert.equal(regular.boundaryModel,'line-curve');assert.ok(regular.boundaryLineCount>=4);assert.ok(regular.boundaryCurveCount<=1);
 });
 
 
@@ -175,7 +175,7 @@ test('fragmented boundary reconstruction does not bridge distant independent car
 });
 
 
-test('geometric model selection regularizes near-rectangular carriers but leaves concave carriers free-form',async()=>{
+test('piecewise prior turns a jagged card into long line segments while preserving a concave carrier',async()=>{
   const cv=await cvModule,width=180,height=180,pixels=new Uint8ClampedArray(width*height*4),evidence=new Uint8Array(width*height),backgroundConnected=new Uint8Array(width*height),shadowLikelihood=new Uint8Array(width*height);
   for(let i=0;i<width*height;i++){pixels[i*4]=pixels[i*4+1]=pixels[i*4+2]=246;pixels[i*4+3]=255;backgroundConnected[i]=1;}
   const mkCandidate=(poly,box)=>{
@@ -183,24 +183,27 @@ test('geometric model selection regularizes near-rectangular carriers but leaves
     for(let py=0;py<h;py++)for(let px=0;px<w;px++)if(inside(x+px,y+py))alpha[py*w+px]=255;
     return {x:x/width,y:y/height,w:w/width,h:h/height,evidenceDensity:.3,edgeMethod:'edge-enclosure',mask:{width:w,height:h,alpha,polygons:[]}};
   };
-  const rectPoly=[[35,35],[132,35],[132,132],[88,132],[86,128],[82,132],[35,132]];
-  const rect=mkCandidate(rectPoly,[35,35,98,98]);
+  const cardPoly=[[35,35],[132,35],[132,132],[90,132],[88,129],[86,132],[35,132],[35,92],[37,90],[35,88]];
+  const card=mkCandidate(cardPoly,[35,35,98,98]);
   for(let y=35;y<133;y++)for(let x=35;x<133;x++){const at=y*width+x;backgroundConnected[at]=0;evidence[at]=1;pixels.set([210,224,214,255],at*4);}
-  const [r]=await processVision(cv,'complete-boundaries',{pixels,evidence,backgroundConnected,shadowLikelihood,width,height,candidates:[rect],smallestMM:6,paperWidthMM:210,paperHeightMM:297});
-  assert.equal(r.geometricPrior,'rectangle');assert.equal(r.mask.polygons[0].length,4);
+  const [r]=await processVision(cv,'complete-boundaries',{pixels,evidence,backgroundConnected,shadowLikelihood,width,height,candidates:[card],smallestMM:6,paperWidthMM:210,paperHeightMM:297});
+  assert.equal(r.boundaryModel,'line-curve');assert.ok(r.boundaryLineCount>=4);assert.ok(r.mask.polygons[0].length<=12);
 
   const concavePoly=[[20,20],[80,20],[80,45],[55,45],[55,90],[20,90]],concave=mkCandidate(concavePoly,[20,20,61,71]);
   const [q]=await processVision(cv,'complete-boundaries',{pixels,evidence,backgroundConnected,shadowLikelihood,width,height,candidates:[concave],smallestMM:6,paperWidthMM:210,paperHeightMM:297});
-  assert.equal(q.geometricPrior,'freeform');
+  assert.equal(q.boundaryModel,'line-curve');assert.ok(q.boundaryCornerCount>=2);
+  const left=Math.round(q.x*width),top=Math.round(q.y*height),notchX=68-left,notchY=62-top;
+  assert.equal(q.mask.alpha[notchY*q.mask.width+notchX],0,'true concavity must not be convex-hulled away');
 });
 
-test('ellipse prior regularizes a slightly jagged oval carrier',async()=>{
+test('piecewise curve prior smooths a jagged oval without an ellipse class',async()=>{
   const cv=await cvModule,width=180,height=220,pixels=new Uint8ClampedArray(width*height*4),evidence=new Uint8Array(width*height),backgroundConnected=new Uint8Array(width*height),shadowLikelihood=new Uint8Array(width*height);
   for(let i=0;i<width*height;i++){pixels[i*4]=pixels[i*4+1]=pixels[i*4+2]=246;pixels[i*4+3]=255;backgroundConnected[i]=1;}
   const x0=48,y0=30,mw=86,mh=150,alpha=new Uint8Array(mw*mh);
-  for(let y=0;y<mh;y++)for(let x=0;x<mw;x++){const dx=(x-mw/2)/(mw*.46),dy=(y-mh/2)/(mh*.47),n=dx*dx+dy*dy;const wobble=(y%17===0&&x>mw*.35&&x<mw*.65);if(n<=1&&!wobble)alpha[y*mw+x]=255;}
+  for(let y=0;y<mh;y++)for(let x=0;x<mw;x++){const dx=(x-mw/2)/(mw*.46),dy=(y-mh/2)/(mh*.47),n=dx*dx+dy*dy,wobble=(y%17===0&&x>mw*.35&&x<mw*.65);if(n<=1&&!wobble)alpha[y*mw+x]=255;}
   const candidate={x:x0/width,y:y0/height,w:mw/width,h:mh/height,evidenceDensity:.3,edgeMethod:'edge-enclosure',mask:{width:mw,height:mh,alpha,polygons:[]}};
   for(let y=y0;y<y0+mh;y++)for(let x=x0;x<x0+mw;x++){const at=y*width+x;if(alpha[(y-y0)*mw+x-x0]){backgroundConnected[at]=0;evidence[at]=1;pixels.set([232,232,230,255],at*4);}}
   const [r]=await processVision(cv,'complete-boundaries',{pixels,evidence,backgroundConnected,shadowLikelihood,width,height,candidates:[candidate],smallestMM:6,paperWidthMM:210,paperHeightMM:297});
-  assert.equal(r.geometricPrior,'ellipse');assert.ok(r.mask.polygons[0].length>12);
+  assert.equal(r.boundaryModel,'line-curve');assert.equal(r.boundaryLineCount,0);assert.ok(r.boundaryCurveCount>=1);assert.ok(r.mask.polygons[0].length>16);
 });
+
