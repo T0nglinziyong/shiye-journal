@@ -14,7 +14,7 @@ export async function seedJournalMotifs(){
   const now=new Date().toISOString();
   await db.transaction(['assets','series','meta'],tx=>{
     if(!seriesIDs.has(journalMotifSeriesID))tx.objectStore('series').put({id:journalMotifSeriesID,title:'手作纸艺',introduction:'根据手帐案例中的纸片与胶带方法创作的原创内置素材',createdAt:now,updatedAt:now});
-    for(const item of journalMotifs){if(assetIDs.has(item.id))continue;const blobId=`${item.id}-image`;tx.objectStore('assets').put({id:item.id,title:item.title,kind:item.kind,role:item.role,tags:item.tags,palette:[],texture:item.texture,staticPath:item.path,blobId,originalBlobId:blobId,physicalWidthMM:item.width,physicalHeightMM:item.height,dimensionSource:'manual',supply:{kind:item.kind==='tape'?'quantity':'single',quantity:item.kind==='tape'?3:1},reviewStatus:'ready',seriesID:journalMotifSeriesID,createdAt:now,sourceIdentifier:'original-journal-motif'});}
+    for(const item of journalMotifs){if(assetIDs.has(item.id))continue;const blobId=`${item.id}-image`;tx.objectStore('assets').put({id:item.id,title:item.title,kind:item.kind,role:item.role,tags:item.tags,palette:[],texture:item.texture,staticPath:item.path,blobId,originalBlobId:blobId,physicalWidthMM:item.width,physicalHeightMM:item.height,dimensionSource:'manual',supply:{kind:item.kind==='tape'?'quantity':'single',quantity:item.kind==='tape'?3:1},reviewStatus:'ready',usageStatus:'unused',seriesID:journalMotifSeriesID,createdAt:now,sourceIdentifier:'original-journal-motif'});}
     tx.objectStore('meta').put({id:marker,createdAt:now});
   });
 }
