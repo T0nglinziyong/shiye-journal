@@ -96,11 +96,21 @@ export async function processVision(cv,operation,p){
         }
         const edgeStrength=boundarySamples?boundaryScore/boundarySamples:0,shadowFraction=boundarySamples?boundaryShadow/boundarySamples:0;
         if(shadowFraction>.58&&edgeStrength<38)continue;
-        const x=Math.max(0,b.x-2),y=Math.max(0,b.y-2),rw=Math.min(w,b.x+b.width+2)-x,rh=Math.min(h,b.y+b.height+2)-y,local=own(filled.roi(new cv.Rect(x,y,rw,rh))),packed=own(new cv.Mat());local.copyTo(packed);
-        const poly=own(new cv.Mat());cv.approxPolyDP(contour,poly,Math.max(.7,cv.arcLength(contour,true)*.0015),true);
+        let boundary=contour,edgeMethod='edge-enclosure';
+        // Once a high-paper-contact enclosure is already strongly rectangular,
+        // the physical sheet/card is better represented by its fitted straight
+        // edges than by Canny's slightly bitten or shadow-wavy contour. This is
+        // geometric completion only; low-fill irregular stickers stay untouched.
+        if(rectFill>=.84&&paperContactRatio>=.80){
+          const box=cv.boxPoints(shapeRect),rectContour=own(cv.matFromArray(4,1,cv.CV_32SC2,box.flatMap(point=>[Math.round(point.x),Math.round(point.y)])));
+          filled.setTo(new cv.Scalar(0));const rects=own(new cv.MatVector());rects.push_back(rectContour);cv.drawContours(filled,rects,-1,new cv.Scalar(255),cv.FILLED);
+          boundary=rectContour;edgeMethod='edge-rectangle';
+        }
+        const bounds=cv.boundingRect(boundary),x=Math.max(0,bounds.x-2),y=Math.max(0,bounds.y-2),rw=Math.min(w,bounds.x+bounds.width+2)-x,rh=Math.min(h,bounds.y+bounds.height+2)-y,local=own(filled.roi(new cv.Rect(x,y,rw,rh))),packed=own(new cv.Mat());local.copyTo(packed);
+        const poly=own(new cv.Mat());cv.approxPolyDP(boundary,poly,Math.max(.7,cv.arcLength(boundary,true)*.0015),true);
         const points=Array.from({length:poly.rows},(_,j)=>[poly.data32S[j*2]-x,poly.data32S[j*2+1]-y]);
         const confidence=Math.min(1,.24+fill*.20+Math.min(signal/Math.max(inside*.02,1),1)*.18+Math.min(edgeStrength/75,1)*.28+(1-shadowFraction)*.10);
-        out.push({x:x/w,y:y/h,w:rw/w,h:rh/h,pixels:inside,edgeMethod:'edge-enclosure',structuralConfidence:confidence,boundaryEdgeStrength:edgeStrength,boundaryShadowFraction:shadowFraction,paperContactRatio,insideEvidenceRatio,fillRatio:fill,rectFill,mask:{width:rw,height:rh,alpha:new Uint8Array(packed.data),polygons:[points]}});
+        out.push({x:x/w,y:y/h,w:rw/w,h:rh/h,pixels:inside,edgeMethod,structuralConfidence:confidence,boundaryEdgeStrength:edgeStrength,boundaryShadowFraction:shadowFraction,paperContactRatio,insideEvidenceRatio,fillRatio:fill,rectFill,mask:{width:rw,height:rh,alpha:new Uint8Array(packed.data),polygons:[points]}});
       }
       // Do not let dozens of tiny, high-contrast printed details evict a
       // physically large outer material boundary. Keep both the largest
