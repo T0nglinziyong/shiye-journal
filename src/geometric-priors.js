@@ -248,6 +248,29 @@ function lineEnvelope(cv,source,rgb,lab,own,pxPerMM){
   return {mask,boundaryModel:'line-envelope',primitives:[{type:'line'},{type:'line'},{type:'line'},{type:'line'}],cornerCount:4,lineCount:4,curveCount:0,polygon:corners,iou};
 }
 
+function polygonArea(points){
+  let sum=0;for(let i=0;i<points.length;i++){const a=points[i],b=points[(i+1)%points.length];sum+=a[0]*b[1]-b[0]*a[1];}return Math.abs(sum)/2;
+}
+function convexHullPoints(points){
+  const pts=[...points].sort((a,b)=>a[0]-b[0]||a[1]-b[1]);if(pts.length<=3)return pts;
+  const cross=(o,a,b)=>(a[0]-o[0])*(b[1]-o[1])-(a[1]-o[1])*(b[0]-o[0]),lower=[],upper=[];
+  for(const p of pts){while(lower.length>=2&&cross(lower[lower.length-2],lower[lower.length-1],p)<=0)lower.pop();lower.push(p);}
+  for(let i=pts.length-1;i>=0;i--){const p=pts[i];while(upper.length>=2&&cross(upper[upper.length-2],upper[upper.length-1],p)<=0)upper.pop();upper.push(p);}
+  lower.pop();upper.pop();return lower.concat(upper);
+}
+function smoothNearConvexCurve(cv,contour,own,pxPerMM){
+  const raw=contourPoints(contour),resampled=resampleClosed(raw,Math.max(1,pxPerMM*.45));if(resampled.length<24)return null;
+  const rawArea=polygonArea(resampled),hull=convexHullPoints(resampled),hullArea=polygonArea(hull);if(!hullArea||rawArea/hullArea<.91)return null;
+  const lineProbe=detectLineRuns(resampled,pxPerMM),lineCoverage=lineProbe.lineLike.filter(Boolean).length/resampled.length;if(lineCoverage>.24)return null;
+  let smooth=resampled.map(p=>[...p]);
+  for(let it=0;it<8;it++){const next=[];for(let i=0;i<smooth.length;i++){const a=smooth[wrap(i-2,smooth.length)],b=smooth[wrap(i-1,smooth.length)],d=smooth[i],e=smooth[(i+1)%smooth.length],g=smooth[(i+2)%smooth.length];next.push([(a[0]+4*b[0]+6*d[0]+4*e[0]+g[0])/16,(a[1]+4*b[1]+6*d[1]+4*e[1]+g[1])/16]);}smooth=next;}
+  const smoothArea=polygonArea(smooth);if(!smoothArea)return null;
+  const cx=smooth.reduce((s,p)=>s+p[0],0)/smooth.length,cy=smooth.reduce((s,p)=>s+p[1],0)/smooth.length,scale=Math.sqrt(rawArea/smoothArea);
+  smooth=smooth.map(([x,y])=>[cx+(x-cx)*scale,cy+(y-cy)*scale]);
+  const rContour=matFromPoints(cv,smooth,own),mask=contourMask(cv,Math.max(1,cv.boundingRect(contour).x+cv.boundingRect(contour).width+4),Math.max(1,cv.boundingRect(contour).y+cv.boundingRect(contour).height+4),rContour,own);
+  return {points:smooth,lineCoverage,convexity:rawArea/hullArea};
+}
+
 export function regularizeOuterSupport(cv,source,own,pxPerMM,{rgb=null,lab=null}={}){
   let clean=own(new cv.Mat()),kernelSize=Math.max(3,Math.min(11,Math.round(pxPerMM*.75)));if(!(kernelSize&1))kernelSize++;
   const kernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(kernelSize,kernelSize)));cv.morphologyEx(source,clean,cv.MORPH_CLOSE,kernel);cv.morphologyEx(clean,clean,cv.MORPH_OPEN,kernel);
@@ -255,6 +278,11 @@ export function regularizeOuterSupport(cv,source,own,pxPerMM,{rgb=null,lab=null}
   const contours=own(new cv.MatVector()),hierarchy=own(new cv.Mat());cv.findContours(clean,contours,hierarchy,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_NONE);
   let largest=null,area=0;for(let i=0;i<contours.size();i++){const q=own(contours.get(i)),a=cv.contourArea(q);if(a>area){area=a;largest=q;}}
   if(!largest||area<16)return {mask:source,boundaryModel:'line-curve',primitives:[],polygon:null};
+  const smoothCurve=smoothNearConvexCurve(cv,largest,own,pxPerMM);
+  if(smoothCurve){
+    const contour=matFromPoints(cv,smoothCurve.points,own),mask=contourMask(cv,source.cols,source.rows,contour,own),iou=maskIoU(cv,clean,mask,own);
+    if(iou>=.90)return {mask,boundaryModel:'smooth-curve',primitives:[{type:'curve',closed:true}],cornerCount:0,lineCount:0,curveCount:1,polygon:smoothCurve.points,curveIoU:iou,convexity:smoothCurve.convexity};
+  }
   const reg=regularizeContour(cv,largest,own,pxPerMM),rContour=matFromPoints(cv,reg.points,own),mask=contourMask(cv,source.cols,source.rows,rContour,own);
   return {mask,boundaryModel:'line-curve',primitives:reg.primitives,cornerCount:reg.corners,lineCount:reg.lineCount,curveCount:reg.curveCount,polygon:reg.points};
 }
