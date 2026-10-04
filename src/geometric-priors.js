@@ -201,7 +201,10 @@ export function regularizeOuterSupport(cv,source,own,pxPerMM){
 
 export function carveEnclosedPageRegions(cv,{mask,outer,lab,gray,pageL,pageA,pageB,pageN,evidence,pxPerMM},own){
   if(!pageN)return {count:0,regions:[]};
-  const rows=mask.rows,cols=mask.cols,pageLike=own(cv.Mat.zeros(rows,cols,cv.CV_8UC1));
+  const rows=mask.rows,cols=mask.cols,outerArea=Math.max(1,cv.countNonZero(outer)),pageLike=own(cv.Mat.zeros(rows,cols,cv.CV_8UC1)),regions=[];
+  const mean=a=>a.reduce((s,x)=>s+x,0)/Math.max(1,a.length),cvRatio=a=>{const m=mean(a);return m?Math.sqrt(mean(a.map(x=>(x-m)**2)))/m:99;};
+  const distance=own(new cv.Mat());cv.distanceTransform(outer,distance,cv.DIST_L2,5);
+
   for(let y=1;y<rows-1;y++)for(let x=1;x<cols-1;x++){
     const i=y*cols+x;if(!outer.data[i]||evidence?.data[i])continue;
     const at=i*3,dL=lab.data[at]-pageL,chroma=Math.hypot(lab.data[at+1]-pageA,lab.data[at+2]-pageB),center=gray.data[i],texture=Math.abs(center-(gray.data[i-1]+gray.data[i+1]+gray.data[i-cols]+gray.data[i+cols])/4);
@@ -209,27 +212,90 @@ export function carveEnclosedPageRegions(cv,{mask,outer,lab,gray,pageL,pageA,pag
   }
   let k=Math.max(3,Math.min(9,Math.round(pxPerMM*.55)));if(!(k&1))k++;
   const kernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(k,k)));cv.morphologyEx(pageLike,pageLike,cv.MORPH_OPEN,kernel);cv.morphologyEx(pageLike,pageLike,cv.MORPH_CLOSE,kernel);
-  const contours=own(new cv.MatVector()),hierarchy=own(new cv.Mat());cv.findContours(pageLike,contours,hierarchy,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_NONE);
-  const outerArea=Math.max(1,cv.countNonZero(outer)),regions=[];
-  for(let i=0;i<contours.size();i++){
-    const c=own(contours.get(i)),a=cv.contourArea(c);if(a<Math.max(8,pxPerMM*pxPerMM*.7)||a>outerArea*.05||c.rows<4)continue;
-    const b=cv.boundingRect(c),widthMM=b.width/pxPerMM,heightMM=b.height/pxPerMM,smallSide=Math.min(widthMM,heightMM),largeSide=Math.max(widthMM,heightMM);
-    // High-confidence aperture prior is deliberately for small enclosed
-    // negative space. Large windows remain the responsibility of the generic
-    // topology/GrabCut stage; this prevents a large white printed panel from
-    // being mistaken for a hole.
-    if(smallSide<1.2||largeSide>14)continue;
-    const raw=contourMask(cv,cols,rows,c,own),ringK=Math.max(3,Math.min(15,Math.round(pxPerMM*.9))|1),ringKernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(ringK,ringK))),dil=own(new cv.Mat()),ring=own(new cv.Mat());
-    cv.dilate(raw,dil,ringKernel);cv.subtract(dil,raw,ring);const ringOuter=own(new cv.Mat());cv.bitwise_and(ring,outer,ringOuter);
-    if(cv.countNonZero(ringOuter)/Math.max(1,cv.countNonZero(ring))<.90)continue;
-    const reg=regularizeContour(cv,c,own,pxPerMM),complexity=reg.lineCount+reg.curveCount;
-    // A real manufactured aperture is usually describable by a few line/curve
-    // primitives. Stars, glyphs and other printed motifs need more pieces and
-    // are therefore kept as material even when they are pale.
-    if(complexity>6||reg.corners>6)continue;
-    if(reg.corners>4&&reg.lineCount<3)continue;
-    const rContour=matFromPoints(cv,reg.points,own),hole=contourMask(cv,cols,rows,rContour,own);
-    mask.setTo(new cv.Scalar(0),hole);regions.push({lineCount:reg.lineCount,curveCount:reg.curveCount,cornerCount:reg.corners,area:a,widthMM,heightMM});
+
+  const enclosed=(candidate)=>{
+    let ringK=Math.max(3,Math.min(15,Math.round(pxPerMM*.9)));if(!(ringK&1))ringK++;
+    const ringKernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(ringK,ringK))),dil=own(new cv.Mat()),ring=own(new cv.Mat()),ringOuter=own(new cv.Mat());
+    cv.dilate(candidate,dil,ringKernel);cv.subtract(dil,candidate,ring);cv.bitwise_and(ring,outer,ringOuter);
+    return cv.countNonZero(ringOuter)/Math.max(1,cv.countNonZero(ring))>=.90;
+  };
+  const describe=(contour,source)=>{
+    const a=cv.contourArea(contour);if(a<Math.max(8,pxPerMM*pxPerMM*.45)||a>outerArea*.05||contour.rows<4)return null;
+    const b=cv.boundingRect(contour),widthMM=b.width/pxPerMM,heightMM=b.height/pxPerMM,smallSide=Math.min(widthMM,heightMM),largeSide=Math.max(widthMM,heightMM);
+    if(smallSide<1.0||largeSide>14)return null;
+    const raw=contourMask(cv,cols,rows,contour,own);if(!enclosed(raw))return null;
+    const reg=regularizeContour(cv,contour,own,pxPerMM),complexity=reg.lineCount+reg.curveCount;
+    if(complexity>7||reg.corners>7)return null;
+    const mom=cv.moments(contour,true);if(!mom.m00)return null;
+    const center=[mom.m10/mom.m00,mom.m01/mom.m00],edgeDistance=distance.data32F[Math.round(center[1])*cols+Math.round(center[0])]/pxPerMM;
+    let signal=0,pixels=0;
+    for(let y=b.y;y<b.y+b.height;y++)for(let x=b.x;x<b.x+b.width;x++){const i=y*cols+x;if(!raw.data[i])continue;pixels++;if(evidence?.data[i])signal++;}
+    if(source==='edge'&&signal/Math.max(1,pixels)>.18)return null;
+    return {contour,raw,reg,source,area:a,center,edgeDistance,widthMM,heightMM,sizeMM:Math.sqrt(a)/pxPerMM,evidenceDensity:signal/Math.max(1,pixels)};
+  };
+
+  // Strong local page-like components are generic aperture evidence.
+  const pageContours=own(new cv.MatVector()),pageHierarchy=own(new cv.Mat());cv.findContours(pageLike,pageContours,pageHierarchy,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_NONE);
+  const pageCandidates=[];
+  for(let i=0;i<pageContours.size();i++){const d=describe(own(pageContours.get(i)),'page');if(d)pageCandidates.push(d);}
+
+  // Internal edge loops are only weak candidates. They are NEVER carved by
+  // themselves; they can only extend a manufacturing pattern already supported
+  // by at least three page-like apertures. This helps holes whose interior lies
+  // over a white printed cell without turning stars/letters into holes.
+  const grayBlur=own(new cv.Mat()),edge=own(new cv.Mat()),channels=own(new cv.MatVector()),aBlur=own(new cv.Mat()),bBlur=own(new cv.Mat()),aEdge=own(new cv.Mat()),bEdge=own(new cv.Mat());
+  cv.GaussianBlur(gray,grayBlur,new cv.Size(3,3),0);cv.Canny(grayBlur,edge,16,52);cv.split(lab,channels);
+  const aa=own(channels.get(1)),bb=own(channels.get(2));cv.GaussianBlur(aa,aBlur,new cv.Size(3,3),0);cv.GaussianBlur(bb,bBlur,new cv.Size(3,3),0);cv.Canny(aBlur,aEdge,4,14);cv.Canny(bBlur,bEdge,4,14);cv.bitwise_or(edge,aEdge,edge);cv.bitwise_or(edge,bEdge,edge);
+  const erodeK=Math.max(3,Math.min(11,Math.round(pxPerMM*.8))|1),erodeKernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(erodeK,erodeK))),inner=own(new cv.Mat()),internalEdges=own(new cv.Mat());
+  cv.erode(outer,inner,erodeKernel);cv.bitwise_and(edge,inner,internalEdges);
+  const loopK=Math.max(3,Math.min(9,Math.round(pxPerMM*.55))|1),loopKernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(loopK,loopK)));cv.morphologyEx(internalEdges,internalEdges,cv.MORPH_CLOSE,loopKernel);
+  const loops=own(new cv.MatVector()),loopHierarchy=own(new cv.Mat());cv.findContours(internalEdges,loops,loopHierarchy,cv.RETR_LIST,cv.CHAIN_APPROX_NONE);
+  const edgeCandidates=[];
+  for(let i=0;i<loops.size();i++){const d=describe(own(loops.get(i)),'edge');if(d)edgeCandidates.push(d);}
+
+  const strongGroups=[];
+  for(let i=0;i<pageCandidates.length;i++)for(let j=i+1;j<pageCandidates.length;j++){
+    const a=pageCandidates[i],b=pageCandidates[j],dx=b.center[0]-a.center[0],dy=b.center[1]-a.center[1],len=Math.hypot(dx,dy);if(len<pxPerMM*2)continue;
+    const ux=dx/len,uy=dy/len,nx=-uy,ny=ux,medianSize=(a.sizeMM+b.sizeMM)/2;
+    const group=pageCandidates.filter(q=>{
+      const vx=q.center[0]-a.center[0],vy=q.center[1]-a.center[1],perp=Math.abs(vx*nx+vy*ny)/pxPerMM;
+      return perp<=Math.max(1.25,medianSize*.55)&&q.sizeMM/medianSize>=.55&&q.sizeMM/medianSize<=1.8;
+    });
+    if(group.length<3)continue;
+    const sorted=[...group].sort((q1,q2)=>(q1.center[0]-a.center[0])*ux+(q1.center[1]-a.center[1])*uy-((q2.center[0]-a.center[0])*ux+(q2.center[1]-a.center[1])*uy));
+    const projections=sorted.map(q=>(q.center[0]-a.center[0])*ux+(q.center[1]-a.center[1])*uy),spacing=[];for(let s=1;s<projections.length;s++)spacing.push((projections[s]-projections[s-1])/pxPerMM);
+    if(cvRatio(spacing)>.16||cvRatio(sorted.map(q=>q.sizeMM))>.32||cvRatio(sorted.map(q=>q.edgeDistance))>.23)continue;
+    strongGroups.push({items:sorted,origin:a.center,dir:[ux,uy],normal:[nx,ny],spacingMM:mean(spacing),sizeMM:mean(sorted.map(q=>q.sizeMM)),edgeDistanceMM:mean(sorted.map(q=>q.edgeDistance))});
   }
-  return {count:regions.length,regions};
+  strongGroups.sort((a,b)=>b.items.length-a.items.length);
+  const accepted=new Set();
+
+  // Very strong isolated page-like holes may be accepted directly, but only
+  // when the geometry is compact/simple and page similarity is unambiguous.
+  for(const q of pageCandidates){
+    const compact=Math.min(q.widthMM,q.heightMM)/Math.max(q.widthMM,q.heightMM);
+    if(compact>=.55&&q.sizeMM<=9&&(q.reg.lineCount+q.reg.curveCount)<=4)accepted.add(q);
+  }
+
+  for(const group of strongGroups){
+    for(const q of group.items)accepted.add(q);
+    const [ux,uy]=group.dir,[nx,ny]=group.normal,origin=group.origin,spacingPx=group.spacingMM*pxPerMM;
+    const pageProjection=group.items.map(q=>(q.center[0]-origin[0])*ux+(q.center[1]-origin[1])*uy);
+    const base=Math.min(...pageProjection);
+    for(const q of edgeCandidates){
+      const vx=q.center[0]-origin[0],vy=q.center[1]-origin[1],perp=Math.abs(vx*nx+vy*ny)/pxPerMM;if(perp>Math.max(1.2,group.sizeMM*.55))continue;
+      if(q.sizeMM/group.sizeMM<.55||q.sizeMM/group.sizeMM>1.7)continue;
+      if(Math.abs(q.edgeDistance-group.edgeDistanceMM)>Math.max(1.3,group.edgeDistanceMM*.25))continue;
+      const t=vx*ux+vy*uy,lattice=(t-base)/Math.max(spacingPx,1),nearest=Math.round(lattice);
+      if(Math.abs(lattice-nearest)>.24)continue;
+      accepted.add(q);
+    }
+  }
+
+  const carved=[];
+  for(const q of accepted){
+    const rContour=matFromPoints(cv,q.reg.points,own),hole=contourMask(cv,cols,rows,rContour,own);mask.setTo(new cv.Scalar(0),hole);
+    carved.push({lineCount:q.reg.lineCount,curveCount:q.reg.curveCount,cornerCount:q.reg.corners,area:q.area,widthMM:q.widthMM,heightMM:q.heightMM,source:q.source});
+  }
+  return {count:carved.length,regions:carved,patternGroups:strongGroups.length};
 }
