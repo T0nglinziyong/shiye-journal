@@ -178,7 +178,8 @@ export function carveEnclosedPageRegions(cv,{mask,outer,lab,gray,pageL,pageA,pag
     // A real manufactured aperture is usually describable by a few line/curve
     // primitives. Stars, glyphs and other printed motifs need more pieces and
     // are therefore kept as material even when they are pale.
-    if(complexity>4||reg.corners>4)continue;
+    if(complexity>6||reg.corners>6)continue;
+    if(reg.corners>4&&reg.lineCount<3)continue;
     const rContour=matFromPoints(cv,reg.points,own),hole=contourMask(cv,cols,rows,rContour,own);
     mask.setTo(new cv.Scalar(0),hole);regions.push({lineCount:reg.lineCount,curveCount:reg.curveCount,cornerCount:reg.corners,area:a,widthMM,heightMM});
   }
