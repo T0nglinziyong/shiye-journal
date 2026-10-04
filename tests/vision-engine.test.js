@@ -101,7 +101,7 @@ test('marker watershed separates two physical items joined by a foreground bridg
   for(let y=20;y<100;y++)for(let x=105;x<165;x++){const i=y*width+x,p=i*4;pixels.set([210,120,150,255],p);mask[i]=evidence[i]=1;}
   for(let y=55;y<62;y++)for(let x=75;x<105;x++)mask[y*width+x]=1;
   const result=await processVision(cv,'instances',{mask,evidence,pixels,width,height,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
-  assert.equal(result.length,2);assert.ok(result[0].x+.25<result[1].x);
+  assert.equal(result.length,2);const byX=[...result].sort((a,b)=>a.x-b.x);assert.ok(byX[0].x+byX[0].w<byX[1].x);
 });
 
 test('marker watershed rejects a page-only island without material evidence',async()=>{
