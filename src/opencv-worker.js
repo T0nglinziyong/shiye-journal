@@ -64,9 +64,13 @@ export async function processVision(cv,operation,p){
       return {x:x/p.width,y:y/p.height,w:w/p.width,h:h/p.height,pixels:area,edgeMethod,mask:{width:w,height:h,alpha:new Uint8Array(packed.data),polygons:[points]}};
     }
     if(operation==='enclosures'){
-      const src=own(cv.matFromArray(p.height,p.width,cv.CV_8UC4,p.pixels)),gray=own(new cv.Mat()),blurred=own(new cv.Mat()),edges=own(new cv.Mat()),closed=own(new cv.Mat());
-      cv.cvtColor(src,gray,cv.COLOR_RGBA2GRAY);cv.GaussianBlur(gray,blurred,new cv.Size(5,5),0);
-      cv.Canny(blurred,edges,20,65);
+      const src=own(cv.matFromArray(p.height,p.width,cv.CV_8UC4,p.pixels)),gray=own(new cv.Mat()),blurred=own(new cv.Mat()),edges=own(new cv.Mat()),closed=own(new cv.Mat()),rgb=own(new cv.Mat()),lab=own(new cv.Mat()),channels=own(new cv.MatVector()),aBlur=own(new cv.Mat()),bBlur=own(new cv.Mat()),aEdge=own(new cv.Mat()),bEdge=own(new cv.Mat());
+      cv.cvtColor(src,gray,cv.COLOR_RGBA2GRAY);cv.GaussianBlur(gray,blurred,new cv.Size(5,5),0);cv.Canny(blurred,edges,20,65);
+      // Physical borders can be nearly iso-luminant (e.g. pale green card
+      // against a neutral grey shadow). Add Lab chroma edges so those borders
+      // survive even when grayscale Canny only sees the outer shadow.
+      cv.cvtColor(src,rgb,cv.COLOR_RGBA2RGB);cv.cvtColor(rgb,lab,cv.COLOR_RGB2Lab);cv.split(lab,channels);
+      const aChannel=own(channels.get(1)),bChannel=own(channels.get(2));cv.GaussianBlur(aChannel,aBlur,new cv.Size(3,3),0);cv.GaussianBlur(bChannel,bBlur,new cv.Size(3,3),0);cv.Canny(aBlur,aEdge,4,14);cv.Canny(bBlur,bEdge,4,14);cv.bitwise_or(edges,aEdge,edges);cv.bitwise_or(edges,bEdge,edges);
       const closeKernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(5,5))),growKernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(3,3)));
       cv.morphologyEx(edges,closed,cv.MORPH_CLOSE,closeKernel,new cv.Point(-1,-1),2);cv.dilate(closed,closed,growKernel);
       const contours=own(new cv.MatVector()),hierarchy=own(new cv.Mat());cv.findContours(closed,contours,hierarchy,cv.RETR_LIST,cv.CHAIN_APPROX_SIMPLE);
