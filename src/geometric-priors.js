@@ -294,6 +294,37 @@ export function carveEnclosedPageRegions(cv,{mask,outer,lab,gray,pageL,pageA,pag
       if(Math.abs(lattice-nearest)>.24)continue;
       accepted.add(q);
     }
+
+    // If one member of an otherwise strong repeated manufacturing pattern is
+    // not page-like enough (for example because a shadow or printed cell sits
+    // beneath the opening), search only at the missing lattice positions with
+    // a lower-threshold local edge detector. This is still category-free: the
+    // pattern is discovered from observed apertures and neither count nor side
+    // is prescribed.
+    const minProj=Math.min(...pageProjection),maxProj=Math.max(...pageProjection),steps=Math.round((maxProj-minProj)/Math.max(spacingPx,1));
+    for(let latticeIndex=-1;latticeIndex<=steps+1;latticeIndex++){
+      const t=minProj+latticeIndex*spacingPx,px=Math.round(origin[0]+ux*t),py=Math.round(origin[1]+uy*t);
+      if(px<3||py<3||px>=cols-3||py>=rows-3||!outer.data[py*cols+px])continue;
+      if(group.items.some(q=>Math.hypot(q.center[0]-px,q.center[1]-py)<spacingPx*.35))continue;
+      const edgeDistance=distance.data32F[py*cols+px]/pxPerMM;
+      if(Math.abs(edgeDistance-group.edgeDistanceMM)>Math.max(1.5,group.edgeDistanceMM*.30))continue;
+      const radius=Math.max(4,Math.min(22,Math.round(group.sizeMM*pxPerMM*.95))),x0=Math.max(0,px-radius),y0=Math.max(0,py-radius),x1=Math.min(cols,px+radius+1),y1=Math.min(rows,py+radius+1),rw=x1-x0,rh=y1-y0;
+      if(rw<7||rh<7)continue;
+      const gROI=own(grayBlur.roi(new cv.Rect(x0,y0,rw,rh))),aaROI=own(aBlur.roi(new cv.Rect(x0,y0,rw,rh))),bbROI=own(bBlur.roi(new cv.Rect(x0,y0,rw,rh))),localEdge=own(new cv.Mat()),localA=own(new cv.Mat()),localB=own(new cv.Mat());
+      cv.Canny(gROI,localEdge,5,18);cv.Canny(aaROI,localA,2,8);cv.Canny(bbROI,localB,2,8);cv.bitwise_or(localEdge,localA,localEdge);cv.bitwise_or(localEdge,localB,localEdge);
+      const lk=Math.max(3,Math.min(7,Math.round(pxPerMM*.7))|1),lkernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(lk,lk)));cv.morphologyEx(localEdge,localEdge,cv.MORPH_CLOSE,lkernel);
+      const lc=own(new cv.MatVector()),lh=own(new cv.Mat());cv.findContours(localEdge,lc,lh,cv.RETR_LIST,cv.CHAIN_APPROX_NONE);
+      let best=null,bestCost=Infinity;
+      for(let ci=0;ci<lc.size();ci++){
+        const localContour=own(lc.get(ci));if(localContour.rows<4||cv.pointPolygonTest(localContour,new cv.Point(px-x0,py-y0),false)<0)continue;
+        const a=cv.contourArea(localContour),sizeMM=Math.sqrt(Math.max(a,1))/pxPerMM,ratio=sizeMM/Math.max(group.sizeMM,.1);if(ratio<.48||ratio>1.9)continue;
+        const points=Array.from({length:localContour.rows},(_,j)=>[localContour.data32S[j*2]+x0,localContour.data32S[j*2+1]+y0]),globalContour=own(cv.matFromArray(points.length,1,cv.CV_32SC2,points.flat()));
+        const d=describe(globalContour,'edge');if(!d)continue;
+        const cost=Math.abs(d.sizeMM/group.sizeMM-1)+Math.hypot(d.center[0]-px,d.center[1]-py)/Math.max(radius,1);
+        if(cost<bestCost){best=d;bestCost=cost;}
+      }
+      if(best&&bestCost<.85)accepted.add(best);
+    }
   }
 
   const carved=[];
