@@ -21,7 +21,7 @@ const effectivelyContained=(child,parent)=>{
   const x=child.x+child.w/2,y=child.y+child.h/2,margin=.006;
   return x>=parent.x-margin&&x<=parent.x+parent.w+margin&&y>=parent.y-margin&&y<=parent.y+parent.h+margin;
 };
-const strongWholeRectangle=s=>s.rectangularPrior===true&&(s.paperContactRatio??0)>=.80&&(s.insideEvidenceRatio??1)<=.65;
+const strongPhysicalBoundary=s=>(s.paperContactRatio??0)>=.80&&(s.interiorBackgroundRatio??1)<=.10&&(s.insideEvidenceRatio??1)<=.75;
 
 export function fuseRecognitionCandidates(instances,structuralCandidates){
   const base=instances.map(candidate=>({candidate,used:false})),accepted=[];
@@ -35,12 +35,14 @@ export function fuseRecognitionCandidates(instances,structuralCandidates){
       .filter(({entry})=>!entry.used&&(containsCenter(structural,entry.candidate)||overlapOf(entry.candidate,structural)>.20));
     let accept=false;
     if(matches.length){
-      // A regular paper/card outer boundary can legitimately reunite several
-      // substantial watershed fragments when a pale/white interior split them.
-      // The shape + direct page-contact + moderate internal evidence jointly
-      // distinguish that case from a loose contour around neighbouring items.
+      // Identity is decided by physical support, not by a shape class.
+      // If a closed boundary has page outside and almost no page-connected
+      // pixels inside, several watershed islands are likely prints/details on
+      // one carrier. An accidental contour around neighbouring loose items
+      // usually contains page-connected gaps and therefore fails this test.
       const shares=matches.map(({entry})=>area(entry.candidate)/Math.max(area(structural),1e-9)).sort((a,b)=>b-a);
-      accept=strongWholeRectangle(structural)||matches.length===1||shares[1]<.15;
+      const occupancy=matches.reduce((sum,{entry})=>sum+intersection(entry.candidate,structural),0)/Math.max(area(structural),1e-9);
+      accept=matches.length===1||shares[1]<.15||(strongPhysicalBoundary(structural)&&occupancy<=.84);
       accept&&=(structural.paperContactRatio??0)>=.70;
     }else{
       // Missing-instance recovery is deliberately strict. It recovers a pale
