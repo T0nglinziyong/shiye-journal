@@ -28,7 +28,7 @@ export function regularizeOuterSupport(cv,source,own,pxPerMM){
   if(!largest||area<16)return {mask:source,model:'freeform',score:0,polygon:null};
 
   const observed=makeContourMask(cv,{width:source.cols,height:source.rows},largest,own);
-  let best={model:'freeform',score:1,mask:observed,contour:largest};
+  let best={model:'freeform',score:0,mask:observed,contour:largest};
 
   const rect=cv.minAreaRect(largest),box=cv.boxPoints(rect),rectContour=own(cv.matFromArray(4,1,cv.CV_32SC2,box.flatMap(p=>[Math.round(p.x),Math.round(p.y)]))),rectMask=makeContourMask(cv,{width:source.cols,height:source.rows},rectContour,own),rectIoU=maskIoU(cv,observed,rectMask,own);
   const rectArea=Math.max(1,rect.size.width*rect.size.height),rectFill=area/rectArea;
