@@ -36,7 +36,7 @@ export async function syncCurrentExamples({isProjectOpen=()=>false,database=defa
     if(!existing)assets.push(canonical);
     else if(existing.sourceIdentifier!==CURRENT_EXAMPLE_SOURCE||existing.staticPath!==canonical.staticPath||!['used','unused'].includes(existing.usageStatus))assets.push({...existing,sourceIdentifier:CURRENT_EXAMPLE_SOURCE,staticPath:canonical.staticPath,usageStatus:canonical.usageStatus});
   }
-  const projects=collection.projects.filter(project=>!existingProjects.has(project.id)).map((project,index)=>currentProjectRecord(project,index));
+  const projects=collection.projects.map((project,index)=>[project,index]).filter(([project])=>!existingProjects.has(project.id)).map(([project,index])=>currentProjectRecord(project,index));
   const series=await database.get('series',collection.series.id);
   await database.transaction(['assets','projects','series','meta'],tx=>{
     for(const asset of assets)tx.objectStore('assets').put(asset);
