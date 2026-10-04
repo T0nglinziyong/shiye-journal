@@ -69,3 +69,39 @@ test('marker watershed rejects a page-only island without material evidence',asy
   const result=await processVision(cv,'instances',{mask,evidence,pixels,width,height,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
   assert.equal(result.length,1);assert.ok(result[0].y>.5);
 });
+
+
+test('local physical-boundary refinement restores a complete oval from a conservative rough mask',async()=>{
+  const cv=await cvModule,width=220,height=220,pixels=new Uint8ClampedArray(width*height*4),backgroundConnected=new Uint8Array(width*height),shadowLikelihood=new Uint8Array(width*height),score=new Uint8Array(width*height);
+  const cx=122,cy=108,rx=54,ry=78,inside=(x,y)=>((x-cx)/rx)**2+((y-cy)/ry)**2<=1,edge=(x,y)=>{const q=((x-cx)/rx)**2+((y-cy)/ry)**2;return q>.93&&q<1.08;};
+  for(let y=0;y<height;y++)for(let x=0;x<width;x++){const i=y*width+x,p=i*4,isInside=inside(x,y);const value=edge(x,y)?125:isInside?232:242;pixels.set([value,value,value,255],p);backgroundConnected[i]=isInside?0:1;if(edge(x,y))score[i]=80;}
+  const bx=73,by=37,bw=98,bh=142,alpha=new Uint8Array(bw*bh);
+  for(let y=0;y<bh;y++)for(let x=0;x<bw;x++)if(((x-(cx-bx))/(rx-6))**2+((y-(cy-by))/(ry-7))**2<=1)alpha[y*bw+x]=255;
+  const candidate={x:bx/width,y:by/height,w:bw/width,h:bh/height,mask:{width:bw,height:bh,alpha,polygons:[]}};
+  const [out]=await processVision(cv,'refine-boundaries',{candidates:[candidate],pixels,backgroundConnected,shadowLikelihood,score,width,height,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
+  assert.equal(out.edgeMethod,'local-ellipse');assert.equal(out.boundaryRefined,true);
+  assert.ok(Math.abs(out.x*width-(cx-rx))<7);assert.ok(Math.abs((out.x+out.w)*width-(cx+rx))<7);
+  assert.ok(Math.abs(out.y*height-(cy-ry))<7);assert.ok(Math.abs((out.y+out.h)*height-(cy+ry))<7);
+});
+
+test('local physical-boundary refinement repairs a pale rectangular card without turning an irregular sticker into a box',async()=>{
+  const cv=await cvModule,width=260,height=190,pixels=new Uint8ClampedArray(width*height*4),backgroundConnected=new Uint8Array(width*height),shadowLikelihood=new Uint8Array(width*height),score=new Uint8Array(width*height);
+  const insideCard=(x,y)=>x>=30&&x<=115&&y>=28&&y<=155;
+  const sticker=[[157,26],[207,30],[216,58],[232,76],[221,101],[235,145],[207,168],[189,153],[171,169],[151,141],[159,108],[145,78],[154,52]];
+  const insidePoly=(x,y)=>{let c=false;for(let i=0,j=sticker.length-1;i<sticker.length;j=i++){const [xi,yi]=sticker[i],[xj,yj]=sticker[j];if(((yi>y)!==(yj>y))&&x<(xj-xi)*(y-yi)/(yj-yi)+xi)c=!c;}return c;};
+  const edgePoly=(x,y)=>insidePoly(x,y)&&(!insidePoly(x-1,y)||!insidePoly(x+1,y)||!insidePoly(x,y-1)||!insidePoly(x,y+1));
+  for(let y=0;y<height;y++)for(let x=0;x<width;x++){
+    const i=y*width+x,p=i*4,card=insideCard(x,y),st=insidePoly(x,y),cardEdge=card&&(x<=32||x>=113||y<=30||y>=153),stEdge=edgePoly(x,y);
+    const value=cardEdge||stEdge?130:card||st?232:243;pixels.set([value,value,value,255],p);backgroundConnected[i]=card||st?0:1;if(cardEdge||stEdge)score[i]=85;
+  }
+  const cardAlpha=new Uint8Array(79*119).fill(255);for(let y=75;y<90;y++)for(let x=0;x<8;x++)cardAlpha[y*79+x]=0;
+  const stickerAlpha=new Uint8Array(80*135);for(let y=0;y<135;y++)for(let x=0;x<80;x++)if(insidePoly(x+150,y+30))stickerAlpha[y*80+x]=255;
+  const candidates=[
+    {x:34/width,y:32/height,w:79/width,h:119/height,mask:{width:79,height:119,alpha:cardAlpha,polygons:[]}},
+    {x:150/width,y:30/height,w:80/width,h:135/height,mask:{width:80,height:135,alpha:stickerAlpha,polygons:[]}}
+  ];
+  const out=await processVision(cv,'refine-boundaries',{candidates,pixels,backgroundConnected,shadowLikelihood,score,width,height,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
+  assert.equal(out[0].edgeMethod,'local-rectangle');assert.equal(out[0].boundaryRefined,true);
+  assert.equal(out[1].edgeMethod,'local-contour');assert.equal(out[1].boundaryRefined,true);
+  assert.ok(out[1].mask.polygons[0].length>4,'irregular sticker must keep its measured concavity');
+});
