@@ -1,4 +1,5 @@
 import cvModule from '@techstark/opencv-js';
+import {completePhysicalBoundaries} from './physical-boundary.js';
 // OpenCV may expose a thenable module. Keep it inside an object rather than
 // resolving a Promise with the module itself (which can recurse indefinitely).
 const ready=(async()=>{let cv;if(cvModule instanceof Promise)cv=await cvModule;else{cv=cvModule;if(!cv.Mat)await new Promise(resolve=>{cv.onRuntimeInitialized=resolve;});}return {cv};})();
@@ -119,56 +120,7 @@ export async function processVision(cv,operation,p){
       for(const item of [...byArea,...byConfidence]){if(seen.has(item))continue;seen.add(item);selected.push(item);if(selected.length>=96)break;}
       return selected.sort((a,b)=>a.y-b.y||a.x-b.x);
     }
-    if(operation==='complete-boundaries'){
-      const w=p.width,h=p.height,rgba=own(cv.matFromArray(h,w,cv.CV_8UC4,p.pixels)),result=[];
-      const contourContains=(contour,x,y)=>{let inside=false;for(let i=0,j=contour.rows-1;i<contour.rows;j=i++){
-        const xi=contour.data32S[i*2],yi=contour.data32S[i*2+1],xj=contour.data32S[j*2],yj=contour.data32S[j*2+1];
-        if((yi>y)!==(yj>y)&&x<(xj-xi)*(y-yi)/(yj-yi)+xi)inside=!inside;
-      }return inside;};
-      for(const candidate of p.candidates||[]){
-        const touches=candidate.x<.012||candidate.y<.012||candidate.x+candidate.w>.988||candidate.y+candidate.h>.988;
-        // Rectification occasionally leaves a thin desk/paper-edge sliver.
-        // Small components sitting on the page boundary are ambiguous and
-        // should not become materials; large genuine edge-touching sheets are
-        // preserved and can still be manually confirmed.
-        if(touches&&candidate.w*candidate.h<.015)continue;
-        const m=candidate.mask;
-        if(!['watershed-grabcut','edge-enclosure'].includes(candidate.edgeMethod)||!m?.alpha||m.width<8||m.height<8){result.push(candidate);continue;}
-        const rough=own(cv.matFromArray(m.height,m.width,cv.CV_8UC1,m.alpha)),roughContours=own(new cv.MatVector()),roughHierarchy=own(new cv.Mat());
-        cv.findContours(rough,roughContours,roughHierarchy,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_NONE);
-        let largest=null,largestArea=0;
-        for(let i=0;i<roughContours.size();i++){const contour=own(roughContours.get(i)),a=cv.contourArea(contour);if(a>largestArea){largest=contour;largestArea=a;}}
-        if(!largest||largest.rows<5){result.push(candidate);continue;}
-        const roughRect=cv.minAreaRect(largest),roughRectArea=Math.max(1,roughRect.size.width*roughRect.size.height),roughRectFill=largestArea/roughRectArea,roughEllipse=cv.fitEllipse(largest),roughEllipseArea=Math.max(1,Math.PI*roughEllipse.size.width*roughEllipse.size.height/4),roughEllipseFill=largestArea/roughEllipseArea,roughElongation=Math.max(roughEllipse.size.width,roughEllipse.size.height)/Math.max(1,Math.min(roughEllipse.size.width,roughEllipse.size.height));
-        // This is intentionally narrow: only an already ellipse-like rough
-        // instance gets geometric completion. Irregular stickers (for example
-        // the basketball sample) stay contour-driven and are refined by the
-        // physical outer enclosure instead of being rounded into an ellipse.
-        if(roughEllipseFill<.96||roughEllipseFill>1.08||roughRectFill<.62||roughRectFill>.90||roughElongation<1.18){result.push(candidate);continue;}
-        const x0=Math.max(0,Math.round(candidate.x*w)),y0=Math.max(0,Math.round(candidate.y*h)),bw=Math.max(1,Math.round(candidate.w*w)),bh=Math.max(1,Math.round(candidate.h*h)),mx=Math.max(6,Math.round(bw*.10)),my=Math.max(6,Math.round(bh*.10)),rx=Math.max(0,x0-mx),ry=Math.max(0,y0-my),rr=Math.min(w,x0+bw+mx),rb=Math.min(h,y0+bh+my),rw=rr-rx,rh=rb-ry;
-        const roi=own(rgba.roi(new cv.Rect(rx,ry,rw,rh))),rgb=own(new cv.Mat()),gray=own(new cv.Mat()),grayBlur=own(new cv.Mat()),edges=own(new cv.Mat()),lab=own(new cv.Mat()),channels=own(new cv.MatVector()),aBlur=own(new cv.Mat()),bBlur=own(new cv.Mat()),aEdge=own(new cv.Mat()),bEdge=own(new cv.Mat()),closed=own(new cv.Mat());
-        cv.cvtColor(roi,rgb,cv.COLOR_RGBA2RGB);cv.cvtColor(rgb,gray,cv.COLOR_RGB2GRAY);cv.GaussianBlur(gray,grayBlur,new cv.Size(3,3),0);cv.Canny(grayBlur,edges,15,50);
-        cv.cvtColor(rgb,lab,cv.COLOR_RGB2Lab);cv.split(lab,channels);const aChannel=own(channels.get(1)),bChannel=own(channels.get(2));cv.GaussianBlur(aChannel,aBlur,new cv.Size(3,3),0);cv.GaussianBlur(bChannel,bBlur,new cv.Size(3,3),0);cv.Canny(aBlur,aEdge,3,12);cv.Canny(bBlur,bEdge,3,12);cv.bitwise_or(edges,aEdge,edges);cv.bitwise_or(edges,bEdge,edges);
-        const closeKernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(3,3)));cv.morphologyEx(edges,closed,cv.MORPH_CLOSE,closeKernel);
-        const contours=own(new cv.MatVector()),hierarchy=own(new cv.Mat());cv.findContours(closed,contours,hierarchy,cv.RETR_LIST,cv.CHAIN_APPROX_NONE);
-        const centerX=x0+bw/2-rx,centerY=y0+bh/2-ry;let best=null;
-        for(let i=0;i<contours.size();i++){
-          const contour=own(contours.get(i)),a=cv.contourArea(contour);if(a<largestArea*.80||a>largestArea*2.50||contour.rows<5||!contourContains(contour,centerX,centerY))continue;
-          const rect=cv.minAreaRect(contour),rectArea=Math.max(1,rect.size.width*rect.size.height),rectFill=a/rectArea,ellipse=cv.fitEllipse(contour),ellipseArea=Math.max(1,Math.PI*ellipse.size.width*ellipse.size.height/4),ellipseFill=a/ellipseArea,elongation=Math.max(ellipse.size.width,ellipse.size.height)/Math.max(1,Math.min(ellipse.size.width,ellipse.size.height));
-          if(ellipseFill<.94||ellipseFill>1.08||rectFill<.55||rectFill>.85||elongation<1.18)continue;
-          const score=-Math.abs(ellipseFill-1)+Math.log1p(a)*.03+a/largestArea*.10;if(!best||score>best.score)best={score,ellipse};
-        }
-        if(!best){result.push(candidate);continue;}
-        const completed=own(cv.Mat.zeros(rh,rw,cv.CV_8UC1)),points=[];
-        const angle=best.ellipse.angle*Math.PI/180,ca=Math.cos(angle),sa=Math.sin(angle),ax=best.ellipse.size.width/2,ay=best.ellipse.size.height/2;
-        for(let i=0;i<96;i++){const t=i*Math.PI*2/96,ux=ax*Math.cos(t),uy=ay*Math.sin(t),px=best.ellipse.center.x+ux*ca-uy*sa,py=best.ellipse.center.y+ux*sa+uy*ca;points.push(Math.round(px),Math.round(py));}
-        const ellipseContour=own(cv.matFromArray(96,1,cv.CV_32SC2,points)),one=own(new cv.MatVector());one.push_back(ellipseContour);cv.drawContours(completed,one,-1,new cv.Scalar(255),cv.FILLED);
-        const bounds=cv.boundingRect(ellipseContour),local=own(completed.roi(new cv.Rect(bounds.x,bounds.y,bounds.width,bounds.height))),packed=own(new cv.Mat());local.copyTo(packed);
-        const poly=own(new cv.Mat());cv.approxPolyDP(ellipseContour,poly,Math.max(.7,cv.arcLength(ellipseContour,true)*.0015),true);const polygon=Array.from({length:poly.rows},(_,i)=>[poly.data32S[i*2]-bounds.x,poly.data32S[i*2+1]-bounds.y]);
-        result.push({...candidate,x:(rx+bounds.x)/w,y:(ry+bounds.y)/h,w:bounds.width/w,h:bounds.height/h,pixels:cv.contourArea(ellipseContour),edgeMethod:'ellipse-completed',mask:{width:bounds.width,height:bounds.height,alpha:new Uint8Array(packed.data),polygons:[polygon]}});
-      }
-      return result;
-    }
+    if(operation==='complete-boundaries')return completePhysicalBoundaries(cv,p,own);
     if(operation==='instances'){
       const w=p.width,h=p.height,src=own(cv.matFromArray(h,w,cv.CV_8UC1,p.mask)),closed=own(new cv.Mat()),kernel=own(cv.getStructuringElement(cv.MORPH_CROSS,new cv.Size(3,3)));
       cv.morphologyEx(src,closed,cv.MORPH_CLOSE,kernel);
