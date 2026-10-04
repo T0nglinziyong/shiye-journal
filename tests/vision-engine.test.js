@@ -98,7 +98,7 @@ test('generic topology refinement preserves circular and rectangular page apertu
   for(let y=0;y<mh;y++)for(let x=0;x<mw;x++)if(((x-mw/2)/rx)**2+((y-mh/2)/ry)**2<=1)alpha[y*mw+x]=255;
   const outer={x:(cx-mw/2)/width,y:(cy-mh/2)/height,w:mw/width,h:mh/height,evidenceDensity:.4,edgeMethod:'edge-enclosure',mask:{width:mw,height:mh,alpha,polygons:[]}};
   const [out]=await processVision(cv,'complete-boundaries',{pixels,evidence,backgroundConnected,shadowLikelihood,width,height,candidates:[outer],smallestMM:6,paperWidthMM:210,paperHeightMM:297});
-  assert.ok(out?.mask?.topologyPreserved);
+  assert.ok(out?.mask?.topologyPreserved);assert.ok((out.apertureCount||0)>=1,'regular circular aperture should receive a geometric negative-space prior');
   const left=Math.round(out.x*width),top=Math.round(out.y*height),at=(gx,gy)=>out.mask.alpha[(gy-top)*out.mask.width+gx-left];
   assert.equal(at(circle[0],circle[1]),0,'circular page aperture should remain transparent');
   assert.equal(at((rect[0]+rect[2])>>1,(rect[1]+rect[3])>>1),0,'rectangular page aperture should remain transparent');
@@ -172,4 +172,35 @@ test('fragmented boundary reconstruction does not bridge distant independent car
   const instances=[{x:28/width,y:45/height,w:45/width,h:65/height},{x:165/width,y:40/height,w:45/width,h:65/height}];
   const out=await processVision(cv,'boundary-reconstruction',{pixels,evidence,backgroundConnected,shadowLikelihood,score,instances,width,height,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
   assert.equal(out.some(r=>r.matchedInstances>=2),false,'large page gap must not be closed into one material');
+});
+
+
+test('geometric model selection regularizes near-rectangular carriers but leaves concave carriers free-form',async()=>{
+  const cv=await cvModule,width=180,height=180,pixels=new Uint8ClampedArray(width*height*4),evidence=new Uint8Array(width*height),backgroundConnected=new Uint8Array(width*height),shadowLikelihood=new Uint8Array(width*height);
+  for(let i=0;i<width*height;i++){pixels[i*4]=pixels[i*4+1]=pixels[i*4+2]=246;pixels[i*4+3]=255;backgroundConnected[i]=1;}
+  const mkCandidate=(poly,box)=>{
+    const [x,y,w,h]=box,alpha=new Uint8Array(w*h),inside=(gx,gy)=>{let hit=false;for(let i=0,j=poly.length-1;i<poly.length;j=i++){const [xi,yi]=poly[i],[xj,yj]=poly[j];if(((yi>gy)!==(yj>gy))&&gx<(xj-xi)*(gy-yi)/(yj-yi)+xi)hit=!hit;}return hit;};
+    for(let py=0;py<h;py++)for(let px=0;px<w;px++)if(inside(x+px,y+py))alpha[py*w+px]=255;
+    return {x:x/width,y:y/height,w:w/width,h:h/height,evidenceDensity:.3,edgeMethod:'edge-enclosure',mask:{width:w,height:h,alpha,polygons:[]}};
+  };
+  const rectPoly=[[35,35],[132,35],[132,132],[88,132],[86,128],[82,132],[35,132]];
+  const rect=mkCandidate(rectPoly,[35,35,98,98]);
+  for(let y=35;y<133;y++)for(let x=35;x<133;x++){const at=y*width+x;backgroundConnected[at]=0;evidence[at]=1;pixels.set([210,224,214,255],at*4);}
+  const [r]=await processVision(cv,'complete-boundaries',{pixels,evidence,backgroundConnected,shadowLikelihood,width,height,candidates:[rect],smallestMM:6,paperWidthMM:210,paperHeightMM:297});
+  assert.equal(r.geometricPrior,'rectangle');assert.equal(r.mask.polygons[0].length,4);
+
+  const concavePoly=[[20,20],[80,20],[80,45],[55,45],[55,90],[20,90]],concave=mkCandidate(concavePoly,[20,20,61,71]);
+  const [q]=await processVision(cv,'complete-boundaries',{pixels,evidence,backgroundConnected,shadowLikelihood,width,height,candidates:[concave],smallestMM:6,paperWidthMM:210,paperHeightMM:297});
+  assert.equal(q.geometricPrior,'freeform');
+});
+
+test('ellipse prior regularizes a slightly jagged oval carrier',async()=>{
+  const cv=await cvModule,width=180,height=220,pixels=new Uint8ClampedArray(width*height*4),evidence=new Uint8Array(width*height),backgroundConnected=new Uint8Array(width*height),shadowLikelihood=new Uint8Array(width*height);
+  for(let i=0;i<width*height;i++){pixels[i*4]=pixels[i*4+1]=pixels[i*4+2]=246;pixels[i*4+3]=255;backgroundConnected[i]=1;}
+  const x0=48,y0=30,mw=86,mh=150,alpha=new Uint8Array(mw*mh);
+  for(let y=0;y<mh;y++)for(let x=0;x<mw;x++){const dx=(x-mw/2)/(mw*.46),dy=(y-mh/2)/(mh*.47),n=dx*dx+dy*dy;const wobble=(y%17===0&&x>mw*.35&&x<mw*.65);if(n<=1&&!wobble)alpha[y*mw+x]=255;}
+  const candidate={x:x0/width,y:y0/height,w:mw/width,h:mh/height,evidenceDensity:.3,edgeMethod:'edge-enclosure',mask:{width:mw,height:mh,alpha,polygons:[]}};
+  for(let y=y0;y<y0+mh;y++)for(let x=x0;x<x0+mw;x++){const at=y*width+x;if(alpha[(y-y0)*mw+x-x0]){backgroundConnected[at]=0;evidence[at]=1;pixels.set([232,232,230,255],at*4);}}
+  const [r]=await processVision(cv,'complete-boundaries',{pixels,evidence,backgroundConnected,shadowLikelihood,width,height,candidates:[candidate],smallestMM:6,paperWidthMM:210,paperHeightMM:297});
+  assert.equal(r.geometricPrior,'ellipse');assert.ok(r.mask.polygons[0].length>12);
 });
