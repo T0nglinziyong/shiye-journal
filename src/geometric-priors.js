@@ -162,7 +162,7 @@ export function regularizeContour(cv,contour,own,pxPerMM,{closed=true}={}){
     const angle=Math.acos(clamp(Math.abs(left.fit.dir[0]*right.fit.dir[0]+left.fit.dir[1]*right.fit.dir[1]),-1,1));
     if(angle<.22)continue;
     const fallback=points[gap[Math.floor(gap.length/2)]],hit=lineIntersectionUnbounded(left.fit,right.fit,fallback,Math.max(4,pxPerMM*3));
-    for(const j of gap)output[j]=[...hit];
+    for(const j of gap){output[j]=[...hit];isLine[j]=true;}
   }
   // Curve primitives are the remaining non-line runs after corner snapping.
   const curveFlags=output.map((_,i)=>!isLine[i]),curveGroups=[];
