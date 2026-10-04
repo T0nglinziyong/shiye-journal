@@ -67,3 +67,10 @@ test('reconstructed fragmented carrier merges sparse pieces but not substantial 
   const out=fuseRecognitionCandidates([a,b],[accidental]);
   assert.equal(out.length,2);assert.ok(out.includes(a)&&out.includes(b));
 });
+
+
+test('overlapping watershed fragments may reunite even when their summed occupancy is high',()=>{
+  const a=c(.62,.14,.09,.09),b=c(.65,.17,.21,.22),d=c(.62,.19,.07,.09);
+  const carrier=c(.62,.13,.23,.27,{edgeMethod:'boundary-reconstruction',boundaryReconstruction:true,reconstructionScore:.64,edgeSupportRatio:.74,paperContactRatio:.62,interiorBackgroundRatio:.25,fillRatio:.66,matchedOccupancy:1.01,matchedPairOverlap:.54});
+  assert.deepEqual(fuseRecognitionCandidates([a,b,d],[carrier]),[carrier]);
+});
