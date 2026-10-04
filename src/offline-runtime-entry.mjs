@@ -40,7 +40,7 @@ async function main(){
       const browserPage=offlineBrowserPage(imported.drafts[0],context.source,previews,offlineBrowserSource);
       writeFileSync('output/画面预览.html',browserPage);
       report.compiledSceneHash=craftSceneHash(imported.drafts[0]);report.browserRenderer='shiye-canvas-v2';
-      writeFileSync('output/material-ledger.json',JSON.stringify(buildMaterialLedger(imported.drafts[0],assets,{strictTape:!!scene.plan}),null,2)+'\n');
+      writeFileSync('output/material-ledger.json',JSON.stringify(buildMaterialLedger(imported.drafts[0],assets),null,2)+'\n');
       if(mode==='pack'){
       const manifest={version:1,taskId:context.source.bundleId,taskHash:context.source.taskHash??null,schemaHash:context.source.schemaHash??null,sceneHash:report.sceneHash,previewHash:`sha256:${await sha256Hex(preview)}`,rendererVersion:'shiye-composition-preview-v1',fontSetVersion:null,outputProfile:'editable-approximate-svg',visualReview:false};
       const contents={
