@@ -18,7 +18,7 @@ export async function segmentPaperMaterials({data,width:w,height:h},{smallestMM=
       width:w,height:h,smallestMM,paperWidthMM,paperHeightMM
     }),
     visionTask('enclosures',{
-      pixels:sourcePixels,evidence:evidence.evidence,width:w,height:h,smallestMM,paperWidthMM,paperHeightMM
+      pixels:sourcePixels,evidence:evidence.evidence,shadowLikelihood:evidence.shadowLikelihood,score:evidence.score,width:w,height:h,smallestMM,paperWidthMM,paperHeightMM
     })
   ]);
   const colour=splitThinBridges(colourRaw,{analysisWidth:w,analysisHeight:h,evidence:evidence.evidence,shadowLikelihood:evidence.shadowLikelihood,smallestMM,paperWidthMM,paperHeightMM});
