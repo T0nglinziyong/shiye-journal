@@ -8,7 +8,7 @@ const root=new URL('../dist/',import.meta.url),html=await readFile(new URL('inde
 const window=new Window({url:'https://shiye.test/',settings:{enableJavaScriptEvaluation:true,disableJavaScriptFileLoading:true}});
 window.document.body.innerHTML=html.match(/<body>([\s\S]*)<\/body>/)[1];window.structuredClone=structuredClone;window.indexedDB=indexedDB;window.IDBKeyRange=IDBKeyRange;
 stubCanvas(window);
-window.fetch=async()=>({ok:true,blob:async()=>new window.Blob(['image'],{type:'image/png'}),json:async()=>JSON.parse(await readFile(new URL('cece/collection.json',root),'utf8'))});
+window.fetch=async()=>({ok:true,blob:async()=>new window.Blob(['image'],{type:'image/png'}),json:async()=>({})});
 window.URL.createObjectURL=()=>`blob:test-${Math.random()}`;window.URL.revokeObjectURL=()=>{};
 window.eval(await builtApp(root,html,window));await waitFor(()=>!!window.document.querySelector('.series-grid'));
 window.document.querySelector('.swift-tabs button:nth-child(2)').click();
