@@ -65,17 +65,18 @@ export async function processVision(cv,operation,p){
       return {x:x/p.width,y:y/p.height,w:w/p.width,h:h/p.height,pixels:area,edgeMethod,mask:{width:w,height:h,alpha:new Uint8Array(packed.data),polygons:[points]}};
     }
     if(operation==='enclosures'){
-      const src=own(cv.matFromArray(p.height,p.width,cv.CV_8UC4,p.pixels)),gray=own(new cv.Mat()),blurred=own(new cv.Mat()),edges=own(new cv.Mat()),closed=own(new cv.Mat()),rgb=own(new cv.Mat()),lab=own(new cv.Mat()),channels=own(new cv.MatVector()),aBlur=own(new cv.Mat()),bBlur=own(new cv.Mat()),aEdge=own(new cv.Mat()),bEdge=own(new cv.Mat());
+      const w=p.width,h=p.height,pxPerMM=Math.max(.5,((w/p.paperWidthMM)+(h/p.paperHeightMM))/2),oddMM=(mm,min=3,max=31)=>{let n=Math.max(min,Math.min(max,Math.round(pxPerMM*mm)));if(!(n&1))n++;return n;};
+      const src=own(cv.matFromArray(h,w,cv.CV_8UC4,p.pixels)),gray=own(new cv.Mat()),blurred=own(new cv.Mat()),edges=own(new cv.Mat()),closed=own(new cv.Mat()),rgb=own(new cv.Mat()),lab=own(new cv.Mat()),channels=own(new cv.MatVector()),aBlur=own(new cv.Mat()),bBlur=own(new cv.Mat()),aEdge=own(new cv.Mat()),bEdge=own(new cv.Mat());
       cv.cvtColor(src,gray,cv.COLOR_RGBA2GRAY);cv.GaussianBlur(gray,blurred,new cv.Size(5,5),0);cv.Canny(blurred,edges,20,65);
       // Near-white paper, pale coloured material and a grey cast shadow may
       // have similar luminance. Add Lab chroma edges so physical borders stay
       // visible even when grayscale Canny prefers the outer shadow boundary.
       cv.cvtColor(src,rgb,cv.COLOR_RGBA2RGB);cv.cvtColor(rgb,lab,cv.COLOR_RGB2Lab);cv.split(lab,channels);
       const aChannel=own(channels.get(1)),bChannel=own(channels.get(2));cv.GaussianBlur(aChannel,aBlur,new cv.Size(3,3),0);cv.GaussianBlur(bChannel,bBlur,new cv.Size(3,3),0);cv.Canny(aBlur,aEdge,4,14);cv.Canny(bBlur,bEdge,4,14);cv.bitwise_or(edges,aEdge,edges);cv.bitwise_or(edges,bEdge,edges);
-      const closeKernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(5,5))),growKernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(3,3)));
+      const closeSize=oddMM(1.05),growSize=oddMM(.55),closeKernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(closeSize,closeSize))),growKernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(growSize,growSize)));
       cv.morphologyEx(edges,closed,cv.MORPH_CLOSE,closeKernel,new cv.Point(-1,-1),2);cv.dilate(closed,closed,growKernel);
       const contours=own(new cv.MatVector()),hierarchy=own(new cv.Mat());cv.findContours(closed,contours,hierarchy,cv.RETR_LIST,cv.CHAIN_APPROX_SIMPLE);
-      const out=[],w=p.width,h=p.height,minArea=Math.max(24,(p.smallestMM/p.paperWidthMM*w)*(p.smallestMM/p.paperHeightMM*h)*.18);
+      const out=[],minArea=Math.max(24,(p.smallestMM/p.paperWidthMM*w)*(p.smallestMM/p.paperHeightMM*h)*.18);
       for(let i=0;i<contours.size();i++){
         const contour=own(contours.get(i)),area=cv.contourArea(contour);if(area<minArea||area>w*h*.55)continue;
         const b=cv.boundingRect(contour),widthMM=b.width/w*p.paperWidthMM,heightMM=b.height/h*p.paperHeightMM;
@@ -86,9 +87,9 @@ export async function processVision(cv,operation,p){
         let signal=0,inside=0,insidePage=0;
         for(let yy=b.y;yy<b.y+b.height;yy++)for(let xx=b.x;xx<b.x+b.width;xx++){const at=yy*w+xx;if(!filled.data[at])continue;inside++;if(p.evidence?.[at])signal++;if(p.backgroundConnected?.[at])insidePage++;}
         if(signal<Math.max(10,inside*.003))continue;const interiorBackgroundRatio=insidePage/Math.max(1,inside);
-        const ringMask=own(new cv.Mat()),ringKernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(9,9)));cv.dilate(filled,ringMask,ringKernel);
+        const ringSize=oddMM(1.9,5),ringRadius=Math.ceil(ringSize/2),ringMask=own(new cv.Mat()),ringKernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(ringSize,ringSize)));cv.dilate(filled,ringMask,ringKernel);
         let ring=0,paperContact=0;
-        for(let yy=Math.max(0,b.y-5);yy<Math.min(h,b.y+b.height+5);yy++)for(let xx=Math.max(0,b.x-5);xx<Math.min(w,b.x+b.width+5);xx++){const at=yy*w+xx;if(!ringMask.data[at]||filled.data[at])continue;ring++;if(p.backgroundConnected?.[at])paperContact++;}
+        for(let yy=Math.max(0,b.y-ringRadius);yy<Math.min(h,b.y+b.height+ringRadius);yy++)for(let xx=Math.max(0,b.x-ringRadius);xx<Math.min(w,b.x+b.width+ringRadius);xx++){const at=yy*w+xx;if(!ringMask.data[at]||filled.data[at])continue;ring++;if(p.backgroundConnected?.[at])paperContact++;}
         const paperContactRatio=ring?paperContact/ring:0,insideEvidenceRatio=signal/Math.max(1,inside);
         let boundaryScore=0,boundaryShadow=0,boundarySamples=0;
         for(let j=0;j<contour.rows;j++){
