@@ -54,7 +54,7 @@ test('edge enclosure keeps a pale rectangular card but excludes its offset shado
     if(card&&(y>95||x<55))evidence[y*width+x]=1;
   }
   const result=await processVision(cv,'enclosures',{pixels,evidence,width,height,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
-  const card=result.find(r=>r.x<.3&&r.x+r.w>.65&&r.y<.28&&r.y+r.h>.7);assert.ok(card,'card enclosure should be found');
+  const card=result.filter(r=>r.x<.3&&r.x+r.w>.65&&r.y<.28&&r.y+r.h>.7).sort((a,b)=>(b.structuralConfidence||0)-(a.structuralConfidence||0))[0];assert.ok(card,'card enclosure should be found');
   assert.ok(card.x>.22&&card.x<.28);assert.ok(card.x+card.w<.74,'offset shadow must not set the physical right edge');
 });
 
