@@ -87,7 +87,7 @@ test('edge enclosure recovers a curved pale physical carrier without an ellipse 
 
 test('generic topology refinement preserves circular and rectangular page apertures without shape-specific rules',async()=>{
   const cv=await cvModule,width=220,height=260,pixels=new Uint8ClampedArray(width*height*4),evidence=new Uint8Array(width*height),backgroundConnected=new Uint8Array(width*height),shadowLikelihood=new Uint8Array(width*height);
-  const cx=112,cy=132,rx=58,ry=92,circle=[112,86,11],rect=[88,145,103,162],print=[124,148,140,165];
+  const cx=112,cy=132,rx=58,ry=92,circle=[112,86,11],rect=[88,145,99,156],print=[124,148,140,165];
   for(let y=0;y<height;y++)for(let x=0;x<width;x++){
     const at=y*width+x,p=at*4,n=((x-cx)/rx)**2+((y-cy)/ry)**2,inside=n<=1,border=inside&&Math.abs(n-1)<.045;
     const circular=(x-circle[0])**2+(y-circle[1])**2<=circle[2]**2,rectangular=x>=rect[0]&&x<=rect[2]&&y>=rect[1]&&y<=rect[3],printed=x>=print[0]&&x<=print[2]&&y>=print[1]&&y<=print[3],aperture=inside&&(circular||rectangular);
