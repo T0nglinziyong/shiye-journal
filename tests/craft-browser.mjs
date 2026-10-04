@@ -20,7 +20,7 @@ try{
     const p=project('Synthetic craft v2',{ratio:'a4'});
     const result=applyToolCalls({version:3,style:'自由构图',intent:null,paper:{color:'#f7f2e8',pattern:'plain'},items,graphics:[],text_blocks:[]},p.drafts[0],assets,aliases,{processing:'自由拆解',allowNoText:true});
     if(!result.committed||result.results.some(r=>!r.ok))throw Error(JSON.stringify(result.results));
-    p.id='craft-v2-browser-project';p.drafts=[result.draft];p.activeDraftID=result.draft.id;p.isDraft=false;p.isTemplate=false;
+    p.id='craft-v2-browser-project';p.drafts=[result.draft];p.activeDraftID=result.draft.id;p.isDraft=false;
     const blobs=[];
     for(const [i,a] of assets.entries()){
       const c=document.createElement('canvas');c.width=a.physicalWidthMM*8;c.height=a.physicalHeightMM*8;
