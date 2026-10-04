@@ -133,7 +133,7 @@ export async function processVision(cv,operation,p){
         // preserved and can still be manually confirmed.
         if(touches&&candidate.w*candidate.h<.015)continue;
         const m=candidate.mask;
-        if(candidate.edgeMethod!=='watershed-grabcut'||!m?.alpha||m.width<8||m.height<8){result.push(candidate);continue;}
+        if(!['watershed-grabcut','edge-enclosure'].includes(candidate.edgeMethod)||!m?.alpha||m.width<8||m.height<8){result.push(candidate);continue;}
         const rough=own(cv.matFromArray(m.height,m.width,cv.CV_8UC1,m.alpha)),roughContours=own(new cv.MatVector()),roughHierarchy=own(new cv.Mat());
         cv.findContours(rough,roughContours,roughHierarchy,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_NONE);
         let largest=null,largestArea=0;
