@@ -6,7 +6,7 @@ export const CURRENT_MATERIAL_SERIES_ID='B7000000-0000-4000-8000-000000009000';
 const CREATED_AT='2026-10-04T00:00:00.000Z';
 const fixed=n=>`B7000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
 const retiredSeriesIDs=new Set([...Array.from({length:10},(_,i)=>fixed((i+1)*100)),'cece-sample-series']);
-const isRetiredSystemMeta=id=>id==='starter-styles-current'||id==='swift-bundled-materials-current'||String(id||'').startsWith('cece-samples-');
+const isRetiredSystemMeta=id=>id==='starter-styles-current'||id==='swift-bundled-materials-current'||id==='journal-motifs-current'||String(id||'').startsWith('cece-samples-');
 const retiredSource=value=>String(value||'').startsWith('built-in-starter')||String(value||'').startsWith('built-in-style-');
 export const isRetiredSystemAsset=asset=>!!asset&&(String(asset.id||'').startsWith('cece-')||asset.seriesID==='cece-sample-series'||retiredSource(asset.sourceIdentifier));
 export const isRetiredSystemProject=project=>!!project&&/^cece-p\d+-project$/.test(String(project.id||''));
