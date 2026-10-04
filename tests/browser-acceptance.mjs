@@ -156,7 +156,8 @@ try {
   await wait('.import-candidate-tile');await click('[data-act="import-confirm-photo"]','.review-candidates');await fill('.record-work-title','合成作品验收');await fill('.import-work-tags','植物，票据');await fill('.import-used','used');
   await click('[data-act="confirm-import"]','.import-done');
   const work=(await storeRecords('projects')).find(p=>p.title==='合成作品验收');assert.equal(work.isUsed,true);assert.deepEqual(work.styleTags,['植物','票据']);assert.equal(work.drafts[0].items.length,3);assert.ok(work.drafts[0].items.every(i=>!i.isParked));
-  const baseAsset=(await storeRecords('assets')).find(a=>a.id===work.drafts[0].items[0].assetID);
+  const importedWorkAssets=await storeRecords('assets'),workAssetIDs=new Set(work.drafts[0].items.map(item=>item.assetID));assert.ok(importedWorkAssets.filter(asset=>workAssetIDs.has(asset.id)).every(asset=>asset.usageStatus==='used'),'已使用作品中的实际素材必须同步为已使用');
+  const baseAsset=importedWorkAssets.find(a=>a.id===work.drafts[0].items[0].assetID);
   const backgroundSample=await evaluate('(async()=>{const db=await new Promise((resolve,reject)=>{const r=indexedDB.open("shiye-pwa-full-v1",1);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);}),blob=await new Promise((resolve,reject)=>{const r=db.transaction("blobs").objectStore("blobs").get('+JSON.stringify(baseAsset.blobId)+');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});db.close();const bitmap=await createImageBitmap(blob.data),c=document.createElement("canvas");c.width=bitmap.width;c.height=bitmap.height;const ctx=c.getContext("2d");ctx.drawImage(bitmap,0,0);const sample=[...ctx.getImageData(150,200,1,1).data];bitmap.close();return sample;})()');
   assert.deepEqual(backgroundSample,[255,255,255,255]);
   // Exercise the deployed UI too: a production bundle has no /src/store.js.
