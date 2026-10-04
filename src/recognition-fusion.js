@@ -52,9 +52,6 @@ export function fuseRecognitionCandidates(instances,structuralCandidates){
         &&area(structural)>=.006;
     }
     if(!accept)continue;
-    // Never replace an already larger physical instance with a smaller
-    // internal print contour merely because that contour has a clean edge.
-    if(matches.length&&area(structural)<Math.max(...matches.map(({entry})=>area(entry.candidate)))*.85)continue;
     accepted.push(structural);
     for(const {entry} of matches)entry.used=true;
   }
