@@ -1,5 +1,6 @@
 import {project,uid} from './domain.js';
 import {paperDimensions} from './paper-sizes.js';
+import {markProjectAssetsUsed} from './library-model.js';
 
 export function importPaperDimensions(record) {
   const size=record.paperSize==='custom'?{width:record.customImportWidth,height:record.customImportHeight}:paperDimensions(record.paperSize)||paperDimensions('a4');
@@ -72,6 +73,10 @@ export async function saveImportBatch({state,db,urls,render,onSaved}) {
         blobs.push({id:originalCutoutBlobId,data:c.originalCutoutBlob||c.blob});
         blobs.push({id:blobId,data:c.blob},{id:sourceID,data:c.originalBlob||c.blob});p.candidateAssetIDs.push(id);
         d.items.push({id:uid(),assetID:id,x:(r.x+r.w/2)*d.canvas.width,y:(r.y+r.h/2)*1000,width:r.w*d.canvas.width,height:r.h*1000,rotation:r.rotation||0,zIndex:d.items.length,isLocked:false,isParked:false,opacity:1});
+      }
+      if(p.isUsed){
+        const used=new Map(markProjectAssetsUsed(p,assets,now).map(asset=>[asset.id,asset]));
+        for(let i=0;i<assets.length;i++)if(used.has(assets[i].id))assets[i]=used.get(assets[i].id);
       }
       projects.push(p);savedCount++;
     }else {
