@@ -112,7 +112,7 @@ export async function processVision(cv,operation,p){
         try{
           const bx=Math.max(0,Math.round(original.x*width)),by=Math.max(0,Math.round(original.y*height));
           const bw=Math.max(1,Math.min(width-bx,Math.round(original.w*width))),bh=Math.max(1,Math.min(height-by,Math.round(original.h*height)));
-          const pad=Math.max(5,Math.min(14,Math.round(Math.min(bw,bh)*.035))),x=Math.max(0,bx-pad),y=Math.max(0,by-pad);
+          const pad=Math.max(10,Math.min(32,Math.round(Math.min(bw,bh)*.10))),x=Math.max(0,bx-pad),y=Math.max(0,by-pad);
           const rw=Math.min(width,bx+bw+pad)-x,rh=Math.min(height,by+bh+pad)-y;
           if(rw<8||rh<8){result.push(original);continue;}
           const imageROI=own(rgba.roi(new cv.Rect(x,y,rw,rh))),rough=own(cv.Mat.zeros(rh,rw,cv.CV_8UC1));
@@ -134,16 +134,24 @@ export async function processVision(cv,operation,p){
           cv.cvtColor(imageROI,rgb,cv.COLOR_RGBA2RGB);cv.cvtColor(rgb,lab,cv.COLOR_RGB2Lab);cv.split(lab,channels);
           const aChannel=own(channels.get(1)),bChannel=own(channels.get(2));cv.GaussianBlur(aChannel,aBlur,new cv.Size(3,3),0);cv.GaussianBlur(bChannel,bBlur,new cv.Size(3,3),0);cv.Canny(aBlur,aEdge,3,12);cv.Canny(bBlur,bEdge,3,12);cv.bitwise_or(edges,aEdge,edges);cv.bitwise_or(edges,bEdge,edges);
           const closeKernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(3,3)));cv.morphologyEx(edges,edges,cv.MORPH_CLOSE,closeKernel);
+          // Canny treats the cropped ROI frame as a strong edge. Remove only
+          // that artificial two-pixel frame; the generous context pad keeps a
+          // real material boundary away from it in ordinary cases.
+          for(let xx=0;xx<rw;xx++)for(let k=0;k<2;k++){edges.data[k*rw+xx]=0;edges.data[(rh-1-k)*rw+xx]=0;}
+          for(let yy=0;yy<rh;yy++)for(let k=0;k<2;k++){edges.data[yy*rw+k]=0;edges.data[yy*rw+rw-1-k]=0;}
           const contours=own(new cv.MatVector()),hierarchy=own(new cv.Mat());cv.findContours(edges,contours,hierarchy,cv.RETR_LIST,cv.CHAIN_APPROX_NONE);
 
           let best=null;
           for(let i=0;i<contours.size();i++){
             const contour=own(contours.get(i)),area=cv.contourArea(contour);if(area<roughArea*.45||area>roughArea*2.35)continue;
-            const b=cv.boundingRect(contour);if(b.width<8||b.height<8||b.x<=1||b.y<=1||b.x+b.width>=rw-1||b.y+b.height>=rh-1)continue;
+            const b=cv.boundingRect(contour);if(b.width<8||b.height<8)continue;
             if(cv.pointPolygonTest(contour,center,false)<0)continue;
             const filled=own(cv.Mat.zeros(rh,rw,cv.CV_8UC1)),one=own(new cv.MatVector());one.push_back(contour);cv.drawContours(filled,one,-1,new cv.Scalar(255),cv.FILLED);
             const overlap=own(new cv.Mat());cv.bitwise_and(filled,rough,overlap);const shared=cv.countNonZero(overlap),containment=shared/roughArea,precision=shared/Math.max(1,area);
-            if(containment<.52||precision<.30)continue;
+            if(containment<.42||precision<.28)continue;
+            // A local refinement may add a missing pale/white carrier edge,
+            // but it must not swallow a neighbouring substantial material.
+            if(area>roughArea*1.55&&precision<.78)continue;
             const ring=own(new cv.Mat()),ringKernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(9,9)));cv.dilate(filled,ring,ringKernel);cv.subtract(ring,filled,ring);
             let ringCount=0,paperContact=0;
             for(let yy=0;yy<rh;yy++)for(let xx=0;xx<rw;xx++)if(ring.data[yy*rw+xx]){
