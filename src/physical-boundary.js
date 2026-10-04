@@ -35,10 +35,9 @@ export function completePhysicalBoundaries(cv,p,own){
     const outerSource=own(cv.matFromArray(m.height,m.width,cv.CV_8UC1,m.alpha)),outerScaled=own(new cv.Mat());
     cv.resize(outerSource,outerScaled,new cv.Size(bw,bh),0,0,cv.INTER_NEAREST);
     const outerRaw=own(cv.Mat.zeros(rh,rw,cv.CV_8UC1)),outerTarget=own(outerRaw.roi(new cv.Rect(ox,oy,bw,bh)));outerScaled.copyTo(outerTarget);
-    const prior=regularizeOuterSupport(cv,outerRaw,own,pxPerMM),outer=prior.mask,outerArea=cv.countNonZero(outer);if(!outerArea)continue;
-
     const imageROI=own(rgba.roi(new cv.Rect(rx,ry,rw,rh))),rgb=own(new cv.Mat()),lab=own(new cv.Mat()),gray=own(new cv.Mat());
     cv.cvtColor(imageROI,rgb,cv.COLOR_RGBA2RGB);cv.cvtColor(rgb,lab,cv.COLOR_RGB2Lab);cv.cvtColor(rgb,gray,cv.COLOR_RGB2GRAY);
+    const prior=regularizeOuterSupport(cv,outerRaw,own,pxPerMM,{rgb,lab}),outer=prior.mask,outerArea=cv.countNonZero(outer);if(!outerArea)continue;
     // Learn the local page appearance only from page-connected pixels around
     // the physical support. A true opening may be slightly darker because the
     // material casts a shadow, so chroma and local texture are stronger cues
