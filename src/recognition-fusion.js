@@ -49,7 +49,7 @@ export function fuseRecognitionCandidates(instances,structuralCandidates){
       const occupancy=matches.reduce((sum,{entry})=>sum+intersection(entry.candidate,structural),0)/Math.max(area(structural),1e-9);
       accept=matches.length===1||shares[1]<.15
         ||(strongPhysicalBoundary(structural)&&occupancy<=.84)
-        ||(strongReconstruction(structural)&&occupancy<=.72);
+        ||(strongReconstruction(structural)&&(occupancy<=.72||(structural.matchedPairOverlap??0)>=.18));
       accept&&=(structural.paperContactRatio??0)>=.48;
     }else{
       // Missing-instance recovery is deliberately strict. It recovers a pale
