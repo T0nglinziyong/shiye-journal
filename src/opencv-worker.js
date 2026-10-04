@@ -1,4 +1,6 @@
 import cvModule from '@techstark/opencv-js';
+import {completePhysicalBoundaries} from './physical-boundary.js';
+import {reconstructFragmentedBoundaries} from './fragmented-boundary.js';
 // OpenCV may expose a thenable module. Keep it inside an object rather than
 // resolving a Promise with the module itself (which can recurse indefinitely).
 const ready=(async()=>{let cv;if(cvModule instanceof Promise)cv=await cvModule;else{cv=cvModule;if(!cv.Mat)await new Promise(resolve=>{cv.onRuntimeInitialized=resolve;});}return {cv};})();
@@ -64,30 +66,31 @@ export async function processVision(cv,operation,p){
       return {x:x/p.width,y:y/p.height,w:w/p.width,h:h/p.height,pixels:area,edgeMethod,mask:{width:w,height:h,alpha:new Uint8Array(packed.data),polygons:[points]}};
     }
     if(operation==='enclosures'){
-      const src=own(cv.matFromArray(p.height,p.width,cv.CV_8UC4,p.pixels)),gray=own(new cv.Mat()),blurred=own(new cv.Mat()),edges=own(new cv.Mat()),closed=own(new cv.Mat()),rgb=own(new cv.Mat()),lab=own(new cv.Mat()),channels=own(new cv.MatVector()),aBlur=own(new cv.Mat()),bBlur=own(new cv.Mat()),aEdge=own(new cv.Mat()),bEdge=own(new cv.Mat());
+      const w=p.width,h=p.height,pxPerMM=Math.max(.5,((w/p.paperWidthMM)+(h/p.paperHeightMM))/2),oddMM=(mm,min=3,max=31)=>{let n=Math.max(min,Math.min(max,Math.round(pxPerMM*mm)));if(!(n&1))n++;return n;};
+      const src=own(cv.matFromArray(h,w,cv.CV_8UC4,p.pixels)),gray=own(new cv.Mat()),blurred=own(new cv.Mat()),edges=own(new cv.Mat()),closed=own(new cv.Mat()),rgb=own(new cv.Mat()),lab=own(new cv.Mat()),channels=own(new cv.MatVector()),aBlur=own(new cv.Mat()),bBlur=own(new cv.Mat()),aEdge=own(new cv.Mat()),bEdge=own(new cv.Mat());
       cv.cvtColor(src,gray,cv.COLOR_RGBA2GRAY);cv.GaussianBlur(gray,blurred,new cv.Size(5,5),0);cv.Canny(blurred,edges,20,65);
       // Near-white paper, pale coloured material and a grey cast shadow may
       // have similar luminance. Add Lab chroma edges so physical borders stay
       // visible even when grayscale Canny prefers the outer shadow boundary.
       cv.cvtColor(src,rgb,cv.COLOR_RGBA2RGB);cv.cvtColor(rgb,lab,cv.COLOR_RGB2Lab);cv.split(lab,channels);
       const aChannel=own(channels.get(1)),bChannel=own(channels.get(2));cv.GaussianBlur(aChannel,aBlur,new cv.Size(3,3),0);cv.GaussianBlur(bChannel,bBlur,new cv.Size(3,3),0);cv.Canny(aBlur,aEdge,4,14);cv.Canny(bBlur,bEdge,4,14);cv.bitwise_or(edges,aEdge,edges);cv.bitwise_or(edges,bEdge,edges);
-      const closeKernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(5,5))),growKernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(3,3)));
+      const closeSize=oddMM(1.05),growSize=oddMM(.55),closeKernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(closeSize,closeSize))),growKernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(growSize,growSize)));
       cv.morphologyEx(edges,closed,cv.MORPH_CLOSE,closeKernel,new cv.Point(-1,-1),2);cv.dilate(closed,closed,growKernel);
       const contours=own(new cv.MatVector()),hierarchy=own(new cv.Mat());cv.findContours(closed,contours,hierarchy,cv.RETR_LIST,cv.CHAIN_APPROX_SIMPLE);
-      const out=[],w=p.width,h=p.height,minArea=Math.max(24,(p.smallestMM/p.paperWidthMM*w)*(p.smallestMM/p.paperHeightMM*h)*.18);
+      const out=[],minArea=Math.max(24,(p.smallestMM/p.paperWidthMM*w)*(p.smallestMM/p.paperHeightMM*h)*.18);
       for(let i=0;i<contours.size();i++){
         const contour=own(contours.get(i)),area=cv.contourArea(contour);if(area<minArea||area>w*h*.55)continue;
         const b=cv.boundingRect(contour),widthMM=b.width/w*p.paperWidthMM,heightMM=b.height/h*p.paperHeightMM;
         if(widthMM<p.smallestMM||heightMM<p.smallestMM||b.width>w*.94||b.height>h*.94)continue;
         if(b.x<2||b.y<2||b.x+b.width>w-2||b.y+b.height>h-2)continue;
-        const fill=area/Math.max(1,b.width*b.height);if(fill<.16)continue;
+        const fill=area/Math.max(1,b.width*b.height);if(fill<.16)continue;const shapeRect=cv.minAreaRect(contour),rectFill=area/Math.max(1,shapeRect.size.width*shapeRect.size.height),shapePoly=own(new cv.Mat());cv.approxPolyDP(contour,shapePoly,Math.max(2,cv.arcLength(contour,true)*.02),true);const rectangularPrior=shapePoly.rows===4&&cv.isContourConvex(shapePoly)&&rectFill>=.70;
         const filled=own(cv.Mat.zeros(h,w,cv.CV_8UC1)),one=own(new cv.MatVector());one.push_back(contour);cv.drawContours(filled,one,-1,new cv.Scalar(255),cv.FILLED);
-        let signal=0,inside=0;
-        for(let yy=b.y;yy<b.y+b.height;yy++)for(let xx=b.x;xx<b.x+b.width;xx++){const at=yy*w+xx;if(!filled.data[at])continue;inside++;if(p.evidence?.[at])signal++;}
-        if(signal<Math.max(10,inside*.003))continue;
-        const ringMask=own(new cv.Mat()),ringKernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(9,9)));cv.dilate(filled,ringMask,ringKernel);
+        let signal=0,inside=0,insidePage=0;
+        for(let yy=b.y;yy<b.y+b.height;yy++)for(let xx=b.x;xx<b.x+b.width;xx++){const at=yy*w+xx;if(!filled.data[at])continue;inside++;if(p.evidence?.[at])signal++;if(p.backgroundConnected?.[at])insidePage++;}
+        if(signal<Math.max(10,inside*.003))continue;const interiorBackgroundRatio=insidePage/Math.max(1,inside);
+        const ringSize=oddMM(1.9,5),ringRadius=Math.ceil(ringSize/2),ringMask=own(new cv.Mat()),ringKernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(ringSize,ringSize)));cv.dilate(filled,ringMask,ringKernel);
         let ring=0,paperContact=0;
-        for(let yy=Math.max(0,b.y-5);yy<Math.min(h,b.y+b.height+5);yy++)for(let xx=Math.max(0,b.x-5);xx<Math.min(w,b.x+b.width+5);xx++){const at=yy*w+xx;if(!ringMask.data[at]||filled.data[at])continue;ring++;if(p.backgroundConnected?.[at])paperContact++;}
+        for(let yy=Math.max(0,b.y-ringRadius);yy<Math.min(h,b.y+b.height+ringRadius);yy++)for(let xx=Math.max(0,b.x-ringRadius);xx<Math.min(w,b.x+b.width+ringRadius);xx++){const at=yy*w+xx;if(!ringMask.data[at]||filled.data[at])continue;ring++;if(p.backgroundConnected?.[at])paperContact++;}
         const paperContactRatio=ring?paperContact/ring:0,insideEvidenceRatio=signal/Math.max(1,inside);
         let boundaryScore=0,boundaryShadow=0,boundarySamples=0;
         for(let j=0;j<contour.rows;j++){
@@ -96,16 +99,25 @@ export async function processVision(cv,operation,p){
         }
         const edgeStrength=boundarySamples?boundaryScore/boundarySamples:0,shadowFraction=boundarySamples?boundaryShadow/boundarySamples:0;
         if(shadowFraction>.58&&edgeStrength<38)continue;
-        const x=Math.max(0,b.x-2),y=Math.max(0,b.y-2),rw=Math.min(w,b.x+b.width+2)-x,rh=Math.min(h,b.y+b.height+2)-y,local=own(filled.roi(new cv.Rect(x,y,rw,rh))),packed=own(new cv.Mat());local.copyTo(packed);
-        const poly=own(new cv.Mat());cv.approxPolyDP(contour,poly,Math.max(.7,cv.arcLength(contour,true)*.0015),true);
+        const boundary=contour,edgeMethod='edge-enclosure';
+        const bounds=cv.boundingRect(boundary),x=Math.max(0,bounds.x-2),y=Math.max(0,bounds.y-2),rw=Math.min(w,bounds.x+bounds.width+2)-x,rh=Math.min(h,bounds.y+bounds.height+2)-y,local=own(filled.roi(new cv.Rect(x,y,rw,rh))),packed=own(new cv.Mat());local.copyTo(packed);
+        const poly=own(new cv.Mat());cv.approxPolyDP(boundary,poly,Math.max(.7,cv.arcLength(boundary,true)*.0015),true);
         const points=Array.from({length:poly.rows},(_,j)=>[poly.data32S[j*2]-x,poly.data32S[j*2+1]-y]);
         const confidence=Math.min(1,.24+fill*.20+Math.min(signal/Math.max(inside*.02,1),1)*.18+Math.min(edgeStrength/75,1)*.28+(1-shadowFraction)*.10);
-        out.push({x:x/w,y:y/h,w:rw/w,h:rh/h,pixels:inside,edgeMethod:'edge-enclosure',structuralConfidence:confidence,boundaryEdgeStrength:edgeStrength,boundaryShadowFraction:shadowFraction,paperContactRatio,insideEvidenceRatio,fillRatio:fill,mask:{width:rw,height:rh,alpha:new Uint8Array(packed.data),polygons:[points]}});
+        out.push({x:x/w,y:y/h,w:rw/w,h:rh/h,pixels:inside,edgeMethod,structuralConfidence:confidence,boundaryEdgeStrength:edgeStrength,boundaryShadowFraction:shadowFraction,paperContactRatio,insideEvidenceRatio,interiorBackgroundRatio,fillRatio:fill,rectFill,rectangularPrior,mask:{width:rw,height:rh,alpha:new Uint8Array(packed.data),polygons:[points]}});
       }
-      return out.sort((a,b)=>(b.structuralConfidence||0)-(a.structuralConfidence||0)||a.y-b.y||a.x-b.x).slice(0,48);
+      // Do not let dozens of tiny, high-contrast printed details evict a
+      // physically large outer material boundary. Keep both the largest
+      // enclosures and the highest-confidence enclosures, then deduplicate.
+      const byArea=[...out].sort((a,b)=>b.pixels-a.pixels).slice(0,64),byConfidence=[...out].sort((a,b)=>(b.structuralConfidence||0)-(a.structuralConfidence||0)).slice(0,64),selected=[],seen=new Set();
+      for(const item of [...byArea,...byConfidence]){if(seen.has(item))continue;seen.add(item);selected.push(item);if(selected.length>=96)break;}
+      return selected.sort((a,b)=>a.y-b.y||a.x-b.x);
     }
+    if(operation==='boundary-reconstruction')return reconstructFragmentedBoundaries(cv,p,own);
+    if(operation==='complete-boundaries')return completePhysicalBoundaries(cv,p,own);
     if(operation==='instances'){
-      const w=p.width,h=p.height,src=own(cv.matFromArray(h,w,cv.CV_8UC1,p.mask)),closed=own(new cv.Mat()),kernel=own(cv.getStructuringElement(cv.MORPH_CROSS,new cv.Size(3,3)));
+      const w=p.width,h=p.height,pxPerMM=Math.max(.5,((w/p.paperWidthMM)+(h/p.paperHeightMM))/2),oddMM=(mm,min=3,max=21)=>{let n=Math.max(min,Math.min(max,Math.round(pxPerMM*mm)));if(!(n&1))n++;return n;};
+      const instanceKernelSize=oddMM(.55),src=own(cv.matFromArray(h,w,cv.CV_8UC1,p.mask)),closed=own(new cv.Mat()),kernel=own(cv.getStructuringElement(cv.MORPH_CROSS,new cv.Size(instanceKernelSize,instanceKernelSize)));
       cv.morphologyEx(src,closed,cv.MORPH_CLOSE,kernel);
       const labels=own(new cv.Mat()),stats=own(new cv.Mat()),centroids=own(new cv.Mat()),componentCount=cv.connectedComponentsWithStats(closed,labels,stats,centroids,8,cv.CV_32S);
       const dist=own(new cv.Mat());cv.distanceTransform(closed,dist,cv.DIST_L2,5);
@@ -117,7 +129,7 @@ export async function processVision(cv,operation,p){
         if(maximum<=0)continue;const threshold=maximum*.28;
         for(let yy=top;yy<top+bh;yy++)for(let xx=left;xx<left+bw;xx++){const at=yy*w+xx;if(labels.data32S[at]===label&&dist.data32F[at]>threshold)peaks.data[at]=255;}
       }
-      const openKernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(3,3)));cv.morphologyEx(peaks,peaks,cv.MORPH_OPEN,openKernel);
+      const openSize=oddMM(.55),openKernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(openSize,openSize)));cv.morphologyEx(peaks,peaks,cv.MORPH_OPEN,openKernel);
       const peakLabels=own(new cv.Mat()),peakStats=own(new cv.Mat()),peakCentroids=own(new cv.Mat()),peakCount=cv.connectedComponentsWithStats(peaks,peakLabels,peakStats,peakCentroids,8,cv.CV_32S);
       const markers=own(cv.Mat.zeros(h,w,cv.CV_32SC1)),backgroundLabel=peakCount;
       for(let i=0;i<w*h;i++)markers.data32S[i]=closed.data[i]?peakLabels.data32S[i]:backgroundLabel;
@@ -128,7 +140,7 @@ export async function processVision(cv,operation,p){
         for(let yy=0;yy<h;yy++)for(let xx=0;xx<w;xx++){const at=yy*w+xx;if(markers.data32S[at]!==label)continue;area++;if(p.evidence?.[at])signal++;left=Math.min(left,xx);right=Math.max(right,xx);top=Math.min(top,yy);bottom=Math.max(bottom,yy);}
         if(area<minArea||right<left||bottom<top||signal/Math.max(1,area)<.03)continue;
         const bw=right-left+1,bh=bottom-top+1;if(bw/w*p.paperWidthMM<p.smallestMM||bh/h*p.paperHeightMM<p.smallestMM||bw>w*.94||bh>h*.94)continue;
-        const pad=8,x=Math.max(0,left-pad),y=Math.max(0,top-pad),rw=Math.min(w,right+1+pad)-x,rh=Math.min(h,bottom+1+pad)-y;
+        const pad=Math.max(4,Math.round(pxPerMM*1.7)),x=Math.max(0,left-pad),y=Math.max(0,top-pad),rw=Math.min(w,right+1+pad)-x,rh=Math.min(h,bottom+1+pad)-y;
         const checkpoint=resources.length,imageROI=own(rgba.roi(new cv.Rect(x,y,rw,rh))),rgbROI=own(new cv.Mat()),gc=own(new cv.Mat(rh,rw,cv.CV_8UC1,new cv.Scalar(cv.GC_PR_BGD)));
         cv.cvtColor(imageROI,rgbROI,cv.COLOR_RGBA2RGB);let foreground=0,background=0;
         for(let py=0;py<rh;py++)for(let px=0;px<rw;px++){
@@ -147,8 +159,7 @@ export async function processVision(cv,operation,p){
         let largest=null,largestArea=0;for(let j=0;j<contours.size();j++){const c=contours.get(j),a=cv.contourArea(c);if(a>largestArea){largest?.delete?.();largest=c;largestArea=a;}else c.delete();}
         if(!largest||largestArea<minArea){largest?.delete?.();while(resources.length>checkpoint)resources.pop().delete();continue;}
         alpha.setTo(new cv.Scalar(0));const one=own(new cv.MatVector());one.push_back(largest);cv.drawContours(alpha,one,-1,new cv.Scalar(255),cv.FILLED);
-        let boundary=largest,edgeMethod='watershed-grabcut';const rectangle=cv.minAreaRect(largest),rectArea=Math.max(1,rectangle.size.width*rectangle.size.height),rectFill=largestArea/rectArea;
-        if(rectFill>=.90){const box=cv.boxPoints(rectangle),rectContour=own(cv.matFromArray(4,1,cv.CV_32SC2,box.flatMap(point=>[Math.round(point.x),Math.round(point.y)])));alpha.setTo(new cv.Scalar(0));const rects=own(new cv.MatVector());rects.push_back(rectContour);cv.drawContours(alpha,rects,-1,new cv.Scalar(255),cv.FILLED);boundary=rectContour;edgeMethod='watershed-rectangular';}
+        const boundary=largest,edgeMethod='watershed-grabcut';
         const bounds=cv.boundingRect(boundary),fx=x+bounds.x,fy=y+bounds.y,fw=bounds.width,fh=bounds.height,localAlpha=own(alpha.roi(new cv.Rect(bounds.x,bounds.y,fw,fh))),packed=own(new cv.Mat());localAlpha.copyTo(packed);
         const poly=own(new cv.Mat());cv.approxPolyDP(boundary,poly,Math.max(.7,cv.arcLength(boundary,true)*.0015),true);const points=Array.from({length:poly.rows},(_,j)=>[poly.data32S[j*2]-bounds.x,poly.data32S[j*2+1]-bounds.y]);
         result.push({x:fx/w,y:fy/h,w:fw/w,h:fh/h,pixels:largestArea,evidenceDensity:signal/Math.max(1,area),edgeMethod,mask:{width:fw,height:fh,alpha:new Uint8Array(packed.data),polygons:[points]}});

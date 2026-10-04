@@ -35,3 +35,51 @@ test('strict paper-contact recovery can restore a missed pale photo',()=>{
   const photo=c(.55,.12,.2,.18,{edgeMethod:'edge-enclosure',paperContactRatio:.96,insideEvidenceRatio:.55,fillRatio:.8});
   assert.deepEqual(fuseRecognitionCandidates([],[photo]),[photo]);
 });
+
+
+test('closed physical carrier may reunite several substantial pale-interior fragments without a shape class',()=>{
+  const top=c(.20,.20,.34,.07),left=c(.18,.27,.08,.24),bottom=c(.22,.48,.30,.08);
+  const carrier=c(.16,.17,.42,.42,{edgeMethod:'edge-enclosure',paperContactRatio:.96,insideEvidenceRatio:.28,interiorBackgroundRatio:.02,fillRatio:.68});
+  assert.deepEqual(fuseRecognitionCandidates([top,left,bottom],[carrier]),[carrier]);
+});
+
+test('page-connected gap prevents an accidental enclosure from merging neighbouring loose items',()=>{
+  const a=c(.15,.20,.18,.22),b=c(.42,.20,.18,.22);
+  const outer=c(.10,.15,.56,.34,{edgeMethod:'edge-enclosure',paperContactRatio:.95,insideEvidenceRatio:.32,interiorBackgroundRatio:.24,fillRatio:.60});
+  const out=fuseRecognitionCandidates([a,b],[outer]);
+  assert.equal(out.length,2);assert.ok(out.includes(a)&&out.includes(b));
+});
+
+test('tiny internal detail with a one-pixel-style bbox overshoot is still suppressed by its physical parent',()=>{
+  const parent=c(.30,.30,.40,.30,{edgeMethod:'edge-enclosure',paperContactRatio:.97,insideEvidenceRatio:.25,fillRatio:.88,rectFill:.93});
+  const glyph=c(.64,.299,.04,.04,{edgeMethod:'watershed-grabcut'});
+  const out=fuseRecognitionCandidates([glyph],[parent]);
+  assert.deepEqual(out,[parent]);
+});
+
+
+test('reconstructed fragmented carrier merges sparse pieces but not substantial neighbours',()=>{
+  const f1=c(.10,.60,.06,.23),f2=c(.15,.60,.28,.04),f3=c(.10,.66,.12,.13),f4=c(.39,.62,.07,.06);
+  const carrier=c(.07,.58,.43,.28,{edgeMethod:'boundary-reconstruction',boundaryReconstruction:true,reconstructionScore:.78,edgeSupportRatio:.72,paperContactRatio:.82,interiorBackgroundRatio:.45,fillRatio:.81,matchedOccupancy:.46});
+  assert.deepEqual(fuseRecognitionCandidates([f1,f2,f3,f4],[carrier]),[carrier]);
+  const a=c(.12,.12,.22,.27),b=c(.40,.10,.58,.42);
+  const accidental=c(.10,.08,.88,.45,{edgeMethod:'boundary-reconstruction',boundaryReconstruction:true,reconstructionScore:.82,edgeSupportRatio:.75,paperContactRatio:.80,interiorBackgroundRatio:.16,fillRatio:.50,matchedOccupancy:.84});
+  const out=fuseRecognitionCandidates([a,b],[accidental]);
+  assert.equal(out.length,2);assert.ok(out.includes(a)&&out.includes(b));
+});
+
+
+test('overlapping watershed fragments may reunite even when their summed occupancy is high',()=>{
+  const a=c(.62,.14,.09,.09),b=c(.65,.17,.21,.22),d=c(.62,.19,.07,.09);
+  const carrier=c(.62,.13,.23,.27,{edgeMethod:'boundary-reconstruction',boundaryReconstruction:true,reconstructionScore:.64,edgeSupportRatio:.74,paperContactRatio:.62,interiorBackgroundRatio:.25,fillRatio:.66,matchedOccupancy:1.01,matchedPairOverlap:.54});
+  assert.deepEqual(fuseRecognitionCandidates([a,b,d],[carrier]),[carrier]);
+});
+
+
+test('edge-certain reconstruction may refine one instance when page flood makes paper contact unreliable',()=>{
+  const rough=c(.47,.44,.53,.42);
+  const physical=c(.47,.45,.53,.39,{edgeMethod:'boundary-reconstruction',boundaryReconstruction:true,reconstructionScore:.58,edgeSupportRatio:.94,closureScaleMM:.65,boundaryShadowFraction:.02,paperContactRatio:.06,interiorBackgroundRatio:.01,fillRatio:.44,matchedInstances:1,largestMatchShare:1.08});
+  assert.deepEqual(fuseRecognitionCandidates([rough],[physical]),[physical]);
+  const tiny=c(.24,.27,.09,.06,{edgeMethod:'boundary-reconstruction',boundaryReconstruction:true,reconstructionScore:.61,edgeSupportRatio:.97,closureScaleMM:.65,boundaryShadowFraction:0,paperContactRatio:0,interiorBackgroundRatio:0,fillRatio:.53,matchedInstances:1,largestMatchShare:8});
+  assert.deepEqual(fuseRecognitionCandidates([rough],[tiny]),[rough]);
+});
