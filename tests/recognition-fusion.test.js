@@ -74,3 +74,12 @@ test('overlapping watershed fragments may reunite even when their summed occupan
   const carrier=c(.62,.13,.23,.27,{edgeMethod:'boundary-reconstruction',boundaryReconstruction:true,reconstructionScore:.64,edgeSupportRatio:.74,paperContactRatio:.62,interiorBackgroundRatio:.25,fillRatio:.66,matchedOccupancy:1.01,matchedPairOverlap:.54});
   assert.deepEqual(fuseRecognitionCandidates([a,b,d],[carrier]),[carrier]);
 });
+
+
+test('edge-certain reconstruction may refine one instance when page flood makes paper contact unreliable',()=>{
+  const rough=c(.47,.44,.53,.42);
+  const physical=c(.47,.45,.53,.39,{edgeMethod:'boundary-reconstruction',boundaryReconstruction:true,reconstructionScore:.58,edgeSupportRatio:.94,closureScaleMM:.65,boundaryShadowFraction:.02,paperContactRatio:.06,interiorBackgroundRatio:.01,fillRatio:.44,matchedInstances:1,largestMatchShare:1.08});
+  assert.deepEqual(fuseRecognitionCandidates([rough],[physical]),[physical]);
+  const tiny=c(.24,.27,.09,.06,{edgeMethod:'boundary-reconstruction',boundaryReconstruction:true,reconstructionScore:.61,edgeSupportRatio:.97,closureScaleMM:.65,boundaryShadowFraction:0,paperContactRatio:0,interiorBackgroundRatio:0,fillRatio:.53,matchedInstances:1,largestMatchShare:8});
+  assert.deepEqual(fuseRecognitionCandidates([rough],[tiny]),[rough]);
+});
