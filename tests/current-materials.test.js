@@ -10,7 +10,7 @@ function memoryDB(seed={}){
     put:row=>stores[name].set(row.id,structuredClone(row)),
     delete:id=>stores[name].delete(id)
   })});
-  return {stores,all:async name=>[...stores[name].values()].map(structuredClone),transaction,confirmedTransaction:transaction};
+  return {stores,all:async name=>[...stores[name].values()].map(row=>structuredClone(row)),transaction,confirmedTransaction:transaction};
 }
 test('current material sync removes only retired system records and seeds the current catalog',async()=>{
   const currentId='B7000000-0000-4000-8000-000000009001';
