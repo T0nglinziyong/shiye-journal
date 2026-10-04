@@ -69,7 +69,7 @@ export async function processVision(cv,operation,p){
       cv.Canny(blurred,edges,20,65);
       const closeKernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(5,5))),growKernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(3,3)));
       cv.morphologyEx(edges,closed,cv.MORPH_CLOSE,closeKernel,new cv.Point(-1,-1),2);cv.dilate(closed,closed,growKernel);
-      const contours=own(new cv.MatVector()),hierarchy=own(new cv.Mat());cv.findContours(closed,contours,hierarchy,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_SIMPLE);
+      const contours=own(new cv.MatVector()),hierarchy=own(new cv.Mat());cv.findContours(closed,contours,hierarchy,cv.RETR_LIST,cv.CHAIN_APPROX_SIMPLE);
       const out=[],w=p.width,h=p.height,minArea=Math.max(24,(p.smallestMM/p.paperWidthMM*w)*(p.smallestMM/p.paperHeightMM*h)*.18);
       for(let i=0;i<contours.size();i++){
         const contour=own(contours.get(i)),area=cv.contourArea(contour);if(area<minArea||area>w*h*.55)continue;
@@ -81,10 +81,18 @@ export async function processVision(cv,operation,p){
         let signal=0,inside=0;
         for(let yy=b.y;yy<b.y+b.height;yy++)for(let xx=b.x;xx<b.x+b.width;xx++){const at=yy*w+xx;if(!filled.data[at])continue;inside++;if(p.evidence?.[at])signal++;}
         if(signal<Math.max(10,inside*.003))continue;
+        let boundaryScore=0,boundaryShadow=0,boundarySamples=0;
+        for(let j=0;j<contour.rows;j++){
+          const xx=contour.data32S[j*2],yy=contour.data32S[j*2+1];
+          for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const sx=xx+dx,sy=yy+dy;if(sx<0||sx>=w||sy<0||sy>=h)continue;const at=sy*w+sx;boundaryScore+=p.score?.[at]||0;boundaryShadow+=p.shadowLikelihood?.[at]||0;boundarySamples++;}
+        }
+        const edgeStrength=boundarySamples?boundaryScore/boundarySamples:0,shadowFraction=boundarySamples?boundaryShadow/boundarySamples:0;
+        if(shadowFraction>.58&&edgeStrength<38)continue;
         const x=Math.max(0,b.x-2),y=Math.max(0,b.y-2),rw=Math.min(w,b.x+b.width+2)-x,rh=Math.min(h,b.y+b.height+2)-y,local=own(filled.roi(new cv.Rect(x,y,rw,rh))),packed=own(new cv.Mat());local.copyTo(packed);
         const poly=own(new cv.Mat());cv.approxPolyDP(contour,poly,Math.max(.7,cv.arcLength(contour,true)*.0015),true);
         const points=Array.from({length:poly.rows},(_,j)=>[poly.data32S[j*2]-x,poly.data32S[j*2+1]-y]);
-        out.push({x:x/w,y:y/h,w:rw/w,h:rh/h,pixels:inside,edgeMethod:'edge-enclosure',structuralConfidence:Math.min(1,.45+fill*.35+Math.min(signal/Math.max(inside*.02,1),1)*.20),mask:{width:rw,height:rh,alpha:new Uint8Array(packed.data),polygons:[points]}});
+        const confidence=Math.min(1,.24+fill*.20+Math.min(signal/Math.max(inside*.02,1),1)*.18+Math.min(edgeStrength/75,1)*.28+(1-shadowFraction)*.10);
+        out.push({x:x/w,y:y/h,w:rw/w,h:rh/h,pixels:inside,edgeMethod:'edge-enclosure',structuralConfidence:confidence,boundaryEdgeStrength:edgeStrength,boundaryShadowFraction:shadowFraction,mask:{width:rw,height:rh,alpha:new Uint8Array(packed.data),polygons:[points]}});
       }
       return out.sort((a,b)=>a.y-b.y||a.x-b.x).slice(0,48);
     }
