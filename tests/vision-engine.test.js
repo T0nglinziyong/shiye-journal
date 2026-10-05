@@ -281,6 +281,7 @@ test('fast recognizer rejects page-edge strips and preserves smooth/concave carr
   assert.equal(oval.edgeMethod,'fast-curve');assert.ok(oval.mask.polygons[0].length>=16,'smooth curve should not collapse into a coarse polygon');
   const irr=out.filter(x=>x.y>.45&&x.x>.4).sort((a,b)=>b.pixels-a.pixels)[0];assert.ok(irr,'irregular white carrier should survive');
   assert.equal(irr.edgeMethod,'fast-curve');
-  const localX=Math.round(.57*irr.mask.width),localY=Math.round(.54*irr.mask.height);
+  const left=Math.round(irr.x*width),top=Math.round(irr.y*height),localX=475-left,localY=545-top;
+  assert.ok(localX>=0&&localY>=0&&localX<irr.mask.width&&localY<irr.mask.height);
   assert.equal(irr.mask.alpha[localY*irr.mask.width+localX],0,'a genuine concavity must not be filled by a convex hull');
 });
