@@ -258,3 +258,29 @@ test('fast shared-pass recognizer keeps a production-size four-material page wit
   assert.ok(out.every(x=>x.recognitionConfidence>=.54));
   assert.ok(elapsed<3000,'shared-pass OpenCV recognition took '+elapsed.toFixed(0)+'ms');
 });
+
+
+test('region-first fast recognizer rejects frame artifacts and keeps line, smooth-curve, and concave carriers separate',async()=>{
+  const cv=await cvModule,width=620,height=860,pixels=new Uint8ClampedArray(width*height*4),backgroundConnected=new Uint8Array(width*height),evidence=new Uint8Array(width*height),shadowLikelihood=new Uint8Array(width*height),score=new Uint8Array(width*height);
+  const insidePoly=(x,y,pts)=>{let hit=false;for(let i=0,j=pts.length-1;i<pts.length;j=i++){const [xi,yi]=pts[i],[xj,yj]=pts[j];if(((yi>y)!==(yj>y))&&x<(xj-xi)*(y-yi)/(yj-yi)+xi)hit=!hit;}return hit;};
+  const oval={cx:435,cy:190,rx:62,ry:104},box={x:70,y:90,w:185,h:205},irregular=[[340,480],[395,452],[458,470],[490,520],[458,550],[492,625],[430,614],[390,680],[350,620],[308,636],[334,558],[300,520]];
+  for(let y=0;y<height;y++)for(let x=0;x<width;x++){
+    const at=y*width+x,p=at*4,frame=x<7,rect=x>=box.x&&x<box.x+box.w&&y>=box.y&&y<box.y+box.h,ov=((x-oval.cx)/oval.rx)**2+((y-oval.cy)/oval.ry)**2<=1,irr=insidePoly(x,y,irregular);
+    let color=[246,246,246],inside=false,border=false;
+    if(frame)color=[188,188,188];
+    if(rect){inside=true;color=[135,187,150];border=x-box.x<3||box.x+box.w-1-x<3||y-box.y<3||box.y+box.h-1-y<3;}
+    if(ov){inside=true;color=[234,234,229];const n=((x-oval.cx)/oval.rx)**2+((y-oval.cy)/oval.ry)**2;border=n>.90;}
+    if(irr){inside=true;color=[244,244,240];border=!insidePoly(x-2,y,irregular)||!insidePoly(x+2,y,irregular)||!insidePoly(x,y-2,irregular)||!insidePoly(x,y+2,irregular);}
+    if(border)color=[145,145,142];
+    if(irr&&((x-403)**2+(y-563)**2<31**2||x>410&&x<450&&y>530&&y<600))color=[72,72,72];
+    pixels.set([...color,255],p);backgroundConnected[at]=inside?0:1;
+    if(inside&&(border||color[0]<180||Math.max(...color)-Math.min(...color)>10)){evidence[at]=1;score[at]=100;}
+  }
+  const out=await processVision(cv,'materials-fast',{pixels,width,height,backgroundConnected,evidence,shadowLikelihood,score,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
+  assert.equal(out.length,3,JSON.stringify(out.map(x=>({bbox:[x.x,x.y,x.w,x.h],method:x.edgeMethod}))));
+  assert.equal(out.some(x=>x.x<.03&&x.h>.5),false,'page frame strip must never become a material');
+  const curved=out.filter(x=>x.x>.55&&x.y<.4)[0];assert.ok(curved,'pale oval carrier must survive');assert.match(curved.edgeMethod,/curve/);assert.ok(curved.mask.polygons[0].length>=24,'smooth curve must retain dense boundary samples');
+  const free=out.filter(x=>x.y>.45)[0];assert.ok(free,'irregular pale carrier must survive');assert.equal(free.edgeMethod,'fast-freeform');
+  const gx=476,gy=578,left=Math.round(free.x*width),top=Math.round(free.y*height),lx=gx-left,ly=gy-top;
+  if(lx>=0&&ly>=0&&lx<free.mask.width&&ly<free.mask.height)assert.equal(free.mask.alpha[ly*free.mask.width+lx],0,'true concavity must remain outside the mask');
+});
