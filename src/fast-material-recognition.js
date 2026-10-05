@@ -272,8 +272,8 @@ function circleCandidates(cv,mask,supportEdges,circles,w,h,lab,paperRef,evidence
     // False holes are much more expensive than misses. No isolated Hough
     // circle is ever carved: first it must pass page-colour + material-ring
     // tests, then belong to a repeated manufacturing pattern.
-    if(pageDistance<=35&&edgeSupport>=.35&&ringMaterialFraction>=.18)strict.push({...candidate,pageLike:pageDistance<=18});
-    else if(pageDistance<=45&&edgeSupport>=.14&&ringMaterialFraction>=.08)weak.push({...candidate,pageLike:pageDistance<=24});
+    if(pageDistance<=35&&edgeSupport>=.35&&ringMaterialFraction>=.18)strict.push({...candidate,pageLike:pageDistance<=30});
+    else if(pageDistance<=45&&edgeSupport>=.14&&ringMaterialFraction>=.08)weak.push({...candidate,pageLike:pageDistance<=35});
   }
   dist.delete();return {strict,weak};
 }
