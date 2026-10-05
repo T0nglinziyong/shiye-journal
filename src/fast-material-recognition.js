@@ -57,28 +57,34 @@ function edgeImage(cv,src){
 }
 
 function proposals(cv,edges,page,{width:w,height:h,paperWidthMM,paperHeightMM,smallestMM},pxPerMM){
-  const closeSize=Math.max(3,(Math.round(pxPerMM*.55)|1)),kernel=cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(closeSize,closeSize)),closed=new cv.Mat(),contours=new cv.MatVector(),hierarchy=new cv.Mat(),out=[];
-  try{
-    cv.morphologyEx(edges,closed,cv.MORPH_CLOSE,kernel);cv.findContours(closed,contours,hierarchy,cv.RETR_LIST,cv.CHAIN_APPROX_SIMPLE);
-    const primaryMin=Math.max((pxPerMM*smallestMM)**2*.12,w*h*.0045),smallMin=(pxPerMM*smallestMM)**2*.12;
-    for(let i=0;i<contours.size();i++){
-      const c=contours.get(i),area=cv.contourArea(c);if(area<smallMin||area>w*h*.40){c.delete();continue;}
-      const b=cv.boundingRect(c),widthMM=b.width/w*paperWidthMM,heightMM=b.height/h*paperHeightMM;
-      if(Math.min(widthMM,heightMM)<smallestMM||b.width>w*.94||b.height>h*.94){c.delete();continue;}
-      const rect=cv.minAreaRect(c),rectFill=area/Math.max(1,rect.size.width*rect.size.height),metrics=pageMetrics(cv,c,page,w,h,pxPerMM),touches=b.x<=2||b.y<=2||b.x+b.width>=w-2||b.y+b.height>=h-2;
-      const frameBand=Math.max(2,Math.round(pxPerMM*1.6));let framePoints=0;
-      for(let j=0;j<c.rows;j++){const x=c.data32S[j*2],y=c.data32S[j*2+1];if(x<frameBand||y<frameBand||x>=w-frameBand||y>=h-frameBand)framePoints++;}
-      const frameFraction=framePoints/Math.max(1,c.rows),longThin=(b.width>w*.48&&b.height<h*.14)||(b.height>h*.48&&b.width<w*.14);
-      // Rectification/page-border remnants are long, frame-hugging contours.
-      // Reject them geometrically instead of relying on colour alone, while
-      // still allowing a genuine compact material to touch the page edge.
-      if(frameFraction>.26&&(longThin||metrics.insidePage>.42)){c.delete();continue;}
-      const primary=area>=primaryMin,smallPhysical=!touches&&metrics.paperContact>.65&&metrics.insidePage<.25&&rectFill>.35;
-      if(!(primary||smallPhysical)||(metrics.paperContact<.25&&rectFill<.80)){c.delete();continue;}
-      const approx=new cv.Mat();cv.approxPolyDP(c,approx,Math.max(1.5,cv.arcLength(c,true)*.02),true);
-      out.push({contour:c,area,bbox:boxObj(b),rectFill,paperContact:metrics.paperContact,insidePage:metrics.insidePage,vertices:approx.rows,small:!primary,frameFraction,source:'edge'});approx.delete();
-    }
-  }finally{kernel.delete();closed.delete();contours.delete();hierarchy.delete();}
+  const out=[],primaryMin=Math.max((pxPerMM*smallestMM)**2*.12,w*h*.0045),smallMin=(pxPerMM*smallestMM)**2*.12;
+  // Two physical closing scales improve recall for pale/soft boundaries without
+  // forcing the entire page through a large aggressive closure. Downstream NMS
+  // prefers the tighter candidate when both scales explain the same carrier.
+  for(const closeMM of [.55,1.10]){
+    const closeSize=Math.max(3,(Math.round(pxPerMM*closeMM)|1)),kernel=cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(closeSize,closeSize)),closed=new cv.Mat(),contours=new cv.MatVector(),hierarchy=new cv.Mat();
+    try{
+      cv.morphologyEx(edges,closed,cv.MORPH_CLOSE,kernel);cv.findContours(closed,contours,hierarchy,cv.RETR_LIST,cv.CHAIN_APPROX_SIMPLE);
+      for(let i=0;i<contours.size();i++){
+        const q=contours.get(i),area=cv.contourArea(q);if(area<smallMin||area>w*h*.40){q.delete();continue;}
+        const b=cv.boundingRect(q),widthMM=b.width/w*paperWidthMM,heightMM=b.height/h*paperHeightMM;
+        if(Math.min(widthMM,heightMM)<smallestMM||b.width>w*.94||b.height>h*.94){q.delete();continue;}
+        const rect=cv.minAreaRect(q),rectFill=area/Math.max(1,rect.size.width*rect.size.height),metrics=pageMetrics(cv,q,page,w,h,pxPerMM),touches=b.x<=2||b.y<=2||b.x+b.width>=w-2||b.y+b.height>=h-2;
+        const frameBand=Math.max(2,Math.round(pxPerMM*1.6));let framePoints=0;
+        for(let j=0;j<q.rows;j++){const x=q.data32S[j*2],y=q.data32S[j*2+1];if(x<frameBand||y<frameBand||x>=w-frameBand||y>=h-frameBand)framePoints++;}
+        const frameFraction=framePoints/Math.max(1,q.rows),longThin=(b.width>w*.48&&b.height<h*.14)||(b.height>h*.48&&b.width<w*.14);
+        if(frameFraction>.26&&(longThin||metrics.insidePage>.42)){q.delete();continue;}
+        const primary=area>=primaryMin,smallPhysical=!touches&&metrics.paperContact>.58&&metrics.insidePage<.30&&rectFill>.32;
+        // Soft pale carriers may have imperfect page-contact because their
+        // boundary is partly missing; the larger closure is allowed only when
+        // most of its interior is not page-connected and geometry is coherent.
+        const paleRecovery=closeMM>.8&&!touches&&metrics.insidePage<.18&&rectFill>.45&&area>=primaryMin*.70;
+        if(!(primary||smallPhysical||paleRecovery)||(metrics.paperContact<.18&&rectFill<.78&&!paleRecovery)){q.delete();continue;}
+        const approx=new cv.Mat();cv.approxPolyDP(q,approx,Math.max(1.5,cv.arcLength(q,true)*.02),true);
+        out.push({contour:q,area,bbox:boxObj(b),rectFill,paperContact:metrics.paperContact,insidePage:metrics.insidePage,vertices:approx.rows,small:!primary&&!paleRecovery,frameFraction,source:'edge',closureScaleMM:closeMM});approx.delete();
+      }
+    }finally{kernel.delete();closed.delete();contours.delete();hierarchy.delete();}
+  }
   return out;
 }
 
@@ -247,10 +253,21 @@ function smoothFreeform(cv,contour,w,h,pxPerMM){
 }
 
 function globalCircles(cv,gray,pxPerMM){
-  const medianBlurred=new cv.Mat(),circles=new cv.Mat();cv.medianBlur(gray,medianBlurred,5);
-  cv.HoughCircles(medianBlurred,circles,cv.HOUGH_GRADIENT,1,Math.max(8,Math.round(pxPerMM*4)),65,15,Math.max(3,Math.round(pxPerMM*.8)),Math.max(8,Math.round(pxPerMM*4)));
-  const out=[];for(let i=0;i+2<circles.data32F.length;i+=3)out.push({x:Math.round(circles.data32F[i]),y:Math.round(circles.data32F[i+1]),r:Math.round(circles.data32F[i+2])});
-  medianBlurred.delete();circles.delete();return out;
+  const medianBlurred=new cv.Mat();cv.medianBlur(gray,medianBlurred,5);const out=[];
+  // Candidate generation is intentionally recall-oriented. False holes are
+  // controlled later by the much stricter >=4-hole structural consensus, so
+  // a second lower Hough threshold is safe and recovers faint physical rims.
+  for(const param2 of [15,11]){
+    const circles=new cv.Mat();
+    cv.HoughCircles(medianBlurred,circles,cv.HOUGH_GRADIENT,1,Math.max(8,Math.round(pxPerMM*3.5)),62,param2,Math.max(3,Math.round(pxPerMM*.75)),Math.max(9,Math.round(pxPerMM*4.2)));
+    for(let i=0;i+2<circles.data32F.length;i+=3){
+      const candidate={x:Math.round(circles.data32F[i]),y:Math.round(circles.data32F[i+1]),r:Math.round(circles.data32F[i+2])};
+      if(out.some(q=>Math.hypot(q.x-candidate.x,q.y-candidate.y)<Math.max(3,(q.r+candidate.r)*.35)&&Math.abs(q.r-candidate.r)<Math.max(3,q.r*.45)))continue;
+      out.push(candidate);
+    }
+    circles.delete();
+  }
+  medianBlurred.delete();return out;
 }
 
 function circleCandidates(cv,mask,supportEdges,circles,w,h,lab,paperRef,evidence,pxPerMM){
