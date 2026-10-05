@@ -227,3 +227,30 @@ test('multiple repeated apertures are recovered without a fixed count or side te
   const at=(gx,gy)=>{const x=Math.round(gx-out.x*width),y=Math.round(gy-out.y*height);return out.mask.alpha[y*out.mask.width+x];};
   for(const y of ys)assert.equal(at(hx,y),0,'every pattern-supported aperture should remain transparent');
 });
+
+
+test('fast shared-pass recognizer finds four materials and repeated apertures in one analysis',async()=>{
+  const cv=await cvModule,width=500,height=700,pixels=new Uint8ClampedArray(width*height*4),backgroundConnected=new Uint8Array(width*height),evidence=new Uint8Array(width*height),shadowLikelihood=new Uint8Array(width*height),score=new Uint8Array(width*height);
+  const items=[
+    {x:45,y:70,w:165,h:190,color:[130,185,145],holes:[110,145,180,215]},
+    {x:285,y:70,w:135,h:205,color:[232,232,226],holes:[]},
+    {x:55,y:390,w:170,h:190,color:[130,165,215],holes:[]},
+    {x:290,y:410,w:150,h:155,color:[220,155,185],holes:[]}
+  ];
+  for(let y=0;y<height;y++)for(let x=0;x<width;x++){
+    const at=y*width+x,p=at*4;let color=[246,246,246],inside=false,hole=false;
+    for(const item of items){
+      if(x>=item.x&&x<item.x+item.w&&y>=item.y&&y<item.y+item.h){
+        inside=true;color=item.color;
+        for(const hy of item.holes)if((x-(item.x+18))**2+(y-hy)**2<=7**2){hole=true;color=[246,246,246];}
+        if(!hole&&(x-item.x<3||item.x+item.w-1-x<3||y-item.y<3||item.y+item.h-1-y<3))color=color.map(v=>Math.max(0,v-35));
+      }
+    }
+    pixels.set([...color,255],p);backgroundConnected[at]=inside?0:1;
+    if(inside&&!hole&&Math.max(...color)-Math.min(...color)>12){evidence[at]=1;score[at]=90;}
+  }
+  const out=await processVision(cv,'materials-fast',{pixels,width,height,backgroundConnected,evidence,shadowLikelihood,score,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
+  assert.equal(out.length,4,JSON.stringify(out.map(x=>({x:x.x,y:x.y,w:x.w,h:x.h,holes:x.apertureCount,method:x.edgeMethod}))));
+  assert.ok(out.some(x=>x.apertureCount>=4),'repeated physical holes should be detected from one global Hough pass');
+  assert.ok(out.every(x=>x.recognitionConfidence>=.54));
+});
