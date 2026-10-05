@@ -81,7 +81,7 @@ function proposals(cv,edges,page,{width:w,height:h,paperWidthMM,paperHeightMM,sm
 }
 
 function regionProposals(cv,page,evidence,{width:w,height:h,paperWidthMM,paperHeightMM,smallestMM},pxPerMM){
-  const material=cv.Mat.zeros(h,w,cv.CV_8UC1),closed=new cv.Mat(),contours=new cv.MatVector(),hierarchy=new cv.MatVector(),out=[];
+  const material=cv.Mat.zeros(h,w,cv.CV_8UC1),closed=new cv.Mat(),contours=new cv.MatVector(),hierarchy=new cv.Mat(),out=[];
   try{
     for(let i=0;i<w*h;i++)material.data[i]=(!page.data[i]||evidence?.[i])?255:0;
     const k=Math.max(3,(Math.round(pxPerMM*.75)|1)),kernel=cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(k,k));
