@@ -242,7 +242,11 @@ test('fast shared-pass recognizer finds four materials and repeated apertures in
     for(const item of items){
       if(x>=item.x&&x<item.x+item.w&&y>=item.y&&y<item.y+item.h){
         inside=true;color=item.color;
-        for(const hy of item.holes)if((x-(item.x+18))**2+(y-hy)**2<=7**2){hole=true;color=[246,246,246];}
+        for(const hy of item.holes){
+          const d=(x-(item.x+18))**2+(y-hy)**2;
+          if(d<=7**2){hole=true;color=[246,246,246];}
+          else if(d<=9**2)color=[105,105,105];
+        }
         if(!hole&&(x-item.x<3||item.x+item.w-1-x<3||y-item.y<3||item.y+item.h-1-y<3))color=color.map(v=>Math.max(0,v-35));
       }
     }
