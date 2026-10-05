@@ -103,9 +103,11 @@ function regionProposals(cv,page,evidence,{width:w,height:h,paperWidthMM,paperHe
 }
 
 function dedupeAndSplit(cv,candidates,w,h,pxPerMM){
-  const primary=candidates.filter(x=>!x.small).sort((a,b)=>b.area-a.area),small=candidates.filter(x=>x.small).sort((a,b)=>b.area-a.area),unique=[];
+  const quality=q=>(q.source==='region'?.18:0)+(q.paperContact||0)*.34+(1-(q.insidePage||0))*.24+Math.min(q.rectFill||0,1)*.18-Math.min(q.frameFraction||0,.5)*.24;
+  const primary=candidates.filter(x=>!x.small).sort((a,b)=>quality(b)-quality(a)||b.area-a.area),small=candidates.filter(x=>x.small).sort((a,b)=>quality(b)-quality(a)||b.area-a.area),unique=[];
   for(const q of primary){
-    if(unique.some(k=>bboxIoU(q.bbox,k.bbox)>.78&&Math.min(q.area,k.area)/Math.max(q.area,k.area)>.60)){q.contour.delete();continue;}
+    const duplicate=unique.find(k=>bboxIoU(q.bbox,k.bbox)>.72&&Math.min(q.area,k.area)/Math.max(q.area,k.area)>.52);
+    if(duplicate){q.contour.delete();continue;}
     unique.push(q);
   }
   const replaced=new Map();
@@ -138,8 +140,8 @@ function dedupeAndSplit(cv,candidates,w,h,pxPerMM){
     accepted.push(q);
   }
   const final=[];
-  for(const q of accepted){
-    if(final.some(k=>bboxIoU(q.bbox,k.bbox)>.78&&Math.min(q.area,k.area)/Math.max(q.area,k.area)>.55)){if(replaced.size&&![...replaced.values()].includes(q))q.contour.delete();continue;}
+  for(const q of accepted.sort((a,b)=>quality(b)-quality(a)||b.area-a.area)){
+    if(final.some(k=>bboxIoU(q.bbox,k.bbox)>.72&&Math.min(q.area,k.area)/Math.max(q.area,k.area)>.50)){if(replaced.size&&![...replaced.values()].includes(q))q.contour.delete();continue;}
     final.push(q);
   }
   // Small materials are evaluated only after primary carriers are fixed, so
