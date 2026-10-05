@@ -272,26 +272,30 @@ function circleCandidates(cv,mask,supportEdges,circles,w,h,lab,paperRef,evidence
     // False holes are much more expensive than misses. No isolated Hough
     // circle is ever carved: first it must pass page-colour + material-ring
     // tests, then belong to a repeated manufacturing pattern.
-    if(pageDistance<=7.5&&edgeSupport>=.24&&ringMaterialFraction>=.12)strict.push(candidate);
-    else if(pageDistance<=12&&edgeSupport>=.12&&ringMaterialFraction>=.06)weak.push(candidate);
+    if(pageDistance<=35&&edgeSupport>=.35&&ringMaterialFraction>=.18)strict.push({...candidate,pageLike:pageDistance<=18});
+    else if(pageDistance<=45&&edgeSupport>=.14&&ringMaterialFraction>=.08)weak.push({...candidate,pageLike:pageDistance<=24});
   }
   dist.delete();return {strict,weak};
 }
 
 function groupCircles(strict,weak,pxPerMM){
-  const groups=[];if(strict.length<3)return [];
+  const groups=[];if(strict.length<4)return [];
   for(let i=0;i<strict.length-2;i++)for(let j=i+1;j<strict.length-1;j++)for(let k=j+1;k<strict.length;k++){
     const ids=[i,j,k],pts=ids.map(id=>[strict[id].x,strict[id].y]),cx=(pts[0][0]+pts[1][0]+pts[2][0])/3,cy=(pts[0][1]+pts[1][1]+pts[2][1])/3;
     let xx=0,xy=0,yy=0;for(const [x,y] of pts){const dx=x-cx,dy=y-cy;xx+=dx*dx;xy+=dx*dy;yy+=dy*dy;}const angle=.5*Math.atan2(2*xy,xx-yy),dir=[Math.cos(angle),Math.sin(angle)],normal=[-dir[1],dir[0]];
     if(Math.max(...pts.map(([x,y])=>Math.abs((x-cx)*normal[0]+(y-cy)*normal[1])))>pxPerMM*1.6)continue;
     const medR=median(ids.map(id=>strict[id].r)),cand=[];
     for(let q=0;q<strict.length;q++){const a=strict[q],perp=Math.abs((a.x-cx)*normal[0]+(a.y-cy)*normal[1]);if(perp<=Math.max(pxPerMM*1.6,medR*.75)&&a.r/medR>=.65&&a.r/medR<=1.5)cand.push(q);}
-    if(cand.length<3)continue;
+    if(cand.length<4)continue;
     const sorted=cand.map(id=>({t:(strict[id].x-cx)*dir[0]+(strict[id].y-cy)*dir[1],id})).sort((a,b)=>a.t-b.t),spacing=[];for(let n=1;n<sorted.length;n++)spacing.push(sorted[n].t-sorted[n-1].t);
     const meanSpacing=spacing.reduce((s,x)=>s+x,0)/Math.max(1,spacing.length);
     if(spacing.length>1&&std(spacing)/Math.max(1,meanSpacing)>.22)continue;
-    const group=sorted.map(x=>x.id),edgeD=group.map(id=>strict[id].edgeDistance),radii=group.map(id=>strict[id].r),cvED=std(edgeD)/Math.max(1,edgeD.reduce((s,x)=>s+x,0)/edgeD.length),cvR=std(radii)/Math.max(1,radii.reduce((s,x)=>s+x,0)/radii.length),medRatio=median(edgeD)/Math.max(1,median(radii));
-    if(cvED<=.13&&cvR<=.24&&medRatio<=6.2)groups.push({ids:group,cx,cy,dir,normal,spacing:meanSpacing,medR,edgeD:median(edgeD),minT:sorted[0].t,maxT:sorted[sorted.length-1].t});
+    const group=sorted.map(x=>x.id),edgeD=group.map(id=>strict[id].edgeDistance),radii=group.map(id=>strict[id].r),cvR=std(radii)/Math.max(1,radii.reduce((s,x)=>s+x,0)/radii.length),medRatio=median(edgeD)/Math.max(1,median(radii)),pageLike=group.filter(id=>strict[id].pageLike).length;
+    // Four mutually-consistent circles are required before ANY carving. This
+    // deliberately prefers a missed hole over a false hole. Distance-transform
+    // depth is used only as a broad side-band guard because end holes near a
+    // corner naturally have a smaller Euclidean distance to the carrier edge.
+    if(cvR<=.22&&medRatio<=6.5&&pageLike>=2)groups.push({ids:group,cx,cy,dir,normal,spacing:meanSpacing,medR,edgeD:median(edgeD),minT:sorted[0].t,maxT:sorted[sorted.length-1].t});
   }
   if(!groups.length)return [];groups.sort((a,b)=>b.ids.length-a.ids.length);const accepted=new Map();
   for(const group of groups){
