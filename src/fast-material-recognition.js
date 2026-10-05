@@ -55,7 +55,7 @@ function edgeImage(cv,src){
 }
 
 function proposals(cv,edges,page,{width:w,height:h,paperWidthMM,paperHeightMM,smallestMM},pxPerMM){
-  const closeSize=Math.max(3,(Math.round(pxPerMM*1.0)|1)),kernel=cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(closeSize,closeSize)),closed=new cv.Mat(),contours=new cv.MatVector(),hierarchy=new cv.Mat(),out=[];
+  const closeSize=Math.max(3,(Math.round(pxPerMM*.55)|1)),kernel=cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(closeSize,closeSize)),closed=new cv.Mat(),contours=new cv.MatVector(),hierarchy=new cv.Mat(),out=[];
   try{
     cv.morphologyEx(edges,closed,cv.MORPH_CLOSE,kernel);cv.findContours(closed,contours,hierarchy,cv.RETR_LIST,cv.CHAIN_APPROX_SIMPLE);
     const primaryMin=Math.max((pxPerMM*smallestMM)**2*.12,w*h*.0045),smallMin=(pxPerMM*smallestMM)**2*.12;
@@ -80,29 +80,32 @@ function proposals(cv,edges,page,{width:w,height:h,paperWidthMM,paperHeightMM,sm
   return out;
 }
 
-function regionProposals(cv,page,evidence,{width:w,height:h,paperWidthMM,paperHeightMM,smallestMM},pxPerMM){
-  const material=cv.Mat.zeros(h,w,cv.CV_8UC1),closed=new cv.Mat(),contours=new cv.MatVector(),hierarchy=new cv.Mat(),out=[];
-  try{
-    // IMPORTANT: "not page-connected" is uncertainty, not foreground.
-    // Shadows, illumination gradients and rectification borders can all break
-    // page connectivity. Region proposals therefore require POSITIVE material
-    // evidence; pale/white carriers are recovered later from physical edges.
-    for(let i=0;i<w*h;i++)material.data[i]=evidence?.[i]?255:0;
-    const k=Math.max(3,(Math.round(pxPerMM*.75)|1)),kernel=cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(k,k));
-    try{cv.morphologyEx(material,closed,cv.MORPH_CLOSE,kernel);cv.morphologyEx(closed,closed,cv.MORPH_OPEN,kernel);}finally{kernel.delete();}
-    cv.findContours(closed,contours,hierarchy,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_SIMPLE);
-    const minArea=Math.max((pxPerMM*smallestMM)**2*.18,w*h*.0025),frameBand=Math.max(2,Math.round(pxPerMM*1.6));
-    for(let i=0;i<contours.size();i++){
-      const c=contours.get(i),area=cv.contourArea(c);if(area<minArea||area>w*h*.40){c.delete();continue;}
-      const b=cv.boundingRect(c),widthMM=b.width/w*paperWidthMM,heightMM=b.height/h*paperHeightMM;if(Math.min(widthMM,heightMM)<smallestMM){c.delete();continue;}
-      let framePoints=0;for(let j=0;j<c.rows;j++){const x=c.data32S[j*2],y=c.data32S[j*2+1];if(x<frameBand||y<frameBand||x>=w-frameBand||y>=h-frameBand)framePoints++;}
-      const frameFraction=framePoints/Math.max(1,c.rows),longThin=(b.width>w*.48&&b.height<h*.14)||(b.height>h*.48&&b.width<w*.14);
-      if(frameFraction>.22&&longThin){c.delete();continue;}
-      const rect=cv.minAreaRect(c),rectFill=area/Math.max(1,rect.size.width*rect.size.height),metrics=pageMetrics(cv,c,page,w,h,pxPerMM);
-      if(metrics.insidePage>.18||metrics.paperContact<.35){c.delete();continue;}
-      out.push({contour:c,area,bbox:boxObj(b),rectFill,paperContact:metrics.paperContact,insidePage:metrics.insidePage,vertices:0,small:false,frameFraction,source:'region'});
-    }
-  }finally{material.delete();closed.delete();contours.delete();hierarchy.delete();}
+function regionProposals(cv,rgba,page,{width:w,height:h,paperWidthMM,paperHeightMM,smallestMM},pxPerMM){
+  // Positive chroma carrier proposals. We intentionally model only a/b here:
+  // smooth illumination changes mostly affect L, while coloured paper remains
+  // separated from the A4 sheet. Pale/white carriers are left to edge closure.
+  const rgb=new cv.Mat(),lab=new cv.Mat(),channels=new cv.MatVector(),material=cv.Mat.zeros(h,w,cv.CV_8UC1),closed=new cv.Mat(),contours=new cv.MatVector(),hierarchy=new cv.Mat(),out=[];
+  cv.cvtColor(rgba,rgb,cv.COLOR_RGBA2RGB);cv.cvtColor(rgb,lab,cv.COLOR_RGB2Lab);cv.split(lab,channels);
+  const aa=channels.get(1),bb=channels.get(2),as=[],bs=[];
+  for(let y=0;y<h;y+=3)for(let x=0;x<w;x+=3){const i=y*w+x;if(page.data[i]){as.push(aa.data[i]);bs.push(bb.data[i]);}}
+  // If page connectivity is weak, the image median is still robust because
+  // journal materials occupy a minority of the rectified A4 page.
+  if(as.length<w*h/80)for(let y=0;y<h;y+=4)for(let x=0;x<w;x+=4){const i=y*w+x;as.push(aa.data[i]);bs.push(bb.data[i]);}
+  as.sort((a,b)=>a-b);bs.sort((a,b)=>a-b);const paperA=as[(as.length/2)|0]??128,paperB=bs[(bs.length/2)|0]??128;
+  for(let i=0;i<w*h;i++)if(Math.hypot(aa.data[i]-paperA,bb.data[i]-paperB)>10)material.data[i]=255;
+  const closeSize=Math.max(5,(Math.round(pxPerMM*5.5)|1)),openSize=Math.max(3,(Math.round(pxPerMM*.8)|1)),closeKernel=cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(closeSize,closeSize)),openKernel=cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(openSize,openSize));
+  cv.morphologyEx(material,closed,cv.MORPH_CLOSE,closeKernel);cv.morphologyEx(closed,closed,cv.MORPH_OPEN,openKernel);cv.findContours(closed,contours,hierarchy,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_SIMPLE);
+  const minArea=Math.max((pxPerMM*smallestMM)**2*.18,w*h*.0025),frameBand=Math.max(2,Math.round(pxPerMM*1.6));
+  for(let i=0;i<contours.size();i++){
+    const contour=contours.get(i),area=cv.contourArea(contour);if(area<minArea||area>w*h*.40){contour.delete();continue;}
+    const b=cv.boundingRect(contour),widthMM=b.width/w*paperWidthMM,heightMM=b.height/h*paperHeightMM;if(Math.min(widthMM,heightMM)<smallestMM){contour.delete();continue;}
+    const rect=cv.minAreaRect(contour),rectFill=area/Math.max(1,rect.size.width*rect.size.height);if(rectFill<.75){contour.delete();continue;}
+    let framePoints=0;for(let j=0;j<contour.rows;j++){const x=contour.data32S[j*2],y=contour.data32S[j*2+1];if(x<frameBand||y<frameBand||x>=w-frameBand||y>=h-frameBand)framePoints++;}
+    const frameFraction=framePoints/Math.max(1,contour.rows),longThin=(b.width>w*.48&&b.height<h*.14)||(b.height>h*.48&&b.width<w*.14);if(frameFraction>.22&&longThin){contour.delete();continue;}
+    const metrics=pageMetrics(cv,contour,page,w,h,pxPerMM);
+    out.push({contour,area,bbox:boxObj(b),rectFill,paperContact:metrics.paperContact,insidePage:metrics.insidePage,vertices:0,small:false,frameFraction,source:'region'});
+  }
+  rgb.delete();lab.delete();channels.delete();aa.delete();bb.delete();material.delete();closed.delete();contours.delete();hierarchy.delete();closeKernel.delete();openKernel.delete();
   return out;
 }
 
@@ -148,6 +151,19 @@ function dedupeAndSplit(cv,candidates,w,h,pxPerMM){
     if(final.some(k=>bboxIoU(q.bbox,k.bbox)>.72&&Math.min(q.area,k.area)/Math.max(q.area,k.area)>.50)){if(replaced.size&&![...replaced.values()].includes(q))q.contour.delete();continue;}
     final.push(q);
   }
+  // Remove internal printed/detail contours. Conversely, if a chroma region
+  // covers only a strip inside a much larger high-fill edge carrier (e.g. a
+  // pale keyboard note with a coloured keyboard strip), keep the physical
+  // outer carrier and discard the partial chroma region.
+  final=final.filter((q,qi)=>!final.some((k,ki)=>{
+    if(qi===ki)return false;
+    const contained=containRatio(q.bbox,k.bbox)>.90;
+    if(!contained)return false;
+    if(q.source==='edge'&&k.source==='region')return q.area<k.area*.55;
+    if(q.source==='region'&&k.source==='edge')return k.area>q.area*1.6&&k.rectFill>.70;
+    return q.area<k.area*.55;
+  }));
+
   // Small materials are evaluated only after primary carriers are fixed, so
   // internal print detail cannot change parent splitting/NMS.
   for(const q of small){
@@ -201,22 +217,27 @@ function chooseOuter(cv,src,q,pxPerMM,w,h){
 }
 
 function smoothFreeform(cv,contour,w,h,pxPerMM){
-  // Preserve the observed concavity. Convex hulls are forbidden here because
-  // they erase the white-carrier shape of irregular stickers.
-  const mask=cv.Mat.zeros(h,w,cv.CV_8UC1),v=new cv.MatVector();v.push_back(contour);cv.drawContours(mask,v,-1,new cv.Scalar(255),cv.FILLED);
-  const k=Math.max(3,(Math.round(pxPerMM*.48)|1)),kernel=cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(k,k)),smooth=new cv.Mat(),cs=new cv.MatVector(),hh=new cv.Mat();
-  cv.morphologyEx(mask,smooth,cv.MORPH_CLOSE,kernel);cv.morphologyEx(smooth,smooth,cv.MORPH_OPEN,kernel);cv.findContours(smooth,cs,hh,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_NONE);
-  let best=null,area=0;for(let i=0;i<cs.size();i++){const c=cs.get(i),a=cv.contourArea(c);if(a>area){best?.delete?.();best=c;area=a;}else c.delete();}
-  const source=best||contour,pts=contourPoints(source),step=Math.max(1,Math.round(pxPerMM*.28)),sampled=[];
-  for(let i=0;i<pts.length;i+=step)sampled.push(pts[i]);
-  let out=sampled.length>=12?sampled:pts;
-  // Circular moving-average smoothing gives a true smooth-curve prior without
-  // classifying the whole object as an ellipse.
-  for(let it=0;it<3&&out.length>=8;it++){
-    const next=[];for(let i=0;i<out.length;i++){const a=out[(i-1+out.length)%out.length],b=out[i],d=out[(i+1)%out.length];next.push([(a[0]+2*b[0]+d[0])/4,(a[1]+2*b[1]+d[1])/4]);}out=next;
+  // Curve model selection, not an object-class decision. A smooth convex
+  // contour may be represented by one conic curve when that curve explains
+  // the observed boundary well; otherwise preserve its arbitrary concavity.
+  const hull=new cv.Mat();cv.convexHull(contour,hull,false,true);const area=Math.max(1,cv.contourArea(contour)),solidity=area/Math.max(1,cv.contourArea(hull));
+  if(solidity>.93&&contour.rows>=5){
+    const ellipse=cv.fitEllipse(contour),em=cv.Mat.zeros(h,w,cv.CV_8UC1),cm=cv.Mat.zeros(h,w,cv.CV_8UC1),vv=new cv.MatVector();vv.push_back(contour);cv.drawContours(cm,vv,-1,new cv.Scalar(255),cv.FILLED);cv.ellipse(em,ellipse,new cv.Scalar(255),cv.FILLED);
+    const inter=new cv.Mat(),union=new cv.Mat();cv.bitwise_and(cm,em,inter);cv.bitwise_or(cm,em,union);const fit=cv.countNonZero(inter)/Math.max(1,cv.countNonZero(union));
+    inter.delete();union.delete();cm.delete();em.delete();vv.delete();
+    if(fit>.84){
+      const pts=[],angle=ellipse.angle*Math.PI/180,ca=Math.cos(angle),sa=Math.sin(angle),rx=ellipse.size.width/2,ry=ellipse.size.height/2;
+      for(let i=0;i<96;i++){const t=i*Math.PI*2/96,ux=rx*Math.cos(t),uy=ry*Math.sin(t);pts.push(Math.round(ellipse.center.x+ux*ca-uy*sa),Math.round(ellipse.center.y+ux*sa+uy*ca));}
+      hull.delete();return cv.matFromArray(96,1,cv.CV_32SC2,pts);
+    }
   }
-  const poly=cv.matFromArray(out.length,1,cv.CV_32SC2,out.flatMap(([x,y])=>[Math.round(x),Math.round(y)]));
-  mask.delete();v.delete();kernel.delete();smooth.delete();cs.delete();hh.delete();best?.delete?.();return poly;
+  hull.delete();
+  const mask=cv.Mat.zeros(h,w,cv.CV_8UC1),v=new cv.MatVector();v.push_back(contour);cv.drawContours(mask,v,-1,new cv.Scalar(255),cv.FILLED);
+  const k=Math.max(3,(Math.round(pxPerMM*.40)|1)),kernel=cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(k,k)),smooth=new cv.Mat(),cs=new cv.MatVector(),hh=new cv.Mat();cv.morphologyEx(mask,smooth,cv.MORPH_CLOSE,kernel);cv.morphologyEx(smooth,smooth,cv.MORPH_OPEN,kernel);cv.findContours(smooth,cs,hh,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_NONE);
+  let best=null,bestArea=0;for(let i=0;i<cs.size();i++){const q=cs.get(i),a=cv.contourArea(q);if(a>bestArea){best?.delete?.();best=q;bestArea=a;}else q.delete();}
+  const source=best||contour,pts=contourPoints(source),step=Math.max(1,Math.round(pxPerMM*.22)),sampled=[];for(let i=0;i<pts.length;i+=step)sampled.push(pts[i]);let out=sampled.length>=12?sampled:pts;
+  for(let it=0;it<2&&out.length>=8;it++){const next=[];for(let i=0;i<out.length;i++){const a=out[(i-1+out.length)%out.length],b=out[i],d=out[(i+1)%out.length];next.push([(a[0]+2*b[0]+d[0])/4,(a[1]+2*b[1]+d[1])/4]);}out=next;}
+  const poly=cv.matFromArray(out.length,1,cv.CV_32SC2,out.flatMap(([x,y])=>[Math.round(x),Math.round(y)]));mask.delete();v.delete();kernel.delete();smooth.delete();cs.delete();hh.delete();best?.delete?.();return poly;
 }
 
 function globalCircles(cv,gray,pxPerMM){
@@ -259,7 +280,7 @@ export function recognizeMaterialsFast(cv,p,own){
   const src=own(cv.matFromArray(h,w,cv.CV_8UC4,p.pixels)),page=own(cv.matFromArray(h,w,cv.CV_8UC1,Uint8Array.from(p.backgroundConnected||new Uint8Array(w*h),x=>x?255:0)));
   const {gray,edges}=edgeImage(cv,src);own(gray);own(edges);
   const supportEdges=own(new cv.Mat()),supportKernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(5,5)));cv.dilate(edges,supportEdges,supportKernel);
-  const circlePool=globalCircles(cv,gray,pxPerMM),edgeRaw=proposals(cv,edges,page,{width:w,height:h,paperWidthMM,paperHeightMM,smallestMM},pxPerMM),regionRaw=regionProposals(cv,page,p.evidence,{width:w,height:h,paperWidthMM,paperHeightMM,smallestMM},pxPerMM),selected=dedupeAndSplit(cv,[...regionRaw,...edgeRaw],w,h,pxPerMM),out=[];
+  const circlePool=globalCircles(cv,gray,pxPerMM),edgeRaw=proposals(cv,edges,page,{width:w,height:h,paperWidthMM,paperHeightMM,smallestMM},pxPerMM),regionRaw=regionProposals(cv,src,page,{width:w,height:h,paperWidthMM,paperHeightMM,smallestMM},pxPerMM),selected=dedupeAndSplit(cv,[...regionRaw,...edgeRaw],w,h,pxPerMM),out=[];
   for(const q of selected){
     const approx=new cv.Mat();cv.approxPolyDP(q.contour,approx,Math.max(1.5,cv.arcLength(q.contour,true)*.018),true);
     let boundary,ownedBoundary=false,edgeMethod;
