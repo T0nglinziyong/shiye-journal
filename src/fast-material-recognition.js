@@ -278,7 +278,7 @@ function circleCandidates(cv,mask,supportEdges,circles,w,h,lab,paperRef,evidence
   dist.delete();return {strict,weak};
 }
 
-function groupCircles(strict,weak,pxPerMM){
+function groupCircles(strict,weak,pxPerMM,mask,supportEdges,w,h){
   const groups=[];if(strict.length<4)return [];
   for(let i=0;i<strict.length-2;i++)for(let j=i+1;j<strict.length-1;j++)for(let k=j+1;k<strict.length;k++){
     const ids=[i,j,k],pts=ids.map(id=>[strict[id].x,strict[id].y]),cx=(pts[0][0]+pts[1][0]+pts[2][0])/3,cy=(pts[0][1]+pts[1][1]+pts[2][1])/3;
@@ -312,6 +312,26 @@ function groupCircles(strict,weak,pxPerMM){
       accepted.set('w'+q,a);
     }
   }
+  // Recover at most one weak end member on either side, but ONLY after four
+  // physical holes have established the lattice and ONLY when a real circular
+  // edge exists at the predicted location. We never punch a purely predicted
+  // hole; this keeps false positives much more expensive than misses.
+  for(const group of groups){
+    if(group.ids.length<4)continue;
+    const existing=[...accepted.values()];
+    for(const t of [group.minT-group.spacing,group.maxT+group.spacing]){
+      const x=Math.round(group.cx+group.dir[0]*t),y=Math.round(group.cy+group.dir[1]*t),r=Math.round(group.medR);
+      if(x<r+1||y<r+1||x>=w-r-1||y>=h-r-1||!mask.data[y*w+x])continue;
+      if(existing.some(q=>Math.hypot(q.x-x,q.y-y)<group.spacing*.35))continue;
+      let edge=0,inside=0,samples=56;
+      for(let k=0;k<samples;k++){
+        const angle=k*Math.PI*2/samples,xx=Math.round(x+Math.cos(angle)*r),yy=Math.round(y+Math.sin(angle)*r);
+        if(xx>=0&&xx<w&&yy>=0&&yy<h){if(supportEdges.data[yy*w+xx])edge++;if(mask.data[yy*w+xx])inside++;}
+      }
+      const edgeSupport=edge/samples,insideFraction=inside/samples;
+      if(edgeSupport>=.55&&insideFraction>=.82)accepted.set('p'+x+','+y,{x,y,r,edgeSupport,edgeDistance:r,pageDistance:0,ringMaterialFraction:1,inferred:true});
+    }
+  }
   return [...accepted.values()];
 }
 
@@ -342,7 +362,7 @@ export function recognizeMaterialsFast(cv,p,own){
     }
     approx.delete();
     const mask=cv.Mat.zeros(h,w,cv.CV_8UC1),vv=new cv.MatVector();vv.push_back(boundary);cv.drawContours(mask,vv,-1,new cv.Scalar(255),cv.FILLED);vv.delete();
-    const circleSets=circleCandidates(cv,mask,supportEdges,circlePool,w,h,lab,paperRef,p.evidence,pxPerMM),holes=groupCircles(circleSets.strict,circleSets.weak,pxPerMM);
+    const circleSets=circleCandidates(cv,mask,supportEdges,circlePool,w,h,lab,paperRef,p.evidence,pxPerMM),holes=groupCircles(circleSets.strict,circleSets.weak,pxPerMM,mask,supportEdges,w,h);
     for(const hole of holes)cv.circle(mask,new cv.Point(hole.x,hole.y),hole.r,new cv.Scalar(0),cv.FILLED);
     const bounds=cv.boundingRect(boundary),x=Math.max(0,bounds.x),y=Math.max(0,bounds.y),rw=Math.min(w-x,bounds.width),rh=Math.min(h-y,bounds.height),local=mask.roi(new cv.Rect(x,y,rw,rh)),packed=new cv.Mat();local.copyTo(packed);
     const poly=contourPoints(boundary).map(([px,py])=>[px-x,py-y]),area=cv.countNonZero(mask),confidence=clamp(.45+q.paperContact*.22+Math.min(q.rectFill,.9)*.12+(edgeMethod==='fast-line'?.08:.04)+(q.source==='region'?.05:0)+Math.min(holes.length,5)*.018,0,1);
