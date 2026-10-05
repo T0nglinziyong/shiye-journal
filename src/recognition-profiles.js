@@ -8,8 +8,8 @@ const refineSlimSAM = async context => {
 
 export const recognitionStrategies = Object.freeze([
   {id:'auto', label:'自动 · 按设备'},
-  {id:'fast', label:'传统识别 · 快速', analysisMaxDimension:600},
-  {id:'standard', label:'传统识别 · 标准', analysisMaxDimension:1000},
+  {id:'fast', label:'传统识别 · 快速', analysisMaxDimension:900},
+  {id:'standard', label:'传统识别 · 标准', analysisMaxDimension:1200},
   {id:'detail', label:'传统识别 · 精细', analysisMaxDimension:1600},
   {id:'slimsam', label:'浏览器模型 · SlimSAM（试用）', analysisMaxDimension:1000, refineCandidates:refineSlimSAM}
 ]);
