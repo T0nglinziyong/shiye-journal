@@ -152,7 +152,7 @@ function dedupeAndSplit(cv,candidates,w,h,pxPerMM){
     if(accepted.some(parent=>containRatio(q.bbox,parent.bbox)>.90&&q.area/parent.area<.78&&parent.rectFill>.80)){if(q!==unique[i])q.contour.delete();continue;}
     accepted.push(q);
   }
-  const final=[];
+  let final=[];
   for(const q of accepted.sort((a,b)=>quality(b)-quality(a)||b.area-a.area)){
     if(final.some(k=>bboxIoU(q.bbox,k.bbox)>.72&&Math.min(q.area,k.area)/Math.max(q.area,k.area)>.50)){if(replaced.size&&![...replaced.values()].includes(q))q.contour.delete();continue;}
     final.push(q);
