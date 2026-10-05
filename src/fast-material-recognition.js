@@ -50,6 +50,10 @@ function pageMetrics(cv,contour,page,w,h,pxPerMM){
 function edgeImage(cv,src){
   const gray=new cv.Mat(),blurred=new cv.Mat(),edges=new cv.Mat(),rgb=new cv.Mat(),lab=new cv.Mat(),channels=new cv.MatVector(),aBlur=new cv.Mat(),bBlur=new cv.Mat(),aEdge=new cv.Mat(),bEdge=new cv.Mat();
   cv.cvtColor(src,gray,cv.COLOR_RGBA2GRAY);cv.GaussianBlur(gray,blurred,new cv.Size(5,5),0);cv.Canny(blurred,edges,20,60);
+  // Pale paper-on-paper boundaries can have only a modest luminance step.
+  // Add a low-threshold edge channel for recall; page/frame/shadow rejection
+  // happens later using carrier geometry and paper context.
+  const lowEdge=new cv.Mat();cv.Canny(blurred,lowEdge,7,24);cv.bitwise_or(edges,lowEdge,edges);lowEdge.delete();
   cv.cvtColor(src,rgb,cv.COLOR_RGBA2RGB);cv.cvtColor(rgb,lab,cv.COLOR_RGB2Lab);cv.split(lab,channels);
   const a=channels.get(1),b=channels.get(2);cv.GaussianBlur(a,aBlur,new cv.Size(3,3),0);cv.GaussianBlur(b,bBlur,new cv.Size(3,3),0);cv.Canny(aBlur,aEdge,4,15);cv.Canny(bBlur,bEdge,4,15);cv.bitwise_or(edges,aEdge,edges);cv.bitwise_or(edges,bEdge,edges);
   a.delete();b.delete();blurred.delete();rgb.delete();channels.delete();aBlur.delete();bBlur.delete();aEdge.delete();bEdge.delete();
@@ -252,22 +256,32 @@ function smoothFreeform(cv,contour,w,h,pxPerMM){
   const poly=cv.matFromArray(out.length,1,cv.CV_32SC2,out.flatMap(([x,y])=>[Math.round(x),Math.round(y)]));mask.delete();v.delete();kernel.delete();smooth.delete();cs.delete();hh.delete();best?.delete?.();return poly;
 }
 
-function globalCircles(cv,gray,pxPerMM){
+function globalCircles(cv,gray,edges,pxPerMM){
   const medianBlurred=new cv.Mat();cv.medianBlur(gray,medianBlurred,5);const out=[];
-  // Candidate generation is intentionally recall-oriented. False holes are
-  // controlled later by the much stricter >=4-hole structural consensus, so
-  // a second lower Hough threshold is safe and recovers faint physical rims.
-  for(const param2 of [15,11]){
+  const add=candidate=>{
+    if(out.some(q=>Math.hypot(q.x-candidate.x,q.y-candidate.y)<Math.max(3,(q.r+candidate.r)*.35)&&Math.abs(q.r-candidate.r)<Math.max(3,q.r*.45)))return;
+    out.push(candidate);
+  };
+  // Hough gives excellent recall on soft circular rims, while later structural
+  // consensus bears the false-positive cost.
+  for(const param2 of [14,10]){
     const circles=new cv.Mat();
-    cv.HoughCircles(medianBlurred,circles,cv.HOUGH_GRADIENT,1,Math.max(8,Math.round(pxPerMM*3.5)),62,param2,Math.max(3,Math.round(pxPerMM*.75)),Math.max(9,Math.round(pxPerMM*4.2)));
-    for(let i=0;i+2<circles.data32F.length;i+=3){
-      const candidate={x:Math.round(circles.data32F[i]),y:Math.round(circles.data32F[i+1]),r:Math.round(circles.data32F[i+2])};
-      if(out.some(q=>Math.hypot(q.x-candidate.x,q.y-candidate.y)<Math.max(3,(q.r+candidate.r)*.35)&&Math.abs(q.r-candidate.r)<Math.max(3,q.r*.45)))continue;
-      out.push(candidate);
-    }
+    cv.HoughCircles(medianBlurred,circles,cv.HOUGH_GRADIENT,1,Math.max(7,Math.round(pxPerMM*3.2)),58,param2,Math.max(3,Math.round(pxPerMM*.70)),Math.max(10,Math.round(pxPerMM*4.5)));
+    for(let i=0;i+2<circles.data32F.length;i+=3)add({x:Math.round(circles.data32F[i]),y:Math.round(circles.data32F[i+1]),r:Math.round(circles.data32F[i+2]),source:'hough'});
     circles.delete();
   }
-  medianBlurred.delete();return out;
+  // Strong manufactured holes often form closed edge loops. This second,
+  // cheaper proposal source avoids depending on Hough alone.
+  const closed=new cv.Mat(),cs=new cv.MatVector(),hh=new cv.Mat(),k=cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(3,3));cv.morphologyEx(edges,closed,cv.MORPH_CLOSE,k);
+  cv.findContours(closed,cs,hh,cv.RETR_LIST,cv.CHAIN_APPROX_NONE);
+  const minR=Math.max(3,pxPerMM*.65),maxR=Math.max(10,pxPerMM*4.7);
+  for(let i=0;i<cs.size();i++){
+    const q=cs.get(i),area=Math.abs(cv.contourArea(q)),per=cv.arcLength(q,true);if(area<Math.PI*minR*minR*.35||area>Math.PI*maxR*maxR*1.7||per<=0){q.delete();continue;}
+    const b=cv.boundingRect(q),rx=b.width/2,ry=b.height/2,r=(rx+ry)/2,aspect=Math.min(rx,ry)/Math.max(rx,ry),circularity=4*Math.PI*area/(per*per);
+    if(r>=minR&&r<=maxR&&aspect>=.60&&circularity>=.42)add({x:Math.round(b.x+rx),y:Math.round(b.y+ry),r:Math.round(r),source:'loop'});
+    q.delete();
+  }
+  k.delete();closed.delete();cs.delete();hh.delete();medianBlurred.delete();return out;
 }
 
 function circleCandidates(cv,mask,supportEdges,circles,w,h,lab,paperRef,evidence,pxPerMM){
@@ -357,7 +371,7 @@ export function recognizeMaterialsFast(cv,p,own){
   const src=own(cv.matFromArray(h,w,cv.CV_8UC4,p.pixels)),page=own(cv.matFromArray(h,w,cv.CV_8UC1,Uint8Array.from(p.backgroundConnected||new Uint8Array(w*h),x=>x?255:0)));
   const {gray,edges,lab}=edgeImage(cv,src);own(gray);own(edges);own(lab);
   const paperRef=robustPaperLab(lab,page,w,h),supportEdges=own(new cv.Mat()),supportKernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(5,5)));cv.dilate(edges,supportEdges,supportKernel);
-  const circlePool=globalCircles(cv,gray,pxPerMM),edgeRaw=proposals(cv,edges,page,{width:w,height:h,paperWidthMM,paperHeightMM,smallestMM},pxPerMM),regionRaw=regionProposals(cv,src,page,paperRef,{width:w,height:h,paperWidthMM,paperHeightMM,smallestMM},pxPerMM),selected=dedupeAndSplit(cv,[...regionRaw,...edgeRaw],w,h,pxPerMM),out=[];
+  const circlePool=globalCircles(cv,gray,edges,pxPerMM),edgeRaw=proposals(cv,edges,page,{width:w,height:h,paperWidthMM,paperHeightMM,smallestMM},pxPerMM),regionRaw=regionProposals(cv,src,page,paperRef,{width:w,height:h,paperWidthMM,paperHeightMM,smallestMM},pxPerMM),selected=dedupeAndSplit(cv,[...regionRaw,...edgeRaw],w,h,pxPerMM),out=[];
   for(const q of selected){
     const approx=new cv.Mat();cv.approxPolyDP(q.contour,approx,Math.max(1.5,cv.arcLength(q.contour,true)*.018),true);
     let boundary,ownedBoundary=false,edgeMethod;
