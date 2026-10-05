@@ -141,7 +141,11 @@ function modelConsistency(cv,mask){
   const filled=filledContour(cv,mask.cols,mask.rows,ext.contour),rect=cv.minAreaRect(ext.contour),box=cv.boxPoints(rect),rectContour=cv.matFromArray(4,1,cv.CV_32SC2,box.flatMap(p=>[Math.round(p.x),Math.round(p.y)])),rectMask=filledContour(cv,mask.cols,mask.rows,rectContour),rectScore=maskIoU(cv,filled,rectMask);
   let ellipseScore=0,ellipse=null,ellipseMask=null;
   if(ext.contour.rows>=5){
-    ellipse=cv.fitEllipse(ext.contour);ellipseMask=cv.Mat.zeros(mask.rows,mask.cols,cv.CV_8UC1);cv.ellipse(ellipseMask,ellipse,new cv.Scalar(255),cv.FILLED);ellipseScore=maskIoU(cv,filled,ellipseMask);
+    ellipse=cv.fitEllipse(ext.contour);
+    const eContour=ellipseContour(cv,ellipse,128);
+    ellipseMask=filledContour(cv,mask.cols,mask.rows,eContour);
+    eContour.delete();
+    ellipseScore=maskIoU(cv,filled,ellipseMask);
   }
   filled.delete();rectMask.delete();
   return {contour:ext.contour,rectContour,rectScore,ellipse,ellipseMask,ellipseScore};
