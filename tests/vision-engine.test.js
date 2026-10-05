@@ -227,3 +227,34 @@ test('multiple repeated apertures are recovered without a fixed count or side te
   const at=(gx,gy)=>{const x=Math.round(gx-out.x*width),y=Math.round(gy-out.y*height);return out.mask.alpha[y*out.mask.width+x];};
   for(const y of ys)assert.equal(at(hx,y),0,'every pattern-supported aperture should remain transparent');
 });
+
+
+test('fast shared-pass recognizer keeps a production-size four-material page within the latency budget',async()=>{
+  const cv=await cvModule,S=1.7,width=850,height=1190,pixels=new Uint8ClampedArray(width*height*4),backgroundConnected=new Uint8Array(width*height),evidence=new Uint8Array(width*height),shadowLikelihood=new Uint8Array(width*height),score=new Uint8Array(width*height);
+  const items=[
+    {x:Math.round(45*S),y:Math.round(70*S),w:Math.round(165*S),h:Math.round(190*S),color:[130,185,145],holes:[110,145,180,215].map(v=>Math.round(v*S))},
+    {x:Math.round(285*S),y:Math.round(70*S),w:Math.round(135*S),h:Math.round(205*S),color:[232,232,226],holes:[]},
+    {x:Math.round(55*S),y:Math.round(390*S),w:Math.round(170*S),h:Math.round(190*S),color:[130,165,215],holes:[]},
+    {x:Math.round(290*S),y:Math.round(410*S),w:Math.round(150*S),h:Math.round(155*S),color:[220,155,185],holes:[]}
+  ];
+  for(let y=0;y<height;y++)for(let x=0;x<width;x++){
+    const at=y*width+x,p=at*4;let color=[246,246,246],inside=false,hole=false;
+    for(const item of items){
+      if(x>=item.x&&x<item.x+item.w&&y>=item.y&&y<item.y+item.h){
+        inside=true;color=item.color;
+        for(const hy of item.holes){
+          const d=(x-(item.x+Math.round(18*S)))**2+(y-hy)**2;
+          if(d<=(Math.round(7*S))**2){hole=true;color=[246,246,246];}
+          else if(d<=(Math.round(9*S))**2)color=[105,105,105];
+        }
+        if(!hole&&(x-item.x<4||item.x+item.w-1-x<4||y-item.y<4||item.y+item.h-1-y<4))color=color.map(v=>Math.max(0,v-35));
+      }
+    }
+    pixels.set([...color,255],p);backgroundConnected[at]=inside?0:1;
+    if(inside&&!hole&&Math.max(...color)-Math.min(...color)>12){evidence[at]=1;score[at]=90;}
+  }
+  const started=performance.now(),out=await processVision(cv,'materials-fast',{pixels,width,height,backgroundConnected,evidence,shadowLikelihood,score,smallestMM:6,paperWidthMM:210,paperHeightMM:297}),elapsed=performance.now()-started;
+  assert.equal(out.length,4,JSON.stringify(out.map(x=>({x:x.x,y:x.y,w:x.w,h:x.h,holes:x.apertureCount,method:x.edgeMethod}))));
+  assert.ok(out.every(x=>x.recognitionConfidence>=.54));
+  assert.ok(elapsed<3000,'shared-pass OpenCV recognition took '+elapsed.toFixed(0)+'ms');
+});

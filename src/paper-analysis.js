@@ -14,6 +14,17 @@ export async function segmentPaperMaterials({data,width:w,height:h},{smallestMM=
   // detail profiles see the same scene rather than three different algorithms.
   const pxPerMM=((w/paperWidthMM)+(h/paperHeightMM))/2,cellSize=Math.max(24,Math.round(pxPerMM*13.5));
   const evidence=buildForegroundEvidence(data,w,h,{sourcePixels,cellSize});
+  // Normal journal pages (a handful of materials) should finish in one shared
+  // OpenCV worker pass. The legacy staged recognizer remains a correctness
+  // fallback for unusual scenes where the fast pass is uncertain.
+  const fast=await visionTask('materials-fast',{
+    pixels:data,width:w,height:h,smallestMM,paperWidthMM,paperHeightMM,
+    evidence:evidence.evidence,backgroundConnected:evidence.backgroundConnected,
+    shadowLikelihood:evidence.shadowLikelihood,score:evidence.score
+  });
+  if(fast.length&&fast.length<=12&&fast.every(candidate=>(candidate.recognitionConfidence??0)>=.54)){
+    return fast.sort((a,b)=>a.y-b.y||a.x-b.x).slice(0,48);
+  }
   const [instances,structural]=await Promise.all([
     visionTask('instances',{
       mask:evidence.mask,evidence:evidence.evidence,foregroundSeeds:evidence.foregroundSeeds,
