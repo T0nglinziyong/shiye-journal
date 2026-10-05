@@ -1,6 +1,7 @@
 import cvModule from '@techstark/opencv-js';
 import {completePhysicalBoundaries} from './physical-boundary.js';
 import {reconstructFragmentedBoundaries} from './fragmented-boundary.js';
+import {recognizeMaterialsFast} from './fast-material-recognition.js';
 // OpenCV may expose a thenable module. Keep it inside an object rather than
 // resolving a Promise with the module itself (which can recurse indefinitely).
 const ready=(async()=>{let cv;if(cvModule instanceof Promise)cv=await cvModule;else{cv=cvModule;if(!cv.Mat)await new Promise(resolve=>{cv.onRuntimeInitialized=resolve;});}return {cv};})();
@@ -65,6 +66,7 @@ export async function processVision(cv,operation,p){
       const local=own(filled.roi(new cv.Rect(x,y,w,h))),packed=own(new cv.Mat());local.copyTo(packed);
       return {x:x/p.width,y:y/p.height,w:w/p.width,h:h/p.height,pixels:area,edgeMethod,mask:{width:w,height:h,alpha:new Uint8Array(packed.data),polygons:[points]}};
     }
+    if(operation==='materials-fast')return recognizeMaterialsFast(cv,p,own);
     if(operation==='enclosures'){
       const w=p.width,h=p.height,pxPerMM=Math.max(.5,((w/p.paperWidthMM)+(h/p.paperHeightMM))/2),oddMM=(mm,min=3,max=31)=>{let n=Math.max(min,Math.min(max,Math.round(pxPerMM*mm)));if(!(n&1))n++;return n;};
       const src=own(cv.matFromArray(h,w,cv.CV_8UC4,p.pixels)),gray=own(new cv.Mat()),blurred=own(new cv.Mat()),edges=own(new cv.Mat()),closed=own(new cv.Mat()),rgb=own(new cv.Mat()),lab=own(new cv.Mat()),channels=own(new cv.MatVector()),aBlur=own(new cv.Mat()),bBlur=own(new cv.Mat()),aEdge=own(new cv.Mat()),bEdge=own(new cv.Mat());
