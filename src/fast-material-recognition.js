@@ -64,12 +64,41 @@ function proposals(cv,edges,page,{width:w,height:h,paperWidthMM,paperHeightMM,sm
       const b=cv.boundingRect(c),widthMM=b.width/w*paperWidthMM,heightMM=b.height/h*paperHeightMM;
       if(Math.min(widthMM,heightMM)<smallestMM||b.width>w*.94||b.height>h*.94){c.delete();continue;}
       const rect=cv.minAreaRect(c),rectFill=area/Math.max(1,rect.size.width*rect.size.height),metrics=pageMetrics(cv,c,page,w,h,pxPerMM),touches=b.x<=2||b.y<=2||b.x+b.width>=w-2||b.y+b.height>=h-2;
+      const frameBand=Math.max(2,Math.round(pxPerMM*1.6));let framePoints=0;
+      for(let j=0;j<c.rows;j++){const x=c.data32S[j*2],y=c.data32S[j*2+1];if(x<frameBand||y<frameBand||x>=w-frameBand||y>=h-frameBand)framePoints++;}
+      const frameFraction=framePoints/Math.max(1,c.rows),longThin=(b.width>w*.48&&b.height<h*.14)||(b.height>h*.48&&b.width<w*.14);
+      // Rectification/page-border remnants are long, frame-hugging contours.
+      // Reject them geometrically instead of relying on colour alone, while
+      // still allowing a genuine compact material to touch the page edge.
+      if(frameFraction>.26&&(longThin||metrics.insidePage>.42)){c.delete();continue;}
       const primary=area>=primaryMin,smallPhysical=!touches&&metrics.paperContact>.65&&metrics.insidePage<.25&&rectFill>.35;
       if(!(primary||smallPhysical)||(metrics.paperContact<.25&&rectFill<.80)){c.delete();continue;}
       const approx=new cv.Mat();cv.approxPolyDP(c,approx,Math.max(1.5,cv.arcLength(c,true)*.02),true);
-      out.push({contour:c,area,bbox:boxObj(b),rectFill,paperContact:metrics.paperContact,insidePage:metrics.insidePage,vertices:approx.rows,small:!primary});approx.delete();
+      out.push({contour:c,area,bbox:boxObj(b),rectFill,paperContact:metrics.paperContact,insidePage:metrics.insidePage,vertices:approx.rows,small:!primary,frameFraction,source:'edge'});approx.delete();
     }
   }finally{kernel.delete();closed.delete();contours.delete();hierarchy.delete();}
+  return out;
+}
+
+function regionProposals(cv,page,evidence,{width:w,height:h,paperWidthMM,paperHeightMM,smallestMM},pxPerMM){
+  const material=cv.Mat.zeros(h,w,cv.CV_8UC1),closed=new cv.Mat(),contours=new cv.MatVector(),hierarchy=new cv.MatVector(),out=[];
+  try{
+    for(let i=0;i<w*h;i++)material.data[i]=(!page.data[i]||evidence?.[i])?255:0;
+    const k=Math.max(3,(Math.round(pxPerMM*.75)|1)),kernel=cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(k,k));
+    try{cv.morphologyEx(material,closed,cv.MORPH_CLOSE,kernel);cv.morphologyEx(closed,closed,cv.MORPH_OPEN,kernel);}finally{kernel.delete();}
+    cv.findContours(closed,contours,hierarchy,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_SIMPLE);
+    const minArea=Math.max((pxPerMM*smallestMM)**2*.18,w*h*.0025),frameBand=Math.max(2,Math.round(pxPerMM*1.6));
+    for(let i=0;i<contours.size();i++){
+      const c=contours.get(i),area=cv.contourArea(c);if(area<minArea||area>w*h*.40){c.delete();continue;}
+      const b=cv.boundingRect(c),widthMM=b.width/w*paperWidthMM,heightMM=b.height/h*paperHeightMM;if(Math.min(widthMM,heightMM)<smallestMM){c.delete();continue;}
+      let framePoints=0;for(let j=0;j<c.rows;j++){const x=c.data32S[j*2],y=c.data32S[j*2+1];if(x<frameBand||y<frameBand||x>=w-frameBand||y>=h-frameBand)framePoints++;}
+      const frameFraction=framePoints/Math.max(1,c.rows),longThin=(b.width>w*.48&&b.height<h*.14)||(b.height>h*.48&&b.width<w*.14);
+      if(frameFraction>.22&&longThin){c.delete();continue;}
+      const rect=cv.minAreaRect(c),rectFill=area/Math.max(1,rect.size.width*rect.size.height),metrics=pageMetrics(cv,c,page,w,h,pxPerMM);
+      if(metrics.insidePage>.18||metrics.paperContact<.35){c.delete();continue;}
+      out.push({contour:c,area,bbox:boxObj(b),rectFill,paperContact:metrics.paperContact,insidePage:metrics.insidePage,vertices:0,small:false,frameFraction,source:'region'});
+    }
+  }finally{material.delete();closed.delete();contours.delete();hierarchy.delete();}
   return out;
 }
 
@@ -154,17 +183,34 @@ function chooseOuter(cv,src,q,pxPerMM,w,h){
   const all=searchOuterEnvelope(cv,src,q.contour,pxPerMM,w,h);if(!all.length)return {contour:q.contour,owned:false};
   let valid=all.filter(z=>z.edgeSupport>=.85&&z.ratio>=.95&&z.ratio<=2.2);if(!valid.length)valid=all;
   let chosen;
-  if(solidity>.80){const bounded=valid.filter(z=>z.ratio<=2.0);chosen=(bounded.length?bounded:valid).sort((a,b)=>b.ratio-a.ratio||b.edgeSupport-a.edgeSupport)[0];}
-  else{const expanded=valid.filter(z=>z.ratio>=1.03);chosen=(expanded.length?expanded:valid).sort((a,b)=>Math.abs(a.ratio-1.15)-Math.abs(b.ratio-1.15)||b.edgeSupport-a.edgeSupport)[0];}
+  if(solidity>.80){const bounded=valid.filter(z=>z.ratio<=1.85);chosen=(bounded.length?bounded:valid).sort((a,b)=>(b.edgeSupport*.72+Math.min(b.ratio,1.55)*.28)-(a.edgeSupport*.72+Math.min(a.ratio,1.55)*.28))[0];}
+  else{
+    // Irregular stickers often have a white carrier outside the dark printed
+    // content. Prefer a somewhat larger, strongly-supported physical envelope
+    // instead of clinging to the printed foreground itself.
+    const expanded=valid.filter(z=>z.ratio>=1.05&&z.ratio<=2.05&&z.edgeSupport>=.72);
+    chosen=(expanded.length?expanded:valid).sort((a,b)=>(b.edgeSupport*.68-Math.abs(b.ratio-1.38)*.18+b.ratio*.14)-(a.edgeSupport*.68-Math.abs(a.ratio-1.38)*.18+a.ratio*.14))[0];
+  }
   return {contour:contourFromPoints(cv,chosen.points),owned:true};
 }
 
 function smoothFreeform(cv,contour,w,h,pxPerMM){
-  const hull=new cv.Mat();cv.convexHull(contour,hull,false,true);const solidity=cv.contourArea(contour)/Math.max(1,cv.contourArea(hull)),base=solidity>.82?hull:contour,mask=cv.Mat.zeros(h,w,cv.CV_8UC1),v=new cv.MatVector();v.push_back(base);cv.drawContours(mask,v,-1,new cv.Scalar(255),cv.FILLED);
-  const k=Math.max(3,(Math.round(pxPerMM*.9)|1)),kernel=cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(k,k)),smooth=new cv.Mat(),cs=new cv.MatVector(),hh=new cv.Mat();cv.morphologyEx(mask,smooth,cv.MORPH_CLOSE,kernel);cv.morphologyEx(smooth,smooth,cv.MORPH_OPEN,kernel);cv.findContours(smooth,cs,hh,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_NONE);
+  // Preserve the observed concavity. Convex hulls are forbidden here because
+  // they erase the white-carrier shape of irregular stickers.
+  const mask=cv.Mat.zeros(h,w,cv.CV_8UC1),v=new cv.MatVector();v.push_back(contour);cv.drawContours(mask,v,-1,new cv.Scalar(255),cv.FILLED);
+  const k=Math.max(3,(Math.round(pxPerMM*.48)|1)),kernel=cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(k,k)),smooth=new cv.Mat(),cs=new cv.MatVector(),hh=new cv.Mat();
+  cv.morphologyEx(mask,smooth,cv.MORPH_CLOSE,kernel);cv.morphologyEx(smooth,smooth,cv.MORPH_OPEN,kernel);cv.findContours(smooth,cs,hh,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_NONE);
   let best=null,area=0;for(let i=0;i<cs.size();i++){const c=cs.get(i),a=cv.contourArea(c);if(a>area){best?.delete?.();best=c;area=a;}else c.delete();}
-  const poly=new cv.Mat();cv.approxPolyDP(best||contour,poly,Math.max(.7,cv.arcLength(best||contour,true)*.0025),true);
-  hull.delete();mask.delete();v.delete();kernel.delete();smooth.delete();cs.delete();hh.delete();best?.delete?.();return poly;
+  const source=best||contour,pts=contourPoints(source),step=Math.max(1,Math.round(pxPerMM*.28)),sampled=[];
+  for(let i=0;i<pts.length;i+=step)sampled.push(pts[i]);
+  let out=sampled.length>=12?sampled:pts;
+  // Circular moving-average smoothing gives a true smooth-curve prior without
+  // classifying the whole object as an ellipse.
+  for(let it=0;it<3&&out.length>=8;it++){
+    const next=[];for(let i=0;i<out.length;i++){const a=out[(i-1+out.length)%out.length],b=out[i],d=out[(i+1)%out.length];next.push([(a[0]+2*b[0]+d[0])/4,(a[1]+2*b[1]+d[1])/4]);}out=next;
+  }
+  const poly=cv.matFromArray(out.length,1,cv.CV_32SC2,out.flatMap(([x,y])=>[Math.round(x),Math.round(y)]));
+  mask.delete();v.delete();kernel.delete();smooth.delete();cs.delete();hh.delete();best?.delete?.();return poly;
 }
 
 function globalCircles(cv,gray,pxPerMM){
@@ -207,7 +253,7 @@ export function recognizeMaterialsFast(cv,p,own){
   const src=own(cv.matFromArray(h,w,cv.CV_8UC4,p.pixels)),page=own(cv.matFromArray(h,w,cv.CV_8UC1,Uint8Array.from(p.backgroundConnected||new Uint8Array(w*h),x=>x?255:0)));
   const {gray,edges}=edgeImage(cv,src);own(gray);own(edges);
   const supportEdges=own(new cv.Mat()),supportKernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(5,5)));cv.dilate(edges,supportEdges,supportKernel);
-  const circlePool=globalCircles(cv,gray,pxPerMM),raw=proposals(cv,edges,page,{width:w,height:h,paperWidthMM,paperHeightMM,smallestMM},pxPerMM),selected=dedupeAndSplit(cv,raw,w,h,pxPerMM),out=[];
+  const circlePool=globalCircles(cv,gray,pxPerMM),edgeRaw=proposals(cv,edges,page,{width:w,height:h,paperWidthMM,paperHeightMM,smallestMM},pxPerMM),regionRaw=regionProposals(cv,page,p.evidence,{width:w,height:h,paperWidthMM,paperHeightMM,smallestMM},pxPerMM),selected=dedupeAndSplit(cv,[...regionRaw,...edgeRaw],w,h,pxPerMM),out=[];
   for(const q of selected){
     const approx=new cv.Mat();cv.approxPolyDP(q.contour,approx,Math.max(1.5,cv.arcLength(q.contour,true)*.018),true);
     let boundary,ownedBoundary=false,edgeMethod;
@@ -221,7 +267,7 @@ export function recognizeMaterialsFast(cv,p,own){
     const holes=groupCircles(circleCandidates(cv,mask,supportEdges,circlePool,w,h),pxPerMM);
     for(const hole of holes)cv.circle(mask,new cv.Point(hole.x,hole.y),hole.r,new cv.Scalar(0),cv.FILLED);
     const bounds=cv.boundingRect(boundary),x=Math.max(0,bounds.x),y=Math.max(0,bounds.y),rw=Math.min(w-x,bounds.width),rh=Math.min(h-y,bounds.height),local=mask.roi(new cv.Rect(x,y,rw,rh)),packed=new cv.Mat();local.copyTo(packed);
-    const poly=contourPoints(boundary).map(([px,py])=>[px-x,py-y]),area=cv.countNonZero(mask),confidence=clamp(.45+q.paperContact*.22+Math.min(q.rectFill,.9)*.12+(edgeMethod==='fast-line'?.08:.04)+Math.min(holes.length,5)*.018,0,1);
+    const poly=contourPoints(boundary).map(([px,py])=>[px-x,py-y]),area=cv.countNonZero(mask),confidence=clamp(.45+q.paperContact*.22+Math.min(q.rectFill,.9)*.12+(edgeMethod==='fast-line'?.08:.04)+(q.source==='region'?.05:0)+Math.min(holes.length,5)*.018,0,1);
     out.push({x:x/w,y:y/h,w:rw/w,h:rh/h,pixels:area,evidenceDensity:1-q.insidePage,edgeMethod,recognitionConfidence:confidence,
       mask:{width:rw,height:rh,alpha:new Uint8Array(packed.data),polygons:[poly],topologyPreserved:true},apertureCount:holes.length});
     local.delete();packed.delete();mask.delete();if(ownedBoundary)boundary.delete();
