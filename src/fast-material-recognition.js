@@ -1,3 +1,5 @@
+import {robustPaperLab} from './paper-reference.js';
+import {expandWhiteCarrier} from './white-carrier.js';
 // Fast traditional-CV material recognizer.
 //
 // Design goal: one shared full-page analysis pass, then cheap per-material ROI
@@ -50,8 +52,8 @@ function edgeImage(cv,src){
   cv.cvtColor(src,gray,cv.COLOR_RGBA2GRAY);cv.GaussianBlur(gray,blurred,new cv.Size(5,5),0);cv.Canny(blurred,edges,20,60);
   cv.cvtColor(src,rgb,cv.COLOR_RGBA2RGB);cv.cvtColor(rgb,lab,cv.COLOR_RGB2Lab);cv.split(lab,channels);
   const a=channels.get(1),b=channels.get(2);cv.GaussianBlur(a,aBlur,new cv.Size(3,3),0);cv.GaussianBlur(b,bBlur,new cv.Size(3,3),0);cv.Canny(aBlur,aEdge,4,15);cv.Canny(bBlur,bEdge,4,15);cv.bitwise_or(edges,aEdge,edges);cv.bitwise_or(edges,bEdge,edges);
-  a.delete();b.delete();blurred.delete();rgb.delete();lab.delete();channels.delete();aBlur.delete();bBlur.delete();aEdge.delete();bEdge.delete();
-  return {gray,edges};
+  a.delete();b.delete();blurred.delete();rgb.delete();channels.delete();aBlur.delete();bBlur.delete();aEdge.delete();bEdge.delete();
+  return {gray,edges,lab};
 }
 
 function proposals(cv,edges,page,{width:w,height:h,paperWidthMM,paperHeightMM,smallestMM},pxPerMM){
@@ -80,7 +82,7 @@ function proposals(cv,edges,page,{width:w,height:h,paperWidthMM,paperHeightMM,sm
   return out;
 }
 
-function regionProposals(cv,rgba,page,{width:w,height:h,paperWidthMM,paperHeightMM,smallestMM},pxPerMM){
+function regionProposals(cv,rgba,page,paperRef,{width:w,height:h,paperWidthMM,paperHeightMM,smallestMM},pxPerMM){
   // Positive chroma carrier proposals. We intentionally model only a/b here:
   // smooth illumination changes mostly affect L, while coloured paper remains
   // separated from the A4 sheet. Pale/white carriers are left to edge closure.
@@ -90,8 +92,12 @@ function regionProposals(cv,rgba,page,{width:w,height:h,paperWidthMM,paperHeight
   for(let y=0;y<h;y+=3)for(let x=0;x<w;x+=3){const i=y*w+x;if(page.data[i]){as.push(aa.data[i]);bs.push(bb.data[i]);}}
   // If page connectivity is weak, the image median is still robust because
   // journal materials occupy a minority of the rectified A4 page.
-  if(as.length<w*h/80)for(let y=0;y<h;y+=4)for(let x=0;x<w;x+=4){const i=y*w+x;as.push(aa.data[i]);bs.push(bb.data[i]);}
-  as.sort((a,b)=>a-b);bs.sort((a,b)=>a-b);const paperA=as[(as.length/2)|0]??128,paperB=bs[(bs.length/2)|0]??128;
+  as.sort((a,b)=>a-b);bs.sort((a,b)=>a-b);
+  const connectedA=as.length?as[(as.length/2)|0]:paperRef.a,connectedB=bs.length?bs[(bs.length/2)|0]:paperRef.b;
+  // Inset corner consensus is only a fallback/guard. One shadowed corner may
+  // alter L, but the median a/b chroma remains a useful paper prior.
+  const paperA=as.length>=w*h/80&&Math.abs(connectedA-paperRef.a)<=6?connectedA:paperRef.a;
+  const paperB=bs.length>=w*h/80&&Math.abs(connectedB-paperRef.b)<=6?connectedB:paperRef.b;
   for(let i=0;i<w*h;i++)if(Math.hypot(aa.data[i]-paperA,bb.data[i]-paperB)>10)material.data[i]=255;
   const closeSize=Math.max(5,(Math.round(pxPerMM*5.5)|1)),openSize=Math.max(3,(Math.round(pxPerMM*.8)|1)),closeKernel=cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(closeSize,closeSize)),openKernel=cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(openSize,openSize));
   cv.morphologyEx(material,closed,cv.MORPH_CLOSE,closeKernel);cv.morphologyEx(closed,closed,cv.MORPH_OPEN,openKernel);cv.findContours(closed,contours,hierarchy,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_SIMPLE);
@@ -278,9 +284,9 @@ function groupCircles(arr,pxPerMM){
 export function recognizeMaterialsFast(cv,p,own){
   const w=p.width,h=p.height,paperWidthMM=p.paperWidthMM||210,paperHeightMM=p.paperHeightMM||297,smallestMM=p.smallestMM||6,pxPerMM=Math.max(.5,((w/paperWidthMM)+(h/paperHeightMM))/2);
   const src=own(cv.matFromArray(h,w,cv.CV_8UC4,p.pixels)),page=own(cv.matFromArray(h,w,cv.CV_8UC1,Uint8Array.from(p.backgroundConnected||new Uint8Array(w*h),x=>x?255:0)));
-  const {gray,edges}=edgeImage(cv,src);own(gray);own(edges);
-  const supportEdges=own(new cv.Mat()),supportKernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(5,5)));cv.dilate(edges,supportEdges,supportKernel);
-  const circlePool=globalCircles(cv,gray,pxPerMM),edgeRaw=proposals(cv,edges,page,{width:w,height:h,paperWidthMM,paperHeightMM,smallestMM},pxPerMM),regionRaw=regionProposals(cv,src,page,{width:w,height:h,paperWidthMM,paperHeightMM,smallestMM},pxPerMM),selected=dedupeAndSplit(cv,[...regionRaw,...edgeRaw],w,h,pxPerMM),out=[];
+  const {gray,edges,lab}=edgeImage(cv,src);own(gray);own(edges);own(lab);
+  const paperRef=robustPaperLab(lab,page,w,h),supportEdges=own(new cv.Mat()),supportKernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(5,5)));cv.dilate(edges,supportEdges,supportKernel);
+  const circlePool=globalCircles(cv,gray,pxPerMM),edgeRaw=proposals(cv,edges,page,{width:w,height:h,paperWidthMM,paperHeightMM,smallestMM},pxPerMM),regionRaw=regionProposals(cv,src,page,paperRef,{width:w,height:h,paperWidthMM,paperHeightMM,smallestMM},pxPerMM),selected=dedupeAndSplit(cv,[...regionRaw,...edgeRaw],w,h,pxPerMM),out=[];
   for(const q of selected){
     const approx=new cv.Mat();cv.approxPolyDP(q.contour,approx,Math.max(1.5,cv.arcLength(q.contour,true)*.018),true);
     let boundary,ownedBoundary=false,edgeMethod;
@@ -291,8 +297,14 @@ export function recognizeMaterialsFast(cv,p,own){
       // again toward nearby edges can bridge real concavities or shadows.
       // Edge-only candidates still receive the outer-envelope search needed
       // for white-carrier stickers.
-      const outer=q.source==='region'?{contour:q.contour,owned:false}:chooseOuter(cv,src,q,pxPerMM,w,h),smooth=smoothFreeform(cv,outer.contour,w,h,pxPerMM);
-      if(outer.owned)outer.contour.delete();boundary=smooth;ownedBoundary=true;edgeMethod='fast-curve';
+      let outer;
+      if(q.source==='region')outer={contour:q.contour,owned:false};
+      else{
+        const carrier=expandWhiteCarrier(cv,{contour:q.contour,page,edges,lab,w,h,pxPerMM,paperRef});
+        outer=carrier.expanded?carrier:chooseOuter(cv,src,q,pxPerMM,w,h);
+      }
+      const smooth=smoothFreeform(cv,outer.contour,w,h,pxPerMM);
+      if(outer.owned)outer.contour.delete();boundary=smooth;ownedBoundary=true;edgeMethod=outer.expanded?'fast-white-carrier':'fast-curve';
     }
     approx.delete();
     const mask=cv.Mat.zeros(h,w,cv.CV_8UC1),vv=new cv.MatVector();vv.push_back(boundary);cv.drawContours(mask,vv,-1,new cv.Scalar(255),cv.FILLED);vv.delete();
