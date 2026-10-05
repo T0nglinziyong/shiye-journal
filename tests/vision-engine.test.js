@@ -255,6 +255,6 @@ test('fast shared-pass recognizer finds four materials and repeated apertures in
   }
   const out=await processVision(cv,'materials-fast',{pixels,width,height,backgroundConnected,evidence,shadowLikelihood,score,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
   assert.equal(out.length,4,JSON.stringify(out.map(x=>({x:x.x,y:x.y,w:x.w,h:x.h,holes:x.apertureCount,method:x.edgeMethod}))));
-  assert.ok(out.some(x=>x.apertureCount>=4),'repeated physical holes should be detected from one global Hough pass');
+  assert.ok(out.some(x=>x.apertureCount>=4),'repeated physical holes should be detected from one global Hough pass: '+JSON.stringify(out.map(x=>({holes:x.apertureCount,method:x.edgeMethod,bbox:[x.x,x.y,x.w,x.h]}))));
   assert.ok(out.every(x=>x.recognitionConfidence>=.54));
 });
