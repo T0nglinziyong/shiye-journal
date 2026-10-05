@@ -1,0 +1,40 @@
+name: CV private local regression runtime
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/cv-repro-runtime.yml'
+      - 'src/fast-material-recognition.js'
+      - 'src/carrier-*.js'
+      - 'tests/cv-*.test.js'
+permissions:
+  contents: read
+jobs:
+  runtime:
+    if: github.head_ref == 'cv-instance-contract-audit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '22'
+      - name: Install exact locked runtime
+        run: npm ci --ignore-scripts
+      - name: Export code and CV runtime only (never private images or secrets)
+        shell: bash
+        run: |
+          mkdir -p cv-repro/node_modules/@techstark
+          git archive HEAD src tests scripts package.json package-lock.json | tar -x -C cv-repro
+          cp -a node_modules/@techstark/opencv-js cv-repro/node_modules/@techstark/
+          printf '%s\n' "${{ github.event.pull_request.head.sha }}" > cv-repro/SOURCE_COMMIT.txt
+          find cv-repro/src -type f -print0 | sort -z | xargs -0 sha256sum > cv-repro/SHA256SUMS.txt
+          tar -czf cv-repro-runtime.tgz cv-repro
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cv-repro-runtime
+          path: cv-repro-runtime.tgz
+          retention-days: 2
+          if-no-files-found: error
