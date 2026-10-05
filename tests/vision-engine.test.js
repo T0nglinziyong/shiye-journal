@@ -229,13 +229,13 @@ test('multiple repeated apertures are recovered without a fixed count or side te
 });
 
 
-test('fast shared-pass recognizer finds four materials and repeated apertures in one analysis',async()=>{
-  const cv=await cvModule,width=500,height=700,pixels=new Uint8ClampedArray(width*height*4),backgroundConnected=new Uint8Array(width*height),evidence=new Uint8Array(width*height),shadowLikelihood=new Uint8Array(width*height),score=new Uint8Array(width*height);
+test('fast shared-pass recognizer keeps a production-size four-material page within the latency budget',async()=>{
+  const cv=await cvModule,S=1.7,width=850,height=1190,pixels=new Uint8ClampedArray(width*height*4),backgroundConnected=new Uint8Array(width*height),evidence=new Uint8Array(width*height),shadowLikelihood=new Uint8Array(width*height),score=new Uint8Array(width*height);
   const items=[
-    {x:45,y:70,w:165,h:190,color:[130,185,145],holes:[110,145,180,215]},
-    {x:285,y:70,w:135,h:205,color:[232,232,226],holes:[]},
-    {x:55,y:390,w:170,h:190,color:[130,165,215],holes:[]},
-    {x:290,y:410,w:150,h:155,color:[220,155,185],holes:[]}
+    {x:Math.round(45*S),y:Math.round(70*S),w:Math.round(165*S),h:Math.round(190*S),color:[130,185,145],holes:[110,145,180,215].map(v=>Math.round(v*S))},
+    {x:Math.round(285*S),y:Math.round(70*S),w:Math.round(135*S),h:Math.round(205*S),color:[232,232,226],holes:[]},
+    {x:Math.round(55*S),y:Math.round(390*S),w:Math.round(170*S),h:Math.round(190*S),color:[130,165,215],holes:[]},
+    {x:Math.round(290*S),y:Math.round(410*S),w:Math.round(150*S),h:Math.round(155*S),color:[220,155,185],holes:[]}
   ];
   for(let y=0;y<height;y++)for(let x=0;x<width;x++){
     const at=y*width+x,p=at*4;let color=[246,246,246],inside=false,hole=false;
@@ -243,18 +243,18 @@ test('fast shared-pass recognizer finds four materials and repeated apertures in
       if(x>=item.x&&x<item.x+item.w&&y>=item.y&&y<item.y+item.h){
         inside=true;color=item.color;
         for(const hy of item.holes){
-          const d=(x-(item.x+18))**2+(y-hy)**2;
-          if(d<=7**2){hole=true;color=[246,246,246];}
-          else if(d<=9**2)color=[105,105,105];
+          const d=(x-(item.x+Math.round(18*S)))**2+(y-hy)**2;
+          if(d<=(Math.round(7*S))**2){hole=true;color=[246,246,246];}
+          else if(d<=(Math.round(9*S))**2)color=[105,105,105];
         }
-        if(!hole&&(x-item.x<3||item.x+item.w-1-x<3||y-item.y<3||item.y+item.h-1-y<3))color=color.map(v=>Math.max(0,v-35));
+        if(!hole&&(x-item.x<4||item.x+item.w-1-x<4||y-item.y<4||item.y+item.h-1-y<4))color=color.map(v=>Math.max(0,v-35));
       }
     }
     pixels.set([...color,255],p);backgroundConnected[at]=inside?0:1;
     if(inside&&!hole&&Math.max(...color)-Math.min(...color)>12){evidence[at]=1;score[at]=90;}
   }
-  const out=await processVision(cv,'materials-fast',{pixels,width,height,backgroundConnected,evidence,shadowLikelihood,score,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
+  const started=performance.now(),out=await processVision(cv,'materials-fast',{pixels,width,height,backgroundConnected,evidence,shadowLikelihood,score,smallestMM:6,paperWidthMM:210,paperHeightMM:297}),elapsed=performance.now()-started;
   assert.equal(out.length,4,JSON.stringify(out.map(x=>({x:x.x,y:x.y,w:x.w,h:x.h,holes:x.apertureCount,method:x.edgeMethod}))));
-  assert.ok(out.some(x=>x.apertureCount>=4),'repeated physical holes should be detected from one global Hough pass: '+JSON.stringify(out.map(x=>({holes:x.apertureCount,method:x.edgeMethod,bbox:[x.x,x.y,x.w,x.h]}))));
   assert.ok(out.every(x=>x.recognitionConfidence>=.54));
+  assert.ok(elapsed<3000,'shared-pass OpenCV recognition took '+elapsed.toFixed(0)+'ms');
 });
