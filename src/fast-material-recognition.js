@@ -262,7 +262,12 @@ export function recognizeMaterialsFast(cv,p,own){
     if(q.rectFill>.86&&approx.rows<=6){
       const rect=cv.minAreaRect(q.contour),points=cv.boxPoints(rect).flatMap(pt=>[Math.round(pt.x),Math.round(pt.y)]);boundary=cv.matFromArray(4,1,cv.CV_32SC2,points);ownedBoundary=true;edgeMethod='fast-line';
     }else{
-      const outer=chooseOuter(cv,src,q,pxPerMM,w,h),smooth=smoothFreeform(cv,outer.contour,w,h,pxPerMM);if(outer.owned)outer.contour.delete();boundary=smooth;ownedBoundary=true;edgeMethod='fast-curve';
+      // A colour/region carrier already supplies object support; expanding it
+      // again toward nearby edges can bridge real concavities or shadows.
+      // Edge-only candidates still receive the outer-envelope search needed
+      // for white-carrier stickers.
+      const outer=q.source==='region'?{contour:q.contour,owned:false}:chooseOuter(cv,src,q,pxPerMM,w,h),smooth=smoothFreeform(cv,outer.contour,w,h,pxPerMM);
+      if(outer.owned)outer.contour.delete();boundary=smooth;ownedBoundary=true;edgeMethod='fast-curve';
     }
     approx.delete();
     const mask=cv.Mat.zeros(h,w,cv.CV_8UC1),vv=new cv.MatVector();vv.push_back(boundary);cv.drawContours(mask,vv,-1,new cv.Scalar(255),cv.FILLED);vv.delete();
