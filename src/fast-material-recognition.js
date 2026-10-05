@@ -83,7 +83,11 @@ function proposals(cv,edges,page,{width:w,height:h,paperWidthMM,paperHeightMM,sm
 function regionProposals(cv,page,evidence,{width:w,height:h,paperWidthMM,paperHeightMM,smallestMM},pxPerMM){
   const material=cv.Mat.zeros(h,w,cv.CV_8UC1),closed=new cv.Mat(),contours=new cv.MatVector(),hierarchy=new cv.Mat(),out=[];
   try{
-    for(let i=0;i<w*h;i++)material.data[i]=(!page.data[i]||evidence?.[i])?255:0;
+    // IMPORTANT: "not page-connected" is uncertainty, not foreground.
+    // Shadows, illumination gradients and rectification borders can all break
+    // page connectivity. Region proposals therefore require POSITIVE material
+    // evidence; pale/white carriers are recovered later from physical edges.
+    for(let i=0;i<w*h;i++)material.data[i]=evidence?.[i]?255:0;
     const k=Math.max(3,(Math.round(pxPerMM*.75)|1)),kernel=cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(k,k));
     try{cv.morphologyEx(material,closed,cv.MORPH_CLOSE,kernel);cv.morphologyEx(closed,closed,cv.MORPH_OPEN,kernel);}finally{kernel.delete();}
     cv.findContours(closed,contours,hierarchy,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_SIMPLE);
