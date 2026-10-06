@@ -1,5 +1,6 @@
 import {robustPaperLab} from './paper-reference.js';
 import {expandWhiteCarrier} from './white-carrier.js';
+import {recoverCarrierOutsideIn} from './outside-in-carrier.js';
 import {carveInternalPaperRegions} from './internal-paper-regions.js';
 // Fast traditional-CV material recognizer.
 //
@@ -368,6 +369,10 @@ function groupCircles(strict,weak,pxPerMM,mask,supportEdges,w,h){
 }
 
 export function recognizeMaterialsFast(cv,p,own){
+  // Production recognition is defined in rectified A4 coordinates. Callers
+  // must warp the detected/manual paper quadrilateral first; otherwise pixel
+  // scale is not a physical mm scale and cross-photo masks are incomparable.
+  if(p.rectified!==true)throw Error('materials-fast requires rectified A4 input');
   const w=p.width,h=p.height,paperWidthMM=p.paperWidthMM||210,paperHeightMM=p.paperHeightMM||297,smallestMM=p.smallestMM||6,pxPerMM=Math.max(.5,((w/paperWidthMM)+(h/paperHeightMM))/2);
   const src=own(cv.matFromArray(h,w,cv.CV_8UC4,p.pixels)),page=own(cv.matFromArray(h,w,cv.CV_8UC1,Uint8Array.from(p.backgroundConnected||new Uint8Array(w*h),x=>x?255:0)));
   const {gray,edges,lab}=edgeImage(cv,src);own(gray);own(edges);own(lab);
@@ -381,18 +386,23 @@ export function recognizeMaterialsFast(cv,p,own){
       // four-sided high-fill region can safely use straight physical edges.
       const rect=cv.minAreaRect(q.contour),points=cv.boxPoints(rect).flatMap(pt=>[Math.round(pt.x),Math.round(pt.y)]);boundary=cv.matFromArray(4,1,cv.CV_32SC2,points);ownedBoundary=true;edgeMethod='fast-line';
     }else if(q.source==='edge'){
-      // A printed seed inside a white sticker is surrounded by carrier, not by
-      // A4 paper, so its paper-contact is low. Only that class of edge
-      // candidate pays for the expensive carrier-expansion pass. A complete
-      // physical oval/card already touches paper and skips directly to geometry.
-      const shouldExpandWhite=q.paperContact<.52&&q.rectFill<.90;
-      const carrier=shouldExpandWhite?expandWhiteCarrier(cv,{contour:q.contour,page,edges,lab,w,h,pxPerMM,paperRef}):{expanded:false};
-      if(carrier.expanded){
-        boundary=smoothFreeform(cv,carrier.contour,w,h,pxPerMM);carrier.contour.delete();ownedBoundary=true;edgeMethod='fast-white-carrier';
-      }else if(q.rectFill>.92&&approx.rows===4&&q.paperContact>.58&&q.insidePage<.22){
+      // Edge-only candidates may be only the dark printed foreground of a
+      // white die-cut sticker. Always attempt carrier expansion BEFORE any
+      // straight-line simplification.
+      const outsideIn=recoverCarrierOutsideIn(cv,{contour:q.contour,edges,w,h,pxPerMM});
+      if(outsideIn.recovered){
+        boundary=smoothFreeform(cv,outsideIn.contour,w,h,pxPerMM);outsideIn.contour.delete();ownedBoundary=true;edgeMethod='fast-outside-in-carrier';
+      }else{
+        // Keep the previous colour-driven method as a conservative fallback
+        // until the private real-photo gate proves outside-in is strictly better.
+        const carrier=expandWhiteCarrier(cv,{contour:q.contour,page,edges,lab,w,h,pxPerMM,paperRef});
+        if(carrier.expanded){
+          boundary=smoothFreeform(cv,carrier.contour,w,h,pxPerMM);carrier.contour.delete();ownedBoundary=true;edgeMethod='fast-white-carrier';
+        }else if(q.rectFill>.92&&approx.rows===4&&q.paperContact>.58&&q.insidePage<.22){
         const rect=cv.minAreaRect(q.contour),points=cv.boxPoints(rect).flatMap(pt=>[Math.round(pt.x),Math.round(pt.y)]);boundary=cv.matFromArray(4,1,cv.CV_32SC2,points);ownedBoundary=true;edgeMethod='fast-line';
       }else{
         const outer=chooseOuter(cv,src,q,pxPerMM,w,h),smooth=smoothFreeform(cv,outer.contour,w,h,pxPerMM);if(outer.owned)outer.contour.delete();boundary=smooth;ownedBoundary=true;edgeMethod='fast-curve';
+        }
       }
     }else{
       boundary=smoothFreeform(cv,q.contour,w,h,pxPerMM);ownedBoundary=true;edgeMethod='fast-curve';
