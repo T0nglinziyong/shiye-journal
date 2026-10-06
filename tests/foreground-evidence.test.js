@@ -57,3 +57,25 @@ test('a closed sticker perimeter protects near-white interior from background fl
   assert.ok(protectedInterior/(36*24)>.9,'near-white sticker interior must be filled as one physical material');
   assert.ok(page/(10*100)<.08,'paper outside the perimeter must stay background');
 });
+
+
+test('protected A4 border band remains background even with a dark corner and warp edge line',()=>{
+  const w=210,h=297,data=rgba(w,h,(x,y)=>{
+    const warp=x<2||y<2||x>=w-2||y>=h-2;
+    const shadow=x<38&&y<42;
+    const material=x>=70&&x<135&&y>=95&&y<190;
+    if(material)return [125,180,145];
+    if(warp)return [145,145,145];
+    if(shadow)return [175,175,175];
+    return [238,238,238];
+  });
+  const out=buildForegroundEvidence(data,w,h,{cellSize:32});
+  let border=0,total=0,material=0,materialN=0;
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+    const i=y*w+x,near=x<3||y<3||x>=w-3||y>=h-3;
+    if(near){border+=out.mask[i];total++;}
+    if(x>=78&&x<127&&y>=105&&y<180){material+=out.mask[i];materialN++;}
+  }
+  assert.ok(border/total<.02,'guaranteed border band must never become a material');
+  assert.ok(material/materialN>.9,'interior material must remain foreground');
+});
