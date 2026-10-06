@@ -34,3 +34,18 @@ export async function refineCandidatesWithSlimSAM({candidates, frame, width, hei
   if (rejected) onProgress({status:'fallback',count:rejected});
   return result;
 }
+
+
+export async function refineCandidatesWithMorphGAC({candidates,frame,width,height,onProgress=()=>{},mode='quality'}){
+  const {refineMaterialsWithContours}=await import('./contour-refine-runtime.js');
+  onProgress({status:'contour-refinement',engine:'morphgac',total:candidates.length});
+  try{
+    return await refineMaterialsWithContours(frame.data,width,height,candidates,mode);
+  }catch(error){
+    onProgress({status:'fallback',engine:'morphgac',message:error.message});
+    return candidates;
+  }
+}
+export async function refineCandidatesHybrid(context){
+  return refineCandidatesWithMorphGAC({...context,mode:'hybrid'});
+}
