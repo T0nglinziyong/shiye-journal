@@ -1,6 +1,6 @@
 // One catalog supplies settings, preference validation and the image pipeline.
-// Core browser contour engines are parity-tested ports of scikit-image; the
-// A4-specific code only chooses initialization/routing.
+// Browser contour engines are parity-tested ports of scikit-image. OpenCV
+// algorithms use the same OpenCV.js WASM core as the existing recognition path.
 const refineSlimSAM=async context=>{
   const {refineCandidatesWithSlimSAM}=await import('./recognition-refiners.js');
   return refineCandidatesWithSlimSAM(context);
@@ -11,7 +11,11 @@ const refineHybrid=async context=>{
 };
 const refineMorphGAC=async context=>{
   const {refineCandidatesWithMorphGAC}=await import('./recognition-refiners.js');
-  return refineCandidatesWithMorphGAC({...context,mode:'quality'});
+  return refineCandidatesWithMorphGAC(context);
+};
+const refineGrabCut=async context=>{
+  const {refineCandidatesWithGrabCut}=await import('./recognition-refiners.js');
+  return refineCandidatesWithGrabCut(context);
 };
 
 export const recognitionStrategies=Object.freeze([
@@ -20,6 +24,7 @@ export const recognitionStrategies=Object.freeze([
   {id:'standard',label:'传统识别 · 标准',analysisMaxDimension:1200},
   {id:'detail',label:'传统识别 · 精细',analysisMaxDimension:1600},
   {id:'hybrid',label:'组合识别 · OpenCV + MorphGAC',analysisMaxDimension:1200,refineCandidates:refineHybrid},
+  {id:'grabcut',label:'OpenCV · GrabCut',analysisMaxDimension:1200,refineCandidates:refineGrabCut},
   {id:'morphgac',label:'浏览器轮廓 · MorphGAC（高质量）',analysisMaxDimension:1200,refineCandidates:refineMorphGAC},
   {id:'slimsam',label:'浏览器模型 · SlimSAM（试用）',analysisMaxDimension:1000,refineCandidates:refineSlimSAM}
 ]);
