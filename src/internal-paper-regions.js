@@ -62,7 +62,7 @@ function describe(cv,{contour,carrier,labROI,evidence,pxPerMM,paperRef,carrierAr
 function patternPromotions(candidates){
   // Pattern completion never invents holes. It only promotes observed page-like
   // regions after FOUR mutually-consistent members establish a manufactured row.
-  const usable=candidates.filter(q=>q.medianDistance<=8&&q.p90Distance<=11&&q.evidenceFraction<.06),promoted=new Set();
+  const usable=candidates.filter(q=>q.medianDistance<=8&&q.p90Distance<=11&&q.evidenceFraction<.06&&q.size<=12),promoted=new Set();
   if(usable.length<4)return promoted;
   for(let i=0;i<usable.length-2;i++)for(let j=i+1;j<usable.length-1;j++)for(let k=j+1;k<usable.length;k++){
     const seed=[usable[i],usable[j],usable[k]],cx=mean(seed.map(q=>q.x+q.w/2)),cy=mean(seed.map(q=>q.y+q.h/2)),sizes=seed.map(q=>q.size);
@@ -111,8 +111,8 @@ export function carveInternalPaperRegions(cv,{mask,lab,page,evidence,w,h,pxPerMM
     // printed-panel failure case is excluded because printed pixels carry
     // foreground evidence. We intentionally do NOT require the immediate rim
     // to be material-coloured: real punched holes often have a dark/neutral rim.
-    const isolated=q.medianDistance<=5.5&&q.p90Distance<=8.0&&q.lStd<=5.0&&q.evidenceFraction<.025;
-    const patterned=repeated.has(q)&&q.medianDistance<=8.0&&q.p90Distance<=11.0&&q.lStd<=6.0&&q.evidenceFraction<.06;
+    const isolated=q.medianDistance<=2.8&&q.p90Distance<=4.5&&q.lStd<=4.0&&q.evidenceFraction<.01;
+    const patterned=repeated.has(q)&&q.size<=12&&q.medianDistance<=8.0&&q.p90Distance<=11.0&&q.lStd<=6.0&&q.evidenceFraction<.06;
     if(isolated||patterned)accepted.push(q);else{q.component.delete();q.contour.delete();}
   }
 
