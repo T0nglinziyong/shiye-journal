@@ -16,7 +16,7 @@ function shiftedContour(cv,c,dx,dy){
 function median(a){if(!a.length)return 0;const b=[...a].sort((x,y)=>x-y);return b[(b.length/2)|0];}
 
 export function expandWhiteCarrier(cv,{contour,page,edges,lab,w,h,pxPerMM,paperRef}){
-  const b=cv.boundingRect(contour),pad=Math.max(12,Math.round(pxPerMM*28)),x0=Math.max(0,b.x-pad),y0=Math.max(0,b.y-pad),x1=Math.min(w,b.x+b.width+pad),y1=Math.min(h,b.y+b.height+pad),rw=x1-x0,rh=y1-y0;
+  const b=cv.boundingRect(contour),seedSpan=Math.max(b.width,b.height),pad=Math.max(Math.round(pxPerMM*20),Math.min(Math.round(pxPerMM*45),Math.round(seedSpan*.60))),x0=Math.max(0,b.x-pad),y0=Math.max(0,b.y-pad),x1=Math.min(w,b.x+b.width+pad),y1=Math.min(h,b.y+b.height+pad),rw=x1-x0,rh=y1-y0;
   if(rw<12||rh<12)return {contour,owned:false,expanded:false};
   const rough=cv.Mat.zeros(rh,rw,cv.CV_8UC1),shifted=shiftedContour(cv,contour,-x0,-y0),one=new cv.MatVector();one.push_back(shifted);cv.drawContours(rough,one,-1,new cv.Scalar(255),cv.FILLED);
   const roughArea=cv.countNonZero(rough);if(roughArea<20){rough.delete();shifted.delete();one.delete();return {contour,owned:false,expanded:false};}
@@ -27,7 +27,7 @@ export function expandWhiteCarrier(cv,{contour,page,edges,lab,w,h,pxPerMM,paperR
   cv.dilate(rough,inner,ik);cv.dilate(rough,outer,ok);cv.subtract(outer,inner,ring);
   const local=localPageLab(labROI,pageROI,rw,rh,ring,paperRef),whiteThreshold=Math.max(10,(local.madL||4)*2.2);
 
-  const zoneR=Math.max(5,Math.round(pxPerMM*24)),zk=cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(zoneR*2+1,zoneR*2+1)),zone=new cv.Mat();cv.dilate(rough,zone,zk);
+  const zoneR=Math.max(Math.round(pxPerMM*16),Math.min(Math.round(pxPerMM*40),Math.round(seedSpan*.52))),zk=cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(zoneR*2+1,zoneR*2+1)),zone=new cv.Mat();cv.dilate(rough,zone,zk);
   const expanded=cv.Mat.zeros(rh,rw,cv.CV_8UC1);
   for(let y=0;y<rh;y++)for(let x=0;x<rw;x++){
     const i=y*rw+x;if(!zone.data[i])continue;
