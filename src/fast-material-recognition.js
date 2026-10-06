@@ -1,5 +1,6 @@
 import {robustPaperLab} from './paper-reference.js';
 import {expandWhiteCarrier} from './white-carrier.js';
+import {carveInternalPaperRegions} from './internal-paper-regions.js';
 // Fast traditional-CV material recognizer.
 //
 // Design goal: one shared full-page analysis pass, then cheap per-material ROI
@@ -371,7 +372,7 @@ export function recognizeMaterialsFast(cv,p,own){
   const src=own(cv.matFromArray(h,w,cv.CV_8UC4,p.pixels)),page=own(cv.matFromArray(h,w,cv.CV_8UC1,Uint8Array.from(p.backgroundConnected||new Uint8Array(w*h),x=>x?255:0)));
   const {gray,edges,lab}=edgeImage(cv,src);own(gray);own(edges);own(lab);
   const paperRef=robustPaperLab(lab,page,w,h),supportEdges=own(new cv.Mat()),supportKernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(5,5)));cv.dilate(edges,supportEdges,supportKernel);
-  const circlePool=globalCircles(cv,gray,edges,pxPerMM),edgeRaw=proposals(cv,edges,page,{width:w,height:h,paperWidthMM,paperHeightMM,smallestMM},pxPerMM),regionRaw=regionProposals(cv,src,page,paperRef,{width:w,height:h,paperWidthMM,paperHeightMM,smallestMM},pxPerMM),selected=dedupeAndSplit(cv,[...regionRaw,...edgeRaw],w,h,pxPerMM),out=[];
+  const edgeRaw=proposals(cv,edges,page,{width:w,height:h,paperWidthMM,paperHeightMM,smallestMM},pxPerMM),regionRaw=regionProposals(cv,src,page,paperRef,{width:w,height:h,paperWidthMM,paperHeightMM,smallestMM},pxPerMM),selected=dedupeAndSplit(cv,[...regionRaw,...edgeRaw],w,h,pxPerMM),out=[];
   for(const q of selected){
     const approx=new cv.Mat();cv.approxPolyDP(q.contour,approx,Math.max(1.5,cv.arcLength(q.contour,true)*.018),true);
     let boundary,ownedBoundary=false,edgeMethod;
@@ -396,12 +397,11 @@ export function recognizeMaterialsFast(cv,p,own){
     }
     approx.delete();
     const mask=cv.Mat.zeros(h,w,cv.CV_8UC1),vv=new cv.MatVector();vv.push_back(boundary);cv.drawContours(mask,vv,-1,new cv.Scalar(255),cv.FILLED);vv.delete();
-    const circleSets=circleCandidates(cv,mask,supportEdges,circlePool,w,h,lab,paperRef,p.evidence,pxPerMM),holes=groupCircles(circleSets.strict,circleSets.weak,pxPerMM,mask,supportEdges,w,h);
-    for(const hole of holes)cv.circle(mask,new cv.Point(hole.x,hole.y),hole.r,new cv.Scalar(0),cv.FILLED);
+    const openings=carveInternalPaperRegions(cv,{mask,lab,page,evidence:p.evidence,w,h,pxPerMM,paperRef});
     const bounds=cv.boundingRect(boundary),x=Math.max(0,bounds.x),y=Math.max(0,bounds.y),rw=Math.min(w-x,bounds.width),rh=Math.min(h-y,bounds.height),local=mask.roi(new cv.Rect(x,y,rw,rh)),packed=new cv.Mat();local.copyTo(packed);
-    const poly=contourPoints(boundary).map(([px,py])=>[px-x,py-y]),area=cv.countNonZero(mask),confidence=clamp(.45+q.paperContact*.22+Math.min(q.rectFill,.9)*.12+(edgeMethod==='fast-line'?.08:.04)+(q.source==='region'?.05:0)+Math.min(holes.length,5)*.018,0,1);
+    const poly=contourPoints(boundary).map(([px,py])=>[px-x,py-y]),area=cv.countNonZero(mask),confidence=clamp(.45+q.paperContact*.22+Math.min(q.rectFill,.9)*.12+(edgeMethod==='fast-line'?.08:.04)+(q.source==='region'?.05:0)+Math.min(openings.count,5)*.012,0,1);
     out.push({x:x/w,y:y/h,w:rw/w,h:rh/h,pixels:area,evidenceDensity:1-q.insidePage,edgeMethod,recognitionConfidence:confidence,
-      mask:{width:rw,height:rh,alpha:new Uint8Array(packed.data),polygons:[poly],topologyPreserved:true},apertureCount:holes.length});
+      mask:{width:rw,height:rh,alpha:new Uint8Array(packed.data),polygons:[poly],topologyPreserved:true,apertureRegions:openings.regions},apertureCount:openings.count});
     local.delete();packed.delete();mask.delete();if(ownedBoundary)boundary.delete();
   }
   for(const q of selected)q.contour?.delete?.();
