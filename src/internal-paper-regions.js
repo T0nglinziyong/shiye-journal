@@ -5,8 +5,8 @@
 // by material. No circle/rectangle template is required.
 //
 // Risk policy: false openings cost more than misses.
-// - isolated regions must match paper very closely;
-// - weaker regions require >=4 mutually consistent observed openings;
+// - isolated regions must match paper very closely and contain no foreground evidence;
+// - weaker regions require >=4 mutually-consistent OBSERVED openings;
 // - no purely predicted opening is ever carved.
 
 const median=a=>{if(!a.length)return 0;const b=[...a].sort((x,y)=>x-y);return b[(b.length/2)|0];};
@@ -44,7 +44,9 @@ function describe(cv,{contour,carrier,labROI,evidence,pxPerMM,paperRef,carrierAr
   if(!pixels){component.delete();return null;}
   const sorted=[...distances].sort((a,b)=>a-b),med=median(distances),p90=sorted[Math.min(sorted.length-1,Math.floor(sorted.length*.90))],lStd=std(Ls),evidenceFraction=evidenceN/pixels;
 
-  const ringK=Math.max(3,(Math.round(pxPerMM*1.0)|1)),ringKernel=cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(ringK,ringK)),dil=new cv.Mat(),ring=new cv.Mat(),insideRing=new cv.Mat();
+  // Enclosure test. Use a wider ring than the old one-pixel ring so a dark
+  // physical rim around a punched hole does not hide the surrounding material.
+  const ringK=Math.max(5,(Math.round(pxPerMM*2.4)|1)),ringKernel=cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(ringK,ringK)),dil=new cv.Mat(),ring=new cv.Mat(),insideRing=new cv.Mat();
   cv.dilate(component,dil,ringKernel);cv.subtract(dil,component,ring);cv.bitwise_and(ring,carrier,insideRing);
   const rb=cv.boundingRect(dil),x0=Math.max(0,rb.x-1),y0=Math.max(0,rb.y-1),x1=Math.min(w,rb.x+rb.width+1),y1=Math.min(h,rb.y+rb.height+1);let ringN=0,materialN=0;
   for(let y=y0;y<y1;y++)for(let x=x0;x<x1;x++){const i=y*w+x;if(!insideRing.data[i])continue;ringN++;if((evidence?.[i])||colourDistance(labROI,i,paperRef)>7)materialN++;}
@@ -58,7 +60,9 @@ function describe(cv,{contour,carrier,labROI,evidence,pxPerMM,paperRef,carrierAr
 }
 
 function patternPromotions(candidates){
-  const usable=candidates.filter(q=>q.medianDistance<=8&&q.p90Distance<=11&&q.evidenceFraction<.06&&q.ringMaterialFraction>=.15),promoted=new Set();
+  // Pattern completion never invents holes. It only promotes observed page-like
+  // regions after FOUR mutually-consistent members establish a manufactured row.
+  const usable=candidates.filter(q=>q.medianDistance<=8&&q.p90Distance<=11&&q.evidenceFraction<.06),promoted=new Set();
   if(usable.length<4)return promoted;
   for(let i=0;i<usable.length-2;i++)for(let j=i+1;j<usable.length-1;j++)for(let k=j+1;k<usable.length;k++){
     const seed=[usable[i],usable[j],usable[k]],cx=mean(seed.map(q=>q.x+q.w/2)),cy=mean(seed.map(q=>q.y+q.h/2)),sizes=seed.map(q=>q.size);
@@ -70,8 +74,6 @@ function patternPromotions(candidates){
       return off<=Math.max(2,baseSize*.80)&&sizeRatio>=.70&&sizeRatio<=1.40;
     });
     if(aligned.length<4)continue;
-    // Repeated openings should also have roughly regular spacing along the
-    // discovered line. This rejects decorative dot fields/grids.
     const tx=Math.cos(angle),ty=Math.sin(angle),proj=aligned.map(q=>({q,t:(q.x+q.w/2-cx)*tx+(q.y+q.h/2-cy)*ty})).sort((a,b)=>a.t-b.t),spacing=[];
     for(let n=1;n<proj.length;n++)spacing.push(proj[n].t-proj[n-1].t);
     if(spacing.length>=2&&std(spacing)/Math.max(1,mean(spacing))>.28)continue;
@@ -82,8 +84,12 @@ function patternPromotions(candidates){
 
 export function carveInternalPaperRegions(cv,{mask,lab,page,evidence,w,h,pxPerMM,paperRef}){
   const b=cv.boundingRect(mask);if(b.width<3||b.height<3)return {count:0,regions:[],diagnostics:[]};
+
+  // roi() can be a strided Mat view in OpenCV.js. Copy before direct .data
+  // indexing or Lab/mask coordinates become silently misaligned.
   const carrierView=mask.roi(new cv.Rect(b.x,b.y,b.width,b.height)),carrier=new cv.Mat();carrierView.copyTo(carrier);carrierView.delete();
   const labView=lab.roi(new cv.Rect(b.x,b.y,b.width,b.height)),labROI=new cv.Mat();labView.copyTo(labROI);labView.delete();
+
   const localEvidence=new Uint8Array(b.width*b.height);
   for(let y=0;y<b.height;y++)for(let x=0;x<b.width;x++)localEvidence[y*b.width+x]=evidence?.[(b.y+y)*w+b.x+x]||0;
   const ref=localPaperReference(cv,{mask,lab,page,w,h,pxPerMM,paperRef}),pageLike=cv.Mat.zeros(b.height,b.width,cv.CV_8UC1);
@@ -101,8 +107,12 @@ export function carveInternalPaperRegions(cv,{mask,lab,page,evidence,w,h,pxPerMM
 
   const repeated=patternPromotions(candidates),accepted=[];
   for(const q of candidates){
-    const isolated=q.medianDistance<=5.5&&q.p90Distance<=8.0&&q.lStd<=5.0&&q.evidenceFraction<.025&&q.ringMaterialFraction>=.22;
-    const patterned=repeated.has(q)&&q.medianDistance<=8.0&&q.p90Distance<=11.0&&q.lStd<=6.0&&q.evidenceFraction<.06&&q.ringMaterialFraction>=.15;
+    // Exact paper match + enclosure is enough for an isolated opening; the
+    // printed-panel failure case is excluded because printed pixels carry
+    // foreground evidence. We intentionally do NOT require the immediate rim
+    // to be material-coloured: real punched holes often have a dark/neutral rim.
+    const isolated=q.medianDistance<=5.5&&q.p90Distance<=8.0&&q.lStd<=5.0&&q.evidenceFraction<.025;
+    const patterned=repeated.has(q)&&q.medianDistance<=8.0&&q.p90Distance<=11.0&&q.lStd<=6.0&&q.evidenceFraction<.06;
     if(isolated||patterned)accepted.push(q);else{q.component.delete();q.contour.delete();}
   }
 
