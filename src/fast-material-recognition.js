@@ -238,14 +238,14 @@ function smoothFreeform(cv,contour,w,h,pxPerMM){
   // contour may be represented by one conic curve when that curve explains
   // the observed boundary well; otherwise preserve its arbitrary concavity.
   const hull=new cv.Mat();cv.convexHull(contour,hull,false,true);const area=Math.max(1,cv.contourArea(contour)),solidity=area/Math.max(1,cv.contourArea(hull));
-  if(solidity>.93&&contour.rows>=5){
+  if(solidity>.992&&contour.rows>=5){
     const ellipse=cv.fitEllipse(contour),pts=[],angle=ellipse.angle*Math.PI/180,ca=Math.cos(angle),sa=Math.sin(angle),rx=ellipse.size.width/2,ry=ellipse.size.height/2;
     for(let i=0;i<96;i++){const t=i*Math.PI*2/96,ux=rx*Math.cos(t),uy=ry*Math.sin(t);pts.push(Math.round(ellipse.center.x+ux*ca-uy*sa),Math.round(ellipse.center.y+ux*sa+uy*ca));}
     const eContour=cv.matFromArray(96,1,cv.CV_32SC2,pts),em=cv.Mat.zeros(h,w,cv.CV_8UC1),cm=cv.Mat.zeros(h,w,cv.CV_8UC1),vv=new cv.MatVector(),ev=new cv.MatVector();
     vv.push_back(contour);ev.push_back(eContour);cv.drawContours(cm,vv,-1,new cv.Scalar(255),cv.FILLED);cv.drawContours(em,ev,-1,new cv.Scalar(255),cv.FILLED);
     const inter=new cv.Mat(),union=new cv.Mat();cv.bitwise_and(cm,em,inter);cv.bitwise_or(cm,em,union);const fit=cv.countNonZero(inter)/Math.max(1,cv.countNonZero(union));
     inter.delete();union.delete();cm.delete();em.delete();vv.delete();ev.delete();
-    if(fit>.84){hull.delete();return eContour;}
+    if(fit>.94){hull.delete();return eContour;}
     eContour.delete();
   }
   hull.delete();
