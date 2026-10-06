@@ -36,7 +36,7 @@ function contourMask(cv,contour,w,h){
 }
 
 function describe(cv,{contour,carrier,labROI,evidence,pxPerMM,paperRef,carrierArea,w,h}){
-  const area=Math.abs(cv.contourArea(contour));if(area<Math.max(8,pxPerMM*pxPerMM*.35)||area>carrierArea*.10||contour.rows<3)return null;
+  const area=Math.abs(cv.contourArea(contour));if(area<Math.max(8,pxPerMM*pxPerMM*.35)||area>carrierArea*.20||contour.rows<3)return null;
   const b=cv.boundingRect(contour),component=contourMask(cv,contour,w,h),distances=[],Ls=[];let evidenceN=0,pixels=0;
   for(let y=b.y;y<b.y+b.height;y++)for(let x=b.x;x<b.x+b.width;x++){
     const i=y*w+x;if(!component.data[i])continue;pixels++;distances.push(colourDistance(labROI,i,paperRef));Ls.push(labROI.data[i*3]);if(evidence?.[i])evidenceN++;
@@ -57,7 +57,7 @@ function describe(cv,{contour,carrier,labROI,evidence,pxPerMM,paperRef,carrierAr
   return {contour,component,x:b.x,y:b.y,w:b.width,h:b.height,area,pixels,medianDistance:med,p90Distance:p90,lStd,evidenceFraction,ringMaterialFraction,enclosedLeak,size:Math.sqrt(area)/pxPerMM};
 }
 
-function patternPromotions(candidates){
+function patternPromotions(candidates,pxPerMM){
   const usable=candidates.filter(q=>q.medianDistance<=8&&q.p90Distance<=11&&q.evidenceFraction<.06&&q.ringMaterialFraction>=.15),promoted=new Set();
   if(usable.length<4)return promoted;
   for(let i=0;i<usable.length-2;i++)for(let j=i+1;j<usable.length-1;j++)for(let k=j+1;k<usable.length;k++){
@@ -75,6 +75,10 @@ function patternPromotions(candidates){
     const tx=Math.cos(angle),ty=Math.sin(angle),proj=aligned.map(q=>({q,t:(q.x+q.w/2-cx)*tx+(q.y+q.h/2-cy)*ty})).sort((a,b)=>a.t-b.t),spacing=[];
     for(let n=1;n<proj.length;n++)spacing.push(proj[n].t-proj[n-1].t);
     if(spacing.length>=2&&std(spacing)/Math.max(1,mean(spacing))>.28)continue;
+    // Generic manufacturing prior: repeated physical apertures are separated
+    // by several aperture diameters. Dense text/UI icon rows should not turn
+    // into holes merely because they are regular.
+    if(spacing.length&&mean(spacing)/Math.max(1,baseSize*pxPerMM)<4)continue;
     for(const {q} of proj)promoted.add(q);
   }
   return promoted;
@@ -97,10 +101,14 @@ export function carveInternalPaperRegions(cv,{mask,lab,page,evidence,w,h,pxPerMM
   const carrierArea=cv.countNonZero(carrier),candidates=[];
   for(let i=0;i<contours.size();i++){const q=contours.get(i),d=describe(cv,{contour:q,carrier,labROI,evidence:localEvidence,pxPerMM,paperRef:ref,carrierArea,w:b.width,h:b.height});if(d)candidates.push(d);else q.delete();}
 
-  const repeated=patternPromotions(candidates),accepted=[];
+  const repeated=patternPromotions(candidates,pxPerMM),accepted=[];
   for(const q of candidates){
-    const isolated=q.medianDistance<=5.5&&q.p90Distance<=8.0&&q.lStd<=5.0&&q.evidenceFraction<.025&&q.ringMaterialFraction>=.22;
-    const patterned=repeated.has(q)&&q.medianDistance<=8.0&&q.p90Distance<=11.0&&q.lStd<=6.0&&q.evidenceFraction<.06&&q.ringMaterialFraction>=.15;
+    const areaFraction=q.area/Math.max(1,carrierArea);
+    // Isolated apertures must be substantial and unambiguously page-like.
+    // Small holes are handled by the structural repeated-circle path; this
+    // prevents white artwork inside an oval/card from being silently erased.
+    const isolated=areaFraction>=.08&&areaFraction<=.18&&q.medianDistance<=5.5&&q.p90Distance<=8.0&&q.lStd<=5.0&&q.evidenceFraction<.025&&q.ringMaterialFraction>=.22;
+    const patterned=areaFraction<=.06&&repeated.has(q)&&q.medianDistance<=8.0&&q.p90Distance<=11.0&&q.lStd<=6.0&&q.evidenceFraction<.06&&q.ringMaterialFraction>=.15;
     if(isolated||patterned)accepted.push(q);else{q.component.delete();q.contour.delete();}
   }
 
