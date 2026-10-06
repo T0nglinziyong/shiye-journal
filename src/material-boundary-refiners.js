@@ -120,7 +120,7 @@ export function refineMaterialBoundaries(cv,p){
       let selected=null,method='',confidence=0,workImage=null,workMask=null,support=null;
 
       if(mode==='quality'||mode==='morphgac'){
-        const quality=resizeForBudget(cv,roi,rough,220),qsupport=edgeSupportMap(cv,quality.image);
+        const quality=resizeForBudget(cv,roi,rough,180),qsupport=edgeSupportMap(cv,quality.image);
         selected=morphMask(cv,quality.image,quality.mask,{iterations:80});
         method='browser-morphgac';confidence=boundarySupport(cv,selected,qsupport);
         workImage=quality.image;workMask=quality.mask;support=qsupport;
@@ -141,8 +141,8 @@ export function refineMaterialBoundaries(cv,p){
           if(mode==='hybrid'&&confidence<.995){
             selected.delete();selected=null;
             workImage.delete();workMask.delete();support.delete();
-            const quality=resizeForBudget(cv,roi,rough,180),qsupport=edgeSupportMap(cv,quality.image);
-            selected=morphMask(cv,quality.image,quality.mask,{iterations:50});
+            const quality=resizeForBudget(cv,roi,rough,160),qsupport=edgeSupportMap(cv,quality.image);
+            selected=morphMask(cv,quality.image,quality.mask,{iterations:65});
             method='browser-morphgac';confidence=boundarySupport(cv,selected,qsupport);
             workImage=quality.image;workMask=quality.mask;support=qsupport;
           }
