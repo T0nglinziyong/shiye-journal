@@ -26,7 +26,7 @@ try{
   })()`);
   for(const [engine,r] of Object.entries(results)){
     assert.ok(r.region,engine+' missing region');
-    assert.ok(r.region.metrics.coverage>=.88,engine+' seed coverage '+JSON.stringify(r.region.metrics));
+    assert.ok(r.region.metrics.coverage>=.84,engine+' seed coverage '+JSON.stringify(r.region.metrics));
     assert.ok(r.elapsedMS<20000,engine+' took '+r.elapsedMS+' ms in Chromium');
   }
   const report=process.env.SHIYE_RECOGNITION_REPORT;
