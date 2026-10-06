@@ -20,7 +20,9 @@ export function expandWhiteCarrier(cv,{contour,page,edges,lab,w,h,pxPerMM,paperR
   if(rw<12||rh<12)return {contour,owned:false,expanded:false,reason:'roi-too-small'};
   const rough=cv.Mat.zeros(rh,rw,cv.CV_8UC1),shifted=shiftedContour(cv,contour,-x0,-y0),one=new cv.MatVector();one.push_back(shifted);cv.drawContours(rough,one,-1,new cv.Scalar(255),cv.FILLED);
   const roughArea=cv.countNonZero(rough);if(roughArea<20){rough.delete();shifted.delete();one.delete();return {contour,owned:false,expanded:false,reason:'seed-too-small'};}
-  const pageROI=page.roi(new cv.Rect(x0,y0,rw,rh)),labROI=lab.roi(new cv.Rect(x0,y0,rw,rh)),edgeROI=edges.roi(new cv.Rect(x0,y0,rw,rh));
+  const pageView=page.roi(new cv.Rect(x0,y0,rw,rh)),pageROI=new cv.Mat();pageView.copyTo(pageROI);pageView.delete();
+  const labView=lab.roi(new cv.Rect(x0,y0,rw,rh)),labROI=new cv.Mat();labView.copyTo(labROI);labView.delete();
+  const edgeView=edges.roi(new cv.Rect(x0,y0,rw,rh)),edgeROI=new cv.Mat();edgeView.copyTo(edgeROI);edgeView.delete();
 
   const inner=new cv.Mat(),outer=new cv.Mat(),ring=new cv.Mat(),innerR=Math.max(2,Math.round(pxPerMM*2.5)),outerR=Math.max(innerR+2,Math.round(pxPerMM*9));
   const ik=cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(innerR*2+1,innerR*2+1)),ok=cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(outerR*2+1,outerR*2+1));
