@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import cvModule from '@techstark/opencv-js';
 import {expandWhiteCarrier} from '../src/white-carrier.js';
+import {recoverCarrierOutsideIn} from '../src/outside-in-carrier.js';
 import {robustPaperLab} from '../src/paper-reference.js';
 
 test('printed foreground expands to a brighter white carrier and snaps to its physical edge',async()=>{
