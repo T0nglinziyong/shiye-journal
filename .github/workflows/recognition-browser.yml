@@ -30,7 +30,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        recognition: [standard, active, morphgac, slimsam]
+        include:
+          - recognition: traditional
+            pixels: 1200
+          - recognition: active
+            pixels: 1200
+          - recognition: morphgac
+            pixels: 1200
+          - recognition: slimsam
+            pixels: 1000
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
@@ -55,6 +63,7 @@ jobs:
         env:
           SHIYE_TEST_URL: http://127.0.0.1:5194
           SHIYE_TEST_RECOGNITION: ${{ matrix.recognition }}
+          SHIYE_TEST_RECOGNITION_PIXELS: ${{ matrix.pixels }}
           SHIYE_WAIT_MS: 300000
         run: |
           set -euo pipefail
