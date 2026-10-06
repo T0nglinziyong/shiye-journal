@@ -102,30 +102,73 @@ function regionFromMask(cv,mask,globalX,globalY,pageW,pageH,method,confidence,el
  * Browser-only boundary refinement using OpenCV.js + scikit-image-equivalent
  * contour engines. Candidate discovery remains unchanged.
  */
+const HYBRID_ACTIVE_SUPPORT=.95,HYBRID_GRABCUT_SUPPORT=.90;
+
 export function refineMaterialBoundaries(cv,p){
   const pageW=p.width,pageH=p.height,src=cv.matFromArray(pageH,pageW,cv.CV_8UC4,p.pixels),mode=p.mode||'hybrid',out=[];
   try{
     for(const candidate of p.candidates||[]){
-      const started=typeof performance!=='undefined'?performance.now():Date.now(),gx=Math.round(candidate.x*pageW),gy=Math.round(candidate.y*pageH),gw=Math.max(1,Math.round(candidate.w*pageW)),gh=Math.max(1,Math.round(candidate.h*pageH)),pad=Math.max(5,Math.round(Math.max(gw,gh)*.12)),x0=Math.max(0,gx-pad),y0=Math.max(0,gy-pad),x1=Math.min(pageW,gx+gw+pad),y1=Math.min(pageH,gy+gh+pad),rw=x1-x0,rh=y1-y0,roi=src.roi(new cv.Rect(x0,y0,rw,rh)),rough=maskFromCandidate(cv,candidate,pageW,pageH,x0,y0,rw,rh),holes=candidate.mask?.alpha?.length?enclosedHoles(cv,rough):null;
-      let selected=null,method='browser-grabcut',confidence=0;
-      const fast=resizeForBudget(cv,roi,rough,320),support=edgeSupportMap(cv,fast.image),grab=grabCutMask(cv,fast.image,fast.mask),grabSupport=boundarySupport(cv,grab,support);
-      confidence=grabSupport;
-      if(mode==='grabcut'||mode==='fast'||mode==='hybrid'&&grabSupport>=.90){selected=grab;method='browser-grabcut';}
-      else if(mode==='active'){
-        grab.delete();selected=activeMask(cv,fast.image,fast.mask);method='browser-active-contour';confidence=boundarySupport(cv,selected,support);
-      }else{
-        grab.delete();fast.image.delete();fast.mask.delete();support.delete();
-        const quality=resizeForBudget(cv,roi,rough,mode==='hybrid'?180:220);selected=morphMask(cv,quality.image,quality.mask,{iterations:65});method='browser-morphgac';const qsupport=edgeSupportMap(cv,quality.image);confidence=boundarySupport(cv,selected,qsupport);qsupport.delete();
-        // Return to full ROI pixels before topology restoration.
-        const full=new cv.Mat();cv.resize(selected,full,new cv.Size(rw,rh),0,0,cv.INTER_NEAREST);selected.delete();selected=full;quality.image.delete();quality.mask.delete();
-        if(holes){const fullHoles=new cv.Mat();cv.resize(holes,fullHoles,new cv.Size(rw,rh),0,0,cv.INTER_NEAREST);restoreHoles(cv,selected,fullHoles);fullHoles.delete();}
-        const elapsed=(typeof performance!=='undefined'?performance.now():Date.now())-started,region=regionFromMask(cv,selected,x0,y0,pageW,pageH,method,confidence,elapsed);if(region)out.push({...candidate,...region});else out.push(candidate);selected.delete();holes?.delete();rough.delete();roi.delete();continue;
+      const started=typeof performance!=='undefined'?performance.now():Date.now(),
+        gx=Math.round(candidate.x*pageW),gy=Math.round(candidate.y*pageH),
+        gw=Math.max(1,Math.round(candidate.w*pageW)),gh=Math.max(1,Math.round(candidate.h*pageH)),
+        pad=Math.max(5,Math.round(Math.max(gw,gh)*.12)),
+        x0=Math.max(0,gx-pad),y0=Math.max(0,gy-pad),x1=Math.min(pageW,gx+gw+pad),y1=Math.min(pageH,gy+gh+pad),
+        rw=x1-x0,rh=y1-y0,roi=src.roi(new cv.Rect(x0,y0,rw,rh)),
+        rough=maskFromCandidate(cv,candidate,pageW,pageH,x0,y0,rw,rh),
+        holes=candidate.mask?.alpha?.length?enclosedHoles(cv,rough):null;
+
+      const finish=(selected,method,confidence,workingW,workingH)=>{
+        const full=new cv.Mat();cv.resize(selected,full,new cv.Size(rw,rh),0,0,cv.INTER_NEAREST);
+        selected.delete();
+        if(holes){const fullHoles=new cv.Mat();cv.resize(holes,fullHoles,new cv.Size(rw,rh),0,0,cv.INTER_NEAREST);restoreHoles(cv,full,fullHoles);fullHoles.delete();}
+        const elapsed=(typeof performance!=='undefined'?performance.now():Date.now())-started,
+          region=regionFromMask(cv,full,x0,y0,pageW,pageH,method,confidence,elapsed);
+        full.delete();
+        if(region)out.push({...candidate,...region});else out.push(candidate);
+      };
+
+      if(mode==='quality'||mode==='morphgac'){
+        const quality=resizeForBudget(cv,roi,rough,220),selected=morphMask(cv,quality.image,quality.mask,{iterations:65}),
+          qsupport=edgeSupportMap(cv,quality.image),confidence=boundarySupport(cv,selected,qsupport);
+        qsupport.delete();finish(selected,'browser-morphgac',confidence,quality.image.cols,quality.image.rows);
+        quality.image.delete();quality.mask.delete();holes?.delete();rough.delete();roi.delete();continue;
       }
-      // GrabCut/Active were evaluated at <=320px; upscale to ROI.
-      const full=new cv.Mat();cv.resize(selected,full,new cv.Size(rw,rh),0,0,cv.INTER_NEAREST);selected.delete();selected=full;
-      if(holes){const fullHoles=new cv.Mat();cv.resize(holes,fullHoles,new cv.Size(rw,rh),0,0,cv.INTER_NEAREST);restoreHoles(cv,selected,fullHoles);fullHoles.delete();}
-      const elapsed=(typeof performance!=='undefined'?performance.now():Date.now())-started,region=regionFromMask(cv,selected,x0,y0,pageW,pageH,method,confidence,elapsed);if(region)out.push({...candidate,...region});else out.push(candidate);
-      selected.delete();holes?.delete();support.delete();fast.image.delete();fast.mask.delete();rough.delete();roi.delete();
+
+      const fast=resizeForBudget(cv,roi,rough,320),support=edgeSupportMap(cv,fast.image);
+
+      if(mode==='active'){
+        const selected=activeMask(cv,fast.image,fast.mask),confidence=boundarySupport(cv,selected,support);
+        finish(selected,'browser-active-contour',confidence,fast.image.cols,fast.image.rows);
+        support.delete();fast.image.delete();fast.mask.delete();holes?.delete();rough.delete();roi.delete();continue;
+      }
+
+      if(mode==='grabcut'||mode==='fast'){
+        const selected=grabCutMask(cv,fast.image,fast.mask),confidence=boundarySupport(cv,selected,support);
+        finish(selected,'browser-grabcut',confidence,fast.image.cols,fast.image.rows);
+        support.delete();fast.image.delete();fast.mask.delete();holes?.delete();rough.delete();roi.delete();continue;
+      }
+
+      // Generic cascade: Active Contour is cheap, GrabCut exploits a good rough
+      // mask when available, MorphGAC is reserved for difficult boundaries.
+      let selected=activeMask(cv,fast.image,fast.mask),confidence=boundarySupport(cv,selected,support);
+      if(confidence>=HYBRID_ACTIVE_SUPPORT){
+        finish(selected,'browser-active-contour',confidence,fast.image.cols,fast.image.rows);
+        support.delete();fast.image.delete();fast.mask.delete();holes?.delete();rough.delete();roi.delete();continue;
+      }
+      selected.delete();
+
+      selected=grabCutMask(cv,fast.image,fast.mask);confidence=boundarySupport(cv,selected,support);
+      if(confidence>=HYBRID_GRABCUT_SUPPORT){
+        finish(selected,'browser-grabcut',confidence,fast.image.cols,fast.image.rows);
+        support.delete();fast.image.delete();fast.mask.delete();holes?.delete();rough.delete();roi.delete();continue;
+      }
+      selected.delete();support.delete();fast.image.delete();fast.mask.delete();
+
+      const quality=resizeForBudget(cv,roi,rough,180);
+      selected=morphMask(cv,quality.image,quality.mask,{iterations:65});
+      const qsupport=edgeSupportMap(cv,quality.image);confidence=boundarySupport(cv,selected,qsupport);
+      qsupport.delete();finish(selected,'browser-morphgac',confidence,quality.image.cols,quality.image.rows);
+      quality.image.delete();quality.mask.delete();holes?.delete();rough.delete();roi.delete();
     }
     return out;
   }finally{src.delete();}
