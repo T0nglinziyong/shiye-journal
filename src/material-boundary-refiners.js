@@ -115,7 +115,7 @@ export function refineMaterialBoundaries(cv,p){
         x0=Math.max(0,gx-pad),y0=Math.max(0,gy-pad),
         x1=Math.min(pageW,gx+gw+pad),y1=Math.min(pageH,gy+gh+pad),
         rw=x1-x0,rh=y1-y0,roi=src.roi(new cv.Rect(x0,y0,rw,rh)),
-        rough=maskFromCandidate(cv,candidate,pageW,pageH,x0,y0,rw,rh),
+        rough=placedMaskFromCandidate(cv,candidate,pageW,pageH,x0,y0,rw,rh),
         holes=candidate.mask?.alpha?.length?enclosedHoles(cv,rough):null;
       let selected=null,method='',confidence=0,workImage=null,workMask=null,support=null;
 
