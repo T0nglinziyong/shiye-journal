@@ -253,7 +253,7 @@ test('fast shared-pass recognizer keeps a production-size four-material page wit
     pixels.set([...color,255],p);backgroundConnected[at]=inside?0:1;
     if(inside&&!hole&&Math.max(...color)-Math.min(...color)>12){evidence[at]=1;score[at]=90;}
   }
-  const started=performance.now(),out=await processVision(cv,'materials-fast',{pixels,width,height,backgroundConnected,evidence,shadowLikelihood,score,smallestMM:6,paperWidthMM:210,paperHeightMM:297}),elapsed=performance.now()-started;
+  const started=performance.now(),out=await processVision(cv,'materials-fast',{pixels,width,height,backgroundConnected,evidence,shadowLikelihood,score,smallestMM:6,paperWidthMM:210,paperHeightMM:297,rectified:true}),elapsed=performance.now()-started;
   assert.equal(out.length,4,JSON.stringify(out.map(x=>({x:x.x,y:x.y,w:x.w,h:x.h,holes:x.apertureCount,method:x.edgeMethod}))));
   assert.ok(out.every(x=>x.recognitionConfidence>=.54));
   assert.ok(elapsed<3000,'shared-pass OpenCV recognition took '+elapsed.toFixed(0)+'ms');
@@ -297,4 +297,10 @@ test('fast recognizer rejects any carrier inside the protected A4 edge-clearance
   const out=await processVision(cv,'materials-fast',{pixels,width,height,backgroundConnected,evidence,shadowLikelihood,score,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
   assert.equal(out.length,1,JSON.stringify(out.map(x=>({x:x.x,y:x.y,w:x.w,h:x.h}))));
   assert.ok(out[0].x>.30&&out[0].x<.55,'only the centered legal material should remain');
+});
+
+
+test('fast material recognition rejects unrectified benchmark input',async()=>{
+  const cv=await cvModule,width=60,height=80,pixels=new Uint8ClampedArray(width*height*4).fill(255);
+  await assert.rejects(()=>processVision(cv,'materials-fast',{pixels,width,height,smallestMM:6,paperWidthMM:210,paperHeightMM:297}),/rectified A4/);
 });
