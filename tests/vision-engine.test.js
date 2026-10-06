@@ -304,3 +304,19 @@ test('fast material recognition rejects unrectified benchmark input',async()=>{
   const cv=await cvModule,width=60,height=80,pixels=new Uint8ClampedArray(width*height*4).fill(255);
   await assert.rejects(()=>processVision(cv,'materials-fast',{pixels,width,height,smallestMM:6,paperWidthMM:210,paperHeightMM:297}),/rectified A4/);
 });
+
+
+test('browser MorphGAC refinement preserves validated repeated apertures',async()=>{
+  const cv=await cvModule,width=140,height=180,pixels=new Uint8ClampedArray(width*height*4),x0=28,y0=20,mw=84,mh=140,alpha=new Uint8Array(mw*mh).fill(255),holes=[35,58,81,104,127];
+  for(let y=0;y<height;y++)for(let x=0;x<width;x++){const p=(y*width+x)*4,inside=x>=x0&&x<x0+mw&&y>=y0&&y<y0+mh;color=inside?[126,174,210]:[246,246,246];pixels.set([...color,255],p);}
+  for(const hy of holes)for(let y=hy-5;y<=hy+5;y++)for(let x=35;x<=45;x++)if((x-40)**2+(y-hy)**2<=25){
+    const gx=x0+x,gy=y0+y;if(gx>=0&&gx<width&&gy>=0&&gy<height){pixels.set([246,246,246,255],(gy*width+gx)*4);alpha[y*mw+x]=0;}
+  }
+  const candidate={x:x0/width,y:y0/height,w:mw/width,h:mh/height,pixels:mw*mh,recognitionConfidence:.5,mask:{width:mw,height:mh,alpha,polygons:[]}};
+  const [out]=await processVision(cv,'material-boundary-refine',{pixels,width,height,candidates:[candidate],mode:'quality'});
+  assert.ok(out?.mask?.alpha?.length);
+  const left=Math.round(out.x*width),top=Math.round(out.y*height),at=(gx,gy)=>out.mask.alpha[(gy-top)*out.mask.width+gx-left];
+  for(const hy of holes)assert.equal(at(x0+40,y0+hy),0,'validated punch hole must survive MorphGAC refinement');
+  assert.equal(at(x0+65,y0+90),255,'material body must remain opaque');
+  assert.equal(out.edgeMethod,'browser-morphgac');
+});
