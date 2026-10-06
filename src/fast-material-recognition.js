@@ -303,8 +303,8 @@ function circleCandidates(cv,mask,supportEdges,circles,w,h,lab,paperRef,evidence
     // False holes are much more expensive than misses. No isolated Hough
     // circle is ever carved: first it must pass page-colour + material-ring
     // tests, then belong to a repeated manufacturing pattern.
-    if(pageDistance<=35&&edgeSupport>=.20&&ringMaterialFraction>=.15)strict.push({...candidate,pageLike:pageDistance<=30});
-    else if(pageDistance<=45&&edgeSupport>=.14&&ringMaterialFraction>=.08)weak.push({...candidate,pageLike:pageDistance<=35});
+    if(pageDistance<=15&&edgeSupport>=.24&&ringMaterialFraction>=.18)strict.push({...candidate,pageLike:pageDistance<=12});
+    else if(pageDistance<=24&&edgeSupport>=.18&&ringMaterialFraction>=.12)weak.push({...candidate,pageLike:pageDistance<=18});
   }
   dist.delete();return {strict,weak};
 }
@@ -375,21 +375,24 @@ export function recognizeMaterialsFast(cv,p,own){
   for(const q of selected){
     const approx=new cv.Mat();cv.approxPolyDP(q.contour,approx,Math.max(1.5,cv.arcLength(q.contour,true)*.018),true);
     let boundary,ownedBoundary=false,edgeMethod;
-    if(q.rectFill>.90&&approx.rows===4){
+    if(q.source==='region'&&q.rectFill>.90&&approx.rows===4){
+      // Colour-supported carriers already identify the whole piece, so a
+      // four-sided high-fill region can safely use straight physical edges.
       const rect=cv.minAreaRect(q.contour),points=cv.boxPoints(rect).flatMap(pt=>[Math.round(pt.x),Math.round(pt.y)]);boundary=cv.matFromArray(4,1,cv.CV_32SC2,points);ownedBoundary=true;edgeMethod='fast-line';
-    }else{
-      // A colour/region carrier already supplies object support; expanding it
-      // again toward nearby edges can bridge real concavities or shadows.
-      // Edge-only candidates still receive the outer-envelope search needed
-      // for white-carrier stickers.
-      let outer;
-      if(q.source==='region')outer={contour:q.contour,owned:false};
-      else{
-        const carrier=expandWhiteCarrier(cv,{contour:q.contour,page,edges,lab,w,h,pxPerMM,paperRef});
-        outer=carrier.expanded?carrier:chooseOuter(cv,src,q,pxPerMM,w,h);
+    }else if(q.source==='edge'){
+      // Edge-only candidates may be only the dark printed foreground of a
+      // white die-cut sticker. Always attempt carrier expansion BEFORE any
+      // straight-line simplification.
+      const carrier=expandWhiteCarrier(cv,{contour:q.contour,page,edges,lab,w,h,pxPerMM,paperRef});
+      if(carrier.expanded){
+        boundary=smoothFreeform(cv,carrier.contour,w,h,pxPerMM);carrier.contour.delete();ownedBoundary=true;edgeMethod='fast-white-carrier';
+      }else if(q.rectFill>.92&&approx.rows===4&&q.paperContact>.58&&q.insidePage<.22){
+        const rect=cv.minAreaRect(q.contour),points=cv.boxPoints(rect).flatMap(pt=>[Math.round(pt.x),Math.round(pt.y)]);boundary=cv.matFromArray(4,1,cv.CV_32SC2,points);ownedBoundary=true;edgeMethod='fast-line';
+      }else{
+        const outer=chooseOuter(cv,src,q,pxPerMM,w,h),smooth=smoothFreeform(cv,outer.contour,w,h,pxPerMM);if(outer.owned)outer.contour.delete();boundary=smooth;ownedBoundary=true;edgeMethod='fast-curve';
       }
-      const smooth=smoothFreeform(cv,outer.contour,w,h,pxPerMM);
-      if(outer.owned)outer.contour.delete();boundary=smooth;ownedBoundary=true;edgeMethod=outer.expanded?'fast-white-carrier':'fast-curve';
+    }else{
+      boundary=smoothFreeform(cv,q.contour,w,h,pxPerMM);ownedBoundary=true;edgeMethod='fast-curve';
     }
     approx.delete();
     const mask=cv.Mat.zeros(h,w,cv.CV_8UC1),vv=new cv.MatVector();vv.push_back(boundary);cv.drawContours(mask,vv,-1,new cv.Scalar(255),cv.FILLED);vv.delete();
