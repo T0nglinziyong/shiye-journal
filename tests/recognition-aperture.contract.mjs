@@ -4,8 +4,8 @@ import cvModule from '@techstark/opencv-js';
 import {processVision} from '../src/opencv-worker.js';
 
 test('checker-printed carrier keeps white print while carving repeated physical punch holes',async()=>{
-  const cv=await cvModule,width=420,height=594,pixels=new Uint8ClampedArray(width*height*4),backgroundConnected=new Uint8Array(width*height),evidence=new Uint8Array(width*height),shadowLikelihood=new Uint8Array(width*height),score=new Uint8Array(width*height);
-  const box={x:80,y:70,w:190,h:390},cell=38,holeX=98,holeYs=[130,195,260,325,390],holeR=9;
+  const cv=await cvModule,width=620,height=860,pixels=new Uint8ClampedArray(width*height*4),backgroundConnected=new Uint8Array(width*height),evidence=new Uint8Array(width*height),shadowLikelihood=new Uint8Array(width*height),score=new Uint8Array(width*height);
+  const box={x:120,y:120,w:280,h:560},cell=56,holeX=150,holeYs=[205,300,395,490,585],holeR=14;
   for(let y=0;y<height;y++)for(let x=0;x<width;x++){
     const at=y*width+x,p=at*4,inside=x>=box.x&&x<box.x+box.w&&y>=box.y&&y<box.y+box.h;let color=[242,242,242],hole=false,rim=false;
     if(inside){
@@ -13,7 +13,7 @@ test('checker-printed carrier keeps white print while carving repeated physical 
       color=white?[238,238,235]:[125,175,135];
     }
     for(const hy of holeYs){
-      const d=Math.hypot(x-holeX,y-hy);if(d<=holeR){hole=true;color=[242,242,242];}else if(d<=holeR+2){rim=true;color=[105,105,105];}
+      const d=Math.hypot(x-holeX,y-hy);if(d<=holeR){hole=true;color=[242,242,242];}else if(d<=holeR+3){rim=true;color=[105,105,105];}
     }
     pixels.set([...color,255],p);backgroundConnected[at]=inside?0:1;
     if(inside&&!hole&&!rim&&Math.max(...color)-Math.min(...color)>12){evidence[at]=1;score[at]=95;}
