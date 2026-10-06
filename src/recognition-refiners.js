@@ -4,6 +4,8 @@ async function refineCandidatesWithContourEngine(engine,{candidates,frame,width,
   const out=[];let fallback=0;
   for(let index=0;index<candidates.length;index++){
     const candidate=candidates[index],started=performance.now();
+    // Auto/hybrid spends contour time only where the base recognizer admits uncertainty. Explicit engines still refine every candidate.
+    if(engine==='hybrid' && Number.isFinite(candidate.recognitionConfidence) && candidate.recognitionConfidence>=.80){out.push(candidate);onProgress({status:'refinement-skip',engine,completed:index+1,total:candidates.length});continue;}
     try{
       const refined=await visionTask('refine-candidate',{
         engine,pixels:frame.data,width,height,candidate,paperWidthMM:210,paperHeightMM:297
