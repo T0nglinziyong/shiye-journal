@@ -285,3 +285,16 @@ test('fast recognizer rejects page-edge strips and preserves smooth/concave carr
   assert.ok(localX>=0&&localY>=0&&localX<irr.mask.width&&localY<irr.mask.height);
   assert.equal(irr.mask.alpha[localY*irr.mask.width+localX],0,'a genuine concavity must not be filled by a convex hull');
 });
+
+
+test('fast recognizer rejects any carrier inside the protected A4 edge-clearance band',async()=>{
+  const cv=await cvModule,width=420,height=594,pixels=new Uint8ClampedArray(width*height*4),backgroundConnected=new Uint8Array(width*height),evidence=new Uint8Array(width*height),shadowLikelihood=new Uint8Array(width*height),score=new Uint8Array(width*height);
+  for(let y=0;y<height;y++)for(let x=0;x<width;x++){
+    const at=y*width+x,p=at*4,edgeItem=x>=1&&x<72&&y>=120&&y<230,center=x>=180&&x<260&&y>=220&&y<340;
+    const item=edgeItem||center,color=item?[115,178,142]:[242,242,242];pixels.set([...color,255],p);backgroundConnected[at]=item?0:1;
+    if(item){evidence[at]=1;score[at]=95;}
+  }
+  const out=await processVision(cv,'materials-fast',{pixels,width,height,backgroundConnected,evidence,shadowLikelihood,score,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
+  assert.equal(out.length,1,JSON.stringify(out.map(x=>({x:x.x,y:x.y,w:x.w,h:x.h}))));
+  assert.ok(out[0].x>.30&&out[0].x<.55,'only the centered legal material should remain');
+});
