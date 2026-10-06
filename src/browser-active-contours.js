@@ -177,3 +177,26 @@ export function morphGAC(gimage,w,h,initMask,opts={}){
   }
   return u;
 }
+
+
+/**
+ * Direct browser translation of skimage.segmentation.morphological_chan_vese.
+ */
+export function morphACWE(image,w,h,initMask,opts={}){
+  const numIter=opts.numIter??100,smoothing=opts.smoothing??1,lambda1=opts.lambda1??1,lambda2=opts.lambda2??1;
+  let u=new Uint8Array(initMask.length);for(let i=0;i<u.length;i++)u[i]=initMask[i]>0?1:0;
+  let phase=0;
+  for(let it=0;it<numIter;it++){
+    let inSum=0,inN=0,outSum=0,outN=0;
+    for(let i=0;i<u.length;i++){if(u[i]){inSum+=image[i];inN++;}else{outSum+=image[i];outN++;}}
+    const c0=outSum/(outN+1e-8),c1=inSum/(inN+1e-8);
+    const [duy,dux]=grad2(u,w,h);
+    for(let i=0;i<u.length;i++){
+      const abs=Math.abs(duy[i])+Math.abs(dux[i]);
+      const aux=abs*(lambda1*(image[i]-c1)**2-lambda2*(image[i]-c0)**2);
+      if(aux<0)u[i]=1;else if(aux>0)u[i]=0;
+    }
+    for(let s=0;s<smoothing;s++)u=curvop(u,w,h,phase++);
+  }
+  return u;
+}
