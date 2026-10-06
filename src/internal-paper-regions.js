@@ -151,25 +151,7 @@ export function carveInternalPaperRegions(cv,{mask,lab,gray,page,evidence,w,h,px
   const carrierView=mask.roi(new cv.Rect(b.x,b.y,b.width,b.height)),carrier=new cv.Mat();carrierView.copyTo(carrier);carrierView.delete();
   const labView=lab.roi(new cv.Rect(b.x,b.y,b.width,b.height)),labROI=new cv.Mat();labView.copyTo(labROI);labView.delete();
   let grayROI=null;if(gray){const grayView=gray.roi(new cv.Rect(b.x,b.y,b.width,b.height));grayROI=new cv.Mat();grayView.copyTo(grayROI);grayView.delete();}
-  // Predict the locally illuminated A4 field behind this material with the
-  // official OpenCV inpaint implementation. Work only on a padded material ROI
-  // so this remains cheap; the prediction is weak evidence for repeated round
-  // apertures and never creates an opening by itself.
   let predictedLabROI=null;
-  if(typeof cv.inpaint==='function'){
-    const pad=Math.max(5,Math.round(pxPerMM*5)),px0=Math.max(0,b.x-pad),py0=Math.max(0,b.y-pad),px1=Math.min(w,b.x+b.width+pad),py1=Math.min(h,b.y+b.height+pad),pw=px1-px0,ph=py1-py0;
-    if(pw>b.width+2&&ph>b.height+2){
-      const labPadView=lab.roi(new cv.Rect(px0,py0,pw,ph)),labPad=new cv.Mat();labPadView.copyTo(labPad);labPadView.delete();
-      const maskPadView=mask.roi(new cv.Rect(px0,py0,pw,ph)),maskPad=new cv.Mat();maskPadView.copyTo(maskPad);maskPadView.delete();
-      const predictedPad=new cv.Mat();
-      try{
-        cv.inpaint(labPad,maskPad,predictedPad,Math.max(3,pxPerMM*2),cv.INPAINT_NS);
-        const rx=b.x-px0,ry=b.y-py0,predictedView=predictedPad.roi(new cv.Rect(rx,ry,b.width,b.height));predictedLabROI=new cv.Mat();predictedView.copyTo(predictedLabROI);predictedView.delete();
-      }catch{}
-      labPad.delete();maskPad.delete();predictedPad.delete();
-    }
-  }
-
   const localEvidence=new Uint8Array(b.width*b.height);
   for(let y=0;y<b.height;y++)for(let x=0;x<b.width;x++)localEvidence[y*b.width+x]=evidence?.[(b.y+y)*w+b.x+x]||0;
   const ref=localPaperReference(cv,{mask,lab,page,w,h,pxPerMM,paperRef});
@@ -212,6 +194,20 @@ export function carveInternalPaperRegions(cv,{mask,lab,gray,page,evidence,w,h,px
 
   const target=mask.roi(new cv.Rect(b.x,b.y,b.width,b.height));
   for(const q of accepted)target.setTo(new cv.Scalar(0),q.component);
+  // Only ambiguous repeated-hole cases pay for local A4 reconstruction.
+  if(accepted.length<4&&candidates.length>=2&&typeof cv.inpaint==='function'){
+    const pad=Math.max(5,Math.round(pxPerMM*5)),px0=Math.max(0,b.x-pad),py0=Math.max(0,b.y-pad),px1=Math.min(w,b.x+b.width+pad),py1=Math.min(h,b.y+b.height+pad),pw=px1-px0,ph=py1-py0;
+    if(pw>b.width+2&&ph>b.height+2){
+      const labPadView=lab.roi(new cv.Rect(px0,py0,pw,ph)),labPad=new cv.Mat();labPadView.copyTo(labPad);labPadView.delete();
+      const maskPadView=mask.roi(new cv.Rect(px0,py0,pw,ph)),maskPad=new cv.Mat();maskPadView.copyTo(maskPad);maskPadView.delete();
+      const predictedPad=new cv.Mat();
+      try{
+        cv.inpaint(labPad,maskPad,predictedPad,Math.max(3,pxPerMM*2),cv.INPAINT_NS);
+        const predictedView=predictedPad.roi(new cv.Rect(b.x-px0,b.y-py0,b.width,b.height));predictedLabROI=new cv.Mat();predictedView.copyTo(predictedLabROI);predictedView.delete();
+      }catch{}
+      labPad.delete();maskPad.delete();predictedPad.delete();
+    }
+  }
   const repeatedCircles=accepted.length<4&&candidates.length>=2?repeatedCircleApertures(cv,{carrier,grayROI,labROI,predictedLabROI,ref,pxPerMM}):[],circleRegions=[];
   for(const q of repeatedCircles){
     const duplicate=accepted.some(a=>Math.hypot(a.x+a.w/2-q.x,a.y+a.h/2-q.y)<=Math.max(q.r,a.size*pxPerMM*.6));if(duplicate)continue;
