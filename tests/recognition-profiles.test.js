@@ -5,11 +5,11 @@ import {normalizePreferences} from '../src/preferences.js';
 
 test('recognition profiles expose fast, Active, hybrid, MorphGAC and model choices',()=>{
  const auto=recognitionProfile('auto',{maxTouchPoints:5,coarsePointer:true});
- assert.equal(auto.analysisMaxDimension,1200);
+ assert.equal(auto.analysisMaxDimension,1000);
  assert.equal(typeof auto.refineCandidates,'function');
  assert.equal(recognitionProfile('fast').analysisMaxDimension,900);
  assert.equal(recognitionProfile('detail').analysisMaxDimension,1600);
- assert.equal(recognitionProfile('hybrid').analysisMaxDimension,1200);
+ assert.equal(recognitionProfile('hybrid').analysisMaxDimension,1000);
  assert.equal(typeof recognitionProfile('hybrid').refineCandidates,'function');
  assert.equal(typeof recognitionProfile('active').refineCandidates,'function');
  assert.equal(typeof recognitionProfile('morphgac').refineCandidates,'function');
