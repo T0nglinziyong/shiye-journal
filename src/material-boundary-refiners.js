@@ -94,7 +94,7 @@ function restoreHoles(cv,outer,holes){
   if(!holes||cv.countNonZero(holes)===0)return;const target=new cv.Mat();cv.bitwise_and(holes,outer,target);outer.setTo(new cv.Scalar(0),target);target.delete();
 }
 function regionFromMask(cv,mask,globalX,globalY,pageW,pageH,method,confidence,elapsed){
-  const found=largestExternal(cv,mask);if(!found.contour)return null;const b=cv.boundingRect(found.contour),local=mask.roi(new cv.Rect(b.x,b.y,b.width,b.height)),packed=new cv.Mat();local.copyTo(packed);const poly=new cv.Mat();cv.approxPolyDP(found.contour,poly,Math.max(.7,cv.arcLength(found.contour,true)*.0015),true),points=contourPoints(poly).map(([x,y])=>[x-b.x,y-b.y]);found.contour.delete();poly.delete();local.delete();
+  const found=largestExternal(cv,mask);if(!found.contour)return null;const b=cv.boundingRect(found.contour),local=mask.roi(new cv.Rect(b.x,b.y,b.width,b.height)),packed=new cv.Mat();local.copyTo(packed);const poly=new cv.Mat();cv.approxPolyDP(found.contour,poly,Math.max(.7,cv.arcLength(found.contour,true)*.0015),true);const points=contourPoints(poly).map(([x,y])=>[x-b.x,y-b.y]);found.contour.delete();poly.delete();local.delete();
   return {x:(globalX+b.x)/pageW,y:(globalY+b.y)/pageH,w:b.width/pageW,h:b.height/pageH,pixels:cv.countNonZero(mask),edgeMethod:method,boundaryConfidence:confidence,refinementMS:elapsed,mask:{width:b.width,height:b.height,alpha:new Uint8Array(packed.data),polygons:[points],topologyPreserved:true}};
 }
 
