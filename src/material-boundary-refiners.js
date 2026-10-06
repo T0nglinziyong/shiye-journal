@@ -74,8 +74,8 @@ function rectangleInit(mask,padFraction=.05){
   const pad=Math.max(2,Math.round(Math.max(maxX-minX+1,maxY-minY+1)*padFraction)),x0=clamp(minX-pad,1,mask.cols-2),x1=clamp(maxX+1+pad,2,mask.cols-1),y0=clamp(minY-pad,1,mask.rows-2),y1=clamp(maxY+1+pad,2,mask.rows-1),out=new Uint8Array(mask.rows*mask.cols);
   for(let y=y0;y<y1;y++)out.fill(1,y*mask.cols+x0,y*mask.cols+x1);return out;
 }
-function morphMask(cv,rgba,rough){
-  const g=inverseGradientGImage(cv,rgba),init=rectangleInit(rough),u=morphGAC(g,rgba.cols,rgba.rows,init,{numIter:80,smoothing:1,threshold:'auto',balloon:-1}),out=cv.Mat.zeros(rgba.rows,rgba.cols,cv.CV_8UC1);
+function morphMask(cv,rgba,rough,{iterations=65}={}){
+  const g=inverseGradientGImage(cv,rgba),init=rectangleInit(rough),u=morphGAC(g,rgba.cols,rgba.rows,init,{numIter:iterations,smoothing:1,threshold:'auto',balloon:-1}),out=cv.Mat.zeros(rgba.rows,rgba.cols,cv.CV_8UC1);
   for(let i=0;i<u.length;i++)if(u[i])out.data[i]=255;const filled=outerFill(cv,out);out.delete();return filled;
 }
 function activeMask(cv,rgba,rough){
@@ -110,12 +110,12 @@ export function refineMaterialBoundaries(cv,p){
       let selected=null,method='browser-grabcut',confidence=0;
       const fast=resizeForBudget(cv,roi,rough,320),support=edgeSupportMap(cv,fast.image),grab=grabCutMask(cv,fast.image,fast.mask),grabSupport=boundarySupport(cv,grab,support);
       confidence=grabSupport;
-      if(mode==='grabcut'||mode==='fast'||mode==='hybrid'&&grabSupport>=.82){selected=grab;method='browser-grabcut';}
+      if(mode==='grabcut'||mode==='fast'||mode==='hybrid'&&grabSupport>=.90){selected=grab;method='browser-grabcut';}
       else if(mode==='active'){
         grab.delete();selected=activeMask(cv,fast.image,fast.mask);method='browser-active-contour';confidence=boundarySupport(cv,selected,support);
       }else{
         grab.delete();fast.image.delete();fast.mask.delete();support.delete();
-        const quality=resizeForBudget(cv,roi,rough,220);selected=morphMask(cv,quality.image,quality.mask);method='browser-morphgac';const qsupport=edgeSupportMap(cv,quality.image);confidence=boundarySupport(cv,selected,qsupport);qsupport.delete();
+        const quality=resizeForBudget(cv,roi,rough,mode==='hybrid'?180:220);selected=morphMask(cv,quality.image,quality.mask,{iterations:65});method='browser-morphgac';const qsupport=edgeSupportMap(cv,quality.image);confidence=boundarySupport(cv,selected,qsupport);qsupport.delete();
         // Return to full ROI pixels before topology restoration.
         const full=new cv.Mat();cv.resize(selected,full,new cv.Size(rw,rh),0,0,cv.INTER_NEAREST);selected.delete();selected=full;quality.image.delete();quality.mask.delete();
         if(holes){const fullHoles=new cv.Mat();cv.resize(holes,fullHoles,new cv.Size(rw,rh),0,0,cv.INTER_NEAREST);restoreHoles(cv,selected,fullHoles);fullHoles.delete();}
