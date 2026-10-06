@@ -281,9 +281,12 @@ test('fast recognizer rejects page-edge strips and preserves smooth/concave carr
   assert.equal(oval.edgeMethod,'fast-curve');assert.ok(oval.mask.polygons[0].length>=16,'smooth curve should not collapse into a coarse polygon');
   const irr=out.filter(x=>x.y>.45&&x.x>.4).sort((a,b)=>b.pixels-a.pixels)[0];assert.ok(irr,'irregular white carrier should survive');
   assert.equal(irr.edgeMethod,'fast-curve');
-  const left=Math.round(irr.x*width),top=Math.round(irr.y*height),localX=475-left,localY=545-top;
-  assert.ok(localX>=0&&localY>=0&&localX<irr.mask.width&&localY<irr.mask.height);
-  assert.equal(irr.mask.alpha[localY*irr.mask.width+localX],0,'a genuine concavity must not be filled by a convex hull');
+  const localMask=cv.matFromArray(irr.mask.height,irr.mask.width,cv.CV_8UC1,irr.mask.alpha),contours=new cv.MatVector(),hierarchy=new cv.Mat();
+  cv.findContours(localMask,contours,hierarchy,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_NONE);
+  let largest=null,largestArea=0;for(let i=0;i<contours.size();i++){const q=contours.get(i),a=cv.contourArea(q);if(a>largestArea){largest?.delete?.();largest=q;largestArea=a;}else q.delete();}
+  assert.ok(largest,'irregular carrier needs an external contour');const hull=new cv.Mat();cv.convexHull(largest,hull);const solidity=largestArea/Math.max(1,cv.contourArea(hull));
+  assert.ok(solidity<.97,'a genuine concavity must survive instead of being convex-hulled: '+solidity);
+  hull.delete();largest.delete();contours.delete();hierarchy.delete();localMask.delete();
 });
 
 
