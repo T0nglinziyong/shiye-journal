@@ -1,5 +1,27 @@
 import {visionTask} from './vision-runtime.js';
 
+async function refineCandidatesWithContourEngine(engine,{candidates,frame,width,height,onProgress=()=>{}}){
+  const out=[];let fallback=0;
+  for(let index=0;index<candidates.length;index++){
+    const candidate=candidates[index],started=performance.now();
+    try{
+      const refined=await visionTask('refine-candidate',{
+        engine,pixels:frame.data,width,height,candidate,paperWidthMM:210,paperHeightMM:297
+      });
+      out.push(refined||candidate);if(!refined)fallback++;
+      onProgress({status:'refinement',engine,completed:index+1,total:candidates.length,elapsedMS:Math.round(performance.now()-started)});
+    }catch{
+      out.push(candidate);fallback++;
+    }
+  }
+  if(fallback)onProgress({status:'fallback',engine,count:fallback});
+  return out;
+}
+export const refineCandidatesWithHybrid=context=>refineCandidatesWithContourEngine('hybrid',context);
+export const refineCandidatesWithActiveContour=context=>refineCandidatesWithContourEngine('active-contour',context);
+export const refineCandidatesWithMorphGAC=context=>refineCandidatesWithContourEngine('morphgac',context);
+export const refineCandidatesWithGrabCut=context=>refineCandidatesWithContourEngine('grabcut',context);
+
 // Only loaded for the optional browser model. Traditional proposals remain
 // available as the explicit fallback when the model rejects an object.
 export async function refineCandidatesWithSlimSAM({candidates, frame, width, height, onProgress=()=>{}}) {
@@ -16,7 +38,10 @@ export async function refineCandidatesWithSlimSAM({candidates, frame, width, hei
       const x = Math.floor(mask.width * fx), y = Math.floor(mask.height * fy);
       const radius = Math.max(2, Math.round(Math.min(mask.width, mask.height) * .04));
       const inside = [[0,0],[-radius,0],[radius,0],[0,-radius],[0,radius]]
-        .every(([dx,dy]) => mask.alpha[(y+dy)*mask.width+x+dx] > 127);
+        .every(([dx,dy]) => {
+          const xx=x+dx,yy=y+dy;
+          return xx>=0&&yy>=0&&xx<mask.width&&yy<mask.height&&mask.alpha[yy*mask.width+xx] > 127;
+        });
       if (inside) points.push([(candidate.x+candidate.w*x/mask.width)*width, (candidate.y+candidate.h*y/mask.height)*height]);
     }
     return points;
