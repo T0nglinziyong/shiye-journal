@@ -275,7 +275,7 @@ test('fast recognizer rejects page-edge strips and preserves smooth/concave carr
     pixels.set([...color,255],p);backgroundConnected[at]=inside?0:1;
     if(inside&&(Math.max(...color)-Math.min(...color)>4||color[0]<180)){evidence[at]=1;score[at]=95;}
   }
-  const out=await processVision(cv,'materials-fast',{pixels,width,height,backgroundConnected,evidence,shadowLikelihood,score,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
+  const out=await processVision(cv,'materials-fast',{pixels,width,height,backgroundConnected,evidence,shadowLikelihood,score,smallestMM:6,paperWidthMM:210,paperHeightMM:297,rectified:true});
   assert.equal(out.some(x=>x.x<.03&&x.h>.45),false,'rectified page-edge strip must not become a material');
   const oval=out.filter(x=>x.y<.38&&x.x>.5).sort((a,b)=>b.pixels-a.pixels)[0];assert.ok(oval,'pale oval carrier should survive');
   assert.equal(oval.edgeMethod,'fast-curve');assert.ok(oval.mask.polygons[0].length>=16,'smooth curve should not collapse into a coarse polygon');
@@ -294,7 +294,7 @@ test('fast recognizer rejects any carrier inside the protected A4 edge-clearance
     const item=edgeItem||center,color=item?[115,178,142]:[242,242,242];pixels.set([...color,255],p);backgroundConnected[at]=item?0:1;
     if(item){evidence[at]=1;score[at]=95;}
   }
-  const out=await processVision(cv,'materials-fast',{pixels,width,height,backgroundConnected,evidence,shadowLikelihood,score,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
+  const out=await processVision(cv,'materials-fast',{pixels,width,height,backgroundConnected,evidence,shadowLikelihood,score,smallestMM:6,paperWidthMM:210,paperHeightMM:297,rectified:true});
   assert.equal(out.length,1,JSON.stringify(out.map(x=>({x:x.x,y:x.y,w:x.w,h:x.h}))));
   assert.ok(out[0].x>.30&&out[0].x<.55,'only the centered legal material should remain');
 });
