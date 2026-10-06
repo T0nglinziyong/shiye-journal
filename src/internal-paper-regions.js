@@ -166,7 +166,7 @@ export function carveInternalPaperRegions(cv,{mask,lab,gray,page,evidence,w,h,px
 
   const target=mask.roi(new cv.Rect(b.x,b.y,b.width,b.height));
   for(const q of accepted)target.setTo(new cv.Scalar(0),q.component);
-  const repeatedCircles=repeatedCircleApertures(cv,{carrier,grayROI,labROI,ref,pxPerMM}),circleRegions=[];
+  const repeatedCircles=candidates.length>=2?repeatedCircleApertures(cv,{carrier,grayROI,labROI,ref,pxPerMM}):[],circleRegions=[];
   for(const q of repeatedCircles){
     const duplicate=accepted.some(a=>Math.hypot(a.x+a.w/2-q.x,a.y+a.h/2-q.y)<=Math.max(q.r,a.size*pxPerMM*.6));if(duplicate)continue;
     cv.circle(target,new cv.Point(q.x,q.y),q.r,new cv.Scalar(0),cv.FILLED);
