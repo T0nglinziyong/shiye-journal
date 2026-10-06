@@ -23,7 +23,7 @@ async function runSheet({printed=false}={}){
 
 test('fast aperture detector carves only a repeated physical-hole pattern',async()=>{
   const out=await runSheet({printed:false});assert.equal(out.length,1,JSON.stringify(out.map(x=>({method:x.edgeMethod,holes:x.apertureCount,bbox:[x.x,x.y,x.w,x.h]}))));
-  assert.ok(out[0].apertureCount>=4,'expected repeated physical holes: '+JSON.stringify(out[0]));
+  assert.ok(out[0].apertureCount>=4,'expected repeated physical holes: '+JSON.stringify({count:out[0].apertureCount,diag:out[0].apertureDiagnostics,ref:out[0].aperturePaperRef}));
 });
 
 test('repeated printed circles are not punched out when their fill is not paper-like',async()=>{
@@ -42,7 +42,7 @@ test('arbitrary enclosed paper-colour opening is carved without a circle prior',
     if(inside&&!hole){evidence[at]=1;score[at]=95;}
   }
   const out=await processVision(cv,'materials-fast',{pixels,width,height,backgroundConnected,evidence,shadowLikelihood,score,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
-  assert.equal(out.length,1);assert.ok(out[0].apertureCount>=1,JSON.stringify(out[0]));
+  assert.equal(out.length,1);assert.ok(out[0].apertureCount>=1,JSON.stringify({count:out[0].apertureCount,diag:out[0].apertureDiagnostics,ref:out[0].aperturePaperRef}));
   const region=out[0].mask.apertureRegions?.[0];assert.ok(region&&region.w>20&&region.h>20,'opening shape should be preserved as a region');
 });
 
