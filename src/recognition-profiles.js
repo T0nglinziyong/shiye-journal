@@ -1,4 +1,4 @@
-// One catalog supplies settings, preference validation and the image pipeline.
+// Recognition method and analysis resolution are intentionally independent.
 // Browser contour engines are parity-tested ports of scikit-image. OpenCV
 // algorithms use the same OpenCV.js WASM core as the existing recognition path.
 const refineSlimSAM=async context=>{
@@ -23,22 +23,28 @@ const refineGrabCut=async context=>{
 };
 
 export const recognitionStrategies=Object.freeze([
-  {id:'auto',label:'自动混合 · Active + GrabCut + MorphGAC',analysisMaxDimension:1000,refineCandidates:refineHybrid},
-  {id:'fast',label:'传统识别 · 快速',analysisMaxDimension:900},
-  {id:'standard',label:'传统识别 · 标准',analysisMaxDimension:1200},
-  {id:'detail',label:'传统识别 · 精细',analysisMaxDimension:1600},
-  {id:'hybrid',label:'组合识别 · Active + GrabCut + MorphGAC',analysisMaxDimension:1000,refineCandidates:refineHybrid},
-  {id:'active',label:'浏览器轮廓 · Active Contour（快速高质量）',analysisMaxDimension:1000,refineCandidates:refineActive},
-  {id:'grabcut',label:'OpenCV · GrabCut',analysisMaxDimension:1000,refineCandidates:refineGrabCut},
-  {id:'morphgac',label:'浏览器轮廓 · MorphGAC（高质量）',analysisMaxDimension:1000,refineCandidates:refineMorphGAC},
-  {id:'slimsam',label:'浏览器模型 · SlimSAM（试用）',analysisMaxDimension:1000,refineCandidates:refineSlimSAM}
+  {id:'auto',label:'自动混合 · Active + GrabCut + MorphGAC',refineCandidates:refineHybrid},
+  {id:'traditional',label:'传统识别 · OpenCV 基础'},
+  {id:'hybrid',label:'组合识别 · Active + GrabCut + MorphGAC',refineCandidates:refineHybrid},
+  {id:'active',label:'浏览器轮廓 · Active Contour',refineCandidates:refineActive},
+  {id:'grabcut',label:'OpenCV · GrabCut',refineCandidates:refineGrabCut},
+  {id:'morphgac',label:'浏览器轮廓 · MorphGAC',refineCandidates:refineMorphGAC},
+  {id:'slimsam',label:'浏览器模型 · SlimSAM（试用）',refineCandidates:refineSlimSAM}
+]);
+export const recognitionPixelOptions=Object.freeze([
+  [900,'900 px'],
+  [1200,'1200 px'],
+  [1600,'1600 px']
 ]);
 const strategiesByID=new Map(recognitionStrategies.map(strategy=>[strategy.id,strategy]));
+const pixelValues=new Set(recognitionPixelOptions.map(([value])=>value));
 export const recognitionOptions=recognitionStrategies.map(({id,label})=>[id,label]);
 export const recognitionModeAllowed=value=>strategiesByID.has(value);
+export const recognitionPixelsAllowed=value=>pixelValues.has(Number(value));
 
-export function recognitionProfile(value='auto'){
+export function recognitionProfile(value='auto',analysisMaxDimension=1200){
   const mode=strategiesByID.has(value)?value:'auto';
-  const {analysisMaxDimension,refineCandidates}=strategiesByID.get(mode);
-  return {mode,analysisMaxDimension,refineCandidates};
+  const pixels=recognitionPixelsAllowed(analysisMaxDimension)?Number(analysisMaxDimension):1200;
+  const {refineCandidates}=strategiesByID.get(mode);
+  return {mode,analysisMaxDimension:pixels,refineCandidates};
 }
