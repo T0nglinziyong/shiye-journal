@@ -12,9 +12,11 @@ test('recognition profiles expose fast, hybrid, MorphGAC and model choices',()=>
  assert.equal(recognitionProfile('hybrid').analysisMaxDimension,1200);
  assert.equal(typeof recognitionProfile('hybrid').refineCandidates,'function');
  assert.equal(typeof recognitionProfile('morphgac').refineCandidates,'function');
+ assert.equal(typeof recognitionProfile('grabcut').refineCandidates,'function');
  assert.equal(recognitionProfile('slimsam').analysisMaxDimension,1000);
  assert.equal(normalizePreferences({recognition:'hybrid'}).recognition,'hybrid');
  assert.equal(normalizePreferences({recognition:'morphgac'}).recognition,'morphgac');
+ assert.equal(normalizePreferences({recognition:'grabcut'}).recognition,'grabcut');
  assert.equal(normalizePreferences({recognition:'slimsam'}).recognition,'slimsam');
  assert.equal(normalizePreferences({recognition:'fake-cloud-model'}).recognition,'auto');
 });
