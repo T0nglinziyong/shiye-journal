@@ -129,7 +129,8 @@ export function carveInternalPaperRegions(cv,{mask,lab,page,evidence,w,h,pxPerMM
     const target=mask.roi(new cv.Rect(b.x,b.y,b.width,b.height));target.setTo(new cv.Scalar(0),q.component);target.delete();
   }
   const regions=accepted.map(q=>({x:b.x+q.x,y:b.y+q.y,w:q.w,h:q.h,area:q.area,medianDistance:q.medianDistance,p90Distance:q.p90Distance,patterned:repeated.has(q)}));
+  const diagnostics=candidates.map(q=>({area:q.area,medianDistance:q.medianDistance,p90Distance:q.p90Distance,lStd:q.lStd,evidenceFraction:q.evidenceFraction,ringMaterialFraction:q.ringMaterialFraction,enclosedLeak:q.enclosedLeak,size:q.size,accepted:accepted.includes(q),patterned:repeated.has(q)}));
   for(const q of accepted)q.component.delete();
   carrier.delete();labROI.delete();pageLike.delete();kernel.delete();clean.delete();labels.delete();stats.delete();centroids.delete();
-  return {count:regions.length,regions,paperRef:ref};
+  return {count:regions.length,regions,paperRef:ref,diagnostics};
 }
