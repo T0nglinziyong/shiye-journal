@@ -14,7 +14,7 @@ function outerFill(cv,mask){
   if(found.contour){const v=new cv.MatVector();v.push_back(found.contour);cv.drawContours(out,v,-1,new cv.Scalar(255),cv.FILLED);v.delete();found.contour.delete();}
   return out;
 }
-function maskFromCandidate(cv,c,w,h,x0,y0,rw,rh){
+function placedMaskFromCandidate(cv,c,w,h,x0,y0,rw,rh){
   const out=cv.Mat.zeros(rh,rw,cv.CV_8UC1);
   if(c.mask?.alpha?.length){
     const mw=c.mask.width,mh=c.mask.height,src=cv.matFromArray(mh,mw,cv.CV_8UC1,c.mask.alpha),resized=new cv.Mat();
@@ -28,7 +28,7 @@ function maskFromCandidate(cv,c,w,h,x0,y0,rw,rh){
       cw=clamp(Math.round(c.w*w),1,rw-x),ch=clamp(Math.round(c.h*h),1,rh-y);
     out.roi(new cv.Rect(x,y,cw,ch)).setTo(new cv.Scalar(255));
   }
-  return outerFill(cv,out);
+  return out;
 }
 function enclosedHoles(cv,mask){
   const outer=outerFill(cv,mask),holes=new cv.Mat();cv.subtract(outer,mask,holes);outer.delete();return holes;
@@ -114,8 +114,9 @@ export function refineMaterialBoundaries(cv,p){
         pad=Math.max(5,Math.round(Math.max(gw,gh)*.12)),
         x0=Math.max(0,gx-pad),y0=Math.max(0,gy-pad),x1=Math.min(pageW,gx+gw+pad),y1=Math.min(pageH,gy+gh+pad),
         rw=x1-x0,rh=y1-y0,roi=src.roi(new cv.Rect(x0,y0,rw,rh)),
-        rough=maskFromCandidate(cv,candidate,pageW,pageH,x0,y0,rw,rh),
-        holes=candidate.mask?.alpha?.length?enclosedHoles(cv,rough):null;
+        placed=placedMaskFromCandidate(cv,candidate,pageW,pageH,x0,y0,rw,rh),
+        holes=candidate.mask?.alpha?.length?enclosedHoles(cv,placed):null,
+        rough=outerFill(cv,placed);placed.delete();
 
       const finish=(selected,method,confidence,workingW,workingH)=>{
         const full=new cv.Mat();cv.resize(selected,full,new cv.Size(rw,rh),0,0,cv.INTER_NEAREST);
