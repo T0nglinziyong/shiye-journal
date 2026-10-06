@@ -323,12 +323,18 @@ function groupCircles(strict,weak,pxPerMM,mask,supportEdges,w,h){
     const sorted=cand.map(id=>({t:(strict[id].x-cx)*dir[0]+(strict[id].y-cy)*dir[1],id})).sort((a,b)=>a.t-b.t),spacing=[];for(let n=1;n<sorted.length;n++)spacing.push(sorted[n].t-sorted[n-1].t);
     const meanSpacing=spacing.reduce((s,x)=>s+x,0)/Math.max(1,spacing.length);
     if(spacing.length>1&&std(spacing)/Math.max(1,meanSpacing)>.22)continue;
-    const group=sorted.map(x=>x.id),edgeD=group.map(id=>strict[id].edgeDistance),radii=group.map(id=>strict[id].r),cvR=std(radii)/Math.max(1,radii.reduce((s,x)=>s+x,0)/radii.length),medRatio=median(edgeD)/Math.max(1,median(radii)),pageLike=group.filter(id=>strict[id].pageLike).length;
-    // Four mutually-consistent circles are required before ANY carving. This
-    // deliberately prefers a missed hole over a false hole. Distance-transform
-    // depth is used only as a broad side-band guard because end holes near a
-    // corner naturally have a smaller Euclidean distance to the carrier edge.
-    if(cvR<=.22&&medRatio<=6.5&&pageLike>=2)groups.push({ids:group,cx,cy,dir,normal,spacing:meanSpacing,medR,edgeD:median(edgeD),minT:sorted[0].t,maxT:sorted[sorted.length-1].t});
+    const group=sorted.map(x=>x.id),edgeD=group.map(id=>strict[id].edgeDistance),radii=group.map(id=>strict[id].r),
+      cvR=std(radii)/Math.max(1,radii.reduce((s,x)=>s+x,0)/radii.length),
+      cvED=std(edgeD)/Math.max(1,edgeD.reduce((s,x)=>s+x,0)/edgeD.length),
+      medR2=Math.max(1,median(radii)),medRatio=median(edgeD)/medR2,
+      spacingRadiusRatio=meanSpacing/medR2,pageLike=group.filter(id=>strict[id].pageLike).length;
+    // A real manufactured punch row is not merely "several circles":
+    // radii, distance to the physical carrier edge and inter-hole spacing are
+    // mutually consistent, and holes are separated by several radii. This
+    // rejects decorative dots, keyboard/UI icons and circular print detail
+    // without knowing anything about the material category.
+    if(cvR<=.30&&cvED<=.18&&medRatio<=6.5&&spacingRadiusRatio>=4&&pageLike>=2)
+      groups.push({ids:group,cx,cy,dir,normal,spacing:meanSpacing,medR:medR2,edgeD:median(edgeD),minT:sorted[0].t,maxT:sorted[sorted.length-1].t});
   }
   if(!groups.length)return [];groups.sort((a,b)=>b.ids.length-a.ids.length);const accepted=new Map();
   for(const group of groups){
@@ -377,6 +383,10 @@ export function recognizeMaterialsFast(cv,p,own){
   const src=own(cv.matFromArray(h,w,cv.CV_8UC4,p.pixels)),page=own(cv.matFromArray(h,w,cv.CV_8UC1,Uint8Array.from(p.backgroundConnected||new Uint8Array(w*h),x=>x?255:0)));
   const {gray,edges,lab}=edgeImage(cv,src);own(gray);own(edges);own(lab);
   const paperRef=robustPaperLab(lab,page,w,h),supportEdges=own(new cv.Mat()),supportKernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(5,5)));cv.dilate(edges,supportEdges,supportKernel);
+  // Circle proposals are computed ONCE per rectified A4 page. Individual
+  // carriers only perform cheap structural filtering, so repeated punch-hole
+  // recovery does not add a per-material Hough cost.
+  const circlePool=globalCircles(cv,gray,edges,pxPerMM);
   const edgeRaw=proposals(cv,edges,page,{width:w,height:h,paperWidthMM,paperHeightMM,smallestMM},pxPerMM),regionRaw=regionProposals(cv,src,page,paperRef,{width:w,height:h,paperWidthMM,paperHeightMM,smallestMM},pxPerMM),selected=dedupeAndSplit(cv,[...regionRaw,...edgeRaw],w,h,pxPerMM),out=[];
   for(const q of selected){
     const approx=new cv.Mat();cv.approxPolyDP(q.contour,approx,Math.max(1.5,cv.arcLength(q.contour,true)*.018),true);
@@ -409,11 +419,20 @@ export function recognizeMaterialsFast(cv,p,own){
     }
     approx.delete();
     const mask=cv.Mat.zeros(h,w,cv.CV_8UC1),vv=new cv.MatVector();vv.push_back(boundary);cv.drawContours(mask,vv,-1,new cv.Scalar(255),cv.FILLED);vv.delete();
+    // Repeated manufactured circular apertures are handled separately from
+    // generic page-like regions. They may be shadowed/grey and therefore are
+    // not reliably recoverable by a white-page colour threshold alone.
+    const circular=circleCandidates(cv,mask,supportEdges,circlePool,w,h,lab,paperRef,p.evidence,pxPerMM),
+      punchHoles=groupCircles(circular.strict,circular.weak,pxPerMM,mask,supportEdges,w,h);
+    for(const hole of punchHoles)cv.circle(mask,new cv.Point(hole.x,hole.y),Math.max(1,Math.round(hole.r*1.05)),new cv.Scalar(0),cv.FILLED);
     const openings=carveInternalPaperRegions(cv,{mask,lab,page,evidence:p.evidence,w,h,pxPerMM,paperRef});
     const bounds=cv.boundingRect(boundary),x=Math.max(0,bounds.x),y=Math.max(0,bounds.y),rw=Math.min(w-x,bounds.width),rh=Math.min(h-y,bounds.height),local=mask.roi(new cv.Rect(x,y,rw,rh)),packed=new cv.Mat();local.copyTo(packed);
-    const poly=contourPoints(boundary).map(([px,py])=>[px-x,py-y]),area=cv.countNonZero(mask),confidence=clamp(.45+q.paperContact*.22+Math.min(q.rectFill,.9)*.12+(edgeMethod==='fast-line'?.08:.04)+(q.source==='region'?.05:0)+Math.min(openings.count,5)*.012,0,1);
+    const poly=contourPoints(boundary).map(([px,py])=>[px-x,py-y]),area=cv.countNonZero(mask),apertureCount=punchHoles.length+openings.count,
+      confidence=clamp(.45+q.paperContact*.22+Math.min(q.rectFill,.9)*.12+(edgeMethod==='fast-line'?.08:.04)+(q.source==='region'?.05:0)+Math.min(apertureCount,5)*.012,0,1),
+      punchRegions=punchHoles.map(hole=>({x:hole.x,y:hole.y,r:hole.r,source:hole.inferred?'repeated-circle-completion':'repeated-circle'}));
     out.push({x:x/w,y:y/h,w:rw/w,h:rh/h,pixels:area,evidenceDensity:1-q.insidePage,edgeMethod,recognitionConfidence:confidence,
-      mask:{width:rw,height:rh,alpha:new Uint8Array(packed.data),polygons:[poly],topologyPreserved:true,apertureRegions:openings.regions},apertureCount:openings.count,apertureDiagnostics:openings.diagnostics,aperturePaperRef:openings.paperRef});
+      mask:{width:rw,height:rh,alpha:new Uint8Array(packed.data),polygons:[poly],topologyPreserved:true,apertureRegions:[...punchRegions,...openings.regions]},
+      apertureCount,apertureDiagnostics:openings.diagnostics,aperturePaperRef:openings.paperRef});
     local.delete();packed.delete();mask.delete();if(ownedBoundary)boundary.delete();
   }
   for(const q of selected)q.contour?.delete?.();
