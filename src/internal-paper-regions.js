@@ -107,7 +107,7 @@ export function carveInternalPaperRegions(cv,{mask,lab,page,evidence,w,h,pxPerMM
     // Isolated apertures must be substantial and unambiguously page-like.
     // Small holes are handled by the structural repeated-circle path; this
     // prevents white artwork inside an oval/card from being silently erased.
-    const isolated=areaFraction>=.08&&areaFraction<=.18&&q.medianDistance<=5.5&&q.p90Distance<=8.0&&q.lStd<=5.0&&q.evidenceFraction<.025&&q.ringMaterialFraction>=.22;
+    const isolated=areaFraction<=.18&&q.medianDistance<=5.5&&q.p90Distance<=8.0&&q.lStd<=5.0&&q.evidenceFraction<.025&&q.ringMaterialFraction>=.22;
     const patterned=areaFraction<=.06&&repeated.has(q)&&q.medianDistance<=8.0&&q.p90Distance<=11.0&&q.lStd<=6.0&&q.evidenceFraction<.06&&q.ringMaterialFraction>=.15;
     if(isolated||patterned)accepted.push(q);else{q.component.delete();q.contour.delete();}
   }
