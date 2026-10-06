@@ -36,16 +36,25 @@ export async function refineCandidatesWithSlimSAM({candidates, frame, width, hei
 }
 
 
-export async function refineCandidatesWithMorphGAC({candidates,frame,width,height,onProgress=()=>{},mode='quality'}){
-  const {refineMaterialsWithContours}=await import('./contour-refine-runtime.js');
-  onProgress({status:'contour-refinement',engine:'morphgac',total:candidates.length});
+export async function refineCandidatesWithBrowserContours({candidates,frame,width,height,onProgress=()=>{},mode='hybrid'}){
+  const quality=mode==='quality';
+  // Hybrid keeps already-high-confidence traditional candidates untouched and
+  // spends contour work only on uncertain instances. Quality refines all.
+  const threshold=.74, selected=[], selectedIndices=[];
+  for(let i=0;i<candidates.length;i++){
+    if(quality||(candidates[i].recognitionConfidence??0)<threshold){selected.push(candidates[i]);selectedIndices.push(i);}
+  }
+  if(!selected.length)return candidates;
+  onProgress({status:'contour-refinement',engine:mode,total:selected.length});
   try{
-    return await refineMaterialsWithContours(frame.data,width,height,candidates,mode);
+    const refined=await visionTask('material-boundary-refine',{pixels:frame.data,width,height,candidates:selected,mode:quality?'quality':mode});
+    const out=[...candidates];for(let i=0;i<selectedIndices.length;i++)out[selectedIndices[i]]=refined[i]||selected[i];
+    return out;
   }catch(error){
-    onProgress({status:'fallback',engine:'morphgac',message:error.message});
+    onProgress({status:'fallback',engine:mode,message:error.message});
     return candidates;
   }
 }
-export async function refineCandidatesHybrid(context){
-  return refineCandidatesWithMorphGAC({...context,mode:'hybrid'});
-}
+export async function refineCandidatesHybrid(context){return refineCandidatesWithBrowserContours({...context,mode:'hybrid'});}
+export async function refineCandidatesWithMorphGAC(context){return refineCandidatesWithBrowserContours({...context,mode:'quality'});}
+export async function refineCandidatesWithGrabCut(context){return refineCandidatesWithBrowserContours({...context,mode:'grabcut'});}
