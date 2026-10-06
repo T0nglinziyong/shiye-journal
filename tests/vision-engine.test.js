@@ -275,7 +275,7 @@ test('fast recognizer rejects page-edge strips and preserves smooth/concave carr
     pixels.set([...color,255],p);backgroundConnected[at]=inside?0:1;
     if(inside&&(Math.max(...color)-Math.min(...color)>4||color[0]<180)){evidence[at]=1;score[at]=95;}
   }
-  const out=await processVision(cv,'materials-fast',{pixels,width,height,backgroundConnected,evidence,shadowLikelihood,score,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
+  const out=await processVision(cv,'materials-fast',{pixels,width,height,backgroundConnected,evidence,shadowLikelihood,score,smallestMM:6,paperWidthMM:210,paperHeightMM:297,rectified:true});
   assert.equal(out.some(x=>x.x<.03&&x.h>.45),false,'rectified page-edge strip must not become a material');
   const oval=out.filter(x=>x.y<.38&&x.x>.5).sort((a,b)=>b.pixels-a.pixels)[0];assert.ok(oval,'pale oval carrier should survive');
   assert.equal(oval.edgeMethod,'fast-curve');assert.ok(oval.mask.polygons[0].length>=16,'smooth curve should not collapse into a coarse polygon');
@@ -294,7 +294,7 @@ test('fast recognizer rejects any carrier inside the protected A4 edge-clearance
     const item=edgeItem||center,color=item?[115,178,142]:[242,242,242];pixels.set([...color,255],p);backgroundConnected[at]=item?0:1;
     if(item){evidence[at]=1;score[at]=95;}
   }
-  const out=await processVision(cv,'materials-fast',{pixels,width,height,backgroundConnected,evidence,shadowLikelihood,score,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
+  const out=await processVision(cv,'materials-fast',{pixels,width,height,backgroundConnected,evidence,shadowLikelihood,score,smallestMM:6,paperWidthMM:210,paperHeightMM:297,rectified:true});
   assert.equal(out.length,1,JSON.stringify(out.map(x=>({x:x.x,y:x.y,w:x.w,h:x.h}))));
   assert.ok(out[0].x>.30&&out[0].x<.55,'only the centered legal material should remain');
 });
@@ -308,7 +308,7 @@ test('fast material recognition rejects unrectified benchmark input',async()=>{
 
 test('browser MorphGAC refinement preserves validated repeated apertures',async()=>{
   const cv=await cvModule,width=140,height=180,pixels=new Uint8ClampedArray(width*height*4),x0=28,y0=20,mw=84,mh=140,alpha=new Uint8Array(mw*mh).fill(255),holes=[35,58,81,104,127];
-  for(let y=0;y<height;y++)for(let x=0;x<width;x++){const p=(y*width+x)*4,inside=x>=x0&&x<x0+mw&&y>=y0&&y<y0+mh;color=inside?[126,174,210]:[246,246,246];pixels.set([...color,255],p);}
+  for(let y=0;y<height;y++)for(let x=0;x<width;x++){const p=(y*width+x)*4,inside=x>=x0&&x<x0+mw&&y>=y0&&y<y0+mh,color=inside?[126,174,210]:[246,246,246];pixels.set([...color,255],p);}
   for(const hy of holes)for(let y=hy-5;y<=hy+5;y++)for(let x=35;x<=45;x++)if((x-40)**2+(y-hy)**2<=25){
     const gx=x0+x,gy=y0+y;if(gx>=0&&gx<width&&gy>=0&&gy<height){pixels.set([246,246,246,255],(gy*width+gx)*4);alpha[y*mw+x]=0;}
   }
