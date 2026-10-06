@@ -111,7 +111,7 @@ export function carveInternalPaperRegions(cv,{mask,lab,page,evidence,w,h,pxPerMM
     // printed-panel failure case is excluded because printed pixels carry
     // foreground evidence. We intentionally do NOT require the immediate rim
     // to be material-coloured: real punched holes often have a dark/neutral rim.
-    const isolated=q.medianDistance<=2.8&&q.p90Distance<=4.5&&q.lStd<=4.0&&q.evidenceFraction<.01;
+    const isolated=q.medianDistance<=1.5&&q.p90Distance<=2.5&&q.lStd<=3.5&&q.evidenceFraction<.01;
     const patterned=repeated.has(q)&&q.size<=12&&q.medianDistance<=8.0&&q.p90Distance<=11.0&&q.lStd<=6.0&&q.evidenceFraction<.06;
     if(isolated||patterned)accepted.push(q);else{q.component.delete();q.contour.delete();}
   }
