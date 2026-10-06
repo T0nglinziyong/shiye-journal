@@ -20,7 +20,7 @@ export async function segmentPaperMaterials({data,width:w,height:h},{smallestMM=
   const fast=await visionTask('materials-fast',{
     pixels:data,width:w,height:h,smallestMM,paperWidthMM,paperHeightMM,
     evidence:evidence.evidence,backgroundConnected:evidence.backgroundConnected,
-    shadowLikelihood:evidence.shadowLikelihood,score:evidence.score
+    shadowLikelihood:evidence.shadowLikelihood,score:evidence.score,rectified:true
   });
   if(fast.length&&fast.length<=12&&fast.every(candidate=>(candidate.recognitionConfidence??0)>=.54)){
     return fast.sort((a,b)=>a.y-b.y||a.x-b.x).slice(0,48);

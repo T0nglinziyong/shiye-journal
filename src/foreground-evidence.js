@@ -55,8 +55,15 @@ export function backgroundConnectedMask({labL,labA,labB,edge,evidence,shadowLike
     return !!shadowLikelihood[i]||chroma<=chromaThreshold&&edge[i]<=edgeThreshold;
   };
   const push=i=>{if(!background[i]&&passable(i)){background[i]=1;queue[tail++]=i;}};
-  for(let x=0;x<w;x++){push(x);push((h-1)*w+x);}
-  for(let y=1;y<h-1;y++){push(y*w);push(y*w+w-1);}
+  // App invariant: materials are never placed flush against the rectified A4
+  // frame. Treat the outer ~3 mm as known background, not merely as a place
+  // from which background is guessed. This makes warp interpolation, paper
+  // edge lines and a shadowed corner harmless to the flood-fill seed.
+  const pxPerMM=Math.max(.5,((w/210)+(h/297))/2),safeBand=Math.max(2,Math.round(pxPerMM*3.0));
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++)if(x<safeBand||y<safeBand||x>=w-safeBand||y>=h-safeBand)background[y*w+x]=1;
+  const seedY0=Math.min(h-1,safeBand),seedY1=Math.max(0,h-1-safeBand),seedX0=Math.min(w-1,safeBand),seedX1=Math.max(0,w-1-safeBand);
+  for(let x=seedX0;x<=seedX1;x++){push(seedY0*w+x);push(seedY1*w+x);}
+  for(let y=seedY0;y<=seedY1;y++){push(y*w+seedX0);push(y*w+seedX1);}
   const offsets=[-1,1,-w,w,-w-1,-w+1,w-1,w+1];
   while(head<tail){
     const at=queue[head++],x=at%w,y=(at/w)|0;
@@ -102,8 +109,15 @@ export function buildForegroundEvidence(analysisPixels,w,h,{sourcePixels=analysi
     labL,labA,labB,edge:edgeField,evidence,shadowLikelihood,width:w,height:h,
     paperA:rawFallbackLab[1],paperB:rawFallbackLab[2]
   });
-  const mask=new Uint8Array(w*h);
-  for(let i=0;i<mask.length;i++){
+  const mask=new Uint8Array(w*h),pxPerMM=Math.max(.5,((w/210)+(h/297))/2),safeBand=Math.max(2,Math.round(pxPerMM*3.0));
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+    const i=y*w+x,protectedFrame=x<safeBand||y<safeBand||x>=w-safeBand||y>=h-safeBand;
+    if(protectedFrame){
+      // The app guarantees that no valid material is placed here. Override
+      // even strong warp/paper-edge evidence so frame artifacts can never be
+      // resurrected as foreground later in the pipeline.
+      mask[i]=proposal[i]=evidence[i]=foregroundSeeds[i]=score[i]=0;shadowLikelihood[i]=0;backgroundConnected[i]=1;continue;
+    }
     // The complement of page-connected background preserves pale/white
     // material interiors behind a real perimeter. Strong evidence is always
     // retained even if a tiny boundary gap lets the background flood through.
