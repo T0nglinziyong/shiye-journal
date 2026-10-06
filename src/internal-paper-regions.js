@@ -144,8 +144,22 @@ export function carveInternalPaperRegions(cv,{mask,lab,gray,page,evidence,w,h,px
 
   const localEvidence=new Uint8Array(b.width*b.height);
   for(let y=0;y<b.height;y++)for(let x=0;x<b.width;x++)localEvidence[y*b.width+x]=evidence?.[(b.y+y)*w+b.x+x]||0;
-  const ref=localPaperReference(cv,{mask,lab,page,w,h,pxPerMM,paperRef}),pageLike=cv.Mat.zeros(b.height,b.width,cv.CV_8UC1);
+  const ref=localPaperReference(cv,{mask,lab,page,w,h,pxPerMM,paperRef});
 
+  // Cheap rejection for solid carriers. Real openings expose several samples
+  // of local A4-like colour; if even a coarse grid finds none, avoid the full
+  // morphology/contour/Hough topology path entirely.
+  const probeStep=Math.max(2,Math.round(pxPerMM*.7));let pageLikeProbe=0;
+  for(let y=1;y<b.height-1&&pageLikeProbe<4;y+=probeStep)for(let x=1;x<b.width-1&&pageLikeProbe<4;x+=probeStep){
+    const i=y*b.width+x;if(!carrier.data[i]||localEvidence[i])continue;
+    if(colourDistance(labROI,i,ref)<=10)pageLikeProbe++;
+  }
+  if(pageLikeProbe<4){
+    carrier.delete();labROI.delete();grayROI?.delete();
+    return {count:0,regions:[],paperRef:ref,diagnostics:[]};
+  }
+
+  const pageLike=cv.Mat.zeros(b.height,b.width,cv.CV_8UC1);
   for(let y=1;y<b.height-1;y++)for(let x=1;x<b.width-1;x++){
     const i=y*b.width+x;if(!carrier.data[i]||localEvidence[i])continue;
     const d=colourDistance(labROI,i,ref),L=labROI.data[i*3],texture=Math.abs(L-(labROI.data[(i-1)*3]+labROI.data[(i+1)*3]+labROI.data[(i-b.width)*3]+labROI.data[(i+b.width)*3])/4);
