@@ -81,7 +81,12 @@ function morphMask(cv,rgba,rough){
 function activeMask(cv,rgba,rough){
   const gray=new cv.Mat(),f=new cv.Mat(),blur=new cv.Mat();cv.cvtColor(rgba,gray,cv.COLOR_RGBA2GRAY);gray.convertTo(f,cv.CV_32F,1/255);cv.GaussianBlur(f,blur,new cv.Size(0,0),1,1,cv.BORDER_REPLICATE);
   let minX=rough.cols,minY=rough.rows,maxX=-1,maxY=-1;for(let y=0;y<rough.rows;y++)for(let x=0;x<rough.cols;x++)if(rough.data[y*rough.cols+x]){minX=Math.min(minX,x);maxX=Math.max(maxX,x);minY=Math.min(minY,y);maxY=Math.max(maxY,y);}
-  const pad=Math.max(2,Math.round(Math.max(maxX-minX+1,maxY-minY+1)*.05)),x0=clamp(minX-pad,1,rough.cols-2),x1=clamp(maxX+pad,2,rough.cols-1),y0=clamp(minY-pad,1,rough.rows-2),y1=clamp(maxY+pad,2,rough.rows-1),snake=[],q=24;
+  const pad=Math.max(2,Math.round(Math.max(maxX-minX+1,maxY-minY+1)*.05)),x0=clamp(minX-pad,1,rough.cols-2),x1=clamp(maxX+pad,2,rough.cols-1),y0=clamp(minY-pad,1,rough.rows-2),y1=clamp(maxY+pad,2,rough.rows-1),snake=[],q=32;
+  // Keep the periodic snake dense. The scikit-image algorithm keeps a fixed
+  // number of control points; sparse 48-point browser fixtures materially
+  // changed the solution on textured paper even though smooth parity fixtures
+  // passed. 128 points keeps ~5–8 px spacing in the <=320 px ROI budget and
+  // tracks the official Python result on the real-photo benchmark.
   for(let i=0;i<q;i++){const t=i/q;snake.push([y0,x0+t*(x1-x0)]);}for(let i=0;i<q;i++){const t=i/q;snake.push([y0+t*(y1-y0),x1]);}for(let i=0;i<q;i++){const t=i/q;snake.push([y1,x1-t*(x1-x0)]);}for(let i=0;i<q;i++){const t=i/q;snake.push([y1-t*(y1-y0),x0]);}
   const r=activeContour(new Float32Array(blur.data32F),rgba.cols,rgba.rows,snake,{alpha:.015,beta:.12,gamma:.02,wLine:0,wEdge:1,maxNumIter:500,convergence:.05,maxPxMove:1}),pts=r.snake.flatMap(([y,x])=>[Math.round(x),Math.round(y)]),contour=cv.matFromArray(r.snake.length,1,cv.CV_32SC2,pts),out=cv.Mat.zeros(rgba.rows,rgba.cols,cv.CV_8UC1),v=new cv.MatVector();v.push_back(contour);cv.drawContours(out,v,-1,new cv.Scalar(255),cv.FILLED);gray.delete();f.delete();blur.delete();contour.delete();v.delete();return out;
 }
