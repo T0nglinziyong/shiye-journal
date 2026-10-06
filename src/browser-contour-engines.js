@@ -52,7 +52,14 @@ function scoreMask(cv,mask,seed,feature){
   const seedArea=Math.max(1,cv.countNonZero(seed)),inter=new cv.Mat();cv.bitwise_and(mask,seed,inter);const coverage=cv.countNonZero(inter)/seedArea;inter.delete();const found=largestExternal(cv,mask);if(!found.contour)return {score:0,coverage,edgeSupport:0,areaRatio:0};const boundary=cv.Mat.zeros(mask.rows,mask.cols,cv.CV_8UC1),v=new cv.MatVector();v.push_back(found.contour);cv.drawContours(boundary,v,-1,new cv.Scalar(255),1);v.delete();let sum=0,n=0;for(let i=0;i<boundary.data.length;i++)if(boundary.data[i]){sum+=feature.data32F[i];n++;}const edgeSupport=n?sum/n:0,areaRatio=cv.countNonZero(mask)/seedArea,areaPenalty=Math.exp(-Math.abs(Math.log(Math.max(areaRatio,1e-5)/1.12))*.55),score=edgeSupport*.55+coverage*.30+areaPenalty*.15;found.contour.delete();boundary.delete();return {score,coverage,edgeSupport,areaRatio};
 }
 function preserveTopology(cv,p,r,outer){
-  const regions=p.candidate.mask?.apertureRegions||[];for(const hole of regions){const x=Math.round(hole.x-r.rx),y=Math.round(hole.y-r.ry),w=Math.round(hole.w),h=Math.round(hole.h);if(w<=0||h<=0)continue;const cx=clamp(x,0,r.rw-1),cy=clamp(y,0,r.rh-1),cw=Math.min(w,r.rw-cx),ch=Math.min(h,r.rh-cy);if(cw>0&&ch>0){const target=outer.roi(new cv.Rect(cx,cy,cw,ch));target.setTo(new cv.Scalar(0));target.delete();}}return outer;
+  // Refiners own only the OUTER physical boundary. Existing aperture pixels in
+  // the authoritative candidate alpha stay unchanged. Recover them as
+  // (filled external support - original candidate) rather than recreating
+  // holes from bounding boxes, which would turn round/irregular holes into
+  // rectangles.
+  const found=largestExternal(cv,r.initial);if(!found.contour)return outer;
+  const filled=maskFromContour(cv,found.contour,r.rw,r.rh),holes=new cv.Mat();cv.subtract(filled,r.initial,holes);outer.setTo(new cv.Scalar(0),holes);
+  found.contour.delete();filled.delete();holes.delete();return outer;
 }
 function regionResult(cv,p,r,mask,method,metrics){const found=largestExternal(cv,mask);if(!found.contour)return null;const b=cv.boundingRect(found.contour),x=r.rx+b.x,y=r.ry+b.y,w=b.width,h=b.height,local=mask.roi(new cv.Rect(b.x,b.y,w,h)),packed=new cv.Mat();local.copyTo(packed);const poly=matPoints(found.contour).map(([px,py])=>[px-b.x,py-b.y]);const result={x:x/p.width,y:y/p.height,w:w/p.width,h:h/p.height,pixels:cv.countNonZero(local),edgeMethod:method,refinementMetrics:metrics,mask:{width:w,height:h,alpha:new Uint8Array(packed.data),polygons:[poly],topologyPreserved:true,apertureRegions:p.candidate.mask?.apertureRegions||[]}};found.contour.delete();local.delete();packed.delete();return result;}
 
