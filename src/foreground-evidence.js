@@ -55,8 +55,15 @@ export function backgroundConnectedMask({labL,labA,labB,edge,evidence,shadowLike
     return !!shadowLikelihood[i]||chroma<=chromaThreshold&&edge[i]<=edgeThreshold;
   };
   const push=i=>{if(!background[i]&&passable(i)){background[i]=1;queue[tail++]=i;}};
-  for(let x=0;x<w;x++){push(x);push((h-1)*w+x);}
-  for(let y=1;y<h-1;y++){push(y*w);push(y*w+w-1);}
+  // App invariant: materials are never placed flush against the rectified A4
+  // frame. Treat the outer ~3 mm as known background, not merely as a place
+  // from which background is guessed. This makes warp interpolation, paper
+  // edge lines and a shadowed corner harmless to the flood-fill seed.
+  const pxPerMM=Math.max(.5,((w/210)+(h/297))/2),safeBand=Math.max(2,Math.round(pxPerMM*3.0));
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++)if(x<safeBand||y<safeBand||x>=w-safeBand||y>=h-safeBand)background[y*w+x]=1;
+  const seedY0=Math.min(h-1,safeBand),seedY1=Math.max(0,h-1-safeBand),seedX0=Math.min(w-1,safeBand),seedX1=Math.max(0,w-1-safeBand);
+  for(let x=seedX0;x<=seedX1;x++){push(seedY0*w+x);push(seedY1*w+x);}
+  for(let y=seedY0;y<=seedY1;y++){push(y*w+seedX0);push(y*w+seedX1);}
   const offsets=[-1,1,-w,w,-w-1,-w+1,w-1,w+1];
   while(head<tail){
     const at=queue[head++],x=at%w,y=(at/w)|0;
