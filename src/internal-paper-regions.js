@@ -82,13 +82,61 @@ function patternPromotions(candidates){
   return promoted;
 }
 
-export function carveInternalPaperRegions(cv,{mask,lab,page,evidence,w,h,pxPerMM,paperRef}){
+
+function repeatedCircleApertures(cv,{carrier,grayROI,labROI,ref,pxPerMM}){
+  if(!grayROI)return [];
+  const rows=carrier.rows,cols=carrier.cols,blur=new cv.Mat(),edges=new cv.Mat(),support=new cv.Mat(),dist=new cv.Mat(),circles=new cv.Mat();
+  cv.medianBlur(grayROI,blur,5);cv.Canny(blur,edges,20,70);
+  const supportKernel=cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(5,5));cv.dilate(edges,support,supportKernel);
+  cv.distanceTransform(carrier,dist,cv.DIST_L2,5);
+  const minR=Math.max(3,Math.round(pxPerMM*.8)),maxR=Math.max(minR+2,Math.round(pxPerMM*4.5)),minDist=Math.max(8,Math.round(pxPerMM*2.5));
+  cv.HoughCircles(blur,circles,cv.HOUGH_GRADIENT,1,minDist,60,12,minR,maxR);
+  const b=cv.boundingRect(carrier),minor=Math.max(1,Math.min(b.width,b.height)),candidates=[];
+  for(let i=0;i+2<circles.data32F.length;i+=3){
+    const x=Math.round(circles.data32F[i]),y=Math.round(circles.data32F[i+1]),r=Math.round(circles.data32F[i+2]);
+    if(x<0||x>=cols||y<0||y>=rows||!carrier.data[y*cols+x])continue;
+    const edgeDistance=dist.data32F[y*cols+x];if(edgeDistance<r*.70)continue;
+    let supported=0,samples=48;
+    for(let k=0;k<samples;k++){const t=k*Math.PI*2/samples,xx=Math.round(x+Math.cos(t)*r),yy=Math.round(y+Math.sin(t)*r);if(xx>=0&&xx<cols&&yy>=0&&yy<rows&&support.data[yy*cols+xx])supported++;}
+    const edgeSupport=supported/samples;if(edgeSupport<.20)continue;
+    const L=[],A=[],B=[],rad=Math.max(3,Math.round(r*.55));
+    for(let py=Math.max(0,y-rad);py<=Math.min(rows-1,y+rad);py++)for(let px=Math.max(0,x-rad);px<=Math.min(cols-1,x+rad);px++){
+      if((px-x)*(px-x)+(py-y)*(py-y)>rad*rad)continue;const at=(py*cols+px)*3;L.push(labROI.data[at]);A.push(labROI.data[at+1]);B.push(labROI.data[at+2]);
+    }
+    if(!L.length)continue;
+    const ml=median(L),ma=median(A),mb=median(B),paperDistance=Math.hypot((ml-ref.L)/2,ma-ref.a,mb-ref.b),texture=(std(L)+std(A)+std(B))/3;
+    candidates.push({x,y,r,edgeSupport,edgeDistance,paperDistance,texture,edgeNorm:edgeDistance/minor});
+  }
+  const cvv=a=>std(a)/Math.max(1e-6,mean(a));let best=[],bestScore=-Infinity;
+  for(let i=0;i<candidates.length;i++)for(let j=i+1;j<candidates.length;j++){
+    const a=candidates[i],d=candidates[j],dx=d.x-a.x,dy=d.y-a.y,len=Math.hypot(dx,dy);if(len<pxPerMM*3)continue;
+    const ux=dx/len,uy=dy/len,nx=-uy,ny=ux,medR=(a.r+d.r)/2;
+    let group=candidates.filter(q=>Math.abs((q.x-a.x)*nx+(q.y-a.y)*ny)<=Math.max(pxPerMM*1.5,medR*.65)&&q.r/medR>=.65&&q.r/medR<=1.45);
+    if(group.length<4)continue;
+    let projected=group.map(q=>({q,t:(q.x-a.x)*ux+(q.y-a.y)*uy})).sort((p,q)=>p.t-q.t),dedup=[];
+    for(const z of projected){
+      if(!dedup.length||z.t-dedup[dedup.length-1].t>Math.max(pxPerMM*2.2,medR*.8))dedup.push(z);
+      else if(z.q.edgeSupport>dedup[dedup.length-1].q.edgeSupport)dedup[dedup.length-1]=z;
+    }
+    if(dedup.length<4)continue;
+    const qs=dedup.map(z=>z.q),spacing=[];for(let k=1;k<dedup.length;k++)spacing.push(dedup[k].t-dedup[k-1].t);
+    if(cvv(spacing)>.24||cvv(qs.map(q=>q.r))>.22||cvv(qs.map(q=>q.edgeDistance))>.18)continue;
+    if(mean(qs.map(q=>q.texture))>5.8||mean(qs.map(q=>q.paperDistance))>25||mean(qs.map(q=>q.edgeNorm))>.18)continue;
+    const score=qs.length*2+mean(qs.map(q=>q.edgeSupport))-cvv(spacing)-cvv(qs.map(q=>q.r))-cvv(qs.map(q=>q.edgeDistance));
+    if(score>bestScore){bestScore=score;best=qs;}
+  }
+  blur.delete();edges.delete();support.delete();dist.delete();circles.delete();supportKernel.delete();
+  return best;
+}
+
+export function carveInternalPaperRegions(cv,{mask,lab,gray,page,evidence,w,h,pxPerMM,paperRef}){
   const b=cv.boundingRect(mask);if(b.width<3||b.height<3)return {count:0,regions:[],diagnostics:[]};
 
   // roi() can be a strided Mat view in OpenCV.js. Copy before direct .data
   // indexing or Lab/mask coordinates become silently misaligned.
   const carrierView=mask.roi(new cv.Rect(b.x,b.y,b.width,b.height)),carrier=new cv.Mat();carrierView.copyTo(carrier);carrierView.delete();
   const labView=lab.roi(new cv.Rect(b.x,b.y,b.width,b.height)),labROI=new cv.Mat();labView.copyTo(labROI);labView.delete();
+  let grayROI=null;if(gray){const grayView=gray.roi(new cv.Rect(b.x,b.y,b.width,b.height));grayROI=new cv.Mat();grayView.copyTo(grayROI);grayView.delete();}
 
   const localEvidence=new Uint8Array(b.width*b.height);
   for(let y=0;y<b.height;y++)for(let x=0;x<b.width;x++)localEvidence[y*b.width+x]=evidence?.[(b.y+y)*w+b.x+x]||0;
@@ -118,11 +166,17 @@ export function carveInternalPaperRegions(cv,{mask,lab,page,evidence,w,h,pxPerMM
 
   const target=mask.roi(new cv.Rect(b.x,b.y,b.width,b.height));
   for(const q of accepted)target.setTo(new cv.Scalar(0),q.component);
+  const repeatedCircles=repeatedCircleApertures(cv,{carrier,grayROI,labROI,ref,pxPerMM}),circleRegions=[];
+  for(const q of repeatedCircles){
+    const duplicate=accepted.some(a=>Math.hypot(a.x+a.w/2-q.x,a.y+a.h/2-q.y)<=Math.max(q.r,a.size*pxPerMM*.6));if(duplicate)continue;
+    cv.circle(target,new cv.Point(q.x,q.y),q.r,new cv.Scalar(0),cv.FILLED);
+    circleRegions.push({x:b.x+q.x-q.r,y:b.y+q.y-q.r,w:q.r*2+1,h:q.r*2+1,area:Math.PI*q.r*q.r,patterned:true,source:'hough-repeat'});
+  }
   target.delete();
 
-  const regions=accepted.map(q=>({x:b.x+q.x,y:b.y+q.y,w:q.w,h:q.h,area:q.area,medianDistance:q.medianDistance,p90Distance:q.p90Distance,patterned:repeated.has(q)}));
+  const regions=[...accepted.map(q=>({x:b.x+q.x,y:b.y+q.y,w:q.w,h:q.h,area:q.area,medianDistance:q.medianDistance,p90Distance:q.p90Distance,patterned:repeated.has(q),source:'page-region'})),...circleRegions];
   const diagnostics=candidates.map(q=>({area:q.area,medianDistance:q.medianDistance,p90Distance:q.p90Distance,lStd:q.lStd,evidenceFraction:q.evidenceFraction,ringMaterialFraction:q.ringMaterialFraction,enclosedLeak:q.enclosedLeak,size:q.size,accepted:accepted.includes(q),patterned:repeated.has(q)}));
   for(const q of accepted){q.component.delete();q.contour.delete();}
-  carrier.delete();labROI.delete();pageLike.delete();kernel.delete();clean.delete();contours.delete();hierarchy.delete();
+  carrier.delete();labROI.delete();grayROI?.delete();pageLike.delete();kernel.delete();clean.delete();contours.delete();hierarchy.delete();
   return {count:regions.length,regions,paperRef:ref,diagnostics};
 }
