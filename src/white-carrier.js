@@ -50,7 +50,11 @@ export function expandWhiteCarrier(cv,{contour,page,edges,lab,w,h,pxPerMM,paperR
   const component=cv.Mat.zeros(rh,rw,cv.CV_8UC1);
   if(label)for(let i=0;i<rw*rh;i++)if(labels.data32S[i]===label)component.data[i]=255;
   const found=largestExternal(cv,component),ratio=found.area/Math.max(roughArea,1);
-  if(!found.contour||ratio<1.02||ratio>2.25||bestOverlap/roughArea<.86){
+  // Printed content may occupy only a modest fraction of a die-cut sticker.
+  // Permit a substantially larger connected carrier, but never accept a weakly
+  // related component. The later edge-support test still prevents expansion
+  // into arbitrary A4 background.
+  if(!found.contour||ratio<1.02||ratio>5.0||bestOverlap/roughArea<.80){
     found.contour?.delete?.();cleanup();return {contour,owned:false,expanded:false};
   }
 
@@ -79,6 +83,10 @@ export function expandWhiteCarrier(cv,{contour,page,edges,lab,w,h,pxPerMM,paperR
     snapped.push([Math.round(pts[i][0]+nx*offsets[i]+x0),Math.round(pts[i][1]+ny*offsets[i]+y0)]);
   }
   const result=cv.matFromArray(snapped.length,1,cv.CV_32SC2,snapped.flat());
+  const resultBounds=cv.boundingRect(result),clearance=Math.max(2,Math.round(pxPerMM*3.0));
+  if(resultBounds.x<clearance||resultBounds.y<clearance||resultBounds.x+resultBounds.width>w-clearance||resultBounds.y+resultBounds.height>h-clearance){
+    result.delete();found.contour.delete();inv.delete();dist.delete();cleanup();return {contour,owned:false,expanded:false};
+  }
   let supported=0;for(const [gx,gy] of snapped){const x=clamp(gx-x0,0,rw-1),y=clamp(gy-y0,0,rh-1);if(dist.data32F[y*rw+x]<=2.5)supported++;}
   const support=supported/snapped.length;
   found.contour.delete();inv.delete();dist.delete();cleanup();
