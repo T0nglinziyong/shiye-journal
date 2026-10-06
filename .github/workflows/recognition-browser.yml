@@ -42,6 +42,8 @@ jobs:
           BROWSER_BIN="$RUNNER_TEMP/shiye-browser/node_modules/.bin/agent-browser"
           "$BROWSER_BIN" install --with-deps
           echo "SHIYE_BROWSER_BIN=$BROWSER_BIN" >> "$GITHUB_ENV"
+      - name: Run isolated contour-engine contract
+        run: node --test tests/browser-contour-engines.contract.mjs
       - name: Build actual sources
         run: npm run build
       - name: Run recognition engines in Chromium
