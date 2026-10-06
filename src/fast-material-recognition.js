@@ -369,6 +369,10 @@ function groupCircles(strict,weak,pxPerMM,mask,supportEdges,w,h){
 }
 
 export function recognizeMaterialsFast(cv,p,own){
+  // Production recognition is defined in rectified A4 coordinates. Callers
+  // must warp the detected/manual paper quadrilateral first; otherwise pixel
+  // scale is not a physical mm scale and cross-photo masks are incomparable.
+  if(p.rectified!==true)throw Error('materials-fast requires rectified A4 input');
   const w=p.width,h=p.height,paperWidthMM=p.paperWidthMM||210,paperHeightMM=p.paperHeightMM||297,smallestMM=p.smallestMM||6,pxPerMM=Math.max(.5,((w/paperWidthMM)+(h/paperHeightMM))/2);
   const src=own(cv.matFromArray(h,w,cv.CV_8UC4,p.pixels)),page=own(cv.matFromArray(h,w,cv.CV_8UC1,Uint8Array.from(p.backgroundConnected||new Uint8Array(w*h),x=>x?255:0)));
   const {gray,edges,lab}=edgeImage(cv,src);own(gray);own(edges);own(lab);
