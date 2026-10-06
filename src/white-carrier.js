@@ -88,10 +88,15 @@ export function expandWhiteCarrier(cv,{contour,page,edges,lab,w,h,pxPerMM,paperR
     result.delete();found.contour.delete();inv.delete();dist.delete();cleanup();return {contour,owned:false,expanded:false,reason:'touches-protected-frame'};
   }
   let supported=0;for(const [gx,gy] of snapped){const x=clamp(gx-x0,0,rw-1),y=clamp(gy-y0,0,rh-1);if(dist.data32F[y*rw+x]<=2.5)supported++;}
-  const support=supported/snapped.length;
+  const support=supported/snapped.length,seedCoverage=bestOverlap/roughArea;
   found.contour.delete();inv.delete();dist.delete();cleanup();
-  if(support<.42){result.delete();return {contour,owned:false,expanded:false,reason:'insufficient-edge-support',edgeSupport:support,areaRatio:ratio};}
-  return {contour:result,owned:true,expanded:true,areaRatio:ratio,edgeSupport:support,localPage:local};
+  // A complete carrier can have weak/soft photographed edges on part of its
+  // perimeter. When the expanded component contains almost all printed seed
+  // and its growth is physically plausible, accept a lower average edge
+  // support; otherwise retain the stricter threshold.
+  const supportFloor=seedCoverage>=.90&&ratio>=1.05&&ratio<=4.5?.22:.42;
+  if(support<supportFloor){result.delete();return {contour,owned:false,expanded:false,reason:'insufficient-edge-support',edgeSupport:support,areaRatio:ratio,seedCoverage,supportFloor};}
+  return {contour:result,owned:true,expanded:true,areaRatio:ratio,edgeSupport:support,seedCoverage,localPage:local};
 
   function cleanup(){
     rough.delete();shifted.delete();one.delete();pageROI.delete();labROI.delete();edgeROI.delete();inner.delete();outer.delete();ring.delete();ik.delete();ok.delete();zone.delete();zk.delete();expanded.delete();ck.delete();op.delete();labels.delete();stats.delete();centroids.delete();component.delete();
