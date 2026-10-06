@@ -1,6 +1,5 @@
 import {robustPaperLab} from './paper-reference.js';
 import {expandWhiteCarrier} from './white-carrier.js';
-import {recoverCarrierOutsideIn} from './outside-in-carrier.js';
 import {carveInternalPaperRegions} from './internal-paper-regions.js';
 // Fast traditional-CV material recognizer.
 //
@@ -388,18 +387,13 @@ export function recognizeMaterialsFast(cv,p,own){
       // candidate pays for the expensive carrier-expansion pass. A complete
       // physical oval/card already touches paper and skips directly to geometry.
       const shouldExpandWhite=q.paperContact<.52&&q.rectFill<.90;
-      const outsideIn=shouldExpandWhite?recoverCarrierOutsideIn(cv,{contour:q.contour,edges,w,h,pxPerMM}):{recovered:false};
-      if(outsideIn.recovered){
-        boundary=smoothFreeform(cv,outsideIn.contour,w,h,pxPerMM);outsideIn.contour.delete();ownedBoundary=true;edgeMethod='fast-outside-in-carrier';
-      }else{
-        const carrier=shouldExpandWhite?expandWhiteCarrier(cv,{contour:q.contour,page,edges,lab,w,h,pxPerMM,paperRef}):{expanded:false};
-        if(carrier.expanded){
-          boundary=smoothFreeform(cv,carrier.contour,w,h,pxPerMM);carrier.contour.delete();ownedBoundary=true;edgeMethod='fast-white-carrier';
-        }else if(q.rectFill>.92&&approx.rows===4&&q.paperContact>.58&&q.insidePage<.22){
+      const carrier=shouldExpandWhite?expandWhiteCarrier(cv,{contour:q.contour,page,edges,lab,w,h,pxPerMM,paperRef}):{expanded:false};
+      if(carrier.expanded){
+        boundary=smoothFreeform(cv,carrier.contour,w,h,pxPerMM);carrier.contour.delete();ownedBoundary=true;edgeMethod='fast-white-carrier';
+      }else if(q.rectFill>.92&&approx.rows===4&&q.paperContact>.58&&q.insidePage<.22){
         const rect=cv.minAreaRect(q.contour),points=cv.boxPoints(rect).flatMap(pt=>[Math.round(pt.x),Math.round(pt.y)]);boundary=cv.matFromArray(4,1,cv.CV_32SC2,points);ownedBoundary=true;edgeMethod='fast-line';
       }else{
         const outer=chooseOuter(cv,src,q,pxPerMM,w,h),smooth=smoothFreeform(cv,outer.contour,w,h,pxPerMM);if(outer.owned)outer.contour.delete();boundary=smooth;ownedBoundary=true;edgeMethod='fast-curve';
-        }
       }
     }else{
       boundary=smoothFreeform(cv,q.contour,w,h,pxPerMM);ownedBoundary=true;edgeMethod='fast-curve';
