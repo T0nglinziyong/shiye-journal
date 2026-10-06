@@ -86,10 +86,12 @@ function patternPromotions(candidates){
     let xx=0,xy=0,yy=0;for(const q of triple){const dx=q.x+q.w/2-cx,dy=q.y+q.h/2-cy;xx+=dx*dx;xy+=dx*dy;yy+=dy*dy;}
     const angle=.5*Math.atan2(2*xy,xx-yy),nx=-Math.sin(angle),ny=Math.cos(angle),perp=triple.map(q=>Math.abs((q.x+q.w/2-cx)*nx+(q.y+q.h/2-cy)*ny));
     if(Math.max(...perp)>Math.max(2,mean(sizes)*.75))continue;
-    for(const q of usable){
+    const aligned=usable.filter(q=>{
       const centerX=q.x+q.w/2,centerY=q.y+q.h/2,off=Math.abs((centerX-cx)*nx+(centerY-cy)*ny),areaRatio=q.area/mean(areas),sizeRatio=q.size/mean(sizes);
-      if(off<=Math.max(2,mean(sizes)*.85)&&areaRatio>=.55&&areaRatio<=1.7&&sizeRatio>=.7&&sizeRatio<=1.45)promoted.add(q);
-    }
+      return off<=Math.max(2,mean(sizes)*.85)&&areaRatio>=.55&&areaRatio<=1.7&&sizeRatio>=.7&&sizeRatio<=1.45;
+    });
+    if(aligned.length<4)continue;
+    for(const q of aligned)promoted.add(q);
   }
   return promoted;
 }
@@ -118,7 +120,7 @@ export function carveInternalPaperRegions(cv,{mask,lab,page,evidence,w,h,pxPerMM
     // Isolated openings require an extremely close match to the local paper.
     // This is intentionally stricter than repeated-pattern members because a
     // false cut is more damaging than a missed aperture.
-    const isolated=q.medianDistance<=3.8&&q.p90Distance<=5.8&&q.lStd<=3.2&&q.evidenceFraction<.025&&q.ringMaterialFraction>=.22;
+    const isolated=q.medianDistance<=5.5&&q.p90Distance<=8.0&&q.lStd<=5.0&&q.evidenceFraction<.025&&q.ringMaterialFraction>=.22;
     const patterned=repeated.has(q)&&q.medianDistance<=7.0&&q.p90Distance<=10.0&&q.lStd<=4.8&&q.evidenceFraction<.06&&q.ringMaterialFraction>=.16;
     if(isolated||patterned)accepted.push(q);else q.component.delete();
   }
