@@ -83,7 +83,7 @@ function patternPromotions(candidates){
 }
 
 
-function repeatedCircleApertures(cv,{carrier,grayROI,labROI,ref,pxPerMM}){
+function repeatedCircleApertures(cv,{carrier,grayROI,labROI,predictedLabROI,ref,pxPerMM}){
   if(!grayROI)return [];
   const rows=carrier.rows,cols=carrier.cols,blur=new cv.Mat(),edges=new cv.Mat(),support=new cv.Mat(),dist=new cv.Mat(),circles=new cv.Mat();
   cv.medianBlur(grayROI,blur,5);cv.Canny(blur,edges,20,70);
@@ -109,7 +109,17 @@ function repeatedCircleApertures(cv,{carrier,grayROI,labROI,ref,pxPerMM}){
     }
     if(!L.length)continue;
     const ml=median(L),ma=median(A),mb=median(B),paperDistance=Math.hypot((ml-ref.L)/2,ma-ref.a,mb-ref.b),texture=(std(L)+std(A)+std(B))/3;
-    candidates.push({x,y,r,edgeSupport,edgeDistance,paperDistance,texture,edgeNorm:edgeDistance/minor});
+    let predictedDistance=paperDistance;
+    if(predictedLabROI){
+      const predicted=[];
+      for(let py=Math.max(0,y-rad);py<=Math.min(rows-1,y+rad);py++)for(let px=Math.max(0,x-rad);px<=Math.min(cols-1,x+rad);px++){
+        if((px-x)*(px-x)+(py-y)*(py-y)>rad*rad)continue;
+        const at=(py*cols+px)*3,dL=(labROI.data[at]-predictedLabROI.data[at])/2,da=labROI.data[at+1]-predictedLabROI.data[at+1],db=labROI.data[at+2]-predictedLabROI.data[at+2];
+        predicted.push(Math.hypot(dL,da,db));
+      }
+      if(predicted.length)predictedDistance=median(predicted);
+    }
+    candidates.push({x,y,r,edgeSupport,edgeDistance,paperDistance,predictedDistance,texture,edgeNorm:edgeDistance/minor});
   }
   const cvv=a=>std(a)/Math.max(1e-6,mean(a));let best=[],bestScore=-Infinity;
   for(let i=0;i<candidates.length;i++)for(let j=i+1;j<candidates.length;j++){
@@ -126,7 +136,7 @@ function repeatedCircleApertures(cv,{carrier,grayROI,labROI,ref,pxPerMM}){
     const qs=dedup.map(z=>z.q),spacing=[];for(let k=1;k<dedup.length;k++)spacing.push(dedup[k].t-dedup[k-1].t);
     if(cvv(spacing)>.24||cvv(qs.map(q=>q.r))>.22||cvv(qs.map(q=>q.edgeDistance))>.18)continue;
     if(mean(qs.map(q=>q.texture))>5.8||mean(qs.map(q=>q.paperDistance))>25||mean(qs.map(q=>q.edgeNorm))>.18)continue;
-    const score=qs.length*2+mean(qs.map(q=>q.edgeSupport))-cvv(spacing)-cvv(qs.map(q=>q.r))-cvv(qs.map(q=>q.edgeDistance));
+    const score=qs.length*2+mean(qs.map(q=>q.edgeSupport))-cvv(spacing)-cvv(qs.map(q=>q.r))-cvv(qs.map(q=>q.edgeDistance))-Math.min(1.5,mean(qs.map(q=>q.predictedDistance||0))/80)*.35;
     if(score>bestScore){bestScore=score;best=qs;}
   }
   if(houghScale<1)houghInput.delete();blur.delete();edges.delete();support.delete();dist.delete();circles.delete();supportKernel.delete();
@@ -141,6 +151,24 @@ export function carveInternalPaperRegions(cv,{mask,lab,gray,page,evidence,w,h,px
   const carrierView=mask.roi(new cv.Rect(b.x,b.y,b.width,b.height)),carrier=new cv.Mat();carrierView.copyTo(carrier);carrierView.delete();
   const labView=lab.roi(new cv.Rect(b.x,b.y,b.width,b.height)),labROI=new cv.Mat();labView.copyTo(labROI);labView.delete();
   let grayROI=null;if(gray){const grayView=gray.roi(new cv.Rect(b.x,b.y,b.width,b.height));grayROI=new cv.Mat();grayView.copyTo(grayROI);grayView.delete();}
+  // Predict the locally illuminated A4 field behind this material with the
+  // official OpenCV inpaint implementation. Work only on a padded material ROI
+  // so this remains cheap; the prediction is weak evidence for repeated round
+  // apertures and never creates an opening by itself.
+  let predictedLabROI=null;
+  if(typeof cv.inpaint==='function'){
+    const pad=Math.max(5,Math.round(pxPerMM*5)),px0=Math.max(0,b.x-pad),py0=Math.max(0,b.y-pad),px1=Math.min(w,b.x+b.width+pad),py1=Math.min(h,b.y+b.height+pad),pw=px1-px0,ph=py1-py0;
+    if(pw>b.width+2&&ph>b.height+2){
+      const labPadView=lab.roi(new cv.Rect(px0,py0,pw,ph)),labPad=new cv.Mat();labPadView.copyTo(labPad);labPadView.delete();
+      const maskPadView=mask.roi(new cv.Rect(px0,py0,pw,ph)),maskPad=new cv.Mat();maskPadView.copyTo(maskPad);maskPadView.delete();
+      const predictedPad=new cv.Mat();
+      try{
+        cv.inpaint(labPad,maskPad,predictedPad,Math.max(3,pxPerMM*2),cv.INPAINT_NS);
+        const rx=b.x-px0,ry=b.y-py0,predictedView=predictedPad.roi(new cv.Rect(rx,ry,b.width,b.height));predictedLabROI=new cv.Mat();predictedView.copyTo(predictedLabROI);predictedView.delete();
+      }catch{}
+      labPad.delete();maskPad.delete();predictedPad.delete();
+    }
+  }
 
   const localEvidence=new Uint8Array(b.width*b.height);
   for(let y=0;y<b.height;y++)for(let x=0;x<b.width;x++)localEvidence[y*b.width+x]=evidence?.[(b.y+y)*w+b.x+x]||0;
@@ -155,7 +183,7 @@ export function carveInternalPaperRegions(cv,{mask,lab,gray,page,evidence,w,h,px
     if(colourDistance(labROI,i,ref)<=10)pageLikeProbe++;
   }
   if(pageLikeProbe<4){
-    carrier.delete();labROI.delete();grayROI?.delete();
+    carrier.delete();labROI.delete();grayROI?.delete();predictedLabROI?.delete();
     return {count:0,regions:[],paperRef:ref,diagnostics:[]};
   }
 
@@ -184,7 +212,7 @@ export function carveInternalPaperRegions(cv,{mask,lab,gray,page,evidence,w,h,px
 
   const target=mask.roi(new cv.Rect(b.x,b.y,b.width,b.height));
   for(const q of accepted)target.setTo(new cv.Scalar(0),q.component);
-  const repeatedCircles=accepted.length<4&&candidates.length>=2?repeatedCircleApertures(cv,{carrier,grayROI,labROI,ref,pxPerMM}):[],circleRegions=[];
+  const repeatedCircles=accepted.length<4&&candidates.length>=2?repeatedCircleApertures(cv,{carrier,grayROI,labROI,predictedLabROI,ref,pxPerMM}):[],circleRegions=[];
   for(const q of repeatedCircles){
     const duplicate=accepted.some(a=>Math.hypot(a.x+a.w/2-q.x,a.y+a.h/2-q.y)<=Math.max(q.r,a.size*pxPerMM*.6));if(duplicate)continue;
     cv.circle(target,new cv.Point(q.x,q.y),q.r,new cv.Scalar(0),cv.FILLED);
@@ -195,6 +223,6 @@ export function carveInternalPaperRegions(cv,{mask,lab,gray,page,evidence,w,h,px
   const regions=[...accepted.map(q=>({x:b.x+q.x,y:b.y+q.y,w:q.w,h:q.h,area:q.area,medianDistance:q.medianDistance,p90Distance:q.p90Distance,patterned:repeated.has(q),source:'page-region'})),...circleRegions];
   const diagnostics=candidates.map(q=>({area:q.area,medianDistance:q.medianDistance,p90Distance:q.p90Distance,lStd:q.lStd,evidenceFraction:q.evidenceFraction,ringMaterialFraction:q.ringMaterialFraction,enclosedLeak:q.enclosedLeak,size:q.size,accepted:accepted.includes(q),patterned:repeated.has(q)}));
   for(const q of accepted){q.component.delete();q.contour.delete();}
-  carrier.delete();labROI.delete();grayROI?.delete();pageLike.delete();kernel.delete();clean.delete();contours.delete();hierarchy.delete();
+  carrier.delete();labROI.delete();grayROI?.delete();predictedLabROI?.delete();pageLike.delete();kernel.delete();clean.delete();contours.delete();hierarchy.delete();
   return {count:regions.length,regions,paperRef:ref,diagnostics};
 }
