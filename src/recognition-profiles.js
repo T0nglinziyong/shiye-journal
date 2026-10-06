@@ -23,14 +23,14 @@ const refineGrabCut=async context=>{
 };
 
 export const recognitionStrategies=Object.freeze([
-  {id:'auto',label:'自动混合 · Active + GrabCut + MorphGAC',analysisMaxDimension:1200,refineCandidates:refineHybrid},
+  {id:'auto',label:'自动混合 · Active + GrabCut + MorphGAC',analysisMaxDimension:1000,refineCandidates:refineHybrid},
   {id:'fast',label:'传统识别 · 快速',analysisMaxDimension:900},
   {id:'standard',label:'传统识别 · 标准',analysisMaxDimension:1200},
   {id:'detail',label:'传统识别 · 精细',analysisMaxDimension:1600},
-  {id:'hybrid',label:'组合识别 · Active + GrabCut + MorphGAC',analysisMaxDimension:1200,refineCandidates:refineHybrid},
-  {id:'active',label:'浏览器轮廓 · Active Contour（快速高质量）',analysisMaxDimension:1200,refineCandidates:refineActive},
-  {id:'grabcut',label:'OpenCV · GrabCut',analysisMaxDimension:1200,refineCandidates:refineGrabCut},
-  {id:'morphgac',label:'浏览器轮廓 · MorphGAC（高质量）',analysisMaxDimension:1200,refineCandidates:refineMorphGAC},
+  {id:'hybrid',label:'组合识别 · Active + GrabCut + MorphGAC',analysisMaxDimension:1000,refineCandidates:refineHybrid},
+  {id:'active',label:'浏览器轮廓 · Active Contour（快速高质量）',analysisMaxDimension:1000,refineCandidates:refineActive},
+  {id:'grabcut',label:'OpenCV · GrabCut',analysisMaxDimension:1000,refineCandidates:refineGrabCut},
+  {id:'morphgac',label:'浏览器轮廓 · MorphGAC（高质量）',analysisMaxDimension:1000,refineCandidates:refineMorphGAC},
   {id:'slimsam',label:'浏览器模型 · SlimSAM（试用）',analysisMaxDimension:1000,refineCandidates:refineSlimSAM}
 ]);
 const strategiesByID=new Map(recognitionStrategies.map(strategy=>[strategy.id,strategy]));
