@@ -31,3 +31,16 @@ for(const engine of ['grabcut','active-contour','morphgac','hybrid']){
     assert.ok(Number.isFinite(result.refinementMetrics?.score),JSON.stringify(result.refinementMetrics));
   });
 }
+
+
+test('browser refiners preserve exact circular aperture alpha instead of a rectangular bbox',async()=>{
+  const cv=await cvModule,p=syntheticCard(),m=p.candidate.mask,cx=22,cy=34,radius=5;
+  for(let y=0;y<m.height;y++)for(let x=0;x<m.width;x++)if((x-cx)**2+(y-cy)**2<=radius**2)m.alpha[y*m.width+x]=0;
+  const result=await processVision(cv,'refine-candidate',{...p,engine:'active-contour',paperWidthMM:210,paperHeightMM:297,maxNumIter:30});
+  assert.ok(result);
+  const gx=p.candidate.x*p.width+cx,gy=p.candidate.y*p.height+cy,left=result.x*p.width,top=result.y*p.height;
+  const lx=Math.round(gx-left),ly=Math.round(gy-top),at=(x,y)=>result.mask.alpha[y*result.mask.width+x];
+  assert.ok(lx>radius&&ly>radius&&lx+radius<result.mask.width&&ly+radius<result.mask.height);
+  assert.equal(at(lx,ly),0,'hole centre must remain transparent');
+  assert.equal(at(lx+radius,ly+radius),255,'circle bbox corner must remain material; do not restore holes as rectangles');
+});
