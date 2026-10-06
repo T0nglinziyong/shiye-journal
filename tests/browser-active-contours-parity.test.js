@@ -55,3 +55,29 @@ test('browser MorphACWE matches scikit-image within raster rounding tolerance',(
   let diff=0;for(let i=0;i<out.length;i++)diff+=out[i]!==golden[i];
   assert.ok(diff<=10,'pixel parity difference '+diff);
 });
+
+
+test('browser Active Contour keeps textured rectangle parity with scikit-image when the snake is dense',()=>{
+  const w=112,h=96,image=new Float32Array(w*h).fill(.95);
+  for(let y=20;y<78;y++)for(let x=18;x<94;x++)image[y*w+x]=.78;
+  for(let x=18;x<94;x++){image[20*w+x]=image[21*w+x]=.35;image[76*w+x]=image[77*w+x]=.35;}
+  for(let y=20;y<78;y++){image[y*w+18]=image[y*w+19]=.35;image[y*w+92]=image[y*w+93]=.35;}
+  for(let y=28;y<70;y+=8)for(let x=28;x<86;x+=8)if(((x/8|0)+(y/8|0))&1)for(let yy=y;yy<y+4;yy++)for(let xx=x;xx<x+4;xx++)image[yy*w+xx]=.25;
+  const q=32,snake=[],x0=11,y0=13,x1=101,y1=85;
+  for(let i=0;i<q;i++){const t=i/q;snake.push([y0,x0+t*(x1-x0)]);}
+  for(let i=0;i<q;i++){const t=i/q;snake.push([y0+t*(y1-y0),x1]);}
+  for(let i=0;i<q;i++){const t=i/q;snake.push([y1,x1-t*(x1-x0)]);}
+  for(let i=0;i<q;i++){const t=i/q;snake.push([y1-t*(y1-y0),x0]);}
+  // Every 8th point from scikit-image active_contour at revision
+  // 533b7694d2004ae84e49e2cfd0bcfc5f8e562f22.
+  const golden=[
+    [19.1871,19.5064],[19.4238,37.2310],[19.5375,56.1915],[19.3460,75.1978],
+    [22.1646,91.9960],[34.6818,93.5542],[48.9621,92.8733],[63.3102,93.1834],
+    [76.5748,92.6999],[76.3426,75.9840],[75.3595,56.3136],[76.7275,36.9424],
+    [77.8259,18.5362],[64.0861,17.0343],[47.2842,17.4624],[29.8057,19.9056]
+  ];
+  const out=activeContour(image,w,h,snake,{alpha:.015,beta:.12,gamma:.02,wLine:0,wEdge:1,maxNumIter:500,convergence:.05,maxPxMove:1}).snake;
+  const errors=golden.map((g,k)=>Math.hypot(out[k*8][0]-g[0],out[k*8][1]-g[1]));
+  assert.ok(errors.reduce((a,b)=>a+b,0)/errors.length<1.7,'mean textured parity error '+errors.reduce((a,b)=>a+b,0)/errors.length);
+  assert.ok(Math.max(...errors)<3.5,'max textured parity error '+Math.max(...errors));
+});
