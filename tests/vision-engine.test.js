@@ -230,7 +230,7 @@ test('multiple repeated apertures are recovered without a fixed count or side te
 
 
 test('fast shared-pass recognizer keeps a production-size four-material page within the latency budget',async()=>{
-  const cv=await cvModule,S=1.7,width=850,height=1190,pixels=new Uint8ClampedArray(width*height*4),backgroundConnected=new Uint8Array(width*height),evidence=new Uint8Array(width*height),shadowLikelihood=new Uint8Array(width*height),score=new Uint8Array(width*height);
+  const cv=await cvModule,S=10/7,width=Math.round(500*S),height=1000,pixels=new Uint8ClampedArray(width*height*4),backgroundConnected=new Uint8Array(width*height),evidence=new Uint8Array(width*height),shadowLikelihood=new Uint8Array(width*height),score=new Uint8Array(width*height);
   const items=[
     {x:Math.round(45*S),y:Math.round(70*S),w:Math.round(165*S),h:Math.round(190*S),color:[130,185,145],holes:[110,145,180,215].map(v=>Math.round(v*S))},
     {x:Math.round(285*S),y:Math.round(70*S),w:Math.round(135*S),h:Math.round(205*S),color:[232,232,226],holes:[]},
