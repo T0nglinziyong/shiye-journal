@@ -71,8 +71,8 @@ function proposals(cv,edges,page,{width:w,height:h,paperWidthMM,paperHeightMM,sm
       cv.morphologyEx(edges,closed,cv.MORPH_CLOSE,kernel);cv.findContours(closed,contours,hierarchy,cv.RETR_LIST,cv.CHAIN_APPROX_SIMPLE);
       for(let i=0;i<contours.size();i++){
         const q=contours.get(i),area=cv.contourArea(q);if(area<smallMin||area>w*h*.40){q.delete();continue;}
-        const b=cv.boundingRect(q),widthMM=b.width/w*paperWidthMM,heightMM=b.height/h*paperHeightMM;
-        if(Math.min(widthMM,heightMM)<smallestMM||b.width>w*.94||b.height>h*.94){q.delete();continue;}
+        const b=cv.boundingRect(q),widthMM=b.width/w*paperWidthMM,heightMM=b.height/h*paperHeightMM,clearancePx=Math.max(2,Math.round(pxPerMM*3.0));
+        if(Math.min(widthMM,heightMM)<smallestMM||b.width>w*.94||b.height>h*.94||b.x<clearancePx||b.y<clearancePx||b.x+b.width>w-clearancePx||b.y+b.height>h-clearancePx){q.delete();continue;}
         const rect=cv.minAreaRect(q),rectFill=area/Math.max(1,rect.size.width*rect.size.height),metrics=pageMetrics(cv,q,page,w,h,pxPerMM),touches=b.x<=2||b.y<=2||b.x+b.width>=w-2||b.y+b.height>=h-2;
         const frameBand=Math.max(2,Math.round(pxPerMM*1.6));let framePoints=0;
         for(let j=0;j<q.rows;j++){const x=q.data32S[j*2],y=q.data32S[j*2+1];if(x<frameBand||y<frameBand||x>=w-frameBand||y>=h-frameBand)framePoints++;}
@@ -114,7 +114,7 @@ function regionProposals(cv,rgba,page,paperRef,{width:w,height:h,paperWidthMM,pa
   const minArea=Math.max((pxPerMM*smallestMM)**2*.18,w*h*.0025),frameBand=Math.max(2,Math.round(pxPerMM*1.6));
   for(let i=0;i<contours.size();i++){
     const contour=contours.get(i),area=cv.contourArea(contour);if(area<minArea||area>w*h*.40){contour.delete();continue;}
-    const b=cv.boundingRect(contour),widthMM=b.width/w*paperWidthMM,heightMM=b.height/h*paperHeightMM;if(Math.min(widthMM,heightMM)<smallestMM){contour.delete();continue;}
+    const b=cv.boundingRect(contour),widthMM=b.width/w*paperWidthMM,heightMM=b.height/h*paperHeightMM,clearancePx=Math.max(2,Math.round(pxPerMM*3.0));if(Math.min(widthMM,heightMM)<smallestMM||b.x<clearancePx||b.y<clearancePx||b.x+b.width>w-clearancePx||b.y+b.height>h-clearancePx){contour.delete();continue;}
     const rect=cv.minAreaRect(contour),rectFill=area/Math.max(1,rect.size.width*rect.size.height);if(rectFill<.75){contour.delete();continue;}
     let framePoints=0;for(let j=0;j<contour.rows;j++){const x=contour.data32S[j*2],y=contour.data32S[j*2+1];if(x<frameBand||y<frameBand||x>=w-frameBand||y>=h-frameBand)framePoints++;}
     const frameFraction=framePoints/Math.max(1,contour.rows),longThin=(b.width>w*.48&&b.height<h*.14)||(b.height>h*.48&&b.width<w*.14);if(frameFraction>.22&&longThin){contour.delete();continue;}
@@ -266,7 +266,7 @@ function globalCircles(cv,gray,edges,pxPerMM){
   // consensus bears the false-positive cost.
   for(const param2 of [14,10]){
     const circles=new cv.Mat();
-    cv.HoughCircles(medianBlurred,circles,cv.HOUGH_GRADIENT,1,Math.max(7,Math.round(pxPerMM*3.2)),58,param2,Math.max(3,Math.round(pxPerMM*.70)),Math.max(10,Math.round(pxPerMM*4.5)));
+    cv.HoughCircles(medianBlurred,circles,cv.HOUGH_GRADIENT,1,Math.max(7,Math.round(pxPerMM*3.2)),58,param2,Math.max(3,Math.round(pxPerMM*.70)),Math.max(12,Math.round(pxPerMM*6.0)));
     for(let i=0;i+2<circles.data32F.length;i+=3)add({x:Math.round(circles.data32F[i]),y:Math.round(circles.data32F[i+1]),r:Math.round(circles.data32F[i+2]),source:'hough'});
     circles.delete();
   }
@@ -274,7 +274,7 @@ function globalCircles(cv,gray,edges,pxPerMM){
   // cheaper proposal source avoids depending on Hough alone.
   const closed=new cv.Mat(),cs=new cv.MatVector(),hh=new cv.Mat(),k=cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(3,3));cv.morphologyEx(edges,closed,cv.MORPH_CLOSE,k);
   cv.findContours(closed,cs,hh,cv.RETR_LIST,cv.CHAIN_APPROX_NONE);
-  const minR=Math.max(3,pxPerMM*.65),maxR=Math.max(10,pxPerMM*4.7);
+  const minR=Math.max(3,pxPerMM*.65),maxR=Math.max(12,pxPerMM*6.2);
   for(let i=0;i<cs.size();i++){
     const q=cs.get(i),area=Math.abs(cv.contourArea(q)),per=cv.arcLength(q,true);if(area<Math.PI*minR*minR*.35||area>Math.PI*maxR*maxR*1.7||per<=0){q.delete();continue;}
     const b=cv.boundingRect(q),rx=b.width/2,ry=b.height/2,r=(rx+ry)/2,aspect=Math.min(rx,ry)/Math.max(rx,ry),circularity=4*Math.PI*area/(per*per);
@@ -375,7 +375,7 @@ export function recognizeMaterialsFast(cv,p,own){
   for(const q of selected){
     const approx=new cv.Mat();cv.approxPolyDP(q.contour,approx,Math.max(1.5,cv.arcLength(q.contour,true)*.018),true);
     let boundary,ownedBoundary=false,edgeMethod;
-    if(q.rectFill>.86&&approx.rows<=6){
+    if(q.rectFill>.90&&approx.rows===4){
       const rect=cv.minAreaRect(q.contour),points=cv.boxPoints(rect).flatMap(pt=>[Math.round(pt.x),Math.round(pt.y)]);boundary=cv.matFromArray(4,1,cv.CV_32SC2,points);ownedBoundary=true;edgeMethod='fast-line';
     }else{
       // A colour/region carrier already supplies object support; expanding it
