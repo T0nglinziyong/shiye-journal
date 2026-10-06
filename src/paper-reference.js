@@ -8,27 +8,38 @@ function patchMedian(lab,w,h,x0,y0,x1,y1){
 }
 
 export function robustPaperLab(lab,page,w,h){
-  // Corners are only a robust fallback / regularizer. We sample them inset
-  // from the rectified frame, so interpolation at the exact warp border is not
-  // treated as paper colour. One shadowed corner cannot dominate the median.
-  const insetX=Math.max(3,Math.round(w*.025)),insetY=Math.max(3,Math.round(h*.025)),pw=Math.max(12,Math.round(w*.09)),ph=Math.max(12,Math.round(h*.07));
-  const patches=[
-    patchMedian(lab,w,h,insetX,insetY,Math.min(w,insetX+pw),Math.min(h,insetY+ph)),
-    patchMedian(lab,w,h,Math.max(0,w-insetX-pw),insetY,w-insetX,Math.min(h,insetY+ph)),
-    patchMedian(lab,w,h,insetX,Math.max(0,h-insetY-ph),Math.min(w,insetX+pw),h-insetY),
-    patchMedian(lab,w,h,Math.max(0,w-insetX-pw),Math.max(0,h-insetY-ph),w-insetX,h-insetY)
-  ];
-  const cornerRef={L:median(patches.map(x=>x.L)),a:median(patches.map(x=>x.a)),b:median(patches.map(x=>x.b))};
-  const L=[],A=[],B=[],step=Math.max(2,Math.round(Math.max(w,h)/420));
-  if(page?.data)for(let y=0;y<h;y+=step)for(let x=0;x<w;x+=step){const i=y*w+x;if(!page.data[i])continue;const at=i*3;L.push(lab.data[at]);A.push(lab.data[at+1]);B.push(lab.data[at+2]);}
-  if(L.length>=180){
-    const connected={L:median(L),a:median(A),b:median(B)};
-    // L can move with illumination/shadows. a/b are much more stable, while
-    // the corner median prevents a single polluted page-connected component
-    // from teaching the model a material colour.
-    return {L:connected.L,a:Math.abs(connected.a-cornerRef.a)<=6?connected.a:cornerRef.a,b:Math.abs(connected.b-cornerRef.b)<=6?connected.b:cornerRef.b,reliable:true,cornerRef};
+  // Domain constraint: imported materials are never placed flush against the
+  // A4 border. Therefore an inset perimeter band is a stronger background
+  // reference than arbitrary page-connected pixels. We deliberately skip the
+  // exact warp edge and use robust statistics so one shadowed corner/side does
+  // not dominate the paper model.
+  const pxPerMM=Math.max(.5,((w/210)+(h/297))/2),inner=Math.max(3,Math.round(pxPerMM*2.5)),outer=Math.max(inner+3,Math.round(pxPerMM*11));
+  const L=[],A=[],B=[],step=Math.max(2,Math.round(Math.max(w,h)/520));
+  for(let y=inner;y<h-inner;y+=step)for(let x=inner;x<w-inner;x+=step){
+    const inBand=x<outer||x>=w-outer||y<outer||y>=h-outer;if(!inBand)continue;
+    const at=(y*w+x)*3;L.push(lab.data[at]);A.push(lab.data[at+1]);B.push(lab.data[at+2]);
   }
-  return {...cornerRef,reliable:false,cornerRef};
+  const sortedL=[...L].sort((a,b)=>a-b),bandRef={
+    // A shadow mostly lowers L; the 65th percentile is a better paper-lightness
+    // anchor than the median while still ignoring specular outliers.
+    L:sortedL.length?sortedL[Math.min(sortedL.length-1,Math.floor(sortedL.length*.65))]:238,
+    a:median(A)||128,b:median(B)||128
+  };
+
+  // Page-connected samples remain useful locally, but cannot override the
+  // chroma of the trusted perimeter band by more than a small amount.
+  const cL=[],cA=[],cB=[];
+  if(page?.data)for(let y=0;y<h;y+=step)for(let x=0;x<w;x+=step){const i=y*w+x;if(!page.data[i])continue;const at=i*3;cL.push(lab.data[at]);cA.push(lab.data[at+1]);cB.push(lab.data[at+2]);}
+  if(cL.length>=180){
+    const connected={L:median(cL),a:median(cA),b:median(cB)};
+    return {
+      L:connected.L,
+      a:Math.abs(connected.a-bandRef.a)<=5?connected.a:bandRef.a,
+      b:Math.abs(connected.b-bandRef.b)<=5?connected.b:bandRef.b,
+      reliable:true,bandRef,samples:cL.length
+    };
+  }
+  return {...bandRef,reliable:L.length>=120,bandRef,samples:L.length};
 }
 
 export function localPageLab(lab,page,w,h,ringMask,fallback){
