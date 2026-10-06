@@ -109,8 +109,15 @@ export function buildForegroundEvidence(analysisPixels,w,h,{sourcePixels=analysi
     labL,labA,labB,edge:edgeField,evidence,shadowLikelihood,width:w,height:h,
     paperA:rawFallbackLab[1],paperB:rawFallbackLab[2]
   });
-  const mask=new Uint8Array(w*h);
-  for(let i=0;i<mask.length;i++){
+  const mask=new Uint8Array(w*h),pxPerMM=Math.max(.5,((w/210)+(h/297))/2),safeBand=Math.max(2,Math.round(pxPerMM*3.0));
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+    const i=y*w+x,protectedFrame=x<safeBand||y<safeBand||x>=w-safeBand||y>=h-safeBand;
+    if(protectedFrame){
+      // The app guarantees that no valid material is placed here. Override
+      // even strong warp/paper-edge evidence so frame artifacts can never be
+      // resurrected as foreground later in the pipeline.
+      mask[i]=proposal[i]=evidence[i]=foregroundSeeds[i]=score[i]=0;shadowLikelihood[i]=0;backgroundConnected[i]=1;continue;
+    }
     // The complement of page-connected background preserves pale/white
     // material interiors behind a real perimeter. Strong evidence is always
     // retained even if a tiny boundary gap lets the background flood through.
