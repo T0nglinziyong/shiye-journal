@@ -44,6 +44,10 @@ jobs:
           echo "SHIYE_BROWSER_BIN=$BROWSER_BIN" >> "$GITHUB_ENV"
       - name: Run isolated contour-engine contract
         run: node --test tests/browser-contour-engines.contract.mjs tests/recognition-aperture.contract.mjs
+      - name: Enforce isolated fast-path latency
+        env:
+          SHIYE_ISOLATED_RECOGNITION: '1'
+        run: node --test --test-name-pattern="fast shared-pass recognizer" tests/vision-engine.test.js
       - name: Build actual sources
         run: npm run build
       - name: Run recognition engines in Chromium
