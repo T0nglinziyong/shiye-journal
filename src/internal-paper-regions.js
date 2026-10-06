@@ -82,7 +82,9 @@ function patternPromotions(candidates){
 
 export function carveInternalPaperRegions(cv,{mask,lab,page,evidence,w,h,pxPerMM,paperRef}){
   const b=cv.boundingRect(mask);if(b.width<3||b.height<3)return {count:0,regions:[],diagnostics:[]};
-  const carrier=mask.roi(new cv.Rect(b.x,b.y,b.width,b.height)),labROI=lab.roi(new cv.Rect(b.x,b.y,b.width,b.height)),localEvidence=new Uint8Array(b.width*b.height);
+  const carrierView=mask.roi(new cv.Rect(b.x,b.y,b.width,b.height)),carrier=new cv.Mat();carrierView.copyTo(carrier);carrierView.delete();
+  const labView=lab.roi(new cv.Rect(b.x,b.y,b.width,b.height)),labROI=new cv.Mat();labView.copyTo(labROI);labView.delete();
+  const localEvidence=new Uint8Array(b.width*b.height);
   for(let y=0;y<b.height;y++)for(let x=0;x<b.width;x++)localEvidence[y*b.width+x]=evidence?.[(b.y+y)*w+b.x+x]||0;
   const ref=localPaperReference(cv,{mask,lab,page,w,h,pxPerMM,paperRef}),pageLike=cv.Mat.zeros(b.height,b.width,cv.CV_8UC1);
 
