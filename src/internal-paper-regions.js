@@ -89,11 +89,15 @@ function repeatedCircleApertures(cv,{carrier,grayROI,labROI,ref,pxPerMM}){
   cv.medianBlur(grayROI,blur,5);cv.Canny(blur,edges,20,70);
   const supportKernel=cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(5,5));cv.dilate(edges,support,supportKernel);
   cv.distanceTransform(carrier,dist,cv.DIST_L2,5);
-  const minR=Math.max(3,Math.round(pxPerMM*.8)),maxR=Math.max(minR+2,Math.round(pxPerMM*4.5)),minDist=Math.max(8,Math.round(pxPerMM*2.5));
-  cv.HoughCircles(blur,circles,cv.HOUGH_GRADIENT,1,minDist,60,12,minR,maxR);
+  // Hough is only a proposal generator. Run it on a bounded working image,
+  // then validate every mapped circle against full-resolution edges/Lab.
+  const houghScale=Math.min(1,280/Math.max(rows,cols)),houghInput=houghScale<1?new cv.Mat():blur;
+  if(houghScale<1)cv.resize(blur,houghInput,new cv.Size(Math.max(1,Math.round(cols*houghScale)),Math.max(1,Math.round(rows*houghScale))),0,0,cv.INTER_AREA);
+  const minR=Math.max(2,Math.round(pxPerMM*.8*houghScale)),maxR=Math.max(minR+2,Math.round(pxPerMM*4.5*houghScale)),minDist=Math.max(6,Math.round(pxPerMM*2.5*houghScale));
+  cv.HoughCircles(houghInput,circles,cv.HOUGH_GRADIENT,1,minDist,60,12,minR,maxR);
   const b=cv.boundingRect(carrier),minor=Math.max(1,Math.min(b.width,b.height)),candidates=[];
   for(let i=0;i+2<circles.data32F.length;i+=3){
-    const x=Math.round(circles.data32F[i]),y=Math.round(circles.data32F[i+1]),r=Math.round(circles.data32F[i+2]);
+    const x=Math.round(circles.data32F[i]/houghScale),y=Math.round(circles.data32F[i+1]/houghScale),r=Math.round(circles.data32F[i+2]/houghScale);
     if(x<0||x>=cols||y<0||y>=rows||!carrier.data[y*cols+x])continue;
     const edgeDistance=dist.data32F[y*cols+x];if(edgeDistance<r*.70)continue;
     let supported=0,samples=48;
@@ -125,7 +129,7 @@ function repeatedCircleApertures(cv,{carrier,grayROI,labROI,ref,pxPerMM}){
     const score=qs.length*2+mean(qs.map(q=>q.edgeSupport))-cvv(spacing)-cvv(qs.map(q=>q.r))-cvv(qs.map(q=>q.edgeDistance));
     if(score>bestScore){bestScore=score;best=qs;}
   }
-  blur.delete();edges.delete();support.delete();dist.delete();circles.delete();supportKernel.delete();
+  if(houghScale<1)houghInput.delete();blur.delete();edges.delete();support.delete();dist.delete();circles.delete();supportKernel.delete();
   return best;
 }
 
