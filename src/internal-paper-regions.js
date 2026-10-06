@@ -34,18 +34,20 @@ function localPaperReference(cv,{mask,lab,page,w,h,pxPerMM,paperRef}){
   return {L:medL,a:median(A),b:median(B),madL,localSamples:L.length};
 }
 
-function componentMask(cv,labels,label,roiW,roiH){
+function componentMask(cv,labels,label,roiW,roiH,x,y,w,h){
   const m=cv.Mat.zeros(roiH,roiW,cv.CV_8UC1);
-  for(let i=0;i<labels.data32S.length;i++)if(labels.data32S[i]===label)m.data[i]=255;
+  // connectedComponentsWithStats already gives the component bbox. Scanning
+  // the entire ROI once per component caused the previous O(K*N) slowdown.
+  for(let yy=y;yy<y+h;yy++)for(let xx=x;xx<x+w;xx++){const i=yy*roiW+xx;if(labels.data32S[i]===label)m.data[i]=255;}
   return m;
 }
 
 function ringStats(cv,{component,carrier,labROI,evidence,w:rw,h:rh,pxPerMM,paperRef}){
   const k=Math.max(3,(Math.round(pxPerMM*1.2)|1)),kernel=cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(k,k)),dil=new cv.Mat(),ring=new cv.Mat(),insideRing=new cv.Mat();
   cv.dilate(component,dil,kernel);cv.subtract(dil,component,ring);cv.bitwise_and(ring,carrier,insideRing);
-  let ringN=0,materialN=0;const distances=[];
-  for(let i=0;i<rw*rh;i++){
-    if(!insideRing.data[i])continue;ringN++;const d=colourDistance(labROI,i,paperRef);distances.push(d);if((evidence?.[i])||d>7)materialN++;
+  let ringN=0,materialN=0;const distances=[],rb=cv.boundingRect(dil),x0=Math.max(0,rb.x-2),y0=Math.max(0,rb.y-2),x1=Math.min(rw,rb.x+rb.width+2),y1=Math.min(rh,rb.y+rb.height+2);
+  for(let y=y0;y<y1;y++)for(let x=x0;x<x1;x++){
+    const i=y*rw+x;if(!insideRing.data[i])continue;ringN++;const d=colourDistance(labROI,i,paperRef);distances.push(d);if((evidence?.[i])||d>7)materialN++;
   }
   kernel.delete();dil.delete();ring.delete();insideRing.delete();
   return {ringN,materialFraction:materialN/Math.max(1,ringN),ringDistance:median(distances)};
@@ -54,7 +56,7 @@ function ringStats(cv,{component,carrier,labROI,evidence,w:rw,h:rh,pxPerMM,paper
 function describeComponent(cv,{labels,label,stats,carrier,labROI,evidence,pxPerMM,paperRef,carrierArea,roiW,roiH}){
   const x=stats.data32S[label*5],y=stats.data32S[label*5+1],w=stats.data32S[label*5+2],h=stats.data32S[label*5+3],area=stats.data32S[label*5+4];
   if(area<Math.max(8,pxPerMM*pxPerMM*.35)||area>carrierArea*.10||w<2||h<2)return null;
-  const comp=componentMask(cv,labels,label,roiW,roiH),dists=[],Ls=[];let evidenceN=0;
+  const comp=componentMask(cv,labels,label,roiW,roiH,x,y,w,h),dists=[],Ls=[];let evidenceN=0;
   for(let yy=y;yy<y+h;yy++)for(let xx=x;xx<x+w;xx++){
     const i=yy*roiW+xx;if(!comp.data[i])continue;dists.push(colourDistance(labROI,i,paperRef));Ls.push(labROI.data[i*3]);if(evidence?.[i])evidenceN++;
   }
