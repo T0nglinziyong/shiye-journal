@@ -62,7 +62,7 @@ export function fuseRecognitionCandidates(instances,structuralCandidates){
       // usually contains page-connected gaps and therefore fails this test.
       const shares=matches.map(({entry})=>area(entry.candidate)/Math.max(area(structural),1e-9)).sort((a,b)=>b-a);
       const occupancy=matches.reduce((sum,{entry})=>sum+intersection(entry.candidate,structural),0)/Math.max(area(structural),1e-9);
-      accept=matches.length===1||shares[1]<.15
+      accept=matches.length===1||shares[1]<.08
         ||(strongPhysicalBoundary(structural)&&occupancy<=.84)
         ||(strongRecoveredCarrier(structural)&&occupancy<=.84)
         ||(strongReconstruction(structural)&&(occupancy<=.72||(structural.matchedPairOverlap??0)>=.18));
@@ -71,10 +71,15 @@ export function fuseRecognitionCandidates(instances,structuralCandidates){
       // Missing-instance recovery is deliberately strict. It recovers a pale
       // photo/card with a real paper-facing perimeter, but internal printed
       // boxes/squares have almost no direct page-background contact.
-      accept=((structural.paperContactRatio??0)>=.90
+      const standardRecovery=(structural.paperContactRatio??0)>=.90
         &&(structural.insideEvidenceRatio??0)>=.20
         &&(structural.fillRatio??0)>=.45
-        &&area(structural)>=.006)
+        &&area(structural)>=.006;
+      const paleCarrierRecovery=(structural.paperContactRatio??0)>=.96
+        &&(structural.insideEvidenceRatio??0)>=.12
+        &&(structural.fillRatio??0)>=.70
+        &&area(structural)>=.02;
+      accept=standardRecovery||paleCarrierRecovery
         ||(strongRecoveredCarrier(structural)&&area(structural)>=.0025);
     }
     if(!accept)continue;
