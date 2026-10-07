@@ -24,26 +24,27 @@ try{
   await click('[data-id="cutout-flow-asset"]','.detail-page');
   await click('[data-act="detail-check"]','.cutout-modal');
 
-  assert.equal(await evaluate('document.querySelector(".cutout-steps .current")?.textContent.includes("重新识别")'),true);
+  assert.equal(await evaluate('document.querySelectorAll(".cutout-steps span").length'),3);
+  assert.equal(await evaluate('document.querySelector(".cutout-steps .current")?.textContent.includes("粗轮廓")'),true);
   assert.ok(await evaluate('!!document.querySelector("#cutout-method")'));
+  assert.ok(await evaluate('!!document.querySelector("#cutout-strength")'));
   assert.equal(await evaluate('!!document.querySelector("#cutout-post-edge")'),false);
   assert.equal(await evaluate('document.querySelector("#cutout-apply").disabled'),true);
 
   await click('#cutout-next');
-  assert.equal(await evaluate('document.querySelector(".cutout-steps .current")?.textContent.includes("自动修整")'),true);
+  assert.equal(await evaluate('document.querySelector(".cutout-steps .current")?.textContent.includes("识别结果")'),true);
+  assert.ok(await evaluate('!!document.querySelector("#cutout-strength")'));
   assert.ok(await evaluate('!!document.querySelector("#cutout-post-edge")'));
   assert.ok(await evaluate('!!document.querySelector("#cutout-post-shapes")'));
   assert.equal(await evaluate('!!document.querySelector("#cutout-method")'),false);
+  assert.equal(await evaluate('!!document.querySelector("#cutout-auto-straighten")'),false);
 
   await click('#cutout-next');
-  assert.equal(await evaluate('document.querySelector(".cutout-steps .current")?.textContent.includes("手动修补")'),true);
+  assert.equal(await evaluate('document.querySelector(".cutout-steps .current")?.textContent.includes("最终调整")'),true);
   assert.ok(await evaluate('!!document.querySelector("#cutout-strength")'));
-  assert.equal(await evaluate('!!document.querySelector("#cutout-post-edge")'),false);
-
-  await click('#cutout-next');
-  assert.equal(await evaluate('document.querySelector(".cutout-steps .current")?.textContent.includes("摆正与外观")'),true);
   assert.ok(await evaluate('!!document.querySelector("#cutout-auto-straighten")'));
   assert.ok(await evaluate('!!document.querySelector("[data-appearance=\"original\"]")'));
+  assert.equal(await evaluate('!!document.querySelector("#cutout-post-edge")'),false);
   assert.equal(await evaluate('document.querySelector("#cutout-apply").disabled'),false);
   assert.equal(await evaluate('document.querySelector("#cutout-auto-straighten").checked'),true);
   assert.deepEqual(b.errors,[]);
