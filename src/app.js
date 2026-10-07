@@ -49,7 +49,7 @@ import {loadPreferences,savePreferences} from './preferences.js';
 import {uid,canvasSize,draft,project,itemFromAsset,physicalPlacement,validatePhysicalDraft,textBlock,primitive,setDraftPaperSize} from './domain.js';
 import {detectPaperCandidates,cropBitmap,alignMaterialPreview} from './image.js';
 import {visionTask} from './vision-runtime.js';
-import {recognitionOptions,recognitionPixelOptions,recognitionMethodDetails} from './recognition-profiles.js';
+import {recognitionOptions,recognitionPixelOptions,recognitionMethodDetails,recognitionProfile} from './recognition-profiles.js';
 import {classifyRecord} from './classification.js';
 import {mountPaperCorrection,resetPaperCorrection} from './paper-ui.js';
 import {rectifyA4,suggestPaperCorners} from './perspective.js';
@@ -562,24 +562,67 @@ async function refresh({background=false,onlyChanged=false}={}){const sync=await
 let trashSweepActive=false;
 async function purgeExpiredTrash(){if(trashSweepActive)return;const entries=expiredTrash(state.trash);if(!entries.length)return;trashSweepActive=true;try{await changeTrash({db,state,ids:entries.map(entry=>entry.id)});if(parity.libraryTab==='trash'||parity.workTab==='trash')render();}catch(error){console.warn('最近删除到期清理待重试',error?.name||error?.message);}finally{trashSweepActive=false;}}
 setInterval(()=>void purgeExpiredTrash(),15*60*1000);
+async function rerecognizeCandidateFrame(candidateFrame,request){
+  const bitmap=await createImageBitmap(candidateFrame);
+  try{
+    const fw=bitmap.width,fh=bitmap.height,canvas=document.createElement('canvas');canvas.width=fw;canvas.height=fh;
+    const ctx=canvas.getContext('2d',{willReadFrequently:true});ctx.drawImage(bitmap,0,0);const raw=ctx.getImageData(0,0,fw,fh);
+    const pre=request.preprocess||{},needs=pre.illumination!==false||pre.denoise!==false||pre.localContrast!==false,
+      processed=needs?await visionTask('balance',{pixels:raw.data,width:fw,height:fh,options:pre}):null,
+      frame=processed?{data:processed.pixels}:raw,
+      p=request.placement||{x:0,y:0,width:fw,height:fh},
+      candidate={
+        x:p.x/fw,y:p.y/fh,w:p.width/fw,h:p.height/fh,
+        recognitionConfidence:0,
+        mask:{width:request.targetWidth,height:request.targetHeight,alpha:new Uint8Array(request.mask),topologyPreserved:true}
+      },
+      profile=recognitionProfile(request.method,request.pixels);
+    if(typeof profile.refineCandidates!=='function')throw Error('此方法需要整张 A4 页面，只能在首次导入时使用');
+    const refined=await profile.refineCandidates({
+      candidates:[candidate],frame,width:fw,height:fh,preprocess:pre,postprocess:request.postprocess||{},
+      onProgress:()=>{}
+    }),region=refined?.[0];
+    if(!region?.mask?.alpha?.length)throw Error('没有得到可靠的新边界');
+
+    const full=document.createElement('canvas');full.width=fw;full.height=fh;const fx=full.getContext('2d');
+    const mc=document.createElement('canvas');mc.width=region.mask.width;mc.height=region.mask.height;const mx=mc.getContext('2d'),mi=mx.createImageData(mc.width,mc.height);
+    for(let i=0;i<region.mask.alpha.length;i++){mi.data[i*4]=mi.data[i*4+1]=mi.data[i*4+2]=255;mi.data[i*4+3]=region.mask.alpha[i];}
+    mx.putImageData(mi,0,0);
+    const rx=Math.round(region.x*fw),ry=Math.round(region.y*fh),rw=Math.max(1,Math.round(region.w*fw)),rh=Math.max(1,Math.round(region.h*fh));
+    fx.drawImage(mc,rx,ry,rw,rh);
+    const local=document.createElement('canvas');local.width=request.targetWidth;local.height=request.targetHeight;
+    local.getContext('2d').drawImage(full,p.x,p.y,p.width,p.height,0,0,local.width,local.height);
+    const alpha=local.getContext('2d',{willReadFrequently:true}).getImageData(0,0,local.width,local.height).data,out=new Uint8Array(local.width*local.height);
+    for(let i=0;i<out.length;i++)out[i]=alpha[i*4+3];
+    return {mask:out,method:request.method,shapeModel:region.shapeModel||null,edgeMethod:region.edgeMethod||null};
+  }finally{bitmap.close();}
+}
+
 async function openCutoutCheck(id,candidate=null){
   const a=candidate?{title:candidate.title}:asset(id);if(!a)return;
   const stored=async blobId=>blobId?(await db.get('blobs',blobId))?.data:null;
-  let saved=candidate?.blob||await stored(a.blobId),original=candidate?.originalBlob||await stored(a.originalBlobId),recognition=candidate?.originalCutoutBlob||await stored(a.originalCutoutBlobId);
+  let saved=candidate?.blob||await stored(a.blobId),original=candidate?.originalBlob||await stored(a.originalBlobId),recognition=candidate?.originalCutoutBlob||await stored(a.originalCutoutBlobId),
+    candidateFrame=candidate?.candidateFrameBlob||await stored(a.candidateFrameBlobId);
   if(!saved&&a.staticPath){const response=await fetch(a.staticPath);if(!response.ok)throw Error('素材图像未能加载，请重试');saved=await response.blob();}
-  original||=saved;recognition||=saved;if(!(original instanceof Blob)||!(saved instanceof Blob))throw Error('原始图像不可读取');
+  original||=saved;recognition||=saved;candidateFrame||=original;if(!(original instanceof Blob)||!(saved instanceof Blob))throw Error('候选框图像不可读取');
   if(modal.open)modal.close();
-  const processing=candidate?.processingRecord||a.processingRecord||{},baseWidth=processing.sourceWidthMM||candidate?.width||a.physicalWidthMM,baseHeight=processing.sourceHeightMM||candidate?.height||a.physicalHeightMM;
-  await showCutoutEditor({body,modal,original,saved,recognition,title:a.title,processing,toast,onApply:async(blob,record,originalRecognition)=>{
+  const processing=candidate?.processingRecord||a.processingRecord||{},baseWidth=processing.sourceWidthMM||candidate?.width||a.physicalWidthMM,baseHeight=processing.sourceHeightMM||candidate?.height||a.physicalHeightMM,
+    localMethods=recognitionMethodDetails.filter(item=>item.id!=='traditional'),
+    preferredMethod=localMethods.some(item=>item.id===(processing.rerecognition?.method||state.preferences.recognition))?(processing.rerecognition?.method||state.preferences.recognition):'auto';
+  await showCutoutEditor({
+    body,modal,original,saved,recognition,candidateFrame,title:a.title,processing,toast,
+    recognitionUI:{methods:localMethods,pixels:recognitionPixelOptions,method:preferredMethod,pixelsValue:state.preferences.recognitionPixels,preprocess:recognitionPreprocessOptions(),postprocess:recognitionPostprocessOptions()},
+    onRerecognize:request=>rerecognizeCandidateFrame(candidateFrame,request),
+    onApply:async(blob,record,originalRecognition)=>{
     const rad=record.displayRotationDegrees*Math.PI/180,width=baseWidth&&baseHeight?Math.abs(baseWidth*Math.cos(rad))+Math.abs(baseHeight*Math.sin(rad)):null,height=baseWidth&&baseHeight?Math.abs(baseHeight*Math.cos(rad))+Math.abs(baseWidth*Math.sin(rad)):null;
     const nextProcessing={...record,sourceWidthMM:baseWidth,sourceHeightMM:baseHeight};
     if(candidate){
-      candidate.originalCutoutBlob||=originalRecognition;candidate.processingRecord=nextProcessing;candidate.blob=blob;URL.revokeObjectURL(candidate.url);candidate.url=URL.createObjectURL(blob);if(width&&height){candidate.width=width;candidate.height=height;}
+      candidate.originalCutoutBlob||=originalRecognition;candidate.candidateFrameBlob||=candidateFrame;candidate.processingRecord=nextProcessing;candidate.blob=blob;URL.revokeObjectURL(candidate.url);candidate.url=URL.createObjectURL(blob);if(width&&height){candidate.width=width;candidate.height=height;}
       for(const rec of state.importRecords){const index=rec.candidateData?.findIndex(c=>c===candidate||c.region===candidate.region);if(index>=0){Object.assign(rec.candidateData[index],candidate);rec.candidateURLs[index]=candidate.url;rec.manualEdits=true;if(state.importStep==='inspect')rec.confirmed=false;}}
       if(state.importRecords[state.importIndex]?.candidateData===state.importCandidateData)state.importCandidateURLs=state.importCandidateData.map(c=>c.url);
     }else{
-      const updated={...a,processingRecord:nextProcessing,physicalWidthMM:width||a.physicalWidthMM,physicalHeightMM:height||a.physicalHeightMM,originalCutoutBlobId:a.originalCutoutBlobId||uid(),updatedAt:new Date().toISOString()};
-      await db.transaction(['assets','blobs'],tx=>{tx.objectStore('assets').put(updated);tx.objectStore('blobs').put({id:a.blobId,data:blob});if(!a.originalCutoutBlobId)tx.objectStore('blobs').put({id:updated.originalCutoutBlobId,data:originalRecognition});});
+      const updated={...a,processingRecord:nextProcessing,physicalWidthMM:width||a.physicalWidthMM,physicalHeightMM:height||a.physicalHeightMM,originalCutoutBlobId:a.originalCutoutBlobId||uid(),candidateFrameBlobId:a.candidateFrameBlobId||uid(),updatedAt:new Date().toISOString()};
+      await db.transaction(['assets','blobs'],tx=>{tx.objectStore('assets').put(updated);tx.objectStore('blobs').put({id:a.blobId,data:blob});if(!a.originalCutoutBlobId)tx.objectStore('blobs').put({id:updated.originalCutoutBlobId,data:originalRecognition});if(!a.candidateFrameBlobId)tx.objectStore('blobs').put({id:updated.candidateFrameBlobId,data:candidateFrame});});
       Object.assign(a,updated);if(urls.has(a.blobId))URL.revokeObjectURL(urls.get(a.blobId));urls.set(a.blobId,URL.createObjectURL(blob));
     }
     render();toast('素材外观已更新');
