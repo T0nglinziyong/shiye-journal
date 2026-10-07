@@ -1,9 +1,7 @@
 import fallbackOpenCVScriptURL from '@techstark/opencv-js/dist/opencv.js?url';
 
 const liteOpenCVScriptURL='/vendor/opencv-shiye/opencv.js';
-const requestedOpenCV=new URLSearchParams(globalThis.location?.search||'').get('opencv');
-const preferLiteOpenCV=requestedOpenCV==='lite';
-export function visionRuntimeFlavor(){return preferLiteOpenCV?'lite':'full';}
+export function visionRuntimeFlavor(){return 'lite';}
 
 // Heavy vision code is downloaded only when image processing is requested.
 // The import flow may explicitly prewarm it while the user is choosing a photo.
@@ -33,8 +31,8 @@ function ensureWorker(){
   };
   worker.postMessage({
     type:'init',
-    opencvScriptURL:preferLiteOpenCV?liteOpenCVScriptURL:fallbackOpenCVScriptURL,
-    fallbackOpenCVScriptURL:preferLiteOpenCV?fallbackOpenCVScriptURL:null
+    opencvScriptURL:liteOpenCVScriptURL,
+    fallbackOpenCVScriptURL
   });
   return readyPromise;
 }

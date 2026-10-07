@@ -20,8 +20,9 @@ test('minimal OpenCV build is restricted to Shiye modules and split WASM',()=>{
 });
 
 
-test('full runtime is the safe default and lite is an explicit comparison mode',()=>{
+test('lite runtime is the default with the full build only as fallback',()=>{
   const runtime=readFileSync(new URL('../src/vision-runtime.js',import.meta.url),'utf8');
-  assert.match(runtime,/requestedOpenCV==='lite'/);
-  assert.match(runtime,/preferLiteOpenCV\?liteOpenCVScriptURL:fallbackOpenCVScriptURL/);
+  assert.match(runtime,/opencvScriptURL:liteOpenCVScriptURL/);
+  assert.match(runtime,/fallbackOpenCVScriptURL/);
+  assert.doesNotMatch(runtime,/requestedOpenCV/);
 });
