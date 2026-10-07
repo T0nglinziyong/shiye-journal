@@ -29,12 +29,20 @@ const edgeCertainReconstruction=s=>s.boundaryReconstruction===true
   &&(s.boundaryShadowFraction??1)<=.35
   &&(s.largestMatchShare??99)>=.45&&(s.largestMatchShare??99)<=1.80
   &&((s.matchedInstances??1)===1||(s.matchedPairOverlap??0)>=.18);
-const strongReconstruction=s=>s.boundaryReconstruction===true
-  &&(s.reconstructionScore??0)>=.28
-  &&(s.edgeSupportRatio??0)>=.42
-  &&(((s.paperContactRatio??0)>=.48
-      &&((s.interiorBackgroundRatio??1)<=.42||(s.fillRatio??0)>=.64||(s.edgeSupportRatio??0)>=.62))
-    ||edgeCertainReconstruction(s));
+const strongReconstruction=s=>{
+  if(s.boundaryReconstruction!==true||(s.reconstructionScore??0)<.28||(s.edgeSupportRatio??0)<.42)return false;
+  if(edgeCertainReconstruction(s))return true;
+  if((s.paperContactRatio??0)<.48)return false;
+  const multi=(s.matchedInstances??1)>1;
+  if(!multi)return (s.interiorBackgroundRatio??1)<=.42||(s.fillRatio??0)>=.64||(s.edgeSupportRatio??0)>=.62;
+  // Multi-instance reconstruction is an identity decision, not just an edge
+  // fitting problem. A strong contour can still wrap neighbouring materials
+  // across a real A4 gap. Require evidence that the enclosed region behaves
+  // like one physical carrier rather than accepting high edge support alone.
+  return (s.interiorBackgroundRatio??1)<=.20
+    ||(s.fillRatio??0)>=.70
+    ||((s.matchedPairOverlap??0)>=.35&&(s.largestMatchShare??0)>=.70);
+};
 const strongRecoveredCarrier=s=>s.physicalCarrierRecovered===true
   &&(s.carrierEdgeSupport??0)>=.20
   &&(s.carrierSeedCoverage??0)>=.80
