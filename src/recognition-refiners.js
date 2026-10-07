@@ -36,18 +36,17 @@ export async function refineCandidatesWithSlimSAM({candidates, frame, width, hei
 }
 
 
-export async function refineCandidatesWithBrowserContours({candidates,frame,width,height,onProgress=()=>{},mode='hybrid'}){
-  const quality=mode==='quality';
-  // Hybrid keeps already-high-confidence traditional candidates untouched and
-  // spends contour work only on uncertain instances. Quality refines all.
-  const threshold=.74, selected=[], selectedIndices=[];
+export async function refineCandidatesWithBrowserContours({candidates,frame,width,height,onProgress=()=>{},mode='auto'}){
+  // Auto spends expensive refinement only on uncertain traditional results.
+  // Explicit user-selected engines apply to every candidate.
+  const refineAll=mode!=='auto',threshold=.74,selected=[],selectedIndices=[];
   for(let i=0;i<candidates.length;i++){
-    if(quality||(candidates[i].recognitionConfidence??0)<threshold){selected.push(candidates[i]);selectedIndices.push(i);}
+    if(refineAll||(candidates[i].recognitionConfidence??0)<threshold){selected.push(candidates[i]);selectedIndices.push(i);}
   }
   if(!selected.length)return candidates;
   onProgress({status:'contour-refinement',engine:mode,total:selected.length});
   try{
-    const refined=await visionTask('material-boundary-refine',{pixels:frame.data,width,height,candidates:selected,mode:quality?'quality':mode});
+    const refined=await visionTask('material-boundary-refine',{pixels:frame.data,width,height,candidates:selected,mode});
     const out=[...candidates];for(let i=0;i<selectedIndices.length;i++)out[selectedIndices[i]]=refined[i]||selected[i];
     return out;
   }catch(error){
@@ -55,8 +54,9 @@ export async function refineCandidatesWithBrowserContours({candidates,frame,widt
     return candidates;
   }
 }
+export async function refineCandidatesAuto(context){return refineCandidatesWithBrowserContours({...context,mode:'auto'});}
 export async function refineCandidatesHybrid(context){return refineCandidatesWithBrowserContours({...context,mode:'hybrid'});}
-export async function refineCandidatesWithMorphGAC(context){return refineCandidatesWithBrowserContours({...context,mode:'quality'});}
+export async function refineCandidatesWithMorphGAC(context){return refineCandidatesWithBrowserContours({...context,mode:'morphgac'});}
 export async function refineCandidatesWithGrabCut(context){return refineCandidatesWithBrowserContours({...context,mode:'grabcut'});}
 
 export async function refineCandidatesWithActiveContour(context){return refineCandidatesWithBrowserContours({...context,mode:'active'});}
