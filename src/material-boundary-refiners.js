@@ -211,7 +211,7 @@ function regionFromMask(cv,mask,globalX,globalY,pageW,pageH,method,confidence,el
  * contour engines. Candidate discovery remains unchanged.
  */
 export function refineMaterialBoundaries(cv,p){
-  const pageW=p.width,pageH=p.height,src=cv.matFromArray(pageH,pageW,cv.CV_8UC4,p.pixels),mode=p.mode||'auto',out=[];
+  const pageW=p.width,pageH=p.height,src=cv.matFromArray(pageH,pageW,cv.CV_8UC4,p.pixels),mode=p.mode||'auto',postprocess=p.postprocess!==false,out=[];
   try{
     for(const candidate of p.candidates||[]){
       const started=typeof performance!=='undefined'?performance.now():Date.now(),
@@ -223,7 +223,7 @@ export function refineMaterialBoundaries(cv,p){
         rw=x1-x0,rh=y1-y0,roi=src.roi(new cv.Rect(x0,y0,rw,rh)),
         rough=placedMaskFromCandidate(cv,candidate,pageW,pageH,x0,y0,rw,rh),
         holes=candidate.mask?.alpha?.length?enclosedHoles(cv,rough):null;
-      let selected=null,method='',confidence=0,workImage=null,workMask=null,support=null,polish=false;
+      let selected=null,method='',confidence=0,workImage=null,workMask=null,support=null;
 
       if(mode==='morphgac'||mode==='quality'||mode==='hybrid'||mode==='auto'){
         const hybrid=mode==='hybrid',automatic=mode==='auto',
@@ -231,9 +231,9 @@ export function refineMaterialBoundaries(cv,p){
           iterations=hybrid?80:automatic?65:80,
           quality=resizeForBudget(cv,roi,rough,maxDim),qsupport=edgeSupportMap(cv,quality.image);
         selected=morphMask(cv,quality.image,quality.mask,{iterations});
-        method=hybrid||automatic?'browser-morphgac-grabcut':'browser-morphgac';
+        method=hybrid||automatic?(postprocess?'browser-morphgac-grabcut':'browser-morphgac'):'browser-morphgac';
         confidence=boundarySupport(cv,selected,qsupport);
-        workImage=quality.image;workMask=quality.mask;support=qsupport;polish=hybrid||automatic;
+        workImage=quality.image;workMask=quality.mask;support=qsupport;
       }else{
         const fast=resizeForBudget(cv,roi,rough,320);
         workImage=fast.image;workMask=fast.mask;support=edgeSupportMap(cv,fast.image);
@@ -249,19 +249,19 @@ export function refineMaterialBoundaries(cv,p){
 
       let full=upscaleBinaryMask(cv,selected,rw,rh);
       selected.delete();selected=full;
-      if(polish){
+      if(postprocess){
         const polished=grabCutPolishMask(cv,roi,selected);
         selected.delete();selected=polished;
+        const regularized=regularizeStrongQuadrilateral(cv,roi,selected);
+        selected.delete();selected=regularized;
       }
-      const regularized=regularizeStrongQuadrilateral(cv,roi,selected);
-      selected.delete();selected=regularized;
       if(holes){
         const fullHoles=upscaleBinaryMask(cv,holes,rw,rh);
         restoreHoles(cv,selected,fullHoles);fullHoles.delete();
       }
       const elapsed=(typeof performance!=='undefined'?performance.now():Date.now())-started,
         region=regionFromMask(cv,selected,x0,y0,pageW,pageH,method,confidence,elapsed);
-      if(region)out.push({...candidate,...region});else out.push(candidate);
+      if(region)out.push({...candidate,...region,postprocessed:postprocess});else out.push(candidate);
 
       selected.delete();holes?.delete();support?.delete();workImage?.delete();workMask?.delete();rough.delete();roi.delete();
     }
