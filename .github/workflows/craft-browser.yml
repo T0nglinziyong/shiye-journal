@@ -1,10 +1,8 @@
 name: Craft browser regression
 
 on:
-  push:
-    branches: [recognition-official-engines]
   pull_request:
-    branches: [main]
+    branches: [main, test]
     paths:
       - 'src/craft-*.js'
       - 'src/material-*.js'

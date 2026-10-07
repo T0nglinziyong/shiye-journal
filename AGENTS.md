@@ -6,4 +6,4 @@
 
 不要将 API 密钥、服务令牌、私人素材、作品或 `数据备份/实时数据` 提交 Git。修改服务器存储逻辑时保留已存数据，先验证完整备份恢复；公开自托管模式必须使用 HTTPS 与强访问令牌，服务器连接失败不得静默改写浏览器本地数据。
 
-用户要求此后每批代码更新经过验收后提交并推送至 `T0nglinziyong/shiye-journal`，不要只留在本机。推送前检查提交范围、凭据／私人数据、远端新增提交并运行 `npm test && npm run test:ui`；不要强推或覆盖远端改动。按用户最新指定，Vercel 只使用现有项目 `shiye-journal-test`（`prj_96WRMneQ8J6gF1X7DUuzDqk5bWrE`），生产分支为 `main`，所有测试版本统一发布到 `https://shiye-journal-test.vercel.app`，不要另建项目、更换网址或修改 DNS。旧临时项目不再作为发布目标。2026-09-29 已核对该项目的 GitHub 关联、生产分支与固定域名；每次推送仍需核对实际 Git 提交的 READY 部署和固定别名，不以手动部署冒充自动部署。连接失败时如实报告，请用户正常授权。
+分支与发布必须遵循 `DEVELOPMENT_WORKFLOW.md`。普通开发默认在 `test` 或从 `test` 新建 `feature/*` / `fix/*` / `experiment/*`；完成后先进入 `test`，通过 CI 和测试站验收后再用 PR 将 `test` 合并到 `main`。除紧急 hotfix 外，不得直接在 `main` 开发普通功能；hotfix 进入 `main` 后必须立即回灌 `test`。不得强推或覆盖两个长期分支。Vercel 正式项目为 `shiye-journal`（只接受 `main`），测试项目为 `shiye-journal-test`（只接受 `test`）；其他分支不自动部署，历史临时项目不得作为发布目标。每次发布仍需核对准确 Git SHA、对应 Vercel Project 和部署状态，不能把 push 成功当作已发布。

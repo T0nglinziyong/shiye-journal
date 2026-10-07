@@ -17,3 +17,9 @@ test('Vercel uploads the Vite worker config used by production build',()=>{
   const allow=new Set(ignore.split(/\r?\n/).map(line=>line.trim()).filter(line=>line.startsWith('!')));
   assert.ok(allow.has('!vite.config.js'),'vite.config.js must be uploaded so worker.format remains es on Vercel');
 });
+
+
+test('Vercel Git auto-deployment is limited to main and test',()=>{
+  const config=JSON.parse(readFileSync(new URL('../vercel.json',import.meta.url),'utf8'));
+  assert.deepEqual(config.git?.deploymentEnabled,{'*':false,main:true,test:true});
+});

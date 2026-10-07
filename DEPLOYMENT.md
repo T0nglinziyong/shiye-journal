@@ -1,5 +1,19 @@
 # 拾页：大陆访问与托管迁移
 
+## 当前分支与 Vercel 发布模型（2026-10-07）
+
+本节覆盖下文所有较早的“main 直接发布到 shiye-journal-test”历史记录。当前正式规则见 [DEVELOPMENT_WORKFLOW.md](DEVELOPMENT_WORKFLOW.md)。
+
+- GitHub `main` → Vercel Project `shiye-journal` → 正式环境。
+- GitHub `test` → Vercel Project `shiye-journal-test` → 测试环境。
+- 其他 Git 分支不自动部署；如确有需要，仅手动创建临时 deployment。
+- 两个长期 Vercel Project 均应关闭 Preview 自动部署，并分别把 Production Branch 固定为 `main` / `test`。
+- 历史临时项目 `temporary-fleet-oxygen-f2279rt` 不再作为任何发布目标。
+- 正常发布路径是 `feature/* → test → test 站验收 → PR(test→main) → main`。紧急 hotfix 允许先进入 `main`，但必须立即回灌 `test`。
+
+仓库 `vercel.json` 只允许 `main` 与 `test` 触发 Git deployment；项目级 Ignored Build Step / Production Branch 再负责将二者分别路由到正确的 Vercel Project。任何后续部署文档、Codex 操作或人工发布都不得重新采用“每个 commit 都直接进 main”的旧流程。
+
+
 ## 多用户账号（2026-10-01）
 
 现有项目已应用 `deploy/supabase/multi-user-accounts.sql` 与 `multi-user-permissions.sql`；旧账号和资料不迁移、不改写。`lrx` 是唯一管理员，其他用户由管理员在「账号 → 新建账号」创建。服务端 `shiye-account-admin` Edge Function 验证登录 JWT 和数据库管理员角色，再使用 Supabase 托管的服务端密钥创建/重置账号；该密钥不进入 Vercel 或浏览器。公开自助注册已关闭，因为当前免费项目未配置自有 SMTP，默认邮件不能发给普通新用户。新用户凭用户名和初始密码登录，登录后可以输入旧密码修改；忘记密码由管理员重置。Supabase Auth 的服务端「修改密码必须提供当前密码」已开启。注册回调 Site URL 指向固定测试站；邮箱确认设置仍保持开启，不以关闭确认作为邮件问题的规避方式。

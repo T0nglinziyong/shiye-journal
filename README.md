@@ -2,6 +2,15 @@
 
 拾页是一个面向真实纸质手帐素材的 PWA。当前代码只维护**现行数据结构、现行 AI 合同和现行任务包格式**，不包含历史 Swift / CeCe / 旧 ZIP / 旧字段的兼容迁移层。
 
+## 开发与发布分支
+
+正式开发规则见 [DEVELOPMENT_WORKFLOW.md](DEVELOPMENT_WORKFLOW.md)。长期只维护两个发布分支：
+
+- `test`：下一版本与集成测试；自动部署到 Vercel `shiye-journal-test`。
+- `main`：已经验收的正式版本；自动部署到 Vercel `shiye-journal`。
+
+普通开发遵循 `feature/* → test → main`；其他分支不自动部署。除紧急 hotfix 外，不直接在 `main` 开发功能；hotfix 合入 `main` 后必须回灌 `test`。
+
 ## 当前能力
 
 - 素材导入：相册 / 文件 / 拍摄入口、纸张校正、候选素材提取、手动框选、去白底、真实毫米尺寸。
