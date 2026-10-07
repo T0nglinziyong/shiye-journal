@@ -315,7 +315,17 @@ export function refineMaterialBoundaries(cv,p){
       let full=upscaleBinaryMask(cv,selected,rw,rh);
       selected.delete();selected=full;
       if(post.edgePolish){
-        const polished=grabCutPolishMask(cv,roi,selected);selected.delete();selected=polished;
+        const polished=grabCutPolishMask(cv,roi,selected);
+        // High-confidence physical carriers are already geometrically useful
+        // seeds. A full-resolution GrabCut may prefer dark printed content over
+        // a weak white carrier, so postprocess-only polishing is accepted only
+        // when it is a local boundary correction rather than a topology/area
+        // rewrite.
+        const conservative=mode==='postprocess'||candidate.physicalCarrierRecovered===true;
+        if(conservative){
+          const before=Math.max(1,cv.countNonZero(selected)),after=cv.countNonZero(polished),ratio=after/before,fit=maskAgreement(cv,selected,polished);
+          if(fit>=.88&&ratio>=.90&&ratio<=1.12){selected.delete();selected=polished;}else polished.delete();
+        }else{selected.delete();selected=polished;}
       }
       if(post.shapeRegularization){
         const shape=regularizeBasicShape(cv,roi,selected,{quadrilateral:true,ellipse:true,polygon:true,useChroma});
