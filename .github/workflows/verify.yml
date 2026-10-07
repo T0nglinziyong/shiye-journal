@@ -29,3 +29,19 @@ jobs:
       - run: npm ci
       - name: Unit tests and built UI smoke
         run: npm test && npm run test:ui
+      - name: Package local box acceptance harness
+        if: github.event_name == 'pull_request'
+        run: |
+          mkdir -p /tmp/shiye-box-harness/scripts
+          cp -R src /tmp/shiye-box-harness/
+          cp scripts/box-real-case-runner.mjs /tmp/shiye-box-harness/scripts/
+          cp package.json package-lock.json /tmp/shiye-box-harness/
+          mkdir -p /tmp/shiye-box-harness/node_modules/@techstark
+          cp -R node_modules/@techstark/opencv-js /tmp/shiye-box-harness/node_modules/@techstark/
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: github.event_name == 'pull_request'
+        with:
+          name: box-discovery-harness
+          path: /tmp/shiye-box-harness/
+          retention-days: 1
+          compression-level: 6
