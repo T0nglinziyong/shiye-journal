@@ -238,22 +238,40 @@ function chooseOuter(cv,src,q,pxPerMM,w,h,useChroma=true){
   return {contour:contourFromPoints(cv,chosen.points),owned:true};
 }
 
-function smoothFreeform(cv,contour,w,h,pxPerMM,{ellipse=true,curveSmooth=true}={}){
-  // Curve model selection, not an object-class decision. A smooth convex
-  // contour may be represented by one conic curve when that curve explains
-  // the observed boundary well; otherwise preserve its arbitrary concavity.
-  const hull=new cv.Mat();cv.convexHull(contour,hull,false,true);const area=Math.max(1,cv.contourArea(contour)),solidity=area/Math.max(1,cv.contourArea(hull));
+function smoothFreeform(cv,contour,w,h,pxPerMM,{ellipse=true,polygon=true,curveSmooth=true}={}){
+  // Global simple-shape models compete on the same observed contour. They do
+  // not run serially; curve smoothing is only the fallback when no simple
+  // model explains the carrier well enough.
+  const hull=new cv.Mat();cv.convexHull(contour,hull,false,true);const area=Math.max(1,cv.contourArea(contour)),solidity=area/Math.max(1,cv.contourArea(hull));hull.delete();
+  const sourceMask=cv.Mat.zeros(h,w,cv.CV_8UC1),sv=new cv.MatVector();sv.push_back(contour);cv.drawContours(sourceMask,sv,-1,new cv.Scalar(255),cv.FILLED);sv.delete();
+  const candidates=[];
+  const agreement=candidate=>{
+    const inter=new cv.Mat(),union=new cv.Mat();cv.bitwise_and(sourceMask,candidate,inter);cv.bitwise_or(sourceMask,candidate,union);
+    const fit=cv.countNonZero(inter)/Math.max(1,cv.countNonZero(union));inter.delete();union.delete();return fit;
+  };
   if(ellipse&&solidity>.93&&contour.rows>=5){
-    const ellipse=cv.fitEllipse(contour),pts=[],angle=ellipse.angle*Math.PI/180,ca=Math.cos(angle),sa=Math.sin(angle),rx=ellipse.size.width/2,ry=ellipse.size.height/2;
-    for(let i=0;i<96;i++){const t=i*Math.PI*2/96,ux=rx*Math.cos(t),uy=ry*Math.sin(t);pts.push(Math.round(ellipse.center.x+ux*ca-uy*sa),Math.round(ellipse.center.y+ux*sa+uy*ca));}
-    const eContour=cv.matFromArray(96,1,cv.CV_32SC2,pts),em=cv.Mat.zeros(h,w,cv.CV_8UC1),cm=cv.Mat.zeros(h,w,cv.CV_8UC1),vv=new cv.MatVector(),ev=new cv.MatVector();
-    vv.push_back(contour);ev.push_back(eContour);cv.drawContours(cm,vv,-1,new cv.Scalar(255),cv.FILLED);cv.drawContours(em,ev,-1,new cv.Scalar(255),cv.FILLED);
-    const inter=new cv.Mat(),union=new cv.Mat();cv.bitwise_and(cm,em,inter);cv.bitwise_or(cm,em,union);const fit=cv.countNonZero(inter)/Math.max(1,cv.countNonZero(union));
-    inter.delete();union.delete();cm.delete();em.delete();vv.delete();ev.delete();
-    if(fit>.84){hull.delete();return eContour;}
-    eContour.delete();
+    const e=cv.fitEllipse(contour),pts=[],angle=e.angle*Math.PI/180,ca=Math.cos(angle),sa=Math.sin(angle),rx=e.size.width/2,ry=e.size.height/2;
+    if(rx>=2&&ry>=2){
+      for(let i=0;i<96;i++){const t=i*Math.PI*2/96,ux=rx*Math.cos(t),uy=ry*Math.sin(t);pts.push(Math.round(e.center.x+ux*ca-uy*sa),Math.round(e.center.y+ux*sa+uy*ca));}
+      const ec=cv.matFromArray(96,1,cv.CV_32SC2,pts),em=cv.Mat.zeros(h,w,cv.CV_8UC1),ev=new cv.MatVector();ev.push_back(ec);cv.drawContours(em,ev,-1,new cv.Scalar(255),cv.FILLED);
+      const fit=agreement(em);if(fit>.87)candidates.push({kind:'ellipse',fit,contour:ec});else ec.delete();em.delete();ev.delete();
+      if(candidates.at(-1)?.contour===ec){em.delete();ev.delete();}
+    }
   }
-  hull.delete();
+  if(polygon&&solidity>.93){
+    const per=cv.arcLength(contour,true);
+    for(const frac of [.008,.012,.016,.022,.030]){
+      const poly=new cv.Mat();cv.approxPolyDP(contour,poly,Math.max(.8,per*frac),true);const n=poly.rows;
+      if(n<3||n>8||n===4||!cv.isContourConvex(poly)){poly.delete();continue;}
+      const pm=cv.Mat.zeros(h,w,cv.CV_8UC1),pv=new cv.MatVector();pv.push_back(poly);cv.drawContours(pm,pv,-1,new cv.Scalar(255),cv.FILLED);
+      const fit=agreement(pm);pm.delete();pv.delete();
+      if(fit>.87)candidates.push({kind:'polygon-'+n,fit:fit-.003*(n-3),contour:poly});else poly.delete();
+    }
+  }
+  sourceMask.delete();
+  if(candidates.length){
+    candidates.sort((a,b)=>b.fit-a.fit);const best=candidates.shift();for(const q of candidates)q.contour.delete();return best.contour;
+  }
   if(!curveSmooth)return contour.clone();
   const mask=cv.Mat.zeros(h,w,cv.CV_8UC1),v=new cv.MatVector();v.push_back(contour);cv.drawContours(mask,v,-1,new cv.Scalar(255),cv.FILLED);
   const k=Math.max(3,(Math.round(pxPerMM*.40)|1)),kernel=cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(k,k)),smooth=new cv.Mat(),cs=new cv.MatVector(),hh=new cv.Mat();cv.morphologyEx(mask,smooth,cv.MORPH_CLOSE,kernel);cv.morphologyEx(smooth,smooth,cv.MORPH_OPEN,kernel);cv.findContours(smooth,cs,hh,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_NONE);
@@ -376,7 +394,7 @@ function groupCircles(strict,weak,pxPerMM,mask,supportEdges,w,h){
 export function recognizeMaterialsFast(cv,p,own){
   if(p.rectified!==true)throw Error('materials-fast requires rectified A4 input');
   const w=p.width,h=p.height,paperWidthMM=p.paperWidthMM||210,paperHeightMM=p.paperHeightMM||297,smallestMM=p.smallestMM||6,pxPerMM=Math.max(.5,((w/paperWidthMM)+(h/paperHeightMM))/2),
-    post={straightEdges:p.postprocess?.straightEdges!==false,curveSmooth:p.postprocess?.curveSmooth!==false,ellipse:p.postprocess?.ellipse!==false,apertures:p.postprocess?.apertures!==false},
+    post={straightEdges:p.postprocess?.straightEdges!==false,curveSmooth:p.postprocess?.curveSmooth!==false,ellipse:p.postprocess?.ellipse!==false,polygon:p.postprocess?.polygon!==false,apertures:p.postprocess?.apertures!==false},
     useChroma=p.chromaEdges!==false;
   const src=own(cv.matFromArray(h,w,cv.CV_8UC4,p.pixels)),page=own(cv.matFromArray(h,w,cv.CV_8UC1,Uint8Array.from(p.backgroundConnected||new Uint8Array(w*h),x=>x?255:0)));
   const {gray,edges,lab}=edgeImage(cv,src,useChroma);own(gray);own(edges);own(lab);
