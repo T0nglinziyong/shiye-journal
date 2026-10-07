@@ -91,11 +91,18 @@ export function completePhysicalBoundaries(cv,p,own){
       // recognition pass; keep the physical carrier and simply carve no holes.
       aperture={count:0,regions:[]};
     }
-    const finalContours=take(new cv.MatVector()),finalHierarchy=take(new cv.Mat());cv.findContours(refined,finalContours,finalHierarchy,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_SIMPLE);
-    let largestFinal=null,largestFinalArea=0;for(let i=0;i<finalContours.size();i++){const q=take(finalContours.get(i)),a=cv.contourArea(q);if(a>largestFinalArea){largestFinalArea=a;largestFinal=q;}}
-    if(!largestFinal){continue;}
-    const bounds=cv.boundingRect(largestFinal),local=take(refined.roi(new cv.Rect(bounds.x,bounds.y,bounds.width,bounds.height))),packed=take(new cv.Mat());local.copyTo(packed);
-    const polygon=(prior.polygon||Array.from({length:largestFinal.rows},(_,i)=>[largestFinal.data32S[i*2],largestFinal.data32S[i*2+1]])).map(([px,py])=>[px-bounds.x,py-bounds.y]);
+    // Final pixel alpha is authoritative. Avoid one more findContours pass
+    // here: on large perforated real-photo masks OpenCV.js can throw even
+    // though GrabCut/aperture refinement already completed successfully.
+    let minX=rw,minY=rh,maxX=-1,maxY=-1;
+    for(let py=0;py<rh;py++)for(let px=0;px<rw;px++)if(refined.data[py*rw+px]){
+      minX=Math.min(minX,px);maxX=Math.max(maxX,px);minY=Math.min(minY,py);maxY=Math.max(maxY,py);
+    }
+    if(maxX<minX||maxY<minY)continue;
+    const bounds={x:minX,y:minY,width:maxX-minX+1,height:maxY-minY+1},
+      local=take(refined.roi(new cv.Rect(bounds.x,bounds.y,bounds.width,bounds.height))),packed=take(new cv.Mat());local.copyTo(packed);
+    const polygon=(prior.polygon||[[bounds.x,bounds.y],[bounds.x+bounds.width-1,bounds.y],[bounds.x+bounds.width-1,bounds.y+bounds.height-1],[bounds.x,bounds.y+bounds.height-1]])
+      .map(([px,py])=>[px-bounds.x,py-bounds.y]);
     result.push({...candidate,x:(rx+bounds.x)/w,y:(ry+bounds.y)/h,w:bounds.width/w,h:bounds.height/h,pixels:cv.countNonZero(local),
       boundaryModel:prior.boundaryModel,boundaryLineCount:prior.lineCount||0,boundaryCurveCount:prior.curveCount||0,boundaryCornerCount:prior.cornerCount||0,apertureCount:aperture.count,
       mask:{...m,width:bounds.width,height:bounds.height,alpha:new Uint8Array(packed.data),polygons:[polygon],topologyPreserved:true,boundaryPrimitives:prior.primitives,apertureRegions:aperture.regions}});
