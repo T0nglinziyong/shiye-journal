@@ -31,8 +31,9 @@ test('box-driven MorphGAC shrinks from a safety box to a pale outer carrier',asy
   const cv=await cvModule,width=220,height=300,pixels=new Uint8ClampedArray(width*height*4),
     cx=110,cy=150,rx=55,ry=92;
   for(let y=0;y<height;y++)for(let x=0;x<width;x++){
-    const ellipse=((x-cx)/rx)**2+((y-cy)/ry)**2<=1,p=(y*width+x)*4,
-      color=ellipse?[224,224,218]:[246,246,246];
+    const q=((x-cx)/rx)**2+((y-cy)/ry)**2,
+      ellipse=q<=1,border=ellipse&&q>=.94,p=(y*width+x)*4,
+      color=border?[145,145,142]:ellipse?[224,224,218]:[246,246,246];
     pixels.set([...color,255],p);
   }
   const box={x:50/width,y:52/height,w:120/width,h:196/height,boxAdjustment:'pale-carrier-margin',touchesProtectedFrame:false};
