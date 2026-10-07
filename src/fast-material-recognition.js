@@ -444,7 +444,7 @@ export function recognizeMaterialsFast(cv,p,own){
       // A4 paper, so its paper-contact is low. Only that class of edge
       // candidate pays for the expensive carrier-expansion pass. A complete
       // physical oval/card already touches paper and skips directly to geometry.
-      const seedOnly=q.paperContact<.26,shouldExpandWhite=q.paperContact<.52&&q.rectFill<.90;
+      const seedOnly=q.paperContact<.26&&q.rectFill>.78,shouldExpandWhite=q.paperContact<.52&&q.rectFill<.90;
       const outsideIn=shouldExpandWhite?recoverCarrierOutsideIn(cv,{contour:q.contour,edges,w,h,pxPerMM}):{recovered:false};
       if(outsideIn.recovered){
         carrierDiagnostics={edgeSupport:outsideIn.edgeSupport,areaRatio:outsideIn.areaRatio,seedCoverage:outsideIn.seedCoverage,source:'outside-in'};
