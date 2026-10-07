@@ -1,0 +1,38 @@
+name: Instance-first recognition experiment
+
+on:
+  push:
+    branches: [experiment/instance-first-recognition-20261007]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: instance-first-recognition-experiment
+  cancel-in-progress: true
+
+jobs:
+  harness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Package local-only recognition harness
+        run: |
+          mkdir -p /tmp/instance-first-harness
+          cp -R src scripts package.json package-lock.json /tmp/instance-first-harness/
+          cp -R node_modules /tmp/instance-first-harness/
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: instance-first-local-harness
+          path: /tmp/instance-first-harness/
+          retention-days: 1
+          compression-level: 6
