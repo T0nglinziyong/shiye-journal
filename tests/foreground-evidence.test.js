@@ -79,3 +79,17 @@ test('protected A4 border band remains background even with a dark corner and wa
   assert.ok(border/total<.02,'guaranteed border band must never become a material');
   assert.ok(material/materialN>.9,'interior material must remain foreground');
 });
+
+
+test('chroma evidence switch removes pure-colour foreground support when disabled',()=>{
+  const w=144,h=96,data=rgba(w,h,(x,y)=>{
+    if(x>=52&&x<92&&y>=28&&y<68)return [165,210,245];
+    return [224,224,224];
+  });
+  const on=buildForegroundEvidence(data,w,h,{cellSize:48,useChroma:true});
+  const off=buildForegroundEvidence(data,w,h,{cellSize:48,useChroma:false});
+  let onEvidence=0,offEvidence=0,n=0;
+  for(let y=34;y<62;y++)for(let x=58;x<86;x++){const i=y*w+x;onEvidence+=on.evidence[i];offEvidence+=off.evidence[i];n++;}
+  assert.ok(onEvidence>offEvidence+n*.35,'enabling chroma should add substantial colour-only foreground evidence');
+  assert.ok(offEvidence/n<.15,'the same colour-only cue should mostly disappear when chroma is disabled');
+});

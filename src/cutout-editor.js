@@ -39,8 +39,8 @@ export async function showCutoutEditor({
     pixelList=recognitionUI.pixels||[[900,'900 px'],[1200,'1200 px'],[1600,'1600 px']],
     savedRecognition=processing.rerecognition||{},
     savedPost=processing.autoPostprocess||savedRecognition.postprocess||{},
-    defaultPre={illumination:true,denoise:true,localContrast:true,chromaEdges:true,...recognitionUI.preprocess,...savedRecognition.preprocess},
-    defaultPost={edgePolish:true,shapeRegularization:true,curveSmooth:true,apertures:true,...recognitionUI.postprocess,...savedPost};
+    defaultPre={illumination:false,denoise:false,localContrast:false,chromaEdges:true,...recognitionUI.preprocess,...savedRecognition.preprocess},
+    defaultPost={shapeRegularization:true,apertures:true,...recognitionUI.postprocess,...savedPost};
 
   let mask=copyMask(initialMask),
     roughStageMask=copyMask(initialMask),
@@ -54,11 +54,11 @@ export async function showCutoutEditor({
     comparison=null,stroke=null,lastStroke=null,busy=false,manualTouched=false,
     recognitionState={
       method:savedRecognition.method||recognitionUI.method||methodList[0]?.id||'auto',
-      pixels:Number(savedRecognition.pixels||recognitionUI.pixelsValue||1200),
+      pixels:Number(savedRecognition.pixels||recognitionUI.pixelsValue||900),
       preprocess:{...defaultPre}
     },
     postState={...defaultPost},
-    lastRecognition=savedRecognition.method?{method:savedRecognition.method,pixels:Number(savedRecognition.pixels||1200),preprocess:{...defaultPre}}:null,
+    lastRecognition=savedRecognition.method?{method:savedRecognition.method,pixels:Number(savedRecognition.pixels||900),preprocess:{...defaultPre}}:null,
     lastPostprocess=processing.autoPostprocess?{...processing.autoPostprocess}:null;
 
   const history=[],initialAppearance=appearance,initialIntensity=intensity,initialAutoStraighten=autoStraighten;
@@ -129,8 +129,11 @@ export async function showCutoutEditor({
   const switchRow=(id,label,checked,help)=>'<label class="toggle-row setting-toggle"><span><b>'+label+'</b><small class="setting-help">'+help+'</small></span><input id="'+id+'" type="checkbox" '+(checked?'checked':'')+'></label>';
   const methodDescription=id=>methodList.find(item=>item.id===id)?.description||'使用当前候选作为初始边界，在本机重新计算透明 mask。';
 
+  const framePhysicalWidthMM=processing.sourceWidthMM&&placement.width?processing.sourceWidthMM*frame.width/placement.width:null,
+    framePhysicalHeightMM=processing.sourceHeightMM&&placement.height?processing.sourceHeightMM*frame.height/placement.height:null;
   const requestBase=currentMask=>({
-    mask:new Uint8Array(currentMask),placement:{...placement},frameWidth:frame.width,frameHeight:frame.height,targetWidth:w,targetHeight:h
+    mask:new Uint8Array(currentMask),placement:{...placement},frameWidth:frame.width,frameHeight:frame.height,targetWidth:w,targetHeight:h,
+    paperWidthMM:framePhysicalWidthMM,paperHeightMM:framePhysicalHeightMM
   });
 
   const readRecognition=el=>{
@@ -148,9 +151,7 @@ export async function showCutoutEditor({
   const readPost=el=>{
     const checked=id=>el.querySelector('#'+id)?.checked!==false;
     postState={
-      edgePolish:checked('cutout-post-edge'),
       shapeRegularization:checked('cutout-post-shapes'),
-      curveSmooth:checked('cutout-post-curves'),
       apertures:checked('cutout-post-apertures')
     };
   };
@@ -204,7 +205,7 @@ export async function showCutoutEditor({
         +switchRow('cutout-pre-contrast','局部对比增强',recognitionState.preprocess.localContrast,'轻量增强浅色边缘，不修改最终保存颜色。')
         +switchRow('cutout-pre-chroma','Lab 色差边缘增强',recognitionState.preprocess.chromaEdges,'对绿白、浅色载体更有帮助，只作为边缘证据。')
         +'<button type="button" class="btn primary" id="cutout-rerecognize" '+(!onRerecognize?'disabled':'')+'>用当前 rough mask 重新识别</button>'
-        +'<small class="setting-help">此按钮只运行主识别算法，不做规则图形、曲线平滑和孔洞后处理。</small></div>';
+        +'<small class="setting-help">此按钮只运行主分割算法；形状规整和打孔恢复在下一步单独执行。</small></div>';
       const action=bindMaskTools(el);
       action('cutout-rough-enter',()=>{push();mask=copyMask(initialMask);roughStageMask=copyMask(mask);lastStroke=null;});
       action('cutout-rough-original',()=>{push();mask=copyMask(recognitionMask);roughStageMask=copyMask(mask);lastStroke=null;});
@@ -227,10 +228,8 @@ export async function showCutoutEditor({
       el.innerHTML='<div class="stack"><h3>2 · 修正识别结果</h3>'
         +maskToolsHTML('先手动修正主算法输出，再把当前 mask 送入后处理；后处理不会回到修正前的版本。','<button type="button" id="cutout-recognition-base">恢复刚识别结果</button>')
         +'<h3>自动后处理</h3>'
-        +switchRow('cutout-post-edge','原分辨率边缘精修',postState.edgePolish,'用原分辨率 GrabCut 贴近真实物理边缘。')
-        +switchRow('cutout-post-shapes','规则图形规整',postState.shapeRegularization,'四边形、圆/椭圆和多边形并行拟合，最多只采用一个可信模型。')
-        +switchRow('cutout-post-curves','曲线平滑',postState.curveSmooth,'没有规则图形明显胜出时抑制像素锯齿。')
-        +switchRow('cutout-post-apertures','真实孔洞识别',postState.apertures,'保守恢复物理孔洞；宁可漏孔也避免误挖图案。')
+        +switchRow('cutout-post-shapes','形状规整',postState.shapeRegularization,'只在真实边缘证据足够强时，把规则纸片收成更干净的直边、圆弧或多边形；自由异形保持原轮廓。')
+        +switchRow('cutout-post-apertures','重复打孔恢复',postState.apertures,'只恢复成排、等半径、近等间距且中心接近 A4 纸色的制造型孔；孤立白点不会挖空。')
         +'<button type="button" class="btn primary" id="cutout-postprocess" '+(!onPostprocess?'disabled':'')+'>对当前 mask 应用后处理</button></div>';
       const action=bindMaskTools(el);
       action('cutout-recognition-base',()=>{push();mask=copyMask(recognitionBaseMask);recognitionStageMask=copyMask(mask);lastStroke=null;});

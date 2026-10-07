@@ -4,17 +4,28 @@ on:
   push:
     branches: [recognition-official-engines]
   pull_request:
-    branches: [main]
+    branches: [main, test]
     paths:
       - 'src/browser-active-contours.js'
       - 'src/material-boundary-refiners.js'
-      - 'src/internal-paper-regions.js'
-      - 'src/fast-material-recognition.js'
+      - 'src/material-box-discovery.js'
+      - 'src/material-segmentation.js'
+      - 'src/repeated-apertures.js'
+      - 'src/paper-analysis.js'
+      - 'src/foreground-evidence.js'
+      - 'src/image.js'
+      - 'src/vision-runtime.js'
+      - 'src/preferences.js'
+      - 'src/cutout-editor.js'
+      - 'src/app.js'
       - 'src/opencv-worker.js'
       - 'src/opencv-worker-browser.js'
       - 'src/recognition-*.js'
       - 'src/slimsam-*.js'
       - 'tests/recognition-engine-browser.mjs'
+      - 'tests/recognition-browser.mjs'
+      - 'tests/cutout-inspection-browser.mjs'
+      - 'tests/import-browser-acceptance.mjs'
       - 'tests/browser-active-contours-parity.test.js'
       - '.github/workflows/recognition-browser.yml'
   workflow_dispatch:
@@ -65,3 +76,5 @@ jobs:
           curl -fsS http://127.0.0.1:5194/ >/dev/null
           node tests/recognition-engine-browser.mjs
           node tests/cutout-inspection-browser.mjs
+          node tests/recognition-browser.mjs
+          node tests/import-browser-acceptance.mjs

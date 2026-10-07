@@ -47,12 +47,12 @@ function localBackgrounds(pixels,w,h,cell,fallback){
 
 const luma=(pixels,i)=>pixels[i]*.2126+pixels[i+1]*.7152+pixels[i+2]*.0722;
 
-export function backgroundConnectedMask({labL,labA,labB,edge,evidence,shadowLikelihood,width:w,height:h,paperA,paperB,chromaThreshold=6,edgeThreshold=13,stepThreshold=7}){
+export function backgroundConnectedMask({labL,labA,labB,edge,evidence,shadowLikelihood,width:w,height:h,paperA,paperB,useChroma=true,chromaThreshold=6,edgeThreshold=13,stepThreshold=7}){
   const background=new Uint8Array(w*h),queue=new Int32Array(w*h);let head=0,tail=0;
   const passable=i=>{
     if(evidence[i])return false;
     const chroma=Math.hypot(labA[i]-paperA,labB[i]-paperB);
-    return !!shadowLikelihood[i]||chroma<=chromaThreshold&&edge[i]<=edgeThreshold;
+    return !!shadowLikelihood[i]||(!useChroma||chroma<=chromaThreshold)&&edge[i]<=edgeThreshold;
   };
   const push=i=>{if(!background[i]&&passable(i)){background[i]=1;queue[tail++]=i;}};
   // App invariant: materials are never placed flush against the rectified A4
@@ -79,7 +79,7 @@ export function backgroundConnectedMask({labL,labA,labB,edge,evidence,shadowLike
   return background;
 }
 
-export function buildForegroundEvidence(analysisPixels,w,h,{sourcePixels=analysisPixels,cellSize=64}={}){
+export function buildForegroundEvidence(analysisPixels,w,h,{sourcePixels=analysisPixels,cellSize=64,useChroma=true}={}){
   if(!analysisPixels||analysisPixels.length!==w*h*4||!sourcePixels||sourcePixels.length!==w*h*4)throw Error('前景分析像素尺寸不匹配');
   const fallback=globalNeutral(analysisPixels,w,h),rawFallback=globalNeutral(sourcePixels,w,h),rawFallbackLab=rgbToLab(...rawFallback);
   const local=localBackgrounds(analysisPixels,w,h,cellSize,fallback),rawLocal=localBackgrounds(sourcePixels,w,h,cellSize,rawFallback);
@@ -93,7 +93,7 @@ export function buildForegroundEvidence(analysisPixels,w,h,{sourcePixels=analysi
     const lab=rgbToLab(analysisPixels[p],analysisPixels[p+1],analysisPixels[p+2]),rawLab=rgbToLab(sourcePixels[p],sourcePixels[p+1],sourcePixels[p+2]);
     labL[i]=rawLab[0];labA[i]=rawLab[1];labB[i]=rawLab[2];
     const bg=labBackground[cell],rawBg=rawLabBackground[cell];
-    const dL=lab[0]-bg[0],dA=rawLab[1]-rawBg[1],dB=rawLab[2]-rawBg[2],chroma=Math.hypot(dA,dB),absL=Math.abs(dL);
+    const dL=lab[0]-bg[0],dA=rawLab[1]-rawBg[1],dB=rawLab[2]-rawBg[2],chroma=useChroma?Math.hypot(dA,dB):0,absL=Math.abs(dL);
     const xl=Math.max(0,x-1),xr=Math.min(w-1,x+1),yt=Math.max(0,y-1),yb=Math.min(h-1,y+1);
     const left=luma(sourcePixels,(y*w+xl)*4),right=luma(sourcePixels,(y*w+xr)*4),top=luma(sourcePixels,(yt*w+x)*4),bottom=luma(sourcePixels,(yb*w+x)*4),center=luma(sourcePixels,p);
     const edge=Math.hypot(right-left,bottom-top)*.5,texture=Math.abs(center-(left+right+top+bottom)/4);edgeField[i]=edge;
@@ -107,7 +107,7 @@ export function buildForegroundEvidence(analysisPixels,w,h,{sourcePixels=analysi
 
   const backgroundConnected=backgroundConnectedMask({
     labL,labA,labB,edge:edgeField,evidence,shadowLikelihood,width:w,height:h,
-    paperA:rawFallbackLab[1],paperB:rawFallbackLab[2]
+    paperA:rawFallbackLab[1],paperB:rawFallbackLab[2],useChroma
   });
   const mask=new Uint8Array(w*h),pxPerMM=Math.max(.5,((w/210)+(h/297))/2),safeBand=Math.max(2,Math.round(pxPerMM*3.0));
   for(let y=0;y<h;y++)for(let x=0;x<w;x++){

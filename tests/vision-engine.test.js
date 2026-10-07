@@ -260,6 +260,63 @@ test('fast shared-pass recognizer keeps a production-size four-material page wit
 });
 
 
+test('box discovery keeps independent full-page components as separate material boxes',async()=>{
+  const cv=await cvModule,width=420,height=594,mask=new Uint8Array(width*height),evidence=new Uint8Array(width*height),foregroundSeeds=new Uint8Array(width*height);
+  const boxes=[[45,60,90,110],[245,70,105,125],[55,325,110,120],[250,335,95,110]];
+  for(const [x0,y0,bw,bh] of boxes)for(let y=y0;y<y0+bh;y++)for(let x=x0;x<x0+bw;x++){const i=y*width+x;mask[i]=evidence[i]=foregroundSeeds[i]=1;}
+  const out=await processVision(cv,'boxes-simple',{mask,evidence,foregroundSeeds,width,height,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
+  assert.equal(out.length,4,JSON.stringify(out));
+  assert.ok(out.every(x=>x.instanceMethod==='connected-component-box'));
+});
+
+test('box discovery absorbs a small internal fragment without changing object count',async()=>{
+  const cv=await cvModule,width=300,height=420,mask=new Uint8Array(width*height),evidence=new Uint8Array(width*height),foregroundSeeds=new Uint8Array(width*height);
+  for(let y=80;y<280;y++)for(let x=55;x<75;x++){const i=y*width+x;mask[i]=evidence[i]=1;}
+  for(let y=80;y<280;y++)for(let x=205;x<225;x++){const i=y*width+x;mask[i]=evidence[i]=1;}
+  for(let y=245;y<280;y++)for(let x=55;x<225;x++){const i=y*width+x;mask[i]=evidence[i]=1;}
+  for(let y=135;y<165;y++)for(let x=125;x<150;x++){const i=y*width+x;mask[i]=evidence[i]=1;}
+  const out=await processVision(cv,'boxes-simple',{mask,evidence,foregroundSeeds,width,height,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
+  assert.equal(out.length,1,JSON.stringify(out));
+  assert.equal(out[0].absorbedFragments,1);
+});
+
+test('box discovery gives sparse-seed pale carriers a small physical safety margin',async()=>{
+  const cv=await cvModule,width=420,height=594,mask=new Uint8Array(width*height),evidence=new Uint8Array(width*height),foregroundSeeds=new Uint8Array(width*height);
+  // An elliptical/sparse visual body inside a pale carrier: fill stays below
+  // 0.8 and only a small portion is a strong seed.
+  const cx=210,cy=275,rx=68,ry=112;
+  for(let y=cy-ry;y<=cy+ry;y++)for(let x=cx-rx;x<=cx+rx;x++){
+    const u=(x-cx)/rx,v=(y-cy)/ry;if(u*u+v*v>1)continue;
+    const i=y*width+x;mask[i]=evidence[i]=1;
+    if(Math.abs(x-cx)<7&&Math.abs(y-cy)<25)foregroundSeeds[i]=1;
+  }
+  const out=await processVision(cv,'boxes-simple',{mask,evidence,foregroundSeeds,width,height,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
+  assert.equal(out.length,1);assert.equal(out[0].boxAdjustment,'pale-carrier-margin');
+  assert.ok(out[0].x<out[0].rawBox.x&&out[0].y<out[0].rawBox.y);
+  assert.ok(out[0].x+out[0].w>out[0].rawBox.x+out[0].rawBox.w);
+});
+
+test('box discovery trims broad page-edge residue from a dense frame-touching body',async()=>{
+  const cv=await cvModule,width=420,height=594,mask=new Uint8Array(width*height),evidence=new Uint8Array(width*height),foregroundSeeds=new Uint8Array(width*height);
+  // Main body x=80..300 is dense. A broad but vertically incomplete residue
+  // near the page edge is connected by a top bridge, enlarging the raw bbox.
+  for(let y=190;y<450;y++)for(let x=80;x<300;x++){const i=y*width+x;mask[i]=evidence[i]=foregroundSeeds[i]=1;}
+  for(let y=195;y<390;y++)for(let x=3;x<70;x++){const i=y*width+x;mask[i]=evidence[i]=1;}
+  for(let y=190;y<220;y++)for(let x=60;x<90;x++){const i=y*width+x;mask[i]=evidence[i]=1;}
+  const out=await processVision(cv,'boxes-simple',{mask,evidence,foregroundSeeds,width,height,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
+  assert.equal(out.length,1,JSON.stringify(out));assert.equal(out[0].boxAdjustment,'dense-frame-body');
+  assert.ok(out[0].x>.12,'dense body should reject the remote frame residue');
+  assert.ok(out[0].rawBox.x<.02,'raw bbox should demonstrate the frame residue existed');
+});
+
+test('dense frame adjustment preserves a real material that genuinely reaches the page side',async()=>{
+  const cv=await cvModule,width=420,height=594,mask=new Uint8Array(width*height),evidence=new Uint8Array(width*height),foregroundSeeds=new Uint8Array(width*height);
+  for(let y=130;y<390;y++)for(let x=0;x<150;x++){const i=y*width+x;mask[i]=evidence[i]=foregroundSeeds[i]=1;}
+  const out=await processVision(cv,'boxes-simple',{mask,evidence,foregroundSeeds,width,height,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
+  assert.equal(out.length,1);assert.equal(out[0].boxAdjustment,'dense-frame-body');
+  assert.equal(out[0].x,0,'a genuinely page-touching dense body must stay on the page edge');
+});
+
 test('fast recognizer rejects page-edge strips and preserves smooth/concave carriers',async()=>{
   const cv=await cvModule,width=620,height=860,pixels=new Uint8ClampedArray(width*height*4),backgroundConnected=new Uint8Array(width*height),evidence=new Uint8Array(width*height),shadowLikelihood=new Uint8Array(width*height),score=new Uint8Array(width*height);
   const ellipse={cx:430,cy:180,rx:64,ry:105},concave=[[355,470],[470,455],[500,520],[458,548],[488,630],[420,615],[380,680],[355,610],[305,625],[330,550],[292,515]];

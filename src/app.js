@@ -118,15 +118,13 @@ function mountPageSyncIndicator(){
   updateSyncIndicator();
 }
 const recognitionPreprocessOptions=()=>({
-  illumination:state.balanceLight!==false,
-  denoise:state.preferences.recognitionDenoise!==false,
-  localContrast:state.preferences.recognitionLocalContrast!==false,
+  illumination:state.balanceLight===true,
+  denoise:state.preferences.recognitionDenoise===true,
+  localContrast:state.preferences.recognitionLocalContrast===true,
   chromaEdges:state.preferences.recognitionChromaEdges!==false
 });
 const recognitionPostprocessOptions=()=>({
-  edgePolish:state.preferences.recognitionEdgePolish!==false,
   shapeRegularization:state.preferences.recognitionShapeRegularization!==false,
-  curveSmooth:state.preferences.recognitionCurveSmooth!==false,
   apertures:state.preferences.recognitionApertures!==false
 });
 const asset=id=>state.assets.find(x=>x.id===id)||state.trash.find(t=>t.kind==='asset'&&t.item.id===id)?.item;
@@ -136,7 +134,7 @@ let settingsSession=null;
 function captureSettings(){
   if(state.route!=='settings')return;
   if(view.querySelector('#setting-ai-provider'))state.aiSettings=readAIForm();
-  if(view.querySelector('#setting-paper-size'))state.preferences={...state.preferences,recognition:view.querySelector('#setting-recognition').value,recognitionPixels:Number(view.querySelector('#setting-recognition-pixels').value),balanceLight:view.querySelector('#setting-preprocess-light').checked,recognitionDenoise:view.querySelector('#setting-preprocess-denoise').checked,recognitionLocalContrast:view.querySelector('#setting-preprocess-contrast').checked,recognitionChromaEdges:view.querySelector('#setting-preprocess-chroma').checked,recognitionEdgePolish:view.querySelector('#setting-postprocess-edge').checked,recognitionShapeRegularization:view.querySelector('#setting-postprocess-shapes').checked,recognitionCurveSmooth:view.querySelector('#setting-postprocess-curves').checked,recognitionApertures:view.querySelector('#setting-postprocess-apertures').checked,paperSize:view.querySelector('#setting-paper-size').value,orientation:view.querySelector('#setting-orientation').value,wholePaper:view.querySelector('#setting-whole-paper').checked,autoOrganize:view.querySelector('#setting-auto-organize').checked};
+  if(view.querySelector('#setting-paper-size'))state.preferences={...state.preferences,recognition:view.querySelector('#setting-recognition').value,recognitionPixels:Number(view.querySelector('#setting-recognition-pixels').value),balanceLight:view.querySelector('#setting-preprocess-light').checked,recognitionDenoise:view.querySelector('#setting-preprocess-denoise').checked,recognitionLocalContrast:view.querySelector('#setting-preprocess-contrast').checked,recognitionChromaEdges:view.querySelector('#setting-preprocess-chroma').checked,recognitionShapeRegularization:view.querySelector('#setting-postprocess-shapes').checked,recognitionApertures:view.querySelector('#setting-postprocess-apertures').checked,paperSize:view.querySelector('#setting-paper-size').value,orientation:view.querySelector('#setting-orientation').value,wholePaper:view.querySelector('#setting-whole-paper').checked,autoOrganize:view.querySelector('#setting-auto-organize').checked};
   if(view.querySelector('#setting-display'))state.preferences={...state.preferences,display:view.querySelector('#setting-display').value,backdrop:view.querySelector('#setting-backdrop').value,maxPageItems:Number(view.querySelector('#setting-page-items').value)};
 }
 const routeScroll=new Map();
@@ -252,7 +250,7 @@ const settingToggle=(id,label,checked,help)=>`<label class="toggle-row setting-t
 function renderSettings(){const sections=[['AI 与创作','创作偏好与模型连接，分组查看','✣'],['导入与识别','照片校正、背景板、识别默认值与自动整理','□'],['界面与素材库','素材排列、卡片背景与显示方式','▦'],['数据与诊断','备份、最近删除、生成诊断与完整上下文','▱']];if(!state.settingsSection)return `<div class="settings-page"><div class="settings-toolbar"><button data-act="settings-back">返回</button><button data-act="settings-save">保存</button></div><h1>设置</h1><section class="settings-list">${sections.map(([name,description,icon])=>`<button data-act="settings-open" data-val="${name}"><span class="settings-icon">${icon}</span><span><strong>${name}</strong><small>${description}</small></span><b>›</b></button>`).join('')}</section><p class="settings-note">设置按使用场景归为四类。AI 设置保存在这台设备的当前浏览器中；作品和素材可在“数据与诊断”中导出备份。</p></div>`;
  const title=state.settingsSection;let content='';if(title==='AI 与创作'){const cfg=state.aiSettings,preset=AI_PROVIDERS[cfg.provider],known=preset.models.some(m=>m[0]===cfg.model);
   content=`<h2>服务与模型</h2><label>服务商<select id="setting-ai-provider">${Object.entries(AI_PROVIDERS).map(([id,x])=>`<option value="${id}" ${id===cfg.provider?'selected':''}>${x.label}</option>`).join('')}</select></label><label>API 地址<input id="setting-ai-endpoint" type="url" value="${esc(cfg.endpoint)}" placeholder="https://…/chat/completions"></label><label>模型<select id="setting-ai-model">${preset.models.map(([id,name])=>`<option value="${esc(id)}" ${cfg.model===id?'selected':''}>${esc(name)}</option>`).join('')}<option value="__custom__" ${known?'':'selected'}>自定义模型 ID</option></select></label><label id="setting-ai-custom-model-row" ${known?'hidden':''}>模型 ID<input id="setting-ai-custom-model" value="${known?'':esc(cfg.model)}"></label><label>API 密钥<input id="setting-ai-key" type="password" autocomplete="off" value="${esc(cfg.key)}" placeholder="API Key"></label><label class="toggle-row">发送全部素材预览 <input id="setting-ai-thumbnails" type="checkbox" ${cfg.includeThumbnails?'checked':''}></label><label class="toggle-row">交付前由 GPT 看图复核（计入总请求上限）<input id="setting-ai-visual-review" type="checkbox" ${cfg.finalVisualReview!==false?'checked':''}></label><label class="toggle-row">自定义模型支持图片 <input id="setting-ai-vision" type="checkbox" ${cfg.customVision?'checked':''}></label><p>当前模型${supportsVision(cfg)?'支持图片输入；开启预览时发送所有允许使用的素材图片':'不支持图片输入，仅发送素材文字信息'}。密钥仅保存在本浏览器，不进入备份。</p><h2>创作与响应</h2><label>创意程度 0–2<input id="setting-ai-temperature" type="number" step="0.05" min="0" max="2" value="${cfg.temperature}"></label><label>单轮最大输出 2000–16000<input id="setting-ai-tokens" type="number" min="2000" max="16000" value="${cfg.maxTokens}"></label><label>最多创作轮次（所有请求和重试计入上限）<input id="setting-ai-turns" type="number" min="1" max="20" value="${cfg.maxTurns}"></label><label>请求超时（秒）<input id="setting-ai-timeout" type="number" min="20" max="180" value="${cfg.requestTimeout}"></label><label>工具接口<select id="setting-ai-transport"><option value="auto" ${cfg.transport==='auto'?'selected':''}>自动适配</option><option value="native" ${cfg.transport==='native'?'selected':''}>原生工具调用</option><option value="json" ${cfg.transport==='json'?'selected':''}>兼容 JSON 工具指令</option></select></label><label>文字内容<select id="setting-ai-text"><option value="automatic" ${cfg.textMode==='automatic'?'selected':''}>图文手账 · 自动配文</option><option value="requested" ${cfg.textMode==='requested'?'selected':''}>仅明确要求时配文</option><option value="none" ${cfg.textMode==='none'?'selected':''}>不生成文字</option>${['minimal','rich'].includes(cfg.textMode)?`<option value="${cfg.textMode}" selected>旧版：${cfg.textMode==='minimal'?'简洁':'丰富'}</option>`:''}</select></label><label>代理思考策略<select id="setting-ai-reasoning"><option value="automatic" ${cfg.reasoningMode==='automatic'?'selected':''}>自动 · 优先执行</option><option value="low" ${cfg.reasoningMode==='low'?'selected':''}>轻量思考</option><option value="providerDefault" ${cfg.reasoningMode==='providerDefault'?'selected':''}>保持服务设置</option></select></label><label class="toggle-row">发送输出上限 <input id="setting-ai-send-limit" type="checkbox" ${cfg.sendOutputLimit?'checked':''}></label><label class="toggle-row">关闭服务商思考模式 <input id="setting-ai-disable-thinking" type="checkbox" ${cfg.disableThinking?'checked':''}></label><label>补充版式指导<textarea id="setting-ai-layout-prompt" placeholder="留空使用默认指导">${esc(cfg.customLayoutPrompt)}</textarea></label>`;}
- else if(title==='导入与识别')content=`<h2>照片校正</h2><p>传统浏览器四角检测与透视校正，不上传照片；当前未接入大模型矫正。</p><label>素材识别方法<select id="setting-recognition">${recognitionOptions.map(([id,name])=>`<option value="${id}" ${state.preferences.recognition===id?'selected':''}>${name}</option>`).join('')}</select><small class="setting-help">识别方法决定主要边界算法；下面的预处理、后处理和处理像素与方法相互独立。</small></label><div class="settings-method-notes">${recognitionMethodDetails.map(item=>`<div class="settings-method-note"><b>${item.label}</b><small>${item.description}</small></div>`).join('')}</div><label>处理像素（最长边）<select id="setting-recognition-pixels">${recognitionPixelOptions.map(([value,name])=>`<option value="${value}" ${state.preferences.recognitionPixels===value?'selected':''}>${name}</option>`).join('')}</select><small class="setting-help">900 px 更快；1200 px 默认；1600 px 保留更多细节但更慢。最终素材始终从原图提取。</small></label><h2>识别预处理</h2>${settingToggle('setting-preprocess-light','光照场校正',state.preferences.balanceLight!==false,'补偿渐变照明与阴影，使 A4 背景更均匀；极端彩色光下可能略削弱局部明暗差。')}${settingToggle('setting-preprocess-denoise','轻度去噪',state.preferences.recognitionDenoise!==false,'抑制相机噪点和 JPEG 纹理，减少边界锯齿；极小细节可能略变弱。')}${settingToggle('setting-preprocess-contrast','局部对比增强',state.preferences.recognitionLocalContrast!==false,'用轻量 CLAHE 帮助浅色载体显边；过强会放大棋盘和文字纹理，因此当前强度很低。')}${settingToggle('setting-preprocess-chroma','Lab 色差边缘增强',state.preferences.recognitionChromaEdges!==false,'用颜色差补充灰度边缘，对绿白、浅色纸尤其有帮助；内部彩色纹理也会增强，因此只作为边缘证据。')}<p class="settings-note">预处理只作用于识别分析图，不会改变最终保存素材的颜色和清晰度。</p><h2>识别后处理</h2>${settingToggle('setting-postprocess-edge','原分辨率边缘精修',state.preferences.recognitionEdgePolish!==false,'低分辨率算法先找整体，再用原分辨率 GrabCut 贴近真实边缘；通常更平滑，但会增加少量耗时。')}${settingToggle('setting-postprocess-shapes','规则图形规整',state.preferences.recognitionShapeRegularization!==false,'四边形、圆/椭圆和 3–8 边多边形并行拟合并统一仲裁；只有证据足够强时才替换自由边界，可恢复直边和清晰棱角。')}${settingToggle('setting-postprocess-curves','曲线平滑',state.preferences.recognitionCurveSmooth!==false,'规则图形没有明显胜出时，抑制像素锯齿并保留自由曲线；过度平滑可能损失很小的真实缺口。')}${settingToggle('setting-postprocess-apertures','真实孔洞识别',state.preferences.recognitionApertures!==false,'识别物理打孔或窗口并保持透明。采用保守策略：宁可漏孔，也尽量避免把文字、白格或印刷图案误挖空。')}<p class="settings-note">默认全部开启。开关只决定是否允许对应处理，不改变主识别流程的固定执行顺序。</p><label>默认纸张<select id="setting-paper-size">${paperSizeOptions(state.preferences.paperSize)}</select></label><label>校正方向<select id="setting-orientation"><option value="auto">自动</option><option value="portrait" ${state.preferences.orientation==='portrait'?'selected':''}>竖向</option><option value="landscape" ${state.preferences.orientation==='landscape'?'selected':''}>横向</option></select></label><label>未识别时作为背景板<input id="setting-whole-paper" type="checkbox" ${state.preferences.wholePaper?'checked':''}></label>`;
+ else if(title==='导入与识别')content=`<h2>照片校正</h2><p>传统浏览器四角检测与透视校正，不上传照片；当前未接入大模型矫正。</p><label>素材识别方法<select id="setting-recognition">${recognitionOptions.map(([id,name])=>`<option value="${id}" ${state.preferences.recognition===id?'selected':''}>${name}</option>`).join('')}</select><small class="setting-help">识别方法决定主要边界算法；下面的预处理、后处理和处理像素与方法相互独立。</small></label><div class="settings-method-notes">${recognitionMethodDetails.map(item=>`<div class="settings-method-note"><b>${item.label}</b><small>${item.description}</small></div>`).join('')}</div><label>处理像素（最长边）<select id="setting-recognition-pixels">${recognitionPixelOptions.map(([value,name])=>`<option value="${value}" ${state.preferences.recognitionPixels===value?'selected':''}>${name}</option>`).join('')}</select><small class="setting-help">900 px 是真实样例中速度与框位置最稳定的默认值；1200/1600 px 可用于特殊照片。最终素材始终从原图提取。</small></label><h2>识别预处理</h2>${settingToggle('setting-preprocess-light','光照场校正',state.preferences.balanceLight!==false,'只作用于候选框内的边界分割；整页自动框选始终使用原始校正图。')}${settingToggle('setting-preprocess-denoise','轻度去噪',state.preferences.recognitionDenoise!==false,'只作用于边界分割。默认关闭；真实样例中直接使用原图更稳定。')}${settingToggle('setting-preprocess-contrast','局部对比增强',state.preferences.recognitionLocalContrast!==false,'只作用于边界分割。默认关闭；需要增强浅色边缘时可手动开启。')}${settingToggle('setting-preprocess-chroma','Lab 色差边缘增强',state.preferences.recognitionChromaEdges!==false,'用颜色差补充灰度边缘，对绿白、浅色纸尤其有帮助；内部彩色纹理也会增强，因此只作为边缘证据。')}<p class="settings-note">预处理只作用于每件素材的边界分割，不改变整页自动框选，也不会改变最终保存素材的颜色和清晰度。</p><h2>识别后处理</h2>${settingToggle('setting-postprocess-shapes','规则图形规整',state.preferences.recognitionShapeRegularization!==false,'默认开启。只在边缘证据足够强时修正四边形、圆/椭圆或简单多边形；自由异形保持主分割轮廓。')}${settingToggle('setting-postprocess-apertures','真实孔洞识别',state.preferences.recognitionApertures!==false,'默认开启。只恢复成排、近等半径、近等间距且中心接近 A4 纸色的制造型孔；孤立白点不会挖空。')}<p class="settings-note">默认只开启形状规整与重复打孔恢复；固定顺序为主分割 → 形状规整 → 打孔恢复。</p><label>默认纸张<select id="setting-paper-size">${paperSizeOptions(state.preferences.paperSize)}</select></label><label>校正方向<select id="setting-orientation"><option value="auto">自动</option><option value="portrait" ${state.preferences.orientation==='portrait'?'selected':''}>竖向</option><option value="landscape" ${state.preferences.orientation==='landscape'?'selected':''}>横向</option></select></label><label>未识别时作为背景板<input id="setting-whole-paper" type="checkbox" ${state.preferences.wholePaper?'checked':''}></label>`;
  else if(title==='界面与素材库')content=`<h2>素材排列</h2><label>显示方式<select id="setting-display"><option value="grid">网格</option><option value="list" ${state.preferences.display==='list'?'selected':''}>列表</option></select></label><label>卡片背景<select id="setting-backdrop"><option value="auto">自动配色</option><option value="white" ${state.preferences.backdrop==='white'?'selected':''}>白色</option><option value="transparent" ${state.preferences.backdrop==='transparent'?'selected':''}>透明</option></select></label><label>每页最多展示<select id="setting-page-items"><option value="0">不限制（连续滚动）</option>${[20,40,80].map(n=>`<option value="${n}" ${state.preferences.maxPageItems===n?'selected':''}>每页 ${n} 项</option>`).join('')}</select></label><p>限制数量后每页仍可滚动；素材、系列和作品共用此设置。</p>`;
  else {const storage=db.storageConfig();content=`<h2>数据位置</h2><p id="storage-location">${storage?.url?`已配置服务器：${esc(storage.url)}`:'此网址当前使用浏览器本机存储；访问其他网址不会自动同步。'}</p><p>素材 ${state.assets.length} 件 · 作品 ${state.projects.length} 件 · 最近删除 ${state.trash.length} 项</p><label>4090 数据服务地址<input id="data-server-url" type="url" placeholder="https://你的数据域名" value="${esc(storage?.url||'')}"></label><label>访问令牌<input id="data-server-token" type="password" autocomplete="off" value="${esc(storage?.token||'')}"></label><div class="actions"><button class="btn primary" data-act="storage-connect">连接服务器</button><button class="btn" data-act="storage-browser">改用此浏览器资料</button></div><p>服务器地址需要公网 HTTPS，手机访问 localhost 指的是手机自身；同一台电脑运行的拾页服务可直接打开 http://127.0.0.1:4173。跨数据源转移资料请使用下方“导出完整备份 / 从备份恢复”，不在连接动作中隐式迁移。</p><h2>完整备份</h2><div class="actions"><button class="btn primary" data-act="backup">导出完整备份</button><button class="btn" data-act="restore">从备份恢复</button></div><h2>最近删除</h2>${state.trash.map(x=>`<div class="rec-card"><b>${esc(x.item.title)}</b><button class="btn mini" data-act="restore-trash" data-id="${x.id}">恢复</button></div>`).join('')||'<p>没有最近删除的项目。</p>'}<h2>离线状态</h2><p id="offline-state">检测中…</p>`;}
  if(title==='数据与诊断'&&state.selfHosted)content=`<h2>唯一数据源 · 4090 服务器</h2><p id="storage-location">${esc(location.origin)}</p><p>素材 ${state.assets.length} 件 · 作品 ${state.projects.length} 件 · 最近删除 ${state.trash.length} 项</p><p>此网址的素材、作品与图片都写入服务器。浏览器只保存访问令牌和 AI 设置；服务器无法连接时不会写入另一份资料。</p><label>更新访问令牌<input id="data-server-token" type="password" autocomplete="off" placeholder="保持不变则留空"></label><button class="btn" data-act="storage-token">验证并更新令牌</button><h2>完整备份</h2><div class="actions"><button class="btn primary" data-act="backup">导出完整备份</button><button class="btn" data-act="restore">从备份恢复</button></div><p>恢复会替换服务器当前全部数据；执行前请先导出一份当前完整备份。</p><h2>最近删除</h2>${state.trash.map(x=>`<div class="rec-card"><b>${esc(x.item.title)}</b><button class="btn mini" data-act="restore-trash" data-id="${x.id}">恢复</button></div>`).join('')||'<p>没有最近删除的项目。</p>'}`;
@@ -565,37 +563,49 @@ setInterval(()=>void purgeExpiredTrash(),15*60*1000);
 async function refineCandidateFrame(candidateFrame,request,{postprocessOnly=false}={}){
   const bitmap=await createImageBitmap(candidateFrame);
   try{
-    const fw=bitmap.width,fh=bitmap.height,canvas=document.createElement('canvas');canvas.width=fw;canvas.height=fh;
-    const ctx=canvas.getContext('2d',{willReadFrequently:true});ctx.drawImage(bitmap,0,0);const raw=ctx.getImageData(0,0,fw,fh),
+    const fw=bitmap.width,fh=bitmap.height,maxDim=Math.max(64,Number(request.pixels)||900),
+      ratio=Math.min(1,maxDim/Math.max(fw,fh)),aw=Math.max(1,Math.round(fw*ratio)),ah=Math.max(1,Math.round(fh*ratio)),
+      canvas=document.createElement('canvas');canvas.width=aw;canvas.height=ah;
+    const ctx=canvas.getContext('2d',{willReadFrequently:true});ctx.drawImage(bitmap,0,0,aw,ah);
+    const raw=ctx.getImageData(0,0,aw,ah),
       p=request.placement||{x:0,y:0,width:fw,height:fh},
-      candidate={
-        x:p.x/fw,y:p.y/fh,w:p.width/fw,h:p.height/fh,
-        recognitionConfidence:0,
-        mask:{width:request.targetWidth,height:request.targetHeight,alpha:new Uint8Array(request.mask),topologyPreserved:true}
-      };
+      roughMask=new Uint8Array(request.mask),tw=Math.max(1,request.targetWidth),th=Math.max(1,request.targetHeight);
+    let ml=tw,mt=th,mr=0,mb=0;
+    for(let y=0;y<th;y++)for(let x=0;x<tw;x++)if(roughMask[y*tw+x]>0){ml=Math.min(ml,x);mt=Math.min(mt,y);mr=Math.max(mr,x+1);mb=Math.max(mb,y+1);}
+    if(mr<=ml||mb<=mt){ml=0;mt=0;mr=tw;mb=th;}
+    const bx=p.x+p.width*ml/tw,by=p.y+p.height*mt/th,bw=p.width*(mr-ml)/tw,bh=p.height*(mb-mt)/th,
+      candidate={x:bx/fw,y:by/fh,w:bw/fw,h:bh/fh,fillRatio:.5,seedDensity:.5,recognitionConfidence:0,
+        mask:{width:tw,height:th,alpha:roughMask,topologyPreserved:true}},
+      paperWidthMM=request.paperWidthMM||210,paperHeightMM=request.paperHeightMM||297;
     let region;
     if(postprocessOnly){
-      const refined=await visionTask('material-boundary-refine',{
-        pixels:raw.data,width:fw,height:fh,candidates:[candidate],mode:'postprocess',
-        postprocess:request.postprocess||{},chromaEdges:request.preprocess?.chromaEdges!==false
-      });
-      region=refined?.[0];
+      let current=candidate;
+      if(request.postprocess?.shapeRegularization!==false){
+        const shaped=await visionTask('material-boundary-refine',{pixels:raw.data,width:aw,height:ah,candidates:[current],mode:'postprocess',
+          postprocess:{edgePolish:false,shapeRegularization:true,curveSmooth:false,apertures:false},
+          chromaEdges:request.preprocess?.chromaEdges!==false});
+        current=shaped?.[0]||current;
+      }
+      if(request.postprocess?.apertures!==false){
+        const holed=await visionTask('restore-repeated-apertures',{pixels:raw.data,width:aw,height:ah,candidates:[current],paperWidthMM,paperHeightMM});
+        current=holed?.[0]||current;
+      }
+      region=current;
     }else{
-      const pre=request.preprocess||{},needs=pre.illumination!==false||pre.denoise!==false||pre.localContrast!==false,
-        processed=needs?await visionTask('balance',{pixels:raw.data,width:fw,height:fh,options:pre}):null,
+      const pre=request.preprocess||{},
+        needs=pre.illumination===true||pre.denoise===true||pre.localContrast===true,
+        processed=needs?await visionTask('balance',{pixels:raw.data,width:aw,height:ah,options:pre}):null,
         frame=processed?{data:processed.pixels}:raw,
         profile=recognitionProfile(request.method,request.pixels),
-        noPost={edgePolish:false,shapeRegularization:false,curveSmooth:false,apertures:false};
-      if(typeof profile.refineCandidates!=='function')throw Error('此方法需要整张 A4 页面，只能在首次导入时使用');
-      const refined=await profile.refineCandidates({
-        candidates:[candidate],frame,width:fw,height:fh,preprocess:pre,postprocess:noPost,onProgress:()=>{}
-      });
+        noPost={shapeRegularization:false,apertures:false},
+        refined=await profile.refineCandidates({candidates:[candidate],frame,sourceFrame:raw,width:aw,height:ah,paperWidthMM,paperHeightMM,preprocess:pre,postprocess:noPost,onProgress:()=>{}});
       region=refined?.[0];
     }
     if(!region?.mask?.alpha?.length)throw Error(postprocessOnly?'自动修整没有返回可用边界':'没有得到可靠的新边界');
 
-    const full=document.createElement('canvas');full.width=fw;full.height=fh;const fx=full.getContext('2d');
-    const mc=document.createElement('canvas');mc.width=region.mask.width;mc.height=region.mask.height;const mx=mc.getContext('2d'),mi=mx.createImageData(mc.width,mc.height);
+    const full=document.createElement('canvas');full.width=fw;full.height=fh;const fx=full.getContext('2d'),
+      mc=document.createElement('canvas');mc.width=region.mask.width;mc.height=region.mask.height;
+    const mx=mc.getContext('2d'),mi=mx.createImageData(mc.width,mc.height);
     for(let i=0;i<region.mask.alpha.length;i++){mi.data[i*4]=mi.data[i*4+1]=mi.data[i*4+2]=255;mi.data[i*4+3]=region.mask.alpha[i];}
     mx.putImageData(mi,0,0);
     const rx=Math.round(region.x*fw),ry=Math.round(region.y*fh),rw=Math.max(1,Math.round(region.w*fw)),rh=Math.max(1,Math.round(region.h*fh));
@@ -604,7 +614,7 @@ async function refineCandidateFrame(candidateFrame,request,{postprocessOnly=fals
     const lx=local.getContext('2d',{willReadFrequently:true});lx.drawImage(full,p.x,p.y,p.width,p.height,0,0,local.width,local.height);
     const alpha=lx.getImageData(0,0,local.width,local.height).data,out=new Uint8Array(local.width*local.height);
     for(let i=0;i<out.length;i++)out[i]=alpha[i*4+3];
-    return {mask:out,method:postprocessOnly?'postprocess-only':request.method,shapeModel:region.shapeModel||null,edgeMethod:region.edgeMethod||null};
+    return {mask:out,method:postprocessOnly?'postprocess-only':request.method,shapeModel:region.shapeModel||null,edgeMethod:region.edgeMethod||null,apertureCount:region.apertureCount||0};
   }finally{bitmap.close();}
 }
 
@@ -617,7 +627,7 @@ async function openCutoutCheck(id,candidate=null){
   original||=saved;recognition||=saved;candidateFrame||=original;if(!(original instanceof Blob)||!(saved instanceof Blob))throw Error('候选框图像不可读取');
   if(modal.open)modal.close();
   const processing=candidate?.processingRecord||a.processingRecord||{},baseWidth=processing.sourceWidthMM||candidate?.width||a.physicalWidthMM,baseHeight=processing.sourceHeightMM||candidate?.height||a.physicalHeightMM,
-    localMethods=recognitionMethodDetails.filter(item=>item.id!=='traditional'),
+    localMethods=recognitionMethodDetails,
     preferredMethod=localMethods.some(item=>item.id===(processing.rerecognition?.method||state.preferences.recognition))?(processing.rerecognition?.method||state.preferences.recognition):'auto';
   await showCutoutEditor({
     body,modal,original,saved,recognition,candidateFrame,title:a.title,processing,toast,
