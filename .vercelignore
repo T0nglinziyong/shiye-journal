@@ -5,6 +5,7 @@
 !package-lock.json
 !index.html
 !vercel.json
+!vite.config.js
 !src
 !src/**
 !api
