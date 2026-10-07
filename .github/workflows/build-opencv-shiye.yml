@@ -64,7 +64,6 @@ jobs:
           source .opencv-build/emsdk/emsdk_env.sh
           emcmake python3 .opencv-build/opencv/platforms/js/build_js.py .opencv-build/out \
             --build_wasm \
-            --disable_single_file \
             --simd \
             --config="$GITHUB_WORKSPACE/scripts/opencv-shiye.config.py" \
             --cmake_option="-DCMAKE_CXX_STANDARD=17" \
@@ -85,13 +84,11 @@ jobs:
 
           mkdir -p public/vendor
           cp .opencv-build/out/bin/opencv.js public/vendor/opencv-shiye.js
-          WASM="$(find .opencv-build/out/bin -maxdepth 1 -name '*.wasm' -print -quit)"
-          test -n "$WASM"
-          cp "$WASM" public/vendor/opencv-shiye.wasm
-
           echo "Minimal OpenCV output:"
-          ls -lh public/vendor/opencv-shiye.*
-          sha256sum public/vendor/opencv-shiye.*
+          ls -lh public/vendor/opencv-shiye.js
+          gzip -9 -c public/vendor/opencv-shiye.js > /tmp/opencv-shiye.js.gz
+          echo "gzip: $(du -h /tmp/opencv-shiye.js.gz | cut -f1)"
+          sha256sum public/vendor/opencv-shiye.js
 
       - name: Commit generated runtime to branch
         shell: bash
@@ -99,7 +96,7 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add public/vendor/opencv-shiye.js public/vendor/opencv-shiye.wasm
+          git add public/vendor/opencv-shiye.js
           if git diff --cached --quiet; then
             echo "Minimal runtime unchanged"
             exit 0
@@ -113,5 +110,4 @@ jobs:
           name: shiye-opencv-minimal
           path: |
             public/vendor/opencv-shiye.js
-            public/vendor/opencv-shiye.wasm
           if-no-files-found: error
