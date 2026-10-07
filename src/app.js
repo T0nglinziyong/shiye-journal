@@ -692,9 +692,9 @@ async function refreshImportCandidates(regions,{manual=false}={}){
     const cut=await cropBitmap(source,b,region),raw=region.mask?await cropBitmap(source,b,region,{raw:true}):cut;
     // Work layers stay in photographed coordinates; library materials get a
     // conservative rectangular correction. Originals use the same raster map.
-    const aligned=state.importMode==='work'?{blob:cut,originalBlob:raw,degrees:0,widthRatio:1,heightRatio:1}:await alignMaterialPreview(cut,raw,region.rotation?-region.rotation:null);
+    const aligned=state.importMode==='work'?{blob:cut,originalBlob:raw,candidateFrameBlob:raw,candidateFramePlacement:null,degrees:0,widthRatio:1,heightRatio:1}:await alignMaterialPreview(cut,raw,region.rotation?-region.rotation:null);
     const width=calibrated?Math.round(region.w*pw*aligned.widthRatio*10)/10:null,height=calibrated?Math.round(region.h*ph*aligned.heightRatio*10)/10:null;
-    next.push({blob:aligned.blob,originalBlob:aligned.originalBlob,url:URL.createObjectURL(aligned.blob),title:'素材 '+(i+1),width,height,alignment:aligned.degrees,widthRatio:aligned.widthRatio,heightRatio:aligned.heightRatio,processingRecord:{automaticCorrectionDegrees:aligned.degrees,sourceWidthMM:width,sourceHeightMM:height},region,selected:true});
+    next.push({blob:aligned.blob,originalBlob:aligned.originalBlob,candidateFrameBlob:aligned.candidateFrameBlob||aligned.originalBlob,url:URL.createObjectURL(aligned.blob),title:'素材 '+(i+1),width,height,alignment:aligned.degrees,widthRatio:aligned.widthRatio,heightRatio:aligned.heightRatio,processingRecord:{automaticCorrectionDegrees:aligned.degrees,sourceWidthMM:width,sourceHeightMM:height,candidateFramePlacement:aligned.candidateFramePlacement||null},region,selected:true});
   }
   if(record!==state.importRecords[state.importIndex]){for(const c of next)if(!previous.includes(c))URL.revokeObjectURL(c.url);return false;}
   for(const c of previous)if(!next.includes(c))URL.revokeObjectURL(c.url);
