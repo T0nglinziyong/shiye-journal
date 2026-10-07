@@ -50,6 +50,13 @@ export async function alignMaterialPreview(blob,originalBlob=blob,rotation=null)
     for(let y=0;y<h;y++)for(let x=0;x<w;x++)if(data[(y*w+x)*4+3]>8){l=Math.min(l,x);r=Math.max(r,x+1);t=Math.min(t,y);b=Math.max(b,y+1);}if(r<=l||b<=t){l=0;r=w;t=0;b=h;}
     l=Math.max(0,l-2);t=Math.max(0,t-2);r=Math.min(w,r+2);b=Math.min(h,b+2);
     const extract=canvas=>{const c=document.createElement('canvas');c.width=r-l;c.height=b-t;c.getContext('2d').drawImage(canvas,l,t,c.width,c.height,0,0,c.width,c.height);return new Promise((resolve,reject)=>c.toBlob(v=>v?resolve(v):reject(Error('扶正图像失败')),'image/png'));};
-    return {blob:await extract(saved),originalBlob:await extract(source),degrees,widthRatio:(r-l)/bitmap.width,heightRatio:(b-t)/bitmap.height};
+    const canvasBlob=canvas=>new Promise((resolve,reject)=>canvas.toBlob(v=>v?resolve(v):reject(Error('候选框原图保存失败')),'image/png'));
+    return {
+      blob:await extract(saved),
+      originalBlob:await extract(source),
+      candidateFrameBlob:await canvasBlob(source),
+      candidateFramePlacement:{x:l,y:t,width:r-l,height:b-t,frameWidth:w,frameHeight:h},
+      degrees,widthRatio:(r-l)/bitmap.width,heightRatio:(b-t)/bitmap.height
+    };
   }finally{bitmap.close();original.close();}
 }
