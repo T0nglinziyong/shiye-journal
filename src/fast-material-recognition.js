@@ -255,7 +255,6 @@ function smoothFreeform(cv,contour,w,h,pxPerMM,{ellipse=true,polygon=true,curveS
       for(let i=0;i<96;i++){const t=i*Math.PI*2/96,ux=rx*Math.cos(t),uy=ry*Math.sin(t);pts.push(Math.round(e.center.x+ux*ca-uy*sa),Math.round(e.center.y+ux*sa+uy*ca));}
       const ec=cv.matFromArray(96,1,cv.CV_32SC2,pts),em=cv.Mat.zeros(h,w,cv.CV_8UC1),ev=new cv.MatVector();ev.push_back(ec);cv.drawContours(em,ev,-1,new cv.Scalar(255),cv.FILLED);
       const fit=agreement(em);if(fit>.87)candidates.push({kind:'ellipse',fit,contour:ec});else ec.delete();em.delete();ev.delete();
-      if(candidates.at(-1)?.contour===ec){em.delete();ev.delete();}
     }
   }
   if(polygon&&solidity>.93){
