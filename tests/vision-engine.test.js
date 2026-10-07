@@ -321,7 +321,7 @@ test('browser MorphGAC refinement preserves validated repeated apertures',async(
 });
 
 
-test('hybrid browser refinement accepts a strong Active boundary without running a mandatory GrabCut pass',async()=>{
+test('hybrid browser refinement runs MorphGAC with full-resolution GrabCut polish',async()=>{
   const cv=await cvModule,width=160,height=190,pixels=new Uint8ClampedArray(width*height*4),x0=35,y0=30,mw=88,mh=118,alpha=new Uint8Array(mw*mh).fill(255);
   for(let y=0;y<height;y++)for(let x=0;x<width;x++){
     const p=(y*width+x)*4,inside=x>=x0&&x<x0+mw&&y>=y0&&y<y0+mh,border=inside&&(x-x0<2||x0+mw-1-x<2||y-y0<2||y0+mh-1-y<2);
@@ -330,6 +330,6 @@ test('hybrid browser refinement accepts a strong Active boundary without running
   const candidate={x:x0/width,y:y0/height,w:mw/width,h:mh/height,pixels:mw*mh,recognitionConfidence:.5,mask:{width:mw,height:mh,alpha,polygons:[]}};
   const [out]=await processVision(cv,'material-boundary-refine',{pixels,width,height,candidates:[candidate],mode:'hybrid'});
   assert.ok(out?.mask?.alpha?.length);
-  assert.ok(['browser-active-contour','browser-morphgac'].includes(out.edgeMethod));
+  assert.equal(out.edgeMethod,'browser-morphgac-grabcut');
   assert.ok(out.refinementMS>=0);
 });
