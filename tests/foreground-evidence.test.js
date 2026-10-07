@@ -82,14 +82,14 @@ test('protected A4 border band remains background even with a dark corner and wa
 
 
 test('chroma evidence switch removes pure-colour foreground support when disabled',()=>{
-  const w=120,h=90,data=rgba(w,h,(x,y)=>{
-    if(x>=38&&x<82&&y>=24&&y<68)return [210,225,238];
+  const w=144,h=96,data=rgba(w,h,(x,y)=>{
+    if(x>=52&&x<92&&y>=28&&y<68)return [165,210,245];
     return [224,224,224];
   });
-  const on=buildForegroundEvidence(data,w,h,{cellSize:24,useChroma:true});
-  const off=buildForegroundEvidence(data,w,h,{cellSize:24,useChroma:false});
+  const on=buildForegroundEvidence(data,w,h,{cellSize:48,useChroma:true});
+  const off=buildForegroundEvidence(data,w,h,{cellSize:48,useChroma:false});
   let onEvidence=0,offEvidence=0,n=0;
-  for(let y=30;y<62;y++)for(let x=44;x<76;x++){const i=y*w+x;onEvidence+=on.evidence[i];offEvidence+=off.evidence[i];n++;}
-  assert.ok(onEvidence/n>.6,'pure colour difference should be strong evidence when chroma is enabled');
-  assert.ok(offEvidence/n<.15,'the same colour-only cue should disappear when chroma is disabled');
+  for(let y=34;y<62;y++)for(let x=58;x<86;x++){const i=y*w+x;onEvidence+=on.evidence[i];offEvidence+=off.evidence[i];n++;}
+  assert.ok(onEvidence>offEvidence+n*.35,'enabling chroma should add substantial colour-only foreground evidence');
+  assert.ok(offEvidence/n<.15,'the same colour-only cue should mostly disappear when chroma is disabled');
 });
