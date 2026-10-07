@@ -103,25 +103,42 @@ export function discoverMaterialInstancesSimple(cv,p,own){
   const out=[];
   for(const item of candidates){
     const labelsFor=new Set([item.label,...(fragments.get(item.label)||[])]),
-      alpha=cv.Mat.zeros(item.h,item.w,cv.CV_8UC1);
+      content=cv.Mat.zeros(item.h,item.w,cv.CV_8UC1);
     for(let yy=0;yy<item.h;yy++)for(let xx=0;xx<item.w;xx++){
       const global=(item.y+yy)*w+item.x+xx;
-      if(labelsFor.has(labels.data32S[global]))alpha.data[yy*item.w+xx]=255;
+      if(labelsFor.has(labels.data32S[global]))content.data[yy*item.w+xx]=255;
     }
-    const contours=new cv.MatVector(),hierarchy=new cv.Mat();cv.findContours(alpha,contours,hierarchy,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_SIMPLE);
+
+    // Identity and boundary are intentionally different representations.
+    // contentMask preserves the actually observed visual foreground; mask is a
+    // conservative filled OUTER carrier seed for later local refinement.
+    // Keeping both is what allows a future "connect by carrier" preference to
+    // choose parent-vs-parts without rerunning instance discovery.
+    const contours=new cv.MatVector(),hierarchy=new cv.Mat();
+    cv.findContours(content,contours,hierarchy,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_NONE);
     let largest=null,largestArea=0;
-    for(let i=0;i<contours.size();i++){const c=contours.get(i),a=Math.abs(cv.contourArea(c));if(a>largestArea){largest?.delete?.();largest=c;largestArea=a;}else c.delete();}
-    const poly=largest?contourPoints(largest):[];
+    for(let i=0;i<contours.size();i++){
+      const q=contours.get(i),a=Math.abs(cv.contourArea(q));
+      if(a>largestArea){largest?.delete?.();largest=q;largestArea=a;}else q.delete();
+    }
+    const carrier=cv.Mat.zeros(item.h,item.w,cv.CV_8UC1),poly=largest?contourPoints(largest):[];
+    if(largest){
+      const one=new cv.MatVector();one.push_back(largest);
+      cv.drawContours(carrier,one,-1,new cv.Scalar(255),cv.FILLED);one.delete();
+    }
     largest?.delete?.();contours.delete();hierarchy.delete();
+
     out.push({
-      x:item.x/w,y:item.y/h,w:item.w/w,h:item.h/h,pixels:item.pixels,
+      x:item.x/w,y:item.y/h,w:item.w/w,h:item.h/h,pixels:cv.countNonZero(carrier),
       edgeMethod:'instance-connected-component',instanceMethod:'connected-component',
       recognitionConfidence:clamp(.48+Math.min(item.evidenceDensity,.35)*.55+Math.min(item.fillRatio,.85)*.18-(item.touchesProtected?.05:0),0,1),
       evidenceDensity:item.evidenceDensity,seedDensity:item.seedDensity,fillRatio:item.fillRatio,
-      touchesProtectedFrame:item.touchesProtected,absorbedFragments:(fragments.get(item.label)||[]).length,
-      mask:{width:item.w,height:item.h,alpha:new Uint8Array(alpha.data),polygons:[poly],topologyPreserved:true}
+      identityFillRatio:item.fillRatio,touchesProtectedFrame:item.touchesProtected,
+      absorbedFragments:(fragments.get(item.label)||[]).length,
+      mask:{width:item.w,height:item.h,alpha:new Uint8Array(carrier.data),polygons:[poly],topologyPreserved:true},
+      contentMask:{width:item.w,height:item.h,alpha:new Uint8Array(content.data)}
     });
-    alpha.delete();
+    carrier.delete();content.delete();
   }
   return out.sort((a,b)=>a.y-b.y||a.x-b.x).slice(0,48);
 }
