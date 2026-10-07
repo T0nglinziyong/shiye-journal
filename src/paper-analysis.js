@@ -1,77 +1,56 @@
 import {visionTask} from './vision-runtime.js';
 import {buildForegroundEvidence} from './foreground-evidence.js';
-import {attachBoundaryHints} from './recognition-boundary-hints.js';
+import {instanceRefinementPlan} from './recognition-instance-refinement.js';
 
-// Instance-first recognition contract:
+// Default recognition is deliberately instance-first and local:
 //
 // 1. page-connected foreground decides material identities;
 // 2. connected components decide the count exactly once;
-// 3. structural enclosures may improve ONE identity's rough boundary;
-// 4. an exceptional per-instance completion pass may refine a high-fill item
-//    at the rectified page edge;
-// 5. no later stage may create, delete, split, or merge identities.
+// 3. each identity may receive AT MOST one local boundary refinement;
+// 4. no later stage may create, delete, split, or merge identities.
 //
-// Exact alpha finishing is handled after this function by the recognition
-// profile. This function is responsible for stable identity + rough carrier.
+// Expensive contour engines remain available as explicit user-selected quality
+// modes, but the default path contains no full-page enclosure/reconstruction/
+// fusion competition.
 export async function segmentPaperMaterials({data,width:w,height:h},{smallestMM=6,paperWidthMM=210,paperHeightMM=297,sourcePixels=data,chromaEdges=true,postprocess={}}={}) {
   const pxPerMM=((w/paperWidthMM)+(h/paperHeightMM))/2,
     cellSize=Math.max(24,Math.round(pxPerMM*13.5)),
     evidence=buildForegroundEvidence(data,w,h,{sourcePixels,cellSize});
 
-  const [instances,structural]=await Promise.all([
-    visionTask('instances-simple',{
-      mask:evidence.mask,evidence:evidence.evidence,foregroundSeeds:evidence.foregroundSeeds,
-      width:w,height:h,smallestMM,paperWidthMM,paperHeightMM
-    }),
-    visionTask('enclosures',{
-      // Structural contours are boundary hints only. They never participate in
-      // identity/count decisions.
-      pixels:data,evidence:evidence.evidence,backgroundConnected:evidence.backgroundConnected,
-      shadowLikelihood:evidence.shadowLikelihood,score:evidence.score,
-      width:w,height:h,smallestMM,paperWidthMM,paperHeightMM,chromaEdges,postprocess
-    })
-  ]);
+  const instances=await visionTask('instances-simple',{
+    mask:evidence.mask,evidence:evidence.evidence,foregroundSeeds:evidence.foregroundSeeds,
+    width:w,height:h,smallestMM,paperWidthMM,paperHeightMM
+  });
 
-  let candidates=attachBoundaryHints(instances,structural);
-
-  // Rare local fallback: a substantial, high-fill identity that reaches the
-  // rectified page edge can lose part of its outer boundary to the protected
-  // frame. Complete that ONE identity in isolation. Low-fill/freeform items
-  // (for example printed content on a white carrier) never enter this rule.
+  const candidates=[...instances];
   for(let index=0;index<candidates.length;index++){
-    const candidate=candidates[index],
-      fill=candidate.identityFillRatio??candidate.fillRatio??0,
-      needsCompletion=!candidate.boundaryHint
-        &&candidate.touchesProtectedFrame===true
-        &&fill>=.70;
-    if(!needsCompletion)continue;
-    const completed=await visionTask('complete-boundaries',{
-      pixels:sourcePixels,width:w,height:h,candidates:[candidate],
-      smallestMM,paperWidthMM,paperHeightMM,
-      evidence:evidence.evidence,backgroundConnected:evidence.backgroundConnected,
-      shadowLikelihood:evidence.shadowLikelihood,chromaEdges,postprocess
-    });
-    if(completed?.[0]){
-      candidates[index]={
-        ...completed[0],
-        boundaryFinalized:true,
-        boundaryCompletion:'frame-high-fill'
-      };
+    const candidate=candidates[index],plan=instanceRefinementPlan(candidate);
+    if(!plan)continue;
+
+    if(plan.kind==='grabcut'){
+      const recovered=await visionTask('carrier-grabcut',{
+        pixels:sourcePixels,width:w,height:h,candidate,
+        paperWidthMM,paperHeightMM,padMM:plan.padMM,reason:plan.reason
+      });
+      if(recovered)candidates[index]=recovered;
+      continue;
     }
-  }
 
-  // Exceptional pale/white carrier recovery. Identity remains authoritative:
-  // only an already-discovered, very low-fill material may replace its rough
-  // alpha with one local 15 mm rectangle-initialized GrabCut result.
-  for(let index=0;index<candidates.length;index++){
-    const candidate=candidates[index],
-      fill=candidate.identityFillRatio??candidate.fillRatio??0;
-    if(candidate.boundaryHint||candidate.boundaryFinalized||fill>=.45)continue;
-    const recovered=await visionTask('carrier-grabcut',{
-      pixels:sourcePixels,width:w,height:h,candidate,
-      paperWidthMM,paperHeightMM,padMM:15
-    });
-    if(recovered)candidates[index]=recovered;
+    if(plan.kind==='complete'){
+      const completed=await visionTask('complete-boundaries',{
+        pixels:sourcePixels,width:w,height:h,candidates:[candidate],
+        smallestMM,paperWidthMM,paperHeightMM,
+        evidence:evidence.evidence,backgroundConnected:evidence.backgroundConnected,
+        shadowLikelihood:evidence.shadowLikelihood,chromaEdges,postprocess
+      });
+      if(completed?.[0]){
+        candidates[index]={
+          ...completed[0],
+          boundaryFinalized:true,
+          boundaryCompletion:plan.reason
+        };
+      }
+    }
   }
 
   return candidates.sort((a,b)=>a.y-b.y||a.x-b.x).slice(0,48);
