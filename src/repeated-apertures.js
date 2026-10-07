@@ -113,7 +113,7 @@ function circleCandidates(cv,carrier,gray,lab,ref,pxPerMM){
   return out;
 }
 
-export function selectRepeatedApertureGroup(candidates,pxPerMM){
+function selectRepeatedAperturePattern(candidates,pxPerMM){
   let best=null;
   for(let i=0;i<candidates.length;i++)for(let j=i+1;j<candidates.length;j++){
     const a=candidates[i],b=candidates[j],dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy);
@@ -124,7 +124,6 @@ export function selectRepeatedApertureGroup(candidates,pxPerMM){
         return perp<=Math.max(pxPerMM*1.3,medR*.7)&&q.r/medR>=.65&&q.r/medR<=1.5;
       });
     if(group.length<4)continue;
-
     const projected=group.map(q=>({t:(q.x-a.x)*ux+(q.y-a.y)*uy,q})).sort((p,q)=>p.t-q.t),dedup=[];
     for(const z of projected){
       if(!dedup.length||z.t-dedup[dedup.length-1].t>Math.max(pxPerMM*3,medR*1.3))dedup.push(z);
@@ -136,21 +135,43 @@ export function selectRepeatedApertureGroup(candidates,pxPerMM){
       }
     }
     if(dedup.length<4)continue;
-    const qs=dedup.map(z=>z.q),spacing=[];
-    for(let k=1;k<dedup.length;k++)spacing.push(dedup[k].t-dedup[k-1].t);
-    const radii=qs.map(q=>q.r),edgeDistances=qs.map(q=>q.edgeDistance);
-    if(cvv(spacing)>.23||cvv(radii)>.25||cvv(edgeDistances)>.35)continue;
-    if(mean(spacing)<3*mean(radii))continue;
-    if(median(edgeDistances)>pxPerMM*10)continue;
-    if(dedup[dedup.length-1].t-dedup[0].t<pxPerMM*12)continue;
-
+    const qs=dedup.map(z=>z.q),spacing=[];for(let k=1;k<dedup.length;k++)spacing.push(dedup[k].t-dedup[k-1].t);
+    const radii=qs.map(q=>q.r),edgeDistances=qs.map(q=>q.edgeDistance),baseSpacing=median(spacing);
+    if(cvv(radii)>.25||cvv(edgeDistances)>.35||median(edgeDistances)>pxPerMM*10||baseSpacing<3*mean(radii))continue;
+    let missing=null,bad=false,doubled=0;
+    for(let k=0;k<spacing.length;k++){
+      const ratio=spacing[k]/Math.max(1e-6,baseSpacing);
+      if(ratio>=.72&&ratio<=1.35)continue;
+      if(ratio>=1.70&&ratio<=2.35&&doubled===0){
+        doubled++;
+        const left=dedup[k].q,right=dedup[k+1].q;
+        missing={x:Math.round((left.x+right.x)/2),y:Math.round((left.y+right.y)/2),r:Math.round(median(radii))};
+      }else{bad=true;break;}
+    }
+    if(bad||dedup[dedup.length-1].t-dedup[0].t<pxPerMM*12)continue;
     const score=qs.length*3+mean(qs.map(q=>q.edgeSupport))+mean(qs.map(q=>q.ringMaterialFraction))
-      -cvv(spacing)-cvv(radii)-mean(qs.map(q=>q.pageDistance))/30;
-    if(!best||score>best.score)best={score,items:qs};
+      -cvv(radii)-mean(qs.map(q=>q.pageDistance))/30-(missing?.5:0);
+    if(!best||score>best.score)best={score,items:qs,missing};
   }
-  return best?.items||[];
+  return best||{items:[],missing:null};
 }
-
+export function selectRepeatedApertureGroup(candidates,pxPerMM){
+  return selectRepeatedAperturePattern(candidates,pxPerMM).items;
+}
+function validatePredictedHole(cv,carrier,gray,lab,ref,q){
+  const {x,y,r}=q;
+  if(x<r+1||y<r+1||x>=carrier.cols-r-1||y>=carrier.rows-r-1||!carrier.data[y*carrier.cols+x])return null;
+  const blur=new cv.Mat(),edges=new cv.Mat(),support=new cv.Mat(),kernel=cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(5,5));
+  cv.medianBlur(gray,blur,5);cv.Canny(blur,edges,20,70);cv.dilate(edges,support,kernel);
+  let edge=0,inside=0;const samples=56;
+  for(let n=0;n<samples;n++){const t=n*Math.PI*2/samples,xx=Math.round(x+Math.cos(t)*r),yy=Math.round(y+Math.sin(t)*r);if(support.data[yy*carrier.cols+xx])edge++;if(carrier.data[yy*carrier.cols+xx])inside++;}
+  const center=[];
+  for(let yy=Math.max(0,y-Math.ceil(r*.55));yy<=Math.min(carrier.rows-1,y+Math.ceil(r*.55));yy+=2)
+    for(let xx=Math.max(0,x-Math.ceil(r*.55));xx<=Math.min(carrier.cols-1,x+Math.ceil(r*.55));xx+=2)
+      if(Math.hypot(xx-x,yy-y)<=r*.55)center.push(paperDistance(lab,yy*carrier.cols+xx,ref));
+  blur.delete();edges.delete();support.delete();kernel.delete();
+  return edge/samples>=.55&&inside/samples>=.80&&center.length&&median(center)<=20?{...q,edgeSupport:edge/samples,pageDistance:median(center),inferred:true}:null;
+}
 function restoreOne(cv,rgba,pageW,pageH,candidate,paperWidthMM,paperHeightMM){
   const m=candidate.mask;
   if(!m?.alpha?.length||m.width<2||m.height<2)return {...candidate,apertureCount:0};
@@ -174,7 +195,9 @@ function restoreOne(cv,rgba,pageW,pageH,candidate,paperWidthMM,paperHeightMM){
   }
 
   const circles=circleCandidates(cv,carrier,gray,lab,ref,pxPerMM),
-    group=selectRepeatedApertureGroup(circles,pxPerMM);
+    pattern=selectRepeatedAperturePattern(circles,pxPerMM),group=[...pattern.items],
+    inferred=pattern.missing?validatePredictedHole(cv,carrier,gray,lab,ref,pattern.missing):null;
+  if(inferred)group.push(inferred);
   if(group.length>=4){
     const radius=Math.max(1,Math.round(median(group.map(q=>q.r))+pxPerMM*.33));
     for(const q of group)cv.circle(carrier,new cv.Point(q.x,q.y),radius,new cv.Scalar(0),cv.FILLED);
@@ -183,7 +206,7 @@ function restoreOne(cv,rgba,pageW,pageH,candidate,paperWidthMM,paperHeightMM){
     const regions=group.map(q=>({
       x:(x0+q.x-radius)/pageW,y:(y0+q.y-radius)/pageH,
       w:(radius*2+1)/pageW,h:(radius*2+1)/pageH,
-      radiusPX:radius,source:'repeated-manufactured-hole'
+      radiusPX:radius,source:q.inferred?'repeated-hole-edge-recovered':'repeated-manufactured-hole'
     }));
     const result={
       ...candidate,
