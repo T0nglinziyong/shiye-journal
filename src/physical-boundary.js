@@ -80,7 +80,15 @@ export function completePhysicalBoundaries(cv,p,own){
       if(largestLabel&&largestArea>=outerArea*.62){for(let i=0;i<labels.data32S.length;i++)refined.data[i]=labels.data32S[i]===largestLabel?255:0;}else outer.copyTo(refined);
     }
 
-    const aperture=carveEnclosedPageRegions(cv,{mask:refined,outer,lab,gray,pageL,pageA,pageB,pageN,evidence:evidence?own(evidence.roi(new cv.Rect(rx,ry,rw,rh))):null,pxPerMM},own);
+    let aperture={count:0,regions:[]};
+    try{
+      aperture=carveEnclosedPageRegions(cv,{mask:refined,outer,lab,gray,pageL,pageA,pageB,pageN,evidence:evidence?own(evidence.roi(new cv.Rect(rx,ry,rw,rh))):null,pxPerMM},own);
+    }catch{
+      // Aperture recovery is precision-first and optional. A pathological
+      // oversized/fragmented enclosure must never crash the entire material
+      // recognition pass; keep the physical carrier and simply carve no holes.
+      aperture={count:0,regions:[]};
+    }
     const finalContours=own(new cv.MatVector()),finalHierarchy=own(new cv.Mat());cv.findContours(refined,finalContours,finalHierarchy,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_SIMPLE);
     let largestFinal=null,largestFinalArea=0;for(let i=0;i<finalContours.size();i++){const q=own(finalContours.get(i)),a=cv.contourArea(q);if(a>largestFinalArea){largestFinalArea=a;largestFinal=q;}}
     if(!largestFinal){continue;}
