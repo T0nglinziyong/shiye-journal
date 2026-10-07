@@ -41,7 +41,7 @@ test('recognition methods, processing pixels, preprocessing and postprocessing a
  for(const key of [
    'recognitionDenoise','recognitionLocalContrast','recognitionChromaEdges',
    'recognitionEdgePolish','recognitionStraightEdges','recognitionCurveSmooth',
-   'recognitionEllipseRegularization','recognitionApertures'
+   'recognitionEllipseRegularization','recognitionPolygonRegularization','recognitionApertures'
  ])assert.equal(custom[key],false,key+' can be disabled independently');
 
  assert.equal(normalizePreferences({recognition:'fake',recognitionPixels:1234}).recognition,'auto');
