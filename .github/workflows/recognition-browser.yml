@@ -11,7 +11,7 @@ on:
       - 'src/opencv-worker.js'
       - 'src/recognition-*.js'
       - 'src/slimsam-*.js'
-      - 'tests/import-completion-browser.mjs'
+      - 'tests/recognition-engine-browser.mjs'
       - 'tests/browser-active-contours-parity.test.js'
       - '.github/workflows/recognition-browser.yml'
   workflow_dispatch:
@@ -27,18 +27,6 @@ jobs:
   chromium:
     runs-on: ubuntu-latest
     timeout-minutes: 25
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - recognition: traditional
-            pixels: 1200
-          - recognition: active
-            pixels: 1200
-          - recognition: morphgac
-            pixels: 1200
-          - recognition: slimsam
-            pixels: 1000
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
@@ -58,13 +46,10 @@ jobs:
           echo "SHIYE_BROWSER_BIN=$BROWSER_BIN" >> "$GITHUB_ENV"
       - name: Build
         run: npm run build
-      - name: Import through selected browser recognition engine
+      - name: Smoke real browser recognition engines
         shell: bash
         env:
           SHIYE_TEST_URL: http://127.0.0.1:5194
-          SHIYE_TEST_RECOGNITION: ${{ matrix.recognition }}
-          SHIYE_TEST_RECOGNITION_PIXELS: ${{ matrix.pixels }}
-          SHIYE_WAIT_MS: 300000
         run: |
           set -euo pipefail
           npm run dev -- --port 5194 --strictPort > /tmp/shiye-recognition-server.log 2>&1 &
@@ -75,4 +60,4 @@ jobs:
             sleep 1
           done
           curl -fsS http://127.0.0.1:5194/ >/dev/null
-          node tests/import-completion-browser.mjs
+          node tests/recognition-engine-browser.mjs
