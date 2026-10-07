@@ -124,7 +124,18 @@ export async function processVision(cv,operation,p){
       return selected.sort((a,b)=>a.y-b.y||a.x-b.x);
     }
     if(operation==='boundary-reconstruction')return reconstructFragmentedBoundaries(cv,p,own);
-    if(operation==='complete-boundaries')return completePhysicalBoundaries(cv,p,own);
+    if(operation==='complete-boundaries'){
+      const out=[];
+      // OpenCV.js can retain substantial temporary state across repeated
+      // contour/topology operations. Give every material its own ownership
+      // scope while keeping the same worker/message and source payload.
+      for(const candidate of p.candidates||[]){
+        const scoped=[],take=mat=>(scoped.push(mat),mat);
+        try{out.push(...completePhysicalBoundaries(cv,{...p,candidates:[candidate]},take));}
+        finally{for(const resource of scoped.reverse())resource.delete();}
+      }
+      return out;
+    }
     if(operation==='instances'){
       const w=p.width,h=p.height,pxPerMM=Math.max(.5,((w/p.paperWidthMM)+(h/p.paperHeightMM))/2),oddMM=(mm,min=3,max=21)=>{let n=Math.max(min,Math.min(max,Math.round(pxPerMM*mm)));if(!(n&1))n++;return n;};
       const instanceKernelSize=oddMM(.55),src=own(cv.matFromArray(h,w,cv.CV_8UC1,p.mask)),closed=own(new cv.Mat()),kernel=own(cv.getStructuringElement(cv.MORPH_CROSS,new cv.Size(instanceKernelSize,instanceKernelSize)));
