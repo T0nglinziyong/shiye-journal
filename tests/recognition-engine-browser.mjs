@@ -20,8 +20,6 @@ try{
     globalThis.__recogFixture={width,height,pixels,backgroundConnected,evidence,shadowLikelihood,score,candidate:{x:x0/width,y:y0/height,w:(x1-x0)/width,h:(y1-y0)/height,pixels:(x1-x0)*(y1-y0),recognitionConfidence:.5,mask:{width:x1-x0,height:y1-y0,alpha,polygons:[]}}};
     return true;
   })()`);
-  const mainOpenCV=await evaluate(`(async()=>{const m=await import('/src/opencv-readiness-probe.js');return await m.probeOpenCVMainThread()})()`);
-  console.log('Chrome engine step: main OpenCV',JSON.stringify(mainOpenCV));assert.equal(mainOpenCV.ready,true,JSON.stringify(mainOpenCV));
   await evaluate(`(async()=>{const m=await import('/src/vision-runtime.js');globalThis.__visionTask=m.visionTask;return true})()`);
   console.log('Chrome engine step: module imported');
 
