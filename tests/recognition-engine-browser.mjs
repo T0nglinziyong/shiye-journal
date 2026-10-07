@@ -38,7 +38,7 @@ try{
   assert.equal(result.grabcut.edgeMethod,'browser-grabcut',JSON.stringify(result));
   assert.equal(result.active.edgeMethod,'browser-active-contour',JSON.stringify(result));
   assert.equal(result.quality.edgeMethod,'browser-morphgac',JSON.stringify(result));
-  assert.ok(['browser-active-contour','browser-morphgac'].includes(result.hybrid.edgeMethod),JSON.stringify(result));
+  assert.equal(result.hybrid.edgeMethod,'browser-morphgac-grabcut',JSON.stringify(result));
   for(const key of ['grabcut','active','quality','hybrid'])assert.ok(result[key].pixels>100&&result[key].width>10&&result[key].height>10,JSON.stringify(result));
   assert.deepEqual(b.errors,[]);
   console.log('Real Chrome recognition engine:',JSON.stringify(result));
