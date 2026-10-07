@@ -12,6 +12,11 @@ try{
   if(recognition==='slimsam'){await wait('.series-grid');await evaluate('localStorage.setItem("shiye-ui-preferences-v1",JSON.stringify({recognition:"slimsam",recognitionPixels:'+JSON.stringify(recognitionPixels)+'}));');await command('Page.reload');await wait('.series-grid');await evaluate('globalThis.__modelWorkers=0;const NativeWorker=window.Worker;window.Worker=class extends NativeWorker{constructor(url,options){super(url,options);if(String(url).includes("slimsam-worker"))globalThis.__modelWorkers++;}};');}
   await wait('.series-grid');await sleep(400);await click('.swift-tabs button:nth-child(2)','.asset-grid');await click('[data-act=import]','.import-nav');
   await evaluate(addPhoto);
+  await sleep(30000);
+  if(!(await evaluate('!!document.querySelector(".import-inspect[aria-busy=\"false\"]")'))){
+    const diagnostic=await evaluate('(async()=>{let vision=[];try{vision=(await import("/src/vision-runtime.js")).visionStatus();}catch{}return {vision,processing:document.querySelector(".import-processing")?.textContent||"",route:document.querySelector("#view")?.className||"",busy:document.querySelector(".import-inspect")?.getAttribute("aria-busy")};})()');
+    console.log('Recognition diagnostic after 30s',JSON.stringify(diagnostic));
+  }
   await wait('.import-inspect[aria-busy="false"]',300000);await wait('.import-candidate-tile');await click('[data-act=import-confirm-photo]','.review-candidates');await click('[data-act=confirm-import]','.import-done');
   for(const [w,h] of [[390,844],[768,1024],[1024,768],[1440,900]]){
     await command('Emulation.setDeviceMetricsOverride',{width:w,height:h,deviceScaleFactor:1,mobile:w<700});
