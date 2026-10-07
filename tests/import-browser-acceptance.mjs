@@ -34,11 +34,19 @@ try {
   await evaluate('[...document.querySelectorAll("#crop-preview + .import-photo-tools button")].find(b=>b.textContent==="取消标记").click()');
   await evaluate('globalThis.__candidateNode=document.querySelector(".import-candidate-grid");const panel=document.querySelector(".inspector-scroll");panel.scrollTop=panel.scrollHeight;globalThis.__candidateScroll=panel.scrollTop;');await click('[data-act="import-toggle-candidate"]');assert.ok(await evaluate('document.querySelector(".import-candidate-grid")===globalThis.__candidateNode&&document.querySelector(".inspector-scroll").scrollTop===globalThis.__candidateScroll'));await click('[data-act="import-toggle-candidate"]');
   await click('[data-import-check="0"]','#cutout-canvas');
-  for(const mode of ['edge','appearance','direction']){
-    await click('[data-cut-mode="'+mode+'"]');assert.ok(await evaluate('document.querySelector("#modal").open'));await screenshot('check-'+mode,2560,1440);
-    const actions=mode==='edge'?['[data-repair="erase"]','[data-repair="restore"]','#cutout-recognition','#cutout-undo']:mode==='appearance'?['[data-appearance="natural"]','[data-appearance="vivid"]','#cutout-original-color']:['#cutout-left','#cutout-rotate','#cutout-align','#cutout-original-direction'];
-    for(const selector of actions){await click(selector);assert.ok(await evaluate('document.querySelector("#modal").open'),'Editor must stay open after '+selector);}
+  assert.ok(await evaluate('!!document.querySelector("#cutout-method")&&!!document.querySelector("#cutout-pixels")'));
+  for(const selector of ['[data-repair="erase"]','[data-repair="restore"]']){await click(selector);assert.ok(await evaluate('document.querySelector("#modal").open'));}
+  await screenshot('check-rough',2560,1440);
+  await click('#cutout-next','#cutout-post-shapes');
+  assert.equal(await evaluate('!!document.querySelector("#cutout-post-edge")'),false);
+  assert.equal(await evaluate('!!document.querySelector("#cutout-post-curves")'),false);
+  assert.ok(await evaluate('!!document.querySelector("#cutout-post-shapes")&&!!document.querySelector("#cutout-post-apertures")'));
+  await screenshot('check-recognition',2560,1440);
+  await click('#cutout-next','#cutout-auto-straighten');
+  for(const selector of ['[data-appearance="natural"]','[data-appearance="vivid"]','[data-appearance="original"]','#cutout-left','#cutout-rotate','#cutout-align','#cutout-original-direction']){
+    await click(selector);assert.ok(await evaluate('document.querySelector("#modal").open'),'Editor must stay open after '+selector);
   }
+  await screenshot('check-final',2560,1440);
   await click('#cutout-reset');
   for(const [w,h] of [[390,844],[768,1024],[1024,768],[1440,900]]){await command('Emulation.setDeviceMetricsOverride',{width:w,height:h,deviceScaleFactor:1,mobile:w<700});await screenshot('cutout',w,h);const scrolling=await evaluate('(()=>{const m=document.querySelector("#modal");m.scrollTop=m.scrollHeight;return {top:m.scrollTop,height:m.clientHeight,total:m.scrollHeight};})()');assert.ok(scrolling.total<=scrolling.height+1||scrolling.top>0,'Material editor must be scrollable');}
   await click('#cutout-cancel');await click('[data-act="import-confirm-photo"]','.review-candidates');
