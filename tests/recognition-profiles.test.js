@@ -22,8 +22,8 @@ test('recognition methods, processing pixels, preprocessing and postprocessing a
  assert.equal(prefs.recognitionPixels,1600);
  for(const key of [
    'balanceLight','recognitionDenoise','recognitionLocalContrast','recognitionChromaEdges',
-   'recognitionEdgePolish','recognitionStraightEdges','recognitionCurveSmooth',
-   'recognitionEllipseRegularization','recognitionPolygonRegularization','recognitionApertures'
+   'recognitionEdgePolish','recognitionShapeRegularization','recognitionCurveSmooth',
+   'recognitionApertures'
  ])assert.equal(prefs[key],true,key+' defaults on');
 
  const custom=normalizePreferences({
@@ -32,16 +32,14 @@ test('recognition methods, processing pixels, preprocessing and postprocessing a
    recognitionLocalContrast:false,
    recognitionChromaEdges:false,
    recognitionEdgePolish:false,
-   recognitionStraightEdges:false,
+   recognitionShapeRegularization:false,
    recognitionCurveSmooth:false,
-   recognitionEllipseRegularization:false,
-   recognitionPolygonRegularization:false,
    recognitionApertures:false
  });
  for(const key of [
    'recognitionDenoise','recognitionLocalContrast','recognitionChromaEdges',
-   'recognitionEdgePolish','recognitionStraightEdges','recognitionCurveSmooth',
-   'recognitionEllipseRegularization','recognitionPolygonRegularization','recognitionApertures'
+   'recognitionEdgePolish','recognitionShapeRegularization','recognitionCurveSmooth',
+   'recognitionApertures'
  ])assert.equal(custom[key],false,key+' can be disabled independently');
 
  assert.equal(normalizePreferences({recognition:'fake',recognitionPixels:1234}).recognition,'auto');
