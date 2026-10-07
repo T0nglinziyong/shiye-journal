@@ -30,7 +30,7 @@ export async function detectPaperCandidates(bitmap,box,smallestMM=6,{
   // showed that illumination/CLAHE/denoise can make identity discovery worse.
   // Optional preprocessing therefore affects boundary segmentation only.
   const candidates=await segmentPaperMaterials(frame,{
-    smallestMM,paperWidthMM,paperHeightMM,sourcePixels:frame.data
+    smallestMM,paperWidthMM,paperHeightMM,sourcePixels:frame.data,chromaEdges:preprocess.chromaEdges
   });
   return profile.refineCandidates&&candidates.length
     ? profile.refineCandidates({
