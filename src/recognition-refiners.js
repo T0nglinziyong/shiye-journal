@@ -84,7 +84,7 @@ export async function refineCandidatesWithBrowserContours({candidates,frame,widt
 export async function refineCandidatesPostprocess(context){
   return postprocessCandidates(context);
 }
-export async function refineCandidatesAuto(context){return postprocessCandidates(context);}
+export async function refineCandidatesAuto({candidates}){return candidates;}
 export async function refineCandidatesHybrid(context){return refineCandidatesWithBrowserContours({...context,mode:'hybrid'});}
 export async function refineCandidatesWithMorphGAC(context){return refineCandidatesWithBrowserContours({...context,mode:'morphgac'});}
 export async function refineCandidatesWithGrabCut(context){return refineCandidatesWithBrowserContours({...context,mode:'grabcut'});}
