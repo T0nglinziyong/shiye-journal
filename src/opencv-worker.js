@@ -79,8 +79,6 @@ export async function processVision(cv,operation,p){
     if(operation==='boxes-simple')return discoverMaterialBoxes(cv,p,own);
     if(operation==='segment-boxes-classical')return segmentMaterialBoxes(cv,p);
     if(operation==='restore-repeated-apertures')return restoreRepeatedApertures(cv,p);
-    if(operation==='segment-boxes-classical')return segmentMaterialBoxes(cv,p);
-    if(operation==='restore-repeated-apertures')return restoreRepeatedApertures(cv,p);
     if(operation==='process-material-boxes'){
       let out;
       if(p.method==='morphgac'||p.method==='auto')out=segmentMaterialBoxes(cv,{...p,pixels:p.pixels});
