@@ -69,8 +69,11 @@ export function fuseRecognitionCandidates(instances,structuralCandidates){
       // one carrier. An accidental contour around neighbouring loose items
       // usually contains page-connected gaps and therefore fails this test.
       const shares=matches.map(({entry})=>area(entry.candidate)/Math.max(area(structural),1e-9)).sort((a,b)=>b-a);
-      const occupancy=matches.reduce((sum,{entry})=>sum+intersection(entry.candidate,structural),0)/Math.max(area(structural),1e-9);
-      accept=matches.length===1||shares[1]<.08
+      const occupancy=matches.reduce((sum,{entry})=>sum+intersection(entry.candidate,structural),0)/Math.max(area(structural),1e-9),
+        fragmentedWithoutDominant=shares[1]<.08&&shares[0]<.45
+          &&((structural.fillRatio??0)>=.45||(structural.interiorBackgroundRatio??1)<=.20),
+        dominantRefinement=shares[1]<.08&&shares[0]>=.75;
+      accept=matches.length===1||fragmentedWithoutDominant||dominantRefinement
         ||(strongPhysicalBoundary(structural)&&occupancy<=.84)
         ||(strongRecoveredCarrier(structural)&&occupancy<=.84)
         ||(strongReconstruction(structural)&&(occupancy<=.72||(structural.matchedPairOverlap??0)>=.18));
