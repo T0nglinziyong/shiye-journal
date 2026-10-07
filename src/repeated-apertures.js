@@ -76,7 +76,7 @@ function circleCandidates(cv,carrier,gray,lab,ref,pxPerMM){
   cv.HoughCircles(
     blur,circles,cv.HOUGH_GRADIENT,1,
     Math.max(6,Math.round(pxPerMM*2.5)),
-    60,10,
+    60,9,
     Math.max(2,Math.round(pxPerMM*.8)),
     Math.max(4,Math.round(pxPerMM*5.2))
   );
@@ -113,7 +113,7 @@ function circleCandidates(cv,carrier,gray,lab,ref,pxPerMM){
   return out;
 }
 
-function bestRepeatedGroup(candidates,pxPerMM){
+export function selectRepeatedApertureGroup(candidates,pxPerMM){
   let best=null;
   for(let i=0;i<candidates.length;i++)for(let j=i+1;j<candidates.length;j++){
     const a=candidates[i],b=candidates[j],dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy);
@@ -174,7 +174,7 @@ function restoreOne(cv,rgba,pageW,pageH,candidate,paperWidthMM,paperHeightMM){
   }
 
   const circles=circleCandidates(cv,carrier,gray,lab,ref,pxPerMM),
-    group=bestRepeatedGroup(circles,pxPerMM);
+    group=selectRepeatedApertureGroup(circles,pxPerMM);
   if(group.length>=4){
     const radius=Math.max(1,Math.round(median(group.map(q=>q.r))+pxPerMM*.33));
     for(const q of group)cv.circle(carrier,new cv.Point(q.x,q.y),radius,new cv.Scalar(0),cv.FILLED);
