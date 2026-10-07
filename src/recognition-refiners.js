@@ -76,7 +76,48 @@ export async function refineCandidatesWithBrowserContours({candidates,frame,widt
 export async function refineCandidatesPostprocess(context){
   return postprocessCandidates(context);
 }
-export async function refineCandidatesAuto(context){return refineCandidatesWithBrowserContours({...context,mode:'auto'});}
+export async function refineCandidatesAuto({
+  candidates,frame,width,height,preprocess={},postprocess={},onProgress=()=>{},
+  paperWidthMM=210,paperHeightMM=297
+}){
+  if(!candidates.length)return candidates;
+  onProgress({status:'contour-refinement',engine:'morphgac',total:candidates.length});
+  let segmented;
+  try{
+    segmented=await visionTask('segment-boxes-classical',{
+      pixels:frame.data,width,height,boxes:candidates,paperWidthMM,paperHeightMM
+    });
+  }catch(error){
+    onProgress({status:'fallback',engine:'morphgac',message:error.message});
+    return candidates;
+  }
+
+  let shaped=segmented;
+  if(postprocess.shapeRegularization!==false){
+    onProgress({status:'boundary-postprocess',engine:'shape-regularization',total:segmented.length});
+    try{
+      shaped=await visionTask('material-boundary-refine',{
+        pixels:frame.data,width,height,candidates:segmented,mode:'postprocess',
+        postprocess:{edgePolish:false,shapeRegularization:true,curveSmooth:false,apertures:false},
+        chromaEdges:preprocess.chromaEdges!==false
+      });
+    }catch(error){
+      onProgress({status:'fallback',engine:'shape-regularization',message:error.message});
+      shaped=segmented;
+    }
+  }
+
+  if(postprocess.apertures===false)return shaped;
+  onProgress({status:'boundary-postprocess',engine:'repeated-apertures',total:shaped.length});
+  try{
+    return await visionTask('restore-repeated-apertures',{
+      pixels:frame.data,width,height,candidates:shaped,paperWidthMM,paperHeightMM
+    });
+  }catch(error){
+    onProgress({status:'fallback',engine:'repeated-apertures',message:error.message});
+    return shaped;
+  }
+}
 export async function refineCandidatesHybrid(context){return refineCandidatesWithBrowserContours({...context,mode:'hybrid'});}
 export async function refineCandidatesWithMorphGAC(context){return refineCandidatesWithBrowserContours({...context,mode:'morphgac'});}
 export async function refineCandidatesWithGrabCut(context){return refineCandidatesWithBrowserContours({...context,mode:'grabcut'});}
