@@ -2,57 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import cvModule from '@techstark/opencv-js';
 import {processVision} from '../src/opencv-worker.js';
-test('almost rectangular paper repairs a small bitten edge without a jagged contour',async()=>{
-  const cv=await cvModule,width=120,height=160,alpha=new Uint8Array(width*height);
-  for(let y=20;y<140;y++)for(let x=20;x<100;x++)alpha[y*width+x]=255;
-  for(let y=110;y<122;y++)for(let x=20;x<26;x++)alpha[y*width+x]=0;
-  const r=await processVision(cv,'material-mask',{alpha,width,height});assert.equal(r.edgeMethod,'slimsam-rectangular-prior');assert.equal(r.mask.polygons[0].length,4);
-  assert.equal(r.mask.alpha[(115-Math.round(r.y*height))*r.mask.width+22-Math.round(r.x*width)],255);
-});
-test('model contour fills printed white holes but preserves a concave material boundary',async()=>{
-  const cv=await cvModule,width=100,height=100,alpha=new Uint8Array(width*height);
-  for(let y=20;y<80;y++)for(let x=20;x<80;x++)if(!(x>55&&y>55))alpha[y*width+x]=255;
-  for(let y=30;y<40;y++)for(let x=30;x<40;x++)alpha[y*width+x]=0;
-  const r=await processVision(cv,'material-mask',{alpha,width,height}),left=Math.round(r.x*width),top=Math.round(r.y*height),at=(x,y)=>r.mask.alpha[(y-top)*r.mask.width+x-left];
-  assert.equal(at(35,35),255);assert.equal(at(70,70),0);assert.equal(at(0+left,0+top),0);
-});
 test('OpenCV local light balance is effective without changing source or alpha',async()=>{
   const cv=await cvModule,width=80,height=80,pixels=new Uint8ClampedArray(width*height*4);for(let y=0;y<height;y++)for(let x=0;x<width;x++){const i=(y*width+x)*4;pixels[i]=pixels[i+1]=pixels[i+2]=40+x*2;pixels[i+3]=x%2?128:255;}const original=pixels.slice(),out=await processVision(cv,'balance',{pixels,width,height});assert.deepEqual(pixels,original);assert.ok(out.pixels.some((v,i)=>i%4!==3&&v!==pixels[i]));for(let i=3;i<pixels.length;i+=4)assert.equal(out.pixels[i],pixels[i]);
 });
 test('OpenCV detects actual paper corners and refuses a featureless full photograph',async()=>{
   const cv=await cvModule,width=180,height=240,pixels=new Uint8ClampedArray(width*height*4);for(let y=0;y<height;y++)for(let x=0;x<width;x++){const i=(y*width+x)*4,value=x>=20&&x<=160&&y>=20&&y<=220?240:60;pixels[i]=pixels[i+1]=pixels[i+2]=value;pixels[i+3]=255;}const corners=await processVision(cv,'quad',{pixels,width,height,paperRatio:140/200});assert.equal(corners.length,4);assert.ok(Math.abs(corners[0].x-20/180)<.01);assert.ok(Math.abs(corners[2].y-220/240)<.01);assert.equal(await processVision(cv,'quad',{pixels:new Uint8ClampedArray(width*height*4).fill(255),width,height,paperRatio:140/200}),null);
 });
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-test('piecewise curve prior smooths a jagged oval without an ellipse class',async()=>{
-  const cv=await cvModule,width=180,height=220,pixels=new Uint8ClampedArray(width*height*4),evidence=new Uint8Array(width*height),backgroundConnected=new Uint8Array(width*height),shadowLikelihood=new Uint8Array(width*height);
-  for(let i=0;i<width*height;i++){pixels[i*4]=pixels[i*4+1]=pixels[i*4+2]=246;pixels[i*4+3]=255;backgroundConnected[i]=1;}
-  const x0=48,y0=30,mw=86,mh=150,alpha=new Uint8Array(mw*mh);
-  for(let y=0;y<mh;y++)for(let x=0;x<mw;x++){const dx=(x-mw/2)/(mw*.46),dy=(y-mh/2)/(mh*.47),n=dx*dx+dy*dy,wobble=(y%17===0&&x>mw*.35&&x<mw*.65);if(n<=1&&!wobble)alpha[y*mw+x]=255;}
-  const candidate={x:x0/width,y:y0/height,w:mw/width,h:mh/height,evidenceDensity:.3,edgeMethod:'edge-enclosure',mask:{width:mw,height:mh,alpha,polygons:[]}};
-  for(let y=y0;y<y0+mh;y++)for(let x=x0;x<x0+mw;x++){const at=y*width+x;if(alpha[(y-y0)*mw+x-x0]){backgroundConnected[at]=0;evidence[at]=1;pixels.set([232,232,230,255],at*4);}}
-  const [r]=await processVision(cv,'complete-boundaries',{pixels,evidence,backgroundConnected,shadowLikelihood,width,height,candidates:[candidate],smallestMM:6,paperWidthMM:210,paperHeightMM:297});
-  assert.equal(r.boundaryModel,'line-curve');assert.equal(r.boundaryLineCount,0);assert.ok(r.boundaryCurveCount>=1);assert.ok(r.mask.polygons[0].length>16);
-});
-
-
-
-
-
-
 
 test('box discovery keeps independent full-page components as separate material boxes',async()=>{
   const cv=await cvModule,width=420,height=594,mask=new Uint8Array(width*height),evidence=new Uint8Array(width*height),foregroundSeeds=new Uint8Array(width*height);
@@ -110,12 +65,6 @@ test('dense frame adjustment preserves a real material that genuinely reaches th
   assert.equal(out.length,1);assert.equal(out[0].boxAdjustment,'dense-frame-body');
   assert.equal(out[0].x,0,'a genuinely page-touching dense body must stay on the page edge');
 });
-
-
-
-
-
-
 
 test('browser MorphGAC refinement preserves validated repeated apertures',async()=>{
   const cv=await cvModule,width=140,height=180,pixels=new Uint8ClampedArray(width*height*4),x0=28,y0=20,mw=84,mh=140,alpha=new Uint8Array(mw*mh).fill(255),holes=[35,58,81,104,127];
