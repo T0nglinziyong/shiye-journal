@@ -569,8 +569,13 @@ async function refineCandidateFrame(candidateFrame,request,{postprocessOnly=fals
     const ctx=canvas.getContext('2d',{willReadFrequently:true});ctx.drawImage(bitmap,0,0,aw,ah);
     const raw=ctx.getImageData(0,0,aw,ah),
       p=request.placement||{x:0,y:0,width:fw,height:fh},
-      candidate={x:p.x/fw,y:p.y/fh,w:p.width/fw,h:p.height/fh,fillRatio:.5,seedDensity:.5,recognitionConfidence:0,
-        mask:{width:request.targetWidth,height:request.targetHeight,alpha:new Uint8Array(request.mask),topologyPreserved:true}},
+      roughMask=new Uint8Array(request.mask),tw=Math.max(1,request.targetWidth),th=Math.max(1,request.targetHeight);
+    let ml=tw,mt=th,mr=0,mb=0;
+    for(let y=0;y<th;y++)for(let x=0;x<tw;x++)if(roughMask[y*tw+x]>0){ml=Math.min(ml,x);mt=Math.min(mt,y);mr=Math.max(mr,x+1);mb=Math.max(mb,y+1);}
+    if(mr<=ml||mb<=mt){ml=0;mt=0;mr=tw;mb=th;}
+    const bx=p.x+p.width*ml/tw,by=p.y+p.height*mt/th,bw=p.width*(mr-ml)/tw,bh=p.height*(mb-mt)/th,
+      candidate={x:bx/fw,y:by/fh,w:bw/fw,h:bh/fh,fillRatio:.5,seedDensity:.5,recognitionConfidence:0,
+        mask:{width:tw,height:th,alpha:roughMask,topologyPreserved:true}},
       paperWidthMM=request.paperWidthMM||210,paperHeightMM=request.paperHeightMM||297;
     let region;
     if(postprocessOnly){
