@@ -99,13 +99,15 @@ export function completePhysicalBoundaries(cv,p,own){
       minX=Math.min(minX,px);maxX=Math.max(maxX,px);minY=Math.min(minY,py);maxY=Math.max(maxY,py);
     }
     if(maxX<minX||maxY<minY)continue;
-    const bounds={x:minX,y:minY,width:maxX-minX+1,height:maxY-minY+1},
-      local=take(refined.roi(new cv.Rect(bounds.x,bounds.y,bounds.width,bounds.height))),packed=take(new cv.Mat());local.copyTo(packed);
+    const bounds={x:minX,y:minY,width:maxX-minX+1,height:maxY-minY+1},alpha=new Uint8Array((maxX-minX+1)*(maxY-minY+1));let pixels=0;
+    for(let py=0;py<bounds.height;py++)for(let px=0;px<bounds.width;px++){
+      const value=refined.data[(bounds.y+py)*rw+bounds.x+px];alpha[py*bounds.width+px]=value;if(value)pixels++;
+    }
     const polygon=(prior.polygon||[[bounds.x,bounds.y],[bounds.x+bounds.width-1,bounds.y],[bounds.x+bounds.width-1,bounds.y+bounds.height-1],[bounds.x,bounds.y+bounds.height-1]])
       .map(([px,py])=>[px-bounds.x,py-bounds.y]);
-    result.push({...candidate,x:(rx+bounds.x)/w,y:(ry+bounds.y)/h,w:bounds.width/w,h:bounds.height/h,pixels:cv.countNonZero(local),
+    result.push({...candidate,x:(rx+bounds.x)/w,y:(ry+bounds.y)/h,w:bounds.width/w,h:bounds.height/h,pixels,
       boundaryModel:prior.boundaryModel,boundaryLineCount:prior.lineCount||0,boundaryCurveCount:prior.curveCount||0,boundaryCornerCount:prior.cornerCount||0,apertureCount:aperture.count,
-      mask:{...m,width:bounds.width,height:bounds.height,alpha:new Uint8Array(packed.data),polygons:[polygon],topologyPreserved:true,boundaryPrimitives:prior.primitives,apertureRegions:aperture.regions}});
+      mask:{...m,width:bounds.width,height:bounds.height,alpha,polygons:[polygon],topologyPreserved:true,boundaryPrimitives:prior.primitives,apertureRegions:aperture.regions}});
     }finally{
       for(const resource of scoped.reverse())resource.delete();
     }
