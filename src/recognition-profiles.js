@@ -5,6 +5,10 @@ const refineSlimSAM=async context=>{
   const {refineCandidatesWithSlimSAM}=await import('./recognition-refiners.js');
   return refineCandidatesWithSlimSAM(context);
 };
+const refineAuto=async context=>{
+  const {refineCandidatesAuto}=await import('./recognition-refiners.js');
+  return refineCandidatesAuto(context);
+};
 const refineHybrid=async context=>{
   const {refineCandidatesHybrid}=await import('./recognition-refiners.js');
   return refineCandidatesHybrid(context);
@@ -23,9 +27,9 @@ const refineGrabCut=async context=>{
 };
 
 export const recognitionStrategies=Object.freeze([
-  {id:'auto',label:'自动混合 · Active + MorphGAC',refineCandidates:refineHybrid},
+  {id:'auto',label:'自动 · 传统识别 + 高质量补边',refineCandidates:refineAuto},
   {id:'traditional',label:'传统识别 · OpenCV 基础'},
-  {id:'hybrid',label:'组合识别 · Active + MorphGAC',refineCandidates:refineHybrid},
+  {id:'hybrid',label:'组合识别 · MorphGAC + GrabCut',refineCandidates:refineHybrid},
   {id:'active',label:'浏览器轮廓 · Active Contour',refineCandidates:refineActive},
   {id:'grabcut',label:'OpenCV · GrabCut',refineCandidates:refineGrabCut},
   {id:'morphgac',label:'浏览器轮廓 · MorphGAC',refineCandidates:refineMorphGAC},
