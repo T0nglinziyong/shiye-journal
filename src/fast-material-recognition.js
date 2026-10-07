@@ -49,6 +49,24 @@ function pageMetrics(cv,contour,page,w,h,pxPerMM){
   }finally{filled.delete();one.delete();dil.delete();ring.delete();contact.delete();insidePage.delete();}
 }
 
+function finalPhysicalMetrics(cv,mask,bounds,page,evidence,w,h,pxPerMM){
+  const area=Math.max(1,cv.countNonZero(mask)),dil=new cv.Mat(),ring=new cv.Mat(),contact=new cv.Mat(),insidePage=new cv.Mat();
+  const k=Math.max(3,(Math.round(pxPerMM*1.9)|1)),kernel=cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(k,k));
+  try{
+    cv.dilate(mask,dil,kernel);cv.subtract(dil,mask,ring);cv.bitwise_and(ring,page,contact);cv.bitwise_and(mask,page,insidePage);
+    let evidenceN=0;
+    if(evidence)for(let y=bounds.y;y<bounds.y+bounds.height;y++)for(let x=bounds.x;x<bounds.x+bounds.width;x++){
+      const i=y*w+x;if(mask.data[i]&&evidence[i])evidenceN++;
+    }
+    return {
+      paperContact:cv.countNonZero(contact)/Math.max(1,cv.countNonZero(ring)),
+      insidePage:cv.countNonZero(insidePage)/area,
+      insideEvidence:evidenceN/area,
+      fillRatio:area/Math.max(1,bounds.width*bounds.height)
+    };
+  }finally{kernel.delete();dil.delete();ring.delete();contact.delete();insidePage.delete();}
+}
+
 function edgeImage(cv,src,useChroma=true){
   const gray=new cv.Mat(),blurred=new cv.Mat(),edges=new cv.Mat(),rgb=new cv.Mat(),lab=new cv.Mat(),channels=new cv.MatVector(),aBlur=new cv.Mat(),bBlur=new cv.Mat(),aEdge=new cv.Mat(),bEdge=new cv.Mat();
   cv.cvtColor(src,gray,cv.COLOR_RGBA2GRAY);cv.GaussianBlur(gray,blurred,new cv.Size(5,5),0);cv.Canny(blurred,edges,20,60);
@@ -416,7 +434,7 @@ export function recognizeMaterialsFast(cv,p,own){
   const edgeRaw=proposals(cv,edges,page,{width:w,height:h,paperWidthMM,paperHeightMM,smallestMM},pxPerMM),regionRaw=regionProposals(cv,src,page,paperRef,{width:w,height:h,paperWidthMM,paperHeightMM,smallestMM},pxPerMM),selected=dedupeAndSplit(cv,[...regionRaw,...edgeRaw],w,h,pxPerMM),out=[];
   for(const q of selected){
     const approx=new cv.Mat();cv.approxPolyDP(q.contour,approx,Math.max(1.5,cv.arcLength(q.contour,true)*.018),true);
-    let boundary,ownedBoundary=false,edgeMethod;
+    let boundary,ownedBoundary=false,edgeMethod,carrierDiagnostics=null;
     if(post.shapeRegularization&&q.source==='region'&&q.rectFill>.90&&approx.rows===4&&fourSideEdgeSupport(cv,q.contour,supportEdges).min>=.68){
       // Colour-supported carriers already identify the whole piece, so a
       // four-sided high-fill region can safely use straight physical edges.
@@ -426,14 +444,22 @@ export function recognizeMaterialsFast(cv,p,own){
       // A4 paper, so its paper-contact is low. Only that class of edge
       // candidate pays for the expensive carrier-expansion pass. A complete
       // physical oval/card already touches paper and skips directly to geometry.
-      const shouldExpandWhite=q.paperContact<.52&&q.rectFill<.90;
+      const seedOnly=q.paperContact<.26,shouldExpandWhite=q.paperContact<.52&&q.rectFill<.90;
       const outsideIn=shouldExpandWhite?recoverCarrierOutsideIn(cv,{contour:q.contour,edges,w,h,pxPerMM}):{recovered:false};
       if(outsideIn.recovered){
+        carrierDiagnostics={edgeSupport:outsideIn.edgeSupport,areaRatio:outsideIn.areaRatio,seedCoverage:outsideIn.seedCoverage,source:'outside-in'};
         boundary=smoothFreeform(cv,outsideIn.contour,w,h,pxPerMM,post);outsideIn.contour.delete();ownedBoundary=true;edgeMethod='fast-outside-in-carrier';
       }else{
         const carrier=shouldExpandWhite?expandWhiteCarrier(cv,{contour:q.contour,page,edges,lab,w,h,pxPerMM,paperRef}):{expanded:false};
         if(carrier.expanded){
+          carrierDiagnostics={edgeSupport:carrier.edgeSupport,areaRatio:carrier.areaRatio,seedCoverage:carrier.seedCoverage,source:'white-carrier'};
           boundary=smoothFreeform(cv,carrier.contour,w,h,pxPerMM,post);carrier.contour.delete();ownedBoundary=true;edgeMethod='fast-white-carrier';
+        }else if(seedOnly){
+          // A closed edge completely surrounded by non-page pixels is usually
+          // internal print/detail, not another physical item. White-carrier
+          // seeds are allowed only when an observed outer carrier was actually
+          // recovered above.
+          approx.delete();continue;
         }else if(post.shapeRegularization&&q.rectFill>.92&&approx.rows===4&&q.paperContact>.58&&q.insidePage<.22&&fourSideEdgeSupport(cv,q.contour,supportEdges).min>=.68){
         const rect=cv.minAreaRect(q.contour),points=cv.boxPoints(rect).flatMap(pt=>[Math.round(pt.x),Math.round(pt.y)]);boundary=cv.matFromArray(4,1,cv.CV_32SC2,points);ownedBoundary=true;edgeMethod='fast-line';
       }else{
@@ -446,9 +472,12 @@ export function recognizeMaterialsFast(cv,p,own){
     approx.delete();
     const mask=cv.Mat.zeros(h,w,cv.CV_8UC1),vv=new cv.MatVector();vv.push_back(boundary);cv.drawContours(mask,vv,-1,new cv.Scalar(255),cv.FILLED);vv.delete();
     const openings=post.apertures?carveInternalPaperRegions(cv,{mask,lab,gray,page,evidence:p.evidence,w,h,pxPerMM,paperRef}):{count:0,regions:[],diagnostics:[],paperRef};
-    const bounds=cv.boundingRect(boundary),x=Math.max(0,bounds.x),y=Math.max(0,bounds.y),rw=Math.min(w-x,bounds.width),rh=Math.min(h-y,bounds.height),local=mask.roi(new cv.Rect(x,y,rw,rh)),packed=new cv.Mat();local.copyTo(packed);
-    const poly=contourPoints(boundary).map(([px,py])=>[px-x,py-y]),area=cv.countNonZero(mask),confidence=clamp(.45+q.paperContact*.22+Math.min(q.rectFill,.9)*.12+(edgeMethod==='fast-line'?.08:.04)+(q.source==='region'?.05:0)+Math.min(openings.count,5)*.012,0,1);
-    out.push({x:x/w,y:y/h,w:rw/w,h:rh/h,pixels:area,evidenceDensity:1-q.insidePage,edgeMethod,recognitionConfidence:confidence,
+    const bounds=cv.boundingRect(boundary),x=Math.max(0,bounds.x),y=Math.max(0,bounds.y),rw=Math.min(w-x,bounds.width),rh=Math.min(h-y,bounds.height),physical=finalPhysicalMetrics(cv,mask,bounds,page,p.evidence,w,h,pxPerMM),local=mask.roi(new cv.Rect(x,y,rw,rh)),packed=new cv.Mat();local.copyTo(packed);
+    const poly=contourPoints(boundary).map(([px,py])=>[px-x,py-y]),area=cv.countNonZero(mask),recovered=!!carrierDiagnostics,
+      confidence=clamp(.40+physical.paperContact*.24+Math.min(q.rectFill,.9)*.10+(edgeMethod==='fast-line'?.08:.04)+(q.source==='region'?.06:0)+(recovered?.08:0)+Math.min(openings.count,5)*.012-Math.min(physical.insidePage,.5)*.28,0,1);
+    out.push({x:x/w,y:y/h,w:rw/w,h:rh/h,pixels:area,evidenceDensity:physical.insideEvidence,edgeMethod,recognitionConfidence:confidence,
+      proposalSource:q.source,paperContactRatio:physical.paperContact,interiorBackgroundRatio:physical.insidePage,insideEvidenceRatio:physical.insideEvidence,fillRatio:physical.fillRatio,rectFill:q.rectFill,
+      physicalCarrierRecovered:recovered,carrierRecoverySource:carrierDiagnostics?.source||null,carrierEdgeSupport:carrierDiagnostics?.edgeSupport??0,carrierSeedCoverage:carrierDiagnostics?.seedCoverage??0,carrierAreaRatio:carrierDiagnostics?.areaRatio??1,
       mask:{width:rw,height:rh,alpha:new Uint8Array(packed.data),polygons:[poly],topologyPreserved:true,apertureRegions:openings.regions},apertureCount:openings.count,apertureDiagnostics:openings.diagnostics,aperturePaperRef:openings.paperRef});
     local.delete();packed.delete();mask.delete();if(ownedBoundary)boundary.delete();
   }
