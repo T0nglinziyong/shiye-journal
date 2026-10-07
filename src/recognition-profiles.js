@@ -51,9 +51,9 @@ export const recognitionMethodDetails=recognitionStrategies.map(({id,label,descr
 export const recognitionModeAllowed=value=>strategiesByID.has(value);
 export const recognitionPixelsAllowed=value=>pixelValues.has(Number(value));
 
-export function recognitionProfile(value='auto',analysisMaxDimension=1200){
+export function recognitionProfile(value='auto',analysisMaxDimension=900){
   const mode=strategiesByID.has(value)?value:'auto';
-  const pixels=recognitionPixelsAllowed(analysisMaxDimension)?Number(analysisMaxDimension):1200;
+  const pixels=recognitionPixelsAllowed(analysisMaxDimension)?Number(analysisMaxDimension):900;
   const {refineCandidates}=strategiesByID.get(mode);
   return {mode,analysisMaxDimension:pixels,refineCandidates};
 }
