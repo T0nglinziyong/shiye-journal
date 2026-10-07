@@ -60,5 +60,19 @@ export async function segmentPaperMaterials({data,width:w,height:h},{smallestMM=
     }
   }
 
+  // Exceptional pale/white carrier recovery. Identity remains authoritative:
+  // only an already-discovered, very low-fill material may replace its rough
+  // alpha with one local 15 mm rectangle-initialized GrabCut result.
+  for(let index=0;index<candidates.length;index++){
+    const candidate=candidates[index],
+      fill=candidate.identityFillRatio??candidate.fillRatio??0;
+    if(candidate.boundaryHint||candidate.boundaryFinalized||fill>=.45)continue;
+    const recovered=await visionTask('carrier-grabcut',{
+      pixels:sourcePixels,width:w,height:h,candidate,
+      paperWidthMM,paperHeightMM,padMM:15
+    });
+    if(recovered)candidates[index]=recovered;
+  }
+
   return candidates.sort((a,b)=>a.y-b.y||a.x-b.x).slice(0,48);
 }
