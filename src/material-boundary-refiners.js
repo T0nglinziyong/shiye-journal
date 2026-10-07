@@ -296,7 +296,7 @@ export function refineMaterialBoundaries(cv,p){
           iterations=hybrid?80:automatic?65:80,
           quality=resizeForBudget(cv,roi,rough,maxDim),qsupport=edgeSupportMap(cv,quality.image,useChroma);
         selected=morphMask(cv,quality.image,quality.mask,{iterations});
-        method=hybrid||automatic?'browser-morphgac':'browser-morphgac';
+        method=hybrid||automatic?(post.edgePolish?'browser-morphgac-grabcut':'browser-morphgac'):'browser-morphgac';
         confidence=boundarySupport(cv,selected,qsupport);
         workImage=quality.image;workMask=quality.mask;support=qsupport;
       }else{
