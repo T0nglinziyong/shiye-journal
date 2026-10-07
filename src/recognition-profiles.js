@@ -55,5 +55,5 @@ export function recognitionProfile(value='auto',analysisMaxDimension=1200){
   const mode=strategiesByID.has(value)?value:'auto';
   const pixels=recognitionPixelsAllowed(analysisMaxDimension)?Number(analysisMaxDimension):1200;
   const {refineCandidates}=strategiesByID.get(mode);
-  return {mode,analysisMaxDimension:pixels,refineCandidates};
+  return {mode,analysisMaxDimension:mode==='auto'?900:pixels,refineCandidates};
 }
