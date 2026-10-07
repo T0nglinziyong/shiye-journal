@@ -272,7 +272,7 @@ function regionFromMask(cv,mask,globalX,globalY,pageW,pageH,method,confidence,el
  * contour engines. Candidate discovery remains unchanged.
  */
 export function refineMaterialBoundaries(cv,p){
-  const pageW=p.width,pageH=p.height,src=cv.matFromArray(pageH,pageW,cv.CV_8UC4,p.pixels),mode=p.mode||'auto',post={edgePolish:p.postprocess?.edgePolish!==false,straightEdges:p.postprocess?.straightEdges!==false,curveSmooth:p.postprocess?.curveSmooth!==false,ellipse:p.postprocess?.ellipse!==false,polygon:p.postprocess?.polygon!==false,apertures:p.postprocess?.apertures!==false},useChroma=p.chromaEdges!==false,out=[];
+  const pageW=p.width,pageH=p.height,src=cv.matFromArray(pageH,pageW,cv.CV_8UC4,p.pixels),mode=p.mode||'auto',post={edgePolish:p.postprocess?.edgePolish!==false,shapeRegularization:p.postprocess?.shapeRegularization!==false,curveSmooth:p.postprocess?.curveSmooth!==false,apertures:p.postprocess?.apertures!==false},useChroma=p.chromaEdges!==false,out=[];
   try{
     for(const candidate of p.candidates||[]){
       const started=typeof performance!=='undefined'?performance.now():Date.now(),
@@ -313,8 +313,8 @@ export function refineMaterialBoundaries(cv,p){
       if(post.edgePolish){
         const polished=grabCutPolishMask(cv,roi,selected);selected.delete();selected=polished;
       }
-      if(post.straightEdges||post.ellipse||post.polygon){
-        const shape=regularizeBasicShape(cv,roi,selected,{quadrilateral:post.straightEdges,ellipse:post.ellipse,polygon:post.polygon,useChroma});
+      if(post.shapeRegularization){
+        const shape=regularizeBasicShape(cv,roi,selected,{quadrilateral:true,ellipse:true,polygon:true,useChroma});
         selected.delete();selected=shape.mask;shapeModel=shape.kind;
       }
       if(!shapeModel&&post.curveSmooth){
