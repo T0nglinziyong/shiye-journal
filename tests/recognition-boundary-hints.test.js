@@ -55,3 +55,22 @@ test('attaching a hint preserves identity and content metadata',()=>{
   assert.equal(out.absorbedFragments,2);
   assert.equal(out.identityRecognitionConfidence,.71);
 });
+
+
+test('boundary hint is completion-only and cannot shrink an already complete identity',()=>{
+  const a=c(.20,.20,.30,.30,{identityFillRatio:.90,fillRatio:.90});
+  const smaller=good(.205,.205,.29,.29,{fillRatio:.94,interiorBackgroundRatio:.02});
+  assert.equal(selectBoundaryHint(a,[a],[smaller],0),null);
+});
+
+test('boundary hint must materially improve carrier fill',()=>{
+  const a=c(.20,.20,.30,.30,{identityFillRatio:.82,fillRatio:.82});
+  const cosmetic=good(.195,.195,.31,.31,{fillRatio:.85,interiorBackgroundRatio:.02});
+  assert.equal(selectBoundaryHint(a,[a],[cosmetic],0),null);
+});
+
+test('high rectangularity cannot override excessive page background leakage',()=>{
+  const a=c(.20,.20,.30,.30,{identityFillRatio:.58,fillRatio:.58});
+  const leaky=good(.19,.19,.33,.33,{fillRatio:.86,rectFill:.97,interiorBackgroundRatio:.31});
+  assert.equal(selectBoundaryHint(a,[a],[leaky],0),null);
+});
