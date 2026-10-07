@@ -5,11 +5,11 @@ import {normalizePreferences} from '../src/preferences.js';
 
 test('validated recognition modes and defaults match the final automatic pipeline',()=>{
   const auto=recognitionProfile('auto',1600);
-  assert.equal(auto.analysisMaxDimension,900,'auto is locked to the validated 900 px pipeline');
+  assert.equal(auto.analysisMaxDimension,1600,'manual resolution selection must remain effective');
   assert.equal(typeof auto.refineCandidates,'function');
 
   const morph=recognitionProfile('morphgac',1200);
-  assert.equal(morph.analysisMaxDimension,900,'explicit MorphGAC matches auto exactly');
+  assert.equal(morph.analysisMaxDimension,1200,'explicit MorphGAC must respect the selected analysis size');
   assert.equal(typeof morph.refineCandidates,'function');
 
   assert.equal(recognitionProfile('grabcut',1600).analysisMaxDimension,1600);
@@ -50,4 +50,6 @@ test('validated recognition modes and defaults match the final automatic pipelin
   const invalid=normalizePreferences({recognition:'fake',recognitionPixels:1234});
   assert.equal(invalid.recognition,'auto');
   assert.equal(invalid.recognitionPixels,900);
+  assert.equal('recognitionEdgePolish' in normalizePreferences({recognitionEdgePolish:true}),false);
+  assert.equal('recognitionCurveSmooth' in normalizePreferences({recognitionCurveSmooth:true}),false);
 });
