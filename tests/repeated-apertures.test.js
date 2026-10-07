@@ -18,7 +18,7 @@ test('repeated aperture recovery carves an observed five-hole manufactured row',
   // Coloured material.
   for(let y=y0;y<y0+mh;y++)for(let x=x0;x<x0+mw;x++)pixels.set([112,168,140,255],(y*pageW+x)*4);
   // Five real openings: exposed paper centre + dark physical rim.
-  const centres=[[118,150],[124,215],[130,280],[136,345],[142,410]],r=9;
+  const centres=[[108,150],[110,215],[112,280],[114,345],[116,410]],r=9;
   for(const [cx,cy] of centres)for(let y=cy-r-2;y<=cy+r+2;y++)for(let x=cx-r-2;x<=cx+r+2;x++){
     const d=Math.hypot(x-cx,y-cy);
     if(d<=r+1&&d>=r-2)pixels.set([55,55,55,255],(y*pageW+x)*4);
