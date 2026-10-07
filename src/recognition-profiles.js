@@ -31,7 +31,7 @@ const refineGrabCut=async context=>{
 };
 
 export const recognitionStrategies=Object.freeze([
-  {id:'auto',label:'自动 · 传统识别 + 高质量补边',description:'默认推荐。先用传统 OpenCV 找素材，只对不确定边界调用高质量轮廓算法；速度与稳定性较均衡。',refineCandidates:refineAuto},
+  {id:'auto',label:'自动 · 实例优先 + 局部补边',description:'默认推荐。先稳定确定每件素材，再让物理边缘只修正对应单件；不会用边界算法重新合并或拆分素材。',refineCandidates:refineAuto},
   {id:'traditional',label:'传统识别 · OpenCV',description:'速度最快、资源占用低，规则纸片通常很好；对白纸载体、弱边缘和复杂自由轮廓更依赖拍摄质量。',refineCandidates:refineTraditional},
   {id:'hybrid',label:'组合识别 · MorphGAC + GrabCut',description:'先用 MorphGAC 找整体轮廓，再用原分辨率 GrabCut 精修。当前真实样例中整体最稳，但比传统识别更耗时。',refineCandidates:refineHybrid},
   {id:'active',label:'轮廓识别 · Active Contour',description:'对已有较好初始边界时速度较快、轮廓连续；对强内部纹理较敏感，需要可靠 rough mask。',refineCandidates:refineActive},
