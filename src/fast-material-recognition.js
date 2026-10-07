@@ -36,17 +36,21 @@ const median=a=>{if(!a.length)return 0;const b=[...a].sort((x,y)=>x-y);return b[
 const std=a=>{if(!a.length)return 0;const m=a.reduce((s,x)=>s+x,0)/a.length;return Math.sqrt(a.reduce((s,x)=>s+(x-m)**2,0)/a.length);};
 
 function pageMetrics(cv,contour,page,w,h,pxPerMM){
-  const filled=cv.Mat.zeros(h,w,cv.CV_8UC1),one=new cv.MatVector(),dil=new cv.Mat(),ring=new cv.Mat(),contact=new cv.Mat(),insidePage=new cv.Mat();
+  // This function is called for many edge contours. Never allocate/dilate a
+  // full A4-sized mask per contour: real journal pages contain lots of print
+  // texture, so the old implementation became O(contours * pagePixels).
+  const b=cv.boundingRect(contour),k=Math.max(3,(Math.round(pxPerMM*1.9)|1)),pad=Math.ceil(k/2)+2,
+    x0=Math.max(0,b.x-pad),y0=Math.max(0,b.y-pad),x1=Math.min(w,b.x+b.width+pad),y1=Math.min(h,b.y+b.height+pad),
+    rw=x1-x0,rh=y1-y0,filled=cv.Mat.zeros(rh,rw,cv.CV_8UC1),one=new cv.MatVector(),dil=new cv.Mat(),ring=new cv.Mat(),contact=new cv.Mat(),insidePage=new cv.Mat(),
+    shifted=shiftedContour(cv,contour,-x0,-y0),pageView=page.roi(new cv.Rect(x0,y0,rw,rh)),kernel=cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(k,k));
   try{
-    one.push_back(contour);cv.drawContours(filled,one,-1,new cv.Scalar(255),cv.FILLED);
-    const k=Math.max(3,(Math.round(pxPerMM*1.9)|1)),kernel=cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(k,k));
-    try{cv.dilate(filled,dil,kernel);cv.subtract(dil,filled,ring);cv.bitwise_and(ring,page,contact);cv.bitwise_and(filled,page,insidePage);}
-    finally{kernel.delete();}
+    one.push_back(shifted);cv.drawContours(filled,one,-1,new cv.Scalar(255),cv.FILLED);
+    cv.dilate(filled,dil,kernel);cv.subtract(dil,filled,ring);cv.bitwise_and(ring,pageView,contact);cv.bitwise_and(filled,pageView,insidePage);
     return {
       paperContact:cv.countNonZero(contact)/Math.max(1,cv.countNonZero(ring)),
       insidePage:cv.countNonZero(insidePage)/Math.max(1,cv.countNonZero(filled))
     };
-  }finally{filled.delete();one.delete();dil.delete();ring.delete();contact.delete();insidePage.delete();}
+  }finally{filled.delete();one.delete();dil.delete();ring.delete();contact.delete();insidePage.delete();shifted.delete();pageView.delete();kernel.delete();}
 }
 
 function finalPhysicalMetrics(cv,mask,bounds,page,evidence,w,h,pxPerMM){
