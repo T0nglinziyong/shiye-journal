@@ -1,4 +1,6 @@
-import opencvScriptURL from '@techstark/opencv-js/dist/opencv.js?url';
+import fallbackOpenCVScriptURL from '@techstark/opencv-js/dist/opencv.js?url';
+
+const liteOpenCVScriptURL='/vendor/opencv-shiye/opencv.js';
 
 // Heavy vision code is downloaded only when image processing is requested.
 // The import flow may explicitly prewarm it while the user is choosing a photo.
@@ -26,7 +28,11 @@ function ensureWorker(){
     for(const job of pending.values()){clearTimeout(job.timer);job.reject(error);}
     pending.clear();worker.terminate();worker=null;readyPromise=null;initialized=false;
   };
-  worker.postMessage({type:'init',opencvScriptURL});
+  worker.postMessage({
+    type:'init',
+    opencvScriptURL:liteOpenCVScriptURL,
+    fallbackOpenCVScriptURL
+  });
   return readyPromise;
 }
 export function prewarmVision(){
