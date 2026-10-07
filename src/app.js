@@ -562,27 +562,37 @@ async function refresh({background=false,onlyChanged=false}={}){const sync=await
 let trashSweepActive=false;
 async function purgeExpiredTrash(){if(trashSweepActive)return;const entries=expiredTrash(state.trash);if(!entries.length)return;trashSweepActive=true;try{await changeTrash({db,state,ids:entries.map(entry=>entry.id)});if(parity.libraryTab==='trash'||parity.workTab==='trash')render();}catch(error){console.warn('最近删除到期清理待重试',error?.name||error?.message);}finally{trashSweepActive=false;}}
 setInterval(()=>void purgeExpiredTrash(),15*60*1000);
-async function rerecognizeCandidateFrame(candidateFrame,request){
+async function refineCandidateFrame(candidateFrame,request,{postprocessOnly=false}={}){
   const bitmap=await createImageBitmap(candidateFrame);
   try{
     const fw=bitmap.width,fh=bitmap.height,canvas=document.createElement('canvas');canvas.width=fw;canvas.height=fh;
-    const ctx=canvas.getContext('2d',{willReadFrequently:true});ctx.drawImage(bitmap,0,0);const raw=ctx.getImageData(0,0,fw,fh);
-    const pre=request.preprocess||{},needs=pre.illumination!==false||pre.denoise!==false||pre.localContrast!==false,
-      processed=needs?await visionTask('balance',{pixels:raw.data,width:fw,height:fh,options:pre}):null,
-      frame=processed?{data:processed.pixels}:raw,
+    const ctx=canvas.getContext('2d',{willReadFrequently:true});ctx.drawImage(bitmap,0,0);const raw=ctx.getImageData(0,0,fw,fh),
       p=request.placement||{x:0,y:0,width:fw,height:fh},
       candidate={
         x:p.x/fw,y:p.y/fh,w:p.width/fw,h:p.height/fh,
         recognitionConfidence:0,
         mask:{width:request.targetWidth,height:request.targetHeight,alpha:new Uint8Array(request.mask),topologyPreserved:true}
-      },
-      profile=recognitionProfile(request.method,request.pixels);
-    if(typeof profile.refineCandidates!=='function')throw Error('此方法需要整张 A4 页面，只能在首次导入时使用');
-    const refined=await profile.refineCandidates({
-      candidates:[candidate],frame,width:fw,height:fh,preprocess:pre,postprocess:request.postprocess||{},
-      onProgress:()=>{}
-    }),region=refined?.[0];
-    if(!region?.mask?.alpha?.length)throw Error('没有得到可靠的新边界');
+      };
+    let region;
+    if(postprocessOnly){
+      const refined=await visionTask('material-boundary-refine',{
+        pixels:raw.data,width:fw,height:fh,candidates:[candidate],mode:'postprocess',
+        postprocess:request.postprocess||{},chromaEdges:request.preprocess?.chromaEdges!==false
+      });
+      region=refined?.[0];
+    }else{
+      const pre=request.preprocess||{},needs=pre.illumination!==false||pre.denoise!==false||pre.localContrast!==false,
+        processed=needs?await visionTask('balance',{pixels:raw.data,width:fw,height:fh,options:pre}):null,
+        frame=processed?{data:processed.pixels}:raw,
+        profile=recognitionProfile(request.method,request.pixels),
+        noPost={edgePolish:false,shapeRegularization:false,curveSmooth:false,apertures:false};
+      if(typeof profile.refineCandidates!=='function')throw Error('此方法需要整张 A4 页面，只能在首次导入时使用');
+      const refined=await profile.refineCandidates({
+        candidates:[candidate],frame,width:fw,height:fh,preprocess:pre,postprocess:noPost,onProgress:()=>{}
+      });
+      region=refined?.[0];
+    }
+    if(!region?.mask?.alpha?.length)throw Error(postprocessOnly?'自动修整没有返回可用边界':'没有得到可靠的新边界');
 
     const full=document.createElement('canvas');full.width=fw;full.height=fh;const fx=full.getContext('2d');
     const mc=document.createElement('canvas');mc.width=region.mask.width;mc.height=region.mask.height;const mx=mc.getContext('2d'),mi=mx.createImageData(mc.width,mc.height);
@@ -591,10 +601,10 @@ async function rerecognizeCandidateFrame(candidateFrame,request){
     const rx=Math.round(region.x*fw),ry=Math.round(region.y*fh),rw=Math.max(1,Math.round(region.w*fw)),rh=Math.max(1,Math.round(region.h*fh));
     fx.drawImage(mc,rx,ry,rw,rh);
     const local=document.createElement('canvas');local.width=request.targetWidth;local.height=request.targetHeight;
-    local.getContext('2d').drawImage(full,p.x,p.y,p.width,p.height,0,0,local.width,local.height);
-    const alpha=local.getContext('2d',{willReadFrequently:true}).getImageData(0,0,local.width,local.height).data,out=new Uint8Array(local.width*local.height);
+    const lx=local.getContext('2d',{willReadFrequently:true});lx.drawImage(full,p.x,p.y,p.width,p.height,0,0,local.width,local.height);
+    const alpha=lx.getImageData(0,0,local.width,local.height).data,out=new Uint8Array(local.width*local.height);
     for(let i=0;i<out.length;i++)out[i]=alpha[i*4+3];
-    return {mask:out,method:request.method,shapeModel:region.shapeModel||null,edgeMethod:region.edgeMethod||null};
+    return {mask:out,method:postprocessOnly?'postprocess-only':request.method,shapeModel:region.shapeModel||null,edgeMethod:region.edgeMethod||null};
   }finally{bitmap.close();}
 }
 
@@ -612,7 +622,8 @@ async function openCutoutCheck(id,candidate=null){
   await showCutoutEditor({
     body,modal,original,saved,recognition,candidateFrame,title:a.title,processing,toast,
     recognitionUI:{methods:localMethods,pixels:recognitionPixelOptions,method:preferredMethod,pixelsValue:state.preferences.recognitionPixels,preprocess:recognitionPreprocessOptions(),postprocess:recognitionPostprocessOptions()},
-    onRerecognize:request=>rerecognizeCandidateFrame(candidateFrame,request),
+    onRerecognize:request=>refineCandidateFrame(candidateFrame,request),
+    onPostprocess:request=>refineCandidateFrame(candidateFrame,request,{postprocessOnly:true}),
     onApply:async(blob,record,originalRecognition)=>{
     const rad=record.displayRotationDegrees*Math.PI/180,width=baseWidth&&baseHeight?Math.abs(baseWidth*Math.cos(rad))+Math.abs(baseHeight*Math.sin(rad)):null,height=baseWidth&&baseHeight?Math.abs(baseHeight*Math.cos(rad))+Math.abs(baseWidth*Math.sin(rad)):null;
     const nextProcessing={...record,sourceWidthMM:baseWidth,sourceHeightMM:baseHeight};
