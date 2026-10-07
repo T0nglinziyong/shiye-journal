@@ -10,3 +10,25 @@
 .settings-method-notes{display:grid;gap:7px;margin:-2px 0 12px}
 .settings-method-note{padding:8px 10px;border-radius:10px;background:rgba(120,140,125,.07)}
 .settings-method-note b{display:block;font-size:12px;line-height:1.35;margin-bottom:2px}
+
+
+/* Cutout inspection is a guided four-step flow. */
+.cutout-steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin:10px 0 12px}
+.cutout-steps span{display:flex;align-items:center;justify-content:center;gap:6px;min-width:0;padding:8px 6px;border-radius:10px;background:#f0f3ef;color:#7a887f;font-size:12px;white-space:nowrap}
+.cutout-steps span b{display:grid;place-items:center;width:20px;height:20px;border-radius:50%;background:#dfe6df;color:#587064;font-size:11px}
+.cutout-steps span.current{background:#e2eee5;color:#28523e;font-weight:700}
+.cutout-steps span.current b{background:#48755d;color:#fff}
+.cutout-steps span.passed{color:#4f6a5c}
+.cutout-steps span.passed b{background:#a9c5b2;color:#244835}
+.cutout-step-nav{display:flex;justify-content:space-between;gap:10px;margin-top:10px}
+.cutout-step-nav .btn{min-width:110px}
+.cutout-controls h3{margin:14px 0 6px;font-size:14px;color:#365244}
+.cutout-controls .setting-toggle{align-items:flex-start;gap:12px;padding:6px 0}
+.cutout-controls .setting-toggle>span{display:flex;min-width:0;flex:1;flex-direction:column;gap:2px}
+.cutout-controls .setting-help{display:block;color:#75827a;font-size:12px;font-weight:400;line-height:1.4}
+.cutout-controls select{width:100%}
+@media(max-width:560px){
+  .cutout-steps{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .cutout-steps span{justify-content:flex-start}
+  .cutout-step-nav .btn{flex:1;min-width:0}
+}
