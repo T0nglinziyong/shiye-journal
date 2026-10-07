@@ -1,13 +1,8 @@
-import opencvScriptURL from '@techstark/opencv-js/dist/opencv.js?url';
+import cvModule from '@techstark/opencv-js';
 import {processVision} from './opencv-worker.js';
 
-// OpenCV's official Emscripten bundle is loaded as an untouched classic script.
-// Vite only fingerprints/copies the file; it does not transform the 13 MB
-// runtime as an ES module. This avoids the fs/crypto/module-worker incompatibility.
-importScripts(opencvScriptURL);
-
 const ready=(async()=>{
-  let cv=self.cv;
+  let cv=cvModule;
   if(cv&&typeof cv.then==='function')cv=await cv;
   else if(!cv?.Mat){
     await new Promise((resolve,reject)=>{
