@@ -475,7 +475,7 @@ export function recognizeMaterialsFast(cv,p,own){
     const bounds=cv.boundingRect(boundary),x=Math.max(0,bounds.x),y=Math.max(0,bounds.y),rw=Math.min(w-x,bounds.width),rh=Math.min(h-y,bounds.height),physical=finalPhysicalMetrics(cv,mask,bounds,page,p.evidence,w,h,pxPerMM),local=mask.roi(new cv.Rect(x,y,rw,rh)),packed=new cv.Mat();local.copyTo(packed);
     const poly=contourPoints(boundary).map(([px,py])=>[px-x,py-y]),area=cv.countNonZero(mask),recovered=!!carrierDiagnostics,
       confidence=clamp(.40+physical.paperContact*.24+Math.min(q.rectFill,.9)*.10+(edgeMethod==='fast-line'?.08:.04)+(q.source==='region'?.06:0)+(recovered?.08:0)+Math.min(openings.count,5)*.012-Math.min(physical.insidePage,.5)*.28,0,1);
-    out.push({x:x/w,y:y/h,w:rw/w,h:rh/h,pixels:area,evidenceDensity:physical.insideEvidence,edgeMethod,recognitionConfidence:confidence,
+    out.push({x:x/w,y:y/h,w:rw/w,h:rh/h,pixels:area,evidenceDensity:1-physical.insidePage,edgeMethod,recognitionConfidence:confidence,
       proposalSource:q.source,paperContactRatio:physical.paperContact,interiorBackgroundRatio:physical.insidePage,insideEvidenceRatio:physical.insideEvidence,fillRatio:physical.fillRatio,rectFill:q.rectFill,
       physicalCarrierRecovered:recovered,carrierRecoverySource:carrierDiagnostics?.source||null,carrierEdgeSupport:carrierDiagnostics?.edgeSupport??0,carrierSeedCoverage:carrierDiagnostics?.seedCoverage??0,carrierAreaRatio:carrierDiagnostics?.areaRatio??1,
       mask:{width:rw,height:rh,alpha:new Uint8Array(packed.data),polygons:[poly],topologyPreserved:true,apertureRegions:openings.regions},apertureCount:openings.count,apertureDiagnostics:openings.diagnostics,aperturePaperRef:openings.paperRef});
