@@ -302,7 +302,7 @@ test('box discovery trims broad page-edge residue from a dense frame-touching bo
   // near the page edge is connected by a top bridge, enlarging the raw bbox.
   for(let y=190;y<450;y++)for(let x=80;x<300;x++){const i=y*width+x;mask[i]=evidence[i]=foregroundSeeds[i]=1;}
   for(let y=195;y<390;y++)for(let x=3;x<70;x++){const i=y*width+x;mask[i]=evidence[i]=1;}
-  for(let y=190;y<202;y++)for(let x=3;x<90;x++){const i=y*width+x;mask[i]=evidence[i]=1;}
+  for(let y=190;y<220;y++)for(let x=60;x<90;x++){const i=y*width+x;mask[i]=evidence[i]=1;}
   const out=await processVision(cv,'boxes-simple',{mask,evidence,foregroundSeeds,width,height,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
   assert.equal(out.length,1,JSON.stringify(out));assert.equal(out[0].boxAdjustment,'dense-frame-body');
   assert.ok(out[0].x>.12,'dense body should reject the remote frame residue');
