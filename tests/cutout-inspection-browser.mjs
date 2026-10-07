@@ -34,8 +34,10 @@ try{
   await click('#cutout-next');
   assert.equal(await evaluate('document.querySelector(".cutout-steps .current")?.textContent.includes("识别结果")'),true);
   assert.ok(await evaluate('!!document.querySelector("#cutout-strength")'));
-  assert.ok(await evaluate('!!document.querySelector("#cutout-post-edge")'));
+  assert.equal(await evaluate('!!document.querySelector("#cutout-post-edge")'),false);
+  assert.equal(await evaluate('!!document.querySelector("#cutout-post-curves")'),false);
   assert.ok(await evaluate('!!document.querySelector("#cutout-post-shapes")'));
+  assert.ok(await evaluate('!!document.querySelector("#cutout-post-apertures")'));
   assert.equal(await evaluate('!!document.querySelector("#cutout-method")'),false);
   assert.equal(await evaluate('!!document.querySelector("#cutout-auto-straighten")'),false);
 
