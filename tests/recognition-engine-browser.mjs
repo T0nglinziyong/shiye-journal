@@ -32,6 +32,7 @@ try{
     out.fast={elapsedMS:performance.now()-fastStarted,count:fast.length,methods:fast.map(x=>x.edgeMethod)};
     return out;
   })()`);
+  console.log('Real Chrome recognition engine raw:',JSON.stringify(result));
   assert.ok(result.warmMS<60000,JSON.stringify(result));
   assert.ok(result.fast.count>=1,JSON.stringify(result));
   assert.equal(result.grabcut.edgeMethod,'browser-grabcut',JSON.stringify(result));
@@ -41,4 +42,4 @@ try{
   for(const key of ['grabcut','active','quality','hybrid'])assert.ok(result[key].pixels>100&&result[key].width>10&&result[key].height>10,JSON.stringify(result));
   assert.deepEqual(b.errors,[]);
   console.log('Real Chrome recognition engine:',JSON.stringify(result));
-}finally{await b.close();}
+}finally{try{await b.close();}catch(error){console.warn('Browser close warning:',String(error?.message||error));}}
