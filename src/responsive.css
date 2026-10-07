@@ -243,3 +243,52 @@ dialog { width:min(700px,calc(100vw - 24px)); max-height:calc(100dvh - 24px); ov
   .material-editor-preview.cutout-preview{height:min(34dvh,320px);min-height:170px}
   .cutout-controls .setting-help{font-size:10px}
 }
+
+
+/* Mobile cutout review: controls stay compact instead of inheriting tall
+   settings-form rows. Keep each toggle as one horizontal row and reduce the
+   amount of explanatory copy visible at once. */
+@media (max-width:699px){
+  .cutout-dialog{max-height:94dvh}
+  .cutout-modal{padding:8px;gap:6px}
+  .cutout-modal>header{min-height:34px}
+  .cutout-modal>header button{padding:6px 10px;min-height:32px}
+  .cutout-modal>header strong{font-size:16px}
+  .cutout-steps{gap:4px}
+  .cutout-steps span{min-height:28px;padding:4px 5px;font-size:9px}
+  .cutout-compare{gap:4px}
+  .cutout-compare button{min-height:30px!important;padding:4px 6px!important;font-size:10px!important}
+  .material-editor-preview.cutout-preview{height:min(27dvh,250px);min-height:135px;border-radius:10px}
+  .cutout-modal>p{margin:0;font-size:10px;line-height:1.25}
+  .cutout-controls{display:flex;flex-direction:column;gap:4px}
+  .cutout-controls .stack{gap:4px!important}
+  .cutout-controls h3{font-size:12px;margin:4px 0 1px}
+  .cutout-controls label.setting-toggle{
+    display:grid!important;
+    grid-template-columns:minmax(0,1fr) auto!important;
+    align-items:center!important;
+    gap:8px!important;
+    min-height:38px;
+    padding:3px 2px!important;
+    margin:0!important
+  }
+  .cutout-controls label.setting-toggle>span{min-width:0}
+  .cutout-controls label.setting-toggle b{display:block;font-size:12px;line-height:1.2}
+  .cutout-controls label.setting-toggle .setting-help{
+    display:block;
+    margin-top:1px;
+    font-size:9px;
+    line-height:1.15;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis
+  }
+  .cutout-controls label.setting-toggle input[type=checkbox]{
+    width:22px!important;height:22px!important;margin:0!important;flex:none
+  }
+  .cutout-controls>p,#cutout-note{margin:2px 0;font-size:10px;line-height:1.2}
+  .cutout-controls button{min-height:32px!important;padding:5px 8px!important;font-size:11px}
+  .cutout-step-nav{gap:5px;margin-top:4px}
+  .cutout-mask-tools .form-grid{grid-template-columns:1fr 1fr;gap:5px}
+  .cutout-controls select{min-height:32px;padding:4px 7px;font-size:11px}
+}
