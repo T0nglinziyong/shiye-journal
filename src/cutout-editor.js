@@ -183,15 +183,6 @@ export async function showCutoutEditor({
     return action;
   };
 
-  function prepareOutput(){
-    if(outputPrepared)return;
-    outputPrepared=true;
-    if(autoStraighten){
-      const angle=maskOrientation(mask,w,h);
-      if(angle!=null)rotation=angle;
-    }
-  }
-
   function panel(){
     const stepIndex=steps.findIndex(([id])=>id===mode);
     body.querySelectorAll('[data-cut-step]').forEach((node,i)=>{
