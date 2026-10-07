@@ -61,7 +61,8 @@ export const recognitionPixelsAllowed=value=>pixelValues.has(Number(value));
 
 export function recognitionProfile(value='auto',analysisMaxDimension=900){
   const mode=strategiesByID.has(value)?value:'auto';
-  const pixels=recognitionPixelsAllowed(analysisMaxDimension)?Number(analysisMaxDimension):900;
+  const requested=recognitionPixelsAllowed(analysisMaxDimension)?Number(analysisMaxDimension):900,
+    pixels=mode==='auto'||mode==='morphgac'?900:requested;
   const {refineCandidates}=strategiesByID.get(mode);
   return {mode,analysisMaxDimension:pixels,refineCandidates};
 }
