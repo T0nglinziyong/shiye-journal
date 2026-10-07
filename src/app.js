@@ -48,7 +48,7 @@ import * as db from './store.js';
 import {loadPreferences,savePreferences} from './preferences.js';
 import {uid,canvasSize,draft,project,itemFromAsset,physicalPlacement,validatePhysicalDraft,textBlock,primitive,setDraftPaperSize} from './domain.js';
 import {detectPaperCandidates,cropBitmap,alignMaterialPreview} from './image.js';
-import {visionTask} from './vision-runtime.js';
+import {visionTask,prewarmVision} from './vision-runtime.js';
 import {recognitionOptions,recognitionPixelOptions,recognitionMethodDetails,recognitionProfile} from './recognition-profiles.js';
 import {classifyRecord} from './classification.js';
 import {mountPaperCorrection,resetPaperCorrection} from './paper-ui.js';
@@ -174,7 +174,7 @@ function route(name,{back=false}={}){
   routeScroll.set(state.route+':'+state.seriesID,window.scrollY);
   if(name==='settings'&&!settingsSession)settingsSession={ai:structuredClone(state.aiSettings),preferences:structuredClone(state.preferences),returnRoute:state.route};
   if(state.route==='settings'&&name!=='settings'&&settingsSession){state.aiSettings=settingsSession.ai;state.preferences=settingsSession.preferences;settingsSession=null;state.settingsSection=null;}
-if(state.route==='editor'&&name!=='editor'&&aiController)aiController.abort(Error('已离开创作页面'));syncSelectionScope(parity,name);state.route=name;if(name==='import'&&typeof Worker!=='undefined')Promise.resolve().then(()=>visionTask('warmup',{})).catch(()=>{});if(name==='series'){state.seriesID='all';state.addingToSeries=null;libraryHistory.length=0;}if(name!=='library')state.addingToSeries=null;if(name!=='settings'&&!fromSettings)state.selected=null;render();window.scrollTo(0,routeScroll.get(name+':'+state.seriesID)||0);}
+if(state.route==='editor'&&name!=='editor'&&aiController)aiController.abort(Error('已离开创作页面'));syncSelectionScope(parity,name);state.route=name;if(name==='import'&&typeof Worker!=='undefined')void prewarmVision().catch(()=>{});if(name==='series'){state.seriesID='all';state.addingToSeries=null;libraryHistory.length=0;}if(name!=='library')state.addingToSeries=null;if(name!=='settings'&&!fromSettings)state.selected=null;render();window.scrollTo(0,routeScroll.get(name+':'+state.seriesID)||0);}
 function imgTag(a){const src=a&&(image(a.blobId)||a.staticPath);return src?`<img data-asset-image-id="${esc(a.id)}" loading="lazy" decoding="async" src="${esc(src)}" alt="${esc(a.title)}">`:'<span>无预览</span>';}
 function assetCard(a){return `<button class="card" data-act="detail" data-id="${a.id}"><div class="card-image">${imgTag(a)}</div><div class="card-body"><h3>${esc(a.title)}${a.isFavorite?'<span class="card-favorite" aria-label="已收藏">♥</span>':''}</h3><p>${esc(kindName(a.kind))} · ${a.physicalWidthMM?`${fmt(a.physicalWidthMM)} × ${fmt(a.physicalHeightMM)} mm`:'尺寸待确认'}</p><span class="chip ${a.reviewStatus==='ready'?'':'warn'}">${a.reviewStatus==='ready'?'已整理':'待检查'}</span></div></button>`;}
 const fmt=n=>Number(n).toFixed(1).replace(/\.0$/,'');
@@ -759,7 +759,13 @@ async function previewCrop(){
   const record=state.importRecords[state.importIndex],source=state.correctedBitmap||state.importBitmap,b=state.correctedBitmap?{x:0,y:0,w:1,h:1}:state.importBox,[pw,ph]=paperDimensions();
   let regions=await detectPaperCandidates(source,b,6,{balanceLight:state.balanceLight,paperWidthMM:pw,paperHeightMM:ph,recognition:state.importRecognition||state.preferences.recognition,recognitionPixels:state.preferences.recognitionPixels,recognitionPreprocess:recognitionPreprocessOptions(),recognitionPostprocess:recognitionPostprocessOptions(),onProgress:p=>{
     if(state.route!=='import'||record!==state.importRecords[state.importIndex])return;
-    const text=p.status==='inference'?'浏览器模型正在细化素材边缘…':p.status==='fallback'?`${p.count} 个模型结果不可靠，保留传统识别边缘，请检查`:`正在加载浏览器模型${Number.isFinite(p.progress)?' '+Math.round(p.progress)+'%':''}（首次约40MB，照片不上传）`;
+    const slim=state.preferences.recognition==='slimsam';
+        const text=p.status==='inference'?'浏览器模型正在细化素材边缘…'
+          :p.status==='fallback'?(Number.isFinite(p.count)?`${p.count} 个模型结果不可靠，保留传统识别边缘，请检查`:'边缘精修未采用新结果，已保留原识别边缘')
+          :p.status==='contour-refinement'?`正在细化 ${p.total||''} 个不确定素材边缘…`
+          :p.status==='boundary-postprocess'?`正在进行 ${p.total||''} 个素材的边缘与孔洞后处理…`
+          :slim?`正在加载浏览器模型${Number.isFinite(p.progress)?' '+Math.round(p.progress)+'%':''}（首次约40MB，照片不上传）`
+          :'正在优化素材边缘…';
     state.importProcessing=text;const label=view.querySelector('.import-processing');if(label)label.textContent=text;toast(text);
   }});
   if(state.route!=='import'||record!==state.importRecords[state.importIndex])return;
@@ -903,7 +909,20 @@ window.addEventListener('resize',refitEditor);
 window.visualViewport?.addEventListener('resize',refitEditor);
 document.querySelectorAll('.main-nav button').forEach(b=>b.onclick=()=>route(b.dataset.route==='library'?'series':b.dataset.route));
 document.querySelector('#top-basket').onclick=()=>route('matching');document.querySelector('#top-settings').onclick=()=>route('settings');
-async function init(user){let cachedShown=false;cloudSessionReady=true;const accountId=user?.id||'browser';if(state.accountId&&state.accountId!==accountId){assetOrganization.clear();clearJournalTemplateImages();clearJournalPresetImages();state.userTemplates=[];}state.accountId=accountId;try{
+let visionPrewarmScheduled=false;
+function scheduleVisionPrewarm(){
+  if(visionPrewarmScheduled||typeof Worker==='undefined')return;
+  visionPrewarmScheduled=true;
+  const start=()=>{void prewarmVision().catch(error=>console.warn('本机识别引擎后台预热失败，导入时将重试',error?.message));};
+  // Let authentication/data shell and the first material-library paint win.
+  // The ~5 s OpenCV/WASM startup then happens while the user is browsing,
+  // instead of after a photo has already been selected.
+  requestAnimationFrame(()=>{
+    if('requestIdleCallback' in window)requestIdleCallback(start,{timeout:1200});
+    else setTimeout(start,500);
+  });
+}
+async function init(user){let cachedShown=false;cloudSessionReady=true;const accountId=user?.id||'browser';if(state.accountId&&state.accountId!==accountId){assetOrganization.clear();clearJournalTemplateImages();clearJournalPresetImages();state.userTemplates=[];}state.accountId=accountId;scheduleVisionPrewarm();try{
   await db.storageMode();state.selfHosted=db.isSameOriginServer();
   // startCloudSession has validated Auth and the allowlist before this runs.
   const cached=await db.cachedCollections();if(cached){Object.assign(state,cached);state.accountId=accountId;await restorePendingProjects();for(const a of state.assets)if(a.staticPath)staticSources.set(a.blobId,a.staticPath);render();cachedShown=true;saveStatus('本机缓存 · 正在核对云端');}
