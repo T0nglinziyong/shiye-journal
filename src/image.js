@@ -16,7 +16,7 @@ export async function detectPaperCandidates(bitmap,box,smallestMM=6,{balanceLigh
       localContrast:recognitionPreprocess.localContrast!==false,
       chromaEdges:recognitionPreprocess.chromaEdges!==false
     },
-    needsRasterPreprocess=preprocess.illumination||preprocess.denoise||preprocess.localContrast,
+    needsRasterPreprocess=profile.mode!=='auto'&&(preprocess.illumination||preprocess.denoise||preprocess.localContrast),
     processed=needsRasterPreprocess?await visionTask('balance',{pixels:frame.data,width:w,height:h,options:preprocess}):null;
   const candidates=await segmentPaperMaterials(processed?{data:processed.pixels,width:w,height:h}:frame,{smallestMM,paperWidthMM,paperHeightMM,sourcePixels:frame.data,chromaEdges:preprocess.chromaEdges,postprocess:recognitionPostprocess});
   return profile.refineCandidates&&candidates.length
