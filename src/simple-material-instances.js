@@ -26,7 +26,7 @@ function componentMetrics(stats,label,w,h,paperWidthMM,paperHeightMM,pxPerMM,evi
     bw=stats.data32S[base+2],bh=stats.data32S[base+3],pixels=stats.data32S[base+4],
     widthMM=bw/w*paperWidthMM,heightMM=bh/h*paperHeightMM,
     safeBand=Math.max(2,Math.round(pxPerMM*3)),
-    touchesProtected=x<safeBand||y<safeBand||x+bw>w-safeBand||y+bh>h-safeBand;
+    touchesProtected=x<=safeBand||y<=safeBand||x+bw>=w-safeBand||y+bh>=h-safeBand;
   let evidenceN=0,seedN=0;
   return {label,x,y,w:bw,h:bh,pixels,widthMM,heightMM,touchesProtected,evidenceN,seedN};
 }
