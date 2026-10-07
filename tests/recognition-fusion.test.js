@@ -112,3 +112,20 @@ test('multi-instance reconstruction cannot wrap a dominant neighbour across page
   assert.equal(out.length,4);
   assert.ok(out.includes(green)&&out.includes(ovalTop)&&out.includes(ovalBody)&&out.includes(ovalBottom));
 });
+
+
+test('sparse low-fill enclosure cannot replace fragmented material with an incomplete carrier',()=>{
+  const top=c(.1619,.1167,.0613,.0567);
+  const body=c(.1918,.1189,.1903,.1722);
+  const bottom=c(.1730,.3233,.0362,.0356);
+  const sparse=c(.1274,.0922,.2752,.3033,{
+    edgeMethod:'boundary-reconstruction',boundaryReconstruction:true,
+    reconstructionScore:.564,edgeSupportRatio:.980,closureScaleMM:.65,
+    paperContactRatio:.581,interiorBackgroundRatio:.836,fillRatio:.126,
+    matchedInstances:3,matchedOccupancy:.45,matchedPairOverlap:.493,
+    largestMatchShare:.408,boundaryShadowFraction:.20,insideEvidenceRatio:.14
+  });
+  const out=fuseRecognitionCandidates([top,body,bottom],[sparse]);
+  assert.equal(out.length,3);
+  assert.ok(out.includes(top)&&out.includes(body)&&out.includes(bottom));
+});
