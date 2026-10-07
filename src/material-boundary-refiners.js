@@ -74,20 +74,51 @@ function rectangleInit(mask,padFraction=.05){
   const pad=Math.max(2,Math.round(Math.max(maxX-minX+1,maxY-minY+1)*padFraction)),x0=clamp(minX-pad,1,mask.cols-2),x1=clamp(maxX+1+pad,2,mask.cols-1),y0=clamp(minY-pad,1,mask.rows-2),y1=clamp(maxY+1+pad,2,mask.rows-1),out=new Uint8Array(mask.rows*mask.cols);
   for(let y=y0;y<y1;y++)out.fill(1,y*mask.cols+x0,y*mask.cols+x1);return out;
 }
+function expandedOuterMask(cv,rough,fraction=.025){
+  const outer=outerFill(cv,rough);
+  if(cv.countNonZero(outer)===0)return outer;
+  const ksize=Math.max(3,(Math.round(Math.min(outer.cols,outer.rows)*fraction)|1)),kernel=cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(ksize,ksize)),expanded=new cv.Mat();
+  cv.dilate(outer,expanded,kernel);outer.delete();kernel.delete();return expanded;
+}
+function morphInitFromRough(cv,rough){
+  const expanded=expandedOuterMask(cv,rough,.025);
+  const init=new Uint8Array(expanded.rows*expanded.cols);
+  if(cv.countNonZero(expanded)>0){for(let i=0;i<init.length;i++)init[i]=expanded.data[i]?1:0;}
+  expanded.delete();
+  if(init.some(v=>v))return init;
+  return rectangleInit(rough);
+}
+function resampledSnakeFromRough(cv,rough,count=128){
+  const expanded=expandedOuterMask(cv,rough,.025),found=largestExternal(cv,expanded);expanded.delete();
+  if(!found.contour||found.contour.rows<4){found.contour?.delete?.();return null;}
+  const points=Array.from({length:found.contour.rows},(_,i)=>[found.contour.data32S[i*2],found.contour.data32S[i*2+1]]);
+  found.contour.delete();
+  const n=points.length,cumulative=new Float64Array(n+1);let total=0;
+  for(let i=0;i<n;i++){const a=points[i],b=points[(i+1)%n],d=Math.hypot(b[0]-a[0],b[1]-a[1]);total+=d;cumulative[i+1]=total;}
+  if(total<1)return null;
+  const snake=[];let seg=0;
+  for(let k=0;k<count;k++){
+    const target=total*k/count;
+    while(seg<n-1&&cumulative[seg+1]<target)seg++;
+    const a=points[seg],b=points[(seg+1)%n],den=Math.max(1e-9,cumulative[seg+1]-cumulative[seg]),t=(target-cumulative[seg])/den;
+    snake.push([a[1]+(b[1]-a[1])*t,a[0]+(b[0]-a[0])*t]);
+  }
+  return snake;
+}
+function rectangleSnake(mask,count=128,padFraction=.05){
+  let minX=mask.cols,minY=mask.rows,maxX=-1,maxY=-1;for(let y=0;y<mask.rows;y++)for(let x=0;x<mask.cols;x++)if(mask.data[y*mask.cols+x]){minX=Math.min(minX,x);maxX=Math.max(maxX,x);minY=Math.min(minY,y);maxY=Math.max(maxY,y);}
+  if(maxX<minX){minX=2;minY=2;maxX=mask.cols-3;maxY=mask.rows-3;}
+  const pad=Math.max(2,Math.round(Math.max(maxX-minX+1,maxY-minY+1)*padFraction)),x0=clamp(minX-pad,1,mask.cols-2),x1=clamp(maxX+pad,2,mask.cols-1),y0=clamp(minY-pad,1,mask.rows-2),y1=clamp(maxY+pad,2,mask.rows-1),snake=[],q=Math.max(4,Math.floor(count/4));
+  for(let i=0;i<q;i++){const t=i/q;snake.push([y0,x0+t*(x1-x0)]);}for(let i=0;i<q;i++){const t=i/q;snake.push([y0+t*(y1-y0),x1]);}for(let i=0;i<q;i++){const t=i/q;snake.push([y1,x1-t*(x1-x0)]);}for(let i=0;i<q;i++){const t=i/q;snake.push([y1-t*(y1-y0),x0]);}
+  return snake;
+}
 function morphMask(cv,rgba,rough,{iterations=65}={}){
-  const g=inverseGradientGImage(cv,rgba),init=rectangleInit(rough),u=morphGAC(g,rgba.cols,rgba.rows,init,{numIter:iterations,smoothing:1,threshold:'auto',balloon:-1}),out=cv.Mat.zeros(rgba.rows,rgba.cols,cv.CV_8UC1);
+  const g=inverseGradientGImage(cv,rgba),init=morphInitFromRough(cv,rough),u=morphGAC(g,rgba.cols,rgba.rows,init,{numIter:iterations,smoothing:1,threshold:'auto',balloon:-1}),out=cv.Mat.zeros(rgba.rows,rgba.cols,cv.CV_8UC1);
   for(let i=0;i<u.length;i++)if(u[i])out.data[i]=255;const filled=outerFill(cv,out);out.delete();return filled;
 }
 function activeMask(cv,rgba,rough){
   const gray=new cv.Mat(),f=new cv.Mat(),blur=new cv.Mat();cv.cvtColor(rgba,gray,cv.COLOR_RGBA2GRAY);gray.convertTo(f,cv.CV_32F,1/255);cv.GaussianBlur(f,blur,new cv.Size(0,0),1,1,cv.BORDER_REPLICATE);
-  let minX=rough.cols,minY=rough.rows,maxX=-1,maxY=-1;for(let y=0;y<rough.rows;y++)for(let x=0;x<rough.cols;x++)if(rough.data[y*rough.cols+x]){minX=Math.min(minX,x);maxX=Math.max(maxX,x);minY=Math.min(minY,y);maxY=Math.max(maxY,y);}
-  const pad=Math.max(2,Math.round(Math.max(maxX-minX+1,maxY-minY+1)*.05)),x0=clamp(minX-pad,1,rough.cols-2),x1=clamp(maxX+pad,2,rough.cols-1),y0=clamp(minY-pad,1,rough.rows-2),y1=clamp(maxY+pad,2,rough.rows-1),snake=[],q=32;
-  // Keep the periodic snake dense. The scikit-image algorithm keeps a fixed
-  // number of control points; sparse 48-point browser fixtures materially
-  // changed the solution on textured paper even though smooth parity fixtures
-  // passed. 128 points keeps ~5–8 px spacing in the <=320 px ROI budget and
-  // tracks the official Python result on the real-photo benchmark.
-  for(let i=0;i<q;i++){const t=i/q;snake.push([y0,x0+t*(x1-x0)]);}for(let i=0;i<q;i++){const t=i/q;snake.push([y0+t*(y1-y0),x1]);}for(let i=0;i<q;i++){const t=i/q;snake.push([y1,x1-t*(x1-x0)]);}for(let i=0;i<q;i++){const t=i/q;snake.push([y1-t*(y1-y0),x0]);}
+  const snake=resampledSnakeFromRough(cv,rough,128)||rectangleSnake(rough,128,.05);
   const r=activeContour(new Float32Array(blur.data32F),rgba.cols,rgba.rows,snake,{alpha:.015,beta:.12,gamma:.02,wLine:0,wEdge:1,maxNumIter:500,convergence:.05,maxPxMove:1}),pts=r.snake.flatMap(([y,x])=>[Math.round(x),Math.round(y)]),contour=cv.matFromArray(r.snake.length,1,cv.CV_32SC2,pts),out=cv.Mat.zeros(rgba.rows,rgba.cols,cv.CV_8UC1),v=new cv.MatVector();v.push_back(contour);cv.drawContours(out,v,-1,new cv.Scalar(255),cv.FILLED);gray.delete();f.delete();blur.delete();contour.delete();v.delete();return out;
 }
 function restoreHoles(cv,outer,holes){
