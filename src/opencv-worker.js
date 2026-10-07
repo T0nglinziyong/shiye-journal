@@ -79,7 +79,8 @@ export async function processVision(cv,operation,p){
     if(operation==='process-material-boxes'){
       let out;
       if(p.method==='morphgac'||p.method==='auto')out=segmentMaterialBoxes(cv,{...p,pixels:p.pixels});
-      else out=refineMaterialBoundaries(cv,{...p,candidates:p.boxes,mode:p.method==='hybrid'?'hybrid':'grabcut',postprocess:{edgePolish:false,shapeRegularization:false,curveSmooth:false,apertures:false}});
+      else if(p.method==='hybrid')out=refineMaterialBoundaries(cv,{...p,candidates:p.boxes,mode:'hybrid',postprocess:{edgePolish:true,shapeRegularization:false,curveSmooth:false,apertures:false}});
+      else out=refineMaterialBoundaries(cv,{...p,candidates:p.boxes,mode:'grabcut',postprocess:{edgePolish:false,shapeRegularization:false,curveSmooth:false,apertures:false}});
       if(p.shapeRegularization!==false)out=refineMaterialBoundaries(cv,{...p,candidates:out,mode:'postprocess',postprocess:{edgePolish:false,shapeRegularization:true,curveSmooth:false,apertures:false}});
       if(p.apertures!==false)out=restoreRepeatedApertures(cv,{pixels:p.sourcePixels||p.pixels,width:p.width,height:p.height,candidates:out,paperWidthMM:p.paperWidthMM,paperHeightMM:p.paperHeightMM});
       return out;
