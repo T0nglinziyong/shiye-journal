@@ -2,7 +2,7 @@ import cvModule from '@techstark/opencv-js';
 
 export async function probeOpenCVMainThread(){
   let cv;
-  if(cvModule instanceof Promise)cv=await cvModule;
+  if(cvModule&&typeof cvModule.then==='function')cv=await cvModule;
   else{
     cv=cvModule;
     if(!cv.Mat)await new Promise((resolve,reject)=>{
