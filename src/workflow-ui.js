@@ -10,6 +10,7 @@ import {mountFourFilters,mountFilterControl} from './filter-controls.js';
 import {containBox} from './preview-geometry.js';
 import {registerSelectionPresenter} from './selection-presenter.js';
 import {applyCatalogPage,resetCatalogPage} from './catalog-pagination.js';
+import {prewarmVision} from './vision-runtime.js';
 
 const previewObservers=new WeakMap();
 function mountWorkPreviews(c){
@@ -30,6 +31,11 @@ export function mountWorkflowControls(c) {
   if(c.state.route==='series')mountSeries(c);
   if(c.state.route==='works')mountProjectBatch(c);
   if(['library','series'].includes(c.state.route))mountAssetBatch(c);
+  // Start downloading/initializing OpenCV as soon as the user commits to an
+  // import gesture. Time spent in the native photo/file picker then hides most
+  // of the first-recognition cold start.
+  const importTrigger=c.view.querySelector('[data-act="import"]');
+  importTrigger?.addEventListener('pointerdown',()=>{void prewarmVision().catch(()=>{});},{once:true,passive:true});
   if(c.state.route==='assetDetail')mountAssetDetail(c);
   if(c.state.route==='settings'&&c.state.settingsSection==='数据与诊断')mountData(c);
   if(c.state.route==='import')mountImport(c);
@@ -161,6 +167,9 @@ function mountData(c) {
 }
 function mountImport(c) {
   const {state,view,render}=c;
+  // A second idempotent call covers keyboard/programmatic import entry where
+  // there was no pointerdown on the catalog button.
+  void prewarmVision().catch(()=>{});
   mountImportCandidateMenus(c);
   if(state.importStep==='inspect') {
     const correction=view.querySelector('.paper-corner-overlay');if(state.showManualBox&&correction)correction.style.display='none';
