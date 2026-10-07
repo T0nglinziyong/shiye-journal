@@ -83,3 +83,14 @@ test('edge-certain reconstruction may refine one instance when page flood makes 
   const tiny=c(.24,.27,.09,.06,{edgeMethod:'boundary-reconstruction',boundaryReconstruction:true,reconstructionScore:.61,edgeSupportRatio:.97,closureScaleMM:.65,boundaryShadowFraction:0,paperContactRatio:0,interiorBackgroundRatio:0,fillRatio:.53,matchedInstances:1,largestMatchShare:8});
   assert.deepEqual(fuseRecognitionCandidates([rough],[tiny]),[rough]);
 });
+
+
+test('validated recovered white carrier can reunite printed fragments even when page contact is weak',()=>{
+  const figure=c(.64,.72,.05,.08),ball=c(.70,.69,.04,.04),legs=c(.66,.79,.07,.08);
+  const carrier=c(.61,.67,.18,.25,{
+    edgeMethod:'fast-outside-in-carrier',physicalCarrierRecovered:true,
+    carrierEdgeSupport:.31,carrierSeedCoverage:.97,carrierAreaRatio:1.85,
+    paperContactRatio:.12,interiorBackgroundRatio:.03,insideEvidenceRatio:.28,fillRatio:.46
+  });
+  assert.deepEqual(fuseRecognitionCandidates([figure,ball,legs],[carrier]),[carrier]);
+});
