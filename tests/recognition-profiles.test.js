@@ -19,6 +19,8 @@ test('recognition methods are independent from processing pixels',()=>{
  const prefs=normalizePreferences({recognition:'grabcut',recognitionPixels:1600});
  assert.equal(prefs.recognition,'grabcut');
  assert.equal(prefs.recognitionPixels,1600);
+ assert.equal(prefs.recognitionPostprocess,true);
  assert.equal(normalizePreferences({recognition:'fake',recognitionPixels:1234}).recognition,'auto');
  assert.equal(normalizePreferences({recognition:'fake',recognitionPixels:1234}).recognitionPixels,1200);
+ assert.equal(normalizePreferences({recognition:'grabcut',recognitionPostprocess:false}).recognitionPostprocess,false);
 });
