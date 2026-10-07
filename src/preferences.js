@@ -2,7 +2,7 @@ import {recognitionModeAllowed,recognitionPixelsAllowed} from './recognition-pro
 const KEY='shiye-ui-preferences-v1';
 const defaults={
   paperSize:'a4',orientation:'auto',wholePaper:true,autoOrganize:true,
-  recognition:'auto',recognitionPixels:1200,
+  recognition:'auto',recognitionPixels:900,
   balanceLight:true,
   recognitionDenoise:true,
   recognitionLocalContrast:true,
@@ -16,7 +16,7 @@ const defaults={
 export function normalizePreferences(value={}){
   return {...defaults,...value,
     recognition:recognitionModeAllowed(value?.recognition)?value.recognition:'auto',
-    recognitionPixels:recognitionPixelsAllowed(value?.recognitionPixels)?Number(value.recognitionPixels):1200,
+    recognitionPixels:recognitionPixelsAllowed(value?.recognitionPixels)?Number(value.recognitionPixels):900,
     balanceLight:value?.balanceLight!==false,
     recognitionDenoise:value?.recognitionDenoise!==false,
     recognitionLocalContrast:value?.recognitionLocalContrast!==false,
