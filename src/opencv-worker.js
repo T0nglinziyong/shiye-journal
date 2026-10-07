@@ -5,7 +5,7 @@ import {recognizeMaterialsFast} from './fast-material-recognition.js';
 import {refineMaterialBoundaries} from './material-boundary-refiners.js';
 // OpenCV may expose a thenable module. Keep it inside an object rather than
 // resolving a Promise with the module itself (which can recurse indefinitely).
-const ready=(async()=>{let cv;if(cvModule instanceof Promise)cv=await cvModule;else{cv=cvModule;if(!cv.Mat)await new Promise(resolve=>{cv.onRuntimeInitialized=resolve;});}return {cv};})();
+const ready=(async()=>{let cv;if(cvModule&&typeof cvModule.then==='function')cv=await cvModule;else{cv=cvModule;if(!cv?.Mat)await new Promise(resolve=>{cv.onRuntimeInitialized=resolve;});}return {cv};})();
 export async function processVision(cv,operation,p){
   const resources=[],own=mat=>(resources.push(mat),mat);
   try{
