@@ -1,4 +1,5 @@
 name: Build minimal Shiye OpenCV
+# Rebuild when the runtime contract changes; generated assets are committed to test.
 
 on:
   push:
