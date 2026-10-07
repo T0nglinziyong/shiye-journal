@@ -5,12 +5,20 @@ const hasPost=postprocess=>Object.values(postprocess||{}).some(value=>value!==fa
 
 async function postprocessCandidates({candidates,frame,width,height,preprocess={},postprocess={},onProgress=()=>{}}){
   if(!candidates.length||!hasPost(postprocess))return candidates;
-  onProgress({status:'boundary-postprocess',total:candidates.length});
+  const selected=[],indices=[];
+  for(let i=0;i<candidates.length;i++){
+    if(candidates[i].boundaryFinalized)continue;
+    selected.push(candidates[i]);indices.push(i);
+  }
+  if(!selected.length)return candidates;
+  onProgress({status:'boundary-postprocess',total:selected.length});
   try{
-    return await visionTask('material-boundary-refine',{
-      pixels:frame.data,width,height,candidates,mode:'postprocess',postprocess,
+    const refined=await visionTask('material-boundary-refine',{
+      pixels:frame.data,width,height,candidates:selected,mode:'postprocess',postprocess,
       chromaEdges:preprocess.chromaEdges!==false
-    });
+    }),out=[...candidates];
+    for(let i=0;i<indices.length;i++)out[indices[i]]=refined[i]||selected[i];
+    return out;
   }catch(error){
     onProgress({status:'fallback',engine:'postprocess',message:error.message});
     return candidates;
@@ -76,7 +84,7 @@ export async function refineCandidatesWithBrowserContours({candidates,frame,widt
 export async function refineCandidatesPostprocess(context){
   return postprocessCandidates(context);
 }
-export async function refineCandidatesAuto(context){return refineCandidatesWithBrowserContours({...context,mode:'auto'});}
+export async function refineCandidatesAuto(context){return postprocessCandidates(context);}
 export async function refineCandidatesHybrid(context){return refineCandidatesWithBrowserContours({...context,mode:'hybrid'});}
 export async function refineCandidatesWithMorphGAC(context){return refineCandidatesWithBrowserContours({...context,mode:'morphgac'});}
 export async function refineCandidatesWithGrabCut(context){return refineCandidatesWithBrowserContours({...context,mode:'grabcut'});}
