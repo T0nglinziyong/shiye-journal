@@ -2,8 +2,8 @@
 // that the card actually displays. A surviving source photo alone cannot
 // render the extracted material; a surviving cutout can.
 import {usableProjectSnapshot} from './project-outbox-recovery.js';
-const imageIDs=asset=>[asset.blobId,asset.originalCutoutBlobId,asset.originalBlobId,asset.photoBlobId].filter(Boolean);
-const displayIDs=asset=>[asset.blobId,asset.originalCutoutBlobId,asset.originalBlobId].filter(Boolean);
+const imageIDs=asset=>[asset.blobId,asset.originalCutoutBlobId,asset.originalBlobId,asset.candidateFrameBlobId,asset.photoBlobId].filter(Boolean);
+const displayIDs=asset=>[asset.blobId,asset.originalCutoutBlobId,asset.originalBlobId,asset.candidateFrameBlobId].filter(Boolean);
 const usable=value=>value instanceof Blob&&value.size>0;
 function validMutation(op,names){
   if(!op||!names.includes(op.store)||!['put','delete','clear'].includes(op.action))return false;

@@ -33,13 +33,13 @@ function placedMaskFromCandidate(cv,c,w,h,x0,y0,rw,rh){
 function enclosedHoles(cv,mask){
   const outer=outerFill(cv,mask),holes=new cv.Mat();cv.subtract(outer,mask,holes);outer.delete();return holes;
 }
-function edgeSupportMap(cv,rgba){
+function edgeSupportMap(cv,rgba,useChroma=true){
   const gray=new cv.Mat(),blur=new cv.Mat(),edge=new cv.Mat(),rgb=new cv.Mat(),lab=new cv.Mat(),channels=new cv.MatVector(),ab=new cv.Mat(),bb=new cv.Mat(),ae=new cv.Mat(),be=new cv.Mat(),support=new cv.Mat();
   cv.cvtColor(rgba,gray,cv.COLOR_RGBA2GRAY);cv.GaussianBlur(gray,blur,new cv.Size(3,3),0);cv.Canny(blur,edge,8,30);
-  cv.cvtColor(rgba,rgb,cv.COLOR_RGBA2RGB);cv.cvtColor(rgb,lab,cv.COLOR_RGB2Lab);cv.split(lab,channels);
-  const a=channels.get(1),b=channels.get(2);cv.GaussianBlur(a,ab,new cv.Size(3,3),0);cv.GaussianBlur(b,bb,new cv.Size(3,3),0);cv.Canny(ab,ae,2,9);cv.Canny(bb,be,2,9);cv.bitwise_or(edge,ae,edge);cv.bitwise_or(edge,be,edge);
+  cv.cvtColor(rgba,rgb,cv.COLOR_RGBA2RGB);cv.cvtColor(rgb,lab,cv.COLOR_RGB2Lab);
+  let a=null,b=null;if(useChroma){cv.split(lab,channels);a=channels.get(1);b=channels.get(2);cv.GaussianBlur(a,ab,new cv.Size(3,3),0);cv.GaussianBlur(b,bb,new cv.Size(3,3),0);cv.Canny(ab,ae,2,9);cv.Canny(bb,be,2,9);cv.bitwise_or(edge,ae,edge);cv.bitwise_or(edge,be,edge);}
   const k=cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(5,5));cv.dilate(edge,support,k);
-  gray.delete();blur.delete();edge.delete();rgb.delete();lab.delete();channels.delete();a.delete();b.delete();ab.delete();bb.delete();ae.delete();be.delete();k.delete();
+  gray.delete();blur.delete();edge.delete();rgb.delete();lab.delete();channels.delete();a?.delete?.();b?.delete?.();ab.delete();bb.delete();ae.delete();be.delete();k.delete();
   return support;
 }
 function boundarySupport(cv,mask,support){
@@ -48,12 +48,12 @@ function boundarySupport(cv,mask,support){
   const score=cv.countNonZero(hit)/Math.max(1,cv.countNonZero(b));found.contour.delete();b.delete();v.delete();hit.delete();return score;
 }
 
-function thinEdgeMap(cv,rgba){
+function thinEdgeMap(cv,rgba,useChroma=true){
   const gray=new cv.Mat(),blur=new cv.Mat(),edge=new cv.Mat(),rgb=new cv.Mat(),lab=new cv.Mat(),channels=new cv.MatVector(),ab=new cv.Mat(),bb=new cv.Mat(),ae=new cv.Mat(),be=new cv.Mat();
   cv.cvtColor(rgba,gray,cv.COLOR_RGBA2GRAY);cv.GaussianBlur(gray,blur,new cv.Size(3,3),0);cv.Canny(blur,edge,15,45);
-  cv.cvtColor(rgba,rgb,cv.COLOR_RGBA2RGB);cv.cvtColor(rgb,lab,cv.COLOR_RGB2Lab);cv.split(lab,channels);
-  const a=channels.get(1),b=channels.get(2);cv.GaussianBlur(a,ab,new cv.Size(3,3),0);cv.GaussianBlur(b,bb,new cv.Size(3,3),0);cv.Canny(ab,ae,3,12);cv.Canny(bb,be,3,12);cv.bitwise_or(edge,ae,edge);cv.bitwise_or(edge,be,edge);
-  gray.delete();blur.delete();rgb.delete();lab.delete();channels.delete();a.delete();b.delete();ab.delete();bb.delete();ae.delete();be.delete();return edge;
+  cv.cvtColor(rgba,rgb,cv.COLOR_RGBA2RGB);cv.cvtColor(rgb,lab,cv.COLOR_RGB2Lab);
+  let a=null,b=null;if(useChroma){cv.split(lab,channels);a=channels.get(1);b=channels.get(2);cv.GaussianBlur(a,ab,new cv.Size(3,3),0);cv.GaussianBlur(b,bb,new cv.Size(3,3),0);cv.Canny(ab,ae,3,12);cv.Canny(bb,be,3,12);cv.bitwise_or(edge,ae,edge);cv.bitwise_or(edge,be,edge);}
+  gray.delete();blur.delete();rgb.delete();lab.delete();channels.delete();a?.delete?.();b?.delete?.();ab.delete();bb.delete();ae.delete();be.delete();return edge;
 }
 function segmentSupport(edge,p1,p2){
   const dx=p2.x-p1.x,dy=p2.y-p1.y,len=Math.hypot(dx,dy),samples=Math.max(24,Math.round(len));if(len<1)return 0;
@@ -80,22 +80,83 @@ function lineIntersection(a,b){
   const qx=b.x-a.x,qy=b.y-a.y,t=(qx*b.vy-qy*b.vx)/cross;
   return {x:a.x+t*a.vx,y:a.y+t*a.vy};
 }
-function regularizeStrongQuadrilateral(cv,rgba,mask){
-  const found=largestExternal(cv,mask);if(!found.contour)return mask.clone();
-  const area=Math.abs(cv.contourArea(found.contour)),rect=cv.minAreaRect(found.contour),box=cv.boxPoints(rect),rectArea=Math.max(1,rect.size.width*rect.size.height),fill=area/rectArea;
-  found.contour.delete();
-  // Only repair a visibly jagged line-dominant carrier. Already-near-perfect
-  // rectangles are left alone, while ovals/freeform stickers fail the fill gate.
-  if(fill<.84||fill>=.95){return mask.clone();}
-  const support=edgeSupportMap(cv,rgba),thin=thinEdgeMap(cv,rgba),sides=[],fits=[],band=Math.max(3,Math.min(rgba.cols,rgba.rows)*.025);
+function maskAgreement(cv,a,b){
+  const inter=new cv.Mat(),union=new cv.Mat();cv.bitwise_and(a,b,inter);cv.bitwise_or(a,b,union);
+  const score=cv.countNonZero(inter)/Math.max(1,cv.countNonZero(union));inter.delete();union.delete();return score;
+}
+function filledContourMask(cv,rows,cols,contour){
+  const out=cv.Mat.zeros(rows,cols,cv.CV_8UC1),v=new cv.MatVector();v.push_back(contour);cv.drawContours(out,v,-1,new cv.Scalar(255),cv.FILLED);v.delete();return out;
+}
+function quadrilateralCandidate(cv,rgba,mask,support,useChroma=true){
+  const found=largestExternal(cv,mask);if(!found.contour)return null;
+  const contour=found.contour,area=Math.abs(cv.contourArea(contour)),rect=cv.minAreaRect(contour),box=cv.boxPoints(rect),rectArea=Math.max(1,rect.size.width*rect.size.height),fill=area/rectArea;
+  contour.delete();
+  if(fill<.78)return null;
+  const thin=thinEdgeMap(cv,rgba,useChroma),sides=[],fits=[],band=Math.max(3,Math.min(rgba.cols,rgba.rows)*.025);
   for(let i=0;i<4;i++){const a=box[i],b=box[(i+1)%4];sides.push(segmentSupport(support,a,b));fits.push(fitObservedLine(cv,thin,a,b,band));}
-  support.delete();thin.delete();
-  if(Math.min(...sides)<.75||fits.some(x=>!x))return mask.clone();
-  const corners=[];
-  for(let i=0;i<4;i++){const p=lineIntersection(fits[(i+3)%4],fits[i]);if(!p)return mask.clone();corners.push(p);}
+  thin.delete();
+  if(Math.min(...sides)<.68||fits.some(x=>!x))return null;
+  const corners=[];for(let i=0;i<4;i++){const p=lineIntersection(fits[(i+3)%4],fits[i]);if(!p)return null;corners.push(p);}
+  if(corners.some(p=>p.x<-5||p.y<-5||p.x>mask.cols+5||p.y>mask.rows+5))return null;
   const poly=cv.matFromArray(4,1,cv.CV_32SC2,corners.flatMap(p=>[Math.round(p.x),Math.round(p.y)])),polyArea=Math.abs(cv.contourArea(poly));
-  if(polyArea<area*.75||polyArea>area*1.35||corners.some(p=>p.x<-5||p.y<-5||p.x>mask.cols+5||p.y>mask.rows+5)){poly.delete();return mask.clone();}
-  const out=cv.Mat.zeros(mask.rows,mask.cols,cv.CV_8UC1),v=new cv.MatVector();v.push_back(poly);cv.drawContours(out,v,-1,new cv.Scalar(255),cv.FILLED);v.delete();poly.delete();return out;
+  if(polyArea<area*.75||polyArea>area*1.35){poly.delete();return null;}
+  const candidate=filledContourMask(cv,mask.rows,mask.cols,poly);poly.delete();
+  const fit=maskAgreement(cv,mask,candidate),edge=boundarySupport(cv,candidate,support);
+  if(fit<.86||edge<.68){candidate.delete();return null;}
+  return {mask:candidate,kind:'quadrilateral',fit,edge,score:fit*.58+edge*.38+.04};
+}
+function ellipseCandidate(cv,rgba,mask,support){
+  const found=largestExternal(cv,mask);if(!found.contour||found.contour.rows<12){found.contour?.delete?.();return null;}
+  const contour=found.contour,area=Math.max(1,Math.abs(cv.contourArea(contour))),hull=new cv.Mat();cv.convexHull(contour,hull,false,true);
+  const solidity=area/Math.max(1,Math.abs(cv.contourArea(hull)));hull.delete();
+  if(solidity<.94||contour.rows<5){contour.delete();return null;}
+  const ellipse=cv.fitEllipse(contour),angle=ellipse.angle*Math.PI/180,ca=Math.cos(angle),sa=Math.sin(angle),rx=ellipse.size.width/2,ry=ellipse.size.height/2;
+  contour.delete();if(rx<2||ry<2)return null;
+  const pts=[];for(let i=0;i<128;i++){const t=i*Math.PI*2/128,ux=rx*Math.cos(t),uy=ry*Math.sin(t);pts.push(Math.round(ellipse.center.x+ux*ca-uy*sa),Math.round(ellipse.center.y+ux*sa+uy*ca));}
+  const eContour=cv.matFromArray(128,1,cv.CV_32SC2,pts),candidate=filledContourMask(cv,mask.rows,mask.cols,eContour);eContour.delete();
+  const fit=maskAgreement(cv,mask,candidate),edge=boundarySupport(cv,candidate,support);
+  if(fit<.89||edge<.70){candidate.delete();return null;}
+  const circularity=Math.min(rx,ry)/Math.max(rx,ry),simplicity=.96+.04*circularity;
+  return {mask:candidate,kind:circularity>.92?'circle':'ellipse',fit,edge,score:fit*.58+edge*.38+.04*simplicity};
+}
+function polygonCandidate(cv,mask,support){
+  const found=largestExternal(cv,mask);if(!found.contour)return null;
+  const contour=found.contour,area=Math.max(1,Math.abs(cv.contourArea(contour))),hull=new cv.Mat();cv.convexHull(contour,hull,false,true);
+  const solidity=area/Math.max(1,Math.abs(cv.contourArea(hull)));hull.delete();
+  if(solidity<.93){contour.delete();return null;}
+  const per=cv.arcLength(contour,true),candidates=[];
+  for(const frac of [.008,.012,.016,.022,.030]){
+    const poly=new cv.Mat();cv.approxPolyDP(contour,poly,Math.max(.8,per*frac),true);
+    const n=poly.rows;
+    if(n<3||n>8||n===4||!cv.isContourConvex(poly)){poly.delete();continue;}
+    const pmask=filledContourMask(cv,mask.rows,mask.cols,poly),fit=maskAgreement(cv,mask,pmask),edge=boundarySupport(cv,pmask,support);
+    if(fit>=.88&&edge>=.68)candidates.push({mask:pmask,kind:'polygon-'+n,fit,edge,vertices:n,score:fit*.58+edge*.38+.04*(1-(n-3)/10)});else pmask.delete();
+    poly.delete();
+  }
+  contour.delete();
+  if(!candidates.length)return null;candidates.sort((a,b)=>b.score-a.score);
+  const best=candidates.shift();for(const q of candidates)q.mask.delete();return best;
+}
+function regularizeBasicShape(cv,rgba,mask,{quadrilateral=true,ellipse=true,polygon=true,useChroma=true}={}){
+  const support=edgeSupportMap(cv,rgba,useChroma),rawEdge=boundarySupport(cv,mask,support),candidates=[];
+  if(quadrilateral){const q=quadrilateralCandidate(cv,rgba,mask,support,useChroma);if(q)candidates.push(q);}
+  if(ellipse){const q=ellipseCandidate(cv,rgba,mask,support);if(q)candidates.push(q);}
+  if(polygon){const q=polygonCandidate(cv,mask,support);if(q)candidates.push(q);}
+  support.delete();
+  if(!candidates.length)return {mask:mask.clone(),kind:null};
+  candidates.sort((a,b)=>b.score-a.score);const best=candidates.shift();
+  for(const q of candidates)q.mask.delete();
+  // A simple model may replace the free boundary only if it remains almost as
+  // well supported by the actual image edge as the original mask.
+  if(best.edge<Math.max(.68,rawEdge-.11)){best.mask.delete();return {mask:mask.clone(),kind:null};}
+  return {mask:best.mask,kind:best.kind,fit:best.fit,edge:best.edge,score:best.score};
+}
+function smoothCurvedMask(cv,mask){
+  const area=Math.max(1,cv.countNonZero(mask)),blur=new cv.Mat(),binary=new cv.Mat();
+  cv.GaussianBlur(mask,blur,new cv.Size(0,0),1.15,1.15,cv.BORDER_REPLICATE);cv.threshold(blur,binary,127,255,cv.THRESH_BINARY);blur.delete();
+  const filled=outerFill(cv,binary);binary.delete();const ratio=cv.countNonZero(filled)/area;
+  if(ratio<.94||ratio>1.06){filled.delete();return mask.clone();}
+  return filled;
 }
 function resizeForBudget(cv,rgba,rough,maxDim){
   const scale=Math.min(1,maxDim/Math.max(rgba.cols,rgba.rows));if(scale===1)return {image:rgba.clone(),mask:rough.clone(),scale};
@@ -211,7 +272,7 @@ function regionFromMask(cv,mask,globalX,globalY,pageW,pageH,method,confidence,el
  * contour engines. Candidate discovery remains unchanged.
  */
 export function refineMaterialBoundaries(cv,p){
-  const pageW=p.width,pageH=p.height,src=cv.matFromArray(pageH,pageW,cv.CV_8UC4,p.pixels),mode=p.mode||'auto',out=[];
+  const pageW=p.width,pageH=p.height,src=cv.matFromArray(pageH,pageW,cv.CV_8UC4,p.pixels),mode=p.mode||'auto',post={edgePolish:p.postprocess?.edgePolish!==false,shapeRegularization:p.postprocess?.shapeRegularization!==false,curveSmooth:p.postprocess?.curveSmooth!==false,apertures:p.postprocess?.apertures!==false},useChroma=p.chromaEdges!==false,out=[];
   try{
     for(const candidate of p.candidates||[]){
       const started=typeof performance!=='undefined'?performance.now():Date.now(),
@@ -223,20 +284,24 @@ export function refineMaterialBoundaries(cv,p){
         rw=x1-x0,rh=y1-y0,roi=src.roi(new cv.Rect(x0,y0,rw,rh)),
         rough=placedMaskFromCandidate(cv,candidate,pageW,pageH,x0,y0,rw,rh),
         holes=candidate.mask?.alpha?.length?enclosedHoles(cv,rough):null;
-      let selected=null,method='',confidence=0,workImage=null,workMask=null,support=null,polish=false;
+      let selected=null,method='',confidence=0,workImage=null,workMask=null,support=null,shapeModel=null;
 
-      if(mode==='morphgac'||mode==='quality'||mode==='hybrid'||mode==='auto'){
+      if(mode==='postprocess'){
+        // Review workflow: keep the chosen recognition mask fixed and apply
+        // only the explicitly enabled automatic finishing stages below.
+        selected=rough.clone();method=candidate.edgeMethod||'browser-postprocess-only';confidence=candidate.boundaryConfidence??1;
+      }else if(mode==='morphgac'||mode==='quality'||mode==='hybrid'||mode==='auto'){
         const hybrid=mode==='hybrid',automatic=mode==='auto',
           maxDim=hybrid?180:automatic?160:180,
           iterations=hybrid?80:automatic?65:80,
-          quality=resizeForBudget(cv,roi,rough,maxDim),qsupport=edgeSupportMap(cv,quality.image);
+          quality=resizeForBudget(cv,roi,rough,maxDim),qsupport=edgeSupportMap(cv,quality.image,useChroma);
         selected=morphMask(cv,quality.image,quality.mask,{iterations});
-        method=hybrid||automatic?'browser-morphgac-grabcut':'browser-morphgac';
+        method=hybrid||automatic?(post.edgePolish?'browser-morphgac-grabcut':'browser-morphgac'):'browser-morphgac';
         confidence=boundarySupport(cv,selected,qsupport);
-        workImage=quality.image;workMask=quality.mask;support=qsupport;polish=hybrid||automatic;
+        workImage=quality.image;workMask=quality.mask;support=qsupport;
       }else{
         const fast=resizeForBudget(cv,roi,rough,320);
-        workImage=fast.image;workMask=fast.mask;support=edgeSupportMap(cv,fast.image);
+        workImage=fast.image;workMask=fast.mask;support=edgeSupportMap(cv,fast.image,useChroma);
         if(mode==='grabcut'){
           selected=grabCutMask(cv,fast.image,fast.mask);
           method='browser-grabcut';
@@ -249,19 +314,23 @@ export function refineMaterialBoundaries(cv,p){
 
       let full=upscaleBinaryMask(cv,selected,rw,rh);
       selected.delete();selected=full;
-      if(polish){
-        const polished=grabCutPolishMask(cv,roi,selected);
-        selected.delete();selected=polished;
+      if(post.edgePolish){
+        const polished=grabCutPolishMask(cv,roi,selected);selected.delete();selected=polished;
       }
-      const regularized=regularizeStrongQuadrilateral(cv,roi,selected);
-      selected.delete();selected=regularized;
-      if(holes){
+      if(post.shapeRegularization){
+        const shape=regularizeBasicShape(cv,roi,selected,{quadrilateral:true,ellipse:true,polygon:true,useChroma});
+        selected.delete();selected=shape.mask;shapeModel=shape.kind;
+      }
+      if(!shapeModel&&post.curveSmooth){
+        const smoothed=smoothCurvedMask(cv,selected);selected.delete();selected=smoothed;
+      }
+      if(post.apertures&&holes){
         const fullHoles=upscaleBinaryMask(cv,holes,rw,rh);
         restoreHoles(cv,selected,fullHoles);fullHoles.delete();
       }
       const elapsed=(typeof performance!=='undefined'?performance.now():Date.now())-started,
         region=regionFromMask(cv,selected,x0,y0,pageW,pageH,method,confidence,elapsed);
-      if(region)out.push({...candidate,...region});else out.push(candidate);
+      if(region)out.push({...candidate,...region,postprocessed:post,shapeModel});else out.push(candidate);
 
       selected.delete();holes?.delete();support?.delete();workImage?.delete();workMask?.delete();rough.delete();roi.delete();
     }

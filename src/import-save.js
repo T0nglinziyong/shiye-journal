@@ -68,9 +68,9 @@ export async function saveImportBatch({state,db,urls,render,onSaved}) {
       assets.push(base);p.candidateAssetIDs=[baseID];
       d.items=[{id:uid(),assetID:baseID,x:d.canvas.width/2,y:500,width:d.canvas.width,height:1000,rotation:0,zIndex:-100,isLocked:true,isParked:false,opacity:1}];
       for(const c of elements) {
-        const id=uid(),blobId=uid(),sourceID=uid(),originalCutoutBlobId=uid(),r=c.region;
-        assets.push({...candidateMetadata(c,record,state.importBatchSeriesID),id,blobId,originalBlobId:sourceID,originalCutoutBlobId,photoBlobId:originalID,isProjectInternal:true,createdAt:now,sourceIdentifier:'imported-work-element'});
-        blobs.push({id:originalCutoutBlobId,data:c.originalCutoutBlob||c.blob});
+        const id=uid(),blobId=uid(),sourceID=uid(),originalCutoutBlobId=uid(),candidateFrameBlobId=uid(),r=c.region;
+        assets.push({...candidateMetadata(c,record,state.importBatchSeriesID),id,blobId,originalBlobId:sourceID,originalCutoutBlobId,candidateFrameBlobId,photoBlobId:originalID,isProjectInternal:true,createdAt:now,sourceIdentifier:'imported-work-element'});
+        blobs.push({id:originalCutoutBlobId,data:c.originalCutoutBlob||c.blob},{id:candidateFrameBlobId,data:c.candidateFrameBlob||c.originalBlob||c.blob});
         blobs.push({id:blobId,data:c.blob},{id:sourceID,data:c.originalBlob||c.blob});p.candidateAssetIDs.push(id);
         d.items.push({id:uid(),assetID:id,x:(r.x+r.w/2)*d.canvas.width,y:(r.y+r.h/2)*1000,width:r.w*d.canvas.width,height:r.h*1000,rotation:r.rotation||0,zIndex:d.items.length,isLocked:false,isParked:false,opacity:1});
       }
@@ -81,12 +81,14 @@ export async function saveImportBatch({state,db,urls,render,onSaved}) {
       projects.push(p);savedCount++;
     }else {
       if(!chosen.length)continue;
-      const photoID=uid();blobs.push({id:photoID,data:record.originalFile||record.file});
+      // Material editing/re-recognition needs only the candidate frame, not the
+      // whole imported photograph. Keep the aligned source pixels plus the full
+      // candidate-box frame so storage stays local and compact.
       for(const c of chosen) {
-        const id=uid(),blobId=uid(),originalBlobId=uid(),originalCutoutBlobId=uid();
+        const id=uid(),blobId=uid(),originalBlobId=uid(),originalCutoutBlobId=uid(),candidateFrameBlobId=uid();
         const {mask,...region}=c.region;
-        assets.push({...candidateMetadata(c,record,state.importBatchSeriesID),id,blobId,originalBlobId,originalCutoutBlobId,photoBlobId:photoID,sourceRegion:structuredClone(region),createdAt:now});
-        blobs.push({id:originalCutoutBlobId,data:c.originalCutoutBlob||c.blob});
+        assets.push({...candidateMetadata(c,record,state.importBatchSeriesID),id,blobId,originalBlobId,originalCutoutBlobId,candidateFrameBlobId,sourceRegion:structuredClone(region),createdAt:now});
+        blobs.push({id:originalCutoutBlobId,data:c.originalCutoutBlob||c.blob},{id:candidateFrameBlobId,data:c.candidateFrameBlob||c.originalBlob||c.blob});
         blobs.push({id:blobId,data:c.blob},{id:originalBlobId,data:c.originalBlob||c.blob});savedCount++;
       }
     }

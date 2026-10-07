@@ -9,7 +9,7 @@ import {fuseRecognitionCandidates} from './recognition-fusion.js';
 // 4) GrabCut inside the watershed stage refines the final alpha.
 // Structural contours are never free-standing "every closed shape is an item"
 // proposals unless they satisfy the much stricter missing-instance rule.
-export async function segmentPaperMaterials({data,width:w,height:h},{smallestMM=6,paperWidthMM=210,paperHeightMM=297,sourcePixels=data}={}) {
+export async function segmentPaperMaterials({data,width:w,height:h},{smallestMM=6,paperWidthMM=210,paperHeightMM=297,sourcePixels=data,chromaEdges=true,postprocess={}}={}) {
   // Express background-grid scale in physical paper units so fast/standard/
   // detail profiles see the same scene rather than three different algorithms.
   const pxPerMM=((w/paperWidthMM)+(h/paperHeightMM))/2,cellSize=Math.max(24,Math.round(pxPerMM*13.5));
@@ -20,7 +20,8 @@ export async function segmentPaperMaterials({data,width:w,height:h},{smallestMM=
   const fast=await visionTask('materials-fast',{
     pixels:data,width:w,height:h,smallestMM,paperWidthMM,paperHeightMM,
     evidence:evidence.evidence,backgroundConnected:evidence.backgroundConnected,
-    shadowLikelihood:evidence.shadowLikelihood,score:evidence.score,rectified:true
+    shadowLikelihood:evidence.shadowLikelihood,score:evidence.score,rectified:true,chromaEdges,
+    postprocess:{shapeRegularization:false,curveSmooth:false,apertures:postprocess?.apertures!==false}
   });
   if(fast.length&&fast.length<=12&&fast.every(candidate=>(candidate.recognitionConfidence??0)>=.54)){
     return fast.sort((a,b)=>a.y-b.y||a.x-b.x).slice(0,48);
@@ -29,7 +30,7 @@ export async function segmentPaperMaterials({data,width:w,height:h},{smallestMM=
     visionTask('instances',{
       mask:evidence.mask,evidence:evidence.evidence,foregroundSeeds:evidence.foregroundSeeds,
       shadowLikelihood:evidence.shadowLikelihood,pixels:sourcePixels,
-      width:w,height:h,smallestMM,paperWidthMM,paperHeightMM
+      width:w,height:h,smallestMM,paperWidthMM,paperHeightMM,chromaEdges,postprocess
     }),
     visionTask('enclosures',{
       // Boundary discovery uses the working (optionally illumination-balanced)
@@ -37,18 +38,18 @@ export async function segmentPaperMaterials({data,width:w,height:h},{smallestMM=
       // normalization can reveal edges without changing saved material colour.
       pixels:data,evidence:evidence.evidence,backgroundConnected:evidence.backgroundConnected,
       shadowLikelihood:evidence.shadowLikelihood,score:evidence.score,
-      width:w,height:h,smallestMM,paperWidthMM,paperHeightMM
+      width:w,height:h,smallestMM,paperWidthMM,paperHeightMM,chromaEdges,postprocess
     })
   ]);
   const reconstructed=instances.length?await visionTask('boundary-reconstruction',{
     pixels:data,instances,evidence:evidence.evidence,backgroundConnected:evidence.backgroundConnected,
     shadowLikelihood:evidence.shadowLikelihood,score:evidence.score,
-    width:w,height:h,smallestMM,paperWidthMM,paperHeightMM
+    width:w,height:h,smallestMM,paperWidthMM,paperHeightMM,chromaEdges,postprocess
   }):[];
   const fused=fuseRecognitionCandidates(instances,[...structural,...reconstructed]);
   const completed=fused.length?await visionTask('complete-boundaries',{
     pixels:sourcePixels,width:w,height:h,candidates:fused,smallestMM,paperWidthMM,paperHeightMM,
-    evidence:evidence.evidence,backgroundConnected:evidence.backgroundConnected,shadowLikelihood:evidence.shadowLikelihood
+    evidence:evidence.evidence,backgroundConnected:evidence.backgroundConnected,shadowLikelihood:evidence.shadowLikelihood,chromaEdges,postprocess
   }):fused;
   return completed.sort((a,b)=>a.y-b.y||a.x-b.x).slice(0,48);
 }

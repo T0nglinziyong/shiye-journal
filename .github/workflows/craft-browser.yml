@@ -1,6 +1,8 @@
 name: Craft browser regression
 
 on:
+  push:
+    branches: [recognition-official-engines]
   pull_request:
     branches: [main]
     paths:
