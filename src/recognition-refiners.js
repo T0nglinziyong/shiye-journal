@@ -46,6 +46,7 @@ async function parallelFinalPipeline({
       // One frame copy per worker/chunk, never one copy per material.
       pixels:new Uint8ClampedArray(frame.data),
       sourcePixels:new Uint8ClampedArray(sourceFrame.data),
+      transferInput:true,
       width,height,boxes,method,paperWidthMM,paperHeightMM,
       chromaEdges:preprocess.chromaEdges!==false,
       shapeRegularization:postprocess.shapeRegularization!==false,
