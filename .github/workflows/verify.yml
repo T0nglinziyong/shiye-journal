@@ -29,3 +29,17 @@ jobs:
       - run: npm ci
       - name: Unit tests and built UI smoke
         run: npm test && npm run test:ui
+      - name: Package classical segmentation benchmark harness
+        if: ${{ github.event_name == 'pull_request' }}
+        run: |
+          mkdir -p /tmp/shiye-segmentation-benchmark/node_modules/@techstark /tmp/shiye-segmentation-benchmark/scripts
+          cp -R src /tmp/shiye-segmentation-benchmark/src
+          cp scripts/segmentation-engine-benchmark.mjs /tmp/shiye-segmentation-benchmark/scripts/
+          cp package.json /tmp/shiye-segmentation-benchmark/
+          cp -R node_modules/@techstark/opencv-js /tmp/shiye-segmentation-benchmark/node_modules/@techstark/
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: ${{ github.event_name == 'pull_request' }}
+        with:
+          name: classical-segmentation-benchmark
+          path: /tmp/shiye-segmentation-benchmark/
+          retention-days: 1
