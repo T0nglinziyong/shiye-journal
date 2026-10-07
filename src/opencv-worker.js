@@ -3,6 +3,7 @@ import {reconstructFragmentedBoundaries} from './fragmented-boundary.js';
 import {recognizeMaterialsFast} from './fast-material-recognition.js';
 import {refineMaterialBoundaries} from './material-boundary-refiners.js';
 import {discoverMaterialBoxes} from './material-box-discovery.js';
+import {segmentDetectedMaterialBoxes} from './material-box-segmentation.js';
 export async function processVision(cv,operation,p){
   const resources=[],own=mat=>(resources.push(mat),mat);
   try{
@@ -75,6 +76,7 @@ export async function processVision(cv,operation,p){
       return {x:x/p.width,y:y/p.height,w:w/p.width,h:h/p.height,pixels:area,edgeMethod,mask:{width:w,height:h,alpha:new Uint8Array(packed.data),polygons:[points]}};
     }
     if(operation==='boxes-simple')return discoverMaterialBoxes(cv,p,own);
+    if(operation==='segment-boxes-classical')return segmentDetectedMaterialBoxes(cv,p);
     if(operation==='materials-fast')return recognizeMaterialsFast(cv,p,own);
     if(operation==='material-boundary-refine')return refineMaterialBoundaries(cv,p);
     if(operation==='enclosures'){
