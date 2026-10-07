@@ -3,7 +3,7 @@ import {reconstructFragmentedBoundaries} from './fragmented-boundary.js';
 import {recognizeMaterialsFast} from './fast-material-recognition.js';
 import {refineMaterialBoundaries} from './material-boundary-refiners.js';
 import {discoverMaterialInstancesSimple} from './simple-material-instances.js';
-import {recoverLowFillCarrier} from './local-carrier-refinement.js';
+import {refineLocalCarrierGrabCut} from './local-carrier-refinement.js';
 export async function processVision(cv,operation,p){
   const resources=[],own=mat=>(resources.push(mat),mat);
   try{
@@ -126,7 +126,7 @@ export async function processVision(cv,operation,p){
       return selected.sort((a,b)=>a.y-b.y||a.x-b.x);
     }
     if(operation==='instances-simple')return discoverMaterialInstancesSimple(cv,p,own);
-    if(operation==='carrier-grabcut')return recoverLowFillCarrier(cv,p);
+    if(operation==='carrier-grabcut')return refineLocalCarrierGrabCut(cv,p);
     if(operation==='boundary-reconstruction')return reconstructFragmentedBoundaries(cv,p,own);
     if(operation==='complete-boundaries'){
       const out=[];
