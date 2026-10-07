@@ -408,7 +408,7 @@ function groupCircles(strict,weak,pxPerMM,mask,supportEdges,w,h){
 export function recognizeMaterialsFast(cv,p,own){
   if(p.rectified!==true)throw Error('materials-fast requires rectified A4 input');
   const w=p.width,h=p.height,paperWidthMM=p.paperWidthMM||210,paperHeightMM=p.paperHeightMM||297,smallestMM=p.smallestMM||6,pxPerMM=Math.max(.5,((w/paperWidthMM)+(h/paperHeightMM))/2),
-    post={shapeRegularization:p.postprocess?.shapeRegularization!==false,curveSmooth:p.postprocess?.curveSmooth!==false,apertures:p.postprocess?.apertures!==false},
+    post={shapeRegularization:p.postprocess?.shapeRegularization===true,curveSmooth:p.postprocess?.curveSmooth!==false,apertures:p.postprocess?.apertures!==false},
     useChroma=p.chromaEdges!==false;
   const src=own(cv.matFromArray(h,w,cv.CV_8UC4,p.pixels)),page=own(cv.matFromArray(h,w,cv.CV_8UC1,Uint8Array.from(p.backgroundConnected||new Uint8Array(w*h),x=>x?255:0)));
   const {gray,edges,lab}=edgeImage(cv,src,useChroma);own(gray);own(edges);own(lab);
