@@ -43,7 +43,9 @@ test('recognition methods, processing pixels, preprocessing and postprocessing a
  ])assert.equal(custom[key],false,key+' can be disabled independently');
 
  assert.equal(normalizePreferences({recognition:'fake',recognitionPixels:1234}).recognition,'auto');
- assert.equal(normalizePreferences({recognition:'fake',recognitionPixels:1234}).recognitionPixels,1200);
+ assert.equal(recognitionProfile().analysisMaxDimension,900);
+ assert.equal(normalizePreferences({}).recognitionPixels,900);
+ assert.equal(normalizePreferences({recognition:'fake',recognitionPixels:1234}).recognitionPixels,900);
 });
 
 
