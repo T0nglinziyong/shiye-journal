@@ -3,22 +3,14 @@ import {visionTask} from './vision-runtime.js';
 const noPost=Object.freeze({edgePolish:false,shapeRegularization:false,curveSmooth:false,apertures:false});
 const hasPost=postprocess=>Object.values(postprocess||{}).some(value=>value!==false);
 
-async function postprocessCandidates({candidates,frame,width,height,preprocess={},postprocess={},onProgress=()=>{},indices=null}){
+async function postprocessCandidates({candidates,frame,width,height,preprocess={},postprocess={},onProgress=()=>{}}){
   if(!candidates.length||!hasPost(postprocess))return candidates;
-  const selectedIndices=indices??candidates.map((_,index)=>index);
-  if(!selectedIndices.length)return candidates;
-  const selected=selectedIndices.map(index=>candidates[index]).filter(Boolean);
-  if(!selected.length)return candidates;
-  onProgress({status:'boundary-postprocess',total:selected.length});
+  onProgress({status:'boundary-postprocess',total:candidates.length});
   try{
-    const refined=await visionTask('material-boundary-refine',{
-      pixels:frame.data,width,height,candidates:selected,mode:'postprocess',postprocess,
+    return await visionTask('material-boundary-refine',{
+      pixels:frame.data,width,height,candidates,mode:'postprocess',postprocess,
       chromaEdges:preprocess.chromaEdges!==false
     });
-    if(selectedIndices.length===candidates.length)return refined;
-    const merged=[...candidates];
-    for(let i=0;i<selectedIndices.length;i++)merged[selectedIndices[i]]=refined[i]||selected[i];
-    return merged;
   }catch(error){
     onProgress({status:'fallback',engine:'postprocess',message:error.message});
     return candidates;
@@ -61,7 +53,7 @@ export async function refineCandidatesWithBrowserContours({candidates,frame,widt
   // Recognition and finishing are deliberately separate. Auto spends the
   // expensive contour engine only on uncertain candidates; the enabled
   // finishing stages then see the same resulting masks for every method.
-  const refineAll=mode!=='auto',threshold=.70,selected=[],selectedIndices=[];
+  const refineAll=mode!=='auto',threshold=.74,selected=[],selectedIndices=[];
   for(let i=0;i<candidates.length;i++){
     if(refineAll||(candidates[i].recognitionConfidence??0)<threshold){selected.push(candidates[i]);selectedIndices.push(i);}
   }
@@ -78,16 +70,7 @@ export async function refineCandidatesWithBrowserContours({candidates,frame,widt
       onProgress({status:'fallback',engine:mode,message:error.message});
     }
   }
-  // In auto mode the fast recognizer has already produced a usable physical
-  // boundary (including conservative aperture handling) for confident items.
-  // Running the full original-resolution finishing stack for every candidate
-  // made one import pay for GrabCut/shape/curve/aperture work repeatedly.
-  // Keep confident candidates on the fast path; spend the expensive finishing
-  // pass only on candidates that actually needed contour refinement.
-  return postprocessCandidates({
-    candidates:out,frame,width,height,preprocess,postprocess,onProgress,
-    indices:mode==='auto'?selectedIndices:null
-  });
+  return postprocessCandidates({candidates:out,frame,width,height,preprocess,postprocess,onProgress});
 }
 
 export async function refineCandidatesPostprocess(context){

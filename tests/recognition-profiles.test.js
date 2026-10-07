@@ -1,6 +1,5 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
 import {recognitionProfile,recognitionPixelOptions} from '../src/recognition-profiles.js';
 import {normalizePreferences} from '../src/preferences.js';
 
@@ -48,8 +47,3 @@ test('recognition methods, processing pixels, preprocessing and postprocessing a
 });
 
 
-test('auto refinement keeps confident candidates on the fast path',async()=>{
-  const source=readFileSync(new URL('../src/recognition-refiners.js',import.meta.url),'utf8');
-  assert.match(source,/threshold=\.70/);
-  assert.match(source,/indices:mode==='auto'\?selectedIndices:null/);
-});
