@@ -34,7 +34,7 @@ export async function showCutoutEditor({
   const initialRotation=processing.displayRotationDegrees||0,
     initialMask=alphaFrom(initial,initialRotation),
     recognitionMask=alphaFrom(recognized,processing.recognitionRotationDegrees||0),
-    steps=[['recognize','重新识别'],['auto','自动修整'],['manual','手动修补'],['output','摆正与外观']],
+    steps=[['rough','粗轮廓与重新识别'],['recognition','识别结果与后处理'],['final','最终调整']],
     methodList=recognitionUI.methods||[],
     pixelList=recognitionUI.pixels||[[900,'900 px'],[1200,'1200 px'],[1600,'1600 px']],
     savedRecognition=processing.rerecognition||{},
@@ -43,9 +43,12 @@ export async function showCutoutEditor({
     defaultPost={edgePolish:true,shapeRegularization:true,curveSmooth:true,apertures:true,...recognitionUI.postprocess,...savedPost};
 
   let mask=copyMask(initialMask),
-    recognitionStageMask=copyMask(initialMask),
-    autoStageMask=copyMask(initialMask),
-    mode='recognize',restore=true,ratio=.04,
+    roughStageMask=copyMask(initialMask),
+    recognitionBaseMask=copyMask(recognitionMask),
+    recognitionStageMask=copyMask(recognitionMask),
+    postprocessBaseMask=copyMask(initialMask),
+    finalStageMask=copyMask(initialMask),
+    mode='rough',restore=true,ratio=.04,
     appearance=processing.appearance||'original',intensity=processing.intensity??.5,
     rotation=initialRotation,autoStraighten=processing.autoStraighten!==false,outputPrepared=false,
     comparison=null,stroke=null,lastStroke=null,busy=false,manualTouched=false,
@@ -114,7 +117,7 @@ export async function showCutoutEditor({
     if(comparison==='original'){
       preview.width=frame.width;preview.height=frame.height;pctx.clearRect(0,0,preview.width,preview.height);pctx.drawImage(frame,0,0);fit();return;
     }
-    const showRotation=mode==='output'?rotation:0,
+    const showRotation=mode==='final'?rotation:0,
       cut=comparison==='initial'?initial:composed(mask,appearance,intensity,showRotation);
     preview.width=frame.width;preview.height=frame.height;pctx.clearRect(0,0,preview.width,preview.height);
     pctx.save();pctx.filter='saturate(.42) brightness(1.18) contrast(.62)';pctx.globalAlpha=.46;pctx.drawImage(frame,0,0);pctx.restore();
@@ -161,6 +164,34 @@ export async function showCutoutEditor({
     }
   }
 
+  const maskToolsHTML=(note,extra='')=>'<div class="cutout-mask-tools"><div class="cutout-tabs two"><button type="button" data-repair="restore" class="'+(restore?'selected':'')+'">补回</button><button type="button" data-repair="erase" class="'+(!restore?'selected':'')+'">擦除</button></div>'
+    +'<label>笔宽 · 短边的 <b id="brush-value">'+Math.round(ratio*100)+'%</b><input id="cutout-strength" type="range" min="0.5" max="20" step="0.5" value="'+ratio*100+'"></label>'
+    +'<div class="form-grid"><button type="button" id="cutout-undo" '+(!history.length?'disabled':'')+'>撤销修补</button><button type="button" id="cutout-refine" '+(!lastStroke?'disabled':'')+'>细化上次涂抹</button></div>'
+    +'<small class="setting-help">'+note+'</small>'+extra+'</div>';
+
+  const bindMaskTools=el=>{
+    el.querySelectorAll('[data-repair]').forEach(b=>b.onclick=()=>{restore=b.dataset.repair==='restore';panel();});
+    const strength=el.querySelector('#cutout-strength');if(strength)strength.oninput=()=>{ratio=+strength.value/100;el.querySelector('#brush-value').textContent=strength.value+'%';};
+    const action=(id,fn)=>{const b=el.querySelector('#'+id);if(b)b.onclick=()=>{if(busy)return;fn();comparison=null;panel();draw();};};
+    action('cutout-undo',()=>{if(history.length)mask=history.pop();lastStroke=null;manualTouched=true;outputPrepared=false;});
+    action('cutout-refine',()=>{
+      if(!lastStroke)return;
+      const result=refineMaskStroke(mask,sourcePixels,lastStroke);
+      if(result.changed){push();mask=result.mask;manualTouched=true;outputPrepared=false;}
+      body.querySelector('#cutout-note').textContent=result.changed?'已细化画笔附近边缘，可撤销。':'没有可靠的边缘变化，保留当前修补。';lastStroke=null;
+    });
+    return action;
+  };
+
+  function prepareOutput(){
+    if(outputPrepared)return;
+    outputPrepared=true;
+    if(autoStraighten){
+      const angle=maskOrientation(mask,w,h);
+      if(angle!=null)rotation=angle;
+    }
+  }
+
   function panel(){
     const stepIndex=steps.findIndex(([id])=>id===mode);
     body.querySelectorAll('[data-cut-step]').forEach((node,i)=>{
@@ -170,83 +201,78 @@ export async function showCutoutEditor({
     previous.disabled=stepIndex===0;next.textContent=stepIndex===steps.length-1?'应用当前结果':'下一步';topApply.disabled=stepIndex!==steps.length-1;
     const el=body.querySelector('#cutout-mode-panel');
 
-    if(mode==='recognize'){
+    if(mode==='rough'){
       const options=methodList.map(item=>'<option value="'+item.id+'" '+(recognitionState.method===item.id?'selected':'')+'>'+item.label+'</option>').join(''),
         pixels=pixelList.map(([value,label])=>'<option value="'+value+'" '+(Number(value)===recognitionState.pixels?'selected':'')+'>'+label+'</option>').join('');
-      el.innerHTML='<div class="stack"><label>识别方法<select id="cutout-method">'+options+'</select><small id="cutout-method-help" class="setting-help">'+methodDescription(recognitionState.method)+'</small></label>'
+      el.innerHTML='<div class="stack"><h3>1 · 先修 rough mask</h3>'
+        +maskToolsHTML('这里的涂抹只作为重新识别的初始范围；主算法可以继续向真实物理边缘扩张或收缩。','<div class="form-grid"><button type="button" id="cutout-rough-enter">恢复进入时 mask</button><button type="button" id="cutout-rough-original">恢复原始识别 mask</button></div>')
+        +'<h3>重新识别</h3><label>识别方法<select id="cutout-method">'+options+'</select><small id="cutout-method-help" class="setting-help">'+methodDescription(recognitionState.method)+'</small></label>'
         +'<label>处理像素<select id="cutout-pixels">'+pixels+'</select><small class="setting-help">只影响这一次重新识别，不修改全局设置。</small></label><h3>识别预处理</h3>'
         +switchRow('cutout-pre-light','光照场校正',recognitionState.preprocess.illumination,'补偿候选框内的渐变照明和阴影。')
         +switchRow('cutout-pre-denoise','轻度去噪',recognitionState.preprocess.denoise,'减少噪点和 JPEG 纹理对边界的干扰。')
         +switchRow('cutout-pre-contrast','局部对比增强',recognitionState.preprocess.localContrast,'轻量增强浅色边缘，不修改最终保存颜色。')
         +switchRow('cutout-pre-chroma','Lab 色差边缘增强',recognitionState.preprocess.chromaEdges,'对绿白、浅色载体更有帮助，只作为边缘证据。')
-        +'<button type="button" class="btn primary" id="cutout-rerecognize" '+(!onRerecognize?'disabled':'')+'>重新识别当前候选</button>'
-        +'<small class="setting-help">这一阶段只运行主识别算法，不做规则图形、曲线平滑、孔洞等自动后处理。</small></div>';
+        +'<button type="button" class="btn primary" id="cutout-rerecognize" '+(!onRerecognize?'disabled':'')+'>用当前 rough mask 重新识别</button>'
+        +'<small class="setting-help">此按钮只运行主识别算法，不做规则图形、曲线平滑和孔洞后处理。</small></div>';
+      const action=bindMaskTools(el);
+      action('cutout-rough-enter',()=>{push();mask=copyMask(initialMask);roughStageMask=copyMask(mask);lastStroke=null;});
+      action('cutout-rough-original',()=>{push();mask=copyMask(recognitionMask);roughStageMask=copyMask(mask);lastStroke=null;});
       const method=el.querySelector('#cutout-method');
       method?.addEventListener('change',()=>{readRecognition(el);el.querySelector('#cutout-method-help').textContent=methodDescription(recognitionState.method);});
       el.querySelector('#cutout-rerecognize')?.addEventListener('click',async()=>{
         if(busy||!onRerecognize)return;
-        readRecognition(el);busy=true;const button=el.querySelector('#cutout-rerecognize');button.disabled=true;body.querySelector('#cutout-note').textContent='正在重新识别候选框…';
+        readRecognition(el);roughStageMask=copyMask(mask);busy=true;const button=el.querySelector('#cutout-rerecognize');button.disabled=true;body.querySelector('#cutout-note').textContent='正在使用当前 rough mask 重新识别…';
         try{
-          const result=await onRerecognize({...requestBase(recognitionStageMask),...recognitionState});
+          const result=await onRerecognize({...requestBase(roughStageMask),...recognitionState});
           if(!result?.mask||result.mask.length!==mask.length)throw Error('重新识别没有返回可用边界');
-          push();mask=copyMask(result.mask);recognitionStageMask=copyMask(result.mask);autoStageMask=copyMask(result.mask);
-          manualTouched=false;outputPrepared=false;lastStroke=null;
+          mask=copyMask(result.mask);recognitionBaseMask=copyMask(result.mask);recognitionStageMask=copyMask(result.mask);postprocessBaseMask=copyMask(result.mask);finalStageMask=copyMask(result.mask);
+          history.length=0;manualTouched=false;outputPrepared=false;lastStroke=null;
           lastRecognition={...recognitionState,method:result.method||recognitionState.method};
-          body.querySelector('#cutout-note').textContent='主识别完成。下一步可以独立选择自动修整项目。';draw();
-        }catch(error){body.querySelector('#cutout-note').textContent=error.message||'重新识别失败，保留当前抠图。';}
+          mode='recognition';body.querySelector('#cutout-note').textContent='主识别完成。现在可先手修识别结果，再执行后处理。';draw();
+        }catch(error){body.querySelector('#cutout-note').textContent=error.message||'重新识别失败，保留当前 rough mask。';}
         finally{busy=false;panel();}
       });
-    }else if(mode==='auto'){
-      el.innerHTML='<div class="stack"><h3>识别后处理</h3>'
+    }else if(mode==='recognition'){
+      el.innerHTML='<div class="stack"><h3>2 · 修正识别结果</h3>'
+        +maskToolsHTML('先手动修正主算法输出，再把当前 mask 送入后处理；后处理不会回到修正前的版本。','<button type="button" id="cutout-recognition-base">恢复刚识别结果</button>')
+        +'<h3>自动后处理</h3>'
         +switchRow('cutout-post-edge','原分辨率边缘精修',postState.edgePolish,'用原分辨率 GrabCut 贴近真实物理边缘。')
-        +switchRow('cutout-post-shapes','规则图形规整',postState.shapeRegularization,'四边形、圆/椭圆和多边形并行拟合并统一仲裁。')
-        +switchRow('cutout-post-curves','曲线平滑',postState.curveSmooth,'规则图形没有明显胜出时抑制像素锯齿。')
-        +switchRow('cutout-post-apertures','真实孔洞识别',postState.apertures,'保守恢复已识别物理孔洞；宁可漏孔也避免误挖图案。')
-        +'<button type="button" class="btn primary" id="cutout-postprocess" '+(!onPostprocess?'disabled':'')+'>应用自动修整</button>'
-        +'<small class="setting-help">自动修整始终基于第 1 步的识别结果。进入手动修补后，系统不会再自动覆盖你的边界。</small></div>';
+        +switchRow('cutout-post-shapes','规则图形规整',postState.shapeRegularization,'四边形、圆/椭圆和多边形并行拟合，最多只采用一个可信模型。')
+        +switchRow('cutout-post-curves','曲线平滑',postState.curveSmooth,'没有规则图形明显胜出时抑制像素锯齿。')
+        +switchRow('cutout-post-apertures','真实孔洞识别',postState.apertures,'保守恢复物理孔洞；宁可漏孔也避免误挖图案。')
+        +'<button type="button" class="btn primary" id="cutout-postprocess" '+(!onPostprocess?'disabled':'')+'>对当前 mask 应用后处理</button></div>';
+      const action=bindMaskTools(el);
+      action('cutout-recognition-base',()=>{push();mask=copyMask(recognitionBaseMask);recognitionStageMask=copyMask(mask);lastStroke=null;});
       el.querySelector('#cutout-postprocess')?.addEventListener('click',async()=>{
         if(busy||!onPostprocess)return;
-        readPost(el);busy=true;const button=el.querySelector('#cutout-postprocess');button.disabled=true;body.querySelector('#cutout-note').textContent='正在应用自动修整…';
+        readPost(el);recognitionStageMask=copyMask(mask);busy=true;const button=el.querySelector('#cutout-postprocess');button.disabled=true;body.querySelector('#cutout-note').textContent='正在对你修正后的 mask 应用后处理…';
         try{
           const result=await onPostprocess({...requestBase(recognitionStageMask),preprocess:recognitionState.preprocess,postprocess:{...postState}});
           if(!result?.mask||result.mask.length!==mask.length)throw Error('自动修整没有返回可用边界');
-          push();mask=copyMask(result.mask);autoStageMask=copyMask(result.mask);manualTouched=false;outputPrepared=false;lastStroke=null;
+          mask=copyMask(result.mask);postprocessBaseMask=copyMask(result.mask);finalStageMask=copyMask(result.mask);
+          history.length=0;manualTouched=false;outputPrepared=false;lastStroke=null;
           lastPostprocess={...postState,shapeModel:result.shapeModel||null};
-          body.querySelector('#cutout-note').textContent=result.shapeModel?'已自动修整，并采用 '+result.shapeModel+' 规则图形。':'已完成自动修整。';draw();
+          mode='final';body.querySelector('#cutout-note').textContent=result.shapeModel?'后处理完成，并采用 '+result.shapeModel+' 规则图形。现在可做最终人工修正。':'后处理完成。现在可做最终人工修正。';draw();
         }catch(error){body.querySelector('#cutout-note').textContent=error.message||'自动修整失败，保留当前识别结果。';}
         finally{busy=false;panel();}
       });
-    }else if(mode==='manual'){
-      el.innerHTML='<div class="cutout-tabs two"><button type="button" data-repair="restore" class="'+(restore?'selected':'')+'">补回</button><button type="button" data-repair="erase" class="'+(!restore?'selected':'')+'">擦除</button></div>'
-        +'<label>笔宽 · 短边的 <b id="brush-value">'+Math.round(ratio*100)+'%</b><input id="cutout-strength" type="range" min="0.5" max="20" step="0.5" value="'+ratio*100+'"></label>'
-        +'<div class="stack"><button type="button" id="cutout-undo" '+(!history.length?'disabled':'')+'>撤销上次修补</button><button type="button" id="cutout-refine" '+(!lastStroke?'disabled':'')+'>细化上次涂抹</button>'
-        +'<small>这一阶段是最终边界人工校正。后续摆正和颜色调整不会改变 mask。</small><button type="button" id="cutout-auto-result">恢复自动修整结果</button><button type="button" id="cutout-recognition">恢复初始识别</button></div>';
-      el.querySelectorAll('[data-repair]').forEach(b=>b.onclick=()=>{restore=b.dataset.repair==='restore';panel();});
-      const strength=el.querySelector('#cutout-strength');if(strength)strength.oninput=()=>{ratio=+strength.value/100;el.querySelector('#brush-value').textContent=strength.value+'%';};
-      const action=(id,fn)=>{const b=el.querySelector('#'+id);if(b)b.onclick=()=>{if(busy)return;fn();comparison=null;panel();draw();};};
-      action('cutout-undo',()=>{if(history.length)mask=history.pop();lastStroke=null;manualTouched=true;outputPrepared=false;});
-      action('cutout-auto-result',()=>{push();mask=copyMask(autoStageMask);lastStroke=null;manualTouched=false;outputPrepared=false;});
-      action('cutout-recognition',()=>{push();mask=copyMask(recognitionMask);recognitionStageMask=copyMask(recognitionMask);autoStageMask=copyMask(recognitionMask);lastStroke=null;manualTouched=false;outputPrepared=false;});
-      action('cutout-refine',()=>{
-        if(!lastStroke)return;
-        const result=refineMaskStroke(mask,sourcePixels,lastStroke);
-        if(result.changed){push();mask=result.mask;manualTouched=true;outputPrepared=false;}
-        body.querySelector('#cutout-note').textContent=result.changed?'已细化画笔附近边缘，可撤销。':'没有可靠的边缘变化，保留当前修补。';lastStroke=null;
-      });
     }else{
       prepareOutput();
-      el.innerHTML='<div class="stack"><h3>方向</h3>'
-        +switchRow('cutout-auto-straighten','自动摆正',autoStraighten,'根据最终手动修补后的 mask 估计素材主方向；只旋转最终输出，不再改变边界。')
+      el.innerHTML='<div class="stack"><h3>3 · 最终 mask</h3>'
+        +maskToolsHTML('这是最终人工边界。此后颜色和角度调整都不会再改变 mask。','<button type="button" id="cutout-final-base">恢复后处理结果</button>')
+        +'<h3>方向</h3>'
+        +switchRow('cutout-auto-straighten','自动摆正',autoStraighten,'根据最终 mask 估计素材主方向；只旋转输出，不改变透明边界。')
         +'<label>显示角度 <b id="rotation-value">'+rotation.toFixed(1)+'°</b><input id="cutout-angle" type="range" min="-180" max="180" step=".1" value="'+rotation+'"></label>'
         +'<div class="form-grid"><button type="button" id="cutout-left">左转90°</button><button type="button" id="cutout-rotate">右转90°</button></div>'
         +'<button type="button" id="cutout-align">重新按最终边缘摆正</button><button type="button" id="cutout-original-direction">恢复原方向</button>'
-        +'<h3>外观</h3><div class="cutout-tabs"><button type="button" data-appearance="original">原色</button><button type="button" data-appearance="natural">自然增强</button><button type="button" data-appearance="vivid">鲜明展示</button></div>'
+        +'<h3>颜色与外观</h3><div class="cutout-tabs"><button type="button" data-appearance="original">原色</button><button type="button" data-appearance="natural">自然增强</button><button type="button" data-appearance="vivid">鲜明展示</button></div>'
         +'<label>增强强度 <b id="appearance-value">'+Math.round(intensity*100)+'%</b><input id="cutout-intensity" type="range" min="0" max="100" value="'+intensity*100+'" '+(appearance==='original'?'disabled':'')+'></label>'
-        +'<small class="setting-help">外观调整只改变最终显示像素，不参与识别，也不会改变透明 mask。</small></div>';
+        +'<small class="setting-help">最终阶段只有人工 mask、颜色和角度；不会再运行任何自动边界算法。</small></div>';
+      const action=bindMaskTools(el);
+      action('cutout-final-base',()=>{push();mask=copyMask(postprocessBaseMask);finalStageMask=copyMask(mask);lastStroke=null;outputPrepared=false;});
       const auto=el.querySelector('#cutout-auto-straighten');
       auto.onchange=()=>{autoStraighten=auto.checked;if(autoStraighten){const angle=maskOrientation(mask,w,h);if(angle!=null)rotation=angle;}panel();draw();};
       const angle=el.querySelector('#cutout-angle');if(angle)angle.oninput=()=>{autoStraighten=false;auto.checked=false;rotation=+angle.value;el.querySelector('#rotation-value').textContent=rotation.toFixed(1)+'°';draw();};
-      const action=(id,fn)=>{const b=el.querySelector('#'+id);if(b)b.onclick=()=>{if(busy)return;fn();comparison=null;panel();draw();};};
       action('cutout-left',()=>{autoStraighten=false;rotation=wrap(rotation-90);});
       action('cutout-rotate',()=>{autoStraighten=false;rotation=wrap(rotation+90);});
       action('cutout-original-direction',()=>{autoStraighten=false;rotation=initialRotation;});
@@ -272,7 +298,7 @@ export async function showCutoutEditor({
   };
 
   preview.onpointerdown=e=>{
-    if(mode!=='manual'||comparison||busy)return;
+    if(comparison||busy)return;
     const p=point(e);if(p.x<0||p.x>1||p.y<0||p.y>1)return;
     e.preventDefault();preview.setPointerCapture(e.pointerId);push();stroke={id:e.pointerId,points:[p],ratio,restore};
     mask=paintMask(mask,w,h,[p],ratio,restore,sourceAlpha);manualTouched=true;outputPrepared=false;draw();
@@ -284,18 +310,18 @@ export async function showCutoutEditor({
       points=Array.from({length:Math.min(steps,2048)},(_,i)=>({x:last.x+(p.x-last.x)*(i+1)/steps,y:last.y+(p.y-last.y)*(i+1)/steps}));
     stroke.points.push(...points);mask=paintMask(mask,w,h,points,ratio,restore,sourceAlpha);manualTouched=true;outputPrepared=false;draw();
   };
-  preview.onpointerup=e=>{if(!stroke||stroke.id!==e.pointerId)return;lastStroke=stroke;stroke=null;panel();};
+  preview.onpointerup=e=>{if(!stroke||stroke.id!==e.pointerId)return;lastStroke=stroke;stroke=null;if(mode==='final'&&autoStraighten){const angle=maskOrientation(mask,w,h);if(angle!=null)rotation=angle;}panel();};
   preview.onpointercancel=()=>{if(!stroke)return;mask=history.pop();stroke=null;draw();panel();};
 
   body.querySelector('#cutout-reset').onclick=()=>{
-    push();mask=copyMask(initialMask);recognitionStageMask=copyMask(initialMask);autoStageMask=copyMask(initialMask);
+    push();mask=copyMask(initialMask);roughStageMask=copyMask(initialMask);recognitionBaseMask=copyMask(recognitionMask);recognitionStageMask=copyMask(recognitionMask);postprocessBaseMask=copyMask(initialMask);finalStageMask=copyMask(initialMask);
     appearance=initialAppearance;intensity=initialIntensity;rotation=initialRotation;autoStraighten=initialAutoStraighten;
-    outputPrepared=false;manualTouched=false;lastStroke=null;lastRecognition=null;lastPostprocess=null;mode='recognize';panel();draw();
+    outputPrepared=false;manualTouched=false;lastStroke=null;lastRecognition=null;lastPostprocess=null;mode='rough';panel();draw();
   };
   body.querySelector('#cutout-cancel').onclick=()=>{if(!busy)modal.close();};
 
   const apply=async()=>{
-    if(busy||stroke)return;
+    if(busy||stroke)return;finalStageMask=copyMask(mask);
     if(!mask.some(a=>a>0)){toast('没有可见素材，请回到手动修补恢复区域');return;}
     busy=true;for(const b of body.querySelectorAll('button'))b.disabled=true;
     try{
@@ -312,16 +338,19 @@ export async function showCutoutEditor({
 
   body.querySelector('#cutout-apply').onclick=apply;
   body.querySelector('#cutout-prev').onclick=()=>{
-    if(busy)return;const i=steps.findIndex(([id])=>id===mode);
-    if(i>0){mode=steps[i-1][0];comparison=null;panel();draw();}
+    if(busy)return;
+    if(mode==='recognition'){recognitionStageMask=copyMask(mask);mode='rough';mask=copyMask(roughStageMask);}
+    else if(mode==='final'){finalStageMask=copyMask(mask);mode='recognition';mask=copyMask(recognitionStageMask);}
+    comparison=null;history.length=0;lastStroke=null;outputPrepared=false;panel();draw();
   };
   body.querySelector('#cutout-next').onclick=()=>{
-    if(busy)return;const i=steps.findIndex(([id])=>id===mode);
-    if(i<steps.length-1){
-      mode=steps[i+1][0];comparison=null;
-      if(mode==='output')prepareOutput();
-      panel();draw();
-    }else void apply();
+    if(busy)return;
+    if(mode==='rough'){
+      roughStageMask=copyMask(mask);recognitionBaseMask=copyMask(mask);recognitionStageMask=copyMask(mask);mode='recognition';mask=copyMask(recognitionStageMask);
+    }else if(mode==='recognition'){
+      recognitionStageMask=copyMask(mask);postprocessBaseMask=copyMask(mask);finalStageMask=copyMask(mask);mode='final';mask=copyMask(finalStageMask);outputPrepared=false;prepareOutput();
+    }else{void apply();return;}
+    comparison=null;history.length=0;lastStroke=null;panel();draw();
   };
 
   const cancel=e=>{if(busy)e.preventDefault();};
