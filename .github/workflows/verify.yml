@@ -29,3 +29,17 @@ jobs:
       - run: npm ci
       - name: Unit tests and built UI smoke
         run: npm test && npm run test:ui
+      - name: Package recognition rebaseline harness
+        if: ${{ github.event_name == 'pull_request' }}
+        run: |
+          mkdir -p /tmp/shiye-rebaseline-harness/node_modules/@techstark /tmp/shiye-rebaseline-harness/scripts
+          cp -R src /tmp/shiye-rebaseline-harness/src
+          cp scripts/recognition-oracle-box-benchmark.mjs /tmp/shiye-rebaseline-harness/scripts/
+          cp package.json /tmp/shiye-rebaseline-harness/
+          cp -R node_modules/@techstark/opencv-js /tmp/shiye-rebaseline-harness/node_modules/@techstark/
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: ${{ github.event_name == 'pull_request' }}
+        with:
+          name: recognition-rebaseline-harness
+          path: /tmp/shiye-rebaseline-harness/
+          retention-days: 1
