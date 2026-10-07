@@ -43,7 +43,7 @@ try{
   assert.equal(await evaluate('document.querySelector(".cutout-steps .current")?.textContent.includes("最终调整")'),true);
   assert.ok(await evaluate('!!document.querySelector("#cutout-strength")'));
   assert.ok(await evaluate('!!document.querySelector("#cutout-auto-straighten")'));
-  assert.ok(await evaluate('!!document.querySelector("[data-appearance=\"original\"]")'));
+  assert.ok(await evaluate("!!document.querySelector('[data-appearance=\"original\"]')"));
   assert.equal(await evaluate('!!document.querySelector("#cutout-post-edge")'),false);
   assert.equal(await evaluate('document.querySelector("#cutout-apply").disabled'),false);
   assert.equal(await evaluate('document.querySelector("#cutout-auto-straighten").checked'),true);
