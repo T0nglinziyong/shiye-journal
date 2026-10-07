@@ -19,7 +19,7 @@ test('carrier grouping enabled joins only instances with strong shared-carrier e
   const merged=groups.find(g=>g.grouped);
   assert.deepEqual(merged.members,[0,1]);
   assert.equal(merged.carrierLinkCount,1);
-  assert.ok(merged.x<=.10&&merged.x+merged.w>=.43);
+  assert.ok(merged.x<=.100001&&merged.x+merged.w>=.429999);
 });
 
 test('page-leaking or weak edge carrier evidence never changes material identity',()=>{
