@@ -25,7 +25,8 @@ const migrateRecognition=value=>{
   return 'auto';
 };
 export function normalizePreferences(value={}){
-  return {...defaults,...value,
+  const {recognitionEdgePolish:_oldEdgePolish,recognitionCurveSmooth:_oldCurveSmooth,...current}=value||{};
+  return {...defaults,...current,
     recognition:migrateRecognition(value?.recognition),
     recognitionPixels:recognitionPixelsAllowed(value?.recognitionPixels)?Number(value.recognitionPixels):900,
     balanceLight:value?.balanceLight===true,
