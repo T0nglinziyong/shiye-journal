@@ -11,6 +11,7 @@ const defaults={
   recognitionStraightEdges:true,
   recognitionCurveSmooth:true,
   recognitionEllipseRegularization:true,
+  recognitionPolygonRegularization:true,
   recognitionApertures:true,
   customPaperWidth:210,customPaperHeight:297,display:'grid',backdrop:'auto',maxPageItems:0
 };
@@ -26,6 +27,7 @@ export function normalizePreferences(value={}){
     recognitionStraightEdges:value?.recognitionStraightEdges!==false,
     recognitionCurveSmooth:value?.recognitionCurveSmooth!==false,
     recognitionEllipseRegularization:value?.recognitionEllipseRegularization!==false,
+    recognitionPolygonRegularization:value?.recognitionPolygonRegularization!==false,
     recognitionApertures:value?.recognitionApertures!==false,
     autoOrganize:value?.autoOrganize!==false,
     maxPageItems:[20,40,80].includes(Number(value?.maxPageItems))?Number(value.maxPageItems):0
