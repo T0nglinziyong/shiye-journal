@@ -97,6 +97,21 @@ function proposals(cv,edges,page,{width:w,height:h,paperWidthMM,paperHeightMM,sm
   return out;
 }
 
+function fourSideEdgeSupport(cv,contour,support){
+  const rect=cv.minAreaRect(contour),box=cv.boxPoints(rect),scores=[];
+  for(let i=0;i<4;i++){
+    const a=box[i],b=box[(i+1)%4],dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy),samples=Math.max(20,Math.round(len)),hits=[];
+    for(let k=0;k<samples;k++){
+      const t=k/Math.max(1,samples-1),x=Math.round(a.x+dx*t),y=Math.round(a.y+dy*t);
+      let seen=false;
+      for(let yy=Math.max(0,y-2);yy<=Math.min(support.rows-1,y+2)&&!seen;yy++)for(let xx=Math.max(0,x-2);xx<=Math.min(support.cols-1,x+2);xx++)if(support.data[yy*support.cols+xx]){seen=true;break;}
+      hits.push(seen?1:0);
+    }
+    scores.push(hits.reduce((s,v)=>s+v,0)/Math.max(1,hits.length));
+  }
+  return {min:Math.min(...scores),mean:scores.reduce((s,v)=>s+v,0)/4,sides:scores};
+}
+
 function regionProposals(cv,rgba,page,paperRef,{width:w,height:h,paperWidthMM,paperHeightMM,smallestMM},pxPerMM){
   // Positive chroma carrier proposals. We intentionally model only a/b here:
   // smooth illumination changes mostly affect L, while coloured paper remains
@@ -402,7 +417,7 @@ export function recognizeMaterialsFast(cv,p,own){
   for(const q of selected){
     const approx=new cv.Mat();cv.approxPolyDP(q.contour,approx,Math.max(1.5,cv.arcLength(q.contour,true)*.018),true);
     let boundary,ownedBoundary=false,edgeMethod;
-    if(post.shapeRegularization&&q.source==='region'&&q.rectFill>.90&&approx.rows===4){
+    if(post.shapeRegularization&&q.source==='region'&&q.rectFill>.90&&approx.rows===4&&fourSideEdgeSupport(cv,q.contour,supportEdges).min>=.68){
       // Colour-supported carriers already identify the whole piece, so a
       // four-sided high-fill region can safely use straight physical edges.
       const rect=cv.minAreaRect(q.contour),points=cv.boxPoints(rect).flatMap(pt=>[Math.round(pt.x),Math.round(pt.y)]);boundary=cv.matFromArray(4,1,cv.CV_32SC2,points);ownedBoundary=true;edgeMethod='fast-line';
@@ -419,7 +434,7 @@ export function recognizeMaterialsFast(cv,p,own){
         const carrier=shouldExpandWhite?expandWhiteCarrier(cv,{contour:q.contour,page,edges,lab,w,h,pxPerMM,paperRef}):{expanded:false};
         if(carrier.expanded){
           boundary=smoothFreeform(cv,carrier.contour,w,h,pxPerMM,post);carrier.contour.delete();ownedBoundary=true;edgeMethod='fast-white-carrier';
-        }else if(post.shapeRegularization&&q.rectFill>.92&&approx.rows===4&&q.paperContact>.58&&q.insidePage<.22){
+        }else if(post.shapeRegularization&&q.rectFill>.92&&approx.rows===4&&q.paperContact>.58&&q.insidePage<.22&&fourSideEdgeSupport(cv,q.contour,supportEdges).min>=.68){
         const rect=cv.minAreaRect(q.contour),points=cv.boxPoints(rect).flatMap(pt=>[Math.round(pt.x),Math.round(pt.y)]);boundary=cv.matFromArray(4,1,cv.CV_32SC2,points);ownedBoundary=true;edgeMethod='fast-line';
       }else{
         const outer=chooseOuter(cv,src,q,pxPerMM,w,h,useChroma),smooth=smoothFreeform(cv,outer.contour,w,h,pxPerMM,post);if(outer.owned)outer.contour.delete();boundary=smooth;ownedBoundary=true;edgeMethod='fast-curve';
