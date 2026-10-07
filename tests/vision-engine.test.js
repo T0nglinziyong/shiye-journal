@@ -315,6 +315,46 @@ test('fast recognizer does not promote enclosed printed detail when no physical 
 });
 
 
+test('simple instance discovery keeps independent physical materials as separate identities',async()=>{
+  const cv=await cvModule,width=420,height=594,mask=new Uint8Array(width*height),evidence=new Uint8Array(width*height),foregroundSeeds=new Uint8Array(width*height);
+  const boxes=[[45,60,90,110],[245,70,105,125],[55,325,110,120],[250,335,95,110]];
+  for(const [x0,y0,bw,bh] of boxes)for(let y=y0;y<y0+bh;y++)for(let x=x0;x<x0+bw;x++){const i=y*width+x;mask[i]=evidence[i]=foregroundSeeds[i]=1;}
+  const out=await processVision(cv,'instances-simple',{mask,evidence,foregroundSeeds,width,height,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
+  assert.equal(out.length,4,JSON.stringify(out.map(x=>({x:x.x,y:x.y,w:x.w,h:x.h}))));
+  assert.ok(out.every(x=>x.instanceMethod==='connected-component'));
+});
+
+test('simple instance discovery absorbs small disconnected detail inside a larger material bbox',async()=>{
+  const cv=await cvModule,width=300,height=420,mask=new Uint8Array(width*height),evidence=new Uint8Array(width*height),foregroundSeeds=new Uint8Array(width*height);
+  // A U-shaped carrier keeps the central detail disconnected while its bbox
+  // clearly belongs to the same physical item.
+  for(let y=80;y<280;y++)for(let x=55;x<75;x++){const i=y*width+x;mask[i]=evidence[i]=1;}
+  for(let y=80;y<280;y++)for(let x=205;x<225;x++){const i=y*width+x;mask[i]=evidence[i]=1;}
+  for(let y=245;y<280;y++)for(let x=55;x<225;x++){const i=y*width+x;mask[i]=evidence[i]=1;}
+  for(let y=135;y<165;y++)for(let x=125;x<150;x++){const i=y*width+x;mask[i]=foregroundSeeds[i]=1;}
+  const out=await processVision(cv,'instances-simple',{mask,evidence,foregroundSeeds,width,height,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
+  assert.equal(out.length,1,JSON.stringify(out));
+  assert.equal(out[0].absorbedFragments,1);
+});
+
+test('simple instance discovery rejects only small artifacts in the rectification edge band',async()=>{
+  const cv=await cvModule,width=420,height=594,mask=new Uint8Array(width*height),evidence=new Uint8Array(width*height),foregroundSeeds=new Uint8Array(width*height);
+  for(let y=1;y<17;y++)for(let x=25;x<55;x++){const i=y*width+x;mask[i]=evidence[i]=foregroundSeeds[i]=1;}
+  for(let y=220;y<340;y++)for(let x=175;x<275;x++){const i=y*width+x;mask[i]=evidence[i]=foregroundSeeds[i]=1;}
+  const out=await processVision(cv,'instances-simple',{mask,evidence,foregroundSeeds,width,height,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
+  assert.equal(out.length,1,JSON.stringify(out.map(x=>({x:x.x,y:x.y,w:x.w,h:x.h,touch:x.touchesProtectedFrame}))));
+  assert.ok(out[0].x>.35&&out[0].x<.5);
+});
+
+test('simple instance discovery preserves a substantial real material that reaches a page side',async()=>{
+  const cv=await cvModule,width=420,height=594,mask=new Uint8Array(width*height),evidence=new Uint8Array(width*height),foregroundSeeds=new Uint8Array(width*height);
+  for(let y=110;y<330;y++)for(let x=0;x<130;x++){const i=y*width+x;mask[i]=evidence[i]=foregroundSeeds[i]=1;}
+  const out=await processVision(cv,'instances-simple',{mask,evidence,foregroundSeeds,width,height,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
+  assert.equal(out.length,1);
+  assert.equal(out[0].touchesProtectedFrame,true);
+});
+
+
 test('fast material recognition rejects unrectified benchmark input',async()=>{
   const cv=await cvModule,width=60,height=80,pixels=new Uint8ClampedArray(width*height*4).fill(255);
   await assert.rejects(()=>processVision(cv,'materials-fast',{pixels,width,height,smallestMM:6,paperWidthMM:210,paperHeightMM:297}),/rectified A4/);
