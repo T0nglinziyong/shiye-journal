@@ -333,3 +333,19 @@ test('hybrid browser refinement runs MorphGAC with full-resolution GrabCut polis
   assert.equal(out.edgeMethod,'browser-morphgac-grabcut');
   assert.ok(out.refinementMS>=0);
 });
+
+test('boundary postprocess can be disabled independently of the recognition method',async()=>{
+  const cv=await cvModule,width=150,height=180,pixels=new Uint8ClampedArray(width*height*4),x0=30,y0=28,mw=86,mh=120,alpha=new Uint8Array(mw*mh).fill(255);
+  for(let y=0;y<height;y++)for(let x=0;x<width;x++){
+    const p=(y*width+x)*4,inside=x>=x0&&x<x0+mw&&y>=y0&&y<y0+mh,border=inside&&(x-x0<2||x0+mw-1-x<2||y-y0<2||y0+mh-1-y<2);
+    const color=inside?(border?[90,120,105]:[150,198,170]):[246,246,246];pixels.set([...color,255],p);
+  }
+  const candidate={x:x0/width,y:y0/height,w:mw/width,h:mh/height,pixels:mw*mh,recognitionConfidence:.5,mask:{width:mw,height:mh,alpha,polygons:[]}};
+  const [raw]=await processVision(cv,'material-boundary-refine',{pixels,width,height,candidates:[candidate],mode:'morphgac',postprocess:false});
+  const [finished]=await processVision(cv,'material-boundary-refine',{pixels,width,height,candidates:[candidate],mode:'morphgac',postprocess:true});
+  assert.equal(raw.postprocessed,false);
+  assert.equal(finished.postprocessed,true);
+  assert.equal(raw.edgeMethod,'browser-morphgac');
+  assert.equal(finished.edgeMethod,'browser-morphgac');
+  assert.ok(raw.mask?.alpha?.length&&finished.mask?.alpha?.length);
+});
