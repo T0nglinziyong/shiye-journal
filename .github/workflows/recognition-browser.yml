@@ -1,0 +1,64 @@
+name: Recognition browser regression
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/browser-active-contours.js'
+      - 'src/material-boundary-refiners.js'
+      - 'src/internal-paper-regions.js'
+      - 'src/fast-material-recognition.js'
+      - 'src/opencv-worker.js'
+      - 'src/opencv-worker-browser.js'
+      - 'src/recognition-*.js'
+      - 'src/slimsam-*.js'
+      - 'tests/recognition-engine-browser.mjs'
+      - 'tests/browser-active-contours-parity.test.js'
+      - '.github/workflows/recognition-browser.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: recognition-browser-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  chromium:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Install pinned browser driver
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --prefix "$RUNNER_TEMP/shiye-browser" --no-save --package-lock=false agent-browser@0.38.2
+          BROWSER_BIN="$RUNNER_TEMP/shiye-browser/node_modules/.bin/agent-browser"
+          "$BROWSER_BIN" install --with-deps
+          echo "SHIYE_BROWSER_BIN=$BROWSER_BIN" >> "$GITHUB_ENV"
+      - name: Build
+        run: npm run build
+      - name: Smoke real browser recognition engines
+        shell: bash
+        env:
+          SHIYE_TEST_URL: http://127.0.0.1:5194
+        run: |
+          set -euo pipefail
+          npm run dev -- --port 5194 --strictPort > /tmp/shiye-recognition-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:5194/ >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:5194/ >/dev/null
+          node tests/recognition-engine-browser.mjs

@@ -1,29 +1,54 @@
-// One catalog supplies settings, preference validation and the image pipeline.
-// New recognizers declare their analysis budget and optional refinement here;
-// the original full-resolution image is still used for the accepted cutout.
-const refineSlimSAM = async context => {
-  const {refineCandidatesWithSlimSAM} = await import('./recognition-refiners.js');
+// Recognition method and analysis resolution are intentionally independent.
+// Browser contour engines are parity-tested ports of scikit-image. OpenCV
+// algorithms use the same OpenCV.js WASM core as the existing recognition path.
+const refineSlimSAM=async context=>{
+  const {refineCandidatesWithSlimSAM}=await import('./recognition-refiners.js');
   return refineCandidatesWithSlimSAM(context);
 };
+const refineAuto=async context=>{
+  const {refineCandidatesAuto}=await import('./recognition-refiners.js');
+  return refineCandidatesAuto(context);
+};
+const refineHybrid=async context=>{
+  const {refineCandidatesHybrid}=await import('./recognition-refiners.js');
+  return refineCandidatesHybrid(context);
+};
+const refineMorphGAC=async context=>{
+  const {refineCandidatesWithMorphGAC}=await import('./recognition-refiners.js');
+  return refineCandidatesWithMorphGAC(context);
+};
+const refineActive=async context=>{
+  const {refineCandidatesWithActiveContour}=await import('./recognition-refiners.js');
+  return refineCandidatesWithActiveContour(context);
+};
+const refineGrabCut=async context=>{
+  const {refineCandidatesWithGrabCut}=await import('./recognition-refiners.js');
+  return refineCandidatesWithGrabCut(context);
+};
 
-export const recognitionStrategies = Object.freeze([
-  {id:'auto', label:'自动 · 按设备'},
-  {id:'fast', label:'传统识别 · 快速', analysisMaxDimension:900},
-  {id:'standard', label:'传统识别 · 标准', analysisMaxDimension:1200},
-  {id:'detail', label:'传统识别 · 精细', analysisMaxDimension:1600},
-  {id:'slimsam', label:'浏览器模型 · SlimSAM（试用）', analysisMaxDimension:1000, refineCandidates:refineSlimSAM}
+export const recognitionStrategies=Object.freeze([
+  {id:'auto',label:'自动 · 传统识别 + 高质量补边',refineCandidates:refineAuto},
+  {id:'traditional',label:'传统识别 · OpenCV 基础'},
+  {id:'hybrid',label:'组合识别 · MorphGAC + GrabCut',refineCandidates:refineHybrid},
+  {id:'active',label:'浏览器轮廓 · Active Contour',refineCandidates:refineActive},
+  {id:'grabcut',label:'OpenCV · GrabCut',refineCandidates:refineGrabCut},
+  {id:'morphgac',label:'浏览器轮廓 · MorphGAC',refineCandidates:refineMorphGAC},
+  {id:'slimsam',label:'浏览器模型 · SlimSAM（试用）',refineCandidates:refineSlimSAM}
 ]);
-const strategiesByID = new Map(recognitionStrategies.map(strategy => [strategy.id, strategy]));
-export const recognitionOptions = recognitionStrategies.map(({id, label}) => [id, label]);
-export const recognitionModeAllowed = value => strategiesByID.has(value);
+export const recognitionPixelOptions=Object.freeze([
+  [900,'900 px'],
+  [1200,'1200 px'],
+  [1600,'1600 px']
+]);
+const strategiesByID=new Map(recognitionStrategies.map(strategy=>[strategy.id,strategy]));
+const pixelValues=new Set(recognitionPixelOptions.map(([value])=>value));
+export const recognitionOptions=recognitionStrategies.map(({id,label})=>[id,label]);
+export const recognitionModeAllowed=value=>strategiesByID.has(value);
+export const recognitionPixelsAllowed=value=>pixelValues.has(Number(value));
 
-export function recognitionProfile(value='auto', {maxTouchPoints=globalThis.navigator?.maxTouchPoints||0, coarsePointer=globalThis.matchMedia?.('(pointer:coarse)').matches||false}={}) {
-  // Auto is quality-first on all supported devices. The explicit fast
-  // profile remains available when a user prefers latency over small/pale
-  // boundary recall. A 600px default was the main reason iPad/phone imports
-  // saw weaker physical edges than desktop on the same corrected A4.
-  const mode = value !== 'auto' && strategiesByID.has(value)
-    ? value : 'standard';
-  const {analysisMaxDimension, refineCandidates} = strategiesByID.get(mode);
-  return {mode, analysisMaxDimension, refineCandidates};
+export function recognitionProfile(value='auto',analysisMaxDimension=1200){
+  const mode=strategiesByID.has(value)?value:'auto';
+  const pixels=recognitionPixelsAllowed(analysisMaxDimension)?Number(analysisMaxDimension):1200;
+  const {refineCandidates}=strategiesByID.get(mode);
+  return {mode,analysisMaxDimension:pixels,refineCandidates};
 }

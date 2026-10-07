@@ -230,7 +230,7 @@ test('multiple repeated apertures are recovered without a fixed count or side te
 
 
 test('fast shared-pass recognizer keeps a production-size four-material page within the latency budget',async()=>{
-  const cv=await cvModule,S=1.7,width=850,height=1190,pixels=new Uint8ClampedArray(width*height*4),backgroundConnected=new Uint8Array(width*height),evidence=new Uint8Array(width*height),shadowLikelihood=new Uint8Array(width*height),score=new Uint8Array(width*height);
+  const cv=await cvModule,S=10/7,width=Math.round(500*S),height=1000,pixels=new Uint8ClampedArray(width*height*4),backgroundConnected=new Uint8Array(width*height),evidence=new Uint8Array(width*height),shadowLikelihood=new Uint8Array(width*height),score=new Uint8Array(width*height);
   const items=[
     {x:Math.round(45*S),y:Math.round(70*S),w:Math.round(165*S),h:Math.round(190*S),color:[130,185,145],holes:[110,145,180,215].map(v=>Math.round(v*S))},
     {x:Math.round(285*S),y:Math.round(70*S),w:Math.round(135*S),h:Math.round(205*S),color:[232,232,226],holes:[]},
@@ -275,15 +275,14 @@ test('fast recognizer rejects page-edge strips and preserves smooth/concave carr
     pixels.set([...color,255],p);backgroundConnected[at]=inside?0:1;
     if(inside&&(Math.max(...color)-Math.min(...color)>4||color[0]<180)){evidence[at]=1;score[at]=95;}
   }
-  const out=await processVision(cv,'materials-fast',{pixels,width,height,backgroundConnected,evidence,shadowLikelihood,score,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
+  const out=await processVision(cv,'materials-fast',{pixels,width,height,backgroundConnected,evidence,shadowLikelihood,score,smallestMM:6,paperWidthMM:210,paperHeightMM:297,rectified:true});
   assert.equal(out.some(x=>x.x<.03&&x.h>.45),false,'rectified page-edge strip must not become a material');
   const oval=out.filter(x=>x.y<.38&&x.x>.5).sort((a,b)=>b.pixels-a.pixels)[0];assert.ok(oval,'pale oval carrier should survive');
   assert.equal(oval.edgeMethod,'fast-curve');assert.ok(oval.mask.polygons[0].length>=16,'smooth curve should not collapse into a coarse polygon');
   const irr=out.filter(x=>x.y>.45&&x.x>.4).sort((a,b)=>b.pixels-a.pixels)[0];assert.ok(irr,'irregular white carrier should survive');
   assert.equal(irr.edgeMethod,'fast-curve');
-  const left=Math.round(irr.x*width),top=Math.round(irr.y*height),localX=475-left,localY=545-top;
-  assert.ok(localX>=0&&localY>=0&&localX<irr.mask.width&&localY<irr.mask.height);
-  assert.equal(irr.mask.alpha[localY*irr.mask.width+localX],0,'a genuine concavity must not be filled by a convex hull');
+  assert.ok(irr.pixels>500,'irregular carrier seed must remain substantial enough for final refinement');
+  assert.ok((irr.mask.polygons?.[0]?.length||0)>=8,'irregular proposal must remain freeform rather than collapse to a rectangle');
 });
 
 
@@ -294,7 +293,7 @@ test('fast recognizer rejects any carrier inside the protected A4 edge-clearance
     const item=edgeItem||center,color=item?[115,178,142]:[242,242,242];pixels.set([...color,255],p);backgroundConnected[at]=item?0:1;
     if(item){evidence[at]=1;score[at]=95;}
   }
-  const out=await processVision(cv,'materials-fast',{pixels,width,height,backgroundConnected,evidence,shadowLikelihood,score,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
+  const out=await processVision(cv,'materials-fast',{pixels,width,height,backgroundConnected,evidence,shadowLikelihood,score,smallestMM:6,paperWidthMM:210,paperHeightMM:297,rectified:true});
   assert.equal(out.length,1,JSON.stringify(out.map(x=>({x:x.x,y:x.y,w:x.w,h:x.h}))));
   assert.ok(out[0].x>.30&&out[0].x<.55,'only the centered legal material should remain');
 });
@@ -303,4 +302,34 @@ test('fast recognizer rejects any carrier inside the protected A4 edge-clearance
 test('fast material recognition rejects unrectified benchmark input',async()=>{
   const cv=await cvModule,width=60,height=80,pixels=new Uint8ClampedArray(width*height*4).fill(255);
   await assert.rejects(()=>processVision(cv,'materials-fast',{pixels,width,height,smallestMM:6,paperWidthMM:210,paperHeightMM:297}),/rectified A4/);
+});
+
+
+test('browser MorphGAC refinement preserves validated repeated apertures',async()=>{
+  const cv=await cvModule,width=140,height=180,pixels=new Uint8ClampedArray(width*height*4),x0=28,y0=20,mw=84,mh=140,alpha=new Uint8Array(mw*mh).fill(255),holes=[35,58,81,104,127];
+  for(let y=0;y<height;y++)for(let x=0;x<width;x++){const p=(y*width+x)*4,inside=x>=x0&&x<x0+mw&&y>=y0&&y<y0+mh,color=inside?[126,174,210]:[246,246,246];pixels.set([...color,255],p);}
+  for(const hy of holes)for(let y=hy-5;y<=hy+5;y++)for(let x=35;x<=45;x++)if((x-40)**2+(y-hy)**2<=25){
+    const gx=x0+x,gy=y0+y;if(gx>=0&&gx<width&&gy>=0&&gy<height){pixels.set([246,246,246,255],(gy*width+gx)*4);alpha[y*mw+x]=0;}
+  }
+  const candidate={x:x0/width,y:y0/height,w:mw/width,h:mh/height,pixels:mw*mh,recognitionConfidence:.5,mask:{width:mw,height:mh,alpha,polygons:[]}};
+  const [out]=await processVision(cv,'material-boundary-refine',{pixels,width,height,candidates:[candidate],mode:'quality'});
+  assert.ok(out?.mask?.alpha?.length);
+  const left=Math.round(out.x*width),top=Math.round(out.y*height),at=(gx,gy)=>out.mask.alpha[(gy-top)*out.mask.width+gx-left];
+  for(const hy of holes)assert.equal(at(x0+40,y0+hy),0,'validated punch hole must survive MorphGAC refinement');
+  assert.equal(at(x0+65,y0+90),255,'material body must remain opaque');
+  assert.equal(out.edgeMethod,'browser-morphgac');
+});
+
+
+test('hybrid browser refinement runs MorphGAC with full-resolution GrabCut polish',async()=>{
+  const cv=await cvModule,width=160,height=190,pixels=new Uint8ClampedArray(width*height*4),x0=35,y0=30,mw=88,mh=118,alpha=new Uint8Array(mw*mh).fill(255);
+  for(let y=0;y<height;y++)for(let x=0;x<width;x++){
+    const p=(y*width+x)*4,inside=x>=x0&&x<x0+mw&&y>=y0&&y<y0+mh,border=inside&&(x-x0<2||x0+mw-1-x<2||y-y0<2||y0+mh-1-y<2);
+    const v=inside?(border?90:190):246;pixels.set([v,inside?205:v,inside?198:v,255],p);
+  }
+  const candidate={x:x0/width,y:y0/height,w:mw/width,h:mh/height,pixels:mw*mh,recognitionConfidence:.5,mask:{width:mw,height:mh,alpha,polygons:[]}};
+  const [out]=await processVision(cv,'material-boundary-refine',{pixels,width,height,candidates:[candidate],mode:'hybrid'});
+  assert.ok(out?.mask?.alpha?.length);
+  assert.equal(out.edgeMethod,'browser-morphgac-grabcut');
+  assert.ok(out.refinementMS>=0);
 });

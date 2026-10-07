@@ -18,7 +18,7 @@ async function runSheet({printed=false}={}){
     backgroundConnected[at]=inside?0:1;
     if(inside&&!hole&&!rim){evidence[at]=1;score[at]=95;}
   }
-  return processVision(cv,'materials-fast',{pixels,width,height,backgroundConnected,evidence,shadowLikelihood,score,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
+  return processVision(cv,'materials-fast',{pixels,width,height,backgroundConnected,evidence,shadowLikelihood,score,smallestMM:6,paperWidthMM:210,paperHeightMM:297,rectified:true});
 }
 
 test('fast aperture detector carves only a repeated physical-hole pattern',async()=>{
@@ -41,7 +41,7 @@ test('arbitrary enclosed paper-colour opening is carved without a circle prior',
     const color=!inside||hole?[242,242,242]:[125,175,215];pixels.set([...color,255],p);backgroundConnected[at]=inside?0:1;
     if(inside&&!hole){evidence[at]=1;score[at]=95;}
   }
-  const out=await processVision(cv,'materials-fast',{pixels,width,height,backgroundConnected,evidence,shadowLikelihood,score,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
+  const out=await processVision(cv,'materials-fast',{pixels,width,height,backgroundConnected,evidence,shadowLikelihood,score,smallestMM:6,paperWidthMM:210,paperHeightMM:297,rectified:true});
   assert.equal(out.length,1);assert.ok(out[0].apertureCount>=1,JSON.stringify({count:out[0].apertureCount,diag:out[0].apertureDiagnostics,ref:out[0].aperturePaperRef}));
   const region=out[0].mask.apertureRegions?.[0];assert.ok(region&&region.w>20&&region.h>20,'opening shape should be preserved as a region');
 });
@@ -54,6 +54,6 @@ test('large pale printed panel is not carved merely because it is light',async()
     const texture=inPanel&&((x+y)%9===0),color=!inside?[242,242,242]:inPanel?(texture?[232,230,226]:[238,237,234]):[205,150,185];
     pixels.set([...color,255],p);backgroundConnected[at]=inside?0:1;if(inside){evidence[at]=1;score[at]=90;}
   }
-  const out=await processVision(cv,'materials-fast',{pixels,width,height,backgroundConnected,evidence,shadowLikelihood,score,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
+  const out=await processVision(cv,'materials-fast',{pixels,width,height,backgroundConnected,evidence,shadowLikelihood,score,smallestMM:6,paperWidthMM:210,paperHeightMM:297,rectified:true});
   assert.equal(out.length,1);assert.equal(out[0].apertureCount,0,'a printed panel must remain material');
 });
