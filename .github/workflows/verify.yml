@@ -2,7 +2,7 @@ name: Verify Shiye
 
 on:
   push:
-    branches: [main]
+    branches: [main, recognition-official-engines]
   pull_request:
     branches: [main]
   workflow_dispatch:
