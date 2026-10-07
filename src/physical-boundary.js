@@ -20,6 +20,8 @@ export function completePhysicalBoundaries(cv,p,own){
   const shadow=p.shadowLikelihood?own(cv.matFromArray(h,w,cv.CV_8UC1,Uint8Array.from(p.shadowLikelihood,v=>v?255:0))):null;
 
   for(const candidate of p.candidates||[]){
+    const scoped=[],take=mat=>(scoped.push(mat),mat);
+    try{
     const m=candidate.mask;if(!m?.alpha||m.width<2||m.height<2){result.push(candidate);continue;}
     const x=Math.max(0,Math.round(candidate.x*w)),y=Math.max(0,Math.round(candidate.y*h));
     const bw=Math.max(1,Math.min(w-x,Math.round(candidate.w*w))),bh=Math.max(1,Math.min(h-y,Math.round(candidate.h*h)));
@@ -32,12 +34,12 @@ export function completePhysicalBoundaries(cv,p,own){
 
     const margin=Math.max(3,Math.round(pxPerMM*1.5)),rx=Math.max(0,x-margin),ry=Math.max(0,y-margin);
     const rr=Math.min(w,x+bw+margin),rb=Math.min(h,y+bh+margin),rw=rr-rx,rh=rb-ry,ox=x-rx,oy=y-ry;
-    const outerSource=own(cv.matFromArray(m.height,m.width,cv.CV_8UC1,m.alpha)),outerScaled=own(new cv.Mat());
+    const outerSource=take(cv.matFromArray(m.height,m.width,cv.CV_8UC1,m.alpha)),outerScaled=take(new cv.Mat());
     cv.resize(outerSource,outerScaled,new cv.Size(bw,bh),0,0,cv.INTER_NEAREST);
-    const outerRaw=own(cv.Mat.zeros(rh,rw,cv.CV_8UC1)),outerTarget=own(outerRaw.roi(new cv.Rect(ox,oy,bw,bh)));outerScaled.copyTo(outerTarget);
+    const outerRaw=take(cv.Mat.zeros(rh,rw,cv.CV_8UC1)),outerTarget=take(outerRaw.roi(new cv.Rect(ox,oy,bw,bh)));outerScaled.copyTo(outerTarget);
     const prior=regularizeOuterSupport(cv,outerRaw,own,pxPerMM),outer=prior.mask,outerArea=cv.countNonZero(outer);if(!outerArea)continue;
 
-    const imageROI=own(rgba.roi(new cv.Rect(rx,ry,rw,rh))),rgb=own(new cv.Mat()),lab=own(new cv.Mat()),gray=own(new cv.Mat());
+    const imageROI=take(rgba.roi(new cv.Rect(rx,ry,rw,rh))),rgb=take(new cv.Mat()),lab=take(new cv.Mat()),gray=take(new cv.Mat());
     cv.cvtColor(imageROI,rgb,cv.COLOR_RGBA2RGB);cv.cvtColor(rgb,lab,cv.COLOR_RGB2Lab);cv.cvtColor(rgb,gray,cv.COLOR_RGB2GRAY);
     // Learn the local page appearance only from page-connected pixels around
     // the physical support. A true opening may be slightly darker because the
@@ -49,7 +51,7 @@ export function completePhysicalBoundaries(cv,p,own){
       const at=local*3;pageL+=lab.data[at];pageA+=lab.data[at+1];pageB+=lab.data[at+2];pageN++;
     }
     if(pageN){pageL/=pageN;pageA/=pageN;pageB/=pageN;}
-    const gc=own(new cv.Mat(rh,rw,cv.CV_8UC1,new cv.Scalar(cv.GC_BGD)));let strongFG=0;
+    const gc=take(new cv.Mat(rh,rw,cv.CV_8UC1,new cv.Scalar(cv.GC_BGD)));let strongFG=0;
     for(let py=0;py<rh;py++)for(let px=0;px<rw;px++){
       const local=py*rw+px;if(!outer.data[local])continue;gc.data[local]=cv.GC_PR_FGD;
       const global=(ry+py)*w+(rx+px);
@@ -66,37 +68,40 @@ export function completePhysicalBoundaries(cv,p,own){
       }
     }
 
-    const refined=own(new cv.Mat());outer.copyTo(refined);
+    const refined=take(new cv.Mat());outer.copyTo(refined);
     const background=rw*rh-outerArea;
     if(strongFG>=10&&background>=10){
-      const bgModel=own(new cv.Mat()),fgModel=own(new cv.Mat());cv.grabCut(rgb,gc,new cv.Rect(),bgModel,fgModel,3,cv.GC_INIT_WITH_MASK);
+      const bgModel=take(new cv.Mat()),fgModel=take(new cv.Mat());cv.grabCut(rgb,gc,new cv.Rect(),bgModel,fgModel,3,cv.GC_INIT_WITH_MASK);
       for(let i=0;i<gc.data.length;i++)refined.data[i]=outer.data[i]&&(gc.data[i]===cv.GC_FGD||gc.data[i]===cv.GC_PR_FGD)?255:0;
 
       // Keep one physical carrier component, but do not fill its internal
       // background islands. Connected-components chooses the carrier while
       // enclosed zero pixels stay zero, so arbitrary apertures can survive.
-      const labels=own(new cv.Mat()),stats=own(new cv.Mat()),centroids=own(new cv.Mat()),count=cv.connectedComponentsWithStats(refined,labels,stats,centroids,8,cv.CV_32S);
+      const labels=take(new cv.Mat()),stats=take(new cv.Mat()),centroids=take(new cv.Mat()),count=cv.connectedComponentsWithStats(refined,labels,stats,centroids,8,cv.CV_32S);
       let largestLabel=0,largestArea=0;for(let label=1;label<count;label++){const a=stats.data32S[label*5+4];if(a>largestArea){largestArea=a;largestLabel=label;}}
       if(largestLabel&&largestArea>=outerArea*.62){for(let i=0;i<labels.data32S.length;i++)refined.data[i]=labels.data32S[i]===largestLabel?255:0;}else outer.copyTo(refined);
     }
 
     let aperture={count:0,regions:[]};
     try{
-      aperture=carveEnclosedPageRegions(cv,{mask:refined,outer,lab,gray,pageL,pageA,pageB,pageN,evidence:evidence?own(evidence.roi(new cv.Rect(rx,ry,rw,rh))):null,pxPerMM},own);
+      aperture=carveEnclosedPageRegions(cv,{mask:refined,outer,lab,gray,pageL,pageA,pageB,pageN,evidence:evidence?take(evidence.roi(new cv.Rect(rx,ry,rw,rh))):null,pxPerMM},own);
     }catch{
       // Aperture recovery is precision-first and optional. A pathological
       // oversized/fragmented enclosure must never crash the entire material
       // recognition pass; keep the physical carrier and simply carve no holes.
       aperture={count:0,regions:[]};
     }
-    const finalContours=own(new cv.MatVector()),finalHierarchy=own(new cv.Mat());cv.findContours(refined,finalContours,finalHierarchy,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_SIMPLE);
-    let largestFinal=null,largestFinalArea=0;for(let i=0;i<finalContours.size();i++){const q=own(finalContours.get(i)),a=cv.contourArea(q);if(a>largestFinalArea){largestFinalArea=a;largestFinal=q;}}
+    const finalContours=take(new cv.MatVector()),finalHierarchy=take(new cv.Mat());cv.findContours(refined,finalContours,finalHierarchy,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_SIMPLE);
+    let largestFinal=null,largestFinalArea=0;for(let i=0;i<finalContours.size();i++){const q=take(finalContours.get(i)),a=cv.contourArea(q);if(a>largestFinalArea){largestFinalArea=a;largestFinal=q;}}
     if(!largestFinal){continue;}
-    const bounds=cv.boundingRect(largestFinal),local=own(refined.roi(new cv.Rect(bounds.x,bounds.y,bounds.width,bounds.height))),packed=own(new cv.Mat());local.copyTo(packed);
+    const bounds=cv.boundingRect(largestFinal),local=take(refined.roi(new cv.Rect(bounds.x,bounds.y,bounds.width,bounds.height))),packed=take(new cv.Mat());local.copyTo(packed);
     const polygon=(prior.polygon||Array.from({length:largestFinal.rows},(_,i)=>[largestFinal.data32S[i*2],largestFinal.data32S[i*2+1]])).map(([px,py])=>[px-bounds.x,py-bounds.y]);
     result.push({...candidate,x:(rx+bounds.x)/w,y:(ry+bounds.y)/h,w:bounds.width/w,h:bounds.height/h,pixels:cv.countNonZero(local),
       boundaryModel:prior.boundaryModel,boundaryLineCount:prior.lineCount||0,boundaryCurveCount:prior.curveCount||0,boundaryCornerCount:prior.cornerCount||0,apertureCount:aperture.count,
       mask:{...m,width:bounds.width,height:bounds.height,alpha:new Uint8Array(packed.data),polygons:[polygon],topologyPreserved:true,boundaryPrimitives:prior.primitives,apertureRegions:aperture.regions}});
+    }finally{
+      for(const resource of scoped.reverse())resource.delete();
+    }
   }
   return result;
 }
