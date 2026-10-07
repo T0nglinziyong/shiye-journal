@@ -21,7 +21,6 @@ on:
       - 'src/opencv-worker.js'
       - 'src/opencv-worker-browser.js'
       - 'src/recognition-*.js'
-      - 'src/slimsam-*.js'
       - 'tests/recognition-engine-browser.mjs'
       - 'tests/recognition-browser.mjs'
       - 'tests/cutout-inspection-browser.mjs'

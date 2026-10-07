@@ -769,12 +769,10 @@ async function previewCrop(){
   const record=state.importRecords[state.importIndex],source=state.correctedBitmap||state.importBitmap,b=state.correctedBitmap?{x:0,y:0,w:1,h:1}:state.importBox,[pw,ph]=paperDimensions();
   let regions=await detectPaperCandidates(source,b,6,{balanceLight:state.balanceLight,paperWidthMM:pw,paperHeightMM:ph,recognition:state.importRecognition||state.preferences.recognition,recognitionPixels:state.preferences.recognitionPixels,recognitionPreprocess:recognitionPreprocessOptions(),recognitionPostprocess:recognitionPostprocessOptions(),onProgress:p=>{
     if(state.route!=='import'||record!==state.importRecords[state.importIndex])return;
-    const slim=state.preferences.recognition==='slimsam';
         const text=p.status==='inference'?'浏览器模型正在细化素材边缘…'
           :p.status==='fallback'?(Number.isFinite(p.count)?`${p.count} 个模型结果不可靠，保留传统识别边缘，请检查`:'边缘精修未采用新结果，已保留原识别边缘')
           :p.status==='contour-refinement'?`正在细化 ${p.total||''} 个不确定素材边缘…`
           :p.status==='boundary-postprocess'?`正在进行 ${p.total||''} 个素材的边缘与孔洞后处理…`
-          :slim?`正在加载浏览器模型${Number.isFinite(p.progress)?' '+Math.round(p.progress)+'%':''}（首次约40MB，照片不上传）`
           :'正在优化素材边缘…';
     state.importProcessing=text;const label=view.querySelector('.import-processing');if(label)label.textContent=text;toast(text);
   }});
