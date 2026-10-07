@@ -2,6 +2,7 @@ import {completePhysicalBoundaries} from './physical-boundary.js';
 import {reconstructFragmentedBoundaries} from './fragmented-boundary.js';
 import {recognizeMaterialsFast} from './fast-material-recognition.js';
 import {refineMaterialBoundaries} from './material-boundary-refiners.js';
+import {discoverMaterialInstancesSimple} from './simple-material-instances.js';
 export async function processVision(cv,operation,p){
   const resources=[],own=mat=>(resources.push(mat),mat);
   try{
@@ -123,6 +124,7 @@ export async function processVision(cv,operation,p){
       for(const item of [...byArea,...byConfidence]){if(seen.has(item))continue;seen.add(item);selected.push(item);if(selected.length>=96)break;}
       return selected.sort((a,b)=>a.y-b.y||a.x-b.x);
     }
+    if(operation==='instances-simple')return discoverMaterialInstancesSimple(cv,p,own);
     if(operation==='boundary-reconstruction')return reconstructFragmentedBoundaries(cv,p,own);
     if(operation==='complete-boundaries')return completePhysicalBoundaries(cv,p,own);
     if(operation==='instances'){
