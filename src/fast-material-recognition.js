@@ -455,11 +455,18 @@ export function recognizeMaterialsFast(cv,p,own){
           carrierDiagnostics={edgeSupport:carrier.edgeSupport,areaRatio:carrier.areaRatio,seedCoverage:carrier.seedCoverage,source:'white-carrier'};
           boundary=smoothFreeform(cv,carrier.contour,w,h,pxPerMM,post);carrier.contour.delete();ownedBoundary=true;edgeMethod='fast-white-carrier';
         }else if(seedOnly){
-          // A closed edge completely surrounded by non-page pixels is usually
-          // internal print/detail, not another physical item. White-carrier
-          // seeds are allowed only when an observed outer carrier was actually
-          // recovered above.
-          approx.delete();continue;
+          // A low-contact contour is normally internal print/detail. Before
+          // rejecting it, allow one edge-derived outer-envelope recovery: it
+          // must grow materially beyond the seed AND the recovered perimeter
+          // must actually face page background. This retains weak white
+          // die-cut outlines without promoting a closed printed box.
+          const outer=chooseOuter(cv,src,q,pxPerMM,w,h,useChroma),outerArea=Math.abs(cv.contourArea(outer.contour)),outerMetrics=pageMetrics(cv,outer.contour,page,w,h,pxPerMM),
+            outerRatio=outerArea/Math.max(1,q.area),validOuter=outer.owned&&outerRatio>=1.08&&outerMetrics.paperContact>=.30&&outerMetrics.insidePage<=.22;
+          if(validOuter){
+            boundary=smoothFreeform(cv,outer.contour,w,h,pxPerMM,post);outer.contour.delete();ownedBoundary=true;edgeMethod='fast-curve';
+          }else{
+            if(outer.owned)outer.contour.delete();approx.delete();continue;
+          }
         }else if(post.shapeRegularization&&q.rectFill>.92&&approx.rows===4&&q.paperContact>.58&&q.insidePage<.22&&fourSideEdgeSupport(cv,q.contour,supportEdges).min>=.68){
         const rect=cv.minAreaRect(q.contour),points=cv.boxPoints(rect).flatMap(pt=>[Math.round(pt.x),Math.round(pt.y)]);boundary=cv.matFromArray(4,1,cv.CV_32SC2,points);ownedBoundary=true;edgeMethod='fast-line';
       }else{
