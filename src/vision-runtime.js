@@ -3,43 +3,74 @@ import fallbackOpenCVScriptURL from '@techstark/opencv-js/dist/opencv.js?url';
 const liteOpenCVScriptURL='/vendor/opencv-shiye/opencv.js';
 export function visionRuntimeFlavor(){return 'lite';}
 
-// Heavy vision code is downloaded only when image processing is requested.
-// The import flow may explicitly prewarm it while the user is choosing a photo.
-let worker,sequence=0,readyPromise=null,resolveReady=null,rejectReady=null;
+const slots=[];
+let sequence=0;
 const pending=new Map();
-let initialized=false;
-export function visionStatus(){return [...pending.values()].map(job=>({operation:job.operation,elapsedMS:Math.round(performance.now()-job.startedAt)}));}
-function ensureWorker(){
-  if(worker)return readyPromise;
-  initialized=false;
-  readyPromise=new Promise((resolve,reject)=>{resolveReady=resolve;rejectReady=reject;});
-  worker=new Worker(new URL('./opencv-worker-browser.js',import.meta.url));
+const now=()=>globalThis.performance?.now?.()??Date.now();
+
+export function visionParallelism(){
+  if(typeof navigator==='undefined')return 1;
+  return Number(navigator.hardwareConcurrency||0)>=8?2:1;
+}
+export function visionStatus(){
+  return [...pending.values()].map(job=>({operation:job.operation,worker:job.slot,elapsedMS:Math.round(now()-job.startedAt)}));
+}
+function resetSlot(index,error){
+  slots[index]?.worker?.terminate?.();slots[index]=null;
+  for(const [id,job] of pending){if(job.slot!==index)continue;clearTimeout(job.timer);pending.delete(id);job.reject(error);}
+}
+function ensureWorker(index=0){
+  if(slots[index])return slots[index].readyPromise;
+  let resolveReady,rejectReady;
+  const readyPromise=new Promise((resolve,reject)=>{resolveReady=resolve;rejectReady=reject;}),
+    worker=new Worker(new URL('./opencv-worker-browser.js',import.meta.url)),
+    slot={worker,readyPromise,initialized:false};
+  slots[index]=slot;
   worker.onmessage=({data})=>{
-    if(data?.type==='ready'){
-      initialized=true;
-      resolveReady?.(true);resolveReady=rejectReady=null;
-      return;
-    }
-    const job=pending.get(data.id);if(!job)return;clearTimeout(job.timer);pending.delete(data.id);data.error?job.reject(Error(data.error)):job.resolve(data.result);
+    if(data?.type==='ready'){slot.initialized=true;resolveReady(true);return;}
+    const job=pending.get(data.id);if(!job)return;
+    clearTimeout(job.timer);pending.delete(data.id);data.error?job.reject(Error(data.error)):job.resolve(data.result);
   };
   worker.onerror=event=>{
-    const detail=[event?.message,event?.filename,event?.lineno&&('line '+event.lineno)].filter(Boolean).join(' · ');
-    const error=Error('本机图像引擎加载失败'+(detail?'：'+detail:'，请联网后重试'));
-    rejectReady?.(error);resolveReady=rejectReady=null;
-    for(const job of pending.values()){clearTimeout(job.timer);job.reject(error);}
-    pending.clear();worker.terminate();worker=null;readyPromise=null;initialized=false;
+    const detail=[event?.message,event?.filename,event?.lineno&&('line '+event.lineno)].filter(Boolean).join(' · '),
+      error=Error('本机图像引擎加载失败'+(detail?'：'+detail:'，请联网后重试'));
+    rejectReady(error);resetSlot(index,error);
   };
-  worker.postMessage({
-    type:'init',
-    opencvScriptURL:liteOpenCVScriptURL,
-    fallbackOpenCVScriptURL
-  });
+  worker.postMessage({type:'init',opencvScriptURL:liteOpenCVScriptURL,fallbackOpenCVScriptURL});
   return readyPromise;
 }
-export function prewarmVision(){
-  return initialized?Promise.resolve(true):ensureWorker();
+function taskOnSlot(index,operation,parameters){
+  ensureWorker(index);const slot=slots[index];
+  return new Promise((resolve,reject)=>{
+    const id=++sequence,timer=setTimeout(()=>{pending.delete(id);reject(Error('本机图像处理超时，请缩小照片后重试'));},90000);
+    pending.set(id,{resolve,reject,timer,operation,slot:index,startedAt:now()});
+    const buffers=parameters.transferInput?[...new Set(Object.values(parameters).filter(ArrayBuffer.isView).map(a=>a.buffer))]:[];
+    slot.worker.postMessage({id,operation,parameters},buffers);
+  });
 }
-export function visionTask(operation,parameters){
-  ensureWorker();
-  return new Promise((resolve,reject)=>{const id=++sequence,timer=setTimeout(()=>{pending.delete(id);reject(Error('本机图像处理超时，请缩小照片后重试'));},90000);pending.set(id,{resolve,reject,timer,operation,startedAt:performance.now()});const buffers=parameters.transferInput?[...new Set(Object.values(parameters).filter(ArrayBuffer.isView).map(a=>a.buffer))]:[];worker.postMessage({id,operation,parameters},buffers);});
+export function prewarmVision({parallel=false}={}){
+  const count=parallel?visionParallelism():1;
+  return Promise.all(Array.from({length:count},(_,i)=>ensureWorker(i))).then(()=>true);
+}
+export function visionTask(operation,parameters){return taskOnSlot(0,operation,parameters);}
+export async function visionParallelTasks(operation,parameterList){
+  if(!parameterList?.length)return [];
+  const count=Math.min(visionParallelism(),parameterList.length);
+  await prewarmVision({parallel:count>1});
+  const results=[];
+  for(let offset=0;offset<parameterList.length;offset+=count){
+    const batch=parameterList.slice(offset,offset+count);
+    results.push(...await Promise.all(batch.map((parameters,i)=>taskOnSlot(i,operation,parameters))));
+  }
+  return results;
+}
+
+// Start fetching/compiling the local OpenCV runtime after the first paint.
+// The existing import-page prewarm remains as a second safety net.
+if(typeof window!=='undefined'&&typeof Worker!=='undefined'){
+  requestAnimationFrame(()=>{
+    const start=()=>{void prewarmVision({parallel:true}).catch(()=>{});};
+    if('requestIdleCallback' in window)requestIdleCallback(start,{timeout:900});
+    else setTimeout(start,250);
+  });
 }
