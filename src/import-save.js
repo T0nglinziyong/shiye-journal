@@ -81,11 +81,13 @@ export async function saveImportBatch({state,db,urls,render,onSaved}) {
       projects.push(p);savedCount++;
     }else {
       if(!chosen.length)continue;
-      const photoID=uid();blobs.push({id:photoID,data:record.originalFile||record.file});
+      // Material editing/re-recognition needs only the candidate frame, not the
+      // whole imported photograph. Keep the aligned source pixels plus the full
+      // candidate-box frame so storage stays local and compact.
       for(const c of chosen) {
         const id=uid(),blobId=uid(),originalBlobId=uid(),originalCutoutBlobId=uid(),candidateFrameBlobId=uid();
         const {mask,...region}=c.region;
-        assets.push({...candidateMetadata(c,record,state.importBatchSeriesID),id,blobId,originalBlobId,originalCutoutBlobId,candidateFrameBlobId,photoBlobId:photoID,sourceRegion:structuredClone(region),createdAt:now});
+        assets.push({...candidateMetadata(c,record,state.importBatchSeriesID),id,blobId,originalBlobId,originalCutoutBlobId,candidateFrameBlobId,sourceRegion:structuredClone(region),createdAt:now});
         blobs.push({id:originalCutoutBlobId,data:c.originalCutoutBlob||c.blob},{id:candidateFrameBlobId,data:c.candidateFrameBlob||c.originalBlob||c.blob});
         blobs.push({id:blobId,data:c.blob},{id:originalBlobId,data:c.originalBlob||c.blob});savedCount++;
       }
