@@ -28,7 +28,8 @@
 .cutout-controls .setting-help{display:block;color:#75827a;font-size:12px;font-weight:400;line-height:1.4}
 .cutout-controls select{width:100%}
 @media(max-width:560px){
-  .cutout-steps{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .cutout-steps span{justify-content:flex-start}
+  .cutout-steps{grid-template-columns:repeat(3,minmax(0,1fr));gap:4px}
+  .cutout-steps span{justify-content:center;gap:3px;padding:7px 3px;font-size:10px;white-space:normal;text-align:center}
+  .cutout-steps span b{width:18px;height:18px;font-size:10px}
   .cutout-step-nav .btn{flex:1;min-width:0}
 }
