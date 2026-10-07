@@ -23,7 +23,7 @@ test('recognition methods, processing pixels, preprocessing and postprocessing a
  for(const key of [
    'balanceLight','recognitionDenoise','recognitionLocalContrast','recognitionChromaEdges',
    'recognitionEdgePolish','recognitionStraightEdges','recognitionCurveSmooth',
-   'recognitionEllipseRegularization','recognitionApertures'
+   'recognitionEllipseRegularization','recognitionPolygonRegularization','recognitionApertures'
  ])assert.equal(prefs[key],true,key+' defaults on');
 
  const custom=normalizePreferences({
@@ -35,6 +35,7 @@ test('recognition methods, processing pixels, preprocessing and postprocessing a
    recognitionStraightEdges:false,
    recognitionCurveSmooth:false,
    recognitionEllipseRegularization:false,
+   recognitionPolygonRegularization:false,
    recognitionApertures:false
  });
  for(const key of [
