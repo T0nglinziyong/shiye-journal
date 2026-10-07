@@ -250,8 +250,8 @@ function rectangleSnake(mask,count=128,padFraction=.05){
   for(let i=0;i<q;i++){const t=i/q;snake.push([y0,x0+t*(x1-x0)]);}for(let i=0;i<q;i++){const t=i/q;snake.push([y0+t*(y1-y0),x1]);}for(let i=0;i<q;i++){const t=i/q;snake.push([y1,x1-t*(x1-x0)]);}for(let i=0;i<q;i++){const t=i/q;snake.push([y1-t*(y1-y0),x0]);}
   return snake;
 }
-function morphMask(cv,rgba,rough,{iterations=65}={}){
-  const g=inverseGradientGImage(cv,rgba),init=morphInitFromRough(cv,rough),u=morphGAC(g,rgba.cols,rgba.rows,init,{numIter:iterations,smoothing:1,threshold:'auto',balloon:-1}),out=cv.Mat.zeros(rgba.rows,rgba.cols,cv.CV_8UC1);
+function morphMask(cv,rgba,rough,{iterations=65,balloon=-1}={}){
+  const g=inverseGradientGImage(cv,rgba),init=morphInitFromRough(cv,rough),u=morphGAC(g,rgba.cols,rgba.rows,init,{numIter:iterations,smoothing:1,threshold:'auto',balloon}),out=cv.Mat.zeros(rgba.rows,rgba.cols,cv.CV_8UC1);
   for(let i=0;i<u.length;i++)if(u[i])out.data[i]=255;const filled=outerFill(cv,out);out.delete();return filled;
 }
 function activeMask(cv,rgba,rough){
@@ -272,13 +272,13 @@ function regionFromMask(cv,mask,globalX,globalY,pageW,pageH,method,confidence,el
  * contour engines. Candidate discovery remains unchanged.
  */
 export function refineMaterialBoundaries(cv,p){
-  const pageW=p.width,pageH=p.height,src=cv.matFromArray(pageH,pageW,cv.CV_8UC4,p.pixels),mode=p.mode||'auto',post={edgePolish:p.postprocess?.edgePolish!==false,shapeRegularization:p.postprocess?.shapeRegularization!==false,curveSmooth:p.postprocess?.curveSmooth!==false,apertures:p.postprocess?.apertures!==false},useChroma=p.chromaEdges!==false,out=[];
+  const pageW=p.width,pageH=p.height,pxPerMM=Math.max(.5,((pageW/(p.paperWidthMM||210))+(pageH/(p.paperHeightMM||297)))/2),src=cv.matFromArray(pageH,pageW,cv.CV_8UC4,p.pixels),mode=p.mode||'auto',post={edgePolish:p.postprocess?.edgePolish!==false,shapeRegularization:p.postprocess?.shapeRegularization!==false,curveSmooth:p.postprocess?.curveSmooth!==false,apertures:p.postprocess?.apertures!==false},useChroma=p.chromaEdges!==false,out=[];
   try{
     for(const candidate of p.candidates||[]){
       const started=typeof performance!=='undefined'?performance.now():Date.now(),
         gx=Math.round(candidate.x*pageW),gy=Math.round(candidate.y*pageH),
         gw=Math.max(1,Math.round(candidate.w*pageW)),gh=Math.max(1,Math.round(candidate.h*pageH)),
-        pad=Math.max(5,Math.round(Math.max(gw,gh)*.12)),
+        pad=p.roiPadMM!=null?Math.max(5,Math.round(pxPerMM*p.roiPadMM)):Math.max(5,Math.round(Math.max(gw,gh)*.12)),
         x0=Math.max(0,gx-pad),y0=Math.max(0,gy-pad),
         x1=Math.min(pageW,gx+gw+pad),y1=Math.min(pageH,gy+gh+pad),
         rw=x1-x0,rh=y1-y0,roi=src.roi(new cv.Rect(x0,y0,rw,rh)),
@@ -292,10 +292,10 @@ export function refineMaterialBoundaries(cv,p){
         selected=rough.clone();method=candidate.edgeMethod||'browser-postprocess-only';confidence=candidate.boundaryConfidence??1;
       }else if(mode==='morphgac'||mode==='quality'||mode==='hybrid'||mode==='auto'){
         const hybrid=mode==='hybrid',automatic=mode==='auto',
-          maxDim=hybrid?180:automatic?160:180,
-          iterations=hybrid?80:automatic?65:80,
+          maxDim=p.morphMaxDim??(hybrid?180:automatic?160:180),
+          iterations=p.morphIterations??(hybrid?80:automatic?65:80),
           quality=resizeForBudget(cv,roi,rough,maxDim),qsupport=edgeSupportMap(cv,quality.image,useChroma);
-        selected=morphMask(cv,quality.image,quality.mask,{iterations});
+        selected=morphMask(cv,quality.image,quality.mask,{iterations,balloon:p.morphBalloon??-1});
         method=hybrid||automatic?(post.edgePolish?'browser-morphgac-grabcut':'browser-morphgac'):'browser-morphgac';
         confidence=boundarySupport(cv,selected,qsupport);
         workImage=quality.image;workMask=quality.mask;support=qsupport;
