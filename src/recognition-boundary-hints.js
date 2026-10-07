@@ -37,9 +37,16 @@ export function selectBoundaryHint(instance,instances,enclosures,index=-1){
       confidence=structural.structuralConfidence??0,
       areaRatio=area(structural)/Math.max(1e-9,area(instance));
 
+    const identityFill=instance.identityFillRatio??instance.fillRatio??0,
+      fillGain=fill-identityFill;
+    // Boundary hints are completion-only. The rough connected component owns
+    // identity; a structural contour may replace it only when it clearly adds
+    // missing carrier area without enclosing appreciable page background.
+    // This deliberately forbids "prettier but smaller" enclosure swaps.
     if(paperContact<.75||fill<.60)continue;
-    if(interiorBackground>.25&&rectFill<.88)continue;
-    if(areaRatio<.60||areaRatio>1.80)continue;
+    if(interiorBackground>.25)continue;
+    if(areaRatio<1.03||areaRatio>1.80)continue;
+    if(fillGain<.06)continue;
 
     const score=paperContact*.30+confidence*.20+fill*.15+rectFill*.15
       +Math.min(identityOverlap,1)*.10
