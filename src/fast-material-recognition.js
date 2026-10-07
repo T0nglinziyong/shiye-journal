@@ -238,7 +238,7 @@ function chooseOuter(cv,src,q,pxPerMM,w,h,useChroma=true){
   return {contour:contourFromPoints(cv,chosen.points),owned:true};
 }
 
-function smoothFreeform(cv,contour,w,h,pxPerMM,{ellipse=true,polygon=true,curveSmooth=true}={}){
+function smoothFreeform(cv,contour,w,h,pxPerMM,{shapeRegularization=true,curveSmooth=true}={}){
   // Global simple-shape models compete on the same observed contour. They do
   // not run serially; curve smoothing is only the fallback when no simple
   // model explains the carrier well enough.
@@ -249,7 +249,7 @@ function smoothFreeform(cv,contour,w,h,pxPerMM,{ellipse=true,polygon=true,curveS
     const inter=new cv.Mat(),union=new cv.Mat();cv.bitwise_and(sourceMask,candidate,inter);cv.bitwise_or(sourceMask,candidate,union);
     const fit=cv.countNonZero(inter)/Math.max(1,cv.countNonZero(union));inter.delete();union.delete();return fit;
   };
-  if(ellipse&&solidity>.93&&contour.rows>=5){
+  if(shapeRegularization&&solidity>.93&&contour.rows>=5){
     const e=cv.fitEllipse(contour),pts=[],angle=e.angle*Math.PI/180,ca=Math.cos(angle),sa=Math.sin(angle),rx=e.size.width/2,ry=e.size.height/2;
     if(rx>=2&&ry>=2){
       for(let i=0;i<96;i++){const t=i*Math.PI*2/96,ux=rx*Math.cos(t),uy=ry*Math.sin(t);pts.push(Math.round(e.center.x+ux*ca-uy*sa),Math.round(e.center.y+ux*sa+uy*ca));}
@@ -257,7 +257,7 @@ function smoothFreeform(cv,contour,w,h,pxPerMM,{ellipse=true,polygon=true,curveS
       const fit=agreement(em);if(fit>.87)candidates.push({kind:'ellipse',fit,contour:ec});else ec.delete();em.delete();ev.delete();
     }
   }
-  if(polygon&&solidity>.93){
+  if(shapeRegularization&&solidity>.93){
     const per=cv.arcLength(contour,true);
     for(const frac of [.008,.012,.016,.022,.030]){
       const poly=new cv.Mat();cv.approxPolyDP(contour,poly,Math.max(.8,per*frac),true);const n=poly.rows;
@@ -393,7 +393,7 @@ function groupCircles(strict,weak,pxPerMM,mask,supportEdges,w,h){
 export function recognizeMaterialsFast(cv,p,own){
   if(p.rectified!==true)throw Error('materials-fast requires rectified A4 input');
   const w=p.width,h=p.height,paperWidthMM=p.paperWidthMM||210,paperHeightMM=p.paperHeightMM||297,smallestMM=p.smallestMM||6,pxPerMM=Math.max(.5,((w/paperWidthMM)+(h/paperHeightMM))/2),
-    post={straightEdges:p.postprocess?.straightEdges!==false,curveSmooth:p.postprocess?.curveSmooth!==false,ellipse:p.postprocess?.ellipse!==false,polygon:p.postprocess?.polygon!==false,apertures:p.postprocess?.apertures!==false},
+    post={shapeRegularization:p.postprocess?.shapeRegularization!==false,curveSmooth:p.postprocess?.curveSmooth!==false,apertures:p.postprocess?.apertures!==false},
     useChroma=p.chromaEdges!==false;
   const src=own(cv.matFromArray(h,w,cv.CV_8UC4,p.pixels)),page=own(cv.matFromArray(h,w,cv.CV_8UC1,Uint8Array.from(p.backgroundConnected||new Uint8Array(w*h),x=>x?255:0)));
   const {gray,edges,lab}=edgeImage(cv,src,useChroma);own(gray);own(edges);own(lab);
@@ -402,7 +402,7 @@ export function recognizeMaterialsFast(cv,p,own){
   for(const q of selected){
     const approx=new cv.Mat();cv.approxPolyDP(q.contour,approx,Math.max(1.5,cv.arcLength(q.contour,true)*.018),true);
     let boundary,ownedBoundary=false,edgeMethod;
-    if(q.source==='region'&&q.rectFill>.90&&approx.rows===4){
+    if(post.shapeRegularization&&q.source==='region'&&q.rectFill>.90&&approx.rows===4){
       // Colour-supported carriers already identify the whole piece, so a
       // four-sided high-fill region can safely use straight physical edges.
       const rect=cv.minAreaRect(q.contour),points=cv.boxPoints(rect).flatMap(pt=>[Math.round(pt.x),Math.round(pt.y)]);boundary=cv.matFromArray(4,1,cv.CV_32SC2,points);ownedBoundary=true;edgeMethod='fast-line';
@@ -419,7 +419,7 @@ export function recognizeMaterialsFast(cv,p,own){
         const carrier=shouldExpandWhite?expandWhiteCarrier(cv,{contour:q.contour,page,edges,lab,w,h,pxPerMM,paperRef}):{expanded:false};
         if(carrier.expanded){
           boundary=smoothFreeform(cv,carrier.contour,w,h,pxPerMM,post);carrier.contour.delete();ownedBoundary=true;edgeMethod='fast-white-carrier';
-        }else if(post.straightEdges&&q.rectFill>.92&&approx.rows===4&&q.paperContact>.58&&q.insidePage<.22){
+        }else if(post.shapeRegularization&&q.rectFill>.92&&approx.rows===4&&q.paperContact>.58&&q.insidePage<.22){
         const rect=cv.minAreaRect(q.contour),points=cv.boxPoints(rect).flatMap(pt=>[Math.round(pt.x),Math.round(pt.y)]);boundary=cv.matFromArray(4,1,cv.CV_32SC2,points);ownedBoundary=true;edgeMethod='fast-line';
       }else{
         const outer=chooseOuter(cv,src,q,pxPerMM,w,h,useChroma),smooth=smoothFreeform(cv,outer.contour,w,h,pxPerMM,post);if(outer.owned)outer.contour.delete();boundary=smooth;ownedBoundary=true;edgeMethod='fast-curve';
