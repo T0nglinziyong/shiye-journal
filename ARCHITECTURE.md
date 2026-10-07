@@ -4,7 +4,7 @@
 
 | 能力 | 单一选择入口 | 执行与数据合同 | 回归测试 |
 | --- | --- | --- | --- |
-| 素材识别 | `src/recognition-profiles.js` 的 `recognitionStrategies` | `foreground-evidence.js` 先建立 page-connected Lab 背景；`opencv-worker.js` 用 distance transform + marker watershed 发现实例并在各自 ROI 内 GrabCut；闭合边界只做 paper-contact 约束下的外轮廓精修/同件合并，不能把内部印刷图案独立成素材；`src/image.js` 最终回到高清原图裁切；可选 SlimSAM 只做最后 refinement | `tests/recognition-profiles.test.js`、`tests/foreground-evidence.test.js`、`tests/recognition-fusion.test.js`、`tests/vision-engine.test.js`、`tests/import-browser-acceptance.mjs` |
+| 素材识别 | `src/recognition-profiles.js` 的 `recognitionStrategies` | 整页校正图先由 `foreground-evidence.js` 建立 page-connected Lab 背景，再由 `material-box-discovery.js` 以 0.30 mm closing + connected components 决定素材数量与自动框；边界阶段只在这些框内运行，默认使用 `material-segmentation.js` 的 MorphGAC（box + 1 mm、180 px、动态 40/65 iter），随后只执行可信形状规整和 `repeated-apertures.js` 的重复制造型孔恢复。GrabCut 与 MorphGAC+GrabCut 仅作为显式可选分割器，不得改变整页素材身份数；`src/image.js` 最终回到高清原图裁切。 | `tests/recognition-profiles.test.js`、`tests/foreground-evidence.test.js`、`tests/material-segmentation.test.js`、`tests/repeated-apertures.test.js`、`tests/vision-engine.test.js`、`tests/import-browser-acceptance.mjs` |
 | AI 创作 | `src/creative-delivery.js` 的响应协议 | `src/creative-runner.js` 控制轮次；`src/creative-contract.js` 验证合同；`src/creative.js` 执行可编辑工具。原生工具、JSON 工具和直接页都要转换为同一工具调用格式 | `tests/creative-delivery.test.js`、`tests/runner.test.js`、`tests/matching-browser.mjs` |
 | 数据位置 | `src/storage-router.js` 的 CRUD 路由 | `src/store.js` 保持公开的 `all/get/transaction` 和备份合同；云端特有的后台暂存、缩略图和增量同步留在 `src/cloud-store.js`，自托管请求留在 `src/store.js`，本机 IndexedDB 用同一表名 | `tests/storage-router.test.js`、`tests/cloud-store.test.js`、`tests/server-persistence.test.js`、`tests/cloud-cache-browser.mjs` |
 | 页面组件 | `src/app.js` 的页面路由 | 大交互逐步拆出独立 UI/模型模块；最近删除由 `src/recently-deleted-ui.js` 渲染，仍使用原 `trash` 表 | `tests/recently-deleted.test.js`、`tests/library-canvas-latest-browser.mjs` |
@@ -39,6 +39,6 @@
 
 每批修改先运行 `npm test && npm run test:ui`，再按触及的能力跑对应浏览器脚本，至少覆盖手机、iPad 横竖与桌面 Chromium 视口。模拟视口不等于实体 Safari／Pencil。发布前必须用准确的暂存快照重复测试，检查私有文件、凭据、远端新提交及固定 Vercel 项目的 Git 自动部署。
 
-素材识别必须遵循“实例发现先于边界精修”：page-connected 背景 + marker watershed 决定有几件实体；结构轮廓只允许修正/合并已发现实例，或在严格 paper-contact 条件下恢复漏检实体。内部印刷格子、文字框和人物细节不得因为自身闭合而成为新素材。
+素材识别必须遵循“整页自动框先于边界分割”：page-connected 背景 + connected components 只决定一次有几件实体；MorphGAC、GrabCut、形状规整和打孔恢复只能修改各自候选框内的透明边界，不能再创建、删除、拆分或合并素材身份。内部印刷格子、文字框和人物细节不得因为自身闭合而成为新素材。
 
 目前 `src/app.js` 仍集中保留跨页编排和部分事件分发，样式也有历史叠层。后续应在有同等端到端测试覆盖时按页面逐段迁出；不要仅为了减少文件长度而大面积搬运状态机或改写 CSS 优先级。识别质量、Swift 全等价和不同云存储的生产迁移仍须分别用真实案例验证，不能从模块化本身推断已经实现。
