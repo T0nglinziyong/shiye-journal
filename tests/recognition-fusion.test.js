@@ -94,3 +94,21 @@ test('validated recovered white carrier can reunite printed fragments even when 
   });
   assert.deepEqual(fuseRecognitionCandidates([figure,ball,legs],[carrier]),[carrier]);
 });
+
+
+test('multi-instance reconstruction cannot wrap a dominant neighbour across page background',()=>{
+  const green=c(.4182,.1056,.5456,.3911);
+  const ovalTop=c(.1619,.1167,.0613,.0567);
+  const ovalBody=c(.1918,.1189,.1903,.1722);
+  const ovalBottom=c(.1730,.3233,.0362,.0356);
+  const accidental=c(.1116,.09,.8616,.4289,{
+    edgeMethod:'boundary-reconstruction',boundaryReconstruction:true,
+    reconstructionScore:.857,edgeSupportRatio:.969,closureScaleMM:.65,
+    paperContactRatio:.967,interiorBackgroundRatio:.299,fillRatio:.501,
+    matchedInstances:4,matchedOccupancy:.691,matchedPairOverlap:.493,
+    largestMatchShare:.588,boundaryShadowFraction:.396,insideEvidenceRatio:.407
+  });
+  const out=fuseRecognitionCandidates([green,ovalTop,ovalBody,ovalBottom],[accidental]);
+  assert.equal(out.length,4);
+  assert.ok(out.includes(green)&&out.includes(ovalTop)&&out.includes(ovalBody)&&out.includes(ovalBottom));
+});
