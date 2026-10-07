@@ -289,7 +289,7 @@ export function refineMaterialBoundaries(cv,p){
       if(mode==='postprocess'){
         // Review workflow: keep the chosen recognition mask fixed and apply
         // only the explicitly enabled automatic finishing stages below.
-        selected=rough.clone();method='browser-postprocess-only';confidence=1;
+        selected=rough.clone();method=candidate.edgeMethod||'browser-postprocess-only';confidence=candidate.boundaryConfidence??1;
       }else if(mode==='morphgac'||mode==='quality'||mode==='hybrid'||mode==='auto'){
         const hybrid=mode==='hybrid',automatic=mode==='auto',
           maxDim=hybrid?180:automatic?160:180,
