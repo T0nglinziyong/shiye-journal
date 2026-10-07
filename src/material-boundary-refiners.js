@@ -47,6 +47,56 @@ function boundarySupport(cv,mask,support){
   const b=cv.Mat.zeros(mask.rows,mask.cols,cv.CV_8UC1),v=new cv.MatVector(),hit=new cv.Mat();v.push_back(found.contour);cv.drawContours(b,v,-1,new cv.Scalar(255),1);cv.bitwise_and(b,support,hit);
   const score=cv.countNonZero(hit)/Math.max(1,cv.countNonZero(b));found.contour.delete();b.delete();v.delete();hit.delete();return score;
 }
+
+function thinEdgeMap(cv,rgba){
+  const gray=new cv.Mat(),blur=new cv.Mat(),edge=new cv.Mat(),rgb=new cv.Mat(),lab=new cv.Mat(),channels=new cv.MatVector(),ab=new cv.Mat(),bb=new cv.Mat(),ae=new cv.Mat(),be=new cv.Mat();
+  cv.cvtColor(rgba,gray,cv.COLOR_RGBA2GRAY);cv.GaussianBlur(gray,blur,new cv.Size(3,3),0);cv.Canny(blur,edge,15,45);
+  cv.cvtColor(rgba,rgb,cv.COLOR_RGBA2RGB);cv.cvtColor(rgb,lab,cv.COLOR_RGB2Lab);cv.split(lab,channels);
+  const a=channels.get(1),b=channels.get(2);cv.GaussianBlur(a,ab,new cv.Size(3,3),0);cv.GaussianBlur(b,bb,new cv.Size(3,3),0);cv.Canny(ab,ae,3,12);cv.Canny(bb,be,3,12);cv.bitwise_or(edge,ae,edge);cv.bitwise_or(edge,be,edge);
+  gray.delete();blur.delete();rgb.delete();lab.delete();channels.delete();a.delete();b.delete();ab.delete();bb.delete();ae.delete();be.delete();return edge;
+}
+function segmentSupport(edge,p1,p2){
+  const dx=p2.x-p1.x,dy=p2.y-p1.y,len=Math.hypot(dx,dy),samples=Math.max(24,Math.round(len));if(len<1)return 0;
+  let hit=0;
+  for(let i=0;i<samples;i++){const t=i/Math.max(1,samples-1),x=Math.round(p1.x+dx*t),y=Math.round(p1.y+dy*t);if(x>=0&&x<edge.cols&&y>=0&&y<edge.rows&&edge.data[y*edge.cols+x])hit++;}
+  return hit/samples;
+}
+function fitObservedLine(cv,thin,p1,p2,band){
+  const dx=p2.x-p1.x,dy=p2.y-p1.y,len=Math.hypot(dx,dy);if(len<1)return null;
+  const ux=dx/len,uy=dy/len,pts=[];
+  for(let y=0;y<thin.rows;y++)for(let x=0;x<thin.cols;x++){
+    if(!thin.data[y*thin.cols+x])continue;
+    const rx=x-p1.x,ry=y-p1.y,t=rx*ux+ry*uy,perp=Math.abs(rx*(-uy)+ry*ux);
+    if(perp<=band&&t>=-len*.08&&t<=len*1.08)pts.push([x,y]);
+  }
+  if(pts.length<12)return null;
+  const input=cv.matFromArray(pts.length,1,cv.CV_32FC2,pts.flat()),line=new cv.Mat();
+  cv.fitLine(input,line,cv.DIST_HUBER,0,.01,.01);input.delete();
+  const d=line.data32F;if(!d||d.length<4){line.delete();return null;}
+  const out={vx:d[0],vy:d[1],x:d[2],y:d[3]};line.delete();return out;
+}
+function lineIntersection(a,b){
+  const cross=a.vx*b.vy-a.vy*b.vx;if(Math.abs(cross)<1e-5)return null;
+  const qx=b.x-a.x,qy=b.y-a.y,t=(qx*b.vy-qy*b.vx)/cross;
+  return {x:a.x+t*a.vx,y:a.y+t*a.vy};
+}
+function regularizeStrongQuadrilateral(cv,rgba,mask){
+  const found=largestExternal(cv,mask);if(!found.contour)return mask.clone();
+  const area=Math.abs(cv.contourArea(found.contour)),rect=cv.minAreaRect(found.contour),box=cv.boxPoints(rect),rectArea=Math.max(1,rect.size.width*rect.size.height),fill=area/rectArea;
+  found.contour.delete();
+  // Only repair a visibly jagged line-dominant carrier. Already-near-perfect
+  // rectangles are left alone, while ovals/freeform stickers fail the fill gate.
+  if(fill<.84||fill>=.95){return mask.clone();}
+  const support=edgeSupportMap(cv,rgba),thin=thinEdgeMap(cv,rgba),sides=[],fits=[],band=Math.max(3,Math.min(rgba.cols,rgba.rows)*.025);
+  for(let i=0;i<4;i++){const a=box[i],b=box[(i+1)%4];sides.push(segmentSupport(support,a,b));fits.push(fitObservedLine(cv,thin,a,b,band));}
+  support.delete();thin.delete();
+  if(Math.min(...sides)<.75||fits.some(x=>!x))return mask.clone();
+  const corners=[];
+  for(let i=0;i<4;i++){const p=lineIntersection(fits[(i+3)%4],fits[i]);if(!p)return mask.clone();corners.push(p);}
+  const poly=cv.matFromArray(4,1,cv.CV_32SC2,corners.flatMap(p=>[Math.round(p.x),Math.round(p.y)])),polyArea=Math.abs(cv.contourArea(poly));
+  if(polyArea<area*.75||polyArea>area*1.35||corners.some(p=>p.x<-5||p.y<-5||p.x>mask.cols+5||p.y>mask.rows+5)){poly.delete();return mask.clone();}
+  const out=cv.Mat.zeros(mask.rows,mask.cols,cv.CV_8UC1),v=new cv.MatVector();v.push_back(poly);cv.drawContours(out,v,-1,new cv.Scalar(255),cv.FILLED);v.delete();poly.delete();return out;
+}
 function resizeForBudget(cv,rgba,rough,maxDim){
   const scale=Math.min(1,maxDim/Math.max(rgba.cols,rgba.rows));if(scale===1)return {image:rgba.clone(),mask:rough.clone(),scale};
   const image=new cv.Mat(),mask=new cv.Mat();cv.resize(rgba,image,new cv.Size(Math.max(1,Math.round(rgba.cols*scale)),Math.max(1,Math.round(rgba.rows*scale))),0,0,cv.INTER_AREA);cv.resize(rough,mask,new cv.Size(image.cols,image.rows),0,0,cv.INTER_NEAREST);return {image,mask,scale};
@@ -203,6 +253,8 @@ export function refineMaterialBoundaries(cv,p){
         const polished=grabCutPolishMask(cv,roi,selected);
         selected.delete();selected=polished;
       }
+      const regularized=regularizeStrongQuadrilateral(cv,roi,selected);
+      selected.delete();selected=regularized;
       if(holes){
         const fullHoles=upscaleBinaryMask(cv,holes,rw,rh);
         restoreHoles(cv,selected,fullHoles);fullHoles.delete();
