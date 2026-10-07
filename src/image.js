@@ -2,7 +2,7 @@ import {segmentPaperMaterials} from './paper-analysis.js';
 import {visionTask} from './vision-runtime.js';
 import {recognitionProfile} from './recognition-profiles.js';
 // Analyze a small copy, but re-extract accepted cuts from the full source.
-export async function detectPaperCandidates(bitmap,box,smallestMM=6,{balanceLight=false,paperWidthMM=210,paperHeightMM=297,recognition='auto',recognitionPixels=1200,recognitionPreprocess={},recognitionPostprocess={},onProgress=()=>{}}={}){
+export async function detectPaperCandidates(bitmap,box,smallestMM=6,{balanceLight=false,paperWidthMM=210,paperHeightMM=297,recognition='auto',recognitionPixels=900,recognitionPreprocess={},recognitionPostprocess={},onProgress=()=>{}}={}){
   const profile=recognitionProfile(recognition,recognitionPixels);
   const ratio=Math.min(1,profile.analysisMaxDimension/Math.max(bitmap.width*box.w,bitmap.height*box.h));
   const w=Math.max(1,Math.round(bitmap.width*box.w*ratio)),h=Math.max(1,Math.round(bitmap.height*box.h*ratio));
@@ -10,17 +10,20 @@ export async function detectPaperCandidates(bitmap,box,smallestMM=6,{balanceLigh
   const ctx=canvas.getContext('2d',{willReadFrequently:true});
   ctx.drawImage(bitmap,bitmap.width*box.x,bitmap.height*box.y,bitmap.width*box.w,bitmap.height*box.h,0,0,w,h);
   const frame=ctx.getImageData(0,0,w,h),
-    preprocess={
+    automatic=profile.mode==='auto',
+    preprocess=automatic?{
+      illumination:false,denoise:false,localContrast:false,chromaEdges:true
+    }:{
       illumination:balanceLight!==false&&recognitionPreprocess.illumination!==false,
       denoise:recognitionPreprocess.denoise!==false,
       localContrast:recognitionPreprocess.localContrast!==false,
       chromaEdges:recognitionPreprocess.chromaEdges!==false
     },
-    needsRasterPreprocess=preprocess.illumination||preprocess.denoise||preprocess.localContrast,
+    needsRasterPreprocess=!automatic&&(preprocess.illumination||preprocess.denoise||preprocess.localContrast),
     processed=needsRasterPreprocess?await visionTask('balance',{pixels:frame.data,width:w,height:h,options:preprocess}):null;
   const candidates=await segmentPaperMaterials(processed?{data:processed.pixels,width:w,height:h}:frame,{smallestMM,paperWidthMM,paperHeightMM,sourcePixels:frame.data,chromaEdges:preprocess.chromaEdges,postprocess:recognitionPostprocess});
   return profile.refineCandidates&&candidates.length
-    ? profile.refineCandidates({candidates,frame,width:w,height:h,preprocess,postprocess:recognitionPostprocess,onProgress})
+    ? profile.refineCandidates({candidates,frame,width:w,height:h,preprocess,postprocess:recognitionPostprocess,onProgress,paperWidthMM,paperHeightMM})
     : candidates;
 }
 export async function cropBitmap(bitmap,paper,region,{raw=false}={}){
