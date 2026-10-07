@@ -45,8 +45,9 @@ export function recoverLowFillCarrier(cv,p){
     const bounds=cv.boundingRect(best),mask=cv.Mat.zeros(rh,rw,cv.CV_8UC1),v=new cv.MatVector();
     v.push_back(best);cv.drawContours(mask,v,-1,new cv.Scalar(255),cv.FILLED);v.delete();
     const local=mask.roi(new cv.Rect(bounds.x,bounds.y,bounds.width,bounds.height)),
-      packed=new cv.Mat();local.copyTo(packed),
-      poly=contourPoints(best).map(([x,y])=>[x-bounds.x,y-bounds.y]);
+      packed=new cv.Mat();
+    local.copyTo(packed);
+    const poly=contourPoints(best).map(([x,y])=>[x-bounds.x,y-bounds.y]);
     const result={
       ...candidate,
       x:(x0+bounds.x)/pageW,y:(y0+bounds.y)/pageH,
