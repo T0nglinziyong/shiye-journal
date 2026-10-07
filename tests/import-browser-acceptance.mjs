@@ -15,7 +15,7 @@ try {
   await wait('.import-inspect[aria-busy="true"]');assert.ok(await evaluate('!!document.querySelector("#crop-preview img[src]")'));
   // Cold OpenCV worker startup can exceed 30 s in CI even though the warm path
   // finishes quickly. Keep a finite bound without conflating it with UI delay.
-  await wait('.import-inspect[aria-busy="false"]',process.env.SHIYE_TEST_RECOGNITION==='slimsam'?300000:90000);
+  await wait('.import-inspect[aria-busy="false"]',90000);
   await wait('.import-candidate-tile');await sleep(100);
   const analysis=await evaluate('({candidates:document.querySelectorAll(".import-candidate-tile").length,corners:[...document.querySelectorAll(".paper-handle")].map(b=>({x:b.style.left,y:b.style.top}))})');console.log('Import photo analysis:',JSON.stringify(analysis));
   if(photo){const thumbnails=await evaluate('Promise.all([...document.querySelectorAll(".candidate-thumb img")].map(async im=>{await im.decode();const c=document.createElement("canvas");c.width=im.naturalWidth;c.height=im.naturalHeight;c.getContext("2d").drawImage(im,0,0);return c.toDataURL("image/png").split(",")[1];}))');for(let i=0;i<thumbnails.length;i++)await writeFile(directory+'/candidate-'+i+'.png',Buffer.from(thumbnails[i],'base64'));}
