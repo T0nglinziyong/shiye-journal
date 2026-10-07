@@ -30,17 +30,20 @@ const t1=performance.now(),paperWidthMM=Number(input.paperWidthMM)||210,paperHei
     foregroundSeeds:evidence.foregroundSeeds,shadowLikelihood:evidence.shadowLikelihood,
     paperWidthMM,paperHeightMM
   }),t4=performance.now(),
-  candidates=await processVision(cv,'material-boundary-refine',{
+  shaped=await processVision(cv,'material-boundary-refine',{
     pixels,width,height,candidates:segmented,mode:'postprocess',
     postprocess:{edgePolish:false,shapeRegularization:true,curveSmooth:false,apertures:false},
     chromaEdges:true
-  }),t5=performance.now();
+  }),t5=performance.now(),
+  candidates=await processVision(cv,'restore-repeated-apertures',{
+    pixels,width,height,candidates:shaped,paperWidthMM,paperHeightMM
+  }),t6=performance.now();
 
 const encodeMask=mask=>mask?{...mask,alphaBase64:mask.alpha?Buffer.from(mask.alpha).toString('base64'):undefined,alpha:undefined}:null;
 fs.writeFileSync(outputPath,JSON.stringify({
   inputWidth:input.width,inputHeight:input.height,width,height,ratio,
   boxCount:boxes.length,finalCount:candidates.length,
-  timingMS:{resize:t1-t0,evidence:t2-t1,boxes:t3-t2,segmentation:t4-t3,shapeRegularization:t5-t4,total:t5-totalStarted},
+  timingMS:{resize:t1-t0,evidence:t2-t1,boxes:t3-t2,segmentation:t4-t3,shapeRegularization:t5-t4,repeatedApertures:t6-t5,total:t6-totalStarted},
   boxes,
   candidates:candidates.map(c=>({...c,mask:encodeMask(c.mask)}))
 }));
