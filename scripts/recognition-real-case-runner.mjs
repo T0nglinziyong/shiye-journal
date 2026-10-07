@@ -84,20 +84,18 @@ await time('localCompletion',async()=>{
   }
 });
 
-const selected=[],indices=[];
-for(let i=0;i<candidates.length;i++){
-  if(candidates[i].boundaryFinalized)continue;
-  selected.push(candidates[i]);indices.push(i);
-}
-if(selected.length){
-  const refined=await time('postprocess',()=>processVision(cv,'material-boundary-refine',{
-    pixels:sourcePixels,width,height,candidates:selected,mode:'postprocess',
-    postprocess,chromaEdges:true
-  }));
-  const out=[...candidates];
-  for(let i=0;i<indices.length;i++)out[indices[i]]=refined[i]||selected[i];
-  candidates=out;
-}else timings.postprocess=0;
+await time('carrierRecovery',async()=>{
+  for(let index=0;index<candidates.length;index++){
+    const candidate=candidates[index],
+      fill=candidate.identityFillRatio??candidate.fillRatio??0;
+    if(candidate.boundaryHint||candidate.boundaryFinalized||fill>=.45)continue;
+    const recovered=await processVision(cv,'carrier-grabcut',{
+      pixels:sourcePixels,width,height,candidate,
+      paperWidthMM,paperHeightMM,padMM:15
+    });
+    if(recovered)candidates[index]=recovered;
+  }
+});
 
 const encodeMask=mask=>mask?{
   ...mask,
