@@ -286,13 +286,17 @@ export function refineMaterialBoundaries(cv,p){
         holes=candidate.mask?.alpha?.length?enclosedHoles(cv,rough):null;
       let selected=null,method='',confidence=0,workImage=null,workMask=null,support=null,shapeModel=null;
 
-      if(mode==='morphgac'||mode==='quality'||mode==='hybrid'||mode==='auto'){
+      if(mode==='postprocess'){
+        // Review workflow: keep the chosen recognition mask fixed and apply
+        // only the explicitly enabled automatic finishing stages below.
+        selected=rough.clone();method='browser-postprocess-only';confidence=1;
+      }else if(mode==='morphgac'||mode==='quality'||mode==='hybrid'||mode==='auto'){
         const hybrid=mode==='hybrid',automatic=mode==='auto',
           maxDim=hybrid?180:automatic?160:180,
           iterations=hybrid?80:automatic?65:80,
           quality=resizeForBudget(cv,roi,rough,maxDim),qsupport=edgeSupportMap(cv,quality.image,useChroma);
         selected=morphMask(cv,quality.image,quality.mask,{iterations});
-        method=hybrid||automatic?(post.edgePolish?'browser-morphgac-grabcut':'browser-morphgac'):'browser-morphgac';
+        method=hybrid||automatic?'browser-morphgac':'browser-morphgac';
         confidence=boundarySupport(cv,selected,qsupport);
         workImage=quality.image;workMask=quality.mask;support=qsupport;
       }else{
