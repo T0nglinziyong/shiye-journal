@@ -8,7 +8,7 @@
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const contourPoints=c=>Array.from({length:c.rows},(_,i)=>[c.data32S[i*2],c.data32S[i*2+1]]);
 
-export function recoverLowFillCarrier(cv,p){
+export function refineLocalCarrierGrabCut(cv,p){
   const pageW=p.width,pageH=p.height,candidate=p.candidate;
   if(!candidate)return null;
   const paperWidthMM=p.paperWidthMM||210,paperHeightMM=p.paperHeightMM||297,
@@ -55,7 +55,7 @@ export function recoverLowFillCarrier(cv,p){
       pixels:cv.countNonZero(mask),
       edgeMethod:'local-carrier-grabcut',
       boundaryFinalized:true,
-      boundaryCompletion:'low-fill-grabcut',
+      boundaryCompletion:p.reason||'local-carrier-grabcut',
       carrierGrabCutPadMM:p.padMM??15,
       mask:{width:bounds.width,height:bounds.height,alpha:new Uint8Array(packed.data),polygons:[poly],topologyPreserved:true}
     };
