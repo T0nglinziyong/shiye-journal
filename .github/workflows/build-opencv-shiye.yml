@@ -1,0 +1,117 @@
+name: Build minimal Shiye OpenCV
+
+on:
+  push:
+    branches: [recognition-official-engines]
+    paths:
+      - 'scripts/opencv-shiye.config.py'
+      - '.github/workflows/build-opencv-shiye.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-shiye-opencv-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: true
+          fetch-depth: 1
+
+      - name: Checkout Emscripten SDK
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          repository: emscripten-core/emsdk
+          ref: main
+          path: .opencv-build/emsdk
+          persist-credentials: false
+
+      - name: Cache Emscripten
+        uses: actions/cache@v6
+        with:
+          path: |
+            .opencv-build/emsdk/upstream
+            .opencv-build/emsdk/node
+            .opencv-build/emsdk/.emscripten
+          key: shiye-emsdk-4.0.20
+
+      - name: Install Emscripten 4.0.20
+        shell: bash
+        run: |
+          cd .opencv-build/emsdk
+          ./emsdk install 4.0.20
+          ./emsdk activate 4.0.20
+
+      - name: Checkout OpenCV 5.0.0
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          repository: opencv/opencv
+          ref: 5.0.0
+          path: .opencv-build/opencv
+          persist-credentials: false
+
+      - name: Build Shiye minimal OpenCV.js
+        shell: bash
+        run: |
+          set -euo pipefail
+          source .opencv-build/emsdk/emsdk_env.sh
+          emcmake python3 .opencv-build/opencv/platforms/js/build_js.py .opencv-build/out \
+            --build_wasm \
+            --disable_single_file \
+            --simd \
+            --config="$GITHUB_WORKSPACE/scripts/opencv-shiye.config.py" \
+            --cmake_option="-DCMAKE_CXX_STANDARD=17" \
+            --cmake_option="-DBUILD_opencv_dnn=OFF" \
+            --cmake_option="-DBUILD_opencv_features=OFF" \
+            --cmake_option="-DBUILD_opencv_flann=OFF" \
+            --cmake_option="-DBUILD_opencv_objdetect=OFF" \
+            --cmake_option="-DBUILD_opencv_video=OFF" \
+            --cmake_option="-DBUILD_opencv_3d=OFF" \
+            --cmake_option="-DBUILD_opencv_calib=OFF" \
+            --cmake_option="-DBUILD_opencv_stereo=OFF" \
+            --cmake_option="-DBUILD_opencv_ptcloud=OFF" \
+            --cmake_option="-DBUILD_opencv_photo=ON" \
+            --cmake_option="-DBUILD_opencv_geometry=ON" \
+            --cmake_option="-DBUILD_TESTS=OFF" \
+            --cmake_option="-DBUILD_PERF_TESTS=OFF" \
+            --cmake_option="-DBUILD_EXAMPLES=OFF"
+
+          mkdir -p public/vendor
+          cp .opencv-build/out/bin/opencv.js public/vendor/opencv-shiye.js
+          WASM="$(find .opencv-build/out/bin -maxdepth 1 -name '*.wasm' -print -quit)"
+          test -n "$WASM"
+          cp "$WASM" public/vendor/opencv-shiye.wasm
+
+          echo "Minimal OpenCV output:"
+          ls -lh public/vendor/opencv-shiye.*
+          sha256sum public/vendor/opencv-shiye.*
+
+      - name: Commit generated runtime to branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/vendor/opencv-shiye.js public/vendor/opencv-shiye.wasm
+          if git diff --cached --quiet; then
+            echo "Minimal runtime unchanged"
+            exit 0
+          fi
+          git commit -m "build(recognition): vendor minimal OpenCV browser runtime"
+          git push origin "HEAD:$GITHUB_REF_NAME"
+
+      - name: Upload runtime artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: shiye-opencv-minimal
+          path: |
+            public/vendor/opencv-shiye.js
+            public/vendor/opencv-shiye.wasm
+          if-no-files-found: error
