@@ -34,7 +34,7 @@ jobs:
         run: |
           mkdir -p /tmp/shiye-recognition-harness/node_modules/@techstark /tmp/shiye-recognition-harness/scripts
           cp -R src /tmp/shiye-recognition-harness/src
-          cp scripts/recognition-real-case-runner.mjs /tmp/shiye-recognition-harness/scripts/
+          cp scripts/recognition-real-case-runner.mjs scripts/instance-first-real-case-runner.mjs /tmp/shiye-recognition-harness/scripts/
           cp package.json /tmp/shiye-recognition-harness/
           cp -R node_modules/@techstark/opencv-js /tmp/shiye-recognition-harness/node_modules/@techstark/
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
