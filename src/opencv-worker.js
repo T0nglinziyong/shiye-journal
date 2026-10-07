@@ -4,6 +4,7 @@ import {recognizeMaterialsFast} from './fast-material-recognition.js';
 import {refineMaterialBoundaries} from './material-boundary-refiners.js';
 import {discoverMaterialBoxes} from './material-box-discovery.js';
 import {segmentMaterialBoxes} from './material-segmentation.js';
+import {restoreRepeatedApertures} from './repeated-apertures.js';
 export async function processVision(cv,operation,p){
   const resources=[],own=mat=>(resources.push(mat),mat);
   try{
@@ -77,6 +78,7 @@ export async function processVision(cv,operation,p){
     }
     if(operation==='boxes-simple')return discoverMaterialBoxes(cv,p,own);
     if(operation==='segment-boxes-classical')return segmentMaterialBoxes(cv,p);
+    if(operation==='restore-repeated-apertures')return restoreRepeatedApertures(cv,p);
     if(operation==='materials-fast')return recognizeMaterialsFast(cv,p,own);
     if(operation==='material-boundary-refine')return refineMaterialBoundaries(cv,p);
     if(operation==='enclosures'){
