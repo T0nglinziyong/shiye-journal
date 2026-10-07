@@ -64,3 +64,4 @@ jobs:
           done
           curl -fsS http://127.0.0.1:5194/ >/dev/null
           node tests/recognition-engine-browser.mjs
+          node tests/cutout-inspection-browser.mjs
