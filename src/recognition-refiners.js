@@ -2,7 +2,7 @@ import {visionTask} from './vision-runtime.js';
 
 // Only loaded for the optional browser model. Traditional proposals remain
 // available as the explicit fallback when the model rejects an object.
-export async function refineCandidatesWithSlimSAM({candidates, frame, width, height, postprocess=true, onProgress=()=>{}}) {
+export async function refineCandidatesWithSlimSAM({candidates, frame, width, height, preprocess={}, postprocess={}, onProgress=()=>{}}) {
   const {refineMaterialsInBrowser} = await import('./slimsam-runtime.js');
   const boxes = candidates.map(candidate => [
     candidate.x * width, candidate.y * height,
@@ -32,13 +32,14 @@ export async function refineCandidatesWithSlimSAM({candidates, frame, width, hei
     else result.push({...region, modelConfidence:mask.score});
   }
   if (rejected) onProgress({status:'fallback',count:rejected});
-  if(!postprocess||!result.length)return result;
-  try{return await visionTask('material-boundary-refine',{pixels:frame.data,width,height,candidates:result,mode:'grabcut',postprocess:true});}
+  const postEnabled=Object.values(postprocess||{}).some(value=>value!==false);
+  if(!postEnabled||!result.length)return result;
+  try{return await visionTask('material-boundary-refine',{pixels:frame.data,width,height,candidates:result,mode:'grabcut',postprocess,chromaEdges:preprocess.chromaEdges!==false});}
   catch{return result;}
 }
 
 
-export async function refineCandidatesWithBrowserContours({candidates,frame,width,height,postprocess=true,onProgress=()=>{},mode='auto'}){
+export async function refineCandidatesWithBrowserContours({candidates,frame,width,height,preprocess={},postprocess={},onProgress=()=>{},mode='auto'}){
   // Auto spends expensive refinement only on uncertain traditional results.
   // Explicit user-selected engines apply to every candidate.
   const refineAll=mode!=='auto',threshold=.74,selected=[],selectedIndices=[];
@@ -48,7 +49,7 @@ export async function refineCandidatesWithBrowserContours({candidates,frame,widt
   if(!selected.length)return candidates;
   onProgress({status:'contour-refinement',engine:mode,total:selected.length});
   try{
-    const refined=await visionTask('material-boundary-refine',{pixels:frame.data,width,height,candidates:selected,mode,postprocess});
+    const refined=await visionTask('material-boundary-refine',{pixels:frame.data,width,height,candidates:selected,mode,postprocess,chromaEdges:preprocess.chromaEdges!==false});
     const out=[...candidates];for(let i=0;i<selectedIndices.length;i++)out[selectedIndices[i]]=refined[i]||selected[i];
     return out;
   }catch(error){
