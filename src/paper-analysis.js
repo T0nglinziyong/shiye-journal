@@ -1,6 +1,7 @@
 import {visionTask} from './vision-runtime.js';
 import {buildForegroundEvidence} from './foreground-evidence.js';
 import {fuseRecognitionCandidates} from './recognition-fusion.js';
+import {assessFastRecognition,fastCandidateForFusion} from './recognition-quality.js';
 
 // Recognition is intentionally staged:
 // 1) page-connected background gives a conservative physical foreground;
@@ -23,7 +24,8 @@ export async function segmentPaperMaterials({data,width:w,height:h},{smallestMM=
     shadowLikelihood:evidence.shadowLikelihood,score:evidence.score,rectified:true,chromaEdges,
     postprocess:{shapeRegularization:false,curveSmooth:false,apertures:postprocess?.apertures!==false}
   });
-  if(fast.length&&fast.length<=12&&fast.every(candidate=>(candidate.recognitionConfidence??0)>=.54)){
+  const fastAssessment=assessFastRecognition(fast,{foregroundSeeds:evidence.foregroundSeeds,width:w,height:h});
+  if(fastAssessment.reliable){
     return fast.sort((a,b)=>a.y-b.y||a.x-b.x).slice(0,48);
   }
   const [instances,structural]=await Promise.all([
@@ -46,7 +48,12 @@ export async function segmentPaperMaterials({data,width:w,height:h},{smallestMM=
     shadowLikelihood:evidence.shadowLikelihood,score:evidence.score,
     width:w,height:h,smallestMM,paperWidthMM,paperHeightMM,chromaEdges,postprocess
   }):[];
-  const fused=fuseRecognitionCandidates(instances,[...structural,...reconstructed]);
+  // Suspicious fast scenes still contain useful physical boundaries (notably
+  // recovered white die-cut carriers). Reconcile only the physically trusted
+  // subset with instance evidence instead of either trusting or discarding the
+  // entire fast pass.
+  const trustedFast=fast.filter(fastCandidateForFusion);
+  const fused=fuseRecognitionCandidates(instances,[...trustedFast,...structural,...reconstructed]);
   const completed=fused.length?await visionTask('complete-boundaries',{
     pixels:sourcePixels,width:w,height:h,candidates:fused,smallestMM,paperWidthMM,paperHeightMM,
     evidence:evidence.evidence,backgroundConnected:evidence.backgroundConnected,shadowLikelihood:evidence.shadowLikelihood,chromaEdges,postprocess
