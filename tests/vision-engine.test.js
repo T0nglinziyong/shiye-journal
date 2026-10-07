@@ -299,6 +299,22 @@ test('fast recognizer rejects any carrier inside the protected A4 edge-clearance
 });
 
 
+test('fast recognizer does not promote enclosed printed detail when no physical carrier edge is recovered',async()=>{
+  const cv=await cvModule,width=300,height=424,pixels=new Uint8ClampedArray(width*height*4),backgroundConnected=new Uint8Array(width*height).fill(1),evidence=new Uint8Array(width*height),shadowLikelihood=new Uint8Array(width*height),score=new Uint8Array(width*height);
+  for(let y=0;y<height;y++)for(let x=0;x<width;x++){
+    const i=y*width+x,p=i*4,hiddenCarrier=x>=70&&x<230&&y>=90&&y<330,printed=x>=118&&x<182&&y>=158&&y<246;
+    // The physical carrier is intentionally indistinguishable from the page:
+    // only an internal printed box has an observed edge. Connectivity failure
+    // inside the hypothetical carrier must not turn that box into a material.
+    const color=printed?[70,70,70]:[246,246,246];pixels.set([...color,255],p);
+    if(hiddenCarrier)backgroundConnected[i]=0;
+    if(printed){evidence[i]=1;score[i]=100;}
+  }
+  const out=await processVision(cv,'materials-fast',{pixels,width,height,backgroundConnected,evidence,shadowLikelihood,score,smallestMM:6,paperWidthMM:210,paperHeightMM:297,rectified:true});
+  assert.equal(out.length,0,JSON.stringify(out.map(x=>({x:x.x,y:x.y,w:x.w,h:x.h,method:x.edgeMethod,paper:x.paperContactRatio}))));
+});
+
+
 test('fast material recognition rejects unrectified benchmark input',async()=>{
   const cv=await cvModule,width=60,height=80,pixels=new Uint8ClampedArray(width*height*4).fill(255);
   await assert.rejects(()=>processVision(cv,'materials-fast',{pixels,width,height,smallestMM:6,paperWidthMM:210,paperHeightMM:297}),/rectified A4/);
