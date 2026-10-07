@@ -20,7 +20,7 @@ export async function detectPaperCandidates(bitmap,box,smallestMM=6,{balanceLigh
     processed=needsRasterPreprocess?await visionTask('balance',{pixels:frame.data,width:w,height:h,options:preprocess}):null;
   const candidates=await segmentPaperMaterials(processed?{data:processed.pixels,width:w,height:h}:frame,{smallestMM,paperWidthMM,paperHeightMM,sourcePixels:frame.data,chromaEdges:preprocess.chromaEdges,postprocess:recognitionPostprocess});
   return profile.refineCandidates&&candidates.length
-    ? profile.refineCandidates({candidates,frame,width:w,height:h,preprocess,postprocess:recognitionPostprocess,onProgress})
+    ? profile.refineCandidates({candidates,frame,width:w,height:h,paperWidthMM,paperHeightMM,preprocess,postprocess:recognitionPostprocess,onProgress})
     : candidates;
 }
 export async function cropBitmap(bitmap,paper,region,{raw=false}={}){
