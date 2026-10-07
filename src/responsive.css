@@ -181,3 +181,65 @@ dialog { width:min(700px,calc(100vw - 24px)); max-height:calc(100dvh - 24px); ov
 .four-filter-controls{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;min-width:0;flex:1}.filter-control{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;border:1px solid #cbd9d0;border-radius:10px;background:#fff;padding:8px;min-width:0;min-height:52px;color:#52634b;text-align:center}.filter-control>span{font-size:14px;white-space:nowrap;line-height:1.25}.filter-control>small{font-size:11px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.filters:has(.four-filter-controls){overflow:visible;flex-wrap:wrap}.filters .four-filter-controls{min-width:280px}.series-filter-menus:has(.four-filter-controls){overflow:visible}.series-filter-menus .four-filter-controls{width:100%;min-width:0}@media(max-width:699px){.filters .four-filter-controls{width:100%;flex-basis:100%;min-width:0}.filter-control{padding:7px 3px}.filter-control>span{font-size:12px}.four-filter-controls{gap:6px}}
 @media(max-width:819px){.import-inspect .inspect-columns{grid-template-columns:minmax(0,1fr)}.inspect-columns>.import-preparation{height:680px}.inspect-columns>.import-inspector{height:580px}.import-photo-tools{flex-wrap:wrap}.import-photo-tools .btn{flex:1}.review-candidates{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:699px){.inspect-columns>.import-preparation{height:min(680px,80dvh);min-height:430px}.inspect-columns>.import-inspector{height:580px}.import-review{padding:18px 6px}.review-record .record-series-label{flex-direction:column;align-items:stretch}.review-record-head span{white-space:nowrap;font-size:10px}}
+
+
+/* Cutout review: keep the image large while making the three-stage inspector
+   dense enough to use without repeated full-page scrolling on iPad/desktop. */
+@media (min-width:700px){
+  .material-editor-dialog.cutout-dialog{width:min(980px,96vw);max-width:none}
+  .cutout-modal{
+    display:grid;
+    grid-template-columns:minmax(0,1.2fr) minmax(300px,.8fr);
+    grid-template-areas:
+      "header header"
+      "steps steps"
+      "compare controls"
+      "preview controls"
+      "hint controls";
+    column-gap:14px;
+    row-gap:8px;
+    padding:12px;
+    max-height:88dvh;
+    overflow:hidden
+  }
+  .cutout-modal>header{grid-area:header;min-height:38px;position:static;padding:0;background:transparent}
+  .cutout-modal>.cutout-steps{grid-area:steps}
+  .cutout-modal>.cutout-compare{grid-area:compare;align-self:end}
+  .cutout-modal>.cutout-preview{grid-area:preview;height:min(58dvh,560px);min-height:300px}
+  .cutout-modal>p{grid-area:hint;margin:0;font-size:11px;line-height:1.35;color:#879084}
+  .cutout-modal>.cutout-controls{
+    grid-area:controls;
+    min-height:0;
+    max-height:calc(88dvh - 92px);
+    overflow:auto;
+    overscroll-behavior:contain;
+    padding-right:4px
+  }
+}
+.cutout-steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:0}
+.cutout-steps span{display:flex;align-items:center;gap:6px;min-width:0;padding:6px 8px;border-radius:9px;background:#eef2e9;color:#7c8578;font-size:11px;line-height:1.2}
+.cutout-steps span b{display:grid;place-items:center;width:18px;height:18px;flex:none;border-radius:50%;background:#dfe7d9;font-size:10px}
+.cutout-steps span.current{background:#e4ecdf;color:#40533c;font-weight:600}
+.cutout-steps span.passed{color:#52634b}
+.cutout-compare{display:flex;gap:6px}
+.cutout-compare button{min-height:32px!important;padding:6px 9px;font-size:11px!important}
+.cutout-controls .stack{gap:6px!important}
+.cutout-controls h3{font-size:13px;margin:6px 0 2px}
+.cutout-controls label{gap:3px;font-size:12px}
+.cutout-controls .setting-toggle{padding:5px 0}
+.cutout-controls .setting-help{font-size:10px;line-height:1.25}
+.cutout-controls select{min-height:34px;padding:6px 8px;font-size:12px}
+.cutout-controls button{min-height:34px!important;padding:6px 9px}
+.cutout-controls .form-grid{gap:6px}
+.cutout-controls input[type=range]{margin:2px 0}
+.cutout-step-nav{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px}
+#cutout-note{min-height:0;margin:5px 0;font-size:11px;line-height:1.3}
+@media (max-width:699px){
+  .material-editor-dialog.cutout-dialog{width:min(700px,96vw)}
+  .cutout-modal{gap:8px}
+  .cutout-steps span{padding:5px 4px;font-size:10px}
+  .cutout-steps span b{width:16px;height:16px}
+  .cutout-compare{display:grid;grid-template-columns:1fr 1fr}
+  .material-editor-preview.cutout-preview{height:min(34dvh,320px);min-height:170px}
+  .cutout-controls .setting-help{font-size:10px}
+}

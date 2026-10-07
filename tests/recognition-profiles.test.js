@@ -45,3 +45,10 @@ test('recognition methods, processing pixels, preprocessing and postprocessing a
  assert.equal(normalizePreferences({recognition:'fake',recognitionPixels:1234}).recognition,'auto');
  assert.equal(normalizePreferences({recognition:'fake',recognitionPixels:1234}).recognitionPixels,1200);
 });
+
+
+test('auto refinement keeps confident candidates on the fast path',async()=>{
+  const source=readFileSync(new URL('../src/recognition-refiners.js',import.meta.url),'utf8');
+  assert.match(source,/threshold=\.70/);
+  assert.match(source,/indices:mode==='auto'\?selectedIndices:null/);
+});
