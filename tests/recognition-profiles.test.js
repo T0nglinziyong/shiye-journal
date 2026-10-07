@@ -8,7 +8,7 @@ test('recognition methods, processing pixels, preprocessing and postprocessing a
  assert.equal(auto.analysisMaxDimension,900);
  assert.equal(typeof auto.refineCandidates,'function');
  assert.equal(recognitionProfile('traditional',1600).analysisMaxDimension,1600);
- assert.equal(recognitionProfile('traditional',1600).refineCandidates,undefined);
+ assert.equal(typeof recognitionProfile('traditional',1600).refineCandidates,'function');
  assert.equal(recognitionProfile('hybrid',1200).analysisMaxDimension,1200);
  assert.equal(typeof recognitionProfile('hybrid',1200).refineCandidates,'function');
  assert.equal(typeof recognitionProfile('active',1200).refineCandidates,'function');
