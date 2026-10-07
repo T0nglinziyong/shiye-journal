@@ -73,3 +73,58 @@ export function fastCandidateForFusion(candidate){
     &&backgroundLeak<=.15
     &&(candidate.fillRatio??0)>=.45;
 }
+
+
+const intersection=(a,b)=>{
+  const l=Math.max(a.x,b.x),t=Math.max(a.y,b.y),r=Math.min(a.x+a.w,b.x+b.w),d=Math.min(a.y+a.h,b.y+b.h);
+  return Math.max(0,r-l)*Math.max(0,d-t);
+};
+const overlapOf=(a,b)=>intersection(a,b)/Math.max(1e-9,area(a));
+const containsCenter=(outer,inner)=>{
+  const x=inner.x+inner.w/2,y=inner.y+inner.h/2;
+  return x>=outer.x&&x<=outer.x+outer.w&&y>=outer.y&&y<=outer.y+outer.h;
+};
+
+export function fastIdentityAnchor(candidate){
+  if(!candidate||area(candidate)<.0015)return false;
+  if(isRecoveredCarrierCandidate(candidate))return fastCandidateForFusion(candidate);
+  const confidence=candidate.recognitionConfidence??0,fill=candidate.fillRatio??0;
+  if(candidate.proposalSource==='region'){
+    return confidence>=.60
+      &&(candidate.interiorBackgroundRatio??1)<=.10
+      &&(candidate.insideEvidenceRatio??0)>=.20
+      &&fill>=.30;
+  }
+  // Pale/white physical items can legitimately contain lots of page-like
+  // pixels. A compact edge carrier with very strong direct paper contact is
+  // useful as an identity anchor even when it is not yet safe as final alpha.
+  return candidate.proposalSource==='edge'
+    &&confidence>=.60
+    &&(candidate.paperContactRatio??0)>=.88
+    &&fill>=.50
+    &&area(candidate)<=.20;
+}
+
+export function reconcileInstancesWithFastAnchors(instances,fastCandidates){
+  const anchors=fastCandidates.filter(fastIdentityAnchor).sort((a,b)=>area(b)-area(a)),unique=[];
+  for(const anchor of anchors){
+    if(unique.some(other=>overlapOf(anchor,other)>.78&&overlapOf(other,anchor)>.60))continue;
+    unique.push(anchor);
+  }
+  const base=[],used=new Set();
+  for(const instance of instances){
+    const matches=unique.map((anchor,index)=>({anchor,index}))
+      .filter(({anchor})=>containsCenter(instance,anchor)||overlapOf(anchor,instance)>.35);
+    if(matches.length>=2){
+      // Watershed has merged independently observed physical seeds. Replace
+      // the merged instance by the anchors so later enclosure fusion cannot
+      // erase the fact that multiple items exist.
+      for(const {anchor,index} of matches){if(!used.has(index)){base.push(anchor);used.add(index);}}
+      continue;
+    }
+    base.push(instance);
+    if(matches.length===1)used.add(matches[0].index);
+  }
+  for(let i=0;i<unique.length;i++)if(!used.has(i))base.push(unique[i]);
+  return {instances:base,anchors:unique};
+}
