@@ -70,9 +70,15 @@ export function discoverMaterialInstancesSimple(cv,p,own){
   const pageArea=w*h;
   let candidates=raw.filter(item=>{
     if(!item.touchesProtected)return true;
-    const smallAtFrame=item.pixels<pageArea*.004
-      ||Math.min(item.widthMM,item.heightMM)<Math.max(10,smallestMM*1.6);
-    return !smallAtFrame;
+    const shortMM=Math.min(item.widthMM,item.heightMM),longFraction=Math.max(item.w/w,item.h/h),
+      smallAtFrame=item.pixels<pageArea*.004
+        ||shortMM<Math.max(10,smallestMM*1.6),
+      // Perspective rectification often leaves a long, shallow strip exactly
+      // along one page side. A real material may touch the page border, so
+      // contact alone is never enough; only a long-and-thin physical strip is
+      // rejected here.
+      longThinFrameStrip=longFraction>.42&&shortMM<15;
+    return !(smallAtFrame||longThinFrameStrip);
   });
 
   // Absorb tiny disconnected print/detail islands whose centers lie inside a
