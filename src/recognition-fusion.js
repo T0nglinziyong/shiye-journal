@@ -35,13 +35,18 @@ const strongReconstruction=s=>s.boundaryReconstruction===true
   &&(((s.paperContactRatio??0)>=.48
       &&((s.interiorBackgroundRatio??1)<=.42||(s.fillRatio??0)>=.64||(s.edgeSupportRatio??0)>=.62))
     ||edgeCertainReconstruction(s));
+const strongRecoveredCarrier=s=>s.physicalCarrierRecovered===true
+  &&(s.carrierEdgeSupport??0)>=.20
+  &&(s.carrierSeedCoverage??0)>=.80
+  &&(s.carrierAreaRatio??0)>=1.02&&(s.carrierAreaRatio??99)<=5.2
+  &&(s.interiorBackgroundRatio??1)<=.20;
 
 export function fuseRecognitionCandidates(instances,structuralCandidates){
   const base=instances.map(candidate=>({candidate,used:false})),accepted=[];
   const structures=[...structuralCandidates]
     .filter(s=>s.boundaryReconstruction===true
       ?(s.paperContactRatio??0)>=.48||edgeCertainReconstruction(s)
-      :(s.paperContactRatio??0)>=.70)
+      :(s.paperContactRatio??0)>=.70||strongRecoveredCarrier(s))
     .sort((a,b)=>area(b)-area(a));
 
   for(const structural of structures){
@@ -59,16 +64,18 @@ export function fuseRecognitionCandidates(instances,structuralCandidates){
       const occupancy=matches.reduce((sum,{entry})=>sum+intersection(entry.candidate,structural),0)/Math.max(area(structural),1e-9);
       accept=matches.length===1||shares[1]<.15
         ||(strongPhysicalBoundary(structural)&&occupancy<=.84)
+        ||(strongRecoveredCarrier(structural)&&occupancy<=.84)
         ||(strongReconstruction(structural)&&(occupancy<=.72||(structural.matchedPairOverlap??0)>=.18));
-      accept&&=(structural.paperContactRatio??0)>=.48||edgeCertainReconstruction(structural);
+      accept&&=(structural.paperContactRatio??0)>=.48||edgeCertainReconstruction(structural)||strongRecoveredCarrier(structural);
     }else{
       // Missing-instance recovery is deliberately strict. It recovers a pale
       // photo/card with a real paper-facing perimeter, but internal printed
       // boxes/squares have almost no direct page-background contact.
-      accept=(structural.paperContactRatio??0)>=.90
+      accept=((structural.paperContactRatio??0)>=.90
         &&(structural.insideEvidenceRatio??0)>=.20
         &&(structural.fillRatio??0)>=.45
-        &&area(structural)>=.006;
+        &&area(structural)>=.006)
+        ||(strongRecoveredCarrier(structural)&&area(structural)>=.0025);
     }
     if(!accept)continue;
     accepted.push(structural);
