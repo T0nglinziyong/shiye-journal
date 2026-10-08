@@ -65,7 +65,8 @@ import {selectJournalReferenceCases,loadJournalReferenceCases} from './journal-r
 import {loadJournalTemplateReferences} from './journal-template-references.js';
 import {clearJournalPresetImages} from './journal-preset-images.js';
 import {changeTrash,expiredTrash} from './trash-actions.js';
-import {runCreativeAgent} from './creative-runner.js';
+// AI agent planning and visual review are paid, optional workflows. Load them only on demand.
+const runCreativeAgent=async(...args)=>(await import('./creative-runner.js')).runCreativeAgent(...args);
 import {commitAIDraft} from './ai-run-target.js';
 import {prepareMaterialPreviews} from './creative-previews.js';
 import {materialAliases} from './material-alias.js';
@@ -86,10 +87,12 @@ import {syncSelectionScope,reconcileSelectedRecords} from './library-selection-m
 import {canApplyBackgroundView} from './view-update-policy.js';
 import {resetSelectionPresenters} from './selection-presenter.js';
 
+import {installRuntimeDiagnostics} from './runtime-diagnostics.js';
 const view=document.querySelector('#view'),modal=document.querySelector('#modal'),body=document.querySelector('#modal-body');
 modal.querySelector('.modal-close').onclick=()=>modal.close();
-const fileInput=document.querySelector('#file-input'),workFileInput=document.querySelector('#work-file-input'),snapshotFileInput=document.querySelector('#snapshot-file-input'),backupInput=document.querySelector('#backup-input');
+const fileInput=document.querySelector('#file-input'),workFileInput=document.querySelector('#work-file-input'),snapshotFileInput=document.querySelector('#snapshot-file-input'),backupInput=document.querySelector('#backup-input'),emergencyInput=document.querySelector('#emergency-input');
 let offlineSnapshotProject=null;
+installRuntimeDiagnostics(()=>state.route);
 const state={route:'series',assets:[],series:[],projects:[],trash:[],userTemplates:[],basket:[],excludedAssetIDs:[],history:[],selected:null,activeProject:null,activeDraft:null,offlineEditingReturnID:null,detailAssetID:null,previewProjectID:null,settingsSection:null,selfHosted:false,aiSettings:loadAISettings(),preferences:loadPreferences(),aiPanel:false,aiBusy:false,aiPrompt:'',aiProgress:'',tool:'select',zoom:1,sort:'newest',query:'',kind:'all',status:'all',seriesID:'all',matchCore:null,matchRatio:'a4',matchMode:'single',matchStyle:'韩系清新',matchStyles:['韩系清新'],matchPurposes:['日常记录'],matchIntent:'',matchContentPolicy:'documentary',matchUserText:'',matchFacts:'',matchPurpose:'日常记录',matchProcessing:'不预设',materialUseHints:{},materialUseRequired:{},assetProcessing:{},customPaperWidth:210,customPaperHeight:297,recommendFilter:'全部',coreIDs:[],importStep:'inspect',importRecords:[],importIndex:0,importFile:null,importBitmap:null,importBox:{x:0,y:0,w:1,h:1},importCandidate:null,importRemoveWhite:false,undo:[],redo:[],drawing:false};
 // Safari's native page pinch must not compete with the editor's bounded canvas zoom.
 for(const type of ['gesturestart','gesturechange'])document.addEventListener(type,event=>event.preventDefault(),{passive:false});
@@ -247,7 +250,7 @@ function renderAssetDetail(){const a=asset(state.detailAssetID);if(!a)return ren
 function renderProjectPreview(){const p=state.projects.find(x=>x.id===state.previewProjectID);if(!p)return renderWorks();const d=p.drafts.find(x=>x.id===p.activeDraftID)||p.drafts[0];const original=p.coverStaticPath&&p.updatedAt===p.coverBaselineUpdatedAt;return `<div class="project-preview-page"><div class="project-preview-head"><h1>${esc(p.title)}</h1><button class="btn" data-act="preview-back">关闭</button></div><div class="project-preview-cover"><div class="preview-paper" style="background:${esc(d.paperColor||'#fff')};aspect-ratio:${d.canvas.width}/${d.canvas.height}">${p.isSnapshot?`<img class="work-reference" src="${image(p.snapshotBlobId)}" alt="${esc(p.title)} 快照">`:original?`<img class="work-reference" src="${p.coverStaticPath}" alt="${esc(p.title)} 完整预览">`:workCover(d)}</div></div><div class="project-preview-tags">${[...(p.styleTags||[]),...(p.tags||[])].filter((tag,index,list)=>tag&&list.indexOf(tag)===index).map(tag=>`<span>${esc(tag)}</span>`).join('')}</div><p>${p.isSnapshot?'独立保存的画面快照，不能逐层编辑。':'页面上的素材、排版和书写内容都已保存。'}</p><div class="project-preview-actions">${p.isSnapshot?'<button class="btn primary" data-act="download-snapshot">下载快照</button>':'<button class="btn primary" data-act="preview-continue">继续创作</button>'}<button class="btn" data-act="project-meta">作品信息与标签</button><button class="btn danger" data-act="project-delete">移到最近删除</button></div></div>`;}
 let aiModelPanelOpen=false;
 const settingToggle=(id,label,checked,help)=>`<label class="toggle-row setting-toggle"><span><b>${label}</b><small class="setting-help">${help}</small></span><input id="${id}" type="checkbox" ${checked?'checked':''}></label>`;
-function renderSettings(){const sections=[['AI 与创作','创作偏好与模型连接，分组查看','✣'],['导入与识别','照片校正、背景板、识别默认值与自动整理','□'],['界面与素材库','素材排列、卡片背景与显示方式','▦'],['数据与诊断','备份、最近删除、生成诊断与完整上下文','▱']];if(!state.settingsSection)return `<div class="settings-page"><div class="settings-toolbar"><button data-act="settings-back">返回</button><button data-act="settings-save">保存</button></div><h1>设置</h1><section class="settings-list">${sections.map(([name,description,icon])=>`<button data-act="settings-open" data-val="${name}"><span class="settings-icon">${icon}</span><span><strong>${name}</strong><small>${description}</small></span><b>›</b></button>`).join('')}</section><p class="settings-note">设置按使用场景归为四类。AI 设置保存在这台设备的当前浏览器中；作品和素材可在“数据与诊断”中导出备份。</p></div>`;
+function renderSettings(){const sections=[['AI 与创作','创作偏好与模型连接，分组查看','✣'],['导入与识别','照片校正、背景板、识别默认值与自动整理','□'],['界面与素材库','素材排列、卡片背景与显示方式','▦'],['数据与诊断','备份、最近删除、生成诊断与完整上下文','▱']];if(!state.settingsSection)return `<div class="settings-page"><div class="settings-toolbar"><button data-act="settings-back">返回</button><button data-act="settings-save">保存</button></div><h1>设置</h1><section class="settings-list">${sections.map(([name,description,icon])=>`<button data-act="settings-open" data-val="${name}"><span class="settings-icon">${icon}</span><span><strong>${name}</strong><small>${description}</small></span><b>›</b></button>`).join('')}</section><p class="settings-note">设置按使用场景归为四类。AI 设置保存在这台设备的当前浏览器中；作品和素材可在“数据与诊断”中导出备份。</p><div class="actions"><button type="button" class="btn" data-act="help">使用说明与故障排查</button></div></div>`;
  const title=state.settingsSection;let content='';if(title==='AI 与创作'){const cfg=state.aiSettings,preset=AI_PROVIDERS[cfg.provider],known=preset.models.some(m=>m[0]===cfg.model);
   content=`<h2>服务与模型</h2><label>服务商<select id="setting-ai-provider">${Object.entries(AI_PROVIDERS).map(([id,x])=>`<option value="${id}" ${id===cfg.provider?'selected':''}>${x.label}</option>`).join('')}</select></label><label>API 地址<input id="setting-ai-endpoint" type="url" value="${esc(cfg.endpoint)}" placeholder="https://…/chat/completions"></label><label>模型<select id="setting-ai-model">${preset.models.map(([id,name])=>`<option value="${esc(id)}" ${cfg.model===id?'selected':''}>${esc(name)}</option>`).join('')}<option value="__custom__" ${known?'':'selected'}>自定义模型 ID</option></select></label><label id="setting-ai-custom-model-row" ${known?'hidden':''}>模型 ID<input id="setting-ai-custom-model" value="${known?'':esc(cfg.model)}"></label><label>API 密钥<input id="setting-ai-key" type="password" autocomplete="off" value="${esc(cfg.key)}" placeholder="API Key"></label><label class="toggle-row">发送全部素材预览 <input id="setting-ai-thumbnails" type="checkbox" ${cfg.includeThumbnails?'checked':''}></label><label class="toggle-row">交付前由 GPT 看图复核（计入总请求上限）<input id="setting-ai-visual-review" type="checkbox" ${cfg.finalVisualReview!==false?'checked':''}></label><label class="toggle-row">自定义模型支持图片 <input id="setting-ai-vision" type="checkbox" ${cfg.customVision?'checked':''}></label><p>当前模型${supportsVision(cfg)?'支持图片输入；开启预览时发送所有允许使用的素材图片':'不支持图片输入，仅发送素材文字信息'}。密钥仅保存在本浏览器，不进入备份。</p><h2>创作与响应</h2><label>创意程度 0–2<input id="setting-ai-temperature" type="number" step="0.05" min="0" max="2" value="${cfg.temperature}"></label><label>单轮最大输出 2000–16000<input id="setting-ai-tokens" type="number" min="2000" max="16000" value="${cfg.maxTokens}"></label><label>最多创作轮次（所有请求和重试计入上限）<input id="setting-ai-turns" type="number" min="1" max="20" value="${cfg.maxTurns}"></label><label>请求超时（秒）<input id="setting-ai-timeout" type="number" min="20" max="180" value="${cfg.requestTimeout}"></label><label>工具接口<select id="setting-ai-transport"><option value="auto" ${cfg.transport==='auto'?'selected':''}>自动适配</option><option value="native" ${cfg.transport==='native'?'selected':''}>原生工具调用</option><option value="json" ${cfg.transport==='json'?'selected':''}>兼容 JSON 工具指令</option></select></label><label>文字内容<select id="setting-ai-text"><option value="automatic" ${cfg.textMode==='automatic'?'selected':''}>图文手账 · 自动配文</option><option value="requested" ${cfg.textMode==='requested'?'selected':''}>仅明确要求时配文</option><option value="none" ${cfg.textMode==='none'?'selected':''}>不生成文字</option>${['minimal','rich'].includes(cfg.textMode)?`<option value="${cfg.textMode}" selected>旧版：${cfg.textMode==='minimal'?'简洁':'丰富'}</option>`:''}</select></label><label>代理思考策略<select id="setting-ai-reasoning"><option value="automatic" ${cfg.reasoningMode==='automatic'?'selected':''}>自动 · 优先执行</option><option value="low" ${cfg.reasoningMode==='low'?'selected':''}>轻量思考</option><option value="providerDefault" ${cfg.reasoningMode==='providerDefault'?'selected':''}>保持服务设置</option></select></label><label class="toggle-row">发送输出上限 <input id="setting-ai-send-limit" type="checkbox" ${cfg.sendOutputLimit?'checked':''}></label><label class="toggle-row">关闭服务商思考模式 <input id="setting-ai-disable-thinking" type="checkbox" ${cfg.disableThinking?'checked':''}></label><label>补充版式指导<textarea id="setting-ai-layout-prompt" placeholder="留空使用默认指导">${esc(cfg.customLayoutPrompt)}</textarea></label>`;}
  else if(title==='导入与识别')content=`<h2>照片校正</h2><p>传统浏览器四角检测与透视校正，不上传照片；当前未接入大模型矫正。</p><label>素材识别方法<select id="setting-recognition">${recognitionOptions.map(([id,name])=>`<option value="${id}" ${state.preferences.recognition===id?'selected':''}>${name}</option>`).join('')}</select><small class="setting-help">识别方法决定主要边界算法；下面的预处理、后处理和处理像素与方法相互独立。</small></label><div class="settings-method-notes">${recognitionMethodDetails.map(item=>`<div class="settings-method-note"><b>${item.label}</b><small>${item.description}</small></div>`).join('')}</div><label>处理像素（最长边）<select id="setting-recognition-pixels">${recognitionPixelOptions.map(([value,name])=>`<option value="${value}" ${state.preferences.recognitionPixels===value?'selected':''}>${name}</option>`).join('')}</select><small class="setting-help">900 px 是真实样例中速度与框位置最稳定的默认值；1200/1600 px 可用于特殊照片。最终素材始终从原图提取。</small></label><h2>识别预处理</h2>${settingToggle('setting-preprocess-light','光照场校正',state.preferences.balanceLight!==false,'只作用于候选框内的边界分割；整页自动框选始终使用原始校正图。')}${settingToggle('setting-preprocess-denoise','轻度去噪',state.preferences.recognitionDenoise!==false,'只作用于边界分割。默认关闭；真实样例中直接使用原图更稳定。')}${settingToggle('setting-preprocess-contrast','局部对比增强',state.preferences.recognitionLocalContrast!==false,'只作用于边界分割。默认关闭；需要增强浅色边缘时可手动开启。')}${settingToggle('setting-preprocess-chroma','Lab 色差边缘增强',state.preferences.recognitionChromaEdges!==false,'用颜色差补充灰度边缘，对绿白、浅色纸尤其有帮助；内部彩色纹理也会增强，因此只作为边缘证据。')}<p class="settings-note">预处理只作用于每件素材的边界分割，不改变整页自动框选，也不会改变最终保存素材的颜色和清晰度。</p><h2>识别后处理</h2>${settingToggle('setting-postprocess-shapes','规则图形规整',state.preferences.recognitionShapeRegularization!==false,'默认开启。只在边缘证据足够强时修正四边形、圆/椭圆或简单多边形；自由异形保持主分割轮廓。')}${settingToggle('setting-postprocess-apertures','真实孔洞识别',state.preferences.recognitionApertures!==false,'默认开启。只恢复成排、近等半径、近等间距且中心接近 A4 纸色的制造型孔；孤立白点不会挖空。')}<p class="settings-note">默认只开启形状规整与重复打孔恢复；固定顺序为主分割 → 形状规整 → 打孔恢复。</p><label>默认纸张<select id="setting-paper-size">${paperSizeOptions(state.preferences.paperSize)}</select></label><label>校正方向<select id="setting-orientation"><option value="auto">自动</option><option value="portrait" ${state.preferences.orientation==='portrait'?'selected':''}>竖向</option><option value="landscape" ${state.preferences.orientation==='landscape'?'selected':''}>横向</option></select></label><label>未识别时作为背景板<input id="setting-whole-paper" type="checkbox" ${state.preferences.wholePaper?'checked':''}></label>`;
@@ -256,7 +259,7 @@ function renderSettings(){const sections=[['AI 与创作','创作偏好与模型
  if(title==='数据与诊断'&&state.selfHosted)content=`<h2>唯一数据源 · 4090 服务器</h2><p id="storage-location">${esc(location.origin)}</p><p>素材 ${state.assets.length} 件 · 作品 ${state.projects.length} 件 · 最近删除 ${state.trash.length} 项</p><p>此网址的素材、作品与图片都写入服务器。浏览器只保存访问令牌和 AI 设置；服务器无法连接时不会写入另一份资料。</p><label>更新访问令牌<input id="data-server-token" type="password" autocomplete="off" placeholder="保持不变则留空"></label><button class="btn" data-act="storage-token">验证并更新令牌</button><h2>完整备份</h2><div class="actions"><button class="btn primary" data-act="backup">导出完整备份</button><button class="btn" data-act="restore">从备份恢复</button></div><p>恢复会替换服务器当前全部数据；执行前请先导出一份当前完整备份。</p><h2>最近删除</h2>${state.trash.map(x=>`<div class="rec-card"><b>${esc(x.item.title)}</b><button class="btn mini" data-act="restore-trash" data-id="${x.id}">恢复</button></div>`).join('')||'<p>没有最近删除的项目。</p>'}`;
  if(title==='AI 与创作')content=`<h2>创作流程</h2><label>交付方式<select id="setting-ai-delivery">${DELIVERY_OPTIONS.map(([id,label])=>`<option value="${id}" ${state.aiSettings.deliveryMode===id?'selected':''}>${label}</option>`).join('')}</select></label><label>GPT 图像模型<select id="setting-ai-image-model">${IMAGE_MODELS.map(id=>`<option value="${id}" ${state.aiSettings.imageModel===id?'selected':''}>${id}</option>`).join('')}</select></label><p>“画面图片”只保存不可编辑快照：在线创作直接调用 OpenAI 图像模型，需另配 API 密钥；导出给网页版 AI 则用相同画面要求手动发送素材包，并导入返回的图片，不需要 API 密钥。“PDF 页面”仍是可编辑版面在本机渲染成快照。工具、JSON 与 ZIP 保留可编辑图层。</p><p>可编辑在线创作的轮数是总请求上限，格式修复也占一轮；本地最终渲染不调用模型。每轮连续无响应按设置的秒数停止，整轮另有十分钟硬上限。失败不会自动重发可能计费的请求。</p>`+content;
  if(title==='AI 与创作')content+='<p>“自动适配”只用于已核对的 API 地址与模型组合；自定义或未核验组合请明确选择原生工具或兼容 JSON。图片输入同理，未核验组合需手动确认支持后才发送预览。</p>';
- if(title==='数据与诊断'&&cloudEnabled)content=`<h2>私人云端资料</h2><p id="storage-location">云端元数据与私有图片 · 本机缓存加速</p><p>素材 ${state.assets.length} 件 · 作品 ${state.projects.length} 件 · 最近删除 ${state.trash.length} 项</p><p>登录验证后显示本机缓存，后台检查云端更新。原图和完整作品按需读取；修改先暂存，后台同步。云端失败不会改用另一份资料。</p><h2>完整备份</h2><div class="actions"><button class="btn primary" data-act="backup">导出完整备份</button><button class="btn" data-act="restore">从备份恢复</button></div><p>只接受拾页现行完整备份格式；恢复会替换当前资料。</p>`;
+ if(title==='数据与诊断'&&cloudEnabled)content=`<h2>私人云端资料</h2><p id="storage-location">云端元数据与私有图片 · 本机缓存加速</p><p>素材 ${state.assets.length} 件 · 作品 ${state.projects.length} 件 · 最近删除 ${state.trash.length} 项</p><p>登录验证后显示本机缓存，后台检查云端更新。原图和完整作品按需读取；修改先暂存，后台同步。云端失败不会改用另一份资料。</p><h2>完整备份</h2><div class="actions"><button class="btn primary" data-act="backup">导出完整备份</button><button class="btn" data-act="restore">从备份恢复</button></div><p>只接受拾页现行完整备份格式；恢复会替换当前资料。</p><h2>离线应急备份</h2><p>仅保存本机尚未上传云端的修改和原始字节，不包含已同步的完整素材库；网络故障时也可导出。应急包只能恢复到原账号，恢复后重新打开拾页再同步。</p><div class="actions"><button class="btn" data-act="backup-emergency">导出本机待同步修改</button><button class="btn" data-act="restore-emergency">恢复待同步应急包</button></div>`;
  if(title==='AI 与创作')content+=`<h2>候选素材</h2><label class="toggle-row">候选素材必须全部使用<input id="setting-ai-require-all" type="checkbox" ${state.aiSettings.requireAllCandidates?'checked':''}></label><p>默认开启：本次发给 AI 的每件候选素材都必须在作品中出现。关闭后，仍尽量使用；手动标星的素材保持必用。若同时开启“自动加入建议搭配”，建议素材也属于候选。</p><label class="toggle-row">自动把全部建议搭配作为 AI 备选素材<input id="setting-ai-auto-recommendations" type="checkbox" ${state.aiSettings.autoIncludeRecommendations?'checked':''}></label><p>开启后会把未排除的建议素材一并发送给 AI；关闭后只发送素材篮中的素材。最终是否必须使用由上方开关决定。</p><h2>样例参考</h2><label class="toggle-row">参考样例的图文结构<input id="setting-ai-structure-reference" type="checkbox" ${state.aiSettings.includeStructureReference?'checked':''}></label><label class="toggle-row">发送匹配风格与用途的四张预设样例<input id="setting-ai-send-reference" type="checkbox" ${state.aiSettings.sendPresetReferences?'checked':''}></label><p>预设样例从简洁到丰富展示不同构图，只含匿名区域示意；不读取或发送已有私人作品。网页版 GPT 任务包会附四张图；API 仅在当前模型支持图片时发送。素材预览另由模型连接设置控制。</p>`;
  if(title==='导入与识别')content+=`<h2>素材整理</h2><label class="toggle-row">自动整理素材名称和标签<input id="setting-auto-organize" type="checkbox" ${state.preferences.autoOrganize?'checked':''}></label><p>整批素材保存成功后，在后台使用视觉模型整理名称和标签，不影响确认归类或继续导入；手动修改的信息不会被覆盖。</p>`;
  if(title==='AI 与创作'){
@@ -384,11 +387,25 @@ async function handle(action,id,value){try{switch(action){
   case 'restore-archive':{const p=state.activeProject,a=p.manualArchives.find(x=>x.id===id);if(!a||!confirm('恢复此存档会替换当前编辑状态，确定吗？'))break;p.drafts=structuredClone(a.drafts);p.activeDraftID=a.activeDraftID;state.activeDraft=a.activeDraftID;saveProject();render();break;}
   case 'export-png':await exportPNG();break;case 'print':await printPage();break;
   case 'creative-json':openCreativeJSON();break;
-  case 'backup':await backup();break;case 'restore':backupInput.click();break;case 'restore-trash':await restoreTrash(id);break;
+  case 'recognition-diagnostics':{
+    const rec=state.importRecords[state.importIndex],trace=rec?.recognitionDiagnostic;
+    if(!trace)throw Error('请先完成当前照片的识别');
+    const report={format:'shiye-recognition-box-diagnostics',version:2,
+      originalPixelSize:[state.importBitmap?.width,state.importBitmap?.height],
+      autoPaperCorners:rec.autoPaperCorners||null,paperCorners:rec.corners||null,
+      appliedPaperCorners:rec.appliedCorners?JSON.parse(rec.appliedCorners):null,
+      correctedPixelSize:rec.correctedBitmap?[rec.correctedBitmap.width,rec.correctedBitmap.height]:null,
+      paperOrientation:rec.paperOrientation||'auto',paperSize:rec.paperSize||'a4',
+      ...trace,visibleCount:rec.candidates?.length||0};
+    download(new Blob([JSON.stringify(report,null,2)],{type:'application/json'}),
+      '拾页素材框诊断.json');
+    toast('已导出不含照片的素材框诊断');break;
+  }
+  case 'backup':await backup();break;case 'restore':backupInput.click();break;case 'backup-emergency':{await flushSave();const blob=await db.createEmergencyBackup();download(blob,'拾页待同步应急包-'+new Date().toISOString().slice(0,10)+'.shiyerecovery');toast('应急包已导出，请妥善保存，包含私人图片和文字');break;}case 'restore-emergency':emergencyInput.click();break;case 'restore-trash':await restoreTrash(id);break;
   case 'storage-token':{const token=view.querySelector('#data-server-token')?.value.trim();if(!token)throw Error('请输入新的访问令牌');const old=db.storageConfig();db.setStorageConfig({url:location.origin,token});try{await db.storageMode();toast('令牌已更新');}catch(error){db.setStorageConfig(old);throw error;}break;}
   case 'storage-connect':{await flushSave();const old=db.storageConfig(),url=view.querySelector('#data-server-url')?.value.trim(),token=view.querySelector('#data-server-token')?.value.trim();if(!url)throw Error('请输入拾页数据服务地址');db.setStorageConfig({url,token});try{await db.storageMode();state.activeProject=null;state.basket=[];await refresh();toast('已连接服务器');}catch(error){db.setStorageConfig(old);throw error;}break;}
   case 'storage-browser':{if(state.selfHosted)throw Error('自托管网站不允许切换到浏览器资料');await flushSave();db.setStorageConfig(null);state.activeProject=null;state.basket=[];await refresh();toast('已切换为本浏览器资料');break;}
-  case 'settings-open':captureSettings();state.settingsSection=value;render();break;case 'settings-back':if(state.settingsSection){captureSettings();state.settingsSection=null;render();}else route(settingsSession?.returnRoute||'series');break;case 'settings-save':{captureSettings();const cfg=state.aiSettings;if(!cfg.model.trim())throw Error('请输入模型 ID');const endpoint=new URL(cfg.endpoint);if(endpoint.protocol!=='https:')throw Error('API 地址必须使用 HTTPS');if(cfg.provider!=='custom'&&endpoint.host!==new URL(AI_PROVIDERS[cfg.provider].endpoint).host)throw Error('服务商与 API 地址不一致；自定义地址请选“自定义兼容接口”');const returnRoute=settingsSession?.returnRoute||'series';state.aiSettings=saveAISettings(cfg);state.preferences=savePreferences(state.preferences);settingsSession=null;state.settingsSection=null;route(returnRoute);toast('设置已保存');break;}
+  case 'help':{const {showHelp}=await import('./help-ui.js');showHelp({body,modal});break;}case 'settings-open':captureSettings();state.settingsSection=value;render();break;case 'settings-back':if(state.settingsSection){captureSettings();state.settingsSection=null;render();}else route(settingsSession?.returnRoute||'series');break;case 'settings-save':{captureSettings();const cfg=state.aiSettings;if(!cfg.model.trim())throw Error('请输入模型 ID');const endpoint=new URL(cfg.endpoint);if(endpoint.protocol!=='https:')throw Error('API 地址必须使用 HTTPS');if(cfg.provider!=='custom'&&endpoint.host!==new URL(AI_PROVIDERS[cfg.provider].endpoint).host)throw Error('服务商与 API 地址不一致；自定义地址请选“自定义兼容接口”');const returnRoute=settingsSession?.returnRoute||'series';state.aiSettings=saveAISettings(cfg);state.preferences=savePreferences(state.preferences);settingsSession=null;state.settingsSection=null;route(returnRoute);toast('设置已保存');break;}
 }}catch(e){console.error(e);toast(e.message||'操作失败');}}
 function editSelected(fn){const d=current(),e=editorEntry(d).find(x=>x.value.id===state.selected);if(!e&&state.selected)return;checkpoint();fn(e,d);saveProject();render();}
 function historyStep(from,to){view.endTextEditing?.();const d=current(),snapshot=takeEditorHistoryStep(state,from,to,d);if(!snapshot)return;for(const key of Object.keys(d))delete d[key];Object.assign(d,snapshot);state.activeDraft=snapshot.id;saveProject();render();}
@@ -703,7 +720,8 @@ async function switchImportRecord(index,skipSave=false){
   try{
   const bitmap=rec.bitmap||await createImageBitmap(rec.file);rec.bitmap=bitmap;if(!isCurrent())return;state.importBitmap=bitmap;
   progress('正在自动寻找纸张四角…');
-  state.paperCorners=rec.corners||(state.paperSize==='none'?null:await suggestPaperCorners(bitmap).catch(()=>null));if(!isCurrent())return;
+  state.paperCorners=rec.corners||(state.paperSize==='none'?null:await suggestPaperCorners(bitmap,(()=>{const [pw,ph]=paperDimensions();return pw/ph;})()).catch(()=>null));if(!isCurrent())return;
+  if(!rec.corners&&state.paperCorners)rec.autoPaperCorners=structuredClone(state.paperCorners);
   progress('正在进行透视校正…');
   if(!state.correctedBitmap&&state.paperCorners&&state.paperSize!=='none'){
     const [pw,ph]=paperDimensions(),blob=await rectifyA4(state.importBitmap,state.paperCorners,4096,pw/ph);
@@ -767,7 +785,7 @@ async function refreshImportCandidates(regions,{manual=false}={}){
 async function previewCrop(){
   if(!state.importBitmap)return;
   const record=state.importRecords[state.importIndex],source=state.correctedBitmap||state.importBitmap,b=state.correctedBitmap?{x:0,y:0,w:1,h:1}:state.importBox,[pw,ph]=paperDimensions();
-  let regions=await detectPaperCandidates(source,b,6,{balanceLight:state.balanceLight,paperWidthMM:pw,paperHeightMM:ph,recognition:state.importRecognition||state.preferences.recognition,recognitionPixels:state.preferences.recognitionPixels,recognitionPreprocess:recognitionPreprocessOptions(),recognitionPostprocess:recognitionPostprocessOptions(),onProgress:p=>{
+  let regions=await detectPaperCandidates(source,b,6,{balanceLight:state.balanceLight,paperWidthMM:pw,paperHeightMM:ph,recognition:state.importRecognition||state.preferences.recognition,recognitionPixels:state.preferences.recognitionPixels,recognitionPreprocess:recognitionPreprocessOptions(),recognitionPostprocess:recognitionPostprocessOptions(),onDiagnostic:trace=>{record.recognitionDiagnostic=trace;},onProgress:p=>{
     if(state.route!=='import'||record!==state.importRecords[state.importIndex])return;
         const text=p.status==='inference'?'浏览器模型正在细化素材边缘…'
           :p.status==='fallback'?(Number.isFinite(p.count)?`${p.count} 个模型结果不可靠，保留传统识别边缘，请检查`:'边缘精修未采用新结果，已保留原识别边缘')
@@ -794,6 +812,17 @@ async function chooseCandidate(index){if(index>=0){state.importCandidateSelectio
 function paperDimensions(){return importPaperDimensions({paperSize:state.paperSize,paperOrientation:state.paperOrientation,bitmap:state.importBitmap,corners:state.paperCorners,customImportWidth:state.customImportWidth||state.preferences.customPaperWidth,customImportHeight:state.customImportHeight||state.preferences.customPaperHeight});}
 async function confirmImportPhoto(){
   if(state.importProcessing)return;
+  const record=state.importRecords[state.importIndex];
+  const [expectedPaperWidth,expectedPaperHeight]=paperDimensions();
+  if(state.paperSize!=='none'&&state.correctedBitmap&&Math.abs(
+    (state.correctedBitmap.width/state.correctedBitmap.height)/
+    (expectedPaperWidth/expectedPaperHeight)-1)>.025){
+    toast('纸张尺寸或方向改变后，须预览并应用新的校正结果，才能确认素材');return;
+  }
+  if(state.paperSize!=='none'&&state.paperCorners&&state.correctedBitmap
+    &&record?.appliedCorners!==JSON.stringify(state.paperCorners)){
+    toast('纸张四角已调整，请先“预览校正”并点击“使用校正结果”，再确认素材');return;
+  }
   const selected=[...(state.importCandidateSelection||[])];if(!selected.length&&state.importMode!=='work'){toast('请选择至少一件素材，或使用手动补框');return;}
   const rec=state.importRecords[state.importIndex];rec.selectedCandidates=(state.importCandidateData||[]).map((c,i)=>({...c,selected:state.importCandidateSelection.has(i)}));rec.confirmed=true;saveActiveImportRecord();
   const next=state.importRecords.findIndex(r=>!r.confirmed);if(next>=0)await switchImportRecord(next);else{state.importStep='review';render();}
@@ -836,7 +865,40 @@ async function applyAssetClassification(record,result,{manual=false,isCurrent=()
 
 
 async function removeWhite(blob){const bitmap=await createImageBitmap(blob),canvas=document.createElement('canvas');canvas.width=bitmap.width;canvas.height=bitmap.height;const c=canvas.getContext('2d',{willReadFrequently:true});c.drawImage(bitmap,0,0);const im=c.getImageData(0,0,canvas.width,canvas.height);for(let i=0;i<im.data.length;i+=4){const r=im.data[i],g=im.data[i+1],b=im.data[i+2],min=Math.min(r,g,b);if(min>247)im.data[i+3]=0;else if(min>230)im.data[i+3]=Math.round(im.data[i+3]*(247-min)/17);}c.putImageData(im,0,0);bitmap.close();return new Promise(resolve=>canvas.toBlob(resolve,'image/png'));}
-async function backup(){await flushSave();saveStatus('正在导出…');const blob=await db.createBackup(),filename=`拾页PWA完整备份-${new Date().toISOString().slice(0,10)}.shiyepwa`;const file=new File([blob],filename,{type:'application/json'});if(navigator.canShare?.({files:[file]})){try{await navigator.share({files:[file],title:'拾页完整备份'});saveStatus('已保存到本机');return;}catch(e){if(e.name==='AbortError'){saveStatus('本机存储');return;}}}download(blob,filename);saveStatus('已导出备份');}
+async function backup(){
+  const filename=`拾页PWA完整备份-${new Date().toISOString().slice(0,10)}.shiyepwa`;
+  // Must request the picker immediately while the click's user activation is
+  // live. All later reads, hashing and ZIP work are asynchronous.
+  let handle=null;
+  if(typeof window.showSaveFilePicker==='function'){
+    try{handle=await window.showSaveFilePicker({suggestedName:filename,
+      types:[{description:'拾页 ZIP 完整备份',accept:{'application/zip':['.shiyepwa']}}]});}
+    catch(error){if(error?.name==='AbortError')return;throw error;}
+  }
+  let writer=null;
+  try{
+    await flushSave();saveStatus('正在导出备份…');
+    if(handle)writer=await handle.createWritable();
+    const result=await db.createBackup({
+      onChunk:writer?bytes=>writer.write(bytes):undefined,
+      onProgress:p=>{if(p.stage==='image')saveStatus('正在备份素材 '+p.current+'/'+p.total);}
+    });
+    if(writer){await writer.close();writer=null;}
+    else{
+      const blob=result,file=new File([blob],filename,{type:'application/zip'});
+      if(navigator.canShare?.({files:[file]})){
+        try{await navigator.share({files:[file],title:'拾页完整备份'});saveStatus('备份已导出');return;}
+        catch(error){if(error.name==='AbortError')return;}
+      }
+      download(blob,filename);
+    }
+    saveStatus('完整备份已导出');
+  }catch(error){
+    if(writer)await writer.abort().catch(()=>{});
+    saveStatus('备份未完成 · 原始资料未更改');
+    throw error;
+  }
+}
 function download(blob,filename){const link=document.createElement('a'),url=URL.createObjectURL(blob);link.href=url;link.download=filename;link.click();setTimeout(()=>URL.revokeObjectURL(url),60000);}
 setCloudProjectPreview(async p=>{if(p.isSnapshot)return (await db.get('blobs',p.snapshotBlobId))?.data||null;const d=p.drafts.find(d=>d.id===p.activeDraftID)||p.drafts[0];if(d.items.some(i=>!asset(i.assetID)))return null;const canvas=await rasterize(d,Math.min(1,360/Math.max(d.canvas.width,d.canvas.height)));return new Promise(resolve=>canvas.toBlob(resolve,'image/webp',.85));});
 async function exportPNG(){const d=current(),canvas=await rasterize(d,2);canvas.toBlob(blob=>download(blob,(state.activeProject.title||'拾页作品')+'.png'),'image/png');}
@@ -875,9 +937,15 @@ const pendingEditableHandles=[];
 let editableImportReady=false;
 async function consumeEditableHandles(){if(!editableImportReady)return;while(pendingEditableHandles.length){const handle=pendingEditableHandles.shift();try{await importEditableFile(await handle.getFile());}catch(error){console.error(error);toast('可编辑作品导入失败：'+error.message);}}}
 if('launchQueue' in window)window.launchQueue.setConsumer(params=>{if(params.files?.length){pendingEditableHandles.push(...params.files);void consumeEditableHandles();}});
+emergencyInput.onchange=async()=>{
+  const file=emergencyInput.files?.[0];emergencyInput.value='';if(!file)return;
+  if(!confirm('恢复待同步应急包会把未上传修改加入本机队列，不会替换云端资料。请确认此文件属于当前账号。'))return;
+  try{await flushSave();const counts=await db.restoreEmergencyBackup(file);alert('已恢复 '+(counts[0]+counts[1])+' 项本机待同步资料。将重新打开页面以重新加载队列。');location.reload();}
+  catch(error){console.error(error);toast('应急恢复失败（原待同步资料未被覆盖）：'+error.message);}
+};
 backupInput.onchange=async()=>{const file=backupInput.files?.[0];backupInput.value='';if(!file)return;
   if(!confirm('恢复完整备份会替换当前拾页中的全部资料。继续吗？'))return;
-  try{await flushSave();await db.flushProjects();state.activeProject=null;await db.restoreBackup(file);state.basket=[];await refresh();toast('完整备份已恢复');}
+  try{await flushSave();await db.flushProjects();await db.restoreBackup(file);state.activeProject=null;state.basket=[];await refresh();toast('完整备份已恢复');}
   catch(e){console.error(e);toast('恢复失败：'+e.message);}
 };
 window.addEventListener('pagehide',()=>{if(saveTimer)flushSave().catch(console.error);});
@@ -917,24 +985,17 @@ window.addEventListener('resize',refitEditor);
 window.visualViewport?.addEventListener('resize',refitEditor);
 document.querySelectorAll('.main-nav button').forEach(b=>b.onclick=()=>route(b.dataset.route==='library'?'series':b.dataset.route));
 document.querySelector('#top-basket').onclick=()=>route('matching');document.querySelector('#top-settings').onclick=()=>route('settings');
-let visionPrewarmScheduled=false;
-function scheduleVisionPrewarm(){
-  if(visionPrewarmScheduled||typeof Worker==='undefined')return;
-  visionPrewarmScheduled=true;
-  const start=()=>{void prewarmVision().catch(error=>console.warn('本机识别引擎后台预热失败，导入时将重试',error?.message));};
-  // Let authentication/data shell and the first material-library paint win.
-  // The ~5 s OpenCV/WASM startup then happens while the user is browsing,
-  // instead of after a photo has already been selected.
-  requestAnimationFrame(()=>{
-    if('requestIdleCallback' in window)requestIdleCallback(start,{timeout:1200});
-    else setTimeout(start,500);
-  });
-}
-async function init(user){let cachedShown=false;cloudSessionReady=true;const accountId=user?.id||'browser';if(state.accountId&&state.accountId!==accountId){assetOrganization.clear();clearJournalTemplateImages();clearJournalPresetImages();state.userTemplates=[];}state.accountId=accountId;scheduleVisionPrewarm();try{
+async function init(user){let cachedShown=false;cloudSessionReady=true;const accountId=user?.id||'browser';if(state.accountId&&state.accountId!==accountId){assetOrganization.clear();clearJournalTemplateImages();clearJournalPresetImages();state.userTemplates=[];}state.accountId=accountId;try{
   await db.storageMode();state.selfHosted=db.isSameOriginServer();
   // startCloudSession has validated Auth and the allowlist before this runs.
   const cached=await db.cachedCollections();if(cached){Object.assign(state,cached);state.accountId=accountId;await restorePendingProjects();for(const a of state.assets)if(a.staticPath)staticSources.set(a.blobId,a.staticPath);render();cachedShown=true;saveStatus('本机缓存 · 正在核对云端');}
-  const initialSync=await db.refreshCloud();if(initialSync?.changed)privateImages.invalidate(initialSync.allBlobs?undefined:initialSync.blobIDs);await syncCurrentMaterials();await refresh({background:cachedShown});void syncCurrentExamples({isProjectOpen:id=>state.activeProject?.id===id}).then(result=>result?.changed&&refresh({background:true})).catch(error=>console.warn('内置示例暂未加载，下次打开重试',error));void purgeExpiredTrash();await matchingSession.restore();editableImportReady=true;void consumeEditableHandles();if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('/sw.js').catch(console.warn);}saveStatus((await db.storageMode())==='server'?'已连接服务器':'已保存到本机');if(cloudEnabled){syncDisplay.checking=false;updateSyncIndicator();void cloudResumer.wake();}
+  const initialSync=await db.refreshCloud();if(initialSync?.changed)privateImages.invalidate(initialSync.allBlobs?undefined:initialSync.blobIDs);await syncCurrentMaterials();await refresh({background:cachedShown});void syncCurrentExamples({isProjectOpen:id=>state.activeProject?.id===id}).then(result=>result?.changed&&refresh({background:true})).catch(error=>console.warn('内置示例暂未加载，下次打开重试',error));void purgeExpiredTrash();await matchingSession.restore();editableImportReady=true;void consumeEditableHandles();if('serviceWorker' in navigator&&location.protocol==='https:'){
+    void import('./app-update.js').then(({registerSafeUpdate})=>registerSafeUpdate({
+      flushLocal:flushSave,
+      isBusy:()=>!!(state.importProcessing||state.aiBusy||savingProjects||dirtyProjects.size),
+      onError:error=>toast('更新未完成，当前页面和资料保持不变：'+error.message)
+    })).catch(error=>console.warn('更新检查暂不可用',error));
+  }saveStatus((await db.storageMode())==='server'?'已连接服务器':'已保存到本机');if(cloudEnabled){syncDisplay.checking=false;updateSyncIndicator();void cloudResumer.wake();}
   }catch(e){console.error(e);const auth=e.status===401;if(auth)cloudSessionReady=false;
   if(cachedShown&&!auth){saveStatus('云端核对失败 · 缓存仅供查看');toast('云端连接失败，未改为本机保存：'+e.message);if(cloudEnabled)void cloudResumer.wake();return;}
   if(auth){view.innerHTML=`<div class="empty"><strong>连接拾页数据服务器</strong><p>请输入服务器访问令牌；连接失败时不会另存到浏览器。</p><form id="server-login"><input type="password" name="token" required autocomplete="off" placeholder="服务器访问令牌" aria-label="服务器访问令牌"><button class="btn primary" type="submit">连接</button></form><p id="server-login-error">${esc(e.message)}</p></div>`;view.querySelector('#server-login').onsubmit=event=>{event.preventDefault();db.setStorageConfig({url:db.storageConfig()?.url||location.origin,token:event.target.elements.token.value.trim()});init();};}else{view.innerHTML=`<div class="empty"><strong>无法读取资料</strong><p>${esc(e.message||'请检查设备剩余空间和数据服务连接。')}</p><button class="btn" id="storage-retry">重试连接</button></div>`;view.querySelector('#storage-retry').onclick=()=>init();}saveStatus('存储不可用');}}

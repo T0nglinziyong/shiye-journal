@@ -1,0 +1,40 @@
+name: Audit deployed commit
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Select the intended deployment branch'
+        type: choice
+        required: true
+        options:
+          - test
+          - main
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '24'
+      - name: Resolve the remote HEAD without checking out unreviewed PR source
+        id: head
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ inputs.branch }}
+        run: |
+          set -euo pipefail
+          SHA="$(gh api "repos/${GITHUB_REPOSITORY}/branches/${BRANCH}" --jq '.commit.sha')"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+      - name: Verify exact READY SHA in the correct Vercel project
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          SHIYE_VERCEL_TEST_PROJECT_ID: ${{ vars.SHIYE_VERCEL_TEST_PROJECT_ID }}
+          SHIYE_VERCEL_MAIN_PROJECT_ID: ${{ vars.SHIYE_VERCEL_MAIN_PROJECT_ID }}
+          DEPLOY_BRANCH: ${{ inputs.branch }}
+          DEPLOY_SHA: ${{ steps.head.outputs.sha }}
+        run: node scripts/run-deploy-audit.mjs

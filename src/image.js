@@ -5,7 +5,7 @@ import {recognitionProfile} from './recognition-profiles.js';
 export async function detectPaperCandidates(bitmap,box,smallestMM=6,{
   balanceLight=false,paperWidthMM=210,paperHeightMM=297,
   recognition='auto',recognitionPixels=900,
-  recognitionPreprocess={},recognitionPostprocess={},onProgress=()=>{}
+  recognitionPreprocess={},recognitionPostprocess={},onProgress=()=>{},onDiagnostic=()=>{}
 }={}){
   const profile=recognitionProfile(recognition,recognitionPixels);
   const ratio=Math.min(1,profile.analysisMaxDimension/Math.max(bitmap.width*box.w,bitmap.height*box.h));
@@ -32,6 +32,11 @@ export async function detectPaperCandidates(bitmap,box,smallestMM=6,{
   const candidates=await segmentPaperMaterials(frame,{
     smallestMM,paperWidthMM,paperHeightMM,sourcePixels:frame.data,chromaEdges:preprocess.chromaEdges
   });
+  onDiagnostic({phase:'boxes',count:candidates.length,
+    dimensions:[w,h],mode:profile.mode,smallestMM,
+    boxes:candidates.map(item=>({x:item.x,y:item.y,w:item.w,h:item.h,
+      evidenceDensity:item.evidenceDensity,seedDensity:item.seedDensity,
+      fillRatio:item.fillRatio,absorbedFragments:item.absorbedFragments}))});
   return profile.refineCandidates&&candidates.length
     ? profile.refineCandidates({
         candidates,

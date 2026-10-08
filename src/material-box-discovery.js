@@ -35,6 +35,25 @@ function metrics(stats,label,w,h,paperWidthMM,paperHeightMM,pxPerMM){
     touchesProtected=x<=safeBand||y<=safeBand||x+bw>=w-safeBand||y+bh>=h-safeBand;
   return {label,x,y,w:bw,h:bh,pixels,widthMM,heightMM,touchesProtected,evidenceN:0,seedN:0};
 }
+// A single irregular cutout can create two substantial connected components
+// whose bounding boxes overlap almost completely. The old small-fragment
+// rule (<=15% area) missed these duplicate instances.
+export function duplicatePhysicalBox(a,b){
+  const x0=Math.max(a.x,b.x),y0=Math.max(a.y,b.y),
+    x1=Math.min(a.x+a.w,b.x+b.w),y1=Math.min(a.y+a.h,b.y+b.h),
+    intersection=Math.max(0,x1-x0)*Math.max(0,y1-y0),
+    smaller=Math.max(1,Math.min(a.w*a.h,b.w*b.h));
+  // Require near-containment, not ordinary intersection: two adjacent or
+  // overlapping physical materials should never be collapsed based on IoU.
+  return intersection/smaller>=.80;
+}
+export function likelyNeutralPageArtifact(item){
+  // Weak, almost seed-free neutral background residue should not become a
+  // material. Non-neutral/pale carriers keep chromatic evidence even when
+  // printed details are sparse.
+  return item.seedDensity<.003&&item.evidenceDensity<.035
+    &&(item.fillRatio<.55||item.touchesProtectedFrame===true);
+}
 function supportedRange(values,threshold){
   let first=-1,last=-1,count=0;
   for(let i=0;i<values.length;i++){
@@ -77,6 +96,7 @@ export function discoverMaterialBoxes(cv,p,own){
     item.evidenceDensity=item.evidenceN/Math.max(1,item.pixels);
     item.seedDensity=item.seedN/Math.max(1,item.pixels);
     item.fillRatio=item.pixels/Math.max(1,item.w*item.h);
+    item.touchesProtectedFrame=item.touchesProtected;
   }
 
   // A closed background-flood island is not automatically a material. Real
@@ -96,6 +116,8 @@ export function discoverMaterialBoxes(cv,p,own){
     return !(smallAtFrame||longThinFrameStrip);
   });
 
+  candidates=candidates.filter(item=>!likelyNeutralPageArtifact(item));
+
   // Tiny disconnected islands whose centers sit inside a much larger object's
   // box are not separate materials. Keep their pixels associated with the
   // parent for robust geometry, but do not increase object count.
@@ -106,7 +128,8 @@ export function discoverMaterialBoxes(cv,p,own){
     for(let j=i+1;j<candidates.length;j++){
       const child=candidates[j];if(suppressed.has(child.label))continue;
       const ratio=child.pixels/Math.max(1,parent.pixels);
-      if(ratio<=.15&&containsCenter(parent,child,Math.round(pxPerMM*1.0))){
+      if((ratio<=.15&&containsCenter(parent,child,Math.round(pxPerMM*1.0)))
+        ||duplicatePhysicalBox(parent,child)){
         suppressed.add(child.label);
         if(!fragments.has(parent.label))fragments.set(parent.label,[]);
         fragments.get(parent.label).push(child.label);

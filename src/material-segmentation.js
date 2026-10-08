@@ -24,6 +24,29 @@ function largestExternal(cv,mask){
   return {contour:best,area};
 }
 
+// Oriented box is optional display geometry. Keep x/y/w/h and alpha mask
+// axis-aligned, otherwise cropBitmap would sample the wrong source pixels.
+export function orientedRegionGeometry(cv,contour,pageX,pageY,pageW,pageH,area){
+  const rect=cv.minAreaRect(contour);
+  let width=rect.size.width,height=rect.size.height,rotation=rect.angle;
+  if(![width,height,rotation,rect.center.x,rect.center.y].every(Number.isFinite)||width<2||height<2)return null;
+  const long=Math.max(width,height),short=Math.min(width,height),rectangularity=area/(width*height);
+  // Squarish or organic silhouettes have no stable orientation. In particular
+  // avoid arbitrary angles for people and die-cut stickers.
+  if(long/short<1.16||rectangularity<.76)return null;
+  // Standardize into [-90,90), with long edge as width; leave no implication
+  // for source crop coordinates, which always remain axis-aligned.
+  if(width<height){[width,height]=[height,width];rotation+=90;}
+  rotation=((rotation+90)%180+180)%180-90;
+  if(Math.abs(rotation)<2)return null;
+  return {
+    centerX:(pageX+rect.center.x)/pageW,
+    centerY:(pageY+rect.center.y)/pageH,
+    width:width/pageW,height:height/pageH,rotation,
+    rectangularity
+  };
+}
+
 function encodeRegion(cv,mask,x0,y0,pageW,pageH,box,extra={}){
   const {contour}=largestExternal(cv,mask);
   if(!contour)return {...box,...extra,segmentationMethod:'morphgac',segmentationFailed:true};
@@ -32,8 +55,10 @@ function encodeRegion(cv,mask,x0,y0,pageW,pageH,box,extra={}){
   const local=filled.roi(new cv.Rect(b.x,b.y,b.width,b.height)),packed=new cv.Mat();local.copyTo(packed);
   const poly=new cv.Mat();cv.approxPolyDP(contour,poly,Math.max(.7,cv.arcLength(contour,true)*.0015),true);
   const points=Array.from({length:poly.rows},(_,i)=>[poly.data32S[i*2]-b.x,poly.data32S[i*2+1]-b.y]);
+  const orientedBox=orientedRegionGeometry(cv,contour,x0,y0,pageW,pageH,cv.contourArea(contour));
   const result={
     ...box,...extra,
+    ...(orientedBox?{orientedBox}:{}),
     x:(x0+b.x)/pageW,y:(y0+b.y)/pageH,w:b.width/pageW,h:b.height/pageH,
     pixels:cv.countNonZero(filled),
     edgeMethod:'morphgac',segmentationMethod:'morphgac',segmentationFailed:false,

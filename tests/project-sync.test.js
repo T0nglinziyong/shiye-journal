@@ -90,7 +90,27 @@ test('transient outbox load failure can recover in the same session',async()=>{
   });
   await assert.rejects(sync.flush(),/temporary IndexedDB read failure/);
   await sync.flush();
-  assert.equal(reads,2);
+  assert.equal(reads,3,'initial retry plus a fresh durable read before sync');
   assert.equal(commits,1);
   assert.deepEqual(rows,[]);
+});
+
+test('background sync refreshes durable rows after acquiring the cross-tab lease',async()=>{
+  let disk=[],revision=0,leaseHeld=false,commits=[];
+  const withLease=async fn=>{leaseHeld=true;return fn();};
+  const make=()=>createProjectSync({
+    load:async()=>structuredClone(disk),
+    write:async rows=>{const old=new Map(disk.map(row=>[row.record.id,row]));
+      for(const row of rows)old.set(row.record.id,structuredClone(row));
+      // The fixture intentionally models durable rows added by other tabs.
+      disk=[...old.values()];
+    },
+    commit:async record=>{assert.equal(leaseHeld,true);commits.push(record.id);revision++;disk=disk.filter(row=>row.record.id!==record.id);},
+    revision:()=>revision,runExclusive:withLease
+  });
+  // Start tab B before tab A adds a queued item.
+  const tabB=make();await tabB.pending();
+  disk.push({serial:1,baseRevision:0,operationID:'other',record:{id:'from-other-tab'}});
+  await tabB.flush();
+  assert.deepEqual(commits,['from-other-tab']);
 });

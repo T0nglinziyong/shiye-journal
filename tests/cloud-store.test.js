@@ -8,7 +8,7 @@ function fixture(cache=null,objectStorage=null){
   const client={from(table){
     const filters={};const query={select(){return query;},eq(k,v){filters[k]=v;return query;},in(k,v){filters[k]=v;return query;},limit(){return query;},abortSignal(){return query;},order(){return query;},
       then(resolve){return Promise.resolve(resolve({data:(state.cloudCopies||[]).filter(row=>!filters.id||(Array.isArray(filters.id)?filters.id.includes(row.id):row.id===filters.id))}));},
-      async range(start,end){state.reads=(state.reads||0)+1;return {data:state.rows.slice(start,end+1).map(record=>({record}))};},
+      async range(start,end){state.reads=(state.reads||0)+1;const rows=state.rows.slice(start,end+1).map(record=>({record}));state.onReadPage?.(start,end);return {data:rows};},
       async single(){return {data:{revision:state.revision}};},
       async maybeSingle(){return {data:table==='shiye_commits'?(state.commits.has(filters.operation_id)?{revision:state.commits.get(filters.operation_id)}:null):state.rows.filter(r=>r.id===filters.id).map(record=>({record}))[0]||null};}};
     if(table==='shiye_changes')return {select(){return this;},eq(){return this;},gt(){return this;},lte(){return this;},order(){return this;},async range(){return state.changes?{data:state.changes}:{error:{message:'change log not installed'}};}};
@@ -318,4 +318,20 @@ test('large works list only metadata; opening reuses the cached editable documen
   await a.db.cloudTransaction(['projects'],tx=>tx.objectStore('projects').put({...summary,title:'after'}));const last=a.state.uploads.at(-1),encoded=a.state.calls.at(-1).operations[0].item;const restored=JSON.parse(await projectBlobText(last.data,encoded.projectDocumentEncoding));assert.equal(restored.drafts[0].primitives.length,4000);assert.equal(restored.title,'after');assert.ok(last.data.size<JSON.stringify(full).length/10);
   a.state.fail=true;const count=a.state.calls.length;await assert.rejects(a.db.cloudTransaction(['projects'],tx=>tx.objectStore('projects').put({...opened,title:'failed'})),/完整数据上传失败/);assert.equal(a.state.calls.length,count);
   const denied=fixture();denied.state.rows=[{...summary,projectDocumentPath:'other/document'}];await assert.rejects(denied.db.cloudGet('projects','p'),/不属于当前账号/);
+});
+
+test('cloudAll discards a mixed remote snapshot after concurrent pagination',async()=>{
+  const {state,db}=fixture();
+  state.rows=Array.from({length:501},(_,i)=>({id:String(i),title:'old'}));
+  let changed=false;
+  state.onReadPage=start=>{
+    if(changed||start!==0)return;
+    changed=true;
+    state.revision=1;
+    state.rows=Array.from({length:503},(_,i)=>({id:String(i),title:'new'}));
+  };
+  const result=await db.cloudAll('assets');
+  assert.equal(result.length,503);
+  assert.ok(result.every(row=>row.title==='new'));
+  assert.ok(state.reads>=4,'must read all pages again after version changed');
 });
