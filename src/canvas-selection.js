@@ -61,7 +61,7 @@ export function moveSelection(draft, starts, dx, dy, strokeStarts = new Map()) {
     draft.strokes?.[index] && Array.isArray(points) && points.length === draft.strokes[index].points?.length ? points : []);
   if (!ink.every(p => Number.isFinite(p.x) && Number.isFinite(p.y))) return {dx:0,dy:0};
   // Clamp the whole selection once, so ink and objects never drift apart.
-  const positions = [...movable.map(e => starts.get(e.value.id)), ...ink];
+  const positions = [...movable.flatMap(e => objectCorners({...e.value,...starts.get(e.value.id)})), ...ink];
   let minX=-Infinity,maxX=Infinity,minY=-Infinity,maxY=Infinity;
   for(const p of positions){
     minX=Math.max(minX,-p.x);maxX=Math.min(maxX,draft.canvas.width-p.x);
