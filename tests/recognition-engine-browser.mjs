@@ -31,5 +31,24 @@ try{
   const grabcut=await run('grabcut');assert.equal(grabcut.edgeMethod,'browser-grabcut',JSON.stringify(grabcut));
   const hybrid=await run('hybrid');assert.equal(hybrid.edgeMethod,'browser-morphgac-grabcut',JSON.stringify(hybrid));
   for(const result of [morph,grabcut,hybrid])assert.ok(result.pixels>100&&result.width>10&&result.height>10,JSON.stringify(result));
+  // The same JPEG bytes must enter recognition identically at phone and desktop widths.
+  const base="/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAQDAwMDAgQDAwMEBAQFBgoGBgUFBgwICQcKDgwPDg4MDQ0PERYTDxAVEQ0NExoTFRcYGRkZDxIbHRsYHRYYGRj/2wBDAQQEBAYFBgsGBgsYEA0QGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBj/wAARCAAMABADAREAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDyfwB8Lf8AVf6N6dqEzy8q4i21PpHSPh2mm+DL69cG32WzBZVyCrkbVII6fMRz2rtwcoKtGVVpRWrbskorVtt6WSTbufUZ1xisBkmKxHtHFqElFq91KS5Y2tqnzNWfTfTcvaXZ2eheAtX1u0tYnuLDT57qJZRlGaONmAYDBxkDOCKzyvDxxWMo4eb0nKKdt7NpaH4FwnOeMx+HwtSTUZzjF23s5JO2+up4d8UPin418YfDfUdJvdU+waVcLC0lhpq+RGwLhCrNy7oRklWYqSenAx1cc5fQyvOMLllCN4cnO29XKV52v9n3eVONktdXd2t/XGZ8HZXlXDGJxFKnz1I8lpT95/xYNNL4U10aimkt9Xf/2Q==";
+  const canonical=[];
+  for(const width of [390,1440]){
+    await b.command('Emulation.setDeviceMetricsOverride',{width,height:844,deviceScaleFactor:1,mobile:width<700});
+    const hashes=await evaluate(`(async()=>{
+      const m=await import('/src/recognition-raster.js');
+      const bytes=Uint8Array.from(atob('${base}'),c=>c.charCodeAt(0));
+      const bitmap=await m.decodeRecognitionImage(new File([bytes],'fixture.jpg',{type:'image/jpeg'}));
+      const full=m.sourcePixels(bitmap),small=await m.analysisPixels(bitmap,{x:2/16,y:1/12,w:12/16,h:10/12},7,6);
+      const digest=async p=>[...new Uint8Array(await crypto.subtle.digest('SHA-256',p))].map(v=>v.toString(16).padStart(2,'0')).join('');
+      return {full:await digest(full),small:await digest(small)};
+    })()`);
+    canonical.push(hashes);
+  }
+  assert.deepEqual(canonical,[
+    {full:'9db2ff8d3b38f0d18ed5fd05e78084c37d2dcd0692c9746d8ba45ab4bb106ae4',small:'ca70a3bf36e03b8f2b8943fd0559c354e282d36a8d6d281c7f0ccb76b65d0f87'},
+    {full:'9db2ff8d3b38f0d18ed5fd05e78084c37d2dcd0692c9746d8ba45ab4bb106ae4',small:'ca70a3bf36e03b8f2b8943fd0559c354e282d36a8d6d281c7f0ccb76b65d0f87'}
+  ]);
   assert.deepEqual(b.errors,[]);
 }finally{try{await b.close();}catch(error){console.warn('Browser close warning:',String(error?.message||error));}}

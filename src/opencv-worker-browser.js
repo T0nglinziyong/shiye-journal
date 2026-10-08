@@ -16,20 +16,10 @@ async function loadRuntime(url){
   return cv;
 }
 
-async function initialize(opencvScriptURL,fallbackOpenCVScriptURL){
+async function initialize(opencvScriptURL){
   if(readyPromise)return readyPromise;
   readyPromise=(async()=>{
-    let cv;
-    try{
-      cv=await loadRuntime(opencvScriptURL);
-    }catch(primaryError){
-      // During rollout or cache recovery the generated lite runtime may not
-      // exist yet. Preserve recognition by falling back to the pinned package
-      // build rather than failing the whole import flow.
-      if(!fallbackOpenCVScriptURL||fallbackOpenCVScriptURL===opencvScriptURL)throw primaryError;
-      try{delete self.cv;}catch{self.cv=undefined;}
-      cv=await loadRuntime(fallbackOpenCVScriptURL);
-    }
+    const cv=await loadRuntime(opencvScriptURL);
     const {processVision}=await import('./opencv-worker.js');
     self.postMessage({type:'ready'});
     return {cv,processVision};
@@ -39,7 +29,7 @@ async function initialize(opencvScriptURL,fallbackOpenCVScriptURL){
 
 self.onmessage=async({data})=>{
   try{
-    if(data.type==='init'){await initialize(data.opencvScriptURL,data.fallbackOpenCVScriptURL);return;}
+    if(data.type==='init'){await initialize(data.opencvScriptURL);return;}
     const {cv,processVision}=await readyPromise;
     const result=await processVision(cv,data.operation,data.parameters);
     self.postMessage({id:data.id,result},ArrayBuffer.isView(result?.pixels)?[result.pixels.buffer]:[]);

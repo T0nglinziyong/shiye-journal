@@ -6,6 +6,13 @@ export async function processVision(cv,operation,p){
   const resources=[],own=mat=>(resources.push(mat),mat);
   try{
     if(operation==='warmup')return {ready:true};
+    if(operation==='resize'){
+      const src=own(cv.matFromArray(p.sourceHeight,p.sourceWidth,cv.CV_8UC4,p.pixels)),
+        roi=own(src.roi(new cv.Rect(p.x||0,p.y||0,p.cropWidth||p.sourceWidth,p.cropHeight||p.sourceHeight))),dst=own(new cv.Mat());
+      cv.resize(roi,dst,new cv.Size(p.width,p.height),0,0,
+        p.width<roi.cols||p.height<roi.rows?cv.INTER_AREA:cv.INTER_LINEAR);
+      return {pixels:new Uint8ClampedArray(dst.data),width:p.width,height:p.height};
+    }
     if(operation==='balance'){
       const options={illumination:p.options?.illumination!==false,denoise:p.options?.denoise!==false,localContrast:p.options?.localContrast!==false},
         src=own(cv.matFromArray(p.height,p.width,cv.CV_8UC4,p.pixels)),rgb=own(new cv.Mat()),lab=own(new cv.Mat()),channels=own(new cv.MatVector()),balanced=own(new cv.Mat()),output=own(new cv.Mat());
