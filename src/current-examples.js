@@ -1,5 +1,6 @@
 import * as defaultDB from './store.js';
 import {project,itemFromAsset,textBlock} from './domain.js';
+import {currentMaterialCatalog} from './current-materials.js';
 
 export const CURRENT_EXAMPLE_SOURCE='shiye-current-example-v2';
 export const CURRENT_EXAMPLE_PROJECT_IDS=new Set([
@@ -8,6 +9,7 @@ export const CURRENT_EXAMPLE_PROJECT_IDS=new Set([
 ]);
 export const CURRENT_EXAMPLE_SHAPES_URL='/builtin-examples/cece/shapes.json';
 const MARKER='current-example-stationery-v2';
+const materialIDByTitle=new Map(currentMaterialCatalog.assets.map(asset=>[asset.title,asset.id]));
 export const isCurrentExampleProject=record=>CURRENT_EXAMPLE_PROJECT_IDS.has(record?.id);
 export const isUntouchedLegacyExample=record=>
   record?.sourceIdentifier==='shiye-current-example-cece'
@@ -28,7 +30,7 @@ const layouts=[
 function example(spec,assets){
   const result=project(spec.title,{style:'airy'}),d=result.drafts[0];
   d.paperColor='#f7f3e9';d.items=spec.pieces.flatMap(([name,rx,ry,z])=>{
-    const asset=assets.find(a=>a.title===name);if(!asset)return [];
+    const id=materialIDByTitle.get(name),asset=assets.find(a=>a.id===id);if(!asset)return [];
     const item=itemFromAsset(asset,d,d.canvas.width*rx,d.canvas.height*ry,z);
     const scale=Math.min(1,d.canvas.width*.83/item.width,d.canvas.height*.78/item.height);
     item.width*=scale;item.height*=scale;item.generationBaseline={x:item.x,y:item.y,width:item.width,height:item.height,rotation:0,zIndex:z};
@@ -44,8 +46,8 @@ function example(spec,assets){
   return result;
 }
 export async function syncCurrentExamples({database=defaultDB}={}){
-  if(await database.get('meta',MARKER))return {changed:false};
   const assets=await database.all('assets'),existing=new Set((await database.all('projects')).map(p=>p.id));
+  if(layouts.every(layout=>existing.has(layout.id)))return {changed:false};
   const projects=layouts.filter(layout=>!existing.has(layout.id)).map(layout=>example(layout,assets)).filter(Boolean);
   await database.transaction(['projects','meta'],tx=>{
     for(const record of projects)tx.objectStore('projects').put(record);
