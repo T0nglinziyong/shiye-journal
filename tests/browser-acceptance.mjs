@@ -157,10 +157,10 @@ try {
   try{await wait('.import-candidate-tile');}catch(error){const info=await evaluate('({screen:document.querySelector("#view")?.innerText.slice(0,700),toast:document.querySelector("#toast")?.textContent,progress:document.querySelector(".import-processing")?.textContent})');throw Error(error.message+' '+JSON.stringify(info));}await capture('import-inspect',2560,1440);
   // The next photo is recognized before the first photo is confirmed.
   for(let i=0;i<Math.ceil(Number(process.env.SHIYE_WAIT_MS||30000)/50);i++){
-    if(String(await evaluate('document.querySelector(".queue-item[data-id=1] small")?.textContent')).includes('已预识别'))break;
+    if(String(await evaluate('document.querySelectorAll(".queue-item")[1]?.querySelector("small")?.textContent')).includes('已预识别'))break;
     await sleep(50);
   }
-  assert.match(String(await evaluate('document.querySelector(".queue-item[data-id=1] small")?.textContent')),/已预识别/);
+  assert.match(String(await evaluate('document.querySelectorAll(".queue-item")[1]?.querySelector("small")?.textContent')),/已预识别/);
   assert.equal(await evaluate('document.querySelector(".queue-item.active").dataset.id'),'0');
   const photoLayout=await evaluate('(()=>{const base=document.querySelector("#crop-preview").getBoundingClientRect(),im=document.querySelector("#crop-preview>img").getBoundingClientRect(),corners=document.querySelector(".paper-corner-overlay").getBoundingClientRect();return {base:{w:base.width,h:base.height},image:{w:im.width,h:im.height},corners:{w:corners.width,h:corners.height}};})()');
   assert.ok(photoLayout.image.h<=photoLayout.base.h+1&&photoLayout.image.w<=photoLayout.base.w+1,'Import photo must not be cropped by its preview');
