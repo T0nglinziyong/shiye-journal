@@ -87,26 +87,22 @@ function maskAgreement(cv,a,b){
 function filledContourMask(cv,rows,cols,contour){
   const out=cv.Mat.zeros(rows,cols,cv.CV_8UC1),v=new cv.MatVector();v.push_back(contour);cv.drawContours(out,v,-1,new cv.Scalar(255),cv.FILLED);v.delete();return out;
 }
-function quadrilateralCandidate(cv,rgba,mask,support,useChroma=true,paleCarrier=false){
+function quadrilateralCandidate(cv,rgba,mask,support,useChroma=true){
   const found=largestExternal(cv,mask);if(!found.contour)return null;
   const contour=found.contour,area=Math.abs(cv.contourArea(contour)),rect=cv.minAreaRect(contour),box=cv.boxPoints(rect),rectArea=Math.max(1,rect.size.width*rect.size.height),fill=area/rectArea;
   contour.delete();
-  // Pale paper carriers can disappear into the page after perspective
-  // interpolation. Allow a partially missing side only when the box detector
-  // independently identified such a carrier and the image supports its frame.
-  if(fill<(paleCarrier?.70:.78))return null;
+  if(fill<.78)return null;
   const thin=thinEdgeMap(cv,rgba,useChroma),sides=[],fits=[],band=Math.max(3,Math.min(rgba.cols,rgba.rows)*.025);
   for(let i=0;i<4;i++){const a=box[i],b=box[(i+1)%4];sides.push(segmentSupport(support,a,b));fits.push(fitObservedLine(cv,thin,a,b,band));}
   thin.delete();
-  const strongAdjacent=sides.some((value,i)=>value>=.9&&sides[(i+1)%4]>=.9);
-  if((paleCarrier?!strongAdjacent:sides.some(value=>value<.68))||fits.some(x=>!x))return null;
+  if(Math.min(...sides)<.68||fits.some(x=>!x))return null;
   const corners=[];for(let i=0;i<4;i++){const p=lineIntersection(fits[(i+3)%4],fits[i]);if(!p)return null;corners.push(p);}
   if(corners.some(p=>p.x<-5||p.y<-5||p.x>mask.cols+5||p.y>mask.rows+5))return null;
   const poly=cv.matFromArray(4,1,cv.CV_32SC2,corners.flatMap(p=>[Math.round(p.x),Math.round(p.y)])),polyArea=Math.abs(cv.contourArea(poly));
-  if(polyArea<area*.75||polyArea>area*(paleCarrier?1.42:1.35)){poly.delete();return null;}
+  if(polyArea<area*.75||polyArea>area*1.35){poly.delete();return null;}
   const candidate=filledContourMask(cv,mask.rows,mask.cols,poly);poly.delete();
   const fit=maskAgreement(cv,mask,candidate),edge=boundarySupport(cv,candidate,support);
-  if(fit<(paleCarrier?.72:.86)||edge<(paleCarrier?.72:.68)){candidate.delete();return null;}
+  if(fit<.86||edge<.68){candidate.delete();return null;}
   return {mask:candidate,kind:'quadrilateral',fit,edge,score:fit*.58+edge*.38+.04};
 }
 function ellipseCandidate(cv,rgba,mask,support){
@@ -141,9 +137,9 @@ function polygonCandidate(cv,mask,support){
   if(!candidates.length)return null;candidates.sort((a,b)=>b.score-a.score);
   const best=candidates.shift();for(const q of candidates)q.mask.delete();return best;
 }
-function regularizeBasicShape(cv,rgba,mask,{quadrilateral=true,ellipse=true,polygon=true,useChroma=true,paleCarrier=false}={}){
+function regularizeBasicShape(cv,rgba,mask,{quadrilateral=true,ellipse=true,polygon=true,useChroma=true}={}){
   const support=edgeSupportMap(cv,rgba,useChroma),rawEdge=boundarySupport(cv,mask,support),candidates=[];
-  if(quadrilateral){const q=quadrilateralCandidate(cv,rgba,mask,support,useChroma,paleCarrier);if(q)candidates.push(q);}
+  if(quadrilateral){const q=quadrilateralCandidate(cv,rgba,mask,support,useChroma);if(q)candidates.push(q);}
   if(ellipse){const q=ellipseCandidate(cv,rgba,mask,support);if(q)candidates.push(q);}
   if(polygon){const q=polygonCandidate(cv,mask,support);if(q)candidates.push(q);}
   support.delete();
@@ -330,7 +326,7 @@ export function refineMaterialBoundaries(cv,p){
         const polished=grabCutPolishMask(cv,roi,selected);selected.delete();selected=polished;
       }
       if(post.shapeRegularization){
-        const shape=regularizeBasicShape(cv,roi,selected,{quadrilateral:true,ellipse:true,polygon:true,useChroma,paleCarrier:candidate.boxAdjustment==='pale-carrier-margin'});
+        const shape=regularizeBasicShape(cv,roi,selected,{quadrilateral:true,ellipse:true,polygon:true,useChroma});
         selected.delete();selected=shape.mask;shapeModel=shape.kind;
       }
       if(!shapeModel&&post.curveSmooth){
