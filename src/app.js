@@ -36,7 +36,7 @@ import {createAIRecorder,publicAIDiagnosticReport} from './ai-diagnostics.js';
 import {mountImportBoxEditor} from './import-box-editor.js';
 import {saveImportBatch,importPaperDimensions} from './import-save.js';
 import {paperDimensions as presetPaperDimensions,paperSizeOptions} from './paper-sizes.js';
-import {refineManualBoxes} from './manual-import-recognition.js';
+import {refineManualBoxes,hasManualForegroundEvidence} from './manual-import-recognition.js';
 import {seriesCovers,usedAssetIDs,markProjectAssetsUsed} from './library-model.js';
 import {renderSeriesContents} from './series-contents.js';
 import {showSeriesEditor} from './series-editor.js';
@@ -776,8 +776,9 @@ async function refreshImportCandidates(regions,{manual=false}={}){
       scale=Math.min(1,limit/Math.max(source.width*b.w,source.height*b.h)),
       aw=Math.max(1,Math.round(source.width*b.w*scale)),
       ah=Math.max(1,Math.round(source.height*b.h*scale));
-    const pixels=await analysisPixels(source,b,aw,ah),
-      orientedBox={centerX:box.x+box.w/2,centerY:box.y+box.h/2,
+    const pixels=await analysisPixels(source,b,aw,ah);
+    if(!hasManualForegroundEvidence(pixels,aw,ah,box))return null;
+    const orientedBox={centerX:box.x+box.w/2,centerY:box.y+box.h/2,
         width:box.w,height:box.h,rotation:box.rotation||0,
         rectangularity:1,autoDeskew:true,source:'manual'},
       [candidate]=await visionTask('process-material-boxes',{
