@@ -180,12 +180,12 @@ try {
   // Exercise the deployed UI too: a production bundle has no /src/store.js.
   // Capture only this isolated context's synthetic export, never a user file.
   await click('[data-act="import-exit"]','.works-grid');await click('#top-settings','.settings-list');await click('[data-val="数据与诊断"]','.settings-detail');
-  await evaluate('(()=>{const original=HTMLAnchorElement.prototype.click;HTMLAnchorElement.prototype.click=function(){if(this.download.endsWith(".shiyepwa")){window.__testBackup=fetch(this.href).then(r=>r.blob());return;}return original.call(this);};})()');
+  await evaluate('(()=>{Object.defineProperty(window,"showSaveFilePicker",{configurable:true,value:undefined});const original=HTMLAnchorElement.prototype.click;HTMLAnchorElement.prototype.click=function(){if(this.download.endsWith(".shiyepwa")){window.__testBackup=fetch(this.href).then(r=>r.blob());return;}return original.call(this);};})()');
   const beforeRestore=(await storeRecords('assets')).length;
   await click('[data-act="backup"]');
   for(let i=0;i<250&&!(await evaluate('!!window.__testBackup'));i++)await sleep(20);
   assert.ok(await evaluate('!!window.__testBackup'),'Backup export must use the real UI');
-  await evaluate('(async()=>{const blob=await window.__testBackup;const saved=JSON.parse(await blob.text());if(saved.format!=="shiye-pwa"||!saved.stores.blobs.length)throw Error("Incomplete backup export");const dt=new DataTransfer();dt.items.add(new File([blob],"synthetic-roundtrip.shiyepwa",{type:"application/json"}));const input=document.querySelector("#backup-input");input.files=dt.files;window.confirm=()=>true;input.dispatchEvent(new Event("change"));})()');
+  await evaluate('(async()=>{const blob=await window.__testBackup;const {readZipBackup}=await import("/src/backup-archive.js");const saved=await readZipBackup(new File([blob],"synthetic-roundtrip.shiyepwa",{type:"application/zip"}));if(!saved.blobs.length)throw Error("Incomplete backup export");const dt=new DataTransfer();dt.items.add(new File([blob],"synthetic-roundtrip.shiyepwa",{type:"application/zip"}));const input=document.querySelector("#backup-input");input.files=dt.files;window.confirm=()=>true;input.dispatchEvent(new Event("change"));})()');
   for(let i=0;i<250&&!(await evaluate('document.querySelector("#toast").textContent.includes("完整备份已恢复")'));i++)await sleep(20);
   assert.ok(await evaluate('document.querySelector("#toast").textContent.includes("完整备份已恢复")'),'Restore must complete through the deployed UI');
   const restored=await storeRecords('assets');assert.equal(restored.length,beforeRestore);assert.equal(restored.find(a=>a.title==='合成素材验收').supply.quantity,3);
