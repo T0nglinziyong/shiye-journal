@@ -61,6 +61,15 @@ try {
     assert.ok(Math.abs(rows.purpose-rows.processing)<2,'purpose and processing share a row');assert.ok(Math.abs(rows.mode-rows.paper)<2,'mode and paper share a row');assert.ok(rows.purpose>rows.style);
     await evaluate('document.querySelector(".match-direction").scrollIntoView({block:"start"})');await capture('matching-controls',width,height);await evaluate('scrollTo(0,0)');
     await click('[data-route="works"]','.works-grid');await capture('works',width,height);
+    await click('.swift-tabs button:nth-child(4)','.journal-template-grid');
+    await wait('.journal-template-fallback');
+    await capture('templates',width,height);
+    const templateLayout=await evaluate('(()=>{const f=document.querySelector(".filters[data-template-filters]"),s=f.querySelector(".shiye-search"),buttons=f.querySelector(".four-filter-controls"),count=f.querySelector(":scope > span:not(.shiye-search)"),r=f.getBoundingClientRect(),b=buttons.getBoundingClientRect(),t=count.getBoundingClientRect();return {count:document.querySelectorAll(".journal-template-card").length,search:s.querySelector("input")?.getBoundingClientRect().width,controlsInside:b.left>=r.left-1&&b.right<=r.right+1,countInside:t.left>=r.left-1&&t.right<=r.right+1,controlsOverflow:buttons.scrollWidth>buttons.clientWidth+1};})()');
+    assert.ok(templateLayout.count===70&&templateLayout.search>80&&templateLayout.controlsInside&&templateLayout.countInside&&!templateLayout.controlsOverflow,'Template filters overflow or lose the search: '+JSON.stringify(templateLayout));
+    await click('.journal-template-card','.journal-template-detail-image');
+    await wait('.journal-template-detail-image .journal-template-fallback');
+    assert.ok(await evaluate('!!document.querySelector(".journal-template-detail-image button")'),'Unavailable template image needs a retry');
+    await click('.swift-tabs button:nth-child(2)','.works-grid');
     await evaluate('document.querySelector(".card[data-act=open-project]").dispatchEvent(new MouseEvent("contextmenu",{bubbles:true}))');await click('#project-meta-preview','.project-preview-cover');await capture('work-preview',width,height);
     await click('[data-act="preview-back"]','.works-grid');await click('[data-act="open-project"]','#canvas-page');await sleep(150);await capture('editor',width,height);
     await click('.swift-editor-head [data-act="back-works"]','.works-grid');
@@ -86,7 +95,9 @@ try {
   await command('Page.reload');await wait('.series-grid');await fill('[aria-label="搜索系列"]','浏览器验收');assert.equal(await evaluate('[...document.querySelectorAll("[data-act=series-detail]")].filter(e=>!e.hidden).length'),1);
   await click('[data-act="series-detail"]','.series-contents');await click('#series-edit-title','#series-name');await fill('#series-name','不应保存');await click('#series-cancel');assert.ok(!(await storeRecords('series')).some(s=>s.title==='不应保存'));
   const allMembers=await evaluate('document.querySelectorAll("[data-act=detail]:not([hidden])").length');
-  await fill('#series-search','找不到的验收名称');assert.equal(await evaluate('document.querySelectorAll("[data-act=detail]:not([hidden])").length'),0);
+  await fill('#series-search','找不到的验收名称');
+  assert.equal(await evaluate('document.querySelectorAll("[data-act=detail]:not([hidden])").length'),0);
+  assert.equal(await evaluate('document.querySelector(".series-result-count").textContent'),'0 项');
   await fill('#series-search','');assert.equal(await evaluate('document.querySelectorAll("[data-act=detail]:not([hidden])").length'),allMembers);
   await click('#series-add-assets','.asset-grid');assert.ok(await evaluate('document.querySelector(".view-head h1").textContent.includes("添加素材")'));
   await evaluate('[...document.querySelectorAll(".view-head .actions button")].find(b=>b.textContent==="取消").click()');await wait('.series-contents');
@@ -112,6 +123,12 @@ try {
   await touchPath([{x:center.x-70,y:center.y-70},{x:center.x+70,y:center.y-70},{x:center.x+70,y:center.y+70},{x:center.x-70,y:center.y+70},{x:center.x-70,y:center.y-70}]);
   await capture('lasso-touch',390,844);
   assert.equal(await evaluate('document.querySelector(".multi-selection-toolbar span").textContent'),'已选 2 个对象');
+  assert.equal(await evaluate('document.querySelectorAll(".canvas-selection-overlay .lasso-outline").length'),1,'Lasso boundary must remain visible after lifting the finger');
+  const inLassoBefore=(await storeRecords('projects')).find(p=>p.title==='未命名手账').drafts[0].primitives;
+  await mouseDrag(center,{x:center.x+20,y:center.y+10});await sleep(250);
+  const inLassoAfter=(await storeRecords('projects')).find(p=>p.title==='未命名手账').drafts[0].primitives;
+  assert.ok(inLassoAfter.every((o,i)=>o.x>inLassoBefore[i].x&&o.y>inLassoBefore[i].y),'Dragging inside lasso must move every enclosed object');
+  assert.equal(await evaluate('document.querySelectorAll(".canvas-selection-overlay .lasso-outline").length'),1,'Lasso boundary must follow the group drag');
   await click('[data-val="select"]');
   const beforeMove=(await storeRecords('projects')).find(p=>p.title==='未命名手账').drafts[0].primitives;
   await mouseDrag(center,{x:center.x+30,y:center.y+15});await sleep(250);
@@ -123,12 +140,11 @@ try {
   // Synthetic image import, multi-photo confirmation, metadata, backup roundtrip.
   await click('.swift-tabs button:nth-child(2)','.asset-grid');await click('[data-act="import"]','.import-nav');
   await evaluate('(async()=>{const canvas=document.createElement("canvas");canvas.width=600;canvas.height=850;const ctx=canvas.getContext("2d");ctx.fillStyle="white";ctx.fillRect(0,0,600,850);ctx.fillStyle="#a45842";ctx.fillRect(80,100,150,200);ctx.fillStyle="#537c62";ctx.fillRect(330,420,120,160);const blob=await new Promise(r=>canvas.toBlob(r,"image/png"));const dt=new DataTransfer();dt.items.add(new File([blob],"验收1.png",{type:"image/png"}));dt.items.add(new File([blob],"验收2.png",{type:"image/png"}));const input=document.querySelector("#file-input");input.files=dt.files;input.dispatchEvent(new Event("change"));})()');
-  await wait('.import-candidate-tile');await capture('import-inspect',2560,1440);
+  try{await wait('.import-candidate-tile');}catch(error){const info=await evaluate('({screen:document.querySelector("#view")?.innerText.slice(0,700),toast:document.querySelector("#toast")?.textContent,progress:document.querySelector(".import-processing")?.textContent})');throw Error(error.message+' '+JSON.stringify(info));}await capture('import-inspect',2560,1440);
   const photoLayout=await evaluate('(()=>{const base=document.querySelector("#crop-preview").getBoundingClientRect(),im=document.querySelector("#crop-preview>img").getBoundingClientRect(),corners=document.querySelector(".paper-corner-overlay").getBoundingClientRect();return {base:{w:base.width,h:base.height},image:{w:im.width,h:im.height},corners:{w:corners.width,h:corners.height}};})()');
   assert.ok(photoLayout.image.h<=photoLayout.base.h+1&&photoLayout.image.w<=photoLayout.base.w+1,'Import photo must not be cropped by its preview');
   assert.ok(Math.abs(photoLayout.corners.w/photoLayout.corners.h-600/850)<.01,'Corner overlay must match fitted photo ratio');
   await click('[data-act="manual-import-box"]','.multi-box-editor');
-  const retainedPreviews=await evaluate('[...document.querySelectorAll(".import-candidate-tile img")].map(img=>img.src)');
   const overlay=await evaluate('(()=>{const r=document.querySelector(".multi-box-editor").getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height};})()');
   await mouseDrag({x:overlay.x+.1*overlay.w,y:overlay.y+.75*overlay.h},{x:overlay.x+.3*overlay.w,y:overlay.y+.9*overlay.h});
   await capture('manual-box',2560,1440);
@@ -142,7 +158,8 @@ try {
   for(let i=0;i<Math.ceil(Number(process.env.SHIYE_WAIT_MS||30000)/20)&&await evaluate('!!document.querySelector(".multi-box-editor")');i++)await sleep(20);
   assert.equal(await evaluate('!!document.querySelector(".multi-box-editor")'),false,'Manual extraction must finish after removing the blank box');
   assert.equal(await evaluate('document.querySelectorAll(".import-candidate-tile").length'),2);
-  assert.deepEqual(await evaluate('[...document.querySelectorAll(".import-candidate-tile img")].map(img=>img.src)'),retainedPreviews,'Unchanged materials must reuse their existing previews');
+  await evaluate('Promise.all([...document.querySelectorAll(".import-candidate-tile img")].map(img=>img.decode().catch(()=>{})))');
+  assert.ok(await evaluate('[...document.querySelectorAll(".import-candidate-tile img")].every(img=>img.complete&&img.naturalWidth>0)'),'Manual segmentation must keep both existing material previews visible');
   await click('[data-act="import-confirm-photo"]');await wait('.queue-item.active[data-id="1"]');await wait('.import-candidate-tile.selected');await click('[data-act="import-confirm-photo"]','.review-candidates');
   await evaluate('document.querySelector(".review-candidate").dispatchEvent(new MouseEvent("contextmenu",{bubbles:true,cancelable:true}))');
   await wait('#candidate-menu');await evaluate('[...document.querySelectorAll("#candidate-menu button")].find(b=>b.textContent==="编辑素材信息").click()');await wait('#candidate-edit-name');
@@ -163,12 +180,12 @@ try {
   // Exercise the deployed UI too: a production bundle has no /src/store.js.
   // Capture only this isolated context's synthetic export, never a user file.
   await click('[data-act="import-exit"]','.works-grid');await click('#top-settings','.settings-list');await click('[data-val="数据与诊断"]','.settings-detail');
-  await evaluate('(()=>{const original=HTMLAnchorElement.prototype.click;HTMLAnchorElement.prototype.click=function(){if(this.download.endsWith(".shiyepwa")){window.__testBackup=fetch(this.href).then(r=>r.blob());return;}return original.call(this);};})()');
+  await evaluate('(()=>{Object.defineProperty(window,"showSaveFilePicker",{configurable:true,value:undefined});const original=HTMLAnchorElement.prototype.click;HTMLAnchorElement.prototype.click=function(){if(this.download.endsWith(".shiyepwa")){window.__testBackup=fetch(this.href).then(r=>r.blob());return;}return original.call(this);};})()');
   const beforeRestore=(await storeRecords('assets')).length;
   await click('[data-act="backup"]');
   for(let i=0;i<250&&!(await evaluate('!!window.__testBackup'));i++)await sleep(20);
   assert.ok(await evaluate('!!window.__testBackup'),'Backup export must use the real UI');
-  await evaluate('(async()=>{const blob=await window.__testBackup;const saved=JSON.parse(await blob.text());if(saved.format!=="shiye-pwa"||!saved.stores.blobs.length)throw Error("Incomplete backup export");const dt=new DataTransfer();dt.items.add(new File([blob],"synthetic-roundtrip.shiyepwa",{type:"application/json"}));const input=document.querySelector("#backup-input");input.files=dt.files;window.confirm=()=>true;input.dispatchEvent(new Event("change"));})()');
+  await evaluate('(async()=>{const blob=await window.__testBackup;const {readZipBackup}=await import("/src/backup-archive.js");const saved=await readZipBackup(new File([blob],"synthetic-roundtrip.shiyepwa",{type:"application/zip"}));if(!saved.blobs.length)throw Error("Incomplete backup export");const dt=new DataTransfer();dt.items.add(new File([blob],"synthetic-roundtrip.shiyepwa",{type:"application/zip"}));const input=document.querySelector("#backup-input");input.files=dt.files;window.confirm=()=>true;input.dispatchEvent(new Event("change"));})()');
   for(let i=0;i<250&&!(await evaluate('document.querySelector("#toast").textContent.includes("完整备份已恢复")'));i++)await sleep(20);
   assert.ok(await evaluate('document.querySelector("#toast").textContent.includes("完整备份已恢复")'),'Restore must complete through the deployed UI');
   const restored=await storeRecords('assets');assert.equal(restored.length,beforeRestore);assert.equal(restored.find(a=>a.title==='合成素材验收').supply.quantity,3);

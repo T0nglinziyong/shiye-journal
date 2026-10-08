@@ -4,6 +4,7 @@ import {
   syncCurrentExamples,CURRENT_EXAMPLE_SOURCE,CURRENT_EXAMPLE_PROJECT_IDS,
   isCurrentExampleProject,isUntouchedLegacyExample
 } from '../src/current-examples.js';
+import {currentMaterialCatalog} from '../src/current-materials.js';
 
 function memoryDB(){
   const names=['assets','projects','series','meta'],stores=Object.fromEntries(names.map(name=>[name,new Map()]));
@@ -19,9 +20,13 @@ test('current works use editable stationery examples while preserving user edits
     '旅行票据 · 纹样书写底纸','旅行票据 · 主题图',
     '旅行票据 · 可写票据','旅行票据 · 纹样纸胶带'
   ];
-  titles.forEach((title,i)=>db.stores.assets.set('asset-'+i,{
-    id:'asset-'+i,title,physicalWidthMM:45,physicalHeightMM:60
-  }));
+  titles.forEach((title,i)=>{
+    const canonical=currentMaterialCatalog.assets.find(a=>a.title===title);
+    assert.ok(canonical,title);
+    db.stores.assets.set(canonical.id,{
+      id:canonical.id,title:i>=7?'已重新命名 · '+title:title,physicalWidthMM:45,physicalHeightMM:60
+    });
+  });
   const old={id:'cece-p1-project',sourceIdentifier:'shiye-current-example-cece',
     updatedAt:'2025-01-01',coverBaselineUpdatedAt:'2025-01-01'};
   const edited={...old,id:'cece-p2-project',updatedAt:'2025-01-02'};
@@ -39,4 +44,16 @@ test('current works use editable stationery examples while preserving user edits
   assert.equal((await syncCurrentExamples({database:db})).changed,false);
   assert.deepEqual(db.stores.projects.get(old.id),old);
   assert.deepEqual(db.stores.projects.get(edited.id),edited);
+});
+
+test('an older partial example sync can fill its missing project',async()=>{
+  const db=memoryDB();
+  for(const material of currentMaterialCatalog.assets)
+    db.stores.assets.set(material.id,{...material,title:'归档素材'});
+  db.stores.meta.set('current-example-stationery-v2',{id:'current-example-stationery-v2'});
+  db.stores.projects.set('shiye-example-handmade',{id:'shiye-example-handmade',title:'保留用户编辑'});
+  const result=await syncCurrentExamples({database:db});
+  assert.equal(result.projects,2);
+  assert.equal(db.stores.projects.get('shiye-example-handmade').title,'保留用户编辑');
+  assert.ok(db.stores.projects.has('shiye-example-travel'));
 });
