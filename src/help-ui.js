@@ -17,5 +17,15 @@ export function showHelp({body,modal}){
   }
   const close=document.createElement('button');close.type='button';close.className='btn primary';close.textContent='返回';
   close.onclick=()=>modal.close();
-  body.append(title,content,close);if(!modal.open)modal.showModal();
+  const reportButton=document.createElement('button');reportButton.type='button';reportButton.className='btn';
+  reportButton.textContent='导出脱敏运行诊断';
+  reportButton.onclick=async()=>{
+    const {runtimeIssueReport}=await import('./runtime-diagnostics.js');
+    const blob=new Blob([runtimeIssueReport()],{type:'application/json'});
+    const url=URL.createObjectURL(blob),link=document.createElement('a');
+    link.href=url;link.download='拾页运行诊断.json';link.click();
+    setTimeout(()=>URL.revokeObjectURL(url),15000);
+  };
+  const actions=document.createElement('div');actions.className='actions';actions.append(reportButton,close);
+  body.append(title,content,actions);if(!modal.open)modal.showModal();
 }
