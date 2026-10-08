@@ -916,7 +916,7 @@ emergencyInput.onchange=async()=>{
 };
 backupInput.onchange=async()=>{const file=backupInput.files?.[0];backupInput.value='';if(!file)return;
   if(!confirm('恢复完整备份会替换当前拾页中的全部资料。继续吗？'))return;
-  try{await flushSave();await db.flushProjects();state.activeProject=null;await db.restoreBackup(file);state.basket=[];await refresh();toast('完整备份已恢复');}
+  try{await flushSave();await db.flushProjects();await db.restoreBackup(file);state.activeProject=null;state.basket=[];await refresh();toast('完整备份已恢复');}
   catch(e){console.error(e);toast('恢复失败：'+e.message);}
 };
 window.addEventListener('pagehide',()=>{if(saveTimer)flushSave().catch(console.error);});
