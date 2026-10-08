@@ -19,6 +19,33 @@ const imageSizes=new Map();
 const uploads=new Map();
 const snapshots=new Map();
 const documents=new Map();
+const blobRecordRequests=new Map();
+let blobRecordTimer=null;
+function batchBlobRecord(id){
+  if(blobRecordRequests.has(id))return blobRecordRequests.get(id).promise;
+  let resolve,reject;
+  const promise=new Promise((ok,fail)=>{resolve=ok;reject=fail;});
+  blobRecordRequests.set(id,{promise,resolve,reject});
+  if(blobRecordTimer===null)blobRecordTimer=setTimeout(async()=>{
+    blobRecordTimer=null;
+    const entries=[...blobRecordRequests];
+    for(const [key] of entries)blobRecordRequests.delete(key);
+    const atRevision=revision;
+    for(let offset=0;offset<entries.length;offset+=40){
+      const group=entries.slice(offset,offset+40),ids=group.map(([key])=>key);
+      try{
+        const rows=checked(await cloudClient().from('shiye_records').select('id,record').eq('user_id',owner).eq('store','blobs').in('id',ids));
+        const found=new Map(rows.map(row=>[row.id,row.record]));
+        await Promise.all(group.map(async([key,waiter])=>{
+          const record=found.get(key);
+          if(record&&revision===atRevision)await remember('blob-record:'+key,{revision:atRevision,record});
+          waiter.resolve(record?structuredClone(record):undefined);
+        }));
+      }catch(error){for(const [,waiter] of group)waiter.reject(error);}
+    }
+  },0);
+  return promise;
+}
 const editorBases=new Map();
 // The editor must carry the revision of the document it actually opened.
 // A later background sync cursor is not its editing baseline.
@@ -199,8 +226,9 @@ async function cloudRecord(store,id){
   await identity();if(revision===undefined)await version();
   if(store!=='blobs'){const saved=snapshots.get(store)||await cached('records:'+store);if(saved?.revision===revision){snapshots.set(store,saved);return structuredClone(saved.records.find(r=>r.id===id));}}
   if(store==='blobs'){const saved=await cached('blob-record:'+id);if(saved?.revision===revision)return saved.record;}
+  if(store==='blobs')return batchBlobRecord(id);
   const row=checked(await cloudClient().from('shiye_records').select('record').eq('user_id',owner).eq('store',store).eq('id',id).maybeSingle());
-  if(row&&store==='blobs')await remember('blob-record:'+id,{revision,record:row.record});return row?.record;
+  return row?.record;
 }
 async function cloudPreview(id){
   const pending=await pendingOverride('blobs',id);if(pending&&(!pending.record||usableBlob(pending.record.data)))return pending.record?await makeThumbnail(pending.record.data)||pending.record.data:undefined;
