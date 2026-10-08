@@ -15,3 +15,18 @@ test('M-06: worker activation deletes only obsolete Shiye shell caches',async()=
   await pending;
   assert.deepEqual(deleted,['shiye-full-shell-old']);
 });
+
+test('service worker does not replace an active editor during installation',async()=>{
+ const source=(await readFile(new URL('../public/sw.js',import.meta.url),'utf8'))
+   .replace('__BUILD_ID__','test').replace('__ASSETS__',"['/','/index.html']");
+ const listeners=new Map();let skip=0;
+ const self={location:{origin:'https://shiyejournal.vip'},
+   addEventListener:(name,fn)=>listeners.set(name,fn),skipWaiting:async()=>{skip++;},clients:{claim:async()=>{}}};
+ const caches={open:async()=>({addAll:async()=>{}}),keys:async()=>[],delete:async()=>{}};
+ vm.runInNewContext(source,{self,caches,Promise,URL,Response,Set});
+ let pending;
+ listeners.get('install')({waitUntil:p=>pending=p});
+ await pending;assert.equal(skip,0);
+ listeners.get('message')({data:{type:'SHIYE_ACTIVATE_UPDATE'},waitUntil:p=>pending=p});
+ await pending;assert.equal(skip,1);
+});

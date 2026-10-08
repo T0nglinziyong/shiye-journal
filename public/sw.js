@@ -1,5 +1,27 @@
 const CACHE='shiye-full-shell-__BUILD_ID__';
 const SHELL=__ASSETS__;
-self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(SHELL)).then(()=>self.skipWaiting())));
-self.addEventListener('activate',e=>e.waitUntil(Promise.all([caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('shiye-full-shell-')&&k!==CACHE).map(k=>caches.delete(k)))),self.clients.claim()])));
-self.addEventListener('fetch',e=>{const u=new URL(e.request.url);if(e.request.method!=='GET'||u.origin!==self.location.origin||u.pathname.startsWith('/api/'))return;e.respondWith(fetch(e.request).then(r=>{if(r.ok){const copy=r.clone();caches.open(CACHE).then(c=>c.put(e.request,copy));}return r;}).catch(()=>caches.match(e.request).then(r=>r||((e.request.mode==='navigate')?caches.match('/'):Response.error()))));});
+const pathOf=url=>new URL(url,self.location.origin).pathname;
+const ASSETS=new Set(SHELL.map(pathOf));
+self.addEventListener('install',event=>event.waitUntil(
+  caches.open(CACHE).then(cache=>cache.addAll(SHELL))
+  // No automatic skipWaiting: existing editors keep using their own version.
+));
+self.addEventListener('message',event=>{
+  if(event.data?.type==='SHIYE_ACTIVATE_UPDATE')event.waitUntil(self.skipWaiting());
+});
+self.addEventListener('activate',event=>event.waitUntil((async()=>{
+  await self.clients.claim();
+  const keys=await caches.keys();
+  // Reclaim only caches belonging to this app, never other sites or models.
+  await Promise.all(keys.filter(key=>key.startsWith('shiye-full-shell-')&&key!==CACHE).map(key=>caches.delete(key)));
+})()));
+self.addEventListener('fetch',event=>{
+  const req=event.request,url=new URL(req.url);
+  if(req.method!=='GET'||url.origin!==self.location.origin||url.pathname.startsWith('/api/'))return;
+  if(req.mode==='navigate'){
+    event.respondWith(fetch(req).catch(async()=>await caches.match('/')||Response.error()));
+    return;
+  }
+  if(!ASSETS.has(url.pathname))return;
+  event.respondWith(caches.match(req).then(cached=>cached||fetch(req)));
+});
