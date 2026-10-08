@@ -3,6 +3,7 @@
 // All user-facing methods share the same validated whole-page box discovery.
 // The method only controls per-box boundary segmentation; no segmenter may
 // create/delete/merge material identities.
+// Final release contract: auto/MorphGAC/GrabCut/hybrid share one box-discovery stage.
 const refineAuto=async context=>{
   const {refineCandidatesAuto}=await import('./recognition-refiners.js');
   return refineCandidatesAuto(context);
