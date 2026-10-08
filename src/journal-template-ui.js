@@ -66,8 +66,21 @@ export function mountJournalTemplateGallery(c,viewState){
     const blobId=side==='case'?item.exampleBlobId:item.templateBlobId,sourcePanel=journalTemplatePanel(item,side);
     if(!blobId&&!sourcePanel)return;
     void (blobId?imageURL(db,state.accountId,blobId):loadJournalPresetPanel(sourcePanel,{accountId:state.accountId})).then(url=>{
-      if(!host.isConnected||!url)return;host.replaceChildren();const image=document.createElement('img');image.src=url;image.alt=item.title+(side==='case'?' 真实案例':' 抽象模板');host.append(image);
-    }).catch(()=>{if(host.isConnected)host.textContent='图片暂未载入，可先查看结构说明。';});
+      if(!url)throw Error('图片暂不可用');
+      if(!host.isConnected)return;host.replaceChildren();const image=document.createElement('img');image.src=url;image.alt=item.title+(side==='case'?' 真实案例':' 抽象模板');host.append(image);
+    }).catch(error=>{
+      if(!host.isConnected)return;
+      const fallback=document.createElement('div');fallback.className='journal-template-fallback';
+      const title=document.createElement('strong');title.textContent=item.title;
+      const description=document.createElement('p');description.textContent=item.structure;
+      const status=document.createElement('small');status.textContent=host.classList.contains('journal-template-detail-image')?`${error.message||'图片暂不可用'} · 可重试`:'图片暂不可用 · 点击查看结构';
+      fallback.append(title,description,status);
+      if(host.classList.contains('journal-template-detail-image')){
+        const retry=document.createElement('button');retry.type='button';retry.className='btn mini';retry.textContent='重新载入图片';
+        retry.onclick=()=>{host.textContent='正在重新载入图片…';loadVisual(host,item,side);};fallback.append(retry);
+      }
+      host.replaceChildren(fallback);
+    });
   };
   const display=()=>{
     imageObserver?.disconnect();imageObserver=null;
