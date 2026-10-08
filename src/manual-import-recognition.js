@@ -1,42 +1,35 @@
-// A hand-drawn box is a search area, not a cutout. Run the existing recognizer
-// only inside a padded area around changed boxes and map its mask back to the
-// paper coordinate system. Unchanged candidates retain their original bytes.
-export const sameRegion=(a,b)=>!!a&&!!b&&['x','y','w','h','rotation'].every(key=>Math.abs((a[key]||0)-(b[key]||0))<1e-6);
-
-export function paddedRegion(box,margin=.16){
-  const dx=Math.max(.012,box.w*margin),dy=Math.max(.012,box.h*margin);
-  const x=Math.max(0,box.x-dx),y=Math.max(0,box.y-dy);
-  return {x,y,w:Math.min(1,x+box.w+2*dx)-x,h:Math.min(1,y+box.h+2*dy)-y};
+// Every completed manual geometry is authoritative. Never search an enlarged
+// axis-aligned window or replace it with a different automatically found object.
+// A blank manual rectangle can yield a full mask from the segmenter's seed.
+// Require visible pixel variation in and just around the user-drawn area first.
+export function hasManualForegroundEvidence(pixels,width,height,box){
+  if(!pixels||pixels.length<width*height*4||!Number.isFinite(width)||!Number.isFinite(height))return false;
+  const x0=Math.max(0,Math.floor((box.x-box.w*.06)*width)),y0=Math.max(0,Math.floor((box.y-box.h*.06)*height));
+  const x1=Math.min(width,Math.ceil((box.x+box.w*1.06)*width)),y1=Math.min(height,Math.ceil((box.y+box.h*1.06)*height));
+  if(x1<=x0||y1<=y0)return false;
+  const step=Math.max(1,Math.floor(Math.max(x1-x0,y1-y0)/256)),low=[255,255,255],high=[0,0,0];
+  for(let y=y0;y<y1;y+=step)for(let x=x0;x<x1;x+=step){
+    const index=(y*width+x)*4;
+    for(let channel=0;channel<3;channel++){const value=pixels[index+channel];low[channel]=Math.min(low[channel],value);high[channel]=Math.max(high[channel],value);}
+  }
+  return high.some((value,channel)=>value-low[channel]>=10);
 }
 
-export function candidateInPaper(candidate,search){
-  return {...candidate,x:search.x+candidate.x*search.w,y:search.y+candidate.y*search.h,w:candidate.w*search.w,h:candidate.h*search.h};
-}
-
-export function chooseManualCandidate(box,candidates,search){
-  const scored=candidates.map(candidate=>{
-    const region=candidateInPaper(candidate,search),right=Math.min(box.x+box.w,region.x+region.w),bottom=Math.min(box.y+box.h,region.y+region.h);
-    const overlap=Math.max(0,right-Math.max(box.x,region.x))*Math.max(0,bottom-Math.max(box.y,region.y));
-    const area=region.w*region.h,boxArea=box.w*box.h;
-    const centreInside=region.x+region.w/2>=box.x&&region.x+region.w/2<=box.x+box.w&&region.y+region.h/2>=box.y&&region.y+region.h/2<=box.y+box.h;
-    return {region,score:centreInside&&overlap/Math.max(area,1e-9)>=.55&&overlap/Math.max(boxArea,1e-9)>=.08?overlap/boxArea:-1};
-  }).sort((a,b)=>b.score-a.score);
-  return scored[0]?.score>0?scored[0].region:null;
-}
-
-export async function refineManualBoxes(boxes,previous,recognize){
-  const used=new Set(),next=[];
-  for(let i=0;i<boxes.length;i++){
-    const box=boxes[i],source=box.sourceIndex;
-    // The editor tracks which boxes the user actually moved. Segmentation can
-    // tighten an unchanged contour by a few pixels, so coordinates alone are
-    // not a reliable identity for preserving its original cutout bytes.
-    const tracked=Number.isInteger(source)&&!box.manualChanged&&previous[source]&&!used.has(source)?source:-1;
-    const index=tracked>=0?tracked:previous.findIndex((candidate,j)=>!used.has(j)&&sameRegion(candidate.region,box));
-    if(index>=0){used.add(index);next.push({region:previous[index].region,original:previous[index]});continue;}
-    const region=await recognize(box,i);
-    if(!region)throw Error('第 '+(i+1)+' 个框内没有找到可靠素材；请贴近素材重画，或在“检查边缘”中调整');
+export async function refineManualBoxes(boxes,previous,segment){
+  const next=[];
+  for(let index=0;index<boxes.length;index++){
+    const box=boxes[index];
+    if(!(box.w>0&&box.h>0))throw Error('候选框尺寸无效');
+    const source=box.sourceIndex;
+    // An untouched editor box keeps its source even when its oriented bounds
+    // differ slightly from the original segmentation rectangle.
+    if(Number.isInteger(source)&&!box.manualChanged&&previous[source]){
+      next.push({region:previous[source].region,original:previous[source]});continue;
+    }
+    const region=await segment(box,index);
+    if(!region?.mask)throw Error('第 '+(index+1)+' 个旋转框分割失败，未覆盖原素材');
     next.push({region,original:null});
   }
   return next;
 }
+
