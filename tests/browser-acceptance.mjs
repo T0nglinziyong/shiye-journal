@@ -189,7 +189,14 @@ try {
   await evaluate('(()=>{const el=document.querySelector("#import-paper-width");el.value="211";el.dispatchEvent(new Event("change",{bubbles:true}));})()');
   assert.deepEqual(await evaluate('[...document.querySelectorAll(".import-candidate-tile img")].map(img=>img.src)'),beforeResize,'Paper size edits must keep cutout blobs');
   assert.notEqual(Number(await evaluate('document.querySelector(".import-candidate-tile small").textContent.match(/[0-9.]+/)?.[0]')),oldWidth,'Paper size edits recalculate physical dimensions');
+  const candidateState=await evaluate('JSON.stringify([...document.querySelectorAll(".import-candidate-tile")].map(el=>({image:el.querySelector("img").src,size:el.querySelector("small").textContent,selected:el.classList.contains("selected")})))');
+  await command('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:3,mobile:true});
+  assert.equal(await evaluate('JSON.stringify([...document.querySelectorAll(".import-candidate-tile")].map(el=>({image:el.querySelector("img").src,size:el.querySelector("small").textContent,selected:el.classList.contains("selected")})))'),candidateState,'Phone viewport must preserve the same material pixels, dimensions and selection');
   await click('[data-act="import-confirm-photo"]');await wait('.queue-item.active[data-id="1"]');await wait('.import-candidate-tile.selected');await click('[data-act="import-confirm-photo"]','.review-candidates');
+  const reviewState=await evaluate('JSON.stringify([...document.querySelectorAll(".review-candidate")].map(el=>({image:el.querySelector("img").src,size:el.querySelector("small").textContent,selected:el.classList.contains("selected")})))');
+  await command('Emulation.setDeviceMetricsOverride',{width:1024,height:768,deviceScaleFactor:2,mobile:true});
+  assert.equal(await evaluate('JSON.stringify([...document.querySelectorAll(".review-candidate")].map(el=>({image:el.querySelector("img").src,size:el.querySelector("small").textContent,selected:el.classList.contains("selected")})))'),reviewState,'Tablet viewport must preserve reviewed material data');
+  await command('Emulation.setDeviceMetricsOverride',{width:2560,height:1440,deviceScaleFactor:1,mobile:false});
   await evaluate('document.querySelector(".review-candidate").dispatchEvent(new MouseEvent("contextmenu",{bubbles:true,cancelable:true}))');
   await wait('#candidate-menu');await evaluate('[...document.querySelectorAll("#candidate-menu button")].find(b=>b.textContent==="编辑素材信息").click()');await wait('#candidate-edit-name');
   await fill('#candidate-edit-name','合成素材验收');await fill('#candidate-edit-quantity','3');await fill('#candidate-edit-status','ready');await click('#candidate-edit-save');await fill('.record-series','__none__');
