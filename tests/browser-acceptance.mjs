@@ -112,6 +112,12 @@ try {
   await touchPath([{x:center.x-70,y:center.y-70},{x:center.x+70,y:center.y-70},{x:center.x+70,y:center.y+70},{x:center.x-70,y:center.y+70},{x:center.x-70,y:center.y-70}]);
   await capture('lasso-touch',390,844);
   assert.equal(await evaluate('document.querySelector(".multi-selection-toolbar span").textContent'),'已选 2 个对象');
+  assert.equal(await evaluate('document.querySelectorAll(".canvas-selection-overlay .lasso-outline").length'),1,'Lasso boundary must remain visible after lifting the finger');
+  const inLassoBefore=(await storeRecords('projects')).find(p=>p.title==='未命名手账').drafts[0].primitives;
+  await mouseDrag(center,{x:center.x+20,y:center.y+10});await sleep(250);
+  const inLassoAfter=(await storeRecords('projects')).find(p=>p.title==='未命名手账').drafts[0].primitives;
+  assert.ok(inLassoAfter.every((o,i)=>o.x>inLassoBefore[i].x&&o.y>inLassoBefore[i].y),'Dragging inside lasso must move every enclosed object');
+  assert.equal(await evaluate('document.querySelectorAll(".canvas-selection-overlay .lasso-outline").length'),1,'Lasso boundary must follow the group drag');
   await click('[data-val="select"]');
   const beforeMove=(await storeRecords('projects')).find(p=>p.title==='未命名手账').drafts[0].primitives;
   await mouseDrag(center,{x:center.x+30,y:center.y+15});await sleep(250);
