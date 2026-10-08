@@ -32,6 +32,14 @@ test('box discovery keeps independent full-page components as separate material 
   assert.ok(out.every(x=>x.instanceMethod==='connected-component-box'));
 });
 
+test('box discovery rejects enclosed paper islands without direct material evidence',async()=>{
+  const cv=await cvModule,width=420,height=594,mask=new Uint8Array(width*height),evidence=new Uint8Array(width*height),foregroundSeeds=new Uint8Array(width*height);
+  for(let y=90;y<150;y++)for(let x=140;x<280;x++)mask[y*width+x]=1;
+  for(let x=150;x<158;x++)evidence[100*width+x]=1;
+  const out=await processVision(cv,'boxes-simple',{mask,evidence,foregroundSeeds,width,height,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
+  assert.equal(out.length,0,JSON.stringify(out));
+});
+
 test('box discovery absorbs a small internal fragment without changing object count',async()=>{
   const cv=await cvModule,width=300,height=420,mask=new Uint8Array(width*height),evidence=new Uint8Array(width*height),foregroundSeeds=new Uint8Array(width*height);
   for(let y=80;y<280;y++)for(let x=55;x<75;x++){const i=y*width+x;mask[i]=evidence[i]=1;}
@@ -70,6 +78,26 @@ test('box discovery trims broad page-edge residue from a dense frame-touching bo
   assert.equal(out.length,1,JSON.stringify(out));assert.equal(out[0].boxAdjustment,'dense-frame-body');
   assert.ok(out[0].x>.12,'dense body should reject the remote frame residue');
   assert.ok(out[0].rawBox.x<.02,'raw bbox should demonstrate the frame residue existed');
+});
+
+test('frame-body trimming keeps a medium-dense warped material while removing remote paper residue',async()=>{
+  const cv=await cvModule,width=420,height=594,mask=new Uint8Array(width*height),evidence=new Uint8Array(width*height),foregroundSeeds=new Uint8Array(width*height);
+  // Main material body: broad but not perfectly solid (simulates binder holes,
+  // warp interpolation and printed gaps). Remote page residue is connected on
+  // the left/bottom so the raw bbox touches the protected frame.
+  for(let y=210;y<500;y++)for(let x=75;x<250;x++){
+    const i=y*width+x;
+    if(((x+y)%11)!==0){mask[i]=evidence[i]=1;if((x+y)%4)foregroundSeeds[i]=1;}
+  }
+  for(let y=330;y<440;y++)for(let x=35;x<60;x++){const i=y*width+x;mask[i]=1;if((x+y)%97===0)evidence[i]=1;}
+  // Narrow bridge reaches the protected frame but has low column occupancy;
+  // only the real body should survive the robust occupancy core.
+  for(let y=430;y<590;y++)for(let x=55;x<85;x++){const i=y*width+x;mask[i]=1;if((x+y)%83===0)evidence[i]=1;}
+  const out=await processVision(cv,'boxes-simple',{mask,evidence,foregroundSeeds,width,height,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
+  assert.equal(out.length,1,JSON.stringify(out));
+  assert.equal(out[0].boxAdjustment,'dense-frame-body');
+  assert.ok(out[0].x>out[0].rawBox.x+.05,JSON.stringify(out[0]));
+  assert.ok(out[0].w<out[0].rawBox.w-.05&&out[0].w>.35,JSON.stringify(out[0]));
 });
 
 test('dense frame adjustment preserves a real material that genuinely reaches the page side',async()=>{

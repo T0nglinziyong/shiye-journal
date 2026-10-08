@@ -1,5 +1,5 @@
 import {recognitionModeAllowed,recognitionPixelsAllowed} from './recognition-profiles.js';
-const KEY='shiye-ui-preferences-v1';
+const KEY='shiye-ui-preferences-v1',RECOGNITION_DEFAULTS_VERSION=2;
 const defaults={
   paperSize:'a4',orientation:'auto',wholePaper:true,autoOrganize:true,
   recognition:'auto',recognitionPixels:900,
@@ -39,5 +39,24 @@ export function normalizePreferences(value={}){
     maxPageItems:[20,40,80].includes(Number(value?.maxPageItems))?Number(value.maxPageItems):0
   };
 }
-export function loadPreferences(){try{return normalizePreferences(JSON.parse(localStorage.getItem(KEY)||'{}'));}catch{return normalizePreferences();}}
-export function savePreferences(value){const next=normalizePreferences(value);localStorage.setItem(KEY,JSON.stringify(next));return next;}
+export function migrateStoredPreferences(value={}){
+  if(value?.recognitionDefaultsVersion===RECOGNITION_DEFAULTS_VERSION)return value;
+  // Recognition semantics changed substantially (new whole-page boxes +
+  // MorphGAC defaults). Reset only recognition-related legacy values once so
+  // old defaults such as 1200 px, preprocessing-on or chroma-off cannot leak
+  // into the new pipeline. Unrelated UI/paper preferences are preserved.
+  return {...value,
+    recognition:'auto',recognitionPixels:900,
+    balanceLight:false,recognitionDenoise:false,recognitionLocalContrast:false,recognitionChromaEdges:true,
+    recognitionShapeRegularization:true,recognitionApertures:true,
+    recognitionDefaultsVersion:RECOGNITION_DEFAULTS_VERSION
+  };
+}
+export function loadPreferences(){
+  try{return normalizePreferences(migrateStoredPreferences(JSON.parse(localStorage.getItem(KEY)||'{}')));}
+  catch{return normalizePreferences(migrateStoredPreferences({}));}
+}
+export function savePreferences(value){
+  const next={...normalizePreferences(value),recognitionDefaultsVersion:RECOGNITION_DEFAULTS_VERSION};
+  localStorage.setItem(KEY,JSON.stringify(next));return next;
+}

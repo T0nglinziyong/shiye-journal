@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {recognitionProfile,recognitionPixelOptions,recognitionOptions} from '../src/recognition-profiles.js';
-import {normalizePreferences} from '../src/preferences.js';
+import {normalizePreferences,migrateStoredPreferences} from '../src/preferences.js';
 
 test('validated recognition modes and defaults match the final automatic pipeline',()=>{
   const auto=recognitionProfile('auto',1600);
@@ -47,6 +47,23 @@ test('validated recognition modes and defaults match the final automatic pipelin
   assert.equal(normalizePreferences({recognition:'traditional'}).recognition,'grabcut');
   assert.equal(normalizePreferences({recognition:'active'}).recognition,'morphgac');
   assert.equal(normalizePreferences({recognition:'slimsam'}).recognition,'auto');
+
+  const migrated=migrateStoredPreferences({
+    paperSize:'letter',recognition:'grabcut',recognitionPixels:1200,
+    balanceLight:true,recognitionDenoise:true,recognitionLocalContrast:true,recognitionChromaEdges:false,
+    recognitionShapeRegularization:false,recognitionApertures:false
+  });
+  assert.equal(migrated.paperSize,'letter','unrelated preferences must survive migration');
+  assert.equal(migrated.recognition,'auto');assert.equal(migrated.recognitionPixels,900);
+  assert.equal(migrated.balanceLight,false);assert.equal(migrated.recognitionDenoise,false);assert.equal(migrated.recognitionLocalContrast,false);
+  assert.equal(migrated.recognitionChromaEdges,true);assert.equal(migrated.recognitionShapeRegularization,true);assert.equal(migrated.recognitionApertures,true);
+
+  const preserved=migrateStoredPreferences({
+    recognitionDefaultsVersion:2,recognition:'grabcut',recognitionPixels:1600,
+    recognitionChromaEdges:false
+  });
+  assert.equal(preserved.recognition,'grabcut');assert.equal(preserved.recognitionPixels,1600);
+  assert.equal(preserved.recognitionChromaEdges,false,'explicit settings after migration must be preserved');
 
   const invalid=normalizePreferences({recognition:'fake',recognitionPixels:1234});
   assert.equal(invalid.recognition,'auto');
