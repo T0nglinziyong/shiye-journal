@@ -1,4 +1,4 @@
-import {activeContour,morphGAC} from './browser-active-contours.js';
+import {morphGAC} from './browser-active-contours.js';
 
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const contourPoints=c=>Array.from({length:c.rows},(_,i)=>[c.data32S[i*2],c.data32S[i*2+1]]);
@@ -302,13 +302,9 @@ export function refineMaterialBoundaries(cv,p){
       }else{
         const fast=resizeForBudget(cv,roi,rough,320);
         workImage=fast.image;workMask=fast.mask;support=edgeSupportMap(cv,fast.image,useChroma);
-        if(mode==='grabcut'){
-          selected=grabCutMask(cv,fast.image,fast.mask);
-          method='browser-grabcut';
-        }else{
-          selected=activeMask(cv,fast.image,fast.mask);
-          method='browser-active-contour';
-        }
+        if(mode!=='grabcut')throw Error('unsupported contour mode: '+mode);
+        selected=grabCutMask(cv,fast.image,fast.mask);
+        method='browser-grabcut';
         confidence=boundarySupport(cv,selected,support);
       }
 
