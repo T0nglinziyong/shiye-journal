@@ -2,6 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import cvModule from '@techstark/opencv-js';
 import {processVision} from '../src/opencv-worker.js';
+import {likelyFrameDebris} from '../src/material-box-discovery.js';
+test('thin sparse frame strip is debris while a printed sheet remains material',()=>{
+  const strip={x:237,y:16,w:155,h:21,fillRatio:.13,seedDensity:.009};
+  assert.equal(likelyFrameDebris(strip,636,900,3),true);
+  assert.equal(likelyFrameDebris({...strip,y:130},636,900,3),false);
+  assert.equal(likelyFrameDebris({...strip,seedDensity:.4},636,900,3),false);
+});
 test('OpenCV local light balance is effective without changing source or alpha',async()=>{
   const cv=await cvModule,width=80,height=80,pixels=new Uint8ClampedArray(width*height*4);for(let y=0;y<height;y++)for(let x=0;x<width;x++){const i=(y*width+x)*4;pixels[i]=pixels[i+1]=pixels[i+2]=40+x*2;pixels[i+3]=x%2?128:255;}const original=pixels.slice(),out=await processVision(cv,'balance',{pixels,width,height});assert.deepEqual(pixels,original);assert.ok(out.pixels.some((v,i)=>i%4!==3&&v!==pixels[i]));for(let i=3;i<pixels.length;i+=4)assert.equal(out.pixels[i],pixels[i]);
 });
@@ -78,6 +85,7 @@ test('box discovery trims broad page-edge residue from a dense frame-touching bo
   assert.equal(out.length,1,JSON.stringify(out));assert.equal(out[0].boxAdjustment,'dense-frame-body');
   assert.ok(out[0].x>.12,'dense body should reject the remote frame residue');
   assert.ok(out[0].rawBox.x<.02,'raw bbox should demonstrate the frame residue existed');
+  assert.equal(out[0].orientedBox,null,'trimmed frame residue must not return through a raw oriented seed');
 });
 
 test('frame-body trimming keeps a medium-dense warped material while removing remote paper residue',async()=>{
