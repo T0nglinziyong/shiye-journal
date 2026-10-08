@@ -3,8 +3,6 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
   <meta name="theme-color" content="#fffefa"><meta name="apple-mobile-web-app-capable" content="yes">
   <link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/icon-192.png">
-  <link rel="preload" href="/vendor/opencv-shiye/opencv.js" as="script">
-  <link rel="preload" href="/vendor/opencv-shiye/opencv_js.wasm" as="fetch" type="application/wasm" crossorigin>
   <title>拾页 · 本地创作</title><meta name="description" content="本地保存真实手账素材与可编辑作品">
 </head><body>
   <div id="app">
@@ -15,6 +13,6 @@
     <div id="toast" role="status" aria-live="polite"></div>
   </div>
   <dialog id="modal"><div class="modal-shell"><button type="button" class="modal-close" aria-label="关闭">×</button><div id="modal-body"></div></div></dialog>
-  <input id="file-input" type="file" accept="image/*" multiple hidden><input id="work-file-input" type="file" accept="image/*,.json,.zip" hidden><input id="snapshot-file-input" type="file" accept="image/png,image/jpeg,image/webp" hidden><input id="backup-input" type="file" accept=".shiyepwa,.json" hidden>
+  <input id="file-input" type="file" accept="image/*" multiple hidden><input id="work-file-input" type="file" accept="image/*,.json,.zip" hidden><input id="snapshot-file-input" type="file" accept="image/png,image/jpeg,image/webp" hidden><input id="backup-input" type="file" accept=".shiyepwa,.json" hidden><input id="emergency-input" type="file" accept=".shiyerecovery,.json" hidden>
   <script type="module" src="/src/app.js"></script>
 </body></html>

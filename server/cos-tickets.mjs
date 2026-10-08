@@ -1,9 +1,10 @@
 const leaf=/^[a-f0-9]{64}(?:-preview360\.webp|-project\.json(?:\.gz)?(?:-preview\.webp)?)?$/;
-export function createTicketHandler({ready,origin,authenticate,sign}){
+export function createTicketHandler({ready,origin,origins,authenticate,sign}){
+  const allowed=origins||[origin].filter(Boolean);
   return async req=>{
     const fail=(status,error)=>({status,body:{error}});
     if(req.method!=='POST')return fail(405,'仅支持 POST');
-    if(req.origin&&req.origin!==origin)return fail(403,'来源不允许');
+    if(req.origin&&!allowed.includes(req.origin))return fail(403,'来源不允许');
     if(!ready)return fail(503,'COS 服务端授权尚未配置，原数据未迁移');
     const match=/^Bearer ([A-Za-z0-9._-]{20,4096})$/.exec(req.authorization||'');if(!match)return fail(401,'请先登录');
     try{

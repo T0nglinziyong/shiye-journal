@@ -17,5 +17,5 @@ test('protected same-origin server never falls back to IndexedDB',async()=>{
   db.setStorageConfig({url:'https://other.example',token:'valid-secret'});
   await assert.rejects(db.storageMode(),/只允许使用同域名/);
   const worker=await readFile(new URL('../public/sw.js',import.meta.url),'utf8');
-  assert.match(worker,/u\.pathname\.startsWith\('\/api\/'\)/);
+  assert.match(worker,/(?:u|url)\.pathname\.startsWith\('\/api\/'\)/);
 });

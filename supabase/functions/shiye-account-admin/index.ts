@@ -1,13 +1,25 @@
 import {createClient} from 'npm:@supabase/supabase-js@2.117.2';
 
-const origin='https://shiye-journal-test.vercel.app';
-const cors={'Access-Control-Allow-Origin':origin,'Access-Control-Allow-Headers':'authorization, x-client-info, apikey, content-type','Access-Control-Allow-Methods':'POST, OPTIONS','Vary':'Origin'};
-const reply=(status:number,body:Record<string,unknown>)=>new Response(JSON.stringify(body),{status,headers:{...cors,'Content-Type':'application/json','Cache-Control':'private, no-store'}});
-
+// Share exact production/test origins with /api/cos; never allow arbitrary
+// Vercel preview subdomains or wildcards.
+const origins=new Set(['https://shiye-journal-test.vercel.app','https://shiyejournal.vip']);
+for(const entry of (Deno.env.get('SHIYE_APP_ORIGINS')||'').split(',')){
+  const value=entry.trim();if(!value)continue;
+  const parsed=new URL(value);
+  if(parsed.origin!==value||parsed.protocol!=='https:')throw Error('可信来源配置不合法');
+  origins.add(value);
+}
+const cors=(origin:string|null)=>({
+  ...(origin&&origins.has(origin)?{'Access-Control-Allow-Origin':origin}:{}),
+  'Access-Control-Allow-Headers':'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods':'POST, OPTIONS','Vary':'Origin'
+});
 Deno.serve(async request=>{
-  if(request.method==='OPTIONS')return new Response(null,{status:204,headers:cors});
+  const requestOrigin=request.headers.get('origin');
+  const reply=(status:number,body:Record<string,unknown>)=>new Response(JSON.stringify(body),{status,headers:{...cors(requestOrigin),'Content-Type':'application/json','Cache-Control':'private, no-store'}});
+  if(requestOrigin&&!origins.has(requestOrigin))return new Response(JSON.stringify({error:'来源不允许'}),{status:403,headers:{'Vary':'Origin','Content-Type':'application/json'}});
+  if(request.method==='OPTIONS')return new Response(null,{status:204,headers:cors(requestOrigin)});
   if(request.method!=='POST')return reply(405,{error:'仅支持 POST'});
-  if(request.headers.get('origin')&&request.headers.get('origin')!==origin)return reply(403,{error:'来源不允许'});
   const authorization=request.headers.get('authorization')||'';
   if(!/^Bearer [A-Za-z0-9._-]{20,4096}$/.test(authorization))return reply(401,{error:'请先登录'});
   const url=Deno.env.get('SUPABASE_URL'),anon=Deno.env.get('SUPABASE_ANON_KEY'),service=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
