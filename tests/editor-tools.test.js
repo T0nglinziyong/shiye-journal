@@ -27,3 +27,9 @@ test('continued material cut composes inside the current piece and rejects tiny 
 test('text layout retains explicit newlines and paragraph gaps while wrapping',()=>{const result=textLines({content:'abcd\nef',width:16,fontSize:10,paragraphSpacing:3},text=>text.length*8);assert.deepEqual(result.lines.map(l=>l.text),['ab','cd','ef']);assert.ok(result.lines[2].y>26);});
 test('a queued close from the previous dialog cannot cancel the newly opened editor',()=>{const dialog=new EventTarget();dialog.open=true;let closed=0;onDialogClosed(dialog,()=>closed++);dialog.dispatchEvent(new Event('close'));assert.equal(closed,0);dialog.open=false;dialog.dispatchEvent(new Event('close'));dialog.dispatchEvent(new Event('close'));assert.equal(closed,1);});
 test('reusable multicolor vectors keep every color layer, holes and opacity in shared preview/export',()=>{const svg=shapeSVG({kind:'vector',vectorLayers:[{fill:'#abcdef',opacity:.5,paths:[[[0,0],[1,0],[1,1]]]},{fill:'#fedcba',opacity:1,paths:[[[0,0],[.5,0],[.5,.5]]]}]});assert.match(svg,/#abcdef/);assert.match(svg,/#fedcba/);assert.match(svg,/opacity="0.5"/);assert.equal((svg.match(/<path /g)||[]).length,2);assert.ok(!shapeSVG({vectorLayers:[{fill:'<script>',paths:[[['bad',0]]]}]}).includes('<script>'));});
+
+test('highlighter-only eraser retains pen strokes',()=>{
+  const pen={penStyle:'fountain',width:3,points:[{x:0,y:0},{x:50,y:0}]};
+  const marker={penStyle:'marker',width:8,points:[{x:0,y:0},{x:50,y:0}]};
+  assert.deepEqual(eraseStrokes([pen,marker],{x:25,y:0},5,true,true),[pen]);
+});
