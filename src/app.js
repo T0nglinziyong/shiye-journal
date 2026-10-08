@@ -296,7 +296,7 @@ function bindPage(){view.querySelectorAll('[data-act]').forEach(el=>el.addEventL
   const draftSelect=view.querySelector('#draft-select');if(draftSelect)draftSelect.onchange=()=>{state.activeDraft=draftSelect.value;state.selected=null;resetEditorHistory(state);render();};
   if(state.route==='import'&&state.showManualBox)bindManualBox();
   for(const [id,key] of [['import-paper-width','customImportWidth'],['import-paper-height','customImportHeight']]){const el=view.querySelector('#'+id);if(el)el.onchange=()=>{const n=Number(el.value);if(!Number.isFinite(n)||n<1||n>10000){toast('纸张宽高为 1–10000 mm');return;}state[key]=n;recalibrateImport();};}const whole=view.querySelector('#whole-paper');if(whole)whole.onchange=()=>{state.wholePaper=whole.checked;recalibrateImport();};for(const [id,key] of [['paper-size','paperSize'],['paper-orientation','paperOrientation']]){const el=view.querySelector('#'+id);if(el)el.onchange=()=>{state[key]=el.type==='checkbox'?el.checked:el.value;recalibrateImport();};}
-  const balance=view.querySelector('#balance-light');if(balance)balance.onchange=async()=>{const before=state.balanceLight;if(state.importProcessing){balance.checked=before;return;}if(state.importCandidateData?.length&&!confirm('更改光照会重新识别候选并重置当前候选标注，继续？')){balance.checked=before;return;}state.importProcessing='正在均衡光照并重新识别…';state.balanceLight=balance.checked;balance.disabled=true;try{await previewCrop();}catch(e){state.balanceLight=before;render();toast(e.message);}finally{state.importProcessing=false;if(state.route==='import')render();}};
+  const balance=view.querySelector('#balance-light');if(balance)balance.onchange=async()=>{const before=state.balanceLight;if(state.importProcessing){balance.checked=before;return;}if(state.importCandidateData?.length&&!confirm('更改光照会重新识别候选并重置当前候选标注，继续？')){balance.checked=before;return;}state.importProcessing='正在均衡光照并重新识别…';state.balanceLight=balance.checked;render();try{await previewCrop();}catch(e){state.balanceLight=before;toast(e.message);}finally{state.importProcessing='';if(state.route==='import')render();}};
   view.querySelectorAll('[data-import-name]').forEach(el=>el.onchange=()=>{const [ri,ci]=el.dataset.importName.split(':').map(Number);state.importRecords[ri].selectedCandidates[ci].title=el.value;});
   for(const key of ['width','height'])view.querySelectorAll(`[data-import-${key}]`).forEach(el=>el.onchange=()=>{const [ri,ci]=el.dataset[`import${key[0].toUpperCase()+key.slice(1)}`].split(':').map(Number);state.importRecords[ri].selectedCandidates[ci][key]=+el.value||null;});
   view.querySelectorAll('.record-series').forEach(el=>el.onchange=()=>{state.importRecords[+el.dataset.index].seriesID=el.value;});view.querySelectorAll('.record-work-title').forEach(el=>el.oninput=()=>{state.importRecords[+el.dataset.index].workTitle=el.value;});
@@ -700,10 +700,79 @@ function saveActiveImportRecord(){
   const rec=state.importRecords[state.importIndex];if(!rec)return;
   Object.assign(rec,{bitmap:state.importBitmap,file:state.importFile,url:state.importURL,box:structuredClone(state.importBox),corners:state.paperCorners?structuredClone(state.paperCorners):null,correctedBitmap:state.correctedBitmap,correctedURL:state.correctedURL,candidates:state.importCandidates||[],candidateURLs:state.importCandidateURLs||[],candidateData:state.importCandidateData||[],selection:[...(state.importCandidateSelection||[])],wholePaper:state.wholePaper,paperSize:state.paperSize,paperOrientation:state.paperOrientation,balanceLight:state.balanceLight,recognition:state.importRecognition,customImportWidth:state.customImportWidth,customImportHeight:state.customImportHeight});
 }
+const importPrefetchJobs=new WeakMap();
+let importBatchRevision=0;
+async function extractImportCandidate(source,box,region,{mode,widthMM,heightMM,calibrated,index}){
+  const cut=await cropBitmap(source,box,region),raw=region.mask?await cropBitmap(source,box,region,{raw:true}):cut;
+  // Both foreground and background recognition use the same extraction path.
+  const aligned=mode==='work'?{blob:cut,originalBlob:raw,candidateFrameBlob:raw,candidateFramePlacement:null,degrees:0,widthRatio:1,heightRatio:1}:await alignMaterialPreview(cut,raw,region.orientedBox?.autoDeskew?-region.orientedBox.rotation:null);
+  const width=calibrated?Math.round((region.orientedBox?.width??region.w)*widthMM*10)/10:null,
+    height=calibrated?Math.round((region.orientedBox?.height??region.h)*heightMM*10)/10:null;
+  return {blob:aligned.blob,originalBlob:aligned.originalBlob,candidateFrameBlob:aligned.candidateFrameBlob||aligned.originalBlob,
+    url:URL.createObjectURL(aligned.blob),title:'素材 '+(index+1),width,height,alignment:aligned.degrees,
+    widthRatio:aligned.widthRatio,heightRatio:aligned.heightRatio,
+    processingRecord:{automaticCorrectionDegrees:aligned.degrees,sourceWidthMM:width,sourceHeightMM:height,candidateFramePlacement:aligned.candidateFramePlacement||null},region,selected:true};
+}
+function importPrefetchSettings(rec){
+  return {paperSize:rec.paperSize||state.preferences.paperSize,paperOrientation:rec.paperOrientation||state.preferences.orientation,
+    customImportWidth:rec.customImportWidth||state.preferences.customPaperWidth||210,customImportHeight:rec.customImportHeight||state.preferences.customPaperHeight||297,
+    wholePaper:rec.wholePaper??state.preferences.wholePaper,balanceLight:rec.balanceLight??state.preferences.balanceLight,
+    recognition:rec.recognition||state.preferences.recognition,pixels:state.preferences.recognitionPixels||900,
+    denoise:state.preferences.recognitionDenoise===true,localContrast:state.preferences.recognitionLocalContrast===true,
+    chromaEdges:state.preferences.recognitionChromaEdges!==false,shapeRegularization:state.preferences.recognitionShapeRegularization!==false,
+    apertures:state.preferences.recognitionApertures!==false,mode:state.importMode};
+}
+function updateImportPrefetchLabel(rec){
+  const index=state.importRecords.indexOf(rec),label=index>=0?view.querySelector(`.queue-item[data-id="${index}"] small`):null;
+  if(label&&!rec.confirmed)label.textContent=rec.prefetchStatus==='ready'?`${rec.candidates.length} 件已预识别`:rec.prefetchStatus==='running'?'后台识别中':'待识别';
+}
+async function prefetchImportRecord(rec,settings,revision){
+  let bitmap,correctedBitmap,correctedURL,candidateURLs=[];
+  const valid=()=>revision===importBatchRevision&&state.importRecords.includes(rec)&&state.route==='import';
+  try{
+    bitmap=await decodeRecognitionImage(rec.file);if(!valid())return;
+    const initial=importPaperDimensions({...settings,bitmap,corners:null});
+    const corners=rec.corners||(settings.paperSize==='none'?null:await suggestPaperCorners(bitmap,initial[0]/initial[1]).catch(()=>null));if(!valid())return;
+    const [pw,ph]=importPaperDimensions({...settings,bitmap,corners});
+    if(corners&&settings.paperSize!=='none'){
+      const corrected=await rectifyA4Frame(bitmap,corners,4096,pw/ph);correctedBitmap=corrected.canvas;correctedURL=URL.createObjectURL(corrected.blob);if(!valid())return;
+    }
+    const source=correctedBitmap||bitmap,box=correctedBitmap?{x:0,y:0,w:1,h:1}:rec.box||{x:0,y:0,w:1,h:1};
+    const candidates=await detectPaperCandidates(source,box,6,{balanceLight:settings.balanceLight,paperWidthMM:pw,paperHeightMM:ph,
+      recognition:settings.recognition,recognitionPixels:settings.pixels,
+      recognitionPreprocess:{illumination:settings.balanceLight,denoise:settings.denoise,localContrast:settings.localContrast,chromaEdges:settings.chromaEdges},
+      recognitionPostprocess:{shapeRegularization:settings.shapeRegularization,apertures:settings.apertures},
+      onDiagnostic:trace=>{if(valid())rec.recognitionDiagnostic=trace;}});if(!valid())return;
+    const calibrated=settings.paperSize!=='none'&&(correctedBitmap||settings.wholePaper),candidateData=[];
+    for(let i=0;i<candidates.length;i++){
+      const candidate=await extractImportCandidate(source,box,candidates[i],{mode:settings.mode,widthMM:pw,heightMM:ph,calibrated,index:i});
+      candidateURLs.push(candidate.url);candidateData.push(candidate);
+      if(!valid())return;
+    }
+    if(!valid())return;
+    Object.assign(rec,{bitmap,autoPaperCorners:corners&&!rec.corners?structuredClone(corners):null,correctedBitmap,correctedURL,
+      appliedCorners:correctedBitmap?JSON.stringify(corners):null,backgroundDetected:!!correctedBitmap,
+      candidates,candidateData,candidateURLs,selection:candidateData.map((_,i)=>i),prefetchStatus:'ready'});
+    bitmap=correctedBitmap=correctedURL=null;candidateURLs=[];updateImportPrefetchLabel(rec);
+  }finally{
+    bitmap?.close?.();correctedBitmap?.close?.();if(correctedURL)URL.revokeObjectURL(correctedURL);
+    for(const url of candidateURLs)URL.revokeObjectURL(url);
+  }
+}
+function scheduleImportPrefetch(){
+  if(state.route!=='import'||state.importStep!=='inspect')return;
+  const rec=state.importRecords.slice(state.importIndex+1).find(r=>!r.confirmed&&!r.candidateData?.length&&!importPrefetchJobs.has(r));
+  if(!rec)return;
+  const settings=importPrefetchSettings(rec),revision=importBatchRevision;
+  rec.prefetchStatus='running';updateImportPrefetchLabel(rec);
+  const promise=prefetchImportRecord(rec,settings,revision).catch(error=>{if(revision===importBatchRevision){rec.prefetchStatus='failed';updateImportPrefetchLabel(rec);console.warn('下一张照片后台识别失败，切换时重试',error);}});
+  importPrefetchJobs.set(rec,{promise,signature:JSON.stringify(settings)});
+}
 function resetImportBatch(){
   // Dispose only photo-owned resources, not the shared model/Worker. Saved
   // library images have independent object URLs maintained by the store.
   state.importLoadGeneration=(state.importLoadGeneration||0)+1;
+  importBatchRevision++;
   discardPaperPreview();
   const bitmaps=new Set(),objectURLs=new Set();
   for(const r of state.importRecords){for(const b of [r.bitmap,r.correctedBitmap])if(b)bitmaps.add(b);for(const u of [r.url,r.correctedURL,...(r.candidateURLs||[])])if(u)objectURLs.add(u);}
@@ -727,9 +796,20 @@ async function switchImportRecord(index,skipSave=false){
   // Paint the selected photo before decoding, engine initialization or warp.
   await new Promise(resolve=>requestAnimationFrame(()=>setTimeout(resolve,0)));
   try{
+  const job=importPrefetchJobs.get(rec);
+  if(job){await job.promise;if(!isCurrent())return;
+    if(job.signature!==JSON.stringify(importPrefetchSettings(rec))){
+      rec.bitmap?.close?.();rec.correctedBitmap?.close?.();if(rec.correctedURL)URL.revokeObjectURL(rec.correctedURL);
+      for(const url of rec.candidateURLs||[])URL.revokeObjectURL(url);
+      Object.assign(rec,{bitmap:null,correctedBitmap:null,correctedURL:null,autoPaperCorners:null,candidates:[],candidateData:[],candidateURLs:[],selection:[],prefetchStatus:null});
+    }
+    importPrefetchJobs.delete(rec);
+    state.paperCorners=rec.corners||rec.autoPaperCorners||null;state.correctedBitmap=rec.correctedBitmap||null;state.correctedURL=rec.correctedURL||null;
+    state.importCandidates=rec.candidates||[];state.importCandidateData=rec.candidateData||[];state.importCandidateURLs=rec.candidateURLs||[];state.importCandidateSelection=new Set(rec.selection||[]);
+  }
   const bitmap=rec.bitmap||await decodeRecognitionImage(rec.file);rec.bitmap=bitmap;if(!isCurrent())return;state.importBitmap=bitmap;
   progress('正在自动寻找纸张四角…');
-  state.paperCorners=rec.corners||(state.paperSize==='none'?null:await suggestPaperCorners(bitmap,(()=>{const [pw,ph]=paperDimensions();return pw/ph;})()).catch(()=>null));if(!isCurrent())return;
+  state.paperCorners=rec.corners||rec.autoPaperCorners||(state.paperSize==='none'?null:await suggestPaperCorners(bitmap,(()=>{const [pw,ph]=paperDimensions();return pw/ph;})()).catch(()=>null));if(!isCurrent())return;
   if(!rec.corners&&state.paperCorners)rec.autoPaperCorners=structuredClone(state.paperCorners);
   progress('正在进行透视校正…');
   if(!state.correctedBitmap&&state.paperCorners&&state.paperSize!=='none'){
@@ -737,8 +817,8 @@ async function switchImportRecord(index,skipSave=false){
     if(!isCurrent())return;
     state.correctedBitmap=canvas;state.correctedURL=URL.createObjectURL(blob);rec.appliedCorners=JSON.stringify(state.paperCorners);rec.backgroundDetected=true;
   }
-  if(!isCurrent())return;progress('正在识别并提取素材…');saveActiveImportRecord();render();if(!state.importCandidates.length&&state.importStep==='inspect')await previewCrop();
-  }finally{if(isCurrent()){state.importProcessing='';render();}}
+  if(!isCurrent())return;progress('正在识别并提取素材…');saveActiveImportRecord();render();if(rec.prefetchStatus!=='ready'&&!state.importCandidates.length&&state.importStep==='inspect')await previewCrop();
+  }finally{if(isCurrent()){state.importProcessing='';render();queueMicrotask(scheduleImportPrefetch);}}
 }
 function discardPaperPreview(){state.paperPreviewBitmap?.close?.();if(state.paperPreviewURL&&state.paperPreviewURL!==state.correctedURL)URL.revokeObjectURL(state.paperPreviewURL);state.paperPreviewBitmap=null;state.paperPreviewURL=null;state.paperPreviewApplied=false;}
 async function rotateImportPhoto(){
@@ -759,7 +839,9 @@ async function applyPaperPreview(){
   if(rec.manualEdits&&!confirm('重新校正会舍弃本照片的名称、手动选框和修补结果并重新识别，继续吗？'))return;
   state.correctedBitmap?.close?.();if(state.correctedURL)URL.revokeObjectURL(state.correctedURL);
   state.correctedBitmap=state.paperPreviewBitmap;state.correctedURL=state.paperPreviewURL;state.paperPreviewBitmap=null;state.paperPreviewURL=null;state.paperPreviewApplied=true;rec.appliedCorners=JSON.stringify(state.paperCorners);rec.backgroundDetected=true;rec.manualEdits=false;rec.confirmed=false;
-  await previewCrop();toast('已使用校正结果，候选素材已更新');
+  state.importProcessing='正在按新校正结果识别…';render();
+  try{await previewCrop();toast('已使用校正结果，候选素材已更新');}
+  finally{state.importProcessing='';if(state.route==='import')render();}
 }
 async function openManualImportBox(){
   if(state.paperPreviewBitmap)await applyPaperPreview();
@@ -796,13 +878,7 @@ async function refreshImportCandidates(regions,{manual=false}={}){
   for(let i=0;i<plans.length;i++){
     const {region,original}=plans[i];if(original){next.push(original);continue;}
     toast('正在提取素材 '+(i+1)+' / '+plans.length);
-    const cut=await cropBitmap(source,b,region),raw=region.mask?await cropBitmap(source,b,region,{raw:true}):cut;
-    // Work layers stay in photographed coordinates; library materials get a
-    // conservative rectangular correction. Originals use the same raster map.
-    const aligned=state.importMode==='work'?{blob:cut,originalBlob:raw,candidateFrameBlob:raw,candidateFramePlacement:null,degrees:0,widthRatio:1,heightRatio:1}:await alignMaterialPreview(cut,raw,region.orientedBox?.autoDeskew?-region.orientedBox.rotation:null);
-    const width=calibrated?Math.round((region.orientedBox?.width??region.w)*pw*10)/10:null,
-      height=calibrated?Math.round((region.orientedBox?.height??region.h)*ph*10)/10:null;
-    next.push({blob:aligned.blob,originalBlob:aligned.originalBlob,candidateFrameBlob:aligned.candidateFrameBlob||aligned.originalBlob,url:URL.createObjectURL(aligned.blob),title:'素材 '+(i+1),width,height,alignment:aligned.degrees,widthRatio:aligned.widthRatio,heightRatio:aligned.heightRatio,processingRecord:{automaticCorrectionDegrees:aligned.degrees,sourceWidthMM:width,sourceHeightMM:height,candidateFramePlacement:aligned.candidateFramePlacement||null},region,selected:true});
+    next.push(await extractImportCandidate(source,b,region,{mode:state.importMode,widthMM:pw,heightMM:ph,calibrated,index:i}));
   }
   if(record!==state.importRecords[state.importIndex]){for(const c of next)if(!previous.includes(c))URL.revokeObjectURL(c.url);return false;}
   for(const c of previous)if(!next.includes(c))URL.revokeObjectURL(c.url);
@@ -839,12 +915,8 @@ function paperDimensions(){return importPaperDimensions({paperSize:state.paperSi
 async function confirmImportPhoto(){
   if(state.importProcessing)return;
   const record=state.importRecords[state.importIndex];
-  const [expectedPaperWidth,expectedPaperHeight]=paperDimensions();
-  if(state.paperSize!=='none'&&state.correctedBitmap&&Math.abs(
-    (state.correctedBitmap.width/state.correctedBitmap.height)/
-    (expectedPaperWidth/expectedPaperHeight)-1)>.025){
-    toast('纸张尺寸或方向改变后，须预览并应用新的校正结果，才能确认素材');return;
-  }
+  // A paper size edit recalibrates millimetres only. The extracted pixels and
+  // applied corner correction stay valid until the corners themselves change.
   if(state.paperSize!=='none'&&state.paperCorners&&state.correctedBitmap
     &&record?.appliedCorners!==JSON.stringify(state.paperCorners)){
     toast('纸张四角已调整，请先“预览校正”并点击“使用校正结果”，再确认素材');return;

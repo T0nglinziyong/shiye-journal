@@ -155,10 +155,18 @@ try {
   await click('.swift-tabs button:nth-child(2)','.asset-grid');await click('[data-act="import"]','.import-nav');
   await evaluate('(async()=>{const canvas=document.createElement("canvas");canvas.width=600;canvas.height=850;const ctx=canvas.getContext("2d");ctx.fillStyle="white";ctx.fillRect(0,0,600,850);ctx.fillStyle="#a45842";ctx.fillRect(80,100,150,200);ctx.fillStyle="#537c62";ctx.fillRect(330,420,120,160);const blob=await new Promise(r=>canvas.toBlob(r,"image/png"));const dt=new DataTransfer();dt.items.add(new File([blob],"验收1.png",{type:"image/png"}));dt.items.add(new File([blob],"验收2.png",{type:"image/png"}));const input=document.querySelector("#file-input");input.files=dt.files;input.dispatchEvent(new Event("change"));})()');
   try{await wait('.import-candidate-tile');}catch(error){const info=await evaluate('({screen:document.querySelector("#view")?.innerText.slice(0,700),toast:document.querySelector("#toast")?.textContent,progress:document.querySelector(".import-processing")?.textContent})');throw Error(error.message+' '+JSON.stringify(info));}await capture('import-inspect',2560,1440);
+  // The next photo is recognized before the first photo is confirmed.
+  for(let i=0;i<Math.ceil(Number(process.env.SHIYE_WAIT_MS||30000)/50);i++){
+    if(String(await evaluate('document.querySelector(".queue-item[data-id=\"1\"] small")?.textContent')).includes('已预识别'))break;
+    await sleep(50);
+  }
+  assert.match(String(await evaluate('document.querySelector(".queue-item[data-id=\"1\"] small")?.textContent')),/已预识别/);
+  assert.equal(await evaluate('document.querySelector(".queue-item.active").dataset.id'),'0');
   const photoLayout=await evaluate('(()=>{const base=document.querySelector("#crop-preview").getBoundingClientRect(),im=document.querySelector("#crop-preview>img").getBoundingClientRect(),corners=document.querySelector(".paper-corner-overlay").getBoundingClientRect();return {base:{w:base.width,h:base.height},image:{w:im.width,h:im.height},corners:{w:corners.width,h:corners.height}};})()');
   assert.ok(photoLayout.image.h<=photoLayout.base.h+1&&photoLayout.image.w<=photoLayout.base.w+1,'Import photo must not be cropped by its preview');
   assert.ok(Math.abs(photoLayout.corners.w/photoLayout.corners.h-600/850)<.01,'Corner overlay must match fitted photo ratio');
   await click('[data-act="manual-import-box"]','.multi-box-editor');
+  const retainedPreviews=await evaluate('[...document.querySelectorAll(".import-candidate-tile img")].map(img=>img.src)');
   const overlay=await evaluate('(()=>{const r=document.querySelector(".multi-box-editor").getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height};})()');
   await mouseDrag({x:overlay.x+.1*overlay.w,y:overlay.y+.75*overlay.h},{x:overlay.x+.3*overlay.w,y:overlay.y+.9*overlay.h});
   await capture('manual-box',2560,1440);
@@ -174,6 +182,13 @@ try {
   assert.equal(await evaluate('document.querySelectorAll(".import-candidate-tile").length'),2);
   await evaluate('Promise.all([...document.querySelectorAll(".import-candidate-tile img")].map(img=>img.decode().catch(()=>{})))');
   assert.ok(await evaluate('[...document.querySelectorAll(".import-candidate-tile img")].every(img=>img.complete&&img.naturalWidth>0)'),'Manual segmentation must keep both existing material previews visible');
+  assert.deepEqual(await evaluate('[...document.querySelectorAll(".import-candidate-tile img")].map(img=>img.src)'),retainedPreviews,'Unchanged manual boxes reuse their original cutouts');
+  const beforeResize=await evaluate('[...document.querySelectorAll(".import-candidate-tile img")].map(img=>img.src)');
+  const oldWidth=Number(await evaluate('document.querySelector(".import-candidate-tile small").textContent.match(/[0-9.]+/)?.[0]'));
+  await evaluate('(()=>{const el=document.querySelector("#paper-size");el.value="custom";el.dispatchEvent(new Event("change",{bubbles:true}));})()');
+  await evaluate('(()=>{const el=document.querySelector("#import-paper-width");el.value="211";el.dispatchEvent(new Event("change",{bubbles:true}));})()');
+  assert.deepEqual(await evaluate('[...document.querySelectorAll(".import-candidate-tile img")].map(img=>img.src)'),beforeResize,'Paper size edits must keep cutout blobs');
+  assert.notEqual(Number(await evaluate('document.querySelector(".import-candidate-tile small").textContent.match(/[0-9.]+/)?.[0]')),oldWidth,'Paper size edits recalculate physical dimensions');
   await click('[data-act="import-confirm-photo"]');await wait('.queue-item.active[data-id="1"]');await wait('.import-candidate-tile.selected');await click('[data-act="import-confirm-photo"]','.review-candidates');
   await evaluate('document.querySelector(".review-candidate").dispatchEvent(new MouseEvent("contextmenu",{bubbles:true,cancelable:true}))');
   await wait('#candidate-menu');await evaluate('[...document.querySelectorAll("#candidate-menu button")].find(b=>b.textContent==="编辑素材信息").click()');await wait('#candidate-edit-name');
@@ -207,3 +222,4 @@ try {
   await writeFile(directory+'/report.json',JSON.stringify({base,browser:'Chrome via CDP (not physical Safari)',report,checks:['settings draft/save/cancel','series cover/tags/reload','touch lasso with handwriting and multiselect drag','manual import box','two-photo import metadata','work editable elements and background removal','complete backup restore'],errors},null,2));
   console.log('Real browser acceptance: '+report.length+' screens, 7 viewports, workflows and backup roundtrip passed. '+directory);
 }finally{if(context)await command('Target.disposeBrowserContext',{browserContextId:context},null);ws.close();cli(['close']);}
+
