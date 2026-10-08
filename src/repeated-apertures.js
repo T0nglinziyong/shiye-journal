@@ -187,10 +187,14 @@ function restoreOne(cv,rgba,pageW,pageH,candidate,paperWidthMM,paperHeightMM){
   cv.cvtColor(image,rgb,cv.COLOR_RGBA2RGB);cv.cvtColor(rgb,lab,cv.COLOR_RGB2Lab);cv.cvtColor(image,gray,cv.COLOR_RGBA2GRAY);
   cv.resize(source,scaled,new cv.Size(gw,gh),0,0,cv.INTER_NEAREST);
   const target=carrier.roi(new cv.Rect(ox,oy,gw,gh));scaled.copyTo(target);target.delete();
+  // Keep feathered model edges for display, but run aperture geometry on the
+  // same binary carrier as before boundary antialiasing was introduced.
+  const displayCarrier=new cv.Mat();carrier.copyTo(displayCarrier);
+  cv.threshold(carrier,carrier,127,255,cv.THRESH_BINARY);
 
   const ref=localPaperReference(cv,carrier,lab,pxPerMM);
   if(!ref||plausiblePageLikeCount(cv,carrier,lab,ref,pxPerMM)<3){
-    source.delete();scaled.delete();carrier.delete();gray.delete();lab.delete();rgb.delete();image.delete();
+    displayCarrier.delete();source.delete();scaled.delete();carrier.delete();gray.delete();lab.delete();rgb.delete();image.delete();
     return {...candidate,apertureCount:0};
   }
 
@@ -200,9 +204,12 @@ function restoreOne(cv,rgba,pageW,pageH,candidate,paperWidthMM,paperHeightMM){
   if(inferred)group.push(inferred);
   if(group.length>=4){
     const radius=Math.max(1,Math.round(median(group.map(q=>q.r))+pxPerMM*.33));
-    for(const q of group)cv.circle(carrier,new cv.Point(q.x,q.y),radius,new cv.Scalar(0),cv.FILLED);
+    for(const q of group){
+      cv.circle(carrier,new cv.Point(q.x,q.y),radius,new cv.Scalar(0),cv.FILLED);
+      cv.circle(displayCarrier,new cv.Point(q.x,q.y),radius,new cv.Scalar(0),cv.FILLED);
+    }
 
-    const local=carrier.roi(new cv.Rect(ox,oy,gw,gh)),packed=new cv.Mat();local.copyTo(packed);
+    const local=carrier.roi(new cv.Rect(ox,oy,gw,gh)),display=displayCarrier.roi(new cv.Rect(ox,oy,gw,gh)),packed=new cv.Mat();display.copyTo(packed);
     const regions=group.map(q=>({
       x:(x0+q.x-radius)/pageW,y:(y0+q.y-radius)/pageH,
       w:(radius*2+1)/pageW,h:(radius*2+1)/pageH,
@@ -215,11 +222,11 @@ function restoreOne(cv,rgba,pageW,pageH,candidate,paperWidthMM,paperHeightMM){
       apertureRegions:regions,
       mask:{...m,width:gw,height:gh,alpha:new Uint8Array(packed.data),topologyPreserved:true,apertureRegions:regions}
     };
-    packed.delete();local.delete();source.delete();scaled.delete();carrier.delete();gray.delete();lab.delete();rgb.delete();image.delete();
+    packed.delete();display.delete();local.delete();displayCarrier.delete();source.delete();scaled.delete();carrier.delete();gray.delete();lab.delete();rgb.delete();image.delete();
     return result;
   }
 
-  source.delete();scaled.delete();carrier.delete();gray.delete();lab.delete();rgb.delete();image.delete();
+  displayCarrier.delete();source.delete();scaled.delete();carrier.delete();gray.delete();lab.delete();rgb.delete();image.delete();
   return {...candidate,apertureCount:0};
 }
 
