@@ -10,6 +10,9 @@ on:
       - 'src/swift-controls.css'
       - 'tests/browser-acceptance.mjs'
       - 'tests/editor-browser-acceptance.mjs'
+      - 'tests/cloud-cache-browser.mjs'
+      - 'src/app.js'
+      - 'src/series-contents.js'
       - '.github/workflows/interface-browser.yml'
   workflow_dispatch:
 
@@ -50,6 +53,7 @@ jobs:
           done
           SHIYE_WAIT_MS=30000 SHIYE_TEST_URL=http://127.0.0.1:5193 node tests/browser-acceptance.mjs
           SHIYE_TEST_URL=http://127.0.0.1:5193 node tests/editor-browser-acceptance.mjs
+          SHIYE_TEST_URL=http://127.0.0.1:5193 node tests/cloud-cache-browser.mjs
       - name: Upload viewport screenshots
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -58,4 +62,5 @@ jobs:
           path: |
             /tmp/shiye-browser-acceptance/
             /tmp/shiye-editor-browser/
+            /tmp/shiye-cache-browser/
           retention-days: 7
