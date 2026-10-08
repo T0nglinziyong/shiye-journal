@@ -7,8 +7,7 @@ export function supportedSchema(version){
   return version;
 }
 export async function migrateDetachedSnapshot(snapshot,{from=1,to=CURRENT_DATA_SCHEMA,migrations={}}={}){
-  supportedSchema(to);
-  if(!Number.isSafeInteger(from)||from<1||from>to)throw Error('迁移起始版本无效');
+  if(!Number.isSafeInteger(to)||to<1||!Number.isSafeInteger(from)||from<1||from>to)throw Error('迁移起始版本无效');
   let output=structuredClone(snapshot);
   for(let version=from;version<to;version++){
     const migrate=migrations[version];
