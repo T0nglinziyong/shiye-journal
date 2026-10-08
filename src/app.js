@@ -810,6 +810,12 @@ function paperDimensions(){return importPaperDimensions({paperSize:state.paperSi
 async function confirmImportPhoto(){
   if(state.importProcessing)return;
   const record=state.importRecords[state.importIndex];
+  const [expectedPaperWidth,expectedPaperHeight]=paperDimensions();
+  if(state.paperSize!=='none'&&state.correctedBitmap&&Math.abs(
+    (state.correctedBitmap.width/state.correctedBitmap.height)/
+    (expectedPaperWidth/expectedPaperHeight)-1)>.025){
+    toast('纸张尺寸或方向改变后，须预览并应用新的校正结果，才能确认素材');return;
+  }
   if(state.paperSize!=='none'&&state.paperCorners&&state.correctedBitmap
     &&record?.appliedCorners!==JSON.stringify(state.paperCorners)){
     toast('纸张四角已调整，请先“预览校正”并点击“使用校正结果”，再确认素材');return;
