@@ -31,11 +31,39 @@ const withProjectBase=(store,record,base)=>{
 function retainImage(path,data){images.set(path,Promise.resolve(data));imageSizes.delete(path);imageSizes.set(path,data.size);let bytes=[...imageSizes.values()].reduce((a,b)=>a+b,0);for(const [key,size] of imageSizes){if(bytes<=64*1024*1024&&imageSizes.size<=48)break;if(key===path)continue;images.delete(key);imageSizes.delete(key);bytes-=size;}}
 let cacheDisabled=false;
 let projectOutboxBefore=[],importOutboxBefore=[];
+const sessionTag=crypto.randomUUID();
+let outboxChannel=null;
+const channel=()=>{
+  if(typeof window==='undefined'||typeof BroadcastChannel==='undefined')return null;
+  if(outboxChannel)return outboxChannel;
+  if(!owner)return null;
+  const name='shiye-outbox:'+namespace+':'+owner;
+  outboxChannel=new BroadcastChannel(name);
+  outboxChannel.onmessage=event=>{
+    if(event.data?.source!==sessionTag||event.data?.type!=='pending')return;
+  };
+  // Remote tab notifications request a background refresh. Every actual cloud
+  // mutation is protected by Web Locks and server-side revision CAS.
+  outboxChannel.onmessage=event=>{
+    if(!event.data||event.data.source===sessionTag||event.data.type!=='pending')return;
+    void Promise.all([importSync.resume(),projectSync.resume()]).catch(()=>{});
+  };
+  return outboxChannel;
+};
+async function withAccountSyncLock(task){
+  const id=await account();
+  if(typeof navigator!=='undefined'&&navigator.locks?.request)
+    return navigator.locks.request('shiye-sync:'+id,{mode:'exclusive'},task);
+  // Web Locks availability varies; durable IndexedDB merge and server CAS are
+  // mandatory correctness layers even when this optimization is unavailable.
+  return task();
+}
 async function persistOutbox(kind,previous,rows){
   if(!cache||cacheDisabled)throw Error('无法安全保存待同步资料');
   const key=await account();
   if(typeof cache.putOutbox==='function')await cache.putOutbox(key,kind,previous,rows);
   else await cache.put(key,kind,rows);
+  channel()?.postMessage({source:sessionTag,type:'pending'});
 }
 const account=async()=>`${namespace}:${await identity()}`;
 function reportSync(){if(typeof window!=='undefined'){const a=projectSync.status(),b=importSync.status();window.dispatchEvent(new CustomEvent('shiye-project-sync',{detail:{pending:a.pending+b.pending+writesInFlight,error:b.error||a.error}}));}}
@@ -50,6 +78,7 @@ const projectSync=createProjectSync({
   },
   onCommitted:(record,committedRevision)=>{if(record.__cloudSessionId)editorBases.set(record.__cloudSessionId,committedRevision);},
   onStatus:reportSync,
+  runExclusive:withAccountSyncLock,
 });
 async function wasCommitted(operationID,baseRevision){
   if(!operationID)throw Error('待同步记录缺少 operationID');
@@ -109,6 +138,7 @@ const importSync=createProjectSync({
   write:async rows=>{await persistOutbox('import-outbox',importOutboxBefore,rows);importOutboxBefore=structuredClone(rows);},
   commit:(batch,operationID)=>batch.operations?cloudTransaction(batch.names,tx=>{for(const op of batch.operations){const store=tx.objectStore(op.store);if(op.action==='put')store.put(op.item);else if(op.action==='delete')store.delete(op.id);else store.clear();}},operationID):cloudTransaction(['assets','blobs','projects'],tx=>{for(const store of ['assets','blobs','projects'])for(const record of batch[store]||[])tx.objectStore(store).put(record);},operationID),
   revision:()=>revision,reconcile:reconcileImport,onStatus:reportSync,
+  runExclusive:withAccountSyncLock,
   recordKeys:batch=>batch.operations?.map(op=>({store:op.store,id:op.item?.id??op.id}))||['assets','blobs','projects'].flatMap(store=>(batch[store]||[]).map(item=>({store,id:item.id}))),
 });
 async function pendingOperations(store){await identity();return (await importSync.pending()).flatMap(row=>row.record.operations?.filter(op=>op.store===store)||(row.record[store]||[]).map(item=>({action:'put',store,item})));}
