@@ -46,3 +46,22 @@ test('installation remains staged until the app requests activation',async()=>{
   await pending;
   assert.equal(activations,1);
 });
+
+test('multi-tab editor prevents an unsafe Service Worker takeover',async()=>{
+  const source=(await readFile(new URL('../public/sw.js',import.meta.url),'utf8'))
+    .replace('__BUILD_ID__','test').replace('__ASSETS__',"['/']");
+  const listeners=new Map(),messages=[];let skipped=0;
+  const self={location:{origin:'https://shiyejournal.vip'},
+    addEventListener:(name,fn)=>listeners.set(name,fn),
+    clients:{claim:async()=>{},matchAll:async()=>[{id:'a'},{id:'b'}]},
+    skipWaiting:async()=>{skipped++;}
+  };
+  const caches={open:async()=>({addAll:async()=>{}}),keys:async()=>[],delete:async()=>true};
+  vm.runInNewContext(source,{self,caches,Promise,URL,Response,Set});
+  let pending;
+  listeners.get('message')({data:{type:'SHIYE_ACTIVATE_UPDATE'},
+    source:{postMessage:message=>messages.push(message)},waitUntil:promise=>pending=promise});
+  await pending;
+  assert.equal(skipped,0);
+  assert.equal(messages[0].type,'SHIYE_UPDATE_BLOCKED');
+});
