@@ -45,13 +45,14 @@ export function duplicatePhysicalBox(a,b){
     smaller=Math.max(1,Math.min(a.w*a.h,b.w*b.h));
   // Require near-containment, not ordinary intersection: two adjacent or
   // overlapping physical materials should never be collapsed based on IoU.
-  return intersection/smaller>=.88;
+  return intersection/smaller>=.80;
 }
 export function likelyNeutralPageArtifact(item){
   // Weak, almost seed-free neutral background residue should not become a
   // material. Non-neutral/pale carriers keep chromatic evidence even when
   // printed details are sparse.
-  return item.seedDensity<.003&&item.evidenceDensity<.035&&item.fillRatio<.55;
+  return item.seedDensity<.003&&item.evidenceDensity<.035
+    &&(item.fillRatio<.55||item.touchesProtectedFrame===true);
 }
 function supportedRange(values,threshold){
   let first=-1,last=-1,count=0;
@@ -95,6 +96,7 @@ export function discoverMaterialBoxes(cv,p,own){
     item.evidenceDensity=item.evidenceN/Math.max(1,item.pixels);
     item.seedDensity=item.seedN/Math.max(1,item.pixels);
     item.fillRatio=item.pixels/Math.max(1,item.w*item.h);
+    item.touchesProtectedFrame=item.touchesProtected;
   }
 
   // Rectification/page-border cleanup. Contact with the page frame by itself
