@@ -6,10 +6,9 @@ const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
  * The validated default material segmenter.
  *
  * Whole-page box discovery owns identity/count. Every discovered box is then
- * segmented independently by the same outside-in MorphGAC rule. GrabCut,
- * Active Contour and MorphACWE are intentionally NOT selected automatically:
- * on the real acceptance cases they were either materially less accurate or
- * slower for negligible gain.
+ * segmented independently by the validated outside-in MorphGAC rule.
+ * GrabCut and MorphGAC+GrabCut remain explicit alternatives, but auto never
+ * switches away from the validated MorphGAC defaults.
  */
 export function chooseClassicalSegmenter(){return 'morphgac';}
 

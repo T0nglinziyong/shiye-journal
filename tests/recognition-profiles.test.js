@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {recognitionProfile,recognitionPixelOptions} from '../src/recognition-profiles.js';
+import {recognitionProfile,recognitionPixelOptions,recognitionOptions} from '../src/recognition-profiles.js';
 import {normalizePreferences} from '../src/preferences.js';
 
 test('validated recognition modes and defaults match the final automatic pipeline',()=>{
@@ -17,6 +17,7 @@ test('validated recognition modes and defaults match the final automatic pipelin
   assert.equal(recognitionProfile('hybrid',1200).analysisMaxDimension,1200);
   assert.equal(typeof recognitionProfile('hybrid',1200).refineCandidates,'function');
   assert.deepEqual(recognitionPixelOptions.map(([value])=>value),[900,1200,1600]);
+  assert.deepEqual(recognitionOptions.map(([id])=>id),['auto','morphgac','grabcut','hybrid']);
 
   const defaults=normalizePreferences({});
   assert.equal(defaults.recognition,'auto');
