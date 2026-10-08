@@ -21,7 +21,9 @@ test('Vercel uploads the Vite worker config used by production build',()=>{
 
 test('Vercel Git auto-deployment is limited to main and test',()=>{
   const config=JSON.parse(readFileSync(new URL('../vercel.json',import.meta.url),'utf8'));
-  assert.deepEqual(config.git?.deploymentEnabled,{'*':false,main:true,test:true});
+  assert.deepEqual(config.git?.deploymentEnabled,{'**':false,main:true,test:true});
+  // Minimatch '*' does not match '/' in branches such as fix/something.
+  // Those commits otherwise create canceled Preview deployments and consume quota.
 });
 
 test('Vercel uploads every server module imported by the COS function',()=>{
