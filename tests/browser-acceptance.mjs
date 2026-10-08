@@ -182,7 +182,7 @@ try {
   assert.equal(await evaluate('document.querySelectorAll(".import-candidate-tile").length'),2);
   await evaluate('Promise.all([...document.querySelectorAll(".import-candidate-tile img")].map(img=>img.decode().catch(()=>{})))');
   assert.ok(await evaluate('[...document.querySelectorAll(".import-candidate-tile img")].every(img=>img.complete&&img.naturalWidth>0)'),'Manual segmentation must keep both existing material previews visible');
-  assert.deepEqual(await evaluate('[...document.querySelectorAll(".import-candidate-tile img")].map(img=>img.src)'),retainedPreviews,'Unchanged manual boxes reuse their original cutouts: '+JSON.stringify(await evaluate('window.__shiyeManualReuseDebug')));
+  assert.deepEqual(await evaluate('[...document.querySelectorAll(".import-candidate-tile img")].map(img=>img.src)'),retainedPreviews,'Unchanged manual boxes reuse their original cutouts');
   const beforeResize=await evaluate('[...document.querySelectorAll(".import-candidate-tile img")].map(img=>img.src)');
   const oldWidth=Number(await evaluate('document.querySelector(".import-candidate-tile small").textContent.match(/[0-9.]+/)?.[0]'));
   await evaluate('(()=>{const el=document.querySelector("#paper-size");el.value="custom";el.dispatchEvent(new Event("change",{bubbles:true}));})()');

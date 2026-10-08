@@ -874,7 +874,6 @@ async function refreshImportCandidates(regions,{manual=false}={}){
     if(!candidate||candidate.segmentationFailed)throw Error('旋转框内无法可靠分割，请调整框后重试');
     return candidate;
   }):regions.map(region=>({region,original:null}));
-  if(manual)window.__shiyeManualReuseDebug={matched:plans.map(plan=>!!plan.original),boxes:regions.map(r=>[r.x,r.y,r.w,r.h,r.rotation]),previous:previous.map(c=>[c.region.x,c.region.y,c.region.w,c.region.h,c.region.rotation])};
   if(record!==state.importRecords[state.importIndex]||state.route!=='import')return false;
   for(let i=0;i<plans.length;i++){
     const {region,original}=plans[i];if(original){next.push(original);continue;}
