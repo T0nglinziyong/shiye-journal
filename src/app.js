@@ -387,6 +387,20 @@ async function handle(action,id,value){try{switch(action){
   case 'restore-archive':{const p=state.activeProject,a=p.manualArchives.find(x=>x.id===id);if(!a||!confirm('恢复此存档会替换当前编辑状态，确定吗？'))break;p.drafts=structuredClone(a.drafts);p.activeDraftID=a.activeDraftID;state.activeDraft=a.activeDraftID;saveProject();render();break;}
   case 'export-png':await exportPNG();break;case 'print':await printPage();break;
   case 'creative-json':openCreativeJSON();break;
+  case 'recognition-diagnostics':{
+    const rec=state.importRecords[state.importIndex],trace=rec?.recognitionDiagnostic;
+    if(!trace)throw Error('请先完成当前照片的识别');
+    const report={format:'shiye-recognition-box-diagnostics',version:2,
+      originalPixelSize:[state.importBitmap?.width,state.importBitmap?.height],
+      autoPaperCorners:rec.autoPaperCorners||null,paperCorners:rec.corners||null,
+      appliedPaperCorners:rec.appliedCorners?JSON.parse(rec.appliedCorners):null,
+      correctedPixelSize:rec.correctedBitmap?[rec.correctedBitmap.width,rec.correctedBitmap.height]:null,
+      paperOrientation:rec.paperOrientation||'auto',paperSize:rec.paperSize||'a4',
+      ...trace,visibleCount:rec.candidates?.length||0};
+    download(new Blob([JSON.stringify(report,null,2)],{type:'application/json'}),
+      '拾页素材框诊断.json');
+    toast('已导出不含照片的素材框诊断');break;
+  }
   case 'backup':await backup();break;case 'restore':backupInput.click();break;case 'backup-emergency':{await flushSave();const blob=await db.createEmergencyBackup();download(blob,'拾页待同步应急包-'+new Date().toISOString().slice(0,10)+'.shiyerecovery');toast('应急包已导出，请妥善保存，包含私人图片和文字');break;}case 'restore-emergency':emergencyInput.click();break;case 'restore-trash':await restoreTrash(id);break;
   case 'storage-token':{const token=view.querySelector('#data-server-token')?.value.trim();if(!token)throw Error('请输入新的访问令牌');const old=db.storageConfig();db.setStorageConfig({url:location.origin,token});try{await db.storageMode();toast('令牌已更新');}catch(error){db.setStorageConfig(old);throw error;}break;}
   case 'storage-connect':{await flushSave();const old=db.storageConfig(),url=view.querySelector('#data-server-url')?.value.trim(),token=view.querySelector('#data-server-token')?.value.trim();if(!url)throw Error('请输入拾页数据服务地址');db.setStorageConfig({url,token});try{await db.storageMode();state.activeProject=null;state.basket=[];await refresh();toast('已连接服务器');}catch(error){db.setStorageConfig(old);throw error;}break;}
@@ -706,7 +720,8 @@ async function switchImportRecord(index,skipSave=false){
   try{
   const bitmap=rec.bitmap||await createImageBitmap(rec.file);rec.bitmap=bitmap;if(!isCurrent())return;state.importBitmap=bitmap;
   progress('正在自动寻找纸张四角…');
-  state.paperCorners=rec.corners||(state.paperSize==='none'?null:await suggestPaperCorners(bitmap).catch(()=>null));if(!isCurrent())return;
+  state.paperCorners=rec.corners||(state.paperSize==='none'?null:await suggestPaperCorners(bitmap,(()=>{const [pw,ph]=paperDimensions();return pw/ph;})()).catch(()=>null));if(!isCurrent())return;
+  if(!rec.corners&&state.paperCorners)rec.autoPaperCorners=structuredClone(state.paperCorners);
   progress('正在进行透视校正…');
   if(!state.correctedBitmap&&state.paperCorners&&state.paperSize!=='none'){
     const [pw,ph]=paperDimensions(),blob=await rectifyA4(state.importBitmap,state.paperCorners,4096,pw/ph);
@@ -770,7 +785,7 @@ async function refreshImportCandidates(regions,{manual=false}={}){
 async function previewCrop(){
   if(!state.importBitmap)return;
   const record=state.importRecords[state.importIndex],source=state.correctedBitmap||state.importBitmap,b=state.correctedBitmap?{x:0,y:0,w:1,h:1}:state.importBox,[pw,ph]=paperDimensions();
-  let regions=await detectPaperCandidates(source,b,6,{balanceLight:state.balanceLight,paperWidthMM:pw,paperHeightMM:ph,recognition:state.importRecognition||state.preferences.recognition,recognitionPixels:state.preferences.recognitionPixels,recognitionPreprocess:recognitionPreprocessOptions(),recognitionPostprocess:recognitionPostprocessOptions(),onProgress:p=>{
+  let regions=await detectPaperCandidates(source,b,6,{balanceLight:state.balanceLight,paperWidthMM:pw,paperHeightMM:ph,recognition:state.importRecognition||state.preferences.recognition,recognitionPixels:state.preferences.recognitionPixels,recognitionPreprocess:recognitionPreprocessOptions(),recognitionPostprocess:recognitionPostprocessOptions(),onDiagnostic:trace=>{record.recognitionDiagnostic=trace;},onProgress:p=>{
     if(state.route!=='import'||record!==state.importRecords[state.importIndex])return;
         const text=p.status==='inference'?'浏览器模型正在细化素材边缘…'
           :p.status==='fallback'?(Number.isFinite(p.count)?`${p.count} 个模型结果不可靠，保留传统识别边缘，请检查`:'边缘精修未采用新结果，已保留原识别边缘')
@@ -797,6 +812,17 @@ async function chooseCandidate(index){if(index>=0){state.importCandidateSelectio
 function paperDimensions(){return importPaperDimensions({paperSize:state.paperSize,paperOrientation:state.paperOrientation,bitmap:state.importBitmap,corners:state.paperCorners,customImportWidth:state.customImportWidth||state.preferences.customPaperWidth,customImportHeight:state.customImportHeight||state.preferences.customPaperHeight});}
 async function confirmImportPhoto(){
   if(state.importProcessing)return;
+  const record=state.importRecords[state.importIndex];
+  const [expectedPaperWidth,expectedPaperHeight]=paperDimensions();
+  if(state.paperSize!=='none'&&state.correctedBitmap&&Math.abs(
+    (state.correctedBitmap.width/state.correctedBitmap.height)/
+    (expectedPaperWidth/expectedPaperHeight)-1)>.025){
+    toast('纸张尺寸或方向改变后，须预览并应用新的校正结果，才能确认素材');return;
+  }
+  if(state.paperSize!=='none'&&state.paperCorners&&state.correctedBitmap
+    &&record?.appliedCorners!==JSON.stringify(state.paperCorners)){
+    toast('纸张四角已调整，请先“预览校正”并点击“使用校正结果”，再确认素材');return;
+  }
   const selected=[...(state.importCandidateSelection||[])];if(!selected.length&&state.importMode!=='work'){toast('请选择至少一件素材，或使用手动补框');return;}
   const rec=state.importRecords[state.importIndex];rec.selectedCandidates=(state.importCandidateData||[]).map((c,i)=>({...c,selected:state.importCandidateSelection.has(i)}));rec.confirmed=true;saveActiveImportRecord();
   const next=state.importRecords.findIndex(r=>!r.confirmed);if(next>=0)await switchImportRecord(next);else{state.importStep='review';render();}
