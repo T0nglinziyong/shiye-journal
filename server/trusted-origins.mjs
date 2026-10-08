@@ -4,7 +4,7 @@ export function trustedOrigins(env={}){
   for(const token of String(env.SHIYE_APP_ORIGINS||'').split(',')){
     const value=token.trim();if(!value)continue;
     let url;try{url=new URL(value);}catch{throw Error('可信来源配置不合法');}
-    if(url.protocol!=='https:'||url.origin!==value)throw Error('可信来源必须是无路径的 HTTPS origin');
+    if(url.protocol!=='https:'||url.origin!==value||url.hostname.includes('*'))throw Error('可信来源必须是无路径的 HTTPS origin');
     origins.add(value);
   }
   const deployed=String(env.VERCEL_URL||'').trim();
