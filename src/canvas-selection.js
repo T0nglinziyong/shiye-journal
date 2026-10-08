@@ -43,8 +43,9 @@ export function selectStrokes(draft, polygon, enabled = true) {
   });
 }
 export function selectionBounds(points) {
-  const x=Math.min(...points.map(p=>p.x)), y=Math.min(...points.map(p=>p.y));
-  return {x,y,width:Math.max(...points.map(p=>p.x))-x,height:Math.max(...points.map(p=>p.y))-y};
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  for(const p of points){minX=Math.min(minX,p.x);minY=Math.min(minY,p.y);maxX=Math.max(maxX,p.x);maxY=Math.max(maxY,p.y);}
+  return {x:minX,y:minY,width:maxX-minX,height:maxY-minY};
 }
 export function clampCanvasPosition(draft,object,x,y){
   return {x:Math.max(0,Math.min(draft.canvas.width,x)),y:Math.max(0,Math.min(draft.canvas.height,y))};
