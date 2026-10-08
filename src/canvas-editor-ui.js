@@ -12,7 +12,7 @@ import {createIcon} from './icons.js';
 import {historyTitle,renameHistory,deleteDraft,captureHistory,restoreHistoryDraft} from './project-history.js';
 import {syncSelectionGeometry} from './selection-geometry.js';
 import {clampCanvasPosition,moveSelection,materialCenterOutside} from './canvas-selection.js';
-const labels={select:'选择',marquee:'矩形框选',pen:'笔',highlighter:'荧光笔',eraser:'橡皮擦',lasso:'套索',text:'文字',shape:'图形',material:'素材',layers:'图层',paper:'画布背景'};
+const labels={select:'选择',marquee:'矩形框选',pen:'笔',highlighter:'荧光笔',eraser:'橡皮擦',lasso:'套索选择',text:'文字',shape:'图形',material:'素材',layers:'图层',paper:'画布背景'};
 const glyphs={select:'➤',pen:'✎',eraser:'◇',highlighter:'▱',lasso:'◌',text:'Aa',shape:'▢',material:'▧',layers:'▱',paper:'▦'};
 const prefKey='shiye-canvas-tools-v1';
 const allEntries=d=>[['material',d.items],['shape',d.primitives],['text',d.textBlocks]].flatMap(([kind,list])=>(list||[]).map(value=>({kind,value})));
