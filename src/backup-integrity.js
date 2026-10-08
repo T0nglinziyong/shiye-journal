@@ -1,3 +1,4 @@
+import {supportedSchema} from './storage-migrations.js';
 // Validation happens before restoring a complete six-store backup. In
 // particular, do not clear a real account because a JSON file parses.
 const STORES=['assets','blobs','series','projects','meta','trash'];
@@ -30,6 +31,7 @@ export async function buildBlobIntegrity(records){
 export async function validateBackupData(data){
   if(data?.format!=='shiye-pwa'||data.version!==1||!data.stores
     ||STORES.some(s=>!Array.isArray(data.stores[s])))throw Error('不是拾页 PWA 完整备份');
+  supportedSchema(data.schemaVersion??1);
   const ids={};
   for(const store of STORES){
     const seen=new Set();

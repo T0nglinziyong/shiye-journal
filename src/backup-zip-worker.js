@@ -1,5 +1,6 @@
 import {Zip,ZipPassThrough,Unzip,UnzipInflate} from 'fflate';
 import {sha256} from '@noble/hashes/sha2.js';
+import {supportedSchema,CURRENT_DATA_SCHEMA} from './storage-migrations.js';
 
 const STORES=['assets','blobs','series','projects','meta','trash'];
 const encoder=new TextEncoder(),decoder=new TextDecoder();
@@ -25,7 +26,7 @@ async function addEntry(path,bytes){
 async function begin(records){
   if(zip)throw Error('ZIP 任务已启动');
   zip=new Zip(onZip);
-  manifest={format:'shiye-pwa-zip',version:2,createdAt:new Date().toISOString(),
+  manifest={format:'shiye-pwa-zip',version:2,schemaVersion:CURRENT_DATA_SCHEMA,createdAt:new Date().toISOString(),
     tables:{},files:{},blobs:[],compression:'store'};
   for(const store of STORES.filter(name=>name!=='blobs')){
     const rows=records[store];
@@ -119,6 +120,7 @@ async function restore(file){
   const manifest=JSON.parse(decoder.decode(raw));
   if(manifest.format!=='shiye-pwa-zip'||manifest.version!==2||!manifest.files||!manifest.tables||!Array.isArray(manifest.blobs))
     throw Error('不是拾页 ZIP 完整备份');
+  supportedSchema(manifest.schemaVersion??1);
   if(files.size!==Object.keys(manifest.files).length+1)throw Error('ZIP 文件清单数量不一致');
   for(const [path,info] of Object.entries(manifest.files)){
     const content=files.get(path);
