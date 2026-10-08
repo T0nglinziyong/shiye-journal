@@ -1,4 +1,4 @@
-import {canvasObjects,objectCorners,polygonContains,selectPolygon,selectStrokes,selectionBounds,moveSelection} from './canvas-selection.js';
+import {canvasObjects,objectCorners,polygonContains,selectPolygon,selectStrokes,selectionBounds,moveSelection,materialCenterOutside} from './canvas-selection.js';
 import {syncSelectionGeometry} from './selection-geometry.js';
 
 export function mountCanvasSelection(c) {
@@ -50,7 +50,7 @@ export function mountCanvasSelection(c) {
     if(target&&!entry&&state.tool==='select'){e.stopImmediatePropagation();return;}
     const p=point(e);let ids=state.multiSelected;
     if(state.tool==='lasso'&&count()&&state.selectionPath?.length>=3&&polygonContains(p,state.selectionPath)){
-      const starts=new Map(active().map(x=>[x.value.id,{x:x.value.x,y:x.value.y}]));
+      const starts=new Map(active().map(x=>[x.value.id,{x:x.value.x,y:x.value.y,...(x.kind==='material'?{userOverrideFlags:x.value.userOverrideFlags?.slice()}: {})}]));
       gesture={id:e.pointerId,start:p,starts,strokeStarts:new Map(activeStrokes().map(i=>[i,d.strokes[i].points.map(point=>({...point}))])),pathStart:state.selectionPath.map(point=>({...point}))};
     }else if(['lasso','marquee'].includes(state.tool)){
       const previous={ids:[...state.multiSelected],strokes:[...state.selectedStrokes],path:state.selectionPath?.map(point=>({...point}))||null};
@@ -61,7 +61,7 @@ export function mountCanvasSelection(c) {
       if(e.shiftKey){state.multiSelected=ids.includes(entry.value.id)?ids.filter(id=>id!==entry.value.id):[...ids,entry.value.id];state.selected=null;e.preventDefault();e.stopImmediatePropagation();render();return;}
       if(!ids.includes(entry.value.id))ids=entry.value.creativeGroupID?canvasObjects(d).filter(x=>x.value.creativeGroupID===entry.value.creativeGroupID).map(x=>x.value.id):[entry.value.id];
       state.multiSelected=ids;state.selectedStrokes=[];state.selected=ids.length===1?entry.value.id:null;state.selectionPath=null;
-      gesture={id:e.pointerId,start:p,starts:new Map(canvasObjects(d).filter(x=>ids.includes(x.value.id)).map(x=>[x.value.id,{x:x.value.x,y:x.value.y}]))};
+      gesture={id:e.pointerId,start:p,starts:new Map(canvasObjects(d).filter(x=>ids.includes(x.value.id)).map(x=>[x.value.id,{x:x.value.x,y:x.value.y,...(x.kind==='material'?{userOverrideFlags:x.value.userOverrideFlags?.slice()}: {})}]))};
     }else{state.multiSelected=[];state.selectedStrokes=[];state.selected=null;state.selectionPath=null;paint();view.editorRefresh?.();return;}
     e.preventDefault();e.stopImmediatePropagation();page.setPointerCapture(e.pointerId);view.editorRefresh?.();paint();
   },true);
@@ -71,11 +71,12 @@ export function mountCanvasSelection(c) {
     if(!gesture.checkpoint&&Math.hypot(p.x-gesture.start.x,p.y-gesture.start.y)>.5){checkpoint();gesture.checkpoint=true;}
     if(gesture.checkpoint){const moved=moveSelection(d,gesture.starts,p.x-gesture.start.x,p.y-gesture.start.y,gesture.strokeStarts);view.canvasInkRefresh?.();const scale=page.clientWidth/d.canvas.width;for(const {value:o} of active()){const el=page.querySelector('[data-object="'+o.id+'"]');if(el){el.style.left=(o.x-o.width/2)*scale+'px';el.style.top=(o.y-o.height/2)*scale+'px';syncSelectionGeometry(page,o.id);}}if(gesture.pathStart)state.selectionPath=gesture.pathStart.map(point=>({x:point.x+moved.dx,y:point.y+moved.dy}));paint();}
   },true);
-  const finish=e=>{if(!gesture||gesture.id!==e.pointerId)return;e.stopImmediatePropagation();view.selectionClickConsumed=true;const g=gesture;gesture=null;if(g.path){state.multiSelected=selectPolygon(d,g.path,state.selectionFilter);state.selectedStrokes=selectStrokes(d,g.path,state.selectionFilter.ink);state.selected=null;state.selectionPath=!g.marquee&&count()?g.path:null;}else if(g.checkpoint)saveProject();render();};
+  const restoreMove=g=>{for(const {value:o} of canvasObjects(d)){const start=g.starts?.get(o.id);if(start)Object.assign(o,start);}for(const [i,points] of g.strokeStarts||[])if(d.strokes?.[i])d.strokes[i].points=points;if(g.pathStart)state.selectionPath=g.pathStart;state.undo.pop();view.canvasInkRefresh?.();};
+  const finish=e=>{if(!gesture||gesture.id!==e.pointerId)return;e.stopImmediatePropagation();view.selectionClickConsumed=true;const g=gesture;gesture=null;if(g.path){state.multiSelected=selectPolygon(d,g.path,state.selectionFilter);state.selectedStrokes=selectStrokes(d,g.path,state.selectionFilter.ink);state.selected=null;state.selectionPath=!g.marquee&&count()?g.path:null;}else if(g.checkpoint){if(materialCenterOutside(d,active())&&confirm('素材中心已移出画布，是否撤回这次移动？'))restoreMove(g);else saveProject();}render();};
   page.addEventListener('pointerup',finish,true);
   const cancelGesture=()=>{if(!gesture)return;const g=gesture;gesture=null;
     if(g.previous){state.multiSelected=g.previous.ids;state.selectedStrokes=g.previous.strokes;state.selectionPath=g.previous.path;}
-    if(g.checkpoint){for(const {value:o} of canvasObjects(d)){const start=g.starts?.get(o.id);if(start)Object.assign(o,start);}for(const [i,points] of g.strokeStarts||[])if(d.strokes?.[i])d.strokes[i].points=points;if(g.pathStart)state.selectionPath=g.pathStart;state.undo.pop();view.canvasInkRefresh?.();}
+    if(g.checkpoint)restoreMove(g);
     if(page.hasPointerCapture?.(g.id))page.releasePointerCapture(g.id);render();
   };
   page.addEventListener('pointercancel',e=>{if(gesture?.id!==e.pointerId)return;e.preventDefault();e.stopImmediatePropagation();cancelGesture();},true);
