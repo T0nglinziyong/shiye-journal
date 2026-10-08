@@ -11,12 +11,12 @@ export function mountCanvasSelection(c) {
   const activeStrokes=()=>state.selectedStrokes.filter(i=>d.strokes?.[i]);
   const count=()=>active().length+activeStrokes().length;
   const controls=view.querySelector('.canvas-context-tools');
-  const range=[...controls.querySelectorAll('button')].find(b=>b.textContent==='选择范围');
+  
   const filter=document.createElement('details');filter.className='selection-filter';
   filter.innerHTML='<summary>选择范围</summary><div>'+[['ink','手写笔画'],['material','素材／照片'],['text','文字'],['shape','图形']].map(([key,label])=>'<label><input type="checkbox" data-selection-filter="'+key+'" '+(state.selectionFilter[key]?'checked':'')+'>'+label+'</label>').join('')+'<small>锁定和隐藏的对象不参与选择</small></div>';
   // Settings now use the tool's anchored popover; keep one shared filter state.
   filter.querySelectorAll('input').forEach(el=>el.onchange=()=>state.selectionFilter[el.dataset.selectionFilter]=el.checked);
-  const toolbar=document.createElement('div');toolbar.className='multi-selection-toolbar';toolbar.hidden=!['lasso','marquee'].includes(state.tool)&&count()<2;controls.append(toolbar);
+  const toolbar=document.createElement('div');toolbar.className='multi-selection-toolbar';toolbar.hidden=!['lasso','marquee'].includes(state.tool)&&count()<2;if(!['lasso','marquee'].includes(state.tool))controls.append(toolbar);
   const button=(label,fn)=>{const b=document.createElement('button');b.type='button';b.className='btn mini';b.textContent=label;b.onclick=fn;toolbar.append(b);return b;};
   const change=fn=>{if(!active().length)return;checkpoint();fn(active());saveProject();render();};
   toolbar.append(Object.assign(document.createElement('span'),{textContent:'已选 '+count()+' 项'}));
@@ -72,7 +72,7 @@ export function mountCanvasSelection(c) {
     if(gesture.checkpoint){const moved=moveSelection(d,gesture.starts,p.x-gesture.start.x,p.y-gesture.start.y,gesture.strokeStarts);view.canvasInkRefresh?.();const scale=page.clientWidth/d.canvas.width;for(const {value:o} of active()){const el=page.querySelector('[data-object="'+o.id+'"]');if(el){el.style.left=(o.x-o.width/2)*scale+'px';el.style.top=(o.y-o.height/2)*scale+'px';syncSelectionGeometry(page,o.id);}}if(gesture.pathStart)state.selectionPath=gesture.pathStart.map(point=>({x:point.x+moved.dx,y:point.y+moved.dy}));paint();}
   },true);
   const restoreMove=g=>{for(const {value:o} of canvasObjects(d)){const start=g.starts?.get(o.id);if(start)Object.assign(o,start);}for(const [i,points] of g.strokeStarts||[])if(d.strokes?.[i])d.strokes[i].points=points;if(g.pathStart)state.selectionPath=g.pathStart;state.undo.pop();view.canvasInkRefresh?.();};
-  const finish=e=>{if(!gesture||gesture.id!==e.pointerId)return;e.stopImmediatePropagation();view.selectionClickConsumed=true;const g=gesture;gesture=null;if(g.path){state.multiSelected=selectPolygon(d,g.path,state.selectionFilter);state.selectedStrokes=selectStrokes(d,g.path,state.selectionFilter.ink);state.selected=null;state.selectionPath=!g.marquee&&count()?g.path:null;}else if(g.checkpoint){if(materialCenterOutside(d,active())&&confirm('素材中心已移出画布，是否撤回这次移动？'))restoreMove(g);else saveProject();}render();};
+  const finish=e=>{if(!gesture||gesture.id!==e.pointerId)return;e.stopImmediatePropagation();view.selectionClickConsumed=true;const g=gesture;gesture=null;if(g.path){state.multiSelected=selectPolygon(d,g.path,state.selectionFilter,state.selectionMode||'contain');state.selectedStrokes=selectStrokes(d,g.path,state.selectionFilter.ink,state.selectionMode||'contain');state.selected=null;state.selectionPath=!g.marquee&&count()?g.path:null;}else if(g.checkpoint){if(materialCenterOutside(d,active())&&confirm('素材中心已移出画布，是否撤回这次移动？'))restoreMove(g);else saveProject();}render();};
   page.addEventListener('pointerup',finish,true);
   const cancelGesture=()=>{if(!gesture)return;const g=gesture;gesture=null;
     if(g.previous){state.multiSelected=g.previous.ids;state.selectedStrokes=g.previous.strokes;state.selectionPath=g.previous.path;}
