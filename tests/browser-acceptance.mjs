@@ -61,6 +61,15 @@ try {
     assert.ok(Math.abs(rows.purpose-rows.processing)<2,'purpose and processing share a row');assert.ok(Math.abs(rows.mode-rows.paper)<2,'mode and paper share a row');assert.ok(rows.purpose>rows.style);
     await evaluate('document.querySelector(".match-direction").scrollIntoView({block:"start"})');await capture('matching-controls',width,height);await evaluate('scrollTo(0,0)');
     await click('[data-route="works"]','.works-grid');await capture('works',width,height);
+    await click('.swift-tabs button:nth-child(4)','.journal-template-grid');
+    await wait('.journal-template-fallback');
+    await capture('templates',width,height);
+    const templateLayout=await evaluate('(()=>{const f=document.querySelector(".filters[data-template-filters]"),s=f.querySelector(".shiye-search"),buttons=f.querySelector(".four-filter-controls"),count=f.querySelector(":scope > span:not(.shiye-search)"),r=f.getBoundingClientRect(),b=buttons.getBoundingClientRect(),t=count.getBoundingClientRect();return {count:document.querySelectorAll(".journal-template-card").length,search:s.querySelector("input")?.getBoundingClientRect().width,controlsInside:b.left>=r.left-1&&b.right<=r.right+1,countInside:t.left>=r.left-1&&t.right<=r.right+1,controlsOverflow:buttons.scrollWidth>buttons.clientWidth+1};})()');
+    assert.ok(templateLayout.count===70&&templateLayout.search>80&&templateLayout.controlsInside&&templateLayout.countInside&&!templateLayout.controlsOverflow,'Template filters overflow or lose the search: '+JSON.stringify(templateLayout));
+    await click('.journal-template-card','.journal-template-detail-image');
+    await wait('.journal-template-detail-image .journal-template-fallback');
+    assert.ok(await evaluate('!!document.querySelector(".journal-template-detail-image button")'),'Unavailable template image needs a retry');
+    await click('.swift-tabs button:nth-child(2)','.works-grid');
     await evaluate('document.querySelector(".card[data-act=open-project]").dispatchEvent(new MouseEvent("contextmenu",{bubbles:true}))');await click('#project-meta-preview','.project-preview-cover');await capture('work-preview',width,height);
     await click('[data-act="preview-back"]','.works-grid');await click('[data-act="open-project"]','#canvas-page');await sleep(150);await capture('editor',width,height);
     await click('.swift-editor-head [data-act="back-works"]','.works-grid');
