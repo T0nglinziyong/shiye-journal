@@ -34,7 +34,10 @@ export function hasDisplayP3Profile(bytes){
       const header='ICC_PROFILE\0';
       if(header.split('').every((c,i)=>segment[i]===c.charCodeAt(0))){
         const label='Display P3';
-        for(let i=14;i+label.length*2<=segment.length;i++)if(label.split('').every((c,j)=>segment[i+j*2]===0&&segment[i+j*2+1]===c.charCodeAt(0)))return true;
+        for(let i=14;i<segment.length;i++){
+          if(i+label.length<=segment.length&&label.split('').every((c,j)=>segment[i+j]===c.charCodeAt(0)))return true;
+          if(i+label.length*2<=segment.length&&label.split('').every((c,j)=>segment[i+j*2]===0&&segment[i+j*2+1]===c.charCodeAt(0)))return true;
+        }
       }
     }
     p+=size+2;

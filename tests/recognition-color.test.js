@@ -1,11 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFile} from 'node:fs/promises';
 import {hasDisplayP3Profile,displayP3ToSrgb} from '../src/recognition-raster.js';
 
-test('Display P3 ICC marker and profile conversion preserve neutrals and correct chroma',async()=>{
-  const p3=await readFile(new URL('../cases/case3/raw_input.jpeg',import.meta.url)).catch(()=>null);
-  if(p3)assert.equal(hasDisplayP3Profile(p3),true);
+test('Display P3 ICC marker and profile conversion preserve neutrals and correct chroma',()=>{
+  const label=[...'Display P3'].flatMap(char=>[0,char.charCodeAt(0)]);
+  const payload=[...'ICC_PROFILE\0'].map(char=>char.charCodeAt(0)).concat([1,1],label);
+  const length=payload.length+2,jpeg=Uint8Array.from([255,216,255,226,length>>8,length&255,...payload,255,218]);
+  assert.equal(hasDisplayP3Profile(jpeg),true);
+  assert.equal(hasDisplayP3Profile(Uint8Array.from([255,216,255,218])),false);
   const pixels=new Uint8ClampedArray([230,230,230,255,91,103,115,255,244,190,130,255]);
   displayP3ToSrgb(pixels);
   assert.deepEqual([...pixels.slice(0,4)],[230,230,230,255]);
