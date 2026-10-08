@@ -134,6 +134,15 @@ try {
   assert.ok(inLassoAfter.every((o,i)=>o.x>inLassoBefore[i].x&&o.y>inLassoBefore[i].y),'Dragging inside lasso must move every enclosed object');
   assert.ok(inkAfter.every((p,i)=>p.x>inkBefore[i].x&&p.y>inkBefore[i].y),'Dragging inside lasso must move enclosed handwriting with objects');
   assert.equal(await evaluate('document.querySelectorAll(".canvas-selection-overlay .lasso-outline").length'),1,'Lasso boundary must follow the group drag');
+  // A mobile gesture interruption must restore both object and handwriting coordinates.
+  await command('Emulation.setTouchEmulationEnabled',{enabled:true});
+  await command('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:center.x+20,y:center.y+10,id:7,radiusX:1,radiusY:1,force:1}]});
+  await command('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:center.x+40,y:center.y+30,id:7,radiusX:1,radiusY:1,force:1}]});
+  await command('Input.dispatchTouchEvent',{type:'touchCancel',touchPoints:[]});
+  await command('Emulation.setTouchEmulationEnabled',{enabled:false});await sleep(150);
+  const cancelledDraft=(await storeRecords('projects')).find(p=>p.title==='未命名手账').drafts[0];
+  assert.deepEqual(cancelledDraft.primitives,inLassoAfter,'Interrupted drag must restore selected objects');
+  assert.deepEqual(cancelledDraft.strokes.at(-1).points,inkAfter,'Interrupted drag must restore selected ink');
   await click('[data-val="select"]');
   const beforeMove=(await storeRecords('projects')).find(p=>p.title==='未命名手账').drafts[0].primitives;
   await mouseDrag(center,{x:center.x+30,y:center.y+15});await sleep(250);
