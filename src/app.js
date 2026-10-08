@@ -65,7 +65,8 @@ import {selectJournalReferenceCases,loadJournalReferenceCases} from './journal-r
 import {loadJournalTemplateReferences} from './journal-template-references.js';
 import {clearJournalPresetImages} from './journal-preset-images.js';
 import {changeTrash,expiredTrash} from './trash-actions.js';
-import {runCreativeAgent} from './creative-runner.js';
+// AI agent planning and visual review are paid, optional workflows. Load them only on demand.
+const runCreativeAgent=async(...args)=>(await import('./creative-runner.js')).runCreativeAgent(...args);
 import {commitAIDraft} from './ai-run-target.js';
 import {prepareMaterialPreviews} from './creative-previews.js';
 import {materialAliases} from './material-alias.js';
