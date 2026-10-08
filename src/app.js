@@ -794,7 +794,8 @@ async function refreshImportCandidates(regions,{manual=false}={}){
     // Work layers stay in photographed coordinates; library materials get a
     // conservative rectangular correction. Originals use the same raster map.
     const aligned=state.importMode==='work'?{blob:cut,originalBlob:raw,candidateFrameBlob:raw,candidateFramePlacement:null,degrees:0,widthRatio:1,heightRatio:1}:await alignMaterialPreview(cut,raw,region.orientedBox?.autoDeskew?-region.orientedBox.rotation:null);
-    const width=calibrated?Math.round(region.w*pw*aligned.widthRatio*10)/10:null,height=calibrated?Math.round(region.h*ph*aligned.heightRatio*10)/10:null;
+    const width=calibrated?Math.round((region.orientedBox?.width??region.w)*pw*10)/10:null,
+      height=calibrated?Math.round((region.orientedBox?.height??region.h)*ph*10)/10:null;
     next.push({blob:aligned.blob,originalBlob:aligned.originalBlob,candidateFrameBlob:aligned.candidateFrameBlob||aligned.originalBlob,url:URL.createObjectURL(aligned.blob),title:'素材 '+(i+1),width,height,alignment:aligned.degrees,widthRatio:aligned.widthRatio,heightRatio:aligned.heightRatio,processingRecord:{automaticCorrectionDegrees:aligned.degrees,sourceWidthMM:width,sourceHeightMM:height,candidateFramePlacement:aligned.candidateFramePlacement||null},region,selected:true});
   }
   if(record!==state.importRecords[state.importIndex]){for(const c of next)if(!previous.includes(c))URL.revokeObjectURL(c.url);return false;}
@@ -824,7 +825,7 @@ async function previewCrop(){
 }
 function recalibrateImport(){
   const [pw,ph]=paperDimensions(),calibrated=state.paperSize!=='none'&&(state.correctedBitmap||state.wholePaper),rec=state.importRecords[state.importIndex];
-  for(const c of state.importCandidateData||[]){if(c.dimensionSource==='manual')continue;c.width=calibrated?Math.round(c.region.w*pw*(c.widthRatio||1)*10)/10:null;c.height=calibrated?Math.round(c.region.h*ph*(c.heightRatio||1)*10)/10:null;if(c.processingRecord){c.processingRecord.sourceWidthMM=c.width;c.processingRecord.sourceHeightMM=c.height;}}
+  for(const c of state.importCandidateData||[]){if(c.dimensionSource==='manual')continue;c.width=calibrated?Math.round((c.region.orientedBox?.width??c.region.w)*pw*10)/10:null;c.height=calibrated?Math.round((c.region.orientedBox?.height??c.region.h)*ph*10)/10:null;if(c.processingRecord){c.processingRecord.sourceWidthMM=c.width;c.processingRecord.sourceHeightMM=c.height;}}
   if(rec)rec.confirmed=false;saveActiveImportRecord();render();
 }
 async function chooseCandidate(index){if(index>=0){state.importCandidateSelection=new Set([index]);render();}else await previewCrop();}
