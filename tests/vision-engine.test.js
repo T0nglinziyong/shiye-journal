@@ -89,8 +89,10 @@ test('frame-body trimming keeps a medium-dense warped material while removing re
     const i=y*width+x;
     if(((x+y)%11)!==0){mask[i]=evidence[i]=1;if((x+y)%4)foregroundSeeds[i]=1;}
   }
-  for(let y=300;y<590;y++)for(let x=10;x<55;x++){const i=y*width+x;mask[i]=1;if((x+y)%97===0)evidence[i]=1;}
-  for(let y=470;y<590;y++)for(let x=45;x<90;x++){const i=y*width+x;mask[i]=1;if((x+y)%83===0)evidence[i]=1;}
+  for(let y=320;y<450;y++)for(let x=10;x<55;x++){const i=y*width+x;mask[i]=1;if((x+y)%97===0)evidence[i]=1;}
+  // Narrow bridge reaches the protected frame but has low column occupancy;
+  // only the real body should survive the robust occupancy core.
+  for(let y=430;y<590;y++)for(let x=50;x<85;x++){const i=y*width+x;mask[i]=1;if((x+y)%83===0)evidence[i]=1;}
   const out=await processVision(cv,'boxes-simple',{mask,evidence,foregroundSeeds,width,height,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
   assert.equal(out.length,1,JSON.stringify(out));
   assert.equal(out[0].boxAdjustment,'dense-frame-body');
