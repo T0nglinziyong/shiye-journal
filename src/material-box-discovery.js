@@ -67,6 +67,35 @@ export function likelyNeutralPageArtifact(item){
   return item.seedDensity<.003&&item.evidenceDensity<.035
     &&(item.fillRatio<.55||item.touchesProtectedFrame===true);
 }
+// Image-space angle (clockwise positive): select the shortest turn that makes
+// one principal rectangle edge horizontal. Equal-length sides are allowed.
+export function minimalHorizontalAngle(degrees){
+  let angle=((degrees+45)%90+90)%90-45;
+  return Math.abs(angle)<.8?0:angle;
+}
+function orientationFromInstance(cv,item,group,labels,pageW,pageH,rectangularityThreshold=.77){
+  const pts=new cv.Mat(item.w*item.h,1,cv.CV_32SC2);
+  let n=0;
+  for(let y=item.y;y<item.y+item.h;y++)for(let x=item.x;x<item.x+item.w;x++){
+    if(!group.has(labels.data32S[y*pageW+x]))continue;
+    pts.data32S[n*2]=x;pts.data32S[n*2+1]=y;n++;
+  }
+  if(n<3){pts.delete();return null;}
+  const points=pts.rowRange(0,n),r=cv.minAreaRect(points);
+  points.delete();pts.delete();
+  const area=Math.max(1,r.size.width*r.size.height),rectangularity=n/area;
+  // OpenCV angle may refer to either edge: modulo 90 handles both.
+  const rotation=minimalHorizontalAngle(r.angle);
+  // If the minimal horizontal turn differs from the raw OpenCV angle by
+  // a right angle, interchange side lengths to describe the SAME rectangle.
+  const swap=Math.abs(rotation-r.angle)>45;
+  return {centerX:r.center.x/pageW,centerY:r.center.y/pageH,
+    width:(swap?r.size.height:r.size.width)/pageW,
+    height:(swap?r.size.width:r.size.height)/pageH,
+    rotation,rectangularity,
+    autoDeskew:rectangularity>=rectangularityThreshold,
+    source:'instance'};
+}
 function supportedRange(values,threshold){
   let first=-1,last=-1,count=0;
   for(let i=0;i<values.length;i++){
@@ -198,8 +227,10 @@ export function discoverMaterialBoxes(cv,p,own){
     }
 
     const bw=Math.max(1,x1-x0),bh=Math.max(1,y1-y0);
+    const orientedBox=orientationFromInstance(cv,item,group,labels,w,h);
     out.push({
       x:x0/w,y:y0/h,w:bw/w,h:bh/h,
+      orientedBox,
       pixels:groupedPixels,
       instanceMethod:'connected-component-box',
       boxAdjustment,
