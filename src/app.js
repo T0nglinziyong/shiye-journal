@@ -762,10 +762,29 @@ async function refreshImportCandidates(regions,{manual=false}={}){
   const source=state.correctedBitmap||state.importBitmap,b=state.correctedBitmap?{x:0,y:0,w:1,h:1}:state.importBox,previous=state.importCandidateData||[],record=state.importRecords[state.importIndex];
   const next=[];const [pw,ph]=paperDimensions(),calibrated=state.paperSize!=='none'&&(state.correctedBitmap||state.wholePaper);
   const plans=manual?await refineManualBoxes(regions,previous,async(box,index)=>{
-    toast('正在识别新增或调整的素材框 '+(index+1)+' / '+regions.length);
-    const search=paddedRegion(box),bitmapBox={x:b.x+search.x*b.w,y:b.y+search.y*b.h,w:search.w*b.w,h:search.h*b.h};
-    const found=await detectPaperCandidates(source,bitmapBox,2.5,{balanceLight:state.balanceLight,paperWidthMM:pw*search.w,paperHeightMM:ph*search.h,recognition:state.importRecognition||state.preferences.recognition,recognitionPixels:state.preferences.recognitionPixels,recognitionPreprocess:recognitionPreprocessOptions(),recognitionPostprocess:recognitionPostprocessOptions()});
-    return chooseManualCandidate(box,found,search);
+    toast('正在按旋转框分割 '+(index+1)+' / '+regions.length);
+    const limit=state.preferences.recognitionPixels||900,
+      scale=Math.min(1,limit/Math.max(source.width*b.w,source.height*b.h)),
+      aw=Math.max(1,Math.round(source.width*b.w*scale)),
+      ah=Math.max(1,Math.round(source.height*b.h*scale)),
+      canvas=document.createElement('canvas');
+    canvas.width=aw;canvas.height=ah;
+    const ctx=canvas.getContext('2d',{willReadFrequently:true});
+    ctx.drawImage(source,source.width*b.x,source.height*b.y,source.width*b.w,source.height*b.h,0,0,aw,ah);
+    const pixels=ctx.getImageData(0,0,aw,ah).data,
+      orientedBox={centerX:box.x+box.w/2,centerY:box.y+box.h/2,
+        width:box.w,height:box.h,rotation:box.rotation||0,
+        rectangularity:1,autoDeskew:true,source:'manual'},
+      [candidate]=await visionTask('process-material-boxes',{
+        pixels,sourcePixels:pixels,width:aw,height:ah,
+        boxes:[{x:box.x,y:box.y,w:box.w,h:box.h,orientedBox,
+          seedDensity:1,fillRatio:1}],method:state.importRecognition||'morphgac',
+        paperWidthMM:pw,paperHeightMM:ph,
+        shapeRegularization:recognitionPostprocessOptions().shapeRegularization!==false,
+        apertures:recognitionPostprocessOptions().apertures!==false
+      });
+    if(!candidate||candidate.segmentationFailed)throw Error('旋转框内无法可靠分割，请调整框后重试');
+    return candidate;
   }):regions.map(region=>({region,original:null}));
   if(record!==state.importRecords[state.importIndex]||state.route!=='import')return false;
   for(let i=0;i<plans.length;i++){
@@ -774,7 +793,7 @@ async function refreshImportCandidates(regions,{manual=false}={}){
     const cut=await cropBitmap(source,b,region),raw=region.mask?await cropBitmap(source,b,region,{raw:true}):cut;
     // Work layers stay in photographed coordinates; library materials get a
     // conservative rectangular correction. Originals use the same raster map.
-    const aligned=state.importMode==='work'?{blob:cut,originalBlob:raw,candidateFrameBlob:raw,candidateFramePlacement:null,degrees:0,widthRatio:1,heightRatio:1}:await alignMaterialPreview(cut,raw,region.rotation?-region.rotation:null);
+    const aligned=state.importMode==='work'?{blob:cut,originalBlob:raw,candidateFrameBlob:raw,candidateFramePlacement:null,degrees:0,widthRatio:1,heightRatio:1}:await alignMaterialPreview(cut,raw,region.orientedBox?.autoDeskew?-region.orientedBox.rotation:null);
     const width=calibrated?Math.round(region.w*pw*aligned.widthRatio*10)/10:null,height=calibrated?Math.round(region.h*ph*aligned.heightRatio*10)/10:null;
     next.push({blob:aligned.blob,originalBlob:aligned.originalBlob,candidateFrameBlob:aligned.candidateFrameBlob||aligned.originalBlob,url:URL.createObjectURL(aligned.blob),title:'素材 '+(i+1),width,height,alignment:aligned.degrees,widthRatio:aligned.widthRatio,heightRatio:aligned.heightRatio,processingRecord:{automaticCorrectionDegrees:aligned.degrees,sourceWidthMM:width,sourceHeightMM:height,candidateFramePlacement:aligned.candidateFramePlacement||null},region,selected:true});
   }
