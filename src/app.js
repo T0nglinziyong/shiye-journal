@@ -53,7 +53,7 @@ import {recognitionOptions,recognitionPixelOptions,recognitionMethodDetails,reco
 import {classifyRecord} from './classification.js';
 import {mountPaperCorrection,resetPaperCorrection} from './paper-ui.js';
 import {rectifyA4Frame,suggestPaperCorners} from './perspective.js';
-import {decodeRecognitionImage,sourcePixels} from './recognition-raster.js';
+import {analysisPixels,decodeRecognitionImage,sourcePixels} from './recognition-raster.js';
 import {syncCurrentMaterials} from './current-materials.js';
 import {syncCurrentExamples,isUntouchedLegacyExample} from './current-examples.js';
 import {applyToolCalls} from './creative.js';
@@ -775,12 +775,8 @@ async function refreshImportCandidates(regions,{manual=false}={}){
     const limit=state.preferences.recognitionPixels||900,
       scale=Math.min(1,limit/Math.max(source.width*b.w,source.height*b.h)),
       aw=Math.max(1,Math.round(source.width*b.w*scale)),
-      ah=Math.max(1,Math.round(source.height*b.h*scale)),
-      canvas=document.createElement('canvas');
-    canvas.width=aw;canvas.height=ah;
-    const ctx=canvas.getContext('2d',{willReadFrequently:true});
-    ctx.drawImage(source,source.width*b.x,source.height*b.y,source.width*b.w,source.height*b.h,0,0,aw,ah);
-    const pixels=ctx.getImageData(0,0,aw,ah).data,
+      ah=Math.max(1,Math.round(source.height*b.h*scale));
+    const pixels=await analysisPixels(source,b,aw,ah),
       orientedBox={centerX:box.x+box.w/2,centerY:box.y+box.h/2,
         width:box.w,height:box.h,rotation:box.rotation||0,
         rectangularity:1,autoDeskew:true,source:'manual'},
