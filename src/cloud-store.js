@@ -30,11 +30,18 @@ const withProjectBase=(store,record,base)=>{
 };
 function retainImage(path,data){images.set(path,Promise.resolve(data));imageSizes.delete(path);imageSizes.set(path,data.size);let bytes=[...imageSizes.values()].reduce((a,b)=>a+b,0);for(const [key,size] of imageSizes){if(bytes<=64*1024*1024&&imageSizes.size<=48)break;if(key===path)continue;images.delete(key);imageSizes.delete(key);bytes-=size;}}
 let cacheDisabled=false;
+let projectOutboxBefore=[],importOutboxBefore=[];
+async function persistOutbox(kind,previous,rows){
+  if(!cache||cacheDisabled)throw Error('无法安全保存待同步资料');
+  const key=await account();
+  if(typeof cache.putOutbox==='function')await cache.putOutbox(key,kind,previous,rows);
+  else await cache.put(key,kind,rows);
+}
 const account=async()=>`${namespace}:${await identity()}`;
 function reportSync(){if(typeof window!=='undefined'){const a=projectSync.status(),b=importSync.status();window.dispatchEvent(new CustomEvent('shiye-project-sync',{detail:{pending:a.pending+b.pending+writesInFlight,error:b.error||a.error}}));}}
 const projectSync=createProjectSync({
-  load:async()=>{if(!cache)return [];const key=await account(),saved=await cache.get(key,'project-outbox')||[],result=recoverProjectOutbox(saved);if(result.removed)try{await cache.put(key,'project-outbox',result.rows);}catch{/* The valid cloud version still takes precedence in this session. */}return result.rows;},
-  write:async rows=>{if(!cache||cacheDisabled)throw Error('无法安全保存待同步作品');await cache.put(await account(),'project-outbox',rows);},
+  load:async()=>{if(!cache)return [];const key=await account(),saved=await cache.get(key,'project-outbox')||[],result=recoverProjectOutbox(saved);if(result.removed)try{await persistOutbox('project-outbox',saved,result.rows);}catch{/* Uncommitted invalid rows are never replayed. */}projectOutboxBefore=structuredClone(result.rows);return result.rows;},
+  write:async rows=>{await persistOutbox('project-outbox',projectOutboxBefore,rows);projectOutboxBefore=structuredClone(rows);},
   commit:(record,operationID)=>cloudTransaction(['projects'],tx=>tx.objectStore('projects').put(record),operationID),revision:()=>revision,
   reconcile:async(record,operationID,baseRevision)=>{
     if(await wasCommitted(operationID,baseRevision))return 'committed';
@@ -94,13 +101,12 @@ const importSync=createProjectSync({
       }
       return available;
     });
-    if(!result.changed)return rows;
-    // Do not show a local ghost after a confirmed cloud miss. This changes
-    // only the broken, uncommitted outbox row; no cloud data is deleted.
-    try{await cache.put(key,'import-outbox',result.rows);return result.rows;}
-    catch{return rows;}
+    if(!result.changed){importOutboxBefore=structuredClone(rows);return rows;}
+    // Repair only the broken local queue rows; never clobber other tab edits.
+    try{await persistOutbox('import-outbox',rows,result.rows);importOutboxBefore=structuredClone(result.rows);return result.rows;}
+    catch{importOutboxBefore=structuredClone(rows);return rows;}
   },
-  write:async rows=>{if(!cache||cacheDisabled)throw Error('无法安全暂存导入资料，请勿关闭页面');await cache.put(await account(),'import-outbox',rows);},
+  write:async rows=>{await persistOutbox('import-outbox',importOutboxBefore,rows);importOutboxBefore=structuredClone(rows);},
   commit:(batch,operationID)=>batch.operations?cloudTransaction(batch.names,tx=>{for(const op of batch.operations){const store=tx.objectStore(op.store);if(op.action==='put')store.put(op.item);else if(op.action==='delete')store.delete(op.id);else store.clear();}},operationID):cloudTransaction(['assets','blobs','projects'],tx=>{for(const store of ['assets','blobs','projects'])for(const record of batch[store]||[])tx.objectStore(store).put(record);},operationID),
   revision:()=>revision,reconcile:reconcileImport,onStatus:reportSync,
   recordKeys:batch=>batch.operations?.map(op=>({store:op.store,id:op.item?.id??op.id}))||['assets','blobs','projects'].flatMap(store=>(batch[store]||[]).map(item=>({store,id:item.id}))),
@@ -117,10 +123,21 @@ async function cloudAll(store){
   await identity();if(revision===undefined)await version();
   const saved=snapshots.get(store)||await cached('records:'+store);
   if(saved?.revision===revision){snapshots.set(store,saved);return overlayImports(store,await Promise.all(saved.records.map(async r=>withProjectBase(store,await decode(store,structuredClone(r)),saved.revision))));}
-  const rows=[],readRevision=revision;
-  for(let offset=0;;offset+=500){const page=checked(await cloudClient().from('shiye_records').select('record').eq('user_id',owner).eq('store',store).order('id').range(offset,offset+499));rows.push(...page);if(page.length<500)break;}
-  const snapshot={revision:readRevision,records:rows.map(row=>row.record)};snapshots.set(store,snapshot);await remember('records:'+store,snapshot);
-  return overlayImports(store,await Promise.all(snapshot.records.map(async record=>withProjectBase(store,await decode(store,structuredClone(record)),snapshot.revision))));
+  // PostgREST pagination consists of several independent HTTP transactions.
+  // Do not cache a mixed-revision library when another device edits mid-read.
+  for(let attempt=0;attempt<3;attempt++){
+    const readRevision=revision,rows=[];
+    for(let offset=0;;offset+=500){
+      const page=checked(await cloudClient().from('shiye_records').select('record').eq('user_id',owner).eq('store',store).order('id').range(offset,offset+499));
+      rows.push(...page);if(page.length<500)break;
+    }
+    const verified=Number(checked(await cloudClient().from('shiye_revisions').select('revision').eq('user_id',owner).single()).revision);
+    if(verified!==readRevision){revision=verified;continue;}
+    const snapshot={revision:readRevision,records:rows.map(row=>row.record)};
+    snapshots.set(store,snapshot);await remember('records:'+store,snapshot);
+    return overlayImports(store,await Promise.all(snapshot.records.map(async record=>withProjectBase(store,await decode(store,structuredClone(record)),snapshot.revision))));
+  }
+  throw Error('读取期间其他设备持续修改资料；未缓存不完整的结果，请重试');
 }
 async function cloudGet(store,id){
   const pending=await pendingOverride(store,id);

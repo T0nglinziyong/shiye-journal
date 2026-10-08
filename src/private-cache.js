@@ -1,6 +1,41 @@
 import {openDB} from 'idb';
 
 // Disposable read cache, never an alternative write destination.
+
+// Merge a tab's changes, not its whole in-memory snapshot. An unrelated tab's
+// pending edit must survive; edits to the same row must fail, never overwrite.
+const outboxID=row=>row?.record?.id;
+const outboxStamp=row=>row?JSON.stringify([row.serial,row.baseRevision,row.operationID]):null;
+const rowsByID=rows=>{
+  const map=new Map();
+  for(const row of rows||[]){
+    const id=outboxID(row);
+    if(typeof id!=='string'||!id||map.has(id))throw Error('待同步记录编号无效或重复');
+    map.set(id,row);
+  }
+  return map;
+};
+export function mergeOutboxRows(currentRows,previousRows,nextRows){
+  const current=rowsByID(currentRows),previous=rowsByID(previousRows),next=rowsByID(nextRows);
+  for(const [id,after] of next){
+    const before=previous.get(id),existing=current.get(id);
+    if(outboxStamp(before)===outboxStamp(after))continue;
+    if(outboxStamp(existing)!==outboxStamp(before)){
+      // A different tab already staged an edit for this exact document.
+      if(!before||outboxStamp(existing)!==outboxStamp(after))
+        throw Error('其他标签页已修改同一份待同步资料；未覆盖原稿，请刷新页面后解决冲突');
+    }
+    current.set(id,after);
+  }
+  for(const [id,before] of previous){
+    if(next.has(id))continue;
+    const existing=current.get(id);
+    if(outboxStamp(existing)===outboxStamp(before))current.delete(id);
+    // Another tab may have replaced or acknowledged this row. Never delete it.
+  }
+  return [...current.values()];
+}
+
 export function createPrivateCache({name='shiye-private-read-cache-v2',limit=160*1024*1024}={}){
   let connection;
   const db=()=>connection??=openDB(name,1,{upgrade(d){
@@ -10,6 +45,21 @@ export function createPrivateCache({name='shiye-private-read-cache-v2',limit=160
   const key=(account,id)=>JSON.stringify([account,id]);
   return {
     async get(account,id){return (await db()).get('entries',key(account,id)).then(row=>row?.value);},
+    // Atomic read/merge/write in ONE IndexedDB transaction. Uses the existing
+    // cache DB/schema and stores the queue under its old key for compatibility.
+    async putOutbox(account,id,previousRows,nextRows){
+      if(id!=='project-outbox'&&id!=='import-outbox')throw Error('不是待同步队列');
+      const d=await db(),tx=d.transaction(['entries','sizes'],'readwrite');
+      try{
+        const k=key(account,id),saved=await tx.objectStore('entries').get(k),
+          merged=mergeOutboxRows(saved?.value||[],previousRows,nextRows),
+          row={key:k,account,time:Date.now(),bytes:0};
+        tx.objectStore('entries').put({...row,value:merged});
+        tx.objectStore('sizes').put(row);
+        await tx.done;
+        return merged;
+      }catch(error){try{tx.abort();}catch{}await tx.done.catch(()=>{});throw error;}
+    },
     async put(account,id,value){
       const d=await db(),row={key:key(account,id),account,time:Date.now(),bytes:value instanceof Blob?value.size:0};
       const write=d.transaction(['entries','sizes'],'readwrite');write.objectStore('entries').put({...row,value});write.objectStore('sizes').put(row);await write.done;
