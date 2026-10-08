@@ -1,6 +1,22 @@
 // Validation happens before restoring a complete six-store backup. In
 // particular, do not clear a real account because a JSON file parses.
 const STORES=['assets','blobs','series','projects','meta','trash'];
+export function validateRestoredRecords(stores){
+  if(!stores||STORES.some(name=>!Array.isArray(stores[name])))throw Error('ZIP 缺少完整六表，未修改现有资料');
+  const keys=new Map();
+  for(const store of STORES){
+    const seen=new Set();
+    for(const row of stores[store]){
+      if(!row||typeof row.id!=='string'||!row.id.trim()||seen.has(row.id))throw Error('ZIP 含非法或重复记录：'+store);
+      if(store==='blobs'&&(!(row.data instanceof Blob)||!row.data.size))throw Error('ZIP 图片字节丢失');
+      seen.add(row.id);
+    }
+    keys.set(store,seen);
+  }
+  for(const asset of stores.assets)if(asset.blobId&&!asset.staticPath&&!keys.get('blobs').has(asset.blobId))
+    throw Error('ZIP 素材缺少抠图原件：'+asset.id);
+  return true;
+}
 const hash=async bytes=>[...new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))].map(b=>b.toString(16).padStart(2,'0')).join('');
 const bytes=blob=>blob.arrayBuffer();
 export async function buildBlobIntegrity(records){

@@ -8,6 +8,9 @@ on:
       - 'src/material-*.js'
       - 'src/creative*.js'
       - 'src/app.js'
+      - 'src/backup-*.js'
+      - 'src/store.js'
+      - 'tests/backup-*.mjs'
       - 'src/offline*.js'
       - 'src/*cache*.js'
       - 'src/presentation-resources.js'
@@ -70,6 +73,7 @@ jobs:
             sleep 1
           done
           curl -fsS http://127.0.0.1:5192/ >/dev/null
+          node tests/backup-archive-browser.mjs
           node tests/craft-browser.mjs
           node tests/presentation-browser.mjs
           node tests/craft-multimodal-browser.mjs

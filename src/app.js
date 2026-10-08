@@ -836,7 +836,40 @@ async function applyAssetClassification(record,result,{manual=false,isCurrent=()
 
 
 async function removeWhite(blob){const bitmap=await createImageBitmap(blob),canvas=document.createElement('canvas');canvas.width=bitmap.width;canvas.height=bitmap.height;const c=canvas.getContext('2d',{willReadFrequently:true});c.drawImage(bitmap,0,0);const im=c.getImageData(0,0,canvas.width,canvas.height);for(let i=0;i<im.data.length;i+=4){const r=im.data[i],g=im.data[i+1],b=im.data[i+2],min=Math.min(r,g,b);if(min>247)im.data[i+3]=0;else if(min>230)im.data[i+3]=Math.round(im.data[i+3]*(247-min)/17);}c.putImageData(im,0,0);bitmap.close();return new Promise(resolve=>canvas.toBlob(resolve,'image/png'));}
-async function backup(){await flushSave();saveStatus('正在导出…');const blob=await db.createBackup(),filename=`拾页PWA完整备份-${new Date().toISOString().slice(0,10)}.shiyepwa`;const file=new File([blob],filename,{type:'application/json'});if(navigator.canShare?.({files:[file]})){try{await navigator.share({files:[file],title:'拾页完整备份'});saveStatus('已保存到本机');return;}catch(e){if(e.name==='AbortError'){saveStatus('本机存储');return;}}}download(blob,filename);saveStatus('已导出备份');}
+async function backup(){
+  const filename=`拾页PWA完整备份-${new Date().toISOString().slice(0,10)}.shiyepwa`;
+  // Must request the picker immediately while the click's user activation is
+  // live. All later reads, hashing and ZIP work are asynchronous.
+  let handle=null;
+  if(typeof window.showSaveFilePicker==='function'){
+    try{handle=await window.showSaveFilePicker({suggestedName:filename,
+      types:[{description:'拾页 ZIP 完整备份',accept:{'application/zip':['.shiyepwa']}}]});}
+    catch(error){if(error?.name==='AbortError')return;throw error;}
+  }
+  let writer=null;
+  try{
+    await flushSave();saveStatus('正在导出备份…');
+    if(handle)writer=await handle.createWritable();
+    const result=await db.createBackup({
+      onChunk:writer?bytes=>writer.write(bytes):undefined,
+      onProgress:p=>{if(p.stage==='image')saveStatus('正在备份素材 '+p.current+'/'+p.total);}
+    });
+    if(writer){await writer.close();writer=null;}
+    else{
+      const blob=result,file=new File([blob],filename,{type:'application/zip'});
+      if(navigator.canShare?.({files:[file]})){
+        try{await navigator.share({files:[file],title:'拾页完整备份'});saveStatus('备份已导出');return;}
+        catch(error){if(error.name==='AbortError')return;}
+      }
+      download(blob,filename);
+    }
+    saveStatus('完整备份已导出');
+  }catch(error){
+    if(writer)await writer.abort().catch(()=>{});
+    saveStatus('备份未完成 · 原始资料未更改');
+    throw error;
+  }
+}
 function download(blob,filename){const link=document.createElement('a'),url=URL.createObjectURL(blob);link.href=url;link.download=filename;link.click();setTimeout(()=>URL.revokeObjectURL(url),60000);}
 setCloudProjectPreview(async p=>{if(p.isSnapshot)return (await db.get('blobs',p.snapshotBlobId))?.data||null;const d=p.drafts.find(d=>d.id===p.activeDraftID)||p.drafts[0];if(d.items.some(i=>!asset(i.assetID)))return null;const canvas=await rasterize(d,Math.min(1,360/Math.max(d.canvas.width,d.canvas.height)));return new Promise(resolve=>canvas.toBlob(resolve,'image/webp',.85));});
 async function exportPNG(){const d=current(),canvas=await rasterize(d,2);canvas.toBlob(blob=>download(blob,(state.activeProject.title||'拾页作品')+'.png'),'image/png');}

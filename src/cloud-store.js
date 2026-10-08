@@ -310,6 +310,21 @@ async function cloudStageMutation(names,fn){
   await identity();if(revision===undefined)await version();await importSync.stage({id:crypto.randomUUID(),names,operations});
 }
 async function cloudPendingProjects(){await identity();return projectSync.pending();}
+// Metadata-only lookup: do NOT download every full-resolution photo just to
+// build the backup list. Fetch each Blob individually while ZIP is streamed.
+async function cloudBackupBlobIDs(){
+  await identity();
+  for(let attempt=0;attempt<3;attempt++){
+    const before=await version(),ids=[];
+    for(let offset=0;;offset+=500){
+      const page=checked(await cloudClient().from('shiye_records').select('id').eq('user_id',owner).eq('store','blobs').order('id').range(offset,offset+499));
+      ids.push(...page.map(item=>item.id));if(page.length<500)break;
+    }
+    if(await version()===before)return ids;
+  }
+  throw Error('云端资料持续变化，请稍后重新导出；没有生成混合版本备份');
+}
+
 // Read the shared durable queue, not just this tab's in-memory status. This
 // intentionally does not contact the server, so logout remains possible when
 // the network is unavailable after local staging succeeds.
@@ -330,7 +345,7 @@ async function cloudRestoreEmergency(snapshot){
   if(typeof cache.restoreOutboxes!=='function')throw Error('当前浏览器不支持原子恢复待同步资料');
   return cache.restoreOutboxes(key,snapshot.projects,snapshot.imports);
 }
-return {cloudAll,cloudGet,cloudPreview,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudClearCache,cloudResumeCache,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudPendingLocalSummary,cloudPendingDetails,cloudDiscardPending,cloudFlushProjects,cloudProjectDocument,cloudEmergencySnapshot,cloudRestoreEmergency};
+return {cloudAll,cloudGet,cloudPreview,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudClearCache,cloudResumeCache,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudPendingLocalSummary,cloudPendingDetails,cloudDiscardPending,cloudFlushProjects,cloudProjectDocument,cloudEmergencySnapshot,cloudRestoreEmergency,cloudBackupBlobIDs};
 }
 let projectPreview=()=>null;
 export const setCloudProjectPreview=producer=>{projectPreview=producer;};
@@ -355,3 +370,4 @@ export const cloudFlushProjects=(...args)=>current.cloudFlushProjects(...args);
 export const cloudProjectDocument=(...args)=>current.cloudProjectDocument(...args);
 export const cloudEmergencySnapshot=(...args)=>current.cloudEmergencySnapshot(...args);
 export const cloudRestoreEmergency=(...args)=>current.cloudRestoreEmergency(...args);
+export const cloudBackupBlobIDs=(...args)=>current.cloudBackupBlobIDs(...args);
