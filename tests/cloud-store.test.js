@@ -7,7 +7,7 @@ function fixture(cache=null,objectStorage=null){
   const state={revision:0,rows:[],calls:[],commits:new Map(),fail:false,authError:false,uploads:[],downloads:0};
   const client={from(table){
     const filters={};const query={select(){return query;},eq(k,v){filters[k]=v;return query;},in(k,v){filters[k]=v;return query;},limit(){return query;},abortSignal(){return query;},order(){return query;},
-      then(resolve){return Promise.resolve(resolve({data:(state.cloudCopies||[]).filter(row=>!filters.id||(Array.isArray(filters.id)?filters.id.includes(row.id):row.id===filters.id))}));},
+      then(resolve){state.batchReads=(state.batchReads||0)+1;const rows=filters.store==='blobs'&&Array.isArray(filters.id)?(state.cloudCopies||state.rows.map(record=>({id:record.id,record}))):(state.cloudCopies||[]);return Promise.resolve(resolve({data:rows.filter(row=>!filters.id||(Array.isArray(filters.id)?filters.id.includes(row.id):row.id===filters.id))}));},
       async range(start,end){state.reads=(state.reads||0)+1;const rows=state.rows.slice(start,end+1).map(record=>({record}));state.onReadPage?.(start,end);return {data:rows};},
       async single(){return {data:{revision:state.revision}};},
       async maybeSingle(){return {data:table==='shiye_commits'?(state.commits.has(filters.operation_id)?{revision:state.commits.get(filters.operation_id)}:null):state.rows.filter(r=>r.id===filters.id).map(record=>({record}))[0]||null};}};
@@ -334,4 +334,13 @@ test('cloudAll discards a mixed remote snapshot after concurrent pagination',asy
   assert.equal(result.length,503);
   assert.ok(result.every(row=>row.title==='new'));
   assert.ok(state.reads>=4,'must read all pages again after version changed');
+});
+
+test('visible private covers batch metadata by account and reuse previews without re-downloading',async()=>{
+  const cache=memoryCache(),a=fixture(cache);a.state.rows=Array.from({length:12},(_,i)=>({id:'cover-'+i,storagePath:'owner-uuid/hash-'+i,storageProvider:'supabase',thumbnailPath:'owner-uuid/hash-'+i+'-preview360.webp'}));
+  a.state.cloudCopies=a.state.rows.map(record=>({id:record.id,record}));
+  const first=await Promise.all(a.state.rows.map(row=>a.db.cloudPreview(row.id)));
+  assert.equal(first.length,12);assert.equal(a.state.batchReads,1);assert.equal(a.state.downloads,12);
+  await Promise.all(a.state.rows.map(row=>a.db.cloudPreview(row.id)));
+  assert.equal(a.state.batchReads,1);assert.equal(a.state.downloads,12);
 });

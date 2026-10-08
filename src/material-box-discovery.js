@@ -116,6 +116,18 @@ function supportedRange(values,threshold){
   }
   return count>=3?{first,last,count}:null;
 }
+function dominantSupportedRange(values,threshold){
+  let best=null,first=-1,last=-1,total=0,count=0;
+  const finish=()=>{
+    if(count>=3&&(!best||total>best.total))best={first,last,count,total};
+    first=-1;last=-1;total=0;count=0;
+  };
+  for(let i=0;i<values.length;i++){
+    if(values[i]>=threshold){if(first<0)first=i;last=i;total+=values[i];count++;}
+    else if(first>=0&&i-last>3)finish();
+  }
+  finish();return best;
+}
 
 export function discoverMaterialBoxes(cv,p,own){
   const w=p.width,h=p.height,paperWidthMM=p.paperWidthMM||210,
@@ -197,13 +209,14 @@ export function discoverMaterialBoxes(cv,p,own){
   const out=[];
   for(const item of candidates){
     const group=new Set([item.label,...(fragments.get(item.label)||[])]),
-      rowCounts=new Uint32Array(item.h),colCounts=new Uint32Array(item.w),colSeeds=new Uint32Array(item.w);
+      rowCounts=new Uint32Array(item.h),colCounts=new Uint32Array(item.w),colSeeds=new Uint32Array(item.w),
+      rowEvidence=new Uint32Array(item.h),colEvidence=new Uint32Array(item.w);
     let groupedPixels=0,groupEvidence=0,groupSeeds=0;
     for(let yy=0;yy<item.h;yy++)for(let xx=0;xx<item.w;xx++){
       const at=(item.y+yy)*w+item.x+xx;
       if(!group.has(labels.data32S[at]))continue;
       rowCounts[yy]++;colCounts[xx]++;groupedPixels++;
-      if(p.evidence?.[at])groupEvidence++;
+      if(p.evidence?.[at]){groupEvidence++;rowEvidence[yy]++;colEvidence[xx]++;}
       if(p.foregroundSeeds?.[at]){groupSeeds++;colSeeds[xx]++;}
     }
     const fill=groupedPixels/Math.max(1,item.w*item.h),
@@ -216,7 +229,23 @@ export function discoverMaterialBoxes(cv,p,own){
     // High-fill material touching the page frame: use only columns/rows that
     // are almost fully occupied by the same component. This rejects broad
     // frame/background residue without relying on a class-specific rectangle.
-    if(item.touchesProtected&&fill>=.70){
+    if(item.touchesProtected&&fill<.70&&evidenceDensity>.07){
+      // A colour-cast or JPEG-compressed page edge may remain linked to a
+      // genuine item despite containing almost no direct foreground evidence.
+      // Recover the supported core only when both axes agree; leave ordinary
+      // disconnected or pale materials unchanged.
+      const xr=dominantSupportedRange(colEvidence,Math.max(3,item.h*.025)),
+        yr=dominantSupportedRange(rowEvidence,Math.max(3,item.w*.025)),
+        pad=Math.max(2,pxPerMM*2);
+      if(xr&&yr&&xr.last-xr.first+1>=item.w*.20&&yr.last-yr.first+1>=item.h*.20){
+        const nx0=clamp(item.x+xr.first-pad,0,w),nx1=clamp(item.x+xr.last+1+pad,0,w),
+          ny0=clamp(item.y+yr.first-pad,0,h),ny1=clamp(item.y+yr.last+1+pad,0,h);
+        if((nx1-nx0)*(ny1-ny0)<item.w*item.h*.75){
+          x0=nx0;x1=nx1;y0=ny0;y1=ny1;boxAdjustment='evidence-supported-frame-body';
+        }
+      }
+    }
+    if(boxAdjustment==='raw'&&item.touchesProtected&&fill>=.70){
       // Perspective interpolation and binder holes lower occupancy. A strict
       // 96% core can retain only the opaque centre of a patterned sheet, so
       // use the same 70% support threshold at every analysis resolution.
@@ -243,7 +272,7 @@ export function discoverMaterialBoxes(cv,p,own){
     // Sparse strong seeds inside a medium/low-fill component are the common
     // signature of printed content on a pale carrier. Add a small physical
     // safety margin so downstream segmentation sees the outer carrier too.
-    }else if(fill<.80&&seedDensity<.12){
+    }else if(boxAdjustment==='raw'&&fill<.80&&seedDensity<.12){
       const pad=pxPerMM*2.0;
       x0=clamp(x0-pad,0,w);y0=clamp(y0-pad,0,h);
       x1=clamp(x1+pad,0,w);y1=clamp(y1+pad,0,h);
@@ -253,7 +282,7 @@ export function discoverMaterialBoxes(cv,p,own){
     const bw=Math.max(1,x1-x0),bh=Math.max(1,y1-y0);
     // Once frame residue has been trimmed, the raw connected component's
     // minAreaRect still includes that residue. Never seed a segmenter from it.
-    const orientedBox=boxAdjustment==='dense-frame-body'?null
+    const orientedBox=boxAdjustment==='dense-frame-body'||boxAdjustment==='evidence-supported-frame-body'?null
       :orientationFromInstance(cv,item,group,labels,w,h);
     out.push({
       x:x0/w,y:y0/h,w:bw/w,h:bh/h,
