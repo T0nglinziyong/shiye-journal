@@ -1,6 +1,6 @@
 // Durable edits are an explicit outbox, not a replacement for cloud records.
 // Commit acknowledgement is the only point at which an entry is removed.
-export function createProjectSync({load,write,commit,revision,reconcile=async()=> 'conflict',recordKeys=record=>[{store:'projects',id:record.id}],onCommitted=()=>{},onStatus=()=>{},runExclusive=fn=>fn()}){
+export function createProjectSync({load,write,commit,revision,reconcile=async()=> 'conflict',recordKeys=record=>[{store:'projects',id:record.id}],onCommitted=()=>{},onStatus=()=>{},runExclusive=fn=>fn(),reload=load}){
   let initialized,staging=Promise.resolve(),network,serial=0,error;
   const entries=new Map();
   // A transient IndexedDB/auth read failure must not poison this instance for
@@ -15,7 +15,7 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
     for(;;){
       const checkpoint=staging;
       await checkpoint;
-      const saved=await load()||[];
+      const saved=await reload()||[];
       if(checkpoint!==staging)continue;
       entries.clear();
       for(const row of saved){

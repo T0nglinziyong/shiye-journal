@@ -75,6 +75,7 @@ function reportSync(){if(typeof window!=='undefined'){const a=projectSync.status
 const projectSync=createProjectSync({
   load:async()=>{if(!cache)return [];const key=await account(),saved=await cache.get(key,'project-outbox')||[],result=recoverProjectOutbox(saved);if(result.removed)try{await persistOutbox('project-outbox',saved,result.rows);}catch{/* Uncommitted invalid rows are never replayed. */}projectOutboxBefore=structuredClone(result.rows);return result.rows;},
   write:async rows=>{await persistOutbox('project-outbox',projectOutboxBefore,rows);projectOutboxBefore=structuredClone(rows);},
+  reload:async()=>{const rows=await cache?.get(await account(),'project-outbox')||[];projectOutboxBefore=structuredClone(rows);return rows;},
   commit:(record,operationID)=>cloudTransaction(['projects'],tx=>tx.objectStore('projects').put(record),operationID),revision:()=>revision,
   reconcile:async(record,operationID,baseRevision)=>{
     if(await wasCommitted(operationID,baseRevision))return 'committed';
@@ -141,6 +142,9 @@ const importSync=createProjectSync({
     catch{importOutboxBefore=structuredClone(rows);return rows;}
   },
   write:async rows=>{await persistOutbox('import-outbox',importOutboxBefore,rows);importOutboxBefore=structuredClone(rows);},
+  // A queued edit is already a durable user action. The background sync must
+  // NEVER re-run crash recovery and drop it before attempting its upload.
+  reload:async()=>{const rows=await cache?.get(await account(),'import-outbox')||[];importOutboxBefore=structuredClone(rows);return rows;},
   commit:(batch,operationID)=>batch.operations?cloudTransaction(batch.names,tx=>{for(const op of batch.operations){const store=tx.objectStore(op.store);if(op.action==='put')store.put(op.item);else if(op.action==='delete')store.delete(op.id);else store.clear();}},operationID):cloudTransaction(['assets','blobs','projects'],tx=>{for(const store of ['assets','blobs','projects'])for(const record of batch[store]||[])tx.objectStore(store).put(record);},operationID),
   revision:()=>revision,reconcile:reconcileImport,onStatus:reportSync,
   runExclusive:withAccountSyncLock,

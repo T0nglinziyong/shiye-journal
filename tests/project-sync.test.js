@@ -90,7 +90,7 @@ test('transient outbox load failure can recover in the same session',async()=>{
   });
   await assert.rejects(sync.flush(),/temporary IndexedDB read failure/);
   await sync.flush();
-  assert.equal(reads,2);
+  assert.equal(reads,3,'initial retry plus a fresh durable read before background sync');
   assert.equal(commits,1);
   assert.deepEqual(rows,[]);
 });
