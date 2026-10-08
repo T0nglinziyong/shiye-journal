@@ -50,6 +50,7 @@ jobs:
           done
           SHIYE_WAIT_MS=30000 SHIYE_TEST_URL=http://127.0.0.1:5193 node tests/browser-acceptance.mjs
           SHIYE_TEST_URL=http://127.0.0.1:5193 node tests/editor-browser-acceptance.mjs
+          SHIYE_TEST_URL=http://127.0.0.1:5193 node tests/interaction-browser.mjs
       - name: Upload viewport screenshots
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -58,4 +59,5 @@ jobs:
           path: |
             /tmp/shiye-browser-acceptance/
             /tmp/shiye-editor-browser/
+            /tmp/shiye-interaction-fixes/
           retention-days: 7
