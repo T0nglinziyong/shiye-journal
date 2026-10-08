@@ -12,13 +12,44 @@ export function pixelCanvas(pixels,width,height){
 }
 export async function decodeRecognitionImage(blob){
   if(blob.type==='image/jpeg'||blob.type==='image/jpg'||/\.jpe?g$/i.test(blob.name||'')){
-    const image=decode(await blob.arrayBuffer(),{useTArray:true,maxResolutionInMP:60,maxMemoryUsageInMB:512});
+    const bytes=new Uint8Array(await blob.arrayBuffer());
+    const image=decode(bytes,{useTArray:true,maxResolutionInMP:60,maxMemoryUsageInMB:512});
     // Orientation is applied explicitly to raw pixels. Neither EXIF handling
     // nor colour conversion is delegated to the browser image decoder.
     const orientation=jpegOrientation(image.exifBuffer),{data,width,height}=orientPixels(image.data,image.width,image.height,orientation);
+    if(hasDisplayP3Profile(bytes))displayP3ToSrgb(data);
     return pixelCanvas(data,width,height);
   }
   return createImageBitmap(blob,{imageOrientation:'from-image',colorSpaceConversion:'none'});
+}
+// The pinned JPEG decoder yields profile-encoded samples. iPhone photos often
+// carry Display P3; putImageData otherwise labels those samples as sRGB.
+export function hasDisplayP3Profile(bytes){
+  for(let p=2;p+4<bytes.length&&bytes[p]===255;){
+    const marker=bytes[p+1];if(marker===0xda||marker===0xd9)break;
+    if(marker===0x01||marker>=0xd0&&marker<=0xd7){p+=2;continue;}
+    const size=(bytes[p+2]<<8)|bytes[p+3];if(size<2||p+2+size>bytes.length)break;
+    if(marker===0xe2){
+      const segment=bytes.subarray(p+4,p+2+size);
+      const header='ICC_PROFILE\0';
+      if(header.split('').every((c,i)=>segment[i]===c.charCodeAt(0))){
+        const label='Display P3';
+        for(let i=14;i+label.length*2<=segment.length;i++)if(label.split('').every((c,j)=>segment[i+j*2]===0&&segment[i+j*2+1]===c.charCodeAt(0)))return true;
+      }
+    }
+    p+=size+2;
+  }
+  return false;
+}
+export function displayP3ToSrgb(pixels){
+  const linear=v=>{v/=255;return v<=.04045?v/12.92:((v+.055)/1.055)**2.4;};
+  const encode=v=>Math.round(255*(v<=.0031308?12.92*v:1.055*v**(1/2.4)-.055));
+  for(let i=0;i<pixels.length;i+=4){
+    const r=linear(pixels[i]),g=linear(pixels[i+1]),b=linear(pixels[i+2]);
+    pixels[i]=encode(1.224940176*r-.224940176*g);
+    pixels[i+1]=encode(-.042056955*r+1.042056955*g);
+    pixels[i+2]=encode(-.019637554*r-.078636046*g+1.098273600*b);
+  }
 }
 function jpegOrientation(exif){
   if(!exif)return 1;

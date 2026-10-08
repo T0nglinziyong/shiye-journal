@@ -36,7 +36,7 @@ import {createAIRecorder,publicAIDiagnosticReport} from './ai-diagnostics.js';
 import {mountImportBoxEditor} from './import-box-editor.js';
 import {saveImportBatch,importPaperDimensions} from './import-save.js';
 import {paperDimensions as presetPaperDimensions,paperSizeOptions} from './paper-sizes.js';
-import {refineManualBoxes,hasManualForegroundEvidence} from './manual-import-recognition.js';
+import {refineManualBoxes} from './manual-import-recognition.js';
 import {seriesCovers,usedAssetIDs,markProjectAssetsUsed} from './library-model.js';
 import {renderSeriesContents} from './series-contents.js';
 import {showSeriesEditor} from './series-editor.js';
@@ -193,11 +193,11 @@ function render(){document.body.classList.toggle('editing',state.route==='editor
 function editorLayoutKey(){const size=view.editorLayoutSize||{width:window.innerWidth,height:window.innerHeight};return [size.width,size.height,current()?.canvas.width,current()?.canvas.height,!!state.workspacePanel,!!state.aiPanel].join(':');}
 function refreshCanvas(){
   const d=current(),page=view.querySelector('#canvas-page');if(!page||view.editorDraft!==d||view.editorLayoutKey!==editorLayoutKey()||!view.editorRefresh)return false;
-  const scale=page.clientWidth/d.canvas.width,entries=editorEntry(d,true),ids=new Set(entries.map(e=>e.value.renderKey||e.value.id));
-  page.querySelectorAll('[data-object]').forEach(node=>{if(!ids.has(node.dataset.renderKey||node.dataset.object))node.remove();});
+  const scale=page.clientWidth/d.canvas.width,entries=editorEntry(d,true),ids=new Set(entries.map(e=>e.value.renderKey||e.value.id)),available=new Set([...d.items,...d.primitives,...d.textBlocks].map(item=>item.id));
+  page.querySelectorAll('[data-object]').forEach(node=>{if(!ids.has(node.dataset.renderKey||node.dataset.object)){if(available.has(node.dataset.object)){node.hidden=true;node.style.display='none';}else node.remove();}});
   for(const entry of entries){const template=document.createElement('template');template.innerHTML=renderCanvasObject(entry,scale);const next=template.content.firstElementChild;let node=[...page.children].find(n=>(n.dataset.renderKey||n.dataset.object)===(entry.value.renderKey||entry.value.id));
     if(!node){page.insertBefore(next,page.querySelector('.paper-layer'));continue;}
-    node.style.cssText=next.style.cssText;node.className=next.className;
+    node.style.cssText=next.style.cssText;node.hidden=false;node.className=next.className;
     if(entry.kind==='text')reconcileCanvasText(node,next);
     else if(entry.kind==='shape'){const preview=node.querySelector('.shape-preview,svg'),fresh=next.querySelector('.shape-preview');if(preview?.getAttribute('src')!==fresh?.getAttribute('src')){if(preview)preview.replaceWith(fresh);else if(fresh)node.prepend(fresh);}}
     else {let im=node.querySelector('img');const fresh=next.querySelector('img');if(im?.getAttribute('src')!==fresh?.getAttribute('src')){im?.remove();if(fresh)node.prepend(fresh);im=fresh;}const crop=entry.value.cropRect;if(im)im.style.cssText=crop?`position:absolute;max-width:none;width:${100/crop.width}%;height:${100/crop.height}%;left:${-crop.x/crop.width*100}%;top:${-crop.y/crop.height*100}%;object-fit:fill`:'';}
@@ -776,9 +776,8 @@ async function refreshImportCandidates(regions,{manual=false}={}){
       scale=Math.min(1,limit/Math.max(source.width*b.w,source.height*b.h)),
       aw=Math.max(1,Math.round(source.width*b.w*scale)),
       ah=Math.max(1,Math.round(source.height*b.h*scale));
-    const pixels=await analysisPixels(source,b,aw,ah);
-    if(!hasManualForegroundEvidence(pixels,aw,ah,box))throw Error('第 '+(index+1)+' 个框内没有找到可靠素材；请贴近素材重画');
-    const orientedBox={centerX:box.x+box.w/2,centerY:box.y+box.h/2,
+    const pixels=await analysisPixels(source,b,aw,ah),
+      orientedBox={centerX:box.x+box.w/2,centerY:box.y+box.h/2,
         width:box.w,height:box.h,rotation:box.rotation||0,
         rectangularity:1,autoDeskew:true,source:'manual'},
       [candidate]=await visionTask('process-material-boxes',{
