@@ -11,9 +11,27 @@ test('full synthetic backup restores six stores and exact Blob bytes; failed res
     const store=await import('../src/store.js?backup-validation');
     const values={assets:[{id:'a',title:'synthetic',blobId:'b',originalBlobId:'b',supply:{quantity:3}}],blobs:[{id:'b',data:new Blob([new Uint8Array([0,1,127,255])],{type:'image/png'})}],series:[{id:'s',title:'synthetic series'}],projects:[{id:'p',drafts:[{id:'d',items:[{assetID:'a'}]}]}],meta:[{id:'m',value:false}],trash:[{id:'t',original:{id:'deleted'}}]};
     await store.transaction(Object.keys(values),tx=>{for(const [name,records] of Object.entries(values))for(const record of records)tx.objectStore(name).put(record);});
-    const backup=await store.createBackup();await store.transaction(Object.keys(values),tx=>{for(const name of Object.keys(values))tx.objectStore(name).clear();});await store.restoreBackup(backup);
+    // Legacy JSON archives must continue restoring byte-identically.
+    const encoded=Object.fromEntries(Object.entries(values).map(([name,items])=>[name,items]));
+    encoded.blobs=[{id:'b',data:'data:image/png;base64,AAF//w=='}];
+    const backup=new Blob([JSON.stringify({format:'shiye-pwa',version:1,stores:encoded})]);
+    await store.transaction(Object.keys(values),tx=>{for(const name of Object.keys(values))tx.objectStore(name).clear();});
+    await store.restoreBackup(backup);
     for(const [name,records] of Object.entries(values)){const actual=await store.all(name);if(name==='blobs'){assert.deepEqual(new Uint8Array(await actual[0].data.arrayBuffer()),new Uint8Array([0,1,127,255]));assert.equal(actual[0].data.type,'image/png');}else assert.deepEqual(actual,records);}
     const corrupted=JSON.parse(await backup.text());corrupted.stores.assets=[{title:'missing primary key'}];await assert.rejects(store.restoreBackup(new Blob([JSON.stringify(corrupted)])));assert.deepEqual(await store.all('assets'),values.assets);assert.equal((await store.all('projects')).length,1);
     await assert.rejects(store.restoreBackup(new Blob(['{}'])),/完整备份/);assert.deepEqual(await store.all('assets'),values.assets);
   }finally{globalThis.fetch=previous;}
+});
+
+
+test('backup manifest rejects altered image bytes before touching existing records',async()=>{
+  // The pure validator is shared by the browser restore entry point.
+  const {validateBackupData,buildBlobIntegrity}=await import('../src/backup-integrity.js');
+  const stored={format:'shiye-pwa',version:1,stores:{
+    assets:[{id:'one',blobId:'img'}],blobs:[{id:'img',data:'data:image/png;base64,YWJj'}],
+    series:[],projects:[],meta:[],trash:[]
+  }};
+  stored.integrity={algorithm:'SHA-256',blobs:await buildBlobIntegrity([{id:'img',data:new Blob(['abc'])}])};
+  stored.stores.blobs[0].data='data:image/png;base64,YWJk';
+  await assert.rejects(validateBackupData(stored),/SHA-256/);
 });

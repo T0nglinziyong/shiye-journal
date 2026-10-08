@@ -1,6 +1,6 @@
 // Durable edits are an explicit outbox, not a replacement for cloud records.
 // Commit acknowledgement is the only point at which an entry is removed.
-export function createProjectSync({load,write,commit,revision,reconcile=async()=> 'conflict',recordKeys=record=>[{store:'projects',id:record.id}],onCommitted=()=>{},onStatus=()=>{}}){
+export function createProjectSync({load,write,commit,revision,reconcile=async()=> 'conflict',recordKeys=record=>[{store:'projects',id:record.id}],onCommitted=()=>{},onStatus=()=>{},runExclusive=fn=>fn()}){
   let initialized,staging=Promise.resolve(),network,serial=0,error;
   const entries=new Map();
   // A transient IndexedDB/auth read failure must not poison this instance for
@@ -8,6 +8,24 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
   const initialize=()=>initialized??=(async()=>{for(const row of await load()||[]){entries.set(row.record.id,row);serial=Math.max(serial,row.serial);}report();})().catch(failure=>{initialized=undefined;throw failure;});
   const report=()=>onStatus({pending:entries.size,error});
   const persist=()=>write(structuredClone([...entries.values()]));
+  // The durable queue is shared by tabs. A tab may have opened before another
+  // wrote pending edits, so refresh it AFTER acquiring the cross-tab sync lock.
+  // Only replace in-memory state when no new local staging occurred meanwhile.
+  async function refreshFromDisk(){
+    for(;;){
+      const checkpoint=staging;
+      await checkpoint;
+      const saved=await load()||[];
+      if(checkpoint!==staging)continue;
+      entries.clear();
+      for(const row of saved){
+        entries.set(row.record.id,row);
+        serial=Math.max(serial,row.serial);
+      }
+      report();
+      return;
+    }
+  }
   const overlaps=(a,b)=>a.some(left=>b.some(right=>left.store===right.store&&(left.id===right.id||left.id===undefined||right.id===undefined)));
   async function acknowledge(row,{confirmedHere=false}={}){
     // A confirmed operation advanced exactly one revision. Newer local edits
@@ -28,8 +46,8 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
   }
   function kick(){
     if(network)return network;
-    network=(async()=>{
-      await initialize();await staging;
+    network=(async()=>runExclusive(async()=>{
+      await initialize();await refreshFromDisk();
       while(entries.size){
         const row=[...entries.values()][0];
         // A restarted queue must not overwrite changes made by another device.
@@ -60,7 +78,7 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
         await acknowledge(row,{confirmedHere:true});
       }
       error=null;report();
-    })().catch(e=>{error=e;report();throw e;}).finally(()=>{network=null;});
+    }))().catch(e=>{error=e;report();throw e;}).finally(()=>{network=null;});
     network.catch(()=>{});return network;
   }
   async function discard(){await initialize();await staging;if(network)throw Error('上传正在进行，请等待请求结束后再放弃待同步修改');const previous=[...entries.values()];entries.clear();try{await persist();}catch(failure){for(const row of previous)entries.set(row.record.id,row);throw failure;}error=null;report();return previous.length;}
