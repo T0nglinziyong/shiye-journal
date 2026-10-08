@@ -3,6 +3,7 @@ import {createStorageRouter} from './storage-router.js';
 import {cloudEnabled} from './cloud-session.js';
 import {cloudAll,cloudGet,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudPreview,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudPendingDetails,cloudDiscardPending,cloudFlushProjects,cloudProjectDocument,cloudEmergencySnapshot,cloudRestoreEmergency} from './cloud-store.js';
 import {createPendingRecovery,parsePendingRecovery} from './emergency-backup.js';
+import {buildBlobIntegrity,validateBackupData} from './backup-integrity.js';
 // Exceptional destructive imports require an acknowledged atomic cloud commit.
 export async function confirmedTransaction(names,fn){if(cloudEnabled){await cloudFlushProjects();return cloudTransaction(names,fn);}return transaction(names,fn);}
 export async function stageImport(batch){if(cloudEnabled)return cloudStageImport(batch);await transaction(['assets','blobs','projects'],tx=>{for(const store of ['assets','blobs','projects'])for(const record of batch[store]||[])tx.objectStore(store).put(record);});return {pending:false};}
@@ -84,9 +85,28 @@ export async function createBackup({browserOnly=false}={}){
   const data={format:'shiye-pwa',version:1,createdAt:new Date().toISOString(),stores:{}};
   const snapshot=cloudEnabled&&!browserOnly?await cloudCheckpoint():null;
   if(!browserOnly&&(cloudEnabled||(await resolveBackend()).url)){for(const name of STORES)data.stores[name]=await all(name);}else{const tx=(await localDatabase()).transaction(STORES);const values=await Promise.all(STORES.map(name=>tx.objectStore(name).getAll()));await tx.done;STORES.forEach((name,i)=>{data.stores[name]=values[i];});}
-  data.stores.blobs=await Promise.all(data.stores.blobs.map(async x=>({...x,data:await toBase64(x.data)})));
+  // Encode one image at a time to bound transient image buffers. A manifest
+  // makes a damaged or truncated archive fail BEFORE the database is cleared.
+  const blobIntegrity=await buildBlobIntegrity(data.stores.blobs);
+  const serialized=[];
+  for(const record of data.stores.blobs)serialized.push({...record,data:await toBase64(record.data)});
+  data.stores.blobs=serialized;
+  data.integrity={algorithm:'SHA-256',blobs:blobIntegrity};
   if(snapshot!==null){data.stores.projects=await Promise.all(data.stores.projects.map(cloudProjectDocument));data.stores.trash=await Promise.all(data.stores.trash.map(async row=>row.kind==='project'?{...row,item:await cloudProjectDocument(row.item)}:row));}
   if(snapshot!==null&&await cloudCheckpoint()!==snapshot)throw Error('备份期间资料已变化，请重试');
   return new Blob([JSON.stringify(data)],{type:'application/json'});
 }
-export async function restoreBackup(file){if(file.size>1024*1024*1024)throw Error('备份超过 1 GB，请在电脑端转换或分批导入');const data=JSON.parse(await file.text());if(data.format!=='shiye-pwa'||data.version!==1||!data.stores||STORES.some(x=>!Array.isArray(data.stores[x])))throw Error('不是拾页 PWA 完整备份');const values={...data.stores,blobs:data.stores.blobs.map(x=>({...x,data:fromBase64(x.data)}))};await confirmedTransaction(STORES,tx=>{for(const name of STORES){tx.objectStore(name).clear();for(const item of values[name])tx.objectStore(name).put(item);}});}
+export async function restoreBackup(file){
+  if(file.size>1024*1024*1024)throw Error('备份超过 1 GB，请在电脑端转换或分批导入');
+  const data=JSON.parse(await file.text());
+  // Every reference and binary checksum is verified before destructive writes.
+  // Legacy v1 backups without a manifest are checked structurally.
+  await validateBackupData(data);
+  const values={...data.stores,blobs:data.stores.blobs.map(x=>({...x,data:fromBase64(x.data)}))};
+  await confirmedTransaction(STORES,tx=>{
+    for(const name of STORES){
+      tx.objectStore(name).clear();
+      for(const item of values[name])tx.objectStore(name).put(item);
+    }
+  });
+}
