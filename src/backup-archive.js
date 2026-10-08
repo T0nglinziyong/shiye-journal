@@ -4,7 +4,7 @@ const MIME='application/zip';
 const BUFFER_LIMIT=192*1024*1024;
 const makeWorker=()=>new Worker(new URL('./backup-zip-worker.js',import.meta.url),{type:'module'});
 
-export async function createZipBackup({records,blobIDs,loadBlob,onChunk,onProgress=()=>{},maxBufferedBytes=BUFFER_LIMIT}){
+export async function createZipBackup({records,blobIDs,loadBlob,onChunk,onProgress=()=>{},beforeFinalize=null,maxBufferedBytes=BUFFER_LIMIT}){
   if(typeof Worker==='undefined')throw Error('此浏览器无法在后台创建 ZIP 备份');
   const worker=makeWorker(),parts=[],state={bytes:0},pending=new Map();
   let errored=false,write=Promise.resolve();
@@ -47,6 +47,7 @@ export async function createZipBackup({records,blobIDs,loadBlob,onChunk,onProgre
       await awaitReply('image',{record},'image-done');
       onProgress({stage:'image',current:index+1,total:blobIDs.length});
     }
+    if(beforeFinalize)await beforeFinalize();
     await awaitReply('finish',{},'done');
     await write;
     if(errored)throw Error('备份输出失败');
