@@ -80,6 +80,24 @@ test('box discovery trims broad page-edge residue from a dense frame-touching bo
   assert.ok(out[0].rawBox.x<.02,'raw bbox should demonstrate the frame residue existed');
 });
 
+test('frame-body trimming keeps a medium-dense warped material while removing remote paper residue',async()=>{
+  const cv=await cvModule,width=420,height=594,mask=new Uint8Array(width*height),evidence=new Uint8Array(width*height),foregroundSeeds=new Uint8Array(width*height);
+  // Main material body: broad but not perfectly solid (simulates binder holes,
+  // warp interpolation and printed gaps). Remote page residue is connected on
+  // the left/bottom so the raw bbox touches the protected frame.
+  for(let y=210;y<500;y++)for(let x=75;x<250;x++){
+    const i=y*width+x;
+    if(((x+y)%11)!==0){mask[i]=evidence[i]=1;if((x+y)%4)foregroundSeeds[i]=1;}
+  }
+  for(let y=300;y<590;y++)for(let x=10;x<55;x++){const i=y*width+x;mask[i]=1;if((x+y)%97===0)evidence[i]=1;}
+  for(let y=470;y<590;y++)for(let x=45;x<90;x++){const i=y*width+x;mask[i]=1;if((x+y)%83===0)evidence[i]=1;}
+  const out=await processVision(cv,'boxes-simple',{mask,evidence,foregroundSeeds,width,height,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
+  assert.equal(out.length,1,JSON.stringify(out));
+  assert.equal(out[0].boxAdjustment,'dense-frame-body');
+  assert.ok(out[0].x>.12&&out[0].x<.20,JSON.stringify(out[0]));
+  assert.ok(out[0].w>.35&&out[0].w<.50,JSON.stringify(out[0]));
+});
+
 test('dense frame adjustment preserves a real material that genuinely reaches the page side',async()=>{
   const cv=await cvModule,width=420,height=594,mask=new Uint8Array(width*height),evidence=new Uint8Array(width*height),foregroundSeeds=new Uint8Array(width*height);
   for(let y=130;y<390;y++)for(let x=0;x<150;x++){const i=y*width+x;mask[i]=evidence[i]=foregroundSeeds[i]=1;}
