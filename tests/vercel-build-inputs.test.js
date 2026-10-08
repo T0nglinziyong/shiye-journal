@@ -23,3 +23,16 @@ test('Vercel Git auto-deployment is limited to main and test',()=>{
   const config=JSON.parse(readFileSync(new URL('../vercel.json',import.meta.url),'utf8'));
   assert.deepEqual(config.git?.deploymentEnabled,{'*':false,main:true,test:true});
 });
+
+test('Vercel uploads every server module imported by the COS function',()=>{
+  const source=readFileSync(new URL('../api/cos.js',import.meta.url),'utf8');
+  const ignore=readFileSync(new URL('../.vercelignore',import.meta.url),'utf8');
+  const allow=new Set(ignore.split(/\r?\n/).map(line=>line.trim()).filter(line=>line.startsWith('!')));
+  const imports=[...source.matchAll(/from ['"]\.\.\/(server\/[^'"]+)['"]/g)].map(match=>match[1]);
+  assert.ok(imports.length>0);
+  assert.ok(allow.has('!server'),'server directory must be traversed');
+  for(const path of imports){
+    assert.ok(allow.has('!'+path),path+' must be uploaded for the COS function');
+    assert.ok(readFileSync(new URL('../'+path,import.meta.url)).length>0,path+' must exist');
+  }
+});
