@@ -124,7 +124,7 @@ try {
   await click('[aria-label="套索选择"]');
   await touchPath([{x:center.x-70,y:center.y-70},{x:center.x+70,y:center.y-70},{x:center.x+70,y:center.y+70},{x:center.x-70,y:center.y+70},{x:center.x-70,y:center.y-70}]);
   await capture('lasso-touch',390,844);
-  assert.equal(await evaluate('document.querySelector(".multi-selection-toolbar span").textContent'),'已选 3 项');
+  assert.equal(await evaluate('document.querySelectorAll(".canvas-object.multi-selected").length'),2);assert.equal(await evaluate('document.querySelector(".canvas-context-tools").querySelectorAll("button").length'),1);
   assert.equal(await evaluate('document.querySelectorAll(".canvas-selection-overlay .lasso-outline").length'),1,'Lasso boundary must remain visible after lifting the finger');
   const beforeDraft=(await storeRecords('projects')).find(p=>p.title==='未命名手账').drafts[0];
   const inLassoBefore=beforeDraft.primitives,inkBefore=beforeDraft.strokes.at(-1).points;

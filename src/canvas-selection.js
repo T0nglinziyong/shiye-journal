@@ -25,20 +25,24 @@ function fullyContains(polygon,corners) {
       if(Math.abs(den)<1e-9)continue;const t=((q.x-a.x)*ey-(q.y-a.y)*ex)/den,u=((q.x-a.x)*dy-(q.y-a.y)*dx)/den;if(t>0&&t<1&&u>=0&&u<=1)cuts.push(t);}
     cuts.sort((a,b)=>a-b);return cuts.slice(1).every((t,j)=>{const m=(t+cuts[j])/2;return polygonContains({x:a.x+dx*m,y:a.y+dy*m},polygon);});});
 }
-export function selectPolygon(draft, polygon, filter) {
+function segmentsIntersect(a,b,c,d){const s1=cross(a,b,c),s2=cross(a,b,d),s3=cross(c,d,a),s4=cross(c,d,b);return s1*s2<=0&&s3*s4<=0&&Math.max(Math.min(a.x,b.x),Math.min(c.x,d.x))<=Math.min(Math.max(a.x,b.x),Math.max(c.x,d.x))&&Math.max(Math.min(a.y,b.y),Math.min(c.y,d.y))<=Math.min(Math.max(a.y,b.y),Math.max(c.y,d.y));}
+function intersects(polygon,corners){if(corners.some(p=>polygonContains(p,polygon))||polygon.some(p=>polygonContains(p,corners)))return true;return corners.some((a,i)=>polygon.some((c,j)=>segmentsIntersect(a,corners[(i+1)%corners.length],c,polygon[(j+1)%polygon.length])));}
+function strokeIntersects(polygon,a,b){return polygonContains(a,polygon)||polygonContains(b,polygon)||polygon.some((p,i)=>segmentsIntersect(a,b,p,polygon[(i+1)%polygon.length]));}
+export function selectPolygon(draft, polygon, filter, mode='contain') {
   if(polygon.length<3 || !polygon.every(p=>Number.isFinite(p.x)&&Number.isFinite(p.y))) return [];
   const bounds=selectionBounds(polygon);
   if(bounds.width<.01 || bounds.height<.01) return [];
-  return canvasObjects(draft,filter).filter(e=>fullyContains(polygon,objectCorners(e.value))).map(e=>e.value.id);
+  return canvasObjects(draft,filter).filter(e=>(mode==='intersect'?intersects(polygon,objectCorners(e.value)):fullyContains(polygon,objectCorners(e.value)))).map(e=>e.value.id);
 }
-export function selectStrokes(draft, polygon, enabled = true) {
+export function selectStrokes(draft, polygon, enabled = true, mode='contain', onlyHighlighter=false) {
   if (!enabled || polygon.length < 3 || !polygon.every(p => Number.isFinite(p.x) && Number.isFinite(p.y))) return [];
   return (draft.strokes || []).flatMap((stroke, index) => {
     const points = stroke.points || [];
+    if (onlyHighlighter && stroke.penStyle!=='marker') return [];
     if (!points.length || !points.every(p => Number.isFinite(p.x) && Number.isFinite(p.y))) return [];
     const inside = points.length === 1
       ? polygonContains(points[0], polygon)
-      : points.slice(1).every((point, i) => fullyContains(polygon, [points[i], point]));
+      : points.slice(1)[mode==='intersect'?'some':'every']((point, i) => mode==='intersect'?strokeIntersects(polygon,points[i],point):fullyContains(polygon,[points[i],point]));
     return inside ? [index] : [];
   });
 }

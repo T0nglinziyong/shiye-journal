@@ -45,3 +45,12 @@ test('lasso excludes a stroke crossing a concave edge between points',()=>{
   const d=draft();d.strokes=[{points:[{x:30,y:50},{x:60,y:50}]}];
   assert.deepEqual(selectStrokes(d,polygon),[]);
 });
+
+test('lasso intersection mode includes crossed objects and strokes while containment does not',()=>{
+  const d=draft(),region=[{x:42,y:32},{x:52,y:32},{x:52,y:48},{x:42,y:48}];
+  assert.deepEqual(selectPolygon(d,region,{material:true,text:true,shape:true}),[]);
+  assert.deepEqual(selectPolygon(d,region,{material:true,text:true,shape:true},'intersect'),['photo']);
+  assert.deepEqual(selectStrokes(d,region,true),[]);
+  d.strokes[0].points=[{x:35,y:40},{x:60,y:40}];
+  assert.deepEqual(selectStrokes(d,region,true,'intersect'),[0]);
+});
