@@ -9,7 +9,7 @@ try {
   for(const [w,h] of [[390,844],[768,1024],[1024,768],[1440,900]]){
     await command('Emulation.setDeviceMetricsOverride',{width:w,height:h,deviceScaleFactor:1,mobile:w<700});
     await click('[data-route="works"]');await click('[data-id="interaction-project"]','#canvas-page');
-    await click('[aria-label="图层"]','.canvas-layer-list');
+    await wait('[data-val="layers"]');await click('[data-val="layers"]','.canvas-layer-list');
     await evaluate('globalThis.__layerList=document.querySelector(".canvas-layer-list");globalThis.__layerThumb=document.querySelector("[data-layer-id=interaction-item] img");globalThis.__layerCanvasImage=document.querySelector("[data-object=interaction-item] img")');
     assert.ok(await evaluate('__layerList&&__layerThumb&&__layerCanvasImage'));
     await click('[data-layer-id="interaction-item"] [data-layer-lock]');
