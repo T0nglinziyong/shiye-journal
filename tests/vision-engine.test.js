@@ -32,6 +32,14 @@ test('box discovery keeps independent full-page components as separate material 
   assert.ok(out.every(x=>x.instanceMethod==='connected-component-box'));
 });
 
+test('box discovery rejects enclosed paper islands without direct material evidence',async()=>{
+  const cv=await cvModule,width=420,height=594,mask=new Uint8Array(width*height),evidence=new Uint8Array(width*height),foregroundSeeds=new Uint8Array(width*height);
+  for(let y=90;y<150;y++)for(let x=140;x<280;x++)mask[y*width+x]=1;
+  for(let x=150;x<158;x++)evidence[100*width+x]=1;
+  const out=await processVision(cv,'boxes-simple',{mask,evidence,foregroundSeeds,width,height,smallestMM:6,paperWidthMM:210,paperHeightMM:297});
+  assert.equal(out.length,0,JSON.stringify(out));
+});
+
 test('box discovery absorbs a small internal fragment without changing object count',async()=>{
   const cv=await cvModule,width=300,height=420,mask=new Uint8Array(width*height),evidence=new Uint8Array(width*height),foregroundSeeds=new Uint8Array(width*height);
   for(let y=80;y<280;y++)for(let x=55;x<75;x++){const i=y*width+x;mask[i]=evidence[i]=1;}
