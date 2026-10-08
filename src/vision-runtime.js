@@ -1,5 +1,3 @@
-import fallbackOpenCVScriptURL from '@techstark/opencv-js/dist/opencv.js?url';
-
 const liteOpenCVScriptURL='/vendor/opencv-shiye/opencv.js';
 export function visionRuntimeFlavor(){return 'lite';}
 
@@ -43,7 +41,7 @@ function ensureWorker(index=0){
       error=Error('本机图像引擎加载失败'+(detail?'：'+detail:'，请联网后重试'));
     resetSlot(index,error);
   };
-  try{worker.postMessage({type:'init',opencvScriptURL:liteOpenCVScriptURL,fallbackOpenCVScriptURL});}
+  try{worker.postMessage({type:'init',opencvScriptURL:liteOpenCVScriptURL});}
   catch(error){resetSlot(index,error);}
   return readyPromise;
 }
@@ -75,3 +73,4 @@ export async function visionParallelTasks(operation,parameterList){
 }
 
 // OpenCV initialization occurs on explicit import intent; no global idle WASM compilation.
+
