@@ -116,18 +116,23 @@ try {
   await command('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
   await click('[data-route="works"]','.works-grid');await click('#work-create','#canvas-page');
   for(let i=0;i<2;i++){await click('[data-act="tool"][data-val="shape"]','[data-shape-kind="roundedRectangle"]');await click('[data-shape-kind="roundedRectangle"]');}
-  await click('[aria-label="套索对象"]');
+  await click('[data-val="pen"]');
   await evaluate('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');
   const canvas=await evaluate('(()=>{const r=document.querySelector("#canvas-page").getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height};})()');
   const center={x:canvas.x+canvas.w/2,y:canvas.y+canvas.h/2};
+  await mouseDrag({x:center.x-22,y:center.y+35},{x:center.x+22,y:center.y+35});await sleep(150);
+  await click('[aria-label="套索选择"]');
   await touchPath([{x:center.x-70,y:center.y-70},{x:center.x+70,y:center.y-70},{x:center.x+70,y:center.y+70},{x:center.x-70,y:center.y+70},{x:center.x-70,y:center.y-70}]);
   await capture('lasso-touch',390,844);
-  assert.equal(await evaluate('document.querySelector(".multi-selection-toolbar span").textContent'),'已选 2 个对象');
+  assert.equal(await evaluate('document.querySelector(".multi-selection-toolbar span").textContent'),'已选 3 项');
   assert.equal(await evaluate('document.querySelectorAll(".canvas-selection-overlay .lasso-outline").length'),1,'Lasso boundary must remain visible after lifting the finger');
-  const inLassoBefore=(await storeRecords('projects')).find(p=>p.title==='未命名手账').drafts[0].primitives;
+  const beforeDraft=(await storeRecords('projects')).find(p=>p.title==='未命名手账').drafts[0];
+  const inLassoBefore=beforeDraft.primitives,inkBefore=beforeDraft.strokes.at(-1).points;
   await mouseDrag(center,{x:center.x+20,y:center.y+10});await sleep(250);
-  const inLassoAfter=(await storeRecords('projects')).find(p=>p.title==='未命名手账').drafts[0].primitives;
+  const afterDraft=(await storeRecords('projects')).find(p=>p.title==='未命名手账').drafts[0];
+  const inLassoAfter=afterDraft.primitives,inkAfter=afterDraft.strokes.at(-1).points;
   assert.ok(inLassoAfter.every((o,i)=>o.x>inLassoBefore[i].x&&o.y>inLassoBefore[i].y),'Dragging inside lasso must move every enclosed object');
+  assert.ok(inkAfter.every((p,i)=>p.x>inkBefore[i].x&&p.y>inkBefore[i].y),'Dragging inside lasso must move enclosed handwriting with objects');
   assert.equal(await evaluate('document.querySelectorAll(".canvas-selection-overlay .lasso-outline").length'),1,'Lasso boundary must follow the group drag');
   await click('[data-val="select"]');
   const beforeMove=(await storeRecords('projects')).find(p=>p.title==='未命名手账').drafts[0].primitives;
@@ -190,6 +195,6 @@ try {
   assert.ok(await evaluate('document.querySelector("#toast").textContent.includes("完整备份已恢复")'),'Restore must complete through the deployed UI');
   const restored=await storeRecords('assets');assert.equal(restored.length,beforeRestore);assert.equal(restored.find(a=>a.title==='合成素材验收').supply.quantity,3);
   assert.deepEqual(errors,[],'Uncaught browser errors');
-  await writeFile(directory+'/report.json',JSON.stringify({base,browser:'Chrome via CDP (not physical Safari)',report,checks:['settings draft/save/cancel','series cover/tags/reload','touch lasso and multiselect drag','manual import box','two-photo import metadata','work editable elements and background removal','complete backup restore'],errors},null,2));
+  await writeFile(directory+'/report.json',JSON.stringify({base,browser:'Chrome via CDP (not physical Safari)',report,checks:['settings draft/save/cancel','series cover/tags/reload','touch lasso with handwriting and multiselect drag','manual import box','two-photo import metadata','work editable elements and background removal','complete backup restore'],errors},null,2));
   console.log('Real browser acceptance: '+report.length+' screens, 7 viewports, workflows and backup roundtrip passed. '+directory);
 }finally{if(context)await command('Target.disposeBrowserContext',{browserContextId:context},null);ws.close();cli(['close']);}

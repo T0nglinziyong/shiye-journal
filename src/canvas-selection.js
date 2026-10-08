@@ -31,23 +31,53 @@ export function selectPolygon(draft, polygon, filter) {
   if(bounds.width<.01 || bounds.height<.01) return [];
   return canvasObjects(draft,filter).filter(e=>fullyContains(polygon,objectCorners(e.value))).map(e=>e.value.id);
 }
+export function selectStrokes(draft, polygon, enabled = true) {
+  if (!enabled || polygon.length < 3 || !polygon.every(p => Number.isFinite(p.x) && Number.isFinite(p.y))) return [];
+  return (draft.strokes || []).flatMap((stroke, index) => {
+    const points = stroke.points || [];
+    if (!points.length || !points.every(p => Number.isFinite(p.x) && Number.isFinite(p.y))) return [];
+    const inside = points.length === 1
+      ? polygonContains(points[0], polygon)
+      : points.slice(1).every((point, i) => fullyContains(polygon, [points[i], point]));
+    return inside ? [index] : [];
+  });
+}
 export function selectionBounds(points) {
-  const x=Math.min(...points.map(p=>p.x)), y=Math.min(...points.map(p=>p.y));
-  return {x,y,width:Math.max(...points.map(p=>p.x))-x,height:Math.max(...points.map(p=>p.y))-y};
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  for(const p of points){minX=Math.min(minX,p.x);minY=Math.min(minY,p.y);maxX=Math.max(maxX,p.x);maxY=Math.max(maxY,p.y);}
+  return {x:minX,y:minY,width:maxX-minX,height:maxY-minY};
 }
 export function clampCanvasPosition(draft,object,x,y){
   return {x:Math.max(0,Math.min(draft.canvas.width,x)),y:Math.max(0,Math.min(draft.canvas.height,y))};
 }
-export function moveSelection(draft, starts, dx, dy) {
-  if(!Number.isFinite(dx)||!Number.isFinite(dy)) return;
-  const movable=canvasObjects(draft).filter(e=>starts.has(e.value.id));
-  for(const {value:o} of movable) { const p=starts.get(o.id); if(!Number.isFinite(p.x)||!Number.isFinite(p.y)) return; }
-  // Keep at least the object's centre on the page, even for objects wider
-  // than the paper. A dragged object must always remain recoverable.
-  const minX=Math.max(-Infinity,...movable.map(e=>-starts.get(e.value.id).x));
-  const maxX=Math.min(Infinity,...movable.map(e=>draft.canvas.width-starts.get(e.value.id).x));
-  const minY=Math.max(-Infinity,...movable.map(e=>-starts.get(e.value.id).y));
-  const maxY=Math.min(Infinity,...movable.map(e=>draft.canvas.height-starts.get(e.value.id).y));
-  dx=Math.min(maxX,Math.max(minX,dx)); dy=Math.min(maxY,Math.max(minY,dy));
-  for(const {kind,value:o} of movable) { const p=starts.get(o.id); o.x=p.x+dx; o.y=p.y+dy; if(kind==='material') o.userOverrideFlags=[...new Set([...(o.userOverrideFlags||[]),'moved'])]; }
+export function moveSelection(draft, starts, dx, dy, strokeStarts = new Map()) {
+  if (!Number.isFinite(dx) || !Number.isFinite(dy)) return {dx:0,dy:0};
+  const movable = canvasObjects(draft).filter(e => starts.has(e.value.id));
+  for (const {value:o} of movable) {
+    const p = starts.get(o.id);
+    if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) return {dx:0,dy:0};
+  }
+  const ink = [...strokeStarts].flatMap(([index, points]) =>
+    draft.strokes?.[index] && Array.isArray(points) && points.length === draft.strokes[index].points?.length ? points : []);
+  if (!ink.every(p => Number.isFinite(p.x) && Number.isFinite(p.y))) return {dx:0,dy:0};
+  // Clamp the whole selection once, so ink and objects never drift apart.
+  const positions = [...movable.map(e => starts.get(e.value.id)), ...ink];
+  let minX=-Infinity,maxX=Infinity,minY=-Infinity,maxY=Infinity;
+  for(const p of positions){
+    minX=Math.max(minX,-p.x);maxX=Math.min(maxX,draft.canvas.width-p.x);
+    minY=Math.max(minY,-p.y);maxY=Math.min(maxY,draft.canvas.height-p.y);
+  }
+  dx = Math.min(maxX, Math.max(minX, dx));
+  dy = Math.min(maxY, Math.max(minY, dy));
+  for (const {kind,value:o} of movable) {
+    const p = starts.get(o.id);
+    o.x = p.x + dx; o.y = p.y + dy;
+    if (kind === 'material') o.userOverrideFlags = [...new Set([...(o.userOverrideFlags || []), 'moved'])];
+  }
+  for (const [index, points] of strokeStarts) {
+    const stroke = draft.strokes?.[index];
+    if (stroke && points.length === stroke.points?.length)
+      stroke.points = points.map(p => ({...p, x:p.x + dx, y:p.y + dy}));
+  }
+  return {dx,dy};
 }
