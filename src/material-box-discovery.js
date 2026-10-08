@@ -64,8 +64,18 @@ export function likelyNeutralPageArtifact(item){
   // Weak, almost seed-free neutral background residue should not become a
   // material. Non-neutral/pale carriers keep chromatic evidence even when
   // printed details are sparse.
-  return item.seedDensity<.003&&item.evidenceDensity<.035
+  return item.seedDensity<.003&&item.evidenceDensity<(item.touchesProtectedFrame?.08:.035)
     &&(item.fillRatio<.55||item.touchesProtectedFrame===true);
+}
+export function likelyFrameDebris(item,pageW,pageH,pxPerMM){
+  // A photographed paper edge can leave a long, sparse coloured strip just
+  // inside the frame after perspective interpolation. It has enough ink to
+  // pass the ordinary evidence gate, but is too thin to be a physical item.
+  const nearEdge=item.x<pageW*.05||item.y<pageH*.05
+    ||item.x+item.w>pageW*.95||item.y+item.h>pageH*.95;
+  const shortSide=Math.min(item.w,item.h),longSide=Math.max(item.w,item.h);
+  return nearEdge&&shortSide<pxPerMM*10&&longSide/Math.max(1,shortSide)>4
+    &&item.fillRatio<.28&&item.seedDensity<.035;
 }
 // Image-space angle (clockwise positive): select the shortest turn that makes
 // one principal rectangle edge horizontal. Equal-length sides are allowed.
@@ -158,7 +168,8 @@ export function discoverMaterialBoxes(cv,p,own){
     return !(smallAtFrame||longThinFrameStrip);
   });
 
-  candidates=candidates.filter(item=>!likelyNeutralPageArtifact(item));
+  candidates=candidates.filter(item=>!likelyNeutralPageArtifact(item)
+    &&!likelyFrameDebris(item,w,h,pxPerMM));
 
   // Tiny disconnected islands whose centers sit inside a much larger object's
   // box are not separate materials. Keep their pixels associated with the
@@ -184,14 +195,14 @@ export function discoverMaterialBoxes(cv,p,own){
   const out=[];
   for(const item of candidates){
     const group=new Set([item.label,...(fragments.get(item.label)||[])]),
-      rowCounts=new Uint32Array(item.h),colCounts=new Uint32Array(item.w);
+      rowCounts=new Uint32Array(item.h),colCounts=new Uint32Array(item.w),colSeeds=new Uint32Array(item.w);
     let groupedPixels=0,groupEvidence=0,groupSeeds=0;
     for(let yy=0;yy<item.h;yy++)for(let xx=0;xx<item.w;xx++){
       const at=(item.y+yy)*w+item.x+xx;
       if(!group.has(labels.data32S[at]))continue;
       rowCounts[yy]++;colCounts[xx]++;groupedPixels++;
       if(p.evidence?.[at])groupEvidence++;
-      if(p.foregroundSeeds?.[at])groupSeeds++;
+      if(p.foregroundSeeds?.[at]){groupSeeds++;colSeeds[xx]++;}
     }
     const fill=groupedPixels/Math.max(1,item.w*item.h),
       seedDensity=groupSeeds/Math.max(1,groupedPixels),
@@ -208,13 +219,25 @@ export function discoverMaterialBoxes(cv,p,own){
       // a real body after browser rectification. Dense components can keep the
       // strict 96% core; medium-dense frame-connected bodies use a 70% core so
       // the material survives while remote paper-edge residue is discarded.
-      const occupancyThreshold=fill>=.82?.96:.70,
+      // A 96% column threshold can retain only the opaque centre of a real
+      // patterned sheet and cut its box in half at higher analysis resolutions.
+      const occupancyThreshold=.70,
         colOcc=Array.from(colCounts,v=>v/Math.max(1,item.h)),
         rowOcc=Array.from(rowCounts,v=>v/Math.max(1,item.w)),
         xr=supportedRange(colOcc,occupancyThreshold),yr=supportedRange(rowOcc,occupancyThreshold),
         pad=Math.max(1,pxPerMM*1.5);
       if(xr){x0=clamp(item.x+xr.first-pad,0,w);x1=clamp(item.x+xr.last+1+pad,0,w);}
       if(yr){y0=clamp(item.y+yr.first-pad,0,h);y1=clamp(item.y+yr.last+1+pad,0,h);}
+      // Page residue may occupy most columns even after the dense-body test.
+      // For a strongly printed sheet, foreground seeds locate the real body
+      // while the neutral page/shadow extension contains essentially none.
+      if(seedDensity>.2){
+        const seeded=supportedRange(colSeeds,Math.max(3,item.h*.12));
+        if(seeded&&seeded.last-seeded.first+1>=item.w*.45){
+          x0=clamp(item.x+seeded.first-pad,0,w);
+          x1=clamp(item.x+seeded.last+1+pad,0,w);
+        }
+      }
       if(xr||yr)boxAdjustment='dense-frame-body';
     // Sparse strong seeds inside a medium/low-fill component are the common
     // signature of printed content on a pale carrier. Add a small physical
@@ -227,7 +250,10 @@ export function discoverMaterialBoxes(cv,p,own){
     }
 
     const bw=Math.max(1,x1-x0),bh=Math.max(1,y1-y0);
-    const orientedBox=orientationFromInstance(cv,item,group,labels,w,h);
+    // Once frame residue has been trimmed, the raw connected component's
+    // minAreaRect still includes that residue. Never seed a segmenter from it.
+    const orientedBox=boxAdjustment==='dense-frame-body'?null
+      :orientationFromInstance(cv,item,group,labels,w,h);
     out.push({
       x:x0/w,y:y0/h,w:bw/w,h:bh/h,
       orientedBox,
