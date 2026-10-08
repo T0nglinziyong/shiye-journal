@@ -30,3 +30,19 @@ test('service worker does not replace an active editor during installation',asyn
  listeners.get('message')({data:{type:'SHIYE_ACTIVATE_UPDATE'},waitUntil:p=>pending=p});
  await pending;assert.equal(skip,1);
 });
+
+test('installation remains staged until the app requests activation',async()=>{
+  const source=(await readFile(new URL('../public/sw.js',import.meta.url),'utf8')).replace('__BUILD_ID__','test').replace('__ASSETS__',"['/']");
+  const listeners=new Map();let activations=0;
+  const self={location:{origin:'https://shiyejournal.vip'},addEventListener:(name,fn)=>listeners.set(name,fn),
+    skipWaiting:async()=>{activations++;},clients:{claim:async()=>{}}};
+  const caches={open:async()=>({addAll:async()=>{}}),keys:async()=>[],delete:async()=>true};
+  vm.runInNewContext(source,{self,caches,Promise,URL,Response,Set});
+  let pending;
+  listeners.get('install')({waitUntil:promise=>pending=promise});
+  await pending;
+  assert.equal(activations,0);
+  listeners.get('message')({data:{type:'SHIYE_ACTIVATE_UPDATE'},waitUntil:promise=>pending=promise});
+  await pending;
+  assert.equal(activations,1);
+});

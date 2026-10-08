@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createTicketHandler} from '../server/cos-tickets.mjs';
+import {trustedOrigins} from '../server/trusted-origins.mjs';
 import {createCOSStore} from '../src/cos-store.js';
 const hash='a'.repeat(64),token='synthetic-token-for-test-only';
 test('COS authorizes only authenticated owner hash paths and validates a whole batch before signing',async()=>{
@@ -75,4 +76,16 @@ test('COS uploads leave read capacity available and do not sign queued PUTs earl
   releases.shift()();await new Promise(resolve=>setTimeout(resolve,5));assert.equal(started,3,'a queued write must not take the visible read lane');
   releaseRead();assert.equal(await (await read).text(),'visible');for(let i=0;i<30&&started<4;i++)await new Promise(resolve=>setTimeout(resolve,1));assert.equal(started,4);
   while(releases.length)releases.shift()();for(let i=0;i<30&&started<5;i++)await new Promise(resolve=>setTimeout(resolve,1));while(releases.length)releases.shift()();await Promise.all(uploads);assert.equal(signedWrites,5);
+});
+
+test('production origins are exact and preview host must be server-provided',async()=>{
+ const origins=trustedOrigins({SHIYE_APP_ORIGINS:'https://myapp.example',VERCEL_URL:'shiye-preview-abc.vercel.app'});
+ for(const host of ['https://shiyejournal.vip','https://shiye-journal-test.vercel.app','https://myapp.example','https://shiye-preview-abc.vercel.app'])
+   assert.ok(origins.includes(host));
+ for(const bad of ['https://*.vercel.app','http://myapp.example','https://myapp.example/path'])
+   assert.throws(()=>trustedOrigins({SHIYE_APP_ORIGINS:bad}));
+ const run=createTicketHandler({ready:true,origins,authenticate:async()=>({userID:'owner'}),sign:async()=> 'https://example.test/object'});
+ const req={method:'POST',authorization:'Bearer '+token,body:{objects:[{method:'GET',path:'owner/'+hash}]}};
+ assert.equal((await run({...req,origin:'https://shiyejournal.vip'})).status,200);
+ assert.equal((await run({...req,origin:'https://bad-shiye-preview-abc.vercel.app'})).status,403);
 });
