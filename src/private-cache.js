@@ -60,6 +60,24 @@ export function createPrivateCache({name='shiye-private-read-cache-v2',limit=160
         return merged;
       }catch(error){try{tx.abort();}catch{}await tx.done.catch(()=>{});throw error;}
     },
+    // Restore both queues as one transaction. A collision with a newer
+    // pending operation aborts EVERYTHING, including the other queue.
+    async restoreOutboxes(account,projects,imports){
+      const d=await db(),tx=d.transaction(['entries','sizes'],'readwrite');
+      try{
+        const inputs=[['project-outbox',projects],['import-outbox',imports]],updates=[];
+        for(const [id,rows] of inputs){
+          const k=key(account,id),stored=await tx.objectStore('entries').get(k);
+          const merged=mergeOutboxRows(stored?.value||[],[],rows);
+          updates.push({key:k,account,time:Date.now(),bytes:0,value:merged});
+        }
+        for(const row of updates){
+          tx.objectStore('entries').put(row);
+          const {value,...size}=row;tx.objectStore('sizes').put(size);
+        }
+        await tx.done;return updates.map(x=>x.value.length);
+      }catch(error){try{tx.abort();}catch{}await tx.done.catch(()=>{});throw error;}
+    },
     async put(account,id,value){
       const d=await db(),row={key:key(account,id),account,time:Date.now(),bytes:value instanceof Blob?value.size:0};
       const write=d.transaction(['entries','sizes'],'readwrite');write.objectStore('entries').put({...row,value});write.objectStore('sizes').put(row);await write.done;

@@ -289,7 +289,18 @@ async function cloudDiscardPending(){await identity();if(writesInFlight||!import
 async function cloudFlushProjects(){await identity();if(revision===undefined)await version();await importSync.flush();return projectSync.flush();}
 async function cloudClearCache(){const id=await account();cacheDisabled=true;try{images.clear();imageSizes.clear();documents.clear();snapshots.clear();editorBases.clear();await cache?.clear(id);}catch(error){cacheDisabled=false;throw error;}}
 function cloudResumeCache(){cacheDisabled=false;}
-return {cloudAll,cloudGet,cloudPreview,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudClearCache,cloudResumeCache,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudPendingLocalSummary,cloudPendingDetails,cloudDiscardPending,cloudFlushProjects,cloudProjectDocument};
+async function cloudEmergencySnapshot(){
+  if(!owner||!cache)throw Error('尚无已验证的本机账号缓存，无法离线导出待同步数据');
+  const key=await account(),[projects,imports]=await Promise.all([cache.get(key,'project-outbox'),cache.get(key,'import-outbox')]);
+  return {account:key,projects:projects||[],imports:imports||[]};
+}
+async function cloudRestoreEmergency(snapshot){
+  if(!owner||!cache||cacheDisabled)throw Error('请先登录目标账号，再恢复应急资料');
+  const key=await account();if(snapshot.account!==key)throw Error('应急资料不属于当前账号，未改动本机数据');
+  if(typeof cache.restoreOutboxes!=='function')throw Error('当前浏览器不支持原子恢复待同步资料');
+  return cache.restoreOutboxes(key,snapshot.projects,snapshot.imports);
+}
+return {cloudAll,cloudGet,cloudPreview,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudClearCache,cloudResumeCache,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudPendingLocalSummary,cloudPendingDetails,cloudDiscardPending,cloudFlushProjects,cloudProjectDocument,cloudEmergencySnapshot,cloudRestoreEmergency};
 }
 let projectPreview=()=>null;
 export const setCloudProjectPreview=producer=>{projectPreview=producer;};
@@ -312,3 +323,5 @@ export const cloudPendingDetails=(...args)=>current.cloudPendingDetails(...args)
 export const cloudDiscardPending=(...args)=>current.cloudDiscardPending(...args);
 export const cloudFlushProjects=(...args)=>current.cloudFlushProjects(...args);
 export const cloudProjectDocument=(...args)=>current.cloudProjectDocument(...args);
+export const cloudEmergencySnapshot=(...args)=>current.cloudEmergencySnapshot(...args);
+export const cloudRestoreEmergency=(...args)=>current.cloudRestoreEmergency(...args);
