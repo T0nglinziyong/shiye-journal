@@ -31,5 +31,23 @@ try{
   const grabcut=await run('grabcut');assert.equal(grabcut.edgeMethod,'browser-grabcut',JSON.stringify(grabcut));
   const hybrid=await run('hybrid');assert.equal(hybrid.edgeMethod,'browser-morphgac-grabcut',JSON.stringify(hybrid));
   for(const result of [morph,grabcut,hybrid])assert.ok(result.pixels>100&&result.width>10&&result.height>10,JSON.stringify(result));
+  // The same JPEG bytes must enter recognition identically at phone and desktop widths.
+  const canonical=[];
+  for(const width of [390,1440]){
+    await b.command('Emulation.setDeviceMetricsOverride',{width,height:844,deviceScaleFactor:1,mobile:width<700});
+    const hashes=await evaluate(`(async()=>{
+      const m=await import('/src/recognition-raster.js');
+      const bytes=Uint8Array.from(atob('${base}'),c=>c.charCodeAt(0));
+      const bitmap=await m.decodeRecognitionImage(new File([bytes],'fixture.jpg',{type:'image/jpeg'}));
+      const full=m.sourcePixels(bitmap),small=await m.analysisPixels(bitmap,{x:2/16,y:1/12,w:12/16,h:10/12},7,6);
+      const digest=async p=>[...new Uint8Array(await crypto.subtle.digest('SHA-256',p))].map(v=>v.toString(16).padStart(2,'0')).join('');
+      return {full:await digest(full),small:await digest(small)};
+    })()`);
+    canonical.push(hashes);
+  }
+  assert.deepEqual(canonical,[
+    {full:'9db2ff8d3b38f0d18ed5fd05e78084c37d2dcd0692c9746d8ba45ab4bb106ae4',small:'ca70a3bf36e03b8f2b8943fd0559c354e282d36a8d6d281c7f0ccb76b65d0f87'},
+    {full:'9db2ff8d3b38f0d18ed5fd05e78084c37d2dcd0692c9746d8ba45ab4bb106ae4',small:'ca70a3bf36e03b8f2b8943fd0559c354e282d36a8d6d281c7f0ccb76b65d0f87'}
+  ]);
   assert.deepEqual(b.errors,[]);
 }finally{try{await b.close();}catch(error){console.warn('Browser close warning:',String(error?.message||error));}}
