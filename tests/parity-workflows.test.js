@@ -51,14 +51,14 @@ test('lasso requires full enclosure of rotated objects and honors type and lock 
   assert.equal(objectCorners(item).length,4);
   assert.deepEqual(selectPolygon(d,[{x:NaN,y:0},...p]),[]);
 });
-test('group movement uses gesture starts and preserves physical sizes and locked objects',()=>{
+test('group movement permits overhang and preserves physical sizes and locked objects',()=>{
   const a={id:'a',x:5,y:5,width:20,height:30},b={id:'b',x:15,y:25,width:10,height:10},locked={id:'l',x:1,y:1,locked:true};
   const d={canvas:{width:100,height:100},items:[a,locked],textBlocks:[b]},starts=new Map([['a',{x:5,y:5}],['b',{x:15,y:25}],['l',{x:1,y:1}]]);
   moveSelection(d,starts,10,20);moveSelection(d,starts,15,25);
   assert.equal(a.x,20);assert.equal(b.x,30);assert.equal(a.width,20);assert.equal(locked.x,1);
   moveSelection(d,starts,Infinity,0);assert.equal(a.x,20);
-  moveSelection(d,starts,-10000,-10000);assert.equal(a.x,0);assert.equal(b.x,10);assert.equal(a.y,0);
-  moveSelection(d,starts,10000,10000);assert.equal(b.x,100);assert.equal(b.y,100);
+  moveSelection(d,starts,-10000,-10000);assert.equal(a.x,-9995);assert.equal(b.x,-9985);assert.equal(a.y,-9995);
+  moveSelection(d,starts,10000,10000);assert.equal(b.x,10015);assert.equal(b.y,10025);
   assert.deepEqual(clampCanvasPosition(d,a,-200,500),{x:0,y:100});
 });
 test('material PDF packs A4 at true sizes and refuses unmeasured/oversized material',()=>{
