@@ -12,7 +12,7 @@ function button(label,action,kind='') {
 }
 export function renderSeriesContents({state,esc,imgTag,assetCard}) {
   const s=state.series.find(s=>s.id===state.seriesID);if(!s)return '<p>系列已移走</p>';
-  const f=filters(s.id),members=seriesMembers(s.id,state.assets,state.projects,f),all=state.assets.filter(a=>a.seriesID===s.id&&!a.isProjectInternal);
+  const f=filters(s.id),members=seriesMembers(s.id,state.assets,f),all=state.assets.filter(a=>a.seriesID===s.id&&!a.isProjectInternal);
   const options=(list,value)=>list.map(([v,label])=>'<option value="'+v+'" '+(v===value?'selected':'')+'>'+label+'</option>').join('');
   return '<section class="series-contents"><div class="series-navigation"><button type="button" class="btn" id="series-return">‹ 返回素材库</button><div class="actions" id="series-actions"></div></div>'+
     '<div class="view-head series-heading"><div class="series-identity"><div class="series-detail-cover">'+seriesCovers(s,state.assets).map(imgTag).join('')+'</div><div class="series-copy"><div class="eyebrow">COLLECTION</div><h1><button type="button" id="series-edit-title" aria-label="编辑系列信息与标签">'+esc(s.title)+' <span aria-hidden="true">✎</span></button></h1>'+
@@ -30,7 +30,7 @@ export function mountSeriesContents(c,p) {
   const f=filters(id),cards=[...view.querySelectorAll('[data-act="detail"]')];
   view.querySelector('#series-return').onclick=()=>c.libraryBack();
   view.querySelector('#series-edit-title').onclick=()=>c.openSeriesEditor(id);
-  const update=()=>{const members=seriesMembers(id,state.assets,state.projects,f),ids=new Set(members.map(a=>a.id)),grid=view.querySelector('.asset-grid');
+  const update=()=>{const members=seriesMembers(id,state.assets,f),ids=new Set(members.map(a=>a.id)),grid=view.querySelector('.asset-grid');
     for(const a of members){const card=cards.find(b=>b.dataset.id===a.id);if(card)grid.append(card);}applyCatalogPage({view,key:'series:'+id,cards,matched:card=>ids.has(card.dataset.id),countNode:view.querySelector('.series-result-count'),size:state.preferences.maxPageItems});};view.catalogRefresh=update;
   // Render every member once, then filter without losing search focus.
   for(const [selector,key] of [['#series-search','query'],['#series-kind','kind'],['#series-status','status'],['#series-sort','sort']]) {
