@@ -16,7 +16,10 @@ export function visionStatus(){
   return [...pending.values()].map(job=>({operation:job.operation,worker:job.slot,elapsedMS:Math.round(now()-job.startedAt)}));
 }
 function resetSlot(index,error){
-  slots[index]?.worker?.terminate?.();slots[index]=null;
+  const slot=slots[index];if(!slot)return;
+  clearTimeout(slot.readyTimer);
+  slot.rejectReady(error);
+  slot.worker?.terminate?.();slots[index]=null;
   for(const [id,job] of pending){if(job.slot!==index)continue;clearTimeout(job.timer);pending.delete(id);job.reject(error);}
 }
 function ensureWorker(index=0){
@@ -24,28 +27,32 @@ function ensureWorker(index=0){
   let resolveReady,rejectReady;
   const readyPromise=new Promise((resolve,reject)=>{resolveReady=resolve;rejectReady=reject;}),
     worker=new Worker(new URL('./opencv-worker-browser.js',import.meta.url)),
-    slot={worker,readyPromise,initialized:false};
+    slot={worker,readyPromise,initialized:false,rejectReady,readyTimer:null};
   slots[index]=slot;
+  slot.readyTimer=setTimeout(()=>resetSlot(index,Error('图像引擎初始化超时，可重新尝试')),50000);
   worker.onmessage=({data})=>{
-    if(data?.type==='ready'){slot.initialized=true;resolveReady(true);return;}
+    if(slots[index]!==slot)return;
+    if(data?.type==='ready'){clearTimeout(slot.readyTimer);slot.initialized=true;resolveReady(true);return;}
     const job=pending.get(data.id);if(!job)return;
     clearTimeout(job.timer);pending.delete(data.id);data.error?job.reject(Error(data.error)):job.resolve(data.result);
   };
   worker.onerror=event=>{
     const detail=[event?.message,event?.filename,event?.lineno&&('line '+event.lineno)].filter(Boolean).join(' · '),
       error=Error('本机图像引擎加载失败'+(detail?'：'+detail:'，请联网后重试'));
-    rejectReady(error);resetSlot(index,error);
+    resetSlot(index,error);
   };
-  worker.postMessage({type:'init',opencvScriptURL:liteOpenCVScriptURL,fallbackOpenCVScriptURL});
+  try{worker.postMessage({type:'init',opencvScriptURL:liteOpenCVScriptURL,fallbackOpenCVScriptURL});}
+  catch(error){resetSlot(index,error);}
   return readyPromise;
 }
 function taskOnSlot(index,operation,parameters){
   ensureWorker(index);const slot=slots[index];
   return new Promise((resolve,reject)=>{
-    const id=++sequence,timer=setTimeout(()=>{pending.delete(id);reject(Error('本机图像处理超时，请缩小照片后重试'));},90000);
+    const id=++sequence,timer=setTimeout(()=>resetSlot(index,Error('本机图像处理超时，已重新启动引擎；请重试')),90000);
     pending.set(id,{resolve,reject,timer,operation,slot:index,startedAt:now()});
     const buffers=parameters.transferInput?[...new Set(Object.values(parameters).filter(ArrayBuffer.isView).map(a=>a.buffer))]:[];
-    slot.worker.postMessage({id,operation,parameters},buffers);
+    try{slot.worker.postMessage({id,operation,parameters},buffers);}
+    catch(error){resetSlot(index,error);}
   });
 }
 export function prewarmVision({parallel=false}={}){
@@ -65,12 +72,4 @@ export async function visionParallelTasks(operation,parameterList){
   return results;
 }
 
-// Start fetching/compiling the local OpenCV runtime after the first paint.
-// The existing import-page prewarm remains as a second safety net.
-if(typeof window!=='undefined'&&typeof Worker!=='undefined'){
-  requestAnimationFrame(()=>{
-    const start=()=>{void prewarmVision({parallel:true}).catch(()=>{});};
-    if('requestIdleCallback' in window)requestIdleCallback(start,{timeout:900});
-    else setTimeout(start,250);
-  });
-}
+// OpenCV initialization occurs on explicit import intent; no global idle WASM compilation.
