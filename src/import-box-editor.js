@@ -1,7 +1,11 @@
 import {paperOverlayRect} from './import-coordinate.js';
 export function mountImportBoxEditor({state,view,render,saveActiveImportRecord,toast,refreshImportCandidates}) {
   const base=view.querySelector('#crop-preview'),source=state.correctedBitmap||state.importBitmap;if(!base||!source)return;
-  let boxes=structuredClone(state.importCandidates||[]),selected=null,drag=null;
+  let boxes=(state.importCandidates||[]).map(c=>{
+    const r=c.orientedBox;
+    return r?{...c,x:r.centerX-r.width/2,y:r.centerY-r.height/2,
+      w:r.width,h:r.height,rotation:r.rotation}:({...c,rotation:c.rotation||0});
+  }),selected=null,drag=null;
   const overlay=document.createElement('div');overlay.className='manual-box-layer multi-box-editor';
   const paper=state.correctedBitmap?{x:0,y:0,w:1,h:1}:state.importBox;
   const position=()=>{if(!base.isConnected)return;const rect=paperOverlayRect(base.clientWidth,base.clientHeight,source.width,source.height,paper);Object.assign(overlay.style,{left:rect.left+'px',top:rect.top+'px',width:rect.width+'px',height:rect.height+'px'});};
@@ -33,7 +37,7 @@ export function mountImportBoxEditor({state,view,render,saveActiveImportRecord,t
     if(drag.mode==='create')Object.assign(r,{x:Math.min(p.x,drag.start.x),y:Math.min(p.y,drag.start.y),w:Math.abs(p.x-drag.start.x),h:Math.abs(p.y-drag.start.y)});
     else if(drag.mode==='move')Object.assign(r,{x:Math.max(0,Math.min(1-o.w,o.x+p.x-drag.start.x)),y:Math.max(0,Math.min(1-o.h,o.y+p.y-drag.start.y))});
     else if(drag.mode==='resize')Object.assign(r,{w:Math.max(.01,Math.min(1-o.x,o.w+p.x-drag.start.x)),h:Math.max(.01,Math.min(1-o.y,o.h+p.y-drag.start.y))});
-    else {const size=overlay.getBoundingClientRect(),cx=o.x+o.w/2,cy=o.y+o.h/2;r.rotation=(o.rotation||0)+(Math.atan2((p.y-cy)*size.height,(p.x-cx)*size.width)-Math.atan2((drag.start.y-cy)*size.height,(drag.start.x-cx)*size.width))*180/Math.PI;}paint();};
+    else {const size=overlay.getBoundingClientRect(),cx=o.x+o.w/2,cy=o.y+o.h/2;r.rotation=(o.rotation||0)+(Math.atan2((p.y-cy)*size.height,(p.x-cx)*size.width)-Math.atan2((drag.start.y-cy)*size.height,(drag.start.x-cx)*size.width))*180/Math.PI;}r.orientedBox={centerX:r.x+r.w/2,centerY:r.y+r.h/2,width:r.w,height:r.h,rotation:r.rotation||0,autoDeskew:true,source:'manual'};paint();};
   overlay.onpointerup=e=>{if(!drag||drag.id!==e.pointerId)return;const r=boxes[selected];if(r.w<.01||r.h<.01){boxes.splice(selected,1);selected=null;}drag=null;paint();};
   overlay.onpointercancel=()=>{if(drag?.original)boxes[selected]=drag.original;else if(drag)boxes.splice(selected,1);drag=null;paint();};
   paint();
