@@ -175,6 +175,28 @@ body:has(.library-management-tray):not(:has(.library-management-tray:not([hidden
 #cutout-mode-panel .stack,#cutout-mode-panel .form-grid{gap:8px;margin:0}
 .cutout-controls>p:empty{display:none}
 .cutout-controls .cutout-tabs{margin:0;min-height:40px;flex-wrap:nowrap}
+/* The series search is a span wrapper. Generic span width and a full-width
+   filter grid previously collapsed it to zero on desktop. */
+.catalog-toolbar .swift-series-controls{display:flex;align-items:center;gap:10px;min-width:0}
+.catalog-toolbar .swift-series-controls>.shiye-search{width:auto;min-width:220px;flex:1 1 280px;text-align:left}
+.catalog-toolbar .swift-series-controls>.shiye-search input{display:block;width:100%;min-width:0;box-sizing:border-box}
+.catalog-toolbar .swift-series-controls>.four-filter-controls{display:flex;align-items:center;gap:8px;width:auto;min-width:0;flex:0 0 auto}
+.catalog-toolbar .swift-series-controls .filter-control{flex:0 0 auto}
+@media(max-width:699px){
+  .catalog-toolbar .swift-series-controls{flex-wrap:wrap}
+  .catalog-toolbar .swift-series-controls>.shiye-search{width:100%;min-width:0;flex:1 0 100%}
+  .catalog-toolbar .swift-series-controls>.four-filter-controls{width:100%;flex:1 1 100%;justify-content:flex-start;overflow-x:auto}
+}
+/* Keep preprocessing switches alongside their explanations at every width. */
+.cutout-controls,#cutout-mode-panel{gap:6px}
+#cutout-mode-panel .stack{gap:6px;margin:0}
+#cutout-mode-panel .setting-toggle{display:grid!important;grid-template-columns:minmax(0,1fr) auto!important;align-items:center;gap:10px;min-height:36px;margin:0;padding:4px 6px}
+#cutout-mode-panel .setting-toggle>span{min-width:0}
+#cutout-mode-panel .setting-toggle b{display:block;font-size:12px;line-height:1.2}
+#cutout-mode-panel .setting-toggle .setting-help{display:block;margin-top:2px;font-size:10px;line-height:1.25}
+#cutout-mode-panel .setting-toggle input[type=checkbox]{width:20px;height:20px;margin:0;flex:none}
+#cutout-mode-panel h3{margin:5px 0 1px}
+#cutout-mode-panel>label{gap:4px}
 .material-info-panel[hidden],#tape-stock[hidden]{display:none!important}
 .material-editor-controls{gap:10px}
 .material-info-panel{gap:10px;padding:12px}
@@ -230,3 +252,4 @@ body:has(.library-management-tray):not(:has(.library-management-tray:not([hidden
 .import-processing{margin:0 0 12px;color:var(--accent,#52684c);min-height:1.5em}
 .import-processing:empty{display:none}
 .import-inspect[aria-busy="true"] .inspect-columns button,.import-inspect[aria-busy="true"] .inspect-columns input,.import-inspect[aria-busy="true"] .inspect-columns select{pointer-events:none;opacity:.55}
+
