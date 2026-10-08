@@ -47,8 +47,15 @@ function roiGeometry(p,box,extraMM=1){
   const pageW=p.width,pageH=p.height,paperWidthMM=p.paperWidthMM||210,paperHeightMM=p.paperHeightMM||297,
     pxPerMM=Math.max(.5,((pageW/paperWidthMM)+(pageH/paperHeightMM))/2),
     extra=pxPerMM*extraMM,
-    bx0=Math.max(0,box.x*pageW-extra),by0=Math.max(0,box.y*pageH-extra),
-    bx1=Math.min(pageW,(box.x+box.w)*pageW+extra),by1=Math.min(pageH,(box.y+box.h)*pageH+extra),
+    center=box.orientedBox,
+    radians=center?center.rotation*Math.PI/180:0,
+    halfWidth=center?center.width*pageW/2:0,halfHeight=center?center.height*pageH/2:0,
+    boundX=center?Math.abs(halfWidth*Math.cos(radians))+Math.abs(halfHeight*Math.sin(radians)):0,
+    boundY=center?Math.abs(halfWidth*Math.sin(radians))+Math.abs(halfHeight*Math.cos(radians)):0,
+    bx0=Math.max(0,center?center.centerX*pageW-boundX-extra:box.x*pageW-extra),
+    by0=Math.max(0,center?center.centerY*pageH-boundY-extra:box.y*pageH-extra),
+    bx1=Math.min(pageW,center?center.centerX*pageW+boundX+extra:(box.x+box.w)*pageW+extra),
+    by1=Math.min(pageH,center?center.centerY*pageH+boundY+extra:(box.y+box.h)*pageH+extra),
     bw=bx1-bx0,bh=by1-by0,
     // ROI padding is only workspace. The level-set initializer itself remains
     // exactly the auto box + 1 mm physical safety band.
@@ -58,6 +65,22 @@ function roiGeometry(p,box,extraMM=1){
   return {pxPerMM,bx0,by0,bx1,by1,x0,y0,x1,y1,rw:x1-x0,rh:y1-y0};
 }
 
+export function insideOrientedBox(px,py,o,outerW,outerH,paddingPx=0){
+  const cx=o.centerX*outerW,cy=o.centerY*outerH,
+    width=o.width*outerW+paddingPx*2,height=o.height*outerH+paddingPx*2,
+    angle=o.rotation*Math.PI/180,dx=px-cx,dy=py-cy,
+    localX=dx*Math.cos(angle)+dy*Math.sin(angle),
+    localY=-dx*Math.sin(angle)+dy*Math.cos(angle);
+  return Math.abs(localX)<=width/2&&Math.abs(localY)<=height/2;
+}
+function orientedSeed(cv,g,box,pageW,pageH){
+  const out=cv.Mat.zeros(g.rh,g.rw,cv.CV_8UC1);
+  const pad=g.pxPerMM*1;
+  for(let y=0;y<g.rh;y++)for(let x=0;x<g.rw;x++)
+    if(insideOrientedBox(x+g.x0+.5,y+g.y0+.5,box.orientedBox,pageW,pageH,pad))
+      out.data[y*g.rw+x]=255;
+  return out;
+}
 function boxMask(cv,g){
   const out=cv.Mat.zeros(g.rh,g.rw,cv.CV_8UC1),
     rx=clamp(Math.round(g.bx0)-g.x0,0,g.rw-1),ry=clamp(Math.round(g.by0)-g.y0,0,g.rh-1),
@@ -84,7 +107,7 @@ function segmentMorphGAC(cv,p,box){
   const g=roiGeometry(p,box,1),
     src=cv.matFromArray(p.height,p.width,cv.CV_8UC4,p.pixels),
     roi=src.roi(new cv.Rect(g.x0,g.y0,g.rw,g.rh)),
-    rough=boxMask(cv,g),
+    rough=box.orientedBox?orientedSeed(cv,g,box,p.width,p.height):boxMask(cv,g),
     scale=Math.min(1,180/Math.max(g.rw,g.rh)),
     qw=Math.max(1,Math.round(g.rw*scale)),qh=Math.max(1,Math.round(g.rh*scale)),
     image=new cv.Mat(),seed=new cv.Mat();
