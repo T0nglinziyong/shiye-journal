@@ -17,3 +17,16 @@ test('full synthetic backup restores six stores and exact Blob bytes; failed res
     await assert.rejects(store.restoreBackup(new Blob(['{}'])),/完整备份/);assert.deepEqual(await store.all('assets'),values.assets);
   }finally{globalThis.fetch=previous;}
 });
+
+
+test('backup manifest rejects altered image bytes before touching existing records',async()=>{
+  // The pure validator is shared by the browser restore entry point.
+  const {validateBackupData,buildBlobIntegrity}=await import('../src/backup-integrity.js');
+  const stored={format:'shiye-pwa',version:1,stores:{
+    assets:[{id:'one',blobId:'img'}],blobs:[{id:'img',data:'data:image/png;base64,YWJj'}],
+    series:[],projects:[],meta:[],trash:[]
+  }};
+  stored.integrity={algorithm:'SHA-256',blobs:await buildBlobIntegrity([{id:'img',data:new Blob(['abc'])}])};
+  stored.stores.blobs[0].data='data:image/png;base64,YWJk';
+  await assert.rejects(validateBackupData(stored),/SHA-256/);
+});

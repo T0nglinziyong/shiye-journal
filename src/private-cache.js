@@ -1,6 +1,7 @@
 import {openDB} from 'idb';
 
-// Disposable read cache, never an alternative write destination.
+// Account-scoped disposable read cache plus a protected durable outbox. 
+// Outbox entries are NEVER evicted or erased on logout.
 
 // Merge a tab's changes, not its whole in-memory snapshot. An unrelated tab's
 // pending edit must survive; edits to the same row must fail, never overwrite.
