@@ -52,8 +52,13 @@ const channel=()=>{
 };
 async function withAccountSyncLock(task){
   const id=await account();
-  if(typeof navigator!=='undefined'&&navigator.locks?.request)
-    return navigator.locks.request('shiye-sync:'+id,{mode:'exclusive'},task);
+  if(typeof window!=='undefined'&&typeof navigator!=='undefined'&&navigator.locks?.request){
+    // Only browser tabs participate in Web Locks. An unattended/blocked tab
+    // must not leave every other tab waiting forever to acquire the lease.
+    // Aborting before acquisition never discards the durable outbox.
+    const signal=globalThis.AbortSignal?.timeout?.(45000);
+    return navigator.locks.request('shiye-sync:'+id,{mode:'exclusive',...(signal?{signal}:{})},task);
+  }
   // Web Locks availability varies; durable IndexedDB merge and server CAS are
   // mandatory correctness layers even when this optimization is unavailable.
   return task();
