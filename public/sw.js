@@ -7,7 +7,15 @@ self.addEventListener('install',event=>event.waitUntil(
   // No automatic skipWaiting: existing editors keep using their own version.
 ));
 self.addEventListener('message',event=>{
-  if(event.data?.type==='SHIYE_ACTIVATE_UPDATE')event.waitUntil(self.skipWaiting());
+  if(event.data?.type!=='SHIYE_ACTIVATE_UPDATE')return;
+  event.waitUntil((async()=>{
+    const pages=await self.clients.matchAll?.({type:'window',includeUncontrolled:true})||[];
+    if(pages.length>1){
+      event.source?.postMessage?.({type:'SHIYE_UPDATE_BLOCKED',reason:'other-tabs'});
+      return;
+    }
+    await self.skipWaiting();
+  })());
 });
 self.addEventListener('activate',event=>event.waitUntil((async()=>{
   await self.clients.claim();

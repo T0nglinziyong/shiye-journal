@@ -28,6 +28,12 @@ export async function registerSafeUpdate({flushLocal,isBusy=()=>false,onError=co
     const worker=registration.installing;
     worker?.addEventListener('statechange',()=>{if(worker.state==='installed'&&navigator.serviceWorker.controller)show();});
   });
+  navigator.serviceWorker.addEventListener('message',event=>{
+    if(event.data?.type!=='SHIYE_UPDATE_BLOCKED')return;
+    requested=false;
+    if(button){button.disabled=false;button.textContent='更新拾页';}
+    onError(Error('请先关闭其他拾页标签页，避免更新中混用不同版本'));
+  });
   navigator.serviceWorker.addEventListener('controllerchange',()=>{
     if(!requested)return;
     hide();location.reload();

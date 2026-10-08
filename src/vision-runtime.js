@@ -38,6 +38,7 @@ function ensureWorker(index=0){
     clearTimeout(job.timer);pending.delete(data.id);data.error?job.reject(Error(data.error)):job.resolve(data.result);
   };
   worker.onerror=event=>{
+    if(slots[index]!==slot)return;
     const detail=[event?.message,event?.filename,event?.lineno&&('line '+event.lineno)].filter(Boolean).join(' · '),
       error=Error('本机图像引擎加载失败'+(detail?'：'+detail:'，请联网后重试'));
     resetSlot(index,error);
