@@ -777,7 +777,7 @@ async function refreshImportCandidates(regions,{manual=false}={}){
       aw=Math.max(1,Math.round(source.width*b.w*scale)),
       ah=Math.max(1,Math.round(source.height*b.h*scale));
     const pixels=await analysisPixels(source,b,aw,ah);
-    if(!hasManualForegroundEvidence(pixels,aw,ah,box))return null;
+    if(!hasManualForegroundEvidence(pixels,aw,ah,box))throw Error('第 '+(index+1)+' 个框内没有找到可靠素材；请贴近素材重画');
     const orientedBox={centerX:box.x+box.w/2,centerY:box.y+box.h/2,
         width:box.w,height:box.h,rotation:box.rotation||0,
         rectangularity:1,autoDeskew:true,source:'manual'},
