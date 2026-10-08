@@ -14,6 +14,7 @@ api/*
 !server
 server/*
 !server/cos-tickets.mjs
+!server/trusted-origins.mjs
 !public
 !public/**
 !scripts
