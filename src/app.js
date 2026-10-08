@@ -52,9 +52,10 @@ import {visionTask,prewarmVision} from './vision-runtime.js';
 import {recognitionOptions,recognitionPixelOptions,recognitionMethodDetails,recognitionProfile} from './recognition-profiles.js';
 import {classifyRecord} from './classification.js';
 import {mountPaperCorrection,resetPaperCorrection} from './paper-ui.js';
-import {rectifyA4,suggestPaperCorners} from './perspective.js';
+import {rectifyA4Frame,suggestPaperCorners} from './perspective.js';
+import {decodeRecognitionImage,sourcePixels} from './recognition-raster.js';
 import {syncCurrentMaterials} from './current-materials.js';
-import {syncCurrentExamples} from './current-examples.js';
+import {syncCurrentExamples,isUntouchedLegacyExample} from './current-examples.js';
 import {applyToolCalls} from './creative.js';
 import {createOfflineHandoff,inspectEditableSource,inspectOfflinePackage,verifyOfflineTaskPackage,importEditableWork,importEditableWorkPackageReviewed} from './offline-creation.js';
 import {offlineTaskStore} from './offline-task-store.js';
@@ -226,7 +227,7 @@ function workCover(d){
  const texts=(d.textBlocks||[]).filter(i=>!i.isHidden).map(i=>`<span class="work-text" style="${position(i)}font-size:${Math.max(.6,i.fontSize/d.canvas.width*100)}cqw;line-height:${textLineHeight(i)/d.canvas.width*100}cqw;letter-spacing:${(i.letterSpacing||0)/d.canvas.width*100}cqw;color:${esc(i.color||'#333')};text-align:${i.alignment||'left'};font-family:${esc(textFontFamily(i))};font-weight:${i.bold?'700':'400'};font-style:${i.italic?'italic':'normal'};text-decoration:${[i.underline?'underline':'',i.strikethrough?'line-through':''].filter(Boolean).join(' ')||'none'}">${textParagraphMarkup(i,(i.paragraphSpacing||0)/d.canvas.width*100+'cqw')}</span>`).join('');
  return materials+shapes+texts+workInkPreview(d);
 }
-function renderWorks(){const list=[...state.projects].sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt));return `<div class="works-page">${head('我的作品','')}<button hidden data-act="new-project" id="work-create"></button><button hidden data-act="import-work" id="work-import"></button><div class="filters"><input type="search" id="work-search" placeholder="搜索作品名称或标签"><select id="work-kind"><option value="all">全部类型</option><option value="created">手动创作</option><option value="imported">导入作品</option></select><select id="work-status"><option value="all">全部状态</option><option value="used">已使用</option><option value="unused">未使用</option></select><select id="work-sort"><option value="access-desc">最近访问 · 降序</option><option value="access-asc">最近访问 · 升序</option><option value="updated-desc">最近修改 · 降序</option><option value="updated-asc">最近修改 · 升序</option><option value="name-asc">名称 · 升序</option><option value="name-desc">名称 · 降序</option></select><span>${list.length} 项</span></div><div class="grid works-grid">${list.map(p=>`<button class="card" data-act="open-project" data-id="${p.id}"><div class="card-image"><div class="thumb-sheet" style="width:75%;background:${esc(p.drafts[0]?.paperColor||'#fff')}">${p.isSnapshot?`<img class="work-reference" loading="lazy" decoding="async" src="${image(p.snapshotBlobId)}" alt="${esc(p.title)} 快照">`:p.coverStaticPath&&p.updatedAt===p.coverBaselineUpdatedAt?`<img class="work-reference" loading="lazy" src="${p.coverStaticPath}" alt="${esc(p.title)} 完整预览">`:workCover(p.drafts[0])}</div></div><div class="card-body"><h3>${esc(p.title)}</h3><p>⊙　${p.isSnapshot?'画面快照':p.isDraft?'草稿':'可编辑作品'} <span>${new Date(p.updatedAt).toLocaleDateString()}</span></p></div></button>`).join('')}</div></div>`;}
+function renderWorks(){const list=state.projects.filter(p=>!isUntouchedLegacyExample(p)).sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt));return `<div class="works-page">${head('我的作品','')}<button hidden data-act="new-project" id="work-create"></button><button hidden data-act="import-work" id="work-import"></button><div class="filters"><input type="search" id="work-search" placeholder="搜索作品名称或标签"><select id="work-kind"><option value="all">全部类型</option><option value="created">手动创作</option><option value="imported">导入作品</option></select><select id="work-status"><option value="all">全部状态</option><option value="used">已使用</option><option value="unused">未使用</option></select><select id="work-sort"><option value="access-desc">最近访问 · 降序</option><option value="access-asc">最近访问 · 升序</option><option value="updated-desc">最近修改 · 降序</option><option value="updated-asc">最近修改 · 升序</option><option value="name-asc">名称 · 升序</option><option value="name-desc">名称 · 降序</option></select><span>${list.length} 项</span></div><div class="grid works-grid">${list.map(p=>`<button class="card" data-act="open-project" data-id="${p.id}"><div class="card-image"><div class="thumb-sheet" style="width:75%;background:${esc(p.drafts[0]?.paperColor||'#fff')}">${p.isSnapshot?`<img class="work-reference" loading="lazy" decoding="async" src="${image(p.snapshotBlobId)}" alt="${esc(p.title)} 快照">`:p.coverStaticPath&&p.updatedAt===p.coverBaselineUpdatedAt?`<img class="work-reference" loading="lazy" src="${p.coverStaticPath}" alt="${esc(p.title)} 完整预览">`:workCover(p.drafts[0])}</div></div><div class="card-body"><h3>${esc(p.title)}</h3><p>⊙　${p.isSnapshot?'画面快照':p.isDraft?'草稿':'可编辑作品'} <span>${new Date(p.updatedAt).toLocaleDateString()}</span></p></div></button>`).join('')}</div></div>`;}
 function current(){const p=state.activeProject;return p?.drafts.find(d=>d.id===state.activeDraft)||p?.drafts[0];}
 function editorEntry(d,rendering=false){if(rendering)return sceneRenderEntries(d);const entries=[...(d.items||[]).filter(i=>!i.isParked).map(i=>({kind:'material',value:i})),...(d.primitives||[]).filter(i=>!i.hidden).map(i=>({kind:'shape',value:i})),...(d.textBlocks||[]).filter(i=>!i.isHidden).map(i=>({kind:'text',value:i}))];return entries.sort((a,b)=>a.value.zIndex-b.value.zIndex);}
 function vectorMarkup(i){const paths=(i.vectorPaths||[]).map(points=>{const d=points.filter(p=>Array.isArray(p)&&p.length===2&&p.every(Number.isFinite)).map((p,n)=>`${n?'L':'M'}${p[0]} ${p[1]}`).join(' ');return d?`<path d="${d} Z"/>`:'';}).join('');return `<svg aria-hidden="true" viewBox="0 0 1 1" preserveAspectRatio="none" style="width:100%;height:100%;overflow:visible;fill:${esc(i.fill||'transparent')};stroke:${esc(i.stroke||'none')};stroke-width:${Math.max(0,Number(i.lineWidth)||0)/Math.max(i.width,i.height,1)}">${paths}</svg>`;}
@@ -390,7 +391,15 @@ async function handle(action,id,value){try{switch(action){
   case 'recognition-diagnostics':{
     const rec=state.importRecords[state.importIndex],trace=rec?.recognitionDiagnostic;
     if(!trace)throw Error('请先完成当前照片的识别');
-    const report={format:'shiye-recognition-box-diagnostics',version:2,
+    const hash=async bytes=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),v=>v.toString(16).padStart(2,'0')).join('');
+    const inputSHA256=await hash(await rec.file.arrayBuffer());
+    const sourceSHA256=await hash(sourcePixels(state.importBitmap));
+    const correctedSHA256=rec.correctedBitmap?await hash(sourcePixels(rec.correctedBitmap)):null;
+    const maskSHA256=await Promise.all((state.importCandidateData||[]).map(async item=>item.region?.mask?.alpha?await hash(item.region.mask.alpha):null));
+    const report={format:'shiye-recognition-box-diagnostics',version:3,
+      pipeline:'pinned-jpeg-js-opencv-lite-area-v1',inputSHA256,sourceSHA256,correctedSHA256,maskSHA256,
+      recognitionSettings:{method:state.importRecognition||state.preferences.recognition,pixels:state.preferences.recognitionPixels,
+        preprocess:recognitionPreprocessOptions(),postprocess:recognitionPostprocessOptions()},
       originalPixelSize:[state.importBitmap?.width,state.importBitmap?.height],
       autoPaperCorners:rec.autoPaperCorners||null,paperCorners:rec.corners||null,
       appliedPaperCorners:rec.appliedCorners?JSON.parse(rec.appliedCorners):null,
@@ -718,15 +727,15 @@ async function switchImportRecord(index,skipSave=false){
   // Paint the selected photo before decoding, engine initialization or warp.
   await new Promise(resolve=>requestAnimationFrame(()=>setTimeout(resolve,0)));
   try{
-  const bitmap=rec.bitmap||await createImageBitmap(rec.file);rec.bitmap=bitmap;if(!isCurrent())return;state.importBitmap=bitmap;
+  const bitmap=rec.bitmap||await decodeRecognitionImage(rec.file);rec.bitmap=bitmap;if(!isCurrent())return;state.importBitmap=bitmap;
   progress('正在自动寻找纸张四角…');
   state.paperCorners=rec.corners||(state.paperSize==='none'?null:await suggestPaperCorners(bitmap,(()=>{const [pw,ph]=paperDimensions();return pw/ph;})()).catch(()=>null));if(!isCurrent())return;
   if(!rec.corners&&state.paperCorners)rec.autoPaperCorners=structuredClone(state.paperCorners);
   progress('正在进行透视校正…');
   if(!state.correctedBitmap&&state.paperCorners&&state.paperSize!=='none'){
-    const [pw,ph]=paperDimensions(),blob=await rectifyA4(state.importBitmap,state.paperCorners,4096,pw/ph);
+    const [pw,ph]=paperDimensions(),{canvas,blob}=await rectifyA4Frame(state.importBitmap,state.paperCorners,4096,pw/ph);
     if(!isCurrent())return;
-    const corrected=await createImageBitmap(blob);if(!isCurrent()){corrected.close();return;}state.correctedBitmap=corrected;state.correctedURL=URL.createObjectURL(blob);rec.appliedCorners=JSON.stringify(state.paperCorners);rec.backgroundDetected=true;
+    state.correctedBitmap=canvas;state.correctedURL=URL.createObjectURL(blob);rec.appliedCorners=JSON.stringify(state.paperCorners);rec.backgroundDetected=true;
   }
   if(!isCurrent())return;progress('正在识别并提取素材…');saveActiveImportRecord();render();if(!state.importCandidates.length&&state.importStep==='inspect')await previewCrop();
   }finally{if(isCurrent()){state.importProcessing='';render();}}
@@ -737,12 +746,12 @@ async function rotateImportPhoto(){
   if(rec.manualEdits&&!confirm('旋转会重新识别这张照片并舍弃候选编辑，继续吗？'))return;
   const bitmap=state.importBitmap,canvas=document.createElement('canvas');canvas.width=bitmap.height;canvas.height=bitmap.width;const ctx=canvas.getContext('2d');ctx.translate(canvas.width,0);ctx.rotate(Math.PI/2);ctx.drawImage(bitmap,0,0);
   const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));rec.originalFile||=rec.file;rec.file=new File([blob],rec.file.name,{type:'image/png'});URL.revokeObjectURL(rec.url);rec.url=URL.createObjectURL(blob);
-  const old=state.paperCorners;resetPaperCorrection(state);state.paperCorners=old?[old[3],old[0],old[1],old[2]].map(p=>({x:1-p.y,y:p.x})):null;bitmap.close();state.importBitmap=await createImageBitmap(blob);state.importFile=rec.file;state.importURL=rec.url;state.importCandidates=[];state.importCandidateData=[];state.importCandidateURLs=[];state.importCandidateSelection=new Set();rec.confirmed=false;rec.manualEdits=false;
+  const old=state.paperCorners;resetPaperCorrection(state);state.paperCorners=old?[old[3],old[0],old[1],old[2]].map(p=>({x:1-p.y,y:p.x})):null;bitmap.close?.();state.importBitmap=await decodeRecognitionImage(rec.file);rec.bitmap=state.importBitmap;state.importFile=rec.file;state.importURL=rec.url;state.importCandidates=[];state.importCandidateData=[];state.importCandidateURLs=[];state.importCandidateSelection=new Set();rec.confirmed=false;rec.manualEdits=false;
   saveActiveImportRecord();await switchImportRecord(state.importIndex,true);
 }
 async function previewCorrection(){
   if(!state.importBitmap)return;discardPaperPreview();const [pw,ph]=paperDimensions();
-  const blob=await rectifyA4(state.importBitmap,state.paperCorners,4096,pw/ph);state.paperPreviewBitmap=await createImageBitmap(blob);state.paperPreviewURL=URL.createObjectURL(blob);state.showCorrectionPreview=true;state.paperPreviewApplied=false;render();
+  const {canvas,blob}=await rectifyA4Frame(state.importBitmap,state.paperCorners,4096,pw/ph);state.paperPreviewBitmap=canvas;state.paperPreviewURL=URL.createObjectURL(blob);state.showCorrectionPreview=true;state.paperPreviewApplied=false;render();
 }
 async function applyPaperPreview(){
   const rec=state.importRecords[state.importIndex];if(!state.paperPreviewBitmap)return;
@@ -1023,3 +1032,4 @@ mountIcons(document);
 const matchingSession=createMatchingSession({state,db,uid,esc,asset,modelImage,rasterize,workCover:p=>{const d=p.drafts.find(d=>d.id===p.activeDraftID)||p.drafts[0];return `<div class="thumb-sheet" style="--thumb-ratio:${d.canvas.width/d.canvas.height};background:${esc(d.paperColor||'#fff')}"><div class="thumb-inner" style="position:relative">${p.isSnapshot?`<img src="${image(p.snapshotBlobId)}" alt="${esc(p.title)} 快照">`:workCover(d)}</div></div>`;},createProject:()=>createMatchingProject(),saveSnapshotFromDraft:saveProjectSnapshot,saveGeneratedImageSnapshot,generatePageImage,runCreativeAgent,createAIRecorder,supportsVision,flushSave,route,handle,mountIcons,toast});
 startCloudSession(init).catch(error=>{document.querySelector('#app').hidden=true;const p=document.createElement('p');p.textContent='无法连接认证服务，请稍后刷新。未打开私人资料。';document.body.append(p);console.warn(error.name);});
 import {createMatchingSession} from './matching-session.js';
+
