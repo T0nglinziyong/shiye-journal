@@ -158,6 +158,7 @@ try {
   for(let i=0;i<Math.ceil(Number(process.env.SHIYE_WAIT_MS||30000)/20)&&await evaluate('!!document.querySelector(".multi-box-editor")');i++)await sleep(20);
   assert.equal(await evaluate('!!document.querySelector(".multi-box-editor")'),false,'Manual extraction must finish after removing the blank box');
   assert.equal(await evaluate('document.querySelectorAll(".import-candidate-tile").length'),2);
+  await evaluate('Promise.all([...document.querySelectorAll(".import-candidate-tile img")].map(img=>img.decode().catch(()=>{})))');
   assert.ok(await evaluate('[...document.querySelectorAll(".import-candidate-tile img")].every(img=>img.complete&&img.naturalWidth>0)'),'Manual segmentation must keep both existing material previews visible');
   await click('[data-act="import-confirm-photo"]');await wait('.queue-item.active[data-id="1"]');await wait('.import-candidate-tile.selected');await click('[data-act="import-confirm-photo"]','.review-candidates');
   await evaluate('document.querySelector(".review-candidate").dispatchEvent(new MouseEvent("contextmenu",{bubbles:true,cancelable:true}))');
