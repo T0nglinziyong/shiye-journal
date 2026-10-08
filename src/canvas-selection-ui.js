@@ -81,7 +81,7 @@ export function mountCanvasSelection(c) {
   };
   page.addEventListener('pointercancel',e=>{if(gesture?.id!==e.pointerId)return;e.preventDefault();e.stopImmediatePropagation();cancelGesture();},true);
   view.cancelObjectGesture=cancelGesture;
-  view.canvasSelectionRefresh=()=>{toolbar.hidden=!['lasso','marquee'].includes(state.tool)&&count()<2;controls.append(toolbar);toolbar.querySelector('span').textContent='已选 '+count()+' 项';group.disabled=active().filter(e=>e.kind==='material').length<2;paint();};
+  view.canvasSelectionRefresh=()=>{toolbar.hidden=!['lasso','marquee'].includes(state.tool)&&count()<2;if(['lasso','marquee'].includes(state.tool))toolbar.remove();else controls.append(toolbar);toolbar.querySelector('span').textContent='已选 '+count()+' 项';group.disabled=active().filter(e=>e.kind==='material').length<2;paint();};
   // Existing per-object inspector remains available; bulk unlock does not
   // require locked objects to participate in selection.
   const locked=[...(d.items||[]),...(d.textBlocks||[]),...(d.primitives||[])].filter(o=>o.locked||o.isLocked);
