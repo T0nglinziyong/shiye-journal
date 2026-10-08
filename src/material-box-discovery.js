@@ -79,10 +79,14 @@ export function discoverMaterialBoxes(cv,p,own){
     item.fillRatio=item.pixels/Math.max(1,item.w*item.h);
   }
 
-  // Rectification/page-border cleanup. Contact with the page frame by itself
-  // never deletes a material; only small or long-and-thin frame artifacts do.
+  // A closed background-flood island is not automatically a material. Real
+  // objects still need a small amount of direct visual support (colour, ink,
+  // highlight or physical edge). This rejects paper wrinkles/shadow pockets
+  // that are topologically enclosed but contain essentially no material signal.
   const pageArea=w*h;
   let candidates=raw.filter(item=>{
+    const minimumEvidence=Math.max(12,Math.ceil(item.pixels*.004));
+    if(item.evidenceN<minimumEvidence)return false;
     if(!item.touchesProtected)return true;
     const shortMM=Math.min(item.widthMM,item.heightMM),
       longFraction=Math.max(item.w/w,item.h/h),
