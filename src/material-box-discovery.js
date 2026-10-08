@@ -215,12 +215,9 @@ export function discoverMaterialBoxes(cv,p,own){
     // are almost fully occupied by the same component. This rejects broad
     // frame/background residue without relying on a class-specific rectangle.
     if(item.touchesProtected&&fill>=.70){
-      // Perspective interpolation and binder holes can lower the occupancy of
-      // a real body after browser rectification. Dense components can keep the
-      // strict 96% core; medium-dense frame-connected bodies use a 70% core so
-      // the material survives while remote paper-edge residue is discarded.
-      // A 96% column threshold can retain only the opaque centre of a real
-      // patterned sheet and cut its box in half at higher analysis resolutions.
+      // Perspective interpolation and binder holes lower occupancy. A strict
+      // 96% core can retain only the opaque centre of a patterned sheet, so
+      // use the same 70% support threshold at every analysis resolution.
       const occupancyThreshold=.70,
         colOcc=Array.from(colCounts,v=>v/Math.max(1,item.h)),
         rowOcc=Array.from(rowCounts,v=>v/Math.max(1,item.w)),
@@ -231,14 +228,16 @@ export function discoverMaterialBoxes(cv,p,own){
       // Page residue may occupy most columns even after the dense-body test.
       // For a strongly printed sheet, foreground seeds locate the real body
       // while the neutral page/shadow extension contains essentially none.
+      let seededBody=false;
       if(seedDensity>.2){
         const seeded=supportedRange(colSeeds,Math.max(3,item.h*.12));
         if(seeded&&seeded.last-seeded.first+1>=item.w*.45){
           x0=clamp(item.x+seeded.first-pad,0,w);
           x1=clamp(item.x+seeded.last+1+pad,0,w);
+          seededBody=true;
         }
       }
-      if(xr||yr)boxAdjustment='dense-frame-body';
+      if(xr||yr||seededBody)boxAdjustment='dense-frame-body';
     // Sparse strong seeds inside a medium/low-fill component are the common
     // signature of printed content on a pale carrier. Add a small physical
     // safety margin so downstream segmentation sees the outer carrier too.
