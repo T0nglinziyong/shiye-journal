@@ -86,8 +86,12 @@ function orientationFromInstance(cv,item,group,labels,pageW,pageH,rectangularity
   const area=Math.max(1,r.size.width*r.size.height),rectangularity=n/area;
   // OpenCV angle may refer to either edge: modulo 90 handles both.
   const rotation=minimalHorizontalAngle(r.angle);
+  // If the minimal horizontal turn differs from the raw OpenCV angle by
+  // a right angle, interchange side lengths to describe the SAME rectangle.
+  const swap=Math.abs(rotation-r.angle)>45;
   return {centerX:r.center.x/pageW,centerY:r.center.y/pageH,
-    width:r.size.width/pageW,height:r.size.height/pageH,
+    width:(swap?r.size.height:r.size.width)/pageW,
+    height:(swap?r.size.width:r.size.height)/pageH,
     rotation,rectangularity,
     autoDeskew:rectangularity>=rectangularityThreshold,
     source:'instance'};
