@@ -95,7 +95,7 @@ try {
   await command('Page.reload');await wait('.series-grid');await fill('[aria-label="搜索系列"]','浏览器验收');assert.equal(await evaluate('[...document.querySelectorAll("[data-act=series-detail]")].filter(e=>!e.hidden).length'),1);
   await click('[data-act="series-detail"]','.series-contents');await click('#series-edit-title','#series-name');await fill('#series-name','不应保存');await click('#series-cancel');assert.ok(!(await storeRecords('series')).some(s=>s.title==='不应保存'));
   const allMembers=await evaluate('document.querySelectorAll("[data-act=detail]:not([hidden])").length');
-  await fill('#series-search','找不到的验收名称');assert.equal(await evaluate('document.querySelectorAll("[data-act=detail]:not([hidden])").length'),0);
+  await fill('#series-search','找不到的验收名称');assert.equal(await evaluate('document.querySelectorAll("[data-act=detail]:not([hidden])").length'),0,JSON.stringify(await evaluate('({query:document.querySelector("#series-search")?.value,attached:!!document.querySelector("#series-search")?.oninput,count:document.querySelector(".series-result-count")?.textContent,visible:[...document.querySelectorAll("[data-act=detail]:not([hidden])")].slice(0,2).map(e=>e.textContent.slice(0,40))})')));
   await fill('#series-search','');assert.equal(await evaluate('document.querySelectorAll("[data-act=detail]:not([hidden])").length'),allMembers);
   await click('#series-add-assets','.asset-grid');assert.ok(await evaluate('document.querySelector(".view-head h1").textContent.includes("添加素材")'));
   await evaluate('[...document.querySelectorAll(".view-head .actions button")].find(b=>b.textContent==="取消").click()');await wait('.series-contents');
