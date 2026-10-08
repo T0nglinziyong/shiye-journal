@@ -1,6 +1,7 @@
 import {segmentPaperMaterials} from './paper-analysis.js';
 import {visionTask} from './vision-runtime.js';
 import {recognitionProfile} from './recognition-profiles.js';
+import {analysisPixels} from './recognition-raster.js';
 // Analyze a small copy, but re-extract accepted cuts from the full source.
 export async function detectPaperCandidates(bitmap,box,smallestMM=6,{
   balanceLight=false,paperWidthMM=210,paperHeightMM=297,
@@ -10,10 +11,7 @@ export async function detectPaperCandidates(bitmap,box,smallestMM=6,{
   const profile=recognitionProfile(recognition,recognitionPixels);
   const ratio=Math.min(1,profile.analysisMaxDimension/Math.max(bitmap.width*box.w,bitmap.height*box.h));
   const w=Math.max(1,Math.round(bitmap.width*box.w*ratio)),h=Math.max(1,Math.round(bitmap.height*box.h*ratio));
-  const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;
-  const ctx=canvas.getContext('2d',{willReadFrequently:true});
-  ctx.drawImage(bitmap,bitmap.width*box.x,bitmap.height*box.y,bitmap.width*box.w,bitmap.height*box.h,0,0,w,h);
-  const frame=ctx.getImageData(0,0,w,h),
+  const frame={data:await analysisPixels(bitmap,box,w,h)},
     preprocess={
       illumination:balanceLight===true&&recognitionPreprocess.illumination===true,
       denoise:recognitionPreprocess.denoise===true,
@@ -87,3 +85,4 @@ export async function alignMaterialPreview(blob,originalBlob=blob,rotation=null)
     };
   }finally{bitmap.close();original.close();}
 }
+
