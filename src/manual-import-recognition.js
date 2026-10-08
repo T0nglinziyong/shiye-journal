@@ -15,14 +15,21 @@ export function hasManualForegroundEvidence(pixels,width,height,box){
   return high.some((value,channel)=>value-low[channel]>=10);
 }
 
-export async function refineManualBoxes(boxes,_previous,segment){
+export async function refineManualBoxes(boxes,previous,segment){
   const next=[];
   for(let index=0;index<boxes.length;index++){
     const box=boxes[index];
     if(!(box.w>0&&box.h>0))throw Error('候选框尺寸无效');
+    const source=box.sourceIndex;
+    // An untouched editor box keeps its source even when its oriented bounds
+    // differ slightly from the original segmentation rectangle.
+    if(Number.isInteger(source)&&!box.manualChanged&&previous[source]){
+      next.push({region:previous[source].region,original:previous[source]});continue;
+    }
     const region=await segment(box,index);
     if(!region?.mask)throw Error('第 '+(index+1)+' 个旋转框分割失败，未覆盖原素材');
     next.push({region,original:null});
   }
   return next;
 }
+

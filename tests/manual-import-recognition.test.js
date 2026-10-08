@@ -28,3 +28,15 @@ test('manual box needs visible foreground variation before segmentation',()=>{
   assert.equal(hasManualForegroundEvidence(pixels,width,height,box),true);
   assert.equal(hasManualForegroundEvidence(pixels,width,height,{x:.6,y:.6,w:.2,h:.2}),false);
 });
+
+test('only a touched box is segmented; untouched oriented box keeps original bytes',async()=>{
+  const first={region:{x:.12,y:.11,w:.26,h:.24,mask:{alpha:new Uint8Array([255])}},blob:new Blob(['first'])};
+  const second={region:{x:.54,y:.49,w:.21,h:.19,mask:{alpha:new Uint8Array([255])}},blob:new Blob(['second'])};
+  let calls=0;
+  const result=await refineManualBoxes([
+    {x:.13,y:.12,w:.25,h:.23,sourceIndex:0},
+    {x:.56,y:.5,w:.2,h:.18,sourceIndex:1,manualChanged:true}
+  ],[first,second],async box=>{calls++;return {...box,mask:{alpha:new Uint8Array([255])}};});
+  assert.equal(calls,1);assert.equal(result[0].original,first);assert.equal(result[1].original,null);
+});
+
