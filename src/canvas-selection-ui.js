@@ -33,7 +33,7 @@ export function mountCanvasSelection(c) {
     const outline=(polygon,className)=>{const p=document.createElementNS(svg.namespaceURI,'polygon');p.setAttribute('points',polygon.map(p=>p.x+','+p.y).join(' '));p.setAttribute('class',className);svg.append(p);};
     if(entries.length>1||state.tool!=='select')entries.forEach(e=>outline(objectCorners(e.value),'selected-object-outline'));
     if(path.length)outline(path,'lasso-outline');
-    else if(entries.length&&state.tool==='lasso'&&state.selectionPath?.length)outline(state.selectionPath,'lasso-outline');
+    else if(count()&&state.tool==='lasso'&&state.selectionPath?.length)outline(state.selectionPath,'lasso-outline');
     else if(points.length&&(entries.length>1||state.tool!=='select')){const b=selectionBounds(points);outline([{x:b.x,y:b.y},{x:b.x+b.width,y:b.y},{x:b.x+b.width,y:b.y+b.height},{x:b.x,y:b.y+b.height}],'selection-bounds');}
     page.querySelectorAll('[data-object]').forEach(el=>el.classList.toggle('multi-selected',state.multiSelected.includes(el.dataset.object)));
   };paint();
