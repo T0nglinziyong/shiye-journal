@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import {browserHarness} from './browser-harness.mjs';
 
-const b=await browserHarness('shiye-backup-archive',process.env.SHIYE_TEST_URL||'http://127.0.0.1:5192');
+const target=process.env.SHIYE_TEST_URL||'http://127.0.0.1:5192';
+if(!['127.0.0.1','localhost'].includes(new URL(target).hostname))throw Error('备份恢复测试只允许本机隔离站，拒绝对线上资料写入');
+const b=await browserHarness('shiye-backup-archive',target);
 try{
   await b.wait('.series-grid');
   const result=await b.evaluate(`(async()=>{
@@ -39,7 +41,32 @@ try{
     try{await readZipBackup(new Blob([bytes],{type:'application/zip'}));}
     catch{refused=true;}
     if(!refused)throw Error('corrupt independent image accepted');
+    // End-to-end: browser IDB and store.restoreBackup() must preserve exact
+    // bytes, then reject a damaged ZIP without clearing the last good copy.
+    const store=await import('/src/store.js');
+    const id='zip-browser-test-'+crypto.randomUUID(),blobID='blob-'+id;
+    await store.transaction(['assets','blobs'],tx=>{
+      tx.objectStore('assets').put({id,title:'ZIP acceptance',blobId:blobID});
+      tx.objectStore('blobs').put({id:blobID,data:bin});
+    });
+    const full=await store.createBackup();
+    await store.transaction(['assets','blobs'],tx=>{
+      tx.objectStore('assets').delete(id);
+      tx.objectStore('blobs').delete(blobID);
+    });
+    await store.restoreBackup(full);
+    const exact=await store.get('blobs',blobID);
+    if(!exact||await exact.data.text()!==await bin.text())throw Error('actual IndexedDB ZIP restore failed');
+    await store.put('assets',{id,title:'latest-owned-record',blobId:blobID});
+    const broken=new Uint8Array(await full.arrayBuffer());
+    // Invalid ZIP must fail before any full table replacement.
+    broken[0]=0;
+    let legacyRejected=false;
+    try{await store.restoreBackup(new Blob([broken]));}catch{legacyRejected=true;}
+    if(!legacyRejected||(await store.get('assets',id))?.title!=='latest-owned-record')
+      throw Error('corrupt ZIP overwrote an existing record');
     return {blobSize:output.size,tables:Object.keys(recovered).length,heartbeats};
+
   })()`);
   assert.equal(result.tables,6);
   assert.ok(result.blobSize>100);
