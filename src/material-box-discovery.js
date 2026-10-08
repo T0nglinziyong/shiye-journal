@@ -137,10 +137,15 @@ export function discoverMaterialBoxes(cv,p,own){
     // High-fill material touching the page frame: use only columns/rows that
     // are almost fully occupied by the same component. This rejects broad
     // frame/background residue without relying on a class-specific rectangle.
-    if(item.touchesProtected&&fill>=.80){
-      const colOcc=Array.from(colCounts,v=>v/Math.max(1,item.h)),
+    if(item.touchesProtected&&fill>=.70){
+      // Perspective interpolation and binder holes can lower the occupancy of
+      // a real body after browser rectification. Dense components can keep the
+      // strict 96% core; medium-dense frame-connected bodies use a 70% core so
+      // the material survives while remote paper-edge residue is discarded.
+      const occupancyThreshold=fill>=.82?.96:.70,
+        colOcc=Array.from(colCounts,v=>v/Math.max(1,item.h)),
         rowOcc=Array.from(rowCounts,v=>v/Math.max(1,item.w)),
-        xr=supportedRange(colOcc,.96),yr=supportedRange(rowOcc,.96),
+        xr=supportedRange(colOcc,occupancyThreshold),yr=supportedRange(rowOcc,occupancyThreshold),
         pad=Math.max(1,pxPerMM*1.5);
       if(xr){x0=clamp(item.x+xr.first-pad,0,w);x1=clamp(item.x+xr.last+1+pad,0,w);}
       if(yr){y0=clamp(item.y+yr.first-pad,0,h);y1=clamp(item.y+yr.last+1+pad,0,h);}
