@@ -11,7 +11,7 @@ export async function detectPaperCandidates(bitmap,box,smallestMM=6,{
   const profile=recognitionProfile(recognition,recognitionPixels);
   const ratio=Math.min(1,profile.analysisMaxDimension/Math.max(bitmap.width*box.w,bitmap.height*box.h));
   const w=Math.max(1,Math.round(bitmap.width*box.w*ratio)),h=Math.max(1,Math.round(bitmap.height*box.h*ratio));
-  const frame={data:await analysisPixels(bitmap,box,w,h)},
+  const frame={data:await analysisPixels(bitmap,box,w,h),width:w,height:h},
     preprocess={
       illumination:balanceLight===true&&recognitionPreprocess.illumination===true,
       denoise:recognitionPreprocess.denoise===true,
@@ -22,7 +22,7 @@ export async function detectPaperCandidates(bitmap,box,smallestMM=6,{
     processed=needsRasterPreprocess
       ?await visionTask('balance',{pixels:frame.data,width:w,height:h,options:preprocess})
       :null,
-    segmentationFrame=processed?{data:processed.pixels}:frame;
+    segmentationFrame=processed?{data:processed.pixels,width:w,height:h}:frame;
 
   // Box discovery always uses the original rectified RGB. Real-case ablation
   // showed that illumination/CLAHE/denoise can make identity discovery worse.
