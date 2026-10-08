@@ -6,7 +6,9 @@ if(!['localhost','127.0.0.1'].includes(new URL(base).hostname))
   throw Error('Storage acceptance cannot run against a real user website');
 const b=await browserHarness('shiye-storage-integration',base);
 try{
-  await b.wait('.series-grid');
+  await b.wait('#app');
+  const boot=await b.evaluate('({view:document.querySelector("#view")?.textContent?.slice(0,160),title:document.title})');
+  console.log('Synthetic browser boot:',boot);
   const result=await b.evaluate(`(async()=>{
     const {createZipBackup,readZipBackup}=await import('/src/backup-archive.js');
     const {createPrivateCache}=await import('/src/private-cache.js');
