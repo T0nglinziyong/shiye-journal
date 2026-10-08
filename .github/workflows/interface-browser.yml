@@ -1,0 +1,60 @@
+name: Interface browser regression
+
+on:
+  pull_request:
+    branches: [test]
+    paths:
+      - 'src/canvas-selection-ui.js'
+      - 'src/canvas-editor-ui.js'
+      - 'src/journal-template-ui.js'
+      - 'src/swift-controls.css'
+      - 'tests/browser-acceptance.mjs'
+      - 'tests/editor-browser-acceptance.mjs'
+      - '.github/workflows/interface-browser.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  chromium:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Install browser driver
+        shell: bash
+        run: |
+          npm install --prefix "$RUNNER_TEMP/shiye-browser" --no-save --package-lock=false agent-browser@0.38.2
+          "$RUNNER_TEMP/shiye-browser/node_modules/.bin/agent-browser" install --with-deps
+          echo "$RUNNER_TEMP/shiye-browser/node_modules/.bin" >> "$GITHUB_PATH"
+      - run: npm run build
+      - name: Check screens and editor in Chromium viewports
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run dev -- --port 5193 --strictPort > /tmp/shiye-interface-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:5193/ >/dev/null; then break; fi
+            sleep 1
+          done
+          SHIYE_TEST_URL=http://127.0.0.1:5193 node tests/browser-acceptance.mjs
+          SHIYE_TEST_URL=http://127.0.0.1:5193 node tests/editor-browser-acceptance.mjs
+      - name: Upload viewport screenshots
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: interface-browser-${{ github.run_id }}
+          path: |
+            /tmp/shiye-browser-acceptance/
+            /tmp/shiye-editor-browser/
+          retention-days: 7
