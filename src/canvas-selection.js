@@ -50,6 +50,10 @@ export function selectionBounds(points) {
 export function clampCanvasPosition(draft,object,x,y){
   return {x:Math.max(0,Math.min(draft.canvas.width,x)),y:Math.max(0,Math.min(draft.canvas.height,y))};
 }
+export function materialCenterOutside(draft, entries) {
+  return entries.some(({kind,value}) => kind === 'material' &&
+    (value.x < 0 || value.x > draft.canvas.width || value.y < 0 || value.y > draft.canvas.height));
+}
 export function moveSelection(draft, starts, dx, dy, strokeStarts = new Map()) {
   if (!Number.isFinite(dx) || !Number.isFinite(dy)) return {dx:0,dy:0};
   const movable = canvasObjects(draft).filter(e => starts.has(e.value.id));
@@ -60,15 +64,8 @@ export function moveSelection(draft, starts, dx, dy, strokeStarts = new Map()) {
   const ink = [...strokeStarts].flatMap(([index, points]) =>
     draft.strokes?.[index] && Array.isArray(points) && points.length === draft.strokes[index].points?.length ? points : []);
   if (!ink.every(p => Number.isFinite(p.x) && Number.isFinite(p.y))) return {dx:0,dy:0};
-  // Clamp the whole selection once, so ink and objects never drift apart.
-  const positions = [...movable.map(e => starts.get(e.value.id)), ...ink];
-  let minX=-Infinity,maxX=Infinity,minY=-Infinity,maxY=Infinity;
-  for(const p of positions){
-    minX=Math.max(minX,-p.x);maxX=Math.min(maxX,draft.canvas.width-p.x);
-    minY=Math.max(minY,-p.y);maxY=Math.min(maxY,draft.canvas.height-p.y);
-  }
-  dx = Math.min(maxX, Math.max(minX, dx));
-  dy = Math.min(maxY, Math.max(minY, dy));
+  // Preserve the relative positions of every selected item and ink stroke.
+  // The UI asks whether to withdraw the move if a material center leaves the page.
   for (const {kind,value:o} of movable) {
     const p = starts.get(o.id);
     o.x = p.x + dx; o.y = p.y + dy;
