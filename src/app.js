@@ -917,20 +917,7 @@ window.addEventListener('resize',refitEditor);
 window.visualViewport?.addEventListener('resize',refitEditor);
 document.querySelectorAll('.main-nav button').forEach(b=>b.onclick=()=>route(b.dataset.route==='library'?'series':b.dataset.route));
 document.querySelector('#top-basket').onclick=()=>route('matching');document.querySelector('#top-settings').onclick=()=>route('settings');
-let visionPrewarmScheduled=false;
-function scheduleVisionPrewarm(){
-  if(visionPrewarmScheduled||typeof Worker==='undefined')return;
-  visionPrewarmScheduled=true;
-  const start=()=>{void prewarmVision().catch(error=>console.warn('本机识别引擎后台预热失败，导入时将重试',error?.message));};
-  // Let authentication/data shell and the first material-library paint win.
-  // The ~5 s OpenCV/WASM startup then happens while the user is browsing,
-  // instead of after a photo has already been selected.
-  requestAnimationFrame(()=>{
-    if('requestIdleCallback' in window)requestIdleCallback(start,{timeout:1200});
-    else setTimeout(start,500);
-  });
-}
-async function init(user){let cachedShown=false;cloudSessionReady=true;const accountId=user?.id||'browser';if(state.accountId&&state.accountId!==accountId){assetOrganization.clear();clearJournalTemplateImages();clearJournalPresetImages();state.userTemplates=[];}state.accountId=accountId;scheduleVisionPrewarm();try{
+async function init(user){let cachedShown=false;cloudSessionReady=true;const accountId=user?.id||'browser';if(state.accountId&&state.accountId!==accountId){assetOrganization.clear();clearJournalTemplateImages();clearJournalPresetImages();state.userTemplates=[];}state.accountId=accountId;try{
   await db.storageMode();state.selfHosted=db.isSameOriginServer();
   // startCloudSession has validated Auth and the allowlist before this runs.
   const cached=await db.cachedCollections();if(cached){Object.assign(state,cached);state.accountId=accountId;await restorePendingProjects();for(const a of state.assets)if(a.staticPath)staticSources.set(a.blobId,a.staticPath);render();cachedShown=true;saveStatus('本机缓存 · 正在核对云端');}

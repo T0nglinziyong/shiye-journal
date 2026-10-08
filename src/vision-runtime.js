@@ -29,6 +29,7 @@ function ensureWorker(index=0){
     worker=new Worker(new URL('./opencv-worker-browser.js',import.meta.url)),
     slot={worker,readyPromise,initialized:false,rejectReady,readyTimer:null};
   slots[index]=slot;
+  slot.readyPromise.catch(()=>{}); // callers may fire-and-forget warmup
   slot.readyTimer=setTimeout(()=>resetSlot(index,Error('图像引擎初始化超时，可重新尝试')),50000);
   worker.onmessage=({data})=>{
     if(slots[index]!==slot)return;
