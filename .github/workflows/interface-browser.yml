@@ -48,7 +48,7 @@ jobs:
             if curl -fsS http://127.0.0.1:5193/ >/dev/null; then break; fi
             sleep 1
           done
-          SHIYE_TEST_URL=http://127.0.0.1:5193 node tests/browser-acceptance.mjs
+          SHIYE_WAIT_MS=30000 SHIYE_TEST_URL=http://127.0.0.1:5193 node tests/browser-acceptance.mjs
           SHIYE_TEST_URL=http://127.0.0.1:5193 node tests/editor-browser-acceptance.mjs
       - name: Upload viewport screenshots
         if: always()
