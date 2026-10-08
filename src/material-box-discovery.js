@@ -122,7 +122,9 @@ export function discoverMaterialBoxes(cv,p,own){
     paperHeightMM=p.paperHeightMM||297,smallestMM=p.smallestMM||6,
     pxPerMM=Math.max(.5,((w/paperWidthMM)+(h/paperHeightMM))/2),
     src=own(cv.matFromArray(h,w,cv.CV_8UC1,Uint8Array.from(p.mask||new Uint8Array(w*h),v=>v?255:0))),
-    closed=own(new cv.Mat()),closeSize=oddPhysical(pxPerMM,.30),
+    // Bridge a few pixels of interrupted pale edges before background gaps
+    // split one physical material into separate components.
+    closed=own(new cv.Mat()),closeSize=oddPhysical(pxPerMM,1.5),
     kernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(closeSize,closeSize)));
   cv.morphologyEx(src,closed,cv.MORPH_CLOSE,kernel);
 
