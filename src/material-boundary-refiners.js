@@ -275,7 +275,8 @@ function regionFromMask(cv,mask,globalX,globalY,pageW,pageH,method,confidence,el
     cv.GaussianBlur(local,packed,new cv.Size(3,3),.58,.58,cv.BORDER_CONSTANT);
   }else local.copyTo(packed);
   const poly=new cv.Mat();cv.approxPolyDP(found.contour,poly,Math.max(.7,cv.arcLength(found.contour,true)*.0015),true);const points=contourPoints(poly).map(([px,py])=>[px-b.x,py-b.y]);found.contour.delete();poly.delete();local.delete();
-  return {x:(globalX+b.x)/pageW,y:(globalY+b.y)/pageH,w:b.width/pageW,h:b.height/pageH,pixels:cv.countNonZero(mask),edgeMethod:method,boundaryConfidence:confidence,refinementMS:elapsed,mask:{width:b.width,height:b.height,alpha:new Uint8Array(packed.data),polygons:[points],topologyPreserved:true}};
+  const result={x:(globalX+b.x)/pageW,y:(globalY+b.y)/pageH,w:b.width/pageW,h:b.height/pageH,pixels:cv.countNonZero(mask),edgeMethod:method,boundaryConfidence:confidence,refinementMS:elapsed,mask:{width:b.width,height:b.height,alpha:new Uint8Array(packed.data),polygons:[points],topologyPreserved:true}};
+  packed.delete();return result;
 }
 
 /**
