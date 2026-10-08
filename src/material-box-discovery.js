@@ -47,6 +47,19 @@ export function duplicatePhysicalBox(a,b){
   // overlapping physical materials should never be collapsed based on IoU.
   return intersection/smaller>=.80;
 }
+// Fragmented die-cut subjects (e.g. the basketball silhouette) may have a
+// detached arm/ball cluster whose *bounding* intersection changes with A4
+// corner rounding. Merge only if BOTH regions are sparse silhouettes and the
+// smaller component's center remains within the larger physical silhouette.
+// Never merge ordinary rectangular cards or merely adjacent materials.
+export function duplicateSparseCutout(parent,child,pxPerMM=3){
+  if((parent.fillRatio??1)>.48||(child.fillRatio??1)>.48)return false;
+  if((child.pixels??Infinity)>(parent.pixels??0)*.75)return false;
+  const overlapX=Math.max(0,Math.min(parent.x+parent.w,child.x+child.w)-Math.max(parent.x,child.x));
+  const overlapY=Math.max(0,Math.min(parent.y+parent.h,child.y+child.h)-Math.max(parent.y,child.y));
+  const overlap=overlapX*overlapY/Math.max(1,Math.min(parent.w*parent.h,child.w*child.h));
+  return overlap>=.35&&containsCenter(parent,child,Math.max(2,pxPerMM*3));
+}
 export function likelyNeutralPageArtifact(item){
   // Weak, almost seed-free neutral background residue should not become a
   // material. Non-neutral/pale carriers keep chromatic evidence even when
@@ -129,7 +142,8 @@ export function discoverMaterialBoxes(cv,p,own){
       const child=candidates[j];if(suppressed.has(child.label))continue;
       const ratio=child.pixels/Math.max(1,parent.pixels);
       if((ratio<=.15&&containsCenter(parent,child,Math.round(pxPerMM*1.0)))
-        ||duplicatePhysicalBox(parent,child)){
+        ||duplicatePhysicalBox(parent,child)
+        ||duplicateSparseCutout(parent,child,pxPerMM)){
         suppressed.add(child.label);
         if(!fragments.has(parent.label))fragments.set(parent.label,[]);
         fragments.get(parent.label).push(child.label);
