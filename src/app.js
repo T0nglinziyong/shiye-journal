@@ -387,7 +387,12 @@ async function handle(action,id,value){try{switch(action){
   case 'recognition-diagnostics':{
     const rec=state.importRecords[state.importIndex],trace=rec?.recognitionDiagnostic;
     if(!trace)throw Error('请先完成当前照片的识别');
-    const report={format:'shiye-recognition-box-diagnostics',version:1,
+    const report={format:'shiye-recognition-box-diagnostics',version:2,
+      originalPixelSize:[state.importBitmap?.width,state.importBitmap?.height],
+      autoPaperCorners:rec.autoPaperCorners||null,paperCorners:rec.corners||null,
+      appliedPaperCorners:rec.appliedCorners?JSON.parse(rec.appliedCorners):null,
+      correctedPixelSize:rec.correctedBitmap?[rec.correctedBitmap.width,rec.correctedBitmap.height]:null,
+      paperOrientation:rec.paperOrientation||'auto',paperSize:rec.paperSize||'a4',
       ...trace,visibleCount:rec.candidates?.length||0};
     download(new Blob([JSON.stringify(report,null,2)],{type:'application/json'}),
       '拾页素材框诊断.json');
@@ -713,6 +718,7 @@ async function switchImportRecord(index,skipSave=false){
   const bitmap=rec.bitmap||await createImageBitmap(rec.file);rec.bitmap=bitmap;if(!isCurrent())return;state.importBitmap=bitmap;
   progress('正在自动寻找纸张四角…');
   state.paperCorners=rec.corners||(state.paperSize==='none'?null:await suggestPaperCorners(bitmap).catch(()=>null));if(!isCurrent())return;
+  if(!rec.corners&&state.paperCorners)rec.autoPaperCorners=structuredClone(state.paperCorners);
   progress('正在进行透视校正…');
   if(!state.correctedBitmap&&state.paperCorners&&state.paperSize!=='none'){
     const [pw,ph]=paperDimensions(),blob=await rectifyA4(state.importBitmap,state.paperCorners,4096,pw/ph);
@@ -803,6 +809,11 @@ async function chooseCandidate(index){if(index>=0){state.importCandidateSelectio
 function paperDimensions(){return importPaperDimensions({paperSize:state.paperSize,paperOrientation:state.paperOrientation,bitmap:state.importBitmap,corners:state.paperCorners,customImportWidth:state.customImportWidth||state.preferences.customPaperWidth,customImportHeight:state.customImportHeight||state.preferences.customPaperHeight});}
 async function confirmImportPhoto(){
   if(state.importProcessing)return;
+  const record=state.importRecords[state.importIndex];
+  if(state.paperSize!=='none'&&state.paperCorners&&state.correctedBitmap
+    &&record?.appliedCorners!==JSON.stringify(state.paperCorners)){
+    toast('纸张四角已调整，请先“预览校正”并点击“使用校正结果”，再确认素材');return;
+  }
   const selected=[...(state.importCandidateSelection||[])];if(!selected.length&&state.importMode!=='work'){toast('请选择至少一件素材，或使用手动补框');return;}
   const rec=state.importRecords[state.importIndex];rec.selectedCandidates=(state.importCandidateData||[]).map((c,i)=>({...c,selected:state.importCandidateSelection.has(i)}));rec.confirmed=true;saveActiveImportRecord();
   const next=state.importRecords.findIndex(r=>!r.confirmed);if(next>=0)await switchImportRecord(next);else{state.importStep='review';render();}
