@@ -384,6 +384,15 @@ async function handle(action,id,value){try{switch(action){
   case 'restore-archive':{const p=state.activeProject,a=p.manualArchives.find(x=>x.id===id);if(!a||!confirm('恢复此存档会替换当前编辑状态，确定吗？'))break;p.drafts=structuredClone(a.drafts);p.activeDraftID=a.activeDraftID;state.activeDraft=a.activeDraftID;saveProject();render();break;}
   case 'export-png':await exportPNG();break;case 'print':await printPage();break;
   case 'creative-json':openCreativeJSON();break;
+  case 'recognition-diagnostics':{
+    const rec=state.importRecords[state.importIndex],trace=rec?.recognitionDiagnostic;
+    if(!trace)throw Error('请先完成当前照片的识别');
+    const report={format:'shiye-recognition-box-diagnostics',version:1,
+      ...trace,visibleCount:rec.candidates?.length||0};
+    download(new Blob([JSON.stringify(report,null,2)],{type:'application/json'}),
+      '拾页素材框诊断.json');
+    toast('已导出不含照片的素材框诊断');break;
+  }
   case 'backup':await backup();break;case 'restore':backupInput.click();break;case 'restore-trash':await restoreTrash(id);break;
   case 'storage-token':{const token=view.querySelector('#data-server-token')?.value.trim();if(!token)throw Error('请输入新的访问令牌');const old=db.storageConfig();db.setStorageConfig({url:location.origin,token});try{await db.storageMode();toast('令牌已更新');}catch(error){db.setStorageConfig(old);throw error;}break;}
   case 'storage-connect':{await flushSave();const old=db.storageConfig(),url=view.querySelector('#data-server-url')?.value.trim(),token=view.querySelector('#data-server-token')?.value.trim();if(!url)throw Error('请输入拾页数据服务地址');db.setStorageConfig({url,token});try{await db.storageMode();state.activeProject=null;state.basket=[];await refresh();toast('已连接服务器');}catch(error){db.setStorageConfig(old);throw error;}break;}
