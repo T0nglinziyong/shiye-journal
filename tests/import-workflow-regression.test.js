@@ -14,7 +14,7 @@ function fixture(copyToLibrary){
     confirmed:true,file:{name:'upload.jpg'},originalFile:original,
     bitmap:{width:800,height:1200},paperSize:'a4',paperOrientation:'portrait',
     workTitle:'十月手帐',workPaperPattern:'grid',workPaperColor:'#faf1ea',
-    workSaveAssets:copyToLibrary,seriesID:'series-A',selectedCandidates:[c]
+    workSaveAssets:copyToLibrary,seriesID:copyToLibrary?'series-A':'__no_library__',selectedCandidates:[c]
   }],
   importBatchSeriesID:'series-B',importBatchWorkSaveAssets:false,assets:[],projects:[]
  };
@@ -28,7 +28,7 @@ test('imported work saves editable paper metadata instead of inpainted photo bac
  assert.equal(batches.length,1);
  const saved=batches[0],p=saved.projects[0],d=p.drafts[0];
  assert.equal(d.paperPattern,'grid');assert.equal(d.paperColor,'#faf1ea');
- assert.equal(p.seriesID,'series-A');assert.equal(p.isDraft,false);
+ assert.equal(p.seriesID,null);assert.equal(p.isDraft,false);
  assert.equal(p.source,'imported');assert.equal(d.items.length,1);
  assert.equal(saved.assets.length,1,'No internal full-sheet photo may be added');
  assert.equal(saved.assets[0].isProjectInternal,true);
@@ -49,8 +49,58 @@ test('work confirmation shows editable background as first tile plus consistent 
  const html=renderImportReview({state,esc:value=>String(value),fmt:x=>x.toFixed(1)});
  const first=html.indexOf('review-background-card'),second=html.indexOf('data-candidate="0"');
  assert.ok(first>=0&&second>first);
- assert.ok(html.includes('record-work-save-assets'));
- assert.ok(html.includes('batch-work-save-assets'));
+ assert.ok(html.includes('不归入素材库'));
+ assert.ok(!html.includes('record-work-save-assets'));
+ assert.ok(!html.includes('batch-work-save-assets'));
  assert.ok(html.includes('record-work-paper-pattern'));
  assert.ok(html.includes('record-series'));
+});
+
+test('imported work material assigned to library is used, and internal elements remain editable',async()=>{
+  const {state,db,batches}=fixture(true);
+  await saveImportBatch({state,db,urls:new Map(),render:()=>{}});
+  const candidate=batches[0].assets[0];
+  assert.equal(candidate.isProjectInternal,false);
+  assert.equal(candidate.usageStatus,'used');
+  assert.equal(candidate.seriesID,'series-A');
+  assert.equal(batches[0].projects[0].drafts[0].items[0].assetID,candidate.id);
+});
+test('material review has no background card; work review preserves one square background tile',()=>{
+  const {state}=fixture(true);state.series=[{id:'series-A',title:'花园'}];state.importRecords[0].url='blob:original';
+  state.importRecords[0].selectedCandidates[0].url='blob:sticker';
+  const html=renderImportReview({state,esc:String,fmt:String});
+  assert.equal((html.match(/review-background-card/g)||[]).length,1);
+  assert.ok(html.indexOf('不归入系列')<html.indexOf('不归入素材库'));
+  state.importMode='material';
+  const plain=renderImportReview({state,esc:String,fmt:String});
+  assert.ok(!plain.includes('review-background-card'));
+  assert.ok(!plain.includes('页面背景'));
+  assert.ok(!plain.includes('作品名称'));
+});
+test('snapshot review shows the corrected full page and no material classification',()=>{
+  const {state}=fixture(true);state.importMode='snapshot';
+  state.importRecords[0].url='blob:raw';
+  state.importRecords[0].correctedURL='blob:rectified';
+  state.importRecords[0].selectedCandidates=[];
+  const html=renderImportReview({state,esc:String,fmt:String});
+  assert.ok(html.includes('保存 1 个快照'));
+  assert.ok(html.includes('src="blob:rectified" alt="校正后完整页面"'));
+  assert.ok(!html.includes('record-series'));
+  assert.ok(!html.includes('review-background-card'));
+});
+test('snapshot save stores one corrected full-page PNG and no materials',async()=>{
+  const {state,db,batches}=fixture(true);state.importMode='snapshot';
+  state.importRecords[0].balanceLight=false;
+  state.importRecords[0].correctedBitmap={width:500,height:700};
+  const originalDocument=globalThis.document;
+  globalThis.document={createElement:()=>({width:0,height:0,getContext(){return {drawImage(){}};},
+    toBlob(fn){fn(new Blob(['corrected page'],{type:'image/png'}));}})};
+  try{
+    await saveImportBatch({state,db,urls:new Map(),render:()=>{}});
+    assert.equal(batches[0].assets.length,0);
+    assert.equal(batches[0].projects.length,1);
+    assert.equal(batches[0].projects[0].isSnapshot,true);
+    assert.equal(batches[0].projects[0].snapshotWidth,500);
+    assert.equal(batches[0].blobs[0].data.type,'image/png');
+  }finally{globalThis.document=originalDocument;}
 });

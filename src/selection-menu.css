@@ -32,3 +32,53 @@
   border-bottom:1px solid #e1e7df;
   box-shadow:0 6px 12px #233f2b12;
 }
+
+/* One touch target and text size for every library, series, work and snapshot
+   selection action, including the named export and delete buttons. */
+.swift-tray.manage.library-management-tray > button {
+  box-sizing:border-box;
+  min-height:44px;
+  min-width:112px;
+  padding:9px 13px;
+  border-radius:12px;
+  font-size:14px;
+  line-height:1.25;
+  display:inline-flex;
+  justify-content:center;
+  align-items:center;
+  gap:6px;
+  white-space:nowrap;
+}
+.swift-tray.manage.library-management-tray > button > .selection-action-label {
+  font-size:inherit;
+  line-height:inherit;
+  white-space:nowrap;
+}
+.swift-tray.manage.library-management-tray > button.danger,
+.swift-tray.manage.library-management-tray > button.primary {
+  min-height:44px;
+  min-width:112px;
+}
+@media (max-width:680px) {
+  .swift-tray.manage.library-management-tray {flex-wrap:wrap}
+  .swift-tray.manage.library-management-tray > button {flex:1 0 112px}
+}
+
+/* Subformat choices stay inside the More menu instead of creating a
+   second floating menu that may disappear on touch devices. */
+.selection-more-menu .selection-inline-submenu {
+  width:100%;
+  padding:4px 0 6px 12px;
+  box-sizing:border-box;
+  border-left:2px solid #d9e5da;
+  margin-left:10px;
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+}
+.selection-more-menu .selection-inline-submenu > button {
+  width:100%;
+  min-height:42px;
+  border:0;
+  text-align:left;
+}

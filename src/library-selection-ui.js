@@ -33,24 +33,13 @@ export function mountAssetSelection(c,p){
   const sync=()=>{showResults();const active=isActive();for(const card of cards){const chosen=active&&p.selected.has(card.dataset.id);card.classList.toggle('batch-selected',chosen);if(active)card.setAttribute('aria-pressed',String(chosen));else card.removeAttribute('aria-pressed');let check=card.querySelector('.batch-check');if(active&&!check){check=document.createElement('span');check.className='batch-check';card.append(check);}if(check){check.hidden=!active;check.textContent=chosen?'☑':'□';}const title=card.querySelector('h3');let mark=title?.querySelector('.basket-card-check');const inBasket=state.basket.includes(card.dataset.id);title?.classList.toggle('in-matching-basket',inBasket);if(inBasket&&!mark){mark=document.createElement('span');mark.className='basket-card-check';mark.textContent='✓';mark.setAttribute('aria-label','已加入搭配素材篮');title.append(mark);}if(!inBasket)mark?.remove();}tray.hidden=!active;if(!active||!p.selected.size)closePopoverFor(tray.querySelector('[data-selection-more]'));view.querySelectorAll('.library-select-toggle').forEach(b=>b.textContent=p.selectionMode?'完成':'选择');view.querySelectorAll('.action-card').forEach(b=>b.disabled=active);const n=tray.querySelector('strong');n.textContent='本次选中 '+p.selected.size+' 件';tray.querySelectorAll('[data-selection-required]').forEach(b=>b.disabled=!p.selected.size);const selectedButton=[...tray.querySelectorAll('button')].find(b=>b.textContent==='返回筛选'||b.textContent==='查看所选');if(selectedButton){selectedButton.textContent=p.showOnlySelected?'返回筛选':'查看所选';selectedButton.disabled=!p.selected.size&&!p.showOnlySelected;}return true;};
   const tray=document.createElement('div');tray.className='swift-tray manage library-management-tray';tray.dataset.selectionMode='asset';tray.innerHTML='<strong></strong>';
   const require=(name,fn)=>{const b=action(name,fn);b.dataset.selectionRequired='';return b;};
-  tray.append(action('全选页面',()=>{cards.filter(b=>!b.hidden).forEach(b=>p.selected.add(b.dataset.id));sync();}),require('清空选择',()=>{p.selected.clear();p.showOnlySelected=false;sync();}),require(p.showOnlySelected?'返回筛选':'查看所选',()=>{p.showOnlySelected=!p.showOnlySelected;sync();}),require('加入搭配',()=>{state.basket=[...new Set([...state.basket,...p.selected])];finishSelection(p);sync();document.querySelector('#basket-count').textContent=state.basket.length;c.toast('已加入搭配素材篮');}),require('导出素材 ›',anchor=>exportMenu(c,p,anchor)),require('更多操作',anchor=>moreMenu(c,p,anchor)),require('删除素材',async()=>{
+  tray.append(action('全选页面',()=>{cards.filter(b=>!b.hidden).forEach(b=>p.selected.add(b.dataset.id));sync();}),require('清空选择',()=>{p.selected.clear();p.showOnlySelected=false;sync();}),require(p.showOnlySelected?'返回筛选':'查看所选',()=>{p.showOnlySelected=!p.showOnlySelected;sync();}),require('加入搭配',()=>{state.basket=[...new Set([...state.basket,...p.selected])];finishSelection(p);sync();document.querySelector('#basket-count').textContent=state.basket.length;c.toast('已加入搭配素材篮');}),require('更多操作',anchor=>moreMenu(c,p,anchor)),require('删除素材',async()=>{
     const records=state.assets.filter(a=>p.selected.has(a.id));if(!records.length||!confirm('将所选 '+records.length+' 件素材移到最近删除？'))return;
     const entries=records.map(item=>({id:crypto.randomUUID(),kind:'asset',item:structuredClone(item),date:new Date().toISOString()}));
     await c.db.transaction(['assets','trash'],tx=>{for(const e of entries){tx.objectStore('assets').delete(e.item.id);tx.objectStore('trash').put(e);}});state.assets=state.assets.filter(a=>!p.selected.has(a.id));state.basket=state.basket.filter(id=>!p.selected.has(id));state.trash.push(...entries);finishSelection(p);render();
   }));tray.lastChild.classList.add('danger');view.append(tray);registerSelectionPresenter(view,sync);
 }
-function exportMenu(c,p,anchor){
-  const menu=togglePopover(anchor,{title:'导出素材',menu:true,width:250});
-  if(!menu)return;
-  menu.surface.classList.add('selection-more-menu');
-  for(const [name,format] of [['透明 PNG','png'],['白底 JPEG','jpeg'],['原始素材图像','original']]){
-    menu.content.append(action(name,async()=>{menu.close();await exportImages(c,p,format);}));
-  }
-  if(c.exportSelectedMaterials)menu.content.append(action('实际尺寸打印 PDF',async()=>{
-    const ids=[...p.selected];menu.close();await c.exportSelectedMaterials(ids);
-  }));
-}
-function moreMenu(c,p,anchor){const menu=togglePopover(anchor,{title:'更多操作',menu:true,width:230});if(!menu)return;menu.surface.classList.add('selection-more-menu');menu.content.append(action('重新识别',async()=>{
+function moreMenu(c,p,anchor){const menu=togglePopover(anchor,{title:'更多操作',menu:true,width:230});if(!menu)return;menu.surface.classList.add('selection-more-menu');menu.content.append(action('导出素材 ›',b=>submenu(menu,b,'导出素材','export')),action('重新识别',async()=>{
   const records=c.state.assets.filter(a=>p.selected.has(a.id)).map(a=>structuredClone(a)),cfg=structuredClone(c.state.aiSettings),accountID=c.state.accountId;
   if(!cfg.key||!cfg.includeThumbnails||!supportsVision(cfg))throw Error('请先配置可用的视觉模型并开启素材图片');
   menu.close();let completed=0,failed=0;
@@ -71,7 +60,14 @@ function moreMenu(c,p,anchor){const menu=togglePopover(anchor,{title:'更多操�
       const create=action('新建系列…',()=>{parent.close();c.body.innerHTML='<h2>新建系列</h2><label>系列名称<input id="selection-new-series-name"></label><div id="selection-new-series-actions"></div>';c.body.querySelector('#selection-new-series-actions').append(action('取消',()=>c.modal.close()),action('新建并加入',async()=>{const name=c.body.querySelector('input').value.trim();if(!name)throw Error('请填写系列名称');const series={id:crypto.randomUUID(),title:name,introduction:'',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};await assign(series.id,series);c.modal.close();}));c.modal.showModal();});create.classList.add('selection-submenu-pinned');panel.append(create);
       for(const series of [{id:null,title:'不归入系列'},...c.state.series])panel.append(action(series.title,async()=>{await assign(series.id);parent.close();}));
     }
-    else for(const [name,format] of [['透明 PNG','png'],['白底 JPEG','jpeg'],['原始图像','original']])panel.append(action(name,async()=>{parent.close();await exportImages(c,p,format);}));
+    else if(assign==='export'){
+      for(const [name,format] of [['透明 PNG','png'],['白底 JPEG','jpeg'],['原始图像','original']]){
+        panel.append(action(name,async()=>{parent.close();await exportImages(c,p,format);}));
+      }
+      if(c.exportSelectedMaterials)panel.append(action('实际尺寸打印 PDF',async()=>{
+        const ids=[...p.selected];parent.close();await c.exportSelectedMaterials(ids);
+      }));
+    }
     parent.surface.dataset.submenu=title;parent.position();
   }
 }

@@ -114,3 +114,133 @@ test('background sync refreshes durable rows after acquiring the cross-tab lease
   await tabB.flush();
   assert.deepEqual(commits,['from-other-tab']);
 });
+
+
+test('stale edited project is saved under a new ID without overwriting cloud original',async()=>{
+  let revision=990,rows=[{record:{id:'original',title:'my offline draft'},serial:1,baseRevision:600,operationID:'op'}];
+  const committed=[];
+  const sync=createProjectSync({
+    load:async()=>structuredClone(rows),reload:async()=>structuredClone(rows),
+    write:async next=>{rows=structuredClone(next);},revision:()=>revision,
+    reconcile:async()=> 'conflict',
+    onConflict:async record=>({...record,id:'safe-copy',title:record.title+'（同步冲突副本）'}),
+    commit:async record=>{committed.push(record);revision++;}
+  });
+  await sync.flush();
+  assert.deepEqual(committed.map(r=>r.id),['safe-copy']);
+  assert.equal(committed[0].title,'my offline draft（同步冲突副本）');
+  assert.equal(rows.length,0);
+});
+test('unresolved change cannot stop independent later queued changes',async()=>{
+  let revision=990,rows=[
+    {record:{id:'conflict'},serial:1,baseRevision:600,operationID:'stuck'},
+    {record:{id:'safe'},serial:2,baseRevision:600,operationID:'independent'}
+  ];
+  const uploaded=[];
+  const sync=createProjectSync({
+    load:async()=>structuredClone(rows),reload:async()=>structuredClone(rows),
+    write:async next=>{rows=structuredClone(next);},revision:()=>revision,
+    reconcile:async record=>record.id==='safe'?'rebase':'conflict',
+    commit:async record=>{uploaded.push(record.id);revision++;}
+  });
+  await assert.rejects(sync.flush(),/已继续同步其他资料/);
+  assert.deepEqual(uploaded,['safe']);
+  assert.deepEqual(rows.map(row=>row.record.id),['conflict']);
+});
+
+
+test('durably staged deletion can retire older unsent saves for the same work only',async()=>{
+  let rows=[
+    {record:{id:'deleted',title:'old editor state'},serial:1,baseRevision:5,operationID:'old'},
+    {record:{id:'untouched',title:'other editor state'},serial:2,baseRevision:5,operationID:'other'}
+  ];
+  const sync=createProjectSync({load:async()=>rows,reload:async()=>structuredClone(rows),
+    write:async next=>{rows=structuredClone(next);},revision:()=>5,commit:async()=>{}});
+  assert.equal(await sync.cancelPendingFor(['deleted']),1);
+  assert.deepEqual(rows.map(row=>row.record.id),['untouched']);
+});
+
+
+test('editor edits are locally staged but cloud commits are coalesced every 10 seconds',async()=>{
+  let time=0,nextTimerID=0,revision=5,rows=[],commits=[];
+  const timers=new Map();
+  const setTimer=(fn,delay)=>{const id=++nextTimerID;timers.set(id,{fn,at:time+delay});return id;};
+  const clearTimer=id=>timers.delete(id);
+  const advance=async(to)=>{
+    time=to;
+    for(const [id,timer] of [...timers]){
+      if(timer.at<=time){timers.delete(id);timer.fn();}
+    }
+    for(let i=0;i<20;i++)await Promise.resolve();
+  };
+  const sync=createProjectSync({
+    load:async()=>structuredClone(rows),reload:async()=>structuredClone(rows),
+    write:async next=>{rows=structuredClone(next);},
+    revision:()=>revision,
+    commit:async record=>{commits.push({...record,time});revision++;},
+    autoFlushDelayMs:10000,clock:()=>time,setTimer,clearTimer
+  });
+  await sync.stage({id:'draft',title:'first'});
+  assert.equal(rows[0].record.title,'first','local IndexedDB outbox is saved before return');
+  await advance(9000);
+  await sync.stage({id:'draft',title:'latest'});
+  assert.equal(commits.length,0,'no network write for each small operation');
+  await advance(10000);
+  assert.deepEqual(commits.map(x=>x.title),['latest']);
+  await sync.stage({id:'draft',title:'after-upload'});
+  await advance(15000);
+  assert.equal(commits.length,1);
+  await sync.flush();
+  assert.deepEqual(commits.map(x=>x.title),['latest','after-upload'],'manual sync skips automatic interval');
+  assert.deepEqual(rows,[]);
+});
+test('background wake-up schedules queued changes rather than forcing a cloud write',async()=>{
+  let time=0,timers=[],rows=[],commits=0,revision=7;
+  const sync=createProjectSync({
+    load:async()=>structuredClone(rows),reload:async()=>structuredClone(rows),
+    write:async next=>{rows=structuredClone(next);},
+    revision:()=>revision,commit:async()=>{commits++;revision++;},
+    autoFlushDelayMs:10000,clock:()=>time,
+    setTimer:(fn,delay)=>{timers.push({fn,delay});return timers.length;},
+    clearTimer:()=>{}
+  });
+  await sync.stage({id:'work',title:'change'});
+  await sync.resumeScheduled();
+  assert.equal(commits,0);
+  assert.equal(timers.length,1);
+  assert.ok(timers[0].delay>=10000);
+});
+
+
+test('edits arriving mid-upload wait for the next cloud window',async()=>{
+  let time=0,revision=0,rows=[],id=0;
+  const timers=new Map(),writes=[];
+  let started,release;
+  const opened=new Promise(resolve=>started=resolve),pending=new Promise(resolve=>release=resolve);
+  const queue=createProjectSync({
+    load:async()=>structuredClone(rows),reload:async()=>structuredClone(rows),
+    write:async next=>{rows=structuredClone(next);},
+    revision:()=>revision,clock:()=>time,autoFlushDelayMs:10000,
+    setTimer:(fn,delay)=>{timers.set(++id,{fn,at:time+delay});return id;},
+    clearTimer:i=>timers.delete(i),
+    commit:async record=>{
+      writes.push({title:record.title,time});
+      if(writes.length===1){started();await pending;}
+      revision++;
+    }
+  });
+  await queue.stage({id:'work',title:'first'});
+  time=10000;
+  for(const [key,task] of [...timers])if(task.at<=time){timers.delete(key);task.fn();}
+  await opened;
+  await queue.stage({id:'work',title:'second'});
+  release();
+  for(let i=0;i<50;i++)await Promise.resolve();
+  assert.deepEqual(writes.map(x=>x.title),['first']);
+  assert.equal(rows[0].record.title,'second');
+  time=20000;
+  for(const [key,task] of [...timers])if(task.at<=time){timers.delete(key);task.fn();}
+  for(let i=0;i<50;i++)await Promise.resolve();
+  assert.deepEqual(writes,[{title:'first',time:10000},{title:'second',time:20000}]);
+  assert.deepEqual(rows,[]);
+});

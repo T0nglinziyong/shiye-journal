@@ -1,6 +1,8 @@
 import {project,uid} from './domain.js';
 import {paperDimensions} from './paper-sizes.js';
 import {markProjectAssetsUsed} from './library-model.js';
+import {snapshotRecord} from './work-collections.js';
+import {neutralizePaperChroma} from './paper-chroma-preprocess.js';
 
 export function importPaperDimensions(record) {
   const size=record.paperSize==='custom'?{width:record.customImportWidth,height:record.customImportHeight}:paperDimensions(record.paperSize)||paperDimensions('a4');
@@ -18,7 +20,7 @@ export function candidateMetadata(c,record,batchSeriesID) {
   const quantity=c.quantity??1;if(!Number.isInteger(quantity)||quantity<1)throw Error('素材数量必须是正整数');
   const choice=c.seriesID??record.seriesID??batchSeriesID;
   return {title:c.title?.trim()||'新素材',kind:c.kind||'sticker',role:c.role||'focal',tags:c.tags||[],palette:[],texture:'待记录',physicalWidthMM:c.width??null,physicalHeightMM:c.height??null,
-    dimensionSource:c.width&&c.height?(c.dimensionSource||'paper'):'unmeasured',processingRecord:c.processingRecord?structuredClone(c.processingRecord):null,supply:{kind:quantity===1?'single':'multiple',quantity},reviewStatus:c.reviewStatus||'pendingReview',usageStatus:'unused',seriesID:choice==='__none__'?null:choice||batchSeriesID||null};
+    dimensionSource:c.width&&c.height?(c.dimensionSource||'paper'):'unmeasured',processingRecord:c.processingRecord?structuredClone(c.processingRecord):null,supply:{kind:quantity===1?'single':'multiple',quantity},reviewStatus:c.reviewStatus||'pendingReview',usageStatus:'unused',seriesID:choice==='__none__'||choice==='__no_library__'?null:choice||null};
 }
 export async function saveImportBatch({state,db,urls,render,onSaved}) {
   if(state.importSaving||state.importStep==='done')return;
@@ -28,7 +30,28 @@ export async function saveImportBatch({state,db,urls,render,onSaved}) {
   for(const record of state.importRecords) {
     if(!record.confirmed)throw Error('请先检查所有照片');
     const chosen=(record.selectedCandidates||[]).filter(c=>c.selected);
-    if(state.importMode==='work') {
+    if(state.importMode==='snapshot') {
+      // Snapshots are single full pages, not segmented or library-classified.
+      // Render exactly the corrected page; never reuse the original perspective
+      // photo when the user has accepted the corrected geometry.
+      const source=record.correctedBitmap||record.bitmap;
+      if(!source)throw Error('校正后的快照页面尚未准备好');
+      const canvas=document.createElement('canvas');
+      canvas.width=source.width;canvas.height=source.height;
+      const ctx=canvas.getContext('2d',{willReadFrequently:record.balanceLight===true});
+      ctx.drawImage(source,0,0);
+      if(record.balanceLight===true){
+        const frame=ctx.getImageData(0,0,canvas.width,canvas.height);
+        const balanced=neutralizePaperChroma(frame.data,canvas.width,canvas.height);
+        if(balanced!==frame.data){frame.data.set(balanced);ctx.putImageData(frame,0,0);}
+      }
+      const image=await new Promise((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(Error('快照页面导出失败')),'image/png'));
+      const blobId=uid(),p=snapshotRecord({
+        title:record.file.name.replace(/\\.[^.]+$/,'')||'导入快照',
+        previewBlobId:blobId,format:'image/png',width:canvas.width,height:canvas.height
+      });
+      projects.push(p);blobs.push({id:blobId,data:image});savedCount++;
+    } else if(state.importMode==='work') {
       const source=record.correctedBitmap||record.bitmap;
       const [paperWidth,paperHeight]=importPaperDimensions(record),ratio=source.width/source.height;
       const p=project(record.workTitle?.trim()||record.file.name.replace(/\\.[^.]+$/,'')||'导入作品',{mode:ratio>1.1?'spread':'single',style:'imported'}),d=p.drafts[0];
@@ -45,12 +68,12 @@ export async function saveImportBatch({state,db,urls,render,onSaved}) {
       blobs.push({id:originalID,data:record.originalFile||record.file});
       p.originalImportPhotoBlobID=originalID;
       p.candidateAssetIDs=[];
-      const copyToLibrary=record.workSaveAssets??state.importBatchWorkSaveAssets??false;
       const choice=record.seriesID&&record.seriesID!==''?record.seriesID:state.importBatchSeriesID||null;
-      p.seriesID=choice==='__none__'?null:choice||null;
+      const copyToLibrary=choice!=='__no_library__';
+      p.seriesID=choice==='__none__'||choice==='__no_library__'?null:choice||null;
       for(const c of elements) {
         const id=uid(),blobId=uid(),sourceID=uid(),originalCutoutBlobId=uid(),candidateFrameBlobId=uid(),region=c.region;
-        assets.push({...candidateMetadata(c,record,state.importBatchSeriesID),id,blobId,originalBlobId:sourceID,originalCutoutBlobId,candidateFrameBlobId,photoBlobId:originalID,isProjectInternal:!copyToLibrary,createdAt:now,sourceIdentifier:'imported-work-element'});
+        assets.push({...candidateMetadata(c,record,state.importBatchSeriesID),id,blobId,originalBlobId:sourceID,originalCutoutBlobId,candidateFrameBlobId,photoBlobId:originalID,isProjectInternal:!copyToLibrary,usageStatus:copyToLibrary?'used':'unused',usageUpdatedAt:copyToLibrary?now:null,seriesID:copyToLibrary?(choice==='__none__'?null:choice||null):null,createdAt:now,sourceIdentifier:'imported-work-element'});
         blobs.push({id:originalCutoutBlobId,data:c.originalCutoutBlob||c.blob},{id:candidateFrameBlobId,data:c.candidateFrameBlob||c.originalBlob||c.blob});
         blobs.push({id:blobId,data:c.blob},{id:sourceID,data:c.originalBlob||c.blob});p.candidateAssetIDs.push(id);
         d.items.push({id:uid(),assetID:id,x:(region.x+region.w/2)*d.canvas.width,y:(region.y+region.h/2)*1000,
@@ -75,7 +98,7 @@ export async function saveImportBatch({state,db,urls,render,onSaved}) {
       }
     }
   }
-  if(!savedCount)throw Error('请选择至少一件素材');
+  if(!savedCount)throw Error('请选择至少一件素材或一个页面');
   // Commit the whole batch once. A failed transaction never leaves a partly
   // imported batch that would be duplicated when the user retries.
   const result=db.stageImport?await db.stageImport({assets,blobs,projects}):await db.transaction(['assets','blobs','projects'],tx=>{for(const a of assets)tx.objectStore('assets').put(a);for(const b of blobs)tx.objectStore('blobs').put(b);for(const p of projects)tx.objectStore('projects').put(p);});
