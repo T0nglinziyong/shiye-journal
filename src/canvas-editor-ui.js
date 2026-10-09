@@ -33,32 +33,17 @@ export function mountCanvasEditor(c){
   actions.append(button('◷',e=>historyMenu(e.currentTarget),'canvas-icon'));actions.lastChild.setAttribute('aria-label','历史记录');actions.append(topAction('undo','↶'),topAction('redo','↷'));
   actions.append(topAction('save-work','保存'));// Archives remain separate from promoting a draft to a work.
   actions.append(button('完成',()=>handle('editor-done'),'btn primary'));
-  const share=button('↥',e=>{const p=openPopover(e.currentTarget,{title:'导出',width:220,menu:true});for(const [name,fn] of [['保存快照',()=>handle('save-snapshot')],['导出 PNG',()=>handle('export-png')],['导出 PDF',()=>pdf?.click()||handle('print')],['导出可编辑 ZIP',()=>handle('download-project-zip')],['打印',()=>handle('print')],['导入创作指令',()=>handle('creative-json')]])p.content.append(button(name,()=>{p.close();fn();}));},'canvas-icon');share.setAttribute('aria-label','导出作品');actions.append(share);if(json){json.hidden=true;actions.append(json);}
+  const share=button('导出',e=>{const p=openPopover(e.currentTarget,{title:'导出',width:220,menu:true});for(const [name,fn] of [['保存快照',()=>handle('save-snapshot')],['导出 PNG',()=>handle('export-png')],['导出 PDF',()=>pdf?.click()||handle('print')],['导出可编辑 ZIP',()=>handle('download-project-zip')],['打印',()=>handle('print')],['导入创作指令',()=>handle('creative-json')]])p.content.append(button(name,()=>{p.close();fn();}));},'btn');share.setAttribute('aria-label','导出作品');actions.append(share);if(json){json.hidden=true;actions.append(json);}
   const toolbar=document.createElement('div');toolbar.className='swift-editor-toolbar';shell.before(toolbar);toolbar.append(tools);tools.replaceChildren();
   const context=document.createElement('div');context.className='canvas-context-tools';context.setAttribute('aria-label','当前工具选项');toolbar.append(context);
   const changeTool=(mode,b)=>{view.endTextEditing?.();if(b.getAttribute('aria-expanded')==='true'){closePopover();return;}const repeated=state.tool===mode;if(['pen','highlighter'].includes(mode))state.previousInkTool=mode;state.tool=['layers','paper','material'].includes(mode)?'select':mode;state.toolHighlight=mode;if(!repeated)state.selectionPath=null;if(mode!=='select'&&mode!=='lasso'){state.multiSelected=[];state.selectedStrokes=[];}if(mode!=='select'&&mode!=='lasso')state.selected=null;if(!state.selected){page.querySelectorAll('.object-handle,.selected-object-actions,.selected-object-overlay').forEach(n=>n.remove());page.querySelectorAll('.selected').forEach(n=>n.classList.remove('selected'));page.querySelector('.canvas-selection-overlay')?.replaceChildren();}page.classList.toggle('pen',['pen','highlighter','eraser'].includes(mode));page.classList.toggle('lasso',['lasso','marquee'].includes(mode));syncTools();contextTools();if(['shape','material','layers','paper'].includes(mode)){if(mode==='shape')shapePicker(b);else if(mode==='material')materialPicker(b);else if(mode==='layers')layerPicker(b);else paperPicker(b);}else if(repeated&&['pen','highlighter','eraser','lasso'].includes(mode))toolSettings(b,mode);else closePopover();};
   for(const mode of ['select','pen','eraser','highlighter','lasso','text','shape','material','layers','paper']){const b=button(glyphs[mode],()=>changeTool(mode,b),'btn');b.dataset.act='tool';b.dataset.val=mode;b.setAttribute('aria-label',labels[mode]);b.title=labels[mode];tools.append(b);if(mode==='select')b.oncontextmenu=e=>{e.preventDefault();const p=openPopover(b,{title:'选择工具',width:230,menu:true});for(const [m,name] of [['select','点击选择 · 单指滚动画布'],['marquee','拖出矩形框选']])p.content.append(button(name,()=>{p.close();state.tool=m;state.toolHighlight='select';render();}));};}
-  const editorPanelController=new AbortController();
-  // The legacy property panel has functioning bindings in bindInspector().
-  // The previous editor mount hid it unconditionally, leaving apparent dead
-  // controls. Keep it available behind an explicit, phone-safe toggle.
-  const inspectorPanel=shell.querySelector('.editor-inspector');
+  // Property editing remains available through the selected object's
+  // contextual inspector, not a separate top-bar button.
   shell.classList.add('swift-editor-workspace');
-  const showInspector=visible=>{
-    state.showEditorInspector=visible;
-    shell.classList.toggle('show-inspector',visible);
-    if(inspectorPanel)inspectorPanel.hidden=!visible;
-    inspectorButton.setAttribute('aria-expanded',String(visible));
-    inspectorButton.setAttribute('aria-pressed',String(visible));
-  };
-  const inspectorButton=button('属性',()=>showInspector(!state.showEditorInspector),'btn');
-  inspectorButton.setAttribute('aria-label','显示或隐藏页面及对象属性');
-  actions.insertBefore(inspectorButton,actions.querySelector('.btn.primary'));
-  showInspector(!!state.showEditorInspector);
-  document.addEventListener('pointerdown',event=>{
-    if(!state.showEditorInspector||!inspectorPanel||inspectorPanel.contains(event.target)||inspectorButton.contains(event.target))return;
-    if(window.innerWidth<900)showInspector(false);
-  },{signal:editorPanelController.signal,capture:true});
+  shell.classList.remove('show-inspector');
+  const inspectorPanel=shell.querySelector('.editor-inspector');
+  if(inspectorPanel)inspectorPanel.hidden=true;
   function syncTools(){for(const b of tools.querySelectorAll('button')){const active=(state.toolHighlight||state.tool)===b.dataset.val||(b.dataset.val==='select'&&state.tool==='marquee');b.classList.toggle('primary',active);b.setAttribute('aria-pressed',String(active));}page.classList.toggle('pen',['pen','highlighter','eraser'].includes(state.tool));}
   function contextTools(){context.replaceChildren();const mode=state.toolHighlight||state.tool,entry=entries.find(e=>e.value.id===state.selected),s=entry?.value,kind=entry?.kind;
     if(['pen','highlighter'].includes(mode)){
@@ -368,8 +353,8 @@ export function mountCanvasEditor(c){
   ink.onpointercancel=()=>{if(!stroke&&!erase)return;stroke=null;erase=null;const before=state.undo.pop();if(before)d.strokes=before.strokes;paint();};
   view.cancelInkGesture=ink.onpointercancel;
   mountCanvasViewport(c,page);
-  const disposeViewport=view.editorDispose;
-  view.editorDispose=()=>{editorPanelController.abort();disposeViewport?.();};
+  // Navigation gestures remain owned by mountCanvasViewport.
+
   refresh();
   function vectorColors(shape,target=context){
     if(!shape.vectorLayers)return;
