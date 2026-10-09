@@ -15,7 +15,7 @@ export function createWorkCoverBackfill({db,state,cloudEnabled=false,onError=con
   let chain=Promise.resolve();
 
   async function repair(id,updatedAt,account){
-    if(!cloudEnabled||state.route!=='works'||(state.accountId||'browser')!==account)return false;
+    if(!cloudEnabled||(state.accountId||'browser')!==account)return false;
     const project=state.projects.find(row=>row.id===id);
     if(!project||project.updatedAt!==updatedAt||!needsWorkCover(project))return false;
     if(state.activeProject?.id===id)return false;
@@ -29,7 +29,7 @@ export function createWorkCoverBackfill({db,state,cloudEnabled=false,onError=con
     if(complete.id!==id||!complete.drafts?.length)throw Error('作品全文不完整，已跳过封面补齐');
     // No updatedAt or content edits: encode() uploads the deterministic
     // snapshot, then commits just the usual project summary metadata.
-    if((state.accountId||'browser')!==account||state.route!=='works'||
+    if((state.accountId||'browser')!==account||
       state.projects.find(p=>p.id===id)?.updatedAt!==updatedAt)return false;
     await db.stageProject(complete);
     return true;
@@ -43,6 +43,25 @@ export function createWorkCoverBackfill({db,state,cloudEnabled=false,onError=con
       try{const staged=await repair(id,updatedAt,account);if(staged)attempted.add(key);}
       catch(error){attempted.add(key);onError('作品封面补齐失败，原稿未改动',id,error);}
       finally{queued.delete(key);}
+    });
+  }
+
+  // Start migration after the account's project summaries have loaded, rather
+  // than waiting for the user to visit Works. Pace writes to avoid competing
+  // with normal foreground image traffic; never stage an active/pending work.
+  let backgroundStartedFor=null;
+  function startBackground(){
+    if(!cloudEnabled)return;
+    const account=state.accountId||'browser';
+    if(backgroundStartedFor===account)return;
+    backgroundStartedFor=account;
+    const ids=state.projects.filter(needsWorkCover).map(project=>({id:project.id,updatedAt:project.updatedAt}));
+    ids.forEach(({id,updatedAt},index)=>{
+      // The queue remains sequential; timers only pace scheduling.
+      setTimeout(()=>{
+        if((state.accountId||'browser')!==account)return;
+        enqueue(id,updatedAt);
+      },4000+index*2200);
     });
   }
 
@@ -86,5 +105,5 @@ export function createWorkCoverBackfill({db,state,cloudEnabled=false,onError=con
     return ()=>{stopped=true;observer?.disconnect();if(timer!==null)clearTimeout(timer);};
   }
 
-  return {observe,enqueue,needsWorkCover,whenIdle:()=>chain};
+  return {observe,enqueue,startBackground,needsWorkCover,whenIdle:()=>chain};
 }
