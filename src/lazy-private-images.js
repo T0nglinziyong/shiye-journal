@@ -12,7 +12,7 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
   const touch=(map,id)=>{if(map.has(id)){const v=map.get(id);map.delete(id);map.set(id,v);}};
   // Public thumbnails always prefer the immutable low-resolution COS snapshot.
   // Larger variants are only reused by the editor/cutout paths, never cards.
-  const currentSource=id=>{touch(previewSizes,id);return previews.get(id)||urls.get(id)||'';};
+  const currentSource=id=>{touch(previewSizes,id);return previews.get(id)||'';};
   const identity=source=>{
     for(const [id,url] of urls)if(url===source)return {id,version:version(id),full:true};
     for(const [id,url] of previews)if(url===source)return {id,version:version(id),full:false};
@@ -59,7 +59,7 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
     // multiply them again and fetch unnecessarily large COS variants.
     const full=requested===true,tier=full?0:requested===false?MIN_DISPLAY_EDGE:
       Math.max(MIN_DISPLAY_EDGE,Math.min(MAX_DISPLAY_EDGE,Math.ceil(Number(requested)||MIN_DISPLAY_EDGE)));
-    if(urls.has(id)){touch(sizes,id);return urls.get(id);}
+    if(full&&urls.has(id)){touch(sizes,id);return urls.get(id);}
     if(!full){
       if(tier===360&&previews.has(id)){touch(previewSizes,id);return previews.get(id);}
       const available=[...variants.values()].filter(row=>row.id===id&&row.tier>=tier).sort((a,b)=>a.tier-b.tier)[0];
@@ -72,7 +72,7 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
       const blob=full?(await db.get('blobs',id))?.data:await db.previewBlob(id,tier);
       if(disposed||epoch!==generation||itemVersion!==version(id))return '';
       if(!blob)throw Error('图片尚未同步到可读取位置');
-      if(urls.has(id))return urls.get(id);
+      if(full&&urls.has(id))return urls.get(id);
       const url=URL.createObjectURL(blob);
       if(full){urls.set(id,url);sizes.set(id,blob.size);}
       else if(tier===360){previews.set(id,url);previewSizes.set(id,blob.size);}
