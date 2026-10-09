@@ -29,7 +29,7 @@ try{
   if(result.results.some(r=>!r.ok))throw Error(JSON.stringify(result.results));p.drafts=[result.draft];p.activeDraftID=result.draft.id;
   const session={id:'matching-session-v1',context:{basket:[a.id],coreIDs:[],excludedAssetIDs:[]},variants:[{id:'cache-test-variant',title:'缓存测试方案',status:'completed',progress:'已暂存',project:structuredClone(p),linkedProjectID:p.id}]};
   const db=await new Promise((r,j)=>{const q=indexedDB.open('shiye-pwa-full-v1');q.onsuccess=()=>r(q.result);q.onerror=()=>j(q.error);});
-  await new Promise((r,j)=>{const tx=db.transaction(['assets','blobs','series','projects','meta'],'readwrite');tx.objectStore('assets').put(a);tx.objectStore('blobs').put({id:a.blobId,data});tx.objectStore('series').put({id:a.seriesID,title:'缓存测试系列',introduction:'synthetic',createdAt:now,updatedAt:now});tx.objectStore('projects').put(p);tx.objectStore('meta').put(session);tx.oncomplete=r;tx.onerror=()=>j(tx.error);});db.close();
+  await new Promise((r,j)=>{const tx=db.transaction(['assets','blobs','series','projects'],'readwrite');tx.objectStore('assets').put(a);tx.objectStore('blobs').put({id:a.blobId,data});tx.objectStore('series').put({id:a.seriesID,title:'缓存测试系列',introduction:'synthetic',createdAt:now,updatedAt:now});tx.objectStore('projects').put(p);tx.oncomplete=r;tx.onerror=()=>j(tx.error);});db.close();const local=await new Promise((resolve,reject)=>{const q=indexedDB.open('shiye-device-session-v1',1);q.onupgradeneeded=()=>{if(!q.result.objectStoreNames.contains('records'))q.result.createObjectStore('records',{keyPath:'key'});};q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error);});await new Promise((resolve,reject)=>{const tx=local.transaction('records','readwrite');tx.objectStore('records').put({key:JSON.stringify(['browser','matching-session-v1']),record:session});tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);});local.close();
  })()`);
  await b.command('Page.reload');await b.wait('.series-grid');
  for(const [width,height] of [[390,844],[768,1024],[1024,768],[1440,900]]){
@@ -45,7 +45,7 @@ try{
   await b.click('[data-act="detail"][data-id="cache-test-asset"]');
   await b.click('[data-selection-more]','.selection-more-menu');
   const rows=await b.evaluate(`[...document.querySelectorAll('.selection-more-menu .popover-content>button')].map(b=>{const r=b.querySelector('.selection-action-label').getBoundingClientRect();return {x:r.x,height:b.getBoundingClientRect().height,width:b.getBoundingClientRect().width};})`);
-  assert.equal(rows.length,4);for(const row of rows){assert.ok(Math.abs(row.x-rows[0].x)<1);assert.ok(row.height>=43.9);assert.ok(Math.abs(row.width-rows[0].width)<1);}
+  assert.equal(rows.length,3);for(const row of rows){assert.ok(Math.abs(row.x-rows[0].x)<1);assert.ok(row.height>=43.9);assert.ok(Math.abs(row.width-rows[0].width)<1);}
   const shot=await b.command('Page.captureScreenshot',{format:'png'});await writeFile(`${directory}/${width}x${height}-selection.png`,Buffer.from(shot.data,'base64'));
   await named('.selection-more-menu button','加入系列 ›');await b.wait('.selection-submenu');
   await b.click('[data-selection-more]');assert.equal(await b.evaluate('!!document.querySelector(".selection-more-menu,.selection-submenu")'),false);

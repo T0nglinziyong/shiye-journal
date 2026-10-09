@@ -1,81 +1,114 @@
-import test from 'node:test';import assert from 'node:assert/strict';
+import test from 'node:test';
+import assert from 'node:assert/strict';
 import {matchingSnapshot,restoreMatchingSession,variantDraftProject,createMatchingSession} from '../src/matching-session.js';
+
 const draft={id:'d',canvas:{width:700,height:1000},items:[],textBlocks:[],primitives:[],strokes:[]};
 const work={id:'p',activeDraftID:'d',drafts:[draft]};
-test('matching results survive reload without credentials; interrupted requests do not resume',()=>{
- const state={basket:['a'],aiSettings:{key:'never-store'},matchIntent:'春日'},record=matchingSnapshot(state,[{id:'v',status:'running',project:work}]);
- assert.ok(!JSON.stringify(record).includes('never-store'));const restored={};const variants=restoreMatchingSession(record,restored);assert.deepEqual(restored.basket,['a']);assert.equal(variants[0].status,'interrupted');
+const memoryDevice=()=>{
+  const rows=new Map(),writes=[];
+  return {
+    rows,writes,
+    get:async(account,id)=>structuredClone(rows.get(JSON.stringify([account,id]))||null),
+    put:async(account,record)=>{writes.push([account,record.id]);rows.set(JSON.stringify([account,record.id]),structuredClone(record));},
+    delete:async(account,id)=>rows.delete(JSON.stringify([account,id]))
+  };
+};
+const memoryProjects=()=>{
+  const projects=new Map(),writes=[];
+  return {
+    projects,writes,
+    transaction:async(stores,fn)=>{
+      assert.deepEqual(stores,['projects'],'operational matching state must never enter cloud meta');
+      fn({objectStore:name=>({
+        put:record=>{assert.equal(name,'projects');writes.push(record.id);projects.set(record.id,structuredClone(record));}
+      })});
+    }
+  };
+};
+const context=(state,device,db=memoryProjects())=>({
+  state:{accountId:'test-user',projects:[],route:'library',...state},
+  deviceRecords:device,db,uid:()=>crypto.randomUUID(),esc:String,workCover:()=>'',flushSave:async()=>{},route:()=>{}
 });
-test('old autonomous label is normalized once to the current unspecified label',()=>{
- const state={matchProcessing:'保留完整'};restoreMatchingSession({context:{matchProcessing:'AI 自主加工'},variants:[]},state);assert.equal(state.matchProcessing,'不预设');
+
+test('snapshot excludes credentials and restores editable local controls',()=>{
+ const record=matchingSnapshot({basket:['a'],aiSettings:{key:'never-store'},matchIntent:'春日'},[{id:'v',status:'running',project:work}]);
+ assert.ok(!JSON.stringify(record).includes('never-store'));
+ const restored={};const variants=restoreMatchingSession(record,restored);
+ assert.deepEqual(restored.basket,['a']);assert.equal(variants[0].status,'interrupted');
+ assert.equal(restoreMatchingSession({variants:{}},{}).length,0);
+ assert.equal(restoreMatchingSession({variants:[{id:'bad',status:'completed',project:{id:'p'}}]},{}).length,0);
 });
-test('content policy, original wording and facts survive matching-page reload',()=>{
- const record=matchingSnapshot({matchContentPolicy:'original',matchUserText:'保留原文',matchFacts:'用户确认的事实',basket:[]},[]);
- const restored={matchContentPolicy:'documentary',matchUserText:'',matchFacts:''};
- restoreMatchingSession(record,restored);
- assert.equal(restored.matchContentPolicy,'original');assert.equal(restored.matchUserText,'保留原文');assert.equal(restored.matchFacts,'用户确认的事实');
+test('legacy match label and user-authored facts remain device-local',()=>{
+ const restored={},snapshot=matchingSnapshot({matchContentPolicy:'original',matchFacts:'确实发生',matchUserText:'保留原文'},[]);
+ snapshot.context.matchProcessing='AI 自主加工';
+ restoreMatchingSession(snapshot,restored);
+ assert.equal(restored.matchProcessing,'不预设');assert.equal(restored.matchFacts,'确实发生');
+ assert.equal(restored.matchUserText,'保留原文');
 });
-test('damaged or partial generated plans do not reappear as unopenable shells',()=>{
- const result=restoreMatchingSession({context:{basket:['a']},variants:[{id:'broken',status:'completed',project:{id:'p'}},{id:'good',status:'running',project:work}]},{});
- assert.deepEqual(result.map(v=>v.id),['good']);assert.equal(result[0].status,'interrupted');
- assert.deepEqual(restoreMatchingSession({variants:{}},{}),[]);
+test('matching basket persists only in local IndexedDB adapter, not cloud',async()=>{
+ const device=memoryDevice(),db=memoryProjects(),c=context({basket:['a']},device,db);
+ const session=createMatchingSession(c);
+ await session.restore();
+ c.state.basket=['a','b'];await session.persist();await session.persist();
+ assert.deepEqual((await device.get('test-user','matching-session-v1')).context.basket,['a','b']);
+ assert.deepEqual(db.writes,[],'no cloud project or meta mutation for basket/filter changes');
+ assert.equal(device.writes.length,1,'identical UI snapshots must be de-duplicated');
 });
-test('completed unopened variants become drafts before reset; reload never duplicates them',async()=>{
- const tables={projects:new Map(),meta:new Map()},state={projects:[]};let id=0;
- const db={get:async(s,id)=>tables[s].get(id),put:async(s,r)=>tables[s].set(r.id,structuredClone(r)),transaction:async(_,fn)=>fn({objectStore:s=>({put:r=>tables[s].set(r.id,structuredClone(r))})})};
- tables.meta.set('matching-session-v1',{context:{},variants:[{id:'v',status:'completed',project:work}]});
- const c={state,db,uid:()=>String(++id)},session=createMatchingSession(c);await session.restore();assert.equal(tables.projects.size,1);assert.ok([...tables.projects.values()][0].isDraft);
- state.projects=[];await createMatchingSession(c).restore();assert.equal(tables.projects.size,1);await session.reset();assert.equal(tables.meta.get('matching-session-v1').variants.length,0);assert.equal(tables.projects.size,1);
+test('device sessions are isolated by account, same browser',async()=>{
+ const device=memoryDevice(),shared=memoryProjects();
+ const a=context({accountId:'account-A',basket:[]},device,shared),b=context({accountId:'account-B',basket:[]},device,shared);
+ const sa=createMatchingSession(a);await sa.restore();a.state.basket=['secret'];await sa.persist();
+ const sb=createMatchingSession(b);await sb.restore();
+ assert.deepEqual(b.state.basket,[]);
+ assert.equal(await device.get('account-B','matching-session-v1'),null);
 });
-test('opening a result reuses its draft but never demotes an existing work',()=>{
- const v={project:{id:'source',drafts:[{id:'d'}],isDraft:true}},existing={id:'old',isDraft:true};assert.equal(variantDraftProject(v,existing,'new'),existing);
- const copy=variantDraftProject(v,{id:'work',isDraft:false},'new');assert.equal(copy.id,'new');assert.equal(copy.isDraft,true);assert.equal(v.project.id,'source');
+test('completed results archive as real cloud draft without uploading matching control metadata',async()=>{
+ const device=memoryDevice(),db=memoryProjects();
+ const record=matchingSnapshot({basket:['a']},[{id:'variant',status:'completed',project:work}]);
+ await device.put('test-user',record);
+ const c=context({},device,db),session=createMatchingSession(c);
+ await session.restore();assert.equal(db.projects.size,1);assert.equal(db.writes.length,1);
+ assert.equal([...db.projects.values()][0].isDraft,true);
+ await createMatchingSession(c).restore();assert.equal(db.projects.size,1,'reload must not duplicate archived draft');
+ await session.reset();assert.equal(db.projects.size,1,'reset must retain saved drafts');
+ assert.deepEqual((await device.get('test-user','matching-session-v1')).variants,[]);
 });
-test('re-pairing clears context only after durable staging and rolls back on failure',async()=>{
-  const state={basket:['a'],coreIDs:['a'],matchCore:'a',projects:[]},record={id:'matching-session-v1',context:{basket:['a'],coreIDs:['a'],matchCore:'a'},variants:[]};let fail=true;
-  const db={get:async()=>record,put:async()=>{if(fail)throw Error('quota');}};
-  const session=createMatchingSession({state,db});await session.restore();
-  const clear=()=>{state.basket=[];state.coreIDs=[];state.matchCore=null;};
-  await assert.rejects(session.reset(clear),/quota/);assert.deepEqual(state.basket,['a']);assert.equal(state.matchCore,'a');
-  fail=false;await session.reset(clear);assert.deepEqual(state.basket,[]);assert.equal(state.matchCore,null);
+test('failed local session writes roll back UI state and do not delete cloud works',async()=>{
+ const device=memoryDevice(),db=memoryProjects(),c=context({basket:['a'],coreIDs:['a'],matchCore:'a'},device,db);
+ const session=createMatchingSession(c);await session.restore();let fail=true;
+ const originalPut=device.put;device.put=async(...args)=>{if(fail)throw Error('device quota');return originalPut(...args);};
+ const clear=()=>{c.state.basket=[];c.state.coreIDs=[];c.state.matchCore=null;};
+ await assert.rejects(session.reset(clear),/device quota/);
+ assert.deepEqual(c.state.basket,['a']);assert.equal(c.state.matchCore,'a');
+ fail=false;await session.reset(clear);assert.deepEqual(c.state.basket,[]);
+ assert.equal(db.projects.size,0);
 });
-test('opening or rerendering matching does not stage an unchanged session',async()=>{
- const state={basket:['a'],projects:[]},record=matchingSnapshot(state,[]);let writes=0;
- const db={get:async()=>record,put:async()=>{writes++;throw Error('offline');}};
- const session=createMatchingSession({state,db});
- await session.persist();assert.equal(writes,0);
- await session.restore();await session.persist();await session.persist();assert.equal(writes,0);
- state.basket=['a','b'];await assert.rejects(session.persist(),/offline/);assert.equal(writes,1);
+test('local UI save not triggered merely by reopening the same state',async()=>{
+ const device=memoryDevice(),c=context({basket:['a']},device),session=createMatchingSession(c);
+ await session.persist();assert.equal(device.writes.length,0);
+ await session.restore();await session.persist();await session.persist();
+ assert.equal(device.writes.length,0);
 });
-test('reloading after local outbox discard resets an unsaved basket without saving it again',async()=>{
- const state={basket:[],coreIDs:[],projects:[]};let writes=0;
- const db={get:async()=>undefined,put:async()=>{writes++;}};
- const session=createMatchingSession({state,db});await session.restore();
- state.basket=['unsent'];await session.restore();await session.persist();
- assert.deepEqual(state.basket,[]);assert.equal(writes,0);
+test('variant drafts reuse drafts but never convert published editable work to draft',()=>{
+ const v={project:{id:'source',drafts:[{id:'d'}],isDraft:true}};
+ assert.equal(variantDraftProject(v,{id:'keep',isDraft:true},'new').id,'keep');
+ const copied=variantDraftProject(v,{id:'published',isDraft:false},'new');
+ assert.equal(copied.isDraft,true);assert.equal(copied.id,'new');
 });
-test('I-05: a failed editable import never leaks a variant into a concurrent matching save',async()=>{
- const state={basket:[],projects:[],route:'library'},records=new Map();let release;
- const blocked=new Promise(resolve=>release=resolve);
- const db={get:async(_store,id)=>records.get(id),put:async(_store,record)=>records.set(record.id,structuredClone(record)),transaction:async()=>{await blocked;throw Error('storage transaction failed');}};
- const session=createMatchingSession({state,db,uid:()=>crypto.randomUUID()});await session.restore();
- const incoming={...work,title:'应当拒绝的作品',isDraft:true};
- const attempt=session.importProject(incoming);
- const otherSave=session.persist();
- release();await assert.rejects(attempt,/storage transaction failed/);await otherSave;
- assert.deepEqual(state.projects,[]);
- assert.doesNotMatch(session.render(),/应当拒绝的作品/);
- assert.deepEqual(records.get('matching-session-v1')?.variants||[],[]);
+test('failed cloud import never produces a local matching variant',async()=>{
+ const device=memoryDevice(),db=memoryProjects(),c=context({},device,db),session=createMatchingSession(c);
+ await session.restore();
+ db.transaction=async()=>{throw Error('cloud offline');};
+ await assert.rejects(session.importProject({...work,title:'do-not-stage',isDraft:true}),/cloud offline/);
+ assert.deepEqual(c.state.projects,[]);
+ assert.equal(device.writes.length,0);
 });
-test('web image import links an already staged snapshot without writing a duplicate project',async()=>{
- const state={basket:[],projects:[],route:'library'},records=new Map(),scopes=[];
- const db={get:async(_store,id)=>records.get(id),put:async(_store,record)=>records.set(record.id,structuredClone(record)),transaction:async(stores,fn)=>{scopes.push(stores);fn({objectStore:name=>({put:record=>records.set(record.id,structuredClone(record))})});}};
- const session=createMatchingSession({state,db,uid:()=>crypto.randomUUID(),esc:value=>String(value),workCover:()=>''});await session.restore();
- const snapshot={id:'image-1',title:'生成画面',isSnapshot:true,snapshotBlobId:'blob-1',createdAt:new Date().toISOString()};
+test('already-stored snapshots add only local matching reference, no second cloud write',async()=>{
+ const device=memoryDevice(),db=memoryProjects(),c=context({},device,db),session=createMatchingSession(c);
+ await session.restore();
+ const snapshot={id:'snap',title:'静态画面',isSnapshot:true,snapshotBlobId:'blob',drafts:[draft]};
  await session.importProject(snapshot,{alreadyStored:true});
- assert.deepEqual(scopes,[['meta']]);
- assert.equal(records.has('image-1'),false);
- assert.equal(state.projects[0].id,'image-1');
- assert.match(session.render(),/画面图片已导入快照/);
- assert.doesNotMatch(session.render(),/返回时保留草稿/);
+ assert.deepEqual(db.writes,[]);
+ assert.equal(c.state.projects[0].id,'snap');
+ assert.match(JSON.stringify(await device.get('test-user','matching-session-v1')),/snap/);
 });
