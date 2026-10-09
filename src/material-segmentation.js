@@ -1,4 +1,5 @@
 import {morphGAC} from './browser-active-contours.js';
+import {orientedContourBox} from './material-orientation.js';
 
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 
@@ -32,9 +33,11 @@ function encodeRegion(cv,mask,x0,y0,pageW,pageH,box,extra={}){
   const local=filled.roi(new cv.Rect(b.x,b.y,b.width,b.height)),packed=new cv.Mat();local.copyTo(packed);
   const poly=new cv.Mat();cv.approxPolyDP(contour,poly,Math.max(.7,cv.arcLength(contour,true)*.0015),true);
   const points=Array.from({length:poly.rows},(_,i)=>[poly.data32S[i*2]-b.x,poly.data32S[i*2+1]-b.y]);
+  const orientedBox=orientedContourBox(cv,contour,x0,y0,pageW,pageH,cv.countNonZero(filled));
   const result={
     ...box,...extra,
     x:(x0+b.x)/pageW,y:(y0+b.y)/pageH,w:b.width/pageW,h:b.height/pageH,
+    orientedBox,
     pixels:cv.countNonZero(filled),
     edgeMethod:'morphgac',segmentationMethod:'morphgac',segmentationFailed:false,
     mask:{width:b.width,height:b.height,alpha:new Uint8Array(packed.data),polygons:[points],topologyPreserved:false}
@@ -47,15 +50,10 @@ function roiGeometry(p,box,extraMM=1){
   const pageW=p.width,pageH=p.height,paperWidthMM=p.paperWidthMM||210,paperHeightMM=p.paperHeightMM||297,
     pxPerMM=Math.max(.5,((pageW/paperWidthMM)+(pageH/paperHeightMM))/2),
     extra=pxPerMM*extraMM,
-    center=box.orientedBox,
-    radians=center?center.rotation*Math.PI/180:0,
-    halfWidth=center?center.width*pageW/2:0,halfHeight=center?center.height*pageH/2:0,
-    boundX=center?Math.abs(halfWidth*Math.cos(radians))+Math.abs(halfHeight*Math.sin(radians)):0,
-    boundY=center?Math.abs(halfWidth*Math.sin(radians))+Math.abs(halfHeight*Math.cos(radians)):0,
-    bx0=Math.max(0,center?center.centerX*pageW-boundX-extra:box.x*pageW-extra),
-    by0=Math.max(0,center?center.centerY*pageH-boundY-extra:box.y*pageH-extra),
-    bx1=Math.min(pageW,center?center.centerX*pageW+boundX+extra:(box.x+box.w)*pageW+extra),
-    by1=Math.min(pageH,center?center.centerY*pageH+boundY+extra:(box.y+box.h)*pageH+extra),
+    bx0=Math.max(0,box.x*pageW-extra),
+    by0=Math.max(0,box.y*pageH-extra),
+    bx1=Math.min(pageW,(box.x+box.w)*pageW+extra),
+    by1=Math.min(pageH,(box.y+box.h)*pageH+extra),
     bw=bx1-bx0,bh=by1-by0,
     // ROI padding is only workspace. The level-set initializer itself remains
     // exactly the auto box + 1 mm physical safety band.
@@ -72,14 +70,6 @@ export function insideOrientedBox(px,py,o,outerW,outerH,paddingPx=0){
     localX=dx*Math.cos(angle)+dy*Math.sin(angle),
     localY=-dx*Math.sin(angle)+dy*Math.cos(angle);
   return Math.abs(localX)<=width/2&&Math.abs(localY)<=height/2;
-}
-function orientedSeed(cv,g,box,pageW,pageH){
-  const out=cv.Mat.zeros(g.rh,g.rw,cv.CV_8UC1);
-  const pad=g.pxPerMM*1;
-  for(let y=0;y<g.rh;y++)for(let x=0;x<g.rw;x++)
-    if(insideOrientedBox(x+g.x0+.5,y+g.y0+.5,box.orientedBox,pageW,pageH,pad))
-      out.data[y*g.rw+x]=255;
-  return out;
 }
 function boxMask(cv,g){
   const out=cv.Mat.zeros(g.rh,g.rw,cv.CV_8UC1),
@@ -107,7 +97,9 @@ function segmentMorphGAC(cv,p,box){
   const g=roiGeometry(p,box,1),
     src=cv.matFromArray(p.height,p.width,cv.CV_8UC4,p.pixels),
     roi=src.roi(new cv.Rect(g.x0,g.y0,g.rw,g.rh)),
-    rough=box.orientedBox?orientedSeed(cv,g,box,p.width,p.height):boxMask(cv,g),
+    // The oriented rectangle remains geometry metadata, not a foreground
+    // constraint. A rough pose can omit pale corners of a regular sheet.
+    rough=boxMask(cv,g),
     scale=Math.min(1,180/Math.max(g.rw,g.rh)),
     qw=Math.max(1,Math.round(g.rw*scale)),qh=Math.max(1,Math.round(g.rh*scale)),
     image=new cv.Mat(),seed=new cv.Mat();

@@ -14,7 +14,8 @@ export default async function handler(req,res){
     },
     sign:async({path,method,headers,variant})=>{
       const cos=new COS({SecretId:env.SHIYE_COS_SECRET_ID,SecretKey:env.SHIYE_COS_SECRET_KEY});
-      return new Promise((resolve,reject)=>cos.getObjectUrl({Bucket:env.SHIYE_COS_BUCKET,Region:env.SHIYE_COS_REGION,Key:path,Method:method,Protocol:'https:',Sign:true,Expires:60,Headers:headers,...(variant==='preview360'?{QueryString:'imageMogr2/thumbnail/360x360/format/webp'}:{})},(error,data)=>error?reject(error):resolve(data.Url)));
+      const edge=variant&&Number(/^preview(360|720|1440|2160)$/.exec(variant)?.[1]);
+      return new Promise((resolve,reject)=>cos.getObjectUrl({Bucket:env.SHIYE_COS_BUCKET,Region:env.SHIYE_COS_REGION,Key:path,Method:method,Protocol:'https:',Sign:true,Expires:60,Headers:headers,...(edge?{QueryString:`imageMogr2/thumbnail/${edge}x${edge}>/format/webp/quality/90`}:{})},(error,data)=>error?reject(error):resolve(data.Url)));
     },
   });
   const result=await run({method:req.method,origin:req.headers.origin,authorization:req.headers.authorization,body:req.body});

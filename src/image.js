@@ -2,16 +2,24 @@ import {segmentPaperMaterials} from './paper-analysis.js';
 import {visionTask} from './vision-runtime.js';
 import {recognitionProfile} from './recognition-profiles.js';
 import {analysisPixels} from './recognition-raster.js';
+import {neutralizePaperChroma} from './paper-chroma-preprocess.js';
 // Analyze a small copy, but re-extract accepted cuts from the full source.
 export async function detectPaperCandidates(bitmap,box,smallestMM=6,{
-  balanceLight=false,paperWidthMM=210,paperHeightMM=297,
+  balanceLight=false,paperRectified=false,paperWidthMM=210,paperHeightMM=297,
   recognition='auto',recognitionPixels=900,
-  recognitionPreprocess={},recognitionPostprocess={},onProgress=()=>{},onDiagnostic=()=>{}
+  recognitionPreprocess={},recognitionPostprocess={},mergeSharedCarrier=true,onProgress=()=>{},onDiagnostic=()=>{}
 }={}){
   const profile=recognitionProfile(recognition,recognitionPixels);
+  // A single discovery scale keeps material identities and candidate geometry
+  // stable when the user raises the boundary-refinement resolution. The final
+  // cutout is still sampled from the original bitmap in cropBitmap.
+  const discoveryRatio=Math.min(1,900/Math.max(bitmap.width*box.w,bitmap.height*box.h));
+  const dw=Math.max(1,Math.round(bitmap.width*box.w*discoveryRatio)),dh=Math.max(1,Math.round(bitmap.height*box.h*discoveryRatio));
+  const discoveryPixels=await analysisPixels(bitmap,box,dw,dh);
+  const discoveryFrame={data:paperRectified?neutralizePaperChroma(discoveryPixels,dw,dh):discoveryPixels,width:dw,height:dh};
   const ratio=Math.min(1,profile.analysisMaxDimension/Math.max(bitmap.width*box.w,bitmap.height*box.h));
   const w=Math.max(1,Math.round(bitmap.width*box.w*ratio)),h=Math.max(1,Math.round(bitmap.height*box.h*ratio));
-  const frame={data:await analysisPixels(bitmap,box,w,h),width:w,height:h},
+  const frame={data:w===dw&&h===dh?discoveryPixels:await analysisPixels(bitmap,box,w,h),width:w,height:h},
     preprocess={
       illumination:balanceLight===true&&recognitionPreprocess.illumination===true,
       denoise:recognitionPreprocess.denoise===true,
@@ -27,11 +35,11 @@ export async function detectPaperCandidates(bitmap,box,smallestMM=6,{
   // Box discovery always uses the original rectified RGB. Real-case ablation
   // showed that illumination/CLAHE/denoise can make identity discovery worse.
   // Optional preprocessing therefore affects boundary segmentation only.
-  const candidates=await segmentPaperMaterials(frame,{
-    smallestMM,paperWidthMM,paperHeightMM,sourcePixels:frame.data,chromaEdges:preprocess.chromaEdges
+  const candidates=await segmentPaperMaterials(discoveryFrame,{
+    smallestMM,paperWidthMM,paperHeightMM,sourcePixels:discoveryFrame.data,chromaEdges:preprocess.chromaEdges,mergeSharedCarrier
   });
   onDiagnostic({phase:'boxes',count:candidates.length,
-    dimensions:[w,h],mode:profile.mode,smallestMM,
+    dimensions:[dw,dh],refinementDimensions:[w,h],mode:profile.mode,smallestMM,
     boxes:candidates.map(item=>({x:item.x,y:item.y,w:item.w,h:item.h,
       evidenceDensity:item.evidenceDensity,seedDensity:item.seedDensity,
       fillRatio:item.fillRatio,absorbedFragments:item.absorbedFragments}))});
@@ -41,7 +49,7 @@ export async function detectPaperCandidates(bitmap,box,smallestMM=6,{
         frame:segmentationFrame,
         sourceFrame:frame,
         width:w,height:h,
-        paperWidthMM,paperHeightMM,
+        paperWidthMM,paperHeightMM,mergeSharedCarrier,
         preprocess,
         postprocess:recognitionPostprocess,
         onProgress

@@ -71,13 +71,13 @@ test('warm preview lookup is synchronous and switching routes does not fetch aga
   const next=await loader.load('m');assert.notEqual(next,source);assert.ok(reads>=2);
  }finally{loader.dispose();env.close();}
 });
-test('returning to the editor upgrades a warm thumbnail to its full image',async()=>{
- const env=environment();let originals=0,full=false;const root=document.createElement('div');document.body.append(root);
- const loader=mountPrivateImages({root,db:{previewBlob:async()=>new Blob(['small']),get:async()=>{originals++;return {data:new Blob(['large'])};}},urls:new Map(),fullView:()=>full,onError:()=>{}});
+test('returning to the editor upgrades a warm thumbnail to a size-based display variant',async()=>{
+ const env=environment();let originals=0,display=0,full=false;const root=document.createElement('div');document.body.append(root);
+ const loader=mountPrivateImages({root,db:{previewBlob:async(_id,pixels)=>{if(pixels>360){display++;return new Blob(['display']);}return new Blob(['small']);},get:async()=>{originals++;return {data:new Blob(['large'])};}},urls:new Map(),fullView:()=>full,onError:()=>{}});
  try{
   const preview=await loader.load('m');full=true;root.innerHTML='<img src="'+preview+'">';
-  await until(()=>originals===1&&root.querySelector('img').getAttribute('src')!==preview);
-  assert.equal(loader.stats().originals,1);assert.equal(root.querySelector('img').dataset.privateImageId,'m');
+  await until(()=>display===1&&root.querySelector('img').getAttribute('src')!==preview);
+  assert.equal(originals,0);assert.equal(loader.stats().displayVariants,1);assert.equal(root.querySelector('img').dataset.privateImageId,'m');
  }finally{loader.dispose();env.close();}
 });
 test('whole invalidation discards in-flight reads even before they have a cached URL',async()=>{
@@ -93,4 +93,14 @@ test('preview retention is bounded and decoded node cache does not steal owned c
   root.innerHTML='<div data-preview-cache-owned><img src="a"></div>';const img=root.querySelector('img');Object.defineProperties(img,{complete:{value:true},naturalWidth:{value:10},naturalHeight:{value:10}});
   const nodes=new ImageNodeCache();nodes.remember([img]);assert.equal(nodes.pixels,0);nodes.dispose();
  }finally{loader.dispose();env.close();}
+});
+
+test('works list keeps its decoded sheet when navigating away and back',()=>{
+ const env=environment();try{
+  const view=document.createElement('div'),state={accountId:'a',route:'works'};document.body.append(view);
+  const markup='<div class="works-grid"><button data-act="open-project" data-id="p"><div class="thumb-sheet"><img src="data:image/png;base64,AA==" alt="cover"></div></button></div>';
+  view.innerHTML=markup;reusePagePreviews({view,state});const first=view.querySelector('.thumb-sheet');
+  view.innerHTML='';view.innerHTML=markup;reusePagePreviews({view,state});
+  assert.equal(view.querySelector('.thumb-sheet'),first);
+ }finally{env.close();}
 });

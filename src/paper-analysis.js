@@ -9,7 +9,7 @@ import {buildForegroundEvidence} from './foreground-evidence.js';
 //
 // No boundary segmenter is allowed to create/delete/merge identities here.
 export async function segmentPaperMaterials({data,width:w,height:h},{
-  smallestMM=6,paperWidthMM=210,paperHeightMM=297,sourcePixels=data,chromaEdges=true
+  smallestMM=6,paperWidthMM=210,paperHeightMM=297,sourcePixels=data,chromaEdges=true,mergeSharedCarrier=true
 }={}){
   // Real-case ablation showed that box discovery is more accurate and roughly
   // twice as fast on the original rectified RGB than on illumination/CLAHE/
@@ -23,7 +23,7 @@ export async function segmentPaperMaterials({data,width:w,height:h},{
     mask:evidence.mask,
     evidence:evidence.evidence,
     foregroundSeeds:evidence.foregroundSeeds,
-    width:w,height:h,smallestMM,paperWidthMM,paperHeightMM
+    width:w,height:h,smallestMM,paperWidthMM,paperHeightMM,mergeSharedCarrier
   });
 
   return boxes.sort((a,b)=>a.y-b.y||a.x-b.x).slice(0,48);

@@ -41,7 +41,7 @@ export function reusePagePreviews({view,state}) {
   if(!view||!validRoutes.has(state.route))return;
   const account=state.accountId||'browser';
   if(scope!==account){covers.clear();scope=account;}
-  for(const fresh of [...view.querySelectorAll('.series-cover,.thumb-inner')]){
+  for(const fresh of [...view.querySelectorAll('.series-cover,.thumb-inner,.works-grid .thumb-sheet')]){
     const holder=fresh.closest('[data-act="series-detail"],[data-act="open-project"],[data-variant]');
     if(!holder)continue;
     const id=holder.dataset.variant||holder.dataset.id;

@@ -21,7 +21,7 @@ export function createTicketHandler({ready,origin,origins,authenticate,sign}){
         if(/^journal-presets\/source\/(?:[1-9]|[1-6][0-9]|70)\.jpg$/.test(row.path))return row.variant===undefined&&(row.method==='GET'||admin&&row.method==='PUT'&&row.type==='image/jpeg');
         const slash=row.path.indexOf('/'),target=slash<0?'':row.path.slice(0,slash),name=row.path.slice(slash+1);
         if(!leaf.test(name)||!(target===owner||admin&&row.method==='GET'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(target)))return false;
-        return (row.variant===undefined||row.variant==='preview360'&&row.method==='GET'&&/^[a-f0-9]{64}$/.test(name))&&(row.method!=='PUT'||target===owner&&typeof row.type==='string'&&/^(image\/(png|jpeg|webp)|application\/(json|gzip|octet-stream))$/.test(row.type));
+        return (row.variant===undefined||['preview360','preview720','preview1440','preview2160'].includes(row.variant)&&row.method==='GET'&&/^[a-f0-9]{64}$/.test(name))&&(row.method!=='PUT'||target===owner&&typeof row.type==='string'&&/^(image\/(png|jpeg|webp)|application\/(json|gzip|octet-stream))$/.test(row.type));
       });
       if(!valid)return fail(403,'对象路径或操作不允许');
       const tickets=await Promise.all(rows.map(async row=>{

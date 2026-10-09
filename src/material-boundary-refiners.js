@@ -1,4 +1,5 @@
 import {morphGAC} from './browser-active-contours.js';
+import {orientedContourBox} from './material-orientation.js';
 
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const contourPoints=c=>Array.from({length:c.rows},(_,i)=>[c.data32S[i*2],c.data32S[i*2+1]]);
@@ -274,8 +275,10 @@ function regionFromMask(cv,mask,globalX,globalY,pageW,pageH,method,confidence,el
     // free-form masks untouched. The padding lets the outside edge fade out.
     cv.GaussianBlur(local,packed,new cv.Size(3,3),.58,.58,cv.BORDER_CONSTANT);
   }else local.copyTo(packed);
-  const poly=new cv.Mat();cv.approxPolyDP(found.contour,poly,Math.max(.7,cv.arcLength(found.contour,true)*.0015),true);const points=contourPoints(poly).map(([px,py])=>[px-b.x,py-b.y]);found.contour.delete();poly.delete();local.delete();
-  const result={x:(globalX+b.x)/pageW,y:(globalY+b.y)/pageH,w:b.width/pageW,h:b.height/pageH,pixels:cv.countNonZero(mask),edgeMethod:method,boundaryConfidence:confidence,refinementMS:elapsed,mask:{width:b.width,height:b.height,alpha:new Uint8Array(packed.data),polygons:[points],topologyPreserved:true}};
+  const poly=new cv.Mat();cv.approxPolyDP(found.contour,poly,Math.max(.7,cv.arcLength(found.contour,true)*.0015),true);const points=contourPoints(poly).map(([px,py])=>[px-b.x,py-b.y]);
+  const orientedBox=orientedContourBox(cv,found.contour,globalX,globalY,pageW,pageH,found.area,shapeModel);
+  found.contour.delete();poly.delete();local.delete();
+  const result={x:(globalX+b.x)/pageW,y:(globalY+b.y)/pageH,w:b.width/pageW,h:b.height/pageH,orientedBox,pixels:cv.countNonZero(mask),edgeMethod:method,boundaryConfidence:confidence,refinementMS:elapsed,mask:{width:b.width,height:b.height,alpha:new Uint8Array(packed.data),polygons:[points],topologyPreserved:true}};
   packed.delete();return result;
 }
 

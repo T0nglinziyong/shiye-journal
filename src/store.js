@@ -24,7 +24,7 @@ export const flushProjects=()=>cloudEnabled?cloudFlushProjects():Promise.resolve
 export const completeProject=record=>cloudEnabled?cloudProjectDocument(record):Promise.resolve(record);
 export const cachedCollections=()=>cloudEnabled?cloudCachedCollections():Promise.resolve(null);
 export const refreshCloud=()=>cloudEnabled?cloudRefresh():Promise.resolve(null);
-export const previewBlob=id=>cloudEnabled?cloudPreview(id):get('blobs',id).then(r=>r?.data);
+export const previewBlob=(id,pixels=360)=>cloudEnabled?cloudPreview(id,pixels):get('blobs',id).then(r=>r?.data);
 const DB='shiye-pwa-full-v1';
 const STORES=['assets','blobs','series','projects','meta','trash'];
 let connection;
