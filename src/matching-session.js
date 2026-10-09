@@ -1,3 +1,4 @@
+import {localDeviceRecords} from './local-device-records.js';
 import {assetSourceRevision} from './material-anatomy.js';
 import {usableProjectSnapshot} from './project-outbox-recovery.js';
 import {selectJournalReferenceCases,loadJournalReferenceCases} from './journal-reference-catalog.js';
@@ -22,14 +23,15 @@ export function variantDraftProject(variant,existing,newID){
 }
 export function createMatchingSession(c){
  let variants=[],queue=Promise.resolve(),controller=null,opening=false,lastSnapshot,ready=false;
+ const device=c.deviceRecords||localDeviceRecords,account=()=>c.state.accountId||'browser';
  const covers=createMatchingCoverCache(c);
  const defaults=matchingSnapshot(c.state,[]).context;
- const save=()=>{if(!ready)return queue;const task=queue.then(async()=>{const record=matchingSnapshot(c.state,variants),snapshot=JSON.stringify(record);if(snapshot===lastSnapshot)return;await c.db.put('meta',record);lastSnapshot=snapshot;});queue=task.then(()=>{},()=>{});return task;};
- const archiveCompleted=async()=>{await queue;for(const v of variants.filter(v=>v.status==='completed')){if(v.linkedProjectID&&c.state.projects.some(p=>p.id===v.linkedProjectID))continue;const p=variantDraftProject(v,null,v.linkedProjectID||c.uid());v.linkedProjectID=p.id;await c.db.transaction(['projects','meta'],tx=>{tx.objectStore('projects').put(p);tx.objectStore('meta').put(matchingSnapshot(c.state,variants));});c.state.projects.push(p);}};
+ const save=()=>{if(!ready)return queue;const task=queue.then(async()=>{const record=matchingSnapshot(c.state,variants),snapshot=JSON.stringify(record);if(snapshot===lastSnapshot)return;await device.put(account(),record);lastSnapshot=snapshot;});queue=task.then(()=>{},()=>{});return task;};
+ const archiveCompleted=async()=>{await queue;for(const v of variants.filter(v=>v.status==='completed')){if(v.linkedProjectID&&c.state.projects.some(p=>p.id===v.linkedProjectID))continue;const p=variantDraftProject(v,null,v.linkedProjectID||c.uid());v.linkedProjectID=p.id;await c.db.transaction(['projects'],tx=>tx.objectStore('projects').put(p));c.state.projects.push(p);await device.put(account(),matchingSnapshot(c.state,variants));}};
  const markup=()=>`<h2>版本方案</h2><p>完成方案自动保存为草稿或快照；“重新搭配”只清空这里的方案，不删除已保存作品。</p><div class="match-variant-grid">${variants.map(v=>`<article class="match-variant" data-variant="${c.esc(v.id)}"><button class="match-result" data-act="match-open-result" data-id="${c.esc(v.id)}" ${v.status==='running'?'disabled':''}><div class="match-cover-preview" data-match-raster="${c.esc(v.id)}">${covers.render(v.project)}</div><strong>${c.esc(v.title)}</strong></button><pre class="match-progress" aria-live="polite">${c.esc(v.progress)}</pre>${v.status==='running'?'<button class="btn" data-act="match-stop">停止创作</button>':v.project.deliveryMode==='zip'?`<button class="btn" data-act="download-project-zip" data-id="${c.esc(v.linkedProjectID||v.project.id)}">下载可编辑 ZIP</button>`:''}</article>`).join('')||'<p>尚未生成方案。</p>'}</div>`;
  const update=()=>{if(c.state.route!=='matching')return;const el=document.querySelector('.match-previews');if(el){el.innerHTML=markup();reusePagePreviews({view:el,state:c.state});covers.hydrate(el,variants);el.onclick=e=>{const b=e.target.closest('[data-act]');if(b)c.handle(b.dataset.act,b.dataset.id);};c.mountIcons?.(el);}};
  return {
-  async restore({archive=true}={}){covers.clear();const record=await c.db.get('meta',ID);for(const key of KEYS)if(defaults[key]!==undefined)c.state[key]=structuredClone(defaults[key]);variants=restoreMatchingSession(record,c.state);if(archive)await archiveCompleted();lastSnapshot=JSON.stringify(matchingSnapshot(c.state,variants));ready=true;},
+  async restore({archive=true}={}){covers.clear();const record=await device.get(account(),ID);for(const key of KEYS)if(defaults[key]!==undefined)c.state[key]=structuredClone(defaults[key]);variants=restoreMatchingSession(record,c.state);if(archive)await archiveCompleted();lastSnapshot=JSON.stringify(matchingSnapshot(c.state,variants));ready=true;},
   render(){return `<section class="panel match-previews">${markup()}</section>`;},
   hydrate(root){covers.hydrate(root,variants);},
   cacheStats:covers.stats,
@@ -40,7 +42,8 @@ export function createMatchingSession(c){
    const v={id:c.uid(),title:p.title,createdAt:new Date().toISOString(),status:'completed',progress:reviewProgress,project:structuredClone(p),linkedProjectID:p.id};
    const task=queue.then(async()=>{
     const next=[v,...variants],record=matchingSnapshot(c.state,next);
-    await c.db.transaction(alreadyStored?['meta']:['projects','meta'],tx=>{if(!alreadyStored)tx.objectStore('projects').put(p);tx.objectStore('meta').put(record);});
+    if(!alreadyStored)await c.db.transaction(['projects'],tx=>tx.objectStore('projects').put(p));
+    await device.put(account(),record);
     variants=next;lastSnapshot=JSON.stringify(record);c.state.projects.push(p);update();return v;
    });
    queue=task.then(()=>{},()=>{});
@@ -49,7 +52,9 @@ export function createMatchingSession(c){
   async reflectProject(p){const v=variants.find(item=>item.linkedProjectID===p?.id);if(!v)return;v.project=structuredClone(p);v.title=p.title;await save();update();},
   stop(){controller?.abort(Error('已停止创作，成功步骤已保留'));},
   async reset(clearContext=()=>{}){await archiveCompleted();const before=matchingSnapshot(c.state,variants),saved=variants;clearContext();variants=[];try{await save();covers.clear();}catch(error){variants=saved;restoreMatchingSession(before,c.state);throw error;}controller?.abort(Error('已重新搭配'));},
-  async open(id){const v=variants.find(x=>x.id===id);if(!v||v.status==='running'||opening)return;opening=true;try{await queue;await c.flushSave();const existing=c.state.projects.find(p=>p.id===v.linkedProjectID);if(v.project.isSnapshot){c.state.previewProjectID=existing?.id||v.project.id;c.route('projectPreview');return;}const p=variantDraftProject(v,existing,c.uid());v.linkedProjectID=p.id;await c.db.transaction(['projects','meta'],tx=>{tx.objectStore('projects').put(p);tx.objectStore('meta').put(matchingSnapshot(c.state,variants));});if(!existing?.isDraft)c.state.projects.push(p);c.state.activeProject=p;c.state.activeDraft=p.activeDraftID;c.state.offlineEditingReturnID=p.offlineBundleId?p.id:null;c.state.selected=null;c.state.undo=[];c.state.redo=[];c.state.tool='select';c.state.zoom=1;c.route('editor');}finally{opening=false;}},
+  async open(id){const v=variants.find(x=>x.id===id);if(!v||v.status==='running'||opening)return;opening=true;try{await queue;await c.flushSave();const existing=c.state.projects.find(p=>p.id===v.linkedProjectID);if(v.project.isSnapshot){c.state.previewProjectID=existing?.id||v.project.id;c.route('projectPreview');return;}const p=variantDraftProject(v,existing,c.uid());v.linkedProjectID=p.id;await c.db.transaction(['projects'],tx=>tx.objectStore('projects').put(p));
+    await device.put(account(),matchingSnapshot(c.state,variants));
+    if(!existing?.isDraft)c.state.projects.push(p);c.state.activeProject=p;c.state.activeDraft=p.activeDraftID;c.state.offlineEditingReturnID=p.offlineBundleId?p.id:null;c.state.selected=null;c.state.undo=[];c.state.redo=[];c.state.tool='select';c.state.zoom=1;c.route('editor');}finally{opening=false;}},
   async generate(){
    if(controller){c.toast('已有方案正在创作，请先停止或等待完成');return;}
    const cfg=structuredClone(c.state.aiSettings);if(cfg.deliveryMode!=='image'&&!cfg.key)throw Error('请先在设置 → AI 与创作中保存 API 密钥');
