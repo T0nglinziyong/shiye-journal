@@ -29,12 +29,12 @@ try{
     await command('Emulation.setDeviceMetricsOverride',{width,height,
       deviceScaleFactor:width===390||width===768?2:1,mobile:width<700});
     await sleep(80);
-    const header=await evaluate('(()=>({actions:[...document.querySelectorAll(".swift-editor-head .actions > button:not([hidden])")].filter(b=>getComputedStyle(b).display!=="none").map(b=>b.getAttribute("aria-label")||b.textContent.trim()),saved:document.querySelectorAll(".swift-editor-head .swift-auto-saved").length,utilityVisible:getComputedStyle(document.querySelector(".canvas-editor-utilities")).display!=="none",tools:document.querySelectorAll(".canvas-editor-utilities > button").length,canvas:!!document.querySelector("#canvas-page"),overflow:document.documentElement.scrollWidth-innerWidth}))()');
-    const headerExpected=width>=900?['完成','导出作品']:['历史记录','撤销','重做','完成','导出作品'];
-    assert.deepEqual(header.actions,headerExpected,'Header must match approved 28509aa9 on phone/tablet: '+JSON.stringify({width,header}));
+    const header=await evaluate('(()=>({actions:[...document.querySelectorAll(".swift-editor-head .actions > button:not([hidden])")].filter(b=>getComputedStyle(b).display!=="none").map(b=>b.getAttribute("aria-label")||b.textContent.trim()),saved:document.querySelectorAll(".swift-editor-head .swift-auto-saved").length,duplicateUtilities:document.querySelectorAll(".canvas-editor-utilities").length,toolbarParts:document.querySelector(".swift-editor-toolbar").children.length,canvas:!!document.querySelector("#canvas-page"),overflow:document.documentElement.scrollWidth-innerWidth}))()');
+    assert.deepEqual(header.actions,['历史记录','撤销','重做','完成','导出作品'],
+      'All displays must match 28509aa9, never relocate tools: '+JSON.stringify({width,header}));
     assert.equal(header.saved,1,'28509aa9 retained auto-save status node');
-    assert.equal(header.utilityVisible,width>=900,'History controls change location only, never functionality');
-    assert.equal(header.tools,3);
+    assert.equal(header.duplicateUtilities,0,'Do not duplicate history controls in a second toolbar');
+    assert.equal(header.toolbarParts,2);
     assert.equal(header.canvas,true);
     assert.ok(header.overflow<=1,JSON.stringify({width,header}));
     await click('[data-val="material"]','.swift-material-picker');
