@@ -122,7 +122,23 @@ const projectSync=createProjectSync({
     const latest=await version();
     return await canRebaseUnchangedKeys({client:cloudClient(),owner:await identity(),before:baseRevision,after:latest,operations:[{store:'projects',action:'put',item:record}]})?'rebase':'conflict';
   },
-  onCommitted:(record,committedRevision)=>{if(record.__cloudSessionId)editorBases.set(record.__cloudSessionId,committedRevision);},
+  onConflict:async record=>{
+    if(!record?.id||!usableProjectSnapshot(record))return null;
+    const now=new Date().toISOString(),originalID=record.id;
+    const copy={...structuredClone(record),id:crypto.randomUUID(),
+      title:(record.title||'未命名作品')+'（同步冲突副本）',
+      isDraft:true,updatedAt:now,lastOpenedAt:now,conflictOriginProjectID:originalID};
+    delete copy.__cloudSessionId;delete copy.__cloudBaseRevision;
+    return copy;
+  },
+  onCommitted:(record,committedRevision)=>{
+    if(record.__cloudSessionId)editorBases.set(record.__cloudSessionId,committedRevision);
+    if(record.conflictOriginProjectID&&typeof window!=='undefined'){
+      window.dispatchEvent(new CustomEvent('shiye-project-conflict-copy',{detail:{
+        id:record.id,origin:record.conflictOriginProjectID,title:record.title
+      }}));
+    }
+  },
   onStatus:reportSync,
   runExclusive:withAccountSyncLock,
 });
