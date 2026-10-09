@@ -32,6 +32,9 @@ test('phone header retains history, undo and redo while desktop alone relocates 
   assert.match(css,/@media\(min-width:900px\)[\s\S]*\.editing \.swift-editor-head \.mobile-editor-head-only\{display:none!important\}/);
   assert.match(css,/@media\(min-width:900px\)[\s\S]*\.canvas-editor-utilities/);
   assert.match(css,/\.canvas-editor-utilities\{display:none\}/);
+  const popover=await read('src/swift-popover.js');
+  assert.match(popover,/if\(innerWidth<900\)\{/);
+  assert.match(popover,/const r = anchor\.getBoundingClientRect\(\); surface\.style\.maxHeight/);
 });
 test('trash selection uses regular three-column buttons and only one wide danger action',async()=>{
   const css=await read('src/selection-menu.css');
