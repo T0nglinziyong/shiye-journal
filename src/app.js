@@ -926,7 +926,7 @@ async function refresh({background=false,onlyChanged=false}={}){const sync=await
   await restorePendingProjects();
   if(cloudEnabled&&state.route==='editor'&&state.activeProject){
     const stillExists=state.projects.some(project=>project.id===state.activeProject.id);
-    if(!stillExists&&!state.activeProject.__remoteDeleted){
+    if(!stillExists&&!dirtyProjects.has(state.activeProject.id)&&savingProjects===0&&!state.activeProject.__remoteDeleted){
       state.activeProject.__remoteDeleted=true;
       toast('当前作品已在另一台设备删除。需要保留本机修改时，请先导出可编辑 ZIP。');
     }else if(stillExists&&state.activeProject.__remoteDeleted)delete state.activeProject.__remoteDeleted;
