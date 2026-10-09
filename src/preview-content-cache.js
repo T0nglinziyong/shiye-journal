@@ -52,7 +52,7 @@ export function reusePagePreviews({view,state}) {
     if(saved&&!saved.isConnected){
       // A first visit may have cached this sheet before its Blob URL arrived.
       // Never replace a currently decoded image with an unloaded old node.
-      const decoded=el=>[...el.querySelectorAll('img')].filter(img=>img.complete&&img.naturalWidth>1).length;
+      const decoded=el=>[...el.querySelectorAll('img')].filter(img=>(img.complete&&img.naturalWidth>1)||!!cachedImageIdentity(img.getAttribute('src')||'')).length;
       if(decoded(saved)>=decoded(fresh)){
         fresh.replaceWith(saved);saved.dataset.previewCacheOwned='';
         continue;
