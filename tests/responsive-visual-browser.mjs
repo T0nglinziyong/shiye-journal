@@ -26,12 +26,22 @@ async function screenshot(name,width,height){
 async function verifyTray(expected){
   const rects=await evaluate('(()=>{const tray=document.querySelector(".library-management-tray:not([hidden])");'+
     'if(!tray)return null;return [...tray.querySelectorAll(":scope > button")].map(b=>{'+
-    'const r=b.getBoundingClientRect();return {label:b.textContent.trim(),width:r.width,height:r.height}})})()');
+    'const r=b.getBoundingClientRect(),icon=b.querySelector(":scope > svg.shiye-icon"),'+
+    'label=b.querySelector(":scope > .selection-action-label"),i=icon?.getBoundingClientRect(),'+
+    't=label?.getBoundingClientRect();return {label:b.textContent.trim(),width:r.width,height:r.height,'+
+    'icon:!!i,iconWidth:i?.width,iconInside:!i||(i.left>=r.left-1&&i.right<=r.right+1&&i.top>=r.top-1&&i.bottom<=r.bottom+1),'+
+    'textInside:!!t&&t.left>=r.left-1&&t.right<=r.right+1,'+
+    'noCollision:!i||!t||i.right<=t.left+1,overflow:b.scrollWidth-b.clientWidth}})})()');
   assert.ok(rects,'selection tray not visible');
   assert.equal(rects.length,expected,'selection count');
   for(const rect of rects){
     assert.ok(Math.abs(rect.width-rects[0].width)<=1.1,JSON.stringify(rects));
     assert.ok(Math.abs(rect.height-36)<=1.1,JSON.stringify(rects));
+    assert.ok(rect.icon,'All batch controls must have a visible icon: '+JSON.stringify(rects));
+    assert.ok(rect.iconWidth<=18,'Batch icon too large: '+JSON.stringify(rects));
+    assert.ok(rect.iconInside&&rect.textInside&&rect.noCollision,
+      'Batch icon or text is outside its button or overlapping: '+JSON.stringify(rects));
+    assert.ok(rect.overflow<=1,'Batch button content overflows: '+JSON.stringify(rects));
   }
   assert.ok(rects.some(row=>row.label==='更多操作'));
   assert.ok(rects.some(row=>row.label.startsWith('删除')));
