@@ -1455,17 +1455,24 @@ window.addEventListener('shiye-cloud-superseded',()=>{
   void backgroundCloudCheck({force:true});
 });
 window.addEventListener('shiye-project-sync',event=>{const {pending,error}=event.detail;syncDisplay.pending=pending;syncDisplay.error=error;syncDisplay.checking=false;if(!dirtyProjects.size&&!savingProjects)syncDisplay.localPending=false;updateSyncIndicator();if(error){saveStatus('待同步 · 修改已保留在本机');const message=error.name==='AbortError'||/abort|timed? ?out/i.test(error.message||'')?'网络请求中断，本机修改已保留，将自动重试同步':error.message||'云端暂不可用，本机修改已保留，将自动重试';if(lastSyncError!==message)toast(message);lastSyncError=message;}else{lastSyncError=null;saveStatus(pending?'修改已暂存 · 后台同步中':'已保存到云端');privateImages.retryMissing();}});
-let cloudCheck,cloudCheckAt=0,cloudSessionReady=false;
+let cloudCheck,cloudCheckAt=0,cloudSessionReady=false,cloudCheckAgain=false;
 let syncPausedByUser=false;
 const cloudResumer=createSyncResumer({flush:()=>db.flushProjects({background:true}),canRun:()=>cloudEnabled&&cloudSessionReady&&navigator.onLine!==false,onError:error=>console.warn('后台同步待重试',error?.message)});
 function backgroundCloudCheck({force=false}={}){
   if(!cloudEnabled||!shouldPullCloudForRoute(state.route)||
-     document.visibilityState==='hidden'||cloudCheck||
-     !force&&Date.now()-cloudCheckAt<15000)return;
+     document.visibilityState==='hidden')return;
+  if(cloudCheck){if(force)cloudCheckAgain=true;return;}
+  if(!force&&Date.now()-cloudCheckAt<15000)return;
   cloudCheckAt=Date.now();
   cloudCheck=refresh({background:true,onlyChanged:true})
     .catch(error=>console.warn('后台版本检查失败；保留已验证缓存',error))
-    .finally(()=>{cloudCheck=null;});
+    .finally(()=>{
+      cloudCheck=null;
+      if(cloudCheckAgain){
+        cloudCheckAgain=false;
+        queueMicrotask(()=>backgroundCloudCheck({force:true}));
+      }
+    });
 }
 // Cloud sync is bidirectional: poll lightweight version metadata while the
 // document remains visible, not only when focus/online events happen.
