@@ -80,14 +80,16 @@ const channel=()=>{
   if(!owner)return null;
   const name='shiye-outbox:'+namespace+':'+owner;
   outboxChannel=new BroadcastChannel(name);
+  // Outbox and committed-revision signals are tab-local optimizations:
+  // Web Locks and versioned server CAS remain the source of truth. A successful
+  // delete should become visible in another open tab immediately, not only on
+  // the next remote poll (other physical devices still poll every 15 seconds).
   outboxChannel.onmessage=event=>{
-    if(event.data?.source!==sessionTag||event.data?.type!=='pending')return;
-  };
-  // Remote tab notifications request a background refresh. Every actual cloud
-  // mutation is protected by Web Locks and server-side revision CAS.
-  outboxChannel.onmessage=event=>{
-    if(!event.data||event.data.source===sessionTag||event.data.type!=='pending')return;
-    void Promise.all([importSync.resume(),projectSync.resume()]).catch(()=>{});
+    const msg=event.data;
+    if(!msg||msg.source===sessionTag)return;
+    if(msg.type==='pending')
+      void Promise.all([importSync.resume(),projectSync.resume()]).catch(()=>{});
+    if(msg.type==='committed')notifyCloudSuperseded();
   };
   return outboxChannel;
 };
@@ -411,6 +413,7 @@ function cloudTransaction(names,fn,operationID=crypto.randomUUID()){
     }
     await projectSync.advance(previous,revision,operations);
     await importSync.advance(previous,revision,operations);
+    channel()?.postMessage({source:sessionTag,type:'committed',revision});
     }finally{writesInFlight--;reportSync();}
   };
   const pending=queue.then(run);queue=pending.catch(()=>{});return pending;
