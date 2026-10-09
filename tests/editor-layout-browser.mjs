@@ -42,15 +42,18 @@ try{
     assert.ok(material.right-material.x<=444,'Picker exceeds compact width: '+JSON.stringify({width,material}));
     assert.ok(material.bottom-material.y<=Math.min(500,height*.75),'Picker too tall: '+JSON.stringify({height,material}));
     assert.ok(['auto','scroll'].includes(material.scrollable),JSON.stringify(material));
-    await screenshot('material-responsive',width,height);
+    await screenshot(width<900?'material-original-mobile':'material-wide-three-columns',width,height);
     await closePopup();
     await click('[data-val="shape"]','.swift-shape-picker');
     const shape=await evaluate('(()=>{const p=document.querySelector(".swift-shape-picker"),g=p.querySelector(".canvas-picker-grid"),r=p.getBoundingClientRect(),c=getComputedStyle(g).gridTemplateColumns.split(" ").filter(Boolean),buttons=[...g.querySelectorAll("button")];return {cols:c.length,x:r.left,right:r.right,top:r.top,bottom:r.bottom,first:buttons[0]?.getBoundingClientRect().width,tile:buttons[0]?getComputedStyle(buttons[0]).overflow:null};})()');
-    assert.equal(shape.cols,width>=900?3:2,JSON.stringify({width,shape}));
+    // The verified mobile/iPad baseline uses 3 small shape icons per row.
+    // This must NOT be converted to the material picker's two-column layout.
+    assert.equal(shape.cols,3,JSON.stringify({width,shape}));
     assert.ok(shape.x>=10&&shape.right<=width+1&&shape.bottom<=height+1,JSON.stringify({width,shape}));
     assert.ok(shape.right-shape.x<=444&&shape.bottom-shape.top<=Math.min(550,height*.8),JSON.stringify({width,shape}));
-    assert.ok(shape.first>=92&&shape.first<=150,'Thumbnail size outside useful bounds: '+JSON.stringify({width,shape}));
-    await screenshot('shape-responsive',width,height);
+    assert.ok(shape.first>=(width<900?62:92)&&shape.first<=150,
+      'Shape icon size outside reference bounds: '+JSON.stringify({width,shape}));
+    await screenshot(width<900?'shape-original-mobile':'shape-wide-three-columns',width,height);
     await closePopup();
     await click('[data-val="paper"]','.swift-popover');
     const paper=await evaluate('(()=>{const r=document.querySelector(".swift-popover").getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom};})()');
