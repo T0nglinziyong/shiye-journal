@@ -15,6 +15,8 @@ import {clampCanvasPosition,moveSelection,materialCenterOutside} from './canvas-
 const labels={select:'选择',marquee:'矩形框选',pen:'笔',highlighter:'荧光笔',eraser:'橡皮擦',lasso:'套索选择',text:'文字',shape:'图形',material:'素材',layers:'图层',paper:'画布背景'};
 const glyphs={select:'➤',pen:'',eraser:'◇',highlighter:'▱',lasso:'◌',text:'Aa',shape:'▢',material:'▧',layers:'▱',paper:'▦'};
 const prefKey='shiye-canvas-tools-v1';
+// Survive editor remounts and route returns; card image nodes stay decoded.
+const pickerRows=new Map();
 const allEntries=d=>[['material',d.items],['shape',d.primitives],['text',d.textBlocks]].flatMap(([kind,list])=>(list||[]).map(value=>({kind,value})));
 export function mountCanvasEditor(c){
   const {state,view,body,modal,current,checkpoint,saveProject,render,route,flushSave,toast,esc,imgTag,asset,handle,openCutoutCheck,openAICreation}=c,d=current(),page=view.querySelector('#canvas-page');if(!d||!page)return;
@@ -128,7 +130,6 @@ export function mountCanvasEditor(c){
   // Keep decoded thumbnail DOM nodes alive between opening the three tabs.
   // The image loader retains COS 360px blobs; reusing nodes also avoids
   // decoding and reflowing them every time the picker is opened.
-  const pickerRows=new Map();
   function materialPicker(anchor){
     const p=openPopover(anchor,{title:'添加素材',width:340}),tabs=document.createElement('div'),
       controls=document.createElement('div'),grid=document.createElement('div');
