@@ -33,6 +33,7 @@ import {shapeTag} from './shape-preview.js';
 import {ImageNodeCache} from './image-node-cache.js';
 import {createWorkCoverBackfill} from './work-cover-backfill.js';
 import {renderWorkCoverSnapshot} from './work-cover-snapshot.js';
+import {createLocalWorkCovers} from './work-cover-local-cache.js';
 import {imagePlaceholder,mountPrivateImages} from './lazy-private-images.js';
 import {reusePagePreviews} from './preview-content-cache.js';
 import {mountSeriesCoverSnapshots} from './series-cover-snapshot.js';
@@ -147,6 +148,44 @@ const image=id=>staticSources.get(id)||
 const privateImages=mountPrivateImages({root:document.body,db,urls,fullView:img=>
   (state.route==='editor'&&!!img.closest('#canvas-page .canvas-object.material'))||
   (state.route==='assetDetail'&&!!img.closest('.detail-picture'))});
+const renderLocalCoverBlob=project=>renderWorkCoverSnapshot(project,{
+  resolveAsset:async id=>asset(id)||await db.get('assets',id),
+  previewBlob:async(id,pixels)=>{
+    // Prefer the fixed 360px variant. Imported works that have not yet
+    // uploaded their images may only have a locally staged Blob.
+    const preview=await db.previewBlob(id,pixels).catch(()=>null);
+    if(preview instanceof Blob&&preview.size)return preview;
+    const local=(await db.get('blobs',id).catch(()=>null))?.data;
+    if(local instanceof Blob&&local.size)return local;
+    throw Error('素材图片暂不可读取：'+id);
+  },
+  decodeStatic:decodeSceneImage,renderScene:renderSceneCanvas,
+  createBitmap:blob=>createImageBitmap(blob),
+  getSnapshot:async id=>(await db.get('blobs',id))?.data||null
+});
+const localWorkCovers=createLocalWorkCovers({
+  state,loadDocument:p=>db.completeProject(p),renderCover:renderLocalCoverBlob,
+  onReady:(p,url)=>{
+    const actual=state.projects.find(item=>item.id===p.id);
+    if(!actual||actual.updatedAt!==p.updatedAt)return;
+    const draft=actual.drafts.find(item=>item.id===actual.activeDraftID)||actual.drafts[0];
+    // Once the COS reference is committed, it remains the preferred source.
+    if(draft?.coverImageID||draft?.coverBlobId||state.route!=='works')return;
+    const card=[...view.querySelectorAll('[data-act="open-project"]')].find(el=>el.dataset.id===p.id),
+      sheet=card?.querySelector('.thumb-sheet');
+    if(!sheet)return;
+    const img=document.createElement('img');img.className='work-reference';
+    img.src=url;img.alt=actual.title+' 本地完整封面';
+    img.loading='eager';img.decoding='async';sheet.replaceChildren(img);
+  },
+  onError:(_message,id,error)=>{
+    console.warn('本地封面暂不可用',id,error);
+    if(state.route!=='works')return;
+    const card=[...view.querySelectorAll('[data-act="open-project"]')].find(el=>el.dataset.id===id),
+      status=card?.querySelector('.work-cover-pending');
+    if(status)status.textContent='封面暂不可用，重新进入后重试';
+  }
+});
 const workCoverBackfill=createWorkCoverBackfill({db,state,cloudEnabled});
 // Cover loading never steals a Works card click: opening a card always edits it.
 
@@ -228,6 +267,7 @@ function head(title,subtitle,actions=''){return `<div class="view-head"><div><h1
 function render(){document.body.classList.toggle('editing',state.route==='editor');document.body.dataset.backdrop=state.preferences.backdrop;document.querySelectorAll('.main-nav button').forEach(b=>b.classList.toggle('active',b.dataset.route===state.route||(b.dataset.route==='library'&&['series','import'].includes(state.route))));document.querySelector('#basket-count').textContent=state.basket.length;
   if(state.route==='editor'&&refreshCanvas())return;
   view.workCoverDispose?.();view.workCoverDispose=null;
+  view.localWorkCoverDispose?.();view.localWorkCoverDispose=null;
   view.editorDispose?.();view.editorDispose=null;view.manualBoxDispose?.();view.manualBoxDispose=null;view.editorRefresh=null;view.catalogRefresh=null;resetSelectionPresenters(view);
   if(view.onshowsimilar){view.removeEventListener('show-similar',view.onshowsimilar);view.onshowsimilar=null;}
   closePopover();imageNodes.remember(view.querySelectorAll('img[src]'));
@@ -235,7 +275,10 @@ function render(){document.body.classList.toggle('editing',state.route==='editor
   const pages={library:renderLibrary,series:renderSeries,matching:renderMatching,works:renderWorks,editor:renderEditor,import:renderImport,assetDetail:renderAssetDetail,projectPreview:renderProjectPreview,settings:renderSettings};view.innerHTML=(pages[state.route]||renderLibrary)();
   for(const fresh of view.querySelectorAll('img[src]')){const old=imageNodes.take(fresh);if(old)fresh.replaceWith(old);}
   reusePagePreviews({view,state});mountSeriesCoverSnapshots({view,state});
-  mountParityControls();bindPage();mountWorkflowControls({state,view,body,modal,db,render,route,toast,imgTag,assetCard,esc,asset,refresh,download,modelImage,rasterize,backup,openSeriesEditor,openAssetEditor:openDetail,openCutoutCheck,switchImportRecord,saveActiveImportRecord,saveProject,flushSave,assetOrganization,applyAssetClassification});view.catalogRefresh?.();if(state.route==='works')view.workCoverDispose=workCoverBackfill.observe(view);if(state.route==='editor'){view.editorDraft=current();view.editorInk=current().strokes;view.editorLayoutKey=editorLayoutKey();mountCanvasEditor({state,view,body,modal,current,checkpoint,saveProject,render,route,flushSave,toast,esc,imgTag,asset,handle,openCutoutCheck,openAICreation});mountCanvasSelection({state,view,current,checkpoint,saveProject,render,toast});}mountPageSyncIndicator();backgroundViewPending=false;}
+  mountParityControls();bindPage();mountWorkflowControls({state,view,body,modal,db,render,route,toast,imgTag,assetCard,esc,asset,refresh,download,modelImage,rasterize,backup,openSeriesEditor,openAssetEditor:openDetail,openCutoutCheck,switchImportRecord,saveActiveImportRecord,saveProject,flushSave,assetOrganization,applyAssetClassification});view.catalogRefresh?.();if(state.route==='works'){
+    view.localWorkCoverDispose=localWorkCovers.observe(view);
+    view.workCoverDispose=workCoverBackfill.observe(view);
+  }if(state.route==='editor'){view.editorDraft=current();view.editorInk=current().strokes;view.editorLayoutKey=editorLayoutKey();mountCanvasEditor({state,view,body,modal,current,checkpoint,saveProject,render,route,flushSave,toast,esc,imgTag,asset,handle,openCutoutCheck,openAICreation});mountCanvasSelection({state,view,current,checkpoint,saveProject,render,toast});}mountPageSyncIndicator();backgroundViewPending=false;}
 function editorLayoutKey(){const size=view.editorLayoutSize||{width:window.innerWidth,height:window.innerHeight};return [size.width,size.height,current()?.canvas.width,current()?.canvas.height,!!state.workspacePanel,!!state.aiPanel].join(':');}
 function refreshCanvas(){
   const d=current(),page=view.querySelector('#canvas-page');if(!page||view.editorDraft!==d||view.editorLayoutKey!==editorLayoutKey()||!view.editorRefresh)return false;
@@ -269,7 +312,11 @@ function workCover(d,priority=false,snapshotOnly=false,projectID=null){
  if(d.coverImageID||d.coverBlobId)return `<img class="work-reference" loading="${priority?'eager':'lazy'}" ${priority?'fetchpriority="high" ':''}decoding="async" src="${image(d.coverImageID||d.coverBlobId)}" alt="作品完整封面">`;
  // Cloud Works cards must show the pre-rendered COS WebP as ONE image. Do
  // not fall back to mounting every material/shape/text (progressive pop-in).
- if(snapshotOnly&&cloudEnabled)return '<span class="work-cover-pending" role="status">正在补齐云端封面</span>';
+ if(snapshotOnly&&cloudEnabled){
+   const source=projectID?localWorkCovers.peek(state.projects.find(p=>p.id===projectID)):null;
+   return source?`<img class="work-reference" loading="${priority?'eager':'lazy'}" src="${esc(source)}" alt="本地完整作品封面">`:
+     '<span class="work-cover-pending" role="status">正在生成本地封面…</span>';
+ }
  const position=(i,flip=false)=>`left:${(i.x-i.width/2)/d.canvas.width*100}%;top:${(i.y-i.height/2)/d.canvas.height*100}%;width:${i.width/d.canvas.width*100}%;height:${i.height/d.canvas.height*100}%;transform:rotate(${i.rotation||0}deg) ${flip&&i.isFlippedHorizontally?'scaleX(-1)':''};opacity:${i.opacity??1};z-index:${i.zIndex||0};`;
  const materials=(d.items||[]).filter(i=>!i.isParked&&!i.isHidden&&!i.hidden).flatMap(projectMaterialViews).map(i=>{const a=asset(i.assetID),crop=i.cropRect||{x:0,y:0,width:1,height:1};return a?`<span class="work-material" style="${position(i,true)}${materialMaskCSS(i)}"><span style="position:absolute;inset:0"><img loading="lazy" decoding="async" src="${image(a.blobId)}" style="position:absolute;max-width:none;width:${100/crop.width}%;height:${100/crop.height}%;left:${-crop.x/crop.width*100}%;top:${-crop.y/crop.height*100}%;object-fit:fill"></span></span>`:'';}).join('');
  const shapes=(d.primitives||[]).filter(i=>!i.hidden).map(i=>`<span class="work-shape" style="${position(i)}">${shapeTag(i)}</span>`).join('');
@@ -1243,14 +1290,8 @@ function download(blob,filename){const link=document.createElement('a'),url=URL.
 // Render a finished 360px cover from the full editable document. This path
 // deliberately does not rely on the active editor, route or hydrated DOM;
 // it fetches ONLY 360px material previews, never original large images.
-setCloudProjectPreview(project=>renderWorkCoverSnapshot(project,{
-  resolveAsset:async id=>asset(id)||db.get('assets',id),
-  previewBlob:(id,pixels)=>db.previewBlob(id,pixels),
-  decodeStatic:decodeSceneImage,
-  renderScene:renderSceneCanvas,
-  createBitmap:blob=>createImageBitmap(blob),
-  getSnapshot:async id=>(await db.get('blobs',id))?.data||null
-}));
+// Reuse the already-rendered local 360px Blob while uploading to COS.
+setCloudProjectPreview(project=>localWorkCovers.ensure(project));
 async function exportPNG(){const d=current(),canvas=await rasterize(d,2);canvas.toBlob(blob=>download(blob,(state.activeProject.title||'拾页作品')+'.png'),'image/png');}
 async function printPage(){const d=current(),canvas=await rasterize(d,2),url=canvas.toDataURL('image/png');const child=window.open('','_blank');if(!child){toast('请允许打开打印预览窗口');return;}child.document.write(`<html><head><title>${esc(state.activeProject.title)}</title><style>@page{size:A4;margin:0}body{margin:0}img{width:100%;height:auto}</style></head><body><img src="${url}" onload="window.print()"></body></html>`);child.document.close();}
 async function rasterize(d,scale,{preview=false}={}){
