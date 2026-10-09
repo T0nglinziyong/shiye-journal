@@ -38,7 +38,7 @@ try{
       for(let i=0;i<150&&autoImage.naturalWidth!==240;i++)await new Promise(r=>setTimeout(r,20));if(autoImage.naturalWidth!==240||autoCalls<2)throw Error('Visible thumbnail did not recover without opening detail');autoLoader.dispose();automatic.remove();
       const corrupt=document.createElement('div');corrupt.style.cssText='position:fixed;top:0;left:0;width:100px;height:100px';isolated.append(corrupt);const corruptImage=document.createElement('img');corruptImage.src=imagePlaceholder('corrupt-preview');corruptImage.style.cssText='width:80px;height:80px';corrupt.append(corruptImage);let originalFallback=0;
       const corruptLoader=mountPrivateImages({root:corrupt,urls:new Map(),onError:()=>{},db:{previewBlob:async()=>new Blob(['not an image'],{type:'image/webp'}),get:async()=>{originalFallback++;return {data:original};}}});
-      for(let i=0;i<100&&corruptImage.naturalWidth!==800;i++)await new Promise(r=>setTimeout(r,20));if(corruptImage.naturalWidth!==800||originalFallback!==1)throw Error('Undecodable thumbnail did not fall back to original');corruptLoader.dispose();corrupt.remove();
+      for(let i=0;i<100&&corruptImage.dataset.imageError!=='true';i++)await new Promise(r=>setTimeout(r,20));if(originalFallback!==0)throw Error('Catalog thumbnail must never fetch/process the original');corruptLoader.dispose();corrupt.remove();
       scrollTo(0,0);globalThis.__cacheTestLoader=loader;globalThis.__cacheTestHost=host;return {first,afterScroll:calls.preview,original:calls.original};
     })()`);
     assert.ok(result.first<60);assert.equal(result.original,1);assert.ok(await b.evaluate('document.documentElement.scrollWidth<=innerWidth+1'));
