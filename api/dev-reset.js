@@ -47,8 +47,8 @@ export default async function handler(req,res){
     }
   });
   try{
-    const result=await api({method:req.method,authorization:req.headers.authorization,confirm:req.body?.confirm});
-    return res.status(result.status).json(result.error?{error:result.error}:{deleted:result.deleted,more:result.more,reset:result.reset||false});
+    const result=await api({method:req.method,authorization:req.headers.authorization,confirm:req.body?.confirm,mode:req.body?.mode});
+    return res.status(result.status).json(result.error?{error:result.error}:{ready:result.ready||false,deleted:result.deleted||0,more:result.more||false,reset:result.reset||false});
   }catch(error){
     console.warn('Development reset interrupted',error?.message);
     return res.status(503).json({error:'开发数据清理未完成，可重试：'+(error?.message||'请求失败')});
