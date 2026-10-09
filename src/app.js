@@ -422,11 +422,11 @@ function bindPage(){view.querySelectorAll('[data-act]').forEach(el=>el.addEventL
   const batchWorkAssets=view.querySelector('#batch-work-save-assets');
   if(batchWorkAssets)batchWorkAssets.onchange=()=>{
     state.importBatchWorkSaveAssets=batchWorkAssets.checked;
-    for(const record of state.importRecords)if(record.workSaveAssets===undefined)record.workSaveAssets=batchWorkAssets.checked;
+    for(const record of state.importRecords)if(!record.workSaveAssetsManual)record.workSaveAssets=batchWorkAssets.checked;
     render();
   };
   view.querySelectorAll('.record-work-save-assets').forEach(el=>el.onchange=()=>{
-    state.importRecords[+el.dataset.index].workSaveAssets=el.checked;
+    const record=state.importRecords[+el.dataset.index];record.workSaveAssets=el.checked;record.workSaveAssetsManual=true;
   });
   view.querySelectorAll('.record-work-paper-pattern,.record-work-paper-color').forEach(el=>el.onchange=()=>{
     const record=state.importRecords[+el.dataset.index];if(!record)return;
@@ -941,7 +941,7 @@ function resetImportBatch(){
   const bitmaps=new Set(),objectURLs=new Set();
   for(const r of state.importRecords){for(const b of [r.bitmap,r.correctedBitmap])if(b)bitmaps.add(b);for(const u of [r.url,r.correctedURL,...(r.candidateURLs||[])])if(u)objectURLs.add(u);}
   for(const b of bitmaps)b.close?.();for(const u of objectURLs)URL.revokeObjectURL(u);
-  Object.assign(state,{importStep:'inspect',importRecords:[],importIndex:0,importFile:null,importBitmap:null,importURL:null,correctedBitmap:null,correctedURL:null,paperCorners:null,importCandidates:[],importCandidateURLs:[],importCandidateData:[],importCandidateSelection:new Set(),importProcessing:'',importOrganizing:false,importSavedCount:0,showManualBox:false,showCorrectionPreview:false,importBatchSeriesID:null});
+  Object.assign(state,{importStep:'inspect',importRecords:[],importIndex:0,importFile:null,importBitmap:null,importURL:null,correctedBitmap:null,correctedURL:null,paperCorners:null,importCandidates:[],importCandidateURLs:[],importCandidateData:[],importCandidateSelection:new Set(),importProcessing:'',importOrganizing:false,importSavedCount:0,showManualBox:false,showCorrectionPreview:false,importBatchSeriesID:null,importBatchWorkSaveAssets:false,importBatchWorkPaperPattern:'plain',importBatchWorkPaperColor:'#fcfaf0'});
 }
 function openImportGallery(mode){
   resetImportBatch();state.importMode=mode;route('import');
@@ -1119,7 +1119,8 @@ async function organizeSavedProjects(projects,{waitForSave}={}){
       if(!latest||latest.updatedAt!==source.updatedAt||latest.autoOrganized)return;
       const updated={...latest,autoOrganized:true,title:result.title||latest.title,
         styleTags:(result.styleTags||result.tags||latest.styleTags||[]).slice(0,8),updatedAt:new Date().toISOString()};
-      await db.stageProject(updated);
+      if(updated.isSnapshot)await db.put('projects',updated);
+      else await db.stageProject(updated);
       const live=state.projects.find(p=>p.id===source.id);
       if(live&&live.updatedAt===source.updatedAt)Object.assign(live,updated);
     }
