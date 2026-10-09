@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
 import {saveImportBatch} from '../src/import-save.js';
 import {renderImportReview} from '../src/import-workspace-ui.js';
 
@@ -107,4 +108,19 @@ test('snapshot save stores one corrected full-page PNG and no materials',async()
     assert.equal(batches[0].projects[0].snapshotWidth,500);
     assert.equal(batches[0].blobs[0].data.type,'image/png');
   }finally{globalThis.document=originalDocument;}
+});
+
+test('work confirmation contains no style-tag or usage-marker controls, including mounted enhancements',async()=>{
+  const {state}=fixture(true);
+  state.series=[{id:'series-A',title:'花园'}];
+  state.importRecords[0].url='blob:original';
+  state.importRecords[0].selectedCandidates[0].url='blob:piece';
+  const html=renderImportReview({state,esc:String,fmt:String});
+  assert.ok(html.includes('class="record-work-title"'));
+  assert.ok(html.includes('class="record-series"'));
+  assert.ok(html.includes('review-background-card'));
+  assert.doesNotMatch(html,/风格标签|使用标记|import-work-tags|class="import-used"/u);
+  // Previous regression was caused by post-render insertion in workflow-ui.
+  const workflow=await readFile(new URL('../src/workflow-ui.js',import.meta.url),'utf8');
+  assert.doesNotMatch(workflow,/import-work-tags|import-used|风格标签|使用标记/u);
 });
