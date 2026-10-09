@@ -73,11 +73,31 @@ const selectionAction=(label,fn,cls='')=>{
   return b;
 };
 function batchMore(anchor,actions){
-  const p=togglePopover(anchor,{title:'更多操作',menu:true,width:230});
+  const p=togglePopover(anchor,{title:'更多操作',menu:true,width:245});
   if(!p)return;
   p.surface.classList.add('selection-more-menu');
-  for(const [title,fn] of actions){
-    p.content.append(selectionAction(title,async()=>{p.close();await fn();}));
+  for(const [title,handler] of actions){
+    if(!Array.isArray(handler)){
+      p.content.append(selectionAction(title,async()=>{p.close();await handler();}));
+      continue;
+    }
+    const toggle=selectionAction(title+' ›',()=>{
+      const expanded=toggle.getAttribute('aria-expanded')==='true';
+      p.content.querySelector('.selection-inline-submenu')?.remove();
+      for(const button of p.content.querySelectorAll('[data-expanded-submenu]'))button.setAttribute('aria-expanded','false');
+      if(expanded)return;
+      const submenu=document.createElement('section');
+      submenu.className='selection-submenu selection-inline-submenu';
+      submenu.setAttribute('role','group');
+      submenu.setAttribute('aria-label',title);
+      for(const [label,run] of handler)submenu.append(selectionAction(label,async()=>{p.close();await run();}));
+      toggle.after(submenu);
+      toggle.setAttribute('aria-expanded','true');
+    });
+    toggle.dataset.expandedSubmenu='';
+    toggle.setAttribute('aria-haspopup','menu');
+    toggle.setAttribute('aria-expanded','false');
+    p.content.append(toggle);
   }
 }
 async function exportSeriesArchive(c,seriesIDs){
@@ -130,21 +150,19 @@ async function exportSelectedWorks(c,records,format='native'){
     }
   }
 }
-function seriesExportMenu(c,parity,anchor){
-  const menu=togglePopover(anchor,{title:'导出系列',menu:true,width:240});
-  if(!menu)return;
-  menu.content.append(selectionAction('素材与系列 ZIP',async()=>{menu.close();await exportSeriesArchive(c,[...parity.selected]);}));
-  menu.content.append(selectionAction('系列清单 JSON',()=>{
-    const series=c.state.series.filter(s=>parity.selected.has(s.id));
-    menu.close();c.download(new Blob([JSON.stringify(series,null,2)],{type:'application/json'}),'拾页-系列清单.json');
-  }));
+function seriesExportActions(c){
+  return [
+    ['素材与系列 ZIP',()=>exportSeriesArchive(c,[...parity.selected])],
+    ['系列清单 JSON',()=>{
+      const series=c.state.series.filter(s=>parity.selected.has(s.id));
+      c.download(new Blob([JSON.stringify(series,null,2)],{type:'application/json'}),'拾页-系列清单.json');
+    }]
+  ];
 }
-function workExportMenu(c,anchor){
+function workExportActions(c){
   const records=c.state.projects.filter(p=>parity.selected.has(p.id));
   const snapshots=records.length>0&&records.every(p=>p.isSnapshot);
   const editable=records.length>0&&records.every(p=>!p.isSnapshot);
-  const menu=togglePopover(anchor,{title:snapshots?'导出快照':'导出作品',menu:true,width:245});
-  if(!menu)return;
   const entries=snapshots
     ?(records.some(p=>p.snapshotFormat==='application/pdf')
       ?[['原始快照文件','original']]
@@ -152,13 +170,12 @@ function workExportMenu(c,anchor){
     :editable
       ?[['可编辑拾页 ZIP','native'],['PNG 图像','png'],['PDF 文件','pdf']]
       :[['按原格式分别导出','mixed']];
-  for(const [label,format] of entries)menu.content.append(selectionAction(label,async()=>{
-    menu.close();
+  return entries.map(([label,format])=>[label,async()=>{
     if(format==='mixed'){
       await exportSelectedWorks(c,records.filter(p=>p.isSnapshot),'original');
       await exportSelectedWorks(c,records.filter(p=>!p.isSnapshot),'native');
     }else await exportSelectedWorks(c,records,format);
-  }));
+  }]);
 }
 async function classifySelectedWorks(c,records){
   const account=c.state.accountId,settings=structuredClone(c.state.aiSettings);
@@ -239,8 +256,8 @@ function mountSeries(c) {
   }
   const entry=view.querySelector('.series-entry');
   const tray=document.createElement('div');tray.className='swift-tray manage library-management-tray';tray.dataset.selectionMode='series';tray.innerHTML='<strong></strong>';
-  const exportButton=selectionAction('导出系列 ›',()=>seriesExportMenu(c,parity,exportButton));
   const more=selectionAction('更多操作',()=>batchMore(more,[
+    ['导出系列',seriesExportActions(c)],
     ['编辑系列信息',()=>{
       if(parity.selected.size!==1)throw Error('请先只选择一个系列');
       c.openSeriesEditor([...parity.selected][0]);
@@ -257,7 +274,7 @@ function mountSeries(c) {
     selectionAction('全选页面',()=>{cards.filter(b=>!b.hidden).forEach(b=>parity.selected.add(b.dataset.id));sync();}),
     selectionAction('清空选择',()=>{parity.selected.clear();parity.showOnlySelected=false;sync();}),
     selectionAction('查看所选',()=>{parity.showOnlySelected=!parity.showOnlySelected;sync();}),
-    exportButton,more,remove
+    more,remove
   );view.append(tray);
   function sync(){const active=isActive();tray.hidden=!active;entry.disabled=active;view.querySelector('.library-select-toggle').textContent=parity.selectionMode?'完成':'选择';for(const card of cards){card.classList.toggle('batch-selected',active&&parity.selected.has(card.dataset.id));if(active)card.setAttribute('aria-pressed',String(parity.selected.has(card.dataset.id)));else card.removeAttribute('aria-pressed');}tray.querySelector('strong').textContent='本次选中 '+parity.selected.size+' 个系列';tray.querySelectorAll('button').forEach((b,i)=>{b.disabled=i>0&&!parity.selected.size;if(i===2)b.querySelector('.selection-action-label').textContent=parity.showOnlySelected?'返回筛选':'查看所选';});update();return true;}registerSelectionPresenter(view,sync);
 }
@@ -273,9 +290,8 @@ function selectedTray(c,selector){
 function mountProjectBatch(c){
   if(parity.workTab==='templates'||!c.view.querySelector('.works-grid'))return;
   const tray=selectedTray(c,'.card[data-act="open-project"]');
-  const exportLabel=parity.workTab==='snapshot'?'导出快照 ›':'导出作品 ›';
-  const exportButton=selectionAction(exportLabel,()=>workExportMenu(c,exportButton));
   const more=selectionAction('更多操作',()=>batchMore(more,[
+    [parity.workTab==='snapshot'?'导出快照':'导出作品',workExportActions(c)],
     ['重新识别',()=>classifySelectedWorks(c,c.state.projects.filter(p=>parity.selected.has(p.id)))],
     ...(c.state.projects.some(p=>parity.selected.has(p.id)&&!p.isSnapshot)?[['设置状态',async()=>{
       const selected=c.state.projects.filter(p=>parity.selected.has(p.id)&&!p.isSnapshot);
@@ -296,7 +312,7 @@ function mountProjectBatch(c){
     c.state.projects=c.state.projects.filter(p=>!parity.selected.has(p.id));
     c.state.trash.push(...entries);finishSelection(parity);c.render();
   },'danger');
-  tray.append(exportButton,more,del);
+  tray.append(more,del);
   function sync(){
     const active=selectionActive(parity,'work'),cards=[...c.view.querySelectorAll('[data-act="open-project"]')];
     tray.hidden=!active;
