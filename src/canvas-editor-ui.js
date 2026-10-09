@@ -30,13 +30,39 @@ export function mountCanvasEditor(c){
   const change=fn=>{checkpoint();fn();saveProject();render();};
   const topAction=(action,label)=>{const b=button(label,()=>handle(action),'btn');b.dataset.act=action;if(['undo','redo'].includes(action)){b.replaceChildren(createIcon(action));b.setAttribute('aria-label',action==='undo'?'撤销':'重做');}return b;};
   head.classList.add('swift-editor-head');const back=actions.querySelector('[data-act="back-works"]');head.prepend(back);back.textContent='‹ 返回';
-  const ai=actions.querySelector('button.primary'),json=actions.querySelector('[data-act="creative-json"]'),pdf=[...actions.querySelectorAll('button')].find(b=>b.textContent==='导出 PDF');
-  actions.replaceChildren();const saved=document.createElement('span');saved.className='swift-auto-saved';saved.textContent=document.querySelector('#save-state').textContent;actions.append(saved);
-  actions.append(button('◷',e=>historyMenu(e.currentTarget),'canvas-icon'));actions.lastChild.setAttribute('aria-label','历史记录');actions.append(topAction('undo','↶'),topAction('redo','↷'));
-  actions.append(button('完成',()=>handle('editor-done'),'btn primary'));
-  const share=button('导出',e=>{const p=openPopover(e.currentTarget,{title:'导出',width:220,menu:true});for(const [name,fn] of [['保存快照',()=>handle('save-snapshot')],['导出 PNG',()=>handle('export-png')],['导出 PDF',()=>pdf?.click()||handle('print')],['导出可编辑 ZIP',()=>handle('download-project-zip')],['打印',()=>handle('print')],['导入创作指令',()=>handle('creative-json')]])p.content.append(button(name,()=>{p.close();fn();}));},'btn');share.setAttribute('aria-label','导出作品');actions.append(share);if(json){json.hidden=true;actions.append(json);}
-  const toolbar=document.createElement('div');toolbar.className='swift-editor-toolbar';shell.before(toolbar);toolbar.append(tools);tools.replaceChildren();
-  const context=document.createElement('div');context.className='canvas-context-tools';context.setAttribute('aria-label','当前工具选项');toolbar.append(context);
+  const pdf=[...actions.querySelectorAll('button')].find(b=>b.textContent==='导出 PDF');
+  // Exactly two visible header actions on EVERY screen. Auto-save remains
+  // active in saveProject()/flushSave(); it does not need a misleading Save
+  // button or an extra status badge inside the title bar.
+  actions.replaceChildren();
+  const done=button('完成',()=>handle('editor-done'),'btn primary');
+  done.dataset.editorCompletion='';
+  actions.append(done);
+  const share=button('导出',e=>{
+    const p=openPopover(e.currentTarget,{title:'导出',width:220,menu:true});
+    for(const [name,fn] of [['保存快照',()=>handle('save-snapshot')],
+      ['导出 PNG',()=>handle('export-png')],
+      ['导出 PDF',()=>pdf?.click()||handle('print')],
+      ['导出可编辑 ZIP',()=>handle('download-project-zip')],
+      ['打印',()=>handle('print')],
+      ['导入创作指令',()=>handle('creative-json')]])
+      p.content.append(button(name,()=>{p.close();fn();}));
+  },'btn');
+  share.setAttribute('aria-label','导出作品');share.dataset.editorExport='';
+  actions.append(share);
+  const toolbar=document.createElement('div');toolbar.className='swift-editor-toolbar';
+  shell.before(toolbar);toolbar.append(tools);tools.replaceChildren();
+  // History and undo/redo stay available, but belong with the editing tools
+  // rather than the top-right Done/Export actions.
+  const utilities=document.createElement('div');
+  utilities.className='canvas-editor-utilities';
+  utilities.setAttribute('aria-label','编辑历史操作');
+  const history=button('◷',e=>historyMenu(e.currentTarget),'canvas-icon');
+  history.setAttribute('aria-label','历史记录');
+  utilities.append(history,topAction('undo','↶'),topAction('redo','↷'));
+  toolbar.append(utilities);
+  const context=document.createElement('div');context.className='canvas-context-tools';
+  context.setAttribute('aria-label','当前工具选项');toolbar.append(context);
   const changeTool=(mode,b)=>{view.endTextEditing?.();if(b.getAttribute('aria-expanded')==='true'){closePopover();return;}const repeated=state.tool===mode;if(['pen','highlighter'].includes(mode))state.previousInkTool=mode;state.tool=['layers','paper','material'].includes(mode)?'select':mode;state.toolHighlight=mode;if(!repeated)state.selectionPath=null;if(mode!=='select'&&mode!=='lasso'){state.multiSelected=[];state.selectedStrokes=[];}if(mode!=='select'&&mode!=='lasso')state.selected=null;if(!state.selected){page.querySelectorAll('.object-handle,.selected-object-actions,.selected-object-overlay').forEach(n=>n.remove());page.querySelectorAll('.selected').forEach(n=>n.classList.remove('selected'));page.querySelector('.canvas-selection-overlay')?.replaceChildren();}page.classList.toggle('pen',['pen','highlighter','eraser'].includes(mode));page.classList.toggle('lasso',['lasso','marquee'].includes(mode));syncTools();contextTools();if(['shape','material','layers','paper'].includes(mode)){if(mode==='shape')shapePicker(b);else if(mode==='material')materialPicker(b);else if(mode==='layers')layerPicker(b);else paperPicker(b);}else if(repeated&&['pen','highlighter','eraser','lasso'].includes(mode))toolSettings(b,mode);else closePopover();};
   for(const mode of ['select','pen','eraser','highlighter','lasso','text','shape','material','layers','paper']){const b=button(glyphs[mode],()=>changeTool(mode,b),'btn');b.dataset.act='tool';b.dataset.val=mode;b.setAttribute('aria-label',labels[mode]);b.title=labels[mode];tools.append(b);if(mode==='select')b.oncontextmenu=e=>{e.preventDefault();const p=openPopover(b,{title:'选择工具',width:230,menu:true});for(const [m,name] of [['select','点击选择 · 单指滚动画布'],['marquee','拖出矩形框选']])p.content.append(button(name,()=>{p.close();state.tool=m;state.toolHighlight='select';render();}));};}
   // Property editing remains available through the selected object's
