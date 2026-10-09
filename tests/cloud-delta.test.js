@@ -54,3 +54,54 @@ test('key watermarks allow disjoint updates beyond the 250-change history window
     'History before watermark initialization is not silently assumed safe');
   assert.equal(await canRebaseUnchangedKeys({...args,operations:[{store:'projects',action:'clear'}],client:watermarkClient({keys:[{store:'projects',id:'work-b',revision:930}]})}),false);
 });
+
+
+test('delete and restore propagate atomically to other devices in every collection',async()=>{
+  const old=new Map([
+    ['assets',{revision:11,records:[{id:'asset-a',title:'to delete'},{id:'asset-b',title:'kept'}]}],
+    ['projects',{revision:11,records:[{id:'work-a',title:'to delete'},{id:'work-b',title:'kept'}]}],
+    ['series',{revision:11,records:[{id:'series-a',title:'kept'}]}],
+    ['trash',{revision:11,records:[]}]
+  ]);
+  const keys=[
+    {store:'assets',id:'asset-a',action:'delete'},
+    {store:'projects',id:'work-a',action:'delete'},
+    {store:'trash',id:'trash-asset',action:'put'},
+    {store:'trash',id:'trash-work',action:'put'}
+  ];
+  const trashRecords=[{id:'trash-asset',kind:'asset',item:{id:'asset-a'},date:'2026-10-09T12:00:00Z'},
+    {id:'trash-work',kind:'project',item:{id:'work-a'},date:'2026-10-09T12:00:00Z'}];
+  const client={from(table){
+    const filter={};const q={
+      select(){return q;},eq(k,v){filter[k]=v;return q;},gt(){return q;},lte(){return q;},
+      in(k,v){filter[k]=v;return q;},order(){return q;},
+      range:async()=>{
+        if(table==='shiye_changes')return {data:[{revision:12,keys}]};
+        if(table==='shiye_records')return {data:(filter.store==='trash'?trashRecords:[])
+          .filter(r=>filter.id?.includes(r.id)).map(record=>({record}))};
+        throw Error('unexpected table '+table);
+      },
+      single:async()=>({data:{revision:12}})
+    };return q;
+  }};
+  const result=await readCloudDelta({client,owner:'a',before:11,after:12,snapshots:old});
+  assert.ok(result);
+  assert.deepEqual(result.snapshots.get('assets').records.map(r=>r.id),['asset-b']);
+  assert.deepEqual(result.snapshots.get('projects').records.map(r=>r.id),['work-b']);
+  assert.deepEqual(result.snapshots.get('trash').records.map(r=>r.id),['trash-asset','trash-work']);
+  assert.deepEqual(old.get('assets').records.map(r=>r.id),['asset-a','asset-b'],'input snapshot is never mutated');
+});
+
+test('permanent deletion of trash propagates even without a new put',async()=>{
+  const keys=[{store:'trash',id:'removed-entry',action:'delete'}];
+  const snapshots=new Map(['assets','series','projects','trash'].map(store=>[store,{
+    revision:4,records:store==='trash'?[{id:'removed-entry',kind:'asset'},{id:'kept-entry',kind:'project'}]:[]
+  }]));
+  const client={from(table){const q={
+    select(){return q;},eq(){return q;},gt(){return q;},lte(){return q;},order(){return q;},
+    range:async()=>({data:table==='shiye_changes'?[{revision:5,keys}]:[]}),
+    single:async()=>({data:{revision:5}})
+  };return q;}};
+  const result=await readCloudDelta({client,owner:'a',before:4,after:5,snapshots});
+  assert.deepEqual(result.snapshots.get('trash').records.map(r=>r.id),['kept-entry']);
+});

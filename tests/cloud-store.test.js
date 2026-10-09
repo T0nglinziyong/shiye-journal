@@ -401,3 +401,58 @@ test('project WebP snapshot becomes visible only after confirmed COS metadata co
     if(previousCustomEvent===undefined)delete globalThis.CustomEvent;else globalThis.CustomEvent=previousCustomEvent;
   }
 });
+
+
+test('all user-facing deletes are staged as remote delete plus trash entry and survive flush',async()=>{
+  for(const [kind,store] of [['material','assets'],['work','projects']]){
+    const cache=memoryCache(),{state,db}=fixture(cache);
+    const original={id:kind+'-1',title:kind==='work'?'第一页':'纸片'};
+    const tombstone={id:kind+'-trash',kind:kind==='work'?'project':'asset',item:original,
+      date:new Date().toISOString()};
+    await db.cloudStageMutation([store,'trash'],tx=>{
+      tx.objectStore(store).delete(original.id);
+      tx.objectStore('trash').put(tombstone);
+    });
+    assert.equal((await cache.get('cloud:owner-uuid','import-outbox')).length,1,
+      'Deletion is durable before any remote network acknowledgement');
+    assert.deepEqual((await db.cloudAll('trash')).map(x=>x.id),[tombstone.id],
+      'Trash is immediately visible before remote upload');
+    await db.cloudFlushProjects();
+    assert.deepEqual(state.calls.at(-1).operations.map(op=>op.store+':'+op.action),
+      [store+':delete','trash:put']);
+    assert.deepEqual(await cache.get('cloud:owner-uuid','import-outbox'),[],
+      'Committed remote deletion must leave no unsynced tombstones');
+  }
+});
+test('permanent trash deletion uses durable cloud outbox and sends real delete op',async()=>{
+  const cache=memoryCache(),{state,db}=fixture(cache);
+  await db.cloudStageMutation(['trash'],tx=>tx.objectStore('trash').delete('gone'));
+  assert.equal((await cache.get('cloud:owner-uuid','import-outbox')).length,1);
+  await db.cloudFlushProjects();
+  assert.deepEqual(state.calls.at(-1).operations.map(op=>[op.store,op.action,op.id]),
+    [['trash','delete','gone']]);
+  assert.deepEqual(await cache.get('cloud:owner-uuid','import-outbox'),[]);
+});
+
+
+test('deleting a work retires an older queued autosave so the work is not resurrected',async()=>{
+  const cache=memoryCache(),{state,db}=fixture(cache);
+  const doc={id:'work-to-remove',title:'Pending edit',
+    activeDraftID:'draft',drafts:[{id:'draft',canvas:{width:600,height:800},
+      items:[],primitives:[],textBlocks:[],strokes:[]}]};
+  await db.cloudStageProject(doc);
+  assert.equal((await cache.get('cloud:owner-uuid','project-outbox')).length,1);
+  await db.cloudStageMutation(['projects','trash'],tx=>{
+    tx.objectStore('projects').delete(doc.id);
+    tx.objectStore('trash').put({id:'deleted-work-entry',kind:'project',item:doc,
+      date:new Date().toISOString()});
+  });
+  assert.deepEqual(await cache.get('cloud:owner-uuid','project-outbox'),[],
+    'Delete should remove its obsolete pending autosave');
+  await db.cloudFlushProjects();
+  const operations=state.calls.flatMap(c=>c.operations);
+  assert.ok(operations.some(op=>op.store==='projects'&&op.action==='delete'&&op.id===doc.id));
+  assert.ok(!operations.some(op=>op.store==='projects'&&op.action==='put'&&op.item.id===doc.id),
+    'No stale project put may resurrect a deleted work');
+  assert.deepEqual(await cache.get('cloud:owner-uuid','import-outbox'),[]);
+});
