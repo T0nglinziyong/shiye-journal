@@ -467,7 +467,32 @@ async function handle(action,id,value){try{switch(action){
   case 'match-import-gpt':openOfflineImportDialog();break;
   case 'basket':{const removing=state.basket.includes(id);state.basket=removing?state.basket.filter(x=>x!==id):[...state.basket,id];if(removing)state.coreIDs=state.coreIDs.filter(x=>x!==id);else state.excludedAssetIDs=state.excludedAssetIDs.filter(x=>x!==id);render();break;}
   case 'reset-match':if(!confirm('重新搭配？已有保存作品不会被删除。'))break;await matchingSession.reset(()=>{state.matchCore=null;state.basket=[];state.coreIDs=[];state.excludedAssetIDs=[];});render();break;
-  case 'create-from-basket':openManualCreationDialog();break;case 'new-project':{const opening=++editorOpenSequence;await flushSave();if(opening!==editorOpenSequence)break;const p=project();state.projects.push(p);state.activeProject=p;state.activeDraft=p.activeDraftID;resetEditorHistory(state);state.tool=state.toolHighlight='select';state.zoom=1;route('editor');saveProject();break;}
+  case 'create-from-basket':openManualCreationDialog();break;
+  case 'new-project':{
+    body.innerHTML='<div class="dialog-head"><h2>空白创作</h2><button class="btn" id="blank-create-cancel">取消</button></div>'+
+      '<div class="stack"><label>页面数<select id="blank-page-count"><option value="single">单页</option><option value="spread">双页</option></select></label>'+
+      '<label>纸张尺寸<select id="blank-paper-size">'+paperSizeOptions(state.preferences.paperSize||'a4',{includeNone:false})+'</select></label>'+
+      '<div class="import-custom-size" id="blank-custom-size" hidden><label>宽（mm）<input type="number" id="blank-custom-width" min="50" max="1000" value="210"></label><label>高（mm）<input type="number" id="blank-custom-height" min="50" max="1000" value="297"></label></div>'+
+      '<button class="btn primary" id="blank-create-confirm">开始创作</button></div>';
+    const sizeSelect=body.querySelector('#blank-paper-size'),custom=body.querySelector('#blank-custom-size');
+    sizeSelect.onchange=()=>custom.hidden=sizeSelect.value!=='custom';
+    body.querySelector('#blank-create-cancel').onclick=()=>modal.close();
+    body.querySelector('#blank-create-confirm').onclick=async()=>{
+      let ratio=sizeSelect.value;
+      if(ratio==='custom'){
+        const w=Number(body.querySelector('#blank-custom-width').value),h=Number(body.querySelector('#blank-custom-height').value);
+        if(!Number.isInteger(w)||!Number.isInteger(h)||w<50||h<50||w>1000||h>1000){toast('纸张尺寸为 50–1000 mm 的整数');return;}
+        ratio='custom:'+w+'x'+h;
+      }
+      const mode=body.querySelector('#blank-page-count').value;
+      const opening=++editorOpenSequence;await flushSave();if(opening!==editorOpenSequence)return;
+      const p=project('未命名手账',{mode,ratio});
+      state.projects.push(p);state.activeProject=p;state.activeDraft=p.activeDraftID;
+      resetEditorHistory(state);state.tool=state.toolHighlight='select';state.zoom=1;
+      modal.close();route('editor');saveProject();
+    };
+    modal.showModal();break;
+  }
   case 'open-project':{const opening=++editorOpenSequence;await flushSave();if(opening!==editorOpenSequence)break;let p=state.projects.find(p=>p.id===id);if(!p)break;if(p.isSnapshot){state.previewProjectID=p.id;route('projectPreview');break;}if(p.projectDocumentPath){toast('正在读取完整作品…');p=await db.get('projects',p.id);if(opening!==editorOpenSequence)break;if(!p)throw Error('作品完整数据尚未载入');state.projects=state.projects.map(old=>old.id===p.id?p:old);}state.activeProject=p;state.activeDraft=p.activeDraftID;state.offlineEditingReturnID=null;resetEditorHistory(state);state.tool=state.toolHighlight='select';state.zoom=state.canvasViewports?.get(p.id+':'+state.activeDraft)?.scale||1;route('editor');break;}
   case 'preview-back':navigateBack('works');break;case 'preview-continue':{await handle('open-project',state.previewProjectID);break;}
   case 'project-meta':openProjectMetadata();break;
