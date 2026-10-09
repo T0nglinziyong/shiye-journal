@@ -56,7 +56,7 @@ export function mountCanvasEditor(c){
         },'stroke-width'+(active?' active':''));
         b.innerHTML='<span style="display:block;height:'+Math.max(2,Math.min(20,width))+'px"></span>';
         b.dataset.inkWidthSlot=String(i);
-        b.setAttribute('aria-label','笔画粗细 '+width+' pt'+(active?'，再次点击修改':''));context.append(b);
+        b.setAttribute('aria-label','笔画粗细 '+width+' pt');b.title=active?'再次点击可修改粗细':'';context.append(b);
       }
       for(let i=0;i<3;i++){
         const color=inkSlot(prefs,mode,'color',i),active=activeInkSlot(prefs,mode,'color')===i;
@@ -64,7 +64,7 @@ export function mountCanvasEditor(c){
           selectInkSlot(prefs,mode,'color',i);prefsChanged();contextTools();
         },'ink-color'+(active?' active':''));
         b.style.backgroundColor=color;b.dataset.inkColorSlot=String(i);
-        b.setAttribute('aria-label','笔画颜色 '+color+(active?'，再次点击修改':''));context.append(b);
+        b.setAttribute('aria-label','笔画颜色 '+color);b.title=active?'再次点击可修改颜色':'';context.append(b);
       }
       return;
     }
@@ -76,7 +76,7 @@ export function mountCanvasEditor(c){
         },'eraser-size'+(active?' active':''));
         b.style.fontSize=Math.round(Math.max(17,Math.min(42,size*.48+11)))+'px';
         b.dataset.inkWidthSlot=String(i);
-        b.setAttribute('aria-label','橡皮大小 '+size+' pt'+(active?'，再次点击修改':''));context.append(b);
+        b.setAttribute('aria-label','橡皮大小 '+size+' pt');b.title=active?'再次点击可修改橡皮大小':'';context.append(b);
       }
       return;
     }
@@ -96,7 +96,7 @@ export function mountCanvasEditor(c){
       const stroke=anchor.querySelector('span');
       if(stroke)stroke.style.height=Math.max(2,Math.min(20,n))+'px';
       if(mode==='eraser')anchor.style.fontSize=Math.round(Math.max(17,Math.min(42,n*.48+11)))+'px';
-      anchor.setAttribute('aria-label',(mode==='eraser'?'橡皮大小 ':'笔画粗细 ')+n+' pt，再次点击修改');
+      anchor.setAttribute('aria-label',(mode==='eraser'?'橡皮大小 ':'笔画粗细 ')+n+' pt');
       prefsChanged();
     };
     range(p.content,'粗细',inkSlot(prefs,mode,'width',index),
@@ -108,7 +108,7 @@ export function mountCanvasEditor(c){
     const apply=value=>{
       const normalized=editInkSlot(prefs,mode,'color',index,value);
       anchor.style.backgroundColor=normalized;
-      anchor.setAttribute('aria-label','笔画颜色 '+normalized+'，再次点击修改');
+      anchor.setAttribute('aria-label','笔画颜色 '+normalized);
       prefsChanged();
     };
     for(const color of ['#171717','#555555','#989898','#ffffff','#e33b45','#fb8795','#ff9c21','#e8d432','#159b73','#57bd4b','#167ad9','#264d9c','#853aaf','#955969']){
