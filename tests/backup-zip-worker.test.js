@@ -26,5 +26,7 @@ test('ZIP completion includes its final directory and manifest',async()=>{
     const files=unzipSync(archive),manifest=JSON.parse(new TextDecoder().decode(files['manifest.json']));
     assert.equal(manifest.blobs.length,1);
     assert.equal(new TextDecoder().decode(files[manifest.blobs[0].path]),'original image');
+    next=reply('restored');self.onmessage({data:{type:'restore',file:new Blob([archive])}});
+    const restored=await next;assert.equal(restored.stores.blobs.length,1);
   }finally{if(previous===undefined)delete globalThis.self;else globalThis.self=previous;}
 });
