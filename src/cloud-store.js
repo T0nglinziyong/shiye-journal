@@ -424,10 +424,20 @@ async function cloudCheckpoint(){
 async function cloudCachedCollections(){await identity();const result={},savedRows=[];for(const store of ['assets','series','projects','trash']){const saved=await cached('records:'+store);if(!saved||savedRows.length&&saved.revision!==savedRows[0].revision)return null;savedRows.push(saved);result[store]=await overlayImports(store,structuredClone(saved.records).map(record=>withProjectBase(store,record,saved.revision)));}revision=savedRows[0].revision;return result;}
 async function cloudRefresh(){
   await queue;
-  const before=revision,current=await version(),changed=before!==undefined&&before!==current;
+  const before=revision,current=await version();
+  for(const store of ['assets','series','projects','trash','meta','blobs'])
+    if(!snapshots.has(store)){
+      const saved=await cached('records:'+store);
+      if(saved)snapshots.set(store,saved);
+    }
+  // Reconciliation may already have read the latest global revision.
+  // Download decisions MUST also compare the cached collection revisions:
+  // otherwise a remote-won edit stays invisible until another change occurs.
+  const stale=[...snapshots.values()].some(row=>row.revision!==current);
+  const changed=(before!==undefined&&before!==current)||stale;
   if(!changed)return {revision:current,changed:false};
-  for(const store of ['assets','series','projects','trash','meta','blobs'])if(!snapshots.has(store)){const saved=await cached('records:'+store);if(saved)snapshots.set(store,saved);}
-  const delta=await readCloudDelta({client:cloudClient(),owner,before,after:current,snapshots});
+  const deltaBefore=snapshots.get('projects')?.revision??snapshots.get('assets')?.revision??before;
+  const delta=await readCloudDelta({client:cloudClient(),owner,before:deltaBefore,after:current,snapshots});
   if(delta){for(const [store,snapshot] of delta.snapshots){snapshots.set(store,snapshot);await remember('records:'+store,snapshot);}return {revision:current,changed:true,incremental:true,blobIDs:delta.blobIDs,allBlobs:delta.allBlobs};}
   return {revision:current,changed:true,incremental:false,allBlobs:true};
 }
