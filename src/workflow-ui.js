@@ -62,8 +62,15 @@ function button(text, action, className='') {
 }
 // Share the materials batch action layout across series, works and snapshots.
 const selectionAction=(label,fn,cls='')=>{
-  const b=button(label,fn,cls);const span=document.createElement('span');
-  span.className='selection-action-label';span.textContent=label;b.replaceChildren(span);return b;
+  const b=button(label,fn,cls),span=document.createElement('span'),
+    hasSubmenu=label.endsWith(' ›');
+  span.className='selection-action-label';
+  span.textContent=hasSubmenu?label.slice(0,-2):label;b.replaceChildren(span);
+  if(hasSubmenu){const arrow=document.createElement('span');arrow.className='selection-action-chevron';
+    arrow.textContent=' ›';arrow.setAttribute('aria-hidden','true');b.append(arrow);
+    b.setAttribute('aria-haspopup','menu');}
+  if(label==='更多操作'){b.dataset.selectionMore='';b.setAttribute('aria-haspopup','menu');}
+  return b;
 };
 function batchMore(anchor,actions){
   const p=togglePopover(anchor,{title:'更多操作',menu:true,width:230});
@@ -139,7 +146,9 @@ function workExportMenu(c,anchor){
   const menu=togglePopover(anchor,{title:snapshots?'导出快照':'导出作品',menu:true,width:245});
   if(!menu)return;
   const entries=snapshots
-    ?[['原始快照文件','original'],['PNG 图像','png'],['白底 JPEG','jpeg']]
+    ?(records.some(p=>p.snapshotFormat==='application/pdf')
+      ?[['原始快照文件','original']]
+      :[['原始快照文件','original'],['PNG 图像','png'],['白底 JPEG','jpeg']])
     :editable
       ?[['可编辑拾页 ZIP','native'],['PNG 图像','png'],['PDF 文件','pdf']]
       :[['按原格式分别导出','mixed']];
