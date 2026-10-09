@@ -92,7 +92,7 @@ import {parity} from './parity-ui.js';
 import {journalTemplateRecords} from './journal-template-ui.js';
 import {clearJournalTemplateImages} from './journal-template-ui.js';
 import {syncSelectionScope,reconcileSelectedRecords} from './library-selection-model.js';
-import {canApplyBackgroundView} from './view-update-policy.js';
+import {canApplyBackgroundView,shouldPullCloudForRoute} from './view-update-policy.js';
 import {resetSelectionPresenters} from './selection-presenter.js';
 
 import {installRuntimeDiagnostics} from './runtime-diagnostics.js';
@@ -263,7 +263,13 @@ function route(name,{back=false}={}){
   routeScroll.set(state.route+':'+state.seriesID,window.scrollY);
   if(name==='settings'&&!settingsSession)settingsSession={ai:structuredClone(state.aiSettings),preferences:structuredClone(state.preferences),returnRoute:state.route};
   if(state.route==='settings'&&name!=='settings'&&settingsSession){state.aiSettings=settingsSession.ai;state.preferences=settingsSession.preferences;settingsSession=null;state.settingsSection=null;}
-if(state.route==='editor'&&name!=='editor'&&aiController)aiController.abort(Error('已离开创作页面'));syncSelectionScope(parity,name);state.route=name;if(name==='import'&&state.importMode!=='snapshot'&&typeof Worker!=='undefined')void prewarmVision().catch(()=>{});if(name==='series'){state.seriesID='all';state.addingToSeries=null;libraryHistory.length=0;}if(name!=='library')state.addingToSeries=null;if(name!=='settings'&&!fromSettings)state.selected=null;render();window.scrollTo(0,routeScroll.get(name+':'+state.seriesID)||0);}
+if(state.route==='editor'&&name!=='editor'&&aiController)aiController.abort(Error('已离开创作页面'));const priorRoute=state.route;syncSelectionScope(parity,name);state.route=name;if(name==='import'&&state.importMode!=='snapshot'&&typeof Worker!=='undefined')void prewarmVision().catch(()=>{});if(name==='series'){state.seriesID='all';state.addingToSeries=null;libraryHistory.length=0;}if(name!=='library')state.addingToSeries=null;if(name!=='settings'&&!fromSettings)state.selected=null;render();window.scrollTo(0,routeScroll.get(name+':'+state.seriesID)||0);
+  // Do not interrupt an unfinished matching/import workspace with a remote
+  // repaint. Pull all queued remote deletions immediately on returning to
+  // another page, instead of waiting for the next 15-second polling window.
+  if(cloudEnabled&&!shouldPullCloudForRoute(priorRoute)&&shouldPullCloudForRoute(name))
+    queueMicrotask(()=>backgroundCloudCheck({force:true}));
+}
 function imgTag(a,priority=false){const src=a&&(image(a.blobId)||a.staticPath),eager=priority===true;return src?`<img data-asset-image-id="${esc(a.id)}" loading="${eager?'eager':'lazy'}" ${eager?'fetchpriority="high" ':''}decoding="async" src="${esc(src)}" alt="${esc(a.title)}">`:'<span>无预览</span>';}
 function assetCard(a){return `<button class="card" data-act="detail" data-id="${a.id}"><div class="card-image">${imgTag(a)}</div><div class="card-body"><h3>${esc(a.title)}${a.isFavorite?'<span class="card-favorite" aria-label="已收藏">♥</span>':''}</h3><p>${esc(kindName(a.kind))} · ${a.physicalWidthMM?`${fmt(a.physicalWidthMM)} × ${fmt(a.physicalHeightMM)} mm`:'尺寸待确认'}</p><span class="chip ${a.reviewStatus==='ready'?'':'warn'}">${a.reviewStatus==='ready'?'已整理':'待检查'}</span></div></button>`;}
 const fmt=n=>Number(n).toFixed(1).replace(/\.0$/,'');
@@ -1436,16 +1442,25 @@ window.addEventListener('beforeunload',event=>{if(saveTimer||savingProjects||dir
 window.addEventListener('shiye-flush-before-logout',event=>event.detail.tasks.push(flushSave()));
 let lastSyncError;
 window.addEventListener('shiye-cloud-superseded',()=>{
-  // A remote record that won timestamp comparison must be downloaded.
-  // The uploader has already removed its superseded local outbox row.
-  void refresh({background:true,onlyChanged:true}).catch(error=>
-    console.warn('云端较新版本尚未拉取，将在下次联网时重试',error));
+  // Local stale changes were dropped in favour of a newer cloud record.
+  // Preserve active import/matching selections; their next route exit forces
+  // an immediate pull rather than replacing their draft UI.
+  if(!shouldPullCloudForRoute(state.route))return;
+  void backgroundCloudCheck({force:true});
 });
 window.addEventListener('shiye-project-sync',event=>{const {pending,error}=event.detail;syncDisplay.pending=pending;syncDisplay.error=error;syncDisplay.checking=false;if(!dirtyProjects.size&&!savingProjects)syncDisplay.localPending=false;updateSyncIndicator();if(error){saveStatus('待同步 · 修改已保留在本机');const message=error.name==='AbortError'||/abort|timed? ?out/i.test(error.message||'')?'网络请求中断，本机修改已保留，将自动重试同步':error.message||'云端暂不可用，本机修改已保留，将自动重试';if(lastSyncError!==message)toast(message);lastSyncError=message;}else{lastSyncError=null;saveStatus(pending?'修改已暂存 · 后台同步中':'已保存到云端');privateImages.retryMissing();}});
 let cloudCheck,cloudCheckAt=0,cloudSessionReady=false;
 let syncPausedByUser=false;
 const cloudResumer=createSyncResumer({flush:()=>db.flushProjects({background:true}),canRun:()=>cloudEnabled&&cloudSessionReady&&navigator.onLine!==false,onError:error=>console.warn('后台同步待重试',error?.message)});
-function backgroundCloudCheck(){if(!cloudEnabled||document.visibilityState==='hidden'||cloudCheck||Date.now()-cloudCheckAt<15000)return;cloudCheckAt=Date.now();cloudCheck=refresh({background:true,onlyChanged:true}).catch(error=>console.warn('后台版本检查失败；保留已验证缓存',error)).finally(()=>{cloudCheck=null;});}
+function backgroundCloudCheck({force=false}={}){
+  if(!cloudEnabled||!shouldPullCloudForRoute(state.route)||
+     document.visibilityState==='hidden'||cloudCheck||
+     !force&&Date.now()-cloudCheckAt<15000)return;
+  cloudCheckAt=Date.now();
+  cloudCheck=refresh({background:true,onlyChanged:true})
+    .catch(error=>console.warn('后台版本检查失败；保留已验证缓存',error))
+    .finally(()=>{cloudCheck=null;});
+}
 // Cloud sync is bidirectional: poll lightweight version metadata while the
 // document remains visible, not only when focus/online events happen.
 setInterval(backgroundCloudCheck,15000);
