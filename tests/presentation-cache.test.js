@@ -133,3 +133,21 @@ test('route cover signature is stable from image placeholder to hydrated Blob UR
     assert.equal(view.querySelector('.thumb-sheet'),warmed);
   }finally{unbind();env.close();}
 });
+
+test('catalog source remains COS thumbnail even after the original has been loaded',async()=>{
+ const env=environment(),root=document.createElement('div'),calls={original:0,low:0,high:0};document.body.append(root);
+ const loader=mountPrivateImages({root,urls:new Map(),onError:()=>{},db:{
+   get:async()=>{calls.original++;return {data:new Blob(['original'])};},
+   previewBlob:async(_id,pixels)=>{if(pixels===360)calls.low++;else calls.high++;return new Blob(['thumbnail-'+pixels]);}
+ }});
+ try{
+   const original=await loader.load('material',true);
+   assert.ok(original.startsWith('blob:'));
+   assert.match(imagePlaceholder('material'),/#shiye-image=/,'a full original cannot become a catalog cover');
+   const low=await loader.load('material',false);
+   assert.ok(low.startsWith('blob:'));assert.notEqual(low,original);
+   assert.equal(imagePlaceholder('material'),low);
+   assert.deepEqual(calls,{original:1,low:1,high:0});
+   assert.equal(await loader.load('material',false),low,'returning to a list reuses its low cover');
+ }finally{loader.dispose();env.close();}
+});
