@@ -15,6 +15,8 @@ import {clampCanvasPosition,moveSelection,materialCenterOutside} from './canvas-
 const labels={select:'选择',marquee:'矩形框选',pen:'笔',highlighter:'荧光笔',eraser:'橡皮擦',lasso:'套索选择',text:'文字',shape:'图形',material:'素材',layers:'图层',paper:'画布背景'};
 const glyphs={select:'➤',pen:'',eraser:'◇',highlighter:'▱',lasso:'◌',text:'Aa',shape:'▢',material:'▧',layers:'▱',paper:'▦'};
 const prefKey='shiye-canvas-tools-v1';
+// Survive editor remounts and route returns; card image nodes stay decoded.
+const pickerRows=new Map();
 const allEntries=d=>[['material',d.items],['shape',d.primitives],['text',d.textBlocks]].flatMap(([kind,list])=>(list||[]).map(value=>({kind,value})));
 export function mountCanvasEditor(c){
   const {state,view,body,modal,current,checkpoint,saveProject,render,route,flushSave,toast,esc,imgTag,asset,handle,openCutoutCheck,openAICreation}=c,d=current(),page=view.querySelector('#canvas-page');if(!d||!page)return;
@@ -59,8 +61,31 @@ export function mountCanvasEditor(c){
   },{signal:editorPanelController.signal,capture:true});
   function syncTools(){for(const b of tools.querySelectorAll('button')){const active=(state.toolHighlight||state.tool)===b.dataset.val||(b.dataset.val==='select'&&state.tool==='marquee');b.classList.toggle('primary',active);b.setAttribute('aria-pressed',String(active));}page.classList.toggle('pen',['pen','highlighter','eraser'].includes(state.tool));}
   function contextTools(){context.replaceChildren();const mode=state.toolHighlight||state.tool,entry=entries.find(e=>e.value.id===state.selected),s=entry?.value,kind=entry?.kind;
-    if(['pen','highlighter'].includes(mode)){const marker=mode==='highlighter',key=marker?'marker':'pen';for(const width of [2,4,9]){const b=button('',()=>{if(prefs[key+'Width']===width)widthSettings(b,mode);else{prefs[key+'Width']=width;prefsChanged();}},'stroke-width'+(prefs[key+'Width']===width?' active':''));b.innerHTML='<span style="height:'+Math.max(2,width)+'px"></span>';b.setAttribute('aria-label','笔画粗细 '+width+' pt');context.append(b);}for(const color of ['#2b5245','#009cff','#ff3348']){const b=button('',()=>{if(prefs[key+'Color']===color)colorSettings(b,mode);else{prefs[key+'Color']=color;prefsChanged();}},'ink-color'+(prefs[key+'Color']===color?' active':''));b.style.backgroundColor=color;b.setAttribute('aria-label','笔画颜色 '+color);context.append(b);}context.append(button('＋',e=>colorSettings(e.currentTarget,mode)));return;}
-    if(mode==='eraser'){for(const size of [8,20,40]){const b=button('○',()=>{if(prefs.eraserWidth===size)widthSettings(b,'eraser');else{prefs.eraserWidth=size;prefsChanged();}},'eraser-size'+(prefs.eraserWidth===size?' active':''));b.style.fontSize=(size/2+14)+'px';b.disabled=(prefs.eraserStyle||'standard')==='standard';b.setAttribute('aria-label','橡皮尺寸 '+size+' pt');context.append(b);}context.append(button('＋',e=>widthSettings(e.currentTarget,'eraser')));return;}
+    if(['pen','highlighter'].includes(mode)){
+      const marker=mode==='highlighter',key=marker?'marker':'pen';
+      for(const width of [2,4,9]){
+        const b=button('',()=>{if(prefs[key+'Width']===width)widthSettings(b,mode);else{prefs[key+'Width']=width;prefsChanged();contextTools();}},'stroke-width'+(prefs[key+'Width']===width?' active':''));
+        b.innerHTML='<span style="height:'+Math.max(2,width)+'px"></span>';
+        b.setAttribute('aria-label','笔画粗细 '+width+' pt');context.append(b);
+      }
+      for(const color of ['#2b5245','#009cff','#ff3348']){
+        const b=button('',()=>{if(prefs[key+'Color']===color)colorSettings(b,mode);else{prefs[key+'Color']=color;prefsChanged();contextTools();}},'ink-color'+(prefs[key+'Color']===color?' active':''));
+        b.style.backgroundColor=color;b.setAttribute('aria-label','笔画颜色 '+color);context.append(b);
+      }
+      const custom=document.createElement('input');custom.type='color';
+      custom.value=prefs[key+'Color'];custom.setAttribute('aria-label',marker?'自定义荧光笔颜色':'自定义画笔颜色');
+      custom.title='选择任意颜色';custom.oninput=()=>{prefs[key+'Color']=custom.value;prefsChanged();};context.append(custom);
+      context.append(button('更多颜色',e=>colorSettings(e.currentTarget,mode)));return;
+    }
+    if(mode==='eraser'){
+      for(const size of [8,20,40]){
+        const b=button('○',()=>{if(prefs.eraserWidth===size&&(prefs.eraserStyle||'standard')!=='standard'){widthSettings(b,'eraser');return;}
+          prefs.eraserWidth=size;prefs.eraserStyle='fine';prefs.wholeStroke=false;prefsChanged();contextTools();
+        },'eraser-size'+(prefs.eraserWidth===size&&(prefs.eraserStyle||'standard')!=='standard'?' active':''));
+        b.style.fontSize=(size/2+14)+'px';b.setAttribute('aria-label','切换到局部橡皮 '+size+' pt');context.append(b);
+      }
+      context.append(button('自定大小',e=>widthSettings(e.currentTarget,'eraser')));return;
+    }
     if(mode==='lasso'||mode==='marquee'){const icon=button('◌',()=>{});icon.setAttribute('aria-label','套索选择');icon.setAttribute('aria-pressed','true');context.append(icon);return;}
     if(['shape','material','layers','paper'].includes(mode))return;
     if(mode==='text'||kind==='text'){const t=s||state.textDefaults||{style:'serif',fontSize:40,color:'#30463d'};const patch=(key,value)=>{if(s)change(()=>{s[key]=value;if(key==='style')s.fontName=null;});else{(state.textDefaults||={...t})[key]=value;contextTools();}};const font=document.createElement('select');font.setAttribute('aria-label','字体');font.innerHTML=[['serif','宋体'],['sans','黑体'],['rounded','圆体'],['hand','手写体']].map(([id,name])=>'<option value="'+id+'" '+(id===t.style?'selected':'')+'>'+name+'</option>').join('');font.onchange=()=>patch('style',font.value);context.append(font);const size=document.createElement('input');size.type='number';size.min=5;size.max=400;size.value=t.fontSize;size.setAttribute('aria-label','字号');size.onchange=()=>patch('fontSize',Math.max(5,Math.min(400,+size.value||40)));context.append(size);context.append(button('☷',e=>textParagraph(e.currentTarget,t,patch)));const color=document.createElement('input');color.type='color';color.value=t.color||'#30463d';color.setAttribute('aria-label','文字颜色');color.onchange=()=>patch('color',color.value);context.append(color,button('Aa',e=>{const p=openPopover(e.currentTarget,{title:'文字样式',width:240,menu:true});for(const [key,name] of [['bold','粗体'],['italic','斜体'],['underline','下划线'],['strikethrough','删除线']])p.content.append(button((t[key]?'✓ ':'')+name,()=>{p.close();patch(key,!t[key]);}));if(s)p.content.append(button('详细文字设置',()=>{p.close();objectInspector(entries.find(e=>e.value.id===state.selected));}));}));return;}
@@ -70,8 +95,31 @@ export function mountCanvasEditor(c){
   }
   const toggle=(parent,label,value,fn)=>{const row=document.createElement('label');row.className='canvas-toggle';row.append(document.createTextNode(label));const input=document.createElement('input');input.type='checkbox';input.checked=value;input.onchange=()=>fn(input.checked);row.append(input);parent.append(row);return input;};
   const range=(parent,label,value,min,max,step,fn,disabled=false,suffix=" pt")=>{const row=document.createElement('label');row.className='canvas-setting';const line=document.createElement('span'),display=document.createElement('output');line.append(document.createTextNode(label),display);display.textContent=Number(value).toFixed(step<1?1:0)+suffix;const input=document.createElement('input');Object.assign(input,{type:'range',min,max,step,value,disabled});input.oninput=()=>{display.textContent=Number(input.value).toFixed(step<1?1:0)+suffix;fn(+input.value);};row.append(line,input);parent.append(row);};
-  function widthSettings(anchor,mode){const key=mode==='highlighter'?'marker':'pen',p=openPopover(anchor,{title:mode==='eraser'?'橡皮粗细':'笔粗细',width:310});range(p.content,'粗细',mode==='eraser'?prefs.eraserWidth:prefs[key+'Width'],mode==='eraser'?6:1,mode==='eraser'?80:20,.1,value=>{if(mode==='eraser')prefs.eraserWidth=value;else prefs[key+'Width']=value;prefsChanged();});}
-  function colorSettings(anchor,mode){const key=mode==='highlighter'?'marker':'pen',p=openPopover(anchor,{title:'笔颜色',width:300}),palette=document.createElement('div');palette.className='canvas-color-grid';p.content.append(palette);for(const color of ['#171717','#555555','#989898','#ffffff','#e33b45','#fb8795','#ff9c21','#e8d432','#159b73','#57bd4b','#167ad9','#264d9c','#853aaf','#955969']){const b=button('',()=>{prefs[key+'Color']=color;prefsChanged();p.close();contextTools();});b.className='ink-color';b.style.backgroundColor=color;b.setAttribute('aria-label','颜色 '+color);palette.append(b);}const custom=document.createElement('input');custom.type='color';custom.value=prefs[key+'Color'];custom.setAttribute('aria-label','自定义颜色');custom.oninput=()=>{prefs[key+'Color']=custom.value;prefsChanged();};p.content.append(custom);}
+  function widthSettings(anchor,mode){
+    const key=mode==='highlighter'?'marker':'pen',p=openPopover(anchor,{title:mode==='eraser'?'橡皮大小':'笔粗细',width:280});
+    range(p.content,'粗细',mode==='eraser'?prefs.eraserWidth:prefs[key+'Width'],mode==='eraser'?6:1,mode==='eraser'?80:20,.1,value=>{
+      if(mode==='eraser'){prefs.eraserWidth=value;prefs.eraserStyle='fine';prefs.wholeStroke=false;}
+      else prefs[key+'Width']=value;
+      prefsChanged();
+    });
+  }
+  function colorSettings(anchor,mode){
+    const key=mode==='highlighter'?'marker':'pen',p=openPopover(anchor,{title:'自定义颜色',width:300}),
+      palette=document.createElement('div');
+    palette.className='canvas-color-grid';p.content.append(palette);
+    const apply=color=>{prefs[key+'Color']=color;prefsChanged();};
+    for(const color of ['#171717','#555555','#989898','#ffffff','#e33b45','#fb8795','#ff9c21','#e8d432','#159b73','#57bd4b','#167ad9','#264d9c','#853aaf','#955969']){
+      const b=button('',()=>{apply(color);p.close();contextTools();});
+      b.className='ink-color';b.style.backgroundColor=color;b.setAttribute('aria-label','颜色 '+color);palette.append(b);
+    }
+    const row=document.createElement('label');row.textContent='精确颜色（十六进制）';
+    const custom=document.createElement('input');custom.type='color';custom.value=prefs[key+'Color'];custom.setAttribute('aria-label','颜色选择器');
+    const hex=document.createElement('input');hex.type='text';hex.maxLength=7;hex.placeholder='#RRGGBB';hex.value=prefs[key+'Color'];hex.setAttribute('aria-label','输入精确颜色');
+    custom.oninput=()=>{hex.value=custom.value;apply(custom.value);};
+    hex.oninput=()=>{const value=hex.value.trim();if(/^#[0-9a-fA-F]{6}$/.test(value)){custom.value=value;apply(value.toLowerCase());}};
+    hex.onchange=()=>{if(!/^#[0-9a-fA-F]{6}$/.test(hex.value.trim()))hex.value=prefs[key+'Color'];};
+    row.append(custom,hex);p.content.append(row);
+  }
   function toolSettings(anchor,mode){const p=openPopover(anchor,{title:labels[mode],width:290,menu:true}),el=p.content;
     if(mode==='pen'){for(const [id,name] of [['fountain','钢笔'],['ballpoint','圆珠笔'],['brush','画笔']]){const b=button(name,()=>{prefs.penStyle=id;prefsChanged();p.close();contextTools();});b.setAttribute('aria-checked',String(prefs.penStyle===id));el.append(b);}}
     else if(mode==='highlighter'){toggle(el,'直线绘制',prefs.markerStraight,value=>{prefs.markerStraight=value;prefsChanged();});}
@@ -79,13 +127,71 @@ export function mountCanvasEditor(c){
     else{state.selectionFilter={ink:true,material:true,text:true,shape:true,...state.selectionFilter};for(const [key,name] of [['ink','手写笔画'],['material','素材'],['text','文字框'],['shape','图形']])toggle(el,name,state.selectionFilter[key],v=>state.selectionFilter[key]=v);const modeRow=document.createElement('div');modeRow.className='canvas-selection-mode';el.append(modeRow);for(const [id,name] of [['contain','必须全部框住'],['intersect','只需要相交']]){const b=button(name,()=>{state.selectionMode=id;modeRow.querySelectorAll('button').forEach(n=>n.setAttribute('aria-checked',String(n===b)));});b.setAttribute('aria-checked',String((state.selectionMode||'contain')===id));modeRow.append(b);}}
   }
   function shapePicker(anchor){const p=openPopover(anchor,{title:'添加图形',width:360}),tabs=document.createElement('div'),grid=document.createElement('div');tabs.className='swift-segments';grid.className='canvas-picker-grid';p.content.append(tabs,grid);let version=0;const show=async tab=>{const ticket=++version;grid.replaceChildren();let choices=tab==='common'?commonShapes:tab==='advanced'?advancedShapes:entries.filter(e=>e.kind==='shape'&&!e.value.hidden).map(e=>[e.value.id,e.value.kind==='vector'?'自定义图形':e.value.kind,e.value]);if(ticket!==version||!grid.isConnected)return;grid.replaceChildren();for(const [id,name,copy] of choices){const sample=copy||configureShape(primitive(id,d),id),b=button('',()=>{p.close();change(()=>{const shape=copy?{...structuredClone(copy),id:uid(),locked:false,hidden:false}:configureShape(primitive(id,d),id);shape.x=d.canvas.width/2;shape.y=d.canvas.height/2;shape.zIndex=Math.max(0,...allEntries(d).map(e=>e.value.zIndex||0))+1;d.primitives.push(shape);state.selected=shape.id;state.tool='select';state.toolHighlight='shape';state.multiSelected=[];});});b.dataset.shapeKind=copy?'used':id;b.innerHTML=shapeSVG(sample)+'<span>'+esc(name)+'</span>';grid.append(b);}tabs.querySelectorAll('button').forEach(b=>b.classList.toggle('selected',b.dataset.tab===tab));};for(const [id,name] of [['used','已使用图形'],['common','基础图形'],['advanced','高级图形']]){const b=button(name,()=>show(id));b.dataset.tab=id;tabs.append(b);}show('common');}
-  function materialPicker(anchor){const p=openPopover(anchor,{title:'添加素材',width:390}),tabs=document.createElement('div'),controls=document.createElement('div'),grid=document.createElement('div');tabs.className='swift-segments';controls.className='canvas-material-filters';grid.className='canvas-picker-grid';p.content.append(tabs,controls,grid);let tab='all',series='all',kind='all',sort='newest';
-    const seriesSelect=document.createElement('select');seriesSelect.setAttribute('aria-label','选择系列');seriesSelect.append(new Option('全部系列','all'),new Option('系列外','none'));for(const group of state.series||[])seriesSelect.append(new Option(group.title,group.id));seriesSelect.onchange=()=>{series=seriesSelect.value;show();};
-    const kindSelect=document.createElement('select');kindSelect.setAttribute('aria-label','过滤素材类型');for(const [id,name] of [['all','全部类型'],['sticker','贴纸'],['paper','纸张'],['tape','胶带'],['photo','照片'],['text','文字'],['reference','参考']])kindSelect.append(new Option(name,id));kindSelect.onchange=()=>{kind=kindSelect.value;show();};
-    const sortSelect=document.createElement('select');sortSelect.setAttribute('aria-label','素材排序');for(const [id,name] of [['newest','最新添加'],['oldest','最早添加'],['name','名称升序'],['name-desc','名称降序']])sortSelect.append(new Option(name,id));sortSelect.onchange=()=>{sort=sortSelect.value;show();};
+  // Keep decoded thumbnail DOM nodes alive between opening the three tabs.
+  // The image loader retains COS 360px blobs; reusing nodes also avoids
+  // decoding and reflowing them every time the picker is opened.
+  function materialPicker(anchor){
+    const p=openPopover(anchor,{title:'添加素材',width:340}),tabs=document.createElement('div'),
+      controls=document.createElement('div'),grid=document.createElement('div');
+    p.surface.classList.add('swift-material-picker');
+    tabs.className='swift-segments';controls.className='canvas-material-filters';grid.className='canvas-picker-grid';
+    p.content.append(tabs,controls,grid);
+    let tab=d.items.some(i=>!i.isParked)?'used':'all',series='all',kind='all',sort='newest';
+    const seriesSelect=document.createElement('select');seriesSelect.setAttribute('aria-label','选择系列');
+    seriesSelect.append(new Option('全部系列','all'),new Option('系列外','none'));
+    for(const group of state.series||[])seriesSelect.append(new Option(group.title,group.id));
+    const kindSelect=document.createElement('select');kindSelect.setAttribute('aria-label','过滤素材类型');
+    for(const [id,name] of [['all','全部类型'],['sticker','贴纸'],['paper','纸张'],['tape','胶带'],['photo','照片'],['text','文字'],['reference','参考']])kindSelect.append(new Option(name,id));
+    const sortSelect=document.createElement('select');sortSelect.setAttribute('aria-label','素材排序');
+    for(const [id,name] of [['newest','最新添加'],['oldest','最早添加'],['name','名称升序'],['name-desc','名称降序']])sortSelect.append(new Option(name,id));
     controls.append(seriesSelect,kindSelect,sortSelect);
-    const show=()=>{controls.hidden=tab!=='all';grid.replaceChildren();let list=tab==='used'?d.items.filter(i=>!i.isParked).map(item=>({a:asset(item.assetID),item})):tab==='standby'?d.items.filter(i=>i.isParked).map(item=>({a:asset(item.assetID),item})):state.assets.filter(a=>!a.isProjectInternal&&(series==='all'||(series==='none'?!a.seriesID:a.seriesID===series))&&(kind==='all'||a.kind===kind)).map(a=>({a}));if(tab==='all')list.sort((x,y)=>sort==='name'?x.a.title.localeCompare(y.a.title):sort==='name-desc'?y.a.title.localeCompare(x.a.title):(Date.parse(y.a.createdAt||0)-Date.parse(x.a.createdAt||0))*(sort==='oldest'?-1:1));for(const {a,item} of list){if(!a)continue;const b=button('',()=>{p.close();if(item){change(()=>{item.isParked=false;state.selected=item.id;state.multiSelected=[];});return;}const used=d.items.filter(i=>i.assetID===a.id),occupied=new Set(used.map(i=>i.materialUnitIndex||0)),unit=Array.from({length:a.supply?.quantity??1},(_,i)=>i).find(i=>!occupied.has(i));if(unit===undefined){toast('此页已使用全部实物数量');return;}if(!(a.physicalWidthMM>0&&a.physicalHeightMM>0)){toast('请先确认素材实物尺寸');return;}change(()=>{const inserted=itemFromAsset(a,d,d.canvas.width/2,d.canvas.height/2,Math.max(0,...allEntries(d).map(e=>e.value.zIndex||0))+1);inserted.materialUnitIndex=unit;d.items.push(inserted);state.selected=inserted.id;state.multiSelected=[];});});b.dataset.assetId=a.id;b.innerHTML=imgTag(a)+'<span>'+esc(a.title)+'</span>';grid.append(b);}if(!grid.children.length)grid.textContent='没有符合条件的素材';tabs.querySelectorAll('button').forEach(b=>b.classList.toggle('selected',b.dataset.tab===tab));};
-    for(const [id,name] of [['used','已使用素材'],['standby','备选素材'],['all','所有素材']]){const b=button(name,()=>{tab=id;show();});b.dataset.tab=id;tabs.append(b);}tab=d.items.some(i=>!i.isParked)?'used':'all';show();}
+    const show=()=>{
+      controls.hidden=tab!=='all';
+      const key=JSON.stringify([state.accountId||'',state.activeProject?.id,d.id,tab,series,kind,sort,
+        d.items.map(i=>[i.id,i.assetID,!!i.isParked]),state.assets.map(a=>[a.id,a.blobId,a.updatedAt])]);
+      let rows=pickerRows.get(key);
+      if(!rows){
+        let list=tab==='used'?d.items.filter(i=>!i.isParked).map(item=>({a:asset(item.assetID),item}))
+          :tab==='standby'?d.items.filter(i=>i.isParked).map(item=>({a:asset(item.assetID),item}))
+          :state.assets.filter(a=>!a.isProjectInternal&&(series==='all'||(series==='none'?!a.seriesID:a.seriesID===series))&&(kind==='all'||a.kind===kind)).map(a=>({a}));
+        if(tab==='all')list.sort((x,y)=>sort==='name'?x.a.title.localeCompare(y.a.title):sort==='name-desc'?y.a.title.localeCompare(x.a.title):(Date.parse(y.a.createdAt||0)-Date.parse(x.a.createdAt||0))*(sort==='oldest'?-1:1));
+        rows=list.filter(({a})=>!!a).map(({a,item})=>{
+          const b=document.createElement('button');b.type='button';b.dataset.pickerAsset=a.id;b.dataset.assetId=a.id;
+          if(item)b.dataset.pickerItem=item.id;
+          b.innerHTML=imgTag(a)+'<span>'+esc(a.title)+'</span>';
+          return b;
+        });
+        pickerRows.set(key,rows);
+        if(pickerRows.size>8)pickerRows.delete(pickerRows.keys().next().value);
+      }
+      grid.replaceChildren(...rows);
+      if(!rows.length)grid.textContent='没有符合条件的素材';
+      tabs.querySelectorAll('button').forEach(b=>b.classList.toggle('selected',b.dataset.tab===tab));
+    };
+    // Delegation stays on this live grid; cached card nodes do not retain
+    // callbacks tied to a closed popover or a stale editor session.
+    grid.onclick=event=>{
+      const b=event.target.closest('button[data-picker-asset]');if(!b||!grid.contains(b))return;
+      const a=asset(b.dataset.pickerAsset),item=d.items.find(i=>i.id===b.dataset.pickerItem);
+      if(!a)return;
+      if(item){p.close();change(()=>{item.isParked=false;state.selected=item.id;state.multiSelected=[];});return;}
+      const occupied=new Set(d.items.filter(i=>i.assetID===a.id).map(i=>i.materialUnitIndex||0));
+      const unit=Array.from({length:a.supply?.quantity??1},(_,i)=>i).find(i=>!occupied.has(i));
+      if(unit===undefined){toast('此页已使用全部实物数量');return;}
+      if(!(a.physicalWidthMM>0&&a.physicalHeightMM>0)){toast('请先确认素材实物尺寸');return;}
+      p.close();change(()=>{
+        const inserted=itemFromAsset(a,d,d.canvas.width/2,d.canvas.height/2,Math.max(0,...allEntries(d).map(e=>e.value.zIndex||0))+1);
+        inserted.materialUnitIndex=unit;d.items.push(inserted);state.selected=inserted.id;state.multiSelected=[];
+      });
+    };
+    seriesSelect.onchange=()=>{series=seriesSelect.value;show();};
+    kindSelect.onchange=()=>{kind=kindSelect.value;show();};
+    sortSelect.onchange=()=>{sort=sortSelect.value;show();};
+    for(const [id,name] of [['used','已使用素材'],['standby','备选素材'],['all','所有素材']]){
+      const b=button(name,()=>{tab=id;show();});b.dataset.tab=id;tabs.append(b);
+    }
+    show();
+  }
   function layerPicker(anchor){
     const p=openPopover(anchor,{title:'图层 · 上方显示在前',width:350}),list=document.createElement('div');
     list.className='canvas-layer-list';p.content.append(list);
@@ -149,12 +255,53 @@ export function mountCanvasEditor(c){
       const move=button('≡',()=>{});
       move.onclick=()=>{if(drag||performance.now()<suppressMoveClickUntil)return;moveMenu?.remove();const controls=document.createElement('div');controls.className='canvas-layer-move-actions';controls.append(button('上移一层',()=>{reorder(o.id,ordered[indexOf(o.id)-1]?.value.id);controls.remove();moveMenu=null;}),button('下移一层',()=>{reorder(o.id,ordered[indexOf(o.id)+1]?.value.id,true);controls.remove();moveMenu=null;}));row.append(controls);moveMenu=controls;};
       move.dataset.layerMove='';move.setAttribute('aria-label','调整图层顺序');move.style.touchAction='none';
-      move.onpointerdown=event=>{if(event.button>0||o.isLocked||o.locked)return;const x=event.clientX,y=event.clientY;move.setPointerCapture(event.pointerId);
-        holdTimer=setTimeout(()=>{drag={id:o.id,y,target:null};row.classList.add('dragging');scrollDrag();},280);
-        move.onpointermove=ev=>{if(!drag){if(Math.hypot(ev.clientX-x,ev.clientY-y)>6){clearTimeout(holdTimer);holdTimer=null;}return;}drag.y=ev.clientY;ev.preventDefault();};
+      let pending=null;
+      const beginDrag=()=>{
+        if(!pending||drag)return;
+        drag={id:o.id,y:pending.y,target:null};
+        row.classList.add('dragging');
+        scrollDrag();
       };
-      move.onpointerup=event=>{const finished=stopDrag();if(finished){suppressMoveClickUntil=performance.now()+350;event.preventDefault();event.stopPropagation();if(finished.target)reorder(finished.id,finished.target.id,finished.target.after);}};
-      move.onpointercancel=stopDrag;
+      move.onpointerdown=event=>{
+        if(event.button>0||o.isLocked||o.locked)return;
+        event.stopPropagation();
+        pending={pointerId:event.pointerId,x:event.clientX,y:event.clientY,startY:event.clientY,
+          pointerType:event.pointerType};
+        try{move.setPointerCapture(event.pointerId);}catch{}
+        if(event.pointerType==='touch')holdTimer=setTimeout(beginDrag,240);
+      };
+      move.onpointermove=event=>{
+        if(!pending||pending.pointerId!==event.pointerId)return;
+        pending.y=event.clientY;
+        if(!drag){
+          const distance=Math.hypot(event.clientX-pending.x,event.clientY-pending.startY);
+          if(event.pointerType==='mouse'&&distance>4)beginDrag();
+          else if(event.pointerType==='touch'&&distance>10){clearTimeout(holdTimer);holdTimer=null;}
+        }
+        if(!drag)return;
+        drag.y=event.clientY;
+        list.querySelectorAll('.drop-target').forEach(el=>el.classList.remove('drop-target'));
+        drag.target=targetAt(event.clientY);
+        drag.target?.row.classList.add('drop-target');
+        event.preventDefault();event.stopPropagation();
+      };
+      move.onpointerup=event=>{
+        if(!pending||pending.pointerId!==event.pointerId)return;
+        const target=drag?targetAt(event.clientY):null;
+        const dragged=!!drag;stopDrag();pending=null;
+        if(dragged){
+          suppressMoveClickUntil=performance.now()+400;
+          event.preventDefault();event.stopPropagation();
+          if(target)reorder(o.id,target.id,target.after);
+        }
+      };
+      move.onpointercancel=()=>{pending=null;stopDrag();};
+      move.onkeydown=event=>{
+        if(o.isLocked||o.locked||!['ArrowUp','ArrowDown'].includes(event.key))return;
+        event.preventDefault();
+        const next=ordered[indexOf(o.id)+(event.key==='ArrowUp'?-1:1)];
+        if(next)reorder(o.id,next.value.id,event.key==='ArrowDown');
+      };
       row.append(lock,eye,move);rows.set(o.id,row);
     }
     redraw();
@@ -181,7 +328,9 @@ export function mountCanvasEditor(c){
   function duplicate(entry){if(entry.kind==='material'){const a=asset(entry.value.assetID),taken=new Set(d.items.filter(i=>i.assetID===a.id).map(i=>i.materialUnitIndex||0)),unit=Array.from({length:a.supply?.quantity??1},(_,i)=>i).find(i=>!taken.has(i));if(unit===undefined){toast('复制会超出本页实物库存');return;}change(()=>{const copy={...structuredClone(entry.value),id:uid(),x:entry.value.x+25,y:entry.value.y+25,materialUnitIndex:unit};d.items.push(copy);state.selected=copy.id;});}else handle('duplicate');}
   function selectedHandles(){if(!selected||selected.value.locked||selected.value.isLocked||state.multiSelected?.length>1)return;const o=selected.value,object=page.querySelector('[data-object="'+o.id+'"]');if(!object)return;const node=document.createElement('div');node.className='selected-object-overlay';node.dataset.selectionFor=o.id;const geometry=['left','top','width','height','transform'];for(const key of geometry)node.style[key]=object.style[key];page.append(node);const floating=document.createElement('div');floating.className='selected-object-actions';for(const [name,glyph,fn] of [['复制对象','⊞',()=>duplicate(selected)],['删除对象','♜',()=>handle('delete-object')],['编辑对象','☷',()=>objectInspector(selected)]]){const b=button(glyph,e=>{e.stopPropagation();fn();});b.setAttribute('aria-label',name);b.onpointerdown=e=>e.stopPropagation();floating.append(b);}node.append(floating);
     let move=null;
-    node.onpointerdown=e=>{if(e.button>0||e.target.closest('.object-handle,.selected-object-actions'))return;const top=document.elementsFromPoint(e.clientX,e.clientY).find(el=>el.matches?.('[data-object]'));if(top&&top.dataset.object!==o.id){e.preventDefault();e.stopPropagation();view.pickCanvasObject?.(top.dataset.object,e.shiftKey);return;}e.preventDefault();e.stopPropagation();move={id:e.pointerId,x:e.clientX,y:e.clientY,startX:o.x,startY:o.y,startFlags:o.userOverrideFlags?.slice(),changed:false};node.setPointerCapture(e.pointerId);};
+    node.onpointerdown=e=>{if(e.button>0||e.target.closest('.object-handle,.selected-object-actions'))return;// The selected overlay owns the hit area until release. Never peek
+      // through it and select an unrelated overlapping object while dragging.
+      e.preventDefault();e.stopPropagation();move={id:e.pointerId,x:e.clientX,y:e.clientY,startX:o.x,startY:o.y,startFlags:o.userOverrideFlags?.slice(),changed:false};node.setPointerCapture(e.pointerId);};
     node.onpointermove=e=>{if(!move||move.id!==e.pointerId)return;const scale=page.getBoundingClientRect().width/d.canvas.width,dx=(e.clientX-move.x)/scale,dy=(e.clientY-move.y)/scale;if(!move.changed&&Math.hypot(e.clientX-move.x,e.clientY-move.y)>3){checkpoint();move.changed=true;node.classList.add('dragging');}if(!move.changed)return;e.preventDefault();e.stopPropagation();moveSelection(d,new Map([[o.id,{x:move.startX,y:move.startY}]]),dx,dy);const displayScale=page.clientWidth/d.canvas.width;object.style.left=(o.x-o.width/2)*displayScale+'px';object.style.top=(o.y-o.height/2)*displayScale+'px';syncSelectionGeometry(page,o.id);};
     node.onpointerup=e=>{if(!move||move.id!==e.pointerId)return;e.stopPropagation();const previous=move,changed=move.changed;move=null;node.classList.remove('dragging');if(changed){view.selectionClickConsumed=true;if(materialCenterOutside(d,[selected])&&confirm('素材中心已移出画布，是否撤回这次移动？')){o.x=previous.startX;o.y=previous.startY;o.userOverrideFlags=previous.startFlags;state.undo.pop();}else saveProject();render();}};
     node.onpointercancel=e=>{if(!move||move.id!==e.pointerId)return;e.stopPropagation();node.classList.remove('dragging');if(move.changed){o.x=move.startX;o.y=move.startY;o.userOverrideFlags=move.startFlags;state.undo.pop();}move=null;render();};
