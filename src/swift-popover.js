@@ -14,7 +14,7 @@ export function openPopover(anchor, {title = '', width = 340, menu = false} = {}
   closePopover();
   const controller = new AbortController(), surface = document.createElement('section'), owned = new Map();
   let closed = false;
-  surface.className = 'swift-popover' + (menu ? ' swift-menu' : '');
+  surface.className = 'swift-popover' + (menu ? ' swift-menu' : '') + (['添加图形','添加素材'].includes(title) ? ' swift-picker-popover' : '');
   surface.setAttribute('role', menu ? 'menu' : 'dialog');
   surface.setAttribute('aria-label', title || anchor.getAttribute('aria-label') || '设置');
   surface.tabIndex = -1;
@@ -24,7 +24,7 @@ export function openPopover(anchor, {title = '', width = 340, menu = false} = {}
   const position = () => {
     if (closed) return;
     if (!anchor.isConnected) { close(); return; }
-    const r = anchor.getBoundingClientRect(); surface.style.maxHeight = Math.max(100, innerHeight - 24) + 'px';
+    const r = anchor.getBoundingClientRect(); surface.style.maxHeight = Math.max(160,Math.min(innerHeight-24, ['添加图形','添加素材'].includes(title)?innerHeight*.54:innerHeight*.78))+'px';
     const h = surface.getBoundingClientRect().height;
     surface.style.left = Math.max(12, Math.min(r.left, innerWidth - surface.offsetWidth - 12)) + 'px';
     surface.style.top = Math.max(12, r.bottom + h + 8 <= innerHeight - 12 ? r.bottom + 8 : r.top - h - 8) + 'px';
@@ -42,7 +42,7 @@ export function openPopover(anchor, {title = '', width = 340, menu = false} = {}
   const observer = new ResizeObserver(position); observer.observe(surface); observer.observe(anchor);
   document.addEventListener('pointerdown', e => {
     if (!surface.contains(e.target) && !anchor.contains(e.target) && ![...owned.keys()].some(el => el.contains(e.target))) close();
-  }, {signal: controller.signal});
+  }, {signal: controller.signal, capture:true});
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') { e.preventDefault(); close(true); }
     else if (menu && ['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) {
