@@ -453,7 +453,7 @@ async function cloudStageProject(record){
 }
 async function cloudStageImport(batch){await identity();if(revision===undefined)await version();await importSync.stage({...batch,id:crypto.randomUUID()});return {pending:true};}
 async function cloudStageMutation(names,fn){
-  const operations=[],modifiedAt=new Date().toISOString(),result=fn({objectStore(store){if(!names.includes(store))throw Error('此表未加入事务');return {put:item=>operations.push({action:'put',store,item:structuredClone(item),modifiedAt:item.updatedAt||modifiedAt}),delete:id=>operations.push({action:'delete',store,id,modifiedAt}),clear:()=>operations.push({action:'clear',store,modifiedAt})};}});
+  const operations=[],modifiedAt=new Date().toISOString(),result=fn({objectStore(store){if(!names.includes(store))throw Error('此表未加入事务');return {put:item=>operations.push({action:'put',store,item:structuredClone(item),modifiedAt}),delete:id=>operations.push({action:'delete',store,id,modifiedAt}),clear:()=>operations.push({action:'clear',store,modifiedAt})};}});
   if(result?.then)throw Error('事务回调必须同步');if(!operations.length)return;
   await identity();if(revision===undefined)await version();
   const deletedIDs=operations.filter(op=>op.store==='projects'&&op.action==='delete').map(op=>op.id);
