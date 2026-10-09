@@ -362,3 +362,28 @@ test('small editable projects store a standalone cover and reuse it for metadata
   assert.equal(rendered,2,'visual changes generate a new snapshot');
   assert.notEqual(state.calls[2].operations[0].item.drafts[0].coverImageID,cover);
 });
+
+test('project WebP snapshot becomes visible only after confirmed COS metadata commit',async()=>{
+  const events=[],previousWindow=globalThis.window,previousCustomEvent=globalThis.CustomEvent;
+  globalThis.window={dispatchEvent:event=>events.push({type:event.type,detail:event.detail})};
+  globalThis.CustomEvent=class{constructor(type,{detail}){this.type=type;this.detail=detail;}};
+  try{
+    const {state,db}=fixture(memoryCache(),{enabled:true,upload:async(path,data)=>{state.uploads.push({path,data});},download:async()=>new Blob(['cover'],{type:'image/webp'})},
+      async()=>new Blob(['webp'],{type:'image/webp'}));
+    const record={id:'w',title:'editable',updatedAt:'2026-10-09T01:00:00Z',activeDraftID:'d',
+      drafts:[{id:'d',canvas:{width:400,height:600},items:[],primitives:[],textBlocks:[],strokes:[]}]};
+    await db.cloudTransaction(['projects'],tx=>tx.objectStore('projects').put(record));
+    const coverEvents=events.filter(e=>e.type==='shiye-project-cover-ready');
+    assert.equal(coverEvents.length,1);
+    assert.equal(coverEvents[0].detail.projectID,'w');
+    assert.match(coverEvents[0].detail.coverImageID,/^project-cover:cos:owner-uuid\//);
+    assert.equal(state.calls.length,1);
+    const before=coverEvents.length;
+    state.fail=true;
+    await assert.rejects(db.cloudTransaction(['projects'],tx=>tx.objectStore('projects').put({...record,title:'failure'})),/conflict/);
+    assert.equal(events.filter(e=>e.type==='shiye-project-cover-ready').length,before);
+  }finally{
+    if(previousWindow===undefined)delete globalThis.window;else globalThis.window=previousWindow;
+    if(previousCustomEvent===undefined)delete globalThis.CustomEvent;else globalThis.CustomEvent=previousCustomEvent;
+  }
+});
