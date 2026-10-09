@@ -1,7 +1,19 @@
 // Durable edits are an explicit outbox, not a replacement for cloud records.
 // Commit acknowledgement is the only point at which an entry is removed.
-export function createProjectSync({load,write,commit,revision,reconcile=async()=> 'conflict',recordKeys=record=>[{store:'projects',id:record.id}],onCommitted=()=>{},onConflict=async()=>null,onStatus=()=>{},runExclusive=fn=>fn(),reload=load}){
+export function createProjectSync({load,write,commit,revision,reconcile=async()=> 'conflict',recordKeys=record=>[{store:'projects',id:record.id}],onCommitted=()=>{},onConflict=async()=>null,onStatus=()=>{},runExclusive=fn=>fn(),reload=load,autoFlushDelayMs=0,setTimer=setTimeout,clearTimer=clearTimeout,clock=()=>Date.now()}){
   let initialized,staging=Promise.resolve(),network,serial=0,error;
+  // Durable local staging is immediate; only the remote commit is batched.
+  const flushWindow=Math.max(0,Number(autoFlushDelayMs)||0);
+  let autoTimer=null,lastNetworkAt=null;
+  const cancelAuto=()=>{if(autoTimer!==null){clearTimer(autoTimer);autoTimer=null;}};
+  function scheduleAuto(){
+    if(network||autoTimer!==null)return;
+    if(!flushWindow){void kick();return;}
+    // First remote upload waits one window to coalesce several small edits.
+    // Further uploads cannot start sooner than a window after the previous one.
+    const elapsed=lastNetworkAt===null?0:Math.max(0,clock()-lastNetworkAt);
+    autoTimer=setTimer(()=>{autoTimer=null;void kick();},Math.max(flushWindow,flushWindow-elapsed));
+  }
   const entries=new Map();
   // A transient IndexedDB/auth read failure must not poison this instance for
   // the rest of the session: the resumer will retry the durable outbox later.
@@ -42,11 +54,14 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
   }
   function stage(record,{baseRevision=revision()}={}){
     const task=staging.catch(()=>{}).then(async()=>{await initialize();if(!Number.isSafeInteger(baseRevision)||baseRevision<0)throw Error('作品编辑基线无效，未上传旧稿');const previous=entries.get(record.id),row={record:structuredClone(record),serial:++serial,baseRevision:previous?Math.min(previous.baseRevision,baseRevision):baseRevision,operationID:crypto.randomUUID()};entries.set(record.id,row);try{await persist();}catch(e){if(previous)entries.set(record.id,previous);else entries.delete(record.id);throw e;}error=null;report();});
-    staging=task.catch(()=>{});void task.then(()=>kick()).catch(()=>{});return task;
+    staging=task.catch(()=>{});void task.then(()=>scheduleAuto()).catch(()=>{});return task;
   }
-  function kick(){
+  function kick({force=false}={}){
+    cancelAuto();
     if(network)return network;
     network=(async()=>runExclusive(async()=>{
+      lastNetworkAt=clock();
+      let autoCommitted=false;
       await initialize();await refreshFromDisk();
       const blocked=new Set();
       while(entries.size){
@@ -95,6 +110,7 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
         }
         await staging;
         await acknowledge(row,{confirmedHere:true});
+        if(flushWindow&&!force){autoCommitted=true;break;}
         }catch(failure){
           if(!/云端版本已变化|另一设备已更新|\\bconflict\\b/i.test(failure?.message||''))throw failure;
           blocked.add(row.record.id);
@@ -102,7 +118,10 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
       }
       if(blocked.size)throw Error('云端版本已变化；已继续同步其他资料，冲突项目仍安全保留');
       error=null;report();
-    }))().catch(e=>{error=e;report();throw e;}).finally(()=>{network=null;});
+    }))().catch(e=>{error=e;report();throw e;}).finally(()=>{
+      network=null;
+      if(entries.size&&!error)scheduleAuto();
+    });
     network.catch(()=>{});return network;
   }
   async function cancelPendingFor(ids){
@@ -116,10 +135,19 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
     report();
     return removed.length;
   }
-  async function discard(){await initialize();await staging;if(network)throw Error('上传正在进行，请等待请求结束后再放弃待同步修改');const previous=[...entries.values()];entries.clear();try{await persist();}catch(failure){for(const row of previous)entries.set(row.record.id,row);throw failure;}error=null;report();return previous.length;}
-  return {stage,async flush(){await initialize();await staging;await kick();},async pending(){await initialize();await staging;return structuredClone([...entries.values()]);},async advance(before,after,operations=[]){await initialize();await staging;if(!operations.length)return;let changed=false;for(const row of entries.values()){
+  async function discard(){cancelAuto();await initialize();await staging;if(network)throw Error('上传正在进行，请等待请求结束后再放弃待同步修改');const previous=[...entries.values()];entries.clear();try{await persist();}catch(failure){for(const row of previous)entries.set(row.record.id,row);throw failure;}error=null;report();return previous.length;}
+  return {stage,
+    async flush(){
+      await initialize();await staging;
+      // Manual sync / editor completion bypasses the automatic interval, but
+      // still uses the same durable outbox, lock and server-side revision CAS.
+      await kick({force:true});
+      if(entries.size)await kick({force:true});
+    },
+    async resumeScheduled(){await initialize();await staging;if(entries.size)scheduleAuto();},
+    async pending(){await initialize();await staging;return structuredClone([...entries.values()]);},async advance(before,after,operations=[]){await initialize();await staging;if(!operations.length)return;let changed=false;for(const row of entries.values()){
     const keys=recordKeys(row.record);
     const touched=operations.some(operation=>keys.some(key=>key.store===operation.store&&(key.id===undefined||operation.action==='clear'||key.id===(operation.item?.id??operation.id))));
     if(row.baseRevision===before&&!touched){row.baseRevision=after;changed=true;}
-  }if(changed)await persist();},cancelPendingFor,discard,canDiscard:()=>!network,resume:()=>kick(),status:()=>({pending:entries.size,error,uploading:!!network})};
+  }if(changed)await persist();},cancelPendingFor,discard,canDiscard:()=>!network,resume:()=>kick({force:true}),status:()=>({pending:entries.size,error,uploading:!!network})};
 }
