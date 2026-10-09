@@ -56,6 +56,10 @@ export async function saveImportBatch({state,db,urls,render,onSaved}) {
         d.items.push({id:uid(),assetID:id,x:(region.x+region.w/2)*d.canvas.width,y:(region.y+region.h/2)*1000,
           width:region.w*d.canvas.width,height:region.h*1000,rotation:region.rotation||0,zIndex:d.items.length,isLocked:false,isParked:false,opacity:1});
       }
+      // Import establishes the first editable baseline, including paper,
+      // detected cutouts and their physical placements.
+      p.initialEditorSnapshot={drafts:[structuredClone(d)],activeDraftID:d.id};
+      p.draftHistorySnapshots={[d.id]:structuredClone(d)};
       projects.push(p);savedCount++;
     }else {
       if(!chosen.length)continue;
