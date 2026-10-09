@@ -21,7 +21,7 @@ export const localDeviceRecords={
   },
   async delete(account,id){await (await localDB()).delete('records',scoped(account,id));},
   async list(account,prefix=''){
-    const db=await localDB(),start=scoped(account,'');
+    const db=await localDB();
     // String-key scans are safe even for accounts containing quotes.
     const rows=await db.getAll('records');
     const scope=String(account||'browser');
