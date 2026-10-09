@@ -9,7 +9,7 @@ export function compareRecordEdits(local,remote,{localTimestamp=null}={}){
   };
   const localTime=time(localTimestamp||local?.updatedAt||local?.usageUpdatedAt||local?.createdAt);
   const cloudTime=time(remote?.updatedAt||remote?.usageUpdatedAt||remote?.createdAt);
-  if(!remote)return 'local';
+  if(!remote)return 'remote';
   if(localTime===null||cloudTime===null)return 'remote';
   return localTime>cloudTime?'local':'remote';
 }
