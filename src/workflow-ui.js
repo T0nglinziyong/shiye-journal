@@ -290,7 +290,7 @@ function mountProjectBatch(c){
   ]));
   const del=selectionAction(parity.workTab==='snapshot'?'删除快照':'删除作品',async()=>{
     if(!parity.selected.size||!confirm('将所选作品移到最近删除？'))return;
-    await c.flushSave();await c.db.flushProjects();
+    await c.flushSave();
     const entries=c.state.projects.filter(p=>parity.selected.has(p.id)).map(item=>({id:crypto.randomUUID(),kind:'project',item:structuredClone(item),date:new Date().toISOString()}));
     await c.db.transaction(['projects','trash'],tx=>{for(const entry of entries){tx.objectStore('projects').delete(entry.item.id);tx.objectStore('trash').put(entry);}});
     c.state.projects=c.state.projects.filter(p=>!parity.selected.has(p.id));
