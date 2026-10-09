@@ -73,7 +73,14 @@ export async function cropBitmap(bitmap,paper,region,{raw=false,lighting=null}={
     // outer polygon destroys arbitrary topology (binder holes, windows,
     // die-cuts) and also discards graph-cut detail. Scale the actual mask
     // instead; polygons remain geometry metadata for editing/debugging.
-    ctx.globalCompositeOperation='destination-in';ctx.imageSmoothingEnabled=true;ctx.drawImage(mask,0,0,w,h);ctx.globalCompositeOperation='source-over';
+    ctx.globalCompositeOperation='destination-in';
+    // This is only sub-pixel raster antialiasing of the *exported* alpha.
+    // The authoritative segmented mask, contour, identity and dimensions stay
+    // byte-for-byte intact. In particular, no morphological shape edits run.
+    ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
+    ctx.filter='blur(0.45px)';
+    ctx.drawImage(mask,0,0,w,h);
+    ctx.filter='none';ctx.globalCompositeOperation='source-over';
   }
   return new Promise((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(Error('素材裁图失败')),'image/png'));
 }
