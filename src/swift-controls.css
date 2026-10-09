@@ -327,3 +327,11 @@ body:has(.library-management-tray):not(:has(.library-management-tray:not([hidden
 .canvas-layer-row>button:first-child>img,.canvas-layer-row>button:first-child>svg{position:static;inset:auto;min-width:0;min-height:0;width:46px;height:46px;max-width:46px;max-height:46px;object-fit:contain;pointer-events:none}
 .canvas-layer-row>button:not(:first-child) svg.shiye-icon{width:20px;height:20px}
 .canvas-layer-row>button:not(:first-child){width:30px;height:36px}
+
+/* All material tabs keep one stable viewport; the grid alone scrolls. */
+.swift-material-picker{height:min(56dvh,440px)!important;max-height:calc(100dvh - 24px)!important}
+.swift-material-picker .popover-content{display:flex;flex-direction:column;min-height:0;height:calc(100% - 45px);gap:8px;overflow:hidden}
+.swift-material-picker .canvas-material-filters{flex:none}
+.swift-material-picker .canvas-picker-grid{min-height:0;max-height:none;flex:1;align-content:start;overflow-y:auto;overscroll-behavior:contain}
+.swift-material-picker .swift-segments{flex:none}
+@media(max-width:600px){.swift-material-picker{height:min(52dvh,400px)!important}.swift-material-picker .popover-content{height:calc(100% - 36px)}}
