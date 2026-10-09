@@ -135,8 +135,15 @@ const recognitionPostprocessOptions=()=>({
   apertures:state.preferences.recognitionApertures!==false
 });
 const asset=id=>state.assets.find(x=>x.id===id)||state.trash.find(t=>t.kind==='asset'&&t.item.id===id)?.item;
-const image=id=>urls.get(id)||staticSources.get(id)||state.trash.find(t=>t.kind==='asset'&&t.item.blobId===id)?.item.staticPath||imagePlaceholder(id);
-const privateImages=mountPrivateImages({root:document.body,db,urls,fullView:()=>['editor','assetDetail','projectPreview'].includes(state.route)});
+const image=id=>staticSources.get(id)||
+  state.trash.find(t=>t.kind==='asset'&&t.item.blobId===id)?.item.staticPath||
+  (cloudEnabled?imagePlaceholder(id):urls.get(id)||imagePlaceholder(id));
+// Only the real creative canvas and cutout detail use display-scaled COS
+// variants. Everything else (Works/Matching/Library/editor material tray)
+// uses one fixed 360-pixel snapshot stored in COS.
+const privateImages=mountPrivateImages({root:document.body,db,urls,fullView:img=>
+  (state.route==='editor'&&!!img.closest('#canvas-page .canvas-object.material'))||
+  (state.route==='assetDetail'&&!!img.closest('.detail-picture'))});
 const workCoverBackfill=createWorkCoverBackfill({db,state,cloudEnabled});
 // A successful COS upload is published after its metadata transaction commits.
 // Hydrate the card in place; rebuilding the entire Works grid resets image
@@ -1035,12 +1042,12 @@ async function backup(){
   }
 }
 function download(blob,filename){const link=document.createElement('a'),url=URL.createObjectURL(blob);link.href=url;link.download=filename;link.click();setTimeout(()=>URL.revokeObjectURL(url),60000);}
-setCloudProjectPreview(async p=>{if(p.isSnapshot)return (await db.get('blobs',p.snapshotBlobId))?.data||null;const d=p.drafts.find(d=>d.id===p.activeDraftID)||p.drafts[0];if(d.items.some(i=>!asset(i.assetID)))return null;const canvas=await rasterize(d,Math.min(1,480/Math.max(d.canvas.width,d.canvas.height)),{preview:true});return new Promise(resolve=>canvas.toBlob(resolve,'image/webp',.84));});
+setCloudProjectPreview(async p=>{if(p.isSnapshot)return (await db.get('blobs',p.snapshotBlobId))?.data||null;const d=p.drafts.find(d=>d.id===p.activeDraftID)||p.drafts[0];if(d.items.some(i=>!asset(i.assetID)))return null;const canvas=await rasterize(d,Math.min(1,360/Math.max(d.canvas.width,d.canvas.height)),{preview:true});return new Promise(resolve=>canvas.toBlob(resolve,'image/webp',.84));});
 async function exportPNG(){const d=current(),canvas=await rasterize(d,2);canvas.toBlob(blob=>download(blob,(state.activeProject.title||'拾页作品')+'.png'),'image/png');}
 async function printPage(){const d=current(),canvas=await rasterize(d,2),url=canvas.toDataURL('image/png');const child=window.open('','_blank');if(!child){toast('请允许打开打印预览窗口');return;}child.document.write(`<html><head><title>${esc(state.activeProject.title)}</title><style>@page{size:A4;margin:0}body{margin:0}img{width:100%;height:auto}</style></head><body><img src="${url}" onload="window.print()"></body></html>`);child.document.close();}
 async function rasterize(d,scale,{preview=false}={}){
  const ids=[...new Set(editorEntry(d).filter(e=>e.kind==='material').map(e=>asset(e.value.assetID)).filter(a=>a&&!a.staticPath).map(a=>a.blobId))],release=privateImages.retain(ids);
- try{await Promise.all(ids.map(id=>privateImages.load(id,preview?900:true)));const result=await renderSceneCanvas(d,{scale,loadMaterialImage:async id=>{const a=asset(id);if(!a)throw Error('素材不在当前资料库');return decodeSceneImage(image(a.blobId));}});return result.canvas;}finally{release();}
+ try{await Promise.all(ids.map(id=>privateImages.load(id,preview?false:true)));const result=await renderSceneCanvas(d,{scale,loadMaterialImage:async id=>{const a=asset(id);if(!a)throw Error('素材不在当前资料库');return decodeSceneImage(preview?imagePlaceholder(a.blobId):image(a.blobId));}});return result.canvas;}finally{release();}
 }
 async function receiveImportPhotos(files){const images=[...files].filter(f=>f.type.startsWith('image/')).slice(0,Math.max(0,12-state.importRecords.length));if(!images.length)return;try{saveActiveImportRecord();const start=state.importRecords.length;for(const file of images)state.importRecords.push({file,url:URL.createObjectURL(file),confirmed:false,selectedCandidates:[],selection:[],candidates:[]});state.importStep='inspect';state.route='import';await switchImportRecord(start,true);}catch(e){console.error(e);toast('照片处理失败：'+e.message);}}
 fileInput.onchange=async()=>{const files=[...(fileInput.files||[])];fileInput.value='';await receiveImportPhotos(files);};
