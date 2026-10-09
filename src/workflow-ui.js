@@ -85,15 +85,71 @@ async function exportSeriesArchive(c,seriesIDs){
   }
   c.download(new Blob([zipSync(payload,{level:3})],{type:'application/zip'}),'拾页-系列导出.zip');
 }
-async function exportSelectedWorks(c,records){
+async function exportSelectedWorks(c,records,format='native'){
+  if(!records.length)throw Error('请先选择要导出的作品');
   for(const record of records){
     if(record.isSnapshot){
-      const id=record.snapshotDocumentBlobId||record.snapshotBlobId,blob=(await c.db.get('blobs',id))?.data;
-      if(!(blob instanceof Blob))throw Error('快照尚未同步：'+record.title);
-      const ext=record.snapshotFormat==='application/pdf'?'pdf':record.snapshotFormat==='image/jpeg'?'jpg':record.snapshotFormat==='image/webp'?'webp':'png';
-      c.download(blob,record.title+'.'+ext);
-    }else await c.handle('download-project-zip',record.id);
+      const id=record.snapshotDocumentBlobId||record.snapshotBlobId,raw=(await c.db.get('blobs',id))?.data;
+      if(!(raw instanceof Blob))throw Error('快照尚未同步：'+record.title);
+      if(format==='original'){
+        const ext=record.snapshotFormat==='application/pdf'?'pdf':record.snapshotFormat==='image/jpeg'?'jpg':record.snapshotFormat==='image/webp'?'webp':'png';
+        c.download(raw,record.title+'.'+ext);
+      }else if(format==='png'||format==='jpeg'){
+        const bitmap=await createImageBitmap(raw);try{
+          const canvas=document.createElement('canvas');canvas.width=bitmap.width;canvas.height=bitmap.height;
+          const ctx=canvas.getContext('2d');
+          if(format==='jpeg'){ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);}
+          ctx.drawImage(bitmap,0,0);
+          const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/'+format,.93));
+          if(!blob)throw Error('快照编码失败：'+record.title);
+          c.download(blob,record.title+(format==='jpeg'?'.jpg':'.png'));
+        }finally{bitmap.close();}
+      }else throw Error('快照不支持当前导出类型');
+    }else if(format==='native')await c.handle('download-project-zip',record.id);
+    else{
+      const complete=record.projectDocumentPath?await c.db.completeProject(record):record;
+      const draft=complete.drafts?.find(d=>d.id===complete.activeDraftID)||complete.drafts?.[0];
+      if(!draft)throw Error('作品缺少可编辑画布：'+record.title);
+      const scale=Math.min(1.6,1800/Math.max(draft.canvas.width,draft.canvas.height));
+      const canvas=await c.rasterize(draft,scale);
+      if(format==='pdf'){
+        const height=draft.physicalPageHeightMM||297,width=height*draft.canvas.width/draft.canvas.height;
+        c.download(await pagePDF([await canvasPDFPage(canvas,width,height)]),record.title+'.pdf');
+      }else{
+        const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));
+        if(!blob)throw Error('作品 PNG 导出失败：'+record.title);
+        c.download(blob,record.title+'.png');
+      }
+    }
   }
+}
+function seriesExportMenu(c,parity,anchor){
+  const menu=togglePopover(anchor,{title:'导出系列',menu:true,width:240});
+  if(!menu)return;
+  menu.content.append(selectionAction('素材与系列 ZIP',async()=>{menu.close();await exportSeriesArchive(c,[...parity.selected]);}));
+  menu.content.append(selectionAction('系列清单 JSON',()=>{
+    const series=c.state.series.filter(s=>parity.selected.has(s.id));
+    menu.close();c.download(new Blob([JSON.stringify(series,null,2)],{type:'application/json'}),'拾页-系列清单.json');
+  }));
+}
+function workExportMenu(c,anchor){
+  const records=c.state.projects.filter(p=>parity.selected.has(p.id));
+  const snapshots=records.length>0&&records.every(p=>p.isSnapshot);
+  const editable=records.length>0&&records.every(p=>!p.isSnapshot);
+  const menu=togglePopover(anchor,{title:snapshots?'导出快照':'导出作品',menu:true,width:245});
+  if(!menu)return;
+  const entries=snapshots
+    ?[['原始快照文件','original'],['PNG 图像','png'],['白底 JPEG','jpeg']]
+    :editable
+      ?[['可编辑拾页 ZIP','native'],['PNG 图像','png'],['PDF 文件','pdf']]
+      :[['按原格式分别导出','mixed']];
+  for(const [label,format] of entries)menu.content.append(selectionAction(label,async()=>{
+    menu.close();
+    if(format==='mixed'){
+      await exportSelectedWorks(c,records.filter(p=>p.isSnapshot),'original');
+      await exportSelectedWorks(c,records.filter(p=>!p.isSnapshot),'native');
+    }else await exportSelectedWorks(c,records,format);
+  }));
 }
 async function classifySelectedWorks(c,records){
   const account=c.state.accountId,settings=structuredClone(c.state.aiSettings);
@@ -174,8 +230,12 @@ function mountSeries(c) {
   }
   const entry=view.querySelector('.series-entry');
   const tray=document.createElement('div');tray.className='swift-tray manage library-management-tray';tray.dataset.selectionMode='series';tray.innerHTML='<strong></strong>';
+  const exportButton=selectionAction('导出系列 ›',()=>seriesExportMenu(c,parity,exportButton));
   const more=selectionAction('更多操作',()=>batchMore(more,[
-    ['导出系列及素材',()=>exportSeriesArchive(c,[...parity.selected])]
+    ['编辑系列信息',()=>{
+      if(parity.selected.size!==1)throw Error('请先只选择一个系列');
+      c.openSeriesEditor([...parity.selected][0]);
+    }]
   ]));
   const remove=selectionAction('删除系列',async()=>{
     if(!parity.selected.size||!confirm('删除所选系列？素材仍保留在全部素材中。'))return;
@@ -188,7 +248,7 @@ function mountSeries(c) {
     selectionAction('全选页面',()=>{cards.filter(b=>!b.hidden).forEach(b=>parity.selected.add(b.dataset.id));sync();}),
     selectionAction('清空选择',()=>{parity.selected.clear();parity.showOnlySelected=false;sync();}),
     selectionAction('查看所选',()=>{parity.showOnlySelected=!parity.showOnlySelected;sync();}),
-    more,remove
+    exportButton,more,remove
   );view.append(tray);
   function sync(){const active=isActive();tray.hidden=!active;entry.disabled=active;view.querySelector('.library-select-toggle').textContent=parity.selectionMode?'完成':'选择';for(const card of cards){card.classList.toggle('batch-selected',active&&parity.selected.has(card.dataset.id));if(active)card.setAttribute('aria-pressed',String(parity.selected.has(card.dataset.id)));else card.removeAttribute('aria-pressed');}tray.querySelector('strong').textContent='本次选中 '+parity.selected.size+' 个系列';tray.querySelectorAll('button').forEach((b,i)=>{b.disabled=i>0&&!parity.selected.size;if(i===2)b.querySelector('.selection-action-label').textContent=parity.showOnlySelected?'返回筛选':'查看所选';});update();return true;}registerSelectionPresenter(view,sync);
 }
@@ -204,8 +264,9 @@ function selectedTray(c,selector){
 function mountProjectBatch(c){
   if(parity.workTab==='templates'||!c.view.querySelector('.works-grid'))return;
   const tray=selectedTray(c,'.card[data-act="open-project"]');
+  const exportLabel=parity.workTab==='snapshot'?'导出快照 ›':'导出作品 ›';
+  const exportButton=selectionAction(exportLabel,()=>workExportMenu(c,exportButton));
   const more=selectionAction('更多操作',()=>batchMore(more,[
-    ['导出',()=>exportSelectedWorks(c,c.state.projects.filter(p=>parity.selected.has(p.id)))],
     ['重新识别',()=>classifySelectedWorks(c,c.state.projects.filter(p=>parity.selected.has(p.id)))],
     ...(c.state.projects.some(p=>parity.selected.has(p.id)&&!p.isSnapshot)?[['设置状态',async()=>{
       const selected=c.state.projects.filter(p=>parity.selected.has(p.id)&&!p.isSnapshot);
@@ -218,7 +279,7 @@ function mountProjectBatch(c){
       c.render();
     }]]:[])
   ]));
-  const del=selectionAction('删除',async()=>{
+  const del=selectionAction(parity.workTab==='snapshot'?'删除快照':'删除作品',async()=>{
     if(!parity.selected.size||!confirm('将所选作品移到最近删除？'))return;
     await c.flushSave();await c.db.flushProjects();
     const entries=c.state.projects.filter(p=>parity.selected.has(p.id)).map(item=>({id:crypto.randomUUID(),kind:'project',item:structuredClone(item),date:new Date().toISOString()}));
@@ -226,7 +287,7 @@ function mountProjectBatch(c){
     c.state.projects=c.state.projects.filter(p=>!parity.selected.has(p.id));
     c.state.trash.push(...entries);finishSelection(parity);c.render();
   },'danger');
-  tray.append(more,del);
+  tray.append(exportButton,more,del);
   function sync(){
     const active=selectionActive(parity,'work'),cards=[...c.view.querySelectorAll('[data-act="open-project"]')];
     tray.hidden=!active;
@@ -245,7 +306,7 @@ function mountProjectBatch(c){
   }
   registerSelectionPresenter(c.view,sync);
 }
-function mountAssetBatch(c) {mountAssetSelection(c,parity);}
+function mountAssetBatch(c) {mountAssetSelection({...c,exportSelectedMaterials:ids=>exportMaterials(c,ids)},parity);}
 async function classifyBatch(c,kind) {
   const records=(kind==='asset'?c.state.assets:c.state.projects).filter(x=>parity.selected.has(x.id));
   if(!records.length)throw Error('请先选择要识别的内容');
