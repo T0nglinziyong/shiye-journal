@@ -10,11 +10,14 @@ const fail=error=>self.postMessage({type:'failure',error:String(error?.message||
 const MAX_ENTRIES=20000;
 const MAX_UNPACKED=256*1024*1024;
 let zip=null,manifest=null,sequence=0,acknowledged=0,waiters=[],nextImage=0;
+let finishOutput;
+const outputFinished=new Promise(resolve=>{finishOutput=resolve;});
 const drain=async()=>{while(acknowledged<sequence)await new Promise(resolve=>waiters.push(resolve));};
-function onZip(error,bytes){
+function onZip(error,bytes,final){
   if(error){fail(error);return;}
   const copy=bytes.slice(),seq=++sequence;
   self.postMessage({type:'chunk',seq,bytes:copy},[copy.buffer]);
+  if(final)finishOutput();
 }
 async function addEntry(path,bytes){
   if(!zip)throw Error('ZIP 尚未初始化');
@@ -68,7 +71,7 @@ async function finish(){
   const final=encoder.encode(JSON.stringify(manifest));
   const entry=new ZipPassThrough('manifest.json');zip.add(entry);
   entry.push(final,true);await drain();
-  zip.end();await drain();
+  zip.end();await outputFinished;await drain();
   self.postMessage({type:'done',entries:Object.keys(manifest.files).length+1});
 }
 
