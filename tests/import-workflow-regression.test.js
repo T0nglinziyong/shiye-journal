@@ -126,7 +126,7 @@ test('work confirmation contains no style-tag or usage-marker controls, includin
 });
 
 
-test('material and work batch / per-photo series choices pin New Series first but keep no-series defaults',()=>{
+test('material and work batch / per-photo series choices pin New Series first but keep no-series defaults',async()=>{
   const {state}=fixture(true);
   state.series=[{id:'series-B',title:'既有系列'}];
   state.importRecords[0].url='blob:source';state.importRecords[0].selectedCandidates[0].url='blob:piece';
