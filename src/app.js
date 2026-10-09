@@ -387,8 +387,25 @@ function bindPage(){view.querySelectorAll('[data-act]').forEach(el=>el.addEventL
   const balance=view.querySelector('#balance-light');if(balance)balance.onchange=async()=>{const before=state.balanceLight;if(state.importProcessing){balance.checked=before;return;}if(state.importCandidateData?.length&&!confirm('更改光照会重新识别候选并重置当前候选标注，继续？')){balance.checked=before;return;}state.importProcessing='正在均衡光照并重新识别…';state.balanceLight=balance.checked;render();try{await previewCrop();}catch(e){state.balanceLight=before;toast(e.message);}finally{state.importProcessing='';if(state.route==='import')render();}};
   view.querySelectorAll('[data-import-name]').forEach(el=>el.onchange=()=>{const [ri,ci]=el.dataset.importName.split(':').map(Number);state.importRecords[ri].selectedCandidates[ci].title=el.value;});
   for(const key of ['width','height'])view.querySelectorAll(`[data-import-${key}]`).forEach(el=>el.onchange=()=>{const [ri,ci]=el.dataset[`import${key[0].toUpperCase()+key.slice(1)}`].split(':').map(Number);state.importRecords[ri].selectedCandidates[ci][key]=+el.value||null;});
-  view.querySelectorAll('.record-series').forEach(el=>el.onchange=()=>{state.importRecords[+el.dataset.index].seriesID=el.value;});view.querySelectorAll('.record-work-title').forEach(el=>el.oninput=()=>{state.importRecords[+el.dataset.index].workTitle=el.value;});
-  const batchSeries=view.querySelector('#batch-series');if(batchSeries)batchSeries.onchange=()=>{state.importBatchSeriesID=batchSeries.value;};
+  view.querySelectorAll('.record-series').forEach(el=>{const record=state.importRecords[+el.dataset.index];el.value=record?.seriesID??'';el.onchange=()=>{if(record)record.seriesID=el.value;};});view.querySelectorAll('.record-work-title').forEach(el=>el.oninput=()=>{state.importRecords[+el.dataset.index].workTitle=el.value;});
+  const batchSeries=view.querySelector('#batch-series');
+  if(batchSeries){batchSeries.value=state.importBatchSeriesID||'';batchSeries.onchange=()=>{state.importBatchSeriesID=batchSeries.value;};}
+  const batchWorkAssets=view.querySelector('#batch-work-save-assets');
+  if(batchWorkAssets)batchWorkAssets.onchange=()=>{
+    state.importBatchWorkSaveAssets=batchWorkAssets.checked;
+    for(const record of state.importRecords)if(record.workSaveAssets===undefined)record.workSaveAssets=batchWorkAssets.checked;
+    render();
+  };
+  view.querySelectorAll('.record-work-save-assets').forEach(el=>el.onchange=()=>{
+    state.importRecords[+el.dataset.index].workSaveAssets=el.checked;
+  });
+  view.querySelectorAll('.record-work-paper-pattern,.record-work-paper-color').forEach(el=>el.onchange=()=>{
+    const record=state.importRecords[+el.dataset.index];if(!record)return;
+    if(el.classList.contains('record-work-paper-pattern'))record.workPaperPattern=el.value;
+    else record.workPaperColor=el.value;
+    const preview=el.closest('.review-record')?.querySelector('.import-work-paper-preview');
+    if(preview){preview.className='review-thumbnail import-work-paper-preview '+(record.workPaperPattern||'plain');preview.style.setProperty('--review-paper',record.workPaperColor||'#fcfaf0');preview.style.backgroundColor=record.workPaperColor||'#fcfaf0';}
+  });
   const removeWhite=view.querySelector('#remove-white');if(removeWhite)removeWhite.onchange=()=>{state.importRemoveWhite=removeWhite.checked;};
   const page=view.querySelector('#canvas-page');if(page)initializeCanvasSurface(page);
   bindInspector();if(state.route==='import'&&state.importProcessing)view.querySelectorAll('.inspect-columns button,.inspect-columns input,.inspect-columns select').forEach(el=>el.disabled=true);if(state.route==='import'&&state.importStep==='inspect'&&state.importFile&&!state.importProcessing)mountPaperCorrection({state,view,render,toast,saveActiveImportRecord});const offline=view.querySelector('#offline-state');if(offline)offline.textContent=navigator.serviceWorker?.controller?'离线程序已就绪':'首次打开时需要联网；请等待离线程序安装后再测试飞行模式';const locationLabel=view.querySelector('#storage-location');if(locationLabel)db.storageMode().then(mode=>{if(locationLabel.isConnected)locationLabel.textContent=cloudEnabled?(import.meta.env?.VITE_SHIYE_OBJECT_STORAGE==='cos'?'当前数据源：Supabase 登录与元数据 + 腾讯 COS 私有图片；本机仅保留账号隔离缓存与待同步修改':'当前数据源：Supabase 私有云端；本机仅保留账号隔离缓存与待同步修改'):mode==='server'?`当前唯一数据源：${db.storageConfig()?.url||location.origin}（服务器）`:'当前数据源：此浏览器 IndexedDB';}).catch(error=>{if(locationLabel.isConnected)locationLabel.textContent='服务器连接失败：'+error.message;});}
@@ -834,7 +851,7 @@ async function prefetchImportRecord(rec,settings,revision){
       recognitionPostprocess:{shapeRegularization:settings.shapeRegularization,apertures:settings.apertures},mergeSharedCarrier:settings.mergeSharedCarrier,
       onDiagnostic:trace=>{if(valid())rec.recognitionDiagnostic=trace;}});if(!valid())return;
     const calibrated=settings.paperSize!=='none'&&(correctedBitmap||settings.wholePaper),candidateData=[];
-    const lighting=settings.materialColorMode!=='original'&&correctedBitmap&&settings.mode!=='work'
+    const lighting=settings.materialColorMode!=='original'&&correctedBitmap&&true
       ?await estimatePageLighting(source,candidates):null;
     for(let i=0;i<candidates.length;i++){
       const candidate=await extractImportCandidate(source,box,candidates[i],{mode:settings.mode,widthMM:pw,heightMM:ph,calibrated,index:i,lighting});
