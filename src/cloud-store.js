@@ -413,7 +413,8 @@ function cloudTransaction(names,fn,operationID=crypto.randomUUID()){
     }
     await projectSync.advance(previous,revision,operations);
     await importSync.advance(previous,revision,operations);
-    channel()?.postMessage({source:sessionTag,type:'committed',revision});
+    try{channel()?.postMessage({source:sessionTag,type:'committed',revision});}
+    catch(error){console.warn('跨标签页同步通知暂不可用，云端提交仍已完成',error?.message);}
     }finally{writesInFlight--;reportSync();}
   };
   const pending=queue.then(run);queue=pending.catch(()=>{});return pending;
