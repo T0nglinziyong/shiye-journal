@@ -33,3 +33,31 @@
 .recognition-settings-group .setting-toggle span{display:grid;gap:3px;min-width:0}
 .recognition-settings-group .setting-toggle input{flex:none}
 @media(max-width:600px){.recognition-settings-group{padding:10px 12px;margin-bottom:9px;gap:7px}}
+
+/* Import confirmation: the first card is editable paper, never a flattened image. */
+.import-work-paper-preview{position:relative;display:grid;place-items:center;min-height:120px;background:var(--review-paper,#fcfaf0)!important;border-radius:10px;overflow:hidden}
+.import-work-paper-preview.grid{background-image:linear-gradient(to right,#82978b45 1px,transparent 1px),linear-gradient(to bottom,#82978b45 1px,transparent 1px)!important;background-size:20px 20px}
+.import-work-paper-preview.lines{background-image:repeating-linear-gradient(to bottom,transparent 0 22px,#82978b65 23px,transparent 24px)!important}
+.import-work-paper-preview.dots{background-image:radial-gradient(#82978b77 1px,transparent 1px)!important;background-size:14px 14px}
+.import-work-paper-preview.columns{background-image:linear-gradient(90deg,transparent 49.8%,#82978b77 50%,transparent 50.2%)!important}
+.review-paper-title{background:#fffefaed;border-radius:12px;padding:5px 9px;font-size:12px;color:#52634b}
+.review-background-card{display:grid;align-content:start;gap:5px;padding:6px}
+.review-background-card label{display:grid;gap:3px;font-size:12px}
+.review-background-card input[type=color]{width:100%;height:30px;padding:1px}
+.review-default .toggle-row{display:flex;justify-content:space-between;gap:12px;align-items:center}
+.review-default .toggle-row input{flex:none}
+.import-review .record-series-label{margin-top:6px}
+.settings-detail>.recognition-settings-group{margin-bottom:12px}
+.settings-detail>.recognition-settings-group>p{line-height:1.45;margin:1px 0 4px}
+.settings-detail>.recognition-settings-group>.actions{display:flex;flex-wrap:wrap;gap:8px}
+.settings-detail .unified-settings-group{padding:12px 14px;margin:0 0 12px;border:1px solid #dde6dc;border-radius:13px;background:#fffefa}
+.settings-detail .unified-settings-group summary{padding:3px 0}
+.settings-detail .unified-settings-group>div{padding:10px 0 0;display:grid;gap:8px}
+.settings-detail .unified-settings-group h2{margin:5px 0 0;font-size:16px}
+.settings-detail .unified-settings-group p{margin:0 0 3px;line-height:1.45;font-size:12px}
+.settings-detail .unified-settings-group label{margin:0}
+@media(max-width:600px){.settings-detail>.recognition-settings-group{padding:10px 12px;margin-bottom:9px}.settings-detail .unified-settings-group{padding:10px 12px;margin-bottom:9px}}
+/* Avoid the top navigation layer flickering during iOS overscroll bounce. */
+html,body{overscroll-behavior-y:none}
+.topbar{isolation:isolate;z-index:100;transform:translateZ(0);backface-visibility:hidden}
+#view,.import-review,.works-page,.series-grid,.asset-grid{overscroll-behavior-y:contain}
