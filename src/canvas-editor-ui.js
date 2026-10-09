@@ -59,8 +59,31 @@ export function mountCanvasEditor(c){
   },{signal:editorPanelController.signal,capture:true});
   function syncTools(){for(const b of tools.querySelectorAll('button')){const active=(state.toolHighlight||state.tool)===b.dataset.val||(b.dataset.val==='select'&&state.tool==='marquee');b.classList.toggle('primary',active);b.setAttribute('aria-pressed',String(active));}page.classList.toggle('pen',['pen','highlighter','eraser'].includes(state.tool));}
   function contextTools(){context.replaceChildren();const mode=state.toolHighlight||state.tool,entry=entries.find(e=>e.value.id===state.selected),s=entry?.value,kind=entry?.kind;
-    if(['pen','highlighter'].includes(mode)){const marker=mode==='highlighter',key=marker?'marker':'pen';for(const width of [2,4,9]){const b=button('',()=>{if(prefs[key+'Width']===width)widthSettings(b,mode);else{prefs[key+'Width']=width;prefsChanged();}},'stroke-width'+(prefs[key+'Width']===width?' active':''));b.innerHTML='<span style="height:'+Math.max(2,width)+'px"></span>';b.setAttribute('aria-label','笔画粗细 '+width+' pt');context.append(b);}for(const color of ['#2b5245','#009cff','#ff3348']){const b=button('',()=>{if(prefs[key+'Color']===color)colorSettings(b,mode);else{prefs[key+'Color']=color;prefsChanged();}},'ink-color'+(prefs[key+'Color']===color?' active':''));b.style.backgroundColor=color;b.setAttribute('aria-label','笔画颜色 '+color);context.append(b);}context.append(button('＋',e=>colorSettings(e.currentTarget,mode)));return;}
-    if(mode==='eraser'){for(const size of [8,20,40]){const b=button('○',()=>{if(prefs.eraserWidth===size)widthSettings(b,'eraser');else{prefs.eraserWidth=size;prefsChanged();}},'eraser-size'+(prefs.eraserWidth===size?' active':''));b.style.fontSize=(size/2+14)+'px';b.disabled=(prefs.eraserStyle||'standard')==='standard';b.setAttribute('aria-label','橡皮尺寸 '+size+' pt');context.append(b);}context.append(button('＋',e=>widthSettings(e.currentTarget,'eraser')));return;}
+    if(['pen','highlighter'].includes(mode)){
+      const marker=mode==='highlighter',key=marker?'marker':'pen';
+      for(const width of [2,4,9]){
+        const b=button('',()=>{if(prefs[key+'Width']===width)widthSettings(b,mode);else{prefs[key+'Width']=width;prefsChanged();contextTools();}},'stroke-width'+(prefs[key+'Width']===width?' active':''));
+        b.innerHTML='<span style="height:'+Math.max(2,width)+'px"></span>';
+        b.setAttribute('aria-label','笔画粗细 '+width+' pt');context.append(b);
+      }
+      for(const color of ['#2b5245','#009cff','#ff3348']){
+        const b=button('',()=>{if(prefs[key+'Color']===color)colorSettings(b,mode);else{prefs[key+'Color']=color;prefsChanged();contextTools();}},'ink-color'+(prefs[key+'Color']===color?' active':''));
+        b.style.backgroundColor=color;b.setAttribute('aria-label','笔画颜色 '+color);context.append(b);
+      }
+      const custom=document.createElement('input');custom.type='color';
+      custom.value=prefs[key+'Color'];custom.setAttribute('aria-label',marker?'自定义荧光笔颜色':'自定义画笔颜色');
+      custom.title='选择任意颜色';custom.oninput=()=>{prefs[key+'Color']=custom.value;prefsChanged();};context.append(custom);
+      context.append(button('更多颜色',e=>colorSettings(e.currentTarget,mode)));return;
+    }
+    if(mode==='eraser'){
+      for(const size of [8,20,40]){
+        const b=button('○',()=>{if(prefs.eraserWidth===size&&(prefs.eraserStyle||'standard')!=='standard'){widthSettings(b,'eraser');return;}
+          prefs.eraserWidth=size;prefs.eraserStyle='fine';prefs.wholeStroke=false;prefsChanged();contextTools();
+        },'eraser-size'+(prefs.eraserWidth===size&&(prefs.eraserStyle||'standard')!=='standard'?' active':''));
+        b.style.fontSize=(size/2+14)+'px';b.setAttribute('aria-label','切换到局部橡皮 '+size+' pt');context.append(b);
+      }
+      context.append(button('自定大小',e=>widthSettings(e.currentTarget,'eraser')));return;
+    }
     if(mode==='lasso'||mode==='marquee'){const icon=button('◌',()=>{});icon.setAttribute('aria-label','套索选择');icon.setAttribute('aria-pressed','true');context.append(icon);return;}
     if(['shape','material','layers','paper'].includes(mode))return;
     if(mode==='text'||kind==='text'){const t=s||state.textDefaults||{style:'serif',fontSize:40,color:'#30463d'};const patch=(key,value)=>{if(s)change(()=>{s[key]=value;if(key==='style')s.fontName=null;});else{(state.textDefaults||={...t})[key]=value;contextTools();}};const font=document.createElement('select');font.setAttribute('aria-label','字体');font.innerHTML=[['serif','宋体'],['sans','黑体'],['rounded','圆体'],['hand','手写体']].map(([id,name])=>'<option value="'+id+'" '+(id===t.style?'selected':'')+'>'+name+'</option>').join('');font.onchange=()=>patch('style',font.value);context.append(font);const size=document.createElement('input');size.type='number';size.min=5;size.max=400;size.value=t.fontSize;size.setAttribute('aria-label','字号');size.onchange=()=>patch('fontSize',Math.max(5,Math.min(400,+size.value||40)));context.append(size);context.append(button('☷',e=>textParagraph(e.currentTarget,t,patch)));const color=document.createElement('input');color.type='color';color.value=t.color||'#30463d';color.setAttribute('aria-label','文字颜色');color.onchange=()=>patch('color',color.value);context.append(color,button('Aa',e=>{const p=openPopover(e.currentTarget,{title:'文字样式',width:240,menu:true});for(const [key,name] of [['bold','粗体'],['italic','斜体'],['underline','下划线'],['strikethrough','删除线']])p.content.append(button((t[key]?'✓ ':'')+name,()=>{p.close();patch(key,!t[key]);}));if(s)p.content.append(button('详细文字设置',()=>{p.close();objectInspector(entries.find(e=>e.value.id===state.selected));}));}));return;}
@@ -70,8 +93,31 @@ export function mountCanvasEditor(c){
   }
   const toggle=(parent,label,value,fn)=>{const row=document.createElement('label');row.className='canvas-toggle';row.append(document.createTextNode(label));const input=document.createElement('input');input.type='checkbox';input.checked=value;input.onchange=()=>fn(input.checked);row.append(input);parent.append(row);return input;};
   const range=(parent,label,value,min,max,step,fn,disabled=false,suffix=" pt")=>{const row=document.createElement('label');row.className='canvas-setting';const line=document.createElement('span'),display=document.createElement('output');line.append(document.createTextNode(label),display);display.textContent=Number(value).toFixed(step<1?1:0)+suffix;const input=document.createElement('input');Object.assign(input,{type:'range',min,max,step,value,disabled});input.oninput=()=>{display.textContent=Number(input.value).toFixed(step<1?1:0)+suffix;fn(+input.value);};row.append(line,input);parent.append(row);};
-  function widthSettings(anchor,mode){const key=mode==='highlighter'?'marker':'pen',p=openPopover(anchor,{title:mode==='eraser'?'橡皮粗细':'笔粗细',width:310});range(p.content,'粗细',mode==='eraser'?prefs.eraserWidth:prefs[key+'Width'],mode==='eraser'?6:1,mode==='eraser'?80:20,.1,value=>{if(mode==='eraser')prefs.eraserWidth=value;else prefs[key+'Width']=value;prefsChanged();});}
-  function colorSettings(anchor,mode){const key=mode==='highlighter'?'marker':'pen',p=openPopover(anchor,{title:'笔颜色',width:300}),palette=document.createElement('div');palette.className='canvas-color-grid';p.content.append(palette);for(const color of ['#171717','#555555','#989898','#ffffff','#e33b45','#fb8795','#ff9c21','#e8d432','#159b73','#57bd4b','#167ad9','#264d9c','#853aaf','#955969']){const b=button('',()=>{prefs[key+'Color']=color;prefsChanged();p.close();contextTools();});b.className='ink-color';b.style.backgroundColor=color;b.setAttribute('aria-label','颜色 '+color);palette.append(b);}const custom=document.createElement('input');custom.type='color';custom.value=prefs[key+'Color'];custom.setAttribute('aria-label','自定义颜色');custom.oninput=()=>{prefs[key+'Color']=custom.value;prefsChanged();};p.content.append(custom);}
+  function widthSettings(anchor,mode){
+    const key=mode==='highlighter'?'marker':'pen',p=openPopover(anchor,{title:mode==='eraser'?'橡皮大小':'笔粗细',width:280});
+    range(p.content,'粗细',mode==='eraser'?prefs.eraserWidth:prefs[key+'Width'],mode==='eraser'?6:1,mode==='eraser'?80:20,.1,value=>{
+      if(mode==='eraser'){prefs.eraserWidth=value;prefs.eraserStyle='fine';prefs.wholeStroke=false;}
+      else prefs[key+'Width']=value;
+      prefsChanged();
+    });
+  }
+  function colorSettings(anchor,mode){
+    const key=mode==='highlighter'?'marker':'pen',p=openPopover(anchor,{title:'自定义颜色',width:300}),
+      palette=document.createElement('div');
+    palette.className='canvas-color-grid';p.content.append(palette);
+    const apply=color=>{prefs[key+'Color']=color;prefsChanged();};
+    for(const color of ['#171717','#555555','#989898','#ffffff','#e33b45','#fb8795','#ff9c21','#e8d432','#159b73','#57bd4b','#167ad9','#264d9c','#853aaf','#955969']){
+      const b=button('',()=>{apply(color);p.close();contextTools();});
+      b.className='ink-color';b.style.backgroundColor=color;b.setAttribute('aria-label','颜色 '+color);palette.append(b);
+    }
+    const row=document.createElement('label');row.textContent='精确颜色（十六进制）';
+    const custom=document.createElement('input');custom.type='color';custom.value=prefs[key+'Color'];custom.setAttribute('aria-label','颜色选择器');
+    const hex=document.createElement('input');hex.type='text';hex.maxLength=7;hex.placeholder='#RRGGBB';hex.value=prefs[key+'Color'];hex.setAttribute('aria-label','输入精确颜色');
+    custom.oninput=()=>{hex.value=custom.value;apply(custom.value);};
+    hex.onchange=()=>{const value=hex.value.trim();if(!/^#[0-9a-fA-F]{6}$/.test(value)){hex.value=prefs[key+'Color'];return;}
+      custom.value=value;apply(value.toLowerCase());};
+    row.append(custom,hex);p.content.append(row);
+  }
   function toolSettings(anchor,mode){const p=openPopover(anchor,{title:labels[mode],width:290,menu:true}),el=p.content;
     if(mode==='pen'){for(const [id,name] of [['fountain','钢笔'],['ballpoint','圆珠笔'],['brush','画笔']]){const b=button(name,()=>{prefs.penStyle=id;prefsChanged();p.close();contextTools();});b.setAttribute('aria-checked',String(prefs.penStyle===id));el.append(b);}}
     else if(mode==='highlighter'){toggle(el,'直线绘制',prefs.markerStraight,value=>{prefs.markerStraight=value;prefsChanged();});}
