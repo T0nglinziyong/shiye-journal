@@ -32,6 +32,13 @@ export function createWorkCoverBackfill({db,state,cloudEnabled=false,onError=con
     if((state.accountId||'browser')!==account||
       state.projects.find(p=>p.id===id)?.updatedAt!==updatedAt)return false;
     await db.stageProject(complete);
+    // Staging merely queues a durable write; a cover is not available until
+    // the uploader and project metadata commit have both succeeded.
+    if(db.flushProjects){
+      await db.flushProjects();
+      const committed=await db.get?.('projects',id);
+      if(committed&&needsWorkCover(committed))throw Error('云端作品已保存，但完整封面尚未生成；稍后重试');
+    }
     return true;
   }
 
