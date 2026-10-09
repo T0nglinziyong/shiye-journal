@@ -36,7 +36,27 @@ export function mountCanvasEditor(c){
   const context=document.createElement('div');context.className='canvas-context-tools';context.setAttribute('aria-label','当前工具选项');toolbar.append(context);
   const changeTool=(mode,b)=>{view.endTextEditing?.();if(b.getAttribute('aria-expanded')==='true'){closePopover();return;}const repeated=state.tool===mode;if(['pen','highlighter'].includes(mode))state.previousInkTool=mode;state.tool=['layers','paper','material'].includes(mode)?'select':mode;state.toolHighlight=mode;if(!repeated)state.selectionPath=null;if(mode!=='select'&&mode!=='lasso'){state.multiSelected=[];state.selectedStrokes=[];}if(mode!=='select'&&mode!=='lasso')state.selected=null;if(!state.selected){page.querySelectorAll('.object-handle,.selected-object-actions,.selected-object-overlay').forEach(n=>n.remove());page.querySelectorAll('.selected').forEach(n=>n.classList.remove('selected'));page.querySelector('.canvas-selection-overlay')?.replaceChildren();}page.classList.toggle('pen',['pen','highlighter','eraser'].includes(mode));page.classList.toggle('lasso',['lasso','marquee'].includes(mode));syncTools();contextTools();if(['shape','material','layers','paper'].includes(mode)){if(mode==='shape')shapePicker(b);else if(mode==='material')materialPicker(b);else if(mode==='layers')layerPicker(b);else paperPicker(b);}else if(repeated&&['pen','highlighter','eraser','lasso'].includes(mode))toolSettings(b,mode);else closePopover();};
   for(const mode of ['select','pen','eraser','highlighter','lasso','text','shape','material','layers','paper']){const b=button(glyphs[mode],()=>changeTool(mode,b),'btn');b.dataset.act='tool';b.dataset.val=mode;b.setAttribute('aria-label',labels[mode]);b.title=labels[mode];tools.append(b);if(mode==='select')b.oncontextmenu=e=>{e.preventDefault();const p=openPopover(b,{title:'选择工具',width:230,menu:true});for(const [m,name] of [['select','点击选择 · 单指滚动画布'],['marquee','拖出矩形框选']])p.content.append(button(name,()=>{p.close();state.tool=m;state.toolHighlight='select';render();}));};}
-  shell.classList.add('swift-editor-workspace');shell.classList.remove('show-inspector');shell.querySelector('.editor-inspector').hidden=true;
+  const editorPanelController=new AbortController();
+  // The legacy property panel has functioning bindings in bindInspector().
+  // The previous editor mount hid it unconditionally, leaving apparent dead
+  // controls. Keep it available behind an explicit, phone-safe toggle.
+  const inspectorPanel=shell.querySelector('.editor-inspector');
+  shell.classList.add('swift-editor-workspace');
+  const showInspector=visible=>{
+    state.showEditorInspector=visible;
+    shell.classList.toggle('show-inspector',visible);
+    if(inspectorPanel)inspectorPanel.hidden=!visible;
+    inspectorButton.setAttribute('aria-expanded',String(visible));
+    inspectorButton.setAttribute('aria-pressed',String(visible));
+  };
+  const inspectorButton=button('属性',()=>showInspector(!state.showEditorInspector),'btn');
+  inspectorButton.setAttribute('aria-label','显示或隐藏页面及对象属性');
+  actions.insertBefore(inspectorButton,actions.querySelector('.btn.primary'));
+  showInspector(!!state.showEditorInspector);
+  document.addEventListener('pointerdown',event=>{
+    if(!state.showEditorInspector||!inspectorPanel||inspectorPanel.contains(event.target)||inspectorButton.contains(event.target))return;
+    if(window.innerWidth<900)showInspector(false);
+  },{signal:editorPanelController.signal,capture:true});
   function syncTools(){for(const b of tools.querySelectorAll('button')){const active=(state.toolHighlight||state.tool)===b.dataset.val||(b.dataset.val==='select'&&state.tool==='marquee');b.classList.toggle('primary',active);b.setAttribute('aria-pressed',String(active));}page.classList.toggle('pen',['pen','highlighter','eraser'].includes(state.tool));}
   function contextTools(){context.replaceChildren();const mode=state.toolHighlight||state.tool,entry=entries.find(e=>e.value.id===state.selected),s=entry?.value,kind=entry?.kind;
     if(['pen','highlighter'].includes(mode)){const marker=mode==='highlighter',key=marker?'marker':'pen';for(const width of [2,4,9]){const b=button('',()=>{if(prefs[key+'Width']===width)widthSettings(b,mode);else{prefs[key+'Width']=width;prefsChanged();}},'stroke-width'+(prefs[key+'Width']===width?' active':''));b.innerHTML='<span style="height:'+Math.max(2,width)+'px"></span>';b.setAttribute('aria-label','笔画粗细 '+width+' pt');context.append(b);}for(const color of ['#2b5245','#009cff','#ff3348']){const b=button('',()=>{if(prefs[key+'Color']===color)colorSettings(b,mode);else{prefs[key+'Color']=color;prefsChanged();}},'ink-color'+(prefs[key+'Color']===color?' active':''));b.style.backgroundColor=color;b.setAttribute('aria-label','笔画颜色 '+color);context.append(b);}context.append(button('＋',e=>colorSettings(e.currentTarget,mode)));return;}
@@ -194,7 +214,10 @@ export function mountCanvasEditor(c){
   ink.onpointerup=e=>{if(stroke?.id===e.pointerId){const {id,...line}=stroke;d.strokes.push(state.tool==='highlighter'&&prefs.markerStraight?straightStroke(line):line);stroke=null;saveProject();schedule();}else if(erase?.id===e.pointerId){erase=null;saveProject();if(prefs.returnToPen){state.tool=state.previousInkTool||'pen';state.toolHighlight=state.tool;render();}else schedule();}};
   ink.onpointercancel=()=>{if(!stroke&&!erase)return;stroke=null;erase=null;const before=state.undo.pop();if(before)d.strokes=before.strokes;paint();};
   view.cancelInkGesture=ink.onpointercancel;
-  mountCanvasViewport(c,page);refresh();
+  mountCanvasViewport(c,page);
+  const disposeViewport=view.editorDispose;
+  view.editorDispose=()=>{editorPanelController.abort();disposeViewport?.();};
+  refresh();
   function vectorColors(shape,target=context){
     if(!shape.vectorLayers)return;
     const colors=[...new Set(shape.vectorLayers.map(layer=>layer.fill))];
