@@ -20,7 +20,7 @@ export function renderImportReview({state,esc,fmt}) {
   const backgroundTile=(r,ri)=>{
     const pattern=r.workPaperPattern||state.importBatchWorkPaperPattern||'plain',
       color=r.workPaperColor||state.importBatchWorkPaperColor||'#fcfaf0';
-    return '<div class="review-candidate review-background-card"><div class="review-thumbnail import-work-paper-preview '+esc(pattern)+'" style="--review-paper:'+esc(color)+';background-color:'+esc(color)+'"><span class="review-paper-title">页面背景</span></div>'+
+    return '<div class="review-background-card"><div class="review-thumbnail import-work-paper-preview '+esc(pattern)+'" style="--review-paper:'+esc(color)+';background-color:'+esc(color)+'"><span class="review-paper-title">页面背景</span></div>'+
       (work?'<label>底纸样式<select class="record-work-paper-pattern" data-index="'+ri+'">'+
       paperTypes.map(([id,name])=>'<option value="'+id+'" '+(id===pattern?'selected':'')+'>'+name+'</option>').join('')+
       '</select></label><label>底纸颜色<input type="color" class="record-work-paper-color" data-index="'+ri+'" value="'+esc(color)+'"></label>':'<strong>页面背景</strong><small>保存作品时使用可编辑纸张</small>')+
