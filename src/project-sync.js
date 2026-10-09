@@ -1,6 +1,6 @@
 // Durable edits are an explicit outbox, not a replacement for cloud records.
 // Commit acknowledgement is the only point at which an entry is removed.
-export function createProjectSync({load,write,commit,revision,reconcile=async()=> 'conflict',recordKeys=record=>[{store:'projects',id:record.id}],onCommitted=()=>{},onStatus=()=>{},runExclusive=fn=>fn(),reload=load}){
+export function createProjectSync({load,write,commit,revision,reconcile=async()=> 'conflict',recordKeys=record=>[{store:'projects',id:record.id}],onCommitted=()=>{},onConflict=async()=>null,onStatus=()=>{},runExclusive=fn=>fn(),reload=load}){
   let initialized,staging=Promise.resolve(),network,serial=0,error;
   const entries=new Map();
   // A transient IndexedDB/auth read failure must not poison this instance for
@@ -62,7 +62,23 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
           // An import batch consists only of new, globally unique IDs. If no
           // ID is present remotely, it can be retried after an unrelated edit.
           if(resolution==='rebase'){row.baseRevision=revision();await persist();}
-          else throw Error('云端版本已变化；待同步作品已保留，未覆盖其他设备的资料');
+          else {
+            // A genuinely conflicting editable project becomes a separate
+            // recoverable copy. Never overwrite the other device's original
+            // project, and never silently drop locally staged work.
+            const current=entries.get(row.record.id);
+            if(current&&current.serial!==row.serial)continue;
+            const copy=await onConflict(row.record,row.baseRevision);
+            if(!copy||!copy.id||copy.id===row.record.id)
+              throw Error('云端版本已变化；待同步作品已保留，未覆盖其他设备的资料');
+            const next={record:structuredClone(copy),serial:++serial,
+              baseRevision:revision(),operationID:crypto.randomUUID()};
+            entries.delete(row.record.id);
+            entries.set(copy.id,next);
+            try{await persist();}
+            catch(failure){entries.delete(copy.id);entries.set(row.record.id,row);throw failure;}
+            report();continue;
+          }
         }
         try{await commit(row.record,row.operationID);}
         catch(failure){
