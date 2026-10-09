@@ -1,13 +1,15 @@
 // Administrator-initiated development reset. Object paths are scoped to the
 // authenticated owner's UUID prefix; built-in shared presets are never touched.
 export function createDevReset({enabled=false,authenticate,cos,listLimit=80,resetRecords}){
-  return async({method,authorization,confirm})=>{
+  return async({method,authorization,confirm,mode='delete'})=>{
     if(method!=='POST'||confirm!=='RESET_DEV_DATA')return {status:400,error:'需明确确认开发数据清理'};
     if(!enabled)return {status:403,error:'未在预览环境启用开发清理'};
     const token=/^Bearer ([A-Za-z0-9._-]{20,4096})$/.exec(authorization||'')?.[1];
     if(!token)return {status:401,error:'请先登录'};
     const user=await authenticate(token);
     if(!user?.id||!user.isAdmin)return {status:403,error:'仅测试管理员可清理开发数据'};
+    if(mode==='probe')return {status:200,ready:true};
+    if(mode!=='delete')return {status:400,error:'不支持的清理操作'};
     const prefix=user.id+'/';
     // Always list the first slice and delete it. This avoids skipping files
     // because deletion invalidates pagination markers.
