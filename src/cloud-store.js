@@ -254,7 +254,7 @@ async function cloudPreview(id,pixels=360){
   const {data}=await decode('blobs',record);
   const blob=await makeThumbnail(data,edge);if(blob){await remember(thumbnailKey,blob);return blob;}return data;
 }
-async function makeThumbnail(data,edge=360){if(typeof createImageBitmap!=='function'||typeof document==='undefined')return null;const bitmap=await createImageBitmap(data);try{const scale=Math.min(1,edge/Math.max(bitmap.width,bitmap.height)),canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));canvas.getContext('2d').drawImage(bitmap,0,0,canvas.width,canvas.height);return await new Promise(resolve=>canvas.toBlob(resolve,'image/webp',.9));}finally{bitmap.close();}}
+async function makeThumbnail(data,edge=360){if(typeof createImageBitmap!=='function'||typeof document==='undefined')return null;const bitmap=await createImageBitmap(data);try{const scale=edge/Math.max(bitmap.width,bitmap.height),canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));canvas.getContext('2d').drawImage(bitmap,0,0,canvas.width,canvas.height);return await new Promise(resolve=>canvas.toBlob(resolve,'image/webp',.9));}finally{bitmap.close();}}
 async function decode(store,record){
   if(store!=='blobs')return record;
   const {storagePath,storageProvider,...metadata}=record;

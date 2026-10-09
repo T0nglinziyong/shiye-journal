@@ -13,8 +13,8 @@ test('COS authorizes only authenticated owner hash paths and validates a whole b
   assert.equal((await run(req)).status,200);
   const preview=await run({...req,body:{objects:[{method:'GET',path:'owner/'+hash,variant:'preview360'}]}});
   assert.equal(preview.status,200);assert.equal(preview.body.tickets[0].variant,'preview360');
-  for(const variant of ['preview720','preview1440','preview2160'])assert.equal((await run({...req,body:{objects:[{method:'GET',path:'owner/'+hash,variant}]}})).status,200);
-  for(const row of [{method:'PUT',path:'owner/'+hash,type:'image/png',variant:'preview360'},{method:'GET',path:'owner/'+hash,variant:'sharpen'},{method:'GET',path:'owner/'+hash+'-preview360.webp',variant:'preview360'}])assert.equal((await run({...req,body:{objects:[row]}})).status,403);
+  for(const variant of ['preview361','preview621','preview721','preview1440','preview4096'])assert.equal((await run({...req,body:{objects:[{method:'GET',path:'owner/'+hash,variant}]}})).status,200);
+  for(const row of [{method:'PUT',path:'owner/'+hash,type:'image/png',variant:'preview360'},{method:'GET',path:'owner/'+hash,variant:'sharpen'},{method:'GET',path:'owner/'+hash,variant:'preview359'},{method:'GET',path:'owner/'+hash,variant:'preview4097'},{method:'GET',path:'owner/'+hash,variant:'preview0004'},{method:'GET',path:'owner/'+hash+'-preview360.webp',variant:'preview360'}])assert.equal((await run({...req,body:{objects:[row]}})).status,403);
   const put=await run({...req,body:{objects:[{method:'PUT',path:'owner/'+hash,type:'image/png'}]}});assert.equal(put.body.tickets[0].headers['x-cos-forbid-overwrite'],'true');
   assert.equal((await run({...req,method:'DELETE'})).status,405);
 });

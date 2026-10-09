@@ -14,8 +14,9 @@ export default async function handler(req,res){
     },
     sign:async({path,method,headers,variant})=>{
       const cos=new COS({SecretId:env.SHIYE_COS_SECRET_ID,SecretKey:env.SHIYE_COS_SECRET_KEY});
-      const edge=variant&&Number(/^preview(360|720|1440|2160)$/.exec(variant)?.[1]);
-      return new Promise((resolve,reject)=>cos.getObjectUrl({Bucket:env.SHIYE_COS_BUCKET,Region:env.SHIYE_COS_REGION,Key:path,Method:method,Protocol:'https:',Sign:true,Expires:60,Headers:headers,...(edge?{QueryString:`imageMogr2/thumbnail/${edge}x${edge}>/format/webp/quality/90`}:{})},(error,data)=>error?reject(error):resolve(data.Url)));
+      const edge=Number(/^preview([1-9]\d{0,3})$/.exec(variant||'')?.[1]);
+      if(variant&&(!Number.isInteger(edge)||edge<360||edge>4096))throw Error('图片显示尺寸无效');
+      return new Promise((resolve,reject)=>cos.getObjectUrl({Bucket:env.SHIYE_COS_BUCKET,Region:env.SHIYE_COS_REGION,Key:path,Method:method,Protocol:'https:',Sign:true,Expires:60,Headers:headers,...(edge?{QueryString:`imageMogr2/thumbnail/${edge}x${edge}/format/webp/quality/90`}:{})},(error,data)=>error?reject(error):resolve(data.Url)));
     },
   });
   const result=await run({method:req.method,origin:req.headers.origin,authorization:req.headers.authorization,body:req.body});
