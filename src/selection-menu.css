@@ -63,3 +63,22 @@
   .swift-tray.manage.library-management-tray {flex-wrap:wrap}
   .swift-tray.manage.library-management-tray > button {flex:1 0 112px}
 }
+
+/* Subformat choices stay inside the More menu instead of creating a
+   second floating menu that may disappear on touch devices. */
+.selection-more-menu .selection-inline-submenu {
+  width:100%;
+  padding:4px 0 6px 12px;
+  box-sizing:border-box;
+  border-left:2px solid #d9e5da;
+  margin-left:10px;
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+}
+.selection-more-menu .selection-inline-submenu > button {
+  width:100%;
+  min-height:42px;
+  border:0;
+  text-align:left;
+}
