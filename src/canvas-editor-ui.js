@@ -30,11 +30,27 @@ export function mountCanvasEditor(c){
   const change=fn=>{checkpoint();fn();saveProject();render();};
   const topAction=(action,label)=>{const b=button(label,()=>handle(action),'btn');b.dataset.act=action;if(['undo','redo'].includes(action)){b.replaceChildren(createIcon(action));b.setAttribute('aria-label',action==='undo'?'撤销':'重做');}return b;};
   head.classList.add('swift-editor-head');const back=actions.querySelector('[data-act="back-works"]');head.prepend(back);back.textContent='‹ 返回';
-  const pdf=[...actions.querySelectorAll('button')].find(b=>b.textContent==='导出 PDF');
+  const json=actions.querySelector('[data-act="creative-json"]'),pdf=[...actions.querySelectorAll('button')].find(b=>b.textContent==='导出 PDF');
   // Exactly two visible header actions on EVERY screen. Auto-save remains
   // active in saveProject()/flushSave(); it does not need a misleading Save
   // button or an extra status badge inside the title bar.
   actions.replaceChildren();
+  // Phone layout is intentionally taken from the last user-approved
+  // test version 28509aa9. These controls remain in the original header
+  // order, but become invisible on desktop (where identical actions live in
+  // the secondary edit toolbar). CSS, not screen checks at mount time,
+  // switches variants so resizing/rotation never loses an action.
+  const saved=document.createElement('span');
+  saved.className='swift-auto-saved mobile-editor-head-only';
+  saved.textContent=document.querySelector('#save-state')?.textContent||'';
+  actions.append(saved);
+  const mobileHistory=button('◷',e=>historyMenu(e.currentTarget),
+    'canvas-icon mobile-editor-head-only');
+  mobileHistory.setAttribute('aria-label','历史记录');
+  const mobileUndo=topAction('undo','↶'),mobileRedo=topAction('redo','↷');
+  mobileUndo.classList.add('mobile-editor-head-only');
+  mobileRedo.classList.add('mobile-editor-head-only');
+  actions.append(mobileHistory,mobileUndo,mobileRedo);
   const done=button('完成',()=>handle('editor-done'),'btn primary');
   done.dataset.editorCompletion='';
   actions.append(done);
@@ -50,6 +66,7 @@ export function mountCanvasEditor(c){
   },'btn');
   share.setAttribute('aria-label','导出作品');share.dataset.editorExport='';
   actions.append(share);
+  if(json){json.hidden=true;actions.append(json);}
   const toolbar=document.createElement('div');toolbar.className='swift-editor-toolbar';
   shell.before(toolbar);toolbar.append(tools);tools.replaceChildren();
   // History and undo/redo stay available, but belong with the editing tools
