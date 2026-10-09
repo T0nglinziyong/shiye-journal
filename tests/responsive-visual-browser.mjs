@@ -46,8 +46,9 @@ async function verifyTray(expected){
   assert.ok(rects.some(row=>row.label==='更多操作'));
   assert.ok(rects.some(row=>row.label.startsWith('删除')));
   assert.ok(rects.every(row=>row.height<=37),'The selection buttons must remain compact');
+  return rects;
 }
-async function verifyDeletedTray(width){
+async function verifyDeletedTray(width,referenceWidth){
   const result=await evaluate('(()=>{const tray=document.querySelector(".deleted-selection-tray:not([hidden])");'+
     'const nav=document.querySelector(".main-nav"),r=tray?.getBoundingClientRect();'+
     'if(!r)return null;return {top:r.top,bottom:r.bottom,buttons:[...tray.querySelectorAll(":scope > button")].map(b=>{'+
@@ -59,6 +60,11 @@ async function verifyDeletedTray(width){
   assert.ok(result,'Recently deleted selection tray missing');
   assert.equal(result.buttons.length,4);
   assert.ok(result.buttons.every(x=>Math.abs(x.height-36)<=1.1&&x.iconInside&&x.labelInside),JSON.stringify(result));
+  for(const button of result.buttons.slice(0,3))
+    assert.ok(Math.abs(button.width-referenceWidth)<=1.1,
+      'Only permanently delete may be wider than regular selection buttons: '+JSON.stringify({width,referenceWidth,result}));
+  assert.ok(result.buttons[3].width>referenceWidth+10,
+    'The irreversible delete button should be the only longer action: '+JSON.stringify({width,referenceWidth,result}));
   assert.ok(result.bottom<=result.navTop+1&&result.top>=0,
     'Deleted tray must not overlap mobile navigation or run off screen: '+JSON.stringify({width,result}));
 }
@@ -111,7 +117,8 @@ try{
     });
     await click('[data-route="library"]','.series-grid');
     await choose('.view-head .actions','选择');
-    await verifyTray(5);
+    const regularTray=await verifyTray(5);
+    const regularWidth=regularTray[0].width;
     await screenshot('series-selection',width,height);
     await choose('.view-head .actions','完成');
 
@@ -130,12 +137,12 @@ try{
     await click('[data-route="library"]','.series-grid');
     await click('.swift-tabs button:nth-child(4)','.recently-deleted-grid');
     await choose('.view-head .actions','选择');
-    await verifyDeletedTray(width);
+    await verifyDeletedTray(width,regularWidth);
     await screenshot('asset-trash-selection',width,height);
     await click('[data-route="works"]','.works-grid');
     await click('.swift-tabs button:nth-child(5)','.recently-deleted-grid');
     await choose('.view-head .actions','选择');
-    await verifyDeletedTray(width);
+    await verifyDeletedTray(width,regularWidth);
     await screenshot('work-trash-selection',width,height);
 
     await click('[data-route="matching"]','.matching-page');
