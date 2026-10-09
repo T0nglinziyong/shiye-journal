@@ -6,11 +6,13 @@ export const imagePlaceholder=id=>id?(cachedImageSource(id)||placeholder(id)):''
 export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=console.warn}){
   const pending=new Map(),previews=new Map(),variants=new Map(),sizes=new Map(),previewSizes=new Map(),variantSizes=new Map(),retained=new Map(),queue=[],versions=new Map(),retryTimers=new Map(),retryCounts=new Map(),resizeTimers=new Map(),brokenPreviews=new Set(),observed=new WeakSet();
   let active=0,generation=0,disposed=false,trimTimer=null;
-  const concurrency=globalThis.matchMedia?.('(pointer: coarse)').matches?4:7;
+  // Network bound COS thumbnail reads; browser decoding remains lazy.
+  const concurrency=globalThis.matchMedia?.('(pointer: coarse)').matches?6:10;
   const version=id=>versions.get(id)||0;
   const touch=(map,id)=>{if(map.has(id)){const v=map.get(id);map.delete(id);map.set(id,v);}};
-  const bestVariant=id=>{let chosen=null;for(const [key,row] of variants)if(row.id===id&&(!chosen||row.tier>chosen.tier))chosen=row;return chosen;};
-  const currentSource=id=>{touch(sizes,id);touch(previewSizes,id);const best=bestVariant(id);if(best)touch(variantSizes,id+':'+best.tier);return urls.get(id)||best?.url||previews.get(id)||'';};
+  // Public thumbnails always prefer the immutable low-resolution COS snapshot.
+  // Larger variants are only reused by the editor/cutout paths, never cards.
+  const currentSource=id=>{touch(previewSizes,id);return previews.get(id)||urls.get(id)||'';};
   const identity=source=>{
     for(const [id,url] of urls)if(url===source)return {id,version:version(id),full:true};
     for(const [id,url] of previews)if(url===source)return {id,version:version(id),full:false};
@@ -118,7 +120,9 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
     img.dataset.privateImageId=id;img.dataset.privateImageLoading=stamp;
     const current=()=>!disposed&&epoch===generation&&itemVersion===version(id);
     const target=fullView(img)?displayTier(img):360;
-    const full=brokenPreviews.has(id);
+    // Never fetch a full original to repair a grid thumbnail. Only a genuine
+    // editing or cutout view may request original bytes as a last resort.
+    const full=brokenPreviews.has(id)&&fullView(img);
     void(async()=>{
       let shown=src;
       if(target>360&&!full)try{const preview=await load(id,false);if(!current())return;if(preview&&img.isConnected&&img.getAttribute('src')===src){img.src=preview;shown=preview;}}catch(error){if(current())onError(error);}
