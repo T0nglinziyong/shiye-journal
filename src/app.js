@@ -1383,9 +1383,11 @@ window.addEventListener('beforeunload',event=>{if(saveTimer||savingProjects||dir
 // trip. Unacknowledged edits remain in the account-scoped outbox for re-login.
 window.addEventListener('shiye-flush-before-logout',event=>event.detail.tasks.push(flushSave()));
 let lastSyncError;
-window.addEventListener('shiye-project-conflict-copy',event=>{
-  toast('已将冲突修改安全保存为「'+event.detail.title+'」，原作品未覆盖');
-  void refresh({background:true}).catch(error=>console.warn('冲突副本已保存，列表刷新待重试',error));
+window.addEventListener('shiye-cloud-superseded',()=>{
+  // A remote record that won timestamp comparison must be downloaded.
+  // The uploader has already removed its superseded local outbox row.
+  void refresh({background:true,onlyChanged:true}).catch(error=>
+    console.warn('云端较新版本尚未拉取，将在下次联网时重试',error));
 });
 window.addEventListener('shiye-project-sync',event=>{const {pending,error}=event.detail;syncDisplay.pending=pending;syncDisplay.error=error;syncDisplay.checking=false;if(!dirtyProjects.size&&!savingProjects)syncDisplay.localPending=false;updateSyncIndicator();if(error){saveStatus('待同步 · 修改已保留在本机');const message=error.name==='AbortError'||/abort|timed? ?out/i.test(error.message||'')?'网络请求中断，本机修改已保留，将自动重试同步':error.message||'云端暂不可用，本机修改已保留，将自动重试';if(lastSyncError!==message)toast(message);lastSyncError=message;}else{lastSyncError=null;saveStatus(pending?'修改已暂存 · 后台同步中':'已保存到云端');privateImages.retryMissing();}});
 let cloudCheck,cloudCheckAt=0,cloudSessionReady=false;
