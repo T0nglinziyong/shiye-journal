@@ -22,7 +22,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [unit-a-m, unit-n-z, ui]
+        shard: [unit-a-m, unit-n-z, unit-presentation, ui]
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -40,7 +40,18 @@ jobs:
         run: node --test --test-concurrency=2 tests/[a-m]*.test.js
       - name: Second half of unit tests
         if: matrix.shard == 'unit-n-z'
-        run: node --test --test-concurrency=2 tests/[n-z]*.test.js
+        shell: bash
+        run: |
+          files=()
+          for file in tests/[n-z]*.test.js; do
+            if [[ "$file" != "tests/presentation-cache.test.js" ]]; then
+              files+=("$file")
+            fi
+          done
+          node --test --test-concurrency=2 "${files[@]}"
+      - name: Isolated presentation resource and browser-cache contracts
+        if: matrix.shard == 'unit-presentation'
+        run: node --test tests/presentation-cache.test.js
       - name: Built UI and deployment smoke
         if: matrix.shard == 'ui'
         run: npm run test:ui
