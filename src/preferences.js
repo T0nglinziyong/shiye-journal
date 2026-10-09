@@ -1,7 +1,7 @@
 import {recognitionModeAllowed,recognitionPixelsAllowed} from './recognition-profiles.js';
 const KEY='shiye-ui-preferences-v1',RECOGNITION_DEFAULTS_VERSION=2;
 const defaults={
-  paperSize:'a4',orientation:'auto',wholePaper:true,autoOrganize:true,
+  paperSize:'a4',orientation:'auto',wholePaper:true,autoOrganize:true,autoOrganizeWorks:true,
   recognition:'auto',recognitionPixels:900,materialColorMode:'auto',
   // Real-case default: whole-page box discovery is most stable on the raw
   // rectified RGB. Optional raster preprocessing remains user-selectable for
@@ -36,7 +36,7 @@ export function normalizePreferences(value={}){
     recognitionChromaEdges:value?.recognitionChromaEdges!==false,
     recognitionShapeRegularization:value?.recognitionShapeRegularization!==false,
     recognitionApertures:value?.recognitionApertures!==false,
-    autoOrganize:value?.autoOrganize!==false,
+    autoOrganize:value?.autoOrganize!==false,autoOrganizeWorks:value?.autoOrganizeWorks!==false,
     maxPageItems:[20,40,80].includes(Number(value?.maxPageItems))?Number(value.maxPageItems):0
   };
 }
