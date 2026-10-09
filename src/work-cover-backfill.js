@@ -69,10 +69,10 @@ export function createWorkCoverBackfill({db,state,cloudEnabled=false,onError=con
         return !queued.has(key)&&Date.now()>=(attempted.get(key)||0)&&Date.now()>=(retryAfter.get(key)||0);
       });
       if(candidate)enqueue(candidate.id,candidate.updatedAt);
-      if(missing.length){
-        backgroundTimer=setTimeout(tick,candidate?2200:10000);
-        backgroundTimer.unref?.();
-      }
+      // Keep a light periodic scan even after today's migration completes:
+      // a subsequent save may create a new missing cover while this tab lives.
+      backgroundTimer=setTimeout(tick,missing.length?(candidate?2200:10000):30000);
+      backgroundTimer.unref?.();
     };
     backgroundTimer=setTimeout(tick,4000);
     backgroundTimer.unref?.();
