@@ -96,6 +96,12 @@ export function createWorkCoverBackfill({db,state,cloudEnabled=false,onError=con
     const cards=[...view.querySelectorAll('[data-act="open-project"][data-id]')]
       .filter(card=>needsWorkCover(state.projects.find(p=>p.id===card.dataset.id)));
     if(!cards.length)return ()=>{};
+    // Immediately queue the first visible cards; don't wait for a delayed
+    // IntersectionObserver callback before the very first COS cover attempt.
+    for(const card of cards.slice(0,4)){
+      const project=state.projects.find(p=>p.id===card.dataset.id);
+      if(project)enqueue(project.id,project.updatedAt);
+    }
     let stopped=false,timer=null;
     // Fill visible cards immediately; do not stage every historical project
     // at once or compete with foreground downloads.
@@ -127,7 +133,7 @@ export function createWorkCoverBackfill({db,state,cloudEnabled=false,onError=con
       }
       if(backlog.length)timer=setTimeout(next,2200);
     };
-    timer=setTimeout(next,3500);
+    timer=setTimeout(next,800);
     return ()=>{stopped=true;observer?.disconnect();if(timer!==null)clearTimeout(timer);};
   }
 
