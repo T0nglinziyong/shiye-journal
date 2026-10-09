@@ -144,7 +144,10 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
         brokenPreviews.add(id);
         if(derived.tier){const key=id+':'+derived.tier;variants.delete(derived.tier+':'+id);variantSizes.delete(key);URL.revokeObjectURL(src);notifyImageInvalidation([id]);}
         else releaseURL(previews,previewSizes,id);
-        delete img.dataset.privateImageLoading;img.src=placeholder(id);resolve(img,id);return;
+        delete img.dataset.privateImageLoading;img.src=placeholder(id);
+        if(fullView(img))resolve(img,id);
+        else{img.dataset.imageError='true';scheduleRetry(id);}
+        return;
       }
       if(src===urls.get(id))releaseURL(urls,sizes,id);
       img.dataset.imageError='true';img.src=placeholder(id);scheduleRetry(id);
