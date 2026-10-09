@@ -44,14 +44,14 @@ jobs:
         run: |
           files=()
           for file in tests/[n-z]*.test.js; do
-            if [[ "$file" != "tests/presentation-cache.test.js" ]]; then
+            if [[ "$file" != tests/presentation-cache*.test.js ]]; then
               files+=("$file")
             fi
           done
           node --test --test-concurrency=2 "${files[@]}"
       - name: Isolated presentation resource and browser-cache contracts
         if: matrix.shard == 'unit-presentation'
-        run: node --test tests/presentation-cache.test.js
+        run: node --test --test-concurrency=1 tests/presentation-cache*.test.js
       - name: Built UI and deployment smoke
         if: matrix.shard == 'ui'
         run: npm run test:ui
