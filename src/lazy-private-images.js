@@ -17,7 +17,7 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
     return null;
   };
   const unbind=bindImageResources({source:currentSource,identity});
-  const displayTier=img=>{const rect=img.getBoundingClientRect(),pixels=rect.width>0&&rect.height>0?Math.max(rect.width,rect.height):Math.max(img.clientWidth||0,img.clientHeight||0);return imagePixelSize(pixels||400,globalThis.devicePixelRatio||1);};
+  const displayTier=img=>{const rect=img.getBoundingClientRect(),pixels=rect.width>0&&rect.height>0?Math.max(rect.width,rect.height):Math.max(img.clientWidth||0,img.clientHeight||0);return imagePixelSize(pixels||400,globalThis.devicePixelRatio||1,globalThis.screen?.width||1440,globalThis.screen?.height||900);};
   function scheduleUpgrade(img){
     if(disposed||!fullView(img))return;
     clearTimeout(resizeTimers.get(img));
