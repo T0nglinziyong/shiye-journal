@@ -1,4 +1,4 @@
-const leaf=/^[a-f0-9]{64}(?:-preview360\.webp|-project\.json(?:\.gz)?(?:-preview\.webp)?)?$/;
+const leaf=/^[a-f0-9]{64}(?:-preview(?:360|720)?\.webp|-project\.json(?:\.gz)?(?:-preview(?:720)?\.webp)?)?$/;
 export function createTicketHandler({ready,origin,origins,authenticate,sign}){
   const allowed=origins||[origin].filter(Boolean);
   return async req=>{
