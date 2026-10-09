@@ -1,4 +1,4 @@
-const leaf=/^[a-f0-9]{64}(?:-preview360\.webp|-project\.json(?:\.gz)?(?:-preview\.webp)?)?$/;
+const leaf=/^[a-f0-9]{64}(?:-preview720\.webp|-project\.json(?:\.gz)?(?:-preview720\.webp)?)?$/;
 export function createTicketHandler({ready,origin,origins,authenticate,sign}){
   const allowed=origins||[origin].filter(Boolean);
   return async req=>{
@@ -22,7 +22,7 @@ export function createTicketHandler({ready,origin,origins,authenticate,sign}){
         const slash=row.path.indexOf('/'),target=slash<0?'':row.path.slice(0,slash),name=row.path.slice(slash+1);
         if(!leaf.test(name)||!(target===owner||admin&&row.method==='GET'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(target)))return false;
         const edge=Number(/^preview([1-9]\d{0,3})$/.exec(row.variant||'')?.[1]);
-        return (row.variant===undefined||Number.isInteger(edge)&&edge>=360&&edge<=4096&&row.method==='GET'&&/^[a-f0-9]{64}$/.test(name))&&(row.method!=='PUT'||target===owner&&typeof row.type==='string'&&/^(image\/(png|jpeg|webp)|application\/(json|gzip|octet-stream))$/.test(row.type));
+        return (row.variant===undefined||Number.isInteger(edge)&&edge>=720&&edge<=4096&&row.method==='GET'&&/^[a-f0-9]{64}$/.test(name))&&(row.method!=='PUT'||target===owner&&typeof row.type==='string'&&/^(image\/(png|jpeg|webp)|application\/(json|gzip|octet-stream))$/.test(row.type));
       });
       if(!valid)return fail(403,'对象路径或操作不允许');
       const tickets=await Promise.all(rows.map(async row=>{

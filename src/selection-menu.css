@@ -82,3 +82,52 @@
   border:0;
   text-align:left;
 }
+
+/* The only size source for all batch actions (series, assets, works, snapshots).
+   Set width as well as height: More/Delete must not grow with text or flex
+   distribution compared with Select/Clear/View. */
+.swift-tray.manage.library-management-tray > button {
+  flex:0 0 114px;
+  width:114px;
+  min-width:114px;
+  max-width:114px;
+  height:44px;
+  min-height:44px;
+  max-height:44px;
+  padding:8px;
+  margin:0;
+  box-sizing:border-box;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  line-height:1.2;
+  text-align:center;
+}
+.swift-tray.manage.library-management-tray > button > .selection-action-label {
+  display:block;
+  width:100%;
+  min-width:0;
+  text-align:center;
+}
+@media(max-width:699px) {
+  .swift-tray.manage.library-management-tray {
+    display:flex;
+    flex-wrap:wrap;
+    align-items:center;
+    justify-content:center;
+    gap:7px;
+  }
+  .swift-tray.manage.library-management-tray > strong {
+    flex:1 0 100%;
+    text-align:center;
+  }
+  .swift-tray.manage.library-management-tray > button {
+    flex:0 0 calc(50% - 7px);
+    width:calc(50% - 7px);
+    min-width:0;
+    max-width:none;
+    height:44px;
+    min-height:44px;
+    max-height:44px;
+  }
+}

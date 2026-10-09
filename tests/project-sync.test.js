@@ -244,3 +244,41 @@ test('edits arriving mid-upload wait for the next cloud window',async()=>{
   assert.deepEqual(writes,[{title:'first',time:10000},{title:'second',time:20000}]);
   assert.deepEqual(rows,[]);
 });
+
+
+test('newer cloud editor revision wins without creating a conflict copy',async()=>{
+  let rows=[{serial:1,baseRevision:10,operationID:'pending',record:{
+    id:'same-work',title:'older local edit',updatedAt:'2026-10-09T09:30:00Z'}}];
+  const superseded=[],commits=[];
+  const sync=createProjectSync({
+    load:async()=>structuredClone(rows),reload:async()=>structuredClone(rows),
+    write:async value=>{rows=structuredClone(value)},
+    revision:()=>12,reconcile:async()=> 'remote',
+    onSuperseded:record=>superseded.push(record.id),
+    onConflict:async()=>{throw Error('No fork expected')},
+    commit:async record=>commits.push(record.id)
+  });
+  await sync.flush();
+  assert.deepEqual(commits,[]);
+  assert.deepEqual(superseded,['same-work']);
+  assert.deepEqual(rows,[]);
+});
+test('a multi-store mutation keeps newer operations and drops older ones',async()=>{
+  let rows=[{serial:1,baseRevision:8,operationID:'batch-1',record:{
+    id:'batch-1',names:['assets'],operations:[
+      {action:'put',store:'assets',item:{id:'recent'},modifiedAt:'2026-10-09T11:00:00Z'},
+      {action:'put',store:'assets',item:{id:'stale'},modifiedAt:'2026-10-09T10:00:00Z'}
+    ]}}];
+  const committed=[];
+  const sync=createProjectSync({
+    load:async()=>structuredClone(rows),reload:async()=>structuredClone(rows),
+    write:async value=>{rows=structuredClone(value)},
+    revision:()=>20,
+    reconcile:async batch=>batch.operations.length===2?
+      {kind:'replace',record:{...batch,operations:batch.operations.slice(0,1)}}:'rebase',
+    commit:async batch=>committed.push(batch.operations.map(op=>op.item.id))
+  });
+  await sync.flush();
+  assert.deepEqual(committed,[['recent']]);
+  assert.deepEqual(rows,[]);
+});

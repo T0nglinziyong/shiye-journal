@@ -2,6 +2,7 @@ import {cloudClient,requireCloudUser} from './cloud-session.js';
 import {privateCache} from './private-cache.js';
 import {createProjectSync} from './project-sync.js';
 import {readCloudDelta,canRebaseUnchangedKeys} from './cloud-delta.js';
+import {compareRecordEdits} from './sync-last-write.js';
 import {LARGE_PROJECT_BYTES,projectSummary,mergeProjectSummary,projectBlobText} from './project-document.js';
 import {createCOSStore} from './cos-store.js';
 import {imageVariant} from './image-variants.js';
@@ -58,12 +59,12 @@ const withProjectBase=(store,record,base)=>{
 };
 function retainImage(path,data){images.set(path,Promise.resolve(data));imageSizes.delete(path);imageSizes.set(path,data.size);let bytes=[...imageSizes.values()].reduce((a,b)=>a+b,0);for(const [key,size] of imageSizes){if(bytes<=64*1024*1024&&imageSizes.size<=48)break;if(key===path)continue;images.delete(key);imageSizes.delete(key);bytes-=size;}}
 // Old COS assets without thumbnail metadata are converted into a durable,
-// immutable preview360 object exactly once. There is never a browser-side
+// immutable preview720 object exactly once. There is never a browser-side
 // reconstruction of the original during ordinary catalog browsing.
 const previewMaterialization=new Set();
-function materializePreview360(record,preview){
+function materializePreview720(record,preview){
   if(record.storageProvider!=='cos'||record.thumbnailPath||!objectStorage?.upload||!usableBlob(preview))return;
-  const path=record.storagePath+'-preview360.webp';
+  const path=record.storagePath+'-preview720.webp';
   if(previewMaterialization.has(path))return;
   previewMaterialization.add(path);
   void objectStorage.upload(path,preview,'image/webp')
@@ -111,6 +112,9 @@ async function persistOutbox(kind,previous,rows){
   channel()?.postMessage({source:sessionTag,type:'pending'});
 }
 const account=async()=>`${namespace}:${await identity()}`;
+function notifyCloudSuperseded(){
+  if(typeof window!=='undefined')window.dispatchEvent(new CustomEvent('shiye-cloud-superseded'));
+}
 function reportSync(){if(typeof window!=='undefined'){const a=projectSync.status(),b=importSync.status();window.dispatchEvent(new CustomEvent('shiye-project-sync',{detail:{pending:a.pending+b.pending+writesInFlight,error:b.error||a.error}}));}}
 const projectSync=createProjectSync({
   autoFlushDelayMs:10000,
@@ -121,25 +125,16 @@ const projectSync=createProjectSync({
   reconcile:async(record,operationID,baseRevision)=>{
     if(await wasCommitted(operationID,baseRevision))return 'committed';
     const latest=await version();
-    return await canRebaseUnchangedKeys({client:cloudClient(),owner:await identity(),before:baseRevision,after:latest,operations:[{store:'projects',action:'put',item:record}]})?'rebase':'conflict';
-  },
-  onConflict:async record=>{
-    if(!record?.id||!usableProjectSnapshot(record))return null;
-    const now=new Date().toISOString(),originalID=record.id;
-    const copy={...structuredClone(record),id:crypto.randomUUID(),
-      title:(record.title||'未命名作品')+'（同步冲突副本）',
-      isDraft:true,updatedAt:now,lastOpenedAt:now,conflictOriginProjectID:originalID};
-    delete copy.__cloudSessionId;delete copy.__cloudBaseRevision;
-    return copy;
+    if(await canRebaseUnchangedKeys({client:cloudClient(),owner:await identity(),before:baseRevision,after:latest,operations:[{store:'projects',action:'put',item:record}]}))return 'rebase';
+    const remote=await cloudRecord('projects',record.id);
+    // Whichever device edited the project most recently wins; the other
+    // device pulls that record instead of inventing a conflict-copy project.
+    return compareRecordEdits(record,remote)==='local'?'rebase':'remote';
   },
   onCommitted:(record,committedRevision)=>{
     if(record.__cloudSessionId)editorBases.set(record.__cloudSessionId,committedRevision);
-    if(record.conflictOriginProjectID&&typeof window!=='undefined'){
-      window.dispatchEvent(new CustomEvent('shiye-project-conflict-copy',{detail:{
-        id:record.id,origin:record.conflictOriginProjectID,title:record.title
-      }}));
-    }
   },
+  onSuperseded:()=>notifyCloudSuperseded(),
   onStatus:reportSync,
   runExclusive:withAccountSyncLock,
 });
@@ -154,7 +149,25 @@ async function reconcileImport(batch,operationID,baseRevision){
   const latest=await version();
   // Edits/deletes rebase only over a complete, disjoint change log. An
   // append-only import may instead prove absence by its unique record IDs.
-  if(batch.operations)return await canRebaseUnchangedKeys({client:cloudClient(),owner:await identity(),before:baseRevision,after:latest,operations:batch.operations})?'rebase':'conflict';
+  if(batch.operations){
+    const client=cloudClient(),user=await identity();
+    const nonoverlap=await canRebaseUnchangedKeys({client,owner:user,before:baseRevision,after:latest,operations:batch.operations});
+    if(nonoverlap)return 'rebase';
+    // Resolve only the objects actually modified since our baseline. A batch
+    // can contain disjoint assets and projects: a stale item must not block
+    // independent updates or a newer item in the same transaction.
+    const operations=[];
+    for(const op of batch.operations){
+      const sameKeyFree=await canRebaseUnchangedKeys({client,owner:user,before:baseRevision,after:latest,operations:[op]});
+      if(sameKeyFree){operations.push(op);continue;}
+      if(op.action==='clear')return 'conflict';
+      const remote=await cloudRecord(op.store,op.item?.id??op.id);
+      const winner=compareRecordEdits(op.item||{updatedAt:op.modifiedAt},remote,{localTimestamp:op.modifiedAt});
+      if(winner==='local')operations.push(op);
+    }
+    if(!operations.length)return 'remote';
+    return {kind:'replace',record:{...batch,operations}};
+  }
   const records=['assets','blobs','projects'].flatMap(store=>(batch[store]||[]).map(item=>({store,id:item.id})));
   if(!records.length||!(batch.assets?.length||batch.projects?.length))return 'conflict';
   let present=0;
@@ -202,7 +215,7 @@ const importSync=createProjectSync({
   // Sync must never rerun destructive crash recovery on a freshly staged row.
   reload:async()=>{const rows=await cache?.get(await account(),'import-outbox')||[];importOutboxBefore=structuredClone(rows);return rows;},
   commit:(batch,operationID)=>batch.operations?cloudTransaction(batch.names,tx=>{for(const op of batch.operations){const store=tx.objectStore(op.store);if(op.action==='put')store.put(op.item);else if(op.action==='delete')store.delete(op.id);else store.clear();}},operationID):cloudTransaction(['assets','blobs','projects'],tx=>{for(const store of ['assets','blobs','projects'])for(const record of batch[store]||[])tx.objectStore(store).put(record);},operationID),
-  revision:()=>revision,reconcile:reconcileImport,onStatus:reportSync,
+  revision:()=>revision,reconcile:reconcileImport,onSuperseded:()=>notifyCloudSuperseded(),onStatus:reportSync,
   runExclusive:withAccountSyncLock,
   recordKeys:batch=>batch.operations?.map(op=>({store:op.store,id:op.item?.id??op.id}))||['assets','blobs','projects'].flatMap(store=>(batch[store]||[]).map(item=>({store,id:item.id}))),
 });
@@ -260,7 +273,7 @@ async function cloudRecord(store,id){
   const row=checked(await cloudClient().from('shiye_records').select('record').eq('user_id',owner).eq('store',store).eq('id',id).maybeSingle());
   return row?.record;
 }
-async function cloudPreview(id,pixels=360){
+async function cloudPreview(id,pixels=720){
   const variant=imageVariant(pixels),edge=Number(variant.slice(7));
   const pending=await pendingOverride('blobs',id);if(pending&&(!pending.record||usableBlob(pending.record.data)))return pending.record?await makeThumbnail(pending.record.data,edge)||pending.record.data:undefined;
   if(id.startsWith('project-cover:')){const match=/^project-cover:(cos|supabase):(.+)$/.exec(id);if(!match)throw Error('作品封面标识不是当前格式');const [,provider,path]=match;if(!path.startsWith((await identity())+'/'))throw Error('作品封面不属于当前账号');const key='thumbnail:'+path,saved=await cached(key);if(usableBlob(saved))return saved;const blob=await downloadObject(path,provider);if(!usableBlob(blob))throw Error('作品封面为空');await remember(key,blob);return blob;}
@@ -268,11 +281,11 @@ async function cloudPreview(id,pixels=360){
   const record=old?.record||await cloudRecord('blobs',id);if(!record)return undefined;
   if(!['cos','supabase'].includes(record.storageProvider))throw Error('图片缺少当前存储服务标记');
   if(!record.storagePath?.startsWith(owner+'/'))throw Error('图片不属于当前账号');
-  const thumbnailKey=(variant==='preview360'?'thumbnail':variant)+':'+record.storagePath,saved=await cached(thumbnailKey);
+  const thumbnailKey=(variant==='preview720'?'thumbnail720':variant)+':'+record.storagePath,saved=await cached(thumbnailKey);
   // A previously loaded thumb must be a zero-network read. Materialization
   // happens only on the COS CI miss path, not repeatedly for every tab.
   if(usableBlob(saved))return saved;
-  if(variant==='preview360'&&record.thumbnailPath){
+  if(variant==='preview720'&&record.thumbnailPath?.endsWith('-preview720.webp')){
     if(!record.thumbnailPath.startsWith(owner+'/'))throw Error('缩略图不属于当前账号');
     try{const thumbnail=await downloadObject(record.thumbnailPath,record.storageProvider);if(!usableBlob(thumbnail))throw Error('缩略图为空');await remember(thumbnailKey,thumbnail);return thumbnail;}
     catch(error){console.warn('缩略图暂不可读，尝试从原图恢复',error?.message);}
@@ -280,8 +293,8 @@ async function cloudPreview(id,pixels=360){
   // Legacy COS originals can already have a deterministic immutable WebP
   // despite their metadata not carrying thumbnailPath. Prefer that file over
   // another image-processing request.
-  if(variant==='preview360'&&record.storageProvider==='cos'&&!record.thumbnailPath){
-    try{const stored=await downloadObject(record.storagePath+'-preview360.webp','cos');
+  if(variant==='preview720'&&record.storageProvider==='cos'&&!record.thumbnailPath?.endsWith('-preview720.webp')){
+    try{const stored=await downloadObject(record.storagePath+'-preview720.webp','cos');
       if(usableBlob(stored)){await remember(thumbnailKey,stored);return stored;}
     }catch{/* One-time cache miss; COS CI can synthesize the derivative. */}
   }
@@ -292,14 +305,14 @@ async function cloudPreview(id,pixels=360){
     const preview=await objectStorage.preview(record.storagePath,variant);
     if(!usableBlob(preview))throw Error('COS 固定封面为空，未下载原图');
     await remember(thumbnailKey,preview);
-    if(variant==='preview360')materializePreview360(record,preview);
+    if(variant==='preview720')materializePreview720(record,preview);
     return preview;
   }
   // Supabase-only records retain their existing read-only recovery path.
   const {data}=await decode('blobs',record);
   const blob=await makeThumbnail(data,edge);if(blob){await remember(thumbnailKey,blob);return blob;}return data;
 }
-async function makeThumbnail(data,edge=360){if(typeof createImageBitmap!=='function'||typeof document==='undefined')return null;const bitmap=await createImageBitmap(data);try{const scale=edge/Math.max(bitmap.width,bitmap.height),canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));canvas.getContext('2d').drawImage(bitmap,0,0,canvas.width,canvas.height);return await new Promise(resolve=>canvas.toBlob(resolve,'image/webp',.9));}finally{bitmap.close();}}
+async function makeThumbnail(data,edge=720){if(typeof createImageBitmap!=='function'||typeof document==='undefined')return null;const bitmap=await createImageBitmap(data);try{const scale=edge/Math.max(bitmap.width,bitmap.height),canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));canvas.getContext('2d').drawImage(bitmap,0,0,canvas.width,canvas.height);return await new Promise(resolve=>canvas.toBlob(resolve,'image/webp',.9));}finally{bitmap.close();}}
 async function decode(store,record){
   if(store!=='blobs')return record;
   const {storagePath,storageProvider,...metadata}=record;
@@ -331,13 +344,13 @@ async function encode(store,record){
       const {coverImageID,coverSceneHash,...scene}=active;
       const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(scene)));
       const sceneHash=[...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,'0')).join('');
-      if(coverImageID&&coverSceneHash===sceneHash){cover.coverImageID=coverImageID;cover.coverSceneHash=sceneHash;}
+      if(coverImageID?.endsWith('-preview720.webp')&&coverSceneHash===sceneHash){cover.coverImageID=coverImageID;cover.coverSceneHash=sceneHash;}
       else{
         delete cover.coverImageID;delete cover.coverSceneHash;
         try{
           const preview=await projectPreview(record);
           if(usableBlob(preview)){
-            const coverPath=(await identity())+'/'+sceneHash+'-preview.webp';
+            const coverPath=(await identity())+'/'+sceneHash+'-preview720.webp';
             const result=await uploadObject(coverPath,preview,preview.type||'image/webp',provider);
             if(!result.error||String(result.error.statusCode)==='409'||result.error.statusCode===409){
               cover.coverImageID='project-cover:'+provider+':'+coverPath;
@@ -360,7 +373,7 @@ async function encode(store,record){
   // The optional thumbnail is independent of the original PUT. Start both
   // together, but never commit metadata until the original is acknowledged.
   // This avoids serial upload latency without changing the safety boundary.
-  const thumbnailTask=(async()=>{try{const thumbnail=await makeThumbnail(record.data);if(!thumbnail)return null;const path=storagePath+'-preview360.webp',result=await uploadObject(path,thumbnail,'image/webp',provider);if(result.error&&String(result.error.statusCode)!=='409')return null;await remember('thumbnail:'+storagePath,thumbnail);return path;}catch{return null;}})();
+  const thumbnailTask=(async()=>{try{const thumbnail=await makeThumbnail(record.data);if(!thumbnail)return null;const path=storagePath+'-preview720.webp',result=await uploadObject(path,thumbnail,'image/webp',provider);if(result.error&&String(result.error.statusCode)!=='409')return null;await remember('thumbnail720:'+storagePath,thumbnail);return path;}catch{return null;}})();
   let thumbnailPath;
   await uploads.get(storagePath);thumbnailPath=await thumbnailTask;
   await remember('image:'+storagePath,record.data);retainImage(storagePath,record.data);
@@ -411,10 +424,20 @@ async function cloudCheckpoint(){
 async function cloudCachedCollections(){await identity();const result={},savedRows=[];for(const store of ['assets','series','projects','trash']){const saved=await cached('records:'+store);if(!saved||savedRows.length&&saved.revision!==savedRows[0].revision)return null;savedRows.push(saved);result[store]=await overlayImports(store,structuredClone(saved.records).map(record=>withProjectBase(store,record,saved.revision)));}revision=savedRows[0].revision;return result;}
 async function cloudRefresh(){
   await queue;
-  const before=revision,current=await version(),changed=before!==undefined&&before!==current;
+  const before=revision,current=await version();
+  for(const store of ['assets','series','projects','trash','meta','blobs'])
+    if(!snapshots.has(store)){
+      const saved=await cached('records:'+store);
+      if(saved)snapshots.set(store,saved);
+    }
+  // Reconciliation may already have read the latest global revision.
+  // Download decisions MUST also compare the cached collection revisions:
+  // otherwise a remote-won edit stays invisible until another change occurs.
+  const stale=[...snapshots.values()].some(row=>row.revision!==current);
+  const changed=(before!==undefined&&before!==current)||stale;
   if(!changed)return {revision:current,changed:false};
-  for(const store of ['assets','series','projects','trash','meta','blobs'])if(!snapshots.has(store)){const saved=await cached('records:'+store);if(saved)snapshots.set(store,saved);}
-  const delta=await readCloudDelta({client:cloudClient(),owner,before,after:current,snapshots});
+  const deltaBefore=snapshots.get('projects')?.revision??snapshots.get('assets')?.revision??before;
+  const delta=await readCloudDelta({client:cloudClient(),owner,before:deltaBefore,after:current,snapshots});
   if(delta){for(const [store,snapshot] of delta.snapshots){snapshots.set(store,snapshot);await remember('records:'+store,snapshot);}return {revision:current,changed:true,incremental:true,blobIDs:delta.blobIDs,allBlobs:delta.allBlobs};}
   return {revision:current,changed:true,incremental:false,allBlobs:true};
 }
@@ -430,7 +453,7 @@ async function cloudStageProject(record){
 }
 async function cloudStageImport(batch){await identity();if(revision===undefined)await version();await importSync.stage({...batch,id:crypto.randomUUID()});return {pending:true};}
 async function cloudStageMutation(names,fn){
-  const operations=[],result=fn({objectStore(store){if(!names.includes(store))throw Error('此表未加入事务');return {put:item=>operations.push({action:'put',store,item:structuredClone(item)}),delete:id=>operations.push({action:'delete',store,id}),clear:()=>operations.push({action:'clear',store})};}});
+  const operations=[],modifiedAt=new Date().toISOString(),result=fn({objectStore(store){if(!names.includes(store))throw Error('此表未加入事务');return {put:item=>operations.push({action:'put',store,item:structuredClone(item),modifiedAt}),delete:id=>operations.push({action:'delete',store,id,modifiedAt}),clear:()=>operations.push({action:'clear',store,modifiedAt})};}});
   if(result?.then)throw Error('事务回调必须同步');if(!operations.length)return;
   await identity();if(revision===undefined)await version();
   const deletedIDs=operations.filter(op=>op.store==='projects'&&op.action==='delete').map(op=>op.id);

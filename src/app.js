@@ -17,7 +17,7 @@ import {createAssetOrganization,mountOrganizationBadges,updateOrganizedAssetView
 import '@fontsource/ma-shan-zheng/chinese-simplified-400.css';
 import {mountIcons,iconMarkup} from './icons.js';
 import {startCloudSession} from './entry.js';
-import {cloudEnabled,requireCloudUser} from './cloud-session.js';
+import {cloudClient,cloudEnabled,requireCloudUser} from './cloud-session.js';
 import {createSyncResumer} from './sync-resumer.js';
 import {setCloudProjectPreview} from './cloud-store.js';
 import {snapshotDraft} from './draft-snapshot.js';
@@ -144,7 +144,7 @@ const image=id=>staticSources.get(id)||
   (cloudEnabled?imagePlaceholder(id):urls.get(id)||imagePlaceholder(id));
 // Only the real creative canvas and cutout detail use display-scaled COS
 // variants. Everything else (Works/Matching/Library/editor material tray)
-// uses one fixed 360-pixel snapshot stored in COS.
+// uses one fixed 720-pixel snapshot stored in COS.
 const privateImages=mountPrivateImages({root:document.body,db,urls,fullView:img=>
   (state.route==='editor'&&!!img.closest('#canvas-page .canvas-object.material'))||
   (state.route==='assetDetail'&&!!img.closest('.detail-picture'))});
@@ -156,7 +156,7 @@ const renderLocalCoverBlob=project=>renderWorkCoverSnapshot(project,{
     const localURL=urls.get(id);
     if(localURL)try{const raw=await fetch(localURL).then(response=>response.blob());
       if(raw.size)return raw;}catch{}
-    // Already uploaded materials use the fixed 360px COS derivative.
+    // Already uploaded materials use the fixed 720px COS derivative.
     const preview=await db.previewBlob(id,pixels).catch(()=>null);
     if(preview instanceof Blob&&preview.size)return preview;
     const local=(await db.get('blobs',id).catch(()=>null))?.data;
@@ -409,6 +409,7 @@ ${settingToggle('setting-postprocess-apertures','重复孔洞恢复',state.prefe
   content=`<details class="ai-settings-group" open><summary><strong>创作偏好</strong><small>候选素材、生成方式与样例参考</small></summary><div>${creative}</div></details><details class="ai-settings-group" id="ai-model-group" ${aiModelPanelOpen?'open':''}><summary><strong>模型与连接</strong><small>服务商、密钥、图片与响应参数</small></summary><div>${model}</div></details>`;
  }
  if(title==='AI 与创作')content=content.replace('发送匹配风格与用途的四张预设样例','发送匹配风格与用途的手帐案例').replace('预设样例从简洁到丰富展示不同构图，只含匿名区域示意；不读取或发送已有私人作品。网页版 GPT 任务包会附四张图；API 仅在当前模型支持图片时发送。素材预览另由模型连接设置控制。','从原创重构的真实风格手帐案例中，按当前风格、用途和素材选最相近的两张；不发送全部案例，也不发送你已有的私人作品。案例只用于构图参考，不属于可使用素材。网页版任务包附图；支持图片的 API 模型也会收到。');
+ if(title==='数据与诊断'&&cloudEnabled)content+='<h2>开发环境数据清理</h2><p>仅测试管理员可在显式启用的预览部署中使用；会清空本人 COS 图片、云端作品和素材。此操作不可撤销。</p><button type="button" class="btn danger" data-act="dev-reset-cloud">清空本账号测试数据（含 COS）</button>';
  if(title==='界面与素材库'||title==='数据与诊断')content=sectionSettings(content);
  if(title==='AI 与创作')content=content.replaceAll('class="ai-settings-group"','class="ai-settings-group unified-settings-group"')
    .replace('“画面图片”只保存不可编辑快照：在线创作直接调用 OpenAI 图像模型，需另配 API 密钥；导出给网页版 AI 则用相同画面要求手动发送素材包，并导入返回的图片，不需要 API 密钥。“PDF 页面”仍是可编辑版面在本机渲染成快照。工具、JSON 与 ZIP 保留可编辑图层。','画面图片是不可编辑快照；工具、JSON 和 ZIP 保留可编辑图层。')
@@ -487,12 +488,30 @@ function bindPage(){view.querySelectorAll('[data-act]').forEach(el=>el.addEventL
   view.querySelectorAll('.record-work-save-assets').forEach(el=>el.onchange=()=>{
     const record=state.importRecords[+el.dataset.index];record.workSaveAssets=el.checked;record.workSaveAssetsManual=true;
   });
-  view.querySelectorAll('.record-work-paper-pattern,.record-work-paper-color').forEach(el=>el.onchange=()=>{
-    const record=state.importRecords[+el.dataset.index];if(!record)return;
-    if(el.classList.contains('record-work-paper-pattern'))record.workPaperPattern=el.value;
-    else record.workPaperColor=el.value;
-    const preview=el.closest('.review-record')?.querySelector('.import-work-paper-preview');
-    if(preview){preview.className='review-thumbnail import-work-paper-preview '+(record.workPaperPattern||'plain');preview.style.setProperty('--review-paper',record.workPaperColor||'#fcfaf0');preview.style.backgroundColor=record.workPaperColor||'#fcfaf0';}
+  view.querySelectorAll('[data-import-paper-options]').forEach(button=>button.onclick=()=>{
+    const ri=Number(button.dataset.importPaperOptions),record=state.importRecords[ri];
+    if(!record)return;
+    const paperTypes=[['plain','纯色'],['grid','方格'],['lines','横线'],['dots','点阵'],['columns','双栏']];
+    body.innerHTML='<div class="dialog-head"><h2>页面背景</h2></div>'+
+      '<div class="stack"><label>底纸样式<select id="review-background-pattern">'+
+      paperTypes.map(([id,name])=>'<option value="'+id+'">'+name+'</option>').join('')+
+      '</select></label><label>底纸颜色<input id="review-background-color" type="color" value="'+esc(record.workPaperColor||state.importBatchWorkPaperColor||'#fcfaf0')+'"></label>'+
+      '<button type="button" class="btn primary" id="review-background-done">完成</button></div>';
+    const pattern=body.querySelector('#review-background-pattern'),
+      color=body.querySelector('#review-background-color');
+    pattern.value=record.workPaperPattern||state.importBatchWorkPaperPattern||'plain';
+    const update=()=>{
+      record.workPaperPattern=pattern.value;record.workPaperColor=color.value;
+      const preview=button.closest('.review-background-card')?.querySelector('.import-work-paper-preview');
+      if(preview){
+        preview.className='review-thumbnail import-work-paper-preview '+pattern.value;
+        preview.style.setProperty('--review-paper',color.value);
+        preview.style.backgroundColor=color.value;
+      }
+    };
+    pattern.onchange=update;color.oninput=update;
+    body.querySelector('#review-background-done').onclick=()=>modal.close();
+    modal.showModal();
   });
   const removeWhite=view.querySelector('#remove-white');if(removeWhite)removeWhite.onchange=()=>{state.importRemoveWhite=removeWhite.checked;};
   const page=view.querySelector('#canvas-page');if(page)initializeCanvasSurface(page);
@@ -517,7 +536,7 @@ async function flushSave(){
   try{await saveChain;if(!savingProjects&&!dirtyProjects.size&&!dirtyUsageAssets.size){syncDisplay.localPending=false;updateSyncIndicator();saveStatus(cloudEnabled?'修改已暂存 · 后台同步中':(await db.storageMode())==='server'?'已保存到服务器':'已保存到本机');}}catch(e){console.error(e);syncDisplay.error=e;updateSyncIndicator();saveStatus('暂存失败 · 修改仍在当前页面');toast('修改暂存失败，暂勿关闭页面：'+e.message);throw e;}
 }
 function saveSpecificProject(p){if(!p)return;delete p.isTemplate;if(cloudEnabled)p.__cloudSessionId||=crypto.randomUUID();
-  // Edits invalidate the previous scene's remote snapshot. A new 360px cover
+  // Edits invalidate the previous scene's remote snapshot. A new 720px cover
   // can be drawn locally immediately; COS receives the next uploaded version.
   const active=p.drafts?.find(d=>d.id===p.activeDraftID)||p.drafts?.[0];
   if(active&&!p.isSnapshot){delete active.coverImageID;delete active.coverSceneHash;}
@@ -655,6 +674,43 @@ async function handle(action,id,value){try{switch(action){
     download(new Blob([JSON.stringify(report,null,2)],{type:'application/json'}),
       '拾页素材框诊断.json');
     toast('已导出不含照片的素材框诊断');break;
+  }
+  case 'dev-reset-cloud':{
+    if(!cloudEnabled)throw Error('开发清理只支持已登录的云端测试账号');
+    if(!confirm('彻底删除当前账号 COS 私有图片、云端素材、系列、作品、快照？操作不可撤销。'))break;
+    if(prompt('请输入 RESET 确认清空当前账号测试数据')!=='RESET')break;
+    cloudResumer.suspend();
+    try{
+      const {data,error}=await cloudClient().auth.getSession();
+      if(error||!data.session?.access_token)throw Error('请先登录');
+      const headers={'Content-Type':'application/json',Authorization:'Bearer '+data.session.access_token};
+      const probe=await fetch('/api/dev-reset',{method:'POST',headers,
+        body:JSON.stringify({confirm:'RESET_DEV_DATA',mode:'probe'})});
+      const check=await probe.json();
+      if(!probe.ok||!check.ready)throw Error(check.error||'当前预览环境尚未授权开发清理');
+      if(saveTimer){clearTimeout(saveTimer);saveTimer=null;}
+      dirtyProjects.clear();dirtyUsageAssets.clear();
+      await db.discardPendingSync();
+      let deleted=0,complete=false;
+      for(let page=0;page<300;page++){
+        const response=await fetch('/api/dev-reset',{method:'POST',
+          headers:{'Content-Type':'application/json',Authorization:'Bearer '+data.session.access_token},
+          body:JSON.stringify({confirm:'RESET_DEV_DATA'})});
+        const payload=await response.json();
+        if(!response.ok)throw Error(payload.error||'开发数据清理失败');
+        deleted+=payload.deleted||0;
+        saveStatus('正在清理 COS · '+deleted+' 个文件');
+        if(payload.reset){complete=true;break;}
+        if(!payload.more)throw Error('清理结果不完整');
+      }
+      if(!complete)throw Error('本次清理达到安全上限，请重新运行');
+      toast('已删除 '+deleted+' 个 COS 文件，云端记录已重置');
+      location.reload();
+    }catch(error){
+      cloudResumer.resume();
+      throw error;
+    }
+    break;
   }
   case 'backup':await backup();break;case 'restore':backupInput.click();break;case 'backup-emergency':{await flushSave();const blob=await db.createEmergencyBackup();download(blob,'拾页待同步应急包-'+new Date().toISOString().slice(0,10)+'.shiyerecovery');toast('应急包已导出，请妥善保存，包含私人图片和文字');break;}case 'restore-emergency':emergencyInput.click();break;case 'restore-trash':await restoreTrash(id);break;
   case 'storage-token':{const token=view.querySelector('#data-server-token')?.value.trim();if(!token)throw Error('请输入新的访问令牌');const old=db.storageConfig();db.setStorageConfig({url:location.origin,token});try{await db.storageMode();toast('令牌已更新');}catch(error){db.setStorageConfig(old);throw error;}break;}
@@ -1307,10 +1363,10 @@ async function backup(){
   }
 }
 function download(blob,filename){const link=document.createElement('a'),url=URL.createObjectURL(blob);link.href=url;link.download=filename;link.click();setTimeout(()=>URL.revokeObjectURL(url),60000);}
-// Render a finished 360px cover from the full editable document. This path
+// Render a finished 720px cover from the full editable document. This path
 // deliberately does not rely on the active editor, route or hydrated DOM;
-// it fetches ONLY 360px material previews, never original large images.
-// Reuse the already-rendered local 360px Blob while uploading to COS.
+// it fetches ONLY 720px material previews, never original large images.
+// Reuse the already-rendered local 720px Blob while uploading to COS.
 setCloudProjectPreview(project=>localWorkCovers.ensure(project));
 async function exportPNG(){const d=current(),canvas=await rasterize(d,2);canvas.toBlob(blob=>download(blob,(state.activeProject.title||'拾页作品')+'.png'),'image/png');}
 async function printPage(){const d=current(),canvas=await rasterize(d,2),url=canvas.toDataURL('image/png');const child=window.open('','_blank');if(!child){toast('请允许打开打印预览窗口');return;}child.document.write(`<html><head><title>${esc(state.activeProject.title)}</title><style>@page{size:A4;margin:0}body{margin:0}img{width:100%;height:auto}</style></head><body><img src="${url}" onload="window.print()"></body></html>`);child.document.close();}
@@ -1365,15 +1421,20 @@ window.addEventListener('beforeunload',event=>{if(saveTimer||savingProjects||dir
 // trip. Unacknowledged edits remain in the account-scoped outbox for re-login.
 window.addEventListener('shiye-flush-before-logout',event=>event.detail.tasks.push(flushSave()));
 let lastSyncError;
-window.addEventListener('shiye-project-conflict-copy',event=>{
-  toast('已将冲突修改安全保存为「'+event.detail.title+'」，原作品未覆盖');
-  void refresh({background:true}).catch(error=>console.warn('冲突副本已保存，列表刷新待重试',error));
+window.addEventListener('shiye-cloud-superseded',()=>{
+  // A remote record that won timestamp comparison must be downloaded.
+  // The uploader has already removed its superseded local outbox row.
+  void refresh({background:true,onlyChanged:true}).catch(error=>
+    console.warn('云端较新版本尚未拉取，将在下次联网时重试',error));
 });
 window.addEventListener('shiye-project-sync',event=>{const {pending,error}=event.detail;syncDisplay.pending=pending;syncDisplay.error=error;syncDisplay.checking=false;if(!dirtyProjects.size&&!savingProjects)syncDisplay.localPending=false;updateSyncIndicator();if(error){saveStatus('待同步 · 修改已保留在本机');const message=error.name==='AbortError'||/abort|timed? ?out/i.test(error.message||'')?'网络请求中断，本机修改已保留，将自动重试同步':error.message||'云端暂不可用，本机修改已保留，将自动重试';if(lastSyncError!==message)toast(message);lastSyncError=message;}else{lastSyncError=null;saveStatus(pending?'修改已暂存 · 后台同步中':'已保存到云端');privateImages.retryMissing();}});
 let cloudCheck,cloudCheckAt=0,cloudSessionReady=false;
 let syncPausedByUser=false;
 const cloudResumer=createSyncResumer({flush:()=>db.flushProjects({background:true}),canRun:()=>cloudEnabled&&cloudSessionReady&&navigator.onLine!==false,onError:error=>console.warn('后台同步待重试',error?.message)});
 function backgroundCloudCheck(){if(!cloudEnabled||document.visibilityState==='hidden'||cloudCheck||Date.now()-cloudCheckAt<15000)return;cloudCheckAt=Date.now();cloudCheck=refresh({background:true,onlyChanged:true}).catch(error=>console.warn('后台版本检查失败；保留已验证缓存',error)).finally(()=>{cloudCheck=null;});}
+// Cloud sync is bidirectional: poll lightweight version metadata while the
+// document remains visible, not only when focus/online events happen.
+setInterval(backgroundCloudCheck,15000);
 window.addEventListener('focus',()=>{backgroundCloudCheck();privateImages.retryMissing();void cloudResumer.wake();});
 document.addEventListener('visibilitychange',()=>{backgroundCloudCheck();if(document.visibilityState==='visible'){privateImages.retryMissing();void cloudResumer.wake();}});
 window.addEventListener('online',()=>{backgroundCloudCheck();privateImages.retryMissing();void cloudResumer.wake();});

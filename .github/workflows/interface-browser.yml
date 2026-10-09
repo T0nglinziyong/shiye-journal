@@ -8,6 +8,12 @@ on:
       - 'src/canvas-editor-ui.js'
       - 'src/journal-template-ui.js'
       - 'src/swift-controls.css'
+      - 'src/selection-menu.css'
+      - 'src/overrides.css'
+      - 'src/import-workspace-ui.js'
+      - 'src/work-cover-snapshot.js'
+      - 'src/image-variants.js'
+      - 'tests/responsive-visual-browser.mjs'
       - 'tests/browser-acceptance.mjs'
       - 'tests/editor-browser-acceptance.mjs'
       - 'tests/cloud-cache-browser.mjs'
@@ -60,6 +66,7 @@ jobs:
           SHIYE_WAIT_MS=30000 SHIYE_TEST_URL=http://127.0.0.1:5193 node tests/browser-acceptance.mjs
           SHIYE_TEST_URL=http://127.0.0.1:5193 node tests/editor-browser-acceptance.mjs
           SHIYE_TEST_URL=http://127.0.0.1:5193 node tests/cloud-cache-browser.mjs
+          SHIYE_TEST_URL=http://127.0.0.1:5193 npm run test:responsive-browser
       - name: Upload viewport screenshots
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -69,4 +76,5 @@ jobs:
             /tmp/shiye-browser-acceptance/
             /tmp/shiye-editor-browser/
             /tmp/shiye-cache-browser/
+            /tmp/shiye-responsive-review/
           retention-days: 7
