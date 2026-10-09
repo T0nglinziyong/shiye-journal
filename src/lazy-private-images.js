@@ -36,7 +36,7 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
     for(const [key,size] of variantSizes){
       if(bytes<=48*1024*1024&&variantSizes.size<=96)break;
       const row=variants.get(key);if(!row||live.has(row.url)||retained.has(row.id))continue;
-      variants.delete(key);variantSizes.delete(key);URL.revokeObjectURL(row.url);bytes-=size;
+      variants.delete(key);variantSizes.delete(key);notifyImageInvalidation([row.id]);URL.revokeObjectURL(row.url);bytes-=size;
     }
   }
   const queueTrim=()=>{if(trimTimer===null&&!disposed)trimTimer=setTimeout(trim,0);};

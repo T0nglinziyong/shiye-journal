@@ -17,11 +17,16 @@ function showSnapshot(cover,url,priority){
   img.alt='';img.loading=priority?'eager':'lazy';img.decoding='async';
   cover.replaceChildren(img);
 }
-function readyImage(img){
-  if(img.complete)return Promise.resolve(img.naturalWidth?img:null);
+export function waitForCoverImage(img){
+  const ready=()=>img.isConnected&&!img.src.includes('#shiye-image=')&&img.complete&&img.naturalWidth>1;
+  if(ready())return Promise.resolve(img);
   return new Promise(resolve=>{
-    const finish=()=>{img.removeEventListener('load',finish);img.removeEventListener('error',finish);resolve(img.naturalWidth?img:null);};
-    img.addEventListener('load',finish);img.addEventListener('error',finish);
+    const finish=()=>{observer.disconnect();clearTimeout(timeout);img.removeEventListener('load',check);img.removeEventListener('error',fail);resolve(ready()?img:null);};
+    const check=()=>{if(ready())finish();};
+    const fail=()=>finish();
+    const observer=new MutationObserver(check),timeout=setTimeout(finish,30000);
+    observer.observe(img,{attributes:true,attributeFilter:['src']});
+    img.addEventListener('load',check);img.addEventListener('error',fail);check();
   });
 }
 async function drawCover(images){
@@ -53,7 +58,7 @@ export function mountSeriesCoverSnapshots({view,state,cache=privateCache}){
       }
       if(url){if(cover.dataset.snapshotKey===key)showSnapshot(cover,url,index<2);return;}
       const images=[...cover.querySelectorAll('img')];if(!images.length)return;
-      const ready=await Promise.all(images.map(readyImage));
+      const ready=await Promise.all(images.map(waitForCoverImage));
       if(!cover.isConnected||cover.dataset.snapshotKey!==key||ready.some(img=>!img))return;
       try{
         const blob=await drawCover(ready);if(!(blob instanceof Blob)||!blob.size)return;
