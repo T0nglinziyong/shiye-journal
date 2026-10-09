@@ -39,37 +39,95 @@ export function mountAssetSelection(c,p){
     await c.db.transaction(['assets','trash'],tx=>{for(const e of entries){tx.objectStore('assets').delete(e.item.id);tx.objectStore('trash').put(e);}});state.assets=state.assets.filter(a=>!p.selected.has(a.id));state.basket=state.basket.filter(id=>!p.selected.has(id));state.trash.push(...entries);finishSelection(p);render();
   }));tray.lastChild.classList.add('danger');view.append(tray);registerSelectionPresenter(view,sync);
 }
-function moreMenu(c,p,anchor){const menu=togglePopover(anchor,{title:'更多操作',menu:true,width:230});if(!menu)return;menu.surface.classList.add('selection-more-menu');menu.content.append(action('导出素材 ›',b=>submenu(menu,b,'导出素材','export')),action('重新识别',async()=>{
-  const records=c.state.assets.filter(a=>p.selected.has(a.id)).map(a=>structuredClone(a)),cfg=structuredClone(c.state.aiSettings),accountID=c.state.accountId;
-  if(!cfg.key||!cfg.includeThumbnails||!supportsVision(cfg))throw Error('请先配置可用的视觉模型并开启素材图片');
-  menu.close();let completed=0,failed=0;
-  await c.assetOrganization.run(records,{priority:'foreground',organize:async(record,isCurrent)=>{
-    if(c.state.accountId!==accountID||!isCurrent())return;
-    const image=await c.modelImage(record);if(!image)throw Error('素材图像无法读取');
-    const result=await classifyRecord({kind:'asset',record,settings:cfg,image,assets:[]});
-    if(await c.applyAssetClassification(record,result,{manual:true,isCurrent:()=>c.state.accountId===accountID&&isCurrent()}))completed++;
-  },onError:()=>{failed++;}});
-  if(c.state.accountId===accountID)c.toast(failed?`已整理 ${completed} 件，${failed} 件未完成；可稍后重试`:`已整理 ${completed} 件`);
-}),action('加入系列 ›',b=>submenu(menu,b,'加入系列',(series,newSeries)=>assignSeries(c,p,series,newSeries))),action('设置状态 ›',b=>submenu(menu,b,'设置状态','usage')));
-  let closeChild=null,childTitle=null;
-  function submenu(parent,b,title,assign){const same=childTitle===title;closeChild?.();closeChild=null;childTitle=null;if(same){parent.position();b.focus({preventScroll:true});return;}const panel=document.createElement('section');panel.className='swift-popover swift-menu selection-submenu';panel.setAttribute('role','menu');panel.setAttribute('aria-label',title);const width=Math.min(230,(innerWidth-32)/2);panel.style.width=width+'px';const remove=parent.addSurface(panel,()=>{const r=parent.surface.getBoundingClientRect(),w=width,side=r.right+w+8<=innerWidth-12?r.right+8:r.left-w-8>=12?r.left-w-8:12;panel.style.left=Math.max(12,Math.min(side,innerWidth-w-12))+'px';panel.style.maxHeight=(innerHeight-24)+'px';panel.style.top=Math.max(12,Math.min(r.top,innerHeight-panel.offsetHeight-12))+'px';});
-    childTitle=title;b.setAttribute('aria-expanded','true');closeChild=()=>{remove();b.setAttribute('aria-expanded','false');delete parent.surface.dataset.submenu;};
-    if(assign==='usage')for(const [name,used] of [['已使用',true],['未使用',false]])panel.append(action(name,async()=>{const at=new Date().toISOString(),revised=c.state.assets.filter(a=>p.selected.has(a.id)).map(a=>withUsageStatus(a,used,at));await c.db.transaction(['assets'],tx=>{for(const asset of revised)tx.objectStore('assets').put(asset);});for(const asset of revised)Object.assign(c.state.assets.find(a=>a.id===asset.id),asset);parent.close();c.render();c.toast('已设置 '+revised.length+' 件素材为'+name);}));
-    else if(assign){
-      panel.classList.add('series-choice-submenu');
-      const create=action('新建系列…',()=>{parent.close();c.body.innerHTML='<h2>新建系列</h2><label>系列名称<input id="selection-new-series-name"></label><div id="selection-new-series-actions"></div>';c.body.querySelector('#selection-new-series-actions').append(action('取消',()=>c.modal.close()),action('新建并加入',async()=>{const name=c.body.querySelector('input').value.trim();if(!name)throw Error('请填写系列名称');const series={id:crypto.randomUUID(),title:name,introduction:'',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};await assign(series.id,series);c.modal.close();}));c.modal.showModal();});create.classList.add('selection-submenu-pinned');panel.append(create);
-      for(const series of [{id:null,title:'不归入系列'},...c.state.series])panel.append(action(series.title,async()=>{await assign(series.id);parent.close();}));
+function moreMenu(c,p,anchor){
+  const menu=togglePopover(anchor,{title:'更多操作',menu:true,width:250});
+  if(!menu)return;
+  menu.surface.classList.add('selection-more-menu');
+
+  // Series, Works and Assets must use the same contained accordion menu.
+  // A separate fixed-position submenu would cover the parent on narrow screens,
+  // and the old truthy 'assign' branch incorrectly treated 'export' as a series.
+  const group=(title,choices)=>{
+    const trigger=action(title+' ›',()=>{
+      const opened=trigger.getAttribute('aria-expanded')==='true';
+      menu.content.querySelector('.selection-inline-submenu')?.remove();
+      for(const button of menu.content.querySelectorAll('[data-expanded-submenu]'))
+        button.setAttribute('aria-expanded','false');
+      if(opened){menu.position();return;}
+      const panel=document.createElement('section');
+      panel.className='selection-submenu selection-inline-submenu';
+      panel.setAttribute('role','group');
+      panel.setAttribute('aria-label',title);
+      for(const [label,handler] of choices())panel.append(action(label,handler));
+      trigger.after(panel);
+      trigger.setAttribute('aria-expanded','true');
+      menu.position();
+    });
+    trigger.dataset.expandedSubmenu='';
+    trigger.setAttribute('aria-expanded','false');
+    trigger.setAttribute('aria-haspopup','menu');
+    menu.content.append(trigger);
+  };
+  group('导出素材',()=>[
+    ...[['透明 PNG','png'],['白底 JPEG','jpeg'],['原始图像','original']].map(([label,format])=>[
+      label,async()=>{menu.close();await exportImages(c,p,format);}
+    ]),
+    ...(c.exportSelectedMaterials?[['实际尺寸打印 PDF',async()=>{
+      const ids=[...p.selected];menu.close();await c.exportSelectedMaterials(ids);
+    }]]:[])
+  ]);
+  menu.content.append(action('重新识别',async()=>{
+    const records=c.state.assets.filter(a=>p.selected.has(a.id)).map(a=>structuredClone(a)),
+      cfg=structuredClone(c.state.aiSettings),accountID=c.state.accountId;
+    if(!cfg.key||!cfg.includeThumbnails||!supportsVision(cfg))
+      throw Error('请先配置可用的视觉模型并开启素材图片');
+    menu.close();let completed=0,failed=0;
+    await c.assetOrganization.run(records,{priority:'foreground',organize:async(record,isCurrent)=>{
+      if(c.state.accountId!==accountID||!isCurrent())return;
+      const image=await c.modelImage(record);
+      if(!image)throw Error('素材图像无法读取');
+      const result=await classifyRecord({kind:'asset',record,settings:cfg,image,assets:[]});
+      if(await c.applyAssetClassification(record,result,{
+        manual:true,isCurrent:()=>c.state.accountId===accountID&&isCurrent()
+      }))completed++;
+    },onError:()=>{failed++;}});
+    if(c.state.accountId===accountID)
+      c.toast(failed?`已整理 ${completed} 件，${failed} 件未完成；可稍后重试`:`已整理 ${completed} 件`);
+  }));
+  group('加入系列',()=>[
+    ['新建系列…',()=>{
+      menu.close();
+      c.body.innerHTML='<h2>新建系列</h2><label>系列名称<input id="selection-new-series-name"></label><div id="selection-new-series-actions"></div>';
+      c.body.querySelector('#selection-new-series-actions').append(
+        action('取消',()=>c.modal.close()),
+        action('新建并加入',async()=>{
+          const name=c.body.querySelector('input').value.trim();
+          if(!name)throw Error('请填写系列名称');
+          const series={id:crypto.randomUUID(),title:name,introduction:'',
+            createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
+          await assignSeries(c,p,series.id,series);
+          c.modal.close();
+        })
+      );
+      c.modal.showModal();
+    }],
+    ['不归入系列',async()=>{menu.close();await assignSeries(c,p,null);}],
+    ...c.state.series.map(series=>[series.title,async()=>{
+      menu.close();await assignSeries(c,p,series.id);
+    }])
+  ]);
+  group('设置状态',()=>[['已使用',true],['未使用',false]].map(([label,used])=>[
+    label,async()=>{
+      const at=new Date().toISOString();
+      const revised=c.state.assets.filter(a=>p.selected.has(a.id)).map(a=>withUsageStatus(a,used,at));
+      await c.db.transaction(['assets'],tx=>{
+        for(const asset of revised)tx.objectStore('assets').put(asset);
+      });
+      for(const asset of revised)
+        Object.assign(c.state.assets.find(a=>a.id===asset.id),asset);
+      menu.close();c.render();c.toast('已设置 '+revised.length+' 件素材为'+label);
     }
-    else if(assign==='export'){
-      for(const [name,format] of [['透明 PNG','png'],['白底 JPEG','jpeg'],['原始图像','original']]){
-        panel.append(action(name,async()=>{parent.close();await exportImages(c,p,format);}));
-      }
-      if(c.exportSelectedMaterials)panel.append(action('实际尺寸打印 PDF',async()=>{
-        const ids=[...p.selected];parent.close();await c.exportSelectedMaterials(ids);
-      }));
-    }
-    parent.surface.dataset.submenu=title;parent.position();
-  }
+  ]));
 }
 async function assignSeries(c,p,id,newSeries=null){const revised=c.state.assets.filter(a=>p.selected.has(a.id)).map(a=>({...a,seriesID:id}));await c.db.transaction(newSeries?['assets','series']:['assets'],tx=>{if(newSeries)tx.objectStore('series').put(newSeries);for(const a of revised)tx.objectStore('assets').put(a);});if(newSeries)c.state.series.push(newSeries);for(const a of revised)Object.assign(c.state.assets.find(x=>x.id===a.id),a);finishSelection(p);c.render();c.toast('已更新所属系列');}
 async function exportImages(c,p,format){const records=c.state.assets.filter(a=>p.selected.has(a.id)),files=[];

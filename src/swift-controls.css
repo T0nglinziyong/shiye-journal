@@ -344,3 +344,26 @@ body:has(.library-management-tray):not(:has(.library-management-tray:not([hidden
 .swift-popover .canvas-layer-row [data-layer-move]{touch-action:none;-webkit-user-select:none}
 .swift-popover .canvas-layer-row.dragging{background:#e6f1e5;box-shadow:inset 3px 0 #537d5e}
 .swift-popover .canvas-layer-row.drop-target{background:#d8eadb;outline:1px dashed #52755c}
+
+/* A restrained breathing space between the catalogue's pagination divider
+   and the upper edge of the first cover. Applies consistently to Series,
+   Materials, Works, Snapshots and Recently Deleted; no blank placeholder. */
+#view > .catalog-toolbar + .grid,
+#view > .catalog-toolbar ~ .grid,
+#view > .catalog-toolbar + .series-contents,
+#view > .catalog-toolbar ~ .series-contents {
+  margin-top:12px;
+}
+.series-contents .series-filters + .asset-grid,
+.series-contents .series-filters + .grid {
+  margin-top:12px;
+}
+@media(max-width:699px){
+  #view > .catalog-toolbar + .grid,
+  #view > .catalog-toolbar ~ .grid,
+  #view > .catalog-toolbar + .series-contents,
+  #view > .catalog-toolbar ~ .series-contents,
+  .series-contents .series-filters + .grid {
+    margin-top:10px;
+  }
+}
