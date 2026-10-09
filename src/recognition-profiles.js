@@ -25,25 +25,25 @@ export const recognitionStrategies=Object.freeze([
   {
     id:'auto',
     label:'自动 · 推荐',
-    description:'使用当前验证最佳流程：自动框选后，以 MorphGAC 从外向内贴合真实边缘，并进行形状规整与保守打孔恢复。',
+    description:'推荐：逐件 MorphGAC 贴边，随后规整形状并恢复规则打孔。',
     refineCandidates:refineAuto
   },
   {
     id:'morphgac',
     label:'MorphGAC · 高质量',
-    description:'固定使用当前最佳 MorphGAC 参数；适合白色载体、弱边缘和自由轮廓。结果与“自动”一致，便于显式锁定算法。',
+    description:'与自动模式相同，显式固定 MorphGAC。',
     refineCandidates:refineMorphGAC
   },
   {
     id:'grabcut',
     label:'OpenCV · GrabCut',
-    description:'使用 OpenCV GrabCut 从自动候选框细化边缘。速度和表现受前景/背景颜色可分性影响，保留用于对比和特殊照片。',
+    description:'按候选框用 GrabCut 分割；适合颜色差明显的素材。',
     refineCandidates:refineGrabCut
   },
   {
     id:'hybrid',
     label:'混合 · MorphGAC + GrabCut',
-    description:'先用 MorphGAC 找整体轮廓，再用 GrabCut 做一次边缘精修。真实案例收益很小且更慢，因此不作为默认。',
+    description:'MorphGAC 后再尝试 GrabCut；较慢，用于对照。',
     refineCandidates:refineHybrid
   }
 ]);
