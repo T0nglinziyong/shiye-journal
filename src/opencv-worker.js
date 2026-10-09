@@ -1,5 +1,6 @@
 import {refineMaterialBoundaries} from './material-boundary-refiners.js';
 import {discoverMaterialBoxes} from './material-box-discovery.js';
+import {separateSharedCarrier} from './material-carrier.js';
 import {segmentMaterialBoxes} from './material-segmentation.js';
 import {restoreRepeatedApertures} from './repeated-apertures.js';
 export async function processVision(cv,operation,p){
@@ -71,7 +72,7 @@ export async function processVision(cv,operation,p){
       else out=refineMaterialBoundaries(cv,{...p,candidates:p.boxes,mode:'grabcut',postprocess:{edgePolish:false,shapeRegularization:false,curveSmooth:false,apertures:false}});
       if(p.shapeRegularization!==false)out=refineMaterialBoundaries(cv,{...p,candidates:out,mode:'postprocess',postprocess:{edgePolish:false,shapeRegularization:true,curveSmooth:false,apertures:false}});
       if(p.apertures!==false)out=restoreRepeatedApertures(cv,{pixels:p.sourcePixels||p.pixels,width:p.width,height:p.height,candidates:out,paperWidthMM:p.paperWidthMM,paperHeightMM:p.paperHeightMM});
-      return out;
+      return p.mergeSharedCarrier===false?separateSharedCarrier(out,p.sourcePixels||p.pixels,p.width,p.height):out;
     }
 
     if(operation==='material-boundary-refine')return refineMaterialBoundaries(cv,p);

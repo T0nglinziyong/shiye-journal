@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {createCloudStore} from '../src/cloud-store.js';
 import {projectBlobText} from '../src/project-document.js';
 
-function fixture(cache=null,objectStorage=null){
+function fixture(cache=null,objectStorage=null,projectPreview=()=>null){
   const state={revision:0,rows:[],calls:[],commits:new Map(),fail:false,authError:false,uploads:[],downloads:0};
   const client={from(table){
     const filters={};const query={select(){return query;},eq(k,v){filters[k]=v;return query;},in(k,v){filters[k]=v;return query;},limit(){return query;},abortSignal(){return query;},order(){return query;},
@@ -18,7 +18,7 @@ function fixture(cache=null,objectStorage=null){
     async download(path){state.downloads++;return {data:state.uploads.find(row=>row.path===path)?.data||new Blob(['private image']),error:state.missingThumbnail&&path.includes('preview360')?{message:'thumbnail missing'}:null};}};}},
     async rpc(name,args){assert.equal(name,'shiye_commit_v2');state.calls.push(args);if(state.rpcAbort)throw new DOMException('request aborted','AbortError');if(state.commits.has(args.operation_id))return state.loseAck?{error:{message:'network response lost'}}:{data:state.commits.get(args.operation_id)};if(state.fail||args.expected_revision!==state.revision)return {error:{message:'conflict'}};const revision=++state.revision;state.commits.set(args.operation_id,revision);if(state.loseAck)return {error:{message:'network response lost'}};return {data:revision};}
   };
-  const db=createCloudStore({cache,objectStorage,cloudClient:()=>client,requireCloudUser:async()=>{if(state.authError)throw Error('not authorized');return {id:'owner-uuid'};}});
+  const db=createCloudStore({cache,objectStorage,projectPreview,cloudClient:()=>client,requireCloudUser:async()=>{if(state.authError)throw Error('not authorized');return {id:'owner-uuid'};}});
   return {state,db};
 }
 test('cloud reads all pages, not just the server default first 1000 records',async()=>{
@@ -343,4 +343,22 @@ test('visible private covers batch metadata by account and reuse previews withou
   assert.equal(first.length,12);assert.equal(a.state.batchReads,1);assert.equal(a.state.downloads,12);
   await Promise.all(a.state.rows.map(row=>a.db.cloudPreview(row.id)));
   assert.equal(a.state.batchReads,1);assert.equal(a.state.downloads,12);
+});
+
+test('small editable projects store a standalone cover and reuse it for metadata changes',async()=>{
+  let rendered=0;
+  const {state,db}=fixture(memoryCache(),null,async()=>{rendered++;return new Blob(['webp'],{type:'image/webp'});});
+  const project={id:'small',activeDraftID:'draft',drafts:[{id:'draft',canvas:{width:100,height:100},items:[{id:'item'}],primitives:[],textBlocks:[],strokes:[]}]};
+  await db.cloudTransaction(['projects'],tx=>tx.objectStore('projects').put(project));
+  const first=state.calls[0].operations[0].item,cover=first.drafts[0].coverImageID;
+  assert.ok(cover.startsWith('project-cover:supabase:owner-uuid/'));
+  assert.ok(cover.endsWith('-preview.webp'));
+  assert.equal(first.drafts[0].items.length,1,'the editable document remains inline');
+  assert.equal(await (await db.cloudPreview(cover)).text(),'webp');
+  await db.cloudTransaction(['projects'],tx=>tx.objectStore('projects').put({...first,title:'new title'}));
+  assert.equal(rendered,1,'metadata-only edits reuse the persisted snapshot');
+  assert.equal(state.calls[1].operations[0].item.drafts[0].coverImageID,cover);
+  await db.cloudTransaction(['projects'],tx=>tx.objectStore('projects').put({...first,drafts:[{...first.drafts[0],items:[{id:'changed'}]}]}));
+  assert.equal(rendered,2,'visual changes generate a new snapshot');
+  assert.notEqual(state.calls[2].operations[0].item.drafts[0].coverImageID,cover);
 });

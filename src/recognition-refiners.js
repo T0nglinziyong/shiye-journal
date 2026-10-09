@@ -36,7 +36,7 @@ async function finalizeCandidates({
 
 async function parallelFinalPipeline({
   candidates,frame,sourceFrame=frame,width,height,preprocess={},postprocess={},
-  onProgress=()=>{},paperWidthMM=210,paperHeightMM=297,method='morphgac'
+  onProgress=()=>{},paperWidthMM=210,paperHeightMM=297,method='morphgac',mergeSharedCarrier=true
 }){
   if(!candidates.length)return candidates;
   const groups=chunks(candidates,Math.min(visionParallelism(),candidates.length));
@@ -47,7 +47,7 @@ async function parallelFinalPipeline({
       pixels:new Uint8ClampedArray(frame.data),
       sourcePixels:new Uint8ClampedArray(sourceFrame.data),
       transferInput:true,
-      width,height,boxes,method,paperWidthMM,paperHeightMM,
+      width,height,boxes,method,paperWidthMM,paperHeightMM,mergeSharedCarrier,
       chromaEdges:preprocess.chromaEdges!==false,
       shapeRegularization:postprocess.shapeRegularization!==false,
       apertures:postprocess.apertures!==false

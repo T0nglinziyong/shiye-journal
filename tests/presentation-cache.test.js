@@ -94,3 +94,13 @@ test('preview retention is bounded and decoded node cache does not steal owned c
   const nodes=new ImageNodeCache();nodes.remember([img]);assert.equal(nodes.pixels,0);nodes.dispose();
  }finally{loader.dispose();env.close();}
 });
+
+test('works list keeps its decoded sheet when navigating away and back',()=>{
+ const env=environment();try{
+  const view=document.createElement('div'),state={accountId:'a',route:'works'};document.body.append(view);
+  const markup='<div class="works-grid"><button data-act="open-project" data-id="p"><div class="thumb-sheet"><img src="data:image/png;base64,AA==" alt="cover"></div></button></div>';
+  view.innerHTML=markup;reusePagePreviews({view,state});const first=view.querySelector('.thumb-sheet');
+  view.innerHTML='';view.innerHTML=markup;reusePagePreviews({view,state});
+  assert.equal(view.querySelector('.thumb-sheet'),first);
+ }finally{env.close();}
+});

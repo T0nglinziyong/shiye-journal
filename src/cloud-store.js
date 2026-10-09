@@ -266,13 +266,43 @@ async function encode(store,record){
     if(record.projectDocumentPath)record=await cloudProjectDocument(record);
     const {__cloudBaseRevision,__cloudSessionId,...persisted}=record;record=persisted;
     const text=JSON.stringify(record);let blob=new Blob([text],{type:'application/json'}),encoding;
-    if(blob.size<=LARGE_PROJECT_BYTES)return record;
-    if(typeof CompressionStream==='function'&&typeof DecompressionStream==='function'){blob=await new Response(blob.stream().pipeThrough(new CompressionStream('gzip'))).blob();encoding='gzip';}
-    const digest=await crypto.subtle.digest('SHA-256',await blob.arrayBuffer()),hash=[...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,'0')).join(''),path=`${await identity()}/${hash}-project.json${encoding?'.gz':''}`;
-    const provider=writeProvider(),uploaded=await uploadObject(path,blob,encoding?'application/gzip':'application/json',provider);if(uploaded.error&&String(uploaded.error.statusCode)!=='409')throw Error('作品完整数据上传失败，未修改云端元数据');
-    const summary={...projectSummary(record,path,encoding),projectDocumentProvider:provider};
-    try{const preview=await projectPreview(record);if(preview instanceof Blob){const cover=path+'-preview.webp',result=await uploadObject(cover,preview,preview.type||'image/webp',provider);if(!result.error||String(result.error.statusCode)==='409'){const d=summary.drafts.find(d=>d.id===record.activeDraftID)||summary.drafts[0];d.coverImageID=`project-cover:${provider}:${cover}`;await remember('thumbnail:'+cover,preview);}}}catch{/* A missing optional preview cannot discard the editable work. */}
-    await remember('project-document:'+path,blob);documents.set(path,Promise.resolve(structuredClone(record)));if(documents.size>8)documents.delete(documents.keys().next().value);return summary;
+    const inline=blob.size<=LARGE_PROJECT_BYTES,provider=writeProvider();
+    let path;
+    if(!inline){
+      if(typeof CompressionStream==='function'&&typeof DecompressionStream==='function'){blob=await new Response(blob.stream().pipeThrough(new CompressionStream('gzip'))).blob();encoding='gzip';}
+      const digest=await crypto.subtle.digest('SHA-256',await blob.arrayBuffer()),hash=[...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,'0')).join('');
+      path=(await identity())+'/'+hash+'-project.json'+(encoding?'.gz':'');
+      const uploaded=await uploadObject(path,blob,encoding?'application/gzip':'application/json',provider);
+      if(uploaded.error&&String(uploaded.error.statusCode)!=='409')throw Error('作品完整数据上传失败，未修改云端元数据');
+    }
+    const summary=inline?structuredClone(record):{...projectSummary(record,path,encoding),projectDocumentProvider:provider};
+    // Store a separate small WebP even when the editable project fits inline.
+    // The scene digest avoids re-rendering when only metadata changes.
+    const active=record.drafts?.find(d=>d.id===record.activeDraftID)||record.drafts?.[0];
+    const cover=summary.drafts?.find(d=>d.id===record.activeDraftID)||summary.drafts?.[0];
+    if(active&&cover&&!record.isSnapshot){
+      const {coverImageID,coverSceneHash,...scene}=active;
+      const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(scene)));
+      const sceneHash=[...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,'0')).join('');
+      if(coverImageID&&coverSceneHash===sceneHash){cover.coverImageID=coverImageID;cover.coverSceneHash=sceneHash;}
+      else{
+        delete cover.coverImageID;delete cover.coverSceneHash;
+        try{
+          const preview=await projectPreview(record);
+          if(usableBlob(preview)){
+            const coverPath=(await identity())+'/'+sceneHash+'-preview.webp';
+            const result=await uploadObject(coverPath,preview,preview.type||'image/webp',provider);
+            if(!result.error||String(result.error.statusCode)==='409'||result.error.statusCode===409){
+              cover.coverImageID='project-cover:'+provider+':'+coverPath;
+              cover.coverSceneHash=sceneHash;
+              await remember('thumbnail:'+coverPath,preview);
+            }
+          }
+        }catch{/* Preview failure never invalidates the editable document. */}
+      }
+    }
+    if(!inline){await remember('project-document:'+path,blob);documents.set(path,Promise.resolve(structuredClone(record)));if(documents.size>8)documents.delete(documents.keys().next().value);}
+    return summary;
   }
   if(store!=='blobs')return record;
   if(!usableBlob(record.data))throw Error('图片字节丢失或为空；云端元数据未修改');
