@@ -159,3 +159,54 @@ test('durably staged deletion can retire older unsent saves for the same work on
   assert.equal(await sync.cancelPendingFor(['deleted']),1);
   assert.deepEqual(rows.map(row=>row.record.id),['untouched']);
 });
+
+
+test('editor edits are locally staged but cloud commits are coalesced every 10 seconds',async()=>{
+  let time=0,nextTimerID=0,revision=5,rows=[],commits=[];
+  const timers=new Map();
+  const setTimer=(fn,delay)=>{const id=++nextTimerID;timers.set(id,{fn,at:time+delay});return id;};
+  const clearTimer=id=>timers.delete(id);
+  const advance=async(to)=>{
+    time=to;
+    for(const [id,timer] of [...timers]){
+      if(timer.at<=time){timers.delete(id);timer.fn();}
+    }
+    for(let i=0;i<20;i++)await Promise.resolve();
+  };
+  const sync=createProjectSync({
+    load:async()=>structuredClone(rows),reload:async()=>structuredClone(rows),
+    write:async next=>{rows=structuredClone(next);},
+    revision:()=>revision,
+    commit:async record=>{commits.push({...record,time});revision++;},
+    autoFlushDelayMs:10000,clock:()=>time,setTimer,clearTimer
+  });
+  await sync.stage({id:'draft',title:'first'});
+  assert.equal(rows[0].record.title,'first','local IndexedDB outbox is saved before return');
+  await advance(9000);
+  await sync.stage({id:'draft',title:'latest'});
+  assert.equal(commits.length,0,'no network write for each small operation');
+  await advance(10000);
+  assert.deepEqual(commits.map(x=>x.title),['latest']);
+  await sync.stage({id:'draft',title:'after-upload'});
+  await advance(15000);
+  assert.equal(commits.length,1);
+  await sync.flush();
+  assert.deepEqual(commits.map(x=>x.title),['latest','after-upload'],'manual sync skips automatic interval');
+  assert.deepEqual(rows,[]);
+});
+test('background wake-up schedules queued changes rather than forcing a cloud write',async()=>{
+  let time=0,timers=[],rows=[],commits=0,revision=7;
+  const sync=createProjectSync({
+    load:async()=>structuredClone(rows),reload:async()=>structuredClone(rows),
+    write:async next=>{rows=structuredClone(next);},
+    revision:()=>revision,commit:async()=>{commits++;revision++;},
+    autoFlushDelayMs:10000,clock:()=>time,
+    setTimer:(fn,delay)=>{timers.push({fn,delay});return timers.length;},
+    clearTimer:()=>{}
+  });
+  await sync.stage({id:'work',title:'change'});
+  await sync.resumeScheduled();
+  assert.equal(commits,0);
+  assert.equal(timers.length,1);
+  assert.ok(timers[0].delay>=10000);
+});
