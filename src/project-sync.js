@@ -1,6 +1,6 @@
 // Durable edits are an explicit outbox, not a replacement for cloud records.
 // Commit acknowledgement is the only point at which an entry is removed.
-export function createProjectSync({load,write,commit,revision,reconcile=async()=> 'conflict',recordKeys=record=>[{store:'projects',id:record.id}],onCommitted=()=>{},onConflict=async()=>null,onStatus=()=>{},runExclusive=fn=>fn(),reload=load,autoFlushDelayMs=0,setTimer=setTimeout,clearTimer=clearTimeout,clock=()=>Date.now()}){
+export function createProjectSync({load,write,commit,revision,reconcile=async()=> 'conflict',recordKeys=record=>[{store:'projects',id:record.id}],onCommitted=()=>{},onConflict=async()=>null,onSuperseded=()=>{},onStatus=()=>{},runExclusive=fn=>fn(),reload=load,autoFlushDelayMs=0,setTimer=setTimeout,clearTimer=clearTimeout,clock=()=>Date.now()}){
   let initialized,staging=Promise.resolve(),network,serial=0,error;
   // Durable local staging is immediate; only the remote commit is batched.
   const flushWindow=Math.max(0,Number(autoFlushDelayMs)||0);
@@ -83,6 +83,25 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
           if(resolution==='committed'){
             await acknowledge(row);continue;
           }
+          if(resolution==='remote'){
+            await acknowledge(row);
+            onSuperseded(row.record);
+            continue;
+          }
+          if(resolution?.kind==='replace'){
+            if(!resolution.record)throw Error('同步合并结果不完整');
+            if(!resolution.record.operations?.length){
+              await acknowledge(row);
+              onSuperseded(row.record);
+              continue;
+            }
+            row.record=structuredClone(resolution.record);
+            row.baseRevision=revision();
+            row.operationID=crypto.randomUUID();
+            await persist();
+            onSuperseded(row.record);
+            continue;
+          }
           // An import batch consists only of new, globally unique IDs. If no
           // ID is present remotely, it can be retried after an unrelated edit.
           if(resolution==='rebase'){row.baseRevision=revision();await persist();}
@@ -111,6 +130,13 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
           let resolved;
           try{resolved=await reconcile(row.record,row.operationID,row.baseRevision);}catch{/* Keep the row if verification is offline. */}
           if(resolved==='committed'){await acknowledge(row);continue;}
+          if(resolved==='remote'){await acknowledge(row);onSuperseded(row.record);continue;}
+          if(resolved?.kind==='replace'){
+            if(!resolved.record?.operations?.length){await acknowledge(row);onSuperseded(row.record);continue;}
+            row.record=structuredClone(resolved.record);
+            row.baseRevision=revision();row.operationID=crypto.randomUUID();
+            await persist();onSuperseded(row.record);continue;
+          }
           if(resolved==='rebase'&&revision()>row.baseRevision){row.baseRevision=revision();await persist();continue;}
           throw failure;
         }
