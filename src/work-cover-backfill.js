@@ -53,6 +53,12 @@ export function createWorkCoverBackfill({db,state,cloudEnabled=false,onError=con
     });
   }
 
+  function retry(id,updatedAt){
+    const key=JSON.stringify([state.accountId||'browser',id,updatedAt]);
+    attempted.delete(key);retryAfter.delete(key);failureCount.delete(key);
+    enqueue(id,updatedAt);
+  }
+
   // Reconcile historical covers after initial library load, and again when
   // account data or retry eligibility changes. One paced loop is used instead
   // of creating one long-lived timer per historical project.
@@ -125,5 +131,5 @@ export function createWorkCoverBackfill({db,state,cloudEnabled=false,onError=con
     return ()=>{stopped=true;observer?.disconnect();if(timer!==null)clearTimeout(timer);};
   }
 
-  return {observe,enqueue,startBackground,needsWorkCover,whenIdle:()=>chain};
+  return {observe,enqueue,retry,startBackground,needsWorkCover,whenIdle:()=>chain};
 }
