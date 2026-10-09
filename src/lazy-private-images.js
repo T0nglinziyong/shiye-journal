@@ -94,6 +94,7 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
     return distances;
   }
   function pump(){
+    if(disposed||active>=concurrency||!queue.length)return;
     const distances=queue.length>1?viewportDistances():null;
     while(!disposed&&active<concurrency&&queue.length){
       if(distances&&queue.length>1){
