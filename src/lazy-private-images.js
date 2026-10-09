@@ -1,10 +1,10 @@
 import {bindImageResources,cachedImageSource,notifyImageInvalidation} from './presentation-resources.js';
-import {IMAGE_TIERS,imageTier} from './image-variants.js';
+import {imagePixelSize} from './image-variants.js';
 const EMPTY='data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>');
 const placeholder=id=>id?EMPTY+'#shiye-image='+encodeURIComponent(id):'';
 export const imagePlaceholder=id=>id?(cachedImageSource(id)||placeholder(id)):'';
 export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=console.warn}){
-  const pending=new Map(),previews=new Map(),variants=new Map(),sizes=new Map(),previewSizes=new Map(),variantSizes=new Map(),retained=new Map(),queue=[],versions=new Map(),retryTimers=new Map(),retryCounts=new Map(),brokenPreviews=new Set(),observed=new WeakSet();
+  const pending=new Map(),previews=new Map(),variants=new Map(),sizes=new Map(),previewSizes=new Map(),variantSizes=new Map(),retained=new Map(),queue=[],versions=new Map(),retryTimers=new Map(),retryCounts=new Map(),resizeTimers=new Map(),brokenPreviews=new Set(),observed=new WeakSet();
   let active=0,generation=0,disposed=false,trimTimer=null;
   const version=id=>versions.get(id)||0;
   const touch=(map,id)=>{if(map.has(id)){const v=map.get(id);map.delete(id);map.set(id,v);}};
@@ -17,7 +17,16 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
     return null;
   };
   const unbind=bindImageResources({source:currentSource,identity});
-  const displayTier=img=>{const rect=img.getBoundingClientRect(),pixels=Math.max(rect.width,rect.height,img.clientWidth||0,img.clientHeight||0);return imageTier(pixels||400,globalThis.devicePixelRatio||1);};
+  const displayTier=img=>{const rect=img.getBoundingClientRect(),pixels=rect.width>0&&rect.height>0?Math.max(rect.width,rect.height):Math.max(img.clientWidth||0,img.clientHeight||0);return imagePixelSize(pixels||400,globalThis.devicePixelRatio||1,globalThis.screen?.width||1440,globalThis.screen?.height||900);};
+  function scheduleUpgrade(img){
+    if(disposed||!fullView(img))return;
+    clearTimeout(resizeTimers.get(img));
+    resizeTimers.set(img,setTimeout(()=>{
+      resizeTimers.delete(img);if(!img.isConnected||img.dataset.imageError||img.dataset.privateImageLoading||!onScreen(img)&&observer)return;
+      const known=identity(img.getAttribute('src')||'');
+      if(known&&!known.full&&displayTier(img)>(known.tier||360))resolve(img,known.id);
+    },180));
+  }
   function scheduleRetry(id){if(disposed||retryTimers.has(id))return;const count=Math.min((retryCounts.get(id)||0)+1,6);retryCounts.set(id,count);retryTimers.set(id,setTimeout(()=>{retryTimers.delete(id);retryMissing(id);},Math.min(30000,1000*2**(count-1))));}
   function retryMissing(id){if(disposed)return;for(const img of root.querySelectorAll('img[data-image-error="true"]')){if(id&&img.dataset.privateImageId!==id)continue;delete img.dataset.imageError;if(onScreen(img)||!observer)resolve(img,img.dataset.privateImageId);else observer.observe(img);}}
   function releaseURL(map,accounting,id){const url=map.get(id);if(!url)return;notifyImageInvalidation([id]);map.delete(id);accounting.delete(id);URL.revokeObjectURL(url);}
@@ -42,7 +51,7 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
   const queueTrim=()=>{if(trimTimer===null&&!disposed)trimTimer=setTimeout(trim,0);};
   async function load(id,requested=false){
     if(disposed)return '';
-    const full=requested===true,tier=full?0:requested===false?360:IMAGE_TIERS.find(size=>size>=Number(requested))||IMAGE_TIERS.at(-1);
+    const full=requested===true,tier=full?0:requested===false?360:imagePixelSize(requested);
     if(urls.has(id)){touch(sizes,id);return urls.get(id);}
     if(!full){
       if(tier===360&&previews.has(id)){touch(previewSizes,id);return previews.get(id);}
@@ -81,10 +90,12 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
       const url=await load(id,full?true:target);if(!current())return;
       if(url&&img.isConnected&&img.getAttribute('src')===shown){if(img.getAttribute('src')!==url)img.src=url;delete img.dataset.imageError;retryCounts.delete(id);const timer=retryTimers.get(id);if(timer){clearTimeout(timer);retryTimers.delete(id);}}
       else if(!url&&img.isConnected){img.dataset.imageError='true';scheduleRetry(id);}
-    })().catch(error=>{if(current()&&img.isConnected){img.dataset.imageError='true';img.src=placeholder(id);scheduleRetry(id);onError(error);}}).finally(()=>{if(img.dataset.privateImageLoading===stamp)delete img.dataset.privateImageLoading;});
+    })().catch(error=>{if(current()&&img.isConnected){img.dataset.imageError='true';img.src=placeholder(id);scheduleRetry(id);onError(error);}}).finally(()=>{if(img.dataset.privateImageLoading===stamp){delete img.dataset.privateImageLoading;scheduleUpgrade(img);}});
   }
   const observer=typeof IntersectionObserver==='function'?new IntersectionObserver(entries=>{for(const e of entries)if(e.isIntersecting){observer.unobserve(e.target);resolve(e.target,e.target.dataset.privateImageId);}},{rootMargin:'100px'}):null;
-  const sizingObserver=typeof ResizeObserver==='function'?new ResizeObserver(entries=>{for(const {target:img} of entries){const known=identity(img.getAttribute('src')||'');if(known&&!known.full&&fullView(img)&&displayTier(img)>(known.tier||360))resolve(img,known.id);}}):null;
+  const sizingObserver=typeof ResizeObserver==='function'?new ResizeObserver(entries=>{for(const {target:img} of entries)scheduleUpgrade(img);}):null;
+  const onViewportResize=()=>{for(const img of root.querySelectorAll('img[data-private-image-id]'))scheduleUpgrade(img);};
+  globalThis.addEventListener?.('resize',onViewportResize);
   function onScreen(img){const box=img.getBoundingClientRect();return box.width>0&&box.height>0&&box.bottom>=-100&&box.top<=innerHeight+100&&box.right>=-100&&box.left<=innerWidth+100;}
   function scan(node){if(disposed||node.nodeType!==1)return;const images=node.matches('img')?[node]:node.querySelectorAll('img');for(const img of images){
     if(!observed.has(img)){observed.add(img);sizingObserver?.observe(img);img.addEventListener('error',()=>{
@@ -103,19 +114,20 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
     if(known)img.dataset.privateImageId=known.id;
     // Warm list thumbnails need no async pass. Editor entry upgrades them.
     const desired=fullView(img)?displayTier(img):360;
-    if(src.includes('#shiye-image=')||(known&&!known.full&&desired>(known.tier||360))){if(onScreen(img)||!observer)resolve(img,known?.id);else observer.observe(img);}
+    if(src.includes('#shiye-image=')){if(onScreen(img)||!observer)resolve(img,known?.id);else observer.observe(img);}
+    else if(known&&!known.full&&desired>(known.tier||360))scheduleUpgrade(img);
   }}
   const changes=new MutationObserver(records=>{for(const r of records){if(r.type==='attributes')scan(r.target);else for(const node of r.addedNodes)scan(node);}});
-  changes.observe(root,{childList:true,subtree:true,attributes:true,attributeFilter:['src']});scan(root);
+  changes.observe(root,{childList:true,subtree:true,attributes:true,attributeFilter:['src','style','class']});scan(root);
   return {load,retain(ids){for(const id of ids)retained.set(id,(retained.get(id)||0)+1);let released=false;return()=>{if(released)return;released=true;for(const id of ids){const n=retained.get(id)||0;if(n>1)retained.set(id,n-1);else retained.delete(id);}trim();};},retryMissing(){retryMissing();},
     stats:()=>({originals:sizes.size,previews:previewSizes.size,displayVariants:variantSizes.size,originalBytes:[...sizes.values()].reduce((a,b)=>a+b,0),previewBytes:[...previewSizes.values()].reduce((a,b)=>a+b,0),pending:pending.size}),
     invalidate(ids){
       if(ids&&!ids.length)return;const affected=ids?new Set(ids):null;if(!affected){generation++;pending.clear();}notifyImageInvalidation(affected);
-      for(const id of affected||new Set([...urls.keys(),...previews.keys(),...[...variants.values()].map(row=>row.id),...root.querySelectorAll('img[data-private-image-id]')].map(img=>typeof img==='string'?img:img.dataset.privateImageId))){versions.set(id,version(id)+1);for(const kind of ['360:','720:','1440:','2160:','original:'])pending.delete(kind+id);const timer=retryTimers.get(id);if(timer)clearTimeout(timer);retryTimers.delete(id);retryCounts.delete(id);brokenPreviews.delete(id);}
+      for(const id of affected||new Set([...urls.keys(),...previews.keys(),...[...variants.values()].map(row=>row.id),...root.querySelectorAll('img[data-private-image-id]')].map(img=>typeof img==='string'?img:img.dataset.privateImageId))){versions.set(id,version(id)+1);for(const key of pending.keys())if(key.endsWith(':'+id))pending.delete(key);const timer=retryTimers.get(id);if(timer)clearTimeout(timer);retryTimers.delete(id);retryCounts.delete(id);brokenPreviews.delete(id);}
       for(const [map,accounting] of [[urls,sizes],[previews,previewSizes]])for(const [id,url] of map){if(affected&&!affected.has(id))continue;map.delete(id);accounting.delete(id);URL.revokeObjectURL(url);}
       for(const [key,row] of variants){if(affected&&!affected.has(row.id))continue;variants.delete(key);variantSizes.delete(row.id+':'+row.tier);URL.revokeObjectURL(row.url);}
       for(const img of root.querySelectorAll('img[data-private-image-id]')){const id=img.dataset.privateImageId;if(affected&&!affected.has(id))continue;delete img.dataset.privateImageLoading;delete img.dataset.imageError;img.src=placeholder(id);if(onScreen(img)||!observer)resolve(img,id);else observer.observe(img);}scan(root);
     },
-    dispose(){disposed=true;generation++;unbind();changes.disconnect();observer?.disconnect();sizingObserver?.disconnect();if(trimTimer!==null)clearTimeout(trimTimer);for(const timer of retryTimers.values())clearTimeout(timer);retryTimers.clear();for(const job of queue.splice(0))job.resolve('');pending.clear();for(const map of [urls,previews]){for(const url of map.values())URL.revokeObjectURL(url);map.clear();}for(const row of variants.values())URL.revokeObjectURL(row.url);variants.clear();sizes.clear();previewSizes.clear();variantSizes.clear();retained.clear();}
+    dispose(){disposed=true;generation++;unbind();changes.disconnect();observer?.disconnect();sizingObserver?.disconnect();globalThis.removeEventListener?.('resize',onViewportResize);if(trimTimer!==null)clearTimeout(trimTimer);for(const timer of retryTimers.values())clearTimeout(timer);retryTimers.clear();for(const timer of resizeTimers.values())clearTimeout(timer);resizeTimers.clear();for(const job of queue.splice(0))job.resolve('');pending.clear();for(const map of [urls,previews]){for(const url of map.values())URL.revokeObjectURL(url);map.clear();}for(const row of variants.values())URL.revokeObjectURL(row.url);variants.clear();sizes.clear();previewSizes.clear();variantSizes.clear();retained.clear();}
   };
 }

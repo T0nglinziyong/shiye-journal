@@ -14,7 +14,7 @@ function environment(){
  return {win,close(){clearPreviewContentCache();win.happyDOM.abort();win.close();for(const [key,value] of previous){if(value)Object.defineProperty(globalThis,key,value);else delete globalThis[key];}}};
 }
 const tick=()=>new Promise(resolve=>setTimeout(resolve,0));
-async function until(check){for(let i=0;i<40;i++){if(check())return;await tick();}assert.ok(check(),'async image state did not settle');}
+async function until(check){for(let i=0;i<80;i++){if(check())return;await new Promise(resolve=>setTimeout(resolve,10));}assert.ok(check(),'async image state did not settle');}
 
 test('presentation LRU uses value signatures and rejects oversized entries',()=>{
  const cache=new BoundedValueCache({maxEntries:2,maxWeight:10});
