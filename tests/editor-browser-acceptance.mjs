@@ -18,12 +18,13 @@ try{
     await click('[data-act="detail"][data-id="browser-tall"]','.detail-columns');await click('[data-act="detail-check"]','#cutout-canvas');
     for(const mode of ['rough','recognition','final']){if(mode!=='rough')await click('#cutout-next');if(mode==='final')await click('#cutout-rotate');const rect=await evaluate('(()=>{const c=document.querySelector("#cutout-canvas"),r=c.getBoundingClientRect(),p=c.parentElement.getBoundingClientRect();return {ratio:r.width/r.height,expected:c.width/c.height,inside:r.left>=p.left&&r.right<=p.right+1&&r.top>=p.top&&r.bottom<=p.bottom+1};})()');assert.ok(rect.inside&&Math.abs(rect.ratio/rect.expected-1)<.002,JSON.stringify(rect));await capture('tall-cutout-'+mode,w,h);}
     await click('#cutout-cancel');await click('[data-route="works"]','.works-grid');await click('#work-create','#blank-create-confirm');await click('#blank-create-confirm','#canvas-page');
-    assert.equal(await evaluate('document.querySelector(".swift-editor-toolbar").children.length'),3);
+    assert.equal(await evaluate('document.querySelector(".swift-editor-toolbar").children.length'),2);
     const visibleHeader=await evaluate('[...document.querySelectorAll(".swift-editor-head .actions > button:not([hidden])")].filter(b=>getComputedStyle(b).display!=="none").map(b=>b.getAttribute("aria-label")||b.textContent.trim())');
-    assert.deepEqual(visibleHeader,w>=900?['完成','导出作品']:['历史记录','撤销','重做','完成','导出作品'],'Phone must match reference 28509aa9');
+    assert.deepEqual(visibleHeader,['历史记录','撤销','重做','完成','导出作品'],
+      'All devices use identical 28509aa9 top actions');
     assert.ok(await evaluate('!!document.querySelector(".swift-editor-head .swift-auto-saved")'));
-    assert.equal(await evaluate('getComputedStyle(document.querySelector(".canvas-editor-utilities")).display!=="none"'),w>=900);
-    assert.deepEqual(await evaluate('[...document.querySelectorAll(".canvas-editor-utilities > button")].map(b=>b.getAttribute("aria-label")||b.textContent.trim())'),['历史记录','撤销','重做']);
+    assert.equal(await evaluate('document.querySelectorAll(".canvas-editor-utilities").length'),0,
+      'History, Undo and Redo must never move or duplicate in toolbar');
     await click('[data-val="material"]','.swift-material-picker');
     const picker=await evaluate('(()=>{const p=document.querySelector(".swift-material-picker"),a=document.querySelector("[data-val=material]"),g=p.querySelector(".canvas-picker-grid"),r=p.getBoundingClientRect(),t=a.getBoundingClientRect(),cols=getComputedStyle(g).gridTemplateColumns.split(" ").filter(Boolean);return {columns:cols.length,left:r.left,right:r.right,top:r.top,bottom:r.bottom,anchorBottom:t.bottom};})()');
     assert.equal(picker.columns,w>=900?3:2,'Material picker must respond to available width: '+JSON.stringify(picker));assert.ok(picker.right-picker.left<=444&&picker.bottom-picker.top<=Math.max(500,h*.7),'Picker must remain compact: '+JSON.stringify(picker));
