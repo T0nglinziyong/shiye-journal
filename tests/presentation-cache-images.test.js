@@ -19,7 +19,7 @@ async function until(check){for(let i=0;i<80;i++){if(check())return;await new Pr
 test('decoded node cache does not steal preview-owned DOM images',()=>{
  const env=environment();const root=document.createElement('div');document.body.append(root);
  try{
-  root.innerHTML='<div data-preview-cache-owned><img src="a"></div>';
+  root.innerHTML='<div data-preview-cache-owned><img src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs="></div>';
   const img=root.querySelector('img');
   Object.defineProperties(img,{complete:{value:true},naturalWidth:{value:10},naturalHeight:{value:10}});
   const nodes=new ImageNodeCache();
@@ -30,7 +30,7 @@ test('decoded node cache does not steal preview-owned DOM images',()=>{
 test('works list keeps its decoded sheet when navigating away and back',()=>{
  const env=environment();try{
   const view=document.createElement('div'),state={accountId:'a',route:'works'};document.body.append(view);
-  const markup='<div class="works-grid"><button data-act="open-project" data-id="p"><div class="thumb-sheet"><img src="data:image/png;base64,AA==" alt="cover"></div></button></div>';
+  const markup='<div class="works-grid"><button data-act="open-project" data-id="p"><div class="thumb-sheet"><img src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=" alt="cover"></div></button></div>';
   view.innerHTML=markup;reusePagePreviews({view,state});const first=view.querySelector('.thumb-sheet');
   view.innerHTML='';view.innerHTML=markup;reusePagePreviews({view,state});
   assert.equal(view.querySelector('.thumb-sheet'),first);
@@ -48,19 +48,20 @@ test('image loader accepts exact display pixels without applying DPR or screen s
 });
 test('route cover signature is stable from image placeholder to hydrated Blob URL',()=>{
   const env=environment(),view=document.createElement('div');document.body.append(view);
+  const hydrated='data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=#asset';
   const unbind=bindImageResources({
-    source:id=>id==='asset'?'blob:asset':'',
-    identity:source=>source==='blob:asset'?{id:'asset',version:1}:null
+    source:id=>id==='asset'?hydrated:'',
+    identity:source=>source===hydrated?{id:'asset',version:1}:null
   });
   const markup=src=>'<button data-act="open-project" data-id="work"><div class="thumb-sheet"><img src="'+src+'" alt="作品封面"></div></button>';
   try{
     view.innerHTML=markup('data:image/svg+xml,%3Csvg/%3E#shiye-image=asset');
     reusePagePreviews({view,state:{accountId:'a',route:'works'}});
-    view.innerHTML=markup('blob:asset');
+    view.innerHTML=markup(hydrated);
     reusePagePreviews({view,state:{accountId:'a',route:'works'}});
-    assert.equal(view.querySelector('img').getAttribute('src'),'blob:asset');
+    assert.equal(view.querySelector('img').getAttribute('src'),hydrated);
     const warmed=view.querySelector('.thumb-sheet');
-    view.innerHTML=markup('blob:asset');
+    view.innerHTML=markup(hydrated);
     reusePagePreviews({view,state:{accountId:'a',route:'works'}});
     assert.equal(view.querySelector('.thumb-sheet'),warmed);
   }finally{unbind();env.close();}
