@@ -305,7 +305,7 @@ function renderSettings(){const sections=[['AI 与创作','创作偏好与模型
  else if(title==='导入与识别')content=`
 <section class="recognition-settings-group">
 <h2>素材识别方法</h2><p>统一确定素材数量与位置，再逐件细化边缘；仅切换单件分割算法。</p>
-<label>识别方法<select id="setting-recognition">${recognitionOptions.map(([id,name])=>`<option value="${id}" ${state.preferences.recognition===id?'selected':''}>${name}</option>`).join('')}</select><small class="setting-help">${recognitionMethodDetails.find(x=>x.id===state.preferences.recognition)?.description||'推荐使用默认 MorphGAC。'}</small></label>
+<label>识别方法<select id="setting-recognition">${recognitionOptions.map(([id,name])=>`<option value="${id}" ${state.preferences.recognition===id?'selected':''}>${name}</option>`).join('')}</select><small data-recognition-method-note class="setting-help">${recognitionMethodDetails.find(x=>x.id===state.preferences.recognition)?.description||'推荐使用默认 MorphGAC。'}</small></label>
 </section>
 <section class="recognition-settings-group">
 <h2>1 · 纸张校正</h2><p>检测纸张四角并透视拉正，为候选定位和真实尺寸提供坐标。</p>
@@ -369,6 +369,11 @@ function bindPage(){view.querySelectorAll('[data-act]').forEach(el=>el.addEventL
     // indicator instead of interrupting navigation with a toast.
     void saveMatching();
   }
+  const recognitionChoice=view.querySelector('#setting-recognition');
+  if(recognitionChoice)recognitionChoice.onchange=()=>{
+    const note=view.querySelector('[data-recognition-method-note]');
+    if(note)note.textContent=recognitionMethodDetails.find(x=>x.id===recognitionChoice.value)?.description||'';
+  };
   const provider=view.querySelector('#setting-ai-provider');if(provider)provider.onchange=()=>{const old=readAIForm(),next=provider.value,preset=AI_PROVIDERS[next];state.aiSettings={...old,provider:next,endpoint:preset.endpoint,model:preset.models[0]?.[0]||'',keys:{...old.keys,[old.provider]:old.key},key:old.keys[next]||'',includeThumbnails:preset.models[0]?.[2]===true};render();};
   const modelSelect=view.querySelector('#setting-ai-model');if(modelSelect)modelSelect.onchange=()=>{view.querySelector('#setting-ai-custom-model-row').hidden=modelSelect.value!=='__custom__';if(modelSelect.value!=='__custom__')view.querySelector('#setting-ai-thumbnails').checked=AI_PROVIDERS[state.aiSettings.provider].models.find(m=>m[0]===modelSelect.value)?.[2]===true;};
   const timeoutInput=view.querySelector('#setting-ai-timeout');if(timeoutInput){timeoutInput.parentElement.firstChild.textContent='连续无响应超时（秒）';timeoutInput.parentElement.insertAdjacentHTML('afterend','<p>流式接收期间只计算连续未收到数据的时间；每轮最多 10 分钟，不会自动重试收费请求。</p>');}
