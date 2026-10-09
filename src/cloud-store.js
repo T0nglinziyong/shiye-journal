@@ -268,7 +268,7 @@ async function cloudPreview(id,pixels=720){
   const record=old?.record||await cloudRecord('blobs',id);if(!record)return undefined;
   if(!['cos','supabase'].includes(record.storageProvider))throw Error('图片缺少当前存储服务标记');
   if(!record.storagePath?.startsWith(owner+'/'))throw Error('图片不属于当前账号');
-  const thumbnailKey=(variant==='preview720'?'thumbnail':variant)+':'+record.storagePath,saved=await cached(thumbnailKey);
+  const thumbnailKey=(variant==='preview720'?'thumbnail720':variant)+':'+record.storagePath,saved=await cached(thumbnailKey);
   // A previously loaded thumb must be a zero-network read. Materialization
   // happens only on the COS CI miss path, not repeatedly for every tab.
   if(usableBlob(saved))return saved;
@@ -360,7 +360,7 @@ async function encode(store,record){
   // The optional thumbnail is independent of the original PUT. Start both
   // together, but never commit metadata until the original is acknowledged.
   // This avoids serial upload latency without changing the safety boundary.
-  const thumbnailTask=(async()=>{try{const thumbnail=await makeThumbnail(record.data);if(!thumbnail)return null;const path=storagePath+'-preview720.webp',result=await uploadObject(path,thumbnail,'image/webp',provider);if(result.error&&String(result.error.statusCode)!=='409')return null;await remember('thumbnail:'+storagePath,thumbnail);return path;}catch{return null;}})();
+  const thumbnailTask=(async()=>{try{const thumbnail=await makeThumbnail(record.data);if(!thumbnail)return null;const path=storagePath+'-preview720.webp',result=await uploadObject(path,thumbnail,'image/webp',provider);if(result.error&&String(result.error.statusCode)!=='409')return null;await remember('thumbnail720:'+storagePath,thumbnail);return path;}catch{return null;}})();
   let thumbnailPath;
   await uploads.get(storagePath);thumbnailPath=await thumbnailTask;
   await remember('image:'+storagePath,record.data);retainImage(storagePath,record.data);
