@@ -1,4 +1,5 @@
-export const MIN_DISPLAY_EDGE=360;
+export const COVER_EDGE=720;
+export const MIN_DISPLAY_EDGE=COVER_EDGE;
 export const MAX_DISPLAY_EDGE=4096;
 
 export function imagePixelSize(cssPixels=0,pixelRatio=1,screenWidth=1440,screenHeight=900){
