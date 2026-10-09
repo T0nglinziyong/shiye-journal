@@ -32,3 +32,34 @@
   border-bottom:1px solid #e1e7df;
   box-shadow:0 6px 12px #233f2b12;
 }
+
+/* One touch target and text size for every library, series, work and snapshot
+   selection action, including the named export and delete buttons. */
+.swift-tray.manage.library-management-tray > button {
+  box-sizing:border-box;
+  min-height:44px;
+  min-width:112px;
+  padding:9px 13px;
+  border-radius:12px;
+  font-size:14px;
+  line-height:1.25;
+  display:inline-flex;
+  justify-content:center;
+  align-items:center;
+  gap:6px;
+  white-space:nowrap;
+}
+.swift-tray.manage.library-management-tray > button > .selection-action-label {
+  font-size:inherit;
+  line-height:inherit;
+  white-space:nowrap;
+}
+.swift-tray.manage.library-management-tray > button.danger,
+.swift-tray.manage.library-management-tray > button.primary {
+  min-height:44px;
+  min-width:112px;
+}
+@media (max-width:680px) {
+  .swift-tray.manage.library-management-tray {flex-wrap:wrap}
+  .swift-tray.manage.library-management-tray > button {flex:1 0 112px}
+}
