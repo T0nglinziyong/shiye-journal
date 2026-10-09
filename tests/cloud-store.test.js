@@ -433,3 +433,26 @@ test('permanent trash deletion uses durable cloud outbox and sends real delete o
     [['trash','delete','gone']]);
   assert.deepEqual(await cache.get('cloud:owner-uuid','import-outbox'),[]);
 });
+
+
+test('deleting a work retires an older queued autosave so the work is not resurrected',async()=>{
+  const cache=memoryCache(),{state,db}=fixture(cache);
+  const doc={id:'work-to-remove',title:'Pending edit',
+    activeDraftID:'draft',drafts:[{id:'draft',canvas:{width:600,height:800},
+      items:[],primitives:[],textBlocks:[],strokes:[]}]};
+  await db.cloudStageProject(doc);
+  assert.equal((await cache.get('cloud:owner-uuid','project-outbox')).length,1);
+  await db.cloudStageMutation(['projects','trash'],tx=>{
+    tx.objectStore('projects').delete(doc.id);
+    tx.objectStore('trash').put({id:'deleted-work-entry',kind:'project',item:doc,
+      date:new Date().toISOString()});
+  });
+  assert.deepEqual(await cache.get('cloud:owner-uuid','project-outbox'),[],
+    'Delete should remove its obsolete pending autosave');
+  await db.cloudFlushProjects();
+  const operations=state.calls.flatMap(c=>c.operations);
+  assert.ok(operations.some(op=>op.store==='projects'&&op.action==='delete'&&op.id===doc.id));
+  assert.ok(!operations.some(op=>op.store==='projects'&&op.action==='put'&&op.item.id===doc.id),
+    'No stale project put may resurrect a deleted work');
+  assert.deepEqual(await cache.get('cloud:owner-uuid','import-outbox'),[]);
+});
