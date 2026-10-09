@@ -24,7 +24,7 @@ try{
     assert.deepEqual(await evaluate('[...document.querySelectorAll(".canvas-editor-utilities > button")].map(b=>b.getAttribute("aria-label")||b.textContent.trim())'),['历史记录','撤销','重做']);
     await click('[data-val="material"]','.swift-material-picker');
     const picker=await evaluate('(()=>{const p=document.querySelector(".swift-material-picker"),a=document.querySelector("[data-val=material]"),g=p.querySelector(".canvas-picker-grid"),r=p.getBoundingClientRect(),t=a.getBoundingClientRect(),cols=getComputedStyle(g).gridTemplateColumns.split(" ").filter(Boolean);return {columns:cols.length,left:r.left,right:r.right,top:r.top,bottom:r.bottom,anchorBottom:t.bottom};})()');
-    assert.equal(picker.columns,2,'Material picker must use two columns on every screen: '+JSON.stringify(picker));
+    assert.equal(picker.columns,w>=900?3:2,'Material picker must respond to available width: '+JSON.stringify(picker));assert.ok(picker.right-picker.left<=444&&picker.bottom-picker.top<=Math.max(500,h*.7),'Picker must remain compact: '+JSON.stringify(picker));
     assert.ok(picker.left>=11&&picker.right<=innerWidth+1&&picker.top>=picker.anchorBottom-1&&picker.bottom<=innerHeight+1,'Material picker should open below toolbar within viewport: '+JSON.stringify(picker));
     await capture('two-column-material-picker',w,h);
     await command('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape'});assert.deepEqual(await evaluate('[...document.querySelectorAll(".swift-editor-toolbar .editor-tools button")].map(b=>b.getAttribute("aria-label"))'),['选择','笔','橡皮擦','荧光笔','套索选择','文字','图形','素材','图层','画布背景']);
