@@ -1,11 +1,12 @@
 import {bindImageResources,cachedImageSource,notifyImageInvalidation} from './presentation-resources.js';
-import {imagePixelSize} from './image-variants.js';
+import {imagePixelSize,MIN_DISPLAY_EDGE,MAX_DISPLAY_EDGE} from './image-variants.js';
 const EMPTY='data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>');
 const placeholder=id=>id?EMPTY+'#shiye-image='+encodeURIComponent(id):'';
 export const imagePlaceholder=id=>id?(cachedImageSource(id)||placeholder(id)):'';
 export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=console.warn}){
   const pending=new Map(),previews=new Map(),variants=new Map(),sizes=new Map(),previewSizes=new Map(),variantSizes=new Map(),retained=new Map(),queue=[],versions=new Map(),retryTimers=new Map(),retryCounts=new Map(),resizeTimers=new Map(),brokenPreviews=new Set(),observed=new WeakSet();
   let active=0,generation=0,disposed=false,trimTimer=null;
+  const concurrency=globalThis.matchMedia?.('(pointer: coarse)').matches?4:7;
   const version=id=>versions.get(id)||0;
   const touch=(map,id)=>{if(map.has(id)){const v=map.get(id);map.delete(id);map.set(id,v);}};
   const bestVariant=id=>{let chosen=null;for(const [key,row] of variants)if(row.id===id&&(!chosen||row.tier>chosen.tier))chosen=row;return chosen;};
@@ -51,7 +52,11 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
   const queueTrim=()=>{if(trimTimer===null&&!disposed)trimTimer=setTimeout(trim,0);};
   async function load(id,requested=false){
     if(disposed)return '';
-    const full=requested===true,tier=full?0:requested===false?360:imagePixelSize(requested);
+    // Requested display pixels have already been calculated using DPR and screen
+    // size by displayTier(). Running imagePixelSize() a second time would
+    // multiply them again and fetch unnecessarily large COS variants.
+    const full=requested===true,tier=full?0:requested===false?MIN_DISPLAY_EDGE:
+      Math.max(MIN_DISPLAY_EDGE,Math.min(MAX_DISPLAY_EDGE,Math.ceil(Number(requested)||MIN_DISPLAY_EDGE)));
     if(urls.has(id)){touch(sizes,id);return urls.get(id);}
     if(!full){
       if(tier===360&&previews.has(id)){touch(previewSizes,id);return previews.get(id);}
@@ -60,7 +65,7 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
     }
     const key=(full?'original:':tier+':')+id;if(pending.has(key))return pending.get(key);
     const epoch=generation,itemVersion=version(id);
-    const task=new Promise((resolve,reject)=>{queue.push({run:async()=>{
+    const task=new Promise((resolve,reject)=>{queue.push({id,tier,run:async()=>{
       if(disposed||epoch!==generation||itemVersion!==version(id))return '';
       const blob=full?(await db.get('blobs',id))?.data:await db.previewBlob(id,tier);
       if(disposed||epoch!==generation||itemVersion!==version(id))return '';
@@ -74,7 +79,31 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
     },resolve,reject});pump();});
     pending.set(key,task);task.finally(()=>{if(pending.get(key)===task)pending.delete(key);}).catch(()=>{});return task;
   }
-  function pump(){while(!disposed&&active<4&&queue.length){const job=queue.shift();active++;job.run().then(job.resolve,job.reject).finally(()=>{active--;pump();});}}
+  // Scrolling users care about the items at their *new* stopping position.
+  // Re-rank waiting jobs at dispatch time, rather than letting previously
+  // approached rows monopolize every available COS download slot.
+  function queueRank(id){
+    let best=1e9;
+    for(const img of root.querySelectorAll('img[data-private-image-id]')){
+      if(img.dataset.privateImageId!==id||!img.isConnected)continue;
+      const rect=img.getBoundingClientRect();
+      if(rect.width<=0||rect.height<=0)continue;
+      const vertical=Math.max(0,rect.top-innerHeight,-rect.bottom),
+        horizontal=Math.max(0,rect.left-innerWidth,-rect.right);
+      best=Math.min(best,vertical+horizontal);
+      if(best===0)break;
+    }
+    return best;
+  }
+  function pump(){while(!disposed&&active<concurrency&&queue.length){
+    if(queue.length>1){let best=0,rank=queueRank(queue[0].id);
+      for(let i=1;i<queue.length;i++){const next=queueRank(queue[i].id);
+        if(next<rank){rank=next;best=i;if(rank===0)break;}}
+      if(best)queue.unshift(queue.splice(best,1)[0]);
+    }
+    const job=queue.shift();active++;job.run().then(job.resolve,job.reject).finally(()=>{active--;pump();});
+  }}
+
   function resolve(img,knownID){
     const src=img.getAttribute('src')||'',at=src.indexOf('#shiye-image='),known=identity(src);
     let id=knownID||known?.id;if(!id&&at>=0){try{id=decodeURIComponent(src.slice(at+13));}catch{return;}}
@@ -92,11 +121,11 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
       else if(!url&&img.isConnected){img.dataset.imageError='true';scheduleRetry(id);}
     })().catch(error=>{if(current()&&img.isConnected){img.dataset.imageError='true';img.src=placeholder(id);scheduleRetry(id);onError(error);}}).finally(()=>{if(img.dataset.privateImageLoading===stamp){delete img.dataset.privateImageLoading;scheduleUpgrade(img);}});
   }
-  const observer=typeof IntersectionObserver==='function'?new IntersectionObserver(entries=>{for(const e of entries)if(e.isIntersecting){observer.unobserve(e.target);resolve(e.target,e.target.dataset.privateImageId);}},{rootMargin:'100px'}):null;
+  const observer=typeof IntersectionObserver==='function'?new IntersectionObserver(entries=>{for(const e of entries)if(e.isIntersecting){observer.unobserve(e.target);resolve(e.target,e.target.dataset.privateImageId);}},{rootMargin:'850px'}):null;
   const sizingObserver=typeof ResizeObserver==='function'?new ResizeObserver(entries=>{for(const {target:img} of entries)scheduleUpgrade(img);}):null;
   const onViewportResize=()=>{for(const img of root.querySelectorAll('img[data-private-image-id]'))scheduleUpgrade(img);};
   globalThis.addEventListener?.('resize',onViewportResize);
-  function onScreen(img){const box=img.getBoundingClientRect();return box.width>0&&box.height>0&&box.bottom>=-100&&box.top<=innerHeight+100&&box.right>=-100&&box.left<=innerWidth+100;}
+  function onScreen(img){const box=img.getBoundingClientRect();return box.width>0&&box.height>0&&box.bottom>=-850&&box.top<=innerHeight+850&&box.right>=-850&&box.left<=innerWidth+850;}
   function scan(node){if(disposed||node.nodeType!==1)return;const images=node.matches('img')?[node]:node.querySelectorAll('img');for(const img of images){
     if(!observed.has(img)){observed.add(img);sizingObserver?.observe(img);img.addEventListener('error',()=>{
       const id=img.dataset.privateImageId,src=img.getAttribute('src');if(!id||!src?.startsWith('blob:'))return;
