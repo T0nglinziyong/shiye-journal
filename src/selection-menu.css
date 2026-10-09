@@ -55,12 +55,33 @@
   line-height:1.2;
   white-space:nowrap;
   text-align:center;
+  /* SVGs are inserted later by mountIcons. Keep the entire icon+label
+     group inside the fixed, compact button instead of letting the label
+     claim 100% of its width in addition to the icon. */
+  overflow:hidden;
+}
+.swift-tray.manage.library-management-tray > button.shiye-icon-host {
+  gap:4px;
+}
+.swift-tray.manage.library-management-tray > button > svg.shiye-icon {
+  position:static;
+  display:block;
+  flex:0 0 16px;
+  width:16px;
+  height:16px;
+  min-width:16px;
+  max-width:16px;
+  margin:0;
+  overflow:hidden;
 }
 .swift-tray.manage.library-management-tray > button > .selection-action-label {
   display:block;
-  flex:none;
+  flex:0 1 auto;
   min-width:0;
-  width:100%;
+  width:auto;
+  max-width:100%;
+  overflow:hidden;
+  text-overflow:ellipsis;
   font-size:inherit;
   line-height:inherit;
   white-space:nowrap;
