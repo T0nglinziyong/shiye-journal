@@ -251,3 +251,6 @@ html,body{overscroll-behavior-y:none}
     padding-bottom:12px;
   }
 }
+
+/* Paper tile is a full-strength editable preview, not an unselected sticker. */
+.import-review .review-background-card:not(.selected) {opacity:1}
