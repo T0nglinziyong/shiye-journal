@@ -2,7 +2,7 @@ import {recognitionModeAllowed,recognitionPixelsAllowed} from './recognition-pro
 const KEY='shiye-ui-preferences-v1',RECOGNITION_DEFAULTS_VERSION=2;
 const defaults={
   paperSize:'a4',orientation:'auto',wholePaper:true,autoOrganize:true,
-  recognition:'auto',recognitionPixels:900,
+  recognition:'auto',recognitionPixels:900,materialColorMode:'auto',
   // Real-case default: whole-page box discovery is most stable on the raw
   // rectified RGB. Optional raster preprocessing remains user-selectable for
   // boundary segmentation, but is disabled by default.
@@ -28,6 +28,7 @@ export function normalizePreferences(value={}){
   const {recognitionEdgePolish:_oldEdgePolish,recognitionCurveSmooth:_oldCurveSmooth,...current}=value||{};
   return {...defaults,...current,
     recognition:migrateRecognition(value?.recognition),
+    materialColorMode:value?.materialColorMode==='original'?'original':'auto',
     recognitionPixels:recognitionPixelsAllowed(value?.recognitionPixels)?Number(value.recognitionPixels):900,
     balanceLight:value?.balanceLight===true,
     recognitionDenoise:value?.recognitionDenoise===true,

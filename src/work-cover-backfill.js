@@ -32,6 +32,13 @@ export function createWorkCoverBackfill({db,state,cloudEnabled=false,onError=con
     if((state.accountId||'browser')!==account||
       state.projects.find(p=>p.id===id)?.updatedAt!==updatedAt)return false;
     await db.stageProject(complete);
+    // Staging merely queues a durable write; a cover is not available until
+    // the uploader and project metadata commit have both succeeded.
+    if(db.flushProjects){
+      await db.flushProjects();
+      const committed=await db.get?.('projects',id);
+      if(committed&&needsWorkCover(committed))throw Error('云端作品已保存，但完整封面尚未生成；稍后重试');
+    }
     return true;
   }
 
@@ -44,6 +51,12 @@ export function createWorkCoverBackfill({db,state,cloudEnabled=false,onError=con
       catch(error){const failures=Math.min(6,(failureCount.get(key)||0)+1);failureCount.set(key,failures);retryAfter.set(key,Date.now()+Math.min(300000,5000*2**(failures-1)));onError('作品封面补齐失败，原稿未改动',id,error);}
       finally{queued.delete(key);}
     });
+  }
+
+  function retry(id,updatedAt){
+    const key=JSON.stringify([state.accountId||'browser',id,updatedAt]);
+    attempted.delete(key);retryAfter.delete(key);failureCount.delete(key);
+    enqueue(id,updatedAt);
   }
 
   // Reconcile historical covers after initial library load, and again when
@@ -118,5 +131,5 @@ export function createWorkCoverBackfill({db,state,cloudEnabled=false,onError=con
     return ()=>{stopped=true;observer?.disconnect();if(timer!==null)clearTimeout(timer);};
   }
 
-  return {observe,enqueue,startBackground,needsWorkCover,whenIdle:()=>chain};
+  return {observe,enqueue,retry,startBackground,needsWorkCover,whenIdle:()=>chain};
 }
