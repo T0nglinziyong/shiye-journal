@@ -13,8 +13,8 @@ export function createWorkCoverBackfill({db,state,cloudEnabled=false,onError=con
   const attempted=new Set(),queued=new Set();
   let chain=Promise.resolve();
 
-  async function repair(id,updatedAt){
-    if(!cloudEnabled||state.route!=='works')return false;
+  async function repair(id,updatedAt,account){
+    if(!cloudEnabled||state.route!=='works'||(state.accountId||'browser')!==account)return false;
     const project=state.projects.find(row=>row.id===id);
     if(!project||project.updatedAt!==updatedAt||!needsWorkCover(project))return false;
     if(state.activeProject?.id===id)return false;
@@ -28,16 +28,18 @@ export function createWorkCoverBackfill({db,state,cloudEnabled=false,onError=con
     if(complete.id!==id||!complete.drafts?.length)throw Error('作品全文不完整，已跳过封面补齐');
     // No updatedAt or content edits: encode() uploads the deterministic
     // snapshot, then commits just the usual project summary metadata.
+    if((state.accountId||'browser')!==account||state.route!=='works'||
+      state.projects.find(p=>p.id===id)?.updatedAt!==updatedAt)return false;
     await db.stageProject(complete);
     return true;
   }
 
   function enqueue(id,updatedAt){
-    const key=JSON.stringify([state.accountId||'browser',id,updatedAt]);
+    const account=state.accountId||'browser',key=JSON.stringify([account,id,updatedAt]);
     if(!id||queued.has(key)||attempted.has(key))return;
     queued.add(key);
     chain=chain.catch(()=>{}).then(async()=>{
-      try{const staged=await repair(id,updatedAt);if(staged)attempted.add(key);}
+      try{const staged=await repair(id,updatedAt,account);if(staged)attempted.add(key);}
       catch(error){attempted.add(key);onError('作品封面补齐失败，原稿未改动',id,error);}
       finally{queued.delete(key);}
     });
