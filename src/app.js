@@ -701,6 +701,7 @@ async function saveProjectSnapshot(source,{format='image/png',alsoEditable=false
  urls.set(previewBlobId,URL.createObjectURL(preview));state.projects.push(snapshot);
  if(alsoEditable){source.isDraft=false;saveProject();}
  toast(cloudEnabled?'快照已暂存，正在后台同步':'快照已保存');
+ void organizeSavedProjects([structuredClone(snapshot)],{waitForSave:()=>db.flushProjects()});
  if(state.route==='works')render();return snapshot;
 }
 async function saveGeneratedImageSnapshot(blob,source){
@@ -1061,7 +1062,43 @@ async function confirmImportPhoto(){
   const rec=state.importRecords[state.importIndex];rec.selectedCandidates=(state.importCandidateData||[]).map((c,i)=>({...c,selected:state.importCandidateSelection.has(i)}));rec.confirmed=true;saveActiveImportRecord();
   const next=state.importRecords.findIndex(r=>!r.confirmed);if(next>=0)await switchImportRecord(next);else{state.importStep='review';render();}
 }
-async function organizeSavedAssets(records,{waitForSave}={}){
+async function organizeSavedProjects(projects,{waitForSave}={}){
+  if(!state.preferences.autoOrganizeWorks||!projects?.length)return;
+  const config=structuredClone(state.aiSettings),account=state.accountId;
+  if(!config.key)return; // Offline projects retain their current title/tags.
+  try{
+    await waitForSave?.();
+    for(const source of projects){
+      if(state.accountId!==account)return;
+      const complete=await db.get('projects',source.id);
+      if(!complete||complete.updatedAt!==source.updatedAt||complete.autoOrganized)return;
+      let picture=null;
+      if(complete.isSnapshot&&supportsVision(config)&&config.includeThumbnails){
+        const raw=(await db.get('blobs',complete.snapshotBlobId))?.data;
+        if(raw instanceof Blob){
+          const bitmap=await createImageBitmap(raw);
+          try{const canvas=document.createElement('canvas'),scale=Math.min(1,360/Math.max(bitmap.width,bitmap.height));
+            canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));
+            canvas.getContext('2d').drawImage(bitmap,0,0,canvas.width,canvas.height);
+            picture=canvas.toDataURL('image/jpeg',.78);
+          }finally{bitmap.close();}
+        }
+      }
+      const result=await classifyRecord({kind:'project',record:complete,settings:config,image:picture,assets:state.assets});
+      if(state.accountId!==account)return;
+      const latest=await db.get('projects',source.id);
+      if(!latest||latest.updatedAt!==source.updatedAt||latest.autoOrganized)return;
+      const updated={...latest,autoOrganized:true,title:result.title||latest.title,
+        styleTags:(result.styleTags||result.tags||latest.styleTags||[]).slice(0,8),updatedAt:new Date().toISOString()};
+      await db.stageProject(updated);
+      const live=state.projects.find(p=>p.id===source.id);
+      if(live&&live.updatedAt===source.updatedAt)Object.assign(live,updated);
+    }
+    if(state.route==='works')render();
+  }catch(error){console.warn('作品自动整理待重试，原始作品仍保留',error);}
+}
+async function organizeSavedAssets(records,{waitForSave,projects=[]}={}){ 
+  if(projects.length)void organizeSavedProjects(projects,{waitForSave});
   if(state.preferences.autoOrganize&&records.length){
     const cfg=structuredClone(state.aiSettings),accountID=state.accountId;
     if(cfg.key&&cfg.includeThumbnails&&supportsVision(cfg)){
