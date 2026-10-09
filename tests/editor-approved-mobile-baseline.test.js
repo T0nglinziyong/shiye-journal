@@ -13,7 +13,7 @@ const hash=text=>{
 };
 test('all approved 28509aa9 mobile CSS is byte-for-byte intact',async()=>{
   const css=await read('src/swift-controls.css');
-  const marker='/* 28509aa9 is the validated phone editor.';
+  const marker='/* Same approved 28509aa9 top action order at every device width.';
   const cut=css.indexOf(marker);
   assert.ok(cut>0,'Must keep desktop changes below the approved mobile style');
   const unchanged=css.slice(0,cut);
@@ -23,18 +23,15 @@ test('all approved 28509aa9 mobile CSS is byte-for-byte intact',async()=>{
   assert.match(css.slice(cut),/@media\(min-width:900px\)/);
   assert.doesNotMatch(css.slice(cut),/@media\(max-width:699px\)/);
 });
-test('phone header retains history, undo and redo while desktop alone relocates them',async()=>{
+test('history, undo and redo remain in the original top header on ALL displays',async()=>{
   const editor=await read('src/canvas-editor-ui.js'),css=await read('src/swift-controls.css');
-  const history=editor.indexOf('actions.append(mobileHistory,mobileUndo,mobileRedo)');
+  const history=editor.indexOf("actions.append(history,topAction('undo','↶'),topAction('redo','↷'))");
   const done=editor.indexOf('actions.append(done)'),share=editor.indexOf('actions.append(share)');
-  assert.ok(history>=0&&done>history&&share>done);
-  assert.match(editor,/mobileHistory\.setAttribute\('aria-label','历史记录'\)/);
-  assert.match(css,/@media\(min-width:900px\)[\s\S]*\.editing \.swift-editor-head \.mobile-editor-head-only\{display:none!important\}/);
-  assert.match(css,/@media\(min-width:900px\)[\s\S]*\.canvas-editor-utilities/);
-  assert.match(css,/\.canvas-editor-utilities\{display:none\}/);
-  const popover=await read('src/swift-popover.js');
-  assert.match(popover,/if\(innerWidth<900\)\{/);
-  assert.match(popover,/const r = anchor\.getBoundingClientRect\(\); surface\.style\.maxHeight/);
+  assert.ok(history>=0&&done>history&&share>done,'Top actions must keep the original order');
+  assert.match(editor,/history\.setAttribute\('aria-label','历史记录'\)/);
+  assert.doesNotMatch(editor,/mobile-editor-head-only|canvas-editor-utilities/);
+  assert.doesNotMatch(css,/canvas-editor-utilities|mobile-editor-head-only/);
+  assert.match(css,/@media\(min-width:900px\)/);
 });
 test('trash selection uses regular three-column buttons and only one wide danger action',async()=>{
   const css=await read('src/selection-menu.css');
