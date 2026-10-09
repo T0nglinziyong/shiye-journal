@@ -7,8 +7,8 @@ export function compareRecordEdits(local,remote,{localTimestamp=null}={}){
     const n=Date.parse(value);
     return Number.isFinite(n)?n:null;
   };
-  const localTime=time(localTimestamp||local?.updatedAt||local?.usageUpdatedAt||local?.createdAt);
-  const cloudTime=time(remote?.updatedAt||remote?.usageUpdatedAt||remote?.createdAt);
+  const localTime=time(localTimestamp||local?.updatedAt||local?.usageUpdatedAt||local?.date||local?.createdAt);
+  const cloudTime=time(remote?.updatedAt||remote?.usageUpdatedAt||remote?.date||remote?.createdAt);
   if(!remote)return 'remote';
   if(localTime===null||cloudTime===null)return 'remote';
   return localTime>cloudTime?'local':'remote';
