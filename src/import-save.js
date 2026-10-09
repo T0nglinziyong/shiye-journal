@@ -79,6 +79,9 @@ export async function saveImportBatch({state,db,urls,render,onSaved}) {
   state.importSavedCount=savedCount;state.importPending=!!result?.pending;state.importStep='done';render();
   // Remote enrichment starts only after the entire batch is safely committed.
   // It must not block the success screen or the next import batch.
-  if(state.importMode!=='work'&&onSaved)void Promise.resolve().then(()=>onSaved(assets.map(a=>structuredClone(a)),{waitForSave:()=>db.flushProjects?db.flushProjects():Promise.resolve()})).catch(console.warn);
+  if(onSaved)void Promise.resolve().then(()=>onSaved(
+    assets.filter(a=>!a.isProjectInternal).map(a=>structuredClone(a)),
+    {projects:projects.map(p=>structuredClone(p)),waitForSave:()=>db.flushProjects?db.flushProjects():Promise.resolve()}
+  )).catch(error=>console.warn('导入后的自动整理待重试',error));
   } finally {state.importSaving=false;}
 }
