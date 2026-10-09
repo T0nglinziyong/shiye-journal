@@ -79,13 +79,72 @@ export function mountCanvasEditor(c){
     else{state.selectionFilter={ink:true,material:true,text:true,shape:true,...state.selectionFilter};for(const [key,name] of [['ink','手写笔画'],['material','素材'],['text','文字框'],['shape','图形']])toggle(el,name,state.selectionFilter[key],v=>state.selectionFilter[key]=v);const modeRow=document.createElement('div');modeRow.className='canvas-selection-mode';el.append(modeRow);for(const [id,name] of [['contain','必须全部框住'],['intersect','只需要相交']]){const b=button(name,()=>{state.selectionMode=id;modeRow.querySelectorAll('button').forEach(n=>n.setAttribute('aria-checked',String(n===b)));});b.setAttribute('aria-checked',String((state.selectionMode||'contain')===id));modeRow.append(b);}}
   }
   function shapePicker(anchor){const p=openPopover(anchor,{title:'添加图形',width:360}),tabs=document.createElement('div'),grid=document.createElement('div');tabs.className='swift-segments';grid.className='canvas-picker-grid';p.content.append(tabs,grid);let version=0;const show=async tab=>{const ticket=++version;grid.replaceChildren();let choices=tab==='common'?commonShapes:tab==='advanced'?advancedShapes:entries.filter(e=>e.kind==='shape'&&!e.value.hidden).map(e=>[e.value.id,e.value.kind==='vector'?'自定义图形':e.value.kind,e.value]);if(ticket!==version||!grid.isConnected)return;grid.replaceChildren();for(const [id,name,copy] of choices){const sample=copy||configureShape(primitive(id,d),id),b=button('',()=>{p.close();change(()=>{const shape=copy?{...structuredClone(copy),id:uid(),locked:false,hidden:false}:configureShape(primitive(id,d),id);shape.x=d.canvas.width/2;shape.y=d.canvas.height/2;shape.zIndex=Math.max(0,...allEntries(d).map(e=>e.value.zIndex||0))+1;d.primitives.push(shape);state.selected=shape.id;state.tool='select';state.toolHighlight='shape';state.multiSelected=[];});});b.dataset.shapeKind=copy?'used':id;b.innerHTML=shapeSVG(sample)+'<span>'+esc(name)+'</span>';grid.append(b);}tabs.querySelectorAll('button').forEach(b=>b.classList.toggle('selected',b.dataset.tab===tab));};for(const [id,name] of [['used','已使用图形'],['common','基础图形'],['advanced','高级图形']]){const b=button(name,()=>show(id));b.dataset.tab=id;tabs.append(b);}show('common');}
-  function materialPicker(anchor){const p=openPopover(anchor,{title:'添加素材',width:390}),tabs=document.createElement('div'),controls=document.createElement('div'),grid=document.createElement('div');tabs.className='swift-segments';controls.className='canvas-material-filters';grid.className='canvas-picker-grid';p.content.append(tabs,controls,grid);let tab='all',series='all',kind='all',sort='newest';
-    const seriesSelect=document.createElement('select');seriesSelect.setAttribute('aria-label','选择系列');seriesSelect.append(new Option('全部系列','all'),new Option('系列外','none'));for(const group of state.series||[])seriesSelect.append(new Option(group.title,group.id));seriesSelect.onchange=()=>{series=seriesSelect.value;show();};
-    const kindSelect=document.createElement('select');kindSelect.setAttribute('aria-label','过滤素材类型');for(const [id,name] of [['all','全部类型'],['sticker','贴纸'],['paper','纸张'],['tape','胶带'],['photo','照片'],['text','文字'],['reference','参考']])kindSelect.append(new Option(name,id));kindSelect.onchange=()=>{kind=kindSelect.value;show();};
-    const sortSelect=document.createElement('select');sortSelect.setAttribute('aria-label','素材排序');for(const [id,name] of [['newest','最新添加'],['oldest','最早添加'],['name','名称升序'],['name-desc','名称降序']])sortSelect.append(new Option(name,id));sortSelect.onchange=()=>{sort=sortSelect.value;show();};
+  // Keep decoded thumbnail DOM nodes alive between opening the three tabs.
+  // The image loader retains COS 360px blobs; reusing nodes also avoids
+  // decoding and reflowing them every time the picker is opened.
+  const pickerRows=new Map();
+  function materialPicker(anchor){
+    const p=openPopover(anchor,{title:'添加素材',width:340}),tabs=document.createElement('div'),
+      controls=document.createElement('div'),grid=document.createElement('div');
+    p.surface.classList.add('swift-material-picker');
+    tabs.className='swift-segments';controls.className='canvas-material-filters';grid.className='canvas-picker-grid';
+    p.content.append(tabs,controls,grid);
+    let tab=d.items.some(i=>!i.isParked)?'used':'all',series='all',kind='all',sort='newest';
+    const seriesSelect=document.createElement('select');seriesSelect.setAttribute('aria-label','选择系列');
+    seriesSelect.append(new Option('全部系列','all'),new Option('系列外','none'));
+    for(const group of state.series||[])seriesSelect.append(new Option(group.title,group.id));
+    const kindSelect=document.createElement('select');kindSelect.setAttribute('aria-label','过滤素材类型');
+    for(const [id,name] of [['all','全部类型'],['sticker','贴纸'],['paper','纸张'],['tape','胶带'],['photo','照片'],['text','文字'],['reference','参考']])kindSelect.append(new Option(name,id));
+    const sortSelect=document.createElement('select');sortSelect.setAttribute('aria-label','素材排序');
+    for(const [id,name] of [['newest','最新添加'],['oldest','最早添加'],['name','名称升序'],['name-desc','名称降序']])sortSelect.append(new Option(name,id));
     controls.append(seriesSelect,kindSelect,sortSelect);
-    const show=()=>{controls.hidden=tab!=='all';grid.replaceChildren();let list=tab==='used'?d.items.filter(i=>!i.isParked).map(item=>({a:asset(item.assetID),item})):tab==='standby'?d.items.filter(i=>i.isParked).map(item=>({a:asset(item.assetID),item})):state.assets.filter(a=>!a.isProjectInternal&&(series==='all'||(series==='none'?!a.seriesID:a.seriesID===series))&&(kind==='all'||a.kind===kind)).map(a=>({a}));if(tab==='all')list.sort((x,y)=>sort==='name'?x.a.title.localeCompare(y.a.title):sort==='name-desc'?y.a.title.localeCompare(x.a.title):(Date.parse(y.a.createdAt||0)-Date.parse(x.a.createdAt||0))*(sort==='oldest'?-1:1));for(const {a,item} of list){if(!a)continue;const b=button('',()=>{p.close();if(item){change(()=>{item.isParked=false;state.selected=item.id;state.multiSelected=[];});return;}const used=d.items.filter(i=>i.assetID===a.id),occupied=new Set(used.map(i=>i.materialUnitIndex||0)),unit=Array.from({length:a.supply?.quantity??1},(_,i)=>i).find(i=>!occupied.has(i));if(unit===undefined){toast('此页已使用全部实物数量');return;}if(!(a.physicalWidthMM>0&&a.physicalHeightMM>0)){toast('请先确认素材实物尺寸');return;}change(()=>{const inserted=itemFromAsset(a,d,d.canvas.width/2,d.canvas.height/2,Math.max(0,...allEntries(d).map(e=>e.value.zIndex||0))+1);inserted.materialUnitIndex=unit;d.items.push(inserted);state.selected=inserted.id;state.multiSelected=[];});});b.dataset.assetId=a.id;b.innerHTML=imgTag(a)+'<span>'+esc(a.title)+'</span>';grid.append(b);}if(!grid.children.length)grid.textContent='没有符合条件的素材';tabs.querySelectorAll('button').forEach(b=>b.classList.toggle('selected',b.dataset.tab===tab));};
-    for(const [id,name] of [['used','已使用素材'],['standby','备选素材'],['all','所有素材']]){const b=button(name,()=>{tab=id;show();});b.dataset.tab=id;tabs.append(b);}tab=d.items.some(i=>!i.isParked)?'used':'all';show();}
+    const show=()=>{
+      controls.hidden=tab!=='all';
+      const key=JSON.stringify([state.accountId||'',state.activeProject?.id,d.id,tab,series,kind,sort,
+        d.items.map(i=>[i.id,i.assetID,!!i.isParked]),state.assets.map(a=>[a.id,a.blobId,a.updatedAt])]);
+      let rows=pickerRows.get(key);
+      if(!rows){
+        let list=tab==='used'?d.items.filter(i=>!i.isParked).map(item=>({a:asset(item.assetID),item}))
+          :tab==='standby'?d.items.filter(i=>i.isParked).map(item=>({a:asset(item.assetID),item}))
+          :state.assets.filter(a=>!a.isProjectInternal&&(series==='all'||(series==='none'?!a.seriesID:a.seriesID===series))&&(kind==='all'||a.kind===kind)).map(a=>({a}));
+        if(tab==='all')list.sort((x,y)=>sort==='name'?x.a.title.localeCompare(y.a.title):sort==='name-desc'?y.a.title.localeCompare(x.a.title):(Date.parse(y.a.createdAt||0)-Date.parse(x.a.createdAt||0))*(sort==='oldest'?-1:1));
+        rows=list.filter(({a})=>!!a).map(({a,item})=>{
+          const b=document.createElement('button');b.type='button';b.dataset.pickerAsset=a.id;
+          if(item)b.dataset.pickerItem=item.id;
+          b.innerHTML=imgTag(a)+'<span>'+esc(a.title)+'</span>';
+          return b;
+        });
+        pickerRows.set(key,rows);
+        if(pickerRows.size>8)pickerRows.delete(pickerRows.keys().next().value);
+      }
+      grid.replaceChildren(...rows);
+      if(!rows.length)grid.textContent='没有符合条件的素材';
+      tabs.querySelectorAll('button').forEach(b=>b.classList.toggle('selected',b.dataset.tab===tab));
+    };
+    // Delegation stays on this live grid; cached card nodes do not retain
+    // callbacks tied to a closed popover or a stale editor session.
+    grid.onclick=event=>{
+      const b=event.target.closest('button[data-picker-asset]');if(!b||!grid.contains(b))return;
+      const a=asset(b.dataset.pickerAsset),item=d.items.find(i=>i.id===b.dataset.pickerItem);
+      if(!a)return;
+      if(item){p.close();change(()=>{item.isParked=false;state.selected=item.id;state.multiSelected=[];});return;}
+      const occupied=new Set(d.items.filter(i=>i.assetID===a.id).map(i=>i.materialUnitIndex||0));
+      const unit=Array.from({length:a.supply?.quantity??1},(_,i)=>i).find(i=>!occupied.has(i));
+      if(unit===undefined){toast('此页已使用全部实物数量');return;}
+      if(!(a.physicalWidthMM>0&&a.physicalHeightMM>0)){toast('请先确认素材实物尺寸');return;}
+      p.close();change(()=>{
+        const inserted=itemFromAsset(a,d,d.canvas.width/2,d.canvas.height/2,Math.max(0,...allEntries(d).map(e=>e.value.zIndex||0))+1);
+        inserted.materialUnitIndex=unit;d.items.push(inserted);state.selected=inserted.id;state.multiSelected=[];
+      });
+    };
+    seriesSelect.onchange=()=>{series=seriesSelect.value;show();};
+    kindSelect.onchange=()=>{kind=kindSelect.value;show();};
+    sortSelect.onchange=()=>{sort=sortSelect.value;show();};
+    for(const [id,name] of [['used','已使用素材'],['standby','备选素材'],['all','所有素材']]){
+      const b=button(name,()=>{tab=id;show();});b.dataset.tab=id;tabs.append(b);
+    }
+    show();
+  }
   function layerPicker(anchor){
     const p=openPopover(anchor,{title:'图层 · 上方显示在前',width:350}),list=document.createElement('div');
     list.className='canvas-layer-list';p.content.append(list);
