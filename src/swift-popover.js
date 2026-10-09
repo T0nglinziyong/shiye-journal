@@ -1,3 +1,4 @@
+import {popupPlacement} from './popover-placement.js';
 let active = null;
 let activeAnchor = null;
 export function closePopover() { active?.(); }
@@ -24,10 +25,14 @@ export function openPopover(anchor, {title = '', width = 340, menu = false} = {}
   const position = () => {
     if (closed) return;
     if (!anchor.isConnected) { close(); return; }
-    const r = anchor.getBoundingClientRect(); surface.style.maxHeight = Math.max(160,Math.min(innerHeight-24, ['添加图形','添加素材'].includes(title)?innerHeight*.54:innerHeight*.78))+'px';
-    const h = surface.getBoundingClientRect().height;
-    surface.style.left = Math.max(12, Math.min(r.left, innerWidth - surface.offsetWidth - 12)) + 'px';
-    surface.style.top = Math.max(12, r.bottom + h + 8 <= innerHeight - 12 ? r.bottom + 8 : r.top - h - 8) + 'px';
+    const rect=anchor.getBoundingClientRect(),picker=['添加图形','添加素材'].includes(title);
+    const spec={anchor:rect,viewportWidth:innerWidth,viewportHeight:innerHeight,
+      popupWidth:surface.offsetWidth,popupHeight:surface.getBoundingClientRect().height,picker};
+    const bounded=popupPlacement(spec);
+    surface.style.maxHeight=bounded.maxHeight+'px';
+    const placed=popupPlacement({...spec,popupHeight:surface.getBoundingClientRect().height});
+    surface.style.left=placed.left+'px';
+    surface.style.top=placed.top+'px';
     for (const fn of owned.values()) fn?.();
   };
   const close = (focus = false) => {
