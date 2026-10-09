@@ -51,3 +51,31 @@ test('pending, actively edited and stale projects are never overwritten',async()
   manager.enqueue('p','2026-10-09T02:00:00.000Z');await manager.whenIdle();
   assert.equal(staged,0);
 });
+
+
+test('background backfill may stage a historical draft outside the Works route',async()=>{
+  const p=project('background'),state={route:'library',accountId:'a',projects:[p]},staged=[];
+  const manager=createWorkCoverBackfill({db:{
+    pendingProjects:async()=>[],stageProject:async doc=>staged.push(doc)
+  },state,cloudEnabled:true});
+  manager.enqueue(p.id,p.updatedAt);
+  await manager.whenIdle();
+  assert.equal(staged.length,1);
+  assert.equal(staged[0].id,p.id);
+});
+
+test('a pending edit is skipped without permanently suppressing a later safe retry',async()=>{
+  const p=project('later'),state={route:'library',accountId:'a',projects:[p]},staged=[];
+  let pending=true;
+  const manager=createWorkCoverBackfill({db:{
+    pendingProjects:async()=>pending?[{record:{id:p.id}}]:[],
+    stageProject:async doc=>staged.push(doc)
+  },state,cloudEnabled:true});
+  manager.enqueue(p.id,p.updatedAt);
+  await manager.whenIdle();
+  assert.equal(staged.length,0);
+  pending=false;
+  manager.enqueue(p.id,p.updatedAt);
+  await manager.whenIdle();
+  assert.equal(staged.length,1);
+});
