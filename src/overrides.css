@@ -131,3 +131,37 @@ html,body{overscroll-behavior-y:none}
 @media (max-width:600px) {
   .series-contents .series-filter-menus .filter-control {font-size:12px;padding:0 7px}
 }
+
+/* Main series catalog: the search and sort row follow the same catalog
+   controls as materials/works; the series detail uses the same language. */
+.catalog-toolbar .swift-series-controls > .shiye-search {
+  display:flex;
+  align-items:center;
+  flex:1 1 280px;
+  min-width:220px;
+  margin:0;
+}
+.catalog-toolbar .swift-series-controls > .shiye-search input {
+  width:100%;
+  max-width:none;
+  height:40px;
+  min-height:40px;
+  padding:9px 13px;
+  box-sizing:border-box;
+  background:#fff;
+  border:1px solid #e3e5dc;
+  border-radius:10px;
+  font-size:14px;
+}
+.catalog-toolbar .swift-series-controls .filter-control {
+  min-height:34px;
+  height:34px;
+  border-radius:9px;
+  font-size:14px;
+}
+@media(max-width:860px){
+  .catalog-toolbar .swift-series-controls > .shiye-search {
+    flex:1 1 100%;
+    min-width:0;
+  }
+}
