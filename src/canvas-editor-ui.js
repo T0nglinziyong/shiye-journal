@@ -254,12 +254,53 @@ export function mountCanvasEditor(c){
       const move=button('≡',()=>{});
       move.onclick=()=>{if(drag||performance.now()<suppressMoveClickUntil)return;moveMenu?.remove();const controls=document.createElement('div');controls.className='canvas-layer-move-actions';controls.append(button('上移一层',()=>{reorder(o.id,ordered[indexOf(o.id)-1]?.value.id);controls.remove();moveMenu=null;}),button('下移一层',()=>{reorder(o.id,ordered[indexOf(o.id)+1]?.value.id,true);controls.remove();moveMenu=null;}));row.append(controls);moveMenu=controls;};
       move.dataset.layerMove='';move.setAttribute('aria-label','调整图层顺序');move.style.touchAction='none';
-      move.onpointerdown=event=>{if(event.button>0||o.isLocked||o.locked)return;const x=event.clientX,y=event.clientY;move.setPointerCapture(event.pointerId);
-        holdTimer=setTimeout(()=>{drag={id:o.id,y,target:null};row.classList.add('dragging');scrollDrag();},280);
-        move.onpointermove=ev=>{if(!drag){if(Math.hypot(ev.clientX-x,ev.clientY-y)>6){clearTimeout(holdTimer);holdTimer=null;}return;}drag.y=ev.clientY;ev.preventDefault();};
+      let pending=null;
+      const beginDrag=()=>{
+        if(!pending||drag)return;
+        drag={id:o.id,y:pending.y,target:null};
+        row.classList.add('dragging');
+        scrollDrag();
       };
-      move.onpointerup=event=>{const finished=stopDrag();if(finished){suppressMoveClickUntil=performance.now()+350;event.preventDefault();event.stopPropagation();if(finished.target)reorder(finished.id,finished.target.id,finished.target.after);}};
-      move.onpointercancel=stopDrag;
+      move.onpointerdown=event=>{
+        if(event.button>0||o.isLocked||o.locked)return;
+        event.stopPropagation();
+        pending={pointerId:event.pointerId,x:event.clientX,y:event.clientY,startY:event.clientY,
+          pointerType:event.pointerType};
+        try{move.setPointerCapture(event.pointerId);}catch{}
+        if(event.pointerType==='touch')holdTimer=setTimeout(beginDrag,240);
+      };
+      move.onpointermove=event=>{
+        if(!pending||pending.pointerId!==event.pointerId)return;
+        pending.y=event.clientY;
+        if(!drag){
+          const distance=Math.hypot(event.clientX-pending.x,event.clientY-pending.startY);
+          if(event.pointerType==='mouse'&&distance>4)beginDrag();
+          else if(event.pointerType==='touch'&&distance>10){clearTimeout(holdTimer);holdTimer=null;}
+        }
+        if(!drag)return;
+        drag.y=event.clientY;
+        list.querySelectorAll('.drop-target').forEach(el=>el.classList.remove('drop-target'));
+        drag.target=targetAt(event.clientY);
+        drag.target?.row.classList.add('drop-target');
+        event.preventDefault();event.stopPropagation();
+      };
+      move.onpointerup=event=>{
+        if(!pending||pending.pointerId!==event.pointerId)return;
+        const target=drag?targetAt(event.clientY):null;
+        const dragged=!!drag;stopDrag();pending=null;
+        if(dragged){
+          suppressMoveClickUntil=performance.now()+400;
+          event.preventDefault();event.stopPropagation();
+          if(target)reorder(o.id,target.id,target.after);
+        }
+      };
+      move.onpointercancel=()=>{pending=null;stopDrag();};
+      move.onkeydown=event=>{
+        if(o.isLocked||o.locked||!['ArrowUp','ArrowDown'].includes(event.key))return;
+        event.preventDefault();
+        const next=ordered[indexOf(o.id)+(event.key==='ArrowUp'?-1:1)];
+        if(next)reorder(o.id,next.value.id,event.key==='ArrowDown');
+      };
       row.append(lock,eye,move);rows.set(o.id,row);
     }
     redraw();
