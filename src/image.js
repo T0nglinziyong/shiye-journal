@@ -1,3 +1,4 @@
+import {applyLightingToCrop} from './material-color-restoration.js';
 import {segmentPaperMaterials} from './paper-analysis.js';
 import {visionTask} from './vision-runtime.js';
 import {recognitionProfile} from './recognition-profiles.js';
@@ -56,12 +57,13 @@ export async function detectPaperCandidates(bitmap,box,smallestMM=6,{
       })
     : candidates;
 }
-export async function cropBitmap(bitmap,paper,region,{raw=false}={}){
+export async function cropBitmap(bitmap,paper,region,{raw=false,lighting=null}={}){
   const x=Math.max(0,Math.round(bitmap.width*(paper.x+region.x*paper.w))),y=Math.max(0,Math.round(bitmap.height*(paper.y+region.y*paper.h)));
   const w=Math.min(bitmap.width-x,Math.max(1,Math.round(bitmap.width*paper.w*region.w))),h=Math.min(bitmap.height-y,Math.max(1,Math.round(bitmap.height*paper.h*region.h)));
   const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;
   const ctx=canvas.getContext('2d');
   ctx.drawImage(bitmap,x,y,w,h,0,0,w,h);
+  if(!raw&&lighting)applyLightingToCrop(ctx,x,y,w,h,bitmap.width,bitmap.height,lighting);
   if(region.mask&&!raw){
     const m=region.mask,mask=document.createElement('canvas');mask.width=m.width;mask.height=m.height;
     const mc=mask.getContext('2d'),frame=mc.createImageData(m.width,m.height);
