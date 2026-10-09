@@ -34,7 +34,7 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
   function trim(){
     trimTimer=null;if(disposed)return;
     const live=new Set([...root.querySelectorAll('img')].map(im=>im.getAttribute('src')));
-    for(const [map,accounting,maxBytes,maxCount] of [[urls,sizes,96*1024*1024,96],[previews,previewSizes,24*1024*1024,240]]){
+    for(const [map,accounting,maxBytes,maxCount] of [[urls,sizes,96*1024*1024,96],[previews,previewSizes,48*1024*1024,480]]){
       let bytes=[...accounting.values()].reduce((a,b)=>a+b,0);
       for(const [id,size] of accounting){
         if(bytes<=maxBytes&&accounting.size<=maxCount)break;
@@ -44,7 +44,7 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
     }
     let bytes=[...variantSizes.values()].reduce((a,b)=>a+b,0);
     for(const [key,size] of variantSizes){
-      if(bytes<=48*1024*1024&&variantSizes.size<=96)break;
+      if(bytes<=64*1024*1024&&variantSizes.size<=128)break;
       const row=variants.get(key);if(!row||live.has(row.url)||retained.has(row.id))continue;
       variants.delete(key);variantSizes.delete(key);notifyImageInvalidation([row.id]);URL.revokeObjectURL(row.url);bytes-=size;
     }
@@ -82,27 +82,32 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
   // Scrolling users care about the items at their *new* stopping position.
   // Re-rank waiting jobs at dispatch time, rather than letting previously
   // approached rows monopolize every available COS download slot.
-  function queueRank(id){
-    let best=1e9;
+  function viewportDistances(){
+    const distances=new Map();
     for(const img of root.querySelectorAll('img[data-private-image-id]')){
-      if(img.dataset.privateImageId!==id||!img.isConnected)continue;
-      const rect=img.getBoundingClientRect();
-      if(rect.width<=0||rect.height<=0)continue;
-      const vertical=Math.max(0,rect.top-innerHeight,-rect.bottom),
-        horizontal=Math.max(0,rect.left-innerWidth,-rect.right);
-      best=Math.min(best,vertical+horizontal);
-      if(best===0)break;
+      if(!img.isConnected)continue;
+      const rect=img.getBoundingClientRect();if(rect.width<=0||rect.height<=0)continue;
+      const distance=Math.max(0,rect.top-innerHeight,-rect.bottom)+
+        Math.max(0,rect.left-innerWidth,-rect.right),id=img.dataset.privateImageId;
+      distances.set(id,Math.min(distance,distances.get(id)??Infinity));
     }
-    return best;
+    return distances;
   }
-  function pump(){while(!disposed&&active<concurrency&&queue.length){
-    if(queue.length>1){let best=0,rank=queueRank(queue[0].id);
-      for(let i=1;i<queue.length;i++){const next=queueRank(queue[i].id);
-        if(next<rank){rank=next;best=i;if(rank===0)break;}}
-      if(best)queue.unshift(queue.splice(best,1)[0]);
+  function pump(){
+    const distances=queue.length>1?viewportDistances():null;
+    while(!disposed&&active<concurrency&&queue.length){
+      if(distances&&queue.length>1){
+        let best=0,rank=distances.get(queue[0].id)??1e9;
+        for(let i=1;i<queue.length;i++){
+          const next=distances.get(queue[i].id)??1e9;
+          if(next<rank){rank=next;best=i;if(rank===0)break;}
+        }
+        if(best)queue.unshift(queue.splice(best,1)[0]);
+      }
+      const job=queue.shift();active++;
+      job.run().then(job.resolve,job.reject).finally(()=>{active--;pump();});
     }
-    const job=queue.shift();active++;job.run().then(job.resolve,job.reject).finally(()=>{active--;pump();});
-  }}
+  }
 
   function resolve(img,knownID){
     const src=img.getAttribute('src')||'',at=src.indexOf('#shiye-image='),known=identity(src);
