@@ -48,6 +48,13 @@ try {
   }
   for(const [width,height] of [[320,640],[390,844],[700,1024],[768,1024],[1024,768],[1440,900],[2560,1440]]) {
     await command('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:width<700});
+    if(width<700){
+      const mobileNav=await evaluate('(()=>{const nav=document.querySelector(".main-nav"),header=document.querySelector(".topbar"),r=nav.getBoundingClientRect();return {position:getComputedStyle(nav).position,bottom:r.bottom,viewport:innerHeight,headerTransform:getComputedStyle(header).transform,labels:[...nav.querySelectorAll("button")].map(b=>b.textContent.trim())};})()');
+      assert.equal(mobileNav.position,'fixed','Mobile navigation should be viewport-fixed');
+      assert.ok(Math.abs(mobileNav.bottom-mobileNav.viewport)<2,'Mobile navigation must be at screen bottom: '+JSON.stringify(mobileNav));
+      assert.equal(mobileNav.headerTransform,'none','Header transform must not re-anchor the fixed mobile nav');
+      assert.ok(mobileNav.labels.length>=3);
+    }
     await click('[data-route="library"]','.series-grid');await capture('series',width,height);
     assert.equal(await evaluate('document.querySelectorAll(".series-card-edit").length'),0);
     await click('[data-act="series-detail"]','.series-contents');await capture('series-contents',width,height);
