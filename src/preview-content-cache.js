@@ -30,8 +30,8 @@ function signature(node) {
   copy.removeAttribute('data-preview-cache-owned');
   for(const image of copy.querySelectorAll('img')){
     const source=image.getAttribute('src')||'',known=cachedImageIdentity(source);
-    if(known){ids.add(known.id);image.setAttribute('src',`private:${known.id}@${known.version}:${source}`);}
-    else if(source.includes('#shiye-image=')){const id=decodeURIComponent(source.split('#shiye-image=')[1]);ids.add(id);image.setAttribute('src',`private:${id}@unloaded`);}
+    if(known){ids.add(known.id);image.setAttribute('src',`private:${known.id}`);}
+    else if(source.includes('#shiye-image=')){const id=decodeURIComponent(source.split('#shiye-image=')[1]);ids.add(id);image.setAttribute('src',`private:${id}`);}
     for(const name of ['data-private-image-id','data-private-image-loading','data-image-error'])image.removeAttribute(name);
   }
   return {key:copy.outerHTML,ids};
@@ -50,8 +50,15 @@ export function reusePagePreviews({view,state}) {
     const key=JSON.stringify([account,kind,id]);
     const saved=covers.get(key,content);
     if(saved&&!saved.isConnected){
-      fresh.replaceWith(saved);saved.dataset.previewCacheOwned='';
-    }else{
+      // A first visit may have cached this sheet before its Blob URL arrived.
+      // Never replace a currently decoded image with an unloaded old node.
+      const decoded=el=>[...el.querySelectorAll('img')].filter(img=>(img.complete&&img.naturalWidth>1)||!!cachedImageIdentity(img.getAttribute('src')||'')).length;
+      if(decoded(saved)>=decoded(fresh)){
+        fresh.replaceWith(saved);saved.dataset.previewCacheOwned='';
+        continue;
+      }
+    }
+    {
       fresh.dataset.previewCacheOwned='';dependencies.set(fresh,ids);
       covers.set(key,content,fresh,content.length*2+fresh.querySelectorAll('*').length*256);
     }

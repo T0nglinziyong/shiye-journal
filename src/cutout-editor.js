@@ -36,7 +36,7 @@ export async function showCutoutEditor({
     recognitionMask=alphaFrom(recognized,processing.recognitionRotationDegrees||0),
     steps=[['rough','粗轮廓与重新识别'],['recognition','识别结果与后处理'],['final','最终调整']],
     methodList=recognitionUI.methods||[],
-    pixelList=recognitionUI.pixels||[[900,'900 px'],[1200,'1200 px'],[1600,'1600 px']],
+    pixelList=(recognitionUI.pixels||[[1200,'1200 px'],[1600,'1600 px']]).filter(([n])=>Number(n)>=1200),
     savedRecognition=processing.rerecognition||{},
     savedPost=processing.autoPostprocess||savedRecognition.postprocess||{},
     defaultPre={illumination:false,denoise:false,localContrast:false,chromaEdges:true,...recognitionUI.preprocess,...savedRecognition.preprocess},
@@ -54,11 +54,11 @@ export async function showCutoutEditor({
     comparison=null,stroke=null,lastStroke=null,busy=false,manualTouched=false,
     recognitionState={
       method:savedRecognition.method||recognitionUI.method||methodList[0]?.id||'auto',
-      pixels:Number(savedRecognition.pixels||recognitionUI.pixelsValue||900),
+      pixels:Math.max(1200,Number(savedRecognition.pixels||recognitionUI.pixelsValue||1200)),
       preprocess:{...defaultPre}
     },
     postState={...defaultPost},
-    lastRecognition=savedRecognition.method?{method:savedRecognition.method,pixels:Number(savedRecognition.pixels||900),preprocess:{...defaultPre}}:null,
+    lastRecognition=savedRecognition.method?{method:savedRecognition.method,pixels:Math.max(1200,Number(savedRecognition.pixels||1200)),preprocess:{...defaultPre}}:null,
     lastPostprocess=processing.autoPostprocess?{...processing.autoPostprocess}:null;
 
   const history=[],initialAppearance=appearance,initialIntensity=intensity,initialAutoStraighten=autoStraighten;

@@ -1,15 +1,18 @@
 import {bindImageResources,cachedImageSource,notifyImageInvalidation} from './presentation-resources.js';
-import {imagePixelSize} from './image-variants.js';
+import {imagePixelSize,MIN_DISPLAY_EDGE,MAX_DISPLAY_EDGE} from './image-variants.js';
 const EMPTY='data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>');
 const placeholder=id=>id?EMPTY+'#shiye-image='+encodeURIComponent(id):'';
 export const imagePlaceholder=id=>id?(cachedImageSource(id)||placeholder(id)):'';
 export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=console.warn}){
   const pending=new Map(),previews=new Map(),variants=new Map(),sizes=new Map(),previewSizes=new Map(),variantSizes=new Map(),retained=new Map(),queue=[],versions=new Map(),retryTimers=new Map(),retryCounts=new Map(),resizeTimers=new Map(),brokenPreviews=new Set(),observed=new WeakSet();
   let active=0,generation=0,disposed=false,trimTimer=null;
+  // Network bound COS thumbnail reads; browser decoding remains lazy.
+  const concurrency=globalThis.matchMedia?.('(pointer: coarse)').matches?6:10;
   const version=id=>versions.get(id)||0;
   const touch=(map,id)=>{if(map.has(id)){const v=map.get(id);map.delete(id);map.set(id,v);}};
-  const bestVariant=id=>{let chosen=null;for(const [key,row] of variants)if(row.id===id&&(!chosen||row.tier>chosen.tier))chosen=row;return chosen;};
-  const currentSource=id=>{touch(sizes,id);touch(previewSizes,id);const best=bestVariant(id);if(best)touch(variantSizes,id+':'+best.tier);return urls.get(id)||best?.url||previews.get(id)||'';};
+  // Public thumbnails always prefer the immutable low-resolution COS snapshot.
+  // Larger variants are only reused by the editor/cutout paths, never cards.
+  const currentSource=id=>{touch(previewSizes,id);return previews.get(id)||'';};
   const identity=source=>{
     for(const [id,url] of urls)if(url===source)return {id,version:version(id),full:true};
     for(const [id,url] of previews)if(url===source)return {id,version:version(id),full:false};
@@ -17,9 +20,25 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
     return null;
   };
   const unbind=bindImageResources({source:currentSource,identity});
-  const displayTier=img=>{const rect=img.getBoundingClientRect(),pixels=rect.width>0&&rect.height>0?Math.max(rect.width,rect.height):Math.max(img.clientWidth||0,img.clientHeight||0);return imagePixelSize(pixels||400,globalThis.devicePixelRatio||1,globalThis.screen?.width||1440,globalThis.screen?.height||900);};
+  const displayTier=img=>{
+    // Detail/inspection show one centered asset at a comparable fraction of
+    // the screen, independent of the physical size of that particular asset.
+    // The creative canvas instead uses the rendered material rectangle:
+    // different real-world sizes legitimately demand different pixel counts.
+    const detail=!!img.closest('.detail-picture,.cutout-preview');
+    const rect=img.getBoundingClientRect();
+    const screenWidth=globalThis.innerWidth||globalThis.screen?.width||1440;
+    const screenHeight=globalThis.innerHeight||globalThis.screen?.height||900;
+    const pixels=detail
+      ? Math.min(screenWidth,screenHeight)*.72
+      : rect.width>0&&rect.height>0?Math.max(rect.width,rect.height):Math.max(img.clientWidth||0,img.clientHeight||0);
+    const selected=imagePixelSize(pixels||400,globalThis.devicePixelRatio||1,screenWidth,screenHeight);
+    return img.closest('.cutout-preview')?Math.max(1200,selected):selected;
+  };
   function scheduleUpgrade(img){
-    if(disposed||!fullView(img))return;
+    if(disposed||!fullView(img)||!img.isConnected||img.dataset.privateImageLoading)return;
+    const existing=identity(img.getAttribute('src')||'');
+    if(!existing||existing.full||displayTier(img)<=(existing.tier||360))return;
     clearTimeout(resizeTimers.get(img));
     resizeTimers.set(img,setTimeout(()=>{
       resizeTimers.delete(img);if(!img.isConnected||img.dataset.imageError||img.dataset.privateImageLoading||!onScreen(img)&&observer)return;
@@ -33,7 +52,7 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
   function trim(){
     trimTimer=null;if(disposed)return;
     const live=new Set([...root.querySelectorAll('img')].map(im=>im.getAttribute('src')));
-    for(const [map,accounting,maxBytes,maxCount] of [[urls,sizes,96*1024*1024,96],[previews,previewSizes,24*1024*1024,240]]){
+    for(const [map,accounting,maxBytes,maxCount] of [[urls,sizes,96*1024*1024,96],[previews,previewSizes,48*1024*1024,480]]){
       let bytes=[...accounting.values()].reduce((a,b)=>a+b,0);
       for(const [id,size] of accounting){
         if(bytes<=maxBytes&&accounting.size<=maxCount)break;
@@ -43,7 +62,7 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
     }
     let bytes=[...variantSizes.values()].reduce((a,b)=>a+b,0);
     for(const [key,size] of variantSizes){
-      if(bytes<=48*1024*1024&&variantSizes.size<=96)break;
+      if(bytes<=64*1024*1024&&variantSizes.size<=128)break;
       const row=variants.get(key);if(!row||live.has(row.url)||retained.has(row.id))continue;
       variants.delete(key);variantSizes.delete(key);notifyImageInvalidation([row.id]);URL.revokeObjectURL(row.url);bytes-=size;
     }
@@ -51,8 +70,12 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
   const queueTrim=()=>{if(trimTimer===null&&!disposed)trimTimer=setTimeout(trim,0);};
   async function load(id,requested=false){
     if(disposed)return '';
-    const full=requested===true,tier=full?0:requested===false?360:imagePixelSize(requested);
-    if(urls.has(id)){touch(sizes,id);return urls.get(id);}
+    // Requested display pixels have already been calculated using DPR and screen
+    // size by displayTier(). Running imagePixelSize() a second time would
+    // multiply them again and fetch unnecessarily large COS variants.
+    const full=requested===true,tier=full?0:requested===false?MIN_DISPLAY_EDGE:
+      Math.max(MIN_DISPLAY_EDGE,Math.min(MAX_DISPLAY_EDGE,Math.ceil(Number(requested)||MIN_DISPLAY_EDGE)));
+    if(full&&urls.has(id)){touch(sizes,id);return urls.get(id);}
     if(!full){
       if(tier===360&&previews.has(id)){touch(previewSizes,id);return previews.get(id);}
       const available=[...variants.values()].filter(row=>row.id===id&&row.tier>=tier).sort((a,b)=>a.tier-b.tier)[0];
@@ -60,12 +83,12 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
     }
     const key=(full?'original:':tier+':')+id;if(pending.has(key))return pending.get(key);
     const epoch=generation,itemVersion=version(id);
-    const task=new Promise((resolve,reject)=>{queue.push({run:async()=>{
+    const task=new Promise((resolve,reject)=>{queue.push({id,tier,run:async()=>{
       if(disposed||epoch!==generation||itemVersion!==version(id))return '';
       const blob=full?(await db.get('blobs',id))?.data:await db.previewBlob(id,tier);
       if(disposed||epoch!==generation||itemVersion!==version(id))return '';
       if(!blob)throw Error('图片尚未同步到可读取位置');
-      if(urls.has(id))return urls.get(id);
+      if(full&&urls.has(id))return urls.get(id);
       const url=URL.createObjectURL(blob);
       if(full){urls.set(id,url);sizes.set(id,blob.size);}
       else if(tier===360){previews.set(id,url);previewSizes.set(id,blob.size);}
@@ -74,7 +97,37 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
     },resolve,reject});pump();});
     pending.set(key,task);task.finally(()=>{if(pending.get(key)===task)pending.delete(key);}).catch(()=>{});return task;
   }
-  function pump(){while(!disposed&&active<4&&queue.length){const job=queue.shift();active++;job.run().then(job.resolve,job.reject).finally(()=>{active--;pump();});}}
+  // Scrolling users care about the items at their *new* stopping position.
+  // Re-rank waiting jobs at dispatch time, rather than letting previously
+  // approached rows monopolize every available COS download slot.
+  function viewportDistances(){
+    const distances=new Map();
+    for(const img of root.querySelectorAll('img[data-private-image-id]')){
+      if(!img.isConnected)continue;
+      const rect=img.getBoundingClientRect();if(rect.width<=0||rect.height<=0)continue;
+      const distance=Math.max(0,rect.top-innerHeight,-rect.bottom)+
+        Math.max(0,rect.left-innerWidth,-rect.right),id=img.dataset.privateImageId;
+      distances.set(id,Math.min(distance,distances.get(id)??Infinity));
+    }
+    return distances;
+  }
+  function pump(){
+    if(disposed||active>=concurrency||!queue.length)return;
+    const distances=queue.length>1?viewportDistances():null;
+    while(!disposed&&active<concurrency&&queue.length){
+      if(distances&&queue.length>1){
+        let best=0,rank=distances.get(queue[0].id)??1e9;
+        for(let i=1;i<queue.length;i++){
+          const next=distances.get(queue[i].id)??1e9;
+          if(next<rank){rank=next;best=i;if(rank===0)break;}
+        }
+        if(best)queue.unshift(queue.splice(best,1)[0]);
+      }
+      const job=queue.shift();active++;
+      job.run().then(job.resolve,job.reject).finally(()=>{active--;pump();});
+    }
+  }
+
   function resolve(img,knownID){
     const src=img.getAttribute('src')||'',at=src.indexOf('#shiye-image='),known=identity(src);
     let id=knownID||known?.id;if(!id&&at>=0){try{id=decodeURIComponent(src.slice(at+13));}catch{return;}}
@@ -83,29 +136,34 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
     img.dataset.privateImageId=id;img.dataset.privateImageLoading=stamp;
     const current=()=>!disposed&&epoch===generation&&itemVersion===version(id);
     const target=fullView(img)?displayTier(img):360;
-    const full=brokenPreviews.has(id);
+    // Never fetch a full original to repair a grid thumbnail. Only a genuine
+    // editing or cutout view may request original bytes as a last resort.
+    const full=brokenPreviews.has(id)&&fullView(img);
     void(async()=>{
       let shown=src;
-      if(target>360&&!full)try{const preview=await load(id,false);if(!current())return;if(preview&&img.isConnected&&img.getAttribute('src')===src){img.src=preview;shown=preview;}}catch(error){if(current())onError(error);}
+      if(target>360&&!full)try{const preview=await load(id,false);if(!current())return;if(preview&&img.isConnected&&img.getAttribute('src')===src){if(src!==preview)img.src=preview;shown=preview;}}catch(error){if(current())onError(error);}
       const url=await load(id,full?true:target);if(!current())return;
       if(url&&img.isConnected&&img.getAttribute('src')===shown){if(img.getAttribute('src')!==url)img.src=url;delete img.dataset.imageError;retryCounts.delete(id);const timer=retryTimers.get(id);if(timer){clearTimeout(timer);retryTimers.delete(id);}}
       else if(!url&&img.isConnected){img.dataset.imageError='true';scheduleRetry(id);}
     })().catch(error=>{if(current()&&img.isConnected){img.dataset.imageError='true';img.src=placeholder(id);scheduleRetry(id);onError(error);}}).finally(()=>{if(img.dataset.privateImageLoading===stamp){delete img.dataset.privateImageLoading;scheduleUpgrade(img);}});
   }
-  const observer=typeof IntersectionObserver==='function'?new IntersectionObserver(entries=>{for(const e of entries)if(e.isIntersecting){observer.unobserve(e.target);resolve(e.target,e.target.dataset.privateImageId);}},{rootMargin:'100px'}):null;
+  const observer=typeof IntersectionObserver==='function'?new IntersectionObserver(entries=>{for(const e of entries)if(e.isIntersecting){observer.unobserve(e.target);resolve(e.target,e.target.dataset.privateImageId);}},{rootMargin:'850px'}):null;
   const sizingObserver=typeof ResizeObserver==='function'?new ResizeObserver(entries=>{for(const {target:img} of entries)scheduleUpgrade(img);}):null;
   const onViewportResize=()=>{for(const img of root.querySelectorAll('img[data-private-image-id]'))scheduleUpgrade(img);};
   globalThis.addEventListener?.('resize',onViewportResize);
-  function onScreen(img){const box=img.getBoundingClientRect();return box.width>0&&box.height>0&&box.bottom>=-100&&box.top<=innerHeight+100&&box.right>=-100&&box.left<=innerWidth+100;}
+  function onScreen(img){const box=img.getBoundingClientRect();return box.width>0&&box.height>0&&box.bottom>=-850&&box.top<=innerHeight+850&&box.right>=-850&&box.left<=innerWidth+850;}
   function scan(node){if(disposed||node.nodeType!==1)return;const images=node.matches('img')?[node]:node.querySelectorAll('img');for(const img of images){
-    if(!observed.has(img)){observed.add(img);sizingObserver?.observe(img);img.addEventListener('error',()=>{
+    if(!observed.has(img)){observed.add(img);if(fullView(img))sizingObserver?.observe(img);img.addEventListener('error',()=>{
       const id=img.dataset.privateImageId,src=img.getAttribute('src');if(!id||!src?.startsWith('blob:'))return;
       const derived=identity(src);
       if(derived&&!derived.full){
         brokenPreviews.add(id);
         if(derived.tier){const key=id+':'+derived.tier;variants.delete(derived.tier+':'+id);variantSizes.delete(key);URL.revokeObjectURL(src);notifyImageInvalidation([id]);}
         else releaseURL(previews,previewSizes,id);
-        delete img.dataset.privateImageLoading;img.src=placeholder(id);resolve(img,id);return;
+        delete img.dataset.privateImageLoading;img.src=placeholder(id);
+        if(fullView(img))resolve(img,id);
+        else{img.dataset.imageError='true';scheduleRetry(id);}
+        return;
       }
       if(src===urls.get(id))releaseURL(urls,sizes,id);
       img.dataset.imageError='true';img.src=placeholder(id);scheduleRetry(id);
@@ -118,7 +176,10 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
     else if(known&&!known.full&&desired>(known.tier||360))scheduleUpgrade(img);
   }}
   const changes=new MutationObserver(records=>{for(const r of records){if(r.type==='attributes')scan(r.target);else for(const node of r.addedNodes)scan(node);}});
-  changes.observe(root,{childList:true,subtree:true,attributes:true,attributeFilter:['src','style','class']});scan(root);
+  // Class/style changes are handled by ResizeObserver and IntersectionObserver;
+  // observing them on document.body rescanned the ENTIRE gallery every time
+  // navigation changed a CSS class.
+  changes.observe(root,{childList:true,subtree:true,attributes:true,attributeFilter:['src']});scan(root);
   return {load,retain(ids){for(const id of ids)retained.set(id,(retained.get(id)||0)+1);let released=false;return()=>{if(released)return;released=true;for(const id of ids){const n=retained.get(id)||0;if(n>1)retained.set(id,n-1);else retained.delete(id);}trim();};},retryMissing(){retryMissing();},
     stats:()=>({originals:sizes.size,previews:previewSizes.size,displayVariants:variantSizes.size,originalBytes:[...sizes.values()].reduce((a,b)=>a+b,0),previewBytes:[...previewSizes.values()].reduce((a,b)=>a+b,0),pending:pending.size}),
     invalidate(ids){

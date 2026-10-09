@@ -57,6 +57,18 @@ const withProjectBase=(store,record,base)=>{
   return {...record,__cloudBaseRevision:base,__cloudSessionId:session};
 };
 function retainImage(path,data){images.set(path,Promise.resolve(data));imageSizes.delete(path);imageSizes.set(path,data.size);let bytes=[...imageSizes.values()].reduce((a,b)=>a+b,0);for(const [key,size] of imageSizes){if(bytes<=64*1024*1024&&imageSizes.size<=48)break;if(key===path)continue;images.delete(key);imageSizes.delete(key);bytes-=size;}}
+// Old COS assets without thumbnail metadata are converted into a durable,
+// immutable preview360 object exactly once. There is never a browser-side
+// reconstruction of the original during ordinary catalog browsing.
+const previewMaterialization=new Set();
+function materializePreview360(record,preview){
+  if(record.storageProvider!=='cos'||record.thumbnailPath||!objectStorage?.upload||!usableBlob(preview))return;
+  const path=record.storagePath+'-preview360.webp';
+  if(previewMaterialization.has(path))return;
+  previewMaterialization.add(path);
+  void objectStorage.upload(path,preview,'image/webp')
+    .catch(error=>{previewMaterialization.delete(path);console.warn('旧素材 COS 固定封面待补齐',error);});
+}
 let cacheDisabled=false;
 let projectOutboxBefore=[],importOutboxBefore=[];
 const sessionTag=crypto.randomUUID();
@@ -239,18 +251,34 @@ async function cloudPreview(id,pixels=360){
   const record=old?.record||await cloudRecord('blobs',id);if(!record)return undefined;
   if(!['cos','supabase'].includes(record.storageProvider))throw Error('图片缺少当前存储服务标记');
   if(!record.storagePath?.startsWith(owner+'/'))throw Error('图片不属于当前账号');
-  const thumbnailKey=(variant==='preview360'?'thumbnail':variant)+':'+record.storagePath,saved=await cached(thumbnailKey);if(usableBlob(saved))return saved;
+  const thumbnailKey=(variant==='preview360'?'thumbnail':variant)+':'+record.storagePath,saved=await cached(thumbnailKey);
+  // A previously loaded thumb must be a zero-network read. Materialization
+  // happens only on the COS CI miss path, not repeatedly for every tab.
+  if(usableBlob(saved))return saved;
   if(variant==='preview360'&&record.thumbnailPath){
     if(!record.thumbnailPath.startsWith(owner+'/'))throw Error('缩略图不属于当前账号');
     try{const thumbnail=await downloadObject(record.thumbnailPath,record.storageProvider);if(!usableBlob(thumbnail))throw Error('缩略图为空');await remember(thumbnailKey,thumbnail);return thumbnail;}
     catch(error){console.warn('缩略图暂不可读，尝试从原图恢复',error?.message);}
   }
-  // Only missing COS thumbnails use CI. The original remains byte-identical
-  // for segmentation, editing, coordinates, and export.
-  if(record.storageProvider==='cos'&&objectStorage?.preview){
-    try{const preview=await objectStorage.preview(record.storagePath,variant);if(usableBlob(preview)){await remember(thumbnailKey,preview);return preview;}}
-    catch(error){console.warn('CI 预览暂不可读，尝试原图',error?.message);}
+  // Legacy COS originals can already have a deterministic immutable WebP
+  // despite their metadata not carrying thumbnailPath. Prefer that file over
+  // another image-processing request.
+  if(variant==='preview360'&&record.storageProvider==='cos'&&!record.thumbnailPath){
+    try{const stored=await downloadObject(record.storagePath+'-preview360.webp','cos');
+      if(usableBlob(stored)){await remember(thumbnailKey,stored);return stored;}
+    }catch{/* One-time cache miss; COS CI can synthesize the derivative. */}
   }
+  // COS handles CI remotely. Never download and decode a full original just
+  // because a catalog snapshot is absent or corrupt.
+  if(record.storageProvider==='cos'){
+    if(!objectStorage?.preview)throw Error('COS 固定封面尚未可用，未下载原图');
+    const preview=await objectStorage.preview(record.storagePath,variant);
+    if(!usableBlob(preview))throw Error('COS 固定封面为空，未下载原图');
+    await remember(thumbnailKey,preview);
+    if(variant==='preview360')materializePreview360(record,preview);
+    return preview;
+  }
+  // Supabase-only records retain their existing read-only recovery path.
   const {data}=await decode('blobs',record);
   const blob=await makeThumbnail(data,edge);if(blob){await remember(thumbnailKey,blob);return blob;}return data;
 }
@@ -300,7 +328,7 @@ async function encode(store,record){
               await remember('thumbnail:'+coverPath,preview);
             }
           }
-        }catch{/* Preview failure never invalidates the editable document. */}
+        }catch(error){console.warn('作品 COS 快照生成或上传失败；保留可编辑正文，下次同步重试',record.id,error);}
       }
     }
     if(!inline){await remember('project-document:'+path,blob);documents.set(path,Promise.resolve(structuredClone(record)));if(documents.size>8)documents.delete(documents.keys().next().value);}
@@ -331,6 +359,18 @@ function cloudTransaction(names,fn,operationID=crypto.randomUUID()){
     const previous=revision;
     const puts=operations.filter(op=>op.action==='put');for(let offset=0;offset<puts.length;offset+=3)await Promise.all(puts.slice(offset,offset+3).map(async op=>{op.item=await encode(op.store,op.item);}));
     const data=checked(await cloudClient().rpc('shiye_commit_v2',{operations,expected_revision:previous,operation_id:operationID}));revision=Number(data);
+    // A WebP cover becomes usable only after both its object PUT and the
+    // metadata commit succeed. Update the current Works UI immediately rather
+    // than waiting for a full collection reload (which recreated every card).
+    if(typeof window!=='undefined')for(const op of operations){
+      if(op.store!=='projects'||op.action!=='put'||op.item.isSnapshot)continue;
+      const cover=op.item.drafts?.find(d=>d.id===op.item.activeDraftID)||op.item.drafts?.[0];
+      if(!cover?.coverImageID)continue;
+      window.dispatchEvent(new CustomEvent('shiye-project-cover-ready',{detail:{
+        projectID:op.item.id,updatedAt:op.item.updatedAt,draftID:cover.id,
+        coverImageID:cover.coverImageID,coverSceneHash:cover.coverSceneHash
+      }}));
+    }
     for(const op of operations)if(op.store==='blobs'&&op.action==='put')await remember('blob-record:'+op.item.id,{revision,record:op.item});
     // Patch only cached collections belonging to the committed base revision.
     // Remote conflicts never write to this cache or silently become local edits.

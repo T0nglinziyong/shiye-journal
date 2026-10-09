@@ -17,8 +17,41 @@ function mountWorkPreviews(c){
   previewObservers.get(c.view)?.disconnect();previewObservers.delete(c.view);
   const frames=[...c.view.querySelectorAll('.works-grid .thumb-sheet,.project-preview-cover .preview-paper')];
   if(!frames.length)return;
-  const fit=()=>{for(const frame of frames){const p=c.state.projects.find(p=>p.id===(frame.closest('[data-act="open-project"]')?.dataset.id||c.state.previewProjectID));const d=frame.matches('.thumb-sheet')?p?.drafts[0]:p?.drafts.find(d=>d.id===p.activeDraftID)||p?.drafts[0];if(!d)continue;const host=frame.parentElement,r=host.getBoundingClientRect(),box=containBox(d.canvas.width,d.canvas.height,r.width,r.height,16);frame.style.setProperty('width',box.width+'px','important');Object.assign(frame.style,{height:box.height+'px',aspectRatio:d.canvas.width+'/'+d.canvas.height});}};
-  const observer=new ResizeObserver(fit);frames.forEach(frame=>observer.observe(frame.parentElement));previewObservers.set(c.view,observer);fit();
+  const projectByID=new Map(c.state.projects.map(project=>[project.id,project])),
+    targets=new Map();
+  for(const frame of frames){
+    const id=frame.closest('[data-act="open-project"]')?.dataset.id||c.state.previewProjectID,
+      project=projectByID.get(id);
+    const draft=project?.drafts?.find(d=>d.id===project.activeDraftID)||project?.drafts?.[0];
+    if(!draft?.canvas||!frame.parentElement)continue;
+    targets.set(frame.parentElement,{frame,width:draft.canvas.width,height:draft.canvas.height});
+  }
+  if(!targets.size)return;
+  let scheduled=0;const waiting=new Set(targets.keys());
+  const fit=()=>{
+    scheduled=0;
+    for(const host of waiting){
+      const target=targets.get(host);if(!target||!host.isConnected)continue;
+      const {frame,width,height}=target,
+        box=containBox(width,height,host.clientWidth,host.clientHeight,16);
+      if(frame.style.width!==box.width+'px')frame.style.setProperty('width',box.width+'px','important');
+      if(frame.style.height!==box.height+'px')frame.style.height=box.height+'px';
+      const ratio=width+'/'+height;
+      if(frame.style.aspectRatio!==ratio)frame.style.aspectRatio=ratio;
+    }
+    waiting.clear();
+  };
+  const schedule=()=>{
+    if(scheduled)return;
+    scheduled=requestAnimationFrame(fit);
+  };
+  const observer=new ResizeObserver(entries=>{
+    for(const entry of entries)if(targets.has(entry.target))waiting.add(entry.target);
+    schedule();
+  });
+  for(const host of targets.keys())observer.observe(host);
+  schedule();
+  previewObservers.set(c.view,{disconnect(){observer.disconnect();if(scheduled)cancelAnimationFrame(scheduled);}});
 }
 
 function button(text, action, className='') {

@@ -19,6 +19,12 @@ on:
 permissions:
   contents: read
 
+# Repeated PR pushes must not leave stale browser runners consuming minutes.
+# Preserve the regression gate; cancel superseded attempts, not checks.
+concurrency:
+  group: interface-browser-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   chromium:
     runs-on: ubuntu-latest
