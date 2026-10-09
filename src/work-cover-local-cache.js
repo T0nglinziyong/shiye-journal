@@ -1,7 +1,7 @@
 import {localDeviceRecords} from './local-device-records.js';
 
 // A missing remote cover must not leave a card blank while its upload waits.
-// Render a complete 360px scene locally, show the Blob immediately, and cache
+// Render a complete 720px scene locally, show the Blob immediately, and cache
 // only that thumbnail by account/project/revision. COS upload is independent.
 export function createLocalWorkCovers({
   state,loadDocument,renderCover,deviceRecords=localDeviceRecords,
@@ -38,7 +38,7 @@ export function createLocalWorkCovers({
     if(jobs.has(token))return jobs.get(token);
     const owner=account(),revision=p.updatedAt;
     const job=(async()=>{
-      const saved=await deviceRecords.get(owner,'work-cover:'+p.id).catch(()=>null);
+      const saved=await deviceRecords.get(owner,'work-cover:720:'+p.id).catch(()=>null);
       if(saved?.updatedAt===revision&&saved?.blob instanceof Blob&&saved.blob.size){
         remember(p,saved.blob,owner);return saved.blob;
       }
@@ -51,7 +51,7 @@ export function createLocalWorkCovers({
       remember(p,blob,owner);
       // A failed thumbnail cache write does not undo the successfully rendered
       // cover or block the independently managed cloud upload.
-      void deviceRecords.put(owner,{id:'work-cover:'+p.id,updatedAt:revision,blob})
+      void deviceRecords.put(owner,{id:'work-cover:720:'+p.id,updatedAt:revision,blob})
         .catch(error=>onError('封面本地缓存暂不可用',p.id,error));
       return blob;
     })().catch(error=>{onError('本地封面生成失败',p.id,error);throw error;})
