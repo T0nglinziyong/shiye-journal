@@ -144,7 +144,7 @@ const image=id=>staticSources.get(id)||
   (cloudEnabled?imagePlaceholder(id):urls.get(id)||imagePlaceholder(id));
 // Only the real creative canvas and cutout detail use display-scaled COS
 // variants. Everything else (Works/Matching/Library/editor material tray)
-// uses one fixed 360-pixel snapshot stored in COS.
+// uses one fixed 720-pixel snapshot stored in COS.
 const privateImages=mountPrivateImages({root:document.body,db,urls,fullView:img=>
   (state.route==='editor'&&!!img.closest('#canvas-page .canvas-object.material'))||
   (state.route==='assetDetail'&&!!img.closest('.detail-picture'))});
@@ -156,7 +156,7 @@ const renderLocalCoverBlob=project=>renderWorkCoverSnapshot(project,{
     const localURL=urls.get(id);
     if(localURL)try{const raw=await fetch(localURL).then(response=>response.blob());
       if(raw.size)return raw;}catch{}
-    // Already uploaded materials use the fixed 360px COS derivative.
+    // Already uploaded materials use the fixed 720px COS derivative.
     const preview=await db.previewBlob(id,pixels).catch(()=>null);
     if(preview instanceof Blob&&preview.size)return preview;
     const local=(await db.get('blobs',id).catch(()=>null))?.data;
@@ -542,7 +542,7 @@ async function flushSave(){
   try{await saveChain;if(!savingProjects&&!dirtyProjects.size&&!dirtyUsageAssets.size){syncDisplay.localPending=false;updateSyncIndicator();saveStatus(cloudEnabled?'修改已暂存 · 后台同步中':(await db.storageMode())==='server'?'已保存到服务器':'已保存到本机');}}catch(e){console.error(e);syncDisplay.error=e;updateSyncIndicator();saveStatus('暂存失败 · 修改仍在当前页面');toast('修改暂存失败，暂勿关闭页面：'+e.message);throw e;}
 }
 function saveSpecificProject(p){if(!p)return;delete p.isTemplate;if(cloudEnabled)p.__cloudSessionId||=crypto.randomUUID();
-  // Edits invalidate the previous scene's remote snapshot. A new 360px cover
+  // Edits invalidate the previous scene's remote snapshot. A new 720px cover
   // can be drawn locally immediately; COS receives the next uploaded version.
   const active=p.drafts?.find(d=>d.id===p.activeDraftID)||p.drafts?.[0];
   if(active&&!p.isSnapshot){delete active.coverImageID;delete active.coverSceneHash;}
@@ -1332,10 +1332,10 @@ async function backup(){
   }
 }
 function download(blob,filename){const link=document.createElement('a'),url=URL.createObjectURL(blob);link.href=url;link.download=filename;link.click();setTimeout(()=>URL.revokeObjectURL(url),60000);}
-// Render a finished 360px cover from the full editable document. This path
+// Render a finished 720px cover from the full editable document. This path
 // deliberately does not rely on the active editor, route or hydrated DOM;
-// it fetches ONLY 360px material previews, never original large images.
-// Reuse the already-rendered local 360px Blob while uploading to COS.
+// it fetches ONLY 720px material previews, never original large images.
+// Reuse the already-rendered local 720px Blob while uploading to COS.
 setCloudProjectPreview(project=>localWorkCovers.ensure(project));
 async function exportPNG(){const d=current(),canvas=await rasterize(d,2);canvas.toBlob(blob=>download(blob,(state.activeProject.title||'拾页作品')+'.png'),'image/png');}
 async function printPage(){const d=current(),canvas=await rasterize(d,2),url=canvas.toDataURL('image/png');const child=window.open('','_blank');if(!child){toast('请允许打开打印预览窗口');return;}child.document.write(`<html><head><title>${esc(state.activeProject.title)}</title><style>@page{size:A4;margin:0}body{margin:0}img{width:100%;height:auto}</style></head><body><img src="${url}" onload="window.print()"></body></html>`);child.document.close();}
