@@ -48,8 +48,11 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
     if(network)return network;
     network=(async()=>runExclusive(async()=>{
       await initialize();await refreshFromDisk();
+      const blocked=new Set();
       while(entries.size){
-        const row=[...entries.values()][0];
+        const row=[...entries.values()].find(item=>!blocked.has(item.record.id));
+        if(!row)break;
+        try {
         // A restarted queue must not overwrite changes made by another device.
         if(row.baseRevision!==revision()){
           // The app may have closed after the server committed but before the
@@ -92,7 +95,12 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
         }
         await staging;
         await acknowledge(row,{confirmedHere:true});
+        }catch(failure){
+          if(!/云端版本已变化|另一设备已更新|\\bconflict\\b/i.test(failure?.message||''))throw failure;
+          blocked.add(row.record.id);
+        }
       }
+      if(blocked.size)throw Error('云端版本已变化；已继续同步其他资料，冲突项目仍安全保留');
       error=null;report();
     }))().catch(e=>{error=e;report();throw e;}).finally(()=>{network=null;});
     network.catch(()=>{});return network;
