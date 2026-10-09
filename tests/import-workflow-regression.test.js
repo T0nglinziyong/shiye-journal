@@ -124,3 +124,26 @@ test('work confirmation contains no style-tag or usage-marker controls, includin
   const workflow=await readFile(new URL('../src/workflow-ui.js',import.meta.url),'utf8');
   assert.doesNotMatch(workflow,/import-work-tags|import-used|风格标签|使用标记/u);
 });
+
+
+test('material and work batch / per-photo series choices pin New Series first but keep no-series defaults',()=>{
+  const {state}=fixture(true);
+  state.series=[{id:'series-B',title:'既有系列'}];
+  state.importRecords[0].url='blob:source';state.importRecords[0].selectedCandidates[0].url='blob:piece';
+  for(const mode of ['material','work']){
+    state.importMode=mode;state.importRecords[0].seriesID='';
+    const html=renderImportReview({state,esc:String,fmt:String});
+    const batch=html.match(/<select id="batch-series">([\s\S]*?)<\/select>/)?.[1];
+    const each=html.match(/<select class="record-series" data-index="0">([\s\S]*?)<\/select>/)?.[1];
+    assert.ok(batch&&each,mode+' series controls are present');
+    assert.match(batch,/^<option value="__new__">＋ 新建系列…<\/option><option value="">不归入系列<\/option>/);
+    assert.match(each,/^<option value="__new__">＋ 新建系列…<\/option><option value="">沿用本批默认<\/option>/);
+    assert.equal((batch.match(/value="__new__"/g)||[]).length,1);
+    assert.equal((each.match(/value="__new__"/g)||[]).length,1);
+    assert.ok(batch.indexOf('新建系列')<batch.indexOf('既有系列'));
+    assert.ok(each.indexOf('新建系列')<each.indexOf('既有系列'));
+    // The select's first option is not its default after app.js applies ''.
+    assert.match(await readFile(new URL('../src/app.js',import.meta.url),'utf8'),
+      /batchSeries\.value=state\.importBatchSeriesID\|\|''/);
+  }
+});
