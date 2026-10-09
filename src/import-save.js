@@ -46,7 +46,7 @@ export async function saveImportBatch({state,db,urls,render,onSaved}) {
       p.originalImportPhotoBlobID=originalID;
       p.candidateAssetIDs=[];
       const copyToLibrary=record.workSaveAssets??state.importBatchWorkSaveAssets??false;
-      const choice=record.seriesID??state.importBatchSeriesID??null;
+      const choice=record.seriesID&&record.seriesID!==''?record.seriesID:state.importBatchSeriesID||null;
       p.seriesID=choice==='__none__'?null:choice||null;
       for(const c of elements) {
         const id=uid(),blobId=uid(),sourceID=uid(),originalCutoutBlobId=uid(),candidateFrameBlobId=uid(),region=c.region;
