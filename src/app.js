@@ -17,7 +17,7 @@ import {createAssetOrganization,mountOrganizationBadges,updateOrganizedAssetView
 import '@fontsource/ma-shan-zheng/chinese-simplified-400.css';
 import {mountIcons,iconMarkup} from './icons.js';
 import {startCloudSession} from './entry.js';
-import {cloudEnabled,requireCloudUser} from './cloud-session.js';
+import {cloudClient,cloudEnabled,requireCloudUser} from './cloud-session.js';
 import {createSyncResumer} from './sync-resumer.js';
 import {setCloudProjectPreview} from './cloud-store.js';
 import {snapshotDraft} from './draft-snapshot.js';
@@ -409,6 +409,7 @@ ${settingToggle('setting-postprocess-apertures','重复孔洞恢复',state.prefe
   content=`<details class="ai-settings-group" open><summary><strong>创作偏好</strong><small>候选素材、生成方式与样例参考</small></summary><div>${creative}</div></details><details class="ai-settings-group" id="ai-model-group" ${aiModelPanelOpen?'open':''}><summary><strong>模型与连接</strong><small>服务商、密钥、图片与响应参数</small></summary><div>${model}</div></details>`;
  }
  if(title==='AI 与创作')content=content.replace('发送匹配风格与用途的四张预设样例','发送匹配风格与用途的手帐案例').replace('预设样例从简洁到丰富展示不同构图，只含匿名区域示意；不读取或发送已有私人作品。网页版 GPT 任务包会附四张图；API 仅在当前模型支持图片时发送。素材预览另由模型连接设置控制。','从原创重构的真实风格手帐案例中，按当前风格、用途和素材选最相近的两张；不发送全部案例，也不发送你已有的私人作品。案例只用于构图参考，不属于可使用素材。网页版任务包附图；支持图片的 API 模型也会收到。');
+ if(title==='数据与诊断'&&cloudEnabled)content+='<h2>开发环境数据清理</h2><p>仅测试管理员可在显式启用的预览部署中使用；会清空本人 COS 图片、云端作品和素材。此操作不可撤销。</p><button type="button" class="btn danger" data-act="dev-reset-cloud">清空本账号测试数据（含 COS）</button>';
  if(title==='界面与素材库'||title==='数据与诊断')content=sectionSettings(content);
  if(title==='AI 与创作')content=content.replaceAll('class="ai-settings-group"','class="ai-settings-group unified-settings-group"')
    .replace('“画面图片”只保存不可编辑快照：在线创作直接调用 OpenAI 图像模型，需另配 API 密钥；导出给网页版 AI 则用相同画面要求手动发送素材包，并导入返回的图片，不需要 API 密钥。“PDF 页面”仍是可编辑版面在本机渲染成快照。工具、JSON 与 ZIP 保留可编辑图层。','画面图片是不可编辑快照；工具、JSON 和 ZIP 保留可编辑图层。')
@@ -673,6 +674,38 @@ async function handle(action,id,value){try{switch(action){
     download(new Blob([JSON.stringify(report,null,2)],{type:'application/json'}),
       '拾页素材框诊断.json');
     toast('已导出不含照片的素材框诊断');break;
+  }
+  case 'dev-reset-cloud':{
+    if(!cloudEnabled)throw Error('开发清理只支持已登录的云端测试账号');
+    if(!confirm('彻底删除当前账号 COS 私有图片、云端素材、系列、作品、快照？操作不可撤销。'))break;
+    if(prompt('请输入 RESET 确认清空当前账号测试数据')!=='RESET')break;
+    cloudResumer.suspend();
+    try{
+      if(saveTimer){clearTimeout(saveTimer);saveTimer=null;}
+      dirtyProjects.clear();dirtyUsageAssets.clear();
+      await db.discardPendingSync();
+      const {data,error}=await cloudClient().auth.getSession();
+      if(error||!data.session?.access_token)throw Error('请先登录');
+      let deleted=0,complete=false;
+      for(let page=0;page<300;page++){
+        const response=await fetch('/api/dev-reset',{method:'POST',
+          headers:{'Content-Type':'application/json',Authorization:'Bearer '+data.session.access_token},
+          body:JSON.stringify({confirm:'RESET_DEV_DATA'})});
+        const payload=await response.json();
+        if(!response.ok)throw Error(payload.error||'开发数据清理失败');
+        deleted+=payload.deleted||0;
+        saveStatus('正在清理 COS · '+deleted+' 个文件');
+        if(payload.reset){complete=true;break;}
+        if(!payload.more)throw Error('清理结果不完整');
+      }
+      if(!complete)throw Error('本次清理达到安全上限，请重新运行');
+      toast('已删除 '+deleted+' 个 COS 文件，云端记录已重置');
+      location.reload();
+    }catch(error){
+      cloudResumer.resume();
+      throw error;
+    }
+    break;
   }
   case 'backup':await backup();break;case 'restore':backupInput.click();break;case 'backup-emergency':{await flushSave();const blob=await db.createEmergencyBackup();download(blob,'拾页待同步应急包-'+new Date().toISOString().slice(0,10)+'.shiyerecovery');toast('应急包已导出，请妥善保存，包含私人图片和文字');break;}case 'restore-emergency':emergencyInput.click();break;case 'restore-trash':await restoreTrash(id);break;
   case 'storage-token':{const token=view.querySelector('#data-server-token')?.value.trim();if(!token)throw Error('请输入新的访问令牌');const old=db.storageConfig();db.setStorageConfig({url:location.origin,token});try{await db.storageMode();toast('令牌已更新');}catch(error){db.setStorageConfig(old);throw error;}break;}
