@@ -461,8 +461,14 @@ body:has(.library-management-tray):not(:has(.library-management-tray:not([hidden
   }
 }
 @media(min-width:700px) and (max-width:899px){
-  /* Portrait iPad uses the same two-column picker rhythm as the phone,
-     without moving the original toolbar/history actions. */
+  /* Portrait iPad follows the phone's controls. Explicit popup widths also
+     recalculate correctly if a browser window is resized with the menu open. */
+  .swift-picker-popover.swift-material-picker {
+    width:min(340px,calc(100vw - 24px))!important;
+  }
+  .swift-picker-popover.swift-shape-picker {
+    width:min(360px,calc(100vw - 24px))!important;
+  }
   .swift-picker-popover:is(.swift-material-picker,.swift-shape-picker) .canvas-picker-grid{
     grid-template-columns:repeat(2,minmax(0,1fr));
   }
