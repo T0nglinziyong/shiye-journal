@@ -1093,7 +1093,38 @@ async function backup(){
   }
 }
 function download(blob,filename){const link=document.createElement('a'),url=URL.createObjectURL(blob);link.href=url;link.download=filename;link.click();setTimeout(()=>URL.revokeObjectURL(url),60000);}
-setCloudProjectPreview(async p=>{if(p.isSnapshot)return (await db.get('blobs',p.snapshotBlobId))?.data||null;const d=p.drafts.find(d=>d.id===p.activeDraftID)||p.drafts[0];if(d.items.some(i=>!asset(i.assetID)))return null;const canvas=await rasterize(d,Math.min(1,360/Math.max(d.canvas.width,d.canvas.height)),{preview:true});return new Promise(resolve=>canvas.toBlob(resolve,'image/webp',.84));});
+// Render a finished 360px cover from the full editable document. This path
+// deliberately does not rely on the active editor, route or hydrated DOM;
+// it fetches ONLY 360px material previews, never original large images.
+setCloudProjectPreview(async project=>{
+  if(project.isSnapshot)return (await db.get('blobs',project.snapshotBlobId))?.data||null;
+  const draft=project.drafts.find(d=>d.id===project.activeDraftID)||project.drafts[0];
+  if(!draft?.canvas)throw Error('作品缺少完整画布，无法生成封面');
+  const bitmaps=new Map();
+  try{
+    const result=await renderSceneCanvas(draft,{
+      scale:Math.min(1,360/Math.max(draft.canvas.width,draft.canvas.height)),
+      waitForFonts:false,
+      loadMaterialImage:async id=>{
+        if(!bitmaps.has(id))bitmaps.set(id,(async()=>{
+          const material=asset(id)||await db.get('assets',id);
+          if(!material)throw Error('作品引用的素材不存在：'+id);
+          if(material.staticPath)return decodeSceneImage(material.staticPath);
+          if(!material.blobId)throw Error('作品素材缺少可读取图片：'+id);
+          const thumbnail=await db.previewBlob(material.blobId,360);
+          if(!(thumbnail instanceof Blob)||!thumbnail.size)throw Error('360px 素材封面尚未同步：'+id);
+          return createImageBitmap(thumbnail);
+        })());
+        return bitmaps.get(id);
+      }
+    });
+    const blob=await new Promise((resolve,reject)=>result.canvas.toBlob(
+      image=>image?.size?resolve(image):reject(Error('360px 作品封面编码失败')),'image/webp',.85));
+    return blob;
+  }finally{
+    for(const pending of bitmaps.values())try{(await pending)?.close?.();}catch{}
+  }
+});
 async function exportPNG(){const d=current(),canvas=await rasterize(d,2);canvas.toBlob(blob=>download(blob,(state.activeProject.title||'拾页作品')+'.png'),'image/png');}
 async function printPage(){const d=current(),canvas=await rasterize(d,2),url=canvas.toDataURL('image/png');const child=window.open('','_blank');if(!child){toast('请允许打开打印预览窗口');return;}child.document.write(`<html><head><title>${esc(state.activeProject.title)}</title><style>@page{size:A4;margin:0}body{margin:0}img{width:100%;height:auto}</style></head><body><img src="${url}" onload="window.print()"></body></html>`);child.document.close();}
 async function rasterize(d,scale,{preview=false}={}){
