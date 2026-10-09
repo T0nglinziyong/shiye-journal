@@ -57,6 +57,23 @@ export async function detectPaperCandidates(bitmap,box,smallestMM=6,{
       })
     : candidates;
 }
+// Output-only subpixel smoothing for jagged free-form cutout pixels.
+// This returns a new buffer and never mutates region.mask.alpha or recognition.
+export function softenOutputAlpha(alpha,width,height){
+  if(!alpha||alpha.length!==width*height)return alpha;
+  const result=new Uint8Array(alpha);
+  for(let y=0;y<height;y++)for(let x=0;x<width;x++){
+    const i=y*width+x,center=alpha[i];
+    let min=center,max=center,sum=0,weight=0;
+    for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+      const xx=x+dx,yy=y+dy,w=(dx===0?2:1)*(dy===0?2:1);
+      const v=xx>=0&&xx<width&&yy>=0&&yy<height?alpha[yy*width+xx]:0;
+      min=Math.min(min,v);max=Math.max(max,v);sum+=v*w;weight+=w;
+    }
+    if(min!==max)result[i]=Math.round(sum/weight);
+  }
+  return result;
+}
 export async function cropBitmap(bitmap,paper,region,{raw=false,lighting=null}={}){
   const x=Math.max(0,Math.round(bitmap.width*(paper.x+region.x*paper.w))),y=Math.max(0,Math.round(bitmap.height*(paper.y+region.y*paper.h)));
   const w=Math.min(bitmap.width-x,Math.max(1,Math.round(bitmap.width*paper.w*region.w))),h=Math.min(bitmap.height-y,Math.max(1,Math.round(bitmap.height*paper.h*region.h)));
@@ -67,7 +84,8 @@ export async function cropBitmap(bitmap,paper,region,{raw=false,lighting=null}={
   if(region.mask&&!raw){
     const m=region.mask,mask=document.createElement('canvas');mask.width=m.width;mask.height=m.height;
     const mc=mask.getContext('2d'),frame=mc.createImageData(m.width,m.height);
-    for(let i=0;i<m.alpha.length;i++){frame.data[i*4]=frame.data[i*4+1]=frame.data[i*4+2]=255;frame.data[i*4+3]=m.alpha[i];}
+    const outputAlpha=region.shapeModel?m.alpha:softenOutputAlpha(m.alpha,m.width,m.height);
+    for(let i=0;i<outputAlpha.length;i++){frame.data[i*4]=frame.data[i*4+1]=frame.data[i*4+2]=255;frame.data[i*4+3]=outputAlpha[i];}
     mc.putImageData(frame,0,0);
     // The pixel alpha is authoritative. Rebuilding the cutout from only the
     // outer polygon destroys arbitrary topology (binder holes, windows,
