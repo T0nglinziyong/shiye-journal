@@ -38,7 +38,39 @@ export async function readCloudDelta({client,owner,before,after,snapshots}){
 // a conflict, never permission to overwrite remote data.
 export async function canRebaseUnchangedKeys({client,owner,before,after,operations}){
   const count=after-before;
-  if(!Number.isSafeInteger(before)||!Number.isSafeInteger(after)||count<1||count>250||!operations?.length)return false;
+  if(!Number.isSafeInteger(before)||!Number.isSafeInteger(after)||count<1||!operations?.length)return false;
+  // Persistent server-side per-key revision watermarks survive truncation of
+  // shiye_changes. No client can declare an old write safe just because its
+  // corresponding history has been trimmed.
+  try {
+    const start=await client.from('shiye_key_watermark_start')
+      .select('start_revision').eq('user_id',owner).maybeSingle();
+    if(!start.error&&start.data&&before>=Number(start.data.start_revision)){
+      const grouped=new Map();
+      for(const operation of operations){
+        if(!operation||typeof operation.store!=='string')return false;
+        const id=operation.item?.id??operation.id;
+        if(operation.action!=='clear'&&typeof id!=='string')return false;
+        const group=grouped.get(operation.store)||{ids:new Set(['*']),clear:false};
+        if(operation.action==='clear')group.clear=true;
+        else group.ids.add(id);
+        grouped.set(operation.store,group);
+      }
+      for(const [store,group] of grouped){
+        let query=client.from('shiye_key_versions')
+          .select('revision').eq('user_id',owner).eq('store',store).gt('revision',before);
+        if(!group.clear)query=query.in('id',[...group.ids]);
+        const rows=await query.limit(1);
+        if(rows.error)break; // Fall back to the complete change log below.
+        if(rows.data?.length)return false; // A real same-record/clear conflict.
+        grouped.delete(store);
+      }
+      if(!grouped.size)return true;
+    }
+  }catch{/* Older deployments may not have installed the additive migration. */}
+  // Conservative compatibility path for an older test server. A truncated
+  // log is never considered proof of non-overlap.
+  if(count>250)return false;
   const result=await client.from('shiye_changes').select('revision,keys').eq('user_id',owner).gt('revision',before).lte('revision',after).order('revision').range(0,249);
   if(result.error||!Array.isArray(result.data)||result.data.length!==count)return false;
   for(let i=0;i<result.data.length;i++){
