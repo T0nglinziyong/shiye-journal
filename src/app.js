@@ -512,13 +512,6 @@ function bindPage(){view.querySelectorAll('[data-act]').forEach(el=>el.addEventL
     body.querySelector('#review-background-done').onclick=()=>modal.close();
     modal.showModal();
   });
-  view.querySelectorAll('.record-work-paper-pattern,.record-work-paper-color').forEach(el=>el.onchange=()=>{
-    const record=state.importRecords[+el.dataset.index];if(!record)return;
-    if(el.classList.contains('record-work-paper-pattern'))record.workPaperPattern=el.value;
-    else record.workPaperColor=el.value;
-    const preview=el.closest('.review-record')?.querySelector('.import-work-paper-preview');
-    if(preview){preview.className='review-thumbnail import-work-paper-preview '+(record.workPaperPattern||'plain');preview.style.setProperty('--review-paper',record.workPaperColor||'#fcfaf0');preview.style.backgroundColor=record.workPaperColor||'#fcfaf0';}
-  });
   const removeWhite=view.querySelector('#remove-white');if(removeWhite)removeWhite.onchange=()=>{state.importRemoveWhite=removeWhite.checked;};
   const page=view.querySelector('#canvas-page');if(page)initializeCanvasSurface(page);
   bindInspector();if(state.route==='import'&&state.importProcessing)view.querySelectorAll('.inspect-columns button,.inspect-columns input,.inspect-columns select').forEach(el=>el.disabled=true);if(state.route==='import'&&state.importStep==='inspect'&&state.importFile&&!state.importProcessing)mountPaperCorrection({state,view,render,toast,saveActiveImportRecord});const offline=view.querySelector('#offline-state');if(offline)offline.textContent=navigator.serviceWorker?.controller?'离线程序已就绪':'首次打开时需要联网；请等待离线程序安装后再测试飞行模式';const locationLabel=view.querySelector('#storage-location');if(locationLabel)db.storageMode().then(mode=>{if(locationLabel.isConnected)locationLabel.textContent=cloudEnabled?(import.meta.env?.VITE_SHIYE_OBJECT_STORAGE==='cos'?'当前数据源：Supabase 登录与元数据 + 腾讯 COS 私有图片；本机仅保留账号隔离缓存与待同步修改':'当前数据源：Supabase 私有云端；本机仅保留账号隔离缓存与待同步修改'):mode==='server'?`当前唯一数据源：${db.storageConfig()?.url||location.origin}（服务器）`:'当前数据源：此浏览器 IndexedDB';}).catch(error=>{if(locationLabel.isConnected)locationLabel.textContent='服务器连接失败：'+error.message;});}
