@@ -147,3 +147,15 @@ test('unresolved change cannot stop independent later queued changes',async()=>{
   assert.deepEqual(uploaded,['safe']);
   assert.deepEqual(rows.map(row=>row.record.id),['conflict']);
 });
+
+
+test('durably staged deletion can retire older unsent saves for the same work only',async()=>{
+  let rows=[
+    {record:{id:'deleted',title:'old editor state'},serial:1,baseRevision:5,operationID:'old'},
+    {record:{id:'untouched',title:'other editor state'},serial:2,baseRevision:5,operationID:'other'}
+  ];
+  const sync=createProjectSync({load:async()=>rows,reload:async()=>structuredClone(rows),
+    write:async next=>{rows=structuredClone(next);},revision:()=>5,commit:async()=>{}});
+  assert.equal(await sync.cancelPendingFor(['deleted']),1);
+  assert.deepEqual(rows.map(row=>row.record.id),['untouched']);
+});
