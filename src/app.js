@@ -51,6 +51,7 @@ import * as db from './store.js';
 import {loadPreferences,savePreferences} from './preferences.js';
 import {uid,canvasSize,draft,project,itemFromAsset,physicalPlacement,validatePhysicalDraft,textBlock,primitive,setDraftPaperSize} from './domain.js';
 import {detectPaperCandidates,cropBitmap,alignMaterialPreview} from './image.js';
+import {estimatePageLighting} from './material-color-restoration.js';
 import {visionTask,prewarmVision} from './vision-runtime.js';
 import {recognitionOptions,recognitionPixelOptions,recognitionMethodDetails,recognitionProfile} from './recognition-profiles.js';
 import {classifyRecord} from './classification.js';
@@ -746,8 +747,10 @@ function saveActiveImportRecord(){
 }
 const importPrefetchJobs=new WeakMap();
 let importBatchRevision=0;
-async function extractImportCandidate(source,box,region,{mode,widthMM,heightMM,calibrated,index}){
-  const cut=await cropBitmap(source,box,region),raw=region.mask?await cropBitmap(source,box,region,{raw:true}):cut;
+async function extractImportCandidate(source,box,region,{mode,widthMM,heightMM,calibrated,index,lighting=null}){
+  // Colour restoration is a read-only RGB branch after segmentation. Geometry,
+  // alpha and the source frame for later manual edits remain untouched.
+  const cut=await cropBitmap(source,box,region,{lighting}),raw=region.mask||lighting?await cropBitmap(source,box,region,{raw:true}):cut;
   // Both foreground and background recognition use the same extraction path.
   const aligned=mode==='work'?{blob:cut,originalBlob:raw,candidateFrameBlob:raw,candidateFramePlacement:null,degrees:0,widthRatio:1,heightRatio:1}:await alignMaterialPreview(cut,raw,region.orientedBox?.autoDeskew?-region.orientedBox.rotation:null);
   const width=calibrated?Math.round(((region.orientedBox?.autoDeskew?region.orientedBox.width:region.w))*widthMM*10)/10:null,
@@ -764,7 +767,7 @@ function importPrefetchSettings(rec){
     recognition:rec.recognition||state.preferences.recognition,pixels:state.preferences.recognitionPixels||900,
     denoise:state.preferences.recognitionDenoise===true,localContrast:state.preferences.recognitionLocalContrast===true,
     chromaEdges:state.preferences.recognitionChromaEdges!==false,shapeRegularization:state.preferences.recognitionShapeRegularization!==false,
-    apertures:state.preferences.recognitionApertures!==false,mergeSharedCarrier:state.preferences.mergeSharedCarrier!==false,mode:state.importMode};
+    apertures:state.preferences.recognitionApertures!==false,mergeSharedCarrier:state.preferences.mergeSharedCarrier!==false,materialColorMode:state.preferences.materialColorMode||'auto',mode:state.importMode};
 }
 function updateImportPrefetchLabel(rec){
   const index=state.importRecords.indexOf(rec),label=index>=0?view.querySelector(`.queue-item[data-id="${index}"] small`):null;
@@ -788,8 +791,10 @@ async function prefetchImportRecord(rec,settings,revision){
       recognitionPostprocess:{shapeRegularization:settings.shapeRegularization,apertures:settings.apertures},mergeSharedCarrier:settings.mergeSharedCarrier,
       onDiagnostic:trace=>{if(valid())rec.recognitionDiagnostic=trace;}});if(!valid())return;
     const calibrated=settings.paperSize!=='none'&&(correctedBitmap||settings.wholePaper),candidateData=[];
+    const lighting=settings.materialColorMode!=='original'&&correctedBitmap&&settings.mode!=='work'
+      ?await estimatePageLighting(source,candidates):null;
     for(let i=0;i<candidates.length;i++){
-      const candidate=await extractImportCandidate(source,box,candidates[i],{mode:settings.mode,widthMM:pw,heightMM:ph,calibrated,index:i});
+      const candidate=await extractImportCandidate(source,box,candidates[i],{mode:settings.mode,widthMM:pw,heightMM:ph,calibrated,index:i,lighting});
       candidateURLs.push(candidate.url);candidateData.push(candidate);
       if(!valid())return;
     }
@@ -919,10 +924,12 @@ async function refreshImportCandidates(regions,{manual=false}={}){
     return candidate;
   }):regions.map(region=>({region,original:null}));
   if(record!==state.importRecords[state.importIndex]||state.route!=='import')return false;
+  const lighting=state.preferences.materialColorMode!=='original'&&state.correctedBitmap&&state.importMode!=='work'
+    ?await estimatePageLighting(source,plans.map(plan=>plan.region)):null;
   for(let i=0;i<plans.length;i++){
     const {region,original}=plans[i];if(original){next.push(original);continue;}
     toast('正在提取素材 '+(i+1)+' / '+plans.length);
-    next.push(await extractImportCandidate(source,b,region,{mode:state.importMode,widthMM:pw,heightMM:ph,calibrated,index:i}));
+    next.push(await extractImportCandidate(source,b,region,{mode:state.importMode,widthMM:pw,heightMM:ph,calibrated,index:i,lighting}));
   }
   if(record!==state.importRecords[state.importIndex]){for(const c of next)if(!previous.includes(c))URL.revokeObjectURL(c.url);return false;}
   for(const c of previous)if(!next.includes(c))URL.revokeObjectURL(c.url);
