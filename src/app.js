@@ -1074,7 +1074,15 @@ async function refreshImportCandidates(regions,{manual=false}={}){
   for(let i=0;i<plans.length;i++){
     const {region,original}=plans[i];if(original){next.push(original);continue;}
     toast('正在提取素材 '+(i+1)+' / '+plans.length);
-    next.push(await extractImportCandidate(source,b,region,{mode:state.importMode,widthMM:pw,heightMM:ph,calibrated,index:i,lighting}));
+    const regenerated=await extractImportCandidate(source,b,region,{mode:state.importMode,widthMM:pw,heightMM:ph,calibrated,index:i,lighting});
+    // Changing only colour must not reset manual names, tags, dimensions or
+    // choices, and must never cause the segmentation algorithm to rerun.
+    const old=previous.find(item=>item.region===region)||
+      previous.find(item=>item.region&&Math.abs(item.region.x-region.x)<1e-6&&Math.abs(item.region.y-region.y)<1e-6&&Math.abs(item.region.w-region.w)<1e-6&&Math.abs(item.region.h-region.h)<1e-6);
+    if(old)for(const key of ['title','selected','tags','seriesID','kind','role','quantity','reviewStatus','dimensionSource','width','height']){
+      if(old[key]!==undefined)regenerated[key]=structuredClone(old[key]);
+    }
+    next.push(regenerated);
   }
   if(record!==state.importRecords[state.importIndex]){for(const c of next)if(!previous.includes(c))URL.revokeObjectURL(c.url);return false;}
   for(const c of previous)if(!next.includes(c))URL.revokeObjectURL(c.url);
