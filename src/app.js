@@ -633,7 +633,7 @@ setInterval(()=>void purgeExpiredTrash(),15*60*1000);
 async function refineCandidateFrame(candidateFrame,request,{postprocessOnly=false}={}){
   const bitmap=await createImageBitmap(candidateFrame);
   try{
-    const fw=bitmap.width,fh=bitmap.height,maxDim=Math.max(64,Number(request.pixels)||900),
+    const fw=bitmap.width,fh=bitmap.height,maxDim=Math.max(1200,Number(request.pixels)||1200),
       ratio=Math.min(1,maxDim/Math.max(fw,fh)),aw=Math.max(1,Math.round(fw*ratio)),ah=Math.max(1,Math.round(fh*ratio)),
       canvas=document.createElement('canvas');canvas.width=aw;canvas.height=ah;
     const ctx=canvas.getContext('2d',{willReadFrequently:true});ctx.drawImage(bitmap,0,0,aw,ah);
@@ -701,7 +701,7 @@ async function openCutoutCheck(id,candidate=null){
     preferredMethod=localMethods.some(item=>item.id===(processing.rerecognition?.method||state.preferences.recognition))?(processing.rerecognition?.method||state.preferences.recognition):'auto';
   await showCutoutEditor({
     body,modal,original,saved,recognition,candidateFrame,title:a.title,processing,toast,
-    recognitionUI:{methods:localMethods,pixels:recognitionPixelOptions,method:preferredMethod,pixelsValue:state.preferences.recognitionPixels,preprocess:recognitionPreprocessOptions(),postprocess:recognitionPostprocessOptions()},
+    recognitionUI:{methods:localMethods,pixels:recognitionPixelOptions.filter(([n])=>n>=1200),method:preferredMethod,pixelsValue:Math.max(1200,state.preferences.recognitionPixels||1200),preprocess:recognitionPreprocessOptions(),postprocess:recognitionPostprocessOptions()},
     onRerecognize:request=>refineCandidateFrame(candidateFrame,request),
     onPostprocess:request=>refineCandidateFrame(candidateFrame,request,{postprocessOnly:true}),
     onApply:async(blob,record,originalRecognition)=>{
