@@ -146,14 +146,7 @@ const privateImages=mountPrivateImages({root:document.body,db,urls,fullView:img=
   (state.route==='editor'&&!!img.closest('#canvas-page .canvas-object.material'))||
   (state.route==='assetDetail'&&!!img.closest('.detail-picture'))});
 const workCoverBackfill=createWorkCoverBackfill({db,state,cloudEnabled});
-view.addEventListener('click',event=>{
-  const control=event.target.closest('[data-cover-retry]');if(!control)return;
-  event.preventDefault();event.stopImmediatePropagation();
-  const project=state.projects.find(p=>p.id===control.dataset.coverRetry);
-  if(!project)return;
-  workCoverBackfill.retry(project.id,project.updatedAt);
-  control.textContent='正在后台重新生成封面…';
-},true);
+// Cover loading never steals a Works card click: opening a card always edits it.
 
 // A successful COS upload is published after its metadata transaction commits.
 // Hydrate the card in place; rebuilding the entire Works grid resets image
@@ -274,7 +267,7 @@ function workCover(d,priority=false,snapshotOnly=false,projectID=null){
  if(d.coverImageID||d.coverBlobId)return `<img class="work-reference" loading="${priority?'eager':'lazy'}" ${priority?'fetchpriority="high" ':''}decoding="async" src="${image(d.coverImageID||d.coverBlobId)}" alt="作品完整封面">`;
  // Cloud Works cards must show the pre-rendered COS WebP as ONE image. Do
  // not fall back to mounting every material/shape/text (progressive pop-in).
- if(snapshotOnly&&cloudEnabled)return '<span class="work-cover-pending" role="status" '+(projectID?'data-cover-retry="'+esc(projectID)+'" title="点击重新尝试生成 COS 封面"':'')+'>封面尚未同步 · 点按重试</span>';
+ if(snapshotOnly&&cloudEnabled)return '<span class="work-cover-pending" role="status">正在补齐云端封面</span>';
  const position=(i,flip=false)=>`left:${(i.x-i.width/2)/d.canvas.width*100}%;top:${(i.y-i.height/2)/d.canvas.height*100}%;width:${i.width/d.canvas.width*100}%;height:${i.height/d.canvas.height*100}%;transform:rotate(${i.rotation||0}deg) ${flip&&i.isFlippedHorizontally?'scaleX(-1)':''};opacity:${i.opacity??1};z-index:${i.zIndex||0};`;
  const materials=(d.items||[]).filter(i=>!i.isParked&&!i.isHidden&&!i.hidden).flatMap(projectMaterialViews).map(i=>{const a=asset(i.assetID),crop=i.cropRect||{x:0,y:0,width:1,height:1};return a?`<span class="work-material" style="${position(i,true)}${materialMaskCSS(i)}"><span style="position:absolute;inset:0"><img loading="lazy" decoding="async" src="${image(a.blobId)}" style="position:absolute;max-width:none;width:${100/crop.width}%;height:${100/crop.height}%;left:${-crop.x/crop.width*100}%;top:${-crop.y/crop.height*100}%;object-fit:fill"></span></span>`:'';}).join('');
  const shapes=(d.primitives||[]).filter(i=>!i.hidden).map(i=>`<span class="work-shape" style="${position(i)}">${shapeTag(i)}</span>`).join('');
