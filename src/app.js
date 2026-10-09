@@ -580,6 +580,13 @@ async function handle(action,id,value){try{switch(action){
   case 'import-snapshot':offlineSnapshotProject=null;openImportGallery('snapshot');break;
   case 'import':openImportGallery('material');break;case 'back-library':navigateBack('library');break;case 'back-works':case 'editor-done':{
     const p=state.activeProject;if(!p)throw Error('当前没有可保存的作品');
+    if(p.__remoteDeleted){
+      if(!confirm('这份作品已在其他设备删除。当前页面的修改不会自动恢复已删除作品。若要保留当前编辑，请先取消并导出可编辑 ZIP。确定退出到作品库吗？'))break;
+      state.activeProject=null;state.activeDraft=null;
+      parity.workTab='all';parity.selectionMode=null;parity.selected.clear();parity.showOnlySelected=false;
+      route('works');
+      break;
+    }
     const decision=editorExitDecision(p,action),publish=decision.publish;
     // Return preserves a new work as a draft; Complete explicitly publishes it.
     // Both paths first stage the *entire* editor document, even with no edits.
@@ -916,7 +923,15 @@ async function refresh({background=false,onlyChanged=false}={}){const sync=await
     if(settingsSession)deferredSyncedPreferences=structuredClone(syncedPreferences);
     else{state.preferences=savePreferences(syncedPreferences);deferredSyncedPreferences=null;}
   }
-  await restorePendingProjects();staticSources.clear();for(const a of state.assets)if(a.staticPath)staticSources.set(a.blobId,a.staticPath);if(reconcileSelectedRecords(parity,state))view.selectionRefresh?.();if(background){backgroundViewPending=true;scheduleBackgroundReconcile();}else render();}
+  await restorePendingProjects();
+  if(cloudEnabled&&state.route==='editor'&&state.activeProject){
+    const stillExists=state.projects.some(project=>project.id===state.activeProject.id);
+    if(!stillExists&&!state.activeProject.__remoteDeleted){
+      state.activeProject.__remoteDeleted=true;
+      toast('当前作品已在另一台设备删除。需要保留本机修改时，请先导出可编辑 ZIP。');
+    }else if(stillExists&&state.activeProject.__remoteDeleted)delete state.activeProject.__remoteDeleted;
+  }
+  staticSources.clear();for(const a of state.assets)if(a.staticPath)staticSources.set(a.blobId,a.staticPath);if(reconcileSelectedRecords(parity,state))view.selectionRefresh?.();if(background){backgroundViewPending=true;scheduleBackgroundReconcile();}else render();}
 let trashSweepActive=false;
 async function purgeExpiredTrash(){if(trashSweepActive)return;const entries=expiredTrash(state.trash);if(!entries.length)return;trashSweepActive=true;try{await changeTrash({db,state,ids:entries.map(entry=>entry.id)});if(parity.libraryTab==='trash'||parity.workTab==='trash')render();}catch(error){console.warn('最近删除到期清理待重试',error?.name||error?.message);}finally{trashSweepActive=false;}}
 setInterval(()=>void purgeExpiredTrash(),15*60*1000);
