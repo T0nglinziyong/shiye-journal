@@ -75,7 +75,7 @@ test('returning to the editor upgrades a warm thumbnail to a size-based display 
  const env=environment();let originals=0,display=0,full=false;const root=document.createElement('div');document.body.append(root);
  const loader=mountPrivateImages({root,db:{previewBlob:async(_id,pixels)=>{if(pixels>360){display++;return new Blob(['display']);}return new Blob(['small']);},get:async()=>{originals++;return {data:new Blob(['large'])};}},urls:new Map(),fullView:()=>full,onError:()=>{}});
  try{
-  const preview=await loader.load('m');full=true;root.innerHTML='<img src="'+preview+'">';
+  const preview=await loader.load('m');full=true;root.innerHTML='<img style="width:500px;height:500px" src="'+preview+'">';
   await until(()=>display===1&&root.querySelector('img').getAttribute('src')!==preview);
   assert.equal(originals,0);assert.equal(loader.stats().displayVariants,1);assert.equal(root.querySelector('img').dataset.privateImageId,'m');
  }finally{loader.dispose();env.close();}
