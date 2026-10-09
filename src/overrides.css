@@ -165,3 +165,89 @@ html,body{overscroll-behavior-y:none}
     min-width:0;
   }
 }
+
+/* Work-import paper is ONE standard card, never a second tall settings card.
+   Pattern/colour editing opens on demand from its centered button. */
+.import-review .review-candidates {align-items:stretch}
+.import-review .review-candidates > .review-candidate {
+  min-width:0;
+  min-height:0;
+}
+.import-review .review-background-card {
+  padding:10px;
+  display:flex;
+  flex-direction:column;
+  align-items:stretch;
+  justify-content:flex-start;
+  gap:0;
+  overflow:hidden;
+}
+.import-review .review-background-card > .review-thumbnail {
+  flex:0 0 130px;
+  width:100%;
+  height:130px;
+  min-height:0;
+  max-height:130px;
+  position:relative;
+}
+.import-review .review-background-card .review-paper-control {
+  position:absolute;
+  left:50%;
+  top:50%;
+  transform:translate(-50%,-50%);
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:max-content;
+  max-width:calc(100% - 16px);
+  height:36px;
+  min-height:36px;
+  padding:8px 14px;
+  margin:0;
+  color:#3f5d44;
+  font-size:13px;
+  font-weight:600;
+  line-height:1;
+  white-space:nowrap;
+  border:1px solid #d5e1d4;
+  border-radius:18px;
+  background:#fffefaef;
+  box-shadow:0 2px 9px #203c2c14;
+  cursor:pointer;
+}
+.import-review .review-background-card .review-paper-control:focus-visible {
+  outline:2px solid #426b4d;
+  outline-offset:2px;
+}
+/* Snapshot recognition pane has only a handful of settings. Do not reserve
+   the 610/580px workspace designed for a long material candidate inspector. */
+.import-snapshot-inspect .inspect-columns > .import-inspector {
+  height:auto;
+  min-height:0;
+  max-height:none;
+  align-self:start;
+  overflow:visible;
+}
+.import-snapshot-inspect .import-inspector > .inspector-scroll {
+  flex:0 0 auto;
+  min-height:0;
+  overflow:visible;
+  padding-bottom:0;
+}
+.import-snapshot-inspect .import-inspector > .confirm-photo {
+  width:100%;
+  margin-top:14px;
+}
+/* Safe bottom scroll space for ALL three mobile catalog tabs.
+   Apply after other catalog/shelf overrides, not to full-screen import/editor. */
+@media(max-width:699px) {
+  body:not(.editing):not(:has(.import-nav)) #view {
+    padding-bottom:calc(115px + env(safe-area-inset-bottom))!important;
+    scroll-padding-bottom:calc(100px + env(safe-area-inset-bottom));
+  }
+  body:not(.editing):not(:has(.import-nav)) .matching-page,
+  body:not(.editing):not(:has(.import-nav)) .works-page {
+    margin-bottom:0;
+    padding-bottom:12px;
+  }
+}
