@@ -366,7 +366,7 @@ test('small editable projects store a standalone cover and reuse it for metadata
   await db.cloudTransaction(['projects'],tx=>tx.objectStore('projects').put(project));
   const first=state.calls[0].operations[0].item,cover=first.drafts[0].coverImageID;
   assert.ok(cover.startsWith('project-cover:supabase:owner-uuid/'));
-  assert.ok(cover.endsWith('-preview.webp'));
+  assert.ok(cover.endsWith('-preview720.webp'));
   assert.equal(first.drafts[0].items.length,1,'the editable document remains inline');
   assert.equal(await (await db.cloudPreview(cover)).text(),'webp');
   await db.cloudTransaction(['projects'],tx=>tx.objectStore('projects').put({...first,title:'new title'}));
