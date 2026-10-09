@@ -2,6 +2,7 @@ import {cloudClient,requireCloudUser} from './cloud-session.js';
 import {privateCache} from './private-cache.js';
 import {createProjectSync} from './project-sync.js';
 import {readCloudDelta,canRebaseUnchangedKeys} from './cloud-delta.js';
+import {compareRecordEdits} from './sync-last-write.js';
 import {LARGE_PROJECT_BYTES,projectSummary,mergeProjectSummary,projectBlobText} from './project-document.js';
 import {createCOSStore} from './cos-store.js';
 import {imageVariant} from './image-variants.js';
@@ -111,6 +112,9 @@ async function persistOutbox(kind,previous,rows){
   channel()?.postMessage({source:sessionTag,type:'pending'});
 }
 const account=async()=>`${namespace}:${await identity()}`;
+function notifyCloudSuperseded(){
+  if(typeof window!=='undefined')window.dispatchEvent(new CustomEvent('shiye-cloud-superseded'));
+}
 function reportSync(){if(typeof window!=='undefined'){const a=projectSync.status(),b=importSync.status();window.dispatchEvent(new CustomEvent('shiye-project-sync',{detail:{pending:a.pending+b.pending+writesInFlight,error:b.error||a.error}}));}}
 const projectSync=createProjectSync({
   autoFlushDelayMs:10000,
@@ -121,25 +125,16 @@ const projectSync=createProjectSync({
   reconcile:async(record,operationID,baseRevision)=>{
     if(await wasCommitted(operationID,baseRevision))return 'committed';
     const latest=await version();
-    return await canRebaseUnchangedKeys({client:cloudClient(),owner:await identity(),before:baseRevision,after:latest,operations:[{store:'projects',action:'put',item:record}]})?'rebase':'conflict';
-  },
-  onConflict:async record=>{
-    if(!record?.id||!usableProjectSnapshot(record))return null;
-    const now=new Date().toISOString(),originalID=record.id;
-    const copy={...structuredClone(record),id:crypto.randomUUID(),
-      title:(record.title||'未命名作品')+'（同步冲突副本）',
-      isDraft:true,updatedAt:now,lastOpenedAt:now,conflictOriginProjectID:originalID};
-    delete copy.__cloudSessionId;delete copy.__cloudBaseRevision;
-    return copy;
+    if(await canRebaseUnchangedKeys({client:cloudClient(),owner:await identity(),before:baseRevision,after:latest,operations:[{store:'projects',action:'put',item:record}]}))return 'rebase';
+    const remote=await cloudRecord('projects',record.id);
+    // Whichever device edited the project most recently wins; the other
+    // device pulls that record instead of inventing a conflict-copy project.
+    return compareRecordEdits(record,remote)==='local'?'rebase':'remote';
   },
   onCommitted:(record,committedRevision)=>{
     if(record.__cloudSessionId)editorBases.set(record.__cloudSessionId,committedRevision);
-    if(record.conflictOriginProjectID&&typeof window!=='undefined'){
-      window.dispatchEvent(new CustomEvent('shiye-project-conflict-copy',{detail:{
-        id:record.id,origin:record.conflictOriginProjectID,title:record.title
-      }}));
-    }
   },
+  onSuperseded:()=>notifyCloudSuperseded(),
   onStatus:reportSync,
   runExclusive:withAccountSyncLock,
 });
@@ -154,7 +149,25 @@ async function reconcileImport(batch,operationID,baseRevision){
   const latest=await version();
   // Edits/deletes rebase only over a complete, disjoint change log. An
   // append-only import may instead prove absence by its unique record IDs.
-  if(batch.operations)return await canRebaseUnchangedKeys({client:cloudClient(),owner:await identity(),before:baseRevision,after:latest,operations:batch.operations})?'rebase':'conflict';
+  if(batch.operations){
+    const client=cloudClient(),user=await identity();
+    const nonoverlap=await canRebaseUnchangedKeys({client,owner:user,before:baseRevision,after:latest,operations:batch.operations});
+    if(nonoverlap)return 'rebase';
+    // Resolve only the objects actually modified since our baseline. A batch
+    // can contain disjoint assets and projects: a stale item must not block
+    // independent updates or a newer item in the same transaction.
+    const operations=[];
+    for(const op of batch.operations){
+      const sameKeyFree=await canRebaseUnchangedKeys({client,owner:user,before:baseRevision,after:latest,operations:[op]});
+      if(sameKeyFree){operations.push(op);continue;}
+      if(op.action==='clear')return 'conflict';
+      const remote=await cloudRecord(op.store,op.item?.id??op.id);
+      const winner=compareRecordEdits(op.item||{updatedAt:op.modifiedAt},remote,{localTimestamp:op.modifiedAt});
+      if(winner==='local')operations.push(op);
+    }
+    if(!operations.length)return 'remote';
+    return {kind:'replace',record:{...batch,operations}};
+  }
   const records=['assets','blobs','projects'].flatMap(store=>(batch[store]||[]).map(item=>({store,id:item.id})));
   if(!records.length||!(batch.assets?.length||batch.projects?.length))return 'conflict';
   let present=0;
@@ -202,7 +215,7 @@ const importSync=createProjectSync({
   // Sync must never rerun destructive crash recovery on a freshly staged row.
   reload:async()=>{const rows=await cache?.get(await account(),'import-outbox')||[];importOutboxBefore=structuredClone(rows);return rows;},
   commit:(batch,operationID)=>batch.operations?cloudTransaction(batch.names,tx=>{for(const op of batch.operations){const store=tx.objectStore(op.store);if(op.action==='put')store.put(op.item);else if(op.action==='delete')store.delete(op.id);else store.clear();}},operationID):cloudTransaction(['assets','blobs','projects'],tx=>{for(const store of ['assets','blobs','projects'])for(const record of batch[store]||[])tx.objectStore(store).put(record);},operationID),
-  revision:()=>revision,reconcile:reconcileImport,onStatus:reportSync,
+  revision:()=>revision,reconcile:reconcileImport,onSuperseded:()=>notifyCloudSuperseded(),onStatus:reportSync,
   runExclusive:withAccountSyncLock,
   recordKeys:batch=>batch.operations?.map(op=>({store:op.store,id:op.item?.id??op.id}))||['assets','blobs','projects'].flatMap(store=>(batch[store]||[]).map(item=>({store,id:item.id}))),
 });
@@ -430,7 +443,7 @@ async function cloudStageProject(record){
 }
 async function cloudStageImport(batch){await identity();if(revision===undefined)await version();await importSync.stage({...batch,id:crypto.randomUUID()});return {pending:true};}
 async function cloudStageMutation(names,fn){
-  const operations=[],result=fn({objectStore(store){if(!names.includes(store))throw Error('此表未加入事务');return {put:item=>operations.push({action:'put',store,item:structuredClone(item)}),delete:id=>operations.push({action:'delete',store,id}),clear:()=>operations.push({action:'clear',store})};}});
+  const operations=[],modifiedAt=new Date().toISOString(),result=fn({objectStore(store){if(!names.includes(store))throw Error('此表未加入事务');return {put:item=>operations.push({action:'put',store,item:structuredClone(item),modifiedAt:item.updatedAt||modifiedAt}),delete:id=>operations.push({action:'delete',store,id,modifiedAt}),clear:()=>operations.push({action:'clear',store,modifiedAt})};}});
   if(result?.then)throw Error('事务回调必须同步');if(!operations.length)return;
   await identity();if(revision===undefined)await version();
   const deletedIDs=operations.filter(op=>op.store==='projects'&&op.action==='delete').map(op=>op.id);
