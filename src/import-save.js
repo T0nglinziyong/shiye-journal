@@ -20,32 +20,6 @@ export function candidateMetadata(c,record,batchSeriesID) {
   return {title:c.title?.trim()||'新素材',kind:c.kind||'sticker',role:c.role||'focal',tags:c.tags||[],palette:[],texture:'待记录',physicalWidthMM:c.width??null,physicalHeightMM:c.height??null,
     dimensionSource:c.width&&c.height?(c.dimensionSource||'paper'):'unmeasured',processingRecord:c.processingRecord?structuredClone(c.processingRecord):null,supply:{kind:quantity===1?'single':'multiple',quantity},reviewStatus:c.reviewStatus||'pendingReview',usageStatus:'unused',seriesID:choice==='__none__'?null:choice||batchSeriesID||null};
 }
-const png=canvas=>new Promise(resolve=>canvas.toBlob(resolve,'image/png'));
-async function workBackground(source,candidates) {
-  const canvas=document.createElement('canvas');canvas.width=source.width;canvas.height=source.height;
-  const ctx=canvas.getContext('2d',{willReadFrequently:true});ctx.drawImage(source,0,0);
-  const original=ctx.getImageData(0,0,canvas.width,canvas.height),width=canvas.width,height=canvas.height;
-  const holes=candidates.map(c=>c.region);
-  for(const c of candidates) {
-    const r=c.region,margin=Math.max(.008,Math.min(r.w,r.h)*.13),samples=[[],[],[]];
-    for(const distance of [margin,margin*2,margin*3]) {
-      for(let step=0;step<=10;step++) {
-        const t=step/10;
-        for(const [x,y] of [[r.x+t*r.w,r.y-distance],[r.x+t*r.w,r.y+r.h+distance],[r.x-distance,r.y+t*r.h],[r.x+r.w+distance,r.y+t*r.h]]) {
-          if(x<0||x>=1||y<0||y>=1||holes.some(h=>x>=h.x&&x<=h.x+h.w&&y>=h.y&&y<=h.y+h.h))continue;
-          const offset=(Math.floor(y*height)*width+Math.floor(x*width))*4;
-          for(let k=0;k<3;k++)samples[k].push(original.data[offset+k]);
-        }
-      }
-      if(samples[0].length>=12)break;
-    }
-    const colors=samples.map(s=>s.length?s.sort((a,b)=>a-b)[Math.floor(s.length/2)]:255);
-    const bitmap=await createImageBitmap(c.blob),mask=document.createElement('canvas');mask.width=width;mask.height=height;
-    const m=mask.getContext('2d');m.save();m.translate((r.x+r.w/2)*width,(r.y+r.h/2)*height);m.rotate((r.rotation||0)*Math.PI/180);m.drawImage(bitmap,-r.w*width/2,-r.h*height/2,r.w*width,r.h*height);m.restore();
-    m.globalCompositeOperation='source-in';m.fillStyle='rgb('+colors.join(',')+')';m.fillRect(0,0,width,height);ctx.drawImage(mask,0,0);bitmap.close();
-  }
-  return png(canvas);
-}
 export async function saveImportBatch({state,db,urls,render,onSaved}) {
   if(state.importSaving||state.importStep==='done')return;
   state.importSaving=true;
@@ -57,26 +31,30 @@ export async function saveImportBatch({state,db,urls,render,onSaved}) {
     if(state.importMode==='work') {
       const source=record.correctedBitmap||record.bitmap;
       const [paperWidth,paperHeight]=importPaperDimensions(record),ratio=source.width/source.height;
-      const p=project(record.workTitle?.trim()||record.file.name.replace(/\.[^.]+$/,'')||'导入作品',{mode:ratio>1.1?'spread':'single',style:'imported'}),d=p.drafts[0];
+      const p=project(record.workTitle?.trim()||record.file.name.replace(/\\.[^.]+$/,'')||'导入作品',{mode:ratio>1.1?'spread':'single',style:'imported'}),d=p.drafts[0];
       d.canvas={width:1000*ratio,height:1000};d.physicalPageHeightMM=paperHeight;
       d.pageRatio='custom:'+Math.round(paperWidth/(d.pageMode==='spread'?2:1))+'x'+Math.round(paperHeight);
-      p.isDraft=false;p.styleTags=record.workTags||[];p.isUsed=!!record.isUsed;
+      // The background is editable paper metadata, NEVER a reconstructed
+      // flattened photo. No inpainting and no locked full-page photo layer.
+      d.paperPattern=record.workPaperPattern||state.importBatchWorkPaperPattern||'plain';
+      d.paperColor=record.workPaperColor||state.importBatchWorkPaperColor||'#fcfaf0';
+      d.items=[];
+      p.isDraft=false;p.source='imported';p.isUsed=false;
       const elements=chosen.filter(c=>c.region.w<.98||c.region.h<.98);
-      const background=await workBackground(source,elements),backgroundID=uid(),originalID=uid(),baseID=uid();
-      blobs.push({id:backgroundID,data:background},{id:originalID,data:record.originalFile||record.file});
-      const base={id:baseID,title:p.title+' · 底页',kind:'photo',role:'background',tags:[],palette:[],texture:'photo',blobId:backgroundID,originalBlobId:originalID,physicalWidthMM:paperWidth,physicalHeightMM:paperHeight,dimensionSource:'importedPage',supply:{kind:'single',quantity:1},reviewStatus:'ready',usageStatus:'unused',seriesID:null,isProjectInternal:true,createdAt:now,sourceIdentifier:'imported-work-page'};
-      assets.push(base);p.candidateAssetIDs=[baseID];
-      d.items=[{id:uid(),assetID:baseID,x:d.canvas.width/2,y:500,width:d.canvas.width,height:1000,rotation:0,zIndex:-100,isLocked:true,isParked:false,opacity:1}];
+      const originalID=uid();
+      blobs.push({id:originalID,data:record.originalFile||record.file});
+      p.originalImportPhotoBlobID=originalID;
+      p.candidateAssetIDs=[];
+      const copyToLibrary=record.workSaveAssets??state.importBatchWorkSaveAssets??false;
+      const choice=record.seriesID??state.importBatchSeriesID??null;
+      p.seriesID=choice==='__none__'?null:choice||null;
       for(const c of elements) {
-        const id=uid(),blobId=uid(),sourceID=uid(),originalCutoutBlobId=uid(),candidateFrameBlobId=uid(),r=c.region;
-        assets.push({...candidateMetadata(c,record,state.importBatchSeriesID),id,blobId,originalBlobId:sourceID,originalCutoutBlobId,candidateFrameBlobId,photoBlobId:originalID,isProjectInternal:true,createdAt:now,sourceIdentifier:'imported-work-element'});
+        const id=uid(),blobId=uid(),sourceID=uid(),originalCutoutBlobId=uid(),candidateFrameBlobId=uid(),region=c.region;
+        assets.push({...candidateMetadata(c,record,state.importBatchSeriesID),id,blobId,originalBlobId:sourceID,originalCutoutBlobId,candidateFrameBlobId,photoBlobId:originalID,isProjectInternal:!copyToLibrary,createdAt:now,sourceIdentifier:'imported-work-element'});
         blobs.push({id:originalCutoutBlobId,data:c.originalCutoutBlob||c.blob},{id:candidateFrameBlobId,data:c.candidateFrameBlob||c.originalBlob||c.blob});
         blobs.push({id:blobId,data:c.blob},{id:sourceID,data:c.originalBlob||c.blob});p.candidateAssetIDs.push(id);
-        d.items.push({id:uid(),assetID:id,x:(r.x+r.w/2)*d.canvas.width,y:(r.y+r.h/2)*1000,width:r.w*d.canvas.width,height:r.h*1000,rotation:r.rotation||0,zIndex:d.items.length,isLocked:false,isParked:false,opacity:1});
-      }
-      if(p.isUsed){
-        const used=new Map(markProjectAssetsUsed(p,assets,now).map(asset=>[asset.id,asset]));
-        for(let i=0;i<assets.length;i++)if(used.has(assets[i].id))assets[i]=used.get(assets[i].id);
+        d.items.push({id:uid(),assetID:id,x:(region.x+region.w/2)*d.canvas.width,y:(region.y+region.h/2)*1000,
+          width:region.w*d.canvas.width,height:region.h*1000,rotation:region.rotation||0,zIndex:d.items.length,isLocked:false,isParked:false,opacity:1});
       }
       projects.push(p);savedCount++;
     }else {
