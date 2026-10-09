@@ -79,3 +79,23 @@ test('a pending edit is skipped without permanently suppressing a later safe ret
   await manager.whenIdle();
   assert.equal(staged.length,1);
 });
+
+test('cover migration waits for committed COS metadata and exposes a retry on missing snapshot',async()=>{
+ const p=project('commit'),state={route:'library',accountId:'account',projects:[p]},staged=[];
+ let ready=false,failures=0;
+ const manager=createWorkCoverBackfill({state,cloudEnabled:true,onError:()=>{failures++;},db:{
+  pendingProjects:async()=>[],completeProject:async row=>row,
+  stageProject:async row=>{staged.push(row);},
+  flushProjects:async()=>{},
+  get:async()=>ready?{...p,drafts:[{id:'d',coverImageID:'project-cover:cos/account/hash'}]}:p
+ }});
+ manager.enqueue(p.id,p.updatedAt);
+ await manager.whenIdle();
+ assert.equal(staged.length,1);
+ assert.equal(failures,1,'staging without an actual cover is not success');
+ ready=true;
+ manager.retry(p.id,p.updatedAt);
+ await manager.whenIdle();
+ assert.equal(staged.length,2);
+ assert.equal(failures,1);
+});
