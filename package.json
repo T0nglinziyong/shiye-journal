@@ -16,7 +16,8 @@
     "test:layout-browser": "node tests/layout-preview-browser.mjs",
     "test:layers-browser": "node tests/catalog-layers-browser.mjs",
     "test:interaction-browser": "node tests/interaction-browser.mjs",
-    "test:ui": "npm run build && node tests/ui-smoke.mjs && node tests/route-parity-smoke.mjs && node tests/self-host-smoke.mjs"
+    "test:ui": "npm run build && node tests/ui-smoke.mjs && node tests/route-parity-smoke.mjs && node tests/self-host-smoke.mjs",
+    "test:responsive-browser": "node tests/responsive-visual-browser.mjs"
   },
   "devDependencies": {
     "esbuild": "0.25.12",
