@@ -851,7 +851,7 @@ async function prefetchImportRecord(rec,settings,revision){
       recognitionPostprocess:{shapeRegularization:settings.shapeRegularization,apertures:settings.apertures},mergeSharedCarrier:settings.mergeSharedCarrier,
       onDiagnostic:trace=>{if(valid())rec.recognitionDiagnostic=trace;}});if(!valid())return;
     const calibrated=settings.paperSize!=='none'&&(correctedBitmap||settings.wholePaper),candidateData=[];
-    const lighting=settings.materialColorMode!=='original'&&correctedBitmap&&true
+    const lighting=settings.materialColorMode!=='original'&&correctedBitmap
       ?await estimatePageLighting(source,candidates):null;
     for(let i=0;i<candidates.length;i++){
       const candidate=await extractImportCandidate(source,box,candidates[i],{mode:settings.mode,widthMM:pw,heightMM:ph,calibrated,index:i,lighting});
@@ -984,7 +984,7 @@ async function refreshImportCandidates(regions,{manual=false}={}){
     return candidate;
   }):regions.map(region=>({region,original:null}));
   if(record!==state.importRecords[state.importIndex]||state.route!=='import')return false;
-  const lighting=state.preferences.materialColorMode!=='original'&&state.correctedBitmap&&state.importMode!=='work'
+  const lighting=state.preferences.materialColorMode!=='original'&&state.correctedBitmap
     ?await estimatePageLighting(source,plans.map(plan=>plan.region)):null;
   for(let i=0;i<plans.length;i++){
     const {region,original}=plans[i];if(original){next.push(original);continue;}
