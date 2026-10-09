@@ -61,3 +61,73 @@
 html,body{overscroll-behavior-y:none}
 /* Keep the mobile fixed bottom nav viewport-anchored: no transformed header. */
 #view,.import-review,.works-page,.series-grid,.asset-grid{overscroll-behavior-y:contain}
+
+/* A series detail uses the same search height, menu chips and layout as the
+   general material catalog, including narrow iPad and phone viewports. */
+.catalog-toolbar .series-contents .series-filters {
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:10px;
+  margin:9px 0 12px;
+  background:transparent;
+  padding:0;
+}
+.series-contents .series-filters > .shiye-search {
+  display:flex;
+  flex:1 1 260px;
+  min-width:min(100%,230px);
+  margin:0;
+}
+.series-contents .series-filters > .shiye-search input {
+  box-sizing:border-box;
+  width:100%;
+  max-width:none;
+  height:40px;
+  min-height:40px;
+  background:#fff;
+  border:1px solid #e3e5dc;
+  border-radius:10px;
+  padding:9px 13px;
+  font:inherit;
+  font-size:14px;
+}
+.series-contents .series-filters > .series-filter-menus {
+  display:flex;
+  align-items:center;
+  flex:0 1 auto;
+  width:auto;
+  min-width:0;
+  overflow:visible;
+}
+.series-contents .series-filter-menus > .four-filter-controls {
+  display:flex;
+  width:auto;
+  min-width:0;
+  gap:6px;
+  align-items:center;
+  flex-wrap:wrap;
+}
+.series-contents .series-filter-menus .filter-control {
+  flex:0 0 auto;
+  min-height:34px;
+  height:34px;
+  border-radius:9px;
+  padding:0 12px;
+  font-size:14px;
+}
+.series-contents .series-navigation .btn,
+.series-contents .series-navigation .library-select-toggle {
+  min-height:36px;
+  border-radius:10px;
+  padding:8px 14px;
+  font-size:14px;
+}
+@media (max-width:860px) {
+  .series-contents .series-filters > .shiye-search {flex:1 0 100%;min-width:0}
+  .series-contents .series-filters > .series-filter-menus {width:100%;flex:1 1 100%}
+  .series-contents .series-filter-menus > .four-filter-controls {width:100%}
+}
+@media (max-width:600px) {
+  .series-contents .series-filter-menus .filter-control {font-size:12px;padding:0 7px}
+}
