@@ -31,26 +31,17 @@ export function mountCanvasEditor(c){
   const topAction=(action,label)=>{const b=button(label,()=>handle(action),'btn');b.dataset.act=action;if(['undo','redo'].includes(action)){b.replaceChildren(createIcon(action));b.setAttribute('aria-label',action==='undo'?'撤销':'重做');}return b;};
   head.classList.add('swift-editor-head');const back=actions.querySelector('[data-act="back-works"]');head.prepend(back);back.textContent='‹ 返回';
   const json=actions.querySelector('[data-act="creative-json"]'),pdf=[...actions.querySelectorAll('button')].find(b=>b.textContent==='导出 PDF');
-  // Exactly two visible header actions on EVERY screen. Auto-save remains
-  // active in saveProject()/flushSave(); it does not need a misleading Save
-  // button or an extra status badge inside the title bar.
+  // All devices use the same header order as the approved 28509aa9:
+  // history, undo, redo, Complete and Export. Width/overflow can adapt,
+  // but none of these actions may move into another toolbar.
   actions.replaceChildren();
-  // Phone layout is intentionally taken from the last user-approved
-  // test version 28509aa9. These controls remain in the original header
-  // order, but become invisible on desktop (where identical actions live in
-  // the secondary edit toolbar). CSS, not screen checks at mount time,
-  // switches variants so resizing/rotation never loses an action.
   const saved=document.createElement('span');
-  saved.className='swift-auto-saved mobile-editor-head-only';
+  saved.className='swift-auto-saved';
   saved.textContent=document.querySelector('#save-state')?.textContent||'';
   actions.append(saved);
-  const mobileHistory=button('◷',e=>historyMenu(e.currentTarget),
-    'canvas-icon mobile-editor-head-only');
-  mobileHistory.setAttribute('aria-label','历史记录');
-  const mobileUndo=topAction('undo','↶'),mobileRedo=topAction('redo','↷');
-  mobileUndo.classList.add('mobile-editor-head-only');
-  mobileRedo.classList.add('mobile-editor-head-only');
-  actions.append(mobileHistory,mobileUndo,mobileRedo);
+  const history=button('◷',e=>historyMenu(e.currentTarget),'canvas-icon');
+  history.setAttribute('aria-label','历史记录');
+  actions.append(history,topAction('undo','↶'),topAction('redo','↷'));
   const done=button('完成',()=>handle('editor-done'),'btn primary');
   done.dataset.editorCompletion='';
   actions.append(done);
@@ -69,15 +60,6 @@ export function mountCanvasEditor(c){
   if(json){json.hidden=true;actions.append(json);}
   const toolbar=document.createElement('div');toolbar.className='swift-editor-toolbar';
   shell.before(toolbar);toolbar.append(tools);tools.replaceChildren();
-  // History and undo/redo stay available, but belong with the editing tools
-  // rather than the top-right Done/Export actions.
-  const utilities=document.createElement('div');
-  utilities.className='canvas-editor-utilities';
-  utilities.setAttribute('aria-label','编辑历史操作');
-  const history=button('◷',e=>historyMenu(e.currentTarget),'canvas-icon');
-  history.setAttribute('aria-label','历史记录');
-  utilities.append(history,topAction('undo','↶'),topAction('redo','↷'));
-  toolbar.append(utilities);
   const context=document.createElement('div');context.className='canvas-context-tools';
   context.setAttribute('aria-label','当前工具选项');toolbar.append(context);
   const changeTool=(mode,b)=>{view.endTextEditing?.();if(b.getAttribute('aria-expanded')==='true'){closePopover();return;}const repeated=state.tool===mode;if(['pen','highlighter'].includes(mode))state.previousInkTool=mode;state.tool=['layers','paper','material'].includes(mode)?'select':mode;state.toolHighlight=mode;if(!repeated)state.selectionPath=null;if(mode!=='select'&&mode!=='lasso'){state.multiSelected=[];state.selectedStrokes=[];}if(mode!=='select'&&mode!=='lasso')state.selected=null;if(!state.selected){page.querySelectorAll('.object-handle,.selected-object-actions,.selected-object-overlay').forEach(n=>n.remove());page.querySelectorAll('.selected').forEach(n=>n.classList.remove('selected'));page.querySelector('.canvas-selection-overlay')?.replaceChildren();}page.classList.toggle('pen',['pen','highlighter','eraser'].includes(mode));page.classList.toggle('lasso',['lasso','marquee'].includes(mode));syncTools();contextTools();if(['shape','material','layers','paper'].includes(mode)){if(mode==='shape')shapePicker(b);else if(mode==='material')materialPicker(b);else if(mode==='layers')layerPicker(b);else paperPicker(b);}else if(repeated&&['pen','highlighter','eraser','lasso'].includes(mode))toolSettings(b,mode);else closePopover();};
