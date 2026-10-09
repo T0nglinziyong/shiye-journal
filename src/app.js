@@ -481,7 +481,27 @@ function initializeCanvasSurface(page){const d=current();const paper=page.queryS
 async function handle(action,id,value){try{switch(action){
   case 'import-work':openImportGallery('work');break;
   case 'import-snapshot':offlineSnapshotProject=null;snapshotFileInput.click();break;
-  case 'import':openImportGallery('material');break;case 'back-library':navigateBack('library');break;case 'back-works':if(state.offlineEditingReturnID===state.activeProject?.id){await flushSave();await matchingSession.reflectProject(state.activeProject);state.offlineEditingReturnID=null;}navigateBack('works');break;case 'editor-done':{const p=state.activeProject,offline=state.offlineEditingReturnID===p?.id;p.isDraft=false;saveProject();await flushSave();saveAISnapshotInBackground(p);if(offline){await matchingSession.reflectProject(p);state.offlineEditingReturnID=null;navigateBack('matching');}else route('works');break;}
+  case 'import':openImportGallery('material');break;case 'back-library':navigateBack('library');break;case 'back-works':case 'editor-done':{
+    const p=state.activeProject;if(!p)throw Error('当前没有可保存的作品');
+    const publish=action==='editor-done';
+    // Return preserves a new work as a draft; Complete explicitly publishes it.
+    // Both paths first stage the *entire* editor document, even with no edits.
+    view.endTextEditing?.();
+    if(publish)p.isDraft=false;
+    saveProject();
+    await flushSave();
+    if(publish)saveAISnapshotInBackground(p);
+    if(state.offlineEditingReturnID===p.id){
+      await matchingSession.reflectProject(p);
+      state.offlineEditingReturnID=null;
+    }
+    parity.workTab=p.isDraft?'draft':'all';
+    parity.selectionMode=null;parity.selected.clear();parity.showOnlySelected=false;
+    resetCatalogPage('works');
+    state.activeProject=null;state.activeDraft=null;
+    route('works');
+    break;
+  }
   case 'select-file':if(value==='files'&&state.importMode==='work'){workFileInput.click();break;}if(value==='camera')fileInput.setAttribute('capture','environment');else fileInput.removeAttribute('capture');fileInput.click();break;case 'preview-crop':await previewCorrection();break;case 'confirm-import':await saveImportBatch({state,db,urls,render,onSaved:organizeSavedAssets});break;
   case 'import-switch':await switchImportRecord(Number(id));break;case 'import-back':if(state.importStep==='review'){state.importStep='inspect';render();}else if(state.importStep==='done'){navigateBack(state.importMode==='work'?'works':'library');}else if(!state.importRecords.length||confirm('放弃未保存的照片？'))navigateBack(state.importMode==='work'?'works':'library');break;
   case 'import-exit':if(state.importStep==='done'||!state.importRecords.length||confirm('放弃未保存的照片？'))navigateBack(state.importMode==='work'?'works':'library');break;
@@ -525,7 +545,10 @@ async function handle(action,id,value){try{switch(action){
       const p=project('未命名手账',{mode,ratio});
       state.projects.push(p);state.activeProject=p;state.activeDraft=p.activeDraftID;
       resetEditorHistory(state);state.tool=state.toolHighlight='select';state.zoom=1;
-      modal.close();route('editor');saveProject();
+      // Persist the newly created blank document immediately, not only after
+      // the first drawing gesture. Returning without drawing still yields a draft.
+      saveProject();await flushSave();
+      modal.close();route('editor');
     };
     modal.showModal();break;
   }
