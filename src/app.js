@@ -124,7 +124,7 @@ function updateSyncIndicator(){
 }
 function mountPageSyncIndicator(){
   if(!cloudEnabled)return;
-  const target=state.route==='editor'?view.querySelector('.swift-editor-head .actions'):state.route==='import'?view.querySelector('.import-nav'):null;
+  const target=state.route==='import'?view.querySelector('.import-nav'):null;
   if(target){const button=document.querySelector('#sync-indicator').cloneNode(true);button.removeAttribute('id');button.dataset.syncIndicator='';button.onclick=()=>void openSyncDetails();target.append(button);}
   updateSyncIndicator();
 }
@@ -339,9 +339,9 @@ return `<div class="view-head"><div><h1 contenteditable="true" id="project-title
 function inspector(e){const i=e.value;return `<div class="stack">${e.kind==='text'?`<label>文字内容<textarea id="inspector-text">${esc(i.content)}</textarea></label><label>字体<select id="inspector-font"><option value="serif" ${i.style==='serif'?'selected':''}>宋体</option><option value="sans" ${i.style==='sans'?'selected':''}>黑体</option><option value="rounded" ${i.style==='rounded'?'selected':''}>圆体</option></select></label><label>字号<input id="inspector-font-size" type="number" min="8" max="200" value="${i.fontSize}"></label>`:''}<div class="form-grid"><label>宽<input id="inspector-width" type="number" min="1" value="${fmt(i.width)}"></label><label>高<input id="inspector-height" type="number" min="1" value="${fmt(i.height)}"></label><label>旋转<input id="inspector-rotation" type="number" value="${fmt(i.rotation||0)}"></label><label>图层<input id="inspector-z" type="number" value="${i.zIndex}"></label></div><label>透明度<input id="inspector-opacity" type="range" min="0.1" max="1" step="0.05" value="${i.opacity||1}"></label>${e.kind==='material'?`<p class="muted">实物 ${fmt(asset(i.assetID)?.physicalWidthMM||0)} × ${fmt(asset(i.assetID)?.physicalHeightMM||0)} mm</p>`:''}<div class="actions"><button class="btn mini" data-act="duplicate">复制</button><button class="btn mini" data-act="flip">镜像</button><button class="btn mini" data-act="front">置顶</button><button class="btn mini danger" data-act="delete-object">删除</button></div></div>`;}
 function pageInspector(d){return `<div class="stack"><label>纸张颜色<input id="paper-color" type="color" value="${esc(d.paperColor)}"></label><label>背景<select id="paper-pattern"><option value="plain">纯色</option><option value="grid" ${d.paperPattern==='grid'?'selected':''}>方格</option><option value="lines" ${d.paperPattern==='lines'?'selected':''}>横线</option><option value="dots" ${d.paperPattern==='dots'?'selected':''}>点阵</option></select></label><label>纸张规格<select id="page-ratio">${paperSizeOptions(d.pageRatio,{includeCustom:false})}${['portrait','square','landscape'].map(v=>`<option value="${v}" ${d.pageRatio===v?'selected':''}>旧版比例 · ${v.toUpperCase()}</option>`).join('')}${d.pageRatio?.startsWith('custom:')?`<option value="${esc(d.pageRatio)}" selected>自定义 ${esc(d.pageRatio.slice(7))} mm</option>`:''}</select></label><label>页面模式<select id="page-mode"><option value="single">单页</option><option value="spread" ${d.pageMode==='spread'?'selected':''}>双页</option></select></label></div>`;}
 function importSourceButtons(){return `<div class="import-source-actions"><button class="btn primary" data-act="select-file" data-val="gallery">▣　从图库中选择</button><button class="btn" data-act="select-file" data-val="camera">▣　拍摄图片</button><button class="btn" data-act="select-file" data-val="files">▱　从文件中导入</button>${state.importMode==='work'?'<small>选择 .shiyeproject.zip 可编辑作品包或 JSON 备选文件会直接导入，不经过照片识别。</small>':''}</div>`;}
-function importSteps(){return `<div class="import-nav"><button class="import-back" data-act="import-back" aria-label="返回">‹</button><strong>导入${state.importMode==='work'?'作品':'素材'}</strong><div class="import-progress">${[['inspect','检查照片'],['review','确认归类'],['done','完成']].map(([key,label],i)=>`<span class="${state.importStep===key?'current':(i<['inspect','review','done'].indexOf(state.importStep)?'passed':'')}"><b>${i<['inspect','review','done'].indexOf(state.importStep)?'✓':i+1}</b>${label}</span>`).join('')}</div><button class="import-cancel" data-act="import-exit">${state.importStep==='done'?'完成':'取消导入'}</button></div>`;}
+function importSteps(){return `<div class="import-nav"><button class="import-back" data-act="import-back" aria-label="返回">‹</button><strong>导入${state.importMode==='work'?'作品':state.importMode==='snapshot'?'快照':'素材'}</strong><div class="import-progress">${[['inspect','检查照片'],['review','确认归类'],['done','完成']].map(([key,label],i)=>`<span class="${state.importStep===key?'current':(i<['inspect','review','done'].indexOf(state.importStep)?'passed':'')}"><b>${i<['inspect','review','done'].indexOf(state.importStep)?'✓':i+1}</b>${label}</span>`).join('')}</div><button class="import-cancel" data-act="import-exit">${state.importStep==='done'?'完成':'取消导入'}</button></div>`;}
 function renderImport(){const b=state.importBox,rec=state.importRecords[state.importIndex];let content='';
-  if(state.importStep==='done')content=`<div class="import-done"><div>✓</div><h1>导入完成 · ${state.importSavedCount||0} 个${state.importMode==='work'?'作品':'素材'}</h1><p>${state.importPending?'资料已可靠暂存，云端同步和自动整理在后台进行。':'资料已保存。'}可以继续导入下一批照片，本机识别引擎会保持就绪。</p><div class="review-actions"><button class="btn" data-act="import-exit">返回${state.importMode==='work'?'作品':'素材库'}</button><button class="btn primary" data-act="import-continue">继续导入</button></div></div>`;
+  if(state.importStep==='done')content=`<div class="import-done"><div>✓</div><h1>导入完成 · ${state.importSavedCount||0} 个${state.importMode==='work'?'作品':state.importMode==='snapshot'?'快照':'素材'}</h1><p>${state.importPending?'资料已可靠暂存，云端同步和自动整理在后台进行。':'资料已保存。'}可以继续导入下一批照片，本机识别引擎会保持就绪。</p><div class="review-actions"><button class="btn" data-act="import-exit">返回${state.importMode==='work'||state.importMode==='snapshot'?'作品':'素材库'}</button><button class="btn primary" data-act="import-continue">继续导入</button></div></div>`;
   else if(state.importStep==='review')content=renderImportReview({state,esc,fmt});
   else if(!rec)content=`<section class="import-intro"><div class="eyebrow">FROM YOUR DESK TO YOUR PAGES</div><h1>${state.importMode==='work'?'收进完成的作品':'先认出纸，再留住喜欢的'}</h1><p>从相册多选，逐张确认纸张和${state.importMode==='work'?'页面':'素材'}。</p><div class="import-empty"><div class="photo-symbol">▧</div><h2>添加照片</h2><p>从相册多选，或拍摄一张白纸上的素材。</p>${importSourceButtons()}<small>每批最多 12 张；使用较小图像识别，从原始工作图提取素材</small></div></section>`;
   else content=renderImportInspection({state,esc,fmt});
@@ -537,7 +537,7 @@ function initializeCanvasSurface(page){const d=current();const paper=page.queryS
 
 async function handle(action,id,value){try{switch(action){
   case 'import-work':openImportGallery('work');break;
-  case 'import-snapshot':offlineSnapshotProject=null;snapshotFileInput.click();break;
+  case 'import-snapshot':offlineSnapshotProject=null;openImportGallery('snapshot');break;
   case 'import':openImportGallery('material');break;case 'back-library':navigateBack('library');break;case 'back-works':case 'editor-done':{
     const p=state.activeProject;if(!p)throw Error('当前没有可保存的作品');
     const decision=editorExitDecision(p,action),publish=decision.publish;
@@ -1011,7 +1011,7 @@ async function prefetchImportRecord(rec,settings,revision){
   }
 }
 function scheduleImportPrefetch(){
-  if(state.route!=='import'||state.importStep!=='inspect')return;
+  if(state.route!=='import'||state.importStep!=='inspect'||state.importMode==='snapshot')return;
   const rec=state.importRecords.slice(state.importIndex+1).find(r=>!r.confirmed&&!r.candidateData?.length&&!importPrefetchJobs.has(r));
   if(!rec)return;
   const settings=importPrefetchSettings(rec),revision=importBatchRevision;
@@ -1068,7 +1068,15 @@ async function switchImportRecord(index,skipSave=false){
     if(!isCurrent())return;
     state.correctedBitmap=canvas;state.correctedURL=URL.createObjectURL(blob);rec.appliedCorners=JSON.stringify(state.paperCorners);rec.backgroundDetected=true;
   }
-  if(!isCurrent())return;progress('正在识别并提取素材…');saveActiveImportRecord();render();if(rec.prefetchStatus!=='ready'&&!state.importCandidates.length&&state.importStep==='inspect')await previewCrop();
+  if(!isCurrent())return;
+  if(state.importMode==='snapshot'){
+    state.importCandidates=[];state.importCandidateData=[];state.importCandidateURLs=[];
+    state.importCandidateSelection=new Set();
+    saveActiveImportRecord();render();
+  }else{
+    progress('正在识别并提取素材…');saveActiveImportRecord();render();
+    if(rec.prefetchStatus!=='ready'&&!state.importCandidates.length&&state.importStep==='inspect')await previewCrop();
+  }
   }finally{if(isCurrent()){state.importProcessing='';render();queueMicrotask(scheduleImportPrefetch);}}
 }
 function discardPaperPreview(){state.paperPreviewBitmap?.close?.();if(state.paperPreviewURL&&state.paperPreviewURL!==state.correctedURL)URL.revokeObjectURL(state.paperPreviewURL);state.paperPreviewBitmap=null;state.paperPreviewURL=null;state.paperPreviewApplied=false;}
@@ -1090,11 +1098,12 @@ async function applyPaperPreview(){
   if(rec.manualEdits&&!confirm('重新校正会舍弃本照片的名称、手动选框和修补结果并重新识别，继续吗？'))return;
   state.correctedBitmap?.close?.();if(state.correctedURL)URL.revokeObjectURL(state.correctedURL);
   state.correctedBitmap=state.paperPreviewBitmap;state.correctedURL=state.paperPreviewURL;state.paperPreviewBitmap=null;state.paperPreviewURL=null;state.paperPreviewApplied=true;rec.appliedCorners=JSON.stringify(state.paperCorners);rec.backgroundDetected=true;rec.manualEdits=false;rec.confirmed=false;
-  state.importProcessing='正在按新校正结果识别…';render();
-  try{await previewCrop();toast('已使用校正结果，候选素材已更新');}
+  state.importProcessing=state.importMode==='snapshot'?'正在更新校正后的页面…':'正在按新校正结果识别…';render();
+  try{if(state.importMode!=='snapshot')await previewCrop();toast(state.importMode==='snapshot'?'已使用校正结果':'已使用校正结果，候选素材已更新');}
   finally{state.importProcessing='';if(state.route==='import')render();}
 }
 async function openManualImportBox(){
+  if(state.importMode==='snapshot')return;
   if(state.paperPreviewBitmap)await applyPaperPreview();
   if(state.paperPreviewBitmap)return;
   state.showManualBox=true;render();
@@ -1146,7 +1155,7 @@ async function refreshImportCandidates(regions,{manual=false}={}){
   state.importCandidates=plans.map(plan=>plan.region);state.importCandidateData=next;state.importCandidateURLs=next.map(c=>c.url);state.importCandidateSelection=new Set(next.flatMap((c,i)=>c.selected?[i]:[]));saveActiveImportRecord();return true;
 }
 async function previewCrop(){
-  if(!state.importBitmap)return;
+  if(!state.importBitmap||state.importMode==='snapshot')return;
   const record=state.importRecords[state.importIndex],source=state.correctedBitmap||state.importBitmap,b=state.correctedBitmap?{x:0,y:0,w:1,h:1}:state.importBox,[pw,ph]=paperDimensions();
   let regions=await detectPaperCandidates(source,b,6,{balanceLight:state.balanceLight,paperRectified:!!state.correctedBitmap,paperWidthMM:pw,paperHeightMM:ph,recognition:state.importRecognition||state.preferences.recognition,recognitionPixels:state.preferences.recognitionPixels,recognitionPreprocess:recognitionPreprocessOptions(),recognitionPostprocess:recognitionPostprocessOptions(),mergeSharedCarrier:state.preferences.mergeSharedCarrier!==false,onDiagnostic:trace=>{record.recognitionDiagnostic=trace;},onProgress:p=>{
     if(state.route!=='import'||record!==state.importRecords[state.importIndex])return;
@@ -1182,7 +1191,7 @@ async function confirmImportPhoto(){
     &&record?.appliedCorners!==JSON.stringify(state.paperCorners)){
     toast('纸张四角已调整，请先“预览校正”并点击“使用校正结果”，再确认素材');return;
   }
-  const selected=[...(state.importCandidateSelection||[])];if(!selected.length&&state.importMode!=='work'){toast('请选择至少一件素材，或使用手动补框');return;}
+  const selected=[...(state.importCandidateSelection||[])];if(!selected.length&&state.importMode==='material'){toast('请选择至少一件素材，或使用手动补框');return;}
   const rec=state.importRecords[state.importIndex];rec.selectedCandidates=(state.importCandidateData||[]).map((c,i)=>({...c,selected:state.importCandidateSelection.has(i)}));rec.confirmed=true;saveActiveImportRecord();
   const next=state.importRecords.findIndex(r=>!r.confirmed);if(next>=0)await switchImportRecord(next);else{state.importStep='review';render();}
 }
