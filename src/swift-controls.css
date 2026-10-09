@@ -335,3 +335,12 @@ body:has(.library-management-tray):not(:has(.library-management-tray:not([hidden
 .swift-material-picker .canvas-picker-grid{min-height:0;max-height:none;flex:1;align-content:start;overflow-y:auto;overscroll-behavior:contain}
 .swift-material-picker .swift-segments{flex:none}
 @media(max-width:600px){.swift-material-picker{height:min(52dvh,400px)!important}.swift-material-picker .popover-content{height:calc(100% - 36px)}}
+
+/* Layer rows are deliberate drag handles on touch screens. Prevent native
+   long-press text selection / rubber-band scrolling from cancelling pointers. */
+.swift-popover .canvas-layer-list{overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+.swift-popover .canvas-layer-row{touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+.swift-popover .canvas-layer-row [data-layer-pick],
+.swift-popover .canvas-layer-row [data-layer-move]{touch-action:none;-webkit-user-select:none}
+.swift-popover .canvas-layer-row.dragging{background:#e6f1e5;box-shadow:inset 3px 0 #537d5e}
+.swift-popover .canvas-layer-row.drop-target{background:#d8eadb;outline:1px dashed #52755c}

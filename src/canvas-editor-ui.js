@@ -1,3 +1,4 @@
+import {ensureInkSlots,inkSlot,activeInkSlot,selectInkSlot,editInkSlot} from './ink-tool-slots.js';
 import {openPopover,closePopover} from './swift-popover.js';
 import {defaultTools,commonShapes,advancedShapes,configureShape,straightStroke,eraseStrokes,drawInk,resizeObject,textFont,textLines} from './editor-tools-model.js';
 import {shapeTag as shapeSVG} from './shape-preview.js';
@@ -22,6 +23,7 @@ export function mountCanvasEditor(c){
   const {state,view,body,modal,current,checkpoint,saveProject,render,route,flushSave,toast,esc,imgTag,asset,handle,openCutoutCheck,openAICreation}=c,d=current(),page=view.querySelector('#canvas-page');if(!d||!page)return;
   if(captureHistory(state.activeProject))saveProject();state.workspacePanel=false;
   if(!state.canvasTools){let saved={};try{saved=JSON.parse(localStorage.getItem(prefKey))||{};}catch{}state.canvasTools={...defaultTools,...saved};}
+  ensureInkSlots(state.canvasTools);
   const prefs=state.canvasTools,head=view.querySelector('.view-head'),actions=head.querySelector('.actions'),tools=view.querySelector('.editor-tools'),shell=view.querySelector('.editor-shell');let entries=allEntries(d),selected=entries.find(e=>e.value.id===state.selected);
   const button=(label,fn,className='')=>{const b=document.createElement('button');b.type='button';b.className=className;b.textContent=label;b.onclick=e=>{if(state.editingTextID&&!b.closest('.canvas-context-tools,[data-object]'))view.endTextEditing?.();fn(e);};return b;};
   const prefsChanged=()=>{try{localStorage.setItem(prefKey,JSON.stringify(prefs));}catch{}if(!document.querySelector('.swift-popover'))contextTools();};
@@ -31,60 +33,52 @@ export function mountCanvasEditor(c){
   const ai=actions.querySelector('button.primary'),json=actions.querySelector('[data-act="creative-json"]'),pdf=[...actions.querySelectorAll('button')].find(b=>b.textContent==='导出 PDF');
   actions.replaceChildren();const saved=document.createElement('span');saved.className='swift-auto-saved';saved.textContent=document.querySelector('#save-state').textContent;actions.append(saved);
   actions.append(button('◷',e=>historyMenu(e.currentTarget),'canvas-icon'));actions.lastChild.setAttribute('aria-label','历史记录');actions.append(topAction('undo','↶'),topAction('redo','↷'));
-  actions.append(topAction('save-work','保存'));// Archives remain separate from promoting a draft to a work.
   actions.append(button('完成',()=>handle('editor-done'),'btn primary'));
-  const share=button('↥',e=>{const p=openPopover(e.currentTarget,{title:'导出',width:220,menu:true});for(const [name,fn] of [['保存快照',()=>handle('save-snapshot')],['导出 PNG',()=>handle('export-png')],['导出 PDF',()=>pdf?.click()||handle('print')],['导出可编辑 ZIP',()=>handle('download-project-zip')],['打印',()=>handle('print')],['导入创作指令',()=>handle('creative-json')]])p.content.append(button(name,()=>{p.close();fn();}));},'canvas-icon');share.setAttribute('aria-label','导出作品');actions.append(share);if(json){json.hidden=true;actions.append(json);}
+  const share=button('导出',e=>{const p=openPopover(e.currentTarget,{title:'导出',width:220,menu:true});for(const [name,fn] of [['保存快照',()=>handle('save-snapshot')],['导出 PNG',()=>handle('export-png')],['导出 PDF',()=>pdf?.click()||handle('print')],['导出可编辑 ZIP',()=>handle('download-project-zip')],['打印',()=>handle('print')],['导入创作指令',()=>handle('creative-json')]])p.content.append(button(name,()=>{p.close();fn();}));},'btn');share.setAttribute('aria-label','导出作品');actions.append(share);if(json){json.hidden=true;actions.append(json);}
   const toolbar=document.createElement('div');toolbar.className='swift-editor-toolbar';shell.before(toolbar);toolbar.append(tools);tools.replaceChildren();
   const context=document.createElement('div');context.className='canvas-context-tools';context.setAttribute('aria-label','当前工具选项');toolbar.append(context);
   const changeTool=(mode,b)=>{view.endTextEditing?.();if(b.getAttribute('aria-expanded')==='true'){closePopover();return;}const repeated=state.tool===mode;if(['pen','highlighter'].includes(mode))state.previousInkTool=mode;state.tool=['layers','paper','material'].includes(mode)?'select':mode;state.toolHighlight=mode;if(!repeated)state.selectionPath=null;if(mode!=='select'&&mode!=='lasso'){state.multiSelected=[];state.selectedStrokes=[];}if(mode!=='select'&&mode!=='lasso')state.selected=null;if(!state.selected){page.querySelectorAll('.object-handle,.selected-object-actions,.selected-object-overlay').forEach(n=>n.remove());page.querySelectorAll('.selected').forEach(n=>n.classList.remove('selected'));page.querySelector('.canvas-selection-overlay')?.replaceChildren();}page.classList.toggle('pen',['pen','highlighter','eraser'].includes(mode));page.classList.toggle('lasso',['lasso','marquee'].includes(mode));syncTools();contextTools();if(['shape','material','layers','paper'].includes(mode)){if(mode==='shape')shapePicker(b);else if(mode==='material')materialPicker(b);else if(mode==='layers')layerPicker(b);else paperPicker(b);}else if(repeated&&['pen','highlighter','eraser','lasso'].includes(mode))toolSettings(b,mode);else closePopover();};
   for(const mode of ['select','pen','eraser','highlighter','lasso','text','shape','material','layers','paper']){const b=button(glyphs[mode],()=>changeTool(mode,b),'btn');b.dataset.act='tool';b.dataset.val=mode;b.setAttribute('aria-label',labels[mode]);b.title=labels[mode];tools.append(b);if(mode==='select')b.oncontextmenu=e=>{e.preventDefault();const p=openPopover(b,{title:'选择工具',width:230,menu:true});for(const [m,name] of [['select','点击选择 · 单指滚动画布'],['marquee','拖出矩形框选']])p.content.append(button(name,()=>{p.close();state.tool=m;state.toolHighlight='select';render();}));};}
-  const editorPanelController=new AbortController();
-  // The legacy property panel has functioning bindings in bindInspector().
-  // The previous editor mount hid it unconditionally, leaving apparent dead
-  // controls. Keep it available behind an explicit, phone-safe toggle.
-  const inspectorPanel=shell.querySelector('.editor-inspector');
+  // Property editing remains available through the selected object's
+  // contextual inspector, not a separate top-bar button.
   shell.classList.add('swift-editor-workspace');
-  const showInspector=visible=>{
-    state.showEditorInspector=visible;
-    shell.classList.toggle('show-inspector',visible);
-    if(inspectorPanel)inspectorPanel.hidden=!visible;
-    inspectorButton.setAttribute('aria-expanded',String(visible));
-    inspectorButton.setAttribute('aria-pressed',String(visible));
-  };
-  const inspectorButton=button('属性',()=>showInspector(!state.showEditorInspector),'btn');
-  inspectorButton.setAttribute('aria-label','显示或隐藏页面及对象属性');
-  actions.insertBefore(inspectorButton,actions.querySelector('.btn.primary'));
-  showInspector(!!state.showEditorInspector);
-  document.addEventListener('pointerdown',event=>{
-    if(!state.showEditorInspector||!inspectorPanel||inspectorPanel.contains(event.target)||inspectorButton.contains(event.target))return;
-    if(window.innerWidth<900)showInspector(false);
-  },{signal:editorPanelController.signal,capture:true});
+  shell.classList.remove('show-inspector');
+  const inspectorPanel=shell.querySelector('.editor-inspector');
+  if(inspectorPanel)inspectorPanel.hidden=true;
   function syncTools(){for(const b of tools.querySelectorAll('button')){const active=(state.toolHighlight||state.tool)===b.dataset.val||(b.dataset.val==='select'&&state.tool==='marquee');b.classList.toggle('primary',active);b.setAttribute('aria-pressed',String(active));}page.classList.toggle('pen',['pen','highlighter','eraser'].includes(state.tool));}
   function contextTools(){context.replaceChildren();const mode=state.toolHighlight||state.tool,entry=entries.find(e=>e.value.id===state.selected),s=entry?.value,kind=entry?.kind;
     if(['pen','highlighter'].includes(mode)){
-      const marker=mode==='highlighter',key=marker?'marker':'pen';
-      for(const width of [2,4,9]){
-        const b=button('',()=>{if(prefs[key+'Width']===width)widthSettings(b,mode);else{prefs[key+'Width']=width;prefsChanged();contextTools();}},'stroke-width'+(prefs[key+'Width']===width?' active':''));
-        b.innerHTML='<span style="height:'+Math.max(2,width)+'px"></span>';
-        b.setAttribute('aria-label','笔画粗细 '+width+' pt');context.append(b);
+      const key=mode==='highlighter'?'marker':'pen';
+      for(let i=0;i<3;i++){
+        const width=inkSlot(prefs,mode,'width',i),active=activeInkSlot(prefs,mode,'width')===i;
+        const b=button('',()=>{if(activeInkSlot(prefs,mode,'width')===i){widthSettings(b,mode,i);return;}
+          selectInkSlot(prefs,mode,'width',i);prefsChanged();contextTools();
+        },'stroke-width'+(active?' active':''));
+        b.innerHTML='<span style="display:block;height:'+Math.max(2,Math.min(20,width))+'px"></span>';
+        b.dataset.inkWidthSlot=String(i);
+        b.setAttribute('aria-label','笔画粗细 '+width+' pt');b.title=active?'再次点击可修改粗细':'';context.append(b);
       }
-      for(const color of ['#2b5245','#009cff','#ff3348']){
-        const b=button('',()=>{if(prefs[key+'Color']===color)colorSettings(b,mode);else{prefs[key+'Color']=color;prefsChanged();contextTools();}},'ink-color'+(prefs[key+'Color']===color?' active':''));
-        b.style.backgroundColor=color;b.setAttribute('aria-label','笔画颜色 '+color);context.append(b);
+      for(let i=0;i<3;i++){
+        const color=inkSlot(prefs,mode,'color',i),active=activeInkSlot(prefs,mode,'color')===i;
+        const b=button('',()=>{if(activeInkSlot(prefs,mode,'color')===i){colorSettings(b,mode,i);return;}
+          selectInkSlot(prefs,mode,'color',i);prefsChanged();contextTools();
+        },'ink-color'+(active?' active':''));
+        b.style.backgroundColor=color;b.dataset.inkColorSlot=String(i);
+        b.setAttribute('aria-label','笔画颜色 '+color);b.title=active?'再次点击可修改颜色':'';context.append(b);
       }
-      const custom=document.createElement('input');custom.type='color';
-      custom.value=prefs[key+'Color'];custom.setAttribute('aria-label',marker?'自定义荧光笔颜色':'自定义画笔颜色');
-      custom.title='选择任意颜色';custom.oninput=()=>{prefs[key+'Color']=custom.value;prefsChanged();};context.append(custom);
-      context.append(button('更多颜色',e=>colorSettings(e.currentTarget,mode)));return;
+      return;
     }
     if(mode==='eraser'){
-      for(const size of [8,20,40]){
-        const b=button('○',()=>{if(prefs.eraserWidth===size&&(prefs.eraserStyle||'standard')!=='standard'){widthSettings(b,'eraser');return;}
-          prefs.eraserWidth=size;prefs.eraserStyle='fine';prefs.wholeStroke=false;prefsChanged();contextTools();
-        },'eraser-size'+(prefs.eraserWidth===size&&(prefs.eraserStyle||'standard')!=='standard'?' active':''));
-        b.style.fontSize=(size/2+14)+'px';b.setAttribute('aria-label','切换到局部橡皮 '+size+' pt');context.append(b);
+      for(let i=0;i<3;i++){
+        const size=inkSlot(prefs,'eraser','width',i),active=activeInkSlot(prefs,'eraser','width')===i;
+        const b=button('○',()=>{if(activeInkSlot(prefs,'eraser','width')===i){widthSettings(b,'eraser',i);return;}
+          selectInkSlot(prefs,'eraser','width',i);prefsChanged();contextTools();
+        },'eraser-size'+(active?' active':''));
+        b.style.fontSize=Math.round(Math.max(17,Math.min(42,size*.48+11)))+'px';
+        b.dataset.inkWidthSlot=String(i);
+        b.setAttribute('aria-label','橡皮大小 '+size+' pt');b.title=active?'再次点击可修改橡皮大小':'';context.append(b);
       }
-      context.append(button('自定大小',e=>widthSettings(e.currentTarget,'eraser')));return;
+      return;
     }
     if(mode==='lasso'||mode==='marquee'){const icon=button('◌',()=>{});icon.setAttribute('aria-label','套索选择');icon.setAttribute('aria-pressed','true');context.append(icon);return;}
     if(['shape','material','layers','paper'].includes(mode))return;
@@ -95,29 +89,41 @@ export function mountCanvasEditor(c){
   }
   const toggle=(parent,label,value,fn)=>{const row=document.createElement('label');row.className='canvas-toggle';row.append(document.createTextNode(label));const input=document.createElement('input');input.type='checkbox';input.checked=value;input.onchange=()=>fn(input.checked);row.append(input);parent.append(row);return input;};
   const range=(parent,label,value,min,max,step,fn,disabled=false,suffix=" pt")=>{const row=document.createElement('label');row.className='canvas-setting';const line=document.createElement('span'),display=document.createElement('output');line.append(document.createTextNode(label),display);display.textContent=Number(value).toFixed(step<1?1:0)+suffix;const input=document.createElement('input');Object.assign(input,{type:'range',min,max,step,value,disabled});input.oninput=()=>{display.textContent=Number(input.value).toFixed(step<1?1:0)+suffix;fn(+input.value);};row.append(line,input);parent.append(row);};
-  function widthSettings(anchor,mode){
-    const key=mode==='highlighter'?'marker':'pen',p=openPopover(anchor,{title:mode==='eraser'?'橡皮大小':'笔粗细',width:280});
-    range(p.content,'粗细',mode==='eraser'?prefs.eraserWidth:prefs[key+'Width'],mode==='eraser'?6:1,mode==='eraser'?80:20,.1,value=>{
-      if(mode==='eraser'){prefs.eraserWidth=value;prefs.eraserStyle='fine';prefs.wholeStroke=false;}
-      else prefs[key+'Width']=value;
+  function widthSettings(anchor,mode,index=activeInkSlot(prefs,mode,'width')){
+    const p=openPopover(anchor,{title:mode==='eraser'?'修改橡皮大小':'修改笔粗细',width:270});
+    const apply=value=>{
+      const n=editInkSlot(prefs,mode,'width',index,value);
+      const stroke=anchor.querySelector('span');
+      if(stroke)stroke.style.height=Math.max(2,Math.min(20,n))+'px';
+      if(mode==='eraser')anchor.style.fontSize=Math.round(Math.max(17,Math.min(42,n*.48+11)))+'px';
+      anchor.setAttribute('aria-label',(mode==='eraser'?'橡皮大小 ':'笔画粗细 ')+n+' pt');
       prefsChanged();
-    });
+    };
+    range(p.content,'粗细',inkSlot(prefs,mode,'width',index),
+      mode==='eraser'?6:1,mode==='eraser'?80:20,.1,apply);
   }
-  function colorSettings(anchor,mode){
-    const key=mode==='highlighter'?'marker':'pen',p=openPopover(anchor,{title:'自定义颜色',width:300}),
-      palette=document.createElement('div');
+  function colorSettings(anchor,mode,index=activeInkSlot(prefs,mode,'color')){
+    const p=openPopover(anchor,{title:'修改当前颜色',width:280}),palette=document.createElement('div');
     palette.className='canvas-color-grid';p.content.append(palette);
-    const apply=color=>{prefs[key+'Color']=color;prefsChanged();};
+    const apply=value=>{
+      const normalized=editInkSlot(prefs,mode,'color',index,value);
+      anchor.style.backgroundColor=normalized;
+      anchor.setAttribute('aria-label','笔画颜色 '+normalized);
+      prefsChanged();
+    };
     for(const color of ['#171717','#555555','#989898','#ffffff','#e33b45','#fb8795','#ff9c21','#e8d432','#159b73','#57bd4b','#167ad9','#264d9c','#853aaf','#955969']){
-      const b=button('',()=>{apply(color);p.close();contextTools();});
-      b.className='ink-color';b.style.backgroundColor=color;b.setAttribute('aria-label','颜色 '+color);palette.append(b);
+      const b=button('',()=>{apply(color);p.close();});
+      b.className='ink-color';b.style.backgroundColor=color;
+      b.setAttribute('aria-label','颜色 '+color);palette.append(b);
     }
-    const row=document.createElement('label');row.textContent='精确颜色（十六进制）';
-    const custom=document.createElement('input');custom.type='color';custom.value=prefs[key+'Color'];custom.setAttribute('aria-label','颜色选择器');
-    const hex=document.createElement('input');hex.type='text';hex.maxLength=7;hex.placeholder='#RRGGBB';hex.value=prefs[key+'Color'];hex.setAttribute('aria-label','输入精确颜色');
+    const row=document.createElement('label');row.textContent='自定义颜色';
+    const custom=document.createElement('input');custom.type='color';
+    custom.value=inkSlot(prefs,mode,'color',index);
+    const hex=document.createElement('input');hex.type='text';hex.maxLength=7;hex.placeholder='#RRGGBB';
+    hex.value=custom.value;
     custom.oninput=()=>{hex.value=custom.value;apply(custom.value);};
-    hex.oninput=()=>{const value=hex.value.trim();if(/^#[0-9a-fA-F]{6}$/.test(value)){custom.value=value;apply(value.toLowerCase());}};
-    hex.onchange=()=>{if(!/^#[0-9a-fA-F]{6}$/.test(hex.value.trim()))hex.value=prefs[key+'Color'];};
+    hex.oninput=()=>{const value=hex.value.trim();if(/^#[0-9a-fA-F]{6}$/.test(value)){custom.value=value;apply(value);}};
+    hex.onchange=()=>{if(!/^#[0-9a-fA-F]{6}$/.test(hex.value.trim()))hex.value=inkSlot(prefs,mode,'color',index);};
     row.append(custom,hex);p.content.append(row);
   }
   function toolSettings(anchor,mode){const p=openPopover(anchor,{title:labels[mode],width:290,menu:true}),el=p.content;
@@ -256,46 +262,54 @@ export function mountCanvasEditor(c){
       move.onclick=()=>{if(drag||performance.now()<suppressMoveClickUntil)return;moveMenu?.remove();const controls=document.createElement('div');controls.className='canvas-layer-move-actions';controls.append(button('上移一层',()=>{reorder(o.id,ordered[indexOf(o.id)-1]?.value.id);controls.remove();moveMenu=null;}),button('下移一层',()=>{reorder(o.id,ordered[indexOf(o.id)+1]?.value.id,true);controls.remove();moveMenu=null;}));row.append(controls);moveMenu=controls;};
       move.dataset.layerMove='';move.setAttribute('aria-label','调整图层顺序');move.style.touchAction='none';
       let pending=null;
+      // Start a drag by holding anywhere on the thumbnail/drag grip. Previous
+      // code listened only on a narrow ≡ button, so long-pressing the layer
+      // itself simply selected it and could close the popover.
       const beginDrag=()=>{
         if(!pending||drag)return;
-        drag={id:o.id,y:pending.y,target:null};
+        drag={id:o.id,y:pending.y,target:null,moved:false};
         row.classList.add('dragging');
-        scrollDrag();
+        try{row.setPointerCapture(pending.pointerId);}catch{}
       };
-      move.onpointerdown=event=>{
-        if(event.button>0||o.isLocked||o.locked)return;
-        event.stopPropagation();
+      row.addEventListener('contextmenu',event=>event.preventDefault());
+      row.addEventListener('click',event=>{
+        if(performance.now()<suppressMoveClickUntil){event.preventDefault();event.stopImmediatePropagation();}
+      },true);
+      row.onpointerdown=event=>{
+        if(event.button>0||o.isLocked||o.locked||
+          event.target.closest('[data-layer-lock],[data-layer-eye],.canvas-layer-move-actions'))return;
         pending={pointerId:event.pointerId,x:event.clientX,y:event.clientY,startY:event.clientY,
           pointerType:event.pointerType};
-        try{move.setPointerCapture(event.pointerId);}catch{}
-        if(event.pointerType==='touch')holdTimer=setTimeout(beginDrag,240);
+        if(event.pointerType!=='mouse')holdTimer=setTimeout(beginDrag,240);
       };
-      move.onpointermove=event=>{
+      row.onpointermove=event=>{
         if(!pending||pending.pointerId!==event.pointerId)return;
         pending.y=event.clientY;
         if(!drag){
           const distance=Math.hypot(event.clientX-pending.x,event.clientY-pending.startY);
-          if(event.pointerType==='mouse'&&distance>4)beginDrag();
-          else if(event.pointerType==='touch'&&distance>10){clearTimeout(holdTimer);holdTimer=null;}
+          if(event.pointerType==='mouse'&&distance>5)beginDrag();
+          // Do not treat a quick touch scroll as a layer reordering.
+          else if(event.pointerType!=='mouse'&&distance>12){clearTimeout(holdTimer);holdTimer=null;}
         }
         if(!drag)return;
         drag.y=event.clientY;
-        list.querySelectorAll('.drop-target').forEach(el=>el.classList.remove('drop-target'));
-        drag.target=targetAt(event.clientY);
-        drag.target?.row.classList.add('drop-target');
+        if(Math.hypot(event.clientX-pending.x,event.clientY-pending.startY)>5){
+          if(!drag.moved){drag.moved=true;scrollDrag();}
+          drag.target=targetAt(event.clientY);
+        }
         event.preventDefault();event.stopPropagation();
       };
-      move.onpointerup=event=>{
+      row.onpointerup=event=>{
         if(!pending||pending.pointerId!==event.pointerId)return;
-        const target=drag?targetAt(event.clientY):null;
-        const dragged=!!drag;stopDrag();pending=null;
+        const dragged=!!drag?.moved,target=dragged?targetAt(event.clientY):null;
+        stopDrag();pending=null;
         if(dragged){
-          suppressMoveClickUntil=performance.now()+400;
+          suppressMoveClickUntil=performance.now()+550;
           event.preventDefault();event.stopPropagation();
           if(target)reorder(o.id,target.id,target.after);
         }
       };
-      move.onpointercancel=()=>{pending=null;stopDrag();};
+      row.onpointercancel=()=>{pending=null;stopDrag();};
       move.onkeydown=event=>{
         if(o.isLocked||o.locked||!['ArrowUp','ArrowDown'].includes(event.key))return;
         event.preventDefault();
@@ -368,8 +382,8 @@ export function mountCanvasEditor(c){
   ink.onpointercancel=()=>{if(!stroke&&!erase)return;stroke=null;erase=null;const before=state.undo.pop();if(before)d.strokes=before.strokes;paint();};
   view.cancelInkGesture=ink.onpointercancel;
   mountCanvasViewport(c,page);
-  const disposeViewport=view.editorDispose;
-  view.editorDispose=()=>{editorPanelController.abort();disposeViewport?.();};
+  // Navigation gestures remain owned by mountCanvasViewport.
+
   refresh();
   function vectorColors(shape,target=context){
     if(!shape.vectorLayers)return;

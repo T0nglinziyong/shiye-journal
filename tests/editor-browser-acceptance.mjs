@@ -17,7 +17,7 @@ try{
     await click('[data-filter-heading="排序依据"]','.swift-menu');assert.ok(!await evaluate('document.querySelector("#modal").open'));await capture('filter-menu',w,h);await evaluate('[...document.querySelectorAll(".swift-menu button")].find(b=>b.textContent==="名称").click()');assert.equal(await evaluate('document.querySelector("#sort-basis").value'),'name');
     await click('[data-act="detail"][data-id="browser-tall"]','.detail-columns');await click('[data-act="detail-check"]','#cutout-canvas');
     for(const mode of ['rough','recognition','final']){if(mode!=='rough')await click('#cutout-next');if(mode==='final')await click('#cutout-rotate');const rect=await evaluate('(()=>{const c=document.querySelector("#cutout-canvas"),r=c.getBoundingClientRect(),p=c.parentElement.getBoundingClientRect();return {ratio:r.width/r.height,expected:c.width/c.height,inside:r.left>=p.left&&r.right<=p.right+1&&r.top>=p.top&&r.bottom<=p.bottom+1};})()');assert.ok(rect.inside&&Math.abs(rect.ratio/rect.expected-1)<.002,JSON.stringify(rect));await capture('tall-cutout-'+mode,w,h);}
-    await click('#cutout-cancel');await click('[data-route="works"]','.works-grid');await click('#work-create','#canvas-page');
+    await click('#cutout-cancel');await click('[data-route="works"]','.works-grid');await click('#work-create','#blank-create-confirm');await click('#blank-create-confirm','#canvas-page');
     assert.equal(await evaluate('document.querySelector(".swift-editor-toolbar").children.length'),2);assert.deepEqual(await evaluate('[...document.querySelectorAll(".swift-editor-toolbar .editor-tools button")].map(b=>b.getAttribute("aria-label"))'),['选择','笔','橡皮擦','荧光笔','套索选择','文字','图形','素材','图层','画布背景']);
     for(const mode of ['pen','highlighter','eraser','lasso']){await click('[data-val="'+mode+'"]');assert.equal(await evaluate('document.querySelectorAll(".swift-popover").length'),0);await capture('tool-'+mode,w,h);await click('[data-val="'+mode+'"]','.swift-popover');await capture('settings-'+mode,w,h);assert.ok(await evaluate(mode==='pen'?'[...document.querySelectorAll(".swift-popover button")].some(b=>b.textContent==="圆珠笔")':mode==='eraser'?'[...document.querySelectorAll(".swift-popover button")].some(b=>b.textContent==="精细橡皮擦")':mode==='lasso'?'[...document.querySelectorAll(".swift-popover button")].some(b=>b.textContent==="只需要相交")':'!!document.querySelector(".swift-popover input[type=checkbox]")'));assert.ok(!await evaluate('!!document.querySelector(".swift-popover input[type=range],.swift-popover input[type=color]")'));assert.ok(!await evaluate('document.querySelector(".swift-popover").textContent.includes("Apple Pencil")'));await command('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape'});}
     await click('[aria-label="图层"]','.canvas-layer-list');await capture('layers',w,h);await command('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape'});
@@ -43,7 +43,29 @@ try{
       const layerDragAfter=await evaluate('([...document.querySelectorAll(".canvas-layer-row")].map(e=>e.dataset.layerId))');
       assert.notDeepEqual(layerDragAfter,layerDragBefore,'press-and-drag must reorder layers');
     }
+    if(w<700&&layerDragBefore.length>1){
+      const coords=await evaluate('(()=>{const rows=[...document.querySelectorAll(".canvas-layer-row")],r=rows[0].querySelector("[data-layer-pick]").getBoundingClientRect(),target=rows.at(-1).getBoundingClientRect();return {from:{x:r.left+r.width/2,y:r.top+r.height/2},to:{x:r.left+r.width/2,y:target.top+target.height*.75}};})()');
+      const startOrder=await evaluate('([...document.querySelectorAll(".canvas-layer-row")].map(r=>r.dataset.layerId))');
+      await command('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:coords.from.x,y:coords.from.y,id:1}]});
+      await sleep(370);
+      for(let j=1;j<=9;j++){await command('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:coords.from.x,y:coords.from.y+(coords.to.y-coords.from.y)*j/9,id:1}]});await sleep(18);}
+      await command('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await sleep(90);
+      const endOrder=await evaluate('([...document.querySelectorAll(".canvas-layer-row")].map(r=>r.dataset.layerId))');
+      assert.notDeepEqual(endOrder,startOrder,'touch long-press layer reorder must work');
+    }
     await command('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape'});await click('[data-act="undo"]');await click('[data-act="back-works"]','.works-grid');
+    assert.equal(await evaluate('document.querySelector(".swift-tabs button.selected")?.textContent.trim()'),'草稿',
+      'Back must leave a new work in Drafts, not discard it');
+    const draft=await currentProject();assert.equal(draft.isDraft,true);
+    const draftCard=await evaluate('(document.querySelector(".works-grid .card[data-act=open-project]:not([hidden])")?.dataset.id)');
+    assert.ok(draftCard);
+    await click('.works-grid .card[data-act=open-project]:not([hidden])','#canvas-page');
+    await evaluate('[...document.querySelectorAll(".swift-editor-head .actions button")].find(b=>b.textContent.trim()==="完成").click()');
+    await wait('.works-grid');await sleep(120);
+    assert.equal(await evaluate('document.querySelector(".swift-tabs button.selected")?.textContent.trim()'),'可编辑作品',
+      'Complete must publish to Editable Works');
+    const published=await currentProject();assert.equal(published.isDraft,false);
+    
   }
   assert.deepEqual(b.errors,[]);await writeFile(directory+'/report.json',JSON.stringify({report,errors:b.errors},null,2));console.log('Swift editor verification passed:',report.length,'screens',directory);
 }finally{await b.close();}
