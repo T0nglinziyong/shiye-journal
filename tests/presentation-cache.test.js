@@ -71,15 +71,23 @@ test('warm preview lookup is synchronous and switching routes does not fetch aga
   const next=await loader.load('m');assert.notEqual(next,source);assert.ok(reads>=2);
  }finally{loader.dispose();env.close();}
 });
-test('returning to the editor upgrades a warm thumbnail to a size-based display variant',async()=>{
- const env=environment();let originals=0,display=0,full=false;const root=document.createElement('div');document.body.append(root);
- const loader=mountPrivateImages({root,db:{previewBlob:async(_id,pixels)=>{if(pixels>360){display++;return new Blob(['display']);}return new Blob(['small']);},get:async()=>{originals++;return {data:new Blob(['large'])};}},urls:new Map(),fullView:()=>full,onError:()=>{}});
+test('editor display variants reuse a warm low cover without fetching the raw original',async()=>{
+ const env=environment();let originals=0,display=0;const root=document.createElement('div');document.body.append(root);
+ const loader=mountPrivateImages({root,db:{
+   previewBlob:async(_id,pixels)=>{if(pixels>360)display++;return new Blob(['variant:'+pixels]);},
+   get:async()=>{originals++;return {data:new Blob(['raw'])};}
+ },urls:new Map(),onError:()=>{}});
  try{
-  const preview=await loader.load('m');full=true;root.innerHTML='<img style="width:500px;height:500px" src="'+preview+'">';
-  await until(()=>display===1&&root.querySelector('img').getAttribute('src')!==preview);
-  assert.equal(originals,0);assert.equal(loader.stats().displayVariants,1);assert.equal(root.querySelector('img').dataset.privateImageId,'m');
+   const preview=await loader.load('m');
+   const sharp=await loader.load('m',750);
+   assert.notEqual(sharp,preview);
+   assert.equal(display,1);
+   assert.equal(originals,0);
+   assert.equal(loader.stats().displayVariants,1);
+   assert.equal(await loader.load('m',750),sharp);
  }finally{loader.dispose();env.close();}
 });
+
 test('whole invalidation discards in-flight reads even before they have a cached URL',async()=>{
  const env=environment();let finish;const root=document.createElement('div');document.body.append(root);
  const loader=mountPrivateImages({root,db:{previewBlob:()=>new Promise(resolve=>{finish=resolve;}),get:async()=>null},urls:new Map(),onError:()=>{}});
