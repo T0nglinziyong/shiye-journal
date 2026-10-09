@@ -33,11 +33,22 @@ export function mountAssetSelection(c,p){
   const sync=()=>{showResults();const active=isActive();for(const card of cards){const chosen=active&&p.selected.has(card.dataset.id);card.classList.toggle('batch-selected',chosen);if(active)card.setAttribute('aria-pressed',String(chosen));else card.removeAttribute('aria-pressed');let check=card.querySelector('.batch-check');if(active&&!check){check=document.createElement('span');check.className='batch-check';card.append(check);}if(check){check.hidden=!active;check.textContent=chosen?'☑':'□';}const title=card.querySelector('h3');let mark=title?.querySelector('.basket-card-check');const inBasket=state.basket.includes(card.dataset.id);title?.classList.toggle('in-matching-basket',inBasket);if(inBasket&&!mark){mark=document.createElement('span');mark.className='basket-card-check';mark.textContent='✓';mark.setAttribute('aria-label','已加入搭配素材篮');title.append(mark);}if(!inBasket)mark?.remove();}tray.hidden=!active;if(!active||!p.selected.size)closePopoverFor(tray.querySelector('[data-selection-more]'));view.querySelectorAll('.library-select-toggle').forEach(b=>b.textContent=p.selectionMode?'完成':'选择');view.querySelectorAll('.action-card').forEach(b=>b.disabled=active);const n=tray.querySelector('strong');n.textContent='本次选中 '+p.selected.size+' 件';tray.querySelectorAll('[data-selection-required]').forEach(b=>b.disabled=!p.selected.size);const selectedButton=[...tray.querySelectorAll('button')].find(b=>b.textContent==='返回筛选'||b.textContent==='查看所选');if(selectedButton){selectedButton.textContent=p.showOnlySelected?'返回筛选':'查看所选';selectedButton.disabled=!p.selected.size&&!p.showOnlySelected;}return true;};
   const tray=document.createElement('div');tray.className='swift-tray manage library-management-tray';tray.dataset.selectionMode='asset';tray.innerHTML='<strong></strong>';
   const require=(name,fn)=>{const b=action(name,fn);b.dataset.selectionRequired='';return b;};
-  tray.append(action('全选页面',()=>{cards.filter(b=>!b.hidden).forEach(b=>p.selected.add(b.dataset.id));sync();}),require('清空选择',()=>{p.selected.clear();p.showOnlySelected=false;sync();}),require(p.showOnlySelected?'返回筛选':'查看所选',()=>{p.showOnlySelected=!p.showOnlySelected;sync();}),require('加入搭配',()=>{state.basket=[...new Set([...state.basket,...p.selected])];finishSelection(p);sync();document.querySelector('#basket-count').textContent=state.basket.length;c.toast('已加入搭配素材篮');}),require('更多操作',anchor=>moreMenu(c,p,anchor)),require('删除素材',async()=>{
+  tray.append(action('全选页面',()=>{cards.filter(b=>!b.hidden).forEach(b=>p.selected.add(b.dataset.id));sync();}),require('清空选择',()=>{p.selected.clear();p.showOnlySelected=false;sync();}),require(p.showOnlySelected?'返回筛选':'查看所选',()=>{p.showOnlySelected=!p.showOnlySelected;sync();}),require('加入搭配',()=>{state.basket=[...new Set([...state.basket,...p.selected])];finishSelection(p);sync();document.querySelector('#basket-count').textContent=state.basket.length;c.toast('已加入搭配素材篮');}),require('导出素材 ›',anchor=>exportMenu(c,p,anchor)),require('更多操作',anchor=>moreMenu(c,p,anchor)),require('删除素材',async()=>{
     const records=state.assets.filter(a=>p.selected.has(a.id));if(!records.length||!confirm('将所选 '+records.length+' 件素材移到最近删除？'))return;
     const entries=records.map(item=>({id:crypto.randomUUID(),kind:'asset',item:structuredClone(item),date:new Date().toISOString()}));
     await c.db.transaction(['assets','trash'],tx=>{for(const e of entries){tx.objectStore('assets').delete(e.item.id);tx.objectStore('trash').put(e);}});state.assets=state.assets.filter(a=>!p.selected.has(a.id));state.basket=state.basket.filter(id=>!p.selected.has(id));state.trash.push(...entries);finishSelection(p);render();
   }));tray.lastChild.classList.add('danger');view.append(tray);registerSelectionPresenter(view,sync);
+}
+function exportMenu(c,p,anchor){
+  const menu=togglePopover(anchor,{title:'导出素材',menu:true,width:250});
+  if(!menu)return;
+  menu.surface.classList.add('selection-more-menu');
+  for(const [name,format] of [['透明 PNG','png'],['白底 JPEG','jpeg'],['原始素材图像','original']]){
+    menu.content.append(action(name,async()=>{menu.close();await exportImages(c,p,format);}));
+  }
+  if(c.exportSelectedMaterials)menu.content.append(action('实际尺寸打印 PDF',async()=>{
+    const ids=[...p.selected];menu.close();await c.exportSelectedMaterials(ids);
+  }));
 }
 function moreMenu(c,p,anchor){const menu=togglePopover(anchor,{title:'更多操作',menu:true,width:230});if(!menu)return;menu.surface.classList.add('selection-more-menu');menu.content.append(action('重新识别',async()=>{
   const records=c.state.assets.filter(a=>p.selected.has(a.id)).map(a=>structuredClone(a)),cfg=structuredClone(c.state.aiSettings),accountID=c.state.accountId;
@@ -50,7 +61,7 @@ function moreMenu(c,p,anchor){const menu=togglePopover(anchor,{title:'更多操�
     if(await c.applyAssetClassification(record,result,{manual:true,isCurrent:()=>c.state.accountId===accountID&&isCurrent()}))completed++;
   },onError:()=>{failed++;}});
   if(c.state.accountId===accountID)c.toast(failed?`已整理 ${completed} 件，${failed} 件未完成；可稍后重试`:`已整理 ${completed} 件`);
-}),action('加入系列 ›',b=>submenu(menu,b,'加入系列',(series,newSeries)=>assignSeries(c,p,series,newSeries))),action('导出图像 ›',b=>submenu(menu,b,'导出图像',null)),action('设置状态 ›',b=>submenu(menu,b,'设置状态','usage')));
+}),action('加入系列 ›',b=>submenu(menu,b,'加入系列',(series,newSeries)=>assignSeries(c,p,series,newSeries))),action('设置状态 ›',b=>submenu(menu,b,'设置状态','usage')));
   let closeChild=null,childTitle=null;
   function submenu(parent,b,title,assign){const same=childTitle===title;closeChild?.();closeChild=null;childTitle=null;if(same){parent.position();b.focus({preventScroll:true});return;}const panel=document.createElement('section');panel.className='swift-popover swift-menu selection-submenu';panel.setAttribute('role','menu');panel.setAttribute('aria-label',title);const width=Math.min(230,(innerWidth-32)/2);panel.style.width=width+'px';const remove=parent.addSurface(panel,()=>{const r=parent.surface.getBoundingClientRect(),w=width,side=r.right+w+8<=innerWidth-12?r.right+8:r.left-w-8>=12?r.left-w-8:12;panel.style.left=Math.max(12,Math.min(side,innerWidth-w-12))+'px';panel.style.maxHeight=(innerHeight-24)+'px';panel.style.top=Math.max(12,Math.min(r.top,innerHeight-panel.offsetHeight-12))+'px';});
     childTitle=title;b.setAttribute('aria-expanded','true');closeChild=()=>{remove();b.setAttribute('aria-expanded','false');delete parent.surface.dataset.submenu;};
