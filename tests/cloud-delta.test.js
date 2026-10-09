@@ -29,3 +29,28 @@ test('pending mutation rebases only over a complete disjoint change log',async()
   }
   assert.equal(await canRebaseUnchangedKeys({...args,client:fixture({logs:[],rows:{}}).client}),false);
 });
+
+
+function watermarkClient({start=721,keys=[]}={}){
+  return {from(table){
+    const where={};
+    const q={
+      select(){return q;},
+      eq(name,value){where[name]=value;return q;},
+      gt(name,value){where.after=value;return q;},
+      in(name,value){where[name]=value;return q;},
+      maybeSingle:async()=>table==='shiye_key_watermark_start'?{data:{start_revision:start},error:null}:{data:null,error:null},
+      limit:async()=>({data:keys.filter(key=>key.store===where.store&&key.revision>where.after&&(!where.id||where.id.includes(key.id))).slice(0,1),error:null})
+    };
+    return q;
+  }};
+}
+test('key watermarks allow disjoint updates beyond the 250-change history window',async()=>{
+  const args={owner:'owner',before:722,after:1250,operations:[{store:'projects',action:'delete',id:'work-a'}]};
+  assert.equal(await canRebaseUnchangedKeys({...args,client:watermarkClient({keys:[{store:'projects',id:'work-b',revision:1249}]})}),true);
+  assert.equal(await canRebaseUnchangedKeys({...args,client:watermarkClient({keys:[{store:'projects',id:'work-a',revision:900}]})}),false);
+  assert.equal(await canRebaseUnchangedKeys({...args,client:watermarkClient({keys:[{store:'projects',id:'*',revision:1100}]})}),false);
+  assert.equal(await canRebaseUnchangedKeys({...args,before:700,client:watermarkClient()}),false,
+    'History before watermark initialization is not silently assumed safe');
+  assert.equal(await canRebaseUnchangedKeys({...args,operations:[{store:'projects',action:'clear'}],client:watermarkClient({keys:[{store:'projects',id:'work-b',revision:930}]})}),false);
+});
