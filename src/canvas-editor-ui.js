@@ -116,8 +116,8 @@ export function mountCanvasEditor(c){
     const custom=document.createElement('input');custom.type='color';custom.value=prefs[key+'Color'];custom.setAttribute('aria-label','颜色选择器');
     const hex=document.createElement('input');hex.type='text';hex.maxLength=7;hex.placeholder='#RRGGBB';hex.value=prefs[key+'Color'];hex.setAttribute('aria-label','输入精确颜色');
     custom.oninput=()=>{hex.value=custom.value;apply(custom.value);};
-    hex.onchange=()=>{const value=hex.value.trim();if(!/^#[0-9a-fA-F]{6}$/.test(value)){hex.value=prefs[key+'Color'];return;}
-      custom.value=value;apply(value.toLowerCase());};
+    hex.oninput=()=>{const value=hex.value.trim();if(/^#[0-9a-fA-F]{6}$/.test(value)){custom.value=value;apply(value.toLowerCase());}};
+    hex.onchange=()=>{if(!/^#[0-9a-fA-F]{6}$/.test(hex.value.trim()))hex.value=prefs[key+'Color'];};
     row.append(custom,hex);p.content.append(row);
   }
   function toolSettings(anchor,mode){const p=openPopover(anchor,{title:labels[mode],width:290,menu:true}),el=p.content;
