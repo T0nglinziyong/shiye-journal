@@ -302,13 +302,27 @@ test('a missing remote thumbnail is rebuilt from its original instead of showing
   const a=fixture();a.state.missingThumbnail=true;a.state.rows=[{id:'b',storagePath:'owner-uuid/hash',storageProvider:'supabase',thumbnailPath:'owner-uuid/hash-preview360.webp'}];
   assert.equal(await (await a.db.cloudPreview('b')).text(),'private image');assert.equal(a.state.downloads,2);
 });
-test('COS CI fills only missing previews and never changes the original',async()=>{
-  const cache=memoryCache(),calls=[],cos={enabled:true,async preview(path){calls.push('ci:'+path);return new Blob(['small webp'],{type:'image/webp'});},async download(path){calls.push('original:'+path);return new Blob(['original pixels']);}},a=fixture(cache,cos);
-  a.state.rows=[{id:'b',storagePath:'owner-uuid/'+'a'.repeat(64),storageProvider:'cos'}];
-  assert.equal(await (await a.db.cloudPreview('b')).text(),'small webp');assert.deepEqual(calls,['ci:owner-uuid/'+'a'.repeat(64)]);
+test('COS thumbnails are materialized once for old images and later read without source processing',async()=>{
+  const cache=memoryCache(),calls=[],remote=new Map(),original='owner-uuid/'+'a'.repeat(64),
+    derived=original+'-preview360.webp';
+  remote.set(original,new Blob(['original pixels']));
+  const cos={enabled:true,
+    async preview(path){calls.push('CI:'+path);return new Blob(['small webp'],{type:'image/webp'});},
+    async download(path){calls.push('GET:'+path);if(!remote.has(path))throw Error('COS 404');return remote.get(path);},
+    async upload(path,blob){calls.push('PUT:'+path);remote.set(path,blob);}
+  },a=fixture(cache,cos);
+  a.state.rows=[{id:'b',storagePath:original,storageProvider:'cos'}];
+  assert.equal(await (await a.db.cloudPreview('b')).text(),'small webp');
+  assert.deepEqual(calls,['GET:'+derived,'CI:'+original,'PUT:'+derived]);
   const b=fixture(cache,cos);b.state.rows=a.state.rows;
-  assert.equal(await (await b.db.cloudPreview('b')).text(),'small webp');assert.equal(calls.length,1);
-  assert.equal(await (await b.db.cloudGet('blobs','b')).data.text(),'original pixels');assert.equal(calls.length,2);
+  assert.equal(await (await b.db.cloudPreview('b')).text(),'small webp');
+  assert.equal(calls.length,3,'account-local read cache avoids a network request');
+  const otherDevice=fixture(null,cos);otherDevice.state.rows=a.state.rows;
+  assert.equal(await (await otherDevice.db.cloudPreview('b')).text(),'small webp');
+  assert.equal(calls.at(-1),'GET:'+derived,'new device reads previously materialized COS WebP directly');
+  assert.equal(calls.filter(x=>x.startsWith('CI:')).length,1);
+  assert.equal(await (await b.db.cloudGet('blobs','b')).data.text(),'original pixels');
+  assert.equal(calls.at(-1),'GET:'+original);
 });
 test('large works list only metadata; opening reuses the cached editable document and metadata edits preserve geometry',async()=>{
   const cache=memoryCache(),a=fixture(cache),full={id:'p',title:'before',activeDraftID:'d',drafts:[{id:'d',canvas:{width:100,height:100},items:[],textBlocks:[],strokes:[],makingSteps:[],primitives:Array.from({length:4000},(_,i)=>({id:String(i),kind:'vector',vectorLayers:[{fill:'#ff0000',rects:[[0,0,12,12]]}]}))}]};
