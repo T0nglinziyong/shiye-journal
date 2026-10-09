@@ -300,7 +300,7 @@ async function encode(store,record){
               await remember('thumbnail:'+coverPath,preview);
             }
           }
-        }catch{/* Preview failure never invalidates the editable document. */}
+        }catch(error){console.warn('作品 COS 快照生成或上传失败；保留可编辑正文，下次同步重试',record.id,error);}
       }
     }
     if(!inline){await remember('project-document:'+path,blob);documents.set(path,Promise.resolve(structuredClone(record)));if(documents.size>8)documents.delete(documents.keys().next().value);}
@@ -331,6 +331,18 @@ function cloudTransaction(names,fn,operationID=crypto.randomUUID()){
     const previous=revision;
     const puts=operations.filter(op=>op.action==='put');for(let offset=0;offset<puts.length;offset+=3)await Promise.all(puts.slice(offset,offset+3).map(async op=>{op.item=await encode(op.store,op.item);}));
     const data=checked(await cloudClient().rpc('shiye_commit_v2',{operations,expected_revision:previous,operation_id:operationID}));revision=Number(data);
+    // A WebP cover becomes usable only after both its object PUT and the
+    // metadata commit succeed. Update the current Works UI immediately rather
+    // than waiting for a full collection reload (which recreated every card).
+    if(typeof window!=='undefined')for(const op of operations){
+      if(op.store!=='projects'||op.action!=='put'||op.item.isSnapshot)continue;
+      const cover=op.item.drafts?.find(d=>d.id===op.item.activeDraftID)||op.item.drafts?.[0];
+      if(!cover?.coverImageID)continue;
+      window.dispatchEvent(new CustomEvent('shiye-project-cover-ready',{detail:{
+        projectID:op.item.id,updatedAt:op.item.updatedAt,draftID:cover.id,
+        coverImageID:cover.coverImageID,coverSceneHash:cover.coverSceneHash
+      }}));
+    }
     for(const op of operations)if(op.store==='blobs'&&op.action==='put')await remember('blob-record:'+op.item.id,{revision,record:op.item});
     // Patch only cached collections belonging to the committed base revision.
     // Remote conflicts never write to this cache or silently become local edits.
