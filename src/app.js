@@ -151,8 +151,12 @@ const privateImages=mountPrivateImages({root:document.body,db,urls,fullView:img=
 const renderLocalCoverBlob=project=>renderWorkCoverSnapshot(project,{
   resolveAsset:async id=>asset(id)||await db.get('assets',id),
   previewBlob:async(id,pixels)=>{
-    // Prefer the fixed 360px variant. Imported works that have not yet
-    // uploaded their images may only have a locally staged Blob.
+    // Immediately reuse a just-imported source already held by this browser,
+    // instead of blocking the Works card on an unfinished COS thumbnail PUT.
+    const localURL=urls.get(id);
+    if(localURL)try{const raw=await fetch(localURL).then(response=>response.blob());
+      if(raw.size)return raw;}catch{}
+    // Already uploaded materials use the fixed 360px COS derivative.
     const preview=await db.previewBlob(id,pixels).catch(()=>null);
     if(preview instanceof Blob&&preview.size)return preview;
     const local=(await db.get('blobs',id).catch(()=>null))?.data;
