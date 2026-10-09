@@ -431,7 +431,17 @@ async function cloudStageImport(batch){await identity();if(revision===undefined)
 async function cloudStageMutation(names,fn){
   const operations=[],result=fn({objectStore(store){if(!names.includes(store))throw Error('此表未加入事务');return {put:item=>operations.push({action:'put',store,item:structuredClone(item)}),delete:id=>operations.push({action:'delete',store,id}),clear:()=>operations.push({action:'clear',store})};}});
   if(result?.then)throw Error('事务回调必须同步');if(!operations.length)return;
-  await identity();if(revision===undefined)await version();await importSync.stage({id:crypto.randomUUID(),names,operations});
+  await identity();if(revision===undefined)await version();
+  const deletedIDs=operations.filter(op=>op.store==='projects'&&op.action==='delete').map(op=>op.id);
+  if(!deletedIDs.length){await importSync.stage({id:crypto.randomUUID(),names,operations});return;}
+  // A deleted work must never be resurrected by an older queued editor save.
+  // The delete + full trash snapshot are first saved to the durable outbox.
+  // Only then may the now-obsolete project-specific pending editor rows leave
+  // their other durable outbox. Both steps run under the account sync lock.
+  await withAccountSyncLock(async()=>{
+    await importSync.stage({id:crypto.randomUUID(),names,operations});
+    await projectSync.cancelPendingFor(deletedIDs);
+  });
 }
 async function cloudPendingProjects(){await identity();return projectSync.pending();}
 // Metadata-only lookup: do NOT download every full-resolution photo just to
