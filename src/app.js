@@ -222,7 +222,7 @@ window.addEventListener('shiye-project-cover-ready',event=>{
     sheet.replaceChildren(img);
   }).catch(error=>console.warn('COS 封面显示待重试',error));
 });
-let settingsSession=null;
+let settingsSession=null,deferredSyncedPreferences=null;
 function captureSettings(){
   if(state.route!=='settings')return;
   if(view.querySelector('#setting-ai-provider'))state.aiSettings=readAIForm();
@@ -263,7 +263,7 @@ function route(name,{back=false}={}){
   if(state.route==='editor'&&name!=='editor')view.endTextEditing?.();
   routeScroll.set(state.route+':'+state.seriesID,window.scrollY);
   if(name==='settings'&&!settingsSession)settingsSession={ai:structuredClone(state.aiSettings),preferences:structuredClone(state.preferences),returnRoute:state.route};
-  if(state.route==='settings'&&name!=='settings'&&settingsSession){state.aiSettings=settingsSession.ai;state.preferences=settingsSession.preferences;settingsSession=null;state.settingsSection=null;}
+  if(state.route==='settings'&&name!=='settings'&&settingsSession){state.aiSettings=settingsSession.ai;state.preferences=settingsSession.preferences;settingsSession=null;state.settingsSection=null;if(cloudEnabled&&deferredSyncedPreferences)state.preferences=savePreferences(deferredSyncedPreferences);deferredSyncedPreferences=null;}
 if(state.route==='editor'&&name!=='editor'&&aiController)aiController.abort(Error('已离开创作页面'));const priorRoute=state.route;syncSelectionScope(parity,name);state.route=name;if(name==='import'&&state.importMode!=='snapshot'&&typeof Worker!=='undefined')void prewarmVision().catch(()=>{});if(name==='series'){state.seriesID='all';state.addingToSeries=null;libraryHistory.length=0;}if(name!=='library')state.addingToSeries=null;if(name!=='settings'&&!fromSettings)state.selected=null;render();window.scrollTo(0,routeScroll.get(name+':'+state.seriesID)||0);
   // Do not interrupt an unfinished matching/import workspace with a remote
   // repaint. Pull all queued remote deletions immediately on returning to
@@ -737,7 +737,7 @@ async function handle(action,id,value){try{switch(action){
   case 'storage-token':{const token=view.querySelector('#data-server-token')?.value.trim();if(!token)throw Error('请输入新的访问令牌');const old=db.storageConfig();db.setStorageConfig({url:location.origin,token});try{await db.storageMode();toast('令牌已更新');}catch(error){db.setStorageConfig(old);throw error;}break;}
   case 'storage-connect':{await flushSave();const old=db.storageConfig(),url=view.querySelector('#data-server-url')?.value.trim(),token=view.querySelector('#data-server-token')?.value.trim();if(!url)throw Error('请输入拾页数据服务地址');db.setStorageConfig({url,token});try{await db.storageMode();state.activeProject=null;state.basket=[];await refresh();toast('已连接服务器');}catch(error){db.setStorageConfig(old);throw error;}break;}
   case 'storage-browser':{if(state.selfHosted)throw Error('自托管网站不允许切换到浏览器资料');await flushSave();db.setStorageConfig(null);state.activeProject=null;state.basket=[];await refresh();toast('已切换为本浏览器资料');break;}
-  case 'help':{const {showHelp}=await import('./help-ui.js');showHelp({body,modal});break;}case 'settings-open':captureSettings();state.settingsSection=value;render();break;case 'settings-back':if(state.settingsSection){captureSettings();state.settingsSection=null;render();}else route(settingsSession?.returnRoute||'series');break;case 'settings-save':{captureSettings();const cfg=state.aiSettings;if(!cfg.model.trim())throw Error('请输入模型 ID');const endpoint=new URL(cfg.endpoint);if(endpoint.protocol!=='https:')throw Error('API 地址必须使用 HTTPS');if(cfg.provider!=='custom'&&endpoint.host!==new URL(AI_PROVIDERS[cfg.provider].endpoint).host)throw Error('服务商与 API 地址不一致；自定义地址请选“自定义兼容接口”');const returnRoute=settingsSession?.returnRoute||'series';state.aiSettings=saveAISettings(cfg);if(cloudEnabled)await db.put('meta',cloudPreferencesRecord(state.preferences));state.preferences=savePreferences(state.preferences);settingsSession=null;state.settingsSection=null;route(returnRoute);toast('设置已保存');break;}
+  case 'help':{const {showHelp}=await import('./help-ui.js');showHelp({body,modal});break;}case 'settings-open':captureSettings();state.settingsSection=value;render();break;case 'settings-back':if(state.settingsSection){captureSettings();state.settingsSection=null;render();}else route(settingsSession?.returnRoute||'series');break;case 'settings-save':{captureSettings();const cfg=state.aiSettings;if(!cfg.model.trim())throw Error('请输入模型 ID');const endpoint=new URL(cfg.endpoint);if(endpoint.protocol!=='https:')throw Error('API 地址必须使用 HTTPS');if(cfg.provider!=='custom'&&endpoint.host!==new URL(AI_PROVIDERS[cfg.provider].endpoint).host)throw Error('服务商与 API 地址不一致；自定义地址请选“自定义兼容接口”');const returnRoute=settingsSession?.returnRoute||'series';state.aiSettings=saveAISettings(cfg);if(cloudEnabled)await db.put('meta',cloudPreferencesRecord(state.preferences));state.preferences=savePreferences(state.preferences);deferredSyncedPreferences=null;settingsSession=null;state.settingsSection=null;route(returnRoute);toast('设置已保存');break;}
 }}catch(e){console.error(e);toast(e.message||'操作失败');}}
 function editSelected(fn){const d=current(),e=editorEntry(d).find(x=>x.value.id===state.selected);if(!e&&state.selected)return;checkpoint();fn(e,d);saveProject();render();}
 function historyStep(from,to){view.endTextEditing?.();const d=current(),snapshot=takeEditorHistoryStep(state,from,to,d);if(!snapshot)return;for(const key of Object.keys(d))delete d[key];Object.assign(d,snapshot);state.activeDraft=snapshot.id;saveProject();render();}
@@ -912,7 +912,10 @@ async function refresh({background=false,onlyChanged=false}={}){const sync=await
   // Settings and display preferences are shared across devices; AI API keys
   // remain device-local and never leave the user's browser.
   const syncedPreferences=cloudEnabled?cloudPreferencesFromMeta(meta):null;
-  if(syncedPreferences&&!settingsSession)state.preferences=savePreferences(syncedPreferences);
+  if(syncedPreferences){
+    if(settingsSession)deferredSyncedPreferences=structuredClone(syncedPreferences);
+    else{state.preferences=savePreferences(syncedPreferences);deferredSyncedPreferences=null;}
+  }
   await restorePendingProjects();staticSources.clear();for(const a of state.assets)if(a.staticPath)staticSources.set(a.blobId,a.staticPath);if(reconcileSelectedRecords(parity,state))view.selectionRefresh?.();if(background){backgroundViewPending=true;scheduleBackgroundReconcile();}else render();}
 let trashSweepActive=false;
 async function purgeExpiredTrash(){if(trashSweepActive)return;const entries=expiredTrash(state.trash);if(!entries.length)return;trashSweepActive=true;try{await changeTrash({db,state,ids:entries.map(entry=>entry.id)});if(parity.libraryTab==='trash'||parity.workTab==='trash')render();}catch(error){console.warn('最近删除到期清理待重试',error?.name||error?.message);}finally{trashSweepActive=false;}}
