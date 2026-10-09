@@ -33,35 +33,64 @@
   box-shadow:0 6px 12px #233f2b12;
 }
 
-/* One touch target and text size for every library, series, work and snapshot
-   selection action, including the named export and delete buttons. */
+/* Compact batch buttons: match the original small tray controls,
+   never enlarge More/Delete because of their label or CSS class. */
 .swift-tray.manage.library-management-tray > button {
   box-sizing:border-box;
-  min-height:44px;
-  min-width:112px;
-  padding:9px 13px;
-  border-radius:12px;
-  font-size:14px;
-  line-height:1.25;
   display:inline-flex;
-  justify-content:center;
+  flex:0 0 90px;
   align-items:center;
-  gap:6px;
+  justify-content:center;
+  width:90px;
+  min-width:90px;
+  max-width:90px;
+  height:36px;
+  min-height:36px;
+  max-height:36px;
+  margin:0;
+  padding:6px 8px;
+  border-radius:10px;
+  font-size:13px;
+  font-weight:400;
+  line-height:1.2;
   white-space:nowrap;
+  text-align:center;
 }
 .swift-tray.manage.library-management-tray > button > .selection-action-label {
+  display:block;
+  flex:none;
+  min-width:0;
+  width:100%;
   font-size:inherit;
   line-height:inherit;
   white-space:nowrap;
+  text-align:center;
 }
-.swift-tray.manage.library-management-tray > button.danger,
-.swift-tray.manage.library-management-tray > button.primary {
-  min-height:44px;
-  min-width:112px;
-}
-@media (max-width:680px) {
-  .swift-tray.manage.library-management-tray {flex-wrap:wrap}
-  .swift-tray.manage.library-management-tray > button {flex:1 0 112px}
+@media(max-width:699px) {
+  .swift-tray.manage.library-management-tray {
+    display:grid;
+    grid-template-columns:repeat(3,minmax(0,1fr));
+    gap:6px;
+    width:calc(100vw - 24px);
+    justify-items:stretch;
+    align-items:center;
+  }
+  .swift-tray.manage.library-management-tray > strong {
+    grid-column:1/-1;
+    min-width:0;
+    text-align:center;
+  }
+  .swift-tray.manage.library-management-tray > button {
+    flex:none;
+    width:100%;
+    min-width:0;
+    max-width:none;
+    height:36px;
+    min-height:36px;
+    max-height:36px;
+    padding:6px 3px;
+    font-size:12px;
+  }
 }
 
 /* Subformat choices stay inside the More menu instead of creating a
@@ -81,53 +110,4 @@
   min-height:42px;
   border:0;
   text-align:left;
-}
-
-/* The only size source for all batch actions (series, assets, works, snapshots).
-   Set width as well as height: More/Delete must not grow with text or flex
-   distribution compared with Select/Clear/View. */
-.swift-tray.manage.library-management-tray > button {
-  flex:0 0 114px;
-  width:114px;
-  min-width:114px;
-  max-width:114px;
-  height:44px;
-  min-height:44px;
-  max-height:44px;
-  padding:8px;
-  margin:0;
-  box-sizing:border-box;
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  line-height:1.2;
-  text-align:center;
-}
-.swift-tray.manage.library-management-tray > button > .selection-action-label {
-  display:block;
-  width:100%;
-  min-width:0;
-  text-align:center;
-}
-@media(max-width:699px) {
-  .swift-tray.manage.library-management-tray {
-    display:flex;
-    flex-wrap:wrap;
-    align-items:center;
-    justify-content:center;
-    gap:7px;
-  }
-  .swift-tray.manage.library-management-tray > strong {
-    flex:1 0 100%;
-    text-align:center;
-  }
-  .swift-tray.manage.library-management-tray > button {
-    flex:0 0 calc(50% - 7px);
-    width:calc(50% - 7px);
-    min-width:0;
-    max-width:none;
-    height:44px;
-    min-height:44px;
-    max-height:44px;
-  }
 }

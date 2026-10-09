@@ -31,10 +31,11 @@ async function verifyTray(expected){
   assert.equal(rects.length,expected,'selection count');
   for(const rect of rects){
     assert.ok(Math.abs(rect.width-rects[0].width)<=1.1,JSON.stringify(rects));
-    assert.ok(Math.abs(rect.height-44)<=1.1,JSON.stringify(rects));
+    assert.ok(Math.abs(rect.height-36)<=1.1,JSON.stringify(rects));
   }
   assert.ok(rects.some(row=>row.label==='更多操作'));
   assert.ok(rects.some(row=>row.label.startsWith('删除')));
+  assert.ok(rects.every(row=>row.height<=37),'The selection buttons must remain compact');
 }
 async function verifyImportGeometry(width){
   const metrics=await evaluate('(()=>{'+
