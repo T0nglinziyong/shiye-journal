@@ -418,7 +418,14 @@ function bindPage(){view.querySelectorAll('[data-act]').forEach(el=>el.addEventL
   for(const key of ['width','height'])view.querySelectorAll(`[data-import-${key}]`).forEach(el=>el.onchange=()=>{const [ri,ci]=el.dataset[`import${key[0].toUpperCase()+key.slice(1)}`].split(':').map(Number);state.importRecords[ri].selectedCandidates[ci][key]=+el.value||null;});
   view.querySelectorAll('.record-series').forEach(el=>{const record=state.importRecords[+el.dataset.index];el.value=record?.seriesID??'';el.onchange=()=>{if(record)record.seriesID=el.value;};});view.querySelectorAll('.record-work-title').forEach(el=>el.oninput=()=>{state.importRecords[+el.dataset.index].workTitle=el.value;});
   const batchSeries=view.querySelector('#batch-series');
-  if(batchSeries){batchSeries.value=state.importBatchSeriesID||'';batchSeries.onchange=()=>{state.importBatchSeriesID=batchSeries.value;};}
+  if(batchSeries){batchSeries.value=state.importBatchSeriesID||'';batchSeries.onchange=async()=>{
+    if(batchSeries.value!=='__new__'){state.importBatchSeriesID=batchSeries.value;return;}
+    const name=prompt('新建系列名称');
+    if(!name?.trim()){batchSeries.value=state.importBatchSeriesID||'';return;}
+    const now=new Date().toISOString(),group={id:uid(),title:name.trim(),introduction:'',createdAt:now,updatedAt:now};
+    try{await db.put('series',group);state.series.push(group);state.importBatchSeriesID=group.id;render();}
+    catch(error){batchSeries.value=state.importBatchSeriesID||'';toast('系列新建失败：'+error.message);}
+  };}
   const batchWorkAssets=view.querySelector('#batch-work-save-assets');
   if(batchWorkAssets)batchWorkAssets.onchange=()=>{
     state.importBatchWorkSaveAssets=batchWorkAssets.checked;
