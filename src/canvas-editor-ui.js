@@ -30,11 +30,27 @@ export function mountCanvasEditor(c){
   const change=fn=>{checkpoint();fn();saveProject();render();};
   const topAction=(action,label)=>{const b=button(label,()=>handle(action),'btn');b.dataset.act=action;if(['undo','redo'].includes(action)){b.replaceChildren(createIcon(action));b.setAttribute('aria-label',action==='undo'?'撤销':'重做');}return b;};
   head.classList.add('swift-editor-head');const back=actions.querySelector('[data-act="back-works"]');head.prepend(back);back.textContent='‹ 返回';
-  const pdf=[...actions.querySelectorAll('button')].find(b=>b.textContent==='导出 PDF');
+  const json=actions.querySelector('[data-act="creative-json"]'),pdf=[...actions.querySelectorAll('button')].find(b=>b.textContent==='导出 PDF');
   // Exactly two visible header actions on EVERY screen. Auto-save remains
   // active in saveProject()/flushSave(); it does not need a misleading Save
   // button or an extra status badge inside the title bar.
   actions.replaceChildren();
+  // Phone layout is intentionally taken from the last user-approved
+  // test version 28509aa9. These controls remain in the original header
+  // order, but become invisible on desktop (where identical actions live in
+  // the secondary edit toolbar). CSS, not screen checks at mount time,
+  // switches variants so resizing/rotation never loses an action.
+  const saved=document.createElement('span');
+  saved.className='swift-auto-saved mobile-editor-head-only';
+  saved.textContent=document.querySelector('#save-state')?.textContent||'';
+  actions.append(saved);
+  const mobileHistory=button('◷',e=>historyMenu(e.currentTarget),
+    'canvas-icon mobile-editor-head-only');
+  mobileHistory.setAttribute('aria-label','历史记录');
+  const mobileUndo=topAction('undo','↶'),mobileRedo=topAction('redo','↷');
+  mobileUndo.classList.add('mobile-editor-head-only');
+  mobileRedo.classList.add('mobile-editor-head-only');
+  actions.append(mobileHistory,mobileUndo,mobileRedo);
   const done=button('完成',()=>handle('editor-done'),'btn primary');
   done.dataset.editorCompletion='';
   actions.append(done);
@@ -50,6 +66,7 @@ export function mountCanvasEditor(c){
   },'btn');
   share.setAttribute('aria-label','导出作品');share.dataset.editorExport='';
   actions.append(share);
+  if(json){json.hidden=true;actions.append(json);}
   const toolbar=document.createElement('div');toolbar.className='swift-editor-toolbar';
   shell.before(toolbar);toolbar.append(tools);tools.replaceChildren();
   // History and undo/redo stay available, but belong with the editing tools
@@ -158,12 +175,12 @@ export function mountCanvasEditor(c){
     else if(mode==='eraser'){for(const [id,name] of [['fine','精细橡皮擦'],['standard','标准橡皮擦'],['brush','画笔橡皮擦']]){const b=button(name,()=>{prefs.eraserStyle=id;prefs.wholeStroke=id==='standard';prefsChanged();p.close();});b.setAttribute('aria-checked',String((prefs.eraserStyle||'standard')===id));el.append(b);}toggle(el,'仅擦除荧光笔痕迹',!!prefs.eraserOnlyHighlighter,value=>{prefs.eraserOnlyHighlighter=value;prefsChanged();});}
     else{state.selectionFilter={ink:true,material:true,text:true,shape:true,...state.selectionFilter};for(const [key,name] of [['ink','手写笔画'],['material','素材'],['text','文字框'],['shape','图形']])toggle(el,name,state.selectionFilter[key],v=>state.selectionFilter[key]=v);const modeRow=document.createElement('div');modeRow.className='canvas-selection-mode';el.append(modeRow);for(const [id,name] of [['contain','必须全部框住'],['intersect','只需要相交']]){const b=button(name,()=>{state.selectionMode=id;modeRow.querySelectorAll('button').forEach(n=>n.setAttribute('aria-checked',String(n===b)));});b.setAttribute('aria-checked',String((state.selectionMode||'contain')===id));modeRow.append(b);}}
   }
-  function shapePicker(anchor){const p=openPopover(anchor,{title:'添加图形',width:432}),tabs=document.createElement('div'),grid=document.createElement('div');p.surface.classList.add('swift-shape-picker');tabs.className='swift-segments';grid.className='canvas-picker-grid';p.content.append(tabs,grid);let version=0;const show=async tab=>{const ticket=++version;grid.replaceChildren();let choices=tab==='common'?commonShapes:tab==='advanced'?advancedShapes:entries.filter(e=>e.kind==='shape'&&!e.value.hidden).map(e=>[e.value.id,e.value.kind==='vector'?'自定义图形':e.value.kind,e.value]);if(ticket!==version||!grid.isConnected)return;grid.replaceChildren();for(const [id,name,copy] of choices){const sample=copy||configureShape(primitive(id,d),id),b=button('',()=>{p.close();change(()=>{const shape=copy?{...structuredClone(copy),id:uid(),locked:false,hidden:false}:configureShape(primitive(id,d),id);shape.x=d.canvas.width/2;shape.y=d.canvas.height/2;shape.zIndex=Math.max(0,...allEntries(d).map(e=>e.value.zIndex||0))+1;d.primitives.push(shape);state.selected=shape.id;state.tool='select';state.toolHighlight='shape';state.multiSelected=[];});});b.dataset.shapeKind=copy?'used':id;b.innerHTML=shapeSVG(sample)+'<span>'+esc(name)+'</span>';grid.append(b);}tabs.querySelectorAll('button').forEach(b=>b.classList.toggle('selected',b.dataset.tab===tab));};for(const [id,name] of [['used','已使用图形'],['common','基础图形'],['advanced','高级图形']]){const b=button(name,()=>show(id));b.dataset.tab=id;tabs.append(b);}show('common');}
+  function shapePicker(anchor){const p=openPopover(anchor,{title:'添加图形',width:innerWidth>=900?432:360}),tabs=document.createElement('div'),grid=document.createElement('div');p.surface.classList.add('swift-shape-picker');tabs.className='swift-segments';grid.className='canvas-picker-grid';p.content.append(tabs,grid);let version=0;const show=async tab=>{const ticket=++version;grid.replaceChildren();let choices=tab==='common'?commonShapes:tab==='advanced'?advancedShapes:entries.filter(e=>e.kind==='shape'&&!e.value.hidden).map(e=>[e.value.id,e.value.kind==='vector'?'自定义图形':e.value.kind,e.value]);if(ticket!==version||!grid.isConnected)return;grid.replaceChildren();for(const [id,name,copy] of choices){const sample=copy||configureShape(primitive(id,d),id),b=button('',()=>{p.close();change(()=>{const shape=copy?{...structuredClone(copy),id:uid(),locked:false,hidden:false}:configureShape(primitive(id,d),id);shape.x=d.canvas.width/2;shape.y=d.canvas.height/2;shape.zIndex=Math.max(0,...allEntries(d).map(e=>e.value.zIndex||0))+1;d.primitives.push(shape);state.selected=shape.id;state.tool='select';state.toolHighlight='shape';state.multiSelected=[];});});b.dataset.shapeKind=copy?'used':id;b.innerHTML=shapeSVG(sample)+'<span>'+esc(name)+'</span>';grid.append(b);}tabs.querySelectorAll('button').forEach(b=>b.classList.toggle('selected',b.dataset.tab===tab));};for(const [id,name] of [['used','已使用图形'],['common','基础图形'],['advanced','高级图形']]){const b=button(name,()=>show(id));b.dataset.tab=id;tabs.append(b);}show('common');}
   // Keep decoded thumbnail DOM nodes alive between opening the three tabs.
   // The image loader retains COS 360px blobs; reusing nodes also avoids
   // decoding and reflowing them every time the picker is opened.
   function materialPicker(anchor){
-    const p=openPopover(anchor,{title:'添加素材',width:432}),tabs=document.createElement('div'),
+    const p=openPopover(anchor,{title:'添加素材',width:innerWidth>=900?432:340}),tabs=document.createElement('div'),
       controls=document.createElement('div'),grid=document.createElement('div');
     p.surface.classList.add('swift-material-picker');
     tabs.className='swift-segments';controls.className='canvas-material-filters';grid.className='canvas-picker-grid';
