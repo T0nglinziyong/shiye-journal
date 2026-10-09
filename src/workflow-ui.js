@@ -416,10 +416,5 @@ function mountImport(c) {
   if(state.importStep!=='review')return;
   const batch=view.querySelector('#batch-series');if(batch)batch.value=state.importBatchSeriesID||'';
   view.querySelectorAll('.record-series').forEach(el=>{el.value=state.importRecords[+el.dataset.index].seriesID||'';});
-  for(const input of view.querySelectorAll('.record-work-title')) {
-    const record=state.importRecords[+input.dataset.index],fields=document.createElement('div');fields.className='form-grid';
-    fields.innerHTML='<label>风格标签<input class="import-work-tags" value="'+c.esc((record.workTags||[]).join('、'))+'"></label><label>使用标记<select class="import-used"><option value="unused">未使用</option><option value="used">已使用</option></select></label>';
-    fields.querySelector('.import-work-tags').oninput=e=>record.workTags=[...new Set(e.target.value.split(/[,，、]/).map(t=>t.trim()).filter(Boolean))];
-    const used=fields.querySelector('.import-used');used.value=record.isUsed?'used':'unused';used.onchange=()=>record.isUsed=used.value==='used';input.closest('label').after(fields);
-  }
+
 }
