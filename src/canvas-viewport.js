@@ -23,7 +23,7 @@ export function mountCanvasViewport(c,page){
     }
     const background=!e.target.closest('[data-object],.selected-object-overlay');
     const navigateToPick=state.tool==='select'&&newTarget;
-    const readTouch=e.pointerType==='touch'&&((background&&['select','text'].includes(state.tool))||navigateToPick));
+    const readTouch=e.pointerType==='touch'&&((background&&['select','text'].includes(state.tool))||navigateToPick);
     if(readTouch||navigateToPick){moved=false;start(e);origin.background=background;origin.targetID=navigateToPick?targetID:null;origin.tool=state.tool;stop(e);}
     else if(background&&state.tool==='select'&&e.pointerType==='mouse'){moved=false;origin={x:e.clientX,y:e.clientY};timer=setTimeout(()=>{view.cancelObjectGesture?.();start(e);moved=true;},250);}
   };
