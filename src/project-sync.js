@@ -105,10 +105,21 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
     }))().catch(e=>{error=e;report();throw e;}).finally(()=>{network=null;});
     network.catch(()=>{});return network;
   }
+  async function cancelPendingFor(ids){
+    await initialize();
+    await refreshFromDisk();
+    const selected=new Set(ids),before=[...entries.values()],removed=before.filter(row=>selected.has(row.record.id));
+    if(!removed.length)return 0;
+    for(const id of selected)entries.delete(id);
+    try{await persist();}
+    catch(failure){entries.clear();for(const row of before)entries.set(row.record.id,row);throw failure;}
+    report();
+    return removed.length;
+  }
   async function discard(){await initialize();await staging;if(network)throw Error('上传正在进行，请等待请求结束后再放弃待同步修改');const previous=[...entries.values()];entries.clear();try{await persist();}catch(failure){for(const row of previous)entries.set(row.record.id,row);throw failure;}error=null;report();return previous.length;}
   return {stage,async flush(){await initialize();await staging;await kick();},async pending(){await initialize();await staging;return structuredClone([...entries.values()]);},async advance(before,after,operations=[]){await initialize();await staging;if(!operations.length)return;let changed=false;for(const row of entries.values()){
     const keys=recordKeys(row.record);
     const touched=operations.some(operation=>keys.some(key=>key.store===operation.store&&(key.id===undefined||operation.action==='clear'||key.id===(operation.item?.id??operation.id))));
     if(row.baseRevision===before&&!touched){row.baseRevision=after;changed=true;}
-  }if(changed)await persist();},discard,canDiscard:()=>!network,resume:()=>kick(),status:()=>({pending:entries.size,error,uploading:!!network})};
+  }if(changed)await persist();},cancelPendingFor,discard,canDiscard:()=>!network,resume:()=>kick(),status:()=>({pending:entries.size,error,uploading:!!network})};
 }
