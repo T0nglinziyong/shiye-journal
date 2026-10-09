@@ -113,6 +113,7 @@ async function persistOutbox(kind,previous,rows){
 const account=async()=>`${namespace}:${await identity()}`;
 function reportSync(){if(typeof window!=='undefined'){const a=projectSync.status(),b=importSync.status();window.dispatchEvent(new CustomEvent('shiye-project-sync',{detail:{pending:a.pending+b.pending+writesInFlight,error:b.error||a.error}}));}}
 const projectSync=createProjectSync({
+  autoFlushDelayMs:10000,
   load:async()=>{if(!cache)return [];const key=await account(),saved=await cache.get(key,'project-outbox')||[],result=recoverProjectOutbox(saved);if(result.removed)try{await persistOutbox('project-outbox',saved,result.rows);}catch{/* Uncommitted invalid rows are never replayed. */}projectOutboxBefore=structuredClone(result.rows);return result.rows;},
   write:async rows=>{await persistOutbox('project-outbox',projectOutboxBefore,rows);projectOutboxBefore=structuredClone(rows);},
   reload:async()=>{const rows=await cache?.get(await account(),'project-outbox')||[];projectOutboxBefore=structuredClone(rows);return rows;},
@@ -465,7 +466,16 @@ async function cloudBackupBlobIDs(){
 async function cloudPendingLocalSummary(){const key=await account();const [projects,imports]=await Promise.all([cache?.get(key,'project-outbox'),cache?.get(key,'import-outbox')]);return {projects:projects?.length||0,imports:imports?.length||0};}
 async function cloudPendingDetails(){await identity();const [projects,imports]=await Promise.all([projectSync.pending(),importSync.pending()]);return {projects:projects.map(row=>({id:row.record.id,title:row.record.title||'未命名作品',baseRevision:row.baseRevision})),batches:imports.map(row=>({id:row.record.id,baseRevision:row.baseRevision,items:row.record.operations?.map(op=>({store:op.store,action:op.action,title:op.item?.title||op.item?.name||op.id||'',id:op.item?.id||op.id||''}))||['assets','projects','blobs'].flatMap(store=>(row.record[store]||[]).map(item=>({store,action:'put',title:item.title||'',id:item.id})))})),error:importSync.status().error?.message||projectSync.status().error?.message||null};}
 async function cloudDiscardPending(){await identity();if(writesInFlight||!importSync.canDiscard()||!projectSync.canDiscard())throw Error('上传正在进行，请等待当前请求结束');const count=(await importSync.discard())+(await projectSync.discard());reportSync();return count;}
-async function cloudFlushProjects(){await identity();if(revision===undefined)await version();await importSync.flush();return projectSync.flush();}
+async function cloudFlushProjects({background=false}={}){
+  await identity();if(revision===undefined)await version();
+  if(background){
+    // Background wake-ups must not bypass the edit batching timer.
+    await projectSync.resumeScheduled();
+    return importSync.flush();
+  }
+  await importSync.flush();
+  return projectSync.flush();
+}
 async function cloudClearCache(){const id=await account();cacheDisabled=true;try{images.clear();imageSizes.clear();documents.clear();snapshots.clear();editorBases.clear();await cache?.clear(id);}catch(error){cacheDisabled=false;throw error;}}
 function cloudResumeCache(){cacheDisabled=false;}
 async function cloudEmergencySnapshot(){
