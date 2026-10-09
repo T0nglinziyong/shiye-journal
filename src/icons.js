@@ -71,7 +71,7 @@ function decorate(node){
   if(node.matches('.series-back')){putIcon(node,'back');return;}
   if(node.matches('.library-management-tray>button,.selection-more-menu button,.selection-submenu>button')){
     if(node.matches('.selection-submenu>button')&&['‹ 更多操作','更多操作'].includes(node.textContent.trim())){putIcon(node,'back');return;}
-    const name={'全选页面':'checkCircle','全选当前结果':'checkCircle','清空选择':'close','查看所选':'eye','返回筛选':'back','加入搭配':'sparkles','更多操作':'more','删除素材':'trash','删除系列':'trash','删除作品':'trash','删除快照':'trash','加入系列 ›':'layers','重新识别':'sparkles','导出图像 ›':'share','‹ 更多操作':'back','新建系列…':'plus'}[node.textContent.trim()];if(name)putIcon(node,name);return;
+    const name={'全选页面':'checkCircle','全选当前结果':'checkCircle','清空选择':'close','查看所选':'eye','返回筛选':'back','加入搭配':'sparkles','更多操作':'more','删除素材':'trash','删除系列':'trash','删除作品':'trash','删除快照':'trash','恢复所选':'history','彻底删除所选':'trash','加入系列 ›':'layers','重新识别':'sparkles','导出图像 ›':'share','‹ 更多操作':'back','新建系列…':'plus'}[node.textContent.trim()];if(name)putIcon(node,name);return;
   }
   if(node.matches('.canvas-context-tools>button')){
     if(node.textContent==='☷'){node.setAttribute('aria-label','段落设置');putIcon(node,'history',true);return;}
