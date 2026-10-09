@@ -160,7 +160,10 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
     else if(known&&!known.full&&desired>(known.tier||360))scheduleUpgrade(img);
   }}
   const changes=new MutationObserver(records=>{for(const r of records){if(r.type==='attributes')scan(r.target);else for(const node of r.addedNodes)scan(node);}});
-  changes.observe(root,{childList:true,subtree:true,attributes:true,attributeFilter:['src','style','class']});scan(root);
+  // Class/style changes are handled by ResizeObserver and IntersectionObserver;
+  // observing them on document.body rescanned the ENTIRE gallery every time
+  // navigation changed a CSS class.
+  changes.observe(root,{childList:true,subtree:true,attributes:true,attributeFilter:['src']});scan(root);
   return {load,retain(ids){for(const id of ids)retained.set(id,(retained.get(id)||0)+1);let released=false;return()=>{if(released)return;released=true;for(const id of ids){const n=retained.get(id)||0;if(n>1)retained.set(id,n-1);else retained.delete(id);}trim();};},retryMissing(){retryMissing();},
     stats:()=>({originals:sizes.size,previews:previewSizes.size,displayVariants:variantSizes.size,originalBytes:[...sizes.values()].reduce((a,b)=>a+b,0),previewBytes:[...previewSizes.values()].reduce((a,b)=>a+b,0),pending:pending.size}),
     invalidate(ids){
