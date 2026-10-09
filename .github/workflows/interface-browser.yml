@@ -6,6 +6,9 @@ on:
     paths:
       - 'src/canvas-selection-ui.js'
       - 'src/canvas-editor-ui.js'
+      - 'src/swift-popover.js'
+      - 'src/popover-placement.js'
+      - 'tests/editor-layout-browser.mjs'
       - 'src/journal-template-ui.js'
       - 'src/swift-controls.css'
       - 'src/selection-menu.css'
@@ -71,6 +74,7 @@ jobs:
           done
           SHIYE_WAIT_MS=30000 SHIYE_TEST_URL=http://127.0.0.1:5193 node tests/browser-acceptance.mjs
           SHIYE_TEST_URL=http://127.0.0.1:5193 node tests/editor-browser-acceptance.mjs
+          SHIYE_TEST_URL=http://127.0.0.1:5193 npm run test:editor-layout-browser
           SHIYE_TEST_URL=http://127.0.0.1:5193 node tests/cloud-cache-browser.mjs
           SHIYE_TEST_URL=http://127.0.0.1:5193 npm run test:responsive-browser
           SHIYE_TEST_URL=http://127.0.0.1:5193 npm run test:selection-browser
@@ -84,6 +88,7 @@ jobs:
           path: |
             /tmp/shiye-browser-acceptance/
             /tmp/shiye-editor-browser/
+            /tmp/shiye-editor-layout/
             /tmp/shiye-cache-browser/
             /tmp/shiye-responsive-review/
             /tmp/shiye-library-selection/
