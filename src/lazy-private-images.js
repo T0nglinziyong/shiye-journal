@@ -22,7 +22,9 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
   const unbind=bindImageResources({source:currentSource,identity});
   const displayTier=img=>{const rect=img.getBoundingClientRect(),pixels=rect.width>0&&rect.height>0?Math.max(rect.width,rect.height):Math.max(img.clientWidth||0,img.clientHeight||0);return imagePixelSize(pixels||400,globalThis.devicePixelRatio||1,globalThis.screen?.width||1440,globalThis.screen?.height||900);};
   function scheduleUpgrade(img){
-    if(disposed||!fullView(img))return;
+    if(disposed||!fullView(img)||!img.isConnected||img.dataset.privateImageLoading)return;
+    const existing=identity(img.getAttribute('src')||'');
+    if(!existing||existing.full||displayTier(img)<=(existing.tier||360))return;
     clearTimeout(resizeTimers.get(img));
     resizeTimers.set(img,setTimeout(()=>{
       resizeTimers.delete(img);if(!img.isConnected||img.dataset.imageError||img.dataset.privateImageLoading||!onScreen(img)&&observer)return;
@@ -125,7 +127,7 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
     const full=brokenPreviews.has(id)&&fullView(img);
     void(async()=>{
       let shown=src;
-      if(target>360&&!full)try{const preview=await load(id,false);if(!current())return;if(preview&&img.isConnected&&img.getAttribute('src')===src){img.src=preview;shown=preview;}}catch(error){if(current())onError(error);}
+      if(target>360&&!full)try{const preview=await load(id,false);if(!current())return;if(preview&&img.isConnected&&img.getAttribute('src')===src){if(src!==preview)img.src=preview;shown=preview;}}catch(error){if(current())onError(error);}
       const url=await load(id,full?true:target);if(!current())return;
       if(url&&img.isConnected&&img.getAttribute('src')===shown){if(img.getAttribute('src')!==url)img.src=url;delete img.dataset.imageError;retryCounts.delete(id);const timer=retryTimers.get(id);if(timer){clearTimeout(timer);retryTimers.delete(id);}}
       else if(!url&&img.isConnected){img.dataset.imageError='true';scheduleRetry(id);}
@@ -137,7 +139,7 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
   globalThis.addEventListener?.('resize',onViewportResize);
   function onScreen(img){const box=img.getBoundingClientRect();return box.width>0&&box.height>0&&box.bottom>=-850&&box.top<=innerHeight+850&&box.right>=-850&&box.left<=innerWidth+850;}
   function scan(node){if(disposed||node.nodeType!==1)return;const images=node.matches('img')?[node]:node.querySelectorAll('img');for(const img of images){
-    if(!observed.has(img)){observed.add(img);sizingObserver?.observe(img);img.addEventListener('error',()=>{
+    if(!observed.has(img)){observed.add(img);if(fullView(img))sizingObserver?.observe(img);img.addEventListener('error',()=>{
       const id=img.dataset.privateImageId,src=img.getAttribute('src');if(!id||!src?.startsWith('blob:'))return;
       const derived=identity(src);
       if(derived&&!derived.full){
