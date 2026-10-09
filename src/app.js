@@ -487,6 +487,31 @@ function bindPage(){view.querySelectorAll('[data-act]').forEach(el=>el.addEventL
   view.querySelectorAll('.record-work-save-assets').forEach(el=>el.onchange=()=>{
     const record=state.importRecords[+el.dataset.index];record.workSaveAssets=el.checked;record.workSaveAssetsManual=true;
   });
+  view.querySelectorAll('[data-import-paper-options]').forEach(button=>button.onclick=()=>{
+    const ri=Number(button.dataset.importPaperOptions),record=state.importRecords[ri];
+    if(!record)return;
+    const paperTypes=[['plain','纯色'],['grid','方格'],['lines','横线'],['dots','点阵'],['columns','双栏']];
+    body.innerHTML='<div class="dialog-head"><h2>页面背景</h2></div>'+
+      '<div class="stack"><label>底纸样式<select id="review-background-pattern">'+
+      paperTypes.map(([id,name])=>'<option value="'+id+'">'+name+'</option>').join('')+
+      '</select></label><label>底纸颜色<input id="review-background-color" type="color" value="'+esc(record.workPaperColor||state.importBatchWorkPaperColor||'#fcfaf0')+'"></label>'+
+      '<button type="button" class="btn primary" id="review-background-done">完成</button></div>';
+    const pattern=body.querySelector('#review-background-pattern'),
+      color=body.querySelector('#review-background-color');
+    pattern.value=record.workPaperPattern||state.importBatchWorkPaperPattern||'plain';
+    const update=()=>{
+      record.workPaperPattern=pattern.value;record.workPaperColor=color.value;
+      const preview=button.closest('.review-background-card')?.querySelector('.import-work-paper-preview');
+      if(preview){
+        preview.className='review-thumbnail import-work-paper-preview '+pattern.value;
+        preview.style.setProperty('--review-paper',color.value);
+        preview.style.backgroundColor=color.value;
+      }
+    };
+    pattern.onchange=update;color.oninput=update;
+    body.querySelector('#review-background-done').onclick=()=>modal.close();
+    modal.showModal();
+  });
   view.querySelectorAll('.record-work-paper-pattern,.record-work-paper-color').forEach(el=>el.onchange=()=>{
     const record=state.importRecords[+el.dataset.index];if(!record)return;
     if(el.classList.contains('record-work-paper-pattern'))record.workPaperPattern=el.value;
