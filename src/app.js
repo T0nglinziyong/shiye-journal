@@ -521,7 +521,7 @@ function saveSpecificProject(p){if(!p)return;delete p.isTemplate;if(cloudEnabled
   // can be drawn locally immediately; COS receives the next uploaded version.
   const active=p.drafts?.find(d=>d.id===p.activeDraftID)||p.drafts?.[0];
   if(active&&!p.isSnapshot){delete active.coverImageID;delete active.coverSceneHash;}
-  const now=new Date().toISOString();p.updatedAt=now;if(p.isUsed)for(const updated of markProjectAssetsUsed(p,state.assets,now)){const live=state.assets.find(asset=>asset.id===updated.id);if(live)Object.assign(live,updated);dirtyUsageAssets.set(updated.id,updated);}saveVersions.set(p.id,(saveVersions.get(p.id)||0)+1);dirtyProjects.set(p.id,p);saveStatus('后台保存中…');syncDisplay.localPending=true;updateSyncIndicator();clearTimeout(saveTimer);saveTimer=setTimeout(()=>flushSave().catch(console.error),150);}
+  const now=new Date().toISOString();p.updatedAt=now;if(p.isUsed)for(const updated of markProjectAssetsUsed(p,state.assets,now)){const live=state.assets.find(asset=>asset.id===updated.id);if(live)Object.assign(live,updated);dirtyUsageAssets.set(updated.id,updated);}saveVersions.set(p.id,(saveVersions.get(p.id)||0)+1);dirtyProjects.set(p.id,p);saveStatus('后台保存中…');syncDisplay.localPending=true;updateSyncIndicator();if(!saveTimer)saveTimer=setTimeout(()=>flushSave().catch(console.error),500);}
 function saveProject(){saveSpecificProject(state.activeProject);}
 const pendingAISnapshots=new Set();
 function saveAISnapshotInBackground(p){
@@ -1372,7 +1372,7 @@ window.addEventListener('shiye-project-conflict-copy',event=>{
 window.addEventListener('shiye-project-sync',event=>{const {pending,error}=event.detail;syncDisplay.pending=pending;syncDisplay.error=error;syncDisplay.checking=false;if(!dirtyProjects.size&&!savingProjects)syncDisplay.localPending=false;updateSyncIndicator();if(error){saveStatus('待同步 · 修改已保留在本机');const message=error.name==='AbortError'||/abort|timed? ?out/i.test(error.message||'')?'网络请求中断，本机修改已保留，将自动重试同步':error.message||'云端暂不可用，本机修改已保留，将自动重试';if(lastSyncError!==message)toast(message);lastSyncError=message;}else{lastSyncError=null;saveStatus(pending?'修改已暂存 · 后台同步中':'已保存到云端');privateImages.retryMissing();}});
 let cloudCheck,cloudCheckAt=0,cloudSessionReady=false;
 let syncPausedByUser=false;
-const cloudResumer=createSyncResumer({flush:()=>db.flushProjects(),canRun:()=>cloudEnabled&&cloudSessionReady&&navigator.onLine!==false,onError:error=>console.warn('后台同步待重试',error?.message)});
+const cloudResumer=createSyncResumer({flush:()=>db.flushProjects({background:true}),canRun:()=>cloudEnabled&&cloudSessionReady&&navigator.onLine!==false,onError:error=>console.warn('后台同步待重试',error?.message)});
 function backgroundCloudCheck(){if(!cloudEnabled||document.visibilityState==='hidden'||cloudCheck||Date.now()-cloudCheckAt<15000)return;cloudCheckAt=Date.now();cloudCheck=refresh({background:true,onlyChanged:true}).catch(error=>console.warn('后台版本检查失败；保留已验证缓存',error)).finally(()=>{cloudCheck=null;});}
 window.addEventListener('focus',()=>{backgroundCloudCheck();privateImages.retryMissing();void cloudResumer.wake();});
 document.addEventListener('visibilitychange',()=>{backgroundCloudCheck();if(document.visibilityState==='visible'){privateImages.retryMissing();void cloudResumer.wake();}});
