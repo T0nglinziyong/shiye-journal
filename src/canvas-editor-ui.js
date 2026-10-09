@@ -156,7 +156,7 @@ export function mountCanvasEditor(c){
           :state.assets.filter(a=>!a.isProjectInternal&&(series==='all'||(series==='none'?!a.seriesID:a.seriesID===series))&&(kind==='all'||a.kind===kind)).map(a=>({a}));
         if(tab==='all')list.sort((x,y)=>sort==='name'?x.a.title.localeCompare(y.a.title):sort==='name-desc'?y.a.title.localeCompare(x.a.title):(Date.parse(y.a.createdAt||0)-Date.parse(x.a.createdAt||0))*(sort==='oldest'?-1:1));
         rows=list.filter(({a})=>!!a).map(({a,item})=>{
-          const b=document.createElement('button');b.type='button';b.dataset.pickerAsset=a.id;
+          const b=document.createElement('button');b.type='button';b.dataset.pickerAsset=a.id;b.dataset.assetId=a.id;
           if(item)b.dataset.pickerItem=item.id;
           b.innerHTML=imgTag(a)+'<span>'+esc(a.title)+'</span>';
           return b;
