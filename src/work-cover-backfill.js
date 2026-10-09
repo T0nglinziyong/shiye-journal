@@ -1,5 +1,6 @@
 // Backfill the *existing* Works library's missing COS WebP covers on demand.
-// Only cards near the viewport are considered. Never touch pending edits or
+// Visible cards are first; the remaining historical covers are staged slowly
+// while the user stays on Works. Never touch pending edits or
 // large-project summaries without recovering the complete document first.
 // Durable stageProject + revision CAS own all actual writes and conflicts.
 export function needsWorkCover(project){
@@ -50,22 +51,40 @@ export function createWorkCoverBackfill({db,state,cloudEnabled=false,onError=con
     const cards=[...view.querySelectorAll('[data-act="open-project"][data-id]')]
       .filter(card=>needsWorkCover(state.projects.find(p=>p.id===card.dataset.id)));
     if(!cards.length)return ()=>{};
-    if(typeof IntersectionObserver==='function'){
-      const observer=new IntersectionObserver(entries=>{
+    let stopped=false,timer=null;
+    // Fill visible cards immediately; do not stage every historical project
+    // at once or compete with foreground downloads.
+    const observer=typeof IntersectionObserver==='function'
+      ?new IntersectionObserver(entries=>{
         for(const row of entries)if(row.isIntersecting){
           const id=row.target.dataset.id,project=state.projects.find(p=>p.id===id);
           if(project)enqueue(id,project.updatedAt);
           observer.unobserve(row.target);
         }
-      },{rootMargin:'550px'});
-      cards.forEach(card=>observer.observe(card));
-      return ()=>observer.disconnect();
-    }
-    cards.slice(0,6).forEach(card=>{
+      },{rootMargin:'550px'}):null;
+    if(observer)cards.forEach(card=>observer.observe(card));
+    else cards.slice(0,6).forEach(card=>{
       const project=state.projects.find(p=>p.id===card.dataset.id);
       if(project)enqueue(project.id,project.updatedAt);
     });
-    return ()=>{};
+    const backlog=cards.map(card=>card.dataset.id);
+    // Keep historical Works covers COS-resident even if the user has not
+    // scrolled to them yet. Idle pacing leaves free slots for active reads.
+    const next=()=>{
+      if(stopped||state.route!=='works')return;
+      while(backlog.length){
+        const id=backlog.shift(),project=state.projects.find(p=>p.id===id);
+        if(!project||!needsWorkCover(project))continue;
+        const key=JSON.stringify([state.accountId||'browser',id,project.updatedAt]);
+        if(attempted.has(key)||queued.has(key))continue;
+        enqueue(id,project.updatedAt);
+        break;
+      }
+      if(backlog.length)timer=setTimeout(next,2200);
+    };
+    timer=setTimeout(next,3500);
+    return ()=>{stopped=true;observer?.disconnect();if(timer!==null)clearTimeout(timer);};
   }
+
   return {observe,enqueue,needsWorkCover,whenIdle:()=>chain};
 }
