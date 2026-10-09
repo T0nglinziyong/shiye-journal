@@ -252,7 +252,9 @@ async function cloudPreview(id,pixels=360){
   if(!['cos','supabase'].includes(record.storageProvider))throw Error('图片缺少当前存储服务标记');
   if(!record.storagePath?.startsWith(owner+'/'))throw Error('图片不属于当前账号');
   const thumbnailKey=(variant==='preview360'?'thumbnail':variant)+':'+record.storagePath,saved=await cached(thumbnailKey);
-  if(usableBlob(saved)){if(variant==='preview360')materializePreview360(record,saved);return saved;}
+  // A previously loaded thumb must be a zero-network read. Materialization
+  // happens only on the COS CI miss path, not repeatedly for every tab.
+  if(usableBlob(saved))return saved;
   if(variant==='preview360'&&record.thumbnailPath){
     if(!record.thumbnailPath.startsWith(owner+'/'))throw Error('缩略图不属于当前账号');
     try{const thumbnail=await downloadObject(record.thumbnailPath,record.storageProvider);if(!usableBlob(thumbnail))throw Error('缩略图为空');await remember(thumbnailKey,thumbnail);return thumbnail;}
