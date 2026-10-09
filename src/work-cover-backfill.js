@@ -11,7 +11,7 @@ export function needsWorkCover(project){
 }
 
 export function createWorkCoverBackfill({db,state,cloudEnabled=false,onError=console.warn}){
-  const attempted=new Set(),queued=new Set();
+  const attempted=new Map(),queued=new Set(),retryAfter=new Map(),failureCount=new Map();
   let chain=Promise.resolve();
 
   async function repair(id,updatedAt,account){
@@ -37,32 +37,45 @@ export function createWorkCoverBackfill({db,state,cloudEnabled=false,onError=con
 
   function enqueue(id,updatedAt){
     const account=state.accountId||'browser',key=JSON.stringify([account,id,updatedAt]);
-    if(!id||queued.has(key)||attempted.has(key))return;
+    if(!id||queued.has(key)||Date.now()<(attempted.get(key)||0)||Date.now()<(retryAfter.get(key)||0))return;
     queued.add(key);
     chain=chain.catch(()=>{}).then(async()=>{
-      try{const staged=await repair(id,updatedAt,account);if(staged)attempted.add(key);}
-      catch(error){attempted.add(key);onError('作品封面补齐失败，原稿未改动',id,error);}
+      try{const staged=await repair(id,updatedAt,account);if(staged){attempted.set(key,Date.now()+60000);retryAfter.delete(key);failureCount.delete(key);}}
+      catch(error){const failures=Math.min(6,(failureCount.get(key)||0)+1);failureCount.set(key,failures);retryAfter.set(key,Date.now()+Math.min(300000,5000*2**(failures-1)));onError('作品封面补齐失败，原稿未改动',id,error);}
       finally{queued.delete(key);}
     });
   }
 
-  // Start migration after the account's project summaries have loaded, rather
-  // than waiting for the user to visit Works. Pace writes to avoid competing
-  // with normal foreground image traffic; never stage an active/pending work.
-  let backgroundStartedFor=null;
+  // Reconcile historical covers after initial library load, and again when
+  // account data or retry eligibility changes. One paced loop is used instead
+  // of creating one long-lived timer per historical project.
+  let backgroundAccount=null,backgroundTimer=null;
   function startBackground(){
     if(!cloudEnabled)return;
     const account=state.accountId||'browser';
-    if(backgroundStartedFor===account)return;
-    backgroundStartedFor=account;
-    const ids=state.projects.filter(needsWorkCover).map(project=>({id:project.id,updatedAt:project.updatedAt}));
-    ids.forEach(({id,updatedAt},index)=>{
-      // The queue remains sequential; timers only pace scheduling.
-      setTimeout(()=>{
-        if((state.accountId||'browser')!==account)return;
-        enqueue(id,updatedAt);
-      },4000+index*2200);
-    });
+    if(backgroundAccount!==account){
+      if(backgroundTimer!==null)clearTimeout(backgroundTimer);
+      backgroundAccount=account;
+      attempted.clear();retryAfter.clear();failureCount.clear();
+      backgroundTimer=null;
+    }
+    if(backgroundTimer!==null)return;
+    const tick=()=>{
+      backgroundTimer=null;
+      if((state.accountId||'browser')!==account||!cloudEnabled)return;
+      const missing=state.projects.filter(needsWorkCover);
+      const candidate=missing.find(project=>{
+        const key=JSON.stringify([account,project.id,project.updatedAt]);
+        return !queued.has(key)&&Date.now()>=(attempted.get(key)||0)&&Date.now()>=(retryAfter.get(key)||0);
+      });
+      if(candidate)enqueue(candidate.id,candidate.updatedAt);
+      if(missing.length){
+        backgroundTimer=setTimeout(tick,candidate?2200:10000);
+        backgroundTimer.unref?.();
+      }
+    };
+    backgroundTimer=setTimeout(tick,4000);
+    backgroundTimer.unref?.();
   }
 
   function observe(view){
@@ -95,7 +108,7 @@ export function createWorkCoverBackfill({db,state,cloudEnabled=false,onError=con
         const id=backlog.shift(),project=state.projects.find(p=>p.id===id);
         if(!project||!needsWorkCover(project))continue;
         const key=JSON.stringify([state.accountId||'browser',id,project.updatedAt]);
-        if(attempted.has(key)||queued.has(key))continue;
+        if(Date.now()<(attempted.get(key)||0)||Date.now()<(retryAfter.get(key)||0)||queued.has(key))continue;
         enqueue(id,project.updatedAt);
         break;
       }
