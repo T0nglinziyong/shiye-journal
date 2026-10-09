@@ -13,6 +13,14 @@ test('last actual change wins regardless of upload order',()=>{
     'deleted remote object must not be resurrected by a stale upload');
   assert.equal(compareRecordEdits({updatedAt:'2026-10-09T11:00:00Z'},remote,
     {localTimestamp:'2026-10-09T11:01:00Z'}),'local');
+  assert.equal(compareRecordEdits({date:'2026-10-09T11:00:00Z'},
+    {id:'trash-entry',date:'2026-10-09T10:00:00Z'},
+    {localTimestamp:'2026-10-09T11:05:00Z'}),'local',
+    'permanent deletion must beat an older trash record');
+  assert.equal(compareRecordEdits({date:'2026-10-09T11:00:00Z'},
+    {id:'trash-entry',date:'2026-10-09T12:00:00Z'},
+    {localTimestamp:'2026-10-09T11:05:00Z'}),'remote',
+    'newer remote trash change wins in conflicting updates');
 });
 
 test('dev COS reset only deletes authenticated admin account prefix and verifies before deletion',async()=>{
