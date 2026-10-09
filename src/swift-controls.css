@@ -368,156 +368,102 @@ body:has(.library-management-tray):not(:has(.library-management-tray:not([hidden
   }
 }
 
-/* Editor parity on desktop, tablet and phone: one top-right action group
-   (Done / Export), common editing utilities below, two-column asset picker. */
-.editing .swift-editor-head .actions {
-  flex:0 0 auto;
-  width:auto;
-  overflow:visible;
-  justify-content:flex-end;
-  gap:8px;
-}
-.editing .swift-editor-head .actions > button {
-  flex:0 0 auto;
-  min-height:40px;
-  border-radius:10px;
-  padding:8px 13px;
-  white-space:nowrap;
-}
-.canvas-editor-utilities {
-  display:flex;
-  flex:0 0 auto;
-  align-items:center;
-  gap:3px;
-  height:100%;
-  padding:0 9px;
-  border-right:1px solid #e3e5dc;
-}
-.canvas-editor-utilities > button {
-  display:inline-flex;
-  flex:0 0 34px;
-  width:34px;
-  height:38px;
-  min-height:38px;
-  align-items:center;
-  justify-content:center;
-  border:0;
-  border-radius:9px;
-  padding:4px;
-  background:transparent;
-  color:#39483d;
-}
-.canvas-editor-utilities > button:hover,
-.canvas-editor-utilities > button:focus-visible {
-  background:#e9eee3;
-}
-.canvas-editor-utilities svg.shiye-icon{
-  width:21px;
-  height:21px;
-  flex:0 0 21px;
-  margin:0;
-}
-/* Unlike the common shape-picker, material thumbnails ALWAYS form two
-   equal columns; this must not depend on a mobile-only media query. */
-.swift-picker-popover.swift-material-picker {
-  display:flex;
-  flex-direction:column;
-  box-sizing:border-box;
-  overflow:hidden;
-  width:min(340px,calc(100vw - 24px))!important;
-}
-.swift-picker-popover.swift-material-picker > h3 { flex:0 0 auto; }
-.swift-picker-popover.swift-material-picker > .popover-content{
-  flex:1 1 auto;
-  min-height:0;
-  height:auto!important;
-  overflow:hidden;
-}
-.swift-picker-popover.swift-material-picker .canvas-picker-grid{
-  display:grid;
-  flex:1 1 auto;
-  min-height:0;
-  max-height:none;
-  overflow-y:auto;
-  grid-template-columns:repeat(2,minmax(0,1fr));
-  align-content:start;
-  gap:8px;
-}
-.swift-picker-popover.swift-material-picker .canvas-picker-grid > button {
-  min-width:0;
-  width:100%;
-}
-/* Desktop/tablet-landscape enhancement only: never override the verified
-   phone and portrait-iPad picker structure. */
+/* 28509aa9 is the validated phone editor. Do not override that view's
+   header, tool ordering, or picker geometry in the global cascade.
+   Change only the visible placement of duplicate utility controls. */
+.canvas-editor-utilities{display:none}
 @media(min-width:900px){
-  .swift-picker-popover:is(.swift-material-picker,.swift-shape-picker) {
+  .editing .swift-editor-head .actions {
+    flex:0 0 auto;
+    width:auto;
+    overflow:visible;
+    justify-content:flex-end;
+    gap:8px;
+  }
+  .editing .swift-editor-head .actions > button:not([hidden]){
+    flex:0 0 auto;
+    min-height:40px;
+    height:40px;
+    box-sizing:border-box;
+    border-radius:10px;
+    padding:8px 13px;
+    white-space:nowrap;
+  }
+  .editing .swift-editor-head .mobile-editor-head-only{display:none!important}
+  .editing .swift-editor-toolbar .canvas-editor-utilities{
+    display:flex;
+    flex:0 0 auto;
+    align-items:center;
+    gap:3px;
+    height:100%;
+    padding:0 9px;
+    border-right:1px solid #e3e5dc;
+  }
+  .canvas-editor-utilities > button {
+    display:inline-flex;
+    flex:0 0 34px;
+    width:34px;
+    height:38px;
+    min-height:38px;
+    align-items:center;
+    justify-content:center;
+    border:0;
+    border-radius:9px;
+    padding:4px;
+    background:transparent;
+    color:#39483d;
+  }
+  .canvas-editor-utilities svg.shiye-icon {
+    width:21px;
+    height:21px;
+    flex:0 0 21px;
+    margin:0;
+  }
+  /* Widen only desktop popups. Desktop tiles are not giant just because the
+     window is 1920px; titles and actual image ratios remain unchanged. */
+  .swift-picker-popover:is(.swift-material-picker,.swift-shape-picker){
     box-sizing:border-box;
     width:432px!important;
-    max-width:calc(100vw - 24px)!important;
+    max-width:min(432px,calc(100vw - 24px))!important;
     overflow:hidden;
   }
-  .swift-picker-popover:is(.swift-material-picker,.swift-shape-picker) .canvas-picker-grid {
+  .swift-picker-popover:is(.swift-material-picker,.swift-shape-picker) .canvas-picker-grid{
     display:grid;
     grid-template-columns:repeat(3,minmax(0,1fr));
     align-content:start;
     gap:8px;
-    min-width:0;
   }
-  .swift-picker-popover:is(.swift-material-picker,.swift-shape-picker) .canvas-picker-grid > button {
+  .swift-picker-popover:is(.swift-material-picker,.swift-shape-picker) .canvas-picker-grid>button{
     min-width:0;
     width:100%;
     overflow:hidden;
     padding:6px 4px;
   }
-  .swift-picker-popover:is(.swift-material-picker,.swift-shape-picker) .canvas-picker-grid > button > :is(img,svg) {
+  .swift-picker-popover:is(.swift-material-picker,.swift-shape-picker) .canvas-picker-grid>button>:is(img,svg){
     display:block;
     width:100%;
+    max-width:100%;
     height:74px;
-    max-height:74px;
     object-fit:contain;
   }
-  .swift-picker-popover:is(.swift-material-picker,.swift-shape-picker) .canvas-picker-grid > button > span {
+  .swift-picker-popover:is(.swift-material-picker,.swift-shape-picker) .canvas-picker-grid>button>span{
     display:block;
     max-width:100%;
-    font-size:12px;
-    line-height:1.35;
     overflow:hidden;
     text-overflow:ellipsis;
     white-space:nowrap;
+    font-size:12px;
+    line-height:1.35;
   }
-  .swift-picker-popover.swift-shape-picker .popover-content {
-    min-height:0;
-    gap:8px;
-  }
-  .swift-picker-popover.swift-shape-picker .canvas-picker-grid {
+  .swift-picker-popover.swift-shape-picker .canvas-picker-grid{
     max-height:min(38dvh,330px);
     overflow-y:auto;
   }
 }
-@media(max-width:699px){
-  .editing .swift-editor-head .actions{
-    grid-column:1/-1;
-    justify-content:flex-end;
-    width:100%;
-    overflow:visible;
-  }
-  .editing .swift-editor-toolbar{
-    overflow-x:auto;
-    overflow-y:hidden;
-    justify-content:flex-start;
-  }
-  .editing .swift-editor-toolbar .editor-tools{
-    flex:0 0 auto;
-    width:max-content;
-    max-width:none;
-    overflow:visible;
-  }
-  .editing .swift-editor-toolbar .canvas-editor-utilities{
-    flex:0 0 auto;
-  }
-  .editing .swift-editor-toolbar .canvas-context-tools{
-    flex:0 0 auto;
-    min-width:max-content;
-    overflow:visible;
+@media(min-width:700px) and (max-width:899px){
+  /* Portrait iPad uses the same two-column picker rhythm as the phone,
+     without moving the original toolbar/history actions. */
+  .swift-picker-popover:is(.swift-material-picker,.swift-shape-picker) .canvas-picker-grid{
+    grid-template-columns:repeat(2,minmax(0,1fr));
   }
 }
