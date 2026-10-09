@@ -494,6 +494,11 @@ body:has(.library-management-tray):not(:has(.library-management-tray:not([hidden
     max-height:70px;
   }
 }
+@media(max-width:599px){
+  .swift-picker-popover:is(.swift-material-picker,.swift-shape-picker) {
+    width:min(330px,86vw)!important;
+  }
+}
 @media(max-width:699px){
   .editing .swift-editor-head .actions{
     grid-column:1/-1;
