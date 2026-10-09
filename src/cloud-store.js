@@ -4,6 +4,7 @@ import {createProjectSync} from './project-sync.js';
 import {readCloudDelta,canRebaseUnchangedKeys} from './cloud-delta.js';
 import {LARGE_PROJECT_BYTES,projectSummary,mergeProjectSummary,projectBlobText} from './project-document.js';
 import {createCOSStore} from './cos-store.js';
+import {imageVariant} from './image-variants.js';
 import {recoverImportOutbox} from './import-outbox-recovery.js';
 import {recoverProjectOutbox,usableProjectSnapshot} from './project-outbox-recovery.js';
 export function createCloudStore({cloudClient,requireCloudUser,cache=null,namespace='cloud',projectPreview=()=>null,objectStorage=null}){
@@ -230,15 +231,16 @@ async function cloudRecord(store,id){
   const row=checked(await cloudClient().from('shiye_records').select('record').eq('user_id',owner).eq('store',store).eq('id',id).maybeSingle());
   return row?.record;
 }
-async function cloudPreview(id){
-  const pending=await pendingOverride('blobs',id);if(pending&&(!pending.record||usableBlob(pending.record.data)))return pending.record?await makeThumbnail(pending.record.data)||pending.record.data:undefined;
+async function cloudPreview(id,pixels=360){
+  const variant=imageVariant(pixels),edge=Number(variant.slice(7));
+  const pending=await pendingOverride('blobs',id);if(pending&&(!pending.record||usableBlob(pending.record.data)))return pending.record?await makeThumbnail(pending.record.data,edge)||pending.record.data:undefined;
   if(id.startsWith('project-cover:')){const match=/^project-cover:(cos|supabase):(.+)$/.exec(id);if(!match)throw Error('作品封面标识不是当前格式');const [,provider,path]=match;if(!path.startsWith((await identity())+'/'))throw Error('作品封面不属于当前账号');const key='thumbnail:'+path,saved=await cached(key);if(usableBlob(saved))return saved;const blob=await downloadObject(path,provider);if(!usableBlob(blob))throw Error('作品封面为空');await remember(key,blob);return blob;}
   await identity();const old=revision===undefined?await cached('blob-record:'+id):null;
   const record=old?.record||await cloudRecord('blobs',id);if(!record)return undefined;
   if(!['cos','supabase'].includes(record.storageProvider))throw Error('图片缺少当前存储服务标记');
   if(!record.storagePath?.startsWith(owner+'/'))throw Error('图片不属于当前账号');
-  const thumbnailKey='thumbnail:'+record.storagePath,saved=await cached(thumbnailKey);if(usableBlob(saved))return saved;
-  if(record.thumbnailPath){
+  const thumbnailKey=(variant==='preview360'?'thumbnail':variant)+':'+record.storagePath,saved=await cached(thumbnailKey);if(usableBlob(saved))return saved;
+  if(variant==='preview360'&&record.thumbnailPath){
     if(!record.thumbnailPath.startsWith(owner+'/'))throw Error('缩略图不属于当前账号');
     try{const thumbnail=await downloadObject(record.thumbnailPath,record.storageProvider);if(!usableBlob(thumbnail))throw Error('缩略图为空');await remember(thumbnailKey,thumbnail);return thumbnail;}
     catch(error){console.warn('缩略图暂不可读，尝试从原图恢复',error?.message);}
@@ -246,13 +248,13 @@ async function cloudPreview(id){
   // Only missing COS thumbnails use CI. The original remains byte-identical
   // for segmentation, editing, coordinates, and export.
   if(record.storageProvider==='cos'&&objectStorage?.preview){
-    try{const preview=await objectStorage.preview(record.storagePath);if(usableBlob(preview)){await remember(thumbnailKey,preview);return preview;}}
+    try{const preview=await objectStorage.preview(record.storagePath,variant);if(usableBlob(preview)){await remember(thumbnailKey,preview);return preview;}}
     catch(error){console.warn('CI 预览暂不可读，尝试原图',error?.message);}
   }
   const {data}=await decode('blobs',record);
-  const blob=await makeThumbnail(data);if(blob){await remember(thumbnailKey,blob);return blob;}return data;
+  const blob=await makeThumbnail(data,edge);if(blob){await remember(thumbnailKey,blob);return blob;}return data;
 }
-async function makeThumbnail(data){if(typeof createImageBitmap!=='function'||typeof document==='undefined')return null;const bitmap=await createImageBitmap(data);try{const scale=Math.min(1,360/Math.max(bitmap.width,bitmap.height)),canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));canvas.getContext('2d').drawImage(bitmap,0,0,canvas.width,canvas.height);return await new Promise(resolve=>canvas.toBlob(resolve,'image/webp',.85));}finally{bitmap.close();}}
+async function makeThumbnail(data,edge=360){if(typeof createImageBitmap!=='function'||typeof document==='undefined')return null;const bitmap=await createImageBitmap(data);try{const scale=Math.min(1,edge/Math.max(bitmap.width,bitmap.height)),canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));canvas.getContext('2d').drawImage(bitmap,0,0,canvas.width,canvas.height);return await new Promise(resolve=>canvas.toBlob(resolve,'image/webp',.9));}finally{bitmap.close();}}
 async function decode(store,record){
   if(store!=='blobs')return record;
   const {storagePath,storageProvider,...metadata}=record;
@@ -437,3 +439,4 @@ export const cloudProjectDocument=(...args)=>current.cloudProjectDocument(...arg
 export const cloudEmergencySnapshot=(...args)=>current.cloudEmergencySnapshot(...args);
 export const cloudRestoreEmergency=(...args)=>current.cloudRestoreEmergency(...args);
 export const cloudBackupBlobIDs=(...args)=>current.cloudBackupBlobIDs(...args);
+

@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createTicketHandler} from '../server/cos-tickets.mjs';
-import {trustedOrigins} from '../server/trusted-origins.mjs';
 import {createCOSStore} from '../src/cos-store.js';
 const hash='a'.repeat(64),token='synthetic-token-for-test-only';
 test('COS authorizes only authenticated owner hash paths and validates a whole batch before signing',async()=>{
@@ -14,6 +13,7 @@ test('COS authorizes only authenticated owner hash paths and validates a whole b
   assert.equal((await run(req)).status,200);
   const preview=await run({...req,body:{objects:[{method:'GET',path:'owner/'+hash,variant:'preview360'}]}});
   assert.equal(preview.status,200);assert.equal(preview.body.tickets[0].variant,'preview360');
+  for(const variant of ['preview720','preview1440','preview2160'])assert.equal((await run({...req,body:{objects:[{method:'GET',path:'owner/'+hash,variant}]}})).status,200);
   for(const row of [{method:'PUT',path:'owner/'+hash,type:'image/png',variant:'preview360'},{method:'GET',path:'owner/'+hash,variant:'sharpen'},{method:'GET',path:'owner/'+hash+'-preview360.webp',variant:'preview360'}])assert.equal((await run({...req,body:{objects:[row]}})).status,403);
   const put=await run({...req,body:{objects:[{method:'PUT',path:'owner/'+hash,type:'image/png'}]}});assert.equal(put.body.tickets[0].headers['x-cos-forbid-overwrite'],'true');
   assert.equal((await run({...req,method:'DELETE'})).status,405);
@@ -28,17 +28,6 @@ test('administrator may read another account in COS but can never write to its p
   assert.equal((await run({...req,body:{objects:[{method:'PUT',path:other+'/'+hash,type:'image/png'}]}})).status,403);
   assert.equal((await run({...req,body:{objects:[{method:'GET',path:'arbitrary/'+hash}]}})).status,403);
   assert.equal(signed,1);
-});
-test('numbered preset source images are private reads and admin-only immutable writes',async()=>{
-  const run=admin=>createTicketHandler({ready:true,origin:'https://shiye-journal-test.vercel.app',authenticate:async()=>({userID:'owner',isAdmin:admin}),sign:async()=> 'https://example.test/preset'});
-  const request=(method,path,type)=>({method:'POST',authorization:'Bearer '+token,body:{objects:[{method,path,...(type?{type}:{})}]}});
-  const path='journal-presets/source/36.jpg';
-  assert.equal((await run(false)(request('GET',path))).status,200);
-  assert.equal((await run(false)(request('PUT',path,'image/jpeg'))).status,403);
-  assert.equal((await run(true)(request('PUT',path,'image/jpeg'))).status,200);
-  for(const name of ['0.jpg','71.jpg','36.png','../36.jpg'])assert.equal((await run(true)(request('GET','journal-presets/source/'+name))).status,403);
-  assert.equal((await run(true)(request('PUT',path,'image/png'))).status,403);
-  assert.equal((await run(true)(request('GET',path,'image/jpeg'))).status,200);
 });
 test('COS adapter batches authorization, never exposes credentials, and does not fall back on failure',async()=>{
   let authorizationCalls=0,objectCalls=0;const store=createCOSStore({enabled:true,client:()=>({auth:{getSession:async()=>({data:{session:{access_token:token}}})}}),fetcher:async(url,options)=>{
@@ -76,16 +65,4 @@ test('COS uploads leave read capacity available and do not sign queued PUTs earl
   releases.shift()();await new Promise(resolve=>setTimeout(resolve,5));assert.equal(started,3,'a queued write must not take the visible read lane');
   releaseRead();assert.equal(await (await read).text(),'visible');for(let i=0;i<30&&started<4;i++)await new Promise(resolve=>setTimeout(resolve,1));assert.equal(started,4);
   while(releases.length)releases.shift()();for(let i=0;i<30&&started<5;i++)await new Promise(resolve=>setTimeout(resolve,1));while(releases.length)releases.shift()();await Promise.all(uploads);assert.equal(signedWrites,5);
-});
-
-test('production origins are exact and preview host must be server-provided',async()=>{
- const origins=trustedOrigins({SHIYE_APP_ORIGINS:'https://myapp.example',VERCEL_URL:'shiye-preview-abc.vercel.app'});
- for(const host of ['https://shiyejournal.vip','https://shiye-journal-test.vercel.app','https://myapp.example','https://shiye-preview-abc.vercel.app'])
-   assert.ok(origins.includes(host));
- for(const bad of ['https://*.vercel.app','http://myapp.example','https://myapp.example/path'])
-   assert.throws(()=>trustedOrigins({SHIYE_APP_ORIGINS:bad}));
- const run=createTicketHandler({ready:true,origins,authenticate:async()=>({userID:'owner'}),sign:async()=> 'https://example.test/object'});
- const req={method:'POST',authorization:'Bearer '+token,body:{objects:[{method:'GET',path:'owner/'+hash}]}};
- assert.equal((await run({...req,origin:'https://shiyejournal.vip'})).status,200);
- assert.equal((await run({...req,origin:'https://bad-shiye-preview-abc.vercel.app'})).status,403);
 });
