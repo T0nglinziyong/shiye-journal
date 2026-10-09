@@ -114,3 +114,36 @@ test('background sync refreshes durable rows after acquiring the cross-tab lease
   await tabB.flush();
   assert.deepEqual(commits,['from-other-tab']);
 });
+
+
+test('stale edited project is saved under a new ID without overwriting cloud original',async()=>{
+  let revision=990,rows=[{record:{id:'original',title:'my offline draft'},serial:1,baseRevision:600,operationID:'op'}];
+  const committed=[];
+  const sync=createProjectSync({
+    load:async()=>structuredClone(rows),reload:async()=>structuredClone(rows),
+    write:async next=>{rows=structuredClone(next);},revision:()=>revision,
+    reconcile:async()=> 'conflict',
+    onConflict:async record=>({...record,id:'safe-copy',title:record.title+'（同步冲突副本）'}),
+    commit:async record=>{committed.push(record);revision++;}
+  });
+  await sync.flush();
+  assert.deepEqual(committed.map(r=>r.id),['safe-copy']);
+  assert.equal(committed[0].title,'my offline draft（同步冲突副本）');
+  assert.equal(rows.length,0);
+});
+test('unresolved change cannot stop independent later queued changes',async()=>{
+  let revision=990,rows=[
+    {record:{id:'conflict'},serial:1,baseRevision:600,operationID:'stuck'},
+    {record:{id:'safe'},serial:2,baseRevision:600,operationID:'independent'}
+  ];
+  const uploaded=[];
+  const sync=createProjectSync({
+    load:async()=>structuredClone(rows),reload:async()=>structuredClone(rows),
+    write:async next=>{rows=structuredClone(next);},revision:()=>revision,
+    reconcile:async record=>record.id==='safe'?'rebase':'conflict',
+    commit:async record=>{uploaded.push(record.id);revision++;}
+  });
+  await assert.rejects(sync.flush(),/已继续同步其他资料/);
+  assert.deepEqual(uploaded,['safe']);
+  assert.deepEqual(rows.map(row=>row.record.id),['conflict']);
+});
