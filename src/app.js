@@ -25,6 +25,7 @@ import {reconcileCanvasText,textParagraphMarkup} from './canvas-text-content.js'
 import {ensureEditorHistory,resetEditorHistory,takeEditorHistoryStep} from './editor-history-scope.js';
 import {captureHistory} from './project-history.js';
 import {mountCanvasEditor} from './canvas-editor-ui.js';
+import {editorExitDecision} from './editor-exit-policy.js';
 import {closePopover} from './swift-popover.js';
 import {drawPaper} from './paper-rendering.js';
 import {shapeSVG,drawInk,textFont,textFontFamily,textLineHeight,textLines} from './editor-tools-model.js';
@@ -483,11 +484,11 @@ async function handle(action,id,value){try{switch(action){
   case 'import-snapshot':offlineSnapshotProject=null;snapshotFileInput.click();break;
   case 'import':openImportGallery('material');break;case 'back-library':navigateBack('library');break;case 'back-works':case 'editor-done':{
     const p=state.activeProject;if(!p)throw Error('当前没有可保存的作品');
-    const publish=action==='editor-done';
+    const decision=editorExitDecision(p,action),publish=decision.publish;
     // Return preserves a new work as a draft; Complete explicitly publishes it.
     // Both paths first stage the *entire* editor document, even with no edits.
     view.endTextEditing?.();
-    if(publish)p.isDraft=false;
+    p.isDraft=decision.isDraft;
     saveProject();
     await flushSave();
     if(publish)saveAISnapshotInBackground(p);
@@ -495,7 +496,7 @@ async function handle(action,id,value){try{switch(action){
       await matchingSession.reflectProject(p);
       state.offlineEditingReturnID=null;
     }
-    parity.workTab=p.isDraft?'draft':'all';
+    parity.workTab=decision.tab;
     parity.selectionMode=null;parity.selected.clear();parity.showOnlySelected=false;
     resetCatalogPage('works');
     state.activeProject=null;state.activeDraft=null;
