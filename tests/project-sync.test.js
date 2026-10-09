@@ -210,3 +210,37 @@ test('background wake-up schedules queued changes rather than forcing a cloud wr
   assert.equal(timers.length,1);
   assert.ok(timers[0].delay>=10000);
 });
+
+
+test('edits arriving mid-upload wait for the next cloud window',async()=>{
+  let time=0,revision=0,rows=[],id=0;
+  const timers=new Map(),writes=[];
+  let started,release;
+  const opened=new Promise(resolve=>started=resolve),pending=new Promise(resolve=>release=resolve);
+  const queue=createProjectSync({
+    load:async()=>structuredClone(rows),reload:async()=>structuredClone(rows),
+    write:async next=>{rows=structuredClone(next);},
+    revision:()=>revision,clock:()=>time,autoFlushDelayMs:10000,
+    setTimer:(fn,delay)=>{timers.set(++id,{fn,at:time+delay});return id;},
+    clearTimer:i=>timers.delete(i),
+    commit:async record=>{
+      writes.push({title:record.title,time});
+      if(writes.length===1){started();await pending;}
+      revision++;
+    }
+  });
+  await queue.stage({id:'work',title:'first'});
+  time=10000;
+  for(const [key,task] of [...timers])if(task.at<=time){timers.delete(key);task.fn();}
+  await opened;
+  await queue.stage({id:'work',title:'second'});
+  release();
+  for(let i=0;i<50;i++)await Promise.resolve();
+  assert.deepEqual(writes.map(x=>x.title),['first']);
+  assert.equal(rows[0].record.title,'second');
+  time=20000;
+  for(const [key,task] of [...timers])if(task.at<=time){timers.delete(key);task.fn();}
+  for(let i=0;i<50;i++)await Promise.resolve();
+  assert.deepEqual(writes,[{title:'first',time:10000},{title:'second',time:20000}]);
+  assert.deepEqual(rows,[]);
+});
