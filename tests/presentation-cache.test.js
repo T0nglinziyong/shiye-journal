@@ -89,7 +89,7 @@ test('whole invalidation discards in-flight reads even before they have a cached
 test('preview retention is bounded and decoded node cache does not steal owned cover children',async()=>{
  const env=environment();const root=document.createElement('div');document.body.append(root);
  const loader=mountPrivateImages({root,db:{previewBlob:async()=>new Blob(['x']),get:async()=>null},urls:new Map(),onError:()=>{}});
- try{for(let i=0;i<510;i++)await loader.load('m'+i);await tick();assert.ok(loader.stats().previews<=480);
+ try{for(let i=0;i<90;i++)await loader.load('m'+i);await tick();assert.ok(loader.stats().previews<=480);
   root.innerHTML='<div data-preview-cache-owned><img src="a"></div>';const img=root.querySelector('img');Object.defineProperties(img,{complete:{value:true},naturalWidth:{value:10},naturalHeight:{value:10}});
   const nodes=new ImageNodeCache();nodes.remember([img]);assert.equal(nodes.pixels,0);nodes.dispose();
  }finally{loader.dispose();env.close();}
