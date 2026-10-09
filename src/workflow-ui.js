@@ -396,7 +396,7 @@ function mountImport(c) {
   const {state,view,render}=c;
   // A second idempotent call covers keyboard/programmatic import entry where
   // there was no pointerdown on the catalog button.
-  void prewarmVision().catch(()=>{});
+  if(state.importMode!=='snapshot')void prewarmVision().catch(()=>{});
   mountImportCandidateMenus(c);
   if(state.importStep==='inspect') {
     const correction=view.querySelector('.paper-corner-overlay');if(state.showManualBox&&correction)correction.style.display='none';
