@@ -681,11 +681,16 @@ async function handle(action,id,value){try{switch(action){
     if(prompt('请输入 RESET 确认清空当前账号测试数据')!=='RESET')break;
     cloudResumer.suspend();
     try{
+      const {data,error}=await cloudClient().auth.getSession();
+      if(error||!data.session?.access_token)throw Error('请先登录');
+      const headers={'Content-Type':'application/json',Authorization:'Bearer '+data.session.access_token};
+      const probe=await fetch('/api/dev-reset',{method:'POST',headers,
+        body:JSON.stringify({confirm:'RESET_DEV_DATA',mode:'probe'})});
+      const check=await probe.json();
+      if(!probe.ok||!check.ready)throw Error(check.error||'当前预览环境尚未授权开发清理');
       if(saveTimer){clearTimeout(saveTimer);saveTimer=null;}
       dirtyProjects.clear();dirtyUsageAssets.clear();
       await db.discardPendingSync();
-      const {data,error}=await cloudClient().auth.getSession();
-      if(error||!data.session?.access_token)throw Error('请先登录');
       let deleted=0,complete=false;
       for(let page=0;page<300;page++){
         const response=await fetch('/api/dev-reset',{method:'POST',
