@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {lightMapFromPixels,lightGainAt,restoreRGBPixels,COLOR_MODES} from '../src/material-color-restoration.js';
+import {softenOutputAlpha} from '../src/image.js';
 
 const sheet=(w,h,base=195)=>{const rgba=new Uint8ClampedArray(w*h*4);
   for(let y=0;y<h;y++)for(let x=0;x<w;x++){const i=(y*w+x)*4;rgba[i]=base+Math.round(x/w*15);rgba[i+1]=rgba[i]+2;rgba[i+2]=rgba[i]-2;rgba[i+3]=255;}
@@ -27,4 +28,11 @@ test('illumination correction changes only colour and is spatially smooth',()=>{
   const left=lightGainAt(map,.49,.49),right=lightGainAt(map,.51,.49);
   assert.ok(Math.max(...left.map((v,i)=>Math.abs(v-right[i])))<.15);
   assert.deepEqual(COLOR_MODES,['original','auto']);
+});
+
+test('visual-only contour feathering does not mutate authoritative recognition mask',()=>{
+  const mask=new Uint8Array([0,0,0,0,255,0,0,0,0]),before=mask.slice();
+  const polished=softenOutputAlpha(mask,3,3);
+  assert.deepEqual(mask,before);
+  assert.notDeepEqual(polished,before);
 });
