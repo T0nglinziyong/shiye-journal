@@ -267,10 +267,9 @@ export function mountCanvasEditor(c){
       // itself simply selected it and could close the popover.
       const beginDrag=()=>{
         if(!pending||drag)return;
-        drag={id:o.id,y:pending.y,target:null};
+        drag={id:o.id,y:pending.y,target:null,moved:false};
         row.classList.add('dragging');
         try{row.setPointerCapture(pending.pointerId);}catch{}
-        scrollDrag();
       };
       row.addEventListener('contextmenu',event=>event.preventDefault());
       row.addEventListener('click',event=>{
@@ -294,12 +293,15 @@ export function mountCanvasEditor(c){
         }
         if(!drag)return;
         drag.y=event.clientY;
-        drag.target=targetAt(event.clientY);
+        if(Math.hypot(event.clientX-pending.x,event.clientY-pending.startY)>5){
+          if(!drag.moved){drag.moved=true;scrollDrag();}
+          drag.target=targetAt(event.clientY);
+        }
         event.preventDefault();event.stopPropagation();
       };
       row.onpointerup=event=>{
         if(!pending||pending.pointerId!==event.pointerId)return;
-        const target=drag?targetAt(event.clientY):null,dragged=!!drag;
+        const dragged=!!drag?.moved,target=dragged?targetAt(event.clientY):null;
         stopDrag();pending=null;
         if(dragged){
           suppressMoveClickUntil=performance.now()+550;
