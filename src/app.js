@@ -30,6 +30,7 @@ import {drawPaper} from './paper-rendering.js';
 import {shapeSVG,drawInk,textFont,textFontFamily,textLineHeight,textLines} from './editor-tools-model.js';
 import {shapeTag} from './shape-preview.js';
 import {ImageNodeCache} from './image-node-cache.js';
+import {createWorkCoverBackfill} from './work-cover-backfill.js';
 import {imagePlaceholder,mountPrivateImages} from './lazy-private-images.js';
 import {reusePagePreviews} from './preview-content-cache.js';
 import {mountSeriesCoverSnapshots} from './series-cover-snapshot.js';
@@ -136,6 +137,7 @@ const recognitionPostprocessOptions=()=>({
 const asset=id=>state.assets.find(x=>x.id===id)||state.trash.find(t=>t.kind==='asset'&&t.item.id===id)?.item;
 const image=id=>urls.get(id)||staticSources.get(id)||state.trash.find(t=>t.kind==='asset'&&t.item.blobId===id)?.item.staticPath||imagePlaceholder(id);
 const privateImages=mountPrivateImages({root:document.body,db,urls,fullView:()=>['editor','assetDetail','projectPreview'].includes(state.route)});
+const workCoverBackfill=createWorkCoverBackfill({db,state,cloudEnabled});
 // A successful COS upload is published after its metadata transaction commits.
 // Hydrate the card in place; rebuilding the entire Works grid resets image
 // decoding/scroll and produces the slow cover-by-cover animation.
@@ -213,6 +215,7 @@ const fmt=n=>Number(n).toFixed(1).replace(/\.0$/,'');
 function head(title,subtitle,actions=''){return `<div class="view-head"><div><h1>${title}</h1><p>${subtitle}</p></div><div class="actions">${actions}</div></div>`;}
 function render(){document.body.classList.toggle('editing',state.route==='editor');document.body.dataset.backdrop=state.preferences.backdrop;document.querySelectorAll('.main-nav button').forEach(b=>b.classList.toggle('active',b.dataset.route===state.route||(b.dataset.route==='library'&&['series','import'].includes(state.route))));document.querySelector('#basket-count').textContent=state.basket.length;
   if(state.route==='editor'&&refreshCanvas())return;
+  view.workCoverDispose?.();view.workCoverDispose=null;
   view.editorDispose?.();view.editorDispose=null;view.manualBoxDispose?.();view.manualBoxDispose=null;view.editorRefresh=null;view.catalogRefresh=null;resetSelectionPresenters(view);
   if(view.onshowsimilar){view.removeEventListener('show-similar',view.onshowsimilar);view.onshowsimilar=null;}
   closePopover();imageNodes.remember(view.querySelectorAll('img[src]'));
@@ -220,7 +223,7 @@ function render(){document.body.classList.toggle('editing',state.route==='editor
   const pages={library:renderLibrary,series:renderSeries,matching:renderMatching,works:renderWorks,editor:renderEditor,import:renderImport,assetDetail:renderAssetDetail,projectPreview:renderProjectPreview,settings:renderSettings};view.innerHTML=(pages[state.route]||renderLibrary)();
   for(const fresh of view.querySelectorAll('img[src]')){const old=imageNodes.take(fresh);if(old)fresh.replaceWith(old);}
   reusePagePreviews({view,state});mountSeriesCoverSnapshots({view,state});
-  mountParityControls();bindPage();mountWorkflowControls({state,view,body,modal,db,render,route,toast,imgTag,assetCard,esc,asset,refresh,download,modelImage,rasterize,backup,openSeriesEditor,openAssetEditor:openDetail,openCutoutCheck,switchImportRecord,saveActiveImportRecord,saveProject,flushSave,assetOrganization,applyAssetClassification});view.catalogRefresh?.();if(state.route==='editor'){view.editorDraft=current();view.editorInk=current().strokes;view.editorLayoutKey=editorLayoutKey();mountCanvasEditor({state,view,body,modal,current,checkpoint,saveProject,render,route,flushSave,toast,esc,imgTag,asset,handle,openCutoutCheck,openAICreation});mountCanvasSelection({state,view,current,checkpoint,saveProject,render,toast});}mountPageSyncIndicator();backgroundViewPending=false;}
+  mountParityControls();bindPage();mountWorkflowControls({state,view,body,modal,db,render,route,toast,imgTag,assetCard,esc,asset,refresh,download,modelImage,rasterize,backup,openSeriesEditor,openAssetEditor:openDetail,openCutoutCheck,switchImportRecord,saveActiveImportRecord,saveProject,flushSave,assetOrganization,applyAssetClassification});view.catalogRefresh?.();if(state.route==='works')view.workCoverDispose=workCoverBackfill.observe(view);if(state.route==='editor'){view.editorDraft=current();view.editorInk=current().strokes;view.editorLayoutKey=editorLayoutKey();mountCanvasEditor({state,view,body,modal,current,checkpoint,saveProject,render,route,flushSave,toast,esc,imgTag,asset,handle,openCutoutCheck,openAICreation});mountCanvasSelection({state,view,current,checkpoint,saveProject,render,toast});}mountPageSyncIndicator();backgroundViewPending=false;}
 function editorLayoutKey(){const size=view.editorLayoutSize||{width:window.innerWidth,height:window.innerHeight};return [size.width,size.height,current()?.canvas.width,current()?.canvas.height,!!state.workspacePanel,!!state.aiPanel].join(':');}
 function refreshCanvas(){
   const d=current(),page=view.querySelector('#canvas-page');if(!page||view.editorDraft!==d||view.editorLayoutKey!==editorLayoutKey()||!view.editorRefresh)return false;
