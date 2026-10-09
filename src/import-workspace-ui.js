@@ -22,7 +22,7 @@ export function renderImportInspection({state,esc,fmt}) {
 export function renderImportReview({state,esc,fmt}) {
   const mode=state.importMode,work=mode==='work',snapshot=mode==='snapshot',records=state.importRecords||[];
   const count=records.reduce((n,r)=>n+(r.selectedCandidates||[]).filter(c=>c.selected).length,0);
-  const options=(record)=>'<option value="">沿用本批默认</option><option value="__none__">不归入系列</option>'+
+  const options=()=>'<option value="__new__">＋ 新建系列…</option><option value="">沿用本批默认</option><option value="__none__">不归入系列</option>'+
     (work?'<option value="__no_library__">不归入素材库</option>':'')+
     state.series.map(s=>'<option value="'+esc(s.id)+'">'+esc(s.title)+'</option>').join('');
   const background=(r,ri)=>{
@@ -31,10 +31,10 @@ export function renderImportReview({state,esc,fmt}) {
     return '<div class="review-candidate review-background-card"><div class="review-thumbnail import-work-paper-preview '+esc(pattern)+'" style="--review-paper:'+esc(color)+';background-color:'+esc(color)+'">'+
       '<button type="button" class="review-paper-control" data-import-paper-options="'+ri+'" aria-label="编辑页面背景">页面背景</button></div></div>';
   };
-  const batchControls=snapshot?'':'<div class="review-default"><strong>本批默认归类</strong><select id="batch-series"><option value="">不归入系列</option>'+
+  const batchControls=snapshot?'':'<div class="review-default"><strong>本批默认归类</strong><select id="batch-series"><option value="__new__">＋ 新建系列…</option><option value="">不归入系列</option>'+
     (work?'<option value="__no_library__">不归入素材库</option>':'')+
     state.series.map(s=>'<option value="'+esc(s.id)+'">'+esc(s.title)+'</option>').join('')+
-    '<option value="__new__">＋ 新建系列…</option></select></div>';
+    '</select></div>';
   return '<section class="import-review"><h1>'+(snapshot?'确认导入快照':work?'确认导入作品':'确认要保存的素材')+'</h1>'+
     '<div class="review-actions"><button class="btn" data-act="import-back">‹ 返回检查照片</button>'+
     '<button class="btn primary" data-act="confirm-import" '+(!snapshot&&!work&&!count?'disabled':'')+'>保存 '+(snapshot?records.length+' 个快照':work?records.length+' 个作品':count+' 个素材')+'</button></div>'+
@@ -42,7 +42,7 @@ export function renderImportReview({state,esc,fmt}) {
     records.map((r,ri)=>'<div class="review-record"><div class="review-record-head"><img src="'+(r.correctedURL||r.url)+'"><div><h2>照片 '+(ri+1)+'</h2>'+
        (snapshot?'': '<small>'+(r.selectedCandidates||[]).filter(c=>c.selected).length+' 个已选素材</small>')+'</div><span>✓ 已确认</span></div>'+
       (work?'<label>作品名称<input class="record-work-title" data-index="'+ri+'" value="'+esc(r.workTitle||r.file.name.replace(/\\.[^.]+$/,''))+'"></label>':'')+
-      (snapshot?'':'<label class="record-series-label">所属系列<select class="record-series" data-index="'+ri+'">'+options(r)+'</select></label>')+
+      (snapshot?'':'<label class="record-series-label">所属系列<select class="record-series" data-index="'+ri+'">'+options()+'</select></label>')+
       '<div class="review-candidates">'+
       (snapshot?'<div class="review-candidate selected review-snapshot"><div class="review-thumbnail"><img src="'+esc(r.correctedURL||r.url)+'" alt="校正后完整页面"></div></div>':
         (work?background(r,ri):'')+(r.selectedCandidates||[]).map((c,ci)=>
