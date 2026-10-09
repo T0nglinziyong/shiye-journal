@@ -207,7 +207,7 @@ function mountProjectBatch(c){
   const more=selectionAction('更多操作',()=>batchMore(more,[
     ['导出',()=>exportSelectedWorks(c,c.state.projects.filter(p=>parity.selected.has(p.id)))],
     ['重新识别',()=>classifySelectedWorks(c,c.state.projects.filter(p=>parity.selected.has(p.id)))],
-    ...c.state.projects.some(p=>parity.selected.has(p.id)&&!p.isSnapshot)?[['设置状态',async()=>{
+    ...(c.state.projects.some(p=>parity.selected.has(p.id)&&!p.isSnapshot)?[['设置状态',async()=>{
       const selected=c.state.projects.filter(p=>parity.selected.has(p.id)&&!p.isSnapshot);
       if(!selected.length)throw Error('仅可编辑作品支持使用状态');
       const used=confirm('确定将所选可编辑作品标记为“已使用”？取消则标记为“未使用”。');
