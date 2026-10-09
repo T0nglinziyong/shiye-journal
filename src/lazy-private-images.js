@@ -20,7 +20,21 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
     return null;
   };
   const unbind=bindImageResources({source:currentSource,identity});
-  const displayTier=img=>{const rect=img.getBoundingClientRect(),pixels=rect.width>0&&rect.height>0?Math.max(rect.width,rect.height):Math.max(img.clientWidth||0,img.clientHeight||0);return imagePixelSize(pixels||400,globalThis.devicePixelRatio||1,globalThis.screen?.width||1440,globalThis.screen?.height||900);};
+  const displayTier=img=>{
+    // Detail/inspection show one centered asset at a comparable fraction of
+    // the screen, independent of the physical size of that particular asset.
+    // The creative canvas instead uses the rendered material rectangle:
+    // different real-world sizes legitimately demand different pixel counts.
+    const detail=!!img.closest('.detail-picture,.cutout-preview');
+    const rect=img.getBoundingClientRect();
+    const screenWidth=globalThis.innerWidth||globalThis.screen?.width||1440;
+    const screenHeight=globalThis.innerHeight||globalThis.screen?.height||900;
+    const pixels=detail
+      ? Math.min(screenWidth,screenHeight)*.72
+      : rect.width>0&&rect.height>0?Math.max(rect.width,rect.height):Math.max(img.clientWidth||0,img.clientHeight||0);
+    const selected=imagePixelSize(pixels||400,globalThis.devicePixelRatio||1,screenWidth,screenHeight);
+    return img.closest('.cutout-preview')?Math.max(1200,selected):selected;
+  };
   function scheduleUpgrade(img){
     if(disposed||!fullView(img)||!img.isConnected||img.dataset.privateImageLoading)return;
     const existing=identity(img.getAttribute('src')||'');
