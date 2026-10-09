@@ -1,3 +1,4 @@
+import {ensureInkSlots,inkSlot,activeInkSlot,selectInkSlot,editInkSlot} from './ink-tool-slots.js';
 import {openPopover,closePopover} from './swift-popover.js';
 import {defaultTools,commonShapes,advancedShapes,configureShape,straightStroke,eraseStrokes,drawInk,resizeObject,textFont,textLines} from './editor-tools-model.js';
 import {shapeTag as shapeSVG} from './shape-preview.js';
@@ -22,6 +23,7 @@ export function mountCanvasEditor(c){
   const {state,view,body,modal,current,checkpoint,saveProject,render,route,flushSave,toast,esc,imgTag,asset,handle,openCutoutCheck,openAICreation}=c,d=current(),page=view.querySelector('#canvas-page');if(!d||!page)return;
   if(captureHistory(state.activeProject))saveProject();state.workspacePanel=false;
   if(!state.canvasTools){let saved={};try{saved=JSON.parse(localStorage.getItem(prefKey))||{};}catch{}state.canvasTools={...defaultTools,...saved};}
+  ensureInkSlots(state.canvasTools);
   const prefs=state.canvasTools,head=view.querySelector('.view-head'),actions=head.querySelector('.actions'),tools=view.querySelector('.editor-tools'),shell=view.querySelector('.editor-shell');let entries=allEntries(d),selected=entries.find(e=>e.value.id===state.selected);
   const button=(label,fn,className='')=>{const b=document.createElement('button');b.type='button';b.className=className;b.textContent=label;b.onclick=e=>{if(state.editingTextID&&!b.closest('.canvas-context-tools,[data-object]'))view.endTextEditing?.();fn(e);};return b;};
   const prefsChanged=()=>{try{localStorage.setItem(prefKey,JSON.stringify(prefs));}catch{}if(!document.querySelector('.swift-popover'))contextTools();};
@@ -31,7 +33,6 @@ export function mountCanvasEditor(c){
   const ai=actions.querySelector('button.primary'),json=actions.querySelector('[data-act="creative-json"]'),pdf=[...actions.querySelectorAll('button')].find(b=>b.textContent==='导出 PDF');
   actions.replaceChildren();const saved=document.createElement('span');saved.className='swift-auto-saved';saved.textContent=document.querySelector('#save-state').textContent;actions.append(saved);
   actions.append(button('◷',e=>historyMenu(e.currentTarget),'canvas-icon'));actions.lastChild.setAttribute('aria-label','历史记录');actions.append(topAction('undo','↶'),topAction('redo','↷'));
-  actions.append(topAction('save-work','保存'));// Archives remain separate from promoting a draft to a work.
   actions.append(button('完成',()=>handle('editor-done'),'btn primary'));
   const share=button('导出',e=>{const p=openPopover(e.currentTarget,{title:'导出',width:220,menu:true});for(const [name,fn] of [['保存快照',()=>handle('save-snapshot')],['导出 PNG',()=>handle('export-png')],['导出 PDF',()=>pdf?.click()||handle('print')],['导出可编辑 ZIP',()=>handle('download-project-zip')],['打印',()=>handle('print')],['导入创作指令',()=>handle('creative-json')]])p.content.append(button(name,()=>{p.close();fn();}));},'btn');share.setAttribute('aria-label','导出作品');actions.append(share);if(json){json.hidden=true;actions.append(json);}
   const toolbar=document.createElement('div');toolbar.className='swift-editor-toolbar';shell.before(toolbar);toolbar.append(tools);tools.replaceChildren();
@@ -47,29 +48,37 @@ export function mountCanvasEditor(c){
   function syncTools(){for(const b of tools.querySelectorAll('button')){const active=(state.toolHighlight||state.tool)===b.dataset.val||(b.dataset.val==='select'&&state.tool==='marquee');b.classList.toggle('primary',active);b.setAttribute('aria-pressed',String(active));}page.classList.toggle('pen',['pen','highlighter','eraser'].includes(state.tool));}
   function contextTools(){context.replaceChildren();const mode=state.toolHighlight||state.tool,entry=entries.find(e=>e.value.id===state.selected),s=entry?.value,kind=entry?.kind;
     if(['pen','highlighter'].includes(mode)){
-      const marker=mode==='highlighter',key=marker?'marker':'pen';
-      for(const width of [2,4,9]){
-        const b=button('',()=>{if(prefs[key+'Width']===width)widthSettings(b,mode);else{prefs[key+'Width']=width;prefsChanged();contextTools();}},'stroke-width'+(prefs[key+'Width']===width?' active':''));
-        b.innerHTML='<span style="height:'+Math.max(2,width)+'px"></span>';
-        b.setAttribute('aria-label','笔画粗细 '+width+' pt');context.append(b);
+      const key=mode==='highlighter'?'marker':'pen';
+      for(let i=0;i<3;i++){
+        const width=inkSlot(prefs,mode,'width',i),active=activeInkSlot(prefs,mode,'width')===i;
+        const b=button('',()=>{if(activeInkSlot(prefs,mode,'width')===i){widthSettings(b,mode,i);return;}
+          selectInkSlot(prefs,mode,'width',i);prefsChanged();contextTools();
+        },'stroke-width'+(active?' active':''));
+        b.innerHTML='<span style="display:block;height:'+Math.max(2,Math.min(20,width))+'px"></span>';
+        b.dataset.inkWidthSlot=String(i);
+        b.setAttribute('aria-label','笔画粗细 '+width+' pt'+(active?'，再次点击修改':''));context.append(b);
       }
-      for(const color of ['#2b5245','#009cff','#ff3348']){
-        const b=button('',()=>{if(prefs[key+'Color']===color)colorSettings(b,mode);else{prefs[key+'Color']=color;prefsChanged();contextTools();}},'ink-color'+(prefs[key+'Color']===color?' active':''));
-        b.style.backgroundColor=color;b.setAttribute('aria-label','笔画颜色 '+color);context.append(b);
+      for(let i=0;i<3;i++){
+        const color=inkSlot(prefs,mode,'color',i),active=activeInkSlot(prefs,mode,'color')===i;
+        const b=button('',()=>{if(activeInkSlot(prefs,mode,'color')===i){colorSettings(b,mode,i);return;}
+          selectInkSlot(prefs,mode,'color',i);prefsChanged();contextTools();
+        },'ink-color'+(active?' active':''));
+        b.style.backgroundColor=color;b.dataset.inkColorSlot=String(i);
+        b.setAttribute('aria-label','笔画颜色 '+color+(active?'，再次点击修改':''));context.append(b);
       }
-      const custom=document.createElement('input');custom.type='color';
-      custom.value=prefs[key+'Color'];custom.setAttribute('aria-label',marker?'自定义荧光笔颜色':'自定义画笔颜色');
-      custom.title='选择任意颜色';custom.oninput=()=>{prefs[key+'Color']=custom.value;prefsChanged();};context.append(custom);
-      context.append(button('更多颜色',e=>colorSettings(e.currentTarget,mode)));return;
+      return;
     }
     if(mode==='eraser'){
-      for(const size of [8,20,40]){
-        const b=button('○',()=>{if(prefs.eraserWidth===size&&(prefs.eraserStyle||'standard')!=='standard'){widthSettings(b,'eraser');return;}
-          prefs.eraserWidth=size;prefs.eraserStyle='fine';prefs.wholeStroke=false;prefsChanged();contextTools();
-        },'eraser-size'+(prefs.eraserWidth===size&&(prefs.eraserStyle||'standard')!=='standard'?' active':''));
-        b.style.fontSize=(size/2+14)+'px';b.setAttribute('aria-label','切换到局部橡皮 '+size+' pt');context.append(b);
+      for(let i=0;i<3;i++){
+        const size=inkSlot(prefs,'eraser','width',i),active=activeInkSlot(prefs,'eraser','width')===i;
+        const b=button('○',()=>{if(activeInkSlot(prefs,'eraser','width')===i){widthSettings(b,'eraser',i);return;}
+          selectInkSlot(prefs,'eraser','width',i);prefsChanged();contextTools();
+        },'eraser-size'+(active?' active':''));
+        b.style.fontSize=Math.round(Math.max(17,Math.min(42,size*.48+11)))+'px';
+        b.dataset.inkWidthSlot=String(i);
+        b.setAttribute('aria-label','橡皮大小 '+size+' pt'+(active?'，再次点击修改':''));context.append(b);
       }
-      context.append(button('自定大小',e=>widthSettings(e.currentTarget,'eraser')));return;
+      return;
     }
     if(mode==='lasso'||mode==='marquee'){const icon=button('◌',()=>{});icon.setAttribute('aria-label','套索选择');icon.setAttribute('aria-pressed','true');context.append(icon);return;}
     if(['shape','material','layers','paper'].includes(mode))return;
@@ -80,29 +89,41 @@ export function mountCanvasEditor(c){
   }
   const toggle=(parent,label,value,fn)=>{const row=document.createElement('label');row.className='canvas-toggle';row.append(document.createTextNode(label));const input=document.createElement('input');input.type='checkbox';input.checked=value;input.onchange=()=>fn(input.checked);row.append(input);parent.append(row);return input;};
   const range=(parent,label,value,min,max,step,fn,disabled=false,suffix=" pt")=>{const row=document.createElement('label');row.className='canvas-setting';const line=document.createElement('span'),display=document.createElement('output');line.append(document.createTextNode(label),display);display.textContent=Number(value).toFixed(step<1?1:0)+suffix;const input=document.createElement('input');Object.assign(input,{type:'range',min,max,step,value,disabled});input.oninput=()=>{display.textContent=Number(input.value).toFixed(step<1?1:0)+suffix;fn(+input.value);};row.append(line,input);parent.append(row);};
-  function widthSettings(anchor,mode){
-    const key=mode==='highlighter'?'marker':'pen',p=openPopover(anchor,{title:mode==='eraser'?'橡皮大小':'笔粗细',width:280});
-    range(p.content,'粗细',mode==='eraser'?prefs.eraserWidth:prefs[key+'Width'],mode==='eraser'?6:1,mode==='eraser'?80:20,.1,value=>{
-      if(mode==='eraser'){prefs.eraserWidth=value;prefs.eraserStyle='fine';prefs.wholeStroke=false;}
-      else prefs[key+'Width']=value;
+  function widthSettings(anchor,mode,index=activeInkSlot(prefs,mode,'width')){
+    const p=openPopover(anchor,{title:mode==='eraser'?'修改橡皮大小':'修改笔粗细',width:270});
+    const apply=value=>{
+      const n=editInkSlot(prefs,mode,'width',index,value);
+      const stroke=anchor.querySelector('span');
+      if(stroke)stroke.style.height=Math.max(2,Math.min(20,n))+'px';
+      if(mode==='eraser')anchor.style.fontSize=Math.round(Math.max(17,Math.min(42,n*.48+11)))+'px';
+      anchor.setAttribute('aria-label',(mode==='eraser'?'橡皮大小 ':'笔画粗细 ')+n+' pt，再次点击修改');
       prefsChanged();
-    });
+    };
+    range(p.content,'粗细',inkSlot(prefs,mode,'width',index),
+      mode==='eraser'?6:1,mode==='eraser'?80:20,.1,apply);
   }
-  function colorSettings(anchor,mode){
-    const key=mode==='highlighter'?'marker':'pen',p=openPopover(anchor,{title:'自定义颜色',width:300}),
-      palette=document.createElement('div');
+  function colorSettings(anchor,mode,index=activeInkSlot(prefs,mode,'color')){
+    const p=openPopover(anchor,{title:'修改当前颜色',width:280}),palette=document.createElement('div');
     palette.className='canvas-color-grid';p.content.append(palette);
-    const apply=color=>{prefs[key+'Color']=color;prefsChanged();};
+    const apply=value=>{
+      const normalized=editInkSlot(prefs,mode,'color',index,value);
+      anchor.style.backgroundColor=normalized;
+      anchor.setAttribute('aria-label','笔画颜色 '+normalized+'，再次点击修改');
+      prefsChanged();
+    };
     for(const color of ['#171717','#555555','#989898','#ffffff','#e33b45','#fb8795','#ff9c21','#e8d432','#159b73','#57bd4b','#167ad9','#264d9c','#853aaf','#955969']){
-      const b=button('',()=>{apply(color);p.close();contextTools();});
-      b.className='ink-color';b.style.backgroundColor=color;b.setAttribute('aria-label','颜色 '+color);palette.append(b);
+      const b=button('',()=>{apply(color);p.close();});
+      b.className='ink-color';b.style.backgroundColor=color;
+      b.setAttribute('aria-label','颜色 '+color);palette.append(b);
     }
-    const row=document.createElement('label');row.textContent='精确颜色（十六进制）';
-    const custom=document.createElement('input');custom.type='color';custom.value=prefs[key+'Color'];custom.setAttribute('aria-label','颜色选择器');
-    const hex=document.createElement('input');hex.type='text';hex.maxLength=7;hex.placeholder='#RRGGBB';hex.value=prefs[key+'Color'];hex.setAttribute('aria-label','输入精确颜色');
+    const row=document.createElement('label');row.textContent='自定义颜色';
+    const custom=document.createElement('input');custom.type='color';
+    custom.value=inkSlot(prefs,mode,'color',index);
+    const hex=document.createElement('input');hex.type='text';hex.maxLength=7;hex.placeholder='#RRGGBB';
+    hex.value=custom.value;
     custom.oninput=()=>{hex.value=custom.value;apply(custom.value);};
-    hex.oninput=()=>{const value=hex.value.trim();if(/^#[0-9a-fA-F]{6}$/.test(value)){custom.value=value;apply(value.toLowerCase());}};
-    hex.onchange=()=>{if(!/^#[0-9a-fA-F]{6}$/.test(hex.value.trim()))hex.value=prefs[key+'Color'];};
+    hex.oninput=()=>{const value=hex.value.trim();if(/^#[0-9a-fA-F]{6}$/.test(value)){custom.value=value;apply(value);}};
+    hex.onchange=()=>{if(!/^#[0-9a-fA-F]{6}$/.test(hex.value.trim()))hex.value=inkSlot(prefs,mode,'color',index);};
     row.append(custom,hex);p.content.append(row);
   }
   function toolSettings(anchor,mode){const p=openPopover(anchor,{title:labels[mode],width:290,menu:true}),el=p.content;
