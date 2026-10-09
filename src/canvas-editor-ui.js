@@ -262,46 +262,52 @@ export function mountCanvasEditor(c){
       move.onclick=()=>{if(drag||performance.now()<suppressMoveClickUntil)return;moveMenu?.remove();const controls=document.createElement('div');controls.className='canvas-layer-move-actions';controls.append(button('上移一层',()=>{reorder(o.id,ordered[indexOf(o.id)-1]?.value.id);controls.remove();moveMenu=null;}),button('下移一层',()=>{reorder(o.id,ordered[indexOf(o.id)+1]?.value.id,true);controls.remove();moveMenu=null;}));row.append(controls);moveMenu=controls;};
       move.dataset.layerMove='';move.setAttribute('aria-label','调整图层顺序');move.style.touchAction='none';
       let pending=null;
+      // Start a drag by holding anywhere on the thumbnail/drag grip. Previous
+      // code listened only on a narrow ≡ button, so long-pressing the layer
+      // itself simply selected it and could close the popover.
       const beginDrag=()=>{
         if(!pending||drag)return;
         drag={id:o.id,y:pending.y,target:null};
         row.classList.add('dragging');
+        try{row.setPointerCapture(pending.pointerId);}catch{}
         scrollDrag();
       };
-      move.onpointerdown=event=>{
-        if(event.button>0||o.isLocked||o.locked)return;
-        event.stopPropagation();
+      row.addEventListener('contextmenu',event=>event.preventDefault());
+      row.addEventListener('click',event=>{
+        if(performance.now()<suppressMoveClickUntil){event.preventDefault();event.stopImmediatePropagation();}
+      },true);
+      row.onpointerdown=event=>{
+        if(event.button>0||o.isLocked||o.locked||
+          event.target.closest('[data-layer-lock],[data-layer-eye],.canvas-layer-move-actions'))return;
         pending={pointerId:event.pointerId,x:event.clientX,y:event.clientY,startY:event.clientY,
           pointerType:event.pointerType};
-        try{move.setPointerCapture(event.pointerId);}catch{}
-        if(event.pointerType==='touch')holdTimer=setTimeout(beginDrag,240);
+        if(event.pointerType!=='mouse')holdTimer=setTimeout(beginDrag,240);
       };
-      move.onpointermove=event=>{
+      row.onpointermove=event=>{
         if(!pending||pending.pointerId!==event.pointerId)return;
         pending.y=event.clientY;
         if(!drag){
           const distance=Math.hypot(event.clientX-pending.x,event.clientY-pending.startY);
-          if(event.pointerType==='mouse'&&distance>4)beginDrag();
-          else if(event.pointerType==='touch'&&distance>10){clearTimeout(holdTimer);holdTimer=null;}
+          if(event.pointerType==='mouse'&&distance>5)beginDrag();
+          // Do not treat a quick touch scroll as a layer reordering.
+          else if(event.pointerType!=='mouse'&&distance>12){clearTimeout(holdTimer);holdTimer=null;}
         }
         if(!drag)return;
         drag.y=event.clientY;
-        list.querySelectorAll('.drop-target').forEach(el=>el.classList.remove('drop-target'));
         drag.target=targetAt(event.clientY);
-        drag.target?.row.classList.add('drop-target');
         event.preventDefault();event.stopPropagation();
       };
-      move.onpointerup=event=>{
+      row.onpointerup=event=>{
         if(!pending||pending.pointerId!==event.pointerId)return;
-        const target=drag?targetAt(event.clientY):null;
-        const dragged=!!drag;stopDrag();pending=null;
+        const target=drag?targetAt(event.clientY):null,dragged=!!drag;
+        stopDrag();pending=null;
         if(dragged){
-          suppressMoveClickUntil=performance.now()+400;
+          suppressMoveClickUntil=performance.now()+550;
           event.preventDefault();event.stopPropagation();
           if(target)reorder(o.id,target.id,target.after);
         }
       };
-      move.onpointercancel=()=>{pending=null;stopDrag();};
+      row.onpointercancel=()=>{pending=null;stopDrag();};
       move.onkeydown=event=>{
         if(o.isLocked||o.locked||!['ArrowUp','ArrowDown'].includes(event.key))return;
         event.preventDefault();
