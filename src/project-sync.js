@@ -61,11 +61,17 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
     if(network)return network;
     network=(async()=>runExclusive(async()=>{
       lastNetworkAt=clock();
-      let autoCommitted=false;
       await initialize();await refreshFromDisk();
+      // Drain all documents already queued at the start of this upload window.
+      // A newer edit arriving while an HTTP request is in flight belongs to
+      // the next window, avoiding two rapid uploads of the same document.
+      const windowSerial=flushWindow&&!force
+        ?Math.max(0,...[...entries.values()].map(item=>item.serial))
+        :Infinity;
       const blocked=new Set();
       while(entries.size){
-        const row=[...entries.values()].find(item=>!blocked.has(item.record.id));
+        const row=[...entries.values()].find(item=>!blocked.has(item.record.id)&&item.serial<=windowSerial);
+        if(!row)break;
         if(!row)break;
         try {
         // A restarted queue must not overwrite changes made by another device.
@@ -110,7 +116,6 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
         }
         await staging;
         await acknowledge(row,{confirmedHere:true});
-        if(flushWindow&&!force){autoCommitted=true;break;}
         }catch(failure){
           if(!/云端版本已变化|另一设备已更新|\\bconflict\\b/i.test(failure?.message||''))throw failure;
           blocked.add(row.record.id);
