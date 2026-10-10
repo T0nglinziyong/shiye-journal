@@ -822,8 +822,9 @@ async function handle(action,id,value){try{switch(action){
   case 'export-png':await exportPNG();break;case 'print':await printPage();break;
   case 'creative-json':openCreativeJSON();break;
   case 'recognition-diagnostics':{
-    const rec=state.importRecords[state.importIndex],trace=rec?.recognitionDiagnostic;
-    if(!trace)throw Error('请先完成当前照片的识别');
+    const rec=state.importRecords[state.importIndex];
+    if(!rec?.file||!state.importBitmap)throw Error('请等待照片读取完成，再导出诊断');
+    const trace=rec.recognitionDiagnostic||{phase:rec.paperNeedsReview?'paper-review-required':'not-recognized',count:0};
     const hash=async bytes=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),v=>v.toString(16).padStart(2,'0')).join('');
     const inputSHA256=await hash(await rec.file.arrayBuffer());
     const sourceSHA256=await hash(sourcePixels(state.importBitmap));
@@ -845,6 +846,7 @@ async function handle(action,id,value){try{switch(action){
     const report={format:'shiye-recognition-box-diagnostics',version:3,
       pipeline:'pinned-jpeg-js-opencv-package-area-v1',inputSHA256,sourceSHA256,correctedSHA256,maskSHA256,
       inputFileInfo:{bytes:rec.file?.size||0,mimeType:rec.file?.type||''},previewStatus,
+      prefetchStatus:rec.prefetchStatus||null,importError:rec.importError||null,
       recognitionSettings:{method:state.importRecognition||state.preferences.recognition,pixels:state.preferences.recognitionPixels,
         preprocess:recognitionPreprocessOptions(),postprocess:recognitionPostprocessOptions()},
       originalPixelSize:[state.importBitmap?.width,state.importBitmap?.height],
