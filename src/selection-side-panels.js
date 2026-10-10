@@ -75,7 +75,7 @@ export function createSelectionSidePanels(menu,{makeAction,anchor}){
       // original parent width after rotation to tablet/desktop; otherwise the
       // temporary compact layout would get stuck across viewport changes.
       const baseWidth=innerWidth>=600?Math.min(parseFloat(initialWidth)||measured.width,innerWidth-24):measured.width;
-      const menuRect={...measured,width:baseWidth,right:measured.left+baseWidth};
+      const menuRect={left:measured.left,top:measured.top,height:measured.height,width:baseWidth,right:measured.left+baseWidth};
       const geometry=selectionSideGeometry({
         viewportWidth:innerWidth,viewportHeight:innerHeight,
         anchor:anchorRect,menu:menuRect,panelHeight:panel.scrollHeight
