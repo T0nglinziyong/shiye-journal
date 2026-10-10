@@ -46,9 +46,13 @@ function example(spec,assets){
   return result;
 }
 export async function syncCurrentExamples({database=defaultDB}={}){
-  const assets=await database.all('assets'),existing=new Set((await database.all('projects')).map(p=>p.id));
-  if(layouts.every(layout=>existing.has(layout.id)))return {changed:false};
-  const projects=layouts.filter(layout=>!existing.has(layout.id)).map(layout=>example(layout,assets)).filter(Boolean);
+  const [assets,saved,meta,trash]=await Promise.all(['assets','projects','meta','trash'].map(name=>database.all(name)));
+  const existing=new Set(saved.map(p=>p.id));
+  const initialized=meta.some(row=>row.id===MARKER)||layouts.some(layout=>existing.has(layout.id));
+  if(initialized)return {changed:false,projects:0};
+  const deleted=new Set([...meta.filter(row=>row.id?.startsWith('tombstone:projects:')).map(row=>row.targetID||row.id.slice('tombstone:projects:'.length)),...trash.filter(row=>row.kind==='project').map(row=>row.item?.id)]);
+  const projects=layouts.filter(layout=>!existing.has(layout.id)&&!deleted.has(layout.id)).map(layout=>example(layout,assets)).filter(Boolean);
+  if(!projects.length)return {changed:false,projects:0};
   await database.transaction(['projects','meta'],tx=>{
     for(const record of projects)tx.objectStore('projects').put(record);
     tx.objectStore('meta').put({id:MARKER,createdAt:new Date().toISOString()});
