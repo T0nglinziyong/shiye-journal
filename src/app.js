@@ -49,10 +49,6 @@ import {renderSeriesContents} from './series-contents.js';
 import {showSeriesEditor} from './series-editor.js';
 import {mountWorkflowControls} from './workflow-ui.js';
 import {renderImportInspection,renderImportReview} from './import-workspace-ui.js';
-import {recoverImportCandidate} from './import-candidate-recovery.js';
-import {detectImportRegions} from './import-recognition-safety.js';
-import {importPhotoDisplayURL,IMPORT_WORKING_LONG_EDGE_PX} from './import-working-size.js';
-import {bindImportCandidatePreviews} from './import-preview-retry.js';
 import {showCutoutEditor} from './cutout-editor.js';
 import {mountCanvasSelection} from './canvas-selection-ui.js';
 import * as db from './store.js';
@@ -613,17 +609,6 @@ function bindPage(){view.querySelectorAll('[data-act]').forEach(el=>el.addEventL
   const removeWhite=view.querySelector('#remove-white');if(removeWhite)removeWhite.onchange=()=>{state.importRemoveWhite=removeWhite.checked;};
   const page=view.querySelector('#canvas-page');if(page)initializeCanvasSurface(page);
   bindInspector();
-  if(state.route==='import'&&state.importMode!=='snapshot'){
-    const index=state.importIndex;
-    bindImportCandidatePreviews({
-      root:view,candidates:()=>state.importCandidateData||[],
-      active:()=>state.route==='import'&&state.importIndex===index,
-      onRepair:(ci,item)=>{
-        (state.importCandidateURLs||=[])[ci]=item.url;
-        saveActiveImportRecord();
-      }
-    });
-  }
   if(state.route==='import'&&state.importProcessing)view.querySelectorAll('.inspect-columns button,.inspect-columns input,.inspect-columns select').forEach(el=>{
     // A failed or slow auto recognizer must never block the manual recovery
     // path once its source bitmap exists. The manual action invalidates the
@@ -851,7 +836,7 @@ async function handle(action,id,value){try{switch(action){
       autoPaperCorners:rec.autoPaperCorners||null,paperCorners:rec.corners||null,
       appliedPaperCorners:rec.appliedCorners?JSON.parse(rec.appliedCorners):null,
       correctedPixelSize:rec.correctedBitmap?[rec.correctedBitmap.width,rec.correctedBitmap.height]:null,
-      paperOrientation:rec.paperOrientation||'auto',paperSize:rec.paperSize||'a4',recognitionWorkingLongEdge:900,rectifiedWorkingLongEdge:IMPORT_WORKING_LONG_EDGE_PX,
+      paperOrientation:rec.paperOrientation||'auto',paperSize:rec.paperSize||'a4',recognitionWorkingLongEdge:900,rectifiedWorkingLongEdge:Math.max(rec.correctedBitmap?.width||0,rec.correctedBitmap?.height||0)||null,
       ...trace,detectedCount:rec.candidates?.length||0,visibleCount:(rec.candidateData||[]).filter(item=>!!item?.url).length,recognitionRecovery:rec.recognitionRecovery||null,paperNeedsReview:!!rec.paperNeedsReview};
     download(new Blob([JSON.stringify(report,null,2)],{type:'application/json'}),
       '拾页素材框诊断.json');
@@ -1201,7 +1186,7 @@ function openProjectMetadata(){
 async function restoreTrash(id){if(!await changeTrash({db,state,ids:[id],recover:true}))return;render();toast('已恢复');}
 function saveActiveImportRecord(){
   const rec=state.importRecords[state.importIndex];if(!rec)return;
-  Object.assign(rec,{bitmap:state.importBitmap,file:state.importFile,url:state.importURL,displayURL:state.importDisplayURL||null,box:structuredClone(state.importBox),corners:state.paperCorners?structuredClone(state.paperCorners):null,correctedBitmap:state.correctedBitmap,correctedURL:state.correctedURL,candidates:state.importCandidates||[],candidateURLs:state.importCandidateURLs||[],candidateData:state.importCandidateData||[],selection:[...(state.importCandidateSelection||[])],wholePaper:state.wholePaper,paperSize:state.paperSize,paperOrientation:state.paperOrientation,balanceLight:state.balanceLight,recognition:state.importRecognition,importShapeRegularization:state.importShapeRegularization,importApertures:state.importApertures,importMaterialColorMode:state.importMaterialColorMode,customImportWidth:state.customImportWidth,customImportHeight:state.customImportHeight});
+  Object.assign(rec,{bitmap:state.importBitmap,file:state.importFile,url:state.importURL,box:structuredClone(state.importBox),corners:state.paperCorners?structuredClone(state.paperCorners):null,correctedBitmap:state.correctedBitmap,correctedURL:state.correctedURL,candidates:state.importCandidates||[],candidateURLs:state.importCandidateURLs||[],candidateData:state.importCandidateData||[],selection:[...(state.importCandidateSelection||[])],wholePaper:state.wholePaper,paperSize:state.paperSize,paperOrientation:state.paperOrientation,balanceLight:state.balanceLight,recognition:state.importRecognition,importShapeRegularization:state.importShapeRegularization,importApertures:state.importApertures,importMaterialColorMode:state.importMaterialColorMode,customImportWidth:state.customImportWidth,customImportHeight:state.customImportHeight});
 }
 const importPrefetchJobs=new WeakMap();
 let importBatchRevision=0;
@@ -1229,7 +1214,7 @@ function importPrefetchSettings(rec){
 }
 function updateImportPrefetchLabel(rec){
   const index=state.importRecords.indexOf(rec),label=index>=0?view.querySelector(`.queue-item[data-id="${index}"] small`):null;
-  if(label&&!rec.confirmed)label.textContent=rec.prefetchStatus==='ready'?`${rec.candidates.length} 件已预识别`:rec.prefetchStatus==='running'?'后台识别中':rec.prefetchStatus==='needs-paper-review'?'请校正纸张':'待识别';
+  if(label&&!rec.confirmed)label.textContent=rec.prefetchStatus==='ready'?`${rec.candidates.length} 件已预识别`:rec.prefetchStatus==='running'?'后台识别中':'待识别';
 }
 async function prefetchImportRecord(rec,settings,revision){
   let bitmap,correctedBitmap,correctedURL,candidateURLs=[];
@@ -1238,32 +1223,22 @@ async function prefetchImportRecord(rec,settings,revision){
     bitmap=await decodeRecognitionImage(rec.file);if(!valid())return;
     const initial=importPaperDimensions({...settings,bitmap,corners:null});
     const corners=rec.corners||(settings.paperSize==='none'?null:await suggestPaperCorners(bitmap,initial[0]/initial[1]).catch(()=>null));if(!valid())return;
-    if(settings.paperSize!=='none'&&(rec.paperNeedsReview||!corners)&&!rec.appliedCorners){rec.paperNeedsReview=true;rec.prefetchStatus='needs-paper-review';updateImportPrefetchLabel(rec);return;}
     const [pw,ph]=importPaperDimensions({...settings,bitmap,corners});
     if(corners&&settings.paperSize!=='none'){
-      const corrected=await rectifyA4Frame(bitmap,corners,4096,pw/ph,{fixedWorkingSize:true});correctedBitmap=corrected.canvas;correctedURL=URL.createObjectURL(corrected.blob);if(!valid())return;
+      const corrected=await rectifyA4Frame(bitmap,corners,4096,pw/ph);correctedBitmap=corrected.canvas;correctedURL=URL.createObjectURL(corrected.blob);if(!valid())return;
     }
     const source=correctedBitmap||bitmap,box=correctedBitmap?{x:0,y:0,w:1,h:1}:rec.box||{x:0,y:0,w:1,h:1};
-    const candidates=await detectImportRegions(source,box,{balanceLight:settings.balanceLight,paperRectified:!!correctedBitmap,paperWidthMM:pw,paperHeightMM:ph,
+    const candidates=await detectPaperCandidates(source,box,6,{balanceLight:settings.balanceLight,paperRectified:!!correctedBitmap,paperWidthMM:pw,paperHeightMM:ph,
       recognition:settings.recognition,recognitionPixels:settings.pixels,
       recognitionPreprocess:{illumination:settings.balanceLight,denoise:settings.denoise,localContrast:settings.localContrast,chromaEdges:settings.chromaEdges},
       recognitionPostprocess:{shapeRegularization:settings.shapeRegularization,apertures:settings.apertures},mergeSharedCarrier:settings.mergeSharedCarrier,
-      onDiagnostic:trace=>{if(valid())rec.recognitionDiagnostic=trace;}},{detect:detectPaperCandidates,onRecovery:report=>{if(valid())rec.recognitionRecovery=report;}});if(!valid())return;
+      onDiagnostic:trace=>{if(valid())rec.recognitionDiagnostic=trace;}});if(!valid())return;
     const calibrated=settings.paperSize!=='none'&&(correctedBitmap||settings.wholePaper),candidateData=[];
     const lighting=settings.materialColorMode!=='original'&&correctedBitmap
       ?await estimatePageLighting(source,candidates):null;
     for(let i=0;i<candidates.length;i++){
-      const result=await recoverImportCandidate({
-        region:candidates[i],index:i,calibrated,paperWidthMM:pw,paperHeightMM:ph,
-        extract:(region,index)=>extractImportCandidate(source,box,region,{mode:settings.mode,widthMM:pw,heightMM:ph,calibrated,index,lighting}),
-        rawCrop:region=>cropBitmap(source,box,region,{raw:true}),
-        makeURL:blob=>URL.createObjectURL(blob)
-      });
-      const candidate=result.candidate;
-      if(candidate){
-        if(candidates[i].recognitionFallback){candidate.previewFallback=true;candidate.reviewStatus='pendingReview';}
-        candidateURLs.push(candidate.url);candidateData.push(candidate);
-      }
+      const candidate=await extractImportCandidate(source,box,candidates[i],{mode:settings.mode,widthMM:pw,heightMM:ph,calibrated,index:i,lighting});
+      candidateURLs.push(candidate.url);candidateData.push(candidate);
       if(!valid())return;
     }
     if(!valid())return;
@@ -1292,9 +1267,9 @@ function resetImportBatch(){
   importBatchRevision++;
   discardPaperPreview();
   const bitmaps=new Set(),objectURLs=new Set();
-  for(const r of state.importRecords){for(const b of [r.bitmap,r.correctedBitmap])if(b)bitmaps.add(b);for(const u of [r.url,r.displayURL,r.correctedURL,...(r.candidateURLs||[])])if(u)objectURLs.add(u);}
+  for(const r of state.importRecords){for(const b of [r.bitmap,r.correctedBitmap])if(b)bitmaps.add(b);for(const u of [r.url,r.correctedURL,...(r.candidateURLs||[])])if(u)objectURLs.add(u);}
   for(const b of bitmaps)b.close?.();for(const u of objectURLs)URL.revokeObjectURL(u);
-  Object.assign(state,{importStep:'inspect',importRecords:[],importIndex:0,importFile:null,importBitmap:null,importURL:null,importDisplayURL:null,correctedBitmap:null,correctedURL:null,paperCorners:null,importCandidates:[],importCandidateURLs:[],importCandidateData:[],importCandidateSelection:new Set(),importProcessing:'',importOrganizing:false,importSavedCount:0,showManualBox:false,showCorrectionPreview:false,importBatchSeriesID:null,importBatchWorkSaveAssets:false,importBatchWorkPaperPattern:'plain',importBatchWorkPaperColor:'#fcfaf0'});
+  Object.assign(state,{importStep:'inspect',importRecords:[],importIndex:0,importFile:null,importBitmap:null,importURL:null,correctedBitmap:null,correctedURL:null,paperCorners:null,importCandidates:[],importCandidateURLs:[],importCandidateData:[],importCandidateSelection:new Set(),importProcessing:'',importOrganizing:false,importSavedCount:0,showManualBox:false,showCorrectionPreview:false,importBatchSeriesID:null,importBatchWorkSaveAssets:false,importBatchWorkPaperPattern:'plain',importBatchWorkPaperColor:'#fcfaf0'});
 }
 function openImportGallery(mode){
   resetImportBatch();state.importMode=mode;route('import');
@@ -1304,7 +1279,7 @@ function openImportGallery(mode){
 async function switchImportRecord(index,skipSave=false){
   if(!skipSave)saveActiveImportRecord();const rec=state.importRecords[index];if(!rec)return;
   const generation=state.importLoadGeneration=(state.importLoadGeneration||0)+1,isCurrent=()=>state.route==='import'&&state.importLoadGeneration===generation;
-  state.importIndex=index;state.importFile=rec.file;state.importBitmap=rec.bitmap||null;state.importURL=rec.url;state.importDisplayURL=rec.displayURL||null;state.importBox=rec.box||{x:0,y:0,w:1,h:1};
+  state.importIndex=index;state.importFile=rec.file;state.importBitmap=rec.bitmap||null;state.importURL=rec.url;state.importBox=rec.box||{x:0,y:0,w:1,h:1};
   state.wholePaper=rec.wholePaper??state.preferences.wholePaper;state.paperSize=rec.paperSize||state.preferences.paperSize;state.paperOrientation=rec.paperOrientation||state.preferences.orientation;state.balanceLight=rec.balanceLight??state.preferences.balanceLight;state.importShapeRegularization=rec.importShapeRegularization??(state.preferences.recognitionShapeRegularization!==false);state.importApertures=rec.importApertures??(state.preferences.recognitionApertures!==false);state.importMaterialColorMode=rec.importMaterialColorMode||state.preferences.materialColorMode||'auto';state.importRecognition=rec.recognition||state.preferences.recognition;state.customImportWidth=rec.customImportWidth||state.preferences.customPaperWidth||210;state.customImportHeight=rec.customImportHeight||state.preferences.customPaperHeight||297;
   state.paperCorners=rec.corners||null;
   state.correctedBitmap=rec.correctedBitmap||null;state.correctedURL=rec.correctedURL||null;state.importCandidates=rec.candidates||[];state.importCandidateURLs=rec.candidateURLs||[];state.importCandidateData=rec.candidateData||[];state.importCandidateSelection=new Set(rec.selection||[]);state.showManualBox=false;state.showCorrectionPreview=false;discardPaperPreview();
@@ -1316,8 +1291,7 @@ async function switchImportRecord(index,skipSave=false){
   const job=importPrefetchJobs.get(rec);
   if(job){await job.promise;if(!isCurrent())return;
     if(job.signature!==JSON.stringify(importPrefetchSettings(rec))){
-      rec.bitmap?.close?.();if(rec.displayURL)URL.revokeObjectURL(rec.displayURL);rec.displayURL=null;
-      state.importDisplayURL=null;rec.correctedBitmap?.close?.();if(rec.correctedURL)URL.revokeObjectURL(rec.correctedURL);
+      rec.bitmap?.close?.();rec.correctedBitmap?.close?.();if(rec.correctedURL)URL.revokeObjectURL(rec.correctedURL);
       for(const url of rec.candidateURLs||[])URL.revokeObjectURL(url);
       Object.assign(rec,{bitmap:null,correctedBitmap:null,correctedURL:null,autoPaperCorners:null,candidates:[],candidateData:[],candidateURLs:[],selection:[],prefetchStatus:null});
     }
@@ -1326,18 +1300,12 @@ async function switchImportRecord(index,skipSave=false){
     state.importCandidates=rec.candidates||[];state.importCandidateData=rec.candidateData||[];state.importCandidateURLs=rec.candidateURLs||[];state.importCandidateSelection=new Set(rec.selection||[]);
   }
   const bitmap=rec.bitmap||await decodeRecognitionImage(rec.file);rec.bitmap=bitmap;if(!isCurrent())return;state.importBitmap=bitmap;
-  if(!rec.displayURL){
-    try{rec.displayURL=await importPhotoDisplayURL(bitmap);}catch(error){console.warn('照片显示预览降级为原始文件',error);}
-  }
-  if(!isCurrent())return;
-  state.importDisplayURL=rec.displayURL||null;
   progress('正在自动寻找纸张四角…');
   state.paperCorners=rec.corners||rec.autoPaperCorners||(state.paperSize==='none'?null:await suggestPaperCorners(bitmap,(()=>{const [pw,ph]=paperDimensions();return pw/ph;})()).catch(()=>null));if(!isCurrent())return;
   if(!rec.corners&&state.paperCorners)rec.autoPaperCorners=structuredClone(state.paperCorners);
-  rec.paperNeedsReview=state.paperSize!=='none'&&!state.correctedBitmap&&!rec.appliedCorners&&(rec.paperNeedsReview||!state.paperCorners);
   progress('正在进行透视校正…');
-  if(!state.correctedBitmap&&state.paperCorners&&state.paperSize!=='none'&&!rec.paperNeedsReview){
-    const [pw,ph]=paperDimensions(),{canvas,blob}=await rectifyA4Frame(state.importBitmap,state.paperCorners,4096,pw/ph,{fixedWorkingSize:true});
+  if(!state.correctedBitmap&&state.paperCorners&&state.paperSize!=='none'){
+    const [pw,ph]=paperDimensions(),{canvas,blob}=await rectifyA4Frame(state.importBitmap,state.paperCorners,4096,pw/ph);
     if(!isCurrent())return;
     state.correctedBitmap=canvas;state.correctedURL=URL.createObjectURL(blob);rec.appliedCorners=JSON.stringify(state.paperCorners);rec.backgroundDetected=true;
   }
@@ -1348,15 +1316,7 @@ async function switchImportRecord(index,skipSave=false){
     saveActiveImportRecord();render();
   }else{
     progress('正在识别并提取素材…');saveActiveImportRecord();render();
-    if(!rec.paperNeedsReview&&state.importStep==='inspect'){
-      // A prefetch may detect 12 boxes but fail to build any image blobs.
-      // Existing boxes are NOT a completed import. Regenerate the missing
-      // cutouts from those exact boxes without invoking discovery again.
-      if(state.importCandidates.length&&!state.importCandidateData.length)
-        await refreshImportCandidates(state.importCandidates);
-      else if(rec.prefetchStatus!=='ready'&&!state.importCandidates.length)
-        await previewCrop();
-    }
+    if(rec.prefetchStatus!=='ready'&&!state.importCandidates.length&&state.importStep==='inspect')await previewCrop();
   }
   }finally{if(isCurrent()){state.importProcessing='';render();queueMicrotask(scheduleImportPrefetch);}}
 }
@@ -1365,37 +1325,32 @@ async function rotateImportPhoto(){
   if(!state.importBitmap)return;const rec=state.importRecords[state.importIndex];
   if(rec.manualEdits&&!confirm('旋转会重新识别这张照片并舍弃候选编辑，继续吗？'))return;
   const bitmap=state.importBitmap,canvas=document.createElement('canvas');canvas.width=bitmap.height;canvas.height=bitmap.width;const ctx=canvas.getContext('2d');ctx.translate(canvas.width,0);ctx.rotate(Math.PI/2);ctx.drawImage(bitmap,0,0);
-  const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));rec.originalFile||=rec.file;rec.file=new File([blob],rec.file.name,{type:'image/png'});URL.revokeObjectURL(rec.url);rec.url=URL.createObjectURL(blob);if(rec.displayURL)URL.revokeObjectURL(rec.displayURL);rec.displayURL=null;state.importDisplayURL=null;
+  const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));rec.originalFile||=rec.file;rec.file=new File([blob],rec.file.name,{type:'image/png'});URL.revokeObjectURL(rec.url);rec.url=URL.createObjectURL(blob);
   const old=state.paperCorners;resetPaperCorrection(state);state.paperCorners=old?[old[3],old[0],old[1],old[2]].map(p=>({x:1-p.y,y:p.x})):null;bitmap.close?.();state.importBitmap=await decodeRecognitionImage(rec.file);rec.bitmap=state.importBitmap;state.importFile=rec.file;state.importURL=rec.url;state.importCandidates=[];state.importCandidateData=[];state.importCandidateURLs=[];state.importCandidateSelection=new Set();rec.confirmed=false;rec.manualEdits=false;
   saveActiveImportRecord();await switchImportRecord(state.importIndex,true);
 }
 async function previewCorrection(){
   if(!state.importBitmap)return;discardPaperPreview();const [pw,ph]=paperDimensions();
-  const {canvas,blob}=await rectifyA4Frame(state.importBitmap,state.paperCorners,4096,pw/ph,{fixedWorkingSize:true});state.paperPreviewBitmap=canvas;state.paperPreviewURL=URL.createObjectURL(blob);state.showCorrectionPreview=true;state.paperPreviewApplied=false;render();
+  const {canvas,blob}=await rectifyA4Frame(state.importBitmap,state.paperCorners,4096,pw/ph);state.paperPreviewBitmap=canvas;state.paperPreviewURL=URL.createObjectURL(blob);state.showCorrectionPreview=true;state.paperPreviewApplied=false;render();
 }
-async function applyPaperPreview({recognize=true}={}){
+async function applyPaperPreview(){
   const rec=state.importRecords[state.importIndex];if(!state.paperPreviewBitmap)return;
   if(rec.appliedCorners===JSON.stringify(state.paperCorners)&&state.correctedBitmap){state.paperPreviewApplied=true;render();return;}
   if(rec.manualEdits&&!confirm('重新校正会舍弃本照片的名称、手动选框和修补结果并重新识别，继续吗？'))return;
   state.correctedBitmap?.close?.();if(state.correctedURL)URL.revokeObjectURL(state.correctedURL);
-  state.correctedBitmap=state.paperPreviewBitmap;state.correctedURL=state.paperPreviewURL;state.paperPreviewBitmap=null;state.paperPreviewURL=null;state.paperPreviewApplied=true;rec.appliedCorners=JSON.stringify(state.paperCorners);rec.backgroundDetected=true;rec.paperNeedsReview=false;rec.manualEdits=false;rec.confirmed=false;
+  state.correctedBitmap=state.paperPreviewBitmap;state.correctedURL=state.paperPreviewURL;state.paperPreviewBitmap=null;state.paperPreviewURL=null;state.paperPreviewApplied=true;rec.appliedCorners=JSON.stringify(state.paperCorners);rec.backgroundDetected=true;rec.manualEdits=false;rec.confirmed=false;
   state.importProcessing=state.importMode==='snapshot'?'正在更新校正后的页面…':'正在按新校正结果识别…';render();
-  try{if(state.importMode!=='snapshot'&&recognize)await previewCrop();toast(state.importMode==='snapshot'?'已使用校正结果':recognize?'已使用校正结果，候选素材已更新':'已使用校正结果，可手动补框');}
+  try{if(state.importMode!=='snapshot')await previewCrop();toast(state.importMode==='snapshot'?'已使用校正结果':'已使用校正结果，候选素材已更新');}
   finally{state.importProcessing='';if(state.route==='import')render();}
 }
 async function openManualImportBox(){
   if(state.importMode==='snapshot')return;
-  if(!state.importBitmap){toast('照片仍在读取，请稍候后再补框');return;}
-  if(state.paperPreviewBitmap)await applyPaperPreview({recognize:false});
-  // A prior applied-corners shortcut can leave a preview bitmap cached.
-  // Manual editing should never be prevented by that cache.
-  if(state.paperPreviewBitmap)discardPaperPreview();
-  state.showCorrectionPreview=false;
-  state.importRecognitionRevision=(state.importRecognitionRevision||0)+1;
-  state.importProcessing='';state.showManualBox=true;render();
+  if(state.paperPreviewBitmap)await applyPaperPreview();
+  if(state.paperPreviewBitmap)return;
+  state.showManualBox=true;render();
 }
 function bindManualBox(){mountImportBoxEditor({state,view,render,saveActiveImportRecord,toast,refreshImportCandidates});}
-async function refreshImportCandidates(regions,{manual=false,canApply=()=>true}={}){
+async function refreshImportCandidates(regions,{manual=false}={}){
   const source=state.correctedBitmap||state.importBitmap,b=state.correctedBitmap?{x:0,y:0,w:1,h:1}:state.importBox,previous=state.importCandidateData||[],record=state.importRecords[state.importIndex];
   const next=[];const [pw,ph]=paperDimensions(),calibrated=state.paperSize!=='none'&&(state.correctedBitmap||state.wholePaper);
   const plans=manual?await refineManualBoxes(regions,previous,async(box,index)=>{
@@ -1420,29 +1375,13 @@ async function refreshImportCandidates(regions,{manual=false,canApply=()=>true}=
     if(!candidate||candidate.segmentationFailed)throw Error('旋转框内无法可靠分割，请调整框后重试');
     return candidate;
   }):regions.map(region=>({region,original:null}));
-  if(!canApply()||record!==state.importRecords[state.importIndex]||state.route!=='import')return false;
+  if(record!==state.importRecords[state.importIndex]||state.route!=='import')return false;
   const lighting=state.importMaterialColorMode!=='original'&&state.correctedBitmap
     ?await estimatePageLighting(source,plans.map(plan=>plan.region)):null;
   for(let i=0;i<plans.length;i++){
     const {region,original}=plans[i];if(original){next.push(original);continue;}
     toast('正在提取素材 '+(i+1)+' / '+plans.length);
-    const recovered=await recoverImportCandidate({
-      region,index:i,calibrated,paperWidthMM:pw,paperHeightMM:ph,
-      extract:(region,index)=>extractImportCandidate(source,b,region,{
-        mode:state.importMode,widthMM:pw,heightMM:ph,calibrated,index,lighting
-      }),
-      rawCrop:region=>cropBitmap(source,b,region,{raw:true}),
-      makeURL:blob=>URL.createObjectURL(blob)
-    });
-    const regenerated=recovered.candidate;
-    if(regenerated&&region.recognitionFallback){regenerated.previewFallback=true;regenerated.reviewStatus='pendingReview';}
-    if(!regenerated){
-      const failures=record.recognitionExtractionErrors||[];
-      record.recognitionExtractionErrors=[
-        ...failures,{index:i,message:String(recovered.error?.message||'预览生成失败')}
-      ];
-      continue;
-    }
+    const regenerated=await extractImportCandidate(source,b,region,{mode:state.importMode,widthMM:pw,heightMM:ph,calibrated,index:i,lighting});
     // Changing only colour must not reset manual names, tags, dimensions or
     // choices, and must never cause the segmentation algorithm to rerun.
     const old=previous.find(item=>item.region===region)||
@@ -1452,40 +1391,26 @@ async function refreshImportCandidates(regions,{manual=false,canApply=()=>true}=
     }
     next.push(regenerated);
   }
-  if(!canApply()||record!==state.importRecords[state.importIndex]){for(const c of next)if(!previous.includes(c))URL.revokeObjectURL(c.url);return false;}
+  if(record!==state.importRecords[state.importIndex]){for(const c of next)if(!previous.includes(c))URL.revokeObjectURL(c.url);return false;}
   for(const c of previous)if(!next.includes(c))URL.revokeObjectURL(c.url);
-  state.importCandidates=next.map(candidate=>candidate.region);
-  state.importCandidateData=next;
-  state.importCandidateURLs=next.map(candidate=>candidate.url);
-  state.importCandidateSelection=new Set(next.flatMap((candidate,i)=>candidate.selected?[i]:[]));
-  saveActiveImportRecord();
-  return true;
+  state.importCandidates=plans.map(plan=>plan.region);state.importCandidateData=next;state.importCandidateURLs=next.map(c=>c.url);state.importCandidateSelection=new Set(next.flatMap((c,i)=>c.selected?[i]:[]));saveActiveImportRecord();return true;
 }
 async function previewCrop(){
   if(!state.importBitmap||state.importMode==='snapshot')return;
-  if(state.paperSize!=='none'&&!state.correctedBitmap&&state.importRecords[state.importIndex]?.paperNeedsReview){toast('请先调整纸张四角并点击“预览校正”及“使用校正结果”');return;}
-  const recognitionRevision=state.importRecognitionRevision=(state.importRecognitionRevision||0)+1,
-    sourceRecord=state.importRecords[state.importIndex],
-    canApply=()=>recognitionRevision===state.importRecognitionRevision&&
-      !state.showManualBox&&state.route==='import'&&
-      sourceRecord===state.importRecords[state.importIndex];
   const record=state.importRecords[state.importIndex],source=state.correctedBitmap||state.importBitmap,b=state.correctedBitmap?{x:0,y:0,w:1,h:1}:state.importBox,[pw,ph]=paperDimensions();
-  let regions=await detectImportRegions(source,b,{balanceLight:state.balanceLight,paperRectified:!!state.correctedBitmap,paperWidthMM:pw,paperHeightMM:ph,recognition:state.importRecognition||state.preferences.recognition,recognitionPixels:state.preferences.recognitionPixels,recognitionPreprocess:recognitionPreprocessOptions(),recognitionPostprocess:recognitionPostprocessOptions(),mergeSharedCarrier:state.preferences.mergeSharedCarrier!==false,onDiagnostic:trace=>{record.recognitionDiagnostic=trace;},onProgress:p=>{
-    if(!canApply())return;
+  let regions=await detectPaperCandidates(source,b,6,{balanceLight:state.balanceLight,paperRectified:!!state.correctedBitmap,paperWidthMM:pw,paperHeightMM:ph,recognition:state.importRecognition||state.preferences.recognition,recognitionPixels:state.preferences.recognitionPixels,recognitionPreprocess:recognitionPreprocessOptions(),recognitionPostprocess:recognitionPostprocessOptions(),mergeSharedCarrier:state.preferences.mergeSharedCarrier!==false,onDiagnostic:trace=>{record.recognitionDiagnostic=trace;},onProgress:p=>{
+    if(state.route!=='import'||record!==state.importRecords[state.importIndex])return;
         const text=p.status==='inference'?'浏览器模型正在细化素材边缘…'
           :p.status==='fallback'?(Number.isFinite(p.count)?`${p.count} 个模型结果不可靠，保留传统识别边缘，请检查`:'边缘精修未采用新结果，已保留原识别边缘')
           :p.status==='contour-refinement'?`正在细化 ${p.total||''} 个不确定素材边缘…`
           :p.status==='boundary-postprocess'?`正在进行 ${p.total||''} 个素材的边缘与孔洞后处理…`
           :'正在优化素材边缘…';
     state.importProcessing=text;const label=view.querySelector('.import-processing');if(label)label.textContent=text;toast(text);
-  }},{detect:detectPaperCandidates,onRecovery:report=>{
-    record.recognitionRecovery=report;
-    if(canApply())toast('已保留 '+report.recovered+' 件识别框，但边缘精修失败；请检查边缘');
   }});
-  if(!canApply())return;
+  if(state.route!=='import'||record!==state.importRecords[state.importIndex])return;
   // Swift leaves unreliable automatic results empty; work import still saves
   // the page as its locked base, without inventing a full-page material.
-  if(await refreshImportCandidates(regions,{canApply})){
+  if(await refreshImportCandidates(regions)){
     // No expensive work remains. Unlock before the first candidate render;
     // users must not wait for another full-page render to confirm the photo.
     state.importProcessing='';render();
