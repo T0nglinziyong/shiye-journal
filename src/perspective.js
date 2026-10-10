@@ -2,7 +2,6 @@
 // normalized against the original bitmap; output uses the A4 aspect ratio.
 import {visionTask} from './vision-runtime.js';
 import {analysisPixels,pixelCanvas,sourcePixels} from './recognition-raster.js';
-export const PAPER_DETECTION_LONG_EDGE=800;
 export function validateCorners(c){
   if(!Array.isArray(c)||c.length!==4||c.some(p=>!Number.isFinite(p.x)||!Number.isFinite(p.y)||p.x<0||p.x>1||p.y<0||p.y>1))throw Error('四角需位于照片内');
   const area=Math.abs(c.reduce((sum,p,i)=>sum+p.x*c[(i+1)%4].y-p.y*c[(i+1)%4].x,0))/2;
@@ -27,26 +26,8 @@ export async function rectifyA4Frame(bitmap,corners,maxDimension=4096,paperRatio
 export async function rectifyA4(bitmap,corners,maxDimension=4096,paperRatio=210/297){
   return (await rectifyA4Frame(bitmap,corners,maxDimension,paperRatio)).blob;
 }
-export async function suggestPaperCorners(bitmap,paperRatio=210/297,{onDiagnostic}={}){
-  // Keep the same canonical 800px input and the same A4 algorithm.
-  // Diagnostics are explicitly requested so OpenCV/WASM execution errors are
-  // distinguishable from a valid 'no paper detected' result.
-  const ratio=PAPER_DETECTION_LONG_EDGE/Math.max(bitmap.width,bitmap.height);
-  const width=Math.max(1,Math.round(bitmap.width*ratio));
-  const height=Math.max(1,Math.round(bitmap.height*ratio));
-  try{
-    const response=await visionTask('quad',{
-      pixels:await analysisPixels(bitmap,{x:0,y:0,w:1,h:1},width,height),
-      width,height,paperRatio,collectDiagnostics:true
-    });
-    const diagnostic=response?.diagnostics||{
-      stage:'quad',inputSize:[width,height],accepted:Array.isArray(response)&&response.length===4
-    };
-    onDiagnostic?.(diagnostic);
-    return Array.isArray(response)?response:response?.corners||null;
-  }catch(error){
-    onDiagnostic?.({stage:'quad-error',inputSize:[width,height],
-      message:String(error?.message||error)});
-    throw error;
-  }
+export async function suggestPaperCorners(bitmap,paperRatio=210/297){
+  const ratio=Math.min(1,800/Math.max(bitmap.width,bitmap.height)),w=Math.max(1,Math.round(bitmap.width*ratio)),h=Math.max(1,Math.round(bitmap.height*ratio));
+  return visionTask('quad',{pixels:await analysisPixels(bitmap,{x:0,y:0,w:1,h:1},w,h),width:w,height:h,paperRatio});
 }
+
