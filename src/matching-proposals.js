@@ -1,3 +1,4 @@
+import {paperDimensions} from './paper-sizes.js';
 // Local-only material proposal generator. No AI, no network, no fixed fill
 // ratio. Recommendations are candidates; the user-starred materials alone
 // are mandatory. The rest may be left out to preserve visual hierarchy.
@@ -84,6 +85,8 @@ export function generateMaterialProposals({
   ...recommendations.map(r=>typeof r==='string'?r:r.asset?.id)]);
  const candidates=candidateIDs.map(id=>map.get(id)).filter(Boolean).slice(0,36);
  if(!candidates.length)return [];
+ const dimensions=paperDimensions(pageRatio)||{width:210,height:297};
+ const paperWidthMM=dimensions.width*(pageMode==='spread'?2:1),paperHeightMM=dimensions.height;
  const historyRecords=history.filter(h=>Array.isArray(h.selectedAssetIDs)).slice(-40);
  const ranked=[];
  const seeds=uniq([...mandatory,...candidates.filter(a=>['photo','sticker'].includes(kind(a))).map(a=>a.id),
@@ -101,7 +104,7 @@ export function generateMaterialProposals({
    for(const asset of candidates){
     if(chosen.some(a=>a.id===asset.id))continue;
     const candidate=[...chosen,asset],base=materialSetScore(candidate,{
-      required:mandatory,preferred,history:historyRecords
+      required:mandatory,preferred,history:historyRecords,paperWidthMM,paperHeightMM
     });
     const boost=preferred.includes(asset.id)?1.4:0;
     const roleBonus=!chosen.some(a=>kind(a)===kind(asset))?2.5:0;
@@ -112,7 +115,7 @@ export function generateMaterialProposals({
    if(!best)break;chosen.push(best);
   }
   const ids=chosen.map(a=>a.id);
-  const score=materialSetScore(chosen,{required:mandatory,preferred,history:historyRecords});
+  const score=materialSetScore(chosen,{required:mandatory,preferred,history:historyRecords,paperWidthMM,paperHeightMM});
   const proposal={
     id:'proposal-'+batch+'-'+layout.id+'-'+i,
     title:layout.title+' · '+theme(anchor),
