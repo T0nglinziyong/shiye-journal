@@ -49,6 +49,7 @@ import {renderSeriesContents} from './series-contents.js';
 import {showSeriesEditor} from './series-editor.js';
 import {mountWorkflowControls} from './workflow-ui.js';
 import {renderImportInspection,renderImportReview} from './import-workspace-ui.js';
+import {recoverImportCandidate} from './import-candidate-recovery.js';
 import {showCutoutEditor} from './cutout-editor.js';
 import {mountCanvasSelection} from './canvas-selection-ui.js';
 import * as db from './store.js';
@@ -1377,41 +1378,21 @@ async function refreshImportCandidates(regions,{manual=false,canApply=()=>true}=
   for(let i=0;i<plans.length;i++){
     const {region,original}=plans[i];if(original){next.push(original);continue;}
     toast('正在提取素材 '+(i+1)+' / '+plans.length);
-    let regenerated;
-    try{
-      // A successful polygon with an empty alpha mask renders completely
-      // transparent on every device. Preserve an inspectable raw candidate
-      // instead of silently displaying a blank thumbnail.
-      const alpha=region.mask?.alpha;
-      if(alpha?.length&&!alpha.some(value=>value>16))throw Error('自动轮廓没有可见前景');
-      regenerated=await extractImportCandidate(source,b,region,{
-        mode:state.importMode,widthMM:pw,heightMM:ph,calibrated,index:i,lighting
-      });
-    }catch(error){
-      // A single alignment/alpha failure must not erase all successfully
-      // recognized materials. Supply an original-colour rectangular crop
-      // with a clear pending-review flag, or skip this invalid region while
-      // retaining the rest of the batch.
-      console.warn('候选素材高清预览失败；尝试保留原始裁片',i+1,error);
-      try{
-        const raw=await cropBitmap(source,b,region,{raw:true});
-        if(!(raw instanceof Blob)||!raw.size)throw Error('原始裁片为空');
-        const physicalWidth=calibrated?Math.round(region.w*pw*10)/10:null;
-        const physicalHeight=calibrated?Math.round(region.h*ph*10)/10:null;
-        regenerated={
-          blob:raw,originalBlob:raw,candidateFrameBlob:raw,
-          url:URL.createObjectURL(raw),region,title:'素材 '+(i+1),
-          width:physicalWidth,height:physicalHeight,
-          alignment:0,widthRatio:1,heightRatio:1,selected:true,
-          reviewStatus:'pendingReview',previewFallback:true,
-          processingRecord:{sourceWidthMM:physicalWidth,sourceHeightMM:physicalHeight}
-        };
-      }catch(fallbackError){
-        console.error('候选素材及原始裁片均无法读取',i+1,fallbackError);
-        const failures=record.recognitionExtractionErrors||[];
-        record.recognitionExtractionErrors=[...failures,{index:i,message:String(fallbackError?.message||fallbackError)}];
-        continue;
-      }
+    const recovered=await recoverImportCandidate({
+      region,index:i,calibrated,paperWidthMM:pw,paperHeightMM:ph,
+      extract:(region,index)=>extractImportCandidate(source,b,region,{
+        mode:state.importMode,widthMM:pw,heightMM:ph,calibrated,index,lighting
+      }),
+      rawCrop:region=>cropBitmap(source,b,region,{raw:true}),
+      makeURL:blob=>URL.createObjectURL(blob)
+    });
+    const regenerated=recovered.candidate;
+    if(!regenerated){
+      const failures=record.recognitionExtractionErrors||[];
+      record.recognitionExtractionErrors=[
+        ...failures,{index:i,message:String(recovered.error?.message||'预览生成失败')}
+      ];
+      continue;
     }
     // Changing only colour must not reset manual names, tags, dimensions or
     // choices, and must never cause the segmentation algorithm to rerun.
