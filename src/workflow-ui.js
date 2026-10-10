@@ -1,4 +1,5 @@
 import {togglePopover} from './swift-popover.js';
+import {createSelectionSidePanels} from './selection-side-panels.js';
 import {zipSync,strToU8} from 'fflate';
 import {finishSelection,toggleSelection,selectionActive} from './library-selection-model.js';
 import {mountAssetSelection} from './library-selection-ui.js';
@@ -76,29 +77,40 @@ function batchMore(anchor,actions){
   const p=togglePopover(anchor,{title:'更多操作',menu:true,width:245});
   if(!p)return;
   p.surface.classList.add('selection-more-menu');
+  const side=createSelectionSidePanels(p,{anchor,makeAction:selectionAction});
   for(const [title,handler] of actions){
     if(!Array.isArray(handler)){
       p.content.append(selectionAction(title,async()=>{p.close();await handler();}));
       continue;
     }
-    const toggle=selectionAction(title+' ›',()=>{
-      const expanded=toggle.getAttribute('aria-expanded')==='true';
-      p.content.querySelector('.selection-inline-submenu')?.remove();
-      for(const button of p.content.querySelectorAll('[data-expanded-submenu]'))button.setAttribute('aria-expanded','false');
-      if(expanded)return;
-      const submenu=document.createElement('section');
-      submenu.className='selection-submenu selection-inline-submenu';
-      submenu.setAttribute('role','group');
-      submenu.setAttribute('aria-label',title);
-      for(const [label,run] of handler)submenu.append(selectionAction(label,async()=>{p.close();await run();}));
-      toggle.after(submenu);
-      toggle.setAttribute('aria-expanded','true');
+    const trigger=selectionAction(title+' ›',()=>{
+      side.open(trigger,title,handler.map(([label,run])=>[label,async()=>{p.close();await run();}]));
     });
-    toggle.dataset.expandedSubmenu='';
-    toggle.setAttribute('aria-haspopup','menu');
-    toggle.setAttribute('aria-expanded','false');
-    p.content.append(toggle);
+    trigger.dataset.expandedSubmenu='';
+    trigger.setAttribute('aria-haspopup','menu');
+    trigger.setAttribute('aria-expanded','false');
+    p.content.append(trigger);
   }
+}
+async function setSelectedWorkUsage(c,used){
+  const selected=c.state.projects.filter(p=>parity.selected.has(p.id)&&!p.isSnapshot);
+  if(!selected.length)throw Error('仅可编辑作品支持使用状态');
+  await c.flushSave();
+  const at=new Date().toISOString(),updated=[];
+  for(const project of selected){
+    const full=project.projectDocumentPath?await c.db.completeProject(project):project;
+    updated.push({...full,isUsed:used,updatedAt:at});
+  }
+  // A single durable batch avoids half-updated selection after a slow upload.
+  await c.db.transaction(['projects'],tx=>{
+    for(const record of updated)tx.objectStore('projects').put(record);
+  });
+  for(const record of updated){
+    const local=c.state.projects.find(p=>p.id===record.id);
+    if(local)Object.assign(local,record);
+  }
+  c.render();
+  c.toast('已将 '+updated.length+' 件作品设置为'+(used?'已使用':'未使用'));
 }
 async function exportSeriesArchive(c,seriesIDs){
   const chosen=c.state.series.filter(x=>seriesIDs.includes(x.id));
@@ -293,16 +305,11 @@ function mountProjectBatch(c){
   const more=selectionAction('更多操作',()=>batchMore(more,[
     [parity.workTab==='snapshot'?'导出快照':'导出作品',workExportActions(c)],
     ['重新识别',()=>classifySelectedWorks(c,c.state.projects.filter(p=>parity.selected.has(p.id)))],
-    ...(c.state.projects.some(p=>parity.selected.has(p.id)&&!p.isSnapshot)?[['设置状态',async()=>{
-      const selected=c.state.projects.filter(p=>parity.selected.has(p.id)&&!p.isSnapshot);
-      if(!selected.length)throw Error('仅可编辑作品支持使用状态');
-      const used=confirm('确定将所选可编辑作品标记为“已使用”？取消则标记为“未使用”。');
-      for(const p of selected){const full=p.projectDocumentPath?await c.db.completeProject(p):p;
-        const next={...full,isUsed:used,updatedAt:new Date().toISOString()};
-        await c.db.put('projects',next);Object.assign(p,next);
-      }
-      c.render();
-    }]]:[])
+    ...(c.state.projects.some(p=>parity.selected.has(p.id)&&!p.isSnapshot)
+      ?[['设置状态',[
+        ['已使用',()=>setSelectedWorkUsage(c,true)],
+        ['未使用',()=>setSelectedWorkUsage(c,false)]
+      ]]]:[])
   ]));
   const del=selectionAction(parity.workTab==='snapshot'?'删除快照':'删除作品',async()=>{
     if(!parity.selected.size||!confirm('将所选作品移到最近删除？'))return;
