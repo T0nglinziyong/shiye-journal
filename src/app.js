@@ -251,6 +251,9 @@ document.addEventListener('click',scheduleBackgroundReconcile);
 document.addEventListener('focusout',scheduleBackgroundReconcile);
 modal.addEventListener('close',scheduleBackgroundReconcile);
 const navigationHistory=[];
+// Material navigation remembers the actual tab/series detail. Opening Works,
+// Matching or Settings must not silently route back to Series.
+const lastMaterialLocation={route:'series',seriesID:'all',libraryTab:'series'};
 function navigateBack(fallback='series'){
   const previous=navigationHistory.pop();
   if(!previous){route(fallback,{back:true});return;}
@@ -258,10 +261,18 @@ function navigateBack(fallback='series'){
   route(previous.route,{back:true});
 }
 let editorOpenSequence=0;
-function route(name,{back=false}={}){
+function route(name,{back=false,restoreMaterial=false}={}){
   editorOpenSequence++;
   viewInteractionRevision++;
   const fromSettings=state.route==='settings';
+  if(['series','library'].includes(state.route)&&!['series','library'].includes(name)){
+    Object.assign(lastMaterialLocation,{route:state.route,
+      seriesID:state.seriesID,libraryTab:parity.libraryTab});
+  }
+  if(restoreMaterial&&['series','library'].includes(name)){
+    state.seriesID=lastMaterialLocation.seriesID||'all';
+    parity.libraryTab=lastMaterialLocation.libraryTab||'series';
+  }
   if(!back&&!fromSettings&&name!=='settings'&&name!==state.route)navigationHistory.push({route:state.route,seriesID:state.seriesID,detailAssetID:state.detailAssetID,previewProjectID:state.previewProjectID});
   if(state.route==='editor'&&name!=='editor')view.endTextEditing?.();
   routeScroll.set(state.route+':'+state.seriesID,window.scrollY);
@@ -1555,7 +1566,12 @@ window.addEventListener('blur',()=>editorPointers.clear());
 const refitEditor=()=>{if(state.route!=='editor'||document.activeElement?.isContentEditable||state.editingTextID)return;clearTimeout(viewportTimer);viewportTimer=setTimeout(()=>{if(state.route!=='editor'||state.editingTextID)return;if(editorPointers.size){refitEditor();return;}view.editorLayoutSize={width:window.innerWidth,height:window.innerHeight};render();},120);};
 window.addEventListener('resize',refitEditor);
 window.visualViewport?.addEventListener('resize',refitEditor);
-document.querySelectorAll('.main-nav button').forEach(b=>b.onclick=()=>route(b.dataset.route==='library'?'series':b.dataset.route));
+document.querySelectorAll('.main-nav button').forEach(b=>b.onclick=()=>{
+  if(b.dataset.route==='library'){
+    if(['library','series'].includes(state.route))return; // keep current tab
+    route(lastMaterialLocation.route||'series',{restoreMaterial:true});
+  }else route(b.dataset.route);
+});
 document.querySelector('#top-basket').onclick=()=>route('matching');document.querySelector('#top-settings').onclick=()=>route('settings');
 async function init(user){let cachedShown=false;cloudSessionReady=true;const accountId=user?.id||'browser';if(state.accountId&&state.accountId!==accountId){deferredSyncedPreferences=null;assetOrganization.clear();clearJournalTemplateImages();clearJournalPresetImages();state.userTemplates=[];}state.accountId=accountId;try{
   await db.storageMode();state.selfHosted=db.isSameOriginServer();
