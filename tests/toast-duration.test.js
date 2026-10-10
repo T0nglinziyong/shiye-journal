@@ -87,3 +87,8 @@ test('every catalogue catch handler routes into the same short-lived notice mana
     assert.doesNotMatch(text,/setTimeout\([^\n]{0,120}classList\.remove\('show'\)/,file);
   }
 });
+
+test('transient notices never force synchronous DOM layout',async()=>{
+  const code=await readFile(new URL('../src/toast.js',import.meta.url),'utf8');
+  assert.doesNotMatch(code,/element\.offsetWidth|getBoundingClientRect\s*\(/);
+});
