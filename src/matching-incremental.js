@@ -39,7 +39,15 @@ function reconcileCards(current,next,bind){
       updates.push(candidate);
     }
   }
-  current.replaceChildren(...updates); // moves existing nodes, never clones them
+  // Never call replaceChildren() on every star click: even re-inserting the
+  // same nodes briefly detaches decoded images and can trigger needless
+  // mutation-observer work, image loads and scroll anchoring shifts.
+  for(let index=0;index<updates.length;index++){
+    const item=updates[index],before=current.children[index]||null;
+    if(before!==item)current.insertBefore(item,before);
+  }
+  const retained=new Set(updates);
+  for(const child of [...current.children])if(!retained.has(child))child.remove();
 }
 function syncFilters(current,next){
   for(const button of current.querySelectorAll('[data-act="match-filter"]')){
