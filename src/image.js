@@ -104,7 +104,22 @@ export async function cropBitmap(bitmap,paper,region,{raw=false,lighting=null}={
 }
 export async function alignMaterialPreview(blob,originalBlob=blob,rotation=null){
   const bitmap=await createImageBitmap(blob),original=await createImageBitmap(originalBlob);
-  try{const probe=document.createElement('canvas');const analysisScale=Math.min(1,800/Math.max(bitmap.width,bitmap.height));probe.width=Math.max(1,Math.round(bitmap.width*analysisScale));probe.height=Math.max(1,Math.round(bitmap.height*analysisScale));const pc=probe.getContext('2d',{willReadFrequently:true});pc.drawImage(bitmap,0,0,probe.width,probe.height);const pixels=pc.getImageData(0,0,probe.width,probe.height),alpha=new Uint8Array(probe.width*probe.height);for(let i=0;i<alpha.length;i++)alpha[i]=pixels.data[i*4+3];const degrees=rotation??(await visionTask('alignment',{alpha,width:probe.width,height:probe.height})).degrees,rad=degrees*Math.PI/180;
+  try{
+    // Auto-deskew already provides an authoritative rotation. In that case
+    // avoid a redundant 800px resize, RGBA readback, alpha extraction and
+    // separate OpenCV alignment task for every individual sticker.
+    let degrees=rotation;
+    if(degrees==null){
+      const probe=document.createElement('canvas'),analysisScale=Math.min(1,800/Math.max(bitmap.width,bitmap.height));
+      probe.width=Math.max(1,Math.round(bitmap.width*analysisScale));
+      probe.height=Math.max(1,Math.round(bitmap.height*analysisScale));
+      const pc=probe.getContext('2d',{willReadFrequently:true});
+      pc.drawImage(bitmap,0,0,probe.width,probe.height);
+      const pixels=pc.getImageData(0,0,probe.width,probe.height),alpha=new Uint8Array(probe.width*probe.height);
+      for(let i=0;i<alpha.length;i++)alpha[i]=pixels.data[i*4+3];
+      degrees=(await visionTask('alignment',{alpha,width:probe.width,height:probe.height})).degrees;
+    }
+    const rad=degrees*Math.PI/180;
     const w=Math.ceil(Math.abs(bitmap.width*Math.cos(rad))+Math.abs(bitmap.height*Math.sin(rad))),h=Math.ceil(Math.abs(bitmap.height*Math.cos(rad))+Math.abs(bitmap.width*Math.sin(rad)));
     const render=source=>{const c=document.createElement('canvas');c.width=w;c.height=h;const ctx=c.getContext('2d');ctx.translate(w/2,h/2);ctx.rotate(rad);ctx.drawImage(source,-bitmap.width/2,-bitmap.height/2,bitmap.width,bitmap.height);ctx.resetTransform();return c;},saved=render(bitmap),source=render(original),ctx=saved.getContext('2d',{willReadFrequently:true}),data=ctx.getImageData(0,0,w,h).data;let l=w,r=0,t=h,b=0;
     for(let y=0;y<h;y++)for(let x=0;x<w;x++)if(data[(y*w+x)*4+3]>8){l=Math.min(l,x);r=Math.max(r,x+1);t=Math.min(t,y);b=Math.max(b,y+1);}if(r<=l||b<=t){l=0;r=w;t=0;b=h;}
