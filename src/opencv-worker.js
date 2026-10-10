@@ -92,9 +92,9 @@ export async function processVision(cv,operation,p){
       // into shape/holes processing, which requires a valid mask and geometry.
       // Keep the operation atomic: invalid manual edits are rejected by the
       // caller, leaving the previous candidate images unchanged.
-      if(!Array.isArray(out)||out.length!==p.boxes.length||
+      if(p.manualEdit&&(!Array.isArray(out)||out.length!==p.boxes.length||
          out.some(c=>!c||c.segmentationFailed||!c.mask?.alpha?.length||
-           !Number.isFinite(c.w)||!Number.isFinite(c.h)||c.w<=0||c.h<=0)){
+           !Number.isFinite(c.w)||!Number.isFinite(c.h)||c.w<=0||c.h<=0))){
         throw Error('框内未形成有效素材轮廓，请贴近素材边缘重新画框');
       }
       if(p.shapeRegularization!==false)out=refineMaterialBoundaries(cv,{...p,candidates:out,mode:'postprocess',postprocess:{edgePolish:false,shapeRegularization:true,curveSmooth:false,apertures:false}});
