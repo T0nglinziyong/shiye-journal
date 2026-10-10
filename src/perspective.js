@@ -27,16 +27,26 @@ export async function rectifyA4Frame(bitmap,corners,maxDimension=4096,paperRatio
 export async function rectifyA4(bitmap,corners,maxDimension=4096,paperRatio=210/297){
   return (await rectifyA4Frame(bitmap,corners,maxDimension,paperRatio)).blob;
 }
-export async function suggestPaperCorners(bitmap,paperRatio=210/297){
-  // One colour-managed sRGB raster, one detector and one resolution regardless
-  // of camera megapixels, device pixel ratio and display size.
-  // The full source bitmap remains untouched for the final high-resolution
-  // perspective warp and material cutouts.
+export async function suggestPaperCorners(bitmap,paperRatio=210/297,{onDiagnostic}={}){
+  // Keep the same canonical 800px input and the same A4 algorithm.
+  // Diagnostics are explicitly requested so OpenCV/WASM execution errors are
+  // distinguishable from a valid 'no paper detected' result.
   const ratio=PAPER_DETECTION_LONG_EDGE/Math.max(bitmap.width,bitmap.height);
   const width=Math.max(1,Math.round(bitmap.width*ratio));
   const height=Math.max(1,Math.round(bitmap.height*ratio));
-  return visionTask('quad',{
-    pixels:await analysisPixels(bitmap,{x:0,y:0,w:1,h:1},width,height),
-    width,height,paperRatio
-  });
+  try{
+    const response=await visionTask('quad',{
+      pixels:await analysisPixels(bitmap,{x:0,y:0,w:1,h:1},width,height),
+      width,height,paperRatio,collectDiagnostics:true
+    });
+    const diagnostic=response?.diagnostics||{
+      stage:'quad',inputSize:[width,height],accepted:Array.isArray(response)&&response.length===4
+    };
+    onDiagnostic?.(diagnostic);
+    return Array.isArray(response)?response:response?.corners||null;
+  }catch(error){
+    onDiagnostic?.({stage:'quad-error',inputSize:[width,height],
+      message:String(error?.message||error)});
+    throw error;
+  }
 }
