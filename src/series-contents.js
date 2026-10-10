@@ -2,13 +2,14 @@ import {beginSelection,finishSelection,toggleSelection,selectionActive} from './
 import {seriesCovers,seriesMembers} from './library-model.js';
 import {bindLongPress} from './long-press.js';
 import {applyCatalogPage,resetCatalogPage} from './catalog-pagination.js';
+import {showToast} from './toast.js';
 
 const filtersByID=new Map();
 const filters=id=>{if(!filtersByID.has(id))filtersByID.set(id,{query:'',kind:'all',status:'all',sort:'recent',ascending:false});return filtersByID.get(id);};
 const kinds=[['sticker','贴纸'],['paper','纸张'],['tape','胶带'],['photo','照片'],['text','文字'],['reference','参考']];
 function button(label,action,kind='') {
   const b=document.createElement('button');b.type='button';b.className='btn '+kind;b.textContent=label;
-  b.onclick=async()=>{b.disabled=true;try{await action();}catch(e){const t=document.querySelector('#toast');t.textContent=e.message;t.classList.add('show');}finally{b.disabled=false;}};return b;
+  b.onclick=async()=>{b.disabled=true;try{await action();}catch(e){showToast(e.message);}finally{b.disabled=false;}};return b;
 }
 export function renderSeriesContents({state,esc,imgTag,assetCard}) {
   const s=state.series.find(s=>s.id===state.seriesID);if(!s)return '<p>系列已移走</p>';

@@ -7,12 +7,19 @@ import {prepareMaterialPreviews} from './creative-previews.js';
 import {materialAliases} from './material-alias.js';
 import {createMatchingCoverCache} from './matching-cover-cache.js';
 import {reusePagePreviews} from './preview-content-cache.js';
+import {captureMatchingScroll,restoreMatchingScroll} from './matching-scroll.js';
 const ID='matching-session-v1';
-const KEYS=['basket','coreIDs','excludedAssetIDs','matchCore','matchRatio','matchMode','matchStyle','matchStyles','matchPurposes','matchIntent','matchContentPolicy','matchUserText','matchFacts','matchPurpose','matchProcessing','materialUseHints','materialUseRequired','assetProcessing','customPaperWidth','customPaperHeight'];
+const KEYS=['basket','coreIDs','excludedAssetIDs','matchCore','matchProposals','matchProposalBatch','matchRatio','matchMode','matchStyle','matchStyles','matchPurposes','matchIntent','matchContentPolicy','matchUserText','matchFacts','matchPurpose','matchProcessing','materialUseHints','materialUseRequired','assetProcessing','customPaperWidth','customPaperHeight'];
 export function matchingSnapshot(state,variants){return {id:ID,context:Object.fromEntries(KEYS.map(k=>[k,structuredClone(state[k])])),variants:structuredClone(variants)};}
 export function restoreMatchingSession(record,state){
  if(!record)return [];
  for(const key of KEYS)if(record.context?.[key]!==undefined)state[key]=key==='matchProcessing'&&record.context[key]==='AI 自主加工'?'不预设':record.context[key];
+ // Device-local proposal cards are suggestions, never cloud projects. Drop
+ // malformed or unexpectedly huge snapshots without touching saved works.
+ state.matchProposals=(Array.isArray(state.matchProposals)?state.matchProposals:[])
+   .filter(p=>p&&typeof p.id==='string'&&Array.isArray(p.selectedAssetIDs))
+   .slice(0,24);
+ state.matchProposalBatch=Number.isSafeInteger(state.matchProposalBatch)&&state.matchProposalBatch>=0?state.matchProposalBatch:0;
  return (Array.isArray(record.variants)?record.variants:[])
   .filter(v=>v&&typeof v.id==='string'&&usableProjectSnapshot(v.project))
   .map(v=>v.status==='running'?{...v,status:'interrupted',progress:'页面曾关闭，生成已中断；已保留收到的完整步骤。'}:v);
@@ -30,11 +37,27 @@ export function createMatchingSession(c){
  const archiveCompleted=async(variantID)=>{await queue;for(const v of variants.filter(v=>v.id===variantID&&v.status==='completed'&&!v.linkedProjectID)){if(v.linkedProjectID&&c.state.projects.some(p=>p.id===v.linkedProjectID))continue;const p=variantDraftProject(v,null,v.linkedProjectID||c.uid());v.linkedProjectID=p.id;await c.db.transaction(['projects'],tx=>tx.objectStore('projects').put(p));c.state.projects.push(p);
       try{await device.put(account(),matchingSnapshot(c.state,variants));}
       catch(error){console.warn('完成的作品已存入云端，本机搭配索引暂未保存',error);}}};
- const markup=()=>`<h2>版本方案</h2><p>完成方案自动保存为草稿或快照；“重新搭配”只清空这里的方案，不删除已保存作品。</p><div class="match-variant-grid">${variants.map(v=>`<article class="match-variant" data-variant="${c.esc(v.id)}"><button class="match-result" data-act="match-open-result" data-id="${c.esc(v.id)}" ${v.status==='running'?'disabled':''}><div class="match-cover-preview" data-match-raster="${c.esc(v.id)}">${covers.render(v.project)}</div><strong>${c.esc(v.title)}</strong></button><pre class="match-progress" aria-live="polite">${c.esc(v.progress)}</pre>${v.linkedProjectID&&!c.state.projects.some(p=>p.id===v.linkedProjectID)?`<button class="btn" data-act="match-restore" data-id="${c.esc(v.id)}">恢复已删除作品</button>`:''}${v.status==='running'?'<button class="btn" data-act="match-stop">停止创作</button>':v.project.deliveryMode==='zip'?`<button class="btn" data-act="download-project-zip" data-id="${c.esc(v.linkedProjectID||v.project.id)}">下载可编辑 ZIP</button>`:''}</article>`).join('')||'<p>尚未生成方案。</p>'}</div>`;
- const update=()=>{if(c.state.route!=='matching')return;const el=document.querySelector('.match-previews');if(el){el.innerHTML=markup();reusePagePreviews({view:el,state:c.state});covers.hydrate(el,variants);el.onclick=e=>{const b=e.target.closest('[data-act]');if(b)c.handle(b.dataset.act,b.dataset.id);};c.mountIcons?.(el);}};
+ const markup=()=>`<h2>版本方案</h2><p>完成方案自动保存为草稿或快照；“重新搭配”只清空这里的方案，不删除已保存作品。</p><div class="match-variant-grid" data-match-scroll="variants">${variants.map(v=>`<article class="match-variant" data-variant="${c.esc(v.id)}"><button class="match-result" data-act="match-open-result" data-id="${c.esc(v.id)}" ${v.status==='running'?'disabled':''}><div class="match-cover-preview" data-match-raster="${c.esc(v.id)}">${covers.render(v.project)}</div><strong>${c.esc(v.title)}</strong></button><pre class="match-progress" aria-live="polite">${c.esc(v.progress)}</pre>${v.linkedProjectID&&!c.state.projects.some(p=>p.id===v.linkedProjectID)?`<button class="btn" data-act="match-restore" data-id="${c.esc(v.id)}">恢复已删除作品</button>`:''}${v.status==='running'?'<button class="btn" data-act="match-stop">停止创作</button>':v.project.deliveryMode==='zip'?`<button class="btn" data-act="download-project-zip" data-id="${c.esc(v.linkedProjectID||v.project.id)}">下载可编辑 ZIP</button>`:''}</article>`).join('')||'<p>尚未生成方案。</p>'}</div>`;
+ const update=()=>{
+   if(c.state.route!=='matching')return;
+   const el=document.querySelector('.match-previews');
+   if(!el)return;
+   const root=el.closest('#view')||el.closest('.matching-page')?.parentElement;
+   const scroll=root?captureMatchingScroll(root,globalThis.window):null;
+   el.innerHTML=markup();
+   reusePagePreviews({view:el,state:c.state});
+   covers.hydrate(el,variants);
+   el.onclick=e=>{
+     const b=e.target.closest('[data-act]');
+     if(b)c.handle(b.dataset.act,b.dataset.id);
+   };
+   c.mountIcons?.(el);
+   if(root)restoreMatchingScroll(root,scroll,globalThis.window);
+ };
+
  return {
   async restore(){covers.clear();const record=await device.get(account(),ID);for(const key of KEYS)if(defaults[key]!==undefined)c.state[key]=structuredClone(defaults[key]);variants=restoreMatchingSession(record,c.state);lastSnapshot=JSON.stringify(matchingSnapshot(c.state,variants));ready=true;},
-  render(){return `<section class="panel match-previews">${markup()}</section>`;},
+  render(){return `<section class="panel match-previews" data-match-scroll="previews">${markup()}</section>`;},
   hydrate(root){covers.hydrate(root,variants);},
   cacheStats:covers.stats,
   persist:save,
@@ -100,6 +123,11 @@ export function createMatchingSession(c){
     ensureAccount();
     let steps='';const output=await c.runCreativeAgent({...cfg,draft:p.drafts[0],assets:assetsSnapshot,aliases,styles:p.styles,pagePurposes:p.purposes,contentPolicy:p.contentPolicy||'documentary',userText:p.userText||'',providedFacts:p.providedFacts||'',requiredAssetIDs:p.requiredAssetIDs,materialPriority:p.materialPriority,processing:p.processing,assetProcessing:p.assetProcessing,materialUseHints:p.materialUseHints,materialUseRequired:p.materialUseRequired,prompt:p.intent||'',images,referenceImages:references,userTemplates:templatesSnapshot,request:recorder.request,signal:run.signal,
      onResponse:recorder.response,
+     onPlanning:plan=>{steps=plan?.selected?'构思 · '+plan.selected.title+'\n':'';v.progress=(plan?.selected?
+       '已比较 '+plan.concepts.length+' 个设计方向：'+plan.selected.title+'。开始制作可编辑页面…':
+       '已跳过不可用的构思阶段，继续可编辑创作。');
+       const el=document.querySelector(`[data-variant="${v.id}"] .match-progress`);
+       if(el)el.textContent=v.progress;},
      onScene:vision?async d=>{ensureAccount();return (await c.rasterize(d,.7)).toDataURL('image/jpeg',.8);}:undefined,
      onFinalScene:async d=>{ensureAccount();return (await c.rasterize(d,Math.min(1.6,2000/Math.max(d.canvas.width,d.canvas.height)))).toDataURL('image/jpeg',.88);},
      onInspection:vision?async data=>{ensureAccount();const parts=[];for(const m of data?.materials||[]){const a=findAsset(m.assetID);if(a){const url=await c.modelImage(a,m.cropRect);if(url)parts.push({type:'text',text:m.key+' 的局部预览'},{type:'image_url',image_url:{url}});}}return parts;}:undefined,

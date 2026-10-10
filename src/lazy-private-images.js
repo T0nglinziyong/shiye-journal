@@ -1,5 +1,5 @@
 import {bindImageResources,cachedImageSource,notifyImageInvalidation} from './presentation-resources.js';
-import {imagePixelSize,MIN_DISPLAY_EDGE,MAX_DISPLAY_EDGE} from './image-variants.js';
+import {imagePixelSize,imageTier,cachedTierChoice,COVER_EDGE,MIN_DISPLAY_EDGE,MAX_DISPLAY_EDGE} from './image-variants.js';
 const EMPTY='data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>');
 const placeholder=id=>id?EMPTY+'#shiye-image='+encodeURIComponent(id):'';
 export const imagePlaceholder=id=>id?(cachedImageSource(id)||placeholder(id)):'';
@@ -10,12 +10,24 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
   const concurrency=globalThis.matchMedia?.('(pointer: coarse)').matches?6:10;
   const version=id=>versions.get(id)||0;
   const touch=(map,id)=>{if(map.has(id)){const v=map.get(id);map.delete(id);map.set(id,v);}};
-  // Public thumbnails always prefer the immutable low-resolution COS snapshot.
-  // Larger variants are only reused by the editor/cutout paths, never cards.
-  const currentSource=id=>{touch(previewSizes,id);return previews.get(id)||'';};
+  // Reuse existing higher-tier decoded bytes, including on list cards. Never
+  // request a 480px cover just because a 960px image is already in memory.
+  const cachedEntries=id=>[
+    ...(previews.has(id)?[{tier:COVER_EDGE,url:previews.get(id),type:'cover'}]:[]),
+    ...[...variants.values()].filter(row=>row.id===id).map(row=>({...row,type:'variant'}))
+  ];
+  const cachedChoice=(id,target)=>{
+    const entries=cachedEntries(id),choice=cachedTierChoice(entries.map(row=>row.tier),target);
+    const tier=choice.sufficient??choice.temporary;
+    const row=entries.find(entry=>entry.tier===tier);
+    if(row?.type==='cover')touch(previewSizes,id);
+    if(row?.type==='variant')touch(variantSizes,id+':'+row.tier);
+    return row?{...row,sufficient:choice.sufficient!==null}:null;
+  };
+  const currentSource=id=>cachedChoice(id,COVER_EDGE)?.url||'';
   const identity=source=>{
     for(const [id,url] of urls)if(url===source)return {id,version:version(id),full:true};
-    for(const [id,url] of previews)if(url===source)return {id,version:version(id),full:false};
+    for(const [id,url] of previews)if(url===source)return {id,version:version(id),full:false,tier:COVER_EDGE};
     for(const row of variants.values())if(row.url===source)return {id:row.id,version:version(row.id),full:false,tier:row.tier};
     return null;
   };
@@ -33,17 +45,18 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
       ? Math.min(screenWidth,screenHeight)*.72
       : rect.width>0&&rect.height>0?Math.max(rect.width,rect.height):Math.max(img.clientWidth||0,img.clientHeight||0);
     const selected=imagePixelSize(pixels||400,globalThis.devicePixelRatio||1,screenWidth,screenHeight);
-    return img.closest('.cutout-preview')?Math.max(1200,selected):selected;
+    return img.closest('.cutout-preview')?Math.max(960,selected):selected;
   };
   function scheduleUpgrade(img){
-    if(disposed||!fullView(img)||!img.isConnected||img.dataset.privateImageLoading)return;
+    if(disposed||!img.isConnected||img.dataset.privateImageLoading)return;
     const existing=identity(img.getAttribute('src')||'');
-    if(!existing||existing.full||displayTier(img)<=(existing.tier||MIN_DISPLAY_EDGE))return;
+    const target=fullView(img)?displayTier(img):COVER_EDGE;
+    if(!existing||existing.full||target<=(existing.tier||COVER_EDGE))return;
     clearTimeout(resizeTimers.get(img));
     resizeTimers.set(img,setTimeout(()=>{
       resizeTimers.delete(img);if(!img.isConnected||img.dataset.imageError||img.dataset.privateImageLoading||!onScreen(img)&&observer)return;
       const known=identity(img.getAttribute('src')||'');
-      if(known&&!known.full&&displayTier(img)>(known.tier||MIN_DISPLAY_EDGE))resolve(img,known.id);
+      if(known&&!known.full&&(fullView(img)?displayTier(img):COVER_EDGE)>(known.tier||COVER_EDGE))resolve(img,known.id);
     },180));
   }
   function scheduleRetry(id){if(disposed||retryTimers.has(id))return;const count=Math.min((retryCounts.get(id)||0)+1,6);retryCounts.set(id,count);retryTimers.set(id,setTimeout(()=>{retryTimers.delete(id);retryMissing(id);},Math.min(30000,1000*2**(count-1))));}
@@ -73,13 +86,12 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
     // Requested display pixels have already been calculated using DPR and screen
     // size by displayTier(). Running imagePixelSize() a second time would
     // multiply them again and fetch unnecessarily large COS variants.
-    const full=requested===true,tier=full?0:requested===false?MIN_DISPLAY_EDGE:
-      Math.max(MIN_DISPLAY_EDGE,Math.min(MAX_DISPLAY_EDGE,Math.ceil(Number(requested)||MIN_DISPLAY_EDGE)));
+    const full=requested===true,tier=full?0:requested===false?COVER_EDGE:
+      imageTier(requested);
     if(full&&urls.has(id)){touch(sizes,id);return urls.get(id);}
     if(!full){
-      if(tier===MIN_DISPLAY_EDGE&&previews.has(id)){touch(previewSizes,id);return previews.get(id);}
-      const available=[...variants.values()].filter(row=>row.id===id&&row.tier>=tier).sort((a,b)=>a.tier-b.tier)[0];
-      if(available){touch(variantSizes,id+':'+available.tier);return available.url;}
+      const cached=cachedChoice(id,tier);
+      if(cached?.sufficient)return cached.url;
     }
     const key=(full?'original:':tier+':')+id;if(pending.has(key))return pending.get(key);
     const epoch=generation,itemVersion=version(id);
@@ -91,7 +103,7 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
       if(full&&urls.has(id))return urls.get(id);
       const url=URL.createObjectURL(blob);
       if(full){urls.set(id,url);sizes.set(id,blob.size);}
-      else if(tier===MIN_DISPLAY_EDGE){previews.set(id,url);previewSizes.set(id,blob.size);}
+      else if(tier===COVER_EDGE){previews.set(id,url);previewSizes.set(id,blob.size);}
       else{variants.set(key,{id,tier,url});variantSizes.set(id+':'+tier,blob.size);}
       queueTrim();return url;
     },resolve,reject});pump();});
@@ -135,13 +147,28 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
     const epoch=generation,itemVersion=version(id),stamp=epoch+':'+itemVersion;
     img.dataset.privateImageId=id;img.dataset.privateImageLoading=stamp;
     const current=()=>!disposed&&epoch===generation&&itemVersion===version(id);
-    const target=fullView(img)?displayTier(img):MIN_DISPLAY_EDGE;
-    // Never fetch a full original to repair a grid thumbnail. Only a genuine
-    // editing or cutout view may request original bytes as a last resort.
+    const target=fullView(img)?displayTier(img):COVER_EDGE;
+    // Never fetch the original for a grid thumbnail; original fallback is
+    // permitted only in editing views with a failed COS derivative.
     const full=brokenPreviews.has(id)&&fullView(img);
     void(async()=>{
       let shown=src;
-      if(target>MIN_DISPLAY_EDGE&&!full)try{const preview=await load(id,false);if(!current())return;if(preview&&img.isConnected&&img.getAttribute('src')===src){if(src!==preview)img.src=preview;shown=preview;}}catch(error){if(current())onError(error);}
+      const cached=cachedChoice(id,target);
+      if(cached&&!full&&img.isConnected&&img.getAttribute('src')===src){
+        if(src!==cached.url)img.src=cached.url;
+        shown=cached.url;
+      }
+      // A previously cached 256/360/480 preview can be shown immediately.
+      // Only request a base cover if no cached size exists at all; skip that
+      // extra request when a high tier already satisfies the target.
+      if(target>COVER_EDGE&&!cached&&!full)try{
+        const preview=await load(id,false);
+        if(!current())return;
+        if(preview&&img.isConnected&&img.getAttribute('src')===shown){
+          if(shown!==preview)img.src=preview;
+          shown=preview;
+        }
+      }catch(error){if(current())onError(error);}
       const url=await load(id,full?true:target);if(!current())return;
       if(url&&img.isConnected&&img.getAttribute('src')===shown){if(img.getAttribute('src')!==url)img.src=url;delete img.dataset.imageError;retryCounts.delete(id);const timer=retryTimers.get(id);if(timer){clearTimeout(timer);retryTimers.delete(id);}}
       else if(!url&&img.isConnected){img.dataset.imageError='true';scheduleRetry(id);}
@@ -171,9 +198,9 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
     const src=img.getAttribute('src')||'',known=identity(src);
     if(known)img.dataset.privateImageId=known.id;
     // Warm list thumbnails need no async pass. Editor entry upgrades them.
-    const desired=fullView(img)?displayTier(img):MIN_DISPLAY_EDGE;
+    const desired=fullView(img)?displayTier(img):COVER_EDGE;
     if(src.includes('#shiye-image=')){if(onScreen(img)||!observer)resolve(img,known?.id);else observer.observe(img);}
-    else if(known&&!known.full&&desired>(known.tier||MIN_DISPLAY_EDGE))scheduleUpgrade(img);
+    else if(known&&!known.full&&desired>(known.tier||COVER_EDGE))scheduleUpgrade(img);
   }}
   const changes=new MutationObserver(records=>{for(const r of records){if(r.type==='attributes')scan(r.target);else for(const node of r.addedNodes)scan(node);}});
   // Class/style changes are handled by ResizeObserver and IntersectionObserver;

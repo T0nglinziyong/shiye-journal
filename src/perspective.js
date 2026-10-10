@@ -27,7 +27,25 @@ export async function rectifyA4(bitmap,corners,maxDimension=4096,paperRatio=210/
   return (await rectifyA4Frame(bitmap,corners,maxDimension,paperRatio)).blob;
 }
 export async function suggestPaperCorners(bitmap,paperRatio=210/297){
-  const ratio=Math.min(1,800/Math.max(bitmap.width,bitmap.height)),w=Math.max(1,Math.round(bitmap.width*ratio)),h=Math.max(1,Math.round(bitmap.height*ratio));
-  return visionTask('quad',{pixels:await analysisPixels(bitmap,{x:0,y:0,w:1,h:1},w,h),width:w,height:h,paperRatio});
+  // The ca0f/c6 800px attempt stays byte-for-byte in behavior when it works.
+  // Images shared by phone photo libraries may have fewer pixels or different
+  // colour encoding; only if this first pass returns no page, increase detail.
+  const longEdge=Math.max(bitmap.width,bitmap.height);
+  for(const maxEdge of [800,1200,1600]){
+    const ratio=Math.min(1,maxEdge/longEdge),
+      w=Math.max(1,Math.round(bitmap.width*ratio)),
+      h=Math.max(1,Math.round(bitmap.height*ratio));
+    try{
+      const corners=await visionTask('quad',{
+        pixels:await analysisPixels(bitmap,{x:0,y:0,w:1,h:1},w,h),
+        width:w,height:h,paperRatio
+      });
+      if(corners)return corners;
+    }catch(error){
+      // One failed high-detail attempt does not invalidate a user's photo.
+      console.warn('自动纸张检测当前分辨率未成功',maxEdge,error);
+    }
+    if(ratio===1)break;
+  }
+  return null;
 }
-

@@ -1,5 +1,5 @@
 import {togglePopover} from './swift-popover.js';
-import {createSelectionSidePanels} from './selection-side-panels.js';
+import {createSelectionSidePanels,selectionMorePopoverOptions} from './selection-side-panels.js';
 import {zipSync,strToU8} from 'fflate';
 import {finishSelection,toggleSelection,selectionActive} from './library-selection-model.js';
 import {mountAssetSelection} from './library-selection-ui.js';
@@ -14,6 +14,7 @@ import {containBox} from './preview-geometry.js';
 import {registerSelectionPresenter} from './selection-presenter.js';
 import {applyCatalogPage,resetCatalogPage} from './catalog-pagination.js';
 import {prewarmVision} from './vision-runtime.js';
+import {showToast} from './toast.js';
 
 const previewObservers=new WeakMap();
 function mountWorkPreviews(c){
@@ -59,7 +60,7 @@ function mountWorkPreviews(c){
 
 function button(text, action, className='') {
   const b=document.createElement('button');b.type='button';b.className='btn '+className;b.textContent=text;
-  b.onclick=async()=>{b.disabled=true;try{await action();}catch(error){document.querySelector('#toast').textContent=error.message;document.querySelector('#toast').classList.add('show');}finally{b.disabled=false;}};return b;
+  b.onclick=async()=>{b.disabled=true;try{await action();}catch(error){showToast(error.message);}finally{b.disabled=false;}};return b;
 }
 // Share the materials batch action layout across series, works and snapshots.
 const selectionAction=(label,fn,cls='')=>{
@@ -74,7 +75,7 @@ const selectionAction=(label,fn,cls='')=>{
   return b;
 };
 function batchMore(anchor,actions){
-  const p=togglePopover(anchor,{title:'更多操作',menu:true,width:245});
+  const p=togglePopover(anchor,selectionMorePopoverOptions());
   if(!p)return;
   p.surface.classList.add('selection-more-menu');
   const side=createSelectionSidePanels(p,{anchor,makeAction:selectionAction});

@@ -56,7 +56,7 @@ try{
       assert.notDeepEqual(layerDragAfter,layerDragBefore,'press-and-drag must reorder layers');
     }
     if(w<700&&layerDragBefore.length>1){
-      const coords=await evaluate('(()=>{const rows=[...document.querySelectorAll(".canvas-layer-row")],r=rows[0].querySelector("[data-layer-pick]").getBoundingClientRect(),target=rows.at(-1).getBoundingClientRect();return {from:{x:r.left+r.width/2,y:r.top+r.height/2},to:{x:r.left+r.width/2,y:target.top+target.height*.75}};})()');
+      const coords=await evaluate('(()=>{const rows=[...document.querySelectorAll(".canvas-layer-row")],r=rows[0].querySelector("[data-layer-move]").getBoundingClientRect(),target=rows.at(-1).getBoundingClientRect();return {from:{x:r.left+r.width/2,y:r.top+r.height/2},to:{x:r.left+r.width/2,y:target.top+target.height*.75}};})()');
       const startOrder=await evaluate('([...document.querySelectorAll(".canvas-layer-row")].map(r=>r.dataset.layerId))');
       await command('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:coords.from.x,y:coords.from.y,id:1}]});
       await sleep(370);
@@ -64,6 +64,22 @@ try{
       await command('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await sleep(90);
       const endOrder=await evaluate('([...document.querySelectorAll(".canvas-layer-row")].map(r=>r.dataset.layerId))');
       assert.notDeepEqual(endOrder,startOrder,'touch long-press layer reorder must work');
+    }
+    // Long lists must scroll on iPad/phone when dragging an ordinary row.
+    // The reorder grip alone keeps touch-action:none to allow deliberate drag.
+    await evaluate('(()=>{const list=document.querySelector(".canvas-layer-list");for(let i=0;i<16;i++){const row=document.createElement("div");row.className="canvas-layer-row";row.innerHTML="<button data-layer-pick>滚动测试 "+i+"</button>";list.append(row);}list.scrollTop=0;})()');
+    const scrollState=await evaluate('(()=>{const list=document.querySelector(".canvas-layer-list"),row=list.querySelector(".canvas-layer-row"),pick=row.querySelector("[data-layer-pick]"),grip=row.querySelector("[data-layer-move]");return {overflow:getComputedStyle(list).overflowY,scrollHeight:list.scrollHeight,clientHeight:list.clientHeight,rowTouch:getComputedStyle(row).touchAction,pickTouch:getComputedStyle(pick).touchAction,gripTouch:getComputedStyle(grip).touchAction};})()');
+    assert.ok(scrollState.scrollHeight>scrollState.clientHeight,'Layer list must be a real scroll container: '+JSON.stringify(scrollState));
+    assert.equal(scrollState.overflow,'auto');assert.equal(scrollState.rowTouch,'pan-y');assert.equal(scrollState.pickTouch,'pan-y');assert.equal(scrollState.gripTouch,'none');
+    if(w<700){
+      const swipe=await evaluate('(()=>{const r=document.querySelector(".canvas-layer-row [data-layer-pick]").getBoundingClientRect();return {x:r.left+r.width*.5,y:r.top+r.height*.6};})()');
+      await command('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:swipe.x,y:swipe.y,id:9}]});
+      for(let n=1;n<=8;n++)await command('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:swipe.x,y:swipe.y-n*12,id:9}]});
+      await command('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+      await sleep(90);
+      assert.ok(await evaluate('document.querySelector(".canvas-layer-list").scrollTop>0'),'Finger swipe on a layer must scroll, not reorder');
+    }else{
+      assert.ok(await evaluate('(()=>{const list=document.querySelector(".canvas-layer-list");list.scrollTop=250;return list.scrollTop>0;})()'),'Desktop trackpad/wheel container must scroll');
     }
     await command('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape'});await click('[data-act="undo"]');await click('[data-act="back-works"]','.works-grid');
     assert.equal(await evaluate('document.querySelector(".swift-tabs button.selected")?.textContent.trim()'),'草稿',
