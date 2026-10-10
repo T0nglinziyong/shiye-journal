@@ -53,10 +53,8 @@ test('work confirmation shows editable background as first tile plus consistent 
  assert.ok(html.includes('不归入素材库'));
  assert.ok(!html.includes('record-work-save-assets'));
  assert.ok(!html.includes('batch-work-save-assets'));
- assert.ok(html.includes('class="review-paper-direct-controls"'));
- assert.ok(html.includes('data-review-paper-pattern="0"'));
- assert.ok(html.includes('data-review-paper-color="0"'));
- assert.ok(!html.includes('data-import-paper-options'));
+ assert.ok(html.includes('class="review-paper-control"'));
+ assert.ok(html.includes('data-import-paper-options="0"'));
  assert.ok(!html.includes('record-work-paper-pattern'));
  assert.ok(html.includes('record-series'));
 });
@@ -75,9 +73,8 @@ test('material review has no background card; work review preserves one square b
   state.importRecords[0].selectedCandidates[0].url='blob:sticker';
   const html=renderImportReview({state,esc:String,fmt:String});
   assert.equal((html.match(/review-background-card/g)||[]).length,1);
-  assert.equal((html.match(/data-review-paper-pattern=/g)||[]).length,1);
-  assert.equal((html.match(/data-review-paper-color=/g)||[]).length,1);
-  assert.ok(html.indexOf('data-review-paper-pattern="0"')<html.indexOf('data-candidate="0"'));
+  assert.equal((html.match(/data-import-paper-options=/g)||[]).length,1);
+  assert.ok(html.indexOf('data-import-paper-options="0"')<html.indexOf('data-candidate="0"'));
   assert.ok(html.indexOf('不归入系列')<html.indexOf('不归入素材库'));
   state.importMode='material';
   const plain=renderImportReview({state,esc:String,fmt:String});

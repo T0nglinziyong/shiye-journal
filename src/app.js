@@ -61,10 +61,8 @@ import {visionTask,prewarmVision} from './vision-runtime.js';
 import {recognitionOptions,recognitionPixelOptions,recognitionMethodDetails,recognitionProfile} from './recognition-profiles.js';
 import {classifyRecord} from './classification.js';
 import {mountPaperCorrection,resetPaperCorrection} from './paper-ui.js';
-import {requiresManualPaperConfirmation} from './import-paper-review.js';
 import {rectifyA4Frame,suggestPaperCorners} from './perspective.js';
 import {analysisPixels,decodeRecognitionImage,sourcePixels} from './recognition-raster.js';
-import {imageFilesFromDrop,isImageImportFile,acceptsDesktopFileDrag,imageImportDestination} from './desktop-image-drop.js';
 import {syncCurrentMaterials} from './current-materials.js';
 import {syncCurrentExamples,isUntouchedLegacyExample} from './current-examples.js';
 import {applyToolCalls} from './creative.js';
@@ -102,7 +100,6 @@ import {canApplyBackgroundView,shouldPullCloudForRoute} from './view-update-poli
 import {resetSelectionPresenters} from './selection-presenter.js';
 
 import {installRuntimeDiagnostics} from './runtime-diagnostics.js';
-import {showToast} from './toast.js';
 const view=document.querySelector('#view'),modal=document.querySelector('#modal'),body=document.querySelector('#modal-body');
 modal.querySelector('.modal-close').onclick=()=>modal.close();
 const fileInput=document.querySelector('#file-input'),workFileInput=document.querySelector('#work-file-input'),snapshotFileInput=document.querySelector('#snapshot-file-input'),backupInput=document.querySelector('#backup-input'),emergencyInput=document.querySelector('#emergency-input');
@@ -119,7 +116,7 @@ const libraryHistory=[];
 function openLibraryAsset(id){libraryHistory.push({route:state.route,seriesID:state.seriesID,detailAssetID:state.detailAssetID});state.detailAssetID=id;route('assetDetail');}
 function libraryBack(){const previous=libraryHistory.pop();if(!previous){navigateBack('series');return;}navigationHistory.pop();state.seriesID=previous.seriesID;state.detailAssetID=previous.detailAssetID;route(previous.route,{back:true});}
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const toast=showToast;
+const toast=s=>{const el=document.querySelector('#toast');el.textContent=s;el.classList.add('show');clearTimeout(toast.timer);toast.timer=setTimeout(()=>el.classList.remove('show'),3500);};
 const saveStatus=s=>{const label=cloudEnabled?({'已保存到本机':'已保存到云端','本机存储':'云端存储'}[s]||s):s;document.querySelector('#save-state').textContent=label;for(const el of document.querySelectorAll('.swift-auto-saved'))el.textContent=label;};
 const syncDisplay={pending:0,error:null,checking:true,localPending:false};
 function updateSyncIndicator(){
@@ -310,13 +307,6 @@ function render(){
   };
   document.body.classList.toggle('editing',state.route==='editor');document.body.dataset.backdrop=state.preferences.backdrop;document.querySelectorAll('.main-nav button').forEach(b=>b.classList.toggle('active',b.dataset.route===state.route||(b.dataset.route==='library'&&['series','import'].includes(state.route))));document.querySelector('#basket-count').textContent=state.basket.length;
   if(state.route==='editor'&&refreshCanvas())return;
-  // The import inspector is independently scrollable. Every recognition step
-  // and settings change used to replace #view, jumping it back to the first
-  // option. Capture before teardown and restore immediately after mounting.
-  const importScroll=state.route==='import'&&view.querySelector('.import-inspector')
-    ?{inspector:view.querySelector('.inspector-scroll')?.scrollTop||0,
-      queue:view.querySelector('.queue-strip')?.scrollLeft||0,
-      page:window.scrollY}:null;
   view.workCoverDispose?.();view.workCoverDispose=null;
   view.localWorkCoverDispose?.();view.localWorkCoverDispose=null;
   view.editorDispose?.();view.editorDispose=null;view.manualBoxDispose?.();view.manualBoxDispose=null;view.editorRefresh=null;view.catalogRefresh=null;resetSelectionPresenters(view);
@@ -335,12 +325,6 @@ function render(){
     // The page and every independent scrollable column/textarea keep their
     // positions after star/remove/filter/proposal/generation rerenders.
     restoreMatchingScroll(view,matchingScrollMemory.scroll,window);
-  }
-  if(importScroll&&state.route==='import'){
-    const inspector=view.querySelector('.inspector-scroll'),queue=view.querySelector('.queue-strip');
-    if(inspector)inspector.scrollTop=importScroll.inspector;
-    if(queue)queue.scrollLeft=importScroll.queue;
-    if(Math.abs(window.scrollY-importScroll.page)>1)window.scrollTo(0,importScroll.page);
   }
   mountPageSyncIndicator();backgroundViewPending=false;}
 function editorLayoutKey(){const size=view.editorLayoutSize||{width:window.innerWidth,height:window.innerHeight};return [size.width,size.height,current()?.canvas.width,current()?.canvas.height,!!state.workspacePanel,!!state.aiPanel].join(':');}
@@ -581,35 +565,34 @@ function bindPage(){view.querySelectorAll('[data-act]').forEach(el=>el.addEventL
   view.querySelectorAll('.record-work-save-assets').forEach(el=>el.onchange=()=>{
     const record=state.importRecords[+el.dataset.index];record.workSaveAssets=el.checked;record.workSaveAssetsManual=true;
   });
-  // Work import background edits are inline: no intermediate modal. Updating
-  // either control directly repaints the same card and keeps both choices live.
-  const applyImportPaper=(ri,field,value)=>{
-    const record=state.importRecords[ri];if(!record)return;
-    if(field==='pattern')record.workPaperPattern=value;
-    else record.workPaperColor=value;
-    const preview=view.querySelector('.review-background-card .import-work-paper-preview:has([data-review-paper-pattern="'+ri+'"])');
-    if(preview){
-      preview.className='review-thumbnail import-work-paper-preview '+(record.workPaperPattern||'plain');
-      preview.style.setProperty('--review-paper',record.workPaperColor||'#fcfaf0');
-      preview.style.backgroundColor=record.workPaperColor||'#fcfaf0';
-    }
-  };
-  view.querySelectorAll('[data-review-paper-pattern]').forEach(el=>{
-    el.onchange=()=>applyImportPaper(Number(el.dataset.reviewPaperPattern),'pattern',el.value);
-  });
-  view.querySelectorAll('[data-review-paper-color]').forEach(el=>{
-    el.oninput=el.onchange=()=>applyImportPaper(Number(el.dataset.reviewPaperColor),'color',el.value);
+  view.querySelectorAll('[data-import-paper-options]').forEach(button=>button.onclick=()=>{
+    const ri=Number(button.dataset.importPaperOptions),record=state.importRecords[ri];
+    if(!record)return;
+    const paperTypes=[['plain','纯色'],['grid','方格'],['lines','横线'],['dots','点阵'],['columns','双栏']];
+    body.innerHTML='<div class="dialog-head"><h2>页面背景</h2></div>'+
+      '<div class="stack"><label>底纸样式<select id="review-background-pattern">'+
+      paperTypes.map(([id,name])=>'<option value="'+id+'">'+name+'</option>').join('')+
+      '</select></label><label>底纸颜色<input id="review-background-color" type="color" value="'+esc(record.workPaperColor||state.importBatchWorkPaperColor||'#fcfaf0')+'"></label>'+
+      '<button type="button" class="btn primary" id="review-background-done">完成</button></div>';
+    const pattern=body.querySelector('#review-background-pattern'),
+      color=body.querySelector('#review-background-color');
+    pattern.value=record.workPaperPattern||state.importBatchWorkPaperPattern||'plain';
+    const update=()=>{
+      record.workPaperPattern=pattern.value;record.workPaperColor=color.value;
+      const preview=button.closest('.review-background-card')?.querySelector('.import-work-paper-preview');
+      if(preview){
+        preview.className='review-thumbnail import-work-paper-preview '+pattern.value;
+        preview.style.setProperty('--review-paper',color.value);
+        preview.style.backgroundColor=color.value;
+      }
+    };
+    pattern.onchange=update;color.oninput=update;
+    body.querySelector('#review-background-done').onclick=()=>modal.close();
+    modal.showModal();
   });
   const removeWhite=view.querySelector('#remove-white');if(removeWhite)removeWhite.onchange=()=>{state.importRemoveWhite=removeWhite.checked;};
   const page=view.querySelector('#canvas-page');if(page)initializeCanvasSurface(page);
-  bindInspector();
-  if(state.route==='import'&&state.importProcessing)view.querySelectorAll('.inspect-columns button,.inspect-columns input,.inspect-columns select').forEach(el=>{
-    // A failed or slow auto recognizer must never block the manual recovery
-    // path once its source bitmap exists. The manual action invalidates the
-    // in-flight auto run before editing begins.
-    if(el.matches('[data-act="manual-import-box"]')&&state.importBitmap)return;
-    el.disabled=true;
-  });if(state.route==='import'&&state.importStep==='inspect'&&state.importFile&&!state.importProcessing)mountPaperCorrection({state,view,render,toast,saveActiveImportRecord});const offline=view.querySelector('#offline-state');if(offline)offline.textContent=navigator.serviceWorker?.controller?'离线程序已就绪':'首次打开时需要联网；请等待离线程序安装后再测试飞行模式';const locationLabel=view.querySelector('#storage-location');if(locationLabel)db.storageMode().then(mode=>{if(locationLabel.isConnected)locationLabel.textContent=cloudEnabled?(import.meta.env?.VITE_SHIYE_OBJECT_STORAGE==='cos'?'当前数据源：Supabase 登录与元数据 + 腾讯 COS 私有图片；本机仅保留账号隔离缓存与待同步修改':'当前数据源：Supabase 私有云端；本机仅保留账号隔离缓存与待同步修改'):mode==='server'?`当前唯一数据源：${db.storageConfig()?.url||location.origin}（服务器）`:'当前数据源：此浏览器 IndexedDB';}).catch(error=>{if(locationLabel.isConnected)locationLabel.textContent='服务器连接失败：'+error.message;});}
+  bindInspector();if(state.route==='import'&&state.importProcessing)view.querySelectorAll('.inspect-columns button,.inspect-columns input,.inspect-columns select').forEach(el=>el.disabled=true);if(state.route==='import'&&state.importStep==='inspect'&&state.importFile&&!state.importProcessing)mountPaperCorrection({state,view,render,toast,saveActiveImportRecord});const offline=view.querySelector('#offline-state');if(offline)offline.textContent=navigator.serviceWorker?.controller?'离线程序已就绪':'首次打开时需要联网；请等待离线程序安装后再测试飞行模式';const locationLabel=view.querySelector('#storage-location');if(locationLabel)db.storageMode().then(mode=>{if(locationLabel.isConnected)locationLabel.textContent=cloudEnabled?(import.meta.env?.VITE_SHIYE_OBJECT_STORAGE==='cos'?'当前数据源：Supabase 登录与元数据 + 腾讯 COS 私有图片；本机仅保留账号隔离缓存与待同步修改':'当前数据源：Supabase 私有云端；本机仅保留账号隔离缓存与待同步修改'):mode==='server'?`当前唯一数据源：${db.storageConfig()?.url||location.origin}（服务器）`:'当前数据源：此浏览器 IndexedDB';}).catch(error=>{if(locationLabel.isConnected)locationLabel.textContent='服务器连接失败：'+error.message;});}
 function bindInspector(){const d=current(),e=d&&editorEntry(d).find(x=>x.value.id===state.selected);if(!d)return;
   const change=(id,fn)=>{const el=view.querySelector('#'+id);if(el)el.addEventListener('change',()=>{checkpoint();fn(el.value);saveProject();render();});};
   if(e){for(const [id,key] of [['inspector-width','width'],['inspector-height','height'],['inspector-rotation','rotation'],['inspector-z','zIndex'],['inspector-opacity','opacity'],['inspector-font-size','fontSize']])change(id,v=>{e.value[key]=Number(v);if(e.kind==='material')e.value.userOverrideFlags=[...new Set([...(e.value.userOverrideFlags||[]),key==='width'||key==='height'?'resized':key])];});change('inspector-text',v=>e.value.content=v);change('inspector-font',v=>e.value.style=v);}else{change('paper-color',v=>d.paperColor=v);change('paper-pattern',v=>d.paperPattern=v);change('page-ratio',v=>{if(presetPaperDimensions(v))setDraftPaperSize(d,v);});change('page-mode',v=>{d.pageMode=v;d.canvas=canvasSize(v,d.pageRatio);});}}
@@ -687,16 +670,7 @@ async function handle(action,id,value){try{switch(action){
   case 'rotate-photo':await rotateImportPhoto();break;
   case 'import-toggle-candidate':state.importCandidateSelection||=new Set();state.importCandidateSelection.has(Number(id))?state.importCandidateSelection.delete(Number(id)):state.importCandidateSelection.add(Number(id));state.importRecords[state.importIndex].confirmed=false;saveActiveImportRecord();{const tile=view.querySelector('[data-act="import-toggle-candidate"][data-id="'+id+'"]'),selected=state.importCandidateSelection.has(Number(id));tile?.classList.toggle('selected',selected);tile?.setAttribute('aria-pressed',String(selected));if(tile)tile.querySelectorAll('span')[1].textContent='素材 '+(Number(id)+1)+' '+(selected?'✓':'○');}break;
   case 'import-confirm-photo':await confirmImportPhoto();break;
-  case 'review-toggle':{
-    const ri=Number(id),ci=Number(value),c=state.importRecords[ri]?.selectedCandidates?.[ci];
-    if(!c)break;c.selected=!c.selected;
-    const card=view.querySelector('.review-candidate[data-index="'+ri+'"][data-candidate="'+ci+'"]');
-    card?.classList.toggle('selected',!!c.selected);
-    const button=card?.querySelector('button[data-act="review-toggle"]');
-    if(button)button.setAttribute('aria-label',c.title+'，'+(c.selected?'已选择':'未选择'));
-    const check=card?.querySelector('.check');if(check)check.textContent=c.selected?'✓':'○';
-    break;
-  }
+  case 'review-toggle':{const c=state.importRecords[Number(id)].selectedCandidates[Number(value)];c.selected=!c.selected;render();break;}
   case 'choose-candidate':await chooseCandidate(Number(id));break;
   case 'detail':openLibraryAsset(id);break;case 'detail-back':libraryBack();break;case 'detail-add':
     if((asset(state.detailAssetID)?.supply?.quantity??1)===0)throw Error('素材可用库存为 0');
@@ -786,40 +760,23 @@ async function handle(action,id,value){try{switch(action){
   case 'export-png':await exportPNG();break;case 'print':await printPage();break;
   case 'creative-json':openCreativeJSON();break;
   case 'recognition-diagnostics':{
-    const rec=state.importRecords[state.importIndex];
-    if(!rec?.file||!state.importBitmap)throw Error('请等待照片读取完成，再导出诊断');
-    const trace=rec.recognitionDiagnostic||{phase:rec.paperNeedsReview?'paper-review-required':'not-recognized',count:0};
+    const rec=state.importRecords[state.importIndex],trace=rec?.recognitionDiagnostic;
+    if(!trace)throw Error('请先完成当前照片的识别');
     const hash=async bytes=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),v=>v.toString(16).padStart(2,'0')).join('');
     const inputSHA256=await hash(await rec.file.arrayBuffer());
     const sourceSHA256=await hash(sourcePixels(state.importBitmap));
     const correctedSHA256=rec.correctedBitmap?await hash(sourcePixels(rec.correctedBitmap)):null;
     const maskSHA256=await Promise.all((state.importCandidateData||[]).map(async item=>item.region?.mask?.alpha?await hash(item.region.mask.alpha):null));
-    // A detected box, an extracted Blob URL and a browser-decoded <img> are
-    // different stages. Export all three counts to locate blank-preview issues.
-    const previewImages=[...view.querySelectorAll('.import-candidate-grid .candidate-thumb img')];
-    const previewStatus={
-      detectedRegions:(state.importCandidates||[]).length,
-      extractedCandidates:(state.importCandidateData||[]).length,
-      imageURLs:(state.importCandidateURLs||[]).filter(Boolean).length,
-      renderedImages:previewImages.length,
-      loadedImages:previewImages.filter(img=>img.complete&&img.naturalWidth>0).length,
-      failedImages:previewImages.filter(img=>img.complete&&img.naturalWidth===0).length,
-      pendingImages:previewImages.filter(img=>!img.complete).length,
-      processing:!!state.importProcessing
-    };
     const report={format:'shiye-recognition-box-diagnostics',version:3,
       pipeline:'pinned-jpeg-js-opencv-package-area-v1',inputSHA256,sourceSHA256,correctedSHA256,maskSHA256,
-      inputFileInfo:{bytes:rec.file?.size||0,mimeType:rec.file?.type||''},previewStatus,
-      prefetchStatus:rec.prefetchStatus||null,importError:rec.importError||null,
-      paperDiagnostic:rec.paperDiagnostic||null,
       recognitionSettings:{method:state.importRecognition||state.preferences.recognition,pixels:state.preferences.recognitionPixels,
         preprocess:recognitionPreprocessOptions(),postprocess:recognitionPostprocessOptions()},
       originalPixelSize:[state.importBitmap?.width,state.importBitmap?.height],
       autoPaperCorners:rec.autoPaperCorners||null,paperCorners:rec.corners||null,
       appliedPaperCorners:rec.appliedCorners?JSON.parse(rec.appliedCorners):null,
       correctedPixelSize:rec.correctedBitmap?[rec.correctedBitmap.width,rec.correctedBitmap.height]:null,
-      paperOrientation:rec.paperOrientation||'auto',paperSize:rec.paperSize||'a4',recognitionWorkingLongEdge:900,rectifiedWorkingLongEdge:Math.max(rec.correctedBitmap?.width||0,rec.correctedBitmap?.height||0)||null,
-      ...trace,detectedCount:rec.candidates?.length||0,visibleCount:(rec.candidateData||[]).filter(item=>!!item?.url).length,recognitionRecovery:rec.recognitionRecovery||null,paperNeedsReview:!!rec.paperNeedsReview};
+      paperOrientation:rec.paperOrientation||'auto',paperSize:rec.paperSize||'a4',
+      ...trace,visibleCount:rec.candidates?.length||0};
     download(new Blob([JSON.stringify(report,null,2)],{type:'application/json'}),
       '拾页素材框诊断.json');
     toast('已导出不含照片的素材框诊断');break;
@@ -1204,30 +1161,20 @@ async function prefetchImportRecord(rec,settings,revision){
   try{
     bitmap=await decodeRecognitionImage(rec.file);if(!valid())return;
     const initial=importPaperDimensions({...settings,bitmap,corners:null});
-    const corners=rec.corners||(settings.paperSize==='none'?null:await suggestPaperCorners(
-      bitmap,initial[0]/initial[1],{onDiagnostic:diagnostic=>{
-        if(valid())rec.paperDiagnostic=diagnostic;
-      }}).catch(error=>{
-        if(valid())rec.paperDiagnostic={stage:'quad-error',message:String(error?.message||error)};
-        console.warn('后台纸张检测执行异常',error);
-        return null;
-      }));if(!valid())return;
-    if(requiresManualPaperConfirmation({paperSize:settings.paperSize,appliedCorners:rec.appliedCorners,reviewFlag:rec.paperNeedsReview,corners})){rec.paperNeedsReview=true;rec.prefetchStatus='needs-paper-review';updateImportPrefetchLabel(rec);return;}
+    const corners=rec.corners||(settings.paperSize==='none'?null:await suggestPaperCorners(bitmap,initial[0]/initial[1]).catch(()=>null));if(!valid())return;
     const [pw,ph]=importPaperDimensions({...settings,bitmap,corners});
     if(corners&&settings.paperSize!=='none'){
       const corrected=await rectifyA4Frame(bitmap,corners,4096,pw/ph);correctedBitmap=corrected.canvas;correctedURL=URL.createObjectURL(corrected.blob);if(!valid())return;
     }
     const source=correctedBitmap||bitmap,box=correctedBitmap?{x:0,y:0,w:1,h:1}:rec.box||{x:0,y:0,w:1,h:1};
-    let analysisRaster=null;
     const candidates=await detectPaperCandidates(source,box,6,{balanceLight:settings.balanceLight,paperRectified:!!correctedBitmap,paperWidthMM:pw,paperHeightMM:ph,
       recognition:settings.recognition,recognitionPixels:settings.pixels,
       recognitionPreprocess:{illumination:settings.balanceLight,denoise:settings.denoise,localContrast:settings.localContrast,chromaEdges:settings.chromaEdges},
       recognitionPostprocess:{shapeRegularization:settings.shapeRegularization,apertures:settings.apertures},mergeSharedCarrier:settings.mergeSharedCarrier,
-      onDiagnostic:trace=>{if(valid())rec.recognitionDiagnostic=trace;},
-      onAnalysisRaster:raster=>{analysisRaster=raster;}});if(!valid())return;
+      onDiagnostic:trace=>{if(valid())rec.recognitionDiagnostic=trace;}});if(!valid())return;
     const calibrated=settings.paperSize!=='none'&&(correctedBitmap||settings.wholePaper),candidateData=[];
     const lighting=settings.materialColorMode!=='original'&&correctedBitmap
-      ?await estimatePageLighting(source,candidates,{analysisRaster}):null;
+      ?await estimatePageLighting(source,candidates):null;
     for(let i=0;i<candidates.length;i++){
       const candidate=await extractImportCandidate(source,box,candidates[i],{mode:settings.mode,widthMM:pw,heightMM:ph,calibrated,index:i,lighting});
       candidateURLs.push(candidate.url);candidateData.push(candidate);
@@ -1269,7 +1216,7 @@ function openImportGallery(mode){
   fileInput.removeAttribute('capture');fileInput.click();
 }
 async function switchImportRecord(index,skipSave=false){
-  if(!skipSave)saveActiveImportRecord();const rec=state.importRecords[index];if(!rec)return;rec.importError=null;
+  if(!skipSave)saveActiveImportRecord();const rec=state.importRecords[index];if(!rec)return;
   const generation=state.importLoadGeneration=(state.importLoadGeneration||0)+1,isCurrent=()=>state.route==='import'&&state.importLoadGeneration===generation;
   state.importIndex=index;state.importFile=rec.file;state.importBitmap=rec.bitmap||null;state.importURL=rec.url;state.importBox=rec.box||{x:0,y:0,w:1,h:1};
   state.wholePaper=rec.wholePaper??state.preferences.wholePaper;state.paperSize=rec.paperSize||state.preferences.paperSize;state.paperOrientation=rec.paperOrientation||state.preferences.orientation;state.balanceLight=rec.balanceLight??state.preferences.balanceLight;state.importShapeRegularization=rec.importShapeRegularization??(state.preferences.recognitionShapeRegularization!==false);state.importApertures=rec.importApertures??(state.preferences.recognitionApertures!==false);state.importMaterialColorMode=rec.importMaterialColorMode||state.preferences.materialColorMode||'auto';state.importRecognition=rec.recognition||state.preferences.recognition;state.customImportWidth=rec.customImportWidth||state.preferences.customPaperWidth||210;state.customImportHeight=rec.customImportHeight||state.preferences.customPaperHeight||297;
@@ -1293,18 +1240,10 @@ async function switchImportRecord(index,skipSave=false){
   }
   const bitmap=rec.bitmap||await decodeRecognitionImage(rec.file);rec.bitmap=bitmap;if(!isCurrent())return;state.importBitmap=bitmap;
   progress('正在自动寻找纸张四角…');
-  state.paperCorners=rec.corners||rec.autoPaperCorners||(state.paperSize==='none'?null:await suggestPaperCorners(
-    bitmap,(()=>{const [pw,ph]=paperDimensions();return pw/ph;})(),
-    {onDiagnostic:diagnostic=>{if(isCurrent())rec.paperDiagnostic=diagnostic;}}
-  ).catch(error=>{
-    if(isCurrent())rec.paperDiagnostic={stage:'quad-error',message:String(error?.message||error)};
-    console.warn('当前照片自动纸张检测执行异常',error);
-    return null;
-  }));if(!isCurrent())return;
+  state.paperCorners=rec.corners||rec.autoPaperCorners||(state.paperSize==='none'?null:await suggestPaperCorners(bitmap,(()=>{const [pw,ph]=paperDimensions();return pw/ph;})()).catch(()=>null));if(!isCurrent())return;
   if(!rec.corners&&state.paperCorners)rec.autoPaperCorners=structuredClone(state.paperCorners);
-  rec.paperNeedsReview=requiresManualPaperConfirmation({paperSize:state.paperSize,correctedBitmap:state.correctedBitmap,appliedCorners:rec.appliedCorners,reviewFlag:rec.paperNeedsReview,corners:state.paperCorners});
-  progress(rec.paperNeedsReview?'请手动调整纸张四角后预览校正':'正在进行透视校正…');
-  if(!state.correctedBitmap&&state.paperCorners&&state.paperSize!=='none'&&!rec.paperNeedsReview){
+  progress('正在进行透视校正…');
+  if(!state.correctedBitmap&&state.paperCorners&&state.paperSize!=='none'){
     const [pw,ph]=paperDimensions(),{canvas,blob}=await rectifyA4Frame(state.importBitmap,state.paperCorners,4096,pw/ph);
     if(!isCurrent())return;
     state.correctedBitmap=canvas;state.correctedURL=URL.createObjectURL(blob);rec.appliedCorners=JSON.stringify(state.paperCorners);rec.backgroundDetected=true;
@@ -1316,10 +1255,8 @@ async function switchImportRecord(index,skipSave=false){
     saveActiveImportRecord();render();
   }else{
     progress('正在识别并提取素材…');saveActiveImportRecord();render();
-    if(!rec.paperNeedsReview&&rec.prefetchStatus!=='ready'&&!state.importCandidates.length&&state.importStep==='inspect')await previewCrop();
+    if(rec.prefetchStatus!=='ready'&&!state.importCandidates.length&&state.importStep==='inspect')await previewCrop();
   }
-  }catch(error){if(isCurrent()){rec.importError=String(error?.message||error);console.warn('当前照片识别或素材预览失败',error);}
-    throw error;
   }finally{if(isCurrent()){state.importProcessing='';render();queueMicrotask(scheduleImportPrefetch);}}
 }
 function discardPaperPreview(){state.paperPreviewBitmap?.close?.();if(state.paperPreviewURL&&state.paperPreviewURL!==state.correctedURL)URL.revokeObjectURL(state.paperPreviewURL);state.paperPreviewBitmap=null;state.paperPreviewURL=null;state.paperPreviewApplied=false;}
@@ -1328,7 +1265,7 @@ async function rotateImportPhoto(){
   if(rec.manualEdits&&!confirm('旋转会重新识别这张照片并舍弃候选编辑，继续吗？'))return;
   const bitmap=state.importBitmap,canvas=document.createElement('canvas');canvas.width=bitmap.height;canvas.height=bitmap.width;const ctx=canvas.getContext('2d');ctx.translate(canvas.width,0);ctx.rotate(Math.PI/2);ctx.drawImage(bitmap,0,0);
   const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));rec.originalFile||=rec.file;rec.file=new File([blob],rec.file.name,{type:'image/png'});URL.revokeObjectURL(rec.url);rec.url=URL.createObjectURL(blob);
-  const old=state.paperCorners,needsReview=!!rec.paperNeedsReview;resetPaperCorrection(state);rec.appliedCorners=null;state.paperCorners=old?[old[3],old[0],old[1],old[2]].map(p=>({x:1-p.y,y:p.x})):null;bitmap.close?.();state.importBitmap=await decodeRecognitionImage(rec.file);rec.bitmap=state.importBitmap;state.importFile=rec.file;state.importURL=rec.url;state.importCandidates=[];state.importCandidateData=[];state.importCandidateURLs=[];state.importCandidateSelection=new Set();rec.confirmed=false;rec.manualEdits=false;rec.paperNeedsReview=needsReview;
+  const old=state.paperCorners;resetPaperCorrection(state);state.paperCorners=old?[old[3],old[0],old[1],old[2]].map(p=>({x:1-p.y,y:p.x})):null;bitmap.close?.();state.importBitmap=await decodeRecognitionImage(rec.file);rec.bitmap=state.importBitmap;state.importFile=rec.file;state.importURL=rec.url;state.importCandidates=[];state.importCandidateData=[];state.importCandidateURLs=[];state.importCandidateSelection=new Set();rec.confirmed=false;rec.manualEdits=false;
   saveActiveImportRecord();await switchImportRecord(state.importIndex,true);
 }
 async function previewCorrection(){
@@ -1340,7 +1277,7 @@ async function applyPaperPreview(){
   if(rec.appliedCorners===JSON.stringify(state.paperCorners)&&state.correctedBitmap){state.paperPreviewApplied=true;render();return;}
   if(rec.manualEdits&&!confirm('重新校正会舍弃本照片的名称、手动选框和修补结果并重新识别，继续吗？'))return;
   state.correctedBitmap?.close?.();if(state.correctedURL)URL.revokeObjectURL(state.correctedURL);
-  state.correctedBitmap=state.paperPreviewBitmap;state.correctedURL=state.paperPreviewURL;state.paperPreviewBitmap=null;state.paperPreviewURL=null;state.paperPreviewApplied=true;rec.appliedCorners=JSON.stringify(state.paperCorners);rec.backgroundDetected=true;rec.paperNeedsReview=false;rec.manualEdits=false;rec.confirmed=false;
+  state.correctedBitmap=state.paperPreviewBitmap;state.correctedURL=state.paperPreviewURL;state.paperPreviewBitmap=null;state.paperPreviewURL=null;state.paperPreviewApplied=true;rec.appliedCorners=JSON.stringify(state.paperCorners);rec.backgroundDetected=true;rec.manualEdits=false;rec.confirmed=false;
   state.importProcessing=state.importMode==='snapshot'?'正在更新校正后的页面…':'正在按新校正结果识别…';render();
   try{if(state.importMode!=='snapshot')await previewCrop();toast(state.importMode==='snapshot'?'已使用校正结果':'已使用校正结果，候选素材已更新');}
   finally{state.importProcessing='';if(state.route==='import')render();}
@@ -1399,7 +1336,6 @@ async function refreshImportCandidates(regions,{manual=false}={}){
 }
 async function previewCrop(){
   if(!state.importBitmap||state.importMode==='snapshot')return;
-  if(state.paperSize!=='none'&&!state.correctedBitmap&&state.importRecords[state.importIndex]?.paperNeedsReview){toast('请先拖动纸张四角，预览校正并点击“使用校正结果”');return;}
   const record=state.importRecords[state.importIndex],source=state.correctedBitmap||state.importBitmap,b=state.correctedBitmap?{x:0,y:0,w:1,h:1}:state.importBox,[pw,ph]=paperDimensions();
   let regions=await detectPaperCandidates(source,b,6,{balanceLight:state.balanceLight,paperRectified:!!state.correctedBitmap,paperWidthMM:pw,paperHeightMM:ph,recognition:state.importRecognition||state.preferences.recognition,recognitionPixels:state.preferences.recognitionPixels,recognitionPreprocess:recognitionPreprocessOptions(),recognitionPostprocess:recognitionPostprocessOptions(),mergeSharedCarrier:state.preferences.mergeSharedCarrier!==false,onDiagnostic:trace=>{record.recognitionDiagnostic=trace;},onProgress:p=>{
     if(state.route!=='import'||record!==state.importRecords[state.importIndex])return;
@@ -1428,7 +1364,6 @@ async function chooseCandidate(index){if(index>=0){state.importCandidateSelectio
 function paperDimensions(){return importPaperDimensions({paperSize:state.paperSize,paperOrientation:state.paperOrientation,bitmap:state.importBitmap,corners:state.paperCorners,customImportWidth:state.customImportWidth||state.preferences.customPaperWidth,customImportHeight:state.customImportHeight||state.preferences.customPaperHeight});}
 async function confirmImportPhoto(){
   if(state.importProcessing)return;
-  if(state.paperSize!=='none'&&state.importRecords[state.importIndex]?.paperNeedsReview&&!state.correctedBitmap){toast('请先确认纸张校正，不能直接使用未校正照片中的素材');return;}
   const record=state.importRecords[state.importIndex];
   // A paper size edit recalibrates millimetres only. The extracted pixels and
   // applied corner correction stay valid until the corners themselves change.
@@ -1561,7 +1496,7 @@ async function rasterize(d,scale,{preview=false}={}){
  const ids=[...new Set(editorEntry(d).filter(e=>e.kind==='material').map(e=>asset(e.value.assetID)).filter(a=>a&&!a.staticPath).map(a=>a.blobId))],release=privateImages.retain(ids);
  try{await Promise.all(ids.map(id=>privateImages.load(id,preview?false:true)));const result=await renderSceneCanvas(d,{scale,loadMaterialImage:async id=>{const a=asset(id);if(!a)throw Error('素材不在当前资料库');return decodeSceneImage(a.staticPath||(preview?imagePlaceholder(a.blobId):(urls.get(a.blobId)||image(a.blobId))));}});return result.canvas;}finally{release();}
 }
-async function receiveImportPhotos(files){const images=[...files].filter(isImageImportFile).slice(0,Math.max(0,12-state.importRecords.length));if(!images.length)return;try{saveActiveImportRecord();const start=state.importRecords.length;for(const file of images)state.importRecords.push({file,url:URL.createObjectURL(file),confirmed:false,selectedCandidates:[],selection:[],candidates:[]});state.importStep='inspect';state.route='import';await switchImportRecord(start,true);}catch(e){console.error(e);toast('照片处理失败：'+e.message);}}
+async function receiveImportPhotos(files){const images=[...files].filter(f=>f.type.startsWith('image/')).slice(0,Math.max(0,12-state.importRecords.length));if(!images.length)return;try{saveActiveImportRecord();const start=state.importRecords.length;for(const file of images)state.importRecords.push({file,url:URL.createObjectURL(file),confirmed:false,selectedCandidates:[],selection:[],candidates:[]});state.importStep='inspect';state.route='import';await switchImportRecord(start,true);}catch(e){console.error(e);toast('照片处理失败：'+e.message);}}
 fileInput.onchange=async()=>{const files=[...(fileInput.files||[])];fileInput.value='';await receiveImportPhotos(files);};
 workFileInput.onchange=async()=>{const file=workFileInput.files?.[0];workFileInput.value='';if(!file)return;if(file.type.startsWith('image/')){await receiveImportPhotos([file]);return;}
   try{await importEditableFile(file);}
@@ -1669,48 +1604,6 @@ window.addEventListener('resize',refitEditor);
 window.visualViewport?.addEventListener('resize',refitEditor);
 // Desktop file drop is equivalent to the regular import path; no drag
 // target overlays the editing canvas or iPad/Pencil UI.
-function installDesktopImageDrop(){
-  let overlay=null;
-  const desktop=()=>!!window.matchMedia?.('(pointer: fine)').matches;
-  const eligible=event=>acceptsDesktopFileDrag({
-    pointerFine:desktop(),types:event.dataTransfer?.types||[],route:state.route
-  });
-  const show=()=>{
-    if(overlay)return;
-    overlay=document.createElement('div');overlay.className='desktop-image-drop-overlay';
-    overlay.setAttribute('aria-hidden','true');
-    const label=document.createElement('strong');label.textContent='松开即可导入图片 · 最多 12 张';
-    overlay.append(label);document.body.append(overlay);
-  };
-  const hide=()=>{overlay?.remove();overlay=null;};
-  document.addEventListener('dragenter',event=>{if(eligible(event))show();});
-  document.addEventListener('dragover',event=>{
-    if(!eligible(event))return;
-    event.preventDefault();if(event.dataTransfer)event.dataTransfer.dropEffect='copy';show();
-  });
-  document.addEventListener('dragleave',event=>{if(event.relatedTarget===null)hide();});
-  window.addEventListener('blur',hide);
-  document.addEventListener('drop',async event=>{
-    const allowed=eligible(event);hide();
-    if(!allowed)return;
-    event.preventDefault();event.stopPropagation();
-    const destination=imageImportDestination({route:state.route,importMode:state.importMode});
-    const free=state.route==='import'&&state.importStep!=='done'
-      ?Math.max(0,12-state.importRecords.length):12;
-    const images=imageFilesFromDrop(event.dataTransfer,free);
-    if(!images.length){
-      toast(free===0?'本批最多导入 12 张，请先完成或取消本批':'请拖入 PNG、JPEG、WebP 等图片');
-      return;
-    }
-    try{
-      if(state.route!=='import'||state.importStep==='done'){
-        resetImportBatch();state.importMode=destination;route('import');
-      }
-      await receiveImportPhotos(images);
-    }catch(error){console.error('拖入图片失败',error);toast('图片导入失败：'+error.message);}
-  });
-}
-installDesktopImageDrop();
 document.querySelectorAll('.main-nav button').forEach(b=>b.onclick=()=>{
   if(b.dataset.route==='library'){
     if(['library','series'].includes(state.route))return; // keep current tab
