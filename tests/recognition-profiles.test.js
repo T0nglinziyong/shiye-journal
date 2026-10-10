@@ -21,7 +21,7 @@ test('validated recognition modes and defaults match the final automatic pipelin
 
   const defaults=normalizePreferences({});
   assert.equal(defaults.recognition,'auto');
-  assert.equal(defaults.recognitionPixels,900);
+  assert.equal(defaults.recognitionPixels,1200);
   assert.equal(defaults.balanceLight,false);
   assert.equal(defaults.recognitionDenoise,false);
   assert.equal(defaults.recognitionLocalContrast,false);
@@ -54,12 +54,12 @@ test('validated recognition modes and defaults match the final automatic pipelin
     recognitionShapeRegularization:false,recognitionApertures:false
   });
   assert.equal(migrated.paperSize,'letter','unrelated preferences must survive migration');
-  assert.equal(migrated.recognition,'auto');assert.equal(migrated.recognitionPixels,900);
+  assert.equal(migrated.recognition,'auto');assert.equal(migrated.recognitionPixels,1200);
   assert.equal(migrated.balanceLight,false);assert.equal(migrated.recognitionDenoise,false);assert.equal(migrated.recognitionLocalContrast,false);
   assert.equal(migrated.recognitionChromaEdges,true);assert.equal(migrated.recognitionShapeRegularization,true);assert.equal(migrated.recognitionApertures,true);
 
   const preserved=migrateStoredPreferences({
-    recognitionDefaultsVersion:2,recognition:'grabcut',recognitionPixels:1600,
+    recognitionDefaultsVersion:3,recognition:'grabcut',recognitionPixels:1600,
     recognitionChromaEdges:false
   });
   assert.equal(preserved.recognition,'grabcut');assert.equal(preserved.recognitionPixels,1600);
@@ -67,7 +67,7 @@ test('validated recognition modes and defaults match the final automatic pipelin
 
   const invalid=normalizePreferences({recognition:'fake',recognitionPixels:1234});
   assert.equal(invalid.recognition,'auto');
-  assert.equal(invalid.recognitionPixels,900);
+  assert.equal(invalid.recognitionPixels,1200);
   assert.equal('recognitionEdgePolish' in normalizePreferences({recognitionEdgePolish:true}),false);
   assert.equal('recognitionCurveSmooth' in normalizePreferences({recognitionCurveSmooth:true}),false);
 });
