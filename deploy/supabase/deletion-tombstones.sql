@@ -52,6 +52,15 @@ begin
     elsif action='delete' then
       row_id:=op->>'id';
       if row_id is null then raise exception '删除对象缺少 ID'; end if;
+      -- A bare metadata deletion is not a restore: the paired logical record
+      -- must be present in this exact atomic transaction.
+      if s='meta' and left(row_id,10)='tombstone:' and not full_restore
+        and not exists(
+          select 1 from jsonb_array_elements(operations) restoration
+          where restoration->>'action'='put'
+            and 'tombstone:'||restoration->>'store'||':'||restoration->'item'->>'id'=row_id
+            and restoration->>'store' in ('assets','projects','series')
+        ) then raise exception '禁止单独清除删除保护记录'; end if;
       if s in ('assets','projects','series') then
         marker_id:='tombstone:'||s||':'||row_id;
         insert into public.shiye_records(user_id,store,id,record)
@@ -62,6 +71,7 @@ begin
       end if;
       delete from public.shiye_records where user_id=who and store=s and id=row_id;
     elsif action='clear' then
+      if s='meta' and not full_restore then raise exception '普通同步不能清空删除保护记录'; end if;
       if s in ('assets','projects','series') and not full_restore then
         for prior in select id from public.shiye_records where user_id=who and store=s loop
           marker_id:='tombstone:'||s||':'||prior.id;
