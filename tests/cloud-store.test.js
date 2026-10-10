@@ -486,3 +486,21 @@ test('deleting a work retires an older queued autosave so the work is not resurr
     'No stale project put may resurrect a deleted work');
   assert.deepEqual(await cache.get('cloud:owner-uuid','import-outbox'),[]);
 });
+
+
+test('persistent COS tier index reuses a cached higher-resolution image on a later visit',async()=>{
+  const cache=memoryCache(),calls=[];
+  const objectStorage={enabled:true,
+    async preview(path,variant){calls.push([path,variant]);return new Blob([variant],{type:'image/webp'});},
+    async download(){throw Error('A larger cached image must be used without COS GET');},
+    async upload(){throw Error('No derived upload is required for an oversized cached tier');}
+  };
+  const record={id:'sample',storageProvider:'cos',storagePath:'owner-uuid/'+'a'.repeat(64)};
+  const first=fixture(cache,objectStorage);first.state.rows=[record];
+  assert.equal(await (await first.db.cloudPreview('sample',960)).text(),'preview960');
+  assert.deepEqual(calls,[[record.storagePath,'preview960']]);
+  const reopen=fixture(cache,objectStorage);reopen.state.rows=[record];
+  assert.equal(await (await reopen.db.cloudPreview('sample',480)).text(),'preview960');
+  assert.equal(await (await reopen.db.cloudPreview('sample',600)).text(),'preview960');
+  assert.equal(calls.length,1,'No redundant small-tier COS processing after reload');
+});
