@@ -8,7 +8,7 @@ import {neutralizePaperChroma} from './paper-chroma-preprocess.js';
 export async function detectPaperCandidates(bitmap,box,smallestMM=6,{
   balanceLight=false,paperRectified=false,paperWidthMM=210,paperHeightMM=297,
   recognition='auto',recognitionPixels=900,
-  recognitionPreprocess={},recognitionPostprocess={},mergeSharedCarrier=true,onProgress=()=>{},onDiagnostic=()=>{}
+  recognitionPreprocess={},recognitionPostprocess={},mergeSharedCarrier=true,onProgress=()=>{},onDiagnostic=()=>{},onAnalysisRaster=()=>{}
 }={}){
   const profile=recognitionProfile(recognition,recognitionPixels);
   // A single discovery scale keeps material identities and candidate geometry
@@ -17,6 +17,10 @@ export async function detectPaperCandidates(bitmap,box,smallestMM=6,{
   const discoveryRatio=Math.min(1,900/Math.max(bitmap.width*box.w,bitmap.height*box.h));
   const dw=Math.max(1,Math.round(bitmap.width*box.w*discoveryRatio)),dh=Math.max(1,Math.round(bitmap.height*box.h*discoveryRatio));
   const discoveryPixels=await analysisPixels(bitmap,box,dw,dh);
+  // Give the downstream colour-only paper-light estimator the same source
+  // analysis raster instead of rescaling the full corrected page again.
+  // This callback never changes boxes, refinement settings or alpha masks.
+  onAnalysisRaster({data:discoveryPixels,width:dw,height:dh});
   const discoveryFrame={data:paperRectified?neutralizePaperChroma(discoveryPixels,dw,dh):discoveryPixels,width:dw,height:dh};
   const ratio=Math.min(1,profile.analysisMaxDimension/Math.max(bitmap.width*box.w,bitmap.height*box.h));
   const w=Math.max(1,Math.round(bitmap.width*box.w*ratio)),h=Math.max(1,Math.round(bitmap.height*box.h*ratio));
