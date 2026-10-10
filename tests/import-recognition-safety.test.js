@@ -13,12 +13,14 @@ test('verified ca0f import does not invoke the speculative PR88/PR92 recovery al
  assert.doesNotMatch(app,/detectImportRegions\(|recoverImportCandidate\(|fixedWorkingSize:true/);
  assert.doesNotMatch(perspective,/fixedWorkingSize|fixedImportFrameSize/);
 });
-test('mobile retries quad at higher resolution only after the stable 800px attempt',async()=>{
+test('mobile uses one canonical 800px white-paper quad analysis',async()=>{
  const perspective=await source('perspective.js');
- assert.match(perspective,/for\(const maxEdge of \[800,1200,1600\]\)/);
- assert.match(perspective,/if\(corners\)return corners/);
- assert.match(perspective,/if\(ratio===1\)break/);
- assert.match(perspective,/return null/);
+ const worker=await source('opencv-worker.js');
+ assert.match(perspective,/PAPER_DETECTION_LONG_EDGE=800/);
+ assert.match(perspective,/return visionTask\('quad'/);
+ assert.doesNotMatch(perspective,/PAPER_RETRY_LONG_EDGE|for\(const longest|for\(const maxEdge/);
+ assert.match(worker,/detectWhitePaperQuad\(lines,blurred\.data,support\.data/);
+ assert.doesNotMatch(worker,/paperQuadFromLines|if\(best\)return best\.corners/);
 });
 test('failed mobile A4 detection never produces raw photo pseudo-materials',async()=>{
  const app=await source('app.js'),ui=await source('import-workspace-ui.js');
