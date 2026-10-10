@@ -2,37 +2,43 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {renderImportInspection} from '../src/import-workspace-ui.js';
 
-function makeState({processing='正在处理第 2 件素材…',candidates=[]}={}){
- return {
-  route:'import',importMode:'material',importStep:'inspect',
-  importProcessing:processing,importIndex:0,
-  importRecords:[{url:'blob:photo',confirmed:false,candidates:candidates.map(c=>c.region),
-    candidateData:candidates,candidateURLs:candidates.map(c=>c.url),prefetchStatus:'ready'}],
-  importCandidates:candidates.map(c=>c.region),
-  importCandidateData:candidates,importCandidateURLs:candidates.map(c=>c.url),
-  importCandidateSelection:new Set(candidates.map((_,i)=>i)),
-  importURL:'blob:photo',importBitmap:{width:1200,height:1700},
-  importBox:{x:0,y:0,w:1,h:1},
-  importRecognition:'auto',showCorrectionPreview:false,showManualBox:false,
-  paperSize:'a4',paperOrientation:'portrait',preferences:{recognitionPixels:900}
- };
+const candidates=Array.from({length:12},(_,i)=>({
+  region:{x:.01+i*.01,y:.02,w:.12,h:.1},
+  url:'blob:cutout-'+i,width:32,height:48,selected:true
+}));
+function state({processing='',paperNeedsReview=false,items=candidates}={}){
+  return {
+    route:'import',importMode:'material',importStep:'inspect',
+    importProcessing:processing,importIndex:0,
+    importRecords:[{url:'blob:photo',confirmed:false,
+      paperNeedsReview,candidates:items.map(c=>c.region)}],
+    importCandidates:items.map(c=>c.region),importCandidateData:items,
+    importCandidateURLs:items.map(c=>c.url),
+    importCandidateSelection:new Set(items.map((_,i)=>i)),
+    importURL:'blob:photo',importFile:{size:157991,name:'photo.jpg'},
+    importBitmap:{width:1706,height:1279},
+    importBox:{x:0,y:0,w:1,h:1},importRecognition:'auto',
+    showCorrectionPreview:false,showManualBox:false,paperSize:'a4',
+    paperOrientation:'auto',preferences:{recognitionPixels:900},series:[]
+  };
 }
-test('mobile and desktop candidate thumbnails remain visible while refinement is busy',()=>{
- const a={region:{x:.15,y:.2,w:.2,h:.2},url:'blob:recognized-1',width:42,height:60,selected:true};
- const b={region:{x:.44,y:.3,w:.2,h:.2},url:'blob:recognized-2',width:32,height:25,selected:true};
- const html=renderImportInspection({state:makeState({candidates:[a,b]}),esc:String,fmt:String});
- assert.match(html,/候选素材 · 2/);
- assert.match(html,/src="blob:recognized-1"/);
- assert.match(html,/src="blob:recognized-2"/);
- assert.ok(!html.includes('src=""'));
- assert.equal((html.match(/class="candidate-choice"/g)||[]).length,2);
- assert.match(html,/aria-busy="true"/);
+const render=s=>renderImportInspection({state:s,esc:String,fmt:String});
+test('all twelve ca0f cutouts and selection positions appear once extraction finishes',()=>{
+  const html=render(state());
+  assert.match(html,/候选素材 · 12/);
+  for(let i=0;i<12;i++)assert.ok(html.includes('src="blob:cutout-'+i+'"'),String(i));
+  assert.equal((html.match(/class="candidate-choice"/g)||[]).length,12);
+  assert.match(html,/1706 × 1279/);
+  assert.match(html,/154 KiB/);
 });
-test('one raw-crop recovery visibly indicates the boundary requires attention',()=>{
- const candidate={region:{x:.1,y:.2,w:.3,h:.2},url:'blob:raw-recovery',
-   previewFallback:true,reviewStatus:'pendingReview',width:63,height:59};
- const html=renderImportInspection({state:makeState({processing:'',candidates:[candidate]}),esc:String,fmt:String});
- assert.match(html,/候选素材 · 1/);
- assert.match(html,/src="blob:raw-recovery"/);
- assert.match(html,/边缘待检查 · 原始裁片/);
+test('unrectified phone photo clearly asks for paper-corner review',()=>{
+  const html=render(state({items:[],paperNeedsReview:true}));
+  assert.match(html,/自动检测未找到可靠纸张/);
+  assert.match(html,/暂不对未校正的A4照片进行自动素材识别/);
+  assert.match(html,/原始照片/);
+});
+test('recognized cutouts are not confused with a working progress indicator',()=>{
+  const html=render(state({processing:'正在识别中',items:[]}));
+  assert.match(html,/aria-busy="true"/);
+  assert.match(html,/识别中/);
 });
