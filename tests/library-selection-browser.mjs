@@ -18,7 +18,13 @@ try{
     assert.ok(await evaluate('!!document.querySelector(".swift-series-controls > .shiye-search input")'),
       'Series list should use the same search component as the material catalog');
     assert.ok(!(await labels('.view-head .actions')).includes('批量'));await named('.view-head .actions','选择');
-    assert.deepEqual(await labels('.library-management-tray:not([hidden])'),['全选页面','清空选择','查看所选','更多操作','删除系列']);await click('[data-act="series-detail"][data-id="selection-s1"]');await named('.library-management-tray:not([hidden])','查看所选');assert.equal(await evaluate('[...document.querySelectorAll("[data-act=series-detail]")].filter(b=>!b.hidden).length'),1);await capture('series-selected',w,h);await named('.library-management-tray:not([hidden])','返回筛选');
+    assert.deepEqual(await labels('.library-management-tray:not([hidden])'),['全选页面','清空选择','查看所选','更多操作','删除系列']);await click('[data-act="series-detail"][data-id="selection-s1"]');await named('.library-management-tray:not([hidden])','查看所选');assert.equal(await evaluate('[...document.querySelectorAll("[data-act=series-detail]")].filter(b=>!b.hidden).length'),1);await capture('series-selected',w,h);
+    await named('.library-management-tray:not([hidden])','更多操作');
+    await named('.selection-more-menu','导出系列 ›');await wait('.selection-side-panel');
+    assert.ok(await evaluate('(()=>{const a=document.querySelector(".selection-side-panel").getBoundingClientRect(),b=document.querySelector(".selection-more-menu").getBoundingClientRect();return a.right<=b.left-5||b.right<=a.left-5;})()'), 'Series export panel must not cover More');
+    await capture('series-export-side-panel',w,h);
+    await named('.library-management-tray:not([hidden])','更多操作');
+    await named('.library-management-tray:not([hidden])','返回筛选');
     await click('.swift-tabs button:nth-child(2)','.asset-grid');assert.equal(await evaluate('!!document.querySelector(".library-management-tray:not([hidden])")'),false);await named('.view-head .actions','选择');await click('[data-act="detail"][data-id="selection-a"]');
     const assetActions=['全选页面','清空选择','查看所选','加入搭配','更多操作','删除素材'];assert.deepEqual(await labels('.library-management-tray:not([hidden])'),assetActions);await click('.swift-tabs button:nth-child(1)','.series-grid');assert.deepEqual(await labels('.library-management-tray:not([hidden])'),assetActions);assert.ok(await evaluate('document.querySelector(".library-management-tray:not([hidden]) strong").textContent.includes("1")'));
     await named('.view-head .actions','完成');assert.equal(await evaluate('!!document.querySelector(".library-management-tray:not([hidden])")'),false,'系列页完成选择必须同时卸载素材底栏');await click('.swift-tabs button:nth-child(2)','.asset-grid');await named('.view-head .actions','选择');await click('[data-act="detail"][data-id="selection-a"]');await click('.swift-tabs button:nth-child(1)','.series-grid');assert.deepEqual(await labels('.library-management-tray:not([hidden])'),assetActions);
