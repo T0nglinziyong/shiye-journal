@@ -1,13 +1,13 @@
 // Read-only COS inventory analysis. No delete tickets or COS DELETE actions
 // are exposed. Storage inventory alone cannot prove an object is unreferenced
 // by another device's durable outbox, a historical backup or external export.
-const HASHED_OBJECT=/^[0-9a-f]{64}(?:-preview480\.webp|-project\.json(?:\.gz)?(?:-preview480\.webp)?)?$/;
+const HASHED_OBJECT=/^[0-9a-f]{64}(?:-preview720\.webp|-project\.json(?:\.gz)?(?:-preview720\.webp)?)?$/;
 const UUID_PREFIX=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\//i;
 
 export function cosObjectKind(key){
   const name=String(key||'').split('/').at(-1);
   if(!HASHED_OBJECT.test(name||''))return 'other';
-  if(name.endsWith('-preview480.webp'))return 'derivative';
+  if(name.endsWith('-preview720.webp'))return 'derivative';
   if(name.includes('-project.json'))return 'document';
   return 'original';
 }

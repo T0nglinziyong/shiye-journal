@@ -15,7 +15,7 @@ function fixture(cache=null,objectStorage=null,projectPreview=()=>null){
     assert.ok(['shiye_records','shiye_revisions','shiye_commits'].includes(table));return query;
   },storage:{from(bucket){assert.equal(bucket,'shiye-private');return {
     async upload(path,data,options){state.uploads.push({path,data,options});await state.uploadGate;return {error:state.fail?{statusCode:500}:null};},
-    async download(path){state.downloads++;return {data:state.uploads.find(row=>row.path===path)?.data||new Blob(['private image']),error:state.missingThumbnail&&path.includes('preview480')?{message:'thumbnail missing'}:null};}};}},
+    async download(path){state.downloads++;return {data:state.uploads.find(row=>row.path===path)?.data||new Blob(['private image']),error:state.missingThumbnail&&path.includes('preview720')?{message:'thumbnail missing'}:null};}};}},
     async rpc(name,args){assert.equal(name,'shiye_commit_v2');state.calls.push(args);if(state.rpcAbort)throw new DOMException('request aborted','AbortError');if(state.commits.has(args.operation_id))return state.loseAck?{error:{message:'network response lost'}}:{data:state.commits.get(args.operation_id)};if(state.fail||args.expected_revision!==state.revision)return {error:{message:'conflict'}};const revision=++state.revision;state.commits.set(args.operation_id,revision);if(state.loseAck)return {error:{message:'network response lost'}};return {data:revision};}
   };
   const db=createCloudStore({cache,objectStorage,projectPreview,cloudClient:()=>client,requireCloudUser:async()=>{if(state.authError)throw Error('not authorized');return {id:'owner-uuid'};}});
@@ -216,11 +216,11 @@ test('cloud objects require explicit current storage provider metadata',async()=
 });
 test('original and optional preview upload overlap but metadata waits for the original',async()=>{
   const oldBitmap=globalThis.createImageBitmap,oldDocument=globalThis.document;
-  globalThis.createImageBitmap=async()=>({width:480,height:480,close(){}});
+  globalThis.createImageBitmap=async()=>({width:720,height:720,close(){}});
   globalThis.document={createElement:()=>({getContext:()=>({drawImage(){}}),toBlob:callback=>callback(new Blob(['preview'],{type:'image/webp'}))})};
   try{
     let releaseOriginal;const gate=new Promise(resolve=>releaseOriginal=resolve),started=[];
-    const cos={enabled:true,async upload(path){started.push(path);if(!path.endsWith('-preview480.webp'))await gate;}};
+    const cos={enabled:true,async upload(path){started.push(path);if(!path.endsWith('-preview720.webp'))await gate;}};
     const {state,db}=fixture(null,cos);const commit=db.cloudTransaction(['blobs'],tx=>tx.objectStore('blobs').put({id:'parallel',data:new Blob(['original'],{type:'image/png'})}));
     for(let i=0;i<100&&started.length<2;i++)await new Promise(resolve=>setTimeout(resolve,1));
     assert.equal(started.length,2);assert.equal(state.calls.length,0,'cloud metadata must not precede the original');
@@ -293,18 +293,18 @@ test('private image download cache and authorization failures are explicit',asyn
   const denied=fixture();denied.state.authError=true;await assert.rejects(denied.db.cloudAll('assets'),/not authorized/);assert.equal(denied.state.calls.length,0);
 });
 test('private thumbnails download without the original and reuse persistent hash cache',async()=>{
-  const cache=memoryCache(),a=fixture(cache);a.state.rows=[{id:'b',storagePath:'owner-uuid/hash',storageProvider:'supabase',thumbnailPath:'owner-uuid/hash-preview480.webp'}];
+  const cache=memoryCache(),a=fixture(cache);a.state.rows=[{id:'b',storagePath:'owner-uuid/hash',storageProvider:'supabase',thumbnailPath:'owner-uuid/hash-preview720.webp'}];
   await a.db.cloudPreview('b');assert.equal(a.state.downloads,1);
   const b=fixture(cache);b.state.rows=a.state.rows;await b.db.cloudPreview('b');assert.equal(b.state.downloads,0);
-  const denied=fixture();denied.state.rows=[{id:'b',storagePath:'owner-uuid/hash',storageProvider:'supabase',thumbnailPath:'other/hash-preview480.webp'}];await assert.rejects(denied.db.cloudPreview('b'),/缩略图不属于当前账号/);assert.equal(denied.state.downloads,0);
+  const denied=fixture();denied.state.rows=[{id:'b',storagePath:'owner-uuid/hash',storageProvider:'supabase',thumbnailPath:'other/hash-preview720.webp'}];await assert.rejects(denied.db.cloudPreview('b'),/缩略图不属于当前账号/);assert.equal(denied.state.downloads,0);
 });
 test('a missing remote thumbnail is rebuilt from its original instead of showing a broken card',async()=>{
-  const a=fixture();a.state.missingThumbnail=true;a.state.rows=[{id:'b',storagePath:'owner-uuid/hash',storageProvider:'supabase',thumbnailPath:'owner-uuid/hash-preview480.webp'}];
+  const a=fixture();a.state.missingThumbnail=true;a.state.rows=[{id:'b',storagePath:'owner-uuid/hash',storageProvider:'supabase',thumbnailPath:'owner-uuid/hash-preview720.webp'}];
   assert.equal(await (await a.db.cloudPreview('b')).text(),'private image');assert.equal(a.state.downloads,2);
 });
 test('COS thumbnails are materialized once for old images and later read without source processing',async()=>{
   const cache=memoryCache(),calls=[],remote=new Map(),original='owner-uuid/'+'a'.repeat(64),
-    derived=original+'-preview480.webp';
+    derived=original+'-preview720.webp';
   remote.set(original,new Blob(['original pixels']));
   const cos={enabled:true,
     async preview(path){calls.push('CI:'+path);return new Blob(['small webp'],{type:'image/webp'});},
@@ -351,7 +351,7 @@ test('cloudAll discards a mixed remote snapshot after concurrent pagination',asy
 });
 
 test('visible private covers batch metadata by account and reuse previews without re-downloading',async()=>{
-  const cache=memoryCache(),a=fixture(cache);a.state.rows=Array.from({length:12},(_,i)=>({id:'cover-'+i,storagePath:'owner-uuid/hash-'+i,storageProvider:'supabase',thumbnailPath:'owner-uuid/hash-'+i+'-preview480.webp'}));
+  const cache=memoryCache(),a=fixture(cache);a.state.rows=Array.from({length:12},(_,i)=>({id:'cover-'+i,storagePath:'owner-uuid/hash-'+i,storageProvider:'supabase',thumbnailPath:'owner-uuid/hash-'+i+'-preview720.webp'}));
   a.state.cloudCopies=a.state.rows.map(record=>({id:record.id,record}));
   const first=await Promise.all(a.state.rows.map(row=>a.db.cloudPreview(row.id)));
   assert.equal(first.length,12);assert.equal(a.state.batchReads,1);assert.equal(a.state.downloads,12);
@@ -366,7 +366,7 @@ test('small editable projects store a standalone cover and reuse it for metadata
   await db.cloudTransaction(['projects'],tx=>tx.objectStore('projects').put(project));
   const first=state.calls[0].operations[0].item,cover=first.drafts[0].coverImageID;
   assert.ok(cover.startsWith('project-cover:supabase:owner-uuid/'));
-  assert.ok(cover.endsWith('-preview480.webp'));
+  assert.ok(cover.endsWith('-preview720.webp'));
   assert.equal(first.drafts[0].items.length,1,'the editable document remains inline');
   assert.equal(await (await db.cloudPreview(cover)).text(),'webp');
   await db.cloudTransaction(['projects'],tx=>tx.objectStore('projects').put({...first,title:'new title'}));
@@ -485,22 +485,4 @@ test('deleting a work retires an older queued autosave so the work is not resurr
   assert.ok(!operations.some(op=>op.store==='projects'&&op.action==='put'&&op.item.id===doc.id),
     'No stale project put may resurrect a deleted work');
   assert.deepEqual(await cache.get('cloud:owner-uuid','import-outbox'),[]);
-});
-
-
-test('persistent COS tier index reuses a cached higher-resolution image on a later visit',async()=>{
-  const cache=memoryCache(),calls=[];
-  const objectStorage={enabled:true,
-    async preview(path,variant){calls.push([path,variant]);return new Blob([variant],{type:'image/webp'});},
-    async download(){throw Error('A larger cached image must be used without COS GET');},
-    async upload(){throw Error('No derived upload is required for an oversized cached tier');}
-  };
-  const record={id:'sample',storageProvider:'cos',storagePath:'owner-uuid/'+'a'.repeat(64)};
-  const first=fixture(cache,objectStorage);first.state.rows=[record];
-  assert.equal(await (await first.db.cloudPreview('sample',960)).text(),'preview960');
-  assert.deepEqual(calls,[[record.storagePath,'preview960']]);
-  const reopen=fixture(cache,objectStorage);reopen.state.rows=[record];
-  assert.equal(await (await reopen.db.cloudPreview('sample',480)).text(),'preview960');
-  assert.equal(await (await reopen.db.cloudPreview('sample',600)).text(),'preview960');
-  assert.equal(calls.length,1,'No redundant small-tier COS processing after reload');
 });

@@ -8,7 +8,7 @@ const project=(id='p')=>({
 });
 test('COS backfill never targets snapshots or a work with an existing preview',()=>{
   assert.equal(needsWorkCover({...project(),isSnapshot:true}),false);
-  assert.equal(needsWorkCover({...project(),drafts:[{id:'d',coverImageID:'project-cover:cos:user/hash-preview480.webp'}]}),false);
+  assert.equal(needsWorkCover({...project(),drafts:[{id:'d',coverImageID:'project-cover:cos:user/hash-preview720.webp'}]}),false);
   assert.equal(needsWorkCover({...project(),drafts:[{id:'d',coverImageID:'project-cover:cos:user/hash-preview.webp'}]}),true,'legacy cover must be upgraded');
   assert.equal(needsWorkCover({...project(),coverStaticPath:'/presets/a.png',coverBaselineUpdatedAt:project().updatedAt}),false);
   assert.equal(needsWorkCover({...project(),isDraft:true}),true);
