@@ -54,7 +54,9 @@ test('mobile paper failure pauses c6-equivalent segmentation until user confirma
   assert.match(code,/rec\.backgroundDetected=true;rec\.paperNeedsReview=false/);
   assert.match(code,/importScroll=state\.route==='import'/);
   assert.match(code,/inspector\.scrollTop=importScroll\.inspector/);
-  assert.match(perspective,/for\(const maxEdge of \[800,1200,1600\]\)/);
+  assert.match(perspective,/PAPER_DETECTION_LONG_EDGE=800/);
+  assert.match(perspective,/return visionTask\('quad'/);
+  assert.doesNotMatch(perspective,/PAPER_RETRY_LONG_EDGE/);
   assert.doesNotMatch(perspective,/fixedImportFrameSize|fixedWorkingSize/);
 });
 test('leaving Materials and returning from Works restores its active tab and selected series',async()=>{
