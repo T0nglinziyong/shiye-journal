@@ -373,7 +373,7 @@ function renderMatching(){return renderMatchingPage({state,head,imgTag,esc,kindN
 function matchingScope(){return buildMaterialScope({basket:state.basket,coreIDs:state.coreIDs,recommendations:matchingRecommendations(state),excluded:state.excludedAssetIDs,autoIncludeRecommendations:state.aiSettings.autoIncludeRecommendations,requireAllCandidates:state.aiSettings.requireAllCandidates});}
 // Common actions update only affected Matching panes, preserving the entire
 // remaining page, sticky header, textarea selection and decoded thumbnails.
-function updateMatchingRegions(regions){
+function updateMatchingRegions(regions,{persist=true}={}){
   if(state.route!=='matching')return render();
   document.querySelector('#basket-count').textContent=state.basket.length;
   const patched=patchMatchingView({
@@ -381,6 +381,14 @@ function updateMatchingRegions(regions){
     onAction:(action,id,value)=>handle(action,id,value),mountIcons
   });
   if(!patched)render();
+  // Full render previously invoked bindPage(), which automatically staged
+  // matching state. Incremental updates intentionally skip bindPage(), so
+  // explicitly retain that durable local save for stars, exclusions, basket,
+  // and filter changes. createMatchingSession serializes concurrent saves.
+  if(persist)void matchingSession.persist().catch(error=>{
+    console.warn('本机搭配状态保存失败',error);
+    toast('本机搭配状态暂存失败：'+error.message);
+  });
 }
 function refreshMatchingRecommendations(){const current=view.querySelector('.match-recommendations');if(!current)return;const scroll=captureMatchingScroll(view,window);const template=document.createElement('template');template.innerHTML=renderMatching();const next=template.content.querySelector('.match-recommendations');if(!next)return;current.replaceWith(next);next.querySelectorAll('[data-act]').forEach(el=>el.addEventListener('click',()=>handle(el.dataset.act,el.dataset.id,el.dataset.val)));mountIcons(next);const summary=view.querySelector('.basket>.muted'),fresh=template.content.querySelector('.basket>.muted');if(summary&&fresh)summary.textContent=fresh.textContent;restoreMatchingScroll(view,scroll,window);}
 function workInkPreview(d){if(!d.strokes?.length)return '';const paths=d.strokes.map(s=>{const points=(s.points||[]).filter(p=>Number.isFinite(p.x)&&Number.isFinite(p.y));if(!points.length)return '';const color=esc(s.color||'#2b5245'),width=Math.max(.5,Number(s.width)||3),opacity=Math.max(0,Math.min(1,Number(s.opacity??1)));if(points.length===1)return `<circle cx="${points[0].x}" cy="${points[0].y}" r="${width/2}" fill="${color}" opacity="${opacity}"/>`;return `<path d="${points.map((p,n)=>`${n?'L':'M'}${p.x} ${p.y}`).join(' ')}" fill="none" stroke="${color}" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round" opacity="${opacity}"/>`;}).join('');return `<svg class="work-ink-preview" viewBox="0 0 ${d.canvas.width} ${d.canvas.height}" preserveAspectRatio="none" aria-hidden="true">${paths}</svg>`;}
@@ -719,7 +727,7 @@ async function handle(action,id,value){try{switch(action){
     });
     state.matchProposalBatch=batch+1;
     state.matchProposals=[...suggestions,...history].slice(0,24);
-    await matchingSession.persist();updateMatchingRegions(['.match-proposals']);
+    await matchingSession.persist();updateMatchingRegions(['.match-proposals'],{persist:false});
     if(!suggestions.length)toast('当前没有足够素材组成搭配方案');
     break;
   }
@@ -733,7 +741,7 @@ async function handle(action,id,value){try{switch(action){
     state.basket=selected;state.coreIDs=proposal.requiredAssetIDs.slice();
     state.matchCore=state.coreIDs[0]||selected[0]||null;
     if(!state.matchIntent.trim())state.matchIntent=proposal.theme||'';
-    await matchingSession.persist();updateMatchingRegions(['.match-basket-scroll','.basket>.muted','.match-rec-grid','.match-recommendations .match-panel-head small','.match-action']);
+    await matchingSession.persist();updateMatchingRegions(['.match-basket-scroll','.basket>.muted','.match-rec-grid','.match-recommendations .match-panel-head small','.match-action'],{persist:false});
     const intent=view.querySelector('#match-intent');if(intent&&intent.value!==state.matchIntent)intent.value=state.matchIntent;
     toast('已选用「'+proposal.title+'」，仍可自由调整素材');
     break;
