@@ -7,10 +7,7 @@ import {visionTask} from './vision-runtime.js';
 export function pixelCanvas(pixels,width,height){
   const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;
   const ctx=canvas.getContext('2d',{willReadFrequently:true,colorSpace:'srgb'});
-  // OpenCV already returns Uint8ClampedArray. Avoid allocating a second
-  // full-resolution RGBA copy before putImageData transfers it into Canvas.
-  const rgba=pixels instanceof Uint8ClampedArray?pixels:new Uint8ClampedArray(pixels);
-  ctx.putImageData(new ImageData(rgba,width,height),0,0);
+  ctx.putImageData(new ImageData(new Uint8ClampedArray(pixels),width,height),0,0);
   return canvas;
 }
 export async function decodeRecognitionImage(blob){
@@ -23,11 +20,7 @@ export async function decodeRecognitionImage(blob){
     if(hasDisplayP3Profile(bytes))displayP3ToSrgb(data);
     return pixelCanvas(data,width,height);
   }
-  // Non-JPEG formats may carry ICC profiles too. Let the browser apply
-  // embedded colour metadata rather than taking profile-encoded samples as
-  // sRGB; sourcePixels() always reads through an explicit sRGB canvas.
-  // JPEG remains pinned to the deterministic decoder and explicit P3->sRGB.
-  return createImageBitmap(blob,{imageOrientation:'from-image',colorSpaceConversion:'default'});
+  return createImageBitmap(blob,{imageOrientation:'from-image',colorSpaceConversion:'none'});
 }
 // The pinned JPEG decoder yields profile-encoded samples. iPhone photos often
 // carry Display P3; putImageData otherwise labels those samples as sRGB.

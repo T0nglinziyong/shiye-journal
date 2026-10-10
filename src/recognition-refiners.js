@@ -1,8 +1,5 @@
 import {visionTask,visionParallelTasks,visionParallelism} from './vision-runtime.js';
-import {workerRasterPair} from './worker-raster-pair.js';
 
-// One transfer-owned copy per unique raster. OpenCV reads both arrays but
-// never edits either: sharing the same buffer does not change segmentation.
 const chunks=(items,count)=>{
   const out=Array.from({length:Math.min(count,items.length)},()=>[]);
   items.forEach((item,i)=>out[i%out.length].push(item));
@@ -47,10 +44,8 @@ async function parallelFinalPipeline({
   try{
     const results=await visionParallelTasks('process-material-boxes',groups.map(boxes=>({
       // One frame copy per worker/chunk, never one copy per material.
-      // Reuse one transferred RGBA buffer when discovery and segmentation
-      // use the same 900px raster (the default). The worker only reads pixels;
-      // ownership is transferred once, never duplicated per field.
-      ...workerRasterPair(frame,sourceFrame),
+      pixels:new Uint8ClampedArray(frame.data),
+      sourcePixels:new Uint8ClampedArray(sourceFrame.data),
       transferInput:true,
       width,height,boxes,method,paperWidthMM,paperHeightMM,mergeSharedCarrier,
       chromaEdges:preprocess.chromaEdges!==false,

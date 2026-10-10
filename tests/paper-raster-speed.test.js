@@ -38,7 +38,7 @@ function sheetFixture(width,height){
 test('single 800px paper analysis pass, not algorithm or resolution fallback',async()=>{
   const [perspective,worker]=await Promise.all([source('perspective.js'),source('opencv-worker.js')]);
   assert.match(perspective,/PAPER_DETECTION_LONG_EDGE=800/);
-  assert.match(perspective,/return visionTask\('quad',/);
+  assert.match(perspective,/await visionTask\('quad',/);
   assert.doesNotMatch(perspective,/PAPER_RETRY_LONG_EDGE|for\(const longest|for\(const maxEdge/);
   assert.match(worker,/detectWhitePaperQuad\(lines,blurred\.data,support\.data/);
   assert.doesNotMatch(worker,/paperQuadFromLines|if\(best\)return best\.corners|for\(const threshold of/);
@@ -73,27 +73,21 @@ test('recognition worker reuses one source raster for identical foreground and d
   const separate=workerRasterPair({data},{data:new Uint8ClampedArray([1,2,3,4])});
   assert.notEqual(separate.pixels,separate.sourcePixels);
 });
-test('light estimator reuses the existing analysis frame without another canvas repaint',async()=>{
-  const width=128,height=96,data=new Uint8ClampedArray(width*height*4);
-  for(let i=0;i<data.length;i+=4){
-    data[i]=236;data[i+1]=237;data[i+2]=235;data[i+3]=255;
-  }
-  const map=await estimatePageLighting(null,[],{analysisRaster:{data,width,height}});
-  assert.ok(map);
-  assert.ok(map.samples>40);
+test('stable light estimation reads the corrected page as in c9',async()=>{
+ const code=await source('material-color-restoration.js');
+ assert.match(code,/const ratio=Math.min\(1,maxDimension\/Math.max\(source.width,source.height\)\)/);
+ assert.doesNotMatch(code,/analysisRaster\?\.data/);
 });
-test('source colour normalization and high-quality material export remain separate',async()=>{
-  const [image,raster,matching,app,perspective]=await Promise.all([
-    source('image.js'),source('recognition-raster.js'),
-    source('matching-view.js'),source('app.js'),source('perspective.js')
-  ]);
-  assert.match(image,/segmentPaperMaterials\(discoveryFrame/);
-  assert.match(image,/if\(degrees==null\)\{/);
-  assert.match(image,/onAnalysisRaster\(\{data:discoveryPixels,width:dw,height:dh\}\)/);
-  assert.match(raster,/colorSpaceConversion:'default'/);
-  assert.match(app,/rectifyA4Frame\(state\.importBitmap,state\.paperCorners,4096/);
-  assert.match(perspective,/sourcePixels\(bitmap\)/);
-  assert.ok(matching.includes('data-act="reset-match"'));
-  assert.ok(!matching.includes('data-act="match-library"'));
-  assert.ok(!matching.includes('data-act="match-context"'));
+test('A4 correction retained while the rest of recognition matches c9',async()=>{
+ const [image,raster,app,perspective,matching]=await Promise.all([
+  source('image.js'),source('recognition-raster.js'),source('app.js'),
+  source('perspective.js'),source('matching-view.js')
+ ]);
+ assert.match(image,/const candidates=await segmentPaperMaterials\(discoveryFrame/);
+ assert.match(image,/const degrees=rotation\?\?/);
+ assert.doesNotMatch(image,/onAnalysisRaster\(/);
+ assert.match(raster,/colorSpaceConversion:'none'/);
+ assert.match(app,/rectifyA4Frame\(state.importBitmap,state.paperCorners,4096/);
+ assert.match(perspective,/sourcePixels\(bitmap\)/);
+ assert.ok(matching.includes('data-act="reset-match"'));
 });

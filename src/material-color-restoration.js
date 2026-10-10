@@ -62,12 +62,7 @@ export function restoreRGBPixels(pixels,width,height,map,sourceX=0,sourceY=0,sou
   }
   return out;
 }
-export async function estimatePageLighting(source,regions=[],{maxDimension=900,analysisRaster=null}={}){
-  // Discovery already owns a 900px *unmodified* source RGB raster. When it
-  // covers the corrected A4 page, reuse its pixels for the colour-only light
-  // map instead of allocating a second canvas and resampling the whole page.
-  if(analysisRaster?.data?.length===analysisRaster.width*analysisRaster.height*4)
-    return lightMapFromPixels(analysisRaster.data,analysisRaster.width,analysisRaster.height,regions);
+export async function estimatePageLighting(source,regions=[],{maxDimension=900}={}){
   const ratio=Math.min(1,maxDimension/Math.max(source.width,source.height));
   const width=Math.round(source.width*ratio),height=Math.round(source.height*ratio);
   const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;
