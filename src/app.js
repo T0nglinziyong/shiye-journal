@@ -72,6 +72,7 @@ import {offlinePreviewBytes as encodeOfflinePreview} from './offline-preview.js'
 import {buildMaterialScope} from './matching-materials.js';
 import {generateMaterialProposals} from './matching-proposals.js';
 import {matchingRecommendations,renderMatchingPage} from './matching-view.js';
+import {captureMatchingScroll,restoreMatchingScroll} from './matching-scroll.js';
 import {selectJournalReferenceCases,loadJournalReferenceCases} from './journal-reference-catalog.js';
 import {loadJournalTemplateReferences} from './journal-template-references.js';
 import {clearJournalPresetImages} from './journal-preset-images.js';
@@ -234,6 +235,7 @@ function captureSettings(){
   if(view.querySelector('#setting-display'))state.preferences={...state.preferences,display:view.querySelector('#setting-display').value,backdrop:view.querySelector('#setting-backdrop').value,maxPageItems:Number(view.querySelector('#setting-page-items').value)};
 }
 const routeScroll=new Map();
+let matchingScrollMemory=null;
 let viewInteractionRevision=0;
 for(const event of ['click','input','pointerdown'])view.addEventListener(event,()=>viewInteractionRevision++,true);
 let backgroundViewPending=false,backgroundViewTimer=null;
@@ -295,6 +297,12 @@ function render(){document.body.classList.toggle('editing',state.route==='editor
   // The import inspector is independently scrollable. Every recognition step
   // and settings change used to replace #view, jumping it back to the first
   // option. Capture before teardown and restore immediately after mounting.
+  // Catch the OLD matching DOM even if route() has already updated state.route:
+  // leaving Matching for another tab must remember every pane's scroll, too.
+  const previousMatchingScroll=captureMatchingScroll(view,window);
+  if(previousMatchingScroll)matchingScrollMemory={
+    account:state.accountId||'browser',scroll:previousMatchingScroll
+  };
   const importScroll=state.route==='import'&&view.querySelector('.import-inspector')
     ?{inspector:view.querySelector('.inspector-scroll')?.scrollTop||0,
       queue:view.querySelector('.queue-strip')?.scrollLeft||0,
@@ -312,6 +320,12 @@ function render(){document.body.classList.toggle('editing',state.route==='editor
     view.localWorkCoverDispose=localWorkCovers.observe(view);
     view.workCoverDispose=workCoverBackfill.observe(view);
   }if(state.route==='editor'){view.editorDraft=current();view.editorInk=current().strokes;view.editorLayoutKey=editorLayoutKey();mountCanvasEditor({state,view,body,modal,current,checkpoint,saveProject,render,route,flushSave,toast,esc,imgTag,asset,handle,openCutoutCheck,openAICreation});mountCanvasSelection({state,view,current,checkpoint,saveProject,render,toast});}
+  if(state.route==='matching'&&
+     matchingScrollMemory?.account===(state.accountId||'browser')){
+    // The page and every independent scrollable column/textarea keep their
+    // positions after star/remove/filter/proposal/generation rerenders.
+    restoreMatchingScroll(view,matchingScrollMemory.scroll,window);
+  }
   if(importScroll&&state.route==='import'){
     const inspector=view.querySelector('.inspector-scroll'),queue=view.querySelector('.queue-strip');
     if(inspector)inspector.scrollTop=importScroll.inspector;
@@ -345,7 +359,7 @@ const kindName=k=>({sticker:'贴纸',paper:'纸张',tape:'胶带',photo:'照片'
 function renderSeries(){return head('我的素材','把喜欢的，收进系列。')+`<div class="grid series-grid ${state.preferences.display==='list'?'list-grid':''}">${[...state.series].sort((a,b)=>a.id.startsWith('B700')&&b.id.startsWith('B700')?b.id.localeCompare(a.id):a.id.startsWith('B700')?-1:b.id.startsWith('B700')?1:0).map((s,index)=>{const members=state.assets.filter(a=>a.seriesID===s.id&&!a.isProjectInternal);const cover=seriesCovers(s,state.assets);return `<button class="card" data-act="series-detail" data-id="${s.id}"><div class="series-cover">${cover.map(a=>imgTag(a,index<2)).join('')}</div><div class="card-body"><h3>${esc(s.title)} <span aria-hidden="true">→</span></h3><p>${members.length} 件素材</p></div></button>`;}).join('')}</div>`;}
 function renderMatching(){return renderMatchingPage({state,head,imgTag,esc,kindName,session:matchingSession});}
 function matchingScope(){return buildMaterialScope({basket:state.basket,coreIDs:state.coreIDs,recommendations:matchingRecommendations(state),excluded:state.excludedAssetIDs,autoIncludeRecommendations:state.aiSettings.autoIncludeRecommendations,requireAllCandidates:state.aiSettings.requireAllCandidates});}
-function refreshMatchingRecommendations(){const current=view.querySelector('.match-recommendations');if(!current)return;const template=document.createElement('template');template.innerHTML=renderMatching();const next=template.content.querySelector('.match-recommendations');if(!next)return;current.replaceWith(next);next.querySelectorAll('[data-act]').forEach(el=>el.addEventListener('click',()=>handle(el.dataset.act,el.dataset.id,el.dataset.val)));mountIcons(next);const summary=view.querySelector('.basket>.muted'),fresh=template.content.querySelector('.basket>.muted');if(summary&&fresh)summary.textContent=fresh.textContent;}
+function refreshMatchingRecommendations(){const current=view.querySelector('.match-recommendations');if(!current)return;const scroll=captureMatchingScroll(view,window);const template=document.createElement('template');template.innerHTML=renderMatching();const next=template.content.querySelector('.match-recommendations');if(!next)return;current.replaceWith(next);next.querySelectorAll('[data-act]').forEach(el=>el.addEventListener('click',()=>handle(el.dataset.act,el.dataset.id,el.dataset.val)));mountIcons(next);const summary=view.querySelector('.basket>.muted'),fresh=template.content.querySelector('.basket>.muted');if(summary&&fresh)summary.textContent=fresh.textContent;restoreMatchingScroll(view,scroll,window,{restoreViewport:false});}
 function workInkPreview(d){if(!d.strokes?.length)return '';const paths=d.strokes.map(s=>{const points=(s.points||[]).filter(p=>Number.isFinite(p.x)&&Number.isFinite(p.y));if(!points.length)return '';const color=esc(s.color||'#2b5245'),width=Math.max(.5,Number(s.width)||3),opacity=Math.max(0,Math.min(1,Number(s.opacity??1)));if(points.length===1)return `<circle cx="${points[0].x}" cy="${points[0].y}" r="${width/2}" fill="${color}" opacity="${opacity}"/>`;return `<path d="${points.map((p,n)=>`${n?'L':'M'}${p.x} ${p.y}`).join(' ')}" fill="none" stroke="${color}" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round" opacity="${opacity}"/>`;}).join('');return `<svg class="work-ink-preview" viewBox="0 0 ${d.canvas.width} ${d.canvas.height}" preserveAspectRatio="none" aria-hidden="true">${paths}</svg>`;}
 function workCover(d,priority=false,snapshotOnly=false,projectID=null){
  if(!d)return '';
