@@ -271,7 +271,7 @@ function route(name,{back=false,restoreMaterial=false}={}){
       seriesID:state.seriesID,libraryTab:parity.libraryTab});
   }
   if(restoreMaterial&&['series','library'].includes(name)){
-    state.seriesID=lastMaterialLocation.seriesID||'all';
+    state.seriesID=state.series.some(row=>row.id===lastMaterialLocation.seriesID)?lastMaterialLocation.seriesID:'all';
     parity.libraryTab=lastMaterialLocation.libraryTab||'series';
   }
   if(!back&&!fromSettings&&name!=='settings'&&name!==state.route)navigationHistory.push({route:state.route,seriesID:state.seriesID,detailAssetID:state.detailAssetID,previewProjectID:state.previewProjectID});
