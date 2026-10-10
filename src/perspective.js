@@ -32,7 +32,10 @@ export async function suggestPaperCorners(bitmap,paperRatio=210/297){
   // Input megapixels, viewport and device pixel ratio must not change this
   // resolution. If the algorithms find no trustworthy quadrilateral, ask the
   // user to confirm paper corners instead of trying larger source sizes.
-  const scale=Math.min(1,PAPER_DETECTION_LONG_EDGE/Math.max(bitmap.width,bitmap.height));
+  // Canonical analysis dimensions also hold for small uploads. Upscaling
+  // cannot recover missing detail, but avoids device-dependent thresholds
+  // operating at different sizes. The full source is retained for export.
+  const scale=PAPER_DETECTION_LONG_EDGE/Math.max(bitmap.width,bitmap.height);
   const width=Math.max(1,Math.round(bitmap.width*scale));
   const height=Math.max(1,Math.round(bitmap.height*scale));
   return visionTask('quad',{
