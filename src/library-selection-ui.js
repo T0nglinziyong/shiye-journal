@@ -6,7 +6,7 @@ import {supportsVision} from './ai-settings.js';
 import {bindLongPress} from './long-press.js';
 import {withUsageStatus} from './library-model.js';
 import {registerSelectionPresenter} from './selection-presenter.js';
-import {createSelectionSidePanels} from './selection-side-panels.js';
+import {createSelectionSidePanels,selectionMorePopoverOptions} from './selection-side-panels.js';
 
 const action=(name,fn)=>{
   const b=document.createElement('button');b.type='button';b.className='btn';
@@ -41,7 +41,7 @@ export function mountAssetSelection(c,p){
   }));tray.lastChild.classList.add('danger');view.append(tray);registerSelectionPresenter(view,sync);
 }
 function moreMenu(c,p,anchor){
-  const menu=togglePopover(anchor,{title:'更多操作',menu:true,width:250});
+  const menu=togglePopover(anchor,selectionMorePopoverOptions());
   if(!menu)return;
   menu.surface.classList.add('selection-more-menu');
 
