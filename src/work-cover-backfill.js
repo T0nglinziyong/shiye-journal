@@ -8,9 +8,9 @@ export function needsWorkCover(project){
   const draft=project.drafts.find(row=>row.id===project.activeDraftID)||project.drafts[0];
   const remoteCover=draft?.coverImageID;
   // Historical 360px COS project snapshots must be upgraded in the
-  // background, never mistaken for a current 720px cover.
+  // background, never mistaken for a current 480px cover.
   const obsolete=typeof remoteCover==='string'&&
-    remoteCover.startsWith('project-cover:')&&!remoteCover.endsWith('-preview720.webp');
+    remoteCover.startsWith('project-cover:')&&!remoteCover.endsWith('-preview480.webp');
   return (obsolete||!remoteCover&&!draft?.coverBlobId)&&
     !(project.coverStaticPath&&project.updatedAt===project.coverBaselineUpdatedAt);
 }

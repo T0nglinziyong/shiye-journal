@@ -48,3 +48,25 @@
 .matching-page .match-cover-preview{display:grid;place-items:center;width:100%;min-height:150px;max-height:360px;overflow:hidden;border-radius:12px;background:#f6f4ed}
 .matching-page .match-cover-preview>.thumb-sheet{max-width:100%;max-height:340px}
 .matching-page .match-raster-preview{display:block;width:100%;height:100%;max-height:340px;object-fit:contain;background:#f6f4ed}
+
+
+/* Deterministic, on-device material-set proposals. No asynchronous assets
+   beyond the same lazy thumbnails already used by the material picker. */
+.matching-page .match-proposals{margin:12px 0;padding:16px}
+.matching-page .match-proposals .match-panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.matching-page .match-proposals h2{margin:0;font-size:20px}
+.matching-page .match-proposals p{font-size:13px;color:#697b69;line-height:1.5}
+.match-proposals-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:12px 0}
+.match-proposals-actions>.btn{min-height:36px}
+.match-proposals-actions small{margin-left:auto;color:#849184}
+.match-proposal-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,255px),1fr));gap:12px}
+.match-proposal-card{display:flex;flex-direction:column;gap:8px;min-width:0;padding:12px;background:#fffefa;border:1px solid #e1e7da;border-radius:15px}
+.match-proposal-head{display:flex;flex-direction:column;gap:4px}
+.match-proposal-head strong{font-size:15px;color:#31493a}
+.match-proposal-head small,.match-proposal-card>small{font-size:12px;color:#7b8779;line-height:1.35}
+.match-proposal-card p{margin:0;min-height:36px}
+.match-proposal-assets{display:flex;flex-wrap:wrap;gap:5px}
+.match-proposal-assets span{display:grid;place-items:center;flex:none;width:55px;height:55px;border-radius:8px;background:#f2f4ee;overflow:hidden}
+.match-proposal-assets img{display:block;width:100%;height:100%;object-fit:contain}
+.match-proposal-card>.btn{margin-top:auto;align-self:flex-start}
+@media(max-width:600px){.matching-page .match-proposals{padding:12px}.match-proposal-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.match-proposal-card{padding:9px}.match-proposal-assets span{width:43px;height:43px}.match-proposal-head strong{font-size:13px}}

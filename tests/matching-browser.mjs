@@ -17,6 +17,18 @@ try{
  await wait('.series-grid');
  await evaluate(`(async()=>{const db=await new Promise(r=>{const q=indexedDB.open('shiye-pwa-full-v1');q.onsuccess=()=>r(q.result)});await new Promise(r=>{const tx=db.transaction(['assets'],'readwrite');for(let i=1;i<=4;i++)tx.objectStore('assets').put({id:'match-test-material-'+i,blobId:'match-test-material-'+i,staticPath:'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2220%22 height=%2230%22%3E%3Crect width=%2220%22 height=%2230%22 fill=%22%2387ae7d%22/%3E%3C/svg%3E',title:'春日贴纸 '+i,kind:'sticker',tags:[],physicalWidthMM:20,physicalHeightMM:30,supply:{quantity:1},usageStatus:'unused',createdAt:new Date().toISOString()});tx.oncomplete=r;});const local=await new Promise((resolve,reject)=>{const q=indexedDB.open('shiye-device-session-v1',1);q.onupgradeneeded=()=>{if(!q.result.objectStoreNames.contains('records'))q.result.createObjectStore('records',{keyPath:'key'});};q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error);});await new Promise((resolve,reject)=>{const tx=local.transaction('records','readwrite');tx.objectStore('records').put({key:JSON.stringify(['browser','matching-session-v1']),record:{id:'matching-session-v1',context:{basket:[1,2,3,4].map(i=>'match-test-material-'+i),coreIDs:[],matchRatio:'a5',matchPurpose:'日常记录',matchPurposes:['日常记录']},variants:[]}});tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);});local.close(); })()`);
  await command('Page.reload');await wait('.series-grid');await click('[data-route="matching"]','.match-previews');
+ // A star/unstar is a local card mutation, NOT a full #view repaint.
+ // The title, form inputs, scroller and decoded material images must all
+ // survive with identical DOM identity and unchanged scroll offsets.
+ await evaluate('(()=>{globalThis.__matchHead=document.querySelector(".matching-page .view-head");globalThis.__matchTextarea=document.querySelector("#match-intent");globalThis.__matchBasket=document.querySelector(".match-basket-scroll");globalThis.__matchImg=__matchBasket.querySelector("img");globalThis.__matchRec=document.querySelector(".match-recommendations");__matchBasket.scrollTop=95;__matchTextarea.value="检查不刷新输入框";})()');
+ await click('[data-act="match-core"]');
+ assert.ok(await evaluate('__matchHead===document.querySelector(".matching-page .view-head")&&__matchTextarea===document.querySelector("#match-intent")&&__matchBasket===document.querySelector(".match-basket-scroll")&&__matchImg===__matchBasket.querySelector("img")&&__matchRec===document.querySelector(".match-recommendations")'),
+  'Starring a material must not remount the entire matching page or material photos');
+ assert.equal(await evaluate('document.querySelector("#match-intent").value'),'检查不刷新输入框');
+ await click('[data-act="match-core"]'); // restore initial optional priority
+ assert.ok(await evaluate('__matchHead===document.querySelector(".matching-page .view-head")'));
+ // Reset test-only unsaved prompt content without remounting Matching.
+ await evaluate('document.querySelector("#match-intent").value=""');
  assert.equal(await evaluate('document.querySelector("[data-act=match-generate]").textContent.trim()'),'进行AI创作');
  assert.equal(await evaluate('document.querySelectorAll(".match-direction-choice[data-direction=style]").length'),3);
  await evaluate('(()=>{const fields=[...document.querySelectorAll(".match-direction-choice[data-direction=style]")];fields[0].value="韩系清新";fields[0].dispatchEvent(new Event("change",{bubbles:true}));fields[1].value="密集拼贴";fields[1].dispatchEvent(new Event("change",{bubbles:true}));})()');

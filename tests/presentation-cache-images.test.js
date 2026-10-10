@@ -43,7 +43,7 @@ test('image loader accepts exact display pixels without applying DPR or screen s
     previewBlob:async(_id,pixels)=>{requests.push(pixels);return new Blob(['image']);},
     get:async()=>({data:new Blob(['original'])})
   },urls:new Map(),onError:()=>{}});
-  try{await loader.load('display',721);assert.deepEqual(requests,[721]);}
+  try{await loader.load('display',721);assert.deepEqual(requests,[960]);}
   finally{loader.dispose();env.close();}
 });
 test('route cover signature is stable from image placeholder to hydrated Blob URL',()=>{
@@ -71,7 +71,7 @@ test('catalog source remains COS thumbnail even after the original has been load
  const env=environment(),root=document.createElement('div'),calls={original:0,low:0,high:0};document.body.append(root);
  const loader=mountPrivateImages({root,urls:new Map(),onError:()=>{},db:{
    get:async()=>{calls.original++;return {data:new Blob(['original'])};},
-   previewBlob:async(_id,pixels)=>{if(pixels===360)calls.low++;else calls.high++;return new Blob(['thumbnail-'+pixels]);}
+   previewBlob:async(_id,pixels)=>{if(pixels===480)calls.low++;else calls.high++;return new Blob(['thumbnail-'+pixels]);}
  }});
  try{
    const original=await loader.load('material',true);
@@ -83,4 +83,40 @@ test('catalog source remains COS thumbnail even after the original has been load
    assert.deepEqual(calls,{original:1,low:1,high:0});
    assert.equal(await loader.load('material',false),low,'returning to a list reuses its low cover');
  }finally{loader.dispose();env.close();}
+});
+
+
+test('a cached higher variant satisfies all smaller tiers without network and survives viewport downsizing',async()=>{
+ const env=environment(),root=document.createElement('div'),requests=[];document.body.append(root);
+ const loader=mountPrivateImages({root,urls:new Map(),onError:()=>{},db:{
+   previewBlob:async(_id,pixels)=>{requests.push(pixels);return new Blob(['image-'+pixels]);},
+   get:async()=>({data:new Blob(['original'])})
+ }});
+ try{
+   const large=await loader.load('already-big',1200);
+   assert.equal(await loader.load('already-big',600),large);
+   assert.equal(await loader.load('already-big',false),large);
+   assert.deepEqual(requests,[1200],'480px cover should NOT be fetched if 1200px is already cached');
+ }finally{loader.dispose();env.close();}
+});
+test('a low-tier cached preview is displayed until one correctly quantized higher tier completes',async()=>{
+ const env=environment(),root=document.createElement('div'),requests=[];document.body.append(root);
+ let releaseHigh;
+ const gate=new Promise(resolve=>releaseHigh=resolve);
+ const loader=mountPrivateImages({root,urls:new Map(),onError:()=>{},db:{
+   previewBlob:async(_id,pixels)=>{requests.push(pixels);if(pixels===960)await gate;return new Blob(['image-'+pixels]);},
+   get:async()=>({data:new Blob(['original'])})
+ }});
+ try{
+   const low=await loader.load('upgrade',360);
+   const highPending=loader.load('upgrade',721); // snaps up to 960
+   await tick();
+   assert.equal(imagePlaceholder('upgrade'),low,'best cached 360px remains available during upgrade');
+   releaseHigh();
+   const high=await highPending;
+   assert.notEqual(high,low);
+   assert.equal(imagePlaceholder('upgrade'),high,'high tier takes precedence as soon as available');
+   assert.equal(await loader.load('upgrade',720),high,'a 720px request uses cached 960px');
+   assert.deepEqual(requests,[360,960]);
+ }finally{releaseHigh?.();loader.dispose();env.close();}
 });

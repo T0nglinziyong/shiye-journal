@@ -8,7 +8,9 @@ try{
   await evaluate('window.__galleryOpens=0;document.querySelector("#file-input").click=()=>window.__galleryOpens++');
   for(const [width,height] of [[390,844],[768,1024],[1024,768],[1440,900]]){
     await command('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:width<700});
-    await click('[data-route="library"]','.series-grid');await click('.swift-tabs button:nth-child(2)','.asset-grid');
+    await click('[data-route="library"]');
+    if(!(await evaluate('!!document.querySelector(".series-grid")')))await click('.swift-tabs button:nth-child(1)','.series-grid');
+    await click('.swift-tabs button:nth-child(2)','.asset-grid');
     const before=await evaluate('window.__galleryOpens');await click('[data-act="import"]','.import-nav');
     assert.equal(await evaluate('window.__galleryOpens'),before+1,'素材入口应直接打开图库');
     const sourceBefore=await evaluate('window.__galleryOpens');await click('[data-act="select-file"][data-val="gallery"]');

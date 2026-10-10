@@ -75,7 +75,7 @@ async function verifyImportGeometry(width){
       '<section class="import-review"><div class="review-candidates">'+
       '<div class="review-candidate review-background-card">'+
       '<div class="review-thumbnail import-work-paper-preview plain">'+
-      '<button type="button" class="review-paper-control" data-import-paper-options="0">页面背景</button>'+
+      '<div class="review-paper-direct-controls"><label class="review-paper-direct-row"><span>底纸样式</span><select><option>纯色</option></select></label><label class="review-paper-direct-row"><span>底纸颜色</span><input type="color" value="#fcfaf0"></label></div>'+
       '</div></div>'+
       '<div class="review-candidate selected" data-index="0" data-candidate="0">'+
       '<button><div class="review-thumbnail"><img alt="素材" src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs="></div>'+
@@ -93,12 +93,12 @@ async function verifyImportGeometry(width){
     )+
     ';document.body.append(host);const background=host.querySelector(".review-background-card .review-thumbnail").getBoundingClientRect(),'+
     'material=host.querySelector("[data-candidate] .review-thumbnail").getBoundingClientRect(),'+
-    'button=host.querySelector(".review-paper-control").getBoundingClientRect(),'+
+    'controls=host.querySelector(".review-paper-direct-controls").getBoundingClientRect(),'+
     'inspector=host.querySelector(".import-snapshot-inspect .import-inspector").getBoundingClientRect();'+
-    'host.remove();return {backgroundH:background.height,materialH:material.height,buttonCenter:Math.abs((button.top+button.bottom)/2-(background.top+background.bottom)/2),inspectorH:inspector.height};})()');
+    'host.remove();return {backgroundH:background.height,materialH:material.height,controlsInside:controls.top>=background.top-1&&controls.bottom<=background.bottom+1&&controls.left>=background.left-1&&controls.right<=background.right+1,inspectorH:inspector.height};})()');
   assert.ok(Math.abs(metrics.backgroundH-metrics.materialH)<=1.1,JSON.stringify(metrics));
   assert.ok(metrics.backgroundH<=132,JSON.stringify(metrics));
-  assert.ok(metrics.buttonCenter<=1.1,JSON.stringify(metrics));
+  assert.equal(metrics.controlsInside,true,JSON.stringify(metrics));
   assert.ok(metrics.inspectorH<400,'Snapshot inspector must not reserve 580/610px: '+JSON.stringify(metrics));
 }
 async function verifyMobileNavigation(){
@@ -115,7 +115,8 @@ try{
     await command('Emulation.setDeviceMetricsOverride',{
       width,height,deviceScaleFactor:width===390||width===768?2:1,mobile:width<700
     });
-    await click('[data-route="library"]','.series-grid');
+    await click('[data-route="library"]');
+    if(!(await evaluate('!!document.querySelector(".series-grid")')))await click('.swift-tabs button:nth-child(1)','.series-grid');
     await choose('.view-head .actions','选择');
     const regularTray=await verifyTray(5);
     const regularWidth=regularTray[0].width;
@@ -134,7 +135,8 @@ try{
     await screenshot('works-selection',width,height);
     await choose('.view-head .actions','完成');
 
-    await click('[data-route="library"]','.series-grid');
+    await click('[data-route="library"]');
+    if(!(await evaluate('!!document.querySelector(".series-grid")')))await click('.swift-tabs button:nth-child(1)','.series-grid');
     await click('.swift-tabs button:nth-child(4)','.recently-deleted-grid');
     await choose('.view-head .actions','选择');
     await verifyDeletedTray(width,regularWidth);

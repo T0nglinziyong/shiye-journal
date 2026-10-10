@@ -6,7 +6,7 @@ import {compareRecordEdits} from './sync-last-write.js';
 import {recordTombstones} from './sync-tombstones.js';
 import {LARGE_PROJECT_BYTES,projectSummary,mergeProjectSummary,projectBlobText} from './project-document.js';
 import {createCOSStore} from './cos-store.js';
-import {imageVariant} from './image-variants.js';
+import {imageVariant,DISPLAY_TIERS,COVER_EDGE} from './image-variants.js';
 import {recoverImportOutbox} from './import-outbox-recovery.js';
 import {recoverProjectOutbox,usableProjectSnapshot} from './project-outbox-recovery.js';
 export function createCloudStore({cloudClient,requireCloudUser,cache=null,namespace='cloud',projectPreview=()=>null,objectStorage=null}){
@@ -60,12 +60,12 @@ const withProjectBase=(store,record,base)=>{
 };
 function retainImage(path,data){images.set(path,Promise.resolve(data));imageSizes.delete(path);imageSizes.set(path,data.size);let bytes=[...imageSizes.values()].reduce((a,b)=>a+b,0);for(const [key,size] of imageSizes){if(bytes<=64*1024*1024&&imageSizes.size<=48)break;if(key===path)continue;images.delete(key);imageSizes.delete(key);bytes-=size;}}
 // Old COS assets without thumbnail metadata are converted into a durable,
-// immutable preview720 object exactly once. There is never a browser-side
+// immutable preview480 object exactly once. There is never a browser-side
 // reconstruction of the original during ordinary catalog browsing.
 const previewMaterialization=new Set();
-function materializePreview720(record,preview){
-  if(record.storageProvider!=='cos'||record.thumbnailPath||!objectStorage?.upload||!usableBlob(preview))return;
-  const path=record.storagePath+'-preview720.webp';
+function materializePreview480(record,preview){
+  if(record.storageProvider!=='cos'||record.thumbnailPath?.endsWith('-preview480.webp')||!objectStorage?.upload||!usableBlob(preview))return;
+  const path=record.storagePath+'-preview480.webp';
   if(previewMaterialization.has(path))return;
   previewMaterialization.add(path);
   void objectStorage.upload(path,preview,'image/webp')
@@ -298,7 +298,27 @@ async function cloudRecord(store,id){
   const row=checked(await cloudClient().from('shiye_records').select('record').eq('user_id',owner).eq('store',store).eq('id',id).maybeSingle());
   return row?.record;
 }
-async function cloudPreview(id,pixels=720){
+const variantBlobKey=(path,tier)=>(tier===COVER_EDGE?'thumbnail480':'preview'+tier)+':'+path;
+async function rememberImageVariant(path,tier,blob){
+  await remember(variantBlobKey(path,tier),blob);
+  // A tiny persistent index lets a later browser session reuse a cached 960px
+  // image for a 480px request without probing ten IndexedDB blobs or COS.
+  const key='cached-image-variants:'+path;
+  const old=await cached(key),tiers=[...new Set([
+    ...(Array.isArray(old)?old.filter(n=>DISPLAY_TIERS.includes(n)):[]),tier
+  ])].sort((a,b)=>a-b);
+  await remember(key,tiers);
+}
+async function cachedSufficientVariant(path,required){
+  const index=await cached('cached-image-variants:'+path);
+  if(!Array.isArray(index))return null;
+  for(const tier of index.filter(n=>DISPLAY_TIERS.includes(n)&&n>required).sort((a,b)=>a-b)){
+    const blob=await cached(variantBlobKey(path,tier));
+    if(usableBlob(blob))return blob;
+  }
+  return null;
+}
+async function cloudPreview(id,pixels=480){
   const variant=imageVariant(pixels),edge=Number(variant.slice(7));
   const pending=await pendingOverride('blobs',id);if(pending&&(!pending.record||usableBlob(pending.record.data)))return pending.record?await makeThumbnail(pending.record.data,edge)||pending.record.data:undefined;
   if(id.startsWith('project-cover:')){const match=/^project-cover:(cos|supabase):(.+)$/.exec(id);if(!match)throw Error('作品封面标识不是当前格式');const [,provider,path]=match;if(!path.startsWith((await identity())+'/'))throw Error('作品封面不属于当前账号');const key='thumbnail:'+path,saved=await cached(key);if(usableBlob(saved))return saved;const blob=await downloadObject(path,provider);if(!usableBlob(blob))throw Error('作品封面为空');await remember(key,blob);return blob;}
@@ -306,21 +326,23 @@ async function cloudPreview(id,pixels=720){
   const record=old?.record||await cloudRecord('blobs',id);if(!record)return undefined;
   if(!['cos','supabase'].includes(record.storageProvider))throw Error('图片缺少当前存储服务标记');
   if(!record.storagePath?.startsWith(owner+'/'))throw Error('图片不属于当前账号');
-  const thumbnailKey=(variant==='preview720'?'thumbnail720':variant)+':'+record.storagePath,saved=await cached(thumbnailKey);
+  const thumbnailKey=variantBlobKey(record.storagePath,edge),saved=await cached(thumbnailKey);
   // A previously loaded thumb must be a zero-network read. Materialization
   // happens only on the COS CI miss path, not repeatedly for every tab.
   if(usableBlob(saved))return saved;
-  if(variant==='preview720'&&record.thumbnailPath?.endsWith('-preview720.webp')){
+  const higher=await cachedSufficientVariant(record.storagePath,edge);
+  if(usableBlob(higher))return higher;
+  if(variant==='preview480'&&record.thumbnailPath?.endsWith('-preview480.webp')){
     if(!record.thumbnailPath.startsWith(owner+'/'))throw Error('缩略图不属于当前账号');
-    try{const thumbnail=await downloadObject(record.thumbnailPath,record.storageProvider);if(!usableBlob(thumbnail))throw Error('缩略图为空');await remember(thumbnailKey,thumbnail);return thumbnail;}
+    try{const thumbnail=await downloadObject(record.thumbnailPath,record.storageProvider);if(!usableBlob(thumbnail))throw Error('缩略图为空');await rememberImageVariant(record.storagePath,edge,thumbnail);return thumbnail;}
     catch(error){console.warn('缩略图暂不可读，尝试从原图恢复',error?.message);}
   }
   // Legacy COS originals can already have a deterministic immutable WebP
   // despite their metadata not carrying thumbnailPath. Prefer that file over
   // another image-processing request.
-  if(variant==='preview720'&&record.storageProvider==='cos'&&!record.thumbnailPath?.endsWith('-preview720.webp')){
-    try{const stored=await downloadObject(record.storagePath+'-preview720.webp','cos');
-      if(usableBlob(stored)){await remember(thumbnailKey,stored);return stored;}
+  if(variant==='preview480'&&record.storageProvider==='cos'&&!record.thumbnailPath?.endsWith('-preview480.webp')){
+    try{const stored=await downloadObject(record.storagePath+'-preview480.webp','cos');
+      if(usableBlob(stored)){await rememberImageVariant(record.storagePath,edge,stored);return stored;}
     }catch{/* One-time cache miss; COS CI can synthesize the derivative. */}
   }
   // COS handles CI remotely. Never download and decode a full original just
@@ -329,15 +351,15 @@ async function cloudPreview(id,pixels=720){
     if(!objectStorage?.preview)throw Error('COS 固定封面尚未可用，未下载原图');
     const preview=await objectStorage.preview(record.storagePath,variant);
     if(!usableBlob(preview))throw Error('COS 固定封面为空，未下载原图');
-    await remember(thumbnailKey,preview);
-    if(variant==='preview720')materializePreview720(record,preview);
+    await rememberImageVariant(record.storagePath,edge,preview);
+    if(variant==='preview480')materializePreview480(record,preview);
     return preview;
   }
   // Supabase-only records retain their existing read-only recovery path.
   const {data}=await decode('blobs',record);
-  const blob=await makeThumbnail(data,edge);if(blob){await remember(thumbnailKey,blob);return blob;}return data;
+  const blob=await makeThumbnail(data,edge);if(blob){await rememberImageVariant(record.storagePath,edge,blob);return blob;}return data;
 }
-async function makeThumbnail(data,edge=720){if(typeof createImageBitmap!=='function'||typeof document==='undefined')return null;const bitmap=await createImageBitmap(data);try{const scale=edge/Math.max(bitmap.width,bitmap.height),canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));canvas.getContext('2d').drawImage(bitmap,0,0,canvas.width,canvas.height);return await new Promise(resolve=>canvas.toBlob(resolve,'image/webp',.9));}finally{bitmap.close();}}
+async function makeThumbnail(data,edge=480){if(typeof createImageBitmap!=='function'||typeof document==='undefined')return null;const bitmap=await createImageBitmap(data);try{const scale=edge/Math.max(bitmap.width,bitmap.height),canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));canvas.getContext('2d').drawImage(bitmap,0,0,canvas.width,canvas.height);return await new Promise(resolve=>canvas.toBlob(resolve,'image/webp',.9));}finally{bitmap.close();}}
 async function decode(store,record){
   if(store!=='blobs')return record;
   const {storagePath,storageProvider,...metadata}=record;
@@ -369,13 +391,13 @@ async function encode(store,record){
       const {coverImageID,coverSceneHash,...scene}=active;
       const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(scene)));
       const sceneHash=[...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,'0')).join('');
-      if(coverImageID?.endsWith('-preview720.webp')&&coverSceneHash===sceneHash){cover.coverImageID=coverImageID;cover.coverSceneHash=sceneHash;}
+      if(coverImageID?.endsWith('-preview480.webp')&&coverSceneHash===sceneHash){cover.coverImageID=coverImageID;cover.coverSceneHash=sceneHash;}
       else{
         delete cover.coverImageID;delete cover.coverSceneHash;
         try{
           const preview=await projectPreview(record);
           if(usableBlob(preview)){
-            const coverPath=(await identity())+'/'+sceneHash+'-preview720.webp';
+            const coverPath=(await identity())+'/'+sceneHash+'-preview480.webp';
             const result=await uploadObject(coverPath,preview,preview.type||'image/webp',provider);
             if(!result.error||String(result.error.statusCode)==='409'||result.error.statusCode===409){
               cover.coverImageID='project-cover:'+provider+':'+coverPath;
@@ -398,7 +420,7 @@ async function encode(store,record){
   // The optional thumbnail is independent of the original PUT. Start both
   // together, but never commit metadata until the original is acknowledged.
   // This avoids serial upload latency without changing the safety boundary.
-  const thumbnailTask=(async()=>{try{const thumbnail=await makeThumbnail(record.data);if(!thumbnail)return null;const path=storagePath+'-preview720.webp',result=await uploadObject(path,thumbnail,'image/webp',provider);if(result.error&&String(result.error.statusCode)!=='409')return null;await remember('thumbnail720:'+storagePath,thumbnail);return path;}catch{return null;}})();
+  const thumbnailTask=(async()=>{try{const thumbnail=await makeThumbnail(record.data);if(!thumbnail)return null;const path=storagePath+'-preview480.webp',result=await uploadObject(path,thumbnail,'image/webp',provider);if(result.error&&String(result.error.statusCode)!=='409')return null;await rememberImageVariant(storagePath,COVER_EDGE,thumbnail);return path;}catch{return null;}})();
   let thumbnailPath;
   await uploads.get(storagePath);thumbnailPath=await thumbnailTask;
   await remember('image:'+storagePath,record.data);retainImage(storagePath,record.data);

@@ -229,18 +229,19 @@
   background:#e7eee5;
 }
 @media(max-width:599px){
-  /* The parent shrinks only while a child is open, leaving two complete,
-     non-overlapping panes even on small phones. */
-  .selection-more-menu.selection-side-open .popover-content{padding:5px;}
-  .selection-more-menu.selection-side-open .popover-content > button {
+  /* Mobile More uses compact metrics FROM THE FIRST OPEN, whether or not a
+     child is visible. Submenu toggles cannot change its width or appearance. */
+  .selection-more-menu .popover-content{padding:5px;}
+  .selection-more-menu .popover-content > button {
     padding:8px 5px;
     grid-template-columns:14px minmax(0,1fr) 10px;
     column-gap:4px;
     font-size:12px;
   }
-  .selection-more-menu.selection-side-open .popover-content > button > svg.shiye-icon {
+  .selection-more-menu .popover-content > button > svg.shiye-icon {
     width:14px;height:14px;
   }
+  .selection-more-menu > h3{padding:11px 6px;font-size:13px;}
   .selection-side-panel .selection-side-heading{padding:10px 7px;font-size:12px}
   .selection-side-panel :is(.selection-side-list,.selection-side-pinned)>button{
     padding:8px 6px;
