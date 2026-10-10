@@ -20,7 +20,11 @@ export async function decodeRecognitionImage(blob){
     if(hasDisplayP3Profile(bytes))displayP3ToSrgb(data);
     return pixelCanvas(data,width,height);
   }
-  return createImageBitmap(blob,{imageOrientation:'from-image',colorSpaceConversion:'none'});
+  // Non-JPEG formats may carry ICC profiles too. Let the browser apply
+  // embedded colour metadata rather than taking profile-encoded samples as
+  // sRGB; sourcePixels() always reads through an explicit sRGB canvas.
+  // JPEG remains pinned to the deterministic decoder and explicit P3->sRGB.
+  return createImageBitmap(blob,{imageOrientation:'from-image',colorSpaceConversion:'default'});
 }
 // The pinned JPEG decoder yields profile-encoded samples. iPhone photos often
 // carry Display P3; putImageData otherwise labels those samples as sRGB.
