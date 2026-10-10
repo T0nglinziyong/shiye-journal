@@ -3,8 +3,8 @@
 // material basket, recommendations, horizontal chips, proposal history,
 // result list and editable multi-line fields all have their own scroll state.
 //
-// Stable data-match-scroll IDs are used for core panes. Future independently
-// scrollable descendants are also captured by a structural fallback key.
+// Stable data-match-scroll IDs cover core panes. Future scrollable panels
+// can reuse these slots or fall back to their stable structural paths.
 const valid=value=>Number.isFinite(value)&&value>=0?value:0;
 function childPath(node,root){
   const segments=[];
@@ -23,12 +23,14 @@ function readScroll(node){return {top:valid(node.scrollTop),left:valid(node.scro
 function paneElements(root){
   const page=root?.querySelector?.('.matching-page');
   if(!page)return null;
-  const panes=[page];
-  for(const node of page.querySelectorAll('*')){
-    if(node.dataset?.matchScroll||
-      node.scrollHeight>node.clientHeight+1||
-      node.scrollWidth>node.clientWidth+1)panes.push(node);
-  }
+  // Avoid forcing hundreds of image/card layout reads on every click.
+  // Every real independent scroller is assigned an explicit stable slot.
+  // Keep panels too, since a future breakpoint may make any panel scrollable.
+  const panes=[page,...page.querySelectorAll(
+    '[data-match-scroll],.match-direction,.match-recommendations,'+
+    '.match-proposals,.match-action,.matching-layout > .basket,'+
+    '.matching-layout > .panel'
+  )];
   return {page,panes};
 }
 export function captureMatchingScroll(root,viewport=globalThis.window){
