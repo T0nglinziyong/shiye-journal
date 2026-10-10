@@ -3,14 +3,7 @@ import {discoverMaterialBoxes} from './material-box-discovery.js';
 import {separateSharedCarrier} from './material-carrier.js';
 import {segmentMaterialBoxes} from './material-segmentation.js';
 import {restoreRepeatedApertures} from './repeated-apertures.js';
-const stableOperations=new Set(['materials-fast','instances','enclosures','boundary-reconstruction','complete-boundaries']);
 export async function processVision(cv,operation,p){
-  if(stableOperations.has(operation)){
-    // Restored, version-pinned A4 discovery/segmentation from before the
-    // October 7 rewrite. Isolated from the newer per-box recognizer.
-    const {processStableVision}=await import('./stable-recognition/opencv-worker.js');
-    return processStableVision(cv,operation,p);
-  }
   const resources=[],own=mat=>(resources.push(mat),mat);
   try{
     if(operation==='warmup')return {ready:true};

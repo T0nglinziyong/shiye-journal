@@ -24,8 +24,8 @@ const refineHybrid=async context=>{
 export const recognitionStrategies=Object.freeze([
   {
     id:'auto',
-    label:'自动 · 稳定分层识别',
-    description:'恢复成熟的分层检测：快速识别、实例与边界补全，按需回退；手机、iPad、电脑使用相同方式。',
+    label:'自动 · 推荐',
+    description:'推荐：逐件 MorphGAC 贴边，随后规整形状并恢复规则打孔。',
     refineCandidates:refineAuto
   },
   {
@@ -49,8 +49,8 @@ export const recognitionStrategies=Object.freeze([
 ]);
 
 export const recognitionPixelOptions=Object.freeze([
-  [900,'900 px（快速）'],
-  [1200,'1200 px（推荐）'],
+  [900,'900 px（推荐）'],
+  [1200,'1200 px'],
   [1600,'1600 px']
 ]);
 const strategiesByID=new Map(recognitionStrategies.map(strategy=>[strategy.id,strategy]));
@@ -60,9 +60,9 @@ export const recognitionMethodDetails=recognitionStrategies.map(({id,label,descr
 export const recognitionModeAllowed=value=>strategiesByID.has(value);
 export const recognitionPixelsAllowed=value=>pixelValues.has(Number(value));
 
-export function recognitionProfile(value='auto',analysisMaxDimension=1200){
+export function recognitionProfile(value='auto',analysisMaxDimension=900){
   const mode=strategiesByID.has(value)?value:'auto';
-  const pixels=recognitionPixelsAllowed(analysisMaxDimension)?Number(analysisMaxDimension):1200;
+  const pixels=recognitionPixelsAllowed(analysisMaxDimension)?Number(analysisMaxDimension):900;
   const {refineCandidates}=strategiesByID.get(mode);
   return {mode,analysisMaxDimension:pixels,refineCandidates};
 }
