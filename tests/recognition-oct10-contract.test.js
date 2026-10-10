@@ -31,10 +31,11 @@ test('PR88 version 3 recognition defaults migrate back to earlier October 10 pre
   assert.equal(migrated.paperSize,'letter','leave unrelated paper preferences alone');
 });
 
-test('candidate thumbnails and manual-box UI remain available after the recognition rollback',async()=>{
+test('verified ca0f candidate UI uses the same discovered regions and URLs',async()=>{
   const [view,app]=await Promise.all([source('import-workspace-ui.js'),source('app.js')]);
-  assert.match(view,/const visibleCandidates=state\.importCandidateData\|\|\[\]/);
-  assert.match(view,/c\?\.url\|\|state\.importCandidateURLs/);
+  assert.match(view,/const visibleCandidates=state\.importProcessing\?\[\]:state\.importCandidates\|\|\[\]/);
+  assert.match(app,/const candidates=await detectPaperCandidates\(source,box,6/);
+  assert.match(app,/await refreshImportCandidates\(regions/);
   assert.match(app,/case 'manual-import-box':await openManualImportBox\(\)/);
-  assert.match(app,/importScroll=state\.route==='import'/);
+  assert.doesNotMatch(app,/detectImportRegions\(|fixedWorkingSize:true|importPhotoDisplayURL\(/);
 });
