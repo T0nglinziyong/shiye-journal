@@ -3,8 +3,8 @@ export function mountImportBoxEditor({state,view,render,saveActiveImportRecord,t
   const base=view.querySelector('#crop-preview'),source=state.correctedBitmap||state.importBitmap;if(!base||!source)return;
   let boxes=(state.importCandidates||[]).map((c,sourceIndex)=>{
     const r=c.orientedBox;
-    return r?{...c,sourceIndex,x:r.centerX-r.width/2,y:r.centerY-r.height/2,
-      w:r.width,h:r.height,rotation:r.rotation}:({...c,sourceIndex,rotation:c.rotation||0});
+    return r?{...c,sourceIndex,manualChanged:false,x:r.centerX-r.width/2,y:r.centerY-r.height/2,
+      w:r.width,h:r.height,rotation:r.rotation}:({...c,sourceIndex,manualChanged:false,rotation:c.rotation||0});
   }),selected=null,drag=null;
   const overlay=document.createElement('div');overlay.className='manual-box-layer multi-box-editor';
   const paper=state.correctedBitmap?{x:0,y:0,w:1,h:1}:state.importBox;
@@ -21,6 +21,16 @@ export function mountImportBoxEditor({state,view,render,saveActiveImportRecord,t
   const done=button('完成标记',async()=>{
     done.disabled=true;
     try {
+      const originalCount=(state.importCandidates||[]).length;
+      const unchanged=boxes.length===originalCount&&
+        boxes.every((box,index)=>box.sourceIndex===index&&!box.manualChanged);
+      // No changes: use the existing candidate, mask, preview and dimensions.
+      // Never re-run MorphGAC or colour estimation for a no-op.
+      if(unchanged){
+        state.showManualBox=false;
+        render();
+        return;
+      }
       if(await refreshImportCandidates(boxes,{manual:true})===false){done.disabled=false;return;}
       state.showManualBox=false;state.importRecords[state.importIndex].manualEdits=true;
       state.importRecords[state.importIndex].confirmed=false;saveActiveImportRecord();render();toast('已更新素材框，请核对候选预览');
