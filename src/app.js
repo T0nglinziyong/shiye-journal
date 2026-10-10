@@ -281,7 +281,15 @@ function route(name,{back=false,restoreMaterial=false}={}){
   routeScroll.set(state.route+':'+state.seriesID,window.scrollY);
   if(name==='settings'&&!settingsSession)settingsSession={ai:structuredClone(state.aiSettings),preferences:structuredClone(state.preferences),returnRoute:state.route};
   if(state.route==='settings'&&name!=='settings'&&settingsSession){state.aiSettings=settingsSession.ai;state.preferences=settingsSession.preferences;settingsSession=null;state.settingsSection=null;if(cloudEnabled&&deferredSyncedPreferences)state.preferences=savePreferences(deferredSyncedPreferences);deferredSyncedPreferences=null;}
-if(state.route==='editor'&&name!=='editor'&&aiController)aiController.abort(Error('已离开创作页面'));const priorRoute=state.route;syncSelectionScope(parity,name);state.route=name;if(name==='import'&&state.importMode!=='snapshot'&&typeof Worker!=='undefined')void prewarmVision().catch(()=>{});if(name==='series'){state.seriesID='all';state.addingToSeries=null;libraryHistory.length=0;}if(name!=='library')state.addingToSeries=null;if(name!=='settings'&&!fromSettings)state.selected=null;render();window.scrollTo(0,routeScroll.get(name+':'+state.seriesID)||0);
+if(state.route==='editor'&&name!=='editor'&&aiController)aiController.abort(Error('已离开创作页面'));const priorRoute=state.route;syncSelectionScope(parity,name);state.route=name;if(name==='import'&&state.importMode!=='snapshot'&&typeof Worker!=='undefined')void prewarmVision().catch(()=>{});if(name==='series'){state.seriesID='all';state.addingToSeries=null;libraryHistory.length=0;}if(name!=='library')state.addingToSeries=null;if(name!=='settings'&&!fromSettings)state.selected=null;render();
+  // A return from Works/Settings must honor the last matching viewport even
+  // if the currently selected series ID has since changed. Nested panes are
+  // already restored inside render() from the same snapshot.
+  const matchingViewport=name==='matching'&&
+    matchingScrollMemory?.account===(state.accountId||'browser')
+    ?matchingScrollMemory.scroll.viewport:null;
+  window.scrollTo(matchingViewport?.left??0,
+    matchingViewport?.top??(routeScroll.get(name+':'+state.seriesID)||0));
   // Do not interrupt an unfinished matching/import workspace with a remote
   // repaint. Pull all queued remote deletions immediately on returning to
   // another page, instead of waiting for the next 15-second polling window.
