@@ -70,7 +70,12 @@ export function createSelectionSidePanels(menu,{makeAction,anchor}){
     const current={trigger,panel,remove:null};active=current;
     const position=()=>{
       if(active!==current||!menu.surface.isConnected)return;
-      const menuRect=menu.surface.getBoundingClientRect(),anchorRect=anchor.getBoundingClientRect();
+      const measured=menu.surface.getBoundingClientRect(),anchorRect=anchor.getBoundingClientRect();
+      // Width may have been reduced on a phone. Recalculate using the
+      // original parent width after rotation to tablet/desktop; otherwise the
+      // temporary compact layout would get stuck across viewport changes.
+      const baseWidth=innerWidth>=600?Math.min(parseFloat(initialWidth)||measured.width,innerWidth-24):measured.width;
+      const menuRect={...measured,width:baseWidth,right:measured.left+baseWidth};
       const geometry=selectionSideGeometry({
         viewportWidth:innerWidth,viewportHeight:innerHeight,
         anchor:anchorRect,menu:menuRect,panelHeight:panel.scrollHeight
