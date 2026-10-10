@@ -1358,7 +1358,42 @@ async function refreshImportCandidates(regions,{manual=false,canApply=()=>true}=
   for(let i=0;i<plans.length;i++){
     const {region,original}=plans[i];if(original){next.push(original);continue;}
     toast('正在提取素材 '+(i+1)+' / '+plans.length);
-    const regenerated=await extractImportCandidate(source,b,region,{mode:state.importMode,widthMM:pw,heightMM:ph,calibrated,index:i,lighting});
+    let regenerated;
+    try{
+      // A successful polygon with an empty alpha mask renders completely
+      // transparent on every device. Preserve an inspectable raw candidate
+      // instead of silently displaying a blank thumbnail.
+      const alpha=region.mask?.alpha;
+      if(alpha?.length&&!alpha.some(value=>value>16))throw Error('自动轮廓没有可见前景');
+      regenerated=await extractImportCandidate(source,b,region,{
+        mode:state.importMode,widthMM:pw,heightMM:ph,calibrated,index:i,lighting
+      });
+    }catch(error){
+      // A single alignment/alpha failure must not erase all successfully
+      // recognized materials. Supply an original-colour rectangular crop
+      // with a clear pending-review flag, or skip this invalid region while
+      // retaining the rest of the batch.
+      console.warn('候选素材高清预览失败；尝试保留原始裁片',i+1,error);
+      try{
+        const raw=await cropBitmap(source,b,region,{raw:true});
+        if(!(raw instanceof Blob)||!raw.size)throw Error('原始裁片为空');
+        const physicalWidth=calibrated?Math.round(region.w*pw*10)/10:null;
+        const physicalHeight=calibrated?Math.round(region.h*ph*10)/10:null;
+        regenerated={
+          blob:raw,originalBlob:raw,candidateFrameBlob:raw,
+          url:URL.createObjectURL(raw),region,title:'素材 '+(i+1),
+          width:physicalWidth,height:physicalHeight,
+          alignment:0,widthRatio:1,heightRatio:1,selected:true,
+          reviewStatus:'pendingReview',previewFallback:true,
+          processingRecord:{sourceWidthMM:physicalWidth,sourceHeightMM:physicalHeight}
+        };
+      }catch(fallbackError){
+        console.error('候选素材及原始裁片均无法读取',i+1,fallbackError);
+        const failures=record.recognitionExtractionErrors||[];
+        record.recognitionExtractionErrors=[...failures,{index:i,message:String(fallbackError?.message||fallbackError)}];
+        continue;
+      }
+    }
     // Changing only colour must not reset manual names, tags, dimensions or
     // choices, and must never cause the segmentation algorithm to rerun.
     const old=previous.find(item=>item.region===region)||
@@ -1370,7 +1405,12 @@ async function refreshImportCandidates(regions,{manual=false,canApply=()=>true}=
   }
   if(!canApply()||record!==state.importRecords[state.importIndex]){for(const c of next)if(!previous.includes(c))URL.revokeObjectURL(c.url);return false;}
   for(const c of previous)if(!next.includes(c))URL.revokeObjectURL(c.url);
-  state.importCandidates=plans.map(plan=>plan.region);state.importCandidateData=next;state.importCandidateURLs=next.map(c=>c.url);state.importCandidateSelection=new Set(next.flatMap((c,i)=>c.selected?[i]:[]));saveActiveImportRecord();return true;
+  state.importCandidates=next.map(candidate=>candidate.region);
+  state.importCandidateData=next;
+  state.importCandidateURLs=next.map(candidate=>candidate.url);
+  state.importCandidateSelection=new Set(next.flatMap((candidate,i)=>candidate.selected?[i]:[]));
+  saveActiveImportRecord();
+  return true;
 }
 async function previewCrop(){
   if(!state.importBitmap||state.importMode==='snapshot')return;
