@@ -3,6 +3,7 @@ import {discoverMaterialBoxes} from './material-box-discovery.js';
 import {separateSharedCarrier} from './material-carrier.js';
 import {segmentMaterialBoxes} from './material-segmentation.js';
 import {restoreRepeatedApertures} from './repeated-apertures.js';
+import {paperQuadFromLines} from './paper-line-candidates.js';
 export async function processVision(cv,operation,p){
   const resources=[],own=mat=>(resources.push(mat),mat);
   try{
@@ -50,7 +51,18 @@ export async function processVision(cv,operation,p){
           const coverage=Math.abs(cv.contourArea(polygon))/(p.width*p.height);if(coverage<.18||coverage>.96||points.some(a=>a.x<.004||a.x>.996||a.y<.004||a.y>.996))continue;
           const length=(a,b)=>Math.hypot((a.x-b.x)*p.width,(a.y-b.y)*p.height),w=length(points[0],points[1])+length(points[2],points[3]),h=length(points[0],points[3])+length(points[1],points[2]),ratio=Math.min(w/h,h/w),expected=Math.min(p.paperRatio,1/p.paperRatio),aspect=Math.min(ratio/expected,expected/ratio);if(aspect<.60)continue;const score=Math.min(coverage/.65,1)*.48+aspect*.20+Math.min(area/coverage,1)*.32;if(!best||score>best.score)best={score,corners:points};
         }
-      }return best?.corners||null;
+      }
+      if(best)return best.corners;
+      // The classic contour detector wins whenever it succeeds. Only if no
+      // acceptable quad exists, infer the paper from four corroborating long
+      // border lines on this SAME 900px sRGB image (no resolution retries).
+      const blurred=own(new cv.Mat()),edges=own(new cv.Mat()),segments=own(new cv.Mat());
+      cv.GaussianBlur(gray,blurred,new cv.Size(5,5),0);
+      cv.Canny(blurred,edges,40,120);
+      cv.HoughLinesP(edges,segments,1,Math.PI/180,55,90,22);
+      const candidates=Array.from({length:segments.rows},(_,i)=>
+        Array.from(segments.data32S.slice(i*4,i*4+4)));
+      return paperQuadFromLines(candidates,gray.data,p.width,p.height,p.paperRatio);
     }
     if(operation==='alignment'){
       const src=own(cv.matFromArray(p.height,p.width,cv.CV_8UC1,p.alpha)),binary=own(new cv.Mat()),contours=own(new cv.MatVector()),hierarchy=own(new cv.Mat());

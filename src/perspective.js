@@ -2,6 +2,7 @@
 // normalized against the original bitmap; output uses the A4 aspect ratio.
 import {visionTask} from './vision-runtime.js';
 import {analysisPixels,pixelCanvas,sourcePixels} from './recognition-raster.js';
+export const PAPER_DETECTION_LONG_EDGE=900;
 export function validateCorners(c){
   if(!Array.isArray(c)||c.length!==4||c.some(p=>!Number.isFinite(p.x)||!Number.isFinite(p.y)||p.x<0||p.x>1||p.y<0||p.y>1))throw Error('四角需位于照片内');
   const area=Math.abs(c.reduce((sum,p,i)=>sum+p.x*c[(i+1)%4].y-p.y*c[(i+1)%4].x,0))/2;
@@ -27,25 +28,18 @@ export async function rectifyA4(bitmap,corners,maxDimension=4096,paperRatio=210/
   return (await rectifyA4Frame(bitmap,corners,maxDimension,paperRatio)).blob;
 }
 export async function suggestPaperCorners(bitmap,paperRatio=210/297){
-  // The ca0f/c6 800px attempt stays byte-for-byte in behavior when it works.
-  // Images shared by phone photo libraries may have fewer pixels or different
-  // colour encoding; only if this first pass returns no page, increase detail.
-  const longEdge=Math.max(bitmap.width,bitmap.height);
-  for(const maxEdge of [800,1200,1600]){
-    const ratio=Math.min(1,maxEdge/longEdge),
-      w=Math.max(1,Math.round(bitmap.width*ratio)),
-      h=Math.max(1,Math.round(bitmap.height*ratio));
-    try{
-      const corners=await visionTask('quad',{
-        pixels:await analysisPixels(bitmap,{x:0,y:0,w:1,h:1},w,h),
-        width:w,height:h,paperRatio
-      });
-      if(corners)return corners;
-    }catch(error){
-      // One failed high-detail attempt does not invalidate a user's photo.
-      console.warn('自动纸张检测当前分辨率未成功',maxEdge,error);
-    }
-    if(ratio===1)break;
-  }
-  return null;
+  // Run ALL paper discovery on one canonical ~900px sRGB source raster.
+  // Input megapixels, viewport and device pixel ratio must not change this
+  // resolution. If the algorithms find no trustworthy quadrilateral, ask the
+  // user to confirm paper corners instead of trying larger source sizes.
+  // Canonical analysis dimensions also hold for small uploads. Upscaling
+  // cannot recover missing detail, but avoids device-dependent thresholds
+  // operating at different sizes. The full source is retained for export.
+  const scale=PAPER_DETECTION_LONG_EDGE/Math.max(bitmap.width,bitmap.height);
+  const width=Math.max(1,Math.round(bitmap.width*scale));
+  const height=Math.max(1,Math.round(bitmap.height*scale));
+  return visionTask('quad',{
+    pixels:await analysisPixels(bitmap,{x:0,y:0,w:1,h:1},width,height),
+    width,height,paperRatio
+  });
 }
