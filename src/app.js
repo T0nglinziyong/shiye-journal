@@ -1412,9 +1412,12 @@ async function refreshImportCandidates(regions,{manual=false,analysisRaster=null
       });
     if(!candidate||candidate.segmentationFailed)throw Error('旋转框内无法可靠分割，请调整框后重试');
     return candidate;
-  }):regions.map(region=>({region,original:null}));
+  },{pagePixelWidth:source.width*b.w,pagePixelHeight:source.height*b.h}):regions.map(region=>({region,original:null}));
   if(record!==state.importRecords[state.importIndex]||state.route!=='import')return false;
-  const lighting=state.importMaterialColorMode!=='original'&&state.correctedBitmap
+  // Deleting boxes or retaining already-extracted boxes is a pure list edit.
+  // It must not call OpenCV, sample the page again or rebuild any cutout.
+  const allOriginal=manual&&plans.every(plan=>!!plan.original);
+  const lighting=!allOriginal&&state.importMaterialColorMode!=='original'&&state.correctedBitmap
     ?await estimatePageLighting(source,plans.map(plan=>plan.region),{analysisRaster:manual?null:analysisRaster}):null;
   for(let i=0;i<plans.length;i++){
     const {region,original}=plans[i];if(original){next.push(original);continue;}

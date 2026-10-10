@@ -19,14 +19,24 @@ export function hasManualForegroundEvidence(pixels,width,height,box){
 // Keep sourceIndex stable, so an unchanged automatic mask is always reused.
 // New / edited frames must be normalized to the same page-coordinate box
 // contract used by the automatic process-material-boxes task.
-export function manualBoxGeometry(box){
+export function manualBoxGeometry(box,{pagePixelWidth=1,pagePixelHeight=1}={}){
   const {x,y,w,h}=box||{};
   if(![x,y,w,h].every(Number.isFinite)||!(w>0&&h>0)||
      x<0||y<0||x+w>1.00001||y+h>1.00001)
     throw Error('候选框尺寸或坐标无效，请调整框的位置');
   const rotation=Number.isFinite(box.rotation)?box.rotation:0;
+  // The editable rectangle is rotated about its centre, but MorphGAC works on
+  // a page-aligned ROI. Its input box MUST enclose the rotated rectangle,
+  // otherwise even a tiny rotation can cut through the actual foreground.
+  const cx=x+w/2,cy=y+h/2,angle=rotation*Math.PI/180;
+  const ratioX=Math.abs(Math.cos(angle))*w+
+    Math.abs(Math.sin(angle))*h*pagePixelHeight/pagePixelWidth;
+  const ratioY=Math.abs(Math.sin(angle))*w*pagePixelWidth/pagePixelHeight+
+    Math.abs(Math.cos(angle))*h;
+  const left=Math.max(0,cx-ratioX/2),top=Math.max(0,cy-ratioY/2),
+    right=Math.min(1,cx+ratioX/2),bottom=Math.min(1,cy+ratioY/2);
   return {
-    x,y,w,h,
+    x:left,y:top,w:right-left,h:bottom-top,
     orientedBox:{
       centerX:x+w/2,centerY:y+h/2,width:w,height:h,
       rotation,rectangularity:1,autoDeskew:true,source:'manual'
@@ -41,7 +51,7 @@ export function unchangedManualBox(box,previous){
   if(!candidate||box.manualChanged)return null;
   return candidate;
 }
-export async function refineManualBoxes(boxes,previous,segment){
+export async function refineManualBoxes(boxes,previous,segment,geometryOptions={}){
   const next=[];
   for(let index=0;index<boxes.length;index++){
     const box=boxes[index];
@@ -49,7 +59,7 @@ export async function refineManualBoxes(boxes,previous,segment){
     if(original){
       next.push({region:original.region,original});continue;
     }
-    const geometry=manualBoxGeometry(box);
+    const geometry=manualBoxGeometry(box,geometryOptions);
     const region=await segment(geometry,index,box);
     if(!region?.mask?.alpha?.length||!Number.isFinite(region.w)||!Number.isFinite(region.h))
       throw Error('第 '+(index+1)+' 个旋转框没有得到有效素材轮廓；原素材未修改');
