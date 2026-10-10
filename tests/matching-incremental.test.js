@@ -121,3 +121,21 @@ test('matching action handlers do not call full render on common operations',asy
  assert.match(text,/case 'match-filter':[\s\S]*?updateMatchingRegions/);
  assert.match(text,/case 'match-propose-history-toggle':[\s\S]*?updateMatchingRegions/);
 });
+
+
+test('starring does not remove or reinsert any basket card, even momentarily',()=>{
+ const f=fixture();
+ try{
+   const {view,win}=f,container=view.querySelector('.match-basket-scroll');
+   const observer=new win.MutationObserver(()=>{});
+   observer.observe(container,{childList:true});
+   patchMatchingView({
+     view,renderHTML:()=>page({star:true}),
+     regions:['.match-basket-scroll','.basket>.muted'],
+     onAction:()=>{}
+   });
+   assert.deepEqual(observer.takeRecords(),[],
+     'No childList mutation on unchanged basket container is allowed');
+   observer.disconnect();
+ }finally{f.close();}
+});
