@@ -58,7 +58,7 @@ begin
         and not exists(
           select 1 from jsonb_array_elements(operations) restoration
           where restoration->>'action'='put'
-            and 'tombstone:'||restoration->>'store'||':'||restoration->'item'->>'id'=row_id
+            and ('tombstone:' || (restoration->>'store') || ':' || (restoration->'item'->>'id')) = row_id
             and restoration->>'store' in ('assets','projects','series')
         ) then raise exception '禁止单独清除删除保护记录'; end if;
       if s in ('assets','projects','series') then
