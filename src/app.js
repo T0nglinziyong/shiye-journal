@@ -13,6 +13,7 @@ import './asset-organization.css';
 import './sync-indicator.css';
 import './offline-handoff.css';
 import './matching-view.css';
+import './page-heading.css';
 import {createAssetOrganization,mountOrganizationBadges,updateOrganizedAssetView} from './asset-organization.js';
 import '@fontsource/ma-shan-zheng/chinese-simplified-400.css';
 import {mountIcons,iconMarkup} from './icons.js';
