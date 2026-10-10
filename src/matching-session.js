@@ -9,17 +9,11 @@ import {createMatchingCoverCache} from './matching-cover-cache.js';
 import {reusePagePreviews} from './preview-content-cache.js';
 import {captureMatchingScroll,restoreMatchingScroll} from './matching-scroll.js';
 const ID='matching-session-v1';
-const KEYS=['basket','coreIDs','excludedAssetIDs','matchCore','matchProposals','matchProposalBatch','matchRatio','matchMode','matchStyle','matchStyles','matchPurposes','matchIntent','matchContentPolicy','matchUserText','matchFacts','matchPurpose','matchProcessing','materialUseHints','materialUseRequired','assetProcessing','customPaperWidth','customPaperHeight'];
+const KEYS=['basket','coreIDs','excludedAssetIDs','matchCore','matchRatio','matchMode','matchStyle','matchStyles','matchPurposes','matchIntent','matchContentPolicy','matchUserText','matchFacts','matchPurpose','matchProcessing','materialUseHints','materialUseRequired','assetProcessing','customPaperWidth','customPaperHeight'];
 export function matchingSnapshot(state,variants){return {id:ID,context:Object.fromEntries(KEYS.map(k=>[k,structuredClone(state[k])])),variants:structuredClone(variants)};}
 export function restoreMatchingSession(record,state){
  if(!record)return [];
  for(const key of KEYS)if(record.context?.[key]!==undefined)state[key]=key==='matchProcessing'&&record.context[key]==='AI 自主加工'?'不预设':record.context[key];
- // Device-local proposal cards are suggestions, never cloud projects. Drop
- // malformed or unexpectedly huge snapshots without touching saved works.
- state.matchProposals=(Array.isArray(state.matchProposals)?state.matchProposals:[])
-   .filter(p=>p&&typeof p.id==='string'&&Array.isArray(p.selectedAssetIDs))
-   .slice(0,24);
- state.matchProposalBatch=Number.isSafeInteger(state.matchProposalBatch)&&state.matchProposalBatch>=0?state.matchProposalBatch:0;
  return (Array.isArray(record.variants)?record.variants:[])
   .filter(v=>v&&typeof v.id==='string'&&usableProjectSnapshot(v.project))
   .map(v=>v.status==='running'?{...v,status:'interrupted',progress:'页面曾关闭，生成已中断；已保留收到的完整步骤。'}:v);
@@ -123,11 +117,6 @@ export function createMatchingSession(c){
     ensureAccount();
     let steps='';const output=await c.runCreativeAgent({...cfg,draft:p.drafts[0],assets:assetsSnapshot,aliases,styles:p.styles,pagePurposes:p.purposes,contentPolicy:p.contentPolicy||'documentary',userText:p.userText||'',providedFacts:p.providedFacts||'',requiredAssetIDs:p.requiredAssetIDs,materialPriority:p.materialPriority,processing:p.processing,assetProcessing:p.assetProcessing,materialUseHints:p.materialUseHints,materialUseRequired:p.materialUseRequired,prompt:p.intent||'',images,referenceImages:references,userTemplates:templatesSnapshot,request:recorder.request,signal:run.signal,
      onResponse:recorder.response,
-     onPlanning:plan=>{steps=plan?.selected?'构思 · '+plan.selected.title+'\n':'';v.progress=(plan?.selected?
-       '已比较 '+plan.concepts.length+' 个设计方向：'+plan.selected.title+'。开始制作可编辑页面…':
-       '已跳过不可用的构思阶段，继续可编辑创作。');
-       const el=document.querySelector(`[data-variant="${v.id}"] .match-progress`);
-       if(el)el.textContent=v.progress;},
      onScene:vision?async d=>{ensureAccount();return (await c.rasterize(d,.7)).toDataURL('image/jpeg',.8);}:undefined,
      onFinalScene:async d=>{ensureAccount();return (await c.rasterize(d,Math.min(1.6,2000/Math.max(d.canvas.width,d.canvas.height)))).toDataURL('image/jpeg',.88);},
      onInspection:vision?async data=>{ensureAccount();const parts=[];for(const m of data?.materials||[]){const a=findAsset(m.assetID);if(a){const url=await c.modelImage(a,m.cropRect);if(url)parts.push({type:'text',text:m.key+' 的局部预览'},{type:'image_url',image_url:{url}});}}return parts;}:undefined,
