@@ -73,6 +73,7 @@ import {buildMaterialScope} from './matching-materials.js';
 import {generateMaterialProposals} from './matching-proposals.js';
 import {matchingRecommendations,renderMatchingPage} from './matching-view.js';
 import {captureMatchingScroll,restoreMatchingScroll} from './matching-scroll.js';
+import {patchMatchingView} from './matching-incremental.js';
 import {selectJournalReferenceCases,loadJournalReferenceCases} from './journal-reference-catalog.js';
 import {loadJournalTemplateReferences} from './journal-template-references.js';
 import {clearJournalPresetImages} from './journal-preset-images.js';
@@ -368,6 +369,17 @@ const kindName=k=>({sticker:'贴纸',paper:'纸张',tape:'胶带',photo:'照片'
 function renderSeries(){return head('我的素材','把喜欢的，收进系列。')+`<div class="grid series-grid ${state.preferences.display==='list'?'list-grid':''}">${[...state.series].sort((a,b)=>a.id.startsWith('B700')&&b.id.startsWith('B700')?b.id.localeCompare(a.id):a.id.startsWith('B700')?-1:b.id.startsWith('B700')?1:0).map((s,index)=>{const members=state.assets.filter(a=>a.seriesID===s.id&&!a.isProjectInternal);const cover=seriesCovers(s,state.assets);return `<button class="card" data-act="series-detail" data-id="${s.id}"><div class="series-cover">${cover.map(a=>imgTag(a,index<2)).join('')}</div><div class="card-body"><h3>${esc(s.title)} <span aria-hidden="true">→</span></h3><p>${members.length} 件素材</p></div></button>`;}).join('')}</div>`;}
 function renderMatching(){return renderMatchingPage({state,head,imgTag,esc,kindName,session:matchingSession});}
 function matchingScope(){return buildMaterialScope({basket:state.basket,coreIDs:state.coreIDs,recommendations:matchingRecommendations(state),excluded:state.excludedAssetIDs,autoIncludeRecommendations:state.aiSettings.autoIncludeRecommendations,requireAllCandidates:state.aiSettings.requireAllCandidates});}
+// Common actions update only affected Matching panes, preserving the entire
+// remaining page, sticky header, textarea selection and decoded thumbnails.
+function updateMatchingRegions(regions){
+  if(state.route!=='matching')return render();
+  document.querySelector('#basket-count').textContent=state.basket.length;
+  const patched=patchMatchingView({
+    view,renderHTML:renderMatching,regions,
+    onAction:(action,id,value)=>handle(action,id,value),mountIcons
+  });
+  if(!patched)render();
+}
 function refreshMatchingRecommendations(){const current=view.querySelector('.match-recommendations');if(!current)return;const scroll=captureMatchingScroll(view,window);const template=document.createElement('template');template.innerHTML=renderMatching();const next=template.content.querySelector('.match-recommendations');if(!next)return;current.replaceWith(next);next.querySelectorAll('[data-act]').forEach(el=>el.addEventListener('click',()=>handle(el.dataset.act,el.dataset.id,el.dataset.val)));mountIcons(next);const summary=view.querySelector('.basket>.muted'),fresh=template.content.querySelector('.basket>.muted');if(summary&&fresh)summary.textContent=fresh.textContent;restoreMatchingScroll(view,scroll,window);}
 function workInkPreview(d){if(!d.strokes?.length)return '';const paths=d.strokes.map(s=>{const points=(s.points||[]).filter(p=>Number.isFinite(p.x)&&Number.isFinite(p.y));if(!points.length)return '';const color=esc(s.color||'#2b5245'),width=Math.max(.5,Number(s.width)||3),opacity=Math.max(0,Math.min(1,Number(s.opacity??1)));if(points.length===1)return `<circle cx="${points[0].x}" cy="${points[0].y}" r="${width/2}" fill="${color}" opacity="${opacity}"/>`;return `<path d="${points.map((p,n)=>`${n?'L':'M'}${p.x} ${p.y}`).join(' ')}" fill="none" stroke="${color}" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round" opacity="${opacity}"/>`;}).join('');return `<svg class="work-ink-preview" viewBox="0 0 ${d.canvas.width} ${d.canvas.height}" preserveAspectRatio="none" aria-hidden="true">${paths}</svg>`;}
 function workCover(d,priority=false,snapshotOnly=false,projectID=null){
@@ -686,11 +698,11 @@ async function handle(action,id,value){try{switch(action){
     });
     state.matchProposalBatch=batch+1;
     state.matchProposals=[...suggestions,...history].slice(0,24);
-    await matchingSession.persist();render();
+    await matchingSession.persist();updateMatchingRegions(['.match-proposals']);
     if(!suggestions.length)toast('当前没有足够素材组成搭配方案');
     break;
   }
-  case 'match-propose-history-toggle':state.matchProposalHistoryExpanded=!state.matchProposalHistoryExpanded;render();break;
+  case 'match-propose-history-toggle':state.matchProposalHistoryExpanded=!state.matchProposalHistoryExpanded;updateMatchingRegions(['.match-proposals']);break;
   case 'match-propose-apply':{
     const proposal=(state.matchProposals||[]).find(row=>row.id===id);
     if(!proposal)break;
@@ -700,17 +712,29 @@ async function handle(action,id,value){try{switch(action){
     state.basket=selected;state.coreIDs=proposal.requiredAssetIDs.slice();
     state.matchCore=state.coreIDs[0]||selected[0]||null;
     if(!state.matchIntent.trim())state.matchIntent=proposal.theme||'';
-    await matchingSession.persist();render();
+    await matchingSession.persist();updateMatchingRegions(['.match-basket-scroll','.basket>.muted','.match-rec-grid','.match-recommendations .match-panel-head small','.match-action']);
+    const intent=view.querySelector('#match-intent');if(intent&&intent.value!==state.matchIntent)intent.value=state.matchIntent;
     toast('已选用「'+proposal.title+'」，仍可自由调整素材');
     break;
   }
-  case 'match-filter':state.recommendFilter=value;render();break;case 'match-skip':state.excludedAssetIDs=[...new Set([...state.excludedAssetIDs,id])];render();break;case 'match-allow':state.excludedAssetIDs=state.excludedAssetIDs.filter(x=>x!==id);render();break;
-  case 'match-core':state.coreIDs=state.coreIDs.includes(id)?state.coreIDs.filter(x=>x!==id):[...state.coreIDs,id];state.matchCore=state.coreIDs[0]||state.basket[0];render();break;
+  case 'match-filter':state.recommendFilter=value;updateMatchingRegions(['.match-chips','.match-rec-grid']);break;
+  case 'match-skip':state.excludedAssetIDs=[...new Set([...state.excludedAssetIDs,id])];updateMatchingRegions(['.match-rec-grid','.basket>.muted','.match-recommendations .match-panel-head small','.match-action']);break;
+  case 'match-allow':state.excludedAssetIDs=state.excludedAssetIDs.filter(x=>x!==id);updateMatchingRegions(['.match-rec-grid','.basket>.muted','.match-recommendations .match-panel-head small','.match-action']);break;
+  case 'match-core':state.coreIDs=state.coreIDs.includes(id)?state.coreIDs.filter(x=>x!==id):[...state.coreIDs,id];
+    state.matchCore=state.coreIDs[0]||state.basket[0];
+    updateMatchingRegions(['.match-basket-scroll','.basket>.muted','.match-action']);break;
   case 'match-use':openMaterialUse(id);break;
   case 'match-generate':state.matchPurpose=view.querySelector('#match-purpose')?.value||'日常记录';state.matchProcessing=view.querySelector('#match-processing')?.value||'保留完整';state.matchStyle=view.querySelector('#match-style')?.value||state.matchStyle;state.matchIntent=view.querySelector('#match-intent')?.value||'';captureMatchContent();state.matchMode=view.querySelector('#match-mode')?.value||'single';state.matchRatio=readMatchPaper();state.matchStyles=readMatchSelection('match-style',state.matchStyle);state.matchPurposes=readMatchSelection('match-purpose',state.matchPurpose);await matchingSession.generate();break;
   case 'match-export-gpt':await exportOfflineCreation();break;
   case 'match-import-gpt':openOfflineImportDialog();break;
-  case 'basket':{const removing=state.basket.includes(id);state.basket=removing?state.basket.filter(x=>x!==id):[...state.basket,id];if(removing)state.coreIDs=state.coreIDs.filter(x=>x!==id);else state.excludedAssetIDs=state.excludedAssetIDs.filter(x=>x!==id);render();break;}
+  case 'basket':{
+    const removing=state.basket.includes(id);
+    state.basket=removing?state.basket.filter(x=>x!==id):[...state.basket,id];
+    if(removing)state.coreIDs=state.coreIDs.filter(x=>x!==id);
+    else state.excludedAssetIDs=state.excludedAssetIDs.filter(x=>x!==id);
+    updateMatchingRegions(['.match-basket-scroll','.basket>.muted','.match-rec-grid','.match-recommendations .match-panel-head small','.match-action']);
+    break;
+  }
   case 'reset-match':if(!confirm('重新搭配？已有保存作品不会被删除。'))break;await matchingSession.reset(()=>{state.matchCore=null;state.basket=[];state.coreIDs=[];state.excludedAssetIDs=[];state.matchProposals=[];state.matchProposalBatch=0;});render();break;
   case 'create-from-basket':openManualCreationDialog();break;
   case 'new-project':{
