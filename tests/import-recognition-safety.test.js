@@ -25,7 +25,7 @@ test('mobile uses one canonical 800px white-paper quad analysis',async()=>{
 test('failed mobile A4 detection never produces raw photo pseudo-materials',async()=>{
  const app=await source('app.js'),ui=await source('import-workspace-ui.js');
  assert.match(app,/rec\.prefetchStatus='needs-paper-review'/);
- assert.match(app,/rec\.paperNeedsReview=state\.paperSize!=='none'/);
+ assert.match(app,/rec\.paperNeedsReview=requiresManualPaperConfirmation\(/);
  assert.match(app,/if\(!rec\.paperNeedsReview&&rec\.prefetchStatus/);
  assert.match(app,/state\.importRecords\[state\.importIndex\]\?\.paperNeedsReview/);
  const html=renderImportInspection({state:{
