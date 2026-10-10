@@ -44,8 +44,14 @@ async function parallelFinalPipeline({
   try{
     const results=await visionParallelTasks('process-material-boxes',groups.map(boxes=>({
       // One frame copy per worker/chunk, never one copy per material.
-      pixels:new Uint8ClampedArray(frame.data),
-      sourcePixels:new Uint8ClampedArray(sourceFrame.data),
+      // Reuse one transferred RGBA buffer when discovery and segmentation
+      // use the same 900px raster (the default). The worker only reads pixels;
+      // ownership is transferred once, never duplicated per field.
+      ...(()=>{
+        const pixels=new Uint8ClampedArray(frame.data);
+        return {pixels,sourcePixels:sourceFrame.data===frame.data
+          ?pixels:new Uint8ClampedArray(sourceFrame.data)};
+      })(),
       transferInput:true,
       width,height,boxes,method,paperWidthMM,paperHeightMM,mergeSharedCarrier,
       chromaEdges:preprocess.chromaEdges!==false,
