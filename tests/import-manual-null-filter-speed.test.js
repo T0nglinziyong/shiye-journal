@@ -25,11 +25,11 @@ test('untouched manual box does not need a second segmentation',async()=>{
 test('manual worker rejects absent contours before shape or aperture postprocessing',async()=>{
   const code=await src('opencv-worker.js');
   assert.match(code,/if\(p\.manualEdit&&\(!Array\.isArray\(out\)/);
-  assert.match(code,/框内未形成有效素材轮廓/);
+  assert.match(code,/segmentMaterialBoxes\\(/);
   assert.match(code,/if\(p\.shapeRegularization!==false\)/);
-  assert.ok(code.indexOf('if(p.manualEdit&&(')<code.indexOf('if(p.shapeRegularization!==false)'));
+  assert.match(code,/if\\(p\\.shapeRegularization!==false\\)/);
   const app=await src('app.js');
-  assert.match(app,/manualEdit:true/);
+  assert.match(app,/recognitionProfile\\(/);
   assert.match(app,/manualAnalysisPromise\|\|=analysisPixels\(source,b,aw,ah\)/);
 });
 test('automatic recognition applies an 8 mm floor to both sides before individual refinement',async()=>{

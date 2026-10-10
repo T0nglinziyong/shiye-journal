@@ -42,6 +42,6 @@ test('manual editor resets edit marker, skips processing if nothing changed',asy
 test('manual input uses the normalized automatic box schema in CV call',async()=>{
  const app=await readFile(new URL('../src/app.js',import.meta.url),'utf8');
  assert.match(app,/boxes:\[box\],method:/);
- assert.match(app,/manualEdit:true/);
+ assert.match(app,/recognitionProfile\\(/);
  assert.match(app,/manualAnalysisPromise\|\|=analysisPixels/);
 });

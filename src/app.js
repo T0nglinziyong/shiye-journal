@@ -43,7 +43,7 @@ import {createAIRecorder,publicAIDiagnosticReport} from './ai-diagnostics.js';
 import {mountImportBoxEditor} from './import-box-editor.js';
 import {saveImportBatch,importPaperDimensions} from './import-save.js';
 import {paperDimensions as presetPaperDimensions,paperSizeOptions} from './paper-sizes.js';
-import {refineManualBoxes,hasManualForegroundEvidence,segmentManualOrFallback} from './manual-import-recognition.js';
+import {refineManualBoxes,segmentManualOrFallback} from './manual-import-recognition.js';
 import {seriesCovers,usedAssetIDs,markProjectAssetsUsed} from './library-model.js';
 import {renderSeriesContents} from './series-contents.js';
 import {showSeriesEditor} from './series-editor.js';
@@ -1357,7 +1357,7 @@ async function refreshImportCandidates(regions,{manual=false,analysisRaster=null
   const next=[];const [pw,ph]=paperDimensions(),calibrated=state.paperSize!=='none'&&(state.correctedBitmap||state.wholePaper);
   // All manually edited boxes share the exact same page raster and settings.
   // Memoize its expensive full-page readback/resize once per edit batch.
-  let manualAnalysisPromise=null;
+  let manualAnalysisPromise=null,manualPreparedRasterPromise=null;
   const plans=manual?await refineManualBoxes(regions,previous,async(box,index)=>{
     {const el=view.querySelector('.import-processing');if(el)el.textContent='正在按旋转框分割 '+(index+1)+' / '+regions.length;}
     const limit=state.preferences.recognitionPixels||900,
@@ -1366,19 +1366,36 @@ async function refreshImportCandidates(regions,{manual=false,analysisRaster=null
       ah=Math.max(1,Math.round(source.height*b.h*scale));
     manualAnalysisPromise||=analysisPixels(source,b,aw,ah);
     const pixels=await manualAnalysisPromise;
+    // The box source (automatic discovery or user edit) must not change the
+    // segmentation and postprocessing profile. Use the very same
+    // recognitionProfile.refineCandidates entry used by detectPaperCandidates.
     return segmentManualOrFallback(box,async()=>{
-      if(!hasManualForegroundEvidence(pixels,aw,ah,box))
-        throw Error('手动框中的前景对比度较低');
-      const [candidate]=await visionTask('process-material-boxes',{
-        pixels,sourcePixels:pixels,width:aw,height:ah,manualEdit:true,
-        boxes:[box],method:state.importRecognition||'morphgac',
-        paperWidthMM:pw,paperHeightMM:ph,
-        shapeRegularization:recognitionPostprocessOptions().shapeRegularization!==false,
-        apertures:recognitionPostprocessOptions().apertures!==false
+      const rawOptions=recognitionPreprocessOptions();
+      const preprocess={
+        illumination:state.balanceLight===true&&rawOptions.illumination===true,
+        denoise:rawOptions.denoise===true,
+        localContrast:rawOptions.localContrast===true,
+        chromaEdges:rawOptions.chromaEdges!==false
+      };
+      // Match the automatic preprocessing branch; memoize for all manually
+      // edited boxes in the same batch (no repeated whole-page balancing).
+      manualPreparedRasterPromise||=(preprocess.illumination||preprocess.denoise||preprocess.localContrast)
+        ?visionTask('balance',{pixels,width:aw,height:ah,options:preprocess}).then(result=>result.pixels)
+        :Promise.resolve(pixels);
+      const prepared=await manualPreparedRasterPromise;
+      const refined=await recognitionProfile(
+        state.importRecognition||state.preferences.recognition,limit
+      ).refineCandidates({
+        candidates:[box],
+        frame:{data:prepared,width:aw,height:ah},
+        sourceFrame:{data:pixels,width:aw,height:ah},
+        width:aw,height:ah,paperWidthMM:pw,paperHeightMM:ph,
+        mergeSharedCarrier:state.preferences.mergeSharedCarrier!==false,
+        preprocess,postprocess:recognitionPostprocessOptions()
       });
-      return candidate;
+      return refined[0];
     },{pagePixelWidth:aw,pagePixelHeight:ah},error=>{
-      console.warn('手动补框精细分割失败，保留所画的完整素材框供检查',index+1,error);
+      console.warn('手动补框精细分割不可用，保留所画的完整素材供检查',index+1,error);
     });
   },{pagePixelWidth:source.width*b.w,pagePixelHeight:source.height*b.h}):regions.map(region=>({region,original:null}));
   if(record!==state.importRecords[state.importIndex]||state.route!=='import')return false;
