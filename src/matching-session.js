@@ -8,11 +8,17 @@ import {materialAliases} from './material-alias.js';
 import {createMatchingCoverCache} from './matching-cover-cache.js';
 import {reusePagePreviews} from './preview-content-cache.js';
 const ID='matching-session-v1';
-const KEYS=['basket','coreIDs','excludedAssetIDs','matchCore','matchRatio','matchMode','matchStyle','matchStyles','matchPurposes','matchIntent','matchContentPolicy','matchUserText','matchFacts','matchPurpose','matchProcessing','materialUseHints','materialUseRequired','assetProcessing','customPaperWidth','customPaperHeight'];
+const KEYS=['basket','coreIDs','excludedAssetIDs','matchCore','matchProposals','matchProposalBatch','matchRatio','matchMode','matchStyle','matchStyles','matchPurposes','matchIntent','matchContentPolicy','matchUserText','matchFacts','matchPurpose','matchProcessing','materialUseHints','materialUseRequired','assetProcessing','customPaperWidth','customPaperHeight'];
 export function matchingSnapshot(state,variants){return {id:ID,context:Object.fromEntries(KEYS.map(k=>[k,structuredClone(state[k])])),variants:structuredClone(variants)};}
 export function restoreMatchingSession(record,state){
  if(!record)return [];
  for(const key of KEYS)if(record.context?.[key]!==undefined)state[key]=key==='matchProcessing'&&record.context[key]==='AI 自主加工'?'不预设':record.context[key];
+ // Device-local proposal cards are suggestions, never cloud projects. Drop
+ // malformed or unexpectedly huge snapshots without touching saved works.
+ state.matchProposals=(Array.isArray(state.matchProposals)?state.matchProposals:[])
+   .filter(p=>p&&typeof p.id==='string'&&Array.isArray(p.selectedAssetIDs))
+   .slice(0,24);
+ state.matchProposalBatch=Number.isSafeInteger(state.matchProposalBatch)&&state.matchProposalBatch>=0?state.matchProposalBatch:0;
  return (Array.isArray(record.variants)?record.variants:[])
   .filter(v=>v&&typeof v.id==='string'&&usableProjectSnapshot(v.project))
   .map(v=>v.status==='running'?{...v,status:'interrupted',progress:'页面曾关闭，生成已中断；已保留收到的完整步骤。'}:v);
