@@ -225,6 +225,7 @@ export function mountCanvasEditor(c){
   }
   function layerPicker(anchor){
     const p=openPopover(anchor,{title:'图层 · 上方显示在前',width:350}),list=document.createElement('div');
+    p.surface.classList.add('swift-layer-popover');
     list.className='canvas-layer-list';p.content.append(list);
     const ordered=[...entries].sort((a,b)=>(b.value.zIndex||0)-(a.value.zIndex||0)),rows=new Map();
     let drag=null,holdTimer=null,scrollFrame=null,moveMenu=null,suppressMoveClickUntil=0;
@@ -287,9 +288,9 @@ export function mountCanvasEditor(c){
       move.onclick=()=>{if(drag||performance.now()<suppressMoveClickUntil)return;moveMenu?.remove();const controls=document.createElement('div');controls.className='canvas-layer-move-actions';controls.append(button('上移一层',()=>{reorder(o.id,ordered[indexOf(o.id)-1]?.value.id);controls.remove();moveMenu=null;}),button('下移一层',()=>{reorder(o.id,ordered[indexOf(o.id)+1]?.value.id,true);controls.remove();moveMenu=null;}));row.append(controls);moveMenu=controls;};
       move.dataset.layerMove='';move.setAttribute('aria-label','调整图层顺序');move.style.touchAction='none';
       let pending=null;
-      // Start a drag by holding anywhere on the thumbnail/drag grip. Previous
-      // code listened only on a narrow ≡ button, so long-pressing the layer
-      // itself simply selected it and could close the popover.
+      // Mouse dragging still starts from the row. Touch must start from
+      // the explicit ≡ grip so a vertical finger swipe over the layer thumbnail
+      // always scrolls the list instead of being intercepted for reordering.
       const beginDrag=()=>{
         if(!pending||drag)return;
         drag={id:o.id,y:pending.y,target:null,moved:false};
@@ -303,8 +304,12 @@ export function mountCanvasEditor(c){
       row.onpointerdown=event=>{
         if(event.button>0||o.isLocked||o.locked||
           event.target.closest('[data-layer-lock],[data-layer-eye],.canvas-layer-move-actions'))return;
+        // Native touch panning remains on the row/thumbnail; only the explicit
+        // reorder grip opts out. The old touch-action:none prevented scrolling.
+        const grip=!!event.target.closest('[data-layer-move]');
+        if(event.pointerType!=='mouse'&&!grip)return;
         pending={pointerId:event.pointerId,x:event.clientX,y:event.clientY,startY:event.clientY,
-          pointerType:event.pointerType};
+          pointerType:event.pointerType,grip};
         if(event.pointerType!=='mouse')holdTimer=setTimeout(beginDrag,240);
       };
       row.onpointermove=event=>{
@@ -314,7 +319,10 @@ export function mountCanvasEditor(c){
           const distance=Math.hypot(event.clientX-pending.x,event.clientY-pending.startY);
           if(event.pointerType==='mouse'&&distance>5)beginDrag();
           // Do not treat a quick touch scroll as a layer reordering.
-          else if(event.pointerType!=='mouse'&&distance>12){clearTimeout(holdTimer);holdTimer=null;}
+          else if(event.pointerType!=='mouse'&&distance>12){
+            if(pending.grip)beginDrag();
+            else{clearTimeout(holdTimer);holdTimer=null;}
+          }
         }
         if(!drag)return;
         drag.y=event.clientY;
