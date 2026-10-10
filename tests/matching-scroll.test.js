@@ -107,11 +107,11 @@ test('full render, recommendation patch and async version update all restore mat
   const app=await readFile(new URL('../src/app.js',import.meta.url),'utf8');
   const session=await readFile(new URL('../src/matching-session.js',import.meta.url),'utf8');
   const markup=await readFile(new URL('../src/matching-view.js',import.meta.url),'utf8');
-  assert.match(app,/previousMatchingScroll=captureMatchingScroll\(view,window\)/);
-  assert.match(app,/restoreMatchingScroll\(view,matchingScrollMemory.scroll,window\)/);
+  assert.match(app,/matchingScroll=captureMatchingScroll\(view,window\)/);
+  assert.match(app,/restoreMatchingScroll\(view,matchingScrollMemory.scroll,window/);
   assert.match(app,/restoreMatchingScroll\(view,scroll,window\)/);
   assert.match(session,/captureMatchingScroll\(root,globalThis.window\)/);
-  assert.match(session,/restoreMatchingScroll\(root,scroll,globalThis.window\)/);
-  for(const key of ['basket','recommendations','chips','proposals','intent','facts'])
+  assert.match(session,/restoreMatchingScroll\(root,scroll,globalThis.window/);
+  for(const key of ['basket','recommendations','chips','intent','facts'])
     assert.ok(markup.includes('data-match-scroll="'+key+'"'),key+' must have a stable scroll identity');
 });
