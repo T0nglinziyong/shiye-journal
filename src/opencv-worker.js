@@ -58,7 +58,7 @@ export async function processVision(cv,operation,p){
       const diagnostics=p.collectDiagnostics?{
         stage:'quad',inputSize:[p.width,p.height],
         graySample:[blurred.data[Math.floor(p.height*.5)*p.width+Math.floor(p.width*.5)]||0],
-        edgePixels:cv.countNonZero(edges),
+        edgePixels:[...edges.data].reduce((count,value)=>count+(value>0),0),
         segmentShape:[segments.rows,segments.cols],
         typedSegments:segments.data32S.length
       }:null;
