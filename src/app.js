@@ -617,7 +617,7 @@ function bindPage(){view.querySelectorAll('[data-act]').forEach(el=>el.addEventL
       root:view,candidates:()=>state.importCandidateData||[],
       active:()=>state.route==='import'&&state.importIndex===index,
       onRepair:(ci,item)=>{
-        state.importCandidateURLs[ci]=item.url;
+        (state.importCandidateURLs||=[])[ci]=item.url;
         saveActiveImportRecord();
       }
     });
