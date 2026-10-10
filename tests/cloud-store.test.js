@@ -419,7 +419,8 @@ test('all user-facing deletes are staged as remote delete plus trash entry and s
       'Trash is immediately visible before remote upload');
     await db.cloudFlushProjects();
     assert.deepEqual(state.calls.at(-1).operations.map(op=>op.store+':'+op.action),
-      [store+':delete','trash:put']);
+      [store+':delete','trash:put','meta:put']);
+    assert.equal(state.calls.at(-1).operations.at(-1).item.id,'tombstone:'+store+':'+original.id);
     assert.deepEqual(await cache.get('cloud:owner-uuid','import-outbox'),[],
       'Committed remote deletion must leave no unsynced tombstones');
   }
