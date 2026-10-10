@@ -1403,6 +1403,8 @@ async function previewCrop(){
   if(!state.importBitmap||state.importMode==='snapshot')return;
   if(state.paperSize!=='none'&&!state.correctedBitmap&&state.importRecords[state.importIndex]?.paperNeedsReview){toast('请先拖动纸张四角，预览校正并点击“使用校正结果”');return;}
   const record=state.importRecords[state.importIndex],source=state.correctedBitmap||state.importBitmap,b=state.correctedBitmap?{x:0,y:0,w:1,h:1}:state.importBox,[pw,ph]=paperDimensions();
+  record.importError=null;
+  try{
   let regions=await detectPaperCandidates(source,b,6,{balanceLight:state.balanceLight,paperRectified:!!state.correctedBitmap,paperWidthMM:pw,paperHeightMM:ph,recognition:state.importRecognition||state.preferences.recognition,recognitionPixels:state.preferences.recognitionPixels,recognitionPreprocess:recognitionPreprocessOptions(),recognitionPostprocess:recognitionPostprocessOptions(),mergeSharedCarrier:state.preferences.mergeSharedCarrier!==false,onDiagnostic:trace=>{record.recognitionDiagnostic=trace;},onProgress:p=>{
     if(state.route!=='import'||record!==state.importRecords[state.importIndex])return;
         const text=p.status==='inference'?'浏览器模型正在细化素材边缘…'
@@ -1419,6 +1421,14 @@ async function previewCrop(){
     // No expensive work remains. Unlock before the first candidate render;
     // users must not wait for another full-page render to confirm the photo.
     state.importProcessing='';render();
+  }
+  }catch(error){
+    if(record===state.importRecords[state.importIndex]&&state.route==='import'){
+      record.importError=String(error?.message||error);
+      state.importProcessing='';
+      render();
+    }
+    throw error;
   }
 }
 function recalibrateImport(){
