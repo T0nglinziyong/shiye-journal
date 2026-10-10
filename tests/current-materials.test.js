@@ -37,7 +37,7 @@ test('sync keeps user-visible built-in edits while canonicalizing current fields
   assert.equal(db.stores.assets.get(id).builtinRevision,CURRENT_MATERIAL_REVISION);
   assert.ok(db.stores.assets.get(id).staticPath.startsWith('/builtin-materials/'));
   assert.equal(db.stores.assets.has('B7000000-0000-4000-8000-000000009005'),false);
-  assert.equal([...db.stores.assets.values()].filter(asset=>CURRENT_MATERIAL_IDS.has(asset.id)).length,164);
+  assert.equal([...db.stores.assets.values()].filter(asset=>CURRENT_MATERIAL_IDS.has(asset.id)).length,1,'partial existing library must not implicitly reseed objects the user may have deleted');
   const again=await syncCurrentMaterials({database:db});assert.equal(again.changed,false);
 });
 
