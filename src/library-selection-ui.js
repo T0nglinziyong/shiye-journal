@@ -6,6 +6,7 @@ import {supportsVision} from './ai-settings.js';
 import {bindLongPress} from './long-press.js';
 import {withUsageStatus} from './library-model.js';
 import {registerSelectionPresenter} from './selection-presenter.js';
+import {createSelectionSidePanels} from './selection-side-panels.js';
 
 const action=(name,fn)=>{
   const b=document.createElement('button');b.type='button';b.className='btn';
@@ -44,24 +45,12 @@ function moreMenu(c,p,anchor){
   if(!menu)return;
   menu.surface.classList.add('selection-more-menu');
 
-  // Series, Works and Assets must use the same contained accordion menu.
-  // A separate fixed-position submenu would cover the parent on narrow screens,
-  // and the old truthy 'assign' branch incorrectly treated 'export' as a series.
+  // The submenu is a SECOND anchored pane, never an inline accordion.
+  // Both panes remain clickable, and closing the parent closes its child.
+  const side=createSelectionSidePanels(menu,{anchor,makeAction:action});
   const group=(title,choices)=>{
     const trigger=action(title+' ›',()=>{
-      const opened=trigger.getAttribute('aria-expanded')==='true';
-      menu.content.querySelector('.selection-inline-submenu')?.remove();
-      for(const button of menu.content.querySelectorAll('[data-expanded-submenu]'))
-        button.setAttribute('aria-expanded','false');
-      if(opened){menu.position();return;}
-      const panel=document.createElement('section');
-      panel.className='selection-submenu selection-inline-submenu';
-      panel.setAttribute('role','group');
-      panel.setAttribute('aria-label',title);
-      for(const [label,handler] of choices())panel.append(action(label,handler));
-      trigger.after(panel);
-      trigger.setAttribute('aria-expanded','true');
-      menu.position();
+      side.open(trigger,title,choices(),{pinned:title==='加入系列'?2:0});
     });
     trigger.dataset.expandedSubmenu='';
     trigger.setAttribute('aria-expanded','false');

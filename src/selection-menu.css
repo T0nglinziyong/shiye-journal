@@ -114,25 +114,6 @@
   }
 }
 
-/* Subformat choices stay inside the More menu instead of creating a
-   second floating menu that may disappear on touch devices. */
-.selection-more-menu .selection-inline-submenu {
-  width:100%;
-  padding:4px 0 6px 12px;
-  box-sizing:border-box;
-  border-left:2px solid #d9e5da;
-  margin-left:10px;
-  display:flex;
-  flex-direction:column;
-  gap:2px;
-}
-.selection-more-menu .selection-inline-submenu > button {
-  width:100%;
-  min-height:42px;
-  border:0;
-  text-align:left;
-}
-
 /* Shared catalog selection bar is a compact anchored bottom sheet, including
    the Asset/Works Recently Deleted tabs. Only the irreversible action needs
    additional horizontal room; do not globally enlarge other buttons. */
@@ -167,26 +148,103 @@
     flex:none;
   }
 }
-/* Every nested action stays within More instead of opening a second overlay
-   beside or over it. Keep the sublist accessible when the menu is taller than
-   the viewport; opening a subsection makes the parent reposition itself. */
-.selection-more-menu .selection-inline-submenu{
-  position:static;
-  max-width:100%;
-  max-height:none;
-  overflow:visible;
-  margin:3px 0 6px 10px;
-  padding:3px 0 3px 10px;
-  border-radius:0;
-  box-shadow:none;
-  background:transparent;
-}
-.selection-more-menu .selection-inline-submenu > button {
+/* The nested choices are a SECOND side pane next to More, never a
+   disclosure list inside it. Both panes use one parent lifecycle. */
+.selection-side-panel.selection-submenu {
+  position:fixed;
+  display:flex;
+  flex-direction:column;
+  z-index:201;
+  min-height:0;
   box-sizing:border-box;
+  overflow:hidden;
+  padding:0;
+  margin:0;
+  border:1px solid #d9e3d9;
+  border-radius:18px;
+  background:#fffefaf5;
+  box-shadow:0 12px 36px #243b2930;
+  backdrop-filter:blur(24px);
+  -webkit-backdrop-filter:blur(24px);
+  overscroll-behavior:contain;
+}
+.selection-side-heading {
+  flex:none;
+  padding:13px 12px;
+  border-bottom:1px solid #e0e7df;
+  font-size:14px;
+  line-height:1.3;
+  font-weight:600;
+  color:#52634b;
+  text-align:center;
+}
+.selection-side-list {
+  display:flex;
+  flex:1 1 auto;
+  flex-direction:column;
+  gap:2px;
+  padding:6px;
+  min-height:0;
+  overflow:auto;
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
+}
+.selection-side-pinned {
+  display:flex;
+  flex:none;
+  flex-direction:column;
+  padding:6px;
+  gap:2px;
+  border-bottom:1px solid #e1e7df;
+  background:#fffefa;
+}
+.selection-side-panel :is(.selection-side-list,.selection-side-pinned) > button {
   width:100%;
-  min-width:0;
-  height:auto;
-  min-height:38px;
+  min-height:42px;
+  flex:none;
+  box-sizing:border-box;
+  margin:0;
+  padding:9px 8px;
+  display:flex;
+  align-items:center;
+  justify-content:flex-start;
+  gap:8px;
+  border:0;
+  border-radius:9px;
+  background:transparent;
+  color:#303b32;
   text-align:left;
   white-space:normal;
+  overflow-wrap:anywhere;
+}
+.selection-side-panel :is(.selection-side-list,.selection-side-pinned) > button:hover,
+.selection-side-panel :is(.selection-side-list,.selection-side-pinned) > button:focus-visible {
+  background:#eaf1e8;
+  outline:2px solid #b4cbb3;
+  outline-offset:-2px;
+}
+.selection-side-panel .selection-action-label { flex:1;min-width:0; }
+.selection-more-menu.selection-side-open [data-expanded-submenu][aria-expanded="true"] {
+  color:#335e40;
+  background:#e7eee5;
+}
+@media(max-width:599px){
+  /* The parent shrinks only while a child is open, leaving two complete,
+     non-overlapping panes even on small phones. */
+  .selection-more-menu.selection-side-open .popover-content{padding:5px;}
+  .selection-more-menu.selection-side-open .popover-content > button {
+    padding:8px 5px;
+    grid-template-columns:14px minmax(0,1fr) 10px;
+    column-gap:4px;
+    font-size:12px;
+  }
+  .selection-more-menu.selection-side-open .popover-content > button > svg.shiye-icon {
+    width:14px;height:14px;
+  }
+  .selection-side-panel .selection-side-heading{padding:10px 7px;font-size:12px}
+  .selection-side-panel :is(.selection-side-list,.selection-side-pinned)>button{
+    padding:8px 6px;
+    font-size:12px;
+    min-height:38px;
+  }
 }
