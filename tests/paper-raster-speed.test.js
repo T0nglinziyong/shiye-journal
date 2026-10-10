@@ -1,55 +1,70 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {paperQuadFromLines} from '../src/paper-line-candidates.js';
+import {detectWhitePaperQuad} from '../src/white-paper-quad.js';
 import {workerRasterPair} from '../src/worker-raster-pair.js';
 import {estimatePageLighting} from '../src/material-color-restoration.js';
-
 const source=file=>readFile(new URL('../src/'+file,import.meta.url),'utf8');
 
-function paperFixture(width,height){
-  const wide=width>height;
-  const n=wide?[[.11,.12],[.89,.12],[.93,.86],[.05,.86]]:
-    [[.12,.10],[.88,.10],[.88,.90],[.12,.90]];
-  const points=n.map(([x,y])=>[Math.round(x*width),Math.round(y*height)]);
-  const gray=new Uint8Array(width*height).fill(20);
+function sheetFixture(width,height){
+  const landscape=width>height;
+  const normalized=landscape
+    ?[[.11,.12],[.89,.12],[.93,.86],[.05,.86]]
+    :[[.12,.10],[.88,.10],[.88,.90],[.12,.90]];
+  const pts=normalized.map(([x,y])=>[Math.round(width*x),Math.round(height*y)]);
+  const gray=new Uint8Array(width*height).fill(20),support=new Uint8Array(width*height);
   for(let y=0;y<height;y++)for(let x=0;x<width;x++){
     let inside=false;
     for(let i=0,j=3;i<4;j=i++){
-      const a=points[i],b=points[j];
-      if((a[1]>y)!==(b[1]>y)&&x<(b[0]-a[0])*(y-a[1])/(b[1]-a[1])+a[0])inside=!inside;
+      const a=pts[i],b=pts[j];
+      if((a[1]>y)!==(b[1]>y)&&x<(b[0]-a[0])*(y-a[1])/(b[1]-a[1])+a[0])
+        inside=!inside;
     }
     if(inside)gray[y*width+x]=235;
   }
-  return {points,gray,lines:points.map((p,i)=>[...p,...points[(i+1)%4]]),
-    ratio:wide?297/210:210/297};
-}
-test('paper detector restores ca0f 800px first; only on failure checks 900px',async()=>{
-  const perspective=await source('perspective.js');
-  assert.match(perspective,/PAPER_DETECTION_LONG_EDGE=800/);
-  assert.match(perspective,/PAPER_RETRY_LONG_EDGE=900/);
-  assert.match(perspective,/for\(const longest of \[PAPER_DETECTION_LONG_EDGE,PAPER_RETRY_LONG_EDGE\]\)/);
-  assert.match(perspective,/if\(corners\)return corners/);
-  assert.doesNotMatch(perspective,/for\(const maxEdge of \[800,1200,1600\]\)/);
-});
-test('fixed-raster paper-line fallback detects landscape and portrait with four real edges',()=>{
-  for(const [width,height] of [[900,675],[675,900]]){
-    const {points,gray,lines,ratio}=paperFixture(width,height);
-    const corners=paperQuadFromLines(lines,gray,width,height,ratio);
-    assert.equal(corners?.length,4,String(width)+' x '+height);
-    for(let i=0;i<4;i++){
-      assert.ok(Math.abs(corners[i].x-points[i][0]/width)<.01);
-      assert.ok(Math.abs(corners[i].y-points[i][1]/height)<.01);
+  const lines=pts.map((p,i)=>[...p,...pts[(i+1)%4]]);
+  for(const [x1,y1,x2,y2] of lines){
+    for(let t=0;t<=700;t++){
+      const x=Math.round(x1+(x2-x1)*t/700);
+      const y=Math.round(y1+(y2-y1)*t/700);
+      for(let dy=-3;dy<=3;dy++)for(let dx=-3;dx<=3;dx++){
+        const xx=x+dx,yy=y+dy;
+        if(xx>=0&&xx<width&&yy>=0&&yy<height)support[yy*width+xx]=255;
+      }
     }
-    assert.equal(paperQuadFromLines(lines.slice(0,3),gray,width,height,ratio),null);
+  }
+  return {pts,gray,support,lines,ratio:landscape?297/210:210/297};
+}
+test('single 800px paper analysis pass, not algorithm or resolution fallback',async()=>{
+  const [perspective,worker]=await Promise.all([source('perspective.js'),source('opencv-worker.js')]);
+  assert.match(perspective,/PAPER_DETECTION_LONG_EDGE=800/);
+  assert.match(perspective,/return visionTask\('quad',/);
+  assert.doesNotMatch(perspective,/PAPER_RETRY_LONG_EDGE|for\(const longest|for\(const maxEdge/);
+  assert.match(worker,/detectWhitePaperQuad\(lines,blurred\.data,support\.data/);
+  assert.doesNotMatch(worker,/paperQuadFromLines|if\(best\)return best\.corners|for\(const threshold of/);
+  assert.match(worker,/cv\.HoughLinesP\(edges,segments,1,Math\.PI\/180,35/);
+});
+test('single border scorer locates white sheet in landscape and portrait',()=>{
+  for(const [width,height] of [[800,600],[600,800]]){
+    const {pts,gray,support,lines,ratio}=sheetFixture(width,height);
+    const corners=detectWhitePaperQuad(lines,gray,support,width,height,ratio);
+    assert.equal(corners?.length,4,'portrait/landscape paper must be found');
+    for(let i=0;i<4;i++){
+      assert.ok(Math.abs(corners[i].x-pts[i][0]/width)<.013);
+      assert.ok(Math.abs(corners[i].y-pts[i][1]/height)<.013);
+    }
+    assert.equal(detectWhitePaperQuad(lines.slice(0,3),gray,support,width,height,ratio),null);
   }
 });
-test('line detector cannot override accepted OpenCV contour corners',async()=>{
-  const worker=await source('opencv-worker.js');
-  assert.match(worker,/if\(best\)return best\.corners/);
-  assert.match(worker,/paperQuadFromLines\(candidates,gray\.data,p\.width,p\.height,p\.paperRatio\)/);
+test('detector rejects blank inputs and incomplete bright objects',()=>{
+  const width=800,height=600,white=new Uint8Array(width*height).fill(255);
+  const noEdges=new Uint8Array(width*height);
+  assert.equal(detectWhitePaperQuad([],white,noEdges,width,height,297/210),null);
+  const {lines}=sheetFixture(width,height);
+  assert.equal(detectWhitePaperQuad(lines,white,noEdges,width,height,297/210),null);
+  assert.equal(detectWhitePaperQuad(lines.slice(0,2),white,noEdges,width,height,297/210),null);
 });
-test('worker parameters share one owned buffer if the source and foreground are identical',()=>{
+test('recognition worker reuses one source raster for identical foreground and discovery pixels',()=>{
   const data=new Uint8ClampedArray([20,30,40,255]);
   const result=workerRasterPair({data},{data});
   assert.equal(result.pixels,result.sourcePixels);
@@ -58,7 +73,7 @@ test('worker parameters share one owned buffer if the source and foreground are 
   const separate=workerRasterPair({data},{data:new Uint8ClampedArray([1,2,3,4])});
   assert.notEqual(separate.pixels,separate.sourcePixels);
 });
-test('white-paper light map uses the existing analysis pixels without canvas repaint',async()=>{
+test('light estimator reuses the existing analysis frame without another canvas repaint',async()=>{
   const width=128,height=96,data=new Uint8ClampedArray(width*height*4);
   for(let i=0;i<data.length;i+=4){
     data[i]=236;data[i+1]=237;data[i+2]=235;data[i+3]=255;
@@ -67,17 +82,18 @@ test('white-paper light map uses the existing analysis pixels without canvas rep
   assert.ok(map);
   assert.ok(map.samples>40);
 });
-test('explicit deskew skips redundant preview probe and non-JPEG ICC gets converted',async()=>{
-  const [image,raster]=await Promise.all([source('image.js'),source('recognition-raster.js')]);
+test('source colour normalization and high-quality material export remain separate',async()=>{
+  const [image,raster,matching,app,perspective]=await Promise.all([
+    source('image.js'),source('recognition-raster.js'),
+    source('matching-view.js'),source('app.js'),source('perspective.js')
+  ]);
+  assert.match(image,/segmentPaperMaterials\(discoveryFrame/);
   assert.match(image,/if\(degrees==null\)\{/);
-  assert.match(raster,/colorSpaceConversion:'default'/);
   assert.match(image,/onAnalysisRaster\(\{data:discoveryPixels,width:dw,height:dh\}\)/);
-});
-test('Matching header only contains reset; original high-res import canvas stays preserved',async()=>{
-  const [matching,app,perspective]=await Promise.all([source('matching-view.js'),source('app.js'),source('perspective.js')]);
+  assert.match(raster,/colorSpaceConversion:'default'/);
+  assert.match(app,/rectifyA4Frame\(state\.importBitmap,state\.paperCorners,4096/);
+  assert.match(perspective,/sourcePixels\(bitmap\)/);
   assert.ok(matching.includes('data-act="reset-match"'));
   assert.ok(!matching.includes('data-act="match-library"'));
   assert.ok(!matching.includes('data-act="match-context"'));
-  assert.match(app,/rectifyA4Frame\(state\.importBitmap,state\.paperCorners,4096/);
-  assert.match(perspective,/sourcePixels\(bitmap\)/);
 });
