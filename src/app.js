@@ -43,7 +43,7 @@ import {createAIRecorder,publicAIDiagnosticReport} from './ai-diagnostics.js';
 import {mountImportBoxEditor} from './import-box-editor.js';
 import {saveImportBatch,importPaperDimensions} from './import-save.js';
 import {paperDimensions as presetPaperDimensions,paperSizeOptions} from './paper-sizes.js';
-import {refineManualBoxes,segmentManualOrFallback} from './manual-import-recognition.js';
+import {refineManualBoxes,hasManualForegroundEvidence} from './manual-import-recognition.js';
 import {seriesCovers,usedAssetIDs,markProjectAssetsUsed} from './library-model.js';
 import {renderSeriesContents} from './series-contents.js';
 import {showSeriesEditor} from './series-editor.js';
@@ -1352,61 +1352,37 @@ async function openManualImportBox(){
   state.showManualBox=true;render();
 }
 function bindManualBox(){mountImportBoxEditor({state,view,render,saveActiveImportRecord,toast,refreshImportCandidates});}
-async function refreshImportCandidates(regions,{manual=false,analysisRaster=null}={}){
+async function refreshImportCandidates(regions,{manual=false}={}){
   const source=state.correctedBitmap||state.importBitmap,b=state.correctedBitmap?{x:0,y:0,w:1,h:1}:state.importBox,previous=state.importCandidateData||[],record=state.importRecords[state.importIndex];
   const next=[];const [pw,ph]=paperDimensions(),calibrated=state.paperSize!=='none'&&(state.correctedBitmap||state.wholePaper);
-  // All manually edited boxes share the exact same page raster and settings.
-  // Memoize its expensive full-page readback/resize once per edit batch.
-  let manualAnalysisPromise=null,manualPreparedRasterPromise=null;
   const plans=manual?await refineManualBoxes(regions,previous,async(box,index)=>{
-    {const el=view.querySelector('.import-processing');if(el)el.textContent='正在按旋转框分割 '+(index+1)+' / '+regions.length;}
+    toast('正在按旋转框分割 '+(index+1)+' / '+regions.length);
     const limit=state.preferences.recognitionPixels||900,
       scale=Math.min(1,limit/Math.max(source.width*b.w,source.height*b.h)),
       aw=Math.max(1,Math.round(source.width*b.w*scale)),
       ah=Math.max(1,Math.round(source.height*b.h*scale));
-    manualAnalysisPromise||=analysisPixels(source,b,aw,ah);
-    const pixels=await manualAnalysisPromise;
-    // The box source (automatic discovery or user edit) must not change the
-    // segmentation and postprocessing profile. Use the very same
-    // recognitionProfile.refineCandidates entry used by detectPaperCandidates.
-    return segmentManualOrFallback(box,async()=>{
-      const rawOptions=recognitionPreprocessOptions();
-      const preprocess={
-        illumination:state.balanceLight===true&&rawOptions.illumination===true,
-        denoise:rawOptions.denoise===true,
-        localContrast:rawOptions.localContrast===true,
-        chromaEdges:rawOptions.chromaEdges!==false
-      };
-      // Match the automatic preprocessing branch; memoize for all manually
-      // edited boxes in the same batch (no repeated whole-page balancing).
-      manualPreparedRasterPromise||=(preprocess.illumination||preprocess.denoise||preprocess.localContrast)
-        ?visionTask('balance',{pixels,width:aw,height:ah,options:preprocess}).then(result=>result.pixels)
-        :Promise.resolve(pixels);
-      const prepared=await manualPreparedRasterPromise;
-      const refined=await recognitionProfile(
-        state.importRecognition||state.preferences.recognition,limit
-      ).refineCandidates({
-        candidates:[box],
-        frame:{data:prepared,width:aw,height:ah},
-        sourceFrame:{data:pixels,width:aw,height:ah},
-        width:aw,height:ah,paperWidthMM:pw,paperHeightMM:ph,
-        mergeSharedCarrier:state.preferences.mergeSharedCarrier!==false,
-        preprocess,postprocess:recognitionPostprocessOptions()
+    const pixels=await analysisPixels(source,b,aw,ah);
+    if(!hasManualForegroundEvidence(pixels,aw,ah,box))throw Error('第 '+(index+1)+' 个框内没有找到可靠素材；请贴近素材重画');
+    const orientedBox={centerX:box.x+box.w/2,centerY:box.y+box.h/2,
+        width:box.w,height:box.h,rotation:box.rotation||0,
+        rectangularity:1,autoDeskew:true,source:'manual'},
+      [candidate]=await visionTask('process-material-boxes',{
+        pixels,sourcePixels:pixels,width:aw,height:ah,
+        boxes:[{x:box.x,y:box.y,w:box.w,h:box.h,orientedBox,
+          seedDensity:1,fillRatio:1}],method:state.importRecognition||'morphgac',
+        paperWidthMM:pw,paperHeightMM:ph,
+        shapeRegularization:recognitionPostprocessOptions().shapeRegularization!==false,
+        apertures:recognitionPostprocessOptions().apertures!==false
       });
-      return refined[0];
-    },{pagePixelWidth:aw,pagePixelHeight:ah},error=>{
-      console.warn('手动补框精细分割不可用，保留所画的完整素材供检查',index+1,error);
-    });
-  },{pagePixelWidth:source.width*b.w,pagePixelHeight:source.height*b.h}):regions.map(region=>({region,original:null}));
+    if(!candidate||candidate.segmentationFailed)throw Error('旋转框内无法可靠分割，请调整框后重试');
+    return candidate;
+  }):regions.map(region=>({region,original:null}));
   if(record!==state.importRecords[state.importIndex]||state.route!=='import')return false;
-  // Deleting boxes or retaining already-extracted boxes is a pure list edit.
-  // It must not call OpenCV, sample the page again or rebuild any cutout.
-  const allOriginal=manual&&plans.every(plan=>!!plan.original);
-  const lighting=!allOriginal&&state.importMaterialColorMode!=='original'&&state.correctedBitmap
-    ?await estimatePageLighting(source,plans.map(plan=>plan.region),{analysisRaster:manual?null:analysisRaster}):null;
+  const lighting=state.importMaterialColorMode!=='original'&&state.correctedBitmap
+    ?await estimatePageLighting(source,plans.map(plan=>plan.region)):null;
   for(let i=0;i<plans.length;i++){
     const {region,original}=plans[i];if(original){next.push(original);continue;}
-    {const el=view.querySelector('.import-processing');if(el)el.textContent='正在提取素材 '+(i+1)+' / '+plans.length;}
+    toast('正在提取素材 '+(i+1)+' / '+plans.length);
     const regenerated=await extractImportCandidate(source,b,region,{mode:state.importMode,widthMM:pw,heightMM:ph,calibrated,index:i,lighting});
     // Changing only colour must not reset manual names, tags, dimensions or
     // choices, and must never cause the segmentation algorithm to rerun.
@@ -1415,8 +1391,6 @@ async function refreshImportCandidates(regions,{manual=false,analysisRaster=null
     if(old)for(const key of ['title','selected','tags','seriesID','kind','role','quantity','reviewStatus','dimensionSource','width','height']){
       if(old[key]!==undefined)regenerated[key]=structuredClone(old[key]);
     }
-    if(region.manualFallback||region.recognitionFallback||region.segmentationFailed||!region.mask?.alpha?.length)
-      regenerated.reviewStatus='pendingReview';
     next.push(regenerated);
   }
   if(record!==state.importRecords[state.importIndex]){for(const c of next)if(!previous.includes(c))URL.revokeObjectURL(c.url);return false;}
@@ -1427,33 +1401,22 @@ async function previewCrop(){
   if(!state.importBitmap||state.importMode==='snapshot')return;
   if(state.paperSize!=='none'&&!state.correctedBitmap&&state.importRecords[state.importIndex]?.paperNeedsReview){toast('请先拖动纸张四角，预览校正并点击“使用校正结果”');return;}
   const record=state.importRecords[state.importIndex],source=state.correctedBitmap||state.importBitmap,b=state.correctedBitmap?{x:0,y:0,w:1,h:1}:state.importBox,[pw,ph]=paperDimensions();
-  record.importError=null;
-  try{
-  let analysisRaster=null;
-  let regions=await detectPaperCandidates(source,b,6,{balanceLight:state.balanceLight,paperRectified:!!state.correctedBitmap,paperWidthMM:pw,paperHeightMM:ph,recognition:state.importRecognition||state.preferences.recognition,recognitionPixels:state.preferences.recognitionPixels,recognitionPreprocess:recognitionPreprocessOptions(),recognitionPostprocess:recognitionPostprocessOptions(),mergeSharedCarrier:state.preferences.mergeSharedCarrier!==false,onDiagnostic:trace=>{record.recognitionDiagnostic=trace;},onAnalysisRaster:raster=>{analysisRaster=raster;},onProgress:p=>{
+  let regions=await detectPaperCandidates(source,b,6,{balanceLight:state.balanceLight,paperRectified:!!state.correctedBitmap,paperWidthMM:pw,paperHeightMM:ph,recognition:state.importRecognition||state.preferences.recognition,recognitionPixels:state.preferences.recognitionPixels,recognitionPreprocess:recognitionPreprocessOptions(),recognitionPostprocess:recognitionPostprocessOptions(),mergeSharedCarrier:state.preferences.mergeSharedCarrier!==false,onDiagnostic:trace=>{record.recognitionDiagnostic=trace;},onProgress:p=>{
     if(state.route!=='import'||record!==state.importRecords[state.importIndex])return;
         const text=p.status==='inference'?'浏览器模型正在细化素材边缘…'
           :p.status==='fallback'?(Number.isFinite(p.count)?`${p.count} 个模型结果不可靠，保留传统识别边缘，请检查`:'边缘精修未采用新结果，已保留原识别边缘')
           :p.status==='contour-refinement'?`正在细化 ${p.total||''} 个不确定素材边缘…`
           :p.status==='boundary-postprocess'?`正在进行 ${p.total||''} 个素材的边缘与孔洞后处理…`
           :'正在优化素材边缘…';
-    state.importProcessing=text;const label=view.querySelector('.import-processing');if(label)label.textContent=text;
+    state.importProcessing=text;const label=view.querySelector('.import-processing');if(label)label.textContent=text;toast(text);
   }});
   if(state.route!=='import'||record!==state.importRecords[state.importIndex])return;
   // Swift leaves unreliable automatic results empty; work import still saves
   // the page as its locked base, without inventing a full-page material.
-  if(await refreshImportCandidates(regions,{analysisRaster})){
+  if(await refreshImportCandidates(regions)){
     // No expensive work remains. Unlock before the first candidate render;
     // users must not wait for another full-page render to confirm the photo.
     state.importProcessing='';render();
-  }
-  }catch(error){
-    if(record===state.importRecords[state.importIndex]&&state.route==='import'){
-      record.importError=String(error?.message||error);
-      state.importProcessing='';
-      render();
-    }
-    throw error;
   }
 }
 function recalibrateImport(){
