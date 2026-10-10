@@ -18,17 +18,21 @@ export function showToast(message,{
   cancel=clearTimeout
 }={}){
   if(!element)return false;
+  const text=String(message??'操作未完成');
   const previous=activeTimers.get(element);
+  // Identical notices may be emitted repeatedly by background retries.
+  // Do not let those retries extend one notice indefinitely.
+  if(previous&&previous.message===text)return true;
   if(previous){previous.cancel(previous.timer);activeTimers.delete(element);}
 
   // Re-trigger the one-second CSS animation even if a previous notice has
   // not yet disappeared. This also avoids a stale previous timeout hiding it.
   element.classList.remove('show');
-  element.textContent=String(message??'操作未完成');
+  element.textContent=text;
   void element.offsetWidth; // force animation restart for successive messages
   element.classList.add('show');
 
-  const token={timer:null,cancel};
+  const token={timer:null,cancel,message:text};
   activeTimers.set(element,token);
   token.timer=schedule(()=>{
     if(activeTimers.get(element)!==token)return;
