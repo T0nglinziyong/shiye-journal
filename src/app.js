@@ -300,17 +300,18 @@ function imgTag(a,priority=false){const src=a&&(image(a.blobId)||a.staticPath),e
 function assetCard(a){return `<button class="card" data-act="detail" data-id="${a.id}"><div class="card-image">${imgTag(a)}</div><div class="card-body"><h3>${esc(a.title)}${a.isFavorite?'<span class="card-favorite" aria-label="已收藏">♥</span>':''}</h3><p>${esc(kindName(a.kind))} · ${a.physicalWidthMM?`${fmt(a.physicalWidthMM)} × ${fmt(a.physicalHeightMM)} mm`:'尺寸待确认'}</p><span class="chip ${a.reviewStatus==='ready'?'':'warn'}">${a.reviewStatus==='ready'?'已整理':'待检查'}</span></div></button>`;}
 const fmt=n=>Number(n).toFixed(1).replace(/\.0$/,'');
 function head(title,subtitle,actions=''){return `<div class="view-head"><div><h1>${title}</h1><p>${subtitle}</p></div><div class="actions">${actions}</div></div>`;}
-function render(){document.body.classList.toggle('editing',state.route==='editor');document.body.dataset.backdrop=state.preferences.backdrop;document.querySelectorAll('.main-nav button').forEach(b=>b.classList.toggle('active',b.dataset.route===state.route||(b.dataset.route==='library'&&['series','import'].includes(state.route))));document.querySelector('#basket-count').textContent=state.basket.length;
-  if(state.route==='editor'&&refreshCanvas())return;
-  // The import inspector is independently scrollable. Every recognition step
-  // and settings change used to replace #view, jumping it back to the first
-  // option. Capture before teardown and restore immediately after mounting.
-  // Catch the OLD matching DOM even if route() has already updated state.route:
-  // leaving Matching for another tab must remember every pane's scroll, too.
+function render(){
+  // Capture BEFORE editing/backdrop CSS changes or DOM teardown. Switching
+  // from Matching into Editor can otherwise clamp the old page scroll first.
   const previousMatchingScroll=captureMatchingScroll(view,window);
   if(previousMatchingScroll)matchingScrollMemory={
     account:state.accountId||'browser',scroll:previousMatchingScroll
   };
+  document.body.classList.toggle('editing',state.route==='editor');document.body.dataset.backdrop=state.preferences.backdrop;document.querySelectorAll('.main-nav button').forEach(b=>b.classList.toggle('active',b.dataset.route===state.route||(b.dataset.route==='library'&&['series','import'].includes(state.route))));document.querySelector('#basket-count').textContent=state.basket.length;
+  if(state.route==='editor'&&refreshCanvas())return;
+  // The import inspector is independently scrollable. Every recognition step
+  // and settings change used to replace #view, jumping it back to the first
+  // option. Capture before teardown and restore immediately after mounting.
   const importScroll=state.route==='import'&&view.querySelector('.import-inspector')
     ?{inspector:view.querySelector('.inspector-scroll')?.scrollTop||0,
       queue:view.querySelector('.queue-strip')?.scrollLeft||0,
