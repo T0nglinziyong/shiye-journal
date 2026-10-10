@@ -4,6 +4,7 @@ import {visionTask} from './vision-runtime.js';
 import {recognitionProfile} from './recognition-profiles.js';
 import {analysisPixels} from './recognition-raster.js';
 import {neutralizePaperChroma} from './paper-chroma-preprocess.js';
+import {colorFallbackEvidence} from './recognition-empty-fallback.js';
 // Analyze a small copy, but re-extract accepted cuts from the full source.
 export async function detectPaperCandidates(bitmap,box,smallestMM=6,{
   balanceLight=false,paperRectified=false,paperWidthMM=210,paperHeightMM=297,
@@ -36,9 +37,30 @@ export async function detectPaperCandidates(bitmap,box,smallestMM=6,{
   // Box discovery always uses the original rectified RGB. Real-case ablation
   // showed that illumination/CLAHE/denoise can make identity discovery worse.
   // Optional preprocessing therefore affects boundary segmentation only.
-  const candidates=await segmentPaperMaterials(discoveryFrame,{
+  let candidates=await segmentPaperMaterials(discoveryFrame,{
     smallestMM,paperWidthMM,paperHeightMM,sourcePixels:discoveryFrame.data,chromaEdges:preprocess.chromaEdges,mergeSharedCarrier
   });
+  if(!candidates.length&&paperRectified){
+    // A mildly grey/blue white board can hide every candidate from the
+    // standard foreground model. Only then retry from high-confidence colour
+    // evidence. Blank pages and neutral shading remain empty; never fabricate
+    // a full-page sticker.
+    const fallback=colorFallbackEvidence(discoveryPixels,dw,dh);
+    if(fallback){
+      const discovered=await visionTask('boxes-simple',{
+        ...fallback,width:dw,height:dh,smallestMM,
+        paperWidthMM,paperHeightMM,mergeSharedCarrier
+      });
+      candidates=(discovered||[]).filter(item=>{
+        const ow=item.orientedBox;
+        return item.w>0&&item.h>0&&
+          Math.min((ow?.width||item.w)*paperWidthMM,
+            (ow?.height||item.h)*paperHeightMM)>=smallestMM;
+      }).slice(0,32);
+      onDiagnostic({phase:'chromatic-fallback',count:candidates.length,
+        pixelFraction:fallback.fraction,backgroundRGB:fallback.backgroundRGB});
+    }
+  }
   onDiagnostic({phase:'boxes',count:candidates.length,
     dimensions:[dw,dh],refinementDimensions:[w,h],mode:profile.mode,smallestMM,
     boxes:candidates.map(item=>({x:item.x,y:item.y,w:item.w,h:item.h,
