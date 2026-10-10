@@ -1329,7 +1329,18 @@ async function switchImportRecord(index,skipSave=false){
     saveActiveImportRecord();render();
   }else{
     progress('正在识别并提取素材…');saveActiveImportRecord();render();
-    if(rec.prefetchStatus!=='ready'&&!state.importCandidates.length&&state.importStep==='inspect')await previewCrop();
+    // Boxes and preview images are separate stages. A previously detected box
+    // must never suppress extraction when its image/URL has not been built.
+    // In particular, a prefetch or aborted render may leave 12 boxes with 0
+    // usable candidates; re-extract those exact boxes instead of detecting again.
+    if(state.importStep==='inspect'&&!state.importCandidateData.length){
+      if(state.importCandidates.length){
+        await refreshImportCandidates(state.importCandidates,{
+          canApply:()=>isCurrent()&&state.importStep==='inspect'&&!state.showManualBox
+        });
+        if(isCurrent()){state.importProcessing='';render();}
+      }else await previewCrop();
+    }
   }
   }finally{if(isCurrent()){state.importProcessing='';render();queueMicrotask(scheduleImportPrefetch);}}
 }
