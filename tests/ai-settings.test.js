@@ -21,7 +21,7 @@ test('invalid current settings normalize to bounded defaults',()=>{
   assert.equal(defaults.transport,'auto');
   assert.equal(defaults.textMode,'automatic');
   assert.equal(defaults.reasoningMode,'automatic');
-  assert.equal(defaults.sendPresetReferences,true);
+  assert.equal(defaults.sendPresetReferences,false,'string-typed legacy booleans must not silently turn on reference uploads');
   assert.equal(defaults.maxTurns,16);
   assert.equal(normalizeAISettings({maxTurns:0}).maxTurns,5);
   assert.equal(normalizeAISettings({maxTurns:-1}).maxTurns,1);
@@ -30,11 +30,17 @@ test('invalid current settings normalize to bounded defaults',()=>{
   assert.equal(normalizeAISettings(null).provider,'openai');
   assert.equal(normalizeAISettings({textMode:'minimal'}).textMode,'minimal');
   assert.equal(normalizeAISettings({textMode:'rich'}).textMode,'rich');
-  assert.equal(AI_DEFAULTS.sendPresetReferences,true);
+  assert.equal(AI_DEFAULTS.sendPresetReferences,false);
   assert.equal(normalizeAISettings({sendPresetReferences:false}).sendPresetReferences,false);
+  assert.equal(normalizeAISettings({sendPresetReferences:true}).sendPresetReferences,true);
   assert.equal(AI_DEFAULTS.autoIncludeRecommendations,false);
-  assert.equal(AI_DEFAULTS.requireAllCandidates,true);
+  assert.equal(AI_DEFAULTS.requireAllCandidates,false);
   assert.equal(normalizeAISettings({requireAllCandidates:false}).requireAllCandidates,false);
+  assert.equal(normalizeAISettings({requireAllCandidates:true}).requireAllCandidates,true);
+  assert.equal(normalizeAISettings({}).qualityMode,'balanced');
+  assert.equal(normalizeAISettings({}).maxTurns,12);
+  assert.equal(normalizeAISettings({qualityMode:'studio'}).qualityMode,'studio');
+  assert.equal(normalizeAISettings({qualityMode:'unknown'}).qualityMode,'balanced');
   assert.equal('referencePage' in defaults,false);
   assert.equal('imageCount' in normalizeAISettings({imageCount:1}),false);
 });
