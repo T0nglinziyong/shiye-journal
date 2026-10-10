@@ -1248,7 +1248,7 @@ async function prefetchImportRecord(rec,settings,revision){
       recognition:settings.recognition,recognitionPixels:settings.pixels,
       recognitionPreprocess:{illumination:settings.balanceLight,denoise:settings.denoise,localContrast:settings.localContrast,chromaEdges:settings.chromaEdges},
       recognitionPostprocess:{shapeRegularization:settings.shapeRegularization,apertures:settings.apertures},mergeSharedCarrier:settings.mergeSharedCarrier,
-      onDiagnostic:trace=>{if(valid())rec.recognitionDiagnostic=trace;}},{onRecovery:report=>{if(valid())rec.recognitionRecovery=report;}});if(!valid())return;
+      onDiagnostic:trace=>{if(valid())rec.recognitionDiagnostic=trace;}},{detect:detectPaperCandidates,onRecovery:report=>{if(valid())rec.recognitionRecovery=report;}});if(!valid())return;
     const calibrated=settings.paperSize!=='none'&&(correctedBitmap||settings.wholePaper),candidateData=[];
     const lighting=settings.materialColorMode!=='original'&&correctedBitmap
       ?await estimatePageLighting(source,candidates):null;
@@ -1478,6 +1478,9 @@ async function previewCrop(){
           :p.status==='boundary-postprocess'?`正在进行 ${p.total||''} 个素材的边缘与孔洞后处理…`
           :'正在优化素材边缘…';
     state.importProcessing=text;const label=view.querySelector('.import-processing');if(label)label.textContent=text;toast(text);
+  }},{detect:detectPaperCandidates,onRecovery:report=>{
+    record.recognitionRecovery=report;
+    if(canApply())toast('已保留 '+report.recovered+' 件识别框，但边缘精修失败；请检查边缘');
   }});
   if(!canApply())return;
   // Swift leaves unreliable automatic results empty; work import still saves
