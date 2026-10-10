@@ -45,13 +45,17 @@ test('wide import has 2:1 columns; wide catalogs are one row and phones retain s
  assert.match(css,/\.import-nav[\s\S]*?max-width:none/);
 });
 
-test('manual adjustment is enabled while auto recognition runs and stale candidates cannot overwrite it',async()=>{
- const code=await source('app.js');
- assert.match(code,/el\.matches\('\[data-act="manual-import-box"\]'\)&&state\.importBitmap/);
- assert.match(code,/state\.importRecognitionRevision=\(state\.importRecognitionRevision\|\|0\)\+1/);
- assert.match(code,/if\(!canApply\(\)\|\|record!==state\.importRecords\[state\.importIndex\]\)/);
- assert.match(code,/importScroll=state\.route==='import'/);
- assert.match(code,/inspector\.scrollTop=importScroll\.inspector/);
+test('mobile paper failure pauses c6-equivalent segmentation until user confirmation',async()=>{
+  const code=await source('app.js');
+  const perspective=await source('perspective.js');
+  assert.match(code,/rec\.paperNeedsReview=state\.paperSize!=='none'/);
+  assert.match(code,/if\(!rec\.paperNeedsReview&&rec\.prefetchStatus/);
+  assert.match(code,/state\.correctedBitmap&&state\.importRecords\[state\.importIndex\]\?\.paperNeedsReview/);
+  assert.match(code,/rec\.backgroundDetected=true;rec\.paperNeedsReview=false/);
+  assert.match(code,/importScroll=state\.route==='import'/);
+  assert.match(code,/inspector\.scrollTop=importScroll\.inspector/);
+  assert.match(perspective,/for\(const maxEdge of \[800,1200,1600\]\)/);
+  assert.doesNotMatch(perspective,/fixedImportFrameSize|fixedWorkingSize/);
 });
 test('leaving Materials and returning from Works restores its active tab and selected series',async()=>{
  const code=await source('app.js');
