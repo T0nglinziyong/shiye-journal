@@ -3,11 +3,11 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {detectImportRegions,preserveDiscoveredCandidates} from '../src/import-recognition-safety.js';
 import {renderImportInspection} from '../src/import-workspace-ui.js';
+import {fixedImportFrameSize,IMPORT_WORKING_LONG_EDGE_PX} from '../src/import-working-size.js';
 
 const boxes=Array.from({length:12},(_,i)=>({
   x:.02+(i%4)*.235,y:.03+Math.floor(i/4)*.31,w:.16,h:.20
 }));
-const rgba=new Uint8ClampedArray(900*636*4);
 
 test('the exact 12 detected identities survive an empty boundary refiner',async()=>{
   let recovered;
@@ -16,12 +16,9 @@ test('the exact 12 detected identities survive an empty boundary refiner',async(
     onDiagnostic:diagnostic=>assert.equal(diagnostic.count,12)
   },{
     detect:async(_bitmap,_box,_min,opts)=>{
-      opts.onDiagnostic({phase:'boxes',count:12,dimensions:[900,636]});
+      opts.onDiagnostic({phase:'boxes',count:12,dimensions:[900,636],boxes});
       return [];
     },
-    analyze:async()=>rgba,
-    neutralize:bytes=>bytes,
-    discover:async()=>boxes,
     onRecovery:info=>{recovered=info;}
   });
   assert.equal(result.length,12);
@@ -69,4 +66,26 @@ test('phone material-select button remains beside the heading',async()=>{
   assert.match(css,/grid-template-columns:minmax\(0,1fr\) max-content/);
   assert.match(css,/grid-column:2;grid-row:1/);
   assert.doesNotMatch(css,/\.unified-page-heading \.actions\{[\s\S]*?flex:1 1 100%/);
+});
+test('same A4 paper always rectifies to the c6-compatible fixed raster, independent of source megapixels',async()=>{
+  assert.equal(IMPORT_WORKING_LONG_EDGE_PX,3396);
+  assert.deepEqual(fixedImportFrameSize(297/210),{width:3396,height:2401});
+  assert.deepEqual(fixedImportFrameSize(210/297),{width:2401,height:3396});
+  const [perspective,app]=await Promise.all([
+    readFile(new URL('../src/perspective.js',import.meta.url),'utf8'),
+    readFile(new URL('../src/app.js',import.meta.url),'utf8')
+  ]);
+  assert.match(perspective,/fixedWorkingSize\?fixedImportFrameSize\(paperRatio\)/);
+  assert.equal((app.match(/rectifyA4Frame\([^;]+fixedWorkingSize:true/g)||[]).length,3);
+});
+test('paper-corner overlay uses the exact pinned JPEG decoder orientation',async()=>{
+  const app=await readFile(new URL('../src/app.js',import.meta.url),'utf8');
+  const ui=await readFile(new URL('../src/import-workspace-ui.js',import.meta.url),'utf8');
+  assert.match(app,/importPhotoDisplayURL\(bitmap\)/);
+  assert.match(ui,/state\.importDisplayURL\|\|state\.importURL/);
+});
+test('12 detected boxes without thumbnails are extracted again without rediscovering the page',async()=>{
+  const app=await readFile(new URL('../src/app.js',import.meta.url),'utf8');
+  assert.match(app,/if\(state\.importCandidates\.length&&!state\.importCandidateData\.length\)/);
+  assert.match(app,/await refreshImportCandidates\(state\.importCandidates\)/);
 });
