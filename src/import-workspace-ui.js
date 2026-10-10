@@ -7,7 +7,8 @@ export function renderImportInspection({state,esc,fmt}) {
   // bitmap can already be available while a slower postprocess is finishing.
   // Match thumbnails and selection indices to the SAME candidateData array.
   const visibleCandidates=state.importCandidateData||[];
-  const source=manual?state.correctedURL||state.importURL:previewing?state.paperPreviewURL||state.correctedURL:state.importURL;
+  const photoDisplay=state.importDisplayURL||state.importURL;
+  const source=manual?state.correctedURL||photoDisplay:previewing?state.paperPreviewURL||state.correctedURL||photoDisplay:photoDisplay;
   if(state.importMode==='snapshot')return '<section class="import-inspect import-snapshot-inspect" aria-busy="'+!!state.importProcessing+'"><h1>检查这一批</h1><p class="import-processing" role="status">'+esc(state.importProcessing||'')+'</p>'+
     '<div class="import-queue"><div><strong>'+state.importRecords.length+' 张照片</strong> <small>'+state.importRecords.filter(r=>r.confirmed).length+' 张已确认</small></div><button class="btn" data-act="select-file" data-val="gallery" '+(state.importRecords.length>=12?'disabled':'')+'>＋ 添加照片</button></div>'+
     '<div class="queue-strip">'+state.importRecords.map((r,i)=>'<button class="queue-item '+(i===state.importIndex?'active':'')+'" data-act="import-switch" data-id="'+i+'"><img src="'+r.url+'"><span>照片 '+(i+1)+'<small>'+(r.confirmed?'已确认':'待检查')+'</small></span></button>').join('')+'</div>'+
