@@ -56,7 +56,11 @@ export default async function handler(req,res){
       const data=await cosList(cos,env,marker);
       const rows=data.Contents||[];
       objects.push(...rows);
-      if(data.IsTruncated!==true&&data.IsTruncated!=='true'){inventoryComplete=true;break;}
+      // Treat a missing or unknown pagination flag as incomplete, not as
+      // evidence that the full private bucket has been enumerated.
+      if(data.IsTruncated===undefined||data.IsTruncated===null)break;
+      const truncated=String(data.IsTruncated).toLowerCase()==='true'||data.IsTruncated===1;
+      if(!truncated){inventoryComplete=true;break;}
       const next=data.NextMarker||rows.at(-1)?.Key;
       if(!next||next===marker)break;
       marker=next;
