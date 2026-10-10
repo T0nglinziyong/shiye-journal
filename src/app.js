@@ -50,6 +50,7 @@ import {showSeriesEditor} from './series-editor.js';
 import {mountWorkflowControls} from './workflow-ui.js';
 import {renderImportInspection,renderImportReview} from './import-workspace-ui.js';
 import {recoverImportCandidate} from './import-candidate-recovery.js';
+import {bindImportCandidatePreviews} from './import-preview-retry.js';
 import {showCutoutEditor} from './cutout-editor.js';
 import {mountCanvasSelection} from './canvas-selection-ui.js';
 import * as db from './store.js';
@@ -609,7 +610,19 @@ function bindPage(){view.querySelectorAll('[data-act]').forEach(el=>el.addEventL
   });
   const removeWhite=view.querySelector('#remove-white');if(removeWhite)removeWhite.onchange=()=>{state.importRemoveWhite=removeWhite.checked;};
   const page=view.querySelector('#canvas-page');if(page)initializeCanvasSurface(page);
-  bindInspector();if(state.route==='import'&&state.importProcessing)view.querySelectorAll('.inspect-columns button,.inspect-columns input,.inspect-columns select').forEach(el=>{
+  bindInspector();
+  if(state.route==='import'&&state.importMode!=='snapshot'){
+    const index=state.importIndex;
+    bindImportCandidatePreviews({
+      root:view,candidates:()=>state.importCandidateData||[],
+      active:()=>state.route==='import'&&state.importIndex===index,
+      onRepair:(ci,item)=>{
+        state.importCandidateURLs[ci]=item.url;
+        saveActiveImportRecord();
+      }
+    });
+  }
+  if(state.route==='import'&&state.importProcessing)view.querySelectorAll('.inspect-columns button,.inspect-columns input,.inspect-columns select').forEach(el=>{
     // A failed or slow auto recognizer must never block the manual recovery
     // path once its source bitmap exists. The manual action invalidates the
     // in-flight auto run before editing begins.
