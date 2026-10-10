@@ -1246,14 +1246,16 @@ async function prefetchImportRecord(rec,settings,revision){
       const corrected=await rectifyA4Frame(bitmap,corners,4096,pw/ph);correctedBitmap=corrected.canvas;correctedURL=URL.createObjectURL(corrected.blob);if(!valid())return;
     }
     const source=correctedBitmap||bitmap,box=correctedBitmap?{x:0,y:0,w:1,h:1}:rec.box||{x:0,y:0,w:1,h:1};
+    let analysisRaster=null;
     const candidates=await detectPaperCandidates(source,box,6,{balanceLight:settings.balanceLight,paperRectified:!!correctedBitmap,paperWidthMM:pw,paperHeightMM:ph,
       recognition:settings.recognition,recognitionPixels:settings.pixels,
       recognitionPreprocess:{illumination:settings.balanceLight,denoise:settings.denoise,localContrast:settings.localContrast,chromaEdges:settings.chromaEdges},
       recognitionPostprocess:{shapeRegularization:settings.shapeRegularization,apertures:settings.apertures},mergeSharedCarrier:settings.mergeSharedCarrier,
-      onDiagnostic:trace=>{if(valid())rec.recognitionDiagnostic=trace;}});if(!valid())return;
+      onDiagnostic:trace=>{if(valid())rec.recognitionDiagnostic=trace;},
+      onAnalysisRaster:raster=>{analysisRaster=raster;}});if(!valid())return;
     const calibrated=settings.paperSize!=='none'&&(correctedBitmap||settings.wholePaper),candidateData=[];
     const lighting=settings.materialColorMode!=='original'&&correctedBitmap
-      ?await estimatePageLighting(source,candidates):null;
+      ?await estimatePageLighting(source,candidates,{analysisRaster}):null;
     for(let i=0;i<candidates.length;i++){
       const candidate=await extractImportCandidate(source,box,candidates[i],{mode:settings.mode,widthMM:pw,heightMM:ph,calibrated,index:i,lighting});
       candidateURLs.push(candidate.url);candidateData.push(candidate);
@@ -1371,7 +1373,7 @@ async function openManualImportBox(){
   state.showManualBox=true;render();
 }
 function bindManualBox(){mountImportBoxEditor({state,view,render,saveActiveImportRecord,toast,refreshImportCandidates});}
-async function refreshImportCandidates(regions,{manual=false}={}){
+async function refreshImportCandidates(regions,{manual=false,analysisRaster=null}={}){
   const source=state.correctedBitmap||state.importBitmap,b=state.correctedBitmap?{x:0,y:0,w:1,h:1}:state.importBox,previous=state.importCandidateData||[],record=state.importRecords[state.importIndex];
   const next=[];const [pw,ph]=paperDimensions(),calibrated=state.paperSize!=='none'&&(state.correctedBitmap||state.wholePaper);
   const plans=manual?await refineManualBoxes(regions,previous,async(box,index)=>{
@@ -1398,7 +1400,7 @@ async function refreshImportCandidates(regions,{manual=false}={}){
   }):regions.map(region=>({region,original:null}));
   if(record!==state.importRecords[state.importIndex]||state.route!=='import')return false;
   const lighting=state.importMaterialColorMode!=='original'&&state.correctedBitmap
-    ?await estimatePageLighting(source,plans.map(plan=>plan.region)):null;
+    ?await estimatePageLighting(source,plans.map(plan=>plan.region),{analysisRaster:manual?null:analysisRaster}):null;
   for(let i=0;i<plans.length;i++){
     const {region,original}=plans[i];if(original){next.push(original);continue;}
     {const el=view.querySelector('.import-processing');if(el)el.textContent='正在提取素材 '+(i+1)+' / '+plans.length;}
@@ -1422,7 +1424,8 @@ async function previewCrop(){
   const record=state.importRecords[state.importIndex],source=state.correctedBitmap||state.importBitmap,b=state.correctedBitmap?{x:0,y:0,w:1,h:1}:state.importBox,[pw,ph]=paperDimensions();
   record.importError=null;
   try{
-  let regions=await detectPaperCandidates(source,b,6,{balanceLight:state.balanceLight,paperRectified:!!state.correctedBitmap,paperWidthMM:pw,paperHeightMM:ph,recognition:state.importRecognition||state.preferences.recognition,recognitionPixels:state.preferences.recognitionPixels,recognitionPreprocess:recognitionPreprocessOptions(),recognitionPostprocess:recognitionPostprocessOptions(),mergeSharedCarrier:state.preferences.mergeSharedCarrier!==false,onDiagnostic:trace=>{record.recognitionDiagnostic=trace;},onProgress:p=>{
+  let analysisRaster=null;
+  let regions=await detectPaperCandidates(source,b,6,{balanceLight:state.balanceLight,paperRectified:!!state.correctedBitmap,paperWidthMM:pw,paperHeightMM:ph,recognition:state.importRecognition||state.preferences.recognition,recognitionPixels:state.preferences.recognitionPixels,recognitionPreprocess:recognitionPreprocessOptions(),recognitionPostprocess:recognitionPostprocessOptions(),mergeSharedCarrier:state.preferences.mergeSharedCarrier!==false,onDiagnostic:trace=>{record.recognitionDiagnostic=trace;},onAnalysisRaster:raster=>{analysisRaster=raster;},onProgress:p=>{
     if(state.route!=='import'||record!==state.importRecords[state.importIndex])return;
         const text=p.status==='inference'?'浏览器模型正在细化素材边缘…'
           :p.status==='fallback'?(Number.isFinite(p.count)?`${p.count} 个模型结果不可靠，保留传统识别边缘，请检查`:'边缘精修未采用新结果，已保留原识别边缘')
@@ -1434,7 +1437,7 @@ async function previewCrop(){
   if(state.route!=='import'||record!==state.importRecords[state.importIndex])return;
   // Swift leaves unreliable automatic results empty; work import still saves
   // the page as its locked base, without inventing a full-page material.
-  if(await refreshImportCandidates(regions)){
+  if(await refreshImportCandidates(regions,{analysisRaster})){
     // No expensive work remains. Unlock before the first candidate render;
     // users must not wait for another full-page render to confirm the photo.
     state.importProcessing='';render();
