@@ -7,7 +7,10 @@ import {visionTask} from './vision-runtime.js';
 export function pixelCanvas(pixels,width,height){
   const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;
   const ctx=canvas.getContext('2d',{willReadFrequently:true,colorSpace:'srgb'});
-  ctx.putImageData(new ImageData(new Uint8ClampedArray(pixels),width,height),0,0);
+  // OpenCV already returns Uint8ClampedArray. Avoid allocating a second
+  // full-resolution RGBA copy before putImageData transfers it into Canvas.
+  const rgba=pixels instanceof Uint8ClampedArray?pixels:new Uint8ClampedArray(pixels);
+  ctx.putImageData(new ImageData(rgba,width,height),0,0);
   return canvas;
 }
 export async function decodeRecognitionImage(blob){
