@@ -21,7 +21,7 @@ test('invalid current settings normalize to bounded defaults',()=>{
   assert.equal(defaults.transport,'auto');
   assert.equal(defaults.textMode,'automatic');
   assert.equal(defaults.reasoningMode,'automatic');
-  assert.equal(defaults.sendPresetReferences,true);
+  assert.equal(defaults.sendPresetReferences,false,'string-typed legacy booleans must not silently turn on reference uploads');
   assert.equal(defaults.maxTurns,16);
   assert.equal(normalizeAISettings({maxTurns:0}).maxTurns,5);
   assert.equal(normalizeAISettings({maxTurns:-1}).maxTurns,1);
