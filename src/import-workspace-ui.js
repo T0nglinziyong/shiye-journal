@@ -7,7 +7,13 @@ export function renderImportInspection({state,esc,fmt}) {
   const visibleCandidates=state.importProcessing?[]:state.importCandidates||[];
   const paperDiagnostic=state.importRecords?.[state.importIndex]?.paperDiagnostic;
   const paperError=paperDiagnostic?.stage==='quad-error'?
-    '<p class="import-recognition-error" role="alert">A4 检测引擎执行异常：'+esc(paperDiagnostic.message||'未知错误')+'。可导出诊断报告，或手动校正。</p>':'';
+    '<p class="import-recognition-error" role="alert">A4 检测引擎执行异常：'+esc(paperDiagnostic.message||'未知错误')+'。可导出诊断报告，或手动校正。</p>':
+    (state.importRecords?.[state.importIndex]?.paperNeedsReview&&paperDiagnostic?.failureStage?
+      '<p class="import-recognition-error" role="status">纸张检测未通过：'+esc(
+        paperDiagnostic.failureStage==='missing-side-evidence'?'部分纸张边界证据不足':
+        paperDiagnostic.failureStage==='geometric-rejection'?'检测到了边线，但四角组合未通过几何校验':
+        '输入图像未能完成分析'
+      )+'。可导出诊断报告，或手动校正。</p>':'');
 
   const source=manual?state.correctedURL||state.importURL:previewing?state.paperPreviewURL||state.correctedURL:state.importURL;
   const pixels=state.importBitmap?Math.max(state.importBitmap.width,state.importBitmap.height):0;
