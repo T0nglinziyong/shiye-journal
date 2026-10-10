@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {renderWorkCoverSnapshot} from '../src/work-cover-snapshot.js';
 
-test('COS Works cover renders complete scene using only 720px material blobs',async()=>{
+test('COS Works cover renders complete scene using only 480px material blobs',async()=>{
   const calls=[],closed=[],output=new Blob(['snapshot'],{type:'image/webp'});
   const project={id:'work-1',activeDraftID:'draft-1',drafts:[
     {id:'draft-1',canvas:{width:750,height:1000},items:[{assetID:'material-1'}],strokes:[{points:[{x:1,y:2}]}]}]};
@@ -10,7 +10,7 @@ test('COS Works cover renders complete scene using only 720px material blobs',as
   const cover=await renderWorkCoverSnapshot(project,{
     resolveAsset:async id=>{calls.push(['asset',id]);return {id,blobId:'blob-1'};},
     previewBlob:async(id,pixels)=>{calls.push(['preview',id,pixels]);return new Blob(['tiny']);},
-    createBitmap:async()=>({width:720,height:720,close:()=>closed.push(1)}),
+    createBitmap:async()=>({width:480,height:480,close:()=>closed.push(1)}),
     renderScene:async(draft,options)=>{
       scene=draft;
       assert.equal(options.scale,.72);
@@ -22,7 +22,7 @@ test('COS Works cover renders complete scene using only 720px material blobs',as
   });
   assert.equal(cover,output);
   assert.equal(scene,project.drafts[0]);
-  assert.deepEqual(calls,[['asset','material-1'],['preview','blob-1',720]]);
+  assert.deepEqual(calls,[['asset','material-1'],['preview','blob-1',480]]);
   assert.equal(closed.length,1);
 });
 
