@@ -1403,7 +1403,7 @@ async function refreshImportCandidates(regions,{manual=false,analysisRaster=null
         width:box.w,height:box.h,rotation:box.rotation||0,
         rectangularity:1,autoDeskew:true,source:'manual'},
       [candidate]=await visionTask('process-material-boxes',{
-        pixels,sourcePixels:pixels,width:aw,height:ah,
+        pixels,sourcePixels:pixels,width:aw,height:ah,manualEdit:true,
         boxes:[{x:box.x,y:box.y,w:box.w,h:box.h,orientedBox,
           seedDensity:1,fillRatio:1}],method:state.importRecognition||'morphgac',
         paperWidthMM:pw,paperHeightMM:ph,
