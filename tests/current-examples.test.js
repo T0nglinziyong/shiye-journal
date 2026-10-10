@@ -7,7 +7,7 @@ import {
 import {currentMaterialCatalog} from '../src/current-materials.js';
 
 function memoryDB(){
-  const names=['assets','projects','series','meta'],stores=Object.fromEntries(names.map(name=>[name,new Map()]));
+  const names=['assets','projects','series','meta','trash'],stores=Object.fromEntries(names.map(name=>[name,new Map()]));
   const transaction=async(names,fn)=>fn({objectStore:name=>({put:row=>stores[name].set(row.id,structuredClone(row))})});
   return {stores,get:async(name,id)=>stores[name].get(id),all:async name=>[...stores[name].values()].map(row=>structuredClone(row)),transaction};
 }
@@ -46,14 +46,23 @@ test('current works use editable stationery examples while preserving user edits
   assert.deepEqual(db.stores.projects.get(edited.id),edited);
 });
 
-test('an older partial example sync can fill its missing project',async()=>{
+test('partial example state does not regenerate user-deleted projects',async()=>{
   const db=memoryDB();
   for(const material of currentMaterialCatalog.assets)
     db.stores.assets.set(material.id,{...material,title:'归档素材'});
   db.stores.meta.set('current-example-stationery-v2',{id:'current-example-stationery-v2'});
   db.stores.projects.set('shiye-example-handmade',{id:'shiye-example-handmade',title:'保留用户编辑'});
   const result=await syncCurrentExamples({database:db});
-  assert.equal(result.projects,2);
+  assert.equal(result.projects,0);
   assert.equal(db.stores.projects.get('shiye-example-handmade').title,'保留用户编辑');
-  assert.ok(db.stores.projects.has('shiye-example-travel'));
+  assert.equal(db.stores.projects.has('shiye-example-travel'),false);
+});
+test('deleted default examples remain absent on subsequent startups',async()=>{
+ const db=memoryDB();
+ for(const asset of currentMaterialCatalog.assets)db.stores.assets.set(asset.id,asset);
+ assert.equal((await syncCurrentExamples({database:db})).projects,3);
+ db.stores.projects.delete('shiye-example-handmade');
+ const after=await syncCurrentExamples({database:db});
+ assert.equal(after.changed,false);
+ assert.equal(db.stores.projects.has('shiye-example-handmade'),false);
 });
