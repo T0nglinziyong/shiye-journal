@@ -48,13 +48,15 @@ test('wide import has 2:1 columns; wide catalogs are one row and phones retain s
 test('mobile paper failure pauses c6-equivalent segmentation until user confirmation',async()=>{
   const code=await source('app.js');
   const perspective=await source('perspective.js');
-  assert.match(code,/rec\.paperNeedsReview=state\.paperSize!=='none'/);
+  assert.match(code,/rec\.paperNeedsReview=requiresManualPaperConfirmation\(/);
   assert.match(code,/if\(!rec\.paperNeedsReview&&rec\.prefetchStatus/);
   assert.match(code,/!state\.correctedBitmap&&state\.importRecords\[state\.importIndex\]\?\.paperNeedsReview/);
   assert.match(code,/rec\.backgroundDetected=true;rec\.paperNeedsReview=false/);
   assert.match(code,/importScroll=state\.route==='import'/);
   assert.match(code,/inspector\.scrollTop=importScroll\.inspector/);
-  assert.match(perspective,/for\(const maxEdge of \[800,1200,1600\]\)/);
+  assert.match(perspective,/PAPER_DETECTION_LONG_EDGE=800/);
+  assert.match(perspective,/return visionTask\('quad'/);
+  assert.doesNotMatch(perspective,/PAPER_RETRY_LONG_EDGE/);
   assert.doesNotMatch(perspective,/fixedImportFrameSize|fixedWorkingSize/);
 });
 test('leaving Materials and returning from Works restores its active tab and selected series',async()=>{
