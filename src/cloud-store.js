@@ -170,6 +170,13 @@ async function reconcileImport(batch,operationID,baseRevision){
       if(sameKeyFree){operations.push(op);continue;}
       if(op.action==='clear')return 'conflict';
       const id=op.item?.id??op.id;
+      // A paired restore also consumes its Recently Deleted card, regardless
+      // of device timestamp skew or the original deletion's write time.
+      if(op.store==='trash'&&op.action==='delete'){
+        const card=await cloudRecord('trash',id);
+        const liveStore=card?.kind==='project'?'projects':card?.kind==='asset'?'assets':null;
+        if(liveStore&&restorePairs.has(liveStore+':'+card.item?.id)){operations.push(op);continue;}
+      }
       if(op.store==='meta'&&op.action==='delete'&&typeof op.id==='string'){
         const pair=[...restorePairs].find(key=>op.id==='tombstone:'+key);
         if(pair&&await cloudRecord('meta',op.id)){operations.push(op);continue;}
