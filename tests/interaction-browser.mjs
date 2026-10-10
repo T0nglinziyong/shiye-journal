@@ -15,7 +15,7 @@ try{
   await command('Page.reload');await wait('.series-grid');
   for(const [w,h] of [[390,844],[768,1024],[1024,768],[1440,900]]){
     await command('Emulation.setDeviceMetricsOverride',{width:w,height:h,deviceScaleFactor:1,mobile:w<700});await command('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:5});
-    await click('[data-route="library"]');if(!(await evaluate('!!document.querySelector(".series-grid")')))await click('.swift-tabs button:nth-child(1)','.series-grid');assert.deepEqual(await evaluate('[...document.querySelectorAll(".swift-tabs button")].map(b=>b.textContent)'),['系列','全部素材','待检测','最近删除']);
+    await click('[data-route="library"]','.series-grid');assert.deepEqual(await evaluate('[...document.querySelectorAll(".swift-tabs button")].map(b=>b.textContent)'),['系列','全部素材','待检测','最近删除']);
     await evaluate('globalThis.__card=document.querySelector("[data-id=interaction-series]");globalThis.__image=__card.querySelector("img")');await named('.view-head .actions','选择');await click('[data-id="interaction-series"]');await named('.view-head .actions','完成');assert.ok(await evaluate('__card===document.querySelector("[data-id=interaction-series]")&&__image===__card.querySelector("img")'),'Series selection recreated cards');
     await click('.swift-tabs button:nth-child(2)','.asset-grid');
     const geometry=await evaluate('[...document.querySelectorAll(".filter-control")].map(b=>{const r=b.getBoundingClientRect();return [r.x,r.y,r.width,r.height]})');

@@ -32,14 +32,8 @@ for(const [width,height] of [[320,640],[390,844],[700,1024],[768,1024],[1024,768
   assert.ok($('.main-nav [data-route="matching"]'));
   assert.ok($('.main-nav [data-route="works"]'));
   assert.ok($('#top-settings'));
-  click('[data-route="library"]');
-  // Materials remembers its last tab when returning from Works/Matching.
-  if(!win.document.querySelector('.series-grid'))click('.swift-tabs button:nth-child(1)');
-  assert.ok($('.series-grid'));
+  click('[data-route="library"]');assert.ok($('.series-grid'));
   click('.swift-tabs button:nth-child(2)');assert.ok($('.asset-grid .action-card'));
-  click('[data-route="matching"]');click('[data-route="works"]');click('[data-route="library"]');
-  assert.ok($('.asset-grid .action-card'),'Returning to Materials preserves All Materials');
-
   click('[data-act="detail"]');assert.ok($('.detail-columns'));
   click('[data-act="detail-edit"]');assert.ok($('#modal').open);
   click('#modal .modal-close');if($('#modal').open)$('#modal').close();

@@ -132,20 +132,3 @@ test('already-stored snapshots add only local matching reference, no second clou
  assert.equal(c.state.projects[0].id,'snap');
  assert.match(JSON.stringify(await device.get('test-user','matching-session-v1')),/snap/);
 });
-
-
-test('matching proposals are device-local, reloadable, and never recreate cloud works',async()=>{
- const device=memoryDevice(),db=memoryProjects(),c=context({
-   basket:['selected'],coreIDs:[],matchProposals:[],matchProposalBatch:0
- },device,db);
- const session=createMatchingSession(c);await session.restore();
- const proposal={id:'proposal-1',title:'不对称组合',layout:'editorial',
-   selectedAssetIDs:['selected'],requiredAssetIDs:[],optionalAssetIDs:[]};
- c.state.matchProposals=[proposal];c.state.matchProposalBatch=1;
- await session.persist();
- assert.equal(db.writes.length,0);
- const reopened=createMatchingSession(c);await reopened.restore();
- assert.deepEqual(c.state.matchProposals,[proposal]);
- assert.equal(c.state.matchProposalBatch,1);
- assert.equal(db.writes.length,0);
-});

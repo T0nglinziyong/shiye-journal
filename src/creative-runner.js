@@ -15,8 +15,6 @@ import {creativePageBrief} from './creative-page-brief.js';
 import {sceneFingerprint} from './offline-result-review.js';
 import {applyScenePatch,patchSceneHash} from './scene-patch.js';
 import {createCreativeBudget} from './ai-budget.js';
-import {creativeQualityProfile} from './creative-quality-mode.js';
-import {planCreativeDirections,selectedDesignBrief} from './creative-planner.js';
 import {classifyJournalMaterial} from './journal-case-study.js';
 import {journalReferenceGuide,selectJournalReferenceCases} from './journal-reference-catalog.js';
 import {journalAbstractTemplateGuide,selectJournalAbstractTemplates} from './journal-abstract-templates.js';
@@ -62,37 +60,7 @@ export async function runCreativeAgent(o){
  const {draft,assets,aliases,key,endpoint='https://api.deepseek.com/chat/completions',maxTurns=5,requestTimeout=75,signal,onTurn=()=>{},request=fetch,onScene,onInspection}=o;
  if(!key?.trim())throw Error('请输入自己的 API 密钥');if(new URL(endpoint).protocol!=='https:')throw Error('API 地址必须使用 HTTPS');
  const options={...o,visualAssetIDs:visualMaterialIDs(o.images,o.aliases),textMode:o.contentPolicy==='visual'?'none':o.textMode,allowNoText:o.contentPolicy==='visual'||o.textMode==='none'||o.textMode==='requested'&&!/文字|正文|标题|写|清单/.test(o.prompt||'')};
- let working=structuredClone(draft),turn=0,noProgress=0,nextPhase='creation';
- if(working.agentRun?.status==='finished')working.agentRun={...working.agentRun,status:'editing'};
- const profile=creativeQualityProfile(o.qualityMode||'quick');
- const visionReview=!!(options.visualAssetIDs.length&&options.finalVisualReview&&
-   (o.onFinalScene||onScene));
- const reserve=visionReview&&maxTurns>=5?profile.reservedVisualRequests:0;
- const messages=buildCreativeMessages({...options,draft:working});
- const budget=createCreativeBudget(maxTurns,{reservedVisualRequests:reserve});
- let designPlan=null;
- // This is one internal, optional, provider-independent art-direction pass.
- // A transient planning failure must not destroy existing creation behavior.
- if(profile.plan&&maxTurns>=5){
-   budget.begin('planning');
-   try{
-     designPlan=await planCreativeDirections({
-       ...options,qualityMode:profile.mode,images:o.images||[],key,endpoint,
-       model:o.model||'gpt-4.1',request,signal,requestTimeout,
-       maxTokens:o.maxTokens||6000,
-       onProgress:p=>o.onProgress?.({...p,phase:'planning',budget:budget.snapshot()})
-     });
-     if(designPlan){
-       messages[1].content.push({type:'text',text:selectedDesignBrief(designPlan)});
-       await o.onPlanning?.(designPlan);
-     }
-   }catch(error){
-     if(signal?.aborted)throw error;
-     console.warn('可选设计构思未完成；按原有可编辑流程继续',error?.message);
-     await o.onPlanning?.(null);
-   }
- }
-
+ let working=structuredClone(draft),turn=0,noProgress=0,nextPhase='creation';if(working.agentRun?.status==='finished')working.agentRun={...working.agentRun,status:'editing'};const messages=buildCreativeMessages({...options,draft:working}),budget=createCreativeBudget(maxTurns);
  try {for(;;){
   if(signal?.aborted)throw signal.reason||Error('创作已停止');const counts=budget.begin(nextPhase);turn=counts.totalRequests;nextPhase='creation';const before=editableSceneState(working),beforePatchHash=await patchSceneHash(working);
   const payload=buildCreativePayload(o,messages),protocol=creativeProtocol(o),native=protocol.native;
@@ -121,7 +89,6 @@ export async function runCreativeAgent(o){
   // Every native call needs its contiguous tool reply before any user image.
   if(inspectionParts.length)messages.push({role:'user',content:inspectionParts});
   if(working.agentRun?.status==='finished'){
-   if(designPlan)working.agentRun={...working.agentRun,designConcept:designPlan.selected};
    working=await reviewFinalCreativeScene({draft:working,options,assets,aliases,budget,render:o.onFinalScene||onScene,request,onResponse:o.onResponse,onTurn,signal});
    if(signal?.aborted)throw signal.reason||Error('创作已停止');
    const sceneHash=craftSceneHash(working);

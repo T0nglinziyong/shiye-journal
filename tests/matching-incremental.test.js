@@ -119,7 +119,7 @@ test('matching action handlers do not call full render on common operations',asy
  assert.match(text,/case 'match-core':[\s\S]*?updateMatchingRegions/);
  assert.match(text,/case 'basket':\{[\s\S]*?updateMatchingRegions/);
  assert.match(text,/case 'match-filter':[\s\S]*?updateMatchingRegions/);
- assert.match(text,/case 'match-propose-history-toggle':[\s\S]*?updateMatchingRegions/);
+ assert.doesNotMatch(text,/case 'match-propose-history-toggle'/,'PR87 proposals are deliberately excluded from the rebuilt baseline');
 });
 
 

@@ -45,17 +45,16 @@ test('wide import has 2:1 columns; wide catalogs are one row and phones retain s
  assert.match(css,/\.import-nav[\s\S]*?max-width:none/);
 });
 
-test('manual adjustment is enabled while auto recognition runs and stale candidates cannot overwrite it',async()=>{
- const code=await source('app.js');
- assert.match(code,/el\.matches\('\[data-act="manual-import-box"\]'\)&&state\.importBitmap/);
- assert.match(code,/state\.importRecognitionRevision=\(state\.importRecognitionRevision\|\|0\)\+1/);
- assert.match(code,/if\(!canApply\(\)\|\|record!==state\.importRecords\[state\.importIndex\]\)/);
- assert.match(code,/importScroll=state\.route==='import'/);
- assert.match(code,/inspector\.scrollTop=importScroll\.inspector/);
+test('stable c6 recognition extraction is unchanged by desktop import enhancements',async()=>{
+ const [app,image,ui]=await Promise.all([source('app.js'),source('image.js'),source('import-workspace-ui.js')]);
+ assert.match(app,/const candidates=await detectPaperCandidates\(source,box,6/);
+ assert.match(app,/await refreshImportCandidates\(regions/);
+ assert.match(ui,/const visibleCandidates=state\.importProcessing\?\[\]:state\.importCandidates\|\|\[\]/);
+ assert.match(image,/segmentPaperMaterials\(discoveryFrame/);
 });
 test('leaving Materials and returning from Works restores its active tab and selected series',async()=>{
  const code=await source('app.js');
  assert.match(code,/const lastMaterialLocation=/);
  assert.match(code,/restoreMaterial=false/);
- assert.match(code,/route\(lastMaterialLocation\.route\|\|'series',\{restoreMaterial:true\}\)/);
+ assert.match(code,/route\(lastMaterialLocation\.route,\{restoreMaterial:true\}\)/);
 });

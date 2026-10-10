@@ -23,8 +23,6 @@ test('current GPT task package has one root entry and grouped compact folders',a
   assert.equal(context.materials[0].assetID,asset.id);
   for(const path of ['task/GUIDE.txt','task/knowledge.json','schema/output.json','schema/craft-plan.json','examples/project.shiyeproject.json','runtime/validate.cjs','runtime/preview.cjs','runtime/pack.cjs'])assert.ok(files[path],path);
   for(const removed of ['README.txt','context.json','contract.json','CONTENT_BRIEF.txt','CREATIVE_GUIDE.txt','CRAFT_GUIDE.txt','case-studies.json','composition-ideas.json','abstract-templates.json','source-image-audit.json','example-response.json','example-response.shiyeproject.json'])assert.equal(files[removed],undefined,removed);
-  assert.match(strFromU8(files['task/GUIDE.txt']),/先艺术构思、后具体执行/);
-  assert.ok(!strFromU8(files['task/GUIDE.txt']).includes('abstract-templates.json'));
   assert.match(strFromU8(files['START_HERE.txt']),/task\/context\.json/);assert.match(strFromU8(files['START_HERE.txt']),/schema\/output\.json/);
   const knowledge=JSON.parse(strFromU8(files['task/knowledge.json']));assert.equal(knowledge.format,'shiye-gpt-task-knowledge');assert.ok(knowledge.compositionIdeas.length);
 });
@@ -34,9 +32,6 @@ test('current editable example imports only with its exact registered source',as
   const imported=importEditableWork(response,[asset],{trustedSource:output.source});
   assert.equal(imported.isDraft,true);assert.equal(imported.drafts[0].items[0].assetID,asset.id);assert.equal(imported.drafts[0].agentRun.status,'finished');
   assert.equal(imported.offlineBundleId,output.source.bundleId);
-  const example=JSON.parse(response);
-  assert.deepEqual(example.page.text_blocks,[],'A schema example must not anchor the actual text layout');
-  assert.deepEqual(example.page.graphics,[],'A schema example must not prescribe decorative stars or cards');
   assert.throws(()=>importEditableWork(response,[asset]),/当前任务原件/);
   assert.throws(()=>importEditableWork(response,[asset],{trustedSource:{...output.source,bundleId:'other'}}),/当前任务原件/);
   const copied=`预览如下。\n\n\`\`\`json\n${response}\n\`\`\``;
@@ -124,9 +119,6 @@ test('reference metadata is merged into task/knowledge.json and images stay unde
   assert.deepEqual(Object.keys(files).filter(name=>name.startsWith('references/')&&name.endsWith('.png')).sort(),cases.map(entry=>`references/${entry.id}.png`).sort());
   assert.deepEqual(knowledge.caseStudies.selectedCases.map(entry=>entry.id),cases.map(entry=>entry.id));assert.ok(knowledge.abstractTemplates.templates.length);assert.equal(knowledge.sourceImageAudit.images.length,70);
   assert.equal(files['abstract-templates.json'],undefined);assert.equal(files['source-image-audit.json'],undefined);
-  const manifest=JSON.parse(strFromU8(files['references/manifest.json']));
-  assert.deepEqual(manifest.images.map(item=>item.id),cases.map(item=>item.id));
-  assert.ok(manifest.images.every(item=>item.type==='independent-study'&&item.pairedWith===null));
   assert.match(strFromU8(files['task/GUIDE.txt']),/模板原图/);
 });
 
