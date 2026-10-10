@@ -1278,7 +1278,7 @@ function openImportGallery(mode){
   fileInput.removeAttribute('capture');fileInput.click();
 }
 async function switchImportRecord(index,skipSave=false){
-  if(!skipSave)saveActiveImportRecord();const rec=state.importRecords[index];if(!rec)return;
+  if(!skipSave)saveActiveImportRecord();const rec=state.importRecords[index];if(!rec)return;rec.importError=null;
   const generation=state.importLoadGeneration=(state.importLoadGeneration||0)+1,isCurrent=()=>state.route==='import'&&state.importLoadGeneration===generation;
   state.importIndex=index;state.importFile=rec.file;state.importBitmap=rec.bitmap||null;state.importURL=rec.url;state.importBox=rec.box||{x:0,y:0,w:1,h:1};
   state.wholePaper=rec.wholePaper??state.preferences.wholePaper;state.paperSize=rec.paperSize||state.preferences.paperSize;state.paperOrientation=rec.paperOrientation||state.preferences.orientation;state.balanceLight=rec.balanceLight??state.preferences.balanceLight;state.importShapeRegularization=rec.importShapeRegularization??(state.preferences.recognitionShapeRegularization!==false);state.importApertures=rec.importApertures??(state.preferences.recognitionApertures!==false);state.importMaterialColorMode=rec.importMaterialColorMode||state.preferences.materialColorMode||'auto';state.importRecognition=rec.recognition||state.preferences.recognition;state.customImportWidth=rec.customImportWidth||state.preferences.customPaperWidth||210;state.customImportHeight=rec.customImportHeight||state.preferences.customPaperHeight||297;
@@ -1320,6 +1320,8 @@ async function switchImportRecord(index,skipSave=false){
     progress('正在识别并提取素材…');saveActiveImportRecord();render();
     if(!rec.paperNeedsReview&&rec.prefetchStatus!=='ready'&&!state.importCandidates.length&&state.importStep==='inspect')await previewCrop();
   }
+  }catch(error){if(isCurrent()){rec.importError=String(error?.message||error);console.warn('当前照片识别或素材预览失败',error);}
+    throw error;
   }finally{if(isCurrent()){state.importProcessing='';render();queueMicrotask(scheduleImportPrefetch);}}
 }
 function discardPaperPreview(){state.paperPreviewBitmap?.close?.();if(state.paperPreviewURL&&state.paperPreviewURL!==state.correctedURL)URL.revokeObjectURL(state.paperPreviewURL);state.paperPreviewBitmap=null;state.paperPreviewURL=null;state.paperPreviewApplied=false;}
