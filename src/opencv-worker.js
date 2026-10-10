@@ -4,6 +4,7 @@ import {separateSharedCarrier} from './material-carrier.js';
 import {segmentMaterialBoxes} from './material-segmentation.js';
 import {restoreRepeatedApertures} from './repeated-apertures.js';
 import {detectWhitePaperQuad} from './white-paper-quad.js';
+import {unpackHoughSegments} from './hough-segments.js';
 export async function processVision(cv,operation,p){
   const resources=[],own=mat=>(resources.push(mat),mat);
   try{
@@ -53,14 +54,17 @@ export async function processVision(cv,operation,p){
       cv.HoughLinesP(edges,segments,1,Math.PI/180,35,
         Math.max(40,Math.round(p.width*.075)),
         Math.max(8,Math.round(p.width*.035)));
-      const lines=Array.from({length:segments.rows},(_,i)=>
-        Array.from(segments.data32S.slice(i*4,i*4+4)));
+      // HoughLinesP in browser OpenCV may create a 1 x N CV_32SC4 Mat,
+      // not N x 1. Reading only `segments.rows` silently dropped N-1 lines
+      // (407 physical lines appeared as a single detected line on iPad).
+      const lines=unpackHoughSegments(segments);
       const diagnostics=p.collectDiagnostics?{
         stage:'quad',inputSize:[p.width,p.height],
         graySample:[blurred.data[Math.floor(p.height*.5)*p.width+Math.floor(p.width*.5)]||0],
         edgePixels:[...edges.data].reduce((count,value)=>count+(value>0),0),
         segmentShape:[segments.rows,segments.cols],
-        typedSegments:segments.data32S.length
+        typedSegments:segments.data32S.length,
+        unpackedSegments:lines.length
       }:null;
       const corners=detectWhitePaperQuad(lines,blurred.data,support.data,
         p.width,p.height,p.paperRatio,diagnostics);
