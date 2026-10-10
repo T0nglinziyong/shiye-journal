@@ -13,7 +13,7 @@ test('COS Works cover renders complete scene using only 480px material blobs',as
     createBitmap:async()=>({width:480,height:480,close:()=>closed.push(1)}),
     renderScene:async(draft,options)=>{
       scene=draft;
-      assert.equal(options.scale,.72);
+      assert.equal(options.scale,.48);
       assert.equal(options.waitForFonts,false);
       const first=await options.loadMaterialImage('material-1');
       assert.equal(first,await options.loadMaterialImage('material-1'));
