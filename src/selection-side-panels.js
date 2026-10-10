@@ -31,8 +31,8 @@ export function selectionSideGeometry({viewportWidth,viewportHeight,anchor,menu,
   return {parentLeft,parentWidth,panelLeft,panelWidth,top,maxHeight,split};
 }
 
-export function createSelectionSidePanels(menu,{makeAction}){
-  if(typeof makeAction!=='function')throw Error('侧拉操作缺少按钮生成器');
+export function createSelectionSidePanels(menu,{makeAction,anchor}){
+  if(typeof makeAction!=='function'||!anchor)throw Error('侧拉操作缺少按钮生成器或锚点');
   const initialWidth=menu.surface.style.width;
   let active=null;
   function close({reposition=true}={}){
@@ -67,7 +67,7 @@ export function createSelectionSidePanels(menu,{makeAction}){
     const current={trigger,panel,remove:null};active=current;
     const position=()=>{
       if(active!==current||!menu.surface.isConnected)return;
-      const menuRect=menu.surface.getBoundingClientRect(),anchorRect=menu.anchor.getBoundingClientRect();
+      const menuRect=menu.surface.getBoundingClientRect(),anchorRect=anchor.getBoundingClientRect();
       const geometry=selectionSideGeometry({
         viewportWidth:innerWidth,viewportHeight:innerHeight,
         anchor:anchorRect,menu:menuRect,panelHeight:panel.scrollHeight
