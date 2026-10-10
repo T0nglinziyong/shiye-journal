@@ -46,8 +46,8 @@ test('if discovery finds no materials, do not invent thumbnails',async()=>{
 });
 test('paper-check failure is explicit; the app never auto-segments unrectified A4',async()=>{
   const app=await readFile(new URL('../src/app.js',import.meta.url),'utf8');
-  assert.match(app,/rec\.paperNeedsReview=state\.paperSize!=='none'&&!state\.paperCorners&&!state\.correctedBitmap/);
-  assert.match(app,/!rec\.paperNeedsReview&&rec\.prefetchStatus/);
+  assert.match(app,/rec\.paperNeedsReview=state\.paperSize!=='none'&&!state\.correctedBitmap&&!rec\.appliedCorners/);
+  assert.match(app,/if\(!rec\.paperNeedsReview&&state\.importStep==='inspect'\)/);
   assert.match(app,/prefetchStatus='needs-paper-review'/);
   assert.match(app,/detectImportRegions\(source,b/);
   const html=renderImportInspection({
