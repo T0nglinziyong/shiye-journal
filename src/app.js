@@ -517,30 +517,24 @@ function bindPage(){view.querySelectorAll('[data-act]').forEach(el=>el.addEventL
   view.querySelectorAll('.record-work-save-assets').forEach(el=>el.onchange=()=>{
     const record=state.importRecords[+el.dataset.index];record.workSaveAssets=el.checked;record.workSaveAssetsManual=true;
   });
-  view.querySelectorAll('[data-import-paper-options]').forEach(button=>button.onclick=()=>{
-    const ri=Number(button.dataset.importPaperOptions),record=state.importRecords[ri];
-    if(!record)return;
-    const paperTypes=[['plain','纯色'],['grid','方格'],['lines','横线'],['dots','点阵'],['columns','双栏']];
-    body.innerHTML='<div class="dialog-head"><h2>页面背景</h2></div>'+
-      '<div class="stack"><label>底纸样式<select id="review-background-pattern">'+
-      paperTypes.map(([id,name])=>'<option value="'+id+'">'+name+'</option>').join('')+
-      '</select></label><label>底纸颜色<input id="review-background-color" type="color" value="'+esc(record.workPaperColor||state.importBatchWorkPaperColor||'#fcfaf0')+'"></label>'+
-      '<button type="button" class="btn primary" id="review-background-done">完成</button></div>';
-    const pattern=body.querySelector('#review-background-pattern'),
-      color=body.querySelector('#review-background-color');
-    pattern.value=record.workPaperPattern||state.importBatchWorkPaperPattern||'plain';
-    const update=()=>{
-      record.workPaperPattern=pattern.value;record.workPaperColor=color.value;
-      const preview=button.closest('.review-background-card')?.querySelector('.import-work-paper-preview');
-      if(preview){
-        preview.className='review-thumbnail import-work-paper-preview '+pattern.value;
-        preview.style.setProperty('--review-paper',color.value);
-        preview.style.backgroundColor=color.value;
-      }
-    };
-    pattern.onchange=update;color.oninput=update;
-    body.querySelector('#review-background-done').onclick=()=>modal.close();
-    modal.showModal();
+  // Work import background edits are inline: no intermediate modal. Updating
+  // either control directly repaints the same card and keeps both choices live.
+  const applyImportPaper=(ri,field,value)=>{
+    const record=state.importRecords[ri];if(!record)return;
+    if(field==='pattern')record.workPaperPattern=value;
+    else record.workPaperColor=value;
+    const preview=view.querySelector('.review-background-card .import-work-paper-preview:has([data-review-paper-pattern="'+ri+'"])');
+    if(preview){
+      preview.className='review-thumbnail import-work-paper-preview '+(record.workPaperPattern||'plain');
+      preview.style.setProperty('--review-paper',record.workPaperColor||'#fcfaf0');
+      preview.style.backgroundColor=record.workPaperColor||'#fcfaf0';
+    }
+  };
+  view.querySelectorAll('[data-review-paper-pattern]').forEach(el=>{
+    el.onchange=()=>applyImportPaper(Number(el.dataset.reviewPaperPattern),'pattern',el.value);
+  });
+  view.querySelectorAll('[data-review-paper-color]').forEach(el=>{
+    el.oninput=el.onchange=()=>applyImportPaper(Number(el.dataset.reviewPaperColor),'color',el.value);
   });
   const removeWhite=view.querySelector('#remove-white');if(removeWhite)removeWhite.onchange=()=>{state.importRemoveWhite=removeWhite.checked;};
   const page=view.querySelector('#canvas-page');if(page)initializeCanvasSurface(page);
