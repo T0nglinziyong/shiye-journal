@@ -105,7 +105,10 @@ export const isCurrentBuiltinMaterial=asset=>!!asset&&(asset.isBuiltinMaterial==
 const TRANSIENT_REPLACEMENT_IDS=new Set(Array.from({length:12},(_,i)=>fixedID(9005+i)));
 
 export async function syncCurrentMaterials({database=defaultDB}={}){
- const [assets,series,projects]=await Promise.all(['assets','series','projects'].map(name=>database.all(name)));
+ const [assets,series,projects,meta,trash]=await Promise.all(['assets','series','projects','meta','trash'].map(name=>database.all(name)));
+ const initialized=meta.some(row=>row.id==='current-builtins')||assets.some(row=>CURRENT_MATERIAL_IDS.has(row.id))||series.some(row=>currentMaterialCatalog.series.some(item=>item.id===row.id));
+ const deletedAssets=new Set([...meta.filter(row=>row.id?.startsWith('tombstone:assets:')).map(row=>row.targetID||row.id.slice('tombstone:assets:'.length)),...trash.filter(row=>row.kind==='asset').map(row=>row.item?.id)]);
+ const deletedSeries=new Set(meta.filter(row=>row.id?.startsWith('tombstone:series:')).map(row=>row.targetID||row.id.slice('tombstone:series:'.length)));
  const transient=assets.filter(asset=>TRANSIENT_REPLACEMENT_IDS.has(asset.id)&&asset.sourceIdentifier===CURRENT_MATERIAL_SOURCE);
  const existingAssets=new Map(assets.filter(asset=>!transient.includes(asset)).map(asset=>[asset.id,asset])),existingSeries=new Set(series.map(item=>item.id));
  const usedByWorks=new Set(projects.filter(project=>project.isUsed).flatMap(project=>[...projectAssetIDs(project)]));
@@ -116,12 +119,12 @@ export async function syncCurrentMaterials({database=defaultDB}={}){
  }
  for(const desired of currentMaterialCatalog.assets){
   const existing=existingAssets.get(desired.id);
-  if(!existing){writes.push(currentRecord(desired,usedByWorks.has(desired.id)));continue;}
+  if(!existing){if(!initialized&&!deletedAssets.has(desired.id))writes.push(currentRecord(desired,usedByWorks.has(desired.id)));continue;}
   const usageStatus=existing.usageStatus==='used'||existing.usageStatus==='unused'?existing.usageStatus:(usedByWorks.has(existing.id)?'used':'unused');
   if(existing.sourceIdentifier!==CURRENT_MATERIAL_SOURCE||existing.isBuiltinMaterial!==true||existing.builtinRevision!==CURRENT_MATERIAL_REVISION||existing.staticPath!==desired.staticPath||existing.usageStatus!==usageStatus)
    writes.push({...existing,staticPath:desired.staticPath,usageStatus,sourceIdentifier:CURRENT_MATERIAL_SOURCE,isBuiltinMaterial:true,builtinRevision:CURRENT_MATERIAL_REVISION});
  }
- const missingSeries=currentMaterialCatalog.series.filter(item=>!existingSeries.has(item.id));
+ const missingSeries=initialized?[]:currentMaterialCatalog.series.filter(item=>!existingSeries.has(item.id)&&!deletedSeries.has(item.id));
  if(!writes.length&&!missingSeries.length&&!transient.length)return {changed:false,assets:currentMaterialCatalog.assets.length,series:currentMaterialCatalog.series.length};
  await database.transaction(['assets','series','meta'],tx=>{for(const asset of transient)tx.objectStore('assets').delete(asset.id);for(const asset of writes)tx.objectStore('assets').put(asset);for(const item of missingSeries)tx.objectStore('series').put(item);tx.objectStore('meta').put({id:'current-builtins',revision:CURRENT_MATERIAL_REVISION,updatedAt:new Date().toISOString()});});
  return {changed:true,assets:currentMaterialCatalog.assets.length,series:currentMaterialCatalog.series.length};
