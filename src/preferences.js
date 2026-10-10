@@ -1,8 +1,8 @@
 import {recognitionModeAllowed,recognitionPixelsAllowed} from './recognition-profiles.js';
-const KEY='shiye-ui-preferences-v1',RECOGNITION_DEFAULTS_VERSION=3;
+const KEY='shiye-ui-preferences-v1',RECOGNITION_DEFAULTS_VERSION=2;
 const defaults={
   paperSize:'a4',orientation:'auto',wholePaper:true,autoOrganize:true,autoOrganizeWorks:true,
-  recognition:'auto',recognitionPixels:1200,materialColorMode:'auto',
+  recognition:'auto',recognitionPixels:900,materialColorMode:'auto',
   // Real-case default: whole-page box discovery is most stable on the raw
   // rectified RGB. Optional raster preprocessing remains user-selectable for
   // boundary segmentation, but is disabled by default.
@@ -29,7 +29,7 @@ export function normalizePreferences(value={}){
   return {...defaults,...current,
     recognition:migrateRecognition(value?.recognition),
     materialColorMode:value?.materialColorMode==='original'?'original':'auto',
-    recognitionPixels:recognitionPixelsAllowed(value?.recognitionPixels)?Number(value.recognitionPixels):1200,
+    recognitionPixels:recognitionPixelsAllowed(value?.recognitionPixels)?Number(value.recognitionPixels):900,
     balanceLight:value?.balanceLight===true,
     recognitionDenoise:value?.recognitionDenoise===true,
     recognitionLocalContrast:value?.recognitionLocalContrast===true,
@@ -42,11 +42,12 @@ export function normalizePreferences(value={}){
 }
 export function migrateStoredPreferences(value={}){
   if(value?.recognitionDefaultsVersion===RECOGNITION_DEFAULTS_VERSION)return value;
-  // Return every device to the stable pre-October-7 multi-stage recognizer
-  // with 1200px A4 analysis after the experimental box-only defaults. Leave
-  // all unrelated UI/storage settings intact.
+  // Recognition semantics changed substantially (new whole-page boxes +
+  // MorphGAC defaults). Reset only recognition-related legacy values once so
+  // old defaults such as 1200 px, preprocessing-on or chroma-off cannot leak
+  // into the new pipeline. Unrelated UI/paper preferences are preserved.
   return {...value,
-    recognition:'auto',recognitionPixels:1200,
+    recognition:'auto',recognitionPixels:900,
     balanceLight:false,recognitionDenoise:false,recognitionLocalContrast:false,recognitionChromaEdges:true,
     recognitionShapeRegularization:true,recognitionApertures:true,
     recognitionDefaultsVersion:RECOGNITION_DEFAULTS_VERSION
