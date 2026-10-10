@@ -13,8 +13,8 @@ test('seven days is inclusive; unknown dates are never silently discarded',()=>{
 test('bulk recovery is one transaction and retains nonselected entries',async()=>{
   const {state,db,writes}=fixture([entry('a','asset','2026-09-30'),entry('p','project','2026-09-30'),entry('other','asset','2026-09-30')]);
   assert.equal(await changeTrash({db,state,ids:['a','p'],recover:true}),2);
-  assert.deepEqual(writes[0].names,['assets','projects','trash']);
-  assert.equal(writes[0].operations.length,4);assert.equal(state.assets.length,1);assert.equal(state.projects.length,1);assert.deepEqual(state.trash.map(row=>row.id),['other']);
+  assert.deepEqual(writes[0].names,['assets','projects','trash','meta']);
+  assert.equal(writes[0].operations.length,6);assert.equal(state.assets.length,1);assert.equal(state.projects.length,1);assert.deepEqual(state.trash.map(row=>row.id),['other']);
 });
 test('failure or abort preserves visible trash and never reports success',async()=>{
   const {state}=fixture([entry('a','asset','2026-09-30')]);
