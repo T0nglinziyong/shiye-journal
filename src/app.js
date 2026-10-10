@@ -1238,7 +1238,7 @@ async function prefetchImportRecord(rec,settings,revision){
     bitmap=await decodeRecognitionImage(rec.file);if(!valid())return;
     const initial=importPaperDimensions({...settings,bitmap,corners:null});
     const corners=rec.corners||(settings.paperSize==='none'?null:await suggestPaperCorners(bitmap,initial[0]/initial[1]).catch(()=>null));if(!valid())return;
-    if(settings.paperSize!=='none'&&!corners){rec.paperNeedsReview=true;rec.prefetchStatus='needs-paper-review';updateImportPrefetchLabel(rec);return;}
+    if(settings.paperSize!=='none'&&(rec.paperNeedsReview||!corners)&&!rec.appliedCorners){rec.paperNeedsReview=true;rec.prefetchStatus='needs-paper-review';updateImportPrefetchLabel(rec);return;}
     const [pw,ph]=importPaperDimensions({...settings,bitmap,corners});
     if(corners&&settings.paperSize!=='none'){
       const corrected=await rectifyA4Frame(bitmap,corners,4096,pw/ph,{fixedWorkingSize:true});correctedBitmap=corrected.canvas;correctedURL=URL.createObjectURL(corrected.blob);if(!valid())return;
@@ -1334,9 +1334,9 @@ async function switchImportRecord(index,skipSave=false){
   progress('正在自动寻找纸张四角…');
   state.paperCorners=rec.corners||rec.autoPaperCorners||(state.paperSize==='none'?null:await suggestPaperCorners(bitmap,(()=>{const [pw,ph]=paperDimensions();return pw/ph;})()).catch(()=>null));if(!isCurrent())return;
   if(!rec.corners&&state.paperCorners)rec.autoPaperCorners=structuredClone(state.paperCorners);
-  rec.paperNeedsReview=state.paperSize!=='none'&&!state.paperCorners&&!state.correctedBitmap;
+  rec.paperNeedsReview=state.paperSize!=='none'&&!state.correctedBitmap&&!rec.appliedCorners&&(rec.paperNeedsReview||!state.paperCorners);
   progress('正在进行透视校正…');
-  if(!state.correctedBitmap&&state.paperCorners&&state.paperSize!=='none'){
+  if(!state.correctedBitmap&&state.paperCorners&&state.paperSize!=='none'&&!rec.paperNeedsReview){
     const [pw,ph]=paperDimensions(),{canvas,blob}=await rectifyA4Frame(state.importBitmap,state.paperCorners,4096,pw/ph,{fixedWorkingSize:true});
     if(!isCurrent())return;
     state.correctedBitmap=canvas;state.correctedURL=URL.createObjectURL(blob);rec.appliedCorners=JSON.stringify(state.paperCorners);rec.backgroundDetected=true;
