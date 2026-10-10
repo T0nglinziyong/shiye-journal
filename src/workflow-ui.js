@@ -1,5 +1,5 @@
 import {togglePopover} from './swift-popover.js';
-import {createSelectionSidePanels} from './selection-side-panels.js';
+import {createSelectionSidePanels,selectionMorePopoverOptions} from './selection-side-panels.js';
 import {zipSync,strToU8} from 'fflate';
 import {finishSelection,toggleSelection,selectionActive} from './library-selection-model.js';
 import {mountAssetSelection} from './library-selection-ui.js';
@@ -74,7 +74,7 @@ const selectionAction=(label,fn,cls='')=>{
   return b;
 };
 function batchMore(anchor,actions){
-  const p=togglePopover(anchor,{title:'更多操作',menu:true,width:245});
+  const p=togglePopover(anchor,selectionMorePopoverOptions());
   if(!p)return;
   p.surface.classList.add('selection-more-menu');
   const side=createSelectionSidePanels(p,{anchor,makeAction:selectionAction});
