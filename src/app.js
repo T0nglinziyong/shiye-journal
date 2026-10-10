@@ -829,8 +829,22 @@ async function handle(action,id,value){try{switch(action){
     const sourceSHA256=await hash(sourcePixels(state.importBitmap));
     const correctedSHA256=rec.correctedBitmap?await hash(sourcePixels(rec.correctedBitmap)):null;
     const maskSHA256=await Promise.all((state.importCandidateData||[]).map(async item=>item.region?.mask?.alpha?await hash(item.region.mask.alpha):null));
+    // A detected box, an extracted Blob URL and a browser-decoded <img> are
+    // different stages. Export all three counts to locate blank-preview issues.
+    const previewImages=[...view.querySelectorAll('.import-candidate-grid .candidate-thumb img')];
+    const previewStatus={
+      detectedRegions:(state.importCandidates||[]).length,
+      extractedCandidates:(state.importCandidateData||[]).length,
+      imageURLs:(state.importCandidateURLs||[]).filter(Boolean).length,
+      renderedImages:previewImages.length,
+      loadedImages:previewImages.filter(img=>img.complete&&img.naturalWidth>0).length,
+      failedImages:previewImages.filter(img=>img.complete&&img.naturalWidth===0).length,
+      pendingImages:previewImages.filter(img=>!img.complete).length,
+      processing:!!state.importProcessing
+    };
     const report={format:'shiye-recognition-box-diagnostics',version:3,
       pipeline:'pinned-jpeg-js-opencv-package-area-v1',inputSHA256,sourceSHA256,correctedSHA256,maskSHA256,
+      inputFileInfo:{bytes:rec.file?.size||0,mimeType:rec.file?.type||''},previewStatus,
       recognitionSettings:{method:state.importRecognition||state.preferences.recognition,pixels:state.preferences.recognitionPixels,
         preprocess:recognitionPreprocessOptions(),postprocess:recognitionPostprocessOptions()},
       originalPixelSize:[state.importBitmap?.width,state.importBitmap?.height],
