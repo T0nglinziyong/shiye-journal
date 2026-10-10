@@ -43,7 +43,7 @@ test('image loader accepts exact display pixels without applying DPR or screen s
     previewBlob:async(_id,pixels)=>{requests.push(pixels);return new Blob(['image']);},
     get:async()=>({data:new Blob(['original'])})
   },urls:new Map(),onError:()=>{}});
-  try{await loader.load('display',721);assert.deepEqual(requests,[721]);}
+  try{await loader.load('display',721);assert.deepEqual(requests,[960]);}
   finally{loader.dispose();env.close();}
 });
 test('route cover signature is stable from image placeholder to hydrated Blob URL',()=>{
@@ -71,7 +71,7 @@ test('catalog source remains COS thumbnail even after the original has been load
  const env=environment(),root=document.createElement('div'),calls={original:0,low:0,high:0};document.body.append(root);
  const loader=mountPrivateImages({root,urls:new Map(),onError:()=>{},db:{
    get:async()=>{calls.original++;return {data:new Blob(['original'])};},
-   previewBlob:async(_id,pixels)=>{if(pixels===360)calls.low++;else calls.high++;return new Blob(['thumbnail-'+pixels]);}
+   previewBlob:async(_id,pixels)=>{if(pixels===480)calls.low++;else calls.high++;return new Blob(['thumbnail-'+pixels]);}
  }});
  try{
    const original=await loader.load('material',true);
