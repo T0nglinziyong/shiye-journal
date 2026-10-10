@@ -88,6 +88,15 @@ export async function processVision(cv,operation,p){
       if(p.method==='morphgac'||p.method==='auto')out=segmentMaterialBoxes(cv,{...p,pixels:p.pixels});
       else if(p.method==='hybrid')out=refineMaterialBoundaries(cv,{...p,candidates:p.boxes,mode:'hybrid',postprocess:{edgePolish:true,shapeRegularization:false,curveSmooth:false,apertures:false}});
       else out=refineMaterialBoundaries(cv,{...p,candidates:p.boxes,mode:'grabcut',postprocess:{edgePolish:false,shapeRegularization:false,curveSmooth:false,apertures:false}});
+      // MorphGAC may report an unusable contour. Never feed such a result
+      // into shape/holes processing, which requires a valid mask and geometry.
+      // Keep the operation atomic: invalid manual edits are rejected by the
+      // caller, leaving the previous candidate images unchanged.
+      if(!Array.isArray(out)||out.length!==p.boxes.length||
+         out.some(c=>!c||c.segmentationFailed||!c.mask?.alpha?.length||
+           !Number.isFinite(c.w)||!Number.isFinite(c.h)||c.w<=0||c.h<=0)){
+        throw Error('框内未形成有效素材轮廓，请贴近素材边缘重新画框');
+      }
       if(p.shapeRegularization!==false)out=refineMaterialBoundaries(cv,{...p,candidates:out,mode:'postprocess',postprocess:{edgePolish:false,shapeRegularization:true,curveSmooth:false,apertures:false}});
       if(p.apertures!==false)out=restoreRepeatedApertures(cv,{pixels:p.sourcePixels||p.pixels,width:p.width,height:p.height,candidates:out,paperWidthMM:p.paperWidthMM,paperHeightMM:p.paperHeightMM});
       return p.mergeSharedCarrier===false?separateSharedCarrier(out,p.sourcePixels||p.pixels,p.width,p.height):out;
