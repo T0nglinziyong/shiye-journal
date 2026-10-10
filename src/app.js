@@ -13,6 +13,7 @@ import './asset-organization.css';
 import './sync-indicator.css';
 import './offline-handoff.css';
 import './matching-view.css';
+import './page-heading.css';
 import {createAssetOrganization,mountOrganizationBadges,updateOrganizedAssetView} from './asset-organization.js';
 import '@fontsource/ma-shan-zheng/chinese-simplified-400.css';
 import {mountIcons,iconMarkup} from './icons.js';
@@ -48,6 +49,8 @@ import {renderSeriesContents} from './series-contents.js';
 import {showSeriesEditor} from './series-editor.js';
 import {mountWorkflowControls} from './workflow-ui.js';
 import {renderImportInspection,renderImportReview} from './import-workspace-ui.js';
+import {recoverImportCandidate} from './import-candidate-recovery.js';
+import {bindImportCandidatePreviews} from './import-preview-retry.js';
 import {showCutoutEditor} from './cutout-editor.js';
 import {mountCanvasSelection} from './canvas-selection-ui.js';
 import * as db from './store.js';
@@ -73,6 +76,7 @@ import {buildMaterialScope} from './matching-materials.js';
 import {generateMaterialProposals} from './matching-proposals.js';
 import {matchingRecommendations,renderMatchingPage} from './matching-view.js';
 import {captureMatchingScroll,restoreMatchingScroll} from './matching-scroll.js';
+import {patchMatchingView} from './matching-incremental.js';
 import {selectJournalReferenceCases,loadJournalReferenceCases} from './journal-reference-catalog.js';
 import {loadJournalTemplateReferences} from './journal-template-references.js';
 import {clearJournalPresetImages} from './journal-preset-images.js';
@@ -299,7 +303,7 @@ if(state.route==='editor'&&name!=='editor'&&aiController)aiController.abort(Erro
 function imgTag(a,priority=false){const src=a&&(image(a.blobId)||a.staticPath),eager=priority===true;return src?`<img data-asset-image-id="${esc(a.id)}" loading="${eager?'eager':'lazy'}" ${eager?'fetchpriority="high" ':''}decoding="async" src="${esc(src)}" alt="${esc(a.title)}">`:'<span>无预览</span>';}
 function assetCard(a){return `<button class="card" data-act="detail" data-id="${a.id}"><div class="card-image">${imgTag(a)}</div><div class="card-body"><h3>${esc(a.title)}${a.isFavorite?'<span class="card-favorite" aria-label="已收藏">♥</span>':''}</h3><p>${esc(kindName(a.kind))} · ${a.physicalWidthMM?`${fmt(a.physicalWidthMM)} × ${fmt(a.physicalHeightMM)} mm`:'尺寸待确认'}</p><span class="chip ${a.reviewStatus==='ready'?'':'warn'}">${a.reviewStatus==='ready'?'已整理':'待检查'}</span></div></button>`;}
 const fmt=n=>Number(n).toFixed(1).replace(/\.0$/,'');
-function head(title,subtitle,actions=''){return `<div class="view-head"><div><h1>${title}</h1><p>${subtitle}</p></div><div class="actions">${actions}</div></div>`;}
+function head(title,subtitle,actions=''){return `<div class="view-head unified-page-heading"><div class="unified-heading-copy"><span class="eyebrow">FROM YOUR DESK TO YOUR PAGES</span><h1>${title}</h1><p>${subtitle}</p></div><div class="actions">${actions}</div></div>`;}
 function render(){
   // Capture BEFORE editing/backdrop CSS changes or DOM teardown. Switching
   // from Matching into Editor can otherwise clamp the old page scroll first.
@@ -368,6 +372,25 @@ const kindName=k=>({sticker:'贴纸',paper:'纸张',tape:'胶带',photo:'照片'
 function renderSeries(){return head('我的素材','把喜欢的，收进系列。')+`<div class="grid series-grid ${state.preferences.display==='list'?'list-grid':''}">${[...state.series].sort((a,b)=>a.id.startsWith('B700')&&b.id.startsWith('B700')?b.id.localeCompare(a.id):a.id.startsWith('B700')?-1:b.id.startsWith('B700')?1:0).map((s,index)=>{const members=state.assets.filter(a=>a.seriesID===s.id&&!a.isProjectInternal);const cover=seriesCovers(s,state.assets);return `<button class="card" data-act="series-detail" data-id="${s.id}"><div class="series-cover">${cover.map(a=>imgTag(a,index<2)).join('')}</div><div class="card-body"><h3>${esc(s.title)} <span aria-hidden="true">→</span></h3><p>${members.length} 件素材</p></div></button>`;}).join('')}</div>`;}
 function renderMatching(){return renderMatchingPage({state,head,imgTag,esc,kindName,session:matchingSession});}
 function matchingScope(){return buildMaterialScope({basket:state.basket,coreIDs:state.coreIDs,recommendations:matchingRecommendations(state),excluded:state.excludedAssetIDs,autoIncludeRecommendations:state.aiSettings.autoIncludeRecommendations,requireAllCandidates:state.aiSettings.requireAllCandidates});}
+// Common actions update only affected Matching panes, preserving the entire
+// remaining page, sticky header, textarea selection and decoded thumbnails.
+function updateMatchingRegions(regions,{persist=true}={}){
+  if(state.route!=='matching')return render();
+  document.querySelector('#basket-count').textContent=state.basket.length;
+  const patched=patchMatchingView({
+    view,renderHTML:renderMatching,regions,
+    onAction:(action,id,value)=>handle(action,id,value),mountIcons
+  });
+  if(!patched)render();
+  // Full render previously invoked bindPage(), which automatically staged
+  // matching state. Incremental updates intentionally skip bindPage(), so
+  // explicitly retain that durable local save for stars, exclusions, basket,
+  // and filter changes. createMatchingSession serializes concurrent saves.
+  if(persist)void matchingSession.persist().catch(error=>{
+    console.warn('本机搭配状态保存失败',error);
+    toast('本机搭配状态暂存失败：'+error.message);
+  });
+}
 function refreshMatchingRecommendations(){const current=view.querySelector('.match-recommendations');if(!current)return;const scroll=captureMatchingScroll(view,window);const template=document.createElement('template');template.innerHTML=renderMatching();const next=template.content.querySelector('.match-recommendations');if(!next)return;current.replaceWith(next);next.querySelectorAll('[data-act]').forEach(el=>el.addEventListener('click',()=>handle(el.dataset.act,el.dataset.id,el.dataset.val)));mountIcons(next);const summary=view.querySelector('.basket>.muted'),fresh=template.content.querySelector('.basket>.muted');if(summary&&fresh)summary.textContent=fresh.textContent;restoreMatchingScroll(view,scroll,window);}
 function workInkPreview(d){if(!d.strokes?.length)return '';const paths=d.strokes.map(s=>{const points=(s.points||[]).filter(p=>Number.isFinite(p.x)&&Number.isFinite(p.y));if(!points.length)return '';const color=esc(s.color||'#2b5245'),width=Math.max(.5,Number(s.width)||3),opacity=Math.max(0,Math.min(1,Number(s.opacity??1)));if(points.length===1)return `<circle cx="${points[0].x}" cy="${points[0].y}" r="${width/2}" fill="${color}" opacity="${opacity}"/>`;return `<path d="${points.map((p,n)=>`${n?'L':'M'}${p.x} ${p.y}`).join(' ')}" fill="none" stroke="${color}" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round" opacity="${opacity}"/>`;}).join('');return `<svg class="work-ink-preview" viewBox="0 0 ${d.canvas.width} ${d.canvas.height}" preserveAspectRatio="none" aria-hidden="true">${paths}</svg>`;}
 function workCover(d,priority=false,snapshotOnly=false,projectID=null){
@@ -386,7 +409,7 @@ function workCover(d,priority=false,snapshotOnly=false,projectID=null){
  const texts=(d.textBlocks||[]).filter(i=>!i.isHidden).map(i=>`<span class="work-text" style="${position(i)}font-size:${Math.max(.6,i.fontSize/d.canvas.width*100)}cqw;line-height:${textLineHeight(i)/d.canvas.width*100}cqw;letter-spacing:${(i.letterSpacing||0)/d.canvas.width*100}cqw;color:${esc(i.color||'#333')};text-align:${i.alignment||'left'};font-family:${esc(textFontFamily(i))};font-weight:${i.bold?'700':'400'};font-style:${i.italic?'italic':'normal'};text-decoration:${[i.underline?'underline':'',i.strikethrough?'line-through':''].filter(Boolean).join(' ')||'none'}">${textParagraphMarkup(i,(i.paragraphSpacing||0)/d.canvas.width*100+'cqw')}</span>`).join('');
  return materials+shapes+texts+workInkPreview(d);
 }
-function renderWorks(){const list=state.projects.filter(p=>!isUntouchedLegacyExample(p)).sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt));return `<div class="works-page">${head('我的作品','')}<button hidden data-act="new-project" id="work-create"></button><button hidden data-act="import-work" id="work-import"></button><div class="filters"><input type="search" id="work-search" placeholder="搜索作品名称或标签"><select id="work-kind"><option value="all">全部类型</option><option value="created">手动创作</option><option value="imported">导入作品</option></select><select id="work-status"><option value="all">全部状态</option><option value="used">已使用</option><option value="unused">未使用</option></select><select id="work-sort"><option value="access-desc">最近访问 · 降序</option><option value="access-asc">最近访问 · 升序</option><option value="updated-desc">最近修改 · 降序</option><option value="updated-asc">最近修改 · 升序</option><option value="name-asc">名称 · 升序</option><option value="name-desc">名称 · 降序</option></select><span>${list.length} 项</span></div><div class="grid works-grid">${list.map((p,index)=>`<button class="card" data-act="open-project" data-id="${p.id}"><div class="card-image"><div class="thumb-sheet" style="width:75%;background:${esc(p.drafts[0]?.paperColor||'#fff')}">${p.isSnapshot?`<img class="work-reference" loading="${index<4?'eager':'lazy'}" decoding="async" src="${image(p.snapshotBlobId)}" alt="${esc(p.title)} 快照">`:p.coverStaticPath&&p.updatedAt===p.coverBaselineUpdatedAt?`<img class="work-reference" loading="${index<4?'eager':'lazy'}" src="${p.coverStaticPath}" alt="${esc(p.title)} 完整预览">`:workCover(p.drafts.find(d=>d.id===p.activeDraftID)||p.drafts[0],index<4,true,p.id)}</div></div><div class="card-body"><h3>${esc(p.title)}</h3><p>⊙　${p.isSnapshot?'画面快照':p.isDraft?'草稿':'可编辑作品'} <span>${new Date(p.updatedAt).toLocaleDateString()}</span></p></div></button>`).join('')}</div></div>`;}
+function renderWorks(){const list=state.projects.filter(p=>!isUntouchedLegacyExample(p)).sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt));return `<div class="works-page">${head('我的作品','留下完成的创作，继续记录新的灵感。')}<button hidden data-act="new-project" id="work-create"></button><button hidden data-act="import-work" id="work-import"></button><div class="filters"><input type="search" id="work-search" placeholder="搜索作品名称或标签"><select id="work-kind"><option value="all">全部类型</option><option value="created">手动创作</option><option value="imported">导入作品</option></select><select id="work-status"><option value="all">全部状态</option><option value="used">已使用</option><option value="unused">未使用</option></select><select id="work-sort"><option value="access-desc">最近访问 · 降序</option><option value="access-asc">最近访问 · 升序</option><option value="updated-desc">最近修改 · 降序</option><option value="updated-asc">最近修改 · 升序</option><option value="name-asc">名称 · 升序</option><option value="name-desc">名称 · 降序</option></select><span>${list.length} 项</span></div><div class="grid works-grid">${list.map((p,index)=>`<button class="card" data-act="open-project" data-id="${p.id}"><div class="card-image"><div class="thumb-sheet" style="width:75%;background:${esc(p.drafts[0]?.paperColor||'#fff')}">${p.isSnapshot?`<img class="work-reference" loading="${index<4?'eager':'lazy'}" decoding="async" src="${image(p.snapshotBlobId)}" alt="${esc(p.title)} 快照">`:p.coverStaticPath&&p.updatedAt===p.coverBaselineUpdatedAt?`<img class="work-reference" loading="${index<4?'eager':'lazy'}" src="${p.coverStaticPath}" alt="${esc(p.title)} 完整预览">`:workCover(p.drafts.find(d=>d.id===p.activeDraftID)||p.drafts[0],index<4,true,p.id)}</div></div><div class="card-body"><h3>${esc(p.title)}</h3><p>⊙　${p.isSnapshot?'画面快照':p.isDraft?'草稿':'可编辑作品'} <span>${new Date(p.updatedAt).toLocaleDateString()}</span></p></div></button>`).join('')}</div></div>`;}
 function current(){const p=state.activeProject;return p?.drafts.find(d=>d.id===state.activeDraft)||p?.drafts[0];}
 function editorEntry(d,rendering=false){if(rendering)return sceneRenderEntries(d);const entries=[...(d.items||[]).filter(i=>!i.isParked).map(i=>({kind:'material',value:i})),...(d.primitives||[]).filter(i=>!i.hidden).map(i=>({kind:'shape',value:i})),...(d.textBlocks||[]).filter(i=>!i.isHidden).map(i=>({kind:'text',value:i}))];return entries.sort((a,b)=>a.value.zIndex-b.value.zIndex);}
 function vectorMarkup(i){const paths=(i.vectorPaths||[]).map(points=>{const d=points.filter(p=>Array.isArray(p)&&p.length===2&&p.every(Number.isFinite)).map((p,n)=>`${n?'L':'M'}${p[0]} ${p[1]}`).join(' ');return d?`<path d="${d} Z"/>`:'';}).join('');return `<svg aria-hidden="true" viewBox="0 0 1 1" preserveAspectRatio="none" style="width:100%;height:100%;overflow:visible;fill:${esc(i.fill||'transparent')};stroke:${esc(i.stroke||'none')};stroke-width:${Math.max(0,Number(i.lineWidth)||0)/Math.max(i.width,i.height,1)}">${paths}</svg>`;}
@@ -479,7 +502,7 @@ function readAIForm(){const q=id=>view.querySelector('#setting-ai-'+id),old=stat
 function bindPage(){view.querySelectorAll('[data-act]').forEach(el=>el.addEventListener('click',()=>handle(el.dataset.act,el.dataset.id,el.dataset.val)));
   const assetStatus=view.querySelector('#status-filter');if(assetStatus&&!assetStatus.querySelector('[value="favorite"]')){const option=document.createElement('option');option.value='favorite';option.textContent='已收藏';assetStatus.append(option);}
   const assetHeart=view.querySelector('.detail-heart');if(assetHeart)assetHeart.setAttribute('aria-pressed',String(!!asset(state.detailAssetID)?.isFavorite));
-  if(state.route==='projectPreview'){const p=state.projects.find(x=>x.id===state.previewProjectID);if(p?.isSnapshot){const header=view.querySelector('.project-preview-head');const heart=document.createElement('button');heart.type='button';heart.className='snapshot-favorite';heart.setAttribute('aria-label',p.isFavorite?'取消收藏快照':'收藏快照');heart.setAttribute('aria-pressed',String(!!p.isFavorite));heart.textContent=p.isFavorite?'♥':'♡';heart.onclick=async()=>{const next={...p,isFavorite:!p.isFavorite};await db.put('projects',next);Object.assign(p,next);render();};header?.querySelector('h1')?.after(heart);}}
+  if(state.route==='projectPreview'){const p=state.projects.find(x=>x.id===state.previewProjectID);if(p?.isSnapshot){const header=view.querySelector('.project-preview-head');const heart=document.createElement('button');heart.type='button';heart.className='snapshot-favorite';heart.setAttribute('aria-label',p.isFavorite?'取消收藏快照':'收藏快照');heart.setAttribute('aria-pressed',String(!!p.isFavorite));heart.textContent=p.isFavorite?'♥':'♡';heart.onclick=async()=>{const next={...p,isFavorite:!p.isFavorite};await db.put('projects',next);Object.assign(p,next);heart.textContent=next.isFavorite?'♥':'♡';heart.setAttribute('aria-label',next.isFavorite?'取消收藏快照':'收藏快照');heart.setAttribute('aria-pressed',String(!!next.isFavorite));};header?.querySelector('h1')?.after(heart);}}
   view.querySelector('#ai-model-group')?.addEventListener('toggle',event=>{aiModelPanelOpen=event.currentTarget.open;});
   if(state.route==='matching'){
     const saveMatching=()=>matchingSession.persist().catch(e=>{console.warn('本机搭配状态未保存；不影响云端作品同步',e);toast('本机搭配状态保存失败：'+e.message);});
@@ -587,7 +610,19 @@ function bindPage(){view.querySelectorAll('[data-act]').forEach(el=>el.addEventL
   });
   const removeWhite=view.querySelector('#remove-white');if(removeWhite)removeWhite.onchange=()=>{state.importRemoveWhite=removeWhite.checked;};
   const page=view.querySelector('#canvas-page');if(page)initializeCanvasSurface(page);
-  bindInspector();if(state.route==='import'&&state.importProcessing)view.querySelectorAll('.inspect-columns button,.inspect-columns input,.inspect-columns select').forEach(el=>{
+  bindInspector();
+  if(state.route==='import'&&state.importMode!=='snapshot'){
+    const index=state.importIndex;
+    bindImportCandidatePreviews({
+      root:view,candidates:()=>state.importCandidateData||[],
+      active:()=>state.route==='import'&&state.importIndex===index,
+      onRepair:(ci,item)=>{
+        (state.importCandidateURLs||=[])[ci]=item.url;
+        saveActiveImportRecord();
+      }
+    });
+  }
+  if(state.route==='import'&&state.importProcessing)view.querySelectorAll('.inspect-columns button,.inspect-columns input,.inspect-columns select').forEach(el=>{
     // A failed or slow auto recognizer must never block the manual recovery
     // path once its source bitmap exists. The manual action invalidates the
     // in-flight auto run before editing begins.
@@ -671,9 +706,28 @@ async function handle(action,id,value){try{switch(action){
   case 'rotate-photo':await rotateImportPhoto();break;
   case 'import-toggle-candidate':state.importCandidateSelection||=new Set();state.importCandidateSelection.has(Number(id))?state.importCandidateSelection.delete(Number(id)):state.importCandidateSelection.add(Number(id));state.importRecords[state.importIndex].confirmed=false;saveActiveImportRecord();{const tile=view.querySelector('[data-act="import-toggle-candidate"][data-id="'+id+'"]'),selected=state.importCandidateSelection.has(Number(id));tile?.classList.toggle('selected',selected);tile?.setAttribute('aria-pressed',String(selected));if(tile)tile.querySelectorAll('span')[1].textContent='素材 '+(Number(id)+1)+' '+(selected?'✓':'○');}break;
   case 'import-confirm-photo':await confirmImportPhoto();break;
-  case 'review-toggle':{const c=state.importRecords[Number(id)].selectedCandidates[Number(value)];c.selected=!c.selected;render();break;}
+  case 'review-toggle':{
+    const ri=Number(id),ci=Number(value),c=state.importRecords[ri]?.selectedCandidates?.[ci];
+    if(!c)break;c.selected=!c.selected;
+    const card=view.querySelector('.review-candidate[data-index="'+ri+'"][data-candidate="'+ci+'"]');
+    card?.classList.toggle('selected',!!c.selected);
+    const button=card?.querySelector('button[data-act="review-toggle"]');
+    if(button)button.setAttribute('aria-label',c.title+'，'+(c.selected?'已选择':'未选择'));
+    const check=card?.querySelector('.check');if(check)check.textContent=c.selected?'✓':'○';
+    break;
+  }
   case 'choose-candidate':await chooseCandidate(Number(id));break;
-  case 'detail':openLibraryAsset(id);break;case 'detail-back':libraryBack();break;case 'detail-add':if((asset(state.detailAssetID)?.supply?.quantity??1)===0)throw Error('素材可用库存为 0');state.basket=[...new Set([...state.basket,state.detailAssetID])];toast('已加入本次创作');render();break;case 'detail-match':if((asset(state.detailAssetID)?.supply?.quantity??1)===0)throw Error('素材可用库存为 0');state.matchCore=state.detailAssetID;state.basket=[...new Set([...state.basket,state.detailAssetID])];route('matching');break;case 'detail-series':libraryHistory.push({route:state.route,seriesID:state.seriesID,detailAssetID:state.detailAssetID});state.seriesID=asset(state.detailAssetID)?.seriesID||'all';route('library');break;case 'detail-similar':view.dispatchEvent(new CustomEvent('show-similar'));break;case 'detail-edit':openDetail(state.detailAssetID);break;case 'detail-check':await openCutoutCheck(state.detailAssetID);break;case 'detail-favorite':{const a=asset(state.detailAssetID),next={...a,isFavorite:!a.isFavorite};await db.put('assets',next);Object.assign(a,next);render();toast(next.isFavorite?'已收藏':'已取消收藏');break;}
+  case 'detail':openLibraryAsset(id);break;case 'detail-back':libraryBack();break;case 'detail-add':
+    if((asset(state.detailAssetID)?.supply?.quantity??1)===0)throw Error('素材可用库存为 0');
+    state.basket=[...new Set([...state.basket,state.detailAssetID])];
+    document.querySelector('#basket-count').textContent=state.basket.length;
+    toast('已加入本次创作');break;case 'detail-match':if((asset(state.detailAssetID)?.supply?.quantity??1)===0)throw Error('素材可用库存为 0');state.matchCore=state.detailAssetID;state.basket=[...new Set([...state.basket,state.detailAssetID])];route('matching');break;case 'detail-series':libraryHistory.push({route:state.route,seriesID:state.seriesID,detailAssetID:state.detailAssetID});state.seriesID=asset(state.detailAssetID)?.seriesID||'all';route('library');break;case 'detail-similar':view.dispatchEvent(new CustomEvent('show-similar'));break;case 'detail-edit':openDetail(state.detailAssetID);break;case 'detail-check':await openCutoutCheck(state.detailAssetID);break;case 'detail-favorite':{
+    const a=asset(state.detailAssetID),next={...a,isFavorite:!a.isFavorite};
+    await db.put('assets',next);Object.assign(a,next);
+    const heart=view.querySelector('.detail-heart');
+    if(heart){heart.textContent=next.isFavorite?'♥':'♡';heart.setAttribute('aria-label',next.isFavorite?'取消收藏':'收藏');heart.setAttribute('aria-pressed',String(!!next.isFavorite));}
+    toast(next.isFavorite?'已收藏':'已取消收藏');break;
+  }
   case 'new-series':openSeriesEditor();break;case 'series-detail':libraryHistory.push({route:state.route,seriesID:state.seriesID,detailAssetID:state.detailAssetID});state.seriesID=id;route('library');break;
   case 'match-library':route('library');break;case 'match-context':{const scope=matchingScope();toast(`必须 ${scope.required.length} · 优先 ${scope.preferred.length} · 可用 ${scope.available.length} · 不使用 ${scope.excluded.length}`);break;}
   case 'match-propose':case 'match-propose-more':{
@@ -686,11 +740,11 @@ async function handle(action,id,value){try{switch(action){
     });
     state.matchProposalBatch=batch+1;
     state.matchProposals=[...suggestions,...history].slice(0,24);
-    await matchingSession.persist();render();
+    await matchingSession.persist();updateMatchingRegions(['.match-proposals'],{persist:false});
     if(!suggestions.length)toast('当前没有足够素材组成搭配方案');
     break;
   }
-  case 'match-propose-history-toggle':state.matchProposalHistoryExpanded=!state.matchProposalHistoryExpanded;render();break;
+  case 'match-propose-history-toggle':state.matchProposalHistoryExpanded=!state.matchProposalHistoryExpanded;updateMatchingRegions(['.match-proposals']);break;
   case 'match-propose-apply':{
     const proposal=(state.matchProposals||[]).find(row=>row.id===id);
     if(!proposal)break;
@@ -700,17 +754,29 @@ async function handle(action,id,value){try{switch(action){
     state.basket=selected;state.coreIDs=proposal.requiredAssetIDs.slice();
     state.matchCore=state.coreIDs[0]||selected[0]||null;
     if(!state.matchIntent.trim())state.matchIntent=proposal.theme||'';
-    await matchingSession.persist();render();
+    await matchingSession.persist();updateMatchingRegions(['.match-basket-scroll','.basket>.muted','.match-rec-grid','.match-recommendations .match-panel-head small','.match-action'],{persist:false});
+    const intent=view.querySelector('#match-intent');if(intent&&intent.value!==state.matchIntent)intent.value=state.matchIntent;
     toast('已选用「'+proposal.title+'」，仍可自由调整素材');
     break;
   }
-  case 'match-filter':state.recommendFilter=value;render();break;case 'match-skip':state.excludedAssetIDs=[...new Set([...state.excludedAssetIDs,id])];render();break;case 'match-allow':state.excludedAssetIDs=state.excludedAssetIDs.filter(x=>x!==id);render();break;
-  case 'match-core':state.coreIDs=state.coreIDs.includes(id)?state.coreIDs.filter(x=>x!==id):[...state.coreIDs,id];state.matchCore=state.coreIDs[0]||state.basket[0];render();break;
+  case 'match-filter':state.recommendFilter=value;updateMatchingRegions(['.match-chips','.match-rec-grid']);break;
+  case 'match-skip':state.excludedAssetIDs=[...new Set([...state.excludedAssetIDs,id])];updateMatchingRegions(['.match-rec-grid','.basket>.muted','.match-recommendations .match-panel-head small','.match-action']);break;
+  case 'match-allow':state.excludedAssetIDs=state.excludedAssetIDs.filter(x=>x!==id);updateMatchingRegions(['.match-rec-grid','.basket>.muted','.match-recommendations .match-panel-head small','.match-action']);break;
+  case 'match-core':state.coreIDs=state.coreIDs.includes(id)?state.coreIDs.filter(x=>x!==id):[...state.coreIDs,id];
+    state.matchCore=state.coreIDs[0]||state.basket[0];
+    updateMatchingRegions(['.match-basket-scroll','.basket>.muted','.match-action']);break;
   case 'match-use':openMaterialUse(id);break;
   case 'match-generate':state.matchPurpose=view.querySelector('#match-purpose')?.value||'日常记录';state.matchProcessing=view.querySelector('#match-processing')?.value||'保留完整';state.matchStyle=view.querySelector('#match-style')?.value||state.matchStyle;state.matchIntent=view.querySelector('#match-intent')?.value||'';captureMatchContent();state.matchMode=view.querySelector('#match-mode')?.value||'single';state.matchRatio=readMatchPaper();state.matchStyles=readMatchSelection('match-style',state.matchStyle);state.matchPurposes=readMatchSelection('match-purpose',state.matchPurpose);await matchingSession.generate();break;
   case 'match-export-gpt':await exportOfflineCreation();break;
   case 'match-import-gpt':openOfflineImportDialog();break;
-  case 'basket':{const removing=state.basket.includes(id);state.basket=removing?state.basket.filter(x=>x!==id):[...state.basket,id];if(removing)state.coreIDs=state.coreIDs.filter(x=>x!==id);else state.excludedAssetIDs=state.excludedAssetIDs.filter(x=>x!==id);render();break;}
+  case 'basket':{
+    const removing=state.basket.includes(id);
+    state.basket=removing?state.basket.filter(x=>x!==id):[...state.basket,id];
+    if(removing)state.coreIDs=state.coreIDs.filter(x=>x!==id);
+    else state.excludedAssetIDs=state.excludedAssetIDs.filter(x=>x!==id);
+    updateMatchingRegions(['.match-basket-scroll','.basket>.muted','.match-rec-grid','.match-recommendations .match-panel-head small','.match-action']);
+    break;
+  }
   case 'reset-match':if(!confirm('重新搭配？已有保存作品不会被删除。'))break;await matchingSession.reset(()=>{state.matchCore=null;state.basket=[];state.coreIDs=[];state.excludedAssetIDs=[];state.matchProposals=[];state.matchProposalBatch=0;});render();break;
   case 'create-from-basket':openManualCreationDialog();break;
   case 'new-project':{
@@ -836,7 +902,7 @@ function editSelected(fn){const d=current(),e=editorEntry(d).find(x=>x.value.id=
 function historyStep(from,to){view.endTextEditing?.();const d=current(),snapshot=takeEditorHistoryStep(state,from,to,d);if(!snapshot)return;for(const key of Object.keys(d))delete d[key];Object.assign(d,snapshot);state.activeDraft=snapshot.id;saveProject();render();}
 function readMatchPaper(){const ratio=view.querySelector('#match-ratio')?.value||'a4';if(ratio!=='custom')return ratio;const w=Number(view.querySelector('#match-paper-width')?.value),h=Number(view.querySelector('#match-paper-height')?.value);if(!Number.isInteger(w)||!Number.isInteger(h)||w<50||h<50||w>1000||h>1000)throw Error('自定义纸张宽高需要是 50–1000 mm 的整数');state.customPaperWidth=w;state.customPaperHeight=h;return `custom:${w}x${h}`;}
 function captureMatchContent(){state.matchContentPolicy=view.querySelector('#match-content-policy')?.value||'documentary';state.matchUserText=view.querySelector('#match-user-text')?.value||'';state.matchFacts=view.querySelector('#match-facts')?.value||'';}
-function openMaterialUse(id){const a=asset(id);if(!a)return;const others=state.basket.length>1;const choices=['由生成器选择','完整保留',...(others?['从另一件后露出']:[]),...(a.kind==='tape'&&others?['截段固定']:[]),...(['paper','photo','tape'].includes(a.kind)?['取一块真实区域',]:[]),'稍后手工剪图案'];const processing=['AI 自主加工','保留完整','少量裁剪','自由拆解'];body.innerHTML=`<h2>${esc(a.title)} · 用法</h2><p>每件素材可以单独选择用法与加工权限。</p><div class="stack"><label>用法<select id="material-use-choice">${choices.map(x=>`<option ${(state.materialUseHints[id]||'由生成器选择')===x?'selected':''}>${x}</option>`).join('')}</select></label><label>加工权限<select id="material-use-processing">${processing.map(x=>`<option ${(state.assetProcessing[id]||state.matchProcessing)===x?'selected':''}>${x}</option>`).join('')}</select></label><label class="toggle-row">要求每个方案做到此用法 <input type="checkbox" id="material-use-required" ${state.materialUseRequired[id]?'checked':''}></label><div class="actions"><button class="btn primary" id="material-use-save">确定</button><button class="btn" id="material-use-cancel">取消</button></div></div>`;modal.showModal();body.querySelector('#material-use-cancel').onclick=()=>modal.close();body.querySelector('#material-use-save').onclick=()=>{const use=body.querySelector('#material-use-choice').value;state.materialUseHints[id]=use==='由生成器选择'?null:use;state.assetProcessing[id]=body.querySelector('#material-use-processing').value;state.materialUseRequired[id]=!!state.materialUseHints[id]&&use!=='稍后手工剪图案'&&body.querySelector('#material-use-required').checked;modal.close();render();};}
+function openMaterialUse(id){const a=asset(id);if(!a)return;const others=state.basket.length>1;const choices=['由生成器选择','完整保留',...(others?['从另一件后露出']:[]),...(a.kind==='tape'&&others?['截段固定']:[]),...(['paper','photo','tape'].includes(a.kind)?['取一块真实区域',]:[]),'稍后手工剪图案'];const processing=['AI 自主加工','保留完整','少量裁剪','自由拆解'];body.innerHTML=`<h2>${esc(a.title)} · 用法</h2><p>每件素材可以单独选择用法与加工权限。</p><div class="stack"><label>用法<select id="material-use-choice">${choices.map(x=>`<option ${(state.materialUseHints[id]||'由生成器选择')===x?'selected':''}>${x}</option>`).join('')}</select></label><label>加工权限<select id="material-use-processing">${processing.map(x=>`<option ${(state.assetProcessing[id]||state.matchProcessing)===x?'selected':''}>${x}</option>`).join('')}</select></label><label class="toggle-row">要求每个方案做到此用法 <input type="checkbox" id="material-use-required" ${state.materialUseRequired[id]?'checked':''}></label><div class="actions"><button class="btn primary" id="material-use-save">确定</button><button class="btn" id="material-use-cancel">取消</button></div></div>`;modal.showModal();body.querySelector('#material-use-cancel').onclick=()=>modal.close();body.querySelector('#material-use-save').onclick=()=>{const use=body.querySelector('#material-use-choice').value;state.materialUseHints[id]=use==='由生成器选择'?null:use;state.assetProcessing[id]=body.querySelector('#material-use-processing').value;state.materialUseRequired[id]=!!state.materialUseHints[id]&&use!=='稍后手工剪图案'&&body.querySelector('#material-use-required').checked;modal.close();updateMatchingRegions(['.match-basket-scroll','.basket>.muted','.match-action']);};}
 function createMatchingProject(automatic=true){const scope=matchingScope();if(!scope.candidateAssetIDs.length||!automatic&&!state.basket.length)throw Error('请先选择素材');const p=project('新的手账',{mode:state.matchMode||'single',ratio:state.matchRatio||'a4',style:state.matchStyle||'韩系清新'}),d=p.drafts[0];d.items=automatic?[]:physicalPlacement(d,state.assets,state.basket.slice(0,8));p.candidateAssetIDs=automatic?scope.candidateAssetIDs:[...state.basket];p.materialPriority=automatic?scope:{...scope,available:[],candidateAssetIDs:[...state.basket]};p.purpose=state.matchPurpose;p.intent=state.matchIntent;p.contentPolicy=state.matchContentPolicy;p.userText=state.matchUserText;p.providedFacts=state.matchFacts;p.styles=readMatchSelection('match-style',state.matchStyle);p.purposes=readMatchSelection('match-purpose',state.matchPurpose);p.requiredAssetIDs=[...scope.required];p.processing=state.matchProcessing;p.materialUseHints=Object.fromEntries(state.basket.filter(id=>state.materialUseHints[id]).map(id=>[id,state.materialUseHints[id]]));p.materialUseRequired=Object.fromEntries(state.basket.filter(id=>state.materialUseRequired[id]).map(id=>[id,true]));p.assetProcessing=Object.fromEntries(state.basket.filter(id=>state.assetProcessing[id]).map(id=>[id,state.assetProcessing[id]]));return p;}
 async function exportOfflineCreation(){
   if(!matchingScope().candidateAssetIDs.length){toast('请先选择素材');return;}
@@ -1333,7 +1399,22 @@ async function refreshImportCandidates(regions,{manual=false,canApply=()=>true}=
   for(let i=0;i<plans.length;i++){
     const {region,original}=plans[i];if(original){next.push(original);continue;}
     toast('正在提取素材 '+(i+1)+' / '+plans.length);
-    const regenerated=await extractImportCandidate(source,b,region,{mode:state.importMode,widthMM:pw,heightMM:ph,calibrated,index:i,lighting});
+    const recovered=await recoverImportCandidate({
+      region,index:i,calibrated,paperWidthMM:pw,paperHeightMM:ph,
+      extract:(region,index)=>extractImportCandidate(source,b,region,{
+        mode:state.importMode,widthMM:pw,heightMM:ph,calibrated,index,lighting
+      }),
+      rawCrop:region=>cropBitmap(source,b,region,{raw:true}),
+      makeURL:blob=>URL.createObjectURL(blob)
+    });
+    const regenerated=recovered.candidate;
+    if(!regenerated){
+      const failures=record.recognitionExtractionErrors||[];
+      record.recognitionExtractionErrors=[
+        ...failures,{index:i,message:String(recovered.error?.message||'预览生成失败')}
+      ];
+      continue;
+    }
     // Changing only colour must not reset manual names, tags, dimensions or
     // choices, and must never cause the segmentation algorithm to rerun.
     const old=previous.find(item=>item.region===region)||
@@ -1345,7 +1426,12 @@ async function refreshImportCandidates(regions,{manual=false,canApply=()=>true}=
   }
   if(!canApply()||record!==state.importRecords[state.importIndex]){for(const c of next)if(!previous.includes(c))URL.revokeObjectURL(c.url);return false;}
   for(const c of previous)if(!next.includes(c))URL.revokeObjectURL(c.url);
-  state.importCandidates=plans.map(plan=>plan.region);state.importCandidateData=next;state.importCandidateURLs=next.map(c=>c.url);state.importCandidateSelection=new Set(next.flatMap((c,i)=>c.selected?[i]:[]));saveActiveImportRecord();return true;
+  state.importCandidates=next.map(candidate=>candidate.region);
+  state.importCandidateData=next;
+  state.importCandidateURLs=next.map(candidate=>candidate.url);
+  state.importCandidateSelection=new Set(next.flatMap((candidate,i)=>candidate.selected?[i]:[]));
+  saveActiveImportRecord();
+  return true;
 }
 async function previewCrop(){
   if(!state.importBitmap||state.importMode==='snapshot')return;

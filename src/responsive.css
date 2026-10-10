@@ -419,3 +419,26 @@ dialog { width:min(700px,calc(100vw - 24px)); max-height:calc(100dvh - 24px); ov
   .import-review .review-paper-direct-row > span{font-size:11px}
   .import-review .review-background-card .review-paper-direct-row{padding:3px 5px;min-height:40px}
 }
+
+
+/* Candidate thumbnails never silently disappear: iOS Blob URL recovery
+   shows an accessible hint if the underlying bytes also cannot be decoded. */
+.import-candidate-grid .candidate-thumb{position:relative;overflow:hidden}
+.import-candidate-grid .candidate-preview-error,
+.import-candidate-grid .candidate-preview-pending{
+  display:grid;place-items:center;
+  min-height:26px;
+  padding:3px 5px;
+  font-size:11px;
+  line-height:1.4;
+  text-align:center;
+  color:#76513d;
+  background:#fff8ebea;
+  overflow-wrap:anywhere;
+}
+.import-candidate-grid .candidate-preview-error{
+  position:absolute;
+  inset:auto 2px 2px;
+  border-radius:6px;
+  pointer-events:none;
+}

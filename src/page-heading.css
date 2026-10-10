@@ -1,0 +1,106 @@
+/* One visual grammar for every top-left page title.
+   Catalogue headers (Materials/Matching/Works) share the same three-line
+   eyebrow / Chinese title / short sentence and desktop/iPad/mobile tokens.
+   Specific import/edit screens retain their own functional layouts. */
+#view{
+  --shiye-heading-color:#2f4237;
+  --shiye-heading-muted:#788a7a;
+  --shiye-heading-title-size:32px;
+  --shiye-heading-subtitle-size:14px;
+}
+#view .unified-page-heading{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  flex-wrap:wrap;
+  gap:12px 20px;
+  min-height:100px;
+  margin:0 0 12px;
+  padding:12px 0 14px;
+}
+#view .unified-page-heading .unified-heading-copy{
+  display:flex;
+  flex:1 1 290px;
+  min-width:0;
+  flex-direction:column;
+  align-items:flex-start;
+  justify-content:center;
+  gap:5px;
+}
+#view .unified-page-heading .unified-heading-copy .eyebrow{
+  display:block;
+  margin:0 0 3px;
+  font-family:ui-monospace,Menlo,monospace;
+  font-weight:600;
+  color:#829781;
+  letter-spacing:.23em;
+  line-height:1.4;
+  font-size:10px;
+}
+#view .unified-page-heading .unified-heading-copy h1,
+#view .series-heading .series-copy h1,
+#view .import-intro > h1,
+#view .import-inspect > h1,
+#view .import-review > h1,
+#view .settings-page > h1{
+  font-family:Georgia,"Songti SC","Noto Serif CJK SC",serif;
+  font-weight:600;
+  color:var(--shiye-heading-color);
+  font-size:var(--shiye-heading-title-size);
+  line-height:1.25;
+  letter-spacing:.015em;
+  margin:0;
+  overflow-wrap:anywhere;
+}
+#view .unified-page-heading .unified-heading-copy p{
+  font-size:var(--shiye-heading-subtitle-size);
+  color:var(--shiye-heading-muted);
+  line-height:1.55;
+  margin:0;
+}
+#view .unified-page-heading .actions{
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:8px;
+  flex:0 1 auto;
+  min-width:0;
+}
+#view .series-heading .series-copy h1 button{
+  font:inherit;
+  line-height:inherit;
+  letter-spacing:inherit;
+}
+#view .series-heading .series-copy .eyebrow{
+  font-size:10px;
+  letter-spacing:.23em;
+  line-height:1.4;
+}
+#view .series-heading .series-copy p{
+  font-size:var(--shiye-heading-subtitle-size);
+  line-height:1.55;
+  color:var(--shiye-heading-muted);
+}
+@media (min-width:700px) and (max-width:1030px){
+  #view{--shiye-heading-title-size:30px}
+  #view .unified-page-heading{min-height:94px}
+}
+@media (max-width:699px){
+  #view{--shiye-heading-title-size:27px;--shiye-heading-subtitle-size:13px}
+  #view .unified-page-heading{
+    align-items:flex-start;
+    min-height:0;
+    gap:10px;
+    padding:10px 0 12px;
+  }
+  #view .unified-page-heading .unified-heading-copy{flex:1 1 100%;gap:4px}
+  #view .unified-page-heading .unified-heading-copy .eyebrow{font-size:9px}
+  #view .unified-page-heading .actions{
+    width:100%;
+    max-width:100%;
+    flex:1 1 100%;
+    justify-content:flex-start;
+    flex-wrap:nowrap;
+    overflow-x:auto;
+  }
+}
