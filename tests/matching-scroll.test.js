@@ -109,7 +109,7 @@ test('full render, recommendation patch and async version update all restore mat
   const markup=await readFile(new URL('../src/matching-view.js',import.meta.url),'utf8');
   assert.match(app,/previousMatchingScroll=captureMatchingScroll\(view,window\)/);
   assert.match(app,/restoreMatchingScroll\(view,matchingScrollMemory.scroll,window\)/);
-  assert.match(app,/restoreMatchingScroll\(view,scroll,window,\{restoreViewport:false\}\)/);
+  assert.match(app,/restoreMatchingScroll\(view,scroll,window\)/);
   assert.match(session,/captureMatchingScroll\(root,globalThis.window\)/);
   assert.match(session,/restoreMatchingScroll\(root,scroll,globalThis.window\)/);
   for(const key of ['basket','recommendations','chips','proposals','intent','facts'])
