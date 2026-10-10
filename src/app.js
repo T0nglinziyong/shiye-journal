@@ -563,7 +563,13 @@ function bindPage(){view.querySelectorAll('[data-act]').forEach(el=>el.addEventL
   });
   const removeWhite=view.querySelector('#remove-white');if(removeWhite)removeWhite.onchange=()=>{state.importRemoveWhite=removeWhite.checked;};
   const page=view.querySelector('#canvas-page');if(page)initializeCanvasSurface(page);
-  bindInspector();if(state.route==='import'&&state.importProcessing)view.querySelectorAll('.inspect-columns button,.inspect-columns input,.inspect-columns select').forEach(el=>el.disabled=true);if(state.route==='import'&&state.importStep==='inspect'&&state.importFile&&!state.importProcessing)mountPaperCorrection({state,view,render,toast,saveActiveImportRecord});const offline=view.querySelector('#offline-state');if(offline)offline.textContent=navigator.serviceWorker?.controller?'离线程序已就绪':'首次打开时需要联网；请等待离线程序安装后再测试飞行模式';const locationLabel=view.querySelector('#storage-location');if(locationLabel)db.storageMode().then(mode=>{if(locationLabel.isConnected)locationLabel.textContent=cloudEnabled?(import.meta.env?.VITE_SHIYE_OBJECT_STORAGE==='cos'?'当前数据源：Supabase 登录与元数据 + 腾讯 COS 私有图片；本机仅保留账号隔离缓存与待同步修改':'当前数据源：Supabase 私有云端；本机仅保留账号隔离缓存与待同步修改'):mode==='server'?`当前唯一数据源：${db.storageConfig()?.url||location.origin}（服务器）`:'当前数据源：此浏览器 IndexedDB';}).catch(error=>{if(locationLabel.isConnected)locationLabel.textContent='服务器连接失败：'+error.message;});}
+  bindInspector();if(state.route==='import'&&state.importProcessing)view.querySelectorAll('.inspect-columns button,.inspect-columns input,.inspect-columns select').forEach(el=>{
+    // A failed or slow auto recognizer must never block the manual recovery
+    // path once its source bitmap exists. The manual action invalidates the
+    // in-flight auto run before editing begins.
+    if(el.matches('[data-act="manual-import-box"]')&&state.importBitmap)return;
+    el.disabled=true;
+  });if(state.route==='import'&&state.importStep==='inspect'&&state.importFile&&!state.importProcessing)mountPaperCorrection({state,view,render,toast,saveActiveImportRecord});const offline=view.querySelector('#offline-state');if(offline)offline.textContent=navigator.serviceWorker?.controller?'离线程序已就绪':'首次打开时需要联网；请等待离线程序安装后再测试飞行模式';const locationLabel=view.querySelector('#storage-location');if(locationLabel)db.storageMode().then(mode=>{if(locationLabel.isConnected)locationLabel.textContent=cloudEnabled?(import.meta.env?.VITE_SHIYE_OBJECT_STORAGE==='cos'?'当前数据源：Supabase 登录与元数据 + 腾讯 COS 私有图片；本机仅保留账号隔离缓存与待同步修改':'当前数据源：Supabase 私有云端；本机仅保留账号隔离缓存与待同步修改'):mode==='server'?`当前唯一数据源：${db.storageConfig()?.url||location.origin}（服务器）`:'当前数据源：此浏览器 IndexedDB';}).catch(error=>{if(locationLabel.isConnected)locationLabel.textContent='服务器连接失败：'+error.message;});}
 function bindInspector(){const d=current(),e=d&&editorEntry(d).find(x=>x.value.id===state.selected);if(!d)return;
   const change=(id,fn)=>{const el=view.querySelector('#'+id);if(el)el.addEventListener('change',()=>{checkpoint();fn(el.value);saveProject();render();});};
   if(e){for(const [id,key] of [['inspector-width','width'],['inspector-height','height'],['inspector-rotation','rotation'],['inspector-z','zIndex'],['inspector-opacity','opacity'],['inspector-font-size','fontSize']])change(id,v=>{e.value[key]=Number(v);if(e.kind==='material')e.value.userOverrideFlags=[...new Set([...(e.value.userOverrideFlags||[]),key==='width'||key==='height'?'resized':key])];});change('inspector-text',v=>e.value.content=v);change('inspector-font',v=>e.value.style=v);}else{change('paper-color',v=>d.paperColor=v);change('paper-pattern',v=>d.paperPattern=v);change('page-ratio',v=>{if(presetPaperDimensions(v))setDraftPaperSize(d,v);});change('page-mode',v=>{d.pageMode=v;d.canvas=canvasSize(v,d.pageRatio);});}}
@@ -1262,12 +1268,14 @@ async function applyPaperPreview(){
 }
 async function openManualImportBox(){
   if(state.importMode==='snapshot')return;
+  if(!state.importBitmap){toast('照片仍在读取，请稍候后再补框');return;}
   if(state.paperPreviewBitmap)await applyPaperPreview();
   if(state.paperPreviewBitmap)return;
-  state.showManualBox=true;render();
+  state.importRecognitionRevision=(state.importRecognitionRevision||0)+1;
+  state.importProcessing='';state.showManualBox=true;render();
 }
 function bindManualBox(){mountImportBoxEditor({state,view,render,saveActiveImportRecord,toast,refreshImportCandidates});}
-async function refreshImportCandidates(regions,{manual=false}={}){
+async function refreshImportCandidates(regions,{manual=false,canApply=()=>true}={}){
   const source=state.correctedBitmap||state.importBitmap,b=state.correctedBitmap?{x:0,y:0,w:1,h:1}:state.importBox,previous=state.importCandidateData||[],record=state.importRecords[state.importIndex];
   const next=[];const [pw,ph]=paperDimensions(),calibrated=state.paperSize!=='none'&&(state.correctedBitmap||state.wholePaper);
   const plans=manual?await refineManualBoxes(regions,previous,async(box,index)=>{
@@ -1292,7 +1300,7 @@ async function refreshImportCandidates(regions,{manual=false}={}){
     if(!candidate||candidate.segmentationFailed)throw Error('旋转框内无法可靠分割，请调整框后重试');
     return candidate;
   }):regions.map(region=>({region,original:null}));
-  if(record!==state.importRecords[state.importIndex]||state.route!=='import')return false;
+  if(!canApply()||record!==state.importRecords[state.importIndex]||state.route!=='import')return false;
   const lighting=state.importMaterialColorMode!=='original'&&state.correctedBitmap
     ?await estimatePageLighting(source,plans.map(plan=>plan.region)):null;
   for(let i=0;i<plans.length;i++){
@@ -1308,12 +1316,17 @@ async function refreshImportCandidates(regions,{manual=false}={}){
     }
     next.push(regenerated);
   }
-  if(record!==state.importRecords[state.importIndex]){for(const c of next)if(!previous.includes(c))URL.revokeObjectURL(c.url);return false;}
+  if(!canApply()||record!==state.importRecords[state.importIndex]){for(const c of next)if(!previous.includes(c))URL.revokeObjectURL(c.url);return false;}
   for(const c of previous)if(!next.includes(c))URL.revokeObjectURL(c.url);
   state.importCandidates=plans.map(plan=>plan.region);state.importCandidateData=next;state.importCandidateURLs=next.map(c=>c.url);state.importCandidateSelection=new Set(next.flatMap((c,i)=>c.selected?[i]:[]));saveActiveImportRecord();return true;
 }
 async function previewCrop(){
   if(!state.importBitmap||state.importMode==='snapshot')return;
+  const recognitionRevision=state.importRecognitionRevision=(state.importRecognitionRevision||0)+1,
+    sourceRecord=state.importRecords[state.importIndex],
+    canApply=()=>recognitionRevision===state.importRecognitionRevision&&
+      !state.showManualBox&&state.route==='import'&&
+      sourceRecord===state.importRecords[state.importIndex];
   const record=state.importRecords[state.importIndex],source=state.correctedBitmap||state.importBitmap,b=state.correctedBitmap?{x:0,y:0,w:1,h:1}:state.importBox,[pw,ph]=paperDimensions();
   let regions=await detectPaperCandidates(source,b,6,{balanceLight:state.balanceLight,paperRectified:!!state.correctedBitmap,paperWidthMM:pw,paperHeightMM:ph,recognition:state.importRecognition||state.preferences.recognition,recognitionPixels:state.preferences.recognitionPixels,recognitionPreprocess:recognitionPreprocessOptions(),recognitionPostprocess:recognitionPostprocessOptions(),mergeSharedCarrier:state.preferences.mergeSharedCarrier!==false,onDiagnostic:trace=>{record.recognitionDiagnostic=trace;},onProgress:p=>{
     if(state.route!=='import'||record!==state.importRecords[state.importIndex])return;
@@ -1324,10 +1337,10 @@ async function previewCrop(){
           :'正在优化素材边缘…';
     state.importProcessing=text;const label=view.querySelector('.import-processing');if(label)label.textContent=text;toast(text);
   }});
-  if(state.route!=='import'||record!==state.importRecords[state.importIndex])return;
+  if(!canApply())return;
   // Swift leaves unreliable automatic results empty; work import still saves
   // the page as its locked base, without inventing a full-page material.
-  if(await refreshImportCandidates(regions)){
+  if(await refreshImportCandidates(regions,{canApply})){
     // No expensive work remains. Unlock before the first candidate render;
     // users must not wait for another full-page render to confirm the photo.
     state.importProcessing='';render();
