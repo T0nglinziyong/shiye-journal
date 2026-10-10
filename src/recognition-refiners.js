@@ -1,13 +1,8 @@
 import {visionTask,visionParallelTasks,visionParallelism} from './vision-runtime.js';
+import {workerRasterPair} from './worker-raster-pair.js';
 
 // One transfer-owned copy per unique raster. OpenCV reads both arrays but
 // never edits either: sharing the same buffer does not change segmentation.
-export function workerRasterPair(frame,sourceFrame=frame){
-  const pixels=new Uint8ClampedArray(frame.data);
-  return {pixels,sourcePixels:sourceFrame.data===frame.data
-    ?pixels:new Uint8ClampedArray(sourceFrame.data)};
-}
-
 const chunks=(items,count)=>{
   const out=Array.from({length:Math.min(count,items.length)},()=>[]);
   items.forEach((item,i)=>out[i%out.length].push(item));
