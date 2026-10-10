@@ -58,6 +58,18 @@ export async function detectImportRegions(bitmap,box,options={},{
     return Array.isArray(detected)?detected:[];
   }
   try{
+    // The box-stage diagnostic already contains the exact discovered
+    // identities; reuse them rather than running a second full-page OpenCV
+    // discovery that might fail again on an underpowered phone.
+    if(Array.isArray(discovery.boxes)&&discovery.boxes.length===discovery.count){
+      const rescued=preserveDiscoveredCandidates(detected,discovery.boxes);
+      if(rescued.length){
+        onRecovery({discovered:discovery.count,refined:detected?.length||0,
+          recovered:rescued.filter(item=>item.recognitionFallback).length,
+          cause:failure?.message||'refiner dropped detected boxes'});
+        return rescued;
+      }
+    }
     const ratio=Math.min(1,900/Math.max(bitmap.width*box.w,bitmap.height*box.h));
     const width=Math.max(1,Math.round(bitmap.width*box.w*ratio));
     const height=Math.max(1,Math.round(bitmap.height*box.h*ratio));
