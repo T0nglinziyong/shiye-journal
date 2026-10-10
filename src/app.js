@@ -43,7 +43,7 @@ import {createAIRecorder,publicAIDiagnosticReport} from './ai-diagnostics.js';
 import {mountImportBoxEditor} from './import-box-editor.js';
 import {saveImportBatch,importPaperDimensions} from './import-save.js';
 import {paperDimensions as presetPaperDimensions,paperSizeOptions} from './paper-sizes.js';
-import {refineManualBoxes,hasManualForegroundEvidence} from './manual-import-recognition.js';
+import {refineManualBoxes,hasManualForegroundEvidence,segmentManualOrFallback} from './manual-import-recognition.js';
 import {seriesCovers,usedAssetIDs,markProjectAssetsUsed} from './library-model.js';
 import {renderSeriesContents} from './series-contents.js';
 import {showSeriesEditor} from './series-editor.js';
@@ -1402,16 +1402,20 @@ async function refreshImportCandidates(regions,{manual=false,analysisRaster=null
       ah=Math.max(1,Math.round(source.height*b.h*scale));
     manualAnalysisPromise||=analysisPixels(source,b,aw,ah);
     const pixels=await manualAnalysisPromise;
-    if(!hasManualForegroundEvidence(pixels,aw,ah,box))throw Error('第 '+(index+1)+' 个框内没有找到可靠素材；请贴近素材重画');
-    const [candidate]=await visionTask('process-material-boxes',{
+    return segmentManualOrFallback(box,async()=>{
+      if(!hasManualForegroundEvidence(pixels,aw,ah,box))
+        throw Error('手动框中的前景对比度较低');
+      const [candidate]=await visionTask('process-material-boxes',{
         pixels,sourcePixels:pixels,width:aw,height:ah,manualEdit:true,
         boxes:[box],method:state.importRecognition||'morphgac',
         paperWidthMM:pw,paperHeightMM:ph,
         shapeRegularization:recognitionPostprocessOptions().shapeRegularization!==false,
         apertures:recognitionPostprocessOptions().apertures!==false
       });
-    if(!candidate||candidate.segmentationFailed)throw Error('旋转框内无法可靠分割，请调整框后重试');
-    return candidate;
+      return candidate;
+    },{pagePixelWidth:aw,pagePixelHeight:ah},error=>{
+      console.warn('手动补框精细分割失败，保留所画的完整素材框供检查',index+1,error);
+    });
   },{pagePixelWidth:source.width*b.w,pagePixelHeight:source.height*b.h}):regions.map(region=>({region,original:null}));
   if(record!==state.importRecords[state.importIndex]||state.route!=='import')return false;
   // Deleting boxes or retaining already-extracted boxes is a pure list edit.
@@ -1430,6 +1434,7 @@ async function refreshImportCandidates(regions,{manual=false,analysisRaster=null
     if(old)for(const key of ['title','selected','tags','seriesID','kind','role','quantity','reviewStatus','dimensionSource','width','height']){
       if(old[key]!==undefined)regenerated[key]=structuredClone(old[key]);
     }
+    if(region.manualFallback)regenerated.reviewStatus='pendingReview';
     next.push(regenerated);
   }
   if(record!==state.importRecords[state.importIndex]){for(const c of next)if(!previous.includes(c))URL.revokeObjectURL(c.url);return false;}
