@@ -10,27 +10,15 @@ export function mountImportBoxEditor({state,view,render,saveActiveImportRecord,t
   const paper=state.correctedBitmap?{x:0,y:0,w:1,h:1}:state.importBox;
   const position=()=>{if(!base.isConnected)return;const rect=paperOverlayRect(base.clientWidth,base.clientHeight,source.width,source.height,paper);Object.assign(overlay.style,{left:rect.left+'px',top:rect.top+'px',width:rect.width+'px',height:rect.height+'px'});};
   base.append(overlay);position();requestAnimationFrame(position);
-  // ResizeObserver is optional on older WebKit. Never prevent manual drawing
-  // just because a browser omits the observation API.
-  const observer=typeof ResizeObserver==='function'?new ResizeObserver(position):null;
-  observer?.observe(base);
-  base.querySelector(':scope > img')?.addEventListener('load',position);
-  view.manualBoxDispose=()=>{observer?.disconnect();base.querySelector(':scope > img')?.removeEventListener('load',position);};
+  const observer=new ResizeObserver(position);observer.observe(base);base.querySelector(':scope > img')?.addEventListener('load',position);
+  view.manualBoxDispose=()=>{observer.disconnect();base.querySelector(':scope > img')?.removeEventListener('load',position);};
   const frame=base.querySelector('#crop-frame');if(frame)frame.style.display='none';
-  // Use the existing action bar rather than inserting a second toolbar in
-  // the fixed-height photo panel (which could clip all manual buttons).
-  const actions=base.parentElement?.querySelector('.import-photo-tools')||document.createElement('div');
-  actions.className='import-photo-tools';actions.replaceChildren();
-  if(!actions.isConnected)base.after(actions);
-  const help=document.createElement('span');help.className='manual-box-instruction';
-  help.textContent='在左侧照片上按住并拖动，逐件画框；点击现有框可移动、缩放和旋转';
-  actions.append(help);
+  const actions=document.createElement('div');actions.className='import-photo-tools';base.after(actions);
   const button=(label,fn)=>{const b=document.createElement('button');b.type='button';b.className='btn';b.textContent=label;b.onclick=fn;actions.append(b);return b;};
   button('取消标记',()=>{state.showManualBox=false;render();});
   button('移除选中',()=>{if(selected!=null){boxes.splice(selected,1);selected=null;paint();}});
   button('清空框',()=>{boxes=[];selected=null;paint();});
   const done=button('完成标记',async()=>{
-    if(!boxes.length){toast('请先在照片上拖动至少一个素材框');return;}
     done.disabled=true;
     try {
       if(await refreshImportCandidates(boxes,{manual:true})===false){done.disabled=false;return;}
