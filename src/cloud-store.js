@@ -64,7 +64,7 @@ function retainImage(path,data){images.set(path,Promise.resolve(data));imageSize
 // reconstruction of the original during ordinary catalog browsing.
 const previewMaterialization=new Set();
 function materializePreview480(record,preview){
-  if(record.storageProvider!=='cos'||record.thumbnailPath||!objectStorage?.upload||!usableBlob(preview))return;
+  if(record.storageProvider!=='cos'||record.thumbnailPath?.endsWith('-preview480.webp')||!objectStorage?.upload||!usableBlob(preview))return;
   const path=record.storagePath+'-preview480.webp';
   if(previewMaterialization.has(path))return;
   previewMaterialization.add(path);
