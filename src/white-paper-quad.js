@@ -78,7 +78,12 @@ function scoreQuadrilateral(top,bottom,left,right,w,h,paperRatio){
   if(!Number.isFinite(ratioScore)||ratioScore<.67)return null;
   return {points,area,ratioScore};
 }
-export function detectWhitePaperQuad(lines,gray,edge,width,height,paperRatio){
+export function detectWhitePaperQuad(lines,gray,edge,width,height,paperRatio,diagnostics=null){
+  if(diagnostics)Object.assign(diagnostics,{
+    detector:'white-paper-quad-v1',inputSize:[width,height],
+    totalSegments:lines?.length??0,sideCandidates:null,
+    accepted:false,failureStage:'invalid-input'
+  });
   if(!Array.isArray(lines)||!gray||!edge||
      gray.length!==width*height||edge.length!==width*height||
      !Number.isFinite(paperRatio)||paperRatio<=0)return null;
@@ -96,7 +101,13 @@ export function detectWhitePaperQuad(lines,gray,edge,width,height,paperRatio){
     const result=contrastScore(line,side,gray,edge,width,height);
     if(result)sides[side].push(result);
   }
-  if(Object.values(sides).some(items=>items.length===0))return null;
+  if(diagnostics)diagnostics.sideCandidates=Object.fromEntries(
+    Object.entries(sides).map(([side,items])=>[side,items.length])
+  );
+  if(Object.values(sides).some(items=>items.length===0)){
+    if(diagnostics)diagnostics.failureStage='missing-side-evidence';
+    return null;
+  }
   for(const side of Object.keys(sides))
     sides[side].sort((a,b)=>b.score-a.score);
   let best=null;
@@ -112,5 +123,14 @@ export function detectWhitePaperQuad(lines,gray,edge,width,height,paperRatio){
           if(!best||score>best.score)best={...geometry,score};
         }
   // Refuse weak or incomplete evidence instead of accepting a false page.
+  if(diagnostics){
+    diagnostics.accepted=!!best;
+    diagnostics.failureStage=best?null:'geometric-rejection';
+    if(best){
+      diagnostics.selectedScore=Math.round(best.score*100)/100;
+      diagnostics.coverage=Math.round(best.area*1000)/1000;
+      diagnostics.aspectScore=Math.round(best.ratioScore*1000)/1000;
+    }
+  }
   return best?best.points.map(([x,y])=>({x:x/width,y:y/height})):null;
 }

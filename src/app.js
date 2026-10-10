@@ -847,6 +847,7 @@ async function handle(action,id,value){try{switch(action){
       pipeline:'pinned-jpeg-js-opencv-package-area-v1',inputSHA256,sourceSHA256,correctedSHA256,maskSHA256,
       inputFileInfo:{bytes:rec.file?.size||0,mimeType:rec.file?.type||''},previewStatus,
       prefetchStatus:rec.prefetchStatus||null,importError:rec.importError||null,
+      paperDiagnostic:rec.paperDiagnostic||null,
       recognitionSettings:{method:state.importRecognition||state.preferences.recognition,pixels:state.preferences.recognitionPixels,
         preprocess:recognitionPreprocessOptions(),postprocess:recognitionPostprocessOptions()},
       originalPixelSize:[state.importBitmap?.width,state.importBitmap?.height],
@@ -1239,7 +1240,14 @@ async function prefetchImportRecord(rec,settings,revision){
   try{
     bitmap=await decodeRecognitionImage(rec.file);if(!valid())return;
     const initial=importPaperDimensions({...settings,bitmap,corners:null});
-    const corners=rec.corners||(settings.paperSize==='none'?null:await suggestPaperCorners(bitmap,initial[0]/initial[1]).catch(()=>null));if(!valid())return;
+    const corners=rec.corners||(settings.paperSize==='none'?null:await suggestPaperCorners(
+      bitmap,initial[0]/initial[1],{onDiagnostic:diagnostic=>{
+        if(valid())rec.paperDiagnostic=diagnostic;
+      }}).catch(error=>{
+        if(valid())rec.paperDiagnostic={stage:'quad-error',message:String(error?.message||error)};
+        console.warn('后台纸张检测执行异常',error);
+        return null;
+      }));if(!valid())return;
     if(requiresManualPaperConfirmation({paperSize:settings.paperSize,appliedCorners:rec.appliedCorners,reviewFlag:rec.paperNeedsReview,corners})){rec.paperNeedsReview=true;rec.prefetchStatus='needs-paper-review';updateImportPrefetchLabel(rec);return;}
     const [pw,ph]=importPaperDimensions({...settings,bitmap,corners});
     if(corners&&settings.paperSize!=='none'){
@@ -1321,7 +1329,14 @@ async function switchImportRecord(index,skipSave=false){
   }
   const bitmap=rec.bitmap||await decodeRecognitionImage(rec.file);rec.bitmap=bitmap;if(!isCurrent())return;state.importBitmap=bitmap;
   progress('正在自动寻找纸张四角…');
-  state.paperCorners=rec.corners||rec.autoPaperCorners||(state.paperSize==='none'?null:await suggestPaperCorners(bitmap,(()=>{const [pw,ph]=paperDimensions();return pw/ph;})()).catch(()=>null));if(!isCurrent())return;
+  state.paperCorners=rec.corners||rec.autoPaperCorners||(state.paperSize==='none'?null:await suggestPaperCorners(
+    bitmap,(()=>{const [pw,ph]=paperDimensions();return pw/ph;})(),
+    {onDiagnostic:diagnostic=>{if(isCurrent())rec.paperDiagnostic=diagnostic;}}
+  ).catch(error=>{
+    if(isCurrent())rec.paperDiagnostic={stage:'quad-error',message:String(error?.message||error)};
+    console.warn('当前照片自动纸张检测执行异常',error);
+    return null;
+  }));if(!isCurrent())return;
   if(!rec.corners&&state.paperCorners)rec.autoPaperCorners=structuredClone(state.paperCorners);
   rec.paperNeedsReview=requiresManualPaperConfirmation({paperSize:state.paperSize,correctedBitmap:state.correctedBitmap,appliedCorners:rec.appliedCorners,reviewFlag:rec.paperNeedsReview,corners:state.paperCorners});
   progress(rec.paperNeedsReview?'请手动调整纸张四角后预览校正':'正在进行透视校正…');

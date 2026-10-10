@@ -55,8 +55,16 @@ export async function processVision(cv,operation,p){
         Math.max(8,Math.round(p.width*.035)));
       const lines=Array.from({length:segments.rows},(_,i)=>
         Array.from(segments.data32S.slice(i*4,i*4+4)));
-      return detectWhitePaperQuad(lines,blurred.data,support.data,
-        p.width,p.height,p.paperRatio);
+      const diagnostics=p.collectDiagnostics?{
+        stage:'quad',inputSize:[p.width,p.height],
+        graySample:[blurred.data[Math.floor(p.height*.5)*p.width+Math.floor(p.width*.5)]||0],
+        edgePixels:[...edges.data].reduce((count,value)=>count+(value>0),0),
+        segmentShape:[segments.rows,segments.cols],
+        typedSegments:segments.data32S.length
+      }:null;
+      const corners=detectWhitePaperQuad(lines,blurred.data,support.data,
+        p.width,p.height,p.paperRatio,diagnostics);
+      return p.collectDiagnostics?{corners,diagnostics}:corners;
     }
     if(operation==='alignment'){
       const src=own(cv.matFromArray(p.height,p.width,cv.CV_8UC1,p.alpha)),binary=own(new cv.Mat()),contours=own(new cv.MatVector()),hierarchy=own(new cv.Mat());
