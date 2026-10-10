@@ -15,21 +15,45 @@ export function hasManualForegroundEvidence(pixels,width,height,box){
   return high.some((value,channel)=>value-low[channel]>=10);
 }
 
+// The edit frame is an editable view of the existing recognition result.
+// Keep sourceIndex stable, so an unchanged automatic mask is always reused.
+// New / edited frames must be normalized to the same page-coordinate box
+// contract used by the automatic process-material-boxes task.
+export function manualBoxGeometry(box){
+  const {x,y,w,h}=box||{};
+  if(![x,y,w,h].every(Number.isFinite)||!(w>0&&h>0)||
+     x<0||y<0||x+w>1.00001||y+h>1.00001)
+    throw Error('候选框尺寸或坐标无效，请调整框的位置');
+  const rotation=Number.isFinite(box.rotation)?box.rotation:0;
+  return {
+    x,y,w,h,
+    orientedBox:{
+      centerX:x+w/2,centerY:y+h/2,width:w,height:h,
+      rotation,rectangularity:1,autoDeskew:true,source:'manual'
+    },
+    // The original detection pipeline uses this exact candidate structure.
+    seedDensity:Number.isFinite(box.seedDensity)?box.seedDensity:1,
+    fillRatio:Number.isFinite(box.fillRatio)?box.fillRatio:1
+  };
+}
+export function unchangedManualBox(box,previous){
+  const candidate=Number.isInteger(box?.sourceIndex)?previous[box.sourceIndex]:null;
+  if(!candidate||box.manualChanged)return null;
+  return candidate;
+}
 export async function refineManualBoxes(boxes,previous,segment){
   const next=[];
   for(let index=0;index<boxes.length;index++){
     const box=boxes[index];
-    if(!(box.w>0&&box.h>0))throw Error('候选框尺寸无效');
-    const source=box.sourceIndex;
-    // An untouched editor box keeps its source even when its oriented bounds
-    // differ slightly from the original segmentation rectangle.
-    if(Number.isInteger(source)&&!box.manualChanged&&previous[source]){
-      next.push({region:previous[source].region,original:previous[source]});continue;
+    const geometry=manualBoxGeometry(box);
+    const original=unchangedManualBox(box,previous);
+    if(original){
+      next.push({region:original.region,original});continue;
     }
-    const region=await segment(box,index);
-    if(!region?.mask)throw Error('第 '+(index+1)+' 个旋转框分割失败，未覆盖原素材');
+    const region=await segment(geometry,index,box);
+    if(!region?.mask?.alpha?.length||!Number.isFinite(region.w)||!Number.isFinite(region.h))
+      throw Error('第 '+(index+1)+' 个旋转框没有得到有效素材轮廓；原素材未修改');
     next.push({region,original:null});
   }
   return next;
 }
-
