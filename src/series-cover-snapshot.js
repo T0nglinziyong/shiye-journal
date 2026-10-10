@@ -9,7 +9,7 @@ function accountScope(account){
   live.clear();scope=account;
 }
 export function seriesCoverSignature(series,assets){
-  return JSON.stringify([720,seriesCovers(series,assets).map(a=>[a.id,a.blobId,a.updatedAt||''])]);
+  return JSON.stringify([480,seriesCovers(series,assets).map(a=>[a.id,a.blobId,a.updatedAt||''])]);
 }
 function showSnapshot(cover,url,priority){
   if(!cover.isConnected)return;
@@ -30,14 +30,14 @@ export function waitForCoverImage(img){
   });
 }
 async function drawCover(images){
-  const canvas=document.createElement('canvas');canvas.width=720;canvas.height=600;
+  const canvas=document.createElement('canvas');canvas.width=480;canvas.height=400;
   const ctx=canvas.getContext('2d');if(!ctx)return null;
-  ctx.fillStyle='#fffefa';ctx.fillRect(0,0,720,600);
-  const slot=720/images.length;
+  ctx.fillStyle='#fffefa';ctx.fillRect(0,0,480,400);
+  const slot=480/images.length;
   images.forEach((img,index)=>{
-    const scale=Math.min((slot-16)/img.naturalWidth,420/img.naturalHeight);
+    const scale=Math.min((slot-16)/img.naturalWidth,280/img.naturalHeight);
     const width=img.naturalWidth*scale,height=img.naturalHeight*scale;
-    ctx.drawImage(img,index*slot+(slot-width)/2,(600-height)/2,width,height);
+    ctx.drawImage(img,index*slot+(slot-width)/2,(400-height)/2,width,height);
   });
   return new Promise(resolve=>canvas.toBlob(resolve,'image/webp',.82));
 }

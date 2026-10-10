@@ -1,9 +1,11 @@
 import {applyLightingToCrop} from './material-color-restoration.js';
 import {segmentPaperMaterials} from './paper-analysis.js';
+import {segmentPaperMaterials as stablePaperMaterials} from './stable-recognition/paper-analysis.js';
 import {visionTask} from './vision-runtime.js';
 import {recognitionProfile} from './recognition-profiles.js';
 import {analysisPixels} from './recognition-raster.js';
 import {neutralizePaperChroma} from './paper-chroma-preprocess.js';
+import {colorFallbackEvidence} from './recognition-empty-fallback.js';
 // Analyze a small copy, but re-extract accepted cuts from the full source.
 export async function detectPaperCandidates(bitmap,box,smallestMM=6,{
   balanceLight=false,paperRectified=false,paperWidthMM=210,paperHeightMM=297,
@@ -11,6 +13,32 @@ export async function detectPaperCandidates(bitmap,box,smallestMM=6,{
   recognitionPreprocess={},recognitionPostprocess={},mergeSharedCarrier=true,onProgress=()=>{},onDiagnostic=()=>{}
 }={}){
   const profile=recognitionProfile(recognition,recognitionPixels);
+  // Reinstate the version-pinned, multi-stage A4 detector that preceded the
+  // October 7 whole-page-box rewrite on every device, including mobile.
+  // If a particular photograph has no reliable result, keep the newer
+  // recovery detector as a fallback; never replace a successful stable result.
+  if(profile.mode==='auto'){
+    const scale=Math.min(1,profile.analysisMaxDimension/
+      Math.max(bitmap.width*box.w,bitmap.height*box.h));
+    const sw=Math.max(1,Math.round(bitmap.width*box.w*scale));
+    const sh=Math.max(1,Math.round(bitmap.height*box.h*scale));
+    try{
+      const raw=await analysisPixels(bitmap,box,sw,sh);
+      const stable=await stablePaperMaterials({data:raw,width:sw,height:sh},{
+        smallestMM,paperWidthMM,paperHeightMM,sourcePixels:raw
+      });
+      onDiagnostic({phase:'restored-stable-pipeline',count:stable.length,
+        dimensions:[sw,sh],mode:'stable-multistage',
+        boxes:stable.map(item=>({x:item.x,y:item.y,w:item.w,h:item.h}))});
+      if(stable.length){
+        onProgress({status:'stable-recognition',total:stable.length});
+        return stable;
+      }
+    }catch(error){
+      console.warn('稳定分层识别未完成，保留保守备用识别与手动补框',error);
+      onDiagnostic({phase:'stable-fallback',message:String(error?.message||error)});
+    }
+  }
   // A single discovery scale keeps material identities and candidate geometry
   // stable when the user raises the boundary-refinement resolution. The final
   // cutout is still sampled from the original bitmap in cropBitmap.
@@ -36,9 +64,37 @@ export async function detectPaperCandidates(bitmap,box,smallestMM=6,{
   // Box discovery always uses the original rectified RGB. Real-case ablation
   // showed that illumination/CLAHE/denoise can make identity discovery worse.
   // Optional preprocessing therefore affects boundary segmentation only.
-  const candidates=await segmentPaperMaterials(discoveryFrame,{
+  let candidates=await segmentPaperMaterials(discoveryFrame,{
     smallestMM,paperWidthMM,paperHeightMM,sourcePixels:discoveryFrame.data,chromaEdges:preprocess.chromaEdges,mergeSharedCarrier
   });
+  if(!candidates.length&&paperRectified){
+    // A mildly grey/blue white board can hide every candidate from the
+    // standard foreground model. Only then retry from high-confidence colour
+    // evidence. Blank pages and neutral shading remain empty; never fabricate
+    // a full-page sticker.
+    const fallback=colorFallbackEvidence(discoveryPixels,dw,dh);
+    if(fallback){
+      try{
+      const discovered=await visionTask('boxes-simple',{
+        ...fallback,width:dw,height:dh,smallestMM,
+        paperWidthMM,paperHeightMM,mergeSharedCarrier
+      });
+      candidates=(discovered||[]).filter(item=>{
+        const ow=item.orientedBox;
+        return item.w>0&&item.h>0&&
+          Math.min((ow?.width||item.w)*paperWidthMM,
+            (ow?.height||item.h)*paperHeightMM)>=smallestMM;
+      }).slice(0,32);
+      onDiagnostic({phase:'chromatic-fallback',count:candidates.length,
+        pixelFraction:fallback.fraction,backgroundRGB:fallback.backgroundRGB});
+      }catch(error){
+        // A last-resort recognizer cannot turn a recoverable empty result into
+        // a broken import session. The manual editor remains available.
+        console.warn('额外颜色候选识别不可用，请尝试手动补框',error);
+        candidates=[];
+      }
+    }
+  }
   onDiagnostic({phase:'boxes',count:candidates.length,
     dimensions:[dw,dh],refinementDimensions:[w,h],mode:profile.mode,smallestMM,
     boxes:candidates.map(item=>({x:item.x,y:item.y,w:item.w,h:item.h,

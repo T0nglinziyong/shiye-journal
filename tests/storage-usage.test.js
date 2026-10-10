@@ -8,23 +8,23 @@ const origin=owner+'/'+hash,second=owner+'/'+otherHash;
 
 test('COS object classification includes immutable derivatives and project documents',()=>{
  assert.equal(cosObjectKind(origin),'original');
- assert.equal(cosObjectKind(origin+'-preview720.webp'),'derivative');
+ assert.equal(cosObjectKind(origin+'-preview480.webp'),'derivative');
  assert.equal(cosObjectKind(origin+'-project.json.gz'),'document');
- assert.equal(cosObjectKind(origin+'-project.json.gz-preview720.webp'),'derivative');
+ assert.equal(cosObjectKind(origin+'-project.json.gz-preview480.webp'),'derivative');
  assert.equal(cosObjectKind('journal-presets/source/1.jpg'),'other');
 });
 
 test('reference discovery reaches nested historical drafts and recently deleted projects',()=>{
- const records=[{store:'blobs',record:{id:'blob',storagePath:origin,thumbnailPath:origin+'-preview720.webp'}},
+ const records=[{store:'blobs',record:{id:'blob',storagePath:origin,thumbnailPath:origin+'-preview480.webp'}},
    {store:'projects',record:{id:'work',projectDocumentPath:second+'-project.json',
-     drafts:[{coverImageID:'project-cover:cos:'+second+'-preview720.webp'}],
-     manualArchives:[{drafts:[{coverImageID:'project-cover:cos:'+second+'-project.json.gz-preview720.webp'}]}]}},
+     drafts:[{coverImageID:'project-cover:cos:'+second+'-preview480.webp'}],
+     manualArchives:[{drafts:[{coverImageID:'project-cover:cos:'+second+'-project.json.gz-preview480.webp'}]}]}},
    {store:'trash',record:{item:{projectDocumentPath:second+'-project.json.gz'}}}];
  const paths=collectCOSReferencePaths(records);
  assert.deepEqual([...paths].sort(),[
-  origin,origin+'-preview720.webp',second+'-project.json',
-  second+'-project.json.gz',second+'-preview720.webp',
-  second+'-project.json.gz-preview720.webp'
+  origin,origin+'-preview480.webp',second+'-project.json',
+  second+'-project.json.gz',second+'-preview480.webp',
+  second+'-project.json.gz-preview480.webp'
  ].sort());
 });
 
@@ -44,7 +44,7 @@ test('complete read-only inventory distinguishes refs, age, and bytes without pe
  const objects=[
    {Key:origin,Size:'100',LastModified:old},
    {Key:owner+'/'+orphanHash,Size:'160',LastModified:old},
-   {Key:second+'-preview720.webp',Size:'20',LastModified:newer},
+   {Key:second+'-preview480.webp',Size:'20',LastModified:newer},
    {Key:'journal-presets/source/1.jpg',Size:'40',LastModified:old}
  ];
  const result=summarizeCOSInventory(objects,{

@@ -11,7 +11,7 @@ try{
   assert.ok(await evaluate('!!document.querySelector("#setting-recognition-pixels")'));
   const defaults=await evaluate('({method:document.querySelector("#setting-recognition").value,pixels:Number(document.querySelector("#setting-recognition-pixels").value),light:document.querySelector("#setting-preprocess-light").checked,denoise:document.querySelector("#setting-preprocess-denoise").checked,contrast:document.querySelector("#setting-preprocess-contrast").checked,chroma:document.querySelector("#setting-preprocess-chroma").checked,oldEdge:!!document.querySelector("#setting-postprocess-edge"),oldCurve:!!document.querySelector("#setting-postprocess-curves"),methods:[...document.querySelector("#setting-recognition").options].map(x=>x.value)})');
   assert.deepEqual(defaults.methods,['auto','morphgac','grabcut','hybrid']);
-  assert.equal(defaults.method,'auto');assert.equal(defaults.pixels,900);
+  assert.equal(defaults.method,'auto');assert.equal(defaults.pixels,1200);
   assert.equal(defaults.light,false);assert.equal(defaults.denoise,false);assert.equal(defaults.contrast,false);assert.equal(defaults.chroma,true);
   assert.equal(defaults.oldEdge,false);assert.equal(defaults.oldCurve,false);
   for(const id of switches)assert.equal(await evaluate(`document.querySelector("#${id}").checked`),true,id+' defaults on');
