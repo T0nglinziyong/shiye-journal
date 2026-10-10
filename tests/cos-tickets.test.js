@@ -11,14 +11,12 @@ test('COS authorizes only authenticated owner hash paths and validates a whole b
   assert.equal((await run({...req,body:{objects:[...req.body.objects,{method:'GET',path:'other/'+hash}]}})).status,403);assert.equal(signs,0);
   for(const path of ['owner/../'+hash,'owner/'+hash+'/extra','owner/private-name.png'])assert.equal((await run({...req,body:{objects:[{method:'GET',path}]}})).status,403);
   assert.equal((await run(req)).status,200);
-  const preview=await run({...req,body:{objects:[{method:'GET',path:'owner/'+hash,variant:'preview480'}]}});
-  assert.equal(preview.status,200);assert.equal(preview.body.tickets[0].variant,'preview480');
-  for(const variant of ['preview256','preview360','preview480','preview600','preview720','preview960','preview1200','preview1440','preview1920','preview2560'])
-    assert.equal((await run({...req,body:{objects:[{method:'GET',path:'owner/'+hash,variant}]}})).status,200,variant);
-  for(const row of [{method:'GET',path:'owner/'+hash,variant:'preview621'},{method:'PUT',path:'owner/'+hash,type:'image/png',variant:'preview360'},{method:'GET',path:'owner/'+hash,variant:'sharpen'},{method:'GET',path:'owner/'+hash,variant:'preview359'},{method:'GET',path:'owner/'+hash,variant:'preview4096'},{method:'GET',path:'owner/'+hash,variant:'preview0004'},{method:'GET',path:'owner/'+hash+'-preview480.webp',variant:'preview480'}])
-    assert.equal((await run({...req,body:{objects:[row]}})).status,403);
-  assert.equal((await run({...req,body:{objects:[{method:'PUT',path:'owner/'+hash+'-preview480.webp',type:'image/webp'}]}})).status,200,'480px derived object is immutable and allowed');
-  assert.equal((await run({...req,body:{objects:[{method:'PUT',path:'owner/'+hash+'-preview721.webp',type:'image/webp'}]}})).status,403,'only fixed cover width may be persisted');
+  const preview=await run({...req,body:{objects:[{method:'GET',path:'owner/'+hash,variant:'preview720'}]}});
+  assert.equal(preview.status,200);assert.equal(preview.body.tickets[0].variant,'preview720');
+  for(const variant of ['preview720','preview721','preview1440','preview4096'])assert.equal((await run({...req,body:{objects:[{method:'GET',path:'owner/'+hash,variant}]}})).status,200);
+  for(const row of [{method:'GET',path:'owner/'+hash,variant:'preview360'},{method:'GET',path:'owner/'+hash,variant:'preview621'},{method:'PUT',path:'owner/'+hash,type:'image/png',variant:'preview360'},{method:'GET',path:'owner/'+hash,variant:'sharpen'},{method:'GET',path:'owner/'+hash,variant:'preview359'},{method:'GET',path:'owner/'+hash,variant:'preview4097'},{method:'GET',path:'owner/'+hash,variant:'preview0004'},{method:'GET',path:'owner/'+hash+'-preview360.webp',variant:'preview360'}])assert.equal((await run({...req,body:{objects:[row]}})).status,403);
+  assert.equal((await run({...req,body:{objects:[{method:'PUT',path:'owner/'+hash+'-preview720.webp',type:'image/webp'}]}})).status,200,'720px derived object is immutable and allowed');
+  assert.equal((await run({...req,body:{objects:[{method:'PUT',path:'owner/'+hash+'-preview721.webp',type:'image/webp'}]}})).status,403,'only declared cover widths may be persisted');
   const put=await run({...req,body:{objects:[{method:'PUT',path:'owner/'+hash,type:'image/png'}]}});assert.equal(put.body.tickets[0].headers['x-cos-forbid-overwrite'],'true');
   assert.equal((await run({...req,method:'DELETE'})).status,405);
 });

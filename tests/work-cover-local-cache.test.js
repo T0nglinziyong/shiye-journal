@@ -12,9 +12,9 @@ const factory=({state,device,draw,ready,error})=>createLocalWorkCovers({
   onReady:ready||(()=>{}),onError:error||(()=>{}),
   createURL:()=> 'blob:local-cover',revokeURL:()=>{}
 });
-test('new blank or imported work shows local 480px snapshot independent of cloud upload',async()=>{
+test('new blank or imported work shows local 720px snapshot independent of cloud upload',async()=>{
   const original=work(),state={accountId:'account',projects:[original],route:'works'};
-  const saved=new Map(),calls=[],events=[],preview=new Blob(['480px scene'],{type:'image/webp'});
+  const saved=new Map(),calls=[],events=[],preview=new Blob(['720px scene'],{type:'image/webp'});
   const device={get:async(_a,id)=>saved.get(id),put:async(_a,item)=>saved.set(item.id,item)};
   const covers=factory({state,device,draw:async p=>{calls.push(p.id);return preview;},
     ready:(p,url)=>events.push([p.id,url])});
@@ -25,8 +25,8 @@ test('new blank or imported work shows local 480px snapshot independent of cloud
   assert.deepEqual(calls,['work-A']);
   assert.equal(await covers.ensure(original),preview);
   assert.deepEqual(calls,['work-A'],'one render per project revision');
-  assert.equal(saved.get('work-cover:480:work-A')?.updatedAt,original.updatedAt);
-  assert.equal(saved.get('work-cover:480:work-A')?.blob,preview);
+  assert.equal(saved.get('work-cover:720:work-A')?.updatedAt,original.updatedAt);
+  assert.equal(saved.get('work-cover:720:work-A')?.blob,preview);
 });
 test('return visits recover local complete cover after reload; new revision invalidates old thumbnail',async()=>{
   const records=new Map(),device={

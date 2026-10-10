@@ -28,13 +28,8 @@ export function renderImportReview({state,esc,fmt}) {
   const background=(r,ri)=>{
     const pattern=r.workPaperPattern||state.importBatchWorkPaperPattern||'plain',
       color=r.workPaperColor||state.importBatchWorkPaperColor||'#fcfaf0';
-    const patterns=[['plain','纯色'],['grid','方格'],['lines','横线'],['dots','点阵'],['columns','双栏']];
     return '<div class="review-candidate review-background-card"><div class="review-thumbnail import-work-paper-preview '+esc(pattern)+'" style="--review-paper:'+esc(color)+';background-color:'+esc(color)+'">'+
-      '<div class="review-paper-direct-controls">'+
-      '<label class="review-paper-direct-row"><span>底纸样式</span><select data-review-paper-pattern="'+ri+'" aria-label="底纸样式">'+
-      patterns.map(([id,name])=>'<option value="'+id+'" '+(id===pattern?'selected':'')+'>'+name+'</option>').join('')+'</select></label>'+
-      '<label class="review-paper-direct-row"><span>底纸颜色</span><input type="color" data-review-paper-color="'+ri+'" aria-label="底纸颜色" value="'+esc(color)+'"></label>'+
-      '</div></div></div>';
+      '<button type="button" class="review-paper-control" data-import-paper-options="'+ri+'" aria-label="编辑页面背景">页面背景</button></div></div>';
   };
   const batchControls=snapshot?'':'<div class="review-default"><strong>本批默认归类</strong><select id="batch-series"><option value="__new__">＋ 新建系列…</option><option value="">不归入系列</option>'+
     (work?'<option value="__no_library__">不归入素材库</option>':'')+

@@ -23,7 +23,7 @@ export function createCOSStore({client,enabled=false,endpoint='/api/cos',fetcher
   return {enabled,
     download:path=>read(path),
     probe,
-    preview:(path,variant='preview480')=>read(path,variant),
+    preview:(path,variant='preview720')=>read(path,variant),
     upload:(path,blob,type=blob.type||'application/octet-stream')=>scheduleWrite(async()=>{const signed=await ticket(path,'PUT',type),response=await fetcher(signed.url,{method:'PUT',headers:signed.headers,body:blob,signal:AbortSignal.timeout(120000)});if(!response.ok&&response.status!==409)throw Error('COS 上传失败（'+response.status+'）；未保存元数据');}),
   };
 }
