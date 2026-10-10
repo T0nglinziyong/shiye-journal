@@ -29,7 +29,9 @@ export function showToast(message,{
   // not yet disappeared. This also avoids a stale previous timeout hiding it.
   element.classList.remove('show');
   element.textContent=text;
-  void element.offsetWidth; // force animation restart for successive messages
+  // Avoid a synchronous layout flush here. During import, repeated notices
+  // used to force style/layout work in the critical segmentation loop.
+  // The status panel handles ongoing progress; this is only a brief notice.
   element.classList.add('show');
 
   const token={timer:null,cancel,message:text};
