@@ -149,7 +149,7 @@ const image=id=>staticSources.get(id)||
   (cloudEnabled?imagePlaceholder(id):urls.get(id)||imagePlaceholder(id));
 // Only the real creative canvas and cutout detail use display-scaled COS
 // variants. Everything else (Works/Matching/Library/editor material tray)
-// uses one fixed 720-pixel snapshot stored in COS.
+// uses one fixed 480-pixel snapshot stored in COS.
 const privateImages=mountPrivateImages({root:document.body,db,urls,fullView:img=>
   (state.route==='editor'&&!!img.closest('#canvas-page .canvas-object.material'))||
   (state.route==='assetDetail'&&!!img.closest('.detail-picture'))});
@@ -161,7 +161,7 @@ const renderLocalCoverBlob=project=>renderWorkCoverSnapshot(project,{
     const localURL=urls.get(id);
     if(localURL)try{const raw=await fetch(localURL).then(response=>response.blob());
       if(raw.size)return raw;}catch{}
-    // Already uploaded materials use the fixed 720px COS derivative.
+    // Already uploaded materials use the fixed 480px COS derivative.
     const preview=await db.previewBlob(id,pixels).catch(()=>null);
     if(preview instanceof Blob&&preview.size)return preview;
     const local=(await db.get('blobs',id).catch(()=>null))?.data;
