@@ -37,3 +37,11 @@ test('rotating a photo invalidates applied corners without clearing pending revi
   assert.match(app,/const old=state\.paperCorners,needsReview=!!rec\.paperNeedsReview;resetPaperCorrection\(state\);rec\.appliedCorners=null/);
   assert.match(app,/rec\.paperNeedsReview=needsReview/);
 });
+
+test('diagnostics can be exported before recognition and distinguish source from DOM failures',async()=>{
+  const app=await readFile(new URL('../src/app.js',import.meta.url),'utf8');
+  assert.match(app,/const trace=rec\.recognitionDiagnostic\|\|\{phase:/);
+  assert.match(app,/inputFileInfo:\{bytes:rec\.file\?\.size/);
+  for(const key of ['detectedRegions','extractedCandidates','imageURLs','renderedImages','loadedImages','failedImages','pendingImages'])
+    assert.ok(app.includes(key+':'),key);
+});
