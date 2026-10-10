@@ -1415,7 +1415,8 @@ async function refreshImportCandidates(regions,{manual=false,analysisRaster=null
     if(old)for(const key of ['title','selected','tags','seriesID','kind','role','quantity','reviewStatus','dimensionSource','width','height']){
       if(old[key]!==undefined)regenerated[key]=structuredClone(old[key]);
     }
-    if(region.manualFallback)regenerated.reviewStatus='pendingReview';
+    if(region.manualFallback||region.recognitionFallback||region.segmentationFailed||!region.mask?.alpha?.length)
+      regenerated.reviewStatus='pendingReview';
     next.push(regenerated);
   }
   if(record!==state.importRecords[state.importIndex]){for(const c of next)if(!previous.includes(c))URL.revokeObjectURL(c.url);return false;}
