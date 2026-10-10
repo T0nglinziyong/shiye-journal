@@ -61,6 +61,7 @@ import {visionTask,prewarmVision} from './vision-runtime.js';
 import {recognitionOptions,recognitionPixelOptions,recognitionMethodDetails,recognitionProfile} from './recognition-profiles.js';
 import {classifyRecord} from './classification.js';
 import {mountPaperCorrection,resetPaperCorrection} from './paper-ui.js';
+import {requiresManualPaperConfirmation} from './import-paper-review.js';
 import {rectifyA4Frame,suggestPaperCorners} from './perspective.js';
 import {analysisPixels,decodeRecognitionImage,sourcePixels} from './recognition-raster.js';
 import {imageFilesFromDrop,isImageImportFile,acceptsDesktopFileDrag,imageImportDestination} from './desktop-image-drop.js';
@@ -821,15 +822,31 @@ async function handle(action,id,value){try{switch(action){
   case 'export-png':await exportPNG();break;case 'print':await printPage();break;
   case 'creative-json':openCreativeJSON();break;
   case 'recognition-diagnostics':{
-    const rec=state.importRecords[state.importIndex],trace=rec?.recognitionDiagnostic;
-    if(!trace)throw Error('请先完成当前照片的识别');
+    const rec=state.importRecords[state.importIndex];
+    if(!rec?.file||!state.importBitmap)throw Error('请等待照片读取完成，再导出诊断');
+    const trace=rec.recognitionDiagnostic||{phase:rec.paperNeedsReview?'paper-review-required':'not-recognized',count:0};
     const hash=async bytes=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),v=>v.toString(16).padStart(2,'0')).join('');
     const inputSHA256=await hash(await rec.file.arrayBuffer());
     const sourceSHA256=await hash(sourcePixels(state.importBitmap));
     const correctedSHA256=rec.correctedBitmap?await hash(sourcePixels(rec.correctedBitmap)):null;
     const maskSHA256=await Promise.all((state.importCandidateData||[]).map(async item=>item.region?.mask?.alpha?await hash(item.region.mask.alpha):null));
+    // A detected box, an extracted Blob URL and a browser-decoded <img> are
+    // different stages. Export all three counts to locate blank-preview issues.
+    const previewImages=[...view.querySelectorAll('.import-candidate-grid .candidate-thumb img')];
+    const previewStatus={
+      detectedRegions:(state.importCandidates||[]).length,
+      extractedCandidates:(state.importCandidateData||[]).length,
+      imageURLs:(state.importCandidateURLs||[]).filter(Boolean).length,
+      renderedImages:previewImages.length,
+      loadedImages:previewImages.filter(img=>img.complete&&img.naturalWidth>0).length,
+      failedImages:previewImages.filter(img=>img.complete&&img.naturalWidth===0).length,
+      pendingImages:previewImages.filter(img=>!img.complete).length,
+      processing:!!state.importProcessing
+    };
     const report={format:'shiye-recognition-box-diagnostics',version:3,
       pipeline:'pinned-jpeg-js-opencv-package-area-v1',inputSHA256,sourceSHA256,correctedSHA256,maskSHA256,
+      inputFileInfo:{bytes:rec.file?.size||0,mimeType:rec.file?.type||''},previewStatus,
+      prefetchStatus:rec.prefetchStatus||null,importError:rec.importError||null,
       recognitionSettings:{method:state.importRecognition||state.preferences.recognition,pixels:state.preferences.recognitionPixels,
         preprocess:recognitionPreprocessOptions(),postprocess:recognitionPostprocessOptions()},
       originalPixelSize:[state.importBitmap?.width,state.importBitmap?.height],
@@ -1223,7 +1240,7 @@ async function prefetchImportRecord(rec,settings,revision){
     bitmap=await decodeRecognitionImage(rec.file);if(!valid())return;
     const initial=importPaperDimensions({...settings,bitmap,corners:null});
     const corners=rec.corners||(settings.paperSize==='none'?null:await suggestPaperCorners(bitmap,initial[0]/initial[1]).catch(()=>null));if(!valid())return;
-    if(settings.paperSize!=='none'&&!corners){rec.paperNeedsReview=true;rec.prefetchStatus='needs-paper-review';updateImportPrefetchLabel(rec);return;}
+    if(requiresManualPaperConfirmation({paperSize:settings.paperSize,appliedCorners:rec.appliedCorners,reviewFlag:rec.paperNeedsReview,corners})){rec.paperNeedsReview=true;rec.prefetchStatus='needs-paper-review';updateImportPrefetchLabel(rec);return;}
     const [pw,ph]=importPaperDimensions({...settings,bitmap,corners});
     if(corners&&settings.paperSize!=='none'){
       const corrected=await rectifyA4Frame(bitmap,corners,4096,pw/ph);correctedBitmap=corrected.canvas;correctedURL=URL.createObjectURL(corrected.blob);if(!valid())return;
@@ -1304,9 +1321,9 @@ async function switchImportRecord(index,skipSave=false){
   progress('正在自动寻找纸张四角…');
   state.paperCorners=rec.corners||rec.autoPaperCorners||(state.paperSize==='none'?null:await suggestPaperCorners(bitmap,(()=>{const [pw,ph]=paperDimensions();return pw/ph;})()).catch(()=>null));if(!isCurrent())return;
   if(!rec.corners&&state.paperCorners)rec.autoPaperCorners=structuredClone(state.paperCorners);
-  rec.paperNeedsReview=state.paperSize!=='none'&&!state.correctedBitmap&&!state.paperCorners;
+  rec.paperNeedsReview=requiresManualPaperConfirmation({paperSize:state.paperSize,correctedBitmap:state.correctedBitmap,appliedCorners:rec.appliedCorners,reviewFlag:rec.paperNeedsReview,corners:state.paperCorners});
   progress(rec.paperNeedsReview?'请手动调整纸张四角后预览校正':'正在进行透视校正…');
-  if(!state.correctedBitmap&&state.paperCorners&&state.paperSize!=='none'){
+  if(!state.correctedBitmap&&state.paperCorners&&state.paperSize!=='none'&&!rec.paperNeedsReview){
     const [pw,ph]=paperDimensions(),{canvas,blob}=await rectifyA4Frame(state.importBitmap,state.paperCorners,4096,pw/ph);
     if(!isCurrent())return;
     state.correctedBitmap=canvas;state.correctedURL=URL.createObjectURL(blob);rec.appliedCorners=JSON.stringify(state.paperCorners);rec.backgroundDetected=true;
@@ -1330,7 +1347,7 @@ async function rotateImportPhoto(){
   if(rec.manualEdits&&!confirm('旋转会重新识别这张照片并舍弃候选编辑，继续吗？'))return;
   const bitmap=state.importBitmap,canvas=document.createElement('canvas');canvas.width=bitmap.height;canvas.height=bitmap.width;const ctx=canvas.getContext('2d');ctx.translate(canvas.width,0);ctx.rotate(Math.PI/2);ctx.drawImage(bitmap,0,0);
   const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));rec.originalFile||=rec.file;rec.file=new File([blob],rec.file.name,{type:'image/png'});URL.revokeObjectURL(rec.url);rec.url=URL.createObjectURL(blob);
-  const old=state.paperCorners;resetPaperCorrection(state);state.paperCorners=old?[old[3],old[0],old[1],old[2]].map(p=>({x:1-p.y,y:p.x})):null;bitmap.close?.();state.importBitmap=await decodeRecognitionImage(rec.file);rec.bitmap=state.importBitmap;state.importFile=rec.file;state.importURL=rec.url;state.importCandidates=[];state.importCandidateData=[];state.importCandidateURLs=[];state.importCandidateSelection=new Set();rec.confirmed=false;rec.manualEdits=false;rec.paperNeedsReview=false;
+  const old=state.paperCorners,needsReview=!!rec.paperNeedsReview;resetPaperCorrection(state);rec.appliedCorners=null;state.paperCorners=old?[old[3],old[0],old[1],old[2]].map(p=>({x:1-p.y,y:p.x})):null;bitmap.close?.();state.importBitmap=await decodeRecognitionImage(rec.file);rec.bitmap=state.importBitmap;state.importFile=rec.file;state.importURL=rec.url;state.importCandidates=[];state.importCandidateData=[];state.importCandidateURLs=[];state.importCandidateSelection=new Set();rec.confirmed=false;rec.manualEdits=false;rec.paperNeedsReview=needsReview;
   saveActiveImportRecord();await switchImportRecord(state.importIndex,true);
 }
 async function previewCorrection(){
