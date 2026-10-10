@@ -291,6 +291,13 @@ const fmt=n=>Number(n).toFixed(1).replace(/\.0$/,'');
 function head(title,subtitle,actions=''){return `<div class="view-head"><div><h1>${title}</h1><p>${subtitle}</p></div><div class="actions">${actions}</div></div>`;}
 function render(){document.body.classList.toggle('editing',state.route==='editor');document.body.dataset.backdrop=state.preferences.backdrop;document.querySelectorAll('.main-nav button').forEach(b=>b.classList.toggle('active',b.dataset.route===state.route||(b.dataset.route==='library'&&['series','import'].includes(state.route))));document.querySelector('#basket-count').textContent=state.basket.length;
   if(state.route==='editor'&&refreshCanvas())return;
+  // The import inspector is independently scrollable. Every recognition step
+  // and settings change used to replace #view, jumping it back to the first
+  // option. Capture before teardown and restore immediately after mounting.
+  const importScroll=state.route==='import'&&view.querySelector('.import-inspector')
+    ?{inspector:view.querySelector('.inspector-scroll')?.scrollTop||0,
+      queue:view.querySelector('.queue-strip')?.scrollLeft||0,
+      page:window.scrollY}:null;
   view.workCoverDispose?.();view.workCoverDispose=null;
   view.localWorkCoverDispose?.();view.localWorkCoverDispose=null;
   view.editorDispose?.();view.editorDispose=null;view.manualBoxDispose?.();view.manualBoxDispose=null;view.editorRefresh=null;view.catalogRefresh=null;resetSelectionPresenters(view);
@@ -303,7 +310,14 @@ function render(){document.body.classList.toggle('editing',state.route==='editor
   mountParityControls();bindPage();mountWorkflowControls({state,view,body,modal,db,render,route,toast,imgTag,assetCard,esc,asset,refresh,download,modelImage,rasterize,backup,openSeriesEditor,openAssetEditor:openDetail,openCutoutCheck,switchImportRecord,saveActiveImportRecord,saveProject,flushSave,assetOrganization,applyAssetClassification});view.catalogRefresh?.();if(state.route==='works'){
     view.localWorkCoverDispose=localWorkCovers.observe(view);
     view.workCoverDispose=workCoverBackfill.observe(view);
-  }if(state.route==='editor'){view.editorDraft=current();view.editorInk=current().strokes;view.editorLayoutKey=editorLayoutKey();mountCanvasEditor({state,view,body,modal,current,checkpoint,saveProject,render,route,flushSave,toast,esc,imgTag,asset,handle,openCutoutCheck,openAICreation});mountCanvasSelection({state,view,current,checkpoint,saveProject,render,toast});}mountPageSyncIndicator();backgroundViewPending=false;}
+  }if(state.route==='editor'){view.editorDraft=current();view.editorInk=current().strokes;view.editorLayoutKey=editorLayoutKey();mountCanvasEditor({state,view,body,modal,current,checkpoint,saveProject,render,route,flushSave,toast,esc,imgTag,asset,handle,openCutoutCheck,openAICreation});mountCanvasSelection({state,view,current,checkpoint,saveProject,render,toast});}
+  if(importScroll&&state.route==='import'){
+    const inspector=view.querySelector('.inspector-scroll'),queue=view.querySelector('.queue-strip');
+    if(inspector)inspector.scrollTop=importScroll.inspector;
+    if(queue)queue.scrollLeft=importScroll.queue;
+    if(Math.abs(window.scrollY-importScroll.page)>1)window.scrollTo(0,importScroll.page);
+  }
+  mountPageSyncIndicator();backgroundViewPending=false;}
 function editorLayoutKey(){const size=view.editorLayoutSize||{width:window.innerWidth,height:window.innerHeight};return [size.width,size.height,current()?.canvas.width,current()?.canvas.height,!!state.workspacePanel,!!state.aiPanel].join(':');}
 function refreshCanvas(){
   const d=current(),page=view.querySelector('#canvas-page');if(!page||view.editorDraft!==d||view.editorLayoutKey!==editorLayoutKey()||!view.editorRefresh)return false;
