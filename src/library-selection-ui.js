@@ -6,15 +6,13 @@ import {supportsVision} from './ai-settings.js';
 import {bindLongPress} from './long-press.js';
 import {withUsageStatus} from './library-model.js';
 import {registerSelectionPresenter} from './selection-presenter.js';
-import {createSelectionSidePanels,selectionMorePopoverOptions} from './selection-side-panels.js';
-import {showToast} from './toast.js';
 
 const action=(name,fn)=>{
   const b=document.createElement('button');b.type='button';b.className='btn';
   const label=document.createElement('span');label.className='selection-action-label';label.textContent=name.replace(/\s*›$/u,'');b.append(label);
   if(/›$/u.test(name)){const arrow=document.createElement('span');arrow.className='selection-action-chevron';arrow.textContent=' ›';arrow.setAttribute('aria-hidden','true');b.append(arrow);}
   if(name==='更多操作'){b.dataset.selectionMore='';b.setAttribute('aria-expanded','false');b.setAttribute('aria-haspopup','menu');}
-  b.onclick=async()=>{b.disabled=true;try{await fn(b);}catch(e){showToast(e.message);}finally{b.disabled=false;}};return b;
+  b.onclick=async()=>{b.disabled=true;try{await fn(b);}catch(e){const toast=document.querySelector('#toast');toast.textContent=e.message;toast.classList.add('show');}finally{b.disabled=false;}};return b;
 };
 export function mountAssetSelection(c,p){
   const {state,view,render}=c,isActive=()=>selectionActive(p,'asset');
@@ -42,16 +40,28 @@ export function mountAssetSelection(c,p){
   }));tray.lastChild.classList.add('danger');view.append(tray);registerSelectionPresenter(view,sync);
 }
 function moreMenu(c,p,anchor){
-  const menu=togglePopover(anchor,selectionMorePopoverOptions());
+  const menu=togglePopover(anchor,{title:'更多操作',menu:true,width:250});
   if(!menu)return;
   menu.surface.classList.add('selection-more-menu');
 
-  // The submenu is a SECOND anchored pane, never an inline accordion.
-  // Both panes remain clickable, and closing the parent closes its child.
-  const side=createSelectionSidePanels(menu,{anchor,makeAction:action});
+  // Series, Works and Assets must use the same contained accordion menu.
+  // A separate fixed-position submenu would cover the parent on narrow screens,
+  // and the old truthy 'assign' branch incorrectly treated 'export' as a series.
   const group=(title,choices)=>{
     const trigger=action(title+' ›',()=>{
-      side.open(trigger,title,choices(),{pinned:title==='加入系列'?2:0});
+      const opened=trigger.getAttribute('aria-expanded')==='true';
+      menu.content.querySelector('.selection-inline-submenu')?.remove();
+      for(const button of menu.content.querySelectorAll('[data-expanded-submenu]'))
+        button.setAttribute('aria-expanded','false');
+      if(opened){menu.position();return;}
+      const panel=document.createElement('section');
+      panel.className='selection-submenu selection-inline-submenu';
+      panel.setAttribute('role','group');
+      panel.setAttribute('aria-label',title);
+      for(const [label,handler] of choices())panel.append(action(label,handler));
+      trigger.after(panel);
+      trigger.setAttribute('aria-expanded','true');
+      menu.position();
     });
     trigger.dataset.expandedSubmenu='';
     trigger.setAttribute('aria-expanded','false');

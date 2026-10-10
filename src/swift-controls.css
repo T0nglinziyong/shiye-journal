@@ -442,30 +442,3 @@ body:has(.library-management-tray):not(:has(.library-management-tray:not([hidden
     grid-template-columns:repeat(2,minmax(0,1fr));
   }
 }
-
-/* Layer picker: the layer LIST (not its drag handles) owns native vertical
-   touch scrolling. Override the older touch-action:none selectors above.
-   Keep the header fixed and constrain only the row list so iPad Safari,
-   iPhone and desktop wheel/trackpad can reach layers below the fold. */
-.swift-popover.swift-layer-popover{overflow:hidden}
-.swift-layer-popover .popover-content{
-  display:flex;flex-direction:column;min-height:0;overflow:hidden;
-  gap:0;padding:8px;
-}
-.swift-layer-popover .canvas-layer-list{
-  box-sizing:border-box;
-  width:100%;min-height:0;max-height:min(50dvh,410px);
-  flex:0 1 auto;overflow-x:hidden;overflow-y:auto;
-  overscroll-behavior-y:contain;
-  -webkit-overflow-scrolling:touch;
-  touch-action:pan-y;
-}
-.swift-layer-popover .canvas-layer-row,
-.swift-layer-popover .canvas-layer-row [data-layer-pick],
-.swift-layer-popover .canvas-layer-row [data-layer-lock],
-.swift-layer-popover .canvas-layer-row [data-layer-eye]{
-  touch-action:pan-y;
-}
-.swift-layer-popover .canvas-layer-row [data-layer-move]{
-  touch-action:none;
-}

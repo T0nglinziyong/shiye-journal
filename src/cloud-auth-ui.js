@@ -2,7 +2,6 @@ import {cloudEnabled,cloudClient,requireCloudUser} from './cloud-session.js';
 import {createBackup} from './store.js';
 import {cloudClearCache,cloudPendingLocalSummary,cloudResumeCache} from './cloud-store.js';
 import {openAdminView} from './admin-view.js';
-import {openStorageUsage} from './storage-usage-ui.js';
 import {openAccountManagement} from './account-management.js';
 
 const emailForLogin=value=>{const name=value.trim().toLowerCase();return name==='lrx'?'lrx@shiyejournal.vip':/^[a-z][a-z0-9_]{2,31}$/.test(name)?name+'@accounts.shiyejournal.invalid':name;};
@@ -43,14 +42,14 @@ export async function startCloudSession(onReady){
     if(error||!account)throw Error('无法读取账号资料');
     gate.remove();app.hidden=false;await onReady(user);
     const menuHost=document.createElement('div');menuHost.className='cloud-account';
-    menuHost.innerHTML='<button type="button" class="btn mini" aria-expanded="false" aria-controls="cloud-account-menu">账号</button><div id="cloud-account-menu" class="cloud-account-menu" hidden><small data-account-name></small><button type="button" class="btn" data-create-account hidden>新建账号</button><button type="button" class="btn" data-admin-view hidden>查看其他用户（只读）</button><button type="button" class="btn" data-storage-usage hidden>存储统计（开发者）</button><button type="button" class="btn" data-change-password>修改密码</button><button type="button" class="btn" data-old-backup>导出本机旧资料</button><button type="button" class="btn" data-logout>退出登录</button></div>';
+    menuHost.innerHTML='<button type="button" class="btn mini" aria-expanded="false" aria-controls="cloud-account-menu">账号</button><div id="cloud-account-menu" class="cloud-account-menu" hidden><small data-account-name></small><button type="button" class="btn" data-create-account hidden>新建账号</button><button type="button" class="btn" data-admin-view hidden>查看其他用户（只读）</button><button type="button" class="btn" data-change-password>修改密码</button><button type="button" class="btn" data-old-backup>导出本机旧资料</button><button type="button" class="btn" data-logout>退出登录</button></div>';
     menuHost.querySelector('[data-account-name]').textContent=account.username+' · 私人云端资料';
     const toggle=menuHost.firstElementChild,menu=menuHost.querySelector('.cloud-account-menu');
     toggle.onclick=()=>{menu.hidden=!menu.hidden;toggle.setAttribute('aria-expanded',String(!menu.hidden));};
     document.addEventListener('click',event=>{if(!menuHost.contains(event.target)){menu.hidden=true;toggle.setAttribute('aria-expanded','false');}});
     menuHost.onkeydown=event=>{if(event.key==='Escape'){menu.hidden=true;toggle.setAttribute('aria-expanded','false');toggle.focus();}};
     menuHost.querySelector('[data-change-password]').onclick=()=>{menu.hidden=true;changePasswordDialog(client);};
-    if(account.is_admin===true){const usage=menuHost.querySelector('[data-storage-usage]');usage.hidden=false;usage.onclick=()=>{menu.hidden=true;void openStorageUsage(client).catch(error=>alert('存储统计暂不可用：'+error.message));};const create=menuHost.querySelector('[data-create-account]');create.hidden=false;create.onclick=()=>{menu.hidden=true;openAccountManagement(client);};const button=menuHost.querySelector('[data-admin-view]');button.hidden=false;button.onclick=async()=>{menu.hidden=true;try{await openAdminView(client,user.id);}catch(error){alert('无法查看其他用户：'+(error.message||'请检查网络'));}};}
+    if(account.is_admin===true){const create=menuHost.querySelector('[data-create-account]');create.hidden=false;create.onclick=()=>{menu.hidden=true;openAccountManagement(client);};const button=menuHost.querySelector('[data-admin-view]');button.hidden=false;button.onclick=async()=>{menu.hidden=true;try{await openAdminView(client,user.id);}catch(error){alert('无法查看其他用户：'+(error.message||'请检查网络'));}};}
     menuHost.querySelector('[data-logout]').onclick=async()=>{try{const detail={tasks:[]};window.dispatchEvent(new CustomEvent('shiye-flush-before-logout',{detail}));await Promise.all(detail.tasks);}catch{alert('本机暂存失败，修改还在当前页面；请先解决后再退出');return;}let pending;try{pending=await cloudPendingLocalSummary();}catch{alert('无法检查本机待同步资料，请先重试');return;}const count=pending.projects+pending.imports;if(count&&!confirm(`本机还有 ${count} 项待同步修改。退出登录会保留这些原稿；下次用同一账号登录后继续上传。确定退出吗？`))return;try{await cloudClearCache();}catch{alert('本机私人缓存清理失败，请重试退出');return;}let result;try{result=await client.auth.signOut({scope:'local'});}catch(error){cloudResumeCache();alert('退出失败，请检查网络');return;}if(result.error){cloudResumeCache();alert('退出失败，请检查网络');return;}location.reload();};
     menuHost.querySelector('[data-old-backup]').onclick=async()=>{try{const blob=await createBackup({browserOnly:true}),link=document.createElement('a'),url=URL.createObjectURL(blob);link.href=url;link.download='拾页本机旧资料.shiyepwa';link.click();setTimeout(()=>URL.revokeObjectURL(url),60000);}catch(error){alert('旧资料导出失败：'+error.message);}};
     document.querySelector('.top-actions').append(menuHost);

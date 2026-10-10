@@ -97,7 +97,6 @@ import {canApplyBackgroundView,shouldPullCloudForRoute} from './view-update-poli
 import {resetSelectionPresenters} from './selection-presenter.js';
 
 import {installRuntimeDiagnostics} from './runtime-diagnostics.js';
-import {showToast} from './toast.js';
 const view=document.querySelector('#view'),modal=document.querySelector('#modal'),body=document.querySelector('#modal-body');
 modal.querySelector('.modal-close').onclick=()=>modal.close();
 const fileInput=document.querySelector('#file-input'),workFileInput=document.querySelector('#work-file-input'),snapshotFileInput=document.querySelector('#snapshot-file-input'),backupInput=document.querySelector('#backup-input'),emergencyInput=document.querySelector('#emergency-input');
@@ -114,7 +113,7 @@ const libraryHistory=[];
 function openLibraryAsset(id){libraryHistory.push({route:state.route,seriesID:state.seriesID,detailAssetID:state.detailAssetID});state.detailAssetID=id;route('assetDetail');}
 function libraryBack(){const previous=libraryHistory.pop();if(!previous){navigateBack('series');return;}navigationHistory.pop();state.seriesID=previous.seriesID;state.detailAssetID=previous.detailAssetID;route(previous.route,{back:true});}
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const toast=showToast;
+const toast=s=>{const el=document.querySelector('#toast');el.textContent=s;el.classList.add('show');clearTimeout(toast.timer);toast.timer=setTimeout(()=>el.classList.remove('show'),3500);};
 const saveStatus=s=>{const label=cloudEnabled?({'已保存到本机':'已保存到云端','本机存储':'云端存储'}[s]||s):s;document.querySelector('#save-state').textContent=label;for(const el of document.querySelectorAll('.swift-auto-saved'))el.textContent=label;};
 const syncDisplay={pending:0,error:null,checking:true,localPending:false};
 function updateSyncIndicator(){

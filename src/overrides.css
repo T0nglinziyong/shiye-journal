@@ -254,23 +254,3 @@ html,body{overscroll-behavior-y:none}
 
 /* Paper tile is a full-strength editable preview, not an unselected sticker. */
 .import-review .review-background-card:not(.selected) {opacity:1}
-
-
-/* Works differs from Materials: its sticky catalogue header is nested inside
-   .works-page, so the generic '#view > .catalog-toolbar ~ .grid' rule never
-   matched. Keep the same 12/10px breathing space under the divider in EVERY
-   Works tab (all, editable, snapshots, templates, recently deleted). */
-#view > .works-page > .catalog-toolbar ~ .works-grid,
-#view > .works-page > .catalog-toolbar ~ .journal-template-grid,
-#view > .works-page > .catalog-toolbar ~ .grid,
-#view > .works-page + .recently-deleted-grid {
-  margin-top:12px;
-}
-@media(max-width:699px){
-  #view > .works-page > .catalog-toolbar ~ .works-grid,
-  #view > .works-page > .catalog-toolbar ~ .journal-template-grid,
-  #view > .works-page > .catalog-toolbar ~ .grid,
-  #view > .works-page + .recently-deleted-grid {
-    margin-top:10px;
-  }
-}
