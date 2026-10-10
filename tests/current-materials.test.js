@@ -4,7 +4,7 @@ import {access} from 'node:fs/promises';
 import {syncCurrentMaterials,currentMaterialCatalog,CURRENT_MATERIAL_SOURCE,CURRENT_MATERIAL_REVISION,CURRENT_MATERIAL_IDS} from '../src/current-materials.js';
 
 function memoryDB(seed={}){
-  const names=['assets','series','projects','meta'];
+  const names=['assets','series','projects','meta','trash'];
   const stores=Object.fromEntries(names.map(name=>[name,new Map((seed[name]||[]).map(row=>[row.id,structuredClone(row)]))]));
   const transaction=async(names,fn)=>fn({objectStore:name=>({
     put:row=>stores[name].set(row.id,structuredClone(row)),
@@ -41,6 +41,21 @@ test('sync keeps user-visible built-in edits while canonicalizing current fields
   const again=await syncCurrentMaterials({database:db});assert.equal(again.changed,false);
 });
 
+test('deleted builtins never come back on relaunch, even when trash expires',async()=>{
+ const db=memoryDB();await syncCurrentMaterials({database:db});
+ const lost=currentMaterialCatalog.assets[0].id,seriesID=currentMaterialCatalog.series[0].id;
+ db.stores.assets.delete(lost);db.stores.series.delete(seriesID);
+ const rerun=await syncCurrentMaterials({database:db});
+ assert.equal(db.stores.assets.has(lost),false);
+ assert.equal(db.stores.series.has(seriesID),false);
+ assert.equal(rerun.changed,false);
+});
+test('a previously deleted first-run builtin stays absent when its tombstone is present',async()=>{
+ const lost=currentMaterialCatalog.assets[0].id;
+ const db=memoryDB({meta:[{id:'tombstone:assets:'+lost,store:'assets',targetID:lost,kind:'tombstone'}]});
+ await syncCurrentMaterials({database:db});
+ assert.equal(db.stores.assets.has(lost),false);
+});
 test('all 164 current built-in paths ship under current resource directories',async()=>{
   for(const asset of currentMaterialCatalog.assets)await access(new URL('../public'+asset.staticPath,import.meta.url));
 });
