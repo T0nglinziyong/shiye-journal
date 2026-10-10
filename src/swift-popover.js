@@ -11,7 +11,7 @@ export function closePopoverFor(anchor) {
 export function togglePopover(anchor, options = {}) {
   return closePopoverFor(anchor) ? null : openPopover(anchor, options);
 }
-export function openPopover(anchor, {title = '', width = 340, menu = false, adjustPosition = null} = {}) {
+export function openPopover(anchor, {title = '', width = 340, menu = false} = {}) {
   closePopover();
   const controller = new AbortController(), surface = document.createElement('section'), owned = new Map();
   let closed = false;
@@ -21,17 +21,10 @@ export function openPopover(anchor, {title = '', width = 340, menu = false, adju
   surface.tabIndex = -1;
   if (title) { const heading = document.createElement('h3'); heading.textContent = title; surface.append(heading); }
   const content = document.createElement('div'); content.className = 'popover-content'; surface.append(content); document.body.append(surface);
-  const popupWidth=()=>Math.min(typeof width==='function'?width(innerWidth):width,innerWidth-24);
-  anchor.setAttribute('aria-expanded', 'true'); surface.style.width = popupWidth() + 'px';
+  anchor.setAttribute('aria-expanded', 'true'); surface.style.width = Math.min(width, innerWidth - 24) + 'px';
   const position = () => {
     if (closed) return;
     if (!anchor.isConnected) { close(); return; }
-    // Responsive More width is chosen when the parent opens and only changes
-    // if the actual viewport changes. Opening a child never resizes it.
-    if(typeof width==='function'){
-      const preferred=popupWidth()+'px';
-      if(surface.style.width!==preferred)surface.style.width=preferred;
-    }
     // Preserve the user-approved 28509aa9 phone/tablet popup geometry.
     // Desktop-only placement improvements must never overwrite touch layout.
     if(innerWidth<900){
@@ -48,20 +41,6 @@ export function openPopover(anchor, {title = '', width = 340, menu = false, adju
       const placed=popupPlacement({...spec,popupHeight:surface.getBoundingClientRect().height});
       surface.style.left=placed.left+'px';
       surface.style.top=placed.top+'px';
-    }
-    if(typeof adjustPosition==='function'){
-      const box=surface.getBoundingClientRect();
-      const adjusted=adjustPosition({left:box.left,top:box.top,
-        width:box.width,height:box.height,viewportWidth:innerWidth,
-        viewportHeight:innerHeight,anchor:anchor.getBoundingClientRect()});
-      if(adjusted&&Number.isFinite(adjusted.left)){
-        const left=adjusted.left+'px';
-        if(surface.style.left!==left)surface.style.left=left;
-      }
-      if(adjusted&&Number.isFinite(adjusted.top)){
-        const top=adjusted.top+'px';
-        if(surface.style.top!==top)surface.style.top=top;
-      }
     }
     for (const fn of owned.values()) fn?.();
   };
