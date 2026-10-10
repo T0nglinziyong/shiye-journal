@@ -3,6 +3,7 @@ import {privateCache} from './private-cache.js';
 import {createProjectSync} from './project-sync.js';
 import {readCloudDelta,canRebaseUnchangedKeys} from './cloud-delta.js';
 import {compareRecordEdits} from './sync-last-write.js';
+import {recordTombstones} from './sync-tombstones.js';
 import {LARGE_PROJECT_BYTES,projectSummary,mergeProjectSummary,projectBlobText} from './project-document.js';
 import {createCOSStore} from './cos-store.js';
 import {imageVariant} from './image-variants.js';
@@ -159,11 +160,33 @@ async function reconcileImport(batch,operationID,baseRevision){
     // can contain disjoint assets and projects: a stale item must not block
     // independent updates or a newer item in the same transaction.
     const operations=[];
+    // A queued explicit restore contains BOTH meta:tombstone delete and the
+    // corresponding record PUT. It may follow an unacknowledged delete.
+    const restorePairs=new Set(batch.operations.filter(op=>op.action==='put'&&['assets','series','projects'].includes(op.store))
+      .filter(op=>batch.operations.some(marker=>marker.store==='meta'&&marker.action==='delete'&&marker.id==='tombstone:'+op.store+':'+op.item?.id))
+      .map(op=>op.store+':'+op.item.id));
     for(const op of batch.operations){
       const sameKeyFree=await canRebaseUnchangedKeys({client,owner:user,before:baseRevision,after:latest,operations:[op]});
       if(sameKeyFree){operations.push(op);continue;}
       if(op.action==='clear')return 'conflict';
-      const remote=await cloudRecord(op.store,op.item?.id??op.id);
+      const id=op.item?.id??op.id;
+      // A paired restore also consumes its Recently Deleted card, regardless
+      // of device timestamp skew or the original deletion's write time.
+      if(op.store==='trash'&&op.action==='delete'){
+        const card=await cloudRecord('trash',id);
+        const liveStore=card?.kind==='project'?'projects':card?.kind==='asset'?'assets':null;
+        if(liveStore&&restorePairs.has(liveStore+':'+card.item?.id)){operations.push(op);continue;}
+      }
+      if(op.store==='meta'&&op.action==='delete'&&typeof op.id==='string'){
+        const pair=[...restorePairs].find(key=>op.id==='tombstone:'+key);
+        if(pair&&await cloudRecord('meta',op.id)){operations.push(op);continue;}
+      }
+      if(op.action==='put'&&restorePairs.has(op.store+':'+id)){
+        const marker=await cloudRecord('meta','tombstone:'+op.store+':'+id);
+        const live=await cloudRecord(op.store,id);
+        if(marker&&!live){operations.push(op);continue;}
+      }
+      const remote=await cloudRecord(op.store,id);
       const winner=compareRecordEdits(op.item||{updatedAt:op.modifiedAt},remote,{localTimestamp:op.modifiedAt});
       if(winner==='local')operations.push(op);
     }
@@ -389,6 +412,7 @@ function cloudTransaction(names,fn,operationID=crypto.randomUUID()){
     try{
     await identity();if(revision===undefined)await version();
     const previous=revision;
+    operations.push(...recordTombstones(operations).slice(operations.length));
     const puts=operations.filter(op=>op.action==='put');for(let offset=0;offset<puts.length;offset+=3)await Promise.all(puts.slice(offset,offset+3).map(async op=>{op.item=await encode(op.store,op.item);}));
     const data=checked(await cloudClient().rpc('shiye_commit_v2',{operations,expected_revision:previous,operation_id:operationID}));revision=Number(data);
     // A WebP cover becomes usable only after both its object PUT and the
@@ -459,6 +483,8 @@ async function cloudStageImport(batch){await identity();if(revision===undefined)
 async function cloudStageMutation(names,fn){
   const operations=[],modifiedAt=new Date().toISOString(),result=fn({objectStore(store){if(!names.includes(store))throw Error('此表未加入事务');return {put:item=>operations.push({action:'put',store,item:structuredClone(item),modifiedAt}),delete:id=>operations.push({action:'delete',store,id,modifiedAt}),clear:()=>operations.push({action:'clear',store,modifiedAt})};}});
   if(result?.then)throw Error('事务回调必须同步');if(!operations.length)return;
+  operations.push(...recordTombstones(operations).slice(operations.length));
+  names=[...new Set([...names,...operations.map(op=>op.store)])];
   await identity();if(revision===undefined)await version();
   const deletedIDs=operations.filter(op=>op.store==='projects'&&op.action==='delete').map(op=>op.id);
   if(!deletedIDs.length){await importSync.stage({id:crypto.randomUUID(),names,operations});return;}

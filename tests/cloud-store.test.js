@@ -419,11 +419,41 @@ test('all user-facing deletes are staged as remote delete plus trash entry and s
       'Trash is immediately visible before remote upload');
     await db.cloudFlushProjects();
     assert.deepEqual(state.calls.at(-1).operations.map(op=>op.store+':'+op.action),
-      [store+':delete','trash:put']);
+      [store+':delete','trash:put','meta:put']);
+    assert.equal(state.calls.at(-1).operations.at(-1).item.id,'tombstone:'+store+':'+original.id);
     assert.deepEqual(await cache.get('cloud:owner-uuid','import-outbox'),[],
       'Committed remote deletion must leave no unsynced tombstones');
   }
 });
+test('rapid delete followed by explicit restore replays the entire recovery after a stale revision',async()=>{
+ const cache=memoryCache(),{db,state}=fixture(cache);
+ const original={id:'fast-deleted',title:'保留此素材',updatedAt:'2026-10-01T00:00:00Z'};
+ const card={id:'fast-trash',kind:'asset',item:original,date:'2026-10-10T00:00:00Z'};
+ await db.cloudStageMutation(['assets','trash'],tx=>{
+   tx.objectStore('assets').delete(original.id);
+   tx.objectStore('trash').put(card);
+ });
+ await db.cloudStageMutation(['assets','trash','meta'],tx=>{
+   tx.objectStore('meta').delete('tombstone:assets:'+original.id);
+   tx.objectStore('trash').delete(card.id);
+   tx.objectStore('assets').put(original);
+ });
+ // Emulate the second device's view just after the first delete commits.
+ // Its tombstone and trash card win over old edit timestamps.
+ state.rows=[{id:'tombstone:assets:'+original.id,kind:'tombstone',deletedAt:card.date},card];
+ state.changes=[{revision:1,keys:[
+   {store:'assets',action:'delete',id:original.id},
+   {store:'trash',action:'put',id:card.id},
+   {store:'meta',action:'put',id:'tombstone:assets:'+original.id}
+ ]}];
+ await db.cloudFlushProjects();
+ assert.equal(state.calls.length,2);
+ assert.deepEqual(state.calls[1].operations.map(op=>op.store+':'+op.action).sort(),
+   ['assets:put','meta:delete','trash:delete'].sort(),
+   'explicit restore must survive a just-committed same-record deletion and consume the trash card');
+ assert.deepEqual(await cache.get('cloud:owner-uuid','import-outbox'),[]);
+});
+
 test('permanent trash deletion uses durable cloud outbox and sends real delete op',async()=>{
   const cache=memoryCache(),{state,db}=fixture(cache);
   await db.cloudStageMutation(['trash'],tx=>tx.objectStore('trash').delete('gone'));

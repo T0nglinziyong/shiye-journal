@@ -62,16 +62,36 @@ test('device sessions are isolated by account, same browser',async()=>{
  assert.deepEqual(b.state.basket,[]);
  assert.equal(await device.get('account-B','matching-session-v1'),null);
 });
-test('completed results archive as real cloud draft without uploading matching control metadata',async()=>{
+test('reopening and resetting matching history never resurrects a deleted cloud work',async()=>{
  const device=memoryDevice(),db=memoryProjects();
- const record=matchingSnapshot({basket:['a']},[{id:'variant',status:'completed',project:work}]);
+ const record=matchingSnapshot({basket:['a']},[{id:'variant',status:'completed',project:work,linkedProjectID:'p'}]);
  await device.put('test-user',record);
  const c=context({},device,db),session=createMatchingSession(c);
- await session.restore();assert.equal(db.projects.size,1);assert.equal(db.writes.length,1);
- assert.equal([...db.projects.values()][0].isDraft,true);
- await createMatchingSession(c).restore();assert.equal(db.projects.size,1,'reload must not duplicate archived draft');
- await session.reset();assert.equal(db.projects.size,1,'reset must retain saved drafts');
+ await session.restore();assert.equal(db.writes.length,0);
+ await createMatchingSession(c).restore();assert.equal(db.writes.length,0);
+ await session.reset();assert.equal(db.writes.length,0);
  assert.deepEqual((await device.get('test-user','matching-session-v1')).variants,[]);
+});
+test('a deleted matching result can be written back only after explicit restoreDeleted',async()=>{
+ const device=memoryDevice(),writes=[];
+ const db={transaction:async(names,fn)=>{
+   assert.deepEqual(names,['projects','meta','trash']);
+   fn({objectStore:store=>({
+     put:record=>writes.push([store,'put',record.id]),
+     delete:id=>writes.push([store,'delete',id])
+   })});
+ }};
+ const restoredWork={...work,title:'手工搭配',isDraft:true};
+ await device.put('test-user',matchingSnapshot({},[{id:'variant',status:'completed',project:restoredWork,linkedProjectID:'p'}]));
+ const c=context({projects:[],trash:[{id:'trash-p',kind:'project',item:restoredWork}]},device,db);
+ c.toast=()=>{};
+ const session=createMatchingSession(c);await session.restore();
+ await session.open('variant');
+ assert.equal(writes.length,0,'opening the local history is not permission to resurrect a deleted work');
+ assert.equal(await session.restoreDeleted('variant'),true);
+ assert.deepEqual(writes,[['meta','delete','tombstone:projects:p'],['trash','delete','trash-p'],['projects','put','p']]);
+ assert.equal(c.state.projects.length,1);
+ assert.equal(await session.restoreDeleted('variant'),false,'repeat recovery must be a no-op');
 });
 test('failed local session writes roll back UI state and do not delete cloud works',async()=>{
  const device=memoryDevice(),db=memoryProjects(),c=context({basket:['a'],coreIDs:['a'],matchCore:'a'},device,db);

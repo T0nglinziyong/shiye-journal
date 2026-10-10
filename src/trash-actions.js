@@ -9,10 +9,10 @@ export function expiredTrash(entries,now=Date.now()){
 export async function changeTrash({db,state,ids,recover=false}){
   const chosen=state.trash.filter(entry=>ids.includes(entry.id));
   if(!chosen.length)return 0;
-  const names=recover?['assets','projects','trash']:['trash'];
+  const names=recover?['assets','projects','trash','meta']:['trash'];
   await db.transaction(names,tx=>{
     for(const entry of chosen){
-      if(recover)tx.objectStore(entry.kind==='asset'?'assets':'projects').put(entry.item);
+      if(recover){const store=entry.kind==='asset'?'assets':'projects';tx.objectStore('meta').delete('tombstone:'+store+':'+entry.item.id);tx.objectStore(store).put(entry.item);}
       tx.objectStore('trash').delete(entry.id);
     }
   });
