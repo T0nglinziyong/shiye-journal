@@ -106,7 +106,7 @@ export function createMatchingSession(c){
     ensureAccount();
     let steps='';const output=await c.runCreativeAgent({...cfg,draft:p.drafts[0],assets:assetsSnapshot,aliases,styles:p.styles,pagePurposes:p.purposes,contentPolicy:p.contentPolicy||'documentary',userText:p.userText||'',providedFacts:p.providedFacts||'',requiredAssetIDs:p.requiredAssetIDs,materialPriority:p.materialPriority,processing:p.processing,assetProcessing:p.assetProcessing,materialUseHints:p.materialUseHints,materialUseRequired:p.materialUseRequired,prompt:p.intent||'',images,referenceImages:references,userTemplates:templatesSnapshot,request:recorder.request,signal:run.signal,
      onResponse:recorder.response,
-     onPlanning:plan=>{v.progress=(plan?.selected?
+     onPlanning:plan=>{steps=plan?.selected?'构思 · '+plan.selected.title+'\n':'';v.progress=(plan?.selected?
        '已比较 '+plan.concepts.length+' 个设计方向：'+plan.selected.title+'。开始制作可编辑页面…':
        '已跳过不可用的构思阶段，继续可编辑创作。');
        const el=document.querySelector(`[data-variant="${v.id}"] .match-progress`);
