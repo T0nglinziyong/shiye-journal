@@ -73,6 +73,7 @@ export function generateMaterialProposals({
  pageRatio='a4',pageMode='single',history=[],batch=0,count=4
 }={}){
  const excludedSet=new Set(excluded);
+ if(coreIDs.some(id=>excludedSet.has(id)))return [];
  const preferred=uniq(basket).filter(id=>!excludedSet.has(id));
  const mandatory=uniq(coreIDs).filter(id=>preferred.includes(id));
  const allowed=assets.filter(a=>a?.id&&!excludedSet.has(a.id)&&!a.isProjectInternal&&
