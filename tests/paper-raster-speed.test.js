@@ -24,10 +24,12 @@ function paperFixture(width,height){
   return {points,gray,lines:points.map((p,i)=>[...p,...points[(i+1)%4]]),
     ratio:wide?297/210:210/297};
 }
-test('paper detector uses a fixed 900px raster without high resolution retries',async()=>{
+test('paper detector restores ca0f 800px first; only on failure checks 900px',async()=>{
   const perspective=await source('perspective.js');
-  assert.match(perspective,/PAPER_DETECTION_LONG_EDGE=900/);
-  assert.match(perspective,/const scale=PAPER_DETECTION_LONG_EDGE\/Math\.max\(bitmap\.width,bitmap\.height\)/);
+  assert.match(perspective,/PAPER_DETECTION_LONG_EDGE=800/);
+  assert.match(perspective,/PAPER_RETRY_LONG_EDGE=900/);
+  assert.match(perspective,/for\(const longest of \[PAPER_DETECTION_LONG_EDGE,PAPER_RETRY_LONG_EDGE\]\)/);
+  assert.match(perspective,/if\(corners\)return corners/);
   assert.doesNotMatch(perspective,/for\(const maxEdge of \[800,1200,1600\]\)/);
 });
 test('fixed-raster paper-line fallback detects landscape and portrait with four real edges',()=>{
