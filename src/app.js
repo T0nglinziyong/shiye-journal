@@ -1648,7 +1648,7 @@ document.querySelectorAll('.main-nav button').forEach(b=>b.onclick=()=>{
   }else route(b.dataset.route);
 });
 document.querySelector('#top-basket').onclick=()=>route('matching');document.querySelector('#top-settings').onclick=()=>route('settings');
-async function init(user){let cachedShown=false;cloudSessionReady=true;const accountId=user?.id||'browser';if(state.accountId&&state.accountId!==accountId){deferredSyncedPreferences=null;assetOrganization.clear();clearJournalTemplateImages();clearJournalPresetImages();state.userTemplates=[];}state.accountId=accountId;try{
+async function init(user){let cachedShown=false;cloudSessionReady=true;const accountId=user?.id||'browser';if(state.accountId&&state.accountId!==accountId){Object.assign(lastMaterialLocation,{route:'series',seriesID:'all',libraryTab:'series'});parity.libraryTab='series';deferredSyncedPreferences=null;assetOrganization.clear();clearJournalTemplateImages();clearJournalPresetImages();state.userTemplates=[];}state.accountId=accountId;try{
   await db.storageMode();state.selfHosted=db.isSameOriginServer();
   // startCloudSession has validated Auth and the allowlist before this runs.
   const cached=await db.cachedCollections();if(cached){Object.assign(state,cached);state.accountId=accountId;await restorePendingProjects();for(const a of state.assets)if(a.staticPath)staticSources.set(a.blobId,a.staticPath);render();cachedShown=true;saveStatus('本机缓存 · 正在核对云端');}
