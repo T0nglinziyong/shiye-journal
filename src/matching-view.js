@@ -30,27 +30,6 @@ export function renderMatchingPage({state,head,imgTag,esc,kindName,session}){
   const suggestionCard=r=>{const a=r.asset,isExcluded=excluded.has(a.id);return `<div class="match-rec" data-match-asset="${esc(a.id)}">${imgTag(a)}<div><strong>${esc(a.title)}</strong><small class="match-type">${kindName(a.kind)}</small>${isExcluded?'<small class="match-priority excluded">不可以使用</small>':''}<small title="${esc(r.reasons.join('、'))}">${esc(r.reasons.slice(0,2).join(' · ')||'适合当前方向')}</small><button data-act="basket" data-id="${esc(a.id)}">加入素材篮</button><button data-act="${isExcluded?'match-allow':'match-skip'}" data-id="${esc(a.id)}">${isExcluded?'恢复推荐':'不使用'}</button></div></div>`;};
   const recommendationsView=`<section class="panel match-recommendations"><div class="match-panel-head"><h3>✣　按风格与用途推荐</h3><small>${recommendations.length} 件候选 · 已排除 ${excluded.size} 件</small></div><div class="match-chips" data-match-scroll="chips">${filters.map(cat=>`<button class="${state.recommendFilter===cat?'active':''}" data-act="match-filter" data-val="${cat}">${cat}</button>`).join('')}</div><div class="match-rec-grid" data-match-scroll="recommendations">${filtered.map(suggestionCard).join('')||'<p>这一类暂时没有候选；可以更换风格、用途或继续从素材库选取。</p>'}</div></section>`;
   const basket=`<aside class="basket"><h3>本次素材篮</h3><div class="match-basket-scroll" data-match-scroll="basket">${selected.map(basketCard).join('')||'<p>先从右侧建议或素材库选择。点星号可设为每版必用。</p>'}</div><p class="muted">必须 ${scope.required.length} · 优先 ${scope.preferred.length} · ${state.aiSettings.autoIncludeRecommendations?'AI 备选 '+scope.available.length:'AI 备选未开启'} · 不使用 ${excluded.size}</p></aside>`;
-  const proposals=Array.isArray(state.matchProposals)?state.matchProposals:[];
-  const visibleProposals=proposals.slice(0,state.matchProposalHistoryExpanded?24:6);
-  const proposalCards=visibleProposals.map(proposal=>{
-    const chosen=proposal.selectedAssetIDs.map(id=>state.assets.find(asset=>asset.id===id)).filter(Boolean);
-    const missing=chosen.length!==proposal.selectedAssetIDs.length||
-      proposal.requiredAssetIDs.some(id=>!chosen.some(item=>item.id===id)||excluded.has(id));
-    return `<article class="match-proposal-card" data-proposal="${esc(proposal.id)}">
-      <div class="match-proposal-head"><strong>${esc(proposal.title)}</strong><small>${chosen.length} 件素材 · ${proposal.requiredAssetIDs.length} 件必用</small></div>
-      <p>${esc(proposal.concept)}</p>
-      <div class="match-proposal-assets">${chosen.slice(0,9).map(asset=>`<span title="${esc(asset.title)}">${imgTag(asset)}</span>`).join('')}</div>
-      <small>${esc(proposal.rationale)}</small>
-      <button type="button" class="btn" data-act="match-propose-apply" data-id="${esc(proposal.id)}" ${missing?'disabled':''}>${missing?'素材已变化':'使用这组素材'}</button>
-    </article>`;
-  }).join('');
-  const proposalsView=`<section class="panel match-proposals">
-    <div class="match-panel-head"><h2>搭配灵感</h2><small>本机组合评分 · 不调用 AI</small></div>
-    <p>从主题、实物尺寸和素材角色出发组合，不强制用满素材篮；已标星的素材始终保留。</p>
-    <div class="match-proposals-actions"><button type="button" class="btn primary" data-act="match-propose">${proposals.length?'重新生成':'生成搭配方案'}</button>
-    <button type="button" class="btn" data-act="match-propose-more">再试一批</button>${proposals.length>6?`<button type="button" class="btn" data-act="match-propose-history-toggle">${state.matchProposalHistoryExpanded?'收起历史':'展开全部历史'}</button>`:''}<small>保留最近 ${proposals.length} / 24 个方案</small></div>
-    <div class="match-proposal-grid" data-match-scroll="proposals">${proposalCards||'<p>选择素材后点击生成；你也可以跳过搭配灵感直接创作。</p>'}</div>
-  </section>`;
   const action=`<section class="panel match-action"><h2>开始创作</h2><p>${state.aiSettings.requireAllCandidates?'当前候选素材均为必用；如无法在真实纸张上容纳，请减少候选或关闭设置中的必用开关。':'标星的素材必须使用；其余候选尽量使用，但不强制用尽。'}不使用的素材不会发送给 AI。</p><div class="match-generate"><button class="btn primary" data-act="match-generate" ${scope.candidateAssetIDs.length?'':'disabled'}>进行AI创作</button><button class="btn" data-act="match-export-gpt" ${scope.candidateAssetIDs.length?'':'disabled'}>导出给网页版 AI</button><button class="btn" data-act="match-import-gpt">导入 AI 结果</button><button class="btn" data-act="create-from-basket" ${selected.length?'':'disabled'}>不使用 AI，手动创作</button></div></section>`;
-  return `<div class="matching-page ${state.matchRatio==='custom'||state.matchRatio.startsWith('custom:')?'custom-paper':''}">${head('素材搭配','先确定方向，再挑选这页需要的素材。',`<button class="btn" data-act="reset-match">↶　重新搭配</button>`)}${direction}<div class="matching-layout">${basket}${recommendationsView}</div>${proposalsView}${action}${session.render()}</div>`;
+  return `<div class="matching-page ${state.matchRatio==='custom'||state.matchRatio.startsWith('custom:')?'custom-paper':''}">${head('素材搭配','先确定方向，再挑选这页需要的素材。',`<button class="btn" data-act="reset-match">↶　重新搭配</button>`)}${direction}<div class="matching-layout">${basket}${recommendationsView}</div>${action}${session.render()}</div>`;
 }

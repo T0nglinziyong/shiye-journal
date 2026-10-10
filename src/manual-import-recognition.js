@@ -46,6 +46,54 @@ export function manualBoxGeometry(box,{pagePixelWidth=1,pagePixelHeight=1}={}){
     fillRatio:Number.isFinite(box.fillRatio)?box.fillRatio:1
   };
 }
+
+/**
+ * If the automatic refiner cannot segment a user-drawn frame, preserve the
+ * exact rotated rectangle as a visibly flagged candidate. Unlike filling its
+ * axis-aligned bounding box, this mask does not include adjacent materials
+ * in the corners when the user rotates the frame.
+ */
+export function manualFrameFallbackRegion(geometry,{pagePixelWidth=1,pagePixelHeight=1}={}){
+  if(!geometry?.orientedBox||!Number.isFinite(pagePixelWidth)||
+     !Number.isFinite(pagePixelHeight)||pagePixelWidth<=0||pagePixelHeight<=0)
+    throw Error('手动框回退所需的页面尺寸无效');
+  const width=Math.max(1,Math.round(geometry.w*pagePixelWidth));
+  const height=Math.max(1,Math.round(geometry.h*pagePixelHeight));
+  const alpha=new Uint8Array(width*height),o=geometry.orientedBox;
+  const angle=o.rotation*Math.PI/180,c=Math.cos(angle),s=Math.sin(angle);
+  const cx=o.centerX*pagePixelWidth,cy=o.centerY*pagePixelHeight;
+  const halfWidth=o.width*pagePixelWidth/2,halfHeight=o.height*pagePixelHeight/2;
+  for(let y=0;y<height;y++){
+    const py=(geometry.y+(y+.5)*geometry.h/height)*pagePixelHeight;
+    for(let x=0;x<width;x++){
+      const px=(geometry.x+(x+.5)*geometry.w/width)*pagePixelWidth;
+      const dx=px-cx,dy=py-cy;
+      if(Math.abs(dx*c+dy*s)<=halfWidth+1e-6&&
+         Math.abs(-dx*s+dy*c)<=halfHeight+1e-6)alpha[y*width+x]=255;
+    }
+  }
+  return {...geometry,segmentationMethod:'manual-frame-fallback',
+    manualFallback:true,recognitionFallback:true,
+    mask:{width,height,alpha,polygons:[],topologyPreserved:true}};
+}
+
+// A manual correction must survive empty contours, low contrast, and worker
+// failures. Successful CV masks remain untouched; failures preserve the user's
+// geometry and are marked pending review in the import candidate list.
+export async function segmentManualOrFallback(geometry,segment,options={},onFallback=()=>{}){
+  try{
+    const result=await segment(geometry);
+    if(!result?.mask?.alpha?.some(value=>value>16)||
+       !Number.isFinite(result.w)||!Number.isFinite(result.h)||
+       result.w<=0||result.h<=0||result.segmentationFailed)
+      throw Error('分割未返回有效前景');
+    return result;
+  }catch(error){
+    onFallback(error);
+    return manualFrameFallbackRegion(geometry,options);
+  }
+}
+
 export function unchangedManualBox(box,previous){
   const candidate=Number.isInteger(box?.sourceIndex)?previous[box.sourceIndex]:null;
   if(!candidate||box.manualChanged)return null;
