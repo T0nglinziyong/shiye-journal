@@ -93,14 +93,34 @@
     gap:10px;
     padding:10px 0 12px;
   }
-  #view .unified-page-heading .unified-heading-copy{flex:1 1 100%;gap:4px}
+  /* On phones keep the selection/action button to the RIGHT of the
+     heading, not in a new full-width row below its description. */
+  #view .unified-page-heading{
+    display:grid;
+    grid-template-columns:minmax(0,1fr) auto;
+    column-gap:8px;
+    align-items:center;
+  }
+  #view .unified-page-heading .unified-heading-copy{
+    grid-column:1;
+    min-width:0;
+    flex:none;
+    gap:4px;
+  }
   #view .unified-page-heading .unified-heading-copy .eyebrow{font-size:9px}
   #view .unified-page-heading .actions{
-    width:100%;
-    max-width:100%;
-    flex:1 1 100%;
-    justify-content:flex-start;
+    grid-column:2;
+    width:auto;
+    max-width:min(42vw,168px);
+    min-width:0;
+    flex:none;
+    justify-content:flex-end;
     flex-wrap:nowrap;
-    overflow-x:auto;
+    overflow:visible;
+  }
+  #view .unified-page-heading .actions > *{flex-shrink:0}
+  @media(max-width:360px){
+    #view .unified-page-heading .actions{max-width:38vw}
+    #view .unified-page-heading .actions .btn{padding-inline:9px}
   }
 }
