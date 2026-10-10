@@ -160,11 +160,26 @@ async function reconcileImport(batch,operationID,baseRevision){
     // can contain disjoint assets and projects: a stale item must not block
     // independent updates or a newer item in the same transaction.
     const operations=[];
+    // A queued explicit restore contains BOTH meta:tombstone delete and the
+    // corresponding record PUT. It may follow an unacknowledged delete.
+    const restorePairs=new Set(batch.operations.filter(op=>op.action==='put'&&['assets','series','projects'].includes(op.store))
+      .filter(op=>batch.operations.some(marker=>marker.store==='meta'&&marker.action==='delete'&&marker.id==='tombstone:'+op.store+':'+op.item?.id))
+      .map(op=>op.store+':'+op.item.id));
     for(const op of batch.operations){
       const sameKeyFree=await canRebaseUnchangedKeys({client,owner:user,before:baseRevision,after:latest,operations:[op]});
       if(sameKeyFree){operations.push(op);continue;}
       if(op.action==='clear')return 'conflict';
-      const remote=await cloudRecord(op.store,op.item?.id??op.id);
+      const id=op.item?.id??op.id;
+      if(op.store==='meta'&&op.action==='delete'&&typeof op.id==='string'){
+        const pair=[...restorePairs].find(key=>op.id==='tombstone:'+key);
+        if(pair&&await cloudRecord('meta',op.id)){operations.push(op);continue;}
+      }
+      if(op.action==='put'&&restorePairs.has(op.store+':'+id)){
+        const marker=await cloudRecord('meta','tombstone:'+op.store+':'+id);
+        const live=await cloudRecord(op.store,id);
+        if(marker&&!live){operations.push(op);continue;}
+      }
+      const remote=await cloudRecord(op.store,id);
       const winner=compareRecordEdits(op.item||{updatedAt:op.modifiedAt},remote,{localTimestamp:op.modifiedAt});
       if(winner==='local')operations.push(op);
     }
