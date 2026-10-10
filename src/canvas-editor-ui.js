@@ -288,9 +288,9 @@ export function mountCanvasEditor(c){
       move.onclick=()=>{if(drag||performance.now()<suppressMoveClickUntil)return;moveMenu?.remove();const controls=document.createElement('div');controls.className='canvas-layer-move-actions';controls.append(button('上移一层',()=>{reorder(o.id,ordered[indexOf(o.id)-1]?.value.id);controls.remove();moveMenu=null;}),button('下移一层',()=>{reorder(o.id,ordered[indexOf(o.id)+1]?.value.id,true);controls.remove();moveMenu=null;}));row.append(controls);moveMenu=controls;};
       move.dataset.layerMove='';move.setAttribute('aria-label','调整图层顺序');move.style.touchAction='none';
       let pending=null;
-      // Start a drag by holding anywhere on the thumbnail/drag grip. Previous
-      // code listened only on a narrow ≡ button, so long-pressing the layer
-      // itself simply selected it and could close the popover.
+      // Mouse dragging still starts from the row. Touch must start from
+      // the explicit ≡ grip so a vertical finger swipe over the layer thumbnail
+      // always scrolls the list instead of being intercepted for reordering.
       const beginDrag=()=>{
         if(!pending||drag)return;
         drag={id:o.id,y:pending.y,target:null,moved:false};
