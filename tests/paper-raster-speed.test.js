@@ -27,7 +27,7 @@ function paperFixture(width,height){
 test('paper detector uses a fixed 900px raster without high resolution retries',async()=>{
   const perspective=await source('perspective.js');
   assert.match(perspective,/PAPER_DETECTION_LONG_EDGE=900/);
-  assert.match(perspective,/Math\.min\(1,PAPER_DETECTION_LONG_EDGE\/Math\.max\(bitmap\.width,bitmap\.height\)\)/);
+  assert.match(perspective,/const scale=PAPER_DETECTION_LONG_EDGE\/Math\.max\(bitmap\.width,bitmap\.height\)/);
   assert.doesNotMatch(perspective,/for\(const maxEdge of \[800,1200,1600\]\)/);
 });
 test('fixed-raster paper-line fallback detects landscape and portrait with four real edges',()=>{
