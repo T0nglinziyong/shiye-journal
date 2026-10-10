@@ -119,6 +119,7 @@ export function generateMaterialProposals({
   const proposal={
     id:'proposal-'+batch+'-'+layout.id+'-'+i,
     title:layout.title+' · '+theme(anchor),
+    theme:theme(anchor),
     concept:'以「'+theme(anchor)+'」为视觉起点；'+layout.description,
     layout:layout.id,
     selectedAssetIDs:ids,
