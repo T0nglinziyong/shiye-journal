@@ -45,11 +45,11 @@ export async function refineManualBoxes(boxes,previous,segment){
   const next=[];
   for(let index=0;index<boxes.length;index++){
     const box=boxes[index];
-    const geometry=manualBoxGeometry(box);
     const original=unchangedManualBox(box,previous);
     if(original){
       next.push({region:original.region,original});continue;
     }
+    const geometry=manualBoxGeometry(box);
     const region=await segment(geometry,index,box);
     if(!region?.mask?.alpha?.length||!Number.isFinite(region.w)||!Number.isFinite(region.h))
       throw Error('第 '+(index+1)+' 个旋转框没有得到有效素材轮廓；原素材未修改');
