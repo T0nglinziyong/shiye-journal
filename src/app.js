@@ -1391,19 +1391,23 @@ function bindManualBox(){mountImportBoxEditor({state,view,render,saveActiveImpor
 async function refreshImportCandidates(regions,{manual=false,analysisRaster=null}={}){
   const source=state.correctedBitmap||state.importBitmap,b=state.correctedBitmap?{x:0,y:0,w:1,h:1}:state.importBox,previous=state.importCandidateData||[],record=state.importRecords[state.importIndex];
   const next=[];const [pw,ph]=paperDimensions(),calibrated=state.paperSize!=='none'&&(state.correctedBitmap||state.wholePaper);
+  // All manually edited boxes share the exact same page raster and settings.
+  // Memoize its expensive full-page readback/resize once per edit batch.
+  let manualAnalysisPromise=null;
   const plans=manual?await refineManualBoxes(regions,previous,async(box,index)=>{
     {const el=view.querySelector('.import-processing');if(el)el.textContent='正在按旋转框分割 '+(index+1)+' / '+regions.length;}
     const limit=state.preferences.recognitionPixels||900,
       scale=Math.min(1,limit/Math.max(source.width*b.w,source.height*b.h)),
       aw=Math.max(1,Math.round(source.width*b.w*scale)),
       ah=Math.max(1,Math.round(source.height*b.h*scale));
-    const pixels=await analysisPixels(source,b,aw,ah);
+    manualAnalysisPromise||=analysisPixels(source,b,aw,ah);
+    const pixels=await manualAnalysisPromise;
     if(!hasManualForegroundEvidence(pixels,aw,ah,box))throw Error('第 '+(index+1)+' 个框内没有找到可靠素材；请贴近素材重画');
     const orientedBox={centerX:box.x+box.w/2,centerY:box.y+box.h/2,
         width:box.w,height:box.h,rotation:box.rotation||0,
         rectangularity:1,autoDeskew:true,source:'manual'},
       [candidate]=await visionTask('process-material-boxes',{
-        pixels,sourcePixels:pixels,width:aw,height:ah,
+        pixels,sourcePixels:pixels,width:aw,height:ah,manualEdit:true,
         boxes:[{x:box.x,y:box.y,w:box.w,h:box.h,orientedBox,
           seedDensity:1,fillRatio:1}],method:state.importRecognition||'morphgac',
         paperWidthMM:pw,paperHeightMM:ph,

@@ -40,16 +40,25 @@ export async function detectPaperCandidates(bitmap,box,smallestMM=6,{
   // Box discovery always uses the original rectified RGB. Real-case ablation
   // showed that illumination/CLAHE/denoise can make identity discovery worse.
   // Optional preprocessing therefore affects boundary segmentation only.
-  const candidates=await segmentPaperMaterials(discoveryFrame,{
+  const discovered=await segmentPaperMaterials(discoveryFrame,{
     smallestMM,paperWidthMM,paperHeightMM,sourcePixels:discoveryFrame.data,chromaEdges:preprocess.chromaEdges,mergeSharedCarrier
   });
+  // Automatic-only physical size floor. Reject either side below 8 mm before
+  // costly individual MorphGAC/GrabCut segmentation. Manual edits are not
+  // routed through this function and remain explicitly user-authoritative.
+  const candidates=discovered.filter(c=>{
+    const widthMM=(c.orientedBox?.width||c.w)*paperWidthMM;
+    const heightMM=(c.orientedBox?.height||c.h)*paperHeightMM;
+    return Number.isFinite(widthMM)&&Number.isFinite(heightMM)&&
+      widthMM>=8&&heightMM>=8;
+  });
   onDiagnostic({phase:'boxes',count:candidates.length,
-    dimensions:[dw,dh],refinementDimensions:[w,h],mode:profile.mode,smallestMM,
+    dimensions:[dw,dh],refinementDimensions:[w,h],mode:profile.mode,smallestMM,minimumAutoSideMM:8,filteredBelow8MM:discovered.length-candidates.length,
     boxes:candidates.map(item=>({x:item.x,y:item.y,w:item.w,h:item.h,
       evidenceDensity:item.evidenceDensity,seedDensity:item.seedDensity,
       fillRatio:item.fillRatio,absorbedFragments:item.absorbedFragments}))});
-  return profile.refineCandidates&&candidates.length
-    ? profile.refineCandidates({
+  const refined=profile.refineCandidates&&candidates.length
+    ? await profile.refineCandidates({
         candidates,
         frame:segmentationFrame,
         sourceFrame:frame,
@@ -60,6 +69,11 @@ export async function detectPaperCandidates(bitmap,box,smallestMM=6,{
         onProgress
       })
     : candidates;
+  // Refined contours may shrink below the discovery rectangle. Enforce the
+  // same automatic 8 mm floor on the final real geometry as well.
+  return refined.filter(region=>region&&
+    (region.orientedBox?.width??region.w)*paperWidthMM>=8&&
+    (region.orientedBox?.height??region.h)*paperHeightMM>=8);
 }
 // Output-only subpixel smoothing for jagged free-form cutout pixels.
 // This returns a new buffer and never mutates region.mask.alpha or recognition.
