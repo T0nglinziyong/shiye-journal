@@ -89,3 +89,10 @@ test('12 detected boxes without thumbnails are extracted again without rediscove
   assert.match(app,/if\(state\.importCandidates\.length&&!state\.importCandidateData\.length\)/);
   assert.match(app,/await refreshImportCandidates\(state\.importCandidates\)/);
 });
+test('placeholder paper corners remain unaccepted until user confirms correction',async()=>{
+  const app=await readFile(new URL('../src/app.js',import.meta.url),'utf8');
+  assert.match(app,/rec\.paperNeedsReview\|\|!state\.paperCorners/);
+  assert.match(app,/!state\.correctedBitmap&&state\.paperCorners&&state\.paperSize!=='none'&&!rec\.paperNeedsReview/);
+  assert.match(app,/rec\.backgroundDetected=true;rec\.paperNeedsReview=false/);
+  assert.match(app,/rec\.paperNeedsReview\|\|!corners/);
+});
