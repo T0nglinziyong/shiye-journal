@@ -97,3 +97,26 @@ end;
 $$;
 revoke all on function public.shiye_commit(jsonb,bigint) from public,anon;
 grant execute on function public.shiye_commit(jsonb,bigint) to authenticated;
+
+
+-- Backfill still-pending legacy deletions. Skip restored live rows; an old trash
+-- card by itself is NOT proof that the active record has been deleted.
+insert into public.shiye_records (user_id,store,id,record)
+select t.user_id,'meta',
+  'tombstone:'||case when t.record->>'kind'='asset' then 'assets' else 'projects' end||':'||(t.record->'item'->>'id'),
+  jsonb_build_object(
+    'id','tombstone:'||case when t.record->>'kind'='asset' then 'assets' else 'projects' end||':'||(t.record->'item'->>'id'),
+    'store',case when t.record->>'kind'='asset' then 'assets' else 'projects' end,
+    'targetID',t.record->'item'->>'id','kind','tombstone',
+    'deletedAt',coalesce(t.record->>'date',now()::text))
+from public.shiye_records t
+where t.store='trash'
+  and t.record->>'kind' in ('asset','project')
+  and nullif(t.record->'item'->>'id','') is not null
+  and not exists (
+    select 1 from public.shiye_records live
+    where live.user_id=t.user_id
+      and live.store=case when t.record->>'kind'='asset' then 'assets' else 'projects' end
+      and live.id=t.record->'item'->>'id'
+  )
+on conflict (user_id,store,id) do nothing;
