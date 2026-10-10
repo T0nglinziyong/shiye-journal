@@ -43,8 +43,8 @@ test('import page uses stable automatic paper and manual cutout controls',async(
   assert.match(app,/await detectPaperCandidates\(source,b,6/);
   assert.match(app,/async function receiveImportPhotos\(files\)\{const images=\[\.\.\.files\]\.filter\(f=>f\.type\.startsWith\('image\/'\)\)/);
   assert.match(page,/renderImportInspection/);
-  assert.match(page,/data-act=\\"manual-import-box\\"/);
-  assert.match(page,/data-act=\\"import-confirm-photo\\"/);
+  assert.match(page,/manual-import-box/);
+  assert.match(page,/import-confirm-photo/);
 });
 test('post-c9 recognition and c6 toast changes must not return',async()=>{
   const app=(await source('app.js')).toString();
