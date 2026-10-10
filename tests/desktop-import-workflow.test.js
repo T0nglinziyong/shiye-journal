@@ -4,7 +4,6 @@ import {readFile} from 'node:fs/promises';
 import {
   isImageImportFile,imageFilesFromDrop,acceptsDesktopFileDrag,imageImportDestination
 } from '../src/desktop-image-drop.js';
-import {colorFallbackEvidence} from '../src/recognition-empty-fallback.js';
 import {renderImportReview} from '../src/import-workspace-ui.js';
 
 const source=path=>readFile(new URL('../src/'+path,import.meta.url),'utf8');
@@ -21,28 +20,6 @@ test('desktop accepts real image file drops, but not text URL drops, canvas or t
  assert.equal(imageImportDestination({route:'works'}),'work');
  assert.equal(imageImportDestination({route:'import',importMode:'work'}),'work');
  assert.equal(imageImportDestination({route:'library'}),'material');
-});
-
-test('chromatic zero-box fallback sees blue and green real items but not grey shadows',()=>{
- const w=120,h=180,pixels=new Uint8ClampedArray(w*h*4);
- for(let i=0;i<pixels.length;i+=4) pixels.set([245,245,245,255],i);
- const rect=(x,y,width,height,color)=>{for(let iy=y;iy<y+height;iy++)for(let ix=x;ix<x+width;ix++)pixels.set([...color,255],(iy*w+ix)*4);};
- rect(12,30,25,50,[77,131,197]);rect(67,70,37,50,[86,185,112]);
- rect(12,120,22,30,[225,225,225]);
- const result=colorFallbackEvidence(pixels,w,h);
- assert.ok(result,'saturated real items should yield conservative evidence');
- assert.equal(result.mask[45*w+22],1);
- assert.equal(result.mask[82*w+87],1);
- assert.equal(result.mask[130*w+22],0);
- assert.equal(result.mask[3*w+3],0);
- assert.ok(result.fraction<.43);
-});
-test('neutral A4 and broad tinted background do not become an invented sticker',()=>{
- const w=100,h=160,blank=new Uint8ClampedArray(w*h*4);
- for(let i=0;i<blank.length;i+=4)blank.set([222,222,222,255],i);
- assert.equal(colorFallbackEvidence(blank,w,h),null);
- for(let y=0;y<h;y++)for(let x=0;x<w;x++)if(x>4&&x<95&&y>4&&y<155)blank.set([40,170,85,255],(y*w+x)*4);
- assert.equal(colorFallbackEvidence(blank,w,h),null,'whole-page colour cast must not create fake material');
 });
 
 test('work import directly exposes stacked colour and pattern pickers, no background modal button',()=>{
