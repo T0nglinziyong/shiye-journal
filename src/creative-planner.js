@@ -64,7 +64,7 @@ export function designPlanningMessages({
 }
 export async function planCreativeDirections({
  qualityMode='balanced',key,endpoint,model,request=fetch,signal,
- requestTimeout=75,maxTokens=6000,onProgress,images=[],...options
+ requestTimeout=75,maxTokens=6000,onProgress,onResponse,images=[],...options
 }={}){
  const profile=creativeQualityProfile(qualityMode);
  if(!profile.plan)return null;
@@ -74,6 +74,7 @@ export async function planCreativeDirections({
  const payload={model,messages,temperature:.85,max_tokens:Math.min(2600,Math.max(800,maxTokens)),
    response_format:{type:'json_object'},stream:false};
  const response=await requestChat({endpoint,key,payload,request,signal,timeout:requestTimeout,onProgress});
+ await onResponse?.(response);
  const raw=response.choices?.[0]?.message?.content;
  if(response.choices?.[0]?.finish_reason==='length')throw Error('创作构思被截断');
  const parsed=typeof raw==='string'?JSON.parse(raw.replace(/^\x60\x60\x60(?:json)?\s*|\s*\x60\x60\x60$/g,'')):raw;
