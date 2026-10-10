@@ -62,6 +62,7 @@ import {classifyRecord} from './classification.js';
 import {mountPaperCorrection,resetPaperCorrection} from './paper-ui.js';
 import {rectifyA4Frame,suggestPaperCorners} from './perspective.js';
 import {analysisPixels,decodeRecognitionImage,sourcePixels} from './recognition-raster.js';
+import {imageFilesFromDrop,acceptsDesktopFileDrag,imageImportDestination} from './desktop-image-drop.js';
 import {syncCurrentMaterials} from './current-materials.js';
 import {syncCurrentExamples,isUntouchedLegacyExample} from './current-examples.js';
 import {applyToolCalls} from './creative.js';
@@ -1596,6 +1597,50 @@ window.addEventListener('blur',()=>editorPointers.clear());
 const refitEditor=()=>{if(state.route!=='editor'||document.activeElement?.isContentEditable||state.editingTextID)return;clearTimeout(viewportTimer);viewportTimer=setTimeout(()=>{if(state.route!=='editor'||state.editingTextID)return;if(editorPointers.size){refitEditor();return;}view.editorLayoutSize={width:window.innerWidth,height:window.innerHeight};render();},120);};
 window.addEventListener('resize',refitEditor);
 window.visualViewport?.addEventListener('resize',refitEditor);
+// Desktop file drop is equivalent to the regular import path; no drag
+// target overlays the editing canvas or iPad/Pencil UI.
+function installDesktopImageDrop(){
+  let overlay=null;
+  const desktop=()=>!!window.matchMedia?.('(pointer: fine)').matches;
+  const eligible=event=>acceptsDesktopFileDrag({
+    pointerFine:desktop(),types:event.dataTransfer?.types||[],route:state.route
+  });
+  const show=()=>{
+    if(overlay)return;
+    overlay=document.createElement('div');overlay.className='desktop-image-drop-overlay';
+    overlay.setAttribute('aria-hidden','true');
+    const label=document.createElement('strong');label.textContent='松开即可导入图片 · 最多 12 张';
+    overlay.append(label);document.body.append(overlay);
+  };
+  const hide=()=>{overlay?.remove();overlay=null;};
+  document.addEventListener('dragenter',event=>{if(eligible(event))show();});
+  document.addEventListener('dragover',event=>{
+    if(!eligible(event))return;
+    event.preventDefault();if(event.dataTransfer)event.dataTransfer.dropEffect='copy';show();
+  });
+  document.addEventListener('dragleave',event=>{if(event.relatedTarget===null)hide();});
+  window.addEventListener('blur',hide);
+  document.addEventListener('drop',async event=>{
+    const allowed=eligible(event);hide();
+    if(!allowed)return;
+    event.preventDefault();event.stopPropagation();
+    const destination=imageImportDestination({route:state.route,importMode:state.importMode});
+    const free=state.route==='import'&&state.importStep==='inspect'
+      ?Math.max(0,12-state.importRecords.length):12;
+    const images=imageFilesFromDrop(event.dataTransfer,free);
+    if(!images.length){
+      toast(free===0?'本批最多导入 12 张，请先完成或取消本批':'请拖入 PNG、JPEG、WebP 等图片');
+      return;
+    }
+    try{
+      if(state.route!=='import'||state.importStep==='done'){
+        resetImportBatch();state.importMode=destination;route('import');
+      }
+      await receiveImportPhotos(images);
+    }catch(error){console.error('拖入图片失败',error);toast('图片导入失败：'+error.message);}
+  });
+}
+installDesktopImageDrop();
 document.querySelectorAll('.main-nav button').forEach(b=>b.onclick=()=>{
   if(b.dataset.route==='library'){
     if(['library','series'].includes(state.route))return; // keep current tab
