@@ -30,10 +30,10 @@ export function createMatchingSession(c){
  const archiveCompleted=async()=>{await queue;for(const v of variants.filter(v=>v.status==='completed')){if(v.linkedProjectID&&c.state.projects.some(p=>p.id===v.linkedProjectID))continue;const p=variantDraftProject(v,null,v.linkedProjectID||c.uid());v.linkedProjectID=p.id;await c.db.transaction(['projects'],tx=>tx.objectStore('projects').put(p));c.state.projects.push(p);
       try{await device.put(account(),matchingSnapshot(c.state,variants));}
       catch(error){console.warn('完成的作品已存入云端，本机搭配索引暂未保存',error);}}};
- const markup=()=>`<h2>版本方案</h2><p>完成方案自动保存为草稿或快照；“重新搭配”只清空这里的方案，不删除已保存作品。</p><div class="match-variant-grid">${variants.map(v=>`<article class="match-variant" data-variant="${c.esc(v.id)}"><button class="match-result" data-act="match-open-result" data-id="${c.esc(v.id)}" ${v.status==='running'?'disabled':''}><div class="match-cover-preview" data-match-raster="${c.esc(v.id)}">${covers.render(v.project)}</div><strong>${c.esc(v.title)}</strong></button><pre class="match-progress" aria-live="polite">${c.esc(v.progress)}</pre>${v.status==='running'?'<button class="btn" data-act="match-stop">停止创作</button>':v.project.deliveryMode==='zip'?`<button class="btn" data-act="download-project-zip" data-id="${c.esc(v.linkedProjectID||v.project.id)}">下载可编辑 ZIP</button>`:''}</article>`).join('')||'<p>尚未生成方案。</p>'}</div>`;
+ const markup=()=>`<h2>版本方案</h2><p>完成方案自动保存为草稿或快照；“重新搭配”只清空这里的方案，不删除已保存作品。</p><div class="match-variant-grid">${variants.map(v=>`<article class="match-variant" data-variant="${c.esc(v.id)}"><button class="match-result" data-act="match-open-result" data-id="${c.esc(v.id)}" ${v.status==='running'?'disabled':''}><div class="match-cover-preview" data-match-raster="${c.esc(v.id)}">${covers.render(v.project)}</div><strong>${c.esc(v.title)}</strong></button><pre class="match-progress" aria-live="polite">${c.esc(v.progress)}</pre>${v.linkedProjectID&&!c.state.projects.some(p=>p.id===v.linkedProjectID)?`<button class="btn" data-act="match-restore" data-id="${c.esc(v.id)}">恢复已删除作品</button>`:''}${v.status==='running'?'<button class="btn" data-act="match-stop">停止创作</button>':v.project.deliveryMode==='zip'?`<button class="btn" data-act="download-project-zip" data-id="${c.esc(v.linkedProjectID||v.project.id)}">下载可编辑 ZIP</button>`:''}</article>`).join('')||'<p>尚未生成方案。</p>'}</div>`;
  const update=()=>{if(c.state.route!=='matching')return;const el=document.querySelector('.match-previews');if(el){el.innerHTML=markup();reusePagePreviews({view:el,state:c.state});covers.hydrate(el,variants);el.onclick=e=>{const b=e.target.closest('[data-act]');if(b)c.handle(b.dataset.act,b.dataset.id);};c.mountIcons?.(el);}};
  return {
-  async restore({archive=true}={}){covers.clear();const record=await device.get(account(),ID);for(const key of KEYS)if(defaults[key]!==undefined)c.state[key]=structuredClone(defaults[key]);variants=restoreMatchingSession(record,c.state);if(archive)await archiveCompleted();lastSnapshot=JSON.stringify(matchingSnapshot(c.state,variants));ready=true;},
+  async restore(){covers.clear();const record=await device.get(account(),ID);for(const key of KEYS)if(defaults[key]!==undefined)c.state[key]=structuredClone(defaults[key]);variants=restoreMatchingSession(record,c.state);lastSnapshot=JSON.stringify(matchingSnapshot(c.state,variants));ready=true;},
   render(){return `<section class="panel match-previews">${markup()}</section>`;},
   hydrate(root){covers.hydrate(root,variants);},
   cacheStats:covers.stats,
@@ -59,9 +59,23 @@ export function createMatchingSession(c){
     try{await save();}catch(error){console.warn('云端作品已保存，本机搭配记录待重试',error);}
     update();
   },
+  async restoreDeleted(id){
+    const v=variants.find(row=>row.id===id);
+    if(!v||v.status!=='completed'||!v.linkedProjectID||c.state.projects.some(p=>p.id===v.linkedProjectID))return false;
+    const recovered=variantDraftProject(v,null,v.linkedProjectID);
+    const trashEntries=(c.state.trash||[]).filter(row=>row.kind==='project'&&row.item?.id===recovered.id);
+    await c.db.transaction(['projects','meta','trash'],tx=>{
+      tx.objectStore('meta').delete('tombstone:projects:'+recovered.id);
+      for(const row of trashEntries)tx.objectStore('trash').delete(row.id);
+      tx.objectStore('projects').put(recovered);
+    });
+    c.state.trash=c.state.trash.filter(row=>!trashEntries.includes(row));
+    c.state.projects.push(recovered);
+    await save();update();return true;
+  },
   stop(){controller?.abort(Error('已停止创作，成功步骤已保留'));},
-  async reset(clearContext=()=>{}){await archiveCompleted();const before=matchingSnapshot(c.state,variants),saved=variants;clearContext();variants=[];try{await save();covers.clear();}catch(error){variants=saved;restoreMatchingSession(before,c.state);throw error;}controller?.abort(Error('已重新搭配'));},
-  async open(id){const v=variants.find(x=>x.id===id);if(!v||v.status==='running'||opening)return;opening=true;try{await queue;await c.flushSave();const existing=c.state.projects.find(p=>p.id===v.linkedProjectID);if(v.project.isSnapshot){c.state.previewProjectID=existing?.id||v.project.id;c.route('projectPreview');return;}const p=variantDraftProject(v,existing,c.uid());v.linkedProjectID=p.id;await c.db.transaction(['projects'],tx=>tx.objectStore('projects').put(p));
+  async reset(clearContext=()=>{}){const before=matchingSnapshot(c.state,variants),saved=variants;clearContext();variants=[];try{await save();covers.clear();}catch(error){variants=saved;restoreMatchingSession(before,c.state);throw error;}controller?.abort(Error('已重新搭配'));},
+  async open(id){const v=variants.find(x=>x.id===id);if(!v||v.status==='running'||opening)return;opening=true;try{await queue;await c.flushSave();const existing=c.state.projects.find(p=>p.id===v.linkedProjectID);if(v.linkedProjectID&&!existing){c.toast('这份作品已被删除，必须主动选择恢复后才能打开');return;}if(v.project.isSnapshot){c.state.previewProjectID=existing?.id||v.project.id;c.route('projectPreview');return;}const p=variantDraftProject(v,existing,c.uid());v.linkedProjectID=p.id;await c.db.transaction(['projects'],tx=>tx.objectStore('projects').put(p));
     await device.put(account(),matchingSnapshot(c.state,variants));
     if(!existing?.isDraft)c.state.projects.push(p);c.state.activeProject=p;c.state.activeDraft=p.activeDraftID;c.state.offlineEditingReturnID=p.offlineBundleId?p.id:null;c.state.selected=null;c.state.undo=[];c.state.redo=[];c.state.tool='select';c.state.zoom=1;c.route('editor');}finally{opening=false;}},
   async generate(){
