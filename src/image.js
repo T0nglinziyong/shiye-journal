@@ -47,6 +47,7 @@ export async function detectPaperCandidates(bitmap,box,smallestMM=6,{
     // a full-page sticker.
     const fallback=colorFallbackEvidence(discoveryPixels,dw,dh);
     if(fallback){
+      try{
       const discovered=await visionTask('boxes-simple',{
         ...fallback,width:dw,height:dh,smallestMM,
         paperWidthMM,paperHeightMM,mergeSharedCarrier
@@ -59,6 +60,12 @@ export async function detectPaperCandidates(bitmap,box,smallestMM=6,{
       }).slice(0,32);
       onDiagnostic({phase:'chromatic-fallback',count:candidates.length,
         pixelFraction:fallback.fraction,backgroundRGB:fallback.backgroundRGB});
+      }catch(error){
+        // A last-resort recognizer cannot turn a recoverable empty result into
+        // a broken import session. The manual editor remains available.
+        console.warn('额外颜色候选识别不可用，请尝试手动补框',error);
+        candidates=[];
+      }
     }
   }
   onDiagnostic({phase:'boxes',count:candidates.length,
