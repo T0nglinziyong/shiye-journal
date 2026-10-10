@@ -54,11 +54,14 @@ export function createSelectionSidePanels(menu,{makeAction,anchor}){
     panel.setAttribute('role','menu');panel.setAttribute('aria-label',title);
     const header=document.createElement('div');header.className='selection-side-heading';
     header.textContent=title;panel.append(header);
-    const list=document.createElement('div');list.className='selection-side-list';panel.append(list);
+    const pinnedList=document.createElement('div');pinnedList.className='selection-side-pinned';
+    const list=document.createElement('div');list.className='selection-side-list';
+    if(pinned)panel.append(pinnedList);
+    panel.append(list);
     for(const [index,[label,run]] of options.entries()){
       const button=makeAction(label,async()=>{await run();});
-      if(index<pinned)button.classList.add('selection-submenu-pinned');
-      list.append(button);
+      if(index<pinned){button.classList.add('selection-submenu-pinned');pinnedList.append(button);}
+      else list.append(button);
     }
     trigger.setAttribute('aria-haspopup','menu');
     trigger.setAttribute('aria-expanded','true');
