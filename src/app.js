@@ -1403,13 +1403,9 @@ async function refreshImportCandidates(regions,{manual=false,analysisRaster=null
     manualAnalysisPromise||=analysisPixels(source,b,aw,ah);
     const pixels=await manualAnalysisPromise;
     if(!hasManualForegroundEvidence(pixels,aw,ah,box))throw Error('第 '+(index+1)+' 个框内没有找到可靠素材；请贴近素材重画');
-    const orientedBox={centerX:box.x+box.w/2,centerY:box.y+box.h/2,
-        width:box.w,height:box.h,rotation:box.rotation||0,
-        rectangularity:1,autoDeskew:true,source:'manual'},
-      [candidate]=await visionTask('process-material-boxes',{
+    const [candidate]=await visionTask('process-material-boxes',{
         pixels,sourcePixels:pixels,width:aw,height:ah,manualEdit:true,
-        boxes:[{x:box.x,y:box.y,w:box.w,h:box.h,orientedBox,
-          seedDensity:1,fillRatio:1}],method:state.importRecognition||'morphgac',
+        boxes:[box],method:state.importRecognition||'morphgac',
         paperWidthMM:pw,paperHeightMM:ph,
         shapeRegularization:recognitionPostprocessOptions().shapeRegularization!==false,
         apertures:recognitionPostprocessOptions().apertures!==false
