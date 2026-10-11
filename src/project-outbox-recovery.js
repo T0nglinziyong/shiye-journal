@@ -26,7 +26,15 @@ export function recoverProjectOutbox(rows){
   // Safely upgrade an offline v1 edit into the same saved v2 tree before
   // checking it. Never discard an otherwise complete pending user drawing
   // merely because a new release removed four legacy leaf-array keys.
-  if(row?.record)try{prepareProjectScene(row.record);}catch{return false;}
+  if(row?.record){
+   // An incomplete v1 outbox must NOT become a seemingly complete empty v2
+   // document during migration. Only a complete four-array v1 draft may migrate.
+   for(const d of row.record.drafts||[]){
+    if(!Array.isArray(d?.layers)&&
+      !['items','textBlocks','primitives','strokes'].every(key=>Array.isArray(d?.[key])))return false;
+   }
+   try{prepareProjectScene(row.record);}catch{return false;}
+  }
   return usableProjectSnapshot(row?.record)&&Number.isSafeInteger(row.serial)&&row.serial>0&&Number.isSafeInteger(row.baseRevision)&&row.baseRevision>=0;
  });
  return {rows:kept,removed:(rows||[]).length-kept.length};
