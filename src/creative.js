@@ -8,7 +8,7 @@ import {craftDiagnostic,craftAssert} from './craft-errors.js';
 import {buildCraftEdge,craftPermission,sourceFootprint,sourceIntersectionArea} from './craft-geometry.js';
 import {solveCraftRelations} from './craft-relations.js';
 import {uid,itemFromAsset} from './domain.js';
-import {sceneLayerEntries,sceneLayerStyle,groupSceneLayers,ungroupSceneLayers,validateSceneExtensions} from './scene-model.js';
+import {sceneLayerEntries,sceneLayerStyle,groupSceneLayers,ungroupSceneLayers,validateSceneExtensions,attachSceneV2} from './scene-model.js';
 import {textLines,textFont} from './editor-tools-model.js';
 import {reviewCreativeDraft} from './creative-quality.js';
 import {materialMaskPoints,materialMaskArea,materialMaskGeometry,cutMaterialDiagonal,addMaterialWindow} from './material-mask.js';
@@ -276,7 +276,8 @@ export function normalizeCalls(raw){
   return list.map(x=>({name:x.name||x.function?.name,arguments:x.arguments??x.function?.arguments??{},id:x.id||uid()}));
 }
 export function applyToolCalls(source,base,assets,aliases={},options={}){
-  const calls=normalizeCalls(source),draft=structuredClone(base),results=[];let mutated=false;
+  attachSceneV2(base);
+  const calls=normalizeCalls(source),draft=attachSceneV2(structuredClone(base)),results=[];let mutated=false;
   for(const field of fields)draft[field]||=[];
   // A failed retry is no longer a completed AI run, even though its scene
   // layers remain atomic and unchanged. This status is not a scene mutation.
@@ -297,6 +298,6 @@ export function applyToolCalls(source,base,assets,aliases={},options={}){
         }
       }
       if(outcome.mutation)recordManagedChanges(snapshot,draft);mutated||=outcome.mutation;results.push({id:call.id||uid(),name:call.name,ok:true,detail:outcome.detail,...(outcome.data?{data:outcome.data}:{}),...(warnings.length?{warnings}:{})});
-    }catch(error){for(const k of Object.keys(draft))delete draft[k];Object.assign(draft,snapshot);results.push({id:call.id||uid(),name:call.name,ok:false,detail:error.message,...craftDiagnostic(error)});}
+    }catch(error){for(const k of Object.keys(draft))delete draft[k];Object.assign(draft,snapshot);attachSceneV2(draft);results.push({id:call.id||uid(),name:call.name,ok:false,detail:error.message,...craftDiagnostic(error)});}
   }return {draft,results,committed:mutated};
 }
