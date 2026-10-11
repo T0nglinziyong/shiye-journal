@@ -25,7 +25,7 @@ export function transformSelectedFrame(frame,handle,from,to,{minWidth=4,minHeigh
     const delta=-dx*s+dy*c;
     const height=Math.max(minHeight,Math.min(maxHeight,frame.height-delta));
     const shift=(frame.height-height)/2;
-    return {x:frame.x-shift*s,y:frame.y+shift*c-shift,width:frame.width,height,rotation:frame.rotation||0};
+    return {x:frame.x-shift*s,y:frame.y+shift*c+shift,width:frame.width,height,rotation:frame.rotation||0};
   }
   return {...frame};
 }
