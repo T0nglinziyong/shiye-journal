@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {creativeProtocol} from '../src/creative-delivery.js';
-import {agentTools} from '../src/creative-contract.js';
+import {agentTools,directPageContract,validateValue} from '../src/creative-contract.js';
 
 test('creative provider formats are selected independently of the turn loop', () => {
   const native = creativeProtocol({generationMode:'agent', transport:'auto'});
@@ -34,6 +34,7 @@ test('direct editable page remains a single atomic compose call', () => {
   assert.throws(() => direct.calls({content:JSON.stringify({...page, style:'unsupported-style'})}, 1), /未知值/);
   assert.equal(direct.native, false);
   assert.match(direct.instruction, /完整JSON页面数据/);
+  assert.throws(()=>direct.calls({content:JSON.stringify({format:'shiye-craft-plan',version:2})},1),/缺少字段|未通过合同|不允许字段|不匹配|应为/);
 });
 
 test('A-12: auto uses only verified endpoint/model capabilities; explicit override stays possible',()=>{
@@ -45,4 +46,12 @@ test('A-12: auto uses only verified endpoint/model capabilities; explicit overri
  assert.equal(creativeProtocol({...unknown,generationMode:'direct',transport:'json'}).native,false);
  assert.equal(creativeProtocol({endpoint:'https://api.deepseek.com/chat/completions',model:'deepseek-flash',transport:'auto'}).native,true);
  assert.throws(()=>creativeProtocol({endpoint:'https://api.deepseek.com/chat/completions',model:'unknown',transport:'auto',generationMode:'agent'}),error=>error.code==='capability-unverified');
+});
+
+test('freehand drawing retains many independent pressure-aware editable ink strokes',()=>{
+ const stroke={points:[{x:.21,y:.29,pressure:.35},{x:.24,y:.32,pressure:.86},{x:.29,y:.34,pressure:.47}],
+   width:3,color:'#445566',opacity:.8,pen_style:'brush'};
+ const page={version:3,style:'自由构图',intent:null,items:[],graphics:[],ink_strokes:Array.from({length:40},()=>({...stroke,points:stroke.points.map(p=>({...p}))})),text_blocks:[],paper:{color:'#ffffff',pattern:'plain'}};
+ assert.doesNotThrow(()=>validateValue(page,directPageContract));
+ assert.throws(()=>validateValue({...page,ink_strokes:[{...stroke,points:[{x:2,y:0}]}]},directPageContract),/合同不合法|缺少字段/);
 });

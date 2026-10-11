@@ -1,11 +1,11 @@
 import {agentTools, toolContracts, validateValue, directPageContract, directPageToTools} from './creative-contract.js';
 import {verifiedModelCapabilities} from './ai-capabilities.js';
 
-const jsonTools = parsed => parsed?.format==='shiye-craft-plan'?directTools(parsed):parsed.tools || [];
-const directTools = parsed => {
- if(parsed?.format==='shiye-craft-plan'){validateValue(parsed,toolContracts.apply_craft_plan,'$.plan');return [{name:'apply_craft_plan',arguments:parsed}];}
- return directPageToTools(parsed);
-};
+const craftPlanTools=parsed=>{validateValue(parsed,toolContracts.apply_craft_plan,'$.plan');return [{name:'apply_craft_plan',arguments:parsed}];};
+const jsonTools=parsed=>parsed?.format==='shiye-craft-plan'?craftPlanTools(parsed):parsed.tools||[];
+// Direct layout is intentionally a complete editable page, not a second
+// hidden gateway into the agent's craft-plan protocol.
+const directTools=parsed=>directPageToTools(parsed);
 const parseJSON = content => JSON.parse((content || '{}').replace(/^\x60\x60\x60(?:json)?\s*|\s*\x60\x60\x60$/g, ''));
 const callsFromJSON = (message, turn, tools) => tools(parseJSON(message.content)).map((entry, index) => ({
   id:`json-${turn}-${index}`,
@@ -30,7 +30,7 @@ const protocols = {
   },
   directPage:{
     native:false,
-    instruction:`一次返回完整JSON页面数据或工艺计划：可以使用可编辑 page v3，也可以直接使用 shiye-craft-plan v2 工艺计划（含本次看图选区、取材、加工、图文）。不返回Markdown。页面合同：${JSON.stringify(directPageContract)}；计划合同：${JSON.stringify(toolContracts.apply_craft_plan)}`,
+    instruction:`一次返回完整JSON页面数据（page v3），不返回 tools、craft-plan 或 Markdown。页面合同：${JSON.stringify(directPageContract)}`,
     request:() => ({response_format:{type:'json_object'}}),
     calls:(message, turn) => callsFromJSON(message, turn, directTools)
   }

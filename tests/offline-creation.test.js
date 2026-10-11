@@ -85,10 +85,11 @@ test('web handoff exposes mode-specific current schemas and concise instructions
   const direct=await make({p,settings:{generationMode:'direct',includeThumbnails:false}}),directFiles=await filesOf(direct);
   assert.ok(JSON.parse(strFromU8(directFiles['examples/project.shiyeproject.json'])).page);
   assert.ok(JSON.parse(strFromU8(agentFiles['examples/project.shiyeproject.json'])).tools);
-  assert.match(agent.prompts.file,/可下载/);assert.match(agent.prompts.json,/不要生成作品文件/);
-  assert.match(agent.prompts.json,/首先展示/);
-  assert.match(agent.prompts.json,/一个独立的/);
-  assert.match(agent.prompts.json,/紧凑、单行/);
+  assert.match(agent.prompts.file,/作品.shiyeproject.json/);
+  assert.match(agent.prompts.file,/ZIP/);
+  assert.match(agent.prompts.text,/展示/);
+  assert.match(agent.prompts.text,/一个完整的/);
+  assert.match(agent.prompts.text,/单行 JSON/);
   assert.match(strFromU8(agentFiles['START_HERE.txt']),/JSON 代码围栏/);
 });
 
