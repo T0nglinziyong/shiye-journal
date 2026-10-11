@@ -323,7 +323,7 @@ export function applyToolCalls(source,base,assets,aliases={},options={}){
   // layers remain atomic and unchanged. This status is not a scene mutation.
   if(calls.some(c=>c.name!=='inspect_materials')&&draft.agentRun?.status==='finished')draft.agentRun.status='editing';
   for(let n=0;n<calls.length;n++){
-    const call=calls[n],snapshot=structuredClone(draft);
+    const call=calls[n],snapshot=attachSceneV2(structuredClone(draft));
     try{
       if(n>=12)throw Error('每轮最多12个工具调用；此前成功调用已保留');
       if(call.name==='finish_design'&&(n!==calls.length-1||results.some(r=>!r.ok)))throw Error('finish_design 必须是最后调用，且本轮前序调用全部成功');
