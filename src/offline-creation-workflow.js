@@ -58,7 +58,7 @@ export function offlineCreationWorkflowText({mode='agent',hasImages=true}={}){
     '',
     '【本次唯一输出协议】',
     target,
-    '最终可编辑作品以 project.shiyeproject.json 为权威，source 原样不变；只交付一个最佳画面。若无法运行 Canvas 或缺少中文字库，明确写“真实视觉/字体未验收”。'
+    '最终可编辑作品以 project.shiyeproject.json 为权威，source 原样不变；只交付一个最佳画面。可将其作为独立 .shiyeproject.json 作品文件交付，ZIP 是可选包装形式；复制文本交付同一 JSON。若无法运行 Canvas 或缺少中文字库，明确写“真实视觉/字体未验收”。'
   ].join('\n');
 }
 
