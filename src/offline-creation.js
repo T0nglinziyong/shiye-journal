@@ -1,4 +1,5 @@
 import {previewImageFormat} from './offline-preview.js';
+import {offlineCreationPlanningData,offlineCreationWorkflowText,offlineVisualReviewChecklist} from './offline-creation-workflow.js';
 import {stabilizeImportedCraftScene} from './craft-import-identity.js';
 import {multimodalCraftGuide} from './craft-vision.js';
 import {freezeCraftTask,validateCraftTask,inheritCreationBrief,craftTaskInstructions} from './craft-task.js';
@@ -112,13 +113,16 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
     example.tools[0].arguments.texts=layeredTexts.map((item,index)=>({...item,key:'example-text-'+index}));
   }
   const handoffInstructions=instructions.replace('并在聊天中展示预览图。请勿把整页烘焙为图片。','并交付可编辑场景。请勿把整页烘焙为图片；若不能用同源渲染器生成预览，明确标记待拾页渲染，勿用另一张独立画作冒充预览。').replace('最后按 contract.json 和 example-response.shiyeproject.json 输出。','最后按 contract.json 输出。example-response.shiyeproject.json 仅示意语法字段，不是成品或本次正文；不要照抄示例文字、坐标和构图。').replace('同一条回复先展示最终页面的图片预览。','若有经过同源渲染并核对的最终预览，同一条回复先展示它；否则不要伪造预览，交回拾页生成。').replace('文件模式附可下载的 UTF-8 文件「作品.shiyeproject.json」；复制模式仅给一个单独的','文件模式附可下载的「作品.shiyeproject.zip」，包内放一个 UTF-8 文件 project.shiyeproject.json；复制模式仅给一个单独的').replace('两种方式都只含一个完整 JSON 对象，不是 PDF、HTML 或位图。','文件包内的 project.shiyeproject.json 与复制模式的 JSON 代码块使用相同可编辑图层合同；材料 ID 引用本机高清原图，图形可用 vector_paths 表达自由矢量轮廓。不要只交付 PDF、HTML 或扁平位图。').concat('\n\n【可选离线工具】在已有 Node.js 20+ 的环境中，先将场景保存为任务根目录 project.shiyeproject.json；node runtime/validate.cjs 检查同源结构与现行物理规则，node runtime/pack.cjs 校验后生成可下载 ZIP。这两个工具都不渲染页面、不核对字体或阅读；无法运行时请直接把可编辑场景交回拾页，不要声称已完成视觉验收。');
-  const runtimeCapabilities={schemaHash:source.schemaHash,sourcePixelCoordinates:false,cropPx:false,previewOnly:showImages,runtime:{validate:'node20',render:null,preview:'approximate-svg',browserRender:'shiye-canvas-v2',pack:'node20',visualReview:false},craft:{plan:true,observations:showImages,twoHoleWeave:true,glyphGeometry:'local-font-required'}};
+  const runtimeCapabilities={schemaHash:source.schemaHash,sourcePixelCoordinates:false,cropPx:false,previewOnly:showImages,runtime:{validate:'node20',render:'browser-html-manual',preview:'approximate-svg',browserRender:'shiye-canvas-v2',pack:'node20',visualReview:'manual-required'},craft:{plan:true,observations:showImages,twoHoleWeave:true,glyphGeometry:'local-font-required'}};
   const knowledge={format:'shiye-gpt-task-knowledge',version:2,capabilities:runtimeCapabilities,regions:source.sourceSnapshots.map(snapshot=>({assetID:snapshot.assetID,sourceRevision:snapshot.sourceRevision,anatomy:snapshot.anatomy})),compositionIdeas:compositionIdeas(source),caseStudies:caseStudies(source,selected)};
   if(hasPresets){
     knowledge.abstractTemplates={source:'user-provided-tutorial-images',note:'本次只选少数匹配风格、用途和素材的来源模板；无确证配对时不得猜配或照搬。',templates:selectedTemplates};
     knowledge.sourceImageAudit={note:'case=真实案例，template=抽象版式，mixed=同图并列；无配对模板不得伪称有对应成品。',images:journalSourceAudit,verifiedCrossImagePairs:journalVerifiedPairs};
   }
+  const workflowText=offlineCreationWorkflowText({mode,hasImages:showImages});
+  const materialPlanning=offlineCreationPlanningData(source,selected,{mode,hasImages:showImages});
   const compactGuide=[
+    '【先阅读 task/WORKFLOW.txt，再查看 material-planning.json；以下是方法细节，不是强制模板】',
     '【内容与事实边界】',contentBrief,
     '【页面与构图】',creativeDesignGuide(source,{hasImages:showImages,hasPresets,referenceCases:selectedCases}),
     '【素材工艺】',craftTaskInstructions,multimodalCraftGuide,
@@ -128,33 +132,34 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
   const compactModeRules=modeRules.replaceAll('contract.json','schema/output.json');
   const compactStart=`拾页手帐创作任务｜一次完成
 
-【阅读顺序】
-1. task/context.json：本次任务、素材编号、尺寸、库存、权限和任务指纹。
-2. materials/：逐件查看本次真实素材透明图片（WebP 或 PNG）。
-3. task/GUIDE.txt：正文边界、页面方法和素材工艺。
-4. task/knowledge.json：能力、区域、构图灵感、案例和可选模板/来源审计。
-5. schema/output.json 与 schema/craft-plan.json：合法输出合同。
-examples/project.shiyeproject.json 只示意字段结构，不能照抄正文、坐标或构图。\n\n【中文字体验收】\nproject.shiyeproject.json 中所有标题和正文必须使用真实 UTF-8 中文字符，不允许用方框、问号或图像替代。runtime/preview.cjs 的 SVG 依赖运行机器已安装 Noto Sans/Serif CJK、苹方或微软雅黑等中文字库；预览中若出现 □□□，表示环境缺少字形，不是作品文字丢失。请先配置中文字库并重新渲染，再交付页面截图；无法做到时应明确标记字体未验收，交回拾页浏览器渲染，绝对不要把方框截图称为已完成的视觉预览。不要在任务包中附带字体文件。
+【首先阅读】
+1. task/WORKFLOW.txt：六阶段创作决策及本次唯一合法输出模式（必须遵循）。
+2. task/context.json 与 materials/：逐件核对图片、尺寸、库存、required/preferred/available。
+3. task/material-planning.json：素材观察清单、未经证实的组合假设、可供比较的构图方向；根据真实图片自行修正。
+4. task/GUIDE.txt、task/knowledge.json：内容约束、工艺说明与可选参考；不能把案例排版直接复制到本次画面。
+5. schema/output.json：本次唯一可执行输出合同。${mode==='agent'?'schema/craft-plan.json 仅供 apply_craft_plan 工具查参数。':'schema/craft-plan.json 是高级工具参考，不属于本次 direct 输出合同。'}
+examples/project.shiyeproject.json 只示意 JSON 语法，不能照搬占位文字、坐标或构图。
 
-【本次任务】
-${compactTask}
-用途提示：${purposeNotes}
-${settings.customLayoutPrompt?`补充排版：${settings.customLayoutPrompt}\\n`:''}
+【本次设计】
+${task}
+用途：${purposeNotes}
+${settings.customLayoutPrompt?`补充排版：${settings.customLayoutPrompt}\n`:''}
+${showImages?'图片的透明区域不是白纸。':'本次无素材预览，不猜测图像内容。'}
+${hasPresets?'references/ 只供构图参考，既不是可用素材，也不是要照抄的模板。':''}
+素材：${materialRules}
 
-【素材规则】
-${materialRules}
-必须使用逐件落实；优先使用先考虑；备选不要求用尽。逐件权限优先于全局设置。纸张、照片、贴纸不能放大、复制或超库存；非重叠余料可继续用，胶带保持真实宽度。预览中的线、边框、色块和文字都必须存在于可编辑数据。
-${showImages?'透明图片（WebP 或 PNG）的透明处不是白底，不要给贴纸添加白底。':'本包没有素材图片，只能依据名称、标签和尺寸，不得猜测图像细节。'}
-${hasPresets?'references/ 是本次匹配的构图参考，不是可用实体素材；其中的文字不可当正文。':''}
-
-【输出】
-${compactModeRules}
-保留 source 原样，只改 title 和 ${mode==='direct'?'page':'tools/plan'}。文件模式把完整 JSON 保存为任务根目录 project.shiyeproject.json；运行 node runtime/preview.cjs 生成预览，或 node runtime/pack.cjs 同时生成 output/作品.shiyeproject.zip。复制模式只返回一个完整 JSON 代码块。
-GPT 可以直接看图并在 plan.observations 中提出本次选区；无需先让用户人工标注。一次交付前可以内部试排、校验、渲染和修正，但不要要求用户反复导入导出。
-若预览工具无法运行，要明确说明没有同源预览；不能另外画一张与可编辑图层无关的图片冒充预览。`;
+【结构与画面验收】
+先保存一个可编辑 JSON 为任务根目录 project.shiyeproject.json。运行 node runtime/validate.cjs 检查规则，再运行 node runtime/preview.cjs 生成 output/构图预览.svg（仅近似）与 output/画面预览.html（拾页共用 Canvas）。请在浏览器打开 HTML，等待素材真正渲染完成，根据 task/VISUAL_REVIEW.txt 和画面逐项核查；截图来自实际 HTML，不可自行生成不对应可编辑图层的效果图。修改 JSON 后重跑预览。
+系统字形可因设备而异：出现方框、错行或字体未加载时不得标注“字体验收通过”，可在拾页里继续校验。不随包附带字体文件。
+${mode==='agent'?'最终 JSON 只包含本合同的 tools，不输出 page 或额外 plan；可在 apply_craft_plan.arguments 中提交 observations。':'最终 JSON 只包含本合同的 page，不输出 tools/plan；高级 observations/weaves 不可混入。'}
+必须保留 source 原样，只修改 title 和${mode==='direct'?' page':' tools' }；可在任务内部多轮试排，但只交付一个最佳版本。复制模式只返回一个完整 JSON 代码块；文件模式运行 node runtime/pack.cjs 输出 output/作品.shiyeproject.zip。若 Canvas 无法运行，应明确说明视觉未验收，不可声称已经完成。
+`;
   const files={
     'START_HERE.txt':strToU8(compactStart),
     'task/context.json':strToU8(JSON.stringify(context,null,2)),
+    'task/WORKFLOW.txt':strToU8(workflowText),
+    'task/material-planning.json':strToU8(JSON.stringify(materialPlanning,null,2)),
+    'task/VISUAL_REVIEW.txt':strToU8(offlineVisualReviewChecklist),
     'task/GUIDE.txt':strToU8(compactGuide),
     'task/knowledge.json':strToU8(JSON.stringify(knowledge,null,2)),
     'schema/output.json':strToU8(JSON.stringify(exportedContract,null,2)),
@@ -171,7 +176,7 @@ GPT 可以直接看图并在 plan.observations 中提出本次选区；无需先
   for(const entry of chosen)if(validAlias(entry.alias)&&source.materials.some(item=>item.alias===entry.alias))files[packagePreviewPath('materials',entry.alias,entry.bytes,{transparent:true})]=entry.bytes;
   if(hasPresets)for(const entry of referenceImages)files[packagePreviewPath('references',entry.id,entry.bytes)]=entry.bytes;
   const bytes=await new Promise((resolve,reject)=>zip(files,{level:4},(error,result)=>error?reject(error):resolve(result)));
-  const prompts={file:'请读 ZIP 中的 START_HERE.txt，一次完成可编辑手帐；运行包内预览工具，展示构图预览，并交付可下载的「作品.shiyeproject.zip」。',json:'请读 ZIP 中的 START_HERE.txt，一次完成可编辑手帐；运行包内预览工具，展示构图预览，再给一个完整可复制的 JSON 代码块，不要生成作品文件。'};
+  const prompts={file:'请先读 ZIP 的 START_HERE.txt 和 task/WORKFLOW.txt；观察素材、比较构图并完成可编辑手帐，运行包内校验与 HTML Canvas 预览，检查画面后交付「作品.shiyeproject.zip」。',json:'请先读 ZIP 的 START_HERE.txt 和 task/WORKFLOW.txt；观察素材、比较构图并完成可编辑手帐，运行包内校验与 HTML Canvas 预览，检查画面后只给一个完整可复制的 JSON 代码块，不生成作品文件。'};
   return {blob:new Blob([bytes],{type:'application/zip'}),filename:'拾页-GPT创作任务.zip',prompt:prompts.file,prompts,source,mode,previewCount:chosen.length,imageBytes:[...chosen,...(hasPresets?referenceImages:[])].reduce((total,item)=>total+item.bytes.length,0),packageBytes:bytes.length};
 }
 async function createOfflineImageHandoff({source,project:p,assets,selected,chosen,settings,referenceImages,showImages,userTemplates=[]}){
