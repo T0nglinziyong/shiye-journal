@@ -88,3 +88,67 @@ export function fallbackPaperQuad400(cv,p,own){
   }
   return best&&best.score>=PAPER_FALLBACK_MIN_SCORE?best.corners:null;
 }
+
+
+// Targeted contour-connectivity rescue for recompressed / P3 phone JPEGs.
+// The c9 800px detector must run first. Only when it fails, retry the SAME
+// standard Canny (40/120, 5px morphology close and strict c9 geometry) with
+// a 3x3 blur instead of 5x5. This preserves thin paper edges that the stronger
+// blur can disconnect; it does not apply histogram equalization or alter RGB.
+export function rescuePaperQuadCanny3(cv,p,own){
+  if(!(p.width>0&&p.height>0)||!p.pixels?.length)return null;
+  const rgba=own(cv.matFromArray(p.height,p.width,cv.CV_8UC4,p.pixels)),
+    gray=own(new cv.Mat()),blurred=own(new cv.Mat()),
+    edges=own(new cv.Mat()),
+    kernel=own(cv.getStructuringElement(cv.MORPH_RECT,new cv.Size(5,5)));
+  cv.cvtColor(rgba,gray,cv.COLOR_RGBA2GRAY);
+  cv.GaussianBlur(gray,blurred,new cv.Size(3,3),0);
+  cv.Canny(blurred,edges,40,120);
+  cv.morphologyEx(edges,edges,cv.MORPH_CLOSE,kernel);
+  const contours=new cv.MatVector(),hierarchy=new cv.Mat();
+  let best=null;
+  try{
+    cv.findContours(edges,contours,hierarchy,cv.RETR_LIST,cv.CHAIN_APPROX_SIMPLE);
+    const width=p.width,height=p.height,
+      expected=Math.min(p.paperRatio||210/297,1/(p.paperRatio||210/297));
+    for(let i=0;i<contours.size();i++){
+      const contour=contours.get(i);
+      try{
+        const area=cv.contourArea(contour)/(width*height);
+        if(area<.14)continue;
+        const polygon=new cv.Mat();
+        try{
+          cv.approxPolyDP(contour,polygon,cv.arcLength(contour,true)*.02,true);
+          if(polygon.rows!==4||!cv.isContourConvex(polygon))continue;
+          let points=Array.from({length:4},(_,j)=>({
+            x:polygon.data32S[j*2]/width,y:polygon.data32S[j*2+1]/height
+          }));
+          const center={
+            x:points.reduce((sum,v)=>sum+v.x,0)/4,
+            y:points.reduce((sum,v)=>sum+v.y,0)/4
+          };
+          points.sort((a,b)=>Math.atan2(a.y-center.y,a.x-center.x)-
+            Math.atan2(b.y-center.y,b.x-center.x));
+          const first=points.reduce((current,v,j)=>
+            v.x+v.y<points[current].x+points[current].y?j:current,0);
+          points=points.slice(first).concat(points.slice(0,first));
+          const coverage=Math.abs(cv.contourArea(polygon))/(width*height);
+          if(coverage<.18||coverage>.96||
+            points.some(v=>v.x<.004||v.x>.996||v.y<.004||v.y>.996))continue;
+          const distance=(a,b)=>Math.hypot(
+            (a.x-b.x)*width,(a.y-b.y)*height);
+          const w=distance(points[0],points[1])+distance(points[2],points[3]),
+            h=distance(points[0],points[3])+distance(points[1],points[2]);
+          if(!(w>0&&h>0))continue;
+          const ratio=Math.min(w/h,h/w);
+          const aspect=Math.min(ratio/expected,expected/ratio);
+          if(aspect<.60)continue;
+          const score=Math.min(coverage/.65,1)*.48+
+            aspect*.20+Math.min(area/coverage,1)*.32;
+          if(!best||score>best.score)best={score,corners:points};
+        }finally{polygon.delete();}
+      }finally{contour.delete();}
+    }
+  }finally{hierarchy.delete();contours.delete();}
+  return best?.corners||null;
+}
