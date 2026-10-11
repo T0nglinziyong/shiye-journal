@@ -1,0 +1,63 @@
+/* Mobile editor fixes: tight, keyboard-free typography controls. */
+.editing .canvas-context-tools .canvas-text-format{
+  display:inline-flex;flex:none;align-items:center;gap:3px;
+  height:40px;padding:0 3px;border-radius:9px;background:#f5f7f2;
+}
+.editing .canvas-context-tools .canvas-text-format>select{
+  width:70px;min-width:66px;max-width:76px;min-height:36px;
+  padding:3px 2px;font-size:14px;background:transparent;
+}
+.editing .canvas-font-size-stepper{
+  display:inline-flex;flex:none;align-items:center;justify-content:center;
+  gap:0;height:36px;border:1px solid #d9e3d8;border-radius:8px;
+  background:#fff;white-space:nowrap;
+}
+.editing .canvas-font-size-stepper button.font-step{
+  display:grid;place-items:center;width:30px;min-width:30px;
+  min-height:34px;padding:0;font-size:25px;font-weight:500;
+  touch-action:manipulation;
+}
+.editing .canvas-font-size-stepper output{
+  display:block;min-width:27px;text-align:center;font-size:14px;
+  color:#3b5141;font-variant-numeric:tabular-nums;
+}
+.editing .canvas-context-tools .shape-quick-color{
+  display:inline-flex;align-items:center;gap:3px;flex:none;
+  font-size:12px;color:#47604b;white-space:nowrap;
+}
+.editing .canvas-context-tools .shape-quick-color input[type=color]{
+  width:28px;height:30px;border-radius:6px;cursor:pointer;
+}
+.editing .canvas-context-tools select.shape-quick-select{
+  max-width:75px;min-width:58px;padding:4px;
+  font-size:12px;flex:none;
+}
+.editing .canvas-context-tools button.shape-detail-quick,
+.editing .canvas-context-tools button.shape-add-quick{
+  font-size:12px;white-space:nowrap;padding:3px 5px;
+}
+/* A tile's picture and its caption occupy independent rows.
+   Earlier min-height + fixed grid rows clipped the caption on iPhone. */
+.swift-picker-popover.swift-material-picker .canvas-picker-grid>button{
+  box-sizing:border-box;display:grid;
+  grid-template-rows:74px minmax(36px,auto);
+  align-content:start;justify-items:center;gap:7px;
+  min-height:137px;height:auto;overflow:visible;
+  padding:6px 5px 9px;
+}
+.swift-picker-popover.swift-material-picker .canvas-picker-grid>button>img{
+  display:block;position:static;width:100%;height:74px;min-height:0;
+  max-height:74px;object-fit:contain;align-self:center;
+}
+.swift-picker-popover.swift-material-picker .canvas-picker-grid>button>span{
+  display:block;position:static;align-self:start;
+  box-sizing:border-box;max-width:100%;min-height:34px;
+  max-height:none;overflow-wrap:anywhere;word-break:break-word;
+  white-space:normal;text-overflow:clip;-webkit-line-clamp:unset;
+  font-size:12px;line-height:17px;text-align:center;
+}
+@media(max-width:520px){
+  .editing .canvas-context-tools .canvas-text-format{gap:2px;padding:0 2px}
+  .editing .canvas-context-tools .canvas-text-format>select{min-width:60px;width:64px}
+  .editing .canvas-context-tools .canvas-font-size-stepper button{width:29px;min-width:29px}
+}
