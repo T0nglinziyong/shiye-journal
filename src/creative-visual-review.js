@@ -1,6 +1,7 @@
 import {requestChat} from './chat-transport.js';
 import {applyToolCalls,normalizeCalls} from './creative.js';
 import {craftSceneHash} from './craft-fingerprint.js';
+import {attachSceneV2} from './scene-v2.js';
 import {reviewCreativeDraft} from './creative-quality.js';
 import {toolContracts} from './creative-contract.js';
 
@@ -9,7 +10,7 @@ const abort=signal=>{if(signal?.aborted)throw signal.reason||Error('创作已停
 // At most two visual inspections; all paid requests share the ordinary budget.
 // Model approval describes the reviewer, not objective beauty or user approval.
 export async function reviewFinalCreativeScene({draft,options,assets,aliases,budget,render,request,onResponse,onTurn,signal}){
- let working=structuredClone(draft),lastPreview=null;
+ let working=attachSceneV2(structuredClone(draft)),lastPreview=null;
  for(let attempt=0;attempt<2;attempt++){
   abort(signal);const sceneHash=craftSceneHash(working);
   try{lastPreview=await render?.(working);}catch(error){abort(signal);working.agentRun={...working.agentRun,visualReview:'render-failed',renderedSceneHash:null};return working;}
