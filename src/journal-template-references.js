@@ -1,3 +1,4 @@
+import {offlinePreviewBytes,OFFLINE_REFERENCE_EDGE} from './offline-preview.js';
 import {selectJournalReferenceCases,loadJournalReferenceCases} from './journal-reference-catalog.js';
 import {selectJournalAbstractTemplates} from './journal-abstract-templates.js';
 import {journalPresetReference} from './journal-preset-images.js';
@@ -12,7 +13,7 @@ export function selectJournalTemplateBundle(context,userTemplates=[]){
   return {selectedCases,selectedTemplates};
 }
 
-export async function loadJournalTemplateReferences({context,userTemplates=[],db,includeImages=true}){
+export async function loadJournalTemplateReferences({context,userTemplates=[],db,includeImages=true,encodeReference=offlinePreviewBytes}){
   const {selectedCases,selectedTemplates}=selectJournalTemplateBundle(context,userTemplates);
   if(!includeImages)return {selectedCases,selectedTemplates,referenceImages:[]};
   const referenceImages=await loadJournalReferenceCases(selectedCases);
@@ -32,5 +33,20 @@ export async function loadJournalTemplateReferences({context,userTemplates=[],db
       }
     }
   }
-  return {selectedCases,selectedTemplates,referenceImages};
+  // Handoff-only encodings: originals remain untouched in the reference
+  // collection and the template database. Never send PNG/JPEG originals.
+  const webp=[];
+  // A template bundle can contain several large source JPEGs. Encode two at
+  // a time to avoid retaining eight full-size decoded bitmaps on mobile.
+  for(let offset=0;offset<referenceImages.length;offset+=2){
+    const pair=await Promise.all(referenceImages.slice(offset,offset+2).map(async entry=>{
+      const mime=entry.mimeType||(entry.extension==='jpg'||entry.extension==='jpeg'?'image/jpeg':'image/png');
+      const input=new Blob([entry.bytes],{type:mime});
+      const bytes=await encodeReference(input,{maxEdge:OFFLINE_REFERENCE_EDGE});
+      const compressed=new Blob([bytes],{type:'image/webp'});
+      return {...entry,bytes,mimeType:'image/webp',extension:'webp',url:await dataURL(compressed)};
+    }));
+    webp.push(...pair);
+  }
+  return {selectedCases,selectedTemplates,referenceImages:webp};
 }

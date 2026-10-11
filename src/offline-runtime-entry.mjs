@@ -30,11 +30,11 @@ async function main(){
     if(mode==='pack'||mode==='preview'){
       const previews=Object.fromEntries(context.materials.map(item=>{
         const file=item.preview;
-        return [item.alias,file&&/^materials\/asset_[A-Za-z0-9_-]+\.png$|^materials\/m[1-9]\d*\.png$/.test(file)&&existsSync(file)?readFileSync(file):null];
+        return [item.alias,file&&/^materials\/(?:asset_[A-Za-z0-9_-]+|m[1-9]\d*)\.webp$/.test(file)&&existsSync(file)?readFileSync(file):null];
       }));
       const preview=Buffer.from(renderOfflinePreviewSVG(imported.drafts[0],context.source,previews),'utf8');
       if(preview.byteLength>16_000_000)throw Error('构图预览超过 16 MB；请缩小任务包中的素材预览图后重新导出，不要修改作品实物尺寸');
-      Object.assign(report,{visual:'approximate-preview',reading:'pending',previewNote:'构图预览并非拾页最终渲染；字体、文字换行和抠图细节待应用复核'});
+      Object.assign(report,{visual:'approximate-preview',reading:'pending',previewNote:'中文字形保存在可编辑 JSON 中；SVG 预览依赖本机中文字体（Noto/PingFang/微软雅黑），若显示方框请安装中文字体后渲染；最终排版仍以拾页为准'});
       mkdirSync('output',{recursive:true});
       writeFileSync('output/构图预览.svg',preview);
       const browserPage=offlineBrowserPage(imported.drafts[0],context.source,previews,offlineBrowserSource);

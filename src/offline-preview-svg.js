@@ -28,7 +28,7 @@ export function renderOfflinePreviewSVG(draft,source,previewFiles={}){
         defs.push(`<clipPath id="${clip}" clipPathUnits="userSpaceOnUse"><path d="${outline} ${holes}" clip-rule="evenodd"/></clipPath>`);
       }
       const content=bytes?.length
-        ?`<image href="data:image/png;base64,${Buffer.from(bytes).toString('base64')}" x="${number(-crop.x*w/crop.width)}" y="${number(-crop.y*h/crop.height)}" width="${number(w/crop.width)}" height="${number(h/crop.height)}" preserveAspectRatio="none"/>`
+        ?`<image href="data:image/webp;base64,${Buffer.from(bytes).toString('base64')}" x="${number(-crop.x*w/crop.width)}" y="${number(-crop.y*h/crop.height)}" width="${number(w/crop.width)}" height="${number(h/crop.height)}" preserveAspectRatio="none"/>`
         :`<rect width="${w}" height="${h}" fill="#e8ebe5" stroke="#8b9a8c"/><text x="8" y="24" font-size="17" fill="#53645a">${xml(image?.alias||'素材')}</text>`;
       layers.push(`<g transform="${transform}" opacity="${bounded(value.opacity)}"><svg x="${number(-w/2)}" y="${number(-h/2)}" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" overflow="hidden"><g transform="${value.isFlippedHorizontally?`translate(${w} 0) scale(-1 1)`:''}"${mask?` clip-path="url(#${clip})"`:''}>${content}</g></svg></g>`);
     }else if(kind==='shape'){
@@ -37,7 +37,11 @@ export function renderOfflinePreviewSVG(draft,source,previewFiles={}){
       const font=Math.max(1,number(value.fontSize||18));
       const fallback=content=>Array.from(content).reduce((total,char)=>total+font*(/^[\x00-\x7f]$/.test(char)?.65:1)+(value.letterSpacing||0),0);
       const lines=textLines(value,fallback).lines;
-      const family=value.style==='serif'?'serif':value.style==='hand'?'cursive':'sans-serif';
+      // The original UTF-8 text stays editable in project.shiyeproject.json.
+      // A generic serif/sans fallback alone often renders CJK as tofu boxes.
+      const family=value.style==='serif'?'Noto Serif CJK SC, Source Han Serif SC, Songti SC, SimSun, serif':
+        value.style==='hand'?'Ma Shan Zheng, Noto Sans CJK SC, PingFang SC, Microsoft YaHei, cursive':
+        'Noto Sans CJK SC, Source Han Sans SC, PingFang SC, Microsoft YaHei, sans-serif';
       const alignment=value.alignment||'left',anchor=alignment==='center'?'middle':alignment==='right'?'end':'start';
       const tx=alignment==='center'?0:alignment==='right'?w/2:-w/2;
       const top=-h/2+font;
@@ -59,5 +63,5 @@ export function renderOfflinePreviewSVG(draft,source,previewFiles={}){
     for(let y=42;y<height-42;y+=42)for(let x=42;x<width-42;x+=42)paper.push(`<circle cx="${x}" cy="${y}" r="1"/>`);
   }else if(draft.paperPattern==='columns')for(const x of [.08,.48,.52,.92])paper.push(`<path d="M${number(width*x)} ${number(height*.1)}V${number(height*.9)}"/>`);
   if(draft.pageMode==='spread'&&draft.drawCenterGutter!==false)paper.push(`<path d="M${number(width/2)} 0V${number(height)}" stroke="#b9bbb4" stroke-width="2"/>`);
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${number(width)}" height="${number(height+42)}" viewBox="0 0 ${number(width)} ${number(height+42)}"><defs>${defs.join('')}<clipPath id="page"><rect width="${number(width)}" height="${number(height)}"/></clipPath></defs><g clip-path="url(#page)"><rect width="${number(width)}" height="${number(height)}" fill="${paperColor}"/><g stroke="#d5d6cc" fill="none" opacity=".72">${paper.join('')}</g>${layers.join('')}</g><rect y="${number(height)}" width="${number(width)}" height="42" fill="#e9ede7"/><text x="16" y="${number(height+28)}" font-size="17" font-family="sans-serif" fill="#415748">构图预览 · 基于可编辑图层与任务包缩略图；字体、抠图边缘及最终效果以拾页为准</text></svg>\n`;
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${number(width)}" height="${number(height+42)}" viewBox="0 0 ${number(width)} ${number(height+42)}"><defs>${defs.join('')}<clipPath id="page"><rect width="${number(width)}" height="${number(height)}"/></clipPath></defs><g clip-path="url(#page)"><rect width="${number(width)}" height="${number(height)}" fill="${paperColor}"/><g stroke="#d5d6cc" fill="none" opacity=".72">${paper.join('')}</g>${layers.join('')}</g><rect y="${number(height)}" width="${number(width)}" height="42" fill="#e9ede7"/><text x="16" y="${number(height+28)}" font-size="17" font-family="Noto Sans CJK SC, PingFang SC, Microsoft YaHei, sans-serif" fill="#415748">构图预览 · 基于可编辑图层与任务包缩略图；字体、抠图边缘及最终效果以拾页为准</text></svg>\n`;
 }
