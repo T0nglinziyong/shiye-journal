@@ -159,26 +159,6 @@ function regionMask(cv,channels,own,w,h){
 }
 // Exact selection of the middle sample without sorting all 67 samples at
 // every offset/angle. This reduces V8 work without changing the objective.
-function medianSample(values){
-  const at=values.length>>1;
-  let left=0,right=values.length-1;
-  while(left<right){
-    const pivot=values[(left+right)>>1];
-    let i=left,j=right;
-    while(i<=j){
-      while(values[i]<pivot)i++;
-      while(values[j]>pivot)j--;
-      if(i<=j){
-        const value=values[i];values[i]=values[j];values[j]=value;
-        i++;j--;
-      }
-    }
-    if(at<=j)right=j;
-    else if(at>=i)left=i;
-    else break;
-  }
-  return values[at];
-}
 function refineRegionLines(cv,candidate,light,w,h,own){
   // Applied only to the strongest Lab hull, never to every raw contour.
   // Four independently movable/rotatable lines (the tested region 2D fit).
@@ -210,7 +190,8 @@ function refineRegionLines(cv,candidate,light,w,h,own){
           sum+=value;values.push(value);
           delta+=Math.abs(offset)/search;
         }
-        const middle=medianSample(values);
+        values.sort((a,b)=>a-b);
+        const middle=values[33];
         const score=.6*middle+.4*sum/67-.15*delta/67;
         if(score>best){best=score;bestShift=shift;bestSlope=slope;}
       }
