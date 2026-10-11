@@ -25,6 +25,9 @@ test('current GPT task package has one root entry and grouped compact folders',a
   for(const removed of ['README.txt','context.json','contract.json','CONTENT_BRIEF.txt','CREATIVE_GUIDE.txt','CRAFT_GUIDE.txt','case-studies.json','composition-ideas.json','abstract-templates.json','source-image-audit.json','example-response.json','example-response.shiyeproject.json'])assert.equal(files[removed],undefined,removed);
   assert.match(strFromU8(files['START_HERE.txt']),/task\/context\.json/);assert.match(strFromU8(files['START_HERE.txt']),/schema\/output\.json/);
   const knowledge=JSON.parse(strFromU8(files['task/knowledge.json']));assert.equal(knowledge.format,'shiye-gpt-task-knowledge');assert.ok(knowledge.compositionIdeas.length);
+  assert.ok(knowledge.compositionIdeas.length<=3);
+  assert.match(strFromU8(files['START_HERE.txt']),/本次主题、要求和内容/);
+  assert.ok(strFromU8(files['task/GUIDE.txt']).length<5500,'The model-facing GUIDE should stay concise');
 });
 
 test('current editable example imports only with its exact registered source',async()=>{
@@ -122,9 +125,9 @@ test('reference metadata is merged into task/knowledge.json and images stay unde
   const referenceImages=cases.map((entry,i)=>({id:entry.id,bytes:new Uint8Array([82,73,70,70,16,0,0,0,87,69,66,80,86,80,56,32,i+1])}));
   const output=await make({p,settings:{generationMode:'direct',includeThumbnails:false,sendPresetReferences:true},referenceImages}),files=await filesOf(output),knowledge=JSON.parse(strFromU8(files['task/knowledge.json']));
   assert.deepEqual(Object.keys(files).filter(name=>name.startsWith('references/')&&name.endsWith('.webp')).sort(),cases.map(entry=>`references/${entry.id}.webp`).sort());
-  assert.deepEqual(knowledge.caseStudies.selectedCases.map(entry=>entry.id),cases.map(entry=>entry.id));assert.ok(knowledge.abstractTemplates.templates.length);assert.equal(knowledge.sourceImageAudit.images.length,70);
+  assert.deepEqual(knowledge.caseStudies.selectedCases.map(entry=>entry.id),cases.map(entry=>entry.id));assert.ok(knowledge.abstractTemplates.templates.length);assert.ok(knowledge.sourceImageAudit.images.length<=referenceImages.length,'Only matching references should be audited');
   assert.equal(files['abstract-templates.json'],undefined);assert.equal(files['source-image-audit.json'],undefined);
-  assert.match(strFromU8(files['task/GUIDE.txt']),/模板原图/);
+  assert.match(strFromU8(files['task/GUIDE.txt']),/可编辑|内容边界/);
 });
 
 test('preset reference planning remains independent across palette, layout and page mode',()=>{
