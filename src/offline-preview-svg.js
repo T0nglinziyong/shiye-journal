@@ -37,7 +37,11 @@ export function renderOfflinePreviewSVG(draft,source,previewFiles={}){
       const font=Math.max(1,number(value.fontSize||18));
       const fallback=content=>Array.from(content).reduce((total,char)=>total+font*(/^[\x00-\x7f]$/.test(char)?.65:1)+(value.letterSpacing||0),0);
       const lines=textLines(value,fallback).lines;
-      // The original UTF-8 text stays editable in project.shiyeproject.json.\n      // A generic serif/sans fallback alone often renders CJK as tofu boxes.\n      const family=value.style==='serif'?'Noto Serif CJK SC, Source Han Serif SC, Songti SC, SimSun, serif':\n        value.style==='hand'?'Ma Shan Zheng, Noto Sans CJK SC, PingFang SC, Microsoft YaHei, cursive':\n        'Noto Sans CJK SC, Source Han Sans SC, PingFang SC, Microsoft YaHei, sans-serif';
+      // The original UTF-8 text stays editable in project.shiyeproject.json.
+      // A generic serif/sans fallback alone often renders CJK as tofu boxes.
+      const family=value.style==='serif'?'Noto Serif CJK SC, Source Han Serif SC, Songti SC, SimSun, serif':
+        value.style==='hand'?'Ma Shan Zheng, Noto Sans CJK SC, PingFang SC, Microsoft YaHei, cursive':
+        'Noto Sans CJK SC, Source Han Sans SC, PingFang SC, Microsoft YaHei, sans-serif';
       const alignment=value.alignment||'left',anchor=alignment==='center'?'middle':alignment==='right'?'end':'start';
       const tx=alignment==='center'?0:alignment==='right'?w/2:-w/2;
       const top=-h/2+font;

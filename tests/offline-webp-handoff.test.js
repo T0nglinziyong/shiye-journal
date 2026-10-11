@@ -39,7 +39,7 @@ test('SVG, HTML and standalone runtime support WebP with visible CJK fallback',a
  assert.ok(svg.includes('Noto Sans CJK SC'));
  assert.ok(svg.includes('Noto Serif CJK SC'));
  assert.ok(runtime.includes('.webp'));
- assert.ok(creation.includes('materials/\${item.alias}.webp'));
+ assert.ok(creation.includes('materials/${item.alias}.webp'));
  assert.ok(creation.includes('UTF-8 中文字符'));
  assert.ok(!html.includes('data:image/png;base64'));
 });
