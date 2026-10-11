@@ -1,4 +1,5 @@
 import {validateDisplaySlices} from './craft-display.js';
+import {validateSceneExtensions} from './scene-model.js';
 import {zipSync,strToU8,strFromU8} from 'fflate';
 import {uid} from './domain.js';
 import {materialMaskPoints} from './material-mask.js';
@@ -83,6 +84,7 @@ export function validatePackageValue(root){
 }
 
 export function validateNativeDraft(draft,known){
+  validateSceneExtensions(draft);
   const canvas=draft?.canvas;
   if(!canvas||![canvas.width,canvas.height].every(n=>Number.isFinite(n)&&n>0&&n<=10000)||!['items','primitives','textBlocks','strokes'].every(key=>Array.isArray(draft[key])&&draft[key].length<=5000))throw Error('工程包图层数据无效');
   if(!paint(draft.paperColor)||draft.paperPattern!==undefined&&!['plain','lines','grid','dots','columns'].includes(draft.paperPattern))throw Error('工程包纸张样式无效');
