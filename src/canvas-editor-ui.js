@@ -13,7 +13,7 @@ import {adjacentFontSize} from './canvas-control-behavior.js';
 import {createIcon} from './icons.js';
 import {historyTitle,renameHistory,deleteDraft,captureHistory,restoreHistoryDraft} from './project-history.js';
 import {syncSelectionGeometry} from './selection-geometry.js';
-import {groupSceneLayers,ungroupSceneLayers,sceneGroupMembers,validateVectorMask} from './scene-model.js';
+import {groupSceneLayers,ungroupSceneLayers,sceneGroupMembers,sceneLayerEntries,validateVectorMask} from './scene-model.js';
 import {clampCanvasPosition,moveSelection,materialCenterOutside} from './canvas-selection.js';
 import {transformSelectedFrame,isObjectDeleteKey} from './selection-transform.js';
 const labels={select:'选择',marquee:'矩形框选',pen:'笔',highlighter:'荧光笔',eraser:'橡皮擦',lasso:'套索选择',text:'文字',shape:'图形',material:'素材',layers:'图层',paper:'画布背景'};
@@ -21,7 +21,7 @@ const glyphs={select:'➤',pen:'',eraser:'◇',highlighter:'▱',lasso:'◌',tex
 const prefKey='shiye-canvas-tools-v1';
 // Survive editor remounts and route returns; card image nodes stay decoded.
 const pickerRows=new Map();
-const allEntries=d=>[['material',d.items],['shape',d.primitives],['text',d.textBlocks]].flatMap(([kind,list])=>(list||[]).map(value=>({kind,value})));
+const allEntries=d=>sceneLayerEntries(d,{hidden:true,ink:false});
 export function mountCanvasEditor(c){
   const {state,view,body,modal,current,checkpoint,saveProject,render,route,flushSave,toast,esc,imgTag,asset,handle,openCutoutCheck,openAICreation}=c,d=current(),page=view.querySelector('#canvas-page');if(!d||!page)return;
   if(captureHistory(state.activeProject))saveProject();state.workspacePanel=false;
