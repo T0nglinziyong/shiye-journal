@@ -54,6 +54,7 @@ export function mountCanvasEditor(c){
       ['导出 PNG',()=>handle('export-png')],
       ['导出 PDF',()=>pdf?.click()||handle('print')],
       ['导出可编辑 ZIP',()=>handle('download-project-zip')],
+      ['导出标准 Scene JSON',()=>handle('export-scene-json')],
       ['打印',()=>handle('print')],
       ['导入创作指令',()=>handle('creative-json')]])
       p.content.append(button(name,()=>{p.close();fn();}));
