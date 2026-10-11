@@ -100,7 +100,7 @@ const directSceneText=object({type:enums(['text']),id:key,...directText.properti
 const directSceneInk=object({type:enums(['ink']),id:key,...inkStroke.properties},['type','id','points','width','color','pen_style']);
 const directSceneGroup=object({type:enums(['group']),id:groupID,name:string(80),z:integer(-1000,1000),
   blend_mode:enums(['normal','multiply']),opacity:num(0,1),vector_mask:nullable(layerMask),
-  children:array({$ref:'#/$defs/node'},2,100)},['type','id','children']);
+  children:array({$ref:'#/$defs/node'},1,100)},['type','id','children']);
 // No duplicate page.items/graphics/ink fields: the whole AI page is one
 // ordered, nestable Scene layer tree. Material transforms remain physically
 // derived from source aliases, crop operations and stock units.
