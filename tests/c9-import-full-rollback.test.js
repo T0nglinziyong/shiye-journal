@@ -51,9 +51,8 @@ test('material recognition stays stable while A4 quad logic may evolve independe
   assert.doesNotMatch(app,/requiresManualPaperConfirmation|onAnalysisRaster|segmentManualOrFallback|installDesktopImageDrop/);
   assert.doesNotMatch(app,/from '\.\/toast\.js'/);
   assert.doesNotMatch(worker,/detectWhitePaperQuad|HoughLinesP/);
-  assert.match(worker,/for\(const threshold of \[150,165,180,195,210/);
-  assert.match(worker,/best\?\.corners\|\|fallbackPaperQuad400\(cv,p,own\)/);
-  assert.doesNotMatch(worker,/detectPaperQuadMultiScale/);
+  assert.match(worker,/if\(operation==='quad'\)return detectPaperQuadOptimized\(cv,p,own\)/);
+  assert.doesNotMatch(worker,/fallbackPaperQuad400|detectPaperQuadMultiScale/);
   assert.match(worker,/if\(operation==='process-material-boxes'\)/);
   assert.match(app,/setTimeout\(\(\)=>el\.classList\.remove\('show'\),3500\)/);
 });
