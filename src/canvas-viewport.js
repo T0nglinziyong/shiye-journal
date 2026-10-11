@@ -22,13 +22,19 @@ export function mountCanvasViewport(c,page){
       points.set(e.pointerId,e);
       if(points.size>=2){clearTimeout(timer);view.cancelObjectGesture?.();view.cancelInkGesture?.();if(!navigating)start([...points.values()][0]);pinching=true;moved=true;start(e);view.navigationSuppressedUntil=Infinity;stop(e);return;}
     }
+    const objectID=e.target.closest('[data-object]')?.dataset.object;
+    const unselectedTouch=e.pointerType==='touch'&&state.tool==='select'&&objectID&&
+      !state.multiSelected?.includes(objectID)&&state.selected!==objectID;
+    // A drag starting on an *unselected* material is a page pan; a tap still
+    // selects that material. Once selected, a drag moves the object instead.
+    if(unselectedTouch){moved=false;start(e);origin.targetID=objectID;stop(e);return;}
     const background=!e.target.closest('[data-object],.selected-object-overlay');
     const readTouch=fingerMayPanCanvas({pointerType:e.pointerType,tool:state.tool,background,pencilEnabled:state.canvasTools?.pencil});
     if(readTouch){moved=false;start(e);origin.background=true;origin.tool=state.tool;stop(e);}
     else if(background&&state.tool==='select'&&e.pointerType==='mouse'){moved=false;origin={x:e.clientX,y:e.clientY};timer=setTimeout(()=>{view.cancelObjectGesture?.();start(e);moved=true;},250);}
   };
   const move=e=>{if(points.has(e.pointerId))points.set(e.pointerId,e);if(!navigating)return;if(origin&&Math.hypot(e.clientX-origin.x,e.clientY-origin.y)>4)moved=true;zoom.handleMove(e);stop(e);};
-  const up=e=>{clearTimeout(timer);timer=null;points.delete(e.pointerId);if(!navigating)return;zoom.handleUp(e);if(!points.size){if(!moved&&!pinching&&origin?.targetID)view.pickCanvasObject?.(origin.targetID,e.shiftKey);else if(!moved&&!pinching&&origin?.background&&origin.tool==='select'&&(state.selected||state.multiSelected?.length)){state.selected=null;state.multiSelected=[];view.editorRefresh?.();view.canvasSelectionRefresh?.();}navigating=false;pinching=false;view.navigationSuppressedUntil=moved?performance.now()+200:0;}else view.navigationSuppressedUntil=Infinity;stop(e);};
+  const up=e=>{clearTimeout(timer);timer=null;points.delete(e.pointerId);if(!navigating)return;zoom.handleUp(e);if(!points.size){if(!moved&&!pinching&&origin?.targetID)view.pickCanvasObject?.(origin.targetID,e.shiftKey);else if(!moved&&!pinching&&origin?.background&&origin.tool==='text')page.dispatchEvent(new MouseEvent('click',{bubbles:false,clientX:e.clientX,clientY:e.clientY}));else if(!moved&&!pinching&&origin?.background&&origin.tool==='select'&&(state.selected||state.multiSelected?.length)){state.selected=null;state.multiSelected=[];view.editorRefresh?.();view.canvasSelectionRefresh?.();}navigating=false;pinching=false;view.navigationSuppressedUntil=moved?performance.now()+200:0;}else view.navigationSuppressedUntil=Infinity;stop(e);};
   const click=e=>{if(performance.now()<(view.navigationSuppressedUntil||0))stop(e);};
   const wheel=e=>{if(!e.ctrlKey)return;zoom.zoomWithWheel(e);e.stopImmediatePropagation();};
   let clampFrame=0;
