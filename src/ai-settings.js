@@ -10,7 +10,7 @@ export const AI_PROVIDERS=Object.freeze({
   siliconflow:{label:'硅基流动',endpoint:'https://api.siliconflow.cn/v1/chat/completions',models:[['Qwen/Qwen2.5-VL-72B-Instruct','Qwen2.5-VL 72B',true],['deepseek-ai/DeepSeek-V3','DeepSeek V3',false]]},
   custom:{label:'自定义兼容接口',endpoint:'',models:[]}
 });
-export const AI_DEFAULTS=Object.freeze({provider:'openai',key:'',keys:{},endpoint:AI_PROVIDERS.openai.endpoint,model:'gpt-4.1',imageModel:IMAGE_MODELS[0],deliveryMode:'tools',generationMode:'agent',temperature:.75,maxTokens:6000,maxTurns:5,includeThumbnails:true,finalVisualReview:true,customVision:false,requestTimeout:75,sendOutputLimit:true,disableThinking:true,transport:'auto',textMode:'automatic',reasoningMode:'automatic',includeStructureReference:true,sendPresetReferences:true,autoIncludeRecommendations:false,requireAllCandidates:true,customLayoutPrompt:''});
+export const AI_DEFAULTS=Object.freeze({provider:'openai',key:'',keys:{},endpoint:AI_PROVIDERS.openai.endpoint,model:'gpt-4.1',imageModel:IMAGE_MODELS[0],creationMode:'tools',deliveryMode:'tools',generationMode:'agent',temperature:.75,maxTokens:6000,maxTurns:5,includeThumbnails:true,finalVisualReview:true,customVision:false,requestTimeout:75,sendOutputLimit:true,disableThinking:true,transport:'auto',textMode:'automatic',reasoningMode:'automatic',includeStructureReference:true,sendPresetReferences:true,autoIncludeRecommendations:false,requireAllCandidates:true,customLayoutPrompt:''});
 const limit=(value,min,max,fallback)=>Number.isFinite(+value)?Math.min(max,Math.max(min,+value)):fallback;
 export function normalizeAISettings(value={}){
   if(!value||typeof value!=='object'||Array.isArray(value))value={};
@@ -19,10 +19,15 @@ export function normalizeAISettings(value={}){
   const keys={...savedKeys};
   if(typeof value.key==='string')keys[provider]=value.key;
   const model=typeof value.model==='string'&&value.model.trim()?value.model.trim():(provider===AI_DEFAULTS.provider?AI_DEFAULTS.model:preset.models[0]?.[0])||'';
-  const deliveryMode=['tools','json','image','pdf','zip'].includes(value.deliveryMode)?value.deliveryMode:AI_DEFAULTS.deliveryMode;
+  const requested=value.creationMode??value.deliveryMode;
+  // The earlier PDF/ZIP choices are transport formats, not creation methods.
+  // Normalize them to direct editable layout instead of resurrecting a
+  // delivery-only creation mode.
+  const creationMode=['tools','json','image'].includes(requested)?requested:
+    ['pdf','zip'].includes(requested)?'json':AI_DEFAULTS.creationMode;
   return {
     provider,keys,key:String(keys[provider]||'').trim(),endpoint:typeof value.endpoint==='string'&&value.endpoint.trim()?value.endpoint.trim():preset.endpoint,model,
-    deliveryMode,...deliveryProfile(deliveryMode),imageModel:IMAGE_MODELS.includes(value.imageModel)?value.imageModel:AI_DEFAULTS.imageModel,
+    ...deliveryProfile(creationMode),imageModel:IMAGE_MODELS.includes(value.imageModel)?value.imageModel:AI_DEFAULTS.imageModel,
     temperature:limit(value.temperature,0,2,AI_DEFAULTS.temperature),
     maxTokens:Math.round(limit(value.maxTokens,2000,16000,AI_DEFAULTS.maxTokens)),
     maxTurns:creativeRequestLimit(value.maxTurns),
