@@ -71,7 +71,7 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
   const {offlineValidateSource}=await import('./generated/offline-validate-source.js');
   const {offlineGlyphSource}=await import('./generated/offline-glyph-source.js');
   const mode=settings.generationMode==='direct'?'direct':'agent';
-  source.capabilities={cropPx:false,craftPlan:true,multimodalVision:showImages,twoHoleWeave:true,canonicalBrowserPreview:true,validateOffline:true,previewOffline:'approximate-svg',packOffline:true};
+  source.capabilities={cropPx:false,craftPlan:mode==='agent',multimodalVision:showImages,twoHoleWeave:mode==='agent',canonicalBrowserPreview:true,validateOffline:true,previewOffline:'approximate-svg',packOffline:true};
   source.packageLayout='compact';
   const exportedContract=offlineContract(mode,{cropPx:false});
   source.schemaHash=schemaFingerprint(exportedContract);source.planSchemaHash=schemaFingerprint(toolContracts.apply_craft_plan);
@@ -113,7 +113,7 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
     example.tools[0].arguments.texts=layeredTexts.map((item,index)=>({...item,key:'example-text-'+index}));
   }
   const handoffInstructions=instructions.replace('并在聊天中展示预览图。请勿把整页烘焙为图片。','并交付可编辑场景。请勿把整页烘焙为图片；若不能用同源渲染器生成预览，明确标记待拾页渲染，勿用另一张独立画作冒充预览。').replace('最后按 contract.json 和 example-response.shiyeproject.json 输出。','最后按 contract.json 输出。example-response.shiyeproject.json 仅示意语法字段，不是成品或本次正文；不要照抄示例文字、坐标和构图。').replace('同一条回复先展示最终页面的图片预览。','若有经过同源渲染并核对的最终预览，同一条回复先展示它；否则不要伪造预览，交回拾页生成。').replace('文件模式附可下载的 UTF-8 文件「作品.shiyeproject.json」；复制模式仅给一个单独的','文件模式附可下载的「作品.shiyeproject.zip」，包内放一个 UTF-8 文件 project.shiyeproject.json；复制模式仅给一个单独的').replace('两种方式都只含一个完整 JSON 对象，不是 PDF、HTML 或位图。','文件包内的 project.shiyeproject.json 与复制模式的 JSON 代码块使用相同可编辑图层合同；材料 ID 引用本机高清原图，图形可用 vector_paths 表达自由矢量轮廓。不要只交付 PDF、HTML 或扁平位图。').concat('\n\n【可选离线工具】在已有 Node.js 20+ 的环境中，先将场景保存为任务根目录 project.shiyeproject.json；node runtime/validate.cjs 检查同源结构与现行物理规则，node runtime/pack.cjs 校验后生成可下载 ZIP。这两个工具都不渲染页面、不核对字体或阅读；无法运行时请直接把可编辑场景交回拾页，不要声称已完成视觉验收。');
-  const runtimeCapabilities={schemaHash:source.schemaHash,sourcePixelCoordinates:false,cropPx:false,previewOnly:showImages,runtime:{validate:'node20',render:'browser-html-manual',preview:'approximate-svg',browserRender:'shiye-canvas-v2',pack:'node20',visualReview:'manual-required'},craft:{plan:true,observations:showImages,twoHoleWeave:true,glyphGeometry:'local-font-required'}};
+  const runtimeCapabilities={schemaHash:source.schemaHash,sourcePixelCoordinates:false,cropPx:false,previewOnly:showImages,runtime:{validate:'node20',render:'browser-html-manual',preview:'approximate-svg',browserRender:'shiye-canvas-v2',pack:'node20',visualReview:'manual-required'},craft:{plan:mode==='agent',observations:mode==='agent'&&showImages,twoHoleWeave:mode==='agent',glyphGeometry:'local-font-required'}};
   const knowledge={format:'shiye-gpt-task-knowledge',version:2,capabilities:runtimeCapabilities,regions:source.sourceSnapshots.map(snapshot=>({assetID:snapshot.assetID,sourceRevision:snapshot.sourceRevision,anatomy:snapshot.anatomy})),compositionIdeas:compositionIdeas(source),caseStudies:caseStudies(source,selected)};
   if(hasPresets){
     knowledge.abstractTemplates={source:'user-provided-tutorial-images',note:'本次只选少数匹配风格、用途和素材的来源模板；无确证配对时不得猜配或照搬。',templates:selectedTemplates};
@@ -125,7 +125,8 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
     '【先阅读 task/WORKFLOW.txt，再查看 material-planning.json；以下是方法细节，不是强制模板】',
     '【内容与事实边界】',contentBrief,
     '【页面与构图】',creativeDesignGuide(source,{hasImages:showImages,hasPresets,referenceCases:selectedCases}),
-    '【素材工艺】',craftTaskInstructions,multimodalCraftGuide,
+    mode==='agent'?'【工艺计划操作】':'【直接页面可用操作】',
+    mode==='agent'?craftTaskInstructions+'\n'+multimodalCraftGuide:'直接 page 模式只能使用 schema/output.json 中的 page.items.operations、graphics、text_blocks 与 ink_strokes；不能输出 apply_craft_plan、observations、weaves 等 agent 工具。先规划素材关系，再使用允许的 crop、cut_shape、window、diagonal 等操作。',
     hasPresets?'【参考案例说明】\\n'+journalReferenceGuide(selectedCases)+'\\n\\n'+journalAbstractTemplateGuide(selectedTemplates):''
   ].filter(Boolean).join('\\n\\n');
   const compactTask=task.replace('CONTENT_BRIEF.txt','task/GUIDE.txt');
