@@ -250,3 +250,28 @@ body:has(.import-nav) .import-nav .import-progress{flex:0 0 auto;min-width:0}
   #view .filters .filter-control,#view .series-filter-menus .filter-control{padding:0 6px;font-size:12px}
   #view .filters:has(.four-filter-controls)>input[type=search],#view .series-contents .series-filters>.shiye-search{min-width:110px!important}
 }
+
+/* The series overview uses a different wrapper than the material/works bars. */
+@media(min-width:700px){
+ #view .catalog-toolbar .swift-series-controls{
+   display:flex!important;flex-wrap:nowrap!important;align-items:center;gap:8px
+ }
+ #view .catalog-toolbar .swift-series-controls>.shiye-search{
+   flex:1 1 160px!important;width:auto!important;min-width:140px!important
+ }
+ #view .catalog-toolbar .swift-series-controls>.four-filter-controls{
+   display:flex!important;flex:0 0 auto!important;flex-wrap:nowrap!important;
+   width:auto!important;gap:6px;overflow:visible
+ }
+}
+@media(max-width:699px) and (orientation:portrait){
+ #view .catalog-toolbar .swift-series-controls{flex-wrap:wrap}
+ #view .catalog-toolbar .swift-series-controls>.shiye-search{flex:1 0 100%;width:100%}
+ #view .catalog-toolbar .swift-series-controls>.four-filter-controls{
+   width:100%;flex:1 1 100%;flex-wrap:wrap
+ }
+}
+/* Protect selection actions at the bottom edge of the paper. */
+.canvas-page .selected-object-overlay.controls-above .selected-object-actions{
+  top:auto;bottom:calc(100% + 8px)
+}
