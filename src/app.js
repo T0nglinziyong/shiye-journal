@@ -838,6 +838,7 @@ async function exportOfflineCreation(){
   state.matchPurpose=view.querySelector('#match-purpose')?.value||state.matchPurpose;state.matchProcessing=view.querySelector('#match-processing')?.value||state.matchProcessing;state.matchStyle=view.querySelector('#match-style')?.value||state.matchStyle;state.matchIntent=view.querySelector('#match-intent')?.value||'';captureMatchContent();state.matchMode=view.querySelector('#match-mode')?.value||state.matchMode;state.matchRatio=readMatchPaper();state.matchStyles=readMatchSelection('match-style',state.matchStyle);state.matchPurposes=readMatchSelection('match-purpose',state.matchPurpose);
   const button=view.querySelector('[data-act="match-export-gpt"]'),controller=new AbortController(),started=performance.now();
   const timing={},report={cacheHits:0,derived:0,original:0,materials:0,references:0};
+  let storedBundle=null;
   if(button){button.disabled=true;button.textContent='正在准备 AI 参考…';}
   body.innerHTML='<section class="offline-handoff"><h2>准备网页版 AI 创作包</h2><p id="offline-export-progress" role="status" aria-live="polite">正在检查素材…</p><button type="button" class="btn" id="offline-export-cancel">取消导出</button></section>';
   if(!modal.open)modal.showModal();
@@ -881,6 +882,7 @@ async function exportOfflineCreation(){
     p.offlineBundleId=result.source.bundleId;
     progress('正在保存任务身份…');
     await measured('taskStore',()=>offlineTaskStore.save(account,result.source));
+    storedBundle={account,id:result.source.bundleId};
     canceled();
     timing.total=Math.round(performance.now()-started);
     console.info('[shiye offline export timing]',{...timing,...report,packageBytes:result.packageBytes,imageBytes:result.imageBytes});
@@ -909,7 +911,7 @@ async function exportOfflineCreation(){
       body.querySelector('#offline-paste-result').onclick=()=>pasteOfflineResult();
     }
     body.querySelector('#offline-import-file').onclick=()=>{if(imageDelivery){offlineSnapshotProject=p;snapshotFileInput.click();}else workFileInput.click();};
-  }catch(error){if(!controller.signal.aborted){console.error(error);toast('AI 参考导出失败：'+error.message);if(modal.open)modal.close();}}finally{modal.removeEventListener('close',onClose);if(button){button.disabled=false;button.textContent='导出给网页版 AI';}}
+  }catch(error){if(controller.signal.aborted&&storedBundle){try{await offlineTaskStore.remove(storedBundle.account,storedBundle.id);}catch(cleanupError){console.warn('已取消任务的本机身份清理失败',cleanupError);}}if(!controller.signal.aborted){console.error(error);toast('AI 参考导出失败：'+error.message);if(modal.open)modal.close();}}finally{modal.removeEventListener('close',onClose);if(button){button.disabled=false;button.textContent='导出给网页版 AI';}}
 }
 function openOfflineImportDialog(){
   if(state.aiSettings.deliveryMode==='image'){
