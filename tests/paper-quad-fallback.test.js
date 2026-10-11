@@ -4,7 +4,7 @@ import cvModule from '@techstark/opencv-js';
 import {readFile} from 'node:fs/promises';
 import {PAPER_FALLBACK_MAX_EDGE,PAPER_FALLBACK_THRESHOLDS,
   PAPER_FALLBACK_EPSILONS,PAPER_FALLBACK_MIN_SCORE,
-  fallbackPaperQuad400,rescuePaperQuadCanny3} from '../src/paper-quad-fallback.js';
+  fallbackPaperQuad400} from '../src/paper-quad-fallback.js';
 
 function syntheticPage(){
  const width=800,height=600,pixels=new Uint8ClampedArray(width*height*4);
@@ -43,32 +43,8 @@ test('800px c9 finder runs unchanged before the optional 400px fallback',async()
  const [worker,perspective]=await Promise.all(['opencv-worker.js','perspective.js'].map(
    file=>readFile(new URL('../src/'+file,import.meta.url),'utf8')));
  assert.match(worker,/for\(const threshold of \[150,165,180,195,210,'otsu','edges','edges-low','lab-125','lab-130'\]/);
- assert.match(worker,/best\?\.corners\|\|rescuePaperQuadCanny3\(cv,p,own\)\|\|fallbackPaperQuad400\(cv,p,own\)/);
+ assert.match(worker,/best\?\.corners\|\|fallbackPaperQuad400\(cv,p,own\)/);
  assert.doesNotMatch(worker,/detectPaperQuadMultiScale/);
  assert.match(perspective,/Math\.min\(1,800\/Math\.max\(bitmap.width,bitmap.height\)\)/);
  assert.doesNotMatch(perspective,/1200\/Math\.max/);
-});
-
-test('3px Canny rescue respects original c9 quad geometry and rejects blank input',async()=>{
- const cv=await cvModule;
- const source=syntheticPage();
- const resources=[],own=mat=>(resources.push(mat),mat);
- try{
-   const corners=rescuePaperQuadCanny3(cv,source,own);
-   assert.equal(corners?.length,4);
- }finally{for(const mat of resources.reverse())mat.delete();}
- const blank=new Uint8ClampedArray(source.pixels.length).fill(255);
- const other=[],alloc=mat=>(other.push(mat),mat);
- try{
-   assert.equal(rescuePaperQuadCanny3(cv,{...source,pixels:blank},alloc),null);
- }finally{for(const mat of other.reverse())mat.delete();}
-});
-test('c9 primary contour code runs before both conditional rescue stages',async()=>{
- const worker=await readFile(new URL('../src/opencv-worker.js',import.meta.url),'utf8');
- const start=worker.indexOf("if(operation==='quad')");
- const end=worker.indexOf("if(operation==='alignment')",start);
- const section=worker.slice(start,end);
- assert.match(section,/for\(const threshold of \[150,165,180,195,210/);
- assert.match(section,/return best\?\.corners\|\|rescuePaperQuadCanny3\(cv,p,own\)\|\|fallbackPaperQuad400\(cv,p,own\)/);
- assert.equal((section.match(/rescuePaperQuadCanny3\(/g)||[]).length,1);
 });
