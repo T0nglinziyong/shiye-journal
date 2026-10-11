@@ -13,7 +13,7 @@ import {adjacentFontSize} from './canvas-control-behavior.js';
 import {createIcon} from './icons.js';
 import {historyTitle,renameHistory,deleteDraft,captureHistory,restoreHistoryDraft} from './project-history.js';
 import {syncSelectionGeometry} from './selection-geometry.js';
-import {groupSceneLayers,ungroupSceneLayers,sceneGroupMembers,sceneLayerEntries,validateVectorMask} from './scene-model.js';
+import {groupSceneLayers,ungroupSceneLayers,sceneGroupMembers,sceneLayerEntries,sceneGroups,transformSceneGroup,validateVectorMask} from './scene-model.js';
 import {clampCanvasPosition,moveSelection,materialCenterOutside} from './canvas-selection.js';
 import {transformSelectedFrame,isObjectDeleteKey} from './selection-transform.js';
 const labels={select:'选择',marquee:'矩形框选',pen:'笔',highlighter:'荧光笔',eraser:'橡皮擦',lasso:'套索选择',text:'文字',shape:'图形',material:'素材',layers:'图层',paper:'画布背景'};
@@ -318,7 +318,22 @@ export function mountCanvasEditor(c){
       p.close();
     },'btn');
     ungroupButton.disabled=!activeGroup;
-    groupActions.append(groupButton,ungroupButton);p.content.append(groupActions,list);
+    const rotateGroup=button('组合旋转 +15°',()=>{
+      if(!activeGroup)return;change(()=>transformSceneGroup(d,activeGroup,{rotation:15}));p.close();
+    },'btn');
+    rotateGroup.disabled=!activeGroup;
+    const groupStyle=button('组合外观',()=>{
+      if(!activeGroup)return;
+      const g=sceneGroups(d).find(item=>item.id===activeGroup);if(!g)return;
+      p.close();
+      const panel=openPopover(anchor,{title:'组合外观',width:300});
+      const label=document.createElement('label');label.textContent='整组不透明度';
+      const slider=document.createElement('input');slider.type='range';slider.min='0';slider.max='1';slider.step='.05';slider.value=String(g.opacity??1);
+      slider.onchange=()=>change(()=>g.opacity=Number(slider.value));label.append(slider);panel.content.append(label);
+      const modes=document.createElement('select');modes.append(new Option('普通纸片','normal'),new Option('正片叠底 · 透明纸','multiply'));
+      modes.value=g.blendMode||'normal';modes.onchange=()=>change(()=>g.blendMode=modes.value);panel.content.append(modes);
+    },'btn');groupStyle.disabled=!activeGroup;
+    groupActions.append(groupButton,ungroupButton,rotateGroup,groupStyle);p.content.append(groupActions,list);
     const ordered=[...entries].sort((a,b)=>(b.value.zIndex||0)-(a.value.zIndex||0)),rows=new Map();
     let drag=null,holdTimer=null,scrollFrame=null,moveMenu=null,suppressMoveClickUntil=0;
     const indexOf=id=>ordered.findIndex(e=>e.value.id===id);
