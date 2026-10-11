@@ -190,10 +190,11 @@ async function createOfflineImageHandoff({source,project:p,assets,selected,chose
   const brief=imagePrompt({project:p,draft:p.drafts[0],assets,ids:selected.map(item=>item.assetID),theme:p.intent||'',requireAll:settings.requireAllCandidates!==false,includeImages:showImages,includeReferences:hasPresets,textMode:source.textMode});
   const imageOrder=selected.map((item,index)=>`${index+1} = ${item.alias}${showImages?` (${packagePreviewPath('materials',item.alias,chosen.find(entry=>entry.alias===item.alias)?.bytes,{transparent:true})})`:''}`).join('；');
   const instructions=`拾页手帐画面图片任务｜一次完成\n\n你收到的是创作参考 ZIP，不是要返回的作品格式。请先读 task/context.json 与 task/knowledge.json${hasPresets?'、abstract-templates.json':''}，并${showImages?'查看 materials/ 中每件素材的透明图片':'依据素材名称、标签与尺寸'}；素材编号对应：${imageOrder}。${hasPresets?'references/ 中的匹配手帐案例和用户原图可核对的抽象模板只供构图启发；':''}按以下与拾页 API 图像创作一致的要求完成：\n\n${brief}\n\n请在聊天中展示最终画面，并提供可下载的 PNG 图片。图片是不可逐层编辑的画面快照；不要输出可编辑工程包、数据文件或代码。保持纸张比例，导入拾页后存入「画面快照」。`;
-  const imageKnowledge={format:'shiye-gpt-task-knowledge',version:2,caseStudies:caseStudies(source,selected)};
+  const imageKnowledge={format:'shiye-gpt-task-knowledge',version:3,caseStudies:{selectedCases:hasPresets?selectedCases.map(({id,title,method})=>({id,title,method})):[]}};
   if(hasPresets){
-    imageKnowledge.abstractTemplates={source:'user-provided-tutorial-images',note:'只选与本次任务匹配的少数来源模板；无确证配对时不得猜配。',templates:selectedTemplates};
-    imageKnowledge.sourceImageAudit={note:'case=真实案例，template=抽象版式，mixed=同图并列。',images:journalSourceAudit,verifiedCrossImagePairs:journalVerifiedPairs};
+    imageKnowledge.abstractTemplates={note:'参考构图，不得照搬',templates:selectedTemplates};
+    const refs=new Set(referenceImages.map(entry=>entry.id));
+    imageKnowledge.sourceImageAudit={images:journalSourceAudit.filter(row=>refs.has(row.id))};
   }
   const compactImageStart=`拾页手帐画面图片任务｜一次完成
 
