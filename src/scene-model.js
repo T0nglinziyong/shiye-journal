@@ -43,6 +43,11 @@ export function validateVectorMask(mask){
   const ring=(points)=>Array.isArray(points)&&points.length>=3&&points.length<=256&&
     points.every(p=>Array.isArray(p)&&p.length===2&&p.every(v=>numeric(v,0,1)));
   if(!ring(mask.outer)||!Array.isArray(mask.holes||[])||(mask.holes||[]).length>16||!(mask.holes||[]).every(ring))throw Error('图层蒙版坐标无效（必须为 0–1 轮廓）');
+  const area=pts=>Math.abs(pts.reduce((sum,p,i)=>{const n=pts[(i+1)%pts.length];return sum+p[0]*n[1]-n[0]*p[1];},0))/2;
+  const contains=(pt,polygon)=>{let yes=false;for(let i=0,j=polygon.length-1;i<polygon.length;j=i++){
+    const a=polygon[i],b=polygon[j];if(((a[1]>pt[1])!==(b[1]>pt[1]))&&pt[0]<(b[0]-a[0])*(pt[1]-a[1])/(b[1]-a[1])+a[0])yes=!yes;
+  }return yes;};
+  if(area(mask.outer)<1e-6||(mask.holes||[]).some(hole=>area(hole)<1e-6||!hole.every(p=>contains(p,mask.outer))))throw Error('蒙版轮廓或孔洞无法形成真实的有效裁切区域');
   return mask;
 }
 export function maskSVG(mask){
