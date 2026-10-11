@@ -1,6 +1,7 @@
 import {materialSourceSnapshot,assetFromSourceSnapshot,assetSourceRevision} from './material-anatomy.js';
 import {craftSceneHash,craftSceneState,craftDigest} from './craft-fingerprint.js';
 import {craftAssert} from './craft-errors.js';
+import {attachSceneV2,validateSceneExtensions,sceneLayerEntries} from './scene-v2.js';
 
 export function freezeCraftTask(source,draft,assets){
  const ids=new Set(source.materials.map(m=>m.assetID));
@@ -23,17 +24,20 @@ export function validateCraftTask(source,currentAssets,{trusted=false}={}){
   craftAssert(assetSourceRevision(assetFromSourceSnapshot(snapshot))===snapshot.sourceRevision,'SOURCE_SNAPSHOT_CHANGED','来源快照与其声明版本不一致',{assetId:item.assetID});
   craftAssert(assetSourceRevision(current)===snapshot.sourceRevision,'STALE_SOURCE','导出后素材图像、尺寸或库存已变化；请重新导出任务，不覆盖旧作品',{assetId:item.assetID});
  }
- craftAssert(source.baseDraft&&craftSceneHash(source.baseDraft)===source.baseSceneHash,'BASE_SCENE_CHANGED','任务起始画面指纹不匹配');
+ craftAssert(source.baseDraft,'INVALID_BASE_SCENE','任务缺少初始可编辑场景');
+ const base=attachSceneV2(structuredClone(source.baseDraft));
+ validateSceneExtensions(base);
+ craftAssert(craftSceneHash(base)===source.baseSceneHash,'BASE_SCENE_CHANGED','任务起始画面指纹不匹配');
  const ids=new Set();
- for(const field of ['items','textBlocks','primitives','strokes']){
-  craftAssert(Array.isArray(source.baseDraft[field])&&source.baseDraft[field].length<=5000,'INVALID_BASE_SCENE','任务起始图层格式无效');
-  for(const item of source.baseDraft[field]){
-   craftAssert(typeof item.id==='string'&&/^[a-zA-Z0-9_-]{1,192}$/.test(item.id)&&!ids.has(item.id),'INVALID_BASE_SCENE','任务起始图层编号不安全或重复');ids.add(item.id);
-  }
+ for(const {kind,value:item} of sceneLayerEntries(base,{hidden:true})){
+   craftAssert(typeof item.id==='string'&&/^[a-zA-Z0-9_-]{1,192}$/.test(item.id)&&!ids.has(item.id),
+     'INVALID_BASE_SCENE','任务起始图层编号不安全或重复');
+   ids.add(item.id);
  }
+
  // Every byte remains a declarative scene. Native validation and normal
  // executor validation still run before the result enters an editor.
- return structuredClone(source.baseDraft);
+ return base;
 }
 export function describeCraftSources(assets,aliases={}){
  return Object.entries(aliases).map(([alias,id])=>{
