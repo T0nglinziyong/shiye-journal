@@ -44,7 +44,7 @@ export function offlineCreationPlanningData(source,selected,{mode='agent',hasIma
 export function offlineCreationWorkflowText({mode='agent',hasImages=true}={}){
   const target=mode==='direct'
     ?'输出只能是一个含 page 的可编辑 JSON；不输出 tools/plan；高级 plan.observations 与 weaves 不属于 direct 合同。page.items.operations 可用 schema/output.json 列出的 crop、cut_shape 等操作。'
-    :'输出只能是一个含 tools 的可编辑 JSON；可使用 apply_craft_plan（含 observations/pieces/relations/ink）或 compose_page 等工具，须按 schema/output.json 逐项校验。不要同时输出 page 或额外顶层 plan。';
+    :'输出只能是一个含 tools 的可编辑 JSON；可使用 apply_craft_plan（含 observations/pieces/relations/ink）或 compose_page 等工具，须按 schema/output.json 逐项校验。不输出 page 或额外顶层 plan。';
   return [
     '拾页创作方法 · 先设计，再落地（一次任务内部完成，不要求用户多次交互）',
     '',
