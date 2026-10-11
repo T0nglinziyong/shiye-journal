@@ -16,8 +16,9 @@ export function restoreMatchingSession(record,state){
  if(!record)return [];
  for(const key of KEYS)if(record.context?.[key]!==undefined)state[key]=key==='matchProcessing'&&record.context[key]==='AI 自主加工'?'不预设':record.context[key];
  return (Array.isArray(record.variants)?record.variants:[])
-  .filter(v=>v&&typeof v.id==='string'&&usableProjectSnapshot(v.project))
-  .map(v=>{prepareProjectScene(v.project);return v.status==='running'?{...v,status:'interrupted',progress:'页面曾关闭，生成已中断；已保留收到的完整步骤。'}:v;});
+  .filter(v=>v&&typeof v.id==='string')
+  .flatMap(v=>{try{prepareProjectScene(v.project);}catch{return [];}return usableProjectSnapshot(v.project)?[v]:[];})
+  .map(v=>v.status==='running'?{...v,status:'interrupted',progress:'页面曾关闭，生成已中断；已保留收到的完整步骤。'}:v);
 }
 export function variantDraftProject(variant,existing,newID){
  if(existing?.isDraft)return existing;
