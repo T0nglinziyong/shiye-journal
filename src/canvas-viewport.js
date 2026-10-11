@@ -1,4 +1,5 @@
 import Panzoom from '@panzoom/panzoom';
+import {fingerMayPanCanvas,clampedCanvasOffset} from './canvas-control-behavior.js';
 
 // Panzoom owns transform/focal-point/pinch maths. This adapter only arbitrates
 // navigation versus the application's object, ink and text editing gestures.
@@ -22,7 +23,7 @@ export function mountCanvasViewport(c,page){
       if(points.size>=2){clearTimeout(timer);view.cancelObjectGesture?.();view.cancelInkGesture?.();if(!navigating)start([...points.values()][0]);pinching=true;moved=true;start(e);view.navigationSuppressedUntil=Infinity;stop(e);return;}
     }
     const background=!e.target.closest('[data-object],.selected-object-overlay');
-    const readTouch=e.pointerType==='touch'&&background&&['select','text'].includes(state.tool);
+    const readTouch=fingerMayPanCanvas({pointerType:e.pointerType,tool:state.tool,background,pencilEnabled:state.canvasTools?.pencil});
     if(readTouch){moved=false;start(e);origin.background=true;origin.tool=state.tool;stop(e);}
     else if(background&&state.tool==='select'&&e.pointerType==='mouse'){moved=false;origin={x:e.clientX,y:e.clientY};timer=setTimeout(()=>{view.cancelObjectGesture?.();start(e);moved=true;},250);}
   };
@@ -32,10 +33,8 @@ export function mountCanvasViewport(c,page){
   const wheel=e=>{if(!e.ctrlKey)return;zoom.zoomWithWheel(e);e.stopImmediatePropagation();};
   let clampFrame=0;
   const clampPan=()=>{if(!page.isConnected)return;const box=page.getBoundingClientRect(),bounds=host.getBoundingClientRect();let dx=0,dy=0;
-    if(box.width<=bounds.width)dx=bounds.left+bounds.width/2-(box.left+box.width/2);
-    else if(box.left>bounds.left)dx=bounds.left-box.left;else if(box.right<bounds.right)dx=bounds.right-box.right;
-    if(box.height<=bounds.height)dy=bounds.top+bounds.height/2-(box.top+box.height/2);
-    else if(box.top>bounds.top)dy=bounds.top-box.top;else if(box.bottom<bounds.bottom)dy=bounds.bottom-box.bottom;
+    dx=clampedCanvasOffset(box.left,box.right,bounds.left,bounds.right);
+    dy=clampedCanvasOffset(box.top,box.bottom,bounds.top,bounds.bottom);
     if(Math.abs(dx)<.5&&Math.abs(dy)<.5)return;const pan=zoom.getPan(),scale=zoom.getScale();zoom.pan(pan.x+dx/scale,pan.y+dy/scale,{force:true,animate:false});};
   const scheduleClamp=()=>{if(!clampFrame)clampFrame=requestAnimationFrame(()=>{clampFrame=0;clampPan();});};
   const changed=()=>{scheduleClamp();const {x,y}=zoom.getPan(),scale=zoom.getScale();state.zoom=scale;state.canvasViewports.set(key,{x,y,scale});const fit=view.querySelector('[data-canvas-fit]');if(fit)fit.textContent='↖ 适合页面 '+Math.round(scale*100)+'%';};
