@@ -1,6 +1,6 @@
 import {ensureInkSlots,inkSlot,activeInkSlot,selectInkSlot,editInkSlot} from './ink-tool-slots.js';
 import {openPopover,closePopover} from './swift-popover.js';
-import {defaultTools,commonShapes,advancedShapes,configureShape,straightStroke,eraseStrokes,drawInk,textFont,textLines} from './editor-tools-model.js';
+import {defaultTools,commonShapes,advancedShapes,configureShape,straightStroke,eraseStrokes,drawInk,textFont,textLines,textFontFamily,textLineHeight} from './editor-tools-model.js';
 import {shapeTag as shapeSVG} from './shape-preview.js';
 import {isCurrentExampleProject} from './current-examples.js';
 import {uid,textBlock,primitive,itemFromAsset} from './domain.js';
@@ -9,6 +9,7 @@ import {parseEditableGeometry} from './editable-geometry.js';
 import {bundledExampleRuling} from './paper-rendering.js';
 import {onDialogClosed} from './dialog-lifecycle.js';
 import {mountCanvasViewport} from './canvas-viewport.js';
+import {adjacentFontSize} from './canvas-control-behavior.js';
 import {createIcon} from './icons.js';
 import {historyTitle,renameHistory,deleteDraft,captureHistory,restoreHistoryDraft} from './project-history.js';
 import {syncSelectionGeometry} from './selection-geometry.js';
@@ -63,6 +64,11 @@ export function mountCanvasEditor(c){
   shell.before(toolbar);toolbar.append(tools);tools.replaceChildren();
   const context=document.createElement('div');context.className='canvas-context-tools';
   context.setAttribute('aria-label','当前工具选项');toolbar.append(context);
+  // iOS Safari blurs the inline text area as soon as a native select or
+  // format button is touched. Defer only that blur, not edits or navigation.
+  context.addEventListener('pointerdown',event=>{
+    if(state.editingTextID&&event.target.closest('select,button,input'))view.keepTextEditorUntil=performance.now()+1600;
+  },true);
   const changeTool=(mode,b)=>{view.endTextEditing?.();if(b.getAttribute('aria-expanded')==='true'){closePopover();return;}const repeated=state.tool===mode;if(['pen','highlighter'].includes(mode))state.previousInkTool=mode;state.tool=['layers','paper','material'].includes(mode)?'select':mode;state.toolHighlight=mode;if(!repeated)state.selectionPath=null;if(mode!=='select'&&mode!=='lasso'){state.multiSelected=[];state.selectedStrokes=[];}if(mode!=='select'&&mode!=='lasso')state.selected=null;if(!state.selected){page.querySelectorAll('.object-handle,.selected-object-actions,.selected-object-overlay').forEach(n=>n.remove());page.querySelectorAll('.selected').forEach(n=>n.classList.remove('selected'));page.querySelector('.canvas-selection-overlay')?.replaceChildren();}page.classList.toggle('pen',['pen','highlighter','eraser'].includes(mode));page.classList.toggle('lasso',['lasso','marquee'].includes(mode));syncTools();contextTools();if(['shape','material','layers','paper'].includes(mode)){if(mode==='shape')shapePicker(b);else if(mode==='material')materialPicker(b);else if(mode==='layers')layerPicker(b);else paperPicker(b);}else if(repeated&&['pen','highlighter','eraser','lasso'].includes(mode))toolSettings(b,mode);else closePopover();};
   for(const mode of ['select','pen','eraser','highlighter','lasso','text','shape','material','layers','paper']){const b=button(glyphs[mode],()=>changeTool(mode,b),'btn');b.dataset.act='tool';b.dataset.val=mode;b.setAttribute('aria-label',labels[mode]);b.title=labels[mode];tools.append(b);if(mode==='select')b.oncontextmenu=e=>{e.preventDefault();const p=openPopover(b,{title:'选择工具',width:230,menu:true});for(const [m,name] of [['select','点击选择 · 单指滚动画布'],['marquee','拖出矩形框选']])p.content.append(button(name,()=>{p.close();state.tool=m;state.toolHighlight='select';render();}));};}
   // Property editing remains available through the selected object's
@@ -107,9 +113,76 @@ export function mountCanvasEditor(c){
       return;
     }
     if(mode==='lasso'||mode==='marquee'){const icon=button('◌',()=>{});icon.setAttribute('aria-label','套索选择');icon.setAttribute('aria-pressed','true');context.append(icon);return;}
-    if(['shape','material','layers','paper'].includes(mode))return;
-    if(mode==='text'||kind==='text'){const t=s||state.textDefaults||{style:'serif',fontSize:40,color:'#30463d'};const patch=(key,value)=>{if(s)change(()=>{s[key]=value;if(key==='style')s.fontName=null;});else{(state.textDefaults||={...t})[key]=value;contextTools();}};const font=document.createElement('select');font.setAttribute('aria-label','字体');font.innerHTML=[['serif','宋体'],['sans','黑体'],['rounded','圆体'],['hand','手写体']].map(([id,name])=>'<option value="'+id+'" '+(id===t.style?'selected':'')+'>'+name+'</option>').join('');font.onchange=()=>patch('style',font.value);context.append(font);const size=document.createElement('input');size.type='number';size.min=5;size.max=400;size.value=t.fontSize;size.setAttribute('aria-label','字号');size.onchange=()=>patch('fontSize',Math.max(5,Math.min(400,+size.value||40)));context.append(size);context.append(button('☷',e=>textParagraph(e.currentTarget,t,patch)));const color=document.createElement('input');color.type='color';color.value=t.color||'#30463d';color.setAttribute('aria-label','文字颜色');color.onchange=()=>patch('color',color.value);context.append(color,button('Aa',e=>{const p=openPopover(e.currentTarget,{title:'文字样式',width:240,menu:true});for(const [key,name] of [['bold','粗体'],['italic','斜体'],['underline','下划线'],['strikethrough','删除线']])p.content.append(button((t[key]?'✓ ':'')+name,()=>{p.close();patch(key,!t[key]);}));if(s)p.content.append(button('详细文字设置',()=>{p.close();objectInspector(entries.find(e=>e.value.id===state.selected));}));}));return;}
-    if(kind==='shape'){context.append(button('＋ 添加图形',e=>shapePicker(e.currentTarget)));if(s&&kind==='shape'){if(!s.vectorLayers){const width=document.createElement('input');width.type='number';width.min=0;width.max=30;width.step=.5;width.value=s.lineWidth; width.setAttribute('aria-label','边框粗细');width.title='边框粗细（pt）';width.onchange=()=>change(()=>s.lineWidth=Math.max(0,Math.min(30,Number(width.value)||0)));context.append(width);for(const [key,name] of [['fill','填充颜色'],['stroke','边框颜色']]){const label=document.createElement('label');label.className='shape-color-control';label.title=name;label.textContent=name;const color=document.createElement('input');color.type='color';color.value=s[key]||'#ffffff';color.setAttribute('aria-label',name);color.onchange=()=>change(()=>s[key]=color.value);label.append(color);context.append(label);} }vectorColors(s);context.append(button('图形设置',()=>objectInspector(selected)));}return;}
+    if(['material','layers','paper'].includes(mode))return;
+    if(mode==='text'||kind==='text'){
+      const t=kind==='text'?s:(state.textDefaults||={style:'serif',fontSize:40,color:'#30463d'});
+      const patch=(key,value)=>{
+        if(!s){state.textDefaults={...t,[key]:value,...(key==='style'?{fontName:null}:{})};contextTools();return;}
+        // Never tear down a brand-new empty textarea to change font/size:
+        // a full render would blur it, delete it and discard the change.
+        const active=state.editingTextID===s.id&&!!page.querySelector('.canvas-inline-text');
+        if(active){
+          checkpoint();s[key]=value;if(key==='style')s.fontName=null;
+          const node=page.querySelector('[data-object="'+s.id+'"]');
+          if(node){
+            const scale=page.clientWidth/d.canvas.width;
+            node.style.fontFamily=textFontFamily(s);
+            node.style.fontSize=s.fontSize*scale+'px';
+            node.style.lineHeight=textLineHeight(s)*scale+'px';
+            node.style.fontWeight=s.bold?'700':'400';
+          }
+          saveProject();contextTools();
+        }else change(()=>{s[key]=value;if(key==='style')s.fontName=null;});
+      };
+      const group=document.createElement('div');group.className='canvas-text-format';
+      const font=document.createElement('select');font.setAttribute('aria-label','字体');
+      font.innerHTML=[['serif','宋体'],['sans','黑体'],['rounded','圆体'],['hand','手写体']]
+        .map(([id,name])=>'<option value="'+id+'" '+(id===t.style?'selected':'')+'>'+name+'</option>').join('');
+      font.onchange=()=>patch('style',font.value);group.append(font);
+      const size=document.createElement('div');size.className='canvas-font-size-stepper';size.setAttribute('aria-label','调整字号');
+      const smaller=button('‹',()=>patch('fontSize',adjacentFontSize(t.fontSize,-1)),'font-step');
+      smaller.setAttribute('aria-label','减小字号');smaller.title='减小到上一个预设字号';
+      const value=document.createElement('output');value.textContent=Math.round(t.fontSize||40);value.setAttribute('aria-label','当前字号');
+      const bigger=button('›',()=>patch('fontSize',adjacentFontSize(t.fontSize,1)),'font-step');
+      bigger.setAttribute('aria-label','增大字号');bigger.title='增大到下一个预设字号';
+      size.append(smaller,value,bigger);group.append(size);
+      context.append(group);
+      const para=button('☷',e=>textParagraph(e.currentTarget,t,patch));para.setAttribute('aria-label','段落设置');context.append(para);
+      const color=document.createElement('input');color.type='color';color.value=t.color||'#30463d';
+      color.setAttribute('aria-label','文字颜色');color.onchange=()=>patch('color',color.value);
+      context.append(color,button('Aa',e=>{
+        const p=openPopover(e.currentTarget,{title:'文字样式',width:240,menu:true});
+        for(const [key,name] of [['bold','粗体'],['italic','斜体'],['underline','下划线'],['strikethrough','删除线']])
+          p.content.append(button((t[key]?'✓ ':'')+name,()=>{p.close();patch(key,!t[key]);}));
+        if(s)p.content.append(button('详细文字设置',()=>{p.close();objectInspector(entries.find(e=>e.value.id===state.selected));}));
+      }));
+      return;
+    }
+    if(kind==='shape'||mode==='shape'){
+      context.append(button('＋ 图形',e=>shapePicker(e.currentTarget),'shape-add-quick'));
+      if(kind==='shape'&&s){
+        if(!s.vectorLayers){
+          for(const [key,label] of [['fill','填充'],['stroke','描边']]){
+            const swatch=document.createElement('label');swatch.className='shape-quick-color';swatch.title=label;
+            swatch.append(document.createTextNode(label));
+            const input=document.createElement('input');input.type='color';input.value=s[key]||'#ffffff';
+            input.setAttribute('aria-label',label+'颜色');input.onchange=()=>change(()=>s[key]=input.value);
+            swatch.append(input);context.append(swatch);
+          }
+          const width=document.createElement('select');width.className='shape-quick-select';width.setAttribute('aria-label','描边粗细');
+          for(const n of [0,1,2,3,4,6,8,12,16,24,30])width.append(new Option('线 '+n,n));
+          if(![...width.options].some(o=>Number(o.value)===s.lineWidth))width.add(new Option('线 '+s.lineWidth,s.lineWidth));
+          width.value=String(s.lineWidth??2);width.onchange=()=>change(()=>s.lineWidth=Number(width.value));context.append(width);
+        }
+        const opacity=document.createElement('select');opacity.className='shape-quick-select';opacity.setAttribute('aria-label','图形整体不透明度');
+        for(const n of [0,25,50,75,100])opacity.append(new Option(n+'%',n));
+        const currentOpacity=Math.round((s.opacity??1)*100);
+        if(![...opacity.options].some(o=>Number(o.value)===currentOpacity))opacity.add(new Option(currentOpacity+'%',currentOpacity));
+        opacity.value=String(currentOpacity);opacity.onchange=()=>change(()=>s.opacity=Number(opacity.value)/100);context.append(opacity);
+        context.append(button('更多设置',()=>objectInspector(entries.find(e=>e.value.id===state.selected)),'shape-detail-quick'));
+      }
+      return;
+    }
     if(kind==='material')context.append(button('☷ 素材操作',()=>objectInspector(selected)));
     if(mode==='select'){const fit=button('↖ '+Math.round(state.zoom*100)+'%',()=>view.editorViewport?.fit());fit.dataset.canvasFit='';context.append(fit);}
   }
@@ -480,7 +553,10 @@ export function mountCanvasEditor(c){
     page.querySelectorAll('.selected-object-overlay').forEach(n=>n.remove());view.selectionGeometryObserver?.disconnect();node.classList.add('typing');node.replaceChildren(input);input.style.textAlign=item.alignment||'left';typing={item,input,before,isNew,undoMark};state.editingTextID=item.id;state.selected=item.id;
     let composing=false;
     const update=()=>{item.content=input.value;const scale=page.clientWidth/d.canvas.width,top=item.y-item.height/2;input.style.height='100%';const height=Math.max(item.fontSize*1.4,input.scrollHeight/scale);if(height>item.height){item.height=height;item.y=top+height/2;node.style.height=height*scale+'px';}saveProject();view.editorViewport?.ensureVisible();};
-    input.oncompositionstart=()=>composing=true;input.oncompositionend=()=>{composing=false;update();};input.oninput=()=>{if(!composing)update();};input.onblur=()=>view.endTextEditing?.();input.onkeydown=e=>{e.stopPropagation();if(!e.isComposing&&!composing&&(e.key==='Escape'||(e.ctrlKey||e.metaKey)&&e.key==='Enter')){e.preventDefault();input.blur();}};
+    input.oncompositionstart=()=>composing=true;input.oncompositionend=()=>{composing=false;update();};input.oninput=()=>{if(!composing)update();};input.onblur=event=>{
+      if(performance.now()<(view.keepTextEditorUntil||0)||event.relatedTarget?.closest?.('.canvas-context-tools'))return;
+      view.endTextEditing?.();
+    };input.onkeydown=e=>{e.stopPropagation();if(!e.isComposing&&!composing&&(e.key==='Escape'||(e.ctrlKey||e.metaKey)&&e.key==='Enter')){e.preventDefault();input.blur();}};
     input.onpaste=e=>{e.preventDefault();const value=e.clipboardData.getData('text/plain');input.setRangeText(value,input.selectionStart,input.selectionEnd,'end');update();};
     view.endTextEditing=()=>{if(!typing)return;const session=typing;typing=null;state.editingTextID=null;session.item.content=session.input.value;session.input.onblur=null;session.input.blur();const node=session.input.closest('[data-object]');node?.classList.remove('typing');node?.replaceChildren(document.createTextNode(session.item.content));if(!session.item.content.trim()){d.textBlocks=d.textBlocks.filter(t=>t.id!==session.item.id);state.selected=null;}if(state.undo.at(-1)===session.undoMark&&(session.isNew&&!session.item.content.trim()||!session.isNew&&JSON.stringify(session.item)===session.before))state.undo.pop();saveProject();render();};
     input.focus({preventScroll:true});input.setSelectionRange(input.value.length,input.value.length);view.editorViewport?.ensureVisible();
