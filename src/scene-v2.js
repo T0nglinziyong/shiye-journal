@@ -19,7 +19,9 @@ function allLeaves(nodes,out=[],ancestors=[]){
 function detach(nodes,id){for(let i=0;i<nodes.length;i++){const n=nodes[i];if(n.id===id){nodes.splice(i,1);return n;}if(n.type==='group'){const found=detach(n.children||[],id);if(found)return found;}}return null;}
 const lookupGroup=(nodes,id)=>{let match=null;children(nodes,n=>{if(n.type==='group'&&n.id===id){match=n;return true;}return false;});return match;};
 function insertNode(d,node,parentID){
- const parent=parentID?lookupGroup(d.layers,parentID):null,target=parent?parent.children:d.layers;
+ const parent=parentID?lookupGroup(d.layers,parentID):null;
+ if(parentID&&!parent)throw Error('无法放入不存在的图层组');
+ const target=parent?parent.children:d.layers;
  let index=target.findIndex(current=>z(current)>z(node));
  if(index<0)index=target.length;
  target.splice(index,0,node);
@@ -112,6 +114,37 @@ export function ungroupSceneLayers(d,id){
  return true;
 }
 export function sceneGroups(d){attachSceneV2(d);return collectGroups(d.layers);}
+export function moveSceneNode(d,id,{parentID=null,beforeID=null}={}){
+ attachSceneV2(d);
+ const node=findSceneNode(d,id);
+ if(!node)throw Error('移动的图层不存在');
+ if(node.locked||node.isLocked)throw Error('锁定图层不能移动');
+ const parent=parentID?lookupGroup(d.layers,parentID):null;
+ if(parentID&&!parent)throw Error('目标图层组不存在');
+ if(node===parent||node.type==='group'&&collectGroups(node.children).includes(parent))throw Error('不能把组放入它自己或子组');
+ if(parent?.locked||parent?.isLocked)throw Error('目标组已锁定');
+ const target=parent?parent.children:d.layers;
+ if(beforeID&&!target.some(n=>n.id===beforeID&&n!==node))throw Error('目标位置不属于该图层组');
+ const removed=detach(d.layers,id);
+ if(!removed)throw Error('无法从旧图层组取出对象');
+ let index=beforeID?target.findIndex(n=>n.id===beforeID):target.length;
+ if(index<0)index=target.length;
+ target.splice(index,0,removed);
+ // Tree sibling order is explicit; only within-parent zIndex changes.
+ // Global leaf positions/source millimetres remain untouched.
+ target.forEach((n,i)=>n.zIndex=i+1);
+ if(node.type!=='group'){
+  if(parent)node.creativeGroupID=parent.id;
+  else delete node.creativeGroupID;
+ }
+ return true;
+}
+export function findSceneNode(d,id){
+ attachSceneV2(d);let result=null;
+ children(d.layers,n=>{if(n.id===id){result=n;return true;}return false;});
+ return result;
+}
+
 export function transformSceneGroup(d,id,{dx=0,dy=0,rotation=0}={}){
  attachSceneV2(d);
  const group=lookupGroup(d.layers,id);if(!group)throw Error('图层组不存在');
