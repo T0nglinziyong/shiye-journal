@@ -1,4 +1,5 @@
 import {previewImageFormat} from './offline-preview.js';
+import {webResultPrompt} from './creation-methods.js';
 import {offlineCreationPlanningData,offlineCreationWorkflowText,offlineVisualReviewChecklist} from './offline-creation-workflow.js';
 import {stabilizeImportedCraftScene} from './craft-import-identity.js';
 import {multimodalCraftGuide} from './craft-vision.js';
@@ -153,7 +154,7 @@ ${hasPresets?'references/ 只供构图参考，既不是可用素材，也不是
 先保存一个可编辑 JSON 为任务根目录 project.shiyeproject.json。运行 node runtime/validate.cjs 检查规则，再运行 node runtime/preview.cjs 生成 output/构图预览.svg（仅近似）与 output/画面预览.html（拾页共用 Canvas）。请在浏览器打开 HTML，等待素材真正渲染完成，根据 task/VISUAL_REVIEW.txt 和画面逐项核查；截图来自实际 HTML，不可自行生成不对应可编辑图层的效果图。修改 JSON 后重跑预览。
 系统字形可因设备而异：出现方框、错行或字体未加载时不得标注“字体验收通过”，可在拾页里继续校验。不随包附带字体文件。
 ${mode==='agent'?'最终 JSON 只包含本合同的 tools，不输出 page 或额外 plan；可在 apply_craft_plan.arguments 中提交 observations。':'最终 JSON 只包含本合同的 page，不输出 tools/plan；高级 observations/weaves 不可混入。'}
-必须保留 source 原样，只修改 title 和${mode==='direct'?' page':' tools' }；可在任务内部多轮试排，但只交付一个最佳版本。复制 JSON 模式：先展示来自同一份可编辑场景的 Canvas 预览图（浏览器渲染后截图）；随后仅用一个独立的 JSON 代码围栏输出完整 JSON，围栏内应为紧凑单行 JSON，不拆块、不用省略号或占位字段。文件模式运行 node runtime/pack.cjs 输出 output/作品.shiyeproject.zip。若 Canvas 无法运行，应明确说明视觉未验收，不可声称已经完成。
+必须保留 source 原样，只修改 title 和${mode==='direct'?' page':' tools' }；可在任务内部多轮试排，但只交付一个最佳版本。复制文本方式：先展示从同一份可编辑场景生成的 Canvas 预览；随后只用一个独立 JSON 代码块输出完整的单行可复制 JSON，不拆块、不省略。作品文件方式：交付可下载的单文件 作品.shiyeproject.json（与复制文本具有完全相同的数据合同）。如需 ZIP 可选运行 node runtime/pack.cjs 输出 output/作品.shiyeproject.zip，拾页仍可导入。若 Canvas 无法运行，应说明视觉未验收，不能声称已完成。
 `;
   const files={
     'START_HERE.txt':strToU8(compactStart),
@@ -177,7 +178,7 @@ ${mode==='agent'?'最终 JSON 只包含本合同的 tools，不输出 page 或�
   for(const entry of chosen)if(validAlias(entry.alias)&&source.materials.some(item=>item.alias===entry.alias))files[packagePreviewPath('materials',entry.alias,entry.bytes,{transparent:true})]=entry.bytes;
   if(hasPresets)for(const entry of referenceImages)files[packagePreviewPath('references',entry.id,entry.bytes)]=entry.bytes;
   const bytes=await new Promise((resolve,reject)=>zip(files,{level:4},(error,result)=>error?reject(error):resolve(result)));
-  const prompts={file:'请先读 ZIP 的 START_HERE.txt 和 task/WORKFLOW.txt；观察素材、比较构图并完成可编辑手帐，运行包内校验与 HTML Canvas 预览，检查画面后交付「作品.shiyeproject.zip」。',json:'请先读 ZIP 中的 START_HERE.txt 与 task/WORKFLOW.txt；完成可编辑手帐并运行校验，首先展示从 HTML Canvas 同一场景渲染的预览图，然后仅用一个独立的 ```json 代码块给出完整、紧凑、单行可复制 JSON（不可截断、不可拆块），不生成作品文件。无法渲染时必须说明未验收，不能伪造预览。'};
+  const prompts={file:webResultPrompt(mode,'file'),text:webResultPrompt(mode,'text')};
   return {blob:new Blob([bytes],{type:'application/zip'}),filename:'拾页-GPT创作任务.zip',prompt:prompts.file,prompts,source,mode,previewCount:chosen.length,imageBytes:[...chosen,...(hasPresets?referenceImages:[])].reduce((total,item)=>total+item.bytes.length,0),packageBytes:bytes.length};
 }
 async function createOfflineImageHandoff({source,project:p,assets,selected,chosen,settings,referenceImages,showImages,userTemplates=[]}){
@@ -194,7 +195,7 @@ async function createOfflineImageHandoff({source,project:p,assets,selected,chose
   // transport and the final handoff format differ for the web conversation.
   const brief=imagePrompt({project:p,draft:p.drafts[0],assets,ids:selected.map(item=>item.assetID),theme:p.intent||'',requireAll:settings.requireAllCandidates!==false,includeImages:showImages,includeReferences:hasPresets,textMode:source.textMode});
   const imageOrder=selected.map((item,index)=>`${index+1} = ${item.alias}${showImages?` (${packagePreviewPath('materials',item.alias,chosen.find(entry=>entry.alias===item.alias)?.bytes,{transparent:true})})`:''}`).join('；');
-  const instructions=`拾页手帐画面图片任务｜一次完成\n\n你收到的是创作参考 ZIP，不是要返回的作品格式。请先读 context.json 与 case-studies.json${hasPresets?'、abstract-templates.json':''}，并${showImages?'查看 materials/ 中每件素材的透明图片':'依据素材名称、标签与尺寸'}；素材编号对应：${imageOrder}。${hasPresets?'references/ 中的匹配手帐案例和用户原图可核对的抽象模板只供构图启发；':''}按以下与拾页 API 图像创作一致的要求完成：\n\n${brief}\n\n请在聊天中展示最终画面，并提供可下载的 PNG 图片。图片是不可逐层编辑的画面快照；不要输出可编辑工程包、数据文件或代码。保持纸张比例，导入拾页后存入「画面快照」。`;
+  const instructions=`拾页手帐画面图片任务｜一次完成\n\n你收到的是创作参考 ZIP，不是要返回的作品格式。请先读 task/context.json 与 task/knowledge.json${hasPresets?'、abstract-templates.json':''}，并${showImages?'查看 materials/ 中每件素材的透明图片':'依据素材名称、标签与尺寸'}；素材编号对应：${imageOrder}。${hasPresets?'references/ 中的匹配手帐案例和用户原图可核对的抽象模板只供构图启发；':''}按以下与拾页 API 图像创作一致的要求完成：\n\n${brief}\n\n请在聊天中展示最终画面，并提供可下载的 PNG 图片。图片是不可逐层编辑的画面快照；不要输出可编辑工程包、数据文件或代码。保持纸张比例，导入拾页后存入「画面快照」。`;
   const imageKnowledge={format:'shiye-gpt-task-knowledge',version:2,caseStudies:caseStudies(source,selected)};
   if(hasPresets){
     imageKnowledge.abstractTemplates={source:'user-provided-tutorial-images',note:'只选与本次任务匹配的少数来源模板；无确证配对时不得猜配。',templates:selectedTemplates};
@@ -216,8 +217,8 @@ async function createOfflineImageHandoff({source,project:p,assets,selected,chose
   for(const entry of chosen)if(validAlias(entry.alias)&&source.materials.some(item=>item.alias===entry.alias))files[packagePreviewPath('materials',entry.alias,entry.bytes,{transparent:true})]=entry.bytes;
   if(hasPresets)for(const entry of referenceImages)files[packagePreviewPath('references',entry.id,entry.bytes)]=entry.bytes;
   const bytes=await new Promise((resolve,reject)=>zip(files,{level:4},(error,result)=>error?reject(error):resolve(result)));
-  const prompt='请读 ZIP 中的 START_HERE.txt，直接创作并展示最终手帐画面，再交付一张可下载的 PNG 图片。输入 ZIP 只是素材任务包。';
-  return {blob:new Blob([bytes],{type:'application/zip'}),filename:'拾页-AI画面任务.zip',prompt,prompts:{image:prompt},source,mode:'image',deliveryMode:'image',previewCount:chosen.length,imageBytes:[...chosen,...(hasPresets?referenceImages:[])].reduce((total,item)=>total+item.bytes.length,0),packageBytes:bytes.length};
+  const prompt=webResultPrompt('image','file');
+  return {blob:new Blob([bytes],{type:'application/zip'}),filename:'拾页-AI画面任务.zip',prompt,prompts:{file:prompt,text:null},source,mode:'image',deliveryMode:'image',previewCount:chosen.length,imageBytes:[...chosen,...(hasPresets?referenceImages:[])].reduce((total,item)=>total+item.bytes.length,0),packageBytes:bytes.length};
 }
 export function inspectEditableSource(text){
   if(text.length>2_000_000)throw Error('可编辑作品文件过大');
