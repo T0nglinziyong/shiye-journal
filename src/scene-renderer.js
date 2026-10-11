@@ -30,13 +30,13 @@ export async function renderSceneCanvas(draft,{scale=1,loadMaterialImage,createC
  for(const {kind,value:item} of sceneRenderEntries(draft)){
   ctx.save();ctx.translate(item.x,item.y);ctx.rotate((item.rotation||0)*Math.PI/180);ctx.globalAlpha=item.opacity??1;
    const style=sceneLayerStyle(item);ctx.globalCompositeOperation=style.blendMode==='multiply'?'multiply':'source-over';
-   if(style.mask)applyVectorMask(ctx,style.mask,item.width,item.height);
+   if(style.mask&&kind!=='material')applyVectorMask(ctx,style.mask,item.width,item.height);
   try{
    if(kind==='material'){
     if(!decoded.has(item.assetID))decoded.set(item.assetID,Promise.resolve(loadMaterialImage?.(item.assetID,item)));
     const image=await decoded.get(item.assetID);if(!image)throw Error('缺少素材图像：'+item.assetID);
     const w=image.naturalWidth||image.width,h=image.naturalHeight||image.height;if(!(w>0&&h>0))throw Error('素材图像尺寸无效');
-    ctx.scale(item.isFlippedHorizontally?-1:1,1);clipMaterial(ctx,item);
+    ctx.scale(item.isFlippedHorizontally?-1:1,1);if(style.mask)applyVectorMask(ctx,style.mask,item.width,item.height);clipMaterial(ctx,item);
     const crop=item.cropRect||{x:0,y:0,width:1,height:1};
     ctx.drawImage(image,crop.x*w,crop.y*h,crop.width*w,crop.height*h,-item.width/2,-item.height/2,item.width,item.height);
    }else if(kind==='shape'){
