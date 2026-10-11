@@ -45,7 +45,7 @@ test('sniff result types by bytes, not file extension or browser MIME',async()=>
 });
 
 test('size budget protects text and package imports even with false MIME extension',async()=>{
-  await assert.rejects(classifyCreationFile(new Blob(['{',new Uint8Array(2_000_000)])),/2 MB/);
+  await assert.rejects(classifyCreationFile(new Blob(['{',new Uint8Array(8_000_000)])),/8 MB/);
   const zip=new Blob([bytes(80,75,3,4),new Uint8Array(20_000_001)]);
   await assert.rejects(classifyCreationFile(zip),/20 MB/);
 });
