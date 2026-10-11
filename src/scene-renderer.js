@@ -1,4 +1,4 @@
-import {projectMaterialViews} from './craft-display.js';
+import {sceneDisplaySiblings} from './craft-display.js';
 import {validateSceneExtensions,sceneLayerStyle,applyVectorMask} from './scene-model.js';
 import {clipMaterial} from './material-mask.js';
 import {drawPaper} from './paper-rendering.js';
@@ -68,10 +68,7 @@ export async function renderSceneCanvas(draft,{scale=1,loadMaterialImage,createC
  const drawTree=async(nodes,target,depth=0)=>{
    if(depth>8)throw Error('图层组嵌套超过渲染预算');
    // Physical weave display fragments are projections of one stock item.
-   const expanded=[...nodes].flatMap(node=>node.type==='material'
-     ?projectMaterialViews(node).map(piece=>({type:'material',value:piece,zIndex:piece.zIndex??0}))
-     :[{type:node.type,value:node,zIndex:node.zIndex??(node.type==='ink'?2000:0)}])
-     .sort((a,b)=>a.zIndex-b.zIndex);
+   const expanded=sceneDisplaySiblings(nodes).map(node=>({type:node.type,value:node}));
    for(const entry of expanded){
      const node=entry.value;
      if(node.hidden||node.isHidden||node.isParked||node.parked)continue;
