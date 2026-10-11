@@ -112,6 +112,26 @@ export function ungroupSceneLayers(d,id){
  return true;
 }
 export function sceneGroups(d){attachSceneV2(d);return collectGroups(d.layers);}
+export function transformSceneGroup(d,id,{dx=0,dy=0,rotation=0}={}){
+ attachSceneV2(d);
+ const group=lookupGroup(d.layers,id);if(!group)throw Error('图层组不存在');
+ if(![dx,dy,rotation].every(Number.isFinite)||Math.abs(dx)>20000||Math.abs(dy)>20000||Math.abs(rotation)>180)throw Error('图层组变换超出纸面范围');
+ const entries=sceneGroupMembers(d,id);
+ if(!entries.length||entries.some(e=>e.value.isLocked||e.value.locked))throw Error('组合中包含锁定或空白的图层');
+ const center=entries.filter(e=>e.kind!=='ink').reduce((r,e)=>({x:r.x+e.value.x,y:r.y+e.value.y,n:r.n+1}),{x:0,y:0,n:0});
+ const cx=center.n?center.x/center.n:d.canvas.width/2,cy=center.n?center.y/center.n:d.canvas.height/2;
+ const theta=rotation*Math.PI/180,cos=Math.cos(theta),sin=Math.sin(theta);
+ const move=(x,y)=>({x:cx+(x-cx)*cos-(y-cy)*sin+dx,y:cy+(x-cx)*sin+(y-cy)*cos+dy});
+ for(const {kind,value} of entries){
+  if(kind==='ink'){value.points=value.points.map(pt=>({...pt,...move(pt.x,pt.y)}));continue;}
+  const p=move(value.x,value.y);value.x=p.x;value.y=p.y;value.rotation=(value.rotation||0)+rotation;
+  // Only locations and angles change; width, height, crops, material source
+  // and stock unit are strictly unchanged.
+ }
+ group.lastTransform={dx,dy,rotation};
+ return true;
+}
+
 export function validateVectorMask(mask){
  if(!mask||typeof mask!=='object'||Array.isArray(mask)||Object.keys(mask).some(k=>!['outer','holes'].includes(k)))throw Error('蒙版格式无效');
  const valid=ring=>Array.isArray(ring)&&ring.length>=3&&ring.length<=256&&ring.every(p=>Array.isArray(p)&&p.length===2&&p.every(v=>num(v,0,1)));
