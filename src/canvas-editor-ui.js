@@ -334,7 +334,7 @@ export function mountCanvasEditor(c){
       modes.value=g.blendMode||'normal';modes.onchange=()=>change(()=>g.blendMode=modes.value);panel.content.append(modes);
     },'btn');groupStyle.disabled=!activeGroup;
     groupActions.append(groupButton,ungroupButton,rotateGroup,groupStyle);p.content.append(groupActions,list);
-    const ordered=[...sceneLayerEntries(d,{hidden:true,ink:true})].sort((a,b)=>(b.value.zIndex??(a.kind==='ink'?2000:0))-(a.value.zIndex??(b.kind==='ink'?2000:0))),rows=new Map();
+    const ordered=[...sceneLayerEntries(d,{hidden:true,ink:true})].sort((a,b)=>(b.value.zIndex??(b.kind==='ink'?2000:0))-(a.value.zIndex??(a.kind==='ink'?2000:0))),rows=new Map();
     let drag=null,holdTimer=null,scrollFrame=null,moveMenu=null,suppressMoveClickUntil=0;
     const indexOf=id=>ordered.findIndex(e=>e.value.id===id);
     const redraw=()=>{
