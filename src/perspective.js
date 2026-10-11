@@ -27,7 +27,7 @@ export async function rectifyA4(bitmap,corners,maxDimension=4096,paperRatio=210/
   return (await rectifyA4Frame(bitmap,corners,maxDimension,paperRatio)).blob;
 }
 export async function suggestPaperCorners(bitmap,paperRatio=210/297){
-  const ratio=Math.min(1,800/Math.max(bitmap.width,bitmap.height)),w=Math.max(1,Math.round(bitmap.width*ratio)),h=Math.max(1,Math.round(bitmap.height*ratio));
+  const ratio=Math.min(1,1200/Math.max(bitmap.width,bitmap.height)),w=Math.max(1,Math.round(bitmap.width*ratio)),h=Math.max(1,Math.round(bitmap.height*ratio));
   return visionTask('quad',{pixels:await analysisPixels(bitmap,{x:0,y:0,w:1,h:1},w,h),width:w,height:h,paperRatio});
 }
 
