@@ -19,14 +19,16 @@ test('tool agent edits the same saved Draft scene with vector masks, paper blend
  assert.equal(result.draft.primitives[0].creativeGroupID,'paper-group');
  assert.equal(result.draft.primitives[1].creativeGroupID,'paper-group');
  assert.equal(result.draft.layerGroups.length,1);
- assert.equal(result.draft.sceneVersion,1);
+ assert.equal(result.draft.sceneVersion,2);
  assert.equal(result.draft.agentRun.status,'finished');
 });
 test('direct page compiles the same physical Scene styling and groups',()=>{
- const page={version:3,style:'自由构图',intent:null,items:[],graphics:[
-  {...rectangle('paper-a',.25),blend_mode:'multiply',vector_mask:mask},rectangle('paper-b',.65)],
-  ink_strokes:[],text_blocks:[],paper:{color:'#fcfaf0',pattern:'plain'},
-  groups:[{id:'pair',name:'平面组合',keys:['paper-a','paper-b']}]};
+ const page={version:2,style:'自由构图',intent:null,paper:{color:'#fcfaf0',pattern:'plain'},layers:[
+   {type:'group',id:'pair',name:'组合',children:[
+      {type:'shape',id:'paper-a',...rectangle('paper-a',.25),blend_mode:'multiply',vector_mask:mask},
+      {type:'shape',id:'paper-b',...rectangle('paper-b',.65)}
+   ]}
+ ]};
  const out=applyToolCalls({tools:[{name:'compose_direct_page',arguments:page}]},draft(),[],{});
  assert.deepEqual(out.results.map(r=>r.ok),[true]);
  assert.equal(out.draft.primitives[0].blendMode,'multiply');
