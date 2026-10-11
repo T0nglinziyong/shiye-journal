@@ -184,15 +184,16 @@ function composeDirectSceneV2(d,assets,aliases,page,options){
   putGraphics(d,graphics);putTexts(d,texts,options);putInk(d,ink);
   const built=new Map(sceneLayerEntries(d,{hidden:true}).map(e=>[e.value.creativePieceID||e.value.agentKey||e.value.key||e.value.id,e.value]));
   const used=new Set();
-  const build=nodes=>nodes.map(node=>{
+  const build=(nodes,parentID=null)=>nodes.map(node=>{
     if(node.type==='group')return {id:node.id,type:'group',name:node.name||'拼贴组',zIndex:node.z??0,
       blendMode:node.blend_mode||'normal',opacity:node.opacity??1,vectorMask:node.vector_mask||null,
-      children:build(node.children)};
+      children:build(node.children,node.id)};
     const key=node.type==='material'?(node.piece||node.id):node.id;
     const value=built.get(key);
     if(!value)throw Error('Scene v2 生成图层不存在：'+key);
     if(used.has(value.id))throw Error('Scene v2 图层重复放置：'+key);
     used.add(value.id);
+    if(parentID)value.creativeGroupID=parentID;else delete value.creativeGroupID;
     return value;
   });
   // Keep manually edited content intact. The only storage is the tree; the
