@@ -44,7 +44,10 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
     const pixels=detail
       ? Math.min(screenWidth,screenHeight)*.72
       : rect.width>0&&rect.height>0?Math.max(rect.width,rect.height):Math.max(img.clientWidth||0,img.clientHeight||0);
-    const selected=imagePixelSize(pixels||400,globalThis.devicePixelRatio||1,screenWidth,screenHeight);
+    // Double request pixels for detail and actual canvas material rectangles only.
+    // Catalogue, matching and work cards keep their unchanged 480px tier.
+    const highDetail=!!img.closest('.detail-picture,#canvas-page .canvas-object.material');
+    const selected=imagePixelSize((pixels||400)*(highDetail?2:1),globalThis.devicePixelRatio||1,screenWidth,screenHeight);
     return img.closest('.cutout-preview')?Math.max(960,selected):selected;
   };
   function scheduleUpgrade(img){

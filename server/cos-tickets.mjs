@@ -1,5 +1,5 @@
 const leaf=/^[a-f0-9]{64}(?:-preview480\.webp|-project\.json(?:\.gz)?(?:-preview480\.webp)?)?$/;
-const supportedTiers=new Set([256,360,480,600,720,960,1200,1440,1920,2560]);
+const supportedTiers=new Set([256,360,480,600,720,960,1200,1440,1920,2560,3200,3840,5120]);
 export function createTicketHandler({ready,origin,origins,authenticate,sign}){
   const allowed=origins||[origin].filter(Boolean);
   return async req=>{

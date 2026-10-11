@@ -86,6 +86,10 @@ test('web handoff exposes mode-specific current schemas and concise instructions
   assert.ok(JSON.parse(strFromU8(directFiles['examples/project.shiyeproject.json'])).page);
   assert.ok(JSON.parse(strFromU8(agentFiles['examples/project.shiyeproject.json'])).tools);
   assert.match(agent.prompts.file,/可下载/);assert.match(agent.prompts.json,/不要生成作品文件/);
+  assert.match(agent.prompts.json,/首先展示/);
+  assert.match(agent.prompts.json,/一个独立的/);
+  assert.match(agent.prompts.json,/紧凑、单行/);
+  assert.match(strFromU8(agentFiles['START_HERE.txt']),/JSON 代码围栏/);
 });
 
 test('image delivery uses the same compact task grouping without editable schemas',async()=>{

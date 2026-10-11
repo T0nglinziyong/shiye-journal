@@ -13,7 +13,7 @@ test('COS authorizes only authenticated owner hash paths and validates a whole b
   assert.equal((await run(req)).status,200);
   const preview=await run({...req,body:{objects:[{method:'GET',path:'owner/'+hash,variant:'preview480'}]}});
   assert.equal(preview.status,200);assert.equal(preview.body.tickets[0].variant,'preview480');
-  for(const variant of ['preview256','preview360','preview480','preview600','preview720','preview960','preview1200','preview1440','preview1920','preview2560'])
+  for(const variant of ['preview256','preview360','preview480','preview600','preview720','preview960','preview1200','preview1440','preview1920','preview2560','preview3200','preview3840','preview5120'])
     assert.equal((await run({...req,body:{objects:[{method:'GET',path:'owner/'+hash,variant}]}})).status,200,variant);
   for(const row of [{method:'GET',path:'owner/'+hash,variant:'preview621'},{method:'PUT',path:'owner/'+hash,type:'image/png',variant:'preview360'},{method:'GET',path:'owner/'+hash,variant:'sharpen'},{method:'GET',path:'owner/'+hash,variant:'preview359'},{method:'GET',path:'owner/'+hash,variant:'preview4096'},{method:'GET',path:'owner/'+hash,variant:'preview0004'},{method:'GET',path:'owner/'+hash+'-preview480.webp',variant:'preview480'}])
     assert.equal((await run({...req,body:{objects:[row]}})).status,403);

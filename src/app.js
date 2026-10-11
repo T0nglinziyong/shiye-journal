@@ -73,6 +73,7 @@ import {offlineTaskStore} from './offline-task-store.js';
 import {offlinePreviewBytes as encodeOfflinePreview} from './offline-preview.js';
 import {mapOfflineExportLimited,prepareOfflineMaterialPreview} from './offline-export-assets.js';
 import {buildMaterialScope} from './matching-materials.js';
+import {addMatchingFromLibrary,addMatchingFromRecommendation} from './matching-selection.js';
 import {matchingRecommendations,renderMatchingPage} from './matching-view.js';
 import {captureMatchingScroll,restoreMatchingScroll} from './matching-scroll.js';
 import {patchMatchingView} from './matching-incremental.js';
@@ -677,9 +678,10 @@ async function handle(action,id,value){try{switch(action){
   case 'choose-candidate':await chooseCandidate(Number(id));break;
   case 'detail':openLibraryAsset(id);break;case 'detail-back':libraryBack();break;case 'detail-add':
     if((asset(state.detailAssetID)?.supply?.quantity??1)===0)throw Error('素材可用库存为 0');
-    state.basket=[...new Set([...state.basket,state.detailAssetID])];
+    addMatchingFromLibrary(state,[state.detailAssetID]);
+    void matchingSession.persist().catch(console.warn);
     document.querySelector('#basket-count').textContent=state.basket.length;
-    toast('已加入本次创作');break;case 'detail-match':if((asset(state.detailAssetID)?.supply?.quantity??1)===0)throw Error('素材可用库存为 0');state.matchCore=state.detailAssetID;state.basket=[...new Set([...state.basket,state.detailAssetID])];route('matching');break;case 'detail-series':libraryHistory.push({route:state.route,seriesID:state.seriesID,detailAssetID:state.detailAssetID});state.seriesID=asset(state.detailAssetID)?.seriesID||'all';route('library');break;case 'detail-similar':view.dispatchEvent(new CustomEvent('show-similar'));break;case 'detail-edit':openDetail(state.detailAssetID);break;case 'detail-check':await openCutoutCheck(state.detailAssetID);break;case 'detail-favorite':{
+    toast('已加入本次创作');break;case 'detail-match':if((asset(state.detailAssetID)?.supply?.quantity??1)===0)throw Error('素材可用库存为 0');addMatchingFromLibrary(state,[state.detailAssetID]);route('matching');break;case 'detail-series':libraryHistory.push({route:state.route,seriesID:state.seriesID,detailAssetID:state.detailAssetID});state.seriesID=asset(state.detailAssetID)?.seriesID||'all';route('library');break;case 'detail-similar':view.dispatchEvent(new CustomEvent('show-similar'));break;case 'detail-edit':openDetail(state.detailAssetID);break;case 'detail-check':await openCutoutCheck(state.detailAssetID);break;case 'detail-favorite':{
     const a=asset(state.detailAssetID),next={...a,isFavorite:!a.isFavorite};
     await db.put('assets',next);Object.assign(a,next);
     const heart=view.querySelector('.detail-heart');
@@ -700,9 +702,8 @@ async function handle(action,id,value){try{switch(action){
   case 'match-import-gpt':openOfflineImportDialog();break;
   case 'basket':{
     const removing=state.basket.includes(id);
-    state.basket=removing?state.basket.filter(x=>x!==id):[...state.basket,id];
-    if(removing)state.coreIDs=state.coreIDs.filter(x=>x!==id);
-    else state.excludedAssetIDs=state.excludedAssetIDs.filter(x=>x!==id);
+    if(removing){state.basket=state.basket.filter(x=>x!==id);state.coreIDs=state.coreIDs.filter(x=>x!==id);}
+    else addMatchingFromRecommendation(state,id);
     updateMatchingRegions(['.match-basket-scroll','.basket>.muted','.match-rec-grid','.match-recommendations .match-panel-head small','.match-action']);
     break;
   }
