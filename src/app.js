@@ -2,6 +2,7 @@
 import {assetSourceRevision} from './material-anatomy.js';
 import {renderSceneCanvas,decodeSceneImage} from './scene-renderer.js';
 import {sceneRenderEntries,projectMaterialViews,sceneDisplaySiblings} from './craft-display.js';
+import {inkScenePaths} from './ink-scene-svg.js';
 import {maskSVG,sceneLayerStyle,sceneLayerEntries,attachSceneV2} from './scene-model.js';
 import './styles.css';
 import './overrides.css';
@@ -410,9 +411,7 @@ function workCover(d,priority=false,snapshotOnly=false,projectID=null){
    if(node.type==='shape')return '<span class="work-shape" style="'+position(node)+extra+'">'+shapeTag(node)+'</span>';
    if(node.type==='text')return '<span class="work-text" style="'+position(node)+extra+'font-size:'+Math.max(.6,node.fontSize/d.canvas.width*100)+'cqw;line-height:'+textLineHeight(node)/d.canvas.width*100+'cqw;color:'+esc(node.color||'#333')+';text-align:'+(node.alignment||'left')+';font-family:'+esc(textFontFamily(node))+'">'+textParagraphMarkup(node,(node.paragraphSpacing||0)/d.canvas.width*100+'cqw')+'</span>';
    if(node.type==='ink'){
-     const points=node.points||[],col=/^#[0-9a-f]{6}$/i.test(node.color||'')?node.color:'#30463d';
-     const path=points.map((pt,i)=>(i?'L':'M')+(Number(pt.x)||0)+' '+(Number(pt.y)||0)).join(' ');
-     return '<svg class="scene-ink-object" viewBox="0 0 '+d.canvas.width+' '+d.canvas.height+'" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;z-index:'+(node.zIndex??2000)+';opacity:'+(node.opacity??1)+';pointer-events:none;'+extra+'"><path d="'+path+'" fill="none" stroke="'+col+'" stroke-width="'+(node.width||2)+'" stroke-linecap="round"/></svg>';
+     return '<svg class="scene-ink-object" viewBox="0 0 '+d.canvas.width+' '+d.canvas.height+'" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;z-index:'+(node.zIndex??2000)+';opacity:'+(node.opacity??1)+';pointer-events:none;'+extra+'">'+inkScenePaths(node)+'</svg>';
    }
    return '';
  };
@@ -426,21 +425,8 @@ function editorEntry(d,rendering=false){return rendering?sceneRenderEntries(d):s
 function vectorMarkup(i){const paths=(i.vectorPaths||[]).map(points=>{const d=points.filter(p=>Array.isArray(p)&&p.length===2&&p.every(Number.isFinite)).map((p,n)=>`${n?'L':'M'}${p[0]} ${p[1]}`).join(' ');return d?`<path d="${d} Z"/>`:'';}).join('');return `<svg aria-hidden="true" viewBox="0 0 1 1" preserveAspectRatio="none" style="width:100%;height:100%;overflow:visible;fill:${esc(i.fill||'transparent')};stroke:${esc(i.stroke||'none')};stroke-width:${Math.max(0,Number(i.lineWidth)||0)/Math.max(i.width,i.height,1)}">${paths}</svg>`;}
 function renderCanvasObject(e,scale){const i=e.value;
 if(e.kind==='ink'){
-  // Ink is a normal Scene node with its own z-order, not a perpetual
-  // topmost overlay. The drawing canvas is used for the active gesture only.
   const d=current(),width=d.canvas.width,height=d.canvas.height;
-  const pt=p=>[Number(p.x)||0,Number(p.y)||0],points=i.points||[];
-  const geom=points.map((p,n)=>(n?'L':'M')+pt(p).join(' ')).join(' ');
-  const sw=Math.max(.1,Number(i.width)||2);
-  const c=/^#[0-9a-f]{6}$/i.test(i.color||'')?i.color:'#30463d';
-  const line=points.length===1?
-    '<circle cx="'+(Number(points[0].x)||0)+'" cy="'+(Number(points[0].y)||0)+'" r="'+sw/2+'" fill="'+c+'"/>':
-    i.penStyle==='brush'?points.slice(1).map((p,k)=>{
-      const prev=points[k],pressure=Math.max(0,Math.min(1,((prev.p??.5)+(p.p??.5))/2));
-      const width=sw*(.35+.9*pressure);
-      return '<path d="M'+pt(prev).join(' ')+' L'+pt(p).join(' ')+'" fill="none" stroke="'+c+'" stroke-width="'+width+'" stroke-linejoin="round" stroke-linecap="round"/>';
-    }).join(''):'<path d="'+geom+'" fill="none" stroke="'+c+'" stroke-width="'+sw+'" stroke-linejoin="round" stroke-linecap="round"/>';
-  return '<svg class="canvas-object scene-ink-object" data-render-key="'+esc(i.id)+'" aria-hidden="true" viewBox="0 0 '+width+' '+height+'" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;z-index:'+(i.zIndex??2000)+';opacity:'+(i.opacity??1)+';mix-blend-mode:'+(i.blendMode==='multiply'?'multiply':'normal')+';pointer-events:none">'+line+'</svg>';
+  return '<svg class="canvas-object scene-ink-object" data-render-key="'+esc(i.id)+'" aria-hidden="true" viewBox="0 0 '+width+' '+height+'" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;z-index:'+(i.zIndex??2000)+';opacity:'+(i.opacity??1)+';mix-blend-mode:'+(i.blendMode==='multiply'?'multiply':'normal')+';pointer-events:none">'+inkScenePaths(i)+'</svg>';
 }
 const left=(i.x-i.width/2)*scale,top=(i.y-i.height/2)*scale;let inner='';let extra='';if(e.kind==='material'){inner=imgTag(asset(i.assetID));extra=`opacity:${i.opacity};${materialMaskCSS(i)}${i.isFlippedHorizontally?'--flip:-1;':''}`;}else if(e.kind==='text'){inner=`<div data-text-content>${textParagraphMarkup(i,(i.paragraphSpacing||0)*scale+'px')}</div>`;extra=`${i.paragraphSpacing?'display:block;':''}opacity:${i.opacity??1};font-size:${i.fontSize*scale}px;line-height:${textLineHeight(i)*scale}px;letter-spacing:${(i.letterSpacing||0)*scale}px;font-style:${i.italic?'italic':'normal'};text-decoration:${[i.underline?'underline':'',i.strikethrough?'line-through':''].filter(Boolean).join(' ')||'none'};color:${esc(i.color)};text-align:${i.alignment||'left'};font-family:${esc(textFontFamily(i))};font-weight:${i.bold?'700':'400'};`; }else{extra=`background:${i.kind==='frame'||i.kind==='line'?'transparent':esc(i.fill||'transparent')};border-color:${esc(i.stroke||'transparent')};border-width:${Math.max(1,i.lineWidth*scale)}px;opacity:${i.opacity};`;}
 if(e.kind==='shape'){inner=shapeTag(i);extra=`opacity:${i.opacity??1};`;}
