@@ -117,7 +117,7 @@ export function mountCanvasEditor(c){
     if(mode==='text'||kind==='text'){
       const t=kind==='text'?s:(state.textDefaults||={style:'serif',fontSize:40,color:'#30463d'});
       const patch=(key,value)=>{
-        if(!s){state.textDefaults={...t,[key]:value,...(key==='style'?{fontName:null}:{})};contextTools();return;}
+        if(kind!=='text'){state.textDefaults={...t,[key]:value,...(key==='style'?{fontName:null}:{})};contextTools();return;}
         // Never tear down a brand-new empty textarea to change font/size:
         // a full render would blur it, delete it and discard the change.
         const active=state.editingTextID===s.id&&!!page.querySelector('.canvas-inline-text');
