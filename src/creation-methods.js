@@ -37,7 +37,8 @@ export function classifyCreationBytes(header){
   if(b.length>=8&&[137,80,78,71,13,10,26,10].every((v,i)=>b[i]===v))return {kind:'image',mimeType:'image/png'};
   if(b.length>=3&&b[0]===255&&b[1]===216&&b[2]===255)return {kind:'image',mimeType:'image/jpeg'};
   if(b.length>=12&&utf8Start(b.slice(0,4))==='RIFF'&&utf8Start(b.slice(8,12))==='WEBP')return {kind:'image',mimeType:'image/webp'};
-  if(b.length&&utf8Start(b).replace(/^\uFEFF/,'').trimStart().startsWith('{'))return {kind:'json',mimeType:'application/json'};
+  const text=utf8Start(b).replace(/^\uFEFF/,'').trimStart();
+  if(text.startsWith('{')||/^```(?:json)?\s*\{/.test(text))return {kind:'json',mimeType:'application/json'};
   return null;
 }
 export async function classifyCreationFile(file){
