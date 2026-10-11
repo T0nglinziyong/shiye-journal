@@ -42,6 +42,16 @@ export function projectMaterialViews(item){
  emit(geometryDifference(source,claimed),'base',item.zIndex||0);
  craftAssert(parts.length<=64,'DISPLAY_FRAGMENT_BUDGET','局部显示碎片过多');return parts;
 }
+// A single source piece may be projected into front/back visibility pieces.
+// These projections never exist in the saved Scene and consume no material stock.
+// Calling surfaces must sort siblings AFTER expansion, so a piece can actually
+// pass both behind and in front of another independent physical layer.
+export function sceneDisplaySiblings(nodes){
+ const z=node=>node.zIndex??(node.type==='ink'?2000:0);
+ return (nodes||[]).flatMap(node=>node.type==='material'
+   ?projectMaterialViews(node).map(piece=>({...piece,type:'material',__sceneProjection:true}))
+   :[node]).sort((a,b)=>z(a)-z(b));
+}
 export function sceneRenderEntries(draft){
  // The tree controls ordering for material, text, graphics and ink.
  return sceneLayerEntries(draft,{ink:true})
