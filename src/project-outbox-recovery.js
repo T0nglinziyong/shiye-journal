@@ -1,3 +1,4 @@
+import {prepareProjectScene} from './scene-v2.js';
 // Offline outbox must accept the same canonical persisted Scene v2 as
 // local/remote project documents. A missing legacy items[] array is NOT
 // damage and must never cause an unsynced user edit to be discarded.
@@ -21,6 +22,12 @@ export function usableProjectSnapshot(project){
    draft.sceneVersion===2&&validTree(draft.layers));
 }
 export function recoverProjectOutbox(rows){
- const kept=(rows||[]).filter(row=>usableProjectSnapshot(row?.record)&&Number.isSafeInteger(row.serial)&&row.serial>0&&Number.isSafeInteger(row.baseRevision)&&row.baseRevision>=0);
+ const kept=(rows||[]).filter(row=>{
+  // Safely upgrade an offline v1 edit into the same saved v2 tree before
+  // checking it. Never discard an otherwise complete pending user drawing
+  // merely because a new release removed four legacy leaf-array keys.
+  if(row?.record)try{prepareProjectScene(row.record);}catch{return false;}
+  return usableProjectSnapshot(row?.record)&&Number.isSafeInteger(row.serial)&&row.serial>0&&Number.isSafeInteger(row.baseRevision)&&row.baseRevision>=0;
+ });
  return {rows:kept,removed:(rows||[]).length-kept.length};
 }
