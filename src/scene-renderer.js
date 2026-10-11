@@ -1,4 +1,5 @@
 import {sceneRenderEntries} from './craft-display.js';
+import {validateSceneExtensions,sceneLayerStyle,applyVectorMask} from './scene-model.js';
 import {clipMaterial} from './material-mask.js';
 import {drawPaper} from './paper-rendering.js';
 import {shapeSVG,drawInk,textFont,textLines,textFontFamily} from './editor-tools-model.js';
@@ -19,6 +20,7 @@ export async function prepareSceneFonts(draft){
 }
 export async function renderSceneCanvas(draft,{scale=1,loadMaterialImage,createCanvas=()=>document.createElement('canvas'),loadShapeImage=decodeSceneImage,waitForFonts=true}={}){
  if(!Number.isFinite(scale)||scale<=0||scale>8)throw Error('画面输出比例无效');
+ validateSceneExtensions(draft);
  const width=Math.round(draft.canvas.width*scale),height=Math.round(draft.canvas.height*scale);
  if(width<1||height<1||width*height>32_000_000)throw Error('画面输出超过像素预算');
  const fontProfile=waitForFonts?await prepareSceneFonts(draft):{status:'not-checked'};
@@ -27,6 +29,8 @@ export async function renderSceneCanvas(draft,{scale=1,loadMaterialImage,createC
  const decoded=new Map(),shapes=new Map();
  for(const {kind,value:item} of sceneRenderEntries(draft)){
   ctx.save();ctx.translate(item.x,item.y);ctx.rotate((item.rotation||0)*Math.PI/180);ctx.globalAlpha=item.opacity??1;
+   const style=sceneLayerStyle(item);ctx.globalCompositeOperation=style.blendMode==='multiply'?'multiply':'source-over';
+   if(style.mask)applyVectorMask(ctx,style.mask,item.width,item.height);
   try{
    if(kind==='material'){
     if(!decoded.has(item.assetID))decoded.set(item.assetID,Promise.resolve(loadMaterialImage?.(item.assetID,item)));
