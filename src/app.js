@@ -71,7 +71,7 @@ import {rectifyA4Frame,suggestPaperCorners} from './perspective.js';
 import {analysisPixels,decodeRecognitionImage,sourcePixels} from './recognition-raster.js';
 import {syncCurrentMaterials} from './current-materials.js';
 import {syncCurrentExamples,isUntouchedLegacyExample} from './current-examples.js';
-import {applyToolCalls} from './creative.js';
+import {applyToolCalls,validateScenePhysical} from './creative.js';
 import {createOfflineHandoff,inspectEditableSource,inspectOfflinePackage,verifyOfflineTaskPackage,importEditableWork,importEditableWorkPackageReviewed} from './offline-creation.js';
 import {offlineTaskStore} from './offline-task-store.js';
 import {offlinePreviewBytes as encodeOfflinePreview} from './offline-preview.js';
@@ -805,6 +805,8 @@ async function handle(action,id,value){try{switch(action){
         const roll=a.kind==='tape'&&a.supply?.kind==='tapeRoll'&&a.tapeRepeatMode==='repeatablePattern';
         if(free===undefined&&!roll)throw Error('实物库存不足，不能复制同一贴纸');
         copy.materialUnitIndex=free??0;
+        const trial=attachSceneV2(structuredClone(d));trial.items.push(structuredClone(copy));
+        validateScenePhysical(trial,state.assets);
         d.items.push(copy);
       }else(e.kind==='shape'?d.primitives:d.textBlocks).push(copy);
     });break;
