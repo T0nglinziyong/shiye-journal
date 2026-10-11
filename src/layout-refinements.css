@@ -275,3 +275,237 @@ body:has(.import-nav) .import-nav .import-progress{flex:0 0 auto;min-width:0}
 .canvas-page .selected-object-overlay.controls-above .selected-object-actions{
   top:auto;bottom:calc(100% + 8px)
 }
+
+
+/* 2026-10-11 · Header alignment and precise selection grip refinements.
+   Keep A4 correction and 9 mm material recognition entirely untouched. */
+
+/* The import bar is full width; title + workflow steps + cancel are a single,
+   optically centered group. The back arrow occupies its own left-side cell. */
+body:has(.import-nav) #view .import-nav{
+  display:grid!important;
+  grid-template-columns:minmax(38px,1fr) max-content minmax(38px,1fr)!important;
+  align-items:center!important;
+  justify-content:stretch!important;
+  justify-items:stretch;
+  column-gap:0!important;
+  width:100%!important;
+  max-width:none!important;
+  min-height:56px;
+  padding:7px clamp(12px,2.2vw,28px)!important;
+  overflow:visible;
+}
+body:has(.import-nav) #view .import-nav .import-nav-center{
+  grid-column:2;
+  grid-row:1;
+  justify-self:center;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:clamp(8px,1.5vw,18px);
+  min-height:38px;
+  white-space:nowrap;
+}
+body:has(.import-nav) #view .import-nav .import-nav-center>strong,
+body:has(.import-nav) #view .import-nav .import-nav-center>.import-cancel{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  height:36px;
+  min-height:36px;
+  margin:0;
+  padding:0 3px;
+  font-size:14px;
+  line-height:20px;
+  vertical-align:middle;
+  white-space:nowrap;
+}
+body:has(.import-nav) #view .import-nav .import-nav-center>.import-progress{
+  display:flex;
+  flex:0 0 auto;
+  align-items:center;
+  gap:7px;
+  height:36px;
+  min-height:36px;
+  margin:0;
+  padding:0;
+  line-height:20px;
+}
+body:has(.import-nav) #view .import-nav .import-nav-center>.import-progress>span{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-height:36px;
+  line-height:20px;
+  white-space:nowrap;
+}
+body:has(.import-nav) #view .import-nav .import-nav-center>.import-progress>span>b{
+  display:inline-grid;
+  place-items:center;
+  vertical-align:middle;
+  flex:0 0 24px;
+  width:24px;height:24px;
+  line-height:1;
+}
+/* Draw both back chevrons as actual centered shapes, rather than relying on
+   the uneven font baseline of the large "‹" character. */
+body:has(.import-nav) #view .import-nav>.import-back{
+  grid-column:1;grid-row:1;justify-self:start;align-self:center;
+  display:inline-grid!important;
+  place-items:center!important;
+  width:36px;height:36px;min-width:36px;min-height:36px;
+  margin:0;padding:0!important;
+  font-size:0!important;line-height:0!important;
+  border:0;background:transparent;
+}
+body:has(.import-nav) #view .import-nav>.import-back::before,
+#view .swift-editor-head .editor-back-chevron{
+  content:'';
+  display:block;
+  width:10px;height:10px;
+  box-sizing:border-box;
+  border-left:2px solid currentColor;
+  border-bottom:2px solid currentColor;
+  transform:translateX(2px) rotate(45deg);
+  flex:0 0 auto;
+}
+#view .swift-editor-head{
+  display:flex;
+  align-items:center!important;
+}
+#view .swift-editor-head>[data-act="back-works"]{
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center;
+  gap:9px;
+  min-height:36px;height:36px;
+  margin:0!important;
+  padding:0 9px!important;
+  line-height:20px!important;
+  font-size:14px;
+  vertical-align:middle;
+  white-space:nowrap;
+}
+#view .swift-editor-head>[data-act="back-works"]>span{
+  display:inline-flex;
+  align-items:center;
+  line-height:20px;
+}
+#view .swift-editor-head>div:first-of-type{
+  display:flex;
+  align-items:center;
+  align-self:center;
+  min-height:36px;
+}
+#view .swift-editor-head h1{
+  display:flex;
+  align-items:center;
+  line-height:22px;
+  margin:0;
+}
+#view .settings-toolbar [data-act="settings-back"],
+#view .detail-back,
+#view .series-back,
+#view .project-preview-back{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-height:36px;
+  line-height:20px;
+  vertical-align:middle;
+}
+/* On phone screens the workflow stays centered within the space remaining
+   after the back button; only the step group may scroll if truly too wide. */
+@media(max-width:699px){
+  body:has(.import-nav) #view .import-nav{
+    grid-template-columns:36px minmax(0,1fr)!important;
+    column-gap:5px!important;
+    padding-inline:10px!important;
+    overflow:hidden;
+  }
+  body:has(.import-nav) #view .import-nav .import-nav-center{
+    grid-column:2;
+    width:max-content;max-width:100%;
+    justify-self:center;
+    justify-content:flex-start;
+    overflow-x:auto;
+    scrollbar-width:none;
+  }
+  body:has(.import-nav) #view .import-nav .import-nav-center::-webkit-scrollbar{display:none}
+}
+
+/* Side-edge grips: a longer visual pill inside a comfortable invisible
+   touch target. The bottom-right combined scale/rotate grip is unchanged. */
+.multi-box-editor .box-grip.top{
+  width:38px;height:24px;min-width:38px;min-height:24px;
+  left:calc(50% - 19px);top:-12px;
+}
+.multi-box-editor .box-grip.top::after{
+  inset:auto;
+  width:22px;height:6px;
+  top:9px;left:8px;
+  border-radius:4px;
+}
+.multi-box-editor .box-grip.right{
+  width:24px;height:38px;min-width:24px;min-height:38px;
+  right:-12px;top:calc(50% - 19px);
+}
+.multi-box-editor .box-grip.right::after{
+  inset:auto;
+  width:6px;height:22px;
+  top:8px;left:9px;
+  border-radius:4px;
+}
+.canvas-page .selected-object-overlay .object-handle.top{
+  width:38px!important;height:24px!important;
+  min-width:38px!important;min-height:24px!important;
+  left:calc(50% - 19px)!important;top:-12px!important;
+}
+.canvas-page .selected-object-overlay .object-handle.top::after{
+  width:22px!important;height:6px!important;
+  top:9px!important;left:8px!important;
+  border-radius:4px!important;
+}
+.canvas-page .selected-object-overlay .object-handle.right{
+  width:24px!important;height:38px!important;
+  min-width:24px!important;min-height:38px!important;
+  right:-12px!important;top:calc(50% - 19px)!important;
+}
+.canvas-page .selected-object-overlay .object-handle.right::after{
+  width:6px!important;height:22px!important;
+  top:8px!important;left:9px!important;
+  border-radius:4px!important;
+}
+/* Deletion has the same 14px visible diameter as the bottom-right circular
+   handle, but still gets a 22px touch area. */
+.multi-box-editor .box-delete{
+  width:22px!important;height:22px!important;
+  min-width:22px!important;min-height:22px!important;
+  top:-11px;right:-11px;
+  padding:0!important;margin:0;
+  background:transparent!important;
+  border:0!important;
+  font-size:0!important;
+  display:grid;place-items:center;
+}
+.multi-box-editor .box-delete::after{
+  content:'';
+  position:absolute;
+  width:14px;height:14px;
+  top:4px;left:4px;
+  border:1.5px solid #52634b;
+  border-radius:50%;
+  background:#fffefa;
+  box-sizing:border-box;
+  box-shadow:0 1px 3px #0002;
+  z-index:0;
+}
+.multi-box-editor .box-delete::before{
+  content:'×';
+  position:absolute;
+  inset:0;
+  display:grid;place-items:center;
+  z-index:1;
+  color:#52634b;
+  font:600 11px/1 sans-serif;
+}
