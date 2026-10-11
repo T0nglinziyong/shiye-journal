@@ -1,4 +1,5 @@
 import {BoundedValueCache} from './preview-content-cache.js';
+import {prepareProjectScene} from './scene-v2.js';
 import {cachedImageSource,onImageInvalidation} from './presentation-resources.js';
 
 // Matching cards first render a lightweight DOM fallback, then replace it with
@@ -10,6 +11,7 @@ export function createMatchingCoverCache(context) {
   const jobs=new Map();let scope=null;
   const unsubscribe=onImageInvalidation(()=>{cache.clear();raster.clear();jobs.clear();});
   const snapshot=project=>{
+    prepareProjectScene(project);
     const draft=project.drafts?.find(d=>d.id===project.activeDraftID)||project.drafts?.[0];
     const ids=new Set((draft?.items||[]).map(item=>item.assetID));
     const assets=(context.state.assets||[]).filter(asset=>ids.has(asset.id));
