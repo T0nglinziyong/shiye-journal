@@ -13,7 +13,7 @@ export function selectJournalTemplateBundle(context,userTemplates=[]){
   return {selectedCases,selectedTemplates};
 }
 
-export async function loadJournalTemplateReferences({context,userTemplates=[],db,includeImages=true}){
+export async function loadJournalTemplateReferences({context,userTemplates=[],db,includeImages=true,encodeReference=offlinePreviewBytes}){
   const {selectedCases,selectedTemplates}=selectJournalTemplateBundle(context,userTemplates);
   if(!includeImages)return {selectedCases,selectedTemplates,referenceImages:[]};
   const referenceImages=await loadJournalReferenceCases(selectedCases);
@@ -38,7 +38,7 @@ export async function loadJournalTemplateReferences({context,userTemplates=[],db
   const webp=await Promise.all(referenceImages.map(async entry=>{
     const mime=entry.mimeType||(entry.extension==='jpg'||entry.extension==='jpeg'?'image/jpeg':'image/png');
     const input=new Blob([entry.bytes],{type:mime});
-    const bytes=await offlinePreviewBytes(input,{maxEdge:OFFLINE_REFERENCE_EDGE});
+    const bytes=await encodeReference(input,{maxEdge:OFFLINE_REFERENCE_EDGE});
     const compressed=new Blob([bytes],{type:'image/webp'});
     return {...entry,bytes,mimeType:'image/webp',extension:'webp',url:await dataURL(compressed)};
   }));

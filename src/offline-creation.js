@@ -127,7 +127,7 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
 3. task/GUIDE.txt：正文边界、页面方法和素材工艺。
 4. task/knowledge.json：能力、区域、构图灵感、案例和可选模板/来源审计。
 5. schema/output.json 与 schema/craft-plan.json：合法输出合同。
-examples/project.shiyeproject.json 只示意字段结构，不能照抄正文、坐标或构图。
+examples/project.shiyeproject.json 只示意字段结构，不能照抄正文、坐标或构图。\n\n【中文字体验收】\nproject.shiyeproject.json 中所有标题和正文必须使用真实 UTF-8 中文字符，不允许用方框、问号或图像替代。runtime/preview.cjs 的 SVG 依赖运行机器已安装 Noto Sans/Serif CJK、苹方或微软雅黑等中文字库；预览中若出现 □□□，表示环境缺少字形，不是作品文字丢失。请先配置中文字库并重新渲染，再交付页面截图；无法做到时应明确标记字体未验收，交回拾页浏览器渲染，绝对不要把方框截图称为已完成的视觉预览。不要在任务包中附带字体文件。
 
 【本次任务】
 ${compactTask}
@@ -159,7 +159,7 @@ GPT 可以直接看图并在 plan.observations 中提出本次选区；无需先
 `),
     'runtime/pack.cjs':strToU8(`process.argv[2]='pack';require('./validate.cjs');
 `),
-    'runtime/README.txt':strToU8('把完整 JSON 保存为任务根目录 project.shiyeproject.json。Node.js 20+：validate.cjs 校验；preview.cjs 生成 output/构图预览.svg 与 output/画面预览.html；pack.cjs 再生成 output/作品.shiyeproject.zip。运行时只读取 task/context.json。glyphs.cjs 只从本地已有字体生成数值轮廓，不携带字体文件。')
+    'runtime/README.txt':strToU8('把完整 JSON 保存为任务根目录 project.shiyeproject.json。Node.js 20+：validate.cjs 校验；preview.cjs 生成 output/构图预览.svg 与 output/画面预览.html；pack.cjs 再生成 output/作品.shiyeproject.zip。运行时只读取 task/context.json。glyphs.cjs 只从本地已有字体生成数值轮廓，不携带字体文件。 中文 SVG/HTML 预览依赖系统可用中文字体（例如 Noto Sans CJK SC）；如果看到方框字，请安装中文字体并重新渲染或在拾页中打开可编辑作品，不能把方框预览视为最终效果。')
   };
   for(const entry of chosen)if(validAlias(entry.alias)&&source.materials.some(item=>item.alias===entry.alias))files[`materials/${entry.alias}.webp`]=entry.bytes;
   if(hasPresets)for(const entry of referenceImages)files[`references/${entry.id}.webp`]=entry.bytes;
