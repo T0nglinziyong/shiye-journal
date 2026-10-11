@@ -37,3 +37,18 @@ test('scene v2 imports old draft arrays into one tree rather than persisting two
  assert.equal(legacy.sceneVersion,2);assert.equal(legacy.layers.length,1);
  assert.equal(JSON.stringify(legacy).includes('"items"'),false);
 });
+
+test('Scene v2 can nest/reparent groups without changing physical dimensions',()=>{
+ const d=draft();d.items.push({id:'m1',assetID:'a1',x:100,y:100,width:25,height:35,zIndex:3});
+ d.textBlocks.push({id:'t1',content:'字',x:100,y:200,width:90,height:40,zIndex:5});
+ d.primitives.push({id:'shape1',kind:'ellipse',x:80,y:160,width:40,height:40,zIndex:4});
+ const top=groupSceneLayers(d,['m1','t1'],{id:'top'});
+ const physical={width:d.items[0].width,height:d.items[0].height,assetID:d.items[0].assetID};
+ moveSceneNode(d,'shape1',{parentID:top});
+ assert.equal(d.layers[0].type,'group');
+ assert.equal(sceneGroupMembers(d,top).length,3);
+ assert.deepEqual({width:d.items[0].width,height:d.items[0].height,assetID:d.items[0].assetID},physical);
+ assert.throws(()=>moveSceneNode(d,top,{parentID:top}),/不能把组/);
+ assert.equal(validateSceneExtensions(d),true);
+ assert.equal(Object.hasOwn(JSON.parse(JSON.stringify(d)),'items'),false);
+});
