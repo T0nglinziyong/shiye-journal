@@ -78,8 +78,7 @@ export function validateSceneExtensions(draft){
   }
   const seen=new Set();
   for(const {value,kind} of sceneLayerEntries(draft,{hidden:true})){
-    if(typeof value.id!=='string'||!value.id||seen.has(value.id))throw Error('Scene 图层 ID 无效或重复');
-    seen.add(value.id);
+    if(kind!=='ink'||value.id!==undefined){if(typeof value.id!=='string'||!value.id||seen.has(value.id))throw Error('Scene 图层 ID 无效或重复');seen.add(value.id);}
     sceneLayerStyle(value);
     if(kind==='ink'&&value.vectorMask)throw Error('笔迹蒙版应先转换为独立路径后使用');
     // creativeGroupID existed before the formal group registry; imported
