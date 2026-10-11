@@ -407,12 +407,24 @@ export function mountCanvasEditor(c){
       view.editorRefresh?.();
     };
     const reorder=(id,targetId,after=false)=>{
-      const from=indexOf(id),target=indexOf(targetId);
-      if(from<0||target<0||from===target||ordered[from].value.isLocked||ordered[from].value.locked)return;
-      const [entry]=ordered.splice(from,1),next=indexOf(targetId)+(after?1:0);
-      ordered.splice(next,0,entry);
-      commitLayer(()=>ordered.forEach((e,i)=>e.value.zIndex=ordered.length-i));
-      redraw();
+      if(!targetId||id===targetId)return;
+      const entriesNow=sceneLayerEntries(d,{hidden:true});
+      const moving=entriesNow.find(e=>e.value.id===id),target=entriesNow.find(e=>e.value.id===targetId);
+      if(!moving||!target||moving.value.isLocked||moving.value.locked)return;
+      const parent=target.parents.at(-1)||null;
+      const siblings=parent?parent.children:d.layers;
+      const index=siblings.findIndex(n=>n.id===targetId);
+      const next=after?siblings.slice(index+1).find(n=>n.id!==id)?.id||null:targetId;
+      try{
+        checkpoint();
+        moveSceneNode(d,id,{parentID:parent?.id||null,beforeID:next});
+        saveProject();
+        // A full redraw is required when moving between compositing groups:
+        // CSS/Canvas z-index changes alone cannot alter the parent clip stack.
+        render();
+      }catch(error){
+        state.undo.pop();toast(error.message);
+      }
     };
     const stopDrag=()=>{clearTimeout(holdTimer);holdTimer=null;cancelAnimationFrame(scrollFrame);scrollFrame=null;
       list.querySelectorAll('.dragging,.drop-target').forEach(row=>row.classList.remove('dragging','drop-target'));
