@@ -38,6 +38,7 @@ test('sniff result types by bytes, not file extension or browser MIME',async()=>
     assert.equal((await classifyCreationFile(new Blob([blob],{type:'text/plain'}))).mimeType,mime);
   }
   assert.equal((await classifyCreationFile(new Blob(['  {"format":"shiye-editable-project"}'],{type:'image/png'}))).kind,'json');
+  assert.equal((await classifyCreationFile(new Blob(['```json\n{"format":"shiye-editable-project"}\n```']))).kind,'json');
   assert.equal(classifyCreationBytes(bytes(34,23,0)),null);
   await assert.rejects(classifyCreationFile(new Blob(['not recognized'])),/不支持/);
   await assert.rejects(classifyCreationFile(new Blob([])),/为空/);
