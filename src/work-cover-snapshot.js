@@ -1,10 +1,12 @@
 // A saved editable scene can always generate its own small cover without
 // opening the editor or fetching high-resolution material originals.
+import {prepareProjectScene} from './scene-v2.js';
 export async function renderWorkCoverSnapshot(project,{
   resolveAsset,previewBlob,decodeStatic,renderScene,createBitmap,
   getSnapshot=async()=>null
 }={}){
   if(project.isSnapshot)return getSnapshot(project.snapshotBlobId);
+  prepareProjectScene(project);
   const draft=project.drafts?.find(d=>d.id===project.activeDraftID)||project.drafts?.[0];
   if(!draft?.canvas?.width||!draft?.canvas?.height)throw Error('作品缺少完整画布，无法生成封面');
   const bitmaps=new Map();
