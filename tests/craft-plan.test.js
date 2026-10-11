@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {webcrypto} from 'node:crypto';
 import {project} from '../src/domain.js';
+import {attachSceneV2} from '../src/scene-model.js';
 import {applyToolCalls} from '../src/creative.js';
 import {craftDigest,craftSceneHash,isManagedUnchanged} from '../src/craft-fingerprint.js';
 import {assetSourceRevision,assetFromSourceSnapshot,materialSourceSnapshot} from '../src/material-anatomy.js';
@@ -23,8 +24,8 @@ test('craft hashes use the same SHA-256 as Web Crypto and are key-order independ
 });
 test('final scene hash includes actual ink coordinates, alpha and masks, not only item counts',()=>{
  const a=base();a.strokes=[{id:'s',points:[{x:1,y:2},{x:5,y:8}],width:3,color:'#000000'}];
- const h=craftSceneHash(a),b=structuredClone(a);b.strokes[0].points[0].x=2;assert.notEqual(craftSceneHash(b),h);
- const c=structuredClone(a);c.strokes[0].opacity=.4;assert.notEqual(craftSceneHash(c),h);
+ const h=craftSceneHash(a),b=attachSceneV2(structuredClone(a));b.strokes[0].points[0].x=2;assert.notEqual(craftSceneHash(b),h);
+ const c=attachSceneV2(structuredClone(a));c.strokes[0].opacity=.4;assert.notEqual(craftSceneHash(c),h);
  const d=structuredClone(a);d.agentRun={status:'editing'};d.craftReceipts=[{fake:true}];assert.equal(craftSceneHash(d),h);
 });
 test('source snapshots reconstruct exact source identities without private asset extras',()=>{
