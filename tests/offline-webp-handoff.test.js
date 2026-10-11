@@ -63,7 +63,8 @@ test('PNG transparency fallback shrinks huge previews instead of failing package
  const mock=fakeCanvas((type,index,w)=>{
    if(type==='image/webp')return null;
    // A synthetic large PNG until the canvas is <=320px
-   return w>320?new Uint8Array(350000).fill(137):PNG;
+   if(w<=320)return PNG;
+   const large=new Uint8Array(350000);large.set(PNG);return large;
  });
  try{
    const out=await offlinePreviewBytes(new Blob([PNG],{type:'image/png'}),{maxEdge:512});
