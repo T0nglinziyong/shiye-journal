@@ -59,7 +59,7 @@ test('stable and UUID material aliases resolve current library assets',async()=>
 
 test('direct editable scene keeps layered typography and vector geometry',async()=>{
   const output=await make({p:project('分层示例')}),files=await filesOf(output),response=JSON.parse(strFromU8(files['examples/project.shiyeproject.json']));
-  response.page.graphics.push({key:'drawn-leaf',kind:'vector',x:.2,y:.5,width:.08,height:.12,fill:'#7a9d77',stroke:null,z:70,vector_paths:[[[.5,0],[1,.5],[.5,1],[0,.5]]]});
+  response.page.layers.push({type:'shape',id:'drawn-leaf',key:'drawn-leaf',kind:'vector',x:.2,y:.5,width:.08,height:.12,fill:'#7a9d77',stroke:null,z:70,vector_paths:[[[.5,0],[1,.5],[.5,1],[0,.5]]]});
   const imported=importEditableWork(JSON.stringify(response),[asset],{trustedSource:output.source});
   assert.equal(imported.drafts[0].primitives.find(p=>p.key==='drawn-leaf')?.vectorPaths.length,1);
   assert.match(shapeSVG(imported.drafts[0].primitives.find(p=>p.key==='drawn-leaf')),/<path/);
