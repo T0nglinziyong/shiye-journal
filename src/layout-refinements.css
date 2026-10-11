@@ -358,9 +358,13 @@ body:has(.import-nav) #view .import-nav>.import-back{
   font-size:0!important;line-height:0!important;
   border:0;background:transparent;
 }
-body:has(.import-nav) #view .import-nav>.import-back::before,
-#view .swift-editor-head .editor-back-chevron{
-  content:'';
+/* Exactly one real glyph element per back button: no overlaid ::before
+   plus an old text glyph, even when legacy stylesheets remain cached. */
+body:has(.import-nav) #view .import-nav>.import-back::before{
+  content:none!important;
+  display:none!important;
+}
+#view .shiye-back-glyph{
   display:block;
   width:10px;height:10px;
   box-sizing:border-box;

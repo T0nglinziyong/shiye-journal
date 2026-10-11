@@ -30,7 +30,7 @@ export function mountCanvasEditor(c){
   const prefsChanged=()=>{try{localStorage.setItem(prefKey,JSON.stringify(prefs));}catch{}if(!document.querySelector('.swift-popover'))contextTools();};
   const change=fn=>{checkpoint();fn();saveProject();render();};
   const topAction=(action,label)=>{const b=button(label,()=>handle(action),'btn');b.dataset.act=action;if(['undo','redo'].includes(action)){b.replaceChildren(createIcon(action));b.setAttribute('aria-label',action==='undo'?'撤销':'重做');}return b;};
-  head.classList.add('swift-editor-head');const back=actions.querySelector('[data-act="back-works"]');head.prepend(back);back.innerHTML='<span class="editor-back-chevron" aria-hidden="true"></span><span>返回</span>';back.setAttribute('aria-label','返回作品');
+  head.classList.add('swift-editor-head');const back=actions.querySelector('[data-act="back-works"]');head.prepend(back);back.innerHTML='<span class="shiye-back-glyph" aria-hidden="true"></span><span>返回</span>';back.setAttribute('aria-label','返回作品');
   const json=actions.querySelector('[data-act="creative-json"]'),pdf=[...actions.querySelectorAll('button')].find(b=>b.textContent==='导出 PDF');
   // All devices use the same header order as the approved 28509aa9:
   // history, undo, redo, Complete and Export. Width/overflow can adapt,
