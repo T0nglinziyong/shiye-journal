@@ -28,9 +28,9 @@ try{
     await click('[data-route="matching"]','[data-act="match-export-gpt"]');
     await click('[data-act="match-export-gpt"]','#offline-gpt-prompt');
     assert.ok(await evaluate('document.querySelector("#offline-gpt-prompt").value.includes("START_HERE.txt")'));
-    assert.ok(await evaluate('document.querySelector("#offline-gpt-prompt").value.length<130'));
-    await click('[data-offline-delivery="json"]');
-    assert.ok(await evaluate('document.querySelector("#offline-gpt-prompt").value.includes("不要生成文件")'));
+    assert.ok(await evaluate('document.querySelector("#offline-gpt-prompt").value.length<550'));
+    await click('[data-offline-delivery="text"]');
+    assert.ok(await evaluate('document.querySelector("#offline-gpt-prompt").value.includes("不要生成作品文件")'));
     await click('[data-offline-delivery="file"]');
     assert.ok(await evaluate('document.querySelector("#modal-body").textContent.includes(".zip")'));
     assert.ok(await evaluate('document.querySelector("#modal-body").textContent.includes("复制并打开任务包")'));
@@ -51,7 +51,7 @@ try{
     await evaluate('document.querySelector(".match-generate").scrollIntoView({block:"center"})');
     const buttons=await command('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});await writeFile(`${directory}/${width}x${height}-buttons.png`,Buffer.from(buttons.data,'base64'));
     await click('[data-act="match-import-gpt"]','#offline-gpt-result');
-    assert.ok(await evaluate('document.querySelector("#modal-body").textContent.includes("验证并导入")'));
+    assert.ok(await evaluate('document.querySelector("#modal-body").textContent.includes("导入复制文本")'));
     await click('.modal-close');
     assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1'));
   }
@@ -80,13 +80,13 @@ try{
   await click('[data-act="match-export-gpt"]','#offline-gpt-prompt');
   for(let attempt=0;attempt<100&&!await evaluate('document.querySelector("#offline-gpt-prompt")?.value.includes("可下载的 PNG 图片")');attempt++)await sleep(100);
   assert.ok(await evaluate('document.querySelector("#offline-gpt-prompt").value.includes("可下载的 PNG 图片")'));
-  assert.ok(await evaluate('!document.querySelector("[data-offline-delivery]")&&!document.querySelector("#offline-show-paste")'));
+  assert.ok(await evaluate('document.querySelector("[data-offline-delivery=file]")&&!document.querySelector("[data-offline-delivery=text]")&&!document.querySelector("#offline-show-paste")'));
   assert.ok(await evaluate('document.querySelector(".offline-handoff-return").textContent.includes("画面")'));
   await command('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
   assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1'));
   const imageShot=await command('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});await writeFile(`${directory}/390x844-image-handoff.png`,Buffer.from(imageShot.data,'base64'));
   await click('#offline-import-file');
-  await evaluate('(async()=>{const canvas=document.createElement("canvas");canvas.width=240;canvas.height=340;canvas.getContext("2d").fillStyle="#ecf2df";canvas.getContext("2d").fillRect(0,0,240,340);const blob=await new Promise(resolve=>canvas.toBlob(resolve,"image/png"));const input=document.querySelector("#snapshot-file-input"),transfer=new DataTransfer();transfer.items.add(new File([blob],"网页 AI 画面.png",{type:"image/png"}));input.files=transfer.files;input.dispatchEvent(new Event("change",{bubbles:true}));})()');
+  await evaluate('(async()=>{const canvas=document.createElement("canvas");canvas.width=240;canvas.height=340;canvas.getContext("2d").fillStyle="#ecf2df";canvas.getContext("2d").fillRect(0,0,240,340);const blob=await new Promise(resolve=>canvas.toBlob(resolve,"image/png"));const input=document.querySelector("#creation-result-input"),transfer=new DataTransfer();transfer.items.add(new File([blob],"网页 AI 画面.png",{type:"image/png"}));input.files=transfer.files;input.dispatchEvent(new Event("change",{bubbles:true}));})()');
   await wait('.match-variant-grid [data-act="match-open-result"]');
   assert.ok(await evaluate('document.querySelector(".match-variant-grid").textContent.includes("网页 AI 画面")'));
   assert.ok(await evaluate('(async()=>{const db=await new Promise(r=>{const q=indexedDB.open("shiye-pwa-full-v1");q.onsuccess=()=>r(q.result)});return await new Promise(r=>{const q=db.transaction("projects").objectStore("projects").getAll();q.onsuccess=()=>r(q.result.some(p=>p.title==="网页 AI 画面"&&p.isSnapshot&&p.snapshotBlobId))})})()'));
