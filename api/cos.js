@@ -15,7 +15,7 @@ export default async function handler(req,res){
     sign:async({path,method,headers,variant})=>{
       const cos=new COS({SecretId:env.SHIYE_COS_SECRET_ID,SecretKey:env.SHIYE_COS_SECRET_KEY});
       const edge=Number(/^preview([1-9]\d{0,3})$/.exec(variant||'')?.[1]);
-      if(variant&&![256,360,480,600,720,960,1200,1440,1920,2560].includes(edge))throw Error('图片显示尺寸无效');
+      if(variant&&![256,360,480,600,720,960,1200,1440,1920,2560,3200,3840,5120].includes(edge))throw Error('图片显示尺寸无效');
       return new Promise((resolve,reject)=>cos.getObjectUrl({Bucket:env.SHIYE_COS_BUCKET,Region:env.SHIYE_COS_REGION,Key:path,Method:method,Protocol:'https:',Sign:true,Expires:60,Headers:headers,...(edge?{QueryString:`imageMogr2/thumbnail/${edge}x${edge}/format/webp/quality/90`}:{})},(error,data)=>error?reject(error):resolve(data.Url)));
     },
   });
