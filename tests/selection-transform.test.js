@@ -4,7 +4,7 @@ import {transformSelectedFrame,isObjectDeleteKey} from '../src/selection-transfo
 const initial={x:100,y:100,width:80,height:40,rotation:0};
 const near=(actual,expected)=>assert.ok(Math.abs(actual-expected)<1e-6,actual+' != '+expected);
 test('bottom-right corner handles proportional scaling and rotation together',()=>{
- const from={x:180,y:140},to={x:200,y:150};
+ const from={x:180,y:140},to={x:200,y:160};
  const result=transformSelectedFrame(initial,'corner',from,to);
  near(result.width/initial.width,result.height/initial.height);
  assert.ok(result.rotation>0);

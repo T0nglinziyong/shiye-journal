@@ -13,9 +13,9 @@
 #view .unified-page-heading .unified-heading-copy .eyebrow{margin:0;line-height:1.2}
 #view .unified-page-heading .unified-heading-copy>p,
 #view .series-heading .series-copy>p,
-#view .import-intro>.eyebrow~p,
-#view .import-inspect>.eyebrow~p,
-#view .import-review>.eyebrow~p {display:none}
+#view .import-intro>.eyebrow~p:not(.import-processing),
+#view .import-inspect>.eyebrow~p:not(.import-processing),
+#view .import-review>.eyebrow~p:not(.import-processing) {display:none}
 #view .unified-page-heading .unified-heading-copy h1,
 #view .series-heading .series-copy h1,
 #view .import-intro>h1,
@@ -244,4 +244,9 @@ body:has(.import-nav) .import-nav .import-progress{flex:0 0 auto;min-width:0}
 }
 .canvas-page .selected-object-overlay .selected-object-actions button{
   min-width:24px;width:24px;height:22px;font-size:15px;padding:0
+}
+
+@media(min-width:700px) and (max-width:860px){
+  #view .filters .filter-control,#view .series-filter-menus .filter-control{padding:0 6px;font-size:12px}
+  #view .filters:has(.four-filter-controls)>input[type=search],#view .series-contents .series-filters>.shiye-search{min-width:110px!important}
 }

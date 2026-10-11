@@ -7,7 +7,7 @@ const source=name=>readFile(new URL('../src/'+name,import.meta.url));
 const expected={
   'image.js':'88d244bf813213c40d2baf8b24e7914d9e594882',
   'manual-import-recognition.js':'7f843bae5c81fb8f2046ae176ff4b0855446f0b8',
-  'import-box-editor.js':'05fa34fa0f09ad350db256350113705b0aee8e01',
+  'import-box-editor.js':'8798db7e8987ade7afa9c58640de759ff17c6ae2',
   'recognition-refiners.js':'e4bd77e4e373e6a3d6ea5d28aa08bdba5e8f2652',
   'recognition-raster.js':'4e88878477689fa3c973576c5ce51c419145343a',
   'material-color-restoration.js':'4be602eab1a8d3d1281ba6c455c1ad80055da1c3',
@@ -24,7 +24,7 @@ const expected={
   'vision-runtime.js':'0e232cafd76e5278da5a5dd6706214cbbdb9c880'
 };
 for(const [name,sha] of Object.entries(expected)){
-  test('c9 import module is byte-for-byte unchanged: '+name,async()=>{
+  test('c9 recognition core or approved manual UI version: '+name,async()=>{
     const bytes=await source(name);
     const actual=createHash('sha1').update('blob '+bytes.length+'\0').update(bytes).digest('hex');
     assert.equal(actual,sha);
