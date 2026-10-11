@@ -414,7 +414,11 @@ if(e.kind==='ink'){
   const c=/^#[0-9a-f]{6}$/i.test(i.color||'')?i.color:'#30463d';
   const line=points.length===1?
     '<circle cx="'+(Number(points[0].x)||0)+'" cy="'+(Number(points[0].y)||0)+'" r="'+sw/2+'" fill="'+c+'"/>':
-    '<path d="'+geom+'" fill="none" stroke="'+c+'" stroke-width="'+sw+'" stroke-linejoin="round" stroke-linecap="round"/>';
+    i.penStyle==='brush'?points.slice(1).map((p,k)=>{
+      const prev=points[k],pressure=Math.max(0,Math.min(1,((prev.p??.5)+(p.p??.5))/2));
+      const width=sw*(.35+.9*pressure);
+      return '<path d="M'+pt(prev).join(' ')+' L'+pt(p).join(' ')+'" fill="none" stroke="'+c+'" stroke-width="'+width+'" stroke-linejoin="round" stroke-linecap="round"/>';
+    }).join(''):'<path d="'+geom+'" fill="none" stroke="'+c+'" stroke-width="'+sw+'" stroke-linejoin="round" stroke-linecap="round"/>';
   return '<svg class="canvas-object scene-ink-object" data-render-key="'+esc(i.id)+'" aria-hidden="true" viewBox="0 0 '+width+' '+height+'" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;z-index:'+(i.zIndex??2000)+';opacity:'+(i.opacity??1)+';mix-blend-mode:'+(i.blendMode==='multiply'?'multiply':'normal')+';pointer-events:none">'+line+'</svg>';
 }
 const left=(i.x-i.width/2)*scale,top=(i.y-i.height/2)*scale;let inner='';let extra='';if(e.kind==='material'){inner=imgTag(asset(i.assetID));extra=`opacity:${i.opacity};${materialMaskCSS(i)}${i.isFlippedHorizontally?'--flip:-1;':''}`;}else if(e.kind==='text'){inner=`<div data-text-content>${textParagraphMarkup(i,(i.paragraphSpacing||0)*scale+'px')}</div>`;extra=`${i.paragraphSpacing?'display:block;':''}opacity:${i.opacity??1};font-size:${i.fontSize*scale}px;line-height:${textLineHeight(i)*scale}px;letter-spacing:${(i.letterSpacing||0)*scale}px;font-style:${i.italic?'italic':'normal'};text-decoration:${[i.underline?'underline':'',i.strikethrough?'line-through':''].filter(Boolean).join(' ')||'none'};color:${esc(i.color)};text-align:${i.alignment||'left'};font-family:${esc(textFontFamily(i))};font-weight:${i.bold?'700':'400'};`; }else{extra=`background:${i.kind==='frame'||i.kind==='line'?'transparent':esc(i.fill||'transparent')};border-color:${esc(i.stroke||'transparent')};border-width:${Math.max(1,i.lineWidth*scale)}px;opacity:${i.opacity};`;}
