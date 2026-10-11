@@ -63,8 +63,8 @@ test('HTML renderer accepts same-task WebP and clearly requires visual inspectio
    materials:[{alias:'m1',assetID:'a1'}]
  },{m1:bytes},'window.ShiyeScene={render:async()=>({})};');
  assert.match(html,/data:image\/webp;base64,/);
- assert.match(html,/检查文字/);
- assert.match(html,/data-render-state/);
+ assert.match(html,/中文字体/);
+ assert.match(html,/dataset\.renderState/);
  assert.match(html,/渲染失败/);
  assert.doesNotMatch(html,/http:\/\/|https:\/\//);
 });
