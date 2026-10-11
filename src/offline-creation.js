@@ -153,7 +153,7 @@ ${hasPresets?'references/ 只供构图参考，既不是可用素材，也不是
 先保存一个可编辑 JSON 为任务根目录 project.shiyeproject.json。运行 node runtime/validate.cjs 检查规则，再运行 node runtime/preview.cjs 生成 output/构图预览.svg（仅近似）与 output/画面预览.html（拾页共用 Canvas）。请在浏览器打开 HTML，等待素材真正渲染完成，根据 task/VISUAL_REVIEW.txt 和画面逐项核查；截图来自实际 HTML，不可自行生成不对应可编辑图层的效果图。修改 JSON 后重跑预览。
 系统字形可因设备而异：出现方框、错行或字体未加载时不得标注“字体验收通过”，可在拾页里继续校验。不随包附带字体文件。
 ${mode==='agent'?'最终 JSON 只包含本合同的 tools，不输出 page 或额外 plan；可在 apply_craft_plan.arguments 中提交 observations。':'最终 JSON 只包含本合同的 page，不输出 tools/plan；高级 observations/weaves 不可混入。'}
-必须保留 source 原样，只修改 title 和${mode==='direct'?' page':' tools' }；可在任务内部多轮试排，但只交付一个最佳版本。复制模式只返回一个完整 JSON 代码块；文件模式运行 node runtime/pack.cjs 输出 output/作品.shiyeproject.zip。若 Canvas 无法运行，应明确说明视觉未验收，不可声称已经完成。
+必须保留 source 原样，只修改 title 和${mode==='direct'?' page':' tools' }；可在任务内部多轮试排，但只交付一个最佳版本。复制 JSON 模式：先展示来自同一份可编辑场景的 Canvas 预览图（浏览器渲染后截图）；随后仅用一个独立的 JSON 代码围栏输出完整 JSON，围栏内应为紧凑单行 JSON，不拆块、不用省略号或占位字段。文件模式运行 node runtime/pack.cjs 输出 output/作品.shiyeproject.zip。若 Canvas 无法运行，应明确说明视觉未验收，不可声称已经完成。
 `;
   const files={
     'START_HERE.txt':strToU8(compactStart),
@@ -177,7 +177,7 @@ ${mode==='agent'?'最终 JSON 只包含本合同的 tools，不输出 page 或�
   for(const entry of chosen)if(validAlias(entry.alias)&&source.materials.some(item=>item.alias===entry.alias))files[packagePreviewPath('materials',entry.alias,entry.bytes,{transparent:true})]=entry.bytes;
   if(hasPresets)for(const entry of referenceImages)files[packagePreviewPath('references',entry.id,entry.bytes)]=entry.bytes;
   const bytes=await new Promise((resolve,reject)=>zip(files,{level:4},(error,result)=>error?reject(error):resolve(result)));
-  const prompts={file:'请先读 ZIP 的 START_HERE.txt 和 task/WORKFLOW.txt；观察素材、比较构图并完成可编辑手帐，运行包内校验与 HTML Canvas 预览，检查画面后交付「作品.shiyeproject.zip」。',json:'请先读 ZIP 的 START_HERE.txt 和 task/WORKFLOW.txt；观察素材、比较构图并完成可编辑手帐，运行包内校验与 HTML Canvas 预览，检查画面后只给一个完整可复制的 JSON 代码块，不生成作品文件。'};
+  const prompts={file:'请先读 ZIP 的 START_HERE.txt 和 task/WORKFLOW.txt；观察素材、比较构图并完成可编辑手帐，运行包内校验与 HTML Canvas 预览，检查画面后交付「作品.shiyeproject.zip」。',json:'请先读 ZIP 中的 START_HERE.txt 与 task/WORKFLOW.txt；完成可编辑手帐并运行校验，首先展示从 HTML Canvas 同一场景渲染的预览图，然后仅用一个独立的 ```json 代码块给出完整、紧凑、单行可复制 JSON（不可截断、不可拆块），不生成作品文件。无法渲染时必须说明未验收，不能伪造预览。'};
   return {blob:new Blob([bytes],{type:'application/zip'}),filename:'拾页-GPT创作任务.zip',prompt:prompts.file,prompts,source,mode,previewCount:chosen.length,imageBytes:[...chosen,...(hasPresets?referenceImages:[])].reduce((total,item)=>total+item.bytes.length,0),packageBytes:bytes.length};
 }
 async function createOfflineImageHandoff({source,project:p,assets,selected,chosen,settings,referenceImages,showImages,userTemplates=[]}){
