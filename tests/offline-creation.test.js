@@ -98,11 +98,11 @@ test('image delivery uses the same compact task grouping without editable schema
   assert.ok(!files['schema/output.json']&&!files['runtime/validate.cjs']);
 });
 
-test('selected material previews retain exact PNG bytes and fingerprints',async()=>{
-  const preview=Uint8Array.from([137,80,78,71,1,2,3,4]),output=await make({previews:[{alias:'m1',bytes:preview}],settings:{generationMode:'direct',includeThumbnails:true}}),bytes=new Uint8Array(await output.blob.arrayBuffer()),files=unzipSync(bytes);
-  assert.deepEqual(files['materials/m1.png'],preview);assert.equal(output.source.previewHashes.m1,'sha256:'+createHash('sha256').update(preview).digest('hex'));assert.match(output.source.taskHash,/^sha256:[a-f0-9]{64}$/);
+test('selected material WebP previews retain exact bytes and fingerprints',async()=>{
+  const preview=Uint8Array.from([82,73,70,70,16,0,0,0,87,69,66,80,86,80,56,32,1,2,3,4]),output=await make({previews:[{alias:'m1',bytes:preview}],settings:{generationMode:'direct',includeThumbnails:true}}),bytes=new Uint8Array(await output.blob.arrayBuffer()),files=unzipSync(bytes);
+  assert.deepEqual(files['materials/m1.webp'],preview);assert.equal(output.source.previewHashes.m1,'sha256:'+createHash('sha256').update(preview).digest('hex'));assert.match(output.source.taskHash,/^sha256:[a-f0-9]{64}$/);
   await verifyOfflineTaskPackage(bytes,output.source);
-  const changed={...files,'materials/m1.png':new Uint8Array([137,80,78,71,9,9,9,9])};await assert.rejects(verifyOfflineTaskPackage(zipSync(changed),output.source),/预览与指纹不一致/);
+  const changed={...files,'materials/m1.webp':new Uint8Array([82,73,70,70,16,0,0,0,87,69,66,80,86,80,56,32,9,9,9,9])};await assert.rejects(verifyOfflineTaskPackage(zipSync(changed),output.source),/预览与指纹不一致/);
   const inspected=inspectOfflinePackage(bytes);assert.equal(inspected.kind,'task');assert.equal(inspected.source.bundleId,output.source.bundleId);
 });
 
@@ -114,9 +114,9 @@ test('text-only task explicitly records null preview hashes',async()=>{
 test('reference metadata is merged into task/knowledge.json and images stay under references',async()=>{
   const p=project('参考');p.styles=['韩系清新'];p.purposes=['日常记录'];
   const cases=selectJournalReferenceCases({styles:p.styles,purposes:p.purposes,materials:[asset]});
-  const referenceImages=cases.map((entry,i)=>({id:entry.id,bytes:new Uint8Array([137,80,78,71,i+1])}));
+  const referenceImages=cases.map((entry,i)=>({id:entry.id,bytes:new Uint8Array([82,73,70,70,16,0,0,0,87,69,66,80,86,80,56,32,i+1])}));
   const output=await make({p,settings:{generationMode:'direct',includeThumbnails:false,sendPresetReferences:true},referenceImages}),files=await filesOf(output),knowledge=JSON.parse(strFromU8(files['task/knowledge.json']));
-  assert.deepEqual(Object.keys(files).filter(name=>name.startsWith('references/')&&name.endsWith('.png')).sort(),cases.map(entry=>`references/${entry.id}.png`).sort());
+  assert.deepEqual(Object.keys(files).filter(name=>name.startsWith('references/')&&name.endsWith('.webp')).sort(),cases.map(entry=>`references/${entry.id}.webp`).sort());
   assert.deepEqual(knowledge.caseStudies.selectedCases.map(entry=>entry.id),cases.map(entry=>entry.id));assert.ok(knowledge.abstractTemplates.templates.length);assert.equal(knowledge.sourceImageAudit.images.length,70);
   assert.equal(files['abstract-templates.json'],undefined);assert.equal(files['source-image-audit.json'],undefined);
   assert.match(strFromU8(files['task/GUIDE.txt']),/模板原图/);
