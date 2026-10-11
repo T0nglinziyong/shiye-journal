@@ -161,3 +161,12 @@ test('Safari-compatible package binds PNG materials and JPEG references to actua
   delete spoofed['materials/m1.png'];
   await assert.rejects(verifyOfflineTaskPackage(zipSync(spoofed),bundle.source),/图片内容与格式不一致/);
 });
+
+test('sync-enabled API keys are never embedded in a model-facing task package',async()=>{
+  const secret='sk-test-not-for-GPT-task';
+  const result=await make({settings:{generationMode:'direct',includeThumbnails:false,
+    provider:'openai',key:secret,keys:{openai:secret}}});
+  const entries=await filesOf(result);
+  const combined=Object.values(entries).filter(Boolean).map(bytes=>strFromU8(bytes)).join(' ');
+  assert.ok(!combined.includes(secret),'Exported GPT task must not include private API keys');
+});
