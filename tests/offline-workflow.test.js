@@ -5,6 +5,7 @@ import {project} from '../src/domain.js';
 import {createOfflineHandoff,importEditableWork} from '../src/offline-creation.js';
 import {offlineCreationPlanningData,offlineCreationWorkflowText} from '../src/offline-creation-workflow.js';
 import {offlineBrowserPage} from '../src/offline-browser-page.js';
+import {auditOfflineCanvasDraft} from '../src/offline-canvas-audit.js';
 
 const assets=[
  {id:'a1',title:'素材 1',kind:'sticker',role:'focal',physicalWidthMM:35,physicalHeightMM:45,supply:{quantity:1}},
@@ -73,4 +74,16 @@ test('direct and agent notes only claim browser-manual visual review',()=>{
  assert.match(offlineCreationWorkflowText({mode:'direct'}),/高级 plan\.observations.*不属于 direct/);
  assert.match(offlineCreationWorkflowText({mode:'agent'}),/apply_craft_plan/);
  assert.doesNotMatch(offlineCreationWorkflowText({mode:'direct'}),/输出只能是一个含 tools/);
+});
+
+test('same-renderer font wrapping produces useful warnings, not false visual approval',()=>{
+ const draft={canvas:{width:1000,height:1000},items:[],primitives:[],
+   textBlocks:[{content:'很多很多文字需要换行并且超出文字框',fontSize:22,style:'sans',
+     width:30,height:10,x:200,y:200,paragraphSpacing:0}]};
+ const result=auditOfflineCanvasDraft(draft,{createCanvas:()=>({
+   getContext:()=>({font:'',measureText:text=>({width:text.length*22})})
+ })});
+ assert.equal(result.textOverflows,1);
+ assert.equal(result.reviewRequired,true);
+ assert.ok(result.warnings.some(note=>note.includes('预计超出文本框')));
 });
