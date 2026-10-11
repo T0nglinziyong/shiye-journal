@@ -1,7 +1,7 @@
 // Production deployment refresh marker: 2026-10-04
 import {assetSourceRevision} from './material-anatomy.js';
 import {renderSceneCanvas,decodeSceneImage} from './scene-renderer.js';
-import {sceneRenderEntries,projectMaterialViews} from './craft-display.js';
+import {sceneRenderEntries,projectMaterialViews,sceneDisplaySiblings} from './craft-display.js';
 import {maskSVG,sceneLayerStyle,sceneLayerEntries,attachSceneV2} from './scene-model.js';
 import './styles.css';
 import './overrides.css';
@@ -403,7 +403,7 @@ function workCover(d,priority=false,snapshotOnly=false,projectID=null){
    const extra=node.blendMode==='multiply'?'mix-blend-mode:multiply;':'';
    if(node.type==='material'){
      const a=asset(node.assetID);if(!a)return '';
-     return projectMaterialViews(node).map(item=>{const crop=item.cropRect||{x:0,y:0,width:1,height:1};
+     return [node].map(item=>{const crop=item.cropRect||{x:0,y:0,width:1,height:1};
        return '<span class="work-material" style="'+position(item,true)+materialMaskCSS(item)+extra+'"><span style="position:absolute;inset:0"><img loading="lazy" decoding="async" src="'+image(a.blobId)+'" style="position:absolute;max-width:none;width:'+(100/crop.width)+'%;height:'+(100/crop.height)+'%;left:'+(-crop.x/crop.width*100)+'%;top:'+(-crop.y/crop.height*100)+'%;object-fit:fill"></span></span>';
      }).join('');
    }
@@ -416,7 +416,7 @@ function workCover(d,priority=false,snapshotOnly=false,projectID=null){
    }
    return '';
  };
- const nodes=items=>[...items].sort((a,b)=>(a.zIndex??(a.type==='ink'?2000:0))-(b.zIndex??(b.type==='ink'?2000:0))).map(part).join('');
+ const nodes=items=>sceneDisplaySiblings(items).map(part).join('');
  return nodes(d.layers||[]);
 
 }
@@ -449,10 +449,10 @@ if(layerStyle.mask){const encoded=encodeURIComponent(maskSVG(layerStyle.mask));e
 return `<div class="canvas-object ${e.kind} ${i.kind||''} ${state.selected===i.id?'selected':''}" data-object="${esc(i.ownerID||i.id)}" data-render-key="${esc(i.renderKey||i.id)}" data-kind="${e.kind}" style="left:${left}px;top:${top}px;width:${i.width*scale}px;height:${i.height*scale}px;transform:rotate(${i.rotation||0}deg) ${i.isFlippedHorizontally?'scaleX(-1)':''};z-index:${i.zIndex};${extra}">${inner}</div>`;}
 function renderSceneDOM(d,scale){
   attachSceneV2(d);
-  const draw=nodes=>[...nodes].sort((a,b)=>(a.zIndex??(a.type==='ink'?2000:0))-(b.zIndex??(b.type==='ink'?2000:0))).map(node=>{
+  const draw=nodes=>sceneDisplaySiblings(nodes).map(node=>{
     if(node.hidden||node.isHidden||node.isParked||node.parked)return '';
     if(node.type!=='group'){
-      if(node.type==='material')return projectMaterialViews(node).map(value=>renderCanvasObject({kind:'material',value},scale)).join('');
+      if(node.type==='material')return renderCanvasObject({kind:'material',value:node},scale);
       return renderCanvasObject({kind:node.type,value:node},scale);
     }
     const style=sceneLayerStyle(node),mask=style.mask?'mask-image:url("data:image/svg+xml,'+encodeURIComponent(maskSVG(style.mask))+'");-webkit-mask-image:url("data:image/svg+xml,'+encodeURIComponent(maskSVG(style.mask))+'");mask-size:100% 100%;-webkit-mask-size:100% 100%;':'';
