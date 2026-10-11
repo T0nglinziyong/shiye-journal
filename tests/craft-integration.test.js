@@ -12,7 +12,7 @@ import {creativeLayeringGuide} from '../src/creative-layering-guide.js';
 
 const asset={id:'craft-paper',title:'合成图案纸',kind:'paper',physicalWidthMM:100,physicalHeightMM:80,supply:{quantity:1}};
 const piece=(id,operations,extra={})=>({asset:'m1',piece:id,unit:0,operations,placement:{x:.5,y:.5,rotation:0,z:10},...extra});
-const page=items=>({version:3,style:'自由构图',intent:null,paper:{color:'#ffffff',pattern:'plain'},items,graphics:[],text_blocks:[]});
+const page=items=>({version:2,style:'自由构图',intent:null,paper:{color:'#ffffff',pattern:'plain'},layers:items.map(item=>({type:'material',id:item.piece,...item}))});
 const execute=(items,options={})=>applyToolCalls(page(items),project('合成工艺').drafts[0],[asset],{m1:asset.id},{processing:'自由拆解',allowNoText:true,...options});
 const edge={op:'edge',style:'torn',edges:['bottom'],depth_mm:1,period_mm:8,seed:42};
 
