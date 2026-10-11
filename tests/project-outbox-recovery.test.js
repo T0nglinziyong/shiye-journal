@@ -34,3 +34,10 @@ test('pending pre-v2 edits are migrated, never discarded for lacking leaf arrays
  assert.equal(record.record.drafts[0].layers[0].type,'material');
  assert.equal(JSON.stringify(record.record).includes('"items"'),false);
 });
+
+test('incomplete legacy pending edit must not migrate into empty v2 work',()=>{
+ const incomplete={id:'legacy-missing-strokes',activeDraftID:'d',drafts:[{id:'d',canvas:{width:707,height:1000},items:[{id:'asset',assetID:'a'}],textBlocks:[],primitives:[]}]};
+ const result=recoverProjectOutbox([row(incomplete)]);
+ assert.equal(result.removed,1);
+ assert.equal(incomplete.drafts[0].layers,undefined,'never create empty layer tree for missing original data');
+});
