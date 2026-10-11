@@ -394,10 +394,31 @@ function workCover(d,priority=false,snapshotOnly=false,projectID=null){
      '<span class="work-cover-pending" role="status">正在生成本地封面…</span>';
  }
  const position=(i,flip=false)=>`left:${(i.x-i.width/2)/d.canvas.width*100}%;top:${(i.y-i.height/2)/d.canvas.height*100}%;width:${i.width/d.canvas.width*100}%;height:${i.height/d.canvas.height*100}%;transform:rotate(${i.rotation||0}deg) ${flip&&i.isFlippedHorizontally?'scaleX(-1)':''};opacity:${i.opacity??1};z-index:${i.zIndex||0};`;
- const materials=(d.items||[]).filter(i=>!i.isParked&&!i.isHidden&&!i.hidden).flatMap(projectMaterialViews).map(i=>{const a=asset(i.assetID),crop=i.cropRect||{x:0,y:0,width:1,height:1};return a?`<span class="work-material" style="${position(i,true)}${materialMaskCSS(i)}"><span style="position:absolute;inset:0"><img loading="lazy" decoding="async" src="${image(a.blobId)}" style="position:absolute;max-width:none;width:${100/crop.width}%;height:${100/crop.height}%;left:${-crop.x/crop.width*100}%;top:${-crop.y/crop.height*100}%;object-fit:fill"></span></span>`:'';}).join('');
- const shapes=(d.primitives||[]).filter(i=>!i.hidden).map(i=>`<span class="work-shape" style="${position(i)}">${shapeTag(i)}</span>`).join('');
- const texts=(d.textBlocks||[]).filter(i=>!i.isHidden).map(i=>`<span class="work-text" style="${position(i)}font-size:${Math.max(.6,i.fontSize/d.canvas.width*100)}cqw;line-height:${textLineHeight(i)/d.canvas.width*100}cqw;letter-spacing:${(i.letterSpacing||0)/d.canvas.width*100}cqw;color:${esc(i.color||'#333')};text-align:${i.alignment||'left'};font-family:${esc(textFontFamily(i))};font-weight:${i.bold?'700':'400'};font-style:${i.italic?'italic':'normal'};text-decoration:${[i.underline?'underline':'',i.strikethrough?'line-through':''].filter(Boolean).join(' ')||'none'}">${textParagraphMarkup(i,(i.paragraphSpacing||0)/d.canvas.width*100+'cqw')}</span>`).join('');
- return materials+shapes+texts+workInkPreview(d);
+ const part=node=>{
+   if(node.hidden||node.isHidden||node.isParked||node.parked)return '';
+   if(node.type==='group'){
+     const style=sceneLayerStyle(node),svg=style.mask?'mask-image:url("data:image/svg+xml,'+encodeURIComponent(maskSVG(style.mask))+'");-webkit-mask-image:url("data:image/svg+xml,'+encodeURIComponent(maskSVG(style.mask))+'");mask-size:100% 100%;':'';
+     return '<span class="scene-v2-group" style="z-index:'+(node.zIndex??0)+';opacity:'+(node.opacity??1)+';mix-blend-mode:'+(style.blendMode==='multiply'?'multiply':'normal')+';'+svg+'">'+nodes(node.children||[])+'</span>';
+   }
+   const extra=node.blendMode==='multiply'?'mix-blend-mode:multiply;':'';
+   if(node.type==='material'){
+     const a=asset(node.assetID);if(!a)return '';
+     return projectMaterialViews(node).map(item=>{const crop=item.cropRect||{x:0,y:0,width:1,height:1};
+       return '<span class="work-material" style="'+position(item,true)+materialMaskCSS(item)+extra+'"><span style="position:absolute;inset:0"><img loading="lazy" decoding="async" src="'+image(a.blobId)+'" style="position:absolute;max-width:none;width:'+(100/crop.width)+'%;height:'+(100/crop.height)+'%;left:'+(-crop.x/crop.width*100)+'%;top:'+(-crop.y/crop.height*100)+'%;object-fit:fill"></span></span>';
+     }).join('');
+   }
+   if(node.type==='shape')return '<span class="work-shape" style="'+position(node)+extra+'">'+shapeTag(node)+'</span>';
+   if(node.type==='text')return '<span class="work-text" style="'+position(node)+extra+'font-size:'+Math.max(.6,node.fontSize/d.canvas.width*100)+'cqw;line-height:'+textLineHeight(node)/d.canvas.width*100+'cqw;color:'+esc(node.color||'#333')+';text-align:'+(node.alignment||'left')+';font-family:'+esc(textFontFamily(node))+'">'+textParagraphMarkup(node,(node.paragraphSpacing||0)/d.canvas.width*100+'cqw')+'</span>';
+   if(node.type==='ink'){
+     const points=node.points||[],col=/^#[0-9a-f]{6}$/i.test(node.color||'')?node.color:'#30463d';
+     const path=points.map((pt,i)=>(i?'L':'M')+(Number(pt.x)||0)+' '+(Number(pt.y)||0)).join(' ');
+     return '<svg class="scene-ink-object" viewBox="0 0 '+d.canvas.width+' '+d.canvas.height+'" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;z-index:'+(node.zIndex??2000)+';opacity:'+(node.opacity??1)+';pointer-events:none;'+extra+'"><path d="'+path+'" fill="none" stroke="'+col+'" stroke-width="'+(node.width||2)+'" stroke-linecap="round"/></svg>';
+   }
+   return '';
+ };
+ const nodes=items=>[...items].sort((a,b)=>(a.zIndex??(a.type==='ink'?2000:0))-(b.zIndex??(b.type==='ink'?2000:0))).map(part).join('');
+ return nodes(d.layers||[]);
+
 }
 function renderWorks(){const list=state.projects.filter(p=>!isUntouchedLegacyExample(p)).sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt));return `<div class="works-page">${head('我的作品','留下完成的创作，继续记录新的灵感。')}<button hidden data-act="new-project" id="work-create"></button><button hidden data-act="import-work" id="work-import"></button><div class="filters"><input type="search" id="work-search" placeholder="搜索作品名称或标签"><select id="work-kind"><option value="all">全部类型</option><option value="created">手动创作</option><option value="imported">导入作品</option></select><select id="work-status"><option value="all">全部状态</option><option value="used">已使用</option><option value="unused">未使用</option></select><select id="work-sort"><option value="access-desc">最近访问 · 降序</option><option value="access-asc">最近访问 · 升序</option><option value="updated-desc">最近修改 · 降序</option><option value="updated-asc">最近修改 · 升序</option><option value="name-asc">名称 · 升序</option><option value="name-desc">名称 · 降序</option></select><span>${list.length} 项</span></div><div class="grid works-grid">${list.map((p,index)=>`<button class="card" data-act="open-project" data-id="${p.id}"><div class="card-image"><div class="thumb-sheet" style="width:75%;background:${esc(p.drafts[0]?.paperColor||'#fff')}">${p.isSnapshot?`<img class="work-reference" loading="${index<4?'eager':'lazy'}" decoding="async" src="${image(p.snapshotBlobId)}" alt="${esc(p.title)} 快照">`:p.coverStaticPath&&p.updatedAt===p.coverBaselineUpdatedAt?`<img class="work-reference" loading="${index<4?'eager':'lazy'}" src="${p.coverStaticPath}" alt="${esc(p.title)} 完整预览">`:workCover(p.drafts.find(d=>d.id===p.activeDraftID)||p.drafts[0],index<4,true,p.id)}</div></div><div class="card-body"><h3>${esc(p.title)}</h3><p>⊙　${p.isSnapshot?'画面快照':p.isDraft?'草稿':'可编辑作品'} <span>${new Date(p.updatedAt).toLocaleDateString()}</span></p></div></button>`).join('')}</div></div>`;}
 function current(){const p=state.activeProject;return p?.drafts.find(d=>d.id===state.activeDraft)||p?.drafts[0];}
