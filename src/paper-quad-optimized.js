@@ -268,6 +268,17 @@ export function detectPaperQuadOptimized(cv,p,own){
   }
   groups.sort((a,b)=>b[0].geom-a[0].geom);
   const standard=groups.slice(0,A4_GROUP_LIMIT).map(g=>g[0]);
+  // The Sobel gradient is calculated once for all candidates, including Lab.
+  // A well-supported conventional paper does not need a costly 2D Lab fit.
+  const gx=own(new cv.Mat()),gy=own(new cv.Mat());
+  cv.Sobel(gray,gx,cv.CV_32F,1,0,3);
+  cv.Sobel(gray,gy,cv.CV_32F,0,1,3);
+  const G=gray.data,GX=gx.data32F,GY=gy.data32F;
+  let strongestClosed=-Infinity;
+  for(const candidate of standard){
+    const evidence=edgeEvidence(candidate,w,h,G,GX,GY);
+    if(evidence!=null)strongestClosed=Math.max(strongestClosed,evidence+A4_CONTOUR_BONUS);
+  }
   // The Lab region hypothesis is independent of threshold-based quadrangles.
   // Keep it only when it overlaps an existing conventional paper location.
   const region=regionMask(cv,labChannels,own,w,h);
@@ -305,7 +316,7 @@ export function detectPaperQuadOptimized(cv,p,own){
   }
   // Regional fit is expensive; do it once and reuse previously split Lab L.
   const firstHull=regionCandidates.find(c=>c.hull);
-  if(firstHull){
+  if(firstHull&&strongestClosed<.50){
     const light=labChannels.get(0);
     try{
       const refined=refineRegionLines(cv,firstHull,light,w,h,own);
@@ -319,11 +330,6 @@ export function detectPaperQuadOptimized(cv,p,own){
     standard.some(c=>paperPolygonIoU(c.corners,r.corners)>=A4_REGION_OVERLAP));
   const ranked=standard.concat(compatible);
   if(!ranked.length)return null;
-  // Build Sobel only when there is a candidate to score; all share it.
-  const gx=own(new cv.Mat()),gy=own(new cv.Mat());
-  cv.Sobel(gray,gx,cv.CV_32F,1,0,3);
-  cv.Sobel(gray,gy,cv.CV_32F,0,1,3);
-  const G=gray.data,GX=gx.data32F,GY=gy.data32F;
   let best=null;
   for(const candidate of ranked){
     const score=edgeEvidence(candidate,w,h,G,GX,GY);
