@@ -42,7 +42,7 @@ export function describeCraftSources(assets,aliases={}){
  }).filter(Boolean);
 }
 export function inheritCreationBrief(project,source){
- for(const key of ['contentPolicy','userText','providedFacts','intent','processing','assetProcessing','materialUseHints','materialUseRequired','textMode'])if(source[key]!==undefined)project[key]=structuredClone(source[key]);
+ for(const key of ['contentPolicy','textPresentation','userText','providedFacts','intent','processing','assetProcessing','materialUseHints','materialUseRequired','textMode'])if(source[key]!==undefined)project[key]=structuredClone(source[key]);
  project.creationSourceVersions=structuredClone(source.sourceSnapshots);
  project.creationBaseSceneHash=source.baseSceneHash;
  return project;

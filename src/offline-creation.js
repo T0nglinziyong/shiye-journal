@@ -53,7 +53,7 @@ function validateTemplateReferences(selectedCases,selectedTemplates,referenceIma
 function sourceFor(p,aliases){
   const d=p.drafts[0];
   const priority=p.materialPriority||{required:p.requiredAssetIDs||[],preferred:Object.values(aliases).filter(id=>!(p.requiredAssetIDs||[]).includes(id)),available:[]};
-  return structuredClone({bundleId:crypto.randomUUID(),title:p.title,mode:d.pageMode,ratio:d.pageRatio,styles:p.styles||[d.style],purposes:p.purposes||[p.purpose||'日常记录'],intent:p.intent||'',contentPolicy:p.contentPolicy||'documentary',userText:p.userText||'',providedFacts:p.providedFacts||'',processing:p.processing||'保留完整',requiredAssetIDs:p.requiredAssetIDs||[],materialPriority:{required:priority.required||[],preferred:priority.preferred||[],available:priority.available||[]},materialUseHints:p.materialUseHints||{},materialUseRequired:p.materialUseRequired||{},assetProcessing:p.assetProcessing||{},materials:Object.entries(aliases).map(([alias,assetID])=>({alias,assetID}))});
+  return structuredClone({bundleId:crypto.randomUUID(),title:p.title,mode:d.pageMode,ratio:d.pageRatio,styles:p.styles||[d.style],purposes:p.purposes||[p.purpose||'日常记录'],intent:p.intent||'',contentPolicy:p.contentPolicy||'documentary',textPresentation:p.textPresentation||'mixed',userText:p.userText||'',providedFacts:p.providedFacts||'',processing:p.processing||'保留完整',requiredAssetIDs:p.requiredAssetIDs||[],materialPriority:{required:priority.required||[],preferred:priority.preferred||[],available:priority.available||[]},materialUseHints:p.materialUseHints||{},materialUseRequired:p.materialUseRequired||{},assetProcessing:p.assetProcessing||{},materials:Object.entries(aliases).map(([alias,assetID])=>({alias,assetID}))});
 }
 // The upload is a task package, not a source archive. Keep the chat prompt
 // short and put exact context, contracts, examples and separate images inside.
@@ -107,54 +107,48 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
   const selectedTemplates=selectJournalAbstractTemplates(selectedCases,{styles:source.styles,purposes:source.purposes,materials:selected,userTemplates});
   if(hasPresets)validateTemplateReferences(selectedCases,selectedTemplates,referenceImages);
   if(hasPresets)for(const entry of referenceImages)packagePreviewPath('references',entry.id,entry.bytes);
-  const instructions=`拾页手帐创作任务｜一次完成，不是软件开发任务\n\n【目标】创作符合纸张与真实素材约束的可编辑手帐，并在聊天中展示预览图。请勿把整页烘焙为图片。\n\n【阅读顺序】先看本文件确认任务，再读 CREATIVE_GUIDE.txt 与 case-studies.json 学习风格、用途和构图方法；看 context.json 与 materials/ 理解本次真实素材；若有 references/，只借鉴匿名版式；最后按 contract.json 和 example-response.shiyeproject.json 输出。\n\n【本次任务】\n${task}\n用途提示：${purposeNotes}\n${settings.customLayoutPrompt?`补充排版：${settings.customLayoutPrompt}\n`:''}${settings.includeStructureReference!==false?`可借鉴匿名图文区域关系，但不能复制固定坐标。\n`:''}\n【素材与物理规则】\n${materialRules}\n必须使用逐件落实；优先使用先考虑，合适时采用；可以使用只是备选，不要求用尽；不使用的素材不在包中，不得猜测或引用。\n${showImages?'查看 materials/ 中每件素材的独立透明图片（WebP 或 PNG）；透明处不是白底，不要给贴纸添加白底。':'本包不含素材 WebP 预览，只能依据名称、标签和尺寸；不得猜测未给的图像细节。'}${hasPresets?' references/ 是按本次风格与用途生成的四张匿名预设示意，没有私人作品。':''}\n所有素材编号与 context.json 一致。纸张、照片、贴纸不能放大、复制或超库存。同一件裁下的非重叠余料可再用；胶带可重复截段，但保持真实宽度与图案。数字文字、线条和图形可自由添加，始终保留可编辑。${densePage?'可以考虑让主素材、辅助素材和有内容的文字形成阅读节奏；若留白能强化主题，也可以保留，不按字数、素材件数或页面填充率评判。':'封面或明确极简可以有意留白，但应有完整焦点。'}composition-ideas.json 是可选构图灵感，不是必须照搬。预览中出现的每一条线、边框和色块都要在可编辑数据中出现。\n\n【输出合同】\n${modeRules} 文件结构与示例见 example-response.shiyeproject.json；原样保留其中的 source（含 bundleId 与素材 ID），只改 title 和 ${mode==='direct'?'page':'tools'}。坐标 x/y 为画布中心的 0–1 比例，实物大小由拾页计算。不要编造经历、日期、地点或图片细节。\n同一条回复先展示最终页面的图片预览。交付方式以聊天中的短提示词为准：文件模式附可下载的 UTF-8 文件「作品.shiyeproject.json」；复制模式仅给一个单独的 \x60\x60\x60json 代码块，不生成文件。两种方式都只含一个完整 JSON 对象，不是 PDF、HTML 或位图。`;
   const example=mode==='direct'?directExample:{...envelope,tools:[{name:'compose_page',arguments:{materials:[{asset:selected[0].alias,piece:'主素材',unit:0,x:.5,y:.42}],graphics:[],texts:[{key:'title',content:'这一页的主题',width:.8,x:.5,y:.12,font_size:44,color:'#30463d',alignment:'center',role:'title'},{key:'body-1',content:'第一段可编辑正文。',width:.75,x:.5,y:.7,font_size:24,color:'#30463d',role:'body'},{key:'body-2',content:'第二段可编辑正文。',width:.75,x:.5,y:.82,font_size:24,color:'#30463d',role:'body'}],paper:{color:'#fcfaf0',pattern:'plain'}}},{name:'finish_design',arguments:{summary:'完成可编辑手帐'}}]};
   if(mode!=='direct'){
     example.tools[0].arguments.graphics=layeredGraphics;
     example.tools[0].arguments.texts=layeredTexts.map((item,index)=>({...item,key:'example-text-'+index}));
   }
-  const handoffInstructions=instructions.replace('并在聊天中展示预览图。请勿把整页烘焙为图片。','并交付可编辑场景。请勿把整页烘焙为图片；若不能用同源渲染器生成预览，明确标记待拾页渲染，勿用另一张独立画作冒充预览。').replace('最后按 contract.json 和 example-response.shiyeproject.json 输出。','最后按 contract.json 输出。example-response.shiyeproject.json 仅示意语法字段，不是成品或本次正文；不要照抄示例文字、坐标和构图。').replace('同一条回复先展示最终页面的图片预览。','若有经过同源渲染并核对的最终预览，同一条回复先展示它；否则不要伪造预览，交回拾页生成。').replace('文件模式附可下载的 UTF-8 文件「作品.shiyeproject.json」；复制模式仅给一个单独的','文件模式附可下载的「作品.shiyeproject.zip」，包内放一个 UTF-8 文件 project.shiyeproject.json；复制模式仅给一个单独的').replace('两种方式都只含一个完整 JSON 对象，不是 PDF、HTML 或位图。','文件包内的 project.shiyeproject.json 与复制模式的 JSON 代码块使用相同可编辑图层合同；材料 ID 引用本机高清原图，图形可用 vector_paths 表达自由矢量轮廓。不要只交付 PDF、HTML 或扁平位图。').concat('\n\n【可选离线工具】在已有 Node.js 20+ 的环境中，先将场景保存为任务根目录 project.shiyeproject.json；node runtime/validate.cjs 检查同源结构与现行物理规则，node runtime/pack.cjs 校验后生成可下载 ZIP。这两个工具都不渲染页面、不核对字体或阅读；无法运行时请直接把可编辑场景交回拾页，不要声称已完成视觉验收。');
   const runtimeCapabilities={schemaHash:source.schemaHash,sourcePixelCoordinates:false,cropPx:false,previewOnly:showImages,runtime:{validate:'node20',render:'browser-html-manual',preview:'approximate-svg',browserRender:'shiye-canvas-v2',pack:'node20',visualReview:'manual-required'},craft:{plan:mode==='agent',observations:mode==='agent'&&showImages,twoHoleWeave:mode==='agent',glyphGeometry:'local-font-required'}};
-  const knowledge={format:'shiye-gpt-task-knowledge',version:2,capabilities:runtimeCapabilities,regions:source.sourceSnapshots.map(snapshot=>({assetID:snapshot.assetID,sourceRevision:snapshot.sourceRevision,anatomy:snapshot.anatomy})),compositionIdeas:compositionIdeas(source),caseStudies:caseStudies(source,selected)};
+  const knowledge={format:'shiye-gpt-task-knowledge',version:3,capabilities:runtimeCapabilities,
+    regions:source.sourceSnapshots.map(snapshot=>({assetID:snapshot.assetID,sourceRevision:snapshot.sourceRevision,anatomy:snapshot.anatomy})),
+    compositionIdeas:compositionIdeas(source).slice(0,3),
+    caseStudies:{selectedCases:hasPresets?selectedCases.map(({id,title,method})=>({id,title,method})):[]}
+  };
   if(hasPresets){
-    knowledge.abstractTemplates={source:'user-provided-tutorial-images',note:'本次只选少数匹配风格、用途和素材的来源模板；无确证配对时不得猜配或照搬。',templates:selectedTemplates};
-    knowledge.sourceImageAudit={note:'case=真实案例，template=抽象版式，mixed=同图并列；无配对模板不得伪称有对应成品。',images:journalSourceAudit,verifiedCrossImagePairs:journalVerifiedPairs};
+    knowledge.abstractTemplates={note:'只借鉴方法，不能照搬素材或坐标',templates:selectedTemplates};
+    // Do not send the full 70-image tutorial audit when only a few matched
+    // references are in this task. Never claim an unverified cross-image pair.
+    const chosenReferences=new Set(referenceImages.map(entry=>entry.id));
+    knowledge.sourceImageAudit={images:journalSourceAudit.filter(row=>chosenReferences.has(row.id)),verifiedCrossImagePairs:journalVerifiedPairs.filter(row=>chosenReferences.has(row.caseId)&&chosenReferences.has(row.templateId))};
   }
   const workflowText=offlineCreationWorkflowText({mode,hasImages:showImages});
   const materialPlanning=offlineCreationPlanningData(source,selected,{mode,hasImages:showImages});
   const compactGuide=[
-    '【先阅读 task/WORKFLOW.txt，再查看 material-planning.json；以下是方法细节，不是强制模板】',
-    '【内容与事实边界】',contentBrief,
-    '【页面与构图】',creativeDesignGuide(source,{hasImages:showImages,hasPresets,referenceCases:selectedCases}),
-    mode==='agent'?'【工艺计划操作】':'【直接页面可用操作】',
-    mode==='agent'?craftTaskInstructions+'\n'+multimodalCraftGuide:'直接 page 模式只能使用 schema/output.json 中的 page.items.operations、graphics、text_blocks 与 ink_strokes；不能输出 apply_craft_plan、observations、weaves 等 agent 工具。先规划素材关系，再使用允许的 crop、cut_shape、window、diagonal 等操作。',
-    hasPresets?'【参考案例说明】\\n'+journalReferenceGuide(selectedCases)+'\\n\\n'+journalAbstractTemplateGuide(selectedTemplates):''
-  ].filter(Boolean).join('\\n\\n');
-  const compactTask=task.replace('CONTENT_BRIEF.txt','task/GUIDE.txt');
-  const compactModeRules=modeRules.replaceAll('contract.json','schema/output.json');
-  const compactStart=`拾页手帐创作任务｜一次完成
+    '【内容边界】',contentBrief,
+    '【创作原则】','先观察真实图案与物理尺寸，再建立主次、叠压、局部加工与阅读路径；拒绝把所有素材平铺成网格。标题、正文和手写装饰需要有实际内容；可保留有意义的留白，素材可少用但不可漏掉 required。参考图不是实体材料，也不是必须复刻的模板。',
+    '【文字方式】',source.textPresentation==='handwritten'?'自由手写优先：用 page.ink_strokes 或工艺计划 ink 绘制短句、标记与线条；长段可用可编辑手写风格文字，避免伪字迹。':source.textPresentation==='type'?'排版文字优先：文字保持独立可编辑，选好字体、行距与层次。':'混合编排：排版正文结合少量可编辑手写笔迹。',
+    '【编辑合同】',mode==='agent'?'只输出 tools；可使用 apply_craft_plan 做复杂取材与穿插；确切参数以 schema/output.json 为准。':'只输出 page；在 page.items.operations 中使用合法裁切和遮罩，在 graphics/ink_strokes/text_blocks 中保留独立可编辑图层。'
+  ].join('\n\n');
+  const compactStart=`拾页 GPT 创作任务 · 先读这一页
+请创作一幅独立、可编辑的手帐作品，不要把整页烘焙成图片。按以下优先级工作：
+1. 先看 task/context.json 与 materials/ 真实素材。source、尺寸、库存、required 必须保持；素材标题不是图像观察证据。
+2. 阅读 task/WORKFLOW.txt 的创作步骤、task/GUIDE.txt 的用户内容边界。可参考 task/material-planning.json 的问题，不把它的假设当事实。
+3. 内部比较至少两种素材组合方向，选最自然的一种；有选择地裁切、叠压、穿插和手写，不照抄 references/ 的版式。
+4. 合法输出合同是 schema/output.json。当前模式：${mode==='direct'?'page（直接排版）':'tools（调用工具）'}，不能混用。examples/project.shiyeproject.json 仅展示字段，不能复制正文或坐标。高级工艺参数仅在 tools 模式阅读 schema/craft-plan.json。
+5. 将完整结果保存为 project.shiyeproject.json，运行 node runtime/preview.cjs 生成 output/画面预览.html，并在浏览器检查真实 Canvas 渲染和中文字形。output/构图预览.svg 仅是近似参考。不能渲染就说明未验收，不能伪造预览。
+6. 最终按聊天中的交付要求返回一个 JSON 文件或完整单行代码块；保留 source 原样，只更改 title 与 ${mode==='direct'?'page':'tools'}，原始 ZIP 仍可作为包装导入。
 
-【首先阅读】
-1. task/WORKFLOW.txt：六阶段创作决策及本次唯一合法输出模式（必须遵循）。
-2. task/context.json 与 materials/：逐件核对图片、尺寸、库存、required/preferred/available。
-3. task/material-planning.json：素材观察清单、未经证实的组合假设、可供比较的构图方向；根据真实图片自行修正。
-4. task/GUIDE.txt、task/knowledge.json：内容约束、工艺说明与可选参考；不能把案例排版直接复制到本次画面。
-5. schema/output.json：本次唯一可执行输出合同。${mode==='agent'?'schema/craft-plan.json 仅供 apply_craft_plan 工具查参数。':'schema/craft-plan.json 是高级工具参考，不属于本次 direct 输出合同。'}
-examples/project.shiyeproject.json 只示意 JSON 语法，不能照搬占位文字、坐标或构图。
-
-【本次设计】
-${task}
-用途：${purposeNotes}
-${settings.customLayoutPrompt?`补充排版：${settings.customLayoutPrompt}\n`:''}
-${showImages?'图片的透明区域不是白纸。':'本次无素材预览，不猜测图像内容。'}
-${hasPresets?'references/ 只供构图参考，既不是可用素材，也不是要照抄的模板。':''}
-素材：${materialRules}
-
-【结构与画面验收】
-先保存一个可编辑 JSON 为任务根目录 project.shiyeproject.json。运行 node runtime/validate.cjs 检查规则，再运行 node runtime/preview.cjs 生成 output/构图预览.svg（仅近似）与 output/画面预览.html（拾页共用 Canvas）。请在浏览器打开 HTML，等待素材真正渲染完成，根据 task/VISUAL_REVIEW.txt 和画面逐项核查；截图来自实际 HTML，不可自行生成不对应可编辑图层的效果图。修改 JSON 后重跑预览。
-系统字形可因设备而异：出现方框、错行或字体未加载时不得标注“字体验收通过”，可在拾页里继续校验。不随包附带字体文件。
-${mode==='agent'?'最终 JSON 只包含本合同的 tools，不输出 page 或额外 plan；可在 apply_craft_plan.arguments 中提交 observations。':'最终 JSON 只包含本合同的 page，不输出 tools/plan；高级 observations/weaves 不可混入。'}
-必须保留 source 原样，只修改 title 和${mode==='direct'?' page':' tools' }；可在任务内部多轮试排，但只交付一个最佳版本。复制文本方式：先展示从同一份可编辑场景生成的 Canvas 预览；随后只用一个独立 JSON 代码块输出完整的单行可复制 JSON，不拆块、不省略。作品文件方式：交付可下载的单文件 作品.shiyeproject.json（与复制文本具有完全相同的数据合同）。如需 ZIP 可选运行 node runtime/pack.cjs 输出 output/作品.shiyeproject.zip，拾页仍可导入。若 Canvas 无法运行，应说明视觉未验收，不能声称已完成。
+【本次主题、要求和内容】
+${source.intent||'未指定：根据素材自由创作'}
+风格：${source.styles.join('、')||'自由发挥'}；用途：${source.purposes.join('、')||'日常记录'}。
+纸张：${source.ratio} ${source.mode==='spread'?'双页':'单页'}；文字内容：${source.contentPolicy}；表现：${source.textPresentation||'mixed'}。
+${settings.customLayoutPrompt?'补充要求：'+settings.customLayoutPrompt:''}
+${showImages?'素材图以 materials/ 为准，保留透明通道。':'本包无素材图片，切勿猜测细节。'}
+${hasPresets?'references/ 只作为灵感来源，不是可用库存。':''}
 `;
   const files={
     'START_HERE.txt':strToU8(compactStart),
@@ -196,10 +190,11 @@ async function createOfflineImageHandoff({source,project:p,assets,selected,chose
   const brief=imagePrompt({project:p,draft:p.drafts[0],assets,ids:selected.map(item=>item.assetID),theme:p.intent||'',requireAll:settings.requireAllCandidates!==false,includeImages:showImages,includeReferences:hasPresets,textMode:source.textMode});
   const imageOrder=selected.map((item,index)=>`${index+1} = ${item.alias}${showImages?` (${packagePreviewPath('materials',item.alias,chosen.find(entry=>entry.alias===item.alias)?.bytes,{transparent:true})})`:''}`).join('；');
   const instructions=`拾页手帐画面图片任务｜一次完成\n\n你收到的是创作参考 ZIP，不是要返回的作品格式。请先读 task/context.json 与 task/knowledge.json${hasPresets?'、abstract-templates.json':''}，并${showImages?'查看 materials/ 中每件素材的透明图片':'依据素材名称、标签与尺寸'}；素材编号对应：${imageOrder}。${hasPresets?'references/ 中的匹配手帐案例和用户原图可核对的抽象模板只供构图启发；':''}按以下与拾页 API 图像创作一致的要求完成：\n\n${brief}\n\n请在聊天中展示最终画面，并提供可下载的 PNG 图片。图片是不可逐层编辑的画面快照；不要输出可编辑工程包、数据文件或代码。保持纸张比例，导入拾页后存入「画面快照」。`;
-  const imageKnowledge={format:'shiye-gpt-task-knowledge',version:2,caseStudies:caseStudies(source,selected)};
+  const imageKnowledge={format:'shiye-gpt-task-knowledge',version:3,caseStudies:{selectedCases:hasPresets?selectedCases.map(({id,title,method})=>({id,title,method})):[]}};
   if(hasPresets){
-    imageKnowledge.abstractTemplates={source:'user-provided-tutorial-images',note:'只选与本次任务匹配的少数来源模板；无确证配对时不得猜配。',templates:selectedTemplates};
-    imageKnowledge.sourceImageAudit={note:'case=真实案例，template=抽象版式，mixed=同图并列。',images:journalSourceAudit,verifiedCrossImagePairs:journalVerifiedPairs};
+    imageKnowledge.abstractTemplates={note:'参考构图，不得照搬',templates:selectedTemplates};
+    const refs=new Set(referenceImages.map(entry=>entry.id));
+    imageKnowledge.sourceImageAudit={images:journalSourceAudit.filter(row=>refs.has(row.id))};
   }
   const compactImageStart=`拾页手帐画面图片任务｜一次完成
 

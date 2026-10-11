@@ -38,12 +38,14 @@ test('snapshot excludes credentials and restores editable local controls',()=>{
  assert.equal(restoreMatchingSession({variants:{}},{}).length,0);
  assert.equal(restoreMatchingSession({variants:[{id:'bad',status:'completed',project:{id:'p'}}]},{}).length,0);
 });
-test('legacy match label and user-authored facts remain device-local',()=>{
- const restored={},snapshot=matchingSnapshot({matchContentPolicy:'original',matchFacts:'确实发生',matchUserText:'保留原文'},[]);
+test('matching content and handwriting mode persist without obsolete fact fields',()=>{
+ const restored={},snapshot=matchingSnapshot({matchContentPolicy:'original',matchTextPresentation:'handwritten',matchIntent:'给猫咪写日记'},[]);
  snapshot.context.matchProcessing='AI 自主加工';
  restoreMatchingSession(snapshot,restored);
- assert.equal(restored.matchProcessing,'不预设');assert.equal(restored.matchFacts,'确实发生');
- assert.equal(restored.matchUserText,'保留原文');
+ assert.equal(restored.matchProcessing,'不预设');
+ assert.equal(restored.matchTextPresentation,'handwritten');
+ assert.equal(restored.matchIntent,'给猫咪写日记');
+ assert.equal('matchUserText' in snapshot.context,false);
 });
 test('matching basket persists only in local IndexedDB adapter, not cloud',async()=>{
  const device=memoryDevice(),db=memoryProjects(),c=context({basket:['a']},device,db);

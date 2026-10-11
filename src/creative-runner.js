@@ -27,13 +27,13 @@ export function creativeScene(d,aliases={}){
 }
 const editableSceneState=d=>JSON.stringify([d.canvas,d.paperColor,d.paperPattern,d.paperRuling,d.drawCenterGutter,d.items,d.textBlocks,d.primitives,d.strokes]);
 export function buildCreativeMessages(o){
- const {draft,assets,aliases,images=[],prompt='',customLayoutPrompt='',textMode='automatic',contentPolicy='documentary',userText='',providedFacts='',styles=[draft.style],pagePurposes=['日常记录'],processing,assetProcessing={},materialUseHints={},materialUseRequired={},requiredAssetIDs=[],materialPriority={},includeStructureReference=true,referenceImages=[],sendPresetReferences=false,userTemplates=[]}=o;
+ const {draft,assets,aliases,images=[],prompt='',customLayoutPrompt='',textMode='automatic',contentPolicy='documentary',textPresentation='mixed',userText='',providedFacts='',styles=[draft.style],pagePurposes=['日常记录'],processing,assetProcessing={},materialUseHints={},materialUseRequired={},requiredAssetIDs=[],materialPriority={},includeStructureReference=true,referenceImages=[],sendPresetReferences=false,userTemplates=[]}=o;
  const effectiveTextMode=contentPolicy==='visual'?'none':textMode;
  const contentBrief=creativeContentBrief({policy:contentPolicy,userText,providedFacts,topic:prompt,purposes:pagePurposes});
  const priority=id=>requiredAssetIDs.includes(id)||materialPriority.required?.includes(id)?'必须使用':materialPriority.available?.includes(id)?'可以使用（仅备选）':'优先使用';
  const list=Object.entries(aliases).flatMap(([label,id])=>{const a=assets.find(x=>x.id===id);return a?[`${label}: ${a.title}，优先级 ${priority(id)}，${a.kind}，${a.role}，图文职责 ${classifyJournalMaterial(a).join('、')}，${a.physicalWidthMM||'未确认'}×${a.physicalHeightMM||'未确认'} mm，库存 ${a.kind==='tape'?'连续胶带，可多次裁取但宽度与图案不得拉伸':a.supply?.quantity??1}，加工 ${assetProcessing[id]||processing||'保留完整'}，用法 ${materialUseHints[id]||'由生成器选择'}${materialUseRequired[id]?'（每个方案必做）':''}，标签 ${(a.tags||[]).join('、')}`]:[];});
  const policy=effectiveTextMode==='none'?'不生成文字。':effectiveTextMode==='requested'?'仅用户明确要求文字时配文。':'按用途生成真实内容的图文手账。';
- const pageBrief=creativePageBrief({styles,purposes:pagePurposes,textMode:effectiveTextMode,contentPolicy,userText,theme:prompt,pageMode:draft.pageMode});
+ const pageBrief=creativePageBrief({styles,purposes:pagePurposes,textMode:effectiveTextMode,contentPolicy,textPresentation,userText,theme:prompt,pageMode:draft.pageMode});
  const reference=includeStructureReference?'可以参考主图与旁注、错层图文、分栏收藏或留白封面等不同阅读结构；根据本次真实素材和用途自由选择，不复制固定坐标。':'';
  const mode=creativeProtocol(o).instruction;
  const first=[{type:'text',text:`【本次任务】\n纸张：${draft.pageRatio} ${draft.pageMode==='spread'?'双页':'单页'}，物理高${draft.physicalPageHeightMM}mm。\n风格：${styles.map(name=>`${name}（${visualStyleBrief(name)}）`).join('；')||'不预设，由素材和主题决定'}。\n用途：${pagePurposes.map(p=>p+'：'+(purposes[p]||'遵守主题要求。')).join('\n')||'不预设，由本次主题决定'}\n${contentBrief}\n优先级：必须使用每版落实；优先使用先考虑，合适时采用；可以使用只是备选；不使用的素材未发送，不得猜测或引用。\n【构思参考（非硬性配额）】\n${pageBrief}\n优先素材逐件审视：合适的多用，不适合的可以不放；不按数量或覆盖率评分。数字图形也可以成为视觉主角，但不能伪装成未拥有的真实素材。\n【真实素材】\n${list.join('\n')}\n【当前画布】\n${JSON.stringify(creativeScene(draft,aliases))}`}];

@@ -9,7 +9,7 @@ import {createMatchingCoverCache} from './matching-cover-cache.js';
 import {reusePagePreviews} from './preview-content-cache.js';
 import {captureMatchingScroll,restoreMatchingScroll} from './matching-scroll.js';
 const ID='matching-session-v1';
-const KEYS=['basket','coreIDs','excludedAssetIDs','matchCore','matchRatio','matchMode','matchStyle','matchStyles','matchPurposes','matchIntent','matchContentPolicy','matchUserText','matchFacts','matchPurpose','matchProcessing','materialUseHints','materialUseRequired','assetProcessing','customPaperWidth','customPaperHeight'];
+const KEYS=['basket','coreIDs','excludedAssetIDs','matchCore','matchRatio','matchMode','matchStyle','matchStyles','matchPurposes','matchIntent','matchContentPolicy','matchTextPresentation','matchPurpose','matchProcessing','materialUseHints','materialUseRequired','assetProcessing','customPaperWidth','customPaperHeight'];
 export function matchingSnapshot(state,variants){return {id:ID,context:Object.fromEntries(KEYS.map(k=>[k,structuredClone(state[k])])),variants:structuredClone(variants)};}
 export function restoreMatchingSession(record,state){
  if(!record)return [];
