@@ -14,7 +14,7 @@ import {createIcon} from './icons.js';
 import {historyTitle,renameHistory,deleteDraft,captureHistory,restoreHistoryDraft} from './project-history.js';
 import {syncSelectionGeometry} from './selection-geometry.js';
 import {syncInkSceneDOM} from './ink-scene-svg.js';
-import {groupSceneLayers,ungroupSceneLayers,sceneGroupMembers,sceneLayerEntries,sceneGroups,transformSceneGroup,validateVectorMask} from './scene-model.js';
+import {groupSceneLayers,ungroupSceneLayers,sceneGroupMembers,sceneLayerEntries,sceneGroups,transformSceneGroup,moveSceneNode,validateVectorMask} from './scene-model.js';
 import {clampCanvasPosition,moveSelection,materialCenterOutside} from './canvas-selection.js';
 import {transformSelectedFrame,isObjectDeleteKey} from './selection-transform.js';
 const labels={select:'选择',marquee:'矩形框选',pen:'笔',highlighter:'荧光笔',eraser:'橡皮擦',lasso:'套索选择',text:'文字',shape:'图形',material:'素材',layers:'图层',paper:'画布背景'};
@@ -335,6 +335,52 @@ export function mountCanvasEditor(c){
       modes.value=g.blendMode||'normal';modes.onchange=()=>change(()=>g.blendMode=modes.value);panel.content.append(modes);
     },'btn');groupStyle.disabled=!activeGroup;
     groupActions.append(groupButton,ungroupButton,rotateGroup,groupStyle);p.content.append(groupActions,list);
+    // Genuine recursive Scene group tree. All controls mutate the same nodes
+    // (no second layerGroups collection) and never resize physical materials.
+    const groupTree=document.createElement('div');groupTree.className='scene-v2-group-tree';
+    p.content.insertBefore(groupTree,list);
+    const groupNodes=()=>sceneGroups(d);
+    const treeRow=(group,depth)=>{
+      const row=document.createElement('div');row.className='scene-v2-group-row';
+      row.style.paddingInlineStart=Math.min(7,depth)*12+'px';
+      const title=button('▱ '+(group.name||'未命名组合'),()=>{
+        state.multiSelected=sceneGroupMembers(d,group.id).filter(e=>e.kind!=='ink').map(e=>e.value.id);
+        state.selected=null;
+        state.sceneSelectedGroup=group.id;
+        view.editorRefresh?.();
+      },'scene-v2-group-label');
+      title.title='选择组内的实体素材、文字和图形';
+      row.append(title);
+      const actions=document.createElement('div');actions.className='scene-v2-group-row-actions';
+      const insert=button('放入所选',()=>{
+        const ids=[...new Set([...(state.multiSelected||[]),...(state.selected?[state.selected]:[])])];
+        if(!ids.length){toast('先选择要放入此组的图层');return;}
+        try{change(()=>{for(const id of ids)moveSceneNode(d,id,{parentID:group.id});state.multiSelected=[];state.selected=null;});p.close();}
+        catch(error){toast(error.message);}
+      },'btn mini');
+      insert.title='移动选中图层进入该组，不复制或改变实体尺寸';
+      actions.append(insert);
+      if(depth){
+        const parentSelect=document.createElement('select');
+        parentSelect.setAttribute('aria-label','移动此子组');
+        parentSelect.append(new Option('移到画布根层',''));
+        for(const g of groupNodes().filter(g=>g.id!==group.id))parentSelect.append(new Option('移到 '+(g.name||g.id),g.id));
+        parentSelect.onchange=()=>{try{change(()=>moveSceneNode(d,group.id,{parentID:parentSelect.value||null}));p.close();}catch(error){toast(error.message);}};
+        actions.append(parentSelect);
+      }else{
+        const parentSelect=document.createElement('select');
+        parentSelect.setAttribute('aria-label','移动组合到子组');
+        parentSelect.append(new Option('移动进其他组合…',''));
+        for(const g of groupNodes().filter(g=>g.id!==group.id))parentSelect.append(new Option(g.name||g.id,g.id));
+        parentSelect.onchange=()=>{if(!parentSelect.value)return;try{change(()=>moveSceneNode(d,group.id,{parentID:parentSelect.value}));p.close();}catch(error){toast(error.message);}};
+        actions.append(parentSelect);
+      }
+      actions.append(button('解组',()=>{change(()=>ungroupSceneLayers(d,group.id));p.close();},'btn mini'));
+      row.append(actions);groupTree.append(row);
+    };
+    const walkGroups=(nodes,depth=0)=>{for(const n of [...nodes].sort((a,b)=>(b.zIndex??0)-(a.zIndex??0)))if(n.type==='group'){treeRow(n,depth);walkGroups(n.children||[],depth+1);}};
+    walkGroups(d.layers);
+
     const ordered=[...sceneLayerEntries(d,{hidden:true,ink:true})].sort((a,b)=>(b.value.zIndex??(b.kind==='ink'?2000:0))-(a.value.zIndex??(a.kind==='ink'?2000:0))),rows=new Map();
     let drag=null,holdTimer=null,scrollFrame=null,moveMenu=null,suppressMoveClickUntil=0;
     const indexOf=id=>ordered.findIndex(e=>e.value.id===id);
