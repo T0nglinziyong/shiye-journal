@@ -161,8 +161,47 @@ function putGraphics(d,list){for(const g of list){
 }}
 function putInk(d,list){for(const stroke of list){
   d.strokes||=[];
-  d.strokes.push({id:uid(),agentGenerated:true,points:stroke.points.map(point=>({x:point.x*d.canvas.width,y:point.y*d.canvas.height,p:point.pressure??.5})),width:stroke.width,color:stroke.color,opacity:stroke.opacity??(stroke.pen_style==='marker'?.4:1),penStyle:stroke.pen_style,blendMode:stroke.blend_mode||'normal'});
+  d.strokes.push({id:stroke.key||uid(),agentGenerated:true,agentKey:stroke.key||null,points:stroke.points.map(point=>({x:point.x*d.canvas.width,y:point.y*d.canvas.height,p:point.pressure??.5})),width:stroke.width,color:stroke.color,opacity:stroke.opacity??(stroke.pen_style==='marker'?.4:1),penStyle:stroke.pen_style,blendMode:stroke.blend_mode||'normal'});
 }}
+function composeDirectSceneV2(d,assets,aliases,page,options){
+  validateValue(page,directPageContract);
+  clearGeneratedScene(d);
+  const items=[],graphics=[],texts=[],ink=[],wanted=new Map(),groups=[];
+  const visit=nodes=>{for(const node of nodes){
+    if(wanted.has(node.id))throw Error('Scene v2 图层编号重复：'+node.id);
+    wanted.set(node.id,node);
+    if(node.type==='group'){groups.push(node);visit(node.children);continue;}
+    const {id,type,...props}=node;
+    if(type==='material'){items.push({...props,piece:node.piece||id});}
+    else if(type==='shape')graphics.push({...props,key:node.key||id});
+    else if(type==='text')texts.push({...props,key:id});
+    else if(type==='ink')ink.push({...props,key:id});
+  }};
+  visit(page.layers);
+  d.style=({'留白叙事':'airy','密集拼贴':'layered','杂志网格':'editorial','手作便签':'memo','胶片日记':'film','自由构图':'free'})[page.style]||'free';
+  setPaper(d,{...page.paper,intent:page.intent});
+  upsertMaterials(d,assets,aliases,{items},options);
+  putGraphics(d,graphics);putTexts(d,texts,options);putInk(d,ink);
+  const built=new Map(sceneLayerEntries(d,{hidden:true}).map(e=>[e.value.creativePieceID||e.value.agentKey||e.value.key||e.value.id,e.value]));
+  const used=new Set();
+  const build=nodes=>nodes.map(node=>{
+    if(node.type==='group')return {id:node.id,type:'group',name:node.name||'拼贴组',zIndex:node.z??0,
+      blendMode:node.blend_mode||'normal',opacity:node.opacity??1,vectorMask:node.vector_mask||null,
+      children:build(node.children)};
+    const key=node.type==='material'?(node.piece||node.id):node.id;
+    const value=built.get(key);
+    if(!value)throw Error('Scene v2 生成图层不存在：'+key);
+    if(used.has(value.id))throw Error('Scene v2 图层重复放置：'+key);
+    used.add(value.id);
+    return value;
+  });
+  // Keep manually edited content intact. The only storage is the tree; the
+  // model must never overwrite an unmentioned existing leaf or copy stock.
+  const original=d.layers.filter(n=>!used.has(n.id)&&n.type!=='group');
+  d.layers=[...original,...build(page.layers)];
+  validateSceneExtensions(d);
+  finish(d,assets,{summary:page.intent||''},options);
+}
 function clearGeneratedScene(d){
   d.items=d.items.filter(i=>!i.creativePieceID||!isManagedUnchanged(i));
   d.textBlocks=d.textBlocks.filter(i=>!i.agentKey||!isManagedUnchanged(i));
@@ -248,7 +287,7 @@ function execute(d,assets,aliases,name,a,options){
     }});
     case 'compose_story_page':story(d,assets,aliases,a,options);break;
     case 'compose_page':compose(d,assets,aliases,a,options);break;
-    case 'compose_direct_page':validateValue(a,directPageContract);clearGeneratedScene(d);d.style=({'留白叙事':'airy','密集拼贴':'layered','杂志网格':'editorial','手作便签':'memo','胶片日记':'film','自由构图':'free'})[a.style];setPaper(d,{...a.paper,intent:a.intent});upsertMaterials(d,assets,aliases,{items:a.items},options);putGraphics(d,a.graphics||[]);putTexts(d,a.text_blocks.map((t,n)=>({...t,key:'direct-t'+(n+1)})),options);putInk(d,a.ink_strokes||[]);for(const group of a.groups||[]){groupSceneLayers(d,group.keys.map(k=>find(d,k).id),{id:group.id,name:group.name||'手帐组合'});}finish(d,assets,{summary:a.intent||''},options);return {detail:'直接页已通过实物与必用约束并完成',mutation:true};
+    case 'compose_direct_page':composeDirectSceneV2(d,assets,aliases,a,options);return {detail:'Scene v2 直接排版已完成真实素材与图层校验',mutation:true};
     case 'place_materials':addMaterials(d,assets,aliases,a.items);break;
     case 'edit_materials':for(const e of a.items){const item=find(d,e.piece);if(!d.items.includes(item))throw Error('加工目标必须是实物');process(d,item,assets.find(a=>a.id===item.assetID),e.operations,e.mode||'append',options);}break;
     case 'upsert_materials':upsertMaterials(d,assets,aliases,a,options);break;
@@ -270,7 +309,7 @@ function execute(d,assets,aliases,name,a,options){
 export function normalizeCalls(raw){
   const input=typeof raw==='string'?JSON.parse(raw):raw;
   if(input?.format==='shiye-craft-plan'&&input.version===2)return [{name:'apply_craft_plan',arguments:input,id:input.commandId}];
-  if(input?.version===3)return directPageToTools(input);
+  if(input?.version===2&&Array.isArray(input.layers))return directPageToTools(input);
   const list=Array.isArray(input)?input:input?.tools;
   if(!Array.isArray(list))throw Error('未找到当前 tools 数组或 page v3 数据');
   return list.map(x=>({name:x.name||x.function?.name,arguments:x.arguments??x.function?.arguments??{},id:x.id||uid()}));
