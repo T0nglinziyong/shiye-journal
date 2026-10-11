@@ -1,3 +1,4 @@
+import {previewImageFormat} from './offline-preview.js';
 import {sceneRenderEntries} from './craft-display.js';
 import {materialMaskGeometry} from './material-mask.js';
 import {shapeSVG,textLines} from './editor-tools-model.js';
@@ -28,7 +29,7 @@ export function renderOfflinePreviewSVG(draft,source,previewFiles={}){
         defs.push(`<clipPath id="${clip}" clipPathUnits="userSpaceOnUse"><path d="${outline} ${holes}" clip-rule="evenodd"/></clipPath>`);
       }
       const content=bytes?.length
-        ?`<image href="data:image/webp;base64,${Buffer.from(bytes).toString('base64')}" x="${number(-crop.x*w/crop.width)}" y="${number(-crop.y*h/crop.height)}" width="${number(w/crop.width)}" height="${number(h/crop.height)}" preserveAspectRatio="none"/>`
+        ?`<image href="data:${previewImageFormat(bytes)?.mimeType||'image/png'};base64,${Buffer.from(bytes).toString('base64')}" x="${number(-crop.x*w/crop.width)}" y="${number(-crop.y*h/crop.height)}" width="${number(w/crop.width)}" height="${number(h/crop.height)}" preserveAspectRatio="none"/>`
         :`<rect width="${w}" height="${h}" fill="#e8ebe5" stroke="#8b9a8c"/><text x="8" y="24" font-size="17" fill="#53645a">${xml(image?.alias||'素材')}</text>`;
       layers.push(`<g transform="${transform}" opacity="${bounded(value.opacity)}"><svg x="${number(-w/2)}" y="${number(-h/2)}" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" overflow="hidden"><g transform="${value.isFlippedHorizontally?`translate(${w} 0) scale(-1 1)`:''}"${mask?` clip-path="url(#${clip})"`:''}>${content}</g></svg></g>`);
     }else if(kind==='shape'){

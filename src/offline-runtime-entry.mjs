@@ -30,7 +30,7 @@ async function main(){
     if(mode==='pack'||mode==='preview'){
       const previews=Object.fromEntries(context.materials.map(item=>{
         const file=item.preview;
-        return [item.alias,file&&/^materials\/(?:asset_[A-Za-z0-9_-]+|m[1-9]\d*)\.webp$/.test(file)&&existsSync(file)?readFileSync(file):null];
+        return [item.alias,file&&/^materials\/(?:asset_[A-Za-z0-9_-]+|m[1-9]\d*)\.(?:webp|png)$/.test(file)&&existsSync(file)?readFileSync(file):null];
       }));
       const preview=Buffer.from(renderOfflinePreviewSVG(imported.drafts[0],context.source,previews),'utf8');
       if(preview.byteLength>16_000_000)throw Error('构图预览超过 16 MB；请缩小任务包中的素材预览图后重新导出，不要修改作品实物尺寸');

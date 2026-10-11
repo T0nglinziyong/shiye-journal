@@ -129,3 +129,27 @@ test('preset reference planning remains independent across palette, layout and p
   const other=presetReferencePlans({styles:['韩系清新'],purposes:['清单计划']}),mixed=presetReferencePlans({styles:['韩系清新','密集拼贴'],purposes:['清单计划']});
   assert.deepEqual(mixed[0].palette,other[0].palette);assert.notDeepEqual(mixed[0].zones,other[0].zones);
 });
+
+
+test('Safari-compatible package binds PNG materials and JPEG references to actual file paths',async()=>{
+  const png=Uint8Array.from([137,80,78,71,13,10,26,10,0,0,1,2]);
+  const jpg=Uint8Array.from([255,216,255,224,0,16,0,0,4,5,6]);
+  const p=project('手机创作参考');p.styles=['韩系清新'];p.purposes=['日常记录'];
+  const cases=selectJournalReferenceCases({styles:p.styles,purposes:p.purposes,materials:[asset]});
+  const refs=cases.map((entry,i)=>({id:entry.id,bytes:jpg,extension:'jpg',mimeType:'image/jpeg'}));
+  const bundle=await make({p,previews:[{alias:'m1',bytes:png}],referenceImages:refs,
+    settings:{generationMode:'direct',includeThumbnails:true,sendPresetReferences:true}});
+  const bytes=new Uint8Array(await bundle.blob.arrayBuffer()),files=unzipSync(bytes),
+    ctx=JSON.parse(strFromU8(files['task/context.json']));
+  assert.deepEqual(files['materials/m1.png'],png);
+  assert.deepEqual(files['references/'+cases[0].id+'.jpg'],jpg);
+  assert.equal(ctx.materials[0].preview,'materials/m1.png');
+  assert.equal(files['materials/m1.webp'],undefined);
+  assert.equal(bundle.source.previewHashes.m1,'sha256:'+createHash('sha256').update(png).digest('hex'));
+  await verifyOfflineTaskPackage(bytes,bundle.source);
+  const broken={...files,'materials/m1.png':new Uint8Array(png.map((v,i)=>i===11?v^1:v))};
+  await assert.rejects(verifyOfflineTaskPackage(zipSync(broken),bundle.source),/预览与指纹不一致/);
+  const spoofed={...files,'materials/m1.png':undefined,'materials/m1.webp':png};
+  delete spoofed['materials/m1.png'];
+  await assert.rejects(verifyOfflineTaskPackage(zipSync(spoofed),bundle.source),/图片内容与格式不一致/);
+});

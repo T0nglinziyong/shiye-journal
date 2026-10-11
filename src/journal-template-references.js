@@ -1,4 +1,4 @@
-import {offlinePreviewBytes,OFFLINE_REFERENCE_EDGE} from './offline-preview.js';
+import {offlinePreviewBytes,OFFLINE_REFERENCE_EDGE,previewImageFormat} from './offline-preview.js';
 import {selectJournalReferenceCases,loadJournalReferenceCases} from './journal-reference-catalog.js';
 import {selectJournalAbstractTemplates} from './journal-abstract-templates.js';
 import {journalPresetReference} from './journal-preset-images.js';
@@ -35,18 +35,20 @@ export async function loadJournalTemplateReferences({context,userTemplates=[],db
   }
   // Handoff-only encodings: originals remain untouched in the reference
   // collection and the template database. Never send PNG/JPEG originals.
-  const webp=[];
+  const encodedReferences=[];
   // A template bundle can contain several large source JPEGs. Encode two at
   // a time to avoid retaining eight full-size decoded bitmaps on mobile.
   for(let offset=0;offset<referenceImages.length;offset+=2){
     const pair=await Promise.all(referenceImages.slice(offset,offset+2).map(async entry=>{
       const mime=entry.mimeType||(entry.extension==='jpg'||entry.extension==='jpeg'?'image/jpeg':'image/png');
       const input=new Blob([entry.bytes],{type:mime});
-      const bytes=await encodeReference(input,{maxEdge:OFFLINE_REFERENCE_EDGE});
-      const compressed=new Blob([bytes],{type:'image/webp'});
-      return {...entry,bytes,mimeType:'image/webp',extension:'webp',url:await dataURL(compressed)};
+      const bytes=await encodeReference(input,{maxEdge:OFFLINE_REFERENCE_EDGE,opaque:true});
+      const format=previewImageFormat(bytes);
+      if(!format)throw Error('无法识别已生成参考图的真实格式');
+      const compressed=new Blob([bytes],{type:format.mimeType});
+      return {...entry,bytes,mimeType:format.mimeType,extension:format.extension,url:await dataURL(compressed)};
     }));
-    webp.push(...pair);
+    encodedReferences.push(...pair);
   }
-  return {selectedCases,selectedTemplates,referenceImages:webp};
+  return {selectedCases,selectedTemplates,referenceImages:encodedReferences};
 }
