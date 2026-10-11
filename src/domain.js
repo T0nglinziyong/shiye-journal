@@ -1,10 +1,11 @@
 import {paperDimensions,paperPresets} from './paper-sizes.js';
+import {attachSceneV2} from './scene-v2.js';
 export const uid=()=>crypto.randomUUID();
 export const A4={width:210,height:297};
 export const ratioMap={...Object.fromEntries(paperPresets.map(p=>[p.id,p.width/p.height])),portrait:3/4,square:1,landscape:4/3};
 export function customPaper(ratio){return typeof ratio==='string'&&ratio.startsWith('custom:')?paperDimensions(ratio):null;}
 export function canvasSize(mode='single',ratio='a4'){const height=1000,custom=customPaper(ratio);return {width:height*(custom?custom.width/custom.height:(ratioMap[ratio]||ratioMap.a4))*(mode==='spread'?2:1),height};}
-export function draft({mode='single',ratio='a4',style='airy'}={}){return {id:uid(),style,canvas:canvasSize(mode,ratio),pageMode:mode,pageRatio:ratio,physicalPageHeightMM:paperDimensions(ratio)?.height||297,paperColor:'#fcfaf0',paperPattern:'plain',sceneVersion:1,layerGroups:[],items:[],textBlocks:[],primitives:[],strokes:[],makingSteps:[],createdAt:new Date().toISOString()};}
+export function draft({mode='single',ratio='a4',style='airy'}={}){return attachSceneV2({id:uid(),style,canvas:canvasSize(mode,ratio),pageMode:mode,pageRatio:ratio,physicalPageHeightMM:paperDimensions(ratio)?.height||297,paperColor:'#fcfaf0',paperPattern:'plain',sceneVersion:2,layers:[],makingSteps:[],createdAt:new Date().toISOString()});}
 export function setDraftPaperSize(d,ratio){
   const size=paperDimensions(ratio);
   if(!size)throw Error('纸张规格无效');
