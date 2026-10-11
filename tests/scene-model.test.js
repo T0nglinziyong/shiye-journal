@@ -52,3 +52,19 @@ test('Scene v2 can nest/reparent groups without changing physical dimensions',()
  assert.equal(validateSceneExtensions(d),true);
  assert.equal(Object.hasOwn(JSON.parse(JSON.stringify(d)),'items'),false);
 });
+
+test('ungroup outer nesting retains inner group membership and raw source IDs',()=>{
+ const d=draft();
+ d.items.push({id:'m1',assetID:'real-1',x:10,y:20,width:40,height:60});
+ d.items.push({id:'m2',assetID:'real-2',x:60,y:20,width:40,height:60});
+ d.textBlocks.push({id:'t1',content:'秋日记录',x:50,y:80,width:100,height:40});
+ groupSceneLayers(d,['m1','m2'],{id:'inner',name:'实体组'});
+ moveSceneNode(d,'t1',{parentID:'inner'});
+ groupSceneLayers(d,['m1','m2'],{id:'nested',name:'内组'});
+ // Nested group membership is preserved when its ancestor is ungrouped.
+ moveSceneNode(d,'nested',{parentID:'inner'});
+ assert.equal(ungroupSceneLayers(d,'inner'),true);
+ assert.equal(d.items.find(x=>x.id==='m1').creativeGroupID,'nested');
+ assert.equal(sceneGroups(d).some(g=>g.id==='nested'),true);
+ assert.deepEqual(d.items.map(x=>x.assetID).sort(),['real-1','real-2']);
+});
