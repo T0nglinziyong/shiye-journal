@@ -27,8 +27,8 @@ export function creativeContentBrief({policy='documentary',userText='',providedF
     visual:'不生成正文、标题或图注；用真实素材和数字图形完成视觉拼贴。'
   };
   return [`内容策略：${contentPolicies[selected]}。${boundaries[selected]}`,
-    subject?`本次主题：${subject}`:'本次未提供主题。',
-    original?`用户原文（默认逐字保留事实和专名，不擅自删改；可分段排版）：${original}`:'用户未提供原文。',
+    subject?`用户填写的创作要求和内容：${subject}。其中明确要求写入画面的句子应优先保留，若有引用或原文要求则尊重原文；构图指令、配色说明不是手帐正文。`:'用户未提供具体创作要求或内容。',
+    original?`用户另附原文（默认逐字保留事实和专名；可分段排版）：${original}`:'没有额外独立原文；直接以创作要求和内容为准，不因缺少第二输入框而忽略文字。',
     facts?`用户已提供事实：${facts}`:'用户未提供可核实的个人事实。',
     selected==='visual'?'纯视觉模式不需要用途配文。':`页面用途决定写什么：${chosen.length?chosen.map((purpose,index)=>`${index===0?'主要':'辅助'}用途「${purpose}」：${purposeCopy[purpose]}`).join(' '):purposeCopy.日常记录}`,
     '制作计划与最终正文分开；“在这里写”“可放到旁边”等排版说明不能成为最终文字。',
