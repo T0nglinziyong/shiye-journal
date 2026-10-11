@@ -34,6 +34,7 @@ test('direct editable page remains a single atomic compose call', () => {
   assert.throws(() => direct.calls({content:JSON.stringify({...page, style:'unsupported-style'})}, 1), /未知值/);
   assert.equal(direct.native, false);
   assert.match(direct.instruction, /完整JSON页面数据/);
+  assert.throws(()=>direct.calls({content:JSON.stringify({format:'shiye-craft-plan',version:2})},1),/缺少字段|未通过合同|不允许字段|不匹配|应为/);
 });
 
 test('A-12: auto uses only verified endpoint/model capabilities; explicit override stays possible',()=>{
