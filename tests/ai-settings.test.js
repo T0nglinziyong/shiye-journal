@@ -61,3 +61,16 @@ test('A-12: image input is scoped to the verified endpoint/model or an explicit 
  assert.equal(supportsVision(normalizeAISettings({provider:'deepseek',endpoint:'https://example.test/chat/completions',model:'deepseek-flash',customVision:true})),true);
  assert.equal(supportsVision(normalizeAISettings({provider:'siliconflow',model:'Qwen/Qwen2.5-VL-72B-Instruct'})),true);
 });
+
+test('three creation methods are independent from web file-versus-text return form',()=>{
+  for(const [mode,generation,snapshot] of [['tools','agent',false],['json','direct',false],['image','direct','image/png']]){
+    const actual=normalizeAISettings({creationMode:mode,deliveryMode:'tools'});
+    assert.equal(actual.creationMode,mode);
+    assert.equal(actual.deliveryMode,mode);
+    assert.equal(actual.generationMode,generation);
+    assert.equal(actual.snapshot,snapshot);
+  }
+  // Old format-only choices cannot appear as a fourth/fifth method.
+  assert.equal(normalizeAISettings({deliveryMode:'zip'}).creationMode,'json');
+  assert.equal(normalizeAISettings({deliveryMode:'pdf'}).creationMode,'json');
+});
