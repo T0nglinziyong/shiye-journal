@@ -69,3 +69,8 @@
 .canvas-object-settings .canvas-setting textarea{display:block;box-sizing:border-box;width:100%;min-width:0;max-width:100%;resize:vertical;font-family:ui-monospace,SFMono-Regular,monospace;font-size:12px;line-height:1.5;margin-top:7px}
 .canvas-object-settings .object-setting-actions{display:flex;gap:6px;flex-wrap:wrap}
 .canvas-object-settings .object-setting-actions button{font-size:12px;min-height:31px}
+
+/* Scene v2: true compositing groups, no material scaling or duplicate stock. */
+.scene-v2-group{position:absolute;inset:0;pointer-events:none;isolation:isolate;transform:none;overflow:visible}
+.scene-v2-group>.canvas-object{pointer-events:auto}
+.scene-v2-group>.scene-ink-object{pointer-events:none}
