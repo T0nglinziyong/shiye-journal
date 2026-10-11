@@ -358,20 +358,15 @@ body:has(.import-nav) #view .import-nav>.import-back{
   font-size:0!important;line-height:0!important;
   border:0;background:transparent;
 }
-/* Exactly one real glyph element per back button: no overlaid ::before
-   plus an old text glyph, even when legacy stylesheets remain cached. */
+/* The shared icon manager in icons.js supplies the sole ChevronLeft SVG.
+   Never add a second CSS or manually authored arrow. */
 body:has(.import-nav) #view .import-nav>.import-back::before{
   content:none!important;
   display:none!important;
 }
-#view .shiye-back-glyph{
-  display:block;
-  width:10px;height:10px;
-  box-sizing:border-box;
-  border-left:2px solid currentColor;
-  border-bottom:2px solid currentColor;
-  transform:translateX(2px) rotate(45deg);
-  flex:0 0 auto;
+#view .import-nav>.import-back>.shiye-icon,
+#view .swift-editor-head>[data-act="back-works"]>.shiye-icon{
+  width:18px;height:18px;flex-basis:18px;margin:0;
 }
 #view .swift-editor-head{
   display:flex;
@@ -389,11 +384,6 @@ body:has(.import-nav) #view .import-nav>.import-back::before{
   font-size:14px;
   vertical-align:middle;
   white-space:nowrap;
-}
-#view .swift-editor-head>[data-act="back-works"]>span{
-  display:inline-flex;
-  align-items:center;
-  line-height:20px;
 }
 #view .swift-editor-head>div:first-of-type{
   display:flex;

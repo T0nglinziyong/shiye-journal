@@ -43,10 +43,10 @@ test('top and right visible grips are longer in BOTH import and creative editors
 
 test('editor back arrow uses centered geometry while keeping original navigation action',async()=>{
   const [editor,css]=await Promise.all(['canvas-editor-ui.js','layout-refinements.css'].map(source));
-  assert.match(editor,/head\.prepend\(back\);back\.innerHTML=/);
-  assert.match(editor,/class="shiye-back-glyph"/);
+  assert.match(editor,/head\.prepend\(back\);back\.textContent='返回'/);
+  assert.doesNotMatch(editor,/shiye-back-glyph/);
   assert.match(editor,/back\.setAttribute\('aria-label','返回作品'\)/);
   assert.match(css,/\.swift-editor-head>\[data-act="back-works"\]/);
-  assert.match(css,/#view \.shiye-back-glyph\{/);
+  assert.match(css,/\[data-act="back-works"\]>\.shiye-icon\{/);
   assert.match(css,/\.import-nav>\.import-back::before/);
 });
