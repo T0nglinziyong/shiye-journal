@@ -41,7 +41,7 @@ export async function loadJournalTemplateReferences({context,userTemplates=[],db
         if(blobId){
           // Reference photos need only a 960px COS derivative before the final
           // 768px handoff encoding; fall back to original when unavailable.
-          const blob=await db.previewBlob?.(blobId,960).catch(()=>null)||
+          const blob=(typeof db.previewBlob==='function'?await db.previewBlob(blobId,960).catch(()=>null):null)||
             (await db.get('blobs',blobId))?.data;
           if(!(blob instanceof Blob)||!blob.size)throw Error('模板「'+template.title+'」的'+(kind==='case'?'案例':'模板')+'图无法读取；未发送不完整参考包');
           return {id:template.id+'-'+kind,kind,title,bytes:new Uint8Array(await blob.arrayBuffer()),mimeType:blob.type,extension:extension(blob.type)};
