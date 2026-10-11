@@ -47,7 +47,7 @@ export async function classifyCreationFile(file){
   // the JSON, image and ZIP size checks downstream.
   const type=classifyCreationBytes(new Uint8Array(await file.slice(0,96).arrayBuffer()));
   if(!type)throw Error('不支持此作品文件：请选择 JSON、ZIP、PNG、JPEG 或 WebP');
-  const max=type.kind==='json'?2_000_000:type.kind==='zip'?20_000_000:40_000_000;
-  if(file.size>max)throw Error(type.kind==='json'?'可编辑 JSON 不能超过 2 MB':type.kind==='zip'?'作品 ZIP 不能超过 20 MB':'画面图片不能超过 40 MB');
+  const max=type.kind==='json'?8_000_000:type.kind==='zip'?20_000_000:40_000_000;
+  if(file.size>max)throw Error(type.kind==='json'?'可编辑 JSON 不能超过 8 MB':type.kind==='zip'?'作品 ZIP 不能超过 20 MB':'画面图片不能超过 40 MB');
   return type;
 }
