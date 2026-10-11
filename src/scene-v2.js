@@ -195,9 +195,24 @@ export function validateSceneExtensions(d){
  function walk(nodes,depth){if(!Array.isArray(nodes)||depth>12||nodes.length>5000)throw Error('Scene 图层树过深或过大');
   for(const node of nodes){if(!node||!kinds.has(node.type)||typeof node.id!=='string'||!node.id||seen.has(node.id))throw Error('Scene 图层类型或编号重复');seen.add(node.id);count++;if(count>10000)throw Error('Scene 图层总数超限');
    sceneLayerStyle(node);
-   if(node.type==='group'){if(!Array.isArray(node.children)||node.children.length>1000||node.scale!==undefined||node.scaleX!==undefined||node.scaleY!==undefined)throw Error('物理图层组不能缩放或包含非法子图层');walk(node.children,depth+1);}
-   else if(node.type==='material'){if(typeof node.assetID!=='string'||!node.assetID)throw Error('缺少真实素材引用');}
-   else if(node.type==='ink'){if(!Array.isArray(node.points)||node.points.length>20000)throw Error('笔迹结构无效');}
+   if(node.opacity!==undefined&&!num(node.opacity,0,1))throw Error('图层透明度必须在 0–1 之间');
+   if(node.zIndex!==undefined&&!num(node.zIndex,-100000,100000))throw Error('图层排序值无效');
+   if(node.type==='group'){
+     if(!Array.isArray(node.children)||node.children.length>1000||
+       ['scale','scaleX','scaleY','width','height','assetID'].some(key=>node[key]!==undefined))throw Error('物理图层组不能缩放或复制真实素材');
+     if(node.name!==undefined&&(typeof node.name!=='string'||node.name.length>100))throw Error('图层组名称无效');
+     walk(node.children,depth+1);
+   }else if(node.type==='ink'){
+     if(!Array.isArray(node.points)||node.points.length<1||node.points.length>20000||
+       !node.points.every(p=>p&&num(p.x,-100000,100000)&&num(p.y,-100000,100000)&&(p.p===undefined||num(p.p,0,1)))||
+       !num(node.width,0.1,1000))throw Error('笔迹路径及压感数据无效');
+   }else{
+     if(![node.x,node.y,node.width,node.height].every(Number.isFinite)||
+       !(node.width>0&&node.height>0)||node.width>100000||node.height>100000||
+       Math.abs(node.x)>100000||Math.abs(node.y)>100000||
+       (node.rotation!==undefined&&!num(node.rotation,-3600,3600)))throw Error('图层尺寸、位置或旋转无效');
+     if(node.type==='material'&&(typeof node.assetID!=='string'||!node.assetID))throw Error('缺少真实素材引用');
+   }
   }
  }
  walk(d.layers,0);return true;
