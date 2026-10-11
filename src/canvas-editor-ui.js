@@ -355,7 +355,7 @@ export function mountCanvasEditor(c){
       p.position();
     };
     const commitLayer=fn=>{checkpoint();fn();saveProject();
-      for(const e of ordered){const item=e.value;page.querySelectorAll('[data-object="'+item.id+'"]').forEach(node=>{node.style.zIndex=item.zIndex||0;node.hidden=!!(item.hidden||item.isHidden||item.isParked);});}
+      for(const e of ordered){const item=e.value;page.querySelectorAll('[data-object="'+item.id+'"],.scene-ink-object[data-render-key="'+item.id+'"]').forEach(node=>{node.style.zIndex=item.zIndex??(e.kind==='ink'?2000:0);node.hidden=!!(item.hidden||item.isHidden||item.isParked);});}
       view.editorRefresh?.();
     };
     const reorder=(id,targetId,after=false)=>{
@@ -388,7 +388,7 @@ export function mountCanvasEditor(c){
     };
     for(const e of ordered){
       const o=e.value,row=document.createElement('div');row.className='canvas-layer-row';row.dataset.layerId=o.id;
-      const pick=button('',()=>{if(o.isLocked||o.locked||o.isHidden||o.hidden||o.isParked)return;if(e.kind==='ink'){state.selected=null;state.multiSelected=[];state.selectedStrokes=[e.index];render();return;}state.multiSelected=o.creativeGroupID?sceneGroupMembers(d,o.creativeGroupID).map(e=>e.value.id):[];state.selected=state.multiSelected.length>1?null:o.id;render();redraw();});
+      const pick=button('',()=>{if(o.isLocked||o.locked||o.isHidden||o.hidden||o.isParked)return;if(e.kind==='ink'){const index=d.strokes.findIndex(stroke=>stroke.id===o.id);state.selected=null;state.multiSelected=[];state.selectedStrokes=index>=0?[index]:[];view.editorRefresh?.();return;}state.multiSelected=o.creativeGroupID?sceneGroupMembers(d,o.creativeGroupID).map(e=>e.value.id):[];state.selected=state.multiSelected.length>1?null:o.id;render();redraw();});
       pick.dataset.layerPick='';pick.innerHTML=(e.kind==='material'?imgTag(asset(o.assetID)):e.kind==='shape'?shapeSVG(o):e.kind==='ink'?'<span>✎</span>':'<span>Aa</span>')+'<span>'+esc((o.creativeGroupID?'◫ ':'')+(e.kind==='material'?asset(o.assetID)?.title:e.kind==='text'?o.content.slice(0,24):e.kind==='ink'?'手写笔迹':o.kind==='vector'?'自定义图形':o.kind))+'</span>';row.append(pick);
       const lock=button('',()=>{const next=!(o.isLocked||o.locked);commitLayer(()=>{o.isLocked=o.locked=next;if(next&&state.selected===o.id)state.selected=null;});redraw();});lock.dataset.layerLock='';
       const eye=button('',()=>{const next=!(o.isHidden||o.hidden||o.isParked);commitLayer(()=>{if(e.kind==='material')o.isParked=next;else if(e.kind==='text')o.isHidden=next;else o.hidden=next;if(next&&state.selected===o.id)state.selected=null;});redraw();});eye.dataset.layerEye='';
