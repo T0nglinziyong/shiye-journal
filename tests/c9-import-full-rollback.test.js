@@ -7,6 +7,7 @@ const source=name=>readFile(new URL('../src/'+name,import.meta.url));
 const expected={
   'image.js':'88d244bf813213c40d2baf8b24e7914d9e594882',
   'manual-import-recognition.js':'7f843bae5c81fb8f2046ae176ff4b0855446f0b8',
+  'perspective.js':'af21f19bead1d03a58626248dd905e8d81f30e59',
   'import-box-editor.js':'8798db7e8987ade7afa9c58640de759ff17c6ae2',
   'recognition-refiners.js':'e4bd77e4e373e6a3d6ea5d28aa08bdba5e8f2652',
   'recognition-raster.js':'4e88878477689fa3c973576c5ce51c419145343a',
@@ -50,7 +51,9 @@ test('material recognition stays stable while A4 quad logic may evolve independe
   assert.doesNotMatch(app,/requiresManualPaperConfirmation|onAnalysisRaster|segmentManualOrFallback|installDesktopImageDrop/);
   assert.doesNotMatch(app,/from '\.\/toast\.js'/);
   assert.doesNotMatch(worker,/detectWhitePaperQuad|HoughLinesP/);
-  assert.match(worker,/if\(operation==='quad'\)return detectPaperQuadMultiScale\(cv,p,own\)/);
+  assert.match(worker,/for\(const threshold of \[150,165,180,195,210/);
+  assert.match(worker,/best\?\.corners\|\|fallbackPaperQuad400\(cv,p,own\)/);
+  assert.doesNotMatch(worker,/detectPaperQuadMultiScale/);
   assert.match(worker,/if\(operation==='process-material-boxes'\)/);
   assert.match(app,/setTimeout\(\(\)=>el\.classList\.remove\('show'\),3500\)/);
 });
