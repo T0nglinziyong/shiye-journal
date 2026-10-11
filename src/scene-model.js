@@ -81,6 +81,7 @@ export function validateSceneExtensions(draft){
     if(typeof value.id!=='string'||!value.id||seen.has(value.id))throw Error('Scene 图层 ID 无效或重复');
     seen.add(value.id);
     sceneLayerStyle(value);
+    if(kind==='ink'&&value.vectorMask)throw Error('笔迹蒙版应先转换为独立路径后使用');
     if(value.creativeGroupID&&!groupIDs.has(value.creativeGroupID)){
       // Existing creativeGroupID was already used for selection before
       // Scene v1; allow these old groups, but never allow new unresolved ones.
