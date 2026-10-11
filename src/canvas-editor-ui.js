@@ -14,6 +14,8 @@ import {createIcon} from './icons.js';
 import {historyTitle,renameHistory,deleteDraft,captureHistory,restoreHistoryDraft} from './project-history.js';
 import {syncSelectionGeometry} from './selection-geometry.js';
 import {syncInkSceneDOM} from './ink-scene-svg.js';
+import {validateScenePhysical} from './creative.js';
+import {attachSceneV2} from './scene-v2.js';
 import {groupSceneLayers,ungroupSceneLayers,sceneGroupMembers,sceneLayerEntries,sceneGroups,transformSceneGroup,moveSceneNode,validateVectorMask} from './scene-model.js';
 import {clampCanvasPosition,moveSelection,materialCenterOutside} from './canvas-selection.js';
 import {transformSelectedFrame,isObjectDeleteKey} from './selection-transform.js';
@@ -566,7 +568,22 @@ export function mountCanvasEditor(c){
     if(kind==='text'){const cancel=button('取消',()=>modal.close());body.querySelector('header').prepend(cancel);body.querySelector('#object-settings-done').textContent='应用';body.querySelector('#object-settings-done').onclick=()=>[...fields.querySelectorAll('button')].find(b=>b.textContent==='应用文字设置').click();const select=(name,key,choices)=>{const row=document.createElement('label');row.textContent=name;const input=document.createElement('select');input.innerHTML=choices.map(([id,label])=>'<option value="'+id+'" '+(draftValue(key)===id?'selected':'')+'>'+label+'</option>').join('');input.onchange=()=>{textDraft[key]=input.value;if(key==='style')textDraft.fontName=null;};row.append(input);fields.append(row);};const draftValue=key=>textDraft[key];select('基础风格','style',[['serif','宋体'],['sans','黑体'],['rounded','圆体'],['hand','手写体']]);select('对齐','alignment',[['left','左对齐'],['center','居中'],['right','右对齐']]);const row=document.createElement('label');row.textContent='文字颜色';const color=document.createElement('input');color.type='color';color.value=textDraft.color;color.oninput=()=>textDraft.color=color.value;row.append(color);fields.append(row);onDialogClosed(modal,()=>{if(state.newTextID===o.id&&!o.content.trim()){d.textBlocks=d.textBlocks.filter(t=>t.id!==o.id);state.selected=null;state.newTextID=null;state.undo.pop();saveProject();render();}});}
     modal.classList.add('canvas-settings-dialog');onDialogClosed(modal,()=>modal.classList.remove('canvas-settings-dialog'));if(!modal.open)modal.showModal();
   }
-  function duplicate(entry){if(entry.kind==='material'){const a=asset(entry.value.assetID),taken=new Set(d.items.filter(i=>i.assetID===a.id).map(i=>i.materialUnitIndex||0)),unit=Array.from({length:a.supply?.quantity??1},(_,i)=>i).find(i=>!taken.has(i));if(unit===undefined){toast('复制会超出本页实物库存');return;}change(()=>{const copy={...structuredClone(entry.value),id:uid(),x:entry.value.x+25,y:entry.value.y+25,materialUnitIndex:unit};d.items.push(copy);state.selected=copy.id;});}else handle('duplicate');}
+  function duplicate(entry){
+    if(entry.kind!=='material'){handle('duplicate');return;}
+    const a=asset(entry.value.assetID);if(!a){toast('原始素材不存在');return;}
+    const used=new Set(d.items.filter(i=>i.assetID===a.id).map(i=>i.materialUnitIndex??0));
+    const count=a.supply?.quantity??1;
+    const free=Array.from({length:Math.min(1000,count)},(_,i)=>i).find(i=>!used.has(i));
+    const roll=a.kind==='tape'&&a.supply?.kind==='tapeRoll'&&a.tapeRepeatMode==='repeatablePattern';
+    if(free===undefined&&!roll){toast('复制会超出本页实物库存');return;}
+    const copy={...structuredClone(entry.value),id:uid(),x:entry.value.x+25,y:entry.value.y+25,
+      materialUnitIndex:free??0};
+    try{
+      const trial=attachSceneV2(structuredClone(d));trial.items.push(structuredClone(copy));
+      validateScenePhysical(trial,c.state.assets);
+    }catch(error){toast(error.message);return;}
+    change(()=>{d.items.push(copy);state.selected=copy.id;});
+  }
   function selectedHandles(){if(!selected||selected.value.locked||selected.value.isLocked||state.multiSelected?.length>1)return;const o=selected.value,object=page.querySelector('[data-object="'+o.id+'"]');if(!object)return;const node=document.createElement('div');node.className='selected-object-overlay';node.dataset.selectionFor=o.id;const geometry=['left','top','width','height','transform'];for(const key of geometry)node.style[key]=object.style[key];page.append(node);const floating=document.createElement('div');floating.className='selected-object-actions';for(const [name,glyph,fn] of [['复制对象','⊞',()=>duplicate(selected)],['删除对象','♜',()=>handle('delete-object')],['编辑对象','☷',()=>objectInspector(selected)]]){const b=button(glyph,e=>{e.stopPropagation();fn();});b.setAttribute('aria-label',name);b.onpointerdown=e=>e.stopPropagation();floating.append(b);}node.append(floating);const top=parseFloat(object.style.top)||0,height=parseFloat(object.style.height)||0;
     if(top>42&&top+height+52>page.clientHeight)node.classList.add('controls-above');
     let move=null;
