@@ -14,7 +14,8 @@ test('O-12/O-13: bundled validator runs from the ZIP without node_modules or clo
   const task=await createOfflineHandoff({project:project('断网验证'),assets:[asset],aliases:{m1:asset.id},settings:{includeThumbnails:false}});
   const entries=unzipSync(new Uint8Array(await task.blob.arrayBuffer()));
   const capabilities=JSON.parse(strFromU8(entries['task/knowledge.json'])).capabilities;
-  assert.equal(capabilities.runtime.render,null);
+  assert.equal(capabilities.runtime.render,'browser-html-manual');
+  assert.equal(capabilities.runtime.visualReview,'manual-required');
   assert.equal(capabilities.runtime.preview,'approximate-svg');
   assert.ok(entries['runtime/preview.cjs']);
   const directory=await mkdtemp(join(tmpdir(),'shiye-offline-runtime-'));
