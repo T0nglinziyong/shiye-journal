@@ -53,6 +53,7 @@ function checkDraft(d,assets){
   }
   buildMaterialLedger(d,assets);
 }
+export function validateScenePhysical(draft,assets){validateSceneExtensions(draft);checkDraft(draft,assets);return true;}
 function measure(t,options){
   if(typeof options.measureText==='function')return text=>options.measureText(text,t);
   const ctx=options.deterministicTextLayout?null:globalThis.document?.createElement?.('canvas')?.getContext?.('2d');
