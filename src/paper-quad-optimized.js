@@ -56,6 +56,9 @@ function geometricProposal(cv,polygon,contourArea,w,h,paperRatio,source){
   return assessShape(points,Math.abs(cv.contourArea(polygon))/(w*h),contourArea,w,h,paperRatio,source);
 }
 function assessShape(points,coverage,contourArea,w,h,paperRatio,source){
+  // Region-derived and line-refined candidates must obey the same convexity
+  // assumption as OpenCV contours; IoU clipping is undefined otherwise.
+  if(points.some((v,i)=>cross(v,points[(i+1)%4],points[(i+2)%4])<=1e-6))return null;
   if(coverage<.18||coverage>.96||
     points.some(p=>!Number.isFinite(p.x)||!Number.isFinite(p.y)||
       p.x<.004||p.x>.996||p.y<.004||p.y>.996))return null;
