@@ -71,6 +71,7 @@ import {applyToolCalls} from './creative.js';
 import {createOfflineHandoff,inspectEditableSource,inspectOfflinePackage,verifyOfflineTaskPackage,importEditableWork,importEditableWorkPackageReviewed} from './offline-creation.js';
 import {offlineTaskStore} from './offline-task-store.js';
 import {offlinePreviewBytes as encodeOfflinePreview} from './offline-preview.js';
+import {mapOfflineExportLimited,prepareOfflineMaterialPreview} from './offline-export-assets.js';
 import {buildMaterialScope} from './matching-materials.js';
 import {matchingRecommendations,renderMatchingPage} from './matching-view.js';
 import {captureMatchingScroll,restoreMatchingScroll} from './matching-scroll.js';
@@ -835,17 +836,56 @@ function createMatchingProject(automatic=true){const scope=matchingScope();if(!s
 async function exportOfflineCreation(){
   if(!matchingScope().candidateAssetIDs.length){toast('请先选择素材');return;}
   state.matchPurpose=view.querySelector('#match-purpose')?.value||state.matchPurpose;state.matchProcessing=view.querySelector('#match-processing')?.value||state.matchProcessing;state.matchStyle=view.querySelector('#match-style')?.value||state.matchStyle;state.matchIntent=view.querySelector('#match-intent')?.value||'';captureMatchContent();state.matchMode=view.querySelector('#match-mode')?.value||state.matchMode;state.matchRatio=readMatchPaper();state.matchStyles=readMatchSelection('match-style',state.matchStyle);state.matchPurposes=readMatchSelection('match-purpose',state.matchPurpose);
-  const button=view.querySelector('[data-act="match-export-gpt"]');if(button){button.disabled=true;button.textContent='正在准备 AI 参考…';}
+  const button=view.querySelector('[data-act="match-export-gpt"]'),controller=new AbortController(),started=performance.now();
+  const timing={},report={cacheHits:0,derived:0,original:0,materials:0,references:0};
+  let storedBundle=null;
+  if(button){button.disabled=true;button.textContent='正在准备 AI 参考…';}
+  body.innerHTML='<section class="offline-handoff"><h2>准备网页版 AI 创作包</h2><p id="offline-export-progress" role="status" aria-live="polite">正在检查素材…</p><button type="button" class="btn" id="offline-export-cancel">取消导出</button></section>';
+  if(!modal.open)modal.showModal();
+  const canceled=()=>{if(controller.signal.aborted)throw controller.signal.reason||Error('已取消导出');};
+  const onClose=()=>controller.abort(Error('已取消导出'));
+  modal.addEventListener('close',onClose);
+  const progress=text=>{const el=body.querySelector('#offline-export-progress');if(el)el.textContent=text;};
+  body.querySelector('#offline-export-cancel').onclick=()=>{controller.abort(Error('已取消导出'));modal.close();};
+  const measured=async(name,task)=>{const now=performance.now();try{return await task();}finally{timing[name]=Math.round(performance.now()-now);}};
   try{
     const p=createMatchingProject(),assetsSnapshot=structuredClone(state.assets),aliases=materialAliases(p.candidateAssetIDs),previews=[],referenceImages=[],cfg=structuredClone(state.aiSettings);
-    // API requests may cap image count; the offline package must contain every
-    // selected material so ChatGPT can inspect the whole basket. Limit parallel
-    // decoding to keep iPad memory and the foreground responsive.
-    if(cfg.includeThumbnails){const entries=Object.entries(aliases);for(let offset=0;offset<entries.length;offset+=3){const group=await Promise.all(entries.slice(offset,offset+3).map(async([alias,id])=>{const chosen=assetsSnapshot.find(item=>item.id===id);if(!chosen)throw Error('创作素材已变更，请重新导出任务包');const bytes=await offlinePreviewBytes(chosen);if(!bytes)throw Error('素材「'+chosen.title+'」缺少预览图，请先检查同步状态');return {alias,bytes};}));previews.push(...group);}}
-    if(cfg.sendPresetReferences){const bundle=await loadJournalTemplateReferences({context:{styles:p.styles,purposes:p.purposes,materials:assetsSnapshot.filter(asset=>p.candidateAssetIDs.includes(asset.id))},userTemplates:state.userTemplates,db});referenceImages.push(...bundle.referenceImages);}
-    const result=await createOfflineHandoff({project:p,assets:assetsSnapshot,aliases,previews,referenceImages,settings:cfg,userTemplates:state.userTemplates});
+    const account=await offlineTaskAccount();canceled();
+    const all=Object.entries(aliases);report.materials=all.length;
+    // Fetch 600px COS derivatives instead of downloading full-resolution
+    // originals for 512px GPT hints. Account/source-revision cache survives
+    // repeat exports; originals stay unchanged and remain the fallback.
+    const materialWork=measured('materials',()=>cfg.includeThumbnails
+      ?mapOfflineExportLimited(all,3,async([alias,id])=>{
+        const chosen=assetsSnapshot.find(item=>item.id===id);
+        if(!chosen)throw Error('创作素材已变更，请重新导出任务包');
+        const row=await prepareOfflineMaterialPreview({
+          asset:chosen,account,signal:controller.signal,
+          loadVariant:(asset,edge)=>db.previewBlob(asset.blobId,edge),
+          loadOriginal:async asset=>(await db.get('blobs',asset.blobId))?.data||
+            (asset.staticPath?await fetch(asset.staticPath).then(r=>r.blob()):null)
+        });
+        if(row.cacheHit)report.cacheHits++;
+        else if(row.source==='variant')report.derived++;
+        else report.original++;
+        return {alias,bytes:row.bytes};
+      },{signal:controller.signal,onDone:(done,total)=>progress('准备素材图片 '+done+'/'+total+' · 同时处理参考案例…')})
+      :Promise.resolve([]));
+    const referenceWork=measured('references',()=>cfg.sendPresetReferences
+      ?loadJournalTemplateReferences({context:{accountId:account,styles:p.styles,purposes:p.purposes,materials:assetsSnapshot.filter(asset=>p.candidateAssetIDs.includes(asset.id))},userTemplates:state.userTemplates,db})
+      :Promise.resolve({referenceImages:[]}));
+    const [materialRows,referenceBundle]=await Promise.all([materialWork,referenceWork]);
+    canceled();previews.push(...materialRows);referenceImages.push(...referenceBundle.referenceImages);report.references=referenceImages.length;
+    progress('正在校验内容并生成 ZIP 文件…');
+    const result=await measured('package',()=>createOfflineHandoff({project:p,assets:assetsSnapshot,aliases,previews,referenceImages,settings:cfg,userTemplates:state.userTemplates}));
+    canceled();
     p.offlineBundleId=result.source.bundleId;
-    await offlineTaskStore.save(await offlineTaskAccount(),result.source);
+    progress('正在保存任务身份…');
+    await measured('taskStore',()=>offlineTaskStore.save(account,result.source));
+    storedBundle={account,id:result.source.bundleId};
+    canceled();
+    timing.total=Math.round(performance.now()-started);
+    console.info('[shiye offline export timing]',{...timing,...report,packageBytes:result.packageBytes,imageBytes:result.imageBytes});
     const fileSize=n=>n<1024*1024?`${Math.ceil(n/1024)} KB`:`${(n/1024/1024).toFixed(1)} MB`;
     const imageDelivery=result.deliveryMode==='image';
     if(imageDelivery){
@@ -858,7 +898,8 @@ async function exportOfflineCreation(){
     body.querySelector('.offline-handoff-return small').textContent='先查看 AI 返回的构图预览，再下载 .shiyeproject.zip 导入；最终字体与阅读以拾页为准。也可复制完整 JSON。';
     }
     body.querySelector('#offline-gpt-prompt').rows=3;
-    modal.showModal();
+    const diagnostics='总耗时 '+timing.total+' ms · 素材 '+timing.materials+' ms · 参考图 '+timing.references+' ms · 打包 '+timing.package+' ms · 保存 '+timing.taskStore+' ms · 缓存命中 '+report.cacheHits+'/'+report.materials+' · COS 派生 '+report.derived+' · 原图回退 '+report.original;
+    body.querySelector('.offline-handoff')?.insertAdjacentHTML('beforeend','<details class="offline-export-diagnostics"><summary>查看本次导出耗时</summary><p>'+esc(diagnostics)+'</p></details>');
     body.querySelectorAll('[data-offline-delivery]').forEach(button=>button.onclick=()=>{for(const option of body.querySelectorAll('[data-offline-delivery]')){const selected=option===button;option.classList.toggle('selected',selected);option.setAttribute('aria-pressed',String(selected));}body.querySelector('#offline-gpt-prompt').value=result.prompts[button.dataset.offlineDelivery];});
     const openPackage=()=>{const url=URL.createObjectURL(result.blob),link=document.createElement('a');link.href=url;link.download=result.filename;link.target='_blank';link.rel='noopener';document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),120000);};
     body.querySelector('#offline-copy-prompt').onclick=()=>{const input=body.querySelector('#offline-gpt-prompt');input.select();if(document.execCommand('copy')){openPackage();body.querySelector('#offline-handoff-status').textContent='提示词已复制 · 任务包已打开；在文件页分享给 ChatGPT。';return;}navigator.clipboard.writeText(input.value).then(()=>{openPackage();body.querySelector('#offline-handoff-status').textContent='提示词已复制 · 任务包已打开；在文件页分享给 ChatGPT。';}).catch(()=>toast('复制失败，请长按提示词手动复制'));};
@@ -870,7 +911,7 @@ async function exportOfflineCreation(){
       body.querySelector('#offline-paste-result').onclick=()=>pasteOfflineResult();
     }
     body.querySelector('#offline-import-file').onclick=()=>{if(imageDelivery){offlineSnapshotProject=p;snapshotFileInput.click();}else workFileInput.click();};
-  }catch(error){console.error(error);toast('AI 参考导出失败：'+error.message);}finally{if(button){button.disabled=false;button.textContent='导出给网页版 AI';}}
+  }catch(error){if(controller.signal.aborted&&storedBundle){try{await offlineTaskStore.remove(storedBundle.account,storedBundle.id);}catch(cleanupError){console.warn('已取消任务的本机身份清理失败',cleanupError);}}if(!controller.signal.aborted){console.error(error);toast('AI 参考导出失败：'+error.message);if(modal.open)modal.close();}}finally{modal.removeEventListener('close',onClose);if(button){button.disabled=false;button.textContent='导出给网页版 AI';}}
 }
 function openOfflineImportDialog(){
   if(state.aiSettings.deliveryMode==='image'){

@@ -60,5 +60,5 @@ export async function journalPresetReference(panel,options){
   const region=typeof panel==='number'?{number:panel,rect:[0,0,1,1],rotate:0}:panel;
   const url=await loadJournalPresetPanel(region,options);if(!url)return null;
   const blob=await(await fetch(url)).blob(),bytes=new Uint8Array(await blob.arrayBuffer());
-  return {id:'source-'+region.number,title:'来源教程 '+region.number,bytes,url:await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(reader.error);reader.readAsDataURL(blob);}),mimeType:'image/jpeg',extension:'jpg'};
+  return {id:'source-'+region.number,title:'来源教程 '+region.number,bytes,url:options?.includeDataURL===false?undefined:await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(reader.error);reader.readAsDataURL(blob);}),mimeType:'image/jpeg',extension:'jpg'};
 }
