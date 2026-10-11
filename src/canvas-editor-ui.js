@@ -1,6 +1,6 @@
 import {ensureInkSlots,inkSlot,activeInkSlot,selectInkSlot,editInkSlot} from './ink-tool-slots.js';
 import {openPopover,closePopover} from './swift-popover.js';
-import {defaultTools,commonShapes,advancedShapes,configureShape,straightStroke,eraseStrokes,drawInk,resizeObject,textFont,textLines} from './editor-tools-model.js';
+import {defaultTools,commonShapes,advancedShapes,configureShape,straightStroke,eraseStrokes,drawInk,textFont,textLines} from './editor-tools-model.js';
 import {shapeTag as shapeSVG} from './shape-preview.js';
 import {isCurrentExampleProject} from './current-examples.js';
 import {uid,textBlock,primitive,itemFromAsset} from './domain.js';
@@ -13,6 +13,7 @@ import {createIcon} from './icons.js';
 import {historyTitle,renameHistory,deleteDraft,captureHistory,restoreHistoryDraft} from './project-history.js';
 import {syncSelectionGeometry} from './selection-geometry.js';
 import {clampCanvasPosition,moveSelection,materialCenterOutside} from './canvas-selection.js';
+import {transformSelectedFrame,isObjectDeleteKey} from './selection-transform.js';
 const labels={select:'选择',marquee:'矩形框选',pen:'笔',highlighter:'荧光笔',eraser:'橡皮擦',lasso:'套索选择',text:'文字',shape:'图形',material:'素材',layers:'图层',paper:'画布背景'};
 const glyphs={select:'➤',pen:'',eraser:'◇',highlighter:'▱',lasso:'◌',text:'Aa',shape:'▢',material:'▧',layers:'▱',paper:'▦'};
 const prefKey='shiye-canvas-tools-v1';
@@ -373,15 +374,82 @@ export function mountCanvasEditor(c){
     modal.classList.add('canvas-settings-dialog');onDialogClosed(modal,()=>modal.classList.remove('canvas-settings-dialog'));if(!modal.open)modal.showModal();
   }
   function duplicate(entry){if(entry.kind==='material'){const a=asset(entry.value.assetID),taken=new Set(d.items.filter(i=>i.assetID===a.id).map(i=>i.materialUnitIndex||0)),unit=Array.from({length:a.supply?.quantity??1},(_,i)=>i).find(i=>!taken.has(i));if(unit===undefined){toast('复制会超出本页实物库存');return;}change(()=>{const copy={...structuredClone(entry.value),id:uid(),x:entry.value.x+25,y:entry.value.y+25,materialUnitIndex:unit};d.items.push(copy);state.selected=copy.id;});}else handle('duplicate');}
-  function selectedHandles(){if(!selected||selected.value.locked||selected.value.isLocked||state.multiSelected?.length>1)return;const o=selected.value,object=page.querySelector('[data-object="'+o.id+'"]');if(!object)return;const node=document.createElement('div');node.className='selected-object-overlay';node.dataset.selectionFor=o.id;const geometry=['left','top','width','height','transform'];for(const key of geometry)node.style[key]=object.style[key];page.append(node);const floating=document.createElement('div');floating.className='selected-object-actions';for(const [name,glyph,fn] of [['复制对象','⊞',()=>duplicate(selected)],['删除对象','♜',()=>handle('delete-object')],['编辑对象','☷',()=>objectInspector(selected)]]){const b=button(glyph,e=>{e.stopPropagation();fn();});b.setAttribute('aria-label',name);b.onpointerdown=e=>e.stopPropagation();floating.append(b);}node.append(floating);
+  function selectedHandles(){if(!selected||selected.value.locked||selected.value.isLocked||state.multiSelected?.length>1)return;const o=selected.value,object=page.querySelector('[data-object="'+o.id+'"]');if(!object)return;const node=document.createElement('div');node.className='selected-object-overlay';node.dataset.selectionFor=o.id;const geometry=['left','top','width','height','transform'];for(const key of geometry)node.style[key]=object.style[key];page.append(node);const floating=document.createElement('div');floating.className='selected-object-actions';for(const [name,glyph,fn] of [['复制对象','⊞',()=>duplicate(selected)],['删除对象','♜',()=>handle('delete-object')],['编辑对象','☷',()=>objectInspector(selected)]]){const b=button(glyph,e=>{e.stopPropagation();fn();});b.setAttribute('aria-label',name);b.onpointerdown=e=>e.stopPropagation();floating.append(b);}node.append(floating);const top=parseFloat(object.style.top)||0,height=parseFloat(object.style.height)||0;
+    if(top>42&&top+height+52>page.clientHeight)node.classList.add('controls-above');
     let move=null;
     node.onpointerdown=e=>{if(e.button>0||e.target.closest('.object-handle,.selected-object-actions'))return;// The selected overlay owns the hit area until release. Never peek
       // through it and select an unrelated overlapping object while dragging.
       e.preventDefault();e.stopPropagation();move={id:e.pointerId,x:e.clientX,y:e.clientY,startX:o.x,startY:o.y,startFlags:o.userOverrideFlags?.slice(),changed:false};node.setPointerCapture(e.pointerId);};
-    node.onpointermove=e=>{if(!move||move.id!==e.pointerId)return;const scale=page.getBoundingClientRect().width/d.canvas.width,dx=(e.clientX-move.x)/scale,dy=(e.clientY-move.y)/scale;if(!move.changed&&Math.hypot(e.clientX-move.x,e.clientY-move.y)>3){checkpoint();move.changed=true;node.classList.add('dragging');}if(!move.changed)return;e.preventDefault();e.stopPropagation();moveSelection(d,new Map([[o.id,{x:move.startX,y:move.startY}]]),dx,dy);const displayScale=page.clientWidth/d.canvas.width;object.style.left=(o.x-o.width/2)*displayScale+'px';object.style.top=(o.y-o.height/2)*displayScale+'px';syncSelectionGeometry(page,o.id);};
+    node.onpointermove=e=>{if(!move||move.id!==e.pointerId)return;const scale=page.getBoundingClientRect().width/d.canvas.width,dx=(e.clientX-move.x)/scale,dy=(e.clientY-move.y)/scale;if(!move.changed&&Math.hypot(e.clientX-move.x,e.clientY-move.y)>3){checkpoint();move.changed=true;node.classList.add('dragging');}if(!move.changed)return;e.preventDefault();e.stopPropagation();moveSelection(d,new Map([[o.id,{x:move.startX,y:move.startY}]]),dx,dy);const displayScale=page.clientWidth/d.canvas.width;object.style.left=(o.x-o.width/2)*displayScale+'px';object.style.top=(o.y-o.height/2)*displayScale+'px';node.style.left=object.style.left;node.style.top=object.style.top;syncSelectionGeometry(page,o.id);};
     node.onpointerup=e=>{if(!move||move.id!==e.pointerId)return;e.stopPropagation();const previous=move,changed=move.changed;move=null;node.classList.remove('dragging');if(changed){view.selectionClickConsumed=true;if(materialCenterOutside(d,[selected])&&confirm('素材中心已移出画布，是否撤回这次移动？')){o.x=previous.startX;o.y=previous.startY;o.userOverrideFlags=previous.startFlags;state.undo.pop();}else saveProject();render();}};
     node.onpointercancel=e=>{if(!move||move.id!==e.pointerId)return;e.stopPropagation();node.classList.remove('dragging');if(move.changed){o.x=move.startX;o.y=move.startY;o.userOverrideFlags=move.startFlags;state.undo.pop();}move=null;render();};
-    for(const corner of ['nw','ne','sw','se','rotate']){const h=button(corner==='rotate'?'⟳':'',()=>{});h.className='object-handle '+corner;h.setAttribute('aria-label',corner==='rotate'?'旋转对象':'缩放对象 '+corner);node.append(h);let drag=null;h.onpointerdown=e=>{e.preventDefault();e.stopPropagation();checkpoint();h.setPointerCapture(e.pointerId);drag={id:e.pointerId,pointerX:e.clientX,pointerY:e.clientY,x:o.x,y:o.y,width:o.width,height:o.height,rotation:o.rotation||0};};h.onpointermove=e=>{if(!drag||drag.id!==e.pointerId)return;e.preventDefault();e.stopPropagation();const scale=page.getBoundingClientRect().width/d.canvas.width,displayScale=page.clientWidth/d.canvas.width;if(corner==='rotate'){const r=node.getBoundingClientRect();const cx=r.x+r.width/2,cy=r.y+r.height/2,a=Math.atan2(drag.pointerY-cy,drag.pointerX-cx),b=Math.atan2(e.clientY-cy,e.clientX-cx);o.rotation=drag.rotation+Math.atan2(Math.sin(b-a),Math.cos(b-a))*180/Math.PI;}else{Object.assign(o,resizeObject(drag,corner.endsWith('e')?1:-1,corner.startsWith('s')?1:-1,(e.clientX-drag.pointerX)/scale,(e.clientY-drag.pointerY)/scale));Object.assign(o,clampCanvasPosition(d,o,o.x,o.y));}object.style.width=o.width*displayScale+'px';object.style.height=o.height*displayScale+'px';object.style.left=(o.x-o.width/2)*displayScale+'px';object.style.top=(o.y-o.height/2)*displayScale+'px';object.style.transform='rotate('+(o.rotation||0)+'deg)';syncSelectionGeometry(page,o.id);};h.onpointerup=e=>{if(!drag)return;e.stopPropagation();drag=null;saveProject();render();};h.onpointercancel=()=>{if(!drag)return;Object.assign(o,{x:drag.x,y:drag.y,width:drag.width,height:drag.height,rotation:drag.rotation});drag=null;state.undo.pop();render();};}
+    // GoodNotes-like grips share the geometry and gesture rules with import
+    // boxes: right = width, top = height, bottom-right = scale plus rotation.
+    for(const [grip,label] of [['top','拉伸对象高度'],['right','拉伸对象宽度'],['corner','缩放并旋转对象']]){
+      const h=button('',()=>{});
+      h.className='object-handle '+grip;
+      h.setAttribute('aria-label',label);
+      node.append(h);
+      let drag=null;
+      h.onpointerdown=e=>{
+        if(e.button>0)return;
+        e.preventDefault();e.stopPropagation();
+        checkpoint();
+        const area=page.getBoundingClientRect(),factor=area.width/d.canvas.width;
+        drag={id:e.pointerId,pointerX:e.clientX,pointerY:e.clientY,
+          start:{x:o.x,y:o.y,width:o.width,height:o.height,rotation:o.rotation||0},
+          flags:o.userOverrideFlags?.slice(),changed:false,scale:factor};
+        h.setPointerCapture(e.pointerId);
+      };
+      h.onpointermove=e=>{
+        if(!drag||drag.id!==e.pointerId)return;
+        e.preventDefault();e.stopPropagation();
+        const rect=page.getBoundingClientRect(),factor=rect.width/d.canvas.width;
+        const from={x:(drag.pointerX-rect.left)/factor,y:(drag.pointerY-rect.top)/factor};
+        const to={x:(e.clientX-rect.left)/factor,y:(e.clientY-rect.top)/factor};
+        const original=drag.start;
+        const out=transformSelectedFrame({
+          x:original.x-original.width/2,y:original.y-original.height/2,
+          width:original.width,height:original.height,rotation:original.rotation
+        },grip,from,to,{minWidth:4,minHeight:4,
+          maxWidth:d.canvas.width,maxHeight:d.canvas.height});
+        const moved=out.width!==original.width||out.height!==original.height||
+          Math.abs(out.rotation-original.rotation)>1e-3;
+        if(!moved)return;
+        drag.changed=true;
+        Object.assign(o,{x:out.x+out.width/2,y:out.y+out.height/2,
+          width:out.width,height:out.height,rotation:out.rotation});
+        Object.assign(o,clampCanvasPosition(d,o,o.x,o.y));
+        if(selected.kind==='material')
+          o.userOverrideFlags=[...new Set([...(o.userOverrideFlags||[]),'resized',...(grip==='corner'?['rotated']:[])])];
+        const displayScale=page.clientWidth/d.canvas.width;
+        const style={
+          width:o.width*displayScale+'px',height:o.height*displayScale+'px',
+          left:(o.x-o.width/2)*displayScale+'px',
+          top:(o.y-o.height/2)*displayScale+'px',
+          transform:'rotate('+(o.rotation||0)+'deg)'
+        };
+        Object.assign(object.style,style);
+        Object.assign(node.style,style);
+        syncSelectionGeometry(page,o.id);
+      };
+      h.onpointerup=e=>{
+        if(!drag||drag.id!==e.pointerId)return;
+        e.stopPropagation();
+        const changed=drag.changed;
+        drag=null;
+        if(changed)saveProject();else state.undo.pop();
+        render();
+      };
+      h.onpointercancel=e=>{
+        if(!drag||drag.id!==e.pointerId)return;
+        e.stopPropagation();
+        Object.assign(o,{x:drag.start.x,y:drag.start.y,width:drag.start.width,
+          height:drag.start.height,rotation:drag.start.rotation,
+          userOverrideFlags:drag.flags});
+        drag=null;state.undo.pop();render();
+      };
+    }
   }
   let typing=null;
   function beginInlineText(entry,isNew=false){
@@ -415,6 +483,20 @@ export function mountCanvasEditor(c){
   ink.onpointercancel=()=>{if(!stroke&&!erase)return;stroke=null;erase=null;const before=state.undo.pop();if(before)d.strokes=before.strokes;paint();};
   view.cancelInkGesture=ink.onpointercancel;
   mountCanvasViewport(c,page);
+  // Delete only a selected, unlocked canvas object, never focused text fields
+  // or an active inline text editor. Tear down with the viewport listeners.
+  const deleteSelected=e=>{
+    if(state.route!=='editor'||state.editingTextID||!state.selected||!isObjectDeleteKey(e))return;
+    const entry=allEntries(d).find(row=>row.value.id===state.selected);
+    if(!entry||entry.value.locked||entry.value.isLocked)return;
+    e.preventDefault();e.stopPropagation();handle('delete-object');
+  };
+  document.addEventListener('keydown',deleteSelected);
+  const disposeViewport=view.editorDispose;
+  view.editorDispose=()=>{
+    document.removeEventListener('keydown',deleteSelected);
+    disposeViewport?.();
+  };
   // Navigation gestures remain owned by mountCanvasViewport.
 
   refresh();

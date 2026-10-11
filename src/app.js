@@ -14,6 +14,7 @@ import './sync-indicator.css';
 import './offline-handoff.css';
 import './matching-view.css';
 import './page-heading.css';
+import './layout-refinements.css';
 import {createAssetOrganization,mountOrganizationBadges,updateOrganizedAssetView} from './asset-organization.js';
 import '@fontsource/ma-shan-zheng/chinese-simplified-400.css';
 import {mountIcons,iconMarkup} from './icons.js';
@@ -298,7 +299,7 @@ if(state.route==='editor'&&name!=='editor'&&aiController)aiController.abort(Erro
 function imgTag(a,priority=false){const src=a&&(image(a.blobId)||a.staticPath),eager=priority===true;return src?`<img data-asset-image-id="${esc(a.id)}" loading="${eager?'eager':'lazy'}" ${eager?'fetchpriority="high" ':''}decoding="async" src="${esc(src)}" alt="${esc(a.title)}">`:'<span>无预览</span>';}
 function assetCard(a){return `<button class="card" data-act="detail" data-id="${a.id}"><div class="card-image">${imgTag(a)}</div><div class="card-body"><h3>${esc(a.title)}${a.isFavorite?'<span class="card-favorite" aria-label="已收藏">♥</span>':''}</h3><p>${esc(kindName(a.kind))} · ${a.physicalWidthMM?`${fmt(a.physicalWidthMM)} × ${fmt(a.physicalHeightMM)} mm`:'尺寸待确认'}</p><span class="chip ${a.reviewStatus==='ready'?'':'warn'}">${a.reviewStatus==='ready'?'已整理':'待检查'}</span></div></button>`;}
 const fmt=n=>Number(n).toFixed(1).replace(/\.0$/,'');
-function head(title,subtitle,actions=''){return `<div class="view-head unified-page-heading"><div class="unified-heading-copy"><span class="eyebrow">FROM YOUR DESK TO YOUR PAGES</span><h1>${title}</h1><p>${subtitle}</p></div><div class="actions">${actions}</div></div>`;}
+function head(title,subtitle,actions=''){return `<div class="view-head unified-page-heading"><div class="unified-heading-copy"><span class="eyebrow">FROM YOUR DESK TO YOUR PAGES</span><h1>${title}</h1></div><div class="actions">${actions}</div></div>`;}
 function render(){
   // Capture BEFORE editing/backdrop CSS changes or DOM teardown. Switching
   // from Matching into Editor can otherwise clamp the old page scroll first.
@@ -435,7 +436,7 @@ function renderSettings(){const sections=[['AI 与创作','创作偏好与模型
 <label class="toggle-row setting-toggle"><span><b>未检测到纸边时使用整张图</b><small class="setting-help">适用于已裁正的纸张图片。</small></span><input id="setting-whole-paper" type="checkbox" ${state.preferences.wholePaper?'checked':''}></label>
 </section>
 <section class="recognition-settings-group">
-<h2>2 · 素材数量与候选框</h2><p>固定 900 px 发现前景、连通区域及候选框；默认过滤短边小于 6 mm 的碎片。</p>
+<h2>2 · 素材数量与候选框</h2><p>固定 900 px 发现前景、连通区域及候选框；自动识别框任一边小于 9 mm 时过滤，手动补框不受限。</p>
 ${settingToggle('setting-merge-carrier','合并共同载体',state.preferences.mergeSharedCarrier!==false,'同一浅色纸片上的图案视为一件；关闭后可尝试按独立图案拆分。')}
 </section>
 <section class="recognition-settings-group">
