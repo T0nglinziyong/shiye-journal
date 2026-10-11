@@ -1,0 +1,247 @@
+/* Visual-only layout refinements. Imported last; does NOT alter stable
+   c9 recognition, paper correction, rendering or asset processing. */
+
+/* English eyebrow + Chinese page title; no extra Chinese tagline / air gap. */
+#view .unified-page-heading{
+  min-height:0;
+  padding:3px 0 7px;
+  margin:0 0 8px;
+  gap:8px 16px;
+  align-items:center;
+}
+#view .unified-page-heading .unified-heading-copy{gap:2px;flex:1 1 auto}
+#view .unified-page-heading .unified-heading-copy .eyebrow{margin:0;line-height:1.2}
+#view .unified-page-heading .unified-heading-copy>p,
+#view .series-heading .series-copy>p,
+#view .import-intro>.eyebrow~p,
+#view .import-inspect>.eyebrow~p,
+#view .import-review>.eyebrow~p {display:none}
+#view .unified-page-heading .unified-heading-copy h1,
+#view .series-heading .series-copy h1,
+#view .import-intro>h1,
+#view .import-inspect>h1,
+#view .import-review>h1,
+#view .settings-page>h1 {font-size:clamp(24px,2.3vw,30px);line-height:1.16;margin:0}
+#view .series-heading{min-height:0;margin-bottom:6px;padding-block:4px}
+#view .series-heading .series-copy{gap:3px}
+#view .import-intro,#view .import-inspect,#view .import-review{
+  padding-top:clamp(10px,1.2vw,18px);
+}
+#view .import-inspect>.eyebrow,#view .import-intro>.eyebrow,#view .import-review>.eyebrow{
+  line-height:1.2;margin-bottom:3px
+}
+#view .import-inspect>h1,#view .import-intro>h1,#view .import-review>h1{margin:0 0 8px}
+#view .settings-page>h1{margin-top:3px;margin-bottom:10px}
+#view .settings-page>h1::before{
+  content:'FROM YOUR DESK TO YOUR PAGES';
+  display:block;font:600 10px/1.3 ui-monospace,Menlo,monospace;
+  letter-spacing:.19em;color:#829781;margin-bottom:3px
+}
+@media(min-width:700px){
+  body:not(.editing):not(:has(.import-nav)) #view{padding-top:12px}
+  #view .unified-page-heading{min-height:0;padding-block:2px 6px;margin-bottom:6px}
+}
+/* Desktop and iPad landscape/portrait: one search + filter row whenever
+   usable width permits; mobile portrait is the only deliberate wrap case. */
+@media(min-width:700px){
+  #view .filters:has(.four-filter-controls),
+  #view .series-contents .series-filters,
+  #view .works-page .filters[data-template-filters=true]{
+    display:flex!important;flex-direction:row!important;
+    flex-wrap:nowrap!important;align-items:center;gap:8px;
+    grid-template-columns:none!important;
+  }
+  #view .filters:has(.four-filter-controls)>input[type=search],
+  #view .filters:has(.four-filter-controls)>.shiye-search,
+  #view .series-contents .series-filters>.shiye-search{
+    flex:1 1 160px!important;min-width:140px!important;width:auto!important;
+    grid-column:auto!important;grid-row:auto!important;
+  }
+  #view .series-contents .series-filters>.series-filter-menus{
+    display:flex;flex:0 0 auto!important;width:auto!important;min-width:0;
+    overflow:visible
+  }
+  #view .catalog-toolbar .four-filter-controls,
+  #view .filters .four-filter-controls,
+  #view .series-filter-menus .four-filter-controls,
+  #view .works-page .filters[data-template-filters=true]>.four-filter-controls{
+    display:flex!important;flex:0 0 auto!important;flex-wrap:nowrap!important;
+    align-items:center;width:auto!important;min-width:0!important;
+    max-width:none;overflow:visible;gap:6px;
+    grid-column:auto!important;grid-row:auto!important;
+  }
+  #view .filters .filter-control,
+  #view .series-filter-menus .filter-control{flex:0 0 auto;padding:0 9px}
+  #view .filters .library-count,
+  #view .filters .catalog-total,
+  #view .series-filters .series-result-count{
+    flex:0 0 auto;width:auto;white-space:nowrap
+  }
+}
+@media(max-width:699px) and (orientation:portrait){
+  #view .filters:has(.four-filter-controls),
+  #view .series-contents .series-filters,
+  #view .works-page .filters[data-template-filters=true]{
+    display:flex!important;flex-direction:row;flex-wrap:wrap!important;
+    align-items:center;gap:7px;
+  }
+  #view .filters:has(.four-filter-controls)>input[type=search],
+  #view .filters:has(.four-filter-controls)>.shiye-search,
+  #view .series-contents .series-filters>.shiye-search{
+    flex:1 0 100%;width:100%;min-width:0!important
+  }
+  #view .catalog-toolbar .four-filter-controls,
+  #view .series-filter-menus .four-filter-controls,
+  #view .works-page .filters[data-template-filters=true]>.four-filter-controls{
+    display:flex;flex-wrap:wrap;width:100%!important;flex:1 1 100%!important;
+    gap:6px
+  }
+  #view .series-contents .series-filters>.series-filter-menus{
+    flex:1 1 100%;width:100%
+  }
+}
+/* The entire import progress rail, not merely its 475px contents, spans
+   the viewport on desktop, iPad and phone. Never change its steps or actions. */
+body:has(.import-nav) .import-nav{
+  width:100%!important;max-width:none!important;margin:0!important;
+  min-height:60px;height:auto;box-sizing:border-box;
+  display:flex;align-items:center;justify-content:center;
+  flex-wrap:nowrap;gap:clamp(5px,1.6vw,18px);
+  padding:10px clamp(12px,2.3vw,28px);overflow-x:auto;
+  scrollbar-width:none;white-space:nowrap
+}
+body:has(.import-nav) .import-nav::-webkit-scrollbar{display:none}
+body:has(.import-nav) .import-nav>*{flex:0 0 auto}
+body:has(.import-nav) .import-nav .import-progress{flex:0 0 auto;min-width:0}
+@media(min-width:1000px){
+  body:has(.import-nav) .import-nav{min-height:58px}
+}
+@media(max-width:699px) and (orientation:portrait){
+  body:has(.import-nav) .import-nav{justify-content:flex-start;min-height:56px}
+}
+/* Settings: left-aligned name, right-aligned control, left-aligned small note
+   underneath; preserve the original form IDs and change listeners. */
+#view .settings-detail label:not(.toggle-row){
+  display:grid!important;
+  grid-template-columns:minmax(0,1fr) minmax(170px,min(38%,320px));
+  column-gap:16px;row-gap:5px;align-items:center;
+  width:100%;min-width:0;flex-direction:unset!important;
+}
+#view .settings-detail label:not(.toggle-row)>select,
+#view .settings-detail label:not(.toggle-row)>input{
+  grid-column:2;grid-row:1;
+  justify-self:end;width:100%;max-width:320px;min-width:0;
+  box-sizing:border-box
+}
+#view .settings-detail label:not(.toggle-row)>small,
+#view .settings-detail label:not(.toggle-row)>.setting-help{
+  grid-column:1/-1;grid-row:2;
+  width:100%;text-align:left;justify-self:start;margin:0
+}
+#view .settings-detail label:not(.toggle-row)>textarea{
+  grid-column:1/-1;grid-row:2;width:100%;max-width:100%
+}
+#view .settings-detail label.toggle-row{
+  display:grid!important;
+  grid-template-columns:minmax(0,1fr) auto;
+  align-items:center;gap:12px;width:100%;
+}
+#view .settings-detail label.toggle-row>input[type=checkbox]{
+  grid-column:2;justify-self:end;width:19px;max-width:19px
+}
+#view .settings-detail label.toggle-row>span{
+  grid-column:1;justify-self:start;min-width:0;text-align:left;
+}
+#view .settings-detail .recognition-settings-group>p,
+#view .settings-detail .recognition-settings-group .setting-help{
+  text-align:left
+}
+@media(max-width:540px) and (orientation:portrait){
+  #view .settings-detail label:not(.toggle-row){
+    grid-template-columns:minmax(0,1fr) minmax(120px,48%);
+    gap:5px 9px
+  }
+  #view .settings-detail label:not(.toggle-row)>select,
+  #view .settings-detail label:not(.toggle-row)>input{max-width:100%}
+}
+/* Shared GoodNotes-style selection control language. The selected surface and
+   grips are above overlapping objects; visible controls remain compact with
+   larger transparent pointer targets for Pencil, touch and mouse. */
+.multi-box-editor .import-region{z-index:1;cursor:move}
+.multi-box-editor .import-region.active{
+  z-index:1000;pointer-events:auto;
+  border:1.5px solid #526b54;
+  background:#526b5420;
+  box-shadow:0 0 0 1px #fff7
+}
+.multi-box-editor .import-region .box-number{
+  position:absolute;top:0;left:0;
+  padding:2px 5px;font-size:11px;line-height:1.25;
+  pointer-events:none;background:#52634b;color:#fff
+}
+.multi-box-editor .box-grip{
+  position:absolute;box-sizing:border-box;
+  width:22px;height:22px;min-width:0;min-height:0;
+  padding:0;border:0;background:transparent;
+  touch-action:none;z-index:1002;cursor:pointer;
+}
+.multi-box-editor .box-grip::after{
+  content:'';position:absolute;inset:7px;
+  background:#fffefa;border:1.5px solid #52634b;
+  border-radius:2px;box-shadow:0 1px 3px #0002
+}
+.multi-box-editor .box-grip.top{left:calc(50% - 11px);top:-11px;cursor:ns-resize}
+.multi-box-editor .box-grip.right{right:-11px;top:calc(50% - 11px);cursor:ew-resize}
+.multi-box-editor .box-grip.corner{
+  right:-11px;bottom:-11px;cursor:move
+}
+.multi-box-editor .box-grip.corner::after{
+  inset:4px;border-radius:50%;border-width:1.5px
+}
+.multi-box-editor .box-grip.corner::before{
+  content:'↻';position:absolute;inset:0;display:grid;place-items:center;
+  color:#52634b;font-size:12px;font-weight:bold;z-index:1
+}
+.multi-box-editor .box-delete{
+  position:absolute;top:-12px;right:-12px;z-index:1003;
+  width:22px;height:22px;min-width:0;min-height:0;padding:0;
+  border:1px solid #52634b;border-radius:50%;
+  background:#fffefa;color:#52634b;font-size:16px;line-height:1
+}
+.canvas-page .selected-object-overlay{z-index:2147483647;pointer-events:auto}
+.canvas-page .selected-object-overlay .object-handle{
+  position:absolute;width:22px!important;height:22px!important;
+  min-width:0;min-height:0;padding:0!important;border:0!important;
+  border-radius:0;background:transparent!important;
+  touch-action:none;z-index:12;box-shadow:none!important
+}
+.canvas-page .selected-object-overlay .object-handle::after{
+  content:'';position:absolute;inset:7px;
+  top:7px!important;left:7px!important;width:8px!important;height:8px!important;
+  border:1.5px solid #52634b;border-radius:2px;background:#fffefa
+}
+.canvas-page .selected-object-overlay .object-handle.top{
+  left:calc(50% - 11px);top:-11px;cursor:ns-resize
+}
+.canvas-page .selected-object-overlay .object-handle.right{
+  right:-11px;top:calc(50% - 11px);cursor:ew-resize
+}
+.canvas-page .selected-object-overlay .object-handle.corner{
+  right:-11px;bottom:-11px;cursor:move
+}
+.canvas-page .selected-object-overlay .object-handle.corner::after{
+  inset:4px!important;top:4px!important;left:4px!important;
+  width:14px!important;height:14px!important;border-radius:50%
+}
+.canvas-page .selected-object-overlay .object-handle.corner::before{
+  content:'↻';position:absolute;inset:0;z-index:2;
+  display:grid;place-items:center;font-weight:bold;font-size:12px;
+  color:#52634b
+}
+.canvas-page .selected-object-overlay .selected-object-actions{
+  z-index:15;gap:4px;padding:3px 6px;
+  border-radius:15px;background:#fffefaed
+}
+.canvas-page .selected-object-overlay .selected-object-actions button{
+  min-width:24px;width:24px;height:22px;font-size:15px;padding:0
+}
