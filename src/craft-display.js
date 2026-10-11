@@ -1,4 +1,5 @@
 import {craftAssert} from './craft-errors.js';
+import {sceneLayerEntries} from './scene-model.js';
 import {materialMaskGeometry} from './material-mask.js';
 import {normalizeGeometry,geometryIntersection,geometryDifference,geometryUnion,geometryArea,geometryBounds,rectangleGeometry,transformGeometry,AREA_EPSILON} from './craft-topology.js';
 
@@ -42,10 +43,12 @@ export function projectMaterialViews(item){
  craftAssert(parts.length<=64,'DISPLAY_FRAGMENT_BUDGET','局部显示碎片过多');return parts;
 }
 export function sceneRenderEntries(draft){
- const visible=x=>!x.hidden&&!x.isHidden&&!x.isParked;
- return [...(draft.items||[]).filter(visible).flatMap(item=>projectMaterialViews(item).map(value=>({kind:'material',value}))),
-  ...(draft.primitives||[]).filter(visible).map(value=>({kind:'shape',value})),
-  ...(draft.textBlocks||[]).filter(visible).map(value=>({kind:'text',value}))]
+ // The same typed layer registry drives editor DOM, Canvas output and
+ // export; physical material projections do not consume extra inventory.
+ return sceneLayerEntries(draft,{ink:false})
+  .flatMap(entry=>entry.kind==='material'
+    ?projectMaterialViews(entry.value).map(value=>({kind:'material',value}))
+    :[{kind:entry.kind,value:entry.value}])
   .sort((a,b)=>(a.value.zIndex||0)-(b.value.zIndex||0));
 }
 
