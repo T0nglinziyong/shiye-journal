@@ -17,7 +17,7 @@ export function offlineBrowserPage(draft,source,previews,browserSource){
     '<main><h2>拾页 · 可编辑图层的同源 Canvas 预览</h2><p>本预览仅使用任务包缩略图，实体素材最终高清画面和字体请在拾页应用内核对。</p>'+
     '<button id="save" disabled>保存这次 Canvas 渲染的 PNG</button>'+
     '<div id="status" role="status">正在渲染…（缺少中文字体时可能显示方框；JSON 文本仍完整可编辑）</div>'+
-    '<div id="page"></div><aside><strong>视觉检查：请逐项核对</strong><ul>'+
+    '<div id="page"></div><aside><strong>自动检查提示（不能代替肉眼核对）</strong><p id="audit">等待渲染…</p><strong>视觉检查：请逐项核对</strong><ul>'+
     '<li>每件素材的轮廓、透明边缘、裁片和图层顺序是否正确</li>'+
     '<li>字号、中文字体、换行、画面边缘是否发生错误或遮挡</li>'+
     '<li>图文是否互相呼应，有阅读节奏而非机械铺满</li>'+
