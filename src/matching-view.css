@@ -48,3 +48,55 @@
 .matching-page .match-cover-preview{display:grid;place-items:center;width:100%;min-height:150px;max-height:360px;overflow:hidden;border-radius:12px;background:#f6f4ed}
 .matching-page .match-cover-preview>.thumb-sheet{max-width:100%;max-height:340px}
 .matching-page .match-raster-preview{display:block;width:100%;height:100%;max-height:340px;object-fit:contain;background:#f6f4ed}
+
+/* Keep Matching proposal cards on the same responsive grid as Works cards. */
+.matching-page .match-previews .match-variant-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(175px,1fr));
+  gap:13px;
+}
+.matching-page .match-previews .match-variant{
+  padding:10px;min-width:0;display:flex;flex-direction:column;
+  border-radius:17px;background:#fffefa;
+}
+.matching-page .match-previews .match-result{
+  min-width:0;width:100%;padding:0;gap:8px;
+  text-align:left;align-content:start;
+}
+.matching-page .match-previews .match-cover-preview{
+  width:100%;min-height:0;max-height:none;
+  aspect-ratio:1.36;overflow:hidden;border-radius:12px;
+}
+.matching-page .match-previews .match-cover-preview>.thumb-sheet{
+  max-width:100%;max-height:100%;
+}
+.matching-page .match-previews .match-raster-preview{
+  width:100%;height:100%;max-height:none;object-fit:contain;
+}
+.matching-page .match-previews .match-result strong{
+  min-width:0;display:block;font-size:13px;line-height:1.4;
+  white-space:nowrap;text-overflow:ellipsis;overflow:hidden;
+}
+.matching-page .match-previews .match-progress{
+  font-size:11px;line-height:1.4;max-height:64px;margin:4px 0;
+}
+.matching-page .match-direction .match-content-row,
+.matching-page .match-direction .match-paper-page{
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:14px;align-items:end;
+}
+.matching-page .match-direction .match-content-row>label,
+.matching-page .match-direction .match-paper-page>label{min-width:0}
+.matching-page .match-direction .match-content-row select,
+.matching-page .match-direction .match-paper-page select{
+  display:block;width:100%;max-width:100%;min-width:0;
+  box-sizing:border-box;
+}
+@media(max-width:680px){
+  .matching-page .match-previews .match-variant-grid{
+    grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;
+  }
+  .matching-page .match-previews .match-variant{padding:7px}
+  .matching-page .match-direction .match-content-row,
+  .matching-page .match-direction .match-paper-page{gap:8px}
+}
