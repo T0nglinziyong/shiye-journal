@@ -18,7 +18,7 @@ export function imagePrompt({project,draft,assets,ids,theme='',requireAll=true,i
   });
   const styles=project.styles||[],purposes=project.purposes?.length?project.purposes:[project.purpose||'日常记录'];
   const content=creativeContentBrief({policy:project.contentPolicy||'documentary',userText:project.userText||'',providedFacts:project.providedFacts||'',topic:theme||project.intent||'',purposes});
-  const direction=creativePageBrief({styles,purposes,textMode,contentPolicy:project.contentPolicy,userText:project.userText,theme:theme||project.intent,delivery:'image',pageMode:draft.pageMode});
+  const direction=creativePageBrief({styles,purposes,textMode,contentPolicy:project.contentPolicy,textPresentation:project.textPresentation||'mixed',userText:project.userText,theme:theme||project.intent,delivery:'image',pageMode:draft.pageMode});
   const imageText=project.contentPolicy==='visual'||textMode==='none'?'':'这是最终图像中的印刷文字，不是给程序解析的排版指令。默认使用中文，保留用户提供的原文和外文；只绘制真正属于手帐内容的标题、段落和图注。文字要有清楚的字号、对比和自然换行，不把整段话或清单挤成一条横线，也不与素材相互遮挡。换行直接在画面上分行，不绘制反斜杠、转义序列、排版指令或占位编号；不用伪文字、乱码、无关英文口号或重复的微型标签填补空间。不要把配色分析、素材介绍或排版说明印成正文；若长文无法清晰绘制，就保留核心句意并精简，而不是缩小字。';
   const referenceContext={styles,purposes,materials:assets.filter(asset=>ids.includes(asset.id)),userTemplates};
   const cases=includeReferences?selectJournalReferenceCases(referenceContext):[];
