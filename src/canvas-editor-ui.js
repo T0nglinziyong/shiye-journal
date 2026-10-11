@@ -382,6 +382,7 @@ export function mountCanvasEditor(c){
           fields.append(row);
         }
         range(fields,'边框粗细',o.lineWidth,0,30,.5,v=>mutate('lineWidth',v));
+        const dashRow=document.createElement('label');dashRow.className='canvas-setting';dashRow.textContent='边框线型';const dash=document.createElement('select');for(const [id,name] of [['solid','实线'],['dash','虚线'],['dot','点线']])dash.append(new Option(name,id));dash.value=o.strokeDash||'solid';dash.setAttribute('aria-label','边框线型');dash.onchange=()=>mutate('strokeDash',dash.value);dashRow.append(dash);fields.append(dashRow);
         range(fields,'填充不透明度',Math.round((o.fillOpacity??1)*100),0,100,1,v=>mutate('fillOpacity',v/100),false,'%');
         range(fields,'边框不透明度',Math.round((o.strokeOpacity??1)*100),0,100,1,v=>mutate('strokeOpacity',v/100),false,'%');
         if(['roundedRectangle','frame','checkbox'].includes(o.kind))range(fields,'圆角半径（边长比例）',o.cornerRadius??.1,0,.5,.005,v=>mutate('cornerRadius',v));
