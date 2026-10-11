@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {matchingSnapshot,restoreMatchingSession,variantDraftProject,createMatchingSession} from '../src/matching-session.js';
 
-const draft={id:'d',canvas:{width:700,height:1000},items:[],textBlocks:[],primitives:[],strokes:[]};
+const draft={id:'d',sceneVersion:2,canvas:{width:700,height:1000},layers:[]};
 const work={id:'p',activeDraftID:'d',drafts:[draft]};
 const memoryDevice=()=>{
   const rows=new Map(),writes=[];
