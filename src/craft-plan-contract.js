@@ -29,7 +29,7 @@ export function craftPlanContract({operation,relation,paper,text,primitive,ink})
   decisions:array(object({asset:key,choice:enums(['whole','extract','treat','split','reuse','relate']),purpose:str(160)},['asset','choice','purpose']),0,100),
   pieces:array(piece,1,24),consume:array(key,0,24),keepRemainders:{type:'boolean'},
   weaves:array(object({piece:key,target:key,holes:array({type:'integer',minimum:0,maximum:63},2,2),front:enums(['between','outside'])},['piece','target','holes']),0,8),
-  paper,texts:array(text,0,24),graphics:array(primitive,0,48),ink:array(ink,0,32),finish:{type:'boolean'},summary:str(240)
+  paper,texts:array(text,0,24),graphics:array(primitive,0,48),ink:array(ink,0,128),finish:{type:'boolean'},summary:str(240)
  },['format','version','commandId','baseSceneHash','pieces']);
 }
 export const craftPlanDescription='原子执行当前素材工艺计划：支持 GPT 图片观察选区、几何取材、父片拆分、真实余料、两孔穿插与组合。centerMM 是页面毫米中心；sourceRevision 必须来自本次任务。consume 列出父片，子片用 parentId 关联，keepRemainders 默认 true。任何错误回滚整个计划；同 commandId 重放不重复物料。whole 可以是正确选择，不按加工数量评分。';
