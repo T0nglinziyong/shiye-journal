@@ -1545,7 +1545,7 @@ async function saveOfflineSnapshotFile(file,matchingProject,mimeType){
   if(!['image/png','image/jpeg','image/webp'].includes(mimeType))throw Error('请选择 PNG、JPEG 或 WebP 图片');
   const bitmap=await createImageBitmap(file);
   try{
-    const blobId=uid(),snapshot=snapshotRecord({title:file.name.replace(/\\.[^.]+$/,'')||'导入的画面',previewBlobId:blobId,format:mimeType,width:bitmap.width,height:bitmap.height});
+    const blobId=uid(),snapshot=snapshotRecord({title:file.name.replace(/\.[^.]+$/,'')||'导入的画面',previewBlobId:blobId,format:mimeType,width:bitmap.width,height:bitmap.height});
     if(matchingProject){
       snapshot.styles=matchingProject.styles;snapshot.purposes=matchingProject.purposes;snapshot.intent=matchingProject.intent;
       snapshot.aiGenerated=true;snapshot.offlineBundleId=matchingProject.offlineBundleId||null;
