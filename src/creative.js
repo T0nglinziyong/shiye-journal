@@ -168,6 +168,8 @@ function clearGeneratedScene(d){
   d.textBlocks=d.textBlocks.filter(i=>!i.agentKey||!isManagedUnchanged(i));
   d.primitives=d.primitives.filter(i=>!i.key||!isManagedUnchanged(i));
   d.strokes=(d.strokes||[]).filter(i=>!i.agentGenerated||!isManagedUnchanged(i));
+  const used=new Set(sceneLayerEntries(d,{hidden:true}).map(e=>e.value.creativeGroupID).filter(Boolean));
+  d.layerGroups=(d.layerGroups||[]).filter(group=>used.has(group.id));
 }
 function setPaper(d,a){if(a.color)d.paperColor=a.color;if(a.pattern)d.paperPattern=a.pattern;if(a.intent)d.compositionIntent=a.intent;if(a.ruling!==undefined){const h=d.canvas.height,step=Math.max(4,a.ruling);d.paperRuling={rowPositions:Array.from({length:Math.ceil(h/step)-1},(_,i)=>(i+1)*step/h).filter(y=>y<1),spans:[{from:0,to:1}],color:'#d0d2d3',relativeLineWidth:1/h};}if(a.center_gutter!==undefined)d.drawCenterGutter=a.center_gutter;}
 function relations(d,list){
