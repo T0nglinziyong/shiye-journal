@@ -1,17 +1,26 @@
-// A partial IndexedDB write must never replace the last acknowledged cloud
-// document. Keep only complete editor snapshots; absent or damaged local edits
-// fall back to the saved project returned by the cloud collection.
+// Offline outbox must accept the same canonical persisted Scene v2 as
+// local/remote project documents. A missing legacy items[] array is NOT
+// damage and must never cause an unsynced user edit to be discarded.
+const validTree=(nodes,seen=new Set(),depth=0)=>{
+ if(!Array.isArray(nodes)||depth>12||nodes.length>5000)return false;
+ for(const node of nodes){
+  if(!node||typeof node.id!=='string'||!node.id||seen.has(node.id)||
+      !['material','text','shape','ink','group'].includes(node.type))return false;
+  seen.add(node.id);
+  if(node.type==='group'&&!validTree(node.children,seen,depth+1))return false;
+ }
+ return true;
+};
 export function usableProjectSnapshot(project){
-  if(!project||typeof project.id!=='string'||!project.id||project.projectDocumentPath)return false;
-  if(!Array.isArray(project.drafts)||!project.drafts.length)return false;
-  if(!project.drafts.some(draft=>draft?.id===project.activeDraftID))return false;
-  return project.drafts.every(draft=>draft&&typeof draft.id==='string'&&
-    Number.isFinite(draft.canvas?.width)&&draft.canvas.width>0&&
-    Number.isFinite(draft.canvas?.height)&&draft.canvas.height>0&&
-    ['items','textBlocks','primitives','strokes'].every(key=>Array.isArray(draft[key])));
+ if(!project||typeof project.id!=='string'||!project.id||project.projectDocumentPath)return false;
+ if(!Array.isArray(project.drafts)||!project.drafts.length||
+   !project.drafts.some(draft=>draft?.id===project.activeDraftID))return false;
+ return project.drafts.every(draft=>draft&&typeof draft.id==='string'&&
+   Number.isFinite(draft.canvas?.width)&&draft.canvas.width>0&&
+   Number.isFinite(draft.canvas?.height)&&draft.canvas.height>0&&
+   draft.sceneVersion===2&&validTree(draft.layers));
 }
-
 export function recoverProjectOutbox(rows){
-  const kept=(rows||[]).filter(row=>usableProjectSnapshot(row?.record)&&Number.isSafeInteger(row.serial)&&row.serial>0&&Number.isSafeInteger(row.baseRevision)&&row.baseRevision>=0);
-  return {rows:kept,removed:(rows||[]).length-kept.length};
+ const kept=(rows||[]).filter(row=>usableProjectSnapshot(row?.record)&&Number.isSafeInteger(row.serial)&&row.serial>0&&Number.isSafeInteger(row.baseRevision)&&row.baseRevision>=0);
+ return {rows:kept,removed:(rows||[]).length-kept.length};
 }
