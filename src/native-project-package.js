@@ -51,10 +51,12 @@ export function importNativeProjectPackage(bytes,assets){
   const project=structuredClone(source),draftMap=new Map(),objectMap=new Map(),groupMap=new Map();
   const mapped=(map,id)=>{if(typeof id!=='string'||!id)throw Error('工程包对象 ID 无效');if(!map.has(id))map.set(id,uid());return map.get(id);};
   const remapDraft=d=>{
+    attachSceneV2(d);
     d.id=mapped(draftMap,d.id);delete d.craftReceipts;
     for(const field of ['items','primitives','textBlocks','strokes'])for(const item of d[field]||[])delete item.aiManaged;
     for(const list of ['items','primitives','textBlocks'])for(const item of d[list]||[]){item.id=mapped(objectMap,item.id);if(item.creativeGroupID)item.creativeGroupID=mapped(groupMap,item.creativeGroupID);}
     for(const stroke of d.strokes||[])stroke.id=stroke.id?mapped(objectMap,stroke.id):uid();
+    const walk=nodes=>{for(const node of nodes||[])if(node.type==='group'){node.id=mapped(groupMap,node.id);walk(node.children);}};walk(d.layers);
   };
   project.drafts.forEach(remapDraft);
   if(project.initialEditorSnapshot){project.initialEditorSnapshot.drafts?.forEach(remapDraft);project.initialEditorSnapshot.activeDraftID=mapped(draftMap,project.initialEditorSnapshot.activeDraftID);}
