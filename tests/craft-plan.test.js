@@ -78,7 +78,7 @@ test('window plan returns its exact core as a parked offcut instead of duplicati
 test('manual edits made before an AI request survive full-page replacement',()=>{
  const a=material(),d=base();const initial=successful(run({tools:[{name:'upsert_text',arguments:{items:[{key:'copy',content:'original',width:.5}]}}]},d,a));
  initial.textBlocks[0].content='user changed this before the request';
- const page={version:3,style:'自由构图',intent:null,paper:{color:'#ffffff',pattern:'plain'},items:[],graphics:[],text_blocks:[]};
+ const page={version:2,style:'自由构图',intent:null,paper:{color:'#ffffff',pattern:'plain'},layers:[]};
  const result=run(page,initial,a);successful(result);assert.equal(result.draft.textBlocks[0].content,'user changed this before the request');
  const attempt=run({tools:[{name:'upsert_text',arguments:{items:[{key:'copy',content:'overwritten',width:.5}]}}]},initial,a);
  assert.equal(attempt.results[0].code,'MANUAL_EDIT_PROTECTED');assert.equal(attempt.draft.textBlocks[0].content,initial.textBlocks[0].content);
