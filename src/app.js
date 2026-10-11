@@ -95,6 +95,7 @@ import {materialMaskCSS,clipMaterial} from './material-mask.js';
 import {manualLayoutChoices,applyManualLayout} from './manual-layout-templates.js';
 import {pagePDF,canvasPDFPage} from './pdf-export.js';
 import {createNativeProjectPackage} from './native-project-package.js';
+import {exportSceneDocument,importSceneDocument} from './scene-io.js';
 import {applyCatalogPage,resetCatalogPage} from './catalog-pagination.js';
 import {AI_PROVIDERS,supportsVision,loadAISettings,saveAISettings} from './ai-settings.js';
 import {DELIVERY_OPTIONS,deliveryProfile} from './ai-delivery.js';
@@ -748,7 +749,8 @@ async function handle(action,id,value){try{switch(action){
   case 'project-meta':openProjectMetadata();break;
   case 'save-snapshot':await saveProjectSnapshot(state.activeProject);break;
   case 'download-snapshot':{const p=state.projects.find(x=>x.id===state.previewProjectID);if(!p?.isSnapshot)break;const id=p.snapshotDocumentBlobId||p.snapshotBlobId,blob=(await db.get('blobs',id))?.data;if(!blob)throw Error('快照文件尚未同步，稍后重试');const ext=p.snapshotFormat==='application/pdf'?'pdf':p.snapshotFormat==='image/jpeg'?'jpg':p.snapshotFormat==='image/webp'?'webp':'png';download(blob,p.title+'.'+ext);break;}
-  case 'download-project-zip':{const source=state.projects.find(x=>x.id===id)||state.activeProject;if(!source||source.isSnapshot)throw Error('可编辑作品不存在');const p=source.projectDocumentPath?await db.completeProject(source):source;download(createNativeProjectPackage(p),p.title+'.shiyeproject.zip');break;}
+  case 'export-scene-json':{const p=state.activeProject;if(!p||p.isSnapshot)throw Error('请选择可编辑作品');download(new Blob([JSON.stringify(exportSceneDocument(p))],{type:'application/json'}),p.title+'.shiye-scene.json');break;}
+   case 'download-project-zip':{const source=state.projects.find(x=>x.id===id)||state.activeProject;if(!source||source.isSnapshot)throw Error('可编辑作品不存在');const p=source.projectDocumentPath?await db.completeProject(source):source;download(createNativeProjectPackage(p),p.title+'.shiyeproject.zip');break;}
   case 'project-delete':{const p=state.projects.find(x=>x.id===state.previewProjectID);if(!p||!confirm('将这份作品移到最近删除？'))break;await flushSave();const entry={id:uid(),kind:'project',item:structuredClone(p),date:new Date().toISOString()};await db.transaction(['projects','trash'],tx=>{tx.objectStore('projects').delete(p.id);tx.objectStore('trash').put(entry);});state.projects=state.projects.filter(x=>x.id!==p.id);state.trash.push(entry);state.previewProjectID=null;route('works');break;}
   case 'works-filter':state.worksFilter=value;render();break;case 'tool':state.tool=value;if(value==='text'){checkpoint();const d=current();const t=textBlock('在这里写下今天的故事',d);d.textBlocks.push(t);state.selected=t.id;state.tool='select';saveProject();}else if(value==='shape'){checkpoint();const d=current();const s=primitive('roundedRectangle',d);d.primitives.push(s);state.selected=s.id;state.tool='select';saveProject();}else if(value==='material'){openMaterialPicker();return;}render();break;
   case 'zoom-in':state.zoom=Math.min(4,state.zoom+.15);render();break;case 'zoom-out':state.zoom=Math.max(1,state.zoom-.15);render();break;
@@ -1608,8 +1610,17 @@ async function importEditableFile(file,{matchingProject=null}={}){
     await importOfflineProject(await importEditableWorkPackageReviewed(bytes,state.assets,{trustedSource}));
     return;
   }
-  // UTF-8 JSON single-file works the same as the ZIP's editable scene entry.
-  await importOfflineText(await file.text());
+  // Standard Scene JSON shares the saved Draft with the manual editor.
+  const contents=await file.text();
+  let input;try{input=JSON.parse(contents.replace(/^\uFEFF/,'').trim());}catch{}
+  if(input?.format==='shiye-scene'){
+    const imported=importSceneDocument(input,state.assets);
+    await flushSave();await db.stageProject(imported);
+    state.projects.push(imported);state.activeProject=imported;state.activeDraft=imported.activeDraftID;
+    resetEditorHistory(state);state.tool='select';if(modal.open)modal.close();route('editor');
+    toast('Scene 已通过物理尺寸与图层校验，可继续编辑');return;
+  }
+  await importOfflineText(contents);
 }
 const pendingEditableHandles=[];
 let editableImportReady=false;
