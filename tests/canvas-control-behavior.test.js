@@ -18,7 +18,7 @@ test('a fitted page may move within a bounded region instead of snapping back to
   assert.ok(clampedCanvasOffset(-160,240,0,600)>0);
   assert.ok(clampedCanvasOffset(260,660,0,600)<0);
   assert.equal(clampedCanvasOffset(25,725,0,600),-25);
-  assert.equal(clampedCanvasOffset(-725,-25,0,600),25);
+  assert.equal(clampedCanvasOffset(-125,575,0,600),25);
 });
 test('font size arrows select discrete print-friendly sizes without opening keyboard',()=>{
   assert.ok(FONT_SIZE_PRESETS.includes(22)&&FONT_SIZE_PRESETS.includes(24)&&FONT_SIZE_PRESETS.includes(28));
