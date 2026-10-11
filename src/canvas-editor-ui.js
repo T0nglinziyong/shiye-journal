@@ -334,7 +334,7 @@ export function mountCanvasEditor(c){
       modes.value=g.blendMode||'normal';modes.onchange=()=>change(()=>g.blendMode=modes.value);panel.content.append(modes);
     },'btn');groupStyle.disabled=!activeGroup;
     groupActions.append(groupButton,ungroupButton,rotateGroup,groupStyle);p.content.append(groupActions,list);
-    const ordered=[...entries].sort((a,b)=>(b.value.zIndex||0)-(a.value.zIndex||0)),rows=new Map();
+    const ordered=[...sceneLayerEntries(d,{hidden:true,ink:true})].sort((a,b)=>(b.value.zIndex??(a.kind==='ink'?2000:0))-(a.value.zIndex??(b.kind==='ink'?2000:0))),rows=new Map();
     let drag=null,holdTimer=null,scrollFrame=null,moveMenu=null,suppressMoveClickUntil=0;
     const indexOf=id=>ordered.findIndex(e=>e.value.id===id);
     const redraw=()=>{
@@ -387,8 +387,8 @@ export function mountCanvasEditor(c){
     };
     for(const e of ordered){
       const o=e.value,row=document.createElement('div');row.className='canvas-layer-row';row.dataset.layerId=o.id;
-      const pick=button('',()=>{if(o.isLocked||o.locked||o.isHidden||o.hidden||o.isParked)return;state.multiSelected=o.creativeGroupID?sceneGroupMembers(d,o.creativeGroupID).map(e=>e.value.id):[];state.selected=state.multiSelected.length>1?null:o.id;render();redraw();});
-      pick.dataset.layerPick='';pick.innerHTML=(e.kind==='material'?imgTag(asset(o.assetID)):e.kind==='shape'?shapeSVG(o):'<span>Aa</span>')+'<span>'+esc((o.creativeGroupID?'◫ ':'')+(e.kind==='material'?asset(o.assetID)?.title:e.kind==='text'?o.content.slice(0,24):o.kind==='vector'?'自定义图形':o.kind))+'</span>';row.append(pick);
+      const pick=button('',()=>{if(o.isLocked||o.locked||o.isHidden||o.hidden||o.isParked)return;if(e.kind==='ink'){state.selected=null;state.multiSelected=[];state.selectedStrokes=[e.index];render();return;}state.multiSelected=o.creativeGroupID?sceneGroupMembers(d,o.creativeGroupID).map(e=>e.value.id):[];state.selected=state.multiSelected.length>1?null:o.id;render();redraw();});
+      pick.dataset.layerPick='';pick.innerHTML=(e.kind==='material'?imgTag(asset(o.assetID)):e.kind==='shape'?shapeSVG(o):e.kind==='ink'?'<span>✎</span>':'<span>Aa</span>')+'<span>'+esc((o.creativeGroupID?'◫ ':'')+(e.kind==='material'?asset(o.assetID)?.title:e.kind==='text'?o.content.slice(0,24):e.kind==='ink'?'手写笔迹':o.kind==='vector'?'自定义图形':o.kind))+'</span>';row.append(pick);
       const lock=button('',()=>{const next=!(o.isLocked||o.locked);commitLayer(()=>{o.isLocked=o.locked=next;if(next&&state.selected===o.id)state.selected=null;});redraw();});lock.dataset.layerLock='';
       const eye=button('',()=>{const next=!(o.isHidden||o.hidden||o.isParked);commitLayer(()=>{if(e.kind==='material')o.isParked=next;else if(e.kind==='text')o.isHidden=next;else o.hidden=next;if(next&&state.selected===o.id)state.selected=null;});redraw();});eye.dataset.layerEye='';
       const move=button('≡',()=>{});
