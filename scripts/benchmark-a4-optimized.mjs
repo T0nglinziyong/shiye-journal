@@ -22,7 +22,11 @@ for(let i=0;i<argv.length;i++){
 if(!paths.length||!Number.isInteger(repeats)||repeats<1||repeats>50)
   throw Error('Usage: node scripts/benchmark-a4-optimized.mjs [--repeat 5] [--reference corners.json] image1.jpg ...');
 const references=referencePath?JSON.parse(await readFile(referencePath,'utf8')):{};
-const cv=await cvModule;
+const cv=cvModule instanceof Promise?await cvModule:cvModule?.Mat?cvModule:
+  await new Promise((resolve,reject)=>{
+    const timeout=setTimeout(()=>reject(Error('OpenCV.js WASM init timeout')),60000);
+    cvModule.onRuntimeInitialized=()=>{clearTimeout(timeout);resolve(cvModule);};
+  });
 if(!cv?.Mat)throw Error('OpenCV.js did not initialize');
 const performanceMedian=values=>{
   const xs=values.slice().sort((a,b)=>a-b),i=xs.length>>1;
