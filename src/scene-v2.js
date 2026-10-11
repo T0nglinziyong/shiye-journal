@@ -63,6 +63,15 @@ export function attachSceneV2(d){
   normalizeGroupLegacy(d);
   d.sceneVersion=SCENE_VERSION;
  }
+ // Older hand-placed material instances did not always record an editor
+ // baseline. Repair metadata only: actual source mm dimensions, crop and
+ // available inventory are still verified by validateScenePhysical.
+ for(const e of allLeaves(d.layers))if(e.kind==='material'&&!e.value.generationBaseline){
+  const n=e.value;
+  if([n.x,n.y,n.width,n.height].every(Number.isFinite)&&n.width>0&&n.height>0)
+   n.generationBaseline={x:n.x,y:n.y,width:n.width,height:n.height,
+     rotation:n.rotation||0,zIndex:n.zIndex||0};
+ }
  if(d.sceneVersion!==SCENE_VERSION)throw Error('不支持的 Scene 版本');
  for(const [field,type] of Object.entries(types)){
   const desc=Object.getOwnPropertyDescriptor(d,field);
