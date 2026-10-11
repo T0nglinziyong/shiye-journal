@@ -96,7 +96,7 @@ import {createNativeProjectPackage} from './native-project-package.js';
 import {applyCatalogPage,resetCatalogPage} from './catalog-pagination.js';
 import {AI_PROVIDERS,supportsVision,loadAISettings,saveAISettings} from './ai-settings.js';
 import {DELIVERY_OPTIONS,deliveryProfile} from './ai-delivery.js';
-import {WEB_RESULT_METHODS,classifyCreationFile} from './creation-methods.js';
+import {classifyCreationFile} from './creation-methods.js';
 import {mountParityControls as mountSwiftParity} from './parity-ui.js';
 import {parity} from './parity-ui.js';
 import {journalTemplateRecords} from './journal-template-ui.js';
@@ -1573,6 +1573,7 @@ snapshotFileInput.onchange=async()=>{
     await saveOfflineSnapshotFile(file,matchingProject,type.mimeType);
   }catch(error){console.error(error);toast('画面导入失败：'+error.message);}
 };
+creationResultInput.addEventListener('cancel',()=>{offlineSnapshotProject=null;});
 creationResultInput.onchange=async()=>{
   const file=creationResultInput.files?.[0],matchingProject=offlineSnapshotProject;
   creationResultInput.value='';offlineSnapshotProject=null;
