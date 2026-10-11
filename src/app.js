@@ -1550,8 +1550,9 @@ async function saveOfflineSnapshotFile(file,matchingProject,mimeType){
       snapshot.styles=matchingProject.styles;snapshot.purposes=matchingProject.purposes;snapshot.intent=matchingProject.intent;
       snapshot.aiGenerated=true;snapshot.offlineBundleId=matchingProject.offlineBundleId||null;
     }
-    await db.stageImport({projects:[snapshot],blobs:[{id:blobId,data:file}]});
-    urls.set(blobId,URL.createObjectURL(file));
+    const content=file.type===mimeType?file:new Blob([file],{type:mimeType});
+    await db.stageImport({projects:[snapshot],blobs:[{id:blobId,data:content}]});
+    urls.set(blobId,URL.createObjectURL(content));
     if(matchingProject){
       await matchingSession.importProject(snapshot,{alreadyStored:true});
       if(modal.open)modal.close();route('matching');
