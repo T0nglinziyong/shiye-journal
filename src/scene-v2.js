@@ -110,7 +110,7 @@ export function ungroupSceneLayers(d,id){
  let parent=null;children(d.layers,(n,arr,g)=>{if(n===group){parent=g;return true;}return false;});
  const target=parent?parent.children:d.layers,index=target.indexOf(group);
  target.splice(index,1,...group.children);
- for(const leaf of allLeaves(group.children))leaf.value.creativeGroupID=parent?.id||undefined;
+ for(const child of group.children)if(child.type!=='group')child.creativeGroupID=parent?.id||undefined; // Nested groups retain their own membership.
  return true;
 }
 export function sceneGroups(d){attachSceneV2(d);return collectGroups(d.layers);}
