@@ -1541,9 +1541,49 @@ workFileInput.onchange=async()=>{const file=workFileInput.files?.[0];workFileInp
   try{await importEditableFile(file);}
   catch(error){console.error(error);toast('可编辑作品导入失败：'+error.message);}
 };
-snapshotFileInput.onchange=async()=>{const file=snapshotFileInput.files?.[0],matchingProject=offlineSnapshotProject;snapshotFileInput.value='';offlineSnapshotProject=null;if(!file)return;try{if(!['image/png','image/jpeg','image/webp'].includes(file.type))throw Error('请选择 PNG、JPEG 或 WebP 图片');const bitmap=await createImageBitmap(file);try{const blobId=uid(),snapshot=snapshotRecord({title:file.name.replace(/\.[^.]+$/,'')||'导入的画面',previewBlobId:blobId,format:file.type,width:bitmap.width,height:bitmap.height});if(matchingProject){snapshot.styles=matchingProject.styles;snapshot.purposes=matchingProject.purposes;snapshot.intent=matchingProject.intent;snapshot.aiGenerated=true;snapshot.offlineBundleId=matchingProject.offlineBundleId||null;}await db.stageImport({projects:[snapshot],blobs:[{id:blobId,data:file}]});urls.set(blobId,URL.createObjectURL(file));if(matchingProject){await matchingSession.importProject(snapshot,{alreadyStored:true});if(modal.open)modal.close();route('matching');toast('画面快照已暂存并加入版本方案，正在后台同步');}else{state.projects.push(snapshot);parity.workTab='snapshot';route('works');toast('画面快照已暂存，正在后台同步');}}finally{bitmap.close();}}catch(error){toast('画面导入失败：'+error.message);}};
-async function importEditableFile(file){
-  if(/\.zip$/i.test(file.name)){
+async function saveOfflineSnapshotFile(file,matchingProject,mimeType){
+  if(!['image/png','image/jpeg','image/webp'].includes(mimeType))throw Error('请选择 PNG、JPEG 或 WebP 图片');
+  const bitmap=await createImageBitmap(file);
+  try{
+    const blobId=uid(),snapshot=snapshotRecord({title:file.name.replace(/\\.[^.]+$/,'')||'导入的画面',previewBlobId:blobId,format:mimeType,width:bitmap.width,height:bitmap.height});
+    if(matchingProject){
+      snapshot.styles=matchingProject.styles;snapshot.purposes=matchingProject.purposes;snapshot.intent=matchingProject.intent;
+      snapshot.aiGenerated=true;snapshot.offlineBundleId=matchingProject.offlineBundleId||null;
+    }
+    await db.stageImport({projects:[snapshot],blobs:[{id:blobId,data:file}]});
+    urls.set(blobId,URL.createObjectURL(file));
+    if(matchingProject){
+      await matchingSession.importProject(snapshot,{alreadyStored:true});
+      if(modal.open)modal.close();route('matching');
+      toast('画面快照已暂存并加入版本方案，正在后台同步');
+    }else{
+      state.projects.push(snapshot);parity.workTab='snapshot';route('works');
+      toast('画面快照已暂存，正在后台同步');
+    }
+  }finally{bitmap.close();}
+}
+snapshotFileInput.onchange=async()=>{
+  const file=snapshotFileInput.files?.[0],matchingProject=offlineSnapshotProject;
+  snapshotFileInput.value='';offlineSnapshotProject=null;
+  if(!file)return;
+  try{
+    const type=await classifyCreationFile(file);
+    if(type.kind!=='image')throw Error('请选用 PNG、JPEG 或 WebP 画面图片');
+    await saveOfflineSnapshotFile(file,matchingProject,type.mimeType);
+  }catch(error){console.error(error);toast('画面导入失败：'+error.message);}
+};
+creationResultInput.onchange=async()=>{
+  const file=creationResultInput.files?.[0],matchingProject=offlineSnapshotProject;
+  creationResultInput.value='';offlineSnapshotProject=null;
+  if(!file)return;
+  try{await importEditableFile(file,{matchingProject});}
+  catch(error){console.error(error);toast('作品文件导入失败：'+error.message);}
+};
+async function importEditableFile(file,{matchingProject=null}={}){
+  const detected=await classifyCreationFile(file);
+  if(detected.kind==='image')return saveOfflineSnapshotFile(file,matchingProject,detected.mimeType);
+
+  if(detected.kind==='zip'){
     if(file.size>20_000_000)throw Error('可编辑作品包不能超过 20 MB');
     const bytes=new Uint8Array(await file.arrayBuffer()),inspected=inspectOfflinePackage(bytes);
     if(inspected.kind==='task'){
@@ -1557,8 +1597,7 @@ async function importEditableFile(file){
     await importOfflineProject(await importEditableWorkPackageReviewed(bytes,state.assets,{trustedSource}));
     return;
   }
-  if(!/\.json$/i.test(file.name))throw Error('请选择 .shiyeproject.zip 可编辑作品包，或 JSON 备选文件');
-  if(file.size>2_000_000)throw Error('可编辑作品文件不能超过 2 MB');
+  // UTF-8 JSON single-file works the same as the ZIP's editable scene entry.
   await importOfflineText(await file.text());
 }
 const pendingEditableHandles=[];
