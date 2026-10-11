@@ -12,7 +12,7 @@ const generatedID=()=>globalThis.crypto?.randomUUID?.()||'layer-'+Math.random().
 const z=n=>n.zIndex??(n.type==='ink'?2000:0);
 const children=(nodes,fn,parent=null)=>{for(const node of nodes){if(fn(node,nodes,parent)===true)return true;if(node.type==='group'&&children(node.children||[],fn,node))return true;}return false;};
 function allLeaves(nodes,out=[],ancestors=[]){
- for(const n of nodes){if(n.type==='group')allLeaves(n.children||[],out,[...ancestors,n]);
+ for(const n of [...nodes].sort((a,b)=>z(a)-z(b))){if(n.type==='group')allLeaves(n.children||[],out,[...ancestors,n]);
  else out.push({kind:n.type,value:n,parents:ancestors});}
  return out;
 }
