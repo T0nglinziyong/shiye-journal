@@ -6,9 +6,10 @@ test('import and creative return buttons each have one chevron',async()=>{
  const [app,editor,css]=await Promise.all(['app.js','canvas-editor-ui.js','layout-refinements.css'].map(source));
  const steps=app.slice(app.indexOf('function importSteps(){'),app.indexOf('function renderImport(){'));
  assert.equal((steps.match(/data-act="import-back"/g)||[]).length,1);
- assert.equal((steps.match(/class="shiye-back-glyph"/g)||[]).length,1);
+ assert.equal((steps.match(/class="shiye-back-glyph"/g)||[]).length,0);
  assert.match(editor,/head\.prepend\(back\)/);
- assert.match(editor,/class="shiye-back-glyph"/);
+ assert.doesNotMatch(editor,/shiye-back-glyph/);
  assert.match(css,/\.import-back::before\{\s*content:none!important/);
+ assert.match(css,/\.import-nav>\.import-back>\.shiye-icon/);
  assert.doesNotMatch(css,/\.editor-back-chevron/);
 });
