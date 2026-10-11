@@ -35,12 +35,18 @@ export async function loadJournalTemplateReferences({context,userTemplates=[],db
   }
   // Handoff-only encodings: originals remain untouched in the reference
   // collection and the template database. Never send PNG/JPEG originals.
-  const webp=await Promise.all(referenceImages.map(async entry=>{
-    const mime=entry.mimeType||(entry.extension==='jpg'||entry.extension==='jpeg'?'image/jpeg':'image/png');
-    const input=new Blob([entry.bytes],{type:mime});
-    const bytes=await encodeReference(input,{maxEdge:OFFLINE_REFERENCE_EDGE});
-    const compressed=new Blob([bytes],{type:'image/webp'});
-    return {...entry,bytes,mimeType:'image/webp',extension:'webp',url:await dataURL(compressed)};
-  }));
+  const webp=[];
+  // A template bundle can contain several large source JPEGs. Encode two at
+  // a time to avoid retaining eight full-size decoded bitmaps on mobile.
+  for(let offset=0;offset<referenceImages.length;offset+=2){
+    const pair=await Promise.all(referenceImages.slice(offset,offset+2).map(async entry=>{
+      const mime=entry.mimeType||(entry.extension==='jpg'||entry.extension==='jpeg'?'image/jpeg':'image/png');
+      const input=new Blob([entry.bytes],{type:mime});
+      const bytes=await encodeReference(input,{maxEdge:OFFLINE_REFERENCE_EDGE});
+      const compressed=new Blob([bytes],{type:'image/webp'});
+      return {...entry,bytes,mimeType:'image/webp',extension:'webp',url:await dataURL(compressed)};
+    }));
+    webp.push(...pair);
+  }
   return {selectedCases,selectedTemplates,referenceImages:webp};
 }
