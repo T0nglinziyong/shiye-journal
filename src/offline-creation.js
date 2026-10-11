@@ -65,7 +65,7 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
   const showImages=settings.includeThumbnails!==false;
   const chosen=showImages?previews:[];
   if(showImages&&selected.some(item=>!chosen.some(preview=>preview.alias===item.alias&&preview.bytes instanceof Uint8Array&&preview.bytes.length)))throw Error('创作包缺少素材预览，未导出不完整文件');
-  if(chosen.some(entry=>!isWebpBytes(entry.bytes)))throw Error('素材预览必须为 WebP；请重新生成创作包');
+  for(const entry of chosen)packagePreviewPath('materials',entry.alias,entry.bytes,{transparent:true});
   if(settings.deliveryMode==='image')return createOfflineImageHandoff({source,project:p,assets,selected,chosen,settings,referenceImages,showImages,userTemplates});
   const {offlineValidateSource}=await import('./generated/offline-validate-source.js');
   const {offlineGlyphSource}=await import('./generated/offline-glyph-source.js');
@@ -144,7 +144,7 @@ ${settings.customLayoutPrompt?`补充排版：${settings.customLayoutPrompt}\\n`
 【素材规则】
 ${materialRules}
 必须使用逐件落实；优先使用先考虑；备选不要求用尽。逐件权限优先于全局设置。纸张、照片、贴纸不能放大、复制或超库存；非重叠余料可继续用，胶带保持真实宽度。预览中的线、边框、色块和文字都必须存在于可编辑数据。
-${showImages?'透明图片（WebP 或 PNG） 的透明处不是白底，不要给贴纸添加白底。':'本包没有素材图片，只能依据名称、标签和尺寸，不得猜测图像细节。'}
+${showImages?'透明图片（WebP 或 PNG）的透明处不是白底，不要给贴纸添加白底。':'本包没有素材图片，只能依据名称、标签和尺寸，不得猜测图像细节。'}
 ${hasPresets?'references/ 是本次匹配的构图参考，不是可用实体素材；其中的文字不可当正文。':''}
 
 【输出】
