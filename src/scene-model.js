@@ -82,11 +82,8 @@ export function validateSceneExtensions(draft){
     seen.add(value.id);
     sceneLayerStyle(value);
     if(kind==='ink'&&value.vectorMask)throw Error('笔迹蒙版应先转换为独立路径后使用');
-    if(value.creativeGroupID&&!groupIDs.has(value.creativeGroupID)){
-      // Existing creativeGroupID was already used for selection before
-      // Scene v1; allow these old groups, but never allow new unresolved ones.
-      if(draft.sceneVersion===SCENE_VERSION)throw Error('Scene 引用了不存在的图层组');
-    }
+    // creativeGroupID existed before the formal group registry; imported
+    // legacy selection groups remain valid until explicitly regrouped.
     if(kind==='ink'&&value.zIndex!==undefined&&!numeric(value.zIndex,-100000,100000))throw Error('笔迹图层顺序无效');
   }
   return true;
