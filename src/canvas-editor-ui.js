@@ -517,7 +517,7 @@ export function mountCanvasEditor(c){
   function textParagraph(anchor,t,patch){const p=openPopover(anchor,{title:'段落',width:230,menu:true});for(const [id,name] of [['left','左对齐'],['center','居中'],['right','右对齐']])p.content.append(button((t.alignment===id?'✓ ':'')+name,()=>{p.close();patch('alignment',id);}));const entry=entries.find(e=>e.value.id===state.selected&&e.kind==='text');if(entry)p.content.append(button('详细文字设置',()=>{p.close();objectInspector(entry);}));}
   function objectInspector(entry){if(!entry)return;const o=entry.value,kind=entry.kind;body.innerHTML='<div class="canvas-object-settings"><header><h2>'+({material:'素材设置',shape:'图形设置',text:'文字设置'}[kind])+'</h2><button type="button" id="object-settings-done">完成</button></header><div id="object-settings-fields"></div></div>';const fields=body.querySelector('#object-settings-fields');body.querySelector('#object-settings-done').onclick=()=>modal.close();
     const textDraft=kind==='text'?structuredClone(o):null;const mutate=(key,value)=>{if(textDraft){textDraft[key]=value;return;}checkpoint();o[key]=value;if(kind==='material')o.userOverrideFlags=[...new Set([...(o.userOverrideFlags||[]),'edited'])];saveProject();render();};
-    if(kind==='material'){fields.append(button('✂ 打开统一素材加工面板',()=>{showMaterialProcessing(c,o);}));const operations=document.createElement('div');operations.className='object-setting-actions';for(const [name,fn] of [['上移一层',()=>mutate('zIndex',(o.zIndex||0)+1)],['下移一层',()=>mutate('zIndex',(o.zIndex||0)-1)],['复制',()=>{modal.close();duplicate(entry);}],['放入备选',()=>{modal.close();handle('park');}],['恢复实物尺寸',()=>{const a=asset(o.assetID);if(!a?.physicalWidthMM||!a?.physicalHeightMM)return;checkpoint();const restored=itemFromAsset(a,d,o.x,o.y);o.width=restored.width;o.height=restored.height;saveProject();render();modal.close();}],['删除',()=>{modal.close();handle('delete-object');}]])operations.append(button(name,fn));fields.append(operations);}
+    if(kind==='material'){fields.append(button('✂ 打开统一素材加工面板',()=>{showMaterialProcessing(c,o);}));const operations=document.createElement('div');operations.className='object-setting-actions';for(const [name,fn] of [['上移一层',()=>mutate('zIndex',(o.zIndex||0)+1)],['下移一层',()=>mutate('zIndex',(o.zIndex||0)-1)],['复制',()=>{modal.close();duplicate(entry);}],['放入备选',()=>{modal.close();handle('park');}],['恢复实物尺寸',()=>{const a=asset(o.assetID);if(!a?.physicalWidthMM||!a?.physicalHeightMM)return;checkpoint();const units=d.canvas.height/(d.physicalPageHeightMM||297),crop=o.cropRect||{width:1,height:1};o.width=crop.width*a.physicalWidthMM*units;o.height=crop.height*a.physicalHeightMM*units;saveProject();render();modal.close();}],['删除',()=>{modal.close();handle('delete-object');}]])operations.append(button(name,fn));fields.append(operations);}
     if(kind==='text'){const draft=textDraft;const row=document.createElement('label');row.textContent='文字内容';const input=document.createElement('textarea');input.value=o.content;input.oninput=()=>draft.content=input.value;row.append(input);fields.append(row);const fontRow=document.createElement('label');fontRow.textContent='字体名称（留空使用基础风格）';const fontInput=document.createElement('input');fontInput.type='text';fontInput.maxLength=120;fontInput.value=draft.fontName||'';fontInput.oninput=()=>draft.fontName=fontInput.value.trim()||null;fontRow.append(fontInput);fields.append(fontRow);for(const [key,name] of [['bold','粗体'],['italic','斜体'],['underline','下划线'],['strikethrough','删除线']])toggle(fields,name,!!draft[key],v=>draft[key]=v);for(const [key,name,min,max,step] of [['fontSize','字号',5,400,1],['letterSpacing','字距',-5,30,.1],['fixedLineHeight','固定行高',5,400,.1],['lineSpacing','附加行距',0,80,1],['paragraphSpacing','段落间距',0,80,1]])range(fields,name,draft[key]??(key==='fixedLineHeight'?draft.fontSize*1.3:0),min,max,step,v=>draft[key]=v);toggle(fields,'自动行高',!draft.fixedLineHeight,v=>draft.fixedLineHeight=v?null:draft.fontSize*1.3);fields.append(button('应用文字设置',()=>{draft.content=input.value;checkpoint();const measure=document.createElement('canvas').getContext('2d');measure.font=textFont(draft);const layout=textLines(draft,text=>measure.measureText(text).width),top=draft.y-draft.height/2;draft.height=Math.max(draft.height,layout.height);draft.y=top+draft.height/2;Object.assign(o,draft);state.newTextID=null;saveProject();modal.close();render();},'btn primary'));}
     // These properties are shared by material, text and digital shapes.
     const styleRow=document.createElement('label');styleRow.className='canvas-setting';styleRow.textContent='实体叠压方式';
@@ -539,7 +539,7 @@ export function mountCanvasEditor(c){
       catch(error){maskError.textContent=error.message;}
     },'btn'));
     fields.append(maskRow,maskActions);
-    const units=d.canvas.height/(d.physicalPageHeightMM||297);if(kind!=='text')for(const [key,name,min,max,step] of [['width',kind==='material'?'宽度（mm）':'宽度',1,d.canvas.width*2,.1],['height',kind==='material'?'高度（mm）':'高度',1,d.canvas.height*2,.1],['rotation','旋转（度）',-180,180,.1],...(kind==='shape'?[]:[['opacity','透明度',0,1,.05]])]){const factor=kind==='material'&&['width','height'].includes(key)?units:1;range(fields,name,(o[key]??1)/factor,min/factor,max/factor,step,v=>mutate(key,v*factor),false,key==="rotation"?"°":key==="opacity"?"":kind==="material"?" mm":" pt");}
+    const units=d.canvas.height/(d.physicalPageHeightMM||297);if(kind!=='text')for(const [key,name,min,max,step] of [...(kind==='material'?[]:[['width','宽度',1,d.canvas.width*2,.1],['height','高度',1,d.canvas.height*2,.1]]),['rotation','旋转（度）',-180,180,.1],...(kind==='shape'?[]:[['opacity','透明度',0,1,.05]])]){const factor=kind==='material'&&['width','height'].includes(key)?units:1;range(fields,name,(o[key]??1)/factor,min/factor,max/factor,step,v=>mutate(key,v*factor),false,key==="rotation"?"°":key==="opacity"?"":kind==="material"?" mm":" pt");}
     if(kind==='shape'){
       if(o.vectorLayers)vectorColors(o,fields);
       else {
@@ -578,7 +578,7 @@ export function mountCanvasEditor(c){
     node.onpointercancel=e=>{if(!move||move.id!==e.pointerId)return;e.stopPropagation();node.classList.remove('dragging');if(move.changed){o.x=move.startX;o.y=move.startY;o.userOverrideFlags=move.startFlags;state.undo.pop();}move=null;render();};
     // GoodNotes-like grips share the geometry and gesture rules with import
     // boxes: right = width, top = height, bottom-right = scale plus rotation.
-    for(const [grip,label] of [['top','拉伸对象高度'],['right','拉伸对象宽度'],['corner','缩放并旋转对象']]){
+    for(const [grip,label] of (selected.kind==='material'?[['corner','旋转真实素材（保持实际尺寸）']]:[['top','拉伸对象高度'],['right','拉伸对象宽度'],['corner','缩放并旋转对象']])){
       const h=button('',()=>{});
       h.className='object-handle '+grip;
       h.setAttribute('aria-label',label);
@@ -601,11 +601,19 @@ export function mountCanvasEditor(c){
         const from={x:(drag.pointerX-rect.left)/factor,y:(drag.pointerY-rect.top)/factor};
         const to={x:(e.clientX-rect.left)/factor,y:(e.clientY-rect.top)/factor};
         const original=drag.start;
-        const out=transformSelectedFrame({
-          x:original.x-original.width/2,y:original.y-original.height/2,
-          width:original.width,height:original.height,rotation:original.rotation
-        },grip,from,to,{minWidth:4,minHeight:4,
-          maxWidth:d.canvas.width,maxHeight:d.canvas.height});
+        const out=selected.kind==='material'
+          ?(()=>{
+            const before=Math.atan2(from.y-original.y,from.x-original.x);
+            const after=Math.atan2(to.y-original.y,to.x-original.x);
+            const delta=Math.atan2(Math.sin(after-before),Math.cos(after-before))*180/Math.PI;
+            return {x:original.x-original.width/2,y:original.y-original.height/2,
+              width:original.width,height:original.height,rotation:original.rotation+delta};
+          })()
+          :transformSelectedFrame({
+            x:original.x-original.width/2,y:original.y-original.height/2,
+            width:original.width,height:original.height,rotation:original.rotation
+          },grip,from,to,{minWidth:4,minHeight:4,
+            maxWidth:d.canvas.width,maxHeight:d.canvas.height});
         const moved=out.width!==original.width||out.height!==original.height||
           Math.abs(out.rotation-original.rotation)>1e-3;
         if(!moved)return;
@@ -614,7 +622,7 @@ export function mountCanvasEditor(c){
           width:out.width,height:out.height,rotation:out.rotation});
         Object.assign(o,clampCanvasPosition(d,o,o.x,o.y));
         if(selected.kind==='material')
-          o.userOverrideFlags=[...new Set([...(o.userOverrideFlags||[]),'resized',...(grip==='corner'?['rotated']:[])])];
+          o.userOverrideFlags=[...new Set([...(o.userOverrideFlags||[]),'rotated'])];
         const displayScale=page.clientWidth/d.canvas.width;
         const style={
           width:o.width*displayScale+'px',height:o.height*displayScale+'px',
