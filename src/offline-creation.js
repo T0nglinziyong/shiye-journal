@@ -35,7 +35,7 @@ function packagePreviewPath(folder,name,bytes,{transparent=false}={}){
 
 export const EDITABLE_WORK_FORMAT='shiye-editable-project';
 export const EDITABLE_PACKAGE_ENTRY='project.shiyeproject.json';
-const allowedTools=new Set(['apply_craft_plan','compose_page','place_materials','edit_materials','upsert_materials','move_elements','arrange_elements','fit_text_to','upsert_primitives','upsert_text','delete_elements','set_paper','finish_design']);
+const allowedTools=new Set(['apply_craft_plan','compose_page','place_materials','edit_materials','upsert_materials','move_elements','arrange_elements','fit_text_to','upsert_primitives','upsert_text','style_elements','group_elements','ungroup_elements','delete_elements','set_paper','finish_design']);
 const compositionIdeas=source=>relevantJournalFamilies(source).map(({name,purposes,method,materials})=>({name,use:purposes.join('、'),plan:method,materialRoles:materials}));
 const caseStudies=(source,selected=[])=>({note:'包内仅选与本次风格、用途和素材相关的版式参考：原创重构家族案例及已匹配的私有教程原图（如果可读取）。这些参考图不是可用素材，图中文字不可当正文。模板与成品的配对证据见 abstract-templates.json 和 source-image-audit.json。',families:relevantJournalFamilies(source),selectedCases:selectJournalReferenceCases({styles:source.styles,purposes:source.purposes,materials:selected}).map(({id,title,method,copy})=>({id,title,method,copy})),materialRoles:journalMaterialRoles});
 const validAlias=validMaterialAlias;
@@ -130,6 +130,7 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
   const compactGuide=[
     '【内容边界】',contentBrief,
     '【创作原则】','先观察真实图案与物理尺寸，再建立主次、叠压、局部加工与阅读路径；拒绝把所有素材平铺成网格。标题、正文和手写装饰需要有实际内容；可保留有意义的留白，素材可少用但不可漏掉 required。参考图不是实体材料，也不是必须复刻的模板。',
+    '【统一 Scene 的实体扩展】','图层可使用 vector_mask 表达 0–1 外轮廓与镂空孔洞；blend_mode=multiply 仅在透明纸、胶带或印色自然叠加时使用。相关文字、矢量和实体片段可以 group_elements 或 page.groups 一起移动；编组不能缩放实体。所有编辑仍保存为拾页相同的 Draft 场景，不把真实图像烘焙成不可编辑的效果图。',
     '【文字方式】',source.textPresentation==='handwritten'?'自由手写优先：用 page.ink_strokes 或工艺计划 ink 绘制短句、标记与线条；长段可用可编辑手写风格文字，避免伪字迹。':source.textPresentation==='type'?'排版文字优先：文字保持独立可编辑，选好字体、行距与层次。':'混合编排：排版正文结合少量可编辑手写笔迹。',
     '【编辑合同】',mode==='agent'?'只输出 tools；可使用 apply_craft_plan 做复杂取材与穿插；确切参数以 schema/output.json 为准。':'只输出 page；在 page.items.operations 中使用合法裁切和遮罩，在 graphics/ink_strokes/text_blocks 中保留独立可编辑图层。'
   ].join('\n\n');

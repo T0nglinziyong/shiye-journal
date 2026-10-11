@@ -13,6 +13,7 @@ import {adjacentFontSize} from './canvas-control-behavior.js';
 import {createIcon} from './icons.js';
 import {historyTitle,renameHistory,deleteDraft,captureHistory,restoreHistoryDraft} from './project-history.js';
 import {syncSelectionGeometry} from './selection-geometry.js';
+import {groupSceneLayers,ungroupSceneLayers,sceneGroupMembers,sceneLayerEntries,validateVectorMask} from './scene-model.js';
 import {clampCanvasPosition,moveSelection,materialCenterOutside} from './canvas-selection.js';
 import {transformSelectedFrame,isObjectDeleteKey} from './selection-transform.js';
 const labels={select:'选择',marquee:'矩形框选',pen:'笔',highlighter:'荧光笔',eraser:'橡皮擦',lasso:'套索选择',text:'文字',shape:'图形',material:'素材',layers:'图层',paper:'画布背景'};
@@ -20,7 +21,7 @@ const glyphs={select:'➤',pen:'',eraser:'◇',highlighter:'▱',lasso:'◌',tex
 const prefKey='shiye-canvas-tools-v1';
 // Survive editor remounts and route returns; card image nodes stay decoded.
 const pickerRows=new Map();
-const allEntries=d=>[['material',d.items],['shape',d.primitives],['text',d.textBlocks]].flatMap(([kind,list])=>(list||[]).map(value=>({kind,value})));
+const allEntries=d=>sceneLayerEntries(d,{hidden:true,ink:false});
 export function mountCanvasEditor(c){
   const {state,view,body,modal,current,checkpoint,saveProject,render,route,flushSave,toast,esc,imgTag,asset,handle,openCutoutCheck,openAICreation}=c,d=current(),page=view.querySelector('#canvas-page');if(!d||!page)return;
   if(captureHistory(state.activeProject))saveProject();state.workspacePanel=false;
@@ -53,6 +54,7 @@ export function mountCanvasEditor(c){
       ['导出 PNG',()=>handle('export-png')],
       ['导出 PDF',()=>pdf?.click()||handle('print')],
       ['导出可编辑 ZIP',()=>handle('download-project-zip')],
+      ['导出标准 Scene JSON',()=>handle('export-scene-json')],
       ['打印',()=>handle('print')],
       ['导入创作指令',()=>handle('creative-json')]])
       p.content.append(button(name,()=>{p.close();fn();}));
@@ -69,7 +71,7 @@ export function mountCanvasEditor(c){
   context.addEventListener('pointerdown',event=>{
     if(state.editingTextID&&event.target.closest('select,button,input'))view.keepTextEditorUntil=performance.now()+1600;
   },true);
-  const changeTool=(mode,b)=>{view.endTextEditing?.();if(b.getAttribute('aria-expanded')==='true'){closePopover();return;}const repeated=state.tool===mode;if(['pen','highlighter'].includes(mode))state.previousInkTool=mode;state.tool=['layers','paper','material'].includes(mode)?'select':mode;state.toolHighlight=mode;if(!repeated)state.selectionPath=null;if(mode!=='select'&&mode!=='lasso'){state.multiSelected=[];state.selectedStrokes=[];}if(mode!=='select'&&mode!=='lasso')state.selected=null;if(!state.selected){page.querySelectorAll('.object-handle,.selected-object-actions,.selected-object-overlay').forEach(n=>n.remove());page.querySelectorAll('.selected').forEach(n=>n.classList.remove('selected'));page.querySelector('.canvas-selection-overlay')?.replaceChildren();}page.classList.toggle('pen',['pen','highlighter','eraser'].includes(mode));page.classList.toggle('lasso',['lasso','marquee'].includes(mode));syncTools();contextTools();if(['shape','material','layers','paper'].includes(mode)){if(mode==='shape')shapePicker(b);else if(mode==='material')materialPicker(b);else if(mode==='layers')layerPicker(b);else paperPicker(b);}else if(repeated&&['pen','highlighter','eraser','lasso'].includes(mode))toolSettings(b,mode);else closePopover();};
+  const changeTool=(mode,b)=>{view.endTextEditing?.();if(b.getAttribute('aria-expanded')==='true'){closePopover();return;}const repeated=state.tool===mode;if(['pen','highlighter'].includes(mode))state.previousInkTool=mode;state.tool=['layers','paper','material'].includes(mode)?'select':mode;state.toolHighlight=mode;if(!repeated)state.selectionPath=null;if(!['select','lasso','layers'].includes(mode)){state.multiSelected=[];state.selectedStrokes=[];}if(!['select','lasso','layers'].includes(mode))state.selected=null;if(!state.selected){page.querySelectorAll('.object-handle,.selected-object-actions,.selected-object-overlay').forEach(n=>n.remove());page.querySelectorAll('.selected').forEach(n=>n.classList.remove('selected'));page.querySelector('.canvas-selection-overlay')?.replaceChildren();}page.classList.toggle('pen',['pen','highlighter','eraser'].includes(mode));page.classList.toggle('lasso',['lasso','marquee'].includes(mode));syncTools();contextTools();if(['shape','material','layers','paper'].includes(mode)){if(mode==='shape')shapePicker(b);else if(mode==='material')materialPicker(b);else if(mode==='layers')layerPicker(b);else paperPicker(b);}else if(repeated&&['pen','highlighter','eraser','lasso'].includes(mode))toolSettings(b,mode);else closePopover();};
   for(const mode of ['select','pen','eraser','highlighter','lasso','text','shape','material','layers','paper']){const b=button(glyphs[mode],()=>changeTool(mode,b),'btn');b.dataset.act='tool';b.dataset.val=mode;b.setAttribute('aria-label',labels[mode]);b.title=labels[mode];tools.append(b);if(mode==='select')b.oncontextmenu=e=>{e.preventDefault();const p=openPopover(b,{title:'选择工具',width:230,menu:true});for(const [m,name] of [['select','点击选择 · 单指滚动画布'],['marquee','拖出矩形框选']])p.content.append(button(name,()=>{p.close();state.tool=m;state.toolHighlight='select';render();}));};}
   // Property editing remains available through the selected object's
   // contextual inspector, not a separate top-bar button.
@@ -300,7 +302,23 @@ export function mountCanvasEditor(c){
   function layerPicker(anchor){
     const p=openPopover(anchor,{title:'图层 · 上方显示在前',width:350}),list=document.createElement('div');
     p.surface.classList.add('swift-layer-popover');
-    list.className='canvas-layer-list';p.content.append(list);
+    list.className='canvas-layer-list';
+    const groupActions=document.createElement('div');groupActions.className='canvas-physical-group-actions';
+    const groupButton=button('组合所选图层',()=>{
+      const ids=[...new Set(state.multiSelected||[])];
+      try{change(()=>{groupSceneLayers(d,ids,{id:'group-'+uid(),name:'手帐组合 '+((d.layerGroups||[]).length+1)});state.selected=null;});p.close();}
+      catch(error){toast(error.message);}
+    },'btn');
+    groupButton.disabled=!(state.multiSelected?.length>=2);
+    const activeGroup=entries.find(e=>e.value.id===state.selected)?.value.creativeGroupID||
+      (state.multiSelected?.length?entries.find(e=>e.value.id===state.multiSelected[0])?.value.creativeGroupID:null);
+    const ungroupButton=button('取消组合',()=>{
+      if(!activeGroup)return;
+      change(()=>{ungroupSceneLayers(d,activeGroup);state.multiSelected=[];});
+      p.close();
+    },'btn');
+    ungroupButton.disabled=!activeGroup;
+    groupActions.append(groupButton,ungroupButton);p.content.append(groupActions,list);
     const ordered=[...entries].sort((a,b)=>(b.value.zIndex||0)-(a.value.zIndex||0)),rows=new Map();
     let drag=null,holdTimer=null,scrollFrame=null,moveMenu=null,suppressMoveClickUntil=0;
     const indexOf=id=>ordered.findIndex(e=>e.value.id===id);
@@ -354,8 +372,8 @@ export function mountCanvasEditor(c){
     };
     for(const e of ordered){
       const o=e.value,row=document.createElement('div');row.className='canvas-layer-row';row.dataset.layerId=o.id;
-      const pick=button('',()=>{if(o.isLocked||o.locked||o.isHidden||o.hidden||o.isParked)return;state.selected=o.id;state.multiSelected=[];render();redraw();});
-      pick.dataset.layerPick='';pick.innerHTML=(e.kind==='material'?imgTag(asset(o.assetID)):e.kind==='shape'?shapeSVG(o):'<span>Aa</span>')+'<span>'+esc(e.kind==='material'?asset(o.assetID)?.title:e.kind==='text'?o.content.slice(0,24):o.kind==='vector'?'自定义图形':o.kind)+'</span>';row.append(pick);
+      const pick=button('',()=>{if(o.isLocked||o.locked||o.isHidden||o.hidden||o.isParked)return;state.multiSelected=o.creativeGroupID?sceneGroupMembers(d,o.creativeGroupID).map(e=>e.value.id):[];state.selected=state.multiSelected.length>1?null:o.id;render();redraw();});
+      pick.dataset.layerPick='';pick.innerHTML=(e.kind==='material'?imgTag(asset(o.assetID)):e.kind==='shape'?shapeSVG(o):'<span>Aa</span>')+'<span>'+esc((o.creativeGroupID?'◫ ':'')+(e.kind==='material'?asset(o.assetID)?.title:e.kind==='text'?o.content.slice(0,24):o.kind==='vector'?'自定义图形':o.kind))+'</span>';row.append(pick);
       const lock=button('',()=>{const next=!(o.isLocked||o.locked);commitLayer(()=>{o.isLocked=o.locked=next;if(next&&state.selected===o.id)state.selected=null;});redraw();});lock.dataset.layerLock='';
       const eye=button('',()=>{const next=!(o.isHidden||o.hidden||o.isParked);commitLayer(()=>{if(e.kind==='material')o.isParked=next;else if(e.kind==='text')o.isHidden=next;else o.hidden=next;if(next&&state.selected===o.id)state.selected=null;});redraw();});eye.dataset.layerEye='';
       const move=button('≡',()=>{});
@@ -439,6 +457,26 @@ export function mountCanvasEditor(c){
     const textDraft=kind==='text'?structuredClone(o):null;const mutate=(key,value)=>{if(textDraft){textDraft[key]=value;return;}checkpoint();o[key]=value;if(kind==='material')o.userOverrideFlags=[...new Set([...(o.userOverrideFlags||[]),'edited'])];saveProject();render();};
     if(kind==='material'){fields.append(button('✂ 打开统一素材加工面板',()=>{showMaterialProcessing(c,o);}));const operations=document.createElement('div');operations.className='object-setting-actions';for(const [name,fn] of [['上移一层',()=>mutate('zIndex',(o.zIndex||0)+1)],['下移一层',()=>mutate('zIndex',(o.zIndex||0)-1)],['复制',()=>{modal.close();duplicate(entry);}],['放入备选',()=>{modal.close();handle('park');}],['恢复实物尺寸',()=>{const a=asset(o.assetID);if(!a?.physicalWidthMM||!a?.physicalHeightMM)return;checkpoint();const restored=itemFromAsset(a,d,o.x,o.y);o.width=restored.width;o.height=restored.height;saveProject();render();modal.close();}],['删除',()=>{modal.close();handle('delete-object');}]])operations.append(button(name,fn));fields.append(operations);}
     if(kind==='text'){const draft=textDraft;const row=document.createElement('label');row.textContent='文字内容';const input=document.createElement('textarea');input.value=o.content;input.oninput=()=>draft.content=input.value;row.append(input);fields.append(row);const fontRow=document.createElement('label');fontRow.textContent='字体名称（留空使用基础风格）';const fontInput=document.createElement('input');fontInput.type='text';fontInput.maxLength=120;fontInput.value=draft.fontName||'';fontInput.oninput=()=>draft.fontName=fontInput.value.trim()||null;fontRow.append(fontInput);fields.append(fontRow);for(const [key,name] of [['bold','粗体'],['italic','斜体'],['underline','下划线'],['strikethrough','删除线']])toggle(fields,name,!!draft[key],v=>draft[key]=v);for(const [key,name,min,max,step] of [['fontSize','字号',5,400,1],['letterSpacing','字距',-5,30,.1],['fixedLineHeight','固定行高',5,400,.1],['lineSpacing','附加行距',0,80,1],['paragraphSpacing','段落间距',0,80,1]])range(fields,name,draft[key]??(key==='fixedLineHeight'?draft.fontSize*1.3:0),min,max,step,v=>draft[key]=v);toggle(fields,'自动行高',!draft.fixedLineHeight,v=>draft.fixedLineHeight=v?null:draft.fontSize*1.3);fields.append(button('应用文字设置',()=>{draft.content=input.value;checkpoint();const measure=document.createElement('canvas').getContext('2d');measure.font=textFont(draft);const layout=textLines(draft,text=>measure.measureText(text).width),top=draft.y-draft.height/2;draft.height=Math.max(draft.height,layout.height);draft.y=top+draft.height/2;Object.assign(o,draft);state.newTextID=null;saveProject();modal.close();render();},'btn primary'));}
+    // These properties are shared by material, text and digital shapes.
+    const styleRow=document.createElement('label');styleRow.className='canvas-setting';styleRow.textContent='实体叠压方式';
+    const blend=document.createElement('select');blend.setAttribute('aria-label','图层混合方式');
+    for(const [key,name] of [['normal','普通叠放'],['multiply','正片叠底 · 透明纸／胶带']])blend.append(new Option(name,key));
+    blend.value=o.blendMode||'normal';blend.onchange=()=>mutate('blendMode',blend.value);styleRow.append(blend);fields.append(styleRow);
+    const maskRow=document.createElement('label');maskRow.className='canvas-setting';maskRow.textContent='矢量剪裁蒙版（外轮廓、可选孔洞；0–1 坐标）';
+    const maskInput=document.createElement('textarea');maskInput.rows=4;maskInput.value=JSON.stringify(o.vectorMask||null);
+    const maskError=document.createElement('small');maskError.setAttribute('role','alert');
+    maskRow.append(maskInput,maskError);
+    const maskActions=document.createElement('div');maskActions.className='object-setting-actions';
+    const maskRect={outer:[[.05,.05],[.95,.05],[.95,.95],[.05,.95]],holes:[]};
+    const ellipse={outer:Array.from({length:48},(_,i)=>{const a=2*Math.PI*i/48;return [.5+.46*Math.cos(a),.5+.46*Math.sin(a)];}),holes:[]};
+    maskActions.append(button('矩形裁切',()=>{maskInput.value=JSON.stringify(maskRect);}),
+      button('椭圆裁切',()=>{maskInput.value=JSON.stringify(ellipse);}),
+      button('取消蒙版',()=>{mutate('vectorMask',null);maskInput.value='null';}));
+    maskActions.append(button('应用蒙版',()=>{
+      try{const v=JSON.parse(maskInput.value);if(v!==null)validateVectorMask(v);maskError.textContent='';mutate('vectorMask',v);}
+      catch(error){maskError.textContent=error.message;}
+    },'btn'));
+    fields.append(maskRow,maskActions);
     const units=d.canvas.height/(d.physicalPageHeightMM||297);if(kind!=='text')for(const [key,name,min,max,step] of [['width',kind==='material'?'宽度（mm）':'宽度',1,d.canvas.width*2,.1],['height',kind==='material'?'高度（mm）':'高度',1,d.canvas.height*2,.1],['rotation','旋转（度）',-180,180,.1],...(kind==='shape'?[]:[['opacity','透明度',0,1,.05]])]){const factor=kind==='material'&&['width','height'].includes(key)?units:1;range(fields,name,(o[key]??1)/factor,min/factor,max/factor,step,v=>mutate(key,v*factor),false,key==="rotation"?"°":key==="opacity"?"":kind==="material"?" mm":" pt");}
     if(kind==='shape'){
       if(o.vectorLayers)vectorColors(o,fields);
@@ -575,7 +613,7 @@ export function mountCanvasEditor(c){
   const ink=page.querySelector('#ink'),ctx=ink.getContext('2d');let stroke=null,erase=null,frame=null;const paint=()=>{frame=null;ctx.clearRect(0,0,ink.width,ink.height);drawInk(ctx,stroke?[...d.strokes,stroke]:d.strokes);},schedule=()=>{if(!frame)frame=requestAnimationFrame(paint);},point=e=>{const r=ink.getBoundingClientRect();return {x:(e.clientX-r.left)/r.width*d.canvas.width,y:(e.clientY-r.top)/r.height*d.canvas.height,p:e.pressure||.5};};paint();view.canvasInkRefresh=schedule;
   ink.onpointerdown=e=>{if(!['pen','highlighter','eraser'].includes(state.tool)||e.button>0)return;e.preventDefault();checkpoint();ink.setPointerCapture(e.pointerId);if(state.tool==='eraser'){erase={id:e.pointerId};d.strokes=eraseStrokes(d.strokes,point(e),(prefs.eraserStyle||'standard')==='standard'?10:prefs.eraserWidth/((prefs.eraserStyle||'standard')==='fine'?4:2),(prefs.eraserStyle||'standard')==='standard',!!prefs.eraserOnlyHighlighter);schedule();return;}const marker=state.tool==='highlighter',key=marker?'marker':'pen';stroke={id:e.pointerId,points:[point(e)],width:prefs[key+'Width'],color:prefs[key+'Color'],opacity:marker?.4:1,penStyle:marker?'marker':prefs.penStyle};schedule();};
   ink.onpointermove=e=>{if(erase?.id===e.pointerId){e.preventDefault();const wholeStroke=(prefs.eraserStyle||'standard')==='standard';for(const sample of e.getCoalescedEvents?.()||[e])d.strokes=eraseStrokes(d.strokes,point(sample),wholeStroke?10:prefs.eraserWidth/((prefs.eraserStyle||'standard')==='fine'?4:2),wholeStroke,!!prefs.eraserOnlyHighlighter);schedule();return;}if(stroke?.id!==e.pointerId)return;e.preventDefault();for(const sample of e.getCoalescedEvents?.()||[e])stroke.points.push(point(sample));schedule();};
-  ink.onpointerup=e=>{if(stroke?.id===e.pointerId){const {id,...line}=stroke;d.strokes.push(state.tool==='highlighter'&&prefs.markerStraight?straightStroke(line):line);stroke=null;saveProject();schedule();}else if(erase?.id===e.pointerId){erase=null;saveProject();if(prefs.returnToPen){state.tool=state.previousInkTool||'pen';state.toolHighlight=state.tool;render();}else schedule();}};
+  ink.onpointerup=e=>{if(stroke?.id===e.pointerId){const {id,...line}=stroke;line.id=uid();d.strokes.push(state.tool==='highlighter'&&prefs.markerStraight?straightStroke(line):line);stroke=null;saveProject();schedule();}else if(erase?.id===e.pointerId){erase=null;saveProject();if(prefs.returnToPen){state.tool=state.previousInkTool||'pen';state.toolHighlight=state.tool;render();}else schedule();}};
   ink.onpointercancel=()=>{if(!stroke&&!erase)return;stroke=null;erase=null;const before=state.undo.pop();if(before)d.strokes=before.strokes;paint();};
   view.cancelInkGesture=ink.onpointercancel;
   mountCanvasViewport(c,page);

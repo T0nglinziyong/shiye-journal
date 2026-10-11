@@ -61,3 +61,11 @@
   .editing .canvas-context-tools .canvas-text-format>select{min-width:60px;width:64px}
   .editing .canvas-context-tools .canvas-font-size-stepper button{width:29px;min-width:29px}
 }
+
+/* Scene v1: editing together without changing the physical size of members. */
+.canvas-physical-group-actions{display:flex;gap:7px;flex-wrap:wrap;padding:8px 2px 12px}
+.canvas-physical-group-actions>.btn{min-width:0;flex:1 1 125px;font-size:12px;padding:8px 9px}
+.canvas-physical-group-actions>.btn:disabled{opacity:.42}
+.canvas-object-settings .canvas-setting textarea{display:block;box-sizing:border-box;width:100%;min-width:0;max-width:100%;resize:vertical;font-family:ui-monospace,SFMono-Regular,monospace;font-size:12px;line-height:1.5;margin-top:7px}
+.canvas-object-settings .object-setting-actions{display:flex;gap:6px;flex-wrap:wrap}
+.canvas-object-settings .object-setting-actions button{font-size:12px;min-height:31px}

@@ -25,6 +25,8 @@ export function craftSceneState(draft) {
     textBlocks:(draft.textBlocks||[]).map(layerState),
     primitives:(draft.primitives||[]).map(layerState),
     strokes:(draft.strokes||[]).map(layerState),
+    ...(draft.sceneVersion?{sceneVersion:draft.sceneVersion}:{}),
+    ...(draft.layerGroups?.length?{layerGroups:draft.layerGroups}:{}),
     ...(draft.craftScraps?.length?{craftScraps:draft.craftScraps}:{})
   };
 }
