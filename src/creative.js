@@ -8,6 +8,7 @@ import {craftDiagnostic,craftAssert} from './craft-errors.js';
 import {buildCraftEdge,craftPermission,sourceFootprint,sourceIntersectionArea} from './craft-geometry.js';
 import {solveCraftRelations} from './craft-relations.js';
 import {uid,itemFromAsset} from './domain.js';
+import {sceneLayerEntries,sceneLayerStyle,groupSceneLayers,ungroupSceneLayers,validateSceneExtensions} from './scene-model.js';
 import {textLines,textFont} from './editor-tools-model.js';
 import {reviewCreativeDraft} from './creative-quality.js';
 import {materialMaskPoints,materialMaskArea,materialMaskGeometry,cutMaterialDiagonal,addMaterialWindow} from './material-mask.js';
@@ -139,27 +140,27 @@ function addMaterials(d,assets,aliases,list){
     if(!entry.piece&&!item)item=d.items.find(i=>i.assetID===asset.id&&(i.materialUnitIndex??0)===unit&&!i.cropRect);
     if(item){locked(item);if(item.assetID!==asset.id)throw Error('不能改变已有片段来源：'+piece);if(entry.unit!==undefined&&item.materialUnitIndex!==unit)throw Error('不能改变已有片段库存单位');}
     else{if(index(d).has(piece))throw Error('图层编号已被占用：'+piece);item=itemFromAsset(asset,d,0,0,entry.z??10+d.items.length,true);item.creativePieceID=piece;item.materialUnitIndex=unit;d.items.push(item);}
-    Object.assign(item,place(d,entry));if(entry.rotation!==undefined)item.rotation=entry.rotation;if(entry.z!==undefined)item.zIndex=entry.z;if(entry.role!==undefined)item.creativeRole=entry.role;if(entry.opacity!==undefined)item.opacity=entry.opacity;if(entry.flip_horizontal!==undefined)item.isFlippedHorizontally=entry.flip_horizontal;baseline(item);output.push(item);
+    Object.assign(item,place(d,entry));if(entry.rotation!==undefined)item.rotation=entry.rotation;if(entry.z!==undefined)item.zIndex=entry.z;if(entry.role!==undefined)item.creativeRole=entry.role;if(entry.opacity!==undefined)item.opacity=entry.opacity;if(entry.flip_horizontal!==undefined)item.isFlippedHorizontally=entry.flip_horizontal;if(entry.blend_mode!==undefined)item.blendMode=entry.blend_mode;if(entry.vector_mask!==undefined)item.vectorMask=structuredClone(entry.vector_mask);baseline(item);output.push(item);
   }return output;
 }
 function putTexts(d,list,options){if(options.textMode==='none'&&list.length)throw Error('本次创作设置为不新增文字图层');for(const t of list){
   const old=d.textBlocks.find(i=>keyOf(i)===t.key);if(old)locked(old);else if(index(d).has(t.key))throw Error('图层编号已被占用：'+t.key);
   const role=t.role||old?.role||'body',font=t.font_size??old?.fontSize??(role==='title'?58:role==='caption'?28:38),sizeUnit=t.size_unit||'ratio';
-  const data={agentKey:t.key,content:t.content,...place(d,t,old),width:converted(t.width,sizeUnit,d,'width'),fontSize:font,style:t.font_style||t.style||old?.style||'serif',fontName:t.font_name??old?.fontName??null,color:t.color||old?.color||'#30463d',zIndex:t.z??old?.zIndex??900,role,rotation:t.rotation??old?.rotation??0,alignment:t.alignment||old?.alignment||'left',bold:t.bold??old?.bold??false,italic:t.italic??old?.italic??false,underline:t.underline??old?.underline??false,strikethrough:t.strikethrough??old?.strikethrough??false,opacity:t.opacity??old?.opacity??1,lineSpacing:t.line_spacing??old?.lineSpacing??0,fixedLineHeight:t.fixed_line_height??old?.fixedLineHeight??null,paragraphSpacing:t.paragraph_spacing??old?.paragraphSpacing??0,letterSpacing:t.letter_spacing??old?.letterSpacing??0};
+  const data={agentKey:t.key,content:t.content,...place(d,t,old),width:converted(t.width,sizeUnit,d,'width'),fontSize:font,style:t.font_style||t.style||old?.style||'serif',fontName:t.font_name??old?.fontName??null,color:t.color||old?.color||'#30463d',zIndex:t.z??old?.zIndex??900,role,rotation:t.rotation??old?.rotation??0,alignment:t.alignment||old?.alignment||'left',bold:t.bold??old?.bold??false,italic:t.italic??old?.italic??false,underline:t.underline??old?.underline??false,strikethrough:t.strikethrough??old?.strikethrough??false,opacity:t.opacity??old?.opacity??1,blendMode:t.blend_mode??old?.blendMode??'normal',vectorMask:t.vector_mask===undefined?old?.vectorMask:structuredClone(t.vector_mask),lineSpacing:t.line_spacing??old?.lineSpacing??0,fixedLineHeight:t.fixed_line_height??old?.fixedLineHeight??null,paragraphSpacing:t.paragraph_spacing??old?.paragraphSpacing??0,letterSpacing:t.letter_spacing??old?.letterSpacing??0};
   data.height=Math.max(t.height===undefined?0:converted(t.height,sizeUnit,d,'height'),layoutText(data,options).height);
   if(old)Object.assign(old,data);else d.textBlocks.push({id:uid(),...data});
 }}
 function putGraphics(d,list){for(const g of list){
   if(g.kind==='vector'&&!g.vector_paths?.length&&!g.vector_layers?.length)throw Error('自由矢量图形缺少 vector_paths 或 vector_layers');
   const old=d.primitives.find(i=>keyOf(i)===g.key);if(old)locked(old);else if(index(d).has(g.key))throw Error('图层编号已被占用：'+g.key);
-  const data={key:g.key,kind:g.kind,...place(d,g,old),width:converted(g.width??.2,g.size_unit||'ratio',d,'width'),height:converted(g.height??.1,g.size_unit||'ratio',d,'height'),rotation:g.rotation??old?.rotation??0,zIndex:g.z??old?.zIndex??500,fill:Object.hasOwn(g,'fill')?g.fill:(g.kind==='frame'?null:'#e7eef7'),stroke:Object.hasOwn(g,'stroke')?g.stroke:'#547da4',lineWidth:g.line_width??old?.lineWidth??3,fillOpacity:g.fill_opacity??old?.fillOpacity??1,strokeOpacity:g.stroke_opacity??old?.strokeOpacity??1,strokeDash:g.stroke_dash??old?.strokeDash??'solid',cornerRadius:g.corner_radius??old?.cornerRadius??.1,opacity:g.opacity??old?.opacity??1,vectorPaths:g.kind==='vector'&&g.vector_paths?structuredClone(g.vector_paths):undefined,vectorLayers:g.vector_layers?structuredClone(g.vector_layers):undefined,vectorSize:g.vector_layers?[1,1]:undefined};
+  const data={key:g.key,kind:g.kind,...place(d,g,old),width:converted(g.width??.2,g.size_unit||'ratio',d,'width'),height:converted(g.height??.1,g.size_unit||'ratio',d,'height'),rotation:g.rotation??old?.rotation??0,zIndex:g.z??old?.zIndex??500,fill:Object.hasOwn(g,'fill')?g.fill:(g.kind==='frame'?null:'#e7eef7'),stroke:Object.hasOwn(g,'stroke')?g.stroke:'#547da4',lineWidth:g.line_width??old?.lineWidth??3,fillOpacity:g.fill_opacity??old?.fillOpacity??1,strokeOpacity:g.stroke_opacity??old?.strokeOpacity??1,strokeDash:g.stroke_dash??old?.strokeDash??'solid',cornerRadius:g.corner_radius??old?.cornerRadius??.1,opacity:g.opacity??old?.opacity??1,blendMode:g.blend_mode??old?.blendMode??'normal',vectorMask:g.vector_mask===undefined?old?.vectorMask:structuredClone(g.vector_mask),vectorPaths:g.kind==='vector'&&g.vector_paths?structuredClone(g.vector_paths):undefined,vectorLayers:g.vector_layers?structuredClone(g.vector_layers):undefined,vectorSize:g.vector_layers?[1,1]:undefined};
   if(g.match_size_to){const target=find(d,g.match_size_to),[l,t,r,b]=g.padding_mm||[0,0,0,0],s=scale(d),angle=(target.rotation||0)*Math.PI/180,dx=(r-l)*s/2,dy=(b-t)*s/2;data.width=target.width+(l+r)*s;data.height=target.height+(t+b)*s;data.x=target.x+dx*Math.cos(angle)-dy*Math.sin(angle);data.y=target.y+dx*Math.sin(angle)+dy*Math.cos(angle);data.rotation=target.rotation||0;}
   else if(g.padding_mm)throw Error('padding_mm 需要 match_size_to');
   if(old)Object.assign(old,data);else d.primitives.push({id:uid(),...data});
 }}
 function putInk(d,list){for(const stroke of list){
   d.strokes||=[];
-  d.strokes.push({id:uid(),agentGenerated:true,points:stroke.points.map(point=>({x:point.x*d.canvas.width,y:point.y*d.canvas.height,p:point.pressure??.5})),width:stroke.width,color:stroke.color,opacity:stroke.opacity??(stroke.pen_style==='marker'?.4:1),penStyle:stroke.pen_style});
+  d.strokes.push({id:uid(),agentGenerated:true,points:stroke.points.map(point=>({x:point.x*d.canvas.width,y:point.y*d.canvas.height,p:point.pressure??.5})),width:stroke.width,color:stroke.color,opacity:stroke.opacity??(stroke.pen_style==='marker'?.4:1),penStyle:stroke.pen_style,blendMode:stroke.blend_mode||'normal'});
 }}
 function clearGeneratedScene(d){
   d.items=d.items.filter(i=>!i.creativePieceID||!isManagedUnchanged(i));
@@ -244,7 +245,7 @@ function execute(d,assets,aliases,name,a,options){
     }});
     case 'compose_story_page':story(d,assets,aliases,a,options);break;
     case 'compose_page':compose(d,assets,aliases,a,options);break;
-    case 'compose_direct_page':validateValue(a,directPageContract);clearGeneratedScene(d);d.style=({'留白叙事':'airy','密集拼贴':'layered','杂志网格':'editorial','手作便签':'memo','胶片日记':'film','自由构图':'free'})[a.style];setPaper(d,{...a.paper,intent:a.intent});upsertMaterials(d,assets,aliases,{items:a.items},options);putGraphics(d,a.graphics||[]);putTexts(d,a.text_blocks.map((t,n)=>({...t,key:'direct-t'+(n+1)})),options);putInk(d,a.ink_strokes||[]);finish(d,assets,{summary:a.intent||''},options);return {detail:'直接页已通过实物与必用约束并完成',mutation:true};
+    case 'compose_direct_page':validateValue(a,directPageContract);clearGeneratedScene(d);d.style=({'留白叙事':'airy','密集拼贴':'layered','杂志网格':'editorial','手作便签':'memo','胶片日记':'film','自由构图':'free'})[a.style];setPaper(d,{...a.paper,intent:a.intent});upsertMaterials(d,assets,aliases,{items:a.items},options);putGraphics(d,a.graphics||[]);putTexts(d,a.text_blocks.map((t,n)=>({...t,key:'direct-t'+(n+1)})),options);putInk(d,a.ink_strokes||[]);for(const group of a.groups||[]){groupSceneLayers(d,group.keys.map(k=>find(d,k).id),{id:group.id,name:group.name||'手帐组合'});}finish(d,assets,{summary:a.intent||''},options);return {detail:'直接页已通过实物与必用约束并完成',mutation:true};
     case 'place_materials':addMaterials(d,assets,aliases,a.items);break;
     case 'edit_materials':for(const e of a.items){const item=find(d,e.piece);if(!d.items.includes(item))throw Error('加工目标必须是实物');process(d,item,assets.find(a=>a.id===item.assetID),e.operations,e.mode||'append',options);}break;
     case 'upsert_materials':upsertMaterials(d,assets,aliases,a,options);break;
@@ -253,12 +254,15 @@ function execute(d,assets,aliases,name,a,options){
     case 'fit_text_to':fitText(d,assets,a,options);break;
     case 'upsert_primitives':putGraphics(d,a.items);break;
     case 'upsert_text':putTexts(d,a.items,options);break;
+    case 'style_elements':for(const {key,blend_mode,vector_mask,opacity} of a.items){const item=find(d,key);locked(item);if(blend_mode!==undefined)item.blendMode=blend_mode;if(vector_mask!==undefined)item.vectorMask=structuredClone(vector_mask);if(opacity!==undefined)item.opacity=opacity;sceneLayerStyle(item);}break;
+    case 'group_elements':groupSceneLayers(d,a.keys.map(k=>find(d,k).id),{id:a.id||'group-'+uid(),name:a.name||'手帐组合'});break;
+    case 'ungroup_elements':if(!ungroupSceneLayers(d,a.id))throw Error('没有找到组合');break;
     case 'delete_elements':remove(d,a.keys);break;
     case 'set_paper':setPaper(d,a);break;
     case 'inspect_materials':return {detail:'已检查 '+a.keys.length+' 件素材',data:inspect(d,assets,aliases,a,options),mutation:false};
     case 'finish_design':finish(d,assets,a,options);return {detail:'方案完成',mutation:true};
     default:throw Error('未知工具 '+name);
-  }checkDraft(d,assets);if(d.agentRun?.status==='finished')d.agentRun.status='editing';return {detail:'已执行 '+name,mutation:true};
+  }validateSceneExtensions(d);checkDraft(d,assets);if(d.agentRun?.status==='finished')d.agentRun.status='editing';return {detail:'已执行 '+name,mutation:true};
 }
 export function normalizeCalls(raw){
   const input=typeof raw==='string'?JSON.parse(raw):raw;
