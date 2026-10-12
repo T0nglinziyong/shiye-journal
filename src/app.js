@@ -57,6 +57,7 @@ import {showSeriesEditor} from './series-editor.js';
 import {mountWorkflowControls} from './workflow-ui.js';
 import {renderImportInspection,renderImportReview} from './import-workspace-ui.js';
 import {showCutoutEditor} from './cutout-editor.js';
+import {decodeImageBlob} from './image-blob-decoder.js';
 import {mountCanvasSelection} from './canvas-selection-ui.js';
 import * as db from './store.js';
 import {loadPreferences,savePreferences} from './preferences.js';
@@ -1247,7 +1248,7 @@ let trashSweepActive=false;
 async function purgeExpiredTrash(){if(trashSweepActive)return;const entries=expiredTrash(state.trash);if(!entries.length)return;trashSweepActive=true;try{await changeTrash({db,state,ids:entries.map(entry=>entry.id)});if(parity.libraryTab==='trash'||parity.workTab==='trash')render();}catch(error){console.warn('最近删除到期清理待重试',error?.name||error?.message);}finally{trashSweepActive=false;}}
 setInterval(()=>void purgeExpiredTrash(),15*60*1000);
 async function refineCandidateFrame(candidateFrame,request,{postprocessOnly=false}={}){
-  const bitmap=await createImageBitmap(candidateFrame);
+  const bitmap=await decodeImageBlob(candidateFrame);
   try{
     const fw=bitmap.width,fh=bitmap.height,maxDim=Math.max(1200,Number(request.pixels)||1200),
       ratio=Math.min(1,maxDim/Math.max(fw,fh)),aw=Math.max(1,Math.round(fw*ratio)),ah=Math.max(1,Math.round(fh*ratio)),
@@ -1310,7 +1311,13 @@ async function openCutoutCheck(id,candidate=null){
   let saved=candidate?.blob||await stored(a.blobId),original=candidate?.originalBlob||await stored(a.originalBlobId),recognition=candidate?.originalCutoutBlob||await stored(a.originalCutoutBlobId),
     candidateFrame=candidate?.candidateFrameBlob||await stored(a.candidateFrameBlobId);
   if(!saved&&a.staticPath){const response=await fetch(a.staticPath);if(!response.ok)throw Error('素材图像未能加载，请重试');saved=await response.blob();}
-  original||=saved;recognition||=saved;candidateFrame||=original;if(!(original instanceof Blob)||!(saved instanceof Blob))throw Error('候选框图像不可读取');
+  // A returned blob metadata record is not proof that its original image bytes
+  // have survived browser termination or the cloud upload lifecycle.
+  original||=saved;recognition||=saved;candidateFrame||=original;
+  if(!(saved instanceof Blob)||saved.size<8)
+    throw Error('原始抠图尚未从云端恢复，不能安全编辑。请在同步完成后重试');
+  if(!(original instanceof Blob)||original.size<8)
+    throw Error('候选框原始图片未保存完整；为防止颜色或边缘被覆盖，未打开手动抠图');
   if(modal.open)modal.close();
   const processing=candidate?.processingRecord||a.processingRecord||{},baseWidth=processing.sourceWidthMM||candidate?.width||a.physicalWidthMM,baseHeight=processing.sourceHeightMM||candidate?.height||a.physicalHeightMM,
     localMethods=recognitionMethodDetails,
