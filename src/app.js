@@ -66,6 +66,7 @@ import {uid,canvasSize,draft,project,itemFromAsset,physicalPlacement,validatePhy
 import {detectPaperCandidates,cropBitmap,alignMaterialPreview} from './image.js';
 import {filterAutomaticMaterialBoxes} from './automatic-material-size-filter.js';
 import {estimatePageLighting} from './material-color-restoration.js';
+import {extractEditableCandidateRGB} from './import-candidate-color.js';
 import {visionTask,prewarmVision} from './vision-runtime.js';
 import {recognitionOptions,recognitionPixelOptions,recognitionMethodDetails,recognitionProfile} from './recognition-profiles.js';
 import {classifyRecord} from './classification.js';
@@ -1334,11 +1335,15 @@ function saveActiveImportRecord(){
 const importPrefetchJobs=new WeakMap();
 let importBatchRevision=0;
 async function extractImportCandidate(source,box,region,{mode,widthMM,heightMM,calibrated,index,lighting=null}){
-  // Colour restoration is a read-only RGB branch after segmentation. Geometry,
-  // alpha and the source frame for later manual edits remain untouched.
-  const cut=await cropBitmap(source,box,region,{lighting}),raw=region.mask||lighting?await cropBitmap(source,box,region,{raw:true}):cut;
-  // Both foreground and background recognition use the same extraction path.
-  const aligned=mode==='work'?{blob:cut,originalBlob:raw,candidateFrameBlob:raw,candidateFramePlacement:null,degrees:0,widthRatio:1,heightRatio:1}:await alignMaterialPreview(cut,raw,region.orientedBox?.autoDeskew?-region.orientedBox.rotation:null);
+  // Geometry/mask discovery uses the unchanged rectified photo. Both the
+  // visible cutout AND the unmasked editing frame use the same output-only RGB
+  // correction. Otherwise hand-restoring masked pixels reverts their colours.
+  const {cutout,fullColor}=await extractEditableCandidateRGB(source,box,region,{lighting,crop:cropBitmap});
+  // alignMaterialPreview rotates and crops both inputs with identical geometry.
+  // originalBlob is the editable full-colour source, not the raw camera RGB.
+  const aligned=mode==='work'
+    ?{blob:cutout,originalBlob:fullColor,candidateFrameBlob:fullColor,candidateFramePlacement:null,degrees:0,widthRatio:1,heightRatio:1}
+    :await alignMaterialPreview(cutout,fullColor,region.orientedBox?.autoDeskew?-region.orientedBox.rotation:null);
   const width=calibrated?Math.round(((region.orientedBox?.autoDeskew?region.orientedBox.width:region.w))*widthMM*10)/10:null,
     height=calibrated?Math.round(((region.orientedBox?.autoDeskew?region.orientedBox.height:region.h))*heightMM*10)/10:null;
   return {blob:aligned.blob,originalBlob:aligned.originalBlob,candidateFrameBlob:aligned.candidateFrameBlob||aligned.originalBlob,
