@@ -8,6 +8,9 @@ export function mountCanvasViewport(c,page){
   // Explicit margins let Panzoom account for the fitted page's centering in
   // its focal-point calculation; flex centering otherwise shifts a zoom.
   host.style.alignItems='flex-start';host.style.justifyContent='flex-start';
+  // The centered margin participates in flex layout. Without a fixed basis,
+  // Safari shrinks the page on its first Panzoom geometry read / gesture.
+  page.style.flex='0 0 auto';page.style.flexShrink='0';
   page.style.marginLeft=Math.max(0,(host.clientWidth-page.clientWidth)/2)+'px';page.style.marginTop=Math.max(0,(host.clientHeight-page.clientHeight)/2)+'px';
   state.canvasViewports||=new Map();const saved=state.canvasViewports.get(key)||{x:0,y:0,scale:state.zoom};
   const zoom=Panzoom(page,{noBind:true,minScale:1,maxScale:4,startScale:Math.max(1,Math.min(4,saved.scale)),startX:saved.x,startY:saved.y,pinchAndPan:true,canvas:true,cursor:'',touchAction:'none',handleStartEvent:e=>e.preventDefault()});
