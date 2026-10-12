@@ -1826,11 +1826,80 @@ async function runAccountStorageMigration(){
   };
  }catch(error){status('扫描失败：'+error.message+'。没有修改数据库。');}
 }
+async function openSyncConflictChoice(kind,id){
+  if(!cloudEnabled)return;
+  cloudResumer.suspend();
+  body.innerHTML='<h2>核对同步版本</h2><p role="status" id="conflict-progress">正在读取云端与本机版本…</p>';
+  try{
+    const review=await db.reviewSyncConflict(kind,id),{local,remote}=review.overview;
+    const formatDate=value=>{const date=new Date(value);return Number.isFinite(date.getTime())?date.toLocaleString():'未记录';};
+    const row=(label,record)=>`<section class="sync-version-card"><strong>${label}</strong>
+      <p>${esc(record?.title||'没有云端版本')}</p><small>修改：${esc(formatDate(record?.updatedAt))} ·
+      ${esc(String(record?.drafts??0))} 个方案 · ${esc(String(record?.layers??0))} 个顶层图层</small></section>`;
+    body.innerHTML=`<h2>手动解决同步冲突</h2><p>这两份作品来自同一个编号，但内容可能不同。
+      请选择希望保留的版本；不会自动用修改时间覆盖。</p>
+      <div class="sync-version-grid">${row('本机未同步',local)}${row('当前云端',remote)}</div>
+      <p role="status" id="conflict-progress">先备份双方版本，再选择处理方式。</p>
+      <div class="actions"><button type="button" class="btn" id="conflict-backup">下载双方原始备份</button>
+      <button type="button" class="btn primary" id="conflict-both" disabled>双方都保留（推荐）</button>
+      <button type="button" class="btn" id="conflict-cloud" disabled>保留云端版</button>
+      <button type="button" class="btn" id="conflict-local" disabled>保留本机版</button>
+      <button type="button" class="btn" id="conflict-back">返回</button></div>
+      <p class="muted">保留本机版会先把当前云端版另存一份，再以本机版更新原作品；
+      双方都保留会生成新的独立可编辑作品。没有确认备份时不能执行。</p>`;
+    const progress=body.querySelector('#conflict-progress');
+    let verifiedBackup=false;
+    body.querySelector('#conflict-back').onclick=()=>void openSyncDetails();
+    body.querySelector('#conflict-backup').onclick=async()=>{
+      try{
+        progress.textContent='正在准备原始版本与 SHA-256…';
+        const saved=await db.backupSyncConflict(kind,id);
+        if(saved.serial!==review.serial||saved.revision!==review.revision)
+          throw Error('备份期间版本已变化，请重新比较');
+        download(saved.blob,'拾页-同步冲突双版本备份-'+new Date().toISOString().slice(0,10)+'.json');
+        verifiedBackup=true;
+        for(const button of body.querySelectorAll('#conflict-both,#conflict-cloud,#conflict-local'))
+          button.disabled=false;
+        progress.textContent='已发起备份下载（SHA-256：'+saved.sha256.slice(0,16)+'…）。请确认文件已在“文件”中保存。';
+      }catch(error){verifiedBackup=false;progress.textContent='备份未完成：'+error.message;}
+    };
+    for(const [selector,choice] of [['#conflict-both','both'],['#conflict-cloud','cloud'],['#conflict-local','local']]){
+      body.querySelector(selector).onclick=async()=>{
+        if(!verifiedBackup||!confirm('确认已经在 iPhone“文件”中保存双方原始备份？'))return;
+        const label={both:'双方都保留',cloud:'保留云端版',local:'保留本机版'}[choice];
+        if(!confirm('确认“'+label+'”？这将改变待同步队列；云端数据变化时会安全拒绝，请重新比较。'))return;
+        for(const button of body.querySelectorAll('button'))button.disabled=true;
+        try{
+          progress.textContent='正在核对版本和原子提交…';
+          const result=await db.resolveSyncConflict({kind,id,serial:review.serial,expectedRevision:review.revision,choice});
+          if(choice==='cloud'&&state.activeProject?.id===local?.id){
+            dirtyProjects.delete(local.id);state.activeProject=null;state.activeDraft=null;
+          }
+          progress.textContent='已应用“'+label+'”，原始备份仍在手机文件中。';
+          modal.close();
+          if(choice==='cloud')route('works');
+          else void db.flushProjects().catch(error=>toast('冲突已解决，后续同步待重试：'+error.message));
+          void refresh({background:true}).catch(error=>console.warn('冲突解决后更新列表待重试',error));
+        }catch(error){
+          progress.textContent='没有覆盖资料：'+error.message+'。请返回同步详情重新核对版本。';
+          body.querySelector('#conflict-back').disabled=false;
+        }
+      };
+    }
+  }catch(error){
+    body.innerHTML='<h2>无法自动比较版本</h2><p role="alert">'+esc(error.message)+
+      '</p><p>本机数据仍保留在待同步队列，可以先导出应急备份。混合操作批次需要单独检查。</p><div class="actions"><button type="button" class="btn" id="conflict-back">返回同步详情</button></div>';
+    body.querySelector('#conflict-back').onclick=()=>void openSyncDetails();
+  }
+}
 async function openSyncDetails(){if(!cloudEnabled)return;cloudResumer.suspend();try{
   const details=await db.pendingSyncDetails(),projects=details.projects||[],batches=details.batches||[],local=[...dirtyProjects.values()],total=projects.length+batches.length+local.length;
-  const rows=[...projects.map(row=>`<li>作品：${esc(row.title)} <small>${esc(row.id)}</small></li>`),...batches.map(row=>`<li>待传批次 ${esc(row.id)}：${row.items.length} 条变更<ul>${row.items.slice(0,12).map(item=>`<li>${esc(item.store)} · ${esc(item.action)} · ${esc(item.title||item.id)}</li>`).join('')}</ul></li>`),...local.map(row=>`<li>尚未暂存的作品：${esc(row.title||row.id)}</li>`)];
+  const rows=[...projects.map(row=>`<li>作品：${esc(row.title)} <small>${esc(row.id)}</small> <button class="btn mini" type="button" data-conflict-kind="project" data-conflict-id="${esc(row.id)}">比较版本</button></li>`),...batches.map(row=>`<li>待传批次 ${esc(row.id)}：${row.items.length} 条变更<ul>${row.items.slice(0,12).map(item=>`<li>${esc(item.store)} · ${esc(item.action)} · ${esc(item.title||item.id)}</li>`).join('')}</ul>${row.items.length===1&&row.items[0]?.store==='projects'&&row.items[0]?.action==='put'?`<button class="btn mini" type="button" data-conflict-kind="batch" data-conflict-id="${esc(row.id)}">比较版本</button>`:''}</li>`),...local.map(row=>`<li>尚未暂存的作品：${esc(row.title||row.id)}</li>`)];
   body.innerHTML=`<h2>同步详情</h2><p>状态：${syncPausedByUser?'已暂停 · 本机修改仍保留':syncDisplay.error?'待重试':syncDisplay.pending||local.length?'上传中':'已同步'}</p><p>最近错误：${esc(details.error||syncDisplay.error?.message||'无')}</p><p>本机待同步：${total} 项。未上传作品和草稿将保留在本机待同步队列。</p><p>已隔离旧版可编辑作品：${db.legacyProjectInfo?.()?.length||0} 件（未删除）。转换工具会同时扫描账号的素材、系列、作品、元数据、图片引用和最近删除。</p><div class="sync-pending-list">${rows.length?`<ul>${rows.join('')}</ul>`:'<p>没有待同步项目。</p>'}</div><div class="actions"><button type="button" class="btn" id="sync-migrate-account">转换旧数据格式</button><button type="button" class="btn" id="sync-backup-legacy-works" ${db.legacyProjectInfo?.()?.length?'':'disabled'}>导出隔离旧作品备份</button><button type="button" class="btn primary" id="sync-retry-now">立即同步</button><button type="button" class="btn" id="sync-pause-local">${syncPausedByUser?'恢复后台重试':'暂停后台重试'}</button><button type="button" class="btn" id="sync-emergency-copy" ${total?'':'disabled'}>导出待同步数据备份</button></div><p>暂停仅停止自动重试，不清空作品、草稿或待上传图片；页面刷新后仍可恢复同步。为防止误删本机唯一副本，已移除直接丢弃待同步作品的操作。</p>`;
   modal.showModal();modal.addEventListener('close',()=>{if(!syncPausedByUser)void cloudResumer.resume();},{once:true});
+  body.querySelectorAll('[data-conflict-kind]').forEach(button=>{
+    button.onclick=()=>{void openSyncConflictChoice(button.dataset.conflictKind,button.dataset.conflictId);};
+  });
   body.querySelector('#sync-migrate-account').onclick=()=>{void runAccountStorageMigration();};
   body.querySelector('#sync-backup-legacy-works').onclick=()=>{void handle('backup-legacy-projects');};
   body.querySelector('#sync-retry-now').onclick=()=>{syncPausedByUser=false;modal.close();void flushSave().then(()=>{void cloudResumer.resume();return db.flushProjects();}).catch(error=>toast('同步待重试：'+error.message));};
