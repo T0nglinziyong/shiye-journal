@@ -18,9 +18,22 @@ export function latestEditedProject(local,remote){
 const validRow=row=>row&&Number.isSafeInteger(row.serial)&&row.serial>=1&&
   Number.isSafeInteger(row.baseRevision)&&row.baseRevision>=0&&
   typeof row.operationID==='string'&&row.operationID.length>0;
-const validBatch=b=>b&&typeof b.id==='string'&&!!b.id&&
-  (Array.isArray(b.operations)&&Array.isArray(b.names)&&b.operations.length>0||
-    Array.isArray(b.assets)&&Array.isArray(b.blobs)&&Array.isArray(b.projects));
+const validBatch=b=>{
+ if(!b||typeof b.id!=='string'||!b.id)return false;
+ if(b.operations){
+   if(!Array.isArray(b.operations)||!Array.isArray(b.names)||!b.operations.length)return false;
+   return b.operations.every(op=>op&&b.names.includes(op.store)&&
+     ['put','delete','clear'].includes(op.action)&&
+     (op.action==='clear'||op.action==='delete'&&typeof op.id==='string'&&!!op.id||
+      op.action==='put'&&typeof op.item?.id==='string'&&!!op.item.id&&
+      (op.store!=='blobs'||op.item.data instanceof Blob&&op.item.data.size>0)&&
+      (op.store!=='projects'||!!op.item.projectDocumentPath||usableProjectSnapshot(op.item))));
+ }
+ return Array.isArray(b.assets)&&Array.isArray(b.blobs)&&Array.isArray(b.projects)&&
+   !!(b.assets.length||b.projects.length)&&
+   b.assets.every(x=>x?.id)&&b.blobs.every(x=>x?.id&&x.data instanceof Blob&&x.data.size>0)&&
+   b.projects.every(usableProjectSnapshot);
+};
 // One account, one durable queue. Rows left by an older installed PWA are
 // migrated transactionally; malformed and duplicate rows go to quarantine.
 export function foldLegacySyncRows(unified=[],projects=[],imports=[],quarantine=[]){
