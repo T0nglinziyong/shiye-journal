@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';
-import {attachSceneV2,sceneLayerEntries,groupSceneLayers,ungroupSceneLayers,transformSceneGroup,canonicalScene,validateSceneExtensions,sceneGroups,sceneGroupMembers,moveSceneNode} from '../src/scene-model.js';
+import {attachSceneV2,sceneLayerEntries,groupSceneLayers,ungroupSceneLayers,transformSceneGroup,canonicalScene,validateSceneExtensions,sceneGroups,sceneGroupMembers,moveSceneNode,validateVectorMask} from '../src/scene-model.js';
 import {draft} from '../src/domain.js';
 
 test('Scene v2 stores only layers, including arbitrary ink stacking',()=>{
@@ -67,4 +67,13 @@ test('ungroup outer nesting retains inner group membership and raw source IDs',(
  assert.equal(d.items.find(x=>x.id==='m1').creativeGroupID,'nested');
  assert.equal(sceneGroups(d).some(g=>g.id==='nested'),true);
  assert.deepEqual(d.items.map(x=>x.assetID).sort(),['real-1','real-2']);
+});
+
+test('physical vector masks reject crossed polygons, escaped holes and overlaps',()=>{
+ const outer=[[0,0],[1,0],[1,1],[0,1]];
+ const square=[[.2,.2],[.4,.2],[.4,.4],[.2,.4]];
+ assert.doesNotThrow(()=>validateVectorMask({outer,holes:[square]}));
+ assert.throws(()=>validateVectorMask({outer,holes:[[[.8,.8],[1.1,.8],[.95,.95]]]}),/坐标无效/);
+ assert.throws(()=>validateVectorMask({outer:[[0,0],[1,1],[1,0],[0,1]]}),/交叉|轮廓/);
+ assert.throws(()=>validateVectorMask({outer,holes:[square,[[.3,.3],[.6,.3],[.6,.6],[.3,.6]]]}),/交叉|孔洞/);
 });
