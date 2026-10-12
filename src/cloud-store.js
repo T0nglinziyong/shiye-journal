@@ -400,6 +400,29 @@ async function cloudAll(store){
   }
   throw Error('读取期间其他设备持续修改资料；未缓存不完整的结果，请重试');
 }
+// Explicit repair/read path for a saved image whose IndexedDB copy is
+// corrupt or Safari cannot decode it. Do not trust the local cached bytes.
+// A missing remote record remains missing; never synthesize an image or
+// overwrite any Cloud record from the recovery path.
+async function cloudReloadBlob(id){
+  if(typeof id!=='string'||!id)return undefined;
+  const user=await identity();
+  const {data,error}=await cloudClient().from('shiye_records')
+    .select('record').eq('user_id',user).eq('store','blobs')
+    .eq('id',id).maybeSingle();
+  if(error)throw Error('无法读取云端原始图片记录：'+error.message);
+  const record=data?.record;
+  if(!record)return undefined;
+  if(!['cos','supabase'].includes(record.storageProvider)||
+     !record.storagePath?.startsWith(user+'/'))
+     throw Error('云端原始图片路径不属于当前账号');
+  const blob=await downloadObject(record.storagePath,record.storageProvider);
+  if(!usableBlob(blob))throw Error('云端原始图片尚未上传完整');
+  images.set(record.storagePath,Promise.resolve(blob));
+  await remember('image:'+record.storagePath,blob).catch(error=>
+    console.warn('原图已重新下载，但本机缓存写入待重试',error?.message));
+  return {id,data:blob};
+}
 async function cloudGet(store,id){
   const pending=await pendingOverride(store,id);
   if(pending&&!(store==='blobs'&&pending.record&&!usableBlob(pending.record.data)))return structuredClone(pending.record);
@@ -915,7 +938,7 @@ async function cloudRestoreEmergency(snapshot){
   if(typeof cache.restoreUnifiedOutboxes!=='function')throw Error('当前浏览器不支持原子恢复唯一同步队列');
   return cache.restoreUnifiedOutboxes(key,snapshot.projects,snapshot.imports);
 }
-return {cloudCloseCacheBeforeRemoteReset,cloudSetResetCleanupPending,cloudRunExclusiveReset,cloudPurgeLocalAfterReset,cloudConflictReview,cloudConflictBackup,cloudResolveProjectConflict,cloudMigrationInventory,cloudMigrationOriginalProject,cloudMigrationCommit,cloudLegacyProjectBackup,cloudAll,cloudGet,cloudPreview,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudClearCache,cloudResumeCache,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudPendingLocalSummary,cloudPendingDetails,cloudDiscardPending,cloudFlushProjects,cloudProjectDocument,cloudEmergencySnapshot,cloudRestoreEmergency,cloudBackupBlobIDs};
+return {cloudReloadBlob,cloudCloseCacheBeforeRemoteReset,cloudSetResetCleanupPending,cloudRunExclusiveReset,cloudPurgeLocalAfterReset,cloudConflictReview,cloudConflictBackup,cloudResolveProjectConflict,cloudMigrationInventory,cloudMigrationOriginalProject,cloudMigrationCommit,cloudLegacyProjectBackup,cloudAll,cloudGet,cloudPreview,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudClearCache,cloudResumeCache,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudPendingLocalSummary,cloudPendingDetails,cloudDiscardPending,cloudFlushProjects,cloudProjectDocument,cloudEmergencySnapshot,cloudRestoreEmergency,cloudBackupBlobIDs};
 }
 let projectPreview=()=>null;
 export const setCloudProjectPreview=producer=>{projectPreview=producer;};
@@ -933,6 +956,7 @@ export const cloudMigrationOriginalProject=(...args)=>current.cloudMigrationOrig
 export const cloudMigrationCommit=(...args)=>current.cloudMigrationCommit(...args);
 export const cloudAll=(...args)=>current.cloudAll(...args);
 export const cloudGet=(...args)=>current.cloudGet(...args);
+export const cloudReloadBlob=(...args)=>current.cloudReloadBlob(...args);
 export const cloudTransaction=(...args)=>current.cloudTransaction(...args);
 export const cloudCheckpoint=(...args)=>current.cloudCheckpoint(...args);
 export const cloudCachedCollections=(...args)=>current.cloudCachedCollections(...args);
