@@ -105,6 +105,7 @@ export function createPrivateCache({name='shiye-private-read-cache-v2',limit=160
         await tx.done;return [projects.length,imports.length];
       }catch(error){try{tx.abort();}catch{}await tx.done.catch(()=>{});throw error;}
     },
+    async close(){if(connection){const connectionToClose=connection;connection=undefined;(await connectionToClose).close();}},
     async purgeAccount(account){
       const d=await db(),tx=d.transaction(['entries','sizes'],'readwrite');
       try{
