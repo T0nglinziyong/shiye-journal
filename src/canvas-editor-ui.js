@@ -15,6 +15,7 @@ import {createIcon} from './icons.js';
 import {historyTitle,renameHistory,deleteDraft,captureHistory,restoreHistoryDraft} from './project-history.js';
 import {syncSelectionGeometry} from './selection-geometry.js';
 import {syncInkSceneDOM} from './ink-scene-svg.js';
+import {eraserBehavior,pointerSamples,eraserPathSamples,eraseStrokesAlongPath} from './ink-gesture.js';
 import {validateScenePhysical} from './creative.js';
 import {attachSceneV2} from './scene-v2.js';
 import {groupSceneLayers,ungroupSceneLayers,sceneGroupMembers,sceneLayerEntries,sceneGroups,transformSceneGroup,moveSceneNode,validateVectorMask} from './scene-model.js';
@@ -234,7 +235,7 @@ export function mountCanvasEditor(c){
   function toolSettings(anchor,mode){const p=openPopover(anchor,{title:labels[mode],width:290,menu:true}),el=p.content;
     if(mode==='pen'){for(const [id,name] of [['fountain','钢笔'],['ballpoint','圆珠笔'],['brush','画笔']]){const b=button(name,()=>{prefs.penStyle=id;prefsChanged();p.close();contextTools();});b.setAttribute('aria-checked',String(prefs.penStyle===id));el.append(b);}}
     else if(mode==='highlighter'){toggle(el,'直线绘制',prefs.markerStraight,value=>{prefs.markerStraight=value;prefsChanged();});}
-    else if(mode==='eraser'){for(const [id,name] of [['fine','精细橡皮擦'],['standard','标准橡皮擦'],['brush','画笔橡皮擦']]){const b=button(name,()=>{prefs.eraserStyle=id;prefs.wholeStroke=id==='standard';prefsChanged();p.close();});b.setAttribute('aria-checked',String((prefs.eraserStyle||'standard')===id));el.append(b);}toggle(el,'仅擦除荧光笔痕迹',!!prefs.eraserOnlyHighlighter,value=>{prefs.eraserOnlyHighlighter=value;prefsChanged();});}
+    else if(mode==='eraser'){for(const [id,name] of [['fine','精细橡皮擦'],['standard','标准橡皮擦 · 擦除经过部分'],['brush','画笔橡皮擦 · 擦除整条笔迹']]){const b=button(name,()=>{prefs.eraserStyle=id;prefs.wholeStroke=id==='brush';prefsChanged();p.close();});b.setAttribute('aria-checked',String((prefs.eraserStyle||'standard')===id));el.append(b);}toggle(el,'仅擦除荧光笔痕迹',!!prefs.eraserOnlyHighlighter,value=>{prefs.eraserOnlyHighlighter=value;prefsChanged();});}
     else{state.selectionFilter={ink:true,material:true,text:true,shape:true,...state.selectionFilter};for(const [key,name] of [['ink','手写笔画'],['material','素材'],['text','文字框'],['shape','图形']])toggle(el,name,state.selectionFilter[key],v=>state.selectionFilter[key]=v);const modeRow=document.createElement('div');modeRow.className='canvas-selection-mode';el.append(modeRow);for(const [id,name] of [['contain','必须全部框住'],['intersect','只需要相交']]){const b=button(name,()=>{state.selectionMode=id;modeRow.querySelectorAll('button').forEach(n=>n.setAttribute('aria-checked',String(n===b)));});b.setAttribute('aria-checked',String((state.selectionMode||'contain')===id));modeRow.append(b);}}
   }
   function shapePicker(anchor){const p=openPopover(anchor,{title:'添加图形',width:innerWidth>=900?432:360}),tabs=document.createElement('div'),grid=document.createElement('div');p.surface.classList.add('swift-shape-picker');tabs.className='swift-segments';grid.className='canvas-picker-grid';p.content.append(tabs,grid);let version=0;const show=async tab=>{const ticket=++version;grid.replaceChildren();let choices=tab==='common'?commonShapes:tab==='advanced'?advancedShapes:entries.filter(e=>e.kind==='shape'&&!e.value.hidden).map(e=>[e.value.id,e.value.kind==='vector'?'自定义图形':e.value.kind,e.value]);if(ticket!==version||!grid.isConnected)return;grid.replaceChildren();for(const [id,name,copy] of choices){const sample=copy||configureShape(primitive(id,d),id),b=button('',()=>{p.close();change(()=>{const shape=copy?{...structuredClone(copy),id:uid(),locked:false,hidden:false}:configureShape(primitive(id,d),id);shape.x=d.canvas.width/2;shape.y=d.canvas.height/2;shape.zIndex=Math.max(0,...allEntries(d).map(e=>e.value.zIndex||0))+1;d.primitives.push(shape);state.selected=shape.id;state.tool='select';state.toolHighlight='shape';state.multiSelected=[];});});b.dataset.shapeKind=copy?'used':id;b.innerHTML=shapeSVG(sample)+'<span>'+esc(name)+'</span>';grid.append(b);}tabs.querySelectorAll('button').forEach(b=>b.classList.toggle('selected',b.dataset.tab===tab));};for(const [id,name] of [['used','已使用图形'],['common','基础图形'],['advanced','高级图形']]){const b=button(name,()=>show(id));b.dataset.tab=id;tabs.append(b);}show('common');}
@@ -504,12 +505,96 @@ export function mountCanvasEditor(c){
     const existing=entries.find(x=>x.kind==='text'&&x.value.id===e.target.closest('[data-object]')?.dataset.object);if(existing){beginInlineText(existing);return;}
     if(e.target.closest('[data-object]'))return;const r=page.getBoundingClientRect();let added;change(()=>{const x=(e.clientX-r.left)/r.width*d.canvas.width,y=(e.clientY-r.top)/r.height*d.canvas.height,width=Math.min(d.canvas.width*.35,d.canvas.width-x);const t={...textBlock('',d),...state.textDefaults,id:uid(),x:x+width/2,y:y+50,width:Math.max(60,width),height:100,alignment:state.textDefaults?.alignment||'left'};d.textBlocks.push(t);added=t;state.selected=t.id;state.tool='select';state.toolHighlight='text';state.multiSelected=[];state.selectedStrokes=[];});beginInlineText({kind:'text',value:added},true);
   }else if(state.tool==='select'&&!e.target.closest('[data-object],.selected-object-overlay')){view.endTextEditing?.();state.selected=null;state.multiSelected=[];state.selectedStrokes=[];state.selectionPath=null;render();}};
-  const ink=page.querySelector('#ink'),ctx=ink.getContext('2d');let stroke=null,erase=null,frame=null;const paint=()=>{frame=null;ctx.clearRect(0,0,ink.width,ink.height);drawInk(ctx,stroke?[stroke]:[]);syncInkSceneDOM(page,d);},schedule=()=>{if(!frame)frame=requestAnimationFrame(paint);},point=e=>{const r=ink.getBoundingClientRect();return {x:(e.clientX-r.left)/r.width*d.canvas.width,y:(e.clientY-r.top)/r.height*d.canvas.height,p:e.pressure||.5};};paint();view.canvasInkRefresh=schedule;
-  ink.onpointerdown=e=>{if(!['pen','highlighter','eraser'].includes(state.tool)||e.button>0)return;e.preventDefault();checkpoint();ink.setPointerCapture(e.pointerId);if(state.tool==='eraser'){erase={id:e.pointerId};d.strokes=eraseStrokes(d.strokes,point(e),(prefs.eraserStyle||'standard')==='standard'?10:prefs.eraserWidth/((prefs.eraserStyle||'standard')==='fine'?4:2),(prefs.eraserStyle||'standard')==='standard',!!prefs.eraserOnlyHighlighter);schedule();return;}const marker=state.tool==='highlighter',key=marker?'marker':'pen';stroke={id:e.pointerId,points:[point(e)],width:prefs[key+'Width'],color:prefs[key+'Color'],opacity:marker?.4:1,penStyle:marker?'marker':prefs.penStyle};schedule();};
-  ink.onpointermove=e=>{if(erase?.id===e.pointerId){e.preventDefault();const wholeStroke=(prefs.eraserStyle||'standard')==='standard';for(const sample of e.getCoalescedEvents?.()||[e])d.strokes=eraseStrokes(d.strokes,point(sample),wholeStroke?10:prefs.eraserWidth/((prefs.eraserStyle||'standard')==='fine'?4:2),wholeStroke,!!prefs.eraserOnlyHighlighter);schedule();return;}if(stroke?.id!==e.pointerId)return;e.preventDefault();for(const sample of e.getCoalescedEvents?.()||[e])stroke.points.push(point(sample));schedule();};
-  ink.onpointerup=e=>{if(stroke?.id===e.pointerId){const {id,...line}=stroke;line.id=uid();d.strokes.push(state.tool==='highlighter'&&prefs.markerStraight?straightStroke(line):line);stroke=null;saveProject();render();}else if(erase?.id===e.pointerId){erase=null;saveProject();render();if(prefs.returnToPen){state.tool=state.previousInkTool||'pen';state.toolHighlight=state.tool;render();}else schedule();}};
-  ink.onpointercancel=()=>{if(!stroke&&!erase)return;stroke=null;erase=null;const before=state.undo.pop();if(before?.kind==='scene-pending-v2')d.strokes=before.before.strokes;paint();};
-  view.cancelInkGesture=ink.onpointercancel;
+  const ink=page.querySelector('#ink'),ctx=ink.getContext('2d');
+  let stroke=null,erase=null,frame=null,painted=0,eraserSamples=[],lastEraserPoint=null;
+  const cursor=document.createElement('div');cursor.className='canvas-eraser-cursor';cursor.setAttribute('aria-hidden','true');cursor.hidden=true;page.append(cursor);
+  const point=e=>{const r=ink.getBoundingClientRect();return {x:(e.clientX-r.left)/Math.max(1,r.width)*d.canvas.width,y:(e.clientY-r.top)/Math.max(1,r.height)*d.canvas.height,p:e.pressure>0?e.pressure:.5};};
+  const showEraser=e=>{
+    const {radius}=eraserBehavior(prefs),p=point(e),scale=page.clientWidth/d.canvas.width,diameter=radius*2*scale;
+    cursor.hidden=false;cursor.style.width=diameter+'px';cursor.style.height=diameter+'px';
+    cursor.style.left=(p.x*scale-diameter/2)+'px';cursor.style.top=(p.y*scale-diameter/2)+'px';
+  };
+  const paint=()=>{
+    frame=null;
+    if(eraserSamples.length){
+      const {radius,whole}=eraserBehavior(prefs),samples=eraserSamples;eraserSamples=[];
+      d.strokes=eraseStrokesAlongPath(d.strokes,samples,radius,whole,!!prefs.eraserOnlyHighlighter);
+      // Show the actual residual strokes using the temporary ink canvas.
+      // Rebuilding hundreds of live SVG nodes during each Pencil move stalls
+      // iOS drawing. The Scene SVGs are restored only after pointerup.
+      page.classList.add('erasing-ink');
+      ctx.clearRect(0,0,ink.width,ink.height);
+      drawInk(ctx,d.strokes);
+    }
+    if(stroke){
+      const pts=stroke.points;
+      if(!painted){drawInk(ctx,[{...stroke,points:[pts[0]]}]);painted=1;}
+      if(pts.length>painted){
+        // Paint only the segments received since the previous frame. Replaying
+        // the full current stroke on every move was O(points^2).
+        drawInk(ctx,[{...stroke,points:pts.slice(Math.max(0,painted-1))}]);
+        painted=pts.length;
+      }
+    }else if(painted){ctx.clearRect(0,0,ink.width,ink.height);painted=0;}
+  };
+  const schedule=()=>{if(frame===null)frame=requestAnimationFrame(paint);};
+  const addStrokeSamples=e=>{
+    const last=stroke.points.at(-1);
+    for(const p of pointerSamples(e,point,last))stroke.points.push(p);
+  };
+  const addEraserSamples=e=>{
+    for(const p of pointerSamples(e,point,lastEraserPoint)){
+      eraserSamples.push(...eraserPathSamples(lastEraserPoint,p,eraserBehavior(prefs).radius));
+      lastEraserPoint=p;
+    }
+  };
+  paint();view.canvasInkRefresh=schedule;
+  ink.onpointerdown=e=>{
+    if(!['pen','highlighter','eraser'].includes(state.tool)||e.button>0)return;
+    e.preventDefault();checkpoint();ink.setPointerCapture(e.pointerId);
+    if(state.tool==='eraser'){
+      erase={id:e.pointerId};lastEraserPoint=null;showEraser(e);addEraserSamples(e);schedule();return;
+    }
+    cursor.hidden=true;ctx.clearRect(0,0,ink.width,ink.height);
+    const marker=state.tool==='highlighter',key=marker?'marker':'pen';
+    stroke={id:e.pointerId,points:[point(e)],width:prefs[key+'Width'],color:prefs[key+'Color'],opacity:marker?.4:1,penStyle:marker?'marker':prefs.penStyle};
+    painted=0;schedule();
+  };
+  ink.onpointermove=e=>{
+    if(erase?.id===e.pointerId){e.preventDefault();showEraser(e);addEraserSamples(e);schedule();return;}
+    if(stroke?.id===e.pointerId){e.preventDefault();addStrokeSamples(e);schedule();return;}
+    if(state.tool==='eraser'&&e.pointerType==='pen')showEraser(e);
+  };
+  ink.onpointerup=e=>{
+    if(stroke?.id===e.pointerId){
+      addStrokeSamples(e);
+      const {id,...line}=stroke;line.id=uid();
+      d.strokes.push(state.tool==='highlighter'&&prefs.markerStraight?straightStroke(line):line);
+      stroke=null;painted=1;saveProject();render();schedule();
+    }else if(erase?.id===e.pointerId){
+      addEraserSamples(e);if(frame!==null){cancelAnimationFrame(frame);frame=null;}paint();
+      erase=null;lastEraserPoint=null;cursor.hidden=true;saveProject();render();
+      page.classList.remove('erasing-ink');ctx.clearRect(0,0,ink.width,ink.height);
+      if(prefs.returnToPen){state.tool=state.previousInkTool||'pen';state.toolHighlight=state.tool;render();}
+      else schedule();
+    }
+  };
+  ink.onpointerleave=e=>{if(!erase)cursor.hidden=true;};
+  const discardInkGesture=()=>{
+    if(!stroke&&!erase)return;
+    stroke=null;erase=null;lastEraserPoint=null;eraserSamples=[];
+    if(frame!==null){cancelAnimationFrame(frame);frame=null;}
+    cursor.hidden=true;page.classList.remove('erasing-ink');
+    painted=1;const before=state.undo.pop();if(before?.kind==='scene-pending-v2')d.strokes=before.before.strokes;
+    ctx.clearRect(0,0,ink.width,ink.height);painted=0;syncInkSceneDOM(page,d);
+  };
+  ink.onpointercancel=e=>{
+    // Safari may cancel a Pencil pointer without a deliberate user undo.
+    // Keep already captured writing; only a true two-finger navigation abort
+    // calls discardInkGesture explicitly through the viewport adapter.
+    if(stroke?.id===e.pointerId||erase?.id===e.pointerId)ink.onpointerup(e);
+  };
+  view.cancelInkGesture=discardInkGesture;
   mountCanvasViewport(c,page);
   // Delete only a selected, unlocked canvas object, never focused text fields
   // or an active inline text editor. Tear down with the viewport listeners.
