@@ -11,7 +11,7 @@ export function closePopoverFor(anchor) {
 export function togglePopover(anchor, options = {}) {
   return closePopoverFor(anchor) ? null : openPopover(anchor, options);
 }
-export function openPopover(anchor, {title = '', width = 340, menu = false, adjustPosition = null} = {}) {
+export function openPopover(anchor, {title = '', width = 340, menu = false, adjustPosition = null, dismissOnOutside = true} = {}) {
   closePopover();
   const controller = new AbortController(), surface = document.createElement('section'), owned = new Map();
   let closed = false;
@@ -75,7 +75,7 @@ export function openPopover(anchor, {title = '', width = 340, menu = false, adju
   };
   active = close; activeAnchor = anchor;
   const observer = new ResizeObserver(position); observer.observe(surface); observer.observe(anchor);
-  document.addEventListener('pointerdown', e => {
+  if (dismissOnOutside) document.addEventListener('pointerdown', e => {
     if (!surface.contains(e.target) && !anchor.contains(e.target) && ![...owned.keys()].some(el => el.contains(e.target))) close();
   }, {signal: controller.signal, capture:true});
   document.addEventListener('keydown', e => {
