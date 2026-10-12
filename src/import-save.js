@@ -101,6 +101,11 @@ export async function saveImportBatch({state,db,urls,render,onSaved}) {
   if(!savedCount)throw Error('请选择至少一件素材或一个页面');
   // Commit the whole batch once. A failed transaction never leaves a partly
   // imported batch that would be duplicated when the user retries.
+  // Import-completed must never be displayed for a candidate whose saved
+  // cutout/original/frame bytes are missing. Those Blob IDs are required for
+  // reliable editing after a later reload on iOS.
+  const invalid=blobs.find(row=>!(row.data instanceof Blob)||row.data.size<8);
+  if(invalid)throw Error('素材原图或抠图字节尚未准备完整，未保存当前批次；请重新识别后再试');
   const result=db.stageImport?await db.stageImport({assets,blobs,projects}):await db.transaction(['assets','blobs','projects'],tx=>{for(const a of assets)tx.objectStore('assets').put(a);for(const b of blobs)tx.objectStore('blobs').put(b);for(const p of projects)tx.objectStore('projects').put(p);});
   state.assets.push(...assets);state.projects.push(...projects);for(const b of blobs)urls.set(b.id,URL.createObjectURL(b.data));
   state.importSavedCount=savedCount;state.importPending=!!result?.pending;state.importStep='done';render();
