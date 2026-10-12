@@ -146,8 +146,8 @@ function updateSyncIndicator(){
 }
 function mountPageSyncIndicator(){
   if(!cloudEnabled)return;
-  const target=null; // Import flow reserves its single compact header for navigation.
-  if(target){const button=document.querySelector('#sync-indicator').cloneNode(true);button.removeAttribute('id');button.dataset.syncIndicator='';button.onclick=()=>void openSyncDetails();target.append(button);}
+  // Import has its own compact step toolbar. Sync status remains accessible
+  // through the normal account UI after leaving the import wizard.
   updateSyncIndicator();
 }
 const recognitionPreprocessOptions=()=>({
