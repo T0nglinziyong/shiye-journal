@@ -661,6 +661,8 @@ async function reviewedConflict(kind,id){
  const sync=kind==='project'?projectSync:importSync;
  const row=(await sync.pending()).find(item=>item.record?.id===id);
  if(!row)throw Error('待同步记录已改变或已完成，请重新打开同步详情');
+ if(await wasCommitted(row.operationID,row.baseRevision))
+   throw Error('服务器已经确认这次保存，请重新打开同步详情刷新作品');
  let local;
  if(kind==='project')local=row.record;
  else{
@@ -717,6 +719,7 @@ async function cloudResolveProjectConflict({kind,id,serial,expectedRevision,choi
   const pending=(await sync.pending()).find(item=>item.record?.id===id);
   if(!pending||pending.serial!==serial)throw Error('本机作品又被编辑，请重新检查版本');
   if(choice==='cloud'){
+   if(!remote)throw Error('云端没有这份作品，不能选择保留云端版本');
    await sync.resolvePending(id,serial);
    notifyCloudSuperseded();
    return {choice,originalID:local.id,remoteID:remote?.id||null};
