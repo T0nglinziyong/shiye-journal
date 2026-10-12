@@ -9,7 +9,7 @@ test('full synthetic backup restores six stores and exact Blob bytes; failed res
   const previous=globalThis.fetch;globalThis.fetch=async()=>new Response('',{status:404});
   try{
     const store=await import('../src/store.js?backup-validation');
-    const values={assets:[{id:'a',title:'synthetic',blobId:'b',originalBlobId:'b',supply:{quantity:3}}],blobs:[{id:'b',data:new Blob([new Uint8Array([0,1,127,255])],{type:'image/png'})}],series:[{id:'s',title:'synthetic series'}],projects:[{id:'p',drafts:[{id:'d',items:[{assetID:'a'}]}]}],meta:[{id:'m',value:false}],trash:[{id:'t',original:{id:'deleted'}}]};
+    const values={assets:[{id:'a',title:'synthetic',blobId:'b',originalBlobId:'b',supply:{quantity:3}}],blobs:[{id:'b',data:new Blob([new Uint8Array([0,1,127,255])],{type:'image/png'})}],series:[{id:'s',title:'synthetic series'}],projects:[{id:'p',activeDraftID:'d',drafts:[{id:'d',sceneVersion:2,canvas:{width:700,height:1000},physicalPageHeightMM:297,pageMode:'single',layers:[{id:'a-placement',type:'material',assetID:'a',x:50,y:70,width:40,height:50,generationBaseline:{x:50,y:70,width:40,height:50}}]}]}],meta:[{id:'m',value:false}],trash:[{id:'t',original:{id:'deleted'}}]};
     await store.transaction(Object.keys(values),tx=>{for(const [name,records] of Object.entries(values))for(const record of records)tx.objectStore(name).put(record);});
     // Legacy JSON archives must continue restoring byte-identically.
     const encoded=Object.fromEntries(Object.entries(values).map(([name,items])=>[name,items]));

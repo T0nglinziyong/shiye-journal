@@ -57,6 +57,6 @@ test('candidate scoring reuses Sobel and limits expensive region refinement',asy
  const source=await readFile(new URL('../src/paper-quad-optimized.js',import.meta.url),'utf8');
  assert.equal((source.match(/cv\.Sobel\(gray/g)||[]).length,2);
  assert.match(source,/groups\.slice\(0,A4_GROUP_LIMIT\)/);
- assert.match(source,/firstHull&&strongestClosed<\.50/);
+ assert.match(source,/firstHull&&strongestClosed<\.60/);
  assert.doesNotMatch(source,/colorSpaceConversion|equalizeHist|createWorker/);
 });

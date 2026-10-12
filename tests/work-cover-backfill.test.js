@@ -88,7 +88,7 @@ test('cover migration waits for committed COS metadata and exposes a retry on mi
   pendingProjects:async()=>[],completeProject:async row=>row,
   stageProject:async row=>{staged.push(row);},
   flushProjects:async()=>{},
-  get:async()=>ready?{...p,drafts:[{id:'d',coverImageID:'project-cover:cos/account/hash'}]}:p
+  get:async()=>ready?{...p,drafts:[{id:'d',coverImageID:'project-cover:cos/account/hash-preview480.webp'}]}:p
  }});
  manager.enqueue(p.id,p.updatedAt);
  await manager.whenIdle();

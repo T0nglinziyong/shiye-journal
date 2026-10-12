@@ -5,7 +5,7 @@ import {renderWorkCoverSnapshot} from '../src/work-cover-snapshot.js';
 test('COS Works cover renders complete scene using only 480px material blobs',async()=>{
   const calls=[],closed=[],output=new Blob(['snapshot'],{type:'image/webp'});
   const project={id:'work-1',activeDraftID:'draft-1',drafts:[
-    {id:'draft-1',canvas:{width:750,height:1000},items:[{assetID:'material-1'}],strokes:[{points:[{x:1,y:2}]}]}]};
+    {id:'draft-1',sceneVersion:2,canvas:{width:750,height:1000},layers:[{id:'m',type:'material',assetID:'material-1'},{id:'ink',type:'ink',points:[{x:1,y:2}]}]}]};
   let scene;
   const cover=await renderWorkCoverSnapshot(project,{
     resolveAsset:async id=>{calls.push(['asset',id]);return {id,blobId:'blob-1'};},
@@ -27,7 +27,7 @@ test('COS Works cover renders complete scene using only 480px material blobs',as
 });
 
 test('missing referenced image rejects cover without altering project document',async()=>{
-  const project={id:'work-2',activeDraftID:'d',drafts:[{id:'d',canvas:{width:600,height:800},items:[{assetID:'missing'}]}]},
+  const project={id:'work-2',activeDraftID:'d',drafts:[{id:'d',sceneVersion:2,canvas:{width:600,height:800},layers:[{id:'m',type:'material',assetID:'missing'}]}]},
     initial=structuredClone(project);
   await assert.rejects(()=>renderWorkCoverSnapshot(project,{
     resolveAsset:async()=>null,

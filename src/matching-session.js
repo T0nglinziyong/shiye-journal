@@ -8,6 +8,7 @@ import {materialAliases} from './material-alias.js';
 import {createMatchingCoverCache} from './matching-cover-cache.js';
 import {reusePagePreviews} from './preview-content-cache.js';
 import {captureMatchingScroll,restoreMatchingScroll} from './matching-scroll.js';
+import {prepareProjectScene} from './scene-v2.js';
 const ID='matching-session-v1';
 const KEYS=['basket','coreIDs','excludedAssetIDs','matchCore','matchRatio','matchMode','matchStyle','matchStyles','matchPurposes','matchIntent','matchContentPolicy','matchTextPresentation','matchPurpose','matchProcessing','materialUseHints','materialUseRequired','assetProcessing','customPaperWidth','customPaperHeight'];
 export function matchingSnapshot(state,variants){return {id:ID,context:Object.fromEntries(KEYS.map(k=>[k,structuredClone(state[k])])),variants:structuredClone(variants)};}
@@ -15,12 +16,13 @@ export function restoreMatchingSession(record,state){
  if(!record)return [];
  for(const key of KEYS)if(record.context?.[key]!==undefined)state[key]=key==='matchProcessing'&&record.context[key]==='AI 自主加工'?'不预设':record.context[key];
  return (Array.isArray(record.variants)?record.variants:[])
-  .filter(v=>v&&typeof v.id==='string'&&usableProjectSnapshot(v.project))
+  .filter(v=>v&&typeof v.id==='string')
+  .flatMap(v=>{try{prepareProjectScene(v.project);}catch{return [];}return usableProjectSnapshot(v.project)?[v]:[];})
   .map(v=>v.status==='running'?{...v,status:'interrupted',progress:'页面曾关闭，生成已中断；已保留收到的完整步骤。'}:v);
 }
 export function variantDraftProject(variant,existing,newID){
  if(existing?.isDraft)return existing;
- const p=structuredClone(variant.project);p.id=newID;p.isDraft=true;p.createdAt=p.updatedAt=new Date().toISOString();return p;
+ const p=prepareProjectScene(structuredClone(variant.project));p.id=newID;p.isDraft=true;p.createdAt=p.updatedAt=new Date().toISOString();return p;
 }
 export function createMatchingSession(c){
  let variants=[],queue=Promise.resolve(),controller=null,opening=false,lastSnapshot,ready=false;

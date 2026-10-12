@@ -30,7 +30,7 @@ const protocols = {
   },
   directPage:{
     native:false,
-    instruction:`一次返回完整JSON页面数据（page v3），不返回 tools、craft-plan 或 Markdown。页面合同：${JSON.stringify(directPageContract)}`,
+    instruction:`一次返回完整JSON页面数据（page v2：递归 layers 图层树），不返回 tools、craft-plan 或 Markdown。页面合同：${JSON.stringify(directPageContract)}`,
     request:() => ({response_format:{type:'json_object'}}),
     calls:(message, turn) => callsFromJSON(message, turn, directTools)
   }

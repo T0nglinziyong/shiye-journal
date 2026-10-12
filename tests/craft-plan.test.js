@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {webcrypto} from 'node:crypto';
 import {project} from '../src/domain.js';
+import {attachSceneV2} from '../src/scene-model.js';
 import {applyToolCalls} from '../src/creative.js';
 import {craftDigest,craftSceneHash,isManagedUnchanged} from '../src/craft-fingerprint.js';
 import {assetSourceRevision,assetFromSourceSnapshot,materialSourceSnapshot} from '../src/material-anatomy.js';
@@ -23,8 +24,8 @@ test('craft hashes use the same SHA-256 as Web Crypto and are key-order independ
 });
 test('final scene hash includes actual ink coordinates, alpha and masks, not only item counts',()=>{
  const a=base();a.strokes=[{id:'s',points:[{x:1,y:2},{x:5,y:8}],width:3,color:'#000000'}];
- const h=craftSceneHash(a),b=structuredClone(a);b.strokes[0].points[0].x=2;assert.notEqual(craftSceneHash(b),h);
- const c=structuredClone(a);c.strokes[0].opacity=.4;assert.notEqual(craftSceneHash(c),h);
+ const h=craftSceneHash(a),b=attachSceneV2(structuredClone(a));b.strokes[0].points[0].x=2;assert.notEqual(craftSceneHash(b),h);
+ const c=attachSceneV2(structuredClone(a));c.strokes[0].opacity=.4;assert.notEqual(craftSceneHash(c),h);
  const d=structuredClone(a);d.agentRun={status:'editing'};d.craftReceipts=[{fake:true}];assert.equal(craftSceneHash(d),h);
 });
 test('source snapshots reconstruct exact source identities without private asset extras',()=>{
@@ -78,7 +79,7 @@ test('window plan returns its exact core as a parked offcut instead of duplicati
 test('manual edits made before an AI request survive full-page replacement',()=>{
  const a=material(),d=base();const initial=successful(run({tools:[{name:'upsert_text',arguments:{items:[{key:'copy',content:'original',width:.5}]}}]},d,a));
  initial.textBlocks[0].content='user changed this before the request';
- const page={version:3,style:'自由构图',intent:null,paper:{color:'#ffffff',pattern:'plain'},items:[],graphics:[],text_blocks:[]};
+ const page={version:2,style:'自由构图',intent:null,paper:{color:'#ffffff',pattern:'plain'},layers:[]};
  const result=run(page,initial,a);successful(result);assert.equal(result.draft.textBlocks[0].content,'user changed this before the request');
  const attempt=run({tools:[{name:'upsert_text',arguments:{items:[{key:'copy',content:'overwritten',width:.5}]}}]},initial,a);
  assert.equal(attempt.results[0].code,'MANUAL_EDIT_PROTECTED');assert.equal(attempt.draft.textBlocks[0].content,initial.textBlocks[0].content);

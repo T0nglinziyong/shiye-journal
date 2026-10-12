@@ -32,8 +32,10 @@ function example(spec,assets){
   d.paperColor='#f7f3e9';d.items=spec.pieces.flatMap(([name,rx,ry,z])=>{
     const id=materialIDByTitle.get(name),asset=assets.find(a=>a.id===id);if(!asset)return [];
     const item=itemFromAsset(asset,d,d.canvas.width*rx,d.canvas.height*ry,z);
-    const scale=Math.min(1,d.canvas.width*.83/item.width,d.canvas.height*.78/item.height);
-    item.width*=scale;item.height*=scale;item.generationBaseline={x:item.x,y:item.y,width:item.width,height:item.height,rotation:0,zIndex:z};
+    // Preset layouts are examples of real stock: never shrink a physical
+    // sticker simply to make the example fit within its page preview.
+    if(item.width>d.canvas.width*.83||item.height>d.canvas.height*.78)return [];
+    item.generationBaseline={x:item.x,y:item.y,width:item.width,height:item.height,rotation:0,zIndex:z};
     return [item];
   });
   if(!d.items.length)return null;

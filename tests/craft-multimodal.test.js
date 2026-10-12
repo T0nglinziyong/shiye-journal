@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {zipSync,unzipSync,strFromU8,strToU8} from 'fflate';
 import {project} from '../src/domain.js';
+import {attachSceneV2} from '../src/scene-v2.js';
 import {applyToolCalls} from '../src/creative.js';
 import {craftSceneHash} from '../src/craft-fingerprint.js';
 import {assetSourceRevision} from '../src/material-anatomy.js';
@@ -42,9 +43,12 @@ test('current default uses GPT vision and current provider settings only',()=>{
  assert.equal(normalizeAISettings({provider:'custom',endpoint:'https://example.invalid/chat',model:'mine',key:'value'}).endpoint,'https://example.invalid/chat');
  assert.equal(normalizeAISettings({finalVisualReview:false}).finalVisualReview,false);
 });
-test('direct JSON mode accepts the same full craft plan without a preliminary request',()=>{
- const a=asset(),d=project().drafts[0],p=plan(d,a),protocol=creativeProtocol({...normalizeAISettings(),generationMode:'direct'});
- const calls=protocol.calls({content:JSON.stringify(p)},1);assert.equal(calls.length,1);assert.equal(calls[0].function.name,'apply_craft_plan');
+test('direct JSON mode rejects a craft plan; agent mode runs the physical plan without weakening v2',()=>{
+ const a=asset(),d=project().drafts[0],p=plan(d,a),direct=creativeProtocol({...normalizeAISettings(),generationMode:'direct'});
+ assert.throws(()=>direct.calls({content:JSON.stringify(p)},1),/缺少字段|合同不合法/);
+ const agent=creativeProtocol({...normalizeAISettings(),generationMode:'agent',transport:'json'});
+ const calls=agent.calls({content:JSON.stringify({tools:[{name:'apply_craft_plan',arguments:p}]})},1);
+ assert.equal(calls.length,1);assert.equal(calls[0].function.name,'apply_craft_plan');
  ok(run({tools:calls},d,a));
 });
 test('the one current offline plan contract accepts multimodal observations',()=>{
@@ -54,24 +58,24 @@ test('the one current offline plan contract accepts multimodal observations',()=
 test('one exported task carries images, exact versions, multimodal instructions and working runtime entry points',async()=>{
  const a=asset(),p=project('one delivery');p.processing='自由拆解';
  const png=Uint8Array.from([137,80,78,71,13,10,26,10]);
- const handoff=await createOfflineHandoff({project:p,assets:[a],aliases:{m1:a.id},previews:[{alias:'m1',bytes:png}],settings:{generationMode:'direct'}});
+ const handoff=await createOfflineHandoff({project:p,assets:[a],aliases:{m1:a.id},previews:[{alias:'m1',bytes:png}],settings:{generationMode:'agent'}});
  const files=unzipSync(new Uint8Array(await handoff.blob.arrayBuffer()));
- assert.match(strFromU8(files['START_HERE.txt']),/observations/);assert.match(strFromU8(files['START_HERE.txt']),/一次交付/);
+ assert.match(strFromU8(files['START_HERE.txt']),/schema\/craft-plan\.json/);assert.match(strFromU8(files['START_HERE.txt']),/独立、可编辑/);
  assert.ok(files['runtime/glyphs.cjs']);assert.ok(files['schema/craft-plan.json']);assert.ok(files['materials/m1.png']);
  const envelope={format:'shiye-editable-project',version:1,source:handoff.source,plan:plan(handoff.source.baseDraft,a)};
  const imported=importEditableWork(JSON.stringify(envelope),[a],{trustedSource:handoff.source});assert.equal(imported.drafts[0].items.length,1);
  assert.equal(imported.processing,'自由拆解');assert.deepEqual(a.anatomy,undefined);
 });
-const weaveDraft=()=>({canvas:{width:300,height:200},physicalPageHeightMM:200,pageRatio:'custom:300x200',pageMode:'single',paperColor:'#fff',items:[
- {id:'strip',creativePieceID:'strip',assetID:'s',x:150,y:100,width:160,height:8,rotation:0,zIndex:1,materialMask:null,opacity:1},
- {id:'frame',creativePieceID:'frame',assetID:'f',x:150,y:100,width:140,height:80,rotation:0,zIndex:10,materialMask:{shape:'compound',outer:null,holes:[{shape:'rectangle',box:[.1,.2,.15,.6]},{shape:'rectangle',box:[.75,.2,.15,.6]}]}}
-],textBlocks:[],primitives:[],strokes:[]});
+const weaveDraft=()=>attachSceneV2({id:'weave',sceneVersion:2,canvas:{width:300,height:200},physicalPageHeightMM:200,pageRatio:'custom:300x200',pageMode:'single',paperColor:'#fff',layers:[
+ {type:'material',id:'strip',creativePieceID:'strip',assetID:'s',x:150,y:100,width:160,height:8,rotation:0,zIndex:1,materialMask:null,opacity:1},
+ {type:'material',id:'frame',creativePieceID:'frame',assetID:'f',x:150,y:100,width:140,height:80,rotation:0,zIndex:10,materialMask:{shape:'compound',outer:null,holes:[{shape:'rectangle',box:[.1,.2,.15,.6]},{shape:'rectangle',box:[.75,.2,.15,.6]}]}}
+]});
 test('two real apertures create front and back fragments of ONE physical piece with no scale change',()=>{
  const d=weaveDraft();compileTwoHoleWeaves(d,[{piece:'strip',target:'frame',holes:[0,1]}]);
  assert.equal(d.items.length,2);const views=projectMaterialViews(d.items[0]);assert.equal(views.length,3);assert.ok(views.every(v=>v.ownerID==='strip'&&v.width===160&&v.height===8));
  const area=views.reduce((n,v)=>n+geometryArea([[v.materialMask.outer,...v.materialMask.holes]]),0);assert.ok(Math.abs(area-1)<1e-9);
  assert.equal(sceneRenderEntries(d).length,4);assert.ok(views.some(v=>v.zIndex>10)&&views.some(v=>v.zIndex<10));
- const changed=structuredClone(d);changed.items[0].craftDisplaySlices[0].zOffset++;assert.notEqual(craftSceneHash(changed),craftSceneHash(d));
+ const changed=attachSceneV2(structuredClone(d));changed.items[0].craftDisplaySlices[0].zOffset++;assert.notEqual(craftSceneHash(changed),craftSceneHash(d));
 });
 test('rotating both materials preserves the local two-hole weave; false openings and too-wide strips fail',()=>{
  const d=weaveDraft();d.items.forEach(i=>i.rotation=35);compileTwoHoleWeaves(d,[{piece:'strip',target:'frame',holes:[0,1]}]);assert.equal(projectMaterialViews(d.items[0]).length,3);

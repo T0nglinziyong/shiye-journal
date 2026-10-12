@@ -32,6 +32,11 @@ export function renderOfflinePreviewSVG(draft,source,previewFiles={}){
         ?`<image href="data:${previewImageFormat(bytes)?.mimeType||'image/png'};base64,${Buffer.from(bytes).toString('base64')}" x="${number(-crop.x*w/crop.width)}" y="${number(-crop.y*h/crop.height)}" width="${number(w/crop.width)}" height="${number(h/crop.height)}" preserveAspectRatio="none"/>`
         :`<rect width="${w}" height="${h}" fill="#e8ebe5" stroke="#8b9a8c"/><text x="8" y="24" font-size="17" fill="#53645a">${xml(image?.alias||'素材')}</text>`;
       layers.push(`<g transform="${transform}" opacity="${bounded(value.opacity)}"><svg x="${number(-w/2)}" y="${number(-h/2)}" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" overflow="hidden"><g transform="${value.isFlippedHorizontally?`translate(${w} 0) scale(-1 1)`:''}"${mask?` clip-path="url(#${clip})"`:''}>${content}</g></svg></g>`);
+    }else if(kind==='ink'){
+      const points=(value.points||[]).filter(p=>Number.isFinite(p.x)&&Number.isFinite(p.y));
+      if(!points.length)continue;
+      const path=points.map((point,index)=>`${index?'L':'M'}${number(point.x)} ${number(point.y)}`).join(' ');
+      layers.push(`<path d="${path}" fill="none" stroke="${xml(value.color||'#30463d')}" stroke-width="${number(value.width||3)}" stroke-linecap="round" stroke-linejoin="round" opacity="${bounded(value.opacity)}"/>`);
     }else if(kind==='shape'){
       layers.push(`<g transform="${transform}" opacity="${bounded(value.opacity)}"><svg x="${number(-w/2)}" y="${number(-h/2)}" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${shapeSVG(value)}</svg></g>`);
     }else{
@@ -49,12 +54,6 @@ export function renderOfflinePreviewSVG(draft,source,previewFiles={}){
       const text=lines.map(line=>`<text x="${number(tx)}" y="${number(top+line.y)}" text-anchor="${anchor}">${xml(line.text)}</text>`).join('');
       layers.push(`<g transform="${transform}" opacity="${bounded(value.opacity)}" fill="${xml(value.color||'#30463d')}" font-family="${family}" font-size="${font}" font-weight="${value.bold?'bold':'normal'}" font-style="${value.italic?'italic':'normal'}" letter-spacing="${number(value.letterSpacing||0)}">${text}</g>`);
     }
-  }
-  for(const stroke of draft.strokes||[]){
-    const points=(stroke.points||[]).filter(p=>Number.isFinite(p.x)&&Number.isFinite(p.y));
-    if(!points.length)continue;
-    const d=points.map((point,index)=>`${index?'L':'M'}${number(point.x)} ${number(point.y)}`).join(' ');
-    layers.push(`<path d="${d}" fill="none" stroke="${xml(stroke.color||'#30463d')}" stroke-width="${number(stroke.width||3)}" stroke-linecap="round" stroke-linejoin="round" opacity="${bounded(stroke.opacity)}"/>`);
   }
   const paperColor=xml(draft.paperColor||'#fcfaf0'),paper=[];
   if(['lines','grid'].includes(draft.paperPattern)){

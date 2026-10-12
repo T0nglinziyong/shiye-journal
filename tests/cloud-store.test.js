@@ -2,15 +2,33 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createCloudStore} from '../src/cloud-store.js';
 import {projectBlobText} from '../src/project-document.js';
+// All successfully staged project fixtures use the current-only persisted
+// Scene v2 tree. The malformed-outbox tests intentionally bypass this helper.
+function v2(record){
+ if(!record?.drafts)return record;
+ return {...record,drafts:record.drafts.map(d=>{
+  if(d.sceneVersion===2)return d;
+  const {items=[],textBlocks=[],primitives=[],strokes=[],...rest}=d;
+  const defaults=(n,i)=>({id:n.id||'test-'+i,x:n.x??50,y:n.y??60,width:n.width??30,height:n.height??30,zIndex:n.zIndex??i});
+  const layers=[
+   ...items.map((n,i)=>({...defaults(n,i),...n,assetID:n.assetID||'fixture-paper',type:'material'})),
+   ...textBlocks.map((n,i)=>({...defaults(n,i),color:'#224466',fontSize:24,...n,type:'text'})),
+   ...primitives.map((n,i)=>({...defaults(n,i),...n,type:'shape'})),
+   ...strokes.map((n,i)=>({...n,id:n.id||'ink-'+i,type:'ink',color:n.color||'#334455',width:n.width||2,points:n.points||[{x:1,y:2}]}))
+  ];
+  return {...rest,sceneVersion:2,layers};
+ })};
+}
+
 
 function fixture(cache=null,objectStorage=null,projectPreview=()=>null){
   const state={revision:0,rows:[],calls:[],commits:new Map(),fail:false,authError:false,uploads:[],downloads:0};
   const client={from(table){
     const filters={};const query={select(){return query;},eq(k,v){filters[k]=v;return query;},in(k,v){filters[k]=v;return query;},limit(){return query;},abortSignal(){return query;},order(){return query;},
       then(resolve){state.batchReads=(state.batchReads||0)+1;const rows=filters.store==='blobs'&&Array.isArray(filters.id)?(state.cloudCopies||state.rows.map(record=>({id:record.id,record}))):(state.cloudCopies||[]);return Promise.resolve(resolve({data:rows.filter(row=>!filters.id||(Array.isArray(filters.id)?filters.id.includes(row.id):row.id===filters.id))}));},
-      async range(start,end){state.reads=(state.reads||0)+1;const rows=state.rows.slice(start,end+1).map(record=>({record}));state.onReadPage?.(start,end);return {data:rows};},
+      async range(start,end){state.reads=(state.reads||0)+1;const rows=state.rows.slice(start,end+1).map(record=>({record:v2(record)}));state.onReadPage?.(start,end);return {data:rows};},
       async single(){return {data:{revision:state.revision}};},
-      async maybeSingle(){return {data:table==='shiye_commits'?(state.commits.has(filters.operation_id)?{revision:state.commits.get(filters.operation_id)}:null):state.rows.filter(r=>r.id===filters.id).map(record=>({record}))[0]||null};}};
+      async maybeSingle(){return {data:table==='shiye_commits'?(state.commits.has(filters.operation_id)?{revision:state.commits.get(filters.operation_id)}:null):state.rows.filter(r=>r.id===filters.id).map(record=>({record:v2(record)}))[0]||null};}};
     if(table==='shiye_changes')return {select(){return this;},eq(){return this;},gt(){return this;},lte(){return this;},order(){return this;},async range(){return state.changes?{data:state.changes}:{error:{message:'change log not installed'}};}};
     assert.ok(['shiye_records','shiye_revisions','shiye_commits'].includes(table));return query;
   },storage:{from(bucket){assert.equal(bucket,'shiye-private');return {
@@ -88,7 +106,7 @@ test('aborted delete resumes after another tab edits an unrelated record, but no
 test('aborted work edit resumes across an unrelated cloud revision without overwriting it',async()=>{
   const cache=memoryCache(),first=fixture(cache);first.state.rpcAbort=true;
   const work={id:'my-work',title:'locally edited',activeDraftID:'d',drafts:[{id:'d',canvas:{width:700,height:1000},items:[],textBlocks:[],primitives:[],strokes:[]}]};
-  await first.db.cloudStageProject(work);
+  await first.db.cloudStageProject(v2(work));
   await assert.rejects(first.db.cloudFlushProjects(),{name:'AbortError'});
   first.state.rpcAbort=false;first.state.revision=1;
   first.state.changes=[{revision:1,keys:[{store:'assets',action:'put',id:'other'}]}];
@@ -127,7 +145,7 @@ test('D-03: an untagged known work is staged locally but cannot claim the newest
   const cache=memoryCache(),{state,db}=fixture(cache);
   const saved={id:'diary',title:'旧作品',activeDraftID:'d',drafts:[{id:'d',canvas:{width:700,height:1000},items:[],textBlocks:[],primitives:[],strokes:[]}]};
   state.revision=4;state.rows=[saved];await db.cloudAll('projects');
-  await db.cloudStageProject({...saved,title:'本机新标题'});
+  await db.cloudStageProject({...v2(saved),title:'本机新标题'});
   assert.equal((await db.cloudPendingProjects())[0].baseRevision,0);
   await assert.rejects(db.cloudFlushProjects(),/版本已变化/);
   assert.equal(state.calls.length,0);
@@ -165,10 +183,10 @@ test('lost acknowledgement for a material edit is recognized immediately and aga
 test('lost acknowledgement for a project snapshot restores the saved cloud version without a stuck outbox',async()=>{
   const cache=memoryCache(),first=fixture(cache);first.state.loseAck=true;
   const work={id:'work',title:'saved',activeDraftID:'d',drafts:[{id:'d',canvas:{width:700,height:1000},items:[],textBlocks:[],primitives:[],strokes:[]}]};
-  await first.db.cloudStageProject(work);
+  await first.db.cloudStageProject(v2(work));
   await first.db.cloudFlushProjects();
   const operationID=first.state.calls[0].operation_id;
-  await cache.put('cloud:owner-uuid','project-outbox',[{record:work,serial:1,baseRevision:0,operationID}]);
+  await cache.put('cloud:owner-uuid','project-outbox',[{record:v2(work),serial:1,baseRevision:0,operationID}]);
   const reopened=fixture(cache);reopened.state.revision=first.state.revision;reopened.state.commits=first.state.commits;reopened.state.rows=[work];
   await reopened.db.cloudFlushProjects();
   assert.equal(reopened.state.calls.length,0);assert.deepEqual(await cache.get('cloud:owner-uuid','project-outbox'),[]);
@@ -247,9 +265,9 @@ test('damaged pending work falls back to its last saved cloud edit on reopen',as
   await cache.put('cloud:owner-uuid','project-outbox',[{record:{...saved,drafts:[{...saved.drafts[0],textBlocks:undefined}]},serial:1,baseRevision:0}]);
   const reopened=fixture(cache);reopened.state.rows=[saved];
   assert.deepEqual(await reopened.db.cloudPendingProjects(),[]);
-  assert.equal((await reopened.db.cloudAll('projects'))[0].drafts[0].textBlocks[0].content,'上次保存');
-  assert.deepEqual(await cache.get('cloud:owner-uuid','project-outbox'),[]);
-  await assert.rejects(reopened.db.cloudStageProject({...saved,drafts:[]}),/不完整/);
+  assert.equal((await reopened.db.cloudAll('projects'))[0].drafts[0].layers[0].content,'上次保存');
+  assert.equal((await cache.get('cloud:owner-uuid','project-outbox')).length,1,'quarantined work must remain durably recoverable');
+  await assert.rejects(reopened.db.cloudStageProject({...v2(saved),drafts:[]}),/不完整/);
 });
 function memoryCache(){const rows=new Map();return {async get(owner,key){return structuredClone(rows.get(owner+':'+key));},async put(owner,key,value){rows.set(owner+':'+key,structuredClone(value));},async clear(owner){for(const key of rows.keys())if(key.startsWith(owner+':'))rows.delete(key);}};}
 test('uploaded originals are immediately reusable and survive a fresh cloud store without re-download',async()=>{
@@ -326,10 +344,10 @@ test('COS thumbnails are materialized once for old images and later read without
 });
 test('large works list only metadata; opening reuses the cached editable document and metadata edits preserve geometry',async()=>{
   const cache=memoryCache(),a=fixture(cache),full={id:'p',title:'before',activeDraftID:'d',drafts:[{id:'d',canvas:{width:100,height:100},items:[],textBlocks:[],strokes:[],makingSteps:[],primitives:Array.from({length:4000},(_,i)=>({id:String(i),kind:'vector',vectorLayers:[{fill:'#ff0000',rects:[[0,0,12,12]]}]}))}]};
-  await a.db.cloudTransaction(['projects'],tx=>tx.objectStore('projects').put(full));const summary=a.state.calls[0].operations[0].item;a.state.rows=[summary];assert.ok(summary.projectDocumentPath);assert.equal(summary.drafts[0].primitives.length,0);
-  assert.equal((await a.db.cloudAll('projects'))[0].drafts[0].primitives.length,0);assert.equal(a.state.downloads,0);
-  const opened=await a.db.cloudGet('projects','p');assert.equal(opened.drafts[0].primitives.length,4000);assert.equal(a.state.downloads,0);assert.equal('projectDocumentPath' in opened,false);
-  await a.db.cloudTransaction(['projects'],tx=>tx.objectStore('projects').put({...summary,title:'after'}));const last=a.state.uploads.at(-1),encoded=a.state.calls.at(-1).operations[0].item;const restored=JSON.parse(await projectBlobText(last.data,encoded.projectDocumentEncoding));assert.equal(restored.drafts[0].primitives.length,4000);assert.equal(restored.title,'after');assert.ok(last.data.size<JSON.stringify(full).length/10);
+  await a.db.cloudTransaction(['projects'],tx=>tx.objectStore('projects').put(v2(full)));const summary=a.state.calls[0].operations[0].item;a.state.rows=[summary];assert.ok(summary.projectDocumentPath);assert.equal(summary.drafts[0].layers.length,0);
+  assert.equal((await a.db.cloudAll('projects'))[0].drafts[0].layers.length,0);assert.equal(a.state.downloads,0);
+  const opened=await a.db.cloudGet('projects','p');assert.equal(opened.drafts[0].layers.length,4000);assert.equal(a.state.downloads,0);assert.equal('projectDocumentPath' in opened,false);
+  await a.db.cloudTransaction(['projects'],tx=>tx.objectStore('projects').put({...summary,title:'after'}));const last=a.state.uploads.at(-1),encoded=a.state.calls.at(-1).operations[0].item;const restored=JSON.parse(await projectBlobText(last.data,encoded.projectDocumentEncoding));assert.equal(restored.drafts[0].layers.length,4000);assert.equal(restored.title,'after');assert.ok(last.data.size<JSON.stringify(full).length/10);
   a.state.fail=true;const count=a.state.calls.length;await assert.rejects(a.db.cloudTransaction(['projects'],tx=>tx.objectStore('projects').put({...opened,title:'failed'})),/完整数据上传失败/);assert.equal(a.state.calls.length,count);
   const denied=fixture();denied.state.rows=[{...summary,projectDocumentPath:'other/document'}];await assert.rejects(denied.db.cloudGet('projects','p'),/不属于当前账号/);
 });
@@ -363,16 +381,16 @@ test('small editable projects store a standalone cover and reuse it for metadata
   let rendered=0;
   const {state,db}=fixture(memoryCache(),null,async()=>{rendered++;return new Blob(['webp'],{type:'image/webp'});});
   const project={id:'small',activeDraftID:'draft',drafts:[{id:'draft',canvas:{width:100,height:100},items:[{id:'item'}],primitives:[],textBlocks:[],strokes:[]}]};
-  await db.cloudTransaction(['projects'],tx=>tx.objectStore('projects').put(project));
+  await db.cloudTransaction(['projects'],tx=>tx.objectStore('projects').put(v2(project)));
   const first=state.calls[0].operations[0].item,cover=first.drafts[0].coverImageID;
   assert.ok(cover.startsWith('project-cover:supabase:owner-uuid/'));
   assert.ok(cover.endsWith('-preview480.webp'));
-  assert.equal(first.drafts[0].items.length,1,'the editable document remains inline');
+  assert.equal(first.drafts[0].layers.length,1,'the editable document remains inline');
   assert.equal(await (await db.cloudPreview(cover)).text(),'webp');
   await db.cloudTransaction(['projects'],tx=>tx.objectStore('projects').put({...first,title:'new title'}));
   assert.equal(rendered,1,'metadata-only edits reuse the persisted snapshot');
   assert.equal(state.calls[1].operations[0].item.drafts[0].coverImageID,cover);
-  await db.cloudTransaction(['projects'],tx=>tx.objectStore('projects').put({...first,drafts:[{...first.drafts[0],items:[{id:'changed'}]}]}));
+  await db.cloudTransaction(['projects'],tx=>tx.objectStore('projects').put({...first,drafts:[{...first.drafts[0],layers:[{type:'material',id:'changed',assetID:'new',x:50,y:50,width:30,height:30}]}]}));
   assert.equal(rendered,2,'visual changes generate a new snapshot');
   assert.notEqual(state.calls[2].operations[0].item.drafts[0].coverImageID,cover);
 });
@@ -380,13 +398,13 @@ test('small editable projects store a standalone cover and reuse it for metadata
 test('project WebP snapshot becomes visible only after confirmed COS metadata commit',async()=>{
   const events=[],previousWindow=globalThis.window,previousCustomEvent=globalThis.CustomEvent;
   globalThis.window={dispatchEvent:event=>events.push({type:event.type,detail:event.detail})};
-  globalThis.CustomEvent=class{constructor(type,{detail}){this.type=type;this.detail=detail;}};
+  globalThis.CustomEvent=class{constructor(type,{detail}={}){this.type=type;this.detail=detail;}};
   try{
     const {state,db}=fixture(memoryCache(),{enabled:true,upload:async(path,data)=>{state.uploads.push({path,data});},download:async()=>new Blob(['cover'],{type:'image/webp'})},
       async()=>new Blob(['webp'],{type:'image/webp'}));
     const record={id:'w',title:'editable',updatedAt:'2026-10-09T01:00:00Z',activeDraftID:'d',
       drafts:[{id:'d',canvas:{width:400,height:600},items:[],primitives:[],textBlocks:[],strokes:[]}]};
-    await db.cloudTransaction(['projects'],tx=>tx.objectStore('projects').put(record));
+    await db.cloudTransaction(['projects'],tx=>tx.objectStore('projects').put(v2(record)));
     const coverEvents=events.filter(e=>e.type==='shiye-project-cover-ready');
     assert.equal(coverEvents.length,1);
     assert.equal(coverEvents[0].detail.projectID,'w');
@@ -470,7 +488,7 @@ test('deleting a work retires an older queued autosave so the work is not resurr
   const doc={id:'work-to-remove',title:'Pending edit',
     activeDraftID:'draft',drafts:[{id:'draft',canvas:{width:600,height:800},
       items:[],primitives:[],textBlocks:[],strokes:[]}]};
-  await db.cloudStageProject(doc);
+  await db.cloudStageProject(v2(doc));
   assert.equal((await cache.get('cloud:owner-uuid','project-outbox')).length,1);
   await db.cloudStageMutation(['projects','trash'],tx=>{
     tx.objectStore('projects').delete(doc.id);

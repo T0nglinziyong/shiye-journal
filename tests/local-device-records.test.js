@@ -1,10 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {indexedDB,IDBKeyRange} from 'fake-indexeddb';
+import 'fake-indexeddb/auto';
 import {localDeviceRecords} from '../src/local-device-records.js';
 
-globalThis.indexedDB=indexedDB;
-globalThis.IDBKeyRange=IDBKeyRange;
 
 test('local matching choices never write a server store and survive device reload',async()=>{
  const account='local-example-A';

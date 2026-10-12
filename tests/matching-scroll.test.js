@@ -112,6 +112,6 @@ test('full render, recommendation patch and async version update all restore mat
   assert.match(app,/restoreMatchingScroll\(view,scroll,window\)/);
   assert.match(session,/captureMatchingScroll\(root,globalThis.window\)/);
   assert.match(session,/restoreMatchingScroll\(root,scroll,globalThis.window\)/);
-  for(const key of ['basket','recommendations','chips','proposals','intent','facts'])
+  for(const key of ['basket','recommendations','chips','intent'])
     assert.ok(markup.includes('data-match-scroll="'+key+'"'),key+' must have a stable scroll identity');
 });

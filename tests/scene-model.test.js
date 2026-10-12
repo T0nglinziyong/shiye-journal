@@ -1,51 +1,136 @@
-import test from 'node:test';
-import assert from 'node:assert/strict';
-import {sceneLayerEntries,groupSceneLayers,ungroupSceneLayers,validateVectorMask,maskSVG,sceneLayerStyle,canonicalScene,validateSceneExtensions} from '../src/scene-model.js';
+import test from 'node:test';import assert from 'node:assert/strict';
+import {attachSceneV2,sceneLayerEntries,groupSceneLayers,ungroupSceneLayers,transformSceneGroup,canonicalScene,validateSceneExtensions,sceneGroups,sceneGroupMembers,moveSceneNode,validateVectorMask} from '../src/scene-model.js';
+import {draft} from '../src/domain.js';
 
-const draft=()=>({id:'draft-test',canvas:{width:707,height:1000},pageMode:'single',pageRatio:'a4',physicalPageHeightMM:297,
-  paperColor:'#fcfaf0',paperPattern:'plain',sceneVersion:1,layerGroups:[],
-  items:[{id:'m',assetID:'flower',x:100,y:100,width:50,height:35,zIndex:20,materialUnitIndex:0}],
-  primitives:[{id:'s',kind:'ellipse',x:200,y:100,width:60,height:40,zIndex:5}],
-  textBlocks:[{id:'t',x:300,y:100,width:100,height:30,zIndex:12,content:'手帐'}],
-  strokes:[{points:[{x:1,y:1,p:.5}],width:2,color:'#30463d',penStyle:'ballpoint'}]});
-test('one Draft is the canonical Scene, with typed sorted layer views',()=>{
- const d=draft(),before=JSON.stringify(d);
- const entries=sceneLayerEntries(d);
- assert.deepEqual(entries.map(e=>e.kind),['shape','text','material','ink']);
- const scene=canonicalScene(d);
- assert.equal(scene.format,'shiye-scene');
- assert.equal(scene.version,1);
- assert.deepEqual(scene.scene,d);
- assert.equal(JSON.stringify(d),before,'projection must not mutate saved Draft');
-});
-test('physical edit groups preserve original geometry and quantity',()=>{
- const d=draft(),before=structuredClone(d.items[0]);
- const id=groupSceneLayers(d,['m','t'],{id:'group-one',name:'春日组合'});
- assert.equal(id,'group-one');
- assert.equal(d.layerGroups[0].kind,'physical-arrangement');
- assert.equal(d.items.length,1);
- assert.deepEqual({...d.items[0],creativeGroupID:undefined},{...before,creativeGroupID:undefined});
- assert.equal(d.textBlocks[0].creativeGroupID,id);
+test('Scene v2 stores only layers, including arbitrary ink stacking',()=>{
+ const d=draft();
+ d.items.push({id:'m',assetID:'m1',x:100,y:100,width:30,height:50,zIndex:20});
+ d.textBlocks.push({id:'t',content:'文本',x:200,y:100,width:50,height:20,zIndex:12});
+ d.strokes.push({id:'ink',points:[{x:10,y:10,p:.5}],width:2,color:'#335544',zIndex:15});
+ assert.deepEqual(sceneLayerEntries(d).map(x=>x.kind),['text','ink','material']);
+ const raw=JSON.parse(JSON.stringify(d));
+ assert.deepEqual(Object.keys(raw).filter(k=>['items','textBlocks','primitives','strokes'].includes(k)),[]);
+ assert.equal(raw.layers.length,3);
+ assert.equal(canonicalScene(d).version,2);
  assert.equal(validateSceneExtensions(d),true);
- assert.equal(ungroupSceneLayers(d,id),true);
- assert.equal(d.textBlocks[0].creativeGroupID,undefined);
- assert.equal(d.layerGroups.length,0);
- assert.throws(()=>groupSceneLayers(d,['m','m'],{id:'g'}),/不同图层/);
 });
-test('vector mask is non-destructive, bounded and safe for Canvas/SVG',()=>{
- const mask={outer:[[0,0],[1,0],[1,1],[0,1]],holes:[[[.2,.2],[.4,.2],[.4,.4],[.2,.4]]]};
- validateVectorMask(mask);
- assert.match(maskSVG(mask),/fill-rule="evenodd"/);
- const d=draft();d.items[0].vectorMask=mask;d.items[0].blendMode='multiply';
- assert.deepEqual(sceneLayerStyle(d.items[0]),{blendMode:'multiply',mask});
- assert.equal(validateSceneExtensions(d),true);
- assert.throws(()=>validateVectorMask({outer:[[0,0],[2,0],[1,1]]}),/坐标无效/);
- assert.throws(()=>sceneLayerStyle({...d.items[0],blendMode:'color-dodge'}),/不支持/);
- assert.equal(d.items[0].width,50,'clip is not a material scale transform');
+test('nested groups survive JSON serialization; rotating groups never scales physical pieces',()=>{
+ const d=draft();
+ d.items.push({id:'m',assetID:'m1',x:100,y:100,width:30,height:50,zIndex:20});
+ d.textBlocks.push({id:'t',content:'文本',x:200,y:100,width:50,height:20,zIndex:12});
+ const initial={width:d.items[0].width,height:d.items[0].height};
+ const g=groupSceneLayers(d,['m','t'],{id:'g',name:'贴纸组合'});
+ assert.equal(d.layers.some(n=>n.type==='group'),true);
+ transformSceneGroup(d,g,{rotation:45,dx:10});
+ assert.equal(d.items[0].width,initial.width);assert.equal(d.items[0].height,initial.height);
+ assert.equal(d.textBlocks[0].rotation,45);
+ assert.equal(sceneGroups(d).length,1);
+ const saved=JSON.parse(JSON.stringify(d)),loaded=attachSceneV2(saved);
+ assert.equal(sceneGroups(loaded)[0].children.length,2);
+ assert.equal(ungroupSceneLayers(loaded,g),true);
+ assert.equal(sceneGroups(loaded).length,0);
+ assert.throws(()=>groupSceneLayers(loaded,['m','m']),/不同图层/);
 });
-test('historical ink without id remains valid, new duplicate leaf IDs are rejected',()=>{
- const d=draft();assert.equal(validateSceneExtensions(d),true);
- d.strokes.push({points:[{x:10,y:10}],width:2,color:'#000000'});
+test('Scene v2 refuses old array-based drafts instead of mutating them',()=>{
+ const old={id:'old',canvas:{width:700,height:1000},items:[{id:'m',assetID:'m1',x:1,y:2,width:3,height:4}],primitives:[],textBlocks:[],strokes:[]};
+ const before=JSON.stringify(old);
+ assert.throws(()=>attachSceneV2(old),/仅支持 Scene v2/);
+ assert.equal(JSON.stringify(old),before);
+ const malformed={sceneVersion:2,canvas:{width:700,height:1000},layers:[],items:[]};
+ assert.throws(()=>attachSceneV2(malformed),/禁止保存旧版并行图层数组/);
+});
+
+test('Scene v2 can nest/reparent groups without changing physical dimensions',()=>{
+ const d=draft();d.items.push({id:'m1',assetID:'a1',x:100,y:100,width:25,height:35,zIndex:3});
+ d.textBlocks.push({id:'t1',content:'字',x:100,y:200,width:90,height:40,zIndex:5});
+ d.primitives.push({id:'shape1',kind:'ellipse',x:80,y:160,width:40,height:40,zIndex:4});
+ const top=groupSceneLayers(d,['m1','t1'],{id:'top'});
+ const physical={width:d.items[0].width,height:d.items[0].height,assetID:d.items[0].assetID};
+ moveSceneNode(d,'shape1',{parentID:top});
+ assert.equal(d.layers[0].type,'group');
+ assert.equal(sceneGroupMembers(d,top).length,3);
+ assert.deepEqual({width:d.items[0].width,height:d.items[0].height,assetID:d.items[0].assetID},physical);
+ assert.throws(()=>moveSceneNode(d,top,{parentID:top}),/不能把组/);
  assert.equal(validateSceneExtensions(d),true);
- d.textBlocks[0].id='m';assert.throws(()=>validateSceneExtensions(d),/重复/);
+ assert.equal(Object.hasOwn(JSON.parse(JSON.stringify(d)),'items'),false);
+});
+
+test('ungroup outer nesting retains inner group membership and raw source IDs',()=>{
+ const d=draft();
+ d.items.push({id:'m1',assetID:'real-1',x:10,y:20,width:40,height:60});
+ d.items.push({id:'m2',assetID:'real-2',x:60,y:20,width:40,height:60});
+ d.textBlocks.push({id:'t1',content:'秋日记录',x:50,y:80,width:100,height:40});
+ groupSceneLayers(d,['m1','m2'],{id:'inner',name:'实体组'});
+ moveSceneNode(d,'t1',{parentID:'inner'});
+ groupSceneLayers(d,['m1','m2'],{id:'nested',name:'内组'});
+ // Nested group membership is preserved when its ancestor is ungrouped.
+ moveSceneNode(d,'nested',{parentID:'inner'});
+ assert.equal(ungroupSceneLayers(d,'inner'),true);
+ assert.equal(d.items.find(x=>x.id==='m1').creativeGroupID,'nested');
+ assert.equal(sceneGroups(d).some(g=>g.id==='nested'),true);
+ assert.deepEqual(d.items.map(x=>x.assetID).sort(),['real-1','real-2']);
+});
+
+test('physical vector masks reject crossed polygons, escaped holes and overlaps',()=>{
+ const outer=[[0,0],[1,0],[1,1],[0,1]];
+ const square=[[.2,.2],[.4,.2],[.4,.4],[.2,.4]];
+ assert.doesNotThrow(()=>validateVectorMask({outer,holes:[square]}));
+ assert.throws(()=>validateVectorMask({outer,holes:[[[.8,.8],[1.1,.8],[.95,.95]]]}),/坐标无效/);
+ assert.throws(()=>validateVectorMask({outer:[[0,0],[1,1],[1,0],[0,1]]}),/交叉|轮廓/);
+ assert.throws(()=>validateVectorMask({outer,holes:[square,[[.3,.3],[.6,.3],[.6,.6],[.3,.6]]]}),/交叉|孔洞/);
+});
+
+test('Scene v2 temporary collection view cannot lose indexed, length or deletion writes',()=>{
+ const d=draft(),view=d.items;
+ const item=id=>({id,assetID:id,x:100,y:100,width:30,height:30});
+ view.push(item('first'),item('second'));
+ assert.equal(view.length,2);
+ view[0]={...view[0],x:150};
+ assert.equal(d.layers.find(node=>node.id==='first').x,150);
+ view.length=1;
+ assert.deepEqual(d.layers.map(node=>node.id),['first']);
+ view[1]=item('third');
+ assert.deepEqual(view.map(node=>node.id),['first','third']);
+ delete view[0];
+ assert.deepEqual(d.items.map(node=>node.id),['third']);
+ assert.throws(()=>{view[3]=item('invalid');},/稀疏索引/);
+ assert.equal(Object.hasOwn(JSON.parse(JSON.stringify(d)),'items'),false);
+});
+
+test('group identities must not collide with any leaf identity',()=>{
+ const d=draft();
+ d.primitives.push({id:'shape-a',kind:'rectangle',x:10,y:10,width:40,height:30});
+ d.primitives.push({id:'shape-b',kind:'rectangle',x:70,y:10,width:40,height:30});
+ const snapshot=JSON.stringify(d);
+ assert.throws(()=>groupSceneLayers(d,['shape-a','shape-b'],{id:'shape-a'}),/编号无效或重复/);
+ assert.equal(JSON.stringify(d),snapshot,'failed grouping must not damage canonical tree');
+ assert.equal(validateSceneExtensions(d),true);
+});
+
+test('locked ancestors protect descendants across all structural operations',()=>{
+ const d=draft();
+ d.primitives.push({id:'outer-shape',kind:'rectangle',x:10,y:20,width:30,height:40});
+ d.primitives.push({id:'inner-shape',kind:'rectangle',x:50,y:60,width:30,height:40});
+ const group=groupSceneLayers(d,['outer-shape','inner-shape'],{id:'lock-group'});
+ d.layers.find(n=>n.id===group).locked=true;
+ const original=JSON.stringify(d);
+ assert.throws(()=>moveSceneNode(d,'outer-shape',{parentID:null}),/锁定/);
+ assert.throws(()=>ungroupSceneLayers(d,group),/锁定/);
+ assert.throws(()=>transformSceneGroup(d,group,{dx:20}),/锁定/);
+ assert.throws(()=>groupSceneLayers(d,['outer-shape','inner-shape'],{id:'another'}),/锁定/);
+ assert.equal(JSON.stringify(d),original);
+});
+
+test('removing recursive groups cannot erase locked descendant artwork',async()=>{
+ const {removeSceneNode}=await import('../src/scene-model.js');
+ const d=draft();
+ for(const id of ['a','b'])d.primitives.push({id,kind:'ellipse',x:10,y:20,width:20,height:20});
+ groupSceneLayers(d,['a','b'],{id:'group'});
+ d.primitives.find(n=>n.id==='a').locked=true;
+ const before=JSON.stringify(d);
+ assert.throws(()=>removeSceneNode(d,'group'),/锁定/);
+ assert.equal(JSON.stringify(d),before);
+ d.primitives.find(n=>n.id==='a').locked=false;
+ assert.equal(removeSceneNode(d,'group').id,'group');
+ assert.equal(d.layers.length,0);
 });

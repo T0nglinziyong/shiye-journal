@@ -12,7 +12,7 @@ import {creativeLayeringGuide} from '../src/creative-layering-guide.js';
 
 const asset={id:'craft-paper',title:'合成图案纸',kind:'paper',physicalWidthMM:100,physicalHeightMM:80,supply:{quantity:1}};
 const piece=(id,operations,extra={})=>({asset:'m1',piece:id,unit:0,operations,placement:{x:.5,y:.5,rotation:0,z:10},...extra});
-const page=items=>({version:3,style:'自由构图',intent:null,paper:{color:'#ffffff',pattern:'plain'},items,graphics:[],text_blocks:[]});
+const page=items=>({version:2,style:'自由构图',intent:null,paper:{color:'#ffffff',pattern:'plain'},layers:items.map(item=>({type:'material',id:item.piece,...item}))});
 const execute=(items,options={})=>applyToolCalls(page(items),project('合成工艺').drafts[0],[asset],{m1:asset.id},{processing:'自由拆解',allowNoText:true,...options});
 const edge={op:'edge',style:'torn',edges:['bottom'],depth_mm:1,period_mm:8,seed:42};
 
@@ -56,8 +56,8 @@ test('rotated peek relation executes in a real direct page without material scal
   const other={...asset,id:'craft-photo',title:'合成照片',physicalWidthMM:60,physicalHeightMM:80};
   const input=page([piece('photo',[{op:'whole'}],{asset:'m2',placement:{x:.5,y:.5,rotation:30,z:10}}),piece('paper',[edge],{relation:{kind:'peek',target:'photo',edge:'right',exposed_mm:8}})]);
   const result=applyToolCalls(input,project('旋转').drafts[0],[asset,other],{m1:asset.id,m2:other.id},{processing:'自由拆解',allowNoText:true});
-  assert.equal(result.results[0].ok,true,result.results[0].detail);assert.equal(result.draft.items[1].rotation,30);
-  assert.equal(result.draft.items[1].width,100*result.draft.canvas.height/result.draft.physicalPageHeightMM);
+  assert.equal(result.results[0].ok,true,result.results[0].detail);assert.equal(result.draft.items.find(i=>i.creativePieceID==='paper').rotation,30);
+  assert.equal(result.draft.items.find(i=>i.creativePieceID==='paper').width,100*result.draft.canvas.height/result.draft.physicalPageHeightMM);
 });
 test('current offline package exports the one active contract and imports current craft operations',async()=>{
   const p=project('网页工艺');p.processing='自由拆解';

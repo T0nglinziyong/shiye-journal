@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {matchingSnapshot,restoreMatchingSession,variantDraftProject,createMatchingSession} from '../src/matching-session.js';
 
-const draft={id:'d',canvas:{width:700,height:1000},items:[],textBlocks:[],primitives:[],strokes:[]};
+const draft={id:'d',sceneVersion:2,canvas:{width:700,height:1000},layers:[]};
 const work={id:'p',activeDraftID:'d',drafts:[draft]};
 const memoryDevice=()=>{
   const rows=new Map(),writes=[];
@@ -112,7 +112,7 @@ test('local UI save not triggered merely by reopening the same state',async()=>{
  assert.equal(device.writes.length,0);
 });
 test('variant drafts reuse drafts but never convert published editable work to draft',()=>{
- const v={project:{id:'source',drafts:[{id:'d'}],isDraft:true}};
+ const v={project:{id:'source',drafts:[draft],activeDraftID:'d',isDraft:true}};
  assert.equal(variantDraftProject(v,{id:'keep',isDraft:true},'new').id,'keep');
  const copied=variantDraftProject(v,{id:'published',isDraft:false},'new');
  assert.equal(copied.isDraft,true);assert.equal(copied.id,'new');

@@ -36,7 +36,7 @@ test('current works use editable stationery examples while preserving user edits
   const fresh=['shiye-example-handmade','shiye-example-journal','shiye-example-travel']
     .map(id=>db.stores.projects.get(id));
   assert.ok(fresh.every(p=>p&&p.sourceIdentifier===CURRENT_EXAMPLE_SOURCE&&
-    p.drafts[0].items.length>=3&&p.drafts[0].textBlocks.length===1));
+    p.drafts[0].layers.filter(n=>n.type==='material').length>=3&&p.drafts[0].layers.filter(n=>n.type==='text').length===1));
   assert.ok(fresh.every(isCurrentExampleProject));
   assert.ok(fresh.every(p=>CURRENT_EXAMPLE_PROJECT_IDS.has(p.id)));
   assert.equal(isUntouchedLegacyExample(old),true);

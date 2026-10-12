@@ -1,7 +1,7 @@
 import {project} from './domain.js';
 import {validateNativeDraft} from './native-project-package.js';
 import {validateScenePhysical} from './creative.js';
-import {canonicalScene,SCENE_FORMAT,SCENE_VERSION} from './scene-model.js';
+import {canonicalScene,SCENE_FORMAT,SCENE_VERSION,attachSceneV2} from './scene-model.js';
 
 // One portable editable scene is a Draft, not a second JSON layer language.
 // The surrounding title is metadata; original images stay in the account's
@@ -17,8 +17,8 @@ export function importSceneDocument(input,assets){
     if(input.length>8_000_000)throw Error('Scene JSON 超出 8 MB');
     try{input=JSON.parse(input.replace(/^\uFEFF/,'').trim());}catch{throw Error('Scene 文件不是有效 JSON');}
   }
-  if(!input||input.format!==SCENE_FORMAT||input.version!==SCENE_VERSION||!input.scene)throw Error('不是拾页标准 Scene v1');
-  const d=structuredClone(input.scene),known=new Set(assets.map(a=>a.id));
+  if(!input||input.format!==SCENE_FORMAT||input.version!==SCENE_VERSION||!input.scene)throw Error('不是拾页标准 Scene v2');
+  const d=attachSceneV2(structuredClone(input.scene)),known=new Set(assets.map(a=>a.id));
   if(typeof d.id!=='string'||!d.id||!['single','spread'].includes(d.pageMode))throw Error('Scene 方案基本信息无效');
   if(!Number.isFinite(d.physicalPageHeightMM)||d.physicalPageHeightMM<=0)throw Error('Scene 缺少纸张真实高度');
   validateNativeDraft(d,known);

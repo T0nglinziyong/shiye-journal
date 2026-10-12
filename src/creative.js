@@ -8,7 +8,7 @@ import {craftDiagnostic,craftAssert} from './craft-errors.js';
 import {buildCraftEdge,craftPermission,sourceFootprint,sourceIntersectionArea} from './craft-geometry.js';
 import {solveCraftRelations} from './craft-relations.js';
 import {uid,itemFromAsset} from './domain.js';
-import {sceneLayerEntries,sceneLayerStyle,groupSceneLayers,ungroupSceneLayers,validateSceneExtensions} from './scene-model.js';
+import {sceneLayerEntries,sceneLayerStyle,groupSceneLayers,ungroupSceneLayers,removeSceneNode,validateSceneExtensions,attachSceneV2} from './scene-model.js';
 import {textLines,textFont} from './editor-tools-model.js';
 import {reviewCreativeDraft} from './creative-quality.js';
 import {materialMaskPoints,materialMaskArea,materialMaskGeometry,cutMaterialDiagonal,addMaterialWindow} from './material-mask.js';
@@ -17,7 +17,7 @@ export {agentTools,directPageContract,directPageToTools};
 const EPS=1e-6,fields=['items','primitives','textBlocks'];
 const entries=d=>fields.flatMap(f=>(d[f]||[]));
 const keyOf=i=>i.creativePieceID||i.agentKey||i.key||i.id;
-const index=d=>new Map(entries(d).flatMap(i=>[[keyOf(i),i],[i.id,i]]));
+const index=d=>new Map(sceneLayerEntries(d,{hidden:true}).flatMap(({value:i})=>[[keyOf(i),i],[i.id,i]]));
 const scale=d=>d.canvas.height/(d.physicalPageHeightMM||297);
 const locked=i=>{if(i.isLocked||i.locked)throw Error('图层已锁定：'+keyOf(i));};
 const finite=(v,name,min=-20000,max=20000)=>{if(!Number.isFinite(v)||v<min||v>max)throw Error(name+' 数值不合法');return v;};
@@ -62,13 +62,29 @@ function measure(t,options){
 }
 function layoutText(t,options){const result=textLines(t,measure(t,options));return {...result,height:Math.max(t.fontSize*1.3,result.height)};}
 function converted(v,unit,d,axis){finite(v,axis);if(unit==='mm')return v*scale(d);if(unit==='pt')return v;return v*d.canvas[axis];}
+function inkBounds(ink){
+ const pts=ink.points||[];if(!pts.length)throw Error('笔迹路径不存在');
+ const xs=pts.map(p=>p.x),ys=pts.map(p=>p.y),left=Math.min(...xs),right=Math.max(...xs),top=Math.min(...ys),bottom=Math.max(...ys);
+ return {x:(left+right)/2,y:(top+bottom)/2,width:Math.max(1,right-left),height:Math.max(1,bottom-top)};
+}
 function place(d,data,fallback){fallback||={x:d.canvas.width/2,y:d.canvas.height/2};
-  if(data.relative_to){const target=find(d,data.relative_to),[dx,dy]=data.offset||[0,0];return {x:target.x+dx*target.width,y:target.y+dy*target.height};}
+  if(data.relative_to){const reference=find(d,data.relative_to),target=reference.type==='ink'?inkBounds(reference):reference,[dx,dy]=data.offset||[0,0];return {x:target.x+dx*target.width,y:target.y+dy*target.height};}
   if(data.offset)throw Error('offset 需要 relative_to');
   return {x:data.x===undefined?fallback.x:converted(data.x,data.coordinate_unit||'ratio',d,'width'),y:data.y===undefined?fallback.y:converted(data.y,data.coordinate_unit||'ratio',d,'height')};
 }
-function setPosition(d,i,data){locked(i);Object.assign(i,place(d,data,i));if(data.rotation!==undefined)i.rotation=data.rotation;if(data.z!==undefined)i.zIndex=data.z;if(i.assetID)baseline(i);}
-function remove(d,keys){for(const key of keys){const target=find(d,key);locked(target);for(const field of fields)d[field]=d[field].filter(i=>i!==target);}}
+function setPosition(d,i,data){
+ locked(i);
+ if(i.type==='ink'){
+  const bounds=inkBounds(i),to=place(d,data,bounds);
+  const theta=((data.rotation??i.rotation??0)-(i.rotation||0))*Math.PI/180,cos=Math.cos(theta),sin=Math.sin(theta);
+  i.points=i.points.map(p=>{const x=p.x-bounds.x,y=p.y-bounds.y;return {...p,x:to.x+x*cos-y*sin,y:to.y+x*sin+y*cos};});
+  if(data.rotation!==undefined)i.rotation=data.rotation;
+  if(data.z!==undefined)i.zIndex=data.z;
+  return;
+ }
+ Object.assign(i,place(d,data,i));if(data.rotation!==undefined)i.rotation=data.rotation;if(data.z!==undefined)i.zIndex=data.z;if(i.assetID)baseline(i);
+}
+function remove(d,keys){for(const key of keys){const target=find(d,key);locked(target);removeSceneNode(d,target.id);}}
 function permission(options,asset){return craftPermission(options,asset);}
 function process(d,item,asset,operations,mode,options){
   locked(item);let current=mode==='replace'?{x:0,y:0,width:1,height:1}:cropOf(item),mask=mode==='replace'?null:item.materialMask||null;
@@ -161,8 +177,50 @@ function putGraphics(d,list){for(const g of list){
 }}
 function putInk(d,list){for(const stroke of list){
   d.strokes||=[];
-  d.strokes.push({id:uid(),agentGenerated:true,points:stroke.points.map(point=>({x:point.x*d.canvas.width,y:point.y*d.canvas.height,p:point.pressure??.5})),width:stroke.width,color:stroke.color,opacity:stroke.opacity??(stroke.pen_style==='marker'?.4:1),penStyle:stroke.pen_style,blendMode:stroke.blend_mode||'normal'});
+  d.strokes.push({id:stroke.key||uid(),agentGenerated:true,agentKey:stroke.key||null,points:stroke.points.map(point=>({x:point.x*d.canvas.width,y:point.y*d.canvas.height,p:point.pressure??.5})),width:stroke.width,color:stroke.color,opacity:stroke.opacity??(stroke.pen_style==='marker'?.4:1),penStyle:stroke.pen_style,blendMode:stroke.blend_mode||'normal'});
 }}
+function composeDirectSceneV2(d,assets,aliases,page,options){
+  validateValue(page,directPageContract);
+  clearGeneratedScene(d);
+  const items=[],graphics=[],texts=[],ink=[],wanted=new Map(),groups=[];
+  const visit=nodes=>{for(const node of nodes){
+    if(wanted.has(node.id))throw Error('Scene v2 图层编号重复：'+node.id);
+    wanted.set(node.id,node);
+    if(node.type==='group'){groups.push(node);visit(node.children);continue;}
+    const {id,type,...props}=node;
+    if(type==='material'){items.push({...props,piece:node.piece||id});}
+    else if(type==='shape')graphics.push({...props,key:node.key||id});
+    else if(type==='text')texts.push({...props,key:id});
+    else if(type==='ink')ink.push({...props,key:id});
+  }};
+  visit(page.layers);
+  d.style=({'留白叙事':'airy','密集拼贴':'layered','杂志网格':'editorial','手作便签':'memo','胶片日记':'film','自由构图':'free'})[page.style]||'free';
+  setPaper(d,{...page.paper,intent:page.intent});
+  upsertMaterials(d,assets,aliases,{items},options);
+  putGraphics(d,graphics);putTexts(d,texts,options);putInk(d,ink);
+  const built=new Map(sceneLayerEntries(d,{hidden:true}).map(e=>[e.value.creativePieceID||e.value.agentKey||e.value.key||e.value.id,e.value]));
+  const used=new Set();
+  const build=(nodes,parentID=null)=>nodes.map(node=>{
+    if(node.type==='group')return {id:node.id,type:'group',name:node.name||'拼贴组',zIndex:node.z??0,
+      blendMode:node.blend_mode||'normal',opacity:node.opacity??1,vectorMask:node.vector_mask||null,
+      children:build(node.children,node.id)};
+    const key=node.type==='material'?(node.piece||node.id):node.id;
+    const value=built.get(key);
+    if(!value)throw Error('Scene v2 生成图层不存在：'+key);
+    if(used.has(value.id))throw Error('Scene v2 图层重复放置：'+key);
+    used.add(value.id);
+    if(parentID)value.creativeGroupID=parentID;else delete value.creativeGroupID;
+    return value;
+  });
+  // Keep manually edited content intact. The only storage is the tree; the
+  // model must never overwrite an unmentioned existing leaf or copy stock.
+  const preserve=nodes=>nodes.flatMap(node=>{if(node.type==='group'){const children=preserve(node.children||[]);return children.length?[{...node,children}]:[];}return used.has(node.id)?[]:[node];});
+  const generated=build(page.layers);
+  const original=preserve(d.layers);
+  d.layers=[...original,...generated];
+  validateSceneExtensions(d);
+  finish(d,assets,{summary:page.intent||''},options);
+}
 function clearGeneratedScene(d){
   d.items=d.items.filter(i=>!i.creativePieceID||!isManagedUnchanged(i));
   d.textBlocks=d.textBlocks.filter(i=>!i.agentKey||!isManagedUnchanged(i));
@@ -177,6 +235,7 @@ function relations(d,list){
   for(const [key,update] of updates){const item=find(d,key);locked(item);const {materialRelation,...position}=update;Object.assign(item,position);if(materialRelation)item.materialRelation=materialRelation;else delete item.materialRelation;baseline(item);}
 }
 function upsertMaterials(d,assets,aliases,a,options){
+  for(const key of a.remove||[])if(!find(d,key).assetID)throw Error('移除真实素材列表中出现了非素材图层');
   remove(d,a.remove||[]);
   for(const e of a.items){const [item]=addMaterials(d,assets,aliases,[{asset:e.asset,piece:e.piece,unit:e.unit,...e.placement,role:e.role,opacity:e.opacity,flip_horizontal:e.flip_horizontal}]);const asset=materialAsset(assets,aliases,e.asset);process(d,item,asset,e.operations,'replace',options);}relations(d,a.items);
 }
@@ -248,7 +307,7 @@ function execute(d,assets,aliases,name,a,options){
     }});
     case 'compose_story_page':story(d,assets,aliases,a,options);break;
     case 'compose_page':compose(d,assets,aliases,a,options);break;
-    case 'compose_direct_page':validateValue(a,directPageContract);clearGeneratedScene(d);d.style=({'留白叙事':'airy','密集拼贴':'layered','杂志网格':'editorial','手作便签':'memo','胶片日记':'film','自由构图':'free'})[a.style];setPaper(d,{...a.paper,intent:a.intent});upsertMaterials(d,assets,aliases,{items:a.items},options);putGraphics(d,a.graphics||[]);putTexts(d,a.text_blocks.map((t,n)=>({...t,key:'direct-t'+(n+1)})),options);putInk(d,a.ink_strokes||[]);for(const group of a.groups||[]){groupSceneLayers(d,group.keys.map(k=>find(d,k).id),{id:group.id,name:group.name||'手帐组合'});}finish(d,assets,{summary:a.intent||''},options);return {detail:'直接页已通过实物与必用约束并完成',mutation:true};
+    case 'compose_direct_page':composeDirectSceneV2(d,assets,aliases,a,options);return {detail:'Scene v2 直接排版已完成真实素材与图层校验',mutation:true};
     case 'place_materials':addMaterials(d,assets,aliases,a.items);break;
     case 'edit_materials':for(const e of a.items){const item=find(d,e.piece);if(!d.items.includes(item))throw Error('加工目标必须是实物');process(d,item,assets.find(a=>a.id===item.assetID),e.operations,e.mode||'append',options);}break;
     case 'upsert_materials':upsertMaterials(d,assets,aliases,a,options);break;
@@ -270,19 +329,20 @@ function execute(d,assets,aliases,name,a,options){
 export function normalizeCalls(raw){
   const input=typeof raw==='string'?JSON.parse(raw):raw;
   if(input?.format==='shiye-craft-plan'&&input.version===2)return [{name:'apply_craft_plan',arguments:input,id:input.commandId}];
-  if(input?.version===3)return directPageToTools(input);
+  if(input?.version===2&&Array.isArray(input.layers))return directPageToTools(input);
   const list=Array.isArray(input)?input:input?.tools;
-  if(!Array.isArray(list))throw Error('未找到当前 tools 数组或 page v3 数据');
+  if(!Array.isArray(list))throw Error('未找到当前 tools 数组或 page.version=2 的 layers 数据');
   return list.map(x=>({name:x.name||x.function?.name,arguments:x.arguments??x.function?.arguments??{},id:x.id||uid()}));
 }
 export function applyToolCalls(source,base,assets,aliases={},options={}){
-  const calls=normalizeCalls(source),draft=structuredClone(base),results=[];let mutated=false;
+  attachSceneV2(base);
+  const calls=normalizeCalls(source),draft=attachSceneV2(structuredClone(base)),results=[];let mutated=false;
   for(const field of fields)draft[field]||=[];
   // A failed retry is no longer a completed AI run, even though its scene
   // layers remain atomic and unchanged. This status is not a scene mutation.
   if(calls.some(c=>c.name!=='inspect_materials')&&draft.agentRun?.status==='finished')draft.agentRun.status='editing';
   for(let n=0;n<calls.length;n++){
-    const call=calls[n],snapshot=structuredClone(draft);
+    const call=calls[n],snapshot=attachSceneV2(structuredClone(draft));
     try{
       if(n>=12)throw Error('每轮最多12个工具调用；此前成功调用已保留');
       if(call.name==='finish_design'&&(n!==calls.length-1||results.some(r=>!r.ok)))throw Error('finish_design 必须是最后调用，且本轮前序调用全部成功');
@@ -297,6 +357,6 @@ export function applyToolCalls(source,base,assets,aliases={},options={}){
         }
       }
       if(outcome.mutation)recordManagedChanges(snapshot,draft);mutated||=outcome.mutation;results.push({id:call.id||uid(),name:call.name,ok:true,detail:outcome.detail,...(outcome.data?{data:outcome.data}:{}),...(warnings.length?{warnings}:{})});
-    }catch(error){for(const k of Object.keys(draft))delete draft[k];Object.assign(draft,snapshot);results.push({id:call.id||uid(),name:call.name,ok:false,detail:error.message,...craftDiagnostic(error)});}
+    }catch(error){for(const k of Object.keys(draft))delete draft[k];Object.assign(draft,snapshot);attachSceneV2(draft);results.push({id:call.id||uid(),name:call.name,ok:false,detail:error.message,...craftDiagnostic(error)});}
   }return {draft,results,committed:mutated};
 }

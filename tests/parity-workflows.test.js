@@ -120,11 +120,11 @@ test('saved import announces queued organization before remote upload finishes',
   release();await new Promise(r=>setImmediate(r));assert.ok(organized);for(const url of urls.values())URL.revokeObjectURL(url);
 });
 test('AI metrics contain no private body; opt-in context redacts credentials before persistence',async()=>{
-  const values=new Map(),db={get:async(_,id)=>values.get(id),put:async(_,value)=>values.set(value.id,structuredClone(value)),all:async()=>[...values.values()],transaction:async(_,fn)=>fn({objectStore:()=>({delete:id=>values.delete(id)})})};
+  const values=new Map(),db={get:async()=>{throw Error('AI diagnostics must never use cloud DB');}},deviceRecords={get:async(account,id)=>values.get(account+':'+id),put:async(account,value)=>values.set(account+':'+value.id,structuredClone(value)),list:async(account,prefix)=>[...values.entries()].filter(([k])=>k.startsWith(account+':'+prefix)).map(([,v])=>v),delete:async(account,id)=>values.delete(account+':'+id)};
   const response=()=>new Response(JSON.stringify({usage:{prompt_tokens:7,completion_tokens:3},choices:[{message:{content:'private-reply'}}]}));
-  const settings={db,model:'test',key:'secret',request:async()=>response(),storage:{getItem:()=>null}};
+  const settings={db,deviceRecords,accountId:'test-account',model:'test',key:'secret',request:async()=>response(),storage:{getItem:()=>null}};
   const r=await createAIRecorder(settings);await r.request('https://example.test',{body:JSON.stringify({messages:[{content:'private-photo secret'}]})});await r.finish('completed');
-  assert.equal(values.size,1);assert.ok(!JSON.stringify([...values.values()]).includes('private'));
+  assert.equal(values.size,1);assert.ok(!JSON.stringify([...values.values()]).includes('private')); assert.ok(values.has('test-account:ai-diagnostics'));
   settings.storage.getItem=()=> 'true';const captured=await createAIRecorder(settings);
   await captured.request('https://example.test',{body:JSON.stringify({messages:[{content:'private-photo secret'}],apiKey:'secret'})});await captured.finish('completed');
   const context=[...values.values()].find(v=>v.id.startsWith('ai-context-'));assert.equal(context.status,'completed');assert.ok(JSON.stringify(context).includes('private-photo'));assert.ok(!JSON.stringify(context).includes('secret'));

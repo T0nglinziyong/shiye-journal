@@ -28,6 +28,9 @@ test('current GPT task package has one root entry and grouped compact folders',a
   assert.ok(knowledge.compositionIdeas.length<=3);
   assert.match(strFromU8(files['START_HERE.txt']),/本次主题、要求和内容/);
   assert.ok(strFromU8(files['task/GUIDE.txt']).length<5500,'The model-facing GUIDE should stay concise');
+  const guide=strFromU8(files['task/GUIDE.txt']);
+  assert.match(guide,/page\.layers/,'direct mode must advertise recursive Scene v2 layers');
+  assert.doesNotMatch(guide,/page\.groups/,'removed parallel group schema must not appear in GPT instructions');
 });
 
 test('current editable example imports only with its exact registered source',async()=>{
@@ -59,7 +62,7 @@ test('stable and UUID material aliases resolve current library assets',async()=>
 
 test('direct editable scene keeps layered typography and vector geometry',async()=>{
   const output=await make({p:project('分层示例')}),files=await filesOf(output),response=JSON.parse(strFromU8(files['examples/project.shiyeproject.json']));
-  response.page.graphics.push({key:'drawn-leaf',kind:'vector',x:.2,y:.5,width:.08,height:.12,fill:'#7a9d77',stroke:null,z:70,vector_paths:[[[.5,0],[1,.5],[.5,1],[0,.5]]]});
+  response.page.layers.push({type:'shape',id:'drawn-leaf',key:'drawn-leaf',kind:'vector',x:.2,y:.5,width:.08,height:.12,fill:'#7a9d77',stroke:null,z:70,vector_paths:[[[.5,0],[1,.5],[.5,1],[0,.5]]]});
   const imported=importEditableWork(JSON.stringify(response),[asset],{trustedSource:output.source});
   assert.equal(imported.drafts[0].primitives.find(p=>p.key==='drawn-leaf')?.vectorPaths.length,1);
   assert.match(shapeSVG(imported.drafts[0].primitives.find(p=>p.key==='drawn-leaf')),/<path/);

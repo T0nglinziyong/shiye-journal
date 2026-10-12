@@ -13,7 +13,10 @@ import {adjacentFontSize} from './canvas-control-behavior.js';
 import {createIcon} from './icons.js';
 import {historyTitle,renameHistory,deleteDraft,captureHistory,restoreHistoryDraft} from './project-history.js';
 import {syncSelectionGeometry} from './selection-geometry.js';
-import {groupSceneLayers,ungroupSceneLayers,sceneGroupMembers,sceneLayerEntries,validateVectorMask} from './scene-model.js';
+import {syncInkSceneDOM} from './ink-scene-svg.js';
+import {validateScenePhysical} from './creative.js';
+import {attachSceneV2} from './scene-v2.js';
+import {groupSceneLayers,ungroupSceneLayers,sceneGroupMembers,sceneLayerEntries,sceneGroups,transformSceneGroup,moveSceneNode,validateVectorMask} from './scene-model.js';
 import {clampCanvasPosition,moveSelection,materialCenterOutside} from './canvas-selection.js';
 import {transformSelectedFrame,isObjectDeleteKey} from './selection-transform.js';
 const labels={select:'选择',marquee:'矩形框选',pen:'笔',highlighter:'荧光笔',eraser:'橡皮擦',lasso:'套索选择',text:'文字',shape:'图形',material:'素材',layers:'图层',paper:'画布背景'};
@@ -318,8 +321,69 @@ export function mountCanvasEditor(c){
       p.close();
     },'btn');
     ungroupButton.disabled=!activeGroup;
-    groupActions.append(groupButton,ungroupButton);p.content.append(groupActions,list);
-    const ordered=[...entries].sort((a,b)=>(b.value.zIndex||0)-(a.value.zIndex||0)),rows=new Map();
+    const rotateGroup=button('组合旋转 +15°',()=>{
+      if(!activeGroup)return;change(()=>transformSceneGroup(d,activeGroup,{rotation:15}));p.close();
+    },'btn');
+    rotateGroup.disabled=!activeGroup;
+    const groupStyle=button('组合外观',()=>{
+      if(!activeGroup)return;
+      const g=sceneGroups(d).find(item=>item.id===activeGroup);if(!g)return;
+      p.close();
+      const panel=openPopover(anchor,{title:'组合外观',width:300});
+      const label=document.createElement('label');label.textContent='整组不透明度';
+      const slider=document.createElement('input');slider.type='range';slider.min='0';slider.max='1';slider.step='.05';slider.value=String(g.opacity??1);
+      slider.onchange=()=>change(()=>g.opacity=Number(slider.value));label.append(slider);panel.content.append(label);
+      const modes=document.createElement('select');modes.append(new Option('普通纸片','normal'),new Option('正片叠底 · 透明纸','multiply'));
+      modes.value=g.blendMode||'normal';modes.onchange=()=>change(()=>g.blendMode=modes.value);panel.content.append(modes);
+    },'btn');groupStyle.disabled=!activeGroup;
+    groupActions.append(groupButton,ungroupButton,rotateGroup,groupStyle);p.content.append(groupActions,list);
+    // Genuine recursive Scene group tree. All controls mutate the same nodes
+    // (no second layerGroups collection) and never resize physical materials.
+    const groupTree=document.createElement('div');groupTree.className='scene-v2-group-tree';
+    p.content.insertBefore(groupTree,list);
+    const groupNodes=()=>sceneGroups(d);
+    const treeRow=(group,depth)=>{
+      const row=document.createElement('div');row.className='scene-v2-group-row';
+      row.style.paddingInlineStart=Math.min(7,depth)*12+'px';
+      const title=button('▱ '+(group.name||'未命名组合'),()=>{
+        state.multiSelected=sceneGroupMembers(d,group.id).filter(e=>e.kind!=='ink').map(e=>e.value.id);
+        state.selected=null;
+        state.sceneSelectedGroup=group.id;
+        view.editorRefresh?.();
+      },'scene-v2-group-label');
+      title.title='选择组内的实体素材、文字和图形';
+      row.append(title);
+      const actions=document.createElement('div');actions.className='scene-v2-group-row-actions';
+      const insert=button('放入所选',()=>{
+        const ids=[...new Set([...(state.multiSelected||[]),...(state.selected?[state.selected]:[])])];
+        if(!ids.length){toast('先选择要放入此组的图层');return;}
+        try{change(()=>{for(const id of ids)moveSceneNode(d,id,{parentID:group.id});state.multiSelected=[];state.selected=null;});p.close();}
+        catch(error){toast(error.message);}
+      },'btn mini');
+      insert.title='移动选中图层进入该组，不复制或改变实体尺寸';
+      actions.append(insert);
+      if(depth){
+        const parentSelect=document.createElement('select');
+        parentSelect.setAttribute('aria-label','移动此子组');
+        parentSelect.append(new Option('移到画布根层',''));
+        for(const g of groupNodes().filter(g=>g.id!==group.id))parentSelect.append(new Option('移到 '+(g.name||g.id),g.id));
+        parentSelect.onchange=()=>{try{change(()=>moveSceneNode(d,group.id,{parentID:parentSelect.value||null}));p.close();}catch(error){toast(error.message);}};
+        actions.append(parentSelect);
+      }else{
+        const parentSelect=document.createElement('select');
+        parentSelect.setAttribute('aria-label','移动组合到子组');
+        parentSelect.append(new Option('移动进其他组合…',''));
+        for(const g of groupNodes().filter(g=>g.id!==group.id))parentSelect.append(new Option(g.name||g.id,g.id));
+        parentSelect.onchange=()=>{if(!parentSelect.value)return;try{change(()=>moveSceneNode(d,group.id,{parentID:parentSelect.value}));p.close();}catch(error){toast(error.message);}};
+        actions.append(parentSelect);
+      }
+      actions.append(button('解组',()=>{change(()=>ungroupSceneLayers(d,group.id));p.close();},'btn mini'));
+      row.append(actions);groupTree.append(row);
+    };
+    const walkGroups=(nodes,depth=0)=>{for(const n of [...nodes].sort((a,b)=>(b.zIndex??0)-(a.zIndex??0)))if(n.type==='group'){treeRow(n,depth);walkGroups(n.children||[],depth+1);}};
+    walkGroups(d.layers);
+
+    const ordered=[...sceneLayerEntries(d,{hidden:true,ink:true})].sort((a,b)=>(b.value.zIndex??(b.kind==='ink'?2000:0))-(a.value.zIndex??(a.kind==='ink'?2000:0))),rows=new Map();
     let drag=null,holdTimer=null,scrollFrame=null,moveMenu=null,suppressMoveClickUntil=0;
     const indexOf=id=>ordered.findIndex(e=>e.value.id===id);
     const redraw=()=>{
@@ -339,16 +403,28 @@ export function mountCanvasEditor(c){
       p.position();
     };
     const commitLayer=fn=>{checkpoint();fn();saveProject();
-      for(const e of ordered){const item=e.value;page.querySelectorAll('[data-object="'+item.id+'"]').forEach(node=>{node.style.zIndex=item.zIndex||0;node.hidden=!!(item.hidden||item.isHidden||item.isParked);});}
+      for(const e of ordered){const item=e.value;page.querySelectorAll('[data-object="'+item.id+'"],.scene-ink-object[data-render-key="'+item.id+'"]').forEach(node=>{node.style.zIndex=item.zIndex??(e.kind==='ink'?2000:0);node.hidden=!!(item.hidden||item.isHidden||item.isParked);});}
       view.editorRefresh?.();
     };
     const reorder=(id,targetId,after=false)=>{
-      const from=indexOf(id),target=indexOf(targetId);
-      if(from<0||target<0||from===target||ordered[from].value.isLocked||ordered[from].value.locked)return;
-      const [entry]=ordered.splice(from,1),next=indexOf(targetId)+(after?1:0);
-      ordered.splice(next,0,entry);
-      commitLayer(()=>ordered.forEach((e,i)=>e.value.zIndex=ordered.length-i));
-      redraw();
+      if(!targetId||id===targetId)return;
+      const entriesNow=sceneLayerEntries(d,{hidden:true});
+      const moving=entriesNow.find(e=>e.value.id===id),target=entriesNow.find(e=>e.value.id===targetId);
+      if(!moving||!target||moving.value.isLocked||moving.value.locked)return;
+      const parent=target.parents.at(-1)||null;
+      const siblings=parent?parent.children:d.layers;
+      const index=siblings.findIndex(n=>n.id===targetId);
+      const next=after?siblings.slice(index+1).find(n=>n.id!==id)?.id||null:targetId;
+      try{
+        checkpoint();
+        moveSceneNode(d,id,{parentID:parent?.id||null,beforeID:next});
+        saveProject();
+        // A full redraw is required when moving between compositing groups:
+        // CSS/Canvas z-index changes alone cannot alter the parent clip stack.
+        render();
+      }catch(error){
+        state.undo.pop();toast(error.message);
+      }
     };
     const stopDrag=()=>{clearTimeout(holdTimer);holdTimer=null;cancelAnimationFrame(scrollFrame);scrollFrame=null;
       list.querySelectorAll('.dragging,.drop-target').forEach(row=>row.classList.remove('dragging','drop-target'));
@@ -372,8 +448,8 @@ export function mountCanvasEditor(c){
     };
     for(const e of ordered){
       const o=e.value,row=document.createElement('div');row.className='canvas-layer-row';row.dataset.layerId=o.id;
-      const pick=button('',()=>{if(o.isLocked||o.locked||o.isHidden||o.hidden||o.isParked)return;state.multiSelected=o.creativeGroupID?sceneGroupMembers(d,o.creativeGroupID).map(e=>e.value.id):[];state.selected=state.multiSelected.length>1?null:o.id;render();redraw();});
-      pick.dataset.layerPick='';pick.innerHTML=(e.kind==='material'?imgTag(asset(o.assetID)):e.kind==='shape'?shapeSVG(o):'<span>Aa</span>')+'<span>'+esc((o.creativeGroupID?'◫ ':'')+(e.kind==='material'?asset(o.assetID)?.title:e.kind==='text'?o.content.slice(0,24):o.kind==='vector'?'自定义图形':o.kind))+'</span>';row.append(pick);
+      const pick=button('',()=>{if(o.isLocked||o.locked||o.isHidden||o.hidden||o.isParked)return;if(e.kind==='ink'){const index=d.strokes.findIndex(stroke=>stroke.id===o.id);state.selected=null;state.multiSelected=[];state.selectedStrokes=index>=0?[index]:[];view.editorRefresh?.();return;}state.multiSelected=o.creativeGroupID?sceneGroupMembers(d,o.creativeGroupID).map(e=>e.value.id):[];state.selected=state.multiSelected.length>1?null:o.id;render();redraw();});
+      pick.dataset.layerPick='';pick.innerHTML=(e.kind==='material'?imgTag(asset(o.assetID)):e.kind==='shape'?shapeSVG(o):e.kind==='ink'?'<span>✎</span>':'<span>Aa</span>')+'<span>'+esc((o.creativeGroupID?'◫ ':'')+(e.kind==='material'?asset(o.assetID)?.title:e.kind==='text'?o.content.slice(0,24):e.kind==='ink'?'手写笔迹':o.kind==='vector'?'自定义图形':o.kind))+'</span>';row.append(pick);
       const lock=button('',()=>{const next=!(o.isLocked||o.locked);commitLayer(()=>{o.isLocked=o.locked=next;if(next&&state.selected===o.id)state.selected=null;});redraw();});lock.dataset.layerLock='';
       const eye=button('',()=>{const next=!(o.isHidden||o.hidden||o.isParked);commitLayer(()=>{if(e.kind==='material')o.isParked=next;else if(e.kind==='text')o.isHidden=next;else o.hidden=next;if(next&&state.selected===o.id)state.selected=null;});redraw();});eye.dataset.layerEye='';
       const move=button('≡',()=>{});
@@ -455,7 +531,7 @@ export function mountCanvasEditor(c){
   function textParagraph(anchor,t,patch){const p=openPopover(anchor,{title:'段落',width:230,menu:true});for(const [id,name] of [['left','左对齐'],['center','居中'],['right','右对齐']])p.content.append(button((t.alignment===id?'✓ ':'')+name,()=>{p.close();patch('alignment',id);}));const entry=entries.find(e=>e.value.id===state.selected&&e.kind==='text');if(entry)p.content.append(button('详细文字设置',()=>{p.close();objectInspector(entry);}));}
   function objectInspector(entry){if(!entry)return;const o=entry.value,kind=entry.kind;body.innerHTML='<div class="canvas-object-settings"><header><h2>'+({material:'素材设置',shape:'图形设置',text:'文字设置'}[kind])+'</h2><button type="button" id="object-settings-done">完成</button></header><div id="object-settings-fields"></div></div>';const fields=body.querySelector('#object-settings-fields');body.querySelector('#object-settings-done').onclick=()=>modal.close();
     const textDraft=kind==='text'?structuredClone(o):null;const mutate=(key,value)=>{if(textDraft){textDraft[key]=value;return;}checkpoint();o[key]=value;if(kind==='material')o.userOverrideFlags=[...new Set([...(o.userOverrideFlags||[]),'edited'])];saveProject();render();};
-    if(kind==='material'){fields.append(button('✂ 打开统一素材加工面板',()=>{showMaterialProcessing(c,o);}));const operations=document.createElement('div');operations.className='object-setting-actions';for(const [name,fn] of [['上移一层',()=>mutate('zIndex',(o.zIndex||0)+1)],['下移一层',()=>mutate('zIndex',(o.zIndex||0)-1)],['复制',()=>{modal.close();duplicate(entry);}],['放入备选',()=>{modal.close();handle('park');}],['恢复实物尺寸',()=>{const a=asset(o.assetID);if(!a?.physicalWidthMM||!a?.physicalHeightMM)return;checkpoint();const restored=itemFromAsset(a,d,o.x,o.y);o.width=restored.width;o.height=restored.height;saveProject();render();modal.close();}],['删除',()=>{modal.close();handle('delete-object');}]])operations.append(button(name,fn));fields.append(operations);}
+    if(kind==='material'){fields.append(button('✂ 打开统一素材加工面板',()=>{showMaterialProcessing(c,o);}));const operations=document.createElement('div');operations.className='object-setting-actions';for(const [name,fn] of [['上移一层',()=>mutate('zIndex',(o.zIndex||0)+1)],['下移一层',()=>mutate('zIndex',(o.zIndex||0)-1)],['复制',()=>{modal.close();duplicate(entry);}],['放入备选',()=>{modal.close();handle('park');}],['恢复实物尺寸',()=>{const a=asset(o.assetID);if(!a?.physicalWidthMM||!a?.physicalHeightMM)return;checkpoint();const units=d.canvas.height/(d.physicalPageHeightMM||297),crop=o.cropRect||{width:1,height:1};o.width=crop.width*a.physicalWidthMM*units;o.height=crop.height*a.physicalHeightMM*units;saveProject();render();modal.close();}],['删除',()=>{modal.close();handle('delete-object');}]])operations.append(button(name,fn));fields.append(operations);}
     if(kind==='text'){const draft=textDraft;const row=document.createElement('label');row.textContent='文字内容';const input=document.createElement('textarea');input.value=o.content;input.oninput=()=>draft.content=input.value;row.append(input);fields.append(row);const fontRow=document.createElement('label');fontRow.textContent='字体名称（留空使用基础风格）';const fontInput=document.createElement('input');fontInput.type='text';fontInput.maxLength=120;fontInput.value=draft.fontName||'';fontInput.oninput=()=>draft.fontName=fontInput.value.trim()||null;fontRow.append(fontInput);fields.append(fontRow);for(const [key,name] of [['bold','粗体'],['italic','斜体'],['underline','下划线'],['strikethrough','删除线']])toggle(fields,name,!!draft[key],v=>draft[key]=v);for(const [key,name,min,max,step] of [['fontSize','字号',5,400,1],['letterSpacing','字距',-5,30,.1],['fixedLineHeight','固定行高',5,400,.1],['lineSpacing','附加行距',0,80,1],['paragraphSpacing','段落间距',0,80,1]])range(fields,name,draft[key]??(key==='fixedLineHeight'?draft.fontSize*1.3:0),min,max,step,v=>draft[key]=v);toggle(fields,'自动行高',!draft.fixedLineHeight,v=>draft.fixedLineHeight=v?null:draft.fontSize*1.3);fields.append(button('应用文字设置',()=>{draft.content=input.value;checkpoint();const measure=document.createElement('canvas').getContext('2d');measure.font=textFont(draft);const layout=textLines(draft,text=>measure.measureText(text).width),top=draft.y-draft.height/2;draft.height=Math.max(draft.height,layout.height);draft.y=top+draft.height/2;Object.assign(o,draft);state.newTextID=null;saveProject();modal.close();render();},'btn primary'));}
     // These properties are shared by material, text and digital shapes.
     const styleRow=document.createElement('label');styleRow.className='canvas-setting';styleRow.textContent='实体叠压方式';
@@ -477,7 +553,7 @@ export function mountCanvasEditor(c){
       catch(error){maskError.textContent=error.message;}
     },'btn'));
     fields.append(maskRow,maskActions);
-    const units=d.canvas.height/(d.physicalPageHeightMM||297);if(kind!=='text')for(const [key,name,min,max,step] of [['width',kind==='material'?'宽度（mm）':'宽度',1,d.canvas.width*2,.1],['height',kind==='material'?'高度（mm）':'高度',1,d.canvas.height*2,.1],['rotation','旋转（度）',-180,180,.1],...(kind==='shape'?[]:[['opacity','透明度',0,1,.05]])]){const factor=kind==='material'&&['width','height'].includes(key)?units:1;range(fields,name,(o[key]??1)/factor,min/factor,max/factor,step,v=>mutate(key,v*factor),false,key==="rotation"?"°":key==="opacity"?"":kind==="material"?" mm":" pt");}
+    const units=d.canvas.height/(d.physicalPageHeightMM||297);if(kind!=='text')for(const [key,name,min,max,step] of [...(kind==='material'?[]:[['width','宽度',1,d.canvas.width*2,.1],['height','高度',1,d.canvas.height*2,.1]]),['rotation','旋转（度）',-180,180,.1],...(kind==='shape'?[]:[['opacity','透明度',0,1,.05]])]){const factor=kind==='material'&&['width','height'].includes(key)?units:1;range(fields,name,(o[key]??1)/factor,min/factor,max/factor,step,v=>mutate(key,v*factor),false,key==="rotation"?"°":key==="opacity"?"":kind==="material"?" mm":" pt");}
     if(kind==='shape'){
       if(o.vectorLayers)vectorColors(o,fields);
       else {
@@ -504,7 +580,22 @@ export function mountCanvasEditor(c){
     if(kind==='text'){const cancel=button('取消',()=>modal.close());body.querySelector('header').prepend(cancel);body.querySelector('#object-settings-done').textContent='应用';body.querySelector('#object-settings-done').onclick=()=>[...fields.querySelectorAll('button')].find(b=>b.textContent==='应用文字设置').click();const select=(name,key,choices)=>{const row=document.createElement('label');row.textContent=name;const input=document.createElement('select');input.innerHTML=choices.map(([id,label])=>'<option value="'+id+'" '+(draftValue(key)===id?'selected':'')+'>'+label+'</option>').join('');input.onchange=()=>{textDraft[key]=input.value;if(key==='style')textDraft.fontName=null;};row.append(input);fields.append(row);};const draftValue=key=>textDraft[key];select('基础风格','style',[['serif','宋体'],['sans','黑体'],['rounded','圆体'],['hand','手写体']]);select('对齐','alignment',[['left','左对齐'],['center','居中'],['right','右对齐']]);const row=document.createElement('label');row.textContent='文字颜色';const color=document.createElement('input');color.type='color';color.value=textDraft.color;color.oninput=()=>textDraft.color=color.value;row.append(color);fields.append(row);onDialogClosed(modal,()=>{if(state.newTextID===o.id&&!o.content.trim()){d.textBlocks=d.textBlocks.filter(t=>t.id!==o.id);state.selected=null;state.newTextID=null;state.undo.pop();saveProject();render();}});}
     modal.classList.add('canvas-settings-dialog');onDialogClosed(modal,()=>modal.classList.remove('canvas-settings-dialog'));if(!modal.open)modal.showModal();
   }
-  function duplicate(entry){if(entry.kind==='material'){const a=asset(entry.value.assetID),taken=new Set(d.items.filter(i=>i.assetID===a.id).map(i=>i.materialUnitIndex||0)),unit=Array.from({length:a.supply?.quantity??1},(_,i)=>i).find(i=>!taken.has(i));if(unit===undefined){toast('复制会超出本页实物库存');return;}change(()=>{const copy={...structuredClone(entry.value),id:uid(),x:entry.value.x+25,y:entry.value.y+25,materialUnitIndex:unit};d.items.push(copy);state.selected=copy.id;});}else handle('duplicate');}
+  function duplicate(entry){
+    if(entry.kind!=='material'){handle('duplicate');return;}
+    const a=asset(entry.value.assetID);if(!a){toast('原始素材不存在');return;}
+    const used=new Set(d.items.filter(i=>i.assetID===a.id).map(i=>i.materialUnitIndex??0));
+    const count=a.supply?.quantity??1;
+    const free=Array.from({length:Math.min(1000,count)},(_,i)=>i).find(i=>!used.has(i));
+    const roll=a.kind==='tape'&&a.supply?.kind==='tapeRoll'&&a.tapeRepeatMode==='repeatablePattern';
+    if(free===undefined&&!roll){toast('复制会超出本页实物库存');return;}
+    const copy={...structuredClone(entry.value),id:uid(),x:entry.value.x+25,y:entry.value.y+25,
+      materialUnitIndex:free??0};
+    try{
+      const trial=attachSceneV2(structuredClone(d));trial.items.push(structuredClone(copy));
+      validateScenePhysical(trial,c.state.assets);
+    }catch(error){toast(error.message);return;}
+    change(()=>{d.items.push(copy);state.selected=copy.id;});
+  }
   function selectedHandles(){if(!selected||selected.value.locked||selected.value.isLocked||state.multiSelected?.length>1)return;const o=selected.value,object=page.querySelector('[data-object="'+o.id+'"]');if(!object)return;const node=document.createElement('div');node.className='selected-object-overlay';node.dataset.selectionFor=o.id;const geometry=['left','top','width','height','transform'];for(const key of geometry)node.style[key]=object.style[key];page.append(node);const floating=document.createElement('div');floating.className='selected-object-actions';for(const [name,glyph,fn] of [['复制对象','⊞',()=>duplicate(selected)],['删除对象','♜',()=>handle('delete-object')],['编辑对象','☷',()=>objectInspector(selected)]]){const b=button(glyph,e=>{e.stopPropagation();fn();});b.setAttribute('aria-label',name);b.onpointerdown=e=>e.stopPropagation();floating.append(b);}node.append(floating);const top=parseFloat(object.style.top)||0,height=parseFloat(object.style.height)||0;
     if(top>42&&top+height+52>page.clientHeight)node.classList.add('controls-above');
     let move=null;
@@ -516,7 +607,7 @@ export function mountCanvasEditor(c){
     node.onpointercancel=e=>{if(!move||move.id!==e.pointerId)return;e.stopPropagation();node.classList.remove('dragging');if(move.changed){o.x=move.startX;o.y=move.startY;o.userOverrideFlags=move.startFlags;state.undo.pop();}move=null;render();};
     // GoodNotes-like grips share the geometry and gesture rules with import
     // boxes: right = width, top = height, bottom-right = scale plus rotation.
-    for(const [grip,label] of [['top','拉伸对象高度'],['right','拉伸对象宽度'],['corner','缩放并旋转对象']]){
+    for(const [grip,label] of (selected.kind==='material'?[['corner','旋转真实素材（保持实际尺寸）']]:[['top','拉伸对象高度'],['right','拉伸对象宽度'],['corner','缩放并旋转对象']])){
       const h=button('',()=>{});
       h.className='object-handle '+grip;
       h.setAttribute('aria-label',label);
@@ -539,11 +630,19 @@ export function mountCanvasEditor(c){
         const from={x:(drag.pointerX-rect.left)/factor,y:(drag.pointerY-rect.top)/factor};
         const to={x:(e.clientX-rect.left)/factor,y:(e.clientY-rect.top)/factor};
         const original=drag.start;
-        const out=transformSelectedFrame({
-          x:original.x-original.width/2,y:original.y-original.height/2,
-          width:original.width,height:original.height,rotation:original.rotation
-        },grip,from,to,{minWidth:4,minHeight:4,
-          maxWidth:d.canvas.width,maxHeight:d.canvas.height});
+        const out=selected.kind==='material'
+          ?(()=>{
+            const before=Math.atan2(from.y-original.y,from.x-original.x);
+            const after=Math.atan2(to.y-original.y,to.x-original.x);
+            const delta=Math.atan2(Math.sin(after-before),Math.cos(after-before))*180/Math.PI;
+            return {x:original.x-original.width/2,y:original.y-original.height/2,
+              width:original.width,height:original.height,rotation:original.rotation+delta};
+          })()
+          :transformSelectedFrame({
+            x:original.x-original.width/2,y:original.y-original.height/2,
+            width:original.width,height:original.height,rotation:original.rotation
+          },grip,from,to,{minWidth:4,minHeight:4,
+            maxWidth:d.canvas.width,maxHeight:d.canvas.height});
         const moved=out.width!==original.width||out.height!==original.height||
           Math.abs(out.rotation-original.rotation)>1e-3;
         if(!moved)return;
@@ -552,7 +651,7 @@ export function mountCanvasEditor(c){
           width:out.width,height:out.height,rotation:out.rotation});
         Object.assign(o,clampCanvasPosition(d,o,o.x,o.y));
         if(selected.kind==='material')
-          o.userOverrideFlags=[...new Set([...(o.userOverrideFlags||[]),'resized',...(grip==='corner'?['rotated']:[])])];
+          o.userOverrideFlags=[...new Set([...(o.userOverrideFlags||[]),'rotated'])];
         const displayScale=page.clientWidth/d.canvas.width;
         const style={
           width:o.width*displayScale+'px',height:o.height*displayScale+'px',
@@ -610,11 +709,11 @@ export function mountCanvasEditor(c){
     const existing=entries.find(x=>x.kind==='text'&&x.value.id===e.target.closest('[data-object]')?.dataset.object);if(existing){beginInlineText(existing);return;}
     if(e.target.closest('[data-object]'))return;const r=page.getBoundingClientRect();let added;change(()=>{const x=(e.clientX-r.left)/r.width*d.canvas.width,y=(e.clientY-r.top)/r.height*d.canvas.height,width=Math.min(d.canvas.width*.35,d.canvas.width-x);const t={...textBlock('',d),...state.textDefaults,id:uid(),x:x+width/2,y:y+50,width:Math.max(60,width),height:100,alignment:state.textDefaults?.alignment||'left'};d.textBlocks.push(t);added=t;state.selected=t.id;state.tool='select';state.toolHighlight='text';state.multiSelected=[];state.selectedStrokes=[];});beginInlineText({kind:'text',value:added},true);
   }else if(state.tool==='select'&&!e.target.closest('[data-object],.selected-object-overlay')){view.endTextEditing?.();state.selected=null;state.multiSelected=[];state.selectedStrokes=[];state.selectionPath=null;render();}};
-  const ink=page.querySelector('#ink'),ctx=ink.getContext('2d');let stroke=null,erase=null,frame=null;const paint=()=>{frame=null;ctx.clearRect(0,0,ink.width,ink.height);drawInk(ctx,stroke?[...d.strokes,stroke]:d.strokes);},schedule=()=>{if(!frame)frame=requestAnimationFrame(paint);},point=e=>{const r=ink.getBoundingClientRect();return {x:(e.clientX-r.left)/r.width*d.canvas.width,y:(e.clientY-r.top)/r.height*d.canvas.height,p:e.pressure||.5};};paint();view.canvasInkRefresh=schedule;
+  const ink=page.querySelector('#ink'),ctx=ink.getContext('2d');let stroke=null,erase=null,frame=null;const paint=()=>{frame=null;ctx.clearRect(0,0,ink.width,ink.height);drawInk(ctx,stroke?[stroke]:[]);syncInkSceneDOM(page,d);},schedule=()=>{if(!frame)frame=requestAnimationFrame(paint);},point=e=>{const r=ink.getBoundingClientRect();return {x:(e.clientX-r.left)/r.width*d.canvas.width,y:(e.clientY-r.top)/r.height*d.canvas.height,p:e.pressure||.5};};paint();view.canvasInkRefresh=schedule;
   ink.onpointerdown=e=>{if(!['pen','highlighter','eraser'].includes(state.tool)||e.button>0)return;e.preventDefault();checkpoint();ink.setPointerCapture(e.pointerId);if(state.tool==='eraser'){erase={id:e.pointerId};d.strokes=eraseStrokes(d.strokes,point(e),(prefs.eraserStyle||'standard')==='standard'?10:prefs.eraserWidth/((prefs.eraserStyle||'standard')==='fine'?4:2),(prefs.eraserStyle||'standard')==='standard',!!prefs.eraserOnlyHighlighter);schedule();return;}const marker=state.tool==='highlighter',key=marker?'marker':'pen';stroke={id:e.pointerId,points:[point(e)],width:prefs[key+'Width'],color:prefs[key+'Color'],opacity:marker?.4:1,penStyle:marker?'marker':prefs.penStyle};schedule();};
   ink.onpointermove=e=>{if(erase?.id===e.pointerId){e.preventDefault();const wholeStroke=(prefs.eraserStyle||'standard')==='standard';for(const sample of e.getCoalescedEvents?.()||[e])d.strokes=eraseStrokes(d.strokes,point(sample),wholeStroke?10:prefs.eraserWidth/((prefs.eraserStyle||'standard')==='fine'?4:2),wholeStroke,!!prefs.eraserOnlyHighlighter);schedule();return;}if(stroke?.id!==e.pointerId)return;e.preventDefault();for(const sample of e.getCoalescedEvents?.()||[e])stroke.points.push(point(sample));schedule();};
-  ink.onpointerup=e=>{if(stroke?.id===e.pointerId){const {id,...line}=stroke;line.id=uid();d.strokes.push(state.tool==='highlighter'&&prefs.markerStraight?straightStroke(line):line);stroke=null;saveProject();schedule();}else if(erase?.id===e.pointerId){erase=null;saveProject();if(prefs.returnToPen){state.tool=state.previousInkTool||'pen';state.toolHighlight=state.tool;render();}else schedule();}};
-  ink.onpointercancel=()=>{if(!stroke&&!erase)return;stroke=null;erase=null;const before=state.undo.pop();if(before)d.strokes=before.strokes;paint();};
+  ink.onpointerup=e=>{if(stroke?.id===e.pointerId){const {id,...line}=stroke;line.id=uid();d.strokes.push(state.tool==='highlighter'&&prefs.markerStraight?straightStroke(line):line);stroke=null;saveProject();render();}else if(erase?.id===e.pointerId){erase=null;saveProject();render();if(prefs.returnToPen){state.tool=state.previousInkTool||'pen';state.toolHighlight=state.tool;render();}else schedule();}};
+  ink.onpointercancel=()=>{if(!stroke&&!erase)return;stroke=null;erase=null;const before=state.undo.pop();if(before?.kind==='scene-pending-v2')d.strokes=before.before.strokes;paint();};
   view.cancelInkGesture=ink.onpointercancel;
   mountCanvasViewport(c,page);
   // Delete only a selected, unlocked canvas object, never focused text fields

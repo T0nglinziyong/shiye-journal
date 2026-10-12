@@ -18,6 +18,7 @@ import {canonicalTaskSource} from './task-source.js';
 import {sha256Hex,taskFingerprint,assertTaskFingerprint} from './task-fingerprint.js';
 import {reviewExternalResultFiles} from './offline-result-review.js';
 import {creativeContentBrief} from './creative-content-brief.js';
+import {creativePageBrief} from './creative-page-brief.js';
 import {imagePrompt} from './ai-image-generation.js';
 import {classifyJournalMaterial,journalMaterialRoles,relevantJournalFamilies} from './journal-case-study.js';
 import {journalReferenceGuide,selectJournalReferenceCases} from './journal-reference-catalog.js';
@@ -81,7 +82,16 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
   source.taskHash=await taskFingerprint(source);
   const context={format:OFFLINE_PACKAGE_FORMAT,version:2,source,materials:selected.map(item=>({...item,preview:showImages?packagePreviewPath('materials',item.alias,chosen.find(entry=>entry.alias===item.alias)?.bytes,{transparent:true}):null}))};
   const envelope={format:EDITABLE_WORK_FORMAT,version:1,source,title:'新的手帐'};
-  const directExample={...envelope,page:{version:3,style:'留白叙事',intent:null,items:[{asset:selected[0].alias,piece:'主素材',unit:0,role:null,operations:[{op:'whole'}],placement:{x:.5,y:.43,rotation:0,z:1},relation:null}],graphics:[{key:'title-rule',kind:'line',x:.5,y:.21,width:.55,height:.004,stroke:'#8ba99b',fill:null,line_width:2}],text_blocks:[{content:'这一页的主题',font_style:'serif',x:.5,y:.13,width:.7,height:.09,font_size:30,color:'#30463d'},{content:'第一段可编辑正文，根据真实主题填写。',font_style:'sans',x:.5,y:.72,width:.75,height:.08,font_size:20,color:'#30463d'},{content:'第二段可编辑正文，接续上一段的内容。',font_style:'sans',x:.5,y:.84,width:.75,height:.08,font_size:20,color:'#30463d'}],paper:{color:'#fcfaf0',pattern:'plain'}}};
+  const directExample={...envelope,page:{version:2,style:'自由构图',intent:null,
+    paper:{color:'#fcfaf0',pattern:'plain'},
+    layers:[
+      {type:'material',id:'hero',asset:selected[0].alias,piece:'hero',unit:0,
+        operations:[{op:'whole'}],placement:{x:.48,y:.42,rotation:-6,z:10}},
+      {type:'text',id:'title',content:'这一页的主题',font_style:'serif',
+        x:.5,y:.14,width:.76,height:.09,font_size:30,color:'#30463d'},
+      {type:'text',id:'body',content:'与这件素材有关的真实观察。',
+        font_style:'sans',x:.5,y:.8,width:.76,height:.11,font_size:19,color:'#30463d'}
+    ]}};
   const layeredGraphics=[
     {key:'note-base',kind:'roundedRectangle',x:.53,y:.74,width:.72,height:.19,fill:'#f5eccb',stroke:null,z:40},
     {key:'marker',kind:'rectangle',x:.5,y:.745,width:.38,height:.022,fill:'#f8df6a',stroke:null,opacity:.68,z:50},
@@ -92,16 +102,15 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
     {content:'和这件素材有关的一句话，\n可放在它的旁边。',font_style:'sans',x:.77,y:.44,width:.26,height:.10,font_size:18,color:'#30463d',role:'caption',line_spacing:3,z:900},
     {content:'把值得记住的小细节写在这里，\n让这张便签与附近的素材互相回应。',font_style:'sans',x:.53,y:.74,width:.62,height:.14,font_size:19,color:'#30463d',role:'body',line_spacing:4,z:900}
   ];
-  directExample.page.graphics=layeredGraphics;
-  directExample.page.ink_strokes=[{points:[{x:.20,y:.63},{x:.24,y:.62},{x:.29,y:.64},{x:.34,y:.62}],width:3,color:'#5278a7',pen_style:'brush',opacity:.8}];
-  directExample.page.text_blocks=layeredTexts;
+  directExample.page.layers.push(...layeredGraphics.map(shape=>({type:'shape',id:shape.key,...shape})));
+  directExample.page.layers.push({type:'ink',id:'hand-mark',points:[{x:.20,y:.63},{x:.24,y:.62},{x:.29,y:.64},{x:.34,y:.62}],width:3,color:'#5278a7',pen_style:'brush',opacity:.8});
   const textRule={none:'不生成文字',requested:'仅按明确要求配文',minimal:'少量可编辑文字',rich:'丰富且可读的可编辑文字',automatic:'按用途生成可编辑文字'}[source.textMode]||'按用途生成可编辑文字';
   const contentBrief=creativeContentBrief({policy:source.contentPolicy,userText:source.userText,providedFacts:source.providedFacts,topic:source.intent,purposes:source.purposes});
-  const task=[`内容要求：先读 CONTENT_BRIEF.txt；正文按页面用途写，不把创作讲解写入画面。`,`风格：${source.styles.map(name=>`${name}（${visualStyleBrief(name)}）`).join('；')||'不预设，由素材和主题决定'}`,`用途：${source.purposes.join('、')||'不预设，由主题决定'}`,`纸张：${source.ratio.toUpperCase()} · ${source.mode==='spread'?'双页':'单页'}`,`加工：${source.processing}`,`文字：${textRule}`].join('\n');
+  const task=[`内容要求：先读 CONTENT_BRIEF.txt；正文按页面用途写，不把创作讲解写入画面。`,`风格：${source.styles.map(name=>`${name}（${visualStyleBrief(name)}）`).join('；')||'不预设，由素材和主题决定'}`,`用途：${source.purposes.join('、')||'不预设，由主题决定'}`,`纸张：${source.ratio.toUpperCase()} · ${source.mode==='spread'?'双页':'单页'}`,`双页构图偏好：${source.mode==='spread'?'画布中线 x=0.5 是装订中缝；尽量让每一件实体素材完整留在左页或右页，避免横跨中缝。不是硬性限制，必要时可以跨页，数字文字与图形可自由跨页。':'单页没有中缝限制。'}`,`加工：${source.processing}`,`文字：${textRule}`].join('\n');
   const materialRules=selected.map(item=>`${item.alias} ${item.title}｜${source.materialPriority.required.includes(item.assetID)?'必须使用':source.materialPriority.available.includes(item.assetID)?'可以使用（仅备选）':'优先使用'}｜${item.kind}｜${item.physicalWidthMM||'?'}×${item.physicalHeightMM||'?'} mm｜${item.continuousTape?'连续胶带':`库存 ${item.quantity}`}｜${source.assetProcessing[item.assetID]||source.processing}｜${source.materialUseHints[item.assetID]||'自由选择用法'}${source.materialUseRequired[item.assetID]?'（必须体现该用法）':''}`).join('\n');
   const densePage=source.purposes[0]!=='主题封面'&&source.styles[0]!=='极简留白';
   const purposeNotes=source.purposes.map(name=>`${name}：${purposeMethod(name)}`).join('；');
-  const modeRules=mode==='direct'?'直接返回 page 可编辑图层，不要返回 tools；线条、边框、色块、自由矢量（多色层可用 vector_layers）放入 page.graphics，画笔/荧光笔路径放入 page.ink_strokes；真实素材先用 crop 裁片，再用 mask 形成外轮廓、diagonal 斜裁、window 开透明孔，后两者可组合；page.style 从合同的六个版式中选，不直接填风格名称；字段与必填项见 contract.json。':'返回 tools 操作数组，先用 compose_page，最后以 finish_design 结束；线条、边框、色块、多色矢量等放入 graphics 或 upsert_primitives；裁片后可用 edit_materials 的 mask、diagonal 和 window 加工，开窗是透明镂空而非白色覆盖；工具参数见 contract.json。';
+  const modeRules=mode==='direct'?'直接返回 page.version=2 的单棵 layers 图层树，不返回 tools；materials、shape、text、ink 与 group 都是 layers 节点，按树顺序叠放。素材经 operations 裁切、挖窗，实体尺寸、库存由拾页校验；不能输出并列的旧图层数组。':'返回 tools 操作数组，先用 compose_page，最后以 finish_design 结束；线条、边框、色块、多色矢量等放入 graphics 或 upsert_primitives；裁片后可用 edit_materials 的 mask、diagonal 和 window 加工，开窗是透明镂空而非白色覆盖；工具参数见 contract.json。';
   const hasPresets=settings.sendPresetReferences===true;
   const selectedCases=selectJournalReferenceCases({styles:source.styles,purposes:source.purposes,materials:selected});
   const selectedTemplates=selectJournalAbstractTemplates(selectedCases,{styles:source.styles,purposes:source.purposes,materials:selected,userTemplates});
@@ -116,7 +125,7 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
   const knowledge={format:'shiye-gpt-task-knowledge',version:3,capabilities:runtimeCapabilities,
     regions:source.sourceSnapshots.map(snapshot=>({assetID:snapshot.assetID,sourceRevision:snapshot.sourceRevision,anatomy:snapshot.anatomy})),
     compositionIdeas:compositionIdeas(source).slice(0,3),
-    caseStudies:{selectedCases:hasPresets?selectedCases.map(({id,title,method})=>({id,title,method})):[]}
+    caseStudies:{families:relevantJournalFamilies({styles:source.styles,purposes:source.purposes}),selectedCases:hasPresets?selectedCases.map(({id,title,method})=>({id,title,method})):[]}
   };
   if(hasPresets){
     knowledge.abstractTemplates={note:'只借鉴方法，不能照搬素材或坐标',templates:selectedTemplates};
@@ -127,21 +136,25 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
   }
   const workflowText=offlineCreationWorkflowText({mode,hasImages:showImages});
   const materialPlanning=offlineCreationPlanningData(source,selected,{mode,hasImages:showImages});
+  const pageBrief=creativePageBrief({styles:source.styles,purposes:source.purposes,textMode:source.textMode,
+    contentPolicy:source.contentPolicy,textPresentation:source.textPresentation,userText:source.userText,
+    theme:source.intent,pageMode:source.mode});
   const compactGuide=[
     '【内容边界】',contentBrief,
+    '【单双页构图与正文】',pageBrief,
     '【创作原则】','先观察真实图案与物理尺寸，再建立主次、叠压、局部加工与阅读路径；拒绝把所有素材平铺成网格。标题、正文和手写装饰需要有实际内容；可保留有意义的留白，素材可少用但不可漏掉 required。参考图不是实体材料，也不是必须复刻的模板。',
-    '【统一 Scene 的实体扩展】','图层可使用 vector_mask 表达 0–1 外轮廓与镂空孔洞；blend_mode=multiply 仅在透明纸、胶带或印色自然叠加时使用。相关文字、矢量和实体片段可以 group_elements 或 page.groups 一起移动；编组不能缩放实体。所有编辑仍保存为拾页相同的 Draft 场景，不把真实图像烘焙成不可编辑的效果图。',
-    '【文字方式】',source.textPresentation==='handwritten'?'自由手写优先：用 page.ink_strokes 或工艺计划 ink 绘制短句、标记与线条；长段可用可编辑手写风格文字，避免伪字迹。':source.textPresentation==='type'?'排版文字优先：文字保持独立可编辑，选好字体、行距与层次。':'混合编排：排版正文结合少量可编辑手写笔迹。',
-    '【编辑合同】',mode==='agent'?'只输出 tools；可使用 apply_craft_plan 做复杂取材与穿插；确切参数以 schema/output.json 为准。':'只输出 page；在 page.items.operations 中使用合法裁切和遮罩，在 graphics/ink_strokes/text_blocks 中保留独立可编辑图层。'
+    '【统一 Scene 的实体扩展】','图层可使用 vector_mask 表达 0–1 外轮廓与镂空孔洞；blend_mode=multiply 仅在透明纸、胶带或印色自然叠加时使用。相关文字、矢量和实体片段可以 代理工具 group_elements 或直接模式 page.layers 中的 group 节点 一起移动；编组不能缩放实体。所有编辑仍保存为拾页相同的 Draft 场景，不把真实图像烘焙成不可编辑的效果图。',
+    '【文字方式】',source.textPresentation==='handwritten'?'自由手写优先：用 page.layers 的 ink 图层或工艺计划 ink 绘制短句、标记与线条；长段可用可编辑手写风格文字，避免伪字迹。':source.textPresentation==='type'?'排版文字优先：文字保持独立可编辑，选好字体、行距与层次。':'混合编排：排版正文结合少量可编辑手写笔迹。',
+    '【编辑合同】',mode==='agent'?'只输出 tools；可使用 apply_craft_plan 做复杂取材与穿插；确切参数以 schema/output.json 为准。':'只输出 page.version=2 且仅含递归 page.layers 图层树；material.operations 按物理裁切协议，shape/text/ink 作为独立可编辑叶图层。禁止输出旧版 items/graphics/text_blocks/ink_strokes 并列数组。'
   ].join('\n\n');
   const compactStart=`拾页 GPT 创作任务 · 先读这一页
 请创作一幅独立、可编辑的手帐作品，不要把整页烘焙成图片。按以下优先级工作：
 1. 先看 task/context.json 与 materials/ 真实素材。source、尺寸、库存、required 必须保持；素材标题不是图像观察证据。
 2. 阅读 task/WORKFLOW.txt 的创作步骤、task/GUIDE.txt 的用户内容边界。可参考 task/material-planning.json 的问题，不把它的假设当事实。
 3. 内部比较至少两种素材组合方向，选最自然的一种；有选择地裁切、叠压、穿插和手写，不照抄 references/ 的版式。
-4. 合法输出合同是 schema/output.json。当前模式：${mode==='direct'?'page（直接排版）':'tools（调用工具）'}，不能混用。examples/project.shiyeproject.json 仅展示字段，不能复制正文或坐标。高级工艺参数仅在 tools 模式阅读 schema/craft-plan.json。
+4. 合法输出合同是 schema/output.json。当前模式：${mode==='direct'?'page（直接排版）':'tools（调用工具）'}，不能混用。${mode==='direct'?'高级 observations/weaves 不可混入直接排版。':'只包含本合同的 tools；严禁额外顶层 page。'}examples/project.shiyeproject.json 仅展示字段，不能复制正文或坐标。高级工艺参数仅在 tools 模式阅读 schema/craft-plan.json。
 5. 将完整结果保存为 project.shiyeproject.json，运行 node runtime/preview.cjs 生成 output/画面预览.html，并在浏览器检查真实 Canvas 渲染和中文字形。output/构图预览.svg 仅是近似参考。不能渲染就说明未验收，不能伪造预览。
-6. 最终按聊天中的交付要求返回一个 JSON 文件或完整单行代码块；保留 source 原样，只更改 title 与 ${mode==='direct'?'page':'tools'}，原始 ZIP 仍可作为包装导入。
+6. 最终按聊天中的交付要求返回一个 JSON 文件或带 JSON 代码围栏的完整单行代码块；保留 source 原样，只更改 title 与 ${mode==='direct'?'page':'tools'}，原始 ZIP 仍可作为包装导入。
 
 【本次主题、要求和内容】
 ${source.intent||'未指定：根据素材自由创作'}
@@ -191,7 +204,7 @@ async function createOfflineImageHandoff({source,project:p,assets,selected,chose
   const brief=imagePrompt({project:p,draft:p.drafts[0],assets,ids:selected.map(item=>item.assetID),theme:p.intent||'',requireAll:settings.requireAllCandidates!==false,includeImages:showImages,includeReferences:hasPresets,textMode:source.textMode});
   const imageOrder=selected.map((item,index)=>`${index+1} = ${item.alias}${showImages?` (${packagePreviewPath('materials',item.alias,chosen.find(entry=>entry.alias===item.alias)?.bytes,{transparent:true})})`:''}`).join('；');
   const instructions=`拾页手帐画面图片任务｜一次完成\n\n你收到的是创作参考 ZIP，不是要返回的作品格式。请先读 task/context.json 与 task/knowledge.json${hasPresets?'、abstract-templates.json':''}，并${showImages?'查看 materials/ 中每件素材的透明图片':'依据素材名称、标签与尺寸'}；素材编号对应：${imageOrder}。${hasPresets?'references/ 中的匹配手帐案例和用户原图可核对的抽象模板只供构图启发；':''}按以下与拾页 API 图像创作一致的要求完成：\n\n${brief}\n\n请在聊天中展示最终画面，并提供可下载的 PNG 图片。图片是不可逐层编辑的画面快照；不要输出可编辑工程包、数据文件或代码。保持纸张比例，导入拾页后存入「画面快照」。`;
-  const imageKnowledge={format:'shiye-gpt-task-knowledge',version:3,caseStudies:{selectedCases:hasPresets?selectedCases.map(({id,title,method})=>({id,title,method})):[]}};
+  const imageKnowledge={format:'shiye-gpt-task-knowledge',version:3,caseStudies:{families:relevantJournalFamilies({styles:source.styles,purposes:source.purposes}),selectedCases:hasPresets?selectedCases.map(({id,title,method})=>({id,title,method})):[]}};
   if(hasPresets){
     imageKnowledge.abstractTemplates={note:'参考构图，不得照搬',templates:selectedTemplates};
     const refs=new Set(referenceImages.map(entry=>entry.id));

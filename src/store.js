@@ -1,13 +1,14 @@
 import {openDB,unwrap} from 'idb';
 import {createStorageRouter} from './storage-router.js';
 import {cloudEnabled} from './cloud-session.js';
+import {prepareProjectScene,prepareProjectList,attachSceneV2} from './scene-v2.js';
 import {cloudAll,cloudGet,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudPreview,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudPendingDetails,cloudDiscardPending,cloudFlushProjects,cloudProjectDocument,cloudEmergencySnapshot,cloudRestoreEmergency,cloudBackupBlobIDs} from './cloud-store.js';
 import {createPendingRecovery,parsePendingRecovery} from './emergency-backup.js';
 import {validateBackupData,validateRestoredRecords} from './backup-integrity.js';
 // Exceptional destructive imports require an acknowledged atomic cloud commit.
 export async function confirmedTransaction(names,fn){if(cloudEnabled){await cloudFlushProjects();return cloudTransaction(names,fn);}return transaction(names,fn);}
 export async function stageImport(batch){if(cloudEnabled)return cloudStageImport(batch);await transaction(['assets','blobs','projects'],tx=>{for(const store of ['assets','blobs','projects'])for(const record of batch[store]||[])tx.objectStore(store).put(record);});return {pending:false};}
-export const stageProject=record=>cloudEnabled?cloudStageProject(record):put('projects',record);
+export const stageProject=record=>{prepareProjectScene(record);return cloudEnabled?cloudStageProject(record):put('projects',record);};
 export const pendingProjects=()=>cloudEnabled?cloudPendingProjects():Promise.resolve([]);
 export const pendingSyncDetails=()=>cloudEnabled?cloudPendingDetails():Promise.resolve({projects:[],batches:[],error:null});
 export async function createEmergencyBackup(){
@@ -73,9 +74,9 @@ const storageRouter=createStorageRouter(
     browser:{all:localAll,get:(name,id)=>localDatabase().then(db=>db.get(name,id)),transaction:browserTransaction}
   }
 );
-export const all=name=>storageRouter.all(name);
-export const get=(name,id)=>storageRouter.get(name,id);
-export async function put(name,item){return transaction([name],tx=>tx.objectStore(name).put(item));}
+export async function all(name){const rows=await storageRouter.all(name);return name==='projects'?prepareProjectList(rows):rows;}
+export async function get(name,id){const record=await storageRouter.get(name,id);return name==='projects'&&record?prepareProjectScene(record):record;}
+export async function put(name,item){if(name==='projects')prepareProjectScene(item);return transaction([name],tx=>tx.objectStore(name).put(item));}
 export async function remove(name,id){return transaction([name],tx=>tx.objectStore(name).delete(id));}
 export const transaction=(names,fn)=>storageRouter.transaction(names,fn);
 const toBase64=blob=>new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=()=>reject(r.error);r.readAsDataURL(blob);});

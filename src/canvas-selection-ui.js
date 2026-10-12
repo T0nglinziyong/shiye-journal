@@ -1,5 +1,6 @@
 import {canvasObjects,objectCorners,polygonContains,selectPolygon,selectStrokes,selectionBounds,moveSelection,materialCenterOutside} from './canvas-selection.js';
 import {syncSelectionGeometry} from './selection-geometry.js';
+import {groupSceneLayers,ungroupSceneLayers,sceneGroupMembers} from './scene-model.js';
 
 export function mountCanvasSelection(c) {
   const {state,view,current,checkpoint,saveProject,render}=c,d=current(),page=view.querySelector('#canvas-page');if(!d||!page)return;
@@ -22,9 +23,21 @@ export function mountCanvasSelection(c) {
   toolbar.append(Object.assign(document.createElement('span'),{textContent:'已选 '+count()+' 项'}));
   button('全选',()=>{state.multiSelected=canvasObjects(d,state.selectionFilter).map(e=>e.value.id);state.selectedStrokes=state.selectionFilter.ink?(d.strokes||[]).map((_,i)=>i):[];state.selected=null;state.selectionPath=null;render();});
   button('清空选择',()=>{state.multiSelected=[];state.selectedStrokes=[];state.selected=null;state.selectionPath=null;render();});
-  const group=button('组合移动',()=>change(entries=>{const id=crypto.randomUUID();entries.filter(e=>e.kind==='material').forEach(e=>e.value.creativeGroupID=id);}));
-  group.disabled=active().filter(e=>e.kind==='material').length<2;
-  button('退出装饰组',()=>change(entries=>entries.forEach(e=>{delete e.value.creativeGroupID;})));
+  const group=button('组合移动',()=>{
+    const ids=[...new Set([...active().map(e=>e.value.id),...activeStrokes().map(i=>d.strokes[i].id)])];
+    if(ids.length<2)return;
+    try{checkpoint();groupSceneLayers(d,ids,{id:'group-'+crypto.randomUUID(),name:'手帐组合'});
+      state.selected=null;saveProject();render();
+    }catch(error){state.undo.pop();globalThis.alert?.(error.message);}
+  });
+  group.disabled=count()<2;
+  button('退出装饰组',()=>{
+    const id=active().find(e=>e.value.creativeGroupID)?.value.creativeGroupID||
+      activeStrokes().map(i=>d.strokes[i].creativeGroupID).find(Boolean);
+    if(!id)return;
+    checkpoint();ungroupSceneLayers(d,id);
+    state.multiSelected=[];state.selectedStrokes=[];state.selected=null;saveProject();render();
+  });
   button('锁定',()=>change(entries=>{entries.forEach(e=>e.value.locked=true);state.multiSelected=[];state.selectedStrokes=[];state.selected=null;state.selectionPath=null;}));
   const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.classList.add('canvas-selection-overlay');svg.setAttribute('viewBox','0 0 '+d.canvas.width+' '+d.canvas.height);page.append(svg);
   const paint=(path=[])=>{
@@ -39,7 +52,24 @@ export function mountCanvasSelection(c) {
   };paint();
   let gesture=null;
   const point=e=>{const r=page.getBoundingClientRect();return {x:(e.clientX-r.left)/r.width*d.canvas.width,y:(e.clientY-r.top)/r.height*d.canvas.height};};
-  view.pickCanvasObject=(id,shift=false)=>{const entry=canvasObjects(d).find(x=>x.value.id===id);if(!entry)return;const ids=state.multiSelected||[];state.selectionPath=null;state.selectedStrokes=[];if(shift){state.multiSelected=ids.includes(id)?ids.filter(x=>x!==id):[...ids,id];state.selected=state.multiSelected.length===1?state.multiSelected[0]:null;}else{state.multiSelected=entry.value.creativeGroupID?canvasObjects(d).filter(x=>x.value.creativeGroupID===entry.value.creativeGroupID).map(x=>x.value.id):[id];state.selected=state.multiSelected.length===1?id:null;}view.editorRefresh?.();paint();};
+  view.pickCanvasObject=(id,shift=false)=>{
+    const entry=canvasObjects(d).find(x=>x.value.id===id);if(!entry)return;
+    const ids=state.multiSelected||[];
+    state.selectionPath=null;state.selectedStrokes=[];
+    if(shift){
+      state.multiSelected=ids.includes(id)?ids.filter(x=>x!==id):[...ids,id];
+      state.selected=state.multiSelected.length===1?state.multiSelected[0]:null;
+    }else if(entry.value.creativeGroupID){
+      const members=sceneGroupMembers(d,entry.value.creativeGroupID);
+      state.multiSelected=members.filter(e=>e.kind!=='ink').map(e=>e.value.id);
+      state.selectedStrokes=members.filter(e=>e.kind==='ink')
+        .map(e=>d.strokes.findIndex(s=>s.id===e.value.id)).filter(i=>i>=0);
+      state.selected=state.multiSelected.length===1&&!state.selectedStrokes.length?id:null;
+    }else{
+      state.multiSelected=[id];state.selected=id;
+    }
+    view.editorRefresh?.();paint();
+  };
   // Capture before app.js' single-object drag so a lasso starts over any
   // object and a selected set moves together, with one undo checkpoint.
   page.addEventListener('pointerdown',e=>{
@@ -65,8 +95,10 @@ export function mountCanvasSelection(c) {
         e.preventDefault();e.stopImmediatePropagation();page.setPointerCapture(e.pointerId);
         return;
       }
-      state.multiSelected=ids;state.selectedStrokes=[];state.selected=ids.length===1?entry.value.id:null;state.selectionPath=null;
-      gesture={id:e.pointerId,start:p,starts:new Map(canvasObjects(d).filter(x=>ids.includes(x.value.id)).map(x=>[x.value.id,{x:x.value.x,y:x.value.y,...(x.kind==='material'?{userOverrideFlags:x.value.userOverrideFlags?.slice()}: {})}]))};
+      state.multiSelected=ids;state.selected=ids.length===1&&!state.selectedStrokes.length?entry.value.id:null;state.selectionPath=null;
+      gesture={id:e.pointerId,start:p,
+        starts:new Map(canvasObjects(d).filter(x=>ids.includes(x.value.id)).map(x=>[x.value.id,{x:x.value.x,y:x.value.y,...(x.kind==='material'?{userOverrideFlags:x.value.userOverrideFlags?.slice()}: {})}])),
+        strokeStarts:new Map(activeStrokes().map(i=>[i,d.strokes[i].points.map(point=>({...point}))]))};
     }else{state.multiSelected=[];state.selectedStrokes=[];state.selected=null;state.selectionPath=null;paint();view.editorRefresh?.();return;}
     e.preventDefault();e.stopImmediatePropagation();page.setPointerCapture(e.pointerId);view.editorRefresh?.();paint();
   },true);
@@ -91,7 +123,7 @@ export function mountCanvasSelection(c) {
   };
   page.addEventListener('pointercancel',e=>{if(gesture?.id!==e.pointerId)return;e.preventDefault();e.stopImmediatePropagation();cancelGesture();},true);
   view.cancelObjectGesture=cancelGesture;
-  view.canvasSelectionRefresh=()=>{toolbar.hidden=!['lasso','marquee'].includes(state.tool)&&count()<2;if(['lasso','marquee'].includes(state.tool))toolbar.remove();else controls.append(toolbar);toolbar.querySelector('span').textContent='已选 '+count()+' 项';group.disabled=active().filter(e=>e.kind==='material').length<2;paint();};
+  view.canvasSelectionRefresh=()=>{toolbar.hidden=!['lasso','marquee'].includes(state.tool)&&count()<2;if(['lasso','marquee'].includes(state.tool))toolbar.remove();else controls.append(toolbar);toolbar.querySelector('span').textContent='已选 '+count()+' 项';group.disabled=count()<2;paint();};
   // Existing per-object inspector remains available; bulk unlock does not
   // require locked objects to participate in selection.
   const locked=[...(d.items||[]),...(d.textBlocks||[]),...(d.primitives||[])].filter(o=>o.locked||o.isLocked);

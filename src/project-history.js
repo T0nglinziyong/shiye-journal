@@ -1,4 +1,5 @@
 import {snapshotDraft} from './draft-snapshot.js';
+import {attachSceneV2} from './scene-v2.js';
 export function captureHistory(project){
   if(!project.initialEditorSnapshot||!project.draftHistorySnapshots)throw Error('作品缺少当前版本历史结构');
   let changed=false;

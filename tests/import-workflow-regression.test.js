@@ -34,7 +34,7 @@ test('imported work saves editable paper metadata instead of inpainted photo bac
  assert.equal(saved.assets.length,1,'No internal full-sheet photo may be added');
  assert.equal(saved.assets[0].isProjectInternal,true);
  assert.equal(saved.blobs.filter(x=>x.data.type==='image/jpeg').length,1);
- assert.deepEqual(p.initialEditorSnapshot.drafts[0].items,d.items);
+ assert.deepEqual(p.initialEditorSnapshot.drafts[0].layers,d.layers);
  assert.equal(state.importStep,'done');
 });
 test('per-photo library choice overrides batch default without changing physical positions',async()=>{
