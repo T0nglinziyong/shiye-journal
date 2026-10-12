@@ -2,7 +2,7 @@ import {openDB,unwrap} from 'idb';
 import {createStorageRouter} from './storage-router.js';
 import {cloudEnabled} from './cloud-session.js';
 import {prepareProjectScene,partitionProjectList,attachSceneV2} from './scene-v2.js';
-import {cloudMigrationInventory,cloudMigrationOriginalProject,cloudMigrationCommit,cloudLegacyProjectBackup,cloudAll,cloudGet,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudPreview,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudPendingDetails,cloudDiscardPending,cloudFlushProjects,cloudProjectDocument,cloudEmergencySnapshot,cloudRestoreEmergency,cloudBackupBlobIDs} from './cloud-store.js';
+import {cloudConflictReview,cloudConflictBackup,cloudResolveProjectConflict,cloudMigrationInventory,cloudMigrationOriginalProject,cloudMigrationCommit,cloudLegacyProjectBackup,cloudAll,cloudGet,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudPreview,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudPendingDetails,cloudDiscardPending,cloudFlushProjects,cloudProjectDocument,cloudEmergencySnapshot,cloudRestoreEmergency,cloudBackupBlobIDs} from './cloud-store.js';
 import {createPendingRecovery,parsePendingRecovery} from './emergency-backup.js';
 import {validateBackupData,validateRestoredRecords} from './backup-integrity.js';
 // Exceptional destructive imports require an acknowledged atomic cloud commit.
@@ -13,6 +13,9 @@ export const readOriginalLegacyProject=record=>cloudMigrationOriginalProject(rec
 export const commitLegacyAccountMigration=plan=>cloudMigrationCommit(plan);
 export const stageProject=record=>{prepareProjectScene(record);return cloudEnabled?cloudStageProject(record):put('projects',record);};
 export const pendingProjects=()=>cloudEnabled?cloudPendingProjects():Promise.resolve([]);
+export const reviewSyncConflict=(kind,id)=>cloudConflictReview(kind,id);
+export const backupSyncConflict=(kind,id)=>cloudConflictBackup(kind,id);
+export const resolveSyncConflict=selection=>cloudResolveProjectConflict(selection);
 export const pendingSyncDetails=()=>cloudEnabled?cloudPendingDetails():Promise.resolve({projects:[],batches:[],error:null});
 export async function createEmergencyBackup(){
   if(!cloudEnabled)throw Error('应急待同步备份仅适用于云端账号');

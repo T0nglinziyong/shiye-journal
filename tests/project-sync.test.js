@@ -282,3 +282,29 @@ test('a multi-store mutation keeps newer operations and drops older ones',async(
   assert.deepEqual(committed,[['recent']]);
   assert.deepEqual(rows,[]);
 });
+
+test('manual conflict choices preserve queue bytes until a reviewed serial is confirmed',async()=>{
+ const clone=x=>structuredClone(x);
+ for(const choice of ['cloud','local','both']){
+  let rows=[],serverRevision=9;
+  const sync=createProjectSync({
+   load:async()=>clone(rows),reload:async()=>clone(rows),
+   write:async next=>{rows=clone(next);},
+   commit:async()=>{serverRevision++;},revision:()=>serverRevision,
+   reconcile:async()=> 'conflict',autoFlushDelayMs:3600000
+  });
+  await sync.stage({id:'local-scene',title:'local words'},{baseRevision:2});
+  const pending=(await sync.pending())[0];
+  await assert.rejects(sync.resolvePending('local-scene',pending.serial+10,
+    {record:{id:'lost-scene'},baseRevision:serverRevision}),/发生了新修改/);
+  assert.equal(rows[0].record.title,'local words');
+  const selected=choice==='cloud'?null:choice==='local'?{id:'local-scene',title:'local words'}:
+    {id:'independent-copy',title:'both'};
+  await sync.resolvePending('local-scene',pending.serial,
+    {record:selected,baseRevision:serverRevision});
+  const actual=await sync.pending();
+  if(choice==='cloud')assert.deepEqual(actual,[]);
+  else{assert.equal(actual.length,1);assert.equal(actual[0].record.id,selected.id);
+    assert.equal(actual[0].baseRevision,9);}
+ }
+});
