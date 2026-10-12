@@ -1366,7 +1366,7 @@ async function openCutoutCheck(id,candidate=null){
   const a=candidate?{title:candidate.title}:asset(id);if(!a)return;
   const stored=async blobId=>blobId?(await db.get('blobs',blobId))?.data:null;
   const compact=!candidate&&!!a.candidateFrameBlobId
-    &&!((a.processingRecord?.displayRotationDegrees||0)%180);
+    &&(!!a.finalMaskBlobId||Math.abs(a.processingRecord?.displayRotationDegrees||0)<.01);
   const modern=compact&&!!a.finalMaskBlobId;
   let saved=modern?null:candidate?.blob||await stored(a.blobId),
     original=compact?null:candidate?.originalBlob||await stored(a.originalBlobId),
@@ -1408,10 +1408,14 @@ async function openCutoutCheck(id,candidate=null){
       if(state.importRecords[state.importIndex]?.candidateData===state.importCandidateData)state.importCandidateURLs=state.importCandidateData.map(c=>c.url);
     }else{
       const frameId=a.candidateFrameBlobId||uid();
-      const baselineId=a.initialMaskBlobId||uid(),
+      // Existing imports can retain their original recognition PNG as a
+      // lazy baseline. Never download it merely because the user pressed
+      // Apply. Fresh imports already have an immutable initial mask.
+      const baselineId=a.initialMaskBlobId||
+        (a.originalCutoutBlobId?null:uid()),
         nextMaskId=a.finalMaskBlobId&&a.finalMaskBlobId!==baselineId?a.finalMaskBlobId:uid();
-      const baselineBlob=a.initialMaskBlobId?null:await extractAlphaMask(
-        a.originalCutoutBlobId?await stored(a.originalCutoutBlobId)||saved:recognition||saved);
+      const baselineBlob=baselineId&&!a.initialMaskBlobId
+        ?finalMaskBlob||await extractAlphaMask(recognition||saved):null;
       const updated={...a,processingRecord:nextProcessing,
         physicalWidthMM:width||a.physicalWidthMM,physicalHeightMM:height||a.physicalHeightMM,
         candidateFrameBlobId:frameId,initialMaskBlobId:baselineId,finalMaskBlobId:nextMaskId,
