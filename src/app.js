@@ -1017,7 +1017,7 @@ async function createFromBasket(templateID=null){
   let result=null;
   if(templateID)result=applyManualLayout(draft,state.assets,state.basket,templateID);
   else draft.items=[];
-  await db.put('projects',p);
+  await db.stageProject(p);
   state.projects.push(p);state.activeProject=p;state.activeDraft=p.activeDraftID;resetEditorHistory(state);state.tool='select';
   await matchingSession.persist();route('editor');
   if(result?.remaining)toast(`已预排版 ${result.placed} 件；其余 ${result.remaining} 件可在画布中手动添加`);
