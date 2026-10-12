@@ -81,7 +81,7 @@ export function mergeEditableSceneProjects(local,remote){
   const stamp=time(op.at),delta=op.delta;
   if(stamp===null||delta?.kind!=='scene-transaction-v2'||!Array.isArray(delta.nodes)||!Array.isArray(delta.meta))
     return null;
-  const draft=result.drafts.find(d=>d.id===op.draftID);
+  const draft=result.drafts.find(d=>d.id===delta.draftID);
   if(!draft||draft.sceneVersion!==2||!Array.isArray(draft.layers))return null;
   // Exact structure reorder/ungroup of existing nodes is not yet safely
   // transformable across concurrent reorder: send it to existing LWW+backup.
@@ -111,7 +111,7 @@ export function mergeEditableSceneProjects(local,remote){
   }
   for(const field of delta.meta){
    if(field.key==='id'||field.key==='layers'||field.key==='sceneVersion')return null;
-   if(!resolveField(draft,field,stamp,remoteTouch,remoteFallback,metaKey(op.draftID,field.key)))return null;
+   if(!resolveField(draft,field,stamp,remoteTouch,remoteFallback,metaKey(delta.draftID,field.key)))return null;
   }
  }
  for(const draft of result.drafts)try{validateSceneExtensions(draft);}catch{return null;}
