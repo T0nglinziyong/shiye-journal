@@ -31,6 +31,6 @@ export function mountPieceThumbnail(card,item){
    ctx.drawImage(img,crop.x*w,crop.y*h,crop.width*w,crop.height*h,0,0,outW,outH);
    ctx.restore();img.style.display='none';
  };
- if(img.complete&&img.naturalWidth)paint();
+ if(img.complete&&img.naturalWidth)requestAnimationFrame(paint);
  else{img.addEventListener('load',paint,{once:true});img.addEventListener('error',()=>canvas.remove(),{once:true});}
 }
