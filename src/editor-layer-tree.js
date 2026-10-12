@@ -31,7 +31,7 @@ export function layerMoveTarget(d,movingID,targetID,relation='before'){
 }
 
 export function openEditorLayerTree(anchor,{draft,state,view,checkpoint,saveProject,render,toast,uid,asset,imgTag,esc}={}){
- const p=openPopover(anchor,{title:'图层树 · 上方在前',width:Math.min(390,innerWidth-24)});
+ const p=openPopover(anchor,{title:'图层树 · 上方在前',width:Math.min(390,innerWidth-24),dismissOnOutside:false});
  p.surface.classList.add('swift-layer-popover','scene-layer-tree-popover');
  const menu=document.createElement('div');menu.className='scene-layer-tree-toolbar';
  const list=document.createElement('div');list.className='canvas-layer-list scene-layer-tree';list.setAttribute('role','tree');
@@ -107,7 +107,7 @@ export function openEditorLayerTree(anchor,{draft,state,view,checkpoint,saveProj
     if(!groupID)return;commit(()=>{ungroupSceneLayers(draft,groupID);state.sceneSelectedGroup=null;});
   },'btn mini');
   ungroup.disabled=!(state.sceneSelectedGroup||record().some(e=>e.value.id===state.selected&&e.parents.length));
-  menu.append(multiple,group,ungroup);
+  menu.append(multiple,group,ungroup,button('关闭',()=>p.close(),'btn mini'));
  }
  const dropCandidate=(x,y)=>{
   const hit=document.elementFromPoint?.(x,y)?.closest?.('[data-scene-node]');
