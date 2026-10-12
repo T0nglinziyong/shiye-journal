@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {checkAccountResetEpoch,resetMarkerToken,observedResetKey} from '../src/account-reset-epoch.js';
+import {checkAccountResetEpoch,resetMarkerToken,observedResetKey,finishPendingAccountReset} from '../src/account-reset-epoch.js';
 import {eraseSiteAppData} from '../src/account-data-wipe.js';
 import {createProjectSync} from '../src/project-sync.js';
 
@@ -76,4 +76,28 @@ test('reset pauses the queued sync immediately; no stale writes are replayed',as
  await sync.flush();
  assert.equal(commits,0);
  assert.equal(durable.length,1);
+});
+
+test('an interrupted remote reset resumes deletion on login without starting a fresh reset',async()=>{
+ const seen=[],statuses=[],queue=[
+   {more:true,phase:'cos',cosDeleted:400},
+   {more:true,phase:'supabase',supabaseDeleted:9},
+   {reset:true,more:false,phase:'complete'}
+ ];
+ const client={auth:{getSession:async()=>({data:{session:{access_token:'mock-bearer'}},error:null})}};
+ const fetchRequest=async(path,options)=>{
+   assert.equal(path,'/api/account-reset');
+   const body=JSON.parse(options.body);
+   assert.equal(body.mode,'delete');
+   assert.equal(body.resetId,'old-run');
+   seen.push(body);
+   return {ok:true,json:async()=>queue.shift()};
+ };
+ const result=await finishPendingAccountReset({
+   client,resetId:'old-run',fetchRequest,onProgress:message=>statuses.push(message)
+ });
+ assert.equal(result.deleted,409);
+ assert.equal(result.complete,true);
+ assert.equal(seen.length,3);
+ assert.equal(statuses.length,3);
 });
