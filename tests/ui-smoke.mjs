@@ -43,11 +43,13 @@ assert.match(window.document.querySelector('.import-nav').textContent,/导入作
 assert.equal(window.document.querySelectorAll('.import-source-actions button').length,3);
 window.document.querySelector('[data-act="import-exit"]').click();
 window.document.querySelector('#work-create').click();
+assert.ok(window.document.querySelector('#blank-create-confirm'),'New work explicitly chooses single/spread layout');
+window.document.querySelector('#blank-create-confirm').click();
 await waitFor(()=>window.document.body.classList.contains('editing'));
 assert.ok(window.document.body.classList.contains('editing'),window.happyDOM.virtualConsolePrinter.readAsString()+' '+window.document.querySelector('#view').textContent.slice(0,120)+' '+window.document.querySelector('#toast').textContent);
 assert.match(window.document.querySelector('#view').textContent,/导入创作指令/);
 assert.ok(window.document.body.classList.contains('editing'));
-assert.equal(window.document.querySelector('.swift-editor-head [data-act="save-work"]')?.textContent,'保存',window.happyDOM.virtualConsolePrinter.readAsString());
+assert.equal(window.document.querySelector('.swift-editor-head [data-editor-completion]')?.textContent,'完成',window.happyDOM.virtualConsolePrinter.readAsString());
 window.document.querySelector('.swift-editor-head [data-act="back-works"]').click();
 window.document.querySelector('#top-settings').click();
 window.document.querySelector('[data-val="数据与诊断"]').click();

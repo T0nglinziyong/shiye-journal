@@ -215,8 +215,9 @@ function composeDirectSceneV2(d,assets,aliases,page,options){
   // Keep manually edited content intact. The only storage is the tree; the
   // model must never overwrite an unmentioned existing leaf or copy stock.
   const preserve=nodes=>nodes.flatMap(node=>{if(node.type==='group'){const children=preserve(node.children||[]);return children.length?[{...node,children}]:[];}return used.has(node.id)?[]:[node];});
+  const generated=build(page.layers);
   const original=preserve(d.layers);
-  d.layers=[...original,...build(page.layers)];
+  d.layers=[...original,...generated];
   validateSceneExtensions(d);
   finish(d,assets,{summary:page.intent||''},options);
 }

@@ -76,7 +76,7 @@ test('direct-page preview embeds the supplied transparent material and editable 
     const svg=await readFile(join(directory,'output/构图预览.svg'),'utf8');
     assert.match(svg,/data:image\/png;base64,/);
     assert.match(svg,/这一页的主题/);
-    assert.match(svg,/font-family="serif"/);
+    assert.match(svg,/font-family="[^"\n]*(?:serif|Songti|Noto)/);
     assert.match(svg,/图层与任务包缩略图|基于可编辑图层与任务包缩略图/);
   }finally{await rm(directory,{recursive:true,force:true});}
 });

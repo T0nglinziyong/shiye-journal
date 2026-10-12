@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {Window} from 'happy-dom';
+import {draft as createDraft} from '../src/domain.js';
 import {BoundedValueCache,reusePagePreviews,clearPreviewContentCache,previewCacheStats} from '../src/preview-content-cache.js';
 import {bindImageResources,notifyImageInvalidation,cachedImageSource} from '../src/presentation-resources.js';
 import {createMatchingCoverCache} from '../src/matching-cover-cache.js';
@@ -19,7 +20,8 @@ async function until(check){for(let i=0;i<80;i++){if(check())return;await new Pr
 test('matching cover markup is reused on progress updates and invalidated by mutable content',()=>{
  let calls=0;const state={accountId:'a',assets:[{id:'m',blobId:'image',title:'paper'}]};
  const cache=createMatchingCoverCache({state,workCover:p=>{calls++;return JSON.stringify(p.drafts);}});
- const p={id:'p',title:'work',activeDraftID:'d',drafts:[{id:'d',items:[{assetID:'m',x:1}],textBlocks:[{content:'old'}]}]};
+ const d=createDraft();d.id='d';d.items.push({id:'material',assetID:'m',x:100,y:120,width:30,height:30,zIndex:1});d.textBlocks.push({id:'text',content:'old',x:40,y:60,width:120,height:50,color:'#333333',fontSize:20});
+ const p={id:'p',title:'work',activeDraftID:'d',drafts:[d]};
  try{
   const a=cache.render(p);assert.equal(cache.render(p),a);assert.equal(calls,1);
   p.drafts[0].textBlocks[0].content='new';assert.notEqual(cache.render(p),a);assert.equal(calls,2);
@@ -42,7 +44,7 @@ test('warm preview lookup is synchronous and switching routes does not fetch aga
 test('editor display variants reuse a warm low cover without fetching the raw original',async()=>{
  const env=environment();let originals=0,display=0;const root=document.createElement('div');document.body.append(root);
  const loader=mountPrivateImages({root,db:{
-   previewBlob:async(_id,pixels)=>{if(pixels>360)display++;return new Blob(['variant:'+pixels]);},
+   previewBlob:async(_id,pixels)=>{if(pixels>480)display++;return new Blob(['variant:'+pixels]);},
    get:async()=>{originals++;return {data:new Blob(['raw'])};}
  },urls:new Map(),onError:()=>{}});
  try{

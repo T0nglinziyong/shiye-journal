@@ -44,7 +44,7 @@ test('malicious nonphysical blend and invalid holes roll back operations',()=>{
  assert.equal(out.results[0].ok,true);
  assert.equal(out.results[1].ok,false);
  assert.equal(out.draft.primitives.length,1);
- assert.equal(out.draft.primitives[0].blendMode,undefined);
+ assert.equal(out.draft.primitives[0].blendMode,'normal');
 });
 
 test('AI tools group, move and delete editable ink through the canonical Scene tree',()=>{

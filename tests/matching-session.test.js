@@ -112,7 +112,7 @@ test('local UI save not triggered merely by reopening the same state',async()=>{
  assert.equal(device.writes.length,0);
 });
 test('variant drafts reuse drafts but never convert published editable work to draft',()=>{
- const v={project:{id:'source',drafts:[{id:'d'}],isDraft:true}};
+ const v={project:{id:'source',drafts:[draft],activeDraftID:'d',isDraft:true}};
  assert.equal(variantDraftProject(v,{id:'keep',isDraft:true},'new').id,'keep');
  const copied=variantDraftProject(v,{id:'published',isDraft:false},'new');
  assert.equal(copied.isDraft,true);assert.equal(copied.id,'new');

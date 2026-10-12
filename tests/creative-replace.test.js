@@ -27,6 +27,6 @@ test('A-01/A-02: locked generated text remains; invalid replacement is atomic',(
  const before=structuredClone(withoutText.draft);
  const conflict=execute(page({layers:[sceneText('试图改锁定正文')]}),withoutText.draft);
  assert.equal(conflict.results[0].ok,false);assert.match(conflict.results[0].detail,/已锁定/);
- assert.deepEqual(JSON.parse(JSON.stringify(conflict.draft)).layers,before.layers);
+ assert.deepEqual(JSON.parse(JSON.stringify(conflict.draft)).layers,JSON.parse(JSON.stringify(before)).layers);
  assert.equal(conflict.draft.agentRun.status,'editing');
 });

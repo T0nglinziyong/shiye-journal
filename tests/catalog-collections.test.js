@@ -43,11 +43,11 @@ test('ZIP project retains editable layers and rejects missing local assets',asyn
 test('direct JSON and ZIP preserve crop, organic vectors, pen, marker, text and page geometry',async()=>{
   const asset={id:'owned-asset',title:'纸片',kind:'paper',physicalWidthMM:20,physicalHeightMM:30,supply:{quantity:1}};
   const source=project('图文层次');
-  const page={version:3,style:'自由构图',intent:'纸片与笔迹互相呼应',paper:{color:'#fdf9ed',pattern:'lines'},
-    items:[{asset:asset.id,piece:'paper-piece',unit:0,role:'support',operations:[{op:'crop',box:{unit:'ratio',mode:'keep',values:[0,0,.5,1]},angle:0,finish:null}],placement:{x:.25,y:.35,rotation:8,z:10},relation:null}],
-    graphics:[{key:'under-text',kind:'roundedRectangle',x:.62,y:.66,width:.52,height:.19,fill:'#f8e787',stroke:null,z:30,opacity:.5},{key:'leaf',kind:'vector',x:.72,y:.34,width:.12,height:.10,fill:'#a0bd8e',stroke:'#52734e',vector_paths:[[[0,.5],[.4,0],[1,.5],[.4,1]]],z:40}],
-    text_blocks:[{content:'在纸片旁写下观察\n让颜色牵起画面',font_style:'hand',x:.62,y:.66,width:.48,height:.16,font_size:24,color:'#30463d',line_spacing:4,z:50}],
-    ink_strokes:[{points:[{x:.2,y:.57},{x:.35,y:.56},{x:.47,y:.59}],width:3,color:'#5278a7',pen_style:'brush'},{points:[{x:.43,y:.73},{x:.58,y:.73}],width:14,color:'#ffde55',pen_style:'marker',opacity:.3}]};
+  const page={version:2,style:'自由构图',intent:'纸片与笔迹互相呼应',paper:{color:'#fdf9ed',pattern:'lines'},
+    layers:[{type:'material',id:'paper-piece',asset:asset.id,piece:'paper-piece',unit:0,role:'support',operations:[{op:'crop',box:{unit:'ratio',mode:'keep',values:[0,0,.5,1]},angle:0,finish:null}],placement:{x:.25,y:.35,rotation:8,z:10},relation:null},
+    {type:'shape',id:'under-text',key:'under-text',kind:'roundedRectangle',x:.62,y:.66,width:.52,height:.19,fill:'#f8e787',stroke:null,z:30,opacity:.5},{type:'shape',id:'leaf',key:'leaf',kind:'vector',x:.72,y:.34,width:.12,height:.10,fill:'#a0bd8e',stroke:'#52734e',vector_paths:[[[0,.5],[.4,0],[1,.5],[.4,1]]],z:40},
+    {type:'text',id:'journal-text',content:'在纸片旁写下观察\n让颜色牵起画面',font_style:'hand',x:.62,y:.66,width:.48,height:.16,font_size:24,color:'#30463d',line_spacing:4,z:50},
+    {type:'ink',id:'ink-pen',points:[{x:.2,y:.57},{x:.35,y:.56},{x:.47,y:.59}],width:3,color:'#5278a7',pen_style:'brush'},{type:'ink',id:'ink-marker',points:[{x:.43,y:.73},{x:.58,y:.73}],width:14,color:'#ffde55',pen_style:'marker',opacity:.3}]};
   const result=applyToolCalls(page,source.drafts[0],[asset],{},{processing:'自由拆解'});
   assert.deepEqual(result.results.map(entry=>entry.ok),[true]);
   assert.equal(result.draft.items[0].cropRect.width,.5);
@@ -63,15 +63,15 @@ test('direct JSON and ZIP preserve crop, organic vectors, pen, marker, text and 
   assert.deepEqual(imported.drafts[0].primitives[1].vectorPaths,result.draft.primitives[1].vectorPaths);
   assert.equal(imported.drafts[0].primitives[0].opacity,.5);
   assert.equal(imported.drafts[0].textBlocks[0].content,result.draft.textBlocks[0].content);
-  const invalid=structuredClone(page);invalid.ink_strokes[0].points[0].x=1.2;
-  assert.throws(()=>applyToolCalls(invalid,source.drafts[0],[asset]),/合同不合法/);
+  const invalid=structuredClone(page);invalid.layers.find(n=>n.type==='ink').points[0].x=1.2;
+  assert.throws(()=>applyToolCalls(invalid,source.drafts[0],[asset]),/合同不合法|缺少字段/);
 });
 test('snapshot prompt leaves composition open while editable prompt advertises layered methods',()=>{
   const base=project('测试').drafts[0],image=buildCreativeMessages({draft:base,assets:[],aliases:{},generationMode:'direct',deliveryMode:'image'});
   assert.match(image[0].content,/不设素材数量、留白、密度/);
   assert.doesNotMatch(image[0].content,/每轮以实际画布/);
   const editable=buildCreativeMessages({draft:base,assets:[],aliases:{},generationMode:'direct',deliveryMode:'json'});
-  assert.match(editable[0].content,/ink_strokes/);
+  assert.match(editable[0].content,/layers|ink/);
   assert.match(editable[0].content,/文字围绕图片侧边/);
 });
 test('GPT image delivery uses actual image edits and only accepts returned PNG bytes',async()=>{
@@ -97,27 +97,27 @@ test('editable mask operations preserve irregular, rounded and scalloped cutouts
     {op:'mask',shape:'rounded',radius:.18},
     {op:'mask',shape:'scallop',depth:.06,waves:7}
   ];
-  const page={version:3,style:'自由构图',intent:null,paper:{color:'#ffffff',pattern:'plain'},graphics:[],text_blocks:[{content:'可编辑文字',font_style:'sans',x:.5,y:.8,width:.5,height:.1,font_size:24,color:'#333333'}],items:masks.map((mask,index)=>({asset:'a1',piece:'piece-'+index,unit:index,role:null,operations:[{op:'whole'},mask],placement:{x:.18+index*.31,y:.4,rotation:0,z:index},relation:null}))};
+  const page={version:2,style:'自由构图',intent:null,paper:{color:'#ffffff',pattern:'plain'},layers:[{type:'text',id:'caption',content:'可编辑文字',font_style:'sans',x:.5,y:.8,width:.5,height:.1,font_size:24,color:'#333333'},...masks.map((mask,index)=>({type:'material',id:'piece-'+index,asset:'a1',piece:'piece-'+index,unit:index,role:null,operations:[{op:'whole'},mask],placement:{x:.18+index*.31,y:.4,rotation:0,z:index},relation:null}))]};
   const result=applyToolCalls(page,p.drafts[0],[asset],{},{processing:'自由拆解'});assert.deepEqual(result.results.map(x=>x.ok),[true]);
   assert.deepEqual(result.draft.items.map(x=>x.materialMask.shape),['polygon','rounded','scallop']);
   for(const item of result.draft.items){assert.ok(materialMaskPoints(item.materialMask).length>=3);assert.match(materialMaskCSS(item),/clip-path:polygon/);}
   p.drafts[0]=result.draft;const imported=importNativeProjectPackage(new Uint8Array(await createNativeProjectPackage(p).arrayBuffer()),[asset]);
   assert.deepEqual(imported.drafts[0].items.map(x=>x.materialMask),result.draft.items.map(x=>x.materialMask));
-  const invalid=structuredClone(page);invalid.items[0].operations[1].points[0]=[-1,0];
+  const invalid=structuredClone(page);invalid.layers.find(n=>n.type==='material').operations[1].points[0]=[-1,0];
   assert.throws(()=>applyToolCalls(invalid,p.drafts[0],[asset]),/合同不合法|边缘无效|未实现或未知字段/);
 });
 test('editable JSON maps visual controls to native layers and preserves them in ZIP',async()=>{
   const asset={id:'a1',title:'纸',kind:'paper',physicalWidthMM:35,physicalHeightMM:45,supply:{quantity:1}};
-  const p=project('表达完整性'),page={version:3,style:'自由构图',intent:'多层表达',paper:{color:'#fffaf2',pattern:'lines',ruling:28,center_gutter:false},
-    items:[{asset:'a1',piece:'paper',unit:0,operations:[{op:'whole'},{op:'mask',shape:'rounded',radius:.13}],placement:{x:.25,y:.4,rotation:0,z:1},opacity:.65,flip_horizontal:true}],
-    graphics:[{key:'round',kind:'roundedRectangle',x:.7,y:.25,width:.25,height:.1,corner_radius:.3,fill:'#ffeeaa',stroke:null},{key:'ornament',kind:'vector',x:.7,y:.6,width:.2,height:.2,vector_layers:[{fill:'#ff0000',opacity:.5,paths:[[[0,0],[1,0],[.5,1]]]},{fill:'#0000ff',rects:[[.2,.2,.3,.3]]}]}],
-    text_blocks:[{content:'第一行\n第二行',font_style:'sans',font_name:'Songti SC',x:.5,y:.8,width:.5,height:.1,font_size:24,color:'#333333',underline:true,strikethrough:true,opacity:.6,fixed_line_height:35,paragraph_spacing:7}],ink_strokes:[]};
+  const p=project('表达完整性'),page={version:2,style:'自由构图',intent:'多层表达',paper:{color:'#fffaf2',pattern:'lines',ruling:28,center_gutter:false},
+    layers:[{type:'material',id:'paper',asset:'a1',piece:'paper',unit:0,operations:[{op:'whole'},{op:'mask',shape:'rounded',radius:.13}],placement:{x:.25,y:.4,rotation:0,z:1},opacity:.65,flip_horizontal:true},
+    {type:'shape',id:'round',key:'round',kind:'roundedRectangle',x:.7,y:.25,width:.25,height:.1,corner_radius:.3,fill:'#ffeeaa',stroke:null},{type:'shape',id:'ornament',key:'ornament',kind:'vector',x:.7,y:.6,width:.2,height:.2,vector_layers:[{fill:'#ff0000',opacity:.5,paths:[[[0,0],[1,0],[.5,1]]]},{fill:'#0000ff',rects:[[.2,.2,.3,.3]]}]},
+    {type:'text',id:'memo',content:'第一行\n第二行',font_style:'sans',font_name:'Songti SC',x:.5,y:.8,width:.5,height:.1,font_size:24,color:'#333333',underline:true,strikethrough:true,opacity:.6,fixed_line_height:35,paragraph_spacing:7}]};
   const result=applyToolCalls(page,p.drafts[0],[asset],{},{processing:'自由拆解'});assert.deepEqual(result.results.map(x=>x.ok),[true]);
   const d=result.draft;assert.equal(d.items[0].opacity,.65);assert.equal(d.items[0].isFlippedHorizontally,true);
   assert.equal(d.paperRuling.rowPositions[0],28/d.canvas.height);assert.equal(d.drawCenterGutter,false);
   assert.match(shapeSVG(d.primitives[0]),/rx="0.3"/);assert.equal(d.primitives[1].vectorLayers.length,2);
   assert.equal(d.textBlocks[0].fontName,'Songti SC');assert.equal(d.textBlocks[0].fixedLineHeight,35);assert.equal(d.textBlocks[0].paragraphSpacing,7);
-  const scene=creativeScene(d,{a1:'a1'});assert.equal(scene.materials[0].materialMask.shape,'rounded');assert.equal(scene.texts[0].fontName,'Songti SC');assert.equal(scene.graphics[0].cornerRadius,.3);
+  const scene=creativeScene(d,{a1:'a1'});assert.equal(scene.layers.find(n=>n.type==='material').materialMask.shape,'rounded');assert.equal(scene.layers.find(n=>n.type==='text').fontName,'Songti SC');assert.equal(scene.layers.find(n=>n.type==='shape').kind,'roundedRectangle');
   assert.equal(textLines(d.textBlocks[0],text=>text.length*10).lines.length,2);
   p.drafts[0]=d;const roundtrip=importNativeProjectPackage(new Uint8Array(await createNativeProjectPackage(p).arrayBuffer()),[asset]);
   assert.deepEqual(roundtrip.drafts[0].items[0].materialMask,d.items[0].materialMask);

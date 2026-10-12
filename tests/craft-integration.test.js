@@ -56,8 +56,8 @@ test('rotated peek relation executes in a real direct page without material scal
   const other={...asset,id:'craft-photo',title:'合成照片',physicalWidthMM:60,physicalHeightMM:80};
   const input=page([piece('photo',[{op:'whole'}],{asset:'m2',placement:{x:.5,y:.5,rotation:30,z:10}}),piece('paper',[edge],{relation:{kind:'peek',target:'photo',edge:'right',exposed_mm:8}})]);
   const result=applyToolCalls(input,project('旋转').drafts[0],[asset,other],{m1:asset.id,m2:other.id},{processing:'自由拆解',allowNoText:true});
-  assert.equal(result.results[0].ok,true,result.results[0].detail);assert.equal(result.draft.items[1].rotation,30);
-  assert.equal(result.draft.items[1].width,100*result.draft.canvas.height/result.draft.physicalPageHeightMM);
+  assert.equal(result.results[0].ok,true,result.results[0].detail);assert.equal(result.draft.items.find(i=>i.creativePieceID==='paper').rotation,30);
+  assert.equal(result.draft.items.find(i=>i.creativePieceID==='paper').width,100*result.draft.canvas.height/result.draft.physicalPageHeightMM);
 });
 test('current offline package exports the one active contract and imports current craft operations',async()=>{
   const p=project('网页工艺');p.processing='自由拆解';

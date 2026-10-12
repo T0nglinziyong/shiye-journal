@@ -4,6 +4,7 @@ import {reviewCreativeDraft} from '../src/creative-quality.js';
 import {creativeTypographyGuide} from '../src/creative-typography.js';
 import {buildCreativeMessages} from '../src/creative-runner.js';
 import {imagePrompt} from '../src/ai-image-generation.js';
+import {draft as createDraft} from '../src/domain.js';
 const draft=size=>({canvas:{width:700,height:1000},physicalPageHeightMM:210,paperColor:'#ffffff',items:[],primitives:[],textBlocks:[{id:'body',content:'真实毫米尺寸对应的正文',x:350,y:200,width:600,height:200,fontSize:size,color:'#000000'}]});
 test('AI review offers print-size advice without making it a completion threshold',()=>{
  assert.ok(reviewCreativeDraft(draft(9)).warnings.some(w=>w.includes('文字可能偏小')));
@@ -37,7 +38,7 @@ test('Q-03: generated copy receives placeholder and duplicate advice without alt
  assert.ok(!reviewCreativeDraft(normal).warnings.some(w=>w.includes('占位说明')));
 });
 test('both creation modes receive role sizes converted to the actual paper, not screen pixels',()=>{
- const a5=draft(14),a4={...a5,physicalPageHeightMM:297},small=creativeTypographyGuide(a5),large=creativeTypographyGuide(a4);
+ const a5=createDraft({ratio:'a5'}),a4={...a5,physicalPageHeightMM:297},small=creativeTypographyGuide(a5),large=creativeTypographyGuide(a4);
  assert.match(small,/主标题建议18–26pt（本页font_size约31–43/);
  assert.match(large,/主标题建议18–26pt（本页font_size约22–30/);
  for(const mode of ['agent','direct']){
@@ -49,7 +50,7 @@ test('both creation modes receive role sizes converted to the actual paper, not 
  }
 });
 test('API receives only matching journal studies without treating their objects as available materials',()=>{
- const messages=buildCreativeMessages({draft:{...draft(14),style:'复古旧物',pageMode:'single'},assets:[],aliases:{},styles:['复古旧物'],pagePurposes:['旅途记录'],referenceImages:['data:image/png;base64,one','data:image/png;base64,two']});
+ const messages=buildCreativeMessages({draft:createDraft({style:'复古旧物'}),assets:[],aliases:{},styles:['复古旧物'],pagePurposes:['旅途记录'],referenceImages:['data:image/png;base64,one','data:image/png;base64,two']});
  assert.match(messages[0].content,/匹配的真实风格手帐案例/);
  assert.match(messages[0].content,/来自用户教程的抽象模板/);
  assert.match(messages[0].content,/模板原图/);
@@ -60,7 +61,7 @@ test('API receives only matching journal studies without treating their objects 
  assert.doesNotMatch(messages[0].content,/私人日记原图|已保存作品/);
 });
 test('text-only API receives relevant case methods without image payloads',()=>{
- const messages=buildCreativeMessages({draft:{...draft(14),style:'韩系清新',pageMode:'single'},assets:[],aliases:{},styles:['韩系清新'],pagePurposes:['清单计划'],sendPresetReferences:true});
+ const messages=buildCreativeMessages({draft:createDraft({style:'韩系清新'}),assets:[],aliases:{},styles:['韩系清新'],pagePurposes:['清单计划'],sendPresetReferences:true});
  assert.match(messages[0].content,/浅色清单与书写卡/);
  assert.match(messages[0].content,/抽象模板/);
  assert.match(messages[0].content,/写可执行计划/);
@@ -69,7 +70,7 @@ test('text-only API receives relevant case methods without image payloads',()=>{
 test('API labels material priorities and has a meaningful-content rule for sparse non-cover pages',()=>{
  const assets=['required','preferred','available','excluded'].map((id,i)=>({id,title:id,kind:'sticker',role:'focal',physicalWidthMM:20,physicalHeightMM:20,supply:{quantity:1},tags:[]}));
  const aliases={m1:'required',m2:'preferred',m3:'available'};
- const messages=buildCreativeMessages({draft:{...draft(14),pageRatio:'a5',pageMode:'single'},assets,aliases,requiredAssetIDs:['required'],materialPriority:{required:['required'],preferred:['preferred'],available:['available'],excluded:['excluded']}});
+ const messages=buildCreativeMessages({draft:createDraft({ratio:'a5'}),assets,aliases,requiredAssetIDs:['required'],materialPriority:{required:['required'],preferred:['preferred'],available:['available'],excluded:['excluded']}});
  const text=messages[1].content[0].text;
  assert.match(text,/优先级 必须使用/);assert.match(text,/优先级 优先使用/);assert.match(text,/优先级 可以使用（仅备选）/);
  assert.doesNotMatch(text,/excluded/);

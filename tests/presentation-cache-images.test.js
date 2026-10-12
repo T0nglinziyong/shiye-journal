@@ -53,7 +53,7 @@ test('route cover signature is stable from image placeholder to hydrated Blob UR
     source:id=>id==='asset'?hydrated:'',
     identity:source=>source===hydrated?{id:'asset',version:1}:null
   });
-  const markup=src=>'<button data-act="open-project" data-id="work"><div class="thumb-sheet"><img src="'+src+'" alt="作品封面"></div></button>';
+  const markup=src=>'<div class="works-grid"><button data-act="open-project" data-id="work"><div class="thumb-sheet"><img src="'+src+'" alt="作品封面"></div></button></div>';
   try{
     view.innerHTML=markup('data:image/svg+xml,%3Csvg/%3E#shiye-image=asset');
     reusePagePreviews({view,state:{accountId:'a',route:'works'}});
@@ -63,7 +63,7 @@ test('route cover signature is stable from image placeholder to hydrated Blob UR
     const warmed=view.querySelector('.thumb-sheet');
     view.innerHTML=markup(hydrated);
     reusePagePreviews({view,state:{accountId:'a',route:'works'}});
-    assert.equal(view.querySelector('.thumb-sheet'),warmed);
+    assert.ok(view.querySelector('.thumb-sheet')===warmed,'cached preview node should be reused');
   }finally{unbind();env.close();}
 });
 

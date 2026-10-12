@@ -149,10 +149,11 @@ const projectSync=createProjectSync({
     if(await wasCommitted(operationID,baseRevision))return 'committed';
     const latest=await version();
     if(await canRebaseUnchangedKeys({client:cloudClient(),owner:await identity(),before:baseRevision,after:latest,operations:[{store:'projects',action:'put',item:record}]}))return 'rebase';
-    const remote=await cloudRecord('projects',record.id);
-    // Whichever device edited the project most recently wins; the other
-    // device pulls that record instead of inventing a conflict-copy project.
-    return compareRecordEdits(record,remote)==='local'?'rebase':'remote';
+    // A full editable Scene cannot be merged by timestamps. If another
+    // device touched the same document, keep local pending bytes and reject
+    // the upload instead of overwriting either copy. Only a proven disjoint
+    // change log permits an automatic rebase.
+    return 'conflict';
   },
   onCommitted:(record,committedRevision)=>{
     if(record.__cloudSessionId)editorBases.set(record.__cloudSessionId,committedRevision);
@@ -170,6 +171,9 @@ async function wasCommitted(operationID,baseRevision){
 async function reconcileImport(batch,operationID,baseRevision){
   if(await wasCommitted(operationID,baseRevision))return 'committed';
   const latest=await version();
+  // If the server cursor never advanced, an aborted request is unconfirmed,
+  // not remotely won. Do not drop a local delete or restore on a 404 lookup.
+  if(latest===baseRevision)return 'rebase';
   // Edits/deletes rebase only over a complete, disjoint change log. An
   // append-only import may instead prove absence by its unique record IDs.
   if(batch.operations){
@@ -206,9 +210,10 @@ async function reconcileImport(batch,operationID,baseRevision){
         const live=await cloudRecord(op.store,id);
         if(marker&&!live){operations.push(op);continue;}
       }
-      const remote=await cloudRecord(op.store,id);
-      const winner=compareRecordEdits(op.item||{updatedAt:op.modifiedAt},remote,{localTimestamp:op.modifiedAt});
-      if(winner==='local')operations.push(op);
+      // A newer remote edit on the same key is a real conflict. Timestamp
+      // comparison must never turn an unacknowledged delete into success or
+      // silently overwrite another device's full record.
+      return 'conflict';
     }
     if(!operations.length)return 'remote';
     return {kind:'replace',record:{...batch,operations}};

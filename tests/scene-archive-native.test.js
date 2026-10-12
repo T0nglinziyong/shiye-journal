@@ -1,0 +1,20 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {project} from '../src/domain.js';
+import {createNativeProjectPackage,importNativeProjectPackage} from '../src/native-project-package.js';
+import {saveManualArchive,restoreManualArchive} from '../src/scene-archive.js';
+test('compressed v2 manual archives survive native ZIP import and receive fresh instance IDs',async()=>{
+ const p=project('多存档原生作品');
+ p.drafts[0].textBlocks.push({id:'memo',content:'先前记忆',color:'#334455',fontSize:22,x:70,y:90,width:200,height:50});
+ saveManualArchive(p,{id:'a1'});
+ p.drafts[0].textBlocks[0].content='新的内容';
+ saveManualArchive(p,{id:'a2'});
+ const bytes=new Uint8Array(await createNativeProjectPackage(p).arrayBuffer());
+ const imported=importNativeProjectPackage(bytes,[]);
+ assert.equal(imported.manualArchives.length,2);
+ assert.notEqual(imported.id,p.id);
+ assert.notEqual(imported.activeDraftID,p.activeDraftID);
+ assert.notEqual(imported.drafts[0].textBlocks[0].id,'memo');
+ assert.equal(restoreManualArchive(imported,imported.manualArchives[0].id).drafts[0].textBlocks[0].content,'先前记忆');
+ assert.equal(restoreManualArchive(imported,imported.manualArchives[1].id).drafts[0].textBlocks[0].content,'新的内容');
+});

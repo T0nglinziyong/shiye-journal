@@ -26,8 +26,9 @@ import {cloudClient,cloudEnabled,requireCloudUser} from './cloud-session.js';
 import {createSyncResumer} from './sync-resumer.js';
 import {setCloudProjectPreview} from './cloud-store.js';
 import {snapshotDraft} from './draft-snapshot.js';
+import {saveManualArchive,restoreManualArchive} from './scene-archive.js';
 import {reconcileCanvasText,textParagraphMarkup} from './canvas-text-content.js';
-import {ensureEditorHistory,resetEditorHistory,takeEditorHistoryStep} from './editor-history-scope.js';
+import {checkpointEditorHistory,ensureEditorHistory,resetEditorHistory,takeEditorHistoryStep} from './editor-history-scope.js';
 import {captureHistory} from './project-history.js';
 import {mountCanvasEditor} from './canvas-editor-ui.js';
 import {editorExitDecision} from './editor-exit-policy.js';
@@ -645,7 +646,7 @@ function bindPage(){view.querySelectorAll('[data-act]').forEach(el=>el.addEventL
 function bindInspector(){const d=current(),e=d&&editorEntry(d).find(x=>x.value.id===state.selected);if(!d)return;
   const change=(id,fn)=>{const el=view.querySelector('#'+id);if(el)el.addEventListener('change',()=>{checkpoint();fn(el.value);saveProject();render();});};
   if(e){for(const [id,key] of [['inspector-width','width'],['inspector-height','height'],['inspector-rotation','rotation'],['inspector-z','zIndex'],['inspector-opacity','opacity'],['inspector-font-size','fontSize']].filter(([,key])=>e.kind!=='material'||!['width','height'].includes(key)))change(id,v=>{e.value[key]=Number(v);if(e.kind==='material')e.value.userOverrideFlags=[...new Set([...(e.value.userOverrideFlags||[]),key==='width'||key==='height'?'resized':key])];});change('inspector-text',v=>e.value.content=v);change('inspector-font',v=>e.value.style=v);}else{change('paper-color',v=>d.paperColor=v);change('paper-pattern',v=>d.paperPattern=v);change('page-ratio',v=>{if(presetPaperDimensions(v))setDraftPaperSize(d,v);});change('page-mode',v=>{d.pageMode=v;d.canvas=canvasSize(v,d.pageRatio);});}}
-function checkpoint(){const d=current();if(!d)return;ensureEditorHistory(state);captureHistory(state.activeProject);state.undo.push(snapshotDraft(d));if(state.undo.length>40)state.undo.shift();state.redo=[];}
+function checkpoint(){const d=current();if(!d)return;ensureEditorHistory(state);captureHistory(state.activeProject);checkpointEditorHistory(state,d);}
 let saveTimer,saveChain=Promise.resolve(),savingProjects=0;
 const dirtyProjects=new Map(),dirtyUsageAssets=new Map();
 const saveVersions=new Map();
@@ -820,8 +821,8 @@ async function handle(action,id,value){try{switch(action){
   case 'match-open-result':await matchingSession.open(id);break;
   case 'match-restore':{const restored=await matchingSession.restoreDeleted(id);if(restored)toast('作品已按你的选择恢复');break;}
   case 'match-stop':matchingSession.stop();break;
-  case 'save-archive':{const p=state.activeProject;(p.manualArchives||=[]).push({id:uid(),date:new Date().toISOString(),drafts:structuredClone(p.drafts),activeDraftID:p.activeDraftID});saveProject();render();toast('手动存档已保存');break;}
-  case 'restore-archive':{const p=state.activeProject,a=p.manualArchives.find(x=>x.id===id);if(!a||!confirm('恢复此存档会替换当前编辑状态，确定吗？'))break;p.drafts=structuredClone(a.drafts);p.activeDraftID=a.activeDraftID;state.activeDraft=a.activeDraftID;saveProject();render();break;}
+  case 'save-archive':{const p=state.activeProject;saveManualArchive(p);saveProject();render();toast('手动存档已保存');break;}
+  case 'restore-archive':{const p=state.activeProject,a=p.manualArchives.find(x=>x.id===id);if(!a||!confirm('恢复此存档会替换当前编辑状态，确定吗？'))break;const restored=restoreManualArchive(p,id);p.drafts=restored.drafts;p.activeDraftID=restored.activeDraftID;state.activeDraft=restored.activeDraftID;resetEditorHistory(state);saveProject();render();break;}
   case 'export-png':await exportPNG();break;case 'print':await printPage();break;
   case 'creative-json':openCreativeJSON();break;
   case 'recognition-diagnostics':{

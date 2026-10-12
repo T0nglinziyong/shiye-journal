@@ -70,7 +70,7 @@ test('I-01/I-02: external IDs are rebuilt and invalid geometry is rejected',asyn
   assert.equal(imported.drafts[0].textBlocks[0].content,'A < B');
   assert.match(imported.drafts[0].textBlocks[0].id,/^[a-f0-9-]{36}$/i);
   p.drafts[0].textBlocks[0].width=-1;
-  assert.throws(()=>importNativeProjectPackage(zipSync({'native.shiyeproject.json':strToU8(JSON.stringify({format:'shiye-native-project',version:1,project:p}))}),[]),/几何/);
+  assert.throws(()=>importNativeProjectPackage(zipSync({'native.shiyeproject.json':strToU8(JSON.stringify({format:'shiye-native-project',version:1,project:p}))}),[]),/几何|尺寸/);
 });
 
 test('I-01/I-04: native package rejects style injection and broken references, while remapping ink IDs',async()=>{

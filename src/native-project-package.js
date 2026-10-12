@@ -4,6 +4,7 @@ import {zipSync,strToU8,strFromU8} from 'fflate';
 import {uid} from './domain.js';
 import {materialMaskPoints} from './material-mask.js';
 import {readProjectPackageEntries} from './project-package-archive.js';
+import {readArchivePayload,archivePayload} from './scene-archive.js';
 
 export const NATIVE_ENTRY='native.shiyeproject.json';
 const paint=value=>value==null||typeof value==='string'&&value.length<=64&&(
@@ -45,7 +46,13 @@ export function importNativeProjectPackage(bytes,assets){
   if(!draftIDs.has(source.activeDraftID))throw Error('工程包当前方案引用无效');
   for(const draft of source.initialEditorSnapshot?.drafts||[])validateNativeDraft(draft,known);
   for(const draft of Object.values(source.draftHistorySnapshots||{}))validateNativeDraft(draft,known);
-  for(const archive of source.manualArchives||[])for(const draft of archive.drafts||[])validateNativeDraft(draft,known);
+  if((source.manualArchives||[]).length>250)throw Error('手账存档数量超出限制');
+  for(const archive of source.manualArchives||[]){
+    if(!source.manualArchiveStore?.[archive.ref])throw Error('手账存档缺少压缩数据');
+    const restored=readArchivePayload(source.manualArchiveStore[archive.ref],archive.ref);
+    if(!restored.some(d=>d.id===archive.activeDraftID))throw Error('存档当前方案引用无效');
+    for(const draft of restored)validateNativeDraft(draft,known);
+  }
   // Undo stacks are session-local. Retain the actual current scene and all
   // immutable archives, but do not resurrect a foreign session's undo state.
   const project=structuredClone(source),draftMap=new Map(),objectMap=new Map(),groupMap=new Map();
@@ -61,12 +68,24 @@ export function importNativeProjectPackage(bytes,assets){
   project.drafts.forEach(remapDraft);
   if(project.initialEditorSnapshot){project.initialEditorSnapshot.drafts?.forEach(remapDraft);project.initialEditorSnapshot.activeDraftID=mapped(draftMap,project.initialEditorSnapshot.activeDraftID);}
   if(project.draftHistorySnapshots){const histories={};for(const [oldID,draft] of Object.entries(project.draftHistorySnapshots)){remapDraft(draft);histories[mapped(draftMap,oldID)]=draft;}project.draftHistorySnapshots=histories;}
-  for(const archive of project.manualArchives||[]){archive.id=uid();archive.drafts?.forEach(remapDraft);archive.activeDraftID=mapped(draftMap,archive.activeDraftID);}
   const reviseReferences=d=>{for(const item of d.items||[])for(const slice of item.craftDisplaySlices||[])if(objectMap.has(slice.targetId))slice.targetId=objectMap.get(slice.targetId);for(const item of d.items||[])for(const key of ['target','target2'])if(item.materialRelation?.[key]&&objectMap.has(item.materialRelation[key]))item.materialRelation[key]=objectMap.get(item.materialRelation[key]);};
+  // Archive snapshots are compressed and deduplicated by SHA-256. On import,
+  // rewrite all IDs before re-hashing, including references inside each draft.
+  const archiveStore={};
+  for(const archive of project.manualArchives||[]){
+    const saved=readArchivePayload(project.manualArchiveStore[archive.ref],archive.ref);
+    saved.forEach(remapDraft);
+    saved.forEach(reviseReferences);
+    const encoded=archivePayload(saved);
+    archiveStore[encoded.hash]=encoded.payload;
+    archive.id=uid();archive.ref=encoded.hash;
+    archive.activeDraftID=mapped(draftMap,archive.activeDraftID);
+  }
+  project.manualArchiveStore=archiveStore;
   for(const draft of project.drafts)reviseReferences(draft);
   for(const draft of project.initialEditorSnapshot?.drafts||[])reviseReferences(draft);
   for(const draft of Object.values(project.draftHistorySnapshots||{}))reviseReferences(draft);
-  for(const archive of project.manualArchives||[])for(const draft of archive.drafts||[])reviseReferences(draft);
+
   project.id=uid();delete project.__cloudBaseRevision;delete project.__cloudSessionId;project.title=project.title.slice(0,80);project.isSnapshot=false;project.isDraft=true;project.projectDocumentPath=null;project.deliveryBlobId=null;project.activeDraftID=mapped(draftMap,source.activeDraftID);project.editHistory={undo:[],redo:[]};project.createdAt=project.updatedAt=new Date().toISOString();return project;
 }
 
