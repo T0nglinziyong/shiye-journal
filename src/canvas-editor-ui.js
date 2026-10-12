@@ -13,6 +13,7 @@ import {mountCanvasViewport} from './canvas-viewport.js';
 import {adjacentFontSize} from './canvas-control-behavior.js';
 import {createIcon} from './icons.js';
 import {historyTitle,renameHistory,deleteDraft,captureHistory,restoreHistoryDraft} from './project-history.js';
+import {mountPieceThumbnail} from './material-piece-thumbnail.js';
 import {syncSelectionGeometry} from './selection-geometry.js';
 import {syncInkSceneDOM} from './ink-scene-svg.js';
 import {eraserBehavior,pointerSamples,eraserPathSamples,eraseStrokesAlongPath} from './ink-gesture.js';
@@ -270,7 +271,8 @@ export function mountCanvasEditor(c){
         rows=list.filter(({a})=>!!a).map(({a,item})=>{
           const b=document.createElement('button');b.type='button';b.dataset.pickerAsset=a.id;b.dataset.assetId=a.id;
           if(item)b.dataset.pickerItem=item.id;
-          b.innerHTML=imgTag(a)+'<span>'+esc(a.title)+'</span>';
+          b.innerHTML=imgTag(a)+'<span>'+esc(a.title)+(item?.splitParentId?' · 裁片 '+((item.splitPartIndex??0)+1):'')+'</span>';
+          if(item)mountPieceThumbnail(b,item);
           return b;
         });
         pickerRows.set(key,rows);
