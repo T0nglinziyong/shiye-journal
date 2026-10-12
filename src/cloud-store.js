@@ -791,7 +791,9 @@ async function cloudPurgeLocalAfterReset(){
   images.clear();imageSizes.clear();documents.clear();snapshots.clear();
   uploads.clear();editorBases.clear();
   if(typeof cache?.purgeAccount!=='function')throw Error('浏览器不支持完整账号本地清理');
-  return cache.purgeAccount(user);
+  const count=await cache.purgeAccount(user);
+  await cache.close?.();
+  return count;
 }
 async function cloudPendingDetails(){await identity();const [projects,imports]=await Promise.all([projectSync.pending(),importSync.pending()]);return {projects:projects.map(row=>({id:row.record.id,title:row.record.title||'未命名作品',baseRevision:row.baseRevision})),batches:imports.map(row=>({id:row.record.id,baseRevision:row.baseRevision,items:row.record.operations?.map(op=>({store:op.store,action:op.action,title:op.item?.title||op.item?.name||op.id||'',id:op.item?.id||op.id||''}))||['assets','projects','blobs'].flatMap(store=>(row.record[store]||[]).map(item=>({store,action:'put',title:item.title||'',id:item.id})))})),error:importSync.status().error?.message||projectSync.status().error?.message||null};}
 async function cloudDiscardPending(){await identity();if(writesInFlight||!unifiedSync.canDiscard())throw Error('上传正在进行，请等待当前请求结束');const count=await unifiedSync.discard();reportSync();return count;}
