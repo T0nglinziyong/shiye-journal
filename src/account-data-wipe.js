@@ -24,7 +24,7 @@ export async function eraseSiteAppData({storage=localStorage,session=sessionStor
        request.onerror=()=>{clearTimeout(timeout);reject(request.error||Error('数据库删除失败'));};
        request.onblocked=()=>{ /* Wait until other tabs release their open handles. */ };
      });
-   }catch(error){errors.push(error.message);}
+   }catch(error){errors.push(name+'：'+error.message);}
  }
  if(cacheStorage)try{
    const keys=await cacheStorage.keys();
