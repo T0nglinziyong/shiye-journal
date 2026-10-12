@@ -17,9 +17,41 @@ try{
     console.log('Recognition diagnostic after 30s',JSON.stringify(diagnostic));
   }
   await wait('.import-inspect[aria-busy="false"]',300000);await wait('.import-candidate-tile');await click('[data-act=import-confirm-photo]','.review-candidates');await click('[data-act=confirm-import]','.import-done');
-  for(const [w,h] of [[390,844],[768,1024],[1024,768],[1440,900]]){
+  for(const [w,h] of [[320,640],[360,740],[390,844],[430,932],[768,1024],[1024,768],[1440,900]]){
     await command('Emulation.setDeviceMetricsOverride',{width:w,height:h,deviceScaleFactor:1,mobile:w<700});
-    const buttons=await evaluate('[...document.querySelectorAll(".import-done button")].map(b=>({font:getComputedStyle(b).fontSize,height:b.getBoundingClientRect().height}))');assert.ok(buttons.every(b=>b.font==='14px'&&b.height<=44),JSON.stringify(buttons));await capture('saved',w,h);
+    const metrics=await evaluate(`(()=>{
+      const r=e=>e?.getBoundingClientRect(),inside=(child,parent)=>!child||!parent||
+        child.left>=parent.left-1&&child.right<=parent.right+1;
+      const doc=document.documentElement,nav=r(document.querySelector(".import-nav")),
+        card=r(document.querySelector(".import-done-card")),
+        title=r(document.querySelector(".import-done-card h1")),
+        count=r(document.querySelector(".import-done-count")),
+        message=r(document.querySelector(".import-done-message")),
+        actions=r(document.querySelector(".import-done-actions")),
+        buttons=[...document.querySelectorAll(".import-done-actions .btn")],
+        buttonBoxes=buttons.map(r),
+        progress=r(document.querySelector(".import-progress")),
+        steps=[...document.querySelectorAll(".import-progress>span")].map(r),
+        navTitle=r(document.querySelector(".import-nav-center>strong")),
+        navExit=r(document.querySelector(".import-nav-center>.import-cancel"));
+      return {pageOverflow:doc.scrollWidth-innerWidth,cardInside:inside(card,{left:0,right:innerWidth}),
+        textInside:[title,count,message,actions,...buttonBoxes].every(x=>inside(x,card)),
+        buttonHeights:buttons.map(b=>b.getBoundingClientRect().height),
+        font:buttons.map(b=>getComputedStyle(b).fontSize),
+        buttonInside:buttonBoxes.every(x=>inside(x,{left:0,right:innerWidth})),
+        navInside:inside(nav,{left:0,right:innerWidth}),
+        navTitleAndExit:!navTitle||!navExit||navTitle.right<=navExit.left+2,
+        stepsInside:steps.every(x=>inside(x,nav))&&inside(progress,nav),
+        statusHidden:w>=700||getComputedStyle(document.querySelector(".import-nav>.sync-indicator"))?.display==='none'};
+    })()`);
+    assert.ok(metrics.pageOverflow<=1,'saved screen horizontal overflow: '+JSON.stringify({w,metrics}));
+    assert.ok(metrics.cardInside&&metrics.textInside&&metrics.buttonInside&&metrics.navInside,
+      'saved screen clipped elements: '+JSON.stringify({w,metrics}));
+    assert.ok(metrics.font.every(v=>v==='14px')&&metrics.buttonHeights.every(v=>v<=44),
+      'saved screen button sizes: '+JSON.stringify({w,metrics}));
+    if(w<700)assert.ok(metrics.stepsInside&&metrics.navTitleAndExit&&metrics.statusHidden,
+      'mobile import nav clips title, steps, or status: '+JSON.stringify({w,metrics}));
+    await capture('saved',w,h);
   }
   await click('[data-act=import-continue]','[data-act=select-file]');assert.equal(await evaluate('document.querySelectorAll(".import-candidate-tile").length'),0);
   await evaluate(`(async()=>{const db=await import('/src/store.js');const a=(await db.all('assets')).find(a=>a.title==='素材 1');if(!a)throw Error('Saved material missing');await db.transaction(['assets','trash'],tx=>{tx.objectStore('assets').delete(a.id);tx.objectStore('trash').put({id:'synthetic-trash',kind:'asset',item:a,date:new Date().toISOString()});});})()`);
