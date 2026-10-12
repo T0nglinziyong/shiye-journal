@@ -10,7 +10,7 @@ const copyMask=value=>new Uint8ClampedArray(value);
 
 export async function showCutoutEditor({
   body,modal,original,saved,recognition=saved,candidateFrame=original,title,processing={},
-  finalMaskBlob=null,onLoadInitialMask=null,
+  finalMaskBlob=null,onLoadInitialMask=null,isCancelled=()=>false,
   onApply,onRerecognize,onPostprocess,recognitionUI={},toast
 }) {
   // New records read only the canonical corrected candidate RGB + final
@@ -52,6 +52,10 @@ export async function showCutoutEditor({
         '。当前素材不会被自动覆盖；请检查同步状态。');
     }
     [source,initial,recognized,frame]=decoded.map(row=>row.value);
+  }
+  if(isCancelled()){
+    for(const bitmap of new Set([source,initial,recognized,frame]))bitmap?.close?.();
+    return;
   }
   const w=source.width,h=source.height,canvas=document.createElement('canvas');
   canvas.width=w;canvas.height=h;
