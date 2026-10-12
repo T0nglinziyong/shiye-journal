@@ -13,6 +13,8 @@ import {mountCanvasViewport} from './canvas-viewport.js';
 import {adjacentFontSize} from './canvas-control-behavior.js';
 import {createIcon} from './icons.js';
 import {historyTitle,renameHistory,deleteDraft,captureHistory,restoreHistoryDraft} from './project-history.js';
+import {mountPieceThumbnail} from './material-piece-thumbnail.js';
+import {makeAutoSceneSnapshot,restoreAutoSceneSnapshot} from './scene-persistence.js';
 import {syncSelectionGeometry} from './selection-geometry.js';
 import {syncInkSceneDOM} from './ink-scene-svg.js';
 import {eraserBehavior,pointerSamples,eraserPathSamples,eraseStrokesAlongPath} from './ink-gesture.js';
@@ -260,7 +262,7 @@ export function mountCanvasEditor(c){
     const show=()=>{
       controls.hidden=tab!=='all';
       const key=JSON.stringify([state.accountId||'',state.activeProject?.id,d.id,tab,series,kind,sort,
-        d.items.map(i=>[i.id,i.assetID,!!i.isParked]),state.assets.map(a=>[a.id,a.blobId,a.updatedAt])]);
+        d.items.map(i=>[i.id,i.assetID,!!i.isParked,i.cropRect,i.materialMask,i.splitPartIndex]),state.assets.map(a=>[a.id,a.blobId,a.updatedAt])]);
       let rows=pickerRows.get(key);
       if(!rows){
         let list=tab==='used'?d.items.filter(i=>!i.isParked).map(item=>({a:asset(item.assetID),item}))
@@ -270,7 +272,8 @@ export function mountCanvasEditor(c){
         rows=list.filter(({a})=>!!a).map(({a,item})=>{
           const b=document.createElement('button');b.type='button';b.dataset.pickerAsset=a.id;b.dataset.assetId=a.id;
           if(item)b.dataset.pickerItem=item.id;
-          b.innerHTML=imgTag(a)+'<span>'+esc(a.title)+'</span>';
+          b.innerHTML=imgTag(a)+'<span>'+esc(a.title)+(item?.splitParentId?' · 裁片 '+((item.splitPartIndex??0)+1):'')+'</span>';
+          if(item)mountPieceThumbnail(b,item);
           return b;
         });
         pickerRows.set(key,rows);
@@ -313,6 +316,31 @@ export function mountCanvasEditor(c){
     const row=(entry,title,activate,remove)=>{const line=document.createElement('div');line.className='canvas-history-row';const open=button(title,()=>{p.close();activate();});line.append(open);const actions=document.createElement('div');const rename=button('重命名',()=>{const name=prompt('历史记录名称',title);if(name===null)return;try{renameHistory(entry,name);saveProject();p.close();historyMenu(anchor);}catch(e){toast(e.message);}});rename.setAttribute('aria-label','重命名 '+title);const del=button('删除',()=>{if(!confirm('删除历史记录「'+title+'」？'))return;try{remove();saveProject();p.close();render();}catch(e){toast(e.message);}});del.setAttribute('aria-label','删除 '+title);actions.append(rename,del);line.append(actions);p.content.append(line);};
     project.drafts.forEach((entry,index)=>row(entry,historyTitle(entry,index),()=>{if(!confirm('是否回到「'+historyTitle(entry,index)+'」？当前修改可通过撤销恢复。'))return;view.endTextEditing?.();const same=state.activeDraft===entry.id;if(same)checkpoint();else{state.undo=[];state.redo=[];}restoreHistoryDraft(project,entry.id);state.activeDraft=entry.id;state.selected=null;state.multiSelected=[];saveProject();render();},()=>{deleteDraft(project,entry.id);state.activeDraft=project.activeDraftID;state.selected=null;state.undo=[];state.redo=[];}));
     for(const archive of (project.manualArchives||[]).slice().reverse())row(archive,archive.title||'存档 '+new Date(archive.date).toLocaleString(),()=>handle('restore-archive',archive.id),()=>project.manualArchives=project.manualArchives.filter(a=>a.id!==archive.id));
+    const automatic=(project.autoSceneSnapshots||[]).slice(0,20);
+    if(automatic.length){
+      const heading=document.createElement('h3');heading.className='canvas-auto-snapshot-heading';heading.textContent='自动恢复点';
+      p.content.append(heading);
+      for(const snapshot of automatic){
+        const labels={'30-operations':'累计 30 次操作','5-minutes':'连续编辑 5 分钟','leave-editor':'退出画布','pagehide':'页面关闭','app-background':'切到后台','pre-conflict':'同步冲突前'};
+        const title=new Date(snapshot.at).toLocaleString()+' · '+(labels[snapshot.reason]||'自动保存');
+        row(snapshot,title,()=>{
+          if(!confirm('恢复自动快照会替换当前编辑画面，是否继续？'))return;
+          try{
+            makeAutoSceneSnapshot(project,{reason:'before-restore',force:true});
+            const target=restoreAutoSceneSnapshot(project,snapshot.id);
+            project.drafts=target.drafts;
+            project.activeDraftID=target.activeDraftID;
+            state.activeDraft=target.activeDraftID;
+            state.selected=null;state.multiSelected=[];
+            state.undo=[];state.redo=[];saveProject();render();
+          }catch(error){toast('自动恢复失败：'+error.message);}
+        },()=>{
+          project.autoSceneSnapshots=(project.autoSceneSnapshots||[]).filter(x=>x.id!==snapshot.id);
+          if(!project.autoSceneSnapshots.some(x=>x.hash===snapshot.hash))
+            delete project.autoSceneSnapshotStore?.[snapshot.hash];
+        });
+      }
+    }
     p.content.append(document.createElement('hr'),button('新方案',()=>{p.close();handle('new-draft');}));const aiEntry=button('AI 创作',()=>{p.close();openAICreation();});aiEntry.dataset.editorAi='true';p.content.append(aiEntry);
   }
   function textParagraph(anchor,t,patch){const p=openPopover(anchor,{title:'段落',width:230,menu:true});for(const [id,name] of [['left','左对齐'],['center','居中'],['right','右对齐']])p.content.append(button((t.alignment===id?'✓ ':'')+name,()=>{p.close();patch('alignment',id);}));const entry=entries.find(e=>e.value.id===state.selected&&e.kind==='text');if(entry)p.content.append(button('详细文字设置',()=>{p.close();objectInspector(entry);}));}

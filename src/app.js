@@ -29,6 +29,9 @@ import {describeSyncError} from './sync-browser-compat.js';
 import {setCloudProjectPreview} from './cloud-store.js';
 import {snapshotDraft} from './draft-snapshot.js';
 import {saveManualArchive,restoreManualArchive} from './scene-archive.js';
+import {recordSceneOperation,makeAutoSceneSnapshot,currentSceneDraft,copySceneBaseline} from './scene-persistence.js';
+import {retireSplitPiece} from './material-split.js';
+import {readAlphaMask,extractAlphaMask} from './alpha-mask-blob.js';
 import {reconcileCanvasText,textParagraphMarkup} from './canvas-text-content.js';
 import {reconcileEditorScene} from './editor-scene-reconcile.js';
 import {checkpointEditorHistory,ensureEditorHistory,resetEditorHistory,takeEditorHistoryStep} from './editor-history-scope.js';
@@ -293,7 +296,13 @@ function route(name,{back=false,restoreMaterial=false}={}){
     parity.libraryTab=lastMaterialLocation.libraryTab||'series';
   }
   if(!back&&!fromSettings&&name!=='settings'&&name!==state.route)navigationHistory.push({route:state.route,seriesID:state.seriesID,detailAssetID:state.detailAssetID,previewProjectID:state.previewProjectID});
-  if(state.route==='editor'&&name!=='editor')view.endTextEditing?.();
+  if(state.route==='editor'&&name!=='editor'){
+    view.endTextEditing?.();snapshotEditedScene('leave-editor');
+    // Reentering after another device's commit must establish a fresh base;
+    // never manufacture a local operation against an obsolete editor session.
+    for(const key of sceneTrackBases.keys())
+      if(key.startsWith((state.activeProject?.id||'')+':'))sceneTrackBases.delete(key);
+  }
   routeScroll.set(state.route+':'+state.seriesID,window.scrollY);
   if(name==='settings'&&!settingsSession)settingsSession={ai:structuredClone(state.aiSettings),preferences:structuredClone(state.preferences),returnRoute:state.route};
   if(state.route==='settings'&&name!=='settings'&&settingsSession){state.aiSettings=settingsSession.ai;state.preferences=settingsSession.preferences;settingsSession=null;state.settingsSection=null;if(cloudEnabled&&deferredSyncedPreferences)state.preferences=savePreferences(deferredSyncedPreferences);if(cloudEnabled&&deferredSyncedAISettings)state.aiSettings=saveAISettings(deferredSyncedAISettings);deferredSyncedPreferences=null;deferredSyncedAISettings=null;}
@@ -337,7 +346,7 @@ function render(){
   mountParityControls();bindPage();mountWorkflowControls({state,view,body,modal,db,render,route,toast,imgTag,assetCard,esc,asset,refresh,download,modelImage,rasterize,backup,openSeriesEditor,openAssetEditor:openDetail,openCutoutCheck,switchImportRecord,saveActiveImportRecord,saveProject,flushSave,assetOrganization,applyAssetClassification});view.catalogRefresh?.();if(state.route==='works'){
     view.localWorkCoverDispose=localWorkCovers.observe(view);
     view.workCoverDispose=workCoverBackfill.observe(view);
-  }if(state.route==='editor'){view.editorDraft=current();view.editorInk=current().strokes;view.editorLayoutKey=editorLayoutKey();mountCanvasEditor({state,view,body,modal,current,checkpoint,saveProject,render,route,flushSave,toast,esc,imgTag,asset,handle,openCutoutCheck,openAICreation});mountCanvasSelection({state,view,current,checkpoint,saveProject,render,toast});}
+  }if(state.route==='editor'){view.editorDraft=current();view.editorInk=current().strokes;view.editorLayoutKey=editorLayoutKey();markSceneTrackingBaseline(state.activeProject);mountCanvasEditor({state,view,body,modal,current,checkpoint,saveProject,render,route,flushSave,toast,esc,imgTag,asset,db,handle,openCutoutCheck,openAICreation});mountCanvasSelection({state,view,current,checkpoint,saveProject,render,toast});}
   if(state.route==='matching'&&
      matchingScrollMemory?.account===(state.accountId||'browser')){
     // The page and every independent scrollable column/textarea keep their
@@ -553,7 +562,7 @@ ${settingToggle('setting-postprocess-apertures','重复孔洞恢复',state.prefe
  if(title==='数据与诊断'&&state.selfHosted)content=`<h2>唯一数据源 · 4090 服务器</h2><p id="storage-location">${esc(location.origin)}</p><p>素材 ${state.assets.length} 件 · 作品 ${state.projects.length} 件 · 最近删除 ${state.trash.length} 项</p><p>此网址的素材、作品与图片都写入服务器。浏览器只保存访问令牌和 AI 设置；服务器无法连接时不会写入另一份资料。</p><label>更新访问令牌<input id="data-server-token" type="password" autocomplete="off" placeholder="保持不变则留空"></label><button class="btn" data-act="storage-token">验证并更新令牌</button><h2>完整备份</h2><div class="actions"><button class="btn primary" data-act="backup">导出完整备份</button><button class="btn" data-act="restore">从备份恢复</button></div><p>恢复会替换服务器当前全部数据；执行前请先导出一份当前完整备份。</p><h2>最近删除</h2>${state.trash.map(x=>`<div class="rec-card"><b>${esc(x.item.title)}</b><button class="btn mini" data-act="restore-trash" data-id="${x.id}">恢复</button></div>`).join('')||'<p>没有最近删除的项目。</p>'}`;
  if(title==='AI 与创作')content=`<h2>创作方式</h2><label>创作方式<select id="setting-ai-delivery">${DELIVERY_OPTIONS.map(([id,label])=>`<option value="${id}" ${state.aiSettings.deliveryMode===id?'selected':''}>${label}</option>`).join('')}</select></label><label>GPT 图像模型<select id="setting-ai-image-model">${IMAGE_MODELS.map(id=>`<option value="${id}" ${state.aiSettings.imageModel===id?'selected':''}>${id}</option>`).join('')}</select></label><p>“画面图片”只保存不可编辑快照：在线创作直接调用 OpenAI 图像模型，需另配 API 密钥；导出给网页版 AI 则用相同画面要求手动发送素材包，并导入返回的图片，不需要 API 密钥。“PDF 页面”仍是可编辑版面在本机渲染成快照。工具、JSON 与 ZIP 保留可编辑图层。</p><p>可编辑在线创作的轮数是总请求上限，格式修复也占一轮；本地最终渲染不调用模型。每轮连续无响应按设置的秒数停止，整轮另有十分钟硬上限。失败不会自动重发可能计费的请求。</p>`+content;
  if(title==='AI 与创作')content+='<p>“自动适配”只用于已核对的 API 地址与模型组合；自定义或未核验组合请明确选择原生工具或兼容 JSON。图片输入同理，未核验组合需手动确认支持后才发送预览。</p>';
- if(title==='数据与诊断'&&cloudEnabled)content=`<h2>私人云端资料</h2><p id="storage-location">云端元数据与私有图片 · 本机缓存加速</p><p>素材 ${state.assets.length} 件 · 作品 ${state.projects.length} 件 · 最近删除 ${state.trash.length} 项</p><p>登录验证后显示本机缓存，后台检查云端更新。原图和完整作品按需读取；修改先暂存，后台同步。云端失败不会改用另一份资料。</p><h2>完整备份</h2><div class="actions"><button class="btn primary" data-act="backup">导出完整备份</button><button class="btn" data-act="restore">从备份恢复</button></div><p>只接受拾页现行完整备份格式；恢复会替换当前资料。</p><h2>离线应急备份</h2><p>仅保存本机尚未上传云端的修改和原始字节，不包含已同步的完整素材库；网络故障时也可导出。应急包只能恢复到原账号，恢复后重新打开拾页再同步。</p><div class="actions"><button class="btn" data-act="backup-emergency">导出本机待同步修改</button><button class="btn" data-act="restore-emergency">恢复待同步应急包</button></div>`;
+ if(title==='数据与诊断'&&cloudEnabled)content=`<h2>私人云端资料</h2><p id="storage-location">云端元数据与私有图片 · 本机缓存加速</p><p>素材 ${state.assets.length} 件 · 作品 ${state.projects.length} 件 · 最近删除 ${state.trash.length} 项</p><p>登录验证后显示本机缓存，后台检查云端更新。原图和完整作品按需读取；修改先暂存，后台同步。云端失败不会改用另一份资料。</p><h2>完整备份</h2><div class="actions"><button class="btn primary" data-act="backup">导出完整备份</button><button class="btn" data-act="restore">从备份恢复</button></div><p>只接受拾页现行完整备份格式；恢复会替换当前资料。</p><h2>离线应急备份</h2><p>仅保存本机尚未上传云端的修改和原始字节，不包含已同步的完整素材库；网络故障时也可导出。应急包只能恢复到原账号，恢复后重新打开拾页再同步。</p><div class="actions"><button class="btn" data-act="backup-emergency">导出本机待同步修改</button><button class="btn" data-act="restore-emergency">恢复待同步应急包</button></div><h2>并发冲突恢复</h2><p>同一画布在两台设备同时修改时，会在应用最后编辑时间规则之前保留双方原稿。本机留有记录时可将旧版本另存为新作品。</p><button class="btn" data-act="recover-pre-conflict">查看与恢复冲突前画布</button>`;
  if(title==='AI 与创作')content+=`<h2>候选素材</h2><label class="toggle-row">候选素材必须全部使用<input id="setting-ai-require-all" type="checkbox" ${state.aiSettings.requireAllCandidates?'checked':''}></label><p>默认开启：本次发给 AI 的每件候选素材都必须在作品中出现。关闭后，仍尽量使用；手动标星的素材保持必用。若同时开启“自动加入建议搭配”，建议素材也属于候选。</p><label class="toggle-row">自动把全部建议搭配作为 AI 备选素材<input id="setting-ai-auto-recommendations" type="checkbox" ${state.aiSettings.autoIncludeRecommendations?'checked':''}></label><p>开启后会把未排除的建议素材一并发送给 AI；关闭后只发送素材篮中的素材。最终是否必须使用由上方开关决定。</p><h2>样例参考</h2><label class="toggle-row">参考样例的图文结构<input id="setting-ai-structure-reference" type="checkbox" ${state.aiSettings.includeStructureReference?'checked':''}></label><label class="toggle-row">发送匹配风格与用途的四张预设样例<input id="setting-ai-send-reference" type="checkbox" ${state.aiSettings.sendPresetReferences?'checked':''}></label><p>预设样例从简洁到丰富展示不同构图，只含匿名区域示意；不读取或发送已有私人作品。网页版 GPT 任务包会附四张图；API 仅在当前模型支持图片时发送。素材预览另由模型连接设置控制。</p>`;
  
  if(title==='AI 与创作'){
@@ -702,6 +711,30 @@ function bindInspector(){const d=current(),e=d&&editorEntry(d).find(x=>x.value.i
   const change=(id,fn)=>{const el=view.querySelector('#'+id);if(el)el.addEventListener('change',()=>{checkpoint();fn(el.value);saveProject();render();});};
   if(e){for(const [id,key] of [['inspector-width','width'],['inspector-height','height'],['inspector-rotation','rotation'],['inspector-z','zIndex'],['inspector-opacity','opacity'],['inspector-font-size','fontSize']].filter(([,key])=>e.kind!=='material'||!['width','height'].includes(key)))change(id,v=>{e.value[key]=Number(v);if(e.kind==='material')e.value.userOverrideFlags=[...new Set([...(e.value.userOverrideFlags||[]),key==='width'||key==='height'?'resized':key])];});change('inspector-text',v=>e.value.content=v);change('inspector-font',v=>e.value.style=v);}else{change('paper-color',v=>d.paperColor=v);change('paper-pattern',v=>d.paperPattern=v);change('page-ratio',v=>{if(presetPaperDimensions(v))setDraftPaperSize(d,v);});change('page-mode',v=>{d.pageMode=v;d.canvas=canvasSize(v,d.pageRatio);});}}
 function checkpoint(){const d=current();if(!d)return;ensureEditorHistory(state);captureHistory(state.activeProject);checkpointEditorHistory(state,d);}
+// Per-editor-draft source baselines let Scene v2 generate property-level
+// patches on each committed user action without duplicating full drafts.
+const sceneTrackBases=new Map();
+const sceneTrackKey=p=>p?.id&&p.activeDraftID?p.id+':'+p.activeDraftID:null;
+function markSceneTrackingBaseline(p){
+  const key=sceneTrackKey(p),d=currentSceneDraft(p);
+  if(key&&d&&!sceneTrackBases.has(key))sceneTrackBases.set(key,copySceneBaseline(d));
+}
+function trackEditedScene(p,at){
+  const key=sceneTrackKey(p),d=currentSceneDraft(p);
+  if(!key||!d)return;
+  const previous=sceneTrackBases.get(key);
+  if(previous&&previous.id===d.id)
+    recordSceneOperation(p,previous,d,{actor:p.__cloudSessionId||state.accountId||'browser',at});
+  sceneTrackBases.set(key,copySceneBaseline(d));
+}
+function snapshotEditedScene(reason){
+  const p=state.route==='editor'?state.activeProject:null;
+  if(!p||!p.sceneOperationsSinceSnapshot)return false;
+  try{
+    if(!makeAutoSceneSnapshot(p,{reason}))return false;
+    saveSpecificProject(p);return true;
+  }catch(error){console.warn('Scene 自动快照将于下次编辑补录',error?.message);return false;}
+}
 let saveTimer,saveChain=Promise.resolve(),savingProjects=0;
 const dirtyProjects=new Map(),dirtyUsageAssets=new Map();
 const saveVersions=new Map();
@@ -722,7 +755,7 @@ function saveSpecificProject(p){if(!p)return;delete p.isTemplate;if(cloudEnabled
   // can be drawn locally immediately; COS receives the next uploaded version.
   const active=p.drafts?.find(d=>d.id===p.activeDraftID)||p.drafts?.[0];
   if(active&&!p.isSnapshot){delete active.coverImageID;delete active.coverSceneHash;}
-  const now=new Date().toISOString();p.updatedAt=now;if(p.isUsed)for(const updated of markProjectAssetsUsed(p,state.assets,now)){const live=state.assets.find(asset=>asset.id===updated.id);if(live)Object.assign(live,updated);dirtyUsageAssets.set(updated.id,updated);}saveVersions.set(p.id,(saveVersions.get(p.id)||0)+1);dirtyProjects.set(p.id,p);saveStatus('后台保存中…');syncDisplay.localPending=true;updateSyncIndicator();if(!saveTimer)saveTimer=setTimeout(()=>flushSave().catch(console.error),500);}
+  const now=new Date().toISOString();trackEditedScene(p,now);p.updatedAt=now;if(p.isUsed)for(const updated of markProjectAssetsUsed(p,state.assets,now)){const live=state.assets.find(asset=>asset.id===updated.id);if(live)Object.assign(live,updated);dirtyUsageAssets.set(updated.id,updated);}saveVersions.set(p.id,(saveVersions.get(p.id)||0)+1);dirtyProjects.set(p.id,p);saveStatus('后台保存中…');syncDisplay.localPending=true;updateSyncIndicator();if(!saveTimer)saveTimer=setTimeout(()=>flushSave().catch(console.error),500);}
 function saveProject(){saveSpecificProject(state.activeProject);}
 const pendingAISnapshots=new Set();
 function saveAISnapshotInBackground(p){
@@ -876,7 +909,7 @@ async function handle(action,id,value){try{switch(action){
     });break;
    case 'flip':editSelected(e=>{e.value.isFlippedHorizontally=!e.value.isFlippedHorizontally;});break;
   case 'front':editSelected((e,d)=>{const parent=e.parents?.at(-1);moveSceneNode(d,e.value.id,{parentID:parent?.id||null});});break;
-  case 'delete-object':editSelected((e,d)=>{const key=e.kind==='material'?'items':e.kind==='shape'?'primitives':'textBlocks';d[key]=d[key].filter(x=>x.id!==state.selected);state.selected=null;});break;
+  case 'delete-object':editSelected((e,d)=>{const key=e.kind==='material'?'items':e.kind==='shape'?'primitives':'textBlocks';if(e.kind==='material'&&retireSplitPiece(d,state.selected)){state.selected=null;return;}d[key]=d[key].filter(x=>x.id!==state.selected);state.selected=null;});break;
   case 'restore-baseline':editSelected(e=>{const b=e.value.generationBaseline;if(b){Object.assign(e.value,structuredClone(b));e.value.userOverrideFlags=[];}});break;
   case 'park':editSelected(e=>{if(e.kind==='material'){e.value.isParked=true;state.selected=null;}});break;
   case 'unpark':editSelected((e,d)=>{const item=d.items.find(x=>x.id===id);if(item)item.isParked=false;});break;
@@ -1011,7 +1044,30 @@ async function handle(action,id,value){try{switch(action){
     }
     break;
   }
-  case 'backup':await backup();break;case 'restore':backupInput.click();break;case 'backup-emergency':{await flushSave();const blob=await db.createEmergencyBackup();download(blob,'拾页待同步应急包-'+new Date().toISOString().slice(0,10)+'.shiyerecovery');toast('应急包已导出，请妥善保存，包含私人图片和文字');break;}case 'restore-emergency':emergencyInput.click();break;case 'restore-trash':await restoreTrash(id);break;
+  case 'backup':await backup();break;case 'restore':backupInput.click();break;case 'backup-emergency':{await flushSave();const blob=await db.createEmergencyBackup();download(blob,'拾页待同步应急包-'+new Date().toISOString().slice(0,10)+'.shiyerecovery');toast('应急包已导出，请妥善保存，包含私人图片和文字');break;}case 'restore-emergency':emergencyInput.click();break;
+  case 'recover-pre-conflict':{
+    const entries=await db.listPreConflictScenes();
+    if(!entries.length){toast('本设备还没有检测到画布并发冲突');break;}
+    body.innerHTML='<section class="stack"><h2>冲突前画布</h2><p>下面保留了服务器自动裁决前的原始双方版本。点击恢复会创建独立的新作品，不会覆盖现在的画布。</p><div id="pre-conflict-entries"></div><button type="button" class="btn" id="pre-conflict-close">关闭</button></section>';
+    const host=body.querySelector('#pre-conflict-entries');
+    for(const entry of entries){
+      const row=document.createElement('div');row.className='rec-card';
+      const title=document.createElement('span');title.textContent=entry.title+' · '+new Date(entry.at).toLocaleString();
+      const btn=document.createElement('button');btn.className='btn mini';btn.textContent='恢复为新作品';
+      btn.onclick=async()=>{
+        if(!confirm('保留当前云端作品，另存此冲突前本机画布？'))return;
+        btn.disabled=true;
+        try{
+          const result=await db.restorePreConflictScene(entry.key);
+          modal.close();await refresh();toast('已恢复新作品：'+result.title);
+        }catch(error){btn.disabled=false;toast('恢复失败：'+error.message);}
+      };
+      row.append(title,btn);host.append(row);
+    }
+    body.querySelector('#pre-conflict-close').onclick=()=>modal.close();
+    modal.showModal();break;
+  }
+  case 'restore-trash':await restoreTrash(id);break;
   case 'storage-token':{const token=view.querySelector('#data-server-token')?.value.trim();if(!token)throw Error('请输入新的访问令牌');const old=db.storageConfig();db.setStorageConfig({url:location.origin,token});try{await db.storageMode();toast('令牌已更新');}catch(error){db.setStorageConfig(old);throw error;}break;}
   case 'storage-connect':{await flushSave();const old=db.storageConfig(),url=view.querySelector('#data-server-url')?.value.trim(),token=view.querySelector('#data-server-token')?.value.trim();if(!url)throw Error('请输入拾页数据服务地址');db.setStorageConfig({url,token});try{await db.storageMode();state.activeProject=null;state.basket=[];await refresh();toast('已连接服务器');}catch(error){db.setStorageConfig(old);throw error;}break;}
   case 'storage-browser':{if(state.selfHosted)throw Error('自托管网站不允许切换到浏览器资料');await flushSave();db.setStorageConfig(null);state.activeProject=null;state.basket=[];await refresh();toast('已切换为本浏览器资料');break;}
@@ -1309,26 +1365,41 @@ async function refineCandidateFrame(candidateFrame,request,{postprocessOnly=fals
 async function openCutoutCheck(id,candidate=null){
   const a=candidate?{title:candidate.title}:asset(id);if(!a)return;
   const stored=async blobId=>blobId?(await db.get('blobs',blobId))?.data:null;
-  let saved=candidate?.blob||await stored(a.blobId),original=candidate?.originalBlob||await stored(a.originalBlobId),recognition=candidate?.originalCutoutBlob||await stored(a.originalCutoutBlobId),
-    candidateFrame=candidate?.candidateFrameBlob||await stored(a.candidateFrameBlobId);
-  if(!saved&&a.staticPath){const response=await fetch(a.staticPath);if(!response.ok)throw Error('素材图像未能加载，请重试');saved=await response.blob();}
-  // A returned blob metadata record is not proof that its original image bytes
-  // have survived browser termination or the cloud upload lifecycle.
-  original||=saved;recognition||=saved;candidateFrame||=original;
-  if(!(saved instanceof Blob)||saved.size<8)
-    throw Error('原始抠图尚未从云端恢复，不能安全编辑。请在同步完成后重试');
-  if(!(original instanceof Blob)||original.size<8)
-    throw Error('候选框原始图片未保存完整；为防止颜色或边缘被覆盖，未打开手动抠图');
+  const compact=!candidate&&!!a.candidateFrameBlobId
+    &&(!!a.finalMaskBlobId||Math.abs(a.processingRecord?.displayRotationDegrees||0)<.01);
+  const modern=compact&&!!a.finalMaskBlobId;
+  let saved=modern?null:candidate?.blob||await stored(a.blobId),
+    original=compact?null:candidate?.originalBlob||await stored(a.originalBlobId),
+    recognition=compact?null:candidate?.originalCutoutBlob||await stored(a.originalCutoutBlobId),
+    candidateFrame=candidate?.candidateFrameBlob||await stored(a.candidateFrameBlobId),
+    finalMaskBlob=modern?await stored(a.finalMaskBlobId):
+      compact&&saved instanceof Blob?await extractAlphaMask(saved):null;
+  if(!compact){
+    if(!saved&&a.staticPath){const response=await fetch(a.staticPath);if(!response.ok)throw Error('素材图像未能加载，请重试');saved=await response.blob();}
+    original||=saved;recognition||=saved;candidateFrame||=original;
+    if(!(saved instanceof Blob)||saved.size<8)
+      throw Error('原始抠图尚未从云端恢复，不能安全编辑。请在同步完成后重试');
+    if(!(original instanceof Blob)||original.size<8)
+      throw Error('候选框原始图片未保存完整；为防止颜色或边缘被覆盖，未打开手动抠图');
+  }else if(!(candidateFrame instanceof Blob)||candidateFrame.size<8||
+            !(finalMaskBlob instanceof Blob)||!finalMaskBlob.size)
+    throw Error('候选框 RGB 或最终蒙版尚未完整同步，已保留旧素材，请检查同步后重试');
   if(modal.open)modal.close();
   const processing=candidate?.processingRecord||a.processingRecord||{},baseWidth=processing.sourceWidthMM||candidate?.width||a.physicalWidthMM,baseHeight=processing.sourceHeightMM||candidate?.height||a.physicalHeightMM,
     localMethods=recognitionMethodDetails,
     preferredMethod=localMethods.some(item=>item.id===(processing.rerecognition?.method||state.preferences.recognition))?(processing.rerecognition?.method||state.preferences.recognition):'auto';
   const openEditor=()=>showCutoutEditor({
-    body,modal,original,saved,recognition,candidateFrame,title:a.title,processing,toast,
+    body,modal,original,saved,recognition,candidateFrame,finalMaskBlob,title:a.title,processing,toast,
+    onLoadInitialMask:compact?async()=>{
+      const oldBlob=a.initialMaskBlobId?await stored(a.initialMaskBlobId):
+        await stored(a.originalCutoutBlobId)||saved;
+      if(!(oldBlob instanceof Blob))throw Error('初始蒙版尚未可用');
+      return readAlphaMask(a.initialMaskBlobId?oldBlob:await extractAlphaMask(oldBlob));
+    }:null,
     recognitionUI:{methods:localMethods,pixels:recognitionPixelOptions.filter(([n])=>n>=1200),method:preferredMethod,pixelsValue:Math.max(1200,state.preferences.recognitionPixels||1200),preprocess:recognitionPreprocessOptions(),postprocess:recognitionPostprocessOptions()},
     onRerecognize:request=>refineCandidateFrame(candidateFrame,request),
     onPostprocess:request=>refineCandidateFrame(candidateFrame,request,{postprocessOnly:true}),
-    onApply:async(blob,record,originalRecognition)=>{
+    onApply:async(blob,record,originalRecognition,maskBlob)=>{
     const rad=record.displayRotationDegrees*Math.PI/180,width=baseWidth&&baseHeight?Math.abs(baseWidth*Math.cos(rad))+Math.abs(baseHeight*Math.sin(rad)):null,height=baseWidth&&baseHeight?Math.abs(baseHeight*Math.cos(rad))+Math.abs(baseWidth*Math.sin(rad)):null;
     const nextProcessing={...record,sourceWidthMM:baseWidth,sourceHeightMM:baseHeight};
     if(candidate){
@@ -1336,8 +1407,26 @@ async function openCutoutCheck(id,candidate=null){
       for(const rec of state.importRecords){const index=rec.candidateData?.findIndex(c=>c===candidate||c.region===candidate.region);if(index>=0){Object.assign(rec.candidateData[index],candidate);rec.candidateURLs[index]=candidate.url;rec.manualEdits=true;if(state.importStep==='inspect')rec.confirmed=false;}}
       if(state.importRecords[state.importIndex]?.candidateData===state.importCandidateData)state.importCandidateURLs=state.importCandidateData.map(c=>c.url);
     }else{
-      const updated={...a,processingRecord:nextProcessing,physicalWidthMM:width||a.physicalWidthMM,physicalHeightMM:height||a.physicalHeightMM,originalCutoutBlobId:a.originalCutoutBlobId||uid(),candidateFrameBlobId:a.candidateFrameBlobId||uid(),updatedAt:new Date().toISOString()};
-      await db.transaction(['assets','blobs'],tx=>{tx.objectStore('assets').put(updated);tx.objectStore('blobs').put({id:a.blobId,data:blob});if(!a.originalCutoutBlobId)tx.objectStore('blobs').put({id:updated.originalCutoutBlobId,data:originalRecognition});if(!a.candidateFrameBlobId)tx.objectStore('blobs').put({id:updated.candidateFrameBlobId,data:candidateFrame});});
+      const frameId=a.candidateFrameBlobId||uid();
+      // Existing imports can retain their original recognition PNG as a
+      // lazy baseline. Never download it merely because the user pressed
+      // Apply. Fresh imports already have an immutable initial mask.
+      const baselineId=a.initialMaskBlobId||
+        (a.originalCutoutBlobId?null:uid()),
+        nextMaskId=a.finalMaskBlobId&&a.finalMaskBlobId!==baselineId?a.finalMaskBlobId:uid();
+      const baselineBlob=baselineId&&!a.initialMaskBlobId
+        ?finalMaskBlob||await extractAlphaMask(recognition||saved):null;
+      const updated={...a,processingRecord:nextProcessing,
+        physicalWidthMM:width||a.physicalWidthMM,physicalHeightMM:height||a.physicalHeightMM,
+        candidateFrameBlobId:frameId,initialMaskBlobId:baselineId,finalMaskBlobId:nextMaskId,
+        updatedAt:new Date().toISOString()};
+      await db.transaction(['assets','blobs'],tx=>{
+        tx.objectStore('assets').put(updated);
+        tx.objectStore('blobs').put({id:a.blobId,data:blob});
+        tx.objectStore('blobs').put({id:nextMaskId,data:maskBlob});
+        if(baselineBlob)tx.objectStore('blobs').put({id:baselineId,data:baselineBlob});
+        if(!a.candidateFrameBlobId)tx.objectStore('blobs').put({id:frameId,data:candidateFrame});
+      });
       Object.assign(a,updated);if(urls.has(a.blobId))URL.revokeObjectURL(urls.get(a.blobId));urls.set(a.blobId,URL.createObjectURL(blob));
     }
     render();toast('素材外观已更新');
@@ -1349,7 +1438,7 @@ async function openCutoutCheck(id,candidate=null){
     // the full original is still recoverable from the private COS/Supabase
     // object. Retry once with VERIFIED server bytes. Never modify metadata
     // or silently replace the user's already saved cutout.
-    if(candidate||!cloudEnabled||!/检查抠图暂无法打开|不可解码|图片原始字节/.test(error?.message||''))
+    if(candidate||!cloudEnabled||!/检查抠图暂无法打开|不可解码|图片原始字节|蒙版.*尺寸/.test(error?.message||''))
       throw error;
     const recover=async(id,current)=>{
       if(!id)return current;
@@ -1357,7 +1446,13 @@ async function openCutoutCheck(id,candidate=null){
       return fresh?.data||current;
     };
     try{
-      [saved,original,recognition,candidateFrame]=await Promise.all([
+      if(compact){
+        [candidateFrame,finalMaskBlob]=await Promise.all([
+          recover(a.candidateFrameBlobId,candidateFrame),
+          modern?recover(a.finalMaskBlobId,finalMaskBlob):
+            Promise.resolve(saved instanceof Blob?extractAlphaMask(saved):finalMaskBlob)
+        ]);
+      }else [saved,original,recognition,candidateFrame]=await Promise.all([
         recover(a.blobId,saved),recover(a.originalBlobId,original),
         recover(a.originalCutoutBlobId,recognition),
         recover(a.candidateFrameBlobId,candidateFrame)
@@ -1868,7 +1963,16 @@ backupInput.onchange=async()=>{const file=backupInput.files?.[0];backupInput.val
   try{await flushSave();await db.flushProjects();await db.restoreBackup(file);state.activeProject=null;state.basket=[];await refresh();toast('完整备份已恢复');}
   catch(e){console.error(e);toast('恢复失败：'+e.message);}
 };
-window.addEventListener('pagehide',()=>{if(saveTimer)flushSave().catch(console.error);});
+// A long uninterrupted editing session also creates a recovery point,
+// even when the user pauses without making another stroke.
+setInterval(()=>{
+  const p=state.route==='editor'?state.activeProject:null;
+  if(!p?.sceneOperationsSinceSnapshot)return;
+  const since=Date.parse(p.lastAutoSceneSnapshotAt||p.sceneFirstUnsnapshottedAt||'');
+  if(Number.isFinite(since)&&Date.now()-since>=5*60*1000)
+    snapshotEditedScene('5-minutes');
+},30000);
+window.addEventListener('pagehide',()=>{snapshotEditedScene('pagehide');if(saveTimer)flushSave().catch(console.error);});
 window.addEventListener('beforeunload',event=>{if(saveTimer||savingProjects||dirtyProjects.size){event.preventDefault();event.returnValue='';}});
 // Logout requires a durable local checkpoint, not a successful network round
 // trip. Unacknowledged edits remain in the account-scoped outbox for re-login.
@@ -1922,7 +2026,7 @@ function backgroundCloudCheck({force=false}={}){
 // document remains visible, not only when focus/online events happen.
 setInterval(backgroundCloudCheck,15000);
 window.addEventListener('focus',()=>{backgroundCloudCheck();privateImages.retryMissing();void cloudResumer.wake();});
-document.addEventListener('visibilitychange',()=>{backgroundCloudCheck();if(document.visibilityState==='visible'){privateImages.retryMissing();void cloudResumer.wake();}});
+document.addEventListener('visibilitychange',()=>{backgroundCloudCheck();if(document.visibilityState==='hidden')snapshotEditedScene('app-background');if(document.visibilityState==='visible'){privateImages.retryMissing();void cloudResumer.wake();}});
 window.addEventListener('online',()=>{backgroundCloudCheck();privateImages.retryMissing();void cloudResumer.wake();});
 window.addEventListener('offline',updateSyncIndicator);
 window.addEventListener('online',updateSyncIndicator);

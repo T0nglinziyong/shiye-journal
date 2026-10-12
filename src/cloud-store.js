@@ -248,6 +248,23 @@ const unifiedSync=createProjectSync({
     // edit timestamp. Ties keep cloud. Deletes and invalid dates remain safe.
     const remote=await cloudRecord('projects',record.id);
     if(!remote)return 'conflict';
+    // Before LWW arbitration, capture both editable variants in the user's
+    // private account cache. Even the losing snapshot remains recoverable
+    // after the outbox entry is retired. Failure aborts arbitration: do not
+    // discard a local version without first preserving the pair.
+    const safetyKey='pre-conflict-scene:'+record.id+':'+operationID;
+    const completeRemote=remote.projectDocumentPath?await cloudProjectDocument(remote):remote;
+    await remember(safetyKey,{
+      kind:'shiye-pre-conflict-scene-pair',at:new Date().toISOString(),
+      local:structuredClone(record),remote:structuredClone(completeRemote),
+      baseRevision,remoteRevision:latest
+    });
+    const savedList=await cached('pre-conflict-scene-index')||[];
+    if(!savedList.some(entry=>entry.key===safetyKey))
+      await remember('pre-conflict-scene-index',[
+        {key:safetyKey,id:record.id,title:record.title||'未命名作品',at:new Date().toISOString()},
+        ...savedList
+      ].slice(0,20));
     const winner=latestEditedProject(record,remote);
     return winner==='local'?'rebase':winner==='remote'?'remote':'conflict';
   },
@@ -812,6 +829,26 @@ async function reviewedConflict(kind,id){
   revision:current,local:structuredClone(local),remote:remote?structuredClone(remote):null,
   overview:{local:summary(local),remote:remote?summary(remote):null}};
 }
+// Offline recoveries are never uploaded implicitly: the user selects a
+// copy, which is staged under a NEW project ID so the current cloud scene
+// cannot be overwritten by a stale pre-conflict version.
+async function cloudListPreConflictScenes(){
+ await identity();return structuredClone(await cached('pre-conflict-scene-index')||[]);
+}
+async function cloudRestorePreConflictScene(key){
+ await identity();
+ const index=await cloudListPreConflictScenes();
+ if(!index.some(entry=>entry.key===key))throw Error('找不到可恢复的冲突前画布');
+ const pair=await cached(key);
+ if(pair?.kind!=='shiye-pre-conflict-scene-pair'||!usableProjectSnapshot(pair.local))
+   throw Error('冲突前存档内容不完整，不能恢复');
+ const copy=forkConflictingEditableWork(pair.local);
+ if(!copy)throw Error('无法建立独立恢复作品');
+ copy.title=String(pair.local.title||'作品').slice(0,60)+' · 冲突前恢复';
+ copy.__cloudSessionId=crypto.randomUUID();
+ await cloudStageProject(copy);
+ return {id:copy.id,title:copy.title};
+}
 async function cloudConflictReview(kind,id){
  const {kind:k,id:key,serial,baseRevision,revision,overview}=await reviewedConflict(kind,id);
  return {kind:k,id:key,serial,baseRevision,revision,overview};
@@ -938,7 +975,7 @@ async function cloudRestoreEmergency(snapshot){
   if(typeof cache.restoreUnifiedOutboxes!=='function')throw Error('当前浏览器不支持原子恢复唯一同步队列');
   return cache.restoreUnifiedOutboxes(key,snapshot.projects,snapshot.imports);
 }
-return {cloudReloadBlob,cloudCloseCacheBeforeRemoteReset,cloudSetResetCleanupPending,cloudRunExclusiveReset,cloudPurgeLocalAfterReset,cloudConflictReview,cloudConflictBackup,cloudResolveProjectConflict,cloudMigrationInventory,cloudMigrationOriginalProject,cloudMigrationCommit,cloudLegacyProjectBackup,cloudAll,cloudGet,cloudPreview,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudClearCache,cloudResumeCache,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudPendingLocalSummary,cloudPendingDetails,cloudDiscardPending,cloudFlushProjects,cloudProjectDocument,cloudEmergencySnapshot,cloudRestoreEmergency,cloudBackupBlobIDs};
+return {cloudListPreConflictScenes,cloudRestorePreConflictScene,cloudReloadBlob,cloudCloseCacheBeforeRemoteReset,cloudSetResetCleanupPending,cloudRunExclusiveReset,cloudPurgeLocalAfterReset,cloudConflictReview,cloudConflictBackup,cloudResolveProjectConflict,cloudMigrationInventory,cloudMigrationOriginalProject,cloudMigrationCommit,cloudLegacyProjectBackup,cloudAll,cloudGet,cloudPreview,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudClearCache,cloudResumeCache,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudPendingLocalSummary,cloudPendingDetails,cloudDiscardPending,cloudFlushProjects,cloudProjectDocument,cloudEmergencySnapshot,cloudRestoreEmergency,cloudBackupBlobIDs};
 }
 let projectPreview=()=>null;
 export const setCloudProjectPreview=producer=>{projectPreview=producer;};
@@ -948,6 +985,8 @@ export const cloudSetResetCleanupPending=(...args)=>current.cloudSetResetCleanup
 export const cloudRunExclusiveReset=(...args)=>current.cloudRunExclusiveReset(...args);
 export const cloudPurgeLocalAfterReset=(...args)=>current.cloudPurgeLocalAfterReset(...args);
 export const cloudConflictReview=(...args)=>current.cloudConflictReview(...args);
+export const cloudListPreConflictScenes=()=>current.cloudListPreConflictScenes();
+export const cloudRestorePreConflictScene=(key)=>current.cloudRestorePreConflictScene(key);
 export const cloudConflictBackup=(...args)=>current.cloudConflictBackup(...args);
 export const cloudResolveProjectConflict=(...args)=>current.cloudResolveProjectConflict(...args);
 export const cloudLegacyProjectBackup=(...args)=>current.cloudLegacyProjectBackup(...args);

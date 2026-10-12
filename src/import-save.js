@@ -3,6 +3,7 @@ import {paperDimensions} from './paper-sizes.js';
 import {markProjectAssetsUsed} from './library-model.js';
 import {snapshotRecord} from './work-collections.js';
 import {neutralizePaperChroma} from './paper-chroma-preprocess.js';
+import {extractAlphaMask} from './alpha-mask-blob.js';
 
 export function importPaperDimensions(record) {
   const size=record.paperSize==='custom'?{width:record.customImportWidth,height:record.customImportHeight}:paperDimensions(record.paperSize)||paperDimensions('a4');
@@ -72,10 +73,17 @@ export async function saveImportBatch({state,db,urls,render,onSaved}) {
       const copyToLibrary=choice!=='__no_library__';
       p.seriesID=choice==='__none__'||choice==='__no_library__'?null:choice||null;
       for(const c of elements) {
-        const id=uid(),blobId=uid(),sourceID=uid(),originalCutoutBlobId=uid(),candidateFrameBlobId=uid(),region=c.region;
-        assets.push({...candidateMetadata(c,record,state.importBatchSeriesID),id,blobId,originalBlobId:sourceID,originalCutoutBlobId,candidateFrameBlobId,photoBlobId:originalID,isProjectInternal:!copyToLibrary,usageStatus:copyToLibrary?'used':'unused',usageUpdatedAt:copyToLibrary?now:null,seriesID:copyToLibrary?(choice==='__none__'?null:choice||null):null,createdAt:now,sourceIdentifier:'imported-work-element'});
-        blobs.push({id:originalCutoutBlobId,data:c.originalCutoutBlob||c.blob},{id:candidateFrameBlobId,data:c.candidateFrameBlob||c.originalBlob||c.blob});
-        blobs.push({id:blobId,data:c.blob},{id:sourceID,data:c.originalBlob||c.blob});p.candidateAssetIDs.push(id);
+        const id=uid(),blobId=uid(),maskId=uid(),candidateFrameBlobId=uid(),region=c.region;
+        const encodedMask=await extractAlphaMask(c.blob);
+        assets.push({...candidateMetadata(c,record,state.importBatchSeriesID),id,blobId,
+          initialMaskBlobId:maskId,finalMaskBlobId:maskId,candidateFrameBlobId,
+          photoBlobId:originalID,isProjectInternal:!copyToLibrary,
+          usageStatus:copyToLibrary?'used':'unused',usageUpdatedAt:copyToLibrary?now:null,
+          seriesID:copyToLibrary?(choice==='__none__'?null:choice||null):null,
+          createdAt:now,sourceIdentifier:'imported-work-element'});
+        blobs.push({id:maskId,data:encodedMask},
+          {id:candidateFrameBlobId,data:c.candidateFrameBlob||c.originalBlob||c.blob},
+          {id:blobId,data:c.blob});p.candidateAssetIDs.push(id);
         d.items.push({id:uid(),assetID:id,x:(region.x+region.w/2)*d.canvas.width,y:(region.y+region.h/2)*1000,
           width:region.w*d.canvas.width,height:region.h*1000,rotation:region.rotation||0,zIndex:d.items.length,isLocked:false,isParked:false,opacity:1});
       }
@@ -90,11 +98,15 @@ export async function saveImportBatch({state,db,urls,render,onSaved}) {
       // whole imported photograph. Keep the aligned source pixels plus the full
       // candidate-box frame so storage stays local and compact.
       for(const c of chosen) {
-        const id=uid(),blobId=uid(),originalBlobId=uid(),originalCutoutBlobId=uid(),candidateFrameBlobId=uid();
+        const id=uid(),blobId=uid(),maskId=uid(),candidateFrameBlobId=uid();
+        const encodedMask=await extractAlphaMask(c.blob);
         const {mask,...region}=c.region;
-        assets.push({...candidateMetadata(c,record,state.importBatchSeriesID),id,blobId,originalBlobId,originalCutoutBlobId,candidateFrameBlobId,sourceRegion:structuredClone(region),createdAt:now});
-        blobs.push({id:originalCutoutBlobId,data:c.originalCutoutBlob||c.blob},{id:candidateFrameBlobId,data:c.candidateFrameBlob||c.originalBlob||c.blob});
-        blobs.push({id:blobId,data:c.blob},{id:originalBlobId,data:c.originalBlob||c.blob});savedCount++;
+        assets.push({...candidateMetadata(c,record,state.importBatchSeriesID),id,blobId,
+          candidateFrameBlobId,initialMaskBlobId:maskId,finalMaskBlobId:maskId,
+          sourceRegion:structuredClone(region),createdAt:now});
+        blobs.push({id:maskId,data:encodedMask},
+          {id:candidateFrameBlobId,data:c.candidateFrameBlob||c.originalBlob||c.blob},
+          {id:blobId,data:c.blob});savedCount++;
       }
     }
   }

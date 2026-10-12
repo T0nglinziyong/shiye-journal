@@ -1,5 +1,6 @@
 import {paintMask,maskOrientation,refineMaskStroke} from './mask-model.js';
 import {decodeImageBlob} from './image-blob-decoder.js';
+import {readAlphaMask,encodeAlphaMask} from './alpha-mask-blob.js';
 import {containBox} from './preview-geometry.js';
 import {onDialogClosed} from './dialog-lifecycle.js';
 
@@ -9,21 +10,49 @@ const copyMask=value=>new Uint8ClampedArray(value);
 
 export async function showCutoutEditor({
   body,modal,original,saved,recognition=saved,candidateFrame=original,title,processing={},
+  finalMaskBlob=null,onLoadInitialMask=null,
   onApply,onRerecognize,onPostprocess,recognitionUI={},toast
 }) {
-  // Persisted originals are fetched from COS/IndexedDB after app restart.
-  // Recover WebKit decoder quirks, but never replace corrupt bytes silently.
-  const decoded=await Promise.allSettled([
-    decodeImageBlob(original),decodeImageBlob(saved),decodeImageBlob(recognition),
-    decodeImageBlob(candidateFrame||original)
-  ]);
-  const failed=decoded.find(row=>row.status==='rejected');
-  if(failed){
-    for(const row of decoded)if(row.status==='fulfilled')row.value?.close?.();
-    throw Error('检查抠图暂无法打开：'+(failed.reason?.message||'图片未能解码')+
-      '。当前素材不会被自动覆盖；请检查同步状态。');
+  // New records read only the canonical corrected candidate RGB + final
+  // alpha mask. The initial mask is a separate lazy recovery operation.
+  // Existing four-image assets continue down the original legacy path.
+  let source,initial,recognized,frame,loadedFinalMask=null;
+  if(finalMaskBlob){
+    const [candidate,record]=await Promise.all([
+      decodeImageBlob(candidateFrame),readAlphaMask(finalMaskBlob)
+    ]);
+    frame=candidate;
+    const r=processing.candidateFramePlacement;
+    const valid=r&&r.frameWidth===frame.width&&r.frameHeight===frame.height
+      &&r.width>0&&r.height>0&&r.x>=0&&r.y>=0
+      &&r.x+r.width<=frame.width+1&&r.y+r.height<=frame.height+1;
+    const placement=valid?r:{x:0,y:0,width:frame.width,height:frame.height};
+    if(record.width!==Math.round(placement.width)||record.height!==Math.round(placement.height))
+      throw Error('保存的透明蒙版与矫正候选框尺寸不匹配，未覆盖已有素材');
+    source=document.createElement('canvas');source.width=record.width;source.height=record.height;
+    source.getContext('2d').drawImage(frame,
+      placement.x,placement.y,placement.width,placement.height,0,0,record.width,record.height);
+    const canvas=document.createElement('canvas');canvas.width=record.width;canvas.height=record.height;
+    const ctx=canvas.getContext('2d',{willReadFrequently:true});
+    ctx.drawImage(source,0,0);
+    const rgba=ctx.getImageData(0,0,record.width,record.height);
+    for(let i=0;i<record.alpha.length;i++)rgba.data[i*4+3]=record.alpha[i];
+    ctx.putImageData(rgba,0,0);
+    initial=recognized=canvas;
+    loadedFinalMask=record.alpha;
+  }else{
+    const decoded=await Promise.allSettled([
+      decodeImageBlob(original),decodeImageBlob(saved),decodeImageBlob(recognition),
+      decodeImageBlob(candidateFrame||original)
+    ]);
+    const failed=decoded.find(row=>row.status==='rejected');
+    if(failed){
+      for(const row of decoded)if(row.status==='fulfilled')row.value?.close?.();
+      throw Error('检查抠图暂无法打开：'+(failed.reason?.message||'图片未能解码')+
+        '。当前素材不会被自动覆盖；请检查同步状态。');
+    }
+    [source,initial,recognized,frame]=decoded.map(row=>row.value);
   }
-  const [source,initial,recognized,frame]=decoded.map(row=>row.value);
   const w=source.width,h=source.height,canvas=document.createElement('canvas');
   canvas.width=w;canvas.height=h;
   const ctx=canvas.getContext('2d',{willReadFrequently:true});
@@ -43,8 +72,8 @@ export async function showCutoutEditor({
   };
 
   const initialRotation=processing.displayRotationDegrees||0,
-    initialMask=alphaFrom(initial,initialRotation),
-    recognitionMask=alphaFrom(recognized,processing.recognitionRotationDegrees||0),
+    initialMask=loadedFinalMask?copyMask(loadedFinalMask):alphaFrom(initial,initialRotation),
+    recognitionMask=loadedFinalMask?copyMask(loadedFinalMask):alphaFrom(recognized,processing.recognitionRotationDegrees||0),
     steps=[['rough','修补轮廓'],['recognition','边缘优化'],['final','调整外观']],
     methodList=recognitionUI.methods||[],
     pixelList=(recognitionUI.pixels||[[1200,'1200 px'],[1600,'1600 px']]).filter(([n])=>Number(n)>=1200),
@@ -219,7 +248,18 @@ export async function showCutoutEditor({
         +'</div>';
       const action=bindMaskTools(el);
       action('cutout-rough-enter',()=>{push();mask=copyMask(initialMask);roughStageMask=copyMask(mask);lastStroke=null;});
-      action('cutout-rough-original',()=>{push();mask=copyMask(recognitionMask);roughStageMask=copyMask(mask);lastStroke=null;});
+      if(onLoadInitialMask){
+         el.querySelector('#cutout-rough-original').onclick=async()=>{
+           if(busy)return;busy=true;
+           try{
+             const initial=await onLoadInitialMask();
+             if(!initial||initial.width!==w||initial.height!==h)throw Error('初始透明蒙版与候选框尺寸不一致');
+             push();mask=copyMask(initial.alpha);roughStageMask=copyMask(mask);
+             recognitionBaseMask=copyMask(mask);lastStroke=null;draw();
+           }catch(error){body.querySelector('#cutout-note').textContent='初始识别结果未能恢复：'+error.message;}
+           finally{busy=false;panel();}
+         };
+       }else action('cutout-rough-original',()=>{push();mask=copyMask(recognitionMask);roughStageMask=copyMask(mask);lastStroke=null;});
       const method=el.querySelector('#cutout-method');
       method?.addEventListener('change',()=>{readRecognition(el);el.querySelector('#cutout-method-help').textContent=methodDescription(recognitionState.method);});
       el.querySelector('#cutout-rerecognize')?.addEventListener('click',async()=>{
@@ -332,7 +372,7 @@ export async function showCutoutEditor({
         recognitionRotationDegrees:processing.recognitionRotationDegrees||0,
         sourcePixelWidth:w,sourcePixelHeight:h,candidateFramePlacement:processing.candidateFramePlacement||null,
         rerecognition:lastRecognition,autoPostprocess:lastPostprocess,manualBoundaryEdited:manualTouched
-      },recognition);
+      },recognition,encodeAlphaMask(mask,w,h));
       modal.close();
     }catch(e){toast(e.message);busy=false;body.querySelectorAll('button').forEach(b=>b.disabled=false);panel();}
   };
