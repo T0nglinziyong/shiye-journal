@@ -794,7 +794,13 @@ async function handle(action,id,value){try{switch(action){
     // Both paths first stage the *entire* editor document, even with no edits.
     view.endTextEditing?.();
     p.isDraft=decision.isDraft;
-    saveProject();
+    saveProject(); // first flushes any outstanding layer mutations to the journal
+    if(action==='editor-done'){
+      // A completed project is an explicit, recoverable EDITABLE Scene v2
+      // milestone, independent of the automatically generated cover PNG.
+      makeAutoSceneSnapshot(p,{reason:'completed',force:true});
+      saveProject();
+    }
     await flushSave();
     if(publish)saveAISnapshotInBackground(p);
     if(state.offlineEditingReturnID===p.id){
