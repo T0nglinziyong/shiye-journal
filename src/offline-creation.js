@@ -138,7 +138,7 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
   const compactGuide=[
     '【内容边界】',contentBrief,
     '【创作原则】','先观察真实图案与物理尺寸，再建立主次、叠压、局部加工与阅读路径；拒绝把所有素材平铺成网格。标题、正文和手写装饰需要有实际内容；可保留有意义的留白，素材可少用但不可漏掉 required。参考图不是实体材料，也不是必须复刻的模板。',
-    '【统一 Scene 的实体扩展】','图层可使用 vector_mask 表达 0–1 外轮廓与镂空孔洞；blend_mode=multiply 仅在透明纸、胶带或印色自然叠加时使用。相关文字、矢量和实体片段可以 group_elements 或 page.groups 一起移动；编组不能缩放实体。所有编辑仍保存为拾页相同的 Draft 场景，不把真实图像烘焙成不可编辑的效果图。',
+    '【统一 Scene 的实体扩展】','图层可使用 vector_mask 表达 0–1 外轮廓与镂空孔洞；blend_mode=multiply 仅在透明纸、胶带或印色自然叠加时使用。相关文字、矢量和实体片段可以 代理工具 group_elements 或直接模式 page.layers 中的 group 节点 一起移动；编组不能缩放实体。所有编辑仍保存为拾页相同的 Draft 场景，不把真实图像烘焙成不可编辑的效果图。',
     '【文字方式】',source.textPresentation==='handwritten'?'自由手写优先：用 page.layers 的 ink 图层或工艺计划 ink 绘制短句、标记与线条；长段可用可编辑手写风格文字，避免伪字迹。':source.textPresentation==='type'?'排版文字优先：文字保持独立可编辑，选好字体、行距与层次。':'混合编排：排版正文结合少量可编辑手写笔迹。',
     '【编辑合同】',mode==='agent'?'只输出 tools；可使用 apply_craft_plan 做复杂取材与穿插；确切参数以 schema/output.json 为准。':'只输出 page.version=2 且仅含递归 page.layers 图层树；material.operations 按物理裁切协议，shape/text/ink 作为独立可编辑叶图层。禁止输出旧版 items/graphics/text_blocks/ink_strokes 并列数组。'
   ].join('\n\n');
