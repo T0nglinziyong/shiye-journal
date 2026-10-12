@@ -31,11 +31,13 @@ test('nested groups survive JSON serialization; rotating groups never scales phy
  assert.equal(sceneGroups(loaded).length,0);
  assert.throws(()=>groupSceneLayers(loaded,['m','m']),/不同图层/);
 });
-test('scene v2 imports old draft arrays into one tree rather than persisting two copies',()=>{
- const legacy={id:'old',canvas:{width:700,height:1000},items:[{id:'m',assetID:'m1',x:1,y:2,width:3,height:4}],primitives:[],textBlocks:[],strokes:[]};
- attachSceneV2(legacy);
- assert.equal(legacy.sceneVersion,2);assert.equal(legacy.layers.length,1);
- assert.equal(JSON.stringify(legacy).includes('"items"'),false);
+test('Scene v2 refuses old array-based drafts instead of mutating them',()=>{
+ const old={id:'old',canvas:{width:700,height:1000},items:[{id:'m',assetID:'m1',x:1,y:2,width:3,height:4}],primitives:[],textBlocks:[],strokes:[]};
+ const before=JSON.stringify(old);
+ assert.throws(()=>attachSceneV2(old),/仅支持 Scene v2/);
+ assert.equal(JSON.stringify(old),before);
+ const malformed={sceneVersion:2,canvas:{width:700,height:1000},layers:[],items:[]};
+ assert.throws(()=>attachSceneV2(malformed),/禁止保存旧版并行图层数组/);
 });
 
 test('Scene v2 can nest/reparent groups without changing physical dimensions',()=>{
@@ -103,4 +105,32 @@ test('group identities must not collide with any leaf identity',()=>{
  assert.throws(()=>groupSceneLayers(d,['shape-a','shape-b'],{id:'shape-a'}),/编号无效或重复/);
  assert.equal(JSON.stringify(d),snapshot,'failed grouping must not damage canonical tree');
  assert.equal(validateSceneExtensions(d),true);
+});
+
+test('locked ancestors protect descendants across all structural operations',()=>{
+ const d=draft();
+ d.primitives.push({id:'outer-shape',kind:'rectangle',x:10,y:20,width:30,height:40});
+ d.primitives.push({id:'inner-shape',kind:'rectangle',x:50,y:60,width:30,height:40});
+ const group=groupSceneLayers(d,['outer-shape','inner-shape'],{id:'lock-group'});
+ d.layers.find(n=>n.id===group).locked=true;
+ const original=JSON.stringify(d);
+ assert.throws(()=>moveSceneNode(d,'outer-shape',{parentID:null}),/锁定/);
+ assert.throws(()=>ungroupSceneLayers(d,group),/锁定/);
+ assert.throws(()=>transformSceneGroup(d,group,{dx:20}),/锁定/);
+ assert.throws(()=>groupSceneLayers(d,['outer-shape','inner-shape'],{id:'another'}),/锁定/);
+ assert.equal(JSON.stringify(d),original);
+});
+
+test('removing recursive groups cannot erase locked descendant artwork',async()=>{
+ const {removeSceneNode}=await import('../src/scene-model.js');
+ const d=draft();
+ for(const id of ['a','b'])d.primitives.push({id,kind:'ellipse',x:10,y:20,width:20,height:20});
+ groupSceneLayers(d,['a','b'],{id:'group'});
+ d.primitives.find(n=>n.id==='a').locked=true;
+ const before=JSON.stringify(d);
+ assert.throws(()=>removeSceneNode(d,'group'),/锁定/);
+ assert.equal(JSON.stringify(d),before);
+ d.primitives.find(n=>n.id==='a').locked=false;
+ assert.equal(removeSceneNode(d,'group').id,'group');
+ assert.equal(d.layers.length,0);
 });
