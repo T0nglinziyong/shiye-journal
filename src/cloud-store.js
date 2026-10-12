@@ -20,7 +20,7 @@ const writeProvider=()=>objectStorage?.enabled?'cos':'supabase';
 const usableBlob=value=>value instanceof Blob&&value.size>0;
 async function downloadObject(path,provider){if(provider==='cos'){if(!objectStorage)throw Error('COS 私有读取尚未配置');return objectStorage.download(path);}if(provider==='supabase')return checked(await cloudClient().storage.from(BUCKET).download(path));throw Error('云端对象缺少当前 storageProvider');}
 async function uploadObject(path,blob,type,provider=writeProvider()){if(provider==='cos'){await objectStorage.upload(path,blob,type);return {error:null};}return cloudClient().storage.from(BUCKET).upload(path,blob,{upsert:false,contentType:type});}
-let owner,revision,writesInFlight=0,resetInProgress=false,resetCleanupPending=false;
+let owner,revision,writesInFlight=0,resetInProgress=false,resetCleanupPending=false,resetEpochId=null;
 let queue=Promise.resolve();
 const images=new Map();
 const imageSizes=new Map();
@@ -99,16 +99,21 @@ const channel=()=>{
   };
   return outboxChannel;
 };
-// The reset marker can remain "deleting" while old COS files are removed.
-// Read-only access to the already-empty account is safe; creating new files
-// under the same account prefix is not safe until the old prefix is gone.
-function cloudSetResetCleanupPending(value){
+// All post-reset uploads go under a unique, immutable generation prefix.
+// The background GC excludes this subtree even while deleting old objects,
+// so file cleanup can never block login or wipe newly uploaded images.
+function cloudSetResetCleanupPending(value,resetId=null){
   resetCleanupPending=!!value;
-  if(resetCleanupPending)unifiedSync.pause();
+  if(resetId&&!/^[a-f0-9-]{36}$/i.test(resetId))throw Error('清空版本编号无效');
+  resetEpochId=resetId||null;
+}
+async function objectRoot(){
+  return (await identity())+'/' + (resetEpochId?'reset-'+resetEpochId+'/':'');
 }
 function assertAccountWritable(){
-  if(resetCleanupPending)throw Error('云端资料已清空，旧图片正在后台清理；暂不能上传新内容');
   if(resetInProgress)throw Error('账号清空中，不能保存新资料');
+  if(resetCleanupPending&&!resetEpochId)
+    throw Error('云端清空版本尚未核对完成，暂不能写入');
 }
 async function withAccountSyncLock(task){
   const id=await account();
@@ -516,7 +521,7 @@ async function encode(store,record){
     if(!inline){
       if(typeof CompressionStream==='function'&&typeof DecompressionStream==='function'){blob=await new Response(blob.stream().pipeThrough(new CompressionStream('gzip'))).blob();encoding='gzip';}
       const digest=await crypto.subtle.digest('SHA-256',await blob.arrayBuffer()),hash=[...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,'0')).join('');
-      path=(await identity())+'/'+hash+'-project.json'+(encoding?'.gz':'');
+      path=(await objectRoot())+hash+'-project.json'+(encoding?'.gz':'');
       const uploaded=await uploadObject(path,blob,encoding?'application/gzip':'application/json',provider);
       if(uploaded.error&&String(uploaded.error.statusCode)!=='409')throw Error('作品完整数据上传失败，未修改云端元数据');
     }
@@ -535,7 +540,7 @@ async function encode(store,record){
         try{
           const preview=await projectPreview(record);
           if(usableBlob(preview)){
-            const coverPath=(await identity())+'/'+sceneHash+'-preview480.webp';
+            const coverPath=(await objectRoot())+sceneHash+'-preview480.webp';
             const result=await uploadObject(coverPath,preview,preview.type||'image/webp',provider);
             if(!result.error||String(result.error.statusCode)==='409'||result.error.statusCode===409){
               cover.coverImageID='project-cover:'+provider+':'+coverPath;
@@ -553,7 +558,7 @@ async function encode(store,record){
   if(!usableBlob(record.data))throw Error('图片字节丢失或为空；云端元数据未修改');
   const bytes=await record.data.arrayBuffer(),digest=await crypto.subtle.digest('SHA-256',bytes);
   const hash=[...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,'0')).join('');
-  const storagePath=`${await identity()}/${hash}`,provider=writeProvider();
+  const storagePath=`${await objectRoot()}${hash}`,provider=writeProvider();
   if(!uploads.has(storagePath)){const task=(async()=>{const uploaded=await uploadObject(storagePath,record.data,record.data.type||'application/octet-stream',provider);if(uploaded.error&&uploaded.error.statusCode!=='409'&&uploaded.error.statusCode!==409)throw Error('图片上传失败，未保存元数据');})().catch(error=>{uploads.delete(storagePath);throw error;});uploads.set(storagePath,task);}
   // The optional thumbnail is independent of the original PUT. Start both
   // together, but never commit metadata until the original is acknowledged.
