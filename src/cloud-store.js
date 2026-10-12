@@ -553,6 +553,56 @@ async function cloudRefresh(){
   if(delta){for(const [store,snapshot] of delta.snapshots){snapshots.set(store,snapshot);await remember('records:'+store,snapshot);}return {revision:current,changed:true,incremental:true,blobIDs:delta.blobIDs,allBlobs:delta.allBlobs};}
   return {revision:current,changed:true,incremental:false,allBlobs:true};
 }
+// Migration is an explicit user action. Scan raw account records rather than
+// cloudAll('blobs'), which would needlessly download every original image.
+// Only known converters may produce write operations; unknown formats stay put.
+async function cloudMigrationInventory(){
+ await identity();
+ const start=await version(),stores=['assets','series','projects','blobs','meta','trash'],collections={};
+ for(const store of stores){
+  const records=[];
+  for(let offset=0;;offset+=250){
+   const page=checked(await cloudClient().from('shiye_records').select('record')
+    .eq('user_id',owner).eq('store',store).order('id').range(offset,offset+249));
+   records.push(...page.map(row=>row.record));
+   if(page.length<250)break;
+  }
+  collections[store]=records;
+ }
+ const end=await version();
+ if(start!==end)throw Error('迁移扫描期间云端资料被修改，请重新扫描；尚未修改任何作品');
+ return {account:owner,revision:start,collections};
+}
+async function cloudMigrationOriginalProject(record){
+ await identity();
+ if(!record?.projectDocumentPath)return structuredClone(record);
+ const path=record.projectDocumentPath;
+ if(!path.startsWith(owner+'/')||!['cos','supabase'].includes(record.projectDocumentProvider))
+  throw Error('完整作品路径或存储服务不合法，不允许迁移');
+ const blob=await downloadObject(path,record.projectDocumentProvider);
+ const full=JSON.parse(await projectBlobText(blob,record.projectDocumentEncoding));
+ if(full?.id!==record.id||!Array.isArray(full.drafts))throw Error('原始作品文档与摘要不一致');
+ // Return the unmodified COS/Supabase document, NOT a summary merge that can
+ // overwrite old leaf arrays with empty metadata placeholders.
+ return full;
+}
+async function cloudMigrationCommit({expectedRevision,changes}){
+ if(!Number.isSafeInteger(expectedRevision)||expectedRevision<0||!Array.isArray(changes)||changes.length>200)
+  throw Error('迁移计划不合法');
+ if(!changes.length)return {updated:0,revision:expectedRevision};
+ if(changes.some(change=>!['projects','trash'].includes(change.store)||
+   !change.converted||change.id!==change.converted.id))throw Error('迁移写入目标不安全');
+ await identity();await queue;
+ const [pendingProjects,pendingImports]=await Promise.all([projectSync.pending(),importSync.pending()]);
+ if(pendingProjects.length||pendingImports.length)throw Error('存在待同步修改，请先解决冲突或备份本机待同步内容；未执行迁移');
+ const current=await version();
+ if(current!==expectedRevision)throw Error('迁移扫描后云端版本已变化，请重新扫描；未覆盖任何资料');
+ const stores=[...new Set(changes.map(row=>row.store))];
+ await cloudTransaction(stores,tx=>{
+  for(const change of changes)tx.objectStore(change.store).put(change.converted);
+ });
+ return {updated:changes.length,revision};
+}
 async function cloudStageProject(record){
   if(!usableProjectSnapshot(record))throw Error('作品编辑数据不完整；云端已保存版本未被覆盖');
   await identity();if(revision===undefined)await version();
@@ -631,12 +681,15 @@ async function cloudRestoreEmergency(snapshot){
   if(typeof cache.restoreOutboxes!=='function')throw Error('当前浏览器不支持原子恢复待同步资料');
   return cache.restoreOutboxes(key,snapshot.projects,snapshot.imports);
 }
-return {cloudLegacyProjectBackup,cloudAll,cloudGet,cloudPreview,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudClearCache,cloudResumeCache,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudPendingLocalSummary,cloudPendingDetails,cloudDiscardPending,cloudFlushProjects,cloudProjectDocument,cloudEmergencySnapshot,cloudRestoreEmergency,cloudBackupBlobIDs};
+return {cloudMigrationInventory,cloudMigrationOriginalProject,cloudMigrationCommit,cloudLegacyProjectBackup,cloudAll,cloudGet,cloudPreview,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudClearCache,cloudResumeCache,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudPendingLocalSummary,cloudPendingDetails,cloudDiscardPending,cloudFlushProjects,cloudProjectDocument,cloudEmergencySnapshot,cloudRestoreEmergency,cloudBackupBlobIDs};
 }
 let projectPreview=()=>null;
 export const setCloudProjectPreview=producer=>{projectPreview=producer;};
 const current=createCloudStore({cloudClient,requireCloudUser,cache:privateCache,namespace:import.meta.env?.VITE_SHIYE_SUPABASE_URL||'cloud',projectPreview:record=>projectPreview(record),objectStorage:createCOSStore({client:cloudClient,enabled:import.meta.env?.VITE_SHIYE_OBJECT_STORAGE==='cos'})});
 export const cloudLegacyProjectBackup=(...args)=>current.cloudLegacyProjectBackup(...args);
+export const cloudMigrationInventory=(...args)=>current.cloudMigrationInventory(...args);
+export const cloudMigrationOriginalProject=(...args)=>current.cloudMigrationOriginalProject(...args);
+export const cloudMigrationCommit=(...args)=>current.cloudMigrationCommit(...args);
 export const cloudAll=(...args)=>current.cloudAll(...args);
 export const cloudGet=(...args)=>current.cloudGet(...args);
 export const cloudTransaction=(...args)=>current.cloudTransaction(...args);
