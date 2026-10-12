@@ -1,6 +1,7 @@
 import {cloudClient,requireCloudUser} from './cloud-session.js';
 import {privateCache} from './private-cache.js';
 import {createProjectSync} from './project-sync.js';
+import {runAccountBrowserLock,markSyncPhase} from './sync-browser-compat.js';
 import {syncEnvelope,projectSyncRows,importSyncRows,latestEditedProject,syncAffectedKeys,foldLegacySyncRows} from './unified-sync-outbox.js';
 import {readCloudDelta,canRebaseUnchangedKeys} from './cloud-delta.js';
 import {compareRecordEdits} from './sync-last-write.js';
@@ -100,16 +101,8 @@ const channel=()=>{
 };
 async function withAccountSyncLock(task){
   const id=await account();
-  if(typeof window!=='undefined'&&typeof navigator!=='undefined'&&navigator.locks?.request){
-    // Only browser tabs participate in Web Locks. An unattended/blocked tab
-    // must not leave every other tab waiting forever to acquire the lease.
-    // Aborting before acquisition never discards the durable outbox.
-    const signal=globalThis.AbortSignal?.timeout?.(45000);
-    return navigator.locks.request('shiye-sync:'+id,{mode:'exclusive',...(signal?{signal}:{})},task);
-  }
-  // Web Locks availability varies; durable IndexedDB merge and server CAS are
-  // mandatory correctness layers even when this optimization is unavailable.
-  return task();
+  try{return await runAccountBrowserLock(id,task);}
+  catch(error){throw markSyncPhase(error,'获取同步锁或执行同步任务');}
 }
 async function persistOutbox(kind,previous,rows){
   if(!cache||cacheDisabled)throw Error('无法安全保存待同步资料');
@@ -571,9 +564,17 @@ function cloudTransaction(names,fn,operationID=crypto.randomUUID()){
     await identity();if(revision===undefined)await version();
     const previous=revision;
     operations.push(...recordTombstones(operations).slice(operations.length));
-    const puts=operations.filter(op=>op.action==='put');for(let offset=0;offset<puts.length;offset+=3)await Promise.all(puts.slice(offset,offset+3).map(async op=>{op.item=await encode(op.store,op.item);}));
+    const puts=operations.filter(op=>op.action==='put');for(let offset=0;offset<puts.length;offset+=3)try{
+      await Promise.all(puts.slice(offset,offset+3).map(async op=>{
+        try{op.item=await encode(op.store,op.item);}
+        catch(error){throw markSyncPhase(error,'编码与上传 '+op.store);}
+      }));
+    }catch(error){throw markSyncPhase(error,'编码云端记录');}
     if(resetInProgress)throw Error('账号清空已开始；取消尚未提交的旧事务');
-    const data=checked(await cloudClient().rpc('shiye_commit_v2',{operations,expected_revision:previous,operation_id:operationID}));revision=Number(data);
+    let data;
+    try{data=checked(await cloudClient().rpc('shiye_commit_v2',{
+      operations,expected_revision:previous,operation_id:operationID
+    }));}catch(error){throw markSyncPhase(error,'云端提交事务');}revision=Number(data);
     // A WebP cover becomes usable only after both its object PUT and the
     // metadata commit succeed. Update the current Works UI immediately rather
     // than waiting for a full collection reload (which recreated every card).
