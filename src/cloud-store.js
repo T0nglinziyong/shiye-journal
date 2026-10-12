@@ -9,6 +9,7 @@ import {createCOSStore} from './cos-store.js';
 import {imageVariant,DISPLAY_TIERS,COVER_EDGE} from './image-variants.js';
 import {recoverImportOutbox} from './import-outbox-recovery.js';
 import {recoverProjectOutbox,usableProjectSnapshot} from './project-outbox-recovery.js';
+import {isLegacySceneProject} from './scene-v2.js';
 export function createCloudStore({cloudClient,requireCloudUser,cache=null,namespace='cloud',projectPreview=()=>null,objectStorage=null}){
 const BUCKET='shiye-private';
 const writeProvider=()=>objectStorage?.enabled?'cos':'supabase';
@@ -306,6 +307,21 @@ async function cloudGet(store,id){
   if(store==='blobs'&&id.startsWith('project-cover:'))return {id,data:await cloudPreview(id)};
   const record=await cloudRecord(store,id);return record?store==='projects'?cloudProjectDocument(withProjectBase(store,record,revision)):decode(store,record):undefined;
 }
+// A recovery-only export of the exact legacy projects held aside by the v2
+// reader. Never mutate v1 data; private full-size project documents are read
+// through the existing account-authenticated COS/Supabase download route.
+async function cloudLegacyProjectBackup(){
+ const legacy=(await cloudAll('projects')).filter(isLegacySceneProject);
+ if(!legacy.length)throw Error('当前账号没有待导出的旧版作品');
+ const projects=[];
+ for(const summary of legacy){
+  const full=summary.projectDocumentPath?await cloudProjectDocument(summary):summary;
+  const {__cloudBaseRevision,__cloudSessionId,...source}=full;
+  projects.push(structuredClone(source));
+ }
+ return new Blob([JSON.stringify({format:'shiye-legacy-project-recovery',
+  version:1,exportedAt:new Date().toISOString(),projects},null,2)],{type:'application/json'});
+}
 async function cloudProjectDocument(record){
   const path=record.projectDocumentPath;if(!path)return record;
   if(!['cos','supabase'].includes(record.projectDocumentProvider))throw Error('作品文档缺少当前存储服务标记');
@@ -589,11 +605,12 @@ async function cloudRestoreEmergency(snapshot){
   if(typeof cache.restoreOutboxes!=='function')throw Error('当前浏览器不支持原子恢复待同步资料');
   return cache.restoreOutboxes(key,snapshot.projects,snapshot.imports);
 }
-return {cloudAll,cloudGet,cloudPreview,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudClearCache,cloudResumeCache,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudPendingLocalSummary,cloudPendingDetails,cloudDiscardPending,cloudFlushProjects,cloudProjectDocument,cloudEmergencySnapshot,cloudRestoreEmergency,cloudBackupBlobIDs};
+return {cloudLegacyProjectBackup,cloudAll,cloudGet,cloudPreview,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudClearCache,cloudResumeCache,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudPendingLocalSummary,cloudPendingDetails,cloudDiscardPending,cloudFlushProjects,cloudProjectDocument,cloudEmergencySnapshot,cloudRestoreEmergency,cloudBackupBlobIDs};
 }
 let projectPreview=()=>null;
 export const setCloudProjectPreview=producer=>{projectPreview=producer;};
 const current=createCloudStore({cloudClient,requireCloudUser,cache:privateCache,namespace:import.meta.env?.VITE_SHIYE_SUPABASE_URL||'cloud',projectPreview:record=>projectPreview(record),objectStorage:createCOSStore({client:cloudClient,enabled:import.meta.env?.VITE_SHIYE_OBJECT_STORAGE==='cos'})});
+export const cloudLegacyProjectBackup=(...args)=>current.cloudLegacyProjectBackup(...args);
 export const cloudAll=(...args)=>current.cloudAll(...args);
 export const cloudGet=(...args)=>current.cloudGet(...args);
 export const cloudTransaction=(...args)=>current.cloudTransaction(...args);

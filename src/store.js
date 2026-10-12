@@ -1,8 +1,8 @@
 import {openDB,unwrap} from 'idb';
 import {createStorageRouter} from './storage-router.js';
 import {cloudEnabled} from './cloud-session.js';
-import {prepareProjectScene,prepareProjectList,attachSceneV2} from './scene-v2.js';
-import {cloudAll,cloudGet,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudPreview,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudPendingDetails,cloudDiscardPending,cloudFlushProjects,cloudProjectDocument,cloudEmergencySnapshot,cloudRestoreEmergency,cloudBackupBlobIDs} from './cloud-store.js';
+import {prepareProjectScene,partitionProjectList,attachSceneV2} from './scene-v2.js';
+import {cloudLegacyProjectBackup,cloudAll,cloudGet,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudPreview,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudPendingDetails,cloudDiscardPending,cloudFlushProjects,cloudProjectDocument,cloudEmergencySnapshot,cloudRestoreEmergency,cloudBackupBlobIDs} from './cloud-store.js';
 import {createPendingRecovery,parsePendingRecovery} from './emergency-backup.js';
 import {validateBackupData,validateRestoredRecords} from './backup-integrity.js';
 // Exceptional destructive imports require an acknowledged atomic cloud commit.
@@ -23,7 +23,20 @@ export async function restoreEmergencyBackup(file){
 export const discardPendingSync=()=>cloudEnabled?cloudDiscardPending():Promise.resolve(0);
 export const flushProjects=()=>cloudEnabled?cloudFlushProjects():Promise.resolve();
 export const completeProject=record=>cloudEnabled?cloudProjectDocument(record):Promise.resolve(record);
-export const cachedCollections=()=>cloudEnabled?cloudCachedCollections():Promise.resolve(null);
+let legacyProjectSummaries=[];
+// Report the exact existing cloud rows that have been held aside. The rows
+// remain on the server until the owner explicitly decides what to do with them.
+export const legacyProjectInfo=()=>structuredClone(legacyProjectSummaries);
+export const exportLegacyProjectBackup=()=>cloudEnabled?cloudLegacyProjectBackup():Promise.reject(Error('仅当前云端账号支持旧版作品原始备份')); 
+function selectCurrentProjects(rows){
+ const result=partitionProjectList(rows);
+ legacyProjectSummaries=result.quarantined;
+ return result.projects;
+}
+export async function cachedCollections(){
+ const cached=cloudEnabled?await cloudCachedCollections():null;
+ return cached?{...cached,projects:selectCurrentProjects(cached.projects)}:null;
+}
 export const refreshCloud=()=>cloudEnabled?cloudRefresh():Promise.resolve(null);
 export const previewBlob=(id,pixels=720)=>cloudEnabled?cloudPreview(id,pixels):get('blobs',id).then(r=>r?.data);
 const DB='shiye-pwa-full-v1';
@@ -74,7 +87,7 @@ const storageRouter=createStorageRouter(
     browser:{all:localAll,get:(name,id)=>localDatabase().then(db=>db.get(name,id)),transaction:browserTransaction}
   }
 );
-export async function all(name){const rows=await storageRouter.all(name);return name==='projects'?prepareProjectList(rows):rows;}
+export async function all(name){const rows=await storageRouter.all(name);return name==='projects'?selectCurrentProjects(rows):rows;}
 export async function get(name,id){const record=await storageRouter.get(name,id);return name==='projects'&&record?prepareProjectScene(record):record;}
 export async function put(name,item){if(name==='projects')prepareProjectScene(item);return transaction([name],tx=>tx.objectStore(name).put(item));}
 export async function remove(name,id){return transaction([name],tx=>tx.objectStore(name).delete(id));}
