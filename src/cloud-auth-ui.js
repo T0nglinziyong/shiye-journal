@@ -1,5 +1,7 @@
 import {cloudEnabled,cloudClient,requireCloudUser} from './cloud-session.js';
-import {createBackup} from './store.js';
+import {createBackup,purgeLocalAfterCloudReset} from './store.js';
+import {checkAccountResetEpoch} from './account-reset-epoch.js';
+import {eraseSiteAppData} from './account-data-wipe.js';
 import {cloudClearCache,cloudPendingLocalSummary,cloudResumeCache} from './cloud-store.js';
 import {openAdminView} from './admin-view.js';
 import {openStorageUsage} from './storage-usage-ui.js';
@@ -41,7 +43,39 @@ export async function startCloudSession(onReady){
     const user=await requireCloudUser();
     const {data:account,error}=await client.from('shiye_accounts').select('username,is_admin').eq('user_id',user.id).single();
     if(error||!account)throw Error('无法读取账号资料');
+    // A reset from another device must be observed BEFORE cachedCollections,
+    // old outbox recovery, or any background upload can start.
+    const wipeOldLocalData=async()=>{
+      window.dispatchEvent(new Event('shiye-account-reset-detected'));
+      await purgeLocalAfterCloudReset();
+      const outcome=await eraseSiteAppData({preserveAuthentication:true});
+      if(outcome.errors.length)
+        throw Error('云端已清空，但本设备还有数据未能删除；请关闭其他拾页标签页并重试：'+outcome.errors.join('；'));
+    };
+    const preflight=()=>checkAccountResetEpoch({
+      client,userId:user.id,storage:localStorage,erase:wipeOldLocalData,
+      onProgress:message=>{status.textContent=message;}
+    });
+    const initialReset=await preflight();
+    if(initialReset.wiped){location.reload();return;}
+    if(initialReset.pending)throw Error('账号云端数据已清空，正在清理旧图片；请完成清空流程后重新进入');
     gate.remove();app.hidden=false;await onReady(user);
+    // Already-open phones and computers also notice a reset on return to the
+    // tab, without waiting for a new manual sign-in.
+    let watching=false;
+    const watch=async()=>{
+      if(watching||document.visibilityState==='hidden')return;
+      watching=true;
+      try{
+        const outcome=await preflight();
+        if(outcome.wiped){location.reload();return;}
+        if(outcome.pending){app.hidden=true;location.reload();}
+      }catch(error){console.warn('跨设备重置检查未完成',error?.message);}
+      finally{watching=false;}
+    };
+    const timer=setInterval(()=>void watch(),15000);
+    window.addEventListener('focus',()=>void watch());
+    window.addEventListener('pagehide',()=>clearInterval(timer),{once:true});
     const menuHost=document.createElement('div');menuHost.className='cloud-account';
     menuHost.innerHTML='<button type="button" class="btn mini" aria-expanded="false" aria-controls="cloud-account-menu">账号</button><div id="cloud-account-menu" class="cloud-account-menu" hidden><small data-account-name></small><button type="button" class="btn" data-create-account hidden>新建账号</button><button type="button" class="btn" data-admin-view hidden>查看其他用户（只读）</button><button type="button" class="btn" data-storage-usage hidden>存储统计（开发者）</button><button type="button" class="btn" data-change-password>修改密码</button><button type="button" class="btn" data-old-backup>导出本机旧资料</button><button type="button" class="btn" data-logout>退出登录</button></div>';
     menuHost.querySelector('[data-account-name]').textContent=account.username+' · 私人云端资料';
