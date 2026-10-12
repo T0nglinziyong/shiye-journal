@@ -134,3 +134,18 @@ test('already-stored snapshots add only local matching reference, no second clou
  assert.equal(c.state.projects[0].id,'snap');
  assert.match(JSON.stringify(await device.get('test-user','matching-session-v1')),/snap/);
 });
+
+test('editable matching imports and newly opened variants use one durable project outbox',async()=>{
+ const device=memoryDevice(),db=memoryProjects(),c=context({},device,db),session=createMatchingSession(c);
+ await session.restore();
+ db.transaction=async()=>{throw Error('editable projects must not use generic mutations');};
+ await session.importProject({...work,isDraft:true,title:'有层级的手帐'});
+ assert.deepEqual(db.writes,['p']);
+ const variant={id:'generated',status:'completed',project:{...work,id:'new-id',isDraft:false},linkedProjectID:null};
+ await device.put('test-user',matchingSnapshot({},[variant]));
+ const other=context({},device,db),otherSession=createMatchingSession(other);
+ await otherSession.restore();await otherSession.open('generated');
+ assert.equal(db.writes.length,2);
+ assert.notEqual(db.writes[1],'p');
+ assert.equal(other.state.projects.length,1);
+});

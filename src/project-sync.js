@@ -155,6 +155,32 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
     });
     network.catch(()=>{});return network;
   }
+  // Only the UI reviewer can invoke this under the per-account sync lock.
+  // Recheck the exact serial before replacing or discarding a local draft.
+  async function resolvePending(id,expectedSerial,{record=null,baseRevision=null}={}){
+    // Only the conflict UI may call this after acquiring the account lock.
+    // A concurrent HTTP request could otherwise acknowledge the row while it
+    // is being replaced by an obsolete modal confirmation.
+    if(network)throw Error('同步正在进行，请等待当前请求结束');
+    await initialize();await staging;await refreshFromDisk();
+    if(network)throw Error('同步正在进行，请等待当前请求结束');
+    const previous=entries.get(id);
+    if(!previous||previous.serial!==expectedSerial)
+      throw Error('冲突作品在确认期间发生了新修改；请重新检查并备份');
+    if(record&&(typeof record.id!=='string'||!record.id||
+      !Number.isSafeInteger(baseRevision)||baseRevision<0||
+      (record.id!==id&&entries.has(record.id))))
+      throw Error('冲突解决目标无效；没有修改待同步数据');
+    const before=new Map(entries);
+    entries.delete(id);
+    if(record)entries.set(record.id,{record:structuredClone(record),serial:++serial,
+      baseRevision,operationID:crypto.randomUUID()});
+    try{await persist();}
+    catch(failure){entries.clear();for(const [key,value] of before)entries.set(key,value);throw failure;}
+    error=null;report();
+    if(entries.size)scheduleAuto();
+    return {id:record?.id||id,retained:!!record};
+  }
   async function cancelPendingFor(ids){
     await initialize();
     await refreshFromDisk();
@@ -180,5 +206,5 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
     const keys=recordKeys(row.record);
     const touched=operations.some(operation=>keys.some(key=>key.store===operation.store&&(key.id===undefined||operation.action==='clear'||key.id===(operation.item?.id??operation.id))));
     if(row.baseRevision===before&&!touched){row.baseRevision=after;changed=true;}
-  }if(changed)await persist();},cancelPendingFor,discard,canDiscard:()=>!network,resume:()=>kick({force:true}),status:()=>({pending:entries.size,error,uploading:!!network})};
+  }if(changed)await persist();},resolvePending,cancelPendingFor,discard,canDiscard:()=>!network,resume:()=>kick({force:true}),status:()=>({pending:entries.size,error,uploading:!!network})};
 }
