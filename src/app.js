@@ -3,7 +3,7 @@ import {assetSourceRevision} from './material-anatomy.js';
 import {renderSceneCanvas,decodeSceneImage} from './scene-renderer.js';
 import {sceneRenderEntries,projectMaterialViews,sceneDisplaySiblings} from './craft-display.js';
 import {inkScenePaths} from './ink-scene-svg.js';
-import {maskSVG,sceneLayerStyle,sceneLayerEntries,attachSceneV2} from './scene-model.js';
+import {maskSVG,sceneLayerStyle,sceneLayerEntries,attachSceneV2,moveSceneNode} from './scene-model.js';
 import './styles.css';
 import './overrides.css';
 import './parity.css';
@@ -837,7 +837,7 @@ async function handle(action,id,value){try{switch(action){
       }else(e.kind==='shape'?d.primitives:d.textBlocks).push(copy);
     });break;
    case 'flip':editSelected(e=>{e.value.isFlippedHorizontally=!e.value.isFlippedHorizontally;});break;
-  case 'front':editSelected((e,d)=>{e.value.zIndex=Math.max(0,...editorEntry(d).map(x=>x.value.zIndex))+1;});break;
+  case 'front':editSelected((e,d)=>{const parent=e.parents?.at(-1);moveSceneNode(d,e.value.id,{parentID:parent?.id||null});});break;
   case 'delete-object':editSelected((e,d)=>{const key=e.kind==='material'?'items':e.kind==='shape'?'primitives':'textBlocks';d[key]=d[key].filter(x=>x.id!==state.selected);state.selected=null;});break;
   case 'restore-baseline':editSelected(e=>{const b=e.value.generationBaseline;if(b){Object.assign(e.value,structuredClone(b));e.value.userOverrideFlags=[];}});break;
   case 'park':editSelected(e=>{if(e.kind==='material'){e.value.isParked=true;state.selected=null;}});break;
