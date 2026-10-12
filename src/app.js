@@ -1976,7 +1976,7 @@ async function openSyncDetails(){if(!cloudEnabled)return;cloudResumer.suspend();
     button.onclick=()=>{void openSyncConflictChoice(button.dataset.conflictKind,button.dataset.conflictId);};
   });
   body.querySelector('#sync-migrate-account').onclick=()=>{void runAccountStorageMigration();};
-   body.querySelector('#sync-wipe-everything').onclick=()=>{modal.close();void handle('reset-all-account-data');};
+   body.querySelector('#sync-wipe-everything').onclick=()=>{void handle('reset-all-account-data');};
   body.querySelector('#sync-backup-legacy-works').onclick=()=>{void handle('backup-legacy-projects');};
   body.querySelector('#sync-retry-now').onclick=()=>{syncPausedByUser=false;modal.close();void flushSave().then(()=>{void cloudResumer.resume();return db.flushProjects();}).catch(error=>toast('同步待重试：'+error.message));};
   body.querySelector('#sync-pause-local').onclick=()=>{syncPausedByUser=!syncPausedByUser;if(syncPausedByUser){cloudResumer.suspend();saveStatus('已暂停后台重试 · 本机修改保留');}modal.close();if(!syncPausedByUser)void cloudResumer.resume();};
