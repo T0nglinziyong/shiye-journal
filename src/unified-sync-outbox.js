@@ -31,7 +31,7 @@ const validBatch=b=>{
  }
  return Array.isArray(b.assets)&&Array.isArray(b.blobs)&&Array.isArray(b.projects)&&
    !!(b.assets.length||b.projects.length)&&
-   b.assets.every(x=>x?.id)&&b.blobs.every(x=>x?.id&&x.data instanceof Blob&&x.data.size>0)&&
+   b.assets.every(x=>x?.id)&&b.blobs.every(x=>x?.id)&&
    b.projects.every(usableProjectSnapshot);
 };
 // One account, one durable queue. Rows left by an older installed PWA are
