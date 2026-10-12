@@ -67,6 +67,7 @@ export function mergeEditableSceneProjects(local,remote){
  if(!local||!remote||local.id!==remote.id||!Array.isArray(local.drafts)||!Array.isArray(remote.drafts))return null;
  const source=local.sceneOperations, target=remote.sceneOperations;
  if(!Array.isArray(source)||!source.length||!Array.isArray(target))return null;
+ if(source.some(op=>typeof op?.id!=='string'||!op.id)||target.some(op=>typeof op?.id!=='string'||!op.id))return null;
  if(local.drafts.length!==remote.drafts.length||local.drafts.some(d=>!remote.drafts.some(x=>x.id===d.id)))return null;
  const remoteIDs=new Set(target.map(op=>op.id));
  const incoming=source.filter(op=>!remoteIDs.has(op.id));
@@ -87,6 +88,8 @@ export function mergeEditableSceneProjects(local,remote){
   // Exact structure reorder/ungroup of existing nodes is not yet safely
   // transformable across concurrent reorder: send it to existing LWW+backup.
   if(delta.structure){
+   if(!Array.isArray(delta.structure.before)||!Array.isArray(delta.structure.after))
+     return null;
    const previousIds=new Set(delta.structure.before.flatMap(function flatten(n){return [n.id,...(n.children||[]).flatMap(flatten)];}));
    const afterIds=new Set(delta.structure.after.flatMap(function flatten(n){return [n.id,...(n.children||[]).flatMap(flatten)];}));
    if([...previousIds].every(id=>afterIds.has(id))&&[...afterIds].every(id=>previousIds.has(id)))
