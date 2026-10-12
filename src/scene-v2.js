@@ -185,6 +185,14 @@ export function findSceneNode(d,id){
  return result;
 }
 
+export function removeSceneNode(d,id){
+ attachSceneV2(d);
+ const node=findSceneNode(d,id);
+ if(!node)throw Error('删除的图层不存在');
+ if(node.locked||node.isLocked)throw Error('锁定图层不能删除');
+ return detach(d.layers,id);
+}
+
 export function transformSceneGroup(d,id,{dx=0,dy=0,rotation=0}={}){
  attachSceneV2(d);
  const group=lookupGroup(d.layers,id);if(!group)throw Error('图层组不存在');
