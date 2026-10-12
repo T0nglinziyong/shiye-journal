@@ -158,7 +158,12 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
   // Only the UI reviewer can invoke this under the per-account sync lock.
   // Recheck the exact serial before replacing or discarding a local draft.
   async function resolvePending(id,expectedSerial,{record=null,baseRevision=null}={}){
-    await initialize();await refreshFromDisk();
+    // Only the conflict UI may call this after acquiring the account lock.
+    // A concurrent HTTP request could otherwise acknowledge the row while it
+    // is being replaced by an obsolete modal confirmation.
+    if(network)throw Error('同步正在进行，请等待当前请求结束');
+    await initialize();await staging;await refreshFromDisk();
+    if(network)throw Error('同步正在进行，请等待当前请求结束');
     const previous=entries.get(id);
     if(!previous||previous.serial!==expectedSerial)
       throw Error('冲突作品在确认期间发生了新修改；请重新检查并备份');
