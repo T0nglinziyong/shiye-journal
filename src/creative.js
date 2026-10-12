@@ -313,7 +313,7 @@ export function normalizeCalls(raw){
   if(input?.format==='shiye-craft-plan'&&input.version===2)return [{name:'apply_craft_plan',arguments:input,id:input.commandId}];
   if(input?.version===2&&Array.isArray(input.layers))return directPageToTools(input);
   const list=Array.isArray(input)?input:input?.tools;
-  if(!Array.isArray(list))throw Error('未找到当前 tools 数组或 page v3 数据');
+  if(!Array.isArray(list))throw Error('未找到当前 tools 数组或 page.version=2 的 layers 数据');
   return list.map(x=>({name:x.name||x.function?.name,arguments:x.arguments??x.function?.arguments??{},id:x.id||uid()}));
 }
 export function applyToolCalls(source,base,assets,aliases={},options={}){
