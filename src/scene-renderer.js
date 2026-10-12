@@ -76,7 +76,7 @@ export async function renderSceneCanvas(draft,{scale=1,loadMaterialImage,createC
      const style=sceneLayerStyle(node);
      const isolate=(node.opacity??1)!==1||style.blendMode!=='normal'||!!style.mask;
      if(!isolate){await drawTree(node.children||[],target,depth+1);continue;}
-     if(++isolatedGroups>8)throw Error('复杂图层组超出高清渲染预算（最多 8 个隔离组）');
+     if(++isolatedGroups>8||width*height*(isolatedGroups+1)>64_000_000)throw Error('复杂图层组合超出内存预算；请降低导出分辨率或减少隔离组');
      const surface=createCanvas();surface.width=width;surface.height=height;
      const inner=surface.getContext('2d');if(!inner)throw Error('无法创建图层组合缓冲');
      inner.scale(scale,scale);await drawTree(node.children||[],inner,depth+1);
