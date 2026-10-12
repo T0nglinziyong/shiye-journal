@@ -18,6 +18,7 @@ export function showMaterialSplitEditor(c,item,{onBack}={}){
    '<label class="split-position">切割位置 <output id="split-position-value">50%</output><input id="split-position" type="range" min="5" max="95" value="50"></label>'+
    '<div class="split-actions"><button type="button" class="btn" id="split-redraw">重新画线</button><span id="split-status" role="status"></span></div>'+
    '<p class="split-note">默认两片都放在当前画布，可独立移动、旋转。复杂套索需要得到两个连通裁片。</p></section>';
+ const confirm=body.querySelector('#split-confirm');confirm.disabled=true;
  const canvas=body.querySelector('#split-source'),ctx=canvas.getContext('2d'),overlay=body.querySelector('#split-overlay'),
   shape=body.querySelector('#split-shape'),pos=body.querySelector('#split-position'),posValue=body.querySelector('#split-position-value'),
   status=body.querySelector('#split-status'),image=new Image();
@@ -29,6 +30,7 @@ export function showMaterialSplitEditor(c,item,{onBack}={}){
    canvas.width=w;canvas.height=h;
    ctx.drawImage(image,sourceCrop.x*image.naturalWidth,sourceCrop.y*image.naturalHeight,
      sourceCrop.width*image.naturalWidth,sourceCrop.height*image.naturalHeight,0,0,w,h);
+   confirm.disabled=false;
  };
  const imgHost=document.createElement('div');imgHost.innerHTML=imgTag(source);const img=imgHost.querySelector('img');
  let privateURL=null;
@@ -92,7 +94,7 @@ export function showMaterialSplitEditor(c,item,{onBack}={}){
  overlay.onpointerup=release;overlay.onpointercancel=release;
  body.querySelector('#split-redraw').onclick=()=>{points=[];from=to=null;dragging=false;outline();};
  body.querySelector('#split-back').onclick=()=>onBack?onBack():modal.close();
- body.querySelector('#split-confirm').onclick=()=>{
+ confirm.onclick=()=>{
    try{
      const draft=current(),spec=currentSpec();
      splitMaterialRegions(item,source,spec); // validate before mutation
