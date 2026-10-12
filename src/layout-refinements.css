@@ -588,6 +588,20 @@ body:has(.import-nav) #view{
   white-space:normal;
   text-wrap:pretty;
 }
+#view .import-done-helper{
+  width:100%;
+  max-width:40ch;
+  margin:12px auto 0;
+  padding:10px 14px;
+  border-radius:12px;
+  background:#f0f3eb;
+  color:#6e7f69;
+  font-size:12px;
+  font-weight:400;
+  line-height:1.65;
+  white-space:normal;
+  overflow-wrap:anywhere;
+}
 #view .import-done-actions{
   display:flex;
   flex-wrap:nowrap;
