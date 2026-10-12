@@ -30,6 +30,7 @@ import {setCloudProjectPreview} from './cloud-store.js';
 import {snapshotDraft} from './draft-snapshot.js';
 import {saveManualArchive,restoreManualArchive} from './scene-archive.js';
 import {recordSceneOperation,makeAutoSceneSnapshot,currentSceneDraft,copySceneBaseline} from './scene-persistence.js';
+import {retireSplitPiece} from './material-split.js';
 import {reconcileCanvasText,textParagraphMarkup} from './canvas-text-content.js';
 import {reconcileEditorScene} from './editor-scene-reconcile.js';
 import {checkpointEditorHistory,ensureEditorHistory,resetEditorHistory,takeEditorHistoryStep} from './editor-history-scope.js';
@@ -901,7 +902,7 @@ async function handle(action,id,value){try{switch(action){
     });break;
    case 'flip':editSelected(e=>{e.value.isFlippedHorizontally=!e.value.isFlippedHorizontally;});break;
   case 'front':editSelected((e,d)=>{const parent=e.parents?.at(-1);moveSceneNode(d,e.value.id,{parentID:parent?.id||null});});break;
-  case 'delete-object':editSelected((e,d)=>{const key=e.kind==='material'?'items':e.kind==='shape'?'primitives':'textBlocks';d[key]=d[key].filter(x=>x.id!==state.selected);state.selected=null;});break;
+  case 'delete-object':editSelected((e,d)=>{const key=e.kind==='material'?'items':e.kind==='shape'?'primitives':'textBlocks';if(e.kind==='material'&&retireSplitPiece(d,state.selected)){state.selected=null;return;}d[key]=d[key].filter(x=>x.id!==state.selected);state.selected=null;});break;
   case 'restore-baseline':editSelected(e=>{const b=e.value.generationBaseline;if(b){Object.assign(e.value,structuredClone(b));e.value.userOverrideFlags=[];}});break;
   case 'park':editSelected(e=>{if(e.kind==='material'){e.value.isParked=true;state.selected=null;}});break;
   case 'unpark':editSelected((e,d)=>{const item=d.items.find(x=>x.id===id);if(item)item.isParked=false;});break;
