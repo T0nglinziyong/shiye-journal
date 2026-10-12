@@ -1,6 +1,6 @@
 import {cloudEnabled,cloudClient,requireCloudUser} from './cloud-session.js';
 import {createBackup,purgeLocalAfterCloudReset} from './store.js';
-import {checkAccountResetEpoch} from './account-reset-epoch.js';
+import {checkAccountResetEpoch,finishPendingAccountReset} from './account-reset-epoch.js';
 import {eraseSiteAppData} from './account-data-wipe.js';
 import {cloudClearCache,cloudPendingLocalSummary,cloudResumeCache} from './cloud-store.js';
 import {openAdminView} from './admin-view.js';
@@ -58,7 +58,14 @@ export async function startCloudSession(onReady){
     });
     const initialReset=await preflight();
     if(initialReset.wiped){location.reload();return;}
-    if(initialReset.pending)throw Error('账号云端数据已清空，正在清理旧图片；请完成清空流程后重新进入');
+    if(initialReset.pending){
+      status.textContent='发现上次未完成的云端图片清理，正在继续处理…';
+      await finishPendingAccountReset({
+        client,resetId:initialReset.resetId,
+        onProgress:message=>{status.textContent=message;}
+      });
+      location.reload();return;
+    }
     gate.remove();app.hidden=false;await onReady(user);
     // Already-open phones and computers also notice a reset on return to the
     // tab, without waiting for a new manual sign-in.
