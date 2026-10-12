@@ -103,7 +103,7 @@ export async function startCloudSession(onReady){
       try{
         const outcome=await preflight();
         if(outcome.wiped){location.reload();return;}
-        if(outcome.pending){app.hidden=true;location.reload();}
+        if(initialReset.pending&&!outcome.pending){location.reload();return;}
       }catch(error){console.warn('跨设备重置检查未完成',error?.message);}
       finally{watching=false;}
     };
