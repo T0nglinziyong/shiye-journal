@@ -304,4 +304,25 @@ export function prepareProjectScene(project){
  for(const a of project?.manualArchives||[])for(const d of a.drafts||[])attachSceneV2(d);
  return project;
 }
-export function prepareProjectList(rows){return rows?.map(prepareProjectScene)||[];}
+// Old editable works are protected data, not valid current Scene v2 drafts.
+// Quarantine them at the collection boundary; never migrate, overwrite or
+// delete their cloud metadata / original private project documents on read.
+export function isLegacySceneProject(project){
+ if(!project||project.isSnapshot||!Array.isArray(project.drafts)||!project.drafts.length)return false;
+ const legacy=d=>d&&typeof d==='object'&&d.sceneVersion===undefined&&
+  !Object.hasOwn(d,'layers')&&['items','textBlocks','primitives','strokes'].every(k=>Array.isArray(d[k]));
+ return project.drafts.some(legacy)&&project.drafts.every(d=>legacy(d)||d?.sceneVersion===2&&Array.isArray(d.layers));
+}
+export function partitionProjectList(rows){
+ const projects=[],quarantined=[];
+ for(const record of rows||[]){
+  if(isLegacySceneProject(record)){
+   quarantined.push({id:record.id,title:String(record.title||'未命名旧作品'),
+    updatedAt:record.updatedAt||null,hasDocument:!!record.projectDocumentPath});
+   continue;
+  }
+  projects.push(prepareProjectScene(record));
+ }
+ return {projects,quarantined};
+}
+export function prepareProjectList(rows){return partitionProjectList(rows).projects;}
