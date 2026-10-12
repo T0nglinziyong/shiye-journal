@@ -19,7 +19,7 @@ const writeProvider=()=>objectStorage?.enabled?'cos':'supabase';
 const usableBlob=value=>value instanceof Blob&&value.size>0;
 async function downloadObject(path,provider){if(provider==='cos'){if(!objectStorage)throw Error('COS 私有读取尚未配置');return objectStorage.download(path);}if(provider==='supabase')return checked(await cloudClient().storage.from(BUCKET).download(path));throw Error('云端对象缺少当前 storageProvider');}
 async function uploadObject(path,blob,type,provider=writeProvider()){if(provider==='cos'){await objectStorage.upload(path,blob,type);return {error:null};}return cloudClient().storage.from(BUCKET).upload(path,blob,{upsert:false,contentType:type});}
-let owner,revision,writesInFlight=0;
+let owner,revision,writesInFlight=0,resetInProgress=false;
 let queue=Promise.resolve();
 const images=new Map();
 const imageSizes=new Map();
@@ -559,6 +559,7 @@ async function encode(store,record){
   const {data,thumbnailPath:_oldThumbnail,...metadata}=record;return {...metadata,storagePath,storageProvider:provider,...(thumbnailPath?{thumbnailPath}:{})};
 }
 function cloudTransaction(names,fn,operationID=crypto.randomUUID()){
+  if(resetInProgress)throw Error('账号正在清空，禁止继续写入旧资料');
   const operations=[];const result=fn({objectStore(store){if(!names.includes(store))throw Error('此表未加入事务');return {put:record=>operations.push({action:'put',store,item:structuredClone(record)}),delete:id=>operations.push({action:'delete',store,id}),clear:()=>operations.push({action:'clear',store})};}});
   if(result?.then)throw Error('事务回调必须同步');
   const run=async()=>{
@@ -677,6 +678,7 @@ async function cloudMigrationCommit({expectedRevision,changes}){
  return {updated:changes.length,revision};
 }
 async function cloudStageProject(record){
+  if(resetInProgress)throw Error('账号清理中，不能暂存旧作品');
   if(!usableProjectSnapshot(record))throw Error('作品编辑数据不完整；云端已保存版本未被覆盖');
   await identity();if(revision===undefined)await version();
   const known=(snapshots.get('projects')||await cached('records:projects'))?.records.some(item=>item.id===record.id);
@@ -691,8 +693,9 @@ async function cloudStageProject(record){
   if(registered===undefined)editorBases.set(record.__cloudSessionId,baseRevision);
   return projectSync.stage(record,{baseRevision});
 }
-async function cloudStageImport(batch){await identity();if(revision===undefined)await version();await importSync.stage({...batch,id:crypto.randomUUID()});return {pending:true};}
+async function cloudStageImport(batch){if(resetInProgress)throw Error('账号清理中，不能暂存旧导入');await identity();if(revision===undefined)await version();await importSync.stage({...batch,id:crypto.randomUUID()});return {pending:true};}
 async function cloudStageMutation(names,fn){
+  if(resetInProgress)throw Error('账号清理中，不能排队旧修改');
   const operations=[],modifiedAt=new Date().toISOString(),result=fn({objectStore(store){if(!names.includes(store))throw Error('此表未加入事务');return {put:item=>operations.push({action:'put',store,item:structuredClone(item),modifiedAt}),delete:id=>operations.push({action:'delete',store,id,modifiedAt}),clear:()=>operations.push({action:'clear',store,modifiedAt})};}});
   if(result?.then)throw Error('事务回调必须同步');if(!operations.length)return;
   operations.push(...recordTombstones(operations).slice(operations.length));
@@ -837,6 +840,17 @@ async function cloudResolveProjectConflict({kind,id,serial,expectedRevision,choi
   return {choice,originalID:local.id,remoteBackupID:retained.id};
  });
 }
+async function cloudRunExclusiveReset(task){
+  if(typeof task!=='function')throw Error('账号清理任务无效');
+  await identity();
+  return withAccountSyncLock(async()=>{
+    await queue; // complete all previously started cloud commits before purge
+    resetInProgress=true;
+    // No automatic retry or resumption of old edits after a partial purge.
+    // The caller is responsible for explicit recovery or finishing the reset.
+    return task();
+  });
+}
 async function cloudPurgeLocalAfterReset(){
   const user=await account();
   // Disable reads and background upload at this instance before erasing the
@@ -869,11 +883,12 @@ async function cloudRestoreEmergency(snapshot){
   if(typeof cache.restoreUnifiedOutboxes!=='function')throw Error('当前浏览器不支持原子恢复唯一同步队列');
   return cache.restoreUnifiedOutboxes(key,snapshot.projects,snapshot.imports);
 }
-return {cloudPurgeLocalAfterReset,cloudConflictReview,cloudConflictBackup,cloudResolveProjectConflict,cloudMigrationInventory,cloudMigrationOriginalProject,cloudMigrationCommit,cloudLegacyProjectBackup,cloudAll,cloudGet,cloudPreview,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudClearCache,cloudResumeCache,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudPendingLocalSummary,cloudPendingDetails,cloudDiscardPending,cloudFlushProjects,cloudProjectDocument,cloudEmergencySnapshot,cloudRestoreEmergency,cloudBackupBlobIDs};
+return {cloudRunExclusiveReset,cloudPurgeLocalAfterReset,cloudConflictReview,cloudConflictBackup,cloudResolveProjectConflict,cloudMigrationInventory,cloudMigrationOriginalProject,cloudMigrationCommit,cloudLegacyProjectBackup,cloudAll,cloudGet,cloudPreview,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudClearCache,cloudResumeCache,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudPendingLocalSummary,cloudPendingDetails,cloudDiscardPending,cloudFlushProjects,cloudProjectDocument,cloudEmergencySnapshot,cloudRestoreEmergency,cloudBackupBlobIDs};
 }
 let projectPreview=()=>null;
 export const setCloudProjectPreview=producer=>{projectPreview=producer;};
 const current=createCloudStore({cloudClient,requireCloudUser,cache:privateCache,namespace:import.meta.env?.VITE_SHIYE_SUPABASE_URL||'cloud',projectPreview:record=>projectPreview(record),objectStorage:createCOSStore({client:cloudClient,enabled:import.meta.env?.VITE_SHIYE_OBJECT_STORAGE==='cos'})});
+export const cloudRunExclusiveReset=(...args)=>current.cloudRunExclusiveReset(...args);
 export const cloudPurgeLocalAfterReset=(...args)=>current.cloudPurgeLocalAfterReset(...args);
 export const cloudConflictReview=(...args)=>current.cloudConflictReview(...args);
 export const cloudConflictBackup=(...args)=>current.cloudConflictBackup(...args);
