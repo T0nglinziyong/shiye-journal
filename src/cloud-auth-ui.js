@@ -65,12 +65,31 @@ export async function startCloudSession(onReady){
     // Never enable new writes while the old COS prefix is still being purged.
     cloudSetResetCleanupPending(initialReset.pending,initialReset.resetId);
     gate.remove();app.hidden=false;await onReady(user,{afterAccountReset:!!initialReset.resetId});
-    if(initialReset.pending){
-      const banner=document.createElement('aside');
-      banner.setAttribute('role','status');
-      banner.style.cssText='position:fixed;bottom:78px;left:12px;right:12px;max-width:600px;margin:auto;background:#284234;color:white;z-index:2147483500;padding:15px;border-radius:14px;box-shadow:0 6px 25px #0003;font-size:14px';
-      banner.textContent='云端账户已经重置，可正常创建作品。旧 COS 图片由服务器自动清理，不依赖手机保持在线。';
-      document.body.append(banner);
+    // GC is a server-side housekeeping job, not a sticky login warning.
+    // Only show this notification once per reset epoch, dismiss it after a
+    // short delay, and never cover the mobile navigation indefinitely.
+    if(initialReset.pending&&initialReset.resetId){
+      const noticeKey='shiye-gc-notice-v1:'+user.id+':'+initialReset.resetId;
+      let previouslyNotified=false;
+      try{previouslyNotified=localStorage.getItem(noticeKey)==='1';}
+      catch{/* Private browsing may disallow storage. */}
+      if(!previouslyNotified){
+        const banner=document.createElement('aside');
+        banner.setAttribute('role','status');
+        banner.style.cssText='position:fixed;bottom:78px;left:12px;right:12px;max-width:600px;margin:auto;background:#284234;color:white;z-index:2147483500;padding:14px;border-radius:14px;box-shadow:0 6px 25px #0003;font-size:14px;display:flex;align-items:center;gap:12px';
+        const message=document.createElement('span');
+        message.textContent='账号已重置，可正常使用。旧 COS 文件仍在服务器后台清理，不影响新作品。';
+        const close=document.createElement('button');
+        close.type='button';close.textContent='关闭';
+        close.setAttribute('aria-label','关闭旧图片清理提示');
+        close.style.cssText='flex-shrink:0;border:1px solid #ffffff88;border-radius:8px;background:transparent;color:white;padding:6px 9px';
+        banner.append(message,close);document.body.append(banner);
+        let timer;
+        const dismiss=()=>{clearTimeout(timer);banner.remove();};
+        close.onclick=dismiss;
+        timer=setTimeout(dismiss,6500);
+        try{localStorage.setItem(noticeKey,'1');}catch{}
+      }
     }
     // Already-open phones and computers also notice a reset on return to the
     // tab, without waiting for a new manual sign-in.
