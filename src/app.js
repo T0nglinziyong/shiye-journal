@@ -296,7 +296,13 @@ function route(name,{back=false,restoreMaterial=false}={}){
     parity.libraryTab=lastMaterialLocation.libraryTab||'series';
   }
   if(!back&&!fromSettings&&name!=='settings'&&name!==state.route)navigationHistory.push({route:state.route,seriesID:state.seriesID,detailAssetID:state.detailAssetID,previewProjectID:state.previewProjectID});
-  if(state.route==='editor'&&name!=='editor'){view.endTextEditing?.();snapshotEditedScene('leave-editor');}
+  if(state.route==='editor'&&name!=='editor'){
+    view.endTextEditing?.();snapshotEditedScene('leave-editor');
+    // Reentering after another device's commit must establish a fresh base;
+    // never manufacture a local operation against an obsolete editor session.
+    for(const key of sceneTrackBases.keys())
+      if(key.startsWith((state.activeProject?.id||'')+':'))sceneTrackBases.delete(key);
+  }
   routeScroll.set(state.route+':'+state.seriesID,window.scrollY);
   if(name==='settings'&&!settingsSession)settingsSession={ai:structuredClone(state.aiSettings),preferences:structuredClone(state.preferences),returnRoute:state.route};
   if(state.route==='settings'&&name!=='settings'&&settingsSession){state.aiSettings=settingsSession.ai;state.preferences=settingsSession.preferences;settingsSession=null;state.settingsSection=null;if(cloudEnabled&&deferredSyncedPreferences)state.preferences=savePreferences(deferredSyncedPreferences);if(cloudEnabled&&deferredSyncedAISettings)state.aiSettings=saveAISettings(deferredSyncedAISettings);deferredSyncedPreferences=null;deferredSyncedAISettings=null;}
