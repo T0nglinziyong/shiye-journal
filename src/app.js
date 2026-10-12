@@ -420,7 +420,7 @@ function workCover(d,priority=false,snapshotOnly=false,projectID=null){
  return nodes(d.layers||[]);
 
 }
-function renderWorks(){const list=state.projects.filter(p=>!isUntouchedLegacyExample(p)).sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt));const quarantined=db.legacyProjectInfo();const oldNotice=quarantined.length?`<details class="legacy-work-notice" style="margin:12px 0;padding:12px 14px;border:1px solid #d8dccc;border-radius:12px;background:#f9faf5"><summary>有 ${quarantined.length} 件旧版作品已隔离（未删除）</summary><p>这些作品仍是旧图层格式，无法在 Scene v2 编辑器直接打开。它们的云端原件和素材没有被覆盖或删除。</p><ul>${quarantined.map(row=>`<li>${esc(row.title)}</li>`).join('')}</ul><div class="actions"><button type="button" class="btn mini" data-act="backup-legacy-projects">导出这些旧版作品的原始 JSON</button></div><p>图片素材仍保存在云端素材库；此文件是旧作品结构备份，不是包含全部图片的完整备份。需要删除旧作品时请先保留此备份。</p></details>`:'';return `<div class="works-page">${head('我的作品','留下完成的创作，继续记录新的灵感。')}${oldNotice}<button hidden data-act="new-project" id="work-create"></button><button hidden data-act="import-work" id="work-import"></button><div class="filters"><input type="search" id="work-search" placeholder="搜索作品名称或标签"><select id="work-kind"><option value="all">全部类型</option><option value="created">手动创作</option><option value="imported">导入作品</option></select><select id="work-status"><option value="all">全部状态</option><option value="used">已使用</option><option value="unused">未使用</option></select><select id="work-sort"><option value="access-desc">最近访问 · 降序</option><option value="access-asc">最近访问 · 升序</option><option value="updated-desc">最近修改 · 降序</option><option value="updated-asc">最近修改 · 升序</option><option value="name-asc">名称 · 升序</option><option value="name-desc">名称 · 降序</option></select><span>${list.length} 项</span></div><div class="grid works-grid">${list.map((p,index)=>`<button class="card" data-act="open-project" data-id="${p.id}"><div class="card-image"><div class="thumb-sheet" style="width:75%;background:${esc(p.drafts[0]?.paperColor||'#fff')}">${p.isSnapshot?`<img class="work-reference" loading="${index<4?'eager':'lazy'}" decoding="async" src="${image(p.snapshotBlobId)}" alt="${esc(p.title)} 快照">`:p.coverStaticPath&&p.updatedAt===p.coverBaselineUpdatedAt?`<img class="work-reference" loading="${index<4?'eager':'lazy'}" src="${p.coverStaticPath}" alt="${esc(p.title)} 完整预览">`:workCover(p.drafts.find(d=>d.id===p.activeDraftID)||p.drafts[0],index<4,true,p.id)}</div></div><div class="card-body"><h3>${esc(p.title)}</h3><p>⊙　${p.isSnapshot?'画面快照':p.isDraft?'草稿':'可编辑作品'} <span>${new Date(p.updatedAt).toLocaleDateString()}</span></p></div></button>`).join('')}</div></div>`;}
+function renderWorks(){const list=state.projects.filter(p=>!isUntouchedLegacyExample(p)).sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt));return `<div class="works-page">${head('我的作品','留下完成的创作，继续记录新的灵感。')}<button hidden data-act="new-project" id="work-create"></button><button hidden data-act="import-work" id="work-import"></button><div class="filters"><input type="search" id="work-search" placeholder="搜索作品名称或标签"><select id="work-kind"><option value="all">全部类型</option><option value="created">手动创作</option><option value="imported">导入作品</option></select><select id="work-status"><option value="all">全部状态</option><option value="used">已使用</option><option value="unused">未使用</option></select><select id="work-sort"><option value="access-desc">最近访问 · 降序</option><option value="access-asc">最近访问 · 升序</option><option value="updated-desc">最近修改 · 降序</option><option value="updated-asc">最近修改 · 升序</option><option value="name-asc">名称 · 升序</option><option value="name-desc">名称 · 降序</option></select><span>${list.length} 项</span></div><div class="grid works-grid">${list.map((p,index)=>`<button class="card" data-act="open-project" data-id="${p.id}"><div class="card-image"><div class="thumb-sheet" style="width:75%;background:${esc(p.drafts[0]?.paperColor||'#fff')}">${p.isSnapshot?`<img class="work-reference" loading="${index<4?'eager':'lazy'}" decoding="async" src="${image(p.snapshotBlobId)}" alt="${esc(p.title)} 快照">`:p.coverStaticPath&&p.updatedAt===p.coverBaselineUpdatedAt?`<img class="work-reference" loading="${index<4?'eager':'lazy'}" src="${p.coverStaticPath}" alt="${esc(p.title)} 完整预览">`:workCover(p.drafts.find(d=>d.id===p.activeDraftID)||p.drafts[0],index<4,true,p.id)}</div></div><div class="card-body"><h3>${esc(p.title)}</h3><p>⊙　${p.isSnapshot?'画面快照':p.isDraft?'草稿':'可编辑作品'} <span>${new Date(p.updatedAt).toLocaleDateString()}</span></p></div></button>`).join('')}</div></div>`;}
 function current(){const p=state.activeProject,d=p?.drafts.find(d=>d.id===state.activeDraft)||p?.drafts[0];return d?attachSceneV2(d):undefined;}
 function editorEntry(d,rendering=false){return rendering?sceneRenderEntries(d):sceneLayerEntries(d,{ink:false});}
 function vectorMarkup(i){const paths=(i.vectorPaths||[]).map(points=>{const d=points.filter(p=>Array.isArray(p)&&p.length===2&&p.every(Number.isFinite)).map((p,n)=>`${n?'L':'M'}${p[0]} ${p[1]}`).join(' ');return d?`<path d="${d} Z"/>`:'';}).join('');return `<svg aria-hidden="true" viewBox="0 0 1 1" preserveAspectRatio="none" style="width:100%;height:100%;overflow:visible;fill:${esc(i.fill||'transparent')};stroke:${esc(i.stroke||'none')};stroke-width:${Math.max(0,Number(i.lineWidth)||0)/Math.max(i.width,i.height,1)}">${paths}</svg>`;}
@@ -1757,11 +1757,51 @@ document.addEventListener('visibilitychange',()=>{backgroundCloudCheck();if(docu
 window.addEventListener('online',()=>{backgroundCloudCheck();privateImages.retryMissing();void cloudResumer.wake();});
 window.addEventListener('offline',updateSyncIndicator);
 window.addEventListener('online',updateSyncIndicator);
+async function runAccountStorageMigration(){
+ if(!cloudEnabled)return;
+ const status=message=>{const label=body.querySelector('#migration-status');if(label)label.textContent=message;};
+ body.innerHTML='<h2>转换旧数据格式</h2><p id="migration-status" role="status">正在只读扫描云端的素材、系列、作品、图片引用、设置和最近删除…</p>';
+ try{
+  const {prepareStorageMigration,migrationBackup}=await import('./data-migrations/registry.js');
+  const inventory=await db.scanLegacyAccountData();
+  const plan=await prepareStorageMigration(inventory.collections,{
+    assets:inventory.collections.assets,
+    resolveProject:record=>db.readOriginalLegacyProject(record)
+  });
+  const rows=plan.scans.map(row=>`<tr><td>${esc({assets:'素材',series:'系列',projects:'作品',blobs:'图片引用',meta:'设置与元数据',trash:'最近删除'}[row.store])}</td><td>${row.total}</td><td>${row.migratable}</td><td>${row.needsReview}</td></tr>`).join('');
+  body.innerHTML=`<h2>转换旧数据格式</h2><p>本次共扫描 ${plan.totals.scanned} 条账号记录；找到 ${plan.totals.migratable} 条可验证转换的旧记录，${plan.totals.needsReview} 条需要人工检查。已符合现行结构的资料不会被重写。</p><div style="max-height:50vh;overflow:auto"><table class="migration-audit-table"><thead><tr><th>数据类型</th><th>扫描</th><th>可转换</th><th>待检查</th></tr></thead><tbody>${rows}</tbody></table></div>${plan.review.length?`<details><summary>无法自动转换的记录（未修改）</summary><ul>${plan.review.slice(0,30).map(row=>`<li>${esc(row.store)} · ${esc(row.id||'未知')}：${esc(row.reason)}</li>`).join('')}</ul></details>`:''}<p>转换前必须下载原始备份。只转换有明确转换器、且完成物理尺寸与库存校验的记录。旧 COS 原件不会删除；无法转换的条目仍保留原样。</p><p id="migration-status" role="status"></p><div class="actions"><button type="button" class="btn" id="migration-download" ${plan.changes.length?'':'disabled'}>下载受影响记录的原始备份</button><button type="button" class="btn primary" id="migration-apply" disabled>确认备份后转换 ${plan.changes.length} 条</button><button type="button" class="btn" id="migration-cancel">取消</button></div>`;
+  body.querySelector('#migration-cancel').onclick=()=>modal.close();
+  if(!plan.changes.length){status(plan.review.length?'没有可安全自动转换的记录；请按待检查清单处理。':'所有已识别的记录均符合当前格式，无需转换。');return;}
+  let backupSaved=false,backup;
+  body.querySelector('#migration-download').onclick=async()=>{
+   try{
+    status('正在准备备份与 SHA-256 校验…');
+    backup??=await migrationBackup(plan,{account:inventory.account,revision:inventory.revision});
+    download(backup.blob,'拾页-转换前原始备份-'+new Date().toISOString().slice(0,10)+'.json');
+    backupSaved=true;
+    body.querySelector('#migration-apply').disabled=false;
+    status('已发起原始备份下载（SHA-256：'+backup.sha256.slice(0,16)+'…）。请先在“文件”中确认已保存，再执行转换。');
+   }catch(error){status('备份失败：'+error.message);}
+  };
+  body.querySelector('#migration-apply').onclick=async()=>{
+   if(!backupSaved||!confirm('确认已在本机保存旧数据备份？\n转换会更新已通过校验的账号记录，其他设备的并发修改将触发版本保护。不能直接撤销数据库写入。'))return;
+   const button=body.querySelector('#migration-apply');button.disabled=true;
+   try{
+    status('正在检查版本并提交转换；请不要关闭页面…');
+    const result=await db.commitLegacyAccountMigration({expectedRevision:inventory.revision,changes:plan.changes});
+    status('转换提交成功：'+result.updated+' 条；旧图像与原始对象未删除。正在核对…');
+    await refresh({background:true});
+    status('转换成功 '+result.updated+' 条；请重新打开作品确认图层、素材与同步状态。');
+   }catch(error){status('转换未完成：'+error.message+'。原始云端记录及已下载备份保留，请重新扫描。');}
+  };
+ }catch(error){status('扫描失败：'+error.message+'。没有修改数据库。');}
+}
 async function openSyncDetails(){if(!cloudEnabled)return;cloudResumer.suspend();try{
   const details=await db.pendingSyncDetails(),projects=details.projects||[],batches=details.batches||[],local=[...dirtyProjects.values()],total=projects.length+batches.length+local.length;
   const rows=[...projects.map(row=>`<li>作品：${esc(row.title)} <small>${esc(row.id)}</small></li>`),...batches.map(row=>`<li>待传批次 ${esc(row.id)}：${row.items.length} 条变更<ul>${row.items.slice(0,12).map(item=>`<li>${esc(item.store)} · ${esc(item.action)} · ${esc(item.title||item.id)}</li>`).join('')}</ul></li>`),...local.map(row=>`<li>尚未暂存的作品：${esc(row.title||row.id)}</li>`)];
-  body.innerHTML=`<h2>同步详情</h2><p>状态：${syncPausedByUser?'已暂停 · 本机修改仍保留':syncDisplay.error?'待重试':syncDisplay.pending||local.length?'上传中':'已同步'}</p><p>最近错误：${esc(details.error||syncDisplay.error?.message||'无')}</p><p>本机待同步：${total} 项。未上传作品和草稿将保留在本机待同步队列。</p><div class="sync-pending-list">${rows.length?`<ul>${rows.join('')}</ul>`:'<p>没有待同步项目。</p>'}</div><div class="actions"><button type="button" class="btn primary" id="sync-retry-now">立即同步</button><button type="button" class="btn" id="sync-pause-local">${syncPausedByUser?'恢复后台重试':'暂停后台重试'}</button><button type="button" class="btn" id="sync-emergency-copy" ${total?'':'disabled'}>导出待同步数据备份</button></div><p>暂停仅停止自动重试，不清空作品、草稿或待上传图片；页面刷新后仍可恢复同步。为防止误删本机唯一副本，已移除直接丢弃待同步作品的操作。</p>`;
+  body.innerHTML=`<h2>同步详情</h2><p>状态：${syncPausedByUser?'已暂停 · 本机修改仍保留':syncDisplay.error?'待重试':syncDisplay.pending||local.length?'上传中':'已同步'}</p><p>最近错误：${esc(details.error||syncDisplay.error?.message||'无')}</p><p>本机待同步：${total} 项。未上传作品和草稿将保留在本机待同步队列。</p><p>已隔离旧版可编辑作品：${db.legacyProjectInfo?.()?.length||0} 件（未删除）。转换工具会同时扫描账号的素材、系列、作品、元数据、图片引用和最近删除。</p><div class="sync-pending-list">${rows.length?`<ul>${rows.join('')}</ul>`:'<p>没有待同步项目。</p>'}</div><div class="actions"><button type="button" class="btn" id="sync-migrate-account">转换旧数据格式</button><button type="button" class="btn primary" id="sync-retry-now">立即同步</button><button type="button" class="btn" id="sync-pause-local">${syncPausedByUser?'恢复后台重试':'暂停后台重试'}</button><button type="button" class="btn" id="sync-emergency-copy" ${total?'':'disabled'}>导出待同步数据备份</button></div><p>暂停仅停止自动重试，不清空作品、草稿或待上传图片；页面刷新后仍可恢复同步。为防止误删本机唯一副本，已移除直接丢弃待同步作品的操作。</p>`;
   modal.showModal();modal.addEventListener('close',()=>{if(!syncPausedByUser)void cloudResumer.resume();},{once:true});
+  body.querySelector('#sync-migrate-account').onclick=()=>{void runAccountStorageMigration();};
   body.querySelector('#sync-retry-now').onclick=()=>{syncPausedByUser=false;modal.close();void flushSave().then(()=>{void cloudResumer.resume();return db.flushProjects();}).catch(error=>toast('同步待重试：'+error.message));};
   body.querySelector('#sync-pause-local').onclick=()=>{syncPausedByUser=!syncPausedByUser;if(syncPausedByUser){cloudResumer.suspend();saveStatus('已暂停后台重试 · 本机修改保留');}modal.close();if(!syncPausedByUser)void cloudResumer.resume();};
   body.querySelector('#sync-emergency-copy').onclick=async()=>{
