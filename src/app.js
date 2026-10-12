@@ -1385,12 +1385,18 @@ async function openCutoutCheck(id,candidate=null){
   const compact=!candidate&&!!a.candidateFrameBlobId
     &&(!!a.finalMaskBlobId||Math.abs(a.processingRecord?.displayRotationDegrees||0)<.01);
   const modern=compact&&!!a.finalMaskBlobId;
-  let saved=modern?null:candidate?.blob||await stored(a.blobId),
-    original=compact?null:candidate?.originalBlob||await stored(a.originalBlobId),
-    recognition=compact?null:candidate?.originalCutoutBlob||await stored(a.originalCutoutBlobId),
-    candidateFrame=candidate?.candidateFrameBlob||await stored(a.candidateFrameBlobId),
-    finalMaskBlob=modern?await stored(a.finalMaskBlobId):
-      compact&&saved instanceof Blob?await extractAlphaMask(saved):null;
+  // Dispatch all required Blob IDs in the same turn. The cloud store
+  // batches simultaneous metadata lookups, rather than serializing 2–4 COS
+  // reads before a blank editor can be rendered.
+  const [saved,original,recognition,candidateFrame,storedMask]=await Promise.all([
+    modern?Promise.resolve(null):Promise.resolve(candidate?.blob||stored(a.blobId)),
+    compact?Promise.resolve(null):Promise.resolve(candidate?.originalBlob||stored(a.originalBlobId)),
+    compact?Promise.resolve(null):Promise.resolve(candidate?.originalCutoutBlob||stored(a.originalCutoutBlobId)),
+    Promise.resolve(candidate?.candidateFrameBlob||stored(a.candidateFrameBlobId)),
+    modern?stored(a.finalMaskBlobId):Promise.resolve(null)
+  ]);
+  let finalMaskBlob=modern?storedMask:
+    compact&&saved instanceof Blob?await extractAlphaMask(saved):null;
   if(!compact){
     if(!saved&&a.staticPath){const response=await fetch(a.staticPath);if(!response.ok)throw Error('素材图像未能加载，请重试');saved=await response.blob();}
     original||=saved;recognition||=saved;candidateFrame||=original;
