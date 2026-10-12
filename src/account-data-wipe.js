@@ -11,8 +11,9 @@ export async function eraseSiteAppData({storage=localStorage,session=sessionStor
  // Close app databases before deleting to avoid IDB blocked events.
  const known=['shiye-pwa-full-v1','shiye-private-read-cache-v2',
    'shiye-offline-tasks-v1'];
- const enumerated=typeof idb.databases==='function'
-   ?(await idb.databases()).map(entry=>entry.name).filter(ownDatabase):[];
+ let enumerated=[];
+ try{if(typeof idb.databases==='function')enumerated=(await idb.databases()).map(entry=>entry.name).filter(ownDatabase);}
+ catch(error){errors.push('数据库枚举：'+error.message);}
  const names=[...new Set([...known,...enumerated])];
  for(const name of names){
    try{
