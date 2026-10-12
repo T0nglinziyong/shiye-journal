@@ -43,8 +43,39 @@ function listView(d,type){
  const operations={push:add,pop:()=>splice(-1,1)[0],shift:()=>splice(0,1)[0],unshift:(...values)=>{splice(0,0,...values);return leafList(d,type).length;},splice,
    reverse:()=>{const value=leafList(d,type).reverse();replaceKind(d,type,value);return list;},
    sort:(compare)=>{const value=leafList(d,type).sort(compare);replaceKind(d,type,value);return list;}};
- for(const [name,fn] of Object.entries(operations))Object.defineProperty(list,name,{value:fn,enumerable:false,configurable:true});
- return list;
+ // Transitional leaf collection APIs must never silently lose an indexed
+ // assignment or a length truncation. Only layers are persisted; every
+ // permitted mutation writes through to that canonical tree.
+ const sync=()=>Array.prototype.splice.call(list,0,list.length,...leafList(d,type));
+ const isIndex=prop=>typeof prop==='string'&&/^(0|[1-9]\d*)$/.test(prop);
+ let proxy;
+ for(const [name,fn] of Object.entries(operations))Object.defineProperty(list,name,{value:(...args)=>{const result=fn(...args);sync();return result===list?proxy:result;},enumerable:false,configurable:true});
+ proxy=new Proxy(list,{
+   set(target,prop,value){
+     if(prop==='length'){
+       const current=leafList(d,type);
+       if(!Number.isInteger(value)||value<0||value>current.length)throw Error('Scene 图层视图不能扩展为空洞数组');
+       replaceKind(d,type,current.slice(0,value));sync();return true;
+     }
+     if(isIndex(prop)){
+       const current=leafList(d,type),index=Number(prop);
+       if(index>current.length)throw Error('Scene 图层视图不能写入稀疏索引');
+       if(index===current.length)add(value);
+       else{current[index]=value;replaceKind(d,type,current);}
+       sync();return true;
+     }
+     return Reflect.set(target,prop,value);
+   },
+   deleteProperty(target,prop){
+     if(isIndex(prop)){
+       const index=Number(prop),current=leafList(d,type);
+       if(index<current.length){current.splice(index,1);replaceKind(d,type,current);sync();}
+       return true;
+     }
+     return Reflect.deleteProperty(target,prop);
+   }
+ });
+ return proxy;
 }
 function normalizeGroupLegacy(d){
  const metadata=Array.isArray(d.layerGroups)?d.layerGroups:[];
