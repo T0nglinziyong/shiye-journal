@@ -1408,6 +1408,7 @@ async function openCutoutCheck(id,candidate=null){
     preferredMethod=localMethods.some(item=>item.id===(processing.rerecognition?.method||state.preferences.recognition))?(processing.rerecognition?.method||state.preferences.recognition):'auto';
   const openEditor=()=>cancelled?Promise.resolve():showCutoutEditor({
     body,modal,original,saved,recognition,candidateFrame,finalMaskBlob,title:a.title,processing,toast,
+    isCancelled:()=>cancelled,
     onLoadInitialMask:compact?async()=>{
       const oldBlob=a.initialMaskBlobId?await stored(a.initialMaskBlobId):
         await stored(a.originalCutoutBlobId)||saved;
