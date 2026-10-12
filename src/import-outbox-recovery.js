@@ -2,7 +2,7 @@
 // that the card actually displays. A surviving source photo alone cannot
 // render the extracted material; a surviving cutout can.
 import {usableProjectSnapshot} from './project-outbox-recovery.js';
-const imageIDs=asset=>[asset.blobId,asset.originalCutoutBlobId,asset.originalBlobId,asset.candidateFrameBlobId,asset.photoBlobId].filter(Boolean);
+const imageIDs=asset=>[asset.blobId,asset.originalCutoutBlobId,asset.originalBlobId,asset.candidateFrameBlobId,asset.initialMaskBlobId,asset.finalMaskBlobId,asset.photoBlobId].filter(Boolean);
 const displayIDs=asset=>[asset.blobId,asset.originalCutoutBlobId,asset.originalBlobId,asset.candidateFrameBlobId].filter(Boolean);
 const usable=value=>value instanceof Blob&&value.size>0;
 function validMutation(op,names){
@@ -40,6 +40,17 @@ export async function recoverImportOutbox(rows,remoteHas){
     const blobs=new Map((batch.blobs||[]).map(blob=>[blob.id,blob.data]));
     let uncertain=false,rowChanged=false,removedInRow=0;
     const assets=await Promise.all(batch.assets.map(async asset=>{
+      if(asset.finalMaskBlobId||asset.initialMaskBlobId){
+        const required=[...new Set([asset.blobId,asset.candidateFrameBlobId,
+          asset.finalMaskBlobId,asset.initialMaskBlobId].filter(Boolean))];
+        const missing=required.filter(id=>!usable(blobs.get(id)));
+        if(!missing.length)return asset;
+        let remote;
+        try{remote=availableIDs(await remoteHas(asset,missing),missing);}catch{remote=null;}
+        if(remote===null){uncertain=true;return asset;}
+        if(missing.every(id=>remote.has(id)))return asset;
+        removedInRow++;rowChanged=true;return null;
+      }
       const candidates=displayIDs(asset),local=candidates.find(id=>usable(blobs.get(id)));
       if(local){if(local!==asset.blobId){rowChanged=true;return {...asset,blobId:local};}return asset;}
       let remote;
