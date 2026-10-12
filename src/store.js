@@ -2,7 +2,7 @@ import {openDB,unwrap} from 'idb';
 import {createStorageRouter} from './storage-router.js';
 import {cloudEnabled} from './cloud-session.js';
 import {prepareProjectScene,partitionProjectList,attachSceneV2} from './scene-v2.js';
-import {cloudConflictReview,cloudConflictBackup,cloudResolveProjectConflict,cloudMigrationInventory,cloudMigrationOriginalProject,cloudMigrationCommit,cloudLegacyProjectBackup,cloudAll,cloudGet,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudPreview,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudPendingDetails,cloudDiscardPending,cloudFlushProjects,cloudProjectDocument,cloudEmergencySnapshot,cloudRestoreEmergency,cloudBackupBlobIDs} from './cloud-store.js';
+import {cloudPurgeLocalAfterReset,cloudConflictReview,cloudConflictBackup,cloudResolveProjectConflict,cloudMigrationInventory,cloudMigrationOriginalProject,cloudMigrationCommit,cloudLegacyProjectBackup,cloudAll,cloudGet,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudPreview,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudPendingDetails,cloudDiscardPending,cloudFlushProjects,cloudProjectDocument,cloudEmergencySnapshot,cloudRestoreEmergency,cloudBackupBlobIDs} from './cloud-store.js';
 import {createPendingRecovery,parsePendingRecovery} from './emergency-backup.js';
 import {validateBackupData,validateRestoredRecords} from './backup-integrity.js';
 // Exceptional destructive imports require an acknowledged atomic cloud commit.
@@ -27,6 +27,11 @@ export async function restoreEmergencyBackup(file){
   return cloudRestoreEmergency(parsed);
 }
 export const discardPendingSync=()=>cloudEnabled?cloudDiscardPending():Promise.resolve(0);
+export async function purgeLocalAfterCloudReset(){
+  if(!cloudEnabled)throw Error('只有已登录云端账号可以执行云端清空');
+  await cloudPurgeLocalAfterReset();
+  if(connection){const old=connection;connection=undefined;(await old).close();}
+}
 export const flushProjects=()=>cloudEnabled?cloudFlushProjects():Promise.resolve();
 export const completeProject=record=>cloudEnabled?cloudProjectDocument(record):Promise.resolve(record);
 let legacyProjectSummaries=[];
