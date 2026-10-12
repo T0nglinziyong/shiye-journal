@@ -76,8 +76,8 @@ export async function showCutoutEditor({
   };
 
   const initialRotation=processing.displayRotationDegrees||0,
-    initialMask=loadedFinalMask?copyMask(loadedFinalMask):alphaFrom(initial,initialRotation),
-    recognitionMask=loadedFinalMask?copyMask(loadedFinalMask):alphaFrom(recognized,processing.recognitionRotationDegrees||0),
+    initialMask=loadedFinalMask||alphaFrom(initial,initialRotation),
+    recognitionMask=loadedFinalMask||alphaFrom(recognized,processing.recognitionRotationDegrees||0),
     steps=[['rough','修补轮廓'],['recognition','边缘优化'],['final','调整外观']],
     methodList=recognitionUI.methods||[],
     pixelList=(recognitionUI.pixels||[[1200,'1200 px'],[1600,'1600 px']]).filter(([n])=>Number(n)>=1200),
