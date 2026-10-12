@@ -1,5 +1,5 @@
 import {createClient} from '@supabase/supabase-js';
-import {validResetId} from './_lib/account-gc.js';
+import {validResetId} from '../server/account-gc-worker.mjs';
 
 // Account reset is ONLY a fast logical transaction. Physical COS and
 // Supabase Storage deletion is handled by the independent scheduled worker.
