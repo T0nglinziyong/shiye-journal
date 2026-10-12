@@ -897,78 +897,66 @@ async function handle(action,id,value){try{switch(action){
     toast('已导出不含照片的素材框诊断');break;
   }
   case 'reset-all-account-data':{
-    if(!cloudEnabled)throw Error('彻底云端清理仅支持当前已登录的云端账号');
-    if(resetWorkflowActive){toast('账号清理正在进行，请不要重复提交');break;}
-    if(!confirm('危险：将永久清除当前账号全部云端作品、素材和私有文件，同时删除本机及其他设备的旧缓存和待同步修改。继续？'))break;
+    if(!cloudEnabled)throw Error('彻底清空仅适用于云端账号');
+    if(resetWorkflowActive){toast('账号清理已经提交，请勿重复操作');break;}
+    if(!confirm('将永久删除本账号所有作品、素材、草稿和历史待同步内容。其他设备登录后也会清理旧 IndexedDB。继续？'))break;
     if(prompt('不可撤销。请输入「清空所有数据」确认')!=='清空所有数据')break;
     resetWorkflowActive=true;
     cloudResumer.suspend();
     const progress=document.createElement('div');
-    progress.setAttribute('role','status');
-    progress.setAttribute('aria-live','polite');
-    progress.style.cssText='position:fixed;inset:0;background:rgba(12,16,24,.8);display:grid;place-items:center;z-index:2147483647;padding:24px;color:#fff';
-    progress.innerHTML='<div style="max-width:480px;background:#222a36;border-radius:16px;padding:28px"><h2>正在清空拾页账号</h2><p id="account-reset-progress">正在停止后台同步…</p><p style="font-size:13px;opacity:.75">删除过程支持中断后继续。请不要在其他设备编辑旧作品。</p></div>';
+    progress.setAttribute('role','status');progress.setAttribute('aria-live','polite');
+    progress.style.cssText='position:fixed;inset:0;background:rgba(12,16,24,.85);display:grid;place-items:center;z-index:2147483647;padding:24px;color:#fff';
+    progress.innerHTML='<div style="max-width:480px;background:#222a36;border-radius:16px;padding:28px"><h2>正在重置账号</h2><p data-phase>正在暂停旧数据写入…</p><small>云端索引清空后即可进入新账户；旧 COS 图片由服务器独立清理。</small></div>';
     if(modal.open)modal.close();
     document.body.append(progress);
-    const progressLabel=progress.querySelector('#account-reset-progress');
-    const update=message=>{progressLabel.textContent=message;saveStatus(message);};
-    let completed=false;
+    const show=s=>{progress.querySelector('[data-phase]').textContent=s;saveStatus(s);};
+    let accepted=false;
     try{
       clearTimeout(saveTimer);saveTimer=null;
       dirtyProjects.clear();dirtyUsageAssets.clear();
       const {data,error}=await cloudClient().auth.getSession();
-      if(error||!data.session?.access_token)throw Error('请先登录拾页');
+      if(error||!data.session?.access_token)throw Error('请先登录');
       const headers={'Content-Type':'application/json',
         Authorization:'Bearer '+data.session.access_token};
       const request=async(mode,resetId)=>{
-        const response=await fetch('/api/account-reset',{
-          method:'POST',headers,cache:'no-store',
+        const response=await fetch('/api/account-reset',{method:'POST',headers,cache:'no-store',
           body:JSON.stringify({mode,resetId,confirm:'RESET_MY_DATA'}),
-          signal:AbortSignal.timeout(35000)
-        });
-        const payload=await response.json();
-        if(!response.ok)throw Error(payload.error||'云端清理失败');
-        return payload;
+          signal:AbortSignal.timeout(35000)});
+        const result=await response.json();
+        if(!response.ok)throw Error(result.error||'云端重置失败');
+        return result;
       };
-      update('正在暂停旧队列，等待正在提交的事务结束…');
       await db.runExclusiveAccountReset(async()=>{
         await saveChain.catch(()=>{});
-        update('正在核对账号与清理权限…');
+        show('正在清空云端作品和素材索引…');
         const probe=await request('probe');
-        if(!probe.ready)throw Error('当前环境未开放账号清空');
         let resetId=probe.phase==='deleting'&&probe.resetId
           ?probe.resetId:crypto.randomUUID();
-        update('正在清空云端数据库，并让其他设备的旧数据失效…');
-        const started=await request('start',resetId);
-        resetId=started.resetId||resetId;
-        let result=started,count=0;
-        if(started.databaseCleared)update('云端作品与素材索引已清空，正在删除私有图片…');
-        for(let page=0;page<1000&&!result.reset;page++){
-          result=await request('delete',resetId);
-          count+=(result.cosDeleted||0)+(result.supabaseDeleted||0);
-          if(result.phase==='cos')update('数据库已清空 · 已删除 '+count+' 个私有文件（COS）');
-          else if(result.phase==='supabase')update('数据库已清空 · 已删除 '+count+' 个私有文件（Supabase）');
-          else update('正在核对剩余私有文件 · 已删除 '+count+' 个');
-          if(!result.more&&!result.reset)throw Error('清理返回不完整，请重新执行');
-        }
-        if(!result.reset)throw Error('清理文件数量超过本次安全上限；再次确认后可续传清理');
-        update('云端清空完成，正在彻底删除此设备 IndexedDB…');
+        const outcome=await request('start',resetId);
+        resetId=outcome.resetId||resetId;
+        if(!outcome.accepted||!outcome.databaseCleared)
+          throw Error('云端未确认索引清理，请重试');
+        accepted=true;
+        // This is an opportunistic one-shot server trigger, NOT the worker
+        // lifecycle. A daily authenticated Vercel Cron is the durable retry.
+        void fetch('/api/account-gc',{method:'POST',headers,cache:'no-store',
+          body:JSON.stringify({kick:true})}).catch(()=>{});
+        show('云端索引已清空，正在删除本机旧缓存…');
         await db.purgeLocalAfterCloudReset();
-        completed=true;
       });
       const {eraseSiteAppData}=await import('./account-data-wipe.js');
-      const cleared=await eraseSiteAppData();
-      if(cleared.errors.length)
-        alert('云端已清空，但本机还有部分数据未清理；请关闭其他拾页标签页后清除本站网站数据：'+cleared.errors.join('；'));
-      update('清理结束，正在刷新登录页面…');
+      const wiped=await eraseSiteAppData({preserveAuthentication:true});
+      if(wiped.errors.length)
+        alert('云端业务数据已清空。本设备尚有未删除的缓存，请关闭其他拾页标签页后重新打开：'+wiped.errors.join('；'));
+      show('账号已重置，旧图片交由服务端清理。正在进入空白账户…');
       location.reload();
     }catch(error){
-      // The server writes the reset marker first. Never resume old outbox
-      // uploads after a partial remote deletion; retry resumes by resetId.
-      update('清空尚未全部完成：'+(error.message||'服务暂不可用')+'。旧上传仍已暂停，重新点击可继续清理。');
+      show(accepted?'云端资料已经清空，本地清理待重试：'+error.message
+        :'重置暂未成功：'+error.message);
       throw error;
     }finally{
-      if(!completed){progress.remove();resetWorkflowActive=false;}
+      resetWorkflowActive=false;
+      if(!accepted)progress.remove();
     }
     break;
   }
