@@ -21,12 +21,13 @@ export function reconcileEditorScene(container,markup,{onText=()=>{},onImage=()=
       else{
         preserved++;
         const typing=live.classList.contains('typing')||!!live.querySelector('.canvas-inline-text');
-        live.style.cssText=desired.style.cssText;
-        live.setAttribute('class',desired.getAttribute('class')||'');
-        if(typing)live.classList.add('typing');
+        if(live.style.cssText!==desired.style.cssText)live.style.cssText=desired.style.cssText;
+        const className=(desired.getAttribute('class')||'')+(typing?' typing':'');
+        if(live.getAttribute('class')!==className)live.setAttribute('class',className);
         for(const attr of ['data-object','data-kind','data-render-key','aria-hidden']){
           const value=desired.getAttribute(attr);
-          if(value===null)live.removeAttribute(attr);else live.setAttribute(attr,value);
+          if(value===null){if(live.hasAttribute(attr))live.removeAttribute(attr);}
+          else if(live.getAttribute(attr)!==value)live.setAttribute(attr,value);
         }
         if(live.dataset.sceneGroup)reconcile(live,desired);
         else if(live.dataset.kind==='text'){
