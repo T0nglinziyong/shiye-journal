@@ -1924,6 +1924,15 @@ backupInput.onchange=async()=>{const file=backupInput.files?.[0];backupInput.val
   try{await flushSave();await db.flushProjects();await db.restoreBackup(file);state.activeProject=null;state.basket=[];await refresh();toast('完整备份已恢复');}
   catch(e){console.error(e);toast('恢复失败：'+e.message);}
 };
+// A long uninterrupted editing session also creates a recovery point,
+// even when the user pauses without making another stroke.
+setInterval(()=>{
+  const p=state.route==='editor'?state.activeProject:null;
+  if(!p?.sceneOperationsSinceSnapshot)return;
+  const since=Date.parse(p.lastAutoSceneSnapshotAt||p.sceneFirstUnsnapshottedAt||'');
+  if(Number.isFinite(since)&&Date.now()-since>=5*60*1000)
+    snapshotEditedScene('5-minutes');
+},30000);
 window.addEventListener('pagehide',()=>{snapshotEditedScene('pagehide');if(saveTimer)flushSave().catch(console.error);});
 window.addEventListener('beforeunload',event=>{if(saveTimer||savingProjects||dirtyProjects.size){event.preventDefault();event.returnValue='';}});
 // Logout requires a durable local checkpoint, not a successful network round
