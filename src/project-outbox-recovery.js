@@ -1,7 +1,5 @@
-import {prepareProjectScene} from './scene-v2.js';
-// Offline outbox must accept the same canonical persisted Scene v2 as
-// local/remote project documents. A missing legacy items[] array is NOT
-// damage and must never cause an unsynced user edit to be discarded.
+// Scene v2 outbox recovery: only complete recursive layer trees are replayable.
+// Corrupted data stays quarantined in the durable account queue for manual recovery.
 const validTree=(nodes,seen=new Set(),depth=0)=>{
  if(!Array.isArray(nodes)||depth>12||nodes.length>5000)return false;
  for(const node of nodes){
@@ -22,20 +20,14 @@ export function usableProjectSnapshot(project){
    draft.sceneVersion===2&&validTree(draft.layers));
 }
 export function recoverProjectOutbox(rows){
- const kept=(rows||[]).filter(row=>{
-  // Safely upgrade an offline v1 edit into the same saved v2 tree before
-  // checking it. Never discard an otherwise complete pending user drawing
-  // merely because a new release removed four legacy leaf-array keys.
-  if(row?.record){
-   // An incomplete v1 outbox must NOT become a seemingly complete empty v2
-   // document during migration. Only a complete four-array v1 draft may migrate.
-   for(const d of row.record.drafts||[]){
-    if(!Array.isArray(d?.layers)&&
-      !['items','textBlocks','primitives','strokes'].every(key=>Array.isArray(d?.[key])))return false;
-   }
-   try{prepareProjectScene(row.record);}catch{return false;}
-  }
-  return usableProjectSnapshot(row?.record)&&Number.isSafeInteger(row.serial)&&row.serial>0&&Number.isSafeInteger(row.baseRevision)&&row.baseRevision>=0;
- });
- return {rows:kept,removed:(rows||[]).length-kept.length};
+ const valid=[],quarantined=[];
+ for(const row of rows||[]){
+  if(usableProjectSnapshot(row?.record)&&Number.isSafeInteger(row.serial)&&row.serial>0&&
+     Number.isSafeInteger(row.baseRevision)&&row.baseRevision>=0)valid.push(row);
+  else quarantined.push(row);
+ }
+ // Never convert old draft arrays. More importantly, do not erase unsynced
+ // invalid records: preserve their raw bytes in the local durable queue so
+ // they can be recovered manually. Only *valid* Scene v2 rows are replayable.
+ return {rows:valid,quarantined,removed:quarantined.length};
 }
