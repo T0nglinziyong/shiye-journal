@@ -262,7 +262,7 @@ export function mountCanvasEditor(c){
     const show=()=>{
       controls.hidden=tab!=='all';
       const key=JSON.stringify([state.accountId||'',state.activeProject?.id,d.id,tab,series,kind,sort,
-        d.items.map(i=>[i.id,i.assetID,!!i.isParked]),state.assets.map(a=>[a.id,a.blobId,a.updatedAt])]);
+        d.items.map(i=>[i.id,i.assetID,!!i.isParked,i.cropRect,i.materialMask,i.splitPartIndex]),state.assets.map(a=>[a.id,a.blobId,a.updatedAt])]);
       let rows=pickerRows.get(key);
       if(!rows){
         let list=tab==='used'?d.items.filter(i=>!i.isParked).map(item=>({a:asset(item.assetID),item}))
