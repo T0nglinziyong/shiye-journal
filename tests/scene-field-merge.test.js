@@ -44,3 +44,22 @@ test('completing the work saves a verified editable archive',()=>{
  assert.equal(p.autoSceneSnapshots[0].reason,'completed');
  assert.equal(restoreAutoSceneSnapshot(p,p.autoSceneSnapshots[0].id).drafts[0].items[0].x,20);
 });
+
+test('different newly added layers remain independently editable',()=>{
+ const l=change(scene(),d=>d.textBlocks.push({
+   id:'mobile',content:'phone',x:90,y:100,width:120,height:40}),10);
+ const r=change(scene(),d=>d.textBlocks.push({
+   id:'desktop',content:'mac',x:120,y:80,width:120,height:40}),20);
+ const merged=mergeEditableSceneProjects(l,r);
+ assert.ok(merged);
+ assert.equal(merged.drafts[0].textBlocks.length,3);
+ assert.deepEqual(new Set(merged.drafts[0].textBlocks.map(n=>n.id)),
+   new Set(['b','mobile','desktop']));
+});
+test('remote delete is not undone by a concurrent local position change',()=>{
+ const l=change(scene(),d=>d.items[0].x=77,10);
+ const r=change(scene(),d=>{d.items.splice(0,1);},20);
+ const merged=mergeEditableSceneProjects(l,r);
+ assert.ok(merged);
+ assert.equal(merged.drafts[0].items.length,0);
+});
