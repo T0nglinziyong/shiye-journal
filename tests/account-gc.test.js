@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {assertGcScope,gcOneBatch,processGc} from '../api/_lib/account-gc.js';
+import {assertGcScope,gcOneBatch,processGc} from '../server/account-gc-worker.mjs';
 import {createTicketHandler} from '../server/cos-tickets.mjs';
 
 const owner='78550825-ce3c-4542-95df-434f39937503';
