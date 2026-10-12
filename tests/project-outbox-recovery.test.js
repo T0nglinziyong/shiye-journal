@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {recoverProjectOutbox,usableProjectSnapshot} from '../src/project-outbox-recovery.js';
 
-const saved={id:'work',activeDraftID:'draft',drafts:[{id:'draft',sceneVersion:2,canvas:{width:707,height:1000},layers:[{id:'text',type:'text',content:'已离线保存',x:10,y:10,width:100,height:40}]}]};
+const saved={id:'work',activeDraftID:'draft',drafts:[{id:'draft',sceneVersion:2,canvas:{width:707,height:1000},layers:[{id:'text',type:'text',content:'已离线保存',x:10,y:10,width:100,height:40,color:'#445566'}]}]};
 const row=record=>({record,serial:1,baseRevision:0});
 test('a complete pending edit may resume after an unexpected exit',()=>{
   assert.equal(usableProjectSnapshot(saved),true);
@@ -38,4 +38,21 @@ test('incomplete legacy pending edit must not migrate into empty v2 work',()=>{
  const result=recoverProjectOutbox([row(incomplete)]);
  assert.equal(result.removed,1);
  assert.equal(incomplete.drafts[0].layers,undefined,'never create empty layer tree for missing original data');
+});
+
+test('a structurally plausible v2 outbox with invalid leaf geometry is quarantined',()=>{
+ const broken=structuredClone(saved);
+ broken.drafts[0].layers[0].width=-10;
+ const pending=row(broken),result=recoverProjectOutbox([pending]);
+ assert.equal(result.rows.length,0);
+ assert.equal(result.quarantined[0],pending);
+ assert.equal(broken.drafts[0].layers[0].width,-10);
+});
+
+test('v2 queue must not replay parallel legacy array fields',()=>{
+ const mixed=structuredClone(saved);
+ mixed.drafts[0].items=[];
+ const pending=row(mixed),result=recoverProjectOutbox([pending]);
+ assert.equal(result.rows.length,0);
+ assert.equal(result.quarantined[0],pending);
 });
