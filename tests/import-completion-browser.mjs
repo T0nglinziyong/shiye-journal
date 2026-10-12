@@ -32,15 +32,17 @@ try{
         buttonBoxes=buttons.map(r),
         progress=r(document.querySelector(".import-progress")),
         steps=[...document.querySelectorAll(".import-progress>span")].map(r),
-        navTitle=r(document.querySelector(".import-nav-center>strong")),
-        navExit=r(document.querySelector(".import-nav-center>.import-cancel"));
+        navBack=r(document.querySelector(".import-nav>.import-back")),
+        navExit=r(document.querySelector(".import-nav>.import-cancel"));
       return {pageOverflow:doc.scrollWidth-innerWidth,cardInside:inside(card,{left:0,right:innerWidth}),
         textInside:[title,count,message,actions,...buttonBoxes].every(x=>inside(x,card)),
         buttonHeights:buttons.map(b=>b.getBoundingClientRect().height),
         font:buttons.map(b=>getComputedStyle(b).fontSize),
         buttonInside:buttonBoxes.every(x=>inside(x,{left:0,right:innerWidth})),
         navInside:inside(nav,{left:0,right:innerWidth}),
-        navTitleAndExit:!navTitle||!navExit||navTitle.right<=navExit.left+2,
+        navTitleAndExit:!!navBack&&!!navExit&&
+          Math.abs(navBack.top-navExit.top)<8&&Math.abs(navBack.top-progress.top)<12&&
+          navBack.right<=progress.left+1&&progress.right<=navExit.left+3,
         stepsInside:steps.every(x=>inside(x,nav))&&inside(progress,nav),
         statusHidden:!document.querySelector(".import-nav>.sync-indicator")||getComputedStyle(document.querySelector(".import-nav>.sync-indicator")).display==='none'};
     })()`);
