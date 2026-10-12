@@ -38,6 +38,8 @@ test('clicking one leaf selects it and reordering never dismisses nested tree po
   assert.equal(calls.render,1);assert.equal(calls.save,1);
   assert.ok(h.surface.isConnected,'popover remains mounted after a layer operation');
   assert.equal(h.surface.querySelectorAll('[role="treeitem"]').length,3);
+  w.document.body.dispatchEvent(new w.PointerEvent('pointerdown',{bubbles:true}));
+  assert.equal(h.surface.isConnected,true,'canvas pointer must not dismiss persistent layer tree');
   h.close();
  }finally{
   for(const [key,value] of Object.entries(saved)){if(value===undefined)delete globalThis[key];else globalThis[key]=value;}
