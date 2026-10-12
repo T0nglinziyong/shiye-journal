@@ -1,4 +1,5 @@
 import {openPopover} from './swift-popover.js';
+import {createIcon} from './icons.js';
 import {sceneLayerEntries,sceneGroupMembers,findSceneNode,moveSceneNode,groupSceneLayers,ungroupSceneLayers} from './scene-model.js';
 
 // Actual recursive, editable layer tree; a visible row has exactly one Scene
@@ -31,7 +32,7 @@ export function layerMoveTarget(d,movingID,targetID,relation='before'){
 }
 
 export function openEditorLayerTree(anchor,{draft,state,view,checkpoint,saveProject,render,toast,uid,asset,imgTag,esc}={}){
- const p=openPopover(anchor,{title:'图层树 · 上方在前',width:Math.min(390,innerWidth-24),dismissOnOutside:false});
+ const p=openPopover(anchor,{title:'图层树 · 上方在前',width:Math.min(390,innerWidth-24),dismissOnOutside:true});
  p.surface.classList.add('swift-layer-popover','scene-layer-tree-popover');
  const menu=document.createElement('div');menu.className='scene-layer-tree-toolbar';
  const list=document.createElement('div');list.className='canvas-layer-list scene-layer-tree';list.setAttribute('role','tree');
@@ -170,9 +171,9 @@ export function openEditorLayerTree(anchor,{draft,state,view,checkpoint,saveProj
        const badge=document.createElement('span');badge.className='scene-layer-symbol';badge.textContent=symbol;
        const label=document.createElement('span');label.textContent=name(node);pick.append(badge,label);
        const locked=!!(node.locked||node.isLocked);
-       const lock=button(locked?'▣':'♧',()=>commit(()=>{node.locked=node.isLocked=!locked;}),'scene-layer-small');lock.dataset.layerLock='';lock.setAttribute('aria-label',locked?'解锁':'锁定');
+       const lock=button('',()=>commit(()=>{node.locked=node.isLocked=!locked;}),'scene-layer-small');lock.replaceChildren(createIcon(locked?'lock':'unlock'));lock.dataset.layerLock='';lock.setAttribute('aria-label',locked?'解锁':'锁定');
        const hidden=!!(node.hidden||node.isHidden||node.isParked);
-       const eye=button(hidden?'◌':'◉',()=>commit(()=>{if(node.type==='material')node.isParked=!hidden;else node.hidden=!hidden;}),'scene-layer-small');eye.dataset.layerEye='';eye.setAttribute('aria-label',hidden?'显示':'隐藏');eye.disabled=locked;
+       const eye=button('',()=>commit(()=>{if(node.type==='material')node.isParked=!hidden;else node.hidden=!hidden;}),'scene-layer-small');eye.replaceChildren(createIcon(hidden?'eyeOff':'eye'));eye.dataset.layerEye='';eye.setAttribute('aria-label',hidden?'显示':'隐藏');eye.disabled=locked;
        const up=button('↑',()=>siblingMove(node.id,1),'scene-layer-small scene-layer-step');up.setAttribute('aria-label','上移一层');up.disabled=locked;
        const down=button('↓',()=>siblingMove(node.id,-1),'scene-layer-small scene-layer-step');down.setAttribute('aria-label','下移一层');down.disabled=locked;
        const grip=button('≡',()=>{},'scene-layer-grip');gripEvents(grip,row,node);grip.disabled=locked;
