@@ -161,19 +161,10 @@ const projectSync=createProjectSync({
   onCommitted:(record,committedRevision)=>{
     if(record.__cloudSessionId)editorBases.set(record.__cloudSessionId,committedRevision);
   },
-  // A true same-document collision produces a new recoverable editable work.
-  // Neither revision of the existing project is overwritten by timestamps.
-  onConflict:async record=>{
-    const copy=forkConflictingEditableWork(record);
-    if(!copy)return null;
-    const originalId=record.id;
-    copy.__cloudSessionId=crypto.randomUUID();
-    editorBases.set(copy.__cloudSessionId,revision);
-    if(typeof window!=='undefined')window.dispatchEvent(new CustomEvent('shiye-project-conflict-copy',{
-      detail:{originalId,copyId:copy.id,title:copy.title,originalSessionId:record.__cloudSessionId,newSessionId:copy.__cloudSessionId}
-    }));
-    return copy;
-  },
+  // True same-document conflicts remain in the durable outbox until the
+  // account owner explicitly chooses cloud, local or both in Sync Details.
+  // Never fork/overwrite a version merely because the timestamp is newer.
+  onConflict:async()=>null,
   onSuperseded:()=>notifyCloudSuperseded(),
   onStatus:reportSync,
   runExclusive:withAccountSyncLock,
@@ -226,14 +217,8 @@ async function reconcileImport(batch,operationID,baseRevision){
         const live=await cloudRecord(op.store,id);
         if(marker&&!live){operations.push(op);continue;}
       }
-      // Old builds sometimes submitted an editable project through the
-      // generic import queue. If the same document has changed remotely,
-      // replay the locally backed-up scene as a NEW work instead of leaving
-      // this queue permanently stuck or overwriting the remote scene.
-      if(op.action==='put'&&op.store==='projects'){
-        const copy=forkConflictingEditableWork(op.item);
-        if(copy){operations.push({...op,item:copy});continue;}
-      }
+      // A real conflict is resolved only by the user's explicit selection.
+      // Old generic-queue projects are reviewed with the same three options.
       // Deletes, malformed documents and other conflicting records must
       // remain pending for explicit recovery, never be silently dropped.
       return 'conflict';
