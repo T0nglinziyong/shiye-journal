@@ -398,7 +398,7 @@ export async function showCutoutEditor({
   modal.addEventListener('cancel',cancel);
   onDialogClosed(modal,()=>{
     resize.disconnect();modal.removeEventListener('cancel',cancel);modal.classList.remove('cutout-dialog','material-editor-dialog');
-    source.close();initial.close();recognized.close();frame.close();
+    for(const image of new Set([source,initial,recognized,frame]))image?.close?.();
   });
   panel();draw();
 }
