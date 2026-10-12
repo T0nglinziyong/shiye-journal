@@ -1371,17 +1371,23 @@ async function refineCandidateFrame(candidateFrame,request,{postprocessOnly=fals
 async function openCutoutCheck(id,candidate=null){
   const a=candidate?{title:candidate.title}:asset(id);if(!a)return;
   if(modal.open)modal.close();
-  body.innerHTML='<section role="status" aria-live="polite" class="cutout-loading"><strong>正在准备抠图编辑器…</strong><p>正在读取矫正 RGB 与最终蒙版，请稍候。</p><button type="button" class="btn" id="cutout-load-cancel">取消</button></section>';
+  body.innerHTML='<section role="status" aria-live="polite" class="cutout-loading"><strong>正在准备抠图编辑器…</strong><p>正在加载约 900px 的候选框图片与透明蒙版…</p><button type="button" class="btn" id="cutout-load-cancel">取消</button></section>';
   if(!modal.open)modal.showModal();
   let cancelled=false;
   body.querySelector('#cutout-load-cancel').onclick=()=>{cancelled=true;modal.close();};
   await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
   if(cancelled)return;
   try{
-  const stored=async blobId=>blobId?(await Promise.race([
-    db.get('blobs',blobId),
-    new Promise((_,reject)=>setTimeout(()=>reject(Error('素材图片读取超时，请检查同步状态')),22000))
-  ]))?.data:null;
+  const readTimeout=async promise=>Promise.race([
+    promise,new Promise((_,reject)=>setTimeout(()=>
+      reject(Error('素材读取超时，请检查 COS 图片和同步状态')),22000))
+  ]);
+  // Original COS photos stay untouched; the editor requests only a ~960px
+  // server-derived candidate RGB (shrunk to 900px before decoding pixels).
+  const stored=async blobId=>blobId?readTimeout(cloudEnabled
+    ?db.previewBlob(blobId,900)
+    :db.get('blobs',blobId).then(row=>row?.data)):null;
+  const loadMaskBlob=async blobId=>blobId?readTimeout(db.get('blobs',blobId).then(row=>row?.data)):null;
   const compact=!candidate&&!!a.candidateFrameBlobId
     &&(!!a.finalMaskBlobId||Math.abs(a.processingRecord?.displayRotationDegrees||0)<.01);
   const modern=compact&&!!a.finalMaskBlobId;
@@ -1393,7 +1399,7 @@ async function openCutoutCheck(id,candidate=null){
     compact?Promise.resolve(null):Promise.resolve(candidate?.originalBlob||stored(a.originalBlobId)),
     compact?Promise.resolve(null):Promise.resolve(candidate?.originalCutoutBlob||stored(a.originalCutoutBlobId)),
     Promise.resolve(candidate?.candidateFrameBlob||stored(a.candidateFrameBlobId)),
-    modern?stored(a.finalMaskBlobId):Promise.resolve(null)
+    modern?loadMaskBlob(a.finalMaskBlobId):Promise.resolve(null)
   ]);
   let finalMaskBlob=modern?storedMask:
     compact&&saved instanceof Blob?await extractAlphaMask(saved):null;
@@ -1407,16 +1413,19 @@ async function openCutoutCheck(id,candidate=null){
   }else if(!(candidateFrame instanceof Blob)||candidateFrame.size<8||
             !(finalMaskBlob instanceof Blob)||!finalMaskBlob.size)
     throw Error('候选框 RGB 或最终蒙版尚未完整同步，已保留旧素材，请检查同步后重试');
-  if(cancelled)return;
-  if(modal.open)modal.close();
+  if(cancelled||!modal.open)return;
+  // Keep one native dialog in the top layer throughout the transition.
+  // Closing it here and reopening inside showCutoutEditor can lose the
+  // second showModal() on iOS Safari, leaving only the grey backdrop.
   const processing=candidate?.processingRecord||a.processingRecord||{},baseWidth=processing.sourceWidthMM||candidate?.width||a.physicalWidthMM,baseHeight=processing.sourceHeightMM||candidate?.height||a.physicalHeightMM,
     localMethods=recognitionMethodDetails,
     preferredMethod=localMethods.some(item=>item.id===(processing.rerecognition?.method||state.preferences.recognition))?(processing.rerecognition?.method||state.preferences.recognition):'auto';
   const openEditor=()=>cancelled?Promise.resolve():showCutoutEditor({
     body,modal,original,saved,recognition,candidateFrame,finalMaskBlob,title:a.title,processing,toast,
     isCancelled:()=>cancelled,
+    onPhase:message=>{const label=body.querySelector('.cutout-loading p');if(label)label.textContent=message;},
     onLoadInitialMask:compact?async()=>{
-      const oldBlob=a.initialMaskBlobId?await stored(a.initialMaskBlobId):
+      const oldBlob=a.initialMaskBlobId?await loadMaskBlob(a.initialMaskBlobId):
         await stored(a.originalCutoutBlobId)||saved;
       if(!(oldBlob instanceof Blob))throw Error('初始蒙版尚未可用');
       return readAlphaMask(a.initialMaskBlobId?oldBlob:await extractAlphaMask(oldBlob));
