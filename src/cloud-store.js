@@ -13,6 +13,7 @@ import {recoverImportOutbox} from './import-outbox-recovery.js';
 import {recoverProjectOutbox,usableProjectSnapshot} from './project-outbox-recovery.js';
 import {migrationPendingConflicts} from './migration-outbox-guard.js';
 import {forkConflictingEditableWork} from './sync-conflict-copy.js';
+import {mergeEditableSceneProjects} from './scene-field-merge.js';
 import {isLegacySceneProject} from './scene-v2.js';
 export function createCloudStore({cloudClient,requireCloudUser,cache=null,namespace='cloud',projectPreview=()=>null,objectStorage=null}){
 const BUCKET='shiye-private';
@@ -265,6 +266,11 @@ const unifiedSync=createProjectSync({
         {key:safetyKey,id:record.id,title:record.title||'未命名作品',at:new Date().toISOString()},
         ...savedList
       ].slice(0,20));
+    // Merge only provably replayable Scene v2 deltas. Different layers and
+    // properties commute; same-property edits use their explicit timestamps.
+    // Unsupported transforms fall back to the original guarded LWW decision.
+    const merged=mergeEditableSceneProjects(record,completeRemote);
+    if(merged)return {kind:'replace',record:syncEnvelope('project',merged)};
     const winner=latestEditedProject(record,remote);
     return winner==='local'?'rebase':winner==='remote'?'remote':'conflict';
   },
