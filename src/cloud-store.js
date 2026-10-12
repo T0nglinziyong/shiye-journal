@@ -663,6 +663,108 @@ async function cloudBackupBlobIDs(){
 // intentionally does not contact the server, so logout remains possible when
 // the network is unavailable after local staging succeeds.
 async function cloudPendingLocalSummary(){const key=await account();const [projects,imports]=await Promise.all([cache?.get(key,'project-outbox'),cache?.get(key,'import-outbox')]);return {projects:projects?.length||0,imports:imports?.length||0};}
+// Manual conflict handling is separate from ordinary synchronization. No
+// pending bytes are discarded until an explicit comparison/backup and choice.
+async function reviewedConflict(kind,id){
+ if(!['project','batch'].includes(kind)||typeof id!=='string'||!id)throw Error('冲突记录标识无效');
+ await identity();
+ const sync=kind==='project'?projectSync:importSync;
+ const row=(await sync.pending()).find(item=>item.record?.id===id);
+ if(!row)throw Error('待同步记录已改变或已完成，请重新打开同步详情');
+ let local;
+ if(kind==='project')local=row.record;
+ else{
+  const ops=row.record?.operations;
+  if(!Array.isArray(ops)||ops.length!==1||ops[0]?.store!=='projects'||ops[0]?.action!=='put')
+   throw Error('此批次包含多条不同操作，请先备份待同步资料，暂不能自动选择版本');
+  local=ops[0].item;
+ }
+ if(!usableProjectSnapshot(local))throw Error('本机可编辑作品结构不完整，请先保留应急备份');
+ const current=await version();
+ if(current<=row.baseRevision)throw Error('云端没有比本机基线更新的版本，可直接尝试同步');
+ const untouched=await canRebaseUnchangedKeys({client:cloudClient(),owner:await identity(),
+  before:row.baseRevision,after:current,operations:[{store:'projects',action:'put',item:local}]});
+ if(untouched)throw Error('云端变化与此作品无关，请先尝试正常同步');
+ const stored=await cloudRecord('projects',local.id);
+ const remote=stored?(stored.projectDocumentPath?await cloudProjectDocument(stored):stored):null;
+ const summary=project=>({id:project?.id||null,title:project?.title||'未命名作品',
+  updatedAt:project?.updatedAt||null,drafts:project?.drafts?.length||0,
+  layers:(project?.drafts||[]).reduce((n,d)=>n+(Array.isArray(d.layers)?d.layers.length:0),0)});
+ return {kind,id,serial:row.serial,baseRevision:row.baseRevision,
+  revision:current,local:structuredClone(local),remote:remote?structuredClone(remote):null,
+  overview:{local:summary(local),remote:remote?summary(remote):null}};
+}
+async function cloudConflictReview(kind,id){
+ const {kind:k,id:key,serial,baseRevision,revision,overview}=await reviewedConflict(kind,id);
+ return {kind:k,id:key,serial,baseRevision,revision,overview};
+}
+async function cloudConflictBackup(kind,id){
+ const review=await reviewedConflict(kind,id);
+ const {kind:k,serial,baseRevision,revision,local,remote}=review;
+ const payload={format:'shiye-scene-conflict-backup',version:1,account:await identity(),
+  savedAt:new Date().toISOString(),queueKind:k,pendingID:id,serial,baseRevision,
+  cloudRevision:revision,local,remote};
+ const bytes=new TextEncoder().encode(JSON.stringify(payload,null,2));
+ if(bytes.byteLength>36*1024*1024)throw Error('冲突双方备份超过 36 MB，请先使用待同步应急备份');
+ const digest=await crypto.subtle.digest('SHA-256',bytes);
+ const hash=Array.from(new Uint8Array(digest),n=>n.toString(16).padStart(2,'0')).join('');
+ return {blob:new Blob([bytes],{type:'application/json'}),sha256:hash,
+  kind:k,id,serial,revision,localID:local.id};
+}
+async function cloudResolveProjectConflict({kind,id,serial,expectedRevision,choice}={}){
+ if(!['project','batch'].includes(kind)||!['cloud','local','both'].includes(choice)||
+    !Number.isSafeInteger(serial)||!Number.isSafeInteger(expectedRevision))
+   throw Error('冲突选择参数不合法');
+ return withAccountSyncLock(async()=>{
+  const review=await reviewedConflict(kind,id);
+  if(review.serial!==serial||review.revision!==expectedRevision)
+   throw Error('确认期间云端或本机版本发生变化；请重新下载双方备份');
+  const sync=kind==='project'?projectSync:importSync;
+  const {local,remote}=review;
+  const pending=(await sync.pending()).find(item=>item.record?.id===id);
+  if(!pending||pending.serial!==serial)throw Error('本机作品又被编辑，请重新检查版本');
+  if(choice==='cloud'){
+   await sync.resolvePending(id,serial);
+   notifyCloudSuperseded();
+   return {choice,originalID:local.id,remoteID:remote?.id||null};
+  }
+  if(choice==='both'){
+   const copy=forkConflictingEditableWork(local);
+   if(!copy)throw Error('本机旧稿无法安全复制，原始数据保持不变');
+   copy.__cloudSessionId=crypto.randomUUID();
+   editorBases.set(copy.__cloudSessionId,expectedRevision);
+   const replacement=kind==='project'?copy:
+     {...pending.record,id:crypto.randomUUID(),names:['projects'],
+       operations:[{store:'projects',action:'put',item:copy}]};
+   await sync.resolvePending(id,serial,{record:replacement,baseRevision:expectedRevision});
+   if(kind==='project'&&typeof window!=='undefined')
+    window.dispatchEvent(new CustomEvent('shiye-project-conflict-copy',{detail:{
+     originalId:local.id,copyId:copy.id,title:copy.title,
+     originalSessionId:local.__cloudSessionId,newSessionId:copy.__cloudSessionId
+    }}));
+   return {choice,originalID:local.id,copyID:copy.id};
+  }
+  // Choosing local explicitly keeps the remote document under a distinct
+  // recoverable ID BEFORE replacing the remote project's original ID. These
+  // two writes form ONE revision-CAS transaction, never timestamp overwrite.
+  if(!remote||!usableProjectSnapshot(remote))
+   throw Error('云端原稿缺失或无法校验，不能直接覆盖；可以选择保留双方');
+  const retained=forkConflictingEditableWork(remote);
+  if(!retained)throw Error('无法安全保存云端旧版，未覆盖任何作品');
+  retained.title=String(remote.title||'未命名作品').slice(0,60)+' · 覆盖前云端备份';
+  const fresh=structuredClone(local);
+  delete fresh.__cloudBaseRevision;delete fresh.__cloudSessionId;
+  // The pending operation ID makes a lost acknowledgement idempotent.
+  await cloudTransaction(['projects'],tx=>{
+   tx.objectStore('projects').put(retained);
+   tx.objectStore('projects').put(fresh);
+  },pending.operationID);
+  await sync.resolvePending(id,serial);
+  if(local.__cloudSessionId)editorBases.set(local.__cloudSessionId,revision);
+  notifyCloudSuperseded();
+  return {choice,originalID:local.id,remoteBackupID:retained.id};
+ });
+}
 async function cloudPendingDetails(){await identity();const [projects,imports]=await Promise.all([projectSync.pending(),importSync.pending()]);return {projects:projects.map(row=>({id:row.record.id,title:row.record.title||'未命名作品',baseRevision:row.baseRevision})),batches:imports.map(row=>({id:row.record.id,baseRevision:row.baseRevision,items:row.record.operations?.map(op=>({store:op.store,action:op.action,title:op.item?.title||op.item?.name||op.id||'',id:op.item?.id||op.id||''}))||['assets','projects','blobs'].flatMap(store=>(row.record[store]||[]).map(item=>({store,action:'put',title:item.title||'',id:item.id})))})),error:importSync.status().error?.message||projectSync.status().error?.message||null};}
 async function cloudDiscardPending(){await identity();if(writesInFlight||!importSync.canDiscard()||!projectSync.canDiscard())throw Error('上传正在进行，请等待当前请求结束');const count=(await importSync.discard())+(await projectSync.discard());reportSync();return count;}
 async function cloudFlushProjects({background=false}={}){
@@ -688,11 +790,14 @@ async function cloudRestoreEmergency(snapshot){
   if(typeof cache.restoreOutboxes!=='function')throw Error('当前浏览器不支持原子恢复待同步资料');
   return cache.restoreOutboxes(key,snapshot.projects,snapshot.imports);
 }
-return {cloudMigrationInventory,cloudMigrationOriginalProject,cloudMigrationCommit,cloudLegacyProjectBackup,cloudAll,cloudGet,cloudPreview,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudClearCache,cloudResumeCache,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudPendingLocalSummary,cloudPendingDetails,cloudDiscardPending,cloudFlushProjects,cloudProjectDocument,cloudEmergencySnapshot,cloudRestoreEmergency,cloudBackupBlobIDs};
+return {cloudConflictReview,cloudConflictBackup,cloudResolveProjectConflict,cloudMigrationInventory,cloudMigrationOriginalProject,cloudMigrationCommit,cloudLegacyProjectBackup,cloudAll,cloudGet,cloudPreview,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudClearCache,cloudResumeCache,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudPendingLocalSummary,cloudPendingDetails,cloudDiscardPending,cloudFlushProjects,cloudProjectDocument,cloudEmergencySnapshot,cloudRestoreEmergency,cloudBackupBlobIDs};
 }
 let projectPreview=()=>null;
 export const setCloudProjectPreview=producer=>{projectPreview=producer;};
 const current=createCloudStore({cloudClient,requireCloudUser,cache:privateCache,namespace:import.meta.env?.VITE_SHIYE_SUPABASE_URL||'cloud',projectPreview:record=>projectPreview(record),objectStorage:createCOSStore({client:cloudClient,enabled:import.meta.env?.VITE_SHIYE_OBJECT_STORAGE==='cos'})});
+export const cloudConflictReview=(...args)=>current.cloudConflictReview(...args);
+export const cloudConflictBackup=(...args)=>current.cloudConflictBackup(...args);
+export const cloudResolveProjectConflict=(...args)=>current.cloudResolveProjectConflict(...args);
 export const cloudLegacyProjectBackup=(...args)=>current.cloudLegacyProjectBackup(...args);
 export const cloudMigrationInventory=(...args)=>current.cloudMigrationInventory(...args);
 export const cloudMigrationOriginalProject=(...args)=>current.cloudMigrationOriginalProject(...args);
