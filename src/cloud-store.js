@@ -237,20 +237,10 @@ async function reconcileImport(batch,operationID,baseRevision){
     present+=found.filter(Boolean).length;
   }
   if(present===0)return 'rebase';
-  // Legacy import batches (before separate project staging existed) could
-  // contain a complete editable project. Existence of its ID does NOT prove
-  // our version was committed: a newer editor save may own that same key.
-  // The operation journal above is the only acknowledgement authority.
-  if(batch.projects?.length&&!batch.assets?.length&&!batch.blobs?.length){
-    const operations=[];
-    for(const item of batch.projects){
-      const existing=await cloudRecord('projects',item.id);
-      const copy=existing?forkConflictingEditableWork(item):item;
-      if(!copy||!usableProjectSnapshot(copy))return 'conflict';
-      operations.push({store:'projects',action:'put',item:copy});
-    }
-    return {kind:'replace',record:{...batch,names:['projects'],operations}};
-  }
+  // Legacy single-project import batches are not acknowledgements. A newer
+  // copy may own the same ID; expose a deliberate version choice instead of
+  // automatically keeping/overwriting either document.
+  if(batch.projects?.length&&!batch.assets?.length&&!batch.blobs?.length)return 'conflict';
   // Mixed old imports can contain original blobs or source inventory. Until
   // their exact bytes are provably acknowledged, never silently drop them.
   return 'conflict';
@@ -675,9 +665,12 @@ async function reviewedConflict(kind,id){
  if(kind==='project')local=row.record;
  else{
   const ops=row.record?.operations;
-  if(!Array.isArray(ops)||ops.length!==1||ops[0]?.store!=='projects'||ops[0]?.action!=='put')
-   throw Error('此批次包含多条不同操作，请先备份待同步资料，暂不能自动选择版本');
-  local=ops[0].item;
+  if(Array.isArray(ops)&&ops.length===1&&ops[0]?.store==='projects'&&ops[0]?.action==='put')
+    local=ops[0].item;
+  else if(!ops&&Array.isArray(row.record?.projects)&&row.record.projects.length===1&&
+    !(row.record.assets||[]).length&&!(row.record.blobs||[]).length)
+    local=row.record.projects[0];
+  else throw Error('此批次有多条不同操作，请先保留应急备份，不能只选择一个作品的版本');
  }
  if(!usableProjectSnapshot(local))throw Error('本机可编辑作品结构不完整，请先保留应急备份');
  const current=await version();
