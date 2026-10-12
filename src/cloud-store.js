@@ -72,7 +72,7 @@ function materializePreview480(record,preview){
     .catch(error=>{previewMaterialization.delete(path);console.warn('旧素材 COS 固定封面待补齐',error);});
 }
 let cacheDisabled=false;
-let projectOutboxBefore=[],importOutboxBefore=[];
+let projectOutboxBefore=[],projectOutboxQuarantine=[],importOutboxBefore=[];
 const sessionTag=crypto.randomUUID();
 let outboxChannel=null;
 const channel=()=>{
@@ -121,9 +121,29 @@ function notifyCloudSuperseded(){
 function reportSync(){if(typeof window!=='undefined'){const a=projectSync.status(),b=importSync.status();window.dispatchEvent(new CustomEvent('shiye-project-sync',{detail:{pending:a.pending+b.pending+writesInFlight,error:b.error||a.error}}));}}
 const projectSync=createProjectSync({
   autoFlushDelayMs:10000,
-  load:async()=>{if(!cache)return [];const key=await account(),saved=await cache.get(key,'project-outbox')||[],result=recoverProjectOutbox(saved);if(result.removed)try{await persistOutbox('project-outbox',saved,result.rows);}catch{/* Uncommitted invalid rows are never replayed. */}projectOutboxBefore=structuredClone(result.rows);return result.rows;},
-  write:async rows=>{await persistOutbox('project-outbox',projectOutboxBefore,rows);projectOutboxBefore=structuredClone(rows);},
-  reload:async()=>{const rows=await cache?.get(await account(),'project-outbox')||[];projectOutboxBefore=structuredClone(rows);return rows;},
+  load:async()=>{
+    if(!cache)return [];
+    const saved=await cache.get(await account(),'project-outbox')||[];
+    const result=recoverProjectOutbox(saved);
+    projectOutboxQuarantine=structuredClone(result.quarantined);
+    projectOutboxBefore=structuredClone(saved);
+    // Incomplete/old data is NEVER silently deleted, migrated or synced.
+    // New valid v2 edits can still progress; corrupted raw bytes remain in the
+    // durable account queue for explicit manual recovery.
+    return result.rows;
+  },
+  write:async rows=>{
+    const preserved=[...projectOutboxQuarantine,...rows];
+    await persistOutbox('project-outbox',projectOutboxBefore,preserved);
+    projectOutboxBefore=structuredClone(preserved);
+  },
+  reload:async()=>{
+    const saved=await cache?.get(await account(),'project-outbox')||[];
+    const result=recoverProjectOutbox(saved);
+    projectOutboxQuarantine=structuredClone(result.quarantined);
+    projectOutboxBefore=structuredClone(saved);
+    return result.rows;
+  },
   commit:(record,operationID)=>cloudTransaction(['projects'],tx=>tx.objectStore('projects').put(record),operationID),revision:()=>revision,
   reconcile:async(record,operationID,baseRevision)=>{
     if(await wasCommitted(operationID,baseRevision))return 'committed';
