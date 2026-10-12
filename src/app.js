@@ -3,7 +3,7 @@ import {assetSourceRevision} from './material-anatomy.js';
 import {renderSceneCanvas,decodeSceneImage} from './scene-renderer.js';
 import {sceneRenderEntries,projectMaterialViews,sceneDisplaySiblings} from './craft-display.js';
 import {inkScenePaths} from './ink-scene-svg.js';
-import {maskSVG,sceneLayerStyle,sceneLayerEntries,attachSceneV2} from './scene-model.js';
+import {maskSVG,sceneLayerStyle,sceneLayerEntries,attachSceneV2,moveSceneNode} from './scene-model.js';
 import './styles.css';
 import './overrides.css';
 import './parity.css';
@@ -60,6 +60,7 @@ import * as db from './store.js';
 import {loadPreferences,savePreferences} from './preferences.js';
 import {cloudPreferencesRecord,cloudPreferencesFromMeta} from './cloud-preferences.js';
 import {cloudAISettingsRecord,cloudAISettingsFromMeta} from './cloud-ai-settings.js';
+import {cloudMatchingSettingsRecord,cloudMatchingSettingsFromMeta,applyMatchingDefaults} from './cloud-matching-settings.js';
 import {uid,canvasSize,draft,project,itemFromAsset,physicalPlacement,validatePhysicalDraft,textBlock,primitive,setDraftPaperSize} from './domain.js';
 import {detectPaperCandidates,cropBitmap,alignMaterialPreview} from './image.js';
 import {filterAutomaticMaterialBoxes} from './automatic-material-size-filter.js';
@@ -115,6 +116,7 @@ const view=document.querySelector('#view'),modal=document.querySelector('#modal'
 modal.querySelector('.modal-close').onclick=()=>modal.close();
 const fileInput=document.querySelector('#file-input'),workFileInput=document.querySelector('#work-file-input'),snapshotFileInput=document.querySelector('#snapshot-file-input'),creationResultInput=document.querySelector('#creation-result-input'),backupInput=document.querySelector('#backup-input'),emergencyInput=document.querySelector('#emergency-input');
 let offlineSnapshotProject=null;
+let registeringOriginalGPTTask=false;
 installRuntimeDiagnostics(()=>state.route);
 const state={route:'series',assets:[],series:[],projects:[],trash:[],userTemplates:[],basket:[],excludedAssetIDs:[],history:[],selected:null,activeProject:null,activeDraft:null,offlineEditingReturnID:null,detailAssetID:null,previewProjectID:null,settingsSection:null,selfHosted:false,aiSettings:loadAISettings(),preferences:loadPreferences(),aiPanel:false,aiBusy:false,aiPrompt:'',aiProgress:'',tool:'select',zoom:1,sort:'newest',query:'',kind:'all',status:'all',seriesID:'all',matchCore:null,matchRatio:'a4',matchMode:'single',matchStyle:'韩系清新',matchStyles:['韩系清新'],matchPurposes:['日常记录'],matchIntent:'',matchContentPolicy:'documentary',matchTextPresentation:'mixed',matchPurpose:'日常记录',matchProcessing:'不预设',materialUseHints:{},materialUseRequired:{},assetProcessing:{},customPaperWidth:210,customPaperHeight:297,recommendFilter:'全部',coreIDs:[],importStep:'inspect',importRecords:[],importIndex:0,importFile:null,importBitmap:null,importBox:{x:0,y:0,w:1,h:1},importCandidate:null,importRemoveWhite:false,undo:[],redo:[],drawing:false};
 // Safari's native page pinch must not compete with the editor's bounded canvas zoom.
@@ -290,7 +292,7 @@ function route(name,{back=false,restoreMaterial=false}={}){
   routeScroll.set(state.route+':'+state.seriesID,window.scrollY);
   if(name==='settings'&&!settingsSession)settingsSession={ai:structuredClone(state.aiSettings),preferences:structuredClone(state.preferences),returnRoute:state.route};
   if(state.route==='settings'&&name!=='settings'&&settingsSession){state.aiSettings=settingsSession.ai;state.preferences=settingsSession.preferences;settingsSession=null;state.settingsSection=null;if(cloudEnabled&&deferredSyncedPreferences)state.preferences=savePreferences(deferredSyncedPreferences);if(cloudEnabled&&deferredSyncedAISettings)state.aiSettings=saveAISettings(deferredSyncedAISettings);deferredSyncedPreferences=null;deferredSyncedAISettings=null;}
-if(state.route==='editor'&&name!=='editor'&&aiController)aiController.abort(Error('已离开创作页面'));const priorRoute=state.route;syncSelectionScope(parity,name);state.route=name;if(name==='import'&&state.importMode!=='snapshot'&&typeof Worker!=='undefined')void prewarmVision().catch(()=>{});if(name==='series'){state.seriesID='all';state.addingToSeries=null;libraryHistory.length=0;}if(name!=='library')state.addingToSeries=null;if(name!=='settings'&&!fromSettings)state.selected=null;render();
+if(state.route==='editor'&&name!=='editor'&&aiController)aiController.abort(Error('已离开创作页面'));const priorRoute=state.route;if(name==='matching'&&priorRoute!=='matching'&&cloudMatchingDefaults&&!matchingDefaultsPending)applyMatchingDefaults(state,cloudMatchingDefaults);syncSelectionScope(parity,name);state.route=name;if(name==='import'&&state.importMode!=='snapshot'&&typeof Worker!=='undefined')void prewarmVision().catch(()=>{});if(name==='series'){state.seriesID='all';state.addingToSeries=null;libraryHistory.length=0;}if(name!=='library')state.addingToSeries=null;if(name!=='settings'&&!fromSettings)state.selected=null;render();
   // A return from Works/Settings must honor the last matching viewport even
   // if the currently selected series ID has since changed. Nested panes are
   // already restored inside render() from the same snapshot.
@@ -420,7 +422,7 @@ function workCover(d,priority=false,snapshotOnly=false,projectID=null){
  return nodes(d.layers||[]);
 
 }
-function renderWorks(){const list=state.projects.filter(p=>!isUntouchedLegacyExample(p)).sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt));const quarantined=db.legacyProjectInfo();const oldNotice=quarantined.length?`<details class="legacy-work-notice" style="margin:12px 0;padding:12px 14px;border:1px solid #d8dccc;border-radius:12px;background:#f9faf5"><summary>有 ${quarantined.length} 件旧版作品已隔离（未删除）</summary><p>这些作品仍是旧图层格式，无法在 Scene v2 编辑器直接打开。它们的云端原件和素材没有被覆盖或删除。</p><ul>${quarantined.map(row=>`<li>${esc(row.title)}</li>`).join('')}</ul><div class="actions"><button type="button" class="btn mini" data-act="backup-legacy-projects">导出这些旧版作品的原始 JSON</button></div><p>图片素材仍保存在云端素材库；此文件是旧作品结构备份，不是包含全部图片的完整备份。需要删除旧作品时请先保留此备份。</p></details>`:'';return `<div class="works-page">${head('我的作品','留下完成的创作，继续记录新的灵感。')}${oldNotice}<button hidden data-act="new-project" id="work-create"></button><button hidden data-act="import-work" id="work-import"></button><div class="filters"><input type="search" id="work-search" placeholder="搜索作品名称或标签"><select id="work-kind"><option value="all">全部类型</option><option value="created">手动创作</option><option value="imported">导入作品</option></select><select id="work-status"><option value="all">全部状态</option><option value="used">已使用</option><option value="unused">未使用</option></select><select id="work-sort"><option value="access-desc">最近访问 · 降序</option><option value="access-asc">最近访问 · 升序</option><option value="updated-desc">最近修改 · 降序</option><option value="updated-asc">最近修改 · 升序</option><option value="name-asc">名称 · 升序</option><option value="name-desc">名称 · 降序</option></select><span>${list.length} 项</span></div><div class="grid works-grid">${list.map((p,index)=>`<button class="card" data-act="open-project" data-id="${p.id}"><div class="card-image"><div class="thumb-sheet" style="width:75%;background:${esc(p.drafts[0]?.paperColor||'#fff')}">${p.isSnapshot?`<img class="work-reference" loading="${index<4?'eager':'lazy'}" decoding="async" src="${image(p.snapshotBlobId)}" alt="${esc(p.title)} 快照">`:p.coverStaticPath&&p.updatedAt===p.coverBaselineUpdatedAt?`<img class="work-reference" loading="${index<4?'eager':'lazy'}" src="${p.coverStaticPath}" alt="${esc(p.title)} 完整预览">`:workCover(p.drafts.find(d=>d.id===p.activeDraftID)||p.drafts[0],index<4,true,p.id)}</div></div><div class="card-body"><h3>${esc(p.title)}</h3><p>⊙　${p.isSnapshot?'画面快照':p.isDraft?'草稿':'可编辑作品'} <span>${new Date(p.updatedAt).toLocaleDateString()}</span></p></div></button>`).join('')}</div></div>`;}
+function renderWorks(){const list=state.projects.filter(p=>!isUntouchedLegacyExample(p)).sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt));return `<div class="works-page">${head('我的作品','留下完成的创作，继续记录新的灵感。')}<button hidden data-act="new-project" id="work-create"></button><button hidden data-act="import-work" id="work-import"></button><div class="filters"><input type="search" id="work-search" placeholder="搜索作品名称或标签"><select id="work-kind"><option value="all">全部类型</option><option value="created">手动创作</option><option value="imported">导入作品</option></select><select id="work-status"><option value="all">全部状态</option><option value="used">已使用</option><option value="unused">未使用</option></select><select id="work-sort"><option value="access-desc">最近访问 · 降序</option><option value="access-asc">最近访问 · 升序</option><option value="updated-desc">最近修改 · 降序</option><option value="updated-asc">最近修改 · 升序</option><option value="name-asc">名称 · 升序</option><option value="name-desc">名称 · 降序</option></select><span>${list.length} 项</span></div><div class="grid works-grid">${list.map((p,index)=>`<button class="card" data-act="open-project" data-id="${p.id}"><div class="card-image"><div class="thumb-sheet" style="width:75%;background:${esc(p.drafts[0]?.paperColor||'#fff')}">${p.isSnapshot?`<img class="work-reference" loading="${index<4?'eager':'lazy'}" decoding="async" src="${image(p.snapshotBlobId)}" alt="${esc(p.title)} 快照">`:p.coverStaticPath&&p.updatedAt===p.coverBaselineUpdatedAt?`<img class="work-reference" loading="${index<4?'eager':'lazy'}" src="${p.coverStaticPath}" alt="${esc(p.title)} 完整预览">`:workCover(p.drafts.find(d=>d.id===p.activeDraftID)||p.drafts[0],index<4,true,p.id)}</div></div><div class="card-body"><h3>${esc(p.title)}</h3><p>⊙　${p.isSnapshot?'画面快照':p.isDraft?'草稿':'可编辑作品'} <span>${new Date(p.updatedAt).toLocaleDateString()}</span></p></div></button>`).join('')}</div></div>`;}
 function current(){const p=state.activeProject,d=p?.drafts.find(d=>d.id===state.activeDraft)||p?.drafts[0];return d?attachSceneV2(d):undefined;}
 function editorEntry(d,rendering=false){return rendering?sceneRenderEntries(d):sceneLayerEntries(d,{ink:false});}
 function vectorMarkup(i){const paths=(i.vectorPaths||[]).map(points=>{const d=points.filter(p=>Array.isArray(p)&&p.length===2&&p.every(Number.isFinite)).map((p,n)=>`${n?'L':'M'}${p[0]} ${p[1]}`).join(' ');return d?`<path d="${d} Z"/>`:'';}).join('');return `<svg aria-hidden="true" viewBox="0 0 1 1" preserveAspectRatio="none" style="width:100%;height:100%;overflow:visible;fill:${esc(i.fill||'transparent')};stroke:${esc(i.stroke||'none')};stroke-width:${Math.max(0,Number(i.lineWidth)||0)/Math.max(i.width,i.height,1)}">${paths}</svg>`;}
@@ -530,6 +532,21 @@ ${settingToggle('setting-postprocess-apertures','重复孔洞恢复',state.prefe
  return `<div class="settings-page"><div class="settings-toolbar"><button data-act="settings-back">‹ 返回</button><button data-act="settings-save">保存</button></div><h1>${title}</h1><section class="settings-detail">${content}</section></div>`;}
 function readAIForm(){const q=id=>view.querySelector('#setting-ai-'+id),old=state.aiSettings,provider=q('provider').value,keys={...old.keys,[old.provider]:q('key').value},creationMode=q('delivery').value;return {...old,provider,keys,key:q('key').value,endpoint:q('endpoint').value,model:q('model').value==='__custom__'?q('custom-model').value.trim():q('model').value,imageModel:q('image-model').value,...deliveryProfile(creationMode),includeStructureReference:q('structure-reference').checked,sendPresetReferences:q('send-reference').checked,autoIncludeRecommendations:q('auto-recommendations').checked,requireAllCandidates:q('require-all').checked,finalVisualReview:q('visual-review')?.checked!==false,customVision:q('vision').checked,includeThumbnails:q('thumbnails').checked,temperature:q('temperature').value,maxTokens:q('tokens').value,maxTurns:q('turns').value,requestTimeout:q('timeout').value,transport:q('transport').value,textMode:q('text').value,reasoningMode:q('reasoning').value,sendOutputLimit:q('send-limit').checked,disableThinking:q('disable-thinking').checked,customLayoutPrompt:q('layout-prompt').value};}
 
+let cloudMatchingDefaults=null,matchingDefaultsTimer=null,matchingDefaultsPending=false,matchingDefaultsLocalEdited=false;
+function queueMatchingDefaultsSync(){
+  if(!cloudEnabled||!state.accountId)return;
+  clearTimeout(matchingDefaultsTimer);
+  matchingDefaultsPending=true;matchingDefaultsLocalEdited=true;
+  const accountID=state.accountId,record=cloudMatchingSettingsRecord(state);
+  cloudMatchingDefaults=structuredClone(record.settings);
+  matchingDefaultsTimer=setTimeout(()=>{
+    matchingDefaultsTimer=null;
+    if(state.accountId!==accountID)return;
+    void db.transaction(['meta'],tx=>tx.objectStore('meta').put(record))
+      .catch(error=>console.warn('搭配方向云端设置待同步',error?.message))
+      .finally(()=>{if(!matchingDefaultsTimer)matchingDefaultsPending=false;});
+  },650);
+}
 function bindPage(){view.querySelectorAll('[data-act]').forEach(el=>el.addEventListener('click',()=>handle(el.dataset.act,el.dataset.id,el.dataset.val)));
   const assetStatus=view.querySelector('#status-filter');if(assetStatus&&!assetStatus.querySelector('[value="favorite"]')){const option=document.createElement('option');option.value='favorite';option.textContent='已收藏';assetStatus.append(option);}
   const assetHeart=view.querySelector('.detail-heart');if(assetHeart)assetHeart.setAttribute('aria-pressed',String(!!asset(state.detailAssetID)?.isFavorite));
@@ -538,7 +555,7 @@ function bindPage(){view.querySelectorAll('[data-act]').forEach(el=>el.addEventL
   if(state.route==='matching'){
     const saveMatching=()=>matchingSession.persist().catch(e=>{console.warn('本机搭配状态未保存；不影响云端作品同步',e);toast('本机搭配状态保存失败：'+e.message);});
     const fields={'match-style':'matchStyle','match-purpose':'matchPurpose','match-intent':'matchIntent','match-content-policy':'matchContentPolicy','match-text-presentation':'matchTextPresentation','match-processing':'matchProcessing','match-mode':'matchMode','match-ratio':'matchRatio','match-paper-width':'customPaperWidth','match-paper-height':'customPaperHeight'};
-    for(const [id,key] of Object.entries(fields))view.querySelector('#'+id)?.addEventListener('change',e=>{state[key]=e.target.type==='number'?Number(e.target.value):e.target.value;if(id==='match-style')state.matchStyles=readMatchSelection(id,state.matchStyle);if(id==='match-purpose')state.matchPurposes=readMatchSelection(id,state.matchPurpose);if(id==='match-style'||id==='match-purpose')refreshMatchingRecommendations();void saveMatching();});
+    for(const [id,key] of Object.entries(fields))view.querySelector('#'+id)?.addEventListener('change',e=>{state[key]=e.target.type==='number'?Number(e.target.value):e.target.value;if(id==='match-style')state.matchStyles=readMatchSelection(id,state.matchStyle);if(id==='match-purpose')state.matchPurposes=readMatchSelection(id,state.matchPurpose);if(id==='match-style'||id==='match-purpose')refreshMatchingRecommendations();void saveMatching();if(id!=='match-intent')queueMatchingDefaultsSync();});
     // Entering or rerendering this page is not an explicit save action. Any
     // changed session is staged in the background; sync errors use the global
     // indicator instead of interrupting navigation with a toast.
@@ -744,14 +761,14 @@ async function handle(action,id,value){try{switch(action){
   }
   case 'new-series':openSeriesEditor();break;case 'series-detail':libraryHistory.push({route:state.route,seriesID:state.seriesID,detailAssetID:state.detailAssetID});state.seriesID=id;route('library');break;
   case 'match-library':route('library');break;case 'match-context':{const scope=matchingScope();toast(`必须 ${scope.required.length} · 优先 ${scope.preferred.length} · 可用 ${scope.available.length} · 不使用 ${scope.excluded.length}`);break;}
-  case 'match-filter':state.recommendFilter=value;updateMatchingRegions(['.match-chips','.match-rec-grid']);break;
+  case 'match-filter':state.recommendFilter=value;updateMatchingRegions(['.match-chips','.match-rec-grid']);queueMatchingDefaultsSync();break;
   case 'match-skip':state.excludedAssetIDs=[...new Set([...state.excludedAssetIDs,id])];updateMatchingRegions(['.match-rec-grid','.basket>.muted','.match-recommendations .match-panel-head small','.match-action']);break;
   case 'match-allow':state.excludedAssetIDs=state.excludedAssetIDs.filter(x=>x!==id);updateMatchingRegions(['.match-rec-grid','.basket>.muted','.match-recommendations .match-panel-head small','.match-action']);break;
   case 'match-core':state.coreIDs=state.coreIDs.includes(id)?state.coreIDs.filter(x=>x!==id):[...state.coreIDs,id];
     state.matchCore=state.coreIDs[0]||state.basket[0];
     updateMatchingRegions(['.match-basket-scroll','.basket>.muted','.match-action']);break;
   case 'match-use':openMaterialUse(id);break;
-  case 'match-generate':state.matchPurpose=view.querySelector('#match-purpose')?.value||'日常记录';state.matchProcessing=view.querySelector('#match-processing')?.value||'保留完整';state.matchStyle=view.querySelector('#match-style')?.value||state.matchStyle;state.matchIntent=view.querySelector('#match-intent')?.value||'';captureMatchContent();state.matchMode=view.querySelector('#match-mode')?.value||'single';state.matchRatio=readMatchPaper();state.matchStyles=readMatchSelection('match-style',state.matchStyle);state.matchPurposes=readMatchSelection('match-purpose',state.matchPurpose);await matchingSession.generate();break;
+  case 'match-generate':state.matchPurpose=view.querySelector('#match-purpose')?.value||'日常记录';state.matchProcessing=view.querySelector('#match-processing')?.value||'保留完整';state.matchStyle=view.querySelector('#match-style')?.value||state.matchStyle;state.matchIntent=view.querySelector('#match-intent')?.value||'';captureMatchContent();state.matchMode=view.querySelector('#match-mode')?.value||'single';state.matchRatio=readMatchPaper();state.matchStyles=readMatchSelection('match-style',state.matchStyle);state.matchPurposes=readMatchSelection('match-purpose',state.matchPurpose);queueMatchingDefaultsSync();await matchingSession.generate();break;
   case 'match-export-gpt':await exportOfflineCreation();break;
   case 'match-import-gpt':openOfflineImportDialog();break;
   case 'basket':{
@@ -820,7 +837,7 @@ async function handle(action,id,value){try{switch(action){
       }else(e.kind==='shape'?d.primitives:d.textBlocks).push(copy);
     });break;
    case 'flip':editSelected(e=>{e.value.isFlippedHorizontally=!e.value.isFlippedHorizontally;});break;
-  case 'front':editSelected((e,d)=>{e.value.zIndex=Math.max(0,...editorEntry(d).map(x=>x.value.zIndex))+1;});break;
+  case 'front':editSelected((e,d)=>{const parent=e.parents?.at(-1);moveSceneNode(d,e.value.id,{parentID:parent?.id||null});});break;
   case 'delete-object':editSelected((e,d)=>{const key=e.kind==='material'?'items':e.kind==='shape'?'primitives':'textBlocks';d[key]=d[key].filter(x=>x.id!==state.selected);state.selected=null;});break;
   case 'restore-baseline':editSelected(e=>{const b=e.value.generationBaseline;if(b){Object.assign(e.value,structuredClone(b));e.value.userOverrideFlags=[];}});break;
   case 'park':editSelected(e=>{if(e.kind==='material'){e.value.isParked=true;state.selected=null;}});break;
@@ -902,7 +919,7 @@ function editSelected(fn){const d=current(),e=editorEntry(d).find(x=>x.value.id=
 function historyStep(from,to){view.endTextEditing?.();const d=current(),snapshot=takeEditorHistoryStep(state,from,to,d);if(!snapshot)return;for(const key of Object.keys(d))delete d[key];Object.assign(d,snapshot);state.activeDraft=snapshot.id;saveProject();render();}
 function readMatchPaper(){const ratio=view.querySelector('#match-ratio')?.value||'a4';if(ratio!=='custom')return ratio;const w=Number(view.querySelector('#match-paper-width')?.value),h=Number(view.querySelector('#match-paper-height')?.value);if(!Number.isInteger(w)||!Number.isInteger(h)||w<50||h<50||w>1000||h>1000)throw Error('自定义纸张宽高需要是 50–1000 mm 的整数');state.customPaperWidth=w;state.customPaperHeight=h;return `custom:${w}x${h}`;}
 function captureMatchContent(){state.matchContentPolicy=view.querySelector('#match-content-policy')?.value||state.matchContentPolicy||'documentary';state.matchTextPresentation=view.querySelector('#match-text-presentation')?.value||state.matchTextPresentation||'mixed';}
-function openMaterialUse(id){const a=asset(id);if(!a)return;const others=state.basket.length>1;const choices=['由生成器选择','完整保留',...(others?['从另一件后露出']:[]),...(a.kind==='tape'&&others?['截段固定']:[]),...(['paper','photo','tape'].includes(a.kind)?['取一块真实区域',]:[]),'稍后手工剪图案'];const processing=['AI 自主加工','保留完整','少量裁剪','自由拆解'];body.innerHTML=`<h2>${esc(a.title)} · 用法</h2><p>每件素材可以单独选择用法与加工权限。</p><div class="stack"><label>用法<select id="material-use-choice">${choices.map(x=>`<option ${(state.materialUseHints[id]||'由生成器选择')===x?'selected':''}>${x}</option>`).join('')}</select></label><label>加工权限<select id="material-use-processing">${processing.map(x=>`<option ${(state.assetProcessing[id]||state.matchProcessing)===x?'selected':''}>${x}</option>`).join('')}</select></label><label class="toggle-row">要求每个方案做到此用法 <input type="checkbox" id="material-use-required" ${state.materialUseRequired[id]?'checked':''}></label><div class="actions"><button class="btn primary" id="material-use-save">确定</button><button class="btn" id="material-use-cancel">取消</button></div></div>`;modal.showModal();body.querySelector('#material-use-cancel').onclick=()=>modal.close();body.querySelector('#material-use-save').onclick=()=>{const use=body.querySelector('#material-use-choice').value;state.materialUseHints[id]=use==='由生成器选择'?null:use;state.assetProcessing[id]=body.querySelector('#material-use-processing').value;state.materialUseRequired[id]=!!state.materialUseHints[id]&&use!=='稍后手工剪图案'&&body.querySelector('#material-use-required').checked;modal.close();updateMatchingRegions(['.match-basket-scroll','.basket>.muted','.match-action']);};}
+function openMaterialUse(id){const a=asset(id);if(!a)return;const others=state.basket.length>1;const choices=['由生成器选择','完整保留',...(others?['从另一件后露出']:[]),...(a.kind==='tape'&&others?['截段固定']:[]),...(['paper','photo','tape'].includes(a.kind)?['取一块真实区域',]:[]),'稍后手工剪图案'];const processing=['AI 自主加工','保留完整','少量裁剪','自由拆解'];body.innerHTML=`<h2>${esc(a.title)} · 用法</h2><p>每件素材可以单独选择用法与加工权限。</p><div class="stack"><label>用法<select id="material-use-choice">${choices.map(x=>`<option ${(state.materialUseHints[id]||'由生成器选择')===x?'selected':''}>${x}</option>`).join('')}</select></label><label>加工权限<select id="material-use-processing">${processing.map(x=>`<option ${(state.assetProcessing[id]||state.matchProcessing)===x?'selected':''}>${x}</option>`).join('')}</select></label><label class="toggle-row">要求每个方案做到此用法 <input type="checkbox" id="material-use-required" ${state.materialUseRequired[id]?'checked':''}></label><div class="actions"><button class="btn primary" id="material-use-save">确定</button><button class="btn" id="material-use-cancel">取消</button></div></div>`;modal.showModal();body.querySelector('#material-use-cancel').onclick=()=>modal.close();body.querySelector('#material-use-save').onclick=()=>{const use=body.querySelector('#material-use-choice').value;state.materialUseHints[id]=use==='由生成器选择'?null:use;state.assetProcessing[id]=body.querySelector('#material-use-processing').value;state.materialUseRequired[id]=!!state.materialUseHints[id]&&use!=='稍后手工剪图案'&&body.querySelector('#material-use-required').checked;modal.close();updateMatchingRegions(['.match-basket-scroll','.basket>.muted','.match-action']);void matchingSession.persist();queueMatchingDefaultsSync();};}
 function createMatchingProject(automatic=true){const scope=matchingScope();if(!scope.candidateAssetIDs.length||!automatic&&!state.basket.length)throw Error('请先选择素材');const p=project('新的手账',{mode:state.matchMode||'single',ratio:state.matchRatio||'a4',style:state.matchStyle||'韩系清新'}),d=p.drafts[0];d.items=automatic?[]:physicalPlacement(d,state.assets,state.basket.slice(0,8));p.candidateAssetIDs=automatic?scope.candidateAssetIDs:[...state.basket];p.materialPriority=automatic?scope:{...scope,available:[],candidateAssetIDs:[...state.basket]};p.purpose=state.matchPurpose;p.intent=state.matchIntent;p.contentPolicy=state.matchContentPolicy;p.textPresentation=state.matchTextPresentation||'mixed';p.userText='';p.providedFacts='';p.styles=readMatchSelection('match-style',state.matchStyle);p.purposes=readMatchSelection('match-purpose',state.matchPurpose);p.requiredAssetIDs=[...scope.required];p.processing=state.matchProcessing;p.materialUseHints=Object.fromEntries(state.basket.filter(id=>state.materialUseHints[id]).map(id=>[id,state.materialUseHints[id]]));p.materialUseRequired=Object.fromEntries(state.basket.filter(id=>state.materialUseRequired[id]).map(id=>[id,true]));p.assetProcessing=Object.fromEntries(state.basket.filter(id=>state.assetProcessing[id]).map(id=>[id,state.assetProcessing[id]]));return p;}
 async function exportOfflineCreation(){
   if(!matchingScope().candidateAssetIDs.length){toast('请先选择素材');return;}
@@ -982,11 +999,12 @@ async function exportOfflineCreation(){
   }catch(error){if(controller.signal.aborted&&storedBundle){try{await offlineTaskStore.remove(storedBundle.account,storedBundle.id);}catch(cleanupError){console.warn('已取消任务的本机身份清理失败',cleanupError);}}if(!controller.signal.aborted){console.error(error);toast('AI 参考导出失败：'+error.message);if(modal.open)modal.close();}}finally{modal.removeEventListener('close',onClose);if(button){button.disabled=false;button.textContent='导出给网页版 AI';}}
 }
 function openOfflineImportDialog(){
-  body.innerHTML='<h2>导入网页版 GPT 作品</h2><p>可以直接选择 JSON 可编辑单文件、PNG／JPEG／WebP 图片快照，或原有 .shiyeproject.zip 工程包。若在另一台设备导入，请先登记原始任务 ZIP。文件类型将根据内容识别，不依赖文件名。</p><textarea id="offline-gpt-result" rows="7" placeholder="粘贴完整可编辑 JSON，或仅包含 JSON 的一个代码块"></textarea><div class="actions"><button type="button" class="btn primary" id="offline-import-file">选择作品文件</button><button type="button" class="btn" id="offline-paste-result">粘贴剪贴板</button><button type="button" class="btn" id="offline-import-text">导入复制文本</button></div>';
+  body.innerHTML='<h2>导入网页版 GPT 作品</h2><p>可以直接选择 JSON 可编辑单文件、PNG／JPEG／WebP 图片快照，或原有 .shiyeproject.zip 工程包。JSON 必须匹配当前账号在本设备登记的原始创作任务。若提示未匹配，先点击「登记原始任务 ZIP」选择最初从拾页导出的 ZIP，再导入 AI 返回的 JSON；文件类型按内容识别。</p><textarea id="offline-gpt-result" rows="7" placeholder="粘贴完整可编辑 JSON，或仅包含 JSON 的一个代码块"></textarea><div class="actions"><button type="button" class="btn primary" id="offline-import-file">选择作品文件</button><button type="button" class="btn" id="offline-paste-result">粘贴剪贴板</button><button type="button" class="btn" id="offline-import-text">导入复制文本</button><button type="button" class="btn" id="offline-register-task">登记原始任务 ZIP</button></div><small>请选择同一次创作的原始任务包，不要选择 AI 返回的作品文件；重新登记不会清空当前粘贴的 JSON。</small>';
   modal.showModal();
   body.querySelector('#offline-paste-result').onclick=()=>pasteOfflineResult();
   body.querySelector('#offline-import-text').onclick=async()=>{try{await importOfflineText(body.querySelector('#offline-gpt-result').value);}catch(error){toast('导入失败：'+error.message);}};
   body.querySelector('#offline-import-file').onclick=()=>{offlineSnapshotProject=matchingScope().candidateAssetIDs.length?createMatchingProject():null;creationResultInput.click();};
+  body.querySelector('#offline-register-task').onclick=()=>{registeringOriginalGPTTask=true;offlineSnapshotProject=null;creationResultInput.click();};
 }
 async function pasteOfflineResult(){try{body.querySelector('#offline-gpt-result').value=await navigator.clipboard.readText();toast('已粘贴 GPT 的可编辑数据');}catch{toast('无法读取剪贴板，请长按输入框粘贴');}}
 async function importOfflineProject(p){await flushSave();p.aiGenerated=true;await matchingSession.importProject(p);state.activeProject=p;state.activeDraft=p.activeDraftID;resetEditorHistory(state);state.offlineEditingReturnID=p.id;state.tool='select';if(modal.open)modal.close();if(state.route!=='matching')route('matching');route('editor');toast(p.creationVerification?.preview==='mismatch'?'已保存可编辑草稿；外部预览或清单有差异，请核对画面':'已加入版本方案；可编辑数据已检查，预览与正文仍需复核');}
@@ -1105,6 +1123,11 @@ async function refresh({background=false,onlyChanged=false}={}){const sync=await
   if(syncedPreferences){
     if(settingsSession)deferredSyncedPreferences=structuredClone(syncedPreferences);
     else{state.preferences=savePreferences(syncedPreferences);deferredSyncedPreferences=null;}
+  }
+  const syncedMatch=cloudEnabled?cloudMatchingSettingsFromMeta(meta):null;
+  if(syncedMatch&&!matchingDefaultsPending&&!matchingDefaultsLocalEdited){
+    cloudMatchingDefaults=syncedMatch;
+    if(state.route!=='matching')applyMatchingDefaults(state,syncedMatch);
   }
   const syncedAI=cloudEnabled?cloudAISettingsFromMeta(meta):null;
   if(syncedAI){
@@ -1646,12 +1669,19 @@ snapshotFileInput.onchange=async()=>{
     await saveOfflineSnapshotFile(file,matchingProject,type.mimeType);
   }catch(error){console.error(error);toast('画面导入失败：'+error.message);}
 };
-creationResultInput.addEventListener('cancel',()=>{offlineSnapshotProject=null;});
+creationResultInput.addEventListener('cancel',()=>{offlineSnapshotProject=null;registeringOriginalGPTTask=false;});
 creationResultInput.onchange=async()=>{
-  const file=creationResultInput.files?.[0],matchingProject=offlineSnapshotProject;
-  creationResultInput.value='';offlineSnapshotProject=null;
+  const file=creationResultInput.files?.[0],matchingProject=offlineSnapshotProject,registerTask=registeringOriginalGPTTask;
+  creationResultInput.value='';offlineSnapshotProject=null;registeringOriginalGPTTask=false;
   if(!file)return;
-  try{await importEditableFile(file,{matchingProject});}
+  try{
+    if(registerTask){
+      if((await classifyCreationFile(file)).kind!=='zip')throw Error('请选用从拾页导出的原始任务 ZIP');
+      const source=inspectOfflinePackage(new Uint8Array(await file.arrayBuffer()));
+      if(source.kind!=='task')throw Error('这不是原始任务包；请选择包含 task/context.json 的导出 ZIP');
+    }
+    await importEditableFile(file,{matchingProject});
+  }
   catch(error){console.error(error);toast('作品文件导入失败：'+error.message);}
 };
 async function importEditableFile(file,{matchingProject=null}={}){
@@ -1757,11 +1787,52 @@ document.addEventListener('visibilitychange',()=>{backgroundCloudCheck();if(docu
 window.addEventListener('online',()=>{backgroundCloudCheck();privateImages.retryMissing();void cloudResumer.wake();});
 window.addEventListener('offline',updateSyncIndicator);
 window.addEventListener('online',updateSyncIndicator);
+async function runAccountStorageMigration(){
+ if(!cloudEnabled)return;
+ const status=message=>{const label=body.querySelector('#migration-status');if(label)label.textContent=message;};
+ body.innerHTML='<h2>转换旧数据格式</h2><p id="migration-status" role="status">正在只读扫描云端的素材、系列、作品、图片引用、设置和最近删除…</p>';
+ try{
+  const {prepareStorageMigration,migrationBackup}=await import('./data-migrations/registry.js');
+  const inventory=await db.scanLegacyAccountData();
+  const plan=await prepareStorageMigration(inventory.collections,{
+    assets:inventory.collections.assets,
+    resolveProject:record=>db.readOriginalLegacyProject(record)
+  });
+  const rows=plan.scans.map(row=>`<tr><td>${esc({assets:'素材',series:'系列',projects:'作品',blobs:'图片引用',meta:'设置与元数据',trash:'最近删除'}[row.store])}</td><td>${row.total}</td><td>${row.migratable}</td><td>${row.needsReview}</td></tr>`).join('');
+  body.innerHTML=`<h2>转换旧数据格式</h2><p>本次共扫描 ${plan.totals.scanned} 条账号记录；找到 ${plan.totals.migratable} 条可验证转换的旧记录，${plan.totals.needsReview} 条需要人工检查。已符合现行结构的资料不会被重写。</p><div style="max-height:50vh;overflow:auto"><table class="migration-audit-table"><thead><tr><th>数据类型</th><th>扫描</th><th>可转换</th><th>待检查</th></tr></thead><tbody>${rows}</tbody></table></div>${plan.review.length?`<details><summary>无法自动转换的记录（未修改）</summary><ul>${plan.review.slice(0,30).map(row=>`<li>${esc(row.store)} · ${esc(row.id||'未知')}：${esc(row.reason)}</li>`).join('')}</ul></details>`:''}<p>转换前必须下载原始备份。只转换有明确转换器、且完成物理尺寸与库存校验的记录。旧 COS 原件不会删除；无法转换的条目仍保留原样。</p><p id="migration-status" role="status"></p><div class="actions"><button type="button" class="btn" id="migration-download" ${plan.changes.length?'':'disabled'}>下载受影响记录的原始备份</button><button type="button" class="btn primary" id="migration-apply" disabled>确认备份后转换 ${plan.changes.length} 条</button><button type="button" class="btn" id="migration-cancel">取消</button></div>`;
+  body.querySelector('#migration-cancel').onclick=()=>modal.close();
+  if(!plan.changes.length){status(plan.review.length?'没有可安全自动转换的记录；请按待检查清单处理。':'所有已识别的记录均符合当前格式，无需转换。');return;}
+  let backupSaved=false,backup;
+  body.querySelector('#migration-download').onclick=async()=>{
+   try{
+    status('正在准备备份与 SHA-256 校验…');
+    backup??=await migrationBackup(plan,{account:inventory.account,revision:inventory.revision});
+    download(backup.blob,'拾页-转换前原始备份-'+new Date().toISOString().slice(0,10)+'.json');
+    backupSaved=true;
+    body.querySelector('#migration-apply').disabled=false;
+    status('已发起原始备份下载（SHA-256：'+backup.sha256.slice(0,16)+'…）。请先在“文件”中确认已保存，再执行转换。');
+   }catch(error){status('备份失败：'+error.message);}
+  };
+  body.querySelector('#migration-apply').onclick=async()=>{
+   if(!backupSaved||!confirm('确认已在本机保存旧数据备份？\n转换会更新已通过校验的账号记录，其他设备的并发修改将触发版本保护。不能直接撤销数据库写入。'))return;
+   const button=body.querySelector('#migration-apply');button.disabled=true;
+   try{
+    status('正在检查版本并提交转换；请不要关闭页面…');
+    const result=await db.commitLegacyAccountMigration({expectedRevision:inventory.revision,changes:plan.changes});
+    status('转换提交成功：'+result.updated+' 条；旧图像与原始对象未删除。正在核对…');
+    await refresh({background:true});
+    status('转换成功 '+result.updated+' 条；请重新打开作品确认图层、素材与同步状态。');
+   }catch(error){status('转换未完成：'+error.message+'。原始云端记录及已下载备份保留，请重新扫描。');}
+  };
+ }catch(error){status('扫描失败：'+error.message+'。没有修改数据库。');}
+}
 async function openSyncDetails(){if(!cloudEnabled)return;cloudResumer.suspend();try{
   const details=await db.pendingSyncDetails(),projects=details.projects||[],batches=details.batches||[],local=[...dirtyProjects.values()],total=projects.length+batches.length+local.length;
   const rows=[...projects.map(row=>`<li>作品：${esc(row.title)} <small>${esc(row.id)}</small></li>`),...batches.map(row=>`<li>待传批次 ${esc(row.id)}：${row.items.length} 条变更<ul>${row.items.slice(0,12).map(item=>`<li>${esc(item.store)} · ${esc(item.action)} · ${esc(item.title||item.id)}</li>`).join('')}</ul></li>`),...local.map(row=>`<li>尚未暂存的作品：${esc(row.title||row.id)}</li>`)];
-  body.innerHTML=`<h2>同步详情</h2><p>状态：${syncPausedByUser?'已暂停 · 本机修改仍保留':syncDisplay.error?'待重试':syncDisplay.pending||local.length?'上传中':'已同步'}</p><p>最近错误：${esc(details.error||syncDisplay.error?.message||'无')}</p><p>本机待同步：${total} 项。未上传作品和草稿将保留在本机待同步队列。</p><div class="sync-pending-list">${rows.length?`<ul>${rows.join('')}</ul>`:'<p>没有待同步项目。</p>'}</div><div class="actions"><button type="button" class="btn primary" id="sync-retry-now">立即同步</button><button type="button" class="btn" id="sync-pause-local">${syncPausedByUser?'恢复后台重试':'暂停后台重试'}</button><button type="button" class="btn" id="sync-emergency-copy" ${total?'':'disabled'}>导出待同步数据备份</button></div><p>暂停仅停止自动重试，不清空作品、草稿或待上传图片；页面刷新后仍可恢复同步。为防止误删本机唯一副本，已移除直接丢弃待同步作品的操作。</p>`;
+  body.innerHTML=`<h2>同步详情</h2><p>状态：${syncPausedByUser?'已暂停 · 本机修改仍保留':syncDisplay.error?'待重试':syncDisplay.pending||local.length?'上传中':'已同步'}</p><p>最近错误：${esc(details.error||syncDisplay.error?.message||'无')}</p><p>本机待同步：${total} 项。未上传作品和草稿将保留在本机待同步队列。</p><p>已隔离旧版可编辑作品：${db.legacyProjectInfo?.()?.length||0} 件（未删除）。转换工具会同时扫描账号的素材、系列、作品、元数据、图片引用和最近删除。</p><div class="sync-pending-list">${rows.length?`<ul>${rows.join('')}</ul>`:'<p>没有待同步项目。</p>'}</div><div class="actions"><button type="button" class="btn" id="sync-migrate-account">转换旧数据格式</button><button type="button" class="btn" id="sync-backup-legacy-works" ${db.legacyProjectInfo?.()?.length?'':'disabled'}>导出隔离旧作品备份</button><button type="button" class="btn primary" id="sync-retry-now">立即同步</button><button type="button" class="btn" id="sync-pause-local">${syncPausedByUser?'恢复后台重试':'暂停后台重试'}</button><button type="button" class="btn" id="sync-emergency-copy" ${total?'':'disabled'}>导出待同步数据备份</button></div><p>暂停仅停止自动重试，不清空作品、草稿或待上传图片；页面刷新后仍可恢复同步。为防止误删本机唯一副本，已移除直接丢弃待同步作品的操作。</p>`;
   modal.showModal();modal.addEventListener('close',()=>{if(!syncPausedByUser)void cloudResumer.resume();},{once:true});
+  body.querySelector('#sync-migrate-account').onclick=()=>{void runAccountStorageMigration();};
+  body.querySelector('#sync-backup-legacy-works').onclick=()=>{void handle('backup-legacy-projects');};
   body.querySelector('#sync-retry-now').onclick=()=>{syncPausedByUser=false;modal.close();void flushSave().then(()=>{void cloudResumer.resume();return db.flushProjects();}).catch(error=>toast('同步待重试：'+error.message));};
   body.querySelector('#sync-pause-local').onclick=()=>{syncPausedByUser=!syncPausedByUser;if(syncPausedByUser){cloudResumer.suspend();saveStatus('已暂停后台重试 · 本机修改保留');}modal.close();if(!syncPausedByUser)void cloudResumer.resume();};
   body.querySelector('#sync-emergency-copy').onclick=async()=>{
@@ -1790,11 +1861,11 @@ document.querySelectorAll('.main-nav button').forEach(b=>b.onclick=()=>{
   }else route(b.dataset.route);
 });
 document.querySelector('#top-basket').onclick=()=>route('matching');document.querySelector('#top-settings').onclick=()=>route('settings');
-async function init(user){let cachedShown=false;cloudSessionReady=true;const accountId=user?.id||'browser';if(state.accountId&&state.accountId!==accountId){matchingScrollMemory=null;Object.assign(lastMaterialLocation,{route:'series',seriesID:'all',libraryTab:'series'});parity.libraryTab='series';deferredSyncedPreferences=null;deferredSyncedAISettings=null;assetOrganization.clear();clearJournalTemplateImages();clearJournalPresetImages();state.userTemplates=[];}state.accountId=accountId;try{
+async function init(user){let cachedShown=false;cloudSessionReady=true;const accountId=user?.id||'browser';if(state.accountId&&state.accountId!==accountId){matchingScrollMemory=null;Object.assign(lastMaterialLocation,{route:'series',seriesID:'all',libraryTab:'series'});parity.libraryTab='series';deferredSyncedPreferences=null;deferredSyncedAISettings=null;clearTimeout(matchingDefaultsTimer);matchingDefaultsTimer=null;matchingDefaultsPending=false;matchingDefaultsLocalEdited=false;cloudMatchingDefaults=null;assetOrganization.clear();clearJournalTemplateImages();clearJournalPresetImages();state.userTemplates=[];}state.accountId=accountId;try{
   await db.storageMode();state.selfHosted=db.isSameOriginServer();
   // startCloudSession has validated Auth and the allowlist before this runs.
   const cached=await db.cachedCollections();if(cached){Object.assign(state,cached);state.accountId=accountId;await restorePendingProjects();for(const a of state.assets)if(a.staticPath)staticSources.set(a.blobId,a.staticPath);render();cachedShown=true;saveStatus('本机缓存 · 正在核对云端');}
-  const initialSync=await db.refreshCloud();if(initialSync?.changed)privateImages.invalidate(initialSync.allBlobs?undefined:initialSync.blobIDs);await syncCurrentMaterials();await refresh({background:cachedShown});workCoverBackfill.startBackground();void syncCurrentExamples({isProjectOpen:id=>state.activeProject?.id===id}).then(result=>result?.changed&&refresh({background:true})).catch(error=>console.warn('内置示例暂未加载，下次打开重试',error));void purgeExpiredTrash();await matchingSession.restore();editableImportReady=true;void consumeEditableHandles();if('serviceWorker' in navigator&&location.protocol==='https:'){
+  const initialSync=await db.refreshCloud();if(initialSync?.changed)privateImages.invalidate(initialSync.allBlobs?undefined:initialSync.blobIDs);await syncCurrentMaterials();await refresh({background:cachedShown});workCoverBackfill.startBackground();void syncCurrentExamples({isProjectOpen:id=>state.activeProject?.id===id}).then(result=>result?.changed&&refresh({background:true})).catch(error=>console.warn('内置示例暂未加载，下次打开重试',error));void purgeExpiredTrash();await matchingSession.restore();if(cloudMatchingDefaults)applyMatchingDefaults(state,cloudMatchingDefaults);editableImportReady=true;void consumeEditableHandles();if('serviceWorker' in navigator&&location.protocol==='https:'){
     void import('./app-update.js').then(({registerSafeUpdate})=>registerSafeUpdate({
       flushLocal:flushSave,
       isBusy:()=>!!(state.importProcessing||state.aiBusy||savingProjects||dirtyProjects.size),
