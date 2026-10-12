@@ -153,8 +153,8 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
 2. 阅读 task/WORKFLOW.txt 的创作步骤、task/GUIDE.txt 的用户内容边界。可参考 task/material-planning.json 的问题，不把它的假设当事实。
 3. 内部比较至少两种素材组合方向，选最自然的一种；有选择地裁切、叠压、穿插和手写，不照抄 references/ 的版式。
 4. 合法输出合同是 schema/output.json。当前模式：${mode==='direct'?'page（直接排版）':'tools（调用工具）'}，不能混用。${mode==='direct'?'高级 observations/weaves 不可混入直接排版。':'只包含本合同的 tools；严禁额外顶层 page。'}examples/project.shiyeproject.json 仅展示字段，不能复制正文或坐标。高级工艺参数仅在 tools 模式阅读 schema/craft-plan.json。
-5. 将完整结果保存为 project.shiyeproject.json，运行 node runtime/preview.cjs 生成 output/画面预览.html，并在浏览器检查真实 Canvas 渲染和中文字形。output/构图预览.svg 仅是近似参考。不能渲染就说明未验收，不能伪造预览。
-6. 最终按聊天中的交付要求返回一个 JSON 文件或带 JSON 代码围栏的完整单行代码块；保留 source 原样，只更改 title 与 ${mode==='direct'?'page':'tools'}，原始 ZIP 仍可作为包装导入。
+5. 将完整结果保存为 project.shiyeproject.json，运行 node runtime/preview.cjs 生成 output/画面预览.html；必须使用实际浏览器打开它、等待 SHIYE_RENDER_READY，再通过页面“下载 PNG”按钮或 Canvas 截图取得同一 Scene 的 PNG，并在聊天中实际展示这张图片，然后交付 JSON。不能用 output/构图预览.svg 或另生成的画作冒充 Canvas 预览；如果浏览器不可用，明确写未能生成真实 Canvas 预览，不要声称已经展示。
+6. 若用户要求看预览，先在聊天中展示同源 Canvas PNG，再按用户指定格式交付完整 JSON；若用户明确限定仅有一个 JSON 代码块且不允许附加图，则遵守该限制，并说明无法显示图像时不能冒充已预览。保留 source 原样，只更改 title 与 ${mode==='direct'?'page':'tools'}。
 
 【本次主题、要求和内容】
 ${source.intent||'未指定：根据素材自由创作'}
@@ -181,7 +181,7 @@ ${hasPresets?'references/ 只作为灵感来源，不是可用库存。':''}
 `),
     'runtime/pack.cjs':strToU8(`process.argv[2]='pack';require('./validate.cjs');
 `),
-    'runtime/README.txt':strToU8('把完整 JSON 保存为任务根目录 project.shiyeproject.json。Node.js 20+：validate.cjs 校验；preview.cjs 生成 output/构图预览.svg 与 output/画面预览.html；pack.cjs 再生成 output/作品.shiyeproject.zip。运行时只读取 task/context.json。glyphs.cjs 只从本地已有字体生成数值轮廓，不携带字体文件。 中文 SVG/HTML 预览依赖系统可用中文字体（例如 Noto Sans CJK SC）；如果看到方框字，请安装中文字体并重新渲染或在拾页中打开可编辑作品，不能把方框预览视为最终效果。')
+    'runtime/README.txt':strToU8('把完整 JSON 保存为任务根目录 project.shiyeproject.json。Node.js 20+：validate.cjs 校验；preview.cjs 生成 output/构图预览.svg 与 output/画面预览.html；用真实浏览器打开 HTML，等待 SHIYE_RENDER_READY，从实际 Canvas 下载 PNG，并把图片展示给用户；如无浏览器须明确说明未验收。pack.cjs 再生成 output/作品.shiyeproject.zip。运行时只读取 task/context.json。glyphs.cjs 只从本地已有字体生成数值轮廓，不携带字体文件。 中文 SVG/HTML 预览依赖系统可用中文字体（例如 Noto Sans CJK SC）；如果看到方框字，请安装中文字体并重新渲染或在拾页中打开可编辑作品，不能把方框预览视为最终效果。')
   };
   for(const entry of chosen)if(validAlias(entry.alias)&&source.materials.some(item=>item.alias===entry.alias))files[packagePreviewPath('materials',entry.alias,entry.bytes,{transparent:true})]=entry.bytes;
   if(hasPresets)for(const entry of referenceImages)files[packagePreviewPath('references',entry.id,entry.bytes)]=entry.bytes;
