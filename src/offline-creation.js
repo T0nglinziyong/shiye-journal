@@ -154,7 +154,7 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
 3. 内部比较至少两种素材组合方向，选最自然的一种；有选择地裁切、叠压、穿插和手写，不照抄 references/ 的版式。
 4. 合法输出合同是 schema/output.json。当前模式：${mode==='direct'?'page（直接排版）':'tools（调用工具）'}，不能混用。${mode==='direct'?'高级 observations/weaves 不可混入直接排版。':'只包含本合同的 tools；严禁额外顶层 page。'}examples/project.shiyeproject.json 仅展示字段，不能复制正文或坐标。高级工艺参数仅在 tools 模式阅读 schema/craft-plan.json。
 5. 将完整结果保存为 project.shiyeproject.json，运行 node runtime/preview.cjs 生成 output/画面预览.html；必须使用实际浏览器打开它、等待 SHIYE_RENDER_READY，再通过页面“下载 PNG”按钮或 Canvas 截图取得同一 Scene 的 PNG，并在聊天中实际展示这张图片，然后交付 JSON。不能用 output/构图预览.svg 或另生成的画作冒充 Canvas 预览；如果浏览器不可用，明确写未能生成真实 Canvas 预览，不要声称已经展示。
-6. 若用户要求看预览，先在聊天中展示同源 Canvas PNG，再按用户指定格式交付完整 JSON；若用户明确限定仅有一个 JSON 代码块且不允许附加图，则遵守该限制，并说明无法显示图像时不能冒充已预览。保留 source 原样，只更改 title 与 ${mode==='direct'?'page':'tools'}。
+6. 若用户要求看预览，先在聊天中展示同源 Canvas PNG，再按用户指定格式交付完整 JSON（可用 JSON 代码围栏）；若用户明确限定仅有一个 JSON 代码块且不允许附加图，则遵守该限制，并说明无法显示图像时不能冒充已预览。保留 source 原样，只更改 title 与 ${mode==='direct'?'page':'tools'}。
 
 【本次主题、要求和内容】
 ${source.intent||'未指定：根据素材自由创作'}
