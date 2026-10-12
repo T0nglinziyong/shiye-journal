@@ -17,7 +17,7 @@ export function importPaperDimensions(record) {
 }
 export function candidateMetadata(c,record,batchSeriesID) {
   if(c.width!=null&&(!Number.isFinite(c.width)||c.width<=0)||c.height!=null&&(!Number.isFinite(c.height)||c.height<=0))throw Error('素材宽高必须是正数或留空');
-  const quantity=c.quantity??(c.kind==='tape'?999:1);if(!Number.isInteger(quantity)||quantity<1||quantity>999)throw Error('素材数量须为 1–999，999 表示不限使用');
+  const quantity=c.kind==='tape'&&c.quantityManuallySet!==true?999:(c.quantity??1);if(!Number.isInteger(quantity)||quantity<1||quantity>999)throw Error('素材数量须为 1–999，999 表示不限使用');
   const choice=c.seriesID??record.seriesID??batchSeriesID;
   return {title:c.title?.trim()||'新素材',kind:c.kind||'sticker',role:c.role||'focal',tags:c.tags||[],palette:[],texture:'待记录',physicalWidthMM:c.width??null,physicalHeightMM:c.height??null,
     dimensionSource:c.width&&c.height?(c.dimensionSource||'paper'):'unmeasured',processingRecord:c.processingRecord?structuredClone(c.processingRecord):null,supply:{kind:quantity===999?'unlimited':quantity===1?'single':'multiple',quantity},reviewStatus:c.reviewStatus||'pendingReview',usageStatus:'unused',seriesID:choice==='__none__'||choice==='__no_library__'?null:choice||null};
