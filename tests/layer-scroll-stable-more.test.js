@@ -4,23 +4,25 @@ import {readFile} from 'node:fs/promises';
 
 const read=name=>readFile(new URL('../src/'+name,import.meta.url),'utf8');
 
-test('the layer picker has its own touch-scroll container below a fixed header',async()=>{
- const [css,editor]=await Promise.all([read('swift-controls.css'),read('canvas-editor-ui.js')]);
- assert.match(editor,/p\.surface\.classList\.add\('swift-layer-popover'\)/);
- assert.match(css,/\.swift-layer-popover \.canvas-layer-list\s*\{[\s\S]*?overflow-y:auto;/);
- assert.match(css,/\.swift-layer-popover \.canvas-layer-list\s*\{[\s\S]*?touch-action:pan-y;/);
- assert.match(css,/\.swift-layer-popover \.canvas-layer-row,\s*\.swift-layer-popover \.canvas-layer-row \[data-layer-pick\]/);
- assert.match(css,/\.swift-layer-popover \.canvas-layer-row \[data-layer-move\]\s*\{\s*touch-action:none;/);
+test('persistent recursive layer tree is independently scrollable and has a touch-only drag grip',async()=>{
+ const [css,tree,editor]=await Promise.all([read('canvas-editor-fixes.css'),read('editor-layer-tree.js'),read('canvas-editor-ui.js')]);
+ assert.match(editor,/openEditorLayerTree\(anchor/);
+ assert.match(tree,/p\.surface\.classList\.add\('swift-layer-popover','scene-layer-tree-popover'\)/);
+ assert.match(tree,/setAttribute\('role','tree'\)/);
+ assert.match(tree,/setAttribute\('role','treeitem'\)/);
+ assert.match(tree,/children\.setAttribute\('role','group'\)/);
+ assert.match(css,/\.scene-layer-tree-popover \.scene-layer-tree\s*\{/);
+ assert.match(css,/touch-action:pan-y/);
+ assert.match(css,/\.scene-layer-tree-popover \.scene-layer-node>button\.scene-layer-grip\s*\{[\s\S]*?touch-action:none/);
 });
-
-test('ordinary finger movement stays native scroll, while the grip enables reordering',async()=>{
- const editor=await read('canvas-editor-ui.js');
- assert.match(editor,/const grip=!!event\.target\.closest\('\[data-layer-move\]'\);/);
- assert.match(editor,/if\(event\.pointerType!=='mouse'&&!grip\)return;/);
- assert.match(editor,/if\(pending\.grip\)beginDrag\(\);/);
- assert.match(editor,/row\.onpointercancel=\(\)=>\{pending=null;stopDrag\(\);\};/);
+test('layer click selects immediately; movement keeps the popover open and group style/rotation controls are gone',async()=>{
+ const [tree,editor]=await Promise.all([read('editor-layer-tree.js'),read('canvas-editor-ui.js')]);
+ assert.match(tree,/state\.selected=node\.id/);
+ assert.match(tree,/view\.editorRefresh\?\.\(\)/);
+ assert.match(tree,/saveProject\(\);[\s\S]*?render\(\);draw\(\)/);
+ assert.doesNotMatch(tree,/组合旋转|组合外观/);
+ assert.doesNotMatch(editor,/组合旋转|组合外观/);
 });
-
 test('no dynamic More shape-change styles remain while a child opens',async()=>{
  const css=await read('selection-menu.css');
  const panels=await read('selection-side-panels.js');

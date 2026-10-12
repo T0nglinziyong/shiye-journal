@@ -119,3 +119,51 @@
     grid-template-columns:repeat(2,minmax(0,1fr));
   }
 }
+
+/* Persistent recursive Scene v2 layer panel. Override obsolete flat list rows,
+   keep scrolling native and make ONLY the grip intercept touch dragging. */
+.swift-layer-popover.scene-layer-tree-popover .scene-layer-tree{
+ max-height:min(58dvh,510px);overflow-y:auto;overscroll-behavior:contain;
+ padding:5px 0 8px;touch-action:pan-y;
+}
+.scene-layer-tree-toolbar{display:flex;flex-wrap:wrap;gap:6px;padding:2px 0 8px}
+.scene-layer-tree-toolbar .btn{font-size:12px;min-width:0;min-height:30px;padding:5px 8px}
+.scene-layer-branch{min-width:0}
+.scene-layer-children{margin-left:13px;padding-left:6px;border-left:1px solid #d1dfd3;min-width:0}
+.scene-layer-tree-popover .scene-layer-node{
+ display:grid;grid-template-columns:21px minmax(55px,1fr) 25px 25px 23px 23px 29px;
+ gap:3px;align-items:center;min-height:49px;height:auto;
+ padding:4px 3px;border-radius:8px;margin:2px 0;position:relative;
+}
+.scene-layer-tree-popover .scene-layer-node[aria-expanded]{background:#f3f7f1}
+.scene-layer-tree-popover .scene-layer-node.selected{background:#e3f1e5;outline:1px solid #9bbba1}
+.scene-layer-tree-popover .scene-layer-node>button{
+ border:0;border-radius:5px;background:transparent;color:#4b6755;
+ padding:0;min-width:0;width:100%;height:38px;min-height:0;
+ touch-action:manipulation;line-height:1.1;
+}
+.scene-layer-tree-popover .scene-layer-node>button.scene-layer-pick{
+ display:flex;gap:5px;align-items:center;text-align:left;overflow:hidden;
+ padding:0 1px;white-space:nowrap;
+}
+.scene-layer-tree-popover .scene-layer-pick>span:last-child{
+ display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+ font-size:12px;font-weight:600;min-width:0;
+}
+.scene-layer-tree-popover .scene-layer-symbol{
+ display:grid;place-items:center;min-width:21px;width:21px;height:26px;
+ background:#e6eee6;border-radius:5px;font-size:12px;
+}
+.scene-layer-tree-popover .scene-layer-node>button.scene-layer-grip{
+ touch-action:none;-webkit-user-select:none;user-select:none;
+ background:#e7efe7;border-radius:6px;font-size:18px;cursor:grab;
+}
+.scene-layer-tree-popover .scene-layer-node.dragging{background:#e2eee3;transform:none;opacity:.84}
+.scene-layer-tree-popover .scene-layer-node.drop-target{box-shadow:inset 0 0 0 2px #59866b}
+.scene-layer-tree-popover .scene-layer-tree-status{font-size:11px;color:#6d806e;margin:6px 2px 0}
+@media(max-width:460px){
+ .scene-layer-tree-popover .scene-layer-node{
+  grid-template-columns:17px minmax(38px,1fr) 22px 22px 22px 22px 27px;gap:2px
+ }
+ .scene-layer-tree-popover .scene-layer-children{margin-left:8px;padding-left:4px}
+}
