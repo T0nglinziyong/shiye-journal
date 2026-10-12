@@ -116,23 +116,25 @@ test('aborted work edit resumes across an unrelated cloud revision without overw
 });
 test('D-01: background cursor advance cannot relabel a stale opened work as the new document version',async()=>{
   const cache=memoryCache(),{state,db}=fixture(cache);
-  const saved={id:'diary',title:'远端 v1',activeDraftID:'d',drafts:[{id:'d',canvas:{width:700,height:1000},items:[],textBlocks:[{id:'text',content:'正文 v1'}],primitives:[],strokes:[]}]};
+  const saved=v2({id:'diary',title:'远端 v1',activeDraftID:'d',drafts:[{id:'d',canvas:{width:700,height:1000},items:[],textBlocks:[{id:'text',content:'正文 v1'}],primitives:[],strokes:[]}]});
   state.revision=1;state.rows=[saved];
   const opened=(await db.cloudAll('projects'))[0];
   assert.equal(opened.__cloudBaseRevision,1);
-  state.revision=2;state.rows=[{...saved,drafts:[{...saved.drafts[0],textBlocks:[{id:'text',content:'另一设备的正文 v2'}]}]}];
+  state.revision=2;state.rows=[{...saved,drafts:[{...saved.drafts[0],layers:saved.drafts[0].layers.map(layer=>layer.id==='text'?{...layer,content:'另一设备的正文 v2'}:layer)}]}];
   state.changes=[{revision:2,keys:[{store:'projects',action:'put',id:'diary'}]}];
   await db.cloudRefresh();
   await db.cloudStageProject({...opened,title:'本机改标题'});
   const pending=await db.cloudPendingProjects();
   assert.equal(pending[0].baseRevision,1);
-  await assert.rejects(db.cloudFlushProjects(),/版本已变化/);
-  assert.equal(state.calls.length,0,'strict CAS must never receive a falsely rebased full document');
-  assert.equal((await db.cloudPendingProjects())[0].record.title,'本机改标题');
+  await db.cloudFlushProjects();
+  assert.equal(state.calls.length,1,'same-project conflict must create one distinct work');
+  assert.notEqual(state.calls[0].operations[0].item.id,'diary');
+  assert.match(state.calls[0].operations[0].item.title,/同步冲突保留/);
+  assert.deepEqual(await db.cloudPendingProjects(),[]);
 });
 test('D-02: a stale work can rebase only over a complete disjoint change log',async()=>{
   const cache=memoryCache(),{state,db}=fixture(cache);
-  const saved={id:'diary',title:'远端 v1',activeDraftID:'d',drafts:[{id:'d',canvas:{width:700,height:1000},items:[],textBlocks:[],primitives:[],strokes:[]}]};
+  const saved=v2({id:'diary',title:'远端 v1',activeDraftID:'d',drafts:[{id:'d',canvas:{width:700,height:1000},items:[],textBlocks:[],primitives:[],strokes:[]}]});
   state.revision=1;state.rows=[saved];const opened=(await db.cloudAll('projects'))[0];
   state.revision=2;state.changes=[{revision:2,keys:[{store:'assets',action:'put',id:'other'}]}];
   await db.cloudRefresh();
@@ -143,16 +145,18 @@ test('D-02: a stale work can rebase only over a complete disjoint change log',as
 });
 test('D-03: an untagged known work is staged locally but cannot claim the newest cursor',async()=>{
   const cache=memoryCache(),{state,db}=fixture(cache);
-  const saved={id:'diary',title:'旧作品',activeDraftID:'d',drafts:[{id:'d',canvas:{width:700,height:1000},items:[],textBlocks:[],primitives:[],strokes:[]}]};
+  const saved=v2({id:'diary',title:'旧作品',activeDraftID:'d',drafts:[{id:'d',canvas:{width:700,height:1000},items:[],textBlocks:[],primitives:[],strokes:[]}]});
   state.revision=4;state.rows=[saved];await db.cloudAll('projects');
   await db.cloudStageProject({...v2(saved),title:'本机新标题'});
   assert.equal((await db.cloudPendingProjects())[0].baseRevision,0);
-  await assert.rejects(db.cloudFlushProjects(),/版本已变化/);
-  assert.equal(state.calls.length,0);
+  await db.cloudFlushProjects();
+  assert.equal(state.calls.length,1);
+  assert.notEqual(state.calls[0].operations[0].item.id,'diary');
+  assert.deepEqual(await db.cloudPendingProjects(),[]);
 });
 test('D-04: confirmed edits advance only their own editor session for a second save',async()=>{
   const {state,db}=fixture(memoryCache());
-  const saved={id:'diary',title:'初始',activeDraftID:'d',drafts:[{id:'d',canvas:{width:700,height:1000},items:[],textBlocks:[],primitives:[],strokes:[]}]};
+  const saved=v2({id:'diary',title:'初始',activeDraftID:'d',drafts:[{id:'d',canvas:{width:700,height:1000},items:[],textBlocks:[],primitives:[],strokes:[]}]});
   state.revision=1;state.rows=[saved];const opened=(await db.cloudAll('projects'))[0];
   opened.title='第一次';await db.cloudStageProject(opened);await db.cloudFlushProjects();
   opened.title='第二次';await db.cloudStageProject(opened);await db.cloudFlushProjects();

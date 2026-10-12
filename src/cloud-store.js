@@ -159,6 +159,27 @@ const projectSync=createProjectSync({
   onCommitted:(record,committedRevision)=>{
     if(record.__cloudSessionId)editorBases.set(record.__cloudSessionId,committedRevision);
   },
+  // A true same-document collision produces a new recoverable editable work.
+  // Neither revision of the existing project is overwritten by timestamps.
+  onConflict:async record=>{
+    if(!usableProjectSnapshot(record))return null;
+    const copy=structuredClone(record),originalId=record.id;
+    copy.id=crypto.randomUUID();
+    copy.title=String(record.title||'未命名作品').slice(0,64)+' · 同步冲突保留';
+    copy.updatedAt=new Date().toISOString();
+    delete copy.projectDocumentPath;
+    delete copy.projectDocumentProvider;
+    delete copy.projectDocumentEncoding;
+    delete copy.coverStaticPath;
+    delete copy.coverBaselineUpdatedAt;
+    delete copy.__cloudBaseRevision;
+    copy.__cloudSessionId=crypto.randomUUID();
+    editorBases.set(copy.__cloudSessionId,revision);
+    if(typeof window!=='undefined')window.dispatchEvent(new CustomEvent('shiye-project-conflict-copy',{
+      detail:{originalId,copyId:copy.id,title:copy.title,originalSessionId:record.__cloudSessionId,newSessionId:copy.__cloudSessionId}
+    }));
+    return copy;
+  },
   onSuperseded:()=>notifyCloudSuperseded(),
   onStatus:reportSync,
   runExclusive:withAccountSyncLock,
@@ -536,10 +557,15 @@ async function cloudStageProject(record){
   if(!usableProjectSnapshot(record))throw Error('作品编辑数据不完整；云端已保存版本未被覆盖');
   await identity();if(revision===undefined)await version();
   const known=(snapshots.get('projects')||await cached('records:projects'))?.records.some(item=>item.id===record.id);
-  // An untagged existing editor document cannot claim the current global
-  // cursor as its base. Stage it durably but require conflict reconciliation.
-  const baseRevision=record.__cloudSessionId&&editorBases.has(record.__cloudSessionId)?editorBases.get(record.__cloudSessionId):Number.isSafeInteger(record.__cloudBaseRevision)?record.__cloudBaseRevision:known?0:revision;
-  if(record.__cloudSessionId&&!editorBases.has(record.__cloudSessionId))editorBases.set(record.__cloudSessionId,baseRevision);
+  // Bind every newly created work to an editor session BEFORE staging it.
+  // Otherwise its acknowledged first save cannot advance a reliable local
+  // baseline and the very next save may be misclassified as a stale edit.
+  // Existing untagged documents remain conservative (base revision zero).
+  record.__cloudSessionId||=crypto.randomUUID();
+  const registered=editorBases.get(record.__cloudSessionId);
+  const baseRevision=registered!==undefined?registered:
+    Number.isSafeInteger(record.__cloudBaseRevision)?record.__cloudBaseRevision:known?0:revision;
+  if(registered===undefined)editorBases.set(record.__cloudSessionId,baseRevision);
   return projectSync.stage(record,{baseRevision});
 }
 async function cloudStageImport(batch){await identity();if(revision===undefined)await version();await importSync.stage({...batch,id:crypto.randomUUID()});return {pending:true};}
