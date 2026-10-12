@@ -565,12 +565,14 @@ function cloudTransaction(names,fn,operationID=crypto.randomUUID()){
   const operations=[];const result=fn({objectStore(store){if(!names.includes(store))throw Error('此表未加入事务');return {put:record=>operations.push({action:'put',store,item:structuredClone(record)}),delete:id=>operations.push({action:'delete',store,id}),clear:()=>operations.push({action:'clear',store})};}});
   if(result?.then)throw Error('事务回调必须同步');
   const run=async()=>{
+    if(resetInProgress)throw Error('账号正在清空，已停止排队中的旧上传');
     writesInFlight++;reportSync();
     try{
     await identity();if(revision===undefined)await version();
     const previous=revision;
     operations.push(...recordTombstones(operations).slice(operations.length));
     const puts=operations.filter(op=>op.action==='put');for(let offset=0;offset<puts.length;offset+=3)await Promise.all(puts.slice(offset,offset+3).map(async op=>{op.item=await encode(op.store,op.item);}));
+    if(resetInProgress)throw Error('账号清空已开始；取消尚未提交的旧事务');
     const data=checked(await cloudClient().rpc('shiye_commit_v2',{operations,expected_revision:previous,operation_id:operationID}));revision=Number(data);
     // A WebP cover becomes usable only after both its object PUT and the
     // metadata commit succeed. Update the current Works UI immediately rather
@@ -845,9 +847,14 @@ async function cloudResolveProjectConflict({kind,id,serial,expectedRevision,choi
 async function cloudRunExclusiveReset(task){
   if(typeof task!=='function')throw Error('账号清理任务无效');
   await identity();
+  // Freeze immediately, BEFORE acquiring a lock. Previously we drained an
+  // arbitrarily large backlog, so emptying an account could appear hung.
+  resetInProgress=true;
+  unifiedSync.pause();
   return withAccountSyncLock(async()=>{
-    await queue; // complete all previously started cloud commits before purge
-    resetInProgress=true;
+    // Only transactions already in progress may finish; enqueued old tasks
+    // fail fast against resetInProgress. Server revision CAS protects races. 
+    await queue;
     // No automatic retry or resumption of old edits after a partial purge.
     // The caller is responsible for explicit recovery or finishing the reset.
     return task();

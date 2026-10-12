@@ -897,50 +897,77 @@ async function handle(action,id,value){try{switch(action){
   }
   case 'reset-all-account-data':{
     if(!cloudEnabled)throw Error('彻底云端清理仅支持当前已登录的云端账号');
-    if(!confirm('危险：这会永久删除本账号云端和当前设备上的全部拾页资料，含素材原图、所有作品和待同步修改。其他设备请先停止编辑。继续？'))break;
+    if(resetWorkflowActive){toast('账号清理正在进行，请不要重复提交');break;}
+    if(!confirm('危险：将永久清除当前账号全部云端作品、素材和私有文件，同时删除本机及其他设备的旧缓存和待同步修改。继续？'))break;
     if(prompt('不可撤销。请输入「清空所有数据」确认')!=='清空所有数据')break;
+    resetWorkflowActive=true;
     cloudResumer.suspend();
+    const progress=document.createElement('div');
+    progress.setAttribute('role','status');
+    progress.setAttribute('aria-live','polite');
+    progress.style.cssText='position:fixed;inset:0;background:rgba(12,16,24,.8);display:grid;place-items:center;z-index:2147483647;padding:24px;color:#fff';
+    progress.innerHTML='<div style="max-width:480px;background:#222a36;border-radius:16px;padding:28px"><h2>正在清空拾页账号</h2><p id="account-reset-progress">正在停止后台同步…</p><p style="font-size:13px;opacity:.75">删除过程支持中断后继续。请不要在其他设备编辑旧作品。</p></div>';
+    if(modal.open)modal.close();
+    document.body.append(progress);
+    const progressLabel=progress.querySelector('#account-reset-progress');
+    const update=message=>{progressLabel.textContent=message;saveStatus(message);};
     let completed=false;
     try{
-      // Do not flush conflicting old edits immediately before deleting them.
-      await saveChain.catch(()=>{});
       clearTimeout(saveTimer);saveTimer=null;
       dirtyProjects.clear();dirtyUsageAssets.clear();
       const {data,error}=await cloudClient().auth.getSession();
       if(error||!data.session?.access_token)throw Error('请先登录拾页');
       const headers={'Content-Type':'application/json',
         Authorization:'Bearer '+data.session.access_token};
-      const request=async mode=>{
-        const response=await fetch('/api/account-reset',{method:'POST',headers,
-          body:JSON.stringify({mode,confirm:'RESET_MY_DATA'}),signal:AbortSignal.timeout(40000)});
+      const request=async(mode,resetId)=>{
+        const response=await fetch('/api/account-reset',{
+          method:'POST',headers,cache:'no-store',
+          body:JSON.stringify({mode,resetId,confirm:'RESET_MY_DATA'}),
+          signal:AbortSignal.timeout(35000)
+        });
         const payload=await response.json();
         if(!response.ok)throw Error(payload.error||'云端清理失败');
         return payload;
       };
+      update('正在暂停旧队列，等待正在提交的事务结束…');
       await db.runExclusiveAccountReset(async()=>{
-      const probe=await request('probe');
-      if(!probe.ready)throw Error('该环境未启用彻底账号清理');
-      let total=0;
-      for(let page=0;page<1000;page++){
-        const result=await request('delete');
-        total+=(result.cosDeleted||0)+(result.supabaseDeleted||0);
-        saveStatus('正在彻底清理云端图片与作品 · '+total+' 个私有文件');
-        if(result.reset){completed=true;break;}
-        if(!result.more)throw Error('云端返回不完整的清理进度');
-      }
-      if(!completed)throw Error('达到单次清理上限，请继续执行清理');
-      await db.purgeLocalAfterCloudReset();
+        await saveChain.catch(()=>{});
+        update('正在核对账号与清理权限…');
+        const probe=await request('probe');
+        if(!probe.ready)throw Error('当前环境未开放账号清空');
+        let resetId=probe.phase==='deleting'&&probe.resetId
+          ?probe.resetId:crypto.randomUUID();
+        update('正在清空云端数据库，并让其他设备的旧数据失效…');
+        const started=await request('start',resetId);
+        resetId=started.resetId||resetId;
+        let result=started,count=0;
+        if(started.databaseCleared)update('云端作品与素材索引已清空，正在删除私有图片…');
+        for(let page=0;page<1000&&!result.reset;page++){
+          result=await request('delete',resetId);
+          count+=(result.cosDeleted||0)+(result.supabaseDeleted||0);
+          if(result.phase==='cos')update('数据库已清空 · 已删除 '+count+' 个私有文件（COS）');
+          else if(result.phase==='supabase')update('数据库已清空 · 已删除 '+count+' 个私有文件（Supabase）');
+          else update('正在核对剩余私有文件 · 已删除 '+count+' 个');
+          if(!result.more&&!result.reset)throw Error('清理返回不完整，请重新执行');
+        }
+        if(!result.reset)throw Error('清理文件数量超过本次安全上限；再次确认后可续传清理');
+        update('云端清空完成，正在彻底删除此设备 IndexedDB…');
+        await db.purgeLocalAfterCloudReset();
+        completed=true;
       });
       const {eraseSiteAppData}=await import('./account-data-wipe.js');
       const cleared=await eraseSiteAppData();
       if(cleared.errors.length)
-        alert('云端已清空，但部分设备本地数据库未能删除，请关闭其他拾页标签页后清除本站网站数据：'+cleared.errors.join('；'));
+        alert('云端已清空，但本机还有部分数据未清理；请关闭其他拾页标签页后清除本站网站数据：'+cleared.errors.join('；'));
+      update('清理结束，正在刷新登录页面…');
       location.reload();
     }catch(error){
-      // Partial remote file deletion is not an excuse to auto-upload old work.
-      // Keep the resumer suspended until the owner retries the explicit reset.
-      saveStatus('清理尚未完成 · 没有重新上传旧队列');
+      // The server writes the reset marker first. Never resume old outbox
+      // uploads after a partial remote deletion; retry resumes by resetId.
+      update('清空尚未全部完成：'+(error.message||'服务暂不可用')+'。旧上传仍已暂停，重新点击可继续清理。');
       throw error;
+    }finally{
+      if(!completed){progress.remove();resetWorkflowActive=false;}
     }
     break;
   }
@@ -1837,7 +1864,7 @@ window.addEventListener('shiye-project-conflict-copy',event=>{
 });
 window.addEventListener('shiye-project-sync',event=>{const {pending,error}=event.detail;syncDisplay.pending=pending;syncDisplay.error=error;syncDisplay.checking=false;if(!dirtyProjects.size&&!savingProjects)syncDisplay.localPending=false;updateSyncIndicator();if(error){saveStatus('待同步 · 修改已保留在本机');const message=error.name==='AbortError'||/abort|timed? ?out/i.test(error.message||'')?'网络请求中断，本机修改已保留，将自动重试同步':error.message||'云端暂不可用，本机修改已保留，将自动重试';if(lastSyncError!==message)toast(message);lastSyncError=message;}else{lastSyncError=null;saveStatus(pending?'修改已暂存 · 后台同步中':'已保存到云端');privateImages.retryMissing();}});
 let cloudCheck,cloudCheckAt=0,cloudSessionReady=false,cloudCheckAgain=false;
-let syncPausedByUser=false;
+let syncPausedByUser=false,resetWorkflowActive=false;
 const cloudResumer=createSyncResumer({flush:()=>db.flushProjects({background:true}),canRun:()=>cloudEnabled&&cloudSessionReady&&navigator.onLine!==false,onError:error=>console.warn('后台同步待重试',error?.message)});
 function backgroundCloudCheck({force=false}={}){
   if(!cloudEnabled||!shouldPullCloudForRoute(state.route)||
@@ -1975,7 +2002,7 @@ async function openSyncDetails(){if(!cloudEnabled)return;cloudResumer.suspend();
   const details=await db.pendingSyncDetails(),projects=details.projects||[],batches=details.batches||[],local=[...dirtyProjects.values()],total=projects.length+batches.length+local.length,quarantined=details.quarantined||0;
   const rows=[...projects.map(row=>`<li>作品：${esc(row.title)} <small>${esc(row.id)}</small> <button class="btn mini" type="button" data-conflict-kind="project" data-conflict-id="${esc(row.id)}">比较版本</button></li>`),...batches.map(row=>`<li>待传批次 ${esc(row.id)}：${row.items.length} 条变更<ul>${row.items.slice(0,12).map(item=>`<li>${esc(item.store)} · ${esc(item.action)} · ${esc(item.title||item.id)}</li>`).join('')}</ul>${row.items.length===1&&row.items[0]?.store==='projects'&&row.items[0]?.action==='put'?`<button class="btn mini" type="button" data-conflict-kind="batch" data-conflict-id="${esc(row.id)}">比较版本</button>`:''}</li>`),...local.map(row=>`<li>尚未暂存的作品：${esc(row.title||row.id)}</li>`)];
   body.innerHTML=`<h2>同步详情</h2><p>状态：${syncPausedByUser?'已暂停 · 本机修改仍保留':syncDisplay.error?'待重试':syncDisplay.pending||local.length?'上传中':'已同步'}</p><p>最近错误：${esc(details.error||syncDisplay.error?.message||'无')}</p><p>本机待同步：${total} 项。未上传作品和草稿将保留在本机待同步队列。</p><p>隔离待同步原始记录：${quarantined} 项（禁止自动上传，原始数据未丢弃）。</p><p>已隔离旧版可编辑作品：${db.legacyProjectInfo?.()?.length||0} 件（未删除）。转换工具会同时扫描账号的素材、系列、作品、元数据、图片引用和最近删除。</p><div class="sync-pending-list">${rows.length?`<ul>${rows.join('')}</ul>`:'<p>没有待同步项目。</p>'}</div><div class="actions"><button type="button" class="btn" id="sync-migrate-account">转换旧数据格式</button><button type="button" class="btn" id="sync-backup-legacy-works" ${db.legacyProjectInfo?.()?.length?'':'disabled'}>导出隔离旧作品备份</button><button type="button" class="btn primary" id="sync-retry-now">立即同步</button><button type="button" class="btn" id="sync-pause-local">${syncPausedByUser?'恢复后台重试':'暂停后台重试'}</button><button type="button" class="btn" id="sync-emergency-copy" ${total?'':'disabled'}>导出待同步数据备份</button><button type="button" class="btn danger" id="sync-wipe-everything">彻底清空本账号本机与云端数据</button></div><p>暂停仅停止自动重试，不清空作品、草稿或待上传图片；页面刷新后仍可恢复同步。为防止误删本机唯一副本，已移除直接丢弃待同步作品的操作。</p>`;
-  modal.showModal();modal.addEventListener('close',()=>{if(!syncPausedByUser)void cloudResumer.resume();},{once:true});
+  modal.showModal();modal.addEventListener('close',()=>{if(!syncPausedByUser&&!resetWorkflowActive)void cloudResumer.resume();},{once:true});
   body.querySelectorAll('[data-conflict-kind]').forEach(button=>{
     button.onclick=()=>{void openSyncConflictChoice(button.dataset.conflictKind,button.dataset.conflictId);};
   });
