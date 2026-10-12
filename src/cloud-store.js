@@ -9,6 +9,7 @@ import {createCOSStore} from './cos-store.js';
 import {imageVariant,DISPLAY_TIERS,COVER_EDGE} from './image-variants.js';
 import {recoverImportOutbox} from './import-outbox-recovery.js';
 import {recoverProjectOutbox,usableProjectSnapshot} from './project-outbox-recovery.js';
+import {migrationPendingConflicts} from './migration-outbox-guard.js';
 import {isLegacySceneProject} from './scene-v2.js';
 export function createCloudStore({cloudClient,requireCloudUser,cache=null,namespace='cloud',projectPreview=()=>null,objectStorage=null}){
 const BUCKET='shiye-private';
@@ -594,8 +595,11 @@ async function cloudMigrationCommit({expectedRevision,changes}){
    !change.converted||change.id!==change.converted.id))throw Error('迁移写入目标不安全');
  await identity();await queue;
  const [pendingProjects,pendingImports]=await Promise.all([projectSync.pending(),importSync.pending()]);
- if(projectOutboxQuarantine.length)throw Error('存在隔离的旧版待同步数据；请先导出应急备份并单独恢复，再进行账号迁移');
- if(pendingProjects.length||pendingImports.length)throw Error('存在待同步修改，请先解决冲突或备份本机待同步内容；未执行迁移');
+ // A queued phone edit to work A must not block migration of unrelated work
+ // B. Keep both outboxes durable and refuse overlapping records, deletes,
+ // clears, tombstones or unknown corrupt queue entries.
+ const conflicts=migrationPendingConflicts(changes,{projects:pendingProjects,imports:pendingImports,quarantined:projectOutboxQuarantine});
+ if(conflicts.length)throw Error('有 '+conflicts.length+' 项本机待同步操作与拟转换资料重叠；原始备份和待同步数据均保留，请先处理对应项目');
  const current=await version();
  if(current!==expectedRevision)throw Error('迁移扫描后云端版本已变化，请重新扫描；未覆盖任何资料');
  const stores=[...new Set(changes.map(row=>row.store))];
