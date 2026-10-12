@@ -10,12 +10,13 @@ const copyMask=value=>new Uint8ClampedArray(value);
 
 export async function showCutoutEditor({
   body,modal,original,saved,recognition=saved,candidateFrame=original,title,processing={},
-  finalMaskBlob=null,onLoadInitialMask=null,isCancelled=()=>false,
+  finalMaskBlob=null,onLoadInitialMask=null,isCancelled=()=>false,onPhase=()=>{},
   onApply,onRerecognize,onPostprocess,recognitionUI={},toast
 }) {
   // New records read only the canonical corrected candidate RGB + final
   // alpha mask. The initial mask is a separate lazy recovery operation.
   // Existing four-image assets continue down the original legacy path.
+  onPhase('正在解码候选框及透明蒙版…');
   let source,initial,recognized,frame,loadedFinalMask=null;
   if(finalMaskBlob){
     const [candidate,record]=await Promise.all([
@@ -57,6 +58,7 @@ export async function showCutoutEditor({
     for(const bitmap of new Set([source,initial,recognized,frame]))bitmap?.close?.();
     return;
   }
+  onPhase('正在初始化原图像素与画笔…');
   const w=source.width,h=source.height,canvas=document.createElement('canvas');
   canvas.width=w;canvas.height=h;
   const ctx=canvas.getContext('2d',{willReadFrequently:true});
@@ -110,6 +112,7 @@ export async function showCutoutEditor({
 
   const history=[],initialAppearance=appearance,initialIntensity=intensity,initialAutoStraighten=autoStraighten;
 
+  onPhase('正在显示抠图工具…');
   body.innerHTML='<div class="material-editor cutout-modal">'
     +'<header><button type="button" id="cutout-cancel">取消</button><strong>检查抠图</strong><button type="button" id="cutout-apply" disabled>应用</button></header>'
     +'<div class="cutout-steps">'+steps.map(([id,label],i)=>'<span data-cut-step="'+id+'"><b>'+(i+1)+'</b>'+label+'</span>').join('')+'</div>'
@@ -446,5 +449,9 @@ export async function showCutoutEditor({
     resize.disconnect();modal.removeEventListener('cancel',cancel);modal.classList.remove('cutout-dialog','material-editor-dialog');
     for(const image of new Set([source,initial,recognized,frame]))image?.close?.();
   });
+  // The tool layout should be presented while the native dialog remains
+  // open, before any expensive preview paint. Do not close and showModal again.
+  await new Promise(resolve=>requestAnimationFrame(resolve));
+  if(isCancelled())return;
   panel();draw();
 }
