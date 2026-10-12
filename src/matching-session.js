@@ -30,7 +30,7 @@ export function createMatchingSession(c){
  const covers=createMatchingCoverCache(c);
  const defaults=matchingSnapshot(c.state,[]).context;
  const save=()=>{if(!ready)return queue;const task=queue.then(async()=>{const record=matchingSnapshot(c.state,variants),snapshot=JSON.stringify(record);if(snapshot===lastSnapshot)return;await device.put(account(),record);lastSnapshot=snapshot;});queue=task.then(()=>{},()=>{});return task;};
- const archiveCompleted=async(variantID)=>{await queue;for(const v of variants.filter(v=>v.id===variantID&&v.status==='completed'&&!v.linkedProjectID)){if(v.linkedProjectID&&c.state.projects.some(p=>p.id===v.linkedProjectID))continue;const p=variantDraftProject(v,null,v.linkedProjectID||c.uid());v.linkedProjectID=p.id;await c.db.stageProject(p);c.state.projects.push(p);
+ const archiveCompleted=async(variantID)=>{await queue;for(const v of variants.filter(v=>v.id===variantID&&v.status==='completed'&&!v.linkedProjectID)){if(v.linkedProjectID&&c.state.projects.some(p=>p.id===v.linkedProjectID))continue;const p=variantDraftProject(v,null,v.linkedProjectID||c.uid());v.linkedProjectID=p.id;await (p.isSnapshot?c.db.transaction(['projects'],tx=>tx.objectStore('projects').put(p)):c.db.stageProject(p));c.state.projects.push(p);
       try{await device.put(account(),matchingSnapshot(c.state,variants));}
       catch(error){console.warn('完成的作品已存入云端，本机搭配索引暂未保存',error);}}};
  const markup=()=>`<h2>版本方案</h2><p>完成方案自动保存为草稿或快照；“重新搭配”只清空这里的方案，不删除已保存作品。</p><div class="match-variant-grid" data-match-scroll="variants">${variants.map(v=>`<article class="match-variant" data-variant="${c.esc(v.id)}"><button class="match-result" data-act="match-open-result" data-id="${c.esc(v.id)}" ${v.status==='running'?'disabled':''}><div class="match-cover-preview" data-match-raster="${c.esc(v.id)}">${covers.render(v.project)}</div><strong>${c.esc(v.title)}</strong></button><pre class="match-progress" aria-live="polite">${c.esc(v.progress)}</pre>${v.linkedProjectID&&!c.state.projects.some(p=>p.id===v.linkedProjectID)?`<button class="btn" data-act="match-restore" data-id="${c.esc(v.id)}">恢复已删除作品</button>`:''}${v.status==='running'?'<button class="btn" data-act="match-stop">停止创作</button>':v.project.deliveryMode==='zip'?`<button class="btn" data-act="download-project-zip" data-id="${c.esc(v.linkedProjectID||v.project.id)}">下载可编辑 ZIP</button>`:''}</article>`).join('')||'<p>尚未生成方案。</p>'}</div>`;
@@ -63,7 +63,7 @@ export function createMatchingSession(c){
    const v={id:c.uid(),title:p.title,createdAt:new Date().toISOString(),status:'completed',progress:reviewProgress,project:structuredClone(p),linkedProjectID:p.id};
    const task=queue.then(async()=>{
     const next=[v,...variants],record=matchingSnapshot(c.state,next);
-    if(!alreadyStored)await c.db.transaction(['projects'],tx=>tx.objectStore('projects').put(p));
+    if(!alreadyStored)await (p.isSnapshot?c.db.transaction(['projects'],tx=>tx.objectStore('projects').put(p)):c.db.stageProject(p));
     // A device-only matching index must not mask the success of a committed
     // cloud project. Show and retain the real work even if local storage fills.
     try{await device.put(account(),record);lastSnapshot=JSON.stringify(record);}
@@ -94,7 +94,7 @@ export function createMatchingSession(c){
   },
   stop(){controller?.abort(Error('已停止创作，成功步骤已保留'));},
   async reset(clearContext=()=>{}){const before=matchingSnapshot(c.state,variants),saved=variants;clearContext();variants=[];try{await save();covers.clear();}catch(error){variants=saved;restoreMatchingSession(before,c.state);throw error;}controller?.abort(Error('已重新搭配'));},
-  async open(id){const v=variants.find(x=>x.id===id);if(!v||v.status==='running'||opening)return;opening=true;try{await queue;await c.flushSave();const existing=c.state.projects.find(p=>p.id===v.linkedProjectID);if(v.linkedProjectID&&!existing){c.toast('这份作品已被删除，必须主动选择恢复后才能打开');return;}if(v.project.isSnapshot){c.state.previewProjectID=existing?.id||v.project.id;c.route('projectPreview');return;}const p=variantDraftProject(v,existing,c.uid());v.linkedProjectID=p.id;await c.db.transaction(['projects'],tx=>tx.objectStore('projects').put(p));
+  async open(id){const v=variants.find(x=>x.id===id);if(!v||v.status==='running'||opening)return;opening=true;try{await queue;await c.flushSave();const existing=c.state.projects.find(p=>p.id===v.linkedProjectID);if(v.linkedProjectID&&!existing){c.toast('这份作品已被删除，必须主动选择恢复后才能打开');return;}if(v.project.isSnapshot){c.state.previewProjectID=existing?.id||v.project.id;c.route('projectPreview');return;}const p=variantDraftProject(v,existing,c.uid());v.linkedProjectID=p.id;if(!existing?.isDraft)await c.db.stageProject(p);
     await device.put(account(),matchingSnapshot(c.state,variants));
     if(!existing?.isDraft)c.state.projects.push(p);c.state.activeProject=p;c.state.activeDraft=p.activeDraftID;c.state.offlineEditingReturnID=p.offlineBundleId?p.id:null;c.state.selected=null;c.state.undo=[];c.state.redo=[];c.state.tool='select';c.state.zoom=1;c.route('editor');}finally{opening=false;}},
   async generate(){
