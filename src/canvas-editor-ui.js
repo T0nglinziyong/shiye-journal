@@ -383,7 +383,9 @@ export function mountCanvasEditor(c){
     const walkGroups=(nodes,depth=0)=>{for(const n of [...nodes].sort((a,b)=>(b.zIndex??0)-(a.zIndex??0)))if(n.type==='group'){treeRow(n,depth);walkGroups(n.children||[],depth+1);}};
     walkGroups(d.layers);
 
-    const ordered=[...sceneLayerEntries(d,{hidden:true,ink:true})].sort((a,b)=>(b.value.zIndex??(b.kind==='ink'?2000:0))-(a.value.zIndex??(a.kind==='ink'?2000:0))),rows=new Map();
+    // The canvas renders recursive siblings by their actual tree order. Never re-sort
+    // flattened descendants with a global z-index (that breaks nested groups).
+    const ordered=[...sceneLayerEntries(d,{hidden:true,ink:true})].reverse(),rows=new Map();
     let drag=null,holdTimer=null,scrollFrame=null,moveMenu=null,suppressMoveClickUntil=0;
     const indexOf=id=>ordered.findIndex(e=>e.value.id===id);
     const redraw=()=>{
@@ -453,7 +455,7 @@ export function mountCanvasEditor(c){
       const lock=button('',()=>{const next=!(o.isLocked||o.locked);commitLayer(()=>{o.isLocked=o.locked=next;if(next&&state.selected===o.id)state.selected=null;});redraw();});lock.dataset.layerLock='';
       const eye=button('',()=>{const next=!(o.isHidden||o.hidden||o.isParked);commitLayer(()=>{if(e.kind==='material')o.isParked=next;else if(e.kind==='text')o.isHidden=next;else o.hidden=next;if(next&&state.selected===o.id)state.selected=null;});redraw();});eye.dataset.layerEye='';
       const move=button('≡',()=>{});
-      move.onclick=()=>{if(drag||performance.now()<suppressMoveClickUntil)return;moveMenu?.remove();const controls=document.createElement('div');controls.className='canvas-layer-move-actions';controls.append(button('上移一层',()=>{reorder(o.id,ordered[indexOf(o.id)-1]?.value.id);controls.remove();moveMenu=null;}),button('下移一层',()=>{reorder(o.id,ordered[indexOf(o.id)+1]?.value.id,true);controls.remove();moveMenu=null;}));row.append(controls);moveMenu=controls;};
+      move.onclick=()=>{if(drag||performance.now()<suppressMoveClickUntil)return;moveMenu?.remove();const controls=document.createElement('div');controls.className='canvas-layer-move-actions';controls.append(button('上移一层',()=>{reorder(o.id,ordered[indexOf(o.id)-1]?.value.id,true);controls.remove();moveMenu=null;}),button('下移一层',()=>{reorder(o.id,ordered[indexOf(o.id)+1]?.value.id,false);controls.remove();moveMenu=null;}));row.append(controls);moveMenu=controls;};
       move.dataset.layerMove='';move.setAttribute('aria-label','调整图层顺序');move.style.touchAction='none';
       let pending=null;
       // Mouse dragging still starts from the row. Touch must start from
@@ -478,7 +480,8 @@ export function mountCanvasEditor(c){
         if(event.pointerType!=='mouse'&&!grip)return;
         pending={pointerId:event.pointerId,x:event.clientX,y:event.clientY,startY:event.clientY,
           pointerType:event.pointerType,grip};
-        if(event.pointerType!=='mouse')holdTimer=setTimeout(beginDrag,240);
+        if(event.pointerType!=='mouse'&&grip){beginDrag();event.preventDefault();}
+        else if(event.pointerType!=='mouse')holdTimer=setTimeout(beginDrag,240);
       };
       row.onpointermove=event=>{
         if(!pending||pending.pointerId!==event.pointerId)return;
@@ -507,7 +510,7 @@ export function mountCanvasEditor(c){
         if(dragged){
           suppressMoveClickUntil=performance.now()+550;
           event.preventDefault();event.stopPropagation();
-          if(target)reorder(o.id,target.id,target.after);
+          if(target)reorder(o.id,target.id,!target.after);
         }
       };
       row.onpointercancel=()=>{pending=null;stopDrag();};
@@ -515,7 +518,7 @@ export function mountCanvasEditor(c){
         if(o.isLocked||o.locked||!['ArrowUp','ArrowDown'].includes(event.key))return;
         event.preventDefault();
         const next=ordered[indexOf(o.id)+(event.key==='ArrowUp'?-1:1)];
-        if(next)reorder(o.id,next.value.id,event.key==='ArrowDown');
+        if(next)reorder(o.id,next.value.id,event.key==='ArrowUp');
       };
       row.append(lock,eye,move);rows.set(o.id,row);
     }
