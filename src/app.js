@@ -1387,7 +1387,7 @@ async function openCutoutCheck(id,candidate=null){
   const stored=async blobId=>blobId?readTimeout(cloudEnabled
     ?db.previewBlob(blobId,900)
     :db.get('blobs',blobId).then(row=>row?.data)):null;
-  const storedMask=async blobId=>blobId?readTimeout(db.get('blobs',blobId).then(row=>row?.data)):null;
+  const loadMaskBlob=async blobId=>blobId?readTimeout(db.get('blobs',blobId).then(row=>row?.data)):null;
   const compact=!candidate&&!!a.candidateFrameBlobId
     &&(!!a.finalMaskBlobId||Math.abs(a.processingRecord?.displayRotationDegrees||0)<.01);
   const modern=compact&&!!a.finalMaskBlobId;
@@ -1399,7 +1399,7 @@ async function openCutoutCheck(id,candidate=null){
     compact?Promise.resolve(null):Promise.resolve(candidate?.originalBlob||stored(a.originalBlobId)),
     compact?Promise.resolve(null):Promise.resolve(candidate?.originalCutoutBlob||stored(a.originalCutoutBlobId)),
     Promise.resolve(candidate?.candidateFrameBlob||stored(a.candidateFrameBlobId)),
-    modern?storedMask(a.finalMaskBlobId):Promise.resolve(null)
+    modern?loadMaskBlob(a.finalMaskBlobId):Promise.resolve(null)
   ]);
   let finalMaskBlob=modern?storedMask:
     compact&&saved instanceof Blob?await extractAlphaMask(saved):null;
@@ -1425,7 +1425,7 @@ async function openCutoutCheck(id,candidate=null){
     isCancelled:()=>cancelled,
     onPhase:message=>{const label=body.querySelector('.cutout-loading p');if(label)label.textContent=message;},
     onLoadInitialMask:compact?async()=>{
-      const oldBlob=a.initialMaskBlobId?await storedMask(a.initialMaskBlobId):
+      const oldBlob=a.initialMaskBlobId?await loadMaskBlob(a.initialMaskBlobId):
         await stored(a.originalCutoutBlobId)||saved;
       if(!(oldBlob instanceof Blob))throw Error('初始蒙版尚未可用');
       return readAlphaMask(a.initialMaskBlobId?oldBlob:await extractAlphaMask(oldBlob));
