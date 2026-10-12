@@ -1,6 +1,6 @@
 export const LARGE_PROJECT_BYTES=128*1024;
 export function projectSummary(project,path,encoding){
-  const {editHistory,manualArchives,manualArchiveStore,initialEditorSnapshot,manualEditorSnapshot,draftHistorySnapshots,...summary}=project;
+  const {editHistory,manualArchives,manualArchiveStore,initialEditorSnapshot,manualEditorSnapshot,draftHistorySnapshots,autoSceneSnapshots,autoSceneSnapshotStore,sceneOperations,sceneOperationsSinceSnapshot,sceneFirstUnsnapshottedAt,lastAutoSceneSnapshotAt,...summary}=project;
   return {...summary,projectDocumentPath:path,...(encoding?{projectDocumentEncoding:encoding}:{}),drafts:project.drafts.map(d=>{const {layers,makingSteps,...meta}=d;return {...meta,layers:[],makingSteps:[]};})};
 }
 export function mergeProjectSummary(document,summary){
