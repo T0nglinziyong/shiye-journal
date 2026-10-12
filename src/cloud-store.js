@@ -251,7 +251,24 @@ async function reconcileImport(batch,operationID,baseRevision){
     }));
     present+=found.filter(Boolean).length;
   }
-  return present===records.length?'committed':present===0?'rebase':'conflict';
+  if(present===0)return 'rebase';
+  // Legacy import batches (before separate project staging existed) could
+  // contain a complete editable project. Existence of its ID does NOT prove
+  // our version was committed: a newer editor save may own that same key.
+  // The operation journal above is the only acknowledgement authority.
+  if(batch.projects?.length&&!batch.assets?.length&&!batch.blobs?.length){
+    const operations=[];
+    for(const item of batch.projects){
+      const existing=await cloudRecord('projects',item.id);
+      const copy=existing?forkConflictingEditableWork(item):item;
+      if(!copy||!usableProjectSnapshot(copy))return 'conflict';
+      operations.push({store:'projects',action:'put',item:copy});
+    }
+    return {kind:'replace',record:{...batch,names:['projects'],operations}};
+  }
+  // Mixed old imports can contain original blobs or source inventory. Until
+  // their exact bytes are provably acknowledged, never silently drop them.
+  return 'conflict';
 }
 // This durable, account-scoped outbox retains the complete batch, including
 // original bytes. Only a successful cloud acknowledgement removes it.
