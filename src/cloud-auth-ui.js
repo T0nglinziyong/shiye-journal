@@ -62,7 +62,7 @@ export async function startCloudSession(onReady){
     // already complete when phase=deleting; keep the empty account readable.
     // Never enable new writes while the old COS prefix is still being purged.
     cloudSetResetCleanupPending(initialReset.pending,initialReset.resetId);
-    gate.remove();app.hidden=false;await onReady(user);
+    gate.remove();app.hidden=false;await onReady(user,{afterAccountReset:!!initialReset.resetId});
     if(initialReset.pending){
       const banner=document.createElement('aside');
       banner.setAttribute('role','status');
