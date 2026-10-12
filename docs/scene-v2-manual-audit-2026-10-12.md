@@ -9,6 +9,9 @@
 
 1. Scene 的临时叶图层集合存在静默不写回：`draft.items[0]=value`、`draft.items.length=0`、`delete draft.items[0]` 只改变临时数组。现在这些操作写入同一棵 `layers`，并拒绝稀疏索引。增添 `tests/scene-model.test.js` 回归断言。
 2. `groupSceneLayers` 只检查组 ID 是否与已有组冲突，没有检查普通图层。现在拒绝任意已占用图层 ID，且拒绝前不修改树；已添加回归测试。
+3. 修正网页版 GPT 任务提示：直接模式只允许 `page.layers` 中的 `group`，不再引用不存在的 `page.groups`；新增断言。
+4. 修正误导用户的 `page v3` 错误提示，准确说明 `page.version=2`。
+5. 统一 Scene v2 的 AI ink 操作路径：增加递归删除 API，支持笔迹查找、组合、样式、移动和删除，保留手写压感。
 
 ## 实际执行的隔离检查
 
@@ -28,7 +31,11 @@
 
 `creative-contract.js` 声明 `page.version=2` 的 `page.layers` 树，`creative.js::composeDirectSceneV2` 同时沿用材料 `placement.z`、图形/文字默认 `zIndex` 和实体 `relation` 解算层序。渲染器 `sceneDisplaySiblings` 又按 `zIndex` 排序，故某些组合的数组先后顺序不等于显示先后顺序。必须定义唯一权威次序，以及物理穿插/underlay 如何表达，移除旧的冲突参数并同步修改 schema 和测试。禁止盲目把所有 zIndex 改为数组索引，因为现有实体 underlay 测试依赖关系解算。
 
-### 4. AI 工具对 ink 的编辑能力尚未统一\n\n\`src/creative.js\` 的 \`index(d)\` 和 \`remove(d,keys)\` 仍只枚举 \`items/primitives/textBlocks\`：手写笔迹虽存于同一 Scene 树，但工具 \`group_elements/style_elements/delete_elements/move_elements\` 对笔迹没有一致的支持，其中移动笔迹须变换 point 坐标而非添加无意义的 x/y 属性。这违反同树统一编辑目标，应补全 API 与对应回归。\n\n### 5. 真正的完整验收未执行
+### 4. AI 工具对 ink 的编辑：核心修复完成，待集成验证
+
+`src/creative.js` 现通过 `sceneLayerEntries` 索引全部叶节点，允许 `group_elements/style_elements/delete_elements/move_elements` 定位笔迹。`move_elements` 直接按中心变换笔迹 points，不再写入无效的 x/y；删除使用统一的 `removeSceneNode`，`upsert_materials.remove` 仍只允许真实素材。新增组合、样式、移动、删除的回归测试，并通过 V8 隔离执行移动和删除。但完整 npm 集成测试尚未运行。
+
+### 5. 真正的完整验收未执行
 
 - `npm ci && npm test && npm run build`；
 - 测试构建自动生成的 `src/generated/offline-*-source.js` 是否携带 **最新** Scene v2 schema/renderer，导出 ZIP 内的 validator、preview、pack 一致；
