@@ -321,7 +321,7 @@ export function mountCanvasEditor(c){
       const heading=document.createElement('h3');heading.className='canvas-auto-snapshot-heading';heading.textContent='自动恢复点';
       p.content.append(heading);
       for(const snapshot of automatic){
-        const labels={'30-operations':'累计 30 次操作','5-minutes':'连续编辑 5 分钟','leave-editor':'退出画布','pagehide':'页面关闭','app-background':'切到后台','pre-conflict':'同步冲突前'};
+        const labels={'30-operations':'累计 30 次操作','5-minutes':'连续编辑 5 分钟','leave-editor':'退出画布','pagehide':'页面关闭','app-background':'切到后台','completed':'完成创作','pre-conflict':'同步冲突前'};
         const title=new Date(snapshot.at).toLocaleString()+' · '+(labels[snapshot.reason]||'自动保存');
         row(snapshot,title,()=>{
           if(!confirm('恢复自动快照会替换当前编辑画面，是否继续？'))return;
