@@ -1,4 +1,5 @@
 import {paintMask,maskOrientation,refineMaskStroke} from './mask-model.js';
+import {decodeImageBlob} from './image-blob-decoder.js';
 import {containBox} from './preview-geometry.js';
 import {onDialogClosed} from './dialog-lifecycle.js';
 
@@ -10,9 +11,20 @@ export async function showCutoutEditor({
   body,modal,original,saved,recognition=saved,candidateFrame=original,title,processing={},
   onApply,onRerecognize,onPostprocess,recognitionUI={},toast
 }) {
-  const [source,initial,recognized,frame]=await Promise.all([
-    createImageBitmap(original),createImageBitmap(saved),createImageBitmap(recognition),createImageBitmap(candidateFrame||original)
-  ]);
+  // Persisted originals are fetched from COS/IndexedDB after app restart.
+  // Recover WebKit decoder quirks, but never replace corrupt bytes silently.
+  const decoded=[];
+  let source,initial,recognized,frame;
+  try{
+    [source,initial,recognized,frame]=await Promise.all([
+      decodeImageBlob(original),decodeImageBlob(saved),decodeImageBlob(recognition),
+      decodeImageBlob(candidateFrame||original)
+    ]);
+    decoded.push(source,initial,recognized,frame);
+  }catch(error){
+    for(const bitmap of decoded)bitmap?.close?.();
+    throw Error('检查抠图暂无法打开：'+error.message);
+  }
   const w=source.width,h=source.height,canvas=document.createElement('canvas');
   canvas.width=w;canvas.height=h;
   const ctx=canvas.getContext('2d',{willReadFrequently:true});
