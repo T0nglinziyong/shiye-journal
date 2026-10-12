@@ -10,7 +10,18 @@ export default async function handler(req,res){
     authenticate:async token=>{
       const client=createClient(env.VITE_SHIYE_SUPABASE_URL,env.VITE_SHIYE_SUPABASE_PUBLISHABLE_KEY,{auth:{persistSession:false,autoRefreshToken:false},global:{headers:{Authorization:'Bearer '+token},fetch:(input,init)=>fetch(input,{...init,signal:AbortSignal.timeout(15000)})}});
       const {data,error}=await client.auth.getUser(token);if(error||!data.user||data.user.is_anonymous)return null;
-      const allowed=await client.from('shiye_accounts').select('user_id,is_admin').eq('user_id',data.user.id).maybeSingle();if(allowed.error)throw Error('authorization unavailable');return allowed.data?{userID:data.user.id,isAdmin:allowed.data.is_admin===true}:null;
+      const allowed=await client.from('shiye_accounts').select('user_id,is_admin').eq('user_id',data.user.id).maybeSingle();
+      if(allowed.error)throw Error('authorization unavailable');
+      if(!allowed.data)return null;
+      // Read the authoritative generation, not a client-supplied prefix.
+      // After a full reset, old versions of the PWA can no longer PUT to the
+      // previous COS generation (even during asynchronous cleanup).
+      const {data:marker,error:resetError}=await client.from('shiye_records')
+        .select('record').eq('user_id',data.user.id).eq('store','meta')
+        .eq('id','shiye-reset-barrier').maybeSingle();
+      if(resetError)throw Error('reset epoch unavailable');
+      return {userID:data.user.id,isAdmin:allowed.data.is_admin===true,
+        resetId:marker?.record?.resetId||null};
     },
     sign:async({path,method,headers,variant})=>{
       const cos=new COS({SecretId:env.SHIYE_COS_SECRET_ID,SecretKey:env.SHIYE_COS_SECRET_KEY});
