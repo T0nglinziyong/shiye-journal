@@ -21,7 +21,7 @@ test('same-parent drag before/after and group interior preserve explicit Scene m
  const root=layerMoveTarget(d,'C','A','after');assert.equal(root.parentID,'G');
 });
 
-test('clicking one leaf selects it and reordering never dismisses nested tree popover',async()=>{
+test('selection and drag retain the layer tree until an outside canvas touch closes it',async()=>{
  const {Window}=await import('happy-dom');
  const w=new Window({url:'https://example.test'});
  const saved={window:globalThis.window,document:globalThis.document,innerWidth:globalThis.innerWidth,innerHeight:globalThis.innerHeight,ResizeObserver:globalThis.ResizeObserver};
@@ -39,7 +39,7 @@ test('clicking one leaf selects it and reordering never dismisses nested tree po
   assert.ok(h.surface.isConnected,'popover remains mounted after a layer operation');
   assert.equal(h.surface.querySelectorAll('[role="treeitem"]').length,3);
   w.document.body.dispatchEvent(new w.PointerEvent('pointerdown',{bubbles:true}));
-  assert.equal(h.surface.isConnected,true,'canvas pointer must not dismiss persistent layer tree');
+  assert.equal(h.surface.isConnected,false,'outside canvas pointer should dismiss the layer tree');
   h.close();
  }finally{
   for(const [key,value] of Object.entries(saved)){if(value===undefined)delete globalThis[key];else globalThis[key]=value;}
