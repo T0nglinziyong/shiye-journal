@@ -1369,7 +1369,10 @@ async function openCutoutCheck(id,candidate=null){
   if(!modal.open)modal.showModal();
   await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
   try{
-  const stored=async blobId=>blobId?(await db.get('blobs',blobId))?.data:null;
+  const stored=async blobId=>blobId?(await Promise.race([
+    db.get('blobs',blobId),
+    new Promise((_,reject)=>setTimeout(()=>reject(Error('素材图片读取超时，请检查同步状态')),22000))
+  ]))?.data:null;
   const compact=!candidate&&!!a.candidateFrameBlobId
     &&(!!a.finalMaskBlobId||Math.abs(a.processingRecord?.displayRotationDegrees||0)<.01);
   const modern=compact&&!!a.finalMaskBlobId;
