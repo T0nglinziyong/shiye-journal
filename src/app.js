@@ -480,7 +480,19 @@ function pageInspector(d){return `<div class="stack"><label>纸张颜色<input i
 function importSourceButtons(){return `<div class="import-source-actions"><button class="btn primary" data-act="select-file" data-val="gallery">▣　从图库中选择</button><button class="btn" data-act="select-file" data-val="camera">▣　拍摄图片</button><button class="btn" data-act="select-file" data-val="files">▱　从文件中导入</button>${state.importMode==='work'?'<small>选择 .shiyeproject.zip 可编辑作品包或 JSON 备选文件会直接导入，不经过照片识别。</small>':''}</div>`;}
 function importSteps(){return `<div class="import-nav"><button class="import-back" data-act="import-back" aria-label="返回"></button><div class="import-nav-center"><strong>导入${state.importMode==='work'?'作品':state.importMode==='snapshot'?'快照':'素材'}</strong><div class="import-progress">${[['inspect','检查照片'],['review','确认归类'],['done','完成']].map(([key,label],i)=>`<span class="${state.importStep===key?'current':(i<['inspect','review','done'].indexOf(state.importStep)?'passed':'')}"><b>${i<['inspect','review','done'].indexOf(state.importStep)?'✓':i+1}</b>${label}</span>`).join('')}</div><button class="import-cancel" data-act="import-exit">${state.importStep==='done'?'完成':'取消导入'}</button></div></div>`;}
 function renderImport(){const b=state.importBox,rec=state.importRecords[state.importIndex];let content='';
-  if(state.importStep==='done')content=`<div class="import-done"><div>✓</div><h1>导入完成 · ${state.importSavedCount||0} 个${state.importMode==='work'?'作品':state.importMode==='snapshot'?'快照':'素材'}</h1><p>${state.importPending?'资料已可靠暂存，云端同步和自动整理在后台进行。':'资料已保存。'}可以继续导入下一批照片，本机识别引擎会保持就绪。</p><div class="review-actions"><button class="btn" data-act="import-exit">返回${state.importMode==='work'||state.importMode==='snapshot'?'作品':'素材库'}</button><button class="btn primary" data-act="import-continue">继续导入</button></div></div>`;
+  if(state.importStep==='done'){
+    const kind=state.importMode==='work'?'作品':state.importMode==='snapshot'?'快照':'素材';
+    const destination=state.importMode==='work'||state.importMode==='snapshot'?'作品':'素材库';
+    const needsManualCheck=state.importMode==='material'&&state.preferences.autoOrganize
+      &&!(state.aiSettings?.key&&state.aiSettings.includeThumbnails&&supportsVision(state.aiSettings));
+    const note=state.importPending
+      ?'内容已安全暂存。云端同步将在后台完成，可以放心返回继续使用。'
+      :'内容已经保存。你可以返回查看，也可以继续添加下一批照片。';
+    const extra=needsManualCheck
+      ?'<p class="import-done-helper">视觉自动整理尚未启用，素材已保留待检查。稍后可在设置中开启。</p>':'';
+
+    content=`<section class="import-done" aria-labelledby="import-done-title"><div class="import-done-card"><div class="import-done-icon" aria-hidden="true">✓</div><h1 id="import-done-title">导入完成</h1><p class="import-done-count">已导入 <strong>${state.importSavedCount||0}</strong> 个${kind}</p><p class="import-done-message">${note}</p>${extra}<div class="review-actions import-done-actions"><button class="btn" data-act="import-exit">返回${destination}</button><button class="btn primary" data-act="import-continue">继续导入</button></div></div></section>`;
+  }
   else if(state.importStep==='review')content=renderImportReview({state,esc,fmt});
   else if(!rec)content=`<section class="import-intro"><div class="eyebrow">FROM YOUR DESK TO YOUR PAGES</div><h1>${state.importMode==='work'?'收进完成的作品':'先认出纸，再留住喜欢的'}</h1><p>从相册多选，逐张确认纸张和${state.importMode==='work'?'页面':'素材'}。</p><div class="import-empty"><div class="photo-symbol">▧</div><h2>添加照片</h2><p>从相册多选，或拍摄一张白纸上的素材。</p>${importSourceButtons()}<small>每批最多 12 张；使用较小图像识别，从原始工作图提取素材</small></div></section>`;
   else content=renderImportInspection({state,esc,fmt});
@@ -1650,7 +1662,7 @@ async function organizeSavedAssets(records,{waitForSave,projects=[]}={}){
         const result=await classifyRecord({kind:'asset',record,settings:cfg,image,assets:[]});
         await applyAssetClassification(record,result,{isCurrent:()=>state.accountId===accountID&&isCurrent()});
       },onError:()=>{if(state.accountId===accountID&&!warned){warned=true;toast('部分素材自动整理未完成，可稍后重新识别');}}});
-    }else toast('未配置可用的视觉接口，素材保留待检查；可在设置关闭自动整理');
+    }else if(state.route!=='import'||state.importStep!=='done')toast('未启用视觉整理，素材已保存，可稍后检查或在设置开启');
   }
 }
 
