@@ -5,7 +5,7 @@ const ownDatabase=name=>typeof name==='string'&&
 
 export async function eraseSiteAppData({storage=localStorage,session=sessionStorage,
   idb=indexedDB,cacheStorage=globalThis.caches,serviceWorker=navigator.serviceWorker,
-  preClose=()=>{}}={}){
+  preClose=()=>{},preserveAuthentication=false}={}){
  await preClose();
  const errors=[];
  // Close app databases before deleting to avoid IDB blocked events.
@@ -31,7 +31,18 @@ export async function eraseSiteAppData({storage=localStorage,session=sessionStor
    for(const name of keys)if(/^shiye(?:-|$)/.test(name))await cacheStorage.delete(name);
  }catch(error){errors.push('页面缓存：'+error.message);}
  try{session.clear();}catch(error){errors.push('会话缓存：'+error.message);}
- try{storage.clear();}catch(error){errors.push('本机设置：'+error.message);}
+ try{
+   // A remote reset must not silently sign another device out when it
+   // revisits the app. Only the Supabase authentication token is retained;
+   // all Shiye content, queues, derived previews and settings are removed.
+   const authTokens=[];
+   if(preserveAuthentication)for(let i=0;i<storage.length;i++){
+     const k=storage.key(i);
+     if(/^sb-[a-z0-9-]+-auth-token$/.test(k))authTokens.push([k,storage.getItem(k)]);
+   }
+   storage.clear();
+   for(const [key,value] of authTokens)if(value!==null)storage.setItem(key,value);
+ }catch(error){errors.push('本机设置：'+error.message);}
  if(serviceWorker)try{
    const registrations=await serviceWorker.getRegistrations();
    for(const registration of registrations)await registration.unregister();
