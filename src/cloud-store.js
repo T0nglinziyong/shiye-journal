@@ -20,7 +20,7 @@ const writeProvider=()=>objectStorage?.enabled?'cos':'supabase';
 const usableBlob=value=>value instanceof Blob&&value.size>0;
 async function downloadObject(path,provider){if(provider==='cos'){if(!objectStorage)throw Error('COS 私有读取尚未配置');return objectStorage.download(path);}if(provider==='supabase')return checked(await cloudClient().storage.from(BUCKET).download(path));throw Error('云端对象缺少当前 storageProvider');}
 async function uploadObject(path,blob,type,provider=writeProvider()){if(provider==='cos'){await objectStorage.upload(path,blob,type);return {error:null};}return cloudClient().storage.from(BUCKET).upload(path,blob,{upsert:false,contentType:type});}
-let owner,revision,writesInFlight=0,resetInProgress=false;
+let owner,revision,writesInFlight=0,resetInProgress=false,resetCleanupPending=false;
 let queue=Promise.resolve();
 const images=new Map();
 const imageSizes=new Map();
@@ -99,6 +99,17 @@ const channel=()=>{
   };
   return outboxChannel;
 };
+// The reset marker can remain "deleting" while old COS files are removed.
+// Read-only access to the already-empty account is safe; creating new files
+// under the same account prefix is not safe until the old prefix is gone.
+function cloudSetResetCleanupPending(value){
+  resetCleanupPending=!!value;
+  if(resetCleanupPending)unifiedSync.pause();
+}
+function assertAccountWritable(){
+  if(resetCleanupPending)throw Error('云端资料已清空，旧图片正在后台清理；暂不能上传新内容');
+  if(resetInProgress)throw Error('账号清空中，不能保存新资料');
+}
 async function withAccountSyncLock(task){
   const id=await account();
   try{return await runAccountBrowserLock(id,task);}
@@ -554,11 +565,11 @@ async function encode(store,record){
   const {data,thumbnailPath:_oldThumbnail,...metadata}=record;return {...metadata,storagePath,storageProvider:provider,...(thumbnailPath?{thumbnailPath}:{})};
 }
 function cloudTransaction(names,fn,operationID=crypto.randomUUID()){
-  if(resetInProgress)throw Error('账号正在清空，禁止继续写入旧资料');
+  assertAccountWritable();
   const operations=[];const result=fn({objectStore(store){if(!names.includes(store))throw Error('此表未加入事务');return {put:record=>operations.push({action:'put',store,item:structuredClone(record)}),delete:id=>operations.push({action:'delete',store,id}),clear:()=>operations.push({action:'clear',store})};}});
   if(result?.then)throw Error('事务回调必须同步');
   const run=async()=>{
-    if(resetInProgress)throw Error('账号正在清空，已停止排队中的旧上传');
+    assertAccountWritable();
     writesInFlight++;reportSync();
     try{
     await identity();if(revision===undefined)await version();
@@ -570,7 +581,7 @@ function cloudTransaction(names,fn,operationID=crypto.randomUUID()){
         catch(error){throw markSyncPhase(error,'编码与上传 '+op.store);}
       }));
     }catch(error){throw markSyncPhase(error,'编码云端记录');}
-    if(resetInProgress)throw Error('账号清空已开始；取消尚未提交的旧事务');
+    assertAccountWritable();
     let data;
     try{data=checked(await cloudClient().rpc('shiye_commit_v2',{
       operations,expected_revision:previous,operation_id:operationID
@@ -683,7 +694,7 @@ async function cloudMigrationCommit({expectedRevision,changes}){
  return {updated:changes.length,revision};
 }
 async function cloudStageProject(record){
-  if(resetInProgress)throw Error('账号清理中，不能暂存旧作品');
+  assertAccountWritable();
   if(!usableProjectSnapshot(record))throw Error('作品编辑数据不完整；云端已保存版本未被覆盖');
   await identity();if(revision===undefined)await version();
   const known=(snapshots.get('projects')||await cached('records:projects'))?.records.some(item=>item.id===record.id);
@@ -698,9 +709,9 @@ async function cloudStageProject(record){
   if(registered===undefined)editorBases.set(record.__cloudSessionId,baseRevision);
   return projectSync.stage(record,{baseRevision});
 }
-async function cloudStageImport(batch){if(resetInProgress)throw Error('账号清理中，不能暂存旧导入');await identity();if(revision===undefined)await version();await importSync.stage({...batch,id:crypto.randomUUID()});return {pending:true};}
+async function cloudStageImport(batch){assertAccountWritable();await identity();if(revision===undefined)await version();await importSync.stage({...batch,id:crypto.randomUUID()});return {pending:true};}
 async function cloudStageMutation(names,fn){
-  if(resetInProgress)throw Error('账号清理中，不能排队旧修改');
+  assertAccountWritable();
   const operations=[],modifiedAt=new Date().toISOString(),result=fn({objectStore(store){if(!names.includes(store))throw Error('此表未加入事务');return {put:item=>operations.push({action:'put',store,item:structuredClone(item),modifiedAt}),delete:id=>operations.push({action:'delete',store,id,modifiedAt}),clear:()=>operations.push({action:'clear',store,modifiedAt})};}});
   if(result?.then)throw Error('事务回调必须同步');if(!operations.length)return;
   operations.push(...recordTombstones(operations).slice(operations.length));
@@ -893,11 +904,12 @@ async function cloudRestoreEmergency(snapshot){
   if(typeof cache.restoreUnifiedOutboxes!=='function')throw Error('当前浏览器不支持原子恢复唯一同步队列');
   return cache.restoreUnifiedOutboxes(key,snapshot.projects,snapshot.imports);
 }
-return {cloudRunExclusiveReset,cloudPurgeLocalAfterReset,cloudConflictReview,cloudConflictBackup,cloudResolveProjectConflict,cloudMigrationInventory,cloudMigrationOriginalProject,cloudMigrationCommit,cloudLegacyProjectBackup,cloudAll,cloudGet,cloudPreview,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudClearCache,cloudResumeCache,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudPendingLocalSummary,cloudPendingDetails,cloudDiscardPending,cloudFlushProjects,cloudProjectDocument,cloudEmergencySnapshot,cloudRestoreEmergency,cloudBackupBlobIDs};
+return {cloudSetResetCleanupPending,cloudRunExclusiveReset,cloudPurgeLocalAfterReset,cloudConflictReview,cloudConflictBackup,cloudResolveProjectConflict,cloudMigrationInventory,cloudMigrationOriginalProject,cloudMigrationCommit,cloudLegacyProjectBackup,cloudAll,cloudGet,cloudPreview,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudClearCache,cloudResumeCache,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudPendingLocalSummary,cloudPendingDetails,cloudDiscardPending,cloudFlushProjects,cloudProjectDocument,cloudEmergencySnapshot,cloudRestoreEmergency,cloudBackupBlobIDs};
 }
 let projectPreview=()=>null;
 export const setCloudProjectPreview=producer=>{projectPreview=producer;};
 const current=createCloudStore({cloudClient,requireCloudUser,cache:privateCache,namespace:import.meta.env?.VITE_SHIYE_SUPABASE_URL||'cloud',projectPreview:record=>projectPreview(record),objectStorage:createCOSStore({client:cloudClient,enabled:import.meta.env?.VITE_SHIYE_OBJECT_STORAGE==='cos'})});
+export const cloudSetResetCleanupPending=(value)=>current.cloudSetResetCleanupPending(value);
 export const cloudRunExclusiveReset=(...args)=>current.cloudRunExclusiveReset(...args);
 export const cloudPurgeLocalAfterReset=(...args)=>current.cloudPurgeLocalAfterReset(...args);
 export const cloudConflictReview=(...args)=>current.cloudConflictReview(...args);
