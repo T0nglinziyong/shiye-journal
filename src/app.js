@@ -1368,6 +1368,7 @@ async function openCutoutCheck(id,candidate=null){
   body.innerHTML='<section role="status" aria-live="polite" class="cutout-loading"><strong>正在准备抠图编辑器…</strong><p>正在加载候选框 RGB 与最终蒙版，请稍候。</p></section>';
   if(!modal.open)modal.showModal();
   await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+  try{
   const stored=async blobId=>blobId?(await db.get('blobs',blobId))?.data:null;
   const compact=!candidate&&!!a.candidateFrameBlobId
     &&(!!a.finalMaskBlobId||Math.abs(a.processingRecord?.displayRotationDegrees||0)<.01);
@@ -1467,6 +1468,10 @@ async function openCutoutCheck(id,candidate=null){
         (retryError?.message||'图片数据损坏')+
         '。当前已保存素材不受影响；请检查同步详情。');
     }
+  }
+  }catch(error){
+    if(modal.open&&body.querySelector('.cutout-loading'))modal.close();
+    throw error;
   }
 }
 function openDetail(id){showAssetEditor({state,body,modal,db,esc,imgTag,render,route,toast},id);}
