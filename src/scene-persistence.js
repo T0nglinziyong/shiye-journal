@@ -29,7 +29,7 @@ export function makeAutoSceneSnapshot(project,{reason='periodic',at=new Date().t
  const unsnapped=project.sceneOperationsSinceSnapshot||0;
  if(!unsnapped&&!force)return false;
  const {hash,payload}=archivePayload(project.drafts);
- const prior=project.autoSceneSnapshots?.at(-1);
+ const prior=project.autoSceneSnapshots?.[0];
  if(prior?.hash===hash&&!force)return false;
  (project.autoSceneSnapshotStore||={})[hash]||=payload;
  (project.autoSceneSnapshots||=[]).push({id:crypto.randomUUID(),hash,at,reason,operationCount:unsnapped,activeDraftID:project.activeDraftID});
