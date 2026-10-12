@@ -229,6 +229,8 @@ export function validateSceneExtensions(d){
      if(node.name!==undefined&&(typeof node.name!=='string'||node.name.length>100))throw Error('图层组名称无效');
      walk(node.children,depth+1);
    }else if(node.type==='ink'){
+     if(node.vectorMask)throw Error('墨迹蒙版需要先将墨迹分组，再在组上添加裁切蒙版');
+     if(typeof node.color!=='string'||!/^#[0-9a-fA-F]{6}$/.test(node.color))throw Error('笔迹颜色无效');
      if(!Array.isArray(node.points)||node.points.length<1||node.points.length>20000||
        !node.points.every(p=>p&&num(p.x,-100000,100000)&&num(p.y,-100000,100000)&&(p.p===undefined||num(p.p,0,1)))||
        !num(node.width,0.1,1000))throw Error('笔迹路径及压感数据无效');
