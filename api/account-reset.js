@@ -43,6 +43,10 @@ export default async function handler(req,res){
    if(!env.SHIYE_COS_SECRET_ID||!env.SHIYE_COS_SECRET_KEY||
      !env.SHIYE_COS_BUCKET||!env.SHIYE_COS_REGION)
      return fail(res,503,'COS 删除权限未配置；没有执行数据库清空');
+   // Another device may have completed cleanup between two requests.
+   // A retry for the same resetId is always idempotent.
+   if(marker?.phase==='complete'&&marker.resetId===resetId)
+     return res.status(200).json({reset:true,more:false,phase:'complete',resetId});
    if(req.body.mode==='start'){
      // A prior interrupted run must finish rather than being reset again.
      if(marker?.phase==='deleting')
