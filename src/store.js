@@ -2,7 +2,7 @@ import {openDB,unwrap} from 'idb';
 import {createStorageRouter} from './storage-router.js';
 import {cloudEnabled} from './cloud-session.js';
 import {prepareProjectScene,partitionProjectList,attachSceneV2} from './scene-v2.js';
-import {cloudRunExclusiveReset,cloudPurgeLocalAfterReset,cloudConflictReview,cloudConflictBackup,cloudResolveProjectConflict,cloudMigrationInventory,cloudMigrationOriginalProject,cloudMigrationCommit,cloudLegacyProjectBackup,cloudAll,cloudGet,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudPreview,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudPendingDetails,cloudDiscardPending,cloudFlushProjects,cloudProjectDocument,cloudEmergencySnapshot,cloudRestoreEmergency,cloudBackupBlobIDs} from './cloud-store.js';
+import {cloudRunExclusiveReset,cloudPurgeLocalAfterReset,cloudConflictReview,cloudConflictBackup,cloudResolveProjectConflict,cloudMigrationInventory,cloudMigrationOriginalProject,cloudMigrationCommit,cloudLegacyProjectBackup,cloudAll,cloudGet,cloudReloadBlob,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudPreview,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudPendingDetails,cloudDiscardPending,cloudFlushProjects,cloudProjectDocument,cloudEmergencySnapshot,cloudRestoreEmergency,cloudBackupBlobIDs} from './cloud-store.js';
 import {createPendingRecovery,parsePendingRecovery} from './emergency-backup.js';
 import {validateBackupData,validateRestoredRecords} from './backup-integrity.js';
 // Exceptional destructive imports require an acknowledged atomic cloud commit.
@@ -26,6 +26,9 @@ export async function restoreEmergencyBackup(file){
   const parsed=await parsePendingRecovery(file);
   return cloudRestoreEmergency(parsed);
 }
+// Only used when a previously-saved image Blob cannot be decoded from
+// IndexedDB. Refetches signed remote original bytes without changing metadata.
+export const reloadCloudBlob=id=>cloudEnabled?cloudReloadBlob(id):get('blobs',id);
 export const discardPendingSync=()=>cloudEnabled?cloudDiscardPending():Promise.resolve(0);
 export const runExclusiveAccountReset=task=>cloudEnabled?cloudRunExclusiveReset(task):Promise.reject(Error('此模式不支持云端清理'));
 export async function purgeLocalAfterCloudReset(){
