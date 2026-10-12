@@ -243,3 +243,25 @@ body:has(.import-nav) #view>.import-nav>.sync-indicator{display:none!important}
   #modal .cutout-modal>.cutout-preview{height:clamp(105px,23dvh,155px)!important;min-height:105px!important}
   #modal .cutout-modal>.cutout-hint{display:none}
 }
+
+/* Native modal must show progress instead of only dimming the background
+   while candidate RGB or alpha bytes are still being fetched from COS. */
+#modal:has(.cutout-loading){
+  box-sizing:border-box;width:min(350px,90vw)!important;
+  max-height:60dvh;padding:0!important;background:#fffefa;
+  border-radius:20px;overflow:hidden;
+}
+#modal .cutout-loading{
+  display:grid;align-content:center;justify-items:center;
+  gap:12px;padding:32px 18px;text-align:center;min-height:180px;
+  color:#344b3d;
+}
+#modal .cutout-loading strong{font-size:16px;font-weight:650}
+#modal .cutout-loading p{
+  color:#7e8f7f;font-size:12px;line-height:1.6;
+  margin:0;overflow-wrap:anywhere;
+}
+#modal .cutout-loading .btn{
+  min-height:36px;padding:8px 20px;border-radius:18px;
+  background:#e9eee5;color:#52634b;font-size:13px;
+}
