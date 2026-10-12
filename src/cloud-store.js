@@ -10,6 +10,7 @@ import {imageVariant,DISPLAY_TIERS,COVER_EDGE} from './image-variants.js';
 import {recoverImportOutbox} from './import-outbox-recovery.js';
 import {recoverProjectOutbox,usableProjectSnapshot} from './project-outbox-recovery.js';
 import {migrationPendingConflicts} from './migration-outbox-guard.js';
+import {forkConflictingEditableWork} from './sync-conflict-copy.js';
 import {isLegacySceneProject} from './scene-v2.js';
 export function createCloudStore({cloudClient,requireCloudUser,cache=null,namespace='cloud',projectPreview=()=>null,objectStorage=null}){
 const BUCKET='shiye-private';
@@ -163,17 +164,9 @@ const projectSync=createProjectSync({
   // A true same-document collision produces a new recoverable editable work.
   // Neither revision of the existing project is overwritten by timestamps.
   onConflict:async record=>{
-    if(!usableProjectSnapshot(record))return null;
-    const copy=structuredClone(record),originalId=record.id;
-    copy.id=crypto.randomUUID();
-    copy.title=String(record.title||'未命名作品').slice(0,64)+' · 同步冲突保留';
-    copy.updatedAt=new Date().toISOString();
-    delete copy.projectDocumentPath;
-    delete copy.projectDocumentProvider;
-    delete copy.projectDocumentEncoding;
-    delete copy.coverStaticPath;
-    delete copy.coverBaselineUpdatedAt;
-    delete copy.__cloudBaseRevision;
+    const copy=forkConflictingEditableWork(record);
+    if(!copy)return null;
+    const originalId=record.id;
     copy.__cloudSessionId=crypto.randomUUID();
     editorBases.set(copy.__cloudSessionId,revision);
     if(typeof window!=='undefined')window.dispatchEvent(new CustomEvent('shiye-project-conflict-copy',{
@@ -233,9 +226,16 @@ async function reconcileImport(batch,operationID,baseRevision){
         const live=await cloudRecord(op.store,id);
         if(marker&&!live){operations.push(op);continue;}
       }
-      // A newer remote edit on the same key is a real conflict. Timestamp
-      // comparison must never turn an unacknowledged delete into success or
-      // silently overwrite another device's full record.
+      // Old builds sometimes submitted an editable project through the
+      // generic import queue. If the same document has changed remotely,
+      // replay the locally backed-up scene as a NEW work instead of leaving
+      // this queue permanently stuck or overwriting the remote scene.
+      if(op.action==='put'&&op.store==='projects'){
+        const copy=forkConflictingEditableWork(op.item);
+        if(copy){operations.push({...op,item:copy});continue;}
+      }
+      // Deletes, malformed documents and other conflicting records must
+      // remain pending for explicit recovery, never be silently dropped.
       return 'conflict';
     }
     if(!operations.length)return 'remote';
