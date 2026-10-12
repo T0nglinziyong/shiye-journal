@@ -125,7 +125,7 @@ function notifyCloudSuperseded(){
 function reportSync(){if(typeof window!=='undefined'){const current=unifiedSync.status();window.dispatchEvent(new CustomEvent('shiye-project-sync',{detail:{pending:current.pending+writesInFlight,error:current.error}}));}}
 // One durable account-scoped queue, one upload scheduler. The project and
 // import accessors below are filtered facades; neither owns a second queue.
-async function loadUnifiedOutbox(){
+async function loadUnifiedOutbox(recover=false){
   if(!cache)return [];
   const user=await account();
   let result;
@@ -141,6 +141,60 @@ async function loadUnifiedOutbox(){
       if(result.quarantine.length)await cache.put(user,'sync-quarantine',result.quarantine);
     }
   }
+  if(recover&&result.rows.some(row=>row.record?.kind==='batch')){
+    // Reuse the existing crash-recovery gate before the first upload. A
+    // missing Safari Blob is not evidence that its COS source also vanished.
+    const recovered=await recoverImportOutbox(importSyncRows(result.rows),async(asset,ids)=>{
+      const userID=await identity();
+      if(!ids.length)return false;
+      const copies=checked(await cloudClient().from('shiye_records').select('id,record')
+        .eq('user_id',userID).eq('store','blobs').in('id',ids)
+        .abortSignal(AbortSignal.timeout(5000)));
+      const available=[];
+      for(const copy of copies){
+        const metadata=copy.record;
+        if(!metadata?.storagePath||!['cos','supabase'].includes(metadata.storageProvider))continue;
+        if(!metadata.storagePath.startsWith(userID+'/'))throw Error('图片不属于当前账号');
+        const localBlob=await cached('image:'+metadata.storagePath);
+        if(usableBlob(localBlob)){available.push(copy.id);continue;}
+        if(metadata.storageProvider==='cos'&&objectStorage?.probe){
+          if(await objectStorage.probe(metadata.storagePath)){available.push(copy.id);continue;}
+        }
+        try{if(usableBlob(await downloadObject(metadata.storagePath,metadata.storageProvider)))available.push(copy.id);}
+        catch(error){if(!/\\b404\\b|NoSuchKey|Object not found/i.test(error?.message||''))throw error;}
+      }
+      return available;
+    });
+    if(recovered.changed){
+      const byOperation=new Map(recovered.rows.map(row=>[row.operationID,row]));
+      const held=[],updated=[];
+      for(const row of result.rows){
+        if(row.record?.kind!=='batch'){updated.push(row);continue;}
+        const repair=byOperation.get(row.operationID);
+        if(!repair){
+          held.push({kind:'batch',reason:'unrecoverable-import',row:{
+            ...row,record:row.record.payload
+          }});
+          continue;
+        }
+        if(repair.record!==row.record.payload){
+          held.push({kind:'batch',reason:'original-before-import-recovery',row:{
+            ...row,record:row.record.payload
+          }});
+          updated.push({...row,operationID:crypto.randomUUID(),record:{
+            ...row.record,payload:repair.record
+          }});
+        }else updated.push(row);
+      }
+      if(typeof cache.repairUnifiedOutbox==='function'){
+        result=await cache.repairUnifiedOutbox(user,result.rows,updated,held);
+      }else{
+        await cache.put(user,'sync-quarantine',[...result.quarantine,...held]);
+        await cache.put(user,'unified-outbox',updated);
+        result={rows:updated,quarantine:[...result.quarantine,...held]};
+      }
+    }
+  }
   unifiedOutboxBefore=structuredClone(result.rows);
   unifiedQuarantine=structuredClone(result.quarantine);
   projectOutboxQuarantine=unifiedQuarantine.filter(item=>item.kind==='project').map(item=>item.row);
@@ -148,8 +202,8 @@ async function loadUnifiedOutbox(){
 }
 const unifiedSync=createProjectSync({
   autoFlushDelayMs:10000,
-  load:loadUnifiedOutbox,
-  reload:loadUnifiedOutbox,
+  load:()=>loadUnifiedOutbox(true),
+  reload:()=>loadUnifiedOutbox(false),
   write:async rows=>{
     await persistOutbox('unified-outbox',unifiedOutboxBefore,rows);
     unifiedOutboxBefore=structuredClone(rows);
