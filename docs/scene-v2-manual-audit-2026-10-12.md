@@ -47,3 +47,32 @@
 ## 处理原则
 
 PR #128 **保持 Draft，不合入 test** 直到 P0 架构统一与构建/持久化/视觉回归有充分的实测证据。GitHub Actions 的 Failure 在无可用 job 执行日志时不能擅自解释为源码断言失败或已通过。
+
+
+## 2026-10-12 上传完整源 ZIP 后的第二轮审查（截至 PR #128 最新分支）
+
+源 ZIP 内含完整 PWA 源码，对应上传时的 `ee064259` 快照。已在本地解压，使用 Node 22 执行真实的 `node:test` 测试，不再仅靠 GitHub 源码隔离执行。
+
+### 已提交到 PR #128 的新增修复
+
+- **只接受 Scene v2**：`attachSceneV2` 明确要求 `sceneVersion=2` 和递归 `layers`；拒绝持久化的并列 `items/textBlocks/primitives/strokes/layerGroups`，删除从旧四数组自动生成 Scene 的逻辑和“缺失实体生成基线时猜测恢复”的行为。此处不提供旧数据升级。
+- **保存数据保护**：`recoverProjectOutbox` 对待同步文档执行 v2 结构及图层几何校验，旧格式或损坏记录不得自动同步；同时 `cloud-store` 保存这些原始记录作为不可自动重放的待恢复数据，不在读取/写入有效队列时静默删除。需要未来的显式恢复 UI，不能把“隔离”当作“自动修好”。
+- **锁定图层保护**：组内锁定、锁定祖先、整组删除、嵌套移动/解组均添加结构校验；删除包含锁定叶子的组合会被拒绝。
+- **纸张规格**：`setDraftPaperSize` 现在按同一个场景树转换实体、数字文字、矢量图形、笔迹、嵌套组合的绝对坐标和尺寸，保留实物毫米尺寸与压感值。
+- **内置作品物理真实性**：不再为适配作品页面默默缩小真实素材；过大的素材实例被跳过，而不是修改源 mm 对应的尺寸。
+- **测试更新**：AI 提交/快照、历史版本、导入、封面、离线恢复的模拟输入改为当前递归 Scene v2；增加纸张多类图层物理坐标及锁定组合回归测试。
+
+### 本地执行证据
+
+- `node --check`：检查 390 个源码和测试 JS/MJS 文件，语法检查全部通过（包含修改后源码）。
+- 依赖无关的专项测试：`node --test tests/scene-model.test.js tests/project-outbox-recovery.test.js tests/import-outbox-recovery.test.js tests/scene-paper-transform.test.js`，28/28 通过。其他历史记录、导入和封面相关的可执行专项也通过。
+- 完整 `node --test tests/*.test.js`：374 项中 **304 通过、70 未通过**；剩余错误来自本地缺少 `ajv`、`fflate`、`idb`、`@noble/hashes`、`happy-dom`、`@techstark/opencv-js` 等 npm 依赖；其中并未取得可信的依赖完整后测试通过结论。
+- 尝试 `npm ci --offline --ignore-scripts`：未成功，首先缺失缓存包 `ws@8.22.0`。容器中 npm registry 网络不可用。未执行 `npm run build`，也未重新生成受 Scene v2 改动影响的离线 validator/browser 打包产物。
+
+### 仍属于 P0，阻断合并到 test
+
+1. 运行时 `listView` 和相当多编辑/AI 模块仍通过临时的旧名称集合属性操作 `layers`。虽然不会存储第二套数组，并修复了主要写回缺陷，但它仍然是**待清理的内部适配层**，未满足“彻底删除旧代码兼容”的严格目标。
+2. AI `page.layers` 树的同级数组顺序与 `zIndex` / 实体 `underlay` 关系仍可能形成双重权威。需要有视觉/库存断言支持的统一排序模型。
+3. 必须在可安装项目依赖的环境执行 `npm ci && npm test && npm run build`，重新生成 `src/generated/offline-*-source.js`，并在真实 Chromium/iPad Safari 验证保存、导出、重开、蒙版、嵌套组合及跨设备 COS/Supabase 同步。
+
+**合并结论：不应合并。** PR #128 继续保留 Draft，`test` 和 `main` 均未被修改。上述阻断项属于真实验收差距，不能通过仅调整测试文案来消除。
