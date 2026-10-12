@@ -51,7 +51,7 @@ export async function gcOneBatch({client,user,record,env=process.env,
      });
      if(result?.Error?.length)throw Error('COS 批量删除返回部分失败');
    }
-   const truncated=String(page.IsTruncated).toLowerCase()==='true';
+   const truncated=['true','1'].includes(String(page.IsTruncated).toLowerCase());
    const nextCursor=truncated?(page.NextMarker||keys.at(-1)):null;
    if(truncated&&(!nextCursor||nextCursor===cursor))throw Error('COS 分页游标未前进；未完成清理');
    const update={...record,gcCosDone:!truncated,gcCursor:nextCursor,
