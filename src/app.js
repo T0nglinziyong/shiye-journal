@@ -1407,8 +1407,10 @@ async function openCutoutCheck(id,candidate=null){
   }else if(!(candidateFrame instanceof Blob)||candidateFrame.size<8||
             !(finalMaskBlob instanceof Blob)||!finalMaskBlob.size)
     throw Error('候选框 RGB 或最终蒙版尚未完整同步，已保留旧素材，请检查同步后重试');
-  if(cancelled)return;
-  if(modal.open)modal.close();
+  if(cancelled||!modal.open)return;
+  // Keep one native dialog in the top layer throughout the transition.
+  // Closing it here and reopening inside showCutoutEditor can lose the
+  // second showModal() on iOS Safari, leaving only the grey backdrop.
   const processing=candidate?.processingRecord||a.processingRecord||{},baseWidth=processing.sourceWidthMM||candidate?.width||a.physicalWidthMM,baseHeight=processing.sourceHeightMM||candidate?.height||a.physicalHeightMM,
     localMethods=recognitionMethodDetails,
     preferredMethod=localMethods.some(item=>item.id===(processing.rerecognition?.method||state.preferences.recognition))?(processing.rerecognition?.method||state.preferences.recognition):'auto';
