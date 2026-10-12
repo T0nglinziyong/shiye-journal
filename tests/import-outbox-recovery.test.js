@@ -61,7 +61,7 @@ test('a remote primary survives missing local bytes; uncertain network never del
   assert.deepEqual(uncertain.rows,input);
 });
 test('an interrupted work import is atomic: a lost background removes the pending work',async()=>{
-  const work={id:'work',activeDraftID:'page',drafts:[{id:'page',canvas:{width:700,height:1000},items:[],textBlocks:[],primitives:[],strokes:[]}]};
+  const work={id:'work',activeDraftID:'page',drafts:[{id:'page',sceneVersion:2,canvas:{width:700,height:1000},layers:[]}]};
   const input=[{...row([asset('background','lost'),asset('cutout','good')],[{id:'lost',data:new Blob([])},{id:'good',data:new Blob(['visible'])}]),record:{id:'batch',assets:[asset('background','lost'),asset('cutout','good')],blobs:[{id:'lost',data:new Blob([])},{id:'good',data:new Blob(['visible'])}],projects:[work]}}];
   const result=await recoverImportOutbox(input,async()=>false);
   assert.deepEqual(result.rows,[]);assert.equal(result.removed,1);
