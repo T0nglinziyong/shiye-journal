@@ -1,6 +1,6 @@
 import {createSceneTransition,hasSceneChanges} from './scene-history-delta.js';
 import {snapshotDraft} from './draft-snapshot.js';
-import {archivePayload} from './scene-archive.js';
+import {archivePayload,readArchivePayload} from './scene-archive.js';
 
 export const AUTO_SNAPSHOT_OPERATIONS=30;
 export const AUTO_SNAPSHOT_INTERVAL_MS=5*60*1000;
@@ -63,7 +63,7 @@ export function restoreAutoSceneSnapshot(project,id){
  if(!item||!project.autoSceneSnapshotStore?.[item.hash])throw Error('自动快照不存在');
  // Caller may use readArchivePayload for explicit restore; this function
  // returns the saved archive record rather than silently mutating the scene.
- return {item,archive:project.autoSceneSnapshotStore[item.hash]};
+ return {item,drafts:readArchivePayload(project.autoSceneSnapshotStore[item.hash],item.hash),activeDraftID:item.activeDraftID};
 }
 export const currentSceneDraft=project=>project?.drafts?.find(d=>d.id===project.activeDraftID)||project?.drafts?.[0];
 export const copySceneBaseline=draft=>draft?snapshotDraft(draft):null;
