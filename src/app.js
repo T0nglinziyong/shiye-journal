@@ -1712,6 +1712,10 @@ window.addEventListener('shiye-cloud-superseded',()=>{
   if(!shouldPullCloudForRoute(state.route))return;
   void backgroundCloudCheck({force:true});
 });
+window.addEventListener('shiye-project-conflict-copy',event=>{
+  const {copyId}=event.detail||{};
+  if(copyId)toast('已保留其他设备原稿；当前修改正作为新的独立作品同步，请在作品页查看。');
+});
 window.addEventListener('shiye-project-sync',event=>{const {pending,error}=event.detail;syncDisplay.pending=pending;syncDisplay.error=error;syncDisplay.checking=false;if(!dirtyProjects.size&&!savingProjects)syncDisplay.localPending=false;updateSyncIndicator();if(error){saveStatus('待同步 · 修改已保留在本机');const message=error.name==='AbortError'||/abort|timed? ?out/i.test(error.message||'')?'网络请求中断，本机修改已保留，将自动重试同步':error.message||'云端暂不可用，本机修改已保留，将自动重试';if(lastSyncError!==message)toast(message);lastSyncError=message;}else{lastSyncError=null;saveStatus(pending?'修改已暂存 · 后台同步中':'已保存到云端');privateImages.retryMissing();}});
 let cloudCheck,cloudCheckAt=0,cloudSessionReady=false,cloudCheckAgain=false;
 let syncPausedByUser=false;
