@@ -539,8 +539,9 @@ test('older generic project PUT from the same phone is rescued without overwriti
  state.rows=[{...structuredClone(work),title:'已经上传的较新版本'}];
  state.changes=[{revision:1,keys:[{store:'projects',id:'same-work',action:'put'}]}];
  await db.cloudFlushProjects();
- assert.equal(state.calls.length,1,'the old queue must upload one recoverable copy');
- const uploaded=state.calls[0].operations.find(op=>op.store==='projects'&&op.action==='put').item;
+ assert.equal(state.calls.length,2,'one obsolete CAS attempt and one committed independent copy');
+ const uploaded=state.calls.at(-1).operations.find(op=>op.store==='projects'&&op.action==='put').item;
+ assert.equal(state.calls[0].expected_revision,0,'the old PUT cannot win its stale revision');
  assert.notEqual(uploaded.id,'same-work');
  assert.match(uploaded.title,/同步冲突保留/);
  assert.equal(uploaded.drafts[0].layers[0].content,'留住这一页');
