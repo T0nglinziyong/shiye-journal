@@ -3,7 +3,7 @@ import {onDialogClosed} from './dialog-lifecycle.js';
 
 const clamp=v=>Math.max(0,Math.min(1,v));
 export function showMaterialSplitEditor(c,item,{onBack}={}){
- const {body,modal,asset,imgTag,current,checkpoint,saveProject,render,toast}=c;
+ const {body,modal,asset,imgTag,db,current,checkpoint,saveProject,render,toast}=c;
  const source=asset(item.assetID);if(!source)return;
  let mode='vertical',position=.5,points=[],from=null,to=null,dragging=false;
  body.innerHTML='<section class="material-split-editor">'+
@@ -31,8 +31,29 @@ export function showMaterialSplitEditor(c,item,{onBack}={}){
      sourceCrop.width*image.naturalWidth,sourceCrop.height*image.naturalHeight,0,0,w,h);
  };
  const imgHost=document.createElement('div');imgHost.innerHTML=imgTag(source);const img=imgHost.querySelector('img');
- image.onload=renderPreview;image.onerror=()=>status.textContent='图片尚未加载，请等待后重试';
- if(img?.src)image.src=img.src;
+ let privateURL=null;
+ const fitOverlay=()=>{
+   const host=canvas.parentElement.getBoundingClientRect(),box=canvas.getBoundingClientRect();
+   if(!box.width||!box.height)return;
+   Object.assign(overlay.style,{inset:'auto',
+     left:(box.left-host.left)+'px',top:(box.top-host.top)+'px',
+     width:box.width+'px',height:box.height+'px'});
+ };
+ image.onload=()=>{renderPreview();requestAnimationFrame(fitOverlay);};
+ image.onerror=()=>status.textContent='图片尚未加载，请等待后重试';
+ // Use the actual source PNG from private storage instead of a low-resolution
+ // asynchronous list thumbnail; never persist a material split from placeholder pixels.
+ Promise.resolve(db?.get('blobs',source.blobId)).then(row=>{
+   if(row?.data instanceof Blob&&row.data.size>8){
+     privateURL=URL.createObjectURL(row.data);image.src=privateURL;
+   }else if(img?.src)image.src=img.src;
+   else status.textContent='请等待源素材完成同步';
+ }).catch(error=>{status.textContent='素材图像未能读取：'+error.message;});
+ const resized=new ResizeObserver(fitOverlay);resized.observe(canvas.parentElement);
+ onDialogClosed(modal,()=>{
+   resized.disconnect();
+   if(privateURL)URL.revokeObjectURL(privateURL);
+ });
  const currentSpec=()=>{
   if(mode==='vertical'||mode==='horizontal')return {mode,position};
   if(mode==='line')return {mode,from,to};
