@@ -97,7 +97,8 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
           }
           if(resolution?.kind==='replace'){
             if(!resolution.record)throw Error('同步合并结果不完整');
-            if(!resolution.record.operations?.length){
+            if(resolution.record.kind==='batch'&&
+              !resolution.record.payload?.operations?.length){
               await acknowledge(row);
               onSuperseded(row.record);
               continue;
@@ -140,7 +141,8 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
           if(resolved==='committed'){await acknowledge(row);continue;}
           if(resolved==='remote'){await acknowledge(row);onSuperseded(row.record);continue;}
           if(resolved?.kind==='replace'){
-            if(!resolved.record?.operations?.length){await acknowledge(row);onSuperseded(row.record);continue;}
+            if(resolved.record.kind==='batch'&&
+              !resolved.record.payload?.operations?.length){await acknowledge(row);onSuperseded(row.record);continue;}
             row.record=structuredClone(resolved.record);
             row.baseRevision=revision();row.operationID=crypto.randomUUID();
             await persist();onSuperseded(row.record);continue;
