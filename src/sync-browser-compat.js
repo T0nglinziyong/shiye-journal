@@ -45,8 +45,9 @@ export async function runAccountBrowserLock(account,callback,{
  }finally{clearTimeout(timer);}
 }
 export function markSyncPhase(error,phase){
- if(error&&typeof error==='object'&&!error.syncPhase)
-   error.syncPhase=phase;
+ if(error&&typeof error==='object'&&!error.syncPhase){
+   try{error.syncPhase=phase;}catch{/* Some WebKit DOMExceptions are sealed. */}
+ }
  return error;
 }
 export function describeSyncError(error){
