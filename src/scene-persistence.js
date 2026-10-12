@@ -5,10 +5,7 @@ import {archivePayload} from './scene-archive.js';
 export const AUTO_SNAPSHOT_OPERATIONS=30;
 export const AUTO_SNAPSHOT_INTERVAL_MS=5*60*1000;
 const HOUR=3600_000,DAY=24*HOUR;
-const diffHasChanges=(a,b)=>hasSceneChanges(createSceneTransition(a,b));
 const validDate=v=>Number.isFinite(Date.parse(v))?Date.parse(v):0;
-const copy=structuredClone;
-const signature=drafts=>JSON.stringify(drafts.map(d=>[d.id,d.layers,d.canvas,d.pageRatio,d.paperColor,d.paperPattern]));
 
 function prune(project,now){
  const entries=(project.autoSceneSnapshots||[]).slice().sort((a,b)=>validDate(b.at)-validDate(a.at));
@@ -31,12 +28,11 @@ export function makeAutoSceneSnapshot(project,{reason='periodic',at=new Date().t
  if(!project||project.isSnapshot||!Array.isArray(project.drafts)||!project.drafts.length)return false;
  const unsnapped=project.sceneOperationsSinceSnapshot||0;
  if(!unsnapped&&!force)return false;
- const content=signature(project.drafts);
- const prior=project.autoSceneSnapshots?.[0];
- if(prior?.signature===content&&!force)return false;
  const {hash,payload}=archivePayload(project.drafts);
+ const prior=project.autoSceneSnapshots?.at(-1);
+ if(prior?.hash===hash&&!force)return false;
  (project.autoSceneSnapshotStore||={})[hash]||=payload;
- (project.autoSceneSnapshots||=[]).push({id:crypto.randomUUID(),hash,at,reason,operationCount:unsnapped,activeDraftID:project.activeDraftID,signature:content});
+ (project.autoSceneSnapshots||=[]).push({id:crypto.randomUUID(),hash,at,reason,operationCount:unsnapped,activeDraftID:project.activeDraftID});
  project.sceneOperationsSinceSnapshot=0;
  project.lastAutoSceneSnapshotAt=at;
  prune(project,validDate(at)||Date.now());
