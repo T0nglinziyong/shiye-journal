@@ -594,6 +594,7 @@ async function cloudMigrationCommit({expectedRevision,changes}){
    !change.converted||change.id!==change.converted.id))throw Error('迁移写入目标不安全');
  await identity();await queue;
  const [pendingProjects,pendingImports]=await Promise.all([projectSync.pending(),importSync.pending()]);
+ if(projectOutboxQuarantine.length)throw Error('存在隔离的旧版待同步数据；请先导出应急备份并单独恢复，再进行账号迁移');
  if(pendingProjects.length||pendingImports.length)throw Error('存在待同步修改，请先解决冲突或备份本机待同步内容；未执行迁移');
  const current=await version();
  if(current!==expectedRevision)throw Error('迁移扫描后云端版本已变化，请重新扫描；未覆盖任何资料');
