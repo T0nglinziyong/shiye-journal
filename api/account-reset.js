@@ -40,9 +40,17 @@ export default async function handler(req,res){
    if(req.body?.mode!=='start'||req.body?.confirm!=='RESET_MY_DATA'||
       !validResetId(req.body?.resetId))
      return out(res,400,{error:'请在网页中二次确认账号清理'});
-   if(marker?.phase==='deleting')
+   if(marker?.phase==='deleting'){
+     // Do not claim a second reset succeeded if new artwork was created
+     // under the current generation while the previous GC was running.
+     const {count,error:countError}=await cloud.from('shiye_records')
+       .select('id',{count:'exact',head:true}).eq('user_id',user)
+       .neq('store','meta');
+     if(countError)throw Error('不能核验当前账号是否有新作品');
+     if(count>0)return out(res,409,{error:'旧文件仍在后台清理，当前账号已有新数据；请在旧清理完成后再次重置'});
      return out(res,202,{accepted:true,phase:'deleting',databaseCleared:true,
        resetId:marker.resetId,queued:true});
+   }
    if(marker?.resetId===req.body.resetId&&marker.phase==='complete')
      return out(res,200,{accepted:true,phase:'complete',databaseCleared:true,
        resetId:marker.resetId,queued:false});
