@@ -265,11 +265,13 @@ const projectSync={
   pending:()=>selectedRows('project'),
   resolvePending:(id,serial,opts)=>resolveEnvelope('project',id,serial,opts),
   cancelPendingFor:ids=>unifiedSync.cancelPendingFor(ids.map(id=>'project:'+id)),
+  status:()=>unifiedSync.status(),
 };
 const importSync={
   stage:(record,opts)=>unifiedSync.stage(syncEnvelope('batch',record),opts),
   pending:()=>selectedRows('batch'),
   resolvePending:(id,serial,opts)=>resolveEnvelope('batch',id,serial,opts),
+  status:()=>unifiedSync.status(),
 };
 // A reset is a high-priority epoch barrier. Outboxes staged before a
 // deliberate all-data reset must NEVER revive old artwork after reconnect.
