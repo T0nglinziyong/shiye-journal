@@ -132,7 +132,7 @@ export function sceneGroupMembers(d,id){return sceneLayerEntries(d,{hidden:true}
 export function groupSceneLayers(d,ids,{id='group-'+generatedID(),name='手帐组合'}={}){
  attachSceneV2(d);
  if(!Array.isArray(ids)||ids.length<2||ids.length>80||new Set(ids).size!==ids.length)throw Error('请选择 2–80 个不同图层进行编组');
- if(!/^[a-zA-Z0-9_-]{1,96}$/.test(id)||lookupGroup(d.layers,id))throw Error('图层组编号无效或重复');
+ if(!/^[a-zA-Z0-9_-]{1,96}$/.test(id)||findSceneNode(d,id))throw Error('图层组编号无效或重复');
  const selected=sceneLayerEntries(d,{hidden:true}).filter(e=>ids.includes(e.value.id));
  if(selected.length!==ids.length||selected.some(e=>e.value.locked||e.value.isLocked))throw Error('编组包含不存在或锁定的图层');
  const parent=selected[0].parents.at(-1)||null;
