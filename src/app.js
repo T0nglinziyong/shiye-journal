@@ -29,6 +29,7 @@ import {describeSyncError} from './sync-browser-compat.js';
 import {setCloudProjectPreview} from './cloud-store.js';
 import {snapshotDraft} from './draft-snapshot.js';
 import {saveManualArchive,restoreManualArchive} from './scene-archive.js';
+import {recordSceneOperation,makeAutoSceneSnapshot,currentSceneDraft,copySceneBaseline} from './scene-persistence.js';
 import {reconcileCanvasText,textParagraphMarkup} from './canvas-text-content.js';
 import {reconcileEditorScene} from './editor-scene-reconcile.js';
 import {checkpointEditorHistory,ensureEditorHistory,resetEditorHistory,takeEditorHistoryStep} from './editor-history-scope.js';
@@ -293,7 +294,7 @@ function route(name,{back=false,restoreMaterial=false}={}){
     parity.libraryTab=lastMaterialLocation.libraryTab||'series';
   }
   if(!back&&!fromSettings&&name!=='settings'&&name!==state.route)navigationHistory.push({route:state.route,seriesID:state.seriesID,detailAssetID:state.detailAssetID,previewProjectID:state.previewProjectID});
-  if(state.route==='editor'&&name!=='editor')view.endTextEditing?.();
+  if(state.route==='editor'&&name!=='editor'){view.endTextEditing?.();snapshotEditedScene('leave-editor');}
   routeScroll.set(state.route+':'+state.seriesID,window.scrollY);
   if(name==='settings'&&!settingsSession)settingsSession={ai:structuredClone(state.aiSettings),preferences:structuredClone(state.preferences),returnRoute:state.route};
   if(state.route==='settings'&&name!=='settings'&&settingsSession){state.aiSettings=settingsSession.ai;state.preferences=settingsSession.preferences;settingsSession=null;state.settingsSection=null;if(cloudEnabled&&deferredSyncedPreferences)state.preferences=savePreferences(deferredSyncedPreferences);if(cloudEnabled&&deferredSyncedAISettings)state.aiSettings=saveAISettings(deferredSyncedAISettings);deferredSyncedPreferences=null;deferredSyncedAISettings=null;}
@@ -337,7 +338,7 @@ function render(){
   mountParityControls();bindPage();mountWorkflowControls({state,view,body,modal,db,render,route,toast,imgTag,assetCard,esc,asset,refresh,download,modelImage,rasterize,backup,openSeriesEditor,openAssetEditor:openDetail,openCutoutCheck,switchImportRecord,saveActiveImportRecord,saveProject,flushSave,assetOrganization,applyAssetClassification});view.catalogRefresh?.();if(state.route==='works'){
     view.localWorkCoverDispose=localWorkCovers.observe(view);
     view.workCoverDispose=workCoverBackfill.observe(view);
-  }if(state.route==='editor'){view.editorDraft=current();view.editorInk=current().strokes;view.editorLayoutKey=editorLayoutKey();mountCanvasEditor({state,view,body,modal,current,checkpoint,saveProject,render,route,flushSave,toast,esc,imgTag,asset,handle,openCutoutCheck,openAICreation});mountCanvasSelection({state,view,current,checkpoint,saveProject,render,toast});}
+  }if(state.route==='editor'){view.editorDraft=current();view.editorInk=current().strokes;view.editorLayoutKey=editorLayoutKey();markSceneTrackingBaseline(state.activeProject);mountCanvasEditor({state,view,body,modal,current,checkpoint,saveProject,render,route,flushSave,toast,esc,imgTag,asset,handle,openCutoutCheck,openAICreation});mountCanvasSelection({state,view,current,checkpoint,saveProject,render,toast});}
   if(state.route==='matching'&&
      matchingScrollMemory?.account===(state.accountId||'browser')){
     // The page and every independent scrollable column/textarea keep their
@@ -702,6 +703,30 @@ function bindInspector(){const d=current(),e=d&&editorEntry(d).find(x=>x.value.i
   const change=(id,fn)=>{const el=view.querySelector('#'+id);if(el)el.addEventListener('change',()=>{checkpoint();fn(el.value);saveProject();render();});};
   if(e){for(const [id,key] of [['inspector-width','width'],['inspector-height','height'],['inspector-rotation','rotation'],['inspector-z','zIndex'],['inspector-opacity','opacity'],['inspector-font-size','fontSize']].filter(([,key])=>e.kind!=='material'||!['width','height'].includes(key)))change(id,v=>{e.value[key]=Number(v);if(e.kind==='material')e.value.userOverrideFlags=[...new Set([...(e.value.userOverrideFlags||[]),key==='width'||key==='height'?'resized':key])];});change('inspector-text',v=>e.value.content=v);change('inspector-font',v=>e.value.style=v);}else{change('paper-color',v=>d.paperColor=v);change('paper-pattern',v=>d.paperPattern=v);change('page-ratio',v=>{if(presetPaperDimensions(v))setDraftPaperSize(d,v);});change('page-mode',v=>{d.pageMode=v;d.canvas=canvasSize(v,d.pageRatio);});}}
 function checkpoint(){const d=current();if(!d)return;ensureEditorHistory(state);captureHistory(state.activeProject);checkpointEditorHistory(state,d);}
+// Per-editor-draft source baselines let Scene v2 generate property-level
+// patches on each committed user action without duplicating full drafts.
+const sceneTrackBases=new Map();
+const sceneTrackKey=p=>p?.id&&p.activeDraftID?p.id+':'+p.activeDraftID:null;
+function markSceneTrackingBaseline(p){
+  const key=sceneTrackKey(p),d=currentSceneDraft(p);
+  if(key&&d&&!sceneTrackBases.has(key))sceneTrackBases.set(key,copySceneBaseline(d));
+}
+function trackEditedScene(p,at){
+  const key=sceneTrackKey(p),d=currentSceneDraft(p);
+  if(!key||!d)return;
+  const previous=sceneTrackBases.get(key);
+  if(previous&&previous.id===d.id)
+    recordSceneOperation(p,previous,d,{actor:p.__cloudSessionId||state.accountId||'browser',at});
+  sceneTrackBases.set(key,copySceneBaseline(d));
+}
+function snapshotEditedScene(reason){
+  const p=state.route==='editor'?state.activeProject:null;
+  if(!p||!p.sceneOperationsSinceSnapshot)return false;
+  try{
+    if(!makeAutoSceneSnapshot(p,{reason}))return false;
+    saveSpecificProject(p);return true;
+  }catch(error){console.warn('Scene 自动快照将于下次编辑补录',error?.message);return false;}
+}
 let saveTimer,saveChain=Promise.resolve(),savingProjects=0;
 const dirtyProjects=new Map(),dirtyUsageAssets=new Map();
 const saveVersions=new Map();
@@ -722,7 +747,7 @@ function saveSpecificProject(p){if(!p)return;delete p.isTemplate;if(cloudEnabled
   // can be drawn locally immediately; COS receives the next uploaded version.
   const active=p.drafts?.find(d=>d.id===p.activeDraftID)||p.drafts?.[0];
   if(active&&!p.isSnapshot){delete active.coverImageID;delete active.coverSceneHash;}
-  const now=new Date().toISOString();p.updatedAt=now;if(p.isUsed)for(const updated of markProjectAssetsUsed(p,state.assets,now)){const live=state.assets.find(asset=>asset.id===updated.id);if(live)Object.assign(live,updated);dirtyUsageAssets.set(updated.id,updated);}saveVersions.set(p.id,(saveVersions.get(p.id)||0)+1);dirtyProjects.set(p.id,p);saveStatus('后台保存中…');syncDisplay.localPending=true;updateSyncIndicator();if(!saveTimer)saveTimer=setTimeout(()=>flushSave().catch(console.error),500);}
+  const now=new Date().toISOString();trackEditedScene(p,now);p.updatedAt=now;if(p.isUsed)for(const updated of markProjectAssetsUsed(p,state.assets,now)){const live=state.assets.find(asset=>asset.id===updated.id);if(live)Object.assign(live,updated);dirtyUsageAssets.set(updated.id,updated);}saveVersions.set(p.id,(saveVersions.get(p.id)||0)+1);dirtyProjects.set(p.id,p);saveStatus('后台保存中…');syncDisplay.localPending=true;updateSyncIndicator();if(!saveTimer)saveTimer=setTimeout(()=>flushSave().catch(console.error),500);}
 function saveProject(){saveSpecificProject(state.activeProject);}
 const pendingAISnapshots=new Set();
 function saveAISnapshotInBackground(p){
@@ -1868,7 +1893,7 @@ backupInput.onchange=async()=>{const file=backupInput.files?.[0];backupInput.val
   try{await flushSave();await db.flushProjects();await db.restoreBackup(file);state.activeProject=null;state.basket=[];await refresh();toast('完整备份已恢复');}
   catch(e){console.error(e);toast('恢复失败：'+e.message);}
 };
-window.addEventListener('pagehide',()=>{if(saveTimer)flushSave().catch(console.error);});
+window.addEventListener('pagehide',()=>{snapshotEditedScene('pagehide');if(saveTimer)flushSave().catch(console.error);});
 window.addEventListener('beforeunload',event=>{if(saveTimer||savingProjects||dirtyProjects.size){event.preventDefault();event.returnValue='';}});
 // Logout requires a durable local checkpoint, not a successful network round
 // trip. Unacknowledged edits remain in the account-scoped outbox for re-login.
@@ -1922,7 +1947,7 @@ function backgroundCloudCheck({force=false}={}){
 // document remains visible, not only when focus/online events happen.
 setInterval(backgroundCloudCheck,15000);
 window.addEventListener('focus',()=>{backgroundCloudCheck();privateImages.retryMissing();void cloudResumer.wake();});
-document.addEventListener('visibilitychange',()=>{backgroundCloudCheck();if(document.visibilityState==='visible'){privateImages.retryMissing();void cloudResumer.wake();}});
+document.addEventListener('visibilitychange',()=>{backgroundCloudCheck();if(document.visibilityState==='hidden')snapshotEditedScene('app-background');if(document.visibilityState==='visible'){privateImages.retryMissing();void cloudResumer.wake();}});
 window.addEventListener('online',()=>{backgroundCloudCheck();privateImages.retryMissing();void cloudResumer.wake();});
 window.addEventListener('offline',updateSyncIndicator);
 window.addEventListener('online',updateSyncIndicator);
