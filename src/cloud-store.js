@@ -248,6 +248,16 @@ const unifiedSync=createProjectSync({
     // edit timestamp. Ties keep cloud. Deletes and invalid dates remain safe.
     const remote=await cloudRecord('projects',record.id);
     if(!remote)return 'conflict';
+    // Before LWW arbitration, capture both editable variants in the user's
+    // private account cache. Even the losing snapshot remains recoverable
+    // after the outbox entry is retired. Failure aborts arbitration: do not
+    // discard a local version without first preserving the pair.
+    const safetyKey='pre-conflict-scene:'+record.id+':'+operationID;
+    await remember(safetyKey,{
+      kind:'shiye-pre-conflict-scene-pair',at:new Date().toISOString(),
+      local:structuredClone(record),remote:structuredClone(remote),
+      baseRevision,remoteRevision:latest
+    });
     const winner=latestEditedProject(record,remote);
     return winner==='local'?'rebase':winner==='remote'?'remote':'conflict';
   },
