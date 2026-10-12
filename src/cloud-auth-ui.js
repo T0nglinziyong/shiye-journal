@@ -1,8 +1,8 @@
 import {cloudEnabled,cloudClient,requireCloudUser} from './cloud-session.js';
-import {createBackup,purgeLocalAfterCloudReset} from './store.js';
+import {createBackup} from './store.js';
 import {checkAccountResetEpoch} from './account-reset-epoch.js';
 import {eraseSiteAppData} from './account-data-wipe.js';
-import {cloudClearCache,cloudPendingLocalSummary,cloudResumeCache,cloudSetResetCleanupPending} from './cloud-store.js';
+import {cloudClearCache,cloudPendingLocalSummary,cloudResumeCache,cloudSetResetCleanupPending,cloudCloseCacheBeforeRemoteReset} from './cloud-store.js';
 import {openAdminView} from './admin-view.js';
 import {openStorageUsage} from './storage-usage-ui.js';
 import {openAccountManagement} from './account-management.js';
@@ -47,7 +47,9 @@ export async function startCloudSession(onReady){
     // old outbox recovery, or any background upload can start.
     const wipeOldLocalData=async()=>{
       window.dispatchEvent(new Event('shiye-account-reset-detected'));
-      await purgeLocalAfterCloudReset();
+      // Do not reopen possibly corrupt Safari IndexedDB just to clear it.
+      // Close the handle, then delete the entire account database directly.
+      await cloudCloseCacheBeforeRemoteReset();
       const outcome=await eraseSiteAppData({preserveAuthentication:true});
       if(outcome.errors.length)
         throw Error('云端已清空，但本设备还有数据未能删除；请关闭其他拾页标签页并重试：'+outcome.errors.join('；'));
