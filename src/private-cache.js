@@ -1,4 +1,5 @@
 import {openDB} from 'idb';
+import {foldLegacySyncRows} from './unified-sync-outbox.js';
 
 // Account-scoped disposable read cache plus a protected durable outbox. 
 // Outbox entries are NEVER evicted or erased on logout.
@@ -49,7 +50,7 @@ export function createPrivateCache({name='shiye-private-read-cache-v2',limit=160
     // Atomic read/merge/write in ONE IndexedDB transaction. Uses the existing
     // cache DB/schema and stores the queue under its old key for compatibility.
     async putOutbox(account,id,previousRows,nextRows){
-      if(id!=='project-outbox'&&id!=='import-outbox')throw Error('不是待同步队列');
+      if(!['project-outbox','import-outbox','unified-outbox'].includes(id))throw Error('不是待同步队列');
       const d=await db(),tx=d.transaction(['entries','sizes'],'readwrite');
       try{
         const k=key(account,id),saved=await tx.objectStore('entries').get(k),
@@ -59,6 +60,60 @@ export function createPrivateCache({name='shiye-private-read-cache-v2',limit=160
         tx.objectStore('sizes').put(row);
         await tx.done;
         return merged;
+      }catch(error){try{tx.abort();}catch{}await tx.done.catch(()=>{});throw error;}
+    },
+    // Fold both retired queues into one transactional, account-scoped outbox.
+    // The source keys are consumed only after the new active queue and all
+    // quarantined bytes have been stored in the very same IDB transaction.
+    async migrateUnifiedOutbox(account){
+      const d=await db(),tx=d.transaction(['entries','sizes'],'readwrite');
+      const read=async id=>(await tx.objectStore('entries').get(key(account,id)))?.value;
+      try{
+        const oldProjects=await read('project-outbox')||[],oldImports=await read('import-outbox')||[];
+        const original=await read('unified-outbox')||[],oldQuarantine=await read('sync-quarantine')||[];
+        const merged=foldLegacySyncRows(original,oldProjects,oldImports,oldQuarantine);
+        if(oldProjects.length||oldImports.length||!(await tx.objectStore('entries').get(key(account,'unified-outbox')))){
+          const put=(id,value)=>{
+            const k=key(account,id),row={key:k,account,time:Date.now(),bytes:0};
+            tx.objectStore('entries').put({...row,value});tx.objectStore('sizes').put(row);
+          };
+          put('unified-outbox',merged.rows);
+          if(merged.quarantine.length)put('sync-quarantine',merged.quarantine);
+          for(const id of ['project-outbox','import-outbox']){
+            tx.objectStore('entries').delete(key(account,id));
+            tx.objectStore('sizes').delete(key(account,id));
+          }
+        }
+        await tx.done;
+        return merged;
+      }catch(error){try{tx.abort();}catch{}await tx.done.catch(()=>{});throw error;}
+    },
+    // Emergency restore adds only non-colliding records; it cannot overwrite
+    // a newer operation already present in the active durable queue.
+    async restoreUnifiedOutboxes(account,projects,imports){
+      const d=await db(),tx=d.transaction(['entries','sizes'],'readwrite');
+      try{
+        const k=key(account,'unified-outbox'),saved=await tx.objectStore('entries').get(k),
+          qkey=key(account,'sync-quarantine'),held=await tx.objectStore('entries').get(qkey);
+        const combined=foldLegacySyncRows(saved?.value||[],projects,imports,held?.value||[]);
+        if(combined.quarantine.some(item=>item.reason==='duplicate-legacy-row'))
+          throw Error('应急包与现有队列有重复操作；没有覆盖已有修改');
+        for(const [id,value] of [['unified-outbox',combined.rows],['sync-quarantine',combined.quarantine]]){
+          const row={key:key(account,id),account,time:Date.now(),bytes:0};
+          tx.objectStore('entries').put({...row,value});tx.objectStore('sizes').put(row);
+        }
+        await tx.done;return [projects.length,imports.length];
+      }catch(error){try{tx.abort();}catch{}await tx.done.catch(()=>{});throw error;}
+    },
+    async purgeAccount(account){
+      const d=await db(),tx=d.transaction(['entries','sizes'],'readwrite');
+      try{
+        const entries=await tx.objectStore('entries').getAll();
+        for(const row of entries)if(row.account===account){
+          tx.objectStore('entries').delete(row.key);
+          tx.objectStore('sizes').delete(row.key);
+        }
+        await tx.done;return entries.filter(row=>row.account===account).length;
       }catch(error){try{tx.abort();}catch{}await tx.done.catch(()=>{});throw error;}
     },
     // Restore both queues as one transaction. A collision with a newer
@@ -92,7 +147,7 @@ export function createPrivateCache({name='shiye-private-read-cache-v2',limit=160
     },
     // Logout clears disposable reads, never unacknowledged edits or their Blob
     // payloads. The explicit outbox discard flow owns deletion of these keys.
-    async clear(account){const d=await db(),rows=await d.getAll('sizes'),tx=d.transaction(['entries','sizes'],'readwrite');for(const r of rows)if(r.account===account&&!['project-outbox','import-outbox'].includes(JSON.parse(r.key)[1])){tx.objectStore('entries').delete(r.key);tx.objectStore('sizes').delete(r.key);}await tx.done;},
+    async clear(account){const d=await db(),rows=await d.getAll('sizes'),tx=d.transaction(['entries','sizes'],'readwrite');for(const r of rows)if(r.account===account&&!['project-outbox','import-outbox','unified-outbox','sync-quarantine'].includes(JSON.parse(r.key)[1])){tx.objectStore('entries').delete(r.key);tx.objectStore('sizes').delete(r.key);}await tx.done;},
   };
 }
 export const privateCache=createPrivateCache();
