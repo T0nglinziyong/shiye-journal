@@ -28,7 +28,7 @@
 
 `creative-contract.js` 声明 `page.version=2` 的 `page.layers` 树，`creative.js::composeDirectSceneV2` 同时沿用材料 `placement.z`、图形/文字默认 `zIndex` 和实体 `relation` 解算层序。渲染器 `sceneDisplaySiblings` 又按 `zIndex` 排序，故某些组合的数组先后顺序不等于显示先后顺序。必须定义唯一权威次序，以及物理穿插/underlay 如何表达，移除旧的冲突参数并同步修改 schema 和测试。禁止盲目把所有 zIndex 改为数组索引，因为现有实体 underlay 测试依赖关系解算。
 
-### 4. 真正的完整验收未执行
+### 4. AI 工具对 ink 的编辑能力尚未统一\n\n\`src/creative.js\` 的 \`index(d)\` 和 \`remove(d,keys)\` 仍只枚举 \`items/primitives/textBlocks\`：手写笔迹虽存于同一 Scene 树，但工具 \`group_elements/style_elements/delete_elements/move_elements\` 对笔迹没有一致的支持，其中移动笔迹须变换 point 坐标而非添加无意义的 x/y 属性。这违反同树统一编辑目标，应补全 API 与对应回归。\n\n### 5. 真正的完整验收未执行
 
 - `npm ci && npm test && npm run build`；
 - 测试构建自动生成的 `src/generated/offline-*-source.js` 是否携带 **最新** Scene v2 schema/renderer，导出 ZIP 内的 validator、preview、pack 一致；
