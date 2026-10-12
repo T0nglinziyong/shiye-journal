@@ -126,11 +126,12 @@ test('D-01: background cursor advance cannot relabel a stale opened work as the 
   await db.cloudStageProject({...opened,title:'本机改标题'});
   const pending=await db.cloudPendingProjects();
   assert.equal(pending[0].baseRevision,1);
-  await db.cloudFlushProjects();
-  assert.equal(state.calls.length,1,'same-project conflict must create one distinct work');
-  assert.notEqual(state.calls[0].operations[0].item.id,'diary');
-  assert.match(state.calls[0].operations[0].item.title,/同步冲突保留/);
-  assert.deepEqual(await db.cloudPendingProjects(),[]);
+  await assert.rejects(db.cloudFlushProjects(),/云端版本已变化/);
+  assert.equal(state.calls.length,0,'a stale project never overwrites without owner choice');
+  assert.equal((await db.cloudPendingProjects())[0].record.title,'本机改标题');
+  const review=await db.cloudConflictReview('project','diary');
+  assert.equal(review.overview.local.title,'本机改标题');
+  assert.equal(review.overview.remote.drafts,1);
 });
 test('D-02: a stale work can rebase only over a complete disjoint change log',async()=>{
   const cache=memoryCache(),{state,db}=fixture(cache);
@@ -149,10 +150,9 @@ test('D-03: an untagged known work is staged locally but cannot claim the newest
   state.revision=4;state.rows=[saved];await db.cloudAll('projects');
   await db.cloudStageProject({...v2(saved),title:'本机新标题'});
   assert.equal((await db.cloudPendingProjects())[0].baseRevision,0);
-  await db.cloudFlushProjects();
-  assert.equal(state.calls.length,1);
-  assert.notEqual(state.calls[0].operations[0].item.id,'diary');
-  assert.deepEqual(await db.cloudPendingProjects(),[]);
+  await assert.rejects(db.cloudFlushProjects(),/云端版本已变化/);
+  assert.equal(state.calls.length,0);
+  assert.equal((await db.cloudPendingProjects())[0].record.title,'本机新标题');
 });
 test('D-04: confirmed edits advance only their own editor session for a second save',async()=>{
   const {state,db}=fixture(memoryCache());
@@ -538,13 +538,12 @@ test('older generic project PUT from the same phone is rescued without overwriti
  state.revision=1;
  state.rows=[{...structuredClone(work),title:'已经上传的较新版本'}];
  state.changes=[{revision:1,keys:[{store:'projects',id:'same-work',action:'put'}]}];
- await db.cloudFlushProjects();
- assert.equal(state.calls.length,2,'one obsolete CAS attempt and one committed independent copy');
- const uploaded=state.calls.at(-1).operations.find(op=>op.store==='projects'&&op.action==='put').item;
- assert.equal(state.calls[0].expected_revision,0,'the old PUT cannot win its stale revision');
- assert.notEqual(uploaded.id,'same-work');
- assert.match(uploaded.title,/同步冲突保留/);
- assert.equal(uploaded.drafts[0].layers[0].content,'留住这一页');
+
+ await assert.rejects(db.cloudFlushProjects(),/conflict|云端版本已变化/);
  assert.equal(state.rows[0].title,'已经上传的较新版本');
- assert.deepEqual(await cache.get('cloud:owner-uuid','import-outbox'),[]);
+ assert.ok((await cache.get('cloud:owner-uuid','import-outbox')).length>0);
+ const pending=(await db.cloudPendingDetails()).batches[0];
+ const reviewed=await db.cloudConflictReview('batch',pending.id);
+ assert.equal(reviewed.overview.local.title,'本机未同步的早期版本');
+ assert.equal(reviewed.overview.remote.title,'已经上传的较新版本');
 });
