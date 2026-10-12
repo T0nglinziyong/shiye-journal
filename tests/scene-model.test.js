@@ -77,3 +77,20 @@ test('physical vector masks reject crossed polygons, escaped holes and overlaps'
  assert.throws(()=>validateVectorMask({outer:[[0,0],[1,1],[1,0],[0,1]]}),/交叉|轮廓/);
  assert.throws(()=>validateVectorMask({outer,holes:[square,[[.3,.3],[.6,.3],[.6,.6],[.3,.6]]]}),/交叉|孔洞/);
 });
+
+test('Scene v2 temporary collection view cannot lose indexed, length or deletion writes',()=>{
+ const d=draft(),view=d.items;
+ const item=id=>({id,assetID:id,x:100,y:100,width:30,height:30});
+ view.push(item('first'),item('second'));
+ assert.equal(view.length,2);
+ view[0]={...view[0],x:150};
+ assert.equal(d.layers.find(node=>node.id==='first').x,150);
+ view.length=1;
+ assert.deepEqual(d.layers.map(node=>node.id),['first']);
+ view[1]=item('third');
+ assert.deepEqual(view.map(node=>node.id),['first','third']);
+ delete view[0];
+ assert.deepEqual(d.items.map(node=>node.id),['third']);
+ assert.throws(()=>{view[3]=item('invalid');},/稀疏索引/);
+ assert.equal(Object.hasOwn(JSON.parse(JSON.stringify(d)),'items'),false);
+});
