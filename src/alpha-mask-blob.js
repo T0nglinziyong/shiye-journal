@@ -16,7 +16,9 @@ export function encodeAlphaMask(alpha,width,height){
 }
 export async function readAlphaMask(blob){
  if(!(blob instanceof Blob)||!blob.size)throw Error('缺少透明蒙版');
- const bytes=gunzipSync(new Uint8Array(await blob.arrayBuffer()));
+ const bytes=typeof DecompressionStream==='function'
+   ?new Uint8Array(await new Response(blob.stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer())
+   :gunzipSync(new Uint8Array(await blob.arrayBuffer()));
  if(bytes.length<13||MAGIC.some((value,i)=>value!==bytes[i]))throw Error('透明蒙版格式无效');
  const view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength),
   width=view.getUint32(4,true),height=view.getUint32(8,true);
