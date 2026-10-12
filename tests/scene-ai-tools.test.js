@@ -46,3 +46,26 @@ test('malicious nonphysical blend and invalid holes roll back operations',()=>{
  assert.equal(out.draft.primitives.length,1);
  assert.equal(out.draft.primitives[0].blendMode,undefined);
 });
+
+test('AI tools group, move and delete editable ink through the canonical Scene tree',()=>{
+ const base=draft();
+ base.primitives.push({id:'paper-shape',key:'paper-shape',kind:'rectangle',x:90,y:80,width:100,height:40,zIndex:1});
+ base.strokes.push({id:'pen-mark',color:'#334455',width:3,points:[{x:10,y:20,p:.2},{x:30,y:40,p:.8}],zIndex:2});
+ const commands=[
+  {name:'group_elements',arguments:{keys:['pen-mark','paper-shape'],id:'note-group'}},
+  {name:'style_elements',arguments:{items:[{key:'pen-mark',opacity:.55}]}},
+  {name:'move_elements',arguments:{items:[{key:'pen-mark',x:.6,y:.35,rotation:90,z:8}]}}
+ ];
+ const result=applyToolCalls({tools:commands},base,[],{});
+ assert.deepEqual(result.results.map(item=>item.ok),[true,true,true],JSON.stringify(result.results));
+ const ink=result.draft.strokes[0],center=ink.points.reduce((p,q)=>({x:p.x+q.x/ink.points.length,y:p.y+q.y/ink.points.length}),{x:0,y:0});
+ assert.ok(Math.abs(center.x-result.draft.canvas.width*.6)<1e-6);
+ assert.ok(Math.abs(center.y-result.draft.canvas.height*.35)<1e-6);
+ assert.equal(ink.opacity,.55);assert.equal(ink.rotation,90);
+ assert.equal(result.draft.layers.find(n=>n.id==='note-group').children.length,2);
+ assert.ok(JSON.stringify(result.draft).includes('"type":"ink"'));
+ const removed=applyToolCalls({tools:[{name:'delete_elements',arguments:{keys:['pen-mark']}}]},result.draft,[],{});
+ assert.deepEqual(removed.results.map(item=>item.ok),[true],JSON.stringify(removed.results));
+ assert.equal(removed.draft.strokes.length,0);
+ assert.equal(removed.draft.primitives.length,1);
+});
