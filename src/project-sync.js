@@ -1,13 +1,13 @@
 // Durable edits are an explicit outbox, not a replacement for cloud records.
 // Commit acknowledgement is the only point at which an entry is removed.
 export function createProjectSync({load,write,commit,revision,reconcile=async()=> 'conflict',recordKeys=record=>[{store:'projects',id:record.id}],onCommitted=()=>{},onConflict=async()=>null,onSuperseded=()=>{},onStatus=()=>{},runExclusive=fn=>fn(),reload=load,autoFlushDelayMs=0,setTimer=setTimeout,clearTimer=clearTimeout,clock=()=>Date.now()}){
-  let initialized,staging=Promise.resolve(),network,serial=0,error;
+  let initialized,staging=Promise.resolve(),network,serial=0,error,paused=false;
   // Durable local staging is immediate; only the remote commit is batched.
   const flushWindow=Math.max(0,Number(autoFlushDelayMs)||0);
   let autoTimer=null,lastNetworkAt=null;
   const cancelAuto=()=>{if(autoTimer!==null){clearTimer(autoTimer);autoTimer=null;}};
   function scheduleAuto(){
-    if(network||autoTimer!==null)return;
+    if(paused||network||autoTimer!==null)return;
     if(!flushWindow){void kick();return;}
     // First remote upload waits one window to coalesce several small edits.
     // Further uploads cannot start sooner than a window after the previous one.
@@ -58,10 +58,13 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
   }
   function kick({force=false}={}){
     cancelAuto();
+    if(paused)return Promise.resolve();
     if(network)return network;
     network=(async()=>runExclusive(async()=>{
       lastNetworkAt=clock();
+      if(paused)return;
       await initialize();await refreshFromDisk();
+      if(paused)return;
       // Drain all documents already queued at the start of this upload window.
       // A newer edit arriving while an HTTP request is in flight belongs to
       // the next window, avoiding two rapid uploads of the same document.
@@ -69,7 +72,7 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
         ?Math.max(0,...[...entries.values()].map(item=>item.serial))
         :Infinity;
       const blocked=new Set();
-      while(entries.size){
+      while(entries.size&&!paused){
         const row=[...entries.values()].find(item=>!blocked.has(item.record.id)&&item.serial<=windowSerial);
         if(!row)break;
         if(!row)break;
@@ -194,6 +197,7 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
   }
   async function discard(){cancelAuto();await initialize();await staging;if(network)throw Error('上传正在进行，请等待请求结束后再放弃待同步修改');const previous=[...entries.values()];entries.clear();try{await persist();}catch(failure){for(const row of previous)entries.set(row.record.id,row);throw failure;}error=null;report();return previous.length;}
   return {stage,
+    pause(){paused=true;cancelAuto();},
     async flush(){
       await initialize();await staging;
       // Manual sync / editor completion bypasses the automatic interval, but
