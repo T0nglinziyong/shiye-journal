@@ -2,7 +2,7 @@ import {cloudEnabled,cloudClient,requireCloudUser} from './cloud-session.js';
 import {createBackup,purgeLocalAfterCloudReset} from './store.js';
 import {checkAccountResetEpoch,finishPendingAccountReset} from './account-reset-epoch.js';
 import {eraseSiteAppData} from './account-data-wipe.js';
-import {cloudClearCache,cloudPendingLocalSummary,cloudResumeCache} from './cloud-store.js';
+import {cloudClearCache,cloudPendingLocalSummary,cloudResumeCache,cloudSetResetCleanupPending} from './cloud-store.js';
 import {openAdminView} from './admin-view.js';
 import {openStorageUsage} from './storage-usage-ui.js';
 import {openAccountManagement} from './account-management.js';
@@ -58,15 +58,42 @@ export async function startCloudSession(onReady){
     });
     const initialReset=await preflight();
     if(initialReset.wiped){location.reload();return;}
+    // Login is not a garbage-collection job. The logical cloud reset is
+    // already complete when phase=deleting; keep the empty account readable.
+    // Never enable new writes while the old COS prefix is still being purged.
+    cloudSetResetCleanupPending(initialReset.pending);
+    gate.remove();app.hidden=false;await onReady(user,{resetPending:initialReset.pending});
     if(initialReset.pending){
-      status.textContent='发现上次未完成的云端图片清理，正在继续处理…';
-      await finishPendingAccountReset({
-        client,resetId:initialReset.resetId,
-        onProgress:message=>{status.textContent=message;}
-      });
-      location.reload();return;
+      const banner=document.createElement('aside');
+      banner.setAttribute('role','status');
+      banner.style.cssText='position:fixed;bottom:78px;left:12px;right:12px;max-width:600px;margin:auto;background:#284234;color:white;z-index:2147483500;padding:15px;border-radius:14px;box-shadow:0 6px 25px #0003;font-size:14px';
+      banner.textContent='云端内容已清空，正在后台清理旧图片。现在可以进入空白账户查看；清理结束后即可创建新资料。';
+      const retry=document.createElement('button');
+      retry.type='button';retry.className='btn mini';
+      retry.textContent='继续清理';
+      retry.style.cssText='margin-left:12px;background:#fff;color:#26442f';
+      banner.append(retry);document.body.append(banner);
+      let running=false;
+      const cleanup=async()=>{
+        if(running)return;
+        running=true;retry.disabled=true;
+        try{
+          await finishPendingAccountReset({
+            client,resetId:initialReset.resetId,
+            onProgress:message=>{banner.firstChild.textContent=message+' · 仅旧图片清理，作品索引已清空。';}
+          });
+          banner.firstChild.textContent='云端旧文件清理完成，正在重新开启可编辑账户…';
+          location.reload();
+        }catch(error){
+          // Login remains usable in read-only mode. Failed file deletion must
+          // not be confused with incorrect credentials or a lost account.
+          banner.firstChild.textContent='账户已登录，云端旧文件清理未完成：'+(error.message||'请重试')+'。';
+          retry.disabled=false;
+        }finally{running=false;}
+      };
+      retry.onclick=()=>void cleanup();
+      void cleanup();
     }
-    gate.remove();app.hidden=false;await onReady(user);
     // Already-open phones and computers also notice a reset on return to the
     // tab, without waiting for a new manual sign-in.
     let watching=false;
@@ -76,7 +103,7 @@ export async function startCloudSession(onReady){
       try{
         const outcome=await preflight();
         if(outcome.wiped){location.reload();return;}
-        if(outcome.pending){app.hidden=true;location.reload();}
+        if(initialReset.pending&&!outcome.pending){location.reload();return;}
       }catch(error){console.warn('跨设备重置检查未完成',error?.message);}
       finally{watching=false;}
     };
