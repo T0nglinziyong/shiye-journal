@@ -1365,9 +1365,12 @@ async function refineCandidateFrame(candidateFrame,request,{postprocessOnly=fals
 async function openCutoutCheck(id,candidate=null){
   const a=candidate?{title:candidate.title}:asset(id);if(!a)return;
   if(modal.open)modal.close();
-  body.innerHTML='<section role="status" aria-live="polite" class="cutout-loading"><strong>正在准备抠图编辑器…</strong><p>正在加载候选框 RGB 与最终蒙版，请稍候。</p></section>';
+  body.innerHTML='<section role="status" aria-live="polite" class="cutout-loading"><strong>正在准备抠图编辑器…</strong><p>正在读取矫正 RGB 与最终蒙版，请稍候。</p><button type="button" class="btn" id="cutout-load-cancel">取消</button></section>';
   if(!modal.open)modal.showModal();
+  let cancelled=false;
+  body.querySelector('#cutout-load-cancel').onclick=()=>{cancelled=true;modal.close();};
   await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+  if(cancelled)return;
   try{
   const stored=async blobId=>blobId?(await Promise.race([
     db.get('blobs',blobId),
@@ -1392,11 +1395,12 @@ async function openCutoutCheck(id,candidate=null){
   }else if(!(candidateFrame instanceof Blob)||candidateFrame.size<8||
             !(finalMaskBlob instanceof Blob)||!finalMaskBlob.size)
     throw Error('候选框 RGB 或最终蒙版尚未完整同步，已保留旧素材，请检查同步后重试');
+  if(cancelled)return;
   if(modal.open)modal.close();
   const processing=candidate?.processingRecord||a.processingRecord||{},baseWidth=processing.sourceWidthMM||candidate?.width||a.physicalWidthMM,baseHeight=processing.sourceHeightMM||candidate?.height||a.physicalHeightMM,
     localMethods=recognitionMethodDetails,
     preferredMethod=localMethods.some(item=>item.id===(processing.rerecognition?.method||state.preferences.recognition))?(processing.rerecognition?.method||state.preferences.recognition):'auto';
-  const openEditor=()=>showCutoutEditor({
+  const openEditor=()=>cancelled?Promise.resolve():showCutoutEditor({
     body,modal,original,saved,recognition,candidateFrame,finalMaskBlob,title:a.title,processing,toast,
     onLoadInitialMask:compact?async()=>{
       const oldBlob=a.initialMaskBlobId?await stored(a.initialMaskBlobId):
@@ -1473,8 +1477,8 @@ async function openCutoutCheck(id,candidate=null){
     }
   }
   }catch(error){
-    if(modal.open&&body.querySelector('.cutout-loading'))modal.close();
-    throw error;
+    if(modal.open)modal.close();
+    if(!cancelled)throw error;
   }
 }
 function openDetail(id){showAssetEditor({state,body,modal,db,esc,imgTag,render,route,toast},id);}
