@@ -917,6 +917,7 @@ async function handle(action,id,value){try{switch(action){
         if(!response.ok)throw Error(payload.error||'云端清理失败');
         return payload;
       };
+      await db.runExclusiveAccountReset(async()=>{
       const probe=await request('probe');
       if(!probe.ready)throw Error('该环境未启用彻底账号清理');
       let total=0;
@@ -929,6 +930,7 @@ async function handle(action,id,value){try{switch(action){
       }
       if(!completed)throw Error('达到单次清理上限，请继续执行清理');
       await db.purgeLocalAfterCloudReset();
+      });
       const {eraseSiteAppData}=await import('./account-data-wipe.js');
       const cleared=await eraseSiteAppData();
       if(cleared.errors.length)
