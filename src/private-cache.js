@@ -65,6 +65,21 @@ export function createPrivateCache({name='shiye-private-read-cache-v2',limit=160
     // Fold both retired queues into one transactional, account-scoped outbox.
     // The source keys are consumed only after the new active queue and all
     // quarantined bytes have been stored in the very same IDB transaction.
+    async repairUnifiedOutbox(account,previousRows,nextRows,quarantineRows){
+      const d=await db(),tx=d.transaction(['entries','sizes'],'readwrite');
+      try{
+        const queueKey=key(account,'unified-outbox'),heldKey=key(account,'sync-quarantine');
+        const saved=await tx.objectStore('entries').get(queueKey);
+        const rows=mergeOutboxRows(saved?.value||[],previousRows,nextRows);
+        const old=await tx.objectStore('entries').get(heldKey);
+        const quarantine=[...(old?.value||[]),...quarantineRows];
+        for(const [k,value] of [[queueKey,rows],[heldKey,quarantine]]){
+          const row={key:k,account,time:Date.now(),bytes:0};
+          tx.objectStore('entries').put({...row,value});tx.objectStore('sizes').put(row);
+        }
+        await tx.done;return {rows,quarantine};
+      }catch(error){try{tx.abort();}catch{}await tx.done.catch(()=>{});throw error;}
+    },
     async migrateUnifiedOutbox(account){
       const d=await db(),tx=d.transaction(['entries','sizes'],'readwrite');
       const read=async id=>(await tx.objectStore('entries').get(key(account,id)))?.value;
