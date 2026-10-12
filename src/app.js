@@ -18,6 +18,7 @@ import './matching-view.css';
 import './page-heading.css';
 import './layout-refinements.css';
 import './canvas-editor-fixes.css';
+import './mobile-material-ui.css';
 import {createAssetOrganization,mountOrganizationBadges,updateOrganizedAssetView} from './asset-organization.js';
 import '@fontsource/ma-shan-zheng/chinese-simplified-400.css';
 import {mountIcons,iconMarkup} from './icons.js';
