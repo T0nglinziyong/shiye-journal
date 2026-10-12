@@ -8,7 +8,7 @@ import {craftDiagnostic,craftAssert} from './craft-errors.js';
 import {buildCraftEdge,craftPermission,sourceFootprint,sourceIntersectionArea} from './craft-geometry.js';
 import {solveCraftRelations} from './craft-relations.js';
 import {uid,itemFromAsset} from './domain.js';
-import {sceneLayerEntries,sceneLayerStyle,groupSceneLayers,ungroupSceneLayers,validateSceneExtensions,attachSceneV2} from './scene-model.js';
+import {sceneLayerEntries,sceneLayerStyle,groupSceneLayers,ungroupSceneLayers,removeSceneNode,validateSceneExtensions,attachSceneV2} from './scene-model.js';
 import {textLines,textFont} from './editor-tools-model.js';
 import {reviewCreativeDraft} from './creative-quality.js';
 import {materialMaskPoints,materialMaskArea,materialMaskGeometry,cutMaterialDiagonal,addMaterialWindow} from './material-mask.js';
@@ -17,7 +17,7 @@ export {agentTools,directPageContract,directPageToTools};
 const EPS=1e-6,fields=['items','primitives','textBlocks'];
 const entries=d=>fields.flatMap(f=>(d[f]||[]));
 const keyOf=i=>i.creativePieceID||i.agentKey||i.key||i.id;
-const index=d=>new Map(entries(d).flatMap(i=>[[keyOf(i),i],[i.id,i]]));
+const index=d=>new Map(sceneLayerEntries(d,{hidden:true}).flatMap(({value:i})=>[[keyOf(i),i],[i.id,i]]));
 const scale=d=>d.canvas.height/(d.physicalPageHeightMM||297);
 const locked=i=>{if(i.isLocked||i.locked)throw Error('图层已锁定：'+keyOf(i));};
 const finite=(v,name,min=-20000,max=20000)=>{if(!Number.isFinite(v)||v<min||v>max)throw Error(name+' 数值不合法');return v;};
@@ -62,13 +62,29 @@ function measure(t,options){
 }
 function layoutText(t,options){const result=textLines(t,measure(t,options));return {...result,height:Math.max(t.fontSize*1.3,result.height)};}
 function converted(v,unit,d,axis){finite(v,axis);if(unit==='mm')return v*scale(d);if(unit==='pt')return v;return v*d.canvas[axis];}
+function inkBounds(ink){
+ const pts=ink.points||[];if(!pts.length)throw Error('笔迹路径不存在');
+ const xs=pts.map(p=>p.x),ys=pts.map(p=>p.y),left=Math.min(...xs),right=Math.max(...xs),top=Math.min(...ys),bottom=Math.max(...ys);
+ return {x:(left+right)/2,y:(top+bottom)/2,width:Math.max(1,right-left),height:Math.max(1,bottom-top)};
+}
 function place(d,data,fallback){fallback||={x:d.canvas.width/2,y:d.canvas.height/2};
-  if(data.relative_to){const target=find(d,data.relative_to),[dx,dy]=data.offset||[0,0];return {x:target.x+dx*target.width,y:target.y+dy*target.height};}
+  if(data.relative_to){const reference=find(d,data.relative_to),target=reference.type==='ink'?inkBounds(reference):reference,[dx,dy]=data.offset||[0,0];return {x:target.x+dx*target.width,y:target.y+dy*target.height};}
   if(data.offset)throw Error('offset 需要 relative_to');
   return {x:data.x===undefined?fallback.x:converted(data.x,data.coordinate_unit||'ratio',d,'width'),y:data.y===undefined?fallback.y:converted(data.y,data.coordinate_unit||'ratio',d,'height')};
 }
-function setPosition(d,i,data){locked(i);Object.assign(i,place(d,data,i));if(data.rotation!==undefined)i.rotation=data.rotation;if(data.z!==undefined)i.zIndex=data.z;if(i.assetID)baseline(i);}
-function remove(d,keys){for(const key of keys){const target=find(d,key);locked(target);for(const field of fields)d[field]=d[field].filter(i=>i!==target);}}
+function setPosition(d,i,data){
+ locked(i);
+ if(i.type==='ink'){
+  const bounds=inkBounds(i),to=place(d,data,bounds);
+  const theta=((data.rotation??i.rotation??0)-(i.rotation||0))*Math.PI/180,cos=Math.cos(theta),sin=Math.sin(theta);
+  i.points=i.points.map(p=>{const x=p.x-bounds.x,y=p.y-bounds.y;return {...p,x:to.x+x*cos-y*sin,y:to.y+x*sin+y*cos};});
+  if(data.rotation!==undefined)i.rotation=data.rotation;
+  if(data.z!==undefined)i.zIndex=data.z;
+  return;
+ }
+ Object.assign(i,place(d,data,i));if(data.rotation!==undefined)i.rotation=data.rotation;if(data.z!==undefined)i.zIndex=data.z;if(i.assetID)baseline(i);
+}
+function remove(d,keys){for(const key of keys){const target=find(d,key);locked(target);removeSceneNode(d,target.id);}}
 function permission(options,asset){return craftPermission(options,asset);}
 function process(d,item,asset,operations,mode,options){
   locked(item);let current=mode==='replace'?{x:0,y:0,width:1,height:1}:cropOf(item),mask=mode==='replace'?null:item.materialMask||null;
@@ -218,6 +234,7 @@ function relations(d,list){
   for(const [key,update] of updates){const item=find(d,key);locked(item);const {materialRelation,...position}=update;Object.assign(item,position);if(materialRelation)item.materialRelation=materialRelation;else delete item.materialRelation;baseline(item);}
 }
 function upsertMaterials(d,assets,aliases,a,options){
+  for(const key of a.remove||[])if(!find(d,key).assetID)throw Error('移除真实素材列表中出现了非素材图层');
   remove(d,a.remove||[]);
   for(const e of a.items){const [item]=addMaterials(d,assets,aliases,[{asset:e.asset,piece:e.piece,unit:e.unit,...e.placement,role:e.role,opacity:e.opacity,flip_horizontal:e.flip_horizontal}]);const asset=materialAsset(assets,aliases,e.asset);process(d,item,asset,e.operations,'replace',options);}relations(d,a.items);
 }
