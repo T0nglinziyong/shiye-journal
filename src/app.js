@@ -1371,7 +1371,7 @@ async function refineCandidateFrame(candidateFrame,request,{postprocessOnly=fals
 async function openCutoutCheck(id,candidate=null){
   const a=candidate?{title:candidate.title}:asset(id);if(!a)return;
   if(modal.open)modal.close();
-  body.innerHTML='<section role="status" aria-live="polite" class="cutout-loading"><strong>正在准备抠图编辑器…</strong><p>正在读取矫正 RGB 与最终蒙版，请稍候。</p><button type="button" class="btn" id="cutout-load-cancel">取消</button></section>';
+  body.innerHTML='<section role="status" aria-live="polite" class="cutout-loading"><strong>正在准备抠图编辑器…</strong><p>正在加载约 900px 的候选框图片与透明蒙版…</p><button type="button" class="btn" id="cutout-load-cancel">取消</button></section>';
   if(!modal.open)modal.showModal();
   let cancelled=false;
   body.querySelector('#cutout-load-cancel').onclick=()=>{cancelled=true;modal.close();};
@@ -1423,6 +1423,7 @@ async function openCutoutCheck(id,candidate=null){
   const openEditor=()=>cancelled?Promise.resolve():showCutoutEditor({
     body,modal,original,saved,recognition,candidateFrame,finalMaskBlob,title:a.title,processing,toast,
     isCancelled:()=>cancelled,
+    onPhase:message=>{const label=body.querySelector('.cutout-loading p');if(label)label.textContent=message;},
     onLoadInitialMask:compact?async()=>{
       const oldBlob=a.initialMaskBlobId?await storedMask(a.initialMaskBlobId):
         await stored(a.originalCutoutBlobId)||saved;
