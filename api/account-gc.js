@@ -33,17 +33,21 @@ export default async function handler(req,res){
    if(!token)return reply(res,401,{error:'请先登录'});
    // The user can request one server-side cleanup pass, but cannot select
    // arbitrary other accounts or object paths.
-   client=createClient(env.VITE_SHIYE_SUPABASE_URL,
+   const authClient=createClient(env.VITE_SHIYE_SUPABASE_URL,
      env.VITE_SHIYE_SUPABASE_PUBLISHABLE_KEY,{
        auth:{persistSession:false,autoRefreshToken:false},
        global:{headers:{Authorization:'Bearer '+token}}
      });
-   const {data,error}=await client.auth.getUser(token);
+   const {data,error}=await authClient.auth.getUser(token);
    if(error||!data.user)return reply(res,401,{error:'会话失效'});
    const user=data.user.id;
-   const {data:account,error:allowedError}=await client.from('shiye_accounts')
+   const {data:account,error:allowedError}=await authClient.from('shiye_accounts')
      .select('user_id').eq('user_id',user).maybeSingle();
    if(allowedError||!account)return reply(res,403,{error:'当前账号无权清理资料'});
+   if(!env.SHIYE_SUPABASE_SERVICE_ROLE_KEY)
+     return reply(res,503,{error:'后台任务尚未配置服务端数据权限'});
+   client=createClient(env.VITE_SHIYE_SUPABASE_URL,
+     env.SHIYE_SUPABASE_SERVICE_ROLE_KEY,{auth:{persistSession:false,autoRefreshToken:false}});
    users=[user];
  }
  const results=[];
