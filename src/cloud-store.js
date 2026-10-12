@@ -176,7 +176,7 @@ const projectSync=createProjectSync({
     copy.__cloudSessionId=crypto.randomUUID();
     editorBases.set(copy.__cloudSessionId,revision);
     if(typeof window!=='undefined')window.dispatchEvent(new CustomEvent('shiye-project-conflict-copy',{
-      detail:{originalId,copyId:copy.id,title:copy.title}
+      detail:{originalId,copyId:copy.id,title:copy.title,originalSessionId:record.__cloudSessionId,newSessionId:copy.__cloudSessionId}
     }));
     return copy;
   },
