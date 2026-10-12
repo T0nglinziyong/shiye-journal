@@ -794,7 +794,13 @@ async function handle(action,id,value){try{switch(action){
     // Both paths first stage the *entire* editor document, even with no edits.
     view.endTextEditing?.();
     p.isDraft=decision.isDraft;
-    saveProject();
+    saveProject(); // first flushes any outstanding layer mutations to the journal
+    if(action==='editor-done'){
+      // A completed project is an explicit, recoverable EDITABLE Scene v2
+      // milestone, independent of the automatically generated cover PNG.
+      makeAutoSceneSnapshot(p,{reason:'completed',force:true});
+      saveProject();
+    }
     await flushSave();
     if(publish)saveAISnapshotInBackground(p);
     if(state.offlineEditingReturnID===p.id){
@@ -1364,16 +1370,33 @@ async function refineCandidateFrame(candidateFrame,request,{postprocessOnly=fals
 
 async function openCutoutCheck(id,candidate=null){
   const a=candidate?{title:candidate.title}:asset(id);if(!a)return;
-  const stored=async blobId=>blobId?(await db.get('blobs',blobId))?.data:null;
+  if(modal.open)modal.close();
+  body.innerHTML='<section role="status" aria-live="polite" class="cutout-loading"><strong>正在准备抠图编辑器…</strong><p>正在读取矫正 RGB 与最终蒙版，请稍候。</p><button type="button" class="btn" id="cutout-load-cancel">取消</button></section>';
+  if(!modal.open)modal.showModal();
+  let cancelled=false;
+  body.querySelector('#cutout-load-cancel').onclick=()=>{cancelled=true;modal.close();};
+  await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+  if(cancelled)return;
+  try{
+  const stored=async blobId=>blobId?(await Promise.race([
+    db.get('blobs',blobId),
+    new Promise((_,reject)=>setTimeout(()=>reject(Error('素材图片读取超时，请检查同步状态')),22000))
+  ]))?.data:null;
   const compact=!candidate&&!!a.candidateFrameBlobId
     &&(!!a.finalMaskBlobId||Math.abs(a.processingRecord?.displayRotationDegrees||0)<.01);
   const modern=compact&&!!a.finalMaskBlobId;
-  let saved=modern?null:candidate?.blob||await stored(a.blobId),
-    original=compact?null:candidate?.originalBlob||await stored(a.originalBlobId),
-    recognition=compact?null:candidate?.originalCutoutBlob||await stored(a.originalCutoutBlobId),
-    candidateFrame=candidate?.candidateFrameBlob||await stored(a.candidateFrameBlobId),
-    finalMaskBlob=modern?await stored(a.finalMaskBlobId):
-      compact&&saved instanceof Blob?await extractAlphaMask(saved):null;
+  // Dispatch all required Blob IDs in the same turn. The cloud store
+  // batches simultaneous metadata lookups, rather than serializing 2–4 COS
+  // reads before a blank editor can be rendered.
+  const [saved,original,recognition,candidateFrame,storedMask]=await Promise.all([
+    modern?Promise.resolve(null):Promise.resolve(candidate?.blob||stored(a.blobId)),
+    compact?Promise.resolve(null):Promise.resolve(candidate?.originalBlob||stored(a.originalBlobId)),
+    compact?Promise.resolve(null):Promise.resolve(candidate?.originalCutoutBlob||stored(a.originalCutoutBlobId)),
+    Promise.resolve(candidate?.candidateFrameBlob||stored(a.candidateFrameBlobId)),
+    modern?stored(a.finalMaskBlobId):Promise.resolve(null)
+  ]);
+  let finalMaskBlob=modern?storedMask:
+    compact&&saved instanceof Blob?await extractAlphaMask(saved):null;
   if(!compact){
     if(!saved&&a.staticPath){const response=await fetch(a.staticPath);if(!response.ok)throw Error('素材图像未能加载，请重试');saved=await response.blob();}
     original||=saved;recognition||=saved;candidateFrame||=original;
@@ -1384,12 +1407,14 @@ async function openCutoutCheck(id,candidate=null){
   }else if(!(candidateFrame instanceof Blob)||candidateFrame.size<8||
             !(finalMaskBlob instanceof Blob)||!finalMaskBlob.size)
     throw Error('候选框 RGB 或最终蒙版尚未完整同步，已保留旧素材，请检查同步后重试');
+  if(cancelled)return;
   if(modal.open)modal.close();
   const processing=candidate?.processingRecord||a.processingRecord||{},baseWidth=processing.sourceWidthMM||candidate?.width||a.physicalWidthMM,baseHeight=processing.sourceHeightMM||candidate?.height||a.physicalHeightMM,
     localMethods=recognitionMethodDetails,
     preferredMethod=localMethods.some(item=>item.id===(processing.rerecognition?.method||state.preferences.recognition))?(processing.rerecognition?.method||state.preferences.recognition):'auto';
-  const openEditor=()=>showCutoutEditor({
+  const openEditor=()=>cancelled?Promise.resolve():showCutoutEditor({
     body,modal,original,saved,recognition,candidateFrame,finalMaskBlob,title:a.title,processing,toast,
+    isCancelled:()=>cancelled,
     onLoadInitialMask:compact?async()=>{
       const oldBlob=a.initialMaskBlobId?await stored(a.initialMaskBlobId):
         await stored(a.originalCutoutBlobId)||saved;
@@ -1463,6 +1488,10 @@ async function openCutoutCheck(id,candidate=null){
         (retryError?.message||'图片数据损坏')+
         '。当前已保存素材不受影响；请检查同步详情。');
     }
+  }
+  }catch(error){
+    if(modal.open)modal.close();
+    if(!cancelled)throw error;
   }
 }
 function openDetail(id){showAssetEditor({state,body,modal,db,esc,imgTag,render,route,toast},id);}

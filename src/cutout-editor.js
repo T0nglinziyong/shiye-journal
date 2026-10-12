@@ -10,7 +10,7 @@ const copyMask=value=>new Uint8ClampedArray(value);
 
 export async function showCutoutEditor({
   body,modal,original,saved,recognition=saved,candidateFrame=original,title,processing={},
-  finalMaskBlob=null,onLoadInitialMask=null,
+  finalMaskBlob=null,onLoadInitialMask=null,isCancelled=()=>false,
   onApply,onRerecognize,onPostprocess,recognitionUI={},toast
 }) {
   // New records read only the canonical corrected candidate RGB + final
@@ -53,6 +53,10 @@ export async function showCutoutEditor({
     }
     [source,initial,recognized,frame]=decoded.map(row=>row.value);
   }
+  if(isCancelled()){
+    for(const bitmap of new Set([source,initial,recognized,frame]))bitmap?.close?.();
+    return;
+  }
   const w=source.width,h=source.height,canvas=document.createElement('canvas');
   canvas.width=w;canvas.height=h;
   const ctx=canvas.getContext('2d',{willReadFrequently:true});
@@ -72,8 +76,8 @@ export async function showCutoutEditor({
   };
 
   const initialRotation=processing.displayRotationDegrees||0,
-    initialMask=loadedFinalMask?copyMask(loadedFinalMask):alphaFrom(initial,initialRotation),
-    recognitionMask=loadedFinalMask?copyMask(loadedFinalMask):alphaFrom(recognized,processing.recognitionRotationDegrees||0),
+    initialMask=loadedFinalMask||alphaFrom(initial,initialRotation),
+    recognitionMask=loadedFinalMask||alphaFrom(recognized,processing.recognitionRotationDegrees||0),
     steps=[['rough','修补轮廓'],['recognition','边缘优化'],['final','调整外观']],
     methodList=recognitionUI.methods||[],
     pixelList=(recognitionUI.pixels||[[1200,'1200 px'],[1600,'1600 px']]).filter(([n])=>Number(n)>=1200),
@@ -82,12 +86,15 @@ export async function showCutoutEditor({
     defaultPre={illumination:false,denoise:false,localContrast:false,chromaEdges:true,...recognitionUI.preprocess,...savedRecognition.preprocess},
     defaultPost={shapeRegularization:true,apertures:true,...recognitionUI.postprocess,...savedPost};
 
-  let mask=copyMask(initialMask),
-    roughStageMask=copyMask(initialMask),
-    recognitionBaseMask=copyMask(recognitionMask),
-    recognitionStageMask=copyMask(recognitionMask),
-    postprocessBaseMask=copyMask(initialMask),
-    finalStageMask=copyMask(initialMask),
+  // Masks are immutable: paintMask/refineMaskStroke allocate new arrays.
+  // Stage baselines can initially share their Uint8 storage. Six eager 4K
+  // alpha copies used ~100MB before the editor even painted on iPhone.
+  let mask=initialMask,
+    roughStageMask=initialMask,
+    recognitionBaseMask=recognitionMask,
+    recognitionStageMask=recognitionMask,
+    postprocessBaseMask=initialMask,
+    finalStageMask=initialMask,
     mode='rough',restore=true,ratio=.04,
     appearance=processing.appearance||'original',intensity=processing.intensity??.5,
     rotation=initialRotation,autoStraighten=processing.autoStraighten!==false,outputPrepared=false,
@@ -152,18 +159,57 @@ export async function showCutoutEditor({
   };
   const resize=new ResizeObserver(fit);resize.observe(preview.parentElement);
 
+  // Draw the interactive preview at screen resolution, but keep sourcePixels
+  // and mask at their original resolution for final PNG and border refinement.
+  // The old draw() composed a 4096px full PNG on EVERY pointer movement and
+  // allocated several 60MB arrays on iPhone, often freezing before first paint.
+  const previewScale=Math.min(1,1100/Math.max(frame.width,frame.height));
+  const displayWidth=Math.max(1,Math.round(frame.width*previewScale)),
+    displayHeight=Math.max(1,Math.round(frame.height*previewScale)),
+    displayCutWidth=Math.max(1,Math.round(placement.width*previewScale)),
+    displayCutHeight=Math.max(1,Math.round(placement.height*previewScale)),
+    displayX=(placement.x+placement.width/2)*previewScale,
+    displayY=(placement.y+placement.height/2)*previewScale;
+  const previewCut=document.createElement('canvas');
+  previewCut.width=displayCutWidth;previewCut.height=displayCutHeight;
+  const previewCtx=previewCut.getContext('2d',{willReadFrequently:true});
+  const previewBuffer=previewCtx.createImageData(displayCutWidth,displayCutHeight);
+  function paintCutout(alpha){
+    const pixels=previewBuffer.data,rgba=sourcePixels.data;
+    for(let y=0;y<displayCutHeight;y++){
+      const sy=Math.min(h-1,Math.floor((y+.5)*h/displayCutHeight)),srcRow=sy*w;
+      for(let x=0;x<displayCutWidth;x++){
+        const sx=Math.min(w-1,Math.floor((x+.5)*w/displayCutWidth));
+        const si=srcRow+sx,src=si*4,out=(y*displayCutWidth+x)*4;
+        let red=rgba[src],green=rgba[src+1],blue=rgba[src+2];
+        if(appearance!=='original'){
+          const luma=.2126*red+.7152*green+.0722*blue;
+          const correction=v=>appearance==='natural'?v+intensity*14*(1-luma/255)
+            :(v-luma)*(1+.3*intensity)+luma+(luma-128)*.18*intensity;
+          red=correction(red);green=correction(green);blue=correction(blue);
+        }
+        pixels[out]=red;pixels[out+1]=green;pixels[out+2]=blue;
+        pixels[out+3]=Math.min(rgba[src+3],alpha[si]);
+      }
+    }
+    previewCtx.putImageData(previewBuffer,0,0);
+  }
   function draw(){
     if(!preview.isConnected)return;
+    if(preview.width!==displayWidth)preview.width=displayWidth;
+    if(preview.height!==displayHeight)preview.height=displayHeight;
+    pctx.clearRect(0,0,displayWidth,displayHeight);
     if(comparison==='original'){
-      preview.width=frame.width;preview.height=frame.height;pctx.clearRect(0,0,preview.width,preview.height);pctx.drawImage(frame,0,0);fit();return;
+      pctx.drawImage(frame,0,0,displayWidth,displayHeight);fit();return;
     }
-    const showRotation=mode==='final'?rotation:0,
-      cut=comparison==='initial'?initial:composed(mask,appearance,intensity,showRotation);
-    preview.width=frame.width;preview.height=frame.height;pctx.clearRect(0,0,preview.width,preview.height);
-    pctx.save();pctx.filter='saturate(.42) brightness(1.18) contrast(.62)';pctx.globalAlpha=.46;pctx.drawImage(frame,0,0);pctx.restore();
-    pctx.fillStyle='rgba(255,255,255,.34)';pctx.fillRect(0,0,preview.width,preview.height);
-    const cx=placement.x+placement.width/2,cy=placement.y+placement.height/2;
-    pctx.drawImage(cut,cx-cut.width/2,cy-cut.height/2);fit();
+    pctx.save();pctx.filter='saturate(.42) brightness(1.18) contrast(.62)';
+    pctx.globalAlpha=.46;pctx.drawImage(frame,0,0,displayWidth,displayHeight);pctx.restore();
+    pctx.fillStyle='rgba(255,255,255,.34)';pctx.fillRect(0,0,displayWidth,displayHeight);
+    paintCutout(comparison==='initial'?initialMask:mask);
+    pctx.save();pctx.translate(displayX,displayY);
+    if(mode==='final'&&comparison!=='initial')pctx.rotate(rotation*Math.PI/180);
+    pctx.drawImage(previewCut,-displayCutWidth/2,-displayCutHeight/2);
+    pctx.restore();fit();
   }
 
   const switchRow=(id,label,checked,help)=>'<label class="toggle-row setting-toggle"><span><b>'+label+'</b><small class="setting-help">'+help+'</small></span><input id="'+id+'" type="checkbox" '+(checked?'checked':'')+'></label>';

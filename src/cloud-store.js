@@ -13,6 +13,7 @@ import {recoverImportOutbox} from './import-outbox-recovery.js';
 import {recoverProjectOutbox,usableProjectSnapshot} from './project-outbox-recovery.js';
 import {migrationPendingConflicts} from './migration-outbox-guard.js';
 import {forkConflictingEditableWork} from './sync-conflict-copy.js';
+import {mergeEditableSceneProjects} from './scene-field-merge.js';
 import {isLegacySceneProject} from './scene-v2.js';
 export function createCloudStore({cloudClient,requireCloudUser,cache=null,namespace='cloud',projectPreview=()=>null,objectStorage=null}){
 const BUCKET='shiye-private';
@@ -254,17 +255,26 @@ const unifiedSync=createProjectSync({
     // discard a local version without first preserving the pair.
     const safetyKey='pre-conflict-scene:'+record.id+':'+operationID;
     const completeRemote=remote.projectDocumentPath?await cloudProjectDocument(remote):remote;
-    await remember(safetyKey,{
-      kind:'shiye-pre-conflict-scene-pair',at:new Date().toISOString(),
+    if(!cache||cacheDisabled)
+      throw Error('无法安全创建冲突前备份；保留待同步修改，请先检查本机存储');
+    const userKey=await account(),savedAt=new Date().toISOString();
+    const pair={kind:'shiye-pre-conflict-scene-pair',at:savedAt,
       local:structuredClone(record),remote:structuredClone(completeRemote),
-      baseRevision,remoteRevision:latest
-    });
-    const savedList=await cached('pre-conflict-scene-index')||[];
+      baseRevision,remoteRevision:latest};
+    // Unlike disposable image thumbnails, conflict protection must never be
+    // best-effort. Stop reconciliation if IndexedDB cannot persist the pair.
+    await cache.put(userKey,safetyKey,pair);
+    const savedList=await cache.get(userKey,'pre-conflict-scene-index')||[];
     if(!savedList.some(entry=>entry.key===safetyKey))
-      await remember('pre-conflict-scene-index',[
-        {key:safetyKey,id:record.id,title:record.title||'未命名作品',at:new Date().toISOString()},
+      await cache.put(userKey,'pre-conflict-scene-index',[
+        {key:safetyKey,id:record.id,title:record.title||'未命名作品',at:savedAt},
         ...savedList
       ].slice(0,20));
+    // Merge only provably replayable Scene v2 deltas. Different layers and
+    // properties commute; same-property edits use their explicit timestamps.
+    // Unsupported transforms fall back to the original guarded LWW decision.
+    const merged=mergeEditableSceneProjects(record,completeRemote);
+    if(merged)return {kind:'replace',record:syncEnvelope('project',merged)};
     const winner=latestEditedProject(record,remote);
     return winner==='local'?'rebase':winner==='remote'?'remote':'conflict';
   },
