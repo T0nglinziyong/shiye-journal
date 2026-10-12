@@ -1323,7 +1323,7 @@ async function openCutoutCheck(id,candidate=null){
   const processing=candidate?.processingRecord||a.processingRecord||{},baseWidth=processing.sourceWidthMM||candidate?.width||a.physicalWidthMM,baseHeight=processing.sourceHeightMM||candidate?.height||a.physicalHeightMM,
     localMethods=recognitionMethodDetails,
     preferredMethod=localMethods.some(item=>item.id===(processing.rerecognition?.method||state.preferences.recognition))?(processing.rerecognition?.method||state.preferences.recognition):'auto';
-  await showCutoutEditor({
+  const openEditor=()=>showCutoutEditor({
     body,modal,original,saved,recognition,candidateFrame,title:a.title,processing,toast,
     recognitionUI:{methods:localMethods,pixels:recognitionPixelOptions.filter(([n])=>n>=1200),method:preferredMethod,pixelsValue:Math.max(1200,state.preferences.recognitionPixels||1200),preprocess:recognitionPreprocessOptions(),postprocess:recognitionPostprocessOptions()},
     onRerecognize:request=>refineCandidateFrame(candidateFrame,request),
@@ -1342,6 +1342,33 @@ async function openCutoutCheck(id,candidate=null){
     }
     render();toast('素材外观已更新');
   }});
+  try{
+    await openEditor();
+  }catch(error){
+    // After an iOS restart, a local Blob may be present but corrupt while
+    // the full original is still recoverable from the private COS/Supabase
+    // object. Retry once with VERIFIED server bytes. Never modify metadata
+    // or silently replace the user's already saved cutout.
+    if(candidate||!cloudEnabled||!/检查抠图暂无法打开|不可解码|图片原始字节/.test(error?.message||''))
+      throw error;
+    const recover=async(id,current)=>{
+      if(!id)return current;
+      const fresh=await db.reloadCloudBlob(id);
+      return fresh?.data||current;
+    };
+    try{
+      [saved,original,recognition,candidateFrame]=await Promise.all([
+        recover(a.blobId,saved),recover(a.originalBlobId,original),
+        recover(a.originalCutoutBlobId,recognition),
+        recover(a.candidateFrameBlobId,candidateFrame)
+      ]);
+      await openEditor();
+    }catch(retryError){
+      throw Error('重新从云端读取素材原图后仍无法检查抠图：'+
+        (retryError?.message||'图片数据损坏')+
+        '。当前已保存素材不受影响；请检查同步详情。');
+    }
+  }
 }
 function openDetail(id){showAssetEditor({state,body,modal,db,esc,imgTag,render,route,toast},id);}
 function openSeriesEditor(id){showSeriesEditor({id,state,body,modal,db,uid,esc,imgTag,render,toast});}
