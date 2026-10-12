@@ -14,8 +14,12 @@ export function validateRestoredRecords(stores){
     }
     keys.set(store,seen);
   }
-  for(const asset of stores.assets)if(asset.blobId&&!asset.staticPath&&!keys.get('blobs').has(asset.blobId))
-    throw Error('ZIP 素材缺少抠图原件：'+asset.id);
+  for(const asset of stores.assets){
+    for(const ref of ['blobId','candidateFrameBlobId','initialMaskBlobId','finalMaskBlobId']){
+      if(asset[ref]&&!asset.staticPath&&!keys.get('blobs').has(asset[ref]))
+        throw Error('ZIP 素材缺少必要图片或蒙版：'+asset.id+' / '+ref);
+    }
+  }
   return true;
 }
 const hash=async bytes=>[...new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))].map(b=>b.toString(16).padStart(2,'0')).join('');
@@ -59,8 +63,10 @@ export async function validateBackupData(data){
   // Built-in resources can be referenced by staticPath; otherwise a material
   // should never be restored with a missing primary cutout Blob.
   for(const asset of data.stores.assets){
-    if(asset.blobId&&!asset.staticPath&&!ids.blobs.has(asset.blobId))
-      throw Error('备份素材缺少原图或抠图：'+asset.id);
+    for(const ref of ['blobId','candidateFrameBlobId','initialMaskBlobId','finalMaskBlobId']){
+      if(asset[ref]&&!asset.staticPath&&!ids.blobs.has(asset[ref]))
+        throw Error('备份素材缺少图片或蒙版：'+asset.id+' / '+ref);
+    }
   }
   return true;
 }
