@@ -177,6 +177,7 @@ const unifiedSync=createProjectSync({
       return reconcileImport(envelope.payload,operationID,baseRevision);
     if(envelope.kind!=='project')return 'conflict';
     if(await wasCommitted(operationID,baseRevision))return 'committed';
+    if(await wasResetAfter(baseRevision))return 'remote';
     const latest=await version(),record=envelope.payload;
     if(await canRebaseUnchangedKeys({client:cloudClient(),owner:await identity(),
       before:baseRevision,after:latest,operations:[{store:'projects',action:'put',item:record}]}))return 'rebase';
@@ -216,6 +217,17 @@ const importSync={
   pending:()=>selectedRows('batch'),
   resolvePending:(id,serial,opts)=>resolveEnvelope('batch',id,serial,opts),
 };
+// A reset is a high-priority epoch barrier. Outboxes staged before a
+// deliberate all-data reset must NEVER revive old artwork after reconnect.
+async function wasResetAfter(baseRevision){
+  const user=await identity();
+  const {data,error}=await cloudClient().from('shiye_records')
+    .select('record').eq('user_id',user).eq('store','meta')
+    .eq('id','shiye-reset-barrier').maybeSingle();
+  if(error)throw Error('无法核对账号清空版本，暂不上传旧资料');
+  const resetRevision=Number(data?.record?.revision);
+  return Number.isSafeInteger(resetRevision)&&resetRevision>baseRevision;
+}
 async function wasCommitted(operationID,baseRevision){
   if(!operationID)throw Error('待同步记录缺少 operationID');
   const row=checked(await cloudClient().from('shiye_commits').select('revision').eq('user_id',await identity()).eq('operation_id',operationID).maybeSingle());
@@ -224,6 +236,7 @@ async function wasCommitted(operationID,baseRevision){
 }
 async function reconcileImport(batch,operationID,baseRevision){
   if(await wasCommitted(operationID,baseRevision))return 'committed';
+  if(await wasResetAfter(baseRevision))return 'remote';
   const latest=await version();
   // If the server cursor never advanced, an aborted request is unconfirmed,
   // not remotely won. Do not drop a local delete or restore on a 404 lookup.
@@ -770,6 +783,16 @@ async function cloudResolveProjectConflict({kind,id,serial,expectedRevision,choi
   return {choice,originalID:local.id,remoteBackupID:retained.id};
  });
 }
+async function cloudPurgeLocalAfterReset(){
+  const user=await account();
+  // Disable reads and background upload at this instance before erasing the
+  // durable outbox. Caller has already stopped editing and received reset:true.
+  cacheDisabled=true;
+  images.clear();imageSizes.clear();documents.clear();snapshots.clear();
+  uploads.clear();editorBases.clear();
+  if(typeof cache?.purgeAccount!=='function')throw Error('浏览器不支持完整账号本地清理');
+  return cache.purgeAccount(user);
+}
 async function cloudPendingDetails(){await identity();const [projects,imports]=await Promise.all([projectSync.pending(),importSync.pending()]);return {projects:projects.map(row=>({id:row.record.id,title:row.record.title||'未命名作品',baseRevision:row.baseRevision})),batches:imports.map(row=>({id:row.record.id,baseRevision:row.baseRevision,items:row.record.operations?.map(op=>({store:op.store,action:op.action,title:op.item?.title||op.item?.name||op.id||'',id:op.item?.id||op.id||''}))||['assets','projects','blobs'].flatMap(store=>(row.record[store]||[]).map(item=>({store,action:'put',title:item.title||'',id:item.id})))})),error:importSync.status().error?.message||projectSync.status().error?.message||null};}
 async function cloudDiscardPending(){await identity();if(writesInFlight||!unifiedSync.canDiscard())throw Error('上传正在进行，请等待当前请求结束');const count=await unifiedSync.discard();reportSync();return count;}
 async function cloudFlushProjects({background=false}={}){
@@ -790,11 +813,12 @@ async function cloudRestoreEmergency(snapshot){
   if(typeof cache.restoreUnifiedOutboxes!=='function')throw Error('当前浏览器不支持原子恢复唯一同步队列');
   return cache.restoreUnifiedOutboxes(key,snapshot.projects,snapshot.imports);
 }
-return {cloudConflictReview,cloudConflictBackup,cloudResolveProjectConflict,cloudMigrationInventory,cloudMigrationOriginalProject,cloudMigrationCommit,cloudLegacyProjectBackup,cloudAll,cloudGet,cloudPreview,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudClearCache,cloudResumeCache,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudPendingLocalSummary,cloudPendingDetails,cloudDiscardPending,cloudFlushProjects,cloudProjectDocument,cloudEmergencySnapshot,cloudRestoreEmergency,cloudBackupBlobIDs};
+return {cloudPurgeLocalAfterReset,cloudConflictReview,cloudConflictBackup,cloudResolveProjectConflict,cloudMigrationInventory,cloudMigrationOriginalProject,cloudMigrationCommit,cloudLegacyProjectBackup,cloudAll,cloudGet,cloudPreview,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudClearCache,cloudResumeCache,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudPendingLocalSummary,cloudPendingDetails,cloudDiscardPending,cloudFlushProjects,cloudProjectDocument,cloudEmergencySnapshot,cloudRestoreEmergency,cloudBackupBlobIDs};
 }
 let projectPreview=()=>null;
 export const setCloudProjectPreview=producer=>{projectPreview=producer;};
 const current=createCloudStore({cloudClient,requireCloudUser,cache:privateCache,namespace:import.meta.env?.VITE_SHIYE_SUPABASE_URL||'cloud',projectPreview:record=>projectPreview(record),objectStorage:createCOSStore({client:cloudClient,enabled:import.meta.env?.VITE_SHIYE_OBJECT_STORAGE==='cos'})});
+export const cloudPurgeLocalAfterReset=(...args)=>current.cloudPurgeLocalAfterReset(...args);
 export const cloudConflictReview=(...args)=>current.cloudConflictReview(...args);
 export const cloudConflictBackup=(...args)=>current.cloudConflictBackup(...args);
 export const cloudResolveProjectConflict=(...args)=>current.cloudResolveProjectConflict(...args);
