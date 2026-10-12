@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import {createCloudStore} from '../src/cloud-store.js';
 import {prepareStorageMigration} from '../src/data-migrations/registry.js';
 const legacy=()=>({id:'project-old',title:'旧作品',activeDraftID:'d',drafts:[{id:'d',canvas:{width:707,height:1000},pageMode:'single',physicalPageHeightMM:297,paperColor:'#ffffff',items:[],primitives:[],textBlocks:[],strokes:[]}]});
-function server(){
+function server(cache=null){
  const state={revision:3,collections:{assets:[],series:[],projects:[legacy()],blobs:[{id:'source',storagePath:'owner/file',storageProvider:'cos'}],meta:[],trash:[]},calls:[]};
  const client={from(table){const f={};const q={select(){return q;},eq(k,v){f[k]=v;return q;},order(){return q;},async range(start,end){return {data:(state.collections[f.store]||[]).slice(start,end+1).map(record=>({record}))};},async single(){return {data:{revision:state.revision}};},async maybeSingle(){return {data:null}}};return q;},async rpc(name,args){assert.equal(name,'shiye_commit_v2');state.calls.push(args);if(args.expected_revision!==state.revision)return {error:{message:'conflict'}};return {data:++state.revision}}};
- const db=createCloudStore({cloudClient:()=>client,requireCloudUser:async()=>({id:'owner'}),cache:null});return {db,state};
+ const db=createCloudStore({cloudClient:()=>client,requireCloudUser:async()=>({id:'owner'}),cache});return {db,state};
 }
 test('account migration inspects all six stores, CAS-commits only validated obsolete records',async()=>{
  const {db,state}=server(),snapshot=await db.cloudMigrationInventory();
@@ -30,4 +30,13 @@ test('migration never overwrites a version advanced by another device after prev
 test('migration rejects arbitrary writes against assets, meta or photos',async()=>{
  const {db}=server();
  await assert.rejects(db.cloudMigrationCommit({expectedRevision:3,changes:[{id:'secret',store:'meta',converted:{id:'secret'}}]}),/写入目标不安全/);
+});
+
+test('migration stops before writing when unsynced old scenes are quarantined locally',async()=>{
+ const invalid={record:{id:'pending-old',drafts:[{id:'d',items:[],primitives:[],textBlocks:[],strokes:[]}]},serial:1,baseRevision:0};
+ const cache={get:async(_account,key)=>key==='project-outbox'?[invalid]:[],put:async()=>{}};
+ const {db,state}=server(cache),snapshot=await db.cloudMigrationInventory();
+ const plan=await prepareStorageMigration(snapshot.collections);
+ await assert.rejects(db.cloudMigrationCommit({expectedRevision:snapshot.revision,changes:plan.changes}),/隔离的旧版待同步数据/);
+ assert.equal(state.calls.length,0);
 });
