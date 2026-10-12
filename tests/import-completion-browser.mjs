@@ -42,7 +42,7 @@ try{
         navInside:inside(nav,{left:0,right:innerWidth}),
         navTitleAndExit:!navTitle||!navExit||navTitle.right<=navExit.left+2,
         stepsInside:steps.every(x=>inside(x,nav))&&inside(progress,nav),
-        statusHidden:w>=700||getComputedStyle(document.querySelector(".import-nav>.sync-indicator"))?.display==='none'};
+        statusHidden:!document.querySelector(".import-nav>.sync-indicator")||getComputedStyle(document.querySelector(".import-nav>.sync-indicator")).display==='none'};
     })()`);
     assert.ok(metrics.pageOverflow<=1,'saved screen horizontal overflow: '+JSON.stringify({w,metrics}));
     assert.ok(metrics.cardInside&&metrics.textInside&&metrics.buttonInside&&metrics.navInside,
