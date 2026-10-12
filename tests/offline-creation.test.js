@@ -28,6 +28,9 @@ test('current GPT task package has one root entry and grouped compact folders',a
   assert.ok(knowledge.compositionIdeas.length<=3);
   assert.match(strFromU8(files['START_HERE.txt']),/本次主题、要求和内容/);
   assert.ok(strFromU8(files['task/GUIDE.txt']).length<5500,'The model-facing GUIDE should stay concise');
+  const guide=strFromU8(files['task/GUIDE.txt']);
+  assert.match(guide,/page\\.layers/,'direct mode must advertise recursive Scene v2 layers');
+  assert.doesNotMatch(guide,/page\\.groups/,'removed parallel group schema must not appear in GPT instructions');
 });
 
 test('current editable example imports only with its exact registered source',async()=>{
