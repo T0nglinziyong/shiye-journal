@@ -1,6 +1,7 @@
 import {cloudClient,requireCloudUser} from './cloud-session.js';
 import {privateCache} from './private-cache.js';
 import {createProjectSync} from './project-sync.js';
+import {syncEnvelope,projectSyncRows,importSyncRows,latestEditedProject,syncAffectedKeys,foldLegacySyncRows} from './unified-sync-outbox.js';
 import {readCloudDelta,canRebaseUnchangedKeys} from './cloud-delta.js';
 import {compareRecordEdits} from './sync-last-write.js';
 import {recordTombstones} from './sync-tombstones.js';
@@ -75,7 +76,7 @@ function materializePreview480(record,preview){
     .catch(error=>{previewMaterialization.delete(path);console.warn('旧素材 COS 固定封面待补齐',error);});
 }
 let cacheDisabled=false;
-let projectOutboxBefore=[],projectOutboxQuarantine=[],importOutboxBefore=[];
+let unifiedOutboxBefore=[],projectOutboxQuarantine=[],unifiedQuarantine=[];
 const sessionTag=crypto.randomUUID();
 let outboxChannel=null;
 const channel=()=>{
@@ -92,7 +93,7 @@ const channel=()=>{
     const msg=event.data;
     if(!msg||msg.source===sessionTag)return;
     if(msg.type==='pending')
-      void Promise.all([importSync.resume(),projectSync.resume()]).catch(()=>{});
+      void unifiedSync.resume().catch(()=>{});
     if(msg.type==='committed')notifyCloudSuperseded();
   };
   return outboxChannel;
@@ -121,54 +122,100 @@ const account=async()=>`${namespace}:${await identity()}`;
 function notifyCloudSuperseded(){
   if(typeof window!=='undefined')window.dispatchEvent(new CustomEvent('shiye-cloud-superseded'));
 }
-function reportSync(){if(typeof window!=='undefined'){const a=projectSync.status(),b=importSync.status();window.dispatchEvent(new CustomEvent('shiye-project-sync',{detail:{pending:a.pending+b.pending+writesInFlight,error:b.error||a.error}}));}}
-const projectSync=createProjectSync({
+function reportSync(){if(typeof window!=='undefined'){const current=unifiedSync.status();window.dispatchEvent(new CustomEvent('shiye-project-sync',{detail:{pending:current.pending+writesInFlight,error:current.error}}));}}
+// One durable account-scoped queue, one upload scheduler. The project and
+// import accessors below are filtered facades; neither owns a second queue.
+async function loadUnifiedOutbox(){
+  if(!cache)return [];
+  const user=await account();
+  let result;
+  if(typeof cache.migrateUnifiedOutbox==='function'){
+    result=await cache.migrateUnifiedOutbox(user);
+  }else{
+    const previous=await cache.get(user,'unified-outbox');
+    if(Array.isArray(previous))result={rows:previous,quarantine:await cache.get(user,'sync-quarantine')||[]};
+    else{
+      result=foldLegacySyncRows([],await cache.get(user,'project-outbox')||[],
+        await cache.get(user,'import-outbox')||[]);
+      await cache.put(user,'unified-outbox',result.rows);
+      if(result.quarantine.length)await cache.put(user,'sync-quarantine',result.quarantine);
+    }
+  }
+  unifiedOutboxBefore=structuredClone(result.rows);
+  unifiedQuarantine=structuredClone(result.quarantine);
+  projectOutboxQuarantine=unifiedQuarantine.filter(item=>item.kind==='project').map(item=>item.row);
+  return result.rows;
+}
+const unifiedSync=createProjectSync({
   autoFlushDelayMs:10000,
-  load:async()=>{
-    if(!cache)return [];
-    const saved=await cache.get(await account(),'project-outbox')||[];
-    const result=recoverProjectOutbox(saved);
-    projectOutboxQuarantine=structuredClone(result.quarantined);
-    projectOutboxBefore=structuredClone(saved);
-    // Incomplete/old data is NEVER silently deleted, migrated or synced.
-    // New valid v2 edits can still progress; corrupted raw bytes remain in the
-    // durable account queue for explicit manual recovery.
-    return result.rows;
-  },
+  load:loadUnifiedOutbox,
+  reload:loadUnifiedOutbox,
   write:async rows=>{
-    const preserved=[...projectOutboxQuarantine,...rows];
-    await persistOutbox('project-outbox',projectOutboxBefore,preserved);
-    projectOutboxBefore=structuredClone(preserved);
+    await persistOutbox('unified-outbox',unifiedOutboxBefore,rows);
+    unifiedOutboxBefore=structuredClone(rows);
   },
-  reload:async()=>{
-    const saved=await cache?.get(await account(),'project-outbox')||[];
-    const result=recoverProjectOutbox(saved);
-    projectOutboxQuarantine=structuredClone(result.quarantined);
-    projectOutboxBefore=structuredClone(saved);
-    return result.rows;
+  commit:(envelope,operationID)=>{
+    const payload=envelope.payload;
+    if(envelope.kind==='project')
+      return cloudTransaction(['projects'],tx=>tx.objectStore('projects').put(payload),operationID);
+    if(envelope.kind!=='batch')throw Error('不支持的待同步操作类型');
+    return payload.operations?
+      cloudTransaction(payload.names,tx=>{for(const op of payload.operations){
+        const store=tx.objectStore(op.store);
+        if(op.action==='put')store.put(op.item);
+        else if(op.action==='delete')store.delete(op.id);
+        else store.clear();
+      }},operationID):
+      cloudTransaction(['assets','blobs','projects'],tx=>{
+        for(const store of ['assets','blobs','projects'])
+          for(const item of payload[store]||[])tx.objectStore(store).put(item);
+      },operationID);
   },
-  commit:(record,operationID)=>cloudTransaction(['projects'],tx=>tx.objectStore('projects').put(record),operationID),revision:()=>revision,
-  reconcile:async(record,operationID,baseRevision)=>{
+  revision:()=>revision,
+  reconcile:async(envelope,operationID,baseRevision)=>{
+    if(envelope.kind==='batch')
+      return reconcileImport(envelope.payload,operationID,baseRevision);
+    if(envelope.kind!=='project')return 'conflict';
     if(await wasCommitted(operationID,baseRevision))return 'committed';
-    const latest=await version();
-    if(await canRebaseUnchangedKeys({client:cloudClient(),owner:await identity(),before:baseRevision,after:latest,operations:[{store:'projects',action:'put',item:record}]}))return 'rebase';
-    // A full editable Scene cannot be merged by timestamps. If another
-    // device touched the same document, keep local pending bytes and reject
-    // the upload instead of overwriting either copy. Only a proven disjoint
-    // change log permits an automatic rebase.
-    return 'conflict';
+    const latest=await version(),record=envelope.payload;
+    if(await canRebaseUnchangedKeys({client:cloudClient(),owner:await identity(),
+      before:baseRevision,after:latest,operations:[{store:'projects',action:'put',item:record}]}))return 'rebase';
+    // User-selected policy: genuine simultaneous edits use the last explicit
+    // edit timestamp. Ties keep cloud. Deletes and invalid dates remain safe.
+    const remote=await cloudRecord('projects',record.id);
+    if(!remote)return 'conflict';
+    const winner=latestEditedProject(record,remote);
+    return winner==='local'?'rebase':winner==='remote'?'remote':'conflict';
   },
-  onCommitted:(record,committedRevision)=>{
-    if(record.__cloudSessionId)editorBases.set(record.__cloudSessionId,committedRevision);
+  onCommitted:(envelope,committedRevision)=>{
+    const record=envelope.kind==='project'?envelope.payload:null;
+    if(record?.__cloudSessionId)editorBases.set(record.__cloudSessionId,committedRevision);
   },
-  // True same-document conflicts remain in the durable outbox until the
-  // account owner explicitly chooses cloud, local or both in Sync Details.
-  // Never fork/overwrite a version merely because the timestamp is newer.
   onConflict:async()=>null,
   onSuperseded:()=>notifyCloudSuperseded(),
   onStatus:reportSync,
   runExclusive:withAccountSyncLock,
+  recordKeys:syncAffectedKeys,
 });
+const selectedRows=async kind=>(await unifiedSync.pending())
+  .filter(row=>row.record?.kind===kind).map(row=>({
+    ...row,record:structuredClone(row.record.payload)
+  }));
+const resolveEnvelope=async(kind,id,serial,{record=null,baseRevision=null}={})=>
+  unifiedSync.resolvePending((kind==='project'?'project:':'batch:')+id,serial,{
+    record:record?syncEnvelope(kind,record):null,baseRevision
+  });
+const projectSync={
+  stage:(record,opts)=>unifiedSync.stage(syncEnvelope('project',record),opts),
+  pending:()=>selectedRows('project'),
+  resolvePending:(id,serial,opts)=>resolveEnvelope('project',id,serial,opts),
+  cancelPendingFor:ids=>unifiedSync.cancelPendingFor(ids.map(id=>'project:'+id)),
+};
+const importSync={
+  stage:(record,opts)=>unifiedSync.stage(syncEnvelope('batch',record),opts),
+  pending:()=>selectedRows('batch'),
+  resolvePending:(id,serial,opts)=>resolveEnvelope('batch',id,serial,opts),
+};
 async function wasCommitted(operationID,baseRevision){
   if(!operationID)throw Error('待同步记录缺少 operationID');
   const row=checked(await cloudClient().from('shiye_commits').select('revision').eq('user_id',await identity()).eq('operation_id',operationID).maybeSingle());
@@ -247,43 +294,6 @@ async function reconcileImport(batch,operationID,baseRevision){
 }
 // This durable, account-scoped outbox retains the complete batch, including
 // original bytes. Only a successful cloud acknowledgement removes it.
-const importSync=createProjectSync({
-  load:async()=>{
-    if(!cache)return [];
-    const key=await account(),rows=await cache.get(key,'import-outbox')||[];
-    const result=await recoverImportOutbox(rows,async(asset,ids)=>{
-      const user=await identity();
-      if(!ids.length)return false;
-      const copies=checked(await cloudClient().from('shiye_records').select('id,record').eq('user_id',user).eq('store','blobs').in('id',ids).abortSignal(AbortSignal.timeout(5000)));
-      const available=[];
-      for(const copy of copies){
-        const record=copy.record;
-        // Metadata alone is not a cloud backup. A crash can leave a row whose
-        // COS object was never uploaded. Check only broken local imports, and
-        // treat 404 as loss; timeout/403 remain indeterminate and are retried.
-        if(!record?.storagePath||!['cos','supabase'].includes(record.storageProvider))continue;
-        if(!record.storagePath.startsWith(user+'/'))throw Error('图片不属于当前账号');
-        const cachedImage=await cached('image:'+record.storagePath);
-        if(usableBlob(cachedImage)){available.push(copy.id);continue;}
-        if(record.storageProvider==='cos'&&objectStorage?.probe){if(await objectStorage.probe(record.storagePath))available.push(copy.id);continue;}
-        try{if(usableBlob(await downloadObject(record.storagePath,record.storageProvider)))available.push(copy.id);}
-        catch(error){if(!/\b404\b|NoSuchKey|Object not found/i.test(error?.message||''))throw error;}
-      }
-      return available;
-    });
-    if(!result.changed){importOutboxBefore=structuredClone(rows);return rows;}
-    // Repair only the broken local queue rows; never clobber other tab edits.
-    try{await persistOutbox('import-outbox',rows,result.rows);importOutboxBefore=structuredClone(result.rows);return result.rows;}
-    catch{importOutboxBefore=structuredClone(rows);return rows;}
-  },
-  write:async rows=>{await persistOutbox('import-outbox',importOutboxBefore,rows);importOutboxBefore=structuredClone(rows);},
-  // Sync must never rerun destructive crash recovery on a freshly staged row.
-  reload:async()=>{const rows=await cache?.get(await account(),'import-outbox')||[];importOutboxBefore=structuredClone(rows);return rows;},
-  commit:(batch,operationID)=>batch.operations?cloudTransaction(batch.names,tx=>{for(const op of batch.operations){const store=tx.objectStore(op.store);if(op.action==='put')store.put(op.item);else if(op.action==='delete')store.delete(op.id);else store.clear();}},operationID):cloudTransaction(['assets','blobs','projects'],tx=>{for(const store of ['assets','blobs','projects'])for(const record of batch[store]||[])tx.objectStore(store).put(record);},operationID),
-  revision:()=>revision,reconcile:reconcileImport,onSuperseded:()=>notifyCloudSuperseded(),onStatus:reportSync,
-  runExclusive:withAccountSyncLock,
-  recordKeys:batch=>batch.operations?.map(op=>({store:op.store,id:op.item?.id??op.id}))||['assets','blobs','projects'].flatMap(store=>(batch[store]||[]).map(item=>({store,id:item.id}))),
-});
 async function pendingOperations(store){await identity();return (await importSync.pending()).flatMap(row=>row.record.operations?.filter(op=>op.store===store)||(row.record[store]||[]).map(item=>({action:'put',store,item})));}
 async function pendingOverride(store,id){let result;for(const op of await pendingOperations(store)){if(op.action==='clear'||op.action==='delete'&&op.id===id)result={found:true};else if(op.action==='put'&&op.item.id===id)result={found:true,record:op.item};}return result;}
 async function overlayImports(store,records){const map=new Map(records.map(r=>[r.id,r]));for(const op of await pendingOperations(store)){if(op.action==='clear')map.clear();else if(op.action==='delete')map.delete(op.id);else map.set(op.item.id,op.item);}return [...map.values()];}
@@ -512,8 +522,7 @@ function cloudTransaction(names,fn,operationID=crypto.randomUUID()){
       const records=new Map(saved.records.map(r=>[r.id,r]));for(const op of operations.filter(o=>o.store===store)){if(op.action==='clear')records.clear();else if(op.action==='delete')records.delete(op.id);else records.set(op.item.id,op.item);}
       const next={revision,records:[...records.values()]};snapshots.set(store,next);await remember('records:'+store,next);
     }
-    await projectSync.advance(previous,revision,operations);
-    await importSync.advance(previous,revision,operations);
+    await unifiedSync.advance(previous,revision,operations);
     try{channel()?.postMessage({source:sessionTag,type:'committed',revision});}
     catch(error){console.warn('跨标签页同步通知暂不可用，云端提交仍已完成',error?.message);}
     }finally{writesInFlight--;reportSync();}
@@ -652,7 +661,7 @@ async function cloudBackupBlobIDs(){
 // Read the shared durable queue, not just this tab's in-memory status. This
 // intentionally does not contact the server, so logout remains possible when
 // the network is unavailable after local staging succeeds.
-async function cloudPendingLocalSummary(){const key=await account();const [projects,imports]=await Promise.all([cache?.get(key,'project-outbox'),cache?.get(key,'import-outbox')]);return {projects:projects?.length||0,imports:imports?.length||0};}
+async function cloudPendingLocalSummary(){const rows=await unifiedSync.pending();return {projects:projectSyncRows(rows).length,imports:importSyncRows(rows).length,quarantined:unifiedQuarantine.length};}
 // Manual conflict handling is separate from ordinary synchronization. No
 // pending bytes are discarded until an explicit comparison/backup and choice.
 async function reviewedConflict(kind,id){
@@ -762,29 +771,24 @@ async function cloudResolveProjectConflict({kind,id,serial,expectedRevision,choi
  });
 }
 async function cloudPendingDetails(){await identity();const [projects,imports]=await Promise.all([projectSync.pending(),importSync.pending()]);return {projects:projects.map(row=>({id:row.record.id,title:row.record.title||'未命名作品',baseRevision:row.baseRevision})),batches:imports.map(row=>({id:row.record.id,baseRevision:row.baseRevision,items:row.record.operations?.map(op=>({store:op.store,action:op.action,title:op.item?.title||op.item?.name||op.id||'',id:op.item?.id||op.id||''}))||['assets','projects','blobs'].flatMap(store=>(row.record[store]||[]).map(item=>({store,action:'put',title:item.title||'',id:item.id})))})),error:importSync.status().error?.message||projectSync.status().error?.message||null};}
-async function cloudDiscardPending(){await identity();if(writesInFlight||!importSync.canDiscard()||!projectSync.canDiscard())throw Error('上传正在进行，请等待当前请求结束');const count=(await importSync.discard())+(await projectSync.discard());reportSync();return count;}
+async function cloudDiscardPending(){await identity();if(writesInFlight||!unifiedSync.canDiscard())throw Error('上传正在进行，请等待当前请求结束');const count=await unifiedSync.discard();reportSync();return count;}
 async function cloudFlushProjects({background=false}={}){
   await identity();if(revision===undefined)await version();
-  if(background){
-    // Background wake-ups must not bypass the edit batching timer.
-    await projectSync.resumeScheduled();
-    return importSync.flush();
-  }
-  await importSync.flush();
-  return projectSync.flush();
+  if(background)return unifiedSync.resumeScheduled();
+  return unifiedSync.flush();
 }
 async function cloudClearCache(){const id=await account();cacheDisabled=true;try{images.clear();imageSizes.clear();documents.clear();snapshots.clear();editorBases.clear();await cache?.clear(id);}catch(error){cacheDisabled=false;throw error;}}
 function cloudResumeCache(){cacheDisabled=false;}
 async function cloudEmergencySnapshot(){
   if(!owner||!cache)throw Error('尚无已验证的本机账号缓存，无法离线导出待同步数据');
-  const key=await account(),[projects,imports]=await Promise.all([cache.get(key,'project-outbox'),cache.get(key,'import-outbox')]);
-  return {account:key,projects:projects||[],imports:imports||[]};
+  const key=await account(),rows=await unifiedSync.pending();
+  return {account:key,projects:projectSyncRows(rows),imports:importSyncRows(rows)};
 }
 async function cloudRestoreEmergency(snapshot){
   if(!owner||!cache||cacheDisabled)throw Error('请先登录目标账号，再恢复应急资料');
   const key=await account();if(snapshot.account!==key)throw Error('应急资料不属于当前账号，未改动本机数据');
-  if(typeof cache.restoreOutboxes!=='function')throw Error('当前浏览器不支持原子恢复待同步资料');
-  return cache.restoreOutboxes(key,snapshot.projects,snapshot.imports);
+  if(typeof cache.restoreUnifiedOutboxes!=='function')throw Error('当前浏览器不支持原子恢复唯一同步队列');
+  return cache.restoreUnifiedOutboxes(key,snapshot.projects,snapshot.imports);
 }
 return {cloudConflictReview,cloudConflictBackup,cloudResolveProjectConflict,cloudMigrationInventory,cloudMigrationOriginalProject,cloudMigrationCommit,cloudLegacyProjectBackup,cloudAll,cloudGet,cloudPreview,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudClearCache,cloudResumeCache,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudPendingLocalSummary,cloudPendingDetails,cloudDiscardPending,cloudFlushProjects,cloudProjectDocument,cloudEmergencySnapshot,cloudRestoreEmergency,cloudBackupBlobIDs};
 }
