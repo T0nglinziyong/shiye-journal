@@ -77,33 +77,15 @@ function listView(d,type){
  });
  return proxy;
 }
-function normalizeGroupLegacy(d){
- const metadata=Array.isArray(d.layerGroups)?d.layerGroups:[];
- for(const group of metadata){const ids=allLeaves(d.layers).filter(e=>e.value.creativeGroupID===group.id).map(e=>e.value.id);
-  if(!ids.length)continue;
-  const leaves=ids.map(id=>detach(d.layers,id)).filter(Boolean);
-  insertNode(d,{id:group.id,type:'group',name:group.name||'手帐组合',opacity:1,blendMode:'normal',children:leaves,zIndex:Math.min(...leaves.map(z))});
- }
-}
 export function attachSceneV2(d){
  if(!d||typeof d!=='object')throw Error('场景不存在');
- if(!Array.isArray(d.layers)){
-  const legacy=Object.fromEntries(fields.map(key=>[key,Array.isArray(d[key])?d[key]:[]]));
-  for(const key of fields)delete d[key];
-  d.layers=fields.flatMap(field=>legacy[field].map(entry=>({...entry,type:types[field],id:entry.id||generatedID()}))).sort((a,b)=>z(a)-z(b));
-  normalizeGroupLegacy(d);
-  d.sceneVersion=SCENE_VERSION;
- }
- // Older hand-placed material instances did not always record an editor
- // baseline. Repair metadata only: actual source mm dimensions, crop and
- // available inventory are still verified by validateScenePhysical.
- for(const e of allLeaves(d.layers))if(e.kind==='material'&&!e.value.generationBaseline){
-  const n=e.value;
-  if([n.x,n.y,n.width,n.height].every(Number.isFinite)&&n.width>0&&n.height>0)
-   n.generationBaseline={x:n.x,y:n.y,width:n.width,height:n.height,
-     rotation:n.rotation||0,zIndex:n.zIndex||0};
- }
- if(d.sceneVersion!==SCENE_VERSION)throw Error('不支持的 Scene 版本');
+ if(d.sceneVersion!==SCENE_VERSION||!Array.isArray(d.layers))
+  throw Error('仅支持 Scene v2 的 layers 图层树；旧版数据不会自动转换或覆盖');
+ if([...fields,'layerGroups'].some(field=>Object.getOwnPropertyDescriptor(d,field)?.enumerable))
+  throw Error('Scene v2 禁止保存旧版并行图层数组或组合字段');
+ // Current-only documents must not infer a geometry baseline during loading.
+ // Missing provenance is a validation error, not a reason to silently rewrite
+ // an untrusted or incomplete source into an apparently legitimate material.
  for(const [field,type] of Object.entries(types)){
   const desc=Object.getOwnPropertyDescriptor(d,field);
   if(desc?.get?.__sceneV2)continue;
@@ -128,6 +110,25 @@ export function sceneLayerEntries(d,{hidden=false,ink=true}={}){
  return allLeaves(d.layers).filter(e=>(hidden||e.parents.every(visible)&&visible(e.value))&&(ink||e.kind!=='ink'))
   .map((e,index)=>({...e,index})); // tree order, including ink; never re-sort by type
 }
+const lockedNode=n=>!!(n?.locked||n?.isLocked);
+const scenePathLocked=nodes=>nodes.some(n=>lockedNode(n)||(n.type==='group'&&scenePathLocked(n.children||[])));
+function scenePath(nodes,id,ancestors=[]){
+ for(const node of nodes){
+  const path=[...ancestors,node];
+  if(node.id===id)return path;
+  if(node.type==='group'){
+   const found=scenePath(node.children||[],id,path);
+   if(found)return found;
+  }
+ }
+ return null;
+}
+const assertUnlockedPath=(d,id)=>{
+ const path=scenePath(d.layers,id);
+ if(!path)throw Error('图层不存在');
+ if(path.some(lockedNode))throw Error('锁定图层或组合不能修改');
+ return path;
+};
 export function sceneGroupMembers(d,id){return sceneLayerEntries(d,{hidden:true}).filter(e=>e.parents.some(g=>g.id===id));}
 export function groupSceneLayers(d,ids,{id='group-'+generatedID(),name='手帐组合'}={}){
  attachSceneV2(d);
@@ -135,6 +136,7 @@ export function groupSceneLayers(d,ids,{id='group-'+generatedID(),name='手帐�
  if(!/^[a-zA-Z0-9_-]{1,96}$/.test(id)||findSceneNode(d,id))throw Error('图层组编号无效或重复');
  const selected=sceneLayerEntries(d,{hidden:true}).filter(e=>ids.includes(e.value.id));
  if(selected.length!==ids.length||selected.some(e=>e.value.locked||e.value.isLocked))throw Error('编组包含不存在或锁定的图层');
+ ids.forEach(id=>assertUnlockedPath(d,id));
  const parent=selected[0].parents.at(-1)||null;
  if(selected.some(e=>(e.parents.at(-1)||null)!==parent))throw Error('请在同一图层组中选择素材');
  const siblings=parent?parent.children:d.layers;
@@ -147,6 +149,7 @@ export function groupSceneLayers(d,ids,{id='group-'+generatedID(),name='手帐�
 export function ungroupSceneLayers(d,id){
  attachSceneV2(d);
  const group=lookupGroup(d.layers,id);if(!group)return false;
+ assertUnlockedPath(d,id);
  let parent=null;children(d.layers,(n,arr,g)=>{if(n===group){parent=g;return true;}return false;});
  const target=parent?parent.children:d.layers,index=target.indexOf(group);
  target.splice(index,1,...group.children);
@@ -158,8 +161,9 @@ export function moveSceneNode(d,id,{parentID=null,beforeID=null}={}){
  attachSceneV2(d);
  const node=findSceneNode(d,id);
  if(!node)throw Error('移动的图层不存在');
- if(node.locked||node.isLocked)throw Error('锁定图层不能移动');
+ assertUnlockedPath(d,id);
  const parent=parentID?lookupGroup(d.layers,parentID):null;
+ if(parentID)assertUnlockedPath(d,parentID);
  if(parentID&&!parent)throw Error('目标图层组不存在');
  if(node===parent||node.type==='group'&&collectGroups(node.children).includes(parent))throw Error('不能把组放入它自己或子组');
  if(parent?.locked||parent?.isLocked)throw Error('目标组已锁定');
@@ -189,13 +193,16 @@ export function removeSceneNode(d,id){
  attachSceneV2(d);
  const node=findSceneNode(d,id);
  if(!node)throw Error('删除的图层不存在');
- if(node.locked||node.isLocked)throw Error('锁定图层不能删除');
+ assertUnlockedPath(d,id);
+ const lockedDescendant=(node.type==='group'&&scenePathLocked(node.children||[]));
+ if(lockedDescendant)throw Error('组合包含锁定图层，不能直接删除');
  return detach(d.layers,id);
 }
 
 export function transformSceneGroup(d,id,{dx=0,dy=0,rotation=0}={}){
  attachSceneV2(d);
  const group=lookupGroup(d.layers,id);if(!group)throw Error('图层组不存在');
+ assertUnlockedPath(d,id);
  if(![dx,dy,rotation].every(Number.isFinite)||Math.abs(dx)>20000||Math.abs(dy)>20000||Math.abs(rotation)>180)throw Error('图层组变换超出纸面范围');
  const entries=sceneGroupMembers(d,id);
  if(!entries.length||entries.some(e=>e.value.isLocked||e.value.locked))throw Error('组合中包含锁定或空白的图层');
