@@ -70,7 +70,8 @@ export function mergeEditableSceneProjects(local,remote){
  if(local.drafts.length!==remote.drafts.length||local.drafts.some(d=>!remote.drafts.some(x=>x.id===d.id)))return null;
  const remoteIDs=new Set(target.map(op=>op.id));
  const incoming=source.filter(op=>!remoteIDs.has(op.id));
- if(!incoming.length)return null; // no independent scene edits, defer to LWW
+ // A Save/Complete with no new layer edits must not replace fresh remote
+ // layers simply because it updated the document timestamp.
  if(incoming.length>30||target.length>30)return null;
  const localIDs=new Set(source.map(op=>op.id)),foreign=target.filter(op=>!localIDs.has(op.id));
  const remoteTouch=changedFields(foreign);
@@ -117,6 +118,7 @@ export function mergeEditableSceneProjects(local,remote){
  for(const draft of result.drafts)try{validateSceneExtensions(draft);}catch{return null;}
  const ordered=[...target,...incoming].sort((a,b)=>(time(a.at)??0)-(time(b.at)??0)||a.id.localeCompare(b.id));
  result.sceneOperations=ordered.slice(-30);
+ if(local.__cloudSessionId)result.__cloudSessionId=local.__cloudSessionId;
  result.updatedAt=new Date(Math.max(time(local.updatedAt)??0,remoteFallback)).toISOString();
  result.sceneOperationsSinceSnapshot=Math.max(Number(local.sceneOperationsSinceSnapshot)||0,
    Number(remote.sceneOperationsSinceSnapshot)||0);
