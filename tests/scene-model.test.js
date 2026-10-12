@@ -94,3 +94,13 @@ test('Scene v2 temporary collection view cannot lose indexed, length or deletion
  assert.throws(()=>{view[3]=item('invalid');},/稀疏索引/);
  assert.equal(Object.hasOwn(JSON.parse(JSON.stringify(d)),'items'),false);
 });
+
+test('group identities must not collide with any leaf identity',()=>{
+ const d=draft();
+ d.primitives.push({id:'shape-a',kind:'rectangle',x:10,y:10,width:40,height:30});
+ d.primitives.push({id:'shape-b',kind:'rectangle',x:70,y:10,width:40,height:30});
+ const snapshot=JSON.stringify(d);
+ assert.throws(()=>groupSceneLayers(d,['shape-a','shape-b'],{id:'shape-a'}),/编号无效或重复/);
+ assert.equal(JSON.stringify(d),snapshot,'failed grouping must not damage canonical tree');
+ assert.equal(validateSceneExtensions(d),true);
+});
