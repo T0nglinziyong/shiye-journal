@@ -17,7 +17,32 @@ export function setDraftPaperSize(d,ratio){
     if(Number.isFinite(item.width))item.width*=oldScale/newScale;
     if(Number.isFinite(item.height))item.height*=oldScale/newScale;
   };
-  for(const item of d.items||[]){move(item);if(item.generationBaseline)move(item.generationBaseline);}
+  // One Scene v2 tree owns all visible geometry. Resizing the page must
+  // preserve physical coordinates for ink, typography and shapes as well as
+  // real inventory items; otherwise those layers drift away from their paper.
+  const transform=(nodes)=>{
+    for(const node of nodes){
+      if(node.type==='group'){transform(node.children||[]);continue;}
+      if(node.type==='ink'){
+        node.points=(node.points||[]).map(point=>({
+          ...point,
+          x:after.width/2+(point.x-before.width/2)*oldScale/newScale,
+          y:after.height/2+(point.y-before.height/2)*oldScale/newScale
+        }));
+        if(Number.isFinite(node.width))node.width*=oldScale/newScale;
+        continue;
+      }
+      move(node);
+      if(node.type==='material'&&node.generationBaseline)move(node.generationBaseline);
+      if(node.type==='text'){
+        for(const key of ['fontSize','letterSpacing','lineSpacing','fixedLineHeight','paragraphSpacing'])
+          if(Number.isFinite(node[key]))node[key]*=oldScale/newScale;
+      }
+      if(node.type==='shape'&&Number.isFinite(node.lineWidth))node.lineWidth*=oldScale/newScale;
+    }
+  };
+  transform(d.layers);
+
   d.pageRatio=ratio;d.canvas=after;d.physicalPageHeightMM=size.height;
   return d;
 }
