@@ -86,12 +86,15 @@ export async function showCutoutEditor({
     defaultPre={illumination:false,denoise:false,localContrast:false,chromaEdges:true,...recognitionUI.preprocess,...savedRecognition.preprocess},
     defaultPost={shapeRegularization:true,apertures:true,...recognitionUI.postprocess,...savedPost};
 
-  let mask=copyMask(initialMask),
-    roughStageMask=copyMask(initialMask),
-    recognitionBaseMask=copyMask(recognitionMask),
-    recognitionStageMask=copyMask(recognitionMask),
-    postprocessBaseMask=copyMask(initialMask),
-    finalStageMask=copyMask(initialMask),
+  // Masks are immutable: paintMask/refineMaskStroke allocate new arrays.
+  // Stage baselines can initially share their Uint8 storage. Six eager 4K
+  // alpha copies used ~100MB before the editor even painted on iPhone.
+  let mask=initialMask,
+    roughStageMask=initialMask,
+    recognitionBaseMask=recognitionMask,
+    recognitionStageMask=recognitionMask,
+    postprocessBaseMask=initialMask,
+    finalStageMask=initialMask,
     mode='rough',restore=true,ratio=.04,
     appearance=processing.appearance||'original',intensity=processing.intensity??.5,
     rotation=initialRotation,autoStraighten=processing.autoStraighten!==false,outputPrepared=false,
