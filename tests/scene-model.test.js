@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';
-import {attachSceneV2,sceneLayerEntries,groupSceneLayers,ungroupSceneLayers,transformSceneGroup,canonicalScene,validateSceneExtensions,sceneGroups} from '../src/scene-model.js';
+import {attachSceneV2,sceneLayerEntries,groupSceneLayers,ungroupSceneLayers,transformSceneGroup,canonicalScene,validateSceneExtensions,sceneGroups,sceneGroupMembers,moveSceneNode} from '../src/scene-model.js';
 import {draft} from '../src/domain.js';
 
 test('Scene v2 stores only layers, including arbitrary ink stacking',()=>{
