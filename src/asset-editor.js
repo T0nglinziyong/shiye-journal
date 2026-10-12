@@ -32,7 +32,13 @@ export function showAssetEditor(c,id) {
     input('具体内容','content-tags',(a.contentTags||[]).join('、'))+input('风格','style-tags',(a.styleTags||[]).join('、'))+input('材质标签','material-tags',(a.materialTags||[]).join('、'))+input('其他标签','tags',(a.tags||[]).join('、'))+
     select('所属系列','series',[['','不归入系列'],...c.state.series.map(s=>[s.id,c.esc(s.title)])],a.seriesID||'')+select('整理状态','status',[['ready','已整理'],['pendingReview','待检查']],a.reviewStatus||'pendingReview')+select('使用状态','usage',[['unused','未使用'],['used','已使用']],usedAssetIDs(c.state.assets).has(a.id)?'used':'unused')+
     '<section id="tape-stock"><h3>胶带库存</h3><label class="toggle-row">实际持有整卷<input type="checkbox" id="asset-tape-roll" '+(a.supply?.kind==='tapeRoll'?'checked':'')+'></label>'+input('整卷剩余长度 mm','supply-length',a.supply?.availableLengthMM,'number')+'<label class="toggle-row">已确认重复纹样<input type="checkbox" id="asset-repeatable" '+(a.tapeRepeatMode==='repeatablePattern'?'checked':'')+'></label>'+input('真实重复周期 mm','repeat-period',a.tapeRepeatPeriodMM,'number')+'<p>未知周期时只能使用照片拍到的一段。</p></section><p>数量 999 表示无限使用，创作后不会自动减为 998；数量为 0 时不可用于搭配。</p><p id="asset-save-error" role="alert"></p></div></div>';
-  const tape=c.body.querySelector('#tape-stock'),kind=c.body.querySelector('#asset-kind');tape.hidden=kind.value!=='tape';kind.onchange=()=>tape.hidden=kind.value!=='tape';
+  const tape=c.body.querySelector('#tape-stock'),kind=c.body.querySelector('#asset-kind');
+  tape.hidden=kind.value!=='tape';
+  kind.onchange=()=>{
+    tape.hidden=kind.value!=='tape';
+    const stock=c.body.querySelector('#asset-quantity');
+    if(kind.value==='tape'&&Number(stock.value)===1)stock.value='999';
+  };
   c.body.querySelector('#asset-dialog-close').onclick=()=>c.modal.close();
   c.body.querySelector('#save-asset').onclick=async()=>{
     const button=c.body.querySelector('#save-asset');button.disabled=true;
