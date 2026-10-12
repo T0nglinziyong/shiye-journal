@@ -31,8 +31,12 @@ export default async function handler(req,res){
      .eq('id','shiye-reset-barrier').maybeSingle();
    if(readError)throw Error('无法读取账号状态');
    const marker=stored?.record||null;
+   const workerReady=!!(env.SHIYE_COS_SECRET_ID&&env.SHIYE_COS_SECRET_KEY&&
+     env.SHIYE_COS_BUCKET&&env.SHIYE_COS_REGION&&
+     env.SHIYE_SUPABASE_SERVICE_ROLE_KEY&&env.CRON_SECRET);
    if(req.body?.mode==='probe')
-     return out(res,200,{ready:true,phase:marker?.phase||null,resetId:marker?.resetId||null});
+     return out(res,200,{ready:workerReady,phase:marker?.phase||null,
+       resetId:marker?.resetId||null});
    if(req.body?.mode!=='start'||req.body?.confirm!=='RESET_MY_DATA'||
       !validResetId(req.body?.resetId))
      return out(res,400,{error:'请在网页中二次确认账号清理'});
@@ -44,10 +48,7 @@ export default async function handler(req,res){
        resetId:marker.resetId,queued:false});
    // Never clear a user's metadata if there is no independent worker
    // capable of completing physical object deletion.
-   const ready=env.SHIYE_COS_SECRET_ID&&env.SHIYE_COS_SECRET_KEY&&
-     env.SHIYE_COS_BUCKET&&env.SHIYE_COS_REGION&&
-     env.SHIYE_SUPABASE_SERVICE_ROLE_KEY&&env.CRON_SECRET;
-   if(!ready)return out(res,503,{error:'服务端自动清理任务尚未正确配置；数据库未改动'});
+   if(!workerReady)return out(res,503,{error:'服务端自动清理任务尚未正确配置；数据库未改动'});
    const {data:rev,error:versionError}=await cloud.from('shiye_revisions')
       .select('revision').eq('user_id',user).single();
    if(versionError)throw Error('无法读取云端数据版本');
