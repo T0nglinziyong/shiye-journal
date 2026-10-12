@@ -177,9 +177,26 @@ export function transformSceneGroup(d,id,{dx=0,dy=0,rotation=0}={}){
 export function validateVectorMask(mask){
  if(!mask||typeof mask!=='object'||Array.isArray(mask)||Object.keys(mask).some(k=>!['outer','holes'].includes(k)))throw Error('蒙版格式无效');
  const valid=ring=>Array.isArray(ring)&&ring.length>=3&&ring.length<=256&&ring.every(p=>Array.isArray(p)&&p.length===2&&p.every(v=>num(v,0,1)));
- if(!valid(mask.outer)||!Array.isArray(mask.holes||[])||(mask.holes||[]).length>16||!(mask.holes||[]).every(valid))throw Error('蒙版轮廓坐标无效');
- const area=r=>Math.abs(r.reduce((v,p,i)=>{const q=r[(i+1)%r.length];return v+p[0]*q[1]-q[0]*p[1];},0)/2);
- if(area(mask.outer)<1e-7||(mask.holes||[]).some(h=>area(h)<1e-7))throw Error('蒙版不能使用零面积轮廓');
+ const holes=mask.holes||[];
+ if(!valid(mask.outer)||!Array.isArray(holes)||holes.length>16||!holes.every(valid))throw Error('蒙版轮廓坐标无效');
+ const EPS=1e-9;
+ const area=ring=>ring.reduce((sum,p,i)=>{const q=ring[(i+1)%ring.length];return sum+p[0]*q[1]-q[0]*p[1];},0)/2;
+ const cross=(a,b,c)=>(b[0]-a[0])*(c[1]-a[1])-(b[1]-a[1])*(c[0]-a[0]);
+ const on=(p,a,b)=>Math.abs(cross(a,b,p))<EPS&&p[0]>=Math.min(a[0],b[0])-EPS&&p[0]<=Math.max(a[0],b[0])+EPS&&p[1]>=Math.min(a[1],b[1])-EPS&&p[1]<=Math.max(a[1],b[1])+EPS;
+ const intersect=(a,b,c,d)=>{const x=cross(a,b,c),y=cross(a,b,d),u=cross(c,d,a),v=cross(c,d,b);
+   if(Math.abs(x)<EPS&&on(c,a,b)||Math.abs(y)<EPS&&on(d,a,b)||Math.abs(u)<EPS&&on(a,c,d)||Math.abs(v)<EPS&&on(b,c,d))return true;
+   return x*y<0&&u*v<0;
+ };
+ const edges=ring=>ring.map((p,i)=>[p,ring[(i+1)%ring.length]]);
+ const simple=ring=>Math.abs(area(ring))>EPS&&edges(ring).every(([a,b],i)=>Math.hypot(a[0]-b[0],a[1]-b[1])>EPS&&edges(ring).every(([c,d],j)=>j===i||j===(i+1)%ring.length||i===(j+1)%ring.length||!intersect(a,b,c,d)));
+ const inside=(p,ring)=>{
+   if(edges(ring).some(([a,b])=>on(p,a,b)))return false;
+   let v=false;for(const [a,b] of edges(ring))if((a[1]>p[1])!==(b[1]>p[1])&&p[0]<(b[0]-a[0])*(p[1]-a[1])/(b[1]-a[1])+a[0])v=!v;
+   return v;
+ };
+ const disjoint=(a,b)=>edges(a).every(([p,q])=>edges(b).every(([r,t])=>!intersect(p,q,r,t)));
+ if(!simple(mask.outer)||holes.some(h=>!simple(h)||!h.every(p=>inside(p,mask.outer))||!disjoint(h,mask.outer))||
+   holes.some((h,i)=>holes.slice(i+1).some(other=>!disjoint(h,other)||inside(h[0],other)||inside(other[0],h))))throw Error('蒙版外轮廓、孔洞或交叉边界无效');
  return mask;
 }
 export function maskSVG(mask){
