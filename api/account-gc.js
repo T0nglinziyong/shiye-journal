@@ -25,7 +25,7 @@ export default async function handler(req,res){
    client=createClient(env.VITE_SHIYE_SUPABASE_URL,
      env.SHIYE_SUPABASE_SERVICE_ROLE_KEY,{auth:{persistSession:false,autoRefreshToken:false}});
    const {data,error}=await client.from('shiye_records').select('user_id,record')
-      .eq('store','meta').eq('id','shiye-reset-barrier').limit(20);
+      .eq('store','meta').eq('id','shiye-reset-barrier').eq('record->>phase','deleting').limit(5);
    if(error)return reply(res,503,{error:'无法读取待清理任务'});
    users=(data||[]).filter(row=>row.record?.phase==='deleting').map(row=>row.user_id);
  }else{
@@ -51,7 +51,7 @@ export default async function handler(req,res){
    users=[user];
  }
  const results=[];
- for(const user of users.slice(0,10)){
+ for(const user of users.slice(0,1)){
    try{
      const marker=await readGcMarker(client,user);
      if(!marker||marker.phase!=='deleting')continue;
