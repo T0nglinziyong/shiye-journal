@@ -108,3 +108,14 @@
 }
 .canvas-layer-row [data-layer-move]{touch-action:none;cursor:grab;user-select:none}
 .canvas-layer-row.dragging [data-layer-move]{cursor:grabbing}
+
+/* Match catalog column widths as well as cover heights across series, Works
+   (editable pages and image snapshots), and journal templates. */
+.series-grid,.works-grid,.journal-template-grid{
+  grid-template-columns:repeat(auto-fill,minmax(clamp(150px,18vw,205px),1fr));
+}
+@media(max-width:680px){
+  .series-grid,.works-grid,.journal-template-grid{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+}
