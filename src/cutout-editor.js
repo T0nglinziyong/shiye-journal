@@ -13,18 +13,17 @@ export async function showCutoutEditor({
 }) {
   // Persisted originals are fetched from COS/IndexedDB after app restart.
   // Recover WebKit decoder quirks, but never replace corrupt bytes silently.
-  const decoded=[];
-  let source,initial,recognized,frame;
-  try{
-    [source,initial,recognized,frame]=await Promise.all([
-      decodeImageBlob(original),decodeImageBlob(saved),decodeImageBlob(recognition),
-      decodeImageBlob(candidateFrame||original)
-    ]);
-    decoded.push(source,initial,recognized,frame);
-  }catch(error){
-    for(const bitmap of decoded)bitmap?.close?.();
-    throw Error('检查抠图暂无法打开：'+error.message);
+  const decoded=await Promise.allSettled([
+    decodeImageBlob(original),decodeImageBlob(saved),decodeImageBlob(recognition),
+    decodeImageBlob(candidateFrame||original)
+  ]);
+  const failed=decoded.find(row=>row.status==='rejected');
+  if(failed){
+    for(const row of decoded)if(row.status==='fulfilled')row.value?.close?.();
+    throw Error('检查抠图暂无法打开：'+(failed.reason?.message||'图片未能解码')+
+      '。当前素材不会被自动覆盖；请检查同步状态。');
   }
+  const [source,initial,recognized,frame]=decoded.map(row=>row.value);
   const w=source.width,h=source.height,canvas=document.createElement('canvas');
   canvas.width=w;canvas.height=h;
   const ctx=canvas.getContext('2d',{willReadFrequently:true});
