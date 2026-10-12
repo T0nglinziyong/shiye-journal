@@ -1,6 +1,7 @@
 import {paintMask,maskOrientation,refineMaskStroke} from './mask-model.js';
 import {decodeImageBlob} from './image-blob-decoder.js';
 import {readAlphaMask,encodeAlphaMask} from './alpha-mask-blob.js';
+import {shrinkEditorBitmap,resampleMask,scaleFramePlacement,CUTOUT_EDIT_EDGE} from './cutout-edit-resolution.js';
 import {containBox} from './preview-geometry.js';
 import {onDialogClosed} from './dialog-lifecycle.js';
 
@@ -19,17 +20,21 @@ export async function showCutoutEditor({
   onPhase('正在解码候选框及透明蒙版…');
   let source,initial,recognized,frame,loadedFinalMask=null;
   if(finalMaskBlob){
-    const [candidate,record]=await Promise.all([
+    const [candidate,fullMask]=await Promise.all([
       decodeImageBlob(candidateFrame),readAlphaMask(finalMaskBlob)
     ]);
-    frame=candidate;
-    const r=processing.candidateFramePlacement;
-    const valid=r&&r.frameWidth===frame.width&&r.frameHeight===frame.height
-      &&r.width>0&&r.height>0&&r.x>=0&&r.y>=0
-      &&r.x+r.width<=frame.width+1&&r.y+r.height<=frame.height+1;
-    const placement=valid?r:{x:0,y:0,width:frame.width,height:frame.height};
-    if(record.width!==Math.round(placement.width)||record.height!==Math.round(placement.height))
-      throw Error('保存的透明蒙版与矫正候选框尺寸不匹配，未覆盖已有素材');
+    frame=shrinkEditorBitmap(candidate,CUTOUT_EDIT_EDGE);
+    const original=processing.candidateFramePlacement,
+      originalW=original?.frameWidth||fullMask.width,
+      originalH=original?.frameHeight||fullMask.height,
+      placement=scaleFramePlacement(original,originalW,originalH,frame.width,frame.height);
+    if(placement.x<-.5||placement.y<-.5||
+       placement.x+placement.width>frame.width+1||
+       placement.y+placement.height>frame.height+1)
+      throw Error('矫正候选框与原始图片坐标不一致');
+    const targetW=Math.max(1,Math.round(placement.width)),
+      targetH=Math.max(1,Math.round(placement.height)),
+      record=resampleMask(fullMask,targetW,targetH);
     source=document.createElement('canvas');source.width=record.width;source.height=record.height;
     source.getContext('2d').drawImage(frame,
       placement.x,placement.y,placement.width,placement.height,0,0,record.width,record.height);
@@ -52,7 +57,7 @@ export async function showCutoutEditor({
       throw Error('检查抠图暂无法打开：'+(failed.reason?.message||'图片未能解码')+
         '。当前素材不会被自动覆盖；请检查同步状态。');
     }
-    [source,initial,recognized,frame]=decoded.map(row=>row.value);
+    [source,initial,recognized,frame]=decoded.map(row=>shrinkEditorBitmap(row.value,CUTOUT_EDIT_EDGE));
   }
   if(isCancelled()){
     for(const bitmap of new Set([source,initial,recognized,frame]))bitmap?.close?.();
@@ -66,8 +71,8 @@ export async function showCutoutEditor({
   const sourcePixels=ctx.getImageData(0,0,w,h),
     sourceAlpha=Uint8ClampedArray.from({length:w*h},(_,i)=>sourcePixels.data[i*4+3]),
     rawPlacement=processing.candidateFramePlacement,
-    placement=rawPlacement&&rawPlacement.frameWidth===frame.width&&rawPlacement.frameHeight===frame.height
-      ?{x:rawPlacement.x,y:rawPlacement.y,width:rawPlacement.width,height:rawPlacement.height}
+    placement=rawPlacement
+      ?scaleFramePlacement(rawPlacement,rawPlacement.frameWidth,rawPlacement.frameHeight,frame.width,frame.height)
       :{x:0,y:0,width:frame.width,height:frame.height};
 
   const alphaFrom=(bitmap,angle=0)=>{
@@ -301,8 +306,9 @@ export async function showCutoutEditor({
          el.querySelector('#cutout-rough-original').onclick=async()=>{
            if(busy)return;busy=true;
            try{
-             const initial=await onLoadInitialMask();
-             if(!initial||initial.width!==w||initial.height!==h)throw Error('初始透明蒙版与候选框尺寸不一致');
+             const originalMask=await onLoadInitialMask();
+             if(!originalMask?.width||!originalMask?.height)throw Error('初始透明蒙版无效');
+             const initial=resampleMask(originalMask,w,h);
              push();mask=copyMask(initial.alpha);roughStageMask=copyMask(mask);
              recognitionBaseMask=copyMask(mask);lastStroke=null;draw();
            }catch(error){body.querySelector('#cutout-note').textContent='初始识别结果未能恢复：'+error.message;}
