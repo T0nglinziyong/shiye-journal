@@ -253,9 +253,10 @@ const unifiedSync=createProjectSync({
     // after the outbox entry is retired. Failure aborts arbitration: do not
     // discard a local version without first preserving the pair.
     const safetyKey='pre-conflict-scene:'+record.id+':'+operationID;
+    const completeRemote=remote.projectDocumentPath?await cloudProjectDocument(remote):remote;
     await remember(safetyKey,{
       kind:'shiye-pre-conflict-scene-pair',at:new Date().toISOString(),
-      local:structuredClone(record),remote:structuredClone(remote),
+      local:structuredClone(record),remote:structuredClone(completeRemote),
       baseRevision,remoteRevision:latest
     });
     const winner=latestEditedProject(record,remote);
