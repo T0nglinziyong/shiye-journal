@@ -526,3 +526,24 @@ test('persistent COS tier index reuses a cached higher-resolution image on a lat
   assert.equal(await (await reopen.db.cloudPreview('sample',600)).text(),'preview960');
   assert.equal(calls.length,1,'No redundant small-tier COS processing after reload');
 });
+
+test('older generic project PUT from the same phone is rescued without overwriting a later remote edit',async()=>{
+ const cache=memoryCache(),{state,db}=fixture(cache);
+ const work=v2({id:'same-work',title:'本机未同步的早期版本',activeDraftID:'draft',
+  drafts:[{id:'draft',canvas:{width:700,height:1000},items:[],textBlocks:[{id:'text',content:'留住这一页'}],primitives:[],strokes:[]}]});
+ await db.cloudStageImport({assets:[],blobs:[],projects:[work]});
+ assert.equal((await cache.get('cloud:owner-uuid','import-outbox')).length,1);
+ // An editor write (or a second tab on the same phone) has already advanced
+ // this document. It must remain untouched by the old generic queue.
+ state.revision=1;
+ state.rows=[{...structuredClone(work),title:'已经上传的较新版本'}];
+ state.changes=[{revision:1,keys:[{store:'projects',id:'same-work',action:'put'}]}];
+ await db.cloudFlushProjects();
+ assert.equal(state.calls.length,1,'the old queue must upload one recoverable copy');
+ const uploaded=state.calls[0].operations.find(op=>op.store==='projects'&&op.action==='put').item;
+ assert.notEqual(uploaded.id,'same-work');
+ assert.match(uploaded.title,/同步冲突保留/);
+ assert.equal(uploaded.drafts[0].layers[0].content,'留住这一页');
+ assert.equal(state.rows[0].title,'已经上传的较新版本');
+ assert.deepEqual(await cache.get('cloud:owner-uuid','import-outbox'),[]);
+});
