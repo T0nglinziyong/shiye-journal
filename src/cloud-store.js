@@ -161,7 +161,7 @@ async function loadUnifiedOutbox(recover=false){
           if(await objectStorage.probe(metadata.storagePath)){available.push(copy.id);continue;}
         }
         try{if(usableBlob(await downloadObject(metadata.storagePath,metadata.storageProvider)))available.push(copy.id);}
-        catch(error){if(!/\\b404\\b|NoSuchKey|Object not found/i.test(error?.message||''))throw error;}
+        catch(error){if(!/\b404\b|NoSuchKey|Object not found/i.test(error?.message||''))throw error;}
       }
       return available;
     });
