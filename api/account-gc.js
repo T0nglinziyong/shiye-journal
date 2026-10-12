@@ -1,6 +1,6 @@
 import {createClient} from '@supabase/supabase-js';
 import {timingSafeEqual} from 'node:crypto';
-import {processGc,readGcMarker,assertGcScope} from './_lib/account-gc.js';
+import {processGc,readGcMarker,assertGcScope} from '../server/account-gc-worker.mjs';
 
 export const config={maxDuration:30};
 const reply=(res,status,body)=>{res.setHeader('Cache-Control','private, no-store');return res.status(status).json(body);};
