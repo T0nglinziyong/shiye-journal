@@ -1,3 +1,4 @@
+import {validateSceneExtensions} from './scene-v2.js';
 // Scene v2 outbox recovery: only complete recursive layer trees are replayable.
 // Corrupted data stays quarantined in the durable account queue for manual recovery.
 const validTree=(nodes,seen=new Set(),depth=0)=>{
@@ -17,7 +18,9 @@ export function usableProjectSnapshot(project){
  return project.drafts.every(draft=>draft&&typeof draft.id==='string'&&
    Number.isFinite(draft.canvas?.width)&&draft.canvas.width>0&&
    Number.isFinite(draft.canvas?.height)&&draft.canvas.height>0&&
-   draft.sceneVersion===2&&validTree(draft.layers));
+   draft.sceneVersion===2&&validTree(draft.layers)&&
+   !['items','textBlocks','primitives','strokes','layerGroups'].some(field=>Object.keys(draft).includes(field))&&
+   (()=>{try{return validateSceneExtensions(draft);}catch{return false;}})());
 }
 export function recoverProjectOutbox(rows){
  const valid=[],quarantined=[];
