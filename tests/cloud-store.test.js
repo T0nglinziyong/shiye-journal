@@ -126,9 +126,11 @@ test('D-01: background cursor advance cannot relabel a stale opened work as the 
   await db.cloudStageProject({...opened,title:'本机改标题'});
   const pending=await db.cloudPendingProjects();
   assert.equal(pending[0].baseRevision,1);
-  await assert.rejects(db.cloudFlushProjects(),/版本已变化/);
-  assert.equal(state.calls.length,0,'strict CAS must never receive a falsely rebased full document');
-  assert.equal((await db.cloudPendingProjects())[0].record.title,'本机改标题');
+  await db.cloudFlushProjects();
+  assert.equal(state.calls.length,1,'same-project conflict must create one distinct work');
+  assert.notEqual(state.calls[0].operations[0].item.id,'diary');
+  assert.match(state.calls[0].operations[0].item.title,/同步冲突保留/);
+  assert.deepEqual(await db.cloudPendingProjects(),[]);
 });
 test('D-02: a stale work can rebase only over a complete disjoint change log',async()=>{
   const cache=memoryCache(),{state,db}=fixture(cache);
@@ -147,8 +149,10 @@ test('D-03: an untagged known work is staged locally but cannot claim the newest
   state.revision=4;state.rows=[saved];await db.cloudAll('projects');
   await db.cloudStageProject({...v2(saved),title:'本机新标题'});
   assert.equal((await db.cloudPendingProjects())[0].baseRevision,0);
-  await assert.rejects(db.cloudFlushProjects(),/版本已变化/);
-  assert.equal(state.calls.length,0);
+  await db.cloudFlushProjects();
+  assert.equal(state.calls.length,1);
+  assert.notEqual(state.calls[0].operations[0].item.id,'diary');
+  assert.deepEqual(await db.cloudPendingProjects(),[]);
 });
 test('D-04: confirmed edits advance only their own editor session for a second save',async()=>{
   const {state,db}=fixture(memoryCache());
