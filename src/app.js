@@ -1858,8 +1858,11 @@ async function openSyncConflictChoice(kind,id){
           throw Error('备份期间版本已变化，请重新比较');
         download(saved.blob,'拾页-同步冲突双版本备份-'+new Date().toISOString().slice(0,10)+'.json');
         verifiedBackup=true;
-        for(const button of body.querySelectorAll('#conflict-both,#conflict-cloud,#conflict-local'))
+        for(const button of body.querySelectorAll('#conflict-both,#conflict-local'))
           button.disabled=false;
+        // The server may have deleted this record: there is no cloud copy
+        // to retain. Never offer a destructive choice with an empty target.
+        body.querySelector('#conflict-cloud').disabled=!remote;
         progress.textContent='已发起备份下载（SHA-256：'+saved.sha256.slice(0,16)+'…）。请确认文件已在“文件”中保存。';
       }catch(error){verifiedBackup=false;progress.textContent='备份未完成：'+error.message;}
     };
