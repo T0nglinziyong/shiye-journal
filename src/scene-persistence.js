@@ -34,6 +34,7 @@ export function makeAutoSceneSnapshot(project,{reason='periodic',at=new Date().t
  (project.autoSceneSnapshotStore||={})[hash]||=payload;
  (project.autoSceneSnapshots||=[]).push({id:crypto.randomUUID(),hash,at,reason,operationCount:unsnapped,activeDraftID:project.activeDraftID});
  project.sceneOperationsSinceSnapshot=0;
+ project.sceneFirstUnsnapshottedAt=null;
  project.lastAutoSceneSnapshotAt=at;
  prune(project,validDate(at)||Date.now());
  return true;
@@ -48,7 +49,8 @@ export function recordSceneOperation(project,before,after,{actor='browser',at=ne
  entries.push({id:crypto.randomUUID(),draftID:after.id,actor,at,delta});
  project.sceneOperations=entries.slice(-30);
  project.sceneOperationsSinceSnapshot=(project.sceneOperationsSinceSnapshot||0)+1;
- const last=validDate(project.lastAutoSceneSnapshotAt)||validDate(at);
+ project.sceneFirstUnsnapshottedAt||=at;
+ const last=validDate(project.lastAutoSceneSnapshotAt)||validDate(project.sceneFirstUnsnapshottedAt);
  const reason=project.sceneOperationsSinceSnapshot>=AUTO_SNAPSHOT_OPERATIONS?'30-operations':
    validDate(at)-last>=AUTO_SNAPSHOT_INTERVAL_MS?'5-minutes':null;
  let snapshot=false;
