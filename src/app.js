@@ -1365,13 +1365,16 @@ async function refineCandidateFrame(candidateFrame,request,{postprocessOnly=fals
 async function openCutoutCheck(id,candidate=null){
   const a=candidate?{title:candidate.title}:asset(id);if(!a)return;
   const stored=async blobId=>blobId?(await db.get('blobs',blobId))?.data:null;
-  const modern=!candidate&&!!a.finalMaskBlobId&&!!a.candidateFrameBlobId;
+  const compact=!candidate&&!!a.candidateFrameBlobId
+    &&!((a.processingRecord?.displayRotationDegrees||0)%180);
+  const modern=compact&&!!a.finalMaskBlobId;
   let saved=modern?null:candidate?.blob||await stored(a.blobId),
-    original=modern?null:candidate?.originalBlob||await stored(a.originalBlobId),
-    recognition=modern?null:candidate?.originalCutoutBlob||await stored(a.originalCutoutBlobId),
+    original=compact?null:candidate?.originalBlob||await stored(a.originalBlobId),
+    recognition=compact?null:candidate?.originalCutoutBlob||await stored(a.originalCutoutBlobId),
     candidateFrame=candidate?.candidateFrameBlob||await stored(a.candidateFrameBlobId),
-    finalMaskBlob=modern?await stored(a.finalMaskBlobId):null;
-  if(!modern){
+    finalMaskBlob=modern?await stored(a.finalMaskBlobId):
+      compact&&saved instanceof Blob?await extractAlphaMask(saved):null;
+  if(!compact){
     if(!saved&&a.staticPath){const response=await fetch(a.staticPath);if(!response.ok)throw Error('素材图像未能加载，请重试');saved=await response.blob();}
     original||=saved;recognition||=saved;candidateFrame||=original;
     if(!(saved instanceof Blob)||saved.size<8)
@@ -1387,10 +1390,11 @@ async function openCutoutCheck(id,candidate=null){
     preferredMethod=localMethods.some(item=>item.id===(processing.rerecognition?.method||state.preferences.recognition))?(processing.rerecognition?.method||state.preferences.recognition):'auto';
   const openEditor=()=>showCutoutEditor({
     body,modal,original,saved,recognition,candidateFrame,finalMaskBlob,title:a.title,processing,toast,
-    onLoadInitialMask:modern?async()=>{
-      const storedInitial=await stored(a.initialMaskBlobId);
-      if(!(storedInitial instanceof Blob))throw Error('初始蒙版尚未可用');
-      return readAlphaMask(storedInitial);
+    onLoadInitialMask:compact?async()=>{
+      const oldBlob=a.initialMaskBlobId?await stored(a.initialMaskBlobId):
+        await stored(a.originalCutoutBlobId)||saved;
+      if(!(oldBlob instanceof Blob))throw Error('初始蒙版尚未可用');
+      return readAlphaMask(a.initialMaskBlobId?oldBlob:await extractAlphaMask(oldBlob));
     }:null,
     recognitionUI:{methods:localMethods,pixels:recognitionPixelOptions.filter(([n])=>n>=1200),method:preferredMethod,pixelsValue:Math.max(1200,state.preferences.recognitionPixels||1200),preprocess:recognitionPreprocessOptions(),postprocess:recognitionPostprocessOptions()},
     onRerecognize:request=>refineCandidateFrame(candidateFrame,request),
@@ -1406,7 +1410,8 @@ async function openCutoutCheck(id,candidate=null){
       const frameId=a.candidateFrameBlobId||uid();
       const baselineId=a.initialMaskBlobId||uid(),
         nextMaskId=a.finalMaskBlobId&&a.finalMaskBlobId!==baselineId?a.finalMaskBlobId:uid();
-      const baselineBlob=a.initialMaskBlobId?null:await extractAlphaMask(recognition||saved);
+      const baselineBlob=a.initialMaskBlobId?null:await extractAlphaMask(
+        a.originalCutoutBlobId?await stored(a.originalCutoutBlobId)||saved:recognition||saved);
       const updated={...a,processingRecord:nextProcessing,
         physicalWidthMM:width||a.physicalWidthMM,physicalHeightMM:height||a.physicalHeightMM,
         candidateFrameBlobId:frameId,initialMaskBlobId:baselineId,finalMaskBlobId:nextMaskId,
@@ -1429,7 +1434,7 @@ async function openCutoutCheck(id,candidate=null){
     // the full original is still recoverable from the private COS/Supabase
     // object. Retry once with VERIFIED server bytes. Never modify metadata
     // or silently replace the user's already saved cutout.
-    if(candidate||!cloudEnabled||!/检查抠图暂无法打开|不可解码|图片原始字节/.test(error?.message||''))
+    if(candidate||!cloudEnabled||!/检查抠图暂无法打开|不可解码|图片原始字节|蒙版.*尺寸/.test(error?.message||''))
       throw error;
     const recover=async(id,current)=>{
       if(!id)return current;
@@ -1437,10 +1442,11 @@ async function openCutoutCheck(id,candidate=null){
       return fresh?.data||current;
     };
     try{
-      if(modern){
+      if(compact){
         [candidateFrame,finalMaskBlob]=await Promise.all([
           recover(a.candidateFrameBlobId,candidateFrame),
-          recover(a.finalMaskBlobId,finalMaskBlob)
+          modern?recover(a.finalMaskBlobId,finalMaskBlob):
+            Promise.resolve(saved instanceof Blob?extractAlphaMask(saved):finalMaskBlob)
         ]);
       }else [saved,original,recognition,candidateFrame]=await Promise.all([
         recover(a.blobId,saved),recover(a.originalBlobId,original),
