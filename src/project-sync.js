@@ -1,3 +1,4 @@
+import {markSyncPhase} from './sync-browser-compat.js';
 // Durable edits are an explicit outbox, not a replacement for cloud records.
 // Commit acknowledgement is the only point at which an entry is removed.
 export function createProjectSync({load,write,commit,revision,reconcile=async()=> 'conflict',recordKeys=record=>[{store:'projects',id:record.id}],onCommitted=()=>{},onConflict=async()=>null,onSuperseded=()=>{},onStatus=()=>{},runExclusive=fn=>fn(),reload=load,autoFlushDelayMs=0,setTimer=setTimeout,clearTimer=clearTimeout,clock=()=>Date.now()}){
@@ -17,9 +18,10 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
   const entries=new Map();
   // A transient IndexedDB/auth read failure must not poison this instance for
   // the rest of the session: the resumer will retry the durable outbox later.
-  const initialize=()=>initialized??=(async()=>{for(const row of await load()||[]){entries.set(row.record.id,row);serial=Math.max(serial,row.serial);}report();})().catch(failure=>{initialized=undefined;throw failure;});
+  const initialize=()=>initialized??=(async()=>{for(const row of await load()||[]){entries.set(row.record.id,row);serial=Math.max(serial,row.serial);}report();})().catch(failure=>{initialized=undefined;throw markSyncPhase(failure,'读取本机待同步队列');});
   const report=()=>onStatus({pending:entries.size,error});
-  const persist=()=>write(structuredClone([...entries.values()]));
+  const persist=()=>Promise.resolve().then(()=>write(structuredClone([...entries.values()])))
+    .catch(error=>{throw markSyncPhase(error,'写入本机待同步队列');});
   // The durable queue is shared by tabs. A tab may have opened before another
   // wrote pending edits, so refresh it AFTER acquiring the cross-tab sync lock.
   // Only replace in-memory state when no new local staging occurred meanwhile.
@@ -27,7 +29,9 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
     for(;;){
       const checkpoint=staging;
       await checkpoint;
-      const saved=await reload()||[];
+      let saved;
+      try{saved=await reload()||[];}
+      catch(error){throw markSyncPhase(error,'从 IndexedDB 刷新同步队列');}
       if(checkpoint!==staging)continue;
       entries.clear();
       for(const row of saved){
@@ -128,6 +132,7 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
         }
         try{await commit(row.record,row.operationID);}
         catch(failure){
+          markSyncPhase(failure,'上传当前待同步记录');
           // The server may have committed before its response disappeared.
           // Confirm the exact durable operation ID before surfacing an error.
           let resolved;
