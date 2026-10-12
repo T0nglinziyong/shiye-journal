@@ -68,13 +68,5 @@
       "path": "/api/account-gc",
       "schedule": "0 3 * * *"
     }
-  ],
-  "functions": {
-    "api/account-gc.js": {
-      "maxDuration": 30
-    },
-    "api/account-reset.js": {
-      "maxDuration": 30
-    }
-  }
+  ]
 }
