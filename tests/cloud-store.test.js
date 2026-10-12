@@ -57,7 +57,7 @@ test('imports finish durable staging while image uploads are blocked; pending by
   assert.equal((await a.db.cloudAll('assets'))[0].id,'new');assert.equal(await (await a.db.cloudGet('blobs','img')).data.text(),'pending-original');
   const reopened=fixture(cache);assert.equal((await reopened.db.cloudAll('assets'))[0].id,'new');assert.equal(await (await reopened.db.cloudPreview('img')).text(),'pending-original');assert.equal(reopened.state.downloads,0);
   release();await a.db.cloudFlushProjects();assert.equal(a.state.calls.length,1);assert.equal(a.state.calls[0].operations.length,2);
-  assert.deepEqual(await cache.get('cloud:owner-uuid','import-outbox'),[]);
+  assert.deepEqual(await activeRows(cache,'batch'),[]);
 });
 test('logout summary reads the shared account outbox without waiting for upload',async()=>{
   const cache=memoryCache(),first=fixture(cache);let release;
@@ -71,7 +71,7 @@ test('logout summary reads the shared account outbox without waiting for upload'
 test('failed import uploads retain the entire batch; rejected auth/quota never creates a ghost import',async()=>{
   const cache=memoryCache(),a=fixture(cache);a.state.fail=true;
   await a.db.cloudStageImport({assets:[{id:'a'}],blobs:[{id:'b',data:new Blob(['image'])}],projects:[]});await assert.rejects(a.db.cloudFlushProjects(),/图片上传失败/);
-  assert.equal((await cache.get('cloud:owner-uuid','import-outbox')).length,1);assert.equal(a.state.calls.length,0);
+  assert.equal((await activeRows(cache,'batch')).length,1);assert.equal(a.state.calls.length,0);
   const reopened=fixture(cache);reopened.state.authError=true;await assert.rejects(reopened.db.cloudGet('blobs','b'),/not authorized/);
   const quota=fixture({...memoryCache(),put:async()=>{throw Error('quota');}});await assert.rejects(quota.db.cloudStageImport({assets:[{id:'ghost'}]}),/quota/);assert.deepEqual(await quota.db.cloudAll('assets'),[]);assert.equal(quota.state.calls.length,0);
 });
@@ -80,9 +80,9 @@ test('trash restore survives AbortError: local stage is immediate and reopen ret
   await first.db.cloudStageMutation(['trash','assets'],tx=>{tx.objectStore('trash').delete('t');tx.objectStore('assets').put({id:'restored',title:'safe'});});
   assert.deepEqual((await first.db.cloudAll('assets')).map(row=>row.id),['restored']);
   await assert.rejects(first.db.cloudFlushProjects(),{name:'AbortError'});
-  assert.equal((await cache.get('cloud:owner-uuid','import-outbox')).length,1);
+  assert.equal((await activeRows(cache,'batch')).length,1);
   const reopened=fixture(cache);await reopened.db.cloudFlushProjects();
-  assert.deepEqual(await cache.get('cloud:owner-uuid','import-outbox'),[]);
+  assert.deepEqual(await activeRows(cache,'batch'),[]);
   assert.deepEqual(reopened.state.calls[0].operations.map(op=>op.store+':'+op.action),['trash:delete','assets:put']);
 });
 test('aborted delete resumes after another tab edits an unrelated record, but not the same record',async()=>{
@@ -93,7 +93,7 @@ test('aborted delete resumes after another tab edits an unrelated record, but no
   first.state.changes=[{revision:1,keys:[{store:'assets',action:'put',id:'other'}]}];
   await first.db.cloudFlushProjects();
   assert.equal(first.state.calls.at(-1).expected_revision,1);
-  assert.deepEqual(await cache.get('cloud:owner-uuid','import-outbox'),[]);
+  assert.deepEqual(await activeRows(cache,'batch'),[]);
 
   const secondCache=memoryCache(),second=fixture(secondCache);second.state.rpcAbort=true;
   await second.db.cloudStageMutation(['trash'],tx=>tx.objectStore('trash').delete('mine'));
@@ -101,7 +101,7 @@ test('aborted delete resumes after another tab edits an unrelated record, but no
   second.state.rpcAbort=false;second.state.revision=1;
   second.state.changes=[{revision:1,keys:[{store:'trash',action:'put',id:'mine'}]}];
   await assert.rejects(second.db.cloudFlushProjects(),/conflict/);
-  assert.equal((await secondCache.get('cloud:owner-uuid','import-outbox')).length,1);
+  assert.equal((await activeRows(secondCache,'batch')).length,1);
 });
 test('aborted work edit resumes across an unrelated cloud revision without overwriting it',async()=>{
   const cache=memoryCache(),first=fixture(cache);first.state.rpcAbort=true;
@@ -112,7 +112,7 @@ test('aborted work edit resumes across an unrelated cloud revision without overw
   first.state.changes=[{revision:1,keys:[{store:'assets',action:'put',id:'other'}]}];
   await first.db.cloudFlushProjects();
   assert.equal(first.state.calls.at(-1).expected_revision,1);
-  assert.deepEqual(await cache.get('cloud:owner-uuid','project-outbox'),[]);
+  assert.deepEqual(await activeRows(cache,'project'),[]);
 });
 test('D-01: background cursor advance cannot relabel a stale opened work as the new document version',async()=>{
   const cache=memoryCache(),{state,db}=fixture(cache);
@@ -170,19 +170,19 @@ test('reopening after an import commit but before local acknowledgement clears t
   await first.db.cloudStageImport({assets:[{id:'new-asset',blobId:'new-blob'}],blobs:[{id:'new-blob',data:new Blob(['image'])}],projects:[]});
   const reopened=fixture(cache);reopened.state.revision=1;reopened.state.rows=[{id:'new-asset',blobId:'new-blob'},{id:'new-blob',storagePath:'owner-uuid/hash',storageProvider:'supabase'}];
   await reopened.db.cloudFlushProjects();
-  assert.equal(reopened.state.calls.length,0);assert.deepEqual(await cache.get('cloud:owner-uuid','import-outbox'),[]);
+  assert.equal(reopened.state.calls.length,0);assert.deepEqual(await activeRows(cache,'batch'),[]);
 });
 test('lost acknowledgement for a material edit is recognized immediately and again after reopening',async()=>{
   const cache=memoryCache(),first=fixture(cache);first.state.loseAck=true;
   await first.db.cloudStageMutation(['assets'],tx=>tx.objectStore('assets').put({id:'asset',title:'renamed'}));
   await first.db.cloudFlushProjects();
-  assert.deepEqual(await cache.get('cloud:owner-uuid','import-outbox'),[]);
+  assert.deepEqual(await activeRows(cache,'batch'),[]);
   const operationID=first.state.calls[0].operation_id;
   await cache.put('cloud:owner-uuid','import-outbox',[{record:{id:'edit',names:['assets'],operations:[{action:'put',store:'assets',item:{id:'asset',title:'renamed'}}]},serial:1,baseRevision:0,operationID}]);
   const reopened=fixture(cache);reopened.state.revision=first.state.revision;reopened.state.commits=first.state.commits;
   await reopened.db.cloudFlushProjects();
   assert.equal(reopened.state.calls.length,0,'an acknowledged edit must never be replayed');
-  assert.deepEqual(await cache.get('cloud:owner-uuid','import-outbox'),[]);
+  assert.deepEqual(await activeRows(cache,'batch'),[]);
 });
 test('lost acknowledgement for a project snapshot restores the saved cloud version without a stuck outbox',async()=>{
   const cache=memoryCache(),first=fixture(cache);first.state.loseAck=true;
@@ -193,7 +193,7 @@ test('lost acknowledgement for a project snapshot restores the saved cloud versi
   await cache.put('cloud:owner-uuid','project-outbox',[{record:v2(work),serial:1,baseRevision:0,operationID}]);
   const reopened=fixture(cache);reopened.state.revision=first.state.revision;reopened.state.commits=first.state.commits;reopened.state.rows=[work];
   await reopened.db.cloudFlushProjects();
-  assert.equal(reopened.state.calls.length,0);assert.deepEqual(await cache.get('cloud:owner-uuid','project-outbox'),[]);
+  assert.equal(reopened.state.calls.length,0);assert.deepEqual(await activeRows(cache,'project'),[]);
   assert.equal((await reopened.db.cloudAll('projects'))[0].title,'saved');
 });
 test('reopening an unfinished import after an unrelated remote update resumes upload',async()=>{
@@ -201,14 +201,14 @@ test('reopening an unfinished import after an unrelated remote update resumes up
   await first.db.cloudStageImport({assets:[{id:'retry-asset',blobId:'retry-blob'}],blobs:[{id:'retry-blob',data:new Blob(['image'])}],projects:[]});
   const reopened=fixture(cache);reopened.state.revision=1;reopened.state.rows=[{id:'other-device',title:'unrelated'}];
   await reopened.db.cloudFlushProjects();assert.equal(reopened.state.calls.length,1);
-  assert.equal(reopened.state.calls[0].expected_revision,1);assert.deepEqual(await cache.get('cloud:owner-uuid','import-outbox'),[]);
+  assert.equal(reopened.state.calls[0].expected_revision,1);assert.deepEqual(await activeRows(cache,'batch'),[]);
 });
 test('reopening removes only an unrecoverable local import card, not a recoverable neighbor',async()=>{
   const cache=memoryCache(),a=fixture(cache);a.state.uploadGate=new Promise(()=>{});
   await a.db.cloudStageImport({assets:[{id:'lost',blobId:'empty'},{id:'safe',blobId:'valid'}],blobs:[{id:'empty',data:new Blob([])},{id:'valid',data:new Blob(['safe image'])}],projects:[]});
   const reopened=fixture(cache);const cards=await reopened.db.cloudAll('assets');
   assert.deepEqual(cards.map(card=>card.id),['safe']);
-  const staged=(await cache.get('cloud:owner-uuid','import-outbox'))[0].record;
+  const staged=(await activeRows(cache,'batch'))[0].record;
   assert.deepEqual(staged.assets.map(card=>card.id),['safe']);
   assert.deepEqual(staged.blobs.map(blob=>blob.id),['valid']);
 });
@@ -218,7 +218,7 @@ test('remote metadata without a COS object does not keep a broken import card',a
   const cos={enabled:true,probe:async()=>false};const reopened=fixture(cache,cos);
   reopened.state.cloudCopies=[{id:'ghost-image',record:{storagePath:'owner-uuid/'+'a'.repeat(64),storageProvider:'cos'}}];
   assert.deepEqual(await reopened.db.cloudAll('assets'),[]);
-  assert.deepEqual(await cache.get('cloud:owner-uuid','import-outbox'),[]);
+  assert.deepEqual(await activeRows(cache,'batch'),[]);
 });
 test('confirmed remote COS object preserves a missing local import image',async()=>{
   const cache=memoryCache(),first=fixture(cache);first.state.uploadGate=new Promise(()=>{});
@@ -254,7 +254,7 @@ test('ordinary cutout updates and deletes are durable and immediately readable w
   await a.db.cloudStageMutation(['assets','blobs'],tx=>{tx.objectStore('assets').put({id:'a',title:'edited',blobId:'cut'});tx.objectStore('blobs').put({id:'cut',data:new Blob(['new-cutout'])});});
   assert.equal((await a.db.cloudGet('assets','a')).title,'edited');assert.equal(await (await a.db.cloudGet('blobs','cut')).data.text(),'new-cutout');assert.equal(a.state.calls.length,0);
   await a.db.cloudStageMutation(['assets'],tx=>tx.objectStore('assets').delete('a'));assert.equal(await a.db.cloudGet('assets','a'),undefined);assert.deepEqual(await a.db.cloudAll('assets'),[]);
-  release();await a.db.cloudFlushProjects();assert.equal(a.state.calls.length,2);assert.equal(a.state.calls[1].operations[0].action,'delete');assert.deepEqual(await cache.get('cloud:owner-uuid','import-outbox'),[]);
+  release();await a.db.cloudFlushProjects();assert.equal(a.state.calls.length,2);assert.equal(a.state.calls[1].operations[0].action,'delete');assert.deepEqual(await activeRows(cache,'batch'),[]);
 });
 test('deleting a pending imported asset hides it immediately even while its upload is blocked',async()=>{
   const cache=memoryCache(),first=fixture(cache);first.state.uploadGate=new Promise(()=>{});
@@ -270,9 +270,16 @@ test('damaged pending work falls back to its last saved cloud edit on reopen',as
   const reopened=fixture(cache);reopened.state.rows=[saved];
   assert.deepEqual(await reopened.db.cloudPendingProjects(),[]);
   assert.equal((await reopened.db.cloudAll('projects'))[0].drafts[0].layers[0].content,'上次保存');
-  assert.equal((await cache.get('cloud:owner-uuid','project-outbox')).length,1,'quarantined work must remain durably recoverable');
+  assert.equal((await cache.get('cloud:owner-uuid','sync-quarantine')).length,1,'quarantined work must remain durably recoverable');
   await assert.rejects(reopened.db.cloudStageProject({...v2(saved),drafts:[]}),/不完整/);
 });
+// Only one physical queue is active; older keys are migration sources only.
+async function activeRows(cache,kind){
+ const rows=await cache.get('cloud:owner-uuid','unified-outbox')||[];
+ return rows.filter(row=>row.record?.kind===kind).map(row=>({
+   ...row,record:row.record.payload
+ }));
+}
 function memoryCache(){const rows=new Map();return {async get(owner,key){return structuredClone(rows.get(owner+':'+key));},async put(owner,key,value){rows.set(owner+':'+key,structuredClone(value));},async clear(owner){for(const key of rows.keys())if(key.startsWith(owner+':'))rows.delete(key);}};}
 test('uploaded originals are immediately reusable and survive a fresh cloud store without re-download',async()=>{
   const cache=memoryCache(),a=fixture(cache),data=new Blob(['new private original'],{type:'image/png'});
@@ -435,7 +442,7 @@ test('all user-facing deletes are staged as remote delete plus trash entry and s
       tx.objectStore(store).delete(original.id);
       tx.objectStore('trash').put(tombstone);
     });
-    assert.equal((await cache.get('cloud:owner-uuid','import-outbox')).length,1,
+    assert.equal((await activeRows(cache,'batch')).length,1,
       'Deletion is durable before any remote network acknowledgement');
     assert.deepEqual((await db.cloudAll('trash')).map(x=>x.id),[tombstone.id],
       'Trash is immediately visible before remote upload');
@@ -443,7 +450,7 @@ test('all user-facing deletes are staged as remote delete plus trash entry and s
     assert.deepEqual(state.calls.at(-1).operations.map(op=>op.store+':'+op.action),
       [store+':delete','trash:put','meta:put']);
     assert.equal(state.calls.at(-1).operations.at(-1).item.id,'tombstone:'+store+':'+original.id);
-    assert.deepEqual(await cache.get('cloud:owner-uuid','import-outbox'),[],
+    assert.deepEqual(await activeRows(cache,'batch'),[],
       'Committed remote deletion must leave no unsynced tombstones');
   }
 });
@@ -473,17 +480,17 @@ test('rapid delete followed by explicit restore replays the entire recovery afte
  assert.deepEqual(state.calls[1].operations.map(op=>op.store+':'+op.action).sort(),
    ['assets:put','meta:delete','trash:delete'].sort(),
    'explicit restore must survive a just-committed same-record deletion and consume the trash card');
- assert.deepEqual(await cache.get('cloud:owner-uuid','import-outbox'),[]);
+ assert.deepEqual(await activeRows(cache,'batch'),[]);
 });
 
 test('permanent trash deletion uses durable cloud outbox and sends real delete op',async()=>{
   const cache=memoryCache(),{state,db}=fixture(cache);
   await db.cloudStageMutation(['trash'],tx=>tx.objectStore('trash').delete('gone'));
-  assert.equal((await cache.get('cloud:owner-uuid','import-outbox')).length,1);
+  assert.equal((await activeRows(cache,'batch')).length,1);
   await db.cloudFlushProjects();
   assert.deepEqual(state.calls.at(-1).operations.map(op=>[op.store,op.action,op.id]),
     [['trash','delete','gone']]);
-  assert.deepEqual(await cache.get('cloud:owner-uuid','import-outbox'),[]);
+  assert.deepEqual(await activeRows(cache,'batch'),[]);
 });
 
 
@@ -493,20 +500,20 @@ test('deleting a work retires an older queued autosave so the work is not resurr
     activeDraftID:'draft',drafts:[{id:'draft',canvas:{width:600,height:800},
       items:[],primitives:[],textBlocks:[],strokes:[]}]};
   await db.cloudStageProject(v2(doc));
-  assert.equal((await cache.get('cloud:owner-uuid','project-outbox')).length,1);
+  assert.equal((await activeRows(cache,'project')).length,1);
   await db.cloudStageMutation(['projects','trash'],tx=>{
     tx.objectStore('projects').delete(doc.id);
     tx.objectStore('trash').put({id:'deleted-work-entry',kind:'project',item:doc,
       date:new Date().toISOString()});
   });
-  assert.deepEqual(await cache.get('cloud:owner-uuid','project-outbox'),[],
+  assert.deepEqual(await activeRows(cache,'project'),[],
     'Delete should remove its obsolete pending autosave');
   await db.cloudFlushProjects();
   const operations=state.calls.flatMap(c=>c.operations);
   assert.ok(operations.some(op=>op.store==='projects'&&op.action==='delete'&&op.id===doc.id));
   assert.ok(!operations.some(op=>op.store==='projects'&&op.action==='put'&&op.item.id===doc.id),
     'No stale project put may resurrect a deleted work');
-  assert.deepEqual(await cache.get('cloud:owner-uuid','import-outbox'),[]);
+  assert.deepEqual(await activeRows(cache,'batch'),[]);
 });
 
 
@@ -532,7 +539,7 @@ test('older generic project PUT from the same phone is rescued without overwriti
  const work=v2({id:'same-work',title:'本机未同步的早期版本',activeDraftID:'draft',
   drafts:[{id:'draft',canvas:{width:700,height:1000},items:[],textBlocks:[{id:'text',content:'留住这一页'}],primitives:[],strokes:[]}]});
  await db.cloudStageImport({assets:[],blobs:[],projects:[work]});
- assert.equal((await cache.get('cloud:owner-uuid','import-outbox')).length,1);
+ assert.equal((await activeRows(cache,'batch')).length,1);
  // An editor write (or a second tab on the same phone) has already advanced
  // this document. It must remain untouched by the old generic queue.
  state.revision=1;
@@ -541,7 +548,7 @@ test('older generic project PUT from the same phone is rescued without overwriti
 
  await assert.rejects(db.cloudFlushProjects(),/conflict|云端版本已变化/);
  assert.equal(state.rows[0].title,'已经上传的较新版本');
- assert.ok((await cache.get('cloud:owner-uuid','import-outbox')).length>0);
+ assert.ok((await activeRows(cache,'batch')).length>0);
  const pending=(await db.cloudPendingDetails()).batches[0];
  const reviewed=await db.cloudConflictReview('batch',pending.id);
  assert.equal(reviewed.overview.local.title,'本机未同步的早期版本');
