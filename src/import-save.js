@@ -17,10 +17,10 @@ export function importPaperDimensions(record) {
 }
 export function candidateMetadata(c,record,batchSeriesID) {
   if(c.width!=null&&(!Number.isFinite(c.width)||c.width<=0)||c.height!=null&&(!Number.isFinite(c.height)||c.height<=0))throw Error('素材宽高必须是正数或留空');
-  const quantity=c.quantity??1;if(!Number.isInteger(quantity)||quantity<1)throw Error('素材数量必须是正整数');
+  const quantity=c.kind==='tape'&&c.quantityManuallySet!==true?999:(c.quantity??1);if(!Number.isInteger(quantity)||quantity<1||quantity>999)throw Error('素材数量须为 1–999，999 表示不限使用');
   const choice=c.seriesID??record.seriesID??batchSeriesID;
   return {title:c.title?.trim()||'新素材',kind:c.kind||'sticker',role:c.role||'focal',tags:c.tags||[],palette:[],texture:'待记录',physicalWidthMM:c.width??null,physicalHeightMM:c.height??null,
-    dimensionSource:c.width&&c.height?(c.dimensionSource||'paper'):'unmeasured',processingRecord:c.processingRecord?structuredClone(c.processingRecord):null,supply:{kind:quantity===1?'single':'multiple',quantity},reviewStatus:c.reviewStatus||'pendingReview',usageStatus:'unused',seriesID:choice==='__none__'||choice==='__no_library__'?null:choice||null};
+    dimensionSource:c.width&&c.height?(c.dimensionSource||'paper'):'unmeasured',processingRecord:c.processingRecord?structuredClone(c.processingRecord):null,supply:{kind:quantity===999?'unlimited':quantity===1?'single':'multiple',quantity},reviewStatus:c.reviewStatus||'pendingReview',usageStatus:'unused',seriesID:choice==='__none__'||choice==='__no_library__'?null:choice||null};
 }
 export async function saveImportBatch({state,db,urls,render,onSaved}) {
   if(state.importSaving||state.importStep==='done')return;
@@ -101,6 +101,11 @@ export async function saveImportBatch({state,db,urls,render,onSaved}) {
   if(!savedCount)throw Error('请选择至少一件素材或一个页面');
   // Commit the whole batch once. A failed transaction never leaves a partly
   // imported batch that would be duplicated when the user retries.
+  // Import-completed must never be displayed for a candidate whose saved
+  // cutout/original/frame bytes are missing. Those Blob IDs are required for
+  // reliable editing after a later reload on iOS.
+  const invalid=blobs.find(row=>!(row.data instanceof Blob)||row.data.size<8);
+  if(invalid)throw Error('素材原图或抠图字节尚未准备完整，未保存当前批次；请重新识别后再试');
   const result=db.stageImport?await db.stageImport({assets,blobs,projects}):await db.transaction(['assets','blobs','projects'],tx=>{for(const a of assets)tx.objectStore('assets').put(a);for(const b of blobs)tx.objectStore('blobs').put(b);for(const p of projects)tx.objectStore('projects').put(p);});
   state.assets.push(...assets);state.projects.push(...projects);for(const b of blobs)urls.set(b.id,URL.createObjectURL(b.data));
   state.importSavedCount=savedCount;state.importPending=!!result?.pending;state.importStep='done';render();

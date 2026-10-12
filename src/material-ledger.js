@@ -5,13 +5,18 @@ import {normalizeGeometry,rectangleGeometry,geometryArea,geometryUnion,geometryI
 
 export const pieceKey=item=>item.creativePieceID||item.agentKey||item.key||item.id;
 export function buildMaterialLedger(draft,assets){
- const catalog=new Map(assets.map(asset=>[asset.id,asset])),groups=new Map(),rolls=new Map();
+ const catalog=new Map(assets.map(asset=>[asset.id,asset])),groups=new Map(),rolls=new Map(),unlimitedUnits=new Map();
  for(const item of draft.items||[]){
   const asset=catalog.get(item.assetID);craftAssert(asset,'MISSING_SOURCE','源素材不存在',{assetId:item.assetID,pieceId:pieceKey(item)});
-  const unit=item.materialUnitIndex??0;
+  // 999 is an explicit unlimited-use sentinel, not 999 finite copies.
+  // Treat each use as a separate virtual stock unit to avoid erroneously
+  // claiming two identical stickers overlap the same physical sheet.
+  const unlimited=asset.supply?.quantity===999&&asset.supply?.kind==='unlimited';
+  const unit=unlimited?(unlimitedUnits.get(asset.id)||0):item.materialUnitIndex??0;
+  if(unlimited)unlimitedUnits.set(asset.id,unit+1);
   craftAssert(Number.isInteger(unit)&&unit>=0,'INVALID_UNIT','素材库存单位无效',{assetId:asset.id});
   const isRoll=asset.kind==='tape'&&asset.supply?.kind==='tapeRoll'&&asset.tapeRepeatMode==='repeatablePattern';
-  craftAssert(isRoll||unit<(asset.supply?.quantity??1),'STOCK_EXCEEDED','裁片超出实际素材数量',{assetId:asset.id});
+  craftAssert(unlimited||isRoll||unit<(asset.supply?.quantity??1),'STOCK_EXCEEDED','裁片超出实际素材数量',{assetId:asset.id});
   const geometry=itemSourceGeometry(item,asset),source=rectangleGeometry(0,0,asset.physicalWidthMM,asset.physicalHeightMM);
   assertSubset(geometry,source,{assetId:asset.id,pieceId:pieceKey(item)});
   if(isRoll){
