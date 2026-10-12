@@ -31,6 +31,7 @@ import {snapshotDraft} from './draft-snapshot.js';
 import {saveManualArchive,restoreManualArchive} from './scene-archive.js';
 import {recordSceneOperation,makeAutoSceneSnapshot,currentSceneDraft,copySceneBaseline} from './scene-persistence.js';
 import {retireSplitPiece} from './material-split.js';
+import {readAlphaMask,extractAlphaMask} from './alpha-mask-blob.js';
 import {reconcileCanvasText,textParagraphMarkup} from './canvas-text-content.js';
 import {reconcileEditorScene} from './editor-scene-reconcile.js';
 import {checkpointEditorHistory,ensureEditorHistory,resetEditorHistory,takeEditorHistoryStep} from './editor-history-scope.js';
@@ -1335,26 +1336,37 @@ async function refineCandidateFrame(candidateFrame,request,{postprocessOnly=fals
 async function openCutoutCheck(id,candidate=null){
   const a=candidate?{title:candidate.title}:asset(id);if(!a)return;
   const stored=async blobId=>blobId?(await db.get('blobs',blobId))?.data:null;
-  let saved=candidate?.blob||await stored(a.blobId),original=candidate?.originalBlob||await stored(a.originalBlobId),recognition=candidate?.originalCutoutBlob||await stored(a.originalCutoutBlobId),
-    candidateFrame=candidate?.candidateFrameBlob||await stored(a.candidateFrameBlobId);
-  if(!saved&&a.staticPath){const response=await fetch(a.staticPath);if(!response.ok)throw Error('素材图像未能加载，请重试');saved=await response.blob();}
-  // A returned blob metadata record is not proof that its original image bytes
-  // have survived browser termination or the cloud upload lifecycle.
-  original||=saved;recognition||=saved;candidateFrame||=original;
-  if(!(saved instanceof Blob)||saved.size<8)
-    throw Error('原始抠图尚未从云端恢复，不能安全编辑。请在同步完成后重试');
-  if(!(original instanceof Blob)||original.size<8)
-    throw Error('候选框原始图片未保存完整；为防止颜色或边缘被覆盖，未打开手动抠图');
+  const modern=!candidate&&!!a.finalMaskBlobId&&!!a.candidateFrameBlobId;
+  let saved=modern?null:candidate?.blob||await stored(a.blobId),
+    original=modern?null:candidate?.originalBlob||await stored(a.originalBlobId),
+    recognition=modern?null:candidate?.originalCutoutBlob||await stored(a.originalCutoutBlobId),
+    candidateFrame=candidate?.candidateFrameBlob||await stored(a.candidateFrameBlobId),
+    finalMaskBlob=modern?await stored(a.finalMaskBlobId):null;
+  if(!modern){
+    if(!saved&&a.staticPath){const response=await fetch(a.staticPath);if(!response.ok)throw Error('素材图像未能加载，请重试');saved=await response.blob();}
+    original||=saved;recognition||=saved;candidateFrame||=original;
+    if(!(saved instanceof Blob)||saved.size<8)
+      throw Error('原始抠图尚未从云端恢复，不能安全编辑。请在同步完成后重试');
+    if(!(original instanceof Blob)||original.size<8)
+      throw Error('候选框原始图片未保存完整；为防止颜色或边缘被覆盖，未打开手动抠图');
+  }else if(!(candidateFrame instanceof Blob)||candidateFrame.size<8||
+            !(finalMaskBlob instanceof Blob)||!finalMaskBlob.size)
+    throw Error('候选框 RGB 或最终蒙版尚未完整同步，已保留旧素材，请检查同步后重试');
   if(modal.open)modal.close();
   const processing=candidate?.processingRecord||a.processingRecord||{},baseWidth=processing.sourceWidthMM||candidate?.width||a.physicalWidthMM,baseHeight=processing.sourceHeightMM||candidate?.height||a.physicalHeightMM,
     localMethods=recognitionMethodDetails,
     preferredMethod=localMethods.some(item=>item.id===(processing.rerecognition?.method||state.preferences.recognition))?(processing.rerecognition?.method||state.preferences.recognition):'auto';
   const openEditor=()=>showCutoutEditor({
-    body,modal,original,saved,recognition,candidateFrame,title:a.title,processing,toast,
+    body,modal,original,saved,recognition,candidateFrame,finalMaskBlob,title:a.title,processing,toast,
+    onLoadInitialMask:modern?async()=>{
+      const storedInitial=await stored(a.initialMaskBlobId);
+      if(!(storedInitial instanceof Blob))throw Error('初始蒙版尚未可用');
+      return readAlphaMask(storedInitial);
+    }:null,
     recognitionUI:{methods:localMethods,pixels:recognitionPixelOptions.filter(([n])=>n>=1200),method:preferredMethod,pixelsValue:Math.max(1200,state.preferences.recognitionPixels||1200),preprocess:recognitionPreprocessOptions(),postprocess:recognitionPostprocessOptions()},
     onRerecognize:request=>refineCandidateFrame(candidateFrame,request),
     onPostprocess:request=>refineCandidateFrame(candidateFrame,request,{postprocessOnly:true}),
-    onApply:async(blob,record,originalRecognition)=>{
+    onApply:async(blob,record,originalRecognition,maskBlob)=>{
     const rad=record.displayRotationDegrees*Math.PI/180,width=baseWidth&&baseHeight?Math.abs(baseWidth*Math.cos(rad))+Math.abs(baseHeight*Math.sin(rad)):null,height=baseWidth&&baseHeight?Math.abs(baseHeight*Math.cos(rad))+Math.abs(baseWidth*Math.sin(rad)):null;
     const nextProcessing={...record,sourceWidthMM:baseWidth,sourceHeightMM:baseHeight};
     if(candidate){
@@ -1362,8 +1374,21 @@ async function openCutoutCheck(id,candidate=null){
       for(const rec of state.importRecords){const index=rec.candidateData?.findIndex(c=>c===candidate||c.region===candidate.region);if(index>=0){Object.assign(rec.candidateData[index],candidate);rec.candidateURLs[index]=candidate.url;rec.manualEdits=true;if(state.importStep==='inspect')rec.confirmed=false;}}
       if(state.importRecords[state.importIndex]?.candidateData===state.importCandidateData)state.importCandidateURLs=state.importCandidateData.map(c=>c.url);
     }else{
-      const updated={...a,processingRecord:nextProcessing,physicalWidthMM:width||a.physicalWidthMM,physicalHeightMM:height||a.physicalHeightMM,originalCutoutBlobId:a.originalCutoutBlobId||uid(),candidateFrameBlobId:a.candidateFrameBlobId||uid(),updatedAt:new Date().toISOString()};
-      await db.transaction(['assets','blobs'],tx=>{tx.objectStore('assets').put(updated);tx.objectStore('blobs').put({id:a.blobId,data:blob});if(!a.originalCutoutBlobId)tx.objectStore('blobs').put({id:updated.originalCutoutBlobId,data:originalRecognition});if(!a.candidateFrameBlobId)tx.objectStore('blobs').put({id:updated.candidateFrameBlobId,data:candidateFrame});});
+      const frameId=a.candidateFrameBlobId||uid();
+      const baselineId=a.initialMaskBlobId||uid(),
+        nextMaskId=a.finalMaskBlobId&&a.finalMaskBlobId!==baselineId?a.finalMaskBlobId:uid();
+      const baselineBlob=a.initialMaskBlobId?null:await extractAlphaMask(recognition||saved);
+      const updated={...a,processingRecord:nextProcessing,
+        physicalWidthMM:width||a.physicalWidthMM,physicalHeightMM:height||a.physicalHeightMM,
+        candidateFrameBlobId:frameId,initialMaskBlobId:baselineId,finalMaskBlobId:nextMaskId,
+        updatedAt:new Date().toISOString()};
+      await db.transaction(['assets','blobs'],tx=>{
+        tx.objectStore('assets').put(updated);
+        tx.objectStore('blobs').put({id:a.blobId,data:blob});
+        tx.objectStore('blobs').put({id:nextMaskId,data:maskBlob});
+        if(baselineBlob)tx.objectStore('blobs').put({id:baselineId,data:baselineBlob});
+        if(!a.candidateFrameBlobId)tx.objectStore('blobs').put({id:frameId,data:candidateFrame});
+      });
       Object.assign(a,updated);if(urls.has(a.blobId))URL.revokeObjectURL(urls.get(a.blobId));urls.set(a.blobId,URL.createObjectURL(blob));
     }
     render();toast('素材外观已更新');
@@ -1383,7 +1408,12 @@ async function openCutoutCheck(id,candidate=null){
       return fresh?.data||current;
     };
     try{
-      [saved,original,recognition,candidateFrame]=await Promise.all([
+      if(modern){
+        [candidateFrame,finalMaskBlob]=await Promise.all([
+          recover(a.candidateFrameBlobId,candidateFrame),
+          recover(a.finalMaskBlobId,finalMaskBlob)
+        ]);
+      }else [saved,original,recognition,candidateFrame]=await Promise.all([
         recover(a.blobId,saved),recover(a.originalBlobId,original),
         recover(a.originalCutoutBlobId,recognition),
         recover(a.candidateFrameBlobId,candidateFrame)
