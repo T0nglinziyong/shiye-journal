@@ -28,6 +28,7 @@ import {setCloudProjectPreview} from './cloud-store.js';
 import {snapshotDraft} from './draft-snapshot.js';
 import {saveManualArchive,restoreManualArchive} from './scene-archive.js';
 import {reconcileCanvasText,textParagraphMarkup} from './canvas-text-content.js';
+import {reconcileEditorScene} from './editor-scene-reconcile.js';
 import {checkpointEditorHistory,ensureEditorHistory,resetEditorHistory,takeEditorHistoryStep} from './editor-history-scope.js';
 import {captureHistory} from './project-history.js';
 import {mountCanvasEditor} from './canvas-editor-ui.js';
@@ -342,20 +343,41 @@ function render(){
   mountPageSyncIndicator();backgroundViewPending=false;}
 function editorLayoutKey(){const size=view.editorLayoutSize||{width:window.innerWidth,height:window.innerHeight};return [size.width,size.height,current()?.canvas.width,current()?.canvas.height,!!state.workspacePanel,!!state.aiPanel].join(':');}
 function refreshCanvas(){
-  const d=current(),page=view.querySelector('#canvas-page');if(d?.layers?.some(n=>n.type==='group'||n.type==='ink')||d?.strokes?.length)return false;if(!page||view.editorDraft!==d||view.editorLayoutKey!==editorLayoutKey()||!view.editorRefresh)return false;
-  const scale=page.clientWidth/d.canvas.width,entries=editorEntry(d,true),ids=new Set(entries.map(e=>e.value.renderKey||e.value.id)),available=new Set([...d.items,...d.primitives,...d.textBlocks].map(item=>item.id));
-  page.querySelectorAll('[data-object]').forEach(node=>{if(!ids.has(node.dataset.renderKey||node.dataset.object)){if(available.has(node.dataset.object)){node.hidden=true;node.style.display='none';}else node.remove();}});
-  for(const entry of entries){const template=document.createElement('template');template.innerHTML=renderCanvasObject(entry,scale);const next=template.content.firstElementChild;let node=[...page.children].find(n=>(n.dataset.renderKey||n.dataset.object)===(entry.value.renderKey||entry.value.id));
-    if(!node){page.insertBefore(next,page.querySelector('.paper-layer'));continue;}
-    node.style.cssText=next.style.cssText;node.hidden=false;node.className=next.className;
-    if(entry.kind==='text')reconcileCanvasText(node,next);
-    else if(entry.kind==='shape'){const preview=node.querySelector('.shape-preview,svg'),fresh=next.querySelector('.shape-preview');if(preview?.getAttribute('src')!==fresh?.getAttribute('src')){if(preview)preview.replaceWith(fresh);else if(fresh)node.prepend(fresh);}}
-    else {let im=node.querySelector('img');const fresh=next.querySelector('img');if(im&&fresh){const src=fresh.getAttribute('src');if(src!==im.getAttribute('src'))im.setAttribute('src',src);im.alt=fresh.alt;im.className=fresh.className;}else if(!im&&fresh){node.prepend(fresh);im=fresh;}else if(im&&!fresh){im.remove();im=null;}const crop=entry.value.cropRect;if(im)im.style.cssText=crop?`position:absolute;max-width:none;width:${100/crop.width}%;height:${100/crop.height}%;left:${-crop.x/crop.width*100}%;top:${-crop.y/crop.height*100}%;object-fit:fill`:'';}
+  const d=current(),page=view.querySelector('#canvas-page');
+  // Never unmount the editor simply because it contains groups or pen strokes.
+  // Keep the user's pointer session, composition input, decoded images and
+  // the layer-tree popover alive across ordinary Scene v2 mutations.
+  if(!page||view.editorDraft!==d||view.editorLayoutKey!==editorLayoutKey()||!view.editorRefresh)return false;
+  const scale=page.clientWidth/d.canvas.width;
+  reconcileEditorScene(page,renderSceneDOM(d,scale),{
+    onText:reconcileCanvasText,
+    onImage:(node,next)=>{
+      const current=node.querySelector('img'),fresh=next.querySelector('img');
+      if(current&&fresh){
+        const src=fresh.getAttribute('src');
+        if(src!==current.getAttribute('src'))current.setAttribute('src',src);
+        current.alt=fresh.alt;
+        // The source crop belongs to a physical material. Never overwrite
+        // its decoded image's scale/offset with the bare imgTag styling.
+        const item=d.items.find(i=>i.id===node.dataset.object);
+        const crop=item?.cropRect;
+        current.style.cssText=crop?`position:absolute;max-width:none;width:${100/crop.width}%;height:${100/crop.height}%;left:${-crop.x/crop.width*100}%;top:${-crop.y/crop.height*100}%;object-fit:fill`:'';
+      }else if(!current&&fresh)node.prepend(fresh);
+      else if(current&&!fresh)current.remove();
+    }
+  });
+  const paperKey=JSON.stringify([d.paperColor,d.paperPattern,d.paperRuling,d.drawCenterGutter]);
+  if(page.dataset.paperKey!==paperKey){
+    drawPaper(page.querySelector('.paper-layer').getContext('2d'),d);
+    page.dataset.paperKey=paperKey;
+    page.style.backgroundColor=d.paperColor;
   }
-  const paperKey=JSON.stringify([d.paperColor,d.paperPattern,d.paperRuling,d.drawCenterGutter]);if(page.dataset.paperKey!==paperKey){drawPaper(page.querySelector('.paper-layer').getContext('2d'),d);page.dataset.paperKey=paperKey;page.style.backgroundColor=d.paperColor;}
   for(const pattern of ['plain','grid','lines','dots','columns'])page.classList.toggle(pattern,d.paperPattern===pattern);
-  if(view.editorInk!==d.strokes){const ink=page.querySelector('#ink'),ctx=ink.getContext('2d');ctx.clearRect(0,0,ink.width,ink.height);drawInk(ctx,d.strokes||[]);view.editorInk=d.strokes;}
-  const start=view.querySelector('#ai-start'),stop=view.querySelector('#ai-stop'),progress=view.querySelector('#ai-progress'),report=view.querySelector('#ai-report');if(start){start.disabled=!!state.aiBusy;start.textContent=state.aiBusy?'创作中…':'开始创作';}if(stop)stop.disabled=!state.aiBusy;if(progress)progress.textContent=state.aiProgress||'';if(report)report.disabled=!aiReport;
+  const start=view.querySelector('#ai-start'),stop=view.querySelector('#ai-stop'),progress=view.querySelector('#ai-progress'),report=view.querySelector('#ai-report');
+  if(start){start.disabled=!!state.aiBusy;start.textContent=state.aiBusy?'创作中…':'开始创作';}
+  if(stop)stop.disabled=!state.aiBusy;
+  if(progress)progress.textContent=state.aiProgress||'';
+  if(report)report.disabled=!aiReport;
   view.editorRefresh();view.canvasSelectionRefresh?.();return true;
 }
 function mountParityControls(){mountSwiftParity({libraryBack,openLibraryAsset,openAssetEditor:openDetail,state,view,body,modal,db,render,route,toast,asset,imgTag,workCover,createFromBasket,openAICreation,openSeriesEditor,current,checkpoint,saveProject,flushSave,uid,handle,esc,matchingSession});}
