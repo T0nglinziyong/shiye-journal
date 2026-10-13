@@ -43,14 +43,25 @@ async function drawCover(images){
 }
 export function mountSeriesCoverSnapshots({view,state,cache=privateCache}){
   if(state.route!=='series')return;
+  view.seriesCoverDispose?.();
   const account=state.accountId||'browser';accountScope(account);
+  const observer=typeof IntersectionObserver==='function'
+    ?new IntersectionObserver(entries=>{
+      for(const entry of entries){
+        if(!entry.isIntersecting)continue;
+        observer.unobserve(entry.target);
+        const start=jobs.get(entry.target);if(start)start();
+      }
+    },{rootMargin:'260px'}):null;
+  const jobs=new WeakMap();
+  view.seriesCoverDispose=()=>observer?.disconnect();
   for(const [index,card] of [...view.querySelectorAll('[data-act="series-detail"]')].entries()){
     const series=state.series.find(s=>s.id===card.dataset.id),cover=card.querySelector('.series-cover');
     if(!series||!cover)continue;
     const signature=seriesCoverSignature(series,state.assets),key=JSON.stringify([account,series.id,signature]);
     if(cover.querySelector('.series-cover-snapshot')&&cover.dataset.snapshotKey===key)continue;
     cover.dataset.snapshotKey=key;
-    void (async()=>{
+    const start=()=>void (async()=>{
       let url=live.get(key);
       if(!url){
         const saved=await cache.get('series-cover:'+account,key).catch(()=>null);
@@ -67,5 +78,7 @@ export function mountSeriesCoverSnapshots({view,state,cache=privateCache}){
         url=URL.createObjectURL(blob);live.set(key,url);showSnapshot(cover,url,index<2);
       }catch{/* A failed presentation snapshot leaves the regular cover intact. */}
     })();
+    if(index<2||!observer)start();
+    else{jobs.set(card,start);observer.observe(card);}
   }
 }
