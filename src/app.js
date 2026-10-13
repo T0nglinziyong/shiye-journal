@@ -51,6 +51,7 @@ import {createWorkCoverBackfill} from './work-cover-backfill.js';
 import {renderWorkCoverSnapshot} from './work-cover-snapshot.js';
 import {createLocalWorkCovers} from './work-cover-local-cache.js';
 import {imagePlaceholder,mountPrivateImages} from './lazy-private-images.js';
+import {recordImageLoading,imageLoadingSnapshot} from './image-loading-diagnostics.js';
 import {reusePagePreviews} from './preview-content-cache.js';
 import {mountSeriesCoverSnapshots} from './series-cover-snapshot.js';
 import {showAssetEditor} from './asset-editor.js';
@@ -159,7 +160,7 @@ const assetOrganization=createAssetOrganization();
 mountOrganizationBadges(view,assetOrganization);
 const imageNodes=new ImageNodeCache();
 const libraryHistory=[];
-function openLibraryAsset(id){libraryHistory.push({route:state.route,seriesID:state.seriesID,detailAssetID:state.detailAssetID});state.detailAssetID=id;route('assetDetail');}
+function openLibraryAsset(id){libraryHistory.push({route:state.route,seriesID:state.seriesID,detailAssetID:state.detailAssetID});state.detailAssetID=id;const selected=asset(id);if(selected?.blobId)privateImages.focus(selected.blobId);route('assetDetail');}
 function libraryBack(){const previous=libraryHistory.pop();if(!previous){navigateBack('series');return;}navigationHistory.pop();state.seriesID=previous.seriesID;state.detailAssetID=previous.detailAssetID;route(previous.route,{back:true});}
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const toast=s=>{const el=document.querySelector('#toast');el.textContent=/can't find variable|is not defined|undefined is not an object|blob:|expected magic word/i.test(String(s))?explainUserError(s):s;el.classList.add('show');clearTimeout(toast.timer);toast.timer=setTimeout(()=>el.classList.remove('show'),3500);};
@@ -197,14 +198,14 @@ const image=id=>staticSources.get(id)||
 // uses one fixed 480-pixel snapshot stored in COS.
 const privateImages=mountPrivateImages({root:document.body,db,urls,fullView:img=>
   (state.route==='editor'&&!!img.closest('#canvas-page .canvas-object.material'))||
-  (state.route==='assetDetail'&&!!img.closest('.detail-picture'))});
+  (state.route==='assetDetail'&&!!img.closest('.detail-picture')),onEvent:recordImageLoading});
 let previewPrewarmEpoch=0;
 function prewarmOtherPages(){
   const epoch=++previewPrewarmEpoch;
   if(!cloudEnabled||navigator.connection?.saveData)return;
   // Warm only a small cross-route window, after visible images have had time
-  // to load. previewBlob uses the account-scoped cache; no hidden <img> nodes
-  // or eager DOM image decoding are created here.
+  // to load. Use the same bounded loader queue and account-scoped cache;
+  // no hidden <img> nodes or eager DOM image decoding are created here.
   const ids=[
     ...state.assets.filter(a=>!a.staticPath).slice(0,8).map(a=>a.blobId),
     ...state.projects.slice(0,4).map(p=>p.isSnapshot?p.snapshotBlobId:
@@ -215,7 +216,7 @@ function prewarmOtherPages(){
     if(epoch!==previewPrewarmEpoch||index>=ids.length||document.visibilityState!=='visible')return;
     const run=()=>{
       if(epoch!==previewPrewarmEpoch||document.visibilityState!=='visible')return;
-      void db.previewBlob(ids[index++],480).catch(()=>{}).finally(()=>{
+      void privateImages.load(ids[index++],false,{background:true}).catch(()=>{}).finally(()=>{
         if(epoch===previewPrewarmEpoch)setTimeout(next,300);
       });
     };
@@ -364,6 +365,7 @@ function route(name,{back=false,restoreMaterial=false}={}){
   if(name==='settings'&&!settingsSession)settingsSession={ai:structuredClone(state.aiSettings),preferences:structuredClone(state.preferences),returnRoute:state.route};
   if(state.route==='settings'&&name!=='settings'&&settingsSession){state.aiSettings=settingsSession.ai;state.preferences=settingsSession.preferences;settingsSession=null;state.settingsSection=null;if(cloudEnabled&&deferredSyncedPreferences)state.preferences=savePreferences(deferredSyncedPreferences);if(cloudEnabled&&deferredSyncedAISettings)state.aiSettings=saveAISettings(deferredSyncedAISettings);deferredSyncedPreferences=null;deferredSyncedAISettings=null;}
 if(state.route==='editor'&&name!=='editor'&&aiController)aiController.abort(Error('已离开创作页面'));const priorRoute=state.route;if(name==='matching'&&priorRoute!=='matching'&&cloudMatchingDefaults&&!matchingDefaultsPending)applyMatchingDefaults(state,cloudMatchingDefaults);syncSelectionScope(parity,name);state.route=name;
+if(name!=='assetDetail')privateImages.focus(null);
 if(priorRoute!=='editor'&&name==='editor')
   editorSessionBaseline=newEditorSession(state.activeProject,saveVersions);
 actionStore.publish('route/change',{scope:'route',keys:['route'],payload:{from:priorRoute,to:name}});if(name==='import'&&state.importMode!=='snapshot'&&typeof Worker!=='undefined')void prewarmVision().catch(()=>{});if(name==='series'){state.seriesID='all';state.addingToSeries=null;libraryHistory.length=0;}if(name!=='library')state.addingToSeries=null;if(name!=='settings'&&!fromSettings)state.selected=null;render();
@@ -2389,10 +2391,10 @@ async function openSyncConflictChoice(kind,id){
   }
 }
 function exportAppDiagnostics(){
-  const report={format:'shiye-app-error-diagnostics',version:1,createdAt:new Date().toISOString(),
+  const report={format:'shiye-app-error-diagnostics',version:2,createdAt:new Date().toISOString(),
     scope:'仅本次打开应用期间的安全摘要；关闭后不保留',
     environment:{mode:cloudEnabled?'cloud':state.selfHosted?'server':'browser',online:navigator.onLine!==false},
-    runtime:runtimeIssueSnapshot(),sync:cloudEnabled?db.syncDiagnosticReport({online:navigator.onLine}):null};
+    runtime:runtimeIssueSnapshot(),images:imageLoadingSnapshot(),sync:cloudEnabled?db.syncDiagnosticReport({online:navigator.onLine}):null};
   download(new Blob([JSON.stringify(report,null,2)],{type:'application/json'}),
     '拾页应用错误诊断-'+new Date().toISOString().slice(0,10)+'.json');
   toast('已导出应用错误诊断；不含作品、图片、账号或密钥');

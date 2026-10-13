@@ -3,9 +3,10 @@ import {imagePixelSize,imageTier,cachedTierChoice,COVER_EDGE,MIN_DISPLAY_EDGE,MA
 const EMPTY='data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>');
 const placeholder=id=>id?EMPTY+'#shiye-image='+encodeURIComponent(id):'';
 export const imagePlaceholder=id=>id?(cachedImageSource(id)||placeholder(id)):'';
-export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=console.warn}){
+export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=console.warn,onEvent=()=>{}}){
   const pending=new Map(),previews=new Map(),variants=new Map(),sizes=new Map(),previewSizes=new Map(),variantSizes=new Map(),retained=new Map(),queue=[],versions=new Map(),retryTimers=new Map(),retryCounts=new Map(),resizeTimers=new Map(),brokenPreviews=new Set(),observed=new WeakSet();
-  let active=0,generation=0,disposed=false,trimTimer=null;
+  let active=0,generation=0,disposed=false,trimTimer=null,focusedID=null;
+  const emit=event=>{try{onEvent(event);}catch{/* Diagnostics never block image loading. */}};
   // Network bound COS thumbnail reads; browser decoding remains lazy.
   const tablet=globalThis.matchMedia?.('(pointer: coarse) and (min-width: 700px)').matches;
   const concurrency=tablet?2:globalThis.matchMedia?.('(pointer: coarse)').matches?3:6;
@@ -86,32 +87,42 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
     }
   }
   const queueTrim=()=>{if(trimTimer===null&&!disposed)trimTimer=setTimeout(trim,0);};
-  async function load(id,requested=false){
+  async function load(id,requested=false,{background=false}={}){
     if(disposed)return '';
     // Requested display pixels have already been calculated using DPR and screen
     // size by displayTier(). Running imagePixelSize() a second time would
     // multiply them again and fetch unnecessarily large COS variants.
     const full=requested===true,tier=full?0:requested===false?COVER_EDGE:
       imageTier(requested);
-    if(full&&urls.has(id)){touch(sizes,id);return urls.get(id);}
+    const imageTierName=full?'original':tier===COVER_EDGE?'cover':'display';
+    const context=()=>focusedID===id?'detail':background?'background':'visible';
+    if(full&&urls.has(id)){touch(sizes,id);emit({phase:'loaded',tier:imageTierName,context:context(),source:'memory',durationMs:0});return urls.get(id);}
     if(!full){
       const cached=cachedChoice(id,tier);
       // A larger decoded variant can paint immediately, but catalogue cards
       // still acquire their compact 480px derivative from the local cache.
-      if(cached?.sufficient&&(tier!==COVER_EDGE||cached.tier===COVER_EDGE))return cached.url;
+      if(cached?.sufficient&&(tier!==COVER_EDGE||cached.tier===COVER_EDGE)){
+        emit({phase:'loaded',tier:imageTierName,context:context(),source:'memory',durationMs:0});return cached.url;
+      }
     }
     const key=(full?'original:':tier+':')+id;if(pending.has(key))return pending.get(key);
-    const epoch=generation,itemVersion=version(id);
+    const epoch=generation,itemVersion=version(id),queuedAt=Date.now();
+    emit({phase:'queued',tier:imageTierName,context:context(),source:'store'});
     const task=new Promise((resolve,reject)=>{queue.push({id,tier,run:async()=>{
       if(disposed||epoch!==generation||itemVersion!==version(id))return '';
-      const blob=full?(await db.get('blobs',id))?.data:await db.previewBlob(id,tier);
+      const waitMs=Date.now()-queuedAt,started=Date.now();
+      emit({phase:'started',tier:imageTierName,context:context(),source:'store',waitMs});
+      let blob;
+      try{blob=full?(await db.get('blobs',id))?.data:await db.previewBlob(id,tier);}
+      catch(error){emit({phase:'failed',tier:imageTierName,context:context(),source:'store',waitMs,durationMs:Date.now()-started,error});throw error;}
       if(disposed||epoch!==generation||itemVersion!==version(id))return '';
-      if(!blob)throw Error('图片尚未同步到可读取位置');
+      if(!blob){const error=Error('图片尚未同步到可读取位置');emit({phase:'failed',tier:imageTierName,context:context(),source:'store',waitMs,durationMs:Date.now()-started,error});throw error;}
       if(full&&urls.has(id))return urls.get(id);
       const url=URL.createObjectURL(blob);
       if(full){urls.set(id,url);sizes.set(id,blob.size);}
       else if(tier===COVER_EDGE){previews.set(id,url);previewSizes.set(id,blob.size);}
       else{variants.set(key,{id,tier,url});variantSizes.set(id+':'+tier,blob.size);}
+      emit({phase:'loaded',tier:imageTierName,context:context(),source:'store',waitMs,durationMs:Date.now()-started});
       queueTrim();return url;
     },resolve,reject});pump();});
     pending.set(key,task);task.finally(()=>{if(pending.get(key)===task)pending.delete(key);}).catch(()=>{});return task;
@@ -135,10 +146,11 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
     const distances=queue.length>1?viewportDistances():null;
     while(!disposed&&active<concurrency&&queue.length){
       if(distances&&queue.length>1){
-        let best=0,rank=distances.get(queue[0].id)??1e9;
+        const priority=job=>job.id===focusedID?-1:distances.get(job.id)??1e9;
+        let best=0,rank=priority(queue[0]);
         for(let i=1;i<queue.length;i++){
-          const next=distances.get(queue[i].id)??1e9;
-          if(next<rank){rank=next;best=i;if(rank===0)break;}
+          const next=priority(queue[i]);
+          if(next<rank){rank=next;best=i;if(rank===-1)break;}
         }
         if(best)queue.unshift(queue.splice(best,1)[0]);
       }
@@ -166,10 +178,11 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
         if(src!==cached.url)img.src=cached.url;
         shown=cached.url;
       }
-      // Start the final tier at once. A base cover is a parallel, temporary
-      // display source, never a network prerequisite for the requested tier.
+      // Enqueue the small source first for detail. Its bytes can paint while
+      // the larger display derivative is still loading.
+      const baseTask=target>COVER_EDGE&&!cached&&!full?load(id,false):null;
       const finalTask=load(id,full?true:target);
-      if(target>COVER_EDGE&&!cached&&!full)void load(id,false).then(preview=>{
+      if(baseTask)void baseTask.then(preview=>{
         if(!current()||finalShown||!preview||!img.isConnected||img.getAttribute('src')!==shown)return;
         if(shown!==preview)img.src=preview;
         shown=preview;
@@ -192,7 +205,7 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
       const id=img.dataset.privateImageId,src=img.getAttribute('src');if(!id||!src?.startsWith('blob:'))return;
       const derived=identity(src);
       if(derived&&!derived.full){
-        brokenPreviews.add(id);
+        brokenPreviews.add(id);emit({phase:'decoded-failed',tier:derived.tier===COVER_EDGE?'cover':'display',context:focusedID===id?'detail':'visible',reason:'decode'});
         if(derived.tier){const key=id+':'+derived.tier;variants.delete(derived.tier+':'+id);variantSizes.delete(key);URL.revokeObjectURL(src);notifyImageInvalidation([id]);}
         else releaseURL(previews,previewSizes,id);
         delete img.dataset.privateImageLoading;img.src=placeholder(id);
@@ -200,6 +213,7 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
         else{img.dataset.imageError='true';scheduleRetry(id);}
         return;
       }
+      emit({phase:'decoded-failed',tier:'original',context:focusedID===id?'detail':'visible',reason:'decode'});
       if(src===urls.get(id))releaseURL(urls,sizes,id);
       img.dataset.imageError='true';img.src=placeholder(id);scheduleRetry(id);
     });}
@@ -215,7 +229,7 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
   // observing them on document.body rescanned the ENTIRE gallery every time
   // navigation changed a CSS class.
   changes.observe(root,{childList:true,subtree:true,attributes:true,attributeFilter:['src']});scan(root);
-  return {load,retain(ids){for(const id of ids)retained.set(id,(retained.get(id)||0)+1);let released=false;return()=>{if(released)return;released=true;for(const id of ids){const n=retained.get(id)||0;if(n>1)retained.set(id,n-1);else retained.delete(id);}trim();};},retryMissing(){retryMissing();},
+  return {load,focus(id){focusedID=id||null;if(id)void load(id,false).catch(onError);pump();},retain(ids){for(const id of ids)retained.set(id,(retained.get(id)||0)+1);let released=false;return()=>{if(released)return;released=true;for(const id of ids){const n=retained.get(id)||0;if(n>1)retained.set(id,n-1);else retained.delete(id);}trim();};},retryMissing(){retryMissing();},
     stats:()=>({originals:sizes.size,previews:previewSizes.size,displayVariants:variantSizes.size,originalBytes:[...sizes.values()].reduce((a,b)=>a+b,0),previewBytes:[...previewSizes.values()].reduce((a,b)=>a+b,0),pending:pending.size}),
     invalidate(ids){
       if(ids&&!ids.length)return;const affected=ids?new Set(ids):null;if(!affected){generation++;pending.clear();}notifyImageInvalidation(affected);

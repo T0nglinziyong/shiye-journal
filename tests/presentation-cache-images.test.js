@@ -121,3 +121,35 @@ test('a low-tier cached preview is displayed until one correctly quantized highe
    assert.deepEqual(requests,[360,960]);
  }finally{releaseHigh?.();loader.dispose();env.close();}
 });
+
+test('selected detail cover jumps ahead of queued list requests without raising tablet concurrency',async()=>{
+ const env=environment(),root=document.createElement('div'),started=[],releases=[];
+ document.body.append(root);
+ const previous=Object.getOwnPropertyDescriptor(globalThis,'matchMedia');
+ Object.defineProperty(globalThis,'matchMedia',{configurable:true,value:query=>({matches:query.includes('min-width: 700px')})});
+ const loader=mountPrivateImages({root,urls:new Map(),onError:()=>{},db:{
+   previewBlob:(id,pixels)=>{started.push([id,pixels]);return new Promise(resolve=>releases.push(()=>resolve(new Blob([id]))));},
+   get:async()=>null
+ }});
+ try{
+   const a=loader.load('first'),b=loader.load('second');
+   await until(()=>started.length===2);
+   const stale=loader.load('old-list');
+   loader.focus('selected');
+   const sharp=loader.load('selected',960);
+   assert.equal(started.length,2,'the tablet keeps its two-download limit');
+   releases.shift()();
+   await until(()=>started.length===3);
+   assert.deepEqual(started[2],['selected',480]);
+   releases.shift()();
+   await until(()=>started.length===4);
+   assert.deepEqual(started[3],['selected',960]);
+   releases.shift()();
+   await until(()=>started.length===5);
+   while(releases.length)releases.shift()();
+   await Promise.all([a,b,stale,sharp]);
+ }finally{
+   while(releases.length)releases.shift()();loader.dispose();env.close();
+   if(previous)Object.defineProperty(globalThis,'matchMedia',previous);else delete globalThis.matchMedia;
+ }
+});
