@@ -1,6 +1,6 @@
 export function createWorksController({
   renderHTML,patchCatalog,view,state,parity,render,binder,bindCards,
-  refreshPreviews,reusePreviews,coverBackfill,localCovers,catalogChanged
+  refreshPreviews,reusePreviews,coverBackfill,localCovers,catalogChanged,actions
 }){
   return {
     render:renderHTML,
@@ -21,6 +21,16 @@ export function createWorksController({
         view.localWorkCoverDispose=localCovers.observe(view);
       }
       catalogChanged();return true;
+    },
+    mount(lifetime){
+      lifetime.use(actions.subscribe(event=>{
+        if(event.scope==='works')render();
+      },{scope:'works'}));
     }
   };
+}
+export function registerWorksActions(actions){
+  actions.register('works/filter',({value})=>({
+    changes:{worksFilter:value},scope:'works'
+  }));
 }

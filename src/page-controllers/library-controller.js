@@ -1,5 +1,5 @@
 export function createLibraryController({
-  renderHTML,patchCatalog,view,state,parity,render,binder,onCatalogChanged
+  renderHTML,patchCatalog,view,state,parity,binder,onCatalogChanged,actions
 }){
   return {
     render:renderHTML,
@@ -19,10 +19,30 @@ export function createLibraryController({
       for(const [id,key] of map){
         const el=view.querySelector('#'+id);if(!el)continue;
         lifetime.on(el,id==='search'?'input':'change',()=>{
-          void onCatalogChanged({type:'filter',key,value:el.value});
+          void actions.dispatch({type:'library/filter',payload:{key,value:el.value}});
         });
       }
+      lifetime.use(actions.subscribe(event=>{
+        if(event.scope==='library')onCatalogChanged();
+      },{scope:'library'}));
       onCatalogChanged();
     }
   };
+}
+
+// Domain controller owns the state transition; subscribers own DOM updates.
+export function registerLibraryActions(actions,{db,state,asset}){
+  actions.register('library/filter',({key,value})=>{
+    if(!['query','kind','status','seriesID','sort'].includes(key))
+      throw Error('未知素材筛选条件');
+    return {changes:{[key]:value},scope:'library'};
+  });
+  actions.register('library/favorite',async({id})=>{
+    const entry=asset(id);
+    if(!entry)throw Error('素材不存在');
+    const next={...entry,isFavorite:!entry.isFavorite};
+    await db.put('assets',next);
+    Object.assign(entry,next);
+    return {notify:true,scope:'library',ids:[id],result:next.isFavorite};
+  });
 }
