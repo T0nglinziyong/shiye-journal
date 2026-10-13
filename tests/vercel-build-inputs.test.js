@@ -26,6 +26,14 @@ test('Vercel Git auto-deployment is limited to main and test',()=>{
   // Those commits otherwise create canceled Preview deployments and consume quota.
 });
 
+test('Vercel cleanup schedules fit the daily Hobby Cron limit',()=>{
+  const config=JSON.parse(readFileSync(new URL('../vercel.json',import.meta.url),'utf8'));
+  assert.deepEqual(config.crons,[
+    {path:'/api/account-gc',schedule:'0 3 * * *'},
+    {path:'/api/cos-orphan-gc',schedule:'30 3 * * *'}
+  ]);
+});
+
 test('Vercel uploads every server module imported by the COS function',()=>{
   const source=readFileSync(new URL('../api/cos.js',import.meta.url),'utf8');
   const ignore=readFileSync(new URL('../.vercelignore',import.meta.url),'utf8');

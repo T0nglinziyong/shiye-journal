@@ -70,7 +70,7 @@
     },
     {
       "path": "/api/cos-orphan-gc",
-      "schedule": "30 * * * *"
+      "schedule": "30 3 * * *"
     }
   ]
 }
