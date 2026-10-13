@@ -9,15 +9,18 @@ try{
   await click('#top-settings','.settings-page');
   await click('[data-val="导入与识别"]','#setting-recognition');
   assert.ok(await evaluate('!!document.querySelector("#setting-recognition-pixels")'));
-  const defaults=await evaluate('({method:document.querySelector("#setting-recognition").value,pixels:Number(document.querySelector("#setting-recognition-pixels").value),light:document.querySelector("#setting-preprocess-light").checked,denoise:document.querySelector("#setting-preprocess-denoise").checked,contrast:document.querySelector("#setting-preprocess-contrast").checked,chroma:document.querySelector("#setting-preprocess-chroma").checked,oldEdge:!!document.querySelector("#setting-postprocess-edge"),oldCurve:!!document.querySelector("#setting-postprocess-curves"),methods:[...document.querySelector("#setting-recognition").options].map(x=>x.value)})');
-  assert.deepEqual(defaults.methods,['auto','morphgac','grabcut','hybrid']);
+  assert.ok(await evaluate('!!document.querySelector("#setting-candidate-discovery")'));
+  const defaults=await evaluate('({method:document.querySelector("#setting-recognition").value,pixels:Number(document.querySelector("#setting-recognition-pixels").value),light:document.querySelector("#setting-preprocess-light").checked,denoise:document.querySelector("#setting-preprocess-denoise").checked,contrast:document.querySelector("#setting-preprocess-contrast").checked,chroma:document.querySelector("#setting-preprocess-chroma").checked,oldEdge:!!document.querySelector("#setting-postprocess-edge"),oldCurve:!!document.querySelector("#setting-postprocess-curves"),methods:[...document.querySelector("#setting-recognition").options].map(x=>x.value),discoveries:[...document.querySelector("#setting-candidate-discovery").options].map(x=>x.value),discovery:document.querySelector("#setting-candidate-discovery").value})');
+  assert.deepEqual(defaults.methods,['auto','morphgac','physical','grabcut','hybrid']);
+  assert.deepEqual(defaults.discoveries,['legacy','physical']);assert.equal(defaults.discovery,'legacy');
   assert.equal(defaults.method,'auto');assert.equal(defaults.pixels,900);
   assert.equal(defaults.light,false);assert.equal(defaults.denoise,false);assert.equal(defaults.contrast,false);assert.equal(defaults.chroma,true);
   assert.equal(defaults.oldEdge,false);assert.equal(defaults.oldCurve,false);
   for(const id of switches)assert.equal(await evaluate(`document.querySelector("#${id}").checked`),true,id+' defaults on');
 
   await evaluate(`(()=>{
-    document.querySelector('#setting-recognition').value='grabcut';
+    document.querySelector('#setting-recognition').value='hybrid';
+    document.querySelector('#setting-candidate-discovery').value='physical';
     document.querySelector('#setting-recognition-pixels').value='1600';
     document.querySelector('#setting-preprocess-light').checked=true;
     document.querySelector('#setting-preprocess-denoise').checked=true;
@@ -26,7 +29,8 @@ try{
   })()`);
   await click('[data-act="settings-save"]');
   const prefs=await evaluate('JSON.parse(localStorage.getItem("shiye-ui-preferences-v1"))');
-  assert.equal(prefs.recognition,'grabcut');
+  assert.equal(prefs.recognition,'hybrid');
+  assert.equal(prefs.candidateDiscovery,'physical');
   assert.equal(prefs.recognitionPixels,1600);
   assert.equal(prefs.balanceLight,true);
   assert.equal(prefs.recognitionDenoise,true);
