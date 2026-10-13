@@ -1400,7 +1400,9 @@ async function openCutoutCheck(id,candidate=null){
   const editPixels=[900,1200,1600].includes(Number(wantedPixels))
     ?Number(wantedPixels):900;
   body.innerHTML='<section role="status" aria-live="polite" class="cutout-loading"><strong>正在准备抠图编辑器…</strong><p>正在加载 '+editPixels+'px 候选框 RGB 与透明蒙版…</p><button type="button" class="btn" id="cutout-load-cancel">取消</button></section>';
+  // Loading and editing use one native dialog and two explicit layout states.
   modal.classList.remove('cutout-dialog','material-editor-dialog');
+  modal.classList.add('cutout-loading-dialog');
   if(!modal.open)modal.showModal();
   let cancelled=false;
   body.querySelector('#cutout-load-cancel').onclick=()=>{cancelled=true;modal.close();};
@@ -1543,6 +1545,7 @@ async function openCutoutCheck(id,candidate=null){
       // Keep the error in a VISIBLE dialog. A toast behind an open modal
       // appears to iPhone users as an endless dark overlay with no page.
       modal.classList.remove('cutout-dialog','material-editor-dialog');
+      modal.classList.add('cutout-loading-dialog');
       const panel=document.createElement('section');
       panel.className='cutout-loading';
       panel.setAttribute('role','alert');
