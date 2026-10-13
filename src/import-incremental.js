@@ -30,7 +30,7 @@ function patchCandidates(oldGrid,newGrid){
       const nextButton=newNode.querySelector('[data-act="import-toggle-candidate"]');
       if(!oldButton||!nextButton)return false;
       oldButton.className=nextButton.className;
-      oldButton.setAttribute('aria-pressed',String(nextButton.getAttribute('aria-pressed')==='true'));
+      oldButton.setAttribute('aria-pressed',String(nextButton.classList.contains('selected')));
       const oldLabels=oldButton.querySelectorAll('span'),newLabels=nextButton.querySelectorAll('span');
       // Preserve the thumbnail's decoded <img>. Update only badges and dimensions.
       if(oldLabels[1]&&newLabels[1])setText(oldLabels[1],newLabels[1]);
@@ -87,9 +87,15 @@ export function patchImportInspection(view,html){
   // focused controls when its option structure is unchanged.
   const oldSettings=bySelector(oldInspector,'.inspector-settings'),nextSettings=bySelector(nextInspector,'.inspector-settings');
   if(oldSettings&&nextSettings&&oldSettings.innerHTML!==nextSettings.innerHTML){
-    const focused=oldSettings.contains(document.activeElement);
+    const focused=oldSettings.contains(document.activeElement)
+      ?document.activeElement?.id:null;
     const scrollHost=oldSettings.closest('.inspector-scroll'),scrollTop=scrollHost?.scrollTop||0;
-    if(!focused){oldSettings.replaceWith(nextSettings);if(scrollHost)scrollHost.scrollTop=scrollTop;}
+    oldSettings.replaceWith(nextSettings);
+    if(scrollHost)scrollHost.scrollTop=scrollTop;
+    if(focused){
+      const restore=[...nextSettings.querySelectorAll('[id]')].find(el=>el.id===focused);
+      restore?.focus({preventScroll:true});
+    }
   }
   const oldCandidates=bySelector(oldInspector,'.import-candidate-grid'),
     nextCandidates=bySelector(nextInspector,'.import-candidate-grid');
