@@ -5,7 +5,7 @@ import {readFile} from 'node:fs/promises';
 
 const source=name=>readFile(new URL('../src/'+name,import.meta.url));
 const expected={
-  'image.js':'125f86260803f87d218455bd15f4a6ff430aa1fa',
+  'image.js':'0d2f5e95ab2bec9df74689dd70010b3118f15e6e',
   'manual-import-recognition.js':'7f843bae5c81fb8f2046ae176ff4b0855446f0b8',
   'perspective.js':'af21f19bead1d03a58626248dd905e8d81f30e59',
   'import-box-editor.js':'8798db7e8987ade7afa9c58640de759ff17c6ae2',

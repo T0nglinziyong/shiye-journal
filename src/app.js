@@ -953,6 +953,8 @@ async function handle(action,id,value){try{switch(action){
         needsBoundaryReview:item.region?.needsBoundaryReview===true,
         alternative:item.region?.boundaryAlternative||null,
         perimeterPolicy:item.region?.perimeterPolicy||null,
+        shapeGuard:item.region?.shapeGuard||null,
+        postprocessDeletedInterior:item.region?.postprocessDeletedInterior??null,
         segmentationROIExtraMM:item.region?.segmentationROIExtraMM??null,
         maskPixels:item.region?.pixels??null,
         perimeterEvidence:item.region?.perimeterEvidence||null,
