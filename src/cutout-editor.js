@@ -429,7 +429,8 @@ export async function showCutoutEditor({
       await onApply(blob,{
         appearance,intensity,displayRotationDegrees:rotation,autoStraighten,
         recognitionRotationDegrees:processing.recognitionRotationDegrees||0,
-        sourcePixelWidth:w,sourcePixelHeight:h,candidateFramePlacement:processing.candidateFramePlacement||null,
+        sourcePixelWidth:w,sourcePixelHeight:h,recognitionPixels:editPixels,
+        candidateFramePlacement:processing.candidateFramePlacement||null,
         rerecognition:lastRecognition,autoPostprocess:lastPostprocess,manualBoundaryEdited:manualTouched
       },recognition,encodeAlphaMask(mask,w,h));
       modal.close();
