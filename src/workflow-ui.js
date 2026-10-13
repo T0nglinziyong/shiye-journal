@@ -16,6 +16,7 @@ import {applyCatalogPage,resetCatalogPage} from './catalog-pagination.js';
 import {prewarmVision} from './vision-runtime.js';
 
 const previewObservers=new WeakMap();
+export function refreshWorkPreviews(c){return mountWorkPreviews(c);}
 function mountWorkPreviews(c){
   previewObservers.get(c.view)?.disconnect();previewObservers.delete(c.view);
   const frames=[...c.view.querySelectorAll('.works-grid .thumb-sheet,.project-preview-cover .preview-paper')];
