@@ -1378,9 +1378,13 @@ async function openCutoutCheck(id,candidate=null){
     modal.close();
     await new Promise(resolve=>requestAnimationFrame(resolve));
   }
-  const editPixels=[900,1200,1600].includes(Number(state.preferences.recognitionPixels))
-    ?Number(state.preferences.recognitionPixels):900;
-  body.innerHTML='<section role="status" aria-live="polite" class="cutout-loading"><strong>正在准备抠图编辑器…</strong><p>正在加载候选框 RGB 与蒙版…</p><button type="button" class="btn" id="cutout-load-cancel">取消</button></section>';
+  // Bind the inspection scale to this material's original segmentation,
+  // rather than a global setting the user may have changed after import.
+  const importedPixels=(candidate?.processingRecord||a.processingRecord)?.recognitionPixels;
+  const wantedPixels=importedPixels||state.preferences.recognitionPixels;
+  const editPixels=[900,1200,1600].includes(Number(wantedPixels))
+    ?Number(wantedPixels):900;
+  body.innerHTML='<section role="status" aria-live="polite" class="cutout-loading"><strong>正在准备抠图编辑器…</strong><p>正在加载 '+editPixels+'px 候选框 RGB 与透明蒙版…</p><button type="button" class="btn" id="cutout-load-cancel">取消</button></section>';
   modal.classList.remove('cutout-dialog','material-editor-dialog');
   if(!modal.open)modal.showModal();
   let cancelled=false;
@@ -1581,7 +1585,10 @@ async function extractImportCandidate(source,box,region,{mode,widthMM,heightMM,c
   return {blob:aligned.blob,originalBlob:aligned.originalBlob,candidateFrameBlob:aligned.candidateFrameBlob||aligned.originalBlob,
     url:URL.createObjectURL(aligned.blob),title:'素材 '+(index+1),width,height,alignment:aligned.degrees,
     widthRatio:aligned.widthRatio,heightRatio:aligned.heightRatio,
-    processingRecord:{automaticCorrectionDegrees:aligned.degrees,sourceWidthMM:width,sourceHeightMM:height,candidateFramePlacement:aligned.candidateFramePlacement||null},region,selected:true};
+    processingRecord:{automaticCorrectionDegrees:aligned.degrees,sourceWidthMM:width,sourceHeightMM:height,
+      recognitionPixels:[900,1200,1600].includes(Number(state.preferences.recognitionPixels))
+        ?Number(state.preferences.recognitionPixels):900,
+      candidateFramePlacement:aligned.candidateFramePlacement||null},region,selected:true};
 }
 function importPrefetchSettings(rec){
   return {paperSize:rec.paperSize||state.preferences.paperSize,paperOrientation:rec.paperOrientation||state.preferences.orientation,
