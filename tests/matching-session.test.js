@@ -17,6 +17,7 @@ const memoryProjects=()=>{
   const projects=new Map(),writes=[];
   return {
     projects,writes,
+    stageProject:async record=>{writes.push(record.id);projects.set(record.id,structuredClone(record));},
     transaction:async(stores,fn)=>{
       assert.deepEqual(stores,['projects'],'operational matching state must never enter cloud meta');
       fn({objectStore:name=>({
@@ -120,7 +121,7 @@ test('variant drafts reuse drafts but never convert published editable work to d
 test('failed cloud import never produces a local matching variant',async()=>{
  const device=memoryDevice(),db=memoryProjects(),c=context({},device,db),session=createMatchingSession(c);
  await session.restore();
- db.transaction=async()=>{throw Error('cloud offline');};
+ db.stageProject=async()=>{throw Error('cloud offline');};
  await assert.rejects(session.importProject({...work,title:'do-not-stage',isDraft:true}),/cloud offline/);
  assert.deepEqual(c.state.projects,[]);
  assert.equal(device.writes.length,0);

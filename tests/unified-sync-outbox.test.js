@@ -38,7 +38,7 @@ test('invalid/duplicate previous queues are preserved in quarantine, never uploa
  assert.equal(output.quarantine.length,2);
  assert.equal(output.quarantine[0].reason,'duplicate-legacy-row');
  assert.equal(output.quarantine[1].reason,'invalid-legacy-row');
- assert.deepEqual(output.quarantine[0].row,imported);
+ assert.deepEqual(output.quarantine[0].row,imported[0]);
 });
 
 test('invalid stored blob references never auto-upload from historical imports',()=>{

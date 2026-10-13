@@ -138,9 +138,10 @@ test('selected detail starts while two tablet gallery reads are still occupied',
    loader.focus('selected');
    const sharp=loader.load('selected',960);
    assert.deepEqual(started[2],['selected',480],'the detail cover starts immediately in its reserved slot');
+   await until(()=>started.some(([id,pixels])=>id==='selected'&&pixels===960));
+   assert.equal(started[3][1],960,'sharp detail starts without waiting for its cover download');
    assert.ok(!started.some(([id])=>id==='old-list'));
    releases.get('selected:480')();
-   await until(()=>started.some(([id,pixels])=>id==='selected'&&pixels===960));
    assert.ok(!started.some(([id])=>id==='old-list'),'the old gallery request remains queued');
    for(const key of ['first:480','second:480','selected:960'])releases.get(key)();
    await until(()=>started.some(([id])=>id==='old-list'));
@@ -166,10 +167,9 @@ test('fast scrolling starts the new visible cover ahead of offscreen reads',asyn
    image('old-a',-900);image('old-b',-900);image('new-a',50);image('new-b',150);
    const a=loader.load('old-a'),b=loader.load('old-b');await until(()=>started.length===2);
    const near=loader.load('new-a'),next=loader.load('new-b');
-   await until(()=>started.includes('new-a'));
-   assert.deepEqual(started,['old-a','old-b','new-a']);
-   releases.get('new-a')();await near;
    await until(()=>started.includes('new-b'));
+   assert.deepEqual(started,['old-a','old-b','new-a','new-b']);
+   releases.get('new-a')();await near;
    for(const id of ['old-a','old-b','new-b'])releases.get(id)();
    await Promise.all([a,b,next]);
  }finally{for(const release of releases.values())release();loader.dispose();env.close();

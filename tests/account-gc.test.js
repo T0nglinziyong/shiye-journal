@@ -26,7 +26,7 @@ const env={SHIYE_COS_SECRET_ID:'test',SHIYE_COS_SECRET_KEY:'test',
 test('worker deletes only pre-reset COS generation, excluding current reset files',async()=>{
  const deleted=[],db=stubDb();
  const old=owner+'/'+hash,keep=owner+'/reset-'+resetId+'/'+hash;
- const worker=async()=>({getBucket:async()=>({Contents:[{Key:old},{Key:keep}],IsTruncated:false}),
+ const worker=()=>({getBucket:async()=>({Contents:[{Key:old},{Key:keep}],IsTruncated:false}),
    deleteMultipleObject:async params=>{deleted.push(...params.Objects.map(x=>x.Key));return {Error:[]};}});
  const result=await gcOneBatch({client:db.client,user:owner,record:db.get(),env,cosFactory:worker});
  assert.equal(result.phase,'cos');

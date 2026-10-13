@@ -158,9 +158,14 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
       // A newly opened detail may use one temporary slot while old gallery
       // downloads finish. A fast scroll can also leave every normal slot
       // occupied by offscreen covers; give the new visible row one slot.
-      const scrollBoost=!focused&&!focusedActive&&!scrollActive&&
-        distances.get(job.id)===0&&[...activeIDs.keys()].every(id=>(distances.get(id)??Infinity)>0);
-      if(active>=concurrency&&(!focused||focusedActive)&&!scrollBoost)break;
+      const visibleActive=[...activeIDs.keys()].filter(id=>distances.get(id)===0).length;
+      const staleActive=[...activeIDs.keys()].some(id=>(distances.get(id)??Infinity)>0);
+      // A new page may need several covers while old-page requests are still
+      // finishing. On a tablet, two visible covers can start immediately;
+      // the opened detail gets both its quick cover and sharp display image.
+      const scrollBoost=!focused&&!focusedActive&&scrollActive<2&&staleActive&&
+        visibleActive<2&&distances.get(job.id)===0;
+      if(active>=concurrency&&(!focused||focusedActive>=2)&&!scrollBoost)break;
       queue.shift();active++;activeIDs.set(job.id,(activeIDs.get(job.id)||0)+1);
       if(focused)focusedActive++;else if(active>concurrency)scrollActive++;
       const boosted=!focused&&active>concurrency;

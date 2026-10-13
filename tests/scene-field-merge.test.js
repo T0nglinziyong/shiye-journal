@@ -6,7 +6,7 @@ import {mergeEditableSceneProjects} from '../src/scene-field-merge.js';
 
 const date=i=>new Date(Date.UTC(2026,9,13,0,0,i)).toISOString();
 function scene(){
- const p=project('test');p.updatedAt=date(0);
+ const p=project('test');p.id='shared-work';p.drafts[0].id='shared-draft';p.activeDraftID='shared-draft';p.updatedAt=date(0);
  p.drafts[0].items.push({id:'a',assetID:'asset',x:20,y:40,width:150,height:180});
  p.drafts[0].textBlocks.push({id:'b',content:'old',x:60,y:70,width:120,height:50});
  return p;
@@ -22,21 +22,21 @@ test('independent layers from two devices merge',()=>{
  const l=change(scene(),d=>d.items[0].x=70,10);
  const r=change(scene(),d=>d.textBlocks[0].content='phone',20);
  const merged=mergeEditableSceneProjects(l,r);
- assert.equal(merged.drafts[0].items[0].x,70);
- assert.equal(merged.drafts[0].textBlocks[0].content,'phone');
+ assert.equal(merged.drafts[0].layers.find(n=>n.id==='a').x,70);
+ assert.equal(merged.drafts[0].layers.find(n=>n.id==='b').content,'phone');
 });
 test('same layer, different properties combine',()=>{
  const l=change(scene(),d=>d.items[0].rotation=33,10);
  const r=change(scene(),d=>d.items[0].x=90,20);
  const merged=mergeEditableSceneProjects(l,r);
- assert.equal(merged.drafts[0].items[0].rotation,33);
- assert.equal(merged.drafts[0].items[0].x,90);
+ assert.equal(merged.drafts[0].layers.find(n=>n.id==='a').rotation,33);
+ assert.equal(merged.drafts[0].layers.find(n=>n.id==='a').x,90);
 });
 test('same attribute uses last explicit edit',()=>{
  const early=change(scene(),d=>d.items[0].x=1,10);
  const late=change(scene(),d=>d.items[0].x=2,20);
- assert.equal(mergeEditableSceneProjects(early,late).drafts[0].items[0].x,2);
- assert.equal(mergeEditableSceneProjects(late,early).drafts[0].items[0].x,2);
+ assert.equal(mergeEditableSceneProjects(early,late).drafts[0].layers.find(n=>n.id==='a').x,2);
+ assert.equal(mergeEditableSceneProjects(late,early).drafts[0].layers.find(n=>n.id==='a').x,2);
 });
 test('completing the work saves a verified editable archive',()=>{
  const p=scene();
@@ -52,8 +52,8 @@ test('different newly added layers remain independently editable',()=>{
    id:'desktop',content:'mac',x:120,y:80,width:120,height:40}),20);
  const merged=mergeEditableSceneProjects(l,r);
  assert.ok(merged);
- assert.equal(merged.drafts[0].textBlocks.length,3);
- assert.deepEqual(new Set(merged.drafts[0].textBlocks.map(n=>n.id)),
+ assert.equal(merged.drafts[0].layers.filter(n=>n.type==='text').length,3);
+ assert.deepEqual(new Set(merged.drafts[0].layers.filter(n=>n.type==='text').map(n=>n.id)),
    new Set(['b','mobile','desktop']));
 });
 test('remote delete is not undone by a concurrent local position change',()=>{
@@ -61,5 +61,5 @@ test('remote delete is not undone by a concurrent local position change',()=>{
  const r=change(scene(),d=>{d.items.splice(0,1);},20);
  const merged=mergeEditableSceneProjects(l,r);
  assert.ok(merged);
- assert.equal(merged.drafts[0].items.length,0);
+ assert.equal(merged.drafts[0].layers.filter(n=>n.type==='material').length,0);
 });

@@ -204,11 +204,15 @@ let workDocumentPrewarmEpoch=0;
 function prewarmVisibleWorkDocuments(){
   const epoch=++workDocumentPrewarmEpoch;
   if(!cloudEnabled||navigator.connection?.saveData)return;
+  let waits=0;
   const ids=[...view.querySelectorAll('.works-grid [data-act="open-project"][data-id]')]
     .filter(card=>{const box=card.getBoundingClientRect();return box.width>0&&box.height>0&&box.top<innerHeight&&box.bottom>0;})
     .map(card=>card.dataset.id).slice(0,2);
   const warm=async()=>{
     if(epoch!==workDocumentPrewarmEpoch||state.route!=='works'||document.visibilityState==='hidden')return;
+    // Full project documents share the user's network with cover downloads.
+    // Keep that connection available until the visible covers have painted.
+    if(!visibleCoversReady()||privateImages.stats().pending){if(++waits<25)setTimeout(()=>void warm(),400);return;}
     for(const id of ids){
       if(epoch!==workDocumentPrewarmEpoch||state.route!=='works')return;
       const project=state.projects.find(row=>row.id===id);
@@ -222,30 +226,35 @@ function prewarmVisibleWorkDocuments(){
     else void warm();
   },650);
 }
+function visibleCoversReady(){
+  return [...view.querySelectorAll('img[data-asset-image-id]')].every(img=>{
+    const box=img.getBoundingClientRect();
+    return box.bottom<=0||box.top>=innerHeight||box.right<=0||box.left>=innerWidth||
+      img.complete&&img.naturalWidth>1&&!img.src.includes('#shiye-image=');
+  });
+}
 function prewarmOtherPages(){
   const epoch=++previewPrewarmEpoch;
-  if(!cloudEnabled||navigator.connection?.saveData)return;
-  // Warm only a small cross-route window, after visible images have had time
-  // to load. Use the same bounded loader queue and account-scoped cache;
-  // no hidden <img> nodes or eager DOM image decoding are created here.
-  const ids=[
-    ...state.assets.filter(a=>!a.staticPath).slice(0,8).map(a=>a.blobId),
-    ...state.projects.slice(0,4).map(p=>p.isSnapshot?p.snapshotBlobId:
-      (p.drafts?.find(d=>d.id===p.activeDraftID)||p.drafts?.[0])?.coverImageID)
-  ].filter(Boolean);
+  if(!cloudEnabled||navigator.connection?.saveData||state.route!=='library')return;
+  // Only the next two covers on this route are useful. Startup used to fetch
+  // eight arbitrary assets and four work covers before the visible page had
+  // finished, competing with the images the user was trying to see.
+  const ids=libraryPageData(state).nextItems.filter(a=>!a.staticPath).map(a=>a.blobId);
   let index=0;
+  let waits=0;
   const next=()=>{
-    if(epoch!==previewPrewarmEpoch||index>=ids.length||document.visibilityState!=='visible')return;
+    if(epoch!==previewPrewarmEpoch||state.route!=='library'||index>=ids.length||document.visibilityState!=='visible')return;
+    if(!visibleCoversReady()||privateImages.stats().pending){if(++waits<25)setTimeout(next,400);return;}
     const run=()=>{
-      if(epoch!==previewPrewarmEpoch||document.visibilityState!=='visible')return;
+      if(epoch!==previewPrewarmEpoch||state.route!=='library'||document.visibilityState!=='visible'||!visibleCoversReady())return;
       void privateImages.load(ids[index++],false,{background:true}).catch(()=>{}).finally(()=>{
         if(epoch===previewPrewarmEpoch)setTimeout(next,300);
       });
     };
-    if('requestIdleCallback' in window)requestIdleCallback(run,{timeout:3000});
+    if('requestIdleCallback' in window)requestIdleCallback(run);
     else setTimeout(run,250);
   };
-  setTimeout(next,1500);
+  setTimeout(next,700);
 }
 const renderLocalCoverBlob=project=>renderWorkCoverSnapshot(project,{
   resolveAsset:async id=>asset(id)||await db.get('assets',id),
@@ -526,6 +535,7 @@ function render(){
     view.workCoverDispose=workCoverBackfill.observe(view);
     prewarmVisibleWorkDocuments();
   }
+  if(state.route==='library')prewarmOtherPages();
   pageControllers.mount(state.route);
   if(state.route==='matching'&&
      matchingScrollMemory?.account===(state.accountId||'browser')){
@@ -584,6 +594,9 @@ function updateLibraryResults(){
   reconcileKeyedChildren(grid,desired,node=>node.classList.contains('action-card')?'import':node.dataset.id||null,{
     update:(current,next)=>current.dataset.cardRevision===next.dataset.cardRevision
   });
+  // Pagination inserts fresh cards after the initial bindPage pass. Without
+  // binding them, ordinary taps on a returned page silently do nothing.
+  bindPage({partial:true});
   grid.querySelector('.action-card').hidden=state.seriesID!=='all'||state.status!=='all'||state.kind!=='all'||!!state.query.trim();
   view.assetCardsChanged?.(page.total);
   if(!(parity.selectionMode&&parity.showOnlySelected))filters.querySelector('.library-count').textContent=page.total+' 项';
@@ -592,7 +605,7 @@ function updateLibraryResults(){
   const [input,previous,next]=controls.children;
   input.value=String(page.current);input.max=String(page.count);
   previous.disabled=page.current===1;next.disabled=page.current===page.count;
-  const change=value=>{setCatalogDataPage('library',value);updateLibraryResults();};
+  const change=value=>{setCatalogDataPage('library',value);updateLibraryResults();prewarmOtherPages();};
   input.onchange=()=>change(Number(input.value));previous.onclick=()=>change(page.current-1);next.onclick=()=>change(page.current+1);
   view.catalogRefresh=updateLibraryResults;
 }
@@ -2482,8 +2495,8 @@ document.querySelector('#top-basket').onclick=()=>route('matching');document.que
 async function init(user,{resetPending=false,afterAccountReset=false}={}){previewPrewarmEpoch++;let cachedShown=false;cloudSessionReady=!resetPending;if(resetPending)cloudResumer.suspend();const accountId=user?.id||'browser';if(state.accountId&&state.accountId!==accountId){matchingScrollMemory=null;Object.assign(lastMaterialLocation,{route:'series',seriesID:'all',libraryTab:'series'});parity.libraryTab='series';deferredSyncedPreferences=null;deferredSyncedAISettings=null;clearTimeout(matchingDefaultsTimer);matchingDefaultsTimer=null;matchingDefaultsPending=false;matchingDefaultsLocalEdited=false;cloudMatchingDefaults=null;assetOrganization.clear();clearJournalTemplateImages();clearJournalPresetImages();state.userTemplates=[];}state.accountId=accountId;try{
   await db.storageMode();state.selfHosted=db.isSameOriginServer();
   // startCloudSession has validated Auth and the allowlist before this runs.
-  const cached=await db.cachedCollections();if(cached){Object.assign(state,cached);state.accountId=accountId;await restorePendingProjects();for(const a of state.assets)if(a.staticPath)staticSources.set(a.blobId,a.staticPath);render();cachedShown=true;saveStatus('本机缓存 · 正在核对云端');if(!resetPending)prewarmOtherPages();}
-  const initialSync=await db.refreshCloud();if(initialSync?.changed)privateImages.invalidate(initialSync.allBlobs?undefined:initialSync.blobIDs);await refresh({background:cachedShown,skipCloudRefresh:true});if(!resetPending)prewarmOtherPages();if(!resetPending&&!afterAccountReset)void purgeExpiredTrash();await matchingSession.restore();if(cloudMatchingDefaults)applyMatchingDefaults(state,cloudMatchingDefaults);editableImportReady=true;void consumeEditableHandles();if('serviceWorker' in navigator&&location.protocol==='https:'){
+  const cached=await db.cachedCollections();if(cached){Object.assign(state,cached);state.accountId=accountId;await restorePendingProjects();for(const a of state.assets)if(a.staticPath)staticSources.set(a.blobId,a.staticPath);render();cachedShown=true;saveStatus('本机缓存 · 正在核对云端');}
+  const initialSync=await db.refreshCloud();if(initialSync?.changed)privateImages.invalidate(initialSync.allBlobs?undefined:initialSync.blobIDs);await refresh({background:cachedShown,skipCloudRefresh:true});if(!resetPending&&!afterAccountReset)void purgeExpiredTrash();await matchingSession.restore();if(cloudMatchingDefaults)applyMatchingDefaults(state,cloudMatchingDefaults);editableImportReady=true;void consumeEditableHandles();if('serviceWorker' in navigator&&location.protocol==='https:'){
     void import('./app-update.js').then(({registerSafeUpdate})=>registerSafeUpdate({
       flushLocal:flushSave,
       isBusy:()=>!!(state.importProcessing||state.aiBusy||savingProjects||dirtyProjects.size),

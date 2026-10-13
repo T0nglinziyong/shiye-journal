@@ -74,9 +74,9 @@ test('logout summary reads the shared account outbox without waiting for upload'
   const cache=memoryCache(),first=fixture(cache);let release;
   first.state.uploadGate=new Promise(resolve=>release=resolve);
   await first.db.cloudStageImport({assets:[{id:'a',blobId:'image'}],blobs:[{id:'image',data:new Blob(['bytes'])}],projects:[]});
-  assert.deepEqual(await first.db.cloudPendingLocalSummary(),{projects:0,imports:1});
+  assert.deepEqual(await first.db.cloudPendingLocalSummary(),{projects:0,imports:1,quarantined:0});
   const second=fixture(cache);
-  assert.deepEqual(await second.db.cloudPendingLocalSummary(),{projects:0,imports:1});
+  assert.deepEqual(await second.db.cloudPendingLocalSummary(),{projects:0,imports:1,quarantined:0});
   release();await first.db.cloudFlushProjects();
 });
 test('failed import uploads retain the entire batch; rejected auth/quota never creates a ghost import',async()=>{

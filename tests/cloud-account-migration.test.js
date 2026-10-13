@@ -32,11 +32,11 @@ test('migration rejects arbitrary writes against assets, meta or photos',async()
  await assert.rejects(db.cloudMigrationCommit({expectedRevision:3,changes:[{id:'secret',store:'meta',converted:{id:'secret'}}]}),/写入目标不安全/);
 });
 
-test('migration stops before writing when unsynced old scenes are quarantined locally',async()=>{
- const invalid={record:{id:'pending-old',drafts:[{id:'d',items:[],primitives:[],textBlocks:[],strokes:[]}]},serial:1,baseRevision:0};
- const cache={get:async(_account,key)=>key==='project-outbox'?[invalid]:[],put:async()=>{}};
+test('migration stops before writing when an overlapping old scene is quarantined locally',async()=>{
+ const invalid={record:{id:'project-old',drafts:[{id:'d',items:[],primitives:[],textBlocks:[],strokes:[]}]},serial:1,baseRevision:0};
+ const cache={get:async(_account,key)=>key==='unified-outbox'?undefined:key==='project-outbox'?[invalid]:[],put:async()=>{}};
  const {db,state}=server(cache),snapshot=await db.cloudMigrationInventory();
  const plan=await prepareStorageMigration(snapshot.collections);
- await assert.rejects(db.cloudMigrationCommit({expectedRevision:snapshot.revision,changes:plan.changes}),/隔离的旧版待同步数据/);
+ await assert.rejects(db.cloudMigrationCommit({expectedRevision:snapshot.revision,changes:plan.changes}),/待同步操作与拟转换资料重叠/);
  assert.equal(state.calls.length,0);
 });

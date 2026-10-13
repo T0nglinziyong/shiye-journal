@@ -28,5 +28,5 @@ export function libraryPageData(state){
     return state.sort==='oldest'?value:-value;
   });
   const range=catalogDataPage('library',items.length,state.preferences.maxPageItems);
-  return {items:items.slice(range.start,range.end),total:items.length,...range};
+  return {items:items.slice(range.start,range.end),nextItems:items.slice(range.end,range.end+2),total:items.length,...range};
 }

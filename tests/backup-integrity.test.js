@@ -13,7 +13,7 @@ test('legacy v1 archive is validated before restoring',async()=>{
 });
 test('missing source image fails before any database transaction',async()=>{
   const source=backup();source.stores.blobs=[];
-  await assert.rejects(validateBackupData(source),/缺少原图/);
+  await assert.rejects(validateBackupData(source),/缺少图片或蒙版/);
 });
 test('duplicate IDs are rejected without mutating data',async()=>{
   const source=backup();source.stores.assets.push({...source.stores.assets[0]});
