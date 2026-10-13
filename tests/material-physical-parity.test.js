@@ -132,3 +132,38 @@ test('slanted real contour exports same number of pixels as rasterized OpenCV ma
  assert.equal(alpha.reduce((n,v)=>n+(v>0),0),result.pixels);
  assert.ok(result.h>box.h*.90,'a rotated paper must not become a thin horizontal strip');
 });
+
+test('a concave Canny paper outline must not cut the word Life from the paper',async()=>{
+ const cv=await cvModule,p=blank(320,300);
+ const pixels=[[40,40],[60,40],[60,100],[140,100],[140,40],
+   [202,40],[202,256],[40,256]];
+ const contour=pixels.map(([x,y])=>[x/p.width,y/p.height]);
+ const paper={x:40/p.width,y:40/p.height,w:162/p.width,h:216/p.height,
+   physicalBoundary:contour,boundarySource:'edge-closed',
+   fillRatio:.86,boundaryPrior:.61};
+ const results=await processVision(cv,'process-material-boxes',{
+   ...p,boxes:[paper],method:'physical',
+   shapeRegularization:false,apertures:false});
+ assert.equal(results.length,1);
+ const r=results[0];
+ assert.equal(r.boundarySource,'supported-rect-envelope');
+ assert.ok(r.mask?.alpha?.length);
+ const px=Math.round(100-r.x*p.width),py=Math.round(60-r.y*p.height);
+ assert.ok(px>=0&&px<r.mask.width&&py>=0&&py<r.mask.height);
+ assert.ok(r.mask.alpha[py*r.mask.width+px]>=127,
+   'top of a printed word must not be deleted by a concave Canny indent');
+});
+
+test('paper safeguard is applied before old aperture restoration',async()=>{
+ const cv=await cvModule,p=blank(320,300);
+ const box={x:40/320,y:30/300,w:175/320,h:210/300,
+   physicalBoundary:[[40/320,30/300],[215/320,30/300],
+     [215/320,240/300],[40/320,240/300]],
+   fillRatio:.91,boundarySource:'edge-closed',boundaryPrior:.8};
+ const result=await processVision(cv,'process-material-boxes',{...p,
+   boxes:[box],method:'physical',shapeRegularization:true,apertures:false});
+ assert.equal(result.length,1);
+ assert.ok(result[0].mask?.alpha?.some(v=>v>127));
+ assert.ok(result[0].h>=box.h*.94);
+ assert.ok(result[0].w>=box.w*.94);
+});
