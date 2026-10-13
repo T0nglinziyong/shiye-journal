@@ -64,6 +64,7 @@ import {mountWorkflowControls,mountImportControls,refreshWorkPreviews} from './w
 import {patchImportInspection} from './import-incremental.js';
 import {patchMaterialCatalog,patchWorksCatalog} from './catalog-incremental.js';
 import {patchAISettingsModel} from './settings-incremental.js';
+import {syncBusyControls} from './ui-disabled-state.js';
 import {renderImportInspection,renderImportReview} from './import-workspace-ui.js';
 import {showCutoutEditor} from './cutout-editor.js';
 import {decodeImageBlob} from './image-blob-decoder.js';
@@ -795,17 +796,7 @@ function bindPage({partial=false}={}){view.querySelectorAll('[data-act]').forEac
   });
   const removeWhite=view.querySelector('#remove-white');if(removeWhite)removeWhite.onchange=()=>{state.importRemoveWhite=removeWhite.checked;};
   const page=view.querySelector('#canvas-page');if(page)initializeCanvasSurface(page);
-  bindInspector();if(state.route==='import'&&state.importStep==='inspect'){
-    // A retained control disabled only by recognition must become interactive
-    // again when recognition completes; preserve genuinely disabled buttons.
-    for(const el of view.querySelectorAll('.inspect-columns button,.inspect-columns input,.inspect-columns select')){
-      if(state.importProcessing){
-        if(!el.disabled){el.dataset.importProgressDisabled='true';el.disabled=true;}
-      }else if(el.dataset.importProgressDisabled==='true'){
-        el.disabled=false;delete el.dataset.importProgressDisabled;
-      }
-    }
-  }if(state.route==='import'&&state.importStep==='inspect'&&state.importFile&&!state.importProcessing&&!partial)view.paperCorrectionDispose=mountPaperCorrection({state,view,render,toast,saveActiveImportRecord});const offline=view.querySelector('#offline-state');if(offline)offline.textContent=navigator.serviceWorker?.controller?'离线程序已就绪':'首次打开时需要联网；请等待离线程序安装后再测试飞行模式';const locationLabel=view.querySelector('#storage-location');if(locationLabel)db.storageMode().then(mode=>{if(locationLabel.isConnected)locationLabel.textContent=cloudEnabled?(import.meta.env?.VITE_SHIYE_OBJECT_STORAGE==='cos'?'当前数据源：Supabase 登录与元数据 + 腾讯 COS 私有图片；本机仅保留账号隔离缓存与待同步修改':'当前数据源：Supabase 私有云端；本机仅保留账号隔离缓存与待同步修改'):mode==='server'?`当前唯一数据源：${db.storageConfig()?.url||location.origin}（服务器）`:'当前数据源：此浏览器 IndexedDB';}).catch(error=>{if(locationLabel.isConnected)locationLabel.textContent='服务器连接失败：'+error.message;});}
+  bindInspector();if(state.route==='import'&&state.importStep==='inspect')syncBusyControls(view,'.inspect-columns button,.inspect-columns input,.inspect-columns select',!!state.importProcessing);if(state.route==='import'&&state.importStep==='inspect'&&state.importFile&&!state.importProcessing&&!partial)view.paperCorrectionDispose=mountPaperCorrection({state,view,render,toast,saveActiveImportRecord});const offline=view.querySelector('#offline-state');if(offline)offline.textContent=navigator.serviceWorker?.controller?'离线程序已就绪':'首次打开时需要联网；请等待离线程序安装后再测试飞行模式';const locationLabel=view.querySelector('#storage-location');if(locationLabel)db.storageMode().then(mode=>{if(locationLabel.isConnected)locationLabel.textContent=cloudEnabled?(import.meta.env?.VITE_SHIYE_OBJECT_STORAGE==='cos'?'当前数据源：Supabase 登录与元数据 + 腾讯 COS 私有图片；本机仅保留账号隔离缓存与待同步修改':'当前数据源：Supabase 私有云端；本机仅保留账号隔离缓存与待同步修改'):mode==='server'?`当前唯一数据源：${db.storageConfig()?.url||location.origin}（服务器）`:'当前数据源：此浏览器 IndexedDB';}).catch(error=>{if(locationLabel.isConnected)locationLabel.textContent='服务器连接失败：'+error.message;});}
 function bindInspector(){const d=current(),e=d&&editorEntry(d).find(x=>x.value.id===state.selected);if(!d)return;
   const change=(id,fn)=>{const el=view.querySelector('#'+id);if(el)el.addEventListener('change',()=>{checkpoint();fn(el.value);saveProject();render();});};
   if(e){for(const [id,key] of [['inspector-width','width'],['inspector-height','height'],['inspector-rotation','rotation'],['inspector-z','zIndex'],['inspector-opacity','opacity'],['inspector-font-size','fontSize']].filter(([,key])=>e.kind!=='material'||!['width','height'].includes(key)))change(id,v=>{e.value[key]=Number(v);if(e.kind==='material')e.value.userOverrideFlags=[...new Set([...(e.value.userOverrideFlags||[]),key==='width'||key==='height'?'resized':key])];});change('inspector-text',v=>e.value.content=v);change('inspector-font',v=>e.value.style=v);}else{change('paper-color',v=>d.paperColor=v);change('paper-pattern',v=>d.paperPattern=v);change('page-ratio',v=>{if(presetPaperDimensions(v))setDraftPaperSize(d,v);});change('page-mode',v=>{d.pageMode=v;d.canvas=canvasSize(v,d.pageRatio);});}}
