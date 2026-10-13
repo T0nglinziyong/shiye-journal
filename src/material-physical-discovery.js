@@ -132,7 +132,39 @@ export function discoverPhysicalMaterialBoxes(cv,p,own){
      }finally{hull.delete();}
    });
  }
- // 3. Irregular exterior outline candidates, including people: never force
+ // 3. Elliptical paper stock. This was present in the Python experiment
+ // but missing from the first JavaScript port, causing the oval label to
+ // become a rectangular contour. Its real fitted outline is saved as points.
+ for(const [lo,hi] of [[50,150],[20,60],[10,30]]){
+   const joined=own(new cv.Mat()),
+     k=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(3,3)));
+   cv.morphologyEx(edges(lo,hi),joined,cv.MORPH_CLOSE,k);
+   contours(joined,cv.RETR_LIST,c=>{
+     if(c.rows<5)return;
+     const r=cv.boundingRect(c),area=Math.abs(cv.contourArea(c));
+     if(area<6000||Math.min(r.width,r.height)<85||
+       Math.max(r.width,r.height)>355)return;
+     const ellipse=cv.fitEllipse(c),major=Math.max(ellipse.size.width,ellipse.size.height),
+       minor=Math.max(1,Math.min(ellipse.size.width,ellipse.size.height)),
+       axis=major/minor,areaEllipse=Math.PI*ellipse.size.width*ellipse.size.height/4,
+       boxRatio=area/Math.max(1,r.width*r.height),
+       fidelity=area/Math.max(1,areaEllipse);
+     if(!(boxRatio>.60&&boxRatio<.82&&axis>1.25&&axis<2.7&&
+       fidelity>.87&&fidelity<1.13))return;
+     const theta=ellipse.angle*Math.PI/180,ct=Math.cos(theta),st=Math.sin(theta),
+       points=Array.from({length:64},(_,i)=>{
+         const u=2*Math.PI*i/64,a=ellipse.size.width*Math.cos(u)/2,
+           b=ellipse.size.height*Math.sin(u)/2;
+         return [clamp((ellipse.center.x+a*ct-b*st)/w,0,1),
+           clamp((ellipse.center.y+a*st+b*ct)/h,0,1)];
+       });
+     all.push({x:r.x/w,y:r.y/h,w:r.width/w,h:r.height/h,
+       instanceMethod:'physical-boundary',physicalBoundary:points,
+       boundarySource:'ellipse-fit',boundaryPrior:clamp(fidelity,0,1),
+       physicalShape:'ellipse',fillRatio:boxRatio,absorbedFragments:0});
+   });
+ }
+ // 4. Irregular exterior outline candidates, including people: never force
  // an irregular but reliable outline through MorphGAC solely due to class.
  for(const [lo,hi] of [[10,30],[12,36],[25,75]]){
    const joined=own(new cv.Mat()),k=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(5,5)));
@@ -176,6 +208,42 @@ export function discoverPhysicalMaterialBoxes(cv,p,own){
        if(Math.abs(y-yy)<Math.max(5,Math.abs(xx-x)*.06)&&Math.abs(xx-x)>75)
          horizontal.push({x0:Math.min(x,xx),x1:Math.max(x,xx),y:Math.round((y+yy)/2)});
      }
+     // A scalloped ticket often provides one vertical side and one
+     // fragmented lower edge, not a pair of parallel vertical sides.
+     const partialLines=new cv.Mat();
+     try{
+       cv.HoughLinesP(edges(12,36),partialLines,1,Math.PI/180,25,35,17);
+       const side=[],bottom=[];
+       for(let i=0;i<partialLines.rows;i++){
+         const [x,y,xx,yy]=Array.from(partialLines.data32S.slice(i*4,i*4+4));
+         const dx=Math.abs(xx-x),dy=Math.abs(yy-y);
+         if(dx<Math.max(5,dy*.10)&&dy>60)
+           side.push({x0:x,y0:Math.min(y,yy),x1:xx,y1:Math.max(y,yy)});
+         if(dy<Math.max(7,dx*.11)&&dx>100)
+           bottom.push({x0:Math.min(x,xx),x1:Math.max(x,xx),y:Math.round((y+yy)/2)});
+       }
+       for(const sideEdge of side.slice(0,45))for(const hEdge of bottom.slice(0,45)){
+         const sx=Math.min(sideEdge.x0,sideEdge.x1),
+           top=sideEdge.y0,low=sideEdge.y1;
+         if(Math.abs(hEdge.x0-sx)>=17||Math.abs(hEdge.y-low)>=9)continue;
+         const left=Math.max(0,sx-2),up=Math.max(0,top-2),
+           right=Math.min(w-5,hEdge.x1+5),down=Math.min(h-5,low+4),
+           ww=right-left,hh=down-up;
+         if(!(hh>55&&hh<210&&ww/hh>1.3&&ww/hh<3.9))continue;
+         const box={x:left/w,y:up/h,w:ww/w,h:hh/h};
+         if(unique.some(item=>overlapOf(box,item)>.20))continue;
+         let dark=0,samples=0;
+         for(let y=up;y<down;y+=3)for(let x=left;x<right;x+=3){
+           dark+=gray.data[y*w+x]<120;samples++;
+         }
+         if(dark/Math.max(1,samples)<.03)continue;
+         unique.push({...box,physicalBoundary:[
+           [left/w,up/h],[right/w,up/h],[right/w,down/h],[left/w,down/h]],
+           instanceMethod:'physical-boundary',physicalShape:'partial',
+           boundarySource:'partial-L-border',boundaryPrior:.30,
+           needsBoundaryReview:true,fillRatio:1,absorbedFragments:0});
+       }
+     }finally{partialLines.delete();}
      for(let i=0;i<Math.min(35,vertical.length);i++)for(let j=i+1;j<Math.min(35,vertical.length);j++){
        const a=vertical[i],b=vertical[j],left=Math.min(a.x,b.x),right=Math.max(a.x,b.x),
          top=Math.min(a.y0,b.y0),bottom=Math.max(a.y1,b.y1),ww=right-left,hh=bottom-top;
