@@ -3,7 +3,7 @@ import {onDialogClosed} from './dialog-lifecycle.js';
 
 const clamp=v=>Math.max(0,Math.min(1,v));
 export function showMaterialSplitEditor(c,item,{onBack}={}){
- const {body,modal,asset,imgTag,db,current,checkpoint,saveProject,render,toast}=c;
+ const {body,modal,asset,db,current,checkpoint,saveProject,render,toast}=c;
  const source=asset(item.assetID);if(!source)return;
  let mode='vertical',position=.5,points=[],from=null,to=null,dragging=false;
  body.innerHTML='<section class="material-split-editor">'+
@@ -32,7 +32,6 @@ export function showMaterialSplitEditor(c,item,{onBack}={}){
      sourceCrop.width*image.naturalWidth,sourceCrop.height*image.naturalHeight,0,0,w,h);
    confirm.disabled=false;
  };
- const imgHost=document.createElement('div');imgHost.innerHTML=imgTag(source);const img=imgHost.querySelector('img');
  let privateURL=null;
  const fitOverlay=()=>{
    const host=canvas.parentElement.getBoundingClientRect(),box=canvas.getBoundingClientRect();
@@ -48,8 +47,8 @@ export function showMaterialSplitEditor(c,item,{onBack}={}){
  Promise.resolve(db?.get('blobs',source.blobId)).then(row=>{
    if(row?.data instanceof Blob&&row.data.size>8){
      privateURL=URL.createObjectURL(row.data);image.src=privateURL;
-   }else if(img?.src)image.src=img.src;
-   else status.textContent='请等待源素材完成同步';
+   }else if(source.staticPath)image.src=source.staticPath;
+   else status.textContent='源素材原图尚未同步，无法进行分割';
  }).catch(error=>{status.textContent='素材图像未能读取：'+error.message;});
  const resized=new ResizeObserver(fitOverlay);resized.observe(canvas.parentElement);
  onDialogClosed(modal,()=>{
@@ -99,8 +98,9 @@ export function showMaterialSplitEditor(c,item,{onBack}={}){
      const draft=current(),spec=currentSpec();
      splitMaterialRegions(item,source,spec); // validate before mutation
      checkpoint();const copies=splitMaterialInDraft(draft,source,item.id,spec);
-     saveProject();modal.close();render();toast?.('已分割为两个独立裁片，可分别拖动；删除会转入备选');
      c.state.selected=copies[0].id;
+     saveProject();modal.close();render();void c.flushSave?.().catch(console.error);
+     toast?.('已分割为两个独立裁片，可分别拖动；删除会转入备选');
    }catch(error){status.textContent=error.message||'无法完成分割';}
  };
  modal.classList.add('material-split-dialog');

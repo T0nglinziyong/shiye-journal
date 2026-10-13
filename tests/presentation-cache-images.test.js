@@ -122,13 +122,13 @@ test('a low-tier cached preview is displayed until one correctly quantized highe
  }finally{releaseHigh?.();loader.dispose();env.close();}
 });
 
-test('selected detail cover jumps ahead of queued list requests without raising tablet concurrency',async()=>{
- const env=environment(),root=document.createElement('div'),started=[],releases=[];
+test('selected detail starts while two tablet gallery reads are still occupied',async()=>{
+ const env=environment(),root=document.createElement('div'),started=[],releases=new Map();
  document.body.append(root);
  const previous=Object.getOwnPropertyDescriptor(globalThis,'matchMedia');
  Object.defineProperty(globalThis,'matchMedia',{configurable:true,value:query=>({matches:query.includes('min-width: 700px')})});
  const loader=mountPrivateImages({root,urls:new Map(),onError:()=>{},db:{
-   previewBlob:(id,pixels)=>{started.push([id,pixels]);return new Promise(resolve=>releases.push(()=>resolve(new Blob([id]))));},
+   previewBlob:(id,pixels)=>{started.push([id,pixels]);return new Promise(resolve=>releases.set(id+':'+pixels,()=>resolve(new Blob([id]))));},
    get:async()=>null
  }});
  try{
@@ -137,19 +137,41 @@ test('selected detail cover jumps ahead of queued list requests without raising 
    const stale=loader.load('old-list');
    loader.focus('selected');
    const sharp=loader.load('selected',960);
-   assert.equal(started.length,2,'the tablet keeps its two-download limit');
-   releases.shift()();
-   await until(()=>started.length===3);
-   assert.deepEqual(started[2],['selected',480]);
-   releases.shift()();
-   await until(()=>started.length===4);
-   assert.deepEqual(started[3],['selected',960]);
-   releases.shift()();
-   await until(()=>started.length===5);
-   while(releases.length)releases.shift()();
+   assert.deepEqual(started[2],['selected',480],'the detail cover starts immediately in its reserved slot');
+   assert.ok(!started.some(([id])=>id==='old-list'));
+   releases.get('selected:480')();
+   await until(()=>started.some(([id,pixels])=>id==='selected'&&pixels===960));
+   assert.ok(!started.some(([id])=>id==='old-list'),'the old gallery request remains queued');
+   for(const key of ['first:480','second:480','selected:960'])releases.get(key)();
+   await until(()=>started.some(([id])=>id==='old-list'));
+   releases.get('old-list:480')();
    await Promise.all([a,b,stale,sharp]);
  }finally{
-   while(releases.length)releases.shift()();loader.dispose();env.close();
+   for(const release of releases.values())release();loader.dispose();env.close();
    if(previous)Object.defineProperty(globalThis,'matchMedia',previous);else delete globalThis.matchMedia;
  }
+});
+
+test('fast scrolling starts the new visible cover ahead of offscreen reads',async()=>{
+ const env=environment(),root=document.createElement('div'),started=[],releases=new Map();document.body.append(root);
+ const previous=Object.getOwnPropertyDescriptor(globalThis,'matchMedia');
+ Object.defineProperty(globalThis,'matchMedia',{configurable:true,value:query=>({matches:query.includes('min-width: 700px')})});
+ const image=(id,top)=>{const img=document.createElement('img');img.dataset.privateImageId=id;
+   img.getBoundingClientRect=()=>({top,bottom:top+100,left:0,right:100,width:100,height:100});root.append(img);};
+ const loader=mountPrivateImages({root,urls:new Map(),onError:()=>{},db:{
+   previewBlob:id=>{started.push(id);return new Promise(resolve=>releases.set(id,()=>resolve(new Blob([id]))));},
+   get:async()=>null
+ }});
+ try{
+   image('old-a',-900);image('old-b',-900);image('new-a',50);image('new-b',150);
+   const a=loader.load('old-a'),b=loader.load('old-b');await until(()=>started.length===2);
+   const near=loader.load('new-a'),next=loader.load('new-b');
+   await until(()=>started.includes('new-a'));
+   assert.deepEqual(started,['old-a','old-b','new-a']);
+   releases.get('new-a')();await near;
+   await until(()=>started.includes('new-b'));
+   for(const id of ['old-a','old-b','new-b'])releases.get(id)();
+   await Promise.all([a,b,next]);
+ }finally{for(const release of releases.values())release();loader.dispose();env.close();
+   if(previous)Object.defineProperty(globalThis,'matchMedia',previous);else delete globalThis.matchMedia;}
 });

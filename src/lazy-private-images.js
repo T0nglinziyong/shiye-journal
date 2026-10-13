@@ -4,8 +4,8 @@ const EMPTY='data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.
 const placeholder=id=>id?EMPTY+'#shiye-image='+encodeURIComponent(id):'';
 export const imagePlaceholder=id=>id?(cachedImageSource(id)||placeholder(id)):'';
 export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=console.warn,onEvent=()=>{}}){
-  const pending=new Map(),previews=new Map(),variants=new Map(),sizes=new Map(),previewSizes=new Map(),variantSizes=new Map(),retained=new Map(),queue=[],versions=new Map(),retryTimers=new Map(),retryCounts=new Map(),resizeTimers=new Map(),brokenPreviews=new Set(),observed=new WeakSet();
-  let active=0,generation=0,disposed=false,trimTimer=null,focusedID=null;
+  const pending=new Map(),previews=new Map(),variants=new Map(),sizes=new Map(),previewSizes=new Map(),variantSizes=new Map(),retained=new Map(),queue=[],versions=new Map(),retryTimers=new Map(),retryCounts=new Map(),resizeTimers=new Map(),brokenPreviews=new Set(),observed=new WeakSet(),activeIDs=new Map();
+  let active=0,focusedActive=0,scrollActive=0,generation=0,disposed=false,trimTimer=null,focusedID=null;
   const emit=event=>{try{onEvent(event);}catch{/* Diagnostics never block image loading. */}};
   // Network bound COS thumbnail reads; browser decoding remains lazy.
   const tablet=globalThis.matchMedia?.('(pointer: coarse) and (min-width: 700px)').matches;
@@ -41,7 +41,7 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
     // The creative canvas instead uses the rendered material rectangle:
     // different real-world sizes legitimately demand different pixel counts.
     const detail=!!img.closest('.detail-picture,.cutout-preview');
-    const rect=img.getBoundingClientRect();
+    const rect=(img.closest('#canvas-page .canvas-object.material')||img).getBoundingClientRect();
     const screenWidth=globalThis.innerWidth||globalThis.screen?.width||1440;
     const screenHeight=globalThis.innerHeight||globalThis.screen?.height||900;
     const pixels=detail
@@ -142,10 +142,10 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
     return distances;
   }
   function pump(){
-    if(disposed||active>=concurrency||!queue.length)return;
-    const distances=queue.length>1?viewportDistances():null;
-    while(!disposed&&active<concurrency&&queue.length){
-      if(distances&&queue.length>1){
+    if(disposed||!queue.length)return;
+    const distances=viewportDistances();
+    while(!disposed&&queue.length){
+      if(queue.length>1){
         const priority=job=>job.id===focusedID?-1:distances.get(job.id)??1e9;
         let best=0,rank=priority(queue[0]);
         for(let i=1;i<queue.length;i++){
@@ -154,8 +154,17 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
         }
         if(best)queue.unshift(queue.splice(best,1)[0]);
       }
-      const job=queue.shift();active++;
-      job.run().then(job.resolve,job.reject).finally(()=>{active--;pump();});
+      const job=queue[0],focused=job.id===focusedID;
+      // A newly opened detail may use one temporary slot while old gallery
+      // downloads finish. A fast scroll can also leave every normal slot
+      // occupied by offscreen covers; give the new visible row one slot.
+      const scrollBoost=!focused&&!focusedActive&&!scrollActive&&
+        distances.get(job.id)===0&&[...activeIDs.keys()].every(id=>(distances.get(id)??Infinity)>0);
+      if(active>=concurrency&&(!focused||focusedActive)&&!scrollBoost)break;
+      queue.shift();active++;activeIDs.set(job.id,(activeIDs.get(job.id)||0)+1);
+      if(focused)focusedActive++;else if(active>concurrency)scrollActive++;
+      const boosted=!focused&&active>concurrency;
+      job.run().then(job.resolve,job.reject).finally(()=>{active--;const count=activeIDs.get(job.id)||0;if(count<=1)activeIDs.delete(job.id);else activeIDs.set(job.id,count-1);if(focused)focusedActive--;if(boosted)scrollActive--;pump();});
     }
   }
 

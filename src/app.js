@@ -200,6 +200,28 @@ const privateImages=mountPrivateImages({root:document.body,db,urls,fullView:img=
   (state.route==='editor'&&!!img.closest('#canvas-page .canvas-object.material'))||
   (state.route==='assetDetail'&&!!img.closest('.detail-picture')),onEvent:recordImageLoading});
 let previewPrewarmEpoch=0;
+let workDocumentPrewarmEpoch=0;
+function prewarmVisibleWorkDocuments(){
+  const epoch=++workDocumentPrewarmEpoch;
+  if(!cloudEnabled||navigator.connection?.saveData)return;
+  const ids=[...view.querySelectorAll('.works-grid [data-act="open-project"][data-id]')]
+    .filter(card=>{const box=card.getBoundingClientRect();return box.width>0&&box.height>0&&box.top<innerHeight&&box.bottom>0;})
+    .map(card=>card.dataset.id).slice(0,2);
+  const warm=async()=>{
+    if(epoch!==workDocumentPrewarmEpoch||state.route!=='works'||document.visibilityState==='hidden')return;
+    for(const id of ids){
+      if(epoch!==workDocumentPrewarmEpoch||state.route!=='works')return;
+      const project=state.projects.find(row=>row.id===id);
+      if(project?.projectDocumentPath&&!project.isSnapshot)
+        await db.completeProject(project).catch(error=>console.warn('作品预读待重试',error?.message));
+    }
+  };
+  setTimeout(()=>{
+    if(epoch!==workDocumentPrewarmEpoch||state.route!=='works')return;
+    if('requestIdleCallback' in window)requestIdleCallback(()=>void warm(),{timeout:1500});
+    else void warm();
+  },650);
+}
 function prewarmOtherPages(){
   const epoch=++previewPrewarmEpoch;
   if(!cloudEnabled||navigator.connection?.saveData)return;
@@ -379,7 +401,7 @@ actionStore.publish('route/change',{scope:'route',keys:['route'],payload:{from:p
     matchingViewport?.top??(routeScroll.get(name+':'+state.seriesID)||0));
   // Do not interrupt an unfinished matching/import workspace with a remote
   // repaint. Pull all queued remote deletions immediately on returning to
-  // another page, instead of waiting for the next 15-second polling window.
+  // another page, instead of waiting for the next polling window.
   if(cloudEnabled&&!shouldPullCloudForRoute(priorRoute)&&shouldPullCloudForRoute(name))
     queueMicrotask(()=>backgroundCloudCheck({force:true}));
 }
@@ -502,6 +524,7 @@ function render(){
   mountParityControls();bindPage();mountWorkflowControls({state,view,body,modal,db,render,route,toast,imgTag,assetCard,esc,asset,refresh,download,modelImage,rasterize,backup,openSeriesEditor,openAssetEditor:openDetail,openCutoutCheck,switchImportRecord,saveActiveImportRecord,saveProject,flushSave,moveProjectsToTrash,assetOrganization,applyAssetClassification});view.catalogRefresh?.();if(state.route==='works'){
     view.localWorkCoverDispose=localWorkCovers.observe(view);
     view.workCoverDispose=workCoverBackfill.observe(view);
+    prewarmVisibleWorkDocuments();
   }
   pageControllers.mount(state.route);
   if(state.route==='matching'&&
@@ -607,7 +630,7 @@ function workCover(d,priority=false,snapshotOnly=false,projectID=null){
    const project=projectID?state.projects.find(p=>p.id===projectID)||
      state.trash.find(entry=>entry.kind==='project'&&entry.item.id===projectID)?.item:null;
    const source=project?localWorkCovers.peek(project):null;
-   return source?`<img class="work-reference" loading="${priority?'eager':'lazy'}" src="${esc(source)}" alt="本地完整作品封面">`:
+   return source?`<img class="work-reference" loading="${priority?'eager':'lazy'}" ${priority?'fetchpriority="high" ':''}decoding="async" src="${esc(source)}" alt="本地完整作品封面">`:
      (d.layers?.length?workCover(d,priority,false):workInkPreview(d)||'<span class="work-cover-pending" role="status">正在准备预览…</span>');
  }
  const position=(i,flip=false)=>`left:${(i.x-i.width/2)/d.canvas.width*100}%;top:${(i.y-i.height/2)/d.canvas.height*100}%;width:${i.width/d.canvas.width*100}%;height:${i.height/d.canvas.height*100}%;transform:rotate(${i.rotation||0}deg) ${flip&&i.isFlippedHorizontally?'scaleX(-1)':''};opacity:${i.opacity??1};z-index:${i.zIndex||0};`;
@@ -644,7 +667,7 @@ if(e.kind==='ink'){
   const d=current(),width=d.canvas.width,height=d.canvas.height;
   return '<svg class="canvas-object scene-ink-object" data-render-key="'+esc(i.id)+'" aria-hidden="true" viewBox="0 0 '+width+' '+height+'" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;z-index:'+(i.zIndex??2000)+';opacity:'+(i.opacity??1)+';mix-blend-mode:'+(i.blendMode==='multiply'?'multiply':'normal')+';pointer-events:none">'+inkScenePaths(i)+'</svg>';
 }
-const left=(i.x-i.width/2)*scale,top=(i.y-i.height/2)*scale;let inner='';let extra='';if(e.kind==='material'){const pixels=Math.ceil(Math.max(i.width,i.height)*scale*(devicePixelRatio||1)*Math.max(1,state.zoom||1));inner=imgTag(asset(i.assetID),false,pixels);extra=`opacity:${i.opacity};${materialMaskCSS(i)}${i.isFlippedHorizontally?'--flip:-1;':''}`;}else if(e.kind==='text'){inner=`<div data-text-content>${textParagraphMarkup(i,(i.paragraphSpacing||0)*scale+'px')}</div>`;extra=`${i.paragraphSpacing?'display:block;':''}opacity:${i.opacity??1};font-size:${i.fontSize*scale}px;line-height:${textLineHeight(i)*scale}px;letter-spacing:${(i.letterSpacing||0)*scale}px;font-style:${i.italic?'italic':'normal'};text-decoration:${[i.underline?'underline':'',i.strikethrough?'line-through':''].filter(Boolean).join(' ')||'none'};color:${esc(i.color)};text-align:${i.alignment||'left'};font-family:${esc(textFontFamily(i))};font-weight:${i.bold?'700':'400'};`; }else{extra=`background:${i.kind==='frame'||i.kind==='line'?'transparent':esc(i.fill||'transparent')};border-color:${esc(i.stroke||'transparent')};border-width:${Math.max(1,i.lineWidth*scale)}px;opacity:${i.opacity};`;}
+const left=(i.x-i.width/2)*scale,top=(i.y-i.height/2)*scale;let inner='';let extra='';if(e.kind==='material'){const crop=i.cropRect||{x:0,y:0,width:1,height:1};inner=`<span class="canvas-material-source" style="position:absolute;inset:0"><span style="position:absolute;display:block;max-width:none;width:${100/crop.width}%;height:${100/crop.height}%;left:${-crop.x/crop.width*100}%;top:${-crop.y/crop.height*100}%">${imgTag(asset(i.assetID))}</span></span>`;extra=`opacity:${i.opacity};${materialMaskCSS(i)}${i.isFlippedHorizontally?'--flip:-1;':''}`;}else if(e.kind==='text'){inner=`<div data-text-content>${textParagraphMarkup(i,(i.paragraphSpacing||0)*scale+'px')}</div>`;extra=`${i.paragraphSpacing?'display:block;':''}opacity:${i.opacity??1};font-size:${i.fontSize*scale}px;line-height:${textLineHeight(i)*scale}px;letter-spacing:${(i.letterSpacing||0)*scale}px;font-style:${i.italic?'italic':'normal'};text-decoration:${[i.underline?'underline':'',i.strikethrough?'line-through':''].filter(Boolean).join(' ')||'none'};color:${esc(i.color)};text-align:${i.alignment||'left'};font-family:${esc(textFontFamily(i))};font-weight:${i.bold?'700':'400'};`; }else{extra=`background:${i.kind==='frame'||i.kind==='line'?'transparent':esc(i.fill||'transparent')};border-color:${esc(i.stroke||'transparent')};border-width:${Math.max(1,i.lineWidth*scale)}px;opacity:${i.opacity};`;}
 if(e.kind==='shape'){inner=shapeTag(i);extra=`opacity:${i.opacity??1};`;}
 const layerStyle=sceneLayerStyle(i);if(layerStyle.blendMode==='multiply')extra+='mix-blend-mode:multiply;';
 if(layerStyle.mask){const encoded=encodeURIComponent(maskSVG(layerStyle.mask));extra+='-webkit-mask-image:url("data:image/svg+xml,'+encoded+'");mask-image:url("data:image/svg+xml,'+encoded+'");-webkit-mask-size:100% 100%;mask-size:100% 100%;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;';}
@@ -668,8 +691,8 @@ function pageInspector(d){return `<div class="stack"><label>纸张颜色<input i
 function importSourceButtons(){return `<div class="import-source-actions"><button class="btn primary" data-act="select-file" data-val="gallery">▣　从图库中选择</button><button class="btn" data-act="select-file" data-val="camera">▣　拍摄图片</button><button class="btn" data-act="select-file" data-val="files">▱　从文件中导入</button>${state.importMode==='work'?'<small>选择 .shiyeproject.zip 可编辑作品包或 JSON 备选文件会直接导入，不经过照片识别。</small>':''}</div>`;}
 function importSteps(){return `<div class="import-nav" aria-label="导入进度"><button class="import-back" data-act="import-back" aria-label="返回上一步" title="返回"></button><div class="import-nav-center"><div class="import-progress" aria-label="当前步骤">${[['inspect','检查照片'],['review','确认归类'],['done','完成']].map(([key,label],i)=>`<span class="${state.importStep===key?'current':(i<['inspect','review','done'].indexOf(state.importStep)?'passed':'')}"><b>${i<['inspect','review','done'].indexOf(state.importStep)?'✓':i+1}</b><span class="import-step-label">${label}</span></span>`).join('')}</div></div><button class="import-cancel" data-act="import-exit">${state.importStep==='done'?'完成':'取消导入'}</button></div>`;}
 function renderImport(){return renderImportHTML({state,esc,fmt,importSteps,importSourceButtons,renderImportReview,renderImportInspection});}
-function renderAssetDetail(){const a=asset(state.detailAssetID);if(!a)return renderLibrary();return `<div class="detail-page"><button class="detail-back" data-act="detail-back">‹　返回素材库</button><span class="detail-category">${esc(state.series.find(s=>s.id===a.seriesID)?.title||'所有系列')}</span><section class="detail-columns"><div class="detail-picture"><span>▣　透明素材预览</span>${imgTag(a)}</div><div class="detail-copy"><div class="eyebrow">A LITTLE PIECE OF EVERYDAY</div><button class="detail-heart" data-act="detail-favorite" aria-label="收藏">${a.isFavorite?'♥':'♡'}</button><h1>${esc(a.title)}</h1><div class="detail-facts"><div><small>真实尺寸</small><span>${fmt(a.physicalWidthMM||0)} × ${fmt(a.physicalHeightMM||0)} mm</span></div><div><small>可用库存</small><span>${a.supply?.quantity??1} 件</span></div><div><small>素材类型</small><span>${kindName(a.kind)}</span></div><div><small>主要作用</small><span>${a.role==='background'?'背景':a.role==='connector'?'连接':'陪衬'}</span></div><div><small>材质</small><span>${esc(a.texture||'待记录')}</span></div></div><div class="detail-tags">${[...(a.tags||[]),...(a.contentTags||[]),...(a.styleTags||[]),...(a.materialTags||[])].filter((tag,index,list)=>tag&&list.indexOf(tag)===index).sort((x,y)=>x.localeCompare(y,'zh-CN')).map(tag=>`<span>${esc(tag)}</span>`).join('')}</div><div class="detail-dots">● ● ● ●</div><hr><p>实物可用操作</p><p>✓ 整件使用　 ✓ 旋转摆放</p><button class="btn primary detail-add" data-act="detail-add">＋　加入本次创作</button><div class="detail-links"><button class="btn" data-act="detail-series"><span class="detail-link-label">同系列</span></button><button class="btn" data-act="detail-similar"><span class="detail-link-label">找相似</span></button><button class="btn" data-act="detail-match"><span class="detail-link-label">去搭配</span></button></div><div class="detail-small"><button data-act="detail-edit">✎　编辑素材信息</button><button data-act="detail-check">□　检查抠图</button></div></div></section></div>`;}
-function renderProjectPreview(){const p=state.projects.find(x=>x.id===state.previewProjectID);if(!p)return renderWorks();const d=p.drafts.find(x=>x.id===p.activeDraftID)||p.drafts[0];const original=p.coverStaticPath&&p.updatedAt===p.coverBaselineUpdatedAt;return `<div class="project-preview-page"><div class="project-preview-head"><h1>${esc(p.title)}</h1><button class="btn" data-act="preview-back">关闭</button></div><div class="project-preview-cover"><div class="preview-paper" style="background:${esc(d.paperColor||'#fff')};aspect-ratio:${d.canvas.width}/${d.canvas.height}">${p.isSnapshot?`<img class="work-reference" src="${image(p.snapshotBlobId)}" alt="${esc(p.title)} 快照">`:original?`<img class="work-reference" src="${p.coverStaticPath}" alt="${esc(p.title)} 完整预览">`:workCover(d,true,true,p.id)}</div></div><div class="project-preview-tags">${[...(p.styleTags||[]),...(p.tags||[])].filter((tag,index,list)=>tag&&list.indexOf(tag)===index).map(tag=>`<span>${esc(tag)}</span>`).join('')}</div><p>${p.isSnapshot?'独立保存的画面快照，不能逐层编辑。':'页面上的素材、排版和书写内容都已保存。'}</p><div class="project-preview-actions">${p.isSnapshot?'<button class="btn primary" data-act="download-snapshot">下载快照</button>':'<button class="btn primary" data-act="preview-continue">继续创作</button>'}<button class="btn" data-act="project-meta">作品信息与标签</button><button class="btn danger" data-act="project-delete">移到最近删除</button></div></div>`;}
+function renderAssetDetail(){const a=asset(state.detailAssetID);if(!a)return renderLibrary();return `<div class="detail-page"><button class="detail-back" data-act="detail-back">‹　返回素材库</button><span class="detail-category">${esc(state.series.find(s=>s.id===a.seriesID)?.title||'所有系列')}</span><section class="detail-columns"><div class="detail-picture"><span>▣　透明素材预览</span>${imgTag(a,true)}</div><div class="detail-copy"><div class="eyebrow">A LITTLE PIECE OF EVERYDAY</div><button class="detail-heart" data-act="detail-favorite" aria-label="收藏">${a.isFavorite?'♥':'♡'}</button><h1>${esc(a.title)}</h1><div class="detail-facts"><div><small>真实尺寸</small><span>${fmt(a.physicalWidthMM||0)} × ${fmt(a.physicalHeightMM||0)} mm</span></div><div><small>可用库存</small><span>${a.supply?.quantity??1} 件</span></div><div><small>素材类型</small><span>${kindName(a.kind)}</span></div><div><small>主要作用</small><span>${a.role==='background'?'背景':a.role==='connector'?'连接':'陪衬'}</span></div><div><small>材质</small><span>${esc(a.texture||'待记录')}</span></div></div><div class="detail-tags">${[...(a.tags||[]),...(a.contentTags||[]),...(a.styleTags||[]),...(a.materialTags||[])].filter((tag,index,list)=>tag&&list.indexOf(tag)===index).sort((x,y)=>x.localeCompare(y,'zh-CN')).map(tag=>`<span>${esc(tag)}</span>`).join('')}</div><div class="detail-dots">● ● ● ●</div><hr><p>实物可用操作</p><p>✓ 整件使用　 ✓ 旋转摆放</p><button class="btn primary detail-add" data-act="detail-add">＋　加入本次创作</button><div class="detail-links"><button class="btn" data-act="detail-series"><span class="detail-link-label">同系列</span></button><button class="btn" data-act="detail-similar"><span class="detail-link-label">找相似</span></button><button class="btn" data-act="detail-match"><span class="detail-link-label">去搭配</span></button></div><div class="detail-small"><button data-act="detail-edit">✎　编辑素材信息</button><button data-act="detail-check">□　检查抠图</button></div></div></section></div>`;}
+function renderProjectPreview(){const p=state.projects.find(x=>x.id===state.previewProjectID);if(!p)return renderWorks();const d=p.drafts.find(x=>x.id===p.activeDraftID)||p.drafts[0];const original=p.coverStaticPath&&p.updatedAt===p.coverBaselineUpdatedAt;return `<div class="project-preview-page"><div class="project-preview-head"><h1>${esc(p.title)}</h1><button class="btn" data-act="preview-back">关闭</button></div><div class="project-preview-cover"><div class="preview-paper" style="background:${esc(d.paperColor||'#fff')};aspect-ratio:${d.canvas.width}/${d.canvas.height}">${p.isSnapshot?`<img class="work-reference" loading="eager" fetchpriority="high" decoding="async" src="${image(p.snapshotBlobId)}" alt="${esc(p.title)} 快照">`:original?`<img class="work-reference" loading="eager" fetchpriority="high" decoding="async" src="${p.coverStaticPath}" alt="${esc(p.title)} 完整预览">`:workCover(d,true,true,p.id)}</div></div><div class="project-preview-tags">${[...(p.styleTags||[]),...(p.tags||[])].filter((tag,index,list)=>tag&&list.indexOf(tag)===index).map(tag=>`<span>${esc(tag)}</span>`).join('')}</div><p>${p.isSnapshot?'独立保存的画面快照，不能逐层编辑。':'页面上的素材、排版和书写内容都已保存。'}</p><div class="project-preview-actions">${p.isSnapshot?'<button class="btn primary" data-act="download-snapshot">下载快照</button>':'<button class="btn primary" data-act="preview-continue">继续创作</button>'}<button class="btn" data-act="project-meta">作品信息与标签</button><button class="btn danger" data-act="project-delete">移到最近删除</button></div></div>`;}
 let aiModelPanelOpen=false;
 // Reuse one compact card language for every settings category.
 function sectionSettings(html){
@@ -2256,13 +2279,14 @@ window.addEventListener('shiye-project-conflict-copy',event=>{
 });
 window.addEventListener('shiye-project-sync',event=>{const {pending,error,conflicts=0}=event.detail;syncDisplay.pending=pending;syncDisplay.error=error;syncDisplay.conflicts=conflicts;syncDisplay.checking=false;if(!dirtyProjects.size&&!savingProjects)syncDisplay.localPending=false;updateSyncIndicator();if(error){saveStatus('待同步 · 修改已保留在本机');const message=error.name==='AbortError'||/abort|timed? ?out/i.test(error.message||'')?'网络请求中断，本机修改已保留，将自动重试同步':describeSyncError(error);if(lastSyncError!==message)toast(message);lastSyncError=message;}else{lastSyncError=null;saveStatus(conflicts?'部分资料有冲突 · 其他资料已继续同步':pending?'修改已暂存 · 后台同步中':'已保存到云端');privateImages.retryMissing();}});
 let cloudCheck,cloudCheckAt=0,cloudSessionReady=false,cloudCheckAgain=false;
+const CLOUD_POLL_MS=5000;
 let syncPausedByUser=false,resetWorkflowActive=false;
 const cloudResumer=createSyncResumer({flush:()=>db.flushProjects({background:true}),canRun:()=>cloudEnabled&&cloudSessionReady&&navigator.onLine!==false,onError:error=>console.warn('后台同步待重试',error?.message)});
 function backgroundCloudCheck({force=false}={}){
   if(!cloudEnabled||!shouldPullCloudForRoute(state.route)||
      document.visibilityState==='hidden')return;
   if(cloudCheck){if(force)cloudCheckAgain=true;return;}
-  if(!force&&Date.now()-cloudCheckAt<15000)return;
+  if(!force&&Date.now()-cloudCheckAt<CLOUD_POLL_MS)return;
   cloudCheckAt=Date.now();
   cloudCheck=refresh({background:true,onlyChanged:true})
     .catch(error=>{recordRuntimeIssue('handled',error,state.route,{phase:'background'});console.warn('后台版本检查失败；保留已验证缓存',error);})
@@ -2276,9 +2300,9 @@ function backgroundCloudCheck({force=false}={}){
 }
 // Cloud sync is bidirectional: poll lightweight version metadata while the
 // document remains visible, not only when focus/online events happen.
-setInterval(backgroundCloudCheck,15000);
+setInterval(backgroundCloudCheck,CLOUD_POLL_MS);
 window.addEventListener('focus',()=>{backgroundCloudCheck();privateImages.retryMissing();void cloudResumer.wake();});
-document.addEventListener('visibilitychange',()=>{backgroundCloudCheck();if(document.visibilityState==='hidden'){view.flushInkCommit?.({renderUI:false,force:true});snapshotEditedScene('app-background');}if(document.visibilityState==='visible'){privateImages.retryMissing();void cloudResumer.wake();}});
+document.addEventListener('visibilitychange',()=>{backgroundCloudCheck();if(document.visibilityState==='hidden'){view.flushInkCommit?.({renderUI:false,force:true});snapshotEditedScene('app-background');if(dirtyProjects.size||dirtyUsageAssets.size)void flushSave().catch(console.error);}if(document.visibilityState==='visible'){privateImages.retryMissing();void cloudResumer.wake();}});
 window.addEventListener('online',()=>{backgroundCloudCheck();privateImages.retryMissing();void cloudResumer.wake();});
 window.addEventListener('offline',updateSyncIndicator);
 window.addEventListener('online',updateSyncIndicator);
@@ -2473,4 +2497,3 @@ mountIcons(document);
 const matchingSession=createMatchingSession({state,db,uid,esc,asset,modelImage,rasterize,workCover:p=>{const d=p.drafts.find(d=>d.id===p.activeDraftID)||p.drafts[0];return `<div class="thumb-sheet" style="--thumb-ratio:${d.canvas.width/d.canvas.height};background:${esc(d.paperColor||'#fff')}"><div class="thumb-inner" style="position:relative">${p.isSnapshot?`<img src="${image(p.snapshotBlobId)}" alt="${esc(p.title)} 快照">`:workCover(d,false,true,p.id)}</div></div>`;},createProject:()=>createMatchingProject(),saveSnapshotFromDraft:saveProjectSnapshot,saveGeneratedImageSnapshot,generatePageImage,runCreativeAgent,createAIRecorder,supportsVision,flushSave,route,handle,mountIcons,toast});
 startCloudSession(init).catch(error=>{recordRuntimeIssue('handled',error,state.route,{phase:'auth'});document.querySelector('#app').hidden=true;const p=document.createElement('p');p.textContent='无法连接认证服务，请稍后刷新。未打开私人资料。';document.body.append(p);console.warn(error.name);});
 import {createMatchingSession} from './matching-session.js';
-

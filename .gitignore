@@ -12,6 +12,7 @@ __pycache__/
 *.shiyepwa
 *.shiyebackup
 实时数据/
+test-data/private-recognition/
 ShiyeJournalFresh.swiftpm/
 auth.json
 credentials.json

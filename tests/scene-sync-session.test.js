@@ -36,7 +36,7 @@ test('first and second saves of a new Scene v2 project share an acknowledged bas
  assert.deepEqual(state.calls.map(c=>c.expected_revision),[0,1]);
  assert.deepEqual(await db.cloudPendingProjects(),[]);
 });
-test('a real remote same-work edit is preserved; local scene uploads as a different conflict copy',async()=>{
+test('a real remote same-work edit preserves both variants and leaves the local upload pending',async()=>{
  const cache=memoryCache(),{state,db}=fixture(cache);
  const saved=mkProject('diary','服务器原稿');state.revision=1;state.rows=[saved];
  const opened=(await db.cloudAll('projects'))[0];
@@ -45,10 +45,12 @@ test('a real remote same-work edit is preserved; local scene uploads as a differ
  await db.cloudRefresh();
  await db.cloudStageProject({...opened,title:'本地编辑'});
  await db.cloudFlushProjects();
- const ops=state.calls[0].operations;
- assert.equal(ops.length,1);assert.equal(ops[0].store,'projects');
- assert.notEqual(ops[0].item.id,'diary');
- assert.match(ops[0].item.title,/冲突保留/);
- assert.equal(ops[0].item.drafts[0].sceneVersion,2);
- assert.deepEqual(await db.cloudPendingProjects(),[]);
+ assert.equal(state.calls.length,0,'an undated local edit cannot overwrite the newer cloud revision');
+ const retained=await db.cloudListPreConflictScenes();
+ assert.equal(retained.length,1);
+ const pair=await cache.get('cloud:owner-uuid',retained[0].key);
+ assert.equal(pair.local.title,'本地编辑');
+ assert.equal(pair.remote.title,'另一台设备已经修改');
+ assert.equal(pair.local.drafts[0].sceneVersion,2);
+ assert.equal((await db.cloudPendingProjects()).length,1,'the local edit remains recoverable until the user resolves the conflict');
 });

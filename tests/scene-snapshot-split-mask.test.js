@@ -27,7 +27,7 @@ test('horizontal and vertical splits create two disjoint physical parts of one u
   assert.ok(children.every(x=>x.width>0&&x.height>0&&x.splitParentId==='piece-root'));
   const ledger=buildMaterialLedger(d,[asset]);
   assert.equal(ledger.units.length,1);
-  assert.equal(ledger.units[0].pieces.length,2);
+  assert.equal(ledger.units[0].allocations.length,2);
   assert.ok(Math.abs(ledger.units[0].usedAreaMM2-8000)<1e-5);
  }
 });
@@ -35,7 +35,7 @@ test('line split can carve two independently positioned pieces',()=>{
  const p=scene(),d=p.drafts[0];
  const pieces=splitMaterialInDraft(d,asset,piece.id,{mode:'line',from:[0,0],to:[1,1]});
  assert.equal(pieces.length,2);assert.notEqual(pieces[0].x,pieces[1].x);
- assert.ok(buildMaterialLedger(d,[asset]).units[0].pieces.length===2);
+ assert.ok(buildMaterialLedger(d,[asset]).units[0].allocations.length===2);
 });
 test('a simple inner lasso extracts the enclosed piece and leaves a physical frame',()=>{
  const p=scene(),d=p.drafts[0];
