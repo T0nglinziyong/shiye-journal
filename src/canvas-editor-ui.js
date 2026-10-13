@@ -1,3 +1,4 @@
+import {mountLiveInkStroke} from './ink-live-svg.js';
 import {configureInkBacking} from './ink-raster-scale.js';
 import {ensureInkSlots,inkSlot,activeInkSlot,selectInkSlot,editInkSlot} from './ink-tool-slots.js';
 import {openPopover,closePopover} from './swift-popover.js';
@@ -599,6 +600,19 @@ export function mountCanvasEditor(c){
   // in immutable logical Scene coordinates and never grow with screen DPI.
   configureInkBacking(ink,d.canvas.width,d.canvas.height);
   const clearInk=()=>ctx.clearRect(0,0,d.canvas.width,d.canvas.height);
+  let inkCommitTimer=null,inkNeedsCommit=false;
+  const flushInkCommit=({renderUI=true,force=false}={})=>{
+    if(!inkNeedsCommit)return;
+    if(!force&&(stroke||erase)){scheduleInkCommit();return;}
+    clearTimeout(inkCommitTimer);inkCommitTimer=null;inkNeedsCommit=false;
+    saveProject();
+    if(renderUI&&!stroke&&!erase&&state.route==='editor')render();
+  };
+  const scheduleInkCommit=()=>{
+    inkNeedsCommit=true;clearTimeout(inkCommitTimer);
+    inkCommitTimer=setTimeout(()=>flushInkCommit(),110);
+  };
+  view.flushInkCommit=flushInkCommit;
   const cursor=document.createElement('div');cursor.className='canvas-eraser-cursor';cursor.setAttribute('aria-hidden','true');cursor.hidden=true;page.append(cursor);
   const point=e=>{const r=ink.getBoundingClientRect();return {x:(e.clientX-r.left)/Math.max(1,r.width)*d.canvas.width,y:(e.clientY-r.top)/Math.max(1,r.height)*d.canvas.height,p:e.pressure>0?e.pressure:.5};};
   const showEraser=e=>{
@@ -699,8 +713,12 @@ export function mountCanvasEditor(c){
       if(frame!==null){cancelAnimationFrame(frame);frame=null;}paint();
       checkpoint();
       const {id,...line}=stroke;line.id=uid();
-      d.strokes.push(state.tool==='highlighter'&&prefs.markerStraight?straightStroke(line):line);
-      stroke=null;painted=1;saveProject();render();schedule();
+      const finished=state.tool==='highlighter'&&prefs.markerStraight?straightStroke(line):line;
+      d.strokes.push(finished);
+      // Publish one vector node immediately; expensive Scene reconciliation
+      // and disk staging are coalesced after a short pen-idle interval.
+      mountLiveInkStroke(page,d,finished);
+      stroke=null;painted=0;clearInk();scheduleInkCommit();
     }else if(erase?.id===e.pointerId){
       addEraserSamples(e);if(frame!==null){cancelAnimationFrame(frame);frame=null;}paint();
       erase=null;lastEraserPoint=null;cursor.hidden=true;
@@ -745,6 +763,8 @@ export function mountCanvasEditor(c){
   document.addEventListener('keydown',deleteSelected);
   const disposeViewport=view.editorDispose;
   view.editorDispose=()=>{
+    flushInkCommit({renderUI:false,force:true});
+    clearTimeout(inkCommitTimer);view.flushInkCommit=null;
     inkResizeObserver?.disconnect();
     page.removeEventListener('panzoomchange',scheduleBacking);
     ink.removeEventListener('pointerrawupdate',rawInkMove);
