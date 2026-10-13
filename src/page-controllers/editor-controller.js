@@ -1,4 +1,4 @@
-export function createEditorController({renderHTML,patchScene,createEditor,actions,render}){
+export function createEditorController({renderHTML,patchScene,createEditor,actions,render,view}){
   return {
     render:renderHTML,
     patch:patchScene,
@@ -9,6 +9,11 @@ export function createEditorController({renderHTML,patchScene,createEditor,actio
       // Existing Scene/Canvas pointer, undo and resize lifetimes stay owned by
       // the editor's established editorDispose hook; host calls it on teardown.
       createEditor();
+      const dispose=view.editorDispose;
+      lifetime.use(()=>{
+        dispose?.();
+        if(view.editorDispose===dispose)view.editorDispose=null;
+      });
     }
   };
 }
