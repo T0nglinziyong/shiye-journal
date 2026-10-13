@@ -1,4 +1,5 @@
 import {boxIoU,overlapOf,overlapOfSmaller,containsCenter,dedupePhysicalCandidates,mergeAlignedCarrierPieces} from './material-physical-candidates.js';
+import {splitLabCarrierComponents} from './material-chroma-carrier-split.js';
 // Physical-carrier-first discovery. Only the box/mask engine changes: paper
 // warp, 9 mm filtering, aperture restoration, original RGB and storage remain
 // owned by existing modules. No crop-specific or case-specific coordinates.
@@ -124,6 +125,15 @@ export function discoverPhysicalMaterialBoxes(cv,p,own){
      const r=cv.boundingRect(c),area=Math.abs(cv.contourArea(c));
      if(!valid(r,area,{minPixels:5000,minWidth:70,minHeight:65,frameMargin:18})
        ||area/Math.max(1,r.width*r.height)<.23)return;
+     // A 25px morphological close can join two genuinely separate bright
+     // stickers into one convex blob. Inspect the ORIGINAL threshold bitmap
+     // before closing; only split two well-separated, individually large
+     // components. Many tiny checker/text fragments remain a single paper.
+     if(splitLabCarrierComponents(cv,bin,r,pxPerMM,(island,islandArea)=>{
+       add(island,'lab-carrier',
+         islandArea/Math.max(1,r.width*r.height),'carrier',
+         {minPixels:5000,minWidth:70,minHeight:65,frameMargin:18});
+     }))return;
      const hull=new cv.Mat();
      try{
        cv.convexHull(c,hull,false,true);
