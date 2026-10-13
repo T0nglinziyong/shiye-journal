@@ -538,10 +538,33 @@ export function mountCanvasEditor(c){
     view.endTextEditing=()=>{if(!typing)return;const session=typing;typing=null;state.editingTextID=null;session.item.content=session.input.value;session.input.onblur=null;session.input.blur();const node=session.input.closest('[data-object]');node?.classList.remove('typing');node?.replaceChildren(document.createTextNode(session.item.content));if(!session.item.content.trim()){d.textBlocks=d.textBlocks.filter(t=>t.id!==session.item.id);state.selected=null;}if(state.undo.at(-1)===session.undoMark&&(session.isNew&&!session.item.content.trim()||!session.isNew&&JSON.stringify(session.item)===session.before))state.undo.pop();saveProject();render();};
     input.focus({preventScroll:true});input.setSelectionRange(input.value.length,input.value.length);view.editorViewport?.ensureVisible();
   }
-  function refresh(){view.selectionGeometryObserver?.disconnect();entries=allEntries(d);selected=entries.find(e=>e.value.id===state.selected);page.querySelectorAll('.object-handle,.selected-object-actions,.selected-object-overlay').forEach(n=>n.remove());page.querySelectorAll('.with-selection-handles').forEach(n=>n.classList.remove('with-selection-handles'));
-    for(const node of page.querySelectorAll('[data-object]'))node.ondblclick=e=>{e.stopPropagation();const entry=entries.find(e=>e.value.id===node.dataset.object);if(entry?.value.isLocked||entry?.value.locked)return;state.selected=node.dataset.object;if(entry.kind==='text')beginInlineText(entry);else objectInspector(entry);};
-    if(!typing)selectedHandles();syncTools();contextTools();view.editorViewport?.sync();
-    actions.querySelector('[data-act="undo"]').disabled=!state.undo.length;actions.querySelector('[data-act="redo"]').disabled=!state.redo.length;
+  let previousSelectionGeometry=null,previousSelectionObject=null;
+  function refresh(){
+    entries=allEntries(d);selected=entries.find(e=>e.value.id===state.selected);
+    const object=selected?.value,
+      geometry=JSON.stringify([state.selected,state.multiSelected,state.selectedStrokes,
+        object?.x,object?.y,object?.width,object?.height,object?.rotation,
+        object?.locked,object?.isLocked]),
+      wantsOverlay=!!object&&!object.locked&&!object.isLocked&&
+        (state.multiSelected?.length||0)<=1,
+      hasOverlay=!!page.querySelector('.selected-object-overlay');
+    if(geometry!==previousSelectionGeometry||
+       object!==previousSelectionObject||wantsOverlay!==hasOverlay){
+      view.selectionGeometryObserver?.disconnect();
+      page.querySelectorAll('.object-handle,.selected-object-actions,.selected-object-overlay').forEach(n=>n.remove());
+      page.querySelectorAll('.with-selection-handles').forEach(n=>n.classList.remove('with-selection-handles'));
+      if(!typing)selectedHandles();
+      previousSelectionGeometry=geometry;previousSelectionObject=object;
+    }
+    // A reused node's handler reads the latest entry array, even after Undo.
+    for(const node of page.querySelectorAll('[data-object]')){
+      if(node.dataset.objectDoubleClickBound==='true')continue;
+      node.dataset.objectDoubleClickBound='true';
+      node.ondblclick=e=>{e.stopPropagation();const entry=entries.find(e=>e.value.id===node.dataset.object);if(entry?.value.isLocked||entry?.value.locked)return;state.selected=node.dataset.object;if(entry.kind==='text')beginInlineText(entry);else objectInspector(entry);};
+    }
+    syncTools();contextTools();view.editorViewport?.sync();
+    actions.querySelector('[data-act="undo"]').disabled=!state.undo.length;
+    actions.querySelector('[data-act="redo"]').disabled=!state.redo.length;
   }
   view.editorRefresh=refresh;
   page.ondblclick=e=>{if(state.tool!=='select'||performance.now()<(view.navigationSuppressedUntil||0)||e.target.closest('button,.canvas-inline-text'))return;const entry=entries.find(x=>x.value.id===(e.target.closest('[data-object]')?.dataset.object||state.selected));if(!entry||entry.value.locked||entry.value.isLocked)return;if(entry.kind==='text')beginInlineText(entry);else objectInspector(entry);};
