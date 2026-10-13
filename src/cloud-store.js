@@ -431,9 +431,16 @@ async function cloudAll(store){
   // Do not cache a mixed-revision library when another device edits mid-read.
   for(let attempt=0;attempt<3;attempt++){
     const readRevision=revision,rows=[];
-    for(let offset=0;;offset+=500){
-      const page=checked(await cloudClient().from('shiye_records').select('record').eq('user_id',owner).eq('store',store).order('id').range(offset,offset+499));
-      rows.push(...page);if(page.length<500)break;
+    const pageAt=async offset=>checked(await cloudClient().from('shiye_records').select('record').eq('user_id',owner).eq('store',store).order('id').range(offset,offset+499));
+    const first=await pageAt(0);rows.push(...first);
+    // Most collections fit on one page. For larger ones, overlap only two
+    // independent page reads, then verify the global revision below.
+    if(first.length===500)for(let offset=500;;offset+=1000){
+      const pages=await Promise.all([pageAt(offset),pageAt(offset+500)]);
+      rows.push(...pages[0]);
+      if(pages[0].length<500)break;
+      rows.push(...pages[1]);
+      if(pages[1].length<500)break;
     }
     const verified=Number(checked(await cloudClient().from('shiye_revisions').select('revision').eq('user_id',owner).single()).revision);
     if(verified!==readRevision){revision=verified;continue;}
@@ -728,11 +735,9 @@ async function cloudCachedCollections(){await identity();const stores=['assets',
 async function cloudRefresh(){
   await queue;
   const before=revision,current=await version();
-  for(const store of ['assets','series','projects','trash','meta','blobs'])
-    if(!snapshots.has(store)){
-      const saved=await cached('records:'+store);
-      if(saved)snapshots.set(store,saved);
-    }
+  const missing=['assets','series','projects','trash','meta','blobs'].filter(store=>!snapshots.has(store));
+  const cachedRows=await Promise.all(missing.map(store=>cached('records:'+store)));
+  missing.forEach((store,index)=>{if(cachedRows[index])snapshots.set(store,cachedRows[index]);});
   // Reconciliation may already have read the latest global revision.
   // Download decisions MUST also compare the cached collection revisions:
   // otherwise a remote-won edit stays invisible until another change occurs.
@@ -741,7 +746,9 @@ async function cloudRefresh(){
   if(!changed)return {revision:current,changed:false};
   const deltaBefore=snapshots.get('projects')?.revision??snapshots.get('assets')?.revision??before;
   const delta=await readCloudDelta({client:cloudClient(),owner,before:deltaBefore,after:current,snapshots});
-  if(delta){blobRevisionProof.accept(deltaBefore,current,delta);for(const [store,snapshot] of delta.snapshots){snapshots.set(store,snapshot);await remember('records:'+store,snapshot);}return {revision:current,changed:true,incremental:true,blobIDs:delta.blobIDs,allBlobs:delta.allBlobs};}
+  if(delta){blobRevisionProof.accept(deltaBefore,current,delta);for(const [store,snapshot] of delta.snapshots)snapshots.set(store,snapshot);
+    await Promise.all([...delta.snapshots].map(([store,snapshot])=>remember('records:'+store,snapshot)));
+    return {revision:current,changed:true,incremental:true,blobIDs:delta.blobIDs,allBlobs:delta.allBlobs};}
   blobRevisionProof.clear();blobRecords.clear();
   return {revision:current,changed:true,incremental:false,allBlobs:true};
 }

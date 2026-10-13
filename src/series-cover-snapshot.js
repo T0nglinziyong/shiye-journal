@@ -13,9 +13,11 @@ export function seriesCoverSignature(series,assets){
 }
 function showSnapshot(cover,url,priority){
   if(!cover.isConnected)return;
-  const img=document.createElement('img');img.className='series-cover-snapshot';img.src=url;
-  img.alt='';img.loading=priority?'eager':'lazy';img.decoding='async';
-  cover.replaceChildren(img);
+  // React owns the individual cover images. Keep them mounted and place the
+  // generated snapshot over them so a subsequent React render can reconcile.
+  let img=cover.querySelector('.series-cover-snapshot');
+  if(!img){img=document.createElement('img');img.className='series-cover-snapshot';img.alt='';img.decoding='async';cover.append(img);}
+  img.src=url;img.loading=priority?'eager':'lazy';
 }
 export function waitForCoverImage(img){
   const ready=()=>img.isConnected&&!img.src.includes('#shiye-image=')&&img.complete&&img.naturalWidth>1;

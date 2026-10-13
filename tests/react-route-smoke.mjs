@@ -50,5 +50,10 @@ await waitFor(()=>window.document.querySelectorAll('.asset-grid [data-act="detai
 window.document.querySelector('.asset-grid [data-act="detail"]').click();
 await waitFor(()=>!!window.document.querySelector('.detail-page h1'));
 assert.ok(window.document.querySelector('.detail-heart'));
-console.log('React route smoke: series, 45 assets, page 2 detail, back and page 1 detail');
+const heart=window.document.querySelector('.detail-heart');
+heart.click();
+await waitFor(()=>heart.getAttribute('aria-pressed')==='true');
+heart.click();
+await waitFor(()=>heart.getAttribute('aria-pressed')==='false');
+console.log('React route smoke: series, 45 assets, page 2 detail, back and one-click favorite');
 process.exit(0);

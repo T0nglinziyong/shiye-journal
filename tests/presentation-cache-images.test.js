@@ -175,3 +175,26 @@ test('fast scrolling starts the new visible cover ahead of offscreen reads',asyn
  }finally{for(const release of releases.values())release();loader.dispose();env.close();
    if(previous)Object.defineProperty(globalThis,'matchMedia',previous);else delete globalThis.matchMedia;}
 });
+
+test('page switch drops queued covers for detached cards before starting the new page',async()=>{
+ const env=environment(),root=document.createElement('div'),started=[],releases=new Map();document.body.append(root);
+ const previous=Object.getOwnPropertyDescriptor(globalThis,'matchMedia');
+ Object.defineProperty(globalThis,'matchMedia',{configurable:true,value:query=>({matches:query.includes('min-width: 700px')})});
+ const image=(id,top)=>{const img=document.createElement('img');img.dataset.privateImageId=id;
+   img.getBoundingClientRect=()=>({top,bottom:top+100,left:0,right:100,width:100,height:100});root.append(img);return img;};
+ const loader=mountPrivateImages({root,urls:new Map(),onError:()=>{},db:{
+   previewBlob:id=>{started.push(id);return new Promise(resolve=>releases.set(id,()=>resolve(new Blob([id]))));},
+   get:async()=>null
+ }});
+ try{
+   const a=loader.load('active-a'),b=loader.load('active-b');await until(()=>started.length===2);
+   const oldCard=image('old-page',-900),old=loader.load('old-page',false,{ephemeral:true});
+   oldCard.remove();image('new-page',30);const fresh=loader.load('new-page');
+   assert.equal(await old,'');
+   releases.get('active-a')();releases.get('active-b')();
+   await until(()=>started.includes('new-page'));
+   assert.ok(!started.includes('old-page'));
+   releases.get('new-page')();await Promise.all([a,b,fresh]);
+ }finally{for(const release of releases.values())release();loader.dispose();env.close();
+   if(previous)Object.defineProperty(globalThis,'matchMedia',previous);else delete globalThis.matchMedia;}
+});

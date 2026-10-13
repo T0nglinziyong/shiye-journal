@@ -4,7 +4,7 @@ const EMPTY='data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.
 const placeholder=id=>id?EMPTY+'#shiye-image='+encodeURIComponent(id):'';
 export const imagePlaceholder=id=>id?(cachedImageSource(id)||placeholder(id)):'';
 export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=console.warn,onEvent=()=>{}}){
-  const pending=new Map(),previews=new Map(),variants=new Map(),sizes=new Map(),previewSizes=new Map(),variantSizes=new Map(),retained=new Map(),queue=[],versions=new Map(),retryTimers=new Map(),retryCounts=new Map(),resizeTimers=new Map(),brokenPreviews=new Set(),observed=new WeakSet(),activeIDs=new Map();
+  const pending=new Map(),jobs=new Map(),previews=new Map(),variants=new Map(),sizes=new Map(),previewSizes=new Map(),variantSizes=new Map(),retained=new Map(),queue=[],versions=new Map(),retryTimers=new Map(),retryCounts=new Map(),resizeTimers=new Map(),brokenPreviews=new Set(),observed=new WeakSet(),activeIDs=new Map();
   let active=0,focusedActive=0,scrollActive=0,generation=0,disposed=false,trimTimer=null,focusedID=null;
   const emit=event=>{try{onEvent(event);}catch{/* Diagnostics never block image loading. */}};
   // Network bound COS thumbnail reads; browser decoding remains lazy.
@@ -87,7 +87,7 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
     }
   }
   const queueTrim=()=>{if(trimTimer===null&&!disposed)trimTimer=setTimeout(trim,0);};
-  async function load(id,requested=false,{background=false}={}){
+  async function load(id,requested=false,{background=false,ephemeral=false}={}){
     if(disposed)return '';
     // Requested display pixels have already been calculated using DPR and screen
     // size by displayTier(). Running imagePixelSize() a second time would
@@ -105,10 +105,15 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
         emit({phase:'loaded',tier:imageTierName,context:context(),source:'memory',durationMs:0});return cached.url;
       }
     }
-    const key=(full?'original:':tier+':')+id;if(pending.has(key))return pending.get(key);
+    const key=(full?'original:':tier+':')+id;
+    if(pending.has(key)){
+      if(!ephemeral&&jobs.has(key))jobs.get(key).ephemeral=false;
+      return pending.get(key);
+    }
     const epoch=generation,itemVersion=version(id),queuedAt=Date.now();
     emit({phase:'queued',tier:imageTierName,context:context(),source:'store'});
-    const task=new Promise((resolve,reject)=>{queue.push({id,tier,run:async()=>{
+    let job;
+    const task=new Promise((resolve,reject)=>{job={key,id,tier,ephemeral,run:async()=>{
       if(disposed||epoch!==generation||itemVersion!==version(id))return '';
       const waitMs=Date.now()-queuedAt,started=Date.now();
       emit({phase:'started',tier:imageTierName,context:context(),source:'store',waitMs});
@@ -124,8 +129,9 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
       else{variants.set(key,{id,tier,url});variantSizes.set(id+':'+tier,blob.size);}
       emit({phase:'loaded',tier:imageTierName,context:context(),source:'store',waitMs,durationMs:Date.now()-started});
       queueTrim();return url;
-    },resolve,reject});pump();});
-    pending.set(key,task);task.finally(()=>{if(pending.get(key)===task)pending.delete(key);}).catch(()=>{});return task;
+    },resolve,reject};jobs.set(key,job);queue.push(job);});
+    pending.set(key,task);task.finally(()=>{if(pending.get(key)===task)pending.delete(key);if(jobs.get(key)===job)jobs.delete(key);}).catch(()=>{});
+    pump();return task;
   }
   // Scrolling users care about the items at their *new* stopping position.
   // Re-rank waiting jobs at dispatch time, rather than letting previously
@@ -144,6 +150,16 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
   function pump(){
     if(disposed||!queue.length)return;
     const distances=viewportDistances();
+    // A page switch detaches its cards. Drop their queued, element-only work
+    // before it can consume a COS slot needed by the newly visible route.
+    for(let i=queue.length-1;i>=0;i--){
+      const job=queue[i];
+      if(job.ephemeral&&job.id!==focusedID&&!distances.has(job.id)){
+        queue.splice(i,1);
+        pending.delete(job.key);jobs.delete(job.key);
+        job.resolve('');
+      }
+    }
     while(!disposed&&queue.length){
       if(queue.length>1){
         const priority=job=>job.id===focusedID?-1:distances.get(job.id)??1e9;
@@ -194,8 +210,8 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
       }
       // Enqueue the small source first for detail. Its bytes can paint while
       // the larger display derivative is still loading.
-      const baseTask=target>COVER_EDGE&&!cached&&!full?load(id,false):null;
-      const finalTask=load(id,full?true:target);
+      const baseTask=target>COVER_EDGE&&!cached&&!full?load(id,false,{ephemeral:true}):null;
+      const finalTask=load(id,full?true:target,{ephemeral:true});
       if(baseTask)void baseTask.then(preview=>{
         if(!current()||finalShown||!preview||!img.isConnected||img.getAttribute('src')!==shown)return;
         if(shown!==preview)img.src=preview;
@@ -252,6 +268,6 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
       for(const [key,row] of variants){if(affected&&!affected.has(row.id))continue;variants.delete(key);variantSizes.delete(row.id+':'+row.tier);URL.revokeObjectURL(row.url);}
       for(const img of root.querySelectorAll('img[data-private-image-id]')){const id=img.dataset.privateImageId;if(affected&&!affected.has(id))continue;delete img.dataset.privateImageLoading;delete img.dataset.imageError;img.src=placeholder(id);if(onScreen(img)||!observer)resolve(img,id);else observer.observe(img);}scan(root);
     },
-    dispose(){disposed=true;generation++;unbind();changes.disconnect();observer?.disconnect();sizingObserver?.disconnect();globalThis.removeEventListener?.('resize',onViewportResize);if(trimTimer!==null)clearTimeout(trimTimer);for(const timer of retryTimers.values())clearTimeout(timer);retryTimers.clear();for(const timer of resizeTimers.values())clearTimeout(timer);resizeTimers.clear();for(const job of queue.splice(0))job.resolve('');pending.clear();for(const map of [urls,previews]){for(const url of map.values())URL.revokeObjectURL(url);map.clear();}for(const row of variants.values())URL.revokeObjectURL(row.url);variants.clear();sizes.clear();previewSizes.clear();variantSizes.clear();retained.clear();}
+    dispose(){disposed=true;generation++;unbind();changes.disconnect();observer?.disconnect();sizingObserver?.disconnect();globalThis.removeEventListener?.('resize',onViewportResize);if(trimTimer!==null)clearTimeout(trimTimer);for(const timer of retryTimers.values())clearTimeout(timer);retryTimers.clear();for(const timer of resizeTimers.values())clearTimeout(timer);resizeTimers.clear();for(const job of queue.splice(0))job.resolve('');pending.clear();jobs.clear();for(const map of [urls,previews]){for(const url of map.values())URL.revokeObjectURL(url);map.clear();}for(const row of variants.values())URL.revokeObjectURL(row.url);variants.clear();sizes.clear();previewSizes.clear();variantSizes.clear();retained.clear();}
   };
 }

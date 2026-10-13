@@ -545,12 +545,15 @@ function render(){
   view.dataset.renderedLibraryTab=state.route==='library'?parity.libraryTab:'';
   view.dataset.renderedWorkTab=state.route==='works'?parity.workTab:'';
   view.dataset.renderedSettingsSection=state.route==='settings'?state.settingsSection||'':'';
-  for(const fresh of view.querySelectorAll('img[src]')){const old=imageNodes.take(fresh);if(old)fresh.replaceWith(old);}
+  // React owns these descendants. Replacing its image or cover nodes behind
+  // its back breaks later reconciliation and can make navigation unclickable.
+  if(!reactPage)for(const fresh of view.querySelectorAll('img[src]')){const old=imageNodes.take(fresh);if(old)fresh.replaceWith(old);}
   if(importQueueScroll!==null){
     const replacement=view.querySelector('.queue-strip');
     if(replacement)replacement.scrollLeft=importQueueScroll;
   }
-  reusePagePreviews({view,state});mountSeriesCoverSnapshots({view,state});
+  if(!reactPage)reusePagePreviews({view,state});
+  mountSeriesCoverSnapshots({view,state});
   mountParityControls();bindPage();mountWorkflowControls({state,view,body,modal,db,render,route,toast,imgTag,assetCard,esc,asset,refresh,download,modelImage,rasterize,backup,openSeriesEditor,openAssetEditor:openDetail,openCutoutCheck,switchImportRecord,saveActiveImportRecord,saveProject,flushSave,moveProjectsToTrash,assetOrganization,applyAssetClassification});view.catalogRefresh?.();if(state.route==='works'){
     view.localWorkCoverDispose=localWorkCovers.observe(view);
     view.workCoverDispose=workCoverBackfill.observe(view);
@@ -1079,7 +1082,16 @@ async function legacyHandle(action,id,value){try{switch(action){
     };
     modal.showModal();break;
   }
-  case 'open-project':{const opening=++editorOpenSequence;await flushSave();if(opening!==editorOpenSequence)break;let p=state.projects.find(p=>p.id===id);if(!p)break;if(p.isSnapshot){state.previewProjectID=p.id;route('projectPreview');break;}if(p.projectDocumentPath){toast('正在读取完整作品…');p=await db.get('projects',p.id);if(opening!==editorOpenSequence)break;if(!p)throw Error('作品完整数据尚未载入');state.projects=state.projects.map(old=>old.id===p.id?p:old);}state.activeProject=p;state.activeDraft=p.activeDraftID;state.offlineEditingReturnID=null;resetEditorHistory(state);state.tool=state.toolHighlight='select';state.zoom=state.canvasViewports?.get(p.id+':'+state.activeDraft)?.scale||1;route('editor');break;}
+  case 'open-project':{const opening=++editorOpenSequence;let p=state.projects.find(p=>p.id===id);if(!p)break;
+    // A different work's local stage must not delay the clicked cover/detail.
+    // Reopening the exact work waits for its own stage so the full document
+    // read cannot replace newer local edits with an older remote snapshot.
+    if(dirtyProjects.has(p.id)||(state.activeProject?.id===p.id&&savingProjects))await flushSave();
+    else if(dirtyProjects.size||dirtyUsageAssets.size)void flushSave().catch(()=>{});
+    if(opening!==editorOpenSequence)break;
+    if(p.isSnapshot){state.previewProjectID=p.id;route('projectPreview');break;}
+    if(p.projectDocumentPath){toast('正在读取完整作品…');p=await db.get('projects',p.id);if(opening!==editorOpenSequence)break;if(!p)throw Error('作品完整数据尚未载入');state.projects=state.projects.map(old=>old.id===p.id?p:old);}
+    state.activeProject=p;state.activeDraft=p.activeDraftID;state.offlineEditingReturnID=null;resetEditorHistory(state);state.tool=state.toolHighlight='select';state.zoom=state.canvasViewports?.get(p.id+':'+state.activeDraft)?.scale||1;route('editor');break;}
   case 'preview-back':navigateBack('works');break;case 'preview-continue':{await handle('open-project',state.previewProjectID);break;}
   case 'project-meta':openProjectMetadata();break;
   case 'save-snapshot':await saveProjectSnapshot(state.activeProject);break;

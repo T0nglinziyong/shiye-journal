@@ -107,12 +107,12 @@ export function AssetDetailPage({asset,seriesTitle,source,kindName,format,onActi
     .filter((tag,index,list)=>tag&&list.indexOf(tag)===index).sort((a,b)=>a.localeCompare(b,'zh-CN'));
   const act=name=>()=>onAction(name);
   return <div className="detail-page" data-react-page="assetDetail">
-    <button className="detail-back" data-act="detail-back" onClick={act('detail-back')}>‹　返回素材库</button>
+    <button className="detail-back" data-act="detail-back" data-react-action="true" onClick={act('detail-back')}>‹　返回素材库</button>
     <span className="detail-category">{seriesTitle||'所有系列'}</span>
     <section className="detail-columns"><div className="detail-picture"><span>▣　透明素材预览</span>
       <RouteImage asset={asset} source={source} priority/>
     </div><div className="detail-copy"><div className="eyebrow">A LITTLE PIECE OF EVERYDAY</div>
-      <button className="detail-heart" data-act="detail-favorite" aria-label={asset.isFavorite?'取消收藏':'收藏'}
+      <button className="detail-heart" data-act="detail-favorite" data-react-action="true" aria-label={asset.isFavorite?'取消收藏':'收藏'}
         aria-pressed={!!asset.isFavorite} onClick={act('detail-favorite')}>{asset.isFavorite?'♥':'♡'}</button>
       <h1>{asset.title}</h1><div className="detail-facts">
         <div><small>真实尺寸</small><span>{format(asset.physicalWidthMM||0)} × {format(asset.physicalHeightMM||0)} mm</span></div>
@@ -122,14 +122,14 @@ export function AssetDetailPage({asset,seriesTitle,source,kindName,format,onActi
         <div><small>材质</small><span>{asset.texture||'待记录'}</span></div>
       </div><div className="detail-tags">{tags.map(tag=><span key={tag}>{tag}</span>)}</div>
       <div className="detail-dots">● ● ● ●</div><hr/><p>实物可用操作</p><p>✓ 整件使用　 ✓ 旋转摆放</p>
-      <button className="btn primary detail-add" data-act="detail-add" onClick={act('detail-add')}>＋　加入本次创作</button>
+      <button className="btn primary detail-add" data-act="detail-add" data-react-action="true" onClick={act('detail-add')}>＋　加入本次创作</button>
       <div className="detail-links">
-        <button className="btn" data-act="detail-series" onClick={act('detail-series')}><span className="detail-link-label">同系列</span></button>
-        <button className="btn" data-act="detail-similar" onClick={act('detail-similar')}><span className="detail-link-label">找相似</span></button>
-        <button className="btn" data-act="detail-match" onClick={act('detail-match')}><span className="detail-link-label">去搭配</span></button>
+        <button className="btn" data-act="detail-series" data-react-action="true" onClick={act('detail-series')}><span className="detail-link-label">同系列</span></button>
+        <button className="btn" data-act="detail-similar" data-react-action="true" onClick={act('detail-similar')}><span className="detail-link-label">找相似</span></button>
+        <button className="btn" data-act="detail-match" data-react-action="true" onClick={act('detail-match')}><span className="detail-link-label">去搭配</span></button>
       </div><div className="detail-small">
-        <button data-act="detail-edit" onClick={act('detail-edit')}>✎　编辑素材信息</button>
-        <button data-act="detail-check" onClick={act('detail-check')}>□　检查抠图</button>
+        <button data-act="detail-edit" data-react-action="true" onClick={act('detail-edit')}>✎　编辑素材信息</button>
+        <button data-act="detail-check" data-react-action="true" onClick={act('detail-check')}>□　检查抠图</button>
       </div>
     </div></section>
   </div>;

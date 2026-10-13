@@ -13,6 +13,18 @@ test('delta fetches only final changed IDs and preserves unchanged collections',
 test('clear followed by put rebuilds just that store',async()=>{
   const f=fixture({logs:[{revision:1,keys:[{store:'assets',action:'clear'}]},{revision:2,keys:[{store:'assets',id:'c',action:'put'}]}],rows:{assets:[{id:'c'}]}});assert.deepEqual((await readCloudDelta(f)).snapshots.get('assets').records,[{id:'c'}]);
 });
+test('delta reads changed collections together and checks revision afterward',async()=>{
+  const snapshots=new Map(['assets','series','projects','trash'].map(store=>[store,{revision:1,records:[]}]));
+  const started=[];let release;
+  const gate=new Promise(resolve=>{release=resolve;});
+  const keys=[{store:'assets',id:'a',action:'put'},{store:'projects',id:'p',action:'put'}];
+  const client={from(table){let store;const q={select(){return q;},eq(k,v){if(k==='store')store=v;return q;},gt(){return q;},lte(){return q;},order(){return q;},in(){return q;},
+    async range(){if(table==='shiye_changes')return {data:[{revision:2,keys}]};started.push(store);if(started.length===2)release();await gate;return {data:[{record:{id:store==='assets'?'a':'p'}}]};},
+    async single(){return {data:{revision:2}};}};return q;}};
+  const result=await readCloudDelta({client,owner:'owner',before:1,after:2,snapshots});
+  assert.deepEqual(started,['assets','projects']);
+  assert.ok(result);assert.equal(result.snapshots.get('projects').records[0].id,'p');
+});
 test('gaps, missing rows and a concurrent cloud revision reject the entire delta',async()=>{
   const logs=[{revision:1,keys:[]},{revision:2,keys:[{store:'assets',id:'a',action:'put'}]}];
   assert.equal(await readCloudDelta(fixture({logs:logs.slice(1),rows:{}})),null);

@@ -14,19 +14,23 @@ export async function readCloudDelta({client,owner,before,after,snapshots}){
     else{if(typeof key.id!=='string')return null;edits.set(JSON.stringify([key.store,key.id]),key);}
   }
   const patched=new Map(),blobIDs=[];
-  for(const store of ['assets','series','projects','trash','blobs','meta']){
+  // Each collection is independent at this revision. Fetch its changed keys
+  // alongside the other collections, then verify the revision once below.
+  const updates=await Promise.all(['assets','series','projects','trash','blobs','meta'].map(async store=>{
     const saved=snapshots.get(store);
-    if(store==='blobs')blobIDs.push(...[...edits.values()].filter(k=>k.store===store).map(k=>k.id));
-    if(saved?.revision!==before)continue;
+    if(saved?.revision!==before)return null;
     const records=new Map((cleared.has(store)?[]:saved.records).map(r=>[r.id,r])),puts=[];
     for(const key of edits.values())if(key.store===store){if(key.action==='delete')records.delete(key.id);else puts.push(key.id);}
     for(let offset=0;offset<puts.length;offset+=50){
       const ids=puts.slice(offset,offset+50),rows=await client.from('shiye_records').select('record').eq('user_id',owner).eq('store',store).in('id',ids).order('id').range(0,49);
-      if(rows.error||rows.data.length!==ids.length)return null;
-      for(const row of rows.data){if(!ids.includes(row.record?.id))return null;records.set(row.record.id,row.record);}
+      if(rows.error||rows.data.length!==ids.length)return false;
+      for(const row of rows.data){if(!ids.includes(row.record?.id))return false;records.set(row.record.id,row.record);}
     }
-    patched.set(store,{revision:after,records:[...records.values()]});
-  }
+    return [store,{revision:after,records:[...records.values()]}];
+  }));
+  if(updates.includes(false))return null;
+  for(const update of updates)if(update)patched.set(...update);
+  blobIDs.push(...[...edits.values()].filter(k=>k.store==='blobs').map(k=>k.id));
   // Reads of changes and changed records must belong to one revision.
   const check=await client.from('shiye_revisions').select('revision').eq('user_id',owner).single();
   if(check.error||Number(check.data?.revision)!==after)return null;
