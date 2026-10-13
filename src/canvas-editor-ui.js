@@ -87,7 +87,23 @@ export function mountCanvasEditor(c){
   const inspectorPanel=shell.querySelector('.editor-inspector');
   if(inspectorPanel)inspectorPanel.hidden=true;
   function syncTools(){for(const b of tools.querySelectorAll('button')){const active=(state.toolHighlight||state.tool)===b.dataset.val||(b.dataset.val==='select'&&state.tool==='marquee');b.classList.toggle('primary',active);b.setAttribute('aria-pressed',String(active));}page.classList.toggle('pen',['pen','highlighter','eraser'].includes(state.tool));}
-  function contextTools(){context.replaceChildren();const mode=state.toolHighlight||state.tool,entry=entries.find(e=>e.value.id===state.selected),s=entry?.value,kind=entry?.kind;
+  let contextSignature=null;
+  function contextTools(){
+    const mode=state.toolHighlight||state.tool,
+      entry=entries.find(e=>e.value.id===state.selected),s=entry?.value,kind=entry?.kind;
+    // The contextual toolbar is a persistent component. Refresh its controls
+    // only when their actual dependencies change, not after every Scene/ink
+    // mutation (which used to replace all buttons and native selects).
+    const t=kind==='text'?s:state.textDefaults;
+    const signature=JSON.stringify([
+      mode,kind,s?.id,state.zoom,
+      ['pen','highlighter','eraser'].includes(mode)?prefs:null,
+      kind==='text'||mode==='text'?[t?.style,t?.fontSize,t?.color,t?.bold,t?.italic,t?.underline,t?.strikethrough]:null,
+      kind==='shape'?[s?.fill,s?.stroke,s?.lineWidth,s?.opacity,!!s?.vectorLayers]:null
+    ]);
+    if(contextSignature===signature&&context.isConnected)return;
+    contextSignature=signature;
+    context.replaceChildren();
     if(['pen','highlighter'].includes(mode)){
       const key=mode==='highlighter'?'marker':'pen';
       for(let i=0;i<3;i++){
