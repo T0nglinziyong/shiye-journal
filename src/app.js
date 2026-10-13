@@ -55,7 +55,7 @@ import {createAIRecorder,publicAIDiagnosticReport} from './ai-diagnostics.js';
 import {mountImportBoxEditor} from './import-box-editor.js';
 import {saveImportBatch,importPaperDimensions} from './import-save.js';
 import {paperDimensions as presetPaperDimensions,paperSizeOptions} from './paper-sizes.js';
-import {refineManualBoxes,hasManualForegroundEvidence} from './manual-import-recognition.js';
+import {refineManualBoxes} from './manual-import-recognition.js';
 import {manualPhysicalRegion} from './manual-import-geometry.js';
 import {seriesCovers,usedAssetIDs,markProjectAssetsUsed} from './library-model.js';
 import {renderSeriesContents} from './series-contents.js';
@@ -1782,7 +1782,8 @@ async function refreshImportCandidates(regions,{manual=false}={}){
       aw=Math.max(1,Math.round(source.width*b.w*scale)),
       ah=Math.max(1,Math.round(source.height*b.h*scale));
     const pixels=await analysisPixels(source,b,aw,ah);
-    if(!hasManualForegroundEvidence(pixels,aw,ah,box))throw Error('第 '+(index+1)+' 个框内没有找到可靠素材；请贴近素材重画');
+    // Explicit manual frames are authoritative even on pale or nearly blank
+    // stock. Do not discard them with automatic foreground-confidence gates.
     // Manual geometry is authoritative. Never pass only the axis-aligned
     // bounds to the physical segmentation worker: doing so discarded rotation
     // on confirmation and silently replaced the user's frame with a vertical
