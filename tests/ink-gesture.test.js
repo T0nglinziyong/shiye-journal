@@ -43,6 +43,9 @@ test('editor uses fast incremental canvas paint with a size-matched eraser circl
  assert.match(editor,/pts\.slice\(Math\.max\(0,painted-2\)\)/);
  assert.match(editor,/configureInkBacking/);
  assert.match(editor,/pointerrawupdate/);
+ assert.match(editor,/mountLiveInkStroke\(page,d,finished\)/);
+ assert.match(editor,/inkCommitTimer=setTimeout\(\(\)=>flushInkCommit\(\),110\)/);
+ assert.match(editor,/if\(erase&&!erase\.checkpointed\)/);
  assert.match(editor,/eraserSamples\s*=\s*\[\]/);
  assert.match(editor,/eraseStrokesAlongPath\(before,samples/);
  assert.match(editor,/diameter=radius\*2\*scale/);
