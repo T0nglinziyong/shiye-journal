@@ -423,6 +423,9 @@ export async function showCutoutEditor({
     busy=true;for(const b of body.querySelectorAll('button'))b.disabled=true;
     try{
       const blob=await png(composed());
+      const note=body.querySelector('#cutout-note');
+      if(note)note.textContent='正在读取高清候选框并映射小蒙版，准备完整 PNG…';
+      await new Promise(resolve=>requestAnimationFrame(resolve));
       await onApply(blob,{
         appearance,intensity,displayRotationDegrees:rotation,autoStraighten,
         recognitionRotationDegrees:processing.recognitionRotationDegrees||0,
