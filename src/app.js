@@ -343,6 +343,69 @@ function assetCard(a){const revision=esc(JSON.stringify([a.title,a.kind,a.physic
 const fmt=n=>Number(n).toFixed(1).replace(/\.0$/,'');
 function head(title,subtitle,actions=''){return `<div class="view-head unified-page-heading"><div class="unified-heading-copy"><span class="eyebrow">FROM YOUR DESK TO YOUR PAGES</span><h1>${title}</h1></div><div class="actions">${actions}</div></div>`;}
 const boundPageActions=new WeakSet();
+// Every route exposes one controller contract; business commands are
+// independent Action/State transitions and can outlive a DOM mount.
+const pageControllers=createPageControllerHost();
+registerLibraryActions(actionStore,{db,state,asset});
+registerWorksActions(actionStore);
+registerImportActions(actionStore,{state,saveActiveImportRecord});
+registerSettingsActions(actionStore,{providers:AI_PROVIDERS});
+registerEditorActions(actionStore,{historyStep});
+pageControllers.register('library',createLibraryController({
+  renderHTML:renderLibrary,patchCatalog:patchMaterialCatalog,view,state,parity,
+  binder:bindPage,actions:actionStore,onCatalogChanged:updateLibraryResults
+}));
+pageControllers.register('works',createWorksController({
+  renderHTML:renderWorks,patchCatalog:patchWorksCatalog,view,state,parity,
+  binder:bindPage,bindCards:cards=>bindWorksCards({state,view,handle},cards),
+  refreshPreviews:()=>refreshWorkPreviews({state,view}),
+  reusePreviews:()=>reusePagePreviews({view,state}),
+  coverBackfill:workCoverBackfill,localCovers:localWorkCovers,
+  catalogChanged:()=>view.catalogRefresh?.(),actions:actionStore,render
+}));
+pageControllers.register('import',createImportController({
+  renderHTML:renderImport,patchInspector:patchImportInspection,view,state,
+  binder:bindPage,actions:actionStore,render,
+  mountControls:()=>mountImportControls({state,view,body,modal,db,render,route,toast,esc,
+    openCutoutCheck,switchImportRecord,saveActiveImportRecord}),
+  disposePaper:()=>{view.paperCorrectionDispose?.();view.paperCorrectionDispose=null;},
+  disposeManual:()=>{view.manualBoxDispose?.();view.manualBoxDispose=null;},
+  mountPaper:()=>{view.paperCorrectionDispose=mountPaperCorrection({state,view,saveActiveImportRecord});},
+  mountManual:bindManualBox
+}));
+pageControllers.register('editor',createEditorController({
+  renderHTML:renderEditor,patchScene:refreshCanvas,actions:actionStore,render,
+  createEditor:()=>{
+    view.editorDraft=current();view.editorInk=current().strokes;
+    view.editorLayoutKey=editorLayoutKey();
+    markSceneTrackingBaseline(state.activeProject);
+    mountCanvasEditor({state,view,body,modal,current,checkpoint,saveProject,render,route,
+      flushSave,toast,esc,imgTag,asset,db,handle,openCutoutCheck,openAICreation});
+    mountCanvasSelection({state,view,current,checkpoint,saveProject,render,toast});
+  }
+}));
+pageControllers.register('settings',createSettingsController({
+  renderHTML:renderSettings,patchModel:patchAISettingsModel,view,state,
+  binder:bindPage,actions:actionStore,render
+}));
+for(const [routeName,renderHTML] of [
+  ['series',renderSeries],['matching',renderMatching],
+  ['assetDetail',renderAssetDetail],['projectPreview',renderProjectPreview]
+])pageControllers.register(routeName,createStandardController(renderHTML));
+// Collection refresh changes business state. Only this projection subscriber
+// requests a view update; cloud/store modules never import UI implementations.
+actionStore.subscribe(event=>{
+  if(event.scope==='collections')render();
+  if(event.type==='library/favorite'){
+    const a=asset(event.payload?.id),heart=view.querySelector('.detail-heart');
+    if(a&&state.route==='assetDetail'&&state.detailAssetID===a.id&&heart){
+      heart.textContent=a.isFavorite?'♥':'♡';
+      heart.setAttribute('aria-label',a.isFavorite?'取消收藏':'收藏');
+      heart.setAttribute('aria-pressed',String(!!a.isFavorite));
+    }
+    if(a)toast(a.isFavorite?'已收藏':'已取消收藏');
+  }
+});
 function render(){
   // Keep the import photo queue at the exact scroll position while the whole
   // view is replaced on every photo switch, load-progress update and confirm.
