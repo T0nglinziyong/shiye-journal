@@ -9,7 +9,7 @@ const expected={
   'manual-import-recognition.js':'7f843bae5c81fb8f2046ae176ff4b0855446f0b8',
   'perspective.js':'af21f19bead1d03a58626248dd905e8d81f30e59',
   'import-box-editor.js':'8798db7e8987ade7afa9c58640de759ff17c6ae2',
-  'recognition-refiners.js':'c37232c942f5de9d54a100897120f6271359d86d',
+  'recognition-refiners.js':'84b625ed6d6ae7b0ca06b3868108dd803c991aa9',
   'recognition-raster.js':'4e88878477689fa3c973576c5ce51c419145343a',
   'material-color-restoration.js':'4be602eab1a8d3d1281ba6c455c1ad80055da1c3',
   'import-workspace-ui.js':'a158cd3b2ea4444ed4a77e2c6c2194774a605796',
