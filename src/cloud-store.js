@@ -545,7 +545,13 @@ async function cloudPreview(id,pixels=480){
   // A previously loaded thumb must be a zero-network read. Materialization
   // happens only on the COS CI miss path, not repeatedly for every tab.
   if(usableBlob(saved))return saved;
-  const higher=await cachedSufficientVariant(record.storagePath,edge);
+  // On a cold cover miss these independent account-scoped cache lookups used
+  // to run one after another for every visible card. Keep the hit-only fast
+  // path above, then overlap the remaining reads before any network request.
+  const [higher,localOriginal]=await Promise.all([
+    cachedSufficientVariant(record.storagePath,edge),
+    cached('image:'+record.storagePath)
+  ]);
   if(usableBlob(higher)){
     const reduced=await makeThumbnail(higher,edge);
     if(usableBlob(reduced)){await rememberImageVariant(record.storagePath,edge,reduced);return reduced;}
@@ -553,7 +559,6 @@ async function cloudPreview(id,pixels=480){
   }
   // If this device already holds the full image, derive the small card cover
   // locally. Do not fetch the same bytes again just to request a thumbnail.
-  const localOriginal=await cached('image:'+record.storagePath);
   if(usableBlob(localOriginal)){
     const reduced=await makeThumbnail(localOriginal,edge);
     if(usableBlob(reduced)){await rememberImageVariant(record.storagePath,edge,reduced);return reduced;}
@@ -1077,4 +1082,3 @@ export const cloudProjectDocument=(...args)=>current.cloudProjectDocument(...arg
 export const cloudEmergencySnapshot=(...args)=>current.cloudEmergencySnapshot(...args);
 export const cloudRestoreEmergency=(...args)=>current.cloudRestoreEmergency(...args);
 export const cloudBackupBlobIDs=(...args)=>current.cloudBackupBlobIDs(...args);
-

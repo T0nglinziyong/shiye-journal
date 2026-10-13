@@ -141,8 +141,11 @@ import {renderWorksHTML} from './page-controllers/works-view.js';
 import {renderEditorHTML} from './page-controllers/editor-view.js';
 import {renderImportHTML} from './page-controllers/import-view.js';
 import {renderSettingsHTML} from './page-controllers/settings-view.js';
+import {mountReactShell,renderReactPage} from './react-shell.jsx';
+import {LibraryPage,SeriesPage,WorksPage,AssetDetailPage,ProjectPreviewPage} from './react-routes.jsx';
 
 import {installRuntimeDiagnostics,recordRuntimeIssue,runtimeIssueSnapshot} from './runtime-diagnostics.js';
+mountReactShell();
 const view=document.querySelector('#view'),modal=document.querySelector('#modal'),body=document.querySelector('#modal-body');
 modal.querySelector('.modal-close').onclick=()=>modal.close();
 const fileInput=document.querySelector('#file-input'),workFileInput=document.querySelector('#work-file-input'),snapshotFileInput=document.querySelector('#snapshot-file-input'),creationResultInput=document.querySelector('#creation-result-input'),backupInput=document.querySelector('#backup-input'),emergencyInput=document.querySelector('#emergency-input');
@@ -418,7 +421,13 @@ function imgTag(a,priority=false){const src=a&&(image(a.blobId)||a.staticPath),e
 function assetCard(a){const revision=esc(JSON.stringify([a.title,a.kind,a.physicalWidthMM,a.physicalHeightMM,a.reviewStatus,a.isFavorite,a.blobId]));return `<button class="card" data-card-revision="${revision}" data-act="detail" data-id="${a.id}"><div class="card-image">${imgTag(a)}</div><div class="card-body"><h3>${esc(a.title)}${a.isFavorite?'<span class="card-favorite" aria-label="已收藏">♥</span>':''}</h3><p>${esc(kindName(a.kind))} · ${a.physicalWidthMM?`${fmt(a.physicalWidthMM)} × ${fmt(a.physicalHeightMM)} mm`:'尺寸待确认'}</p><span class="chip ${a.reviewStatus==='ready'?'':'warn'}">${a.reviewStatus==='ready'?'已整理':'待检查'}</span></div></button>`;}
 const fmt=n=>Number(n).toFixed(1).replace(/\.0$/,'');
 function head(title,subtitle,actions=''){return `<div class="view-head unified-page-heading"><div class="unified-heading-copy"><span class="eyebrow">FROM YOUR DESK TO YOUR PAGES</span><h1>${title}</h1></div><div class="actions">${actions}</div></div>`;}
-const boundPageActions=new WeakSet();
+// One delegated action handler covers cards inserted by pagination, matching
+// recommendations and background catalog patches without rebinding listeners.
+view.addEventListener('click',event=>{
+  const target=event.target.closest?.('[data-act]');
+  if(!target||!view.contains(target)||target.dataset.reactAction||target.closest('.match-previews'))return;
+  void handle(target.dataset.act,target.dataset.id,target.dataset.val);
+});
 // Every route exposes one controller contract; business commands are
 // independent Action/State transitions and can outlive a DOM mount.
 const pageControllers=createPageControllerHost();
@@ -517,7 +526,19 @@ function render(){
   if(view.onshowsimilar){view.removeEventListener('show-similar',view.onshowsimilar);view.onshowsimilar=null;}
   closePopover();imageNodes.remember(view.querySelectorAll('img[src]'));
   view.editorLayoutSize={width:window.innerWidth,height:window.innerHeight};
-  view.innerHTML=pageControllers.render(state.route)||renderLibrary();
+  const reactPage=state.route==='library'&&!state.series.some(s=>s.id===state.seriesID)
+    ?LibraryPage({state,items:libraryPageData(state).items,source:image,kindName,format:fmt,onAction:handle})
+    :state.route==='works'
+      ?WorksPage({projects:state.projects,isUntouchedLegacyExample,workCover,source:image,onAction:handle})
+    :state.route==='series'
+    ?SeriesPage({series:state.series,assets:state.assets,display:state.preferences.display,seriesCovers,source:image,onAction:handle})
+    :state.route==='assetDetail'&&asset(state.detailAssetID)
+      ?AssetDetailPage({asset:asset(state.detailAssetID),seriesTitle:state.series.find(s=>s.id===asset(state.detailAssetID).seriesID)?.title,
+        source:image,kindName,format:fmt,onAction:handle})
+    :state.route==='projectPreview'&&state.projects.find(p=>p.id===state.previewProjectID)
+      ?ProjectPreviewPage({project:state.projects.find(p=>p.id===state.previewProjectID),source:image,workCover,onAction:handle})
+      :null;
+  renderReactPage(reactPage||pageControllers.render(state.route)||renderLibrary());
   view.dataset.renderedRoute=state.route;
   view.dataset.renderedImportStep=state.route==='import'?state.importStep:'';
   view.dataset.renderedImportMode=state.route==='import'?state.importMode:'';
@@ -620,7 +641,7 @@ function updateMatchingRegions(regions,{persist=true}={}){
   document.querySelector('#basket-count').textContent=state.basket.length;
   const patched=patchMatchingView({
     view,renderHTML:renderMatching,regions,
-    onAction:(action,id,value)=>handle(action,id,value),mountIcons
+    mountIcons
   });
   if(!patched)render();
   // Full render previously invoked bindPage(), which automatically staged
@@ -632,7 +653,7 @@ function updateMatchingRegions(regions,{persist=true}={}){
     toast('本机搭配状态暂存失败：'+error.message);
   });
 }
-function refreshMatchingRecommendations(){const current=view.querySelector('.match-recommendations');if(!current)return;const scroll=captureMatchingScroll(view,window);const template=document.createElement('template');template.innerHTML=renderMatching();const next=template.content.querySelector('.match-recommendations');if(!next)return;current.replaceWith(next);next.querySelectorAll('[data-act]').forEach(el=>el.addEventListener('click',()=>handle(el.dataset.act,el.dataset.id,el.dataset.val)));mountIcons(next);const summary=view.querySelector('.basket>.muted'),fresh=template.content.querySelector('.basket>.muted');if(summary&&fresh)summary.textContent=fresh.textContent;restoreMatchingScroll(view,scroll,window);}
+function refreshMatchingRecommendations(){const current=view.querySelector('.match-recommendations');if(!current)return;const scroll=captureMatchingScroll(view,window);const template=document.createElement('template');template.innerHTML=renderMatching();const next=template.content.querySelector('.match-recommendations');if(!next)return;current.replaceWith(next);mountIcons(next);const summary=view.querySelector('.basket>.muted'),fresh=template.content.querySelector('.basket>.muted');if(summary&&fresh)summary.textContent=fresh.textContent;restoreMatchingScroll(view,scroll,window);}
 function workInkPreview(d){if(!d.strokes?.length)return '';const paths=d.strokes.map(s=>{const points=(s.points||[]).filter(p=>Number.isFinite(p.x)&&Number.isFinite(p.y));if(!points.length)return '';const color=esc(s.color||'#2b5245'),width=Math.max(.5,Number(s.width)||3),opacity=Math.max(0,Math.min(1,Number(s.opacity??1)));if(points.length===1)return `<circle cx="${points[0].x}" cy="${points[0].y}" r="${width/2}" fill="${color}" opacity="${opacity}"/>`;return `<path d="${points.map((p,n)=>`${n?'L':'M'}${p.x} ${p.y}`).join(' ')}" fill="none" stroke="${color}" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round" opacity="${opacity}"/>`;}).join('');return `<svg class="work-ink-preview" viewBox="0 0 ${d.canvas.width} ${d.canvas.height}" preserveAspectRatio="none" aria-hidden="true">${paths}</svg>`;}
 function workCover(d,priority=false,snapshotOnly=false,projectID=null){
  if(!d)return '';
@@ -704,7 +725,7 @@ function pageInspector(d){return `<div class="stack"><label>纸张颜色<input i
 function importSourceButtons(){return `<div class="import-source-actions"><button class="btn primary" data-act="select-file" data-val="gallery">▣　从图库中选择</button><button class="btn" data-act="select-file" data-val="camera">▣　拍摄图片</button><button class="btn" data-act="select-file" data-val="files">▱　从文件中导入</button>${state.importMode==='work'?'<small>选择 .shiyeproject.zip 可编辑作品包或 JSON 备选文件会直接导入，不经过照片识别。</small>':''}</div>`;}
 function importSteps(){return `<div class="import-nav" aria-label="导入进度"><button class="import-back" data-act="import-back" aria-label="返回上一步" title="返回"></button><div class="import-nav-center"><div class="import-progress" aria-label="当前步骤">${[['inspect','检查照片'],['review','确认归类'],['done','完成']].map(([key,label],i)=>`<span class="${state.importStep===key?'current':(i<['inspect','review','done'].indexOf(state.importStep)?'passed':'')}"><b>${i<['inspect','review','done'].indexOf(state.importStep)?'✓':i+1}</b><span class="import-step-label">${label}</span></span>`).join('')}</div></div><button class="import-cancel" data-act="import-exit">${state.importStep==='done'?'完成':'取消导入'}</button></div>`;}
 function renderImport(){return renderImportHTML({state,esc,fmt,importSteps,importSourceButtons,renderImportReview,renderImportInspection});}
-function renderAssetDetail(){const a=asset(state.detailAssetID);if(!a)return renderLibrary();return `<div class="detail-page"><button class="detail-back" data-act="detail-back">‹　返回素材库</button><span class="detail-category">${esc(state.series.find(s=>s.id===a.seriesID)?.title||'所有系列')}</span><section class="detail-columns"><div class="detail-picture"><span>▣　透明素材预览</span>${imgTag(a,true)}</div><div class="detail-copy"><div class="eyebrow">A LITTLE PIECE OF EVERYDAY</div><button class="detail-heart" data-act="detail-favorite" aria-label="收藏">${a.isFavorite?'♥':'♡'}</button><h1>${esc(a.title)}</h1><div class="detail-facts"><div><small>真实尺寸</small><span>${fmt(a.physicalWidthMM||0)} × ${fmt(a.physicalHeightMM||0)} mm</span></div><div><small>可用库存</small><span>${a.supply?.quantity??1} 件</span></div><div><small>素材类型</small><span>${kindName(a.kind)}</span></div><div><small>主要作用</small><span>${a.role==='background'?'背景':a.role==='connector'?'连接':'陪衬'}</span></div><div><small>材质</small><span>${esc(a.texture||'待记录')}</span></div></div><div class="detail-tags">${[...(a.tags||[]),...(a.contentTags||[]),...(a.styleTags||[]),...(a.materialTags||[])].filter((tag,index,list)=>tag&&list.indexOf(tag)===index).sort((x,y)=>x.localeCompare(y,'zh-CN')).map(tag=>`<span>${esc(tag)}</span>`).join('')}</div><div class="detail-dots">● ● ● ●</div><hr><p>实物可用操作</p><p>✓ 整件使用　 ✓ 旋转摆放</p><button class="btn primary detail-add" data-act="detail-add">＋　加入本次创作</button><div class="detail-links"><button class="btn" data-act="detail-series"><span class="detail-link-label">同系列</span></button><button class="btn" data-act="detail-similar"><span class="detail-link-label">找相似</span></button><button class="btn" data-act="detail-match"><span class="detail-link-label">去搭配</span></button></div><div class="detail-small"><button data-act="detail-edit">✎　编辑素材信息</button><button data-act="detail-check">□　检查抠图</button></div></div></section></div>`;}
+function renderAssetDetail(){const a=asset(state.detailAssetID);if(!a)return renderLibrary();return `<div class="detail-page"><button class="detail-back" data-act="detail-back">‹　返回素材库</button><span class="detail-category">${esc(state.series.find(s=>s.id===a.seriesID)?.title||'所有系列')}</span><section class="detail-columns"><div class="detail-picture"><span>▣　透明素材预览</span>${imgTag(a,true)}</div><div class="detail-copy"><div class="eyebrow">A LITTLE PIECE OF EVERYDAY</div><button class="detail-heart" data-act="detail-favorite" aria-label="${a.isFavorite?'取消收藏':'收藏'}" aria-pressed="${!!a.isFavorite}">${a.isFavorite?'♥':'♡'}</button><h1>${esc(a.title)}</h1><div class="detail-facts"><div><small>真实尺寸</small><span>${fmt(a.physicalWidthMM||0)} × ${fmt(a.physicalHeightMM||0)} mm</span></div><div><small>可用库存</small><span>${a.supply?.quantity??1} 件</span></div><div><small>素材类型</small><span>${kindName(a.kind)}</span></div><div><small>主要作用</small><span>${a.role==='background'?'背景':a.role==='connector'?'连接':'陪衬'}</span></div><div><small>材质</small><span>${esc(a.texture||'待记录')}</span></div></div><div class="detail-tags">${[...(a.tags||[]),...(a.contentTags||[]),...(a.styleTags||[]),...(a.materialTags||[])].filter((tag,index,list)=>tag&&list.indexOf(tag)===index).sort((x,y)=>x.localeCompare(y,'zh-CN')).map(tag=>`<span>${esc(tag)}</span>`).join('')}</div><div class="detail-dots">● ● ● ●</div><hr><p>实物可用操作</p><p>✓ 整件使用　 ✓ 旋转摆放</p><button class="btn primary detail-add" data-act="detail-add">＋　加入本次创作</button><div class="detail-links"><button class="btn" data-act="detail-series"><span class="detail-link-label">同系列</span></button><button class="btn" data-act="detail-similar"><span class="detail-link-label">找相似</span></button><button class="btn" data-act="detail-match"><span class="detail-link-label">去搭配</span></button></div><div class="detail-small"><button data-act="detail-edit">✎　编辑素材信息</button><button data-act="detail-check">□　检查抠图</button></div></div></section></div>`;}
 function renderProjectPreview(){const p=state.projects.find(x=>x.id===state.previewProjectID);if(!p)return renderWorks();const d=p.drafts.find(x=>x.id===p.activeDraftID)||p.drafts[0];const original=p.coverStaticPath&&p.updatedAt===p.coverBaselineUpdatedAt;return `<div class="project-preview-page"><div class="project-preview-head"><h1>${esc(p.title)}</h1><button class="btn" data-act="preview-back">关闭</button></div><div class="project-preview-cover"><div class="preview-paper" style="background:${esc(d.paperColor||'#fff')};aspect-ratio:${d.canvas.width}/${d.canvas.height}">${p.isSnapshot?`<img class="work-reference" loading="eager" fetchpriority="high" decoding="async" src="${image(p.snapshotBlobId)}" alt="${esc(p.title)} 快照">`:original?`<img class="work-reference" loading="eager" fetchpriority="high" decoding="async" src="${p.coverStaticPath}" alt="${esc(p.title)} 完整预览">`:workCover(d,true,true,p.id)}</div></div><div class="project-preview-tags">${[...(p.styleTags||[]),...(p.tags||[])].filter((tag,index,list)=>tag&&list.indexOf(tag)===index).map(tag=>`<span>${esc(tag)}</span>`).join('')}</div><p>${p.isSnapshot?'独立保存的画面快照，不能逐层编辑。':'页面上的素材、排版和书写内容都已保存。'}</p><div class="project-preview-actions">${p.isSnapshot?'<button class="btn primary" data-act="download-snapshot">下载快照</button>':'<button class="btn primary" data-act="preview-continue">继续创作</button>'}<button class="btn" data-act="project-meta">作品信息与标签</button><button class="btn danger" data-act="project-delete">移到最近删除</button></div></div>`;}
 let aiModelPanelOpen=false;
 // Reuse one compact card language for every settings category.
@@ -731,9 +752,12 @@ function queueMatchingDefaultsSync(){
       .finally(()=>{if(!matchingDefaultsTimer)matchingDefaultsPending=false;});
   },650);
 }
-function bindPage({partial=false}={}){view.querySelectorAll('[data-act]').forEach(el=>{if(boundPageActions.has(el))return;boundPageActions.add(el);el.addEventListener('click',()=>handle(el.dataset.act,el.dataset.id,el.dataset.val));});
+function bindPage({partial=false}={}){
+  // Pagination only inserts cards. Rebinding all form, editor and matching
+  // listeners here accumulates duplicate handlers on each page transition.
+  if(partial)return;
   const assetStatus=view.querySelector('#status-filter');if(assetStatus&&!assetStatus.querySelector('[value="favorite"]')){const option=document.createElement('option');option.value='favorite';option.textContent='已收藏';assetStatus.append(option);}
-  const assetHeart=view.querySelector('.detail-heart');if(assetHeart)assetHeart.setAttribute('aria-pressed',String(!!asset(state.detailAssetID)?.isFavorite));
+  const assetHeart=view.querySelector('.detail-heart');if(assetHeart){const favorite=!!asset(state.detailAssetID)?.isFavorite;assetHeart.textContent=favorite?'♥':'♡';assetHeart.setAttribute('aria-label',favorite?'取消收藏':'收藏');assetHeart.setAttribute('aria-pressed',String(favorite));}
   if(state.route==='projectPreview'){const p=state.projects.find(x=>x.id===state.previewProjectID);if(p?.isSnapshot){const header=view.querySelector('.project-preview-head');const heart=document.createElement('button');heart.type='button';heart.className='snapshot-favorite';heart.setAttribute('aria-label',p.isFavorite?'取消收藏快照':'收藏快照');heart.setAttribute('aria-pressed',String(!!p.isFavorite));heart.textContent=p.isFavorite?'♥':'♡';heart.onclick=async()=>{const next={...p,isFavorite:!p.isFavorite};await db.put('projects',next);Object.assign(p,next);heart.textContent=next.isFavorite?'♥':'♡';heart.setAttribute('aria-label',next.isFavorite?'取消收藏快照':'收藏快照');heart.setAttribute('aria-pressed',String(!!next.isFavorite));};header?.querySelector('h1')?.after(heart);}}
   const aiModelGroup=view.querySelector('#ai-model-group');if(aiModelGroup)aiModelGroup.ontoggle=event=>{aiModelPanelOpen=event.currentTarget.open;};
   if(state.route==='matching'){
@@ -2505,7 +2529,7 @@ async function init(user,{resetPending=false,afterAccountReset=false}={}){previe
   }saveStatus((await db.storageMode())==='server'?'已连接服务器':'已保存到本机');if(cloudEnabled){syncDisplay.checking=false;updateSyncIndicator();if(!resetPending)void cloudResumer.wake();else saveStatus('云端已清空 · 正在后台清理旧图片（暂只读）');}
   }catch(e){console.error(e);recordRuntimeIssue('handled',e,state.route,{phase:'auth'});const auth=e.status===401;if(auth)cloudSessionReady=false;
   if(cachedShown&&!auth){saveStatus('云端核对失败 · 缓存仅供查看');toast('云端连接失败，未改为本机保存：'+e.message);if(cloudEnabled)void cloudResumer.wake();return;}
-  if(auth){view.innerHTML=`<div class="empty"><strong>连接拾页数据服务器</strong><p>请输入服务器访问令牌；连接失败时不会另存到浏览器。</p><form id="server-login"><input type="password" name="token" required autocomplete="off" placeholder="服务器访问令牌" aria-label="服务器访问令牌"><button class="btn primary" type="submit">连接</button></form><p id="server-login-error">${esc(e.message)}</p></div>`;view.querySelector('#server-login').onsubmit=event=>{event.preventDefault();db.setStorageConfig({url:db.storageConfig()?.url||location.origin,token:event.target.elements.token.value.trim()});init();};}else{view.innerHTML=`<div class="empty"><strong>无法读取资料</strong><p>${esc(e.message||'请检查设备剩余空间和数据服务连接。')}</p><button class="btn" id="storage-retry">重试连接</button></div>`;view.querySelector('#storage-retry').onclick=()=>init();}saveStatus('存储不可用');}}
+  if(auth){renderReactPage(`<div class="empty"><strong>连接拾页数据服务器</strong><p>请输入服务器访问令牌；连接失败时不会另存到浏览器。</p><form id="server-login"><input type="password" name="token" required autocomplete="off" placeholder="服务器访问令牌" aria-label="服务器访问令牌"><button class="btn primary" type="submit">连接</button></form><p id="server-login-error">${esc(e.message)}</p></div>`);view.querySelector('#server-login').onsubmit=event=>{event.preventDefault();db.setStorageConfig({url:db.storageConfig()?.url||location.origin,token:event.target.elements.token.value.trim()});init();};}else{renderReactPage(`<div class="empty"><strong>无法读取资料</strong><p>${esc(e.message||'请检查设备剩余空间和数据服务连接。')}</p><button class="btn" id="storage-retry">重试连接</button></div>`);view.querySelector('#storage-retry').onclick=()=>init();}saveStatus('存储不可用');}}
 mountIcons(document);
 const matchingSession=createMatchingSession({state,db,uid,esc,asset,modelImage,rasterize,workCover:p=>{const d=p.drafts.find(d=>d.id===p.activeDraftID)||p.drafts[0];return `<div class="thumb-sheet" style="--thumb-ratio:${d.canvas.width/d.canvas.height};background:${esc(d.paperColor||'#fff')}"><div class="thumb-inner" style="position:relative">${p.isSnapshot?`<img src="${image(p.snapshotBlobId)}" alt="${esc(p.title)} 快照">`:workCover(d,false,true,p.id)}</div></div>`;},createProject:()=>createMatchingProject(),saveSnapshotFromDraft:saveProjectSnapshot,saveGeneratedImageSnapshot,generatePageImage,runCreativeAgent,createAIRecorder,supportsVision,flushSave,route,handle,mountIcons,toast});
 startCloudSession(init).catch(error=>{recordRuntimeIssue('handled',error,state.route,{phase:'auth'});document.querySelector('#app').hidden=true;const p=document.createElement('p');p.textContent='无法连接认证服务，请稍后刷新。未打开私人资料。';document.body.append(p);console.warn(error.name);});

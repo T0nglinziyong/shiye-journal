@@ -64,10 +64,11 @@ export function patchMatchingView({
   const template=document.createElement('template');
   template.innerHTML=renderHTML();
   const draft=template.content;
+  // Standalone consumers can supply onAction. The app uses its delegated
+  // route handler and omits this callback to avoid duplicate clicks.
   const bind=node=>{
-    for(const button of [node,...node.querySelectorAll('[data-act]')].filter(el=>el.matches?.('[data-act]'))){
+    if(onAction)for(const button of [node,...node.querySelectorAll('[data-act]')].filter(el=>el.matches?.('[data-act]')))
       button.addEventListener('click',()=>onAction(button.dataset.act,button.dataset.id,button.dataset.val));
-    }
     mountIcons(node);
   };
   for(const selector of [...new Set(regions)]){

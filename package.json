@@ -17,7 +17,7 @@
     "test:layout-browser": "node tests/layout-preview-browser.mjs",
     "test:layers-browser": "node tests/catalog-layers-browser.mjs",
     "test:interaction-browser": "node tests/interaction-browser.mjs",
-    "test:ui": "npm run build && node tests/ui-smoke.mjs && node tests/route-parity-smoke.mjs && node tests/self-host-smoke.mjs",
+    "test:ui": "npm run build && node tests/ui-smoke.mjs && node tests/react-route-smoke.mjs && node tests/route-parity-smoke.mjs && node tests/self-host-smoke.mjs",
     "test:responsive-browser": "node tests/responsive-visual-browser.mjs",
     "test:incremental-browser": "node tests/ui-incremental-browser.mjs",
     "test:ink-browser": "node tests/ink-render-browser.mjs",
@@ -43,6 +43,8 @@
     "lucide": "1.48.0",
     "opentype.js": "2.0.0",
     "pdf-lib": "1.17.1",
-    "polygon-clipping": "0.15.7"
+    "polygon-clipping": "0.15.7",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
   }
 }
