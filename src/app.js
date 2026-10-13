@@ -142,7 +142,7 @@ import {renderEditorHTML} from './page-controllers/editor-view.js';
 import {renderImportHTML} from './page-controllers/import-view.js';
 import {renderSettingsHTML} from './page-controllers/settings-view.js';
 import {mountReactShell,renderReactPage,imperativeRoute} from './react-shell.jsx';
-import {LibraryPage,SeriesPage,SeriesContentsPage,WorksPage,MatchingPage,AssetDetailPage,ProjectPreviewPage,SettingsHomePage,SettingsDisplayPage,SettingsRecognitionPage,SettingsDataPage,SettingsAIPage,ImportSimplePage,ImportReviewPage} from './react-routes.jsx';
+import {LibraryPage,SeriesPage,SeriesContentsPage,WorksPage,MatchingPage,EditorPage,AssetDetailPage,ProjectPreviewPage,SettingsHomePage,SettingsDisplayPage,SettingsRecognitionPage,SettingsDataPage,SettingsAIPage,ImportSimplePage,ImportReviewPage,ImportInspectionPage} from './react-routes.jsx';
 
 import {installRuntimeDiagnostics,recordRuntimeIssue,runtimeIssueSnapshot} from './runtime-diagnostics.js';
 mountReactShell();
@@ -539,6 +539,8 @@ function render(){
     ?SeriesPage({series:state.series,assets:state.assets,display:state.preferences.display,seriesCovers,source:image,onAction:handle})
     :state.route==='matching'
     ?MatchingPage({state,source:image,kindName,session:matchingSession})
+    :state.route==='editor'&&state.activeProject&&current()
+    ?EditorPage({state,draft:current(),editorEntry,renderSceneDOM,inspector,pageInspector,asset,source:image,renderAIPanel})
     :state.route==='assetDetail'&&asset(state.detailAssetID)
       ?AssetDetailPage({asset:asset(state.detailAssetID),seriesTitle:state.series.find(s=>s.id===asset(state.detailAssetID).seriesID)?.title,
         source:image,kindName,format:fmt,onAction:handle})
@@ -558,6 +560,8 @@ function render(){
       ?ImportSimplePage({state,onAction:handle})
     :state.route==='import'&&state.importStep==='review'
       ?ImportReviewPage({state,format:fmt,onAction:handle})
+    :state.route==='import'&&state.importStep==='inspect'&&state.importRecords[state.importIndex]
+      ?ImportInspectionPage({state,format:fmt,onAction:handle})
       :null;
   renderReactPage(reactPage||imperativeRoute(pageControllers.render(state.route)||renderLibrary()));
   view.dataset.renderedRoute=state.route;

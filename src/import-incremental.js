@@ -59,7 +59,8 @@ export function patchImportInspection(view,html){
     oldInspector=bySelector(oldRoot,'.import-inspector'),nextInspector=bySelector(nextRoot,'.import-inspector');
   if(!oldNav||!nextNav||!oldQueue||!nextQueue||!oldPrep||!nextPrep||!oldInspector||!nextInspector)return null;
   const report={patched:true,photoReplaced:false,candidatesChanged:false,newQueueButtons:false};
-  if(oldNav.outerHTML!==nextNav.outerHTML)oldNav.replaceWith(nextNav);
+  // The step stays "inspect" for an incremental patch. React owns the nav
+  // buttons, so keep that top-level node and its click handlers intact.
   oldRoot.setAttribute('aria-busy',nextRoot.getAttribute('aria-busy')||'false');
   setText(bySelector(oldRoot,'.import-processing'),bySelector(nextRoot,'.import-processing'));
   const oldSummary=bySelector(oldRoot,'.import-queue>div'),nextSummary=bySelector(nextRoot,'.import-queue>div');

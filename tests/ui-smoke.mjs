@@ -42,6 +42,7 @@ assert.ok(window.document.querySelector('#blank-create-confirm'),'New work expli
 window.document.querySelector('#blank-create-confirm').click();
 await waitFor(()=>window.document.body.classList.contains('editing'));
 assert.ok(window.document.body.classList.contains('editing'),window.happyDOM.virtualConsolePrinter.readAsString()+' '+window.document.querySelector('#view').textContent.slice(0,120)+' '+window.document.querySelector('#toast').textContent);
+assert.ok(window.document.querySelector('[data-react-page="editor"] #canvas-page'),'React editor keeps the canvas engine mounted');
 assert.match(window.document.querySelector('#view').textContent,/导入创作指令/);
 assert.ok(window.document.body.classList.contains('editing'));
 assert.equal(window.document.querySelector('.swift-editor-head [data-editor-completion]')?.textContent,'完成',window.happyDOM.virtualConsolePrinter.readAsString());

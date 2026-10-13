@@ -212,6 +212,49 @@ export function MatchingPage({state,source,kindName,session}){
   </div>;
 }
 
+// The editor controls are React nodes. Its paper and scene stay one opaque
+// island so pointer capture, canvas contexts and incremental layer patches
+// remain under the existing canvas engine's lifetime.
+export function EditorPage({state,draft,editorEntry,renderSceneDOM,inspector,pageInspector,asset,source,renderAIPanel}){
+  const project=state.activeProject;
+  if(!project||!draft)return null;
+  const selected=editorEntry(draft).find(entry=>entry.value.id===state.selected);
+  const viewportHeight=window.visualViewport?.height||window.innerHeight;
+  const availableWidth=Math.max(180,window.innerWidth-(window.innerWidth<700?24:72));
+  const availableHeight=Math.max(180,viewportHeight-(window.innerWidth<700?200:166));
+  const width=Math.max(160,Math.min(availableWidth,availableHeight*draft.canvas.width/draft.canvas.height));
+  const scale=width/draft.canvas.width,height=draft.canvas.height*scale;
+  const sceneHTML=renderSceneDOM(draft,scale)+
+    `<canvas class="paper-layer" width="${Math.round(draft.canvas.width)}" height="${Math.round(draft.canvas.height)}" aria-hidden="true"></canvas>`+
+    `<canvas id="ink" class="ink-layer" width="${Math.round(draft.canvas.width)}" height="${Math.round(draft.canvas.height)}"></canvas>`;
+  const toolNames=[['select','选择'],['pen','画笔'],['text','文字'],['shape','图形'],['material','素材']];
+  return <><div className="view-head"><div><h1 contentEditable suppressContentEditableWarning id="project-title" spellCheck="false">{project.title}</h1>
+      <p>编辑只改变作品，不修改素材库里的原始尺寸和数量</p></div><div className="actions">
+      <button className="btn" data-act="back-works">返回作品</button><button className="btn" data-act="new-draft">新方案</button>
+      <button className="btn" data-act="creative-json">导入创作指令</button><button className="btn" data-act="export-png">导出 PNG</button><button className="btn" data-act="print">打印 / PDF</button>
+    </div></div>
+    <div className="editor-shell" data-react-page="editor"><div className="editor-tools">
+      {toolNames.map(([id,label])=><button key={id} className={`btn ${state.tool===id?'primary':''}`} data-act="tool" data-val={id}>{label}</button>)}
+      <hr/><button className="btn" data-act="undo">撤销</button><button className="btn" data-act="redo">重做</button>
+    </div><section className="editor-stage"><div className="object-toolbar">
+      <button className="btn mini" data-act="zoom-out">－</button><span>{Math.round(state.zoom*100)}%</span><button className="btn mini" data-act="zoom-in">＋</button>
+      <button className="btn mini" data-act="paper-menu">纸张</button>
+      <button className="btn mini" data-act="restore-baseline" disabled={selected?.kind!=='material'||!selected.value.generationBaseline}>恢复初稿</button>
+      <button className="btn mini" data-act="park" disabled={selected?.kind!=='material'}>放入备选</button>
+    </div><div className="page-wrap"><div id="canvas-page" className={`canvas-page ${draft.paperPattern} ${state.tool==='pen'?'pen':''}`}
+      style={{width,height,backgroundColor:draft.paperColor}} dangerouslySetInnerHTML={{__html:sceneHTML}}/></div>
+      <div className="shelf"><b>备选</b>{draft.items.filter(item=>item.isParked).map(item=><button key={item.id} className="mini-asset" data-act="unpark" data-id={item.id}>
+        <RouteImage asset={asset(item.assetID)} source={source}/></button>)}</div>
+    </section><aside className="editor-inspector"><h2>{selected?`${{material:'素材',text:'文字',shape:'图形'}[selected.kind]} · 图层属性`:'页面设置'}</h2>
+      <div className="inspector-island" style={{display:'contents'}} dangerouslySetInnerHTML={{__html:selected?inspector(selected):pageInspector(draft)}}/>
+      <hr/><label>方案<select id="draft-select" defaultValue={draft.id}>{project.drafts.map((entry,index)=><option key={entry.id} value={entry.id}>方案 {index+1} · {entry.style}</option>)}</select></label>
+      <button className="btn mini" data-act="save-archive">保存手动存档</button><div className="stack" style={{marginTop:12}}>
+        {(project.manualArchives||[]).slice(-5).reverse().map(archive=><button key={archive.id} className="btn mini" data-act="restore-archive" data-id={archive.id}>{new Date(archive.date).toLocaleString()}</button>)}
+      </div></aside></div>
+    {state.aiPanel?<div className="editor-ai-island" style={{display:'contents'}} dangerouslySetInnerHTML={{__html:renderAIPanel()}}/>:null}
+  </>;
+}
+
 export function AssetDetailPage({asset,seriesTitle,source,kindName,format,onAction}){
   const tags=[...(asset.tags||[]),...(asset.contentTags||[]),...(asset.styleTags||[]),...(asset.materialTags||[])]
     .filter((tag,index,list)=>tag&&list.indexOf(tag)===index).sort((a,b)=>a.localeCompare(b,'zh-CN'));
@@ -531,8 +574,6 @@ export function SettingsAIPage({settings,modelPanelOpen,onAction}){
 }
 
 export function ImportSimplePage({state,onAction}){
-  const steps=[['inspect','检查照片'],['review','确认归类'],['done','完成']];
-  const index=steps.findIndex(([key])=>key===state.importStep);
   const button=(name,label,value,kind='btn')=><button className={kind} data-act={name} data-val={value}
     data-react-action="true" onClick={()=>onAction(name,null,value)}>{label}</button>;
   const isDone=state.importStep==='done';
@@ -540,14 +581,7 @@ export function ImportSimplePage({state,onAction}){
   const destination=state.importMode==='work'||state.importMode==='snapshot'?'作品':'素材库';
   const needsManualCheck=state.importMode==='material'&&state.preferences.autoOrganize&&
     !(state.aiSettings?.key&&state.aiSettings.includeThumbnails&&supportsVision(state.aiSettings));
-  return <><div className="import-nav" aria-label="导入进度">
-    <button className="import-back" data-act="import-back" data-react-action="true" aria-label="返回上一步"
-      title="返回" onClick={()=>onAction('import-back')}/>
-    <div className="import-nav-center"><div className="import-progress" aria-label="当前步骤">
-      {steps.map(([key,label],i)=><span key={key} className={state.importStep===key?'current':i<index?'passed':''}>
-        <b>{i<index?'✓':i+1}</b><span className="import-step-label">{label}</span></span>)}
-    </div></div>{button('import-exit',isDone?'完成':'取消导入',null,'import-cancel')}
-  </div>{isDone?<section className="import-done" aria-labelledby="import-done-title"><div className="import-done-card">
+  return <><ImportNavigation state={state} onAction={onAction}/>{isDone?<section className="import-done" aria-labelledby="import-done-title"><div className="import-done-card">
     <div className="import-done-icon" aria-hidden="true">✓</div><h1 id="import-done-title">导入完成</h1>
     <p className="import-done-count">已导入 <strong>{state.importSavedCount||0}</strong> 个{kind}</p>
     <p className="import-done-message">{state.importPending?'内容已安全暂存。云端同步将在后台完成，可以放心返回继续使用。':'内容已经保存。你可以返回查看，也可以继续添加下一批照片。'}</p>
@@ -582,6 +616,55 @@ function ImportNavigation({state,onAction}){
     <button className="import-cancel" data-act="import-exit" data-react-action="true"
       onClick={()=>onAction('import-exit')}>{state.importStep==='done'?'完成':'取消导入'}</button>
   </div>;
+}
+
+export function ImportInspectionPage({state,format,onAction}){
+  const snapshot=state.importMode==='snapshot',previewing=!!state.showCorrectionPreview,manual=!!state.showManualBox;
+  const source=manual?state.correctedURL||state.importURL:previewing?state.paperPreviewURL||state.correctedURL:state.importURL;
+  const candidates=state.importProcessing?[]:state.importCandidates||[];
+  const paperOptions=paperSizeOptions(state.paperSize,{includeNone:true});
+  const button=(action,label,disabled=false,kind='btn')=><button className={kind} data-act={action} disabled={disabled}>{label}</button>;
+  return <><ImportNavigation state={state} onAction={onAction}/>
+    <section className={`import-inspect ${snapshot?'import-snapshot-inspect':''}`} data-react-page="importInspection" aria-busy={!!state.importProcessing}>
+      {!snapshot?<div className="eyebrow">FROM YOUR DESK TO YOUR PAGES</div>:null}<h1>检查这一批</h1>
+      {!snapshot?<p>逐张确认，最后一起归类。</p>:null}<p className="import-processing" role="status">{state.importProcessing||''}</p>
+      <div className="import-queue"><div><strong>{state.importRecords.length} 张照片</strong> <small>{state.importRecords.filter(record=>record.confirmed).length} 张已确认</small></div>
+        <button className="btn" data-act="select-file" data-val="gallery" disabled={state.importRecords.length>=12}>＋ 添加照片</button></div>
+      <div className="queue-strip">{state.importRecords.map((record,index)=><button key={index} className={`queue-item ${index===state.importIndex?'active':''}`}
+        data-act="import-switch" data-id={index}><img src={record.url} alt=""/><span>照片 {index+1}<small>{record.confirmed?'已确认':snapshot?'待检查':record.prefetchStatus==='running'?'后台识别中':record.prefetchStatus==='ready'?`${record.candidates.length} 件已预识别`:record.candidates?.length?`${record.candidates.length} 件素材`:'待识别'}</small></span></button>)}</div>
+      <div className="inspect-columns"><section className="panel import-preparation"><h2>照片 {state.importIndex+1}</h2><div className="photo-preparation-content">
+        <h3>{previewing?'查看校正结果':snapshot?'调整页面边框':'选择画面范围'}</h3>
+        {!snapshot?<p>{previewing?'检查边缘和文字方向，必要时返回调整。':'拖动四角贴合纸张边缘；双页请框住整个跨页。'}</p>:null}
+        <div className="photo-preview" id="crop-preview"><img src={source} alt={snapshot?'页面预览':previewing?'校正结果':'待检查照片'}/><div id="crop-frame" hidden/></div>
+        <div className="import-photo-tools">{manual?null:previewing?<>{button('readjust-paper','重新调整')}{button('apply-paper-preview',state.paperPreviewApplied?'✓ 已应用校正':'✓ 使用校正结果',!!state.paperPreviewApplied)}</>:
+          <>{button('rotate-photo','↻ 旋转 90°')}{button('preview-crop',snapshot?'□ 预览校正':'□ 预览校正')}</>}
+          {!snapshot&&!manual?button('manual-import-box','手动补框',false,'btn primary'):null}</div>
+      </div></section>
+      <section className="panel import-inspector"><h2>{snapshot?'页面与颜色校正':state.importMode==='work'?'检查作品图层':'检查识别结果'}</h2>
+        {!snapshot?<><p>校正后自动识别；如有漏检，使用左侧的“手动补框”。</p><hr/></>:null}
+        <div className="inspector-scroll"><div className="inspector-settings">
+          <label>{snapshot?'页面规格':'当前照片的背景板'}<select id="paper-size" defaultValue={state.paperSize} dangerouslySetInnerHTML={{__html:paperOptions}}/></label>
+          {state.paperSize==='custom'?<div className="import-custom-size"><label>宽 mm<input id="import-paper-width" type="number" min="1" max="10000" defaultValue={state.customImportWidth}/></label>
+            <label>高 mm<input id="import-paper-height" type="number" min="1" max="10000" defaultValue={state.customImportHeight}/></label></div>:null}
+          {(snapshot||state.paperSize!=='none')?<><label>{snapshot?'页面方向':'纸张方向'}<select id="paper-orientation" defaultValue={state.paperOrientation||'auto'}>
+            <option value="auto">自动</option><option value="portrait">竖向</option><option value="landscape">横向</option></select></label>
+            <label className="toggle-row">{snapshot?'校正白纸色偏':'识别前均衡光照'}<input id="balance-light" type="checkbox" defaultChecked={!!state.balanceLight}/></label>
+            {!snapshot?<><label className="toggle-row">规则形状规整<input id="import-shape-regularization" type="checkbox" defaultChecked={state.importShapeRegularization!==false}/></label>
+              <label className="toggle-row">恢复重复孔洞<input id="import-apertures" type="checkbox" defaultChecked={state.importApertures!==false}/></label>
+              <label>最终素材颜色<select id="import-material-color" defaultValue={state.importMaterialColorMode==='original'?'original':'auto'}><option value="auto">A4 光照与颜色还原</option><option value="original">原始照片颜色</option></select><small>仅影响高清输出，不改变数量与分割边缘。</small></label>
+              <label className="toggle-row">未识别时将整张照片视为背景板<input id="whole-paper" type="checkbox" defaultChecked={!!state.wholePaper}/></label></>:null}</>:null}
+          {!snapshot?<><small>{state.paperSize==='none'?'当前照片不计算素材尺寸':'尺寸变化仅更新标尺；不重新抠图'}</small>
+            <button className="import-default-action" id="save-import-defaults">将当前参数设为以后导入的默认值</button>
+            <small>设为默认值会同步本批后续照片，并用于以后新导入的照片；之前的照片不变。</small></>:null}
+        </div>{!snapshot?<><hr/><h3>候选素材 · {state.importProcessing?'识别中':candidates.length}</h3>
+          {button('recognition-diagnostics','导出识别诊断',false,'btn mini')}
+          <div className="import-candidate-grid">{candidates.map((candidate,index)=><div key={index} className="candidate-choice"><button className={`import-candidate-tile ${state.importCandidateSelection?.has(index)?'selected':''}`}
+            data-act="import-toggle-candidate" data-id={index}><span className="candidate-thumb"><img src={state.importCandidateURLs?.[index]||''} alt=""/></span>
+            <span>素材 {index+1} {state.importCandidateSelection?.has(index)?'✓':'○'}</span><small>{state.importCandidateData?.[index]?.width?`${format(state.importCandidateData[index].width)} × ${format(state.importCandidateData[index].height)} mm`:'尺寸待检查'}</small></button>
+            <button className="btn mini" data-import-check={index}>检查边缘</button></div>)}</div></>:null}</div>
+        <button className="btn primary confirm-photo" data-act="import-confirm-photo">→ 确认</button>
+      </section></div>
+    </section></>;
 }
 
 export function ImportReviewPage({state,format,onAction}){
