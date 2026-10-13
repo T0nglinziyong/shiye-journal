@@ -74,7 +74,10 @@ export async function saveImportBatch({state,db,urls,render,onSaved}) {
       p.seriesID=choice==='__none__'||choice==='__no_library__'?null:choice||null;
       for(const c of elements) {
         const id=uid(),blobId=uid(),maskId=uid(),candidateFrameBlobId=uid(),region=c.region;
-        const encodedMask=await extractAlphaMask(c.blob);
+        const encodedMask=await extractAlphaMask(c.blob,{
+          maxEdge:[900,1200,1600].includes(Number(state.preferences?.recognitionPixels))
+            ?Number(state.preferences.recognitionPixels):900
+        });
         assets.push({...candidateMetadata(c,record,state.importBatchSeriesID),id,blobId,
           initialMaskBlobId:maskId,finalMaskBlobId:maskId,candidateFrameBlobId,
           photoBlobId:originalID,isProjectInternal:!copyToLibrary,
@@ -99,7 +102,10 @@ export async function saveImportBatch({state,db,urls,render,onSaved}) {
       // candidate-box frame so storage stays local and compact.
       for(const c of chosen) {
         const id=uid(),blobId=uid(),maskId=uid(),candidateFrameBlobId=uid();
-        const encodedMask=await extractAlphaMask(c.blob);
+        const encodedMask=await extractAlphaMask(c.blob,{
+          maxEdge:[900,1200,1600].includes(Number(state.preferences?.recognitionPixels))
+            ?Number(state.preferences.recognitionPixels):900
+        });
         const {mask,...region}=c.region;
         assets.push({...candidateMetadata(c,record,state.importBatchSeriesID),id,blobId,
           candidateFrameBlobId,initialMaskBlobId:maskId,finalMaskBlobId:maskId,

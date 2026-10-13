@@ -12,6 +12,7 @@ const copyMask=value=>new Uint8ClampedArray(value);
 export async function showCutoutEditor({
   body,modal,original,saved,recognition=saved,candidateFrame=original,title,processing={},
   finalMaskBlob=null,onLoadInitialMask=null,isCancelled=()=>false,onPhase=()=>{},
+  editPixels=CUTOUT_EDIT_EDGE,
   onApply,onRerecognize,onPostprocess,recognitionUI={},toast
 }) {
   // New records read only the canonical corrected candidate RGB + final
@@ -23,7 +24,7 @@ export async function showCutoutEditor({
     const [candidate,fullMask]=await Promise.all([
       decodeImageBlob(candidateFrame),readAlphaMask(finalMaskBlob)
     ]);
-    frame=shrinkEditorBitmap(candidate,CUTOUT_EDIT_EDGE);
+    frame=shrinkEditorBitmap(candidate,editPixels);
     const original=processing.candidateFramePlacement,
       originalW=original?.frameWidth||fullMask.width,
       originalH=original?.frameHeight||fullMask.height,
@@ -57,7 +58,7 @@ export async function showCutoutEditor({
       throw Error('检查抠图暂无法打开：'+(failed.reason?.message||'图片未能解码')+
         '。当前素材不会被自动覆盖；请检查同步状态。');
     }
-    [source,initial,recognized,frame]=decoded.map(row=>shrinkEditorBitmap(row.value,CUTOUT_EDIT_EDGE));
+    [source,initial,recognized,frame]=decoded.map(row=>shrinkEditorBitmap(row.value,editPixels));
   }
   if(isCancelled()){
     for(const bitmap of new Set([source,initial,recognized,frame]))bitmap?.close?.();
@@ -87,7 +88,7 @@ export async function showCutoutEditor({
     recognitionMask=loadedFinalMask||alphaFrom(recognized,processing.recognitionRotationDegrees||0),
     steps=[['rough','修补轮廓'],['recognition','边缘优化'],['final','调整外观']],
     methodList=recognitionUI.methods||[],
-    pixelList=(recognitionUI.pixels||[[1200,'1200 px'],[1600,'1600 px']]).filter(([n])=>Number(n)>=1200),
+    pixelList=recognitionUI.pixels||[[900,'900 px'],[1200,'1200 px'],[1600,'1600 px']],
     savedRecognition=processing.rerecognition||{},
     savedPost=processing.autoPostprocess||savedRecognition.postprocess||{},
     defaultPre={illumination:false,denoise:false,localContrast:false,chromaEdges:true,...recognitionUI.preprocess,...savedRecognition.preprocess},
@@ -108,11 +109,11 @@ export async function showCutoutEditor({
     comparison=null,stroke=null,lastStroke=null,busy=false,manualTouched=false,
     recognitionState={
       method:savedRecognition.method||recognitionUI.method||methodList[0]?.id||'auto',
-      pixels:Math.max(1200,Number(savedRecognition.pixels||recognitionUI.pixelsValue||1200)),
+      pixels:Math.max(900,Number(savedRecognition.pixels||recognitionUI.pixelsValue||editPixels)),
       preprocess:{...defaultPre}
     },
     postState={...defaultPost},
-    lastRecognition=savedRecognition.method?{method:savedRecognition.method,pixels:Math.max(1200,Number(savedRecognition.pixels||1200)),preprocess:{...defaultPre}}:null,
+    lastRecognition=savedRecognition.method?{method:savedRecognition.method,pixels:Math.max(900,Number(savedRecognition.pixels||editPixels)),preprocess:{...defaultPre}}:null,
     lastPostprocess=processing.autoPostprocess?{...processing.autoPostprocess}:null;
 
   const history=[],initialAppearance=appearance,initialIntensity=intensity,initialAutoStraighten=autoStraighten;
@@ -422,10 +423,14 @@ export async function showCutoutEditor({
     busy=true;for(const b of body.querySelectorAll('button'))b.disabled=true;
     try{
       const blob=await png(composed());
+      const note=body.querySelector('#cutout-note');
+      if(note)note.textContent='正在读取高清候选框并映射小蒙版，准备完整 PNG…';
+      await new Promise(resolve=>requestAnimationFrame(resolve));
       await onApply(blob,{
         appearance,intensity,displayRotationDegrees:rotation,autoStraighten,
         recognitionRotationDegrees:processing.recognitionRotationDegrees||0,
-        sourcePixelWidth:w,sourcePixelHeight:h,candidateFramePlacement:processing.candidateFramePlacement||null,
+        sourcePixelWidth:w,sourcePixelHeight:h,recognitionPixels:editPixels,
+        candidateFramePlacement:processing.candidateFramePlacement||null,
         rerecognition:lastRecognition,autoPostprocess:lastPostprocess,manualBoundaryEdited:manualTouched
       },recognition,encodeAlphaMask(mask,w,h));
       modal.close();

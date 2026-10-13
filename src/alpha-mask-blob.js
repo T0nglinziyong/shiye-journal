@@ -26,11 +26,20 @@ export async function readAlphaMask(blob){
    throw Error('蒙版尺寸不匹配或数据损坏');
  return {width,height,alpha:Uint8ClampedArray.from(bytes.subarray(12))};
 }
-export async function extractAlphaMask(imageBlob){
+// Store the accepted initial/final alpha at the same bounded analysis scale
+// used by import segmentation. Keep the original full-resolution PNG/RGB
+// untouched. A later edit projects this compact mask to the full source.
+export async function extractAlphaMask(imageBlob,{maxEdge=900}={}){
+ if(![900,1200,1600].includes(Number(maxEdge)))
+   throw Error('蒙版采样分辨率只能为 900/1200/1600');
  const image=await decodeImageBlob(imageBlob);
  try{
-  const canvas=document.createElement('canvas');canvas.width=image.width;canvas.height=image.height;
+  const scale=Math.min(1,maxEdge/Math.max(image.width,image.height));
+  const canvas=document.createElement('canvas');
+  canvas.width=Math.max(1,Math.round(image.width*scale));
+  canvas.height=Math.max(1,Math.round(image.height*scale));
   const ctx=canvas.getContext('2d',{willReadFrequently:true});
+  ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
   ctx.drawImage(image,0,0,canvas.width,canvas.height);
   const rgba=ctx.getImageData(0,0,canvas.width,canvas.height).data,
     alpha=new Uint8ClampedArray(canvas.width*canvas.height);

@@ -32,6 +32,7 @@ import {saveManualArchive,restoreManualArchive} from './scene-archive.js';
 import {recordSceneOperation,makeAutoSceneSnapshot,currentSceneDraft,copySceneBaseline} from './scene-persistence.js';
 import {retireSplitPiece} from './material-split.js';
 import {readAlphaMask,extractAlphaMask} from './alpha-mask-blob.js';
+import {renderHighResolutionCutout} from './cutout-full-resolution.js';
 import {reconcileCanvasText,textParagraphMarkup} from './canvas-text-content.js';
 import {reconcileEditorScene} from './editor-scene-reconcile.js';
 import {checkpointEditorHistory,ensureEditorHistory,resetEditorHistory,takeEditorHistoryStep} from './editor-history-scope.js';
@@ -1313,7 +1314,7 @@ setInterval(()=>void purgeExpiredTrash(),15*60*1000);
 async function refineCandidateFrame(candidateFrame,request,{postprocessOnly=false}={}){
   const bitmap=await decodeImageBlob(candidateFrame);
   try{
-    const fw=bitmap.width,fh=bitmap.height,maxDim=Math.max(1200,Number(request.pixels)||1200),
+    const fw=bitmap.width,fh=bitmap.height,maxDim=Math.max(900,Math.min(1600,Number(request.pixels)||900)),
       ratio=Math.min(1,maxDim/Math.max(fw,fh)),aw=Math.max(1,Math.round(fw*ratio)),ah=Math.max(1,Math.round(fh*ratio)),
       canvas=document.createElement('canvas');canvas.width=aw;canvas.height=ah;
     const ctx=canvas.getContext('2d',{willReadFrequently:true});ctx.drawImage(bitmap,0,0,aw,ah);
@@ -1370,8 +1371,21 @@ async function refineCandidateFrame(candidateFrame,request,{postprocessOnly=fals
 
 async function openCutoutCheck(id,candidate=null){
   const a=candidate?{title:candidate.title}:asset(id);if(!a)return;
-  if(modal.open)modal.close();
-  body.innerHTML='<section role="status" aria-live="polite" class="cutout-loading"><strong>正在准备抠图编辑器…</strong><p>正在加载约 900px 的候选框图片与透明蒙版…</p><button type="button" class="btn" id="cutout-load-cancel">取消</button></section>';
+  // Native <dialog> stays in the top layer throughout loading and editing.
+  // WebKit may render only a backdrop if close() and showModal() are called
+  // in the same frame while transitioning from asset-detail settings.
+  if(modal.open){
+    modal.close();
+    await new Promise(resolve=>requestAnimationFrame(resolve));
+  }
+  // Bind the inspection scale to this material's original segmentation,
+  // rather than a global setting the user may have changed after import.
+  const importedPixels=(candidate?.processingRecord||a.processingRecord)?.recognitionPixels;
+  const wantedPixels=importedPixels||state.preferences.recognitionPixels;
+  const editPixels=[900,1200,1600].includes(Number(wantedPixels))
+    ?Number(wantedPixels):900;
+  body.innerHTML='<section role="status" aria-live="polite" class="cutout-loading"><strong>正在准备抠图编辑器…</strong><p>正在加载 '+editPixels+'px 候选框 RGB 与透明蒙版…</p><button type="button" class="btn" id="cutout-load-cancel">取消</button></section>';
+  modal.classList.remove('cutout-dialog','material-editor-dialog');
   if(!modal.open)modal.showModal();
   let cancelled=false;
   body.querySelector('#cutout-load-cancel').onclick=()=>{cancelled=true;modal.close();};
@@ -1385,7 +1399,7 @@ async function openCutoutCheck(id,candidate=null){
   // Original COS photos stay untouched; the editor requests only a ~960px
   // server-derived candidate RGB (shrunk to 900px before decoding pixels).
   const stored=async blobId=>blobId?readTimeout(cloudEnabled
-    ?db.previewBlob(blobId,900)
+    ?db.previewBlob(blobId,editPixels)
     :db.get('blobs',blobId).then(row=>row?.data)):null;
   const loadMaskBlob=async blobId=>blobId?readTimeout(db.get('blobs',blobId).then(row=>row?.data)):null;
   const compact=!candidate&&!!a.candidateFrameBlobId
@@ -1394,7 +1408,7 @@ async function openCutoutCheck(id,candidate=null){
   // Dispatch all required Blob IDs in the same turn. The cloud store
   // batches simultaneous metadata lookups, rather than serializing 2–4 COS
   // reads before a blank editor can be rendered.
-  const [saved,original,recognition,candidateFrame,storedMask]=await Promise.all([
+  let [saved,original,recognition,candidateFrame,storedMask]=await Promise.all([
     modern?Promise.resolve(null):Promise.resolve(candidate?.blob||stored(a.blobId)),
     compact?Promise.resolve(null):Promise.resolve(candidate?.originalBlob||stored(a.originalBlobId)),
     compact?Promise.resolve(null):Promise.resolve(candidate?.originalCutoutBlob||stored(a.originalCutoutBlobId)),
@@ -1422,6 +1436,7 @@ async function openCutoutCheck(id,candidate=null){
     preferredMethod=localMethods.some(item=>item.id===(processing.rerecognition?.method||state.preferences.recognition))?(processing.rerecognition?.method||state.preferences.recognition):'auto';
   const openEditor=()=>cancelled?Promise.resolve():showCutoutEditor({
     body,modal,original,saved,recognition,candidateFrame,finalMaskBlob,title:a.title,processing,toast,
+    editPixels,
     isCancelled:()=>cancelled,
     onPhase:message=>{const label=body.querySelector('.cutout-loading p');if(label)label.textContent=message;},
     onLoadInitialMask:compact?async()=>{
@@ -1430,12 +1445,22 @@ async function openCutoutCheck(id,candidate=null){
       if(!(oldBlob instanceof Blob))throw Error('初始蒙版尚未可用');
       return readAlphaMask(a.initialMaskBlobId?oldBlob:await extractAlphaMask(oldBlob));
     }:null,
-    recognitionUI:{methods:localMethods,pixels:recognitionPixelOptions.filter(([n])=>n>=1200),method:preferredMethod,pixelsValue:Math.max(1200,state.preferences.recognitionPixels||1200),preprocess:recognitionPreprocessOptions(),postprocess:recognitionPostprocessOptions()},
+    recognitionUI:{methods:localMethods,pixels:recognitionPixelOptions,method:preferredMethod,pixelsValue:editPixels,preprocess:recognitionPreprocessOptions(),postprocess:recognitionPostprocessOptions()},
     onRerecognize:request=>refineCandidateFrame(candidateFrame,request),
     onPostprocess:request=>refineCandidateFrame(candidateFrame,request,{postprocessOnly:true}),
     onApply:async(blob,record,originalRecognition,maskBlob)=>{
     const rad=record.displayRotationDegrees*Math.PI/180,width=baseWidth&&baseHeight?Math.abs(baseWidth*Math.cos(rad))+Math.abs(baseHeight*Math.sin(rad)):null,height=baseWidth&&baseHeight?Math.abs(baseHeight*Math.cos(rad))+Math.abs(baseWidth*Math.sin(rad)):null;
     const nextProcessing={...record,sourceWidthMM:baseWidth,sourceHeightMM:baseHeight};
+    // Only on deliberate Apply fetch the original high-resolution candidate.
+    // Opening the editor never downloads a large RGB PNG and never uploads
+    // a high-resolution mask. The 900/1200/1600px alpha is mapped back here.
+    const fullRGB=candidate
+      ?candidate.candidateFrameBlob||candidate.originalBlob
+      :await db.get('blobs',a.candidateFrameBlobId||a.originalBlobId||a.blobId).then(row=>row?.data);
+    if(!(fullRGB instanceof Blob)||!fullRGB.size)
+      throw Error('完整候选框原图尚未同步完成；未降低原始素材清晰度');
+    const completePNG=await renderHighResolutionCutout(fullRGB,maskBlob,nextProcessing);
+    blob=completePNG;
     if(candidate){
       candidate.originalCutoutBlob||=originalRecognition;candidate.candidateFrameBlob||=candidateFrame;candidate.processingRecord=nextProcessing;candidate.blob=blob;URL.revokeObjectURL(candidate.url);candidate.url=URL.createObjectURL(blob);if(width&&height){candidate.width=width;candidate.height=height;}
       for(const rec of state.importRecords){const index=rec.candidateData?.findIndex(c=>c===candidate||c.region===candidate.region);if(index>=0){Object.assign(rec.candidateData[index],candidate);rec.candidateURLs[index]=candidate.url;rec.manualEdits=true;if(state.importStep==='inspect')rec.confirmed=false;}}
@@ -1499,8 +1524,23 @@ async function openCutoutCheck(id,candidate=null){
     }
   }
   }catch(error){
-    if(modal.open)modal.close();
-    if(!cancelled)throw error;
+    if(!cancelled&&modal.open){
+      // Keep the error in a VISIBLE dialog. A toast behind an open modal
+      // appears to iPhone users as an endless dark overlay with no page.
+      modal.classList.remove('cutout-dialog','material-editor-dialog');
+      const panel=document.createElement('section');
+      panel.className='cutout-loading';
+      panel.setAttribute('role','alert');
+      const title=document.createElement('strong');
+      title.textContent='检查抠图未能打开';
+      const detail=document.createElement('p');
+      detail.textContent=error?.message||'候选框图片读取失败，请检查同步状态';
+      const close=document.createElement('button');
+      close.type='button';close.className='btn';
+      close.textContent='关闭';close.onclick=()=>modal.close();
+      panel.append(title,detail,close);body.replaceChildren(panel);
+      console.warn('打开素材抠图失败',error);
+    }else if(!cancelled)throw error;
   }
 }
 function openDetail(id){showAssetEditor({state,body,modal,db,esc,imgTag,render,route,toast},id);}
@@ -1545,7 +1585,10 @@ async function extractImportCandidate(source,box,region,{mode,widthMM,heightMM,c
   return {blob:aligned.blob,originalBlob:aligned.originalBlob,candidateFrameBlob:aligned.candidateFrameBlob||aligned.originalBlob,
     url:URL.createObjectURL(aligned.blob),title:'素材 '+(index+1),width,height,alignment:aligned.degrees,
     widthRatio:aligned.widthRatio,heightRatio:aligned.heightRatio,
-    processingRecord:{automaticCorrectionDegrees:aligned.degrees,sourceWidthMM:width,sourceHeightMM:height,candidateFramePlacement:aligned.candidateFramePlacement||null},region,selected:true};
+    processingRecord:{automaticCorrectionDegrees:aligned.degrees,sourceWidthMM:width,sourceHeightMM:height,
+      recognitionPixels:[900,1200,1600].includes(Number(state.preferences.recognitionPixels))
+        ?Number(state.preferences.recognitionPixels):900,
+      candidateFramePlacement:aligned.candidateFramePlacement||null},region,selected:true};
 }
 function importPrefetchSettings(rec){
   return {paperSize:rec.paperSize||state.preferences.paperSize,paperOrientation:rec.paperOrientation||state.preferences.orientation,

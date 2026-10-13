@@ -9,6 +9,15 @@ export function validateCorners(c){
   if(area<.03)throw Error('纸张四角区域太小');
   return c;
 }
+export function rectifiedPixelSize(rawWidth,rawHeight,maxDimension=4096,paperRatio=210/297){
+  if(!Number.isFinite(rawWidth)||!Number.isFinite(rawHeight)||rawWidth<=0||rawHeight<=0||
+     !Number.isFinite(maxDimension)||maxDimension<300||!Number.isFinite(paperRatio)||paperRatio<=0)
+    throw Error('矫正尺寸或纸张比例无效');
+  const longest=Math.min(maxDimension,Math.max(300,Math.round(Math.max(rawWidth,rawHeight))));
+  const width=paperRatio>=1?longest:Math.max(1,Math.round(longest*paperRatio));
+  const height=paperRatio<1?longest:Math.max(1,Math.round(longest/paperRatio));
+  return {width,height};
+}
 export async function rectifyA4Frame(bitmap,corners,maxDimension=4096,paperRatio=210/297){
   validateCorners(corners);
   const p=corners.map(v=>({x:v.x*bitmap.width,y:v.y*bitmap.height}));
@@ -16,8 +25,7 @@ export async function rectifyA4Frame(bitmap,corners,maxDimension=4096,paperRatio
   const rawWidth=(length(p[0],p[1])+length(p[3],p[2]))/2;
   const rawHeight=(length(p[0],p[3])+length(p[1],p[2]))/2;
   if(!Number.isFinite(paperRatio)||paperRatio<=0)throw Error('纸张比例无效');
-  const size=Math.min(maxDimension,Math.max(300,Math.round(Math.max(rawWidth,rawHeight))));
-  const height=Math.round(size/Math.max(1,paperRatio)),width=Math.round(height*paperRatio);
+  const {width,height}=rectifiedPixelSize(rawWidth,rawHeight,maxDimension,paperRatio);
   const processed=await visionTask('warp',{pixels:sourcePixels(bitmap),transferInput:true,sourceWidth:bitmap.width,sourceHeight:bitmap.height,corners,width,height});
   const canvas=pixelCanvas(processed.pixels,width,height);
   const blob=await new Promise((resolve,reject)=>canvas.toBlob(value=>value?resolve(value):reject(Error('校正图像失败')),'image/png'));
