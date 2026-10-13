@@ -12,7 +12,7 @@ test('restore first no-MOR mask selection policy on four physical image cases',(
     ['JOURNEY paper','edge-closed',.99,.86,.97,4,'observed-paper-convex'],
     ['person die-cut','irregular-closed',.75,.55,.77,5,'observed-freeform'],
     ['basketball players','irregular-closed',.81,.57,.75,6,'observed-freeform'],
-    ['plate with disconnected food','irregular-closed',.84,.45,.59,9,'fragmented-carrier-hull'],
+    ['plate with disconnected food','irregular-closed',.84,.76,.59,9,'fragmented-carrier-hull'],
     ['red crab near ellipse','ellipse-fit',.84,.8,.97,5,'observed-ellipse'],
     ['rotated blue star paper','lab-carrier',.94,.67,.82,9,'observed-chroma-hull'],
     ['unobserved ticket','legacy-uncovered',0,0,0,0,'unverified-rectangle']
