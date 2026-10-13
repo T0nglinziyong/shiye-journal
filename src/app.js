@@ -1322,6 +1322,13 @@ async function refineCandidateFrame(candidateFrame,request,{postprocessOnly=fals
     const raw=ctx.getImageData(0,0,aw,ah),
       p=request.placement||{x:0,y:0,width:fw,height:fh},
       roughMask=new Uint8Array(request.mask),tw=Math.max(1,request.targetWidth),th=Math.max(1,request.targetHeight);
+    // A user-edited rough mask is already defined in the original aligned
+    // source coordinates. Without an independently detected physical contour,
+    // a physical-only re-recognition must NEVER fill its bounding rectangle
+    // (which would erase the user's fine alpha edits).
+    if(!postprocessOnly&&request.method==='physical')
+      return {mask:roughMask,method:'physical',edgeMethod:'manual-mask-preserved',
+        shapeModel:null,apertureCount:0};
     let ml=tw,mt=th,mr=0,mb=0;
     for(let y=0;y<th;y++)for(let x=0;x<tw;x++)if(roughMask[y*tw+x]>0){ml=Math.min(ml,x);mt=Math.min(mt,y);mr=Math.max(mr,x+1);mb=Math.max(mb,y+1);}
     if(mr<=ml||mb<=mt){ml=0;mt=0;mr=tw;mb=th;}
