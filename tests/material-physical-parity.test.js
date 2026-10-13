@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import cvModule from '@techstark/opencv-js';
 import {processVision} from '../src/opencv-worker.js';
+import {paperEnvelopeNeeded} from '../src/material-physical-segmentation.js';
+import {keepPhysicalBeforeUnsafeRegularization} from '../src/material-physical-mask-guard.js';
 import {boxIoU,overlapOfSmaller,dedupePhysicalCandidates,mergeAlignedCarrierPieces} from '../src/material-physical-candidates.js';
 
 test('normalized overlap: an identical paper has 100% overlap, not its small area',()=>{
@@ -59,16 +61,38 @@ test('real OpenCV physical mask keeps complete paper, not disconnected ink',asyn
  assert.ok(out[0].mask.alpha.length===out[0].mask.width*out[0].mask.height);
 });
 
-test('real OpenCV physical-only must never promote a blank legacy box to opaque paper',async()=>{
+test('unverified legacy box remains visible as an editable, explicitly flagged rectangle',async()=>{
  const cv=await cvModule,p=blank(180,200);
  const noBoundary={x:.2,y:.2,w:.25,h:.25,instanceMethod:'physical-fallback',
    physicalBoundary:null};
  const out=await processVision(cv,'process-material-boxes',{...p,boxes:[noBoundary],
    method:'physical',shapeRegularization:false,apertures:false});
  assert.equal(out.length,1);
- assert.equal(out[0].segmentationFailed,true);
- assert.equal(out[0].mask,null);
+ assert.equal(out[0].segmentationFailed,false);
+ assert.equal(out[0].segmentationMethod,'physical');
+ assert.equal(out[0].boundarySource,'unverified-box');
  assert.equal(out[0].needsBoundaryReview,true);
+ assert.ok(out[0].mask?.alpha?.some(v=>v===255));
+ assert.equal(out[0].mask.alpha.length,out[0].mask.width*out[0].mask.height);
+});
+
+test('a full light paper receives rectangular envelope while an irregular person remains free-form',()=>{
+ const square={boundarySource:'edge-closed',fillRatio:.91,
+   physicalBoundary:[[.2,.2],[.7,.2],[.7,.6],[.2,.6]]};
+ assert.equal(paperEnvelopeNeeded(square),true);
+ assert.equal(paperEnvelopeNeeded({...square,fillRatio:.55}),false);
+ assert.equal(paperEnvelopeNeeded({...square,boundarySource:'irregular-closed'}),false);
+});
+
+test('do not allow postprocessing to crop top letters or shrink a complete star sheet',()=>{
+ const alpha=new Uint8Array(100*100).fill(255);
+ const paper={segmentationMethod:'physical',boundarySource:'supported-rect-envelope',
+   x:.1,y:.1,w:.4,h:.5,pixels:10000,mask:{width:100,height:100,alpha}};
+ const cut={...paper,y:.12,h:.43,pixels:8200,mask:{width:100,height:100,alpha}};
+ const result=keepPhysicalBeforeUnsafeRegularization(paper,cut);
+ assert.equal(result.pixels,10000);
+ assert.equal(result.shapeGuard,'preserved-physical-perimeter');
+ assert.equal(keepPhysicalBeforeUnsafeRegularization(paper,{...paper,pixels:9990}).pixels,9990);
 });
 
 test('physical Mask ROI must be row-packed: alpha matches complete raster area without stripes',async()=>{
