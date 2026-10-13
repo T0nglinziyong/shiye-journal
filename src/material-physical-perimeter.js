@@ -52,6 +52,7 @@ export function physicalPerimeterChoice({hasObserved,source='unknown',
     hullToMinRect=0,hullToBox=0,solidity=1,vertices=0,
     ellipseAgreement=1}){
  if(!hasObserved)return 'unverified-rectangle';
+ if(source==='manual-outline')return 'observed-manual-polygon';
  if(source==='ellipse-fit')return ellipseAgreement>=.96?'observed-ellipse':'observed-freeform';
  if(source==='lab-carrier'||source==='rotated-paper'||source==='chroma-carrier')
    return 'observed-chroma-hull';
@@ -100,6 +101,8 @@ export function selectPhysicalPerimeter(cv,p,box){
      chosen=physicalPerimeterChoice({hasObserved:true,
        source:box.boundarySource||'unknown',hullToMinRect,hullToBox,
        solidity,vertices:polygon.rows,ellipseAgreement});
+   // A user-edited frame is a hard geometry constraint, not a suggestion
+   // to convexify, auto-fit, or snap to a different physical outline.
    let points=raw;
    if(chosen==='observed-freeform'&&box.boundarySource==='ellipse-fit'&&
       actual?.length>=3)points=actual;
