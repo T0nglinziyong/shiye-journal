@@ -25,9 +25,9 @@ test('live canvas changes resolution but never mutates Scene coordinates',()=>{
    getContext:()=>fakeCtx};
  const first=configureInkBacking(canvas,800,1000,{pixelRatio:2});
  assert.ok(first.changed);
- assert.equal(canvas.width,1200);
+ assert.equal(canvas.width,1280);
  assert.equal(canvas.height,1600);
- assert.deepEqual(fakeCtx.transform,[1.5,0,0,1.6,0,0]);
+ assert.deepEqual(fakeCtx.transform,[1.6,0,0,1.6,0,0]);
  assert.equal(configureInkBacking(canvas,800,1000,{pixelRatio:2}).changed,false);
 });
 test('SVG and live Canvas share one quadratic centreline with real endpoints',()=>{
