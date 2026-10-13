@@ -647,7 +647,11 @@ function bindPage({partial=false}={}){view.querySelectorAll('[data-act]').forEac
   const timeoutInput=view.querySelector('#setting-ai-timeout');if(timeoutInput){timeoutInput.parentElement.firstChild.textContent='连续无响应超时（秒）';timeoutInput.parentElement.insertAdjacentHTML('afterend','<p>流式接收期间只计算连续未收到数据的时间；每轮最多 10 分钟，不会自动重试收费请求。</p>');}
   if(state.route==='editor'){bindAIPanel();const anchor=view.querySelector('[data-act="creative-json"]');if(anchor){const ai=document.createElement('button');ai.type='button';ai.className='btn primary';ai.textContent='AI 创作';ai.onclick=openAICreation;anchor.before(ai);}}
   // Catalog search/select listeners are scoped to the Library controller.
-  const title=view.querySelector('#project-title');if(title)title.addEventListener('blur',()=>{const p=state.activeProject;p.title=title.textContent.trim()||'未命名手账';saveProject();});
+  const title=view.querySelector('#project-title');if(title)title.addEventListener('blur',()=>{
+    const p=state.activeProject;if(!p)return;
+    const next=title.textContent.trim()||'未命名手账';
+    if(next!==p.title){p.title=next;saveProject();}
+  });
   const draftSelect=view.querySelector('#draft-select');if(draftSelect)draftSelect.onchange=()=>{state.activeDraft=draftSelect.value;state.selected=null;resetEditorHistory(state);render();};
   if(state.route==='import'&&state.showManualBox&&!partial)bindManualBox();
   for(const [id,key] of [['import-paper-width','customImportWidth'],['import-paper-height','customImportHeight']]){const el=view.querySelector('#'+id);if(el)el.onchange=()=>{const n=Number(el.value);if(!Number.isFinite(n)||n<1||n>10000){toast('纸张宽高为 1–10000 mm');return;}state[key]=n;recalibrateImport();};}const whole=view.querySelector('#whole-paper');if(whole)whole.onchange=()=>{state.wholePaper=whole.checked;recalibrateImport();};for(const [id,key] of [['paper-size','paperSize'],['paper-orientation','paperOrientation']]){const el=view.querySelector('#'+id);if(el)el.onchange=()=>{state[key]=el.type==='checkbox'?el.checked:el.value;recalibrateImport();};}
@@ -821,17 +825,16 @@ async function legacyHandle(action,id,value){try{switch(action){
       break;
     }
     const decision=editorExitDecision(p,action),publish=decision.publish;
-    // Return preserves a new work as a draft; Complete explicitly publishes it.
-    // Both paths first stage the *entire* editor document, even with no edits.
+    // Viewing/closing an existing work must be read-only unless a user
+    // action changed its data. Real edits have already called saveProject().
     view.endTextEditing?.();
+    const changedStatus=p.isDraft!==decision.isDraft;
     p.isDraft=decision.isDraft;
-    saveProject(); // first flushes any outstanding layer mutations to the journal
     if(action==='editor-done'){
-      // A completed project is an explicit, recoverable EDITABLE Scene v2
-      // milestone, independent of the automatically generated cover PNG.
+      // Completing is an explicit user change even without new pen strokes.
       makeAutoSceneSnapshot(p,{reason:'completed',force:true});
       saveProject();
-    }
+    }else if(changedStatus)saveProject();
     await flushSave();
     if(publish)saveAISnapshotInBackground(p);
     if(state.offlineEditingReturnID===p.id){
