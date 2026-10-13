@@ -14,7 +14,7 @@ const defaults={
   // precision-first manufactured aperture recovery.
   recognitionShapeRegularization:true,
   recognitionApertures:true,
-  customPaperWidth:210,customPaperHeight:297,display:'grid',backdrop:'auto',maxPageItems:0
+  customPaperWidth:210,customPaperHeight:297,display:'grid',backdrop:'auto',maxPageItems:40
 };
 const migrateRecognition=value=>{
   if(recognitionModeAllowed(value))return value;
@@ -38,7 +38,7 @@ export function normalizePreferences(value={}){
     recognitionShapeRegularization:value?.recognitionShapeRegularization!==false,
     recognitionApertures:value?.recognitionApertures!==false,
     autoOrganize:value?.autoOrganize!==false,autoOrganizeWorks:value?.autoOrganizeWorks!==false,
-    maxPageItems:[20,40,80].includes(Number(value?.maxPageItems))?Number(value.maxPageItems):0
+    maxPageItems:[20,40,80].includes(Number(value?.maxPageItems))?Number(value.maxPageItems):40
   };
 }
 export function migrateStoredPreferences(value={}){

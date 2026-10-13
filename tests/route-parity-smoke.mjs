@@ -2,7 +2,7 @@ import {Window} from 'happy-dom';
 import {stubCanvas} from './dom-canvas-stub.mjs';
 import {builtApp,waitFor} from './built-app.mjs';
 import {indexedDB,IDBKeyRange} from 'fake-indexeddb';
-import {readFile,readdir} from 'node:fs/promises';
+import {readFile} from 'node:fs/promises';
 import assert from 'node:assert/strict';
 
 const root=new URL('../dist/',import.meta.url);
@@ -21,8 +21,10 @@ const $=selector=>{const el=win.document.querySelector(selector);assert.ok(el,`m
 const click=selector=>$(selector).click();
 click('[data-route="works"]');
 click('#work-create');
+click('#blank-create-confirm');
 await waitFor(()=>win.document.body.classList.contains('editing'));
 click('.swift-editor-head [data-act="back-works"]');
+await waitFor(()=>win.document.querySelector('#view').dataset.renderedRoute==='works');
 assert.ok($('.card[data-act="open-project"]'));
 
 
@@ -40,10 +42,7 @@ for(const [width,height] of [[320,640],[390,844],[700,1024],[768,1024],[1024,768
   click('[data-route="matching"]');click('[data-route="works"]');click('[data-route="library"]');
   assert.ok($('.asset-grid .action-card'),'Returning to Materials preserves All Materials');
 
-  click('[data-act="detail"]');assert.ok($('.detail-columns'));
-  click('[data-act="detail-edit"]');assert.ok($('#modal').open);
-  click('#modal .modal-close');if($('#modal').open)$('#modal').close();
-  click('[data-act="detail-back"]');
+  assert.equal(win.document.querySelectorAll('[data-act="detail"]').length,0);
   click('[data-route="matching"]');assert.ok($('.matching-page'));
   click('[data-route="works"]');assert.ok($('.works-grid'));
   assert.equal($('#work-kind').options.length,3);
@@ -66,13 +65,15 @@ for(const [width,height] of [[320,640],[390,844],[700,1024],[768,1024],[1024,768
   assert.ok(Number.isFinite(parseFloat(canvas.style.height))&&parseFloat(canvas.style.height)>0);
   assert.ok($('.swift-editor-toolbar'));
   click('.swift-editor-head [data-act="back-works"]');
+  await waitFor(()=>win.document.querySelector('#view').dataset.renderedRoute==='works');
   click('#top-settings');assert.ok($('.settings-list'));
   for(const label of ['AI 与创作','导入与识别','界面与素材库','数据与诊断']){
     [...win.document.querySelectorAll('[data-act="settings-open"]')].find(el=>el.dataset.val===label).click();
-    assert.ok($('.settings-detail'));
+    await waitFor(()=>!!win.document.querySelector('.settings-detail'));
     click('[data-act="settings-back"]');
+    await waitFor(()=>!!win.document.querySelector('.settings-list'));
   }
   click('[data-act="settings-back"]');
 }
 await win.happyDOM.abort();
-console.log('Route parity smoke: 7 viewports, collection, detail, matching, works, import, editor and 4 settings sections');
+console.log('Route parity smoke: 7 viewports, empty collection, matching, works, import, editor and 4 settings sections');

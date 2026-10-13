@@ -19,8 +19,9 @@ export function reconcileKeyedChildren(parent, desired, keyOf, {update,onInsert,
       if(node!==candidate)changed+=node.outerHTML===candidate.outerHTML?0:1;
     }else{
       inserted++;onInsert?.(candidate,key);
-      if(existing){existing.remove();removed++;onRemove?.(existing,key);}
+      if(existing){if(cursor===existing)cursor=existing.nextElementSibling;existing.remove();removed++;onRemove?.(existing,key);}
     }
+    if(cursor?.parentElement!==parent)cursor=null;
     if(node!==cursor)parent.insertBefore(node,cursor);
     retained.add(node);
     cursor=node.nextElementSibling;

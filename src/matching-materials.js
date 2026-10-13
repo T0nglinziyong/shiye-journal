@@ -1,4 +1,4 @@
-import {isCurrentBuiltinMaterial} from './current-materials.js';
+import {isCurrentBuiltinMaterial} from './legacy-builtins.js';
 import {classifyJournalMaterial,relevantJournalFamilies} from './journal-case-study.js';
 const purposeKinds={
   日常记录:['paper','photo','sticker','tape','text'],旅途记录:['photo','paper','tape','sticker'],

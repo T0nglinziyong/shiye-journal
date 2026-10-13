@@ -1,8 +1,11 @@
-import {readdir,readFile,writeFile} from 'node:fs/promises';
-import {join,relative} from 'node:path';
+import {copyFile,readFile,writeFile} from 'node:fs/promises';
+import {join} from 'node:path';
 import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 const root=fileURLToPath(new URL('../dist/',import.meta.url));
+// Emscripten resolves split WASM relative to the hashed worker script URL.
+// Keep one source in public/vendor and place its build copy beside workers.
+await copyFile(join(root,'vendor/opencv-shiye/opencv_js.wasm'),join(root,'assets/opencv_js.wasm'));
 const sha=process.env.VERCEL_GIT_COMMIT_SHA||process.env.GITHUB_SHA||null,
   branch=process.env.VERCEL_GIT_COMMIT_REF||null;
 await writeFile(join(root,'version.json'),JSON.stringify({
@@ -10,8 +13,11 @@ await writeFile(join(root,'version.json'),JSON.stringify({
   branch,buildAt:new Date().toISOString()
 }));
 
-async function files(dir){let out=[];for(const entry of await readdir(dir,{withFileTypes:true})){const path=join(dir,entry.name);if(entry.isDirectory())out.push(...await files(path));else out.push(path);}return out;}
-const list=(await files(root)).filter(x=>!x.endsWith('/sw.js')&&!/\.(woff2?|ttf)$/.test(x)&&!x.endsWith('.wasm')&&!/\/assets\/(?:opencv-|offline-(?:validate|glyph)-source-)/.test(x)&&!/\/(builtin-materials|builtin-examples|sample|journal-cases)\//.test(x)).map(x=>'/'+relative(root,x).replaceAll('\\','/'));
+// Cache only the HTML entry and the files it references directly. Import,
+// editor, AI, PDF and font chunks are fetched when their feature opens.
+const html=await readFile(join(root,'index.html'),'utf8');
+const entryAssets=[...html.matchAll(/(?:src|href)="(\/assets\/[^"]+)"/g)].map(match=>match[1]);
+const list=[...new Set(['/index.html','/manifest.webmanifest','/icon-192.png','/icon-512.png','/version.json',...entryAssets])];
 const hasher=createHash('sha256');
 for(const asset of list){hasher.update(asset);hasher.update(await readFile(join(root,asset.slice(1))));}
 const hash=hasher.digest('hex').slice(0,12);

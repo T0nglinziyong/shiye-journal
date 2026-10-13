@@ -17,3 +17,12 @@ export function applyCatalogPage({view,key,cards,matched,countNode,size}){
   return {total,...range};
 }
 export function resetCatalogPage(key){if(pages.has(key))pages.get(key).current=1;}
+export function catalogDataPage(key,total,size){
+  const state=pages.get(key)||{current:1};
+  const range=pageSlice(total,pageSize(size)||40,state.current);
+  state.current=range.current;pages.set(key,state);
+  return range;
+}
+export function setCatalogDataPage(key,page){
+  const state=pages.get(key)||{current:1};state.current=page;pages.set(key,state);
+}

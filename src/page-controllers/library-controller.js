@@ -19,6 +19,7 @@ export function createLibraryController({
       for(const [id,key] of map){
         const el=view.querySelector('#'+id);if(!el)continue;
         lifetime.on(el,id==='search'?'input':'change',()=>{
+          resetCatalogPage('library');
           void actions.dispatch({type:'library/filter',payload:{key,value:el.value}});
         });
       }
@@ -46,3 +47,4 @@ export function registerLibraryActions(actions,{db,state,asset}){
     return {notify:true,scope:'library',ids:[id],result:next.isFavorite};
   });
 }
+import {resetCatalogPage} from '../catalog-pagination.js';

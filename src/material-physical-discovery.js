@@ -236,7 +236,9 @@ export function discoverPhysicalMaterialBoxes(cv,p,own){
    if(!covered[index])uncovered++;
  }
  const uncoveredFraction=uncovered/Math.max(1,observed);
- if(uncoveredFraction>.07){
+ // The older shipped minimal build omits probabilistic Hough lines. Other
+ // contour and legacy-box candidates remain available until its next rebuild.
+ if(uncoveredFraction>.07&&cv.HoughLinesP){
    const lines=new cv.Mat();
    try{
      cv.HoughLinesP(edges(9,27),lines,1,Math.PI/360,27,68,15);

@@ -7,7 +7,9 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
   const pending=new Map(),previews=new Map(),variants=new Map(),sizes=new Map(),previewSizes=new Map(),variantSizes=new Map(),retained=new Map(),queue=[],versions=new Map(),retryTimers=new Map(),retryCounts=new Map(),resizeTimers=new Map(),brokenPreviews=new Set(),observed=new WeakSet();
   let active=0,generation=0,disposed=false,trimTimer=null;
   // Network bound COS thumbnail reads; browser decoding remains lazy.
-  const concurrency=globalThis.matchMedia?.('(pointer: coarse)').matches?4:6;
+  const tablet=globalThis.matchMedia?.('(pointer: coarse) and (min-width: 700px)').matches;
+  const concurrency=tablet?2:globalThis.matchMedia?.('(pointer: coarse)').matches?3:6;
+  const budget=tablet?0.5:1;
   const version=id=>versions.get(id)||0;
   const touch=(map,id)=>{if(map.has(id)){const v=map.get(id);map.delete(id);map.set(id,v);}};
   // Reuse existing higher-tier decoded bytes, including on list cards. Never
@@ -68,7 +70,7 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
   function trim(){
     trimTimer=null;if(disposed)return;
     const live=new Set([...root.querySelectorAll('img')].map(im=>im.getAttribute('src')));
-    for(const [map,accounting,maxBytes,maxCount] of [[urls,sizes,96*1024*1024,96],[previews,previewSizes,48*1024*1024,480]]){
+    for(const [map,accounting,maxBytes,maxCount] of [[urls,sizes,96*1024*1024*budget,96*budget],[previews,previewSizes,48*1024*1024*budget,480*budget]]){
       let bytes=[...accounting.values()].reduce((a,b)=>a+b,0);
       for(const [id,size] of accounting){
         if(bytes<=maxBytes&&accounting.size<=maxCount)break;
@@ -78,7 +80,7 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
     }
     let bytes=[...variantSizes.values()].reduce((a,b)=>a+b,0);
     for(const [key,size] of variantSizes){
-      if(bytes<=64*1024*1024&&variantSizes.size<=128)break;
+      if(bytes<=64*1024*1024*budget&&variantSizes.size<=128*budget)break;
       const row=variants.get(key);if(!row||live.has(row.url)||retained.has(row.id))continue;
       variants.delete(key);variantSizes.delete(key);notifyImageInvalidation([row.id]);URL.revokeObjectURL(row.url);bytes-=size;
     }

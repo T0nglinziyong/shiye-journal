@@ -163,8 +163,9 @@ function refineRegionLines(cv,candidate,light,w,h,own){
   // Applied only to the strongest Lab hull, never to every raw contour.
   // Four independently movable/rotatable lines (the tested region 2D fit).
   const gx=own(new cv.Mat()),gy=own(new cv.Mat());
-  cv.Scharr(light,gx,cv.CV_32F,1,0);
-  cv.Scharr(light,gy,cv.CV_32F,0,1);
+  // Older minimal builds omit Scharr; Sobel still supplies the edge gradient.
+  if(cv.Scharr){cv.Scharr(light,gx,cv.CV_32F,1,0);cv.Scharr(light,gy,cv.CV_32F,0,1);}
+  else{cv.Sobel(light,gx,cv.CV_32F,1,0,3);cv.Sobel(light,gy,cv.CV_32F,0,1,3);}
   const gxData=gx.data32F,gyData=gy.data32F,L=light.data;
   const rough=candidate.corners.map(p=>({x:p.x*w,y:p.y*h}));
   const search=Math.round(Math.max(w,h)*.13);

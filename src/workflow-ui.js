@@ -6,7 +6,6 @@ import {mountAssetSelection} from './library-selection-ui.js';
 import {parity} from './parity-ui.js';
 import {searchableSeries} from './library-model.js';
 import {classifyRecord} from './classification.js';
-import {pagePDF,canvasPDFPage,materialPrintPlacements} from './pdf-export.js';
 import {showAIDiagnostics,showAIContexts} from './ai-diagnostics.js';
 import {mountImportCandidateMenus} from './import-workspace-ui.js';
 import {mountFourFilters,mountFilterControl} from './filter-controls.js';
@@ -154,6 +153,7 @@ async function exportSelectedWorks(c,records,format='native'){
       const canvas=await c.rasterize(draft,scale);
       if(format==='pdf'){
         const height=draft.physicalPageHeightMM||297,width=height*draft.canvas.width/draft.canvas.height;
+        const {pagePDF,canvasPDFPage}=await import('./pdf-export.js');
         c.download(await pagePDF([await canvasPDFPage(canvas,width,height)]),record.title+'.pdf');
       }else{
         const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));
@@ -237,6 +237,7 @@ export function mountWorkflowControls(c) {
       const height=d.physicalPageHeightMM||297,width=height*d.canvas.width/d.canvas.height;
       const scale=Math.min(height*300/25.4/d.canvas.height,8192/Math.max(d.canvas.width,d.canvas.height));
       const canvas=await c.rasterize(d,scale);
+      const {pagePDF,canvasPDFPage}=await import('./pdf-export.js');
       c.download(await pagePDF([await canvasPDFPage(canvas,width,height)]),c.state.activeProject.title+'.pdf');
     }));
   }
@@ -354,6 +355,7 @@ async function classifyBatch(c,kind) {
   c.render();c.toast('已整理 '+count+' 件');
 }
 async function exportMaterials(c,ids) {
+  const {pagePDF,canvasPDFPage,materialPrintPlacements}=await import('./pdf-export.js');
   const placements=materialPrintPlacements(ids.map(c.asset).filter(Boolean)),scale=300/25.4,pages=[];
   for(let page=0;page<=placements.at(-1).page;page++) {
     const canvas=document.createElement('canvas');canvas.width=Math.round(210*scale);canvas.height=Math.round(297*scale);

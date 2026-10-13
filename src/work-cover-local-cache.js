@@ -8,7 +8,7 @@ export function createLocalWorkCovers({
   onReady=()=>{},onError=()=>{},createURL=blob=>URL.createObjectURL(blob),
   revokeURL=url=>URL.revokeObjectURL(url)
 }){
-  const entries=new Map(),jobs=new Map();const maxMemory=60;
+  const entries=new Map(),jobs=new Map();const maxMemory=24;
   const account=()=>String(state.accountId||'browser');
   const key=p=>JSON.stringify([account(),p.id,p.updatedAt,p.activeDraftID]);
   const missing=p=>!!p&&!p.isSnapshot&&!p.isTemplate&&!!p.drafts?.length&&
@@ -70,11 +70,10 @@ export function createLocalWorkCovers({
       const p=state.projects.find(project=>project.id===card.dataset.id);
       if(p&&missing(p))void ensure(p).catch(()=>{});
     };
-    cards.slice(0,8).forEach(loadCard);
     const observer=typeof IntersectionObserver==='function'
-      ?new IntersectionObserver(rows=>rows.forEach(row=>{if(row.isIntersecting){loadCard(row.target);observer.unobserve(row.target);}}),{rootMargin:'650px'}):null;
-    observer?.observe&&cards.slice(8).forEach(card=>observer.observe(card));
-    if(!observer)cards.slice(8,16).forEach(loadCard);
+      ?new IntersectionObserver(rows=>rows.forEach(row=>{if(row.isIntersecting){loadCard(row.target);observer.unobserve(row.target);}}),{rootMargin:'120px'}):null;
+    observer?.observe&&cards.forEach(card=>observer.observe(card));
+    if(!observer)cards.slice(0,2).forEach(loadCard);
     return ()=>{disposed=true;observer?.disconnect();};
   }
   return {peek,ensure,remember,observe,missing,

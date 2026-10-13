@@ -64,83 +64,28 @@ export function createWorkCoverBackfill({db,state,cloudEnabled=false,onError=con
     enqueue(id,updatedAt);
   }
 
-  // Reconcile historical covers after initial library load, and again when
-  // account data or retry eligibility changes. One paced loop is used instead
-  // of creating one long-lived timer per historical project.
-  let backgroundAccount=null,backgroundTimer=null;
-  function startBackground(){
-    if(!cloudEnabled)return;
-    const account=state.accountId||'browser';
-    if(backgroundAccount!==account){
-      if(backgroundTimer!==null)clearTimeout(backgroundTimer);
-      backgroundAccount=account;
-      attempted.clear();retryAfter.clear();failureCount.clear();
-      backgroundTimer=null;
-    }
-    if(backgroundTimer!==null)return;
-    const tick=()=>{
-      backgroundTimer=null;
-      if((state.accountId||'browser')!==account||!cloudEnabled)return;
-      const missing=state.projects.filter(needsWorkCover);
-      const candidate=missing.find(project=>{
-        const key=JSON.stringify([account,project.id,project.updatedAt]);
-        return !queued.has(key)&&Date.now()>=(attempted.get(key)||0)&&Date.now()>=(retryAfter.get(key)||0);
-      });
-      if(candidate)enqueue(candidate.id,candidate.updatedAt);
-      // Keep a light periodic scan even after today's migration completes:
-      // a subsequent save may create a new missing cover while this tab lives.
-      backgroundTimer=setTimeout(tick,missing.length?(candidate?2200:10000):30000);
-      backgroundTimer.unref?.();
-    };
-    backgroundTimer=setTimeout(tick,4000);
-    backgroundTimer.unref?.();
-  }
-
   function observe(view){
     if(!cloudEnabled||state.route!=='works')return ()=>{};
     const cards=[...view.querySelectorAll('[data-act="open-project"][data-id]')]
       .filter(card=>needsWorkCover(state.projects.find(p=>p.id===card.dataset.id)));
     if(!cards.length)return ()=>{};
-    // Immediately queue the first visible cards; don't wait for a delayed
-    // IntersectionObserver callback before the very first COS cover attempt.
-    for(const card of cards.slice(0,4)){
-      const project=state.projects.find(p=>p.id===card.dataset.id);
-      if(project)enqueue(project.id,project.updatedAt);
-    }
-    let stopped=false,timer=null;
-    // Fill visible cards immediately; do not stage every historical project
-    // at once or compete with foreground downloads.
+    // Repair only cards that enter the viewport. Historical projects no
+    // longer compete with editing, import, or foreground image downloads.
     const observer=typeof IntersectionObserver==='function'
       ?new IntersectionObserver(entries=>{
         for(const row of entries)if(row.isIntersecting){
           const id=row.target.dataset.id,project=state.projects.find(p=>p.id===id);
-          if(project)enqueue(id,project.updatedAt);
+          if(project&&document.visibilityState!=='hidden')enqueue(id,project.updatedAt);
           observer.unobserve(row.target);
         }
-      },{rootMargin:'550px'}):null;
+      },{rootMargin:'120px'}):null;
     if(observer)cards.forEach(card=>observer.observe(card));
     else cards.slice(0,6).forEach(card=>{
       const project=state.projects.find(p=>p.id===card.dataset.id);
       if(project)enqueue(project.id,project.updatedAt);
     });
-    const backlog=cards.map(card=>card.dataset.id);
-    // Keep historical Works covers COS-resident even if the user has not
-    // scrolled to them yet. Idle pacing leaves free slots for active reads.
-    const next=()=>{
-      if(stopped||state.route!=='works')return;
-      while(backlog.length){
-        const id=backlog.shift(),project=state.projects.find(p=>p.id===id);
-        if(!project||!needsWorkCover(project))continue;
-        const key=JSON.stringify([state.accountId||'browser',id,project.updatedAt]);
-        if(Date.now()<(attempted.get(key)||0)||Date.now()<(retryAfter.get(key)||0)||queued.has(key))continue;
-        enqueue(id,project.updatedAt);
-        break;
-      }
-      if(backlog.length)timer=setTimeout(next,2200);
-    };
-    timer=setTimeout(next,800);
-    return ()=>{stopped=true;observer?.disconnect();if(timer!==null)clearTimeout(timer);};
+    return ()=>observer?.disconnect();
   }
 
-  return {observe,enqueue,retry,startBackground,needsWorkCover,whenIdle:()=>chain};
+  return {observe,enqueue,retry,startBackground:()=>{},needsWorkCover,whenIdle:()=>chain};
 }
