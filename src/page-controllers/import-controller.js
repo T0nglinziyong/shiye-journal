@@ -20,6 +20,7 @@ export function createImportController({
       return true;
     },
     mount(lifetime){
+      lifetime.use(()=>{disposePaper();disposeManual();});
       lifetime.use(actions.subscribe(event=>{
         if(event.scope!=='import')return;
         if(event.type==='import/candidate/toggle'){
