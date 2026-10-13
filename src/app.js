@@ -132,6 +132,7 @@ import {createImportController,registerImportActions} from './page-controllers/i
 import {createEditorController,registerEditorActions} from './page-controllers/editor-controller.js';
 import {createSettingsController,registerSettingsActions} from './page-controllers/settings-controller.js';
 import {createStandardController} from './page-controllers/standard-controller.js';
+import {createMatchingController,registerMatchingActions} from './page-controllers/matching-controller.js';
 import {renderLibraryHTML} from './page-controllers/library-view.js';
 import {renderWorksHTML} from './page-controllers/works-view.js';
 import {renderEditorHTML} from './page-controllers/editor-view.js';
@@ -356,6 +357,7 @@ registerWorksActions(actionStore);
 registerImportActions(actionStore,{state,saveActiveImportRecord});
 registerSettingsActions(actionStore,{providers:AI_PROVIDERS});
 registerEditorActions(actionStore,{historyStep});
+registerMatchingActions(actionStore,{addMatchingFromRecommendation});
 pageControllers.register('library',createLibraryController({
   renderHTML:renderLibrary,patchCatalog:patchMaterialCatalog,view,state,parity,
   binder:bindPage,actions:actionStore,onCatalogChanged:updateLibraryResults
@@ -389,12 +391,16 @@ pageControllers.register('editor',createEditorController({
     mountCanvasSelection({state,view,current,checkpoint,saveProject,render,toast});
   }
 }));
+pageControllers.register('matching',createMatchingController({
+  renderHTML:renderMatching,actions:actionStore,
+  updateMatchingRegions,queueDefaults:queueMatchingDefaultsSync
+}));
 pageControllers.register('settings',createSettingsController({
   renderHTML:renderSettings,patchModel:patchAISettingsModel,view,state,
   binder:bindPage,actions:actionStore,render
 }));
 for(const [routeName,renderHTML] of [
-  ['series',renderSeries],['matching',renderMatching],
+  ['series',renderSeries],
   ['assetDetail',renderAssetDetail],['projectPreview',renderProjectPreview]
 ])pageControllers.register(routeName,createStandardController(renderHTML));
 // Collection refresh changes business state. Only this projection subscriber
@@ -866,23 +872,15 @@ async function legacyHandle(action,id,value){try{switch(action){
     toast('已加入本次创作');break;case 'detail-match':if((asset(state.detailAssetID)?.supply?.quantity??1)===0)throw Error('素材可用库存为 0');addMatchingFromLibrary(state,[state.detailAssetID]);route('matching');break;case 'detail-series':libraryHistory.push({route:state.route,seriesID:state.seriesID,detailAssetID:state.detailAssetID});state.seriesID=asset(state.detailAssetID)?.seriesID||'all';route('library');break;case 'detail-similar':view.dispatchEvent(new CustomEvent('show-similar'));break;case 'detail-edit':openDetail(state.detailAssetID);break;case 'detail-check':await openCutoutCheck(state.detailAssetID);break;case 'detail-favorite':await actionStore.dispatch({type:'library/favorite',payload:{id:state.detailAssetID}});break;
   case 'new-series':openSeriesEditor();break;case 'series-detail':libraryHistory.push({route:state.route,seriesID:state.seriesID,detailAssetID:state.detailAssetID});state.seriesID=id;route('library');break;
   case 'match-library':route('library');break;case 'match-context':{const scope=matchingScope();toast(`必须 ${scope.required.length} · 优先 ${scope.preferred.length} · 可用 ${scope.available.length} · 不使用 ${scope.excluded.length}`);break;}
-  case 'match-filter':state.recommendFilter=value;updateMatchingRegions(['.match-chips','.match-rec-grid']);queueMatchingDefaultsSync();break;
-  case 'match-skip':state.excludedAssetIDs=[...new Set([...state.excludedAssetIDs,id])];updateMatchingRegions(['.match-rec-grid','.basket>.muted','.match-recommendations .match-panel-head small','.match-action']);break;
-  case 'match-allow':state.excludedAssetIDs=state.excludedAssetIDs.filter(x=>x!==id);updateMatchingRegions(['.match-rec-grid','.basket>.muted','.match-recommendations .match-panel-head small','.match-action']);break;
-  case 'match-core':state.coreIDs=state.coreIDs.includes(id)?state.coreIDs.filter(x=>x!==id):[...state.coreIDs,id];
-    state.matchCore=state.coreIDs[0]||state.basket[0];
-    updateMatchingRegions(['.match-basket-scroll','.basket>.muted','.match-action']);break;
+  case 'match-filter':await actionStore.dispatch({type:'matching/filter',payload:{value}});break;
+  case 'match-skip':await actionStore.dispatch({type:'matching/exclude',payload:{id}});break;
+  case 'match-allow':await actionStore.dispatch({type:'matching/include',payload:{id}});break;
+  case 'match-core':await actionStore.dispatch({type:'matching/priority',payload:{id}});break;
   case 'match-use':openMaterialUse(id);break;
   case 'match-generate':state.matchPurpose=view.querySelector('#match-purpose')?.value||'日常记录';state.matchProcessing=view.querySelector('#match-processing')?.value||'保留完整';state.matchStyle=view.querySelector('#match-style')?.value||state.matchStyle;state.matchIntent=view.querySelector('#match-intent')?.value||'';captureMatchContent();state.matchMode=view.querySelector('#match-mode')?.value||'single';state.matchRatio=readMatchPaper();state.matchStyles=readMatchSelection('match-style',state.matchStyle);state.matchPurposes=readMatchSelection('match-purpose',state.matchPurpose);queueMatchingDefaultsSync();await matchingSession.generate();break;
   case 'match-export-gpt':await exportOfflineCreation();break;
   case 'match-import-gpt':openOfflineImportDialog();break;
-  case 'basket':{
-    const removing=state.basket.includes(id);
-    if(removing){state.basket=state.basket.filter(x=>x!==id);state.coreIDs=state.coreIDs.filter(x=>x!==id);}
-    else addMatchingFromRecommendation(state,id);
-    updateMatchingRegions(['.match-basket-scroll','.basket>.muted','.match-rec-grid','.match-recommendations .match-panel-head small','.match-action']);
-    break;
-  }
+  case 'basket':await actionStore.dispatch({type:'matching/basket',payload:{id}});break;
   case 'reset-match':if(!confirm('重新搭配？已有保存作品不会被删除。'))break;await matchingSession.reset(()=>{state.matchCore=null;state.basket=[];state.coreIDs=[];state.excludedAssetIDs=[];});render();break;
   case 'create-from-basket':openManualCreationDialog();break;
   case 'new-project':{
