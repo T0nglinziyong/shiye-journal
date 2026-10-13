@@ -14,7 +14,15 @@ export function configureInkBacking(canvas,logicalWidth,logicalHeight,{pixelRati
   const rect=canvas.getBoundingClientRect?.()||{};
   const next=inkBackingSize({logicalWidth,logicalHeight,
     cssWidth:rect.width||canvas.clientWidth,cssHeight:rect.height||canvas.clientHeight,pixelRatio});
-  const changed=canvas.width!==next.width||canvas.height!==next.height;
+  // Panzoom fires many events per pinch. Exact-per-pixel reallocations would
+  // discard the transient raster every frame. Use hysteresis: enlarge only
+  // when the current backing is noticeably undersampled, and shrink only
+  // after a substantial reduction in displayed size.
+  const established=canvas.width>0&&canvas.height>0;
+  const closeEnough=established&&canvas.width>=next.width*.8&&
+    canvas.height>=next.height*.8&&canvas.width<=next.width*1.7&&
+    canvas.height<=next.height*1.7;
+  const changed=!closeEnough;
   if(changed){canvas.width=next.width;canvas.height=next.height;}
   const ctx=canvas.getContext('2d');
   if(!ctx)throw Error('Ink 2D context unavailable');
