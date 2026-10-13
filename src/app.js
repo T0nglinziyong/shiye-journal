@@ -365,8 +365,8 @@ function render(){
       bindPage({partial:true});
       if(patch.touched.length){
         bindWorksCards({state,view,handle},patch.touched);
-        refreshWorkPreviews({state,view});
         reusePagePreviews({view,state});
+        refreshWorkPreviews({state,view});
         view.workCoverDispose?.();
         view.localWorkCoverDispose?.();
         view.workCoverDispose=workCoverBackfill.observe(view);
