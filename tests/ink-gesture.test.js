@@ -40,7 +40,7 @@ test('coalesced Pencil samples and final lift are lossless and de-duplicated',()
 test('editor uses fast incremental canvas paint with a size-matched eraser circle',async()=>{
  const [editor,viewport,css,tree]=await Promise.all([
    read('canvas-editor-ui.js'),read('canvas-viewport.js'),read('canvas-editor-fixes.css'),read('editor-layer-tree.js')]);
- assert.match(editor,/pts\\.slice\\(Math\\.max\\(0,painted-2\\)\\)/);
+ assert.match(editor,/pts\.slice\(Math\.max\(0,painted-2\)\)/);
  assert.match(editor,/configureInkBacking/);
  assert.match(editor,/pointerrawupdate/);
  assert.match(editor,/eraserSamples\s*=\s*\[\]/);
