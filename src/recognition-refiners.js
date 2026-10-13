@@ -52,7 +52,16 @@ async function parallelFinalPipeline({
       shapeRegularization:postprocess.shapeRegularization!==false,
       apertures:postprocess.apertures!==false
     })));
-    return results.flat().sort((a,b)=>a.y-b.y||a.x-b.x);
+    const all=results.flat();
+    // Unlike legacy MorphGAC, a physical-only fallback can deliberately
+    // reject a candidate with no real exterior. Never let it reach cropBitmap
+    // without a mask: that would turn the unknown fragment into a full paper.
+    const filtered=['physical','adaptive'].includes(method)?
+      all.filter(region=>region.mask?.alpha?.some(value=>value>0)):all;
+    if(filtered.length!==all.length)onProgress({status:'fallback',
+      count:all.length-filtered.length,
+      message:'没有可靠物理边界的候选已跳过，避免错误保存整块矩形背景。'});
+    return filtered.sort((a,b)=>a.y-b.y||a.x-b.x);
   }catch(error){
     onProgress({status:'fallback',engine:method,message:error.message});
     return candidates;
