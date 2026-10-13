@@ -76,13 +76,53 @@ export function boundaryConfidence(cv,p,region){
  try{return ctx.evaluate(region);}finally{ctx.close();}
 }
 
+export function paperEnvelopeNeeded(box){
+  // A coherent almost-filled, closed *paper* contour is a rectangular
+  // carrier, even if Canny traced a notch around its printed letters.
+  // Never impose this rule on people, holes or unverified legacy boxes.
+  return box?.boundarySource==='edge-closed' &&
+    Number(box.fillRatio)>=.83 &&
+    Array.isArray(box.physicalBoundary) && box.physicalBoundary.length>=3;
+}
+
+function physicalBoundaryForMask(cv,p,box){
+  const w=p.width,h=p.height,base=box.physicalBoundary;
+  if(!Array.isArray(base)||base.length<3){
+    // User preference: keep unverified candidates as editable rectangles.
+    // An uncertain box must not silently disappear from the import list.
+    const x=box.x,y=box.y,r=x+box.w,b=y+box.h;
+    return {points:[[x,y],[r,y],[r,b],[x,b]],
+      boundarySource:'unverified-box',needsBoundaryReview:true};
+  }
+  if(!paperEnvelopeNeeded(box))return {points:base};
+  const contour=cv.matFromArray(base.length,1,cv.CV_32SC2,
+    base.flatMap(([x,y])=>[Math.round(x*w),Math.round(y*h)])),
+    hull=new cv.Mat();
+  try{
+    cv.convexHull(contour,hull,false,true);
+    const fitted=cv.minAreaRect(hull),
+      hullArea=Math.abs(cv.contourArea(hull)),
+      area=Math.max(1,fitted.size.width*fitted.size.height),
+      fill=hullArea/area;
+    // A severely nonrectangular carrier should retain its observed outline.
+    // The fitted envelope is adopted only when shape evidence supports it.
+    if(fill<.78)return {points:base};
+    const corners=cv.boxPoints(fitted),cx=fitted.center.x,cy=fitted.center.y;
+    const points=corners.map(pt=>{
+      // Tiny outward safety margin prevents light print at a pale paper edge
+      // from being amputated by 900px antialiasing.
+      const dx=pt.x-cx,dy=pt.y-cy,n=Math.max(1,Math.hypot(dx,dy));
+      return [clamp((pt.x+dx/n)/w,0,1),clamp((pt.y+dy/n)/h,0,1)];
+    });
+    return {points,boundarySource:'supported-rect-envelope',
+      originalPhysicalBoundary:base};
+  }finally{hull.delete();contour.delete();}
+}
+
 function physicalRegion(cv,p,box){
- const w=p.width,h=p.height;
- const points=box.physicalBoundary;
- // A detection with only an axis-aligned box is NOT evidence of a paper
- // perimeter. Never make it an opaque rectangle by default.
+ const w=p.width,h=p.height,
+   boundary=physicalBoundaryForMask(cv,p,box),points=boundary.points;
  if(!Array.isArray(points)||points.length<3)return null;
- if(!points||points.length<3)return null;
  // Rasterize at the SAME pixel scale as the original morph segmenter.
  const ax=clamp(Math.floor(Math.min(...points.map(v=>v[0]))*w)-2,0,w-1),
    ay=clamp(Math.floor(Math.min(...points.map(v=>v[1]))*h)-2,0,h-1),
@@ -128,7 +168,7 @@ function physicalRegion(cv,p,box){
            // MorphGAC retry), never turn the region into a full rectangle.
            return null;
          }
-         return {...box,x:(ax+bounds.x)/w,y:(ay+bounds.y)/h,w:bounds.width/w,h:bounds.height/h,
+         return {...box,...boundary,x:(ax+bounds.x)/w,y:(ay+bounds.y)/h,w:bounds.width/w,h:bounds.height/h,
            pixels:cv.countNonZero(mat),segmentationMethod:'physical',segmentationFailed:false,
            orientedBox:orientedContourBox(cv,biggest,ax,ay,w,h,cv.countNonZero(mat)),
            mask:{width:bounds.width,height:bounds.height,alpha:packed,polygons:[polyLocal],
@@ -192,8 +232,12 @@ function localPhysicalFallback(cv,p,box){
 export function segmentPhysicalOrAdaptive(cv,p){
  const output=[],qualityContext=createBoundaryConfidenceContext(cv,p);
  try{for(const box of p.boxes||[]){
-   const candidateBox=box.physicalBoundary?box:localPhysicalFallback(cv,p,box);
-   const physical=candidateBox?physicalRegion(cv,p,candidateBox):null;
+   // Pure physical mode keeps the *whole unverified box* for manual
+   // correction. In adaptive mode a local observed contour may be considered,
+   // but absence of one must also retain the approximate rectangle.
+   const candidateBox=p.method==='physical'?box:
+     box.physicalBoundary?box:(localPhysicalFallback(cv,p,box)||box);
+   const physical=physicalRegion(cv,p,candidateBox);
    if(!physical){
      if(p.method==='adaptive'){
        const alternate=segmentMaterialBoxes(cv,{...p,boxes:[box]})[0];
@@ -205,9 +249,12 @@ export function segmentPhysicalOrAdaptive(cv,p){
      }
      continue;
    }
-   const quality=qualityContext.evaluate(candidateBox),candidate={
+   const evidenceBox={...candidateBox,physicalBoundary:physical.originalPhysicalBoundary||
+     (box.physicalBoundary||null)};
+   const quality=qualityContext.evaluate(evidenceBox),candidate={
      ...physical,boundaryConfidence:quality.score,boundaryEvidence:quality,
-     needsBoundaryReview:quality.score<.46||!box.physicalBoundary||box.needsBoundaryReview===true
+     needsBoundaryReview:quality.score<.46||!box.physicalBoundary||
+       box.needsBoundaryReview===true||physical.boundarySource==='unverified-box'
    };
    if(p.method!=='adaptive'||(quality.score>=.46&&box.physicalBoundary)){
      output.push(candidate);continue;
@@ -225,7 +272,7 @@ export function segmentPhysicalOrAdaptive(cv,p){
      x:alternate.x,y:alternate.y,w:alternate.w,h:alternate.h});
    // Compare independently scored contours, not shape class or only area.
    // The contraction guard prevents swapping paper for interior printing.
-   const takeMorph=retention>=.88&&morphQuality.score>quality.score+.06
+   const takeMorph=(retention>=.88&&morphQuality.score>quality.score+.06)
      ||(!box.physicalBoundary&&morphQuality.score>quality.score+.03);
    output.push(takeMorph?
      {...alternate,boundaryConfidence:morphQuality.score,boundaryEvidence:morphQuality,

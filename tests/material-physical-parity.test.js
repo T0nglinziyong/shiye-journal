@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import cvModule from '@techstark/opencv-js';
 import {processVision} from '../src/opencv-worker.js';
+import {paperEnvelopeNeeded} from '../src/material-physical-segmentation.js';
+import {keepPhysicalBeforeUnsafeRegularization} from '../src/material-physical-mask-guard.js';
 import {boxIoU,overlapOfSmaller,dedupePhysicalCandidates,mergeAlignedCarrierPieces} from '../src/material-physical-candidates.js';
 
 test('normalized overlap: an identical paper has 100% overlap, not its small area',()=>{
@@ -59,16 +61,38 @@ test('real OpenCV physical mask keeps complete paper, not disconnected ink',asyn
  assert.ok(out[0].mask.alpha.length===out[0].mask.width*out[0].mask.height);
 });
 
-test('real OpenCV physical-only must never promote a blank legacy box to opaque paper',async()=>{
+test('unverified legacy box remains visible as an editable, explicitly flagged rectangle',async()=>{
  const cv=await cvModule,p=blank(180,200);
  const noBoundary={x:.2,y:.2,w:.25,h:.25,instanceMethod:'physical-fallback',
    physicalBoundary:null};
  const out=await processVision(cv,'process-material-boxes',{...p,boxes:[noBoundary],
    method:'physical',shapeRegularization:false,apertures:false});
  assert.equal(out.length,1);
- assert.equal(out[0].segmentationFailed,true);
- assert.equal(out[0].mask,null);
+ assert.equal(out[0].segmentationFailed,false);
+ assert.equal(out[0].segmentationMethod,'physical');
+ assert.equal(out[0].boundarySource,'unverified-box');
  assert.equal(out[0].needsBoundaryReview,true);
+ assert.ok(out[0].mask?.alpha?.some(v=>v===255));
+ assert.equal(out[0].mask.alpha.length,out[0].mask.width*out[0].mask.height);
+});
+
+test('a full light paper receives rectangular envelope while an irregular person remains free-form',()=>{
+ const square={boundarySource:'edge-closed',fillRatio:.91,
+   physicalBoundary:[[.2,.2],[.7,.2],[.7,.6],[.2,.6]]};
+ assert.equal(paperEnvelopeNeeded(square),true);
+ assert.equal(paperEnvelopeNeeded({...square,fillRatio:.55}),false);
+ assert.equal(paperEnvelopeNeeded({...square,boundarySource:'irregular-closed'}),false);
+});
+
+test('do not allow postprocessing to crop top letters or shrink a complete star sheet',()=>{
+ const alpha=new Uint8Array(100*100).fill(255);
+ const paper={segmentationMethod:'physical',boundarySource:'supported-rect-envelope',
+   x:.1,y:.1,w:.4,h:.5,pixels:10000,mask:{width:100,height:100,alpha}};
+ const cut={...paper,y:.12,h:.43,pixels:8200,mask:{width:100,height:100,alpha}};
+ const result=keepPhysicalBeforeUnsafeRegularization(paper,cut);
+ assert.equal(result.pixels,10000);
+ assert.equal(result.shapeGuard,'preserved-physical-perimeter');
+ assert.equal(keepPhysicalBeforeUnsafeRegularization(paper,{...paper,pixels:9990}).pixels,9990);
 });
 
 test('physical Mask ROI must be row-packed: alpha matches complete raster area without stripes',async()=>{
@@ -107,4 +131,39 @@ test('slanted real contour exports same number of pixels as rasterized OpenCV ma
  assert.equal(alpha.length,result.mask.width*result.mask.height);
  assert.equal(alpha.reduce((n,v)=>n+(v>0),0),result.pixels);
  assert.ok(result.h>box.h*.90,'a rotated paper must not become a thin horizontal strip');
+});
+
+test('a concave Canny paper outline must not cut the word Life from the paper',async()=>{
+ const cv=await cvModule,p=blank(320,300);
+ const pixels=[[40,40],[60,40],[60,100],[140,100],[140,40],
+   [202,40],[202,256],[40,256]];
+ const contour=pixels.map(([x,y])=>[x/p.width,y/p.height]);
+ const paper={x:40/p.width,y:40/p.height,w:162/p.width,h:216/p.height,
+   physicalBoundary:contour,boundarySource:'edge-closed',
+   fillRatio:.86,boundaryPrior:.61};
+ const results=await processVision(cv,'process-material-boxes',{
+   ...p,boxes:[paper],method:'physical',
+   shapeRegularization:false,apertures:false});
+ assert.equal(results.length,1);
+ const r=results[0];
+ assert.equal(r.boundarySource,'supported-rect-envelope');
+ assert.ok(r.mask?.alpha?.length);
+ const px=Math.round(100-r.x*p.width),py=Math.round(60-r.y*p.height);
+ assert.ok(px>=0&&px<r.mask.width&&py>=0&&py<r.mask.height);
+ assert.ok(r.mask.alpha[py*r.mask.width+px]>=127,
+   'top of a printed word must not be deleted by a concave Canny indent');
+});
+
+test('paper safeguard is applied before old aperture restoration',async()=>{
+ const cv=await cvModule,p=blank(320,300);
+ const box={x:40/320,y:30/300,w:175/320,h:210/300,
+   physicalBoundary:[[40/320,30/300],[215/320,30/300],
+     [215/320,240/300],[40/320,240/300]],
+   fillRatio:.91,boundarySource:'edge-closed',boundaryPrior:.8};
+ const result=await processVision(cv,'process-material-boxes',{...p,
+   boxes:[box],method:'physical',shapeRegularization:true,apertures:false});
+ assert.equal(result.length,1);
+ assert.ok(result[0].mask?.alpha?.some(v=>v>127));
+ assert.ok(result[0].h>=box.h*.94);
+ assert.ok(result[0].w>=box.w*.94);
 });
