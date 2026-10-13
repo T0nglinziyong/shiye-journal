@@ -63,6 +63,7 @@ import {showSeriesEditor} from './series-editor.js';
 import {mountWorkflowControls,mountImportControls} from './workflow-ui.js';
 import {patchImportInspection} from './import-incremental.js';
 import {patchMaterialCatalog} from './catalog-incremental.js';
+import {patchAISettingsModel} from './settings-incremental.js';
 import {renderImportInspection,renderImportReview} from './import-workspace-ui.js';
 import {showCutoutEditor} from './cutout-editor.js';
 import {decodeImageBlob} from './image-blob-decoder.js';
@@ -344,6 +345,15 @@ function render(){
   };
   document.body.classList.toggle('editing',state.route==='editor');document.body.dataset.backdrop=state.preferences.backdrop;document.querySelectorAll('.main-nav button').forEach(b=>b.classList.toggle('active',b.dataset.route===state.route||(b.dataset.route==='library'&&['series','import'].includes(state.route))));document.querySelector('#basket-count').textContent=state.basket.length;
   if(state.route==='editor'&&refreshCanvas())return;
+  // Provider changes affect the model connector, not the rest of Settings.
+  if(state.route==='settings'&&state.settingsSection==='AI 与创作'&&
+     view.dataset.renderedRoute==='settings'&&
+     view.dataset.renderedSettingsSection===state.settingsSection&&
+     patchAISettingsModel(view,renderSettings())){
+    bindPage({partial:true});
+    backgroundViewPending=false;
+    return;
+  }
   // Passive catalog changes reconcile by material ID while preserving
   // decoded thumbnails, search focus and pagination state.
   if(state.route==='library'&&view.dataset.renderedRoute==='library'&&
@@ -387,6 +397,7 @@ function render(){
   view.dataset.renderedImportStep=state.route==='import'?state.importStep:'';
   view.dataset.renderedImportMode=state.route==='import'?state.importMode:'';
   view.dataset.renderedLibraryTab=state.route==='library'?parity.libraryTab:'';
+  view.dataset.renderedSettingsSection=state.route==='settings'?state.settingsSection||'':'';
   for(const fresh of view.querySelectorAll('img[src]')){const old=imageNodes.take(fresh);if(old)fresh.replaceWith(old);}
   if(importQueueScroll!==null){
     const replacement=view.querySelector('.queue-strip');
@@ -649,7 +660,7 @@ function bindPage({partial=false}={}){view.querySelectorAll('[data-act]').forEac
   const assetStatus=view.querySelector('#status-filter');if(assetStatus&&!assetStatus.querySelector('[value="favorite"]')){const option=document.createElement('option');option.value='favorite';option.textContent='已收藏';assetStatus.append(option);}
   const assetHeart=view.querySelector('.detail-heart');if(assetHeart)assetHeart.setAttribute('aria-pressed',String(!!asset(state.detailAssetID)?.isFavorite));
   if(state.route==='projectPreview'){const p=state.projects.find(x=>x.id===state.previewProjectID);if(p?.isSnapshot){const header=view.querySelector('.project-preview-head');const heart=document.createElement('button');heart.type='button';heart.className='snapshot-favorite';heart.setAttribute('aria-label',p.isFavorite?'取消收藏快照':'收藏快照');heart.setAttribute('aria-pressed',String(!!p.isFavorite));heart.textContent=p.isFavorite?'♥':'♡';heart.onclick=async()=>{const next={...p,isFavorite:!p.isFavorite};await db.put('projects',next);Object.assign(p,next);heart.textContent=next.isFavorite?'♥':'♡';heart.setAttribute('aria-label',next.isFavorite?'取消收藏快照':'收藏快照');heart.setAttribute('aria-pressed',String(!!next.isFavorite));};header?.querySelector('h1')?.after(heart);}}
-  view.querySelector('#ai-model-group')?.addEventListener('toggle',event=>{aiModelPanelOpen=event.currentTarget.open;});
+  const aiModelGroup=view.querySelector('#ai-model-group');if(aiModelGroup)aiModelGroup.ontoggle=event=>{aiModelPanelOpen=event.currentTarget.open;};
   if(state.route==='matching'){
     const saveMatching=()=>matchingSession.persist().catch(e=>{console.warn('本机搭配状态未保存；不影响云端作品同步',e);toast('本机搭配状态保存失败：'+e.message);});
     const fields={'match-style':'matchStyle','match-purpose':'matchPurpose','match-intent':'matchIntent','match-content-policy':'matchContentPolicy','match-text-presentation':'matchTextPresentation','match-processing':'matchProcessing','match-mode':'matchMode','match-ratio':'matchRatio','match-paper-width':'customPaperWidth','match-paper-height':'customPaperHeight'};
