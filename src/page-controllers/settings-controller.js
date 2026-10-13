@@ -4,6 +4,7 @@ export function createSettingsController({
   return {
     render:renderHTML,
     patch(){
+      if(view.querySelector('[data-react-page="settingsAI"]'))return false;
       if(state.settingsSection!=='AI 与创作'||
          view.dataset.renderedRoute!=='settings'||
          view.dataset.renderedSettingsSection!==state.settingsSection||

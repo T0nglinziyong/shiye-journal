@@ -35,6 +35,15 @@ database.close();
 
 window.eval(await builtApp(root,html,window));
 await waitFor(()=>!!window.document.querySelector('[data-act="series-detail"][data-id="series-1"]'));
+window.document.querySelector('[data-act="series-detail"][data-id="series-1"]').click();
+await waitFor(()=>!!window.document.querySelector('[data-react-page="seriesContents"]'));
+assert.equal(window.document.querySelectorAll('.series-contents [data-act="detail"]').length,45);
+window.document.querySelector('.series-contents [data-act="detail"]').click();
+await waitFor(()=>!!window.document.querySelector('.detail-page h1'));
+window.document.querySelector('[data-act="detail-back"]').click();
+await waitFor(()=>!!window.document.querySelector('[data-react-page="seriesContents"]'));
+window.document.querySelector('#series-return').click();
+await waitFor(()=>!!window.document.querySelector('[data-act="series-detail"]'));
 window.document.querySelector('.swift-tabs button:nth-child(2)').click();
 await waitFor(()=>window.document.querySelectorAll('.asset-grid [data-act="detail"]').length===40);
 const controls=window.document.querySelector('.catalog-page-controls');

@@ -1,5 +1,11 @@
 import React from 'react';
-import {supportsVision} from './ai-settings.js';
+import {AI_PROVIDERS,supportsVision} from './ai-settings.js';
+import {seriesContentsModel} from './series-contents.js';
+import {paperPresets} from './paper-sizes.js';
+import {candidateDiscoveryOptions,recognitionOptions,recognitionPixelOptions,
+  recognitionMethodDetails} from './recognition-profiles.js';
+import {DELIVERY_OPTIONS} from './ai-delivery.js';
+import {IMAGE_MODELS} from './ai-image-generation.js';
 
 function RouteImage({asset,source,priority=false}){
   const src=asset&&(source(asset.blobId)||asset.staticPath);
@@ -103,6 +109,50 @@ export function SeriesPage({series,assets,display,seriesCovers,source,onAction})
   </>;
 }
 
+export function SeriesContentsPage({state,source,kindName,format,onAction}){
+  const model=seriesContentsModel(state);
+  if(!model)return <p>系列已移走</p>;
+  const {series,filter,all,members,covers}=model;
+  const options=(items,value)=>items.map(([id,label])=><option key={id} value={id}>{label}</option>);
+  const kinds=[['sticker','贴纸'],['paper','纸张'],['tape','胶带'],['photo','照片'],
+    ['text','文字'],['reference','参考']];
+  const statuses=[['all','全部状态'],['ready','已整理'],['unready','未整理'],['used','已使用'],
+    ['unused','未使用'],['favorite','已收藏'],['inside','系列中'],['outside','系列外']];
+  return <section className="series-contents" data-react-page="seriesContents">
+    <div className="series-navigation"><button type="button" className="btn" id="series-return">‹ 返回素材库</button>
+      <div className="actions" id="series-actions"/></div>
+    <div className="view-head series-heading"><div className="series-identity">
+      <div className="series-detail-cover">{covers.map(asset=><RouteImage key={asset.id} asset={asset} source={source} priority/>)}</div>
+      <div className="series-copy"><div className="eyebrow">COLLECTION</div>
+        <h1><button type="button" id="series-edit-title" aria-label="编辑系列信息与标签">{series.title} <span aria-hidden="true">✎</span></button></h1>
+        {series.introduction?<p>{series.introduction}</p>:null}
+        <p className="series-tags">{[...(series.styleTags||[]),...(series.semanticTags||[])].join(' · ')}</p>
+        <p>{all.length} 件素材</p>
+      </div></div></div>
+    <div className="series-filters filters"><label className="shiye-search">
+      <input type="search" id="series-search" aria-label="在这个系列中搜索" placeholder="搜索系列内素材名称、标签或颜色"
+        defaultValue={filter.query}/></label><div className="series-filter-menus">
+      <select id="series-kind" aria-label="系列素材类型" defaultValue={filter.kind}>{options([['all','全部类型'],...kinds])}</select>
+      <select id="series-status" aria-label="系列素材状态" defaultValue={filter.status}>{options(statuses)}</select>
+      <select id="series-sort" aria-label="系列素材排序" defaultValue={filter.sort}>{options([['recent','最近添加'],['name','名称']])}</select>
+      <button className="btn" id="series-order">{filter.ascending?'升序 ↑':'降序 ↓'}</button>
+    </div></div>
+    <div className={`grid asset-grid ${state.preferences.display==='list'?'list-grid':''}`}>
+      <button type="button" className="card action-card" id="series-add-assets"><div className="card-image">＋</div>
+        <div className="card-body"><h3>添加素材</h3><p>从全部素材选择</p></div></button>
+      {all.map(asset=><button key={asset.id} className="card" data-card-revision={JSON.stringify([asset.title,asset.kind,
+        asset.physicalWidthMM,asset.physicalHeightMM,asset.reviewStatus,asset.isFavorite,asset.blobId])}
+        data-act="detail" data-id={asset.id} data-react-action="true" onClick={()=>onAction('detail',asset.id)}>
+        <div className="card-image"><RouteImage asset={asset} source={source}/></div>
+        <div className="card-body"><h3>{asset.title}{asset.isFavorite?<span className="card-favorite" aria-label="已收藏">♥</span>:null}</h3>
+          <p>{kindName(asset.kind)} · {asset.physicalWidthMM?`${format(asset.physicalWidthMM)} × ${format(asset.physicalHeightMM)} mm`:'尺寸待确认'}</p>
+          <span className={`chip ${asset.reviewStatus==='ready'?'':'warn'}`}>{asset.reviewStatus==='ready'?'已整理':'待检查'}</span>
+        </div>
+      </button>)}
+    </div><p className="series-result-count">{members.length} 项</p>
+  </section>;
+}
+
 export function AssetDetailPage({asset,seriesTitle,source,kindName,format,onAction}){
   const tags=[...(asset.tags||[]),...(asset.contentTags||[]),...(asset.styleTags||[]),...(asset.materialTags||[])]
     .filter((tag,index,list)=>tag&&list.indexOf(tag)===index).sort((a,b)=>a.localeCompare(b,'zh-CN'));
@@ -183,6 +233,244 @@ export function SettingsHomePage({onAction}){
   </div>;
 }
 
+export function SettingsDisplayPage({preferences,onAction}){
+  return <div className="settings-page" data-react-page="settingsDisplay">
+    <div className="settings-toolbar">
+      <button data-act="settings-back" data-react-action="true" onClick={()=>onAction('settings-back')}>‹ 返回</button>
+      <button data-act="settings-save" data-react-action="true" onClick={()=>onAction('settings-save')}>保存</button>
+    </div><h1>界面与素材库</h1><section className="settings-detail">
+      <section className="recognition-settings-group"><h2>素材排列</h2>
+        <label>显示方式<select id="setting-display" defaultValue={preferences.display}>
+          <option value="grid">网格</option><option value="list">列表</option>
+        </select></label>
+        <label>卡片背景<select id="setting-backdrop" defaultValue={preferences.backdrop}>
+          <option value="auto">自动配色</option><option value="white">白色</option>
+          <option value="transparent">透明</option>
+        </select></label>
+        <label>每页最多展示<select id="setting-page-items" defaultValue={String(preferences.maxPageItems)}>
+          {[20,40,80].map(count=><option value={count} key={count}>每页 {count} 项</option>)}
+        </select></label>
+        <p>素材库只创建当前页卡片；系列和作品共用此设置。</p>
+      </section>
+    </section>
+  </div>;
+}
+
+function SettingsDetailShell({title,onAction,children,kind}){
+  return <div className="settings-page" data-react-page={kind}>
+    <div className="settings-toolbar">
+      <button data-act="settings-back" data-react-action="true" onClick={()=>onAction('settings-back')}>‹ 返回</button>
+      <button data-act="settings-save" data-react-action="true" onClick={()=>onAction('settings-save')}>保存</button>
+    </div><h1>{title}</h1><section className="settings-detail">{children}</section>
+  </div>;
+}
+function SettingsSelect({id,label,value,choices,help}){
+  return <label>{label}<select id={id} defaultValue={String(value)}>
+    {choices.map(([key,name])=><option key={key} value={key}>{name}</option>)}
+  </select>{help?<small className="setting-help">{help}</small>:null}</label>;
+}
+function SettingsToggle({id,label,checked,help}){
+  return <label className="toggle-row setting-toggle"><span><b>{label}</b>
+    <small className="setting-help">{help}</small></span>
+    <input id={id} type="checkbox" defaultChecked={!!checked}/></label>;
+}
+function SettingsGroup({title,description,children}){
+  return <section className="recognition-settings-group"><h2>{title}</h2>
+    {description?<p>{description}</p>:null}{children}</section>;
+}
+
+export function SettingsRecognitionPage({preferences,onAction}){
+  const p=preferences;
+  const paperChoices=[...paperPresets.map(x=>[x.id,`${x.name} · ${x.width} × ${x.height} mm`]),
+    ['custom','自定义尺寸']];
+  const method=recognitionMethodDetails.find(x=>x.id===p.recognition);
+  return <SettingsDetailShell title="导入与识别" kind="settingsRecognition" onAction={onAction}>
+    <SettingsGroup title="素材识别方法" description="统一确定素材数量与位置，再逐件细化边缘；仅切换单件分割算法。">
+      <SettingsSelect id="setting-candidate-discovery" label="候选框发现" value={p.candidateDiscovery||'legacy'}
+        choices={candidateDiscoveryOptions} help="原版使用连通区域；物理载体模式优先寻找完整纸片、票据与贴纸。候选框算法与 Mask 算法可任意搭配。"/>
+      <label>Mask 分割<select id="setting-recognition" defaultValue={p.recognition}>
+        {recognitionOptions.map(([id,name])=><option key={id} value={id}>{name}</option>)}
+      </select><small data-recognition-method-note="" className="setting-help">{method?.description||'推荐使用默认 MorphGAC。'}</small></label>
+    </SettingsGroup>
+    <SettingsGroup title="1 · 纸张校正" description="检测纸张四角并透视拉正，为候选定位和真实尺寸提供坐标。">
+      <SettingsSelect id="setting-paper-size" label="默认纸张"
+        value={p.paperSize?.startsWith('custom:')?'custom':p.paperSize} choices={paperChoices}/>
+      <SettingsSelect id="setting-orientation" label="校正方向" value={p.orientation||'auto'}
+        choices={[["auto","自动"],["portrait","竖向"],["landscape","横向"]]}/>
+      <SettingsToggle id="setting-whole-paper" label="未检测到纸边时使用整张图" checked={p.wholePaper}
+        help="适用于已裁正的纸张图片。"/>
+    </SettingsGroup>
+    <SettingsGroup title="2 · 素材数量与候选框" description="固定 900 px 发现前景、连通区域及候选框；自动识别框任一边小于 9 mm 时过滤，手动补框不受限。">
+      <SettingsToggle id="setting-merge-carrier" label="合并共同载体" checked={p.mergeSharedCarrier!==false}
+        help="同一浅色纸片上的图案视为一件；关闭后可尝试按独立图案拆分。"/>
+    </SettingsGroup>
+    <SettingsGroup title="3 · 单件边缘分割" description="每件候选独立细化轮廓；以下设置不改变已确定的素材数量。">
+      <SettingsSelect id="setting-recognition-pixels" label="边缘分析分辨率" value={p.recognitionPixels}
+        choices={recognitionPixelOptions} help="只影响边缘分析图；最终从高清校正图提取。检查抠图重新识别最低 1200 px。"/>
+      <SettingsToggle id="setting-preprocess-light" label="亮度均衡" checked={p.balanceLight===true}
+        help="仅用于单件分割，减轻明显光照不均；通常无需开启。"/>
+      <SettingsToggle id="setting-preprocess-denoise" label="轻度去噪" checked={p.recognitionDenoise===true}
+        help="图像噪点较多时开启。"/>
+      <SettingsToggle id="setting-preprocess-contrast" label="局部对比增强" checked={p.recognitionLocalContrast===true}
+        help="浅色边界不明显时尝试开启。"/>
+      <SettingsToggle id="setting-preprocess-chroma" label="Lab 色差边缘" checked={p.recognitionChromaEdges!==false}
+        help="以颜色差补充灰度边缘，推荐开启。"/>
+    </SettingsGroup>
+    <SettingsGroup title="4 · 轮廓后处理" description="在分割结果上修整几何和真实打孔，不重新识别素材数量。">
+      <SettingsToggle id="setting-postprocess-shapes" label="规则形状规整" checked={p.recognitionShapeRegularization!==false}
+        help="边缘证据充分时校直卡片或拟合圆形。"/>
+      <SettingsToggle id="setting-postprocess-apertures" label="重复孔洞恢复" checked={p.recognitionApertures!==false}
+        help="恢复有规律的活页孔；不挖除孤立白点。"/>
+    </SettingsGroup>
+    <SettingsGroup title="5 · 高清输出与颜色" description="由识别 Mask 提取高清素材；颜色还原不改变数量、边界或实际尺寸。">
+      <SettingsSelect id="setting-material-color" label="素材颜色" value={p.materialColorMode==='original'?'original':'auto'}
+        choices={[["auto","自动校正 A4 光照与色偏"],["original","保留照片颜色"]]}
+        help="优先保留印刷与纸张原色；纸面参考不可靠时不校正。"/>
+    </SettingsGroup>
+    <SettingsGroup title="6 · 自动整理" description="保存成功后在后台整理标题与标签，不阻塞导入或创作。">
+      <SettingsToggle id="setting-auto-organize" label="自动整理名称和标签" checked={p.autoOrganize}
+        help="不会覆盖已手动修改的信息。"/>
+      <SettingsToggle id="setting-auto-organize-works" label="自动整理作品" checked={p.autoOrganizeWorks!==false}
+        help="导入作品和保存快照后自动整理标题、标签；无模型密钥时保留原信息。"/>
+    </SettingsGroup>
+  </SettingsDetailShell>;
+}
+
+export function SettingsDataPage({state,cloudEnabled,storage,onAction}){
+  const counts=`素材 ${state.assets.length} 件 · 作品 ${state.projects.length} 件 · 最近删除 ${state.trash.length} 项`;
+  const button=(name,label,kind='btn')=><button className={kind} data-act={name} data-react-action="true"
+    onClick={()=>onAction(name)}>{label}</button>;
+  const backup=<SettingsGroup title="完整备份"><div className="actions">
+    {button('backup','导出完整备份','btn primary')}{button('restore','从备份恢复')}
+  </div>{cloudEnabled?<p>只接受拾页现行完整备份格式；恢复会替换当前资料。</p>:null}
+    {state.selfHosted&&!cloudEnabled?<p>恢复会替换服务器当前全部数据；执行前请先导出一份当前完整备份。</p>:null}
+  </SettingsGroup>;
+  const trash=<SettingsGroup title="最近删除">{state.trash.length?state.trash.map(item=><div className="rec-card" key={item.id}>
+    <b>{item.item.title}</b><button className="btn mini" data-act="restore-trash" data-id={item.id}
+      data-react-action="true" onClick={()=>onAction('restore-trash',item.id)}>恢复</button>
+  </div>):<p>没有最近删除的项目。</p>}</SettingsGroup>;
+  return <SettingsDetailShell title="数据与诊断" kind="settingsData" onAction={onAction}>
+    <SettingsGroup title="应用错误诊断" description="导出本次打开拾页以来的运行错误、网络与同步故障的安全摘要，包含发生页面、阶段、错误类别和可判断的原因。不会导出作品、图片、账号、密钥或原始报错文本；关闭应用后不保留。">
+      {button('export-app-diagnostics','导出完整错误诊断')}
+    </SettingsGroup>
+    <SettingsGroup title="图片保留与清理" description="删除素材后，已有作品引用的图片会隐藏保留；从最近删除彻底移除且无作品引用时才清除隐藏素材记录。云端 COS 原图尚不自动物理删除，避免遗漏其他设备、历史存档或备份中的引用。"/>
+    {cloudEnabled?<>
+      <SettingsGroup title="私人云端资料">
+        <p id="storage-location">云端元数据与私有图片 · 本机缓存加速</p><p>{counts}</p>
+        <p>登录验证后显示本机缓存，后台检查云端更新。原图和完整作品按需读取；修改先暂存，后台同步。云端失败不会改用另一份资料。</p>
+      </SettingsGroup>
+      {backup}
+      <SettingsGroup title="离线应急备份">
+        <p>仅保存本机尚未上传云端的修改和原始字节，不包含已同步的完整素材库；网络故障时也可导出。应急包只能恢复到原账号，恢复后重新打开拾页再同步。</p>
+        <div className="actions">{button('backup-emergency','导出本机待同步修改')}
+          {button('restore-emergency','恢复待同步应急包')}</div>
+      </SettingsGroup>
+      <SettingsGroup title="并发冲突恢复">
+        <p>同一画布在两台设备同时修改时，会在应用最后编辑时间规则之前保留双方原稿。本机留有记录时可将旧版本另存为新作品。</p>
+        {button('recover-pre-conflict','查看与恢复冲突前画布')}
+      </SettingsGroup>
+      <SettingsGroup title="危险操作 · 清除所有数据">
+        <p>同时永久删除当前账号的云端作品、素材、系列、私有图片和最近删除，并删除此设备的本地缓存、待同步队列和设置。保留登录账号本身；其他设备原有的离线缓存须在升级后重新检查。无法恢复。</p>
+        {button('reset-all-account-data','彻底清空本账号本机与云端数据','btn danger')}
+      </SettingsGroup>
+    </>:state.selfHosted?<>
+      <SettingsGroup title="唯一数据源 · 4090 服务器">
+        <p id="storage-location">{location.origin}</p><p>{counts}</p>
+        <p>此网址的素材、作品与图片都写入服务器。浏览器只保存访问令牌和 AI 设置；服务器无法连接时不会写入另一份资料。</p>
+        <label>更新访问令牌<input id="data-server-token" type="password" autoComplete="off" placeholder="保持不变则留空"/></label>
+        {button('storage-token','验证并更新令牌')}
+      </SettingsGroup>
+      {backup}{trash}
+    </>:<>
+      <SettingsGroup title="数据位置">
+        <p id="storage-location">{storage?.url?`已配置服务器：${storage.url}`:'此网址当前使用浏览器本机存储；访问其他网址不会自动同步。'}</p>
+        <p>{counts}</p>
+        <label>4090 数据服务地址<input id="data-server-url" type="url" placeholder="https://你的数据域名" defaultValue={storage?.url||''}/></label>
+        <label>访问令牌<input id="data-server-token" type="password" autoComplete="off" defaultValue={storage?.token||''}/></label>
+        <div className="actions">{button('storage-connect','连接服务器','btn primary')}
+          {button('storage-browser','改用此浏览器资料')}</div>
+        <p>服务器地址需要公网 HTTPS，手机访问 localhost 指的是手机自身；同一台电脑运行的拾页服务可直接打开 http://127.0.0.1:4173。跨数据源转移资料请使用下方“导出完整备份 / 从备份恢复”，不在连接动作中隐式迁移。</p>
+      </SettingsGroup>
+      {backup}{trash}
+      <SettingsGroup title="离线状态"><p id="offline-state">检测中…</p></SettingsGroup>
+    </>}
+  </SettingsDetailShell>;
+}
+
+function AIToggle({id,label,checked}){
+  return <label className="toggle-row">{label}<input id={`setting-ai-${id}`} type="checkbox" defaultChecked={!!checked}/></label>;
+}
+function AISelect({id,label,value,choices}){
+  return <SettingsSelect id={`setting-ai-${id}`} label={label} value={value} choices={choices}/>;
+}
+function AINumber({id,label,value,min,max,step}){
+  return <label>{label}<input id={`setting-ai-${id}`} type="number" min={min} max={max}
+    step={step} defaultValue={value}/></label>;
+}
+
+export function SettingsAIPage({settings,modelPanelOpen,onAction}){
+  const cfg=settings,preset=AI_PROVIDERS[cfg.provider];
+  const known=preset.models.some(([id])=>id===cfg.model);
+  return <SettingsDetailShell title="AI 与创作" kind="settingsAI" onAction={onAction}>
+    <details className="ai-settings-group unified-settings-group" open>
+      <summary><strong>创作偏好</strong><small>候选素材、生成方式与样例参考</small></summary>
+      <div><h2>创作方式</h2>
+        <AISelect id="delivery" label="创作方式" value={cfg.deliveryMode} choices={DELIVERY_OPTIONS}/>
+        <AISelect id="image-model" label="GPT 图像模型" value={cfg.imageModel}
+          choices={IMAGE_MODELS.map(id=>[id,id])}/>
+        <p>调用工具和直接排版都会生成可编辑素材、文字、图形及自由笔迹；自由绘画通过图像模型生成整张 PNG 快照，不能独立编辑图层。网页 GPT 的“作品文件／复制文本”在导出任务时选择，不影响创作方式。</p>
+        <p>轮数包含重试；超时后停止，不自动重复收费请求。</p>
+        <h2>候选素材</h2>
+        <AIToggle id="require-all" label="候选素材必须全部使用" checked={cfg.requireAllCandidates}/>
+        <p>默认开启：本次发给 AI 的每件候选素材都必须在作品中出现。关闭后，仍尽量使用；手动标星的素材保持必用。若同时开启“自动加入建议搭配”，建议素材也属于候选。</p>
+        <AIToggle id="auto-recommendations" label="自动把全部建议搭配作为 AI 备选素材" checked={cfg.autoIncludeRecommendations}/>
+        <p>开启后会把未排除的建议素材一并发送给 AI；关闭后只发送素材篮中的素材。最终是否必须使用由上方开关决定。</p>
+        <h2>样例参考</h2>
+        <AIToggle id="structure-reference" label="参考样例的图文结构" checked={cfg.includeStructureReference}/>
+        <AIToggle id="send-reference" label="发送匹配风格与用途的手帐案例" checked={cfg.sendPresetReferences}/>
+        <p>从原创重构的真实风格手帐案例中，按当前风格、用途和素材选最相近的两张；不发送全部案例，也不发送你已有的私人作品。案例只用于构图参考，不属于可使用素材。网页版任务包附图；支持图片的 API 模型也会收到。</p>
+      </div>
+    </details>
+    <details className="ai-settings-group unified-settings-group" id="ai-model-group" open={modelPanelOpen}>
+      <summary><strong>模型与连接</strong><small>服务商、密钥、图片与响应参数</small></summary>
+      <div><h2>服务与模型</h2>
+        <AISelect id="provider" label="服务商" value={cfg.provider}
+          choices={Object.entries(AI_PROVIDERS).map(([id,entry])=>[id,entry.label])}/>
+        <label>API 地址<input id="setting-ai-endpoint" type="url" defaultValue={cfg.endpoint}
+          placeholder="https://…/chat/completions"/></label>
+        <AISelect id="model" label="模型" value={known?cfg.model:'__custom__'}
+          choices={[...preset.models.map(([id,name])=>[id,name]),['__custom__','自定义模型 ID']]}/>
+        <label id="setting-ai-custom-model-row" hidden={known}>模型 ID
+          <input id="setting-ai-custom-model" defaultValue={known?'':cfg.model}/></label>
+        <label>API 密钥<input id="setting-ai-key" type="password" autoComplete="off"
+          defaultValue={cfg.key} placeholder="API Key"/></label>
+        <AIToggle id="thumbnails" label="发送全部素材预览" checked={cfg.includeThumbnails}/>
+        <AIToggle id="visual-review" label="交付前由 GPT 看图复核（计入总请求上限）" checked={cfg.finalVisualReview!==false}/>
+        <AIToggle id="vision" label="自定义模型支持图片" checked={cfg.customVision}/>
+        <p>当前模型{supportsVision(cfg)?'支持图片输入；开启预览时发送所有允许使用的素材图片':'不支持图片输入，仅发送素材文字信息'}。密钥仅保存在本浏览器，不进入备份。</p>
+        <h2>创作与响应</h2>
+        <AINumber id="temperature" label="创意程度 0–2" value={cfg.temperature} min="0" max="2" step="0.05"/>
+        <AINumber id="tokens" label="单轮最大输出 2000–16000" value={cfg.maxTokens} min="2000" max="16000"/>
+        <AINumber id="turns" label="最多创作轮次（所有请求和重试计入上限）" value={cfg.maxTurns} min="1" max="20"/>
+        <AINumber id="timeout" label="连续无响应超时（秒）" value={cfg.requestTimeout} min="20" max="180"/>
+        <p>流式接收期间只计算连续未收到数据的时间；每轮最多 10 分钟，不会自动重试收费请求。</p>
+        <AISelect id="transport" label="工具接口" value={cfg.transport}
+          choices={[["auto","自动适配"],["native","原生工具调用"],["json","兼容 JSON 工具指令"]]}/>
+        <AISelect id="text" label="文字内容" value={cfg.textMode}
+          choices={[["automatic","图文手账 · 自动配文"],["requested","仅明确要求时配文"],["none","不生成文字"],
+            ...(['minimal','rich'].includes(cfg.textMode)?[[cfg.textMode,`旧版：${cfg.textMode==='minimal'?'简洁':'丰富'}`]]:[])]}/>
+        <AISelect id="reasoning" label="代理思考策略" value={cfg.reasoningMode}
+          choices={[["automatic","自动 · 优先执行"],["low","轻量思考"],["providerDefault","保持服务设置"]]}/>
+        <AIToggle id="send-limit" label="发送输出上限" checked={cfg.sendOutputLimit}/>
+        <AIToggle id="disable-thinking" label="关闭服务商思考模式" checked={cfg.disableThinking}/>
+        <label>补充版式指导<textarea id="setting-ai-layout-prompt" placeholder="留空使用默认指导"
+          defaultValue={cfg.customLayoutPrompt}/></label>
+        <p>“自动适配”只用于已核对的 API 地址与模型组合；自定义或未核验组合请明确选择原生工具或兼容 JSON。图片输入同理，未核验组合需手动确认支持后才发送预览。</p>
+      </div>
+    </details>
+  </SettingsDetailShell>;
+}
+
 export function ImportSimplePage({state,onAction}){
   const steps=[['inspect','检查照片'],['review','确认归类'],['done','完成']];
   const index=steps.findIndex(([key])=>key===state.importStep);
@@ -219,4 +507,87 @@ export function ImportSimplePage({state,onAction}){
       </div><small>每批最多 12 张；使用较小图像识别，从原始工作图提取素材</small>
     </div>
   </section>}</>;
+}
+
+function ImportNavigation({state,onAction}){
+  const steps=[['inspect','检查照片'],['review','确认归类'],['done','完成']];
+  const index=steps.findIndex(([key])=>key===state.importStep);
+  return <div className="import-nav" aria-label="导入进度">
+    <button className="import-back" data-act="import-back" data-react-action="true"
+      aria-label="返回上一步" title="返回" onClick={()=>onAction('import-back')}/>
+    <div className="import-nav-center"><div className="import-progress" aria-label="当前步骤">
+      {steps.map(([key,label],i)=><span key={key} className={state.importStep===key?'current':i<index?'passed':''}>
+        <b>{i<index?'✓':i+1}</b><span className="import-step-label">{label}</span>
+      </span>)}
+    </div></div>
+    <button className="import-cancel" data-act="import-exit" data-react-action="true"
+      onClick={()=>onAction('import-exit')}>{state.importStep==='done'?'完成':'取消导入'}</button>
+  </div>;
+}
+
+export function ImportReviewPage({state,format,onAction}){
+  const mode=state.importMode,work=mode==='work',snapshot=mode==='snapshot',records=state.importRecords||[];
+  const count=records.reduce((total,record)=>total+(record.selectedCandidates||[]).filter(c=>c.selected).length,0);
+  const seriesOptions=(record=false)=><>
+    <option value="__new__">＋ 新建系列…</option>
+    <option value="">{record?'沿用本批默认':'不归入系列'}</option>
+    {record?<option value="__none__">不归入系列</option>:null}
+    {work?<option value="__no_library__">不归入素材库</option>:null}
+    {state.series.map(series=><option key={series.id} value={series.id}>{series.title}</option>)}
+  </>;
+  const action=(name,id,value)=>()=>onAction(name,id,value);
+  return <><ImportNavigation state={state} onAction={onAction}/>
+    <section className="import-review" data-react-page="importReview">
+      <h1>{snapshot?'确认导入快照':work?'确认导入作品':'确认要保存的素材'}</h1>
+      <div className="review-actions">
+        <button className="btn" data-act="import-back" data-react-action="true"
+          onClick={action('import-back')}>‹ 返回检查照片</button>
+        <button className="btn primary" data-act="confirm-import" data-react-action="true"
+          disabled={!snapshot&&!work&&!count} onClick={action('confirm-import')}>
+          保存 {snapshot?`${records.length} 个快照`:work?`${records.length} 个作品`:`${count} 个素材`}
+        </button>
+      </div>
+      {!snapshot?<div className="review-default"><strong>本批默认归类</strong>
+        <select id="batch-series">{seriesOptions()}</select></div>:null}
+      {records.map((record,ri)=>{
+        const pattern=record.workPaperPattern||state.importBatchWorkPaperPattern||'plain';
+        const color=record.workPaperColor||state.importBatchWorkPaperColor||'#fcfaf0';
+        const candidates=record.selectedCandidates||[];
+        return <div className="review-record" key={ri}>
+          <div className="review-record-head"><img src={record.correctedURL||record.url} alt=""/>
+            <div><h2>照片 {ri+1}</h2>{snapshot?null:<small>{candidates.filter(c=>c.selected).length} 个已选素材</small>}</div>
+            <span>✓ 已确认</span>
+          </div>
+          {work?<label>作品名称<input className="record-work-title" data-index={ri}
+            defaultValue={record.workTitle||record.file.name.replace(/\.[^.]+$/,'')}/></label>:null}
+          {!snapshot?<label className="record-series-label">所属系列
+            <select className="record-series" data-index={ri}>{seriesOptions(true)}</select>
+          </label>:null}
+          <div className="review-candidates">
+            {snapshot?<div className="review-candidate selected review-snapshot"><div className="review-thumbnail">
+              <img src={record.correctedURL||record.url} alt="校正后完整页面"/>
+            </div></div>:<>
+              {work?<div className="review-candidate review-background-card"><div className={`review-thumbnail import-work-paper-preview ${pattern}`}
+                style={{'--review-paper':color,backgroundColor:color}}>
+                <button type="button" className="review-paper-control" data-import-paper-options={ri}
+                  aria-label="编辑页面背景">页面背景</button>
+              </div></div>:null}
+              {candidates.map((candidate,ci)=><div className={`review-candidate ${candidate.selected?'selected':''}`}
+                data-index={ri} data-candidate={ci} key={ci}>
+                <button data-act="review-toggle" data-id={ri} data-val={ci} data-react-action="true"
+                  aria-label={`${candidate.title}，${candidate.selected?'已选择':'未选择'}`}
+                  onClick={action('review-toggle',String(ri),String(ci))}>
+                  <div className="review-thumbnail"><img src={candidate.url} alt=""/>
+                    <span className="check" aria-hidden="true">{candidate.selected?'✓':''}</span></div>
+                  <strong>{candidate.title||`素材 ${ci+1}`}</strong>
+                  <small>{candidate.width&&candidate.height?`${format(candidate.width)} × ${format(candidate.height)} mm`:
+                    candidate.selected?'将保存':'不保存'}</small>
+                </button>
+              </div>)}
+            </>}
+          </div>
+        </div>;
+      })}
+    </section>
+  </>;
 }

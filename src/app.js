@@ -142,7 +142,7 @@ import {renderEditorHTML} from './page-controllers/editor-view.js';
 import {renderImportHTML} from './page-controllers/import-view.js';
 import {renderSettingsHTML} from './page-controllers/settings-view.js';
 import {mountReactShell,renderReactPage} from './react-shell.jsx';
-import {LibraryPage,SeriesPage,WorksPage,AssetDetailPage,ProjectPreviewPage,SettingsHomePage,ImportSimplePage} from './react-routes.jsx';
+import {LibraryPage,SeriesPage,SeriesContentsPage,WorksPage,AssetDetailPage,ProjectPreviewPage,SettingsHomePage,SettingsDisplayPage,SettingsRecognitionPage,SettingsDataPage,SettingsAIPage,ImportSimplePage,ImportReviewPage} from './react-routes.jsx';
 
 import {installRuntimeDiagnostics,recordRuntimeIssue,runtimeIssueSnapshot} from './runtime-diagnostics.js';
 mountReactShell();
@@ -215,13 +215,16 @@ function prewarmVisibleWorkDocuments(){
     if(epoch!==workDocumentPrewarmEpoch||state.route!=='works'||document.visibilityState==='hidden')return;
     // Full project documents share the user's network with cover downloads.
     // Keep that connection available until the visible covers have painted.
-    if(!visibleCoversReady()||privateImages.stats().pending){if(++waits<25)setTimeout(()=>void warm(),400);return;}
-    for(const id of ids){
+    if(!visibleCoversReady()){if(++waits<25)setTimeout(()=>void warm(),400);return;}
+    // These two documents are independent immutable objects. Start both
+    // reads together once visible covers have painted; the store deduplicates
+    // a later click on either document against its in-flight read.
+    await Promise.all(ids.map(async id=>{
       if(epoch!==workDocumentPrewarmEpoch||state.route!=='works')return;
       const project=state.projects.find(row=>row.id===id);
       if(project?.projectDocumentPath&&!project.isSnapshot)
         await db.completeProject(project).catch(error=>console.warn('作品预读待重试',error?.message));
-    }
+    }));
   };
   setTimeout(()=>{
     if(epoch!==workDocumentPrewarmEpoch||state.route!=='works')return;
@@ -247,7 +250,7 @@ function prewarmOtherPages(){
   let waits=0;
   const next=()=>{
     if(epoch!==previewPrewarmEpoch||state.route!=='library'||index>=ids.length||document.visibilityState!=='visible')return;
-    if(!visibleCoversReady()||privateImages.stats().pending){if(++waits<25)setTimeout(next,400);return;}
+    if(!visibleCoversReady()){if(++waits<25)setTimeout(next,400);return;}
     const run=()=>{
       if(epoch!==previewPrewarmEpoch||state.route!=='library'||document.visibilityState!=='visible'||!visibleCoversReady())return;
       void privateImages.load(ids[index++],false,{background:true}).catch(()=>{}).finally(()=>{
@@ -526,8 +529,10 @@ function render(){
   if(view.onshowsimilar){view.removeEventListener('show-similar',view.onshowsimilar);view.onshowsimilar=null;}
   closePopover();imageNodes.remember(view.querySelectorAll('img[src]'));
   view.editorLayoutSize={width:window.innerWidth,height:window.innerHeight};
-  const reactPage=state.route==='library'&&!state.series.some(s=>s.id===state.seriesID)
-    ?LibraryPage({state,items:libraryPageData(state).items,source:image,kindName,format:fmt,onAction:handle})
+  const reactPage=state.route==='library'&&state.series.some(s=>s.id===state.seriesID)
+    ?SeriesContentsPage({state,source:image,kindName,format:fmt,onAction:handle})
+    :state.route==='library'
+      ?LibraryPage({state,items:libraryPageData(state).items,source:image,kindName,format:fmt,onAction:handle})
     :state.route==='works'
       ?WorksPage({projects:state.projects,isUntouchedLegacyExample,workCover,source:image,onAction:handle})
     :state.route==='series'
@@ -539,8 +544,18 @@ function render(){
       ?ProjectPreviewPage({project:state.projects.find(p=>p.id===state.previewProjectID),source:image,workCover,onAction:handle})
     :state.route==='settings'&&!state.settingsSection
       ?SettingsHomePage({onAction:handle})
+    :state.route==='settings'&&state.settingsSection==='界面与素材库'
+      ?SettingsDisplayPage({preferences:state.preferences,onAction:handle})
+    :state.route==='settings'&&state.settingsSection==='导入与识别'
+      ?SettingsRecognitionPage({preferences:state.preferences,onAction:handle})
+    :state.route==='settings'&&state.settingsSection==='数据与诊断'
+      ?SettingsDataPage({state,cloudEnabled,storage:db.storageConfig(),onAction:handle})
+    :state.route==='settings'&&state.settingsSection==='AI 与创作'
+      ?SettingsAIPage({settings:state.aiSettings,modelPanelOpen:aiModelPanelOpen,onAction:handle})
     :state.route==='import'&&(state.importStep==='done'||!state.importRecords[state.importIndex])
       ?ImportSimplePage({state,onAction:handle})
+    :state.route==='import'&&state.importStep==='review'
+      ?ImportReviewPage({state,format:fmt,onAction:handle})
       :null;
   renderReactPage(reactPage||pageControllers.render(state.route)||renderLibrary());
   view.dataset.renderedRoute=state.route;
@@ -783,7 +798,7 @@ function bindPage({partial=false}={}){
   };
   const provider=view.querySelector('#setting-ai-provider');if(provider)provider.onchange=()=>{const previous=readAIForm();void actionStore.dispatch({type:'settings/provider',payload:{previous,next:provider.value}}).catch(error=>toast(error.message));};
   const modelSelect=view.querySelector('#setting-ai-model');if(modelSelect)modelSelect.onchange=()=>{view.querySelector('#setting-ai-custom-model-row').hidden=modelSelect.value!=='__custom__';if(modelSelect.value!=='__custom__')view.querySelector('#setting-ai-thumbnails').checked=AI_PROVIDERS[state.aiSettings.provider].models.find(m=>m[0]===modelSelect.value)?.[2]===true;};
-  const timeoutInput=view.querySelector('#setting-ai-timeout');if(timeoutInput){timeoutInput.parentElement.firstChild.textContent='连续无响应超时（秒）';timeoutInput.parentElement.insertAdjacentHTML('afterend','<p>流式接收期间只计算连续未收到数据的时间；每轮最多 10 分钟，不会自动重试收费请求。</p>');}
+  const timeoutInput=view.querySelector('#setting-ai-timeout');if(timeoutInput&&!view.querySelector('[data-react-page="settingsAI"]')){timeoutInput.parentElement.firstChild.textContent='连续无响应超时（秒）';timeoutInput.parentElement.insertAdjacentHTML('afterend','<p>流式接收期间只计算连续未收到数据的时间；每轮最多 10 分钟，不会自动重试收费请求。</p>');}
   if(state.route==='editor'){bindAIPanel();const anchor=view.querySelector('[data-act="creative-json"]');if(anchor){const ai=document.createElement('button');ai.type='button';ai.className='btn primary';ai.textContent='AI 创作';ai.onclick=openAICreation;anchor.before(ai);}}
   // Catalog search/select listeners are scoped to the Library controller.
   const title=view.querySelector('#project-title');if(title)title.addEventListener('blur',()=>{

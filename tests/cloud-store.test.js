@@ -27,7 +27,7 @@ function fixture(cache=null,objectStorage=null,projectPreview=()=>null){
     const filters={};const query={select(){return query;},eq(k,v){filters[k]=v;return query;},in(k,v){filters[k]=v;return query;},limit(){return query;},abortSignal(){return query;},order(){return query;},
       then(resolve){state.batchReads=(state.batchReads||0)+1;const rows=filters.store==='blobs'&&Array.isArray(filters.id)?(state.cloudCopies||state.rows.map(record=>({id:record.id,record}))):(state.cloudCopies||[]);return Promise.resolve(resolve({data:rows.filter(row=>!filters.id||(Array.isArray(filters.id)?filters.id.includes(row.id):row.id===filters.id))}));},
       async range(start,end){state.reads=(state.reads||0)+1;const rows=state.rows.slice(start,end+1).map(record=>({record:v2(record)}));await state.onReadPage?.(start,end);return {data:rows};},
-      async single(){return {data:{revision:state.revision}};},
+      async single(){state.versionReads=(state.versionReads||0)+1;return {data:{revision:state.revision}};},
       async maybeSingle(){return {data:table==='shiye_commits'?(state.commits.has(filters.operation_id)?{revision:state.commits.get(filters.operation_id)}:null):state.rows.filter(r=>r.id===filters.id).map(record=>({record:v2(record)}))[0]||null};}};
     if(table==='shiye_changes')return {select(){return this;},eq(){return this;},gt(){return this;},lte(){return this;},order(){return this;},async range(){return state.changes?{data:state.changes}:{error:{message:'change log not installed'}};}};
     assert.ok(['shiye_records','shiye_revisions','shiye_commits'].includes(table));return query;
@@ -50,6 +50,11 @@ test('large collection reads independent pages concurrently after the first page
   state.onReadPage=async start=>{if(start>=500){started.push(start);if(started.length===2)release();await gate;}};
   assert.equal((await db.cloudAll('assets')).length,1001);
   assert.deepEqual(started,[500,1000]);
+});
+test('cold collection reads share one revision request',async()=>{
+  const {state,db}=fixture();
+  await Promise.all(['assets','series','projects','trash','meta'].map(store=>db.cloudAll(store)));
+  assert.equal(state.versionReads,6,'one startup revision plus one verification per collection');
 });
 test('direct cloud uploads also appear in the global sync indicator until committed',async()=>{
   const events=[],previous=globalThis.window;globalThis.window={dispatchEvent:event=>events.push(event.detail)};

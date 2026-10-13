@@ -425,10 +425,29 @@ const checked=result=>{if(result.error){const failure=Error(result.error.message
   for(const key of ['code','status','statusCode'])if(result.error[key]!=null)failure[key]=result.error[key];
   throw failure;}return result.data;};
 async function identity(){return owner??=(await requireCloudUser()).id;}
-async function version(){const id=await identity();const row=checked(await cloudClient().from('shiye_revisions').select('revision').eq('user_id',id).single());revision=Number(row.revision);return revision;}
+let versionRead;
+async function version(){
+  // The five collection reads at startup share one version request. A later
+  // refresh still starts a new request after this one settles.
+  if(versionRead)return versionRead;
+  const task=(async()=>{
+    const id=await identity();
+    const row=checked(await cloudClient().from('shiye_revisions').select('revision').eq('user_id',id).single());
+    revision=Number(row.revision);
+    return revision;
+  })();
+  versionRead=task;
+  try{return await task;}finally{if(versionRead===task)versionRead=null;}
+}
 async function cloudAll(store){
-  await identity();if(revision===undefined)await version();
-  const saved=snapshots.get(store)||await cached('records:'+store);
+  await identity();
+  // IndexedDB and the remote revision endpoint are independent reads. Start
+  // the local snapshot immediately, then compare it only after the revision
+  // arrives. This removes one network round trip from a cold account open.
+  const savedTask=snapshots.has(store)
+    ?Promise.resolve(snapshots.get(store)):cached('records:'+store);
+  if(revision===undefined)await version();
+  const saved=await savedTask;
   if(saved?.revision===revision){snapshots.set(store,saved);return overlayImports(store,await Promise.all(saved.records.map(async r=>withProjectBase(store,await decode(store,structuredClone(r)),saved.revision))));}
   // PostgREST pagination consists of several independent HTTP transactions.
   // Do not cache a mixed-revision library when another device edits mid-read.
@@ -737,9 +756,11 @@ async function cloudCheckpoint(){
 async function cloudCachedCollections(){await identity();const stores=['assets','series','projects','trash'];const savedRows=await Promise.all(stores.map(store=>cached('records:'+store)));if(savedRows.some(saved=>!saved||saved.revision!==savedRows[0].revision))return null;const result={};await Promise.all(stores.map(async(store,index)=>{const saved=savedRows[index];result[store]=await overlayImports(store,structuredClone(saved.records).map(record=>withProjectBase(store,record,saved.revision)));}));blobRevisionProof.clear();blobRecords.clear();revision=savedRows[0].revision;return result;}
 async function cloudRefresh(){
   await queue;
-  const before=revision,current=await version();
+  const before=revision;
   const missing=['assets','series','projects','trash','meta','blobs'].filter(store=>!snapshots.has(store));
-  const cachedRows=await Promise.all(missing.map(store=>cached('records:'+store)));
+  const [current,cachedRows]=await Promise.all([
+    version(),Promise.all(missing.map(store=>cached('records:'+store)))
+  ]);
   missing.forEach((store,index)=>{if(cachedRows[index])snapshots.set(store,cachedRows[index]);});
   // Reconciliation may already have read the latest global revision.
   // Download decisions MUST also compare the cached collection revisions:

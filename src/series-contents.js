@@ -5,6 +5,13 @@ import {applyCatalogPage,resetCatalogPage} from './catalog-pagination.js';
 
 const filtersByID=new Map();
 const filters=id=>{if(!filtersByID.has(id))filtersByID.set(id,{query:'',kind:'all',status:'all',sort:'recent',ascending:false});return filtersByID.get(id);};
+export function seriesContentsModel(state){
+  const series=state.series.find(item=>item.id===state.seriesID);
+  if(!series)return null;
+  const filter=filters(series.id);
+  return {series,filter,all:state.assets.filter(asset=>asset.seriesID===series.id&&!asset.isProjectInternal),
+    members:seriesMembers(series.id,state.assets,filter),covers:seriesCovers(series,state.assets)};
+}
 const kinds=[['sticker','贴纸'],['paper','纸张'],['tape','胶带'],['photo','照片'],['text','文字'],['reference','参考']];
 function button(label,action,kind='') {
   const b=document.createElement('button');b.type='button';b.className='btn '+kind;b.textContent=label;
