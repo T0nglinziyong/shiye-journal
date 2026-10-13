@@ -1,3 +1,4 @@
+import {physicalPolygonQuality,shouldRepairPhysicalPolygon} from './material-physical-polygon-quality.js';
 // Historical no-MorphGAC mask policy from the real-photo Python prototype.
 // This module handles PHYSICAL PERIMETERS ONLY. Candidate discovery, page warp,
 // morphology-based discovery, apertures, RGB extraction and storage are intact.
@@ -98,7 +99,9 @@ export function selectPhysicalPerimeter(cv,p,box){
      ellipseAgreement=box.boundarySource==='ellipse-fit'&&actual?.length>=3
        ?normalizedPolygonAgreement(cv,raw,actual,w,h,
          expandedSegmentationROI(box,w,h,p.paperWidthMM,p.paperHeightMM)):1,
-     chosen=physicalPerimeterChoice({hasObserved:true,
+     quality=physicalPolygonQuality(raw,w,h),
+     repaired=shouldRepairPhysicalPolygon(box,quality,solidity),
+     chosen=repaired?'repaired-observed-hull':physicalPerimeterChoice({hasObserved:true,
        source:box.boundarySource||'unknown',hullToMinRect,hullToBox,
        solidity,vertices:polygon.rows,ellipseAgreement});
    // A user-edited frame is a hard geometry constraint, not a suggestion
@@ -106,7 +109,8 @@ export function selectPhysicalPerimeter(cv,p,box){
    let points=raw;
    if(chosen==='observed-freeform'&&box.boundarySource==='ellipse-fit'&&
       actual?.length>=3)points=actual;
-   if(chosen==='observed-paper-convex'||chosen==='fragmented-carrier-hull'){
+   if(chosen==='observed-paper-convex'||chosen==='fragmented-carrier-hull'||
+      chosen==='repaired-observed-hull'){
      points=normalizedPoints(Array.from({length:polygon.rows},(_,i)=>[
        polygon.data32S[i*2],polygon.data32S[i*2+1]]),w,h);
    }else if(chosen==='observed-chroma-hull'){
@@ -123,9 +127,10 @@ export function selectPhysicalPerimeter(cv,p,box){
          box.boundarySource==='ellipse-fit'?'ellipse-observed-outline':
          box.boundarySource||'unverified-box',
      needsBoundaryReview:box.needsBoundaryReview===true||
-       chosen==='unverified-rectangle',
+       chosen==='unverified-rectangle'||repaired,
      originalPhysicalBoundary:raw,
      perimeterEvidence:{solidity,hullToMinRect,hullToBox,vertices:polygon.rows,
-       ellipseAgreement}};
+       ellipseAgreement,polygonCrossings:quality.crossings,
+       sharpIndentations:quality.sharpIndentations}};
  }finally{polygon.delete();hull.delete();observed.delete();}
 }
