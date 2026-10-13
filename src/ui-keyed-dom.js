@@ -9,6 +9,7 @@ export function reconcileKeyedChildren(parent, desired, keyOf, {update,onInsert,
     if(key!=null&&!old.has(key))old.set(key,child);
   }
   let reused=0,inserted=0,removed=0,changed=0,cursor=parent.firstElementChild;
+  const retained=new Set();
   for(const candidate of [...desired.children]){
     const key=keyOf(candidate),existing=key==null?null:old.get(key);
     if(existing)old.delete(key);
@@ -21,9 +22,14 @@ export function reconcileKeyedChildren(parent, desired, keyOf, {update,onInsert,
       if(existing){existing.remove();removed++;onRemove?.(existing,key);}
     }
     if(node!==cursor)parent.insertBefore(node,cursor);
+    retained.add(node);
     cursor=node.nextElementSibling;
   }
-  for(const [key,node] of old){node.remove();removed++;onRemove?.(node,key);}
+  // Also remove unkeyed placeholders (e.g. an empty-list message) when real
+  // cards arrive; a purely keyed map would leave them attached forever.
+  for(const node of [...parent.children])if(!retained.has(node)){
+    const key=keyOf(node);node.remove();removed++;onRemove?.(node,key);
+  }
   return {reused,inserted,removed,changed};
 }
 
