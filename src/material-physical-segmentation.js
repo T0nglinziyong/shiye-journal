@@ -106,16 +106,34 @@ function physicalRegion(cv,p,box){
      }
      if(!biggest)return null;
      try{
-       const bounds=cv.boundingRect(biggest),mask=mat.roi(new cv.Rect(bounds.x,bounds.y,bounds.width,bounds.height));
+       const bounds=cv.boundingRect(biggest),mask=mat.roi(new cv.Rect(bounds.x,bounds.y,bounds.width,bounds.height)),
+         // ROI inherits its parent's row stride (mat.step). OpenCV.js
+         // Mat.data is a *linear* view over the underlying WASM address.
+         // Directly reading roi.data therefore concatenates bytes from
+         // adjacent parent rows and produces diagonal/white stripe artifacts.
+         // Match the existing MorphGAC path: copy the ROI to a continuous Mat
+         // BEFORE exporting its alpha to JS.
+         packedMat=new cv.Mat();
        try{
-         const packed=new Uint8Array(mask.data),polyLocal=points.map(([x,y])=>[
+         mask.copyTo(packedMat);
+         const packed=new Uint8Array(packedMat.data),polyLocal=points.map(([x,y])=>[
            Math.round(x*w)-ax-bounds.x,Math.round(y*h)-ay-bounds.y]);
+         if(packed.length!==bounds.width*bounds.height)
+           throw Error('物理轮廓的连续 Mask 尺寸不一致');
+         const originalMaskPixels=cv.countNonZero(mat);
+         const exportedPixels=packed.reduce((sum,value)=>sum+(value>0),0);
+         if(exportedPixels!==originalMaskPixels){
+           // A self-intersecting/fragmented candidate is not a valid single
+           // physical object. Return a failed candidate (or let adaptive
+           // MorphGAC retry), never turn the region into a full rectangle.
+           return null;
+         }
          return {...box,x:(ax+bounds.x)/w,y:(ay+bounds.y)/h,w:bounds.width/w,h:bounds.height/h,
            pixels:cv.countNonZero(mat),segmentationMethod:'physical',segmentationFailed:false,
            orientedBox:orientedContourBox(cv,biggest,ax,ay,w,h,cv.countNonZero(mat)),
            mask:{width:bounds.width,height:bounds.height,alpha:packed,polygons:[polyLocal],
              topologyPreserved:false}};
-       }finally{mask.delete();}
+       }finally{packedMat.delete();mask.delete();}
      }finally{biggest.delete();}
    }finally{contours.delete();hierarchy.delete();}
  }finally{vectors.delete();outline.delete();mat.delete();}
