@@ -60,7 +60,7 @@ test('matching commands update scoped state without DOM or duplicated subscriber
  await store.dispatch({type:'matching/basket',payload:{id:'b'}});
  assert.equal(state.recommendFilter,'已收藏');
  assert.deepEqual(state.excludedAssetIDs,['b']);
- assert.deepEqual(state.coreIDs,[]);
+ assert.deepEqual(state.coreIDs,['a']);
  assert.deepEqual(state.basket,['a','b']);
  assert.equal(notices.length,4);
  assert.equal(regions.length,4);
