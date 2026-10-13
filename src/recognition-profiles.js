@@ -1,9 +1,9 @@
 // Recognition method and analysis resolution are independent.
 //
-// All user-facing methods share the same validated whole-page box discovery.
-// The method only controls per-box boundary segmentation; no segmenter may
-// create/delete/merge material identities.
-// Final release contract: auto/MorphGAC/GrabCut/hybrid share one box-discovery stage.
+// Candidate discovery (legacy or physical) and mask segmentation are fully
+// independent user choices. Legacy+MorphGAC restores the historical flow;
+// physical+physical restores the no-MorphGAC contour flow. 'hybrid' performs
+// confidence-based selection and does not use the old MorphGAC+GrabCut hybrid.
 const refineAuto=async context=>{
   const {refineCandidatesAuto}=await import('./recognition-refiners.js');
   return refineCandidatesAuto(context);
@@ -24,11 +24,6 @@ const refineGrabCut=async context=>{
   const {refineCandidatesWithGrabCut}=await import('./recognition-refiners.js');
   return refineCandidatesWithGrabCut(context);
 };
-const refineHybrid=async context=>{
-  const {refineCandidatesHybrid}=await import('./recognition-refiners.js');
-  return refineCandidatesHybrid(context);
-};
-
 export const recognitionStrategies=Object.freeze([
   {
     id:'auto',
