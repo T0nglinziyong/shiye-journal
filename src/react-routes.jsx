@@ -1,11 +1,14 @@
 import React from 'react';
 import {AI_PROVIDERS,supportsVision} from './ai-settings.js';
 import {seriesContentsModel} from './series-contents.js';
-import {paperPresets} from './paper-sizes.js';
+import {paperPresets,paperSizeOptions} from './paper-sizes.js';
 import {candidateDiscoveryOptions,recognitionOptions,recognitionPixelOptions,
   recognitionMethodDetails} from './recognition-profiles.js';
 import {DELIVERY_OPTIONS} from './ai-delivery.js';
 import {IMAGE_MODELS} from './ai-image-generation.js';
+import {matchingViewModel} from './matching-view.js';
+import {styleGroups,purposeGroups} from './matching-directions.js';
+import {visualStyles} from './creative-style-brief.js';
 
 function RouteImage({asset,source,priority=false}){
   const src=asset&&(source(asset.blobId)||asset.staticPath);
@@ -151,6 +154,62 @@ export function SeriesContentsPage({state,source,kindName,format,onAction}){
       </button>)}
     </div><p className="series-result-count">{members.length} 项</p>
   </section>;
+}
+
+const matchingPurposes=['日常记录','旅途记录','图文收藏','清单计划','影像故事','主题封面'];
+const recommendationFilters=['全部','结构补足','配色关系','尺寸层次','内容呼应','材质','同系列','不使用'];
+function DirectionGroup({groups,values,type}){
+  return groups.map(group=><label key={group.id}>{group.label}<select className="match-direction-choice"
+    data-direction={type} data-group={group.id} aria-label={group.label} defaultValue={values.find(value=>group.options.includes(value))||''}>
+    <option value="">不预设</option>{group.options.map(name=><option key={name} value={name}>{name}</option>)}
+  </select></label>);
+}
+export function MatchingPage({state,source,kindName,session}){
+  const {selected,recommendations,excluded,scope,filtered,styles,chosenPurposes}=matchingViewModel(state);
+  const custom=state.matchRatio==='custom'||state.matchRatio.startsWith('custom:');
+  return <div className={`matching-page ${custom?'custom-paper':''}`} data-react-page="matching">
+    <div className="view-head unified-page-heading"><div className="unified-heading-copy"><span className="eyebrow">FROM YOUR DESK TO YOUR PAGES</span><h1>素材搭配</h1></div>
+      <div className="actions"><button className="btn" data-act="reset-match">↶　重新搭配</button></div></div>
+    <section className="panel match-direction"><h2>先定这一页的方向</h2><p>每类可选一个方向，也可选“不预设”；不同类别可以自由组合。</p>
+      <div className="match-direction-groups"><fieldset><legend>页面风格</legend><DirectionGroup groups={styleGroups} values={styles} type="style"/></fieldset>
+        <fieldset><legend>页面用途</legend><DirectionGroup groups={purposeGroups} values={chosenPurposes} type="purpose"/>
+          <label>素材加工方式<select id="match-processing" defaultValue={state.matchProcessing}>{['不预设','保留完整','少量裁剪','自由拆解'].map(value=><option key={value}>{value}</option>)}</select></label>
+        </fieldset></div>
+      <select id="match-style" multiple hidden defaultValue={styles}>{visualStyles.map(([name])=><option key={name} value={name}>{name}</option>)}</select>
+      <select id="match-purpose" multiple hidden defaultValue={chosenPurposes}>{matchingPurposes.map(name=><option key={name}>{name}</option>)}</select>
+      <div className="match-options match-setting-row match-content-row"><label>文字内容<select id="match-content-policy" defaultValue={state.matchContentPolicy}>
+        <option value="documentary">真实记录 · 不编造经历</option><option value="original">原创主题文字</option><option value="collection">素材收藏短评</option><option value="visual">不添加文字</option>
+      </select></label><label>文字表现方式<select id="match-text-presentation" defaultValue={state.matchTextPresentation||'mixed'}>
+        <option value="type">排版文字</option><option value="handwritten">自由手写</option><option value="mixed">混合编排</option>
+      </select></label></div>
+      <div className="match-options match-setting-row match-paper-page"><label>页面模式<select id="match-mode" defaultValue={state.matchMode}><option value="single">单页</option><option value="spread">双页</option></select></label>
+        <label>纸张规格<select id="match-ratio" defaultValue={state.matchRatio} dangerouslySetInnerHTML={{__html:paperSizeOptions(state.matchRatio)}}/></label></div>
+      <div className="match-options match-setting-row match-paper-dimensions"><label className="match-custom-paper">纸张宽 mm<input id="match-paper-width" type="number" min="50" max="1000" defaultValue={state.customPaperWidth}/></label>
+        <label className="match-custom-paper">纸张高 mm<input id="match-paper-height" type="number" min="50" max="1000" defaultValue={state.customPaperHeight}/></label></div>
+      <label>创作要求和内容<textarea data-match-scroll="intent" id="match-intent" placeholder="可写主题、具体内容、想保留的句子或排版要求；未提供的私人事实不会编造" defaultValue={state.matchIntent}/></label>
+    </section>
+    <div className="matching-layout"><aside className="basket"><h3>本次素材篮</h3><div className="match-basket-scroll" data-match-scroll="basket">
+      {selected.length?selected.map(asset=><div key={asset.id} className="match-basket-item" data-match-asset={asset.id}>
+        <RouteImage asset={asset} source={source}/><div><strong>{asset.title}</strong><small className={`match-priority ${scope.required.includes(asset.id)?'required':'preferred'}`}>{scope.required.includes(asset.id)?'必须使用':'优先使用'}</small>
+          <div className="match-basket-actions"><button type="button" data-act="match-core" data-id={asset.id} aria-label={state.coreIDs.includes(asset.id)?'取消标星':'标星设为必用'} aria-pressed={state.coreIDs.includes(asset.id)} title={state.aiSettings.requireAllCandidates?'当前设置为全部候选必用；标星会保留单件优先级':'切换此素材是否必用'}>{state.coreIDs.includes(asset.id)?'★':'☆'}</button>
+            <button type="button" data-act="basket" data-id={asset.id} aria-label="移出素材篮">×</button><button type="button" data-act="match-use" data-id={asset.id} aria-label="设置素材用法">▣ 用法</button></div>
+          {state.materialUseHints[asset.id]?<small className="material-use-summary">{state.materialUseRequired[asset.id]?'必做':'偏好'} · {state.materialUseHints[asset.id]}</small>:null}
+        </div></div>):<p>先从右侧建议或素材库选择。点星号可设为每版必用。</p>}
+      </div><p className="muted">必须 {scope.required.length} · 优先 {scope.preferred.length} · {state.aiSettings.autoIncludeRecommendations?'AI 备选 '+scope.available.length:'AI 备选未开启'} · 不使用 {excluded.size}</p></aside>
+      <section className="panel match-recommendations"><div className="match-panel-head"><h3>✣　按风格与用途推荐</h3><small>{recommendations.length} 件候选 · 已排除 {excluded.size} 件</small></div>
+        <div className="match-chips" data-match-scroll="chips">{recommendationFilters.map(filter=><button key={filter} className={state.recommendFilter===filter?'active':''} data-act="match-filter" data-val={filter}>{filter}</button>)}</div>
+        <div className="match-rec-grid" data-match-scroll="recommendations">{filtered.length?filtered.map(({asset,reasons})=>{
+          const isExcluded=excluded.has(asset.id);
+          return <div key={asset.id} className="match-rec" data-match-asset={asset.id}><RouteImage asset={asset} source={source}/><div><strong>{asset.title}</strong><small className="match-type">{kindName(asset.kind)}</small>
+            {isExcluded?<small className="match-priority excluded">不可以使用</small>:null}<small title={reasons.join('、')}>{reasons.slice(0,2).join(' · ')||'适合当前方向'}</small>
+            <button data-act="basket" data-id={asset.id}>加入素材篮</button><button data-act={isExcluded?'match-allow':'match-skip'} data-id={asset.id}>{isExcluded?'恢复推荐':'不使用'}</button></div></div>;
+        }):<p>这一类暂时没有候选；可以更换风格、用途或继续从素材库选取。</p>}</div>
+      </section></div>
+    <section className="panel match-action"><h2>开始创作</h2><p>{state.aiSettings.requireAllCandidates?'当前候选素材均为必用；如无法在真实纸张上容纳，请减少候选或关闭设置中的必用开关。':'标星的素材必须使用；其余候选尽量使用，但不强制用尽。'}不使用的素材不会发送给 AI。</p>
+      <div className="match-generate"><button className="btn primary" data-act="match-generate" disabled={!scope.candidateAssetIDs.length}>进行AI创作</button><button className="btn" data-act="match-export-gpt" disabled={!scope.candidateAssetIDs.length}>导出给网页版 AI</button>
+        <button className="btn" data-act="match-import-gpt">导入 AI 结果</button><button className="btn" data-act="create-from-basket" disabled={!selected.length}>不使用 AI，手动创作</button></div></section>
+    <div className="matching-session-island" style={{display:'contents'}} dangerouslySetInnerHTML={{__html:session.render()}}/>
+  </div>;
 }
 
 export function AssetDetailPage({asset,seriesTitle,source,kindName,format,onAction}){

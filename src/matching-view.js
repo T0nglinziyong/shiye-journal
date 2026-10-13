@@ -16,12 +16,16 @@ const matched=(item,filter,selected)=>{
   return item.reasons.includes('配色关系');
 };
 export function matchingRecommendations(state){return recommendForDirection({assets:state.assets,basket:state.basket,styles:state.matchStyles||[],purposes:state.matchPurposes||[]}).slice(0,18);}
-export function renderMatchingPage({state,head,imgTag,esc,kindName,session}){
-  const selected=state.basket.map(id=>state.assets.find(a=>a.id===id)).filter(Boolean),recommendations=matchingRecommendations(state),excluded=new Set(state.excludedAssetIDs||[]);
+export function matchingViewModel(state){
+  const selected=state.basket.map(id=>state.assets.find(a=>a.id===id)).filter(Boolean);
+  const recommendations=matchingRecommendations(state),excluded=new Set(state.excludedAssetIDs||[]);
   const scope=buildMaterialScope({basket:state.basket,coreIDs:state.coreIDs,recommendations,excluded:state.excludedAssetIDs,autoIncludeRecommendations:state.aiSettings.autoIncludeRecommendations,requireAllCandidates:state.aiSettings.requireAllCandidates});
   const filtered=state.recommendFilter==='不使用'?[...excluded].map(id=>state.assets.find(a=>a.id===id)).filter(Boolean).map(asset=>({asset,reasons:['已排除']})):recommendations.filter(r=>!excluded.has(r.asset.id)&&matched(r,state.recommendFilter,selected));
+  return {selected,recommendations,excluded,scope,filtered,styles:selectedDirections(styleGroups,state.matchStyles||[]),chosenPurposes:selectedDirections(purposeGroups,state.matchPurposes||[])};
+}
+export function renderMatchingPage({state,head,imgTag,esc,kindName,session}){
+  const {selected,recommendations,excluded,scope,filtered,styles,chosenPurposes}=matchingViewModel(state);
   const groupFields=(groups,values,type)=>groups.map(group=>`<label>${group.label}<select class="match-direction-choice" data-direction="${type}" data-group="${group.id}" aria-label="${group.label}"><option value="">不预设</option>${group.options.map(name=>`<option value="${esc(name)}" ${values.includes(name)?'selected':''}>${esc(name)}</option>`).join('')}</select></label>`).join('');
-  const styles=selectedDirections(styleGroups,state.matchStyles||[]),chosenPurposes=selectedDirections(purposeGroups,state.matchPurposes||[]);
   const processingField=`<label>素材加工方式<select id="match-processing">${['不预设','保留完整','少量裁剪','自由拆解'].map(x=>`<option ${state.matchProcessing===x?'selected':''}>${x}</option>`).join('')}</select></label>`;
   const contentFields=`<div class="match-options match-setting-row match-content-row"><label>文字内容<select id="match-content-policy"><option value="documentary" ${state.matchContentPolicy==='documentary'?'selected':''}>真实记录 · 不编造经历</option><option value="original" ${state.matchContentPolicy==='original'?'selected':''}>原创主题文字</option><option value="collection" ${state.matchContentPolicy==='collection'?'selected':''}>素材收藏短评</option><option value="visual" ${state.matchContentPolicy==='visual'?'selected':''}>不添加文字</option></select></label><label>文字表现方式<select id="match-text-presentation"><option value="type" ${(state.matchTextPresentation||'mixed')==='type'?'selected':''}>排版文字</option><option value="handwritten" ${state.matchTextPresentation==='handwritten'?'selected':''}>自由手写</option><option value="mixed" ${(state.matchTextPresentation||'mixed')==='mixed'?'selected':''}>混合编排</option></select></label></div>`;
   const paperField=`<div class="match-options match-setting-row match-paper-page"><label>页面模式<select id="match-mode"><option value="single" ${state.matchMode==='single'?'selected':''}>单页</option><option value="spread" ${state.matchMode==='spread'?'selected':''}>双页</option></select></label><label>纸张规格<select id="match-ratio">${paperSizeOptions(state.matchRatio)}</select></label></div>`;
