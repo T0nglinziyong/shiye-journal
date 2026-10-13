@@ -20,3 +20,29 @@ export function patchMaterialCatalog(view,html){
     }
   });
 }
+
+// Works catalog has additional action tiles mounted by parity-ui; include
+// them as stable pseudo-keys so a data refresh never deletes their listeners.
+export function patchWorksCatalog(view,html){
+  if(view.querySelector('.recently-deleted-grid,.journal-template-grid,.selection-results'))return null;
+  const live=view.querySelector('.works-page .works-grid');
+  if(!live)return null;
+  const template=document.createElement('template');template.innerHTML=html;
+  const fresh=template.content.querySelector('.works-page .works-grid');
+  if(!fresh)return null;
+  const originals=new Map([...live.querySelectorAll(':scope > .card[data-act="open-project"]')]
+    .map(card=>[card.dataset.id,card]));
+  const desired=document.createElement('div');
+  for(const tile of live.querySelectorAll(':scope > .work-entry'))desired.append(tile.cloneNode(true));
+  desired.append(...[...fresh.children]);
+  const key=card=>card.dataset.id?'project:'+card.dataset.id:
+    card.classList.contains('work-entry')?'utility:'+card.textContent:null;
+  const stats=reconcileKeyedChildren(live,desired,key,{
+    update(current,next,id){
+      if(id?.startsWith('utility:'))return true;
+      return current.dataset.workRevision===next.dataset.workRevision;
+    }
+  });
+  return {...stats,touched:[...live.querySelectorAll(':scope > .card[data-act="open-project"]')]
+    .filter(card=>originals.get(card.dataset.id)!==card)};
+}
