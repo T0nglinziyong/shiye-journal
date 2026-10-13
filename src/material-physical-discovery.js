@@ -129,6 +129,7 @@ export function discoverPhysicalMaterialBoxes(cv,p,own){
      if(!valid(r,area,{minPixels:5000,minWidth:70,minHeight:65,frameMargin:18})
        ||area/Math.max(1,r.width*r.height)<.23)return;
      const hull=new cv.Mat();
+     try{
      cv.convexHull(c,hull,false,true);
      const fitted=cv.minAreaRect(hull),
        hullFill=Math.abs(cv.contourArea(hull))/
@@ -155,9 +156,8 @@ export function discoverPhysicalMaterialBoxes(cv,p,own){
      if(contained.some((a,i)=>contained.slice(i+1).some(b=>
        Math.hypot(a.x+a.width/2-b.x-b.width/2,
          a.y+a.height/2-b.y-b.height/2)>pxPerMM*9)))return;
-     try{
-       add(hull,'lab-carrier',area/Math.max(1,r.width*r.height),'carrier',
-         {minPixels:5000,minWidth:70,minHeight:65,frameMargin:18});
+     add(hull,'lab-carrier',area/Math.max(1,r.width*r.height),'carrier',
+       {minPixels:5000,minWidth:70,minHeight:65,frameMargin:18});
      }finally{hull.delete();}
    });
  }
