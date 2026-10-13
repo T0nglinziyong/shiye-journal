@@ -1,5 +1,7 @@
 import {refineMaterialBoundaries} from './material-boundary-refiners.js';
 import {discoverMaterialBoxes} from './material-box-discovery.js';
+import {discoverPhysicalMaterialBoxes} from './material-physical-discovery.js';
+import {segmentPhysicalOrAdaptive} from './material-physical-segmentation.js';
 import {separateSharedCarrier} from './material-carrier.js';
 import {segmentMaterialBoxes} from './material-segmentation.js';
 import {restoreRepeatedApertures} from './repeated-apertures.js';
@@ -50,11 +52,13 @@ export async function processVision(cv,operation,p){
       return {degrees:Math.abs(degrees)>=1.5&&elongation>=1.18&&fillRatio>=.78?degrees:0,fillRatio,elongation};
     }
     if(operation==='boxes-simple')return discoverMaterialBoxes(cv,p,own);
+    if(operation==='boxes-physical')return discoverPhysicalMaterialBoxes(cv,p,own);
     if(operation==='segment-boxes-classical')return segmentMaterialBoxes(cv,p);
     if(operation==='restore-repeated-apertures')return restoreRepeatedApertures(cv,p);
     if(operation==='process-material-boxes'){
       let out;
       if(p.method==='morphgac'||p.method==='auto')out=segmentMaterialBoxes(cv,{...p,pixels:p.pixels});
+      else if(p.method==='physical'||p.method==='adaptive')out=segmentPhysicalOrAdaptive(cv,p);
       else if(p.method==='hybrid')out=refineMaterialBoundaries(cv,{...p,candidates:p.boxes,mode:'hybrid',postprocess:{edgePolish:true,shapeRegularization:false,curveSmooth:false,apertures:false}});
       else out=refineMaterialBoundaries(cv,{...p,candidates:p.boxes,mode:'grabcut',postprocess:{edgePolish:false,shapeRegularization:false,curveSmooth:false,apertures:false}});
       if(p.shapeRegularization!==false)out=refineMaterialBoundaries(cv,{...p,candidates:out,mode:'postprocess',postprocess:{edgePolish:false,shapeRegularization:true,curveSmooth:false,apertures:false}});
