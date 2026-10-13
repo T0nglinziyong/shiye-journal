@@ -1,5 +1,6 @@
 import {segmentMaterialBoxes} from './material-segmentation.js';
 import {orientedContourBox} from './material-orientation.js';
+import {selectPhysicalPerimeter,expandedSegmentationROI} from './material-physical-perimeter.js';
 const clamp=(x,a,b)=>Math.min(b,Math.max(a,x));
 
 // This is boundary evidence, NOT probability of a correct mask. No shape
@@ -76,58 +77,29 @@ export function boundaryConfidence(cv,p,region){
  try{return ctx.evaluate(region);}finally{ctx.close();}
 }
 
+// Compatibility for diagnostic callers: whether a paper candidate has an
+// observed, nearly full closed border. The segmentation decision itself is
+// now handled by the tested original no-MOR perimeter policy.
 export function paperEnvelopeNeeded(box){
-  // A coherent almost-filled, closed *paper* contour is a rectangular
-  // carrier, even if Canny traced a notch around its printed letters.
-  // Never impose this rule on people, holes or unverified legacy boxes.
-  return box?.boundarySource==='edge-closed' &&
-    Number(box.fillRatio)>=.83 &&
-    Array.isArray(box.physicalBoundary) && box.physicalBoundary.length>=3;
+ return box?.boundarySource==='edge-closed'&&
+   Number(box.fillRatio)>=.83&&
+   Array.isArray(box.physicalBoundary)&&box.physicalBoundary.length>=3;
 }
-
-function physicalBoundaryForMask(cv,p,box){
-  const w=p.width,h=p.height,base=box.physicalBoundary;
-  if(!Array.isArray(base)||base.length<3){
-    // User preference: keep unverified candidates as editable rectangles.
-    // An uncertain box must not silently disappear from the import list.
-    const x=box.x,y=box.y,r=x+box.w,b=y+box.h;
-    return {points:[[x,y],[r,y],[r,b],[x,b]],
-      boundarySource:'unverified-box',needsBoundaryReview:true};
-  }
-  if(!paperEnvelopeNeeded(box))return {points:base};
-  const contour=cv.matFromArray(base.length,1,cv.CV_32SC2,
-    base.flatMap(([x,y])=>[Math.round(x*w),Math.round(y*h)])),
-    hull=new cv.Mat();
-  try{
-    cv.convexHull(contour,hull,false,true);
-    const fitted=cv.minAreaRect(hull),
-      hullArea=Math.abs(cv.contourArea(hull)),
-      area=Math.max(1,fitted.size.width*fitted.size.height),
-      fill=hullArea/area;
-    // A severely nonrectangular carrier should retain its observed outline.
-    // The fitted envelope is adopted only when shape evidence supports it.
-    if(fill<.78)return {points:base};
-    const corners=cv.boxPoints(fitted),cx=fitted.center.x,cy=fitted.center.y;
-    const points=corners.map(pt=>{
-      // Tiny outward safety margin prevents light print at a pale paper edge
-      // from being amputated by 900px antialiasing.
-      const dx=pt.x-cx,dy=pt.y-cy,n=Math.max(1,Math.hypot(dx,dy));
-      return [clamp((pt.x+dx/n)/w,0,1),clamp((pt.y+dy/n)/h,0,1)];
-    });
-    return {points,boundarySource:'supported-rect-envelope',
-      originalPhysicalBoundary:base};
-  }finally{hull.delete();contour.delete();}
-}
+const physicalBoundaryForMask=(cv,p,box)=>selectPhysicalPerimeter(cv,p,box);
 
 function physicalRegion(cv,p,box){
  const w=p.width,h=p.height,
    boundary=physicalBoundaryForMask(cv,p,box),points=boundary.points;
  if(!Array.isArray(points)||points.length<3)return null;
  // Rasterize at the SAME pixel scale as the original morph segmenter.
- const ax=clamp(Math.floor(Math.min(...points.map(v=>v[0]))*w)-2,0,w-1),
-   ay=clamp(Math.floor(Math.min(...points.map(v=>v[1]))*h)-2,0,h-1),
-   bx=clamp(Math.ceil(Math.max(...points.map(v=>v[0]))*w)+3,ax+1,w),
-   by=clamp(Math.ceil(Math.max(...points.map(v=>v[1]))*h)+3,ay+1,h);
+ // Search workspace may extend beyond the discovery box by 3mm, so a
+ // weak outer perimeter is not clipped by the original candidate rectangle.
+ // The output is cropped back to the ACTUAL perimeter, not made 3mm fatter.
+ const search=expandedSegmentationROI(box,w,h,p.paperWidthMM,p.paperHeightMM),
+   ax=clamp(Math.min(search.x0,Math.floor(Math.min(...points.map(v=>v[0]))*w)-2),0,w-1),
+   ay=clamp(Math.min(search.y0,Math.floor(Math.min(...points.map(v=>v[1]))*h)-2),0,h-1),
+   bx=clamp(Math.max(search.x1,Math.ceil(Math.max(...points.map(v=>v[0]))*w)+3),ax+1,w),
+   by=clamp(Math.max(search.y1,Math.ceil(Math.max(...points.map(v=>v[1]))*h)+3),ay+1,h);
  const mw=bx-ax,mh=by-ay;
  if(mw<2||mh<2||mw*mh>Math.max(w*h,.1e7))return null;
  const mat=cv.Mat.zeros(mh,mw,cv.CV_8UC1),outline=cv.matFromArray(points.length,1,cv.CV_32SC2,
@@ -168,7 +140,8 @@ function physicalRegion(cv,p,box){
            // MorphGAC retry), never turn the region into a full rectangle.
            return null;
          }
-         return {...box,...boundary,x:(ax+bounds.x)/w,y:(ay+bounds.y)/h,w:bounds.width/w,h:bounds.height/h,
+         return {...box,...boundary,segmentationROIExtraMM:3,
+           x:(ax+bounds.x)/w,y:(ay+bounds.y)/h,w:bounds.width/w,h:bounds.height/h,
            pixels:cv.countNonZero(mat),segmentationMethod:'physical',segmentationFailed:false,
            orientedBox:orientedContourBox(cv,biggest,ax,ay,w,h,cv.countNonZero(mat)),
            mask:{width:bounds.width,height:bounds.height,alpha:packed,polygons:[polyLocal],
@@ -184,10 +157,8 @@ function physicalRegion(cv,p,box){
 // never fabricates the box as a completely opaque paper.
 function localPhysicalFallback(cv,p,box){
  const w=p.width,h=p.height,
-   x0=clamp(Math.floor(box.x*w)-5,0,w-1),
-   y0=clamp(Math.floor(box.y*h)-5,0,h-1),
-   x1=clamp(Math.ceil((box.x+box.w)*w)+5,x0+1,w),
-   y1=clamp(Math.ceil((box.y+box.h)*h)+5,y0+1,h),
+   search=expandedSegmentationROI(box,w,h,p.paperWidthMM,p.paperHeightMM),
+   x0=search.x0,y0=search.y0,x1=search.x1,y1=search.y1,
    rw=x1-x0,rh=y1-y0;
  if(rw<12||rh<12)return null;
  const rgba=cv.matFromArray(h,w,cv.CV_8UC4,p.pixels),
