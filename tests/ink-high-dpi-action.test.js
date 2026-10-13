@@ -17,11 +17,12 @@ test('retina live pen uses actual visible pixel area and respects memory cap',()
  assert.ok(giant.width*giant.height<=9_100_000);
 });
 test('live canvas changes resolution but never mutates Scene coordinates',()=>{
- let width=100,height=100;const fakeCtx={setTransform(...values){this.transform=values;},
+ let width=100,height=100,displayWidth=600,displayHeight=800;
+ const fakeCtx={setTransform(...values){this.transform=values;},
    imageSmoothingEnabled:false};
  const canvas={get width(){return width},set width(v){width=v},
    get height(){return height},set height(v){height=v},
-   getBoundingClientRect:()=>({width:600,height:800}),
+   getBoundingClientRect:()=>({width:displayWidth,height:displayHeight}),
    getContext:()=>fakeCtx};
  const first=configureInkBacking(canvas,800,1000,{pixelRatio:2});
  assert.ok(first.changed);
@@ -29,6 +30,12 @@ test('live canvas changes resolution but never mutates Scene coordinates',()=>{
  assert.equal(canvas.height,1600);
  assert.deepEqual(fakeCtx.transform,[1.6,0,0,1.6,0,0]);
  assert.equal(configureInkBacking(canvas,800,1000,{pixelRatio:2}).changed,false);
+ displayWidth=630;displayHeight=840;
+ assert.equal(configureInkBacking(canvas,800,1000,{pixelRatio:2}).changed,false,
+   'minor zoom should not recreate live ink canvas');
+ displayWidth=1250;displayHeight=1700;
+ assert.equal(configureInkBacking(canvas,800,1000,{pixelRatio:2}).changed,true,
+   'large zoom should upgrade ink detail');
 });
 test('SVG and live Canvas share one quadratic centreline with real endpoints',()=>{
  const pts=[{x:0,y:0},{x:10,y:20},{x:25,y:40},{x:40,y:50}];
