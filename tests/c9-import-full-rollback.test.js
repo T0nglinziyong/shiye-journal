@@ -9,7 +9,7 @@ const expected={
   'manual-import-recognition.js':'7f843bae5c81fb8f2046ae176ff4b0855446f0b8',
   'perspective.js':'af21f19bead1d03a58626248dd905e8d81f30e59',
   'import-box-editor.js':'8798db7e8987ade7afa9c58640de759ff17c6ae2',
-  'recognition-refiners.js':'e4bd77e4e373e6a3d6ea5d28aa08bdba5e8f2652',
+  'recognition-refiners.js':'6aa11c29b69fcddb09c10b15083e410828702713',
   'recognition-raster.js':'4e88878477689fa3c973576c5ce51c419145343a',
   'material-color-restoration.js':'4be602eab1a8d3d1281ba6c455c1ad80055da1c3',
   'import-workspace-ui.js':'a158cd3b2ea4444ed4a77e2c6c2194774a605796',
@@ -19,7 +19,7 @@ const expected={
   'paper-ui.js':'d1ebb53e61c7753c869850528eb43fe1bc7f062a',
   'import-save.js':'503d252ecfb47a9310f099cb4605c538346198c5',
   'paper-analysis.js':'821147b425086b7b579e7caceff7b1fea914bbfc',
-  'recognition-profiles.js':'4e2234bc36035e229ef5b5c2ea525cf35c5c2ef8',
+  'recognition-profiles.js':'5001bea0d5cc4257c1c08e11b874c84d448c22c5',
   'vision-runtime.js':'0e232cafd76e5278da5a5dd6706214cbbdb9c880'
 };
 for(const [name,sha] of Object.entries(expected)){
