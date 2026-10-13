@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import {Window} from 'happy-dom';
 import {reconcileKeyedChildren,reconcileLayerBranches} from '../src/ui-keyed-dom.js';
 import {patchImportInspection} from '../src/import-incremental.js';
-import {patchMaterialCatalog} from '../src/catalog-incremental.js';
+import {patchMaterialCatalog,patchWorksCatalog} from '../src/catalog-incremental.js';
+import {syncBusyControls} from '../src/ui-disabled-state.js';
 import {patchAISettingsModel} from '../src/settings-incremental.js';
 
 function fixture(markup,run){
@@ -45,7 +46,7 @@ test('layer tree patch retains unchanged sibling/child even when one lock icon c
     const replacement=doc.createElement('div');
     replacement.innerHTML='<div class="scene-layer-branch"><div data-scene-node="b">B</div></div>';
     reconcileLayerBranches(children,replacement,refs,new Map([['b',{}]]));
-    assert.notEqual(children.firstElementChild,keep);
+    assert.notEqual(children.lastElementChild,keep);
   });
 });
 test('import recognition status updates do not detach photo, quadrilateral or queue image',()=>{
@@ -104,5 +105,43 @@ test('model provider updates only connector subtree and keeps details node expan
     assert.equal(root.querySelector('#ai-model-group'),node);
     assert.equal(node.open,true);
     assert.equal(node.querySelector('input').getAttribute('value'),'b');
+  });
+});
+
+test('empty-state placeholder disappears when the first keyed proposal arrives',()=>{
+  fixture('<div id="list"><p>尚未生成方案</p></div><div id="next">'+
+    '<article data-variant="run1">方案 1</article></div>',doc=>{
+    const list=doc.querySelector('#list'),next=doc.querySelector('#next');
+    reconcileKeyedChildren(list,next,el=>el.dataset.variant||null);
+    assert.equal(list.children.length,1);
+    assert.equal(list.firstElementChild.dataset.variant,'run1');
+  });
+});
+test('busy controls re-enable without overriding permanently disabled controls',()=>{
+  fixture('<div id="root"><button id="a">可执行</button><button id="b" disabled>受限</button></div>',doc=>{
+    const root=doc.querySelector('#root'),a=doc.querySelector('#a'),b=doc.querySelector('#b');
+    syncBusyControls(root,'button',true);
+    assert.equal(a.disabled,true);assert.equal(b.disabled,true);
+    syncBusyControls(root,'button',false);
+    assert.equal(a.disabled,false);assert.equal(b.disabled,true);
+    assert.equal(a.hasAttribute('data-ui-busy-disabled'),false);
+  });
+});
+test('works catalog keeps action tiles and unaffected project thumbnail nodes',()=>{
+  const work=(id,title,revision)=>'<button class="card" data-id="'+id+
+    '" data-act="open-project" data-work-revision="'+revision+
+    '"><img src="blob:'+id+'"><span>'+title+'</span></button>';
+  const wrapper=rows=>'<div class="works-page"><div class="works-grid">'+rows+'</div></div>';
+  fixture('<main id="view">'+wrapper('<button class="work-entry">创建作品</button>'+
+    work('a','A','1')+work('b','B','1'))+'</main>',doc=>{
+    const view=doc.querySelector('#view'),grid=view.querySelector('.works-grid'),
+      tile=grid.querySelector('.work-entry'),image=grid.querySelector('[data-id="a"] img');
+    let clicks=0;tile.onclick=()=>clicks++;
+    const result=patchWorksCatalog(view,wrapper(work('a','A','1')+work('b','B updated','2')));
+    assert.ok(result);
+    assert.equal(grid.querySelector('.work-entry'),tile);
+    assert.equal(grid.querySelector('[data-id="a"] img'),image);
+    assert.equal(result.touched.length,1);
+    tile.click();assert.equal(clicks,1);
   });
 });
