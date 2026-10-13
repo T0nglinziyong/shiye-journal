@@ -831,6 +831,9 @@ async function legacyHandle(action,id,value){try{switch(action){
   case 'import-work':openImportGallery('work');break;
   case 'import-snapshot':offlineSnapshotProject=null;openImportGallery('snapshot');break;
   case 'import':openImportGallery('material');break;case 'back-library':navigateBack('library');break;case 'back-works':case 'editor-done':{
+    // The ink layer may have a short coalescing timer. Flush its committed
+    // strokes BEFORE the explicit export/publish/exit transaction.
+    view.flushInkCommit?.({renderUI:false,force:true});
     const p=state.activeProject;if(!p)throw Error('当前没有可保存的作品');
     if(p.__remoteDeleted){
       if(!confirm('这份作品已在其他设备删除。当前页面的修改不会自动恢复已删除作品。若要保留当前编辑，请先取消并导出可编辑 ZIP。确定退出到作品库吗？'))break;
