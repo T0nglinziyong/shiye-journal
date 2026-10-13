@@ -1,3 +1,5 @@
+import {physicalPolygonQuality,shouldRepairPhysicalPolygon} from './material-physical-polygon-quality.js';
+import {recoverBrokenPhysicalChroma} from './material-chroma-recovery.js';
 // Historical no-MorphGAC mask policy from the real-photo Python prototype.
 // This module handles PHYSICAL PERIMETERS ONLY. Candidate discovery, page warp,
 // morphology-based discovery, apertures, RGB extraction and storage are intact.
@@ -52,6 +54,7 @@ export function physicalPerimeterChoice({hasObserved,source='unknown',
     hullToMinRect=0,hullToBox=0,solidity=1,vertices=0,
     ellipseAgreement=1}){
  if(!hasObserved)return 'unverified-rectangle';
+ if(source==='manual-outline')return 'observed-manual-polygon';
  if(source==='ellipse-fit')return ellipseAgreement>=.96?'observed-ellipse':'observed-freeform';
  if(source==='lab-carrier'||source==='rotated-paper'||source==='chroma-carrier')
    return 'observed-chroma-hull';
@@ -97,13 +100,25 @@ export function selectPhysicalPerimeter(cv,p,box){
      ellipseAgreement=box.boundarySource==='ellipse-fit'&&actual?.length>=3
        ?normalizedPolygonAgreement(cv,raw,actual,w,h,
          expandedSegmentationROI(box,w,h,p.paperWidthMM,p.paperHeightMM)):1,
-     chosen=physicalPerimeterChoice({hasObserved:true,
+     quality=physicalPolygonQuality(raw,w,h),
+     repaired=shouldRepairPhysicalPolygon(box,quality,solidity),
+     // For a spiky but non-self-crossing contour, the candidate may have
+     // followed printed decoration. Reacquire the carrier from independent
+     // paper-relative colour components, only when the recovered component
+     // substantially overlaps and has bounded outward growth.
+     recovered=repaired&&quality.crossings===0&&quality.sharpIndentations>0
+       ?recoverBrokenPhysicalChroma(cv,p,box):null,
+     chosen=recovered?'recovered-chroma-hull':repaired?'repaired-observed-hull':
+       physicalPerimeterChoice({hasObserved:true,
        source:box.boundarySource||'unknown',hullToMinRect,hullToBox,
        solidity,vertices:polygon.rows,ellipseAgreement});
-   let points=raw;
+   // A user-edited frame is a hard geometry constraint, not a suggestion
+   // to convexify, auto-fit, or snap to a different physical outline.
+   let points=recovered||raw;
    if(chosen==='observed-freeform'&&box.boundarySource==='ellipse-fit'&&
       actual?.length>=3)points=actual;
-   if(chosen==='observed-paper-convex'||chosen==='fragmented-carrier-hull'){
+   if(chosen==='observed-paper-convex'||chosen==='fragmented-carrier-hull'||
+      chosen==='repaired-observed-hull'){
      points=normalizedPoints(Array.from({length:polygon.rows},(_,i)=>[
        polygon.data32S[i*2],polygon.data32S[i*2+1]]),w,h);
    }else if(chosen==='observed-chroma-hull'){
@@ -120,9 +135,11 @@ export function selectPhysicalPerimeter(cv,p,box){
          box.boundarySource==='ellipse-fit'?'ellipse-observed-outline':
          box.boundarySource||'unverified-box',
      needsBoundaryReview:box.needsBoundaryReview===true||
-       chosen==='unverified-rectangle',
+       chosen==='unverified-rectangle'||repaired,
      originalPhysicalBoundary:raw,
      perimeterEvidence:{solidity,hullToMinRect,hullToBox,vertices:polygon.rows,
-       ellipseAgreement}};
+       ellipseAgreement,polygonCrossings:quality.crossings,
+       sharpIndentations:quality.sharpIndentations,
+       recoveredFromChroma:!!recovered}};
  }finally{polygon.delete();hull.delete();observed.delete();}
 }

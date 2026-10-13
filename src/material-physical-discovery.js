@@ -1,4 +1,5 @@
 import {boxIoU,overlapOf,overlapOfSmaller,containsCenter,dedupePhysicalCandidates,mergeAlignedCarrierPieces} from './material-physical-candidates.js';
+import {splitLabCarrierComponents} from './material-chroma-carrier-split.js';
 // Physical-carrier-first discovery. Only the box/mask engine changes: paper
 // warp, 9 mm filtering, aperture restoration, original RGB and storage remain
 // owned by existing modules. No crop-specific or case-specific coordinates.
@@ -111,7 +112,10 @@ export function discoverPhysicalMaterialBoxes(cv,p,own){
  for(let i=0;i<w*h;i++)chroma[i]=clamp(Math.round(Math.hypot(data[i*3+1]-bgA,data[i*3+2]-bgB)),0,255);
  const chromaMat=own(cv.matFromArray(h,w,cv.CV_8UC1,chroma));
  const closeK=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(25,25))),
-   openK=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(7,7)));
+   openK=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(7,7))),
+   // Threshold 11 can separate two objects that threshold 14 reconnects.
+   // Never reintroduce a giant merged hull in a later threshold pass.
+   splitColorIslands=[];
  for(const threshold of [11,8,14]){
    const bin=own(new cv.Mat()),closed=own(new cv.Mat()),opened=own(new cv.Mat());
    cv.threshold(chromaMat,bin,threshold,255,cv.THRESH_BINARY);
@@ -126,9 +130,34 @@ export function discoverPhysicalMaterialBoxes(cv,p,own){
        ||area/Math.max(1,r.width*r.height)<.23)return;
      const hull=new cv.Mat();
      try{
-       cv.convexHull(c,hull,false,true);
-       add(hull,'lab-carrier',area/Math.max(1,r.width*r.height),'carrier',
+     cv.convexHull(c,hull,false,true);
+     const fitted=cv.minAreaRect(hull),
+       hullFill=Math.abs(cv.contourArea(hull))/
+         Math.max(1,fitted.size.width*fitted.size.height);
+     // Rectangular-looking paper is a shared physical carrier even if its
+     // printed colours are disconnected. Only test for two loose objects
+     // when the merged colour hull itself is NON-rectangular.
+     // A 25px morphological close can join two genuinely separate bright
+     // stickers into one convex blob. Inspect the ORIGINAL threshold bitmap
+     // before closing; only split two well-separated, individually large
+     // components. Many tiny checker/text fragments remain a single paper.
+     if(hullFill<.86&&splitLabCarrierComponents(cv,bin,r,pxPerMM,(island,islandArea)=>{
+       splitColorIslands.push(cv.boundingRect(island));
+       add(island,'lab-carrier',
+         islandArea/Math.max(1,r.width*r.height),'carrier',
          {minPixels:5000,minWidth:70,minHeight:65,frameMargin:18});
+     }))return;
+     // Other Lab thresholds must not accidentally replace two distinct
+     // carriers with their union. Require two spatially distinct centroids.
+     const contained=splitColorIslands.filter(q=>{
+       const cx=q.x+q.width/2,cy=q.y+q.height/2;
+       return cx>=r.x&&cx<=r.x+r.width&&cy>=r.y&&cy<=r.y+r.height;
+     });
+     if(contained.some((a,i)=>contained.slice(i+1).some(b=>
+       Math.hypot(a.x+a.width/2-b.x-b.width/2,
+         a.y+a.height/2-b.y-b.height/2)>pxPerMM*9)))return;
+     add(hull,'lab-carrier',area/Math.max(1,r.width*r.height),'carrier',
+       {minPixels:5000,minWidth:70,minHeight:65,frameMargin:18});
      }finally{hull.delete();}
    });
  }

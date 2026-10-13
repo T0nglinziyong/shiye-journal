@@ -55,7 +55,8 @@ import {createAIRecorder,publicAIDiagnosticReport} from './ai-diagnostics.js';
 import {mountImportBoxEditor} from './import-box-editor.js';
 import {saveImportBatch,importPaperDimensions} from './import-save.js';
 import {paperDimensions as presetPaperDimensions,paperSizeOptions} from './paper-sizes.js';
-import {refineManualBoxes,hasManualForegroundEvidence} from './manual-import-recognition.js';
+import {refineManualBoxes} from './manual-import-recognition.js';
+import {manualPhysicalRegion} from './manual-import-geometry.js';
 import {seriesCovers,usedAssetIDs,markProjectAssetsUsed} from './library-model.js';
 import {renderSeriesContents} from './series-contents.js';
 import {showSeriesEditor} from './series-editor.js';
@@ -327,6 +328,11 @@ function assetCard(a){return `<button class="card" data-act="detail" data-id="${
 const fmt=n=>Number(n).toFixed(1).replace(/\.0$/,'');
 function head(title,subtitle,actions=''){return `<div class="view-head unified-page-heading"><div class="unified-heading-copy"><span class="eyebrow">FROM YOUR DESK TO YOUR PAGES</span><h1>${title}</h1></div><div class="actions">${actions}</div></div>`;}
 function render(){
+  // Keep the import photo queue at the exact scroll position while the whole
+  // view is replaced on every photo switch, load-progress update and confirm.
+  // Do not scroll the selected photo into view: that causes backward jumps.
+  const priorImportQueue=state.route==='import'?view.querySelector('.queue-strip'):null;
+  const importQueueScroll=priorImportQueue?.scrollLeft??null;
   // Capture BEFORE editing/backdrop CSS changes or DOM teardown. Switching
   // from Matching into Editor can otherwise clamp the old page scroll first.
   const previousMatchingScroll=captureMatchingScroll(view,window);
@@ -343,6 +349,10 @@ function render(){
   view.editorLayoutSize={width:window.innerWidth,height:window.innerHeight};
   const pages={library:renderLibrary,series:renderSeries,matching:renderMatching,works:renderWorks,editor:renderEditor,import:renderImport,assetDetail:renderAssetDetail,projectPreview:renderProjectPreview,settings:renderSettings};view.innerHTML=(pages[state.route]||renderLibrary)();
   for(const fresh of view.querySelectorAll('img[src]')){const old=imageNodes.take(fresh);if(old)fresh.replaceWith(old);}
+  if(importQueueScroll!==null){
+    const replacement=view.querySelector('.queue-strip');
+    if(replacement)replacement.scrollLeft=importQueueScroll;
+  }
   reusePagePreviews({view,state});mountSeriesCoverSnapshots({view,state});
   mountParityControls();bindPage();mountWorkflowControls({state,view,body,modal,db,render,route,toast,imgTag,assetCard,esc,asset,refresh,download,modelImage,rasterize,backup,openSeriesEditor,openAssetEditor:openDetail,openCutoutCheck,switchImportRecord,saveActiveImportRecord,saveProject,flushSave,assetOrganization,applyAssetClassification});view.catalogRefresh?.();if(state.route==='works'){
     view.localWorkCoverDispose=localWorkCovers.observe(view);
@@ -1772,20 +1782,25 @@ async function refreshImportCandidates(regions,{manual=false}={}){
       aw=Math.max(1,Math.round(source.width*b.w*scale)),
       ah=Math.max(1,Math.round(source.height*b.h*scale));
     const pixels=await analysisPixels(source,b,aw,ah);
-    if(!hasManualForegroundEvidence(pixels,aw,ah,box))throw Error('第 '+(index+1)+' 个框内没有找到可靠素材；请贴近素材重画');
-    const orientedBox={centerX:box.x+box.w/2,centerY:box.y+box.h/2,
-        width:box.w,height:box.h,rotation:box.rotation||0,
-        rectangularity:1,autoDeskew:true,source:'manual'},
-      [candidate]=await visionTask('process-material-boxes',{
-        pixels,sourcePixels:pixels,width:aw,height:ah,
-        boxes:[{x:box.x,y:box.y,w:box.w,h:box.h,orientedBox,
-          seedDensity:1,fillRatio:1}],method:state.importRecognition||'morphgac',
-        paperWidthMM:pw,paperHeightMM:ph,
-        shapeRegularization:recognitionPostprocessOptions().shapeRegularization!==false,
-        apertures:recognitionPostprocessOptions().apertures!==false
-      });
-    if(!candidate||candidate.segmentationFailed)throw Error('旋转框内无法可靠分割，请调整框后重试');
-    return candidate;
+    // Explicit manual frames are authoritative even on pale or nearly blank
+    // stock. Do not discard them with automatic foreground-confidence gates.
+    // Manual geometry is authoritative. Never pass only the axis-aligned
+    // bounds to the physical segmentation worker: doing so discarded rotation
+    // on confirmation and silently replaced the user's frame with a vertical
+    // full rectangle. Rasterize the EXACT visible rotated frame instead.
+    const manualRegion=manualPhysicalRegion(box,aw,ah);
+    const [candidate]=await visionTask('process-material-boxes',{
+      pixels,sourcePixels:pixels,width:aw,height:ah,
+      boxes:[manualRegion],method:'physical',paperWidthMM:pw,paperHeightMM:ph,
+      mergeSharedCarrier:true,shapeRegularization:false,apertures:false
+    });
+    if(!candidate?.mask?.alpha?.length||candidate.segmentationFailed)
+      throw Error('旋转框无法生成完整素材 Mask，请调整后重试');
+    // Preserve the user-defined angle; minAreaRect can re-express e.g. 60°
+    // as -30° with swapped axes, which is not the frame the user confirmed.
+    return {...candidate,manualGeometry:true,
+      physicalBoundary:manualRegion.physicalBoundary,
+      orientedBox:manualRegion.orientedBox};
   }):regions.map(region=>({region,original:null}));
   if(record!==state.importRecords[state.importIndex]||state.route!=='import')return false;
   const lighting=state.importMaterialColorMode!=='original'&&state.correctedBitmap
