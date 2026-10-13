@@ -444,6 +444,7 @@ function render(){
   // The controller lifetime has released route-owned observers, gestures,
   // and native editor listeners before replacing their DOM hosts.
   view.workCoverDispose=null;view.localWorkCoverDispose=null;
+  view.seriesCoverDispose?.();view.seriesCoverDispose=null;
   view.editorDispose=null;view.manualBoxDispose=null;view.paperCorrectionDispose=null;
   view.editorRefresh=null;view.catalogRefresh=null;resetSelectionPresenters(view);
   if(view.onshowsimilar){view.removeEventListener('show-similar',view.onshowsimilar);view.onshowsimilar=null;}
