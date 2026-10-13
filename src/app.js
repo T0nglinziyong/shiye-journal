@@ -952,6 +952,10 @@ async function handle(action,id,value){try{switch(action){
         boundaryConfidence:Number.isFinite(item.region?.boundaryConfidence)?item.region.boundaryConfidence:null,
         needsBoundaryReview:item.region?.needsBoundaryReview===true,
         alternative:item.region?.boundaryAlternative||null,
+        perimeterPolicy:item.region?.perimeterPolicy||null,
+        segmentationROIExtraMM:item.region?.segmentationROIExtraMM??null,
+        maskPixels:item.region?.pixels??null,
+        perimeterEvidence:item.region?.perimeterEvidence||null,
         box:[item.region?.x,item.region?.y,item.region?.w,item.region?.h]
       }))};
     download(new Blob([JSON.stringify(report,null,2)],{type:'application/json'}),
