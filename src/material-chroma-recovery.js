@@ -12,9 +12,9 @@ export function chromaRecoveryCandidateFits(candidate,object){
  const inter=intersection(candidate,object),
    iou=inter/Math.max(1,candidate.w*candidate.h+object.w*object.h-inter),
    maxTravel=Math.max(candidate.w,candidate.h)*.45,
-   extends=Math.max(0,candidate.x-object.x,object.x+object.w-candidate.x-candidate.w,
+   outwardExtent=Math.max(0,candidate.x-object.x,object.x+object.w-candidate.x-candidate.w,
      candidate.y-object.y,object.y+object.h-candidate.y-candidate.h);
- return iou>.48&&extends<=maxTravel&&object.area>candidate.w*candidate.h*.22;
+ return iou>.48&&outwardExtent<=maxTravel&&object.area>candidate.w*candidate.h*.22;
 }
 export function recoverBrokenPhysicalChroma(cv,p,box){
  const w=p.width,h=p.height,roi={
