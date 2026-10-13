@@ -32,8 +32,10 @@ const pickerRows=new Map();
 const allEntries=d=>sceneLayerEntries(d,{hidden:true,ink:false});
 export function mountCanvasEditor(c){
   const {state,view,body,modal,current,checkpoint,saveProject,render,route,flushSave,toast,esc,imgTag,asset,handle,openCutoutCheck,openAICreation}=c,d=current(),page=view.querySelector('#canvas-page');if(!d||!page)return;
-  // Reading an existing draft must never stage a write just to initialise its
-  // history. The first real editing checkpoint will capture missing history.
+  // Initialize missing history records in memory, but do not stage a write
+  // merely because the user opened an existing draft. A genuine edit will
+  // persist the current snapshot together with its Scene changes.
+  captureHistory(state.activeProject);
   state.workspacePanel=false;
   if(!state.canvasTools){let saved={};try{saved=JSON.parse(localStorage.getItem(prefKey))||{};}catch{}state.canvasTools={...defaultTools,...saved};}
   ensureInkSlots(state.canvasTools);
