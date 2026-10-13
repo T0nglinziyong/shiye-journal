@@ -65,7 +65,7 @@ function mountWorks(c){const {state,view,render}=c,header=view.querySelector('.v
 // Existing cards keep their long-press and selection handlers.
 export function bindWorksCards(c,cards){
   const {state,view}=c;
-  for(const card of view.querySelectorAll('.grid .card[data-act="open-project"]')){const p=state.projects.find(x=>x.id===card.dataset.id);if(p){card.hidden=!workInTab(p,parity.workTab);if(p.isSnapshot&&p.isFavorite)card.querySelector('h3')?.insertAdjacentHTML('beforeend',' <span class="card-favorite" aria-label="已收藏">♥</span>');}
+  for(const card of cards){const p=state.projects.find(x=>x.id===card.dataset.id);if(p){card.hidden=!workInTab(p,parity.workTab);if(p.isSnapshot&&p.isFavorite)card.querySelector('h3')?.insertAdjacentHTML('beforeend',' <span class="card-favorite" aria-label="已收藏">♥</span>');}
     bindLongPress(card,()=>{state.previewProjectID=card.dataset.id;c.handle('project-meta');},()=>!parity.selectionMode);
     card.addEventListener('click',e=>{if(!selectionActive(parity,'work'))return;e.stopImmediatePropagation();parity.selected.has(card.dataset.id)?parity.selected.delete(card.dataset.id):parity.selected.add(card.dataset.id);view.selectionRefresh?.();},true);
   }
