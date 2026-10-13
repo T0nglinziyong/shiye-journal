@@ -842,13 +842,13 @@ async function legacyHandle(action,id,value){try{switch(action){
     // Viewing/closing an existing work must be read-only unless a user
     // action changed its data. Real edits have already called saveProject().
     view.endTextEditing?.();
-    const changedStatus=p.isDraft!==decision.isDraft;
-    p.isDraft=decision.isDraft;
     if(action==='editor-done'){
-      // Completing is an explicit user change even without new pen strokes.
+      // Publishing is explicit; Back must not normalize legacy draft flags or
+      // change timestamps merely because a user inspected an existing work.
+      p.isDraft=decision.isDraft;
       makeAutoSceneSnapshot(p,{reason:'completed',force:true});
       saveProject();
-    }else if(changedStatus)saveProject();
+    }
     await flushSave();
     if(publish)saveAISnapshotInBackground(p);
     if(state.offlineEditingReturnID===p.id){
