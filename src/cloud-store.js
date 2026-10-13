@@ -546,7 +546,18 @@ async function cloudPreview(id,pixels=480){
   // happens only on the COS CI miss path, not repeatedly for every tab.
   if(usableBlob(saved))return saved;
   const higher=await cachedSufficientVariant(record.storagePath,edge);
-  if(usableBlob(higher))return higher;
+  if(usableBlob(higher)){
+    const reduced=await makeThumbnail(higher,edge);
+    if(usableBlob(reduced)){await rememberImageVariant(record.storagePath,edge,reduced);return reduced;}
+    return higher;
+  }
+  // If this device already holds the full image, derive the small card cover
+  // locally. Do not fetch the same bytes again just to request a thumbnail.
+  const localOriginal=await cached('image:'+record.storagePath);
+  if(usableBlob(localOriginal)){
+    const reduced=await makeThumbnail(localOriginal,edge);
+    if(usableBlob(reduced)){await rememberImageVariant(record.storagePath,edge,reduced);return reduced;}
+  }
   if(variant==='preview480'&&record.thumbnailPath?.endsWith('-preview480.webp')){
     if(!record.thumbnailPath.startsWith(owner+'/'))throw Error('缩略图不属于当前账号');
     try{const thumbnail=await downloadObject(record.thumbnailPath,record.storageProvider);if(!usableBlob(thumbnail))throw Error('缩略图为空');await rememberImageVariant(record.storagePath,edge,thumbnail);return thumbnail;}
@@ -574,7 +585,7 @@ async function cloudPreview(id,pixels=480){
   const {data}=await decode('blobs',record);
   const blob=await makeThumbnail(data,edge);if(blob){await rememberImageVariant(record.storagePath,edge,blob);return blob;}return data;
 }
-async function makeThumbnail(data,edge=480){if(typeof createImageBitmap!=='function'||typeof document==='undefined')return null;const bitmap=await createImageBitmap(data);try{const scale=edge/Math.max(bitmap.width,bitmap.height),canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));canvas.getContext('2d').drawImage(bitmap,0,0,canvas.width,canvas.height);return await new Promise(resolve=>canvas.toBlob(resolve,'image/webp',.9));}finally{bitmap.close();}}
+async function makeThumbnail(data,edge=480){if(typeof createImageBitmap!=='function'||typeof document==='undefined')return null;const bitmap=await createImageBitmap(data);try{const scale=Math.min(1,edge/Math.max(bitmap.width,bitmap.height)),width=Math.max(1,Math.round(bitmap.width*scale)),height=Math.max(1,Math.round(bitmap.height*scale));if(typeof OffscreenCanvas==='function'){const canvas=new OffscreenCanvas(width,height);canvas.getContext('2d').drawImage(bitmap,0,0,width,height);return await canvas.convertToBlob({type:'image/webp',quality:.9});}const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;canvas.getContext('2d').drawImage(bitmap,0,0,width,height);return await new Promise(resolve=>canvas.toBlob(resolve,'image/webp',.9));}finally{bitmap.close();}}
 async function decode(store,record){
   if(store!=='blobs')return record;
   const {storagePath,storageProvider,...metadata}=record;
@@ -809,14 +820,13 @@ async function cloudStageMutation(names,fn){
   await identity();if(revision===undefined)await version();
   const deletedIDs=operations.filter(op=>op.store==='projects'&&op.action==='delete').map(op=>op.id);
   if(!deletedIDs.length){await importSync.stage({id:crypto.randomUUID(),names,operations});return;}
-  // A deleted work must never be resurrected by an older queued editor save.
-  // The delete + full trash snapshot are first saved to the durable outbox.
-  // Only then may the now-obsolete project-specific pending editor rows leave
-  // their other durable outbox. Both steps run under the account sync lock.
-  await withAccountSyncLock(async()=>{
-    await importSync.stage({id:crypto.randomUUID(),names,operations});
-    await projectSync.cancelPendingFor(deletedIDs);
-  });
+  // Persist the delete + full trash snapshot before touching older pending
+  // saves. Waiting for the network-held account lock here made Delete appear
+  // frozen while an unrelated upload retried. The unified outbox serializes
+  // local stages; tombstones prevent an older PUT from reviving a later delete.
+  await importSync.stage({id:crypto.randomUUID(),names,operations});
+  try{await projectSync.cancelPendingFor(deletedIDs);}
+  catch(error){console.warn('旧作品保存待后台清理；删除事务已安全暂存',error?.message);}
 }
 async function cloudPendingProjects(){await identity();return projectSync.pending();}
 // Metadata-only lookup: do NOT download every full-resolution photo just to

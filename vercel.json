@@ -67,6 +67,10 @@
     {
       "path": "/api/account-gc",
       "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cos-orphan-gc",
+      "schedule": "30 * * * *"
     }
   ]
 }

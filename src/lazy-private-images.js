@@ -96,7 +96,9 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
     if(full&&urls.has(id)){touch(sizes,id);return urls.get(id);}
     if(!full){
       const cached=cachedChoice(id,tier);
-      if(cached?.sufficient)return cached.url;
+      // A larger decoded variant can paint immediately, but catalogue cards
+      // still acquire their compact 480px derivative from the local cache.
+      if(cached?.sufficient&&(tier!==COVER_EDGE||cached.tier===COVER_EDGE))return cached.url;
     }
     const key=(full?'original:':tier+':')+id;if(pending.has(key))return pending.get(key);
     const epoch=generation,itemVersion=version(id);
@@ -158,26 +160,27 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
     const full=brokenPreviews.has(id)&&fullView(img);
     void(async()=>{
       let shown=src;
+      let finalShown=false;
       const cached=cachedChoice(id,target);
       if(cached&&!full&&img.isConnected&&img.getAttribute('src')===src){
         if(src!==cached.url)img.src=cached.url;
         shown=cached.url;
       }
-      // A previously cached 256/360/480 preview can be shown immediately.
-      // Only request a base cover if no cached size exists at all; skip that
-      // extra request when a high tier already satisfies the target.
-      if(target>COVER_EDGE&&!cached&&!full)try{
-        const preview=await load(id,false);
-        if(!current())return;
-        if(preview&&img.isConnected&&img.getAttribute('src')===shown){
-          if(shown!==preview)img.src=preview;
-          shown=preview;
-        }
-      }catch(error){if(current())onError(error);}
-      const url=await load(id,full?true:target);if(!current())return;
+      // Start the final tier at once. A base cover is a parallel, temporary
+      // display source, never a network prerequisite for the requested tier.
+      const finalTask=load(id,full?true:target);
+      if(target>COVER_EDGE&&!cached&&!full)void load(id,false).then(preview=>{
+        if(!current()||finalShown||!preview||!img.isConnected||img.getAttribute('src')!==shown)return;
+        if(shown!==preview)img.src=preview;
+        shown=preview;
+      }).catch(error=>{if(current())onError(error);});
+      const url=await finalTask;finalShown=true;if(!current())return;
       if(url&&img.isConnected&&img.getAttribute('src')===shown){if(img.getAttribute('src')!==url)img.src=url;delete img.dataset.imageError;retryCounts.delete(id);const timer=retryTimers.get(id);if(timer){clearTimeout(timer);retryTimers.delete(id);}}
       else if(!url&&img.isConnected){img.dataset.imageError='true';scheduleRetry(id);}
-    })().catch(error=>{if(current()&&img.isConnected){img.dataset.imageError='true';img.src=placeholder(id);scheduleRetry(id);onError(error);}}).finally(()=>{if(img.dataset.privateImageLoading===stamp){delete img.dataset.privateImageLoading;scheduleUpgrade(img);}});
+    })().catch(error=>{if(current()&&img.isConnected){img.dataset.imageError='true';
+      // A failed higher tier must not erase a usable low-resolution image.
+      if(!identity(img.getAttribute('src')||''))img.src=placeholder(id);
+      scheduleRetry(id);onError(error);}}).finally(()=>{if(img.dataset.privateImageLoading===stamp){delete img.dataset.privateImageLoading;scheduleUpgrade(img);}});
   }
   const observer=typeof IntersectionObserver==='function'?new IntersectionObserver(entries=>{for(const e of entries)if(e.isIntersecting){observer.unobserve(e.target);resolve(e.target,e.target.dataset.privateImageId);}},{rootMargin:'220px'}):null;
   const sizingObserver=typeof ResizeObserver==='function'?new ResizeObserver(entries=>{for(const {target:img} of entries)scheduleUpgrade(img);}):null;

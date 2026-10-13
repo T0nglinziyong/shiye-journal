@@ -47,7 +47,7 @@ export async function openStorageUsage(client){
     <p>仅开发者可查看。Supabase 的物理表空间、JSON 内容大小与 COS 文件体积是不同指标，不应相加为同一个数据库大小。</p>
     <div class="actions"><button class="btn" data-refresh>重新核对</button><button class="btn danger" data-prune disabled>清理过期同步收据</button></div>
     <p role="status" data-status>准备读取…</p><section data-db></section><section data-cos></section>
-    <p>删除墓碑永久保留；COS 旧文件先做只读盘点。没有包含离线队列、外部备份与跨设备历史的引用证明前，不提供 COS 删除操作。</p>`;
+    <p>删除墓碑永久保留；此处仅做 COS 旧文件只读盘点，不提供浏览器删除操作。服务端清理需单独启用隔离备份和延迟复核。</p>`;
   backdrop.append(panel);document.body.append(backdrop);
   const dbHost=panel.querySelector('[data-db]'),cosHost=panel.querySelector('[data-cos]'),status=panel.querySelector('[data-status]');
   const button=panel.querySelector('[data-prune]');
@@ -88,7 +88,7 @@ export async function openStorageUsage(client){
     if(data.oldUnreferencedCandidates!==null&&data.oldUnreferencedCandidates!==undefined)
       line(cosHost,'超过 90 天的待核对无引用候选',`${data.oldUnreferencedCandidates} 个，${bytes(data.oldUnreferencedCandidateBytes)}；不可直接删除`);
     line(cosHost,'确认可安全删除的 COS 大小','0 B（未进行离线队列和备份核验）');
-    cosHost.append(node('p',data.warning||'COS 不会自动删除任何内容'));
+    cosHost.append(node('p',data.warning||'此处只读；服务端清理是否启用需单独核对'));
   };
   const refresh=async()=>{
     const mine=++epoch;status.textContent='正在读取数据库与 COS 容量…';button.disabled=true;

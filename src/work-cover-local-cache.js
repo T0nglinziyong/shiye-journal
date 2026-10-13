@@ -59,15 +59,15 @@ export function createLocalWorkCovers({
     jobs.set(token,job);
     return job;
   }
-  function observe(root){
+  function observe(root,projects=state.projects){
     if(!root)return ()=>{};
-    const cards=[...root.querySelectorAll('[data-act="open-project"][data-id]')]
-      .filter(card=>missing(state.projects.find(p=>p.id===card.dataset.id)));
+    const cards=[...root.querySelectorAll('[data-act="open-project"][data-id],[data-cover-project-id]')]
+      .filter(card=>missing(projects.find(p=>p.id===(card.dataset.coverProjectId||card.dataset.id))));
     if(!cards.length)return ()=>{};
     let disposed=false;
     const loadCard=card=>{
       if(disposed)return;
-      const p=state.projects.find(project=>project.id===card.dataset.id);
+      const p=projects.find(project=>project.id===(card.dataset.coverProjectId||card.dataset.id));
       if(p&&missing(p))void ensure(p).catch(()=>{});
     };
     const observer=typeof IntersectionObserver==='function'

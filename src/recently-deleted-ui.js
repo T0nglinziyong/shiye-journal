@@ -12,7 +12,7 @@ function deletedPreview(record, kind, {esc, imgTag, workCover}) {
     ? `<img class="work-reference" src="${imagePlaceholder(record.snapshotBlobId)}" alt="${esc(record.title)} 快照">`
     : staticCover
     ? `<img class="work-reference" src="${esc(record.coverStaticPath)}" alt="${esc(record.title)}">`
-    : workCover?.(draft) || '';
+    : workCover?.(draft,false,true,record.id) || '';
   return `<div class="thumb-sheet" style="aspect-ratio:${draft?.canvas?.width || 1}/${draft?.canvas?.height || 1};background:${esc(draft?.paperColor || '#fff')}">${cover}</div>`;
 }
 
@@ -21,7 +21,7 @@ export function deletedCardHTML(entry, kind, helpers) {
   const title = esc(entry.item.title);
   const date = new Date(entry.date).toLocaleDateString();
   return `<article class="card deleted-row" data-trash-id="${esc(entry.id)}" aria-label="${title}，${date} 删除">
-    <div class="card-image">${deletedPreview(entry.item, kind, helpers)}</div>
+    <div class="card-image" ${kind==='project'?`data-cover-project-id="${esc(entry.item.id)}"`:''}>${deletedPreview(entry.item, kind, helpers)}</div>
     <div class="card-body">
       <h3>${title}</h3><p>${date} 删除</p>
       <div class="deleted-actions">
@@ -68,7 +68,8 @@ export function mountRecentlyDeleted(c, kind) {
     if (!recover && !confirm(`彻底删除所选 ${entries.length} 项？此操作不能撤销。`)) return;
     busy=true;sync();
     try {
-      await changeTrash({db,state,ids:entries.map(entry=>entry.id),recover});
+      await changeTrash({db,state,ids:entries.map(entry=>entry.id),recover,
+        awaitStage:c.awaitTrashStages});
       choosing=false;selected.clear();
       render();
       toast(recover ? `已恢复 ${entries.length} 项` : `已彻底删除 ${entries.length} 项`);
@@ -82,7 +83,9 @@ export function mountRecentlyDeleted(c, kind) {
   list.querySelectorAll('[data-recover]').forEach(button => button.onclick = () => act([button.dataset.recover], true));
   list.querySelectorAll('[data-remove]').forEach(button => button.onclick = () => act([button.dataset.remove], false));
   view.append(list);
-  const note=document.createElement('p');note.className='deleted-retention-note';note.textContent='最近删除保留 7 天，到期自动清除。';view.append(note);
+  if(kind==='project'&&c.localCovers)
+    view.deletedCoverDispose=c.localCovers.observe(list,records.map(entry=>entry.item));
+  const note=document.createElement('p');note.className='deleted-retention-note';note.textContent='最近删除保留 30 天，到期自动移除记录；仍被作品引用的素材图片继续保留。云端孤立文件经隔离备份与复核后延迟回收。';view.append(note);
   view.append(tray);
   update();
 

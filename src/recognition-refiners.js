@@ -58,7 +58,9 @@ async function parallelFinalPipeline({
     return results.flat().sort((a,b)=>a.y-b.y||a.x-b.x);
   }catch(error){
     onProgress({status:'fallback',engine:method,message:error.message});
-    return candidates;
+    // A box is only a proposal, never a finished cutout. Returning proposals
+    // here made an OpenCV/runtime failure look like successful segmentation.
+    throw Error('素材边缘分割失败，已保留候选框但未生成素材：'+(error?.message||'图像引擎暂不可用'),{cause:error});
   }
 }
 

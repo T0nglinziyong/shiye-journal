@@ -6,7 +6,7 @@ const now=Date.parse('2026-09-30T12:00:00Z');
 const entry=(id,kind,date)=>({id,kind,date,item:{id:id+'-item',title:id}});
 function fixture(rows){const state={assets:[],projects:[],trash:structuredClone(rows)},writes=[];const db={all:async()=>[],completeProject:async row=>row,async transaction(names,fn){const operations=[];fn({objectStore:store=>({put:item=>operations.push({store,action:'put',item}),delete:id=>operations.push({store,action:'delete',id})})});writes.push({names,operations});}};return {state,db,writes};}
 
-test('seven days is inclusive; unknown dates are never silently discarded',()=>{
+test('thirty days is inclusive; unknown dates are never silently discarded',()=>{
   const rows=[entry('a','asset',new Date(now-TRASH_RETENTION_MS+1).toISOString()),entry('b','asset',new Date(now-TRASH_RETENTION_MS).toISOString()),entry('c','project','invalid')];
   assert.deepEqual(expiredTrash(rows,now).map(row=>row.id),['b']);
 });

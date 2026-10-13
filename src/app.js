@@ -246,12 +246,14 @@ const renderLocalCoverBlob=project=>renderWorkCoverSnapshot(project,{
 const localWorkCovers=createLocalWorkCovers({
   state,loadDocument:p=>db.completeProject(p),renderCover:renderLocalCoverBlob,
   onReady:(p,url)=>{
-    const actual=state.projects.find(item=>item.id===p.id);
+    const actual=state.projects.find(item=>item.id===p.id)||
+      state.trash.find(entry=>entry.kind==='project'&&entry.item.id===p.id)?.item;
     if(!actual||actual.updatedAt!==p.updatedAt)return;
     const draft=actual.drafts.find(item=>item.id===actual.activeDraftID)||actual.drafts[0];
     // Once the COS reference is committed, it remains the preferred source.
     if(draft?.coverImageID||draft?.coverBlobId||state.route!=='works')return;
-    const card=[...view.querySelectorAll('[data-act="open-project"]')].find(el=>el.dataset.id===p.id),
+    const card=[...view.querySelectorAll('[data-act="open-project"],[data-cover-project-id]')]
+      .find(el=>el.dataset.id===p.id||el.dataset.coverProjectId===p.id),
       sheet=card?.querySelector('.thumb-sheet');
     if(!sheet)return;
     const img=document.createElement('img');img.className='work-reference';
@@ -474,6 +476,7 @@ function render(){
   // The controller lifetime has released route-owned observers, gestures,
   // and native editor listeners before replacing their DOM hosts.
   view.workCoverDispose=null;view.localWorkCoverDispose=null;
+  view.deletedCoverDispose?.();view.deletedCoverDispose=null;
   view.seriesCoverDispose?.();view.seriesCoverDispose=null;
   view.editorDispose=null;view.manualBoxDispose=null;view.paperCorrectionDispose=null;
   view.editorRefresh=null;view.catalogRefresh=null;resetSelectionPresenters(view);
@@ -494,7 +497,7 @@ function render(){
     if(replacement)replacement.scrollLeft=importQueueScroll;
   }
   reusePagePreviews({view,state});mountSeriesCoverSnapshots({view,state});
-  mountParityControls();bindPage();mountWorkflowControls({state,view,body,modal,db,render,route,toast,imgTag,assetCard,esc,asset,refresh,download,modelImage,rasterize,backup,openSeriesEditor,openAssetEditor:openDetail,openCutoutCheck,switchImportRecord,saveActiveImportRecord,saveProject,flushSave,assetOrganization,applyAssetClassification});view.catalogRefresh?.();if(state.route==='works'){
+  mountParityControls();bindPage();mountWorkflowControls({state,view,body,modal,db,render,route,toast,imgTag,assetCard,esc,asset,refresh,download,modelImage,rasterize,backup,openSeriesEditor,openAssetEditor:openDetail,openCutoutCheck,switchImportRecord,saveActiveImportRecord,saveProject,flushSave,moveProjectsToTrash,assetOrganization,applyAssetClassification});view.catalogRefresh?.();if(state.route==='works'){
     view.localWorkCoverDispose=localWorkCovers.observe(view);
     view.workCoverDispose=workCoverBackfill.observe(view);
   }
@@ -545,7 +548,7 @@ function refreshCanvas(){
   if(report)report.disabled=!aiReport;
   view.editorRefresh();view.canvasSelectionRefresh?.();return true;
 }
-function mountParityControls(){mountSwiftParity({libraryBack,openLibraryAsset,openAssetEditor:openDetail,state,view,body,modal,db,render,route,toast,asset,imgTag,workCover,createFromBasket,openAICreation,openSeriesEditor,current,checkpoint,saveProject,flushSave,uid,handle,esc,matchingSession});}
+function mountParityControls(){mountSwiftParity({libraryBack,openLibraryAsset,openAssetEditor:openDetail,state,view,body,modal,db,render,route,toast,asset,imgTag,workCover,localCovers:localWorkCovers,awaitTrashStages,createFromBasket,openAICreation,openSeriesEditor,current,checkpoint,saveProject,flushSave,uid,handle,esc,matchingSession});}
 function renderLibrary(){return renderLibraryHTML({state,esc,imgTag,assetCard,head,renderSeriesContents,kindName});}
 function updateLibraryResults(){
   if(view.querySelector('.series-contents'))return;
@@ -598,10 +601,12 @@ function workCover(d,priority=false,snapshotOnly=false,projectID=null){
  if(d.coverImageID||d.coverBlobId)return `<img class="work-reference" loading="${priority?'eager':'lazy'}" ${priority?'fetchpriority="high" ':''}decoding="async" src="${image(d.coverImageID||d.coverBlobId)}" alt="作品完整封面">`;
  // Cloud Works cards must show the pre-rendered COS WebP as ONE image. Do
  // not fall back to mounting every material/shape/text (progressive pop-in).
- if(snapshotOnly&&cloudEnabled){
-   const source=projectID?localWorkCovers.peek(state.projects.find(p=>p.id===projectID)):null;
+  if(snapshotOnly&&cloudEnabled){
+   const project=projectID?state.projects.find(p=>p.id===projectID)||
+     state.trash.find(entry=>entry.kind==='project'&&entry.item.id===projectID)?.item:null;
+   const source=project?localWorkCovers.peek(project):null;
    return source?`<img class="work-reference" loading="${priority?'eager':'lazy'}" src="${esc(source)}" alt="本地完整作品封面">`:
-     '<span class="work-cover-pending" role="status">正在生成本地封面…</span>';
+     (d.layers?.length?workCover(d,priority,false):workInkPreview(d)||'<span class="work-cover-pending" role="status">正在准备预览…</span>');
  }
  const position=(i,flip=false)=>`left:${(i.x-i.width/2)/d.canvas.width*100}%;top:${(i.y-i.height/2)/d.canvas.height*100}%;width:${i.width/d.canvas.width*100}%;height:${i.height/d.canvas.height*100}%;transform:rotate(${i.rotation||0}deg) ${flip&&i.isFlippedHorizontally?'scaleX(-1)':''};opacity:${i.opacity??1};z-index:${i.zIndex||0};`;
  const part=node=>{
@@ -842,7 +847,12 @@ async function flushSave(){
   savingProjects+=batch.length;
   saveChain=saveChain.catch(()=>{}).then(async()=>{let failure;
     if(usageBatch.length)try{await db.transaction(['assets'],tx=>{for(const asset of usageBatch)tx.objectStore('assets').put(asset);});}catch(error){for(const asset of usageBatch)if(!dirtyUsageAssets.has(asset.id))dirtyUsageAssets.set(asset.id,asset);failure??=error;}
-    for(const {snapshot,version} of batch){try{await db.stageProject(snapshot);}catch(error){if(saveVersions.get(snapshot.id)===version&&!dirtyProjects.has(snapshot.id))dirtyProjects.set(snapshot.id,snapshot);failure??=error;}finally{savingProjects--;}}
+    for(const {snapshot,version} of batch){try{
+      // A later edit or deletion supersedes this queued snapshot. In-flight
+      // stages are serialized by the store before the deletion tombstone.
+      if(saveVersions.get(snapshot.id)!==version)continue;
+      await db.stageProject(snapshot);
+    }catch(error){if(saveVersions.get(snapshot.id)===version&&!dirtyProjects.has(snapshot.id))dirtyProjects.set(snapshot.id,snapshot);failure??=error;}finally{savingProjects--;}}
     if(failure)throw failure;
   });
   try{await saveChain;if(!savingProjects&&!dirtyProjects.size&&!dirtyUsageAssets.size){syncDisplay.localPending=false;updateSyncIndicator();saveStatus(cloudEnabled?'修改已暂存 · 后台同步中':(await db.storageMode())==='server'?'已保存到服务器':'已保存到本机');}}catch(e){console.error(e);recordRuntimeIssue('handled',e,state.route,{phase:'save'});syncDisplay.error=e;updateSyncIndicator();saveStatus('暂存失败 · 修改仍在当前页面');toast('修改暂存失败，暂勿关闭页面：'+e.message);throw e;}
@@ -854,6 +864,40 @@ function saveSpecificProject(p){if(!p)return;delete p.isTemplate;if(cloudEnabled
   if(active&&!p.isSnapshot){delete active.coverImageID;delete active.coverSceneHash;}
   const now=new Date().toISOString();trackEditedScene(p,now);p.updatedAt=now;if(p.isUsed)for(const updated of markProjectAssetsUsed(p,state.assets,now)){const live=state.assets.find(asset=>asset.id===updated.id);if(live)Object.assign(live,updated);dirtyUsageAssets.set(updated.id,updated);}saveVersions.set(p.id,(saveVersions.get(p.id)||0)+1);dirtyProjects.set(p.id,p);saveStatus('后台保存中…');syncDisplay.localPending=true;updateSyncIndicator();if(!saveTimer)saveTimer=setTimeout(()=>flushSave().catch(console.error),500);}
 function saveProject(){saveSpecificProject(state.activeProject);}
+const pendingTrashStages=new Map();
+async function awaitTrashStages(ids){await Promise.all(ids.map(id=>pendingTrashStages.get(id)).filter(Boolean));}
+async function moveProjectsToTrash(ids){
+  const selected=new Set(ids),projects=state.projects.filter(p=>selected.has(p.id));
+  if(!projects.length)return 0;
+  const entries=projects.map(item=>({id:uid(),kind:'project',item:structuredClone(item),date:new Date().toISOString()}));
+  for(const project of projects){dirtyProjects.delete(project.id);saveVersions.set(project.id,(saveVersions.get(project.id)||0)+1);}
+  if(!dirtyProjects.size&&!dirtyUsageAssets.size){clearTimeout(saveTimer);saveTimer=null;}
+  state.projects=state.projects.filter(p=>!selected.has(p.id));state.trash.push(...entries);
+  if(selected.has(state.previewProjectID)){state.previewProjectID=null;route('works');}
+  else render();
+  const staged=(async()=>{
+    // The latest scene is in each trash entry. The store serializes an
+    // already-started local save before this tombstone; queued stale saves
+    // are invalidated by saveVersions above. Neither path waits for upload.
+    await db.transaction(['projects','trash'],tx=>{for(const entry of entries){tx.objectStore('projects').delete(entry.item.id);tx.objectStore('trash').put(entry);}});
+  })();
+  for(const entry of entries)pendingTrashStages.set(entry.id,staged);
+  try{
+    await staged;
+    toast('已移到最近删除 · 云端后台同步中');
+    return entries.length;
+  }catch(error){
+    const entryIDs=new Set(entries.map(entry=>entry.id));
+    state.trash=state.trash.filter(entry=>!entryIDs.has(entry.id));
+    for(const project of projects)if(!state.projects.some(row=>row.id===project.id)){
+      state.projects.push(project);
+      dirtyProjects.set(project.id,project);
+    }
+    if(dirtyProjects.size&&!saveTimer)saveTimer=setTimeout(()=>flushSave().catch(console.error),500);
+    render();toast('删除未能安全暂存，作品已恢复：'+(error?.message||error));
+    throw error;
+  }finally{for(const entry of entries)if(pendingTrashStages.get(entry.id)===staged)pendingTrashStages.delete(entry.id);}
+}
 const pendingAISnapshots=new Set();
 function saveAISnapshotInBackground(p){
   if(!p?.aiGenerated||pendingAISnapshots.has(p.id)||state.projects.some(item=>item.isSnapshot&&item.sourceProjectID===p.id))return;
@@ -980,7 +1024,7 @@ async function legacyHandle(action,id,value){try{switch(action){
   case 'download-snapshot':{const p=state.projects.find(x=>x.id===state.previewProjectID);if(!p?.isSnapshot)break;const id=p.snapshotDocumentBlobId||p.snapshotBlobId,blob=(await db.get('blobs',id))?.data;if(!blob)throw Error('快照文件尚未同步，稍后重试');const ext=p.snapshotFormat==='application/pdf'?'pdf':p.snapshotFormat==='image/jpeg'?'jpg':p.snapshotFormat==='image/webp'?'webp':'png';download(blob,p.title+'.'+ext);break;}
   case 'export-scene-json':{const p=state.activeProject;if(!p||p.isSnapshot)throw Error('请选择可编辑作品');download(new Blob([JSON.stringify(exportSceneDocument(p))],{type:'application/json'}),p.title+'.shiye-scene.json');break;}
    case 'download-project-zip':{const source=state.projects.find(x=>x.id===id)||state.activeProject;if(!source||source.isSnapshot)throw Error('可编辑作品不存在');const p=source.projectDocumentPath?await db.completeProject(source):source;const {createNativeProjectPackage}=await import('./native-project-package.js');download(createNativeProjectPackage(p),p.title+'.shiyeproject.zip');break;}
-  case 'project-delete':{const p=state.projects.find(x=>x.id===state.previewProjectID);if(!p||!confirm('将这份作品移到最近删除？'))break;await flushSave();const entry={id:uid(),kind:'project',item:structuredClone(p),date:new Date().toISOString()};await db.transaction(['projects','trash'],tx=>{tx.objectStore('projects').delete(p.id);tx.objectStore('trash').put(entry);});state.projects=state.projects.filter(x=>x.id!==p.id);state.trash.push(entry);state.previewProjectID=null;route('works');break;}
+  case 'project-delete':{const p=state.projects.find(x=>x.id===state.previewProjectID);if(!p||!confirm('将这份作品移到最近删除？'))break;await moveProjectsToTrash([p.id]);break;}
   case 'works-filter':await actionStore.dispatch({type:'works/filter',payload:{value}});break;case 'tool':state.tool=value;if(value==='text'){checkpoint();const d=current();const t=textBlock('在这里写下今天的故事',d);d.textBlocks.push(t);state.selected=t.id;state.tool='select';saveProject();}else if(value==='shape'){checkpoint();const d=current();const s=primitive('roundedRectangle',d);d.primitives.push(s);state.selected=s.id;state.tool='select';saveProject();}else if(value==='material'){openMaterialPicker();return;}render();break;
   case 'zoom-in':await actionStore.dispatch({type:'editor/zoom',payload:{delta:.15}});break;case 'zoom-out':await actionStore.dispatch({type:'editor/zoom',payload:{delta:-.15}});break;
   case 'paper-menu':state.editorPanel=!state.editorPanel;state.selected=null;render();break;case 'undo':await actionStore.dispatch({type:'editor/undo'});break;case 'redo':await actionStore.dispatch({type:'editor/redo'});break;
@@ -1679,7 +1723,7 @@ function openProjectMetadata(){
     Object.assign(p,next);for(const a of affected)Object.assign(state.assets.find(x=>x.id===a.id),a);modal.close();render();toast('作品信息已保存');
   };
 }
-async function restoreTrash(id){if(!await changeTrash({db,state,ids:[id],recover:true}))return;render();toast('已恢复');}
+async function restoreTrash(id){if(!await changeTrash({db,state,ids:[id],recover:true,awaitStage:awaitTrashStages}))return;render();toast('已恢复');}
 function saveActiveImportRecord(){
   const rec=state.importRecords[state.importIndex];if(!rec)return;
   Object.assign(rec,{bitmap:state.importBitmap,file:state.importFile,url:state.importURL,box:structuredClone(state.importBox),corners:state.paperCorners?structuredClone(state.paperCorners):null,correctedBitmap:state.correctedBitmap,correctedURL:state.correctedURL,candidates:state.importCandidates||[],candidateURLs:state.importCandidateURLs||[],candidateData:state.importCandidateData||[],selection:[...(state.importCandidateSelection||[])],wholePaper:state.wholePaper,paperSize:state.paperSize,paperOrientation:state.paperOrientation,balanceLight:state.balanceLight,recognition:state.importRecognition,importShapeRegularization:state.importShapeRegularization,importApertures:state.importApertures,importMaterialColorMode:state.importMaterialColorMode,customImportWidth:state.customImportWidth,customImportHeight:state.customImportHeight});

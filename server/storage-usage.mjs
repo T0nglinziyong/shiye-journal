@@ -59,7 +59,7 @@ export function summarizeCOSInventory(objects,{
     candidateAgeDays:minCandidateDays,
     safelyDeletableBytes:0,
     warning:complete
-      ?'待核对候选不是可安全删除量：可能仍被离线队列、历史备份或外部客户端引用；不会自动删除 COS。'
+      ?'待核对候选不是可安全删除量：可能仍被离线队列、历史备份或外部客户端引用；仅受保护的服务端定时任务可在隔离与延迟复核后回收。'
       :'枚举或引用检查不完整，无法判断无引用对象；禁止据此清理 COS。'
   };
 }

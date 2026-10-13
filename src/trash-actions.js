@@ -1,5 +1,5 @@
 import {hiddenAssetCopy,referencedHiddenAssetIDs} from './asset-retention.js';
-export const TRASH_RETENTION_MS=7*24*60*60*1000;
+export const TRASH_RETENTION_MS=30*24*60*60*1000;
 
 export function expiredTrash(entries,now=Date.now()){
   return entries.filter(entry=>Number.isFinite(Date.parse(entry.date))&&now-Date.parse(entry.date)>=TRASH_RETENTION_MS);
@@ -8,9 +8,10 @@ export function expiredTrash(entries,now=Date.now()){
 // The trash card may disappear, but a hidden asset is kept when any work,
 // history, archive or pending edit still references it. Blob bytes are swept
 // separately, after all asset and scene references have been verified.
-export async function changeTrash({db,state,ids,recover=false}){
+export async function changeTrash({db,state,ids,recover=false,awaitStage=async()=>{}}){
   const chosen=state.trash.filter(entry=>ids.includes(entry.id));
   if(!chosen.length)return 0;
+  await awaitStage(chosen.map(entry=>entry.id));
   const assetEntries=chosen.filter(entry=>entry.kind==='asset');
   const hidden=assetEntries.filter(entry=>state.assets.some(asset=>asset.id===entry.item.id&&asset.hiddenFromLibraryAt));
   const legacy=assetEntries.filter(entry=>!state.assets.some(asset=>asset.id===entry.item.id));

@@ -7,13 +7,14 @@ const escapeHTML=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;'
 const split=value=>[...new Set(String(value||'').split(/[,，、\n]/).map(part=>part.trim()).filter(Boolean))];
 const urls=new Map();let urlOwner=null;
 export function clearJournalTemplateImages(){for(const url of urls.values())URL.revokeObjectURL(url);urls.clear();urlOwner=null;}
-async function imageURL(db,owner,id){
+async function imageURL(db,owner,id,edge=480){
   if(!id)return null;
   if(urlOwner!==owner){clearJournalTemplateImages();urlOwner=owner;}
-  if(urls.has(id))return urls.get(id);
-  const blob=(await db.get('blobs',id))?.data;
+  const key=id+':'+(edge||'original');
+  if(urls.has(key))return urls.get(key);
+  const blob=edge?await db.previewBlob(id,edge):(await db.get('blobs',id))?.data;
   if(!(blob instanceof Blob)||!blob.size)return null;
-  const url=URL.createObjectURL(blob);urls.set(id,url);return url;
+  const url=URL.createObjectURL(blob);urls.set(key,url);return url;
 }
 export function validateJournalImage(file){
   if(!file)return null;
@@ -66,7 +67,9 @@ export function mountJournalTemplateGallery(c,viewState){
   const loadVisual=(host,item,side='template')=>{
     const blobId=side==='case'?item.exampleBlobId:item.templateBlobId,sourcePanel=journalTemplatePanel(item,side);
     if(!blobId&&!sourcePanel)return;
-    void (blobId?imageURL(db,state.accountId,blobId):loadJournalPresetPanel(sourcePanel,{accountId:state.accountId})).then(url=>{
+    const card=!host.classList.contains('journal-template-detail-image');
+    void (blobId?imageURL(db,state.accountId,blobId,card?480:null):
+      loadJournalPresetPanel(sourcePanel,{accountId:state.accountId,edge:card?480:null})).then(url=>{
       if(!url)throw Error('图片暂不可用');
       if(!host.isConnected)return;host.replaceChildren();const image=document.createElement('img');image.src=url;image.alt=item.title+(side==='case'?' 真实案例':' 抽象模板');host.append(image);
     }).catch(error=>{

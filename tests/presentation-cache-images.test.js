@@ -95,8 +95,9 @@ test('a cached higher variant satisfies all smaller tiers without network and su
  try{
    const large=await loader.load('already-big',1200);
    assert.equal(await loader.load('already-big',600),large);
-   assert.equal(await loader.load('already-big',false),large);
-   assert.deepEqual(requests,[1200],'480px cover should NOT be fetched if 1200px is already cached');
+   const cover=await loader.load('already-big',false);
+   assert.notEqual(cover,large,'the existing high image is converted to a compact card cover');
+   assert.deepEqual(requests,[1200,480]);
  }finally{loader.dispose();env.close();}
 });
 test('a low-tier cached preview is displayed until one correctly quantized higher tier completes',async()=>{

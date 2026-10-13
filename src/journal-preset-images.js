@@ -34,7 +34,8 @@ export function journalPanelPixels(panel,width,height){
 export async function loadJournalPresetPanel(panel,options={}){
   validateJournalPanel(panel);
   if(options.accountId&&owner!==options.accountId){clearJournalPresetImages();owner=options.accountId;}
-  const key=JSON.stringify(panel);
+  const edge=Number(options.edge)>0?Number(options.edge):null;
+  const key=JSON.stringify([panel,edge]);
   if(panelCache.has(key))return panelCache.get(key);
   if(panelPending.has(key))return panelPending.get(key);
   const started=epoch;
@@ -46,10 +47,12 @@ export async function loadJournalPresetPanel(panel,options={}){
     const rotatedWidth=Math.abs(rect.width*Math.cos(angle))+Math.abs(rect.height*Math.sin(angle));
     const rotatedHeight=Math.abs(rect.height*Math.cos(angle))+Math.abs(rect.width*Math.sin(angle));
     const margin=Math.max(12,Math.round(Math.min(rect.width,rect.height)*.035));
-    const canvas=document.createElement('canvas');canvas.width=Math.ceil(rotatedWidth+margin*2);canvas.height=Math.ceil(rotatedHeight+margin*2);
+    const naturalWidth=Math.ceil(rotatedWidth+margin*2),naturalHeight=Math.ceil(rotatedHeight+margin*2),
+      scale=edge?Math.min(1,edge/Math.max(naturalWidth,naturalHeight)):1;
+    const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.ceil(naturalWidth*scale));canvas.height=Math.max(1,Math.ceil(naturalHeight*scale));
     const context=canvas.getContext('2d');if(!context)throw Error('无法处理预设图片');
-    context.fillStyle='#fff';context.fillRect(0,0,canvas.width,canvas.height);
-    context.translate(canvas.width/2,canvas.height/2);context.rotate(angle);
+    context.scale(scale,scale);context.fillStyle='#fff';context.fillRect(0,0,naturalWidth,naturalHeight);
+    context.translate(naturalWidth/2,naturalHeight/2);context.rotate(angle);
     context.drawImage(image,rect.x,rect.y,rect.width,rect.height,-rect.width/2,-rect.height/2,rect.width,rect.height);
     const blob=await new Promise((resolve,reject)=>canvas.toBlob(result=>result?resolve(result):reject(Error('预设画面裁切失败')),'image/jpeg',.92));
     const url=URL.createObjectURL(blob);if(started!==epoch){URL.revokeObjectURL(url);throw Error('账号已切换，停止读取旧账号画面');}panelCache.set(key,url);return url;
