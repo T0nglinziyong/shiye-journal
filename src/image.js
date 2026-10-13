@@ -7,7 +7,7 @@ import {neutralizePaperChroma} from './paper-chroma-preprocess.js';
 // Analyze a small copy, but re-extract accepted cuts from the full source.
 export async function detectPaperCandidates(bitmap,box,smallestMM=6,{
   balanceLight=false,paperRectified=false,paperWidthMM=210,paperHeightMM=297,
-  recognition='auto',recognitionPixels=900,
+  recognition='auto',candidateDiscovery='legacy',recognitionPixels=900,
   recognitionPreprocess={},recognitionPostprocess={},mergeSharedCarrier=true,onProgress=()=>{},onDiagnostic=()=>{}
 }={}){
   const profile=recognitionProfile(recognition,recognitionPixels);
@@ -37,10 +37,10 @@ export async function detectPaperCandidates(bitmap,box,smallestMM=6,{
   // showed that illumination/CLAHE/denoise can make identity discovery worse.
   // Optional preprocessing therefore affects boundary segmentation only.
   const candidates=await segmentPaperMaterials(discoveryFrame,{
-    smallestMM,paperWidthMM,paperHeightMM,sourcePixels:discoveryFrame.data,chromaEdges:preprocess.chromaEdges,mergeSharedCarrier
+    smallestMM,paperWidthMM,paperHeightMM,sourcePixels:discoveryFrame.data,chromaEdges:preprocess.chromaEdges,mergeSharedCarrier,candidateDiscovery
   });
   onDiagnostic({phase:'boxes',count:candidates.length,
-    dimensions:[dw,dh],refinementDimensions:[w,h],mode:profile.mode,smallestMM,
+    dimensions:[dw,dh],refinementDimensions:[w,h],mode:profile.mode,candidateDiscovery,smallestMM,
     boxes:candidates.map(item=>({x:item.x,y:item.y,w:item.w,h:item.h,
       evidenceDensity:item.evidenceDensity,seedDensity:item.seedDensity,
       fillRatio:item.fillRatio,absorbedFragments:item.absorbedFragments}))});
