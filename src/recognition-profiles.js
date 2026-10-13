@@ -12,6 +12,14 @@ const refineMorphGAC=async context=>{
   const {refineCandidatesAuto}=await import('./recognition-refiners.js');
   return refineCandidatesAuto(context);
 };
+const refinePhysical=async context=>{
+  const {refineCandidatesPhysical}=await import('./recognition-refiners.js');
+  return refineCandidatesPhysical(context);
+};
+const refineAdaptive=async context=>{
+  const {refineCandidatesAdaptive}=await import('./recognition-refiners.js');
+  return refineCandidatesAdaptive(context);
+};
 const refineGrabCut=async context=>{
   const {refineCandidatesWithGrabCut}=await import('./recognition-refiners.js');
   return refineCandidatesWithGrabCut(context);
@@ -25,14 +33,20 @@ export const recognitionStrategies=Object.freeze([
   {
     id:'auto',
     label:'自动 · 推荐',
-    description:'推荐：逐件 MorphGAC 贴边，随后规整形状并恢复规则打孔。',
+    description:'保留原版自动分割（MorphGAC），可与旧版连通区域候选框组合，复现原流程。',
     refineCandidates:refineAuto
   },
   {
     id:'morphgac',
-    label:'MorphGAC · 高质量',
-    description:'与自动模式相同，显式固定 MorphGAC。',
+    label:'MorphGAC · 原始分割',
+    description:'严格使用旧版 MorphGAC 分割，不运行物理轮廓优先选择。',
     refineCandidates:refineMorphGAC
+  },
+  {
+    id:'physical',
+    label:'物理轮廓 · 不使用 MorphGAC',
+    description:'优先保留完整载体的实际外边界，无法获得可信边界时标记待检查。',
+    refineCandidates:refinePhysical
   },
   {
     id:'grabcut',
@@ -42,9 +56,9 @@ export const recognitionStrategies=Object.freeze([
   },
   {
     id:'hybrid',
-    label:'混合 · MorphGAC + GrabCut',
-    description:'MorphGAC 后再尝试 GrabCut；较慢，用于对照。',
-    refineCandidates:refineHybrid
+    label:'混合 · Mask 可信度自适应',
+    description:'物理轮廓优先，可信度不足才尝试 MorphGAC，并检查明显收缩。',
+    refineCandidates:refineAdaptive
   }
 ]);
 
@@ -56,6 +70,8 @@ export const recognitionPixelOptions=Object.freeze([
 const strategiesByID=new Map(recognitionStrategies.map(strategy=>[strategy.id,strategy]));
 const pixelValues=new Set(recognitionPixelOptions.map(([value])=>value));
 export const recognitionOptions=recognitionStrategies.map(({id,label})=>[id,label]);
+export const candidateDiscoveryOptions=Object.freeze([['legacy','原版 · 前景连通区域'],['physical','物理载体 · 多尺度边缘与颜色']]);
+export const candidateDiscoveryAllowed=value=>candidateDiscoveryOptions.some(([id])=>id===value);
 export const recognitionMethodDetails=recognitionStrategies.map(({id,label,description})=>({id,label,description}));
 export const recognitionModeAllowed=value=>strategiesByID.has(value);
 export const recognitionPixelsAllowed=value=>pixelValues.has(Number(value));
