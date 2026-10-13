@@ -400,12 +400,12 @@ function mountData(c) {
     await db.transaction(['blobs'],tx=>{for(const b of orphans)tx.objectStore('blobs').delete(b.id);});await refresh();c.toast('已清理 '+orphans.length+' 张未使用图片');
   }));
 }
-export function mountImportControls(c) {return mountImport(c);}
+export function mountImportControls(c) {return mountImport({...c,skipImportPrewarm:true});}
 function mountImport(c) {
   const {state,view,render}=c;
   // A second idempotent call covers keyboard/programmatic import entry where
   // there was no pointerdown on the catalog button.
-  if(state.importMode!=='snapshot')void prewarmVision().catch(()=>{});
+  if(!c.skipImportPrewarm&&state.importMode!=='snapshot')void prewarmVision().catch(()=>{});
   mountImportCandidateMenus(c);
   if(state.importStep==='inspect') {
     const correction=view.querySelector('.paper-corner-overlay');if(state.showManualBox&&correction)correction.style.display='none';
