@@ -26,3 +26,26 @@ export function reconcileKeyedChildren(parent, desired, keyOf, {update,onInsert,
   for(const [key,node] of old){node.remove();removed++;onRemove?.(node,key);}
   return {reused,inserted,removed,changed};
 }
+
+// Reconcile each row and expanded subtree without detaching the whole layer
+// tree. An object identity mismatch after Undo forces fresh event handlers.
+export function reconcileLayerBranches(container,desired,previousReferences=new Map(),nextReferences=new Map()){
+  const key=branch=>branch.querySelector(':scope > [data-scene-node]')?.dataset.sceneNode;
+  return reconcileKeyedChildren(container,desired,key,{
+    update(oldBranch,newBranch,id){
+      if(previousReferences.get(id)!==nextReferences.get(id))return false;
+      const oldRow=oldBranch.querySelector(':scope > [data-scene-node]'),
+        newRow=newBranch.querySelector(':scope > [data-scene-node]');
+      if(!oldRow||!newRow)return false;
+      if(oldRow.outerHTML!==newRow.outerHTML)oldRow.replaceWith(newRow);
+      const oldChildren=oldBranch.querySelector(':scope > .scene-layer-children'),
+        newChildren=newBranch.querySelector(':scope > .scene-layer-children');
+      if(Boolean(oldChildren)!==Boolean(newChildren))return false;
+      if(oldChildren){
+        oldChildren.hidden=newChildren.hidden;
+        reconcileLayerBranches(oldChildren,newChildren,previousReferences,nextReferences);
+      }
+      return true;
+    }
+  });
+}
