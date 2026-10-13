@@ -39,7 +39,7 @@ export function dedupePhysicalCandidates(candidates,limit=48){
   }
   return selected.sort((a,b)=>a.y-b.y||a.x-b.x);
 }
-export function mergeAlignedCarrierPieces(candidates){
+export function mergeAlignedCarrierPieces(candidates,pageHeight=636){
   const chosen=[...candidates];let changed=true;
   while(changed){
     changed=false;
@@ -51,7 +51,7 @@ export function mergeAlignedCarrierPieces(candidates){
       const center=Math.abs((a.x+a.w/2)-(b.x+b.w/2))/Math.max(a.w,b.w);
       const yov=Math.max(0,Math.min(a.y+a.h,b.y+b.h)-Math.max(a.y,b.y))/Math.max(1e-9,Math.min(a.h,b.h));
       const gap=Math.max(0,Math.max(a.y,b.y)-Math.min(a.y+a.h,b.y+b.h));
-      const aligned=xov>.86&&center<.13&&yov<.30&&gap<12/636;
+      const aligned=xov>.86&&center<.13&&yov<.30&&gap<12/Math.max(1,pageHeight);
       if(!aligned)continue;
       const x=Math.min(a.x,b.x),y=Math.min(a.y,b.y),right=Math.max(a.x+a.w,b.x+b.w),bottom=Math.max(a.y+a.h,b.y+b.h);
       // The joined rectangle is only an inferred proposal. Explicitly mark
