@@ -22,10 +22,37 @@ function rectanglePoints(box){
  return [[x,y],[r,y],[r,b],[x,b]];
 }
 
+// Mask agreement is assessed against the ACTUALLY OBSERVED Canny contour,
+// not against a shape label. Prevent an alarm clock with horns/bells from
+// becoming an oval simply because its center is roughly elliptical.
+function normalizedPolygonAgreement(cv,first,second,w,h,roi){
+ if(!first?.length||!second?.length)return 0;
+ const mw=roi.x1-roi.x0,mh=roi.y1-roi.y0;
+ const maskA=cv.Mat.zeros(mh,mw,cv.CV_8UC1),
+   maskB=cv.Mat.zeros(mh,mw,cv.CV_8UC1),
+   count=new cv.Mat(),united=new cv.Mat(),
+   pa=cv.matFromArray(first.length,1,cv.CV_32SC2,
+     first.flatMap(([x,y])=>[Math.round(x*w)-roi.x0,Math.round(y*h)-roi.y0])),
+   pb=cv.matFromArray(second.length,1,cv.CV_32SC2,
+     second.flatMap(([x,y])=>[Math.round(x*w)-roi.x0,Math.round(y*h)-roi.y0])),
+   va=new cv.MatVector(),vb=new cv.MatVector();
+ try{
+   va.push_back(pa);vb.push_back(pb);
+   cv.drawContours(maskA,va,-1,new cv.Scalar(255),cv.FILLED);
+   cv.drawContours(maskB,vb,-1,new cv.Scalar(255),cv.FILLED);
+   cv.bitwise_and(maskA,maskB,count);
+   cv.bitwise_or(maskA,maskB,united);
+   return cv.countNonZero(count)/Math.max(1,cv.countNonZero(united));
+ }finally{
+   vb.delete();va.delete();pb.delete();pa.delete();
+   united.delete();count.delete();maskB.delete();maskA.delete();
+ }
+}
 export function physicalPerimeterChoice({hasObserved,source='unknown',
-    hullToMinRect=0,hullToBox=0,solidity=1,vertices=0}){
+    hullToMinRect=0,hullToBox=0,solidity=1,vertices=0,
+    ellipseAgreement=1}){
  if(!hasObserved)return 'unverified-rectangle';
- if(source==='ellipse-fit')return 'observed-ellipse'; // ellipse fit is from discovery
+ if(source==='ellipse-fit')return ellipseAgreement>=.96?'observed-ellipse':'observed-freeform';
  if(source==='lab-carrier'||source==='rotated-paper'||source==='chroma-carrier')
    return 'observed-chroma-hull';
  if(source==='aligned-joint'||source==='partial-L-border'||source==='hough-edges')
@@ -66,10 +93,16 @@ export function selectPhysicalPerimeter(cv,p,box){
      hullToBox=hullArea/Math.max(1,box.w*w*box.h*h),
      solidity=observedArea/Math.max(1,hullArea);
    cv.approxPolyDP(hull,polygon,Math.max(.8,cv.arcLength(hull,true)*.017),true);
-   const chosen=physicalPerimeterChoice({hasObserved:true,
-     source:box.boundarySource||'unknown',hullToMinRect,hullToBox,
-     solidity,vertices:polygon.rows});
+   const actual=box.observedPhysicalBoundary,
+     ellipseAgreement=box.boundarySource==='ellipse-fit'&&actual?.length>=3
+       ?normalizedPolygonAgreement(cv,raw,actual,w,h,
+         expandedSegmentationROI(box,w,h,p.paperWidthMM,p.paperHeightMM)):1,
+     chosen=physicalPerimeterChoice({hasObserved:true,
+       source:box.boundarySource||'unknown',hullToMinRect,hullToBox,
+       solidity,vertices:polygon.rows,ellipseAgreement});
    let points=raw;
+   if(chosen==='observed-freeform'&&box.boundarySource==='ellipse-fit'&&
+      actual?.length>=3)points=actual;
    if(chosen==='observed-paper-convex'||chosen==='fragmented-carrier-hull'){
      points=normalizedPoints(Array.from({length:polygon.rows},(_,i)=>[
        polygon.data32S[i*2],polygon.data32S[i*2+1]]),w,h);
@@ -83,10 +116,13 @@ export function selectPhysicalPerimeter(cv,p,box){
    }
    return {points,perimeterPolicy:chosen,
      boundarySource:chosen==='observed-paper-convex'||chosen==='observed-rotated-rectangle'
-       ?'supported-rect-envelope':box.boundarySource||'unverified-box',
+       ?'supported-rect-envelope':chosen==='observed-freeform'&&
+         box.boundarySource==='ellipse-fit'?'ellipse-observed-outline':
+         box.boundarySource||'unverified-box',
      needsBoundaryReview:box.needsBoundaryReview===true||
        chosen==='unverified-rectangle',
      originalPhysicalBoundary:raw,
-     perimeterEvidence:{solidity,hullToMinRect,hullToBox,vertices:polygon.rows}};
+     perimeterEvidence:{solidity,hullToMinRect,hullToBox,vertices:polygon.rows,
+       ellipseAgreement}};
  }finally{polygon.delete();hull.delete();observed.delete();}
 }
