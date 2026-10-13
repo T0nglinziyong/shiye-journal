@@ -122,8 +122,12 @@ function physicalRegion(cv,p,box){
            throw Error('物理轮廓的连续 Mask 尺寸不一致');
          const originalMaskPixels=cv.countNonZero(mat);
          const exportedPixels=packed.reduce((sum,value)=>sum+(value>0),0);
-         if(exportedPixels!==originalMaskPixels)
-           throw Error('物理轮廓像素不完整，拒绝保存损坏的 Mask');
+         if(exportedPixels!==originalMaskPixels){
+           // A self-intersecting/fragmented candidate is not a valid single
+           // physical object. Return a failed candidate (or let adaptive
+           // MorphGAC retry), never turn the region into a full rectangle.
+           return null;
+         }
          return {...box,x:(ax+bounds.x)/w,y:(ay+bounds.y)/h,w:bounds.width/w,h:bounds.height/h,
            pixels:cv.countNonZero(mat),segmentationMethod:'physical',segmentationFailed:false,
            orientedBox:orientedContourBox(cv,biggest,ax,ay,w,h,cv.countNonZero(mat)),
