@@ -7,7 +7,7 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
   const pending=new Map(),previews=new Map(),variants=new Map(),sizes=new Map(),previewSizes=new Map(),variantSizes=new Map(),retained=new Map(),queue=[],versions=new Map(),retryTimers=new Map(),retryCounts=new Map(),resizeTimers=new Map(),brokenPreviews=new Set(),observed=new WeakSet();
   let active=0,generation=0,disposed=false,trimTimer=null;
   // Network bound COS thumbnail reads; browser decoding remains lazy.
-  const concurrency=globalThis.matchMedia?.('(pointer: coarse)').matches?6:10;
+  const concurrency=globalThis.matchMedia?.('(pointer: coarse)').matches?4:6;
   const version=id=>versions.get(id)||0;
   const touch=(map,id)=>{if(map.has(id)){const v=map.get(id);map.delete(id);map.set(id,v);}};
   // Reuse existing higher-tier decoded bytes, including on list cards. Never
@@ -177,11 +177,11 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
       else if(!url&&img.isConnected){img.dataset.imageError='true';scheduleRetry(id);}
     })().catch(error=>{if(current()&&img.isConnected){img.dataset.imageError='true';img.src=placeholder(id);scheduleRetry(id);onError(error);}}).finally(()=>{if(img.dataset.privateImageLoading===stamp){delete img.dataset.privateImageLoading;scheduleUpgrade(img);}});
   }
-  const observer=typeof IntersectionObserver==='function'?new IntersectionObserver(entries=>{for(const e of entries)if(e.isIntersecting){observer.unobserve(e.target);resolve(e.target,e.target.dataset.privateImageId);}},{rootMargin:'850px'}):null;
+  const observer=typeof IntersectionObserver==='function'?new IntersectionObserver(entries=>{for(const e of entries)if(e.isIntersecting){observer.unobserve(e.target);resolve(e.target,e.target.dataset.privateImageId);}},{rootMargin:'220px'}):null;
   const sizingObserver=typeof ResizeObserver==='function'?new ResizeObserver(entries=>{for(const {target:img} of entries)scheduleUpgrade(img);}):null;
   const onViewportResize=()=>{for(const img of root.querySelectorAll('img[data-private-image-id]'))scheduleUpgrade(img);};
   globalThis.addEventListener?.('resize',onViewportResize);
-  function onScreen(img){const box=img.getBoundingClientRect();return box.width>0&&box.height>0&&box.bottom>=-850&&box.top<=innerHeight+850&&box.right>=-850&&box.left<=innerWidth+850;}
+  function onScreen(img){const box=img.getBoundingClientRect();return box.width>0&&box.height>0&&box.bottom>=-220&&box.top<=innerHeight+220&&box.right>=-220&&box.left<=innerWidth+220;}
   function scan(node){if(disposed||node.nodeType!==1)return;const images=node.matches('img')?[node]:node.querySelectorAll('img');for(const img of images){
     if(!observed.has(img)){observed.add(img);if(fullView(img))sizingObserver?.observe(img);img.addEventListener('error',()=>{
       const id=img.dataset.privateImageId,src=img.getAttribute('src');if(!id||!src?.startsWith('blob:'))return;

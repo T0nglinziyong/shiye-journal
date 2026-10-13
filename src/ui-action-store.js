@@ -31,10 +31,10 @@ export function createActionStore(state){
       if(outcome?.changes){
         Object.assign(state,outcome.changes);
         publish(action.type,{scope:outcome.scope||'global',
-          keys:Object.keys(outcome.changes),ids:outcome.ids||[],payload:action.payload});
+          keys:Object.keys(outcome.changes),ids:outcome.ids||[],payload:outcome.payload??action.payload});
       }else if(outcome?.notify){
         publish(action.type,{scope:outcome.scope||'global',keys:outcome.keys||[],
-          ids:outcome.ids||[],payload:action.payload});
+          ids:outcome.ids||[],payload:outcome.payload??action.payload});
       }
       return outcome?.result;
     },

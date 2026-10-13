@@ -37,6 +37,7 @@ import {reconcileCanvasText,textParagraphMarkup} from './canvas-text-content.js'
 import {reconcileEditorScene} from './editor-scene-reconcile.js';
 import {checkpointEditorHistory,ensureEditorHistory,resetEditorHistory,takeEditorHistoryStep} from './editor-history-scope.js';
 import {captureHistory} from './project-history.js';
+import {newEditorSession,editorSessionHasEdits} from './editor-session-policy.js';
 import {mountCanvasEditor} from './canvas-editor-ui.js';
 import {editorExitDecision} from './editor-exit-policy.js';
 import {closePopover} from './swift-popover.js';
@@ -132,6 +133,7 @@ import {createImportController,registerImportActions} from './page-controllers/i
 import {createEditorController,registerEditorActions} from './page-controllers/editor-controller.js';
 import {createSettingsController,registerSettingsActions} from './page-controllers/settings-controller.js';
 import {createStandardController} from './page-controllers/standard-controller.js';
+import {createMatchingController,registerMatchingActions} from './page-controllers/matching-controller.js';
 import {renderLibraryHTML} from './page-controllers/library-view.js';
 import {renderWorksHTML} from './page-controllers/works-view.js';
 import {renderEditorHTML} from './page-controllers/editor-view.js';
@@ -304,7 +306,7 @@ function navigateBack(fallback='series'){
   Object.assign(state,{seriesID:previous.seriesID,detailAssetID:previous.detailAssetID,previewProjectID:previous.previewProjectID});
   route(previous.route,{back:true});
 }
-let editorOpenSequence=0;
+let editorOpenSequence=0,editorSessionBaseline=null;
 function route(name,{back=false,restoreMaterial=false}={}){
   editorOpenSequence++;
   viewInteractionRevision++;
@@ -319,7 +321,11 @@ function route(name,{back=false,restoreMaterial=false}={}){
   }
   if(!back&&!fromSettings&&name!=='settings'&&name!==state.route)navigationHistory.push({route:state.route,seriesID:state.seriesID,detailAssetID:state.detailAssetID,previewProjectID:state.previewProjectID});
   if(state.route==='editor'&&name!=='editor'){
-    view.endTextEditing?.();snapshotEditedScene('leave-editor');
+    view.flushInkCommit?.({renderUI:false,force:true});
+    view.endTextEditing?.();
+    if(editorSessionHasEdits(state.activeProject,editorSessionBaseline,saveVersions))
+      snapshotEditedScene('leave-editor');
+    editorSessionBaseline=null;
     // Reentering after another device's commit must establish a fresh base;
     // never manufacture a local operation against an obsolete editor session.
     for(const key of sceneTrackBases.keys())
@@ -328,7 +334,10 @@ function route(name,{back=false,restoreMaterial=false}={}){
   routeScroll.set(state.route+':'+state.seriesID,window.scrollY);
   if(name==='settings'&&!settingsSession)settingsSession={ai:structuredClone(state.aiSettings),preferences:structuredClone(state.preferences),returnRoute:state.route};
   if(state.route==='settings'&&name!=='settings'&&settingsSession){state.aiSettings=settingsSession.ai;state.preferences=settingsSession.preferences;settingsSession=null;state.settingsSection=null;if(cloudEnabled&&deferredSyncedPreferences)state.preferences=savePreferences(deferredSyncedPreferences);if(cloudEnabled&&deferredSyncedAISettings)state.aiSettings=saveAISettings(deferredSyncedAISettings);deferredSyncedPreferences=null;deferredSyncedAISettings=null;}
-if(state.route==='editor'&&name!=='editor'&&aiController)aiController.abort(Error('已离开创作页面'));const priorRoute=state.route;if(name==='matching'&&priorRoute!=='matching'&&cloudMatchingDefaults&&!matchingDefaultsPending)applyMatchingDefaults(state,cloudMatchingDefaults);syncSelectionScope(parity,name);state.route=name;actionStore.publish('route/change',{scope:'route',keys:['route'],payload:{from:priorRoute,to:name}});if(name==='import'&&state.importMode!=='snapshot'&&typeof Worker!=='undefined')void prewarmVision().catch(()=>{});if(name==='series'){state.seriesID='all';state.addingToSeries=null;libraryHistory.length=0;}if(name!=='library')state.addingToSeries=null;if(name!=='settings'&&!fromSettings)state.selected=null;render();
+if(state.route==='editor'&&name!=='editor'&&aiController)aiController.abort(Error('已离开创作页面'));const priorRoute=state.route;if(name==='matching'&&priorRoute!=='matching'&&cloudMatchingDefaults&&!matchingDefaultsPending)applyMatchingDefaults(state,cloudMatchingDefaults);syncSelectionScope(parity,name);state.route=name;
+if(priorRoute!=='editor'&&name==='editor')
+  editorSessionBaseline=newEditorSession(state.activeProject,saveVersions);
+actionStore.publish('route/change',{scope:'route',keys:['route'],payload:{from:priorRoute,to:name}});if(name==='import'&&state.importMode!=='snapshot'&&typeof Worker!=='undefined')void prewarmVision().catch(()=>{});if(name==='series'){state.seriesID='all';state.addingToSeries=null;libraryHistory.length=0;}if(name!=='library')state.addingToSeries=null;if(name!=='settings'&&!fromSettings)state.selected=null;render();
   // A return from Works/Settings must honor the last matching viewport even
   // if the currently selected series ID has since changed. Nested panes are
   // already restored inside render() from the same snapshot.
@@ -356,6 +365,7 @@ registerWorksActions(actionStore);
 registerImportActions(actionStore,{state,saveActiveImportRecord});
 registerSettingsActions(actionStore,{providers:AI_PROVIDERS});
 registerEditorActions(actionStore,{historyStep});
+registerMatchingActions(actionStore,{addMatchingFromRecommendation});
 pageControllers.register('library',createLibraryController({
   renderHTML:renderLibrary,patchCatalog:patchMaterialCatalog,view,state,parity,
   binder:bindPage,actions:actionStore,onCatalogChanged:updateLibraryResults
@@ -389,12 +399,16 @@ pageControllers.register('editor',createEditorController({
     mountCanvasSelection({state,view,current,checkpoint,saveProject,render,toast});
   }
 }));
+pageControllers.register('matching',createMatchingController({
+  renderHTML:renderMatching,actions:actionStore,
+  updateMatchingRegions,queueDefaults:queueMatchingDefaultsSync
+}));
 pageControllers.register('settings',createSettingsController({
   renderHTML:renderSettings,patchModel:patchAISettingsModel,view,state,
   binder:bindPage,actions:actionStore,render
 }));
 for(const [routeName,renderHTML] of [
-  ['series',renderSeries],['matching',renderMatching],
+  ['series',renderSeries],
   ['assetDetail',renderAssetDetail],['projectPreview',renderProjectPreview]
 ])pageControllers.register(routeName,createStandardController(renderHTML));
 // Collection refresh changes business state. Only this projection subscriber
@@ -431,6 +445,7 @@ function render(){
   // The controller lifetime has released route-owned observers, gestures,
   // and native editor listeners before replacing their DOM hosts.
   view.workCoverDispose=null;view.localWorkCoverDispose=null;
+  view.seriesCoverDispose?.();view.seriesCoverDispose=null;
   view.editorDispose=null;view.manualBoxDispose=null;view.paperCorrectionDispose=null;
   view.editorRefresh=null;view.catalogRefresh=null;resetSelectionPresenters(view);
   if(view.onshowsimilar){view.removeEventListener('show-similar',view.onshowsimilar);view.onshowsimilar=null;}
@@ -647,7 +662,11 @@ function bindPage({partial=false}={}){view.querySelectorAll('[data-act]').forEac
   const timeoutInput=view.querySelector('#setting-ai-timeout');if(timeoutInput){timeoutInput.parentElement.firstChild.textContent='连续无响应超时（秒）';timeoutInput.parentElement.insertAdjacentHTML('afterend','<p>流式接收期间只计算连续未收到数据的时间；每轮最多 10 分钟，不会自动重试收费请求。</p>');}
   if(state.route==='editor'){bindAIPanel();const anchor=view.querySelector('[data-act="creative-json"]');if(anchor){const ai=document.createElement('button');ai.type='button';ai.className='btn primary';ai.textContent='AI 创作';ai.onclick=openAICreation;anchor.before(ai);}}
   // Catalog search/select listeners are scoped to the Library controller.
-  const title=view.querySelector('#project-title');if(title)title.addEventListener('blur',()=>{const p=state.activeProject;p.title=title.textContent.trim()||'未命名手账';saveProject();});
+  const title=view.querySelector('#project-title');if(title)title.addEventListener('blur',()=>{
+    const p=state.activeProject;if(!p)return;
+    const next=title.textContent.trim()||'未命名手账';
+    if(next!==p.title){p.title=next;saveProject();}
+  });
   const draftSelect=view.querySelector('#draft-select');if(draftSelect)draftSelect.onchange=()=>{state.activeDraft=draftSelect.value;state.selected=null;resetEditorHistory(state);render();};
   if(state.route==='import'&&state.showManualBox&&!partial)bindManualBox();
   for(const [id,key] of [['import-paper-width','customImportWidth'],['import-paper-height','customImportHeight']]){const el=view.querySelector('#'+id);if(el)el.onchange=()=>{const n=Number(el.value);if(!Number.isFinite(n)||n<1||n>10000){toast('纸张宽高为 1–10000 mm');return;}state[key]=n;recalibrateImport();};}const whole=view.querySelector('#whole-paper');if(whole)whole.onchange=()=>{state.wholePaper=whole.checked;recalibrateImport();};for(const [id,key] of [['paper-size','paperSize'],['paper-orientation','paperOrientation']]){const el=view.querySelector('#'+id);if(el)el.onchange=()=>{state[key]=el.type==='checkbox'?el.checked:el.value;recalibrateImport();};}
@@ -812,6 +831,9 @@ async function legacyHandle(action,id,value){try{switch(action){
   case 'import-work':openImportGallery('work');break;
   case 'import-snapshot':offlineSnapshotProject=null;openImportGallery('snapshot');break;
   case 'import':openImportGallery('material');break;case 'back-library':navigateBack('library');break;case 'back-works':case 'editor-done':{
+    // The ink layer may have a short coalescing timer. Flush its committed
+    // strokes BEFORE the explicit export/publish/exit transaction.
+    view.flushInkCommit?.({renderUI:false,force:true});
     const p=state.activeProject;if(!p)throw Error('当前没有可保存的作品');
     if(p.__remoteDeleted){
       if(!confirm('这份作品已在其他设备删除。当前页面的修改不会自动恢复已删除作品。若要保留当前编辑，请先取消并导出可编辑 ZIP。确定退出到作品库吗？'))break;
@@ -821,14 +843,13 @@ async function legacyHandle(action,id,value){try{switch(action){
       break;
     }
     const decision=editorExitDecision(p,action),publish=decision.publish;
-    // Return preserves a new work as a draft; Complete explicitly publishes it.
-    // Both paths first stage the *entire* editor document, even with no edits.
+    // Viewing/closing an existing work must be read-only unless a user
+    // action changed its data. Real edits have already called saveProject().
     view.endTextEditing?.();
-    p.isDraft=decision.isDraft;
-    saveProject(); // first flushes any outstanding layer mutations to the journal
     if(action==='editor-done'){
-      // A completed project is an explicit, recoverable EDITABLE Scene v2
-      // milestone, independent of the automatically generated cover PNG.
+      // Publishing is explicit; Back must not normalize legacy draft flags or
+      // change timestamps merely because a user inspected an existing work.
+      p.isDraft=decision.isDraft;
       makeAutoSceneSnapshot(p,{reason:'completed',force:true});
       saveProject();
     }
@@ -863,23 +884,15 @@ async function legacyHandle(action,id,value){try{switch(action){
     toast('已加入本次创作');break;case 'detail-match':if((asset(state.detailAssetID)?.supply?.quantity??1)===0)throw Error('素材可用库存为 0');addMatchingFromLibrary(state,[state.detailAssetID]);route('matching');break;case 'detail-series':libraryHistory.push({route:state.route,seriesID:state.seriesID,detailAssetID:state.detailAssetID});state.seriesID=asset(state.detailAssetID)?.seriesID||'all';route('library');break;case 'detail-similar':view.dispatchEvent(new CustomEvent('show-similar'));break;case 'detail-edit':openDetail(state.detailAssetID);break;case 'detail-check':await openCutoutCheck(state.detailAssetID);break;case 'detail-favorite':await actionStore.dispatch({type:'library/favorite',payload:{id:state.detailAssetID}});break;
   case 'new-series':openSeriesEditor();break;case 'series-detail':libraryHistory.push({route:state.route,seriesID:state.seriesID,detailAssetID:state.detailAssetID});state.seriesID=id;route('library');break;
   case 'match-library':route('library');break;case 'match-context':{const scope=matchingScope();toast(`必须 ${scope.required.length} · 优先 ${scope.preferred.length} · 可用 ${scope.available.length} · 不使用 ${scope.excluded.length}`);break;}
-  case 'match-filter':state.recommendFilter=value;updateMatchingRegions(['.match-chips','.match-rec-grid']);queueMatchingDefaultsSync();break;
-  case 'match-skip':state.excludedAssetIDs=[...new Set([...state.excludedAssetIDs,id])];updateMatchingRegions(['.match-rec-grid','.basket>.muted','.match-recommendations .match-panel-head small','.match-action']);break;
-  case 'match-allow':state.excludedAssetIDs=state.excludedAssetIDs.filter(x=>x!==id);updateMatchingRegions(['.match-rec-grid','.basket>.muted','.match-recommendations .match-panel-head small','.match-action']);break;
-  case 'match-core':state.coreIDs=state.coreIDs.includes(id)?state.coreIDs.filter(x=>x!==id):[...state.coreIDs,id];
-    state.matchCore=state.coreIDs[0]||state.basket[0];
-    updateMatchingRegions(['.match-basket-scroll','.basket>.muted','.match-action']);break;
+  case 'match-filter':await actionStore.dispatch({type:'matching/filter',payload:{value}});break;
+  case 'match-skip':await actionStore.dispatch({type:'matching/exclude',payload:{id}});break;
+  case 'match-allow':await actionStore.dispatch({type:'matching/include',payload:{id}});break;
+  case 'match-core':await actionStore.dispatch({type:'matching/priority',payload:{id}});break;
   case 'match-use':openMaterialUse(id);break;
   case 'match-generate':state.matchPurpose=view.querySelector('#match-purpose')?.value||'日常记录';state.matchProcessing=view.querySelector('#match-processing')?.value||'保留完整';state.matchStyle=view.querySelector('#match-style')?.value||state.matchStyle;state.matchIntent=view.querySelector('#match-intent')?.value||'';captureMatchContent();state.matchMode=view.querySelector('#match-mode')?.value||'single';state.matchRatio=readMatchPaper();state.matchStyles=readMatchSelection('match-style',state.matchStyle);state.matchPurposes=readMatchSelection('match-purpose',state.matchPurpose);queueMatchingDefaultsSync();await matchingSession.generate();break;
   case 'match-export-gpt':await exportOfflineCreation();break;
   case 'match-import-gpt':openOfflineImportDialog();break;
-  case 'basket':{
-    const removing=state.basket.includes(id);
-    if(removing){state.basket=state.basket.filter(x=>x!==id);state.coreIDs=state.coreIDs.filter(x=>x!==id);}
-    else addMatchingFromRecommendation(state,id);
-    updateMatchingRegions(['.match-basket-scroll','.basket>.muted','.match-rec-grid','.match-recommendations .match-panel-head small','.match-action']);
-    break;
-  }
+  case 'basket':await actionStore.dispatch({type:'matching/basket',payload:{id}});break;
   case 'reset-match':if(!confirm('重新搭配？已有保存作品不会被删除。'))break;await matchingSession.reset(()=>{state.matchCore=null;state.basket=[];state.coreIDs=[];state.excludedAssetIDs=[];});render();break;
   case 'create-from-basket':openManualCreationDialog();break;
   case 'new-project':{
@@ -919,7 +932,7 @@ async function legacyHandle(action,id,value){try{switch(action){
    case 'download-project-zip':{const source=state.projects.find(x=>x.id===id)||state.activeProject;if(!source||source.isSnapshot)throw Error('可编辑作品不存在');const p=source.projectDocumentPath?await db.completeProject(source):source;download(createNativeProjectPackage(p),p.title+'.shiyeproject.zip');break;}
   case 'project-delete':{const p=state.projects.find(x=>x.id===state.previewProjectID);if(!p||!confirm('将这份作品移到最近删除？'))break;await flushSave();const entry={id:uid(),kind:'project',item:structuredClone(p),date:new Date().toISOString()};await db.transaction(['projects','trash'],tx=>{tx.objectStore('projects').delete(p.id);tx.objectStore('trash').put(entry);});state.projects=state.projects.filter(x=>x.id!==p.id);state.trash.push(entry);state.previewProjectID=null;route('works');break;}
   case 'works-filter':await actionStore.dispatch({type:'works/filter',payload:{value}});break;case 'tool':state.tool=value;if(value==='text'){checkpoint();const d=current();const t=textBlock('在这里写下今天的故事',d);d.textBlocks.push(t);state.selected=t.id;state.tool='select';saveProject();}else if(value==='shape'){checkpoint();const d=current();const s=primitive('roundedRectangle',d);d.primitives.push(s);state.selected=s.id;state.tool='select';saveProject();}else if(value==='material'){openMaterialPicker();return;}render();break;
-  case 'zoom-in':state.zoom=Math.min(4,state.zoom+.15);render();break;case 'zoom-out':state.zoom=Math.max(1,state.zoom-.15);render();break;
+  case 'zoom-in':await actionStore.dispatch({type:'editor/zoom',payload:{delta:.15}});break;case 'zoom-out':await actionStore.dispatch({type:'editor/zoom',payload:{delta:-.15}});break;
   case 'paper-menu':state.editorPanel=!state.editorPanel;state.selected=null;render();break;case 'undo':await actionStore.dispatch({type:'editor/undo'});break;case 'redo':await actionStore.dispatch({type:'editor/redo'});break;
   case 'new-draft':{checkpoint();const d=structuredClone(current());d.id=uid();d.title='方案 '+(state.activeProject.drafts.length+1);state.activeProject.drafts.push(d);state.activeProject.activeDraftID=d.id;state.activeDraft=d.id;resetEditorHistory(state);saveProject();render();break;}
   case 'duplicate':editSelected((e,d)=>{
@@ -1118,7 +1131,7 @@ async function legacyHandle(action,id,value){try{switch(action){
   case 'help':{const {showHelp}=await import('./help-ui.js');showHelp({body,modal});break;}case 'settings-open':captureSettings();await actionStore.dispatch({type:'settings/section',payload:{section:value}});break;case 'settings-back':if(state.settingsSection){captureSettings();await actionStore.dispatch({type:'settings/section',payload:{section:null}});}else route(settingsSession?.returnRoute||'series');break;case 'settings-save':{captureSettings();const cfg=state.aiSettings;if(!cfg.model.trim())throw Error('请输入模型 ID');const endpoint=new URL(cfg.endpoint);if(endpoint.protocol!=='https:')throw Error('API 地址必须使用 HTTPS');if(cfg.provider!=='custom'&&endpoint.host!==new URL(AI_PROVIDERS[cfg.provider].endpoint).host)throw Error('服务商与 API 地址不一致；自定义地址请选“自定义兼容接口”');const returnRoute=settingsSession?.returnRoute||'series';if(cloudEnabled){await db.transaction(['meta'],tx=>{tx.objectStore('meta').put(cloudPreferencesRecord(state.preferences));tx.objectStore('meta').put(cloudAISettingsRecord(cfg));});}state.aiSettings=saveAISettings(cfg);state.preferences=savePreferences(state.preferences);deferredSyncedPreferences=null;deferredSyncedAISettings=null;settingsSession=null;state.settingsSection=null;route(returnRoute);toast('设置已保存');break;}
 }}catch(e){console.error(e);toast(e.message||'操作失败');}}
 function editSelected(fn){const d=current(),e=editorEntry(d).find(x=>x.value.id===state.selected);if(!e&&state.selected)return;checkpoint();fn(e,d);saveProject();render();}
-function historyStep(from,to){view.endTextEditing?.();const d=current(),snapshot=takeEditorHistoryStep(state,from,to,d);if(!snapshot)return false;for(const key of Object.keys(d))delete d[key];Object.assign(d,snapshot);state.activeDraft=snapshot.id;saveProject();return true;}
+function historyStep(from,to){view.flushInkCommit?.({renderUI:false,force:true});view.endTextEditing?.();const d=current(),snapshot=takeEditorHistoryStep(state,from,to,d);if(!snapshot)return false;for(const key of Object.keys(d))delete d[key];Object.assign(d,snapshot);state.activeDraft=snapshot.id;saveProject();return true;}
 function readMatchPaper(){const ratio=view.querySelector('#match-ratio')?.value||'a4';if(ratio!=='custom')return ratio;const w=Number(view.querySelector('#match-paper-width')?.value),h=Number(view.querySelector('#match-paper-height')?.value);if(!Number.isInteger(w)||!Number.isInteger(h)||w<50||h<50||w>1000||h>1000)throw Error('自定义纸张宽高需要是 50–1000 mm 的整数');state.customPaperWidth=w;state.customPaperHeight=h;return `custom:${w}x${h}`;}
 function captureMatchContent(){state.matchContentPolicy=view.querySelector('#match-content-policy')?.value||state.matchContentPolicy||'documentary';state.matchTextPresentation=view.querySelector('#match-text-presentation')?.value||state.matchTextPresentation||'mixed';}
 function openMaterialUse(id){const a=asset(id);if(!a)return;const others=state.basket.length>1;const choices=['由生成器选择','完整保留',...(others?['从另一件后露出']:[]),...(a.kind==='tape'&&others?['截段固定']:[]),...(['paper','photo','tape'].includes(a.kind)?['取一块真实区域',]:[]),'稍后手工剪图案'];const processing=['AI 自主加工','保留完整','少量裁剪','自由拆解'];body.innerHTML=`<h2>${esc(a.title)} · 用法</h2><p>每件素材可以单独选择用法与加工权限。</p><div class="stack"><label>用法<select id="material-use-choice">${choices.map(x=>`<option ${(state.materialUseHints[id]||'由生成器选择')===x?'selected':''}>${x}</option>`).join('')}</select></label><label>加工权限<select id="material-use-processing">${processing.map(x=>`<option ${(state.assetProcessing[id]||state.matchProcessing)===x?'selected':''}>${x}</option>`).join('')}</select></label><label class="toggle-row">要求每个方案做到此用法 <input type="checkbox" id="material-use-required" ${state.materialUseRequired[id]?'checked':''}></label><div class="actions"><button class="btn primary" id="material-use-save">确定</button><button class="btn" id="material-use-cancel">取消</button></div></div>`;modal.showModal();body.querySelector('#material-use-cancel').onclick=()=>modal.close();body.querySelector('#material-use-save').onclick=()=>{const use=body.querySelector('#material-use-choice').value;state.materialUseHints[id]=use==='由生成器选择'?null:use;state.assetProcessing[id]=body.querySelector('#material-use-processing').value;state.materialUseRequired[id]=!!state.materialUseHints[id]&&use!=='稍后手工剪图案'&&body.querySelector('#material-use-required').checked;modal.close();updateMatchingRegions(['.match-basket-scroll','.basket>.muted','.match-action']);void matchingSession.persist();queueMatchingDefaultsSync();};}
@@ -2159,7 +2172,7 @@ function backgroundCloudCheck({force=false}={}){
 // document remains visible, not only when focus/online events happen.
 setInterval(backgroundCloudCheck,15000);
 window.addEventListener('focus',()=>{backgroundCloudCheck();privateImages.retryMissing();void cloudResumer.wake();});
-document.addEventListener('visibilitychange',()=>{backgroundCloudCheck();if(document.visibilityState==='hidden')snapshotEditedScene('app-background');if(document.visibilityState==='visible'){privateImages.retryMissing();void cloudResumer.wake();}});
+document.addEventListener('visibilitychange',()=>{backgroundCloudCheck();if(document.visibilityState==='hidden'){view.flushInkCommit?.({renderUI:false,force:true});snapshotEditedScene('app-background');}if(document.visibilityState==='visible'){privateImages.retryMissing();void cloudResumer.wake();}});
 window.addEventListener('online',()=>{backgroundCloudCheck();privateImages.retryMissing();void cloudResumer.wake();});
 window.addEventListener('offline',updateSyncIndicator);
 window.addEventListener('online',updateSyncIndicator);

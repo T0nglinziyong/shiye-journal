@@ -9,6 +9,19 @@ export function createMatchingCoverCache(context) {
   const cache=new BoundedValueCache({maxEntries:36,maxWeight:4_000_000});
   const raster=new BoundedValueCache({maxEntries:24,maxWeight:12_000_000});
   const jobs=new Map();let scope=null;
+  // Rasterizing off-screen matching variants competes with the first visible
+  // card and can cause a frozen-feeling initial page. Use a single observer.
+  let visibleVariants=new Map();
+  const pendingHosts=new WeakMap();
+  const rasterObserver=typeof IntersectionObserver==='function'
+    ?new IntersectionObserver(entries=>{
+      for(const entry of entries){
+        if(!entry.isIntersecting)continue;
+        rasterObserver.unobserve(entry.target);
+        const variant=pendingHosts.get(entry.target);
+        if(variant)showRaster(entry.target,variant);
+      }
+    },{rootMargin:'240px'}):null;
   const unsubscribe=onImageInvalidation(()=>{cache.clear();raster.clear();jobs.clear();});
   const snapshot=project=>{
     prepareProjectScene(project);
@@ -45,17 +58,26 @@ export function createMatchingCoverCache(context) {
     })().catch(()=>null).finally(()=>jobs.delete(jobKey));
     jobs.set(jobKey,task);return task;
   };
+  const showRaster=(host,variant)=>{
+    if(host.querySelector('.match-raster-preview'))return;
+    void rasterize(variant.project).then(url=>{
+      if(!url||!host.isConnected||visibleVariants.get(variant.id)!==variant)return;
+      if(host.dataset.matchRaster!==variant.id)return;
+      const image=document.createElement('img');image.className='match-raster-preview';
+      image.src=url;image.alt=variant.title+' 构图预览';host.replaceChildren(image);
+    });
+  };
   const hydrate=(root,variants=[])=>{
     if(!root)return;
-    const byID=new Map(variants.map(variant=>[variant.id,variant]));
+    visibleVariants=new Map(variants.map(variant=>[variant.id,variant]));
     for(const host of root.querySelectorAll('[data-match-raster]')){
-      const variant=byID.get(host.dataset.matchRaster);if(!variant||variant.status==='running'||variant.project?.isSnapshot)continue;
-      void rasterize(variant.project).then(url=>{
-        if(!url||!host.isConnected)return;
-        const current=byID.get(host.dataset.matchRaster);if(current!==variant)return;
-        const image=document.createElement('img');image.className='match-raster-preview';image.src=url;image.alt=variant.title+' 构图预览';host.replaceChildren(image);
-      });
+      const variant=visibleVariants.get(host.dataset.matchRaster);
+      if(!variant||variant.status==='running'||variant.project?.isSnapshot||
+         host.querySelector('.match-raster-preview'))continue;
+      pendingHosts.set(host,variant);
+      if(rasterObserver)rasterObserver.observe(host);
+      else showRaster(host,variant);
     }
   };
-  return {render,hydrate,clear(){cache.clear();raster.clear();jobs.clear();},stats:()=>({entries:cache.rows.size+raster.rows.size,hits:cache.hits+raster.hits,misses:cache.misses+raster.misses,weight:cache.weight+raster.weight}),dispose(){unsubscribe();cache.clear();raster.clear();jobs.clear();}};
+  return {render,hydrate,clear(){rasterObserver?.disconnect();visibleVariants.clear();cache.clear();raster.clear();jobs.clear();},stats:()=>({entries:cache.rows.size+raster.rows.size,hits:cache.hits+raster.hits,misses:cache.misses+raster.misses,weight:cache.weight+raster.weight}),dispose(){rasterObserver?.disconnect();unsubscribe();visibleVariants.clear();cache.clear();raster.clear();jobs.clear();}};
 }

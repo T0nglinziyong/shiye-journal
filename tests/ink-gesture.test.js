@@ -40,9 +40,14 @@ test('coalesced Pencil samples and final lift are lossless and de-duplicated',()
 test('editor uses fast incremental canvas paint with a size-matched eraser circle',async()=>{
  const [editor,viewport,css,tree]=await Promise.all([
    read('canvas-editor-ui.js'),read('canvas-viewport.js'),read('canvas-editor-fixes.css'),read('editor-layer-tree.js')]);
- assert.match(editor,/pts\.slice\(Math\.max\(0,painted-1\)\)/);
+ assert.match(editor,/pts\.slice\(Math\.max\(0,painted-2\)\)/);
+ assert.match(editor,/configureInkBacking/);
+ assert.match(editor,/pointerrawupdate/);
+ assert.match(editor,/mountLiveInkStroke\(page,d,finished\)/);
+ assert.match(editor,/inkCommitTimer=setTimeout\(\(\)=>flushInkCommit\(\),110\)/);
+ assert.match(editor,/if\(erase&&!erase\.checkpointed\)/);
  assert.match(editor,/eraserSamples\s*=\s*\[\]/);
- assert.match(editor,/eraseStrokesAlongPath\(d\.strokes,samples/);
+ assert.match(editor,/eraseStrokesAlongPath\(before,samples/);
  assert.match(editor,/diameter=radius\*2\*scale/);
  assert.match(editor,/canvas-eraser-cursor/);
  assert.match(editor,/prefs\.wholeStroke=id==='brush'/);
@@ -52,4 +57,15 @@ test('editor uses fast incremental canvas paint with a size-matched eraser circl
  assert.match(tree,/dismissOnOutside:true/);
  assert.match(tree,/createIcon\(locked\?'lock':'unlock'\)/);
  assert.match(tree,/createIcon\(hidden\?'eyeOff':'eye'\)/);
+});
+
+test('ink render uses shared smooth paths and logical high-resolution scene',async()=>{
+ const [raster,svg,model,editor]=await Promise.all([
+   read('ink-raster-scale.js'),read('ink-scene-svg.js'),
+   read('editor-tools-model.js'),read('canvas-editor-ui.js')]);
+ assert.match(svg,/smoothInkSVG/);
+ assert.match(model,/traceSmoothInk/);
+ assert.match(raster,/inkBackingSize/);
+ assert.match(editor,/configureInkBacking/);
+ assert.doesNotMatch(editor,/if\(captureHistory\(state.activeProject\)\)saveProject\(\)/);
 });

@@ -1,3 +1,5 @@
+import {mountLiveInkStroke} from './ink-live-svg.js';
+import {configureInkBacking} from './ink-raster-scale.js';
 import {ensureInkSlots,inkSlot,activeInkSlot,selectInkSlot,editInkSlot} from './ink-tool-slots.js';
 import {openPopover,closePopover} from './swift-popover.js';
 import {openEditorLayerTree} from './editor-layer-tree.js';
@@ -31,7 +33,11 @@ const pickerRows=new Map();
 const allEntries=d=>sceneLayerEntries(d,{hidden:true,ink:false});
 export function mountCanvasEditor(c){
   const {state,view,body,modal,current,checkpoint,saveProject,render,route,flushSave,toast,esc,imgTag,asset,handle,openCutoutCheck,openAICreation}=c,d=current(),page=view.querySelector('#canvas-page');if(!d||!page)return;
-  if(captureHistory(state.activeProject))saveProject();state.workspacePanel=false;
+  // Initialize missing history records in memory, but do not stage a write
+  // merely because the user opened an existing draft. A genuine edit will
+  // persist the current snapshot together with its Scene changes.
+  captureHistory(state.activeProject);
+  state.workspacePanel=false;
   if(!state.canvasTools){let saved={};try{saved=JSON.parse(localStorage.getItem(prefKey))||{};}catch{}state.canvasTools={...defaultTools,...saved};}
   ensureInkSlots(state.canvasTools);
   const prefs=state.canvasTools,head=view.querySelector('.view-head'),actions=head.querySelector('.actions'),tools=view.querySelector('.editor-tools'),shell=view.querySelector('.editor-shell');let entries=allEntries(d),selected=entries.find(e=>e.value.id===state.selected);
@@ -78,7 +84,7 @@ export function mountCanvasEditor(c){
   context.addEventListener('pointerdown',event=>{
     if(state.editingTextID&&event.target.closest('select,button,input'))view.keepTextEditorUntil=performance.now()+1600;
   },true);
-  const changeTool=(mode,b)=>{view.endTextEditing?.();if(b.getAttribute('aria-expanded')==='true'){closePopover();return;}const repeated=state.tool===mode;if(['pen','highlighter'].includes(mode))state.previousInkTool=mode;state.tool=['layers','paper','material'].includes(mode)?'select':mode;state.toolHighlight=mode;if(!repeated)state.selectionPath=null;if(!['select','lasso','layers'].includes(mode)){state.multiSelected=[];state.selectedStrokes=[];}if(!['select','lasso','layers'].includes(mode))state.selected=null;if(!state.selected){page.querySelectorAll('.object-handle,.selected-object-actions,.selected-object-overlay').forEach(n=>n.remove());page.querySelectorAll('.selected').forEach(n=>n.classList.remove('selected'));page.querySelector('.canvas-selection-overlay')?.replaceChildren();}page.classList.toggle('pen',['pen','highlighter','eraser'].includes(mode));page.classList.toggle('lasso',['lasso','marquee'].includes(mode));syncTools();contextTools();if(['shape','material','layers','paper'].includes(mode)){if(mode==='shape')shapePicker(b);else if(mode==='material')materialPicker(b);else if(mode==='layers')layerPicker(b);else paperPicker(b);}else if(repeated&&['pen','highlighter','eraser','lasso'].includes(mode))toolSettings(b,mode);else closePopover();};
+  const changeTool=(mode,b)=>{view.flushInkCommit?.({renderUI:false,force:true});view.endTextEditing?.();if(b.getAttribute('aria-expanded')==='true'){closePopover();return;}const repeated=state.tool===mode;if(['pen','highlighter'].includes(mode))state.previousInkTool=mode;state.tool=['layers','paper','material'].includes(mode)?'select':mode;state.toolHighlight=mode;if(!repeated)state.selectionPath=null;if(!['select','lasso','layers'].includes(mode)){state.multiSelected=[];state.selectedStrokes=[];}if(!['select','lasso','layers'].includes(mode))state.selected=null;if(!state.selected){page.querySelectorAll('.object-handle,.selected-object-actions,.selected-object-overlay').forEach(n=>n.remove());page.querySelectorAll('.selected').forEach(n=>n.classList.remove('selected'));page.querySelector('.canvas-selection-overlay')?.replaceChildren();}page.classList.toggle('pen',['pen','highlighter','eraser'].includes(mode));page.classList.toggle('lasso',['lasso','marquee'].includes(mode));syncTools();contextTools();if(['shape','material','layers','paper'].includes(mode)){if(mode==='shape')shapePicker(b);else if(mode==='material')materialPicker(b);else if(mode==='layers')layerPicker(b);else paperPicker(b);}else if(repeated&&['pen','highlighter','eraser','lasso'].includes(mode))toolSettings(b,mode);else closePopover();};
   for(const mode of ['select','pen','eraser','highlighter','lasso','text','shape','material','layers','paper']){const b=button(glyphs[mode],()=>changeTool(mode,b),'btn');b.dataset.act='tool';b.dataset.val=mode;b.setAttribute('aria-label',labels[mode]);b.title=labels[mode];tools.append(b);if(mode==='select')b.oncontextmenu=e=>{e.preventDefault();const p=openPopover(b,{title:'选择工具',width:230,menu:true});for(const [m,name] of [['select','点击选择 · 单指滚动画布'],['marquee','拖出矩形框选']])p.content.append(button(name,()=>{p.close();state.tool=m;state.toolHighlight='select';render();}));};}
   // Property editing remains available through the selected object's
   // contextual inspector, not a separate top-bar button.
@@ -535,7 +541,22 @@ export function mountCanvasEditor(c){
       view.endTextEditing?.();
     };input.onkeydown=e=>{e.stopPropagation();if(!e.isComposing&&!composing&&(e.key==='Escape'||(e.ctrlKey||e.metaKey)&&e.key==='Enter')){e.preventDefault();input.blur();}};
     input.onpaste=e=>{e.preventDefault();const value=e.clipboardData.getData('text/plain');input.setRangeText(value,input.selectionStart,input.selectionEnd,'end');update();};
-    view.endTextEditing=()=>{if(!typing)return;const session=typing;typing=null;state.editingTextID=null;session.item.content=session.input.value;session.input.onblur=null;session.input.blur();const node=session.input.closest('[data-object]');node?.classList.remove('typing');node?.replaceChildren(document.createTextNode(session.item.content));if(!session.item.content.trim()){d.textBlocks=d.textBlocks.filter(t=>t.id!==session.item.id);state.selected=null;}if(state.undo.at(-1)===session.undoMark&&(session.isNew&&!session.item.content.trim()||!session.isNew&&JSON.stringify(session.item)===session.before))state.undo.pop();saveProject();render();};
+    view.endTextEditing=()=>{
+      if(!typing)return;
+      const session=typing;typing=null;state.editingTextID=null;
+      session.item.content=session.input.value;session.input.onblur=null;session.input.blur();
+      const node=session.input.closest('[data-object]');
+      node?.classList.remove('typing');
+      node?.replaceChildren(document.createTextNode(session.item.content));
+      if(!session.item.content.trim()){
+        d.textBlocks=d.textBlocks.filter(t=>t.id!==session.item.id);state.selected=null;
+      }
+      const unchanged=(!session.isNew&&JSON.stringify(session.item)===session.before)||
+        (session.isNew&&!session.item.content.trim());
+      if(state.undo.at(-1)===session.undoMark&&unchanged)state.undo.pop();
+      if(!unchanged)saveProject();
+      render();
+    };
     input.focus({preventScroll:true});input.setSelectionRange(input.value.length,input.value.length);view.editorViewport?.ensureVisible();
   }
   let previousSelectionGeometry=null,previousSelectionObject=null;
@@ -573,7 +594,25 @@ export function mountCanvasEditor(c){
     if(e.target.closest('[data-object]'))return;const r=page.getBoundingClientRect();let added;change(()=>{const x=(e.clientX-r.left)/r.width*d.canvas.width,y=(e.clientY-r.top)/r.height*d.canvas.height,width=Math.min(d.canvas.width*.35,d.canvas.width-x);const t={...textBlock('',d),...state.textDefaults,id:uid(),x:x+width/2,y:y+50,width:Math.max(60,width),height:100,alignment:state.textDefaults?.alignment||'left'};d.textBlocks.push(t);added=t;state.selected=t.id;state.tool='select';state.toolHighlight='text';state.multiSelected=[];state.selectedStrokes=[];});beginInlineText({kind:'text',value:added},true);
   }else if(state.tool==='select'&&!e.target.closest('[data-object],.selected-object-overlay')){view.endTextEditing?.();state.selected=null;state.multiSelected=[];state.selectedStrokes=[];state.selectionPath=null;render();}};
   const ink=page.querySelector('#ink'),ctx=ink.getContext('2d');
-  let stroke=null,erase=null,frame=null,painted=0,eraserSamples=[],lastEraserPoint=null;
+  let stroke=null,erase=null,frame=null,painted=0,eraserSamples=[],lastEraserPoint=null,
+    eraseModified=false,backingFrame=null;
+  // The visible canvas is device-pixel-resolution; all stored vectors remain
+  // in immutable logical Scene coordinates and never grow with screen DPI.
+  configureInkBacking(ink,d.canvas.width,d.canvas.height);
+  const clearInk=()=>ctx.clearRect(0,0,d.canvas.width,d.canvas.height);
+  let inkCommitTimer=null,inkNeedsCommit=false;
+  const flushInkCommit=({renderUI=true,force=false}={})=>{
+    if(!inkNeedsCommit)return;
+    if(!force&&(stroke||erase)){scheduleInkCommit();return;}
+    clearTimeout(inkCommitTimer);inkCommitTimer=null;inkNeedsCommit=false;
+    saveProject();
+    if(renderUI&&!stroke&&!erase&&state.route==='editor')render();
+  };
+  const scheduleInkCommit=()=>{
+    inkNeedsCommit=true;clearTimeout(inkCommitTimer);
+    inkCommitTimer=setTimeout(()=>flushInkCommit(),110);
+  };
+  view.flushInkCommit=flushInkCommit;
   const cursor=document.createElement('div');cursor.className='canvas-eraser-cursor';cursor.setAttribute('aria-hidden','true');cursor.hidden=true;page.append(cursor);
   const point=e=>{const r=ink.getBoundingClientRect();return {x:(e.clientX-r.left)/Math.max(1,r.width)*d.canvas.width,y:(e.clientY-r.top)/Math.max(1,r.height)*d.canvas.height,p:e.pressure>0?e.pressure:.5};};
   const showEraser=e=>{
@@ -585,12 +624,21 @@ export function mountCanvasEditor(c){
     frame=null;
     if(eraserSamples.length){
       const {radius,whole}=eraserBehavior(prefs),samples=eraserSamples;eraserSamples=[];
-      d.strokes=eraseStrokesAlongPath(d.strokes,samples,radius,whole,!!prefs.eraserOnlyHighlighter);
+      const before=d.strokes;
+      const next=eraseStrokesAlongPath(before,samples,radius,whole,!!prefs.eraserOnlyHighlighter);
+      if(before.length!==next.length||
+          before.some((row,index)=>row!==next[index])){
+        // The old Scene is still intact here, so Undo captures the correct
+        // pre-erase state without blocking initial pointerdown.
+        if(erase&&!erase.checkpointed){checkpoint();erase.checkpointed=true;}
+        eraseModified=true;
+      }
+      d.strokes=next;
       // Show the actual residual strokes using the temporary ink canvas.
       // Rebuilding hundreds of live SVG nodes during each Pencil move stalls
       // iOS drawing. The Scene SVGs are restored only after pointerup.
       page.classList.add('erasing-ink');
-      ctx.clearRect(0,0,ink.width,ink.height);
+      clearInk();
       drawInk(ctx,d.strokes);
     }
     if(stroke){
@@ -599,10 +647,10 @@ export function mountCanvasEditor(c){
       if(pts.length>painted){
         // Paint only the segments received since the previous frame. Replaying
         // the full current stroke on every move was O(points^2).
-        drawInk(ctx,[{...stroke,points:pts.slice(Math.max(0,painted-1))}]);
+        drawInk(ctx,[{...stroke,points:pts.slice(Math.max(0,painted-2))}]);
         painted=pts.length;
       }
-    }else if(painted){ctx.clearRect(0,0,ink.width,ink.height);painted=0;}
+    }else if(painted){clearInk();painted=0;}
   };
   const schedule=()=>{if(frame===null)frame=requestAnimationFrame(paint);};
   const addStrokeSamples=e=>{
@@ -616,17 +664,42 @@ export function mountCanvasEditor(c){
     }
   };
   paint();view.canvasInkRefresh=schedule;
+  // Geometry/DPR/zoom changes may require a different backing scale. Never
+  // recreate the canvas or its pointer listeners, just resize its pixels.
+  const syncBacking=()=>{
+    backingFrame=null;
+    if(!ink.isConnected||stroke||erase)return;
+    const result=configureInkBacking(ink,d.canvas.width,d.canvas.height);
+    if(result.changed){painted=0;clearInk();}
+  };
+  const scheduleBacking=()=>{
+    if(backingFrame===null)backingFrame=requestAnimationFrame(syncBacking);
+  };
+  const inkResizeObserver=typeof ResizeObserver==='function'
+    ?new ResizeObserver(scheduleBacking):null;
+  inkResizeObserver?.observe(ink);
+  page.addEventListener('panzoomchange',scheduleBacking);
   ink.onpointerdown=e=>{
     if(!['pen','highlighter','eraser'].includes(state.tool)||e.button>0)return;
-    e.preventDefault();checkpoint();ink.setPointerCapture(e.pointerId);
+    // Pen strokes are staged in a transient buffer until pointerup. Deferring
+    // the expensive Undo snapshot keeps the first Pencil packets responsive.
+    e.preventDefault();ink.setPointerCapture(e.pointerId);
     if(state.tool==='eraser'){
-      erase={id:e.pointerId};lastEraserPoint=null;showEraser(e);addEraserSamples(e);schedule();return;
+      eraseModified=false;erase={id:e.pointerId,checkpointed:false};lastEraserPoint=null;showEraser(e);addEraserSamples(e);schedule();return;
     }
-    cursor.hidden=true;ctx.clearRect(0,0,ink.width,ink.height);
+    cursor.hidden=true;clearInk();
     const marker=state.tool==='highlighter',key=marker?'marker':'pen';
     stroke={id:e.pointerId,points:[point(e)],width:prefs[key+'Width'],color:prefs[key+'Color'],opacity:marker?.4:1,penStyle:marker?'marker':prefs.penStyle};
     painted=0;schedule();
   };
+  // Modern Pointer Events expose the densest samples on pointerrawupdate.
+  // Safari may only deliver coalesced pointermove; both paths deduplicate by
+  // coordinates, so neither loses fast handwriting points.
+  const rawInkMove=e=>{
+    if(erase?.id===e.pointerId){e.preventDefault();showEraser(e);addEraserSamples(e);schedule();}
+    else if(stroke?.id===e.pointerId){e.preventDefault();addStrokeSamples(e);schedule();}
+  };
+  ink.addEventListener('pointerrawupdate',rawInkMove);
   ink.onpointermove=e=>{
     if(erase?.id===e.pointerId){e.preventDefault();showEraser(e);addEraserSamples(e);schedule();return;}
     if(stroke?.id===e.pointerId){e.preventDefault();addStrokeSamples(e);schedule();return;}
@@ -635,13 +708,24 @@ export function mountCanvasEditor(c){
   ink.onpointerup=e=>{
     if(stroke?.id===e.pointerId){
       addStrokeSamples(e);
+      // Preserve every final flick/coalesced sample before converting the
+      // transient stroke into an editable vector object.
+      if(frame!==null){cancelAnimationFrame(frame);frame=null;}paint();
+      checkpoint();
       const {id,...line}=stroke;line.id=uid();
-      d.strokes.push(state.tool==='highlighter'&&prefs.markerStraight?straightStroke(line):line);
-      stroke=null;painted=1;saveProject();render();schedule();
+      const finished=state.tool==='highlighter'&&prefs.markerStraight?straightStroke(line):line;
+      d.strokes.push(finished);
+      // Publish one vector node immediately; expensive Scene reconciliation
+      // and disk staging are coalesced after a short pen-idle interval.
+      mountLiveInkStroke(page,d,finished);
+      stroke=null;painted=0;clearInk();scheduleInkCommit();
     }else if(erase?.id===e.pointerId){
       addEraserSamples(e);if(frame!==null){cancelAnimationFrame(frame);frame=null;}paint();
-      erase=null;lastEraserPoint=null;cursor.hidden=true;saveProject();render();
-      page.classList.remove('erasing-ink');ctx.clearRect(0,0,ink.width,ink.height);
+      erase=null;lastEraserPoint=null;cursor.hidden=true;
+      if(eraseModified)saveProject();
+      render();
+      eraseModified=false;
+      page.classList.remove('erasing-ink');clearInk();
       if(prefs.returnToPen){state.tool=state.previousInkTool||'pen';state.toolHighlight=state.tool;render();}
       else schedule();
     }
@@ -649,11 +733,16 @@ export function mountCanvasEditor(c){
   ink.onpointerleave=e=>{if(!erase)cursor.hidden=true;};
   const discardInkGesture=()=>{
     if(!stroke&&!erase)return;
+    const eraserCheckpointed=!!erase?.checkpointed;
     stroke=null;erase=null;lastEraserPoint=null;eraserSamples=[];
     if(frame!==null){cancelAnimationFrame(frame);frame=null;}
     cursor.hidden=true;page.classList.remove('erasing-ink');
-    painted=1;const before=state.undo.pop();if(before?.kind==='scene-pending-v2')d.strokes=before.before.strokes;
-    ctx.clearRect(0,0,ink.width,ink.height);painted=0;syncInkSceneDOM(page,d);
+    painted=1;
+    if(eraserCheckpointed){
+      const before=state.undo.pop();
+      if(before?.kind==='scene-pending-v2')d.strokes=before.before.strokes;
+    }
+    clearInk();painted=0;syncInkSceneDOM(page,d);
   };
   ink.onpointercancel=e=>{
     // Safari may cancel a Pencil pointer without a deliberate user undo.
@@ -674,6 +763,13 @@ export function mountCanvasEditor(c){
   document.addEventListener('keydown',deleteSelected);
   const disposeViewport=view.editorDispose;
   view.editorDispose=()=>{
+    flushInkCommit({renderUI:false,force:true});
+    clearTimeout(inkCommitTimer);view.flushInkCommit=null;
+    inkResizeObserver?.disconnect();
+    page.removeEventListener('panzoomchange',scheduleBacking);
+    ink.removeEventListener('pointerrawupdate',rawInkMove);
+    if(backingFrame!==null)cancelAnimationFrame(backingFrame);
+    if(frame!==null)cancelAnimationFrame(frame);
     document.removeEventListener('keydown',deleteSelected);
     disposeViewport?.();
   };

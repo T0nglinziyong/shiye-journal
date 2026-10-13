@@ -1,3 +1,4 @@
+import {smoothInkSVG} from './ink-path-geometry.js';
 // An ink node is editable vector geometry, not a baked PNG.
 // Used by editor DOM, Works previews and live lasso motion. All text
 // interpolation is bounded numerical data, never untrusted SVG markup.
@@ -13,7 +14,7 @@ export function inkScenePaths(stroke){
    const a=points[i],pressure=Math.max(0,Math.min(1,((Number(a.p??.5)+Number(p.p??.5))/2)));
    return '<path d="M'+at(a)+' L'+at(p)+'" fill="none" stroke="'+color+'" stroke-width="'+width*(.35+.9*pressure)+'" stroke-linejoin="round" stroke-linecap="round"/>';
  }).join('');
- return '<path d="'+points.map((p,i)=>(i?'L':'M')+at(p)).join(' ')+'" fill="none" stroke="'+color+'" stroke-width="'+width+'" stroke-linejoin="round" stroke-linecap="round"/>';
+ return '<path d="'+smoothInkSVG(points,coord)+'" fill="none" stroke="'+color+'" stroke-width="'+width+'" stroke-linejoin="round" stroke-linecap="round"/>';
 }
 export function syncInkSceneDOM(page,draft){
  const strokes=draft.strokes||[],byId=new Map(strokes.filter(s=>s.id).map(s=>[s.id,s]));
