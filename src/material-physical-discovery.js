@@ -158,10 +158,21 @@ export function discoverPhysicalMaterialBoxes(cv,p,own){
          return [clamp((ellipse.center.x+a*ct-b*st)/w,0,1),
            clamp((ellipse.center.y+a*st+b*ct)/h,0,1)];
        });
-     all.push({x:r.x/w,y:r.y/h,w:r.width/w,h:r.height/h,
-       instanceMethod:'physical-boundary',physicalBoundary:points,
-       boundarySource:'ellipse-fit',boundaryPrior:clamp(fidelity,0,1),
-       physicalShape:'ellipse',fillRatio:boxRatio,absorbedFragments:0});
+     // Preserve the measured raw exterior in addition to the fitted
+     // ellipse. Mask segmentation can reject a bad ellipse (e.g. an alarm
+     // clock with protruding handles) WITHOUT changing candidate discovery.
+     const actualContour=new cv.Mat();
+     try{
+       cv.approxPolyDP(c,actualContour,Math.max(.6,cv.arcLength(c,true)*.003),true);
+       const observedPhysicalBoundary=Array.from({length:actualContour.rows},(_,i)=>[
+         clamp(actualContour.data32S[2*i]/w,0,1),
+         clamp(actualContour.data32S[2*i+1]/h,0,1)]);
+       all.push({x:r.x/w,y:r.y/h,w:r.width/w,h:r.height/h,
+         instanceMethod:'physical-boundary',physicalBoundary:points,
+         observedPhysicalBoundary,
+         boundarySource:'ellipse-fit',boundaryPrior:clamp(fidelity,0,1),
+         physicalShape:'ellipse',fillRatio:boxRatio,absorbedFragments:0});
+     }finally{actualContour.delete();}
    });
  }
  // 4. Irregular exterior outline candidates, including people: never force
