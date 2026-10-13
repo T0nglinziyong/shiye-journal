@@ -128,11 +128,19 @@ export function discoverPhysicalMaterialBoxes(cv,p,own){
      const r=cv.boundingRect(c),area=Math.abs(cv.contourArea(c));
      if(!valid(r,area,{minPixels:5000,minWidth:70,minHeight:65,frameMargin:18})
        ||area/Math.max(1,r.width*r.height)<.23)return;
+     const hull=new cv.Mat();
+     cv.convexHull(c,hull,false,true);
+     const fitted=cv.minAreaRect(hull),
+       hullFill=Math.abs(cv.contourArea(hull))/
+         Math.max(1,fitted.size.width*fitted.size.height);
+     // Rectangular-looking paper is a shared physical carrier even if its
+     // printed colours are disconnected. Only test for two loose objects
+     // when the merged colour hull itself is NON-rectangular.
      // A 25px morphological close can join two genuinely separate bright
      // stickers into one convex blob. Inspect the ORIGINAL threshold bitmap
      // before closing; only split two well-separated, individually large
      // components. Many tiny checker/text fragments remain a single paper.
-     if(splitLabCarrierComponents(cv,bin,r,pxPerMM,(island,islandArea)=>{
+     if(hullFill<.86&&splitLabCarrierComponents(cv,bin,r,pxPerMM,(island,islandArea)=>{
        splitColorIslands.push(cv.boundingRect(island));
        add(island,'lab-carrier',
          islandArea/Math.max(1,r.width*r.height),'carrier',
@@ -147,9 +155,7 @@ export function discoverPhysicalMaterialBoxes(cv,p,own){
      if(contained.some((a,i)=>contained.slice(i+1).some(b=>
        Math.hypot(a.x+a.width/2-b.x-b.width/2,
          a.y+a.height/2-b.y-b.height/2)>pxPerMM*9)))return;
-     const hull=new cv.Mat();
      try{
-       cv.convexHull(c,hull,false,true);
        add(hull,'lab-carrier',area/Math.max(1,r.width*r.height),'carrier',
          {minPixels:5000,minWidth:70,minHeight:65,frameMargin:18});
      }finally{hull.delete();}
