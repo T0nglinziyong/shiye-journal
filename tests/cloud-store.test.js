@@ -56,6 +56,19 @@ test('cold collection reads share one revision request',async()=>{
   await Promise.all(['assets','series','projects','trash','meta'].map(store=>db.cloudAll(store)));
   assert.equal(state.versionReads,6,'one startup revision plus one verification per collection');
 });
+test('a read-only cloud tab subscribes to committed changes before its first write',async()=>{
+  const priorWindow=globalThis.window,priorChannel=globalThis.BroadcastChannel,names=[];
+  globalThis.window={dispatchEvent(){}};
+  globalThis.BroadcastChannel=class{constructor(name){names.push(name);}postMessage(){}close(){}};
+  try{
+    const {db}=fixture();
+    await db.cloudAll('assets');
+    assert.deepEqual(names,['shiye-outbox:cloud:owner-uuid']);
+  }finally{
+    if(priorWindow===undefined)delete globalThis.window;else globalThis.window=priorWindow;
+    if(priorChannel===undefined)delete globalThis.BroadcastChannel;else globalThis.BroadcastChannel=priorChannel;
+  }
+});
 test('direct cloud uploads also appear in the global sync indicator until committed',async()=>{
   const events=[],previous=globalThis.window;globalThis.window={dispatchEvent:event=>events.push(event.detail)};
   try{const {db}=fixture();await db.cloudTransaction(['blobs'],tx=>tx.objectStore('blobs').put({id:'direct',data:new Blob(['bytes'])}));
