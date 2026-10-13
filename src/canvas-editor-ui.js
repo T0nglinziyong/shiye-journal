@@ -538,7 +538,22 @@ export function mountCanvasEditor(c){
       view.endTextEditing?.();
     };input.onkeydown=e=>{e.stopPropagation();if(!e.isComposing&&!composing&&(e.key==='Escape'||(e.ctrlKey||e.metaKey)&&e.key==='Enter')){e.preventDefault();input.blur();}};
     input.onpaste=e=>{e.preventDefault();const value=e.clipboardData.getData('text/plain');input.setRangeText(value,input.selectionStart,input.selectionEnd,'end');update();};
-    view.endTextEditing=()=>{if(!typing)return;const session=typing;typing=null;state.editingTextID=null;session.item.content=session.input.value;session.input.onblur=null;session.input.blur();const node=session.input.closest('[data-object]');node?.classList.remove('typing');node?.replaceChildren(document.createTextNode(session.item.content));if(!session.item.content.trim()){d.textBlocks=d.textBlocks.filter(t=>t.id!==session.item.id);state.selected=null;}if(state.undo.at(-1)===session.undoMark&&(session.isNew&&!session.item.content.trim()||!session.isNew&&JSON.stringify(session.item)===session.before))state.undo.pop();saveProject();render();};
+    view.endTextEditing=()=>{
+      if(!typing)return;
+      const session=typing;typing=null;state.editingTextID=null;
+      session.item.content=session.input.value;session.input.onblur=null;session.input.blur();
+      const node=session.input.closest('[data-object]');
+      node?.classList.remove('typing');
+      node?.replaceChildren(document.createTextNode(session.item.content));
+      if(!session.item.content.trim()){
+        d.textBlocks=d.textBlocks.filter(t=>t.id!==session.item.id);state.selected=null;
+      }
+      const unchanged=(!session.isNew&&JSON.stringify(session.item)===session.before)||
+        (session.isNew&&!session.item.content.trim());
+      if(state.undo.at(-1)===session.undoMark&&unchanged)state.undo.pop();
+      if(!unchanged)saveProject();
+      render();
+    };
     input.focus({preventScroll:true});input.setSelectionRange(input.value.length,input.value.length);view.editorViewport?.ensureVisible();
   }
   let previousSelectionGeometry=null,previousSelectionObject=null;
