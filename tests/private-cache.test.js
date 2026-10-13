@@ -11,10 +11,17 @@ test('persistent private cache isolates accounts and enforces its byte limit',as
 });
 test('a newly cached original evicts originals before already loaded thumbnails',async()=>{
   const name='private-cache-preview-'+Date.now(),cache=createPrivateCache({name,limit:12});
-  await cache.put('user','thumbnail:first',new Blob(['preview']));
+  await cache.put('user','thumbnail480:user/material.webp',new Blob(['preview']));
   await cache.put('user','image:first',new Blob(['original']));
   assert.equal(await cache.get('user','image:first'),undefined);
-  assert.equal(await (await cache.get('user','thumbnail:first')).text(),'preview');
+  assert.equal(await (await cache.get('user','thumbnail480:user/material.webp')).text(),'preview');
+});
+test('large detail variants are evicted before fixed card previews',async()=>{
+  const cache=createPrivateCache({name:'private-cache-tiers-'+Date.now(),limit:12});
+  await cache.put('user','thumbnail480:user/material.webp',new Blob(['preview']));
+  await cache.put('user','preview960:user/material.webp',new Blob(['variant']));
+  assert.equal(await cache.get('user','preview960:user/material.webp'),undefined);
+  assert.equal((await cache.get('user','thumbnail480:user/material.webp')).size,7);
 });
 test('logout clears disposable reads but preserves account-scoped pending edits',async()=>{
   const name='private-cache-logout-'+Date.now(),cache=createPrivateCache({name});

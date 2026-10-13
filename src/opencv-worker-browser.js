@@ -1,7 +1,13 @@
 let readyPromise=null;
 
 async function loadRuntime(url){
-  importScripts(url);
+  // Emscripten otherwise resolves its split WASM relative to this hashed
+  // worker chunk (or /src/ during development), not the imported OpenCV JS.
+  // Vite then answers that missing path with index.html, yielding a WASM
+  // "expected magic word" error after candidate-box discovery.
+  const runtimeURL=new URL(url,self.location.href);
+  self.Module={locateFile:path=>new URL(path,runtimeURL).href};
+  importScripts(runtimeURL.href);
   let cv=self.cv;
   if(cv&&typeof cv.then==='function')cv=await cv;
   else if(!cv?.Mat){

@@ -1,5 +1,6 @@
 // Pure import page projection. No global route, DOM mutation or storage writes.
 // Context is injected so React/Vue can substitute a renderer later.
+import {supportsVision} from '../ai-settings.js';
 export function renderImportHTML({state,esc,fmt,importSteps,importSourceButtons,renderImportReview,renderImportInspection}){const b=state.importBox,rec=state.importRecords[state.importIndex];let content='';
   if(state.importStep==='done'){
     const kind=state.importMode==='work'?'作品':state.importMode==='snapshot'?'快照':'素材';

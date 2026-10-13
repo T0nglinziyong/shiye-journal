@@ -241,6 +241,8 @@ body:has(.library-management-tray):not(:has(.library-management-tray:not([hidden
 #offline-gpt-result{height:96px;min-height:80px}
 @media(max-width:699px){.recently-deleted-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px!important}.recently-deleted-grid[data-kind=asset] .deleted-row>.card-image{aspect-ratio:1.15}}
 .works-grid>[data-act=open-project]{-webkit-touch-callout:none;user-select:none;touch-action:pan-y}
+.asset-grid .card,.series-grid .card,.works-grid .card,.mini-asset,.canvas-page,.canvas-page .canvas-object,.ink-layer{user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+.canvas-page textarea,.canvas-page input,.canvas-page [contenteditable="true"]{user-select:text;-webkit-user-select:text;-webkit-touch-callout:default}
 .canvas-history-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px;align-items:center}
 .canvas-history-row>button:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .canvas-history-row>div{display:flex;gap:0}

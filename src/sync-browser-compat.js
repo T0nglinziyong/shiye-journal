@@ -50,9 +50,11 @@ export function markSyncPhase(error,phase){
  }
  return error;
 }
+import {explainUserError} from './user-facing-error.js';
+
 export function describeSyncError(error){
  if(isWebKitPatternError(error))
    return 'iPhone/iPad Safari 返回参数格式错误'+(error.syncPhase?'（'+error.syncPhase+'）':'')+'；待同步数据仍保留。';
- const msg=String(error?.message||'同步暂不可用');
+ const msg=explainUserError(error,'同步');
  return error?.syncPhase?'['+error.syncPhase+'] '+msg:msg;
 }

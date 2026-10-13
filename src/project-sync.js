@@ -3,6 +3,7 @@ import {markSyncPhase} from './sync-browser-compat.js';
 // Commit acknowledgement is the only point at which an entry is removed.
 export function createProjectSync({load,write,commit,revision,reconcile=async()=> 'conflict',recordKeys=record=>[{store:'projects',id:record.id}],onCommitted=()=>{},onConflict=async()=>null,onSuperseded=()=>{},onStatus=()=>{},runExclusive=fn=>fn(),reload=load,autoFlushDelayMs=0,setTimer=setTimeout,clearTimer=clearTimeout,clock=()=>Date.now()}){
   let initialized,staging=Promise.resolve(),network,serial=0,error,paused=false;
+  let conflicts=new Set();
   // Durable local staging is immediate; only the remote commit is batched.
   const flushWindow=Math.max(0,Number(autoFlushDelayMs)||0);
   let autoTimer=null,lastNetworkAt=null;
@@ -19,7 +20,7 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
   // A transient IndexedDB/auth read failure must not poison this instance for
   // the rest of the session: the resumer will retry the durable outbox later.
   const initialize=()=>initialized??=(async()=>{for(const row of await load()||[]){entries.set(row.record.id,row);serial=Math.max(serial,row.serial);}report();})().catch(failure=>{initialized=undefined;throw markSyncPhase(failure,'读取本机待同步队列');});
-  const report=()=>onStatus({pending:entries.size,error});
+  const report=()=>onStatus({pending:entries.size,error,conflicts:conflicts.size});
   const persist=()=>Promise.resolve().then(()=>write(structuredClone([...entries.values()])))
     .catch(error=>{throw markSyncPhase(error,'写入本机待同步队列');});
   // The durable queue is shared by tabs. A tab may have opened before another
@@ -38,6 +39,7 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
         entries.set(row.record.id,row);
         serial=Math.max(serial,row.serial);
       }
+      conflicts=new Set([...conflicts].filter(id=>entries.has(id)));
       report();
       return;
     }
@@ -57,7 +59,7 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
     report();
   }
   function stage(record,{baseRevision=revision()}={}){
-    const task=staging.catch(()=>{}).then(async()=>{await initialize();if(!Number.isSafeInteger(baseRevision)||baseRevision<0)throw Error('作品编辑基线无效，未上传旧稿');const previous=entries.get(record.id),row={record:structuredClone(record),serial:++serial,baseRevision:previous?Math.min(previous.baseRevision,baseRevision):baseRevision,operationID:crypto.randomUUID()};entries.set(record.id,row);try{await persist();}catch(e){if(previous)entries.set(record.id,previous);else entries.delete(record.id);throw e;}error=null;report();});
+    const task=staging.catch(()=>{}).then(async()=>{await initialize();if(!Number.isSafeInteger(baseRevision)||baseRevision<0)throw Error('作品编辑基线无效，未上传旧稿');const previous=entries.get(record.id),row={record:structuredClone(record),serial:++serial,baseRevision:previous?Math.min(previous.baseRevision,baseRevision):baseRevision,operationID:crypto.randomUUID()};entries.set(record.id,row);try{await persist();}catch(e){if(previous)entries.set(record.id,previous);else entries.delete(record.id);throw e;}conflicts.delete(record.id);error=null;report();});
     staging=task.catch(()=>{});void task.then(()=>scheduleAuto()).catch(()=>{});return task;
   }
   function kick({force=false}={}){
@@ -78,7 +80,6 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
       const blocked=new Set();
       while(entries.size&&!paused){
         const row=[...entries.values()].find(item=>!blocked.has(item.record.id)&&item.serial<=windowSerial);
-        if(!row)break;
         if(!row)break;
         try {
         // A restarted queue must not overwrite changes made by another device.
@@ -147,7 +148,12 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
             row.baseRevision=revision();row.operationID=crypto.randomUUID();
             await persist();onSuperseded(row.record);continue;
           }
-          if(resolved==='rebase'&&revision()>row.baseRevision){row.baseRevision=revision();await persist();continue;}
+          if(resolved==='rebase'){
+            if(revision()>row.baseRevision){row.baseRevision=revision();await persist();continue;}
+            // Unchanged server revision means an unconfirmed upload, not a
+            // competing edit. Retain the row for the normal retry path.
+            throw new Error('云端版本未变化，本次上传未获确认；本机修改已保留，将自动重试',{cause:failure});
+          }
           throw failure;
         }
         await staging;
@@ -157,11 +163,11 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
           blocked.add(row.record.id);
         }
       }
-      if(blocked.size)throw Error('云端版本已变化；已继续同步其他资料，冲突项目仍安全保留');
+      conflicts=blocked;
       error=null;report();
     }))().catch(e=>{error=e;report();throw e;}).finally(()=>{
       network=null;
-      if(entries.size&&!error)scheduleAuto();
+      if(entries.size&&!error&&[...entries.keys()].some(id=>!conflicts.has(id)))scheduleAuto();
     });
     network.catch(()=>{});return network;
   }
@@ -187,7 +193,7 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
       baseRevision,operationID:crypto.randomUUID()});
     try{await persist();}
     catch(failure){entries.clear();for(const [key,value] of before)entries.set(key,value);throw failure;}
-    error=null;report();
+    conflicts.delete(id);error=null;report();
     if(entries.size)scheduleAuto();
     return {id:record?.id||id,retained:!!record};
   }
@@ -199,10 +205,11 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
     for(const id of selected)entries.delete(id);
     try{await persist();}
     catch(failure){entries.clear();for(const row of before)entries.set(row.record.id,row);throw failure;}
+    for(const id of selected)conflicts.delete(id);
     report();
     return removed.length;
   }
-  async function discard(){cancelAuto();await initialize();await staging;if(network)throw Error('上传正在进行，请等待请求结束后再放弃待同步修改');const previous=[...entries.values()];entries.clear();try{await persist();}catch(failure){for(const row of previous)entries.set(row.record.id,row);throw failure;}error=null;report();return previous.length;}
+  async function discard(){cancelAuto();await initialize();await staging;if(network)throw Error('上传正在进行，请等待请求结束后再放弃待同步修改');const previous=[...entries.values()];entries.clear();try{await persist();}catch(failure){for(const row of previous)entries.set(row.record.id,row);throw failure;}conflicts.clear();error=null;report();return previous.length;}
   return {stage,
     pause(){paused=true;cancelAuto();},
     async flush(){
@@ -210,12 +217,16 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
       // Manual sync / editor completion bypasses the automatic interval, but
       // still uses the same durable outbox, lock and server-side revision CAS.
       await kick({force:true});
-      if(entries.size)await kick({force:true});
+      if(entries.size&&!conflicts.size)await kick({force:true});
     },
     async resumeScheduled(){await initialize();await staging;if(entries.size)scheduleAuto();},
-    async pending(){await initialize();await staging;return structuredClone([...entries.values()]);},async advance(before,after,operations=[]){await initialize();await staging;if(!operations.length)return;let changed=false;for(const row of entries.values()){
+    async pending(){await initialize();await staging;return structuredClone([...entries.values()]);},
+    // Image reads need one pending override, not a clone of every queued
+    // import (which may contain many original image Blobs).
+    async inspectPending(select){await initialize();await staging;return structuredClone(select(entries.values()));},
+    async advance(before,after,operations=[]){await initialize();await staging;if(!operations.length)return;let changed=false;for(const row of entries.values()){
     const keys=recordKeys(row.record);
     const touched=operations.some(operation=>keys.some(key=>key.store===operation.store&&(key.id===undefined||operation.action==='clear'||key.id===(operation.item?.id??operation.id))));
     if(row.baseRevision===before&&!touched){row.baseRevision=after;changed=true;}
-  }if(changed)await persist();},resolvePending,cancelPendingFor,discard,canDiscard:()=>!network,resume:()=>kick({force:true}),status:()=>({pending:entries.size,error,uploading:!!network})};
+  }if(changed)await persist();},resolvePending,cancelPendingFor,discard,canDiscard:()=>!network,resume:()=>kick({force:true}),status:()=>({pending:entries.size,error,conflicts:conflicts.size,uploading:!!network})};
 }

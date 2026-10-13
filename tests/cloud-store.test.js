@@ -294,6 +294,34 @@ test('warm cloud reads reuse revision snapshots and hashes across store instance
   b.state.revision=1;b.state.rows=[{id:'a',title:'remote changed'}];assert.equal((await b.db.cloudRefresh()).changed,true);assert.equal((await b.db.cloudAll('assets'))[0].title,'remote changed');
   const c=fixture(cache);c.state.rows=[{id:'blob',storagePath:'owner-uuid/hash',storageProvider:'supabase'}];await c.db.cloudGet('blobs','blob');const d=fixture(cache);d.state.rows=c.state.rows;assert.equal(await (await d.db.cloudGet('blobs','blob')).data.text(),'private image');assert.equal(d.state.downloads,0);
 });
+test('verified unrelated cloud revisions reuse blob metadata; changed blobs still query the server',async()=>{
+  const cache=memoryCache(),{state,db}=fixture(cache);
+  state.rows=[{id:'b',storagePath:'owner-uuid/hash',storageProvider:'supabase',thumbnailPath:'owner-uuid/hash-preview480.webp'}];
+  for(const store of ['assets','series','projects','trash'])await db.cloudAll(store);
+  await db.cloudPreview('b');
+  assert.equal(state.batchReads,1);
+  state.revision=1;state.changes=[{revision:1,keys:[{store:'series',id:'other',action:'delete'}]}];
+  assert.equal((await db.cloudRefresh()).incremental,true);
+  await db.cloudPreview('b');
+  assert.equal(state.batchReads,1,'unrelated edits must not re-fetch each image record');
+  state.revision=2;state.changes=[{revision:2,keys:[{store:'blobs',id:'b',action:'put'}]}];
+  assert.equal((await db.cloudRefresh()).incremental,true);
+  await db.cloudPreview('b');
+  assert.equal(state.batchReads,2,'changed image metadata must be verified remotely');
+});
+test('reopened app reuses persisted image metadata after a verified unrelated delta',async()=>{
+  const cache=memoryCache(),first=fixture(cache);
+  first.state.rows=[{id:'b',storagePath:'owner-uuid/hash',storageProvider:'supabase',thumbnailPath:'owner-uuid/hash-preview480.webp'}];
+  for(const store of ['assets','series','projects','trash'])await first.db.cloudAll(store);
+  await first.db.cloudPreview('b');
+  const reopened=fixture(cache);
+  reopened.state.revision=1;
+  reopened.state.changes=[{revision:1,keys:[{store:'series',id:'other',action:'delete'}]}];
+  assert.ok(await reopened.db.cloudCachedCollections());
+  assert.equal((await reopened.db.cloudRefresh()).incremental,true);
+  await reopened.db.cloudPreview('b');
+  assert.equal(reopened.state.batchReads||0,0,'returning to a cached page needs no per-image metadata request');
+});
 test('successful commits patch cached records; failed commits do not alter cache',async()=>{
   const cache=memoryCache(),a=fixture(cache);a.state.rows=[{id:'a',title:'before'}];await a.db.cloudAll('assets');
   await a.db.cloudTransaction(['assets'],tx=>tx.objectStore('assets').put({id:'a',title:'after'}));assert.equal((await a.db.cloudAll('assets'))[0].title,'after');assert.equal(a.state.reads,1);

@@ -15,6 +15,7 @@ import {migrationPendingConflicts} from './migration-outbox-guard.js';
 import {forkConflictingEditableWork} from './sync-conflict-copy.js';
 import {mergeEditableSceneProjects} from './scene-field-merge.js';
 import {isLegacySceneProject} from './scene-v2.js';
+import {createBlobRevisionProof} from './blob-revision-proof.js';
 export function createCloudStore({cloudClient,requireCloudUser,cache=null,namespace='cloud',projectPreview=()=>null,objectStorage=null}){
 const BUCKET='shiye-private';
 const writeProvider=()=>objectStorage?.enabled?'cos':'supabase';
@@ -29,6 +30,12 @@ const uploads=new Map();
 const snapshots=new Map();
 const documents=new Map();
 const blobRecordRequests=new Map();
+const blobRecords=new Map();
+const blobRevisionProof=createBlobRevisionProof();
+function retainBlobRecord(id,saved){
+  blobRecords.delete(id);blobRecords.set(id,saved);
+  if(blobRecords.size>256)blobRecords.delete(blobRecords.keys().next().value);
+}
 let blobRecordTimer=null;
 function batchBlobRecord(id){
   if(blobRecordRequests.has(id))return blobRecordRequests.get(id).promise;
@@ -47,7 +54,7 @@ function batchBlobRecord(id){
         const found=new Map(rows.map(row=>[row.id,row.record]));
         await Promise.all(group.map(async([key,waiter])=>{
           const record=found.get(key);
-          if(record&&revision===atRevision)await remember('blob-record:'+key,{revision:atRevision,record});
+          if(record&&revision===atRevision){const saved={revision:atRevision,record};retainBlobRecord(key,saved);await remember('blob-record:'+key,saved);}
           waiter.resolve(record?structuredClone(record):undefined);
         }));
       }catch(error){for(const [,waiter] of group)waiter.reject(error);}
@@ -132,7 +139,7 @@ const account=async()=>`${namespace}:${await identity()}`;
 function notifyCloudSuperseded(){
   if(typeof window!=='undefined')window.dispatchEvent(new CustomEvent('shiye-cloud-superseded'));
 }
-function reportSync(){if(typeof window!=='undefined'){const current=unifiedSync.status();window.dispatchEvent(new CustomEvent('shiye-project-sync',{detail:{pending:current.pending+writesInFlight,error:current.error}}));}}
+function reportSync(){if(typeof window!=='undefined'){const current=unifiedSync.status();window.dispatchEvent(new CustomEvent('shiye-project-sync',{detail:{pending:current.pending+writesInFlight,error:current.error,conflicts:current.conflicts}}));}}
 // One durable account-scoped queue, one upload scheduler. The project and
 // import accessors below are filtered facades; neither owns a second queue.
 async function loadUnifiedOutbox(recover=false){
@@ -243,6 +250,7 @@ const unifiedSync=createProjectSync({
     if(await wasCommitted(operationID,baseRevision))return 'committed';
     if(await wasResetAfter(baseRevision))return 'remote';
     const latest=await version(),record=envelope.payload;
+    if(latest===baseRevision)return 'rebase';
     if(await canRebaseUnchangedKeys({client:cloudClient(),owner:await identity(),
       before:baseRevision,after:latest,operations:[{store:'projects',action:'put',item:record}]}))return 'rebase';
     // User-selected policy: genuine simultaneous edits use the last explicit
@@ -399,8 +407,11 @@ async function reconcileImport(batch,operationID,baseRevision){
 }
 // This durable, account-scoped outbox retains the complete batch, including
 // original bytes. Only a successful cloud acknowledgement removes it.
-async function pendingOperations(store){await identity();return (await importSync.pending()).flatMap(row=>row.record.operations?.filter(op=>op.store===store)||(row.record[store]||[]).map(item=>({action:'put',store,item})));}
-async function pendingOverride(store,id){let result;for(const op of await pendingOperations(store)){if(op.action==='clear'||op.action==='delete'&&op.id===id)result={found:true};else if(op.action==='put'&&op.item.id===id)result={found:true,record:op.item};}return result;}
+async function pendingOperations(store){await identity();return unifiedSync.inspectPending(rows=>{const operations=[];for(const row of rows){if(row.record?.kind!=='batch')continue;const batch=row.record.payload;operations.push(...(batch.operations?.filter(op=>op.store===store)||(batch[store]||[]).map(item=>({action:'put',store,item}))));}return operations;});}
+async function pendingOverride(store,id){await identity();return unifiedSync.inspectPending(rows=>{let result;for(const row of rows){if(row.record?.kind!=='batch')continue;const batch=row.record.payload;
+  const operations=batch.operations|| (batch[store]||[]).map(item=>({action:'put',store,item}));
+  for(const op of operations){if(op.store!==store)continue;if(op.action==='clear'||op.action==='delete'&&op.id===id)result={found:true};else if(op.action==='put'&&op.item.id===id)result={found:true,record:op.item};}
+}return result;});}
 async function overlayImports(store,records){const map=new Map(records.map(r=>[r.id,r]));for(const op of await pendingOperations(store)){if(op.action==='clear')map.clear();else if(op.action==='delete')map.delete(op.id);else map.set(op.item.id,op.item);}return [...map.values()];}
 const cached=async key=>{try{const id=await account();return cacheDisabled?undefined:await cache?.get(id,key);}catch{return undefined;}};
 const remember=async(key,value)=>{try{const id=await account();if(!cacheDisabled)await cache?.put(id,key,value);}catch{/* Cache quota/failure cannot fail a cloud operation. */}};
@@ -486,7 +497,14 @@ async function cloudProjectDocument(record){
 async function cloudRecord(store,id){
   await identity();if(revision===undefined)await version();
   if(store!=='blobs'){const saved=snapshots.get(store)||await cached('records:'+store);if(saved?.revision===revision){snapshots.set(store,saved);return structuredClone(saved.records.find(r=>r.id===id));}}
-  if(store==='blobs'){const saved=await cached('blob-record:'+id);if(saved?.revision===revision)return saved.record;}
+  if(store==='blobs'){
+    const saved=blobRecords.get(id)||await cached('blob-record:'+id);
+    if(saved&&(saved.revision===revision||blobRevisionProof.valid(id,saved.revision,revision))){
+      if(saved.revision!==revision)retainBlobRecord(id,{revision,record:saved.record});
+      else retainBlobRecord(id,saved);
+      return structuredClone(saved.record);
+    }
+  }
   if(store==='blobs')return batchBlobRecord(id);
   const row=checked(await cloudClient().from('shiye_records').select('record').eq('user_id',owner).eq('store',store).eq('id',id).maybeSingle());
   return row?.record;
@@ -515,8 +533,7 @@ async function cloudPreview(id,pixels=480){
   const variant=imageVariant(pixels),edge=Number(variant.slice(7));
   const pending=await pendingOverride('blobs',id);if(pending&&(!pending.record||usableBlob(pending.record.data)))return pending.record?await makeThumbnail(pending.record.data,edge)||pending.record.data:undefined;
   if(id.startsWith('project-cover:')){const match=/^project-cover:(cos|supabase):(.+)$/.exec(id);if(!match)throw Error('作品封面标识不是当前格式');const [,provider,path]=match;if(!path.startsWith((await identity())+'/'))throw Error('作品封面不属于当前账号');const key='thumbnail:'+path,saved=await cached(key);if(usableBlob(saved))return saved;const blob=await downloadObject(path,provider);if(!usableBlob(blob))throw Error('作品封面为空');await remember(key,blob);return blob;}
-  await identity();const old=revision===undefined?await cached('blob-record:'+id):null;
-  const record=old?.record||await cloudRecord('blobs',id);if(!record)return undefined;
+  const record=await cloudRecord('blobs',id);if(!record)return undefined;
   if(!['cos','supabase'].includes(record.storageProvider))throw Error('图片缺少当前存储服务标记');
   if(!record.storagePath?.startsWith(owner+'/'))throw Error('图片不属于当前账号');
   const thumbnailKey=variantBlobKey(record.storagePath,edge),saved=await cached(thumbnailKey);
@@ -653,7 +670,15 @@ function cloudTransaction(names,fn,operationID=crypto.randomUUID()){
         coverImageID:cover.coverImageID,coverSceneHash:cover.coverSceneHash
       }}));
     }
-    for(const op of operations)if(op.store==='blobs'&&op.action==='put')await remember('blob-record:'+op.item.id,{revision,record:op.item});
+    if(revision===previous+1)blobRevisionProof.accept(previous,revision,{
+      blobIDs:operations.filter(op=>op.store==='blobs'&&op.action!=='clear').map(op=>op.item?.id||op.id),
+      allBlobs:operations.some(op=>op.store==='blobs'&&op.action==='clear')
+    });
+    else{blobRevisionProof.clear();blobRecords.clear();}
+    for(const op of operations)if(op.store==='blobs'&&op.action==='put'){
+      const saved={revision,record:op.item};retainBlobRecord(op.item.id,saved);
+      await remember('blob-record:'+op.item.id,saved);
+    }
     // Patch only cached collections belonging to the committed base revision.
     // Remote conflicts never write to this cache or silently become local edits.
     for(const store of ['assets','series','projects','trash','meta','blobs']){
@@ -674,7 +699,7 @@ async function cloudCheckpoint(){
   if(revision!==undefined&&revision!==current)throw Error('另一设备已更新资料，请刷新后重试；未导出不一致的备份');
   return current;
 }
-async function cloudCachedCollections(){await identity();const result={},savedRows=[];for(const store of ['assets','series','projects','trash']){const saved=await cached('records:'+store);if(!saved||savedRows.length&&saved.revision!==savedRows[0].revision)return null;savedRows.push(saved);result[store]=await overlayImports(store,structuredClone(saved.records).map(record=>withProjectBase(store,record,saved.revision)));}revision=savedRows[0].revision;return result;}
+async function cloudCachedCollections(){await identity();const stores=['assets','series','projects','trash'];const savedRows=await Promise.all(stores.map(store=>cached('records:'+store)));if(savedRows.some(saved=>!saved||saved.revision!==savedRows[0].revision))return null;const result={};await Promise.all(stores.map(async(store,index)=>{const saved=savedRows[index];result[store]=await overlayImports(store,structuredClone(saved.records).map(record=>withProjectBase(store,record,saved.revision)));}));blobRevisionProof.clear();blobRecords.clear();revision=savedRows[0].revision;return result;}
 async function cloudRefresh(){
   await queue;
   const before=revision,current=await version();
@@ -691,7 +716,8 @@ async function cloudRefresh(){
   if(!changed)return {revision:current,changed:false};
   const deltaBefore=snapshots.get('projects')?.revision??snapshots.get('assets')?.revision??before;
   const delta=await readCloudDelta({client:cloudClient(),owner,before:deltaBefore,after:current,snapshots});
-  if(delta){for(const [store,snapshot] of delta.snapshots){snapshots.set(store,snapshot);await remember('records:'+store,snapshot);}return {revision:current,changed:true,incremental:true,blobIDs:delta.blobIDs,allBlobs:delta.allBlobs};}
+  if(delta){blobRevisionProof.accept(deltaBefore,current,delta);for(const [store,snapshot] of delta.snapshots){snapshots.set(store,snapshot);await remember('records:'+store,snapshot);}return {revision:current,changed:true,incremental:true,blobIDs:delta.blobIDs,allBlobs:delta.allBlobs};}
+  blobRevisionProof.clear();blobRecords.clear();
   return {revision:current,changed:true,incremental:false,allBlobs:true};
 }
 // Migration is an explicit user action. Scan raw account records rather than
@@ -958,7 +984,7 @@ async function cloudPurgeLocalAfterReset(){
   // Disable reads and background upload at this instance before erasing the
   // durable outbox. Caller has already stopped editing and received reset:true.
   cacheDisabled=true;
-  images.clear();imageSizes.clear();documents.clear();snapshots.clear();
+  images.clear();imageSizes.clear();documents.clear();snapshots.clear();blobRecords.clear();blobRevisionProof.clear();
   uploads.clear();editorBases.clear();
   if(typeof cache?.purgeAccount!=='function')throw Error('浏览器不支持完整账号本地清理');
   const count=await cache.purgeAccount(user);
@@ -972,7 +998,7 @@ async function cloudFlushProjects({background=false}={}){
   if(background)return unifiedSync.resumeScheduled();
   return unifiedSync.flush();
 }
-async function cloudClearCache(){const id=await account();cacheDisabled=true;try{images.clear();imageSizes.clear();documents.clear();snapshots.clear();editorBases.clear();await cache?.clear(id);}catch(error){cacheDisabled=false;throw error;}}
+async function cloudClearCache(){const id=await account();cacheDisabled=true;try{images.clear();imageSizes.clear();documents.clear();snapshots.clear();blobRecords.clear();blobRevisionProof.clear();editorBases.clear();await cache?.clear(id);}catch(error){cacheDisabled=false;throw error;}}
 function cloudResumeCache(){cacheDisabled=false;}
 async function cloudEmergencySnapshot(){
   if(!owner||!cache)throw Error('尚无已验证的本机账号缓存，无法离线导出待同步数据');

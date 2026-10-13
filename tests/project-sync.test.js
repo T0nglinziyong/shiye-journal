@@ -13,6 +13,15 @@ test('append-only import retries after an unrelated cloud revision',async()=>{
   await sync.flush();assert.equal(calls,1);assert.deepEqual(rows,[]);
 });
 const defer=()=>{let resolve;const promise=new Promise(r=>resolve=r);return {promise,resolve};};
+test('targeted pending inspection returns an isolated match without copying unrelated imports',async()=>{
+  const rows=[{record:{id:'batch-a',kind:'batch',payload:{operations:[{store:'blobs',action:'put',item:{id:'a',data:new Blob(['a'])}}]}},serial:1,baseRevision:0},
+    {record:{id:'batch-b',kind:'batch',payload:{operations:[{store:'blobs',action:'put',item:{id:'b',data:new Blob(['b'])}}]}},serial:2,baseRevision:0}];
+  const sync=createProjectSync({load:async()=>rows,write:async()=>{},commit:async()=>{},revision:()=>0});
+  let visited=0;
+  const found=await sync.inspectPending(entries=>{for(const row of entries){visited++;if(row.record.id==='batch-b')return row.record.payload.operations[0].item;}return null;});
+  assert.equal(visited,2);assert.equal(found.id,'b');found.id='changed';
+  assert.equal((await sync.pending())[1].record.payload.operations[0].item.id,'b');
+});
 test('project edits are durably staged before slow cloud commits, and newer edits are retained',async()=>{
   let rows=[],revision=0;const gate=defer(),commits=[];
   const q=createProjectSync({load:async()=>rows,write:async value=>{rows=structuredClone(value);},revision:()=>revision,commit:async record=>{commits.push(record.title);if(commits.length===1)await gate.promise;revision++;}});
@@ -24,7 +33,7 @@ test('failed network edits survive reload and cannot silently overwrite a differ
   let rows=[],revision=3;const q=createProjectSync({load:async()=>rows,write:async value=>{rows=value;},revision:()=>revision,commit:async()=>{throw Error('offline');}});
   await q.stage({id:'a',title:'unsent'});await assert.rejects(q.flush(),/offline/);assert.equal(rows[0].record.title,'unsent');
   let calls=0;revision=4;const reopened=createProjectSync({load:async()=>rows,write:async value=>{rows=value;},revision:()=>revision,commit:async()=>{calls++;}});
-  await assert.rejects(reopened.flush(),/云端版本已变化/);assert.equal(calls,0);assert.equal((await reopened.pending())[0].record.title,'unsent');
+  await reopened.flush();assert.equal(reopened.status().conflicts,1);assert.equal(reopened.status().error,null);assert.equal(calls,0);assert.equal((await reopened.pending())[0].record.title,'unsent');
 });
 test('local successful transactions advance pending base revisions without discarding them',async()=>{
   let rows=[{record:{id:'a'},serial:1,baseRevision:2}],revision=3;
@@ -143,9 +152,22 @@ test('unresolved change cannot stop independent later queued changes',async()=>{
     reconcile:async record=>record.id==='safe'?'rebase':'conflict',
     commit:async record=>{uploaded.push(record.id);revision++;}
   });
-  await assert.rejects(sync.flush(),/已继续同步其他资料/);
+  await sync.flush();
   assert.deepEqual(uploaded,['safe']);
   assert.deepEqual(rows.map(row=>row.record.id),['conflict']);
+  assert.equal(sync.status().conflicts,1);
+  assert.equal(sync.status().error,null);
+});
+
+test('unchanged remote revision is an unconfirmed upload, not a conflict',async()=>{
+  let rows=[];
+  const sync=createProjectSync({load:async()=>rows,reload:async()=>structuredClone(rows),
+    write:async next=>{rows=structuredClone(next);},revision:()=>7,
+    commit:async()=>{throw Error('conflict');},reconcile:async()=> 'rebase'});
+  await sync.stage({id:'draft'});
+  await assert.rejects(sync.flush(),/云端版本未变化/);
+  assert.equal(sync.status().conflicts,0);
+  assert.equal(rows.length,1);
 });
 
 
@@ -306,5 +328,6 @@ test('manual conflict choices preserve queue bytes until a reviewed serial is co
   if(choice==='cloud')assert.deepEqual(actual,[]);
   else{assert.equal(actual.length,1);assert.equal(actual[0].record.id,selected.id);
     assert.equal(actual[0].baseRevision,9);}
+  sync.pause();
  }
 });

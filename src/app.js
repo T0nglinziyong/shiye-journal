@@ -27,6 +27,7 @@ import {startCloudSession} from './entry.js';
 import {cloudClient,cloudEnabled,requireCloudUser} from './cloud-session.js';
 import {createSyncResumer} from './sync-resumer.js';
 import {describeSyncError} from './sync-browser-compat.js';
+import {explainUserError} from './user-facing-error.js';
 import {setCloudProjectPreview} from './cloud-store.js';
 import {snapshotDraft} from './draft-snapshot.js';
 import {saveManualArchive,restoreManualArchive} from './scene-archive.js';
@@ -160,12 +161,12 @@ const libraryHistory=[];
 function openLibraryAsset(id){libraryHistory.push({route:state.route,seriesID:state.seriesID,detailAssetID:state.detailAssetID});state.detailAssetID=id;route('assetDetail');}
 function libraryBack(){const previous=libraryHistory.pop();if(!previous){navigateBack('series');return;}navigationHistory.pop();state.seriesID=previous.seriesID;state.detailAssetID=previous.detailAssetID;route(previous.route,{back:true});}
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const toast=s=>{const el=document.querySelector('#toast');el.textContent=s;el.classList.add('show');clearTimeout(toast.timer);toast.timer=setTimeout(()=>el.classList.remove('show'),3500);};
+const toast=s=>{const el=document.querySelector('#toast');el.textContent=/can't find variable|is not defined|undefined is not an object|blob:|expected magic word/i.test(String(s))?explainUserError(s):s;el.classList.add('show');clearTimeout(toast.timer);toast.timer=setTimeout(()=>el.classList.remove('show'),3500);};
 const saveStatus=s=>{const label=cloudEnabled?({'已保存到本机':'已保存到云端','本机存储':'云端存储'}[s]||s):s;document.querySelector('#save-state').textContent=label;for(const el of document.querySelectorAll('.swift-auto-saved'))el.textContent=label;};
-const syncDisplay={pending:0,error:null,checking:true,localPending:false};
+const syncDisplay={pending:0,error:null,conflicts:0,checking:true,localPending:false};
 function updateSyncIndicator(){
   if(!cloudEnabled)return;
-  const conflict=/云端版本已变化|另一设备已更新|conflict/i.test(syncDisplay.error?.message||'');
+  const conflict=syncDisplay.conflicts>0||/云端版本已变化|另一设备已更新|conflict/i.test(syncDisplay.error?.message||'');
   const status=conflict?'conflict':syncDisplay.error?'error':navigator.onLine===false&&syncDisplay.pending?'offline':syncDisplay.checking?'checking':syncDisplay.pending||syncDisplay.localPending?'uploading':'synced';
   const label={conflict:'同步冲突',error:'待重试',offline:'待联网',checking:'核对中',uploading:'上传中',synced:'已同步'}[status];
   for(const button of document.querySelectorAll('.sync-indicator')){button.hidden=false;button.dataset.status=status;button.title=conflict?'其他设备修改了同一资料；本机待传内容仍保留，请先检查其他设备':syncDisplay.error?'上传未完成；点击重试：'+syncDisplay.error.message:label;button.setAttribute('aria-label',label);button.querySelector('.sync-indicator-label').textContent=label;}
@@ -196,6 +197,32 @@ const image=id=>staticSources.get(id)||
 const privateImages=mountPrivateImages({root:document.body,db,urls,fullView:img=>
   (state.route==='editor'&&!!img.closest('#canvas-page .canvas-object.material'))||
   (state.route==='assetDetail'&&!!img.closest('.detail-picture'))});
+let previewPrewarmEpoch=0;
+function prewarmOtherPages(){
+  const epoch=++previewPrewarmEpoch;
+  if(!cloudEnabled||navigator.connection?.saveData)return;
+  // Warm only a small cross-route window, after visible images have had time
+  // to load. previewBlob uses the account-scoped cache; no hidden <img> nodes
+  // or eager DOM image decoding are created here.
+  const ids=[
+    ...state.assets.filter(a=>!a.staticPath).slice(0,8).map(a=>a.blobId),
+    ...state.projects.slice(0,4).map(p=>p.isSnapshot?p.snapshotBlobId:
+      (p.drafts?.find(d=>d.id===p.activeDraftID)||p.drafts?.[0])?.coverImageID)
+  ].filter(Boolean);
+  let index=0;
+  const next=()=>{
+    if(epoch!==previewPrewarmEpoch||index>=ids.length||document.visibilityState!=='visible')return;
+    const run=()=>{
+      if(epoch!==previewPrewarmEpoch||document.visibilityState!=='visible')return;
+      void db.previewBlob(ids[index++],480).catch(()=>{}).finally(()=>{
+        if(epoch===previewPrewarmEpoch)setTimeout(next,300);
+      });
+    };
+    if('requestIdleCallback' in window)requestIdleCallback(run,{timeout:3000});
+    else setTimeout(run,250);
+  };
+  setTimeout(next,1500);
+}
 const renderLocalCoverBlob=project=>renderWorkCoverSnapshot(project,{
   resolveAsset:async id=>asset(id)||await db.get('assets',id),
   previewBlob:async(id,pixels)=>{
@@ -1290,7 +1317,7 @@ async function startAICreation(){
   if(!ids.length){state.aiProgress='请先在素材搭配中选择素材。';render();return;}
   const controller=new AbortController();aiController=controller;state.aiBusy=true;state.aiProgress='正在准备图像生成…';render();
   try{const referenceImages=cfg.sendPresetReferences?(await loadJournalTemplateReferences({context:{styles:sourceProject.styles,purposes:sourceProject.purposes,materials:assetsSnapshot.filter(asset=>ids.includes(asset.id))},userTemplates:state.userTemplates,db})).referenceImages:[];const blob=await generatePageImage({settings:cfg,project:sourceProject,draft:sourceDraft,assets:assetsSnapshot,ids,theme:prompt,createImage:modelImage,referenceImages,userTemplates:state.userTemplates,signal:controller.signal,onProgress:message=>{state.aiProgress=message;const el=view.querySelector('#ai-progress');if(el)el.textContent=message;}});if(controller.signal.aborted||state.accountId!==accountID)throw Error('创作已停止或账号已切换');await saveGeneratedImageSnapshot(blob,sourceProject);state.aiProgress='图片已由 GPT 图像模型直接生成，并保存到「画面快照」。当前可编辑画布未改变。';}
-  catch(error){state.aiProgress='图像生成失败：'+String(error.message||error).replace(/sk-[A-Za-z0-9_-]+/g,'[REDACTED]');}
+  catch(error){console.error(error);state.aiProgress='图像生成失败：'+explainUserError(error,'图像创作');}
   finally{if(aiController===controller)aiController=null;state.aiBusy=false;if(state.route==='editor')render();}
   return;
  }
@@ -1314,7 +1341,7 @@ async function startAICreation(){
   });
   assertRun();const completed=state.projects.find(item=>item.id===projectID);if(!completed)throw Error('原创作作品已不存在；结果未覆盖其他作品');const finalized=commitAIDraft(completed,{targetDraftID:commitTargetID,expectedDraft,generatedDraft:output.draft,newDraftID:uid()});commitTargetID=finalized.targetDraftID;candidateCreated||=finalized.candidate;completed.aiGenerated=true;completed.deliveryMode=cfg.deliveryMode;saveSpecificProject(completed);await flushSave();if(['image','pdf'].includes(cfg.deliveryMode)){await saveProjectSnapshot({...completed,projectDocumentPath:null,activeDraftID:commitTargetID},{format:cfg.deliveryMode==='pdf'?'application/pdf':'image/png'});completed.aiSnapshotCreated=true;saveSpecificProject(completed);}
   aiReport.outcome='completed';aiReport.budget=output.budget;state.aiProgress+=candidateCreated?'\n结构已完成并另存 AI 候选；原稿手改未被覆盖。':'\n结构已完成，草稿已保存。';state.aiProgress+=output.draft.agentRun?.visualReview==='model-reviewed'?' GPT 已检查最终画面，仍可继续手改。':' 最终视觉请核对。';
- }catch(error){aiReport.outcome=controller.signal.aborted?'stopped':'failed';aiReport.stopReason=error.code||aiReport.outcome;aiReport.budget=error.budget||null;aiReport.error=String(error.message||'创作中断').replace(/sk-[A-Za-z0-9_-]+/g,'[REDACTED]');state.aiProgress+='\n'+aiReport.error+'。已保留成功的步骤。';}
+ }catch(error){console.error(error);aiReport.outcome=controller.signal.aborted?'stopped':'failed';aiReport.stopReason=error.code||aiReport.outcome;aiReport.budget=error.budget||null;aiReport.error=explainUserError(error,'创作');state.aiProgress+='\n'+aiReport.error+'。已保留成功的步骤。';}
  finally{await recorder?.finish(aiReport.outcome).catch(()=>{});if(aiController===controller)aiController=null;state.aiBusy=false;if(state.route==='editor')render();}
 }
 async function flattenGeneratedPage(d,p=state.activeProject,persistProject=true){
@@ -1876,13 +1903,15 @@ async function previewCrop(){
   let regions=await detectPaperCandidates(source,b,6,{balanceLight:state.balanceLight,paperRectified:!!state.correctedBitmap,paperWidthMM:pw,paperHeightMM:ph,recognition:state.importRecognition||state.preferences.recognition,candidateDiscovery:state.preferences.candidateDiscovery||'legacy',recognitionPixels:state.preferences.recognitionPixels,recognitionPreprocess:recognitionPreprocessOptions(),recognitionPostprocess:recognitionPostprocessOptions(),mergeSharedCarrier:state.preferences.mergeSharedCarrier!==false,onDiagnostic:trace=>{record.recognitionDiagnostic=trace;},onProgress:p=>{
     if(state.route!=='import'||record!==state.importRecords[state.importIndex])return;
         const text=p.status==='inference'?'浏览器模型正在细化素材边缘…'
-          :p.status==='fallback'?(Number.isFinite(p.count)?`${p.count} 个模型结果不可靠，保留传统识别边缘，请检查`:'边缘精修未采用新结果，已保留原识别边缘')
+          :p.status==='fallback'?(Number.isFinite(p.count)?`${p.count} 个模型结果不可靠，保留传统识别边缘，请检查`:'边缘识别未完成，正在检查候选结果…')
           :p.status==='contour-refinement'?`正在细化 ${p.total||''} 个不确定素材边缘…`
           :p.status==='boundary-postprocess'?`正在进行 ${p.total||''} 个素材的边缘与孔洞后处理…`
           :'正在优化素材边缘…';
     state.importProcessing=text;const label=view.querySelector('.import-processing');if(label)label.textContent=text;toast(text);
   }});
   if(state.route!=='import'||record!==state.importRecords[state.importIndex])return;
+  if(regions.length&&regions.every(region=>!region.mask?.alpha?.length))
+    throw Error('素材边缘分割未完成，请联网刷新后重试识别；当前候选框尚未生成可用素材。');
   regions=filterAutomaticMaterialBoxes(regions,{paperWidthMM:pw,paperHeightMM:ph,enabled:state.paperSize!=='none'});
   // Swift leaves unreliable automatic results empty; work import still saves
   // the page as its locked base, without inventing a full-page material.
@@ -2033,7 +2062,7 @@ async function rasterize(d,scale,{preview=false}={}){
  const ids=[...new Set(editorEntry(d).filter(e=>e.kind==='material').map(e=>asset(e.value.assetID)).filter(a=>a&&!a.staticPath).map(a=>a.blobId))],release=privateImages.retain(ids);
  try{await Promise.all(ids.map(id=>privateImages.load(id,preview?false:true)));const result=await renderSceneCanvas(d,{scale,loadMaterialImage:async id=>{const a=asset(id);if(!a)throw Error('素材不在当前资料库');return decodeSceneImage(a.staticPath||(preview?imagePlaceholder(a.blobId):(urls.get(a.blobId)||image(a.blobId))));}});return result.canvas;}finally{release();}
 }
-async function receiveImportPhotos(files){const images=[...files].filter(f=>f.type.startsWith('image/')).slice(0,Math.max(0,12-state.importRecords.length));if(!images.length)return;try{saveActiveImportRecord();const start=state.importRecords.length;for(const file of images)state.importRecords.push({file,url:URL.createObjectURL(file),confirmed:false,selectedCandidates:[],selection:[],candidates:[]});state.importStep='inspect';state.route='import';await switchImportRecord(start,true);}catch(e){console.error(e);toast('照片处理失败：'+e.message);}}
+async function receiveImportPhotos(files){const images=[...files].filter(f=>f.type.startsWith('image/')).slice(0,Math.max(0,12-state.importRecords.length));if(!images.length)return;try{saveActiveImportRecord();const start=state.importRecords.length;for(const file of images)state.importRecords.push({file,url:URL.createObjectURL(file),confirmed:false,selectedCandidates:[],selection:[],candidates:[]});state.importStep='inspect';state.route='import';await switchImportRecord(start,true);}catch(e){console.error(e);toast(explainUserError(e,'照片处理'));}}
 fileInput.onchange=async()=>{const files=[...(fileInput.files||[])];fileInput.value='';await receiveImportPhotos(files);};
 workFileInput.onchange=async()=>{const file=workFileInput.files?.[0];workFileInput.value='';if(!file)return;if(file.type.startsWith('image/')){await receiveImportPhotos([file]);return;}
   try{await importEditableFile(file);}
@@ -2172,7 +2201,7 @@ window.addEventListener('shiye-project-conflict-copy',event=>{
   }
   toast('已保留其他设备原稿；当前修改正作为新的独立作品同步，请在作品页查看。');
 });
-window.addEventListener('shiye-project-sync',event=>{const {pending,error}=event.detail;syncDisplay.pending=pending;syncDisplay.error=error;syncDisplay.checking=false;if(!dirtyProjects.size&&!savingProjects)syncDisplay.localPending=false;updateSyncIndicator();if(error){saveStatus('待同步 · 修改已保留在本机');const message=error.name==='AbortError'||/abort|timed? ?out/i.test(error.message||'')?'网络请求中断，本机修改已保留，将自动重试同步':describeSyncError(error);if(lastSyncError!==message)toast(message);lastSyncError=message;}else{lastSyncError=null;saveStatus(pending?'修改已暂存 · 后台同步中':'已保存到云端');privateImages.retryMissing();}});
+window.addEventListener('shiye-project-sync',event=>{const {pending,error,conflicts=0}=event.detail;syncDisplay.pending=pending;syncDisplay.error=error;syncDisplay.conflicts=conflicts;syncDisplay.checking=false;if(!dirtyProjects.size&&!savingProjects)syncDisplay.localPending=false;updateSyncIndicator();if(error){saveStatus('待同步 · 修改已保留在本机');const message=error.name==='AbortError'||/abort|timed? ?out/i.test(error.message||'')?'网络请求中断，本机修改已保留，将自动重试同步':describeSyncError(error);if(lastSyncError!==message)toast(message);lastSyncError=message;}else{lastSyncError=null;saveStatus(conflicts?'部分资料有冲突 · 其他资料已继续同步':pending?'修改已暂存 · 后台同步中':'已保存到云端');privateImages.retryMissing();}});
 let cloudCheck,cloudCheckAt=0,cloudSessionReady=false,cloudCheckAgain=false;
 let syncPausedByUser=false,resetWorkflowActive=false;
 const cloudResumer=createSyncResumer({flush:()=>db.flushProjects({background:true}),canRun:()=>cloudEnabled&&cloudSessionReady&&navigator.onLine!==false,onError:error=>console.warn('后台同步待重试',error?.message)});
@@ -2352,11 +2381,11 @@ document.querySelectorAll('.main-nav button').forEach(b=>b.onclick=()=>{
   }else route(b.dataset.route);
 });
 document.querySelector('#top-basket').onclick=()=>route('matching');document.querySelector('#top-settings').onclick=()=>route('settings');
-async function init(user,{resetPending=false,afterAccountReset=false}={}){let cachedShown=false;cloudSessionReady=!resetPending;if(resetPending)cloudResumer.suspend();const accountId=user?.id||'browser';if(state.accountId&&state.accountId!==accountId){matchingScrollMemory=null;Object.assign(lastMaterialLocation,{route:'series',seriesID:'all',libraryTab:'series'});parity.libraryTab='series';deferredSyncedPreferences=null;deferredSyncedAISettings=null;clearTimeout(matchingDefaultsTimer);matchingDefaultsTimer=null;matchingDefaultsPending=false;matchingDefaultsLocalEdited=false;cloudMatchingDefaults=null;assetOrganization.clear();clearJournalTemplateImages();clearJournalPresetImages();state.userTemplates=[];}state.accountId=accountId;try{
+async function init(user,{resetPending=false,afterAccountReset=false}={}){previewPrewarmEpoch++;let cachedShown=false;cloudSessionReady=!resetPending;if(resetPending)cloudResumer.suspend();const accountId=user?.id||'browser';if(state.accountId&&state.accountId!==accountId){matchingScrollMemory=null;Object.assign(lastMaterialLocation,{route:'series',seriesID:'all',libraryTab:'series'});parity.libraryTab='series';deferredSyncedPreferences=null;deferredSyncedAISettings=null;clearTimeout(matchingDefaultsTimer);matchingDefaultsTimer=null;matchingDefaultsPending=false;matchingDefaultsLocalEdited=false;cloudMatchingDefaults=null;assetOrganization.clear();clearJournalTemplateImages();clearJournalPresetImages();state.userTemplates=[];}state.accountId=accountId;try{
   await db.storageMode();state.selfHosted=db.isSameOriginServer();
   // startCloudSession has validated Auth and the allowlist before this runs.
-  const cached=await db.cachedCollections();if(cached){Object.assign(state,cached);state.accountId=accountId;await restorePendingProjects();for(const a of state.assets)if(a.staticPath)staticSources.set(a.blobId,a.staticPath);render();cachedShown=true;saveStatus('本机缓存 · 正在核对云端');}
-  const initialSync=await db.refreshCloud();if(initialSync?.changed)privateImages.invalidate(initialSync.allBlobs?undefined:initialSync.blobIDs);await refresh({background:cachedShown,skipCloudRefresh:true});if(!resetPending&&!afterAccountReset)void purgeExpiredTrash();await matchingSession.restore();if(cloudMatchingDefaults)applyMatchingDefaults(state,cloudMatchingDefaults);editableImportReady=true;void consumeEditableHandles();if('serviceWorker' in navigator&&location.protocol==='https:'){
+  const cached=await db.cachedCollections();if(cached){Object.assign(state,cached);state.accountId=accountId;await restorePendingProjects();for(const a of state.assets)if(a.staticPath)staticSources.set(a.blobId,a.staticPath);render();cachedShown=true;saveStatus('本机缓存 · 正在核对云端');if(!resetPending)prewarmOtherPages();}
+  const initialSync=await db.refreshCloud();if(initialSync?.changed)privateImages.invalidate(initialSync.allBlobs?undefined:initialSync.blobIDs);await refresh({background:cachedShown,skipCloudRefresh:true});if(!resetPending)prewarmOtherPages();if(!resetPending&&!afterAccountReset)void purgeExpiredTrash();await matchingSession.restore();if(cloudMatchingDefaults)applyMatchingDefaults(state,cloudMatchingDefaults);editableImportReady=true;void consumeEditableHandles();if('serviceWorker' in navigator&&location.protocol==='https:'){
     void import('./app-update.js').then(({registerSafeUpdate})=>registerSafeUpdate({
       flushLocal:flushSave,
       isBusy:()=>!!(state.importProcessing||state.aiBusy||savingProjects||dirtyProjects.size),

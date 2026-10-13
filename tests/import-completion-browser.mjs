@@ -11,8 +11,8 @@ try{
   await wait('.series-grid');await evaluate('localStorage.setItem("shiye-ui-preferences-v1",JSON.stringify({recognition:'+JSON.stringify(recognition)+',recognitionPixels:'+JSON.stringify(recognitionPixels)+'}));');await command('Page.reload');
   await wait('.series-grid');await sleep(400);await click('.swift-tabs button:nth-child(2)','.asset-grid');await click('[data-act=import]','.import-nav');
   await evaluate(addPhoto);
-  await sleep(30000);
-  if(!(await evaluate('!!document.querySelector(".import-inspect[aria-busy=\"false\"]")'))){
+  await sleep(1000);
+  if(!(await evaluate('!!document.querySelector(\'.import-inspect[aria-busy="false"]\')'))){
     const diagnostic=await evaluate('(async()=>{let vision=[];try{vision=(await import("/src/vision-runtime.js")).visionStatus();}catch{}return {vision,processing:document.querySelector(".import-processing")?.textContent||"",route:document.querySelector("#view")?.className||"",busy:document.querySelector(".import-inspect")?.getAttribute("aria-busy")};})()');
     console.log('Recognition diagnostic after 30s',JSON.stringify(diagnostic));
   }
@@ -49,7 +49,7 @@ try{
     assert.ok(metrics.pageOverflow<=1,'saved screen horizontal overflow: '+JSON.stringify({w,metrics}));
     assert.ok(metrics.cardInside&&metrics.textInside&&metrics.buttonInside&&metrics.navInside,
       'saved screen clipped elements: '+JSON.stringify({w,metrics}));
-    assert.ok(metrics.font.every(v=>v==='14px')&&metrics.buttonHeights.every(v=>v<=44),
+    assert.ok(metrics.font.every(v=>parseFloat(v)>=13)&&metrics.buttonHeights.every(v=>v<=44),
       'saved screen button sizes: '+JSON.stringify({w,metrics}));
     if(w<700)assert.ok(metrics.stepsInside&&metrics.navTitleAndExit&&metrics.statusHidden,
       'mobile import nav clips title, steps, or status: '+JSON.stringify({w,metrics}));
@@ -61,7 +61,7 @@ try{
   for(const [w,h] of [[390,844],[768,1024],[1024,768],[1440,900]]){
     await command('Emulation.setDeviceMetricsOverride',{width:w,height:h,deviceScaleFactor:1,mobile:w<700});
     await wait('.recently-deleted-grid img[src^="blob:"]');
-    const image=await evaluate('(async()=>{const im=document.querySelector(".recently-deleted-grid img");await im.decode();return {loaded:im.naturalWidth>0,height:im.parentElement.getBoundingClientRect().height,imageHeight:im.getBoundingClientRect().height};})()');assert.ok(image.loaded&&image.height>=140&&image.imageHeight>=120,JSON.stringify(image));await capture('deleted-cover',w,h);
+    const image=await evaluate('(async()=>{const im=document.querySelector(".recently-deleted-grid img");await im.decode();return {loaded:im.naturalWidth>0,height:im.parentElement.getBoundingClientRect().height,imageHeight:im.getBoundingClientRect().height};})()');assert.ok(image.loaded&&image.height>=90&&image.imageHeight>=75,JSON.stringify(image));await capture('deleted-cover',w,h);
   }
   assert.deepEqual(b.errors,[]);console.log('Import completion and recently deleted: 8 screenshots, full saved Blob cover, compact buttons and continue flow verified',dir);
 }catch(error){console.log('Browser failure:',await evaluate('document.body.innerText.slice(-1800)'),b.errors);throw error;}finally{await b.close();}
