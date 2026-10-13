@@ -5,16 +5,17 @@ const clamp=(x,a,b)=>Math.min(b,Math.max(a,x));
 // This is boundary evidence, NOT probability of a correct mask. No shape
 // labels/class IDs enter the decision; provisional threshold is deliberately
 // conservative until pixel-level ground truth is available.
-export function boundaryConfidence(cv,p,region){
- const width=p.width,height=p.height,poly=region?.physicalBoundary;
- if(!Array.isArray(poly)||poly.length<3)return {score:0,edge:0,continuity:0,contrast:0,stability:0,reason:'no-physical-contour'};
- const src=cv.matFromArray(height,width,cv.CV_8UC4,p.pixels),
+export function createBoundaryConfidenceContext(cv,p){
+ const width=p.width,height=p.height,
+   src=cv.matFromArray(height,width,cv.CV_8UC4,p.pixels),
    gray=new cv.Mat(),maps=[];
- try{
-   cv.cvtColor(src,gray,cv.COLOR_RGBA2GRAY);
-   for(const [lo,hi] of [[10,30],[20,60],[40,120]]){
-     const m=new cv.Mat();cv.Canny(gray,m,lo,hi);maps.push(m);
-   }
+ cv.cvtColor(src,gray,cv.COLOR_RGBA2GRAY);
+ for(const [lo,hi] of [[10,30],[20,60],[40,120]]){
+   const m=new cv.Mat();cv.Canny(gray,m,lo,hi);maps.push(m);
+ }
+ const evaluate=region=>{
+   const poly=region?.physicalBoundary;
+   if(!Array.isArray(poly)||poly.length<3)return {score:0,edge:0,continuity:0,contrast:0,stability:0,reason:'no-physical-contour'};
    let total=0,edges=[0,0,0],contrasts=0,gradients=0,weak=0,maxWeak=0,area=0;
    const indices=poly.map(([x,y])=>[x*width,y*height]);
    for(let j=0;j<indices.length;j++){
@@ -67,7 +68,12 @@ export function boundaryConfidence(cv,p,region){
    const score=clamp(.29*edge+.19*gradient+.19*contrast+.14*continuity+
      .11*stability+.08*clamp(fill/.55,0,1)-.12*Math.max(0,clipping-.7),0,1);
    return {score,edge,contrast,gradient,continuity,stability,fill,samples:total};
- }finally{for(const m of maps)m.delete();gray.delete();src.delete();}
+ };
+ return {evaluate,close(){for(const m of maps)m.delete();gray.delete();src.delete();}};
+}
+export function boundaryConfidence(cv,p,region){
+ const ctx=createBoundaryConfidenceContext(cv,p);
+ try{return ctx.evaluate(region);}finally{ctx.close();}
 }
 
 function physicalRegion(cv,p,box){
@@ -119,11 +125,11 @@ function physicalRegion(cv,p,box){
 // physical candidate path. Adaptive may attempt MorphGAC only if confidence
 // is low, and keeps the initial candidate when contraction is unsupported.
 export function segmentPhysicalOrAdaptive(cv,p){
- const output=[];
- for(const box of p.boxes||[]){
+ const output=[],qualityContext=createBoundaryConfidenceContext(cv,p);
+ try{for(const box of p.boxes||[]){
    const physical=physicalRegion(cv,p,box);
    if(!physical){output.push({...box,segmentationFailed:true,needsBoundaryReview:true});continue;}
-   const quality=boundaryConfidence(cv,p,box),candidate={
+   const quality=qualityContext.evaluate(box),candidate={
      ...physical,boundaryConfidence:quality.score,boundaryEvidence:quality,
      needsBoundaryReview:quality.score<.46||!box.physicalBoundary
    };
@@ -137,14 +143,19 @@ export function segmentPhysicalOrAdaptive(cv,p){
    const morphPixels=alternate.mask.alpha.reduce((n,v)=>n+(v>127),0);
    const physicalPixels=physical.mask.alpha.reduce((n,v)=>n+(v>127),0);
    const retention=morphPixels/Math.max(1,physicalPixels);
-   // A drastic contraction is suspect even when interior lettering has
-   // stronger gradients. Fallback contours have no reliable reference.
-   const takeMorph=!box.physicalBoundary||retention>=.92;
+   const contour=alternate.mask.polygons?.[0]?.map(([px,py])=>[
+     alternate.x+px/p.width,alternate.y+py/p.height]);
+   const morphQuality=qualityContext.evaluate({physicalBoundary:contour,
+     x:alternate.x,y:alternate.y,w:alternate.w,h:alternate.h});
+   // Compare independently scored contours, not shape class or only area.
+   // The contraction guard prevents swapping paper for interior printing.
+   const takeMorph=!box.physicalBoundary||
+     retention>=.88&&morphQuality.score>quality.score+.06;
    output.push(takeMorph?
-     {...alternate,boundaryConfidence:quality.score,
-       boundaryAlternative:'morphgac',needsBoundaryReview:!box.physicalBoundary}:
-     {...candidate,boundaryAlternative:'morphgac-rejected-shrink',
-       needsBoundaryReview:true});
+     {...alternate,boundaryConfidence:morphQuality.score,boundaryEvidence:morphQuality,
+       boundaryAlternative:'morphgac',needsBoundaryReview:morphQuality.score<.46}:
+     {...candidate,boundaryAlternative:'morphgac-not-better',
+       alternativeConfidence:morphQuality.score,needsBoundaryReview:true});
  }
- return output;
+ return output;}finally{qualityContext.close();}
 }
