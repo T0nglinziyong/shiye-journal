@@ -60,9 +60,9 @@ import {manualPhysicalRegion} from './manual-import-geometry.js';
 import {seriesCovers,usedAssetIDs,markProjectAssetsUsed} from './library-model.js';
 import {renderSeriesContents} from './series-contents.js';
 import {showSeriesEditor} from './series-editor.js';
-import {mountWorkflowControls,mountImportControls} from './workflow-ui.js';
+import {mountWorkflowControls,mountImportControls,refreshWorkPreviews} from './workflow-ui.js';
 import {patchImportInspection} from './import-incremental.js';
-import {patchMaterialCatalog} from './catalog-incremental.js';
+import {patchMaterialCatalog,patchWorksCatalog} from './catalog-incremental.js';
 import {patchAISettingsModel} from './settings-incremental.js';
 import {renderImportInspection,renderImportReview} from './import-workspace-ui.js';
 import {showCutoutEditor} from './cutout-editor.js';
@@ -116,7 +116,7 @@ import {applyCatalogPage,resetCatalogPage} from './catalog-pagination.js';
 import {AI_PROVIDERS,supportsVision,loadAISettings,saveAISettings} from './ai-settings.js';
 import {DELIVERY_OPTIONS,deliveryProfile} from './ai-delivery.js';
 import {classifyCreationFile} from './creation-methods.js';
-import {mountParityControls as mountSwiftParity} from './parity-ui.js';
+import {mountParityControls as mountSwiftParity,bindWorksCards} from './parity-ui.js';
 import {parity} from './parity-ui.js';
 import {journalTemplateRecords} from './journal-template-ui.js';
 import {clearJournalTemplateImages} from './journal-template-ui.js';
@@ -354,6 +354,28 @@ function render(){
     backgroundViewPending=false;
     return;
   }
+  // Works changes update only affected cards without replacing sticky filters
+  // or destroying the long-press/selection listeners of untouched projects.
+  if(state.route==='works'&&view.dataset.renderedRoute==='works'&&
+     view.dataset.renderedWorkTab===parity.workTab&&!parity.selectionMode&&
+     !['trash','templates'].includes(parity.workTab)){
+    const patch=patchWorksCatalog(view,renderWorks());
+    if(patch){
+      bindPage({partial:true});
+      if(patch.touched.length){
+        bindWorksCards({state,view,handle},patch.touched);
+        refreshWorkPreviews({state,view});
+        reusePagePreviews({view,state});
+        view.workCoverDispose?.();
+        view.localWorkCoverDispose?.();
+        view.workCoverDispose=workCoverBackfill.observe(view);
+        view.localWorkCoverDispose=localWorkCovers.observe(view);
+      }
+      view.catalogRefresh?.();
+      backgroundViewPending=false;
+      return;
+    }
+  }
   // Passive catalog changes reconcile by material ID while preserving
   // decoded thumbnails, search focus and pagination state.
   if(state.route==='library'&&view.dataset.renderedRoute==='library'&&
@@ -401,6 +423,7 @@ function render(){
   view.dataset.renderedImportStep=state.route==='import'?state.importStep:'';
   view.dataset.renderedImportMode=state.route==='import'?state.importMode:'';
   view.dataset.renderedLibraryTab=state.route==='library'?parity.libraryTab:'';
+  view.dataset.renderedWorkTab=state.route==='works'?parity.workTab:'';
   view.dataset.renderedSettingsSection=state.route==='settings'?state.settingsSection||'':'';
   for(const fresh of view.querySelectorAll('img[src]')){const old=imageNodes.take(fresh);if(old)fresh.replaceWith(old);}
   if(importQueueScroll!==null){
@@ -522,7 +545,7 @@ function workCover(d,priority=false,snapshotOnly=false,projectID=null){
  return nodes(d.layers||[]);
 
 }
-function renderWorks(){const list=state.projects.filter(p=>!isUntouchedLegacyExample(p)).sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt));return `<div class="works-page">${head('我的作品','留下完成的创作，继续记录新的灵感。')}<button hidden data-act="new-project" id="work-create"></button><button hidden data-act="import-work" id="work-import"></button><div class="filters"><input type="search" id="work-search" placeholder="搜索作品名称或标签"><select id="work-kind"><option value="all">全部类型</option><option value="created">手动创作</option><option value="imported">导入作品</option></select><select id="work-status"><option value="all">全部状态</option><option value="used">已使用</option><option value="unused">未使用</option></select><select id="work-sort"><option value="access-desc">最近访问 · 降序</option><option value="access-asc">最近访问 · 升序</option><option value="updated-desc">最近修改 · 降序</option><option value="updated-asc">最近修改 · 升序</option><option value="name-asc">名称 · 升序</option><option value="name-desc">名称 · 降序</option></select><span>${list.length} 项</span></div><div class="grid works-grid">${list.map((p,index)=>`<button class="card" data-act="open-project" data-id="${p.id}"><div class="card-image"><div class="thumb-sheet" style="width:75%;background:${esc(p.drafts[0]?.paperColor||'#fff')}">${p.isSnapshot?`<img class="work-reference" loading="${index<4?'eager':'lazy'}" decoding="async" src="${image(p.snapshotBlobId)}" alt="${esc(p.title)} 快照">`:p.coverStaticPath&&p.updatedAt===p.coverBaselineUpdatedAt?`<img class="work-reference" loading="${index<4?'eager':'lazy'}" src="${p.coverStaticPath}" alt="${esc(p.title)} 完整预览">`:workCover(p.drafts.find(d=>d.id===p.activeDraftID)||p.drafts[0],index<4,true,p.id)}</div></div><div class="card-body"><h3>${esc(p.title)}</h3><p>⊙　${p.isSnapshot?'画面快照':p.isDraft?'草稿':'可编辑作品'} <span>${new Date(p.updatedAt).toLocaleDateString()}</span></p></div></button>`).join('')}</div></div>`;}
+function renderWorks(){const list=state.projects.filter(p=>!isUntouchedLegacyExample(p)).sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt));return `<div class="works-page">${head('我的作品','留下完成的创作，继续记录新的灵感。')}<button hidden data-act="new-project" id="work-create"></button><button hidden data-act="import-work" id="work-import"></button><div class="filters"><input type="search" id="work-search" placeholder="搜索作品名称或标签"><select id="work-kind"><option value="all">全部类型</option><option value="created">手动创作</option><option value="imported">导入作品</option></select><select id="work-status"><option value="all">全部状态</option><option value="used">已使用</option><option value="unused">未使用</option></select><select id="work-sort"><option value="access-desc">最近访问 · 降序</option><option value="access-asc">最近访问 · 升序</option><option value="updated-desc">最近修改 · 降序</option><option value="updated-asc">最近修改 · 升序</option><option value="name-asc">名称 · 升序</option><option value="name-desc">名称 · 降序</option></select><span>${list.length} 项</span></div><div class="grid works-grid">${list.map((p,index)=>`<button class="card" data-work-revision="${esc(JSON.stringify([p.title,p.updatedAt,p.lastOpenedAt,p.isSnapshot,p.isDraft,p.isUsed,p.isFavorite,p.coverStaticPath,p.coverBaselineUpdatedAt,p.snapshotBlobId,p.activeDraftID]))}" data-act="open-project" data-id="${p.id}"><div class="card-image"><div class="thumb-sheet" style="width:75%;background:${esc(p.drafts[0]?.paperColor||'#fff')}">${p.isSnapshot?`<img class="work-reference" loading="${index<4?'eager':'lazy'}" decoding="async" src="${image(p.snapshotBlobId)}" alt="${esc(p.title)} 快照">`:p.coverStaticPath&&p.updatedAt===p.coverBaselineUpdatedAt?`<img class="work-reference" loading="${index<4?'eager':'lazy'}" src="${p.coverStaticPath}" alt="${esc(p.title)} 完整预览">`:workCover(p.drafts.find(d=>d.id===p.activeDraftID)||p.drafts[0],index<4,true,p.id)}</div></div><div class="card-body"><h3>${esc(p.title)}</h3><p>⊙　${p.isSnapshot?'画面快照':p.isDraft?'草稿':'可编辑作品'} <span>${new Date(p.updatedAt).toLocaleDateString()}</span></p></div></button>`).join('')}</div></div>`;}
 function current(){const p=state.activeProject,d=p?.drafts.find(d=>d.id===state.activeDraft)||p?.drafts[0];return d?attachSceneV2(d):undefined;}
 function editorEntry(d,rendering=false){return rendering?sceneRenderEntries(d):sceneLayerEntries(d,{ink:false});}
 function vectorMarkup(i){const paths=(i.vectorPaths||[]).map(points=>{const d=points.filter(p=>Array.isArray(p)&&p.length===2&&p.every(Number.isFinite)).map((p,n)=>`${n?'L':'M'}${p[0]} ${p[1]}`).join(' ');return d?`<path d="${d} Z"/>`:'';}).join('');return `<svg aria-hidden="true" viewBox="0 0 1 1" preserveAspectRatio="none" style="width:100%;height:100%;overflow:visible;fill:${esc(i.fill||'transparent')};stroke:${esc(i.stroke||'none')};stroke-width:${Math.max(0,Number(i.lineWidth)||0)/Math.max(i.width,i.height,1)}">${paths}</svg>`;}
