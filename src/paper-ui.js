@@ -1,5 +1,5 @@
+import {ComponentLifetime} from './ui-component-lifecycle.js';
 const defaults=()=>[{x:.03,y:.03},{x:.97,y:.03},{x:.97,y:.97},{x:.03,y:.97}];
-let observer;
 export function resetPaperCorrection(state){
   state.correctedBitmap?.close?.();state.correctedBitmap=null;
   if(state.correctedURL)URL.revokeObjectURL(state.correctedURL);
@@ -9,10 +9,10 @@ export function resetPaperCorrection(state){
   state.paperPreviewURL=null;state.showCorrectionPreview=false;state.paperPreviewApplied=false;
 }
 export function mountPaperCorrection({state,view,saveActiveImportRecord}){
-  observer?.disconnect();observer=null;
-  if(!state.importFile||state.showManualBox||state.showCorrectionPreview)return;
+  if(!state.importFile||state.showManualBox||state.showCorrectionPreview)return null;
   const base=view.querySelector('#crop-preview'),bitmap=state.importBitmap;if(!base||!bitmap)return;
   state.paperCorners||=defaults();
+  const lifetime=new ComponentLifetime();
   const overlay=document.createElement('div');overlay.className='paper-corner-overlay';base.append(overlay);
   const paint=()=>{
     if(!base.isConnected)return;
@@ -27,5 +27,7 @@ export function mountPaperCorrection({state,view,saveActiveImportRecord}){
     overlay.querySelector('svg').setAttribute('viewBox','0 0 '+width+' '+height);position();
   };
   const position=()=>{const width=overlay.clientWidth,height=overlay.clientHeight;overlay.querySelector('polygon').setAttribute('points',state.paperCorners.map(p=>p.x*width+','+p.y*height).join(' '));overlay.querySelectorAll('[data-corner]').forEach(b=>{const p=state.paperCorners[+b.dataset.corner];b.style.left=Math.max(15,Math.min(width-15,p.x*width))+'px';b.style.top=Math.max(15,Math.min(height-15,p.y*height))+'px';});};
-  requestAnimationFrame(paint);if(typeof ResizeObserver!=='undefined'){observer=new ResizeObserver(paint);observer.observe(base);}
+  lifetime.frame(paint);
+  lifetime.resize(base,paint);
+  return ()=>{lifetime.dispose();overlay.remove();};
 }

@@ -1,3 +1,4 @@
+import {reconcileLayerBranches} from './ui-keyed-dom.js';
 import {openPopover} from './swift-popover.js';
 import {createIcon} from './icons.js';
 import {sceneLayerEntries,sceneGroupMembers,findSceneNode,moveSceneNode,groupSceneLayers,ungroupSceneLayers} from './scene-model.js';
@@ -40,6 +41,7 @@ export function openEditorLayerTree(anchor,{draft,state,view,checkpoint,saveProj
  const status=document.createElement('p');status.className='scene-layer-tree-status';status.setAttribute('role','status');
  p.content.append(menu,list,status);
  const expanded=new Set(),nodesSeen=new Set();
+ let lastTreeReferences=new Map();
  let multiMode=false,drag=null;
  const button=(label,run,className='')=>{const b=document.createElement('button');b.type='button';b.className=className;b.textContent=label;b.addEventListener('click',e=>{e.stopPropagation();run(e);});return b;};
  const name=node=>node.type==='group'?node.name||'未命名组合':node.type==='material'?asset(node.assetID)?.title||'素材':node.type==='text'?node.content?.slice(0,27)||'文字':node.type==='ink'?'手写笔迹':node.kind||'图形';
@@ -153,11 +155,12 @@ export function openEditorLayerTree(anchor,{draft,state,view,checkpoint,saveProj
   };
  };
  function draw(){
-   const scroll=list.scrollTop;list.replaceChildren();
+   const scroll=list.scrollTop,staging=document.createElement('div'),nextReferences=new Map();
    const leafCount=record().length;
    status.textContent=leafCount+' 个可编辑图层 · 拖动 ≡ 改变层级；放在组合中部可移入组合';
    const visit=(nodes,host,level=1)=>{
      for(const node of visibleOrder(nodes)){
+       nextReferences.set(node.id,node);
        const branch=document.createElement('div');branch.className='scene-layer-branch';
        const row=document.createElement('div');row.className='canvas-layer-row scene-layer-node';row.dataset.sceneNode=node.id;row.dataset.layerId=node.id;
        row.setAttribute('role','treeitem');row.setAttribute('aria-level',String(level));
@@ -189,7 +192,9 @@ export function openEditorLayerTree(anchor,{draft,state,view,checkpoint,saveProj
    };
    const initial=sceneLayerOutline(draft.layers).filter(n=>n.type==='group').map(n=>n.id);
    for(const id of initial)if(!nodesSeen.has(id)){expanded.add(id);nodesSeen.add(id);}
-   visit(draft.layers,list);
+   visit(draft.layers,staging);
+   reconcileLayerBranches(list,staging,lastTreeReferences,nextReferences);
+   lastTreeReferences=nextReferences;
    list.scrollTop=scroll;p.position();drawToolbar();
  }
  draw();

@@ -60,7 +60,11 @@ import {manualPhysicalRegion} from './manual-import-geometry.js';
 import {seriesCovers,usedAssetIDs,markProjectAssetsUsed} from './library-model.js';
 import {renderSeriesContents} from './series-contents.js';
 import {showSeriesEditor} from './series-editor.js';
-import {mountWorkflowControls} from './workflow-ui.js';
+import {mountWorkflowControls,mountImportControls,refreshWorkPreviews} from './workflow-ui.js';
+import {patchImportInspection} from './import-incremental.js';
+import {patchMaterialCatalog,patchWorksCatalog} from './catalog-incremental.js';
+import {patchAISettingsModel} from './settings-incremental.js';
+import {syncBusyControls} from './ui-disabled-state.js';
 import {renderImportInspection,renderImportReview} from './import-workspace-ui.js';
 import {showCutoutEditor} from './cutout-editor.js';
 import {decodeImageBlob} from './image-blob-decoder.js';
@@ -113,7 +117,7 @@ import {applyCatalogPage,resetCatalogPage} from './catalog-pagination.js';
 import {AI_PROVIDERS,supportsVision,loadAISettings,saveAISettings} from './ai-settings.js';
 import {DELIVERY_OPTIONS,deliveryProfile} from './ai-delivery.js';
 import {classifyCreationFile} from './creation-methods.js';
-import {mountParityControls as mountSwiftParity} from './parity-ui.js';
+import {mountParityControls as mountSwiftParity,bindWorksCards} from './parity-ui.js';
 import {parity} from './parity-ui.js';
 import {journalTemplateRecords} from './journal-template-ui.js';
 import {clearJournalTemplateImages} from './journal-template-ui.js';
@@ -324,9 +328,10 @@ if(state.route==='editor'&&name!=='editor'&&aiController)aiController.abort(Erro
     queueMicrotask(()=>backgroundCloudCheck({force:true}));
 }
 function imgTag(a,priority=false){const src=a&&(image(a.blobId)||a.staticPath),eager=priority===true;return src?`<img data-asset-image-id="${esc(a.id)}" loading="${eager?'eager':'lazy'}" ${eager?'fetchpriority="high" ':''}decoding="async" src="${esc(src)}" alt="${esc(a.title)}">`:'<span>无预览</span>';}
-function assetCard(a){return `<button class="card" data-act="detail" data-id="${a.id}"><div class="card-image">${imgTag(a)}</div><div class="card-body"><h3>${esc(a.title)}${a.isFavorite?'<span class="card-favorite" aria-label="已收藏">♥</span>':''}</h3><p>${esc(kindName(a.kind))} · ${a.physicalWidthMM?`${fmt(a.physicalWidthMM)} × ${fmt(a.physicalHeightMM)} mm`:'尺寸待确认'}</p><span class="chip ${a.reviewStatus==='ready'?'':'warn'}">${a.reviewStatus==='ready'?'已整理':'待检查'}</span></div></button>`;}
+function assetCard(a){const revision=esc(JSON.stringify([a.title,a.kind,a.physicalWidthMM,a.physicalHeightMM,a.reviewStatus,a.isFavorite,a.blobId]));return `<button class="card" data-card-revision="${revision}" data-act="detail" data-id="${a.id}"><div class="card-image">${imgTag(a)}</div><div class="card-body"><h3>${esc(a.title)}${a.isFavorite?'<span class="card-favorite" aria-label="已收藏">♥</span>':''}</h3><p>${esc(kindName(a.kind))} · ${a.physicalWidthMM?`${fmt(a.physicalWidthMM)} × ${fmt(a.physicalHeightMM)} mm`:'尺寸待确认'}</p><span class="chip ${a.reviewStatus==='ready'?'':'warn'}">${a.reviewStatus==='ready'?'已整理':'待检查'}</span></div></button>`;}
 const fmt=n=>Number(n).toFixed(1).replace(/\.0$/,'');
 function head(title,subtitle,actions=''){return `<div class="view-head unified-page-heading"><div class="unified-heading-copy"><span class="eyebrow">FROM YOUR DESK TO YOUR PAGES</span><h1>${title}</h1></div><div class="actions">${actions}</div></div>`;}
+const boundPageActions=new WeakSet();
 function render(){
   // Keep the import photo queue at the exact scroll position while the whole
   // view is replaced on every photo switch, load-progress update and confirm.
@@ -341,13 +346,90 @@ function render(){
   };
   document.body.classList.toggle('editing',state.route==='editor');document.body.dataset.backdrop=state.preferences.backdrop;document.querySelectorAll('.main-nav button').forEach(b=>b.classList.toggle('active',b.dataset.route===state.route||(b.dataset.route==='library'&&['series','import'].includes(state.route))));document.querySelector('#basket-count').textContent=state.basket.length;
   if(state.route==='editor'&&refreshCanvas())return;
+  // Provider changes affect the model connector, not the rest of Settings.
+  if(state.route==='settings'&&state.settingsSection==='AI 与创作'&&
+     view.dataset.renderedRoute==='settings'&&
+     view.dataset.renderedSettingsSection===state.settingsSection&&
+     patchAISettingsModel(view,renderSettings())){
+    bindPage({partial:true});
+    backgroundViewPending=false;
+    return;
+  }
+  // Works changes update only affected cards without replacing sticky filters
+  // or destroying the long-press/selection listeners of untouched projects.
+  if(state.route==='works'&&view.dataset.renderedRoute==='works'&&
+     view.dataset.renderedWorkTab===parity.workTab&&!parity.selectionMode&&
+     !['trash','templates'].includes(parity.workTab)){
+    const patch=patchWorksCatalog(view,renderWorks());
+    if(patch){
+      bindPage({partial:true});
+      if(patch.touched.length){
+        bindWorksCards({state,view,handle},patch.touched);
+        reusePagePreviews({view,state});
+        refreshWorkPreviews({state,view});
+        view.workCoverDispose?.();
+        view.localWorkCoverDispose?.();
+        view.workCoverDispose=workCoverBackfill.observe(view);
+        view.localWorkCoverDispose=localWorkCovers.observe(view);
+      }
+      view.catalogRefresh?.();
+      backgroundViewPending=false;
+      return;
+    }
+  }
+  // Passive catalog changes reconcile by material ID while preserving
+  // decoded thumbnails, search focus and pagination state.
+  if(state.route==='library'&&view.dataset.renderedRoute==='library'&&
+     view.dataset.renderedLibraryTab===parity.libraryTab&&!parity.selectionMode&&
+     !state.addingToSeries){
+    const patch=patchMaterialCatalog(view,renderLibrary());
+    if(patch){
+      bindPage({partial:true});
+      updateLibraryResults();
+      backgroundViewPending=false;
+      return;
+    }
+  }
+  // Preserve photo, quad handles and decoded preview DOM while recognition
+  // progress and candidate/settings data change. Stage transitions remount.
+  if(state.route==='import'&&view.dataset.renderedRoute==='import'&&
+     view.dataset.renderedImportStep===state.importStep&&
+     view.dataset.renderedImportMode===state.importMode){
+    const patch=patchImportInspection(view,renderImport());
+    if(patch){
+      bindPage({partial:true});
+      mountImportControls({state,view,body,modal,db,render,route,toast,esc,
+        openCutoutCheck,switchImportRecord,saveActiveImportRecord});
+      if(patch.photoReplaced){
+        view.paperCorrectionDispose?.();view.paperCorrectionDispose=null;
+        view.manualBoxDispose?.();view.manualBoxDispose=null;
+      }
+      // A newly selected photo can finish decoding after its container was
+      // mounted. Initialize overlays when the pixels actually become ready,
+      // even if the image URL/DOM did not change in that final progress tick.
+      if(state.showManualBox&&!view.querySelector('.manual-box-layer'))bindManualBox();
+      else if(state.importFile&&!state.importProcessing&&!state.showManualBox&&
+              !state.showCorrectionPreview&&!view.querySelector('.paper-corner-overlay'))
+        view.paperCorrectionDispose=mountPaperCorrection({state,view,saveActiveImportRecord});
+      backgroundViewPending=false;
+      return;
+    }
+  }
   view.workCoverDispose?.();view.workCoverDispose=null;
   view.localWorkCoverDispose?.();view.localWorkCoverDispose=null;
-  view.editorDispose?.();view.editorDispose=null;view.manualBoxDispose?.();view.manualBoxDispose=null;view.editorRefresh=null;view.catalogRefresh=null;resetSelectionPresenters(view);
+  view.editorDispose?.();view.editorDispose=null;view.manualBoxDispose?.();view.manualBoxDispose=null;
+  view.paperCorrectionDispose?.();view.paperCorrectionDispose=null;
+  view.editorRefresh=null;view.catalogRefresh=null;resetSelectionPresenters(view);
   if(view.onshowsimilar){view.removeEventListener('show-similar',view.onshowsimilar);view.onshowsimilar=null;}
   closePopover();imageNodes.remember(view.querySelectorAll('img[src]'));
   view.editorLayoutSize={width:window.innerWidth,height:window.innerHeight};
   const pages={library:renderLibrary,series:renderSeries,matching:renderMatching,works:renderWorks,editor:renderEditor,import:renderImport,assetDetail:renderAssetDetail,projectPreview:renderProjectPreview,settings:renderSettings};view.innerHTML=(pages[state.route]||renderLibrary)();
+  view.dataset.renderedRoute=state.route;
+  view.dataset.renderedImportStep=state.route==='import'?state.importStep:'';
+  view.dataset.renderedImportMode=state.route==='import'?state.importMode:'';
+  view.dataset.renderedLibraryTab=state.route==='library'?parity.libraryTab:'';
+  view.dataset.renderedWorkTab=state.route==='works'?parity.workTab:'';
+  view.dataset.renderedSettingsSection=state.route==='settings'?state.settingsSection||'':'';
   for(const fresh of view.querySelectorAll('img[src]')){const old=imageNodes.take(fresh);if(old)fresh.replaceWith(old);}
   if(importQueueScroll!==null){
     const replacement=view.querySelector('.queue-strip');
@@ -468,7 +550,7 @@ function workCover(d,priority=false,snapshotOnly=false,projectID=null){
  return nodes(d.layers||[]);
 
 }
-function renderWorks(){const list=state.projects.filter(p=>!isUntouchedLegacyExample(p)).sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt));return `<div class="works-page">${head('我的作品','留下完成的创作，继续记录新的灵感。')}<button hidden data-act="new-project" id="work-create"></button><button hidden data-act="import-work" id="work-import"></button><div class="filters"><input type="search" id="work-search" placeholder="搜索作品名称或标签"><select id="work-kind"><option value="all">全部类型</option><option value="created">手动创作</option><option value="imported">导入作品</option></select><select id="work-status"><option value="all">全部状态</option><option value="used">已使用</option><option value="unused">未使用</option></select><select id="work-sort"><option value="access-desc">最近访问 · 降序</option><option value="access-asc">最近访问 · 升序</option><option value="updated-desc">最近修改 · 降序</option><option value="updated-asc">最近修改 · 升序</option><option value="name-asc">名称 · 升序</option><option value="name-desc">名称 · 降序</option></select><span>${list.length} 项</span></div><div class="grid works-grid">${list.map((p,index)=>`<button class="card" data-act="open-project" data-id="${p.id}"><div class="card-image"><div class="thumb-sheet" style="width:75%;background:${esc(p.drafts[0]?.paperColor||'#fff')}">${p.isSnapshot?`<img class="work-reference" loading="${index<4?'eager':'lazy'}" decoding="async" src="${image(p.snapshotBlobId)}" alt="${esc(p.title)} 快照">`:p.coverStaticPath&&p.updatedAt===p.coverBaselineUpdatedAt?`<img class="work-reference" loading="${index<4?'eager':'lazy'}" src="${p.coverStaticPath}" alt="${esc(p.title)} 完整预览">`:workCover(p.drafts.find(d=>d.id===p.activeDraftID)||p.drafts[0],index<4,true,p.id)}</div></div><div class="card-body"><h3>${esc(p.title)}</h3><p>⊙　${p.isSnapshot?'画面快照':p.isDraft?'草稿':'可编辑作品'} <span>${new Date(p.updatedAt).toLocaleDateString()}</span></p></div></button>`).join('')}</div></div>`;}
+function renderWorks(){const list=state.projects.filter(p=>!isUntouchedLegacyExample(p)).sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt));return `<div class="works-page">${head('我的作品','留下完成的创作，继续记录新的灵感。')}<button hidden data-act="new-project" id="work-create"></button><button hidden data-act="import-work" id="work-import"></button><div class="filters"><input type="search" id="work-search" placeholder="搜索作品名称或标签"><select id="work-kind"><option value="all">全部类型</option><option value="created">手动创作</option><option value="imported">导入作品</option></select><select id="work-status"><option value="all">全部状态</option><option value="used">已使用</option><option value="unused">未使用</option></select><select id="work-sort"><option value="access-desc">最近访问 · 降序</option><option value="access-asc">最近访问 · 升序</option><option value="updated-desc">最近修改 · 降序</option><option value="updated-asc">最近修改 · 升序</option><option value="name-asc">名称 · 升序</option><option value="name-desc">名称 · 降序</option></select><span>${list.length} 项</span></div><div class="grid works-grid">${list.map((p,index)=>`<button class="card" data-work-revision="${esc(JSON.stringify([p.title,p.updatedAt,p.lastOpenedAt,p.isSnapshot,p.isDraft,p.isUsed,p.isFavorite,p.coverStaticPath,p.coverBaselineUpdatedAt,p.snapshotBlobId,p.activeDraftID]))}" data-act="open-project" data-id="${p.id}"><div class="card-image"><div class="thumb-sheet" style="width:75%;background:${esc(p.drafts[0]?.paperColor||'#fff')}">${p.isSnapshot?`<img class="work-reference" loading="${index<4?'eager':'lazy'}" decoding="async" src="${image(p.snapshotBlobId)}" alt="${esc(p.title)} 快照">`:p.coverStaticPath&&p.updatedAt===p.coverBaselineUpdatedAt?`<img class="work-reference" loading="${index<4?'eager':'lazy'}" src="${p.coverStaticPath}" alt="${esc(p.title)} 完整预览">`:workCover(p.drafts.find(d=>d.id===p.activeDraftID)||p.drafts[0],index<4,true,p.id)}</div></div><div class="card-body"><h3>${esc(p.title)}</h3><p>⊙　${p.isSnapshot?'画面快照':p.isDraft?'草稿':'可编辑作品'} <span>${new Date(p.updatedAt).toLocaleDateString()}</span></p></div></button>`).join('')}</div></div>`;}
 function current(){const p=state.activeProject,d=p?.drafts.find(d=>d.id===state.activeDraft)||p?.drafts[0];return d?attachSceneV2(d):undefined;}
 function editorEntry(d,rendering=false){return rendering?sceneRenderEntries(d):sceneLayerEntries(d,{ink:false});}
 function vectorMarkup(i){const paths=(i.vectorPaths||[]).map(points=>{const d=points.filter(p=>Array.isArray(p)&&p.length===2&&p.every(Number.isFinite)).map((p,n)=>`${n?'L':'M'}${p[0]} ${p[1]}`).join(' ');return d?`<path d="${d} Z"/>`:'';}).join('');return `<svg aria-hidden="true" viewBox="0 0 1 1" preserveAspectRatio="none" style="width:100%;height:100%;overflow:visible;fill:${esc(i.fill||'transparent')};stroke:${esc(i.stroke||'none')};stroke-width:${Math.max(0,Number(i.lineWidth)||0)/Math.max(i.width,i.height,1)}">${paths}</svg>`;}
@@ -606,11 +688,11 @@ function queueMatchingDefaultsSync(){
       .finally(()=>{if(!matchingDefaultsTimer)matchingDefaultsPending=false;});
   },650);
 }
-function bindPage(){view.querySelectorAll('[data-act]').forEach(el=>el.addEventListener('click',()=>handle(el.dataset.act,el.dataset.id,el.dataset.val)));
+function bindPage({partial=false}={}){view.querySelectorAll('[data-act]').forEach(el=>{if(boundPageActions.has(el))return;boundPageActions.add(el);el.addEventListener('click',()=>handle(el.dataset.act,el.dataset.id,el.dataset.val));});
   const assetStatus=view.querySelector('#status-filter');if(assetStatus&&!assetStatus.querySelector('[value="favorite"]')){const option=document.createElement('option');option.value='favorite';option.textContent='已收藏';assetStatus.append(option);}
   const assetHeart=view.querySelector('.detail-heart');if(assetHeart)assetHeart.setAttribute('aria-pressed',String(!!asset(state.detailAssetID)?.isFavorite));
   if(state.route==='projectPreview'){const p=state.projects.find(x=>x.id===state.previewProjectID);if(p?.isSnapshot){const header=view.querySelector('.project-preview-head');const heart=document.createElement('button');heart.type='button';heart.className='snapshot-favorite';heart.setAttribute('aria-label',p.isFavorite?'取消收藏快照':'收藏快照');heart.setAttribute('aria-pressed',String(!!p.isFavorite));heart.textContent=p.isFavorite?'♥':'♡';heart.onclick=async()=>{const next={...p,isFavorite:!p.isFavorite};await db.put('projects',next);Object.assign(p,next);heart.textContent=next.isFavorite?'♥':'♡';heart.setAttribute('aria-label',next.isFavorite?'取消收藏快照':'收藏快照');heart.setAttribute('aria-pressed',String(!!next.isFavorite));};header?.querySelector('h1')?.after(heart);}}
-  view.querySelector('#ai-model-group')?.addEventListener('toggle',event=>{aiModelPanelOpen=event.currentTarget.open;});
+  const aiModelGroup=view.querySelector('#ai-model-group');if(aiModelGroup)aiModelGroup.ontoggle=event=>{aiModelPanelOpen=event.currentTarget.open;};
   if(state.route==='matching'){
     const saveMatching=()=>matchingSession.persist().catch(e=>{console.warn('本机搭配状态未保存；不影响云端作品同步',e);toast('本机搭配状态保存失败：'+e.message);});
     const fields={'match-style':'matchStyle','match-purpose':'matchPurpose','match-intent':'matchIntent','match-content-policy':'matchContentPolicy','match-text-presentation':'matchTextPresentation','match-processing':'matchProcessing','match-mode':'matchMode','match-ratio':'matchRatio','match-paper-width':'customPaperWidth','match-paper-height':'customPaperHeight'};
@@ -633,7 +715,7 @@ function bindPage(){view.querySelectorAll('[data-act]').forEach(el=>el.addEventL
   if(state.route==='library')updateLibraryResults();
   const title=view.querySelector('#project-title');if(title)title.addEventListener('blur',()=>{const p=state.activeProject;p.title=title.textContent.trim()||'未命名手账';saveProject();});
   const draftSelect=view.querySelector('#draft-select');if(draftSelect)draftSelect.onchange=()=>{state.activeDraft=draftSelect.value;state.selected=null;resetEditorHistory(state);render();};
-  if(state.route==='import'&&state.showManualBox)bindManualBox();
+  if(state.route==='import'&&state.showManualBox&&!partial)bindManualBox();
   for(const [id,key] of [['import-paper-width','customImportWidth'],['import-paper-height','customImportHeight']]){const el=view.querySelector('#'+id);if(el)el.onchange=()=>{const n=Number(el.value);if(!Number.isFinite(n)||n<1||n>10000){toast('纸张宽高为 1–10000 mm');return;}state[key]=n;recalibrateImport();};}const whole=view.querySelector('#whole-paper');if(whole)whole.onchange=()=>{state.wholePaper=whole.checked;recalibrateImport();};for(const [id,key] of [['paper-size','paperSize'],['paper-orientation','paperOrientation']]){const el=view.querySelector('#'+id);if(el)el.onchange=()=>{state[key]=el.type==='checkbox'?el.checked:el.value;recalibrateImport();};}
   const balance=view.querySelector('#balance-light');if(balance)balance.onchange=async()=>{const before=state.balanceLight;if(state.importProcessing){balance.checked=before;return;}if(state.importCandidateData?.length&&!confirm('更改光照会重新识别候选并重置当前候选标注，继续？')){balance.checked=before;return;}state.importProcessing=state.importMode==='snapshot'?'正在调整页面颜色…':'正在均衡光照并重新识别…';state.balanceLight=balance.checked;saveActiveImportRecord();render();try{if(state.importMode!=='snapshot')await previewCrop();}catch(e){state.balanceLight=before;toast(e.message);}finally{state.importProcessing='';if(state.route==='import')render();}};
   for(const [selector,key] of [['#import-shape-regularization','importShapeRegularization'],['#import-apertures','importApertures']]){
@@ -718,7 +800,7 @@ function bindPage(){view.querySelectorAll('[data-act]').forEach(el=>el.addEventL
   });
   const removeWhite=view.querySelector('#remove-white');if(removeWhite)removeWhite.onchange=()=>{state.importRemoveWhite=removeWhite.checked;};
   const page=view.querySelector('#canvas-page');if(page)initializeCanvasSurface(page);
-  bindInspector();if(state.route==='import'&&state.importProcessing)view.querySelectorAll('.inspect-columns button,.inspect-columns input,.inspect-columns select').forEach(el=>el.disabled=true);if(state.route==='import'&&state.importStep==='inspect'&&state.importFile&&!state.importProcessing)mountPaperCorrection({state,view,render,toast,saveActiveImportRecord});const offline=view.querySelector('#offline-state');if(offline)offline.textContent=navigator.serviceWorker?.controller?'离线程序已就绪':'首次打开时需要联网；请等待离线程序安装后再测试飞行模式';const locationLabel=view.querySelector('#storage-location');if(locationLabel)db.storageMode().then(mode=>{if(locationLabel.isConnected)locationLabel.textContent=cloudEnabled?(import.meta.env?.VITE_SHIYE_OBJECT_STORAGE==='cos'?'当前数据源：Supabase 登录与元数据 + 腾讯 COS 私有图片；本机仅保留账号隔离缓存与待同步修改':'当前数据源：Supabase 私有云端；本机仅保留账号隔离缓存与待同步修改'):mode==='server'?`当前唯一数据源：${db.storageConfig()?.url||location.origin}（服务器）`:'当前数据源：此浏览器 IndexedDB';}).catch(error=>{if(locationLabel.isConnected)locationLabel.textContent='服务器连接失败：'+error.message;});}
+  bindInspector();if(state.route==='import'&&state.importStep==='inspect')syncBusyControls(view,'.inspect-columns button,.inspect-columns input,.inspect-columns select',!!state.importProcessing);if(state.route==='import'&&state.importStep==='inspect'&&state.importFile&&!state.importProcessing&&!partial)view.paperCorrectionDispose=mountPaperCorrection({state,view,render,toast,saveActiveImportRecord});const offline=view.querySelector('#offline-state');if(offline)offline.textContent=navigator.serviceWorker?.controller?'离线程序已就绪':'首次打开时需要联网；请等待离线程序安装后再测试飞行模式';const locationLabel=view.querySelector('#storage-location');if(locationLabel)db.storageMode().then(mode=>{if(locationLabel.isConnected)locationLabel.textContent=cloudEnabled?(import.meta.env?.VITE_SHIYE_OBJECT_STORAGE==='cos'?'当前数据源：Supabase 登录与元数据 + 腾讯 COS 私有图片；本机仅保留账号隔离缓存与待同步修改':'当前数据源：Supabase 私有云端；本机仅保留账号隔离缓存与待同步修改'):mode==='server'?`当前唯一数据源：${db.storageConfig()?.url||location.origin}（服务器）`:'当前数据源：此浏览器 IndexedDB';}).catch(error=>{if(locationLabel.isConnected)locationLabel.textContent='服务器连接失败：'+error.message;});}
 function bindInspector(){const d=current(),e=d&&editorEntry(d).find(x=>x.value.id===state.selected);if(!d)return;
   const change=(id,fn)=>{const el=view.querySelector('#'+id);if(el)el.addEventListener('change',()=>{checkpoint();fn(el.value);saveProject();render();});};
   if(e){for(const [id,key] of [['inspector-width','width'],['inspector-height','height'],['inspector-rotation','rotation'],['inspector-z','zIndex'],['inspector-opacity','opacity'],['inspector-font-size','fontSize']].filter(([,key])=>e.kind!=='material'||!['width','height'].includes(key)))change(id,v=>{e.value[key]=Number(v);if(e.kind==='material')e.value.userOverrideFlags=[...new Set([...(e.value.userOverrideFlags||[]),key==='width'||key==='height'?'resized':key])];});change('inspector-text',v=>e.value.content=v);change('inspector-font',v=>e.value.style=v);}else{change('paper-color',v=>d.paperColor=v);change('paper-pattern',v=>d.paperPattern=v);change('page-ratio',v=>{if(presetPaperDimensions(v))setDraftPaperSize(d,v);});change('page-mode',v=>{d.pageMode=v;d.canvas=canvasSize(v,d.pageRatio);});}}

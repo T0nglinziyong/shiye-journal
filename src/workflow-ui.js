@@ -16,6 +16,7 @@ import {applyCatalogPage,resetCatalogPage} from './catalog-pagination.js';
 import {prewarmVision} from './vision-runtime.js';
 
 const previewObservers=new WeakMap();
+export function refreshWorkPreviews(c){return mountWorkPreviews(c);}
 function mountWorkPreviews(c){
   previewObservers.get(c.view)?.disconnect();previewObservers.delete(c.view);
   const frames=[...c.view.querySelectorAll('.works-grid .thumb-sheet,.project-preview-cover .preview-paper')];
@@ -399,17 +400,19 @@ function mountData(c) {
     await db.transaction(['blobs'],tx=>{for(const b of orphans)tx.objectStore('blobs').delete(b.id);});await refresh();c.toast('已清理 '+orphans.length+' 张未使用图片');
   }));
 }
+export function mountImportControls(c) {return mountImport({...c,skipImportPrewarm:true});}
 function mountImport(c) {
   const {state,view,render}=c;
   // A second idempotent call covers keyboard/programmatic import entry where
   // there was no pointerdown on the catalog button.
-  if(state.importMode!=='snapshot')void prewarmVision().catch(()=>{});
+  if(!c.skipImportPrewarm&&state.importMode!=='snapshot')void prewarmVision().catch(()=>{});
   mountImportCandidateMenus(c);
   if(state.importStep==='inspect') {
     const correction=view.querySelector('.paper-corner-overlay');if(state.showManualBox&&correction)correction.style.display='none';
     // Existing candidates remain drafts until the photo is confirmed again.
     for(const queue of view.querySelectorAll('.queue-item')) {
-      const remove=button('移除',()=>{},'mini');remove.onclick=async e=>{e.stopPropagation();try{
+      if(queue.querySelector('[data-import-remove]'))continue;
+      const remove=button('移除',()=>{},'mini');remove.dataset.importRemove='';remove.onclick=async e=>{e.stopPropagation();try{
         const index=+queue.dataset.id;if(!confirm('从本批中移除这张照片？'))return;
         c.saveActiveImportRecord();const [record]=state.importRecords.splice(index,1);
         URL.revokeObjectURL(record.url);record.bitmap?.close?.();record.correctedBitmap?.close?.();

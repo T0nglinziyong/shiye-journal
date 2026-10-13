@@ -1,3 +1,4 @@
+import {reconcileKeyedChildren} from './ui-keyed-dom.js';
 import {localDeviceRecords} from './local-device-records.js';
 import {assetSourceRevision} from './material-anatomy.js';
 import {usableProjectSnapshot} from './project-outbox-recovery.js';
@@ -33,16 +34,46 @@ export function createMatchingSession(c){
  const archiveCompleted=async(variantID)=>{await queue;for(const v of variants.filter(v=>v.id===variantID&&v.status==='completed'&&!v.linkedProjectID)){if(v.linkedProjectID&&c.state.projects.some(p=>p.id===v.linkedProjectID))continue;const p=variantDraftProject(v,null,v.linkedProjectID||c.uid());await (p.isSnapshot?c.db.transaction(['projects'],tx=>tx.objectStore('projects').put(p)):c.db.stageProject(p));v.linkedProjectID=p.id;c.state.projects.push(p);
       try{await device.put(account(),matchingSnapshot(c.state,variants));}
       catch(error){console.warn('完成的作品已存入云端，本机搭配索引暂未保存',error);}}};
- const markup=()=>`<h2>版本方案</h2><p>完成方案自动保存为草稿或快照；“重新搭配”只清空这里的方案，不删除已保存作品。</p><div class="match-variant-grid" data-match-scroll="variants">${variants.map(v=>`<article class="match-variant" data-variant="${c.esc(v.id)}"><button class="match-result" data-act="match-open-result" data-id="${c.esc(v.id)}" ${v.status==='running'?'disabled':''}><div class="match-cover-preview" data-match-raster="${c.esc(v.id)}">${covers.render(v.project)}</div><strong>${c.esc(v.title)}</strong></button><pre class="match-progress" aria-live="polite">${c.esc(v.progress)}</pre>${v.linkedProjectID&&!c.state.projects.some(p=>p.id===v.linkedProjectID)?`<button class="btn" data-act="match-restore" data-id="${c.esc(v.id)}">恢复已删除作品</button>`:''}${v.status==='running'?'<button class="btn" data-act="match-stop">停止创作</button>':v.project.deliveryMode==='zip'?`<button class="btn" data-act="download-project-zip" data-id="${c.esc(v.linkedProjectID||v.project.id)}">下载可编辑 ZIP</button>`:''}</article>`).join('')||'<p>尚未生成方案。</p>'}</div>`;
+ const markup=()=>`<h2>版本方案</h2><p>完成方案自动保存为草稿或快照；“重新搭配”只清空这里的方案，不删除已保存作品。</p><div class="match-variant-grid" data-match-scroll="variants">${variants.map(v=>`<article class="match-variant" data-variant="${c.esc(v.id)}" data-variant-status="${c.esc(v.status)}"><button class="match-result" data-act="match-open-result" data-id="${c.esc(v.id)}" ${v.status==='running'?'disabled':''}><div class="match-cover-preview" data-match-raster="${c.esc(v.id)}">${covers.render(v.project)}</div><strong>${c.esc(v.title)}</strong></button><pre class="match-progress" aria-live="polite">${c.esc(v.progress)}</pre>${v.linkedProjectID&&!c.state.projects.some(p=>p.id===v.linkedProjectID)?`<button class="btn" data-act="match-restore" data-id="${c.esc(v.id)}">恢复已删除作品</button>`:''}${v.status==='running'?'<button class="btn" data-act="match-stop">停止创作</button>':v.project.deliveryMode==='zip'?`<button class="btn" data-act="download-project-zip" data-id="${c.esc(v.linkedProjectID||v.project.id)}">下载可编辑 ZIP</button>`:''}</article>`).join('')||'<p>尚未生成方案。</p>'}</div>`;
  const update=()=>{
    if(c.state.route!=='matching')return;
    const el=document.querySelector('.match-previews');
    if(!el)return;
    const root=el.closest('#view')||el.closest('.matching-page')?.parentElement;
    const scroll=root?captureMatchingScroll(root,globalThis.window):null;
-   el.innerHTML=markup();
-   reusePagePreviews({view:el,state:c.state});
-   covers.hydrate(el,variants);
+   // Progress often changes many times per model turn. Keep every unchanged
+   // variant preview and its decoded images mounted across those updates.
+   const template=document.createElement('template');template.innerHTML=markup();
+   const oldGrid=el.querySelector('.match-variant-grid'),
+     nextGrid=template.content.querySelector('.match-variant-grid');
+   let structuralChange=false;
+   if(!oldGrid||!nextGrid){
+     el.innerHTML=markup();
+     structuralChange=true;
+   }else{
+     const stats=reconcileKeyedChildren(oldGrid,nextGrid,row=>row.dataset.variant||null,{
+       update(current,next){
+         if(current.dataset.variantStatus!==next.dataset.variantStatus)return false;
+         const actionSignature=node=>[...node.querySelectorAll(':scope > button[data-act]')]
+           .map(b=>[b.dataset.act,b.dataset.id,b.disabled,b.textContent].join(':')).join('|');
+         if(actionSignature(current)!==actionSignature(next))return false;
+         const oldButton=current.querySelector('.match-result'),
+           nextButton=next.querySelector('.match-result');
+         if(!oldButton||!nextButton)return false;
+         oldButton.disabled=nextButton.disabled;
+         const progress=current.querySelector('.match-progress'),
+           nextProgress=next.querySelector('.match-progress');
+         if(progress&&nextProgress&&progress.textContent!==nextProgress.textContent)
+           progress.textContent=nextProgress.textContent;
+         return true;
+       }
+     });
+     structuralChange=stats.inserted>0||stats.removed>0;
+   }
+   if(structuralChange){
+     reusePagePreviews({view:el,state:c.state});
+     covers.hydrate(el,variants);
+   }
    el.onclick=e=>{
      const b=e.target.closest('[data-act]');
      if(b)c.handle(b.dataset.act,b.dataset.id);

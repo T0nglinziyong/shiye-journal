@@ -1,3 +1,4 @@
+import {reconcileKeyedChildren} from './ui-keyed-dom.js';
 import {presetJournalTemplates,normalizeUserTemplate,templateIndexText,USER_TEMPLATE_PREFIX} from './journal-template-catalog.js';
 import {loadJournalPresetPanel} from './journal-preset-images.js';
 import {journalTemplatePanel} from './journal-source-panels.js';
@@ -99,12 +100,23 @@ export function mountJournalTemplateGallery(c,viewState){
     grid.classList.remove('journal-template-detail');
     const found=ordered(catalog.filter(matches));if(count)count.textContent=`${found.length} / ${catalog.length} 个模板`;
     const importCard='<button type="button" class="card work-entry journal-template-import-card" data-template-import><div class="card-image">＋</div><div class="card-body"><h3>导入模板与案例</h3><p>添加自己的模板图片</p></div></button>';
-    const cards=found.map(item=>`<button type="button" class="card journal-template-card" data-template-id="${escapeHTML(item.id)}"><div class="card-image">${item.templateBlobId?'<span class="journal-template-loading">载入模板…</span>':'<div class="journal-template-outline">'+escapeHTML(item.title)+'</div>'}</div><div class="card-body"><h3>${escapeHTML(item.title)}</h3><p>${item.origin==='preset'?'预设模板':'我的模板'} · ${item.exampleBlobId||item.exampleSourceNumbers?.length?'有对应案例':'暂无案例'}</p><div class="journal-template-tags">${item.tags.slice(0,3).map(tag=>`<span class="chip">${escapeHTML(tag)}</span>`).join('')}</div></div></button>`).join('');
-    grid.innerHTML=importCard+(cards||'<p class="empty">没有匹配的模板，试试其他标签。</p>');
+    const cards=found.map(item=>`<button type="button" class="card journal-template-card" data-template-id="${escapeHTML(item.id)}" data-template-signature="${escapeHTML(JSON.stringify([item.title,item.origin,item.structure,item.tags,item.templateBlobId,item.exampleBlobId,item.exampleSourceNumbers]))}"><div class="card-image">${item.templateBlobId?'<span class="journal-template-loading">载入模板…</span>':'<div class="journal-template-outline">'+escapeHTML(item.title)+'</div>'}</div><div class="card-body"><h3>${escapeHTML(item.title)}</h3><p>${item.origin==='preset'?'预设模板':'我的模板'} · ${item.exampleBlobId||item.exampleSourceNumbers?.length?'有对应案例':'暂无案例'}</p><div class="journal-template-tags">${item.tags.slice(0,3).map(tag=>`<span class="chip">${escapeHTML(tag)}</span>`).join('')}</div></div></button>`).join('');
+    // Filter without discarding loaded preview images or re-registering their
+    // decoders. Stable card IDs and semantic signatures determine replacements.
+    const desired=document.createElement('div');
+    desired.innerHTML=importCard+(cards||'<p class="empty">没有匹配的模板，试试其他标签。</p>');
+    reconcileKeyedChildren(grid,desired,el=>el.dataset.templateId||
+      (el.hasAttribute('data-template-import')?'__import__':'__empty__'),{
+      update(current,fresh,id){
+        if(id==='__import__')return true;
+        return id!=='__empty__'&&
+          current.dataset.templateSignature===fresh.dataset.templateSignature;
+      }
+    });
     grid.querySelector('[data-template-import]').onclick=()=>openImport(c,async record=>{state.userTemplates=[...(state.userTemplates||[]),record];viewState.templateID=record.id;viewState.templateSide='template';render();toast('模板已在本机暂存，正在后台同步');});
     grid.querySelectorAll('[data-template-id]').forEach(card=>card.onclick=()=>{viewState.templateID=card.dataset.templateId;viewState.templateSide='template';display();});
     const byID=new Map(found.map(item=>[item.id,item]));
-    const loadCard=card=>{const item=byID.get(card.dataset.templateId);if(!item)return;const host=card.querySelector('.card-image');if(item.templateBlobId||journalTemplatePanel(item,'template'))loadVisual(host,item,'template');};
+    const loadCard=card=>{const item=byID.get(card.dataset.templateId);if(!item)return;const host=card.querySelector('.card-image');if(host?.querySelector('img,.journal-template-fallback'))return;if(item.templateBlobId||journalTemplatePanel(item,'template'))loadVisual(host,item,'template');};
     if(typeof IntersectionObserver==='function'){
       const observer=new IntersectionObserver(entries=>{for(const entry of entries)if(entry.isIntersecting){observer.unobserve(entry.target);loadCard(entry.target);}},{rootMargin:'300px'});
       imageObserver=observer;grid.querySelectorAll('[data-template-id]').forEach(card=>observer.observe(card));
