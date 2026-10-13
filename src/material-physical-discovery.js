@@ -181,7 +181,7 @@ export function discoverPhysicalMaterialBoxes(cv,p,own){
  }
  // Python parity: dedupe physical envelopes, then join closely aligned
  // same-width carrier fragments only when independent evidence paths agree.
- const unique=mergeAlignedCarrierPieces(dedupePhysicalCandidates(all,48));
+ const unique=mergeAlignedCarrierPieces(dedupePhysicalCandidates(all,48),h);
  // Hough is genuinely on-demand: skip only when reliable candidates explain
  // most edges; uncovered content triggers it. Never suppress a valid old box.
  const covered=new Uint8Array(w*h);
