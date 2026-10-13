@@ -13,6 +13,7 @@ import {containBox} from './preview-geometry.js';
 import {registerSelectionPresenter} from './selection-presenter.js';
 import {applyCatalogPage,resetCatalogPage} from './catalog-pagination.js';
 import {prewarmVision} from './vision-runtime.js';
+import {changeTrash} from './trash-actions.js';
 
 const previewObservers=new WeakMap();
 export function refreshWorkPreviews(c){return mountWorkPreviews(c);}
@@ -387,11 +388,11 @@ function mountData(c) {
   const {view,state,db,refresh}=c;
   for(const row of view.querySelectorAll('.rec-card')) {
     const id=row.querySelector('[data-act="restore-trash"]')?.dataset.id;if(!id)continue;
-    row.append(button('彻底删除',async()=>{if(!confirm('彻底删除这项内容？此操作无法撤销。'))return;await db.remove('trash',id);state.trash=state.trash.filter(t=>t.id!==id);c.render();},'danger mini'));
+    row.append(button('彻底删除',async()=>{if(!confirm('彻底删除这项内容？此操作无法撤销。'))return;await changeTrash({db,state,ids:[id]});c.render();},'danger mini'));
   }
   const section=view.querySelector('.settings-detail');
   section.append(button('生成诊断',()=>showAIDiagnostics(c)),button('创作完整上下文',()=>showAIContexts(c)));
-  section.append(button('清空最近删除',async()=>{if(!state.trash.length||!confirm('彻底删除最近删除中的所有内容？此操作无法撤销。'))return;await db.transaction(['trash'],tx=>tx.objectStore('trash').clear());state.trash=[];c.render();},'danger'));
+  section.append(button('清空最近删除',async()=>{if(!state.trash.length||!confirm('彻底删除最近删除中的所有内容？此操作无法撤销。'))return;await changeTrash({db,state,ids:state.trash.map(item=>item.id)});c.render();},'danger'));
   // Blob reclamation is a separate explicit action. Recursively scan every
   // record, including manual archives and trash; never delete live references.
   section.append(button('清理未使用的图片',async()=>{

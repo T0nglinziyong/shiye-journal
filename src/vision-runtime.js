@@ -1,5 +1,5 @@
-const minimalOpenCVScriptURL='/vendor/opencv-shiye/opencv.js';
-export function visionRuntimeFlavor(){return 'shiye-minimal';}
+import fullOpenCVScriptURL from '@techstark/opencv-js/dist/opencv.js?url';
+export function visionRuntimeFlavor(){return 'opencv-5-full';}
 
 const slots=[];
 let sequence=0;
@@ -41,7 +41,7 @@ function ensureWorker(index=0){
       error=Error('本机图像引擎加载失败'+(detail?'：'+detail:'，请联网后重试'));
     resetSlot(index,error);
   };
-  try{worker.postMessage({type:'init',opencvScriptURL:minimalOpenCVScriptURL});}
+  try{worker.postMessage({type:'init',opencvScriptURL:fullOpenCVScriptURL});}
   catch(error){resetSlot(index,error);}
   return readyPromise;
 }

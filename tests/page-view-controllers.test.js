@@ -46,3 +46,9 @@ test('settings page is a pure root projection independent of document/DOM',()=>{
   assert.match(html,/settings-list/);
   assert.equal(state.settingsSection,null);
 });
+test('data and diagnostics offers privacy-safe error export',()=>{
+  const html=renderSettingsHTML({state:{settingsSection:'数据与诊断',assets:[],projects:[],trash:[]},esc,
+    sectionSettings:x=>x,cloudEnabled:false,db:{storageConfig:()=>null}});
+  assert.match(html,/data-act="export-app-diagnostics"/);
+  assert.match(html,/不会导出作品、图片、账号、密钥/);
+});

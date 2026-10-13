@@ -10,7 +10,7 @@ export function parseTags(text) {
 }
 export function searchableSeries(series, assets) {
   return [series.title, series.introduction, ...(series.styleTags || []), ...(series.semanticTags || []),
-    ...assets.filter(a => a.seriesID === series.id).flatMap(a => [a.title, ...(a.tags || []), ...(a.contentTags || []), ...(a.styleTags || [])])]
+    ...assets.filter(a => a.seriesID === series.id && !a.isProjectInternal).flatMap(a => [a.title, ...(a.tags || []), ...(a.contentTags || []), ...(a.styleTags || [])])]
     .join(' ').toLocaleLowerCase();
 }
 

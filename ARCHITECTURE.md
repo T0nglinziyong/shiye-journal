@@ -12,6 +12,8 @@
 | 画布对象操作 | `src/canvas-selection.js` 的可见对象和移动边界 | `src/canvas-selection-ui.js` 负责圈选；`src/canvas-editor-ui.js` 负责唯一单对象选框，两者调用同一移动函数；`src/canvas-viewport.js` 只管适合页面以上的导航缩放。`app.js` 不再注册另一套对象拖动/画笔事件 | `tests/parity-workflows.test.js`、`tests/library-canvas-latest-browser.mjs` |
 | 云端续传 | `src/project-sync.js` 的账号隔离持久队列 | `src/sync-resumer.js` 在重新打开、回前台与恢复网络时重试 `cloud-store.js` 的两类待同步队列；冲突不得自动覆盖，云端确认才移出队列 | `tests/project-sync.test.js`、`tests/sync-resumer.test.js`、`tests/cloud-store.test.js` |
 
+同步详情的诊断导出由 `src/sync-diagnostics.js` 生成：只记录本次会话的阶段、修订号、数量和经过分类的错误，不写入云端或本地资料库，也不包含待同步记录内容。它不是含原始字节的应急备份。
+
 ## 操作与刷新优先级
 
 选择模式只由 `selectionMode` 表示；不存在可与它分叉的第二个布尔标记。`src/library-selection-model.js` 负责开始、结束、跨页范围与远端删除后的选中 ID 清理；`src/selection-presenter.js` 将同一状态变化广播给当前页所有底栏。系列首页允许带着素材选择进入系列详情，因此系列栏与素材栏可以同时挂载，但只能有一条显示。切页前先决定选择范围，再渲染目标页。设置只是临时覆盖层，不结束选择。
@@ -42,3 +44,5 @@
 素材识别必须遵循“整页自动框先于边界分割”：page-connected 背景 + connected components 只决定一次有几件实体；MorphGAC、GrabCut、形状规整和打孔恢复只能修改各自候选框内的透明边界，不能再创建、删除、拆分或合并素材身份。内部印刷格子、文字框和人物细节不得因为自身闭合而成为新素材。
 
 目前 `src/app.js` 仍集中保留跨页编排和部分事件分发，样式也有历史叠层。页面控制器、Action Store 与 keyed DOM 是扩展接缝，但主脚本尚未按完整路由拆包。后续应在同等端到端测试覆盖下逐页迁出。识别质量与云存储的生产迁移须用真实案例验证，不能从模块化本身推断已经实现。
+
+素材从库中删除后，素材记录以 `isProjectInternal` 隐藏保留，供已有作品解析；最近删除可恢复原可见记录。彻底删除或到期清理只有在完整作品、手动存档和待同步队列引用检查通过时才删除无引用的隐藏元数据。浏览器本地模式每日空闲时再扫一次。COS 原图的物理回收仍需服务端引用证明及备份保护，不得由浏览器直接删除。

@@ -170,6 +170,22 @@ test('unchanged remote revision is an unconfirmed upload, not a conflict',async(
   assert.equal(rows.length,1);
 });
 
+test('diagnostic callback observes a blocked row and subsequent safe commit without payloads',async()=>{
+  let revision=3,rows=[
+    {record:{id:'first',kind:'project',payload:{id:'private-work'}},serial:1,baseRevision:2,operationID:'one'},
+    {record:{id:'second',kind:'batch',payload:{operations:[]}},serial:2,baseRevision:2,operationID:'two'}
+  ];
+  const events=[];
+  const sync=createProjectSync({load:async()=>rows,reload:async()=>structuredClone(rows),
+    write:async next=>{rows=structuredClone(next);},revision:()=>revision,
+    reconcile:async record=>record.id==='first'?'conflict':'rebase',
+    commit:async()=>{revision++;},onDiagnostic:event=>events.push(event)});
+  await sync.flush();
+  assert.ok(events.some(event=>event.action==='conflict'&&event.kind==='project'));
+  assert.ok(events.some(event=>event.action==='committed'&&event.kind==='batch'));
+  assert.ok(events.every(event=>!JSON.stringify(event).includes('private-work')));
+});
+
 
 test('durably staged deletion can retire older unsent saves for the same work only',async()=>{
   let rows=[

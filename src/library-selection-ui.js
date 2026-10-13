@@ -8,6 +8,7 @@ import {bindLongPress} from './long-press.js';
 import {withUsageStatus} from './library-model.js';
 import {registerSelectionPresenter} from './selection-presenter.js';
 import {createSelectionSidePanels,selectionMorePopoverOptions} from './selection-side-panels.js';
+import {hiddenAssetCopy} from './asset-retention.js';
 
 const action=(name,fn)=>{
   const b=document.createElement('button');b.type='button';b.className='btn';
@@ -41,7 +42,10 @@ export function mountAssetSelection(c,p){
   tray.append(action('全选页面',()=>{cards.filter(b=>!b.hidden).forEach(b=>p.selected.add(b.dataset.id));sync();}),require('清空选择',()=>{p.selected.clear();p.showOnlySelected=false;sync();}),require(p.showOnlySelected?'返回筛选':'查看所选',()=>{p.showOnlySelected=!p.showOnlySelected;sync();}),require('加入搭配',()=>{addMatchingFromLibrary(state,[...p.selected]);finishSelection(p);sync();document.querySelector('#basket-count').textContent=state.basket.length;void c.matchingSession?.persist?.().catch(console.warn);c.toast('已加入搭配素材篮 · ★ 必须使用');}),require('更多操作',anchor=>moreMenu(c,p,anchor)),require('删除素材',async()=>{
     const records=state.assets.filter(a=>p.selected.has(a.id));if(!records.length||!confirm('将所选 '+records.length+' 件素材移到最近删除？'))return;
     const entries=records.map(item=>({id:crypto.randomUUID(),kind:'asset',item:structuredClone(item),date:new Date().toISOString()}));
-    await c.db.transaction(['assets','trash'],tx=>{for(const e of entries){tx.objectStore('assets').delete(e.item.id);tx.objectStore('trash').put(e);}});state.assets=state.assets.filter(a=>!p.selected.has(a.id));state.basket=state.basket.filter(id=>!p.selected.has(id));state.trash.push(...entries);finishSelection(p);render();
+    const hidden=records.map(item=>hiddenAssetCopy(item));
+    await c.db.transaction(['assets','trash'],tx=>{for(let i=0;i<entries.length;i++){tx.objectStore('assets').put(hidden[i]);tx.objectStore('trash').put(entries[i]);}});
+    for(const item of hidden)Object.assign(state.assets.find(asset=>asset.id===item.id),item);
+    state.basket=state.basket.filter(id=>!p.selected.has(id));state.trash.push(...entries);finishSelection(p);render();
   }));tray.lastChild.classList.add('danger');view.append(tray);registerSelectionPresenter(view,sync);
 }
 function moreMenu(c,p,anchor){

@@ -55,6 +55,7 @@ ${settingToggle('setting-postprocess-apertures','重复孔洞恢复',state.prefe
  }
  if(title==='AI 与创作')content=content.replace('发送匹配风格与用途的四张预设样例','发送匹配风格与用途的手帐案例').replace('预设样例从简洁到丰富展示不同构图，只含匿名区域示意；不读取或发送已有私人作品。网页版 GPT 任务包会附四张图；API 仅在当前模型支持图片时发送。素材预览另由模型连接设置控制。','从原创重构的真实风格手帐案例中，按当前风格、用途和素材选最相近的两张；不发送全部案例，也不发送你已有的私人作品。案例只用于构图参考，不属于可使用素材。网页版任务包附图；支持图片的 API 模型也会收到。');
  if(title==='数据与诊断'&&cloudEnabled)content+='<h2>危险操作 · 清除所有数据</h2><p>同时永久删除当前账号的云端作品、素材、系列、私有图片和最近删除，并删除此设备的本地缓存、待同步队列和设置。保留登录账号本身；其他设备原有的离线缓存须在升级后重新检查。无法恢复。</p><button type="button" class="btn danger" data-act="reset-all-account-data">彻底清空本账号本机与云端数据</button>';
+ if(title==='数据与诊断')content='<h2>应用错误诊断</h2><p>导出本次打开拾页以来的运行错误、网络与同步故障的安全摘要，包含发生页面、阶段、错误类别和可判断的原因。不会导出作品、图片、账号、密钥或原始报错文本；关闭应用后不保留。</p><button type="button" class="btn" data-act="export-app-diagnostics">导出完整错误诊断</button><h2>图片保留与清理</h2><p>删除素材后，已有作品引用的图片会隐藏保留；从最近删除彻底移除且无作品引用时才清除隐藏素材记录。云端 COS 原图尚不自动物理删除，避免遗漏其他设备、历史存档或备份中的引用。</p>'+content;
  if(title==='界面与素材库'||title==='数据与诊断')content=sectionSettings(content);
  if(title==='AI 与创作')content=content.replaceAll('class="ai-settings-group"','class="ai-settings-group unified-settings-group"')
    .replace('“画面图片”只保存不可编辑快照：在线创作直接调用 OpenAI 图像模型，需另配 API 密钥；导出给网页版 AI 则用相同画面要求手动发送素材包，并导入返回的图片，不需要 API 密钥。“PDF 页面”仍是可编辑版面在本机渲染成快照。工具、JSON 与 ZIP 保留可编辑图层。','调用工具和直接排版都会生成可编辑素材、文字、图形及自由笔迹；自由绘画通过图像模型生成整张 PNG 快照，不能独立编辑图层。网页 GPT 的“作品文件／复制文本”在导出任务时选择，不影响创作方式。')

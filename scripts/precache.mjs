@@ -1,11 +1,8 @@
-import {copyFile,readFile,writeFile} from 'node:fs/promises';
+import {readFile,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 const root=fileURLToPath(new URL('../dist/',import.meta.url));
-// Emscripten resolves split WASM relative to the hashed worker script URL.
-// Keep one source in public/vendor and place its build copy beside workers.
-await copyFile(join(root,'vendor/opencv-shiye/opencv_js.wasm'),join(root,'assets/opencv_js.wasm'));
 const sha=process.env.VERCEL_GIT_COMMIT_SHA||process.env.GITHUB_SHA||null,
   branch=process.env.VERCEL_GIT_COMMIT_REF||null;
 await writeFile(join(root,'version.json'),JSON.stringify({

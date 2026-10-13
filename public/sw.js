@@ -32,8 +32,7 @@ self.addEventListener('fetch',event=>{
     return;
   }
   if(!ASSETS.has(url.pathname)){
-    if(!(/^\/assets\/[^/]+\.(?:js|css|woff2?|wasm)$/.test(url.pathname)||
-      /^\/vendor\/opencv-shiye\/opencv(?:_js\.wasm|\.js)$/.test(url.pathname)))return;
+    if(!/^\/assets\/[^/]+\.(?:js|css|woff2?|wasm)$/.test(url.pathname))return;
     event.respondWith(caches.open(RUNTIME).then(async cache=>{
       const cached=await cache.match(req);
       if(cached)return cached;

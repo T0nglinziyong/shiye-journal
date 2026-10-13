@@ -16,6 +16,7 @@ import {forkConflictingEditableWork} from './sync-conflict-copy.js';
 import {mergeEditableSceneProjects} from './scene-field-merge.js';
 import {isLegacySceneProject} from './scene-v2.js';
 import {createBlobRevisionProof} from './blob-revision-proof.js';
+import {createSyncDiagnostics} from './sync-diagnostics.js';
 export function createCloudStore({cloudClient,requireCloudUser,cache=null,namespace='cloud',projectPreview=()=>null,objectStorage=null}){
 const BUCKET='shiye-private';
 const writeProvider=()=>objectStorage?.enabled?'cos':'supabase';
@@ -32,6 +33,7 @@ const documents=new Map();
 const blobRecordRequests=new Map();
 const blobRecords=new Map();
 const blobRevisionProof=createBlobRevisionProof();
+const syncDiagnostics=createSyncDiagnostics();
 function retainBlobRecord(id,saved){
   blobRecords.delete(id);blobRecords.set(id,saved);
   if(blobRecords.size>256)blobRecords.delete(blobRecords.keys().next().value);
@@ -293,6 +295,7 @@ const unifiedSync=createProjectSync({
   onConflict:async()=>null,
   onSuperseded:()=>notifyCloudSuperseded(),
   onStatus:reportSync,
+  onDiagnostic:event=>syncDiagnostics.record(event),
   runExclusive:withAccountSyncLock,
   recordKeys:syncAffectedKeys,
 });
@@ -415,7 +418,9 @@ async function pendingOverride(store,id){await identity();return unifiedSync.ins
 async function overlayImports(store,records){const map=new Map(records.map(r=>[r.id,r]));for(const op of await pendingOperations(store)){if(op.action==='clear')map.clear();else if(op.action==='delete')map.delete(op.id);else map.set(op.item.id,op.item);}return [...map.values()];}
 const cached=async key=>{try{const id=await account();return cacheDisabled?undefined:await cache?.get(id,key);}catch{return undefined;}};
 const remember=async(key,value)=>{try{const id=await account();if(!cacheDisabled)await cache?.put(id,key,value);}catch{/* Cache quota/failure cannot fail a cloud operation. */}};
-const checked=result=>{if(result.error)throw Error(result.error.message||'云端数据服务不可用');return result.data;};
+const checked=result=>{if(result.error){const failure=Error(result.error.message||'云端数据服务不可用');
+  for(const key of ['code','status','statusCode'])if(result.error[key]!=null)failure[key]=result.error[key];
+  throw failure;}return result.data;};
 async function identity(){return owner??=(await requireCloudUser()).id;}
 async function version(){const id=await identity();const row=checked(await cloudClient().from('shiye_revisions').select('revision').eq('user_id',id).single());revision=Number(row.revision);return revision;}
 async function cloudAll(store){
@@ -691,7 +696,11 @@ function cloudTransaction(names,fn,operationID=crypto.randomUUID()){
     catch(error){console.warn('跨标签页同步通知暂不可用，云端提交仍已完成',error?.message);}
     }finally{writesInFlight--;reportSync();}
   };
-  const pending=queue.then(run);queue=pending.catch(()=>{});return pending;
+  const pending=queue.then(run).catch(error=>{
+    syncDiagnostics.record({action:'failed',kind:'direct',baseRevision:revision,pending:unifiedSync.status().pending,
+      cloudRevision:revision,error});
+    throw error;
+  });queue=pending.catch(()=>{});return pending;
 }
 async function cloudCheckpoint(){
   await cloudFlushProjects();
@@ -989,16 +998,22 @@ async function cloudPurgeLocalAfterReset(){
   if(typeof cache?.purgeAccount!=='function')throw Error('浏览器不支持完整账号本地清理');
   const count=await cache.purgeAccount(user);
   await cache.close?.();
+  syncDiagnostics.clear();
   return count;
 }
 async function cloudPendingDetails(){await identity();const [projects,imports]=await Promise.all([projectSync.pending(),importSync.pending()]);return {projects:projects.map(row=>({id:row.record.id,title:row.record.title||'未命名作品',baseRevision:row.baseRevision})),batches:imports.map(row=>({id:row.record.id,baseRevision:row.baseRevision,items:row.record.operations?.map(op=>({store:op.store,action:op.action,title:op.item?.title||op.item?.name||op.id||'',id:op.item?.id||op.id||''}))||['assets','projects','blobs'].flatMap(store=>(row.record[store]||[]).map(item=>({store,action:'put',title:item.title||'',id:item.id})))})),error:unifiedSync.status().error?.message||null,quarantined:unifiedQuarantine.length};}
+function cloudSyncDiagnosticReport({online=null}={}){
+  const status=unifiedSync.status();
+  return syncDiagnostics.report({pending:status.pending,conflicts:status.conflicts,uploading:status.uploading,
+    revision,writesInFlight,quarantined:unifiedQuarantine.length,online});
+}
 async function cloudDiscardPending(){await identity();if(writesInFlight||!unifiedSync.canDiscard())throw Error('上传正在进行，请等待当前请求结束');const count=await unifiedSync.discard();reportSync();return count;}
 async function cloudFlushProjects({background=false}={}){
   await identity();if(revision===undefined)await version();
   if(background)return unifiedSync.resumeScheduled();
   return unifiedSync.flush();
 }
-async function cloudClearCache(){const id=await account();cacheDisabled=true;try{images.clear();imageSizes.clear();documents.clear();snapshots.clear();blobRecords.clear();blobRevisionProof.clear();editorBases.clear();await cache?.clear(id);}catch(error){cacheDisabled=false;throw error;}}
+async function cloudClearCache(){const id=await account();cacheDisabled=true;try{images.clear();imageSizes.clear();documents.clear();snapshots.clear();blobRecords.clear();blobRevisionProof.clear();editorBases.clear();await cache?.clear(id);syncDiagnostics.clear();}catch(error){cacheDisabled=false;throw error;}}
 function cloudResumeCache(){cacheDisabled=false;}
 async function cloudEmergencySnapshot(){
   if(!owner||!cache)throw Error('尚无已验证的本机账号缓存，无法离线导出待同步数据');
@@ -1011,7 +1026,7 @@ async function cloudRestoreEmergency(snapshot){
   if(typeof cache.restoreUnifiedOutboxes!=='function')throw Error('当前浏览器不支持原子恢复唯一同步队列');
   return cache.restoreUnifiedOutboxes(key,snapshot.projects,snapshot.imports);
 }
-return {cloudListPreConflictScenes,cloudRestorePreConflictScene,cloudReloadBlob,cloudCloseCacheBeforeRemoteReset,cloudSetResetCleanupPending,cloudRunExclusiveReset,cloudPurgeLocalAfterReset,cloudConflictReview,cloudConflictBackup,cloudResolveProjectConflict,cloudMigrationInventory,cloudMigrationOriginalProject,cloudMigrationCommit,cloudLegacyProjectBackup,cloudAll,cloudGet,cloudPreview,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudClearCache,cloudResumeCache,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudPendingLocalSummary,cloudPendingDetails,cloudDiscardPending,cloudFlushProjects,cloudProjectDocument,cloudEmergencySnapshot,cloudRestoreEmergency,cloudBackupBlobIDs};
+return {cloudListPreConflictScenes,cloudRestorePreConflictScene,cloudReloadBlob,cloudCloseCacheBeforeRemoteReset,cloudSetResetCleanupPending,cloudRunExclusiveReset,cloudPurgeLocalAfterReset,cloudConflictReview,cloudConflictBackup,cloudResolveProjectConflict,cloudMigrationInventory,cloudMigrationOriginalProject,cloudMigrationCommit,cloudLegacyProjectBackup,cloudAll,cloudGet,cloudPreview,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudClearCache,cloudResumeCache,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudPendingLocalSummary,cloudPendingDetails,cloudSyncDiagnosticReport,cloudDiscardPending,cloudFlushProjects,cloudProjectDocument,cloudEmergencySnapshot,cloudRestoreEmergency,cloudBackupBlobIDs};
 }
 let projectPreview=()=>null;
 export const setCloudProjectPreview=producer=>{projectPreview=producer;};
@@ -1045,6 +1060,7 @@ export const cloudStageMutation=(...args)=>current.cloudStageMutation(...args);
 export const cloudPendingProjects=(...args)=>current.cloudPendingProjects(...args);
 export const cloudPendingLocalSummary=(...args)=>current.cloudPendingLocalSummary(...args);
 export const cloudPendingDetails=(...args)=>current.cloudPendingDetails(...args);
+export const cloudSyncDiagnosticReport=(...args)=>current.cloudSyncDiagnosticReport(...args);
 export const cloudDiscardPending=(...args)=>current.cloudDiscardPending(...args);
 export const cloudFlushProjects=(...args)=>current.cloudFlushProjects(...args);
 export const cloudProjectDocument=(...args)=>current.cloudProjectDocument(...args);

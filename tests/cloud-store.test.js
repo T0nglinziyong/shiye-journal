@@ -49,6 +49,17 @@ test('direct cloud uploads also appear in the global sync indicator until commit
     assert.ok(events.some(event=>event.pending>0));assert.equal(events.at(-1).pending,0);
   }finally{if(previous===undefined)delete globalThis.window;else globalThis.window=previous;}
 });
+test('sync diagnostic export reports a failed phase without record content',async()=>{
+  const {state,db}=fixture();state.fail=true;
+  await db.cloudAll('assets');
+  await assert.rejects(db.cloudTransaction(['assets'],tx=>tx.objectStore('assets').put({id:'secret-id',title:'私人标题'})));
+  const report=db.cloudSyncDiagnosticReport({online:true});
+  assert.equal(report.format,'shiye-sync-diagnostics');
+  assert.equal(report.lastFailure.failure.phase,'云端提交事务');
+  assert.equal(report.lastFailure.failure.category,'revision-conflict');
+  assert.equal(report.state.online,true);
+  assert.doesNotMatch(JSON.stringify(report),/secret-id|私人标题|owner-uuid/);
+});
 test('imports finish durable staging while image uploads are blocked; pending bytes survive reopening',async()=>{
   const cache=memoryCache(),a=fixture(cache);let release;a.state.uploadGate=new Promise(r=>release=r);
   await a.db.cloudAll('assets');

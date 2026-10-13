@@ -104,6 +104,7 @@ import {selectJournalReferenceCases,loadJournalReferenceCases} from './journal-r
 import {loadJournalTemplateReferences} from './journal-template-references.js';
 import {clearJournalPresetImages} from './journal-preset-images.js';
 import {changeTrash,expiredTrash} from './trash-actions.js';
+import {visibleMaterials,pruneUnreferencedHiddenAssets} from './asset-retention.js';
 // AI agent planning and visual review are paid, optional workflows. Load them only on demand.
 const runCreativeAgent=async(...args)=>(await import('./creative-runner.js')).runCreativeAgent(...args);
 import {commitAIDraft} from './ai-run-target.js';
@@ -140,7 +141,7 @@ import {renderEditorHTML} from './page-controllers/editor-view.js';
 import {renderImportHTML} from './page-controllers/import-view.js';
 import {renderSettingsHTML} from './page-controllers/settings-view.js';
 
-import {installRuntimeDiagnostics} from './runtime-diagnostics.js';
+import {installRuntimeDiagnostics,recordRuntimeIssue,runtimeIssueSnapshot} from './runtime-diagnostics.js';
 const view=document.querySelector('#view'),modal=document.querySelector('#modal'),body=document.querySelector('#modal-body');
 modal.querySelector('.modal-close').onclick=()=>modal.close();
 const fileInput=document.querySelector('#file-input'),workFileInput=document.querySelector('#work-file-input'),snapshotFileInput=document.querySelector('#snapshot-file-input'),creationResultInput=document.querySelector('#creation-result-input'),backupInput=document.querySelector('#backup-input'),emergencyInput=document.querySelector('#emergency-input');
@@ -844,7 +845,7 @@ async function flushSave(){
     for(const {snapshot,version} of batch){try{await db.stageProject(snapshot);}catch(error){if(saveVersions.get(snapshot.id)===version&&!dirtyProjects.has(snapshot.id))dirtyProjects.set(snapshot.id,snapshot);failure??=error;}finally{savingProjects--;}}
     if(failure)throw failure;
   });
-  try{await saveChain;if(!savingProjects&&!dirtyProjects.size&&!dirtyUsageAssets.size){syncDisplay.localPending=false;updateSyncIndicator();saveStatus(cloudEnabled?'修改已暂存 · 后台同步中':(await db.storageMode())==='server'?'已保存到服务器':'已保存到本机');}}catch(e){console.error(e);syncDisplay.error=e;updateSyncIndicator();saveStatus('暂存失败 · 修改仍在当前页面');toast('修改暂存失败，暂勿关闭页面：'+e.message);throw e;}
+  try{await saveChain;if(!savingProjects&&!dirtyProjects.size&&!dirtyUsageAssets.size){syncDisplay.localPending=false;updateSyncIndicator();saveStatus(cloudEnabled?'修改已暂存 · 后台同步中':(await db.storageMode())==='server'?'已保存到服务器':'已保存到本机');}}catch(e){console.error(e);recordRuntimeIssue('handled',e,state.route,{phase:'save'});syncDisplay.error=e;updateSyncIndicator();saveStatus('暂存失败 · 修改仍在当前页面');toast('修改暂存失败，暂勿关闭页面：'+e.message);throw e;}
 }
 function saveSpecificProject(p){if(!p)return;delete p.isTemplate;if(cloudEnabled)p.__cloudSessionId||=crypto.randomUUID();
   // Edits invalidate the previous scene's remote snapshot. A new 720px cover
@@ -1150,7 +1151,7 @@ async function legacyHandle(action,id,value){try{switch(action){
     }
     break;
   }
-  case 'backup':await backup();break;case 'restore':backupInput.click();break;case 'backup-emergency':{await flushSave();const blob=await db.createEmergencyBackup();download(blob,'拾页待同步应急包-'+new Date().toISOString().slice(0,10)+'.shiyerecovery');toast('应急包已导出，请妥善保存，包含私人图片和文字');break;}case 'restore-emergency':emergencyInput.click();break;
+  case 'backup':await backup();break;case 'restore':backupInput.click();break;case 'export-app-diagnostics':exportAppDiagnostics();break;case 'backup-emergency':{await flushSave();const blob=await db.createEmergencyBackup();download(blob,'拾页待同步应急包-'+new Date().toISOString().slice(0,10)+'.shiyerecovery');toast('应急包已导出，请妥善保存，包含私人图片和文字');break;}case 'restore-emergency':emergencyInput.click();break;
   case 'recover-pre-conflict':{
     const entries=await db.listPreConflictScenes();
     if(!entries.length){toast('本设备还没有检测到画布并发冲突');break;}
@@ -1178,7 +1179,7 @@ async function legacyHandle(action,id,value){try{switch(action){
   case 'storage-connect':{await flushSave();const old=db.storageConfig(),url=view.querySelector('#data-server-url')?.value.trim(),token=view.querySelector('#data-server-token')?.value.trim();if(!url)throw Error('请输入拾页数据服务地址');db.setStorageConfig({url,token});try{await db.storageMode();state.activeProject=null;state.basket=[];await refresh();toast('已连接服务器');}catch(error){db.setStorageConfig(old);throw error;}break;}
   case 'storage-browser':{if(state.selfHosted)throw Error('自托管网站不允许切换到浏览器资料');await flushSave();db.setStorageConfig(null);state.activeProject=null;state.basket=[];await refresh();toast('已切换为本浏览器资料');break;}
   case 'help':{const {showHelp}=await import('./help-ui.js');showHelp({body,modal});break;}case 'settings-open':captureSettings();await actionStore.dispatch({type:'settings/section',payload:{section:value}});break;case 'settings-back':if(state.settingsSection){captureSettings();await actionStore.dispatch({type:'settings/section',payload:{section:null}});}else route(settingsSession?.returnRoute||'series');break;case 'settings-save':{captureSettings();const cfg=state.aiSettings;if(!cfg.model.trim())throw Error('请输入模型 ID');const endpoint=new URL(cfg.endpoint);if(endpoint.protocol!=='https:')throw Error('API 地址必须使用 HTTPS');if(cfg.provider!=='custom'&&endpoint.host!==new URL(AI_PROVIDERS[cfg.provider].endpoint).host)throw Error('服务商与 API 地址不一致；自定义地址请选“自定义兼容接口”');const returnRoute=settingsSession?.returnRoute||'series';if(cloudEnabled){await db.transaction(['meta'],tx=>{tx.objectStore('meta').put(cloudPreferencesRecord(state.preferences));tx.objectStore('meta').put(cloudAISettingsRecord(cfg));});}state.aiSettings=saveAISettings(cfg);state.preferences=savePreferences(state.preferences);deferredSyncedPreferences=null;deferredSyncedAISettings=null;settingsSession=null;state.settingsSection=null;route(returnRoute);toast('设置已保存');break;}
-}}catch(e){console.error(e);toast(e.message||'操作失败');}}
+}}catch(e){console.error(e);recordRuntimeIssue('handled',e,state.route,{phase:'action'});toast(e.message||'操作失败');}}
 function editSelected(fn){const d=current(),e=editorEntry(d).find(x=>x.value.id===state.selected);if(!e&&state.selected)return;checkpoint();fn(e,d);saveProject();render();}
 function historyStep(from,to){view.flushInkCommit?.({renderUI:false,force:true});view.endTextEditing?.();const d=current(),snapshot=takeEditorHistoryStep(state,from,to,d);if(!snapshot)return false;for(const key of Object.keys(d))delete d[key];Object.assign(d,snapshot);state.activeDraft=snapshot.id;saveProject();return true;}
 function readMatchPaper(){const ratio=view.querySelector('#match-ratio')?.value||'a4';if(ratio!=='custom')return ratio;const w=Number(view.querySelector('#match-paper-width')?.value),h=Number(view.querySelector('#match-paper-height')?.value);if(!Number.isInteger(w)||!Number.isInteger(h)||w<50||h<50||w>1000||h>1000)throw Error('自定义纸张宽高需要是 50–1000 mm 的整数');state.customPaperWidth=w;state.customPaperHeight=h;return `custom:${w}x${h}`;}
@@ -1295,7 +1296,7 @@ function openManualCreationDialog(){
   modal.showModal();body.querySelector('#manual-layout-cancel').onclick=()=>modal.close();
   for(const button of body.querySelectorAll('[data-manual-template]'))button.onclick=async()=>{try{button.disabled=true;await createFromBasket(button.dataset.manualTemplate||null);modal.close();}catch(error){button.disabled=false;toast('创建草稿失败：'+error.message);}};
 }
-function openMaterialPicker(){body.innerHTML=`<h2>选择素材放入画布</h2><div class="mini-assets">${state.assets.map(a=>`<button type="button" class="mini-asset" data-pick="${a.id}">${imgTag(a)}<span>${esc(a.title)}</span></button>`).join('')}</div>`;modal.showModal();body.querySelectorAll('[data-pick]').forEach(b=>b.onclick=()=>{const a=asset(b.dataset.pick),d=current();checkpoint();const i=itemFromAsset(a,d,d.canvas.width/2,d.canvas.height/2,20,false);d.items.push(i);state.selected=i.id;state.tool='select';modal.close();saveProject();render();});}
+function openMaterialPicker(){body.innerHTML=`<h2>选择素材放入画布</h2><div class="mini-assets">${visibleMaterials(state.assets).map(a=>`<button type="button" class="mini-asset" data-pick="${a.id}">${imgTag(a)}<span>${esc(a.title)}</span></button>`).join('')}</div>`;modal.showModal();body.querySelectorAll('[data-pick]').forEach(b=>b.onclick=()=>{const a=asset(b.dataset.pick),d=current();checkpoint();const i=itemFromAsset(a,d,d.canvas.width/2,d.canvas.height/2,20,false);d.items.push(i);state.selected=i.id;state.tool='select';modal.close();saveProject();render();});}
 function openCreativeJSON(){const aliases=Object.entries(materialAliases(state.basket)).map(([key,id])=>`${key} = ${asset(id)?.title||id}`).join(' · ');body.innerHTML=`<h2>导入创作指令</h2><p>这是本地工具协议的验证入口，不会联系大模型。当前素材编号：${esc(aliases||'请先在搭配页选素材')}</p><label>包含 tools 或 tool_calls 的 JSON<textarea id="creative-source" style="min-height:240px" placeholder='{"tools":[{"name":"upsert_text","arguments":{"items":[{"key":"t1","content":"今天的故事……","width":0.5}]}}]}'></textarea></label><p>成功的前序调用会保留；失败调用不会污染画布。物理素材尺寸仍从素材库计算。</p><button type="button" class="btn primary" id="creative-apply">验证并应用</button><div id="creative-results" style="white-space:pre-wrap;margin-top:12px"></div>`;modal.showModal();body.querySelector('#creative-apply').onclick=()=>{try{const aliases=materialAliases(state.basket);const result=applyToolCalls(body.querySelector('#creative-source').value,current(),state.assets,aliases);body.querySelector('#creative-results').textContent=result.results.map(x=>`${x.ok?'✓':'×'} ${x.name}: ${x.detail}`).join('\n');if(result.committed){checkpoint();const p=state.activeProject,index=p.drafts.findIndex(x=>x.id===state.activeDraft);p.drafts[index]=result.draft;saveProject();render();}}catch(e){body.querySelector('#creative-results').textContent=e.message;}};}
 async function modelImage(a,cropRect=null,maxPixels=512,transparent=false){const record=await db.get('blobs',a.blobId),blob=record?.data||(a.staticPath?await fetch(a.staticPath).then(r=>r.blob()):null);if(!blob)return null;const bitmap=await createImageBitmap(blob),canvas=document.createElement('canvas'),crop=cropRect||{x:0,y:0,width:1,height:1},cw=crop.width*bitmap.width,ch=crop.height*bitmap.height,scale=Math.min(1,maxPixels/Math.max(cw,ch));canvas.width=Math.max(1,Math.round(cw*scale));canvas.height=Math.max(1,Math.round(ch*scale));const ctx=canvas.getContext('2d');if(!transparent){ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);}ctx.drawImage(bitmap,crop.x*bitmap.width,crop.y*bitmap.height,cw,ch,0,0,canvas.width,canvas.height);bitmap.close();return transparent?canvas.toDataURL('image/png'):canvas.toDataURL('image/jpeg',.78);}
 async function offlinePreviewBytes(a){
@@ -1317,7 +1318,7 @@ async function startAICreation(){
   if(!ids.length){state.aiProgress='请先在素材搭配中选择素材。';render();return;}
   const controller=new AbortController();aiController=controller;state.aiBusy=true;state.aiProgress='正在准备图像生成…';render();
   try{const referenceImages=cfg.sendPresetReferences?(await loadJournalTemplateReferences({context:{styles:sourceProject.styles,purposes:sourceProject.purposes,materials:assetsSnapshot.filter(asset=>ids.includes(asset.id))},userTemplates:state.userTemplates,db})).referenceImages:[];const blob=await generatePageImage({settings:cfg,project:sourceProject,draft:sourceDraft,assets:assetsSnapshot,ids,theme:prompt,createImage:modelImage,referenceImages,userTemplates:state.userTemplates,signal:controller.signal,onProgress:message=>{state.aiProgress=message;const el=view.querySelector('#ai-progress');if(el)el.textContent=message;}});if(controller.signal.aborted||state.accountId!==accountID)throw Error('创作已停止或账号已切换');await saveGeneratedImageSnapshot(blob,sourceProject);state.aiProgress='图片已由 GPT 图像模型直接生成，并保存到「画面快照」。当前可编辑画布未改变。';}
-  catch(error){console.error(error);state.aiProgress='图像生成失败：'+explainUserError(error,'图像创作');}
+  catch(error){console.error(error);recordRuntimeIssue('handled',error,state.route,{phase:'ai'});state.aiProgress='图像生成失败：'+explainUserError(error,'图像创作');}
   finally{if(aiController===controller)aiController=null;state.aiBusy=false;if(state.route==='editor')render();}
   return;
  }
@@ -1341,7 +1342,7 @@ async function startAICreation(){
   });
   assertRun();const completed=state.projects.find(item=>item.id===projectID);if(!completed)throw Error('原创作作品已不存在；结果未覆盖其他作品');const finalized=commitAIDraft(completed,{targetDraftID:commitTargetID,expectedDraft,generatedDraft:output.draft,newDraftID:uid()});commitTargetID=finalized.targetDraftID;candidateCreated||=finalized.candidate;completed.aiGenerated=true;completed.deliveryMode=cfg.deliveryMode;saveSpecificProject(completed);await flushSave();if(['image','pdf'].includes(cfg.deliveryMode)){await saveProjectSnapshot({...completed,projectDocumentPath:null,activeDraftID:commitTargetID},{format:cfg.deliveryMode==='pdf'?'application/pdf':'image/png'});completed.aiSnapshotCreated=true;saveSpecificProject(completed);}
   aiReport.outcome='completed';aiReport.budget=output.budget;state.aiProgress+=candidateCreated?'\n结构已完成并另存 AI 候选；原稿手改未被覆盖。':'\n结构已完成，草稿已保存。';state.aiProgress+=output.draft.agentRun?.visualReview==='model-reviewed'?' GPT 已检查最终画面，仍可继续手改。':' 最终视觉请核对。';
- }catch(error){console.error(error);aiReport.outcome=controller.signal.aborted?'stopped':'failed';aiReport.stopReason=error.code||aiReport.outcome;aiReport.budget=error.budget||null;aiReport.error=explainUserError(error,'创作');state.aiProgress+='\n'+aiReport.error+'。已保留成功的步骤。';}
+ }catch(error){console.error(error);recordRuntimeIssue('handled',error,state.route,{phase:'ai'});aiReport.outcome=controller.signal.aborted?'stopped':'failed';aiReport.stopReason=error.code||aiReport.outcome;aiReport.budget=error.budget||null;aiReport.error=explainUserError(error,'创作');state.aiProgress+='\n'+aiReport.error+'。已保留成功的步骤。';}
  finally{await recorder?.finish(aiReport.outcome).catch(()=>{});if(aiController===controller)aiController=null;state.aiBusy=false;if(state.route==='editor')render();}
 }
 async function flattenGeneratedPage(d,p=state.activeProject,persistProject=true){
@@ -1410,6 +1411,12 @@ async function refresh({background=false,onlyChanged=false,skipCloudRefresh=fals
 let trashSweepActive=false;
 async function purgeExpiredTrash(){if(trashSweepActive)return;const entries=expiredTrash(state.trash);if(!entries.length)return;trashSweepActive=true;try{await changeTrash({db,state,ids:entries.map(entry=>entry.id)});if(parity.libraryTab==='trash'||parity.workTab==='trash')render();}catch(error){console.warn('最近删除到期清理待重试',error?.name||error?.message);}finally{trashSweepActive=false;}}
 setInterval(()=>void purgeExpiredTrash(),15*60*1000);
+let hiddenSweepActive=false;
+async function sweepHiddenAssets(){if(hiddenSweepActive||cloudEnabled||document.hidden||state.route==='editor'||state.route==='import')return;
+  hiddenSweepActive=true;try{const removed=await pruneUnreferencedHiddenAssets({db,state});if(removed)actionStore.publish('collections/updated',{scope:'collections',keys:['assets']});}
+  catch(error){recordRuntimeIssue('handled',error,state.route,{phase:'background'});}finally{hiddenSweepActive=false;}}
+setInterval(()=>void sweepHiddenAssets(),24*60*60*1000);
+setTimeout(()=>void sweepHiddenAssets(),60*1000);
 async function refineCandidateFrame(candidateFrame,request,{postprocessOnly=false}={}){
   const bitmap=await decodeImageBlob(candidateFrame);
   try{
@@ -2062,7 +2069,7 @@ async function rasterize(d,scale,{preview=false}={}){
  const ids=[...new Set(editorEntry(d).filter(e=>e.kind==='material').map(e=>asset(e.value.assetID)).filter(a=>a&&!a.staticPath).map(a=>a.blobId))],release=privateImages.retain(ids);
  try{await Promise.all(ids.map(id=>privateImages.load(id,preview?false:true)));const result=await renderSceneCanvas(d,{scale,loadMaterialImage:async id=>{const a=asset(id);if(!a)throw Error('素材不在当前资料库');return decodeSceneImage(a.staticPath||(preview?imagePlaceholder(a.blobId):(urls.get(a.blobId)||image(a.blobId))));}});return result.canvas;}finally{release();}
 }
-async function receiveImportPhotos(files){const images=[...files].filter(f=>f.type.startsWith('image/')).slice(0,Math.max(0,12-state.importRecords.length));if(!images.length)return;try{saveActiveImportRecord();const start=state.importRecords.length;for(const file of images)state.importRecords.push({file,url:URL.createObjectURL(file),confirmed:false,selectedCandidates:[],selection:[],candidates:[]});state.importStep='inspect';state.route='import';await switchImportRecord(start,true);}catch(e){console.error(e);toast(explainUserError(e,'照片处理'));}}
+async function receiveImportPhotos(files){const images=[...files].filter(f=>f.type.startsWith('image/')).slice(0,Math.max(0,12-state.importRecords.length));if(!images.length)return;try{saveActiveImportRecord();const start=state.importRecords.length;for(const file of images)state.importRecords.push({file,url:URL.createObjectURL(file),confirmed:false,selectedCandidates:[],selection:[],candidates:[]});state.importStep='inspect';state.route='import';await switchImportRecord(start,true);}catch(e){console.error(e);recordRuntimeIssue('handled',e,'import',{phase:'import'});toast(explainUserError(e,'照片处理'));}}
 fileInput.onchange=async()=>{const files=[...(fileInput.files||[])];fileInput.value='';await receiveImportPhotos(files);};
 workFileInput.onchange=async()=>{const file=workFileInput.files?.[0];workFileInput.value='';if(!file)return;if(file.type.startsWith('image/')){await receiveImportPhotos([file]);return;}
   try{await importEditableFile(file);}
@@ -2212,7 +2219,7 @@ function backgroundCloudCheck({force=false}={}){
   if(!force&&Date.now()-cloudCheckAt<15000)return;
   cloudCheckAt=Date.now();
   cloudCheck=refresh({background:true,onlyChanged:true})
-    .catch(error=>console.warn('后台版本检查失败；保留已验证缓存',error))
+    .catch(error=>{recordRuntimeIssue('handled',error,state.route,{phase:'background'});console.warn('后台版本检查失败；保留已验证缓存',error);})
     .finally(()=>{
       cloudCheck=null;
       if(cloudCheckAgain){
@@ -2337,6 +2344,22 @@ async function openSyncConflictChoice(kind,id){
     body.querySelector('#conflict-back').onclick=()=>void openSyncDetails();
   }
 }
+function exportAppDiagnostics(){
+  const report={format:'shiye-app-error-diagnostics',version:1,createdAt:new Date().toISOString(),
+    scope:'仅本次打开应用期间的安全摘要；关闭后不保留',
+    environment:{mode:cloudEnabled?'cloud':state.selfHosted?'server':'browser',online:navigator.onLine!==false},
+    runtime:runtimeIssueSnapshot(),sync:cloudEnabled?db.syncDiagnosticReport({online:navigator.onLine}):null};
+  download(new Blob([JSON.stringify(report,null,2)],{type:'application/json'}),
+    '拾页应用错误诊断-'+new Date().toISOString().slice(0,10)+'.json');
+  toast('已导出应用错误诊断；不含作品、图片、账号或密钥');
+}
+function exportSyncDiagnostics(){
+  const report=db.syncDiagnosticReport({online:navigator.onLine});
+  if(!report){toast('当前不是云端同步模式');return;}
+  download(new Blob([JSON.stringify(report,null,2)],{type:'application/json'}),
+    '拾页同步诊断-'+new Date().toISOString().slice(0,10)+'.json');
+  toast('已导出本次会话的同步诊断；不含作品、图片、账号标识或原始报错');
+}
 async function openSyncDetails(){if(!cloudEnabled)return;cloudResumer.suspend();try{
   const details=await db.pendingSyncDetails(),projects=details.projects||[],batches=details.batches||[],local=[...dirtyProjects.values()],total=projects.length+batches.length+local.length,quarantined=details.quarantined||0;
   // Safari uses one generic SyntaxError for many unrelated DOM APIs.
@@ -2346,6 +2369,8 @@ async function openSyncDetails(){if(!cloudEnabled)return;cloudResumer.suspend();
     .slice(0,8).join(' → ');
   const rows=[...projects.map(row=>`<li>作品：${esc(row.title)} <small>${esc(row.id)}</small> <button class="btn mini" type="button" data-conflict-kind="project" data-conflict-id="${esc(row.id)}">比较版本</button></li>`),...batches.map(row=>`<li>待传批次 ${esc(row.id)}：${row.items.length} 条变更<ul>${row.items.slice(0,12).map(item=>`<li>${esc(item.store)} · ${esc(item.action)} · ${esc(item.title||item.id)}</li>`).join('')}</ul>${row.items.length===1&&row.items[0]?.store==='projects'&&row.items[0]?.action==='put'?`<button class="btn mini" type="button" data-conflict-kind="batch" data-conflict-id="${esc(row.id)}">比较版本</button>`:''}</li>`),...local.map(row=>`<li>尚未暂存的作品：${esc(row.title||row.id)}</li>`)];
   body.innerHTML=`<h2>同步详情</h2><p>状态：${syncPausedByUser?'已暂停 · 本机修改仍保留':syncDisplay.error?'待重试':syncDisplay.pending||local.length?'上传中':'已同步'}</p><p>最近错误：${esc(syncDisplay.error?describeSyncError(syncDisplay.error):details.error||'无')}</p>${errorFrames?`<details><summary>查看错误位置（用于排查 Safari）</summary><small>${esc(errorFrames)}</small></details>`:''}<p>本机待同步：${total} 项。未上传作品和草稿将保留在本机待同步队列。</p><p>隔离待同步原始记录：${quarantined} 项（禁止自动上传，原始数据未丢弃）。</p><p>已隔离旧版可编辑作品：${db.legacyProjectInfo?.()?.length||0} 件（未删除）。转换工具会同时扫描账号的素材、系列、作品、元数据、图片引用和最近删除。</p><div class="sync-pending-list">${rows.length?`<ul>${rows.join('')}</ul>`:'<p>没有待同步项目。</p>'}</div><div class="actions"><button type="button" class="btn" id="sync-migrate-account">转换旧数据格式</button><button type="button" class="btn" id="sync-backup-legacy-works" ${db.legacyProjectInfo?.()?.length?'':'disabled'}>导出隔离旧作品备份</button><button type="button" class="btn primary" id="sync-retry-now">立即同步</button><button type="button" class="btn" id="sync-pause-local">${syncPausedByUser?'恢复后台重试':'暂停后台重试'}</button><button type="button" class="btn" id="sync-emergency-copy" ${total?'':'disabled'}>导出待同步数据备份</button><button type="button" class="btn danger" id="sync-wipe-everything">彻底清空本账号本机与云端数据</button></div><p>暂停仅停止自动重试，不清空作品、草稿或待上传图片；页面刷新后仍可恢复同步。为防止误删本机唯一副本，已移除直接丢弃待同步作品的操作。</p>`;
+  body.querySelector('.actions')?.insertAdjacentHTML('afterbegin','<button type="button" class="btn" id="sync-export-diagnostics">导出详细同步诊断</button>');
+  body.querySelector('#sync-export-diagnostics').onclick=exportSyncDiagnostics;
   modal.showModal();modal.addEventListener('close',()=>{if(!syncPausedByUser&&!resetWorkflowActive)void cloudResumer.resume();},{once:true});
   body.querySelectorAll('[data-conflict-kind]').forEach(button=>{
     button.onclick=()=>{void openSyncConflictChoice(button.dataset.conflictKind,button.dataset.conflictId);};
@@ -2359,7 +2384,10 @@ async function openSyncDetails(){if(!cloudEnabled)return;cloudResumer.suspend();
     try{await flushSave();const backup=await db.createEmergencyBackup();if(!(backup instanceof Blob)||!backup.size)throw Error('应急备份为空');download(backup,'拾页-待同步应急备份-'+new Date().toISOString().slice(0,10)+'.shiyerecovery');toast('已导出含原始字节的待同步应急备份，请妥善保存');}
     catch(error){toast('导出应急备份失败：'+error.message);}
   };
- }catch(error){if(!syncPausedByUser)void cloudResumer.resume();toast('同步详情读取失败：'+error.message);}}
+ }catch(error){console.warn('同步详情读取失败',error);recordRuntimeIssue('handled',error,state.route,{phase:'sync-details'});body.innerHTML='<h2>同步详情暂不可用</h2><p>待同步资料没有被清除。仍可导出本次会话的同步诊断。</p><div class="actions"><button type="button" class="btn" id="sync-export-diagnostics">导出详细同步诊断</button></div>';
+   body.querySelector('#sync-export-diagnostics').onclick=exportSyncDiagnostics;
+   if(!modal.open)modal.showModal();modal.addEventListener('close',()=>{if(!syncPausedByUser&&!resetWorkflowActive)void cloudResumer.resume();},{once:true});
+   toast(explainUserError(error,'同步详情读取'));}}
 document.querySelector('#save-state').addEventListener('click',()=>{if(cloudEnabled)void openSyncDetails();});
 document.querySelector('#sync-indicator').onclick=()=>void openSyncDetails();
 let viewportTimer;
@@ -2392,11 +2420,11 @@ async function init(user,{resetPending=false,afterAccountReset=false}={}){previe
       onError:error=>toast('更新未完成，当前页面和资料保持不变：'+error.message)
     })).catch(error=>console.warn('更新检查暂不可用',error));
   }saveStatus((await db.storageMode())==='server'?'已连接服务器':'已保存到本机');if(cloudEnabled){syncDisplay.checking=false;updateSyncIndicator();if(!resetPending)void cloudResumer.wake();else saveStatus('云端已清空 · 正在后台清理旧图片（暂只读）');}
-  }catch(e){console.error(e);const auth=e.status===401;if(auth)cloudSessionReady=false;
+  }catch(e){console.error(e);recordRuntimeIssue('handled',e,state.route,{phase:'auth'});const auth=e.status===401;if(auth)cloudSessionReady=false;
   if(cachedShown&&!auth){saveStatus('云端核对失败 · 缓存仅供查看');toast('云端连接失败，未改为本机保存：'+e.message);if(cloudEnabled)void cloudResumer.wake();return;}
   if(auth){view.innerHTML=`<div class="empty"><strong>连接拾页数据服务器</strong><p>请输入服务器访问令牌；连接失败时不会另存到浏览器。</p><form id="server-login"><input type="password" name="token" required autocomplete="off" placeholder="服务器访问令牌" aria-label="服务器访问令牌"><button class="btn primary" type="submit">连接</button></form><p id="server-login-error">${esc(e.message)}</p></div>`;view.querySelector('#server-login').onsubmit=event=>{event.preventDefault();db.setStorageConfig({url:db.storageConfig()?.url||location.origin,token:event.target.elements.token.value.trim()});init();};}else{view.innerHTML=`<div class="empty"><strong>无法读取资料</strong><p>${esc(e.message||'请检查设备剩余空间和数据服务连接。')}</p><button class="btn" id="storage-retry">重试连接</button></div>`;view.querySelector('#storage-retry').onclick=()=>init();}saveStatus('存储不可用');}}
 mountIcons(document);
 const matchingSession=createMatchingSession({state,db,uid,esc,asset,modelImage,rasterize,workCover:p=>{const d=p.drafts.find(d=>d.id===p.activeDraftID)||p.drafts[0];return `<div class="thumb-sheet" style="--thumb-ratio:${d.canvas.width/d.canvas.height};background:${esc(d.paperColor||'#fff')}"><div class="thumb-inner" style="position:relative">${p.isSnapshot?`<img src="${image(p.snapshotBlobId)}" alt="${esc(p.title)} 快照">`:workCover(d,false,true,p.id)}</div></div>`;},createProject:()=>createMatchingProject(),saveSnapshotFromDraft:saveProjectSnapshot,saveGeneratedImageSnapshot,generatePageImage,runCreativeAgent,createAIRecorder,supportsVision,flushSave,route,handle,mountIcons,toast});
-startCloudSession(init).catch(error=>{document.querySelector('#app').hidden=true;const p=document.createElement('p');p.textContent='无法连接认证服务，请稍后刷新。未打开私人资料。';document.body.append(p);console.warn(error.name);});
+startCloudSession(init).catch(error=>{recordRuntimeIssue('handled',error,state.route,{phase:'auth'});document.querySelector('#app').hidden=true;const p=document.createElement('p');p.textContent='无法连接认证服务，请稍后刷新。未打开私人资料。';document.body.append(p);console.warn(error.name);});
 import {createMatchingSession} from './matching-session.js';
 

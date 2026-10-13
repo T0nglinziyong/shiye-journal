@@ -1,7 +1,7 @@
 import {markSyncPhase} from './sync-browser-compat.js';
 // Durable edits are an explicit outbox, not a replacement for cloud records.
 // Commit acknowledgement is the only point at which an entry is removed.
-export function createProjectSync({load,write,commit,revision,reconcile=async()=> 'conflict',recordKeys=record=>[{store:'projects',id:record.id}],onCommitted=()=>{},onConflict=async()=>null,onSuperseded=()=>{},onStatus=()=>{},runExclusive=fn=>fn(),reload=load,autoFlushDelayMs=0,setTimer=setTimeout,clearTimer=clearTimeout,clock=()=>Date.now()}){
+export function createProjectSync({load,write,commit,revision,reconcile=async()=> 'conflict',recordKeys=record=>[{store:'projects',id:record.id}],onCommitted=()=>{},onConflict=async()=>null,onSuperseded=()=>{},onStatus=()=>{},onDiagnostic=()=>{},runExclusive=fn=>fn(),reload=load,autoFlushDelayMs=0,setTimer=setTimeout,clearTimer=clearTimeout,clock=()=>Date.now()}){
   let initialized,staging=Promise.resolve(),network,serial=0,error,paused=false;
   let conflicts=new Set();
   // Durable local staging is immediate; only the remote commit is batched.
@@ -21,6 +21,8 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
   // the rest of the session: the resumer will retry the durable outbox later.
   const initialize=()=>initialized??=(async()=>{for(const row of await load()||[]){entries.set(row.record.id,row);serial=Math.max(serial,row.serial);}report();})().catch(failure=>{initialized=undefined;throw markSyncPhase(failure,'读取本机待同步队列');});
   const report=()=>onStatus({pending:entries.size,error,conflicts:conflicts.size});
+  const diagnose=(action,row,failure)=>{try{onDiagnostic({action,kind:row?.record?.kind||'queue',baseRevision:row?.baseRevision,
+    cloudRevision:revision(),pending:entries.size,error:failure});}catch{/* Diagnostics must not block a durable sync. */}};
   const persist=()=>Promise.resolve().then(()=>write(structuredClone([...entries.values()])))
     .catch(error=>{throw markSyncPhase(error,'写入本机待同步队列');});
   // The durable queue is shared by tabs. A tab may have opened before another
@@ -55,12 +57,12 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
     if(removed)entries.delete(row.record.id);
     try{await persist();}
     catch(e){if(removed&&!entries.has(row.record.id))entries.set(row.record.id,row);throw e;}
-    if(confirmedHere)onCommitted(row.record,revision());
+    if(confirmedHere){onCommitted(row.record,revision());diagnose('committed',row);}
     report();
   }
   function stage(record,{baseRevision=revision()}={}){
     const task=staging.catch(()=>{}).then(async()=>{await initialize();if(!Number.isSafeInteger(baseRevision)||baseRevision<0)throw Error('作品编辑基线无效，未上传旧稿');const previous=entries.get(record.id),row={record:structuredClone(record),serial:++serial,baseRevision:previous?Math.min(previous.baseRevision,baseRevision):baseRevision,operationID:crypto.randomUUID()};entries.set(record.id,row);try{await persist();}catch(e){if(previous)entries.set(record.id,previous);else entries.delete(record.id);throw e;}conflicts.delete(record.id);error=null;report();});
-    staging=task.catch(()=>{});void task.then(()=>scheduleAuto()).catch(()=>{});return task;
+    staging=task.catch(()=>{});void task.then(()=>scheduleAuto()).catch(failure=>diagnose('failed',{record,baseRevision},failure));return task;
   }
   function kick({force=false}={}){
     cancelAuto();
@@ -81,18 +83,21 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
       while(entries.size&&!paused){
         const row=[...entries.values()].find(item=>!blocked.has(item.record.id)&&item.serial<=windowSerial);
         if(!row)break;
+        diagnose('start',row);
         try {
         // A restarted queue must not overwrite changes made by another device.
         if(row.baseRevision!==revision()){
+          diagnose('reconcile',row);
           // The app may have closed after the server committed but before the
           // acknowledgement was removed from IndexedDB. Verify the exact
           // operation instead of replaying it or reporting a false conflict.
           const resolution=await reconcile(row.record,row.operationID,row.baseRevision);
           if(resolution==='committed'){
-            await acknowledge(row);continue;
+            await acknowledge(row);diagnose('committed',row);continue;
           }
           if(resolution==='remote'){
             await acknowledge(row);
+            diagnose('remote-won',row);
             onSuperseded(row.record);
             continue;
           }
@@ -108,12 +113,13 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
             row.baseRevision=revision();
             row.operationID=crypto.randomUUID();
             await persist();
+            diagnose('merged',row);
             onSuperseded(row.record);
             continue;
           }
           // An import batch consists only of new, globally unique IDs. If no
           // ID is present remotely, it can be retried after an unrelated edit.
-          if(resolution==='rebase'){row.baseRevision=revision();await persist();}
+          if(resolution==='rebase'){row.baseRevision=revision();await persist();diagnose('retry',row);}
           else {
             // A genuinely conflicting editable project becomes a separate
             // recoverable copy. Never overwrite the other device's original
@@ -139,33 +145,34 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
           // Confirm the exact durable operation ID before surfacing an error.
           let resolved;
           try{resolved=await reconcile(row.record,row.operationID,row.baseRevision);}catch{/* Keep the row if verification is offline. */}
-          if(resolved==='committed'){await acknowledge(row);continue;}
-          if(resolved==='remote'){await acknowledge(row);onSuperseded(row.record);continue;}
+          if(resolved==='committed'){await acknowledge(row);diagnose('committed',row);continue;}
+          if(resolved==='remote'){await acknowledge(row);diagnose('remote-won',row);onSuperseded(row.record);continue;}
           if(resolved?.kind==='replace'){
             if(resolved.record.kind==='batch'&&
               !resolved.record.payload?.operations?.length){await acknowledge(row);onSuperseded(row.record);continue;}
             row.record=structuredClone(resolved.record);
             row.baseRevision=revision();row.operationID=crypto.randomUUID();
-            await persist();onSuperseded(row.record);continue;
+            await persist();diagnose('merged',row);onSuperseded(row.record);continue;
           }
           if(resolved==='rebase'){
-            if(revision()>row.baseRevision){row.baseRevision=revision();await persist();continue;}
+            if(revision()>row.baseRevision){row.baseRevision=revision();await persist();diagnose('retry',row);continue;}
             // Unchanged server revision means an unconfirmed upload, not a
             // competing edit. Retain the row for the normal retry path.
-            throw new Error('云端版本未变化，本次上传未获确认；本机修改已保留，将自动重试',{cause:failure});
+            throw markSyncPhase(new Error('云端版本未变化，本次上传未获确认；本机修改已保留，将自动重试',{cause:failure}),failure.syncPhase||'上传当前待同步记录');
           }
           throw failure;
         }
         await staging;
         await acknowledge(row,{confirmedHere:true});
         }catch(failure){
-          if(!/云端版本已变化|另一设备已更新|\\bconflict\\b/i.test(failure?.message||''))throw failure;
+          if(!/云端版本已变化|另一设备已更新|\\bconflict\\b/i.test(failure?.message||'')){diagnose('failed',row,failure);throw failure;}
           blocked.add(row.record.id);
+          diagnose('conflict',row,failure);
         }
       }
       conflicts=blocked;
       error=null;report();
-    }))().catch(e=>{error=e;report();throw e;}).finally(()=>{
+    }))().catch(e=>{diagnose('failed',null,e);error=e;report();throw e;}).finally(()=>{
       network=null;
       if(entries.size&&!error&&[...entries.keys()].some(id=>!conflicts.has(id)))scheduleAuto();
     });

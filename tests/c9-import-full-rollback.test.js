@@ -13,14 +13,14 @@ const expected={
   'recognition-raster.js':'4e88878477689fa3c973576c5ce51c419145343a',
   'material-color-restoration.js':'4be602eab1a8d3d1281ba6c455c1ad80055da1c3',
   'import-workspace-ui.js':'a158cd3b2ea4444ed4a77e2c6c2194774a605796',
-  'workflow-ui.js':'088058dd6b4ca2d3f7132bd647f89aedb12bd81a',
+  'workflow-ui.js':'bb0366540cb69f9c721295f1bcf78508bf7b31f8',
   'styles.css':'c6b7945ba3ffeb4373dbe38f97bc96dbfd9e5178',
   'responsive.css':'3daab9b366125aeda84ed7e78bf2ac72132c8981',
   'paper-ui.js':'d1ebb53e61c7753c869850528eb43fe1bc7f062a',
   'import-save.js':'503d252ecfb47a9310f099cb4605c538346198c5',
   'paper-analysis.js':'821147b425086b7b579e7caceff7b1fea914bbfc',
   'recognition-profiles.js':'5001bea0d5cc4257c1c08e11b874c84d448c22c5',
-  'vision-runtime.js':'0e232cafd76e5278da5a5dd6706214cbbdb9c880'
+  'vision-runtime.js':'3817687ab32df7fb19c308c83902a6b123aabee1'
 };
 for(const [name,sha] of Object.entries(expected)){
   test('c9 recognition core or approved manual UI version: '+name,async()=>{
