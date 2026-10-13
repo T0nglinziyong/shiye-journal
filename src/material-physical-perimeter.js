@@ -1,4 +1,5 @@
 import {physicalPolygonQuality,shouldRepairPhysicalPolygon} from './material-physical-polygon-quality.js';
+import {recoverBrokenPhysicalChroma} from './material-chroma-recovery.js';
 // Historical no-MorphGAC mask policy from the real-photo Python prototype.
 // This module handles PHYSICAL PERIMETERS ONLY. Candidate discovery, page warp,
 // morphology-based discovery, apertures, RGB extraction and storage are intact.
@@ -101,12 +102,19 @@ export function selectPhysicalPerimeter(cv,p,box){
          expandedSegmentationROI(box,w,h,p.paperWidthMM,p.paperHeightMM)):1,
      quality=physicalPolygonQuality(raw,w,h),
      repaired=shouldRepairPhysicalPolygon(box,quality,solidity),
-     chosen=repaired?'repaired-observed-hull':physicalPerimeterChoice({hasObserved:true,
+     // For a spiky but non-self-crossing contour, the candidate may have
+     // followed printed decoration. Reacquire the carrier from independent
+     // paper-relative colour components, only when the recovered component
+     // substantially overlaps and has bounded outward growth.
+     recovered=repaired&&quality.crossings===0&&quality.sharpIndentations>0
+       ?recoverBrokenPhysicalChroma(cv,p,box):null,
+     chosen=recovered?'recovered-chroma-hull':repaired?'repaired-observed-hull':
+       physicalPerimeterChoice({hasObserved:true,
        source:box.boundarySource||'unknown',hullToMinRect,hullToBox,
        solidity,vertices:polygon.rows,ellipseAgreement});
    // A user-edited frame is a hard geometry constraint, not a suggestion
    // to convexify, auto-fit, or snap to a different physical outline.
-   let points=raw;
+   let points=recovered||raw;
    if(chosen==='observed-freeform'&&box.boundarySource==='ellipse-fit'&&
       actual?.length>=3)points=actual;
    if(chosen==='observed-paper-convex'||chosen==='fragmented-carrier-hull'||
@@ -131,6 +139,7 @@ export function selectPhysicalPerimeter(cv,p,box){
      originalPhysicalBoundary:raw,
      perimeterEvidence:{solidity,hullToMinRect,hullToBox,vertices:polygon.rows,
        ellipseAgreement,polygonCrossings:quality.crossings,
-       sharpIndentations:quality.sharpIndentations}};
+       sharpIndentations:quality.sharpIndentations,
+       recoveredFromChroma:!!recovered}};
  }finally{polygon.delete();hull.delete();observed.delete();}
 }
