@@ -11,6 +11,7 @@
     "pretest": "node scripts/build-offline-runtime.mjs",
     "test": "node --test --test-concurrency=4 tests/*.test.js",
     "test:browser": "node tests/browser-acceptance.mjs",
+    "test:cutout-browser": "node tests/cutout-dialog-visibility-browser.mjs",
     "test:editor-browser": "node tests/editor-browser-acceptance.mjs",
     "test:selection-browser": "node tests/library-selection-browser.mjs",
     "test:layout-browser": "node tests/layout-preview-browser.mjs",

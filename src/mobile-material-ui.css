@@ -125,17 +125,16 @@ body:has(.import-nav) #view>.import-nav>.sync-indicator{display:none!important}
    Advanced settings remain accessible via collapsible drawers. */
 #modal.cutout-dialog{
   box-sizing:border-box!important;
-  width:min(620px,96vw)!important;
+  width:min(980px,96vw)!important;
   max-width:none!important;
   max-height:min(92dvh,calc(100dvh - env(safe-area-inset-top) - 8px))!important;
   overflow:hidden!important;
   padding:0!important;
 }
-#modal.cutout-dialog>.modal-shell{padding:0!important;min-height:0;height:100%}
-#modal .cutout-modal{
-  display:flex!important;flex-direction:column!important;
-  gap:6px!important;height:min(91dvh,820px);max-height:91dvh;
-  min-height:0;overflow:hidden;padding:10px!important;
+#modal.cutout-dialog>.modal-shell{padding:0!important;min-height:0;min-width:0;height:auto}
+/* Shared editor controls; layout (grid/flex) is determined by viewport. */
+#modal.cutout-dialog .cutout-modal{
+  gap:6px!important;min-height:0;overflow:hidden;padding:10px!important;
 }
 #modal .cutout-modal>header{
   display:grid;grid-template-columns:64px minmax(0,1fr) 64px;
@@ -164,11 +163,8 @@ body:has(.import-nav) #view>.import-nav>.sync-indicator{display:none!important}
   min-height:30px!important;padding:5px 8px!important;border-radius:10px;
   font-size:12px!important;line-height:1.2;
 }
-#modal .cutout-modal>.cutout-preview{
-  flex:0 0 auto!important;
-  width:100%;height:clamp(150px,29dvh,270px)!important;
-  min-height:150px!important;
-  border-radius:13px;
+#modal.cutout-dialog .cutout-modal>.cutout-preview{
+  width:100%;border-radius:13px;margin:0;
 }
 #modal .cutout-modal>.cutout-hint{
   margin:0 1px!important;padding:0!important;
@@ -226,27 +222,59 @@ body:has(.import-nav) #view>.import-nav>.sync-indicator{display:none!important}
   min-height:40px!important;padding:9px 8px!important;font-size:13px!important;
 }
 #modal .cutout-reset-settings{flex:none;margin:0}
+/* Restore the original side-by-side desktop composition. No global
+   mobile !important overrides may force this back into a narrow column. */
+@media(min-width:700px){
+  #modal.cutout-dialog .cutout-modal{
+    display:grid!important;
+    grid-template-columns:minmax(0,1.2fr) minmax(260px,.8fr);
+    grid-template-rows:auto auto auto minmax(0,1fr) auto;
+    grid-template-areas:"header header" "steps steps" "compare controls"
+                        "preview controls" "hint controls";
+    column-gap:14px;row-gap:8px;
+    height:min(86dvh,760px);max-height:calc(100dvh - 26px);
+    padding:12px!important;
+  }
+  #modal.cutout-dialog .cutout-modal>.cutout-preview{
+    height:100%!important;min-height:0!important;max-width:none;
+    aspect-ratio:auto;align-self:stretch;
+  }
+  #modal.cutout-dialog .cutout-modal>.cutout-controls{
+    min-height:0;max-height:100%;overflow-y:auto;
+  }
+}
+/* Only phones use the compact stacked cutout wizard. */
 @media(max-width:699px){
-  #modal.cutout-dialog{max-height:calc(94dvh - env(safe-area-inset-top))!important}
-  #modal .cutout-modal{
+  #modal.cutout-dialog{
+    width:min(620px,96vw)!important;
+    max-height:calc(94dvh - env(safe-area-inset-top))!important;
+  }
+  #modal.cutout-dialog .cutout-modal{
+    display:flex!important;flex-direction:column!important;
     height:min(90dvh,740px);max-height:90dvh;
     padding:8px!important;gap:5px!important;
   }
-  #modal .cutout-modal>.cutout-preview{
+  #modal.cutout-dialog .cutout-modal>.cutout-preview{
+    flex:0 0 auto!important;
     height:clamp(140px,26dvh,215px)!important;min-height:140px!important;
+    aspect-ratio:auto;
   }
-  #modal .cutout-modal>.cutout-controls{padding:8px!important}
-  #modal .cutout-controls #cutout-mode-panel>.stack{gap:6px!important}
-  #modal .cutout-advanced .setting-toggle{min-height:35px!important}
+  #modal.cutout-dialog .cutout-modal>.cutout-controls{
+    flex:1;min-height:0;max-height:none;overflow-y:auto;padding:8px!important;
+  }
+  #modal.cutout-dialog #cutout-mode-panel>.stack{gap:6px!important}
+  #modal.cutout-dialog .cutout-advanced .setting-toggle{min-height:35px!important}
 }
-@media(max-height:660px){
-  #modal .cutout-modal>.cutout-preview{height:clamp(105px,23dvh,155px)!important;min-height:105px!important}
-  #modal .cutout-modal>.cutout-hint{display:none}
+@media(max-width:699px) and (max-height:660px){
+  #modal.cutout-dialog .cutout-modal>.cutout-preview{
+    height:clamp(105px,23dvh,155px)!important;min-height:105px!important;
+  }
+  #modal.cutout-dialog .cutout-modal>.cutout-hint{display:none}
 }
 
 /* Native modal must show progress instead of only dimming the background
    while candidate RGB or alpha bytes are still being fetched from COS. */
-#modal:has(.cutout-loading){
+#modal.cutout-loading-dialog{
   box-sizing:border-box;width:min(350px,90vw)!important;
   max-height:60dvh;padding:0!important;background:#fffefa;
   border-radius:20px;overflow:hidden;

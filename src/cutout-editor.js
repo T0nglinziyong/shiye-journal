@@ -118,6 +118,9 @@ export async function showCutoutEditor({
 
   const history=[],initialAppearance=appearance,initialIntensity=intensity,initialAutoStraighten=autoStraighten;
 
+  // A cancelled or displaced asynchronous loader must not repaint the dialog.
+  if(isCancelled()||!modal.open)return;
+  if(!modal.matches(':modal'))throw Error('检查抠图弹窗不在模态顶层，请重新打开');
   onPhase('正在显示抠图工具…');
   body.innerHTML='<div class="material-editor cutout-modal">'
     +'<header><button type="button" id="cutout-cancel">取消</button><strong>检查抠图</strong><button type="button" id="cutout-apply" disabled>应用</button></header>'
@@ -129,8 +132,10 @@ export async function showCutoutEditor({
     +'<div class="cutout-step-nav"><button type="button" class="btn" id="cutout-prev">上一步</button><button type="button" class="btn primary" id="cutout-next">下一步</button></div>'
     +'<details class="cutout-advanced cutout-reset-settings"><summary>更多操作</summary><button type="button" class="btn" id="cutout-reset">恢复进入时的状态</button></details></section></div>';
 
+  // Keep the original showModal() instance active throughout the handoff.
+  // Do not call close()/showModal() after the loader has already opened it.
+  modal.classList.remove('cutout-loading-dialog');
   modal.classList.add('cutout-dialog','material-editor-dialog');
-  if(!modal.open)modal.showModal();
   const preview=body.querySelector('#cutout-canvas'),pctx=preview.getContext('2d');
 
   const push=()=>{
@@ -457,12 +462,12 @@ export async function showCutoutEditor({
   const cancel=e=>{if(busy)e.preventDefault();};
   modal.addEventListener('cancel',cancel);
   onDialogClosed(modal,()=>{
-    resize.disconnect();modal.removeEventListener('cancel',cancel);modal.classList.remove('cutout-dialog','material-editor-dialog');
+    resize.disconnect();modal.removeEventListener('cancel',cancel);modal.classList.remove('cutout-dialog','material-editor-dialog','cutout-loading-dialog');
     for(const image of new Set([source,initial,recognized,frame]))image?.close?.();
   });
   // The tool layout should be presented while the native dialog remains
   // open, before any expensive preview paint. Do not close and showModal again.
   await new Promise(resolve=>requestAnimationFrame(resolve));
-  if(isCancelled())return;
+  if(isCancelled()||!modal.open)return;
   panel();draw();
 }
