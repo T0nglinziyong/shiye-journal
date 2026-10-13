@@ -43,7 +43,9 @@ export async function detectPaperCandidates(bitmap,box,smallestMM=6,{
     dimensions:[dw,dh],refinementDimensions:[w,h],mode:profile.mode,candidateDiscovery,smallestMM,
     boxes:candidates.map(item=>({x:item.x,y:item.y,w:item.w,h:item.h,
       evidenceDensity:item.evidenceDensity,seedDensity:item.seedDensity,
-      fillRatio:item.fillRatio,absorbedFragments:item.absorbedFragments}))});
+      fillRatio:item.fillRatio,absorbedFragments:item.absorbedFragments,
+      boundarySource:item.boundarySource||null,boundaryPrior:item.boundaryPrior??null,
+      needsBoundaryReview:item.needsBoundaryReview===true}))});
   return profile.refineCandidates&&candidates.length
     ? profile.refineCandidates({
         candidates,

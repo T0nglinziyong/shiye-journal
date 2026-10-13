@@ -78,10 +78,10 @@ export function boundaryConfidence(cv,p,region){
 
 function physicalRegion(cv,p,box){
  const w=p.width,h=p.height;
- const points=box.physicalBoundary||[
-   [box.x,box.y],[box.x+box.w,box.y],
-   [box.x+box.w,box.y+box.h],[box.x,box.y+box.h]
- ];
+ const points=box.physicalBoundary;
+ // A detection with only an axis-aligned box is NOT evidence of a paper
+ // perimeter. Never make it an opaque rectangle by default.
+ if(!Array.isArray(points)||points.length<3)return null;
  if(!points||points.length<3)return null;
  // Rasterize at the SAME pixel scale as the original morph segmenter.
  const ax=clamp(Math.floor(Math.min(...points.map(v=>v[0]))*w)-2,0,w-1),
@@ -121,19 +121,77 @@ function physicalRegion(cv,p,box){
  }finally{vectors.delete();outline.delete();mat.delete();}
 }
 
+// No trustworthy exterior in a legacy fallback? Look for a real local
+// CLOSED outline before considering a mask. This does not run MorphGAC and
+// never fabricates the box as a completely opaque paper.
+function localPhysicalFallback(cv,p,box){
+ const w=p.width,h=p.height,
+   x0=clamp(Math.floor(box.x*w)-5,0,w-1),
+   y0=clamp(Math.floor(box.y*h)-5,0,h-1),
+   x1=clamp(Math.ceil((box.x+box.w)*w)+5,x0+1,w),
+   y1=clamp(Math.ceil((box.y+box.h)*h)+5,y0+1,h),
+   rw=x1-x0,rh=y1-y0;
+ if(rw<12||rh<12)return null;
+ const rgba=cv.matFromArray(h,w,cv.CV_8UC4,p.pixels),
+   roi=rgba.roi(new cv.Rect(x0,y0,rw,rh)),gray=new cv.Mat(),
+   edges=new cv.Mat(),closed=new cv.Mat(),
+   kernel=cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(3,3)),
+   contours=new cv.MatVector(),hierarchy=new cv.Mat();
+ try{
+   cv.cvtColor(roi,gray,cv.COLOR_RGBA2GRAY);
+   cv.Canny(gray,edges,10,30);
+   cv.morphologyEx(edges,closed,cv.MORPH_CLOSE,kernel);
+   cv.findContours(closed,contours,hierarchy,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_SIMPLE);
+   let best=null,bestArea=0;
+   for(let i=0;i<contours.size();i++){
+     const contour=contours.get(i),area=Math.abs(cv.contourArea(contour));
+     if(area>bestArea){best?.delete();best=contour;bestArea=area;}else contour.delete();
+   }
+   if(!best||bestArea<Math.max(40,rw*rh*.025)){best?.delete();return null;}
+   try{
+     const polygon=new cv.Mat();
+     try{
+       cv.approxPolyDP(best,polygon,Math.max(1,cv.arcLength(best,true)*.012),true);
+       if(polygon.rows<3)return null;
+       const boundary=Array.from({length:polygon.rows},(_,i)=>[
+         clamp((polygon.data32S[i*2]+x0)/w,0,1),
+         clamp((polygon.data32S[i*2+1]+y0)/h,0,1)
+       ]);
+       return {...box,physicalBoundary:boundary,
+         boundarySource:'local-edge-unverified',boundaryPrior:0,
+         needsBoundaryReview:true};
+     }finally{polygon.delete();}
+   }finally{best.delete();}
+ }finally{
+   hierarchy.delete();contours.delete();kernel.delete();closed.delete();
+   edges.delete();gray.delete();roi.delete();rgba.delete();
+ }
+}
+
 // Both explicit physical-only and confidence-adaptive modes use this same
 // physical candidate path. Adaptive may attempt MorphGAC only if confidence
 // is low, and keeps the initial candidate when contraction is unsupported.
 export function segmentPhysicalOrAdaptive(cv,p){
  const output=[],qualityContext=createBoundaryConfidenceContext(cv,p);
  try{for(const box of p.boxes||[]){
-   const physical=physicalRegion(cv,p,box);
-   if(!physical){output.push({...box,segmentationFailed:true,needsBoundaryReview:true});continue;}
-   const quality=qualityContext.evaluate(box),candidate={
+   const candidateBox=box.physicalBoundary?box:localPhysicalFallback(cv,p,box);
+   const physical=candidateBox?physicalRegion(cv,p,candidateBox):null;
+   if(!physical){
+     if(p.method==='adaptive'){
+       const alternate=segmentMaterialBoxes(cv,{...p,boxes:[box]})[0];
+       if(alternate?.mask?.alpha?.length)output.push({...alternate,
+         boundaryAlternative:'morphgac-no-physical-contour',needsBoundaryReview:true});
+     }else{
+       output.push({...box,segmentationFailed:true,needsBoundaryReview:true,
+         boundaryConfidence:0,mask:null});
+     }
+     continue;
+   }
+   const quality=qualityContext.evaluate(candidateBox),candidate={
      ...physical,boundaryConfidence:quality.score,boundaryEvidence:quality,
-     needsBoundaryReview:quality.score<.46||!box.physicalBoundary
+     needsBoundaryReview:quality.score<.46||!box.physicalBoundary||box.needsBoundaryReview===true
    };
-   if(p.method!=='adaptive'||quality.score>=.46){
+   if(p.method!=='adaptive'||(quality.score>=.46&&box.physicalBoundary)){
      output.push(candidate);continue;
    }
    // No high-confidence independent exterior: run the unchanged MorphGAC
@@ -149,8 +207,8 @@ export function segmentPhysicalOrAdaptive(cv,p){
      x:alternate.x,y:alternate.y,w:alternate.w,h:alternate.h});
    // Compare independently scored contours, not shape class or only area.
    // The contraction guard prevents swapping paper for interior printing.
-   const takeMorph=!box.physicalBoundary||
-     retention>=.88&&morphQuality.score>quality.score+.06;
+   const takeMorph=retention>=.88&&morphQuality.score>quality.score+.06
+     ||(!box.physicalBoundary&&morphQuality.score>quality.score+.03);
    output.push(takeMorph?
      {...alternate,boundaryConfidence:morphQuality.score,boundaryEvidence:morphQuality,
        boundaryAlternative:'morphgac',needsBoundaryReview:morphQuality.score<.46}:

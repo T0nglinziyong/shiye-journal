@@ -5,11 +5,11 @@ import {readFile} from 'node:fs/promises';
 
 const source=name=>readFile(new URL('../src/'+name,import.meta.url));
 const expected={
-  'image.js':'81436edac034e80f4dd67fca4ed91cf0b7f99427',
+  'image.js':'125f86260803f87d218455bd15f4a6ff430aa1fa',
   'manual-import-recognition.js':'7f843bae5c81fb8f2046ae176ff4b0855446f0b8',
   'perspective.js':'af21f19bead1d03a58626248dd905e8d81f30e59',
   'import-box-editor.js':'8798db7e8987ade7afa9c58640de759ff17c6ae2',
-  'recognition-refiners.js':'6aa11c29b69fcddb09c10b15083e410828702713',
+  'recognition-refiners.js':'c37232c942f5de9d54a100897120f6271359d86d',
   'recognition-raster.js':'4e88878477689fa3c973576c5ce51c419145343a',
   'material-color-restoration.js':'4be602eab1a8d3d1281ba6c455c1ad80055da1c3',
   'import-workspace-ui.js':'a158cd3b2ea4444ed4a77e2c6c2194774a605796',
