@@ -3,8 +3,9 @@
 // carrier only if two independently *large* raw components are present with
 // a substantial background gap and distinct bounding boxes.
 export function shouldSplitChromaCarrier(items,boxArea,pxPerMM){
- const viable=items.filter(c=>c.area>Math.max(600,boxArea*.075)&&
-   Math.min(c.w,c.h)>pxPerMM*6).sort((a,b)=>b.area-a.area);
+ const viable=items.filter(c=>c.area>Math.max(5000,boxArea*.075)&&
+   c.w>=70&&c.h>=65&&Math.min(c.w,c.h)>pxPerMM*6)
+   .sort((a,b)=>b.area-a.area);
  if(viable.length!==2)return false;
  const [a,b]=viable;
  if(b.area/a.area<.13)return false;
@@ -25,8 +26,8 @@ export function splitLabCarrierComponents(cv,rawThreshold,bbox,pxPerMM,emit){
      const offset=label*5,x=stats.data32S[offset],
        y=stats.data32S[offset+1],w=stats.data32S[offset+2],
        h=stats.data32S[offset+3],area=stats.data32S[offset+4];
-     if(area>Math.max(600,bbox.width*bbox.height*.075)&&
-       Math.min(w,h)>pxPerMM*6)
+     if(area>Math.max(5000,bbox.width*bbox.height*.075)&&
+       w>=70&&h>=65&&Math.min(w,h)>pxPerMM*6)
        parts.push({label,x,y,w,h,area});
    }
    if(!shouldSplitChromaCarrier(parts,bbox.width*bbox.height,pxPerMM))
