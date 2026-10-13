@@ -1,4 +1,4 @@
-import React from 'react';
+import React,{useLayoutEffect} from 'react';
 import {createRoot} from 'react-dom/client';
 import {flushSync} from 'react-dom';
 
@@ -19,6 +19,18 @@ function AppShell(){
 
 let root;
 let routeRoot;
+
+// The recognition workspace, Matching controls and canvas engine still own
+// gesture-heavy DOM lifetimes. They mount as React route islands so a route
+// switch has one lifecycle, while their existing incremental patchers can
+// keep the exact photo/canvas nodes currently under a pointer.
+function ImperativeRoute({html}){
+  useLayoutEffect(()=>{
+    document.querySelector('#view').innerHTML=html;
+  },[html]);
+  return null;
+}
+export const imperativeRoute=html=><ImperativeRoute html={html}/>;
 
 export function mountReactShell(){
   if(root)return;

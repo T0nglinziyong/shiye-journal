@@ -25,7 +25,7 @@ export function LibraryPage({state,items,source,kindName,format,onAction}){
     ['unused','未使用'],['inside','系列中'],['outside','系列外']];
   const sorts=[['newest','添加时间 · 降序'],['oldest','添加时间 · 升序'],
     ['name','名称 · 升序'],['name-desc','名称 · 降序']];
-  return <><PageHeading title="我的素材"/>
+  return <><div className="catalog-toolbar"><PageHeading title="我的素材"/>
     <div className="filters">
       <input id="search" type="search" placeholder="搜索名称、标签、颜色或主题"
         defaultValue={state.query} aria-label="搜索素材"/>
@@ -36,7 +36,7 @@ export function LibraryPage({state,items,source,kindName,format,onAction}){
         {state.series.map(entry=><option key={entry.id} value={entry.id}>{entry.title}</option>)}</select>
       <select id="sort-filter" defaultValue={state.sort}>{sorts.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select>
       <span className="library-count"/>
-    </div>
+    </div></div>
     <div className={`grid asset-grid ${state.preferences.display==='list'?'list-grid':''}`}>
       <button className="card action-card" data-act="import" data-react-action="true" onClick={()=>onAction('import')}>
         <div className="card-image">＋</div><div className="card-body"><h3>导入素材</h3><p>添加照片或文件</p></div>
@@ -63,7 +63,7 @@ export function WorksPage({projects,isUntouchedLegacyExample,workCover,source,on
   const sorts=[['access-desc','最近访问 · 降序'],['access-asc','最近访问 · 升序'],
     ['updated-desc','最近修改 · 降序'],['updated-asc','最近修改 · 升序'],
     ['name-asc','名称 · 升序'],['name-desc','名称 · 降序']];
-  return <div className="works-page"><PageHeading title="我的作品"/>
+  return <div className="works-page"><div className="catalog-toolbar"><PageHeading title="我的作品"/>
     <button hidden data-act="new-project" data-react-action="true" id="work-create" onClick={()=>onAction('new-project')}/>
     <button hidden data-act="import-work" data-react-action="true" id="work-import" onClick={()=>onAction('import-work')}/>
     <div className="filters"><input type="search" id="work-search" placeholder="搜索作品名称或标签"/>
@@ -71,7 +71,7 @@ export function WorksPage({projects,isUntouchedLegacyExample,workCover,source,on
       <select id="work-status"><option value="all">全部状态</option><option value="used">已使用</option><option value="unused">未使用</option></select>
       <select id="work-sort">{sorts.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select>
       <span>{list.length} 项</span>
-    </div><div className="grid works-grid">
+    </div></div><div className="grid works-grid">
       {list.map((project,index)=>{
         const draft=project.drafts.find(d=>d.id===project.activeDraftID)||project.drafts[0];
         const revision=JSON.stringify([project.title,project.updatedAt,project.lastOpenedAt,
@@ -95,7 +95,7 @@ export function WorksPage({projects,isUntouchedLegacyExample,workCover,source,on
 export function SeriesPage({series,assets,display,seriesCovers,source,onAction}){
   const sorted=[...series].sort((a,b)=>a.id.startsWith('B700')&&b.id.startsWith('B700')?
     b.id.localeCompare(a.id):a.id.startsWith('B700')?-1:b.id.startsWith('B700')?1:0);
-  return <><PageHeading title="我的素材"/>
+  return <><div className="catalog-toolbar"><PageHeading title="我的素材"/></div>
     <div className={`grid series-grid ${display==='list'?'list-grid':''}`} data-react-page="series">
       {sorted.map((entry,index)=>{
         const members=assets.filter(asset=>asset.seriesID===entry.id&&!asset.isProjectInternal);
@@ -118,7 +118,7 @@ export function SeriesContentsPage({state,source,kindName,format,onAction}){
     ['text','文字'],['reference','参考']];
   const statuses=[['all','全部状态'],['ready','已整理'],['unready','未整理'],['used','已使用'],
     ['unused','未使用'],['favorite','已收藏'],['inside','系列中'],['outside','系列外']];
-  return <section className="series-contents" data-react-page="seriesContents">
+  return <section className="series-contents" data-react-page="seriesContents"><div className="catalog-toolbar">
     <div className="series-navigation"><button type="button" className="btn" id="series-return">‹ 返回素材库</button>
       <div className="actions" id="series-actions"/></div>
     <div className="view-head series-heading"><div className="series-identity">
@@ -136,7 +136,7 @@ export function SeriesContentsPage({state,source,kindName,format,onAction}){
       <select id="series-status" aria-label="系列素材状态" defaultValue={filter.status}>{options(statuses)}</select>
       <select id="series-sort" aria-label="系列素材排序" defaultValue={filter.sort}>{options([['recent','最近添加'],['name','名称']])}</select>
       <button className="btn" id="series-order">{filter.ascending?'升序 ↑':'降序 ↓'}</button>
-    </div></div>
+    </div></div></div>
     <div className={`grid asset-grid ${state.preferences.display==='list'?'list-grid':''}`}>
       <button type="button" className="card action-card" id="series-add-assets"><div className="card-image">＋</div>
         <div className="card-body"><h3>添加素材</h3><p>从全部素材选择</p></div></button>

@@ -13,7 +13,7 @@ const expected={
   'recognition-raster.js':'4e88878477689fa3c973576c5ce51c419145343a',
   'material-color-restoration.js':'4be602eab1a8d3d1281ba6c455c1ad80055da1c3',
   'import-workspace-ui.js':'8f057fda3ec1c4115b0c8503b5372253c8dc03dc',
-  'workflow-ui.js':'f20644883491ca11a393ba0c7fce0faacaa50e09',
+  'workflow-ui.js':'693d5a7eccf8319a400e0dc7c20e090900e3ae71',
   'styles.css':'c6b7945ba3ffeb4373dbe38f97bc96dbfd9e5178',
   'responsive.css':'3daab9b366125aeda84ed7e78bf2ac72132c8981',
   'paper-ui.js':'43dcd4f457d72382dadd0a0d8cea82cdd248058f',

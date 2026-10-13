@@ -246,6 +246,8 @@ export function mountWorkflowControls(c) {
 function mountCatalogSticky(view,route){
   if(!['library','series','works'].includes(route))return;
   const root=view.querySelector('.series-contents,.works-page')||view;
+  const existing=[...root.children].find(child=>child.classList?.contains('catalog-toolbar'));
+  if(existing){const top=document.querySelector('.topbar');if(top)existing.style.setProperty('--catalog-top',top.getBoundingClientRect().height+'px');return;}
   const parts=route==='library'&&root.classList.contains('series-contents')?['.series-navigation','.series-heading','.series-filters']:route==='series'?['.view-head','.swift-tabs','.swift-series-controls']:['.view-head','.swift-tabs','.filters'];
   const nodes=parts.map(selector=>root.querySelector(selector)).filter(Boolean);
   if(!nodes.length)return;

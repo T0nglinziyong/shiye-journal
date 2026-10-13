@@ -27,7 +27,9 @@ function mountLibrary(c){
   if(c.state.addingToSeries&&mountSeriesAddition(c,parity))return;
   const {state,view,render,route,toast,db}=c,header=view.querySelector('.view-head'),actions=header?.querySelector('.actions');
   const insideSeries=state.seriesID!=='all';
-  header?.querySelector('h1')?.replaceChildren(insideSeries?(state.series.find(s=>s.id===state.seriesID)?.title||'系列'):'我的素材');
+  const title=insideSeries?(state.series.find(s=>s.id===state.seriesID)?.title||'系列'):'我的素材';
+  const heading=header?.querySelector('h1');
+  if(heading&&heading.textContent!==title)heading.textContent=title;
   if(insideSeries){const back=button('‹ 返回素材库',()=>route('series'));back.classList.add('series-back');header?.prepend(back);}
   actions?.prepend(button(parity.selectionMode?'完成':'选择',()=>{toggleSelection(parity,'asset');view.selectionRefresh?.();},'library-select-toggle'));
   const bar=tabs([['series','系列'],['all','全部素材'],['pending','待检测'],['trash','最近删除']],parity.libraryTab,id=>{
@@ -38,7 +40,7 @@ function mountLibrary(c){
   if(!insideSeries&&parity.libraryTab==='trash'){actions?.replaceChildren();mountRecentlyDeleted(c,'asset');return;}
   if(insideSeries){header?.querySelector('.actions')?.append(button('编辑系列',()=>c.openSeriesEditor?.(state.seriesID)));}
 }
-function mountSeries(c){const {view,route,state,render}=c,header=view.querySelector('.view-head'),grid=view.querySelector('.grid');header?.querySelector('h1')?.replaceChildren('我的素材');const bar=tabs([['series','系列'],['all','全部素材'],['pending','待检测'],['trash','最近删除']],'series',id=>{if(id==='series')return;parity.libraryTab=id;state.status=id==='pending'?'pendingReview':'all';state.libraryRecent=false;route('library');});header?.after(bar);
+function mountSeries(c){const {view,route,state,render}=c,header=view.querySelector('.view-head'),grid=view.querySelector('.grid');const heading=header?.querySelector('h1');if(heading&&heading.textContent!=='我的素材')heading.textContent='我的素材';const bar=tabs([['series','系列'],['all','全部素材'],['pending','待检测'],['trash','最近删除']],'series',id=>{if(id==='series')return;parity.libraryTab=id;state.status=id==='pending'?'pendingReview':'all';state.libraryRecent=false;route('library');});header?.after(bar);
   const controls=document.createElement('div');controls.className='swift-series-controls';controls.innerHTML='<label class="shiye-search"><input type="search" placeholder="搜索系列、素材或标签" aria-label="搜索系列"></label><select aria-label="系列排序"><option value="recent">最近更新</option><option value="name">名称</option></select><span></span>';bar.after(controls);
   const cards=[...view.querySelectorAll('.grid .card[data-act="series-detail"]')], count=controls.querySelector('span');
   for(const card of cards)card.addEventListener('click',()=>{if(!selectionActive(parity,'series')){parity.seriesScrollY=window.scrollY;parity.restoreSeriesScroll=true;}});

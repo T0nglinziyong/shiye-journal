@@ -141,7 +141,7 @@ import {renderWorksHTML} from './page-controllers/works-view.js';
 import {renderEditorHTML} from './page-controllers/editor-view.js';
 import {renderImportHTML} from './page-controllers/import-view.js';
 import {renderSettingsHTML} from './page-controllers/settings-view.js';
-import {mountReactShell,renderReactPage} from './react-shell.jsx';
+import {mountReactShell,renderReactPage,imperativeRoute} from './react-shell.jsx';
 import {LibraryPage,SeriesPage,SeriesContentsPage,WorksPage,AssetDetailPage,ProjectPreviewPage,SettingsHomePage,SettingsDisplayPage,SettingsRecognitionPage,SettingsDataPage,SettingsAIPage,ImportSimplePage,ImportReviewPage} from './react-routes.jsx';
 
 import {installRuntimeDiagnostics,recordRuntimeIssue,runtimeIssueSnapshot} from './runtime-diagnostics.js';
@@ -557,7 +557,7 @@ function render(){
     :state.route==='import'&&state.importStep==='review'
       ?ImportReviewPage({state,format:fmt,onAction:handle})
       :null;
-  renderReactPage(reactPage||pageControllers.render(state.route)||renderLibrary());
+  renderReactPage(reactPage||imperativeRoute(pageControllers.render(state.route)||renderLibrary()));
   view.dataset.renderedRoute=state.route;
   view.dataset.renderedImportStep=state.route==='import'?state.importStep:'';
   view.dataset.renderedImportMode=state.route==='import'?state.importMode:'';
