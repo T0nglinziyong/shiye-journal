@@ -403,10 +403,14 @@ function render(){
       if(patch.photoReplaced){
         view.paperCorrectionDispose?.();view.paperCorrectionDispose=null;
         view.manualBoxDispose?.();view.manualBoxDispose=null;
-        if(state.showManualBox)bindManualBox();
-        else if(state.importFile&&!state.importProcessing)
-          view.paperCorrectionDispose=mountPaperCorrection({state,view,saveActiveImportRecord});
       }
+      // A newly selected photo can finish decoding after its container was
+      // mounted. Initialize overlays when the pixels actually become ready,
+      // even if the image URL/DOM did not change in that final progress tick.
+      if(state.showManualBox&&!view.querySelector('.manual-box-layer'))bindManualBox();
+      else if(state.importFile&&!state.importProcessing&&!state.showManualBox&&
+              !state.showCorrectionPreview&&!view.querySelector('.paper-corner-overlay'))
+        view.paperCorrectionDispose=mountPaperCorrection({state,view,saveActiveImportRecord});
       backgroundViewPending=false;
       return;
     }
