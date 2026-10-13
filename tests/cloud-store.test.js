@@ -329,6 +329,18 @@ test('warm cloud reads reuse revision snapshots and hashes across store instance
   b.state.revision=1;b.state.rows=[{id:'a',title:'remote changed'}];assert.equal((await b.db.cloudRefresh()).changed,true);assert.equal((await b.db.cloudAll('assets'))[0].title,'remote changed');
   const c=fixture(cache);c.state.rows=[{id:'blob',storagePath:'owner-uuid/hash',storageProvider:'supabase'}];await c.db.cloudGet('blobs','blob');const d=fixture(cache);d.state.rows=c.state.rows;assert.equal(await (await d.db.cloudGet('blobs','blob')).data.text(),'private image');assert.equal(d.state.downloads,0);
 });
+test('warm startup includes same-revision account metadata without making it mandatory for old caches',async()=>{
+  const cache=memoryCache(),owner='cloud:owner-uuid';
+  for(const store of ['assets','series','projects','trash','meta'])
+    await cache.put(owner,'records:'+store,{revision:7,records:[{id:store+'-item'}]});
+  const first=fixture(cache);
+  assert.deepEqual((await first.db.cloudCachedCollections()).meta,[{id:'meta-item'}]);
+  await cache.put(owner,'records:meta',{revision:6,records:[{id:'stale'}]});
+  const second=fixture(cache);
+  const old=await second.db.cloudCachedCollections();
+  assert.ok(old.assets.length);
+  assert.equal(old.meta,undefined,'an older metadata cache must not invalidate the catalog');
+});
 test('verified unrelated cloud revisions reuse blob metadata; changed blobs still query the server',async()=>{
   const cache=memoryCache(),{state,db}=fixture(cache);
   state.rows=[{id:'b',storagePath:'owner-uuid/hash',storageProvider:'supabase',thumbnailPath:'owner-uuid/hash-preview480.webp'}];

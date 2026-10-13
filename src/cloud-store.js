@@ -753,7 +753,24 @@ async function cloudCheckpoint(){
   if(revision!==undefined&&revision!==current)throw Error('另一设备已更新资料，请刷新后重试；未导出不一致的备份');
   return current;
 }
-async function cloudCachedCollections(){await identity();const stores=['assets','series','projects','trash'];const savedRows=await Promise.all(stores.map(store=>cached('records:'+store)));if(savedRows.some(saved=>!saved||saved.revision!==savedRows[0].revision))return null;const result={};await Promise.all(stores.map(async(store,index)=>{const saved=savedRows[index];result[store]=await overlayImports(store,structuredClone(saved.records).map(record=>withProjectBase(store,record,saved.revision)));}));blobRevisionProof.clear();blobRecords.clear();revision=savedRows[0].revision;return result;}
+async function cloudCachedCollections(){
+  await identity();
+  // Read all account-scoped snapshots in one IndexedDB burst. Metadata is
+  // optional for older caches; the four catalog collections still form an
+  // all-or-nothing verified view at one revision.
+  const stores=['assets','series','projects','trash','meta'];
+  const rows=await Promise.all(stores.map(store=>cached('records:'+store)));
+  const base=rows[0]?.revision;
+  if(base===undefined||rows.slice(0,4).some(row=>!row||row.revision!==base))return null;
+  const result={};
+  await Promise.all(stores.map(async(store,index)=>{
+    const saved=rows[index];
+    if(!saved||saved.revision!==base)return;
+    result[store]=await overlayImports(store,structuredClone(saved.records).map(record=>withProjectBase(store,record,saved.revision)));
+  }));
+  blobRevisionProof.clear();blobRecords.clear();revision=base;
+  return result;
+}
 async function cloudRefresh(){
   await queue;
   const before=revision;

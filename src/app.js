@@ -2552,7 +2552,21 @@ document.querySelector('#top-basket').onclick=()=>route('matching');document.que
 async function init(user,{resetPending=false,afterAccountReset=false}={}){previewPrewarmEpoch++;let cachedShown=false;cloudSessionReady=!resetPending;if(resetPending)cloudResumer.suspend();const accountId=user?.id||'browser';if(state.accountId&&state.accountId!==accountId){matchingScrollMemory=null;Object.assign(lastMaterialLocation,{route:'series',seriesID:'all',libraryTab:'series'});parity.libraryTab='series';deferredSyncedPreferences=null;deferredSyncedAISettings=null;clearTimeout(matchingDefaultsTimer);matchingDefaultsTimer=null;matchingDefaultsPending=false;matchingDefaultsLocalEdited=false;cloudMatchingDefaults=null;assetOrganization.clear();clearJournalTemplateImages();clearJournalPresetImages();state.userTemplates=[];}state.accountId=accountId;try{
   await db.storageMode();state.selfHosted=db.isSameOriginServer();
   // startCloudSession has validated Auth and the allowlist before this runs.
-  const cached=await db.cachedCollections();if(cached){Object.assign(state,cached);state.accountId=accountId;await restorePendingProjects();for(const a of state.assets)if(a.staticPath)staticSources.set(a.blobId,a.staticPath);render();cachedShown=true;saveStatus('本机缓存 · 正在核对云端');}
+  const cached=await db.cachedCollections();if(cached){
+    const {meta:cachedMeta,...collections}=cached;
+    Object.assign(state,collections);state.accountId=accountId;
+    if(cachedMeta){
+      const preferences=cloudPreferencesFromMeta(cachedMeta);
+      const aiSettings=cloudAISettingsFromMeta(cachedMeta);
+      const matching=cloudMatchingSettingsFromMeta(cachedMeta);
+      if(preferences)state.preferences=savePreferences(preferences);
+      if(aiSettings)state.aiSettings=saveAISettings(aiSettings);
+      if(matching){cloudMatchingDefaults=matching;applyMatchingDefaults(state,matching);}
+    }
+    await restorePendingProjects();
+    for(const a of state.assets)if(a.staticPath)staticSources.set(a.blobId,a.staticPath);
+    render();cachedShown=true;saveStatus('本机缓存 · 正在核对云端');
+  }
   const initialSync=await db.refreshCloud();if(initialSync?.changed)privateImages.invalidate(initialSync.allBlobs?undefined:initialSync.blobIDs);await refresh({background:cachedShown,skipCloudRefresh:true});if(!resetPending&&!afterAccountReset)void purgeExpiredTrash();await matchingSession.restore();if(cloudMatchingDefaults)applyMatchingDefaults(state,cloudMatchingDefaults);editableImportReady=true;void consumeEditableHandles();if('serviceWorker' in navigator&&location.protocol==='https:'){
     void import('./app-update.js').then(({registerSafeUpdate})=>registerSafeUpdate({
       flushLocal:flushSave,
