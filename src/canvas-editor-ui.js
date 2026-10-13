@@ -611,9 +611,15 @@ export function mountCanvasEditor(c){
     if(eraserSamples.length){
       const {radius,whole}=eraserBehavior(prefs),samples=eraserSamples;eraserSamples=[];
       const before=d.strokes;
-      d.strokes=eraseStrokesAlongPath(before,samples,radius,whole,!!prefs.eraserOnlyHighlighter);
-      if(before.length!==d.strokes.length||
-          before.some((row,index)=>row!==d.strokes[index]))eraseModified=true;
+      const next=eraseStrokesAlongPath(before,samples,radius,whole,!!prefs.eraserOnlyHighlighter);
+      if(before.length!==next.length||
+          before.some((row,index)=>row!==next[index])){
+        // The old Scene is still intact here, so Undo captures the correct
+        // pre-erase state without blocking initial pointerdown.
+        if(erase&&!erase.checkpointed){checkpoint();erase.checkpointed=true;}
+        eraseModified=true;
+      }
+      d.strokes=next;
       // Show the actual residual strokes using the temporary ink canvas.
       // Rebuilding hundreds of live SVG nodes during each Pencil move stalls
       // iOS drawing. The Scene SVGs are restored only after pointerup.
@@ -661,9 +667,11 @@ export function mountCanvasEditor(c){
   page.addEventListener('panzoomchange',scheduleBacking);
   ink.onpointerdown=e=>{
     if(!['pen','highlighter','eraser'].includes(state.tool)||e.button>0)return;
-    e.preventDefault();checkpoint();ink.setPointerCapture(e.pointerId);
+    // Pen strokes are staged in a transient buffer until pointerup. Deferring
+    // the expensive Undo snapshot keeps the first Pencil packets responsive.
+    e.preventDefault();ink.setPointerCapture(e.pointerId);
     if(state.tool==='eraser'){
-      eraseModified=false;erase={id:e.pointerId};lastEraserPoint=null;showEraser(e);addEraserSamples(e);schedule();return;
+      eraseModified=false;erase={id:e.pointerId,checkpointed:false};lastEraserPoint=null;showEraser(e);addEraserSamples(e);schedule();return;
     }
     cursor.hidden=true;clearInk();
     const marker=state.tool==='highlighter',key=marker?'marker':'pen';
@@ -689,14 +697,15 @@ export function mountCanvasEditor(c){
       // Preserve every final flick/coalesced sample before converting the
       // transient stroke into an editable vector object.
       if(frame!==null){cancelAnimationFrame(frame);frame=null;}paint();
+      checkpoint();
       const {id,...line}=stroke;line.id=uid();
       d.strokes.push(state.tool==='highlighter'&&prefs.markerStraight?straightStroke(line):line);
       stroke=null;painted=1;saveProject();render();schedule();
     }else if(erase?.id===e.pointerId){
       addEraserSamples(e);if(frame!==null){cancelAnimationFrame(frame);frame=null;}paint();
       erase=null;lastEraserPoint=null;cursor.hidden=true;
-      if(eraseModified){saveProject();render();}
-      else {state.undo.pop();render();}
+      if(eraseModified)saveProject();
+      render();
       eraseModified=false;
       page.classList.remove('erasing-ink');clearInk();
       if(prefs.returnToPen){state.tool=state.previousInkTool||'pen';state.toolHighlight=state.tool;render();}
@@ -706,10 +715,15 @@ export function mountCanvasEditor(c){
   ink.onpointerleave=e=>{if(!erase)cursor.hidden=true;};
   const discardInkGesture=()=>{
     if(!stroke&&!erase)return;
+    const eraserCheckpointed=!!erase?.checkpointed;
     stroke=null;erase=null;lastEraserPoint=null;eraserSamples=[];
     if(frame!==null){cancelAnimationFrame(frame);frame=null;}
     cursor.hidden=true;page.classList.remove('erasing-ink');
-    painted=1;const before=state.undo.pop();if(before?.kind==='scene-pending-v2')d.strokes=before.before.strokes;
+    painted=1;
+    if(eraserCheckpointed){
+      const before=state.undo.pop();
+      if(before?.kind==='scene-pending-v2')d.strokes=before.before.strokes;
+    }
     clearInk();painted=0;syncInkSceneDOM(page,d);
   };
   ink.onpointercancel=e=>{
