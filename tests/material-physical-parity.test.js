@@ -70,3 +70,41 @@ test('real OpenCV physical-only must never promote a blank legacy box to opaque 
  assert.equal(out[0].mask,null);
  assert.equal(out[0].needsBoundaryReview,true);
 });
+
+test('physical Mask ROI must be row-packed: alpha matches complete raster area without stripes',async()=>{
+ const cv=await cvModule,p=blank(480,360);
+ paint(p,(x,y)=>x>=57&&x<285&&y>=46&&y<305);
+ const carrier={x:57/480,y:46/360,w:228/480,h:259/360,
+   physicalBoundary:[[57/480,46/360],[285/480,46/360],
+     [285/480,305/360],[57/480,305/360]],
+   boundarySource:'edge-closed',boundaryPrior:.9};
+ const out=await processVision(cv,'process-material-boxes',{...p,
+   boxes:[carrier],method:'physical',shapeRegularization:false,apertures:false});
+ assert.equal(out.length,1);
+ const result=out[0];
+ const alpha=result.mask.alpha,w=result.mask.width,h=result.mask.height;
+ assert.equal(alpha.length,w*h);
+ const nonzero=alpha.reduce((n,value)=>n+(value>0),0);
+ assert.equal(nonzero,result.pixels,
+   'reading a strided ROI directly corrupts alpha and must never be used');
+ for(const y of [5,Math.floor(h/2),h-6]){
+   const row=alpha.subarray(y*w,(y+1)*w);
+   assert.ok(row.reduce((n,value)=>n+(value>0),0)>=w*.94,
+     'all three height bands must contain an unbroken filled paper');
+ }
+});
+
+test('slanted real contour exports same number of pixels as rasterized OpenCV mask',async()=>{
+ const cv=await cvModule,p=blank(480,360);
+ const points=[[85,50],[307,67],[281,292],[60,275]];
+ const outline=points.map(([x,y])=>[x/p.width,y/p.height]);
+ const box={x:60/p.width,y:50/p.height,w:247/p.width,h:242/p.height,
+   physicalBoundary:outline,boundarySource:'edge-closed',boundaryPrior:.8};
+ const out=await processVision(cv,'process-material-boxes',{...p,
+   boxes:[box],method:'physical',shapeRegularization:false,apertures:false});
+ assert.equal(out.length,1);
+ const result=out[0],alpha=result.mask.alpha;
+ assert.equal(alpha.length,result.mask.width*result.mask.height);
+ assert.equal(alpha.reduce((n,v)=>n+(v>0),0),result.pixels);
+ assert.ok(result.h>box.h*.90,'a rotated paper must not become a thin horizontal strip');
+});
