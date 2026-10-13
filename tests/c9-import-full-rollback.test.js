@@ -5,7 +5,7 @@ import {readFile} from 'node:fs/promises';
 
 const source=name=>readFile(new URL('../src/'+name,import.meta.url));
 const expected={
-  'image.js':'88d244bf813213c40d2baf8b24e7914d9e594882',
+  'image.js':'81436edac034e80f4dd67fca4ed91cf0b7f99427',
   'manual-import-recognition.js':'7f843bae5c81fb8f2046ae176ff4b0855446f0b8',
   'perspective.js':'af21f19bead1d03a58626248dd905e8d81f30e59',
   'import-box-editor.js':'8798db7e8987ade7afa9c58640de759ff17c6ae2',
@@ -18,8 +18,8 @@ const expected={
   'responsive.css':'3daab9b366125aeda84ed7e78bf2ac72132c8981',
   'paper-ui.js':'d1ebb53e61c7753c869850528eb43fe1bc7f062a',
   'import-save.js':'503d252ecfb47a9310f099cb4605c538346198c5',
-  'paper-analysis.js':'6c1d0e41dbf6794a2db6b9a09ca48ed8da519d1d',
-  'recognition-profiles.js':'86bea3a187c096121e5f551abc851f9f461f8c2d',
+  'paper-analysis.js':'821147b425086b7b579e7caceff7b1fea914bbfc',
+  'recognition-profiles.js':'4e2234bc36035e229ef5b5c2ea525cf35c5c2ef8',
   'vision-runtime.js':'0e232cafd76e5278da5a5dd6706214cbbdb9c880'
 };
 for(const [name,sha] of Object.entries(expected)){
