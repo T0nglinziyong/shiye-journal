@@ -379,7 +379,7 @@ pageControllers.register('import',createImportController({
   mountManual:bindManualBox
 }));
 pageControllers.register('editor',createEditorController({
-  renderHTML:renderEditor,patchScene:refreshCanvas,actions:actionStore,render,
+  renderHTML:renderEditor,patchScene:refreshCanvas,actions:actionStore,render,view,
   createEditor:()=>{
     view.editorDraft=current();view.editorInk=current().strokes;
     view.editorLayoutKey=editorLayoutKey();
@@ -428,10 +428,10 @@ function render(){
   // current route; business actions never manipulate page DOM here.
   if(pageControllers.patch(state.route)){backgroundViewPending=false;return;}
   pageControllers.dispose();
-  view.workCoverDispose?.();view.workCoverDispose=null;
-  view.localWorkCoverDispose?.();view.localWorkCoverDispose=null;
-  view.editorDispose?.();view.editorDispose=null;view.manualBoxDispose?.();view.manualBoxDispose=null;
-  view.paperCorrectionDispose?.();view.paperCorrectionDispose=null;
+  // The controller lifetime has released route-owned observers, gestures,
+  // and native editor listeners before replacing their DOM hosts.
+  view.workCoverDispose=null;view.localWorkCoverDispose=null;
+  view.editorDispose=null;view.manualBoxDispose=null;view.paperCorrectionDispose=null;
   view.editorRefresh=null;view.catalogRefresh=null;resetSelectionPresenters(view);
   if(view.onshowsimilar){view.removeEventListener('show-similar',view.onshowsimilar);view.onshowsimilar=null;}
   closePopover();imageNodes.remember(view.querySelectorAll('img[src]'));
