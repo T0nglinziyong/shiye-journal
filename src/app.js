@@ -946,7 +946,14 @@ async function handle(action,id,value){try{switch(action){
       appliedPaperCorners:rec.appliedCorners?JSON.parse(rec.appliedCorners):null,
       correctedPixelSize:rec.correctedBitmap?[rec.correctedBitmap.width,rec.correctedBitmap.height]:null,
       paperOrientation:rec.paperOrientation||'auto',paperSize:rec.paperSize||'a4',
-      ...trace,visibleCount:rec.candidates?.length||0};
+      ...trace,visibleCount:rec.candidates?.length||0,
+      candidateMaskAudit:(state.importCandidateData||[]).map(item=>({
+        segmentationMethod:item.region?.segmentationMethod||null,
+        boundaryConfidence:Number.isFinite(item.region?.boundaryConfidence)?item.region.boundaryConfidence:null,
+        needsBoundaryReview:item.region?.needsBoundaryReview===true,
+        alternative:item.region?.boundaryAlternative||null,
+        box:[item.region?.x,item.region?.y,item.region?.w,item.region?.h]
+      }))};
     download(new Blob([JSON.stringify(report,null,2)],{type:'application/json'}),
       '拾页素材框诊断.json');
     toast('已导出不含照片的素材框诊断');break;
