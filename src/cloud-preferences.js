@@ -3,7 +3,7 @@
 export const CLOUD_PREFERENCES_ID='app-ui-preferences';
 const safeFields=new Set([
   'paperSize','orientation','wholePaper','autoOrganize','autoOrganizeWorks',
-  'recognition','recognitionPixels','materialColorMode','balanceLight',
+  'recognition','candidateDiscovery','recognitionPixels','materialColorMode','balanceLight',
   'recognitionDenoise','recognitionLocalContrast','recognitionChromaEdges',
   'recognitionShapeRegularization','recognitionApertures',
   'customPaperWidth','customPaperHeight','display','backdrop','maxPageItems',

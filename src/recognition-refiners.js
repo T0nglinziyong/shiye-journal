@@ -69,7 +69,13 @@ export async function refineCandidatesWithGrabCut(context){
   return parallelFinalPipeline({...context,method:'grabcut'});
 }
 export async function refineCandidatesHybrid(context){
-  return parallelFinalPipeline({...context,method:'hybrid'});
+  return parallelFinalPipeline({...context,method:'adaptive'});
+}
+export async function refineCandidatesPhysical(context){
+  return parallelFinalPipeline({...context,method:'physical'});
+}
+export async function refineCandidatesAdaptive(context){
+  return parallelFinalPipeline({...context,method:'adaptive'});
 }
 export async function refineCandidatesPostprocess(context){
   return finalizeCandidates(context);
