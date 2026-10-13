@@ -177,7 +177,10 @@ async function loadUnifiedOutbox(recover=false){
         const localBlob=await cached('image:'+metadata.storagePath);
         if(usableBlob(localBlob)){available.push(copy.id);continue;}
         if(metadata.storageProvider==='cos'&&objectStorage?.probe){
-          if(await objectStorage.probe(metadata.storagePath)){available.push(copy.id);continue;}
+          if(await objectStorage.probe(metadata.storagePath))available.push(copy.id);
+          // A definite COS 404 is evidence that metadata alone cannot render
+          // the card. Other probe failures throw and keep the outbox intact.
+          continue;
         }
         try{if(usableBlob(await downloadObject(metadata.storagePath,metadata.storageProvider)))available.push(copy.id);}
         catch(error){if(!/\b404\b|NoSuchKey|Object not found/i.test(error?.message||''))throw error;}

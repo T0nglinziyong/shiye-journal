@@ -142,7 +142,7 @@ import {renderEditorHTML} from './page-controllers/editor-view.js';
 import {renderImportHTML} from './page-controllers/import-view.js';
 import {renderSettingsHTML} from './page-controllers/settings-view.js';
 import {mountReactShell,renderReactPage} from './react-shell.jsx';
-import {LibraryPage,SeriesPage,WorksPage,AssetDetailPage,ProjectPreviewPage} from './react-routes.jsx';
+import {LibraryPage,SeriesPage,WorksPage,AssetDetailPage,ProjectPreviewPage,SettingsHomePage,ImportSimplePage} from './react-routes.jsx';
 
 import {installRuntimeDiagnostics,recordRuntimeIssue,runtimeIssueSnapshot} from './runtime-diagnostics.js';
 mountReactShell();
@@ -537,6 +537,10 @@ function render(){
         source:image,kindName,format:fmt,onAction:handle})
     :state.route==='projectPreview'&&state.projects.find(p=>p.id===state.previewProjectID)
       ?ProjectPreviewPage({project:state.projects.find(p=>p.id===state.previewProjectID),source:image,workCover,onAction:handle})
+    :state.route==='settings'&&!state.settingsSection
+      ?SettingsHomePage({onAction:handle})
+    :state.route==='import'&&(state.importStep==='done'||!state.importRecords[state.importIndex])
+      ?ImportSimplePage({state,onAction:handle})
       :null;
   renderReactPage(reactPage||pageControllers.render(state.route)||renderLibrary());
   view.dataset.renderedRoute=state.route;
@@ -761,7 +765,7 @@ function bindPage({partial=false}={}){
   if(partial)return;
   const assetStatus=view.querySelector('#status-filter');if(assetStatus&&!assetStatus.querySelector('[value="favorite"]')){const option=document.createElement('option');option.value='favorite';option.textContent='已收藏';assetStatus.append(option);}
   const assetHeart=view.querySelector('.detail-heart');if(assetHeart){const favorite=!!asset(state.detailAssetID)?.isFavorite;assetHeart.textContent=favorite?'♥':'♡';assetHeart.setAttribute('aria-label',favorite?'取消收藏':'收藏');assetHeart.setAttribute('aria-pressed',String(favorite));}
-  if(state.route==='projectPreview'){const p=state.projects.find(x=>x.id===state.previewProjectID);if(p?.isSnapshot){const header=view.querySelector('.project-preview-head');const heart=document.createElement('button');heart.type='button';heart.className='snapshot-favorite';heart.setAttribute('aria-label',p.isFavorite?'取消收藏快照':'收藏快照');heart.setAttribute('aria-pressed',String(!!p.isFavorite));heart.textContent=p.isFavorite?'♥':'♡';heart.onclick=async()=>{const next={...p,isFavorite:!p.isFavorite};await db.put('projects',next);Object.assign(p,next);heart.textContent=next.isFavorite?'♥':'♡';heart.setAttribute('aria-label',next.isFavorite?'取消收藏快照':'收藏快照');heart.setAttribute('aria-pressed',String(!!next.isFavorite));};header?.querySelector('h1')?.after(heart);}}
+  if(state.route==='projectPreview'&&!view.querySelector('[data-react-page="projectPreview"]')){const p=state.projects.find(x=>x.id===state.previewProjectID);if(p?.isSnapshot){const header=view.querySelector('.project-preview-head');const heart=document.createElement('button');heart.type='button';heart.className='snapshot-favorite';heart.setAttribute('aria-label',p.isFavorite?'取消收藏快照':'收藏快照');heart.setAttribute('aria-pressed',String(!!p.isFavorite));heart.textContent=p.isFavorite?'♥':'♡';heart.onclick=async()=>{const next={...p,isFavorite:!p.isFavorite};await db.put('projects',next);Object.assign(p,next);heart.textContent=next.isFavorite?'♥':'♡';heart.setAttribute('aria-label',next.isFavorite?'取消收藏快照':'收藏快照');heart.setAttribute('aria-pressed',String(!!next.isFavorite));};header?.querySelector('h1')?.after(heart);}}
   const aiModelGroup=view.querySelector('#ai-model-group');if(aiModelGroup)aiModelGroup.ontoggle=event=>{aiModelPanelOpen=event.currentTarget.open;};
   if(state.route==='matching'){
     const saveMatching=()=>matchingSession.persist().catch(e=>{console.warn('本机搭配状态未保存；不影响云端作品同步',e);toast('本机搭配状态保存失败：'+e.message);});
@@ -1093,6 +1097,8 @@ async function legacyHandle(action,id,value){try{switch(action){
     if(p.projectDocumentPath){toast('正在读取完整作品…');p=await db.get('projects',p.id);if(opening!==editorOpenSequence)break;if(!p)throw Error('作品完整数据尚未载入');state.projects=state.projects.map(old=>old.id===p.id?p:old);}
     state.activeProject=p;state.activeDraft=p.activeDraftID;state.offlineEditingReturnID=null;resetEditorHistory(state);state.tool=state.toolHighlight='select';state.zoom=state.canvasViewports?.get(p.id+':'+state.activeDraft)?.scale||1;route('editor');break;}
   case 'preview-back':navigateBack('works');break;case 'preview-continue':{await handle('open-project',state.previewProjectID);break;}
+  case 'snapshot-favorite':{const p=state.projects.find(x=>x.id===state.previewProjectID);if(!p?.isSnapshot)break;const next={...p,isFavorite:!p.isFavorite};await db.put('projects',next);Object.assign(p,next);
+    const heart=view.querySelector('.snapshot-favorite');if(heart){heart.textContent=next.isFavorite?'♥':'♡';heart.setAttribute('aria-label',next.isFavorite?'取消收藏快照':'收藏快照');heart.setAttribute('aria-pressed',String(!!next.isFavorite));}break;}
   case 'project-meta':openProjectMetadata();break;
   case 'save-snapshot':await saveProjectSnapshot(state.activeProject);break;
   case 'download-snapshot':{const p=state.projects.find(x=>x.id===state.previewProjectID);if(!p?.isSnapshot)break;const id=p.snapshotDocumentBlobId||p.snapshotBlobId,blob=(await db.get('blobs',id))?.data;if(!blob)throw Error('快照文件尚未同步，稍后重试');const ext=p.snapshotFormat==='application/pdf'?'pdf':p.snapshotFormat==='image/jpeg'?'jpg':p.snapshotFormat==='image/webp'?'webp':'png';download(blob,p.title+'.'+ext);break;}

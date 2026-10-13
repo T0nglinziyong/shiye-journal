@@ -9,7 +9,7 @@ test('vision only prewarms on import intent; normal startup avoids heavy WASM',(
   const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
   assert.match(runtime,/export function prewarmVision\(\{parallel=false\}=\{\}\)/);
   assert.match(workflow,/pointerdown[^\n]+prewarmVision/);
-  assert.match(workflow,/function mountImport[\s\S]{0,220}prewarmVision/);
+  assert.match(workflow,/function mountImport\(c\)[\s\S]{0,350}state\.importMode!=='snapshot'\)void prewarmVision/);
   assert.doesNotMatch(app,/scheduleVisionPrewarm\(/);
   assert.doesNotMatch(html,/rel="preload" href="\/vendor\/opencv/);
 });

@@ -115,10 +115,13 @@ test('new cards receive only their own click bindings; unchanged proposal and ti
 
 test('matching action handlers do not call full render on common operations',async()=>{
  const {readFile}=await import('node:fs/promises');
- const text=await readFile(new URL('../src/app.js',import.meta.url),'utf8');
- assert.match(text,/case 'match-core':[\s\S]*?updateMatchingRegions/);
- assert.match(text,/case 'basket':\{[\s\S]*?updateMatchingRegions/);
- assert.match(text,/case 'match-filter':[\s\S]*?updateMatchingRegions/);
+ const [text,controller]=await Promise.all([
+   readFile(new URL('../src/app.js',import.meta.url),'utf8'),
+   readFile(new URL('../src/page-controllers/matching-controller.js',import.meta.url),'utf8')
+ ]);
+ for(const [command,action] of [['match-core','priority'],['basket','basket'],['match-filter','filter']])
+   assert.match(text,new RegExp("case '"+command+"':[\\s\\S]*?actionStore\\.dispatch\\(\\{type:'matching/"+action+"'"));
+ assert.match(controller,/updateMatchingRegions\(event\.payload\.regions\)/);
  // Removed history-toggle action must not be revived just for an obsolete selector.
 });
 

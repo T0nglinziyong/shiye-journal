@@ -46,13 +46,14 @@ const sameButtons=(a,b)=>[...a.querySelectorAll('.import-photo-tools button')].m
 
 /** Returns null when a full re-mount is required, otherwise a change report. */
 export function patchImportInspection(view,html){
-  const oldRoot=view.querySelector(':scope > .import-inspect');
+  const direct=(parent,selector)=>[...parent.children].find(child=>child.matches(selector));
+  const oldRoot=direct(view,'.import-inspect');
   const template=document.createElement('template');template.innerHTML=html;
-  const nextRoot=template.content.querySelector(':scope > .import-inspect');
+  const nextRoot=direct(template.content,'.import-inspect');
   if(!oldRoot||!nextRoot||
      oldRoot.classList.contains('import-snapshot-inspect')!==nextRoot.classList.contains('import-snapshot-inspect'))return null;
-  const oldNav=view.querySelector(':scope > .import-nav'),
-    nextNav=template.content.querySelector(':scope > .import-nav');
+  const oldNav=direct(view,'.import-nav'),
+    nextNav=direct(template.content,'.import-nav');
   const oldQueue=bySelector(oldRoot,'.queue-strip'),nextQueue=bySelector(nextRoot,'.queue-strip'),
     oldPrep=bySelector(oldRoot,'.import-preparation'),nextPrep=bySelector(nextRoot,'.import-preparation'),
     oldInspector=bySelector(oldRoot,'.import-inspector'),nextInspector=bySelector(nextRoot,'.import-inspector');

@@ -9,7 +9,7 @@
     "start:local": "node server/server.mjs",
     "build": "node scripts/build-offline-runtime.mjs && vite build && node scripts/license-notices.mjs && node scripts/precache.mjs",
     "pretest": "node scripts/build-offline-runtime.mjs",
-    "test": "node --test --test-concurrency=4 tests/*.test.js",
+    "test": "node --test --test-force-exit --test-concurrency=4 tests/*.test.js",
     "test:browser": "node tests/browser-acceptance.mjs",
     "test:cutout-browser": "node tests/cutout-dialog-visibility-browser.mjs",
     "test:editor-browser": "node tests/editor-browser-acceptance.mjs",

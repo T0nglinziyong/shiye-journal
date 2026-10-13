@@ -1,4 +1,5 @@
 import React from 'react';
+import {supportsVision} from './ai-settings.js';
 
 function RouteImage({asset,source,priority=false}){
   const src=asset&&(source(asset.blobId)||asset.staticPath);
@@ -144,8 +145,11 @@ export function ProjectPreviewPage({project,source,workCover,onAction}){
   const action=name=>()=>onAction(name);
   const button=(name,label,kind='')=><button className={`btn ${kind}`} data-act={name}
     data-react-action="true" onClick={action(name)}>{label}</button>;
-  return <div className="project-preview-page"><div className="project-preview-head">
-    <h1>{project.title}</h1>{button('preview-back','关闭')}
+  return <div className="project-preview-page" data-react-page="projectPreview"><div className="project-preview-head">
+    <h1>{project.title}</h1>{project.isSnapshot?<button type="button" className="snapshot-favorite"
+      data-act="snapshot-favorite" data-react-action="true" aria-label={project.isFavorite?'取消收藏快照':'收藏快照'}
+      aria-pressed={!!project.isFavorite} onClick={action('snapshot-favorite')}>{project.isFavorite?'♥':'♡'}</button>:null}
+    {button('preview-back','关闭')}
   </div><div className="project-preview-cover"><div className="preview-paper"
     style={{background:draft.paperColor||'#fff',aspectRatio:`${draft.canvas.width}/${draft.canvas.height}`}}
     {...(staticCover?{}:{dangerouslySetInnerHTML:{__html:workCover(draft,true,true,project.id)}})}>
@@ -158,4 +162,61 @@ export function ProjectPreviewPage({project,source,workCover,onAction}){
       {button('project-meta','作品信息与标签')}{button('project-delete','移到最近删除','danger')}
     </div>
   </div>;
+}
+
+export function SettingsHomePage({onAction}){
+  const sections=[['AI 与创作','创作偏好与模型连接，分组查看','✣'],
+    ['导入与识别','照片校正、背景板、识别默认值与自动整理','□'],
+    ['界面与素材库','素材排列、卡片背景与显示方式','▦'],
+    ['数据与诊断','备份、最近删除、生成诊断与完整上下文','▱']];
+  const button=(name,label)=><button data-act={name} data-react-action="true" onClick={()=>onAction(name)}>{label}</button>;
+  return <div className="settings-page" data-react-page="settings"><div className="settings-toolbar">
+    {button('settings-back','返回')}{button('settings-save','保存')}
+  </div><h1>设置</h1><section className="settings-list">
+    {sections.map(([name,description,icon])=><button key={name} data-act="settings-open" data-val={name}
+      data-react-action="true" onClick={()=>onAction('settings-open',null,name)}>
+      <span className="settings-icon">{icon}</span><span><strong>{name}</strong><small>{description}</small></span><b>›</b>
+    </button>)}
+  </section><p className="settings-note">设置按使用场景归为四类。AI 设置保存在这台设备的当前浏览器中；作品和素材可在“数据与诊断”中导出备份。</p>
+    <div className="actions"><button type="button" className="btn" data-act="help" data-react-action="true"
+      onClick={()=>onAction('help')}>使用说明与故障排查</button></div>
+  </div>;
+}
+
+export function ImportSimplePage({state,onAction}){
+  const steps=[['inspect','检查照片'],['review','确认归类'],['done','完成']];
+  const index=steps.findIndex(([key])=>key===state.importStep);
+  const button=(name,label,value,kind='btn')=><button className={kind} data-act={name} data-val={value}
+    data-react-action="true" onClick={()=>onAction(name,null,value)}>{label}</button>;
+  const isDone=state.importStep==='done';
+  const kind=state.importMode==='work'?'作品':state.importMode==='snapshot'?'快照':'素材';
+  const destination=state.importMode==='work'||state.importMode==='snapshot'?'作品':'素材库';
+  const needsManualCheck=state.importMode==='material'&&state.preferences.autoOrganize&&
+    !(state.aiSettings?.key&&state.aiSettings.includeThumbnails&&supportsVision(state.aiSettings));
+  return <><div className="import-nav" aria-label="导入进度">
+    <button className="import-back" data-act="import-back" data-react-action="true" aria-label="返回上一步"
+      title="返回" onClick={()=>onAction('import-back')}/>
+    <div className="import-nav-center"><div className="import-progress" aria-label="当前步骤">
+      {steps.map(([key,label],i)=><span key={key} className={state.importStep===key?'current':i<index?'passed':''}>
+        <b>{i<index?'✓':i+1}</b><span className="import-step-label">{label}</span></span>)}
+    </div></div>{button('import-exit',isDone?'完成':'取消导入',null,'import-cancel')}
+  </div>{isDone?<section className="import-done" aria-labelledby="import-done-title"><div className="import-done-card">
+    <div className="import-done-icon" aria-hidden="true">✓</div><h1 id="import-done-title">导入完成</h1>
+    <p className="import-done-count">已导入 <strong>{state.importSavedCount||0}</strong> 个{kind}</p>
+    <p className="import-done-message">{state.importPending?'内容已安全暂存。云端同步将在后台完成，可以放心返回继续使用。':'内容已经保存。你可以返回查看，也可以继续添加下一批照片。'}</p>
+    {needsManualCheck?<p className="import-done-helper">视觉自动整理尚未启用，素材已保留待检查。稍后可在设置中开启。</p>:null}
+    <div className="review-actions import-done-actions">{button('import-exit',`返回${destination}`)}{button('import-continue','继续导入',null,'btn primary')}</div>
+  </div></section>:<section className="import-intro"><div className="eyebrow">FROM YOUR DESK TO YOUR PAGES</div>
+    <h1>{state.importMode==='work'?'收进完成的作品':'先认出纸，再留住喜欢的'}</h1>
+    <p>从相册多选，逐张确认纸张和{state.importMode==='work'?'页面':'素材'}。</p>
+    <div className="import-empty"><div className="photo-symbol">▧</div><h2>添加照片</h2>
+      <p>从相册多选，或拍摄一张白纸上的素材。</p>
+      <div className="import-source-actions">
+        {button('select-file','▣　从图库中选择','gallery','btn primary')}
+        {button('select-file','▣　拍摄图片','camera')}
+        {button('select-file','▱　从文件中导入','files')}
+        {state.importMode==='work'?<small>选择 .shiyeproject.zip 可编辑作品包或 JSON 备选文件会直接导入，不经过照片识别。</small>:null}
+      </div><small>每批最多 12 张；使用较小图像识别，从原始工作图提取素材</small>
+    </div>
+  </section>}</>;
 }

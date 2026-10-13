@@ -7,17 +7,17 @@ const source=name=>readFile(new URL('../src/'+name,import.meta.url));
 const expected={
   'image.js':'0d2f5e95ab2bec9df74689dd70010b3118f15e6e',
   'manual-import-recognition.js':'7f843bae5c81fb8f2046ae176ff4b0855446f0b8',
-  'perspective.js':'af21f19bead1d03a58626248dd905e8d81f30e59',
-  'import-box-editor.js':'8798db7e8987ade7afa9c58640de759ff17c6ae2',
+  'perspective.js':'1339e08b3b23603d1a41c779792c6a0327c676a8',
+  'import-box-editor.js':'196304b571f14f00d02855c6bc08bdb3fd32b533',
   'recognition-refiners.js':'715b9b41bd84b3397677752f226a0f65dcba94d0',
   'recognition-raster.js':'4e88878477689fa3c973576c5ce51c419145343a',
   'material-color-restoration.js':'4be602eab1a8d3d1281ba6c455c1ad80055da1c3',
-  'import-workspace-ui.js':'a158cd3b2ea4444ed4a77e2c6c2194774a605796',
+  'import-workspace-ui.js':'8f057fda3ec1c4115b0c8503b5372253c8dc03dc',
   'workflow-ui.js':'f20644883491ca11a393ba0c7fce0faacaa50e09',
   'styles.css':'c6b7945ba3ffeb4373dbe38f97bc96dbfd9e5178',
   'responsive.css':'3daab9b366125aeda84ed7e78bf2ac72132c8981',
-  'paper-ui.js':'d1ebb53e61c7753c869850528eb43fe1bc7f062a',
-  'import-save.js':'503d252ecfb47a9310f099cb4605c538346198c5',
+  'paper-ui.js':'43dcd4f457d72382dadd0a0d8cea82cdd248058f',
+  'import-save.js':'f3cfd3b556178edabdb55ad8736ca5797f008467',
   'paper-analysis.js':'821147b425086b7b579e7caceff7b1fea914bbfc',
   'recognition-profiles.js':'5001bea0d5cc4257c1c08e11b874c84d448c22c5',
   'vision-runtime.js':'3817687ab32df7fb19c308c83902a6b123aabee1'
@@ -38,7 +38,9 @@ test('import page uses stable automatic paper and manual cutout controls',async(
   assert.match(app,/async function previewCrop\(\)/);
   assert.match(app,/const plans=manual\?await refineManualBoxes\(regions,previous/);
   assert.match(app,/visionTask\('process-material-boxes'/);
-  assert.match(app,/boxes:\[\{x:box\.x,y:box\.y,w:box\.w,h:box\.h,orientedBox/);
+  assert.match(app,/const manualRegion=manualPhysicalRegion\(box,aw,ah\)/);
+  assert.match(app,/boxes:\[manualRegion\]/);
+  assert.match(app,/if\(!candidate\?\.mask\?\.alpha\?\.length\|\|candidate\.segmentationFailed\)/);
   assert.match(app,/await detectPaperCandidates\(source,b,6/);
   assert.match(app,/async function receiveImportPhotos\(files\)\{const images=\[\.\.\.files\]\.filter\(f=>f\.type\.startsWith\('image\/'\)\)/);
   assert.match(page,/renderImportInspection/);

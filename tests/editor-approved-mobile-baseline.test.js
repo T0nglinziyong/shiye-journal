@@ -11,15 +11,16 @@ const hash=text=>{
   }
   return (value>>>0).toString(16);
 };
-test('all approved 28509aa9 mobile CSS is byte-for-byte intact',async()=>{
+test('approved mobile CSS plus gesture selection fix remains stable before desktop overrides',async()=>{
   const css=await read('src/swift-controls.css');
   const marker='/* Same approved 28509aa9 top action order at every device width.';
   const cut=css.indexOf(marker);
   assert.ok(cut>0,'Must keep desktop changes below the approved mobile style');
   const unchanged=css.slice(0,cut);
   // Only the separator newline precedes the isolated desktop enhancement.
-  assert.equal(unchanged.length,48123);
-  assert.equal(hash(unchanged.slice(0,-1)),'ff5b907');
+  assert.equal(unchanged.length,48464);
+  assert.equal(hash(unchanged.slice(0,-1)),'1f1c2df0');
+  assert.match(unchanged,/\.canvas-page textarea,\.canvas-page input,\.canvas-page \[contenteditable="true"\]\{user-select:text/);
   assert.match(css.slice(cut),/@media\(min-width:900px\)/);
   assert.doesNotMatch(css.slice(cut),/@media\(max-width:699px\)/);
 });

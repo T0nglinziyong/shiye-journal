@@ -23,8 +23,8 @@ test('three matching GoodNotes grips, no independent upper rotation grip',async(
 });
 test('Delete and Backspace guarded by editor mode and active focused inputs',async()=>{
  const [manual,editor]=await Promise.all(['import-box-editor.js','canvas-editor-ui.js'].map(src));
- assert.match(manual,/document\.addEventListener\('keydown',onDelete\)/);
- assert.match(manual,/document\.removeEventListener\('keydown',onDelete\)/);
+ assert.match(manual,/lifetime\.on\(document,'keydown',onDelete\)/);
+ assert.match(manual,/lifetime\.dispose\(\)/);
  assert.match(editor,/document\.addEventListener\('keydown',deleteSelected\)/);
  assert.match(editor,/document\.removeEventListener\('keydown',deleteSelected\)/);
  assert.match(editor,/handle\('delete-object'\)/);

@@ -9,6 +9,14 @@ import {createAIRecorder,redact} from '../src/ai-diagnostics.js';
 import {assetEditorValue} from '../src/asset-editor.js';
 import {draft,physicalPlacement,recommend} from '../src/domain.js';
 
+async function withCutoutPixels(run){
+  const bitmap=globalThis.createImageBitmap,document=globalThis.document;
+  globalThis.createImageBitmap=async()=>({width:2,height:2,close(){}});
+  globalThis.document={createElement:()=>({width:0,height:0,getContext:()=>({drawImage(){},getImageData:()=>({data:new Uint8ClampedArray(16).fill(255)})})})};
+  try{return await run();}finally{if(bitmap===undefined)delete globalThis.createImageBitmap;else globalThis.createImageBitmap=bitmap;
+    if(document===undefined)delete globalThis.document;else globalThis.document=document;}
+}
+
 test('series covers follow current membership, five-cover limit, and automatic cover fallback',()=>{
   const assets=Array.from({length:6},(_,i)=>({id:String(i),seriesID:'s'}));
   assert.deepEqual(seriesCovers({id:'s',coverAssetIDs:['gone','4','2']},assets).map(a=>a.id),['4','2']);
@@ -77,7 +85,7 @@ test('mature PDF encoder produces parseable pages at exact physical size',async(
 test('import records preserve candidate metadata and explicit unassigned series',()=>{
   const c={title:'票据',width:30.5,height:60,quantity:3,kind:'paper',role:'support',reviewStatus:'ready',seriesID:'__none__'};
   const a=candidateMetadata(c,{seriesID:'s'},'batch');assert.equal(a.seriesID,null);assert.equal(a.supply.quantity,3);assert.equal(a.kind,'paper');assert.equal(a.physicalWidthMM,30.5);assert.equal(a.usageStatus,'unused');
-  assert.throws(()=>candidateMetadata({...c,quantity:1.5},{},null),/正整数/);
+  assert.throws(()=>candidateMetadata({...c,quantity:1.5},{},null),/数量须为 1–999/);
   assert.throws(()=>candidateMetadata({...c,width:-1},{},null),/宽高/);
   assert.deepEqual(importPaperDimensions({paperSize:'a5',paperOrientation:'landscape'}),[210,148]);
   assert.deepEqual(importPaperDimensions({paperSize:'custom',customImportWidth:12,customImportHeight:500,paperOrientation:'portrait'}),[12,500]);
@@ -89,7 +97,8 @@ test('classification rejects malformed enums and uses configured endpoint withou
   assert.equal(payload.model,'test');assert.deepEqual(result.styleTags,['植物']);
 });
 test('import saves once under double-click and permits retry after transaction failure',async()=>{
-  const blob=new Blob(['synthetic']);
+  return withCutoutPixels(async()=>{
+  const blob=new Blob(['synthetic-image-bytes']);
   const state={importMode:'material',importStep:'review',assets:[],projects:[],importRecords:[{confirmed:true,file:blob,selectedCandidates:[{selected:true,title:'合成',blob,width:20,height:30,region:{x:0,y:0,w:1,h:1}}]}]};
   const urls=new Map();let writes=0,release,started;
   const ready=new Promise(resolve=>started=resolve),gate=new Promise(resolve=>release=resolve);
@@ -101,9 +110,11 @@ test('import saves once under double-click and permits retry after transaction f
   state.importStep='review';state.assets=[];
   db.transaction=async()=>{throw Error('offline');};
   await assert.rejects(saveImportBatch(options),/offline/);assert.equal(state.assets.length,0);assert.equal(state.importSaving,false);
+  });
 });
 test('automatic organization starts after commit and does not delay continuing import',async()=>{
-  const blob=new Blob(['synthetic']),state={importMode:'material',importStep:'review',assets:[],projects:[],importRecords:[{confirmed:true,file:blob,selectedCandidates:[{selected:true,title:'素材 1',blob,region:{x:0,y:0,w:1,h:1}}]}]},urls=new Map();
+  return withCutoutPixels(async()=>{
+  const blob=new Blob(['synthetic-image-bytes']),state={importMode:'material',importStep:'review',assets:[],projects:[],importRecords:[{confirmed:true,file:blob,selectedCandidates:[{selected:true,title:'素材 1',blob,region:{x:0,y:0,w:1,h:1}}]}]},urls=new Map();
   let committed=false,called=false,release;
   const work=new Promise(r=>release=r),db={transaction:async()=>{committed=true;}};
   await saveImportBatch({state,db,urls,render:()=>{},onSaved:async assets=>{assert.ok(committed);assert.equal(state.importStep,'done');assert.equal(assets.length,1);assets[0].title='background mutation';called=true;await work;}});
@@ -111,13 +122,16 @@ test('automatic organization starts after commit and does not delay continuing i
   release();for(const url of urls.values())URL.revokeObjectURL(url);
   state.importStep='review';db.transaction=async()=>{throw Error('offline');};called=false;
   await assert.rejects(saveImportBatch({state,db,urls,render:()=>{},onSaved:()=>{called=true;}}),/offline/);assert.equal(called,false);
+  });
 });
 test('saved import announces queued organization before remote upload finishes',async()=>{
-  const blob=new Blob(['synthetic']),state={importMode:'material',importStep:'review',assets:[],projects:[],importRecords:[{confirmed:true,file:blob,selectedCandidates:[{selected:true,title:'素材 1',blob,region:{x:0,y:0,w:1,h:1}}]}]},urls=new Map();
+  return withCutoutPixels(async()=>{
+  const blob=new Blob(['synthetic-image-bytes']),state={importMode:'material',importStep:'review',assets:[],projects:[],importRecords:[{confirmed:true,file:blob,selectedCandidates:[{selected:true,title:'素材 1',blob,region:{x:0,y:0,w:1,h:1}}]}]},urls=new Map();
   let release,announced=false,organized=false;const remote=new Promise(r=>release=r);
   await saveImportBatch({state,db:{stageImport:async()=>({pending:true}),flushProjects:()=>remote},urls,render:()=>{},onSaved:async(records,{waitForSave})=>{announced=true;await waitForSave();organized=true;}});
   assert.equal(state.importStep,'done');assert.ok(announced);assert.equal(organized,false);
   release();await new Promise(r=>setImmediate(r));assert.ok(organized);for(const url of urls.values())URL.revokeObjectURL(url);
+  });
 });
 test('AI metrics contain no private body; opt-in context redacts credentials before persistence',async()=>{
   const values=new Map(),db={get:async()=>{throw Error('AI diagnostics must never use cloud DB');}},deviceRecords={get:async(account,id)=>values.get(account+':'+id),put:async(account,value)=>values.set(account+':'+value.id,structuredClone(value)),list:async(account,prefix)=>[...values.entries()].filter(([k])=>k.startsWith(account+':'+prefix)).map(([,v])=>v),delete:async(account,id)=>values.delete(account+':'+id)};

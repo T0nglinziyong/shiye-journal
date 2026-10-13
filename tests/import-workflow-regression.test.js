@@ -4,8 +4,15 @@ import {readFile} from 'node:fs/promises';
 import {saveImportBatch} from '../src/import-save.js';
 import {renderImportReview} from '../src/import-workspace-ui.js';
 
-const photo=()=>new Blob(['photo'],{type:'image/jpeg'});
-const piece=()=>new Blob(['piece'],{type:'image/png'});
+const photo=()=>new Blob(['jpeg-fixture-bytes'],{type:'image/jpeg'});
+const piece=()=>new Blob(['opaque-png-fixture'],{type:'image/png'});
+async function withCutoutPixels(run){
+ const bitmap=globalThis.createImageBitmap,document=globalThis.document;
+ globalThis.createImageBitmap=async()=>({width:2,height:2,close(){}});
+ globalThis.document={createElement:()=>({width:0,height:0,getContext:()=>({drawImage(){},getImageData:()=>({data:new Uint8ClampedArray(16).fill(255)})})})};
+ try{return await run();}finally{if(bitmap===undefined)delete globalThis.createImageBitmap;else globalThis.createImageBitmap=bitmap;
+   if(document===undefined)delete globalThis.document;else globalThis.document=document;}
+}
 function fixture(copyToLibrary){
  const original=photo(),cutout=piece();
  const c={selected:true,title:'纸片 1',blob:cutout,originalBlob:cutout,
@@ -25,7 +32,7 @@ function fixture(copyToLibrary){
 
 test('imported work saves editable paper metadata instead of inpainted photo background',async()=>{
  const {state,batches,db}=fixture(false);
- await saveImportBatch({state,db,urls:new Map(),render:()=>{}});
+ await withCutoutPixels(()=>saveImportBatch({state,db,urls:new Map(),render:()=>{}}));
  assert.equal(batches.length,1);
  const saved=batches[0],p=saved.projects[0],d=p.drafts[0];
  assert.equal(d.paperPattern,'grid');assert.equal(d.paperColor,'#faf1ea');
@@ -39,7 +46,7 @@ test('imported work saves editable paper metadata instead of inpainted photo bac
 });
 test('per-photo library choice overrides batch default without changing physical positions',async()=>{
  const {state,batches,db}=fixture(true);
- await saveImportBatch({state,db,urls:new Map(),render:()=>{}});
+ await withCutoutPixels(()=>saveImportBatch({state,db,urls:new Map(),render:()=>{}}));
  assert.equal(batches[0].assets[0].isProjectInternal,false);
  const element=batches[0].projects[0].drafts[0].items[0];
  assert.ok(element.x>0&&element.y>0);
@@ -61,7 +68,7 @@ test('work confirmation shows editable background as first tile plus consistent 
 
 test('imported work material assigned to library is used, and internal elements remain editable',async()=>{
   const {state,db,batches}=fixture(true);
-  await saveImportBatch({state,db,urls:new Map(),render:()=>{}});
+  await withCutoutPixels(()=>saveImportBatch({state,db,urls:new Map(),render:()=>{}}));
   const candidate=batches[0].assets[0];
   assert.equal(candidate.isProjectInternal,false);
   assert.equal(candidate.usageStatus,'used');

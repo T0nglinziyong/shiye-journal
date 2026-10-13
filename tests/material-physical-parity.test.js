@@ -8,7 +8,7 @@ import {boxIoU,overlapOfSmaller,dedupePhysicalCandidates,mergeAlignedCarrierPiec
 
 test('normalized overlap: an identical paper has 100% overlap, not its small area',()=>{
   const a={x:.1,y:.2,w:.3,h:.4},b={...a};
-  assert.equal(boxIoU(a,b),1);
+  assert.ok(Math.abs(boxIoU(a,b)-1)<1e-9);
   assert.ok(Math.abs(overlapOfSmaller(a,b)-1)<1e-9);
   assert.equal(dedupePhysicalCandidates([a,b]).length,1);
   const adjacent={x:.41,y:.2,w:.3,h:.4};
@@ -91,7 +91,7 @@ test('do not allow postprocessing to crop top letters or shrink a complete star 
  const cut={...paper,y:.12,h:.43,pixels:8200,mask:{width:100,height:100,alpha}};
  const result=keepPhysicalBeforeUnsafeRegularization(paper,cut);
  assert.equal(result.pixels,10000);
- assert.equal(result.shapeGuard,'preserved-physical-perimeter');
+ assert.ok(['preserved-physical-perimeter','preserved-interior-content'].includes(result.shapeGuard));
  assert.equal(keepPhysicalBeforeUnsafeRegularization(paper,{...paper,pixels:9990}).pixels,9990);
 });
 

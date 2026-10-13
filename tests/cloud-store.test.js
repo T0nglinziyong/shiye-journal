@@ -89,16 +89,19 @@ test('logout summary reads the shared account outbox without waiting for upload'
 });
 test('failed import uploads retain the entire batch; rejected auth/quota never creates a ghost import',async()=>{
   const cache=memoryCache(),a=fixture(cache);a.state.fail=true;
-  await a.db.cloudStageImport({assets:[{id:'a'}],blobs:[{id:'b',data:new Blob(['image'])}],projects:[]});await assert.rejects(a.db.cloudFlushProjects(),/图片上传失败/);
+  await a.db.cloudStageImport({assets:[{id:'a'}],blobs:[{id:'b',data:new Blob(['image'])}],projects:[]});await assert.rejects(a.db.cloudFlushProjects(),/未获确认/);
   assert.equal((await activeRows(cache,'batch')).length,1);assert.equal(a.state.calls.length,0);
   const reopened=fixture(cache);reopened.state.authError=true;await assert.rejects(reopened.db.cloudGet('blobs','b'),/not authorized/);
-  const quota=fixture({...memoryCache(),put:async()=>{throw Error('quota');}});await assert.rejects(quota.db.cloudStageImport({assets:[{id:'ghost'}]}),/quota/);assert.deepEqual(await quota.db.cloudAll('assets'),[]);assert.equal(quota.state.calls.length,0);
+  const durable=memoryCache();let full=true;
+  const quota=fixture({...durable,put:async(...args)=>{if(full)throw Error('quota');return durable.put(...args);}});
+  await assert.rejects(quota.db.cloudStageImport({assets:[{id:'ghost'}]}),/quota/);
+  full=false;assert.deepEqual(await quota.db.cloudAll('assets'),[]);assert.equal(quota.state.calls.length,0);
 });
 test('trash restore survives AbortError: local stage is immediate and reopen retries the same operation',async()=>{
   const cache=memoryCache(),first=fixture(cache);first.state.rpcAbort=true;
   await first.db.cloudStageMutation(['trash','assets'],tx=>{tx.objectStore('trash').delete('t');tx.objectStore('assets').put({id:'restored',title:'safe'});});
   assert.deepEqual((await first.db.cloudAll('assets')).map(row=>row.id),['restored']);
-  await assert.rejects(first.db.cloudFlushProjects(),{name:'AbortError'});
+  await assert.rejects(first.db.cloudFlushProjects(),/未获确认/);
   assert.equal((await activeRows(cache,'batch')).length,1);
   const reopened=fixture(cache);await reopened.db.cloudFlushProjects();
   assert.deepEqual(await activeRows(cache,'batch'),[]);
@@ -107,7 +110,7 @@ test('trash restore survives AbortError: local stage is immediate and reopen ret
 test('aborted delete resumes after another tab edits an unrelated record, but not the same record',async()=>{
   const cache=memoryCache(),first=fixture(cache);first.state.rpcAbort=true;
   await first.db.cloudStageMutation(['trash'],tx=>tx.objectStore('trash').delete('mine'));
-  await assert.rejects(first.db.cloudFlushProjects(),{name:'AbortError'});
+  await assert.rejects(first.db.cloudFlushProjects(),/未获确认/);
   first.state.rpcAbort=false;first.state.revision=1;
   first.state.changes=[{revision:1,keys:[{store:'assets',action:'put',id:'other'}]}];
   await first.db.cloudFlushProjects();
@@ -116,7 +119,7 @@ test('aborted delete resumes after another tab edits an unrelated record, but no
 
   const secondCache=memoryCache(),second=fixture(secondCache);second.state.rpcAbort=true;
   await second.db.cloudStageMutation(['trash'],tx=>tx.objectStore('trash').delete('mine'));
-  await assert.rejects(second.db.cloudFlushProjects(),{name:'AbortError'});
+  await assert.rejects(second.db.cloudFlushProjects(),/未获确认/);
   second.state.rpcAbort=false;second.state.revision=1;
   second.state.changes=[{revision:1,keys:[{store:'trash',action:'put',id:'mine'}]}];
   await assert.rejects(second.db.cloudFlushProjects(),/conflict/);
@@ -126,7 +129,7 @@ test('aborted work edit resumes across an unrelated cloud revision without overw
   const cache=memoryCache(),first=fixture(cache);first.state.rpcAbort=true;
   const work={id:'my-work',title:'locally edited',activeDraftID:'d',drafts:[{id:'d',canvas:{width:700,height:1000},items:[],textBlocks:[],primitives:[],strokes:[]}]};
   await first.db.cloudStageProject(v2(work));
-  await assert.rejects(first.db.cloudFlushProjects(),{name:'AbortError'});
+  await assert.rejects(first.db.cloudFlushProjects(),/未获确认/);
   first.state.rpcAbort=false;first.state.revision=1;
   first.state.changes=[{revision:1,keys:[{store:'assets',action:'put',id:'other'}]}];
   await first.db.cloudFlushProjects();
@@ -145,7 +148,9 @@ test('D-01: background cursor advance cannot relabel a stale opened work as the 
   await db.cloudStageProject({...opened,title:'本机改标题'});
   const pending=await db.cloudPendingProjects();
   assert.equal(pending[0].baseRevision,1);
-  await assert.rejects(db.cloudFlushProjects(),/云端版本已变化/);
+  await db.cloudFlushProjects();
+  assert.equal((await cache.get('cloud:owner-uuid','pre-conflict-scene-index')).length,1,
+    'both versions are backed up before conflict handling');
   assert.equal(state.calls.length,0,'a stale project never overwrites without owner choice');
   assert.equal((await db.cloudPendingProjects())[0].record.title,'本机改标题');
   const review=await db.cloudConflictReview('project','diary');
@@ -169,7 +174,8 @@ test('D-03: an untagged known work is staged locally but cannot claim the newest
   state.revision=4;state.rows=[saved];await db.cloudAll('projects');
   await db.cloudStageProject({...v2(saved),title:'本机新标题'});
   assert.equal((await db.cloudPendingProjects())[0].baseRevision,0);
-  await assert.rejects(db.cloudFlushProjects(),/云端版本已变化/);
+  await db.cloudFlushProjects();
+  assert.equal((await cache.get('cloud:owner-uuid','pre-conflict-scene-index')).length,1);
   assert.equal(state.calls.length,0);
   assert.equal((await db.cloudPendingProjects())[0].record.title,'本机新标题');
 });
@@ -188,6 +194,11 @@ test('reopening after an import commit but before local acknowledgement clears t
   first.state.uploadGate=new Promise(()=>{});
   await first.db.cloudStageImport({assets:[{id:'new-asset',blobId:'new-blob'}],blobs:[{id:'new-blob',data:new Blob(['image'])}],projects:[]});
   const reopened=fixture(cache);reopened.state.revision=1;reopened.state.rows=[{id:'new-asset',blobId:'new-blob'},{id:'new-blob',storagePath:'owner-uuid/hash',storageProvider:'supabase'}];
+  await reopened.db.cloudFlushProjects();
+  assert.equal(reopened.state.calls.length,0);
+  const pending=await activeRows(cache,'batch');
+  assert.equal(pending.length,1,'metadata alone cannot prove the original bytes were committed');
+  reopened.state.commits.set(pending[0].operationID,1);
   await reopened.db.cloudFlushProjects();
   assert.equal(reopened.state.calls.length,0);assert.deepEqual(await activeRows(cache,'batch'),[]);
 });

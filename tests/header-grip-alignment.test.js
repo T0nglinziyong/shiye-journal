@@ -4,14 +4,17 @@ import {readFile} from 'node:fs/promises';
 const source=file=>readFile(new URL('../src/'+file,import.meta.url),'utf8');
 
 test('import navigation keeps back at start and progress/cancel centered in one wrapper',async()=>{
-  const app=await source('app.js');
-  const nav=app.slice(app.indexOf('function importSteps()'),app.indexOf('function renderImport()'));
-  assert.match(nav,/<div class="import-nav"><button class="import-back"/);
-  assert.match(nav,/<div class="import-nav-center"><strong>/);
-  assert.match(nav,/class="import-progress"/);
-  assert.match(nav,/class="import-cancel"/);
-  assert.ok(nav.indexOf('class="import-back"')<nav.indexOf('class="import-nav-center"'));
-  assert.ok(nav.indexOf('class="import-nav-center"')<nav.indexOf('class="import-progress"'));
+  const [app,react]=await Promise.all([source('app.js'),source('react-routes.jsx')]);
+  for(const nav of [app.slice(app.indexOf('function importSteps()'),app.indexOf('function renderImport()')),
+    react.slice(react.indexOf('export function ImportSimplePage'))]){
+    assert.match(nav,/import-nav/);
+    assert.match(nav,/import-back/);
+    assert.match(nav,/import-nav-center/);
+    assert.match(nav,/import-progress/);
+    assert.match(nav,/import-cancel/);
+    assert.ok(nav.indexOf('import-back')<nav.indexOf('import-nav-center'));
+    assert.ok(nav.indexOf('import-nav-center')<nav.indexOf('import-progress'));
+  }
 });
 
 test('whole-width import bar uses centered three-track layout; phone falls back gracefully',async()=>{

@@ -5,16 +5,15 @@ import {readFile} from 'node:fs/promises';
 const load=name=>readFile(new URL('../src/'+name,import.meta.url),'utf8');
 
 test('Materials, Matching and Works share identical top-left three-line header structure',async()=>{
- const [app,matching,css]=await Promise.all([
-   load('app.js'),load('matching-view.js'),load('page-heading.css')
+ const [app,react,matching,css]=await Promise.all([
+   load('app.js'),load('react-routes.jsx'),load('matching-view.js'),load('page-heading.css')
  ]);
  assert.match(app,/function head\(title,subtitle,actions/);
  assert.match(app,/view-head unified-page-heading/);
  assert.match(app,/unified-heading-copy/);
  assert.match(app,/FROM YOUR DESK TO YOUR PAGES/);
- for(const name of ['我的素材','我的作品']){
-   assert.match(app,new RegExp("head\\('"+name+"'"));
- }
+ assert.match(react,/<PageHeading title="我的素材"\/>/);
+ assert.match(react,/<PageHeading title="我的作品"\/>/);
  assert.match(matching,/head\('素材搭配'/);
  assert.match(css,/\.unified-page-heading \.unified-heading-copy h1/);
  assert.match(css,/--shiye-heading-title-size:32px/);
