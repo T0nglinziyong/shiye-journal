@@ -23,6 +23,10 @@ export function createWorksController({
       catalogChanged();return true;
     },
     mount(lifetime){
+      lifetime.use(()=>{
+        view.workCoverDispose?.();view.workCoverDispose=null;
+        view.localWorkCoverDispose?.();view.localWorkCoverDispose=null;
+      });
       lifetime.use(actions.subscribe(event=>{
         if(event.scope==='works')render();
       },{scope:'works'}));
