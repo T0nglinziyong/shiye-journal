@@ -1,14 +1,8 @@
+import {boxIoU,overlapOf,overlapOfSmaller,containsCenter,dedupePhysicalCandidates,mergeAlignedCarrierPieces} from './material-physical-candidates.js';
 // Physical-carrier-first discovery. Only the box/mask engine changes: paper
 // warp, 9 mm filtering, aperture restoration, original RGB and storage remain
 // owned by existing modules. No crop-specific or case-specific coordinates.
 const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
-const bboxOverlap=(a,b)=>{
- const x=Math.max(a.x,b.x),y=Math.max(a.y,b.y),
-   w=Math.max(0,Math.min(a.x+a.w,b.x+b.w)-x),
-   h=Math.max(0,Math.min(a.y+a.h,b.y+b.h)-y);
- return w*h/Math.max(1,Math.min(a.w*a.h,b.w*b.h));
-};
-const within=(box,x,y,pad=0)=>x>=box.x-pad&&x<=box.x+box.w+pad&&y>=box.y-pad&&y<=box.y+box.h+pad;
 const median=values=>{values.sort((a,b)=>a-b);return values[values.length>>1]||0;};
 const order=(a,b)=>a.y-b.y||a.x-b.x;
 
@@ -24,6 +18,20 @@ export function discoverPhysicalMaterialBoxes(cv,p,own){
  cv.cvtColor(src,rgb,cv.COLOR_RGBA2RGB);
  cv.cvtColor(rgb,lab,cv.COLOR_RGB2Lab);
  const edgeCache=new Map(),all=[];
+ const edgeSupport=(r,lo=10,hi=30)=>{
+   const e=edges(lo,hi).data,R=3,pad=4;
+   const strips=[[r.x-R,r.y+pad,r.x+R+1,r.y+r.height-pad],
+     [r.x+r.width-R,r.y+pad,r.x+r.width+R+1,r.y+r.height-pad],
+     [r.x+pad,r.y-R,r.x+r.width-pad,r.y+R+1],
+     [r.x+pad,r.y+r.height-R,r.x+r.width-pad,r.y+r.height+R+1]];
+   return strips.reduce((total,[xx,yy,xx2,yy2])=>{
+     const x0=clamp(Math.floor(xx),0,w),x1=clamp(Math.ceil(xx2),0,w),
+       y0=clamp(Math.floor(yy),0,h),y1=clamp(Math.ceil(yy2),0,h);
+     let hit=0;
+     for(let y=y0;y<y1;y++)for(let x=x0;x<x1;x++)hit+=e[y*w+x]>0;
+     return total+hit/Math.max(1,(x1-x0)*(y1-y0));
+   },0);
+ };
  const edges=(lo,hi)=>{
    const key=lo+':'+hi;
    if(!edgeCache.has(key)){const m=own(new cv.Mat());cv.Canny(gray,m,lo,hi);edgeCache.set(key,m);}
@@ -38,17 +46,20 @@ export function discoverPhysicalMaterialBoxes(cv,p,own){
      }
    }finally{found.delete();hierarchy.delete();}
  };
- const valid=(rect,area,{maxFraction=.70,minPixels=4500}={})=>
-   rect.width>=Math.max(20,pxPerMM*minMM)&&rect.height>=Math.max(20,pxPerMM*minMM)&&
+ const valid=(rect,area,{maxFraction=.70,minPixels=4500,
+   minWidth=20,minHeight=20,frameMargin=4}={})=>
+   rect.width>=Math.max(minWidth,pxPerMM*minMM)&&
+   rect.height>=Math.max(minHeight,pxPerMM*minMM)&&
    area>=minPixels&&rect.width/w<=maxFraction&&rect.height/h<=maxFraction&&
-   rect.x>3&&rect.y>3&&rect.x+rect.width<w-3&&rect.y+rect.height<h-3;
- const add=(contour,kind,confidence,shape='physical')=>{
+   rect.x>frameMargin&&rect.y>frameMargin&&
+   rect.x+rect.width<w-frameMargin&&rect.y+rect.height<h-frameMargin;
+ const add=(contour,kind,confidence,shape='physical',options={})=>{
    const r=cv.boundingRect(contour),a=Math.abs(cv.contourArea(contour));
-   if(!valid(r,a))return;
+   if(!valid(r,a,options))return;
    const polygon=new cv.Mat();
    try{
      const arc=cv.arcLength(contour,true);
-     cv.approxPolyDP(contour,polygon,Math.max(1,arc*.0075),true);
+     cv.approxPolyDP(contour,polygon,Math.max(1,arc*.017),true);
      if(polygon.rows<3)return;
      const points=[];
      for(let i=0;i<polygon.rows;i++)points.push([
@@ -71,14 +82,18 @@ export function discoverPhysicalMaterialBoxes(cv,p,own){
    cv.morphologyEx(edges(lo,hi),closed,cv.MORPH_CLOSE,kernel);
    contours(closed,cv.RETR_LIST,c=>{
      const r=cv.boundingRect(c),area=Math.abs(cv.contourArea(c));
-     if(!valid(r,area,{minPixels:Math.max(900,pxPerMM*pxPerMM*45)}))return;
+     if(!valid(r,area,{minPixels:Math.max(900,pxPerMM*pxPerMM*45),
+       minWidth:60,minHeight:60,maxFraction:.68}))return;
      const fill=area/Math.max(1,r.width*r.height);
-     if(fill<.72)return;
+     if(fill<.78)return;
      const approx=new cv.Mat();
      try{
        cv.approxPolyDP(c,approx,Math.max(1,cv.arcLength(c,true)*.03),true);
-       if(approx.rows>8||approx.rows<3)return;
-       add(c,'edge-closed',fill,'paper');
+       if(approx.rows>7||approx.rows<3)return;
+       const support=edgeSupport(r,lo,hi);
+       if(support<.12)return; // reject interior text / incomplete border
+       add(c,'edge-closed',Math.min(1,support),'paper',
+         {minPixels:Math.max(900,pxPerMM*pxPerMM*45),minWidth:60,minHeight:60,maxFraction:.68});
      }finally{approx.delete();}
    });
  }
@@ -107,8 +122,14 @@ export function discoverPhysicalMaterialBoxes(cv,p,own){
    cv.morphologyEx(closed,opened,cv.MORPH_OPEN,openK);
    contours(opened,cv.RETR_EXTERNAL,c=>{
      const r=cv.boundingRect(c),area=Math.abs(cv.contourArea(c));
-     if(!valid(r,area)||area/Math.max(1,r.width*r.height)<.22)return;
-     add(c,'lab-carrier',area/Math.max(1,r.width*r.height),'carrier');
+     if(!valid(r,area,{minPixels:5000,minWidth:70,minHeight:65,frameMargin:18})
+       ||area/Math.max(1,r.width*r.height)<.23)return;
+     const hull=new cv.Mat();
+     try{
+       cv.convexHull(c,hull,false,true);
+       add(hull,'lab-carrier',area/Math.max(1,r.width*r.height),'carrier',
+         {minPixels:5000,minWidth:70,minHeight:65,frameMargin:18});
+     }finally{hull.delete();}
    });
  }
  // 3. Irregular exterior outline candidates, including people: never force
@@ -118,22 +139,17 @@ export function discoverPhysicalMaterialBoxes(cv,p,own){
    cv.morphologyEx(edges(lo,hi),joined,cv.MORPH_CLOSE,k);
    contours(joined,cv.RETR_LIST,c=>{
      const r=cv.boundingRect(c),area=Math.abs(cv.contourArea(c));
-     if(!valid(r,area,{minPixels:Math.max(1000,pxPerMM*pxPerMM*75)}))return;
+     if(!valid(r,area,{minPixels:Math.max(1500,pxPerMM*pxPerMM*75),
+       minWidth:70,minHeight:70,maxFraction:.65}))return;
      const fill=area/Math.max(1,r.width*r.height);
-     if(fill<.40||fill>.76)return;
-     add(c,'irregular-closed',fill,'diecut');
+     if(fill<.43||fill>.70)return;
+     add(c,'irregular-closed',fill,'diecut',
+       {minPixels:Math.max(1500,pxPerMM*pxPerMM*75),minWidth:70,minHeight:70,maxFraction:.65});
    });
  }
- // Sort large/coherent carriers first, then remove their inner text/stars.
- // This is geometric containment, not the old small-fragment overlap rule.
- const priority=row=>(row.physicalShape==='paper'?1.5:row.physicalShape==='carrier'?1.3:1)*
-   row.w*row.h*(.6+.4*row.boundaryPrior);
- all.sort((a,b)=>priority(b)-priority(a));
- const unique=[];
- for(const item of all){
-   if(unique.some(row=>bboxOverlap(row,item)>.78))continue;
-   unique.push(item);
- }
+ // Python parity: dedupe physical envelopes, then join closely aligned
+ // same-width carrier fragments only when independent evidence paths agree.
+ const unique=mergeAlignedCarrierPieces(dedupePhysicalCandidates(all,48));
  // Hough is genuinely on-demand: skip only when reliable candidates explain
  // most edges; uncovered content triggers it. Never suppress a valid old box.
  const covered=new Uint8Array(w*h);
@@ -169,7 +185,7 @@ export function discoverPhysicalMaterialBoxes(cv,p,own){
          (Math.abs(q.y-top)<14||Math.abs(q.y-bottom)<14));
        if(!support)continue;
        const normalized={x:left/w,y:top/h,w:ww/w,h:hh/h};
-       if(unique.some(row=>bboxOverlap(row,normalized)>.34))continue;
+       if(unique.some(row=>overlapOfSmaller(row,normalized)>.34))continue;
        unique.push({...normalized,instanceMethod:'physical-boundary',
          physicalBoundary:[[left/w,top/h],[right/w,top/h],[right/w,bottom/h],[left/w,bottom/h]],
          physicalShape:'partial',boundarySource:'hough-edges',boundaryPrior:.32,
@@ -182,12 +198,12 @@ export function discoverPhysicalMaterialBoxes(cv,p,own){
  if(Array.isArray(p.legacyBoxes)){
    for(const old of p.legacyBoxes){
      const x=old.x+old.w/2,y=old.y+old.h/2;
-     if(unique.some(row=>within(row,x,y,.008)))continue;
-     if(unique.some(row=>bboxOverlap(row,old)>.25))continue;
+     if(unique.some(row=>containsCenter(row,old,.008)))continue;
+     if(unique.some(row=>overlapOfSmaller(row,old)>.25))continue;
      unique.push({...old,instanceMethod:'physical-fallback',
        physicalBoundary:null,boundarySource:'legacy-uncovered',
        boundaryPrior:0,needsBoundaryReview:true});
    }
  }
- return unique.sort(order).slice(0,48);
+ return dedupePhysicalCandidates(unique,48).sort(order);
 }
