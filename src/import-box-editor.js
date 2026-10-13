@@ -1,8 +1,10 @@
+import {ComponentLifetime} from './ui-component-lifecycle.js';
 import {paperOverlayRect} from './import-coordinate.js';
 import {transformSelectedFrame,isObjectDeleteKey} from './selection-transform.js';
 
 export function mountImportBoxEditor({state,view,render,saveActiveImportRecord,toast,refreshImportCandidates}) {
   const base=view.querySelector('#crop-preview'),source=state.correctedBitmap||state.importBitmap;
+  const lifetime=new ComponentLifetime();
   if(!base||!source)return;
   let boxes=(state.importCandidates||[]).map((c,sourceIndex)=>{
     const r=c.orientedBox;
@@ -16,10 +18,10 @@ export function mountImportBoxEditor({state,view,render,saveActiveImportRecord,t
     const rect=paperOverlayRect(base.clientWidth,base.clientHeight,source.width,source.height,paper);
     Object.assign(overlay.style,{left:rect.left+'px',top:rect.top+'px',width:rect.width+'px',height:rect.height+'px'});
   };
-  base.append(overlay);position();requestAnimationFrame(position);
-  const observer=new ResizeObserver(position);observer.observe(base);
+  base.append(overlay);position();lifetime.frame(position);
+  lifetime.resize(base,position);
   const sourceImage=base.querySelector(':scope > img');
-  sourceImage?.addEventListener('load',position);
+  if(sourceImage)lifetime.on(sourceImage,'load',position);
   const removeSelected=()=>{
     if(selected==null)return;
     boxes.splice(selected,1);selected=null;drag=null;paint();
@@ -28,11 +30,8 @@ export function mountImportBoxEditor({state,view,render,saveActiveImportRecord,t
     if(!state.showManualBox||state.route!=='import'||selected==null||!isObjectDeleteKey(event))return;
     event.preventDefault();event.stopPropagation();removeSelected();
   };
-  document.addEventListener('keydown',onDelete);
-  view.manualBoxDispose=()=>{
-    observer.disconnect();sourceImage?.removeEventListener('load',position);
-    document.removeEventListener('keydown',onDelete);
-  };
+  lifetime.on(document,'keydown',onDelete);
+  view.manualBoxDispose=()=>{lifetime.dispose();overlay.remove();actions.remove();};
   const frame=base.querySelector('#crop-frame');if(frame)frame.style.display='none';
   const actions=document.createElement('div');actions.className='import-photo-tools';base.after(actions);
   const button=(label,fn)=>{const b=document.createElement('button');b.type='button';b.className='btn';b.textContent=label;b.onclick=fn;actions.append(b);return b;};
