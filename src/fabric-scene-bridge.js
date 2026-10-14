@@ -1,5 +1,7 @@
 import {shapeSVG,textFont,textFontFamily,textLineHeight,textLines} from './editor-tools-model.js';
 import {materialMaskGeometry} from './material-mask.js';
+import {geometryIntersection} from './craft-topology.js';
+import {validateVectorMask} from './scene-v2.js';
 import {smoothInkSVG} from './ink-path-geometry.js';
 import {pressureInkPath} from './pressure-ink.js';
 
@@ -10,7 +12,21 @@ const ringPath=(points,width,height)=>points.map(([x,y],index)=>
 
 // Fabric is the interactive projection. Scene v2 remains the persisted source
 // of truth, so an editor change never replaces the physical-data contract.
-export function createFabricSceneBridge(fabric,{assetURL=()=>null}={}){
+export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=>null}={}){
+  const maskGeometry=mask=>[[mask.outer,...(mask.holes||[])]];
+  const clipPath=(geometry,width,height,{page=false,topOffset=0}={})=>{
+    // A compound path keeps openings transparent. Fabric recenters Path data
+    // around its own bounds, so place that center back in the Scene frame.
+    if(!geometry.length)return new fabric.Path('M 0 0',{fill:'black',stroke:null});
+    const points=geometry.flat(2),xs=points.map(point=>point[0]),ys=points.map(point=>point[1]);
+    const centerX=(Math.min(...xs)+Math.max(...xs))/2;
+    const centerY=(Math.min(...ys)+Math.max(...ys))/2;
+    const path=geometry.flatMap(polygon=>polygon.map(ring=>ringPath(ring,width,height))).join(' ');
+    return new fabric.Path(path,{originX:'center',originY:'center',
+      left:(centerX-(page?0:.5))*width,
+      top:(centerY-(page?0:.5))*height+topOffset,
+      fill:'black',stroke:null,fillRule:'evenodd',absolutePositioned:page});
+  };
   class SceneTextbox extends fabric.Textbox{
     _render(ctx){
       if(this.isEditing||!this.sceneTextNode){super._render(ctx);return;}
@@ -55,13 +71,18 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null}={}){
   };
   async function fromNode(node){
     if(!node||node.hidden||node.isHidden||node.isParked||node.parked)return null;
-    if(node.vectorMask)throw Error('Fabric 画布尚未支持该图层的矢量蒙版：'+node.id);
+    if(node.vectorMask)validateVectorMask(node.vectorMask);
     if(node.type==='group'){
       const children=(await Promise.all((node.children||[]).map(fromNode))).filter(Boolean);
       if(!children.length)return null;
       const group=new fabric.Group(children,{opacity:finite(node.opacity,1),
         globalCompositeOperation:node.blendMode==='multiply'?'multiply':'source-over'});
       group.sceneID=node.id;group.sceneType='group';
+      if(node.vectorMask){
+        const size=typeof canvasSize==='function'?canvasSize():canvasSize;
+        if(!(size?.width>0&&size?.height>0))throw Error('图层组蒙版缺少画布尺寸：'+node.id);
+        group.clipPath=clipPath(maskGeometry(node.vectorMask),size.width,size.height,{page:true});
+      }
       group.sceneGroupPose={center:group.getCenterPoint(),angle:group.angle||0};
       // A Scene group contains real materials. Its gesture may move and rotate
       // the children, but resizing would silently change physical inventory.
@@ -95,7 +116,10 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null}={}){
       });
       object.sceneTextFrameHeight=frameHeight;
       object.sceneTextNode=node;
+      if(node.vectorMask)object.clipPath=clipPath(maskGeometry(node.vectorMask),
+        object.width,frameHeight,{topOffset:(frameHeight-object.height)/2});
     }else if(node.type==='ink'){
+      if(node.vectorMask)throw Error('墨迹蒙版需要先将墨迹分组，再在组上添加裁切蒙版');
       if(!node.points?.length)return null;
       const color=node.color||'#2b5245',width=positive(node.width,3);
       if(node.penStyle==='pressure'){
@@ -133,14 +157,13 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null}={}){
         originX:'center',originY:'center',left:finite(node.x),top:finite(node.y),
         flipX:!!node.isFlippedHorizontally,lockScalingX:true,lockScalingY:true,
         lockSkewingX:true,lockSkewingY:true});
-      if(node.materialMask){
-        const geometry=materialMaskGeometry(node.materialMask);
-        const path=[ringPath(geometry.outer,object.width,object.height),
-          ...geometry.holes.map(ring=>ringPath(ring,object.width,object.height))].join(' ');
-        object.clipPath=new fabric.Path(path,{originX:'center',originY:'center',
-          fill:'black',fillRule:geometry.holes.length?'evenodd':'nonzero'});
-      }
+      const material=node.materialMask&&maskGeometry(materialMaskGeometry(node.materialMask));
+      const vector=node.vectorMask&&maskGeometry(node.vectorMask);
+      if(material||vector)object.clipPath=clipPath(material&&vector?
+        geometryIntersection(material,vector):material||vector,object.width,object.height);
     }else throw Error('不支持的 Scene 图层：'+node.type);
+    if(node.type==='shape'&&node.vectorMask)object.clipPath=clipPath(maskGeometry(node.vectorMask),
+      object.sceneFrameWidth,object.sceneFrameHeight);
     object.set({angle:finite(node.rotation),opacity:finite(node.opacity,1),
       selectable:!node.locked&&!node.isLocked,evented:!node.locked&&!node.isLocked,
       globalCompositeOperation:node.blendMode==='multiply'?'multiply':'source-over'});
@@ -196,6 +219,9 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null}={}){
       if(node.type==='text'){
         node.content=object.text;
         object.sceneTextFrameHeight=textFrame/object.scaleY;
+        if(node.vectorMask)object.clipPath=clipPath(maskGeometry(node.vectorMask),
+          object.width,object.sceneTextFrameHeight,
+          {topOffset:(object.sceneTextFrameHeight-object.height)/2});
       }
       if(node.type==='material')node.isFlippedHorizontally=!!object.flipX;
     }

@@ -69,10 +69,12 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
         canvas.requestRenderAll();
         callbacks.current.onReady?.(canvas);
         const bridge=createFabricSceneBridge(fabric,{
-          assetURL:(id,node)=>callbacks.current.assetURL?.(id,node)
+          assetURL:(id,node)=>callbacks.current.assetURL?.(id,node),
+          canvasSize:()=>callbacks.current.draft.canvas
         });
         const sceneVersions=new Map();
-        const snapshot=node=>JSON.stringify(node);
+        const snapshot=node=>JSON.stringify([node,node.type==='group'&&node.vectorMask?
+          callbacks.current.draft.canvas:null]);
         const signatures=new Map((draft.layers||[]).map(node=>[node.id,snapshot(node)]));
         const remember=id=>{
           const node=callbacks.current.draft.layers.find(item=>item.id===id);

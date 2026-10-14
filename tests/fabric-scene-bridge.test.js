@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {createCanvas} from 'canvas';
+import {createCanvas,loadImage} from 'canvas';
 import * as fabric from 'fabric/node';
 import {createFabricSceneBridge} from '../src/fabric-scene-bridge.js';
+import {renderSceneCanvas} from '../src/scene-renderer.js';
 
 const bridge=createFabricSceneBridge(fabric);
 
@@ -140,8 +141,47 @@ test('Fabric material controls cannot resize the physical paper placement',async
   assert.equal(node.width,200);
 });
 
-test('unsupported vector masks fail visibly instead of rendering an inaccurate layer',async()=>{
-  const node={id:'masked-shape',type:'shape',kind:'rectangle',x:100,y:100,width:80,height:40,
-    vectorMask:{outer:[[0,0],[1,0],[1,1],[0,1]],holes:[]}};
-  await assert.rejects(bridge.fromNode(node),/尚未支持.*矢量蒙版/);
+test('Fabric leaf and group vector masks match the Scene export at sampled pixels',async()=>{
+  const canvasSize={width:200,height:200};
+  const image=createCanvas(100,100),ctx=image.getContext('2d');
+  ctx.fillStyle='#ff0000';ctx.fillRect(0,0,100,100);
+  const leftHalf={outer:[[0,0],[.5,0],[.5,1],[0,1]],holes:[]};
+  const layers=[
+    {id:'masked-shape',type:'shape',kind:'rectangle',x:50,y:50,width:70,height:70,
+      fill:'#0000ff',vectorMask:leftHalf},
+    {id:'masked-material',type:'material',assetID:'red',x:100,y:100,width:100,height:100,
+      materialMask:{shape:'polygon',points:[[.1,.1],[.9,.1],[.9,.9],[.1,.9]]},
+      vectorMask:{outer:[[0,0],[.6,0],[.6,1],[0,1]],
+        holes:[[[.2,.2],[.4,.2],[.4,.4],[.2,.4]]]}},
+    {id:'masked-group',type:'group',vectorMask:leftHalf,children:[
+      {id:'group-shape',type:'shape',kind:'rectangle',x:100,y:170,width:100,height:40,fill:'#00aa00'}]}
+  ];
+  const draft={id:'masked-draft',sceneVersion:2,canvas:canvasSize,
+    paperColor:'#ffffff',paperPattern:'plain',layers};
+  const display=new fabric.StaticCanvas(null,{...canvasSize,backgroundColor:'#ffffff'});
+  const projection=createFabricSceneBridge(fabric,{assetURL:()=>image.toDataURL(),canvasSize});
+  try{
+    for(const node of layers)display.add(await projection.fromNode(node));
+    display.renderAll();
+    const reference=(await renderSceneCanvas(draft,{waitForFonts:false,
+      createCanvas:()=>createCanvas(1,1),loadMaterialImage:async()=>image,
+      loadShapeImage:uri=>loadImage(Buffer.from(decodeURIComponent(uri.split(',')[1])
+        .replace('<svg ','<svg width="1000" height="1000" ')))})).canvas;
+    const actual=display.getContext(),expected=reference.getContext('2d');
+    for(const [x,y] of [[30,50],[65,50],[60,60],[80,80],[105,100],
+      [135,100],[65,130],[75,170],[125,170]]){
+      const pixel=[...actual.getImageData(x,y,1,1).data];
+      const target=[...expected.getImageData(x,y,1,1).data];
+      assert.deepEqual(pixel,target,`mask mismatch at ${x},${y}`);
+    }
+  }finally{await display.dispose();}
+});
+
+test('Fabric group masks require a real page size and invalid vectors fail visibly',async()=>{
+  const group={id:'g',type:'group',vectorMask:{outer:[[0,0],[1,0],[1,1],[0,1]]},
+    children:[{id:'s',type:'shape',kind:'rectangle',x:100,y:100,width:50,height:50}]};
+  await assert.rejects(bridge.fromNode(group),/缺少画布尺寸/);
+  const invalid={id:'invalid',type:'shape',kind:'rectangle',x:100,y:100,width:50,height:50,
+    vectorMask:{outer:[[0,0],[2,0],[1,1]]}};
+  await assert.rejects(bridge.fromNode(invalid),/蒙版轮廓坐标无效/);
 });
