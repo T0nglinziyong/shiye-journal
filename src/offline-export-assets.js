@@ -4,8 +4,9 @@ import {offlinePreviewBytes,previewImageFormat} from './offline-preview.js';
 
 // The preview is an AI visual hint, not an editable source image. Keep the
 // original immutable in COS and cache only this small, account-scoped derivative.
-export const OFFLINE_EXPORT_SOURCE_EDGE=600;
-export const OFFLINE_EXPORT_CACHE_VERSION='v2-600-512-webp-png';
+export const OFFLINE_EXPORT_SOURCE_EDGE=480;
+export const OFFLINE_IMPORT_IMAGE_EDGE=1440;
+export const OFFLINE_EXPORT_CACHE_VERSION='v3-cover480-webp-png';
 
 const checkCanceled=signal=>{
   if(signal?.aborted)throw signal.reason instanceof Error?signal.reason:Error('已取消导出');
@@ -30,7 +31,7 @@ export async function mapOfflineExportLimited(entries,limit,task,{signal,onDone=
 }
 
 export async function prepareOfflineMaterialPreview({
-  asset,account,loadVariant,loadOriginal,cache=privateCache,
+  asset,account,loadVariant,cache=privateCache,
   encode=offlinePreviewBytes,signal
 }){
   checkCanceled(signal);
@@ -48,28 +49,27 @@ export async function prepareOfflineMaterialPreview({
     }
   }catch{/* A disposable cache must never prevent an export. */}
   checkCanceled(signal);
-  let bytes,source='variant';
-  try{
-    if(asset.staticPath||typeof loadVariant!=='function')throw Error('使用静态素材原图');
-    const preview=await loadVariant(asset,OFFLINE_EXPORT_SOURCE_EDGE);
-    if(!(preview instanceof Blob)||!preview.size)throw Error('COS 图片派生预览为空');
-    checkCanceled(signal);
-    bytes=await encode(preview);
-    if(!['webp','png'].includes(previewImageFormat(bytes)?.extension))throw Error('图片派生格式不支持透明素材');
-  }catch(error){
-    checkCanceled(signal);
-    // Preserve existing behaviour if COS transformation or WebP decoding is
-    // unavailable; do not silently omit an image or break a ZIP export.
-    const original=await loadOriginal(asset);
-    if(!(original instanceof Blob)||!original.size)throw Error('素材「'+asset.title+'」缺少图片');
-    checkCanceled(signal);
-    bytes=await encode(original);
-    source='original';
-  }
+  if(typeof loadVariant!=='function')throw Error('素材封面读取方式不可用');
+  const preview=await loadVariant(asset,OFFLINE_EXPORT_SOURCE_EDGE);
+  if(!(preview instanceof Blob)||!preview.size)throw Error('素材「'+asset.title+'」的封面不可用，请检查同步状态后重试');
+  checkCanceled(signal);
+  const bytes=await encode(preview,{maxEdge:OFFLINE_EXPORT_SOURCE_EDGE});
   checkCanceled(signal);
   if(!['webp','png'].includes(previewImageFormat(bytes)?.extension))throw Error('无法生成保留透明通道的素材预览');
   try{await cache.put(account,key,new Blob([bytes],{type:previewImageFormat(bytes).mimeType}));}
   catch{/* Account-scoped cache may be unavailable or full. */}
   checkCanceled(signal);
-  return {bytes,cacheHit:false,source};
+  return {bytes,cacheHit:false,source:'cover'};
+}
+
+// Only after the package has been delivered: warm the display-sized COS
+// derivative in the existing priority queue. A single background lane leaves
+// visible cards and details free to use the remaining network slots.
+export async function prefetchOfflineImportImages(assets,{loadVariant,isCurrent=()=>true,onError=()=>{}}={}){
+  const ids=[...new Set(assets.filter(asset=>asset?.blobId&&!asset.staticPath).map(asset=>asset.blobId))];
+  for(const id of ids){
+    if(!isCurrent())break;
+    try{await loadVariant(id,OFFLINE_IMPORT_IMAGE_EDGE);}
+    catch(error){onError(error,id);}
+  }
 }

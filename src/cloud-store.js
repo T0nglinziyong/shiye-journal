@@ -577,7 +577,7 @@ async function cachedSufficientVariant(path,required){
   }
   return null;
 }
-async function cloudPreview(id,pixels=480){
+async function cloudPreview(id,pixels=480,{allowRemoteOriginal=true}={}){
   const variant=imageVariant(pixels),edge=Number(variant.slice(7));
   const pending=await pendingOverride('blobs',id);if(pending&&(!pending.record||usableBlob(pending.record.data)))return pending.record?await makeThumbnail(pending.record.data,edge)||pending.record.data:undefined;
   if(id.startsWith('project-cover:')){const match=/^project-cover:(cos|supabase):(.+)$/.exec(id);if(!match)throw Error('作品封面标识不是当前格式');const [,provider,path]=match;if(!path.startsWith((await identity())+'/'))throw Error('作品封面不属于当前账号');const key='thumbnail:'+path,saved=await cached(key);if(usableBlob(saved))return saved;const blob=await downloadObject(path,provider);if(!usableBlob(blob))throw Error('作品封面为空');await remember(key,blob);return blob;}
@@ -629,7 +629,10 @@ async function cloudPreview(id,pixels=480){
     if(variant==='preview480')materializePreview480(record,preview);
     return preview;
   }
-  // Supabase-only records retain their existing read-only recovery path.
+  // Model requests and AI packages must not download a remote original merely
+  // because this storage provider has no cover/variant object available.
+  if(!allowRemoteOriginal)throw Error('素材派生封面尚不可用，未下载云端原图');
+  // Other readers may use the authenticated Supabase recovery path.
   const {data}=await decode('blobs',record);
   const blob=await makeThumbnail(data,edge);if(blob){await rememberImageVariant(record.storagePath,edge,blob);return blob;}return data;
 }

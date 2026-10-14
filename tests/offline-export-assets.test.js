@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mapOfflineExportLimited,offlineExportCacheKey,prepareOfflineMaterialPreview,OFFLINE_EXPORT_SOURCE_EDGE} from '../src/offline-export-assets.js';
+import {mapOfflineExportLimited,offlineExportCacheKey,prepareOfflineMaterialPreview,prefetchOfflineImportImages,OFFLINE_EXPORT_SOURCE_EDGE,OFFLINE_IMPORT_IMAGE_EDGE} from '../src/offline-export-assets.js';
 
 const WEBP=new Uint8Array([82,73,70,70,16,0,0,0,87,69,66,80,86,80,56,32]);
 const mkAsset=(extra={})=>({id:'asset-a',blobId:'cutout-01',title:'透明贴纸',kind:'sticker',
@@ -14,11 +14,10 @@ test('GPT export reuses account-and-source-revision scoped transparent preview',
   const cache=fakeCache(),asset=mkAsset();let reads=0,encodes=0;
   const opts={asset,account:'alice',cache,
     loadVariant:async(_asset,edge)=>{reads++;assert.equal(edge,OFFLINE_EXPORT_SOURCE_EDGE);return new Blob([WEBP]);},
-    loadOriginal:()=>{throw Error('must not fetch original');},
-    encode:async()=>{encodes++;return WEBP;}};
+    encode:async(_blob,{maxEdge})=>{assert.equal(maxEdge,480);encodes++;return WEBP;}};
   const first=await prepareOfflineMaterialPreview(opts);
   const second=await prepareOfflineMaterialPreview(opts);
-  assert.equal(first.source,'variant');assert.equal(first.cacheHit,false);
+  assert.equal(first.source,'cover');assert.equal(first.cacheHit,false);
   assert.equal(second.cacheHit,true);assert.deepEqual(second.bytes,WEBP);
   assert.equal(reads,1);assert.equal(encodes,1);
   assert.equal(cache.rows.size,1);
@@ -27,7 +26,7 @@ test('GPT export reuses account-and-source-revision scoped transparent preview',
 test('account and changed physical source cannot reuse another material preview',async()=>{
   const cache=fakeCache(),asset=mkAsset();let loads=0;
   const opts={asset,cache,account:'alice',loadVariant:async()=>{loads++;return new Blob([WEBP]);},
-    loadOriginal:()=>{throw Error('unexpected');},encode:async()=>WEBP};
+    encode:async()=>WEBP};
   await prepareOfflineMaterialPreview(opts);
   await prepareOfflineMaterialPreview({...opts,account:'bob'});
   const metadataOnly=mkAsset({updatedAt:'2026-10-12T00:00:00Z',title:'新名称'});
@@ -38,14 +37,11 @@ test('account and changed physical source cannot reuse another material preview'
   assert.equal(loads,3);assert.equal(cache.rows.size,3);
 });
 
-test('unavailable COS derivative preserves original-based PNG/WebP fallback',async()=>{
-  const cache=fakeCache(),asset=mkAsset();let original=0;
-  const result=await prepareOfflineMaterialPreview({asset,account:'alice',cache,
-    loadVariant:async()=>{throw Error('variant unavailable');},
-    loadOriginal:async()=>{original++;return new Blob([WEBP]);},
-    encode:async()=>WEBP});
-  assert.equal(original,1);assert.equal(result.source,'original');
-  assert.equal(result.cacheHit,false);
+test('missing remote cover stops export without fetching an original',async()=>{
+  const cache=fakeCache(),asset=mkAsset();
+  await assert.rejects(prepareOfflineMaterialPreview({asset,account:'alice',cache,
+    loadVariant:async()=>undefined,encode:async()=>WEBP}),/封面不可用/);
+  assert.equal(cache.rows.size,0);
 });
 
 test('corrupt cached bytes never enter a ZIP',async()=>{
@@ -53,7 +49,7 @@ test('corrupt cached bytes never enter a ZIP',async()=>{
   await cache.put('alice',offlineExportCacheKey(asset),new Blob([Uint8Array.from([0,1,2])]));
   const result=await prepareOfflineMaterialPreview({asset,account:'alice',cache,
     loadVariant:async()=>{calls++;return new Blob([WEBP]);},
-    loadOriginal:async()=>{throw Error('unexpected');},encode:async()=>WEBP});
+    encode:async()=>WEBP});
   assert.equal(calls,1);assert.equal(result.cacheHit,false);
 });
 
@@ -80,4 +76,22 @@ test('cancellation prevents pending tasks from starting',async()=>{
     return i;
   },{signal:controller.signal}),/stopped/);
   assert.equal(launched,1);
+});
+
+test('post-export import warmup reads one display derivative at a time and stops on account change',async()=>{
+  const calls=[];let current=true;
+  await prefetchOfflineImportImages([
+    mkAsset({blobId:'one'}),mkAsset({id:'a2',blobId:'one'}),mkAsset({id:'a3',blobId:'two'})
+  ],{loadVariant:async(id,edge)=>{calls.push([id,edge]);if(id==='one')current=false;},isCurrent:()=>current});
+  assert.deepEqual(calls,[['one',OFFLINE_IMPORT_IMAGE_EDGE]]);
+});
+
+test('failed background derivative does not prevent the next import image from warming',async()=>{
+  const calls=[],errors=[];
+  await prefetchOfflineImportImages([mkAsset({blobId:'one'}),mkAsset({id:'a2',blobId:'two'})],{
+    loadVariant:async id=>{calls.push(id);if(id==='one')throw Error('offline');},
+    onError:(error,id)=>errors.push([id,error.message])
+  });
+  assert.deepEqual(calls,['one','two']);
+  assert.deepEqual(errors,[['one','offline']]);
 });

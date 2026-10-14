@@ -56,7 +56,7 @@ export async function cachedCollections(){
  return cached?{...cached,projects:selectCurrentProjects(cached.projects)}:null;
 }
 export const refreshCloud=()=>cloudEnabled?cloudRefresh():Promise.resolve(null);
-export const previewBlob=(id,pixels=720)=>cloudEnabled?cloudPreview(id,pixels):get('blobs',id).then(r=>r?.data);
+export const previewBlob=(id,pixels=720,options)=>cloudEnabled?cloudPreview(id,pixels,options):get('blobs',id).then(r=>r?.data);
 const DB='shiye-pwa-full-v1';
 const STORES=['assets','blobs','series','projects','meta','trash'];
 let connection;

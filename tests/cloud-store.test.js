@@ -419,6 +419,11 @@ test('a missing remote thumbnail is rebuilt from its original instead of showing
   const a=fixture();a.state.missingThumbnail=true;a.state.rows=[{id:'b',storagePath:'owner-uuid/hash',storageProvider:'supabase',thumbnailPath:'owner-uuid/hash-preview480.webp'}];
   assert.equal(await (await a.db.cloudPreview('b')).text(),'private image');assert.equal(a.state.downloads,2);
 });
+test('AI cover reads refuse a remote original when no private derivative exists',async()=>{
+  const a=fixture();a.state.rows=[{id:'b',storagePath:'owner-uuid/hash',storageProvider:'supabase'}];
+  await assert.rejects(a.db.cloudPreview('b',480,{allowRemoteOriginal:false}),/未下载云端原图/);
+  assert.equal(a.state.downloads,0);
+});
 test('COS thumbnails are materialized once for old images and later read without source processing',async()=>{
   const cache=memoryCache(),calls=[],remote=new Map(),original='owner-uuid/'+'a'.repeat(64),
     derived=original+'-preview480.webp';

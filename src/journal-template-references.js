@@ -39,10 +39,9 @@ export async function loadJournalTemplateReferences({context,userTemplates=[],db
       mapOfflineExportLimited(requests,2,async({template,kind,blobId})=>{
         const title=template.title+(kind==='case'?' · 对应案例':' · 抽象模板');
         if(blobId){
-          // Reference photos need only a 960px COS derivative before the final
-          // 768px handoff encoding; fall back to original when unavailable.
-          const blob=(typeof db.previewBlob==='function'?await db.previewBlob(blobId,960).catch(()=>null):null)||
-            (await db.get('blobs',blobId))?.data;
+          // The task receives only a display-sized derivative. Never fetch a
+          // private source original merely because the cover is unavailable.
+          const blob=await db.previewBlob(blobId,OFFLINE_REFERENCE_EDGE,{allowRemoteOriginal:false});
           if(!(blob instanceof Blob)||!blob.size)throw Error('模板「'+template.title+'」的'+(kind==='case'?'案例':'模板')+'图无法读取；未发送不完整参考包');
           return {id:template.id+'-'+kind,kind,title,bytes:new Uint8Array(await blob.arrayBuffer()),mimeType:blob.type,extension:extension(blob.type)};
         }

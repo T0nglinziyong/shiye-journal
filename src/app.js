@@ -75,6 +75,7 @@ import {syncBusyControls} from './ui-disabled-state.js';
 import {renderImportInspection,renderImportReview} from './import-workspace-ui.js';
 import {showCutoutEditor} from './cutout-editor.js';
 import {decodeImageBlob} from './image-blob-decoder.js';
+import {COVER_EDGE} from './image-variants.js';
 import {loadModelImageSource} from './model-image-source.js';
 import {mountCanvasSelection} from './canvas-selection-ui.js';
 import * as db from './store.js';
@@ -95,8 +96,7 @@ import {rectifyA4Frame,suggestPaperCorners} from './perspective.js';
 import {analysisPixels,decodeRecognitionImage,sourcePixels} from './recognition-raster.js';
 import {isUntouchedLegacyExample} from './legacy-builtins.js';
 import {applyToolCalls,validateScenePhysical} from './creative.js';
-import {offlinePreviewBytes as encodeOfflinePreview} from './offline-preview.js';
-import {mapOfflineExportLimited,prepareOfflineMaterialPreview} from './offline-export-assets.js';
+import {mapOfflineExportLimited,prepareOfflineMaterialPreview,prefetchOfflineImportImages} from './offline-export-assets.js';
 import {buildMaterialScope} from './matching-materials.js';
 import {addMatchingFromLibrary,addMatchingFromRecommendation} from './matching-selection.js';
 import {matchingRecommendations,renderMatchingPage} from './matching-view.js';
@@ -1508,7 +1508,7 @@ async function exportOfflineCreation(){
   if(!matchingScope().candidateAssetIDs.length){toast('请先选择素材');return;}
   state.matchPurpose=view.querySelector('#match-purpose')?.value||state.matchPurpose;state.matchProcessing=view.querySelector('#match-processing')?.value||state.matchProcessing;state.matchStyle=view.querySelector('#match-style')?.value||state.matchStyle;state.matchIntent=view.querySelector('#match-intent')?.value||'';captureMatchContent();state.matchMode=view.querySelector('#match-mode')?.value||state.matchMode;state.matchRatio=readMatchPaper();state.matchStyles=readMatchSelection('match-style',state.matchStyle);state.matchPurposes=readMatchSelection('match-purpose',state.matchPurpose);
   const button=view.querySelector('[data-act="match-export-gpt"]'),controller=new AbortController(),started=performance.now();
-  const timing={},report={cacheHits:0,derived:0,original:0,materials:0,references:0};
+  const timing={},report={cacheHits:0,covers:0,materials:0,references:0};
   if(button){button.disabled=true;button.textContent='正在准备 AI 参考…';}
   body.innerHTML='<section class="offline-handoff"><h2>准备网页版 AI 创作包</h2><p id="offline-export-progress" role="status" aria-live="polite">正在检查素材…</p><button type="button" class="btn" id="offline-export-cancel">取消导出</button></section>';
   if(!modal.open)modal.showModal();
@@ -1522,22 +1522,20 @@ async function exportOfflineCreation(){
     const p=createMatchingProject(),assetsSnapshot=structuredClone(state.assets),aliases=materialAliases(p.candidateAssetIDs),previews=[],referenceImages=[],cfg=structuredClone(state.aiSettings);
     const account=await offlineTaskAccount();canceled();
     const all=Object.entries(aliases);report.materials=all.length;
-    // Fetch 600px COS derivatives instead of downloading full-resolution
-    // originals for 512px GPT hints. Account/source-revision cache survives
-    // repeat exports; originals stay unchanged and remain the fallback.
+    // The package uses cached 480px covers or fetches that same COS tier.
+    // High-resolution display variants are queued only after delivery.
     const materialWork=measured('materials',()=>cfg.includeThumbnails
       ?mapOfflineExportLimited(all,3,async([alias,id])=>{
         const chosen=assetsSnapshot.find(item=>item.id===id);
         if(!chosen)throw Error('创作素材已变更，请重新导出任务包');
         const row=await prepareOfflineMaterialPreview({
           asset:chosen,account,signal:controller.signal,
-          loadVariant:(asset,edge)=>db.previewBlob(asset.blobId,edge),
-          loadOriginal:async asset=>(await db.get('blobs',asset.blobId))?.data||
-            (asset.staticPath?await fetch(asset.staticPath).then(r=>r.blob()):null)
+          loadVariant:(asset,edge)=>asset.staticPath
+            ?fetch(asset.staticPath).then(response=>{if(!response.ok)throw Error('内置素材封面无法读取');return response.blob();})
+            :db.previewBlob(asset.blobId,edge,{allowRemoteOriginal:false})
         });
         if(row.cacheHit)report.cacheHits++;
-        else if(row.source==='variant')report.derived++;
-        else report.original++;
+        else report.covers++;
         return {alias,bytes:row.bytes};
       },{signal:controller.signal,onDone:(done,total)=>progress('准备素材图片 '+done+'/'+total+' · 同时处理参考案例…')})
       :Promise.resolve([]));
@@ -1562,13 +1560,25 @@ async function exportOfflineCreation(){
     }
     if(!imageDelivery){body.querySelector('.offline-handoff-return small').textContent='作品文件使用可编辑 JSON，或者导入 PNG／JPEG／WebP 快照。复制文本应包含完整可编辑 JSON。';}
     body.querySelector('#offline-gpt-prompt').rows=3;
-    const diagnostics='总耗时 '+timing.total+' ms · 素材 '+timing.materials+' ms · 参考图 '+timing.references+' ms · 打包 '+timing.package+' ms · 缓存命中 '+report.cacheHits+'/'+report.materials+' · COS 派生 '+report.derived+' · 原图回退 '+report.original;
+    const diagnostics='总耗时 '+timing.total+' ms · 素材 '+timing.materials+' ms · 参考图 '+timing.references+' ms · 打包 '+timing.package+' ms · 缓存命中 '+report.cacheHits+'/'+report.materials+' · 封面读取 '+report.covers;
     body.querySelector('.offline-handoff')?.insertAdjacentHTML('beforeend','<details class="offline-export-diagnostics"><summary>查看本次导出耗时</summary><p>'+esc(diagnostics)+'</p></details>');
     body.querySelectorAll('[data-offline-delivery]').forEach(button=>button.onclick=()=>{for(const option of body.querySelectorAll('[data-offline-delivery]')){const selected=option===button;option.classList.toggle('selected',selected);option.setAttribute('aria-pressed',String(selected));}body.querySelector('#offline-gpt-prompt').value=result.prompts[button.dataset.offlineDelivery];});
-    const openPackage=()=>{const url=URL.createObjectURL(result.blob),link=document.createElement('a');link.href=url;link.download=result.filename;link.target='_blank';link.rel='noopener';document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),120000);};
+    let prefetchStarted=false;
+    const prefetchForImport=()=>{
+      if(prefetchStarted||!cloudEnabled)return;
+      prefetchStarted=true;
+      const run=()=>void prefetchOfflineImportImages(assetsSnapshot.filter(item=>p.candidateAssetIDs.includes(item.id)),{
+        loadVariant:(id,edge)=>privateImages.load(id,edge,{background:true,allowRemoteOriginal:false}),
+        isCurrent:()=>state.accountId===account,
+        onError:(error,id)=>console.warn('创作导入图片后台预载失败',id,error?.message)
+      });
+      if('requestIdleCallback' in window)requestIdleCallback(run,{timeout:2000});
+      else setTimeout(run,200);
+    };
+    const openPackage=()=>{const url=URL.createObjectURL(result.blob),link=document.createElement('a');link.href=url;link.download=result.filename;link.target='_blank';link.rel='noopener';document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),120000);prefetchForImport();};
     body.querySelector('#offline-copy-prompt').onclick=()=>{const input=body.querySelector('#offline-gpt-prompt');input.select();if(document.execCommand('copy')){openPackage();body.querySelector('#offline-handoff-status').textContent='提示词已复制 · 任务包已打开；在文件页分享给 ChatGPT。';return;}navigator.clipboard.writeText(input.value).then(()=>{openPackage();body.querySelector('#offline-handoff-status').textContent='提示词已复制 · 任务包已打开；在文件页分享给 ChatGPT。';}).catch(()=>toast('复制失败，请长按提示词手动复制'));};
-    body.querySelector('#offline-share-package').onclick=async()=>{const file=new File([result.blob],result.filename,{type:'application/zip'});if(!navigator.canShare?.({files:[file]})){openPackage();toast('设备不支持文件分享，已打开任务包');return;}try{await navigator.share({files:[file]});}catch(error){if(error?.name!=='AbortError'){openPackage();toast('分享未完成，已打开任务包');}}};
-    body.querySelector('#offline-download-package').onclick=()=>download(result.blob,result.filename);
+    body.querySelector('#offline-share-package').onclick=async()=>{const file=new File([result.blob],result.filename,{type:'application/zip'});if(!navigator.canShare?.({files:[file]})){openPackage();toast('设备不支持文件分享，已打开任务包');return;}try{await navigator.share({files:[file]});prefetchForImport();}catch(error){if(error?.name!=='AbortError'){openPackage();toast('分享未完成，已打开任务包');}}};
+    body.querySelector('#offline-download-package').onclick=()=>{download(result.blob,result.filename);prefetchForImport();};
     if(!imageDelivery){
       body.querySelector('#offline-show-paste').onclick=()=>{const panel=body.querySelector('.offline-handoff-paste');panel.hidden=!panel.hidden;if(!panel.hidden)panel.querySelector('textarea').focus();};
       body.querySelector('#offline-import-text').onclick=async()=>{try{await importOfflineText(body.querySelector('#offline-gpt-result').value);modal.close();}catch(error){toast('导入失败：'+error.message);}};
@@ -1610,39 +1620,26 @@ function openManualCreationDialog(){
 }
 function openMaterialPicker(){body.innerHTML=`<h2>选择素材放入画布</h2><div class="mini-assets">${visibleMaterials(state.assets).map(a=>`<button type="button" class="mini-asset" data-pick="${a.id}">${imgTag(a)}<span>${esc(a.title)}</span></button>`).join('')}</div>`;modal.showModal();body.querySelectorAll('[data-pick]').forEach(b=>b.onclick=()=>{const a=asset(b.dataset.pick),d=current();checkpoint();const i=itemFromAsset(a,d,d.canvas.width/2,d.canvas.height/2,20,false);d.items.push(i);state.selected=i.id;state.tool='select';modal.close();saveProject();render();});}
 function openCreativeJSON(){const aliases=Object.entries(materialAliases(state.basket)).map(([key,id])=>`${key} = ${asset(id)?.title||id}`).join(' · ');body.innerHTML=`<h2>导入创作指令</h2><p>这是本地工具协议的验证入口，不会联系大模型。当前素材编号：${esc(aliases||'请先在搭配页选素材')}</p><label>包含 tools 或 tool_calls 的 JSON<textarea id="creative-source" style="min-height:240px" placeholder='{"tools":[{"name":"upsert_text","arguments":{"items":[{"key":"t1","content":"今天的故事……","width":0.5}]}}]}'></textarea></label><p>成功的前序调用会保留；失败调用不会污染画布。物理素材尺寸仍从素材库计算。</p><button type="button" class="btn primary" id="creative-apply">验证并应用</button><div id="creative-results" style="white-space:pre-wrap;margin-top:12px"></div>`;modal.showModal();body.querySelector('#creative-apply').onclick=()=>{try{const aliases=materialAliases(state.basket);const result=applyToolCalls(body.querySelector('#creative-source').value,current(),state.assets,aliases);body.querySelector('#creative-results').textContent=result.results.map(x=>`${x.ok?'✓':'×'} ${x.name}: ${x.detail}`).join('\n');if(result.committed){checkpoint();const p=state.activeProject,index=p.drafts.findIndex(x=>x.id===state.activeDraft);p.drafts[index]=result.draft;saveProject();render();}}catch(e){body.querySelector('#creative-results').textContent=e.message;}};}
-async function modelImage(a,cropRect=null,maxPixels=512,transparent=false,preferPreview=false){
+async function modelImage(a,cropRect=null,maxPixels=512,transparent=false){
+  const outputPixels=!cropRect&&maxPixels<=512?Math.min(maxPixels,COVER_EDGE):maxPixels;
+  const sourceEdge=cropRect
+    ?Math.min(1920,Math.max(COVER_EDGE,Math.ceil(maxPixels/Math.max(cropRect.width,cropRect.height))))
+    :Math.max(COVER_EDGE,maxPixels>512?maxPixels:COVER_EDGE);
   const blob=await loadModelImageSource(a,{
-    preview:(id,edge)=>db.previewBlob(id,edge),
-    original:async id=>(await db.get('blobs',id))?.data,
-    reload:async id=>(await db.reloadCloudBlob(id))?.data,
-    fetchStatic:path=>fetch(path).then(r=>r.blob()),cloud:cloudEnabled
-  },{coverOnly:preferPreview,edge:maxPixels});
-  if(!blob)return null;
-  let bitmap;
-  try{bitmap=await decodeImageBlob(blob);}
-  catch(error){
-    if(preferPreview)throw error;
-    // A card can display its cached low-resolution cover while the original
-    // Safari Blob is unreadable. Retry once from the private cloud original.
-    if(!cloudEnabled||!a.blobId)throw error;
-    const fresh=await db.reloadCloudBlob(a.blobId);
-    if(!fresh?.data)throw error;
-    bitmap=await decodeImageBlob(fresh.data);
-  }
+    preview:(id,edge)=>db.previewBlob(id,edge,{allowRemoteOriginal:false}),
+    fetchStatic:path=>fetch(path).then(r=>r.blob())
+  },{edge:sourceEdge});
+  const bitmap=await decodeImageBlob(blob);
   try{
     const canvas=document.createElement('canvas'),crop=cropRect||{x:0,y:0,width:1,height:1};
     const cw=crop.width*bitmap.width,ch=crop.height*bitmap.height;
-    const scale=Math.min(1,maxPixels/Math.max(cw,ch));
+    const scale=Math.min(1,outputPixels/Math.max(cw,ch));
     canvas.width=Math.max(1,Math.round(cw*scale));canvas.height=Math.max(1,Math.round(ch*scale));
     const ctx=canvas.getContext('2d');
     if(!transparent){ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);}
     ctx.drawImage(bitmap,crop.x*bitmap.width,crop.y*bitmap.height,cw,ch,0,0,canvas.width,canvas.height);
     return transparent?canvas.toDataURL('image/png'):canvas.toDataURL('image/jpeg',.78);
   }finally{bitmap.close?.();}
-}
-async function offlinePreviewBytes(a){
-  const record=await db.get('blobs',a.blobId),blob=record?.data||(a.staticPath?await fetch(a.staticPath).then(r=>r.blob()):null);if(!blob)return null;
-  return encodeOfflinePreview(blob);
 }
 function readMatchSelection(id,fallback){const e=view.querySelector('#'+id);return e?[...e.selectedOptions].map(x=>x.value):fallback?[fallback]:[];}
 let aiController=null,aiReport=null;
@@ -2338,7 +2335,7 @@ async function organizeSavedProjects(projects,{waitForSave}={}){
       if(!complete||complete.updatedAt!==source.updatedAt||complete.autoOrganized)continue;
       let picture=null;
       if(complete.isSnapshot&&supportsVision(config)&&config.includeThumbnails){
-        picture=await modelImage({blobId:complete.snapshotBlobId},null,360,false,true);
+        picture=await modelImage({blobId:complete.snapshotBlobId},null,360,false);
       }
       const result=await classifyRecord({kind:'project',record:complete,settings:config,image:picture,assets:state.assets});
       if(state.accountId!==account)return;
@@ -2365,7 +2362,7 @@ async function organizeSavedAssets(records,{waitForSave,projects=[]}={}){
       // not fail every classification in an otherwise saved import batch.
       await assetOrganization.run(records,{organize:async(record,isCurrent)=>{
         if(state.accountId!==accountID||!isCurrent())return;
-        const image=await modelImage(record,null,512,false,true);if(!image)throw Error('素材图像无法读取');
+        const image=await modelImage(record,null,512,false);if(!image)throw Error('素材图像无法读取');
         const result=await classifyRecord({kind:'asset',record,settings:cfg,image,assets:[]});
         await applyAssetClassification(record,result,{isCurrent:()=>state.accountId===accountID&&isCurrent()});
       },onError:error=>{recordRuntimeIssue('handled',error,state.route,{phase:'ai'});if(state.accountId===accountID&&!warned){warned=true;toast(explainUserError(error,'素材自动整理'));}}});

@@ -87,7 +87,7 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
     }
   }
   const queueTrim=()=>{if(trimTimer===null&&!disposed)trimTimer=setTimeout(trim,0);};
-  async function load(id,requested=false,{background=false,ephemeral=false}={}){
+  async function load(id,requested=false,{background=false,ephemeral=false,allowRemoteOriginal=true}={}){
     if(disposed)return '';
     // Requested display pixels have already been calculated using DPR and screen
     // size by displayTier(). Running imagePixelSize() a second time would
@@ -118,7 +118,7 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
       const waitMs=Date.now()-queuedAt,started=Date.now();
       emit({phase:'started',tier:imageTierName,context:context(),source:'store',waitMs});
       let blob;
-      try{blob=full?(await db.get('blobs',id))?.data:await db.previewBlob(id,tier);}
+      try{blob=full?(await db.get('blobs',id))?.data:await db.previewBlob(id,tier,{allowRemoteOriginal});}
       catch(error){emit({phase:'failed',tier:imageTierName,context:context(),source:'store',waitMs,durationMs:Date.now()-started,error});throw error;}
       if(disposed||epoch!==generation||itemVersion!==version(id))return '';
       if(!blob){const error=Error('图片尚未同步到可读取位置');emit({phase:'failed',tier:imageTierName,context:context(),source:'store',waitMs,durationMs:Date.now()-started,error});throw error;}

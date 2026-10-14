@@ -1,6 +1,7 @@
 // Exported previews are visual hints. The original material is always kept
 // in the library at full resolution. Safari can decode WebP while being unable
 // to *encode* it: never fail a handoff solely for that capability difference.
+import {decodeImageBlob} from './image-blob-decoder.js';
 export const OFFLINE_MATERIAL_EDGE=512;
 export const OFFLINE_REFERENCE_EDGE=768;
 export const OFFLINE_IMAGE_QUALITY=.86;
@@ -41,7 +42,7 @@ export async function offlinePreviewBytes(blob,{
   opaque=false,maxBytes=OFFLINE_PNG_MAX_BYTES
 }={}){
   if(!(blob instanceof Blob)||!blob.size)throw Error('创作图片预览文件无效');
-  const bitmap=await createImageBitmap(blob),canvas=document.createElement('canvas');
+  const bitmap=await decodeImageBlob(blob),canvas=document.createElement('canvas');
   try{
     const ctx=canvas.getContext('2d');
     if(!ctx)throw Error('无法生成素材预览');
