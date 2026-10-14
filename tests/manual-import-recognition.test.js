@@ -1,6 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {refineManualBoxes,hasManualForegroundEvidence} from '../src/manual-import-recognition.js';
+import {refineManualBoxes,hasManualForegroundEvidence,manualSegmentationMethod} from '../src/manual-import-recognition.js';
+
+test('a manual candidate uses the selected Mask algorithm, with automatic mode using MorphGAC',()=>{
+  assert.equal(manualSegmentationMethod('auto'),'morphgac');
+  assert.equal(manualSegmentationMethod('morphgac'),'morphgac');
+  assert.equal(manualSegmentationMethod('physical'),'physical');
+  assert.equal(manualSegmentationMethod('grabcut'),'grabcut');
+  assert.equal(manualSegmentationMethod('hybrid'),'adaptive');
+  assert.throws(()=>manualSegmentationMethod('unknown'),/未支持/);
+});
 
 test('manual angle is authoritative: every edited box is segmented as a rotated instance',async()=>{
   const boxes=[{x:.2,y:.3,w:.2,h:.15,rotation:28},{x:.55,y:.6,w:.18,h:.13,rotation:-12}];
@@ -39,4 +48,3 @@ test('only a touched box is segmented; untouched oriented box keeps original byt
   ],[first,second],async box=>{calls++;return {...box,mask:{alpha:new Uint8Array([255])}};});
   assert.equal(calls,1);assert.equal(result[0].original,first);assert.equal(result[1].original,null);
 });
-

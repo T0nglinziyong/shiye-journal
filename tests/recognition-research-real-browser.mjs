@@ -41,11 +41,31 @@ try{
     const best=overlaps.map(row=>Math.max(0,...row));
     results.push({candidateDiscovery,count:pieces.length,validMasks:pred.length,elapsedMS:Math.round(performance.now()-start),meanBestIoU:+(best.reduce((a,c)=>a+c,0)/best.length).toFixed(4),best:best.map(x=>+x.toFixed(3))});
    }
-   bitmap.close();original.close();return {case:${row.case},expected:${row.count},results};
+   let manual=null;
+   if(${row.case}===2){
+    const {manualPhysicalRegion}=await import('/src/manual-import-geometry.js');
+    const frame=manualPhysicalRegion({x:.062,y:.056,w:.31,h:.34,rotation:0},width,height);
+    const started=performance.now();
+    const [cutout]=await visionTask('process-material-boxes',{
+      pixels:corrected.pixels,sourcePixels:corrected.pixels,width,height,
+      boxes:[frame],method:'morphgac',paperWidthMM:297,paperHeightMM:210,
+      shapeRegularization:false,apertures:false
+    });
+    manual={failed:cutout?.segmentationFailed,maskPixels:cutout?.pixels||0,
+      segmentationMethod:cutout?.segmentationMethod,
+      bounds:cutout?[cutout.x,cutout.y,cutout.w,cutout.h]:null,
+      elapsedMS:Math.round(performance.now()-started)};
+   }
+   bitmap.close();original.close();return {case:${row.case},expected:${row.count},results,manual};
   })()`;
   const result=await b.evaluate(expr);
   assert.equal(result.results[0].count,row.count,`案例 ${row.case} 候选数量`);
   assert.equal(result.results[0].validMasks,row.count,`案例 ${row.case} 透明 Mask 数量`);
+  if(row.case===2){
+    assert.equal(result.manual.failed,false,'浅色 LifeWear 卡片手动框应可执行 MorphGAC');
+    assert.equal(result.manual.segmentationMethod,'morphgac');
+    assert.ok(result.manual.maskPixels>30000,'手动框应覆盖整张浅色卡片，不能只抠文字');
+  }
   console.log(JSON.stringify(result));
  }
 }finally{await b.close()}

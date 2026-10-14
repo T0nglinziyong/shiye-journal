@@ -60,7 +60,7 @@ import {createAIRecorder,publicAIDiagnosticReport} from './ai-diagnostics.js';
 import {mountImportBoxEditor} from './import-box-editor.js';
 import {saveImportBatch,importPaperDimensions} from './import-save.js';
 import {paperDimensions as presetPaperDimensions,paperSizeOptions} from './paper-sizes.js';
-import {refineManualBoxes} from './manual-import-recognition.js';
+import {refineManualBoxes,hasManualForegroundEvidence,manualSegmentationMethod} from './manual-import-recognition.js';
 import {manualPhysicalRegion} from './manual-import-geometry.js';
 import {seriesCovers,markProjectAssetsUsed} from './library-model.js';
 import {libraryPageData} from './library-page-data.js';
@@ -2196,26 +2196,23 @@ async function refreshImportCandidates(regions,{manual=false}={}){
       aw=Math.max(1,Math.round(source.width*b.w*scale)),
       ah=Math.max(1,Math.round(source.height*b.h*scale));
     const pixels=await analysisPixels(source,b,aw,ah);
-    // Preserve the rotated search geometry. In the unified path the frame
-    // identifies a local image-evidence search, not an opaque final Mask;
-    // the explicit old physical mode keeps its historical hard-frame crop.
     const manualRegion=manualPhysicalRegion(box,aw,ah);
-    const useUnifiedManual=state.preferences.candidateDiscovery==='unified'&&
-      (state.importRecognition||state.preferences.recognition)==='auto';
+    if(!hasManualForegroundEvidence(pixels,aw,ah,manualRegion))
+      throw Error('框内没有可区分的素材边缘或颜色，请贴近素材外沿重新框选');
+    const method=manualSegmentationMethod(state.importRecognition||state.preferences.recognition);
     const [candidate]=await visionTask('process-material-boxes',{
       pixels,sourcePixels:pixels,width:aw,height:ah,
-      boxes:[manualRegion],method:useUnifiedManual?'unified-manual':'physical',paperWidthMM:pw,paperHeightMM:ph,
+      boxes:[manualRegion],method,paperWidthMM:pw,paperHeightMM:ph,
       mergeSharedCarrier:true,shapeRegularization:false,apertures:false
     });
     if(!candidate?.mask?.alpha?.length||candidate.segmentationFailed)
-      throw Error(useUnifiedManual?'框内没有找到可信的素材外边界，请贴近素材重新框选或在设置中选择旧版按框裁剪':'旋转框无法生成完整素材 Mask，请调整后重试');
+      throw Error('手动框未能生成透明分割 Mask；请贴近素材外沿调整框，或在设置中更换 Mask 分割算法');
     // Preserve the user-defined angle; minAreaRect can re-express e.g. 60°
     // as -30° with swapped axes, which is not the frame the user confirmed.
-    return useUnifiedManual?{...candidate,manualGeometry:true,
-      manualSearchBoundary:manualRegion.physicalBoundary,physicalBoundary:null}:
-      {...candidate,manualGeometry:true,
-        physicalBoundary:manualRegion.physicalBoundary,
-        orientedBox:manualRegion.orientedBox};
+    return {...candidate,manualGeometry:true,
+      manualSearchBoundary:manualRegion.physicalBoundary,
+      physicalBoundary:method==='physical'?manualRegion.physicalBoundary:null,
+      orientedBox:manualRegion.orientedBox};
   }):regions.map(region=>({region,original:null}));
   if(record!==state.importRecords[state.importIndex]||state.route!=='import')return false;
   const lighting=state.importMaterialColorMode!=='original'&&state.correctedBitmap

@@ -218,8 +218,8 @@ try {
   await capture('manual-box',2560,1440);
   assert.equal(await evaluate('document.querySelectorAll(".import-region").length'),3,JSON.stringify(overlay));
   await evaluate('[...document.querySelectorAll("button")].find(b=>b.textContent==="完成标记").click()');
-  for(let i=0;i<Math.ceil(Number(process.env.SHIYE_WAIT_MS||30000)/20)&&!String(await evaluate('document.querySelector("#toast").textContent')).includes('框内没有找到可信的素材外边界');i++)await sleep(20);
-  assert.ok(String(await evaluate('document.querySelector("#toast").textContent')).includes('框内没有找到可信的素材外边界'),'Blank manual box must not become a material');
+  for(let i=0;i<Math.ceil(Number(process.env.SHIYE_WAIT_MS||30000)/20)&&!String(await evaluate('document.querySelector("#toast").textContent')).includes('框内没有可区分的素材边缘或颜色');i++)await sleep(20);
+  assert.ok(String(await evaluate('document.querySelector("#toast").textContent')).includes('框内没有可区分的素材边缘或颜色'),'Blank manual box must not become a material');
   assert.equal(await evaluate('!!document.querySelector(".multi-box-editor")'),true);
   await evaluate('[...document.querySelectorAll(".import-photo-tools button")].find(b=>b.textContent==="移除选中").click()');
   await evaluate('[...document.querySelectorAll(".import-photo-tools button")].find(b=>b.textContent==="完成标记").click()');

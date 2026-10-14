@@ -1,5 +1,16 @@
-// Every completed manual geometry is authoritative. Never search an enlarged
-// axis-aligned window or replace it with a different automatically found object.
+// Manual boxes supply candidate identity. The selected Mask method still
+// determines the cutout; automatic mode uses MorphGAC for a user-drawn seed.
+export function manualSegmentationMethod(recognition='auto'){
+  switch(recognition){
+    case 'auto':
+    case 'morphgac':return 'morphgac';
+    case 'physical':return 'physical';
+    case 'grabcut':return 'grabcut';
+    case 'hybrid':return 'adaptive';
+    default:throw Error('未支持的手动素材分割算法');
+  }
+}
+
 // A blank manual rectangle can yield a full mask from the segmenter's seed.
 // Require visible pixel variation in and just around the user-drawn area first.
 export function hasManualForegroundEvidence(pixels,width,height,box){
@@ -32,4 +43,3 @@ export async function refineManualBoxes(boxes,previous,segment){
   }
   return next;
 }
-

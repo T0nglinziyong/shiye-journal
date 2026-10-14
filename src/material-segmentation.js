@@ -50,10 +50,13 @@ function roiGeometry(p,box,extraMM=1){
   const pageW=p.width,pageH=p.height,paperWidthMM=p.paperWidthMM||210,paperHeightMM=p.paperHeightMM||297,
     pxPerMM=Math.max(.5,((pageW/paperWidthMM)+(pageH/paperHeightMM))/2),
     extra=pxPerMM*extraMM,
-    bx0=Math.max(0,box.x*pageW-extra),
-    by0=Math.max(0,box.y*pageH-extra),
-    bx1=Math.min(pageW,(box.x+box.w)*pageW+extra),
-    by1=Math.min(pageH,(box.y+box.h)*pageH+extra),
+    manualOutline=box.manualGeometry&&Array.isArray(box.physicalBoundary)&&box.physicalBoundary.length>=3
+      ?box.physicalBoundary:null,
+    xs=manualOutline?.map(([x])=>x*pageW),ys=manualOutline?.map(([,y])=>y*pageH),
+    bx0=Math.max(0,(xs?Math.min(...xs):box.x*pageW)-extra),
+    by0=Math.max(0,(ys?Math.min(...ys):box.y*pageH)-extra),
+    bx1=Math.min(pageW,(xs?Math.max(...xs):(box.x+box.w)*pageW)+extra),
+    by1=Math.min(pageH,(ys?Math.max(...ys):(box.y+box.h)*pageH)+extra),
     bw=bx1-bx0,bh=by1-by0,
     // ROI padding is only workspace. The level-set initializer itself remains
     // exactly the auto box + 1 mm physical safety band.
@@ -71,8 +74,23 @@ export function insideOrientedBox(px,py,o,outerW,outerH,paddingPx=0){
     localY=-dx*Math.sin(angle)+dy*Math.cos(angle);
   return Math.abs(localX)<=width/2&&Math.abs(localY)<=height/2;
 }
-function boxMask(cv,g){
-  const out=cv.Mat.zeros(g.rh,g.rw,cv.CV_8UC1),
+function boxMask(cv,g,box,pageW,pageH){
+  const out=cv.Mat.zeros(g.rh,g.rw,cv.CV_8UC1);
+  if(box.manualGeometry&&Array.isArray(box.physicalBoundary)&&box.physicalBoundary.length>=3){
+    const points=box.physicalBoundary.flatMap(([x,y])=>[
+      Math.round(x*pageW)-g.x0,Math.round(y*pageH)-g.y0
+    ]),outline=cv.matFromArray(points.length/2,1,cv.CV_32SC2,points),
+      contours=new cv.MatVector(),kernelSize=Math.max(3,Math.round(g.pxPerMM)*2+1),
+      kernel=cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(kernelSize,kernelSize)),
+      expanded=new cv.Mat();
+    try{
+      contours.push_back(outline);cv.fillPoly(out,contours,new cv.Scalar(255));
+      cv.dilate(out,expanded,kernel);expanded.copyTo(out);
+      return out;
+    }catch(error){out.delete();throw error;}
+    finally{expanded.delete();kernel.delete();contours.delete();outline.delete();}
+  }
+  const
     rx=clamp(Math.round(g.bx0)-g.x0,0,g.rw-1),ry=clamp(Math.round(g.by0)-g.y0,0,g.rh-1),
     rr=clamp(Math.round(g.bx1)-g.x0,rx+1,g.rw),rb=clamp(Math.round(g.by1)-g.y0,ry+1,g.rh);
   const roi=out.roi(new cv.Rect(rx,ry,Math.max(1,rr-rx),Math.max(1,rb-ry)));
@@ -99,7 +117,7 @@ function segmentMorphGAC(cv,p,box){
     roi=src.roi(new cv.Rect(g.x0,g.y0,g.rw,g.rh)),
     // The oriented rectangle remains geometry metadata, not a foreground
     // constraint. A rough pose can omit pale corners of a regular sheet.
-    rough=boxMask(cv,g),
+    rough=boxMask(cv,g,box,p.width,p.height),
     scale=Math.min(1,180/Math.max(g.rw,g.rh)),
     qw=Math.max(1,Math.round(g.rw*scale)),qh=Math.max(1,Math.round(g.rh*scale)),
     image=new cv.Mat(),seed=new cv.Mat();
