@@ -35,10 +35,14 @@ async function assign(c,ids,to) {
 export function mountSeriesContents(c,p) {
   const {state,view,render,route,body,modal}=c,id=state.seriesID,s=state.series.find(s=>s.id===id);if(!s)return;
   const f=filters(id),cards=[...view.querySelectorAll('[data-act="detail"]')];
-  view.querySelector('#series-return').onclick=()=>c.libraryBack();
+  if(!view.querySelector('[data-react-page="seriesContents"]'))
+    view.querySelector('#series-return').onclick=()=>c.libraryBack();
   view.querySelector('#series-edit-title').onclick=()=>c.openSeriesEditor(id);
-  const update=()=>{const members=seriesMembers(id,state.assets,f),ids=new Set(members.map(a=>a.id)),grid=view.querySelector('.asset-grid');
-    for(const a of members){const card=cards.find(b=>b.dataset.id===a.id);if(card)grid.append(card);}applyCatalogPage({view,key:'series:'+id,cards,matched:card=>ids.has(card.dataset.id),countNode:view.querySelector('.series-result-count'),size:state.preferences.maxPageItems});};view.catalogRefresh=update;
+  const update=()=>{const members=seriesMembers(id,state.assets,f),ids=new Set(members.map(a=>a.id)),order=new Map(members.map((a,index)=>[a.id,index+1]));
+    // React owns these card nodes. Moving them with append() detaches their
+    // Fiber identity and can dispatch a later click to the wrong route.
+    for(const card of cards)card.style.order=String(order.get(card.dataset.id)??cards.length+1);
+    applyCatalogPage({view,key:'series:'+id,cards,matched:card=>ids.has(card.dataset.id),countNode:view.querySelector('.series-result-count'),size:state.preferences.maxPageItems});};view.catalogRefresh=update;
   // Render every member once, then filter without losing search focus.
   for(const [selector,key] of [['#series-search','query'],['#series-kind','kind'],['#series-status','status'],['#series-sort','sort']]) {
     const el=view.querySelector(selector);el.oninput=el.onchange=()=>{f[key]=el.value;resetCatalogPage('series:'+id);update();};

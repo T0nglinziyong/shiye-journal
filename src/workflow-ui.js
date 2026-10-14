@@ -265,7 +265,7 @@ function mountSeries(c) {
   const cards=[...view.querySelectorAll('[data-act="series-detail"]')];
   const update=()=>{parity.seriesQuery=input.value;parity.seriesSort=sort.value;const q=input.value.trim().toLocaleLowerCase();
     cards.sort((a,b)=>{const x=state.series.find(s=>s.id===a.dataset.id),y=state.series.find(s=>s.id===b.dataset.id);const value=sort.value==='name'?x.title.localeCompare(y.title,'zh-CN'):(x.updatedAt||'').localeCompare(y.updatedAt||'');return (parity.seriesAscending?value:-value)||x.id.localeCompare(y.id);});
-    for(const card of cards)card.parentElement.append(card);applyCatalogPage({view,key:'series',cards,matched:card=>{const s=state.series.find(s=>s.id===card.dataset.id);return isActive()&&parity.showOnlySelected?parity.selected.has(s.id):!q||searchableSeries(s,state.assets).includes(q);},countNode:count,size:state.preferences.maxPageItems});};view.catalogRefresh=update;
+    cards.forEach((card,index)=>{card.style.order=String(index+1);});applyCatalogPage({view,key:'series',cards,matched:card=>{const s=state.series.find(s=>s.id===card.dataset.id);return isActive()&&parity.showOnlySelected?parity.selected.has(s.id):!q||searchableSeries(s,state.assets).includes(q);},countNode:count,size:state.preferences.maxPageItems});};view.catalogRefresh=update;
   input.oninput=()=>{resetCatalogPage('series');update();};sort.onchange=()=>{resetCatalogPage('series');update();};update();
   for(const card of cards) {
     card.addEventListener('click',e=>{if(!isActive())return;e.stopImmediatePropagation();e.preventDefault();const id=card.dataset.id;parity.selected.has(id)?parity.selected.delete(id):parity.selected.add(id);sync();},true);

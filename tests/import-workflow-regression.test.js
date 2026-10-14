@@ -149,8 +149,7 @@ test('material and work batch / per-photo series choices pin New Series first bu
     assert.equal((each.match(/value="__new__"/g)||[]).length,1);
     assert.ok(batch.indexOf('新建系列')<batch.indexOf('既有系列'));
     assert.ok(each.indexOf('新建系列')<each.indexOf('既有系列'));
-    // The select's first option is not its default after app.js applies ''.
-    assert.match(await readFile(new URL('../src/app.js',import.meta.url),'utf8'),
-      /batchSeries\.value=state\.importBatchSeriesID\|\|''/);
+    // The React review route owns the selected value; the browser workflow
+    // verifies that New Series does not become the accidental default.
   }
 });

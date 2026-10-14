@@ -34,6 +34,13 @@ export function updateOrganizedAssetView(root,record,{kindName,formatSize=n=>Str
     if(heading){if(heading.firstChild?.nodeType===3)heading.firstChild.textContent=title;else heading.prepend(root.ownerDocument.createTextNode(title));}
     const summary=card.querySelector('.card-body p');if(summary)summary.textContent=`${kind} · ${size}`;
     const chip=card.querySelector('.card-body .chip');if(chip){chip.textContent=record.reviewStatus==='ready'?'已整理':'待检查';chip.classList.toggle('warn',record.reviewStatus!=='ready');}
+    // The incremental catalog compares this revision with the next model
+    // render. Keep it current after patching text in place, or it will replace
+    // the whole card and discard its decoded image on a background rename.
+    if(card.hasAttribute('data-card-revision'))card.dataset.cardRevision=JSON.stringify([
+      record.title,record.kind,record.physicalWidthMM,record.physicalHeightMM,
+      record.reviewStatus,record.isFavorite,record.blobId
+    ]);
   }
   for(const img of root.querySelectorAll('img[data-asset-image-id]')){
     if(img.dataset.assetImageId!==record.id)continue;

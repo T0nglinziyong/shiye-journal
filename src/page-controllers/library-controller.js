@@ -6,6 +6,7 @@ export function createLibraryController({
     patch(){
       if(view.dataset.renderedRoute!=='library'||
          view.dataset.renderedLibraryTab!==parity.libraryTab||
+         view.dataset.renderedSeriesID!==(state.seriesID||'all')||
          parity.selectionMode||state.addingToSeries)return false;
       if(!patchCatalog(view,renderHTML()))return false;
       binder({partial:true});

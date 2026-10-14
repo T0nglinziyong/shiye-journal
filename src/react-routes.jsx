@@ -132,7 +132,8 @@ export function SeriesContentsPage({state,source,kindName,format,onAction}){
   const statuses=[['all','全部状态'],['ready','已整理'],['unready','未整理'],['used','已使用'],
     ['unused','未使用'],['favorite','已收藏'],['inside','系列中'],['outside','系列外']];
   return <section className="series-contents" data-react-page="seriesContents"><div className="catalog-toolbar">
-    <div className="series-navigation"><button type="button" className="btn" id="series-return">‹ 返回素材库</button>
+    <div className="series-navigation"><button type="button" className="btn" id="series-return"
+      data-react-action="true" onClick={()=>onAction('series-return')}>‹ 返回素材库</button>
       <div className="actions" id="series-actions"/></div>
     <div className="view-head series-heading"><div className="series-identity">
       <div className="series-detail-cover">{covers.map(asset=><RouteImage key={asset.id} asset={asset} source={source} priority/>)}</div>
@@ -776,7 +777,22 @@ export function ImportInspectionPage({state,format,onAction}){
     </section></>;
 }
 
-export function ImportReviewPage({state,format,onAction}){
+function ReviewSeriesSelect({value='',recordIndex=null,seriesOptions,onSeriesChange}){
+  const [selected,setSelected]=useState(value);
+  const change=async event=>{
+    const next=event.target.value;
+    if(next!=='__new__')setSelected(next);
+    const accepted=await onSeriesChange(recordIndex,next);
+    if(next==='__new__')setSelected(accepted??selected);
+  };
+  return <select id={recordIndex===null?'batch-series':undefined}
+    className={recordIndex===null?undefined:'record-series'}
+    data-index={recordIndex===null?undefined:recordIndex} value={selected} onChange={change}>
+    {seriesOptions(recordIndex!==null)}
+  </select>;
+}
+
+export function ImportReviewPage({state,format,onAction,onSeriesChange,onWorkTitleChange}){
   const mode=state.importMode,work=mode==='work',snapshot=mode==='snapshot',records=state.importRecords||[];
   const count=records.reduce((total,record)=>total+(record.selectedCandidates||[]).filter(c=>c.selected).length,0);
   const seriesOptions=(record=false)=><>
@@ -799,7 +815,8 @@ export function ImportReviewPage({state,format,onAction}){
         </button>
       </div>
       {!snapshot?<div className="review-default"><strong>本批默认归类</strong>
-        <select id="batch-series">{seriesOptions()}</select></div>:null}
+        <ReviewSeriesSelect value={state.importBatchSeriesID||''} seriesOptions={seriesOptions}
+          onSeriesChange={onSeriesChange}/></div>:null}
       {records.map((record,ri)=>{
         const pattern=record.workPaperPattern||state.importBatchWorkPaperPattern||'plain';
         const color=record.workPaperColor||state.importBatchWorkPaperColor||'#fcfaf0';
@@ -810,9 +827,11 @@ export function ImportReviewPage({state,format,onAction}){
             <span>✓ 已确认</span>
           </div>
           {work?<label>作品名称<input className="record-work-title" data-index={ri}
-            defaultValue={record.workTitle||record.file.name.replace(/\.[^.]+$/,'')}/></label>:null}
+            defaultValue={record.workTitle||record.file.name.replace(/\.[^.]+$/,'')}
+            onInput={event=>onWorkTitleChange(ri,event.currentTarget.value)}/></label>:null}
           {!snapshot?<label className="record-series-label">所属系列
-            <select className="record-series" data-index={ri}>{seriesOptions(true)}</select>
+            <ReviewSeriesSelect value={record.seriesID??''} recordIndex={ri}
+              seriesOptions={seriesOptions} onSeriesChange={onSeriesChange}/>
           </label>:null}
           <div className="review-candidates">
             {snapshot?<div className="review-candidate selected review-snapshot"><div className="review-thumbnail">

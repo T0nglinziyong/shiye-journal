@@ -571,15 +571,19 @@ function render(){
     :state.route==='import'&&(state.importStep==='done'||!state.importRecords[state.importIndex])
       ?ImportSimplePage({state,onAction:handle})
     :state.route==='import'&&state.importStep==='review'
-      ?ImportReviewPage({state,format:fmt,onAction:handle})
+      ?ImportReviewPage({state,format:fmt,onAction:handle,
+        onSeriesChange:updateImportReviewSeries,
+        onWorkTitleChange:(index,title)=>{state.importRecords[index].workTitle=title;}})
     :state.route==='import'&&state.importStep==='inspect'&&state.importRecords[state.importIndex]
       ?ImportInspectionPage({state,format:fmt,onAction:handle})
       :null;
   renderReactPage(reactPage||imperativeRoute(pageControllers.render(state.route)||renderLibrary()));
   view.dataset.renderedRoute=state.route;
   view.dataset.renderedImportStep=state.route==='import'?state.importStep:'';
+  view.dataset.renderedManualBox=state.route==='import'?String(!!state.showManualBox):'';
   view.dataset.renderedImportMode=state.route==='import'?state.importMode:'';
   view.dataset.renderedLibraryTab=state.route==='library'?parity.libraryTab:'';
+  view.dataset.renderedSeriesID=state.route==='library'?state.seriesID||'all':'';
   view.dataset.renderedWorkTab=state.route==='works'?parity.workTab:'';
   view.dataset.renderedSettingsSection=state.route==='settings'?state.settingsSection||'':'';
   // React owns these descendants. Replacing its image or cover nodes behind
@@ -832,39 +836,6 @@ function bindPage({partial=false}={}){
   };
   view.querySelectorAll('[data-import-name]').forEach(el=>el.onchange=()=>{const [ri,ci]=el.dataset.importName.split(':').map(Number);state.importRecords[ri].selectedCandidates[ci].title=el.value;});
   for(const key of ['width','height'])view.querySelectorAll(`[data-import-${key}]`).forEach(el=>el.onchange=()=>{const [ri,ci]=el.dataset[`import${key[0].toUpperCase()+key.slice(1)}`].split(':').map(Number);state.importRecords[ri].selectedCandidates[ci][key]=+el.value||null;});
-  view.querySelectorAll('.record-series').forEach(el=>{
-    const record=state.importRecords[+el.dataset.index];
-    el.value=record?.seriesID??'';
-    el.onchange=async()=>{
-      if(!record)return;
-      if(el.value!=='__new__'){record.seriesID=el.value;return;}
-      const previous=record.seriesID??'',name=prompt('新建系列名称');
-      if(!name?.trim()){el.value=previous;return;}
-      const now=new Date().toISOString(),group={id:uid(),title:name.trim(),introduction:'',createdAt:now,updatedAt:now};
-      try{
-        await db.put('series',group);
-        state.series.push(group);record.seriesID=group.id;render();
-      }catch(error){el.value=previous;toast('系列新建失败：'+error.message);}
-    };
-  });view.querySelectorAll('.record-work-title').forEach(el=>el.oninput=()=>{state.importRecords[+el.dataset.index].workTitle=el.value;});
-  const batchSeries=view.querySelector('#batch-series');
-  if(batchSeries){batchSeries.value=state.importBatchSeriesID||'';batchSeries.onchange=async()=>{
-    if(batchSeries.value!=='__new__'){state.importBatchSeriesID=batchSeries.value;return;}
-    const name=prompt('新建系列名称');
-    if(!name?.trim()){batchSeries.value=state.importBatchSeriesID||'';return;}
-    const now=new Date().toISOString(),group={id:uid(),title:name.trim(),introduction:'',createdAt:now,updatedAt:now};
-    try{await db.put('series',group);state.series.push(group);state.importBatchSeriesID=group.id;render();}
-    catch(error){batchSeries.value=state.importBatchSeriesID||'';toast('系列新建失败：'+error.message);}
-  };}
-  const batchWorkAssets=view.querySelector('#batch-work-save-assets');
-  if(batchWorkAssets)batchWorkAssets.onchange=()=>{
-    state.importBatchWorkSaveAssets=batchWorkAssets.checked;
-    for(const record of state.importRecords)if(!record.workSaveAssetsManual)record.workSaveAssets=batchWorkAssets.checked;
-    render();
-  };
-  view.querySelectorAll('.record-work-save-assets').forEach(el=>el.onchange=()=>{
-    const record=state.importRecords[+el.dataset.index];record.workSaveAssets=el.checked;record.workSaveAssetsManual=true;
-  });
   view.querySelectorAll('[data-import-paper-options]').forEach(button=>button.onclick=()=>{
     const ri=Number(button.dataset.importPaperOptions),record=state.importRecords[ri];
     if(!record)return;
@@ -916,6 +887,27 @@ function updateEditorInspector(id,value){
   }else if(id==='page-mode'){d.pageMode=value;d.canvas=canvasSize(value,d.pageRatio);}
   else return;
   saveProject();render();
+}
+async function updateImportReviewSeries(recordIndex,next){
+  const record=recordIndex===null?null:state.importRecords[recordIndex];
+  if(recordIndex!==null&&!record)return null;
+  const previous=record?record.seriesID??'':state.importBatchSeriesID||'';
+  if(next!=='__new__'){
+    if(record)record.seriesID=next;
+    else state.importBatchSeriesID=next;
+    return next;
+  }
+  const name=prompt('新建系列名称');
+  if(!name?.trim())return previous;
+  const now=new Date().toISOString(),group={id:uid(),title:name.trim(),
+    introduction:'',createdAt:now,updatedAt:now};
+  try{
+    await db.put('series',group);
+    state.series.push(group);
+    if(record)record.seriesID=group.id;
+    else state.importBatchSeriesID=group.id;
+    render();return group.id;
+  }catch(error){toast('系列新建失败：'+error.message);return previous;}
 }
 function bindInspector(){const d=current(),e=d&&editorEntry(d).find(x=>x.value.id===state.selected);if(!d)return;
   const change=(id,fn)=>{const el=view.querySelector('#'+id);if(el)el.addEventListener('change',()=>{checkpoint();fn(el.value);saveProject();render();});};
@@ -1085,6 +1077,7 @@ async function legacyHandle(action,id,value){try{switch(action){
     document.querySelector('#basket-count').textContent=state.basket.length;
     toast('已加入本次创作');break;case 'detail-match':if((asset(state.detailAssetID)?.supply?.quantity??1)===0)throw Error('素材可用库存为 0');addMatchingFromLibrary(state,[state.detailAssetID]);route('matching');break;case 'detail-series':libraryHistory.push({route:state.route,seriesID:state.seriesID,detailAssetID:state.detailAssetID});state.seriesID=asset(state.detailAssetID)?.seriesID||'all';route('library');break;case 'detail-similar':view.dispatchEvent(new CustomEvent('show-similar'));break;case 'detail-edit':openDetail(state.detailAssetID);break;case 'detail-check':await openCutoutCheck(state.detailAssetID);break;case 'detail-favorite':await actionStore.dispatch({type:'library/favorite',payload:{id:state.detailAssetID}});break;
   case 'new-series':openSeriesEditor();break;case 'series-detail':libraryHistory.push({route:state.route,seriesID:state.seriesID,detailAssetID:state.detailAssetID});state.seriesID=id;route('library');break;
+  case 'series-return':libraryBack();break;
   case 'match-library':route('library');break;case 'match-context':{const scope=matchingScope();toast(`必须 ${scope.required.length} · 优先 ${scope.preferred.length} · 可用 ${scope.available.length} · 不使用 ${scope.excluded.length}`);break;}
   case 'match-filter':await actionStore.dispatch({type:'matching/filter',payload:{value}});break;
   case 'match-skip':await actionStore.dispatch({type:'matching/exclude',payload:{id}});break;

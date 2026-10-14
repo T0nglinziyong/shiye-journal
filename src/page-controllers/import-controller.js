@@ -1,3 +1,5 @@
+import {syncBusyControls} from '../ui-disabled-state.js';
+
 export function createImportController({
   renderHTML,patchInspector,view,state,binder,mountControls,
   disposePaper,disposeManual,mountPaper,mountManual,render,actions
@@ -7,10 +9,13 @@ export function createImportController({
     patch(){
       if(view.dataset.renderedRoute!=='import'||
          view.dataset.renderedImportStep!==state.importStep||
+         view.dataset.renderedManualBox!==String(!!state.showManualBox)||
          view.dataset.renderedImportMode!==state.importMode)return false;
       const result=patchInspector(view,renderHTML());
       if(!result)return false;
       binder({partial:true});
+      syncBusyControls(view,'.inspect-columns button,.inspect-columns input,.inspect-columns select',
+        !!state.importProcessing);
       mountControls();
       if(result.photoReplaced){disposePaper();disposeManual();}
       if(state.showManualBox&&!view.querySelector('.manual-box-layer'))mountManual();
