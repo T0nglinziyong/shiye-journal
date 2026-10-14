@@ -35,6 +35,17 @@ test('failed network edits survive reload and cannot silently overwrite a differ
   let calls=0;revision=4;const reopened=createProjectSync({load:async()=>rows,write:async value=>{rows=value;},revision:()=>revision,commit:async()=>{calls++;}});
   await reopened.flush();assert.equal(reopened.status().conflicts,1);assert.equal(reopened.status().error,null);assert.equal(calls,0);assert.equal((await reopened.pending())[0].record.title,'unsent');
 });
+test('database rejection keeps its error code and the durable row',async()=>{
+  let rows=[],commits=0;
+  const sync=createProjectSync({load:async()=>rows,write:async next=>rows=structuredClone(next),
+    revision:()=>2019,reconcile:async()=> 'rebase',commit:async()=>{
+      commits++;const error=Error('此对象已被删除');error.code='P0001';throw error;
+    }});
+  await sync.stage({id:'delete-batch'});
+  await assert.rejects(sync.flush(),error=>error.code==='P0001'&&/已被删除/.test(error.message));
+  assert.equal(commits,1);
+  assert.deepEqual(rows.map(row=>row.record.id),['delete-batch']);
+});
 test('local successful transactions advance pending base revisions without discarding them',async()=>{
   let rows=[{record:{id:'a'},serial:1,baseRevision:2}],revision=3;
   const q=createProjectSync({load:async()=>rows,write:async value=>{rows=value;},revision:()=>revision,commit:async()=>{revision++;}});

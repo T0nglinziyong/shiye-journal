@@ -156,6 +156,10 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
           }
           if(resolved==='rebase'){
             if(revision()>row.baseRevision){row.baseRevision=revision();await persist();diagnose('retry',row);continue;}
+            // A PL/pgSQL validation error is a confirmed rejection, even
+            // though the revision stayed put. Preserve its code and message
+            // instead of misreporting a lost network acknowledgement.
+            if(failure?.code==='P0001')throw failure;
             // Unchanged server revision means an unconfirmed upload, not a
             // competing edit. Retain the row for the normal retry path.
             throw markSyncPhase(new Error('云端版本未变化，本次上传未获确认；本机修改已保留，将自动重试',{cause:failure}),failure.syncPhase||'上传当前待同步记录');

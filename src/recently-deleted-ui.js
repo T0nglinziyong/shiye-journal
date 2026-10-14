@@ -65,7 +65,7 @@ export function mountRecentlyDeleted(c, kind) {
   const act = async (ids, recover) => {
     const entries=state.trash.filter(item=>ids.includes(item.id)&&item.kind===kind);
     if(!entries.length||busy)return;
-    if (!recover && !confirm(`彻底删除所选 ${entries.length} 项？此操作不能撤销。`)) return;
+    if (!recover && !confirm(`彻底删除所选 ${entries.length} 项？${kind==='project'?'不再被其他作品引用的已删除素材也会一并移除。':''}此操作不能撤销。`)) return;
     busy=true;sync();
     try {
       await changeTrash({db,state,ids:entries.map(entry=>entry.id),recover,
@@ -85,7 +85,7 @@ export function mountRecentlyDeleted(c, kind) {
   view.append(list);
   if(kind==='project'&&c.localCovers)
     view.deletedCoverDispose=c.localCovers.observe(list,records.map(entry=>entry.item));
-  const note=document.createElement('p');note.className='deleted-retention-note';note.textContent='最近删除保留 30 天，到期自动移除记录；仍被作品引用的素材图片继续保留。云端孤立文件经隔离备份与复核后延迟回收。';view.append(note);
+  const note=document.createElement('p');note.className='deleted-retention-note';note.textContent='最近删除保留 30 天，到期自动移除记录；仍被作品引用的素材图片继续保留。彻底删除最后一份引用它的作品时，隐藏素材记录一并移除；云端孤立文件经隔离备份与复核后延迟回收。';view.append(note);
   view.append(tray);
   update();
 

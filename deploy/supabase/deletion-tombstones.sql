@@ -13,6 +13,7 @@ declare
   marker_id text;
   changed jsonb := '[]'::jsonb;
   full_restore boolean;
+  legacy_retention jsonb := '[]'::jsonb;
   prior record;
 begin
   if who is null then raise exception '请先登录'; end if;
@@ -28,6 +29,17 @@ begin
     where item->>'action'='clear'
       and item->>'store' in ('assets','projects','series','meta')
   );
+  -- A legacy trash card can be the only remaining copy of an image still used
+  -- by a work. Capture the server's original card before the loop deletes it.
+  -- Only that exact card may become a hidden asset; its tombstone stays put.
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'id', card.record->'item'->>'id', 'item', card.record->'item',
+    'date', card.record->>'date')), '[]'::jsonb)
+    into legacy_retention
+  from jsonb_array_elements(operations) removal
+  join public.shiye_records card on card.user_id=who and card.store='trash'
+    and card.id=removal->>'id' and card.record->>'kind'='asset'
+  where removal->>'store'='trash' and removal->>'action'='delete';
   for op in select value from jsonb_array_elements(operations) loop
     s:=op->>'store'; action:=op->>'action';
     if s is null or s not in ('assets','blobs','series','projects','meta','trash') then raise exception '无效数据表'; end if;
@@ -42,6 +54,16 @@ begin
             select 1 from jsonb_array_elements(operations) restoration
             where restoration->>'store'='meta' and restoration->>'action'='delete'
               and restoration->>'id'=marker_id
+          )
+          and not (
+            s='assets' and op->'item'->>'isProjectInternal'='true'
+            and exists(
+              select 1 from jsonb_array_elements(legacy_retention) original
+              where original->>'id'=row_id
+                and op->'item'->>'hiddenFromLibraryAt'=original->>'date'
+                and (((op->'item') - 'isProjectInternal'::text) - 'hiddenFromLibraryAt'::text)
+                  = (((original->'item') - 'isProjectInternal'::text) - 'hiddenFromLibraryAt'::text)
+            )
           )
           then raise exception '此对象已被删除，必须主动恢复，禁止旧设备或初始化程序重新创建：%',row_id;
         end if;

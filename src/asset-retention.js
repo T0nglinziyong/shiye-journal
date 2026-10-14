@@ -12,17 +12,9 @@ function containsID(value,ids,found,seen=new WeakSet()){
   for(const child of Object.values(value))containsID(child,ids,found,seen);
 }
 
-// Incomplete project documents, pending uploads or damaged archives mean
-// "unknown", never permission to discard a work's source image.
-export async function referencedHiddenAssetIDs({db,assets,trash=[],candidateIDs=null}){
-  const ids=candidateIDs||new Set(assets.filter(a=>a.hiddenFromLibraryAt).map(a=>a.id)),found=new Set();
+export async function referencedAssetIDsInProjects({db,projects,ids}){
+  const found=new Set();
   if(!ids.size)return found;
-  const rows=await db.all('projects');
-  const pending=typeof db.pendingProjects==='function'?await db.pendingProjects():[];
-  const details=typeof db.pendingSyncDetails==='function'?await db.pendingSyncDetails():null;
-  if(details?.batches?.length||details?.quarantined)throw Error('待同步资料尚未核对，隐藏图片暂不清理');
-  const projects=[...rows,...trash.filter(row=>row.kind==='project').map(row=>row.item),
-    ...pending.map(row=>row.record||row)];
   for(const source of projects){
     const project=await db.completeProject(source);
     containsID(project,ids,found);
@@ -36,6 +28,20 @@ export async function referencedHiddenAssetIDs({db,assets,trash=[],candidateIDs=
     }
   }
   return found;
+}
+
+// Incomplete project documents, pending uploads or damaged archives mean
+// "unknown", never permission to discard a work's source image.
+export async function referencedHiddenAssetIDs({db,assets,trash=[],candidateIDs=null}){
+  const ids=candidateIDs||new Set(assets.filter(a=>a.hiddenFromLibraryAt).map(a=>a.id));
+  if(!ids.size)return new Set();
+  const rows=await db.all('projects');
+  const pending=typeof db.pendingProjects==='function'?await db.pendingProjects():[];
+  const details=typeof db.pendingSyncDetails==='function'?await db.pendingSyncDetails():null;
+  if(details?.batches?.length||details?.quarantined)throw Error('待同步资料尚未核对，隐藏图片暂不清理');
+  const projects=[...rows,...trash.filter(row=>row.kind==='project').map(row=>row.item),
+    ...pending.map(row=>row.record||row)];
+  return referencedAssetIDsInProjects({db,projects,ids});
 }
 
 export async function pruneUnreferencedHiddenAssets({db,state,now=Date.now(),minAgeMs=7*86400000}){
