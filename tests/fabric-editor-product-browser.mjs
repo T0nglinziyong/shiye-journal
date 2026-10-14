@@ -18,6 +18,13 @@ const projects=()=>evaluate(`(async()=>{
 })()`);
 try{
   await wait('.series-grid');
+  await evaluate(`(async()=>{const db=await new Promise(resolve=>{const open=indexedDB.open('shiye-pwa-full-v1');open.onsuccess=()=>resolve(open.result)});
+    await new Promise(resolve=>{const tx=db.transaction('assets','readwrite');tx.objectStore('assets').put({
+      id:'fabric-product-material',blobId:'fabric-product-material',title:'画布测试素材',kind:'sticker',
+      physicalWidthMM:25,physicalHeightMM:25,supply:{quantity:2},createdAt:new Date().toISOString(),
+      staticPath:'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2240%22 height=%2240%22%3E%3Crect width=%2240%22 height=%2240%22 fill=%22%2392b87b%22/%3E%3C/svg%3E'
+    });tx.oncomplete=resolve;});db.close()})()`);
+  await command('Page.reload');await wait('.series-grid');
   await click('[data-route="works"]','.works-grid');
   await click('#work-create','#blank-create-confirm');
   await click('#blank-create-confirm','#canvas-page');
@@ -111,6 +118,32 @@ try{
   await click('[data-shape-kind="rectangle"]');
   await sleep(700);
   assert.equal((await projects())[0].drafts[0].layers.filter(layer=>layer.type==='shape').length,1);
+  await click('[data-val="shape"]','.swift-shape-picker');
+  await click('.swift-shape-picker .swift-segments button:first-child');
+  await click('[data-shape-kind="used"]');await sleep(700);
+  const shapes=(await projects())[0].drafts[0].layers.filter(layer=>layer.type==='shape');
+  assert.equal(shapes.length,2);
+  assert.notEqual(shapes[0].id,shapes[1].id,'Copied used shape needs a new Scene identity');
+  await click('[data-val="material"]','.swift-material-picker');
+  await click('.swift-material-picker .swift-segments button:last-child');
+  await click('[data-material-id="fabric-product-material"]');await sleep(700);
+  assert.equal((await projects())[0].drafts[0].layers.filter(layer=>layer.type==='material').length,1);
+  await click('[data-val="material"]','.swift-material-picker');
+  assert.equal(await evaluate('document.querySelectorAll(".swift-material-picker [data-picker-item]").length'),1);
+  await click('.swift-material-picker [data-picker-item]');await sleep(300);
+  assert.equal((await projects())[0].drafts[0].layers.filter(layer=>layer.type==='material').length,1,
+    'Selecting an already used material must not consume another physical unit');
+  assert.equal(await evaluate('document.querySelector("[data-act=park]").disabled'),false,
+    'The reused material must remain selected for parking');
+  await click('[data-act="park"]');await sleep(700);
+  assert.equal((await projects())[0].drafts[0].layers.filter(layer=>layer.type==='material'&&layer.isParked).length,1,
+    JSON.stringify({material:(await projects())[0].drafts[0].layers.filter(layer=>layer.type==='material'),
+      toast:await evaluate('document.querySelector("#toast")?.textContent'),
+      park:await evaluate('document.querySelector("[data-act=park]")?.outerHTML')}));
+  await click('[data-val="material"]','.swift-material-picker');
+  await click('.swift-material-picker .swift-segments button:nth-child(2)');
+  await click('.swift-material-picker [data-picker-item]');await sleep(700);
+  assert.equal((await projects())[0].drafts[0].layers.filter(layer=>layer.type==='material'&&!layer.isParked).length,1);
   await click('[data-val="paper"]','.swift-popover');
   await click('[role="menuitemradio"][aria-checked="false"]');
   await sleep(700);

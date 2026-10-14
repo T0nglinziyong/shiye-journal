@@ -4,14 +4,13 @@ import {browserHarness} from './browser-harness.mjs';
 const out='/tmp/shiye-matching-flow';await mkdir(out,{recursive:true});
 const b=await browserHarness('shiye-matching-flow',process.env.SHIYE_TEST_URL||'http://localhost:5175',async({command})=>{
  await command('Page.addScriptToEvaluateOnNewDocument',{source:`
- localStorage.setItem('shiye-ai-settings-v2',JSON.stringify({provider:'custom',endpoint:'https://mock.invalid/chat',model:'test',key:'synthetic-key',includeThumbnails:false,deliveryMode:'tools',transport:'native'}));
- const original=fetch;globalThis.__matchingMockCalls=[];globalThis.fetch=async(url,options)=>{if(String(url).startsWith('http'))globalThis.__matchingMockCalls.push(String(url));if(url!=='https://mock.invalid/chat')return original(url,options);
- const tool=(id,name,args)=>({id,type:'function',function:{name,arguments:JSON.stringify(args)}});
- const first=[tool('a','place_materials',{items:[1,2,3,4].map((i)=>({asset:'asset_'+btoa('match-test-material-'+i).replace(/=+$/,''),piece:'p'+i,x:.14+i*.18,y:.3}))}),tool('b','upsert_text',{items:[{key:'title',content:'春日收藏',x:.5,y:.1,width:.7,font_size:34}]}),tool('c','finish_design',{})];
- const calls=first;
- return new Response(new ReadableStream({async start(c){c.enqueue(new TextEncoder().encode(': keep-alive\\n\\n'));await new Promise(r=>setTimeout(r,300));c.enqueue(new TextEncoder().encode('data: '+JSON.stringify({choices:[{delta:{tool_calls:calls.map((t,index)=>({...t,index}))},finish_reason:'tool_calls'}]})+'\\n\\ndata: [DONE]\\n\\n'));c.close();}}),{headers:{'Content-Type':'text/event-stream'}});};`});
+ localStorage.setItem('shiye-ai-settings-v2',JSON.stringify({provider:'custom',endpoint:'https://mock.invalid/chat',model:'test',key:'synthetic-key',includeThumbnails:false,deliveryMode:'tools',transport:'native'}));`});
 });
 const {command,evaluate,wait,click,sleep}=b;
+const tool=(id,name,args)=>({id,type:'function',function:{name,arguments:JSON.stringify(args)}});
+const calls=[tool('a','place_materials',{items:[1,2,3,4].map(i=>({asset:'asset_'+Buffer.from('match-test-material-'+i).toString('base64').replace(/=+$/,''),piece:'p'+i,x:.14+i*.18,y:.3}))}),
+  tool('b','upsert_text',{items:[{key:'title',content:'春日收藏',x:.5,y:.1,width:.7,font_size:34}]}),tool('c','finish_design',{})];
+const mockSSE=': keep-alive\n\n'+'data: '+JSON.stringify({choices:[{delta:{tool_calls:calls.map((item,index)=>({...item,index}))},finish_reason:'tool_calls'}]})+'\n\ndata: [DONE]\n\n';
 const records=store=>evaluate(`(async()=>{const db=await new Promise(r=>{const q=indexedDB.open('shiye-pwa-full-v1');q.onsuccess=()=>r(q.result)});return await new Promise(r=>{const q=db.transaction('${store}').objectStore('${store}').getAll();q.onsuccess=()=>r(q.result)})})()`);
 try{
  await wait('.series-grid');
@@ -35,11 +34,36 @@ try{
  assert.equal(await evaluate('document.querySelector("#match-style").selectedOptions.length'),2);
  const before=(await records('projects')).filter(p=>p.title==='新的手账').length;
  const preflight=await evaluate(`({capture:localStorage.getItem('shiye-ai-context-capture-v1'),
-   settings:JSON.parse(localStorage.getItem('shiye-ai-settings-v2')),fetch:String(globalThis.fetch).slice(0,80)})`);
+   settings:JSON.parse(localStorage.getItem('shiye-ai-settings-v2')),
+   fetch:String(globalThis.fetch).slice(0,90),serviceWorker:!!navigator.serviceWorker?.controller,
+   variants:[...document.querySelectorAll('.match-variant')].map(item=>({status:item.dataset.variantStatus,text:item.querySelector('.match-progress')?.textContent}))})`);
+ assert.equal(preflight.variants.length,0,'Fresh matching fixture must start without an older variant');
+ await command('Network.enable');
+ await command('Fetch.enable',{patterns:[{urlPattern:'https://mock.invalid/chat*',requestStage:'Request'}]});
  await click('[data-act="match-generate"]');await wait('.match-progress');assert.ok(await evaluate('!!document.querySelector(".matching-page")&&!document.querySelector("#canvas-page")'));
- for(let i=0;i<300;i++){if(await evaluate('/结构已完成|创作完成/.test(document.querySelector(".match-progress").textContent)'))break;await sleep(100);}
+ let intercepted=0;const methods=[];
+ for(let i=0;i<300;i++){
+   for(const request of b.pausedRequests.splice(0)){
+     intercepted++;methods.push(request.request?.method);
+     await command('Fetch.fulfillRequest',{requestId:request.requestId,
+       responseCode:request.request?.method==='OPTIONS'?204:200,
+       responseHeaders:[{name:'Content-Type',value:'text/event-stream'},
+         {name:'Access-Control-Allow-Origin',value:'*'},
+         {name:'Access-Control-Allow-Methods',value:'POST, OPTIONS'},
+         {name:'Access-Control-Allow-Headers',value:'authorization, content-type'}],
+       body:request.request?.method==='OPTIONS'?'':Buffer.from(mockSSE).toString('base64')});
+   }
+   if(await evaluate('/结构已完成|创作完成/.test(document.querySelector(".match-progress").textContent)'))break;
+   await sleep(100);
+ }
+ assert.ok(intercepted>0,'The synthetic model request must reach the browser network boundary. '+
+   JSON.stringify({preflight,variant:await evaluate(`({status:document.querySelector('.match-variant')?.dataset.variantStatus,
+       text:document.querySelector('.match-progress')?.textContent})`),errors:b.errors,
+     requests:b.networkRequests.slice(-12).map(item=>({url:item.request?.url,method:item.request?.method}))}));
  assert.match(await evaluate('document.querySelector(".match-progress").textContent'),/结构已完成|创作完成/,
-   'Preflight: '+JSON.stringify(preflight)+' Request URLs: '+JSON.stringify(await evaluate('globalThis.__matchingMockCalls?.slice(-20)')));
+   'Preflight: '+JSON.stringify(preflight)+' Intercepted methods: '+JSON.stringify(methods));
+ assert.ok(await evaluate('!!document.querySelector(".match-cover-fallback .thumb-sheet, .match-raster-preview")'),
+   'A generated variant must show an immediate or completed cover');
  assert.equal((await records('projects')).filter(p=>p.title==='新的手账').length,before+1);
  for(const [w,h] of [[390,844],[768,1024],[1024,768],[1440,900]]){await command('Emulation.setDeviceMetricsOverride',{width:w,height:h,deviceScaleFactor:1,mobile:w<700});await sleep(100);await evaluate('document.querySelector(".match-previews").scrollIntoView({block:"center"})');const png=await command('Page.captureScreenshot',{format:'png'});await writeFile(out+'/'+w+'x'+h+'.png',Buffer.from(png.data,'base64'));assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1'));}
  await command('Page.reload');await wait('.series-grid');await click('[data-route="matching"]','.match-result');assert.match(await evaluate('document.querySelector(".match-progress").textContent'),/结构已完成|创作完成/);

@@ -38,34 +38,62 @@ function ReactPopover({anchor,title,className='',width=360,height=440,picker=fal
 
 function ShapePicker({draft,onPick}){
   const [tab,setTab]=useState('common');
-  const choices=tab==='advanced'?advancedShapes:commonShapes;
+  const choices=tab==='used'?(draft.layers||[]).filter(node=>node.type==='shape'&&!node.hidden)
+    .map(node=>[node.id,node.kind==='vector'?'自定义图形':node.kind,node]):
+    tab==='advanced'?advancedShapes:commonShapes;
   return <><div className="swift-segments">
-    {[['common','基础图形'],['advanced','高级图形']].map(([id,label])=><button key={id}
+    {[['used','已使用图形'],['common','基础图形'],['advanced','高级图形']].map(([id,label])=><button key={id}
       className={tab===id?'selected':''} onClick={()=>setTab(id)}>{label}</button>)}
-  </div><div className="canvas-picker-grid">{choices.map(([id,label])=>{
-    const sample=configureShape(primitive(id,draft),id);
+  </div><div className="canvas-picker-grid">{choices.length?choices.map(([id,label,copy])=>{
+    const sample=copy||configureShape(primitive(id,draft),id);
     const image='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(shapeSVG(sample));
-    return <button key={id} type="button" data-shape-kind={id} onClick={()=>onPick(id)}>
+    return <button key={id} type="button" data-shape-kind={copy?'used':id} onClick={()=>onPick(copy||id)}>
       <img src={image} alt=""/><span>{label}</span></button>;
-  })}</div></>;
+  }):<p>这一页还没有图形。</p>}</div></>;
 }
 
-function MaterialPicker({materials,source,onPick}){
-  const [query,setQuery]=useState(''),[shown,setShown]=useState(40);
-  const filtered=useMemo(()=>materials.filter(asset=>
-    !query||asset.title?.toLocaleLowerCase().includes(query.toLocaleLowerCase())),[materials,query]);
-  useEffect(()=>setShown(40),[query]);
-  return <><div className="canvas-material-filters"><input type="search" value={query}
-    onChange={event=>setQuery(event.target.value)} placeholder="搜索素材" aria-label="搜索可用素材"/></div>
+function MaterialPicker({draft,materials,series,source,onPick}){
+  const [tab,setTab]=useState(draft.items.some(item=>!item.isParked)?'used':'all');
+  const [query,setQuery]=useState(''),[group,setGroup]=useState('all');
+  const [kind,setKind]=useState('all'),[sort,setSort]=useState('newest'),[shown,setShown]=useState(40);
+  const byID=useMemo(()=>new Map(materials.map(asset=>[asset.id,asset])),[materials]);
+  const rows=useMemo(()=>{
+    if(tab==='used'||tab==='standby')return draft.items.filter(item=>!!item.isParked===(tab==='standby'))
+      .map(item=>({asset:byID.get(item.assetID),item})).filter(row=>!!row.asset);
+    const list=materials.filter(asset=>!asset.isProjectInternal&&
+      (group==='all'||(group==='none'?!asset.seriesID:asset.seriesID===group))&&
+      (kind==='all'||asset.kind===kind)&&
+      (!query||asset.title?.toLocaleLowerCase().includes(query.toLocaleLowerCase())));
+    list.sort((a,b)=>sort==='name'?a.title.localeCompare(b.title):
+      sort==='name-desc'?b.title.localeCompare(a.title):
+      (Date.parse(b.createdAt||0)-Date.parse(a.createdAt||0))*(sort==='oldest'?-1:1));
+    return list.map(asset=>({asset}));
+  },[tab,draft.items,materials,byID,group,kind,sort,query]);
+  useEffect(()=>setShown(40),[tab,query,group,kind,sort]);
+  return <><div className="swift-segments">
+    {[['used','已使用素材'],['standby','备选素材'],['all','所有素材']].map(([id,label])=><button
+      key={id} type="button" className={tab===id?'selected':''} onClick={()=>setTab(id)}>{label}</button>)}
+  </div>{tab==='all'?<div className="canvas-material-filters">
+    <select aria-label="选择系列" value={group} onChange={event=>setGroup(event.target.value)}>
+      <option value="all">全部系列</option><option value="none">系列外</option>
+      {series.map(item=><option key={item.id} value={item.id}>{item.title}</option>)}
+    </select><select aria-label="过滤素材类型" value={kind} onChange={event=>setKind(event.target.value)}>
+      {[['all','全部类型'],['sticker','贴纸'],['paper','纸张'],['tape','胶带'],
+        ['photo','照片'],['text','文字'],['reference','参考']].map(([id,label])=><option key={id} value={id}>{label}</option>)}
+    </select><select aria-label="素材排序" value={sort} onChange={event=>setSort(event.target.value)}>
+      {[['newest','最新添加'],['oldest','最早添加'],['name','名称升序'],['name-desc','名称降序']]
+        .map(([id,label])=><option key={id} value={id}>{label}</option>)}
+    </select><input type="search" value={query} onChange={event=>setQuery(event.target.value)}
+      placeholder="搜索素材" aria-label="搜索可用素材"/></div>:null}
     <div className="canvas-picker-grid" onScroll={event=>{
       const node=event.currentTarget;
-      if(node.scrollHeight-node.scrollTop-node.clientHeight<150)setShown(count=>Math.min(filtered.length,count+40));
-    }}>{filtered.slice(0,shown).map(asset=><button type="button" key={asset.id}
-      data-material-id={asset.id} onClick={()=>onPick(asset.id)}>
+      if(node.scrollHeight-node.scrollTop-node.clientHeight<150)setShown(count=>Math.min(rows.length,count+40));
+    }}>{rows.slice(0,shown).map(({asset,item})=><button type="button" key={item?.id||asset.id}
+      data-material-id={asset.id} data-picker-item={item?.id} onClick={()=>onPick(asset.id,item?.id)}>
       {source(asset.blobId)||asset.staticPath?<img src={source(asset.blobId)||asset.staticPath}
         loading="lazy" decoding="async" alt=""/>:<span>无预览</span>}
-      <span>{asset.title}</span></button>)}
-    </div>{filtered.length>shown?<small>下滑继续显示 · 共 {filtered.length} 件</small>:null}</>;
+      <span>{asset.title}{item?.splitParentId?' · 裁片 '+((item.splitPartIndex??0)+1):''}</span></button>)}
+    </div>{!rows.length?<p>没有符合条件的素材</p>:rows.length>shown?<small>下滑继续显示 · 共 {rows.length} 件</small>:null}</>;
 }
 
 export function FabricEditorToolbar({state,draft,materials,source,onAction}){
@@ -102,8 +130,9 @@ export function FabricEditorToolbar({state,draft,materials,source,onAction}){
     width={menu.kind==='paper'?260:innerWidth>=900?432:360} height={menu.kind==='shape'?550:440}
     picker={['shape','material'].includes(menu.kind)}>
     {menu.kind==='shape'?<ShapePicker draft={draft} onPick={id=>choose('fabric-add-shape',id)}/>:null}
-    {menu.kind==='material'?<MaterialPicker materials={materials} source={source}
-      onPick={id=>choose('fabric-add-material',id)}/>:null}
+    {menu.kind==='material'?<MaterialPicker draft={draft} materials={materials}
+      series={state.series||[]} source={source}
+      onPick={(id,itemID)=>choose(itemID?'fabric-unpark':'fabric-add-material',itemID||id)}/>:null}
     {menu.kind==='paper'?<>
       {[['plain','纯色'],['grid','方格'],['lines','横线'],['dots','点阵'],['columns','双栏']]
         .map(([id,label])=><button key={id} type="button" role="menuitemradio"

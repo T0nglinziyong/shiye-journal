@@ -201,9 +201,10 @@ function MatchingVariantCover({variant,session,source}){
     variant.project?.drafts?.[0];
   return <div ref={host} className="match-cover-preview" data-match-raster={variant.id}>
     {raster||snapshot?<img className="match-raster-preview" src={raster||snapshot}
-      alt={variant.title+' 构图预览'}/>:<div className="thumb-sheet"
+      alt={variant.title+' 构图预览'}/>:<div className="match-cover-fallback"
       style={{aspectRatio:draft?`${draft.canvas.width}/${draft.canvas.height}`:'3/4',
-        background:draft?.paperColor||'#fcfaf0'}}/>}
+        background:draft?.paperColor||'#fcfaf0'}}
+      dangerouslySetInnerHTML={{__html:session.coverMarkup(variant)}}/>}
   </div>;
 }
 function MatchingSessionPanel({session,state,source,onAction}){

@@ -509,7 +509,11 @@ actionStore.subscribe(event=>{
     if(a)toast(a.isFavorite?'已收藏':'已取消收藏');
   }
 });
+let renderInProgress=false,renderQueued=false;
 function render(){
+  if(renderInProgress){renderQueued=true;return;}
+  renderInProgress=true;
+  try{
   if(state.route==='editor'&&state.activeProject?.drafts?.some(d=>d.textBlocks?.some(t=>t.style==='hand')))
     void import('@fontsource/ma-shan-zheng/chinese-simplified-400.css');
   // Keep the import photo queue at the exact scroll position while the whole
@@ -553,7 +557,7 @@ function render(){
     :state.route==='editor'&&state.activeProject&&current()
     ?EditorPage({state,draft:current(),editorEntry,renderSceneDOM,asset,source:image,
       useFabric:fabricEditorPreview,sceneRevision:state.activeProject.updatedAt,
-      materials:visibleMaterials(state.assets),
+      materials:state.assets,
       loadFabricAsset:async(id,node)=>{
         const record=asset(id);
         if(!record)throw Error('素材不在当前资料库：'+id);
@@ -640,7 +644,12 @@ function render(){
     // positions after star/remove/filter/proposal/generation rerenders.
     restoreMatchingScroll(view,matchingScrollMemory.scroll,window);
   }
-  mountPageSyncIndicator();backgroundViewPending=false;}
+  mountPageSyncIndicator();backgroundViewPending=false;
+  }finally{
+    renderInProgress=false;
+    if(renderQueued){renderQueued=false;queueMicrotask(render);}
+  }
+}
 function editorLayoutKey(){const size=view.editorLayoutSize||{width:window.innerWidth,height:window.innerHeight};return [size.width,size.height,current()?.canvas.width,current()?.canvas.height,!!state.workspacePanel,!!state.aiPanel].join(':');}
 function refreshCanvas(){
   if(fabricEditorPreview)return false;
@@ -1204,7 +1213,9 @@ async function legacyHandle(action,id,value){try{switch(action){
   case 'fabric-add-shape':{
     const d=current();if(!d)break;
     checkpoint();
-    const shape=configureShape(primitive(id,d),id);
+    const shape=typeof id==='string'?configureShape(primitive(id,d),id):
+      {...structuredClone(id),id:uid(),locked:false,hidden:false};
+    shape.x=d.canvas.width/2;shape.y=d.canvas.height/2;
     shape.type='shape';shape.zIndex=Math.max(0,...d.layers.map(node=>node.zIndex||0))+1;
     d.primitives.push(shape);
     state.selected=shape.id;state.tool='select';saveProject();render();break;
@@ -1225,6 +1236,11 @@ async function legacyHandle(action,id,value){try{switch(action){
     item.materialUnitIndex=available;
     d.items.push(item);
     state.selected=item.id;state.tool='select';saveProject();render();break;
+  }
+  case 'fabric-unpark':{
+    const d=current(),item=d?.items.find(entry=>entry.id===id);if(!item)break;
+    if(item.isParked){checkpoint();item.isParked=false;saveProject();}
+    state.selected=item.id;state.tool='select';render();break;
   }
   case 'fabric-select-layer':state.selected=id;state.tool='select';render();break;
   case 'fabric-paper':{

@@ -30,3 +30,11 @@ test('keep-alive without text reports provider waiting, not fictitious output',a
  const progress=[];await requestChat({...base,onProgress:p=>progress.push(p),request:async()=>sse([': keep-alive\n\n','data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}\n\n','data: [DONE]\n\n'])});
  assert.ok(progress.some(p=>p.keepAlives===1&&p.received===0&&p.phase.includes('服务保活中')));assert.ok(progress.at(-1).networkBytes>0);assert.equal(progress.at(-1).received,2);
 });
+test('a broken progress renderer does not prevent the model request',async()=>{
+ let requests=0;
+ const response=await requestChat({...base,onProgress:()=>{throw Error('progress node was removed');},
+  request:async()=>{requests++;return new Response(JSON.stringify({choices:[{message:{content:'ok'}}]}),
+    {headers:{'Content-Type':'application/json'}});}});
+ assert.equal(requests,1);
+ assert.equal(response.choices[0].message.content,'ok');
+});
