@@ -1,4 +1,5 @@
 import {itemFromAsset} from './domain.js';
+import {attachSceneV2} from './scene-v2.js';
 
 // These are starting arrangements, not flattened images. Every placed material
 // retains its measured size and remains an independent canvas object.
@@ -33,6 +34,7 @@ function fits(item,placed,draft){
   return placed.every(other=>Math.abs(item.x-other.x)>=(item.width+other.width)/2+margin||Math.abs(item.y-other.y)>=(item.height+other.height)/2+margin);
 }
 export function applyManualLayout(draft,assets,basket,templateID){
+  attachSceneV2(draft);
   const template=templates.find(item=>item.id===templateID);if(!template)throw Error('请选择有效的手动排版模板');
   const selected=basket.map(id=>assets.find(asset=>asset.id===id)).filter(Boolean);
   const focus=selected.filter(asset=>asset.kind==='photo'||asset.kind==='paper').sort((a,b)=>area(b)-area(a))[0]||[...selected].sort((a,b)=>area(b)-area(a))[0];

@@ -4,7 +4,7 @@ import {ensureInkSlots,inkSlot,activeInkSlot,selectInkSlot,editInkSlot} from './
 import {openPopover,closePopover} from './swift-popover.js';
 import {openEditorLayerTree} from './editor-layer-tree.js';
 import {defaultTools,commonShapes,advancedShapes,configureShape,straightStroke,eraseStrokes,drawInk,textFont,textLines,textFontFamily,textLineHeight} from './editor-tools-model.js';
-import {shapeTag as shapeSVG} from './shape-preview.js';
+import {shapeThumbnailTag as shapeSVG} from './shape-preview.js';
 import {isCurrentExampleProject} from './legacy-builtins.js';
 import {uid,textBlock,primitive,itemFromAsset} from './domain.js';
 import {showMaterialProcessing} from './material-processing-editor.js';

@@ -115,6 +115,14 @@ try{
   assert.equal((await projects())[0].drafts[0].layers.filter(layer=>layer.type==='text').length,1,
     'An abandoned empty text object must be removed');
   await click('[data-val="shape"]','.swift-shape-picker');
+  const previewRatios=await evaluate(`(()=>['rectangle','ellipse','heart'].map(kind=>{
+    const image=document.querySelector('[data-shape-kind="'+kind+'"] img');
+    return {kind,ratio:image.naturalWidth/image.naturalHeight,loaded:image.complete};
+  }))()`);
+  assert.ok(previewRatios.every(row=>row.loaded)&&
+    Math.abs(previewRatios[0].ratio-150/105)<.01&&
+    previewRatios.slice(1).every(row=>Math.abs(row.ratio-1)<.01),
+    'Shape menu thumbnails must preserve the intended Scene aspect ratios: '+JSON.stringify(previewRatios));
   await click('[data-shape-kind="rectangle"]');
   await sleep(700);
   assert.equal((await projects())[0].drafts[0].layers.filter(layer=>layer.type==='shape').length,1);
@@ -124,6 +132,35 @@ try{
   const shapes=(await projects())[0].drafts[0].layers.filter(layer=>layer.type==='shape');
   assert.equal(shapes.length,2);
   assert.notEqual(shapes[0].id,shapes[1].id,'Copied used shape needs a new Scene identity');
+  await click('[data-val="highlighter"]');
+  const markerAt=await evaluate(`(()=>{const r=document.querySelector('.upper-canvas').getBoundingClientRect();
+    return {x:r.left+r.width*.2,y:r.top+r.height*.15}})()`);
+  await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,clickCount:1,...markerAt});
+  await command('Input.dispatchMouseEvent',{type:'mouseMoved',button:'left',buttons:1,
+    x:markerAt.x+40,y:markerAt.y+10});
+  await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,
+    x:markerAt.x+50,y:markerAt.y+10,clickCount:1});
+  await sleep(600);
+  const marker=(await projects())[0].drafts[0].layers.find(layer=>layer.penStyle==='marker');
+  assert.ok(marker&&marker.blendMode==='multiply'&&marker.opacity<.5,
+    'Highlighter must persist as a transparent multiply stroke');
+  await click('[data-val="lasso"]');
+  const lasso=await evaluate(`(()=>{const r=document.querySelector('.upper-canvas').getBoundingClientRect();
+    const p=${JSON.stringify(shapes[0])};const sx=r.width/document.querySelector('.upper-canvas').width;
+    const sy=r.height/document.querySelector('.upper-canvas').height;
+    const w=Math.max(30,p.width*sx/2+20),h=Math.max(30,p.height*sy/2+20);
+    return [{x:r.left+p.x*sx-w,y:r.top+p.y*sy-h},{x:r.left+p.x*sx+w,y:r.top+p.y*sy-h},
+      {x:r.left+p.x*sx+w,y:r.top+p.y*sy+h},{x:r.left+p.x*sx-w,y:r.top+p.y*sy+h}];})()`);
+  await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,clickCount:1,...lasso[0]});
+  for(const point of [...lasso.slice(1),lasso[0]])await command('Input.dispatchMouseEvent',{
+    type:'mouseMoved',button:'left',buttons:1,...point});
+  await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,...lasso[0]});
+  await sleep(200);
+  assert.ok(await evaluate('!!document.querySelector(".canvas-context-tools button")?.textContent.includes("组合")'),
+    'Lasso must select the overlapping Scene objects');
+  await click('.canvas-context-tools button');await sleep(700);
+  assert.equal((await projects())[0].drafts[0].layers.filter(layer=>layer.type==='group').length,1,
+    'Grouping selected Scene nodes must persist');
   await click('[data-val="material"]','.swift-material-picker');
   await click('.swift-material-picker .swift-segments button:last-child');
   await click('[data-material-id="fabric-product-material"]');await sleep(700);
@@ -168,5 +205,5 @@ try{
   assert.equal((await projects())[0].drafts[0].layers.filter(layer=>layer.type==='ink').length,
     inkBeforePinch,'Pinch gesture must cancel the incomplete pen stroke');
   assert.deepEqual(browser.errors,[]);
-  console.log('Fabric product editor smoke passed: stroke, undo, redo, text, shape, paper, zoom and pinch cancellation');
+  console.log('Fabric product editor smoke passed: stroke, marker, lasso, grouping, undo, redo, text, shape, paper, zoom and pinch cancellation');
 }finally{await browser.close();}

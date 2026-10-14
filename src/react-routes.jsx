@@ -374,7 +374,7 @@ function EditorAIPanel({state,draft,asset,hasReport,onAction,onPromptChange}){
 // island so pointer capture, canvas contexts and incremental layer patches
 // remain under the existing canvas engine's lifetime.
 export function EditorPage({state,draft,editorEntry,renderSceneDOM,asset,source,format,
-  hasAIReport,onAction,onInspectorChange,onTitleCommit,onDraftSelect,onAIAction,onAIPromptChange,
+  hasAIReport,onAction,onInspectorChange,onTitleCommit,onDraftSelect,onAIAction,onAIOpen,onAIPromptChange,
   useFabric=false,sceneRevision,onFabricSelection,onFabricBeforeChange,onFabricChange,onFabricIssue,
   onFabricViewportChange,loadFabricAsset,materials=[]}){
   const project=state.activeProject;
@@ -395,7 +395,7 @@ export function EditorPage({state,draft,editorEntry,renderSceneDOM,asset,source,
     spellCheck="false" onBlur={event=>onTitleCommit(event.currentTarget.textContent)}>{project.title}</h1>
       <p>编辑只改变作品，不修改素材库里的原始尺寸和数量</p></div><div className="actions">
       {useFabric?<><span className="swift-auto-saved">{document.querySelector('#save-state')?.textContent||'本机暂存'}</span>
-        <FabricHeaderMenu kind="history" project={project} onAction={onAction}/>
+        <FabricHeaderMenu kind="history" project={project} onAction={onAction} onAIOpen={onAIOpen}/>
         <button className="btn" data-act="undo" aria-label="撤销">↶</button>
         <button className="btn" data-act="redo" aria-label="重做">↷</button>
         <button className="btn primary" data-act="editor-done">完成</button>
@@ -420,8 +420,12 @@ export function EditorPage({state,draft,editorEntry,renderSceneDOM,asset,source,
         width:draft.canvas.width,height:draft.canvas.height,transform:`scale(${scale})`,transformOrigin:'left top'}}>
         <FabricSceneStage draft={draft} sceneRevision={sceneRevision} tool={state.tool}
           selectedID={state.selected}
-          pen={{widthMM:state.canvasTools?.fabricPenWidthMM??.5,color:state.canvasTools?.penColor||'#2b5245'}}
-          eraser={{widthMM:state.canvasTools?.fabricEraserWidthMM??4}}
+          pen={{widthMM:state.canvasTools?.fabricPenWidthMM??.5,color:state.canvasTools?.penColor||'#2b5245',
+            style:state.canvasTools?.fabricPenStyle||'pressure'}}
+          marker={{widthMM:state.canvasTools?.fabricMarkerWidthMM??2,color:state.canvasTools?.fabricMarkerColor||'#f5cf45',
+            straight:!!state.canvasTools?.fabricMarkerStraight}}
+          eraser={{widthMM:state.canvasTools?.fabricEraserWidthMM??4,style:state.canvasTools?.fabricEraserStyle||'standard'}}
+          selectionMode={state.selectionMode||'contain'} selectedIDs={state.multiSelected||[]}
           assetURL={loadFabricAsset} onSelection={onFabricSelection}
           onBeforeChange={onFabricBeforeChange} onChange={onFabricChange} onIssue={onFabricIssue}/>
       </div></FabricPageViewport>:<div id="canvas-page" className={`canvas-page ${draft.paperPattern} ${state.tool==='pen'?'pen':''}`}

@@ -6,7 +6,7 @@ const renderSceneCanvas=async(...args)=>(await sceneRuntime()).renderSceneCanvas
 const decodeSceneImage=async(...args)=>(await sceneRuntime()).decodeSceneImage(...args);
 import {sceneRenderEntries,projectMaterialViews,sceneDisplaySiblings} from './craft-display.js';
 import {inkScenePaths} from './ink-scene-svg.js';
-import {maskSVG,sceneLayerStyle,sceneLayerEntries,attachSceneV2,moveSceneNode} from './scene-model.js';
+import {maskSVG,sceneLayerStyle,sceneLayerEntries,attachSceneV2,moveSceneNode,groupSceneLayers} from './scene-model.js';
 import './styles.css';
 import './overrides.css';
 import './parity.css';
@@ -566,7 +566,9 @@ function render(){
         const pixels=Math.min(4096,Math.max(480,Math.ceil(Math.max(node.width,node.height)*pageScale*(devicePixelRatio||1)*2)));
         return privateImages.load(record.blobId,pixels);
       },
-      onFabricSelection:ids=>{const next=ids[0]||null;if(state.selected!==next){state.selected=next;render();}},
+      onFabricSelection:ids=>{const next=ids.length===1?ids[0]:null;
+        if(state.selected!==next||JSON.stringify(state.multiSelected||[])!==JSON.stringify(ids)){
+          state.selected=next;state.multiSelected=ids;render();}},
       onFabricBeforeChange:()=>checkpoint(),
       // Fabric already updates the changed layer in place. Persist its Scene
       // data without rebuilding the route during ink or text input.
@@ -581,7 +583,8 @@ function render(){
       onTitleCommit:title=>{const p=state.activeProject,next=title.trim()||'未命名手账';
         if(p&&next!==p.title){p.title=next;saveProject();}},
       onDraftSelect:id=>{state.activeDraft=id;state.selected=null;resetEditorHistory(state);render();},
-      onAIAction:handleAIPanelAction,onAIPromptChange:value=>{state.aiPrompt=value;}})
+      onAIAction:handleAIPanelAction,onAIOpen:openAICreation,
+      onAIPromptChange:value=>{state.aiPrompt=value;}})
     :state.route==='assetDetail'&&asset(state.detailAssetID)
       ?AssetDetailPage({asset:asset(state.detailAssetID),seriesTitle:state.series.find(s=>s.id===asset(state.detailAssetID).seriesID)?.title,
         source:image,kindName,format:fmt,onAction:handle})
@@ -1197,18 +1200,33 @@ async function legacyHandle(action,id,value){try{switch(action){
   case 'works-filter':await actionStore.dispatch({type:'works/filter',payload:{value}});break;
   case 'fabric-tool':{
     state.tool=value;
-    if(value!=='select')state.selected=null;
+    if(!['select','lasso'].includes(value)){state.selected=null;state.multiSelected=[];}
     render();break;
   }
   case 'fabric-tool-setting':{
     state.canvasTools||={...defaultTools};
-    if(id==='penColor')state.canvasTools.penColor=value;
-    else if(['fabricPenWidthMM','fabricEraserWidthMM'].includes(id))
-      state.canvasTools[id]=Math.max(id==='fabricPenWidthMM'?.2:1,
-        Math.min(id==='fabricPenWidthMM'?3:12,Number(value)||1));
+    if(id==='penColor'||id==='fabricMarkerColor'){
+      if(!/^#[0-9a-f]{6}$/i.test(value))break;
+      state.canvasTools[id]=value;
+    }else if(['fabricPenWidthMM','fabricEraserWidthMM','fabricMarkerWidthMM'].includes(id))
+      state.canvasTools[id]=Math.max(id==='fabricPenWidthMM'?.2:id==='fabricMarkerWidthMM'?.5:1,
+        Math.min(id==='fabricPenWidthMM'?3:id==='fabricMarkerWidthMM'?8:12,Number(value)||1));
+    else if(id==='fabricMarkerStraight')state.canvasTools[id]=!!value;
+    else if(id==='fabricPenStyle'&&['pressure','ballpoint','brush'].includes(value))state.canvasTools[id]=value;
+    else if(id==='fabricEraserStyle'&&['fine','standard','brush'].includes(value))state.canvasTools[id]=value;
     else break;
     try{localStorage.setItem('shiye-canvas-tools-v1',JSON.stringify(state.canvasTools));}catch{}
     render();break;
+  }
+  case 'fabric-selection-mode':state.selectionMode=id==='intersect'?'intersect':'contain';render();break;
+  case 'fabric-clear-selection':state.selected=null;state.multiSelected=[];render();break;
+  case 'fabric-group-selection':{
+    const d=current(),ids=[...new Set(state.multiSelected||[])];
+    if(!d||ids.length<2)break;
+    checkpoint();
+    const groupID=groupSceneLayers(d,ids,{id:'group-'+uid(),name:'手帐组合'});
+    state.selected=groupID;state.multiSelected=[groupID];
+    saveProject();render();break;
   }
   case 'fabric-add-shape':{
     const d=current();if(!d)break;

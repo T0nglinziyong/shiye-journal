@@ -4,6 +4,8 @@ import {createFabricSceneBridge} from './fabric-scene-bridge.js';
 import {projectFabricLayers} from './fabric-layer-loader.js';
 import {paperWidthPixels,pressureInkOutline,erasePressureStroke} from './pressure-ink.js';
 import {textBlock} from './domain.js';
+import {selectPolygon,polygonContains} from './canvas-selection.js';
+import {attachSceneV2} from './scene-v2.js';
 
 const byID=(nodes,id)=>{
   for(const node of nodes||[]){
@@ -19,30 +21,41 @@ const byID=(nodes,id)=>{
 // Fabric owns this canvas for the whole draft lifetime. React owns the host,
 // tool panels and route lifecycle; a pointer packet never crosses a JSX render.
 export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onChange,onIssue,onReady,
-  tool='select',pen={widthMM:.5,color:'#2b5245'},eraser={widthMM:4},readOnly=false,sceneRevision=0,
-  selectedID=null}){
+  tool='select',pen={widthMM:.5,color:'#2b5245'},marker={widthMM:2,color:'#f5cf45'},
+  eraser={widthMM:4},selectionMode='contain',readOnly=false,sceneRevision=0,
+  selectedID=null,selectedIDs=[]}){
   const canvasRef=useRef(null),sessionRef=useRef(null),reconcileRef=useRef(null),callbacks=useRef(null);
-  callbacks.current={draft,assetURL,onSelection,onBeforeChange,onChange,onIssue,onReady,tool,pen,eraser,selectedID};
+  callbacks.current={draft,assetURL,onSelection,onBeforeChange,onChange,onIssue,onReady,tool,pen,marker,
+    eraser,selectionMode,selectedID,selectedIDs};
 
   useLayoutEffect(()=>{reconcileRef.current?.();},[draft,sceneRevision]);
 
   useLayoutEffect(()=>{
     const canvas=sessionRef.current;
-    if(!canvas||tool!=='select')return;
-    const target=selectedID?canvas.getObjects().find(item=>item.sceneID===selectedID):null;
-    if(target&&canvas.getActiveObject()!==target){canvas.setActiveObject(target);canvas.requestRenderAll();}
-    else if(!selectedID&&canvas.getActiveObject()){
+    if(!canvas||!['select','lasso'].includes(tool))return;
+    const ids=selectedIDs.length?selectedIDs:selectedID?[selectedID]:[];
+    const objects=canvas.getObjects().filter(item=>ids.includes(item.sceneID));
+    const active=canvas.getActiveObjects();
+    if(objects.length&&(!active.length||active.length!==objects.length||
+      active.some(item=>!objects.includes(item)))){
+      if(objects.length===1)canvas.setActiveObject(objects[0]);
+      else import('fabric').then(({ActiveSelection})=>{
+        if(sessionRef.current!==canvas)return;
+        canvas.setActiveObject(new ActiveSelection(objects,{canvas}));canvas.requestRenderAll();
+      });
+      canvas.requestRenderAll();
+    }else if(!ids.length&&canvas.getActiveObject()){
       canvas.discardActiveObject();canvas.requestRenderAll();
     }
-  },[selectedID,tool,sceneRevision]);
+  },[selectedID,selectedIDs,tool,sceneRevision]);
 
   useLayoutEffect(()=>{
     const canvas=sessionRef.current;
     if(!canvas)return;
     canvas.selection=tool==='select'&&!readOnly;
     canvas.skipTargetFind=tool!=='select'||readOnly;
-    canvas.defaultCursor=tool==='pen'?'crosshair':tool==='eraser'?'cell':'default';
-    if(tool!=='select'){canvas.getActiveObject()?.exitEditing?.();canvas.discardActiveObject();
+    canvas.defaultCursor=['pen','highlighter','lasso'].includes(tool)?'crosshair':tool==='eraser'?'cell':'default';
+    if(!['select','lasso'].includes(tool)){canvas.getActiveObject()?.exitEditing?.();canvas.discardActiveObject();
       canvas.requestRenderAll();}
     if(tool!=='text')canvas.sceneDiscardEmptyText?.();
   },[tool,readOnly]);
@@ -51,6 +64,7 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
     let disposed=false,canvas=null;
     const start=async()=>{
       try{
+        attachSceneV2(draft);
         const fabric=await import('fabric');
         if(disposed)return;
         canvas=new fabric.Canvas(canvasRef.current,{
@@ -175,10 +189,16 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
           const ctx=canvas.contextTop;
           canvas.clearContext(ctx);ctx.save();
           ctx.transform(...canvas.viewportTransform);
-          if(gesture.tool==='pen'){
+          if(gesture.tool==='pen'||gesture.tool==='highlighter'){
             const outline=pressureInkOutline({points:gesture.points,width:gesture.width});
-            if(outline.length){ctx.fillStyle=gesture.color;ctx.beginPath();ctx.moveTo(...outline[0]);
+            if(outline.length){ctx.globalAlpha=gesture.tool==='highlighter'?.38:1;
+              ctx.fillStyle=gesture.color;ctx.beginPath();ctx.moveTo(...outline[0]);
               for(const point of outline.slice(1))ctx.lineTo(...point);ctx.closePath();ctx.fill();}
+          }else if(gesture.tool==='lasso'){
+            ctx.strokeStyle='#2b5245';ctx.lineWidth=2;ctx.setLineDash([7,5]);
+            ctx.fillStyle='rgba(80,130,90,.08)';ctx.beginPath();
+            gesture.points.forEach((point,index)=>index?ctx.lineTo(point.x,point.y):ctx.moveTo(point.x,point.y));
+            ctx.stroke();if(gesture.points.length>2){ctx.closePath();ctx.fill();}
           }else{
             ctx.strokeStyle='rgba(48,70,61,.4)';ctx.lineWidth=gesture.width;
             ctx.lineCap='round';ctx.lineJoin='round';ctx.beginPath();
@@ -196,7 +216,7 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
         };
         const onPointerDown=event=>{
           const mode=callbacks.current.tool;
-          if(readOnly||!['pen','eraser','text'].includes(mode)||event.button>0)return;
+          if(readOnly||!['pen','highlighter','eraser','text','lasso'].includes(mode)||event.button>0)return;
           event.preventDefault();event.stopImmediatePropagation();
           if(mode==='text'){
             textPointerID=event.pointerId;
@@ -233,10 +253,13 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
             return;
           }
           canvas.discardActiveObject();
-          const settings=mode==='pen'?callbacks.current.pen:callbacks.current.eraser;
+          const settings=mode==='pen'?callbacks.current.pen:
+            mode==='highlighter'?callbacks.current.marker:callbacks.current.eraser;
           gesture={id:event.pointerId,tool:mode,points:samples(event),
-            width:paperWidthPixels(callbacks.current.draft,settings?.widthMM??(mode==='pen'?.5:4)),
-            color:settings?.color||'#2b5245'};
+            width:mode==='lasso'?2:paperWidthPixels(callbacks.current.draft,
+              settings?.widthMM??(mode==='pen'?.5:mode==='highlighter'?2:4)),
+            color:settings?.color||'#2b5245',style:settings?.style,
+            straight:settings?.straight};
           canvas.upperCanvasEl.setPointerCapture(event.pointerId);
           preview();
         };
@@ -245,7 +268,8 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
           event.preventDefault();event.stopImmediatePropagation();
           for(const point of samples(event)){
             const previous=gesture.points.at(-1);
-            const spacing=gesture.tool==='eraser'?Math.max(.5,gesture.width*.25):.15;
+            const spacing=gesture.tool==='eraser'?Math.max(.5,gesture.width*.25):
+              gesture.tool==='lasso'?1:.15;
             if(!previous||Math.hypot(point.x-previous.x,point.y-previous.y)>spacing)
               gesture.points.push(point);
           }
@@ -265,12 +289,31 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
           const point=pointer(event),prior=finished.points.at(-1);
           if(prior&&Math.hypot(point.x-prior.x,point.y-prior.y)>.15)finished.points.push(point);
           const current=callbacks.current.draft;
-          if(finished.tool==='pen'){
+          if(finished.tool==='lasso'){
+            if(finished.points.length<3)return;
+            const mode=callbacks.current.selectionMode||'contain';
+            const ids=selectPolygon(current,finished.points,
+              {material:true,text:true,shape:true},mode);
+            for(const node of current.layers||[]){
+              if(node.type!=='ink'||node.hidden||node.locked)continue;
+              const hits=(node.points||[]).map(sample=>polygonContains(sample,finished.points));
+              if(hits.length&&(mode==='intersect'?hits.some(Boolean):hits.every(Boolean)))ids.push(node.id);
+            }
+            const objects=canvas.getObjects().filter(object=>ids.includes(object.sceneID));
+            if(objects.length===1)canvas.setActiveObject(objects[0]);
+            else if(objects.length>1)canvas.setActiveObject(new fabric.ActiveSelection(objects,{canvas}));
+            else canvas.discardActiveObject();
+            canvas.requestRenderAll();
+            callbacks.current.onSelection?.(objects.map(object=>object.sceneID));
+          }else if(finished.tool==='pen'||finished.tool==='highlighter'){
             callbacks.current.onBeforeChange?.('ink:new');
             const node={id:globalThis.crypto?.randomUUID?.()||'ink-'+Math.random().toString(36).slice(2),
-              type:'ink',penStyle:'pressure',points:finished.points,width:finished.width,
+              type:'ink',penStyle:finished.tool==='highlighter'?'marker':finished.style||'pressure',
+              points:finished.straight&&finished.points.length>1?
+                [finished.points[0],finished.points.at(-1)]:finished.points,width:finished.width,
               color:finished.color,zIndex:Math.max(2000,...(current.layers||[]).map(n=>n.zIndex||0))+1,
-              opacity:1};
+              opacity:finished.tool==='highlighter'?.38:1,
+              blendMode:finished.tool==='highlighter'?'multiply':undefined};
             current.layers.push(node);
             remember(node.id);
             const index=current.layers.length-1;
@@ -283,7 +326,8 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
                 const node=nodes[index];
                 if(node.type==='group'){inspectTree(node.children,rootID||node.id);continue;}
                 if(node.type!=='ink')continue;
-                const parts=erasePressureStroke(node,finished.points,finished.width/2);
+                const fragments=erasePressureStroke(node,finished.points,finished.width/2);
+                const parts=finished.style==='brush'&&fragments[0]!==node?[]:fragments;
                 if(parts.length===1&&parts[0]===node)continue;
                 changes.push({nodes,index,parts,rootID:rootID||node.id});
               }
