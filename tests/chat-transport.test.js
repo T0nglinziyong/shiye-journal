@@ -16,7 +16,7 @@ test('idle timeout and cancellation return meaningful errors without keys',async
 test('HTTP authentication failures are distinguished',async()=>{await assert.rejects(requestChat({...base,request:async()=>new Response('',{status:401})}),/密钥无效/);});
 test('A-12: provider errors have safe codes without leaking provider text or credentials',async()=>{
  const cases=[
-  [401,'authentication',''],[429,'rate-limit',''],
+  [401,'authentication',''],[402,'balance',''],[429,'rate-limit',''],
   [400,'context-limit',JSON.stringify({error:{code:'context_length_exceeded',message:'private text and sk-should-not-leak'}})],
   [400,'unsupported-request',JSON.stringify({error:{code:'unsupported_response_format',message:'private text and sk-should-not-leak'}})]
  ];

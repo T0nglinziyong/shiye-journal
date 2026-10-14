@@ -2312,7 +2312,7 @@ async function organizeSavedProjects(projects,{waitForSave}={}){
     for(const source of projects){
       if(state.accountId!==account)return;
       const complete=await db.get('projects',source.id);
-      if(!complete||complete.updatedAt!==source.updatedAt||complete.autoOrganized)return;
+      if(!complete||complete.updatedAt!==source.updatedAt||complete.autoOrganized)continue;
       let picture=null;
       if(complete.isSnapshot&&supportsVision(config)&&config.includeThumbnails){
         const raw=(await db.get('blobs',complete.snapshotBlobId))?.data;
@@ -2328,7 +2328,7 @@ async function organizeSavedProjects(projects,{waitForSave}={}){
       const result=await classifyRecord({kind:'project',record:complete,settings:config,image:picture,assets:state.assets});
       if(state.accountId!==account)return;
       const latest=await db.get('projects',source.id);
-      if(!latest||latest.updatedAt!==source.updatedAt||latest.autoOrganized)return;
+      if(!latest||latest.updatedAt!==source.updatedAt||latest.autoOrganized)continue;
       const updated={...latest,autoOrganized:true,title:result.title||latest.title,
         styleTags:(result.styleTags||result.tags||latest.styleTags||[]).slice(0,8),updatedAt:new Date().toISOString()};
       if(updated.isSnapshot)await db.put('projects',updated);
@@ -2337,7 +2337,7 @@ async function organizeSavedProjects(projects,{waitForSave}={}){
       if(live&&live.updatedAt===source.updatedAt)Object.assign(live,updated);
     }
     if(state.route==='works')render();
-  }catch(error){console.warn('作品自动整理待重试，原始作品仍保留',error);}
+  }catch(error){recordRuntimeIssue('handled',error,state.route,{phase:'ai'});console.warn('作品自动整理待重试，原始作品仍保留',error);if(state.accountId===account)toast(explainUserError(error,'作品自动整理'));}
 }
 async function organizeSavedAssets(records,{waitForSave,projects=[]}={}){ 
   if(projects.length)void organizeSavedProjects(projects,{waitForSave});
@@ -2350,7 +2350,7 @@ async function organizeSavedAssets(records,{waitForSave,projects=[]}={}){
         const image=await modelImage(record);if(!image)throw Error('素材图像无法读取');
         const result=await classifyRecord({kind:'asset',record,settings:cfg,image,assets:[]});
         await applyAssetClassification(record,result,{isCurrent:()=>state.accountId===accountID&&isCurrent()});
-      },onError:()=>{if(state.accountId===accountID&&!warned){warned=true;toast('部分素材自动整理未完成，可稍后重新识别');}}});
+      },onError:error=>{recordRuntimeIssue('handled',error,state.route,{phase:'ai'});if(state.accountId===accountID&&!warned){warned=true;toast(explainUserError(error,'素材自动整理'));}}});
     }else if(state.route!=='import'||state.importStep!=='done')toast('未启用视觉整理，素材已保存，可稍后检查或在设置开启');
   }
 }

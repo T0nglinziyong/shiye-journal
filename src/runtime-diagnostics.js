@@ -14,6 +14,7 @@ function reason(error){
   if(/webassembly|wasm|opencv|expected magic word/i.test(message))return 'image-engine';
   if(/blob|createobjecturl|decode.*image|image.*decode/i.test(message))return 'image-read-or-decode';
   if(status(error)===401||status(error)===403||/unauthori[sz]ed|permission|jwt/i.test(message))return 'authorization';
+  if(status(error)===402)return 'balance';
   if(status(error)===429)return 'rate-limit';
   if(status(error)>=500)return 'server';
   if(error?.name==='QuotaExceededError'||/quota|disk full/i.test(message))return 'local-storage';
@@ -42,7 +43,7 @@ export function recordRuntimeIssue(kind,error,route,{phase='general'}={}){
 export function runtimeIssueSnapshot(){return {format:'shiye-runtime-report',version:2,
   reasonGuide:{'undefined-variable':'代码引用了未定义的变量','image-engine':'图像识别组件加载或执行失败',
     'image-read-or-decode':'图片 Blob 读取或解码失败',authorization:'登录或权限验证失败',
-    'rate-limit':'服务请求过于频繁',server:'远端服务返回 5xx',
+    balance:'模型 API 账号余额不可用','rate-limit':'服务请求过于频繁',server:'远端服务返回 5xx',
     'local-storage':'本机存储空间或写入失败',interrupted:'请求中断或超时',
     network:'网络连接失败','invalid-data-or-browser':'数据格式或浏览器脚本语法异常',
     unknown:'仅凭安全摘要无法确定原因，需要结合复现步骤排查'},

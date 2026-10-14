@@ -20,3 +20,12 @@ test('known import variables and Blob decoding failures have actionable safe cat
  assert.ok(!runtimeIssueReport().includes('private photo'));
  clearRuntimeIssues();
 });
+test('model payment failures retain only status and a safe category',()=>{
+ clearRuntimeIssues();
+ const error=Object.assign(new Error('private prompt and sk-should-never-enter-log'),{status:402,code:'balance'});
+ recordRuntimeIssue('handled',error,'library',{phase:'ai'});
+ const [record]=runtimeIssueSnapshot().records;
+ assert.equal(record.phase,'ai');assert.equal(record.httpStatus,402);assert.equal(record.reason,'balance');
+ assert.ok(!runtimeIssueReport().includes('private prompt'));
+ clearRuntimeIssues();
+});

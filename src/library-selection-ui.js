@@ -9,6 +9,8 @@ import {withUsageStatus} from './library-model.js';
 import {registerSelectionPresenter} from './selection-presenter.js';
 import {createSelectionSidePanels,selectionMorePopoverOptions} from './selection-side-panels.js';
 import {hiddenAssetCopy} from './asset-retention.js';
+import {explainUserError} from './user-facing-error.js';
+import {recordRuntimeIssue} from './runtime-diagnostics.js';
 
 const action=(name,fn)=>{
   const b=document.createElement('button');b.type='button';b.className='btn';
@@ -78,7 +80,7 @@ function moreMenu(c,p,anchor){
       cfg=structuredClone(c.state.aiSettings),accountID=c.state.accountId;
     if(!cfg.key||!cfg.includeThumbnails||!supportsVision(cfg))
       throw Error('请先配置可用的视觉模型并开启素材图片');
-    menu.close();let completed=0,failed=0;
+    menu.close();let completed=0,failed=0,firstError=null;
     await c.assetOrganization.run(records,{priority:'foreground',organize:async(record,isCurrent)=>{
       if(c.state.accountId!==accountID||!isCurrent())return;
       const image=await c.modelImage(record);
@@ -87,9 +89,9 @@ function moreMenu(c,p,anchor){
       if(await c.applyAssetClassification(record,result,{
         manual:true,isCurrent:()=>c.state.accountId===accountID&&isCurrent()
       }))completed++;
-    },onError:()=>{failed++;}});
+    },onError:error=>{failed++;firstError||=error;recordRuntimeIssue('handled',error,c.state.route,{phase:'ai'});}});
     if(c.state.accountId===accountID)
-      c.toast(failed?`已整理 ${completed} 件，${failed} 件未完成；可稍后重试`:`已整理 ${completed} 件`);
+      c.toast(failed?`已整理 ${completed} 件，${failed} 件未完成。${explainUserError(firstError,'素材整理')}`:`已整理 ${completed} 件`);
   }));
   group('加入系列',()=>[
     ['新建系列…',()=>{

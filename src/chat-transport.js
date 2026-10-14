@@ -6,6 +6,7 @@ export class ChatRequestError extends Error {
 function httpError(status,providerCode=''){
  const code=String(providerCode||'').toLowerCase();
  if(status===401)return new ChatRequestError('authentication','模型请求失败 HTTP 401：密钥无效',{status});
+ if(status===402)return new ChatRequestError('balance','模型请求失败 HTTP 402：这把密钥所属的 API 账号当前余额不可用；请核对服务商余额与所用密钥',{status});
  if(status===403)return new ChatRequestError('permission','模型请求失败 HTTP 403：没有访问权限',{status});
  if(status===429)return new ChatRequestError('rate-limit','模型请求失败 HTTP 429：请求过多或额度限制；请稍后手动重试',{status});
  if(status===413||/context[_ -]?length|maximum[_ -]?context/.test(code))return new ChatRequestError('context-limit','模型上下文超限：请缩短输入或减少素材图片',{status});
