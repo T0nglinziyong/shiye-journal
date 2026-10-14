@@ -616,7 +616,7 @@ export function SettingsRecognitionPage({preferences,onAction}){
       <SettingsToggle id="setting-whole-paper" label="未检测到纸边时使用整张图" checked={p.wholePaper}
         help="适用于已裁正的纸张图片。"/>
     </SettingsGroup>
-    <SettingsGroup title="2 · 素材数量与候选框" description="固定 900 px 发现前景、连通区域及候选框；自动识别框任一边小于 9 mm 时过滤，手动补框不受限。">
+    <SettingsGroup title="2 · 素材数量与候选框" description="整页分析图最长边为 900 px；所选算法决定素材数量与候选位置。自动识别过滤小于 6 mm 的实体，手动补框不受限。">
       <SettingsToggle id="setting-merge-carrier" label="合并共同载体" checked={p.mergeSharedCarrier!==false}
         help="同一浅色纸片上的图案视为一件；关闭后可尝试按独立图案拆分。"/>
     </SettingsGroup>
