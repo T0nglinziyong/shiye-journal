@@ -119,7 +119,9 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null}={}){
       object.set({globalCompositeOperation:node.blendMode==='multiply'?'multiply':'source-over'});
       object.set({lockScalingX:true,lockScalingY:true,lockSkewingX:true,lockSkewingY:true});
     }else if(node.type==='material'){
-      const url=assetURL(node.assetID,node);
+      // The production image queue can resolve a screen-sized variant before
+      // Fabric decodes it. A plain URL remains valid for local/static assets.
+      const url=await assetURL(node.assetID,node);
       if(!url)throw Error('素材图片尚未准备好：'+node.assetID);
       object=await fabric.FabricImage.fromURL(url,{crossOrigin:'anonymous'});
       const naturalWidth=positive(object.width),naturalHeight=positive(object.height);

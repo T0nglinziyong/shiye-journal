@@ -1,4 +1,4 @@
-import React from 'react';
+import React,{useEffect,useState} from 'react';
 import {AI_PROVIDERS,supportsVision} from './ai-settings.js';
 import {seriesContentsModel} from './series-contents.js';
 import {paperPresets} from './paper-sizes.js';
@@ -222,10 +222,89 @@ export function MatchingPage({state,source,kindName,session}){
   </div>;
 }
 
+function EditorInspector({selected,draft,asset,format,onChange,onAction}){
+  const field=(id,label,value,type='number',props={})=><label>{label}<input id={id} type={type}
+    defaultValue={value} onChange={event=>onChange(id,event.target.value)} {...props}/></label>;
+  if(!selected)return <div className="stack">
+    {field('paper-color','纸张颜色',draft.paperColor,'color')}
+    <label>背景<select id="paper-pattern" defaultValue={draft.paperPattern}
+      onChange={event=>onChange('paper-pattern',event.target.value)}>
+      {Object.entries({plain:'纯色',grid:'方格',lines:'横线',dots:'点阵'}).map(([id,name])=>
+        <option key={id} value={id}>{name}</option>)}
+    </select></label>
+    <label>纸张规格<select id="page-ratio" defaultValue={draft.pageRatio}
+      onChange={event=>onChange('page-ratio',event.target.value)}>
+      <PaperSizeOptions includeCustom={false}/>
+      {['portrait','square','landscape'].map(id=><option key={id} value={id}>旧版比例 · {id.toUpperCase()}</option>)}
+      {draft.pageRatio?.startsWith('custom:')?<option value={draft.pageRatio}>自定义 {draft.pageRatio.slice(7)} mm</option>:null}
+    </select></label>
+    <label>页面模式<select id="page-mode" defaultValue={draft.pageMode||'single'}
+      onChange={event=>onChange('page-mode',event.target.value)}>
+      <option value="single">单页</option><option value="spread">双页</option>
+    </select></label>
+  </div>;
+  const item=selected.value;
+  const button=(name,label,kind='')=><button className={`btn mini ${kind}`} data-act={name}
+    data-react-action="true" onClick={()=>onAction(name)}>{label}</button>;
+  return <div className="stack">
+    {selected.kind==='text'?<>
+      <label>文字内容<textarea id="inspector-text" defaultValue={item.content}
+        onChange={event=>onChange('inspector-text',event.target.value)}/></label>
+      <label>字体<select id="inspector-font" defaultValue={item.style}
+        onChange={event=>onChange('inspector-font',event.target.value)}>
+        <option value="serif">宋体</option><option value="sans">黑体</option><option value="rounded">圆体</option>
+      </select></label>
+      {field('inspector-font-size','字号',item.fontSize,'number',{min:8,max:200})}
+    </>:null}
+    <div className="form-grid">
+      {field('inspector-width','宽',format(item.width),'number',{
+        min:1,disabled:selected.kind==='material',title:selected.kind==='material'?'实物尺寸来自素材标定':undefined})}
+      {field('inspector-height','高',format(item.height),'number',{
+        min:1,disabled:selected.kind==='material',title:selected.kind==='material'?'实物尺寸来自素材标定':undefined})}
+      {field('inspector-rotation','旋转',format(item.rotation||0))}
+      {field('inspector-z','图层',item.zIndex)}
+    </div>
+    {field('inspector-opacity','透明度',item.opacity||1,'range',{min:.1,max:1,step:.05})}
+    {selected.kind==='material'?<p className="muted">实物 {format(asset(item.assetID)?.physicalWidthMM||0)} × {format(asset(item.assetID)?.physicalHeightMM||0)} mm</p>:null}
+    <div className="actions">{button('duplicate','复制')}{button('flip','镜像')}
+      {button('front','置顶')}{button('delete-object','删除','danger')}</div>
+  </div>;
+}
+
+function EditorAIPanel({state,draft,asset,hasReport,onAction,onPromptChange}){
+  const [status,setStatus]=useState({busy:!!state.aiBusy,progress:state.aiProgress||'',hasReport});
+  useEffect(()=>{
+    const update=event=>setStatus(event.detail);
+    window.addEventListener('shiye-ai-status',update);
+    return ()=>window.removeEventListener('shiye-ai-status',update);
+  },[]);
+  const ids=[...new Set([...(state.activeProject?.candidateAssetIDs||[]),
+    ...state.basket,...(draft.items||[]).map(item=>item.assetID)])].filter(id=>asset(id));
+  return <section className="inline-ai-panel" aria-label="AI 创作">
+    <div className="inline-ai-head"><h2>AI 创作</h2><button type="button" data-ai-close
+      aria-label="收起 AI 创作" onClick={()=>onAction('close')}>×</button></div>
+    <p>边创作边在上方画布查看。使用设置中的 {state.aiSettings.model}，按模型能力发送素材描述与可选缩略图。</p>
+    <div className="inline-ai-assets">{ids.length?ids.map((id,index)=><span key={id}>m{index+1} · {asset(id).title}</span>):'请先从素材搭配选择素材'}</div>
+    <label>这页想记录什么？<textarea id="ai-prompt" placeholder="写下主题、故事与喜欢的氛围"
+      defaultValue={state.aiPrompt} onInput={event=>onPromptChange(event.currentTarget.value)}/></label>
+    <div className="inline-ai-actions">
+      <button type="button" className="btn primary" id="ai-start" disabled={status.busy}
+        onClick={()=>onAction('start')}>{status.busy?'创作中…':'开始创作'}</button>
+      <button type="button" className="btn" id="ai-stop" disabled={!status.busy}
+        onClick={()=>onAction('stop')}>停止</button>
+      <button type="button" className="btn" id="ai-report" disabled={!status.hasReport}
+        onClick={()=>onAction('report')}>导出诊断</button>
+      <button type="button" className="btn" id="ai-settings"
+        onClick={()=>onAction('settings')}>AI 设置</button>
+    </div><div id="ai-progress" role="status" aria-live="polite">{status.progress}</div>
+  </section>;
+}
+
 // The editor controls are React nodes. Its paper and scene stay one opaque
 // island so pointer capture, canvas contexts and incremental layer patches
 // remain under the existing canvas engine's lifetime.
-export function EditorPage({state,draft,editorEntry,renderSceneDOM,inspector,pageInspector,asset,source,renderAIPanel}){
+export function EditorPage({state,draft,editorEntry,renderSceneDOM,asset,source,format,
+  hasAIReport,onAction,onInspectorChange,onTitleCommit,onDraftSelect,onAIAction,onAIPromptChange}){
   const project=state.activeProject;
   if(!project||!draft)return null;
   const selected=editorEntry(draft).find(entry=>entry.value.id===state.selected);
@@ -238,7 +317,8 @@ export function EditorPage({state,draft,editorEntry,renderSceneDOM,inspector,pag
     `<canvas class="paper-layer" width="${Math.round(draft.canvas.width)}" height="${Math.round(draft.canvas.height)}" aria-hidden="true"></canvas>`+
     `<canvas id="ink" class="ink-layer" width="${Math.round(draft.canvas.width)}" height="${Math.round(draft.canvas.height)}"></canvas>`;
   const toolNames=[['select','选择'],['pen','画笔'],['text','文字'],['shape','图形'],['material','素材']];
-  return <><div className="view-head"><div><h1 contentEditable suppressContentEditableWarning id="project-title" spellCheck="false">{project.title}</h1>
+  return <><div className="view-head"><div><h1 contentEditable suppressContentEditableWarning id="project-title"
+    spellCheck="false" onBlur={event=>onTitleCommit(event.currentTarget.textContent)}>{project.title}</h1>
       <p>编辑只改变作品，不修改素材库里的原始尺寸和数量</p></div><div className="actions">
       <button className="btn" data-act="back-works">返回作品</button><button className="btn" data-act="new-draft">新方案</button>
       <button className="btn" data-act="creative-json">导入创作指令</button><button className="btn" data-act="export-png">导出 PNG</button><button className="btn" data-act="print">打印 / PDF</button>
@@ -256,12 +336,16 @@ export function EditorPage({state,draft,editorEntry,renderSceneDOM,inspector,pag
       <div className="shelf"><b>备选</b>{draft.items.filter(item=>item.isParked).map(item=><button key={item.id} className="mini-asset" data-act="unpark" data-id={item.id}>
         <RouteImage asset={asset(item.assetID)} source={source}/></button>)}</div>
     </section><aside className="editor-inspector"><h2>{selected?`${{material:'素材',text:'文字',shape:'图形'}[selected.kind]} · 图层属性`:'页面设置'}</h2>
-      <div className="inspector-island" style={{display:'contents'}} dangerouslySetInnerHTML={{__html:selected?inspector(selected):pageInspector(draft)}}/>
-      <hr/><label>方案<select id="draft-select" defaultValue={draft.id}>{project.drafts.map((entry,index)=><option key={entry.id} value={entry.id}>方案 {index+1} · {entry.style}</option>)}</select></label>
+      <div className="inspector-island" style={{display:'contents'}}><EditorInspector selected={selected}
+        draft={draft} asset={asset} format={format} onChange={onInspectorChange} onAction={onAction}/></div>
+      <hr/><label>方案<select id="draft-select" defaultValue={draft.id}
+        onChange={event=>onDraftSelect(event.target.value)}>{project.drafts.map((entry,index)=><option key={entry.id} value={entry.id}>方案 {index+1} · {entry.style}</option>)}</select></label>
       <button className="btn mini" data-act="save-archive">保存手动存档</button><div className="stack" style={{marginTop:12}}>
         {(project.manualArchives||[]).slice(-5).reverse().map(archive=><button key={archive.id} className="btn mini" data-act="restore-archive" data-id={archive.id}>{new Date(archive.date).toLocaleString()}</button>)}
       </div></aside></div>
-    {state.aiPanel?<div className="editor-ai-island" style={{display:'contents'}} dangerouslySetInnerHTML={{__html:renderAIPanel()}}/>:null}
+    {state.aiPanel?<div className="editor-ai-island" style={{display:'contents'}}>
+      <EditorAIPanel state={state} draft={draft} asset={asset} hasReport={hasAIReport}
+        onAction={onAIAction} onPromptChange={onAIPromptChange}/></div>:null}
   </>;
 }
 
@@ -393,14 +477,16 @@ function SettingsGroup({title,description,children}){
 
 export function SettingsRecognitionPage({preferences,onAction}){
   const p=preferences;
+  const [recognitionMethod,setRecognitionMethod]=useState(p.recognition);
   const paperChoices=[...paperPresets.map(x=>[x.id,`${x.name} · ${x.width} × ${x.height} mm`]),
     ['custom','自定义尺寸']];
-  const method=recognitionMethodDetails.find(x=>x.id===p.recognition);
+  const method=recognitionMethodDetails.find(x=>x.id===recognitionMethod);
   return <SettingsDetailShell title="导入与识别" kind="settingsRecognition" onAction={onAction}>
     <SettingsGroup title="素材识别方法" description="统一确定素材数量与位置，再逐件细化边缘；仅切换单件分割算法。">
       <SettingsSelect id="setting-candidate-discovery" label="候选框发现" value={p.candidateDiscovery||'legacy'}
         choices={candidateDiscoveryOptions} help="原版使用连通区域；物理载体模式优先寻找完整纸片、票据与贴纸。候选框算法与 Mask 算法可任意搭配。"/>
-      <label>Mask 分割<select id="setting-recognition" defaultValue={p.recognition}>
+      <label>Mask 分割<select id="setting-recognition" value={recognitionMethod}
+        onChange={event=>setRecognitionMethod(event.target.value)}>
         {recognitionOptions.map(([id,name])=><option key={id} value={id}>{name}</option>)}
       </select><small data-recognition-method-note="" className="setting-help">{method?.description||'推荐使用默认 MorphGAC。'}</small></label>
     </SettingsGroup>
@@ -509,20 +595,31 @@ export function SettingsDataPage({state,cloudEnabled,storage,onAction}){
   </SettingsDetailShell>;
 }
 
-function AIToggle({id,label,checked}){
-  return <label className="toggle-row">{label}<input id={`setting-ai-${id}`} type="checkbox" defaultChecked={!!checked}/></label>;
+function AIToggle({id,label,checked,onChange}){
+  return <label className="toggle-row">{label}<input id={`setting-ai-${id}`} type="checkbox"
+    {...(onChange?{checked:!!checked,onChange}:{defaultChecked:!!checked})}/></label>;
 }
-function AISelect({id,label,value,choices}){
-  return <SettingsSelect id={`setting-ai-${id}`} label={label} value={value} choices={choices}/>;
+function AISelect({id,label,value,choices,onChange}){
+  return <label>{label}<select id={`setting-ai-${id}`}
+    {...(onChange?{value:String(value),onChange}:{defaultValue:String(value)})}>
+    {choices.map(([key,name])=><option key={key} value={key}>{name}</option>)}
+  </select></label>;
 }
 function AINumber({id,label,value,min,max,step}){
   return <label>{label}<input id={`setting-ai-${id}`} type="number" min={min} max={max}
     step={step} defaultValue={value}/></label>;
 }
 
-export function SettingsAIPage({settings,modelPanelOpen,onAction}){
+export function SettingsAIPage({settings,modelPanelOpen,onAction,onProviderChange,onModelPanelToggle}){
   const cfg=settings,preset=AI_PROVIDERS[cfg.provider];
   const known=preset.models.some(([id])=>id===cfg.model);
+  const [modelChoice,setModelChoice]=useState(known?cfg.model:'__custom__');
+  const [thumbnails,setThumbnails]=useState(!!cfg.includeThumbnails);
+  const selectModel=event=>{
+    const next=event.target.value;
+    setModelChoice(next);
+    if(next!=='__custom__')setThumbnails(preset.models.find(([id])=>id===next)?.[2]===true);
+  };
   return <SettingsDetailShell title="AI 与创作" kind="settingsAI" onAction={onAction}>
     <details className="ai-settings-group unified-settings-group" open>
       <summary><strong>创作偏好</strong><small>候选素材、生成方式与样例参考</small></summary>
@@ -543,20 +640,23 @@ export function SettingsAIPage({settings,modelPanelOpen,onAction}){
         <p>从原创重构的真实风格手帐案例中，按当前风格、用途和素材选最相近的两张；不发送全部案例，也不发送你已有的私人作品。案例只用于构图参考，不属于可使用素材。网页版任务包附图；支持图片的 API 模型也会收到。</p>
       </div>
     </details>
-    <details className="ai-settings-group unified-settings-group" id="ai-model-group" open={modelPanelOpen}>
+    <details className="ai-settings-group unified-settings-group" id="ai-model-group"
+      open={modelPanelOpen} onToggle={event=>onModelPanelToggle(event.currentTarget.open)}>
       <summary><strong>模型与连接</strong><small>服务商、密钥、图片与响应参数</small></summary>
       <div><h2>服务与模型</h2>
         <AISelect id="provider" label="服务商" value={cfg.provider}
-          choices={Object.entries(AI_PROVIDERS).map(([id,entry])=>[id,entry.label])}/>
+          choices={Object.entries(AI_PROVIDERS).map(([id,entry])=>[id,entry.label])}
+          onChange={event=>onProviderChange(event.target.value)}/>
         <label>API 地址<input id="setting-ai-endpoint" type="url" defaultValue={cfg.endpoint}
           placeholder="https://…/chat/completions"/></label>
-        <AISelect id="model" label="模型" value={known?cfg.model:'__custom__'}
+        <AISelect id="model" label="模型" value={modelChoice} onChange={selectModel}
           choices={[...preset.models.map(([id,name])=>[id,name]),['__custom__','自定义模型 ID']]}/>
-        <label id="setting-ai-custom-model-row" hidden={known}>模型 ID
+        <label id="setting-ai-custom-model-row" hidden={modelChoice!=='__custom__'}>模型 ID
           <input id="setting-ai-custom-model" defaultValue={known?'':cfg.model}/></label>
         <label>API 密钥<input id="setting-ai-key" type="password" autoComplete="off"
           defaultValue={cfg.key} placeholder="API Key"/></label>
-        <AIToggle id="thumbnails" label="发送全部素材预览" checked={cfg.includeThumbnails}/>
+        <AIToggle id="thumbnails" label="发送全部素材预览" checked={thumbnails}
+          onChange={event=>setThumbnails(event.target.checked)}/>
         <AIToggle id="visual-review" label="交付前由 GPT 看图复核（计入总请求上限）" checked={cfg.finalVisualReview!==false}/>
         <AIToggle id="vision" label="自定义模型支持图片" checked={cfg.customVision}/>
         <p>当前模型{supportsVision(cfg)?'支持图片输入；开启预览时发送所有允许使用的素材图片':'不支持图片输入，仅发送素材文字信息'}。密钥仅保存在本浏览器，不进入备份。</p>

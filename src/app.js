@@ -1,5 +1,6 @@
 // Production deployment refresh marker: 2026-10-04
 import {assetSourceRevision} from './material-anatomy.js';
+import {createElement} from 'react';
 const sceneRuntime=()=>import('./scene-renderer.js');
 const renderSceneCanvas=async(...args)=>(await sceneRuntime()).renderSceneCanvas(...args);
 const decodeSceneImage=async(...args)=>(await sceneRuntime()).decodeSceneImage(...args);
@@ -540,7 +541,12 @@ function render(){
     :state.route==='matching'
     ?MatchingPage({state,source:image,kindName,session:matchingSession})
     :state.route==='editor'&&state.activeProject&&current()
-    ?EditorPage({state,draft:current(),editorEntry,renderSceneDOM,inspector,pageInspector,asset,source:image,renderAIPanel})
+    ?EditorPage({state,draft:current(),editorEntry,renderSceneDOM,asset,source:image,
+      format:fmt,hasAIReport:!!aiReport,onAction:handle,onInspectorChange:updateEditorInspector,
+      onTitleCommit:title=>{const p=state.activeProject,next=title.trim()||'未命名手账';
+        if(p&&next!==p.title){p.title=next;saveProject();}},
+      onDraftSelect:id=>{state.activeDraft=id;state.selected=null;resetEditorHistory(state);render();},
+      onAIAction:handleAIPanelAction,onAIPromptChange:value=>{state.aiPrompt=value;}})
     :state.route==='assetDetail'&&asset(state.detailAssetID)
       ?AssetDetailPage({asset:asset(state.detailAssetID),seriesTitle:state.series.find(s=>s.id===asset(state.detailAssetID).seriesID)?.title,
         source:image,kindName,format:fmt,onAction:handle})
@@ -551,11 +557,17 @@ function render(){
     :state.route==='settings'&&state.settingsSection==='界面与素材库'
       ?SettingsDisplayPage({preferences:state.preferences,onAction:handle})
     :state.route==='settings'&&state.settingsSection==='导入与识别'
-      ?SettingsRecognitionPage({preferences:state.preferences,onAction:handle})
+      ?createElement(SettingsRecognitionPage,{preferences:state.preferences,onAction:handle})
     :state.route==='settings'&&state.settingsSection==='数据与诊断'
       ?SettingsDataPage({state,cloudEnabled,storage:db.storageConfig(),onAction:handle})
     :state.route==='settings'&&state.settingsSection==='AI 与创作'
-      ?SettingsAIPage({settings:state.aiSettings,modelPanelOpen:aiModelPanelOpen,onAction:handle})
+      ?createElement(SettingsAIPage,{settings:state.aiSettings,modelPanelOpen:aiModelPanelOpen,
+        onAction:handle,onModelPanelToggle:open=>{aiModelPanelOpen=open;},
+        onProviderChange:next=>{
+          const previous={...readAIForm(),provider:state.aiSettings.provider};
+          void actionStore.dispatch({type:'settings/provider',payload:{previous,next}})
+            .catch(error=>toast(error.message));
+        }})
     :state.route==='import'&&(state.importStep==='done'||!state.importRecords[state.importIndex])
       ?ImportSimplePage({state,onAction:handle})
     :state.route==='import'&&state.importStep==='review'
@@ -625,11 +637,7 @@ function refreshCanvas(){
     page.style.backgroundColor=d.paperColor;
   }
   for(const pattern of ['plain','grid','lines','dots','columns'])page.classList.toggle(pattern,d.paperPattern===pattern);
-  const start=view.querySelector('#ai-start'),stop=view.querySelector('#ai-stop'),progress=view.querySelector('#ai-progress'),report=view.querySelector('#ai-report');
-  if(start){start.disabled=!!state.aiBusy;start.textContent=state.aiBusy?'创作中…':'开始创作';}
-  if(stop)stop.disabled=!state.aiBusy;
-  if(progress)progress.textContent=state.aiProgress||'';
-  if(report)report.disabled=!aiReport;
+  publishAIStatus();
   view.editorRefresh();view.canvasSelectionRefresh?.();return true;
 }
 function mountParityControls(){mountSwiftParity({libraryBack,openLibraryAsset,openAssetEditor:openDetail,state,view,body,modal,db,render,route,toast,asset,imgTag,workCover,localCovers:localWorkCovers,awaitTrashStages,createFromBasket,openAICreation,openSeriesEditor,current,checkpoint,saveProject,flushSave,uid,handle,esc,matchingSession});}
@@ -787,7 +795,6 @@ function bindPage({partial=false}={}){
   const assetStatus=view.querySelector('#status-filter');if(assetStatus&&!assetStatus.querySelector('[value="favorite"]')){const option=document.createElement('option');option.value='favorite';option.textContent='已收藏';assetStatus.append(option);}
   const assetHeart=view.querySelector('.detail-heart');if(assetHeart){const favorite=!!asset(state.detailAssetID)?.isFavorite;assetHeart.textContent=favorite?'♥':'♡';assetHeart.setAttribute('aria-label',favorite?'取消收藏':'收藏');assetHeart.setAttribute('aria-pressed',String(favorite));}
   if(state.route==='projectPreview'&&!view.querySelector('[data-react-page="projectPreview"]')){const p=state.projects.find(x=>x.id===state.previewProjectID);if(p?.isSnapshot){const header=view.querySelector('.project-preview-head');const heart=document.createElement('button');heart.type='button';heart.className='snapshot-favorite';heart.setAttribute('aria-label',p.isFavorite?'取消收藏快照':'收藏快照');heart.setAttribute('aria-pressed',String(!!p.isFavorite));heart.textContent=p.isFavorite?'♥':'♡';heart.onclick=async()=>{const next={...p,isFavorite:!p.isFavorite};await db.put('projects',next);Object.assign(p,next);heart.textContent=next.isFavorite?'♥':'♡';heart.setAttribute('aria-label',next.isFavorite?'取消收藏快照':'收藏快照');heart.setAttribute('aria-pressed',String(!!next.isFavorite));};header?.querySelector('h1')?.after(heart);}}
-  const aiModelGroup=view.querySelector('#ai-model-group');if(aiModelGroup)aiModelGroup.ontoggle=event=>{aiModelPanelOpen=event.currentTarget.open;};
   if(state.route==='matching'){
     const saveMatching=()=>matchingSession.persist().catch(e=>{console.warn('本机搭配状态未保存；不影响云端作品同步',e);toast('本机搭配状态保存失败：'+e.message);});
     const fields={'match-style':'matchStyle','match-purpose':'matchPurpose','match-intent':'matchIntent','match-content-policy':'matchContentPolicy','match-text-presentation':'matchTextPresentation','match-processing':'matchProcessing','match-mode':'matchMode','match-ratio':'matchRatio','match-paper-width':'customPaperWidth','match-paper-height':'customPaperHeight'};
@@ -797,22 +804,9 @@ function bindPage({partial=false}={}){
     // indicator instead of interrupting navigation with a toast.
     void saveMatching();
   }
-  const recognitionChoice=view.querySelector('#setting-recognition');
-  if(recognitionChoice)recognitionChoice.onchange=()=>{
-    const note=view.querySelector('[data-recognition-method-note]');
-    if(note)note.textContent=recognitionMethodDetails.find(x=>x.id===recognitionChoice.value)?.description||'';
-  };
-  const provider=view.querySelector('#setting-ai-provider');if(provider)provider.onchange=()=>{const previous=readAIForm();void actionStore.dispatch({type:'settings/provider',payload:{previous,next:provider.value}}).catch(error=>toast(error.message));};
-  const modelSelect=view.querySelector('#setting-ai-model');if(modelSelect)modelSelect.onchange=()=>{view.querySelector('#setting-ai-custom-model-row').hidden=modelSelect.value!=='__custom__';if(modelSelect.value!=='__custom__')view.querySelector('#setting-ai-thumbnails').checked=AI_PROVIDERS[state.aiSettings.provider].models.find(m=>m[0]===modelSelect.value)?.[2]===true;};
   const timeoutInput=view.querySelector('#setting-ai-timeout');if(timeoutInput&&!view.querySelector('[data-react-page="settingsAI"]')){timeoutInput.parentElement.firstChild.textContent='连续无响应超时（秒）';timeoutInput.parentElement.insertAdjacentHTML('afterend','<p>流式接收期间只计算连续未收到数据的时间；每轮最多 10 分钟，不会自动重试收费请求。</p>');}
-  if(state.route==='editor'){bindAIPanel();const anchor=view.querySelector('[data-act="creative-json"]');if(anchor){const ai=document.createElement('button');ai.type='button';ai.className='btn primary';ai.textContent='AI 创作';ai.onclick=openAICreation;anchor.before(ai);}}
+  if(state.route==='editor'){if(!view.querySelector('[data-react-page="editor"]'))bindAIPanel();const anchor=view.querySelector('[data-act="creative-json"]');if(anchor){const ai=document.createElement('button');ai.type='button';ai.className='btn primary';ai.textContent='AI 创作';ai.onclick=openAICreation;anchor.before(ai);}}
   // Catalog search/select listeners are scoped to the Library controller.
-  const title=view.querySelector('#project-title');if(title)title.addEventListener('blur',()=>{
-    const p=state.activeProject;if(!p)return;
-    const next=title.textContent.trim()||'未命名手账';
-    if(next!==p.title){p.title=next;saveProject();}
-  });
-  const draftSelect=view.querySelector('#draft-select');if(draftSelect)draftSelect.onchange=()=>{state.activeDraft=draftSelect.value;state.selected=null;resetEditorHistory(state);render();};
   if(state.route==='import'&&state.showManualBox&&!partial)bindManualBox();
   for(const [id,key] of [['import-paper-width','customImportWidth'],['import-paper-height','customImportHeight']]){const el=view.querySelector('#'+id);if(el)el.onchange=()=>{const n=Number(el.value);if(!Number.isFinite(n)||n<1||n>10000){toast('纸张宽高为 1–10000 mm');return;}state[key]=n;recalibrateImport();};}const whole=view.querySelector('#whole-paper');if(whole)whole.onchange=()=>{state.wholePaper=whole.checked;recalibrateImport();};for(const [id,key] of [['paper-size','paperSize'],['paper-orientation','paperOrientation']]){const el=view.querySelector('#'+id);if(el)el.onchange=()=>{state[key]=el.type==='checkbox'?el.checked:el.value;recalibrateImport();};}
   const balance=view.querySelector('#balance-light');if(balance)balance.onchange=async()=>{const before=state.balanceLight;if(state.importProcessing){balance.checked=before;return;}if(state.importCandidateData?.length&&!confirm('更改光照会重新识别候选并重置当前候选标注，继续？')){balance.checked=before;return;}state.importProcessing=state.importMode==='snapshot'?'正在调整页面颜色…':'正在均衡光照并重新识别…';state.balanceLight=balance.checked;saveActiveImportRecord();render();try{if(state.importMode!=='snapshot')await previewCrop();}catch(e){state.balanceLight=before;toast(e.message);}finally{state.importProcessing='';if(state.route==='import')render();}};
@@ -898,7 +892,31 @@ function bindPage({partial=false}={}){
   });
   const removeWhite=view.querySelector('#remove-white');if(removeWhite)removeWhite.onchange=()=>{state.importRemoveWhite=removeWhite.checked;};
   const page=view.querySelector('#canvas-page');if(page)initializeCanvasSurface(page);
-  bindInspector();if(state.route==='import'&&state.importStep==='inspect')syncBusyControls(view,'.inspect-columns button,.inspect-columns input,.inspect-columns select',!!state.importProcessing);if(state.route==='import'&&state.importStep==='inspect'&&state.importFile&&!state.importProcessing&&!partial)view.paperCorrectionDispose=mountPaperCorrection({state,view,render,toast,saveActiveImportRecord});const offline=view.querySelector('#offline-state');if(offline)offline.textContent=navigator.serviceWorker?.controller?'离线程序已就绪':'首次打开时需要联网；请等待离线程序安装后再测试飞行模式';const locationLabel=view.querySelector('#storage-location');if(locationLabel)db.storageMode().then(mode=>{if(locationLabel.isConnected)locationLabel.textContent=cloudEnabled?(import.meta.env?.VITE_SHIYE_OBJECT_STORAGE==='cos'?'当前数据源：Supabase 登录与元数据 + 腾讯 COS 私有图片；本机仅保留账号隔离缓存与待同步修改':'当前数据源：Supabase 私有云端；本机仅保留账号隔离缓存与待同步修改'):mode==='server'?`当前唯一数据源：${db.storageConfig()?.url||location.origin}（服务器）`:'当前数据源：此浏览器 IndexedDB';}).catch(error=>{if(locationLabel.isConnected)locationLabel.textContent='服务器连接失败：'+error.message;});}
+  if(state.route==='editor'&&!view.querySelector('[data-react-page="editor"]'))bindInspector();if(state.route==='import'&&state.importStep==='inspect')syncBusyControls(view,'.inspect-columns button,.inspect-columns input,.inspect-columns select',!!state.importProcessing);if(state.route==='import'&&state.importStep==='inspect'&&state.importFile&&!state.importProcessing&&!partial)view.paperCorrectionDispose=mountPaperCorrection({state,view,render,toast,saveActiveImportRecord});const offline=view.querySelector('#offline-state');if(offline)offline.textContent=navigator.serviceWorker?.controller?'离线程序已就绪':'首次打开时需要联网；请等待离线程序安装后再测试飞行模式';const locationLabel=view.querySelector('#storage-location');if(locationLabel)db.storageMode().then(mode=>{if(locationLabel.isConnected)locationLabel.textContent=cloudEnabled?(import.meta.env?.VITE_SHIYE_OBJECT_STORAGE==='cos'?'当前数据源：Supabase 登录与元数据 + 腾讯 COS 私有图片；本机仅保留账号隔离缓存与待同步修改':'当前数据源：Supabase 私有云端；本机仅保留账号隔离缓存与待同步修改'):mode==='server'?`当前唯一数据源：${db.storageConfig()?.url||location.origin}（服务器）`:'当前数据源：此浏览器 IndexedDB';}).catch(error=>{if(locationLabel.isConnected)locationLabel.textContent='服务器连接失败：'+error.message;});}
+function updateEditorInspector(id,value){
+  const d=current(),entry=d&&editorEntry(d).find(item=>item.value.id===state.selected);
+  if(!d)return;
+  checkpoint();
+  const numeric={'inspector-width':'width','inspector-height':'height',
+    'inspector-rotation':'rotation','inspector-z':'zIndex',
+    'inspector-opacity':'opacity','inspector-font-size':'fontSize'};
+  if(entry){
+    const key=numeric[id];
+    if(key){
+      if(entry.kind==='material'&&['width','height'].includes(key))return;
+      entry.value[key]=Number(value);
+      if(entry.kind==='material')entry.value.userOverrideFlags=[...new Set([...(entry.value.userOverrideFlags||[]),key])];
+    }else if(id==='inspector-text')entry.value.content=value;
+    else if(id==='inspector-font')entry.value.style=value;
+    else return;
+  }else if(id==='paper-color')d.paperColor=value;
+  else if(id==='paper-pattern')d.paperPattern=value;
+  else if(id==='page-ratio'){
+    if(presetPaperDimensions(value))setDraftPaperSize(d,value);
+  }else if(id==='page-mode'){d.pageMode=value;d.canvas=canvasSize(value,d.pageRatio);}
+  else return;
+  saveProject();render();
+}
 function bindInspector(){const d=current(),e=d&&editorEntry(d).find(x=>x.value.id===state.selected);if(!d)return;
   const change=(id,fn)=>{const el=view.querySelector('#'+id);if(el)el.addEventListener('change',()=>{checkpoint();fn(el.value);saveProject();render();});};
   if(e){for(const [id,key] of [['inspector-width','width'],['inspector-height','height'],['inspector-rotation','rotation'],['inspector-z','zIndex'],['inspector-opacity','opacity'],['inspector-font-size','fontSize']].filter(([,key])=>e.kind!=='material'||!['width','height'].includes(key)))change(id,v=>{e.value[key]=Number(v);if(e.kind==='material')e.value.userOverrideFlags=[...new Set([...(e.value.userOverrideFlags||[]),key==='width'||key==='height'?'resized':key])];});change('inspector-text',v=>e.value.content=v);change('inspector-font',v=>e.value.style=v);}else{change('paper-color',v=>d.paperColor=v);change('paper-pattern',v=>d.paperPattern=v);change('page-ratio',v=>{if(presetPaperDimensions(v))setDraftPaperSize(d,v);});change('page-mode',v=>{d.pageMode=v;d.canvas=canvasSize(v,d.pageRatio);});}}
@@ -1126,7 +1144,13 @@ async function legacyHandle(action,id,value){try{switch(action){
   case 'export-scene-json':{const p=state.activeProject;if(!p||p.isSnapshot)throw Error('请选择可编辑作品');download(new Blob([JSON.stringify(exportSceneDocument(p))],{type:'application/json'}),p.title+'.shiye-scene.json');break;}
    case 'download-project-zip':{const source=state.projects.find(x=>x.id===id)||state.activeProject;if(!source||source.isSnapshot)throw Error('可编辑作品不存在');const p=source.projectDocumentPath?await db.completeProject(source):source;const {createNativeProjectPackage}=await import('./native-project-package.js');download(createNativeProjectPackage(p),p.title+'.shiyeproject.zip');break;}
   case 'project-delete':{const p=state.projects.find(x=>x.id===state.previewProjectID);if(!p||!confirm('将这份作品移到最近删除？'))break;await moveProjectsToTrash([p.id]);break;}
-  case 'works-filter':await actionStore.dispatch({type:'works/filter',payload:{value}});break;case 'tool':state.tool=value;if(value==='text'){checkpoint();const d=current();const t=textBlock('在这里写下今天的故事',d);d.textBlocks.push(t);state.selected=t.id;state.tool='select';saveProject();}else if(value==='shape'){checkpoint();const d=current();const s=primitive('roundedRectangle',d);d.primitives.push(s);state.selected=s.id;state.tool='select';saveProject();}else if(value==='material'){openMaterialPicker();return;}render();break;
+  case 'works-filter':await actionStore.dispatch({type:'works/filter',payload:{value}});break;case 'tool':{
+    // A tool click selects its mode. A scene object is created only by an
+    // explicit canvas placement or picker choice, never by this fallback.
+    state.tool=value;
+    if(value==='material'){openMaterialPicker();break;}
+    render();break;
+  }
   case 'zoom-in':await actionStore.dispatch({type:'editor/zoom',payload:{delta:.15}});break;case 'zoom-out':await actionStore.dispatch({type:'editor/zoom',payload:{delta:-.15}});break;
   case 'paper-menu':state.editorPanel=!state.editorPanel;state.selected=null;render();break;case 'undo':await actionStore.dispatch({type:'editor/undo'});break;case 'redo':await actionStore.dispatch({type:'editor/redo'});break;
   case 'new-draft':{checkpoint();const d=structuredClone(current());d.id=uid();d.title='方案 '+(state.activeProject.drafts.length+1);state.activeProject.drafts.push(d);state.activeProject.activeDraftID=d.id;state.activeDraft=d.id;resetEditorHistory(state);saveProject();render();break;}
@@ -1452,6 +1476,20 @@ function readMatchSelection(id,fallback){const e=view.querySelector('#'+id);retu
 let aiController=null,aiReport=null;
 function renderAIPanel(){const ids=[...new Set([...(state.activeProject?.candidateAssetIDs||[]),...state.basket,...(current()?.items||[]).map(x=>x.assetID)])].filter(id=>asset(id));return `<section class="inline-ai-panel" aria-label="AI 创作"><div class="inline-ai-head"><h2>AI 创作</h2><button type="button" data-ai-close aria-label="收起 AI 创作">×</button></div><p>边创作边在上方画布查看。使用设置中的 ${esc(state.aiSettings.model)}，按模型能力发送素材描述与可选缩略图。</p><div class="inline-ai-assets">${ids.map((id,i)=>`<span>m${i+1} · ${esc(asset(id).title)}</span>`).join('')||'请先从素材搭配选择素材'}</div><label>这页想记录什么？<textarea id="ai-prompt" placeholder="写下主题、故事与喜欢的氛围">${esc(state.aiPrompt)}</textarea></label><div class="inline-ai-actions"><button type="button" class="btn primary" id="ai-start" ${state.aiBusy?'disabled':''}>${state.aiBusy?'创作中…':'开始创作'}</button><button type="button" class="btn" id="ai-stop" ${state.aiBusy?'':'disabled'}>停止</button><button type="button" class="btn" id="ai-report" ${aiReport?'':'disabled'}>导出诊断</button><button type="button" class="btn" id="ai-settings">AI 设置</button></div><div id="ai-progress" role="status" aria-live="polite">${esc(state.aiProgress)}</div></section>`;}
 function openAICreation(){state.aiPanel=true;if(!state.aiPrompt)state.aiPrompt=state.matchIntent||'';render();view.querySelector('.inline-ai-panel')?.scrollIntoView({block:'nearest',behavior:'smooth'});}
+function publishAIStatus(){
+  window.dispatchEvent(new CustomEvent('shiye-ai-status',{detail:{
+    busy:!!state.aiBusy,progress:state.aiProgress||'',hasReport:!!aiReport
+  }}));
+}
+function handleAIPanelAction(action){
+  if(action==='close'){state.aiPanel=false;render();}
+  else if(action==='settings'){state.settingsSection='AI 与创作';route('settings');}
+  else if(action==='start')void startAICreation();
+  else if(action==='stop')aiController?.abort(Error('已停止创作，之前成功的步骤已保存'));
+  else if(action==='report'&&aiReport)download(new Blob([
+    JSON.stringify(publicAIDiagnosticReport(aiReport),null,2)],{type:'application/json'}),
+    `拾页AI诊断-${new Date().toISOString().slice(0,10)}.json`);
+}
 function bindAIPanel(){if(!state.aiPanel)return;view.querySelector('#ai-prompt')?.addEventListener('input',e=>state.aiPrompt=e.target.value);view.querySelector('[data-ai-close]')?.addEventListener('click',()=>{state.aiPanel=false;render();});view.querySelector('#ai-settings')?.addEventListener('click',()=>{state.settingsSection='AI 与创作';route('settings');});view.querySelector('#ai-start')?.addEventListener('click',startAICreation);view.querySelector('#ai-stop')?.addEventListener('click',()=>aiController?.abort(Error('已停止创作，之前成功的步骤已保存')));view.querySelector('#ai-report')?.addEventListener('click',()=>{if(aiReport)download(new Blob([JSON.stringify(publicAIDiagnosticReport(aiReport),null,2)],{type:'application/json'}),`拾页AI诊断-${new Date().toISOString().slice(0,10)}.json`);});}
 async function startAICreation(){
  if(state.aiBusy)return;
@@ -1462,7 +1500,7 @@ async function startAICreation(){
  if(cfg.deliveryMode==='image'){
   if(!ids.length){state.aiProgress='请先在素材搭配中选择素材。';render();return;}
   const controller=new AbortController();aiController=controller;state.aiBusy=true;state.aiProgress='正在准备图像生成…';render();
-  try{const referenceImages=cfg.sendPresetReferences?(await loadJournalTemplateReferences({context:{styles:sourceProject.styles,purposes:sourceProject.purposes,materials:assetsSnapshot.filter(asset=>ids.includes(asset.id))},userTemplates:state.userTemplates,db})).referenceImages:[];const blob=await generatePageImage({settings:cfg,project:sourceProject,draft:sourceDraft,assets:assetsSnapshot,ids,theme:prompt,createImage:modelImage,referenceImages,userTemplates:state.userTemplates,signal:controller.signal,onProgress:message=>{state.aiProgress=message;const el=view.querySelector('#ai-progress');if(el)el.textContent=message;}});if(controller.signal.aborted||state.accountId!==accountID)throw Error('创作已停止或账号已切换');await saveGeneratedImageSnapshot(blob,sourceProject);state.aiProgress='图片已由 GPT 图像模型直接生成，并保存到「画面快照」。当前可编辑画布未改变。';}
+  try{const referenceImages=cfg.sendPresetReferences?(await loadJournalTemplateReferences({context:{styles:sourceProject.styles,purposes:sourceProject.purposes,materials:assetsSnapshot.filter(asset=>ids.includes(asset.id))},userTemplates:state.userTemplates,db})).referenceImages:[];const blob=await generatePageImage({settings:cfg,project:sourceProject,draft:sourceDraft,assets:assetsSnapshot,ids,theme:prompt,createImage:modelImage,referenceImages,userTemplates:state.userTemplates,signal:controller.signal,onProgress:message=>{state.aiProgress=message;publishAIStatus();}});if(controller.signal.aborted||state.accountId!==accountID)throw Error('创作已停止或账号已切换');await saveGeneratedImageSnapshot(blob,sourceProject);state.aiProgress='图片已由 GPT 图像模型直接生成，并保存到「画面快照」。当前可编辑画布未改变。';}
   catch(error){console.error(error);recordRuntimeIssue('handled',error,state.route,{phase:'ai'});state.aiProgress='图像生成失败：'+explainUserError(error,'图像创作');}
   finally{if(aiController===controller)aiController=null;state.aiBusy=false;if(state.route==='editor')render();}
   return;
@@ -1479,7 +1517,7 @@ async function startAICreation(){
   if(cfg.sendPresetReferences&&supportsVision(cfg)){referenceImages.push(...(await loadJournalTemplateReferences({context:{styles:p.styles||[sourceDraft.style],purposes:p.purposes||[p.purpose||fallbackPurpose],materials:assetsSnapshot.filter(asset=>ids.includes(asset.id))},userTemplates:state.userTemplates,db})).referenceImages);}assertRun();
   const output=await runCreativeAgent({...cfg,draft:sourceDraft,assets:assetsSnapshot,aliases,styles:p.styles||[sourceDraft.style],pagePurposes:p.purposes||[p.purpose||fallbackPurpose],contentPolicy:p.contentPolicy||'documentary',textPresentation:p.textPresentation||'mixed',userText:p.userText||'',providedFacts:p.providedFacts||'',requiredAssetIDs:p.requiredAssetIDs||[],materialPriority:p.materialPriority,processing:p.processing,assetProcessing:p.assetProcessing||{},materialUseHints:p.materialUseHints||{},materialUseRequired:p.materialUseRequired||{},prompt,images,referenceImages,userTemplates:state.userTemplates,request:recorder.request,signal:controller.signal,
    onResponse:recorder.response,
-   onProgress:progress=>{state.aiProgress='请求 '+progress.budget.totalRequests+'/'+progress.budget.limit+'（创作 '+progress.budget.creationRequests+'、格式修复 '+progress.budget.formatRepairRequests+'） · '+progress.phase+' · '+progress.seconds+' 秒 · 已接收 '+progress.received+' 字符';const el=view.querySelector('#ai-progress');if(el)el.textContent=state.aiProgress;},
+   onProgress:progress=>{state.aiProgress='请求 '+progress.budget.totalRequests+'/'+progress.budget.limit+'（创作 '+progress.budget.creationRequests+'、格式修复 '+progress.budget.formatRepairRequests+'） · '+progress.phase+' · '+progress.seconds+' 秒 · 已接收 '+progress.received+' 字符';publishAIStatus();},
    onScene:vision?async d=>{assertRun();return (await rasterize(d,.7)).toDataURL('image/jpeg',.8);}:undefined,
    onFinalScene:async d=>{assertRun();return (await rasterize(d,Math.min(1.5,2000/Math.max(d.canvas.width,d.canvas.height)))).toDataURL('image/jpeg',.8);},
    onInspection:vision?async data=>{const parts=[];for(const m of data?.materials||[]){assertRun();const a=findAsset(m.assetID);if(a){const url=await modelImage(a,m.cropRect);if(url)parts.push({type:'text',text:m.key+' 的当前局部预览'},{type:'image_url',image_url:{url}});}}return parts;}:undefined,

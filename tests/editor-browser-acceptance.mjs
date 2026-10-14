@@ -18,6 +18,17 @@ try{
     await click('[data-act="detail"][data-id="browser-tall"]','.detail-columns');await click('[data-act="detail-check"]','#cutout-canvas');
     for(const mode of ['rough','recognition','final']){if(mode!=='rough')await click('#cutout-next');if(mode==='final')await click('#cutout-rotate');const rect=await evaluate('(()=>{const c=document.querySelector("#cutout-canvas"),r=c.getBoundingClientRect(),p=c.parentElement.getBoundingClientRect();return {ratio:r.width/r.height,expected:c.width/c.height,inside:r.left>=p.left&&r.right<=p.right+1&&r.top>=p.top&&r.bottom<=p.bottom+1,style:c.getAttribute("style"),computed:[getComputedStyle(c).width,getComputedStyle(c).height],host:[p.width,p.height]};})()');assert.ok(rect.inside&&Math.abs(rect.ratio/rect.expected-1)<.002,JSON.stringify(rect));await capture('tall-cutout-'+mode,w,h);}
     await click('#cutout-cancel');await click('[data-route="works"]','.works-grid');await click('#work-create','#blank-create-confirm');await click('#blank-create-confirm','#canvas-page');
+    await click('[aria-label="历史记录"]','[data-editor-ai]');
+    await click('[data-editor-ai]','.inline-ai-panel');
+    assert.ok(await evaluate('!!document.querySelector(".editor-ai-island #ai-prompt")'));
+    assert.equal(await evaluate('document.querySelector("#ai-start").disabled'),false);
+    await evaluate('(()=>{const input=document.querySelector("#ai-prompt");input.value="React 面板验收";input.dispatchEvent(new Event("input",{bubbles:true}));})()');
+    await click('[data-ai-close]');
+    assert.equal(await evaluate('!!document.querySelector(".inline-ai-panel")'),false);
+    await click('[aria-label="历史记录"]','[data-editor-ai]');
+    await click('[data-editor-ai]','.inline-ai-panel');
+    assert.equal(await evaluate('document.querySelector("#ai-prompt").value'),'React 面板验收');
+    await click('[data-ai-close]');
     assert.equal(await evaluate('document.querySelector(".swift-editor-toolbar").children.length'),2);
     const visibleHeader=await evaluate('[...document.querySelectorAll(".swift-editor-head .actions > button:not([hidden])")].filter(b=>getComputedStyle(b).display!=="none").map(b=>b.getAttribute("aria-label")||b.textContent.trim())');
     assert.deepEqual(visibleHeader,['历史记录','撤销','重做','完成','导出作品'],

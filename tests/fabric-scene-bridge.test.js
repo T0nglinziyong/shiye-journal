@@ -56,7 +56,11 @@ test('Fabric material projection preserves crop and a compound physical mask',as
     cropRect:{x:.25,y:0,width:.5,height:1},
     materialMask:{shape:'compound',outer:{shape:'rounded',radius:.1},
       holes:[{shape:'rectangle',box:[.35,.35,.3,.3]}]}};
-  const object=await createFabricSceneBridge(fabric,{assetURL:()=>image.toDataURL()}).fromNode(node);
+  let loaded=0;
+  const object=await createFabricSceneBridge(fabric,{assetURL:async()=>{
+    loaded++;return image.toDataURL();
+  }}).fromNode(node);
+  assert.equal(loaded,1);
   assert.equal(object.width,20);
   assert.equal(object.height,20);
   assert.equal(object.cropX,10);
