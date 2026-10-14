@@ -600,7 +600,7 @@ export function SettingsRecognitionPage({preferences,onAction}){
     ['custom','自定义尺寸']];
   const method=recognitionMethodDetails.find(x=>x.id===recognitionMethod);
   return <SettingsDetailShell title="导入与识别" kind="settingsRecognition" onAction={onAction}>
-    <SettingsGroup title="素材识别方法" description="统一确定素材数量与位置，再逐件细化边缘；仅切换单件分割算法。">
+    <SettingsGroup title="素材识别方法" description="候选框算法决定素材数量与位置；Mask 算法再逐件细化透明边缘。">
       <SettingsSelect id="setting-candidate-discovery" label="候选框发现" value={p.candidateDiscovery||'unified'}
         choices={candidateDiscoveryOptions} help="默认“统一候选 + 自动”为新研究算法；选择“原版前景连通区域 + MorphGAC”可回到旧算法。"/>
       <label>Mask 分割<select id="setting-recognition" value={recognitionMethod}
@@ -614,15 +614,15 @@ export function SettingsRecognitionPage({preferences,onAction}){
       <SettingsSelect id="setting-orientation" label="校正方向" value={p.orientation||'auto'}
         choices={[["auto","自动"],["portrait","竖向"],["landscape","横向"]]}/>
       <SettingsToggle id="setting-whole-paper" label="未检测到纸边时使用整张图" checked={p.wholePaper}
-        help="适用于已裁正的纸张图片。"/>
+        help="未找到纸边时按整张图估算尺寸；不会生成透视校正。"/>
     </SettingsGroup>
-    <SettingsGroup title="2 · 素材数量与候选框" description="整页分析图最长边为 900 px；所选算法决定素材数量与候选位置。自动识别过滤小于 6 mm 的实体，手动补框不受限。">
+    <SettingsGroup title="2 · 素材数量与候选框" description="统一候选的整页分析图最长边为 900 px；所选算法决定素材数量与候选位置。有纸张尺寸时，自动结果过滤短边小于 9 mm 的实体，手动补框不受限。">
       <SettingsToggle id="setting-merge-carrier" label="合并共同载体" checked={p.mergeSharedCarrier!==false}
         help="同一浅色纸片上的图案视为一件；关闭后可尝试按独立图案拆分。"/>
     </SettingsGroup>
-    <SettingsGroup title="3 · 单件边缘分割" description="每件候选独立细化轮廓；以下设置不改变已确定的素材数量。">
+    <SettingsGroup title="3 · 单件边缘分割" description="亮度、去噪和对比度只作用于边界分割；Lab 色差边缘也会影响整页候选。">
       <SettingsSelect id="setting-recognition-pixels" label="边缘分析分辨率" value={p.recognitionPixels}
-        choices={recognitionPixelOptions} help="只影响边缘分析图；最终从高清校正图提取。检查抠图重新识别最低 1200 px。"/>
+        choices={recognitionPixelOptions} help="统一候选固定使用 900 px；手动补框和非统一候选使用所选分辨率。最终从高清校正图提取。"/>
       <SettingsToggle id="setting-preprocess-light" label="亮度均衡" checked={p.balanceLight===true}
         help="仅用于单件分割，减轻明显光照不均；通常无需开启。"/>
       <SettingsToggle id="setting-preprocess-denoise" label="轻度去噪" checked={p.recognitionDenoise===true}
@@ -632,7 +632,7 @@ export function SettingsRecognitionPage({preferences,onAction}){
       <SettingsToggle id="setting-preprocess-chroma" label="Lab 色差边缘" checked={p.recognitionChromaEdges!==false}
         help="以颜色差补充灰度边缘，推荐开启。"/>
     </SettingsGroup>
-    <SettingsGroup title="4 · 轮廓后处理" description="在分割结果上修整几何和真实打孔，不重新识别素材数量。">
+    <SettingsGroup title="4 · 轮廓后处理" description="控制非统一自动分割的形状与打孔后处理；统一 V5 使用内部形状仲裁，不读取以下两项开关。">
       <SettingsToggle id="setting-postprocess-shapes" label="规则形状规整" checked={p.recognitionShapeRegularization!==false}
         help="边缘证据充分时校直卡片或拟合圆形。"/>
       <SettingsToggle id="setting-postprocess-apertures" label="重复孔洞恢复" checked={p.recognitionApertures!==false}
