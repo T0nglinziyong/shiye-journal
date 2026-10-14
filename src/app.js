@@ -294,6 +294,10 @@ const localWorkCovers=createLocalWorkCovers({
     const draft=actual.drafts.find(item=>item.id===actual.activeDraftID)||actual.drafts[0];
     // Once the COS reference is committed, it remains the preferred source.
     if(draft?.coverImageID||draft?.coverBlobId||state.route!=='works')return;
+    if(view.querySelector('.works-page')){
+      window.dispatchEvent(new CustomEvent('shiye-react-cover-update',{detail:{projectID:p.id}}));
+      return;
+    }
     const card=[...view.querySelectorAll('[data-act="open-project"],[data-cover-project-id]')]
       .find(el=>el.dataset.id===p.id||el.dataset.coverProjectId===p.id),
       sheet=card?.querySelector('.thumb-sheet');
@@ -305,6 +309,11 @@ const localWorkCovers=createLocalWorkCovers({
   onError:(_message,id,error)=>{
     console.warn('本地封面暂不可用',id,error);
     if(state.route!=='works')return;
+    if(view.querySelector('.works-page')){
+      window.dispatchEvent(new CustomEvent('shiye-react-cover-update',{
+        detail:{projectID:id,error:'封面暂不可用，重新进入后重试'}}));
+      return;
+    }
     const card=[...view.querySelectorAll('[data-act="open-project"]')].find(el=>el.dataset.id===id),
       status=card?.querySelector('.work-cover-pending');
     if(status)status.textContent='封面暂不可用，重新进入后重试';
@@ -328,6 +337,10 @@ window.addEventListener('shiye-project-cover-ready',event=>{
     if(state.route!=='works'&&state.route!=='projectPreview')return;
     const project=state.projects.find(row=>row.id===projectID);
     if(!project||project.updatedAt!==updatedAt)return;
+    if(view.querySelector('.works-page,.project-preview-page')){
+      window.dispatchEvent(new CustomEvent('shiye-react-cover-update',{detail:{projectID}}));
+      return;
+    }
     const card=[...view.querySelectorAll('[data-act="open-project"]')].find(el=>el.dataset.id===projectID),
       sheet=card?.querySelector('.thumb-sheet')||
         (state.previewProjectID===projectID?view.querySelector('.project-preview-cover .preview-paper'):null);
@@ -548,7 +561,8 @@ function render(){
     :state.route==='library'
       ?LibraryPage({state,items:libraryPageData(state).items,source:image,kindName,format:fmt,onAction:handle})
     :state.route==='works'
-      ?WorksPage({projects:state.projects,isUntouchedLegacyExample,workCover,source:image,onAction:handle})
+      ?WorksPage({projects:state.projects,isUntouchedLegacyExample,assets:state.assets,
+        localCover:p=>localWorkCovers.peek(p),cloudEnabled,source:image,onAction:handle})
     :state.route==='series'
     ?SeriesPage({series:state.series,assets:state.assets,display:state.preferences.display,seriesCovers,source:image,onAction:handle})
     :state.route==='matching'
@@ -582,14 +596,16 @@ function render(){
       format:fmt,hasAIReport:!!aiReport,onAction:handle,onInspectorChange:updateEditorInspector,
       onTitleCommit:title=>{const p=state.activeProject,next=title.trim()||'未命名手账';
         if(p&&next!==p.title){p.title=next;saveProject();}},
-      onDraftSelect:id=>{state.activeDraft=id;state.selected=null;resetEditorHistory(state);render();},
+      onDraftSelect:id=>{state.activeDraft=id;state.selected=null;state.multiSelected=[];
+        resetEditorHistory(state);render();},
       onAIAction:handleAIPanelAction,onAIOpen:openAICreation,
       onAIPromptChange:value=>{state.aiPrompt=value;}})
     :state.route==='assetDetail'&&asset(state.detailAssetID)
       ?AssetDetailPage({asset:asset(state.detailAssetID),seriesTitle:state.series.find(s=>s.id===asset(state.detailAssetID).seriesID)?.title,
         source:image,kindName,format:fmt,onAction:handle})
     :state.route==='projectPreview'&&state.projects.find(p=>p.id===state.previewProjectID)
-      ?ProjectPreviewPage({project:state.projects.find(p=>p.id===state.previewProjectID),source:image,workCover,onAction:handle})
+      ?ProjectPreviewPage({project:state.projects.find(p=>p.id===state.previewProjectID),source:image,
+        assets:state.assets,localCover:p=>localWorkCovers.peek(p),cloudEnabled,onAction:handle})
     :state.route==='settings'&&!state.settingsSection
       ?SettingsHomePage({onAction:handle})
     :state.route==='settings'&&state.settingsSection==='界面与素材库'
@@ -1236,7 +1252,7 @@ async function legacyHandle(action,id,value){try{switch(action){
     shape.x=d.canvas.width/2;shape.y=d.canvas.height/2;
     shape.type='shape';shape.zIndex=Math.max(0,...d.layers.map(node=>node.zIndex||0))+1;
     d.primitives.push(shape);
-    state.selected=shape.id;state.tool='select';saveProject();render();break;
+    state.selected=shape.id;state.multiSelected=[shape.id];state.tool='select';saveProject();render();break;
   }
   case 'fabric-add-material':{
     const a=asset(id),d=current();if(!a||!d)break;
@@ -1253,14 +1269,14 @@ async function legacyHandle(action,id,value){try{switch(action){
       Math.max(0,...d.layers.map(node=>node.zIndex||0))+1);
     item.materialUnitIndex=available;
     d.items.push(item);
-    state.selected=item.id;state.tool='select';saveProject();render();break;
+    state.selected=item.id;state.multiSelected=[item.id];state.tool='select';saveProject();render();break;
   }
   case 'fabric-unpark':{
     const d=current(),item=d?.items.find(entry=>entry.id===id);if(!item)break;
     if(item.isParked){checkpoint();item.isParked=false;saveProject();}
-    state.selected=item.id;state.tool='select';render();break;
+    state.selected=item.id;state.multiSelected=[item.id];state.tool='select';render();break;
   }
-  case 'fabric-select-layer':state.selected=id;state.tool='select';render();break;
+  case 'fabric-select-layer':state.selected=id;state.multiSelected=[id];state.tool='select';render();break;
   case 'fabric-paper':{
     const d=current();if(!d)break;
     if(id==='pattern'&&['plain','grid','lines','dots','columns'].includes(value)){

@@ -12,11 +12,21 @@ import {visualStyles} from './creative-style-brief.js';
 import {FabricSceneStage} from './fabric-scene-stage.jsx';
 import {FabricEditorToolbar,FabricHeaderMenu} from './fabric-editor-controls.jsx';
 import {FabricPageViewport} from './fabric-page-viewport.jsx';
+import {SceneCover} from './scene-cover.jsx';
 
 function RouteImage({asset,source,priority=false}){
   const src=asset&&(source(asset.blobId)||asset.staticPath);
   return src?<img data-asset-image-id={asset.id} loading={priority?'eager':'lazy'}
     fetchPriority={priority?'high':undefined} decoding="async" src={src} alt={asset.title}/>:<span>无预览</span>;
+}
+
+function DetailLinkIcon({kind}){
+  const lines=kind==='folder'?<><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></>
+    :kind==='search'?<><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></>
+    :<><path d="m12 3 1.7 5.3L19 10l-5.3 1.7L12 17l-1.7-5.3L5 10l5.3-1.7z"/><path d="m19 17 .5 1.5L21 19l-1.5.5L19 21l-.5-1.5L17 19l1.5-.5z"/></>;
+  return <span className="detail-link-icon"><svg className="shiye-icon" viewBox="0 0 24 24"
+    width="25" height="25" fill="none" stroke="currentColor" strokeWidth="2"
+    strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{lines}</svg></span>;
 }
 
 function PageHeading({title}){
@@ -73,7 +83,8 @@ export function LibraryPage({state,items,source,kindName,format,onAction}){
   </>;
 }
 
-export function WorksPage({projects,isUntouchedLegacyExample,workCover,source,onAction}){
+export function WorksPage({projects,isUntouchedLegacyExample,assets,localCover,cloudEnabled,source,onAction}){
+  const asset=id=>assets.find(entry=>entry.id===id);
   const list=projects.filter(project=>!isUntouchedLegacyExample(project))
     .sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt));
   const sorts=[['access-desc','最近访问 · 降序'],['access-asc','最近访问 · 升序'],
@@ -97,10 +108,12 @@ export function WorksPage({projects,isUntouchedLegacyExample,workCover,source,on
           project.coverStaticPath&&project.updatedAt===project.coverBaselineUpdatedAt?project.coverStaticPath:null;
         return <button key={project.id} className="card" data-work-revision={revision}
           data-act="open-project" data-id={project.id} data-react-action="true" onClick={()=>onAction('open-project',project.id)}>
-          <div className="card-image"><div className="thumb-sheet" style={{width:'75%',background:project.drafts[0]?.paperColor||'#fff'}}
-            {...(staticCover?{}:{dangerouslySetInnerHTML:{__html:workCover(draft,index<4,true,project.id)}})}>
+          <div className="card-image"><div className="thumb-sheet" style={{width:'75%',background:project.drafts[0]?.paperColor||'#fff'}}>
             {staticCover?<img className="work-reference" loading={index<4?'eager':'lazy'} decoding="async"
               src={staticCover} alt={`${project.title} ${project.isSnapshot?'快照':'完整预览'}`}/>:null}
+            {!staticCover?<SceneCover draft={draft} asset={asset} source={source} priority={index<4}
+              snapshotOnly cloudEnabled={cloudEnabled} localCover={()=>localCover(project)}
+              projectID={project.id}/>:null}
           </div></div><div className="card-body"><h3>{project.title}</h3><p>⊙　{project.isSnapshot?'画面快照':project.isDraft?'草稿':'可编辑作品'} <span>{new Date(project.updatedAt).toLocaleDateString()}</span></p></div>
         </button>;
       })}
@@ -180,7 +193,7 @@ function DirectionGroup({groups,values,type,onChange}){
     <option value="">不预设</option>{group.options.map(name=><option key={name} value={name}>{name}</option>)}
   </select></label>);
 }
-function MatchingVariantCover({variant,session,source}){
+function MatchingVariantCover({variant,session,source,assets}){
   const host=React.useRef(null),[raster,setRaster]=useState(null);
   useEffect(()=>{
     if(variant.status==='running'||variant.project?.isSnapshot)return;
@@ -199,12 +212,17 @@ function MatchingVariantCover({variant,session,source}){
   const snapshot=variant.project?.isSnapshot?source(variant.project.snapshotBlobId):null;
   const draft=variant.project?.drafts?.find(item=>item.id===variant.project.activeDraftID)||
     variant.project?.drafts?.[0];
+  const asset=id=>assets.find(entry=>entry.id===id);
   return <div ref={host} className="match-cover-preview" data-match-raster={variant.id}>
     {raster||snapshot?<img className="match-raster-preview" src={raster||snapshot}
       alt={variant.title+' 构图预览'}/>:<div className="match-cover-fallback"
       style={{aspectRatio:draft?`${draft.canvas.width}/${draft.canvas.height}`:'3/4',
-        background:draft?.paperColor||'#fcfaf0'}}
-      dangerouslySetInnerHTML={{__html:session.coverMarkup(variant)}}/>}
+        background:draft?.paperColor||'#fcfaf0'}}>
+      {draft?<div className="thumb-sheet" style={{'--thumb-ratio':draft.canvas.width/draft.canvas.height,
+        background:draft.paperColor||'#fff'}}><div className="thumb-inner" style={{position:'relative'}}>
+        <SceneCover draft={draft} asset={asset} source={source}/>
+      </div></div>:null}
+    </div>}
   </div>;
 }
 function MatchingSessionPanel({session,state,source,onAction}){
@@ -220,7 +238,7 @@ function MatchingSessionPanel({session,state,source,onAction}){
         <button className="match-result" data-act="match-open-result" data-id={variant.id}
           data-react-action="true" disabled={variant.status==='running'}
           onClick={action('match-open-result',variant.id)}>
-          <MatchingVariantCover variant={variant} session={session} source={source}/>
+          <MatchingVariantCover variant={variant} session={session} source={source} assets={state.assets}/>
           <strong>{variant.title}</strong>
         </button><pre className="match-progress" aria-live="polite">{variant.progress}</pre>
         {variant.linkedProjectID&&!state.projects.some(project=>project.id===variant.linkedProjectID)?
@@ -468,9 +486,9 @@ export function AssetDetailPage({asset,seriesTitle,source,kindName,format,onActi
       <div className="detail-dots">● ● ● ●</div><hr/><p>实物可用操作</p><p>✓ 整件使用　 ✓ 旋转摆放</p>
       <button className="btn primary detail-add" data-act="detail-add" data-react-action="true" onClick={act('detail-add')}>＋　加入本次创作</button>
       <div className="detail-links">
-        <button className="btn" data-act="detail-series" data-react-action="true" onClick={act('detail-series')}><span className="detail-link-label">同系列</span></button>
-        <button className="btn" data-act="detail-similar" data-react-action="true" onClick={act('detail-similar')}><span className="detail-link-label">找相似</span></button>
-        <button className="btn" data-act="detail-match" data-react-action="true" onClick={act('detail-match')}><span className="detail-link-label">去搭配</span></button>
+        <button className="btn" data-act="detail-series" data-react-action="true" onClick={act('detail-series')}><DetailLinkIcon kind="folder"/><span className="detail-link-label">同系列</span></button>
+        <button className="btn" data-act="detail-similar" data-react-action="true" onClick={act('detail-similar')}><DetailLinkIcon kind="search"/><span className="detail-link-label">找相似</span></button>
+        <button className="btn" data-act="detail-match" data-react-action="true" onClick={act('detail-match')}><DetailLinkIcon kind="sparkles"/><span className="detail-link-label">去搭配</span></button>
       </div><div className="detail-small">
         <button data-act="detail-edit" data-react-action="true" onClick={act('detail-edit')}>✎　编辑素材信息</button>
         <button data-act="detail-check" data-react-action="true" onClick={act('detail-check')}>□　检查抠图</button>
@@ -479,7 +497,8 @@ export function AssetDetailPage({asset,seriesTitle,source,kindName,format,onActi
   </div>;
 }
 
-export function ProjectPreviewPage({project,source,workCover,onAction}){
+export function ProjectPreviewPage({project,source,assets,localCover,cloudEnabled,onAction}){
+  const asset=id=>assets.find(entry=>entry.id===id);
   const draft=project.drafts.find(entry=>entry.id===project.activeDraftID)||project.drafts[0];
   const original=project.coverStaticPath&&project.updatedAt===project.coverBaselineUpdatedAt;
   const staticCover=project.isSnapshot?source(project.snapshotBlobId):original?project.coverStaticPath:null;
@@ -494,10 +513,12 @@ export function ProjectPreviewPage({project,source,workCover,onAction}){
       aria-pressed={!!project.isFavorite} onClick={action('snapshot-favorite')}>{project.isFavorite?'♥':'♡'}</button>:null}
     {button('preview-back','关闭')}
   </div><div className="project-preview-cover"><div className="preview-paper"
-    style={{background:draft.paperColor||'#fff',aspectRatio:`${draft.canvas.width}/${draft.canvas.height}`}}
-    {...(staticCover?{}:{dangerouslySetInnerHTML:{__html:workCover(draft,true,true,project.id)}})}>
+    style={{background:draft.paperColor||'#fff',aspectRatio:`${draft.canvas.width}/${draft.canvas.height}`}}>
     {staticCover?<img className="work-reference" loading="eager" fetchPriority="high" decoding="async"
       src={staticCover} alt={`${project.title} ${project.isSnapshot?'快照':'完整预览'}`}/>:null}
+    {!staticCover?<SceneCover draft={draft} asset={asset} source={source} priority
+      snapshotOnly cloudEnabled={cloudEnabled} localCover={()=>localCover(project)}
+      projectID={project.id}/>:null}
   </div></div><div className="project-preview-tags">{tags.map(tag=><span key={tag}>{tag}</span>)}</div>
     <p>{project.isSnapshot?'独立保存的画面快照，不能逐层编辑。':'页面上的素材、排版和书写内容都已保存。'}</p>
     <div className="project-preview-actions">
