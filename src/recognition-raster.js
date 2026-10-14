@@ -3,18 +3,34 @@
 // the same pixels; display and export may still use the platform renderer.
 import {decode} from './vendor/jpeg-decoder.js';
 import {visionTask} from './vision-runtime.js';
+const decodedPixels=new WeakMap();
 
 export function pixelCanvas(pixels,width,height){
   const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;
   const ctx=canvas.getContext('2d',{willReadFrequently:true,colorSpace:'srgb'});
-  ctx.putImageData(new ImageData(new Uint8ClampedArray(pixels),width,height),0,0);
+  const pinned=new Uint8ClampedArray(pixels);
+  ctx.putImageData(new ImageData(pinned,width,height),0,0);
+  decodedPixels.set(canvas,pinned);
   return canvas;
+}
+let mozJpegInitPromise;
+function mozJpegDecoder(){
+  return mozJpegInitPromise??=(async()=>{
+    const [{default:decode,init},{default:wasmURL}]=await Promise.all([
+      import('@jsquash/jpeg/decode.js'),import('@jsquash/jpeg/codec/dec/mozjpeg_dec.wasm?url')
+    ]);
+    init(undefined,{locateFile:()=>wasmURL});
+    return decode;
+  })().catch(error=>{mozJpegInitPromise=null;throw error;});
 }
 export async function decodeRecognitionImage(blob,{research=false}={}){
   if(research&&(blob.type==='image/jpeg'||blob.type==='image/jpg'||/\.jpe?g$/i.test(blob.name||''))){
-    // The research reference reads encoded JPEG samples without applying its
-    // embedded display ICC profile. Keep the same samples for V8 discovery.
-    return createImageBitmap(blob,{imageOrientation:'from-image',colorSpaceConversion:'none'});
+    // The research reference uses libjpeg's encoded samples without applying
+    // display ICC. Decode with one pinned codec so Safari/Chromium and devices
+    // feed identical pixels into paper correction and material discovery.
+    const [decodeMozJpeg,bytes]=await Promise.all([mozJpegDecoder(),blob.arrayBuffer()]);
+    const image=await decodeMozJpeg(bytes,{preserveOrientation:true});
+    return pixelCanvas(image.data,image.width,image.height);
   }
   if(blob.type==='image/jpeg'||blob.type==='image/jpg'||/\.jpe?g$/i.test(blob.name||'')){
     const bytes=new Uint8Array(await blob.arrayBuffer());
@@ -98,6 +114,9 @@ function orientPixels(pixels,width,height,orientation){
   return {data:out,width:ow,height:oh};
 }
 export function sourcePixels(source){
+  // ImageData readback may pass through a device-specific canvas colour path.
+  // Keep the codec output as the authoritative recognition raster.
+  if(decodedPixels.has(source))return new Uint8ClampedArray(decodedPixels.get(source));
   const canvas=source instanceof HTMLCanvasElement?source:document.createElement('canvas');
   if(canvas!==source){canvas.width=source.width;canvas.height=source.height;canvas.getContext('2d',{willReadFrequently:true,colorSpace:'srgb'}).drawImage(source,0,0);}
   return canvas.getContext('2d',{willReadFrequently:true,colorSpace:'srgb'}).getImageData(0,0,canvas.width,canvas.height).data;

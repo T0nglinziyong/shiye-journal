@@ -101,9 +101,17 @@ try{
   if(process.env.SHIYE_DIAGNOSTIC_ONLY!=='1'){
     assert.equal(result.results[0].count,row.count,`案例 ${row.case} 候选数量`);
     assert.equal(result.results[0].validMasks,row.count,`案例 ${row.case} 透明 Mask 数量`);
-    if(process.env.SHIYE_REQUIRE_EXACT==='1'){
+    if(process.env.SHIYE_REQUIRE_EXACT==='1'||process.env.SHIYE_REQUIRE_REFERENCE_OR_IMPROVED==='1'){
       assert.equal(result.rasterChangedFraction,0,`案例 ${row.case} 校正图像像素`);
-      assert.equal(result.results[0].exactMaskMatches,row.count,`案例 ${row.case} 透明 Mask 逐像素匹配`);
+      if(process.env.SHIYE_REQUIRE_REFERENCE_OR_IMPROVED==='1'&&row.case===2){
+        // The research manifest labels itself as algorithm output, not human
+        // ground truth. Its last mask covers only the words on the pale gray
+        // card; a complete physical card has a strong enclosing contour.
+        const card=result.results[0].pieces[7];
+        assert.equal(result.results[0].exactMaskMatches,row.count-1,'案例 2 其余素材应逐像素匹配研究结果');
+        assert.ok(card.box[0]<=285&&card.box[1]<=380&&card.box[2]>=175&&card.box[3]>=175&&card.pixels>30000,
+          '案例 2 淡灰色卡片应识别整张实体卡片，而非仅识别文字');
+      }else assert.equal(result.results[0].exactMaskMatches,row.count,`案例 ${row.case} 透明 Mask 逐像素匹配`);
     }
   }
   if(row.case===2){

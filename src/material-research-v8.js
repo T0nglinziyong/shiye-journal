@@ -142,7 +142,7 @@ function candidateRows(cv,p,gray,blur,gx,gy,lab,regions,edges,own){
     const b=[old.x*w,old.y*h,old.w*w,old.h*h].map(Math.round);
     if(Math.min(b[2],b[3])<10)continue;
     if(Math.max(b[2]/w,b[3]/h)>.84&&Math.max(b[2]/Math.max(1,b[3]),b[3]/Math.max(1,b[2]))>3.6)continue;
-    anchors.push({bbox:b,source:'old-base',c:null,quality:.25,orig:b.slice(),seedDensity:old.seedDensity||0});
+    anchors.push({bbox:b,source:'old-base',c:null,quality:.25,orig:b.slice(),seedDensity:old.seedDensity||0,fillRatio:old.fillRatio||0});
   }
   const accepted=[];
   for(const old of anchors){
@@ -150,16 +150,30 @@ function candidateRows(cv,p,gray,blur,gx,gy,lab,regions,edges,own){
     for(const z of edges){
       const b=z.bbox,ov=iou(a,b),contains=ovsmall(a,b),scale=area(b)/Math.max(1,area(a)),[cx,cy]=center(a);
       const inside=b[0]-3<=cx&&cx<=b[0]+b[2]+3&&b[1]-3<=cy&&cy<=b[1]+b[3]+3;
-      if(inside&&scale>.32&&scale<4.5&&(ov>.20||contains>.65)&&
-        (z.solidity>.68||(ov>.72&&z.quality>.78&&z.solidity>.64)))
+      const strongOuterCarrier=area(a)<w*h*.02&&scale>=4.5&&scale<20&&contains>.7&&
+        z.quality>.9&&z.fill>.85&&z.solidity>.85;
+      if(inside&&((scale>.32&&scale<4.5&&(ov>.20||contains>.65)&&
+        (z.solidity>.68||(ov>.72&&z.quality>.78&&z.solidity>.64)))||strongOuterCarrier))
         choices.push({score:z.quality+.2*contains-.14*Math.abs(Math.log(scale)),z});
     }
     if(choices.length){
       choices.sort((a,b)=>b.score-a.score);const z=choices[0].z;
       if(z.quality>.46)accepted.push({bbox:z.bbox.slice(),source:'edge-envelope',c:z.c,quality:z.quality,
-        orig:a,fill:z.fill,solidity:z.solidity});
+        orig:a,seedDensity:old.seedDensity,fill:z.fill,solidity:z.solidity});
       else accepted.push(old);
     }else accepted.push(old);
+  }
+  // A faint carrier can be represented by only its interior texture after a
+  // JPEG re-encode. Recover the four outer lines when all sides have evidence.
+  for(const row of accepted){
+    if(row.source!=='edge-envelope'||row.seedDensity>=.05||area(row.orig)<w*h*.06)continue;
+    if(anchors.some(a=>a.bbox[1]<row.orig[1]&&a.bbox[1]+a.bbox[3]<=row.orig[1]+2&&
+      row.orig[1]-(a.bbox[1]+a.bbox[3])<32&&a.bbox[3]<row.orig[3]*.2&&
+      Math.min(a.bbox[0]+a.bbox[2],row.orig[0]+row.orig[2])>Math.max(a.bbox[0],row.orig[0])))continue;
+    const outer=rectangleSearch(row.orig,gx,gy,w,h);
+    if(outer&&outer.support>5&&area(outer.bbox)>area(row.bbox)*1.2&&area(outer.bbox)<area(row.bbox)*2.2){
+      Object.assign(row,{bbox:outer.bbox,c:outer.c,source:'weak-carrier-line',quality:.80,needsReview:true});
+    }
   }
   const ref=[[],[],[]];for(let y=0;y<12;y++)for(let x=0;x<w;x++)for(let c=0;c<3;c++)ref[c].push(lab[(y*w+x)*3+c]);
   for(let y=h-12;y<h;y++)for(let x=0;x<w;x++)for(let c=0;c<3;c++)ref[c].push(lab[(y*w+x)*3+c]);
@@ -168,7 +182,7 @@ function candidateRows(cv,p,gray,blur,gx,gy,lab,regions,edges,own){
     if(anchor.source!=='old-base')continue;
     const options=[];
     for(const z of regions){
-      const b=z.bbox;if(iou(anchor.bbox,b)<.73||z.fill<.42||area(b)<w*h*.05)continue;
+      const b=z.bbox;if(iou(anchor.bbox,b)<.73||z.fill<.42||area(b)<w*h*.05||anchor.seedDensity>.8)continue;
       const [x,y,bw,bh]=b,chrom=[];
       for(let yy=0;yy<bh;yy++)for(let xx=0;xx<bw;xx++)if(z.mask[yy*bw+xx]){
         const i=((y+yy)*w+x+xx)*3;chrom.push(Math.hypot(lab[i+1]-bg[1],lab[i+2]-bg[2]));
@@ -228,7 +242,7 @@ function candidateRows(cv,p,gray,blur,gx,gy,lab,regions,edges,own){
     const [cx,cy]=center(b);
     return !accepted.some(q=>q!==z&&q.quality>.60&&q.bbox[0]<=cx&&cx<=q.bbox[0]+q.bbox[2]&&q.bbox[1]<=cy&&cy<=q.bbox[1]+q.bbox[3]);
   });
-  for(const cluster of linked(weak,(a,b)=>Math.hypot(center(a.bbox)[0]-center(b.bbox)[0],center(a.bbox)[1]-center(b.bbox)[1])<Math.max(w,h)*.205)){
+  for(const cluster of linked(weak,(a,b)=>Math.hypot(center(a.bbox)[0]-center(b.bbox)[0],center(a.bbox)[1]-center(b.bbox)[1])<Math.max(w,h)*.26)){
     if(cluster.length<3)continue;
     const x=Math.min(...cluster.map(z=>z.bbox[0])),y=Math.min(...cluster.map(z=>z.bbox[1])),
       xe=Math.max(...cluster.map(z=>z.bbox[0]+z.bbox[2])),ye=Math.max(...cluster.map(z=>z.bbox[1]+z.bbox[3]));
@@ -256,8 +270,16 @@ function candidateRows(cv,p,gray,blur,gx,gy,lab,regions,edges,own){
 function finishRows(cv,rows,gray,blur,w,h,own){
   let {accepted,anchors}=rows;
   if(cv.HoughCircles){
+    const roundCarrier=anchors.some(a=>{
+      const b=a.bbox,ratio=b[2]/Math.max(1,b[3]);
+      return area(b)>w*h*.06&&ratio>1.25&&ratio<1.9&&a.fillRatio>.2&&a.fillRatio<.55;
+    });
+    for(const enhanceContrast of [false,true]){
+    if(enhanceContrast&&(!roundCarrier||accepted.some(a=>a.source==='edge-circle-verified')))break;
     const medianBlur=own(new cv.Mat()),circles=own(new cv.Mat());
-    cv.medianBlur(gray,medianBlur,5);
+    let circleInput=gray;
+    if(enhanceContrast){circleInput=own(new cv.Mat());cv.equalizeHist(gray,circleInput);}
+    cv.medianBlur(circleInput,medianBlur,5);
     cv.HoughCircles(medianBlur,circles,cv.HOUGH_GRADIENT,1.2,65,80,38,45,Math.floor(Math.min(w,h)/3));
     if(circles.total()>0){
       const e=own(new cv.Mat()),support=own(new cv.Mat()),
@@ -284,7 +306,7 @@ function finishRows(cv,rows,gray,blur,w,h,own){
           }
           const coverage=hits/128;if(coverage>best){best=coverage;bestCircle=[cx+dx,cy+dy,rad+dr];}
         }
-        if(best<.78)continue;
+        if(best<.65)continue;
         [cx,cy,rad]=bestCircle;cb=[cx-rad,cy-rad,2*rad,2*rad];
         if(cb[0]<9||cb[1]<9||cb[0]+cb[2]>w-9||cb[1]+cb[3]>h-9)continue;
         let points=[];
@@ -301,6 +323,7 @@ function finishRows(cv,rows,gray,blur,w,h,own){
         }
         accepted.push({bbox:cb,source:'edge-circle-verified',c:points,quality:.90,orig:matching[0].bbox.slice(),circleGeometry:[cx,cy,rad]});
       }
+    }
     }
   }
   const consumed=new Set(),joined=[];
@@ -320,6 +343,10 @@ function finishRows(cv,rows,gray,blur,w,h,own){
     }
   }
   if(consumed.size)accepted=accepted.filter((_,i)=>!consumed.has(i)).concat(joined);
+  // Legacy connected components at the paper edge can be background scraps.
+  // Require interior support before retaining an otherwise unverified box.
+  accepted=accepted.filter(row=>row.source!=='old-base'||row.seedDensity>0||
+    row.bbox[0]>=8&&row.bbox[1]>=8&&row.bbox[0]+row.bbox[2]<=w-8&&row.bbox[1]+row.bbox[3]<=h-8);
   const edge=own(new cv.Mat()),dilated=own(new cv.Mat()),kernel=own(cv.getStructuringElement(cv.MORPH_ELLIPSE,new cv.Size(5,5)));
   cv.Canny(gray,edge,10,30);cv.dilate(edge,dilated,kernel);
   for(const row of accepted){
@@ -345,6 +372,30 @@ function finishRows(cv,rows,gray,blur,w,h,own){
   accepted.sort((a,b)=>b.quality-a.quality||area(b.bbox)-area(a.bbox));
   const kept=[];for(const q of accepted)if(!kept.some(k=>dominates(k,q)))kept.push(q);
   return kept.sort((a,b)=>a.bbox[1]-b.bbox[1]||a.bbox[0]-b.bbox[0]);
+}
+
+function joinAdjacentFragments(cv,rows,w,h){
+  const result=rows.slice();
+  for(let i=0;i<result.length;i++)for(let j=i+1;j<result.length;j++){
+    const a=result[i],b=result[j],ab=a.bbox,bb=b.bbox;
+    if(!['old-base','v2-color-new'].includes(a.source)&&!['old-base','v2-color-new'].includes(b.source))continue;
+    const upper=ab[1]<=bb[1]?ab:bb,lower=upper===ab?bb:ab,
+      horizontal=Math.max(0,Math.min(ab[0]+ab[2],bb[0]+bb[2])-Math.max(ab[0],bb[0]));
+    if(horizontal<Math.min(ab[2],bb[2])*.65||Math.min(ab[2],bb[2])/Math.max(ab[2],bb[2])<.7||
+      Math.abs(center(ab)[0]-center(bb)[0])>Math.max(ab[2],bb[2])*.12||
+      lower[1]>upper[1]+upper[3]+Math.min(18,h*.03)||
+      lower[1]+lower[3]<upper[1]+upper[3]+Math.min(18,h*.03))continue;
+    const x=Math.min(ab[0],bb[0]),y=Math.min(ab[1],bb[1]),
+      right=Math.max(ab[0]+ab[2],bb[0]+bb[2]),bottom=Math.max(ab[1]+ab[3],bb[1]+bb[3]),box=[x,y,right-x,bottom-y];
+    if(area(box)>w*h*.30||area(box)<Math.max(area(ab),area(bb))*1.25)continue;
+    const points=[...(a.c||rectPoints(ab)),...(b.c||rectPoints(bb))].flat(),
+      input=cv.matFromArray(points.length/2,1,cv.CV_32SC2,points.map(Math.round)),hull=new cv.Mat();
+    let contour;
+    try{cv.convexHull(input,hull,false,true);contour=pointList(hull);}finally{input.delete();hull.delete();}
+    result.splice(j,1);result[i]={bbox:box,c:contour,source:'fragment-union-review',quality:.66,orig:box.slice(),needsReview:true};
+    j=i;
+  }
+  return result.sort((a,b)=>a.bbox[1]-b.bbox[1]||a.bbox[0]-b.bbox[0]);
 }
 
 function encodeRow(cv,row,w,h){
@@ -383,7 +434,19 @@ export function discoverResearchV8(cv,p,own){
   cv.Sobel(blur,gxMat,cv.CV_32F,1,0,3);cv.Sobel(blur,gyMat,cv.CV_32F,0,1,3);
   const gx=Float32Array.from(gxMat.data32F,Math.abs),gy=Float32Array.from(gyMat.data32F,Math.abs),
     lab=labPixels(p.pixels,w,h),regions=colorRegions(cv,lab,w,h,own),edges=edgeProposals(cv,blur,w,h,own);
-  const rows=candidateRows(cv,p,gray,blur,gx,gy,lab,regions,edges,own),finished=finishRows(cv,rows,gray,blur,w,h,own);
+  const rows=candidateRows(cv,p,gray,blur,gx,gy,lab,regions,edges,own),finished=joinAdjacentFragments(cv,finishRows(cv,rows,gray,blur,w,h,own),w,h);
+  // Run an edge-preserving view only for large carriers left as plain legacy
+  // rectangles. It suppresses JPEG texture while keeping a rotated boundary.
+  if(finished.some(row=>row.source==='old-base'&&row.seedDensity<.8&&area(row.bbox)>w*h*.05)){
+    const smooth=own(new cv.Mat());cv.bilateralFilter(gray,smooth,5,25,3);
+    const alternate=edgeProposals(cv,smooth,w,h,own);
+    for(const row of finished){
+      if(row.source!=='old-base'||row.seedDensity>=.8||area(row.bbox)<=w*h*.05)continue;
+      const contour=alternate.filter(z=>iou(z.bbox,row.bbox)>.55&&z.quality>.65&&z.fill>.25&&z.solidity>.5)
+        .sort((a,b)=>b.quality-a.quality)[0];
+      if(contour)Object.assign(row,{bbox:contour.bbox,c:contour.c,source:'edge-preserved-envelope',quality:contour.quality});
+    }
+  }
   const candidates=finished.map(row=>encodeRow(cv,row,w,h));
   if(!finished.some(row=>row.quality<.4))return candidates;
   return recoverResidualCarriers(candidates,discoverResidualCarriers(cv,p,own),w,h);

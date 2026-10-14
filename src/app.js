@@ -2137,8 +2137,16 @@ async function switchImportRecord(index,skipSave=false){
     state.importCandidates=rec.candidates||[];state.importCandidateData=rec.candidateData||[];state.importCandidateURLs=rec.candidateURLs||[];state.importCandidateSelection=new Set(rec.selection||[]);
   }
   const researchDecode=(state.preferences.candidateDiscovery||'unified')==='unified';
+  const decodeMode=researchDecode?'research':'legacy';
+  if(rec.bitmap&&rec.recognitionDecodeMode!==decodeMode){
+    rec.bitmap.close?.();rec.correctedBitmap?.close?.();
+    if(rec.correctedURL)URL.revokeObjectURL(rec.correctedURL);
+    for(const url of rec.candidateURLs||[])URL.revokeObjectURL(url);
+    Object.assign(rec,{bitmap:null,correctedBitmap:null,correctedURL:null,autoPaperCorners:null,candidates:[],candidateData:[],candidateURLs:[],selection:[],prefetchStatus:null});
+    Object.assign(state,{importBitmap:null,correctedBitmap:null,correctedURL:null,importCandidates:[],importCandidateData:[],importCandidateURLs:[],importCandidateSelection:new Set()});
+  }
   const bitmap=rec.bitmap||await decodeRecognitionImage(rec.file,{research:researchDecode});rec.bitmap=bitmap;
-  rec.recognitionDecodeMode=researchDecode?'research':'legacy';if(!isCurrent())return;state.importBitmap=bitmap;
+  rec.recognitionDecodeMode=decodeMode;if(!isCurrent())return;state.importBitmap=bitmap;
   progress('正在自动寻找纸张四角…');
   state.paperCorners=rec.corners||rec.autoPaperCorners||(state.paperSize==='none'?null:await suggestPaperCorners(bitmap,(()=>{const [pw,ph]=paperDimensions();return pw/ph;})()).catch(()=>null));if(!isCurrent())return;
   if(!rec.corners&&state.paperCorners)rec.autoPaperCorners=structuredClone(state.paperCorners);
