@@ -83,7 +83,7 @@ function moreMenu(c,p,anchor){
     menu.close();let completed=0,failed=0,firstError=null;
     await c.assetOrganization.run(records,{priority:'foreground',organize:async(record,isCurrent)=>{
       if(c.state.accountId!==accountID||!isCurrent())return;
-      const image=await c.modelImage(record);
+      const image=await c.modelImage(record,null,512,false,true);
       if(!image)throw Error('素材图像无法读取');
       const result=await classifyRecord({kind:'asset',record,settings:cfg,image,assets:[]});
       if(await c.applyAssetClassification(record,result,{

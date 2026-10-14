@@ -198,14 +198,7 @@ async function classifySelectedWorks(c,records){
     const source=record.isSnapshot?record:await c.db.completeProject(record);
     let image=null;
     if(record.isSnapshot&&settings.includeThumbnails){
-      const blob=(await c.db.get('blobs',record.snapshotBlobId))?.data;
-      if(blob instanceof Blob){
-        const bmp=await createImageBitmap(blob);
-        try{const canvas=document.createElement('canvas'),scale=Math.min(1,360/Math.max(bmp.width,bmp.height));
-          canvas.width=Math.max(1,Math.round(bmp.width*scale));canvas.height=Math.max(1,Math.round(bmp.height*scale));
-          canvas.getContext('2d').drawImage(bmp,0,0,canvas.width,canvas.height);image=canvas.toDataURL('image/jpeg',.8);
-        }finally{bmp.close();}
-      }
+      image=await c.modelImage({blobId:record.snapshotBlobId},null,360,false,true);
     }
     const identified=await classifyRecord({kind:'project',record:source,settings,image,assets:c.state.assets});
     const current=await c.db.get('projects',source.id);
@@ -348,7 +341,7 @@ async function classifyBatch(c,kind) {
   for(const record of records) {
     c.toast('正在识别 '+(count+1)+' / '+records.length);
     const complete=kind==='asset'?record:await c.db.completeProject(record);
-    const image=kind==='asset'?await c.modelImage(record):(await c.rasterize(complete.drafts[0],.5)).toDataURL('image/jpeg',.8);
+    const image=kind==='asset'?await c.modelImage(record,null,512,false,true):(await c.rasterize(complete.drafts[0],.5)).toDataURL('image/jpeg',.8);
     const result=await classifyRecord({kind,record,settings:c.state.aiSettings,image,assets:c.state.assets,onProgress:p=>c.toast(p.phase+' · '+p.seconds+' 秒 · '+p.received+' 字符')});
     const next={...record,...result,updatedAt:new Date().toISOString()};await c.db.put(kind==='asset'?'assets':'projects',next);Object.assign(record,next);count++;
   }

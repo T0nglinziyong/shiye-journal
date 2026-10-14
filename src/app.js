@@ -75,6 +75,7 @@ import {syncBusyControls} from './ui-disabled-state.js';
 import {renderImportInspection,renderImportReview} from './import-workspace-ui.js';
 import {showCutoutEditor} from './cutout-editor.js';
 import {decodeImageBlob} from './image-blob-decoder.js';
+import {loadModelImageSource} from './model-image-source.js';
 import {mountCanvasSelection} from './canvas-selection-ui.js';
 import * as db from './store.js';
 import {loadPreferences,savePreferences,migrateStoredPreferences} from './preferences.js';
@@ -1609,19 +1610,18 @@ function openManualCreationDialog(){
 }
 function openMaterialPicker(){body.innerHTML=`<h2>选择素材放入画布</h2><div class="mini-assets">${visibleMaterials(state.assets).map(a=>`<button type="button" class="mini-asset" data-pick="${a.id}">${imgTag(a)}<span>${esc(a.title)}</span></button>`).join('')}</div>`;modal.showModal();body.querySelectorAll('[data-pick]').forEach(b=>b.onclick=()=>{const a=asset(b.dataset.pick),d=current();checkpoint();const i=itemFromAsset(a,d,d.canvas.width/2,d.canvas.height/2,20,false);d.items.push(i);state.selected=i.id;state.tool='select';modal.close();saveProject();render();});}
 function openCreativeJSON(){const aliases=Object.entries(materialAliases(state.basket)).map(([key,id])=>`${key} = ${asset(id)?.title||id}`).join(' · ');body.innerHTML=`<h2>导入创作指令</h2><p>这是本地工具协议的验证入口，不会联系大模型。当前素材编号：${esc(aliases||'请先在搭配页选素材')}</p><label>包含 tools 或 tool_calls 的 JSON<textarea id="creative-source" style="min-height:240px" placeholder='{"tools":[{"name":"upsert_text","arguments":{"items":[{"key":"t1","content":"今天的故事……","width":0.5}]}}]}'></textarea></label><p>成功的前序调用会保留；失败调用不会污染画布。物理素材尺寸仍从素材库计算。</p><button type="button" class="btn primary" id="creative-apply">验证并应用</button><div id="creative-results" style="white-space:pre-wrap;margin-top:12px"></div>`;modal.showModal();body.querySelector('#creative-apply').onclick=()=>{try{const aliases=materialAliases(state.basket);const result=applyToolCalls(body.querySelector('#creative-source').value,current(),state.assets,aliases);body.querySelector('#creative-results').textContent=result.results.map(x=>`${x.ok?'✓':'×'} ${x.name}: ${x.detail}`).join('\n');if(result.committed){checkpoint();const p=state.activeProject,index=p.drafts.findIndex(x=>x.id===state.activeDraft);p.drafts[index]=result.draft;saveProject();render();}}catch(e){body.querySelector('#creative-results').textContent=e.message;}};}
-async function modelImage(a,cropRect=null,maxPixels=512,transparent=false){
-  let blob;
-  try{blob=(await db.get('blobs',a.blobId))?.data;}
-  catch(error){
-    if(!cloudEnabled||!a.blobId)throw error;
-    blob=(await db.reloadCloudBlob(a.blobId))?.data;
-    if(!blob)throw error;
-  }
-  blob||=a.staticPath?await fetch(a.staticPath).then(r=>r.blob()):null;
+async function modelImage(a,cropRect=null,maxPixels=512,transparent=false,preferPreview=false){
+  const blob=await loadModelImageSource(a,{
+    preview:(id,edge)=>db.previewBlob(id,edge),
+    original:async id=>(await db.get('blobs',id))?.data,
+    reload:async id=>(await db.reloadCloudBlob(id))?.data,
+    fetchStatic:path=>fetch(path).then(r=>r.blob()),cloud:cloudEnabled
+  },{coverOnly:preferPreview,edge:maxPixels});
   if(!blob)return null;
   let bitmap;
   try{bitmap=await decodeImageBlob(blob);}
   catch(error){
+    if(preferPreview)throw error;
     // A card can display its cached low-resolution cover while the original
     // Safari Blob is unreadable. Retry once from the private cloud original.
     if(!cloudEnabled||!a.blobId)throw error;
@@ -2338,15 +2338,7 @@ async function organizeSavedProjects(projects,{waitForSave}={}){
       if(!complete||complete.updatedAt!==source.updatedAt||complete.autoOrganized)continue;
       let picture=null;
       if(complete.isSnapshot&&supportsVision(config)&&config.includeThumbnails){
-        const raw=(await db.get('blobs',complete.snapshotBlobId))?.data;
-        if(raw instanceof Blob){
-          const bitmap=await createImageBitmap(raw);
-          try{const canvas=document.createElement('canvas'),scale=Math.min(1,360/Math.max(bitmap.width,bitmap.height));
-            canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));
-            canvas.getContext('2d').drawImage(bitmap,0,0,canvas.width,canvas.height);
-            picture=canvas.toDataURL('image/jpeg',.78);
-          }finally{bitmap.close();}
-        }
+        picture=await modelImage({blobId:complete.snapshotBlobId},null,360,false,true);
       }
       const result=await classifyRecord({kind:'project',record:complete,settings:config,image:picture,assets:state.assets});
       if(state.accountId!==account)return;
@@ -2373,7 +2365,7 @@ async function organizeSavedAssets(records,{waitForSave,projects=[]}={}){
       // not fail every classification in an otherwise saved import batch.
       await assetOrganization.run(records,{organize:async(record,isCurrent)=>{
         if(state.accountId!==accountID||!isCurrent())return;
-        const image=await modelImage(record);if(!image)throw Error('素材图像无法读取');
+        const image=await modelImage(record,null,512,false,true);if(!image)throw Error('素材图像无法读取');
         const result=await classifyRecord({kind:'asset',record,settings:cfg,image,assets:[]});
         await applyAssetClassification(record,result,{isCurrent:()=>state.accountId===accountID&&isCurrent()});
       },onError:error=>{recordRuntimeIssue('handled',error,state.route,{phase:'ai'});if(state.accountId===accountID&&!warned){warned=true;toast(explainUserError(error,'素材自动整理'));}}});

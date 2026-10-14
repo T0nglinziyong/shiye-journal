@@ -17,6 +17,7 @@ import {mergeEditableSceneProjects} from './scene-field-merge.js';
 import {isLegacySceneProject} from './scene-v2.js';
 import {createBlobRevisionProof} from './blob-revision-proof.js';
 import {createSyncDiagnostics} from './sync-diagnostics.js';
+import {decodeImageBlob} from './image-blob-decoder.js';
 export function createCloudStore({cloudClient,requireCloudUser,cache=null,namespace='cloud',projectPreview=()=>null,objectStorage=null}){
 const BUCKET='shiye-private';
 const writeProvider=()=>objectStorage?.enabled?'cos':'supabase';
@@ -632,7 +633,22 @@ async function cloudPreview(id,pixels=480){
   const {data}=await decode('blobs',record);
   const blob=await makeThumbnail(data,edge);if(blob){await rememberImageVariant(record.storagePath,edge,blob);return blob;}return data;
 }
-async function makeThumbnail(data,edge=480){if(typeof createImageBitmap!=='function'||typeof document==='undefined')return null;const bitmap=await createImageBitmap(data);try{const scale=Math.min(1,edge/Math.max(bitmap.width,bitmap.height)),width=Math.max(1,Math.round(bitmap.width*scale)),height=Math.max(1,Math.round(bitmap.height*scale));if(typeof OffscreenCanvas==='function'){const canvas=new OffscreenCanvas(width,height);canvas.getContext('2d').drawImage(bitmap,0,0,width,height);return await canvas.convertToBlob({type:'image/webp',quality:.9});}const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;canvas.getContext('2d').drawImage(bitmap,0,0,width,height);return await new Promise(resolve=>canvas.toBlob(resolve,'image/webp',.9));}finally{bitmap.close();}}
+async function makeThumbnail(data,edge=480){
+  if(typeof document==='undefined')return null;
+  const bitmap=await decodeImageBlob(data);
+  try{
+    const scale=Math.min(1,edge/Math.max(bitmap.width,bitmap.height));
+    const width=Math.max(1,Math.round(bitmap.width*scale)),height=Math.max(1,Math.round(bitmap.height*scale));
+    if(typeof OffscreenCanvas==='function'){
+      const canvas=new OffscreenCanvas(width,height);
+      canvas.getContext('2d').drawImage(bitmap,0,0,width,height);
+      return await canvas.convertToBlob({type:'image/webp',quality:.9});
+    }
+    const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;
+    canvas.getContext('2d').drawImage(bitmap,0,0,width,height);
+    return await new Promise(resolve=>canvas.toBlob(resolve,'image/webp',.9));
+  }finally{bitmap.close?.();}
+}
 async function decode(store,record){
   if(store!=='blobs')return record;
   const {storagePath,storageProvider,...metadata}=record;
