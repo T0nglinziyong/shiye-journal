@@ -20,8 +20,11 @@ export function validateCraftTask(source,currentAssets){
  for(const item of source.materials){
   const snapshot=byID.get(item.assetID),current=currentAssets.find(a=>a.id===item.assetID);
   craftAssert(snapshot&&current,'MISSING_SOURCE','当前素材库找不到任务素材',{assetId:item.assetID});
-  const exported=assetFromSourceSnapshot(snapshot),physicalRevision=assetSourceRevision(exported);
-  craftAssert(snapshot.sourceRevision===physicalRevision,'SOURCE_SNAPSHOT_CHANGED','来源快照与其声明版本不一致',{assetId:item.assetID});
+  const exported=assetFromSourceSnapshot(snapshot);
+  // The task and snapshot hashes already protect the exported source. Treat
+  // its revision as an opaque task identity so a later digest-rule change
+  // cannot make an otherwise valid in-progress creation unimportable.
+  craftAssert(/^sha256:[a-f0-9]{64}$/.test(snapshot.sourceRevision),'INVALID_SOURCE_SNAPSHOT','素材来源版本无效',{assetId:item.assetID});
   craftAssert(sameMaterialCutoutAndSize(exported,current),'STALE_SOURCE','导出后素材抠图或实物尺寸已变化；请重新导出任务，不覆盖旧作品',{assetId:item.assetID});
  }
  craftAssert(source.baseDraft,'INVALID_BASE_SCENE','任务缺少初始可编辑场景');

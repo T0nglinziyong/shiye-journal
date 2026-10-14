@@ -10,6 +10,7 @@ import {rectangleGeometry,normalizeGeometry,geometryArea,geometryIntersection,ge
 import {buildMaterialLedger} from '../src/material-ledger.js';
 import {createOfflineHandoff,importEditableWork,importEditableWorkPackage} from '../src/offline-creation.js';
 import {createNativeProjectPackage} from '../src/native-project-package.js';
+import {taskFingerprint} from '../src/task-fingerprint.js';
 
 const material=()=>({id:'plan-paper',title:'合成图案纸',kind:'paper',physicalWidthMM:100,physicalHeightMM:80,blobId:'plan-source',supply:{quantity:1},updatedAt:'2026-10-03T00:00:00.000Z'});
 const base=()=>project('工艺计划',{ratio:'a5'}).drafts[0];
@@ -104,6 +105,14 @@ test('offline task imports a plan using its original source and full creation br
  const afterEdit=importEditableWork(JSON.stringify(envelope),[updated],{trustedSource:handoff.source});
  assert.equal(afterEdit.drafts[0].items.length,1);
  assert.equal(afterEdit.drafts[0].items[0].craftProvenance.sourceRevision,assetSourceRevision(a));
+ const driftedSource=structuredClone(handoff.source),frozen='sha256:'+'f'.repeat(64);
+ driftedSource.sourceSnapshots[0].sourceRevision=frozen;
+ driftedSource.sourceVersionHash=craftDigest(driftedSource.sourceSnapshots);
+ driftedSource.taskHash=await taskFingerprint(driftedSource);
+ const driftedPlan=structuredClone(input);driftedPlan.pieces[0].sourceRevision=frozen;
+ const drifted={...envelope,source:driftedSource,plan:driftedPlan};
+ const stable=importEditableWork(JSON.stringify(drifted),[updated]);
+ assert.equal(stable.drafts[0].items[0].craftProvenance.sourceRevision,frozen);
  assert.throws(()=>importEditableWork(JSON.stringify(envelope),[{...a,physicalWidthMM:101}],{trustedSource:handoff.source}),/已变化/);
 });
 test('native roundtrip preserves current scene and persistent craft geometry while dropping session undo',async()=>{

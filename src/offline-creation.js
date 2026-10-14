@@ -272,7 +272,7 @@ export function importEditableWork(text,assets,{trustedSource=null}={}){
   const p=project(title,{mode:source.mode,ratio:source.ratio,style:Array.isArray(source.styles)?source.styles[0]:'韩系清新'});
   // Execute the AI's plan against the task it actually saw. Current assets
   // were already checked for matching cutouts and measured dimensions above.
-  const selectedAssets=source.sourceSnapshots.map(assetFromSourceSnapshot);
+  const selectedAssets=source.sourceSnapshots.map(snapshot=>assetFromSourceSnapshot(snapshot,{frozenRevision:true}));
   if(baseDraft){validateNativeDraft(baseDraft,new Set(selectedAssets.map(a=>a.id)));p.drafts[0]=baseDraft;p.activeDraftID=baseDraft.id;}
   const result=applyToolCalls({tools},p.drafts[0],selectedAssets,aliases,{visualAssetIDs:source.materials.filter(m=>source.previewHashes?.[m.alias]).map(m=>m.assetID),requiredAssetIDs:source.requiredAssetIDs,processing:source.processing||'保留完整',textMode:source.textMode||'automatic',materialUseHints:source.materialUseHints||{},materialUseRequired:source.materialUseRequired||{},assetProcessing:source.assetProcessing||{},pagePurposes:source.purposes||['日常记录'],allowNoText:source.textMode==='none'||source.purposes?.every(x=>x==='主题封面')});
   const error=result.results.find(x=>!x.ok);if(error)throw Error(`${error.name}：${error.detail}`);

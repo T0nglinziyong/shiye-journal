@@ -16,9 +16,10 @@ function physicalSupply(asset){
 const physicalSource=asset=>({...assetVisualDescriptor(asset),kind:asset.kind??null,supply:physicalSupply(asset),
  tapeRepeatMode:asset.tapeRepeatMode==='repeatablePattern'?'repeatablePattern':'singleStrip',
  tapeRepeatPeriodMM:asset.tapeRepeatMode==='repeatablePattern'?asset.tapeRepeatPeriodMM??null:null});
+const frozenTaskRevision=Symbol('frozenTaskRevision');
 // Editing a title, label or series updates updatedAt without changing the
 // physical material. Keep that timestamp out of new source revisions.
-export const assetSourceRevision=asset=>craftDigest(physicalSource(asset));
+export const assetSourceRevision=asset=>asset[frozenTaskRevision]||craftDigest(physicalSource(asset));
 // A saved work still refers to the library image. Metadata and inventory may
 // change while the model is working, but a different cutout or measured size
 // would change the meaning of its placements and physical operations.
@@ -35,11 +36,13 @@ export function materialSourceSnapshot(asset){
   kind:asset.kind,title:asset.title,role:asset.role??null,tags:asset.tags||[],supply:structuredClone(asset.supply??{quantity:1}),
   tapeRepeatMode:asset.tapeRepeatMode??null,tapeRepeatPeriodMM:asset.tapeRepeatPeriodMM??null};
 }
-export function assetFromSourceSnapshot(snapshot){
+export function assetFromSourceSnapshot(snapshot,{frozenRevision=false}={}){
  const d=snapshot.descriptor;
  craftAssert(d&&d.assetID===snapshot.assetID,'INVALID_SOURCE_SNAPSHOT','素材来源快照缺失或编号不一致');
- return {id:snapshot.assetID,title:snapshot.title,kind:snapshot.kind,role:snapshot.role,tags:snapshot.tags,
+ const asset={id:snapshot.assetID,title:snapshot.title,kind:snapshot.kind,role:snapshot.role,tags:snapshot.tags,
   blobId:d.blobId,originalBlobId:d.originalBlobId,staticPath:d.staticPath,physicalWidthMM:d.widthMM,physicalHeightMM:d.heightMM,
   imageSize:d.imageSize,processingRecord:d.processingRecord,sourceSilhouette:d.sourceSilhouette,imageHash:d.imageHash,orientation:d.orientation,
   updatedAt:snapshot.updatedAt,supply:snapshot.supply,tapeRepeatMode:snapshot.tapeRepeatMode,tapeRepeatPeriodMM:snapshot.tapeRepeatPeriodMM};
+ if(frozenRevision)Object.defineProperty(asset,frozenTaskRevision,{value:snapshot.sourceRevision});
+ return asset;
 }
