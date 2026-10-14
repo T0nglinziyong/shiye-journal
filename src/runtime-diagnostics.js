@@ -10,6 +10,8 @@ const status=error=>{const value=Number(error?.status??error?.statusCode);return
 const providerCode=error=>{const value=String(error?.code||'');return /^(?:PGRST\d{3}|[0-9A-Z]{5}|ERR_[A-Z_]{2,24})$/.test(value)?value:null;};
 function reason(error){
   const message=String(error?.message||'');
+  if(/本机待同步队列|IndexedDB/.test(error?.syncPhase||'')&&
+    /^(?:AbortError|QuotaExceededError)$/.test(error?.name||''))return 'local-storage';
   if(/can't find variable|is not defined/i.test(message)||error?.name==='ReferenceError')return 'undefined-variable';
   if(/webassembly|wasm|opencv|expected magic word/i.test(message))return 'image-engine';
   if(/blob|createobjecturl|decode.*image|image.*decode/i.test(message))return 'image-read-or-decode';

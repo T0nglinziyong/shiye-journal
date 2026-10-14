@@ -1609,7 +1609,37 @@ function openManualCreationDialog(){
 }
 function openMaterialPicker(){body.innerHTML=`<h2>选择素材放入画布</h2><div class="mini-assets">${visibleMaterials(state.assets).map(a=>`<button type="button" class="mini-asset" data-pick="${a.id}">${imgTag(a)}<span>${esc(a.title)}</span></button>`).join('')}</div>`;modal.showModal();body.querySelectorAll('[data-pick]').forEach(b=>b.onclick=()=>{const a=asset(b.dataset.pick),d=current();checkpoint();const i=itemFromAsset(a,d,d.canvas.width/2,d.canvas.height/2,20,false);d.items.push(i);state.selected=i.id;state.tool='select';modal.close();saveProject();render();});}
 function openCreativeJSON(){const aliases=Object.entries(materialAliases(state.basket)).map(([key,id])=>`${key} = ${asset(id)?.title||id}`).join(' · ');body.innerHTML=`<h2>导入创作指令</h2><p>这是本地工具协议的验证入口，不会联系大模型。当前素材编号：${esc(aliases||'请先在搭配页选素材')}</p><label>包含 tools 或 tool_calls 的 JSON<textarea id="creative-source" style="min-height:240px" placeholder='{"tools":[{"name":"upsert_text","arguments":{"items":[{"key":"t1","content":"今天的故事……","width":0.5}]}}]}'></textarea></label><p>成功的前序调用会保留；失败调用不会污染画布。物理素材尺寸仍从素材库计算。</p><button type="button" class="btn primary" id="creative-apply">验证并应用</button><div id="creative-results" style="white-space:pre-wrap;margin-top:12px"></div>`;modal.showModal();body.querySelector('#creative-apply').onclick=()=>{try{const aliases=materialAliases(state.basket);const result=applyToolCalls(body.querySelector('#creative-source').value,current(),state.assets,aliases);body.querySelector('#creative-results').textContent=result.results.map(x=>`${x.ok?'✓':'×'} ${x.name}: ${x.detail}`).join('\n');if(result.committed){checkpoint();const p=state.activeProject,index=p.drafts.findIndex(x=>x.id===state.activeDraft);p.drafts[index]=result.draft;saveProject();render();}}catch(e){body.querySelector('#creative-results').textContent=e.message;}};}
-async function modelImage(a,cropRect=null,maxPixels=512,transparent=false){const record=await db.get('blobs',a.blobId),blob=record?.data||(a.staticPath?await fetch(a.staticPath).then(r=>r.blob()):null);if(!blob)return null;const bitmap=await createImageBitmap(blob),canvas=document.createElement('canvas'),crop=cropRect||{x:0,y:0,width:1,height:1},cw=crop.width*bitmap.width,ch=crop.height*bitmap.height,scale=Math.min(1,maxPixels/Math.max(cw,ch));canvas.width=Math.max(1,Math.round(cw*scale));canvas.height=Math.max(1,Math.round(ch*scale));const ctx=canvas.getContext('2d');if(!transparent){ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);}ctx.drawImage(bitmap,crop.x*bitmap.width,crop.y*bitmap.height,cw,ch,0,0,canvas.width,canvas.height);bitmap.close();return transparent?canvas.toDataURL('image/png'):canvas.toDataURL('image/jpeg',.78);}
+async function modelImage(a,cropRect=null,maxPixels=512,transparent=false){
+  let blob;
+  try{blob=(await db.get('blobs',a.blobId))?.data;}
+  catch(error){
+    if(!cloudEnabled||!a.blobId)throw error;
+    blob=(await db.reloadCloudBlob(a.blobId))?.data;
+    if(!blob)throw error;
+  }
+  blob||=a.staticPath?await fetch(a.staticPath).then(r=>r.blob()):null;
+  if(!blob)return null;
+  let bitmap;
+  try{bitmap=await decodeImageBlob(blob);}
+  catch(error){
+    // A card can display its cached low-resolution cover while the original
+    // Safari Blob is unreadable. Retry once from the private cloud original.
+    if(!cloudEnabled||!a.blobId)throw error;
+    const fresh=await db.reloadCloudBlob(a.blobId);
+    if(!fresh?.data)throw error;
+    bitmap=await decodeImageBlob(fresh.data);
+  }
+  try{
+    const canvas=document.createElement('canvas'),crop=cropRect||{x:0,y:0,width:1,height:1};
+    const cw=crop.width*bitmap.width,ch=crop.height*bitmap.height;
+    const scale=Math.min(1,maxPixels/Math.max(cw,ch));
+    canvas.width=Math.max(1,Math.round(cw*scale));canvas.height=Math.max(1,Math.round(ch*scale));
+    const ctx=canvas.getContext('2d');
+    if(!transparent){ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);}
+    ctx.drawImage(bitmap,crop.x*bitmap.width,crop.y*bitmap.height,cw,ch,0,0,canvas.width,canvas.height);
+    return transparent?canvas.toDataURL('image/png'):canvas.toDataURL('image/jpeg',.78);
+  }finally{bitmap.close?.();}
+}
 async function offlinePreviewBytes(a){
   const record=await db.get('blobs',a.blobId),blob=record?.data||(a.staticPath?await fetch(a.staticPath).then(r=>r.blob()):null);if(!blob)return null;
   return encodeOfflinePreview(blob);
@@ -2338,7 +2368,10 @@ async function organizeSavedAssets(records,{waitForSave,projects=[]}={}){
     const cfg=structuredClone(state.aiSettings),accountID=state.accountId;
     if(cfg.key&&cfg.includeThumbnails&&supportsVision(cfg)){
       let warned=false;
-      await assetOrganization.run(records,{waitForSave,organize:async(record,isCurrent)=>{
+      // saveImportBatch has already durably staged the cutouts and metadata.
+      // The model can read those pending Blobs locally; a slow cloud ACK must
+      // not fail every classification in an otherwise saved import batch.
+      await assetOrganization.run(records,{organize:async(record,isCurrent)=>{
         if(state.accountId!==accountID||!isCurrent())return;
         const image=await modelImage(record);if(!image)throw Error('素材图像无法读取');
         const result=await classifyRecord({kind:'asset',record,settings:cfg,image,assets:[]});

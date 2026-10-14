@@ -26,6 +26,16 @@ try{
     let conflict=false;
     try{await c.putOutbox(account,'project-outbox',[],[conflicting]);}catch{conflict=true;}
     if(!conflict)throw Error('Concurrent same-document update overwrote an existing edit');
+    const queue='unified-outbox',bulk=new Blob([new Uint8Array(256*1024)]);
+    let pending=[];
+    for(let index=0;index<26;index++){
+      const next=[...pending,{serial:index+1,baseRevision:0,
+        operationID:crypto.randomUUID(),record:{id:'import-'+index,kind:'batch',data:bulk}}];
+      await a.putOutbox(account,queue,pending,next);pending=next;
+    }
+    if((await c.get(account,queue)).length!==26)throw Error('Blob import queue lost a row');
+    await a.putOutbox(account,queue,pending,[]);
+    if((await c.get(account,queue)).length)throw Error('Acknowledged rows remained in queue');
 
     // A live text input must stay responsive while image bytes are packaged.
     const input=document.createElement('textarea');input.value='handwritten-note-synthetic';
@@ -60,5 +70,5 @@ try{
   assert.ok(result.worstFrameDelayMs<1000);
   assert.equal(result.restoredBytes,4*1024*1024);
   assert.deepEqual(b.errors,[]);
-  console.log('PASS: synthetic concurrent outbox, input responsive during ZIP, direct chunk writer',result);
+  console.log('PASS: synthetic concurrent outbox, 26 Blob imports, input responsive during ZIP, direct chunk writer',result);
 }finally{await b.close();}

@@ -88,6 +88,13 @@ function materializePreview480(record,preview){
 }
 let cacheDisabled=false;
 let unifiedOutboxBefore=[],projectOutboxQuarantine=[],unifiedQuarantine=[];
+// The merge guard needs only identity/version stamps, never image payloads.
+// Keeping a second structured clone of every pending Blob made each import
+// progressively more expensive on mobile Safari.
+const outboxStamps=rows=>(rows||[]).map(row=>({
+  record:{id:row.record.id},serial:row.serial,
+  baseRevision:row.baseRevision,operationID:row.operationID
+}));
 const sessionTag=crypto.randomUUID();
 let outboxChannel=null;
 const channel=()=>{
@@ -148,7 +155,7 @@ async function loadUnifiedOutbox(recover=false){
   if(!cache)return [];
   const user=await account();
   let result;
-  if(typeof cache.migrateUnifiedOutbox==='function'){
+  if(recover&&typeof cache.migrateUnifiedOutbox==='function'){
     result=await cache.migrateUnifiedOutbox(user);
   }else{
     const previous=await cache.get(user,'unified-outbox');
@@ -217,7 +224,7 @@ async function loadUnifiedOutbox(recover=false){
       }
     }
   }
-  unifiedOutboxBefore=structuredClone(result.rows);
+  unifiedOutboxBefore=outboxStamps(result.rows);
   unifiedQuarantine=structuredClone(result.quarantine);
   projectOutboxQuarantine=unifiedQuarantine.filter(item=>item.kind==='project').map(item=>item.row);
   return result.rows;
@@ -228,7 +235,7 @@ const unifiedSync=createProjectSync({
   reload:()=>loadUnifiedOutbox(false),
   write:async rows=>{
     await persistOutbox('unified-outbox',unifiedOutboxBefore,rows);
-    unifiedOutboxBefore=structuredClone(rows);
+    unifiedOutboxBefore=outboxStamps(rows);
   },
   commit:(envelope,operationID)=>{
     const payload=envelope.payload;

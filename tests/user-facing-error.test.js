@@ -9,3 +9,10 @@ test('browser runtime errors become actionable Chinese messages',()=>{
     assert.doesNotMatch(text,/supportsVision|blob:|WebAssembly|magic word/);
   }
 });
+test('IndexedDB outbox abort is not mislabeled as a damaged image',()=>{
+  const error=new DOMException('Blob transaction aborted','AbortError');
+  error.syncPhase='写入本机待同步队列';
+  const text=explainUserError(error,'素材自动整理');
+  assert.match(text,/本机待同步资料写入中断/);
+  assert.doesNotMatch(text,/图片读取或解码失败/);
+});

@@ -45,19 +45,72 @@ export function createPrivateCache({name='shiye-private-read-cache-v2',limit=160
     d.createObjectStore('sizes',{keyPath:'key'});
   }});
   const key=(account,id)=>JSON.stringify([account,id]);
+  // Keep the current logical outbox rows, but journal changed rows separately.
+  // An imported batch can contain many Blobs; rewriting the aggregate entry
+  // for every later edit exhausted/aborted Safari's IndexedDB transaction.
+  const rowKey=(account,id,recordID)=>JSON.stringify([account,id,recordID]);
+  const rowRange=(account,id)=>{
+    const prefix=JSON.stringify([account,id]).slice(0,-1)+',';
+    return IDBKeyRange.bound(prefix,prefix+'\uffff');
+  };
+  const readOutbox=async(tx,account,id)=>{
+    const entries=tx.objectStore('entries');
+    const [base,overlays]=await Promise.all([
+      entries.get(key(account,id)),entries.getAll(rowRange(account,id))
+    ]);
+    const rows=rowsByID(base?.value||[]);
+    for(const entry of overlays){
+      const recordID=JSON.parse(entry.key)[2];
+      if(entry.value?.deleted)rows.delete(recordID);
+      else rows.set(recordID,entry.value);
+    }
+    return {rows:[...rows.values()],base:base?.value||[],overlays,present:!!base||overlays.length>0};
+  };
   return {
-    async get(account,id){return (await db()).get('entries',key(account,id)).then(row=>row?.value);},
-    // Atomic read/merge/write in ONE IndexedDB transaction. Uses the existing
-    // cache DB/schema and stores the queue under its old key for compatibility.
+    async get(account,id){
+      const d=await db();
+      if(['project-outbox','import-outbox','unified-outbox'].includes(id)){
+        const tx=d.transaction('entries','readonly');
+        const result=await readOutbox(tx,account,id);await tx.done;
+        return result.present?result.rows:undefined;
+      }
+      return d.get('entries',key(account,id)).then(row=>row?.value);
+    },
+    // The logical queue is merged atomically across tabs. Only changed rows
+    // are written; the pre-existing aggregate remains read-only until its
+    // final row is acknowledged. This preserves pending imports without a
+    // large, risky one-shot migration or another full Blob rewrite.
     async putOutbox(account,id,previousRows,nextRows){
       if(!['project-outbox','import-outbox','unified-outbox'].includes(id))throw Error('不是待同步队列');
-      const d=await db(),tx=d.transaction(['entries','sizes'],'readwrite');
+      const d=await db(),tx=d.transaction('entries','readwrite');
       try{
-        const k=key(account,id),saved=await tx.objectStore('entries').get(k),
-          merged=mergeOutboxRows(saved?.value||[],previousRows,nextRows),
-          row={key:k,account,time:Date.now(),bytes:0};
-        tx.objectStore('entries').put({...row,value:merged});
-        tx.objectStore('sizes').put(row);
+        const saved=await readOutbox(tx,account,id),
+          merged=mergeOutboxRows(saved.rows,previousRows,nextRows),
+          before=rowsByID(saved.rows),after=rowsByID(merged),
+          overlays=new Map(saved.overlays.map(entry=>[JSON.parse(entry.key)[2],entry])),
+          baseIDs=new Set(saved.base.map(outboxID));
+        const entries=tx.objectStore('entries');
+        for(const recordID of new Set([...before.keys(),...after.keys()])){
+          const old=before.get(recordID),current=after.get(recordID);
+          if(outboxStamp(old)===outboxStamp(current))continue;
+          if(!current&&!baseIDs.has(recordID)){
+            entries.delete(rowKey(account,id,recordID));overlays.delete(recordID);
+            continue;
+          }
+          const row={key:rowKey(account,id,recordID),account,time:Date.now(),bytes:0,
+            value:current||{deleted:true}};
+          entries.put(row);overlays.set(recordID,row);
+        }
+        // Once every aggregate row has an overlay, it no longer protects any
+        // data. Remove it and obsolete tombstones in this same transaction.
+        if(!merged.length){
+          entries.put({key:key(account,id),account,time:Date.now(),bytes:0,value:[]});
+          for(const recordID of overlays.keys())entries.delete(rowKey(account,id,recordID));
+        }else if(saved.base.length&&saved.base.every(row=>overlays.has(outboxID(row)))){
+          entries.delete(key(account,id));
+          for(const [recordID,entry] of overlays)if(entry.value?.deleted)
+            entries.delete(rowKey(account,id,recordID));
+        }
         await tx.done;
         return merged;
       }catch(error){try{tx.abort();}catch{}await tx.done.catch(()=>{});throw error;}
@@ -69,14 +122,15 @@ export function createPrivateCache({name='shiye-private-read-cache-v2',limit=160
       const d=await db(),tx=d.transaction(['entries','sizes'],'readwrite');
       try{
         const queueKey=key(account,'unified-outbox'),heldKey=key(account,'sync-quarantine');
-        const saved=await tx.objectStore('entries').get(queueKey);
-        const rows=mergeOutboxRows(saved?.value||[],previousRows,nextRows);
+        const saved=await readOutbox(tx,account,'unified-outbox');
+        const rows=mergeOutboxRows(saved.rows,previousRows,nextRows);
         const old=await tx.objectStore('entries').get(heldKey);
         const quarantine=[...(old?.value||[]),...quarantineRows];
         for(const [k,value] of [[queueKey,rows],[heldKey,quarantine]]){
           const row={key:k,account,time:Date.now(),bytes:0};
           tx.objectStore('entries').put({...row,value});tx.objectStore('sizes').put(row);
         }
+        for(const entry of saved.overlays)tx.objectStore('entries').delete(entry.key);
         await tx.done;return {rows,quarantine};
       }catch(error){try{tx.abort();}catch{}await tx.done.catch(()=>{});throw error;}
     },
@@ -84,19 +138,24 @@ export function createPrivateCache({name='shiye-private-read-cache-v2',limit=160
       const d=await db(),tx=d.transaction(['entries','sizes'],'readwrite');
       const read=async id=>(await tx.objectStore('entries').get(key(account,id)))?.value;
       try{
-        const oldProjects=await read('project-outbox')||[],oldImports=await read('import-outbox')||[];
-        const original=await read('unified-outbox')||[],oldQuarantine=await read('sync-quarantine')||[];
+        const oldProjects=(await readOutbox(tx,account,'project-outbox')).rows;
+        const oldImports=(await readOutbox(tx,account,'import-outbox')).rows;
+        const active=await readOutbox(tx,account,'unified-outbox');
+        const original=active.rows,oldQuarantine=await read('sync-quarantine')||[];
         const merged=foldLegacySyncRows(original,oldProjects,oldImports,oldQuarantine);
-        if(oldProjects.length||oldImports.length||!(await tx.objectStore('entries').get(key(account,'unified-outbox')))){
+        if(oldProjects.length||oldImports.length){
           const put=(id,value)=>{
             const k=key(account,id),row={key:k,account,time:Date.now(),bytes:0};
             tx.objectStore('entries').put({...row,value});tx.objectStore('sizes').put(row);
           };
           put('unified-outbox',merged.rows);
+          for(const entry of active.overlays)tx.objectStore('entries').delete(entry.key);
           if(merged.quarantine.length)put('sync-quarantine',merged.quarantine);
           for(const id of ['project-outbox','import-outbox']){
             tx.objectStore('entries').delete(key(account,id));
             tx.objectStore('sizes').delete(key(account,id));
+            for(const entry of (await readOutbox(tx,account,id)).overlays)
+              tx.objectStore('entries').delete(entry.key);
           }
         }
         await tx.done;
@@ -108,15 +167,16 @@ export function createPrivateCache({name='shiye-private-read-cache-v2',limit=160
     async restoreUnifiedOutboxes(account,projects,imports){
       const d=await db(),tx=d.transaction(['entries','sizes'],'readwrite');
       try{
-        const k=key(account,'unified-outbox'),saved=await tx.objectStore('entries').get(k),
+        const k=key(account,'unified-outbox'),saved=await readOutbox(tx,account,'unified-outbox'),
           qkey=key(account,'sync-quarantine'),held=await tx.objectStore('entries').get(qkey);
-        const combined=foldLegacySyncRows(saved?.value||[],projects,imports,held?.value||[]);
+        const combined=foldLegacySyncRows(saved.rows,projects,imports,held?.value||[]);
         if(combined.quarantine.some(item=>item.reason==='duplicate-legacy-row'))
           throw Error('应急包与现有队列有重复操作；没有覆盖已有修改');
         for(const [id,value] of [['unified-outbox',combined.rows],['sync-quarantine',combined.quarantine]]){
           const row={key:key(account,id),account,time:Date.now(),bytes:0};
           tx.objectStore('entries').put({...row,value});tx.objectStore('sizes').put(row);
         }
+        for(const entry of saved.overlays)tx.objectStore('entries').delete(entry.key);
         await tx.done;return [projects.length,imports.length];
       }catch(error){try{tx.abort();}catch{}await tx.done.catch(()=>{});throw error;}
     },
@@ -139,9 +199,10 @@ export function createPrivateCache({name='shiye-private-read-cache-v2',limit=160
       try{
         const inputs=[['project-outbox',projects],['import-outbox',imports]],updates=[];
         for(const [id,rows] of inputs){
-          const k=key(account,id),stored=await tx.objectStore('entries').get(k);
-          const merged=mergeOutboxRows(stored?.value||[],[],rows);
+          const k=key(account,id),stored=await readOutbox(tx,account,id);
+          const merged=mergeOutboxRows(stored.rows,[],rows);
           updates.push({key:k,account,time:Date.now(),bytes:0,value:merged});
+          for(const entry of stored.overlays)tx.objectStore('entries').delete(entry.key);
         }
         for(const row of updates){
           tx.objectStore('entries').put(row);

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import 'fake-indexeddb/auto';
+import {openDB} from 'idb';
 import {createPrivateCache,mergeOutboxRows} from '../src/private-cache.js';
 
 const row=(id,serial=1)=>({serial,baseRevision:2,operationID:id+'-'+serial,record:{id,title:'local-'+serial}});
@@ -33,4 +34,41 @@ test('import queue merge keeps untouched operations after independent writes',as
   await cache.putOutbox(account,kind,[],[row('batch-one')]);
   await cache.putOutbox(account,kind,[],[row('batch-two')]);
   assert.equal((await cache.get(account,kind)).length,2);
+});
+test('large existing outbox is preserved while later edits write only their own rows',async()=>{
+  const name='shiye-outbox-row-journal',account='cloud:large',kind='unified-outbox';
+  const first={...row('old'),record:{id:'old',data:new Blob([new Uint8Array(1024*1024)])}};
+  const d=await openDB(name,1,{upgrade(db){db.createObjectStore('entries',{keyPath:'key'});db.createObjectStore('sizes',{keyPath:'key'});}});
+  const aggregateKey=JSON.stringify([account,kind]);
+  await d.put('entries',{key:aggregateKey,account,value:[first]});d.close();
+  const cache=createPrivateCache({name});
+  assert.equal((await cache.get(account,kind))[0].record.data.size,1024*1024);
+  await cache.putOutbox(account,kind,[first],[first,row('new')]);
+  assert.equal((await cache.get(account,kind)).length,2);
+  assert.equal((await cache.migrateUnifiedOutbox(account)).rows.length,2);
+  const check=await openDB(name,1);
+  assert.equal((await check.get('entries',aggregateKey)).value[0].record.data.size,1024*1024);
+  check.close();
+  await cache.putOutbox(account,kind,[first,row('new')],[row('new')]);
+  assert.deepEqual((await cache.get(account,kind)).map(x=>x.record.id),['new']);
+  const after=await openDB(name,1);
+  assert.equal(await after.get('entries',aggregateKey),undefined);
+  after.close();await cache.close();
+});
+test('many Blob imports can be staged and acknowledged without rewriting an aggregate',async()=>{
+  const name='shiye-outbox-many-blobs',account='cloud:many',kind='unified-outbox';
+  const cache=createPrivateCache({name});
+  let previous=[];
+  for(let index=0;index<26;index++){
+    const next=[...previous,{...row('batch-'+index),record:{id:'batch-'+index,
+      data:new Blob([new Uint8Array(256*1024)])}}];
+    await cache.putOutbox(account,kind,previous,next);previous=next;
+  }
+  assert.equal((await cache.get(account,kind)).length,26);
+  const d=await openDB(name,1);
+  assert.equal(await d.get('entries',JSON.stringify([account,kind])),undefined);
+  d.close();
+  await cache.putOutbox(account,kind,previous,[]);
+  assert.deepEqual(await cache.get(account,kind),[]);
+  await cache.close();
 });

@@ -1,6 +1,9 @@
 // Keep diagnostics in the console; UI text must explain what users can do.
 export function explainUserError(error,context='操作'){
   const message=String(error?.message||error||'');
+  if(/本机待同步队列|IndexedDB/.test(error?.syncPhase||'')&&
+    /^(?:AbortError|QuotaExceededError)$/.test(error?.name||''))
+    return `${context}时本机待同步资料写入中断。请检查设备剩余空间并重新打开页面重试；确认同步前不要清除网站数据。`;
   if(/can't find variable|is not defined|undefined is not an object/i.test(message))
     return `${context}遇到程序错误，请刷新后重试；若持续出现，请反馈给开发者。`;
   if(/(?:blob:|\bblob\b|createobjecturl|arraybuffer|decode.*image|image.*decode)/i.test(message))
