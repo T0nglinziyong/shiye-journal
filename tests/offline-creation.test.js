@@ -100,8 +100,13 @@ test('web handoff exposes mode-specific current schemas and concise instructions
   const p=project('测试创作',{style:'韩系清新'}),args={p};
   const agent=await make({p,settings:{generationMode:'agent',includeThumbnails:false,includeStructureReference:false}}),agentFiles=await filesOf(agent);
   assert.equal(agent.filename,'拾页-GPT创作任务.zip');assert.match(strFromU8(agentFiles['START_HERE.txt']),/runtime\/preview\.cjs/);
+  assert.match(strFromU8(agentFiles['START_HERE.txt']),/task\/CRAFT_GUIDE\.txt/);
+  const craftGuide=strFromU8(agentFiles['task/CRAFT_GUIDE.txt']);
+  assert.match(craftGuide,/逐件查看 materials\//);assert.match(craftGuide,/decisions/);
+  assert.match(craftGuide,/observed_region/);assert.match(craftGuide,/不设工艺数量指标/);
   const agentContract=JSON.parse(strFromU8(agentFiles['schema/output.json']));assert.ok(agentContract.apply_craft_plan&&agentContract.edit_materials);
   const direct=await make({p,settings:{generationMode:'direct',includeThumbnails:false}}),directFiles=await filesOf(direct);
+  assert.equal(directFiles['task/CRAFT_GUIDE.txt'],undefined);
   assert.ok(JSON.parse(strFromU8(directFiles['examples/project.shiyeproject.json'])).page);
   assert.ok(JSON.parse(strFromU8(agentFiles['examples/project.shiyeproject.json'])).tools);
   assert.match(agent.prompts.file,/作品.shiyeproject.json/);

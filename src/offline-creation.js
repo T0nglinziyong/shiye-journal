@@ -4,6 +4,7 @@ import {offlineCreationPlanningData,offlineCreationWorkflowText,offlineVisualRev
 import {stabilizeImportedCraftScene} from './craft-import-identity.js';
 import {multimodalCraftGuide} from './craft-vision.js';
 import {freezeCraftTask,validateCraftTask,inheritCreationBrief,craftTaskInstructions} from './craft-task.js';
+import {materialCraftGuide} from './material-craft-guide.js';
 import {validateNativeDraft} from './native-project-package.js';
 import {zip,unzipSync,strToU8,strFromU8} from 'fflate';
 import {project} from './domain.js';
@@ -150,7 +151,7 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
   const compactStart=`拾页 GPT 创作任务 · 先读这一页
 请创作一幅独立、可编辑的手帐作品，不要把整页烘焙成图片。按以下优先级工作：
 1. 先看 task/context.json 与 materials/ 真实素材。source、尺寸、库存、required 必须保持；素材标题不是图像观察证据。
-2. 阅读 task/WORKFLOW.txt 的创作步骤、task/GUIDE.txt 的用户内容边界。可参考 task/material-planning.json 的问题，不把它的假设当事实。
+2. 阅读 task/WORKFLOW.txt 的创作步骤、task/GUIDE.txt 的用户内容边界。${mode==='agent'?'逐件查看 task/CRAFT_GUIDE.txt 的实体工艺与权限说明，再决定完整保留还是加工。':'按 schema/output.json 决定素材的完整使用或合法裁切。'}可参考 task/material-planning.json 的问题，不把它的假设当事实。
 3. 内部比较至少两种素材组合方向，选最自然的一种；有选择地裁切、叠压、穿插和手写，不照抄 references/ 的版式。
 4. 合法输出合同是 schema/output.json。当前模式：${mode==='direct'?'page（直接排版）':'tools（调用工具）'}，不能混用。${mode==='direct'?'高级 observations/weaves 不可混入直接排版。':'只包含本合同的 tools；严禁额外顶层 page。'}examples/project.shiyeproject.json 仅展示字段，不能复制正文或坐标。高级工艺参数仅在 tools 模式阅读 schema/craft-plan.json。
 5. 将完整结果保存为 project.shiyeproject.json，运行 node runtime/preview.cjs 生成 output/画面预览.html；必须使用实际浏览器打开它、等待 SHIYE_RENDER_READY，再通过页面“下载 PNG”按钮或 Canvas 截图取得同一 Scene 的 PNG，并在聊天中实际展示这张图片，然后交付 JSON。不能用 output/构图预览.svg 或另生成的画作冒充 Canvas 预览；如果浏览器不可用，明确写未能生成真实 Canvas 预览，不要声称已经展示。
@@ -171,6 +172,7 @@ ${hasPresets?'references/ 只作为灵感来源，不是可用库存。':''}
     'task/material-planning.json':strToU8(JSON.stringify(materialPlanning,null,2)),
     'task/VISUAL_REVIEW.txt':strToU8(offlineVisualReviewChecklist),
     'task/GUIDE.txt':strToU8(compactGuide),
+    ...(mode==='agent'?{'task/CRAFT_GUIDE.txt':strToU8(`${craftTaskInstructions}\n\n${materialCraftGuide}\n\n【本次取材决策】\n逐件查看 materials/ 中的实际边缘、主体、印刷文字和可裁区域，再对照 source.processing 与 source.assetProcessing。设置为“不预设”表示没有额外限制，不表示必须加工；逐件“保留完整”仍须遵守。至少比较完整、局部取材、边缘加工或与另一素材建立实体关系，选对最终画面有帮助且符合权限的做法。\n\n若使用 apply_craft_plan，请在 decisions 中逐件写明 choice 与具体视觉理由；whole 的理由应说明要保护的主体、外轮廓或完整叙事，不能只写“保持原样”。需要局部图案时，用 observations 给出真实 boundsRatio/outlineRatio，再在 pieces.extraction 引用 observed_region；需要实体边缘、镂空或组合时用 pieces.treatments、pieces.relation、consume/parentId 或 weaves，并按 schema/craft-plan.json 校验。只有图形、手写和遮挡而没有实体加工时，也应如实描述为数字构图，不把它称为裁片、穿插或开窗。完整使用可以是最好的决定，不设工艺数量指标。`) }:{}),
     'task/knowledge.json':strToU8(JSON.stringify(knowledge,null,2)),
     'schema/output.json':strToU8(JSON.stringify(exportedContract,null,2)),
     'schema/craft-plan.json':strToU8(JSON.stringify(toolContracts.apply_craft_plan,null,2)),

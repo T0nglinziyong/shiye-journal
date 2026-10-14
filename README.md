@@ -31,6 +31,7 @@ START_HERE.txt
 task/
   context.json
   GUIDE.txt
+  CRAFT_GUIDE.txt       # 工具模式：逐件取材、加工权限与工艺参数
   knowledge.json
 schema/
   output.json
