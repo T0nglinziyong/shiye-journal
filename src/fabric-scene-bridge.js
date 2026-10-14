@@ -28,6 +28,13 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
       fill:'black',stroke:null,fillRule:'evenodd',absolutePositioned:page});
   };
   class SceneTextbox extends fabric.Textbox{
+    initHiddenTextarea(){
+      super.initHiddenTextarea();
+      // Fabric focuses its offscreen input when editing starts. Browsers may
+      // scroll the entire document to that 1px element and hide the page.
+      const focus=this.hiddenTextarea.focus.bind(this.hiddenTextarea);
+      this.hiddenTextarea.focus=options=>focus({...options,preventScroll:true});
+    }
     _render(ctx){
       if(this.isEditing||!this.sceneTextNode){super._render(ctx);return;}
       // The canonical renderer and the interactive view share one text layout.

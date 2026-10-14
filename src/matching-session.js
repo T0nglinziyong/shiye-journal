@@ -27,6 +27,12 @@ export function variantDraftProject(variant,existing,newID){
 }
 export function createMatchingSession(c){
  let variants=[],queue=Promise.resolve(),controller=null,opening=false,lastSnapshot,ready=false;
+ const listeners=new Set();let notifyFrame=0;
+ const notify=()=>{
+   if(notifyFrame)return;
+   const schedule=globalThis.requestAnimationFrame||((fn)=>setTimeout(fn,16));
+   notifyFrame=schedule(()=>{notifyFrame=0;for(const listener of listeners)listener();});
+ };
  const device=c.deviceRecords||localDeviceRecords,account=()=>c.state.accountId||'browser';
  const covers=createMatchingCoverCache(c);
  const defaults=matchingSnapshot(c.state,[]).context;
@@ -39,6 +45,7 @@ export function createMatchingSession(c){
    if(c.state.route!=='matching')return;
    const el=document.querySelector('.match-previews');
    if(!el)return;
+   if(el.dataset.reactSession==='true'){notify();return;}
    const root=el.closest('#view')||el.closest('.matching-page')?.parentElement;
    const scroll=root?captureMatchingScroll(root,globalThis.window):null;
    // Progress often changes many times per model turn. Keep every unchanged
@@ -83,9 +90,12 @@ export function createMatchingSession(c){
  };
 
  return {
+  subscribe(listener){listeners.add(listener);return ()=>listeners.delete(listener);},
+  variants:()=>variants,
+  coverURL:variant=>covers.rasterize(variant.project),
   async restore(){covers.clear();const record=await device.get(account(),ID);for(const key of KEYS)if(defaults[key]!==undefined)c.state[key]=structuredClone(defaults[key]);variants=restoreMatchingSession(record,c.state);lastSnapshot=JSON.stringify(matchingSnapshot(c.state,variants));ready=true;},
   render(){return `<section class="panel match-previews" data-match-scroll="previews">${markup()}</section>`;},
-  hydrate(root){covers.hydrate(root,variants);},
+  hydrate(root){if(root?.dataset.reactSession!=='true')covers.hydrate(root,variants);},
   cacheStats:covers.stats,
   persist:save,
   async importProject(p,{alreadyStored=false}={}){
@@ -141,7 +151,7 @@ export function createMatchingSession(c){
     await save();ensureAccount();
     if(cfg.deliveryMode==='image'){
      const referenceImages=cfg.sendPresetReferences?(await loadJournalTemplateReferences({context:{styles:p.styles,purposes:p.purposes,materials:assetsSnapshot.filter(asset=>ids.includes(asset.id))},userTemplates:templatesSnapshot,db:c.db})).referenceImages:[];
-     const blob=await c.generatePageImage({settings:cfg,project:p,draft:p.drafts[0],assets:assetsSnapshot,ids,theme:p.intent||'',createImage:c.modelImage,referenceImages,userTemplates:templatesSnapshot,signal:run.signal,onProgress:message=>{v.progress=message;const el=document.querySelector(`[data-variant="${v.id}"] .match-progress`);if(el)el.textContent=message;}});
+     const blob=await c.generatePageImage({settings:cfg,project:p,draft:p.drafts[0],assets:assetsSnapshot,ids,theme:p.intent||'',createImage:c.modelImage,referenceImages,userTemplates:templatesSnapshot,signal:run.signal,onProgress:message=>{v.progress=message;notify();const el=document.querySelector(`[data-variant="${v.id}"] .match-progress`);if(el?.closest('.match-previews')?.dataset.reactSession!=='true')el.textContent=message;}});
      ensureAccount();const snapshot=await c.saveGeneratedImageSnapshot(blob,p);v.project=snapshot;v.linkedProjectID=snapshot.id;v.status='completed';v.progress='GPT 直接生成的图片已保存到画面快照；点击查看。';return;
     }
     recorder=await c.createAIRecorder({db:c.db,model:cfg.model,key:cfg.key,accountId:c.state.accountId||'browser'});const vision=cfg.includeThumbnails&&c.supportsVision(cfg);
@@ -153,7 +163,7 @@ export function createMatchingSession(c){
      onScene:vision?async d=>{ensureAccount();return (await c.rasterize(d,.7)).toDataURL('image/jpeg',.8);}:undefined,
      onFinalScene:async d=>{ensureAccount();return (await c.rasterize(d,Math.min(1.6,2000/Math.max(d.canvas.width,d.canvas.height)))).toDataURL('image/jpeg',.88);},
      onInspection:vision?async data=>{ensureAccount();const parts=[];for(const m of data?.materials||[]){const a=findAsset(m.assetID);if(a){const url=await c.modelImage(a,m.cropRect);if(url)parts.push({type:'text',text:m.key+' 的局部预览'},{type:'image_url',image_url:{url}});}}return parts;}:undefined,
-     onProgress:progress=>{v.progress=steps+'请求 '+progress.budget.totalRequests+'/'+progress.budget.limit+'（创作 '+progress.budget.creationRequests+'、格式修复 '+progress.budget.formatRepairRequests+'） · '+progress.phase+' · '+progress.seconds+' 秒 · 已接收 '+progress.received+' 字符';const el=document.querySelector(`[data-variant="${v.id}"] .match-progress`);if(el)el.textContent=v.progress;},
+     onProgress:progress=>{v.progress=steps+'请求 '+progress.budget.totalRequests+'/'+progress.budget.limit+'（创作 '+progress.budget.creationRequests+'、格式修复 '+progress.budget.formatRepairRequests+'） · '+progress.phase+' · '+progress.seconds+' 秒 · 已接收 '+progress.received+' 字符';notify();const el=document.querySelector(`[data-variant="${v.id}"] .match-progress`);if(el?.closest('.match-previews')?.dataset.reactSession!=='true')el.textContent=v.progress;},
      onTurn:async({turn,results,draft})=>{
       ensureAccount();p.drafts=[structuredClone(draft)];p.activeDraftID=draft.id;
       steps+='第 '+turn+' 轮\n'+results.map(r=>(r.ok?'✓':'×')+' '+r.detail).join('\n')+'\n';v.progress=steps;

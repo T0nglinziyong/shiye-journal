@@ -3,6 +3,7 @@ import {drawPaper} from './paper-rendering.js';
 import {createFabricSceneBridge} from './fabric-scene-bridge.js';
 import {projectFabricLayers} from './fabric-layer-loader.js';
 import {paperWidthPixels,pressureInkOutline,erasePressureStroke} from './pressure-ink.js';
+import {textBlock} from './domain.js';
 
 const byID=(nodes,id)=>{
   for(const node of nodes||[]){
@@ -18,11 +19,22 @@ const byID=(nodes,id)=>{
 // Fabric owns this canvas for the whole draft lifetime. React owns the host,
 // tool panels and route lifecycle; a pointer packet never crosses a JSX render.
 export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onChange,onIssue,onReady,
-  tool='select',pen={widthMM:.5,color:'#2b5245'},eraser={widthMM:4},readOnly=false,sceneRevision=0}){
+  tool='select',pen={widthMM:.5,color:'#2b5245'},eraser={widthMM:4},readOnly=false,sceneRevision=0,
+  selectedID=null}){
   const canvasRef=useRef(null),sessionRef=useRef(null),reconcileRef=useRef(null),callbacks=useRef(null);
-  callbacks.current={draft,assetURL,onSelection,onBeforeChange,onChange,onIssue,onReady,tool,pen,eraser};
+  callbacks.current={draft,assetURL,onSelection,onBeforeChange,onChange,onIssue,onReady,tool,pen,eraser,selectedID};
 
   useLayoutEffect(()=>{reconcileRef.current?.();},[draft,sceneRevision]);
+
+  useLayoutEffect(()=>{
+    const canvas=sessionRef.current;
+    if(!canvas||tool!=='select')return;
+    const target=selectedID?canvas.getObjects().find(item=>item.sceneID===selectedID):null;
+    if(target&&canvas.getActiveObject()!==target){canvas.setActiveObject(target);canvas.requestRenderAll();}
+    else if(!selectedID&&canvas.getActiveObject()){
+      canvas.discardActiveObject();canvas.requestRenderAll();
+    }
+  },[selectedID,tool,sceneRevision]);
 
   useLayoutEffect(()=>{
     const canvas=sessionRef.current;
@@ -32,6 +44,7 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
     canvas.defaultCursor=tool==='pen'?'crosshair':tool==='eraser'?'cell':'default';
     if(tool!=='select'){canvas.getActiveObject()?.exitEditing?.();canvas.discardActiveObject();
       canvas.requestRenderAll();}
+    if(tool!=='text')canvas.sceneDiscardEmptyText?.();
   },[tool,readOnly]);
 
   useLayoutEffect(()=>{
@@ -81,8 +94,8 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
           if(node)signatures.set(id,snapshot(node));
           else signatures.delete(id);
         };
-        const addProjected=(node,sceneIndex,version)=>{
-          void bridge.fromNode(node).then(object=>{
+        const addProjected=(node,sceneIndex,version,onAdded)=>{
+          return bridge.fromNode(node).then(object=>{
             if(disposed||!callbacks.current.draft.layers.includes(node)||
               (sceneVersions.get(node.id)||0)!==version)return;
             // Decode the replacement before touching the visible object. A
@@ -94,8 +107,11 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
               if(readOnly)object.set({selectable:false,evented:false});
               const position=canvas.getObjects().filter(item=>item.sceneIndex<sceneIndex).length;
               canvas.insertAt(position,object);
+              if(callbacks.current.tool==='select'&&callbacks.current.selectedID===node.id)
+                canvas.setActiveObject(object);
             }
             canvas.requestRenderAll();
+            if(object)onAdded?.(object);
           }).catch(error=>{if(!disposed){signatures.delete(node.id);callbacks.current.onIssue?.(error);}});
         };
         reconcileRef.current=()=>{
@@ -123,7 +139,21 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
           existing.forEach((object,index)=>canvas.moveObjectTo(object,index));
           canvas.requestRenderAll();
         };
-        let gesture=null,previewFrame=0;
+        let gesture=null,previewFrame=0,textPointerID=null;
+        const uncommittedText=new Set();
+        const discardEmptyText=id=>{
+          if(!uncommittedText.delete(id))return;
+          const current=callbacks.current.draft;
+          const node=current.layers.find(item=>item.id===id);
+          if(!node||String(node.content||'').trim())return;
+          current.layers.splice(current.layers.indexOf(node),1);
+          sceneVersions.set(id,(sceneVersions.get(id)||0)+1);
+          remember(id);
+          for(const object of canvas.getObjects().filter(item=>item.sceneID===id))canvas.remove(object);
+          canvas.requestRenderAll();
+          callbacks.current.onChange?.(node,'text:cancel');
+        };
+        canvas.sceneDiscardEmptyText=()=>{for(const id of [...uncommittedText])discardEmptyText(id);};
         const pointer=event=>{
           const point=canvas.getScenePoint(event);
           // Mouse and touch have no trustworthy pressure curve. Omitting p
@@ -166,8 +196,42 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
         };
         const onPointerDown=event=>{
           const mode=callbacks.current.tool;
-          if(readOnly||!['pen','eraser'].includes(mode)||event.button>0)return;
+          if(readOnly||!['pen','eraser','text'].includes(mode)||event.button>0)return;
           event.preventDefault();event.stopImmediatePropagation();
+          if(mode==='text'){
+            textPointerID=event.pointerId;
+            const current=callbacks.current.draft,point=pointer(event);
+            if(point.x<0||point.y<0||point.x>current.canvas.width||point.y>current.canvas.height)return;
+            const hit=canvas.getObjects().findLast(object=>object.evented!==false&&
+              object.containsPoint(new fabric.Point(point.x,point.y)));
+            if(hit){
+              canvas.setActiveObject(hit);
+              if(hit.sceneType==='text'){
+                hit.enterEditing?.();
+                hit.hiddenTextarea?.focus();
+              }
+              canvas.requestRenderAll();
+              return;
+            }
+            const width=Math.max(60,Math.min(current.canvas.width*.35,current.canvas.width-point.x));
+            const node={...textBlock('',current),
+              id:globalThis.crypto?.randomUUID?.()||'text-'+Math.random().toString(36).slice(2),
+              type:'text',x:point.x+width/2,y:point.y+50,width,height:100,
+              alignment:'left',zIndex:Math.max(1000,...current.layers.map(item=>item.zIndex||0))+1};
+            callbacks.current.onBeforeChange?.('text:new');
+            current.layers.push(node);
+            uncommittedText.add(node.id);
+            remember(node.id);
+            const index=current.layers.length-1;
+            void addProjected(node,index,sceneVersions.get(node.id)||0,object=>{
+              canvas.setActiveObject(object);
+              object.enterEditing?.();
+              object.hiddenTextarea?.focus();
+              canvas.requestRenderAll();
+            });
+            callbacks.current.onChange?.(node,'text:new');
+            return;
+          }
           canvas.discardActiveObject();
           const settings=mode==='pen'?callbacks.current.pen:callbacks.current.eraser;
           gesture={id:event.pointerId,tool:mode,points:samples(event),
@@ -188,6 +252,11 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
           queuePreview();
         };
         const onPointerEnd=event=>{
+          if(textPointerID===event.pointerId){
+            textPointerID=null;
+            event.preventDefault();event.stopImmediatePropagation();
+            return;
+          }
           if(!gesture||gesture.id!==event.pointerId)return;
           event.preventDefault();event.stopImmediatePropagation();
           const finished=gesture;gesture=null;
@@ -271,16 +340,21 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
           }catch(error){callbacks.current.onIssue?.(error);}
         });
         canvas.on('text:editing:entered',event=>{
-          if(event.target?.sceneID)callbacks.current.onBeforeChange?.(event.target.sceneID);
+          if(event.target?.sceneID&&!uncommittedText.has(event.target.sceneID))
+            callbacks.current.onBeforeChange?.(event.target.sceneID);
         });
         canvas.on('text:changed',event=>{
           const object=event.target,node=byID(callbacks.current.draft.layers,object?.sceneID);
           if(!node||node.type!=='text')return;
           try{
             bridge.applyObject(node,object);
+            if(node.content.trim())uncommittedText.delete(node.id);
             remember(object.sceneID);
             callbacks.current.onChange?.(node,'text');
           }catch(error){callbacks.current.onIssue?.(error);}
+        });
+        canvas.on('text:editing:exited',event=>{
+          discardEmptyText(event.target?.sceneID);
         });
         const initialVersions=new Map((draft.layers||[]).map(node=>[node.id,sceneVersions.get(node.id)||0]));
         void projectFabricLayers(canvas,draft.layers,bridge,{readOnly,

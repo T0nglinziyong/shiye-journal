@@ -79,5 +79,5 @@ export function createMatchingCoverCache(context) {
       else showRaster(host,variant);
     }
   };
-  return {render,hydrate,clear(){rasterObserver?.disconnect();visibleVariants.clear();cache.clear();raster.clear();jobs.clear();},stats:()=>({entries:cache.rows.size+raster.rows.size,hits:cache.hits+raster.hits,misses:cache.misses+raster.misses,weight:cache.weight+raster.weight}),dispose(){rasterObserver?.disconnect();unsubscribe();visibleVariants.clear();cache.clear();raster.clear();jobs.clear();}};
+  return {render,hydrate,rasterize,clear(){rasterObserver?.disconnect();visibleVariants.clear();cache.clear();raster.clear();jobs.clear();},stats:()=>({entries:cache.rows.size+raster.rows.size,hits:cache.hits+raster.hits,misses:cache.misses+raster.misses,weight:cache.weight+raster.weight}),dispose(){rasterObserver?.disconnect();unsubscribe();visibleVariants.clear();cache.clear();raster.clear();jobs.clear();}};
 }

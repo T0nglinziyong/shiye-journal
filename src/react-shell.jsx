@@ -19,6 +19,7 @@ function AppShell(){
 
 let root;
 let routeRoot;
+let routeRootKey=null;
 
 // The recognition workspace, Matching controls and canvas engine still own
 // gesture-heavy DOM lifetimes. They mount as React route islands so a route
@@ -41,13 +42,14 @@ export function mountReactShell(){
   document.querySelector('#view').innerHTML='<section class="empty"><strong>正在打开拾页…</strong><p>正在读取当前账号的本机缓存。</p></section>';
 }
 
-export function renderReactPage(content){
+export function renderReactPage(content,{preserveKey=null}={}){
   if(!root)mountReactShell();
-  if(routeRoot){flushSync(()=>routeRoot.unmount());routeRoot=null;}
+  if(routeRoot&&(!preserveKey||routeRootKey!==preserveKey||!React.isValidElement(content))){
+    flushSync(()=>routeRoot.unmount());routeRoot=null;routeRootKey=null;
+  }
   const view=document.querySelector('#view');
   if(React.isValidElement(content)){
-    view.replaceChildren();
-    routeRoot=createRoot(view);
+    if(!routeRoot){view.replaceChildren();routeRoot=createRoot(view);routeRootKey=preserveKey;}
     flushSync(()=>routeRoot.render(content));
   }else view.innerHTML=content;
 }

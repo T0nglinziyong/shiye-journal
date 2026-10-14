@@ -9,6 +9,9 @@ import {IMAGE_MODELS} from './ai-image-generation.js';
 import {matchingViewModel} from './matching-view.js';
 import {styleGroups,purposeGroups} from './matching-directions.js';
 import {visualStyles} from './creative-style-brief.js';
+import {FabricSceneStage} from './fabric-scene-stage.jsx';
+import {FabricEditorToolbar,FabricHeaderMenu} from './fabric-editor-controls.jsx';
+import {FabricPageViewport} from './fabric-page-viewport.jsx';
 
 function RouteImage({asset,source,priority=false}){
   const src=asset&&(source(asset.blobId)||asset.staticPath);
@@ -169,57 +172,122 @@ export function SeriesContentsPage({state,source,kindName,format,onAction}){
 
 const matchingPurposes=['日常记录','旅途记录','图文收藏','清单计划','影像故事','主题封面'];
 const recommendationFilters=['全部','结构补足','配色关系','尺寸层次','内容呼应','材质','同系列','不使用'];
-function DirectionGroup({groups,values,type}){
+function DirectionGroup({groups,values,type,onChange}){
   return groups.map(group=><label key={group.id}>{group.label}<select className="match-direction-choice"
-    data-direction={type} data-group={group.id} aria-label={group.label} defaultValue={values.find(value=>group.options.includes(value))||''}>
+    data-direction={type} data-group={group.id} aria-label={group.label}
+    value={values.find(value=>group.options.includes(value))||''}
+    onChange={event=>onChange(type,event.target.value,group.options)}>
     <option value="">不预设</option>{group.options.map(name=><option key={name} value={name}>{name}</option>)}
   </select></label>);
 }
-export function MatchingPage({state,source,kindName,session}){
+function MatchingVariantCover({variant,session,source}){
+  const host=React.useRef(null),[raster,setRaster]=useState(null);
+  useEffect(()=>{
+    if(variant.status==='running'||variant.project?.isSnapshot)return;
+    let canceled=false,observer;
+    const load=()=>{void session.coverURL(variant).then(url=>{
+      if(!canceled&&url)setRaster(url);
+    });};
+    if(typeof IntersectionObserver==='function'){
+      observer=new IntersectionObserver(entries=>{
+        if(entries.some(entry=>entry.isIntersecting)){observer.disconnect();load();}
+      },{rootMargin:'240px'});
+      if(host.current)observer.observe(host.current);
+    }else load();
+    return ()=>{canceled=true;observer?.disconnect();};
+  },[variant.project,variant.status,session]);
+  const snapshot=variant.project?.isSnapshot?source(variant.project.snapshotBlobId):null;
+  const draft=variant.project?.drafts?.find(item=>item.id===variant.project.activeDraftID)||
+    variant.project?.drafts?.[0];
+  return <div ref={host} className="match-cover-preview" data-match-raster={variant.id}>
+    {raster||snapshot?<img className="match-raster-preview" src={raster||snapshot}
+      alt={variant.title+' 构图预览'}/>:<div className="thumb-sheet"
+      style={{aspectRatio:draft?`${draft.canvas.width}/${draft.canvas.height}`:'3/4',
+        background:draft?.paperColor||'#fcfaf0'}}/>}
+  </div>;
+}
+function MatchingSessionPanel({session,state,source,onAction}){
+  const [,refresh]=useState(0);
+  useEffect(()=>session.subscribe(()=>refresh(version=>version+1)),[session]);
+  const variants=session.variants();
+  const action=(name,id)=>()=>onAction(name,id);
+  return <section className="panel match-previews" data-match-scroll="previews" data-react-session="true">
+    <h2>版本方案</h2><p>完成方案自动保存为草稿或快照；“重新搭配”只清空这里的方案，不删除已保存作品。</p>
+    <div className="match-variant-grid" data-match-scroll="variants">{variants.length?
+      variants.map(variant=><article key={variant.id} className="match-variant"
+        data-variant={variant.id} data-variant-status={variant.status}>
+        <button className="match-result" data-act="match-open-result" data-id={variant.id}
+          data-react-action="true" disabled={variant.status==='running'}
+          onClick={action('match-open-result',variant.id)}>
+          <MatchingVariantCover variant={variant} session={session} source={source}/>
+          <strong>{variant.title}</strong>
+        </button><pre className="match-progress" aria-live="polite">{variant.progress}</pre>
+        {variant.linkedProjectID&&!state.projects.some(project=>project.id===variant.linkedProjectID)?
+          <button className="btn" data-react-action="true" onClick={action('match-restore',variant.id)}>恢复已删除作品</button>:null}
+        {variant.status==='running'?<button className="btn" data-react-action="true" onClick={action('match-stop')}>停止创作</button>:
+          variant.project.deliveryMode==='zip'?<button className="btn"
+            data-react-action="true"
+            onClick={action('download-project-zip',variant.linkedProjectID||variant.project.id)}>
+            下载可编辑 ZIP</button>:null}
+      </article>):<p>尚未生成方案。</p>}</div>
+  </section>;
+}
+export function MatchingPage({state,source,kindName,session,onAction,onMatchingChange}){
+  const [,refresh]=useState(0);
+  const change=(id,value,options)=>{onMatchingChange(id,value,options);refresh(version=>version+1);};
+  const action=(name,id,value)=>()=>onAction(name,id,value);
   const {selected,recommendations,excluded,scope,filtered,styles,chosenPurposes}=matchingViewModel(state);
   const custom=state.matchRatio==='custom'||state.matchRatio.startsWith('custom:');
   return <div className={`matching-page ${custom?'custom-paper':''}`} data-react-page="matching">
     <div className="view-head unified-page-heading"><div className="unified-heading-copy"><span className="eyebrow">FROM YOUR DESK TO YOUR PAGES</span><h1>素材搭配</h1></div>
-      <div className="actions"><button className="btn" data-act="reset-match">↶　重新搭配</button></div></div>
+      <div className="actions"><button className="btn" data-act="reset-match" data-react-action="true" onClick={action('reset-match')}>↶　重新搭配</button></div></div>
     <section className="panel match-direction"><h2>先定这一页的方向</h2><p>每类可选一个方向，也可选“不预设”；不同类别可以自由组合。</p>
-      <div className="match-direction-groups"><fieldset><legend>页面风格</legend><DirectionGroup groups={styleGroups} values={styles} type="style"/></fieldset>
-        <fieldset><legend>页面用途</legend><DirectionGroup groups={purposeGroups} values={chosenPurposes} type="purpose"/>
-          <label>素材加工方式<select id="match-processing" defaultValue={state.matchProcessing}>{['不预设','保留完整','少量裁剪','自由拆解'].map(value=><option key={value}>{value}</option>)}</select></label>
+      <div className="match-direction-groups"><fieldset><legend>页面风格</legend><DirectionGroup groups={styleGroups} values={styles} type="style" onChange={change}/></fieldset>
+        <fieldset><legend>页面用途</legend><DirectionGroup groups={purposeGroups} values={chosenPurposes} type="purpose" onChange={change}/>
+          <label>素材加工方式<select id="match-processing" defaultValue={state.matchProcessing}
+            onChange={event=>change('matchProcessing',event.target.value)}>{['不预设','保留完整','少量裁剪','自由拆解'].map(value=><option key={value}>{value}</option>)}</select></label>
         </fieldset></div>
-      <select id="match-style" multiple hidden defaultValue={styles}>{visualStyles.map(([name])=><option key={name} value={name}>{name}</option>)}</select>
-      <select id="match-purpose" multiple hidden defaultValue={chosenPurposes}>{matchingPurposes.map(name=><option key={name}>{name}</option>)}</select>
-      <div className="match-options match-setting-row match-content-row"><label>文字内容<select id="match-content-policy" defaultValue={state.matchContentPolicy}>
+      <select id="match-style" multiple hidden value={styles} onChange={()=>{}}>{visualStyles.map(([name])=><option key={name} value={name}>{name}</option>)}</select>
+      <select id="match-purpose" multiple hidden value={chosenPurposes} onChange={()=>{}}>{matchingPurposes.map(name=><option key={name}>{name}</option>)}</select>
+      <div className="match-options match-setting-row match-content-row"><label>文字内容<select id="match-content-policy" defaultValue={state.matchContentPolicy}
+        onChange={event=>change('matchContentPolicy',event.target.value)}>
         <option value="documentary">真实记录 · 不编造经历</option><option value="original">原创主题文字</option><option value="collection">素材收藏短评</option><option value="visual">不添加文字</option>
-      </select></label><label>文字表现方式<select id="match-text-presentation" defaultValue={state.matchTextPresentation||'mixed'}>
+      </select></label><label>文字表现方式<select id="match-text-presentation" defaultValue={state.matchTextPresentation||'mixed'}
+        onChange={event=>change('matchTextPresentation',event.target.value)}>
         <option value="type">排版文字</option><option value="handwritten">自由手写</option><option value="mixed">混合编排</option>
       </select></label></div>
-      <div className="match-options match-setting-row match-paper-page"><label>页面模式<select id="match-mode" defaultValue={state.matchMode}><option value="single">单页</option><option value="spread">双页</option></select></label>
-        <label>纸张规格<select id="match-ratio" defaultValue={state.matchRatio?.startsWith('custom:')?'custom':state.matchRatio}><PaperSizeOptions/></select></label></div>
-      <div className="match-options match-setting-row match-paper-dimensions"><label className="match-custom-paper">纸张宽 mm<input id="match-paper-width" type="number" min="50" max="1000" defaultValue={state.customPaperWidth}/></label>
-        <label className="match-custom-paper">纸张高 mm<input id="match-paper-height" type="number" min="50" max="1000" defaultValue={state.customPaperHeight}/></label></div>
-      <label>创作要求和内容<textarea data-match-scroll="intent" id="match-intent" placeholder="可写主题、具体内容、想保留的句子或排版要求；未提供的私人事实不会编造" defaultValue={state.matchIntent}/></label>
+      <div className="match-options match-setting-row match-paper-page"><label>页面模式<select id="match-mode" defaultValue={state.matchMode}
+        onChange={event=>change('matchMode',event.target.value)}><option value="single">单页</option><option value="spread">双页</option></select></label>
+        <label>纸张规格<select id="match-ratio" defaultValue={state.matchRatio?.startsWith('custom:')?'custom':state.matchRatio}
+          onChange={event=>change('matchRatio',event.target.value)}><PaperSizeOptions/></select></label></div>
+      <div className="match-options match-setting-row match-paper-dimensions"><label className="match-custom-paper">纸张宽 mm<input id="match-paper-width" type="number" min="50" max="1000" defaultValue={state.customPaperWidth}
+        onChange={event=>change('customPaperWidth',Number(event.target.value))}/></label>
+        <label className="match-custom-paper">纸张高 mm<input id="match-paper-height" type="number" min="50" max="1000" defaultValue={state.customPaperHeight}
+          onChange={event=>change('customPaperHeight',Number(event.target.value))}/></label></div>
+      <label>创作要求和内容<textarea data-match-scroll="intent" id="match-intent" placeholder="可写主题、具体内容、想保留的句子或排版要求；未提供的私人事实不会编造" defaultValue={state.matchIntent}
+        onBlur={event=>change('matchIntent',event.target.value)}/></label>
     </section>
     <div className="matching-layout"><aside className="basket"><h3>本次素材篮</h3><div className="match-basket-scroll" data-match-scroll="basket">
       {selected.length?selected.map(asset=><div key={asset.id} className="match-basket-item" data-match-asset={asset.id}>
         <RouteImage asset={asset} source={source}/><div><strong>{asset.title}</strong><small className={`match-priority ${scope.required.includes(asset.id)?'required':'preferred'}`}>{scope.required.includes(asset.id)?'必须使用':'优先使用'}</small>
-          <div className="match-basket-actions"><button type="button" data-act="match-core" data-id={asset.id} aria-label={state.coreIDs.includes(asset.id)?'取消标星':'标星设为必用'} aria-pressed={state.coreIDs.includes(asset.id)} title={state.aiSettings.requireAllCandidates?'当前设置为全部候选必用；标星会保留单件优先级':'切换此素材是否必用'}>{state.coreIDs.includes(asset.id)?'★':'☆'}</button>
-            <button type="button" data-act="basket" data-id={asset.id} aria-label="移出素材篮">×</button><button type="button" data-act="match-use" data-id={asset.id} aria-label="设置素材用法">▣ 用法</button></div>
+          <div className="match-basket-actions"><button type="button" data-act="match-core" data-id={asset.id} data-react-action="true" onClick={action('match-core',asset.id)} aria-label={state.coreIDs.includes(asset.id)?'取消标星':'标星设为必用'} aria-pressed={state.coreIDs.includes(asset.id)} title={state.aiSettings.requireAllCandidates?'当前设置为全部候选必用；标星会保留单件优先级':'切换此素材是否必用'}>{state.coreIDs.includes(asset.id)?'★':'☆'}</button>
+            <button type="button" data-act="basket" data-id={asset.id} data-react-action="true" onClick={action('basket',asset.id)} aria-label="移出素材篮">×</button><button type="button" data-act="match-use" data-id={asset.id} data-react-action="true" onClick={action('match-use',asset.id)} aria-label="设置素材用法">▣ 用法</button></div>
           {state.materialUseHints[asset.id]?<small className="material-use-summary">{state.materialUseRequired[asset.id]?'必做':'偏好'} · {state.materialUseHints[asset.id]}</small>:null}
         </div></div>):<p>先从右侧建议或素材库选择。点星号可设为每版必用。</p>}
       </div><p className="muted">必须 {scope.required.length} · 优先 {scope.preferred.length} · {state.aiSettings.autoIncludeRecommendations?'AI 备选 '+scope.available.length:'AI 备选未开启'} · 不使用 {excluded.size}</p></aside>
       <section className="panel match-recommendations"><div className="match-panel-head"><h3>✣　按风格与用途推荐</h3><small>{recommendations.length} 件候选 · 已排除 {excluded.size} 件</small></div>
-        <div className="match-chips" data-match-scroll="chips">{recommendationFilters.map(filter=><button key={filter} className={state.recommendFilter===filter?'active':''} data-act="match-filter" data-val={filter}>{filter}</button>)}</div>
+        <div className="match-chips" data-match-scroll="chips">{recommendationFilters.map(filter=><button key={filter} className={state.recommendFilter===filter?'active':''} data-act="match-filter" data-val={filter} data-react-action="true" onClick={action('match-filter',null,filter)}>{filter}</button>)}</div>
         <div className="match-rec-grid" data-match-scroll="recommendations">{filtered.length?filtered.map(({asset,reasons})=>{
           const isExcluded=excluded.has(asset.id);
           return <div key={asset.id} className="match-rec" data-match-asset={asset.id}><RouteImage asset={asset} source={source}/><div><strong>{asset.title}</strong><small className="match-type">{kindName(asset.kind)}</small>
             {isExcluded?<small className="match-priority excluded">不可以使用</small>:null}<small title={reasons.join('、')}>{reasons.slice(0,2).join(' · ')||'适合当前方向'}</small>
-            <button data-act="basket" data-id={asset.id}>加入素材篮</button><button data-act={isExcluded?'match-allow':'match-skip'} data-id={asset.id}>{isExcluded?'恢复推荐':'不使用'}</button></div></div>;
+            <button data-act="basket" data-id={asset.id} data-react-action="true" onClick={action('basket',asset.id)}>加入素材篮</button><button data-act={isExcluded?'match-allow':'match-skip'} data-id={asset.id} data-react-action="true" onClick={action(isExcluded?'match-allow':'match-skip',asset.id)}>{isExcluded?'恢复推荐':'不使用'}</button></div></div>;
         }):<p>这一类暂时没有候选；可以更换风格、用途或继续从素材库选取。</p>}</div>
       </section></div>
     <section className="panel match-action"><h2>开始创作</h2><p>{state.aiSettings.requireAllCandidates?'当前候选素材均为必用；如无法在真实纸张上容纳，请减少候选或关闭设置中的必用开关。':'标星的素材必须使用；其余候选尽量使用，但不强制用尽。'}不使用的素材不会发送给 AI。</p>
-      <div className="match-generate"><button className="btn primary" data-act="match-generate" disabled={!scope.candidateAssetIDs.length}>进行AI创作</button><button className="btn" data-act="match-export-gpt" disabled={!scope.candidateAssetIDs.length}>导出给网页版 AI</button>
-        <button className="btn" data-act="match-import-gpt">导入 AI 结果</button><button className="btn" data-act="create-from-basket" disabled={!selected.length}>不使用 AI，手动创作</button></div></section>
-    <div className="matching-session-island" style={{display:'contents'}} dangerouslySetInnerHTML={{__html:session.render()}}/>
+      <div className="match-generate"><button className="btn primary" data-act="match-generate" data-react-action="true" onClick={action('match-generate')} disabled={!scope.candidateAssetIDs.length}>进行AI创作</button><button className="btn" data-act="match-export-gpt" data-react-action="true" onClick={action('match-export-gpt')} disabled={!scope.candidateAssetIDs.length}>导出给网页版 AI</button>
+        <button className="btn" data-act="match-import-gpt" data-react-action="true" onClick={action('match-import-gpt')}>导入 AI 结果</button><button className="btn" data-act="create-from-basket" data-react-action="true" onClick={action('create-from-basket')} disabled={!selected.length}>不使用 AI，手动创作</button></div></section>
+    <MatchingSessionPanel session={session} state={state} source={source} onAction={onAction}/>
   </div>;
 }
 
@@ -305,7 +373,9 @@ function EditorAIPanel({state,draft,asset,hasReport,onAction,onPromptChange}){
 // island so pointer capture, canvas contexts and incremental layer patches
 // remain under the existing canvas engine's lifetime.
 export function EditorPage({state,draft,editorEntry,renderSceneDOM,asset,source,format,
-  hasAIReport,onAction,onInspectorChange,onTitleCommit,onDraftSelect,onAIAction,onAIPromptChange}){
+  hasAIReport,onAction,onInspectorChange,onTitleCommit,onDraftSelect,onAIAction,onAIPromptChange,
+  useFabric=false,sceneRevision,onFabricSelection,onFabricBeforeChange,onFabricChange,onFabricIssue,
+  onFabricViewportChange,loadFabricAsset,materials=[]}){
   const project=state.activeProject;
   if(!project||!draft)return null;
   const selected=editorEntry(draft).find(entry=>entry.value.id===state.selected);
@@ -314,26 +384,47 @@ export function EditorPage({state,draft,editorEntry,renderSceneDOM,asset,source,
   const availableHeight=Math.max(180,viewportHeight-(window.innerWidth<700?200:166));
   const width=Math.max(160,Math.min(availableWidth,availableHeight*draft.canvas.width/draft.canvas.height));
   const scale=width/draft.canvas.width,height=draft.canvas.height*scale;
-  const sceneHTML=renderSceneDOM(draft,scale)+
+  const sceneHTML=!useFabric&&renderSceneDOM(draft,scale)+
     `<canvas class="paper-layer" width="${Math.round(draft.canvas.width)}" height="${Math.round(draft.canvas.height)}" aria-hidden="true"></canvas>`+
     `<canvas id="ink" class="ink-layer" width="${Math.round(draft.canvas.width)}" height="${Math.round(draft.canvas.height)}"></canvas>`;
   const toolNames=[['select','选择'],['pen','画笔'],['text','文字'],['shape','图形'],['material','素材']];
-  return <><div className="view-head"><div><h1 contentEditable suppressContentEditableWarning id="project-title"
+  return <><div className={`view-head ${useFabric?'swift-editor-head':''}`}>
+    {useFabric?<button className="btn" data-act="back-works">返回</button>:null}
+    <div><h1 contentEditable suppressContentEditableWarning id="project-title"
     spellCheck="false" onBlur={event=>onTitleCommit(event.currentTarget.textContent)}>{project.title}</h1>
       <p>编辑只改变作品，不修改素材库里的原始尺寸和数量</p></div><div className="actions">
-      <button className="btn" data-act="back-works">返回作品</button><button className="btn" data-act="new-draft">新方案</button>
-      <button className="btn" data-act="creative-json">导入创作指令</button><button className="btn" data-act="export-png">导出 PNG</button><button className="btn" data-act="print">打印 / PDF</button>
+      {useFabric?<><span className="swift-auto-saved">{document.querySelector('#save-state')?.textContent||'本机暂存'}</span>
+        <FabricHeaderMenu kind="history" project={project} onAction={onAction}/>
+        <button className="btn" data-act="undo" aria-label="撤销">↶</button>
+        <button className="btn" data-act="redo" aria-label="重做">↷</button>
+        <button className="btn primary" data-act="editor-done">完成</button>
+        <FabricHeaderMenu kind="export" project={project} onAction={onAction}/>
+      </>:<><button className="btn" data-act="back-works">返回作品</button><button className="btn" data-act="new-draft">新方案</button>
+        <button className="btn" data-act="creative-json">导入创作指令</button><button className="btn" data-act="export-png">导出 PNG</button><button className="btn" data-act="print">打印 / PDF</button></>}
     </div></div>
-    <div className="editor-shell" data-react-page="editor"><div className="editor-tools">
+    {useFabric?<FabricEditorToolbar state={state} draft={draft} materials={materials} source={source}
+      onAction={onAction}/>:null}
+    <div className={`editor-shell ${useFabric?'swift-editor-workspace':''} ${useFabric&&selected?'show-inspector':''}`}
+      data-react-page="editor">{useFabric?null:<div className="editor-tools">
       {toolNames.map(([id,label])=><button key={id} className={`btn ${state.tool===id?'primary':''}`} data-act="tool" data-val={id}>{label}</button>)}
       <hr/><button className="btn" data-act="undo">撤销</button><button className="btn" data-act="redo">重做</button>
-    </div><section className="editor-stage"><div className="object-toolbar">
+    </div>}<section className="editor-stage"><div className="object-toolbar">
       <button className="btn mini" data-act="zoom-out">－</button><span>{Math.round(state.zoom*100)}%</span><button className="btn mini" data-act="zoom-in">＋</button>
       <button className="btn mini" data-act="paper-menu">纸张</button>
       <button className="btn mini" data-act="restore-baseline" disabled={selected?.kind!=='material'||!selected.value.generationBaseline}>恢复初稿</button>
       <button className="btn mini" data-act="park" disabled={selected?.kind!=='material'}>放入备选</button>
-    </div><div className="page-wrap"><div id="canvas-page" className={`canvas-page ${draft.paperPattern} ${state.tool==='pen'?'pen':''}`}
-      style={{width,height,backgroundColor:draft.paperColor}} dangerouslySetInnerHTML={{__html:sceneHTML}}/></div>
+    </div><div className="page-wrap">{useFabric?<FabricPageViewport draft={draft} width={width} height={height}
+      zoom={state.zoom} initialPan={state.canvasViewports?.get(project.id+':'+draft.id)}
+      onViewportChange={onFabricViewportChange}><div className="fabric-scene-scale" style={{position:'absolute',left:0,top:0,
+        width:draft.canvas.width,height:draft.canvas.height,transform:`scale(${scale})`,transformOrigin:'left top'}}>
+        <FabricSceneStage draft={draft} sceneRevision={sceneRevision} tool={state.tool}
+          selectedID={state.selected}
+          pen={{widthMM:state.canvasTools?.fabricPenWidthMM??.5,color:state.canvasTools?.penColor||'#2b5245'}}
+          eraser={{widthMM:state.canvasTools?.fabricEraserWidthMM??4}}
+          assetURL={loadFabricAsset} onSelection={onFabricSelection}
+          onBeforeChange={onFabricBeforeChange} onChange={onFabricChange} onIssue={onFabricIssue}/>
+      </div></FabricPageViewport>:<div id="canvas-page" className={`canvas-page ${draft.paperPattern} ${state.tool==='pen'?'pen':''}`}
+        style={{width,height,backgroundColor:draft.paperColor}} dangerouslySetInnerHTML={{__html:sceneHTML}}/>}</div>
       <div className="shelf"><b>备选</b>{draft.items.filter(item=>item.isParked).map(item=><button key={item.id} className="mini-asset" data-act="unpark" data-id={item.id}>
         <RouteImage asset={asset(item.assetID)} source={source}/></button>)}</div>
     </section><aside className="editor-inspector"><h2>{selected?`${{material:'素材',text:'文字',shape:'图形'}[selected.kind]} · 图层属性`:'页面设置'}</h2>

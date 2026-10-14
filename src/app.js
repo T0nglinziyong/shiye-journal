@@ -45,7 +45,7 @@ import {mountCanvasEditor} from './canvas-editor-ui.js';
 import {editorExitDecision} from './editor-exit-policy.js';
 import {closePopover} from './swift-popover.js';
 import {drawPaper} from './paper-rendering.js';
-import {shapeSVG,drawInk,textFont,textFontFamily,textLineHeight,textLines} from './editor-tools-model.js';
+import {shapeSVG,drawInk,textFont,textFontFamily,textLineHeight,textLines,defaultTools,configureShape} from './editor-tools-model.js';
 import {shapeTag} from './shape-preview.js';
 import {ImageNodeCache} from './image-node-cache.js';
 import {createWorkCoverBackfill} from './work-cover-backfill.js';
@@ -154,6 +154,9 @@ let offlineSnapshotProject=null;
 let registeringOriginalGPTTask=false;
 installRuntimeDiagnostics(()=>state.route);
 const state={route:'series',assets:[],series:[],projects:[],trash:[],userTemplates:[],basket:[],excludedAssetIDs:[],history:[],selected:null,activeProject:null,activeDraft:null,offlineEditingReturnID:null,detailAssetID:null,previewProjectID:null,settingsSection:null,selfHosted:false,aiSettings:loadAISettings(),preferences:loadPreferences(),aiPanel:false,aiBusy:false,aiPrompt:'',aiProgress:'',tool:'select',zoom:1,sort:'newest',query:'',kind:'all',status:'all',seriesID:'all',matchCore:null,matchRatio:'a4',matchMode:'single',matchStyle:'韩系清新',matchStyles:['韩系清新'],matchPurposes:['日常记录'],matchIntent:'',matchContentPolicy:'documentary',matchTextPresentation:'mixed',matchPurpose:'日常记录',matchProcessing:'不预设',materialUseHints:{},materialUseRequired:{},assetProcessing:{},customPaperWidth:210,customPaperHeight:297,recommendFilter:'全部',coreIDs:[],importStep:'inspect',importRecords:[],importIndex:0,importFile:null,importBitmap:null,importBox:{x:0,y:0,w:1,h:1},importCandidate:null,importRemoveWhite:false,undo:[],redo:[],drawing:false};
+// The actual account-backed editor can be exercised while the remaining
+// controls migrate. This switch is removed before the test-branch cutover.
+const fabricEditorPreview=new URLSearchParams(location.search).has('fabric-editor');
 // Action changes are published independently of their DOM representation.
 const actionStore=createActionStore(state);
 actionStore.register('legacy/action',async({action,id,value})=>({result:await legacyHandle(action,id,value)}));
@@ -469,6 +472,12 @@ pageControllers.register('editor',createEditorController({
     view.editorDraft=current();view.editorInk=current().strokes;
     view.editorLayoutKey=editorLayoutKey();
     markSceneTrackingBaseline(state.activeProject);
+    if(fabricEditorPreview){
+      captureHistory(state.activeProject);
+      if(!state.canvasTools){let saved={};try{saved=JSON.parse(localStorage.getItem('shiye-canvas-tools-v1'))||{};}catch{}
+        state.canvasTools={...defaultTools,...saved};}
+      return;
+    }
     mountCanvasEditor({state,view,body,modal,current,checkpoint,saveProject,render,route,
       flushSave,toast,esc,imgTag,asset,db,handle,openCutoutCheck,openAICreation});
     mountCanvasSelection({state,view,current,checkpoint,saveProject,render,toast});
@@ -539,9 +548,31 @@ function render(){
     :state.route==='series'
     ?SeriesPage({series:state.series,assets:state.assets,display:state.preferences.display,seriesCovers,source:image,onAction:handle})
     :state.route==='matching'
-    ?MatchingPage({state,source:image,kindName,session:matchingSession})
+    ?createElement(MatchingPage,{state,source:image,kindName,session:matchingSession,
+      onAction:handle,onMatchingChange:updateMatchingFromReact})
     :state.route==='editor'&&state.activeProject&&current()
     ?EditorPage({state,draft:current(),editorEntry,renderSceneDOM,asset,source:image,
+      useFabric:fabricEditorPreview,sceneRevision:state.activeProject.updatedAt,
+      materials:visibleMaterials(state.assets),
+      loadFabricAsset:async(id,node)=>{
+        const record=asset(id);
+        if(!record)throw Error('素材不在当前资料库：'+id);
+        if(record.staticPath)return record.staticPath;
+        const pageScale=Math.max(0.1,Math.min(4,(view.clientWidth||window.innerWidth)/current().canvas.width));
+        const pixels=Math.min(4096,Math.max(480,Math.ceil(Math.max(node.width,node.height)*pageScale*(devicePixelRatio||1)*2)));
+        return privateImages.load(record.blobId,pixels);
+      },
+      onFabricSelection:ids=>{const next=ids[0]||null;if(state.selected!==next){state.selected=next;render();}},
+      onFabricBeforeChange:()=>checkpoint(),
+      // Fabric already updates the changed layer in place. Persist its Scene
+      // data without rebuilding the route during ink or text input.
+      onFabricChange:()=>saveProject(),
+      onFabricIssue:error=>toast(error.message),
+      onFabricViewportChange:(scale,pan)=>{
+        state.zoom=scale;
+        state.canvasViewports||=new Map();
+        state.canvasViewports.set(state.activeProject.id+':'+current().id,{...pan,scale});
+      },
       format:fmt,hasAIReport:!!aiReport,onAction:handle,onInspectorChange:updateEditorInspector,
       onTitleCommit:title=>{const p=state.activeProject,next=title.trim()||'未命名手账';
         if(p&&next!==p.title){p.title=next;saveProject();}},
@@ -577,7 +608,8 @@ function render(){
     :state.route==='import'&&state.importStep==='inspect'&&state.importRecords[state.importIndex]
       ?ImportInspectionPage({state,format:fmt,onAction:handle})
       :null;
-  renderReactPage(reactPage||imperativeRoute(pageControllers.render(state.route)||renderLibrary()));
+  renderReactPage(reactPage||imperativeRoute(pageControllers.render(state.route)||renderLibrary()),
+    {preserveKey:fabricEditorPreview&&state.route==='editor'?'fabric-editor':null});
   view.dataset.renderedRoute=state.route;
   view.dataset.renderedImportStep=state.route==='import'?state.importStep:'';
   view.dataset.renderedManualBox=state.route==='import'?String(!!state.showManualBox):'';
@@ -611,6 +643,7 @@ function render(){
   mountPageSyncIndicator();backgroundViewPending=false;}
 function editorLayoutKey(){const size=view.editorLayoutSize||{width:window.innerWidth,height:window.innerHeight};return [size.width,size.height,current()?.canvas.width,current()?.canvas.height,!!state.workspacePanel,!!state.aiPanel].join(':');}
 function refreshCanvas(){
+  if(fabricEditorPreview)return false;
   const d=current(),page=view.querySelector('#canvas-page');
   // Never unmount the editor simply because it contains groups or pen strokes.
   // Keep the user's pointer session, composition input, decoded images and
@@ -792,6 +825,20 @@ function queueMatchingDefaultsSync(){
       .finally(()=>{if(!matchingDefaultsTimer)matchingDefaultsPending=false;});
   },650);
 }
+function updateMatchingFromReact(key,value,options){
+  if(key==='style'||key==='purpose'){
+    const list=key==='style'?'matchStyles':'matchPurposes';
+    state[list]=[...(state[list]||[]).filter(item=>!options.includes(item)),...(value?[value]:[])];
+    state[key==='style'?'matchStyle':'matchPurpose']=state[list][0]||'';
+  }else if(['matchProcessing','matchContentPolicy','matchTextPresentation','matchMode',
+    'matchRatio','customPaperWidth','customPaperHeight','matchIntent'].includes(key))state[key]=value;
+  else return;
+  void matchingSession.persist().catch(error=>{
+    console.warn('本机搭配状态未保存；不影响云端作品同步',error);
+    toast('本机搭配状态保存失败：'+error.message);
+  });
+  if(key!=='matchIntent')queueMatchingDefaultsSync();
+}
 function bindPage({partial=false}={}){
   // Pagination only inserts cards. Rebinding all form, editor and matching
   // listeners here accumulates duplicate handlers on each page transition.
@@ -802,7 +849,8 @@ function bindPage({partial=false}={}){
   if(state.route==='matching'){
     const saveMatching=()=>matchingSession.persist().catch(e=>{console.warn('本机搭配状态未保存；不影响云端作品同步',e);toast('本机搭配状态保存失败：'+e.message);});
     const fields={'match-style':'matchStyle','match-purpose':'matchPurpose','match-intent':'matchIntent','match-content-policy':'matchContentPolicy','match-text-presentation':'matchTextPresentation','match-processing':'matchProcessing','match-mode':'matchMode','match-ratio':'matchRatio','match-paper-width':'customPaperWidth','match-paper-height':'customPaperHeight'};
-    for(const [id,key] of Object.entries(fields))view.querySelector('#'+id)?.addEventListener('change',e=>{state[key]=e.target.type==='number'?Number(e.target.value):e.target.value;if(id==='match-style')state.matchStyles=readMatchSelection(id,state.matchStyle);if(id==='match-purpose')state.matchPurposes=readMatchSelection(id,state.matchPurpose);if(id==='match-style'||id==='match-purpose')refreshMatchingRecommendations();void saveMatching();if(id!=='match-intent')queueMatchingDefaultsSync();});
+    if(!view.querySelector('[data-react-page="matching"]'))
+      for(const [id,key] of Object.entries(fields))view.querySelector('#'+id)?.addEventListener('change',e=>{state[key]=e.target.type==='number'?Number(e.target.value):e.target.value;if(id==='match-style')state.matchStyles=readMatchSelection(id,state.matchStyle);if(id==='match-purpose')state.matchPurposes=readMatchSelection(id,state.matchPurpose);if(id==='match-style'||id==='match-purpose')refreshMatchingRecommendations();void saveMatching();if(id!=='match-intent')queueMatchingDefaultsSync();});
     // Entering or rerendering this page is not an explicit save action. Any
     // changed session is staged in the background; sync errors use the global
     // indicator instead of interrupting navigation with a toast.
@@ -1137,7 +1185,60 @@ async function legacyHandle(action,id,value){try{switch(action){
   case 'export-scene-json':{const p=state.activeProject;if(!p||p.isSnapshot)throw Error('请选择可编辑作品');download(new Blob([JSON.stringify(exportSceneDocument(p))],{type:'application/json'}),p.title+'.shiye-scene.json');break;}
    case 'download-project-zip':{const source=state.projects.find(x=>x.id===id)||state.activeProject;if(!source||source.isSnapshot)throw Error('可编辑作品不存在');const p=source.projectDocumentPath?await db.completeProject(source):source;const {createNativeProjectPackage}=await import('./native-project-package.js');download(createNativeProjectPackage(p),p.title+'.shiyeproject.zip');break;}
   case 'project-delete':{const p=state.projects.find(x=>x.id===state.previewProjectID);if(!p||!confirm('将这份作品移到最近删除？'))break;await moveProjectsToTrash([p.id]);break;}
-  case 'works-filter':await actionStore.dispatch({type:'works/filter',payload:{value}});break;case 'tool':{
+  case 'works-filter':await actionStore.dispatch({type:'works/filter',payload:{value}});break;
+  case 'fabric-tool':{
+    state.tool=value;
+    if(value!=='select')state.selected=null;
+    render();break;
+  }
+  case 'fabric-tool-setting':{
+    state.canvasTools||={...defaultTools};
+    if(id==='penColor')state.canvasTools.penColor=value;
+    else if(['fabricPenWidthMM','fabricEraserWidthMM'].includes(id))
+      state.canvasTools[id]=Math.max(id==='fabricPenWidthMM'?.2:1,
+        Math.min(id==='fabricPenWidthMM'?3:12,Number(value)||1));
+    else break;
+    try{localStorage.setItem('shiye-canvas-tools-v1',JSON.stringify(state.canvasTools));}catch{}
+    render();break;
+  }
+  case 'fabric-add-shape':{
+    const d=current();if(!d)break;
+    checkpoint();
+    const shape=configureShape(primitive(id,d),id);
+    shape.type='shape';shape.zIndex=Math.max(0,...d.layers.map(node=>node.zIndex||0))+1;
+    d.primitives.push(shape);
+    state.selected=shape.id;state.tool='select';saveProject();render();break;
+  }
+  case 'fabric-add-material':{
+    const a=asset(id),d=current();if(!a||!d)break;
+    const occupied=new Set(d.items.filter(item=>item.assetID===a.id)
+      .map(item=>item.materialUnitIndex??0));
+    const available=Array.from({length:Math.min(1000,a.supply?.quantity??1)},(_,index)=>index)
+      .find(index=>!occupied.has(index));
+    if(available===undefined){toast('此页已使用全部实物数量');break;}
+    if(!(a.physicalWidthMM>0&&a.physicalHeightMM>0)){
+      toast('请先确认素材实物尺寸');break;
+    }
+    checkpoint();
+    const item=itemFromAsset(a,d,d.canvas.width/2,d.canvas.height/2,
+      Math.max(0,...d.layers.map(node=>node.zIndex||0))+1);
+    item.materialUnitIndex=available;
+    d.items.push(item);
+    state.selected=item.id;state.tool='select';saveProject();render();break;
+  }
+  case 'fabric-select-layer':state.selected=id;state.tool='select';render();break;
+  case 'fabric-paper':{
+    const d=current();if(!d)break;
+    if(id==='pattern'&&['plain','grid','lines','dots','columns'].includes(value)){
+      if(d.paperPattern===value)break;
+      checkpoint();d.paperPattern=value;
+    }else if(id==='color'&&/^#[0-9a-f]{6}$/i.test(value)){
+      if(d.paperColor===value)break;
+      checkpoint();d.paperColor=value;
+    }else break;
+    saveProject();render();break;
+  }
+  case 'tool':{
     // A tool click selects its mode. A scene object is created only by an
     // explicit canvas placement or picker choice, never by this fallback.
     state.tool=value;
