@@ -66,7 +66,7 @@ export function mountCanvasEditor(c){
     for(const [name,fn] of [['保存快照',()=>handle('save-snapshot')],
       ['导出 PNG',()=>handle('export-png')],
       ['导出 PDF',()=>pdf?.click()||handle('print')],
-      ['导出可编辑 ZIP',()=>handle('download-project-zip')],
+      ['导出可编辑 JSON',()=>handle('download-project-json')],
       ['导出标准 Scene JSON',()=>handle('export-scene-json')],
       ['打印',()=>handle('print')],
       ['导入创作指令',()=>handle('creative-json')]])

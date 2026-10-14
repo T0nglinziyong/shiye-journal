@@ -8,17 +8,14 @@ import {assetFromSourceSnapshot} from './material-anatomy.js';
 // It intentionally reads only fixed files in the current task directory and
 // writes only output/validation-report.json. No account or network access.
 import {readFileSync,mkdirSync,writeFileSync,rmSync,existsSync} from 'node:fs';
-import {zipSync,strToU8} from 'fflate';
 import {importEditableWork,inspectEditableSource} from './offline-creation.js';
 import {sceneFingerprint} from './offline-result-review.js';
 import {renderOfflinePreviewSVG} from './offline-preview-svg.js';
-import {sha256Hex} from './task-fingerprint.js';
 
 async function main(){
   const report={version:1,validator:'shiye-current-contract',structure:'failed',physical:'not-run',visual:'unavailable',reading:'pending'};
   const mode=process.argv[2];
-  if(mode==='pack')rmSync('output/作品.shiyeproject.zip',{force:true});
-  if(mode==='pack'||mode==='preview'){rmSync('output/构图预览.svg',{force:true});rmSync('output/画面预览.html',{force:true});}
+  if(mode==='preview'){rmSync('output/构图预览.svg',{force:true});rmSync('output/画面预览.html',{force:true});}
   try{
     const context=JSON.parse(readFileSync('task/context.json','utf8'));
     const sceneText=readFileSync('project.shiyeproject.json','utf8');
@@ -27,7 +24,7 @@ async function main(){
     const assets=context.source.sourceSnapshots.map(assetFromSourceSnapshot);
     const imported=importEditableWork(sceneText,assets,{trustedSource:context.source});
     Object.assign(report,{structure:'passed',physical:'current-rules-passed',taskId:context.source.bundleId,taskHash:context.source.taskHash??null,sceneHash:await sceneFingerprint(scene)});
-    if(mode==='pack'||mode==='preview'){
+    if(mode==='preview'){
       const previews=Object.fromEntries(context.materials.map(item=>{
         const file=item.preview;
         return [item.alias,file&&/^materials\/(?:asset_[A-Za-z0-9_-]+|m[1-9]\d*)\.(?:webp|png)$/.test(file)&&existsSync(file)?readFileSync(file):null];
@@ -41,16 +38,6 @@ async function main(){
       writeFileSync('output/画面预览.html',browserPage);
       report.compiledSceneHash=craftSceneHash(imported.drafts[0]);report.browserRenderer='shiye-canvas-v2';
       writeFileSync('output/material-ledger.json',JSON.stringify(buildMaterialLedger(imported.drafts[0],assets),null,2)+'\n');
-      if(mode==='pack'){
-      const manifest={version:1,taskId:context.source.bundleId,taskHash:context.source.taskHash??null,schemaHash:context.source.schemaHash??null,sceneHash:report.sceneHash,previewHash:`sha256:${await sha256Hex(preview)}`,rendererVersion:'shiye-composition-preview-v1',fontSetVersion:null,outputProfile:'editable-approximate-svg',visualReview:false};
-      const contents={
-        'project.shiyeproject.json':strToU8(sceneText),
-        'preview.svg':preview,
-        'manifest.json':strToU8(JSON.stringify(manifest,null,2)+'\n'),
-        'validation-report.json':strToU8(JSON.stringify(report,null,2)+'\n')
-      };
-      writeFileSync('output/作品.shiyeproject.zip',zipSync(contents,{level:6}));
-      }
     }
   }catch(error){report.structure='failed';report.issue=String(error?.message||error).slice(0,500);report.diagnostic=craftDiagnostic(error);process.exitCode=1;}
   mkdirSync('output',{recursive:true});

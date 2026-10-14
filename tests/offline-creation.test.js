@@ -21,7 +21,8 @@ test('current GPT task package has one root entry and grouped compact folders',a
   assert.equal(context.format,'shiye-gpt-creation-package');assert.equal(context.version,2);
   assert.equal(context.source.taskBinding,'local');assert.equal(context.source.packageLayout,'compact');
   assert.equal(context.materials[0].assetID,asset.id);
-  for(const path of ['task/GUIDE.txt','task/knowledge.json','schema/output.json','schema/craft-plan.json','examples/project.shiyeproject.json','runtime/validate.cjs','runtime/preview.cjs','runtime/pack.cjs'])assert.ok(files[path],path);
+  for(const path of ['task/GUIDE.txt','task/knowledge.json','schema/output.json','schema/craft-plan.json','examples/project.shiyeproject.json','runtime/validate.cjs','runtime/preview.cjs'])assert.ok(files[path],path);
+  assert.equal(files['runtime/pack.cjs'],undefined);
   for(const removed of ['README.txt','context.json','contract.json','CONTENT_BRIEF.txt','CREATIVE_GUIDE.txt','CRAFT_GUIDE.txt','case-studies.json','composition-ideas.json','abstract-templates.json','source-image-audit.json','example-response.json','example-response.shiyeproject.json'])assert.equal(files[removed],undefined,removed);
   assert.match(strFromU8(files['START_HERE.txt']),/task\/context\.json/);assert.match(strFromU8(files['START_HERE.txt']),/schema\/output\.json/);
   const knowledge=JSON.parse(strFromU8(files['task/knowledge.json']));assert.equal(knowledge.format,'shiye-gpt-task-knowledge');assert.ok(knowledge.compositionIdeas.length);
@@ -33,13 +34,13 @@ test('current GPT task package has one root entry and grouped compact folders',a
   assert.doesNotMatch(guide,/page\.groups/,'removed parallel group schema must not appear in GPT instructions');
 });
 
-test('current editable example imports only with its exact registered source',async()=>{
+test('current editable example imports from JSON with current library assets',async()=>{
   const output=await make(),files=await filesOf(output),response=strFromU8(files['examples/project.shiyeproject.json']);
   const imported=importEditableWork(response,[asset],{trustedSource:output.source});
   assert.equal(imported.isDraft,true);assert.equal(imported.drafts[0].items[0].assetID,asset.id);assert.equal(imported.drafts[0].agentRun.status,'finished');
   assert.equal(imported.offlineBundleId,output.source.bundleId);
-  assert.throws(()=>importEditableWork(response,[asset]),/当前任务原件/);
-  assert.throws(()=>importEditableWork(response,[asset],{trustedSource:{...output.source,bundleId:'other'}}),/当前任务原件/);
+  assert.equal(importEditableWork(response,[asset]).drafts[0].items[0].assetID,asset.id);
+  assert.throws(()=>importEditableWork(response,[asset],{trustedSource:{...output.source,bundleId:'other'}}),/来源与所选原始任务不一致/);
   const copied=`预览如下。\n\n\`\`\`json\n${response}\n\`\`\``;
   assert.equal(importEditableWork(copied,[asset],{trustedSource:output.source}).drafts[0].items[0].assetID,asset.id);
 });

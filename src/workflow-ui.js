@@ -145,7 +145,7 @@ async function exportSelectedWorks(c,records,format='native'){
           c.download(blob,record.title+(format==='jpeg'?'.jpg':'.png'));
         }finally{bitmap.close();}
       }else throw Error('快照不支持当前导出类型');
-    }else if(format==='native')await c.handle('download-project-zip',record.id);
+    }else if(format==='native')await c.handle('download-project-json',record.id);
     else{
       const complete=record.projectDocumentPath?await c.db.completeProject(record):record;
       const draft=complete.drafts?.find(d=>d.id===complete.activeDraftID)||complete.drafts?.[0];
@@ -182,7 +182,7 @@ function workExportActions(c){
       ?[['原始快照文件','original']]
       :[['原始快照文件','original'],['PNG 图像','png'],['白底 JPEG','jpeg']])
     :editable
-      ?[['可编辑拾页 ZIP','native'],['PNG 图像','png'],['PDF 文件','pdf']]
+      ?[['可编辑拾页 JSON','native'],['PNG 图像','png'],['PDF 文件','pdf']]
       :[['按原格式分别导出','mixed']];
   return entries.map(([label,format])=>[label,async()=>{
     if(format==='mixed'){

@@ -10,7 +10,7 @@ const expected={
   'import-box-editor.js':'196304b571f14f00d02855c6bc08bdb3fd32b533',
   'material-color-restoration.js':'4be602eab1a8d3d1281ba6c455c1ad80055da1c3',
   'import-workspace-ui.js':'8f057fda3ec1c4115b0c8503b5372253c8dc03dc',
-  'workflow-ui.js':'87e7ce8603c1dbb699857d00874127454feb1553',
+  'workflow-ui.js':'a27372ff376230f162d5a41302c408545a04f81d',
   'styles.css':'c6b7945ba3ffeb4373dbe38f97bc96dbfd9e5178',
   'responsive.css':'3daab9b366125aeda84ed7e78bf2ac72132c8981',
   'paper-ui.js':'43dcd4f457d72382dadd0a0d8cea82cdd248058f',

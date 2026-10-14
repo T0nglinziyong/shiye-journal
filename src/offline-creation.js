@@ -15,7 +15,7 @@ import {validMaterialAlias} from './material-alias.js';
 import {importNativeProjectPackage,validatePackageValue} from './native-project-package.js';
 import {readProjectPackageEntries} from './project-package-archive.js';
 import {canonicalTaskSource} from './task-source.js';
-import {sha256Hex,taskFingerprint,assertTaskFingerprint} from './task-fingerprint.js';
+import {sha256Hex,taskFingerprint,assertTaskFingerprint,assertTaskFingerprintSync} from './task-fingerprint.js';
 import {reviewExternalResultFiles} from './offline-result-review.js';
 import {creativeContentBrief} from './creative-content-brief.js';
 import {creativePageBrief} from './creative-page-brief.js';
@@ -73,7 +73,7 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
   const {offlineValidateSource}=await import('./generated/offline-validate-source.js');
   const {offlineGlyphSource}=await import('./generated/offline-glyph-source.js');
   const mode=settings.generationMode==='direct'?'direct':'agent';
-  source.capabilities={cropPx:false,craftPlan:mode==='agent',multimodalVision:showImages,twoHoleWeave:mode==='agent',canonicalBrowserPreview:true,validateOffline:true,previewOffline:'approximate-svg',packOffline:true};
+  source.capabilities={cropPx:false,craftPlan:mode==='agent',multimodalVision:showImages,twoHoleWeave:mode==='agent',canonicalBrowserPreview:true,validateOffline:true,previewOffline:'approximate-svg'};
   source.packageLayout='compact';
   const exportedContract=offlineContract(mode,{cropPx:false});
   source.schemaHash=schemaFingerprint(exportedContract);source.planSchemaHash=schemaFingerprint(toolContracts.apply_craft_plan);
@@ -179,9 +179,7 @@ ${hasPresets?'references/ 只作为灵感来源，不是可用库存。':''}
     'runtime/validate.cjs':strToU8(offlineValidateSource),
     'runtime/preview.cjs':strToU8(`process.argv[2]='preview';require('./validate.cjs');
 `),
-    'runtime/pack.cjs':strToU8(`process.argv[2]='pack';require('./validate.cjs');
-`),
-    'runtime/README.txt':strToU8('把完整 JSON 保存为任务根目录 project.shiyeproject.json。Node.js 20+：validate.cjs 校验；preview.cjs 生成 output/构图预览.svg 与 output/画面预览.html；用真实浏览器打开 HTML，等待 SHIYE_RENDER_READY，从实际 Canvas 下载 PNG，并把图片展示给用户；如无浏览器须明确说明未验收。pack.cjs 再生成 output/作品.shiyeproject.zip。运行时只读取 task/context.json。glyphs.cjs 只从本地已有字体生成数值轮廓，不携带字体文件。 中文 SVG/HTML 预览依赖系统可用中文字体（例如 Noto Sans CJK SC）；如果看到方框字，请安装中文字体并重新渲染或在拾页中打开可编辑作品，不能把方框预览视为最终效果。')
+    'runtime/README.txt':strToU8('把完整 JSON 保存为任务根目录 project.shiyeproject.json。Node.js 20+：validate.cjs 校验；preview.cjs 生成 output/构图预览.svg 与 output/画面预览.html；用真实浏览器打开 HTML，等待 SHIYE_RENDER_READY，从实际 Canvas 下载 PNG，并把图片展示给用户；如无浏览器须明确说明未验收。最终将 project.shiyeproject.json 单文件交回拾页，不要交付 ZIP 工程包。运行时只读取 task/context.json。glyphs.cjs 只从本地已有字体生成数值轮廓，不携带字体文件。 中文 SVG/HTML 预览依赖系统可用中文字体（例如 Noto/PingFang/微软雅黑）；如果看到方框字，请安装中文字体并重新渲染或在拾页中打开可编辑作品，不能把方框预览视为最终效果。')
   };
   for(const entry of chosen)if(validAlias(entry.alias)&&source.materials.some(item=>item.alias===entry.alias))files[packagePreviewPath('materials',entry.alias,entry.bytes,{transparent:true})]=entry.bytes;
   if(hasPresets)for(const entry of referenceImages)files[packagePreviewPath('references',entry.id,entry.bytes)]=entry.bytes;
@@ -242,14 +240,16 @@ export function importEditableWork(text,assets,{trustedSource=null}={}){
   if(input?.format!==EDITABLE_WORK_FORMAT||input.version!==1)throw Error('不是拾页可编辑作品文件');
   const source=input.source;
   if(!source||typeof source.bundleId!=='string'||!Array.isArray(source.materials)||!source.materials.length||source.materials.length>100)throw Error('创作包来源无效');
-  if(!trustedSource||source.taskBinding!=='local'||source.packageLayout!=='compact'||canonicalTaskSource(source)!==canonicalTaskSource(trustedSource))throw Error('网页 AI 结果必须匹配本机登记的当前任务原件；未导入作品');
+  if(source.taskBinding!=='local'||source.packageLayout!=='compact')throw Error('创作包来源格式无效');
+  assertTaskFingerprintSync(source);
+  if(trustedSource&&canonicalTaskSource(source)!==canonicalTaskSource(trustedSource))throw Error('作品来源与所选原始任务不一致');
   if(!['single','spread'].includes(source.mode)||!paperDimensions(source.ratio))throw Error('纸张规格无效');
   const direct=input.page!==undefined,planned=input.plan!==undefined;
   if([input.page,input.plan,input.tools].filter(value=>value!==undefined).length!==1)throw Error('作品只能包含 page、plan、tools 中的一种入口');
   const tools=planned?[{name:'apply_craft_plan',arguments:input.plan}]:direct?directPageToTools(input.page):input.tools;
   const standalonePlan=Array.isArray(tools)&&tools.length===1&&tools[0]?.name==='apply_craft_plan';
   if(!Array.isArray(tools)||!tools.length||tools.length>12||(direct?tools.length!==1||tools[0].name!=='compose_direct_page':!standalonePlan&&(tools.at(-1)?.name!=='finish_design'||!tools.some(t=>t.name==='compose_page'||t.name==='apply_craft_plan'))))throw Error('作品需要完整页面、完整工艺计划，或包含 compose_page 并以 finish_design 结束的有效工具数组');
-  const baseDraft=validateCraftTask(source,assets,{trusted:!!trustedSource});
+  const baseDraft=validateCraftTask(source,assets);
   if(!direct&&tools.some(t=>!allowedTools.has(t?.name)))throw Error('作品包含不支持的创作操作');
   if(planned){
     if(schemaFingerprint(offlinePlanContract())!==source.planSchemaHash)throw Error('工艺计划合同版本不匹配');

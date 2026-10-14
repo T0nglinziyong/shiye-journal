@@ -94,7 +94,6 @@ import {rectifyA4Frame,suggestPaperCorners} from './perspective.js';
 import {analysisPixels,decodeRecognitionImage,sourcePixels} from './recognition-raster.js';
 import {isUntouchedLegacyExample} from './legacy-builtins.js';
 import {applyToolCalls,validateScenePhysical} from './creative.js';
-import {offlineTaskStore} from './offline-task-store.js';
 import {offlinePreviewBytes as encodeOfflinePreview} from './offline-preview.js';
 import {mapOfflineExportLimited,prepareOfflineMaterialPreview} from './offline-export-assets.js';
 import {buildMaterialScope} from './matching-materials.js';
@@ -121,6 +120,7 @@ import {resetCatalogPage,setCatalogDataPage} from './catalog-pagination.js';
 import {AI_PROVIDERS,supportsVision,loadAISettings,saveAISettings} from './ai-settings.js';
 import {DELIVERY_OPTIONS,deliveryProfile} from './ai-delivery.js';
 import {classifyCreationFile} from './creation-methods.js';
+import {readClipboardText} from './clipboard-text.js';
 import {mountParityControls as mountSwiftParity,bindWorksCards} from './parity-ui.js';
 import {parity} from './parity-ui.js';
 import {journalTemplateRecords} from './journal-template-ui.js';
@@ -151,7 +151,6 @@ const view=document.querySelector('#view'),modal=document.querySelector('#modal'
 modal.querySelector('.modal-close').onclick=()=>modal.close();
 const fileInput=document.querySelector('#file-input'),workFileInput=document.querySelector('#work-file-input'),snapshotFileInput=document.querySelector('#snapshot-file-input'),creationResultInput=document.querySelector('#creation-result-input'),backupInput=document.querySelector('#backup-input'),emergencyInput=document.querySelector('#emergency-input');
 let offlineSnapshotProject=null;
-let registeringOriginalGPTTask=false;
 installRuntimeDiagnostics(()=>state.route);
 const state={route:'series',assets:[],series:[],projects:[],trash:[],userTemplates:[],basket:[],excludedAssetIDs:[],history:[],selected:null,activeProject:null,activeDraft:null,offlineEditingReturnID:null,detailAssetID:null,previewProjectID:null,settingsSection:null,selfHosted:false,aiSettings:loadAISettings(),preferences:loadPreferences(),aiPanel:false,aiBusy:false,aiPrompt:'',aiProgress:'',tool:'select',zoom:1,sort:'newest',query:'',kind:'all',status:'all',seriesID:'all',matchCore:null,matchRatio:'a4',matchMode:'single',matchStyle:'韩系清新',matchStyles:['韩系清新'],matchPurposes:['日常记录'],matchIntent:'',matchContentPolicy:'documentary',matchTextPresentation:'mixed',matchPurpose:'日常记录',matchProcessing:'不预设',materialUseHints:{},materialUseRequired:{},assetProcessing:{},customPaperWidth:210,customPaperHeight:297,recommendFilter:'全部',coreIDs:[],importStep:'inspect',importRecords:[],importIndex:0,importFile:null,importBitmap:null,importBox:{x:0,y:0,w:1,h:1},importCandidate:null,importRemoveWhite:false,undo:[],redo:[],drawing:false};
 // The actual account-backed editor can be exercised while the remaining
@@ -824,7 +823,7 @@ function renderSceneDOM(d,scale){
 function renderEditor(){return renderEditorHTML({state,current,renderWorks,editorEntry,renderCanvasObject,renderSceneDOM,esc,imgTag,asset,inspector,pageInspector,renderAIPanel});}
 function inspector(e){const i=e.value;return `<div class="stack">${e.kind==='text'?`<label>文字内容<textarea id="inspector-text">${esc(i.content)}</textarea></label><label>字体<select id="inspector-font"><option value="serif" ${i.style==='serif'?'selected':''}>宋体</option><option value="sans" ${i.style==='sans'?'selected':''}>黑体</option><option value="rounded" ${i.style==='rounded'?'selected':''}>圆体</option></select></label><label>字号<input id="inspector-font-size" type="number" min="8" max="200" value="${i.fontSize}"></label>`:''}<div class="form-grid"><label>宽<input id="inspector-width" type="number" min="1" value="${fmt(i.width)}" ${e.kind==='material'?'disabled title="实物尺寸来自素材标定"':''}></label><label>高<input id="inspector-height" type="number" min="1" value="${fmt(i.height)}" ${e.kind==='material'?'disabled title="实物尺寸来自素材标定"':''}></label><label>旋转<input id="inspector-rotation" type="number" value="${fmt(i.rotation||0)}"></label><label>图层<input id="inspector-z" type="number" value="${i.zIndex}"></label></div><label>透明度<input id="inspector-opacity" type="range" min="0.1" max="1" step="0.05" value="${i.opacity||1}"></label>${e.kind==='material'?`<p class="muted">实物 ${fmt(asset(i.assetID)?.physicalWidthMM||0)} × ${fmt(asset(i.assetID)?.physicalHeightMM||0)} mm</p>`:''}<div class="actions"><button class="btn mini" data-act="duplicate">复制</button><button class="btn mini" data-act="flip">镜像</button><button class="btn mini" data-act="front">置顶</button><button class="btn mini danger" data-act="delete-object">删除</button></div></div>`;}
 function pageInspector(d){return `<div class="stack"><label>纸张颜色<input id="paper-color" type="color" value="${esc(d.paperColor)}"></label><label>背景<select id="paper-pattern"><option value="plain">纯色</option><option value="grid" ${d.paperPattern==='grid'?'selected':''}>方格</option><option value="lines" ${d.paperPattern==='lines'?'selected':''}>横线</option><option value="dots" ${d.paperPattern==='dots'?'selected':''}>点阵</option></select></label><label>纸张规格<select id="page-ratio">${paperSizeOptions(d.pageRatio,{includeCustom:false})}${['portrait','square','landscape'].map(v=>`<option value="${v}" ${d.pageRatio===v?'selected':''}>旧版比例 · ${v.toUpperCase()}</option>`).join('')}${d.pageRatio?.startsWith('custom:')?`<option value="${esc(d.pageRatio)}" selected>自定义 ${esc(d.pageRatio.slice(7))} mm</option>`:''}</select></label><label>页面模式<select id="page-mode"><option value="single">单页</option><option value="spread" ${d.pageMode==='spread'?'selected':''}>双页</option></select></label></div>`;}
-function importSourceButtons(){return `<div class="import-source-actions"><button class="btn primary" data-act="select-file" data-val="gallery">▣　从图库中选择</button><button class="btn" data-act="select-file" data-val="camera">▣　拍摄图片</button><button class="btn" data-act="select-file" data-val="files">▱　从文件中导入</button>${state.importMode==='work'?'<small>选择 .shiyeproject.zip 可编辑作品包或 JSON 备选文件会直接导入，不经过照片识别。</small>':''}</div>`;}
+function importSourceButtons(){return `<div class="import-source-actions"><button class="btn primary" data-act="select-file" data-val="gallery">▣　从图库中选择</button><button class="btn" data-act="select-file" data-val="camera">▣　拍摄图片</button><button class="btn" data-act="select-file" data-val="files">▱　从文件中导入</button>${state.importMode==='work'?'<small>选择可编辑 JSON 作品文件会直接导入，不经过照片识别。</small>':''}</div>`;}
 function importSteps(){return `<div class="import-nav" aria-label="导入进度"><button class="import-back" data-act="import-back" aria-label="返回上一步" title="返回"></button><div class="import-nav-center"><div class="import-progress" aria-label="当前步骤">${[['inspect','检查照片'],['review','确认归类'],['done','完成']].map(([key,label],i)=>`<span class="${state.importStep===key?'current':(i<['inspect','review','done'].indexOf(state.importStep)?'passed':'')}"><b>${i<['inspect','review','done'].indexOf(state.importStep)?'✓':i+1}</b><span class="import-step-label">${label}</span></span>`).join('')}</div></div><button class="import-cancel" data-act="import-exit">${state.importStep==='done'?'完成':'取消导入'}</button></div>`;}
 function renderImport(){return renderImportHTML({state,esc,fmt,importSteps,importSourceButtons,renderImportReview,renderImportInspection});}
 function renderAssetDetail(){const a=asset(state.detailAssetID);if(!a)return renderLibrary();return `<div class="detail-page"><button class="detail-back" data-act="detail-back">‹　返回素材库</button><span class="detail-category">${esc(state.series.find(s=>s.id===a.seriesID)?.title||'所有系列')}</span><section class="detail-columns"><div class="detail-picture"><span>▣　透明素材预览</span>${imgTag(a,true)}</div><div class="detail-copy"><div class="eyebrow">A LITTLE PIECE OF EVERYDAY</div><button class="detail-heart" data-act="detail-favorite" aria-label="${a.isFavorite?'取消收藏':'收藏'}" aria-pressed="${!!a.isFavorite}">${a.isFavorite?'♥':'♡'}</button><h1>${esc(a.title)}</h1><div class="detail-facts"><div><small>真实尺寸</small><span>${fmt(a.physicalWidthMM||0)} × ${fmt(a.physicalHeightMM||0)} mm</span></div><div><small>可用库存</small><span>${a.supply?.quantity??1} 件</span></div><div><small>素材类型</small><span>${kindName(a.kind)}</span></div><div><small>主要作用</small><span>${a.role==='background'?'背景':a.role==='connector'?'连接':'陪衬'}</span></div><div><small>材质</small><span>${esc(a.texture||'待记录')}</span></div></div><div class="detail-tags">${[...(a.tags||[]),...(a.contentTags||[]),...(a.styleTags||[]),...(a.materialTags||[])].filter((tag,index,list)=>tag&&list.indexOf(tag)===index).sort((x,y)=>x.localeCompare(y,'zh-CN')).map(tag=>`<span>${esc(tag)}</span>`).join('')}</div><div class="detail-dots">● ● ● ●</div><hr><p>实物可用操作</p><p>✓ 整件使用　 ✓ 旋转摆放</p><button class="btn primary detail-add" data-act="detail-add">＋　加入本次创作</button><div class="detail-links"><button class="btn" data-act="detail-series"><span class="detail-link-label">同系列</span></button><button class="btn" data-act="detail-similar"><span class="detail-link-label">找相似</span></button><button class="btn" data-act="detail-match"><span class="detail-link-label">去搭配</span></button></div><div class="detail-small"><button data-act="detail-edit">✎　编辑素材信息</button><button data-act="detail-check">□　检查抠图</button></div></div></section></div>`;}
@@ -1111,7 +1110,7 @@ async function legacyHandle(action,id,value){try{switch(action){
     view.flushInkCommit?.({renderUI:false,force:true});
     const p=state.activeProject;if(!p)throw Error('当前没有可保存的作品');
     if(p.__remoteDeleted){
-      if(!confirm('这份作品已在其他设备删除。当前页面的修改不会自动恢复已删除作品。若要保留当前编辑，请先取消并导出可编辑 ZIP。确定退出到作品库吗？'))break;
+      if(!confirm('这份作品已在其他设备删除。当前页面的修改不会自动恢复已删除作品。若要保留当前编辑，请先取消并导出可编辑 JSON。确定退出到作品库吗？'))break;
       state.activeProject=null;state.activeDraft=null;
       parity.workTab='all';parity.selectionMode=null;parity.selected.clear();parity.showOnlySelected=false;
       route('works');
@@ -1216,7 +1215,7 @@ async function legacyHandle(action,id,value){try{switch(action){
   case 'save-snapshot':await saveProjectSnapshot(state.activeProject);break;
   case 'download-snapshot':{const p=state.projects.find(x=>x.id===state.previewProjectID);if(!p?.isSnapshot)break;const id=p.snapshotDocumentBlobId||p.snapshotBlobId,blob=(await db.get('blobs',id))?.data;if(!blob)throw Error('快照文件尚未同步，稍后重试');const ext=p.snapshotFormat==='application/pdf'?'pdf':p.snapshotFormat==='image/jpeg'?'jpg':p.snapshotFormat==='image/webp'?'webp':'png';download(blob,p.title+'.'+ext);break;}
   case 'export-scene-json':{const p=state.activeProject;if(!p||p.isSnapshot)throw Error('请选择可编辑作品');download(new Blob([JSON.stringify(exportSceneDocument(p))],{type:'application/json'}),p.title+'.shiye-scene.json');break;}
-   case 'download-project-zip':{const source=state.projects.find(x=>x.id===id)||state.activeProject;if(!source||source.isSnapshot)throw Error('可编辑作品不存在');const p=source.projectDocumentPath?await db.completeProject(source):source;const {createNativeProjectPackage}=await import('./native-project-package.js');download(createNativeProjectPackage(p),p.title+'.shiyeproject.zip');break;}
+   case 'download-project-json':{const source=state.projects.find(x=>x.id===id)||state.activeProject;if(!source||source.isSnapshot)throw Error('可编辑作品不存在');const p=source.projectDocumentPath?await db.completeProject(source):source;const {createNativeProjectDocument}=await import('./native-project-package.js');download(new Blob([JSON.stringify(createNativeProjectDocument(p))],{type:'application/json'}),p.title+'.shiyeproject.json');break;}
   case 'project-delete':{const p=state.projects.find(x=>x.id===state.previewProjectID);if(!p||!confirm('将这份作品移到最近删除？'))break;await moveProjectsToTrash([p.id]);break;}
   case 'works-filter':await actionStore.dispatch({type:'works/filter',payload:{value}});break;
   case 'fabric-tool':{
@@ -1509,7 +1508,6 @@ async function exportOfflineCreation(){
   state.matchPurpose=view.querySelector('#match-purpose')?.value||state.matchPurpose;state.matchProcessing=view.querySelector('#match-processing')?.value||state.matchProcessing;state.matchStyle=view.querySelector('#match-style')?.value||state.matchStyle;state.matchIntent=view.querySelector('#match-intent')?.value||'';captureMatchContent();state.matchMode=view.querySelector('#match-mode')?.value||state.matchMode;state.matchRatio=readMatchPaper();state.matchStyles=readMatchSelection('match-style',state.matchStyle);state.matchPurposes=readMatchSelection('match-purpose',state.matchPurpose);
   const button=view.querySelector('[data-act="match-export-gpt"]'),controller=new AbortController(),started=performance.now();
   const timing={},report={cacheHits:0,derived:0,original:0,materials:0,references:0};
-  let storedBundle=null;
   if(button){button.disabled=true;button.textContent='正在准备 AI 参考…';}
   body.innerHTML='<section class="offline-handoff"><h2>准备网页版 AI 创作包</h2><p id="offline-export-progress" role="status" aria-live="polite">正在检查素材…</p><button type="button" class="btn" id="offline-export-cancel">取消导出</button></section>';
   if(!modal.open)modal.showModal();
@@ -1551,9 +1549,6 @@ async function exportOfflineCreation(){
     const result=await measured('package',async()=>{const {createOfflineHandoff}=await import('./offline-creation.js');return createOfflineHandoff({project:p,assets:assetsSnapshot,aliases,previews,referenceImages,settings:cfg,userTemplates:state.userTemplates});});
     canceled();
     p.offlineBundleId=result.source.bundleId;
-    progress('正在保存任务身份…');
-    await measured('taskStore',()=>offlineTaskStore.save(account,result.source));
-    storedBundle={account,id:result.source.bundleId};
     canceled();
     timing.total=Math.round(performance.now()-started);
     console.info('[shiye offline export timing]',{...timing,...report,packageBytes:result.packageBytes,imageBytes:result.imageBytes});
@@ -1562,11 +1557,11 @@ async function exportOfflineCreation(){
     if(imageDelivery){
       body.innerHTML=`<section class="offline-handoff"><div class="offline-handoff-heading"><span class="offline-handoff-emblem">${iconMarkup('sparkles')}</span><div><small>网页版 AI · 画面创作</small><h2>把这一页交给 AI</h2></div></div><p class="offline-handoff-intro">${p.candidateAssetIDs.length} 件可用素材 · ${esc(p.styles?.join('、')||'所选风格')} · ${esc(p.drafts[0].pageRatio.toUpperCase())} · 任务包 ${fileSize(result.packageBytes)}（图片 ${fileSize(result.imageBytes)}）</p><div class="offline-handoff-delivery" role="group" aria-label="网页 GPT 返回形式"><button type="button" class="selected" data-offline-delivery="file" aria-pressed="true">作品文件</button><button type="button" disabled title="自由绘画需要 PNG 文件，不能复制为简短文本">复制文本（图片不可用）</button></div><div class="offline-handoff-step"><span class="offline-handoff-number">1</span><div><strong>复制要求并发送素材包</strong><small>这个 ZIP 是输入素材包，不是要求 AI 生成的文件。请让 AI 在回复中展示画面并提供可下载的 PNG。</small></div></div><textarea id="offline-gpt-prompt" readonly rows="3" aria-label="发送给网页版 AI 的短提示词">${esc(result.prompt)}</textarea><button type="button" class="btn primary offline-handoff-main" id="offline-copy-prompt">${iconMarkup('copy')}<span>复制并打开素材包</span></button><p id="offline-handoff-status" role="status">准备就绪 · ${esc(result.filename)}</p><div class="offline-handoff-alternatives"><button type="button" class="btn" id="offline-share-package">${iconMarkup('share')}<span>分享素材包</span></button><button type="button" class="btn" id="offline-download-package">${iconMarkup('fileDown')}<span>重新下载</span></button></div><div class="offline-handoff-step offline-handoff-return"><span class="offline-handoff-number">2</span><div><strong>将完成的画面导回拾页</strong><small>下载 AI 返回的 PNG、JPEG 或 WebP 图片，导入后保存为画面快照，并出现在版本方案中。</small></div></div><button type="button" class="btn" id="offline-import-file">${iconMarkup('fileUp')}<span>导入作品文件</span></button><p class="offline-handoff-footnote">浏览器无法替你选择 AI 会话，也无法自动删除系统下载的文件。</p></section>`;
     }else{
-    body.innerHTML=`<section class="offline-handoff"><div class="offline-handoff-heading"><span class="offline-handoff-emblem">${iconMarkup('sparkles')}</span><div><small>网页版 GPT · 创作交接</small><h2>把这一页交给 GPT</h2></div></div><p class="offline-handoff-intro">${p.candidateAssetIDs.length} 件可用素材 · ${esc(p.styles?.join('、')||'所选风格')} · ${esc(p.drafts[0].pageRatio.toUpperCase())}${referenceImages.length?` · ${referenceImages.length} 张匹配案例`:''} · 任务包 ${fileSize(result.packageBytes)}（图片 ${fileSize(result.imageBytes)}）</p><div class="offline-handoff-delivery" role="group" aria-label="网页版 GPT 返回形式"><button type="button" class="selected" data-offline-delivery="file" aria-pressed="true">作品文件</button><button type="button" data-offline-delivery="text" aria-pressed="false">复制文本</button></div><div class="offline-handoff-step"><span class="offline-handoff-number">1</span><div><strong>复制创作要求并打开任务包</strong><small>复制成功后自动下载；在系统文件页分享给 ChatGPT，或在 ChatGPT 手动附加。</small></div></div><textarea id="offline-gpt-prompt" readonly rows="2" aria-label="发送给 ChatGPT 的短提示词">${esc(result.prompt)}</textarea><button type="button" class="btn primary offline-handoff-main" id="offline-copy-prompt">${iconMarkup('copy')}<span>复制并打开任务包</span></button><p id="offline-handoff-status" role="status">准备就绪 · ${esc(result.filename)}</p><div class="offline-handoff-alternatives"><button type="button" class="btn" id="offline-share-package">${iconMarkup('share')}<span>分享文件</span></button><button type="button" class="btn" id="offline-download-package">${iconMarkup('fileDown')}<span>重新下载</span></button></div><div class="offline-handoff-step offline-handoff-return"><span class="offline-handoff-number">2</span><div><strong>将 GPT 的结果导回拾页</strong><small>下载独立的 .shiyeproject.json 文件，也可以选择 PNG／JPEG／WebP 画面快照；ZIP 工程包仍兼容。复制文本只适用于可编辑 JSON。</small></div></div><div class="offline-handoff-alternatives"><button type="button" class="btn" id="offline-import-file">${iconMarkup('fileUp')}<span>选择结果文件</span></button><button type="button" class="btn" id="offline-show-paste">${iconMarkup('copy')}<span>粘贴 JSON</span></button></div><div class="offline-handoff-paste" hidden><textarea id="offline-gpt-result" rows="4" placeholder="粘贴完整 JSON 或单个代码块"></textarea><div class="offline-handoff-alternatives"><button type="button" class="btn" id="offline-paste-result">粘贴剪贴板</button><button type="button" class="btn primary" id="offline-import-text">验证并导入</button></div></div><p class="offline-handoff-footnote">临时对话需在 ChatGPT 内开启；浏览器无法替你选择 ChatGPT 的会话或自动删除系统下载文件。</p></section>`;
+    body.innerHTML=`<section class="offline-handoff"><div class="offline-handoff-heading"><span class="offline-handoff-emblem">${iconMarkup('sparkles')}</span><div><small>网页版 GPT · 创作交接</small><h2>把这一页交给 GPT</h2></div></div><p class="offline-handoff-intro">${p.candidateAssetIDs.length} 件可用素材 · ${esc(p.styles?.join('、')||'所选风格')} · ${esc(p.drafts[0].pageRatio.toUpperCase())}${referenceImages.length?` · ${referenceImages.length} 张匹配案例`:''} · 任务包 ${fileSize(result.packageBytes)}（图片 ${fileSize(result.imageBytes)}）</p><div class="offline-handoff-delivery" role="group" aria-label="网页版 GPT 返回形式"><button type="button" class="selected" data-offline-delivery="file" aria-pressed="true">作品文件</button><button type="button" data-offline-delivery="text" aria-pressed="false">复制文本</button></div><div class="offline-handoff-step"><span class="offline-handoff-number">1</span><div><strong>复制创作要求并打开任务包</strong><small>复制成功后自动下载；在系统文件页分享给 ChatGPT，或在 ChatGPT 手动附加。</small></div></div><textarea id="offline-gpt-prompt" readonly rows="2" aria-label="发送给 ChatGPT 的短提示词">${esc(result.prompt)}</textarea><button type="button" class="btn primary offline-handoff-main" id="offline-copy-prompt">${iconMarkup('copy')}<span>复制并打开任务包</span></button><p id="offline-handoff-status" role="status">准备就绪 · ${esc(result.filename)}</p><div class="offline-handoff-alternatives"><button type="button" class="btn" id="offline-share-package">${iconMarkup('share')}<span>分享文件</span></button><button type="button" class="btn" id="offline-download-package">${iconMarkup('fileDown')}<span>重新下载</span></button></div><div class="offline-handoff-step offline-handoff-return"><span class="offline-handoff-number">2</span><div><strong>将 GPT 的结果导回拾页</strong><small>下载独立的 .shiyeproject.json 文件，也可以选择 PNG／JPEG／WebP 画面快照。复制文本只适用于可编辑 JSON。</small></div></div><div class="offline-handoff-alternatives"><button type="button" class="btn" id="offline-import-file">${iconMarkup('fileUp')}<span>选择结果文件</span></button><button type="button" class="btn" id="offline-show-paste">${iconMarkup('copy')}<span>粘贴 JSON</span></button></div><div class="offline-handoff-paste" hidden><textarea id="offline-gpt-result" rows="4" placeholder="粘贴完整 JSON 或单个代码块"></textarea><div class="offline-handoff-alternatives"><button type="button" class="btn" id="offline-paste-result">粘贴剪贴板</button><button type="button" class="btn primary" id="offline-import-text">验证并导入</button></div></div><p class="offline-handoff-footnote">临时对话需在 ChatGPT 内开启；浏览器无法替你选择 ChatGPT 的会话或自动删除系统下载文件。</p></section>`;
     }
-    if(!imageDelivery){body.querySelector('.offline-handoff-return small').textContent='作品文件可直接使用 JSON，或者导入 PNG／JPEG／WebP 快照；现有 ZIP 也支持。复制文本应包含完整可编辑 JSON。';}
+    if(!imageDelivery){body.querySelector('.offline-handoff-return small').textContent='作品文件使用可编辑 JSON，或者导入 PNG／JPEG／WebP 快照。复制文本应包含完整可编辑 JSON。';}
     body.querySelector('#offline-gpt-prompt').rows=3;
-    const diagnostics='总耗时 '+timing.total+' ms · 素材 '+timing.materials+' ms · 参考图 '+timing.references+' ms · 打包 '+timing.package+' ms · 保存 '+timing.taskStore+' ms · 缓存命中 '+report.cacheHits+'/'+report.materials+' · COS 派生 '+report.derived+' · 原图回退 '+report.original;
+    const diagnostics='总耗时 '+timing.total+' ms · 素材 '+timing.materials+' ms · 参考图 '+timing.references+' ms · 打包 '+timing.package+' ms · 缓存命中 '+report.cacheHits+'/'+report.materials+' · COS 派生 '+report.derived+' · 原图回退 '+report.original;
     body.querySelector('.offline-handoff')?.insertAdjacentHTML('beforeend','<details class="offline-export-diagnostics"><summary>查看本次导出耗时</summary><p>'+esc(diagnostics)+'</p></details>');
     body.querySelectorAll('[data-offline-delivery]').forEach(button=>button.onclick=()=>{for(const option of body.querySelectorAll('[data-offline-delivery]')){const selected=option===button;option.classList.toggle('selected',selected);option.setAttribute('aria-pressed',String(selected));}body.querySelector('#offline-gpt-prompt').value=result.prompts[button.dataset.offlineDelivery];});
     const openPackage=()=>{const url=URL.createObjectURL(result.blob),link=document.createElement('a');link.href=url;link.download=result.filename;link.target='_blank';link.rel='noopener';document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),120000);};
@@ -1579,21 +1574,19 @@ async function exportOfflineCreation(){
       body.querySelector('#offline-paste-result').onclick=()=>pasteOfflineResult();
     }
     body.querySelector('#offline-import-file').onclick=()=>{offlineSnapshotProject=p;creationResultInput.click();};
-  }catch(error){if(controller.signal.aborted&&storedBundle){try{await offlineTaskStore.remove(storedBundle.account,storedBundle.id);}catch(cleanupError){console.warn('已取消任务的本机身份清理失败',cleanupError);}}if(!controller.signal.aborted){console.error(error);toast('AI 参考导出失败：'+error.message);if(modal.open)modal.close();}}finally{modal.removeEventListener('close',onClose);if(button){button.disabled=false;button.textContent='导出给网页版 AI';}}
+  }catch(error){if(!controller.signal.aborted){console.error(error);toast('AI 参考导出失败：'+error.message);if(modal.open)modal.close();}}finally{modal.removeEventListener('close',onClose);if(button){button.disabled=false;button.textContent='导出给网页版 AI';}}
 }
 function openOfflineImportDialog(){
-  body.innerHTML='<h2>导入网页版 GPT 作品</h2><p>可以直接选择 JSON 可编辑单文件、PNG／JPEG／WebP 图片快照，或原有 .shiyeproject.zip 工程包。JSON 必须匹配当前账号在本设备登记的原始创作任务。若提示未匹配，先点击「登记原始任务 ZIP」选择最初从拾页导出的 ZIP，再导入 AI 返回的 JSON；文件类型按内容识别。</p><textarea id="offline-gpt-result" rows="7" placeholder="粘贴完整可编辑 JSON，或仅包含 JSON 的一个代码块"></textarea><div class="actions"><button type="button" class="btn primary" id="offline-import-file">选择作品文件</button><button type="button" class="btn" id="offline-paste-result">粘贴剪贴板</button><button type="button" class="btn" id="offline-import-text">导入复制文本</button><button type="button" class="btn" id="offline-register-task">登记原始任务 ZIP</button></div><small>请选择同一次创作的原始任务包，不要选择 AI 返回的作品文件；重新登记不会清空当前粘贴的 JSON。</small>';
+  body.innerHTML='<h2>导入网页版 GPT 作品</h2><p>选择可编辑 JSON 或 PNG／JPEG／WebP 图片快照。可编辑 JSON 会核对格式、指纹和当前素材库，无需登记原始任务；导入后进入作品编辑。</p><textarea id="offline-gpt-result" rows="7" placeholder="粘贴完整可编辑 JSON，或仅包含 JSON 的一个代码块"></textarea><div class="actions"><button type="button" class="btn primary" id="offline-import-file">选择作品文件</button><button type="button" class="btn" id="offline-paste-result">粘贴剪贴板</button><button type="button" class="btn" id="offline-import-text">导入复制文本</button></div><small>如果浏览器不允许自动读取剪贴板，点击输入框后在电脑按 Ctrl/⌘+V，或在手机长按输入框选择“粘贴”。</small>';
   modal.showModal();
   body.querySelector('#offline-paste-result').onclick=()=>pasteOfflineResult();
   body.querySelector('#offline-import-text').onclick=async()=>{try{await importOfflineText(body.querySelector('#offline-gpt-result').value);}catch(error){toast('导入失败：'+error.message);}};
-  body.querySelector('#offline-import-file').onclick=()=>{offlineSnapshotProject=matchingScope().candidateAssetIDs.length?createMatchingProject():null;creationResultInput.click();};
-  body.querySelector('#offline-register-task').onclick=()=>{registeringOriginalGPTTask=true;offlineSnapshotProject=null;creationResultInput.click();};
+  body.querySelector('#offline-import-file').onclick=()=>{offlineSnapshotProject=null;creationResultInput.click();};
 }
-async function pasteOfflineResult(){try{body.querySelector('#offline-gpt-result').value=await navigator.clipboard.readText();toast('已粘贴 GPT 的可编辑数据');}catch{toast('无法读取剪贴板，请长按输入框粘贴');}}
-async function importOfflineProject(p){await flushSave();p.aiGenerated=true;await matchingSession.importProject(p);state.activeProject=p;state.activeDraft=p.activeDraftID;resetEditorHistory(state);state.offlineEditingReturnID=p.id;state.tool='select';if(modal.open)modal.close();if(state.route!=='matching')route('matching');route('editor');toast(p.creationVerification?.preview==='mismatch'?'已保存可编辑草稿；外部预览或清单有差异，请核对画面':'已加入版本方案；可编辑数据已检查，预览与正文仍需复核');}
+async function pasteOfflineResult(){const input=body.querySelector('#offline-gpt-result');if(!input)return;try{const value=await readClipboardText(navigator.clipboard);input.value=value;input.dispatchEvent(new Event('input',{bubbles:true}));toast('已粘贴可编辑数据');}catch{input.focus();toast('浏览器未允许读取剪贴板；请在输入框按 Ctrl/⌘+V，或在手机长按选择“粘贴”');}}
+async function importOfflineProject(p,{aiGenerated=true}={}){await flushSave();if(aiGenerated)p.aiGenerated=true;await db.stageProject(p);state.projects.push(p);state.activeProject=p;state.activeDraft=p.activeDraftID;resetEditorHistory(state);state.offlineEditingReturnID=null;state.tool='select';if(modal.open)modal.close();route('editor');toast(p.creationVerification?.preview==='mismatch'?'已暂存可编辑草稿；外部预览或清单有差异，请核对画面':'已暂存可编辑草稿；请核对画面与正文');}
 async function offlineTaskAccount(){return cloudEnabled?(await requireCloudUser()).id:'browser';}
-async function trustedOfflineSource(source){if(!source?.bundleId)return null;const trusted=await offlineTaskStore.load(await offlineTaskAccount(),source.bundleId);if(!trusted&&source.taskBinding==='local-v1')throw Error('未找到此网页版 AI 任务的原始快照；请先在此设备导入原始创作任务 ZIP，再导入 AI 结果');return trusted;}
-async function importOfflineText(text){const {inspectEditableSource,importEditableWork}=await import('./offline-creation.js');const trustedSource=await trustedOfflineSource(inspectEditableSource(text)?.source);return importOfflineProject(importEditableWork(text,state.assets,{trustedSource}));}
+async function importOfflineText(text){const {importEditableWork}=await import('./offline-creation.js');return importOfflineProject(importEditableWork(text,state.assets));}
 async function createFromBasket(templateID=null){
   await flushSave();
   const p=createMatchingProject(false),draft=p.drafts[0];
@@ -1736,7 +1729,7 @@ async function refresh({background=false,onlyChanged=false,skipCloudRefresh=fals
     const stillExists=state.projects.some(project=>project.id===state.activeProject.id);
     if(!stillExists&&!dirtyProjects.has(state.activeProject.id)&&savingProjects===0&&!state.activeProject.__remoteDeleted){
       state.activeProject.__remoteDeleted=true;
-      toast('当前作品已在另一台设备删除。需要保留本机修改时，请先导出可编辑 ZIP。');
+      toast('当前作品已在另一台设备删除。需要保留本机修改时，请先导出可编辑 JSON。');
     }else if(stillExists&&state.activeProject.__remoteDeleted)delete state.activeProject.__remoteDeleted;
   }
   staticSources.clear();for(const a of state.assets)if(a.staticPath)staticSources.set(a.blobId,a.staticPath);if(reconcileSelectedRecords(parity,state))view.selectionRefresh?.();if(background){backgroundViewPending=true;scheduleBackgroundReconcile();}else actionStore.publish('collections/updated',{scope:'collections',keys:['assets','series','projects','trash','userTemplates']});}
@@ -2462,44 +2455,25 @@ snapshotFileInput.onchange=async()=>{
     await saveOfflineSnapshotFile(file,matchingProject,type.mimeType);
   }catch(error){console.error(error);toast('画面导入失败：'+error.message);}
 };
-creationResultInput.addEventListener('cancel',()=>{offlineSnapshotProject=null;registeringOriginalGPTTask=false;});
+creationResultInput.addEventListener('cancel',()=>{offlineSnapshotProject=null;});
 creationResultInput.onchange=async()=>{
-  const file=creationResultInput.files?.[0],matchingProject=offlineSnapshotProject,registerTask=registeringOriginalGPTTask;
-  creationResultInput.value='';offlineSnapshotProject=null;registeringOriginalGPTTask=false;
+  const file=creationResultInput.files?.[0],matchingProject=offlineSnapshotProject;
+  creationResultInput.value='';offlineSnapshotProject=null;
   if(!file)return;
-  try{
-    if(registerTask){
-      if((await classifyCreationFile(file)).kind!=='zip')throw Error('请选用从拾页导出的原始任务 ZIP');
-      const {inspectOfflinePackage}=await import('./offline-creation.js');
-      const source=inspectOfflinePackage(new Uint8Array(await file.arrayBuffer()));
-      if(source.kind!=='task')throw Error('这不是原始任务包；请选择包含 task/context.json 的导出 ZIP');
-    }
-    await importEditableFile(file,{matchingProject});
-  }
+  try{await importEditableFile(file,{matchingProject});}
   catch(error){console.error(error);toast('作品文件导入失败：'+error.message);}
 };
 async function importEditableFile(file,{matchingProject=null}={}){
   const detected=await classifyCreationFile(file);
   if(detected.kind==='image')return saveOfflineSnapshotFile(file,matchingProject,detected.mimeType);
-
-  if(detected.kind==='zip'){
-    if(file.size>20_000_000)throw Error('可编辑作品包不能超过 20 MB');
-    const {inspectOfflinePackage,verifyOfflineTaskPackage,importEditableWorkPackageReviewed}=await import('./offline-creation.js');
-    const bytes=new Uint8Array(await file.arrayBuffer()),inspected=inspectOfflinePackage(bytes);
-    if(inspected.kind==='task'){
-      if(inspected.source.materials.some(item=>!state.assets.some(asset=>asset.id===item.assetID)))throw Error('原始任务中的素材不在当前账号资料里');
-      await verifyOfflineTaskPackage(bytes,inspected.source);
-      if(!confirm('这是网页版 AI 的原始创作任务包。将它登记为后续 AI 作品的校验基线，确认这是你导出的原件吗？'))return;
-      await offlineTaskStore.save(await offlineTaskAccount(),inspected.source);
-      toast('原始任务已登记；现在请选择 AI 返回的可编辑作品包');return;
-    }
-    const trustedSource=await trustedOfflineSource(inspected.source);
-    await importOfflineProject(await importEditableWorkPackageReviewed(bytes,state.assets,{trustedSource}));
-    return;
-  }
+  if(detected.kind==='zip')throw Error('不再导入 .shiyeproject.zip 工程包；请选择可编辑 JSON 作品文件');
   // Standard Scene JSON shares the saved Draft with the manual editor.
   const contents=await file.text();
   let input;try{input=JSON.parse(contents.replace(/^\uFEFF/,'').trim());}catch{}
+  if(input?.format==='shiye-native-project'){
+    const {importNativeProjectDocument}=await import('./native-project-package.js');
+    await importOfflineProject(importNativeProjectDocument(input,state.assets),{aiGenerated:false});return;
+  }
   if(input?.format==='shiye-scene'){
     const imported=importSceneDocument(input,state.assets);
     await flushSave();await db.stageProject(imported);

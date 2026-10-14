@@ -7,7 +7,7 @@ import {spawnSync} from 'node:child_process';
 import {unzipSync,strFromU8,strToU8} from 'fflate';
 import {project} from '../src/domain.js';
 import {createOfflineHandoff} from '../src/offline-creation.js';
-import {importEditableWorkPackageReviewed} from '../src/offline-creation.js';
+import {importEditableWork} from '../src/offline-creation.js';
 
 test('O-12/O-13: bundled validator runs from the ZIP without node_modules or cloud credentials',async()=>{
   const asset={id:'offline-runtime-asset',title:'蓝纸',kind:'sticker',physicalWidthMM:30,physicalHeightMM:40,supply:{quantity:1}};
@@ -18,12 +18,12 @@ test('O-12/O-13: bundled validator runs from the ZIP without node_modules or clo
   assert.equal(capabilities.runtime.visualReview,'manual-required');
   assert.equal(capabilities.runtime.preview,'approximate-svg');
   assert.ok(entries['runtime/preview.cjs']);
+  assert.equal(entries['runtime/pack.cjs'],undefined);
   const directory=await mkdtemp(join(tmpdir(),'shiye-offline-runtime-'));
   try{
     await mkdir(join(directory,'runtime'));await mkdir(join(directory,'task'));
     await writeFile(join(directory,'runtime/validate.cjs'),entries['runtime/validate.cjs']);
     await writeFile(join(directory,'runtime/preview.cjs'),entries['runtime/preview.cjs']);
-    await writeFile(join(directory,'runtime/pack.cjs'),entries['runtime/pack.cjs']);
     await writeFile(join(directory,'task/context.json'),entries['task/context.json']);
     await writeFile(join(directory,'project.shiyeproject.json'),entries['examples/project.shiyeproject.json']);
     const run=()=>spawnSync(process.execPath,['runtime/validate.cjs'],{cwd:directory,encoding:'utf8',env:{PATH:process.env.PATH||''},timeout:10000});
@@ -38,25 +38,15 @@ test('O-12/O-13: bundled validator runs from the ZIP without node_modules or clo
     assert.match(previewText,/<svg/);
     assert.match(previewText,/构图预览/);
     assert.match(previewText,/这一页的主题/);
-    const packed=spawnSync(process.execPath,['runtime/pack.cjs'],{cwd:directory,encoding:'utf8',env:{PATH:process.env.PATH||''},timeout:10000});
-    assert.equal(packed.status,0,packed.stderr||packed.stdout);
-    const resultBytes=new Uint8Array(await readFile(join(directory,'output/作品.shiyeproject.zip')));
-    const resultEntries=unzipSync(resultBytes);
-    assert.equal(strFromU8(resultEntries['preview.svg']),previewText);
-    const manifest=JSON.parse(strFromU8(resultEntries['manifest.json']));
-    assert.match(manifest.previewHash,/^sha256:[a-f0-9]{64}$/);
-    assert.equal(manifest.outputProfile,'editable-approximate-svg');
-    const imported=await importEditableWorkPackageReviewed(resultBytes,[asset],{trustedSource:task.source});
-    assert.equal(imported.creationVerification.manifest,'self-consistent');
-    assert.equal(imported.creationVerification.preview,'unverified');
+    const imported=importEditableWork(await readFile(join(directory,'project.shiyeproject.json'),'utf8'),[asset]);
+    assert.equal(imported.drafts[0].items.length,1);
     const changed=JSON.parse(strFromU8(entries['examples/project.shiyeproject.json']));
     changed.source.mode='spread';
     await writeFile(join(directory,'project.shiyeproject.json'),strToU8(JSON.stringify(changed)));
-    const invalid=spawnSync(process.execPath,['runtime/pack.cjs'],{cwd:directory,encoding:'utf8',env:{PATH:process.env.PATH||''},timeout:10000});
+    const invalid=spawnSync(process.execPath,['runtime/preview.cjs'],{cwd:directory,encoding:'utf8',env:{PATH:process.env.PATH||''},timeout:10000});
     assert.equal(invalid.status,1);
     const failed=JSON.parse(await readFile(join(directory,'output/validation-report.json'),'utf8'));
     assert.equal(failed.structure,'failed');
-    await assert.rejects(stat(join(directory,'output/作品.shiyeproject.zip')),{code:'ENOENT'});
     await assert.rejects(stat(join(directory,'output/构图预览.svg')),{code:'ENOENT'});
   }finally{await rm(directory,{recursive:true,force:true});}
 });

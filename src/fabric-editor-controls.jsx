@@ -183,7 +183,7 @@ export function FabricHeaderMenu({kind,project,onAction,onAIOpen}){
   const [anchor,setAnchor]=useState(null);
   const close=()=>setAnchor(null);
   const entries=kind==='export'?[['save-snapshot','保存快照'],['export-png','导出 PNG'],
-    ['print','导出 PDF / 打印'],['download-project-zip','导出可编辑 ZIP'],
+    ['print','导出 PDF / 打印'],['download-project-json','导出可编辑 JSON'],
     ['export-scene-json','导出 Scene JSON'],['creative-json','导入创作指令']]:
     [['new-draft','新方案'],['save-archive','保存手动存档'],
       ...(project.manualArchives||[]).slice(-5).reverse().map(item=>['restore-archive','恢复 '+new Date(item.date).toLocaleString(),item.id])];

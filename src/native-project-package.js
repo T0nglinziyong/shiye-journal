@@ -23,16 +23,21 @@ function validateVectorGeometry(shape){
     layer.rects!==undefined&&(!Array.isArray(layer.rects)||layer.rects.length>512||!layer.rects.every(rectangle))
   )))throw Error('工程包多色图形数据无效');
 }
-export function createNativeProjectPackage(project){
+export function createNativeProjectDocument(project){
   if(!project?.drafts?.length||project.isSnapshot)throw Error('只有可编辑作品可以打包');
   const {__cloudBaseRevision,__cloudSessionId,editHistory:_temporaryHistory,...portableProject}=project;
-  const document={format:'shiye-native-project',version:1,project:portableProject};
-  return new Blob([zipSync({[NATIVE_ENTRY]:strToU8(JSON.stringify(document))},{level:6})],{type:'application/zip'});
+  return {format:'shiye-native-project',version:1,project:portableProject};
+}
+export function createNativeProjectPackage(project){
+  return new Blob([zipSync({[NATIVE_ENTRY]:strToU8(JSON.stringify(createNativeProjectDocument(project)))},{level:6})],{type:'application/zip'});
 }
 export function importNativeProjectPackage(bytes,assets){
   const {kind,files}=readProjectPackageEntries(bytes);
   if(kind!=='native')return null;
   let envelope;try{envelope=JSON.parse(strFromU8(files[NATIVE_ENTRY]));}catch{throw Error('工程包页面数据无效');}
+  return importNativeProjectDocument(envelope,assets);
+}
+export function importNativeProjectDocument(envelope,assets){
   if(envelope?.format!=='shiye-native-project'||envelope.version!==1)throw Error('工程包格式不受支持');
   const source=envelope.project,known=new Set(assets.map(a=>a.id));
   if(!source||typeof source.title!=='string'||!Array.isArray(source.drafts)||!source.drafts.length||source.drafts.length>40)throw Error('工程包缺少可编辑页面');

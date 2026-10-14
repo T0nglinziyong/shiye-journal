@@ -13,8 +13,7 @@ export function freezeCraftTask(source,draft,assets){
  source.sourceVersionHash=craftDigest(source.sourceSnapshots);
  return source;
 }
-export function validateCraftTask(source,currentAssets,{trusted=false}={}){
- craftAssert(trusted,'TASK_NOT_TRUSTED','新工艺任务必须匹配本机登记的原始任务');
+export function validateCraftTask(source,currentAssets){
  craftAssert(Array.isArray(source.sourceSnapshots)&&source.sourceSnapshots.length===source.materials.length&&source.sourceSnapshots.length<=100,'INVALID_SOURCE_SNAPSHOT','素材来源快照不完整');
  craftAssert(craftDigest(source.sourceSnapshots)===source.sourceVersionHash,'SOURCE_SNAPSHOT_CHANGED','来源快照指纹不匹配');
  const byID=new Map(source.sourceSnapshots.map(s=>[s.assetID,s]));craftAssert(byID.size===source.materials.length,'INVALID_SOURCE_SNAPSHOT','来源快照有重复素材');

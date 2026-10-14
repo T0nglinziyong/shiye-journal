@@ -246,8 +246,8 @@ function MatchingSessionPanel({session,state,source,onAction}){
         {variant.status==='running'?<button className="btn" data-react-action="true" onClick={action('match-stop')}>停止创作</button>:
           variant.project.deliveryMode==='zip'?<button className="btn"
             data-react-action="true"
-            onClick={action('download-project-zip',variant.linkedProjectID||variant.project.id)}>
-            下载可编辑 ZIP</button>:null}
+            onClick={action('download-project-json',variant.linkedProjectID||variant.project.id)}>
+            下载可编辑 JSON</button>:null}
       </article>):<p>尚未生成方案。</p>}</div>
   </section>;
 }
@@ -824,7 +824,7 @@ export function ImportSimplePage({state,onAction}){
         {button('select-file','▣　从图库中选择','gallery','btn primary')}
         {button('select-file','▣　拍摄图片','camera')}
         {button('select-file','▱　从文件中导入','files')}
-        {state.importMode==='work'?<small>选择 .shiyeproject.zip 可编辑作品包或 JSON 备选文件会直接导入，不经过照片识别。</small>:null}
+        {state.importMode==='work'?<small>选择可编辑 JSON 作品文件会直接导入，不经过照片识别。</small>:null}
       </div><small>每批最多 12 张；使用较小图像识别，从原始工作图提取素材</small>
     </div>
   </section>}</>;

@@ -26,7 +26,7 @@ export function webResultPrompt(mode,output){
   }
   const instructions='请先读 ZIP 的 START_HERE.txt 与 task/WORKFLOW.txt；观察素材、比较构图，完成唯一一份可编辑手帐。运行校验并展示同一场景的 HTML Canvas 预览，发现问题后修订，不能用另一张画作冒充预览。';
   return output==='file'
-    ?instructions+'最终交付一个可下载的「作品.shiyeproject.json」UTF-8 单文件（含原样 source、title 与 page 或 tools）。不要求输出 ZIP；如果确实需要，也可以交付原有的「作品.shiyeproject.zip」。'
+    ?instructions+'最终交付一个可下载的「作品.shiyeproject.json」UTF-8 单文件（含原样 source、title 与 page 或 tools）。拾页只从 JSON 导入可编辑作品，不要交付 ZIP 工程包。'
     :instructions+'随后只用一个完整的 ```json 代码块返回紧凑单行 JSON，不能分成多个块、不能省略字段、不要生成作品文件。';
 }
 
@@ -46,7 +46,7 @@ export async function classifyCreationFile(file){
   // Inspect bytes rather than name/MIME; forged extensions must not bypass
   // the JSON, image and ZIP size checks downstream.
   const type=classifyCreationBytes(new Uint8Array(await file.slice(0,96).arrayBuffer()));
-  if(!type)throw Error('不支持此作品文件：请选择 JSON、ZIP、PNG、JPEG 或 WebP');
+  if(!type)throw Error('不支持此作品文件：请选择 JSON、PNG、JPEG 或 WebP');
   const max=type.kind==='json'?8_000_000:type.kind==='zip'?20_000_000:40_000_000;
   if(file.size>max)throw Error(type.kind==='json'?'可编辑 JSON 不能超过 8 MB':type.kind==='zip'?'作品 ZIP 不能超过 20 MB':'画面图片不能超过 40 MB');
   return type;
