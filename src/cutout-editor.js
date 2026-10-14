@@ -467,6 +467,9 @@ export async function showCutoutEditor({
   });
   // The tool layout should be presented while the native dialog remains
   // open, before any expensive preview paint. Do not close and showModal again.
+  // Size the preview at once so the first visible frame is never stretched
+  // while the higher-cost mask composition waits for the next animation frame.
+  preview.width=displayWidth;preview.height=displayHeight;fit();
   await new Promise(resolve=>requestAnimationFrame(resolve));
   if(isCancelled()||!modal.open)return;
   panel();draw();

@@ -38,11 +38,13 @@
     "ajv": "8.20.0",
     "cos-nodejs-sdk-v5": "3.0.0",
     "eventsource-parser": "4.1.1",
+    "fabric": "^7.4.0",
     "fflate": "0.8.2",
     "idb": "8.0.3",
     "lucide": "1.48.0",
     "opentype.js": "2.0.0",
     "pdf-lib": "1.17.1",
+    "perfect-freehand": "1.2.3",
     "polygon-clipping": "0.15.7",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"

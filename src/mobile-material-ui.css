@@ -293,3 +293,8 @@ body:has(.import-nav) #view>.import-nav>.sync-indicator{display:none!important}
   min-height:36px;padding:8px 20px;border-radius:18px;
   background:#e9eee5;color:#52634b;font-size:13px;
 }
+@media(max-width:699px){
+  .swift-picker-popover:is(.swift-material-picker,.swift-shape-picker) .canvas-picker-grid{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+}

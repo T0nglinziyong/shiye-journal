@@ -1,4 +1,5 @@
 import {smoothInkSVG} from './ink-path-geometry.js';
+import {pressureInkPath} from './pressure-ink.js';
 // An ink node is editable vector geometry, not a baked PNG.
 // Used by editor DOM, Works previews and live lasso motion. All text
 // interpolation is bounded numerical data, never untrusted SVG markup.
@@ -9,6 +10,7 @@ export function inkScenePaths(stroke){
  if(!points.length)return '';
  const color=/^#[0-9a-fA-F]{6}$/.test(stroke?.color||'')?stroke.color:'#30463d',width=widthOf(stroke);
  const at=p=>coord(p.x)+' '+coord(p.y);
+ if(stroke.penStyle==='pressure')return '<path d="'+pressureInkPath(stroke)+'" fill="'+color+'"/>';
  if(points.length===1)return '<circle cx="'+coord(points[0].x)+'" cy="'+coord(points[0].y)+'" r="'+width/2+'" fill="'+color+'"/>';
  if(stroke.penStyle==='brush')return points.slice(1).map((p,i)=>{
    const a=points[i],pressure=Math.max(0,Math.min(1,((Number(a.p??.5)+Number(p.p??.5))/2)));

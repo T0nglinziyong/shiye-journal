@@ -1,7 +1,7 @@
 import React from 'react';
 import {AI_PROVIDERS,supportsVision} from './ai-settings.js';
 import {seriesContentsModel} from './series-contents.js';
-import {paperPresets,paperSizeOptions} from './paper-sizes.js';
+import {paperPresets} from './paper-sizes.js';
 import {candidateDiscoveryOptions,recognitionOptions,recognitionPixelOptions,
   recognitionMethodDetails} from './recognition-profiles.js';
 import {DELIVERY_OPTIONS} from './ai-delivery.js';
@@ -20,6 +20,16 @@ function PageHeading({title}){
   return <div className="view-head unified-page-heading"><div className="unified-heading-copy">
     <span className="eyebrow">FROM YOUR DESK TO YOUR PAGES</span><h1>{title}</h1>
   </div><div className="actions"/></div>;
+}
+
+function PaperSizeOptions({includeNone=false,includeCustom=true}){
+  const groups=[...new Set(paperPresets.map(preset=>preset.group))];
+  return <>{includeNone?<option value="none">无背景板</option>:null}
+    {groups.map(group=><optgroup key={group} label={group}>{paperPresets.filter(preset=>preset.group===group)
+      .map(preset=><option key={preset.id} value={preset.id}>
+        {preset.name} · {preset.width} × {preset.height} mm
+      </option>)}</optgroup>)}
+    {includeCustom?<option value="custom">自定义尺寸</option>:null}</>;
 }
 
 export function LibraryPage({state,items,source,kindName,format,onAction}){
@@ -183,7 +193,7 @@ export function MatchingPage({state,source,kindName,session}){
         <option value="type">排版文字</option><option value="handwritten">自由手写</option><option value="mixed">混合编排</option>
       </select></label></div>
       <div className="match-options match-setting-row match-paper-page"><label>页面模式<select id="match-mode" defaultValue={state.matchMode}><option value="single">单页</option><option value="spread">双页</option></select></label>
-        <label>纸张规格<select id="match-ratio" defaultValue={state.matchRatio} dangerouslySetInnerHTML={{__html:paperSizeOptions(state.matchRatio)}}/></label></div>
+        <label>纸张规格<select id="match-ratio" defaultValue={state.matchRatio?.startsWith('custom:')?'custom':state.matchRatio}><PaperSizeOptions/></select></label></div>
       <div className="match-options match-setting-row match-paper-dimensions"><label className="match-custom-paper">纸张宽 mm<input id="match-paper-width" type="number" min="50" max="1000" defaultValue={state.customPaperWidth}/></label>
         <label className="match-custom-paper">纸张高 mm<input id="match-paper-height" type="number" min="50" max="1000" defaultValue={state.customPaperHeight}/></label></div>
       <label>创作要求和内容<textarea data-match-scroll="intent" id="match-intent" placeholder="可写主题、具体内容、想保留的句子或排版要求；未提供的私人事实不会编造" defaultValue={state.matchIntent}/></label>
@@ -622,7 +632,6 @@ export function ImportInspectionPage({state,format,onAction}){
   const snapshot=state.importMode==='snapshot',previewing=!!state.showCorrectionPreview,manual=!!state.showManualBox;
   const source=manual?state.correctedURL||state.importURL:previewing?state.paperPreviewURL||state.correctedURL:state.importURL;
   const candidates=state.importProcessing?[]:state.importCandidates||[];
-  const paperOptions=paperSizeOptions(state.paperSize,{includeNone:true});
   const button=(action,label,disabled=false,kind='btn')=><button className={kind} data-act={action} disabled={disabled}>{label}</button>;
   return <><ImportNavigation state={state} onAction={onAction}/>
     <section className={`import-inspect ${snapshot?'import-snapshot-inspect':''}`} data-react-page="importInspection" aria-busy={!!state.importProcessing}>
@@ -643,7 +652,7 @@ export function ImportInspectionPage({state,format,onAction}){
       <section className="panel import-inspector"><h2>{snapshot?'页面与颜色校正':state.importMode==='work'?'检查作品图层':'检查识别结果'}</h2>
         {!snapshot?<><p>校正后自动识别；如有漏检，使用左侧的“手动补框”。</p><hr/></>:null}
         <div className="inspector-scroll"><div className="inspector-settings">
-          <label>{snapshot?'页面规格':'当前照片的背景板'}<select id="paper-size" defaultValue={state.paperSize} dangerouslySetInnerHTML={{__html:paperOptions}}/></label>
+          <label>{snapshot?'页面规格':'当前照片的背景板'}<select id="paper-size" defaultValue={state.paperSize?.startsWith('custom:')?'custom':state.paperSize}><PaperSizeOptions includeNone/></select></label>
           {state.paperSize==='custom'?<div className="import-custom-size"><label>宽 mm<input id="import-paper-width" type="number" min="1" max="10000" defaultValue={state.customImportWidth}/></label>
             <label>高 mm<input id="import-paper-height" type="number" min="1" max="10000" defaultValue={state.customImportHeight}/></label></div>:null}
           {(snapshot||state.paperSize!=='none')?<><label>{snapshot?'页面方向':'纸张方向'}<select id="paper-orientation" defaultValue={state.paperOrientation||'auto'}>

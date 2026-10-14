@@ -41,7 +41,7 @@ export function mountCanvasEditor(c){
   if(!state.canvasTools){let saved={};try{saved=JSON.parse(localStorage.getItem(prefKey))||{};}catch{}state.canvasTools={...defaultTools,...saved};}
   ensureInkSlots(state.canvasTools);
   const prefs=state.canvasTools,head=view.querySelector('.view-head'),actions=head.querySelector('.actions'),tools=view.querySelector('.editor-tools'),shell=view.querySelector('.editor-shell');let entries=allEntries(d),selected=entries.find(e=>e.value.id===state.selected);
-  const button=(label,fn,className='')=>{const b=document.createElement('button');b.type='button';b.className=className;b.textContent=label;b.onclick=e=>{if(state.editingTextID&&!b.closest('.canvas-context-tools,[data-object]'))view.endTextEditing?.();fn(e);};return b;};
+  const button=(label,fn,className='')=>{const b=document.createElement('button');b.type='button';b.className=className;b.textContent=label;b.onclick=e=>{e.stopPropagation();if(state.editingTextID&&!b.closest('.canvas-context-tools,[data-object]'))view.endTextEditing?.();fn(e);};return b;};
   const prefsChanged=()=>{try{localStorage.setItem(prefKey,JSON.stringify(prefs));}catch{}if(!document.querySelector('.swift-popover'))contextTools();};
   const change=fn=>{checkpoint();fn();saveProject();render();};
   const topAction=(action,label)=>{const b=button(label,()=>handle(action),'btn');b.dataset.act=action;if(['undo','redo'].includes(action)){b.replaceChildren(createIcon(action));b.setAttribute('aria-label',action==='undo'?'撤销':'重做');}return b;};

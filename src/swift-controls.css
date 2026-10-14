@@ -444,7 +444,6 @@ body:has(.library-management-tray):not(:has(.library-management-tray:not([hidden
     grid-template-columns:repeat(2,minmax(0,1fr));
   }
 }
-
 /* Layer picker: the layer LIST (not its drag handles) owns native vertical
    touch scrolling. Override the older touch-action:none selectors above.
    Keep the header fixed and constrain only the row list so iPad Safari,
