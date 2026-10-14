@@ -36,6 +36,8 @@ import {recordSceneOperation,makeAutoSceneSnapshot,currentSceneDraft,copySceneBa
 import {retireSplitPiece} from './material-split.js';
 import {readAlphaMask,extractAlphaMask} from './alpha-mask-blob.js';
 import {renderHighResolutionCutout} from './cutout-full-resolution.js';
+import {materialStorageBlobs} from './material-storage-resolution.js';
+import {sha256Hex} from './task-fingerprint.js';
 import {reconcileCanvasText,textParagraphMarkup} from './canvas-text-content.js';
 import {reconcileEditorScene} from './editor-scene-reconcile.js';
 import {checkpointEditorHistory,ensureEditorHistory,resetEditorHistory,takeEditorHistoryStep} from './editor-history-scope.js';
@@ -1933,6 +1935,9 @@ async function openCutoutCheck(id,candidate=null){
       for(const rec of state.importRecords){const index=rec.candidateData?.findIndex(c=>c===candidate||c.region===candidate.region);if(index>=0){Object.assign(rec.candidateData[index],candidate);rec.candidateURLs[index]=candidate.url;rec.manualEdits=true;if(state.importStep==='inspect')rec.confirmed=false;}}
       if(state.importRecords[state.importIndex]?.candidateData===state.importCandidateData)state.importCandidateURLs=state.importCandidateData.map(c=>c.url);
     }else{
+      const storedMaterial=await materialStorageBlobs(
+        completePNG,fullRGB,width||baseWidth,height||baseHeight);
+      blob=storedMaterial.cutout;
       const frameId=a.candidateFrameBlobId||uid();
       // Existing imports can retain their original recognition PNG as a
       // lazy baseline. Never download it merely because the user pressed
@@ -1943,6 +1948,7 @@ async function openCutoutCheck(id,candidate=null){
       const baselineBlob=baselineId&&!a.initialMaskBlobId
         ?finalMaskBlob||await extractAlphaMask(recognition||saved):null;
       const updated={...a,processingRecord:nextProcessing,
+        imageHash:'sha256:'+await sha256Hex(await blob.arrayBuffer()),
         physicalWidthMM:width||a.physicalWidthMM,physicalHeightMM:height||a.physicalHeightMM,
         candidateFrameBlobId:frameId,initialMaskBlobId:baselineId,finalMaskBlobId:nextMaskId,
         updatedAt:new Date().toISOString()};
@@ -1951,8 +1957,9 @@ async function openCutoutCheck(id,candidate=null){
         tx.objectStore('blobs').put({id:a.blobId,data:blob});
         tx.objectStore('blobs').put({id:nextMaskId,data:maskBlob});
         if(baselineBlob)tx.objectStore('blobs').put({id:baselineId,data:baselineBlob});
-        if(!a.candidateFrameBlobId)tx.objectStore('blobs').put({id:frameId,data:candidateFrame});
+        tx.objectStore('blobs').put({id:frameId,data:storedMaterial.frame});
       });
+      candidateFrame=storedMaterial.frame;
       Object.assign(a,updated);if(urls.has(a.blobId))URL.revokeObjectURL(urls.get(a.blobId));urls.set(a.blobId,URL.createObjectURL(blob));
     }
     render();toast('素材外观已更新');

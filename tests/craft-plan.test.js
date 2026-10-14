@@ -100,6 +100,10 @@ test('offline task imports a plan using its original source and full creation br
  const imported=importEditableWork(JSON.stringify(envelope),[a],{trustedSource:handoff.source});
  assert.equal(imported.contentPolicy,'original');assert.equal(imported.userText,'原文');assert.deepEqual(imported.assetProcessing,p.assetProcessing);
  assert.equal(imported.drafts[0].items.length,1);
+ const updated={...a,kind:'tape',supply:{quantity:0},title:'新标题',role:'decoration'};
+ const afterEdit=importEditableWork(JSON.stringify(envelope),[updated],{trustedSource:handoff.source});
+ assert.equal(afterEdit.drafts[0].items.length,1);
+ assert.equal(afterEdit.drafts[0].items[0].craftProvenance.sourceRevision,assetSourceRevision(a));
  assert.throws(()=>importEditableWork(JSON.stringify(envelope),[{...a,physicalWidthMM:101}],{trustedSource:handoff.source}),/已变化/);
 });
 test('native roundtrip preserves current scene and persistent craft geometry while dropping session undo',async()=>{

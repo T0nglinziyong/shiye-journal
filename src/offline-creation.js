@@ -26,6 +26,7 @@ import {journalReferenceGuide,selectJournalReferenceCases} from './journal-refer
 import {journalAbstractTemplateGuide,selectJournalAbstractTemplates} from './journal-abstract-templates.js';
 import {journalSourceAudit,journalVerifiedPairs} from './journal-source-audit.js';
 import {paperDimensions} from './paper-sizes.js';
+import {assetFromSourceSnapshot} from './material-anatomy.js';
 
 export const OFFLINE_PACKAGE_FORMAT='shiye-gpt-creation-package';
 function packagePreviewPath(folder,name,bytes,{transparent=false}={}){
@@ -269,7 +270,9 @@ export function importEditableWork(text,assets,{trustedSource=null}={}){
   if(sourcePriority&&['required','preferred','available'].some(key=>!Array.isArray(sourcePriority[key])||sourcePriority[key].some(id=>!allowedIDs.has(id))))throw Error('素材优先级引用了创作包之外的素材');
   const title=typeof input.title==='string'&&input.title.trim()?input.title.trim().slice(0,80):'导入的可编辑作品';
   const p=project(title,{mode:source.mode,ratio:source.ratio,style:Array.isArray(source.styles)?source.styles[0]:'韩系清新'});
-  const selectedAssets=assets.filter(a=>Object.values(aliases).includes(a.id));
+  // Execute the AI's plan against the task it actually saw. Current assets
+  // were already checked for matching cutouts and measured dimensions above.
+  const selectedAssets=source.sourceSnapshots.map(assetFromSourceSnapshot);
   if(baseDraft){validateNativeDraft(baseDraft,new Set(selectedAssets.map(a=>a.id)));p.drafts[0]=baseDraft;p.activeDraftID=baseDraft.id;}
   const result=applyToolCalls({tools},p.drafts[0],selectedAssets,aliases,{visualAssetIDs:source.materials.filter(m=>source.previewHashes?.[m.alias]).map(m=>m.assetID),requiredAssetIDs:source.requiredAssetIDs,processing:source.processing||'保留完整',textMode:source.textMode||'automatic',materialUseHints:source.materialUseHints||{},materialUseRequired:source.materialUseRequired||{},assetProcessing:source.assetProcessing||{},pagePurposes:source.purposes||['日常记录'],allowNoText:source.textMode==='none'||source.purposes?.every(x=>x==='主题封面')});
   const error=result.results.find(x=>!x.ok);if(error)throw Error(`${error.name}：${error.detail}`);

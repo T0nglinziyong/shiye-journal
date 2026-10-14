@@ -61,7 +61,8 @@ test('imported work and library candidates align the color-corrected source, nev
   // The export and cutout editor still persist/use the same fields, so reopening
   // a corrected import after saving cannot silently select raw camera bytes.
   const saved=await readFile(new URL('../src/import-save.js',import.meta.url),'utf8');
-  assert.match(saved,/data:c\.candidateFrameBlob\|\|c\.originalBlob\|\|c\.blob/);
+  assert.match(saved,/materialStorageBlobs\(c\.blob,c\.candidateFrameBlob\|\|c\.originalBlob\|\|c\.blob/);
+  assert.match(saved,/data:stored\.frame/);
   const editor=await readFile(new URL('../src/cutout-editor.js',import.meta.url),'utf8');
   assert.match(editor,/imageFrame=new ImageData\(new Uint8ClampedArray\(sourcePixels\.data\),w,h\)/);
 });

@@ -4,6 +4,8 @@ import {markProjectAssetsUsed} from './library-model.js';
 import {snapshotRecord} from './work-collections.js';
 import {neutralizePaperChroma} from './paper-chroma-preprocess.js';
 import {extractAlphaMask} from './alpha-mask-blob.js';
+import {materialStorageBlobs} from './material-storage-resolution.js';
+import {sha256Hex} from './task-fingerprint.js';
 
 export function importPaperDimensions(record) {
   const size=record.paperSize==='custom'?{width:record.customImportWidth,height:record.customImportHeight}:paperDimensions(record.paperSize)||paperDimensions('a4');
@@ -74,19 +76,21 @@ export async function saveImportBatch({state,db,urls,render,onSaved}) {
       p.seriesID=choice==='__none__'||choice==='__no_library__'?null:choice||null;
       for(const c of elements) {
         const id=uid(),blobId=uid(),maskId=uid(),candidateFrameBlobId=uid(),region=c.region;
-        const encodedMask=await extractAlphaMask(c.blob,{
+        const stored=await materialStorageBlobs(c.blob,c.candidateFrameBlob||c.originalBlob||c.blob,c.width,c.height);
+        const imageHash='sha256:'+await sha256Hex(await stored.cutout.arrayBuffer());
+        const encodedMask=await extractAlphaMask(stored.cutout,{
           maxEdge:[900,1200,1600].includes(Number(state.preferences?.recognitionPixels))
             ?Number(state.preferences.recognitionPixels):900
         });
-        assets.push({...candidateMetadata(c,record,state.importBatchSeriesID),id,blobId,
+        assets.push({...candidateMetadata(c,record,state.importBatchSeriesID),id,blobId,imageHash,
           initialMaskBlobId:maskId,finalMaskBlobId:maskId,candidateFrameBlobId,
           photoBlobId:originalID,isProjectInternal:!copyToLibrary,
           usageStatus:copyToLibrary?'used':'unused',usageUpdatedAt:copyToLibrary?now:null,
           seriesID:copyToLibrary?(choice==='__none__'?null:choice||null):null,
           createdAt:now,sourceIdentifier:'imported-work-element'});
         blobs.push({id:maskId,data:encodedMask},
-          {id:candidateFrameBlobId,data:c.candidateFrameBlob||c.originalBlob||c.blob},
-          {id:blobId,data:c.blob});p.candidateAssetIDs.push(id);
+          {id:candidateFrameBlobId,data:stored.frame},
+          {id:blobId,data:stored.cutout});p.candidateAssetIDs.push(id);
         d.items.push({id:uid(),assetID:id,x:(region.x+region.w/2)*d.canvas.width,y:(region.y+region.h/2)*1000,
           width:region.w*d.canvas.width,height:region.h*1000,rotation:region.rotation||0,zIndex:d.items.length,isLocked:false,isParked:false,opacity:1});
       }
@@ -102,17 +106,19 @@ export async function saveImportBatch({state,db,urls,render,onSaved}) {
       // candidate-box frame so storage stays local and compact.
       for(const c of chosen) {
         const id=uid(),blobId=uid(),maskId=uid(),candidateFrameBlobId=uid();
-        const encodedMask=await extractAlphaMask(c.blob,{
+        const stored=await materialStorageBlobs(c.blob,c.candidateFrameBlob||c.originalBlob||c.blob,c.width,c.height);
+        const imageHash='sha256:'+await sha256Hex(await stored.cutout.arrayBuffer());
+        const encodedMask=await extractAlphaMask(stored.cutout,{
           maxEdge:[900,1200,1600].includes(Number(state.preferences?.recognitionPixels))
             ?Number(state.preferences.recognitionPixels):900
         });
         const {mask,...region}=c.region;
-        assets.push({...candidateMetadata(c,record,state.importBatchSeriesID),id,blobId,
+        assets.push({...candidateMetadata(c,record,state.importBatchSeriesID),id,blobId,imageHash,
           candidateFrameBlobId,initialMaskBlobId:maskId,finalMaskBlobId:maskId,
           sourceRegion:structuredClone(region),createdAt:now});
         blobs.push({id:maskId,data:encodedMask},
-          {id:candidateFrameBlobId,data:c.candidateFrameBlob||c.originalBlob||c.blob},
-          {id:blobId,data:c.blob});savedCount++;
+          {id:candidateFrameBlobId,data:stored.frame},
+          {id:blobId,data:stored.cutout});savedCount++;
       }
     }
   }

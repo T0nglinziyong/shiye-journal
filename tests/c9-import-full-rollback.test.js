@@ -15,7 +15,8 @@ const expected={
   'styles.css':'c6b7945ba3ffeb4373dbe38f97bc96dbfd9e5178',
   'responsive.css':'3daab9b366125aeda84ed7e78bf2ac72132c8981',
   'paper-ui.js':'43dcd4f457d72382dadd0a0d8cea82cdd248058f',
-  'import-save.js':'f3cfd3b556178edabdb55ad8736ca5797f008467',
+  // Reviewed change: saved cutouts use a proportional A4 pixel budget; detection and segmentation are unchanged.
+  'import-save.js':'89239971282c69c9e599f66a0d64e47e1907f88a',
   'vision-runtime.js':'3817687ab32df7fb19c308c83902a6b123aabee1'
 };
 for(const [name,sha] of Object.entries(expected)){

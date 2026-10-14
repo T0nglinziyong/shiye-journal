@@ -19,6 +19,17 @@ const physicalSource=asset=>({...assetVisualDescriptor(asset),kind:asset.kind??n
 // Editing a title, label or series updates updatedAt without changing the
 // physical material. Keep that timestamp out of new source revisions.
 export const assetSourceRevision=asset=>craftDigest(physicalSource(asset));
+// A saved work still refers to the library image. Metadata and inventory may
+// change while the model is working, but a different cutout or measured size
+// would change the meaning of its placements and physical operations.
+export function sameMaterialCutoutAndSize(exported,current){
+ const a=assetVisualDescriptor(exported),b=assetVisualDescriptor(current);
+ if(a.widthMM!==b.widthMM||a.heightMM!==b.heightMM)return false;
+ if(a.imageHash||b.imageHash)return !!a.imageHash&&a.imageHash===b.imageHash;
+ return a.blobId===b.blobId&&a.staticPath===b.staticPath&&
+   craftDigest([a.processingRecord,a.sourceSilhouette,a.orientation])===
+   craftDigest([b.processingRecord,b.sourceSilhouette,b.orientation]);
+}
 export function materialSourceSnapshot(asset){
  return {assetID:asset.id,sourceRevision:assetSourceRevision(asset),descriptor:assetVisualDescriptor(asset),updatedAt:asset.updatedAt??null,
   kind:asset.kind,title:asset.title,role:asset.role??null,tags:asset.tags||[],supply:structuredClone(asset.supply??{quantity:1}),

@@ -46,15 +46,23 @@ test('current editable example imports from JSON with current library assets',as
   assert.equal(importEditableWork(copied,[asset],{trustedSource:output.source}).drafts[0].items[0].assetID,asset.id);
 });
 
-test('editing material metadata after task export does not block import, but physical changes do',async()=>{
+test('editing material metadata and stock after task export does not block import, but cutout or measured size does',async()=>{
   const output=await make(),files=await filesOf(output),response=strFromU8(files['examples/project.shiyeproject.json']);
   const edited=assetEditorValue(asset,{title:'重新命名',kind:'sticker',role:'focal',texture:'纸',width:'40',height:'50',quantity:'1',
     tags:'新标签',contentTags:'',styleTags:'',materialTags:'',seriesID:'new-series',reviewStatus:'ready',usageStatus:'unused',
     tapeRoll:false,supplyLength:'',repeatable:false,repeatPeriod:''});
   assert.equal(importEditableWork(response,[edited]).drafts[0].items[0].assetID,asset.id);
-  assert.throws(()=>importEditableWork(response,[{...edited,physicalWidthMM:45}]),/素材图像、类型、尺寸或库存已变化/);
-  assert.throws(()=>importEditableWork(response,[{...edited,supply:{quantity:0}}]),/素材图像、类型、尺寸或库存已变化/);
-  assert.throws(()=>importEditableWork(response,[{...edited,kind:'tape'}]),/素材图像、类型、尺寸或库存已变化/);
+  for(const changed of [
+    {...edited,supply:{quantity:0}},
+    {...edited,kind:'tape'},
+    {...edited,role:'background',imageSize:{width:900,height:1200},originalBlobId:'new-original'}
+  ])assert.equal(importEditableWork(response,[changed]).drafts[0].items[0].assetID,asset.id);
+  for(const changed of [
+    {...edited,physicalWidthMM:45},
+    {...edited,blobId:'new-cutout'},
+    {...edited,processingRecord:{manualCutout:true}},
+    {...edited,imageHash:'sha256:'+ 'a'.repeat(64)}
+  ])assert.throws(()=>importEditableWork(response,[changed]),/素材抠图或实物尺寸已变化/);
 });
 
 test('current task round-trip keeps the selected journal paper size',async()=>{
