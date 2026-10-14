@@ -1,5 +1,5 @@
 import {recognitionModeAllowed,recognitionPixelsAllowed,candidateDiscoveryAllowed} from './recognition-profiles.js';
-const KEY='shiye-ui-preferences-v1',RECOGNITION_DEFAULTS_VERSION=3;
+const KEY='shiye-ui-preferences-v1',RECOGNITION_DEFAULTS_VERSION=4;
 const defaults={
   paperSize:'a4',orientation:'auto',wholePaper:true,autoOrganize:true,autoOrganizeWorks:true,
   recognition:'auto',candidateDiscovery:'unified',recognitionPixels:900,materialColorMode:'auto',
@@ -43,8 +43,11 @@ export function normalizePreferences(value={}){
 }
 export function migrateStoredPreferences(value={}){
   if(value?.recognitionDefaultsVersion===RECOGNITION_DEFAULTS_VERSION)return value;
-  if(value?.recognitionDefaultsVersion===2){
-    return {...value,candidateDiscovery:value.recognition==='auto'&&value.candidateDiscovery==='legacy'
+  if(value?.recognitionDefaultsVersion>=2){
+    // The former automatic mode used legacy/physical candidate discovery.
+    // Upgrade that automatic choice once; explicitly selected mask methods stay put.
+    return {...value,candidateDiscovery:value.recognition==='auto'&&
+      ['legacy','physical'].includes(value.candidateDiscovery)
       ?'unified':value.candidateDiscovery,recognitionDefaultsVersion:RECOGNITION_DEFAULTS_VERSION};
   }
   // Recognition semantics changed substantially (new whole-page boxes +

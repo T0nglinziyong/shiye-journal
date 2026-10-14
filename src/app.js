@@ -77,7 +77,7 @@ import {showCutoutEditor} from './cutout-editor.js';
 import {decodeImageBlob} from './image-blob-decoder.js';
 import {mountCanvasSelection} from './canvas-selection-ui.js';
 import * as db from './store.js';
-import {loadPreferences,savePreferences} from './preferences.js';
+import {loadPreferences,savePreferences,migrateStoredPreferences} from './preferences.js';
 import {cloudPreferencesRecord,cloudPreferencesFromMeta} from './cloud-preferences.js';
 import {cloudAISettingsRecord,cloudAISettingsFromMeta} from './cloud-ai-settings.js';
 import {cloudMatchingSettingsRecord,cloudMatchingSettingsFromMeta,applyMatchingDefaults} from './cloud-matching-settings.js';
@@ -417,7 +417,7 @@ function route(name,{back=false,restoreMaterial=false}={}){
   }
   routeScroll.set(state.route+':'+state.seriesID,window.scrollY);
   if(name==='settings'&&!settingsSession)settingsSession={ai:structuredClone(state.aiSettings),preferences:structuredClone(state.preferences),returnRoute:state.route};
-  if(state.route==='settings'&&name!=='settings'&&settingsSession){state.aiSettings=settingsSession.ai;state.preferences=settingsSession.preferences;settingsSession=null;state.settingsSection=null;if(cloudEnabled&&deferredSyncedPreferences)state.preferences=savePreferences(deferredSyncedPreferences);if(cloudEnabled&&deferredSyncedAISettings)state.aiSettings=saveAISettings(deferredSyncedAISettings);deferredSyncedPreferences=null;deferredSyncedAISettings=null;}
+  if(state.route==='settings'&&name!=='settings'&&settingsSession){state.aiSettings=settingsSession.ai;state.preferences=settingsSession.preferences;settingsSession=null;state.settingsSection=null;if(cloudEnabled&&deferredSyncedPreferences)state.preferences=savePreferences(migrateStoredPreferences(deferredSyncedPreferences));if(cloudEnabled&&deferredSyncedAISettings)state.aiSettings=saveAISettings(deferredSyncedAISettings);deferredSyncedPreferences=null;deferredSyncedAISettings=null;}
 if(state.route==='editor'&&name!=='editor'&&aiController)aiController.abort(Error('已离开创作页面'));const priorRoute=state.route;if(name==='matching'&&priorRoute!=='matching'&&cloudMatchingDefaults&&!matchingDefaultsPending)applyMatchingDefaults(state,cloudMatchingDefaults);syncSelectionScope(parity,name);state.route=name;
 if(name!=='assetDetail')privateImages.focus(null);
 if(priorRoute!=='editor'&&name==='editor')
@@ -1719,7 +1719,7 @@ async function refresh({background=false,onlyChanged=false,skipCloudRefresh=fals
   const syncedPreferences=cloudEnabled?cloudPreferencesFromMeta(meta):null;
   if(syncedPreferences){
     if(settingsSession)deferredSyncedPreferences=structuredClone(syncedPreferences);
-    else{state.preferences=savePreferences(syncedPreferences);deferredSyncedPreferences=null;}
+    else{state.preferences=savePreferences(migrateStoredPreferences(syncedPreferences));deferredSyncedPreferences=null;}
   }
   const syncedMatch=cloudEnabled?cloudMatchingSettingsFromMeta(meta):null;
   if(syncedMatch&&!matchingDefaultsPending&&!matchingDefaultsLocalEdited){
@@ -2752,8 +2752,17 @@ document.querySelectorAll('.main-nav button').forEach(b=>b.onclick=()=>{
   }else route(b.dataset.route);
 });
 document.querySelector('#top-basket').onclick=()=>route('matching');document.querySelector('#top-settings').onclick=()=>route('settings');
+let safeUpdateRegistration=null;
+function checkForSafeUpdate(){
+  if(!('serviceWorker' in navigator)||location.protocol!=='https:'||safeUpdateRegistration)return;
+  safeUpdateRegistration=import('./app-update.js').then(({registerSafeUpdate})=>registerSafeUpdate({
+    flushLocal:flushSave,
+    isBusy:()=>!!(state.importProcessing||state.aiBusy||savingProjects||dirtyProjects.size),
+    onError:error=>toast('更新未完成，当前页面和资料保持不变：'+error.message)
+  })).catch(error=>{safeUpdateRegistration=null;console.warn('更新检查暂不可用',error);});
+}
 async function init(user,{resetPending=false,afterAccountReset=false}={}){previewPrewarmEpoch++;let cachedShown=false;cloudSessionReady=!resetPending;if(resetPending)cloudResumer.suspend();const accountId=user?.id||'browser';if(state.accountId&&state.accountId!==accountId){matchingScrollMemory=null;Object.assign(lastMaterialLocation,{route:'series',seriesID:'all',libraryTab:'series'});parity.libraryTab='series';deferredSyncedPreferences=null;deferredSyncedAISettings=null;clearTimeout(matchingDefaultsTimer);matchingDefaultsTimer=null;matchingDefaultsPending=false;matchingDefaultsLocalEdited=false;cloudMatchingDefaults=null;assetOrganization.clear();clearJournalTemplateImages();clearJournalPresetImages();state.userTemplates=[];}state.accountId=accountId;try{
-  await db.storageMode();state.selfHosted=db.isSameOriginServer();
+  await db.storageMode();state.selfHosted=db.isSameOriginServer();checkForSafeUpdate();
   // startCloudSession has validated Auth and the allowlist before this runs.
   const cached=await db.cachedCollections();if(cached){
     const {meta:cachedMeta,...collections}=cached;
@@ -2762,7 +2771,7 @@ async function init(user,{resetPending=false,afterAccountReset=false}={}){previe
       const preferences=cloudPreferencesFromMeta(cachedMeta);
       const aiSettings=cloudAISettingsFromMeta(cachedMeta);
       const matching=cloudMatchingSettingsFromMeta(cachedMeta);
-      if(preferences)state.preferences=savePreferences(preferences);
+      if(preferences)state.preferences=savePreferences(migrateStoredPreferences(preferences));
       if(aiSettings)state.aiSettings=saveAISettings(aiSettings);
       if(matching){cloudMatchingDefaults=matching;applyMatchingDefaults(state,matching);}
     }
@@ -2770,13 +2779,7 @@ async function init(user,{resetPending=false,afterAccountReset=false}={}){previe
     for(const a of state.assets)if(a.staticPath)staticSources.set(a.blobId,a.staticPath);
     render();cachedShown=true;saveStatus('本机缓存 · 正在核对云端');
   }
-  const initialSync=await db.refreshCloud();if(initialSync?.changed)privateImages.invalidate(initialSync.allBlobs?undefined:initialSync.blobIDs);await refresh({background:cachedShown,skipCloudRefresh:true});if(!resetPending&&!afterAccountReset)void purgeExpiredTrash();await matchingSession.restore();if(cloudMatchingDefaults)applyMatchingDefaults(state,cloudMatchingDefaults);editableImportReady=true;void consumeEditableHandles();if('serviceWorker' in navigator&&location.protocol==='https:'){
-    void import('./app-update.js').then(({registerSafeUpdate})=>registerSafeUpdate({
-      flushLocal:flushSave,
-      isBusy:()=>!!(state.importProcessing||state.aiBusy||savingProjects||dirtyProjects.size),
-      onError:error=>toast('更新未完成，当前页面和资料保持不变：'+error.message)
-    })).catch(error=>console.warn('更新检查暂不可用',error));
-  }saveStatus((await db.storageMode())==='server'?'已连接服务器':'已保存到本机');if(cloudEnabled){syncDisplay.checking=false;updateSyncIndicator();if(!resetPending)void cloudResumer.wake();else saveStatus('云端已清空 · 正在后台清理旧图片（暂只读）');}
+  const initialSync=await db.refreshCloud();if(initialSync?.changed)privateImages.invalidate(initialSync.allBlobs?undefined:initialSync.blobIDs);await refresh({background:cachedShown,skipCloudRefresh:true});if(!resetPending&&!afterAccountReset)void purgeExpiredTrash();await matchingSession.restore();if(cloudMatchingDefaults)applyMatchingDefaults(state,cloudMatchingDefaults);editableImportReady=true;void consumeEditableHandles();saveStatus((await db.storageMode())==='server'?'已连接服务器':'已保存到本机');if(cloudEnabled){syncDisplay.checking=false;updateSyncIndicator();if(!resetPending)void cloudResumer.wake();else saveStatus('云端已清空 · 正在后台清理旧图片（暂只读）');}
   }catch(e){console.error(e);recordRuntimeIssue('handled',e,state.route,{phase:'auth'});const auth=e.status===401;if(auth)cloudSessionReady=false;
   if(cachedShown&&!auth){saveStatus('云端核对失败 · 缓存仅供查看');toast('云端连接失败，未改为本机保存：'+e.message);if(cloudEnabled)void cloudResumer.wake();return;}
   if(auth){renderReactPage(`<div class="empty"><strong>连接拾页数据服务器</strong><p>请输入服务器访问令牌；连接失败时不会另存到浏览器。</p><form id="server-login"><input type="password" name="token" required autocomplete="off" placeholder="服务器访问令牌" aria-label="服务器访问令牌"><button class="btn primary" type="submit">连接</button></form><p id="server-login-error">${esc(e.message)}</p></div>`);view.querySelector('#server-login').onsubmit=event=>{event.preventDefault();db.setStorageConfig({url:db.storageConfig()?.url||location.origin,token:event.target.elements.token.value.trim()});init();};}else{renderReactPage(`<div class="empty"><strong>无法读取资料</strong><p>${esc(e.message||'请检查设备剩余空间和数据服务连接。')}</p><button class="btn" id="storage-retry">重试连接</button></div>`);view.querySelector('#storage-retry').onclick=()=>init();}saveStatus('存储不可用');}}

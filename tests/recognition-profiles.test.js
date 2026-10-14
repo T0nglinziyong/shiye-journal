@@ -71,6 +71,8 @@ test('validated recognition modes and defaults match the final automatic pipelin
   assert.equal(preserved.recognition,'grabcut');assert.equal(preserved.recognitionPixels,1600);
   assert.equal(preserved.recognitionChromaEdges,false,'explicit settings after migration must be preserved');
   assert.equal(migrateStoredPreferences({recognitionDefaultsVersion:2,recognition:'auto',candidateDiscovery:'legacy'}).candidateDiscovery,'unified');
+  assert.equal(migrateStoredPreferences({recognitionDefaultsVersion:3,recognition:'auto',candidateDiscovery:'physical'}).candidateDiscovery,'unified');
+  assert.equal(migrateStoredPreferences({recognitionDefaultsVersion:3,recognition:'physical',candidateDiscovery:'physical'}).candidateDiscovery,'physical');
 
   const invalid=normalizePreferences({recognition:'fake',recognitionPixels:1234});
   assert.equal(invalid.recognition,'auto');
