@@ -31,7 +31,8 @@ function Preview(){
   window.__fabricFixture.refresh=()=>setSceneRevision(value=>value+1);
   return <><nav id="fabric-tools">{['select','pen','eraser'].map(name=><button key={name}
     type="button" data-tool={name} onClick={()=>setTool(name)}>{name}</button>)}</nav>
-    <FabricSceneStage draft={draft} sceneRevision={sceneRevision} tool={tool} assetURL={()=>assetURL}
+    <FabricSceneStage draft={draft} sceneRevision={sceneRevision} tool={tool}
+      assetURL={id=>id==='fabric-delayed'?new Promise(resolve=>setTimeout(()=>resolve(assetURL),350)):assetURL}
       onReady={canvas=>window.__fabricCanvas=canvas}
       onSelection={ids=>events.textContent='选中：'+ids.join(', ')}
       onIssue={error=>events.textContent='错误：'+error.message}/></>;

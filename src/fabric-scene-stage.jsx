@@ -83,13 +83,20 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
         };
         const addProjected=(node,sceneIndex,version)=>{
           void bridge.fromNode(node).then(object=>{
-            if(disposed||!object||!callbacks.current.draft.layers.includes(node)||
+            if(disposed||!callbacks.current.draft.layers.includes(node)||
               (sceneVersions.get(node.id)||0)!==version)return;
-            object.sceneIndex=sceneIndex;
-            if(readOnly)object.set({selectable:false,evented:false});
-            const position=canvas.getObjects().filter(item=>item.sceneIndex<sceneIndex).length;
-            canvas.insertAt(position,object);canvas.requestRenderAll();
-          }).catch(error=>{if(!disposed)callbacks.current.onIssue?.(error);});
+            // Decode the replacement before touching the visible object. A
+            // slow image cannot leave a blank hole in an already drawn page.
+            const old=canvas.getObjects().filter(item=>item.sceneID===node.id);
+            for(const item of old)canvas.remove(item);
+            if(object){
+              object.sceneIndex=sceneIndex;
+              if(readOnly)object.set({selectable:false,evented:false});
+              const position=canvas.getObjects().filter(item=>item.sceneIndex<sceneIndex).length;
+              canvas.insertAt(position,object);
+            }
+            canvas.requestRenderAll();
+          }).catch(error=>{if(!disposed){signatures.delete(node.id);callbacks.current.onIssue?.(error);}});
         };
         reconcileRef.current=()=>{
           const current=callbacks.current.draft;
@@ -108,7 +115,6 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
             signatures.set(node.id,next);
             const version=(sceneVersions.get(node.id)||0)+1;
             sceneVersions.set(node.id,version);
-            for(const object of canvas.getObjects().filter(item=>item.sceneID===node.id))canvas.remove(object);
             addProjected(node,sceneIndex,version);
           }
           const existing=canvas.getObjects().filter(object=>positions.has(object.sceneID));

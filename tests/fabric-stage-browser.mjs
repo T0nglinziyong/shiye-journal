@@ -50,6 +50,17 @@ try{
   assert.ok(parity.material.meanRGBError<.1,JSON.stringify(parity));
   assert.ok(parity.text.meanRGBError<5,JSON.stringify(parity));
   assert.ok(parity.ink.meanRGBError<1,JSON.stringify(parity));
+  await evaluate(`(()=>{
+    const {draft,refresh}=window.__fabricFixture;
+    window.__oldMaterial=window.__fabricCanvas.getObjects().find(object=>object.sceneID==='paper-material');
+    draft.layers.find(node=>node.id==='paper-material').assetID='fabric-delayed';
+    refresh();
+  })()`);
+  assert.equal(await evaluate('window.__fabricCanvas.getObjects().find(object=>object.sceneID==="paper-material")===window.__oldMaterial'),true);
+  await sleep(150);
+  assert.equal(await evaluate('window.__fabricCanvas.getObjects().find(object=>object.sceneID==="paper-material")===window.__oldMaterial'),true);
+  await sleep(300);
+  assert.equal(await evaluate('window.__fabricCanvas.getObjects().find(object=>object.sceneID==="paper-material")===window.__oldMaterial'),false);
   const bounds=await evaluate('(()=>{const r=document.querySelector(".upper-canvas").getBoundingClientRect();return {left:r.left,top:r.top,width:r.width,height:r.height};})()');
   const x=bounds.left+bounds.width*340/600,y=bounds.top+bounds.height*380/800;
   await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,x,y,clickCount:1});
