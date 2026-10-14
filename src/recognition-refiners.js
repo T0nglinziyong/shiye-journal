@@ -65,7 +65,26 @@ async function parallelFinalPipeline({
 }
 
 export async function refineCandidatesAuto(context){
+  if(context.candidateDiscovery==='unified')return refineCandidatesUnified(context);
   return parallelFinalPipeline({...context,method:'morphgac'});
+}
+export async function refineCandidatesUnified({candidates,frame,sourceFrame=frame,width,height,
+  mergeSharedCarrier=true,onProgress=()=>{},paperWidthMM=210,paperHeightMM=297}){
+  if(!candidates.length)return candidates;
+  onProgress({status:'contour-refinement',engine:'unified-v8-v5',total:candidates.length});
+  try{
+    // One worker retains the shared page gradient and all neighboring masks.
+    // Splitting candidates across workers would copy the whole page twice and
+    // remove the V5 inter-carrier overlap guard.
+    return await visionTask('process-material-boxes',{
+      pixels:new Uint8ClampedArray(frame.data),
+      ...(mergeSharedCarrier===false?{sourcePixels:new Uint8ClampedArray(sourceFrame.data)}:{}),
+      transferInput:true,width,height,boxes:candidates,method:'unified',
+      paperWidthMM,paperHeightMM,mergeSharedCarrier
+    });
+  }catch(error){
+    throw Error('统一识别分割失败，已保留候选框但未生成素材：'+(error?.message||'图像引擎暂不可用'),{cause:error});
+  }
 }
 export async function refineCandidatesWithMorphGAC(context){
   return parallelFinalPipeline({...context,method:'morphgac'});

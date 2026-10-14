@@ -18,14 +18,14 @@ test('validated recognition modes and defaults match the final automatic pipelin
   assert.equal(typeof recognitionProfile('hybrid',1200).refineCandidates,'function');
   assert.deepEqual(recognitionPixelOptions.map(([value])=>value),[900,1200,1600]);
   assert.deepEqual(recognitionOptions.map(([id])=>id),['auto','morphgac','physical','grabcut','hybrid']);
-  assert.deepEqual(candidateDiscoveryOptions.map(([id])=>id),['legacy','physical']);
+  assert.deepEqual(candidateDiscoveryOptions.map(([id])=>id),['legacy','physical','unified']);
   assert.equal(candidateDiscoveryAllowed('physical'),true);
   assert.equal(candidateDiscoveryAllowed('random'),false);
   assert.equal(typeof recognitionProfile('physical').refineCandidates,'function');
 
   const defaults=normalizePreferences({});
   assert.equal(defaults.recognition,'auto');
-  assert.equal(defaults.candidateDiscovery,'legacy');
+  assert.equal(defaults.candidateDiscovery,'unified');
   assert.equal(defaults.recognitionPixels,900);
   assert.equal(defaults.balanceLight,false);
   assert.equal(defaults.recognitionDenoise,false);
@@ -70,10 +70,11 @@ test('validated recognition modes and defaults match the final automatic pipelin
   });
   assert.equal(preserved.recognition,'grabcut');assert.equal(preserved.recognitionPixels,1600);
   assert.equal(preserved.recognitionChromaEdges,false,'explicit settings after migration must be preserved');
+  assert.equal(migrateStoredPreferences({recognitionDefaultsVersion:2,recognition:'auto',candidateDiscovery:'legacy'}).candidateDiscovery,'unified');
 
   const invalid=normalizePreferences({recognition:'fake',recognitionPixels:1234});
   assert.equal(invalid.recognition,'auto');
-  assert.equal(normalizePreferences({candidateDiscovery:'nonsense'}).candidateDiscovery,'legacy');
+  assert.equal(normalizePreferences({candidateDiscovery:'nonsense'}).candidateDiscovery,'unified');
   assert.equal(invalid.recognitionPixels,900);
   assert.equal('recognitionEdgePolish' in normalizePreferences({recognitionEdgePolish:true}),false);
   assert.equal('recognitionCurveSmooth' in normalizePreferences({recognitionCurveSmooth:true}),false);

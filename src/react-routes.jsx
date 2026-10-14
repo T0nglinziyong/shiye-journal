@@ -601,8 +601,8 @@ export function SettingsRecognitionPage({preferences,onAction}){
   const method=recognitionMethodDetails.find(x=>x.id===recognitionMethod);
   return <SettingsDetailShell title="导入与识别" kind="settingsRecognition" onAction={onAction}>
     <SettingsGroup title="素材识别方法" description="统一确定素材数量与位置，再逐件细化边缘；仅切换单件分割算法。">
-      <SettingsSelect id="setting-candidate-discovery" label="候选框发现" value={p.candidateDiscovery||'legacy'}
-        choices={candidateDiscoveryOptions} help="原版使用连通区域；物理载体模式优先寻找完整纸片、票据与贴纸。候选框算法与 Mask 算法可任意搭配。"/>
+      <SettingsSelect id="setting-candidate-discovery" label="候选框发现" value={p.candidateDiscovery||'unified'}
+        choices={candidateDiscoveryOptions} help="默认“统一候选 + 自动”为新研究算法；选择“原版前景连通区域 + MorphGAC”可回到旧算法。"/>
       <label>Mask 分割<select id="setting-recognition" value={recognitionMethod}
         onChange={event=>setRecognitionMethod(event.target.value)}>
         {recognitionOptions.map(([id,name])=><option key={id} value={id}>{name}</option>)}
@@ -846,7 +846,7 @@ function ImportNavigation({state,onAction}){
   </div>;
 }
 
-export function ImportInspectionPage({state,format,onAction}){
+export function ImportInspectionPage({state,format,onAction,onSettingChange}){
   const snapshot=state.importMode==='snapshot',previewing=!!state.showCorrectionPreview,manual=!!state.showManualBox;
   const source=manual?state.correctedURL||state.importURL:previewing?state.paperPreviewURL||state.correctedURL:state.importURL;
   const candidates=state.importProcessing?[]:state.importCandidates||[];
@@ -870,16 +870,16 @@ export function ImportInspectionPage({state,format,onAction}){
       <section className="panel import-inspector"><h2>{snapshot?'页面与颜色校正':state.importMode==='work'?'检查作品图层':'检查识别结果'}</h2>
         {!snapshot?<><p>校正后自动识别；如有漏检，使用左侧的“手动补框”。</p><hr/></>:null}
         <div className="inspector-scroll"><div className="inspector-settings">
-          <label>{snapshot?'页面规格':'当前照片的背景板'}<select id="paper-size" defaultValue={state.paperSize?.startsWith('custom:')?'custom':state.paperSize}><PaperSizeOptions includeNone/></select></label>
-          {state.paperSize==='custom'?<div className="import-custom-size"><label>宽 mm<input id="import-paper-width" type="number" min="1" max="10000" defaultValue={state.customImportWidth}/></label>
-            <label>高 mm<input id="import-paper-height" type="number" min="1" max="10000" defaultValue={state.customImportHeight}/></label></div>:null}
-          {(snapshot||state.paperSize!=='none')?<><label>{snapshot?'页面方向':'纸张方向'}<select id="paper-orientation" defaultValue={state.paperOrientation||'auto'}>
+          <label>{snapshot?'页面规格':'当前照片的背景板'}<select id="paper-size" value={state.paperSize?.startsWith('custom:')?'custom':state.paperSize} onChange={event=>onSettingChange('paperSize',event.target.value)}><PaperSizeOptions includeNone/></select></label>
+          {state.paperSize==='custom'?<div className="import-custom-size"><label>宽 mm<input id="import-paper-width" type="number" min="1" max="10000" defaultValue={state.customImportWidth} onBlur={event=>onSettingChange('customImportWidth',event.target.value)}/></label>
+            <label>高 mm<input id="import-paper-height" type="number" min="1" max="10000" defaultValue={state.customImportHeight} onBlur={event=>onSettingChange('customImportHeight',event.target.value)}/></label></div>:null}
+          {(snapshot||state.paperSize!=='none')?<><label>{snapshot?'页面方向':'纸张方向'}<select id="paper-orientation" value={state.paperOrientation||'auto'} onChange={event=>onSettingChange('paperOrientation',event.target.value)}>
             <option value="auto">自动</option><option value="portrait">竖向</option><option value="landscape">横向</option></select></label>
             <label className="toggle-row">{snapshot?'校正白纸色偏':'识别前均衡光照'}<input id="balance-light" type="checkbox" defaultChecked={!!state.balanceLight}/></label>
             {!snapshot?<><label className="toggle-row">规则形状规整<input id="import-shape-regularization" type="checkbox" defaultChecked={state.importShapeRegularization!==false}/></label>
               <label className="toggle-row">恢复重复孔洞<input id="import-apertures" type="checkbox" defaultChecked={state.importApertures!==false}/></label>
               <label>最终素材颜色<select id="import-material-color" defaultValue={state.importMaterialColorMode==='original'?'original':'auto'}><option value="auto">A4 光照与颜色还原</option><option value="original">原始照片颜色</option></select><small>仅影响高清输出，不改变数量与分割边缘。</small></label>
-              <label className="toggle-row">未识别时将整张照片视为背景板<input id="whole-paper" type="checkbox" defaultChecked={!!state.wholePaper}/></label></>:null}</>:null}
+              <label className="toggle-row">未识别时将整张照片视为背景板<input id="whole-paper" type="checkbox" checked={!!state.wholePaper} onChange={event=>onSettingChange('wholePaper',event.target.checked)}/></label></>:null}</>:null}
           {!snapshot?<><small>{state.paperSize==='none'?'当前照片不计算素材尺寸':'尺寸变化仅更新标尺；不重新抠图'}</small>
             <button className="import-default-action" id="save-import-defaults">将当前参数设为以后导入的默认值</button>
             <small>设为默认值会同步本批后续照片，并用于以后新导入的照片；之前的照片不变。</small></>:null}

@@ -88,7 +88,7 @@ export function patchImportInspection(view,html){
   // The settings panel is an independent component. Preserve the scroller and
   // focused controls when its option structure is unchanged.
   const oldSettings=bySelector(oldInspector,'.inspector-settings'),nextSettings=bySelector(nextInspector,'.inspector-settings');
-  if(oldSettings&&nextSettings&&oldSettings.innerHTML!==nextSettings.innerHTML){
+  if(!oldRoot.hasAttribute('data-react-page')&&oldSettings&&nextSettings&&oldSettings.innerHTML!==nextSettings.innerHTML){
     const focused=oldSettings.contains(document.activeElement)
       ?document.activeElement?.id:null;
     const scrollHost=oldSettings.closest('.inspector-scroll'),scrollTop=scrollHost?.scrollTop||0;

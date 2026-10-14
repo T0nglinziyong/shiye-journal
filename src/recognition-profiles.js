@@ -1,6 +1,6 @@
 // Recognition method and analysis resolution are independent.
 //
-// Candidate discovery (legacy or physical) and mask segmentation are fully
+// Candidate discovery (legacy, physical or unified) and mask segmentation are
 // independent user choices. Legacy+MorphGAC restores the historical flow;
 // physical+physical restores the no-MorphGAC contour flow. 'hybrid' performs
 // confidence-based selection and does not use the old MorphGAC+GrabCut hybrid.
@@ -9,8 +9,8 @@ const refineAuto=async context=>{
   return refineCandidatesAuto(context);
 };
 const refineMorphGAC=async context=>{
-  const {refineCandidatesAuto}=await import('./recognition-refiners.js');
-  return refineCandidatesAuto(context);
+  const {refineCandidatesWithMorphGAC}=await import('./recognition-refiners.js');
+  return refineCandidatesWithMorphGAC(context);
 };
 const refinePhysical=async context=>{
   const {refineCandidatesPhysical}=await import('./recognition-refiners.js');
@@ -28,7 +28,7 @@ export const recognitionStrategies=Object.freeze([
   {
     id:'auto',
     label:'自动 · 推荐',
-    description:'保留原版自动分割（MorphGAC），可与旧版连通区域候选框组合，复现原流程。',
+    description:'默认使用统一候选与 V5 轮廓仲裁；选择旧版候选发现时使用原版 MorphGAC。',
     refineCandidates:refineAuto
   },
   {
@@ -65,7 +65,7 @@ export const recognitionPixelOptions=Object.freeze([
 const strategiesByID=new Map(recognitionStrategies.map(strategy=>[strategy.id,strategy]));
 const pixelValues=new Set(recognitionPixelOptions.map(([value])=>value));
 export const recognitionOptions=recognitionStrategies.map(({id,label})=>[id,label]);
-export const candidateDiscoveryOptions=Object.freeze([['legacy','原版 · 前景连通区域'],['physical','物理载体 · 多尺度边缘与颜色']]);
+export const candidateDiscoveryOptions=Object.freeze([['legacy','原版 · 前景连通区域'],['physical','物理载体 · 多尺度边缘与颜色'],['unified','统一候选 · 物理载体与漏检补全']]);
 export const candidateDiscoveryAllowed=value=>candidateDiscoveryOptions.some(([id])=>id===value);
 export const recognitionMethodDetails=recognitionStrategies.map(({id,label,description})=>({id,label,description}));
 export const recognitionModeAllowed=value=>strategiesByID.has(value);

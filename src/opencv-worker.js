@@ -5,6 +5,8 @@ import {segmentPhysicalOrAdaptive} from './material-physical-segmentation.js';
 import {keepPhysicalBeforeUnsafeRegularization} from './material-physical-mask-guard.js';
 import {separateSharedCarrier} from './material-carrier.js';
 import {segmentMaterialBoxes} from './material-segmentation.js';
+import {segmentUnifiedMaterials} from './material-unified-segmentation.js';
+import {discoverResidualCarriers} from './material-residual-recovery.js';
 import {restoreRepeatedApertures} from './repeated-apertures.js';
 import {detectPaperQuadOptimized} from './paper-quad-optimized.js';
 export async function processVision(cv,operation,p){
@@ -54,10 +56,16 @@ export async function processVision(cv,operation,p){
     }
     if(operation==='boxes-simple')return discoverMaterialBoxes(cv,p,own);
     if(operation==='boxes-physical')return discoverPhysicalMaterialBoxes(cv,p,own);
+    if(operation==='boxes-residual')return discoverResidualCarriers(cv,p,own);
     if(operation==='segment-boxes-classical')return segmentMaterialBoxes(cv,p);
     if(operation==='restore-repeated-apertures')return restoreRepeatedApertures(cv,p);
     if(operation==='process-material-boxes'){
       let out;
+      if(p.method==='unified'||p.method==='unified-manual'){
+        const carriers=segmentUnifiedMaterials(cv,{...p,manualEvidence:p.method==='unified-manual'});
+        return p.mergeSharedCarrier===false
+          ?separateSharedCarrier(carriers,p.sourcePixels||p.pixels,p.width,p.height):carriers;
+      }
       if(p.method==='morphgac'||p.method==='auto')out=segmentMaterialBoxes(cv,{...p,pixels:p.pixels});
       else if(['physical','adaptive','hybrid'].includes(p.method))out=segmentPhysicalOrAdaptive(cv,{...p,method:p.method==='hybrid'?'adaptive':p.method});
       else out=refineMaterialBoundaries(cv,{...p,candidates:p.boxes,mode:'grabcut',postprocess:{edgePolish:false,shapeRegularization:false,curveSmooth:false,apertures:false}});

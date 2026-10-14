@@ -7,7 +7,7 @@ import {neutralizePaperChroma} from './paper-chroma-preprocess.js';
 // Analyze a small copy, but re-extract accepted cuts from the full source.
 export async function detectPaperCandidates(bitmap,box,smallestMM=6,{
   balanceLight=false,paperRectified=false,paperWidthMM=210,paperHeightMM=297,
-  recognition='auto',candidateDiscovery='legacy',recognitionPixels=900,
+  recognition='auto',candidateDiscovery='unified',recognitionPixels=900,
   recognitionPreprocess={},recognitionPostprocess={},mergeSharedCarrier=true,onProgress=()=>{},onDiagnostic=()=>{}
 }={}){
   const profile=recognitionProfile(recognition,recognitionPixels);
@@ -17,7 +17,10 @@ export async function detectPaperCandidates(bitmap,box,smallestMM=6,{
   const discoveryRatio=Math.min(1,900/Math.max(bitmap.width*box.w,bitmap.height*box.h));
   const dw=Math.max(1,Math.round(bitmap.width*box.w*discoveryRatio)),dh=Math.max(1,Math.round(bitmap.height*box.h*discoveryRatio));
   const discoveryPixels=await analysisPixels(bitmap,box,dw,dh);
-  const discoveryFrame={data:paperRectified?neutralizePaperChroma(discoveryPixels,dw,dh):discoveryPixels,width:dw,height:dh};
+  // The research V8 detector evaluates the measured exterior on corrected
+  // RGB. Chroma neutralization changes weak paper edges and candidate count.
+  const discoveryFrame={data:paperRectified&&candidateDiscovery!=='unified'
+    ?neutralizePaperChroma(discoveryPixels,dw,dh):discoveryPixels,width:dw,height:dh};
   const ratio=Math.min(1,profile.analysisMaxDimension/Math.max(bitmap.width*box.w,bitmap.height*box.h));
   const w=Math.max(1,Math.round(bitmap.width*box.w*ratio)),h=Math.max(1,Math.round(bitmap.height*box.h*ratio));
   const frame={data:w===dw&&h===dh?discoveryPixels:await analysisPixels(bitmap,box,w,h),width:w,height:h},
@@ -54,7 +57,7 @@ export async function detectPaperCandidates(bitmap,box,smallestMM=6,{
         frame:segmentationFrame,
         sourceFrame:frame,
         width:w,height:h,
-        paperWidthMM,paperHeightMM,mergeSharedCarrier,
+        paperWidthMM,paperHeightMM,mergeSharedCarrier,candidateDiscovery,
         preprocess,
         postprocess:recognitionPostprocess,
         onProgress
@@ -124,4 +127,3 @@ export async function alignMaterialPreview(blob,originalBlob=blob,rotation=null)
     };
   }finally{bitmap.close();original.close();}
 }
-

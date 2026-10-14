@@ -5,11 +5,9 @@ import {readFile} from 'node:fs/promises';
 
 const source=name=>readFile(new URL('../src/'+name,import.meta.url));
 const expected={
-  'image.js':'0d2f5e95ab2bec9df74689dd70010b3118f15e6e',
   'manual-import-recognition.js':'7f843bae5c81fb8f2046ae176ff4b0855446f0b8',
   'perspective.js':'1339e08b3b23603d1a41c779792c6a0327c676a8',
   'import-box-editor.js':'196304b571f14f00d02855c6bc08bdb3fd32b533',
-  'recognition-refiners.js':'715b9b41bd84b3397677752f226a0f65dcba94d0',
   'recognition-raster.js':'4e88878477689fa3c973576c5ce51c419145343a',
   'material-color-restoration.js':'4be602eab1a8d3d1281ba6c455c1ad80055da1c3',
   'import-workspace-ui.js':'8f057fda3ec1c4115b0c8503b5372253c8dc03dc',
@@ -18,8 +16,6 @@ const expected={
   'responsive.css':'3daab9b366125aeda84ed7e78bf2ac72132c8981',
   'paper-ui.js':'43dcd4f457d72382dadd0a0d8cea82cdd248058f',
   'import-save.js':'f3cfd3b556178edabdb55ad8736ca5797f008467',
-  'paper-analysis.js':'821147b425086b7b579e7caceff7b1fea914bbfc',
-  'recognition-profiles.js':'5001bea0d5cc4257c1c08e11b874c84d448c22c5',
   'vision-runtime.js':'3817687ab32df7fb19c308c83902a6b123aabee1'
 };
 for(const [name,sha] of Object.entries(expected)){
@@ -29,6 +25,18 @@ for(const [name,sha] of Object.entries(expected)){
     assert.equal(actual,sha);
   });
 }
+test('research recognizer preserves the explicit classical rollback route',async()=>{
+  const [image,paper,refiners,profiles]=await Promise.all([
+    'image.js','paper-analysis.js','recognition-refiners.js','recognition-profiles.js'
+  ].map(async name=>(await source(name)).toString()));
+  assert.match(image,/candidateDiscovery='unified'/);
+  assert.match(paper,/candidateDiscovery!=='physical'&&candidateDiscovery!=='unified'/);
+  assert.match(paper,/unifyCarrierCandidates\(physical,legacy\)/);
+  assert.match(refiners,/candidateDiscovery==='unified'/);
+  assert.match(refiners,/method:'morphgac'/);
+  assert.match(profiles,/\['legacy','原版/);
+  assert.match(profiles,/\['unified','统一候选/);
+});
 test('import page uses stable automatic paper and manual cutout controls',async()=>{
   const app=(await source('app.js')).toString();
   const page=(await source('import-workspace-ui.js')).toString();

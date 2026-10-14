@@ -358,7 +358,7 @@ let settingsSession=null,deferredSyncedPreferences=null,deferredSyncedAISettings
 function captureSettings(){
   if(state.route!=='settings')return;
   if(view.querySelector('#setting-ai-provider'))state.aiSettings=readAIForm();
-  if(view.querySelector('#setting-paper-size'))state.preferences={...state.preferences,recognition:view.querySelector('#setting-recognition').value,candidateDiscovery:view.querySelector('#setting-candidate-discovery')?.value||'legacy',recognitionPixels:Number(view.querySelector('#setting-recognition-pixels').value),materialColorMode:view.querySelector('#setting-material-color')?.value||'auto',balanceLight:view.querySelector('#setting-preprocess-light').checked,recognitionDenoise:view.querySelector('#setting-preprocess-denoise').checked,recognitionLocalContrast:view.querySelector('#setting-preprocess-contrast').checked,recognitionChromaEdges:view.querySelector('#setting-preprocess-chroma').checked,recognitionShapeRegularization:view.querySelector('#setting-postprocess-shapes').checked,recognitionApertures:view.querySelector('#setting-postprocess-apertures').checked,mergeSharedCarrier:view.querySelector('#setting-merge-carrier').checked,paperSize:view.querySelector('#setting-paper-size').value,orientation:view.querySelector('#setting-orientation').value,wholePaper:view.querySelector('#setting-whole-paper').checked,autoOrganize:view.querySelector('#setting-auto-organize').checked,autoOrganizeWorks:view.querySelector('#setting-auto-organize-works')?.checked!==false};
+  if(view.querySelector('#setting-paper-size'))state.preferences={...state.preferences,recognition:view.querySelector('#setting-recognition').value,candidateDiscovery:view.querySelector('#setting-candidate-discovery')?.value||'unified',recognitionPixels:Number(view.querySelector('#setting-recognition-pixels').value),materialColorMode:view.querySelector('#setting-material-color')?.value||'auto',balanceLight:view.querySelector('#setting-preprocess-light').checked,recognitionDenoise:view.querySelector('#setting-preprocess-denoise').checked,recognitionLocalContrast:view.querySelector('#setting-preprocess-contrast').checked,recognitionChromaEdges:view.querySelector('#setting-preprocess-chroma').checked,recognitionShapeRegularization:view.querySelector('#setting-postprocess-shapes').checked,recognitionApertures:view.querySelector('#setting-postprocess-apertures').checked,mergeSharedCarrier:view.querySelector('#setting-merge-carrier').checked,paperSize:view.querySelector('#setting-paper-size').value,orientation:view.querySelector('#setting-orientation').value,wholePaper:view.querySelector('#setting-whole-paper').checked,autoOrganize:view.querySelector('#setting-auto-organize').checked,autoOrganizeWorks:view.querySelector('#setting-auto-organize-works')?.checked!==false};
   if(view.querySelector('#setting-display'))state.preferences={...state.preferences,display:view.querySelector('#setting-display').value,backdrop:view.querySelector('#setting-backdrop').value,maxPageItems:Number(view.querySelector('#setting-page-items').value)};
 }
 const routeScroll=new Map();
@@ -522,7 +522,7 @@ actionStore.subscribe(event=>{
     if(a)toast(a.isFavorite?'已收藏':'已取消收藏');
   }
 });
-let renderInProgress=false,renderQueued=false;
+let renderInProgress=false,renderQueued=false,forceImportReactRender=false;
 function render(){
   if(renderInProgress){renderQueued=true;return;}
   renderInProgress=true;
@@ -543,7 +543,8 @@ function render(){
   document.body.classList.toggle('editing',state.route==='editor');document.body.dataset.backdrop=state.preferences.backdrop;document.querySelectorAll('.main-nav button').forEach(b=>b.classList.toggle('active',b.dataset.route===state.route||(b.dataset.route==='library'&&['series','import'].includes(state.route))));document.querySelector('#basket-count').textContent=state.basket.length;
   // Controller owns the decision to patch. A safe fallback remounts the
   // current route; business actions never manipulate page DOM here.
-  if(pageControllers.patch(state.route)){backgroundViewPending=false;return;}
+  if(!forceImportReactRender&&pageControllers.patch(state.route)){backgroundViewPending=false;return;}
+  forceImportReactRender=false;
   pageControllers.dispose();
   // The controller lifetime has released route-owned observers, gestures,
   // and native editor listeners before replacing their DOM hosts.
@@ -629,7 +630,7 @@ function render(){
         onSeriesChange:updateImportReviewSeries,
         onWorkTitleChange:(index,title)=>{state.importRecords[index].workTitle=title;}})
     :state.route==='import'&&state.importStep==='inspect'&&state.importRecords[state.importIndex]
-      ?ImportInspectionPage({state,format:fmt,onAction:handle})
+      ?ImportInspectionPage({state,format:fmt,onAction:handle,onSettingChange:changeImportCalibration})
       :null;
   renderReactPage(reactPage||imperativeRoute(pageControllers.render(state.route)||renderLibrary()),
     {preserveKey:fabricEditorPreview&&state.route==='editor'?'fabric-editor':null});
@@ -888,7 +889,11 @@ function bindPage({partial=false}={}){
   if(state.route==='editor'){if(!view.querySelector('[data-react-page="editor"]'))bindAIPanel();const anchor=view.querySelector('[data-act="creative-json"]');if(anchor){const ai=document.createElement('button');ai.type='button';ai.className='btn primary';ai.textContent='AI 创作';ai.onclick=openAICreation;anchor.before(ai);}}
   // Catalog search/select listeners are scoped to the Library controller.
   if(state.route==='import'&&state.showManualBox&&!partial)bindManualBox();
-  for(const [id,key] of [['import-paper-width','customImportWidth'],['import-paper-height','customImportHeight']]){const el=view.querySelector('#'+id);if(el)el.onchange=()=>{const n=Number(el.value);if(!Number.isFinite(n)||n<1||n>10000){toast('纸张宽高为 1–10000 mm');return;}state[key]=n;recalibrateImport();};}const whole=view.querySelector('#whole-paper');if(whole)whole.onchange=()=>{state.wholePaper=whole.checked;recalibrateImport();};for(const [id,key] of [['paper-size','paperSize'],['paper-orientation','paperOrientation']]){const el=view.querySelector('#'+id);if(el)el.onchange=()=>{state[key]=el.type==='checkbox'?el.checked:el.value;recalibrateImport();};}
+  if(!view.querySelector('[data-react-page="importInspection"]')){
+    for(const [id,key] of [['import-paper-width','customImportWidth'],['import-paper-height','customImportHeight']]){const el=view.querySelector('#'+id);if(el)el.onchange=()=>changeImportCalibration(key,el.value);}
+    const whole=view.querySelector('#whole-paper');if(whole)whole.onchange=()=>changeImportCalibration('wholePaper',whole.checked);
+    for(const [id,key] of [['paper-size','paperSize'],['paper-orientation','paperOrientation']]){const el=view.querySelector('#'+id);if(el)el.onchange=()=>changeImportCalibration(key,el.value);}
+  }
   const balance=view.querySelector('#balance-light');if(balance)balance.onchange=async()=>{const before=state.balanceLight;if(state.importProcessing){balance.checked=before;return;}if(state.importCandidateData?.length&&!confirm('更改光照会重新识别候选并重置当前候选标注，继续？')){balance.checked=before;return;}state.importProcessing=state.importMode==='snapshot'?'正在调整页面颜色…':'正在均衡光照并重新识别…';state.balanceLight=balance.checked;saveActiveImportRecord();render();try{if(state.importMode!=='snapshot')await previewCrop();}catch(e){state.balanceLight=before;toast(e.message);}finally{state.importProcessing='';if(state.route==='import')render();}};
   for(const [selector,key] of [['#import-shape-regularization','importShapeRegularization'],['#import-apertures','importApertures']]){
     const input=view.querySelector(selector);if(!input)continue;
@@ -2037,7 +2042,7 @@ function importPrefetchSettings(rec){
   return {paperSize:rec.paperSize||state.preferences.paperSize,paperOrientation:rec.paperOrientation||state.preferences.orientation,
     customImportWidth:rec.customImportWidth||state.preferences.customPaperWidth||210,customImportHeight:rec.customImportHeight||state.preferences.customPaperHeight||297,
     wholePaper:rec.wholePaper??state.preferences.wholePaper,balanceLight:rec.balanceLight??state.preferences.balanceLight,
-    recognition:rec.recognition||state.preferences.recognition,candidateDiscovery:rec.candidateDiscovery||state.preferences.candidateDiscovery||'legacy',pixels:state.preferences.recognitionPixels||900,
+    recognition:rec.recognition||state.preferences.recognition,candidateDiscovery:rec.candidateDiscovery||state.preferences.candidateDiscovery||'unified',pixels:state.preferences.recognitionPixels||900,
     denoise:state.preferences.recognitionDenoise===true,localContrast:state.preferences.recognitionLocalContrast===true,
     chromaEdges:state.preferences.recognitionChromaEdges!==false,shapeRegularization:rec.importShapeRegularization??(state.preferences.recognitionShapeRegularization!==false),
     apertures:rec.importApertures??(state.preferences.recognitionApertures!==false),mergeSharedCarrier:state.preferences.mergeSharedCarrier!==false,materialColorMode:rec.importMaterialColorMode||state.preferences.materialColorMode||'auto',mode:state.importMode};
@@ -2191,25 +2196,26 @@ async function refreshImportCandidates(regions,{manual=false}={}){
       aw=Math.max(1,Math.round(source.width*b.w*scale)),
       ah=Math.max(1,Math.round(source.height*b.h*scale));
     const pixels=await analysisPixels(source,b,aw,ah);
-    // Explicit manual frames are authoritative even on pale or nearly blank
-    // stock. Do not discard them with automatic foreground-confidence gates.
-    // Manual geometry is authoritative. Never pass only the axis-aligned
-    // bounds to the physical segmentation worker: doing so discarded rotation
-    // on confirmation and silently replaced the user's frame with a vertical
-    // full rectangle. Rasterize the EXACT visible rotated frame instead.
+    // Preserve the rotated search geometry. In the unified path the frame
+    // identifies a local image-evidence search, not an opaque final Mask;
+    // the explicit old physical mode keeps its historical hard-frame crop.
     const manualRegion=manualPhysicalRegion(box,aw,ah);
+    const useUnifiedManual=state.preferences.candidateDiscovery==='unified'&&
+      (state.importRecognition||state.preferences.recognition)==='auto';
     const [candidate]=await visionTask('process-material-boxes',{
       pixels,sourcePixels:pixels,width:aw,height:ah,
-      boxes:[manualRegion],method:'physical',paperWidthMM:pw,paperHeightMM:ph,
+      boxes:[manualRegion],method:useUnifiedManual?'unified-manual':'physical',paperWidthMM:pw,paperHeightMM:ph,
       mergeSharedCarrier:true,shapeRegularization:false,apertures:false
     });
     if(!candidate?.mask?.alpha?.length||candidate.segmentationFailed)
-      throw Error('旋转框无法生成完整素材 Mask，请调整后重试');
+      throw Error(useUnifiedManual?'框内没有找到可信的素材外边界，请贴近素材重新框选或在设置中选择旧版按框裁剪':'旋转框无法生成完整素材 Mask，请调整后重试');
     // Preserve the user-defined angle; minAreaRect can re-express e.g. 60°
     // as -30° with swapped axes, which is not the frame the user confirmed.
-    return {...candidate,manualGeometry:true,
-      physicalBoundary:manualRegion.physicalBoundary,
-      orientedBox:manualRegion.orientedBox};
+    return useUnifiedManual?{...candidate,manualGeometry:true,
+      manualSearchBoundary:manualRegion.physicalBoundary,physicalBoundary:null}:
+      {...candidate,manualGeometry:true,
+        physicalBoundary:manualRegion.physicalBoundary,
+        orientedBox:manualRegion.orientedBox};
   }):regions.map(region=>({region,original:null}));
   if(record!==state.importRecords[state.importIndex]||state.route!=='import')return false;
   const lighting=state.importMaterialColorMode!=='original'&&state.correctedBitmap
@@ -2234,7 +2240,7 @@ async function refreshImportCandidates(regions,{manual=false}={}){
 async function previewCrop(){
   if(!state.importBitmap||state.importMode==='snapshot')return;
   const record=state.importRecords[state.importIndex],source=state.correctedBitmap||state.importBitmap,b=state.correctedBitmap?{x:0,y:0,w:1,h:1}:state.importBox,[pw,ph]=paperDimensions();
-  let regions=await detectPaperCandidates(source,b,6,{balanceLight:state.balanceLight,paperRectified:!!state.correctedBitmap,paperWidthMM:pw,paperHeightMM:ph,recognition:state.importRecognition||state.preferences.recognition,candidateDiscovery:state.preferences.candidateDiscovery||'legacy',recognitionPixels:state.preferences.recognitionPixels,recognitionPreprocess:recognitionPreprocessOptions(),recognitionPostprocess:recognitionPostprocessOptions(),mergeSharedCarrier:state.preferences.mergeSharedCarrier!==false,onDiagnostic:trace=>{record.recognitionDiagnostic=trace;},onProgress:p=>{
+  let regions=await detectPaperCandidates(source,b,6,{balanceLight:state.balanceLight,paperRectified:!!state.correctedBitmap,paperWidthMM:pw,paperHeightMM:ph,recognition:state.importRecognition||state.preferences.recognition,candidateDiscovery:state.preferences.candidateDiscovery||'unified',recognitionPixels:state.preferences.recognitionPixels,recognitionPreprocess:recognitionPreprocessOptions(),recognitionPostprocess:recognitionPostprocessOptions(),mergeSharedCarrier:state.preferences.mergeSharedCarrier!==false,onDiagnostic:trace=>{record.recognitionDiagnostic=trace;},onProgress:p=>{
     if(state.route!=='import'||record!==state.importRecords[state.importIndex])return;
         const text=p.status==='inference'?'浏览器模型正在细化素材边缘…'
           :p.status==='fallback'?(Number.isFinite(p.count)?`${p.count} 个模型结果不可靠，保留传统识别边缘，请检查`:'边缘识别未完成，正在检查候选结果…')
@@ -2259,6 +2265,15 @@ function recalibrateImport(){
   const [pw,ph]=paperDimensions(),calibrated=state.paperSize!=='none'&&(state.correctedBitmap||state.wholePaper),rec=state.importRecords[state.importIndex];
   for(const c of state.importCandidateData||[]){if(c.dimensionSource==='manual')continue;c.width=calibrated?Math.round(((c.region.orientedBox?.autoDeskew?c.region.orientedBox.width:c.region.w))*pw*10)/10:null;c.height=calibrated?Math.round(((c.region.orientedBox?.autoDeskew?c.region.orientedBox.height:c.region.h))*ph*10)/10:null;if(c.processingRecord){c.processingRecord.sourceWidthMM=c.width;c.processingRecord.sourceHeightMM=c.height;}}
   if(rec)rec.confirmed=false;saveActiveImportRecord();render();
+}
+function changeImportCalibration(key,value){
+  if(key==='customImportWidth'||key==='customImportHeight'){
+    const n=Number(value);
+    if(!Number.isFinite(n)||n<1||n>10000){toast('纸张宽高为 1–10000 mm');return;}
+    state[key]=n;
+  }else state[key]=value;
+  forceImportReactRender=!!view.querySelector('[data-react-page="importInspection"]');
+  recalibrateImport();
 }
 async function chooseCandidate(index){if(index>=0){state.importCandidateSelection=new Set([index]);render();}else await previewCrop();}
 function paperDimensions(){return importPaperDimensions({paperSize:state.paperSize,paperOrientation:state.paperOrientation,bitmap:state.importBitmap,corners:state.paperCorners,customImportWidth:state.customImportWidth||state.preferences.customPaperWidth,customImportHeight:state.customImportHeight||state.preferences.customPaperHeight});}

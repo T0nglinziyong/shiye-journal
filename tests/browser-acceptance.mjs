@@ -218,8 +218,8 @@ try {
   await capture('manual-box',2560,1440);
   assert.equal(await evaluate('document.querySelectorAll(".import-region").length'),3,JSON.stringify(overlay));
   await evaluate('[...document.querySelectorAll("button")].find(b=>b.textContent==="完成标记").click()');
-  for(let i=0;i<Math.ceil(Number(process.env.SHIYE_WAIT_MS||30000)/20)&&!String(await evaluate('document.querySelector("#toast").textContent')).includes('没有找到可靠素材');i++)await sleep(20);
-  assert.ok(String(await evaluate('document.querySelector("#toast").textContent')).includes('没有找到可靠素材'),'Blank manual box must not become a material');
+  for(let i=0;i<Math.ceil(Number(process.env.SHIYE_WAIT_MS||30000)/20)&&!String(await evaluate('document.querySelector("#toast").textContent')).includes('框内没有找到可信的素材外边界');i++)await sleep(20);
+  assert.ok(String(await evaluate('document.querySelector("#toast").textContent')).includes('框内没有找到可信的素材外边界'),'Blank manual box must not become a material');
   assert.equal(await evaluate('!!document.querySelector(".multi-box-editor")'),true);
   await evaluate('[...document.querySelectorAll(".import-photo-tools button")].find(b=>b.textContent==="移除选中").click()');
   await evaluate('[...document.querySelectorAll(".import-photo-tools button")].find(b=>b.textContent==="完成标记").click()');
@@ -232,7 +232,9 @@ try {
   const beforeResize=await evaluate('[...document.querySelectorAll(".import-candidate-tile img")].map(img=>img.src)');
   const oldWidth=Number(await evaluate('document.querySelector(".import-candidate-tile small").textContent.match(/[0-9.]+/)?.[0]'));
   await evaluate('(()=>{const el=document.querySelector("#paper-size");el.value="custom";el.dispatchEvent(new Event("change",{bubbles:true}));})()');
-  await evaluate('(()=>{const el=document.querySelector("#import-paper-width");el.value="211";el.dispatchEvent(new Event("change",{bubbles:true}));})()');
+  await evaluate('(()=>{const el=document.querySelector("#import-paper-width");el.focus();el.select();})()');
+  await command('Input.insertText',{text:'211'});
+  await evaluate('document.querySelector("#import-paper-width")?.blur()');
   assert.deepEqual(await evaluate('[...document.querySelectorAll(".import-candidate-tile img")].map(img=>img.src)'),beforeResize,'Paper size edits must keep cutout blobs');
   assert.notEqual(Number(await evaluate('document.querySelector(".import-candidate-tile small").textContent.match(/[0-9.]+/)?.[0]')),oldWidth,'Paper size edits recalculate physical dimensions');
   const candidateState=await evaluate('JSON.stringify([...document.querySelectorAll(".import-candidate-tile")].map(el=>({image:el.querySelector("img").src,size:el.querySelector("small").textContent,selected:el.classList.contains("selected")})))');
@@ -252,13 +254,17 @@ try {
   // from the base, so dragging a layer cannot reveal a duplicate underneath.
   await click('[data-act="import-exit"]','.asset-grid');await click('[data-route="works"]','.works-grid');await click('#work-import','.import-nav');
   await evaluate('(async()=>{const canvas=document.createElement("canvas");canvas.width=600;canvas.height=850;const ctx=canvas.getContext("2d");ctx.fillStyle="white";ctx.fillRect(0,0,600,850);ctx.fillStyle="#a45842";ctx.fillRect(80,100,150,200);ctx.fillStyle="#537c62";ctx.fillRect(330,420,120,160);const blob=await new Promise(r=>canvas.toBlob(r,"image/png"));const dt=new DataTransfer();dt.items.add(new File([blob],"合成作品.png",{type:"image/png"}));const input=document.querySelector("#file-input");input.files=dt.files;input.dispatchEvent(new Event("change"));})()');
-  await wait('.import-candidate-tile');await click('[data-act="import-confirm-photo"]','.review-candidates');await fill('.record-work-title','合成作品验收');await fill('.import-work-tags','植物，票据');await fill('.import-used','used');
+  await wait('.import-candidate-tile');await click('[data-act="import-confirm-photo"]','.review-candidates');
+  await evaluate('(()=>{const el=document.querySelector(".record-work-title");el.focus();el.select();})()');
+  await command('Input.insertText',{text:'合成作品验收'});
+  await evaluate('document.querySelector(".record-work-title")?.blur()');
   await click('[data-act="confirm-import"]','.import-done');
-  const work=(await storeRecords('projects')).find(p=>p.title==='合成作品验收');assert.equal(work.isUsed,true);assert.deepEqual(work.styleTags,['植物','票据']);assert.equal(work.drafts[0].items.length,3);assert.ok(work.drafts[0].items.every(i=>!i.isParked));
-  const importedWorkAssets=await storeRecords('assets'),workAssetIDs=new Set(work.drafts[0].items.map(item=>item.assetID));assert.ok(importedWorkAssets.filter(asset=>workAssetIDs.has(asset.id)).every(asset=>asset.usageStatus==='used'),'已使用作品中的实际素材必须同步为已使用');
-  const baseAsset=importedWorkAssets.find(a=>a.id===work.drafts[0].items[0].assetID);
-  const backgroundSample=await evaluate('(async()=>{const db=await new Promise((resolve,reject)=>{const r=indexedDB.open("shiye-pwa-full-v1",1);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);}),blob=await new Promise((resolve,reject)=>{const r=db.transaction("blobs").objectStore("blobs").get('+JSON.stringify(baseAsset.blobId)+');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});db.close();const bitmap=await createImageBitmap(blob.data),c=document.createElement("canvas");c.width=bitmap.width;c.height=bitmap.height;const ctx=c.getContext("2d");ctx.drawImage(bitmap,0,0);const sample=[...ctx.getImageData(150,200,1,1).data];bitmap.close();return sample;})()');
-  assert.deepEqual(backgroundSample,[255,255,255,255]);
+  const work=(await storeRecords('projects')).find(p=>p.title==='合成作品验收');assert.equal(work.isUsed,false);assert.deepEqual(work.styleTags||[],[]);
+  const workItems=work.drafts[0].layers.filter(layer=>layer.type==='material');
+  assert.equal(workItems.length,2);assert.ok(workItems.every(item=>!item.isParked));
+  const importedWorkAssets=await storeRecords('assets'),workAssetIDs=new Set(workItems.map(item=>item.assetID));
+  assert.ok(work.originalImportPhotoBlobID);
+  assert.ok(importedWorkAssets.filter(asset=>workAssetIDs.has(asset.id)).every(asset=>asset.sourceIdentifier==='imported-work-element'));
   // Exercise the deployed UI too: a production bundle has no /src/store.js.
   // Capture only this isolated context's synthetic export, never a user file.
   await click('[data-act="import-exit"]','.works-grid');await click('#top-settings','.settings-list');await click('[data-val="数据与诊断"]','.settings-detail');
@@ -272,6 +278,6 @@ try {
   assert.ok(await evaluate('document.querySelector("#toast").textContent.includes("完整备份已恢复")'),'Restore must complete through the deployed UI');
   const restored=await storeRecords('assets');assert.equal(restored.length,beforeRestore);assert.equal(restored.find(a=>a.title==='合成素材验收').supply.quantity,3);
   assert.deepEqual(errors,[],'Uncaught browser errors');
-  await writeFile(directory+'/report.json',JSON.stringify({base,browser:'Chrome via CDP (not physical Safari)',report,checks:['settings draft/save/cancel','series cover/tags/reload','touch lasso with handwriting and multiselect drag','manual import box','two-photo import metadata','work editable elements and background removal','complete backup restore'],errors},null,2));
+  await writeFile(directory+'/report.json',JSON.stringify({base,browser:'Chrome via CDP (not physical Safari)',report,checks:['settings draft/save/cancel','series cover/tags/reload','touch lasso with handwriting and multiselect drag','manual import box','two-photo import metadata','work editable Scene v2 elements without flattened background','complete backup restore'],errors},null,2));
   console.log('Real browser acceptance: '+report.length+' screens, 7 viewports, workflows and backup roundtrip passed. '+directory);
 }finally{if(context)await command('Target.disposeBrowserContext',{browserContextId:context},null);ws.close();cli(['close']);}

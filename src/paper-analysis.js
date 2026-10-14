@@ -1,5 +1,7 @@
 import {visionTask} from './vision-runtime.js';
 import {buildForegroundEvidence} from './foreground-evidence.js';
+import {unifyCarrierCandidates} from './unified-material-discovery.js';
+import {recoverResidualCarriers} from './material-residual-recovery.js';
 
 // Whole-page recognition stage: discover material identities/boxes only.
 //
@@ -23,11 +25,20 @@ export async function segmentPaperMaterials({data,width:w,height:h},{
     foregroundSeeds:evidence.foregroundSeeds,width:w,height:h,
     smallestMM,paperWidthMM,paperHeightMM,mergeSharedCarrier};
   const legacy=await visionTask('boxes-simple',opts);
-  if(candidateDiscovery!=='physical')return legacy.sort((a,b)=>a.y-b.y||a.x-b.x).slice(0,48);
+  if(candidateDiscovery!=='physical'&&candidateDiscovery!=='unified')return legacy.sort((a,b)=>a.y-b.y||a.x-b.x).slice(0,48);
   // Preserve the old detector as an uncovered-object fallback, but only in
   // the explicitly selected physical-discovery path.
   const physical=await visionTask('boxes-physical',{
-    ...opts,pixels:new Uint8ClampedArray(pixels),legacyBoxes:legacy
+    ...opts,pixels:new Uint8ClampedArray(pixels),legacyBoxes:candidateDiscovery==='physical'?legacy:undefined,
+    separateSupportedCarriers:candidateDiscovery==='unified'
   });
+  if(candidateDiscovery==='unified'){
+    const candidates=unifyCarrierCandidates(physical,legacy);
+    if(!candidates.some(box=>!box.physicalBoundary||(box.boundaryPrior??0)<.4))return candidates;
+    const residual=await visionTask('boxes-residual',{
+      pixels:new Uint8ClampedArray(pixels),width:w,height:h
+    });
+    return recoverResidualCarriers(candidates,residual,w,h);
+  }
   return physical.sort((a,b)=>a.y-b.y||a.x-b.x).slice(0,48);
 }

@@ -6,8 +6,8 @@ export function renderSettingsHTML({state,esc,AI_PROVIDERS,DELIVERY_OPTIONS,IMAG
  else if(title==='导入与识别')content=`
 <section class="recognition-settings-group">
 <h2>素材识别方法</h2><p>统一确定素材数量与位置，再逐件细化边缘；仅切换单件分割算法。</p>
-<label>候选框发现<select id="setting-candidate-discovery">${candidateDiscoveryOptions.map(([id,name])=>`<option value="${id}" ${(state.preferences.candidateDiscovery||'legacy')===id?'selected':''}>${name}</option>`).join('')}</select><small class="setting-help">原版使用连通区域；物理载体模式优先寻找完整纸片、票据与贴纸。候选框算法与 Mask 算法可任意搭配。</small></label>
-<label>Mask 分割<select id="setting-recognition">${recognitionOptions.map(([id,name])=>`<option value="${id}" ${state.preferences.recognition===id?'selected':''}>${name}</option>`).join('')}</select><small data-recognition-method-note class="setting-help">${recognitionMethodDetails.find(x=>x.id===state.preferences.recognition)?.description||'推荐使用默认 MorphGAC。'}</small></label>
+<label>候选框发现<select id="setting-candidate-discovery">${candidateDiscoveryOptions.map(([id,name])=>`<option value="${id}" ${(state.preferences.candidateDiscovery||'unified')===id?'selected':''}>${name}</option>`).join('')}</select><small class="setting-help">默认“统一候选 + 自动”为新研究算法；选择“原版前景连通区域 + MorphGAC”可回到旧算法。</small></label>
+<label>Mask 分割<select id="setting-recognition">${recognitionOptions.map(([id,name])=>`<option value="${id}" ${state.preferences.recognition===id?'selected':''}>${name}</option>`).join('')}</select><small data-recognition-method-note class="setting-help">${recognitionMethodDetails.find(x=>x.id===state.preferences.recognition)?.description||'推荐使用统一识别。'}</small></label>
 </section>
 <section class="recognition-settings-group">
 <h2>1 · 纸张校正</h2><p>检测纸张四角并透视拉正，为候选定位和真实尺寸提供坐标。</p>

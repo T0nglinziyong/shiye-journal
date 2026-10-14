@@ -4,7 +4,7 @@
 
 | 能力 | 单一选择入口 | 执行与数据合同 | 回归测试 |
 | --- | --- | --- | --- |
-| 素材识别 | `src/recognition-profiles.js` 的 `recognitionStrategies` | 整页校正图先由 `foreground-evidence.js` 建立 page-connected Lab 背景，再由 `material-box-discovery.js` 以 0.30 mm closing + connected components 决定素材数量与自动框；边界阶段只在这些框内运行，默认使用 `material-segmentation.js` 的 MorphGAC（box + 1 mm、180 px、动态 40/65 iter），随后只执行可信形状规整和 `repeated-apertures.js` 的重复制造型孔恢复。GrabCut 与 MorphGAC+GrabCut 仅作为显式可选分割器，不得改变整页素材身份数；`src/image.js` 最终回到高清原图裁切。 | `tests/recognition-profiles.test.js`、`tests/foreground-evidence.test.js`、`tests/material-segmentation.test.js`、`tests/repeated-apertures.test.js`、`tests/vision-engine.test.js`、`tests/import-browser-acceptance.mjs` |
+| 素材识别 | `src/recognition-profiles.js` 的候选发现与 Mask 分割两个独立设置 | 默认 `unified + auto`：`paper-analysis.js` 整合旧版连通区域、物理载体和受约束的漏检补全，只在整页阶段决定素材身份；`material-unified-segmentation.js` 在每个候选内共享梯度证据，仲裁实际轮廓、规则形状和透明 Mask。选择 `legacy + morphgac` 可恢复原版候选与原版分割路径；其他显式组合各按所选算法运行。后处理只能修改已有素材的透明边界；`src/image.js` 最终回到高清原图裁切。实测口径和局限见 [识别研究集成](docs/recognition-research-integration.md)。 | `tests/recognition-profiles.test.js`、`tests/unified-material-discovery.test.js`、`tests/recognition-settings-browser.mjs`、`tests/recognition-browser.mjs`、`tests/import-browser-acceptance.mjs` |
 | AI 创作 | `src/creative-delivery.js` 的响应协议 | `src/creative-runner.js` 控制轮次；`src/creative-contract.js` 验证合同；`src/creative.js` 执行可编辑工具。原生工具、JSON 工具和直接页都要转换为同一工具调用格式 | `tests/creative-delivery.test.js`、`tests/runner.test.js`、`tests/matching-browser.mjs` |
 | 数据位置 | `src/storage-router.js` 的 CRUD 路由 | `src/store.js` 保持公开的 `all/get/transaction` 和备份合同；云端特有的后台暂存、缩略图和增量同步留在 `src/cloud-store.js`，自托管请求留在 `src/store.js`，本机 IndexedDB 用同一表名 | `tests/storage-router.test.js`、`tests/cloud-store.test.js`、`tests/server-persistence.test.js`、`tests/cloud-cache-browser.mjs` |
 | 页面组件 | `src/app.js` 的页面路由 | 大交互逐步拆出独立 UI/模型模块；最近删除由 `src/recently-deleted-ui.js` 渲染，仍使用原 `trash` 表 | `tests/recently-deleted.test.js`、`tests/library-canvas-latest-browser.mjs` |
@@ -32,7 +32,7 @@
 
 ## 加一个实现时
 
-1. 识别策略只在注册表里增加 ID、显示名、分析尺寸和可选的懒加载修边器；不得直接覆盖原图或把模型运行库放入首屏包。候选仍须经现有的尺寸、轮廓、遮罩校验和人工确认。若更换自动找框方法，应先把候选提案接口抽出来，再以同一真实照片和合成极端案例比较漏检、误检、边缘与耗时。
+1. 候选发现与 Mask 分割分别登记 ID 和显示名，不得直接覆盖原图或把 OpenCV 运行库放入首屏包。候选仍须经尺寸、轮廓、透明遮罩校验和人工确认。新算法用同一批真实照片和独立真值合成场景比较漏检、误检、边缘与耗时；保留 `legacy + morphgac` 的旧路径供用户回退。
 2. 创作服务商的输出若不同，在协议层转成统一工具调用；工具语义和直接页合同只在各自合同/执行模块扩充。模型输出必须先验证，失败不修改画布；成功步骤仍可保存，流式进度与取消路径不得被新格式堵塞。
 3. 新数据源实现 `all(name)`、`get(name,id)`、`transaction(names, callback)` 后接入路由；若有后台暂存、增量拉取、图像缓存等能力，单独实现并显式接入相应入口，不要让 CRUD 在失败时静默回退到浏览器资料。六表名称、完整备份格式、账号隔离与清除规则不能被缓存或传输优化改变。
 4. UI 新模块优先接受所需的状态和回调，不直接复制第二份资料库。把可纯函数验证的 HTML/状态转换与 DOM 事件分开；浏览器脚本用隔离合成数据和几何断言，截图供人工核对。
@@ -41,7 +41,7 @@
 
 每批修改先运行 `npm test && npm run test:ui`，再按触及的能力跑对应浏览器脚本，至少覆盖手机、iPad 横竖与桌面 Chromium 视口。模拟视口不等于实体 Safari／Pencil。发布前必须用准确的暂存快照重复测试，检查私有文件、凭据、远端新提交及固定 Vercel 项目的 Git 自动部署。
 
-素材识别必须遵循“整页自动框先于边界分割”：page-connected 背景 + connected components 只决定一次有几件实体；MorphGAC、GrabCut、形状规整和打孔恢复只能修改各自候选框内的透明边界，不能再创建、删除、拆分或合并素材身份。内部印刷格子、文字框和人物细节不得因为自身闭合而成为新素材。
+素材识别必须遵循“整页候选先于边界分割”：所选候选发现算法只决定一次有几件实体；MorphGAC、统一轮廓、GrabCut、形状规整和打孔恢复只能修改各自候选内的透明边界，不能再创建、删除、拆分或合并素材身份。内部印刷格子、文字框和人物细节不得因为自身闭合而成为新素材。
 
 目前 `src/app.js` 仍集中保留跨页编排和部分事件分发，样式也有历史叠层。页面控制器、Action Store 与 keyed DOM 是扩展接缝，但主脚本尚未按完整路由拆包。后续应在同等端到端测试覆盖下逐页迁出。识别质量与云存储的生产迁移须用真实案例验证，不能从模块化本身推断已经实现。
 

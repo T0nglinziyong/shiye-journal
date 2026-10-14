@@ -19,7 +19,7 @@ const source=(w=360,h=300)=>{
 };
 
 test('settings keep discovery and segmentation independent and explicitly restore old route',()=>{
- assert.deepEqual(['legacy','physical'].map(candidateDiscoveryAllowed),[true,true]);
+ assert.deepEqual(['legacy','physical','unified'].map(candidateDiscoveryAllowed),[true,true,true]);
  const old=normalizePreferences({candidateDiscovery:'legacy',recognition:'morphgac'});
  const newPipeline=normalizePreferences({candidateDiscovery:'physical',recognition:'physical'});
  const mixed=normalizePreferences({candidateDiscovery:'physical',recognition:'hybrid'});
@@ -28,7 +28,7 @@ test('settings keep discovery and segmentation independent and explicitly restor
  assert.deepEqual([mixed.candidateDiscovery,mixed.recognition],['physical','hybrid']);
  for(const mode of ['morphgac','physical','hybrid'])
    assert.equal(typeof recognitionProfile(mode,1200).refineCandidates,'function');
- assert.equal(normalizePreferences({candidateDiscovery:'invalid'}).candidateDiscovery,'legacy');
+ assert.equal(normalizePreferences({candidateDiscovery:'invalid'}).candidateDiscovery,'unified');
 });
 
 test('real OpenCV worker finds intact carrier and physical mode generates alpha without MorphGAC',async()=>{
