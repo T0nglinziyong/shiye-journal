@@ -9,6 +9,7 @@ import {presetReferenceGuide,presetReferencePlans} from '../src/creative-referen
 import {selectJournalReferenceCases} from '../src/journal-reference-catalog.js';
 import {materialAlias,materialAliases} from '../src/material-alias.js';
 import {imagePrompt} from '../src/ai-image-generation.js';
+import {assetEditorValue} from '../src/asset-editor.js';
 
 const asset={id:'asset-1',title:'蓝色纸',kind:'sticker',role:'focal',physicalWidthMM:40,physicalHeightMM:50,supply:{quantity:1},tags:['蓝色'],updatedAt:'2026-10-03T00:00:00.000Z'};
 const make=async({p=project('测试创作',{style:'韩系清新'}),assets=[asset],aliases={m1:asset.id},previews=[],settings={generationMode:'direct',includeThumbnails:false},referenceImages=[],userTemplates=[]}={})=>
@@ -43,6 +44,17 @@ test('current editable example imports from JSON with current library assets',as
   assert.throws(()=>importEditableWork(response,[asset],{trustedSource:{...output.source,bundleId:'other'}}),/来源与所选原始任务不一致/);
   const copied=`预览如下。\n\n\`\`\`json\n${response}\n\`\`\``;
   assert.equal(importEditableWork(copied,[asset],{trustedSource:output.source}).drafts[0].items[0].assetID,asset.id);
+});
+
+test('editing material metadata after task export does not block import, but physical changes do',async()=>{
+  const output=await make(),files=await filesOf(output),response=strFromU8(files['examples/project.shiyeproject.json']);
+  const edited=assetEditorValue(asset,{title:'重新命名',kind:'sticker',role:'focal',texture:'纸',width:'40',height:'50',quantity:'1',
+    tags:'新标签',contentTags:'',styleTags:'',materialTags:'',seriesID:'new-series',reviewStatus:'ready',usageStatus:'unused',
+    tapeRoll:false,supplyLength:'',repeatable:false,repeatPeriod:''});
+  assert.equal(importEditableWork(response,[edited]).drafts[0].items[0].assetID,asset.id);
+  assert.throws(()=>importEditableWork(response,[{...edited,physicalWidthMM:45}]),/素材图像、类型、尺寸或库存已变化/);
+  assert.throws(()=>importEditableWork(response,[{...edited,supply:{quantity:0}}]),/素材图像、类型、尺寸或库存已变化/);
+  assert.throws(()=>importEditableWork(response,[{...edited,kind:'tape'}]),/素材图像、类型、尺寸或库存已变化/);
 });
 
 test('current task round-trip keeps the selected journal paper size',async()=>{

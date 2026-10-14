@@ -7,7 +7,18 @@ export function assetVisualDescriptor(asset){
   processingRecord:asset.processingRecord??null,sourceSilhouette:asset.sourceSilhouette??null,
   imageHash:asset.imageHash??asset.contentHash??null,orientation:asset.orientation??null};
 }
-export const assetSourceRevision=asset=>craftDigest({...assetVisualDescriptor(asset),updatedAt:asset.updatedAt??null,supply:asset.supply??{quantity:1},tapeRepeatMode:asset.tapeRepeatMode??null,tapeRepeatPeriodMM:asset.tapeRepeatPeriodMM??null});
+function physicalSupply(asset){
+ const supply=asset.supply??{quantity:1},quantity=supply.quantity??1;
+ if(supply.kind==='tapeRoll')return {kind:'tapeRoll',quantity,availableLengthMM:supply.availableLengthMM??null};
+ if(supply.kind==='unlimited')return {kind:'unlimited',quantity};
+ return {kind:'counted',quantity};
+}
+const physicalSource=asset=>({...assetVisualDescriptor(asset),kind:asset.kind??null,supply:physicalSupply(asset),
+ tapeRepeatMode:asset.tapeRepeatMode==='repeatablePattern'?'repeatablePattern':'singleStrip',
+ tapeRepeatPeriodMM:asset.tapeRepeatMode==='repeatablePattern'?asset.tapeRepeatPeriodMM??null:null});
+// Editing a title, label or series updates updatedAt without changing the
+// physical material. Keep that timestamp out of new source revisions.
+export const assetSourceRevision=asset=>craftDigest(physicalSource(asset));
 export function materialSourceSnapshot(asset){
  return {assetID:asset.id,sourceRevision:assetSourceRevision(asset),descriptor:assetVisualDescriptor(asset),updatedAt:asset.updatedAt??null,
   kind:asset.kind,title:asset.title,role:asset.role??null,tags:asset.tags||[],supply:structuredClone(asset.supply??{quantity:1}),

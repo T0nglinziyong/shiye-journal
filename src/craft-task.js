@@ -20,8 +20,9 @@ export function validateCraftTask(source,currentAssets){
  for(const item of source.materials){
   const snapshot=byID.get(item.assetID),current=currentAssets.find(a=>a.id===item.assetID);
   craftAssert(snapshot&&current,'MISSING_SOURCE','当前素材库找不到任务素材',{assetId:item.assetID});
-  craftAssert(assetSourceRevision(assetFromSourceSnapshot(snapshot))===snapshot.sourceRevision,'SOURCE_SNAPSHOT_CHANGED','来源快照与其声明版本不一致',{assetId:item.assetID});
-  craftAssert(assetSourceRevision(current)===snapshot.sourceRevision,'STALE_SOURCE','导出后素材图像、尺寸或库存已变化；请重新导出任务，不覆盖旧作品',{assetId:item.assetID});
+  const exported=assetFromSourceSnapshot(snapshot),physicalRevision=assetSourceRevision(exported);
+  craftAssert(snapshot.sourceRevision===physicalRevision,'SOURCE_SNAPSHOT_CHANGED','来源快照与其声明版本不一致',{assetId:item.assetID});
+  craftAssert(assetSourceRevision(current)===physicalRevision,'STALE_SOURCE','导出后素材图像、类型、尺寸或库存已变化；请重新导出任务，不覆盖旧作品',{assetId:item.assetID});
  }
  craftAssert(source.baseDraft,'INVALID_BASE_SCENE','任务缺少初始可编辑场景');
  const base=attachSceneV2(structuredClone(source.baseDraft));

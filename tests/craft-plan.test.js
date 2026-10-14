@@ -32,7 +32,10 @@ test('source snapshots reconstruct exact source identities without private asset
  const a=material();a.privateNote='do not export irrelevant metadata';a.anatomy={legacy:'ignored'};
  const snapshot=materialSourceSnapshot(a);assert.equal(snapshot.privateNote,undefined);assert.equal(snapshot.anatomy,undefined);assert.equal(assetSourceRevision(assetFromSourceSnapshot(snapshot)),assetSourceRevision(a));
  assert.notEqual(assetSourceRevision({...a,physicalWidthMM:101}),assetSourceRevision(a));
- assert.notEqual(assetSourceRevision({...a,updatedAt:'new'}),assetSourceRevision(a));
+ assert.equal(assetSourceRevision({...a,updatedAt:'new',title:'新名称',tags:['新标签']}),assetSourceRevision(a));
+ assert.equal(assetSourceRevision({...a,supply:{kind:'single',quantity:1}}),assetSourceRevision(a));
+ assert.notEqual(assetSourceRevision({...a,supply:{quantity:2}}),assetSourceRevision(a));
+ assert.notEqual(assetSourceRevision({...a,kind:'tape'}),assetSourceRevision(a));
 });
 test('topology rejects self crossing and escaped holes rather than guessing physical intent',()=>{
  assert.throws(()=>normalizeGeometry([[[[0,0],[3,3],[0,3],[2,0]]]]),{code:'SELF_INTERSECTION'});

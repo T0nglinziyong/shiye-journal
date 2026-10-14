@@ -24,13 +24,15 @@ test('GPT export reuses account-and-source-revision scoped transparent preview',
   assert.equal(cache.rows.size,1);
 });
 
-test('account and updated source revision cannot reuse another material preview',async()=>{
+test('account and changed physical source cannot reuse another material preview',async()=>{
   const cache=fakeCache(),asset=mkAsset();let loads=0;
   const opts={asset,cache,account:'alice',loadVariant:async()=>{loads++;return new Blob([WEBP]);},
     loadOriginal:()=>{throw Error('unexpected');},encode:async()=>WEBP};
   await prepareOfflineMaterialPreview(opts);
   await prepareOfflineMaterialPreview({...opts,account:'bob'});
-  const newer=mkAsset({updatedAt:'2026-10-12T00:00:00Z'});
+  const metadataOnly=mkAsset({updatedAt:'2026-10-12T00:00:00Z',title:'新名称'});
+  assert.equal(offlineExportCacheKey(asset),offlineExportCacheKey(metadataOnly));
+  const newer=mkAsset({physicalWidthMM:25});
   assert.notEqual(offlineExportCacheKey(asset),offlineExportCacheKey(newer));
   await prepareOfflineMaterialPreview({...opts,asset:newer});
   assert.equal(loads,3);assert.equal(cache.rows.size,3);
