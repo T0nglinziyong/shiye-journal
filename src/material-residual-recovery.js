@@ -93,15 +93,17 @@ export function discoverResidualCarriers(cv,p,own){
       try{
         const fill=contourArea/Math.max(1,w*h);
         if(fill<.46)continue;
-        const poly=new cv.Mat();
+        const contourMask=cv.Mat.zeros(h,w,cv.CV_8UC1),vector=new cv.MatVector();
         try{
-          cv.approxPolyDP(best,poly,Math.max(.7,cv.arcLength(best,true)*.002),true);
-          const points=Array.from({length:poly.rows},(_,i)=>[
-            (x+poly.data32S[i*2])/width,(y+poly.data32S[i*2+1])/height]);
+          vector.push_back(best);
+          cv.drawContours(contourMask,vector,-1,new cv.Scalar(255),cv.FILLED);
+          const points=Array.from({length:best.rows},(_,i)=>[
+            (x+best.data32S[i*2])/width,(y+best.data32S[i*2+1])/height]);
           out.push({x:x/width,y:y/height,w:w/width,h:h/height,
             physicalBoundary:points,boundarySource:'background-field-recovery',
+            physicalMask:{x,y,width:w,height:h,alpha:new Uint8Array(contourMask.data)},
             boundaryPrior:Math.min(.6,.35+.3*fill),fillRatio:fill});
-        }finally{poly.delete();}
+        }finally{vector.delete();contourMask.delete();}
       }finally{best.delete();}
     }finally{hierarchy.delete();contours.delete();part.delete();}
   }

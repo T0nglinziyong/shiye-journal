@@ -1,7 +1,5 @@
 import {visionTask} from './vision-runtime.js';
 import {buildForegroundEvidence} from './foreground-evidence.js';
-import {unifyCarrierCandidates} from './unified-material-discovery.js';
-import {recoverResidualCarriers} from './material-residual-recovery.js';
 
 // Whole-page recognition stage: discover material identities/boxes only.
 //
@@ -19,26 +17,21 @@ export async function segmentPaperMaterials({data,width:w,height:h},{
   const pixels=sourcePixels||data,
     pxPerMM=((w/paperWidthMM)+(h/paperHeightMM))/2,
     cellSize=Math.max(24,Math.round(pxPerMM*13.5)),
-    evidence=buildForegroundEvidence(pixels,w,h,{sourcePixels:pixels,cellSize,useChroma:chromaEdges!==false});
+    evidence=buildForegroundEvidence(pixels,w,h,{sourcePixels:pixels,cellSize,useChroma:chromaEdges!==false,paperWidthMM,paperHeightMM});
 
   const opts={mask:evidence.mask,evidence:evidence.evidence,
     foregroundSeeds:evidence.foregroundSeeds,width:w,height:h,
-    smallestMM,paperWidthMM,paperHeightMM,mergeSharedCarrier};
+    smallestMM:candidateDiscovery==='unified'||candidateDiscovery==='research'?9:smallestMM,paperWidthMM,paperHeightMM,mergeSharedCarrier};
   const legacy=await visionTask('boxes-simple',opts);
-  if(candidateDiscovery!=='physical'&&candidateDiscovery!=='unified')return legacy.sort((a,b)=>a.y-b.y||a.x-b.x).slice(0,48);
+  if(candidateDiscovery==='unified'||candidateDiscovery==='research')return visionTask('boxes-research',{
+    ...opts,pixels:new Uint8ClampedArray(pixels),legacyBoxes:legacy
+  });
+  if(candidateDiscovery!=='physical')return legacy.sort((a,b)=>a.y-b.y||a.x-b.x).slice(0,48);
   // Preserve the old detector as an uncovered-object fallback, but only in
   // the explicitly selected physical-discovery path.
   const physical=await visionTask('boxes-physical',{
-    ...opts,pixels:new Uint8ClampedArray(pixels),legacyBoxes:candidateDiscovery==='physical'?legacy:undefined,
-    separateSupportedCarriers:candidateDiscovery==='unified'
+    ...opts,pixels:new Uint8ClampedArray(pixels),legacyBoxes:legacy,
+    separateSupportedCarriers:false
   });
-  if(candidateDiscovery==='unified'){
-    const candidates=unifyCarrierCandidates(physical,legacy);
-    if(!candidates.some(box=>!box.physicalBoundary||(box.boundaryPrior??0)<.4))return candidates;
-    const residual=await visionTask('boxes-residual',{
-      pixels:new Uint8ClampedArray(pixels),width:w,height:h
-    });
-    return recoverResidualCarriers(candidates,residual,w,h);
-  }
   return physical.sort((a,b)=>a.y-b.y||a.x-b.x).slice(0,48);
 }

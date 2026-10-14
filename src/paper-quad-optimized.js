@@ -178,7 +178,7 @@ function refineRegionLines(cv,candidate,light,w,h,own){
     let best=-Infinity,bestShift=0,bestSlope=0;
     for(const slope of slopes){
       for(let shift=-search;shift<=search;shift+=4){
-        const values=[];let sum=0,delta=0;
+        const values=[],contrasts=[];let sum=0,delta=0;
         for(let i=0;i<67;i++){
           const t=.07+.86*i/66,offset=shift+slope*span*(t-.5);
           const x=a.x+t*vx+offset*nx,y=a.y+t*vy+offset*ny;
@@ -188,12 +188,15 @@ function refineRegionLines(cv,candidate,light,w,h,own){
             bilinear(L,w,h,x-9*nx,y-9*ny);
           const value=clamp(grad/320,0,2)*.35+
             clamp(contrast/34,0,2)*.65;
-          sum+=value;values.push(value);
+          sum+=value;values.push(value);contrasts.push(contrast);
           delta+=Math.abs(offset)/search;
         }
-        values.sort((a,b)=>a-b);
+        values.sort((a,b)=>a-b);contrasts.sort((a,b)=>a-b);
         const middle=values[33];
-        const score=.6*middle+.4*sum/67-.15*delta/67;
+        // A bright printed object can provide a strong partial line. Require
+        // positive paper-side contrast across at least three quarters of it.
+        const score=.4*middle+.25*sum/67+
+          .35*clamp(contrasts[16]/34,0,2)-.15*delta/67;
         if(score>best){best=score;bestShift=shift;bestSlope=slope;}
       }
     }
@@ -289,6 +292,7 @@ export function detectPaperQuadOptimized(cv,p,own){
   // Keep it only when it overlaps an existing conventional paper location.
   const region=regionMask(cv,labChannels,own,w,h);
   const regionCandidates=[];
+  let borderHullSeed=null;
   const rawRegions=[];
   obtainContours(cv,region,cv.RETR_EXTERNAL,own,contour=>{
     const fraction=cv.contourArea(contour)/(w*h);
@@ -311,6 +315,15 @@ export function detectPaperQuadOptimized(cv,p,own){
           try{
             cv.approxPolyDP(hull,poly,perimeter*eps,true);
             const cand=geometricProposal(cv,poly,data.fraction,w,h,paperRatio,'region-hull');
+            // The low-chroma region can bleed into a bright table at the
+            // photograph edge. Keep such a hull only as a line-fit seed; its
+            // border-touching quadrilateral is never accepted as the paper.
+            if(!cand&&poly.rows===4&&cv.isContourConvex(poly)&&!borderHullSeed){
+              const d=poly.data32S;
+              borderHullSeed={corners:orderPaperCorners(Array.from({length:4},(_,j)=>({
+                x:d[j*2]/w,y:d[j*2+1]/h
+              })))};
+            }
             if(cand){
               regionCandidates.push({...cand,kind:'region',hull:true});
               break;
@@ -321,7 +334,7 @@ export function detectPaperQuadOptimized(cv,p,own){
     }finally{contour.delete();}
   }
   // Regional fit is expensive; do it once and reuse previously split Lab L.
-  const firstHull=regionCandidates.find(c=>c.hull);
+  const firstHull=regionCandidates.find(c=>c.hull)||borderHullSeed;
   if(firstHull&&strongestClosed<.60){
     const light=labChannels.get(0);
     try{
@@ -342,6 +355,7 @@ export function detectPaperQuadOptimized(cv,p,own){
     if(score==null)continue;
     // +.04 closed-contour advantage from the conservative offline policy.
     const total=score+(candidate.kind==='region'?0:A4_CONTOUR_BONUS);
+    if(candidate.source==='region-refined'&&firstHull===borderHullSeed&&total<.45)continue;
     if(!best||total>best.score)best={score:total,corners:candidate.corners};
   }
   return best?.corners||null;

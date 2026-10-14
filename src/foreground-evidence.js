@@ -47,7 +47,7 @@ function localBackgrounds(pixels,w,h,cell,fallback){
 
 const luma=(pixels,i)=>pixels[i]*.2126+pixels[i+1]*.7152+pixels[i+2]*.0722;
 
-export function backgroundConnectedMask({labL,labA,labB,edge,evidence,shadowLikelihood,width:w,height:h,paperA,paperB,useChroma=true,chromaThreshold=6,edgeThreshold=13,stepThreshold=7}){
+export function backgroundConnectedMask({labL,labA,labB,edge,evidence,shadowLikelihood,width:w,height:h,paperWidthMM=210,paperHeightMM=297,paperA,paperB,useChroma=true,chromaThreshold=6,edgeThreshold=13,stepThreshold=7}){
   const background=new Uint8Array(w*h),queue=new Int32Array(w*h);let head=0,tail=0;
   const passable=i=>{
     if(evidence[i])return false;
@@ -59,7 +59,7 @@ export function backgroundConnectedMask({labL,labA,labB,edge,evidence,shadowLike
   // frame. Treat the outer ~3 mm as known background, not merely as a place
   // from which background is guessed. This makes warp interpolation, paper
   // edge lines and a shadowed corner harmless to the flood-fill seed.
-  const pxPerMM=Math.max(.5,((w/210)+(h/297))/2),safeBand=Math.max(2,Math.round(pxPerMM*3.0));
+  const pxPerMM=Math.max(.5,((w/paperWidthMM)+(h/paperHeightMM))/2),safeBand=Math.max(2,Math.round(pxPerMM*3.0));
   for(let y=0;y<h;y++)for(let x=0;x<w;x++)if(x<safeBand||y<safeBand||x>=w-safeBand||y>=h-safeBand)background[y*w+x]=1;
   const seedY0=Math.min(h-1,safeBand),seedY1=Math.max(0,h-1-safeBand),seedX0=Math.min(w-1,safeBand),seedX1=Math.max(0,w-1-safeBand);
   for(let x=seedX0;x<=seedX1;x++){push(seedY0*w+x);push(seedY1*w+x);}
@@ -79,7 +79,7 @@ export function backgroundConnectedMask({labL,labA,labB,edge,evidence,shadowLike
   return background;
 }
 
-export function buildForegroundEvidence(analysisPixels,w,h,{sourcePixels=analysisPixels,cellSize=64,useChroma=true}={}){
+export function buildForegroundEvidence(analysisPixels,w,h,{sourcePixels=analysisPixels,cellSize=64,useChroma=true,paperWidthMM=210,paperHeightMM=297}={}){
   if(!analysisPixels||analysisPixels.length!==w*h*4||!sourcePixels||sourcePixels.length!==w*h*4)throw Error('前景分析像素尺寸不匹配');
   const fallback=globalNeutral(analysisPixels,w,h),rawFallback=globalNeutral(sourcePixels,w,h),rawFallbackLab=rgbToLab(...rawFallback);
   const local=localBackgrounds(analysisPixels,w,h,cellSize,fallback),rawLocal=localBackgrounds(sourcePixels,w,h,cellSize,rawFallback);
@@ -107,9 +107,9 @@ export function buildForegroundEvidence(analysisPixels,w,h,{sourcePixels=analysi
 
   const backgroundConnected=backgroundConnectedMask({
     labL,labA,labB,edge:edgeField,evidence,shadowLikelihood,width:w,height:h,
-    paperA:rawFallbackLab[1],paperB:rawFallbackLab[2],useChroma
+    paperA:rawFallbackLab[1],paperB:rawFallbackLab[2],useChroma,paperWidthMM,paperHeightMM
   });
-  const mask=new Uint8Array(w*h),pxPerMM=Math.max(.5,((w/210)+(h/297))/2),safeBand=Math.max(2,Math.round(pxPerMM*3.0));
+  const mask=new Uint8Array(w*h),pxPerMM=Math.max(.5,((w/paperWidthMM)+(h/paperHeightMM))/2),safeBand=Math.max(2,Math.round(pxPerMM*3.0));
   for(let y=0;y<h;y++)for(let x=0;x<w;x++){
     const i=y*w+x,protectedFrame=x<safeBand||y<safeBand||x>=w-safeBand||y>=h-safeBand;
     if(protectedFrame){

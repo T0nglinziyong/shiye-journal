@@ -1,6 +1,7 @@
 import {refineMaterialBoundaries} from './material-boundary-refiners.js';
 import {discoverMaterialBoxes} from './material-box-discovery.js';
 import {discoverPhysicalMaterialBoxes} from './material-physical-discovery.js';
+import {discoverResearchV8} from './material-research-v8.js';
 import {segmentPhysicalOrAdaptive} from './material-physical-segmentation.js';
 import {keepPhysicalBeforeUnsafeRegularization} from './material-physical-mask-guard.js';
 import {separateSharedCarrier} from './material-carrier.js';
@@ -9,6 +10,7 @@ import {segmentUnifiedMaterials} from './material-unified-segmentation.js';
 import {discoverResidualCarriers} from './material-residual-recovery.js';
 import {restoreRepeatedApertures} from './repeated-apertures.js';
 import {detectPaperQuadOptimized} from './paper-quad-optimized.js';
+import {warpResearchPixels} from './recognition-perspective-warp.js';
 export async function processVision(cv,operation,p){
   const resources=[],own=mat=>(resources.push(mat),mat);
   try{
@@ -56,6 +58,7 @@ export async function processVision(cv,operation,p){
     }
     if(operation==='boxes-simple')return discoverMaterialBoxes(cv,p,own);
     if(operation==='boxes-physical')return discoverPhysicalMaterialBoxes(cv,p,own);
+    if(operation==='boxes-research')return discoverResearchV8(cv,p,own);
     if(operation==='boxes-residual')return discoverResidualCarriers(cv,p,own);
     if(operation==='segment-boxes-classical')return segmentMaterialBoxes(cv,p);
     if(operation==='restore-repeated-apertures')return restoreRepeatedApertures(cv,p);
@@ -87,6 +90,25 @@ export async function processVision(cv,operation,p){
       const transform=own(cv.getPerspectiveTransform(from,to));
       cv.warpPerspective(src,dst,transform,new cv.Size(p.width,p.height),cv.INTER_LINEAR,cv.BORDER_REPLICATE);
       return {pixels:new Uint8ClampedArray(dst.data),width:p.width,height:p.height};
+    }
+    if(operation==='warp-research'){
+      const from=own(cv.matFromArray(4,1,cv.CV_32FC2,p.corners.flatMap(c=>[c.x*p.sourceWidth,c.y*p.sourceHeight])));
+      const to=own(cv.matFromArray(4,1,cv.CV_32FC2,[0,0,p.width-1,0,p.width-1,p.height-1,0,p.height-1]));
+      const transform=own(cv.getPerspectiveTransform(from,to)),inverse=own(new cv.Mat());
+      cv.invert(transform,inverse,cv.DECOMP_LU);
+      return {pixels:warpResearchPixels(p.pixels,p.sourceWidth,p.sourceHeight,inverse.data64F,p.width,p.height),
+        width:p.width,height:p.height};
+    }
+    if(operation==='project-mask-nearest'){
+      const src=own(cv.matFromArray(p.height,p.width,cv.CV_8UC1,p.mask)),dst=own(new cv.Mat());
+      const from=own(cv.matFromArray(4,1,cv.CV_32FC2,[0,0,p.width-1,0,p.width-1,p.height-1,0,p.height-1]));
+      const to=own(cv.matFromArray(4,1,cv.CV_32FC2,p.corners.flatMap(c=>[
+        c.x*p.rawWidth,c.y*p.rawHeight
+      ])));
+      const transform=own(cv.getPerspectiveTransform(from,to));
+      cv.warpPerspective(src,dst,transform,new cv.Size(p.rawWidth,p.rawHeight),
+        cv.INTER_NEAREST,cv.BORDER_CONSTANT,new cv.Scalar(0));
+      return {mask:new Uint8Array(dst.data),width:p.rawWidth,height:p.rawHeight};
     }
     throw Error('未知图像操作');
   }finally{for(const resource of resources.reverse())resource.delete();}

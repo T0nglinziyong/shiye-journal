@@ -10,7 +10,12 @@ export function pixelCanvas(pixels,width,height){
   ctx.putImageData(new ImageData(new Uint8ClampedArray(pixels),width,height),0,0);
   return canvas;
 }
-export async function decodeRecognitionImage(blob){
+export async function decodeRecognitionImage(blob,{research=false}={}){
+  if(research&&(blob.type==='image/jpeg'||blob.type==='image/jpg'||/\.jpe?g$/i.test(blob.name||''))){
+    // The research reference reads encoded JPEG samples without applying its
+    // embedded display ICC profile. Keep the same samples for V8 discovery.
+    return createImageBitmap(blob,{imageOrientation:'from-image',colorSpaceConversion:'none'});
+  }
   if(blob.type==='image/jpeg'||blob.type==='image/jpg'||/\.jpe?g$/i.test(blob.name||'')){
     const bytes=new Uint8Array(await blob.arrayBuffer());
     const image=decode(bytes,{useTArray:true,maxResolutionInMP:60,maxMemoryUsageInMB:512});

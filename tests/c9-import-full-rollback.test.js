@@ -8,7 +8,6 @@ const expected={
   'manual-import-recognition.js':'bc83bd2f7e0d572c9fb7c0d3acc724a238385133',
   'perspective.js':'1339e08b3b23603d1a41c779792c6a0327c676a8',
   'import-box-editor.js':'196304b571f14f00d02855c6bc08bdb3fd32b533',
-  'recognition-raster.js':'4e88878477689fa3c973576c5ce51c419145343a',
   'material-color-restoration.js':'4be602eab1a8d3d1281ba6c455c1ad80055da1c3',
   'import-workspace-ui.js':'8f057fda3ec1c4115b0c8503b5372253c8dc03dc',
   'workflow-ui.js':'87e7ce8603c1dbb699857d00874127454feb1553',
@@ -30,12 +29,15 @@ test('research recognizer preserves the explicit classical rollback route',async
     'image.js','paper-analysis.js','recognition-refiners.js','recognition-profiles.js'
   ].map(async name=>(await source(name)).toString()));
   assert.match(image,/candidateDiscovery='unified'/);
-  assert.match(paper,/candidateDiscovery!=='physical'&&candidateDiscovery!=='unified'/);
-  assert.match(paper,/unifyCarrierCandidates\(physical,legacy\)/);
+  assert.match(paper,/if\(candidateDiscovery!=='physical'\)return legacy/);
+  assert.match(paper,/visionTask\('boxes-research'/);
   assert.match(refiners,/candidateDiscovery==='unified'/);
   assert.match(refiners,/method:'morphgac'/);
   assert.match(profiles,/\['legacy','原版/);
   assert.match(profiles,/\['unified','统一候选/);
+  const raster=(await source('recognition-raster.js')).toString();
+  assert.match(raster,/if\(research&&/);
+  assert.match(raster,/const image=decode\(bytes,/);
 });
 test('import page uses stable automatic paper and manual cutout controls',async()=>{
   const app=(await source('app.js')).toString();

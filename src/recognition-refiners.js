@@ -65,7 +65,7 @@ async function parallelFinalPipeline({
 }
 
 export async function refineCandidatesAuto(context){
-  if(context.candidateDiscovery==='unified')return refineCandidatesUnified(context);
+  if(context.candidateDiscovery==='unified'||context.candidateDiscovery==='research')return refineCandidatesUnified(context);
   return parallelFinalPipeline({...context,method:'morphgac'});
 }
 export async function refineCandidatesUnified({candidates,frame,sourceFrame=frame,width,height,

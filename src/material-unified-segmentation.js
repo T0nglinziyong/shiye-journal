@@ -32,6 +32,18 @@ function sharedGradient(cv,p){
 }
 
 function localSeed(cv,box,width,height){
+  if(box.physicalMask&&box.physicalMask.alpha?.length===box.physicalMask.width*box.physicalMask.height&&
+    box.physicalMask.x>=0&&box.physicalMask.y>=0&&
+    box.physicalMask.x+box.physicalMask.width<=width&&box.physicalMask.y+box.physicalMask.height<=height){
+    const source=box.physicalMask,pad=Math.max(14,Math.ceil(Math.max(source.width,source.height)*.23)),
+      x0=Math.max(0,source.x-pad),y0=Math.max(0,source.y-pad),
+      x1=Math.min(width,source.x+source.width+pad),y1=Math.min(height,source.y+source.height+pad),
+      mask=cv.Mat.zeros(y1-y0,x1-x0,cv.CV_8UC1);
+    for(let y=0;y<source.height;y++)mask.data.set(
+      source.alpha.subarray(y*source.width,(y+1)*source.width),
+      (source.y-y0+y)*mask.cols+source.x-x0);
+    return {x0,y0,mask};
+  }
   const points=Array.isArray(box.physicalBoundary)&&box.physicalBoundary.length>=3
     ?box.physicalBoundary:null;
   const xs=points?points.map(p=>p[0]*width):[box.x*width,(box.x+box.w)*width],
@@ -153,14 +165,11 @@ function hypotheses(cv,observed){
     const quad=cv.boxPoints(cv.minAreaRect(contour)).map(p=>[p.x,p.y]);
     out.push({kind:'quadrilateral',mask:polygonMask(cv,observed.cols,observed.rows,quad),complexity:4});
     if(contour.rows>=5){
-      const ellipse=cv.fitEllipse(contour),
-        angle=ellipse.angle*Math.PI/180,ca=Math.cos(angle),sa=Math.sin(angle),
-        points=Array.from({length:96},(_,i)=>{
-          const theta=2*Math.PI*i/96,x=ellipse.size.width*Math.cos(theta)/2,
-            y=ellipse.size.height*Math.sin(theta)/2;
-          return [ellipse.center.x+x*ca-y*sa,ellipse.center.y+x*sa+y*ca];
-        });
-      out.push({kind:'ellipse',mask:polygonMask(cv,observed.cols,observed.rows,points),complexity:5});
+      const ellipse=cv.fitEllipse(contour),mask=cv.Mat.zeros(observed.rows,observed.cols,cv.CV_8UC1);
+      cv.ellipse(mask,new cv.Point(Math.round(ellipse.center.x),Math.round(ellipse.center.y)),
+        new cv.Size(Math.max(1,Math.round(ellipse.size.width/2)),Math.max(1,Math.round(ellipse.size.height/2))),
+        ellipse.angle,0,360,new cv.Scalar(255),cv.FILLED);
+      out.push({kind:'ellipse',mask,complexity:5});
     }
     return out;
   }finally{contour.delete();}

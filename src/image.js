@@ -2,27 +2,41 @@ import {applyLightingToCrop} from './material-color-restoration.js';
 import {segmentPaperMaterials} from './paper-analysis.js';
 import {visionTask} from './vision-runtime.js';
 import {recognitionProfile} from './recognition-profiles.js';
-import {analysisPixels} from './recognition-raster.js';
+import {analysisPixels,sourcePixels} from './recognition-raster.js';
 import {neutralizePaperChroma} from './paper-chroma-preprocess.js';
 // Analyze a small copy, but re-extract accepted cuts from the full source.
 export async function detectPaperCandidates(bitmap,box,smallestMM=6,{
   balanceLight=false,paperRectified=false,paperWidthMM=210,paperHeightMM=297,
   recognition='auto',candidateDiscovery='unified',recognitionPixels=900,
-  recognitionPreprocess={},recognitionPostprocess={},mergeSharedCarrier=true,onProgress=()=>{},onDiagnostic=()=>{}
+  recognitionPreprocess={},recognitionPostprocess={},mergeSharedCarrier=true,onProgress=()=>{},onDiagnostic=()=>{},recognitionSource=null
 }={}){
   const profile=recognitionProfile(recognition,recognitionPixels);
   // A single discovery scale keeps material identities and candidate geometry
   // stable when the user raises the boundary-refinement resolution. The final
   // cutout is still sampled from the original bitmap in cropBitmap.
   const discoveryRatio=Math.min(1,900/Math.max(bitmap.width*box.w,bitmap.height*box.h));
-  const dw=Math.max(1,Math.round(bitmap.width*box.w*discoveryRatio)),dh=Math.max(1,Math.round(bitmap.height*box.h*discoveryRatio));
-  const discoveryPixels=await analysisPixels(bitmap,box,dw,dh);
+  const researchPage=paperRectified&&candidateDiscovery==='unified'&&recognitionSource,
+    dw=researchPage?(paperWidthMM>=paperHeightMM?900:Math.round(900*paperWidthMM/paperHeightMM))
+      :Math.max(1,Math.round(bitmap.width*box.w*discoveryRatio)),
+    dh=researchPage?(paperWidthMM>=paperHeightMM?Math.round(900*paperHeightMM/paperWidthMM):900)
+      :Math.max(1,Math.round(bitmap.height*box.h*discoveryRatio));
+  const discoveryPixels=recognitionSource&&paperRectified&&candidateDiscovery==='unified'
+    ?(await visionTask('warp-research',{
+      pixels:sourcePixels(recognitionSource.bitmap),transferInput:true,
+      sourceWidth:recognitionSource.bitmap.width,sourceHeight:recognitionSource.bitmap.height,
+      corners:recognitionSource.corners,width:dw,height:dh
+    })).pixels
+    :await analysisPixels(bitmap,box,dw,dh);
   // The research V8 detector evaluates the measured exterior on corrected
   // RGB. Chroma neutralization changes weak paper edges and candidate count.
-  const discoveryFrame={data:paperRectified&&candidateDiscovery!=='unified'
+  const discoveryFrame={data:paperRectified&&candidateDiscovery!=='unified'&&candidateDiscovery!=='research'
     ?neutralizePaperChroma(discoveryPixels,dw,dh):discoveryPixels,width:dw,height:dh};
-  const ratio=Math.min(1,profile.analysisMaxDimension/Math.max(bitmap.width*box.w,bitmap.height*box.h));
-  const w=Math.max(1,Math.round(bitmap.width*box.w*ratio)),h=Math.max(1,Math.round(bitmap.height*box.h*ratio));
+  // V8's candidate mask and V5's arbitration share the same 900px raster.
+  // Higher display/export quality still comes from the full corrected source.
+  const ratio=candidateDiscovery==='unified'&&researchPage?null:candidateDiscovery==='unified'?discoveryRatio
+    :Math.min(1,profile.analysisMaxDimension/Math.max(bitmap.width*box.w,bitmap.height*box.h));
+  const w=researchPage?dw:Math.max(1,Math.round(bitmap.width*box.w*ratio)),
+    h=researchPage?dh:Math.max(1,Math.round(bitmap.height*box.h*ratio));
   const frame={data:w===dw&&h===dh?discoveryPixels:await analysisPixels(bitmap,box,w,h),width:w,height:h},
     preprocess={
       illumination:balanceLight===true&&recognitionPreprocess.illumination===true,
