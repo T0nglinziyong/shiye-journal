@@ -1,8 +1,9 @@
 import {markSyncPhase} from './sync-browser-compat.js';
 // Durable edits are an explicit outbox, not a replacement for cloud records.
 // Commit acknowledgement is the only point at which an entry is removed.
-export function createProjectSync({load,write,commit,revision,reconcile=async()=> 'conflict',recordKeys=record=>[{store:'projects',id:record.id}],onCommitted=()=>{},onConflict=async()=>null,onSuperseded=()=>{},onStatus=()=>{},onDiagnostic=()=>{},runExclusive=fn=>fn(),reload=load,autoFlushDelayMs=0,setTimer=setTimeout,clearTimer=clearTimeout,clock=()=>Date.now()}){
+export function createProjectSync({load,write,commit,revision,reconcile=async()=> 'conflict',recordKeys=record=>[{store:'projects',id:record.id}],coalesce=()=>null,splitCoalesced=()=>null,onCommitted=()=>{},onConflict=async()=>null,onSuperseded=()=>{},onStatus=()=>{},onDiagnostic=()=>{},runExclusive=fn=>fn(),reload=load,autoFlushDelayMs=0,setTimer=setTimeout,clearTimer=clearTimeout,clock=()=>Date.now()}){
   let initialized,staging=Promise.resolve(),network,serial=0,error,paused=false;
+  let persistedRows=new Map();
   let conflicts=new Set();
   // Durable local staging is immediate; only the remote commit is batched.
   const flushWindow=Math.max(0,Number(autoFlushDelayMs)||0);
@@ -19,12 +20,22 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
   const entries=new Map();
   // A transient IndexedDB/auth read failure must not poison this instance for
   // the rest of the session: the resumer will retry the durable outbox later.
-  const initialize=()=>initialized??=(async()=>{for(const row of await load()||[]){entries.set(row.record.id,row);serial=Math.max(serial,row.serial);}report();})().catch(failure=>{initialized=undefined;throw markSyncPhase(failure,'读取本机待同步队列');});
+  const rowStamp=row=>JSON.stringify([row.serial,row.baseRevision,row.operationID]);
+  const rememberPersisted=rows=>{persistedRows=new Map(rows.map(row=>[row.record.id,{stamp:rowStamp(row),row}]));};
+  const initialize=()=>initialized??=(async()=>{const rows=await load()||[];for(const row of rows){entries.set(row.record.id,row);serial=Math.max(serial,row.serial);}rememberPersisted(rows);report();})().catch(failure=>{initialized=undefined;throw markSyncPhase(failure,'读取本机待同步队列');});
   const report=()=>onStatus({pending:entries.size,error,conflicts:conflicts.size});
   const diagnose=(action,row,failure)=>{try{onDiagnostic({action,kind:row?.record?.kind||'queue',baseRevision:row?.baseRevision,
     cloudRevision:revision(),pending:entries.size,error:failure});}catch{/* Diagnostics must not block a durable sync. */}};
-  const persist=()=>Promise.resolve().then(()=>write(structuredClone([...entries.values()])))
-    .catch(error=>{throw markSyncPhase(error,'写入本机待同步队列');});
+  const persist=async(options={})=>{
+    // IndexedDB already journals changed rows. Clone only those rows here as
+    // well: a queued import may carry many large Blobs that did not change.
+    const snapshot=[...entries.values()].map(row=>{
+      const previous=persistedRows.get(row.record.id);
+      return previous?.stamp===rowStamp(row)?previous.row:structuredClone(row);
+    });
+    try{await write(snapshot,options);rememberPersisted(snapshot);}
+    catch(error){throw markSyncPhase(error,'写入本机待同步队列');}
+  };
   // The durable queue is shared by tabs. A tab may have opened before another
   // wrote pending edits, so refresh it AFTER acquiring the cross-tab sync lock.
   // Only replace in-memory state when no new local staging occurred meanwhile.
@@ -41,12 +52,58 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
         entries.set(row.record.id,row);
         serial=Math.max(serial,row.serial);
       }
+      rememberPersisted(saved);
       conflicts=new Set([...conflicts].filter(id=>entries.has(id)));
       report();
       return;
     }
   }
   const overlaps=(a,b)=>a.some(left=>b.some(right=>left.store===right.store&&(left.id===right.id||left.id===undefined||right.id===undefined)));
+  const orderedRows=()=>[...entries.values()].sort((a,b)=>a.serial-b.serial);
+  const replaceRows=rows=>{entries.clear();for(const row of rows.sort((a,b)=>a.serial-b.serial))entries.set(row.record.id,row);};
+  async function coalesceReady(windowSerial){
+    const task=staging.catch(()=>{}).then(async()=>{
+      const before=orderedRows(),next=[...before],strictRemoveIds=[];
+      for(;;){
+        const plan=coalesce(next,revision(),windowSerial);
+        if(!plan)break;
+        const sourceIDs=new Set(plan.sourceRows.map(row=>row.record.id));
+        const first=plan.sourceRows[0];
+        if(sourceIDs.size!==plan.sourceRows.length||next.some(row=>row.record.id===plan.record.id))
+          throw Error('待同步批次编号重复，未修改本机队列');
+        strictRemoveIds.push(...sourceIDs);
+        const merged={record:plan.record,serial:first.serial,baseRevision:first.baseRevision,operationID:crypto.randomUUID()};
+        next.splice(0,next.length,...next.filter(row=>!sourceIDs.has(row.record.id)),merged);
+        next.sort((a,b)=>a.serial-b.serial);
+      }
+      if(!strictRemoveIds.length)return;
+      replaceRows(next);
+      try{await persist({strictRemoveIds});}
+      catch(error){replaceRows(before);throw error;}
+      report();
+    });
+    staging=task.catch(()=>{});
+    return task;
+  }
+  async function splitConflictingBatch(row){
+    const pieces=splitCoalesced(row.record);
+    if(!pieces)return false;
+    const task=staging.catch(()=>{}).then(async()=>{
+      if(entries.get(row.record.id)?.serial!==row.serial)return false;
+      const before=orderedRows(),next=before.filter(item=>item.record.id!==row.record.id);
+      const existing=new Set(next.map(item=>item.record.id));
+      for(const piece of pieces){
+        if(existing.has(piece.record.id))return false;
+        existing.add(piece.record.id);next.push(structuredClone(piece));
+      }
+      replaceRows(next);
+      try{await persist({strictRemoveIds:[row.record.id]});}
+      catch(error){replaceRows(before);throw error;}
+      report();diagnose('split',row);return true;
+    });
+    staging=task.catch(()=>{});
+    return task;
+  }
   async function acknowledge(row,{confirmedHere=false}={}){
     // A confirmed operation advanced exactly one revision. Newer local edits
     // based on its old revision can follow it; never jump across an unrelated
@@ -79,9 +136,10 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
       const windowSerial=flushWindow&&!force
         ?Math.max(0,...[...entries.values()].map(item=>item.serial))
         :Infinity;
+      await coalesceReady(windowSerial);
       const blocked=new Set();
       while(entries.size&&!paused){
-        const row=[...entries.values()].find(item=>!blocked.has(item.record.id)&&item.serial<=windowSerial);
+        const row=orderedRows().find(item=>!blocked.has(item.record.id)&&item.serial<=windowSerial);
         if(!row)break;
         diagnose('start',row);
         try {
@@ -121,6 +179,7 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
           // ID is present remotely, it can be retried after an unrelated edit.
           if(resolution==='rebase'){row.baseRevision=revision();await persist();diagnose('retry',row);}
           else {
+            if(await splitConflictingBatch(row))continue;
             // A genuinely conflicting editable project becomes a separate
             // recoverable copy. Never overwrite the other device's original
             // project, and never silently drop locally staged work.
@@ -159,11 +218,15 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
             // A PL/pgSQL validation error is a confirmed rejection, even
             // though the revision stayed put. Preserve its code and message
             // instead of misreporting a lost network acknowledgement.
-            if(failure?.code==='P0001')throw failure;
+            if(failure?.code==='P0001'){
+              if(await splitConflictingBatch(row))continue;
+              throw failure;
+            }
             // Unchanged server revision means an unconfirmed upload, not a
             // competing edit. Retain the row for the normal retry path.
             throw markSyncPhase(new Error('云端版本未变化，本次上传未获确认；本机修改已保留，将自动重试',{cause:failure}),failure.syncPhase||'上传当前待同步记录');
           }
+          if(resolved==='conflict'&&await splitConflictingBatch(row))continue;
           throw failure;
         }
         await staging;

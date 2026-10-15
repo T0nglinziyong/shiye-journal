@@ -4,6 +4,7 @@ import {createProjectSync} from './project-sync.js';
 import {runAccountBrowserLock,markSyncPhase} from './sync-browser-compat.js';
 import {syncEnvelope,projectSyncRows,importSyncRows,latestEditedProject,syncAffectedKeys,foldLegacySyncRows} from './unified-sync-outbox.js';
 import {readCloudDelta,canRebaseUnchangedKeys} from './cloud-delta.js';
+import {planMetadataBatch,splitMetadataBatch} from './sync-metadata-batch.js';
 import {compareRecordEdits} from './sync-last-write.js';
 import {recordTombstones} from './sync-tombstones.js';
 import {LARGE_PROJECT_BYTES,projectSummary,mergeProjectSummary,projectBlobText} from './project-document.js';
@@ -50,17 +51,22 @@ function batchBlobRecord(id){
     const entries=[...blobRecordRequests];
     for(const [key] of entries)blobRecordRequests.delete(key);
     const atRevision=revision;
-    for(let offset=0;offset<entries.length;offset+=40){
-      const group=entries.slice(offset,offset+40),ids=group.map(([key])=>key);
-      try{
-        const rows=checked(await cloudClient().from('shiye_records').select('id,record').eq('user_id',owner).eq('store','blobs').in('id',ids));
-        const found=new Map(rows.map(row=>[row.id,row.record]));
-        await Promise.all(group.map(async([key,waiter])=>{
-          const record=found.get(key);
-          if(record&&revision===atRevision){const saved={revision:atRevision,record};retainBlobRecord(key,saved);await remember('blob-record:'+key,saved);}
-          waiter.resolve(record?structuredClone(record):undefined);
-        }));
-      }catch(error){for(const [,waiter] of group)waiter.reject(error);}
+    for(let offset=0;offset<entries.length;offset+=120){
+      // Up to three independent metadata queries can overlap, while each
+      // request still stays below PostgREST's practical IN-list size.
+      const groups=[0,40,80].map(start=>entries.slice(offset+start,offset+start+40)).filter(group=>group.length);
+      await Promise.all(groups.map(async group=>{
+        const ids=group.map(([key])=>key);
+        try{
+          const rows=checked(await cloudClient().from('shiye_records').select('id,record').eq('user_id',owner).eq('store','blobs').in('id',ids));
+          const found=new Map(rows.map(row=>[row.id,row.record]));
+          await Promise.all(group.map(async([key,waiter])=>{
+            const record=found.get(key);
+            if(record&&revision===atRevision){const saved={revision:atRevision,record};retainBlobRecord(key,saved);await remember('blob-record:'+key,saved);}
+            waiter.resolve(record?structuredClone(record):undefined);
+          }));
+        }catch(error){for(const [,waiter] of group)waiter.reject(error);}
+      }));
     }
   },0);
   return promise;
@@ -138,10 +144,10 @@ async function withAccountSyncLock(task){
   try{return await runAccountBrowserLock(id,task);}
   catch(error){throw markSyncPhase(error,'获取同步锁或执行同步任务');}
 }
-async function persistOutbox(kind,previous,rows){
+async function persistOutbox(kind,previous,rows,options={}){
   if(!cache||cacheDisabled)throw Error('无法安全保存待同步资料');
   const key=await account();
-  if(typeof cache.putOutbox==='function')await cache.putOutbox(key,kind,previous,rows);
+  if(typeof cache.putOutbox==='function')await cache.putOutbox(key,kind,previous,rows,options);
   else await cache.put(key,kind,rows);
   channel()?.postMessage({source:sessionTag,type:'pending'});
 }
@@ -232,10 +238,12 @@ async function loadUnifiedOutbox(recover=false){
 }
 const unifiedSync=createProjectSync({
   autoFlushDelayMs:10000,
+  coalesce:planMetadataBatch,
+  splitCoalesced:splitMetadataBatch,
   load:()=>loadUnifiedOutbox(true),
   reload:()=>loadUnifiedOutbox(false),
-  write:async rows=>{
-    await persistOutbox('unified-outbox',unifiedOutboxBefore,rows);
+  write:async(rows,options={})=>{
+    await persistOutbox('unified-outbox',unifiedOutboxBefore,rows,options);
     unifiedOutboxBefore=outboxStamps(rows);
   },
   commit:(envelope,operationID)=>{

@@ -32,7 +32,7 @@ function changePasswordDialog(client){
 }
 
 export async function startCloudSession(onReady){
-  if(!cloudEnabled){await onReady(null);return;}
+  if(!cloudEnabled){document.querySelector('#app').hidden=false;await onReady(null);return;}
   const app=document.querySelector('#app');app.hidden=true;
   const gate=document.createElement('main');gate.className='cloud-login';
   gate.innerHTML='<section class="panel"><h1>登录拾页</h1><p>每位用户的资料独立保存在私人云端。账号由管理员创建；登录后本浏览器会保持会话，直到主动退出。</p><form data-login><label>用户名<input name="email" type="text" autocomplete="username" required></label><label>密码<input name="password" type="password" autocomplete="current-password" required></label><button class="btn primary" type="submit">登录</button></form><p role="status"></p></section>';

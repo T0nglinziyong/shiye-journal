@@ -17,8 +17,9 @@ const rowsByID=rows=>{
   }
   return map;
 };
-export function mergeOutboxRows(currentRows,previousRows,nextRows){
+export function mergeOutboxRows(currentRows,previousRows,nextRows,{strictRemoveIds=[]}={}){
   const current=rowsByID(currentRows),previous=rowsByID(previousRows),next=rowsByID(nextRows);
+  const strict=new Set(strictRemoveIds);
   for(const [id,after] of next){
     const before=previous.get(id),existing=current.get(id);
     if(outboxStamp(before)===outboxStamp(after))continue;
@@ -32,6 +33,8 @@ export function mergeOutboxRows(currentRows,previousRows,nextRows){
   for(const [id,before] of previous){
     if(next.has(id))continue;
     const existing=current.get(id);
+    if(strict.has(id)&&outboxStamp(existing)!==outboxStamp(before))
+      throw Error('其他标签页已修改待合并资料；未合并或覆盖原稿，请重试同步');
     if(outboxStamp(existing)===outboxStamp(before))current.delete(id);
     // Another tab may have replaced or acknowledged this row. Never delete it.
   }
@@ -80,12 +83,12 @@ export function createPrivateCache({name='shiye-private-read-cache-v2',limit=160
     // are written; the pre-existing aggregate remains read-only until its
     // final row is acknowledged. This preserves pending imports without a
     // large, risky one-shot migration or another full Blob rewrite.
-    async putOutbox(account,id,previousRows,nextRows){
+    async putOutbox(account,id,previousRows,nextRows,options={}){
       if(!['project-outbox','import-outbox','unified-outbox'].includes(id))throw Error('不是待同步队列');
       const d=await db(),tx=d.transaction('entries','readwrite');
       try{
         const saved=await readOutbox(tx,account,id),
-          merged=mergeOutboxRows(saved.rows,previousRows,nextRows),
+          merged=mergeOutboxRows(saved.rows,previousRows,nextRows,options),
           before=rowsByID(saved.rows),after=rowsByID(merged),
           overlays=new Map(saved.overlays.map(entry=>[JSON.parse(entry.key)[2],entry])),
           baseIDs=new Set(saved.base.map(outboxID));

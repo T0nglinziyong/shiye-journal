@@ -28,6 +28,21 @@ test('acknowledgements cannot delete newer pending edits from another tab',()=>{
   assert.deepEqual(mergeOutboxRows([replacement],[old],[]),[replacement]);
   assert.deepEqual(mergeOutboxRows([old,row('other')],[old],[row('new')]).map(x=>x.record.id).sort(),['new','other']);
 });
+test('metadata coalescing refuses to remove a row edited by another tab',async()=>{
+  const cache=createPrivateCache({name:'shiye-outbox-coalesce-race'});
+  const account='cloud:account',kind='unified-outbox';
+  const first=row('first'),second=row('second');
+  await cache.putOutbox(account,kind,[],[first,second]);
+  const newer=row('second',2);
+  await cache.putOutbox(account,kind,[first,second],[first,newer]);
+  await assert.rejects(cache.putOutbox(account,kind,[first,second],[row('merged')],{
+    strictRemoveIds:['first','second']
+  }),/其他标签页/);
+  assert.deepEqual((await cache.get(account,kind)).map(item=>[item.record.id,item.serial]),[
+    ['first',1],['second',2]
+  ]);
+  await cache.close();
+});
 test('import queue merge keeps untouched operations after independent writes',async()=>{
   const cache=createPrivateCache({name:'shiye-outbox-import'});
   const account='cloud:account',kind='import-outbox';

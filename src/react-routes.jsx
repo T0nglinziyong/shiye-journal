@@ -253,6 +253,11 @@ function MatchingSessionPanel({session,state,source,onAction}){
 }
 export function MatchingPage({state,source,kindName,session,onAction,onMatchingChange}){
   const [,refresh]=useState(0);
+  useEffect(()=>{
+    const update=()=>refresh(version=>version+1);
+    window.addEventListener('shiye-matching-refresh',update);
+    return ()=>window.removeEventListener('shiye-matching-refresh',update);
+  },[]);
   const change=(id,value,options)=>{onMatchingChange(id,value,options);refresh(version=>version+1);};
   const action=(name,id,value)=>()=>onAction(name,id,value);
   const {selected,recommendations,excluded,scope,filtered,styles,chosenPurposes}=matchingViewModel(state);

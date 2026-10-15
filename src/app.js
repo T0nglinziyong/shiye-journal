@@ -23,6 +23,7 @@ import './layout-refinements.css';
 import './canvas-editor-fixes.css';
 import './mobile-material-ui.css';
 import {createAssetOrganization,mountOrganizationBadges,updateOrganizedAssetView} from './asset-organization.js';
+import {classificationQueue} from './classification-queue.js';
 import {mountIcons,iconMarkup} from './icons.js';
 import {startCloudSession} from './entry.js';
 import {cloudClient,cloudEnabled,requireCloudUser} from './cloud-session.js';
@@ -90,6 +91,7 @@ import {detectPaperCandidates,cropBitmap,alignMaterialPreview} from './image.js'
 import {filterAutomaticMaterialBoxes} from './automatic-material-size-filter.js';
 import {estimatePageLighting} from './material-color-restoration.js';
 import {extractEditableCandidateRGB} from './import-candidate-color.js';
+import {boundedMap} from './bounded-map.js';
 import {visionTask,prewarmVision} from './vision-runtime.js';
 import {recognitionOptions,recognitionPixelOptions,recognitionMethodDetails,recognitionProfile,candidateDiscoveryOptions} from './recognition-profiles.js';
 import {classifyRecord} from './classification.js';
@@ -101,9 +103,8 @@ import {applyToolCalls,validateScenePhysical} from './creative.js';
 import {mapOfflineExportLimited,prepareOfflineMaterialPreview,prefetchOfflineImportImages} from './offline-export-assets.js';
 import {buildMaterialScope} from './matching-materials.js';
 import {addMatchingFromLibrary,addMatchingFromRecommendation} from './matching-selection.js';
-import {matchingRecommendations,renderMatchingPage} from './matching-view.js';
+import {matchingRecommendations} from './matching-view.js';
 import {captureMatchingScroll,restoreMatchingScroll} from './matching-scroll.js';
-import {patchMatchingView} from './matching-incremental.js';
 import {selectJournalReferenceCases,loadJournalReferenceCases} from './journal-reference-catalog.js';
 import {loadJournalTemplateReferences} from './journal-template-references.js';
 import {clearJournalPresetImages} from './journal-preset-images.js';
@@ -499,7 +500,7 @@ pageControllers.register('editor',createEditorController({
   }
 }));
 pageControllers.register('matching',createMatchingController({
-  renderHTML:renderMatching,actions:actionStore,
+  renderHTML:()=>'',actions:actionStore,
   updateMatchingRegions,queueDefaults:queueMatchingDefaultsSync
 }));
 pageControllers.register('settings',createSettingsController({
@@ -736,18 +737,15 @@ function updateLibraryResults(){
 }
 const kindName=k=>({sticker:'贴纸',paper:'纸张',tape:'胶带',photo:'照片',text:'文字',reference:'参考'})[k]||k;
 function renderSeries(){return head('我的素材','把喜欢的，收进系列。')+`<div class="grid series-grid ${state.preferences.display==='list'?'list-grid':''}">${[...state.series].sort((a,b)=>a.id.startsWith('B700')&&b.id.startsWith('B700')?b.id.localeCompare(a.id):a.id.startsWith('B700')?-1:b.id.startsWith('B700')?1:0).map((s,index)=>{const members=state.assets.filter(a=>a.seriesID===s.id&&!a.isProjectInternal);const cover=seriesCovers(s,state.assets);return `<button class="card" data-act="series-detail" data-id="${s.id}"><div class="series-cover">${cover.map(a=>imgTag(a,index<2)).join('')}</div><div class="card-body"><h3>${esc(s.title)} <span aria-hidden="true">→</span></h3><p>${members.length} 件素材</p></div></button>`;}).join('')}</div>`;}
-function renderMatching(){return renderMatchingPage({state,head,imgTag,esc,kindName,session:matchingSession});}
 function matchingScope(){return buildMaterialScope({basket:state.basket,coreIDs:state.coreIDs,recommendations:matchingRecommendations(state),excluded:state.excludedAssetIDs,autoIncludeRecommendations:state.aiSettings.autoIncludeRecommendations,requireAllCandidates:state.aiSettings.requireAllCandidates});}
 // Common actions update only affected Matching panes, preserving the entire
 // remaining page, sticky header, textarea selection and decoded thumbnails.
-function updateMatchingRegions(regions,{persist=true}={}){
+function updateMatchingRegions(_regions,{persist=true}={}){
   if(state.route!=='matching')return render();
   document.querySelector('#basket-count').textContent=state.basket.length;
-  const patched=patchMatchingView({
-    view,renderHTML:renderMatching,regions,
-    mountIcons
-  });
-  if(!patched)render();
+  // React owns the Matching route. Replacing its descendants with HTML
+  // removes the delegated click handlers from newly inserted controls.
+  window.dispatchEvent(new Event('shiye-matching-refresh'));
   // Full render previously invoked bindPage(), which automatically staged
   // matching state. Incremental updates intentionally skip bindPage(), so
   // explicitly retain that durable local save for stars, exclusions, basket,
@@ -757,7 +755,6 @@ function updateMatchingRegions(regions,{persist=true}={}){
     toast('本机搭配状态暂存失败：'+error.message);
   });
 }
-function refreshMatchingRecommendations(){const current=view.querySelector('.match-recommendations');if(!current)return;const scroll=captureMatchingScroll(view,window);const template=document.createElement('template');template.innerHTML=renderMatching();const next=template.content.querySelector('.match-recommendations');if(!next)return;current.replaceChildren(...next.childNodes);mountIcons(current);const summary=view.querySelector('.basket>.muted'),fresh=template.content.querySelector('.basket>.muted');if(summary&&fresh)summary.textContent=fresh.textContent;restoreMatchingScroll(view,scroll,window);}
 function workInkPreview(d){if(!d.strokes?.length)return '';const paths=d.strokes.map(s=>{const points=(s.points||[]).filter(p=>Number.isFinite(p.x)&&Number.isFinite(p.y));if(!points.length)return '';const color=esc(s.color||'#2b5245'),width=Math.max(.5,Number(s.width)||3),opacity=Math.max(0,Math.min(1,Number(s.opacity??1)));if(points.length===1)return `<circle cx="${points[0].x}" cy="${points[0].y}" r="${width/2}" fill="${color}" opacity="${opacity}"/>`;return `<path d="${points.map((p,n)=>`${n?'L':'M'}${p.x} ${p.y}`).join(' ')}" fill="none" stroke="${color}" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round" opacity="${opacity}"/>`;}).join('');return `<svg class="work-ink-preview" viewBox="0 0 ${d.canvas.width} ${d.canvas.height}" preserveAspectRatio="none" aria-hidden="true">${paths}</svg>`;}
 function workCover(d,priority=false,snapshotOnly=false,projectID=null){
  if(!d)return '';
@@ -879,9 +876,6 @@ function bindPage({partial=false}={}){
   if(state.route==='projectPreview'&&!view.querySelector('[data-react-page="projectPreview"]')){const p=state.projects.find(x=>x.id===state.previewProjectID);if(p?.isSnapshot){const header=view.querySelector('.project-preview-head');const heart=document.createElement('button');heart.type='button';heart.className='snapshot-favorite';heart.setAttribute('aria-label',p.isFavorite?'取消收藏快照':'收藏快照');heart.setAttribute('aria-pressed',String(!!p.isFavorite));heart.textContent=p.isFavorite?'♥':'♡';heart.onclick=async()=>{const next={...p,isFavorite:!p.isFavorite};await db.put('projects',next);Object.assign(p,next);heart.textContent=next.isFavorite?'♥':'♡';heart.setAttribute('aria-label',next.isFavorite?'取消收藏快照':'收藏快照');heart.setAttribute('aria-pressed',String(!!next.isFavorite));};header?.querySelector('h1')?.after(heart);}}
   if(state.route==='matching'){
     const saveMatching=()=>matchingSession.persist().catch(e=>{console.warn('本机搭配状态未保存；不影响云端作品同步',e);toast('本机搭配状态保存失败：'+e.message);});
-    const fields={'match-style':'matchStyle','match-purpose':'matchPurpose','match-intent':'matchIntent','match-content-policy':'matchContentPolicy','match-text-presentation':'matchTextPresentation','match-processing':'matchProcessing','match-mode':'matchMode','match-ratio':'matchRatio','match-paper-width':'customPaperWidth','match-paper-height':'customPaperHeight'};
-    if(!view.querySelector('[data-react-page="matching"]'))
-      for(const [id,key] of Object.entries(fields))view.querySelector('#'+id)?.addEventListener('change',e=>{state[key]=e.target.type==='number'?Number(e.target.value):e.target.value;if(id==='match-style')state.matchStyles=readMatchSelection(id,state.matchStyle);if(id==='match-purpose')state.matchPurposes=readMatchSelection(id,state.matchPurpose);if(id==='match-style'||id==='match-purpose')refreshMatchingRecommendations();void saveMatching();if(id!=='match-intent')queueMatchingDefaultsSync();});
     // Entering or rerendering this page is not an explicit save action. Any
     // changed session is staged in the background; sync errors use the global
     // indicator instead of interrupting navigation with a toast.
@@ -1721,7 +1715,7 @@ async function saveProjectSnapshot(source,{format='image/png',alsoEditable=false
  urls.set(previewBlobId,URL.createObjectURL(preview));state.projects.push(snapshot);
  if(alsoEditable){source.isDraft=false;saveProject();}
  toast(cloudEnabled?'快照已暂存，正在后台同步':'快照已保存');
- void organizeSavedProjects([structuredClone(snapshot)],{waitForSave:()=>db.flushProjects()});
+ void organizeSavedProjects([structuredClone(snapshot)]);
  if(state.route==='works')render();return snapshot;
 }
 async function saveGeneratedImageSnapshot(blob,source){
@@ -2102,14 +2096,15 @@ async function prefetchImportRecord(rec,settings,revision){
       recognitionPostprocess:{shapeRegularization:settings.shapeRegularization,apertures:settings.apertures},mergeSharedCarrier:settings.mergeSharedCarrier,
       onDiagnostic:trace=>{if(valid())rec.recognitionDiagnostic=trace;}});if(!valid())return;
     candidates=filterAutomaticMaterialBoxes(candidates,{paperWidthMM:pw,paperHeightMM:ph,enabled:settings.paperSize!=='none'});
-    const calibrated=settings.paperSize!=='none'&&(correctedBitmap||settings.wholePaper),candidateData=[];
+    const calibrated=settings.paperSize!=='none'&&(correctedBitmap||settings.wholePaper);
     const lighting=settings.materialColorMode!=='original'&&correctedBitmap
       ?await estimatePageLighting(source,candidates):null;
-    for(let i=0;i<candidates.length;i++){
-      const candidate=await extractImportCandidate(source,box,candidates[i],{mode:settings.mode,widthMM:pw,heightMM:ph,calibrated,index:i,lighting});
-      candidateURLs.push(candidate.url);candidateData.push(candidate);
-      if(!valid())return;
-    }
+    const candidateData=await boundedMap(candidates,2,async(region,index)=>{
+      if(!valid())return null;
+      const candidate=await extractImportCandidate(source,box,region,{mode:settings.mode,widthMM:pw,heightMM:ph,calibrated,index,lighting});
+      candidateURLs[index]=candidate.url;
+      return candidate;
+    });
     if(!valid())return;
     Object.assign(rec,{bitmap,recognitionDecodeMode:settings.candidateDiscovery==='unified'?'research':'legacy',autoPaperCorners:corners&&!rec.corners?structuredClone(corners):null,correctedBitmap,correctedURL,
       appliedCorners:correctedBitmap?JSON.stringify(corners):null,backgroundDetected:!!correctedBitmap,
@@ -2263,19 +2258,24 @@ async function refreshImportCandidates(regions,{manual=false}={}){
   if(record!==state.importRecords[state.importIndex]||state.route!=='import')return false;
   const lighting=state.importMaterialColorMode!=='original'&&state.correctedBitmap
     ?await estimatePageLighting(source,plans.map(plan=>plan.region)):null;
-  for(let i=0;i<plans.length;i++){
-    const {region,original}=plans[i];if(original){next.push(original);continue;}
-    toast('正在提取素材 '+(i+1)+' / '+plans.length);
-    const regenerated=await extractImportCandidate(source,b,region,{mode:state.importMode,widthMM:pw,heightMM:ph,calibrated,index:i,lighting});
-    // Changing only colour must not reset manual names, tags, dimensions or
-    // choices, and must never cause the segmentation algorithm to rerun.
-    const old=previous.find(item=>item.region===region)||
-      previous.find(item=>item.region&&Math.abs(item.region.x-region.x)<1e-6&&Math.abs(item.region.y-region.y)<1e-6&&Math.abs(item.region.w-region.w)<1e-6&&Math.abs(item.region.h-region.h)<1e-6);
-    if(old)for(const key of ['title','selected','tags','seriesID','kind','role','quantity','reviewStatus','dimensionSource','width','height']){
-      if(old[key]!==undefined)regenerated[key]=structuredClone(old[key]);
-    }
-    next.push(regenerated);
-  }
+  let completed=0;
+  const created=[];
+  try{
+    next.push(...await boundedMap(plans,2,async({region,original},index)=>{
+      if(original)return original;
+      const regenerated=await extractImportCandidate(source,b,region,{mode:state.importMode,widthMM:pw,heightMM:ph,calibrated,index,lighting});
+      // Changing only colour must not reset manual names, tags, dimensions or
+      // choices, and must never cause the segmentation algorithm to rerun.
+      const old=previous.find(item=>item.region===region)||
+        previous.find(item=>item.region&&Math.abs(item.region.x-region.x)<1e-6&&Math.abs(item.region.y-region.y)<1e-6&&Math.abs(item.region.w-region.w)<1e-6&&Math.abs(item.region.h-region.h)<1e-6);
+      if(old)for(const key of ['title','selected','tags','seriesID','kind','role','quantity','reviewStatus','dimensionSource','width','height']){
+        if(old[key]!==undefined)regenerated[key]=structuredClone(old[key]);
+      }
+      created.push(regenerated);
+      toast('正在提取素材 '+(++completed)+' / '+plans.length);
+      return regenerated;
+    }));
+  }catch(error){for(const item of created)URL.revokeObjectURL(item.url);throw error;}
   if(record!==state.importRecords[state.importIndex]){for(const c of next)if(!previous.includes(c))URL.revokeObjectURL(c.url);return false;}
   for(const c of previous)if(!next.includes(c))URL.revokeObjectURL(c.url);
   state.importCandidates=plans.map(plan=>plan.region);state.importCandidateData=next;state.importCandidateURLs=next.map(c=>c.url);state.importCandidateSelection=new Set(next.flatMap((c,i)=>c.selected?[i]:[]));saveActiveImportRecord();return true;
@@ -2335,16 +2335,17 @@ async function confirmImportPhoto(){
   const rec=state.importRecords[state.importIndex];rec.selectedCandidates=(state.importCandidateData||[]).map((c,i)=>({...c,selected:state.importCandidateSelection.has(i)}));rec.confirmed=true;saveActiveImportRecord();
   const next=state.importRecords.findIndex(r=>!r.confirmed);if(next>=0)await switchImportRecord(next);else{state.importStep='review';render();}
 }
-async function organizeSavedProjects(projects,{waitForSave}={}){
+async function organizeSavedProjects(projects){
   if(!state.preferences.autoOrganizeWorks||!projects?.length)return;
   const config=structuredClone(state.aiSettings),account=state.accountId;
   if(!config.key)return; // Offline projects retain their current title/tags.
   try{
-    await waitForSave?.();
-    for(const source of projects){
+    // These works are already durably staged by the caller. The model reads
+    // their local cover while COS upload and the cloud acknowledgement run.
+    const results=await Promise.allSettled(projects.map(source=>classificationQueue.schedule(async()=>{
       if(state.accountId!==account)return;
       const complete=await db.get('projects',source.id);
-      if(!complete||complete.updatedAt!==source.updatedAt||complete.autoOrganized)continue;
+      if(!complete||complete.updatedAt!==source.updatedAt||complete.autoOrganized)return;
       let picture=null;
       if(complete.isSnapshot&&supportsVision(config)&&config.includeThumbnails){
         picture=await modelImage({blobId:complete.snapshotBlobId},null,360,false);
@@ -2352,19 +2353,21 @@ async function organizeSavedProjects(projects,{waitForSave}={}){
       const result=await classifyRecord({kind:'project',record:complete,settings:config,image:picture,assets:state.assets});
       if(state.accountId!==account)return;
       const latest=await db.get('projects',source.id);
-      if(!latest||latest.updatedAt!==source.updatedAt||latest.autoOrganized)continue;
+      if(!latest||latest.updatedAt!==source.updatedAt||latest.autoOrganized)return;
       const updated={...latest,autoOrganized:true,title:result.title||latest.title,
         styleTags:(result.styleTags||result.tags||latest.styleTags||[]).slice(0,8),updatedAt:new Date().toISOString()};
       if(updated.isSnapshot)await db.put('projects',updated);
       else await db.stageProject(updated);
       const live=state.projects.find(p=>p.id===source.id);
       if(live&&live.updatedAt===source.updatedAt)Object.assign(live,updated);
-    }
+    },{priority:'background'})));
     if(state.route==='works')render();
+    const failure=results.find(result=>result.status==='rejected');
+    if(failure)throw failure.reason;
   }catch(error){recordRuntimeIssue('handled',error,state.route,{phase:'ai'});console.warn('作品自动整理待重试，原始作品仍保留',error);if(state.accountId===account)toast(explainUserError(error,'作品自动整理'));}
 }
-async function organizeSavedAssets(records,{waitForSave,projects=[]}={}){ 
-  if(projects.length)void organizeSavedProjects(projects,{waitForSave});
+async function organizeSavedAssets(records,{projects=[]}={}){
+  if(projects.length)void organizeSavedProjects(projects);
   if(state.preferences.autoOrganize&&records.length){
     const cfg=structuredClone(state.aiSettings),accountID=state.accountId;
     if(cfg.key&&cfg.includeThumbnails&&supportsVision(cfg)){

@@ -129,7 +129,8 @@ try{
     await screenshot('material-selection',width,height);
     await choose('.view-head .actions','完成');
 
-    await click('[data-route="works"]','.works-grid');
+    await click('[data-route="works"]','.works-page');
+    if(!(await evaluate('!!document.querySelector(".works-grid")')))await click('.works-page .swift-tabs button:nth-child(1)','.works-grid');
     await choose('.view-head .actions','选择');
     await verifyTray(5);
     await screenshot('works-selection',width,height);
@@ -141,7 +142,7 @@ try{
     await choose('.view-head .actions','选择');
     await verifyDeletedTray(width,regularWidth);
     await screenshot('asset-trash-selection',width,height);
-    await click('[data-route="works"]','.works-grid');
+    await click('[data-route="works"]','.works-page');
     await click('.swift-tabs button:nth-child(5)','.recently-deleted-grid');
     await choose('.view-head .actions','选择');
     await verifyDeletedTray(width,regularWidth);
