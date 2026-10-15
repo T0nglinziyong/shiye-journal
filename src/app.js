@@ -2724,20 +2724,14 @@ window.addEventListener('online',updateSyncIndicator);
 async function runAccountStorageMigration(){
   if(!cloudEnabled)return;
   try{
-    const {prepareStorageMigration,migrationBackup}=await import('./data-migrations/registry.js');
+    const {prepareStorageMigration}=await import('./data-migrations/registry.js');
     const inventory=await db.scanLegacyAccountData();
     const plan=await prepareStorageMigration(inventory.collections,{
       assets:inventory.collections.assets,
       resolveProject:record=>db.readOriginalLegacyProject(record)
     });
-    let backup;
     openOverlay(createElement(SyncMigrationDialog,{plan,onClose:()=>{closeOverlay();if(!syncPausedByUser&&!resetWorkflowActive)void cloudResumer.resume();},
-      onBackup:async()=>{
-        backup??=await migrationBackup(plan,{account:inventory.account,revision:inventory.revision});
-        download(backup.blob,'拾页-转换前原始备份-'+new Date().toISOString().slice(0,10)+'.json');
-        return backup;
-      },onApply:async()=>{
-        if(!confirm('确认已在本机保存旧数据备份？\n转换会更新已通过校验的账号记录，其他设备的并发修改将触发版本保护。不能直接撤销数据库写入。'))throw Error('已取消转换');
+      onApply:async()=>{
         const result=await db.commitLegacyAccountMigration({expectedRevision:inventory.revision,changes:plan.changes});
         await refresh({background:true});return result;
       }}));
@@ -2752,15 +2746,7 @@ async function openSyncConflictChoice(kind,id){
   try{
     const review=await db.reviewSyncConflict(kind,id);
     openOverlay(createElement(SyncConflictDialog,{review,onClose:()=>{closeOverlay();if(!syncPausedByUser&&!resetWorkflowActive)void cloudResumer.resume();},
-      onBack:()=>void openSyncDetails(),onBackup:async()=>{
-        const saved=await db.backupSyncConflict(kind,id);
-        if(saved.serial!==review.serial||saved.revision!==review.revision)
-          throw Error('备份期间版本已变化，请重新比较');
-        download(saved.blob,'拾页-同步冲突双版本备份-'+new Date().toISOString().slice(0,10)+'.json');
-        return saved;
-      },onResolve:async(choice,label)=>{
-        if(!confirm('确认已经在 iPhone“文件”中保存双方原始备份？'))throw Error('已取消处理');
-        if(!confirm('确认“'+label+'”？这将改变待同步队列；云端数据变化时会安全拒绝，请重新比较。'))throw Error('已取消处理');
+      onBack:()=>void openSyncDetails(),onResolve:async(choice)=>{
         const {local}=review.overview;
         await db.resolveSyncConflict({kind,id,serial:review.serial,expectedRevision:review.revision,choice});
         if(review.mode==='project'&&choice==='cloud'&&state.activeProject?.id===local?.id){
@@ -2809,10 +2795,16 @@ async function openSyncDetails(){
       onWipe:()=>void handle('reset-all-account-data'),
       onRetry:async()=>{
         syncPausedByUser=false;
-        try{await flushSave();await db.flushProjects();
-          const remaining=db.syncDiagnosticReport({online:navigator.onLine})?.state.pending??syncDisplay.pending;
-          if(!remaining)toast('已同步到云端');return remaining;
-        }catch(error){toast('同步待重试：'+describeSyncError(error));throw error;}
+        try{await flushSave();await db.flushProjects();}
+        catch(error){
+          const current=db.syncDiagnosticReport({online:navigator.onLine})?.state;
+          if(!current?.conflicts){toast('同步待重试：'+describeSyncError(error));throw error;}
+          toast('仍有同步冲突；请在待同步记录中比较版本');
+        }
+        const current=db.syncDiagnosticReport({online:navigator.onLine})?.state;
+        const remaining=current?.pending??syncDisplay.pending;
+        if(!remaining)toast('已同步到云端');
+        return {remaining,conflicts:current?.conflicts??syncDisplay.conflicts};
       },onPause:()=>{
         syncPausedByUser=!syncPausedByUser;
         if(syncPausedByUser){cloudResumer.suspend();saveStatus('已暂停后台重试 · 本机修改保留');}

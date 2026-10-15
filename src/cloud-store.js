@@ -934,7 +934,7 @@ async function cloudMigrationCommit({expectedRevision,changes}){
  // B. Keep both outboxes durable and refuse overlapping records, deletes,
  // clears, tombstones or unknown corrupt queue entries.
  const conflicts=migrationPendingConflicts(changes,{projects:pendingProjects,imports:pendingImports,quarantined:projectOutboxQuarantine});
- if(conflicts.length)throw Error('有 '+conflicts.length+' 项本机待同步操作与拟转换资料重叠；原始备份和待同步数据均保留，请先处理对应项目');
+ if(conflicts.length)throw Error('有 '+conflicts.length+' 项本机待同步操作与拟转换资料重叠；待同步数据仍保留，请先处理对应项目');
  const current=await version();
  if(current!==expectedRevision)throw Error('迁移扫描后云端版本已变化，请重新扫描；未覆盖任何资料');
  const stores=[...new Set(changes.map(row=>row.store))];
@@ -998,7 +998,7 @@ async function cloudBackupBlobIDs(){
 // the network is unavailable after local staging succeeds.
 async function cloudPendingLocalSummary(){const rows=await unifiedSync.pending();return {projects:projectSyncRows(rows).length,imports:importSyncRows(rows).length,quarantined:unifiedQuarantine.length};}
 // Manual conflict handling is separate from ordinary synchronization. No
-// pending bytes are discarded until an explicit comparison/backup and choice.
+// pending bytes are discarded until the user reviews and explicitly chooses.
 async function reviewedConflict(kind,id){
  if(!['project','batch'].includes(kind)||typeof id!=='string'||!id)throw Error('冲突记录标识无效');
  await identity();
@@ -1007,26 +1007,50 @@ async function reviewedConflict(kind,id){
  if(!row)throw Error('待同步记录已改变或已完成，请重新打开同步详情');
  if(await wasCommitted(row.operationID,row.baseRevision))
    throw Error('服务器已经确认这次保存，请重新打开同步详情刷新作品');
- let local,store='projects';
+ let local,store='projects',operations=null;
  if(kind==='project')local=row.record;
  else{
-  const ops=row.record?.operations;
+  const ops=row.record?.operations||['assets','blobs','projects'].flatMap(name=>
+    (row.record?.[name]||[]).map(item=>({store:name,action:'put',item})));
   if(Array.isArray(ops)&&ops.length===1&&['projects','assets','series'].includes(ops[0]?.store)&&ops[0]?.action==='put'){
     local=ops[0].item;store=ops[0].store;
   }
-  else if(!ops&&Array.isArray(row.record?.projects)&&row.record.projects.length===1&&
+  else if(Array.isArray(ops)&&ops.length>0&&ops.length<=80&&
+    ops.every(op=>op&&typeof op.store==='string'&&['put','delete','clear'].includes(op.action)&&
+      (op.action==='clear'||typeof(op.item?.id??op.id)==='string'&&(op.item?.id??op.id)))){
+    local=row.record;store='batch';operations=ops;
+  }
+  else if(!row.record?.operations&&Array.isArray(row.record?.projects)&&row.record.projects.length===1&&
     !(row.record.assets||[]).length&&!(row.record.blobs||[]).length)
     local=row.record.projects[0];
-  else throw Error('此批次有多条不同操作，请先保留应急备份，不能只选择其中一条的版本');
+  else throw Error('此批次的操作结构无法安全核对；原始待同步记录仍保留');
  }
- if(store==='projects'?!usableProjectSnapshot(local):
+ if(store==='projects'?!usableProjectSnapshot(local):store==='batch'?false:
    !local||typeof local.id!=='string'||!local.id||typeof local.title!=='string')
-   throw Error('本机待同步记录结构不完整，请先保留应急备份');
+   throw Error('本机待同步记录结构不完整；原始待同步记录仍保留');
+ if(await wasResetAfter(row.baseRevision))
+   throw Error('账号在此修改之后执行过清空；不能把清空前的资料重新上传');
  const current=await version();
  if(current<=row.baseRevision)throw Error('云端没有比本机基线更新的版本，可直接尝试同步');
  const untouched=await canRebaseUnchangedKeys({client:cloudClient(),owner:await identity(),
-  before:row.baseRevision,after:current,operations:[{store,action:'put',item:local}]});
+  before:row.baseRevision,after:current,operations:operations||[{store,action:'put',item:local}]});
  if(untouched)throw Error('云端变化与此作品无关，请先尝试正常同步');
+ if(store==='batch'){
+  const remote=await boundedMap(operations,6,async op=>{
+   const id=op.item?.id??op.id,stored=op.action==='clear'?null:await cloudRecord(op.store,id);
+   return {store:op.store,id,action:op.action,record:stored&&op.store==='projects'&&stored.projectDocumentPath?
+     await cloudProjectDocument(stored):stored};
+  });
+  const label=`${operations.length} 条待同步变更`;
+  return {kind,id,store,mode:'batch',serial:row.serial,baseRevision:row.baseRevision,
+   revision:current,local:structuredClone(local),remote:structuredClone(remote),
+   localAllowed:!operations.some(op=>op.action==='clear'),
+   overview:{local:{id:local.id,title:label,updatedAt:null,kind:operations.map(op=>op.store+'·'+op.action).join('、')},
+    remote:{id:local.id,title:`对应云端记录 ${remote.filter(item=>item.record).length} 条`,updatedAt:null},
+    items:operations.map((op,index)=>({store:op.store,action:op.action,id:op.item?.id??op.id??null,
+      localTitle:op.item?.title||op.item?.name||null,
+      remoteTitle:remote[index].record?.title||remote[index].record?.name||null}))}};
+ }
  const stored=await cloudRecord(store,local.id);
  const remote=stored?(store==='projects'&&stored.projectDocumentPath?await cloudProjectDocument(stored):stored):null;
  const summary=project=>({id:project?.id||null,title:project?.title||'未命名作品',
@@ -1060,12 +1084,13 @@ async function cloudRestorePreConflictScene(key){
  return {id:copy.id,title:copy.title};
 }
 async function cloudConflictReview(kind,id){
- const {kind:k,id:key,store,mode,serial,baseRevision,revision,overview}=await reviewedConflict(kind,id);
- return {kind:k,id:key,store,mode,serial,baseRevision,revision,overview};
+ const {kind:k,id:key,store,mode,serial,baseRevision,revision,overview,localAllowed}=await reviewedConflict(kind,id);
+ return {kind:k,id:key,store,mode,serial,baseRevision,revision,overview,localAllowed};
 }
 async function cloudConflictBackup(kind,id){
  const review=await reviewedConflict(kind,id);
  const {kind:k,serial,baseRevision,revision,local,remote}=review;
+ if(review.mode==='batch')throw Error('混合批次无需单独备份，请直接比较并选择版本');
  const payload={format:'shiye-scene-conflict-backup',version:1,account:await identity(),
   savedAt:new Date().toISOString(),queueKind:k,pendingID:id,serial,baseRevision,
   cloudRevision:revision,local,remote};
@@ -1083,20 +1108,31 @@ async function cloudResolveProjectConflict({kind,id,serial,expectedRevision,choi
  return withAccountSyncLock(async()=>{
   const review=await reviewedConflict(kind,id);
   if(review.serial!==serial||review.revision!==expectedRevision)
-   throw Error('确认期间云端或本机版本发生变化；请重新下载双方备份');
+   throw Error('确认期间云端或本机版本发生变化；请重新比较');
   const sync=kind==='project'?projectSync:importSync;
   const {local,remote}=review;
   const pending=(await sync.pending()).find(item=>item.record?.id===id);
   if(!pending||pending.serial!==serial)throw Error('本机作品又被编辑，请重新检查版本');
+  if(review.mode==='batch'){
+   if(choice==='both')throw Error('混合批次不能自动复制为两份，请选择保留云端或本机');
+   if(choice==='cloud'){
+    await sync.resolvePending(id,serial);notifyCloudSuperseded();
+    return {choice,originalID:local.id};
+   }
+   if(!review.localAllowed)throw Error('整库清空操作不能覆盖另一设备的修改；可选择保留云端版');
+   if(review.remote.some(item=>item.store==='blobs'&&item.record))
+    throw Error('云端图片与本机图片编号重叠，不能直接覆盖；原始待同步记录仍保留');
+   await sync.resolvePending(id,serial,{record:pending.record,baseRevision:expectedRevision});
+   return {choice,originalID:local.id};
+  }
   if(review.mode==='metadata'){
-   if(choice==='both')throw Error('素材或系列不能自动复制为两份，请选择一份并保留已下载的双方原始备份');
+   if(choice==='both')throw Error('素材或系列不能自动复制为两份，请选择保留云端或本机');
    if(choice==='cloud'){
     if(!remote)throw Error('云端没有这条记录，不能选择保留云端版本');
     await sync.resolvePending(id,serial);notifyCloudSuperseded();
     return {choice,originalID:local.id,remoteID:remote.id};
    }
-   // The downloaded conflict backup preserves the remote record. Rebase the
-   // same local operation; ordinary revision CAS still guards the next upload.
+   // Rebase the same local operation; ordinary revision CAS still guards the next upload.
    await sync.resolvePending(id,serial,{record:pending.record,baseRevision:expectedRevision});
    return {choice,originalID:local.id};
   }

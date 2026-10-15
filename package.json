@@ -21,6 +21,7 @@
     "test:responsive-browser": "node tests/responsive-visual-browser.mjs",
     "test:ink-browser": "node tests/ink-render-browser.mjs",
     "test:editor-layout-browser": "node tests/editor-layout-browser.mjs",
+    "test:sync-browser": "node tests/sync-resolution-browser.mjs",
     "test:research-real": "SHIYE_RESEARCH_WARP=1 SHIYE_FULL_APP_PIPELINE=1 SHIYE_DISCOVERY=unified SHIYE_REQUIRE_REFERENCE_OR_IMPROVED=1 node tests/recognition-research-real-browser.mjs"
   },
   "devDependencies": {
