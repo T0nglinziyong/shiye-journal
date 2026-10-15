@@ -44,6 +44,10 @@ test('A-12: auto uses only verified endpoint/model capabilities; explicit overri
  assert.throws(()=>creativeProtocol({...unknown,generationMode:'direct'}),error=>error.code==='capability-unverified');
  assert.equal(creativeProtocol({...unknown,generationMode:'direct',transport:'json'}).native,false);
  assert.equal(creativeProtocol({endpoint:'https://api.deepseek.com/chat/completions',model:'deepseek-flash',transport:'auto'}).native,true);
+ assert.deepEqual(creativeProtocol({endpoint:'https://open.bigmodel.cn/api/paas/v4/chat/completions',model:'glm-4.6v',generationMode:'direct'}).request(),{});
+ assert.equal(creativeProtocol({endpoint:'https://open.bigmodel.cn/api/paas/v4/chat/completions',model:'glm-4.6v',generationMode:'agent'}).request().tool_choice,'auto');
+ assert.deepEqual(creativeProtocol({endpoint:'https://api.siliconflow.cn/v1/chat/completions',model:'Qwen/Qwen2.5-VL-72B-Instruct',generationMode:'agent'}).request(),{});
+ assert.deepEqual(creativeProtocol({endpoint:'https://open.bigmodel.cn/api/paas/v4/chat/completions',model:'glm-5.2',generationMode:'direct'}).request(),{response_format:{type:'json_object'}});
  assert.throws(()=>creativeProtocol({endpoint:'https://api.deepseek.com/chat/completions',model:'unknown',transport:'auto',generationMode:'agent'}),error=>error.code==='capability-unverified');
 });
 

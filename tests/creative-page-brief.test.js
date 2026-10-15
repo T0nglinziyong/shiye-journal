@@ -50,6 +50,8 @@ test('API editable, web editable and API/web image handoffs share the same compo
   assert.match(strFromU8(webFiles['task/GUIDE.txt']),/连贯的多行正文/);
   assert.match(strFromU8(webFiles['task/GUIDE.txt']),/避免所有内容挤在一角/);
   assert.match(strFromU8(webFiles['task/GUIDE.txt']),/纸片错层/);
+  assert.match(strFromU8(webFiles['task/GUIDE.txt']),/主图与旁注、错层图文/);
+  assert.match(api[0].content,/主图与旁注、错层图文/);
   assert.ok(JSON.parse(strFromU8(webFiles['task/context.json'])).materials[0].journalRoles.includes('writing'));
   assert.equal(JSON.parse(strFromU8(webFiles['task/knowledge.json'])).caseStudies.families[0].id,'paper-collage');
   const image=imagePrompt({project:p,draft:p.drafts[0],assets:[asset],ids:[asset.id],theme:p.intent,includeImages:false,textMode:'rich'});
@@ -64,6 +66,17 @@ test('API editable, web editable and API/web image handoffs share the same compo
   const imageFiles=unzipSync(new Uint8Array(await webImage.blob.arrayBuffer()));
   assert.ok(strFromU8(imageFiles['task/GUIDE.txt']).includes(image));
   assert.equal(JSON.parse(strFromU8(imageFiles['task/knowledge.json'])).caseStudies.families[0].id,'paper-collage');
+});
+
+test('API and web task honor the same optional structure guidance',async()=>{
+  const p=task(),options={draft:p.drafts[0],assets:[asset],aliases:{m1:asset.id},
+    prompt:p.intent,styles:p.styles,pagePurposes:p.purposes,includeStructureReference:false};
+  const api=buildCreativeMessages(options);
+  const web=await createOfflineHandoff({project:p,assets:[asset],aliases:{m1:asset.id},
+    settings:{includeThumbnails:false,includeStructureReference:false}});
+  const files=unzipSync(new Uint8Array(await web.blob.arrayBuffer()));
+  assert.doesNotMatch(api[0].content,/主图与旁注、错层图文/);
+  assert.doesNotMatch(strFromU8(files['task/GUIDE.txt']),/主图与旁注、错层图文/);
 });
 
 test('both editable and image transports receive the same spread-specific page balance direction',async()=>{

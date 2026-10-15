@@ -13,6 +13,7 @@ import {visualStyleBrief} from './creative-style-brief.js';
 import {creativeLayeringGuide} from './creative-layering-guide.js';
 import {creativeContentBrief} from './creative-content-brief.js';
 import {creativePageBrief} from './creative-page-brief.js';
+import {structureReferenceGuide} from './creative-design-guide.js';
 import {sceneFingerprint} from './offline-result-review.js';
 import {applyScenePatch,patchSceneHash} from './scene-patch.js';
 import {createCreativeBudget} from './ai-budget.js';
@@ -50,7 +51,7 @@ export function buildCreativeMessages(o){
  const policy=effectiveTextMode==='none'?'不生成文字。':effectiveTextMode==='requested'?'仅用户明确要求文字时配文。':'按用途生成真实内容的图文手账。';
  const pageBrief=creativePageBrief({styles,purposes:pagePurposes,textMode:effectiveTextMode,contentPolicy,textPresentation,userText,theme:prompt,pageMode:draft.pageMode});
  const spreadPreference=draft.pageMode==='spread'?'双页是一张加宽画布，中心 x=0.5 为装订中缝。优先把每件实体素材完整安排在左半页或右半页，尽量不要横跨中缝；这是视觉建议而非强制规则，合理的跨页设计允许保留。':'';
- const reference=includeStructureReference?'可以参考主图与旁注、错层图文、分栏收藏或留白封面等不同阅读结构；根据本次真实素材和用途自由选择，不复制固定坐标。':'';
+ const reference=includeStructureReference?structureReferenceGuide:'';
  const mode=creativeProtocol(o).instruction;
  const first=[{type:'text',text:`【本次任务】\n纸张：${draft.pageRatio} ${draft.pageMode==='spread'?'双页':'单页'}，物理高${draft.physicalPageHeightMM}mm。\n风格：${styles.map(name=>`${name}（${visualStyleBrief(name)}）`).join('；')||'不预设，由素材和主题决定'}。\n用途：${pagePurposes.map(p=>p+'：'+(purposes[p]||'遵守主题要求。')).join('\n')||'不预设，由本次主题决定'}\n${contentBrief}\n优先级：必须使用每版落实；优先使用先考虑，合适时采用；可以使用只是备选；不使用的素材未发送，不得猜测或引用。\n【构思参考（非硬性配额）】\n${pageBrief}\n${spreadPreference}\n优先素材逐件审视：合适的多用，不适合的可以不放；不按数量或覆盖率评分。数字图形也可以成为视觉主角，但不能伪装成未拥有的真实素材。\n【真实素材】\n${list.join('\n')}\n【当前画布】\n${JSON.stringify(creativeScene(draft,aliases))}`}];
  const snapshotMode=['image','pdf'].includes(o.deliveryMode);
@@ -73,7 +74,7 @@ export function buildCreativePayload(o,messages){
 }
 export async function runCreativeAgent(o){
  if(o.deliveryMode==='image')throw Error('画面图片必须由图像模型直接生成，不能把可编辑页面截图伪装成生成图片');
- const {draft,assets,aliases,key,endpoint='https://api.deepseek.com/chat/completions',maxTurns=5,requestTimeout=75,signal,onTurn=()=>{},request=fetch,onScene,onInspection}=o;
+ const {draft,assets,aliases,key,endpoint='https://api.deepseek.com/chat/completions',maxTurns=12,requestTimeout=75,signal,onTurn=()=>{},request=fetch,onScene,onInspection}=o;
  if(!key?.trim())throw Error('请输入自己的 API 密钥');if(new URL(endpoint).protocol!=='https:')throw Error('API 地址必须使用 HTTPS');
  const options={...o,visualAssetIDs:visualMaterialIDs(o.images,o.aliases),textMode:o.contentPolicy==='visual'?'none':o.textMode,allowNoText:o.contentPolicy==='visual'||o.textMode==='none'||o.textMode==='requested'&&!/文字|正文|标题|写|清单/.test(o.prompt||'')};
  let working=attachSceneV2(structuredClone(draft)),turn=0,noProgress=0,nextPhase='creation';if(working.agentRun?.status==='finished')working.agentRun={...working.agentRun,status:'editing'};const messages=buildCreativeMessages({...options,draft:working}),budget=createCreativeBudget(maxTurns);

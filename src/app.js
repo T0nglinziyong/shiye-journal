@@ -827,7 +827,7 @@ function readAIForm(){
     autoIncludeRecommendations:q('auto-recommendations').checked,
     requireAllCandidates:q('require-all').checked,
     includeThumbnails:vision,customVision:false,finalVisualReview:false,
-    temperature:q('temperature').value,maxTurns:q('turns').value,
+    temperature:q('temperature').value,
     requestTimeout:q('timeout').value,customLayoutPrompt:q('layout-prompt').value};
 }
 
@@ -1631,7 +1631,7 @@ async function startAICreation(){
  let recorder;const projectID=targetProject.id,draftID=sourceDraft.id,controller=new AbortController();let commitTargetID=draftID,expectedDraft=structuredClone(sourceDraft),candidateCreated=false;
  const sourceVersions=new Map(ids.map(id=>[id,assetSourceRevision(findAsset(id))]));
  const assertRun=()=>{if(controller.signal.aborted||state.accountId!==accountID)throw Error('创作已停止或账号已切换');for(const [id,version] of sourceVersions){const current=state.assets.find(a=>a.id===id);if(!current||assetSourceRevision(current)!==version)throw Error('创作期间素材来源或标定已变化，已停止旧条件下的生成');}};
- checkpoint();aiController=controller;state.aiBusy=true;state.aiProgress='正在准备素材预览…';aiReport={date:new Date().toISOString(),model,parameters:{generationMode:cfg.generationMode,temperature:cfg.temperature,maxTokens:cfg.maxTokens,maxTurns:cfg.maxTurns,materialCount:ids.length},rounds:[],outcome:'started'};render();
+ checkpoint();aiController=controller;state.aiBusy=true;state.aiProgress='正在准备素材预览…';aiReport={date:new Date().toISOString(),model,parameters:{generationMode:cfg.generationMode,temperature:cfg.temperature,maxTokens:cfg.maxTokens,materialCount:ids.length},rounds:[],outcome:'started'};render();
  try{
   recorder=await createAIRecorder({db,model,key,accountId:state.accountId||'browser'});const aliases=materialAliases(ids),vision=supportsVision(cfg);
   const images=vision?await prepareMaterialPreviews(ids,{findAsset,createImage:async(...args)=>{assertRun();return modelImage(...args);}}):[];assertRun();

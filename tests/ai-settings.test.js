@@ -10,8 +10,9 @@ test('creative delivery settings survive save and reload without changing provid
   const settings={deliveryMode:'image',provider:'custom',key:'test-value',endpoint:'https://example.invalid/chat/completions',model:'example-model',temperature:1.25,maxTokens:10000,maxTurns:4,includeThumbnails:false,transport:'json',textMode:'none',reasoningMode:'providerDefault',requestTimeout:120,sendOutputLimit:false,disableThinking:false,includeStructureReference:false,sendPresetReferences:true,autoIncludeRecommendations:true,requireAllCandidates:false,customLayoutPrompt:'保留大块留白'};
   const saved=saveAISettings(settings,storage),restored=loadAISettings(storage);
   assert.deepEqual(restored,saved);
-  for(const [key,value] of Object.entries(settings))if(key!=='includeThumbnails')assert.deepEqual(restored[key],value,key);
+  for(const [key,value] of Object.entries(settings))if(!['includeThumbnails','maxTurns'].includes(key))assert.deepEqual(restored[key],value,key);
   assert.equal(restored.includeThumbnails,true,'image creation includes source material even when an old toggle was off');
+  assert.equal('maxTurns' in restored,false);
   assert.equal(restored.generationMode,'direct');
 });
 
@@ -23,9 +24,7 @@ test('invalid current settings normalize to bounded defaults',()=>{
   assert.equal(defaults.textMode,'automatic');
   assert.equal(defaults.reasoningMode,'automatic');
   assert.equal(defaults.sendPresetReferences,true);
-  assert.equal(defaults.maxTurns,16);
-  assert.equal(normalizeAISettings({maxTurns:0}).maxTurns,5);
-  assert.equal(normalizeAISettings({maxTurns:-1}).maxTurns,1);
+  assert.equal('maxTurns' in defaults,false);
   assert.equal(normalizeAISettings({reasoningMode:'providerDefault'}).reasoningMode,'providerDefault');
   assert.equal(normalizeAISettings({reasoningMode:'toString'}).reasoningMode,'automatic');
   assert.equal(normalizeAISettings(null).provider,'openai');

@@ -18,7 +18,7 @@ test('account-scoped AI metadata preserves provider keys and all model preferenc
   assert.equal(restored.creationMode,'json');
   assert.equal(restored.includeThumbnails,false);
   assert.equal(restored.sendPresetReferences,false);
-  assert.equal(restored.maxTurns,9);
+  assert.equal('maxTurns' in restored,false);
   assert.equal(restored.temperature,1.3);
   settings.keys.custom='mutated';
   assert.equal(item.settings.keys.custom,'sk-private-abc');

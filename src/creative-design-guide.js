@@ -3,6 +3,7 @@
 import {creativeLayeringGuide} from './creative-layering-guide.js';
 import {creativePageBrief} from './creative-page-brief.js';
 import {journalReferenceGuide,selectJournalReferenceCases} from './journal-reference-catalog.js';
+export const structureReferenceGuide='可以参考主图与旁注、错层图文、分栏收藏或留白封面等不同阅读结构；根据本次真实素材和用途自由选择，不复制固定坐标。';
 const styleMethods={
   韩系清新:'低饱和浅绿与浅粉、轻纸感和有节奏的间距；主素材之外用短标题、多行记录与少量柔和色块承托内容，避免每块都加白底。',
   美式拼贴:'对比鲜明的色块与有方向的错层、票据/字块/贴纸互相搭接；保持一个最醒目的标题和可追踪的阅读路线。',

@@ -9,7 +9,7 @@ export function publicAIDiagnosticReport(report){
  const budget=report.budget||{},parameters=report.parameters||{};
  return {
   date:report.date,model:redact(String(report.model||'')).slice(0,120),
-  parameters:{generationMode:['agent','direct'].includes(parameters.generationMode)?parameters.generationMode:'unknown',temperature:numberOrNull(parameters.temperature),maxTokens:numberOrNull(parameters.maxTokens),maxTurns:numberOrNull(parameters.maxTurns),materialCount:numberOrNull(parameters.materialCount)},
+  parameters:{generationMode:['agent','direct'].includes(parameters.generationMode)?parameters.generationMode:'unknown',temperature:numberOrNull(parameters.temperature),maxTokens:numberOrNull(parameters.maxTokens),materialCount:numberOrNull(parameters.materialCount)},
   rounds:(report.rounds||[]).map(round=>({turn:numberOrNull(round.turn),tools:(round.tools||[]).map(tool=>({name:SAFE_TOOLS.has(tool.name)?tool.name:'unknown',ok:tool.ok===true})),review:{materials:numberOrNull(round.review?.materials),textBlocks:numberOrNull(round.review?.textBlocks),graphics:numberOrNull(round.review?.graphics),warningCount:round.review?.warnings?.length||0}})),
   outcome:['completed','failed','stopped','started'].includes(report.outcome)?report.outcome:'failed',stopReason:safeReason(report.stopReason||budget.stopReason||report.outcome),
   budget:{limit:numberOrNull(budget.limit),totalRequests:numberOrNull(budget.totalRequests),creationRequests:numberOrNull(budget.creationRequests),formatRepairRequests:numberOrNull(budget.formatRepairRequests),visualReviewRequests:numberOrNull(budget.visualReviewRequests)}

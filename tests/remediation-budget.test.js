@@ -2,9 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {normalizeAISettings} from '../src/ai-settings.js';
 
-test('A-10 configured AI turn budget is not silently capped at five',()=>{
-  assert.equal(normalizeAISettings({maxTurns:12}).maxTurns,12);
-  assert.equal(normalizeAISettings({maxTurns:20}).maxTurns,20);
-  assert.equal(normalizeAISettings({maxTurns:100}).maxTurns,20);
-  assert.equal(normalizeAISettings({}).maxTurns,5);
+test('AI request budget is internal, not a saved conversation setting',()=>{
+  assert.equal('maxTurns' in normalizeAISettings({maxTurns:12}),false);
+  assert.equal('maxTurns' in normalizeAISettings({}),false);
 });

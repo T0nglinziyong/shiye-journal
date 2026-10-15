@@ -135,6 +135,7 @@ window.document.querySelector('#top-settings').click();
 await waitFor(()=>!!window.document.querySelector('.settings-list'));
 openSettings('AI 与创作');
 await waitFor(()=>!!window.document.querySelector('[data-react-page="settingsAI"]'));
+assert.equal(window.document.querySelector('#setting-ai-turns'),null);
 const model=window.document.querySelector('#setting-ai-model');
 model.value='__custom__';
 model.dispatchEvent(new window.Event('change',{bubbles:true}));

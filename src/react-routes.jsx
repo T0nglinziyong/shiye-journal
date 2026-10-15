@@ -1497,7 +1497,6 @@ export function SettingsAIPage({settings,onAction}){
       <input id="setting-ai-provider-keys" type="hidden" value={JSON.stringify(keys)}/>
       <p>{vision?'所选模型支持图片输入，创作时自动发送素材封面。':'所选模型按纯文字输入处理，创作时发送素材信息。'}密钥仅保存在本浏览器。</p>
       <AINumber id="temperature" label="创意程度 0–2" value={cfg.temperature} min="0" max="2" step="0.05"/>
-      <AINumber id="turns" label="最多创作轮次" value={cfg.maxTurns} min="1" max="20"/>
       <AINumber id="timeout" label="连续无响应超时（秒）" value={cfg.requestTimeout} min="20" max="180"/>
     </section>
   </SettingsDetailShell>;

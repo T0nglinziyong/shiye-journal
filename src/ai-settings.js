@@ -1,6 +1,5 @@
 import {deliveryProfile} from './ai-delivery.js';
 import {IMAGE_MODELS} from './ai-image-generation.js';
-import {creativeRequestLimit} from './ai-budget.js';
 import {verifiedModelCapabilities} from './ai-capabilities.js';
 const STORAGE_KEY='shiye-ai-settings-v2';
 export const AI_PROVIDERS=Object.freeze({
@@ -10,7 +9,7 @@ export const AI_PROVIDERS=Object.freeze({
   siliconflow:{label:'硅基流动',endpoint:'https://api.siliconflow.cn/v1/chat/completions',models:[['Qwen/Qwen2.5-VL-72B-Instruct','Qwen2.5-VL 72B',true],['deepseek-ai/DeepSeek-V3','DeepSeek V3',false]]},
   custom:{label:'自定义兼容接口',endpoint:'',models:[]}
 });
-export const AI_DEFAULTS=Object.freeze({provider:'openai',key:'',keys:{},endpoint:AI_PROVIDERS.openai.endpoint,model:'gpt-4.1',imageModel:IMAGE_MODELS[0],creationMode:'tools',deliveryMode:'tools',generationMode:'agent',temperature:.75,maxTokens:6000,maxTurns:5,includeThumbnails:true,finalVisualReview:true,customVision:false,requestTimeout:75,sendOutputLimit:true,disableThinking:true,transport:'auto',textMode:'automatic',reasoningMode:'automatic',includeStructureReference:true,sendPresetReferences:true,autoIncludeRecommendations:false,requireAllCandidates:true,customLayoutPrompt:''});
+export const AI_DEFAULTS=Object.freeze({provider:'openai',key:'',keys:{},endpoint:AI_PROVIDERS.openai.endpoint,model:'gpt-4.1',imageModel:IMAGE_MODELS[0],creationMode:'tools',deliveryMode:'tools',generationMode:'agent',temperature:.75,maxTokens:6000,includeThumbnails:true,finalVisualReview:true,customVision:false,requestTimeout:75,sendOutputLimit:true,disableThinking:true,transport:'auto',textMode:'automatic',reasoningMode:'automatic',includeStructureReference:true,sendPresetReferences:true,autoIncludeRecommendations:false,requireAllCandidates:true,customLayoutPrompt:''});
 const limit=(value,min,max,fallback)=>Number.isFinite(+value)?Math.min(max,Math.max(min,+value)):fallback;
 export function normalizeAISettings(value={}){
   if(!value||typeof value!=='object'||Array.isArray(value))value={};
@@ -30,7 +29,6 @@ export function normalizeAISettings(value={}){
     ...deliveryProfile(creationMode),imageModel:IMAGE_MODELS.includes(value.imageModel)?value.imageModel:AI_DEFAULTS.imageModel,
     temperature:limit(value.temperature,0,2,AI_DEFAULTS.temperature),
     maxTokens:Math.round(limit(value.maxTokens,2000,16000,AI_DEFAULTS.maxTokens)),
-    maxTurns:creativeRequestLimit(value.maxTurns),
     // Image delivery follows the selected model's input capability. The old
     // persisted thumbnail toggle must not silently disable a vision model.
     includeThumbnails:creationMode==='image'||verifiedModelCapabilities({endpoint:typeof value.endpoint==='string'&&value.endpoint.trim()?value.endpoint.trim():preset.endpoint,model})?.vision===true,
