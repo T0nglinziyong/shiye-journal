@@ -3,9 +3,7 @@ import assert from 'node:assert/strict';
 import {Window} from 'happy-dom';
 import {reconcileKeyedChildren,reconcileLayerBranches} from '../src/ui-keyed-dom.js';
 import {patchImportInspection} from '../src/import-incremental.js';
-import {patchMaterialCatalog,patchWorksCatalog} from '../src/catalog-incremental.js';
 import {syncBusyControls} from '../src/ui-disabled-state.js';
-import {patchAISettingsModel} from '../src/settings-incremental.js';
 
 function fixture(markup,run){
   const previous=globalThis.document,window=new Window({url:'http://localhost/'});
@@ -79,35 +77,6 @@ test('import recognition status updates do not detach photo, quadrilateral or qu
     assert.equal(patchImportInspection(view,'<div class="import-review"></div>'),null);
   });
 });
-test('material catalog patches only changed item and preserves unaffected thumbnail',()=>{
-  const card=(id,title,signature)=>'<button class="card" data-act="detail" data-id="'+id+
-    '" data-card-revision="'+signature+'"><img src="blob:'+id+'"><strong>'+title+'</strong></button>';
-  const shell=cards=>'<div class="view-head">Head</div><div class="filters">Filter</div>'+
-    '<div class="asset-grid"><button class="card action-card">Add</button>'+cards+'</div>';
-  fixture('<main id="view">'+shell(card('a','A','1')+card('b','B','1'))+'</main>',doc=>{
-    const root=doc.querySelector('#view'),a=root.querySelector('[data-id="a"]'),
-      b=root.querySelector('[data-id="b"]'),img=a.querySelector('img');
-    const result=patchMaterialCatalog(root,shell(card('a','A','1')+card('b','B2','2')));
-    assert.ok(result);
-    assert.equal(root.querySelector('[data-id="a"]'),a);
-    assert.equal(root.querySelector('[data-id="a"] img'),img);
-    assert.notEqual(root.querySelector('[data-id="b"]'),b);
-    assert.equal(root.querySelector('[data-id="b"] strong').textContent,'B2');
-  });
-});
-test('model provider updates only connector subtree and keeps details node expanded',()=>{
-  const current='<div class="settings-page"><section class="settings-detail"><details id="ai-model-group" open>'+
-    '<summary>模型与连接</summary><div><input id="setting-ai-provider" value="a"></div></details></section></div>';
-  const updated=current.replace('value="a"','value="b"');
-  fixture('<main id="view">'+current+'</main>',doc=>{
-    const root=doc.querySelector('#view'),node=root.querySelector('#ai-model-group');
-    assert.equal(patchAISettingsModel(root,updated),true);
-    assert.equal(root.querySelector('#ai-model-group'),node);
-    assert.equal(node.open,true);
-    assert.equal(node.querySelector('input').getAttribute('value'),'b');
-  });
-});
-
 test('empty-state placeholder disappears when the first keyed proposal arrives',()=>{
   fixture('<div id="list"><p>尚未生成方案</p></div><div id="next">'+
     '<article data-variant="run1">方案 1</article></div>',doc=>{
@@ -125,23 +94,5 @@ test('busy controls re-enable without overriding permanently disabled controls',
     syncBusyControls(root,'button',false);
     assert.equal(a.disabled,false);assert.equal(b.disabled,true);
     assert.equal(a.hasAttribute('data-ui-busy-disabled'),false);
-  });
-});
-test('works catalog keeps action tiles and unaffected project thumbnail nodes',()=>{
-  const work=(id,title,revision)=>'<button class="card" data-id="'+id+
-    '" data-act="open-project" data-work-revision="'+revision+
-    '"><img src="blob:'+id+'"><span>'+title+'</span></button>';
-  const wrapper=rows=>'<div class="works-page"><div class="works-grid">'+rows+'</div></div>';
-  fixture('<main id="view">'+wrapper('<button class="work-entry">创建作品</button>'+
-    work('a','A','1')+work('b','B','1'))+'</main>',doc=>{
-    const view=doc.querySelector('#view'),grid=view.querySelector('.works-grid'),
-      tile=grid.querySelector('.work-entry'),image=grid.querySelector('[data-id="a"] img');
-    let clicks=0;tile.onclick=()=>clicks++;
-    const result=patchWorksCatalog(view,wrapper(work('a','A','1')+work('b','B updated','2')));
-    assert.ok(result);
-    assert.equal(grid.querySelector('.work-entry'),tile);
-    assert.equal(grid.querySelector('[data-id="a"] img'),image);
-    assert.equal(result.touched.length,1);
-    tile.click();assert.equal(clicks,1);
   });
 });

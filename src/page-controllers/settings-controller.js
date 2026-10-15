@@ -1,16 +1,7 @@
 export function createSettingsController({
-  renderHTML,patchModel,view,state,binder,actions,render
+  actions,render
 }){
   return {
-    render:renderHTML,
-    patch(){
-      if(view.querySelector('[data-react-page="settingsAI"]'))return false;
-      if(state.settingsSection!=='AI 与创作'||
-         view.dataset.renderedRoute!=='settings'||
-         view.dataset.renderedSettingsSection!==state.settingsSection||
-         !patchModel(view,renderHTML()))return false;
-      binder({partial:true});return true;
-    },
     mount(lifetime){
       lifetime.use(actions.subscribe(event=>{
         if(event.scope==='settings')render();

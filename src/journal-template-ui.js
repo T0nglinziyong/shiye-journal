@@ -45,9 +45,6 @@ export function mountJournalTemplateGallery(c,viewState){
   if(filters){
     filters.dataset.templateFilters='true';
     search.placeholder='搜索模板名称或标签';search.setAttribute('aria-label','搜索模板');
-    type.innerHTML='<option value="all">全部类型</option><option value="preset">预设模板</option><option value="user">我的模板</option>';
-    status.innerHTML='<option value="all">全部状态</option><option value="with-case">有对应案例</option><option value="without-case">暂无案例</option>';
-    sort.innerHTML='<option value="default-desc">默认顺序 · 降序</option><option value="default-asc">默认顺序 · 升序</option><option value="name-asc">名称 · 升序</option><option value="name-desc">名称 · 降序</option>';
   }
   const saved=viewState.templateFilters||{query:'',type:'all',status:'all',sort:'default-asc'};
   if(search)search.value=saved.query;if(type)type.value=saved.type;if(status)status.value=saved.status;if(sort)sort.value=saved.sort;

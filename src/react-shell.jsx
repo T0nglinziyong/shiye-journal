@@ -1,10 +1,9 @@
-import React,{useLayoutEffect} from 'react';
+import React from 'react';
 import {createRoot} from 'react-dom/client';
 import {flushSync} from 'react-dom';
 
-// The shell is the single React root. Route templates are kept byte-for-byte
-// while their controllers move to components; editors and the image loader
-// continue to own their imperative canvas/Blob resources.
+// The shell and every route are React roots. The canvas and image loader own
+// only their resource nodes, not a fallback HTML page renderer.
 function AppShell(){
   return <>
     <header className="topbar"><div className="brand"><b>♧</b><div><strong>拾页</strong><small>COLLECT. COMPOSE.</small></div></div><nav className="main-nav" aria-label="主导航">
@@ -21,17 +20,8 @@ let root;
 let routeRoot;
 let routeRootKey=null;
 
-// The recognition workspace, Matching controls and canvas engine still own
-// gesture-heavy DOM lifetimes. They mount as React route islands so a route
-// switch has one lifecycle, while their existing incremental patchers can
-// keep the exact photo/canvas nodes currently under a pointer.
-function ImperativeRoute({html}){
-  useLayoutEffect(()=>{
-    document.querySelector('#view').innerHTML=html;
-  },[html]);
-  return null;
-}
-export const imperativeRoute=html=><ImperativeRoute html={html}/>;
+export const unavailableRoute=()=>
+  <section className="empty" role="alert"><strong>页面暂不可用</strong><p>请返回素材库后重试。</p></section>;
 
 export function mountReactShell(){
   if(root)return;
@@ -39,17 +29,19 @@ export function mountReactShell(){
   if(!host)throw Error('缺少应用挂载位置');
   root=createRoot(host);
   flushSync(()=>root.render(<AppShell/>));
-  document.querySelector('#view').innerHTML='<section class="empty"><strong>正在打开拾页…</strong><p>正在读取当前账号的本机缓存。</p></section>';
+  routeRoot=createRoot(document.querySelector('#view'));
+  flushSync(()=>routeRoot.render(<section className="empty">
+    <strong>正在打开拾页…</strong><p>正在读取当前账号的本机缓存。</p>
+  </section>));
 }
 
 export function renderReactPage(content,{preserveKey=null}={}){
   if(!root)mountReactShell();
-  if(routeRoot&&(!preserveKey||routeRootKey!==preserveKey||!React.isValidElement(content))){
+  if(!React.isValidElement(content))throw Error('页面必须由 React 组件渲染');
+  if(routeRoot&&(!preserveKey||routeRootKey!==preserveKey)){
     flushSync(()=>routeRoot.unmount());routeRoot=null;routeRootKey=null;
   }
   const view=document.querySelector('#view');
-  if(React.isValidElement(content)){
-    if(!routeRoot){view.replaceChildren();routeRoot=createRoot(view);routeRootKey=preserveKey;}
-    flushSync(()=>routeRoot.render(content));
-  }else view.innerHTML=content;
+  if(!routeRoot){view.replaceChildren();routeRoot=createRoot(view);routeRootKey=preserveKey;}
+  flushSync(()=>routeRoot.render(content));
 }

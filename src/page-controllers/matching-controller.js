@@ -27,9 +27,8 @@ export function registerMatchingActions(store,{addMatchingFromRecommendation}){
   },['.match-basket-scroll','.basket>.muted','.match-rec-grid',
     '.match-recommendations .match-panel-head small','.match-action']);
 }
-export function createMatchingController({renderHTML,actions,updateMatchingRegions,queueDefaults}){
+export function createMatchingController({actions,updateMatchingRegions,queueDefaults}){
   return {
-    render:renderHTML,
     mount(lifetime){
       lifetime.use(actions.subscribe(event=>{
         if(event.scope!=='matching')return;

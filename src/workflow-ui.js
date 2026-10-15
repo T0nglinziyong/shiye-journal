@@ -239,13 +239,9 @@ export function mountWorkflowControls(c) {
 function mountCatalogSticky(view,route){
   if(!['library','series','works'].includes(route))return;
   const root=view.querySelector('.series-contents,.works-page')||view;
-  const existing=[...root.children].find(child=>child.classList?.contains('catalog-toolbar'));
-  if(existing){const top=document.querySelector('.topbar');if(top)existing.style.setProperty('--catalog-top',top.getBoundingClientRect().height+'px');return;}
-  const parts=route==='library'&&root.classList.contains('series-contents')?['.series-navigation','.series-heading','.series-filters']:route==='series'?['.view-head','.swift-tabs','.swift-series-controls']:['.view-head','.swift-tabs','.filters'];
-  const nodes=parts.map(selector=>root.querySelector(selector)).filter(Boolean);
-  if(!nodes.length)return;
-  const wrap=document.createElement('div');wrap.className='catalog-toolbar';nodes[0].before(wrap);wrap.append(...nodes);
-  const top=document.querySelector('.topbar');if(top)wrap.style.setProperty('--catalog-top',top.getBoundingClientRect().height+'px');
+  const toolbar=[...root.children].find(child=>child.classList?.contains('catalog-toolbar'));
+  const top=document.querySelector('.topbar');
+  if(toolbar&&top)toolbar.style.setProperty('--catalog-top',top.getBoundingClientRect().height+'px');
 }
 function mountSeries(c) {
   const {state,view,render,openSeriesEditor}=c,actions=view.querySelector('.view-head .actions');
@@ -261,6 +257,11 @@ function mountSeries(c) {
     cards.forEach((card,index)=>{card.style.order=String(index+1);});applyCatalogPage({view,key:'series',cards,matched:card=>{const s=state.series.find(s=>s.id===card.dataset.id);return isActive()&&parity.showOnlySelected?parity.selected.has(s.id):!q||searchableSeries(s,state.assets).includes(q);},countNode:count,size:state.preferences.maxPageItems});};view.catalogRefresh=update;
   input.oninput=()=>{resetCatalogPage('series');update();};sort.onchange=()=>{resetCatalogPage('series');update();};update();
   for(const card of cards) {
+    card.addEventListener('click',()=>{
+      if(isActive())return;
+      parity.seriesScrollY=window.scrollY;
+      parity.restoreSeriesScroll=true;
+    });
     card.addEventListener('click',e=>{if(!isActive())return;e.stopImmediatePropagation();e.preventDefault();const id=card.dataset.id;parity.selected.has(id)?parity.selected.delete(id):parity.selected.add(id);sync();},true);
     const menu=()=>{if(isActive())return;c.body.innerHTML='<h2>系列操作</h2><div class="stack" id="series-card-menu"></div>';const list=c.body.querySelector('#series-card-menu');list.append(button('查看系列详情',()=>{c.modal.close();card.click();}),button('编辑信息与标签',()=>{c.modal.close();openSeriesEditor(card.dataset.id);}));c.modal.showModal();};card.oncontextmenu=e=>{e.preventDefault();menu();};card.onkeydown=e=>{if(e.key==='ContextMenu'||(e.shiftKey&&e.key==='F10')){e.preventDefault();menu();}};
   }
@@ -287,6 +288,10 @@ function mountSeries(c) {
     more,remove
   );view.append(tray);
   function sync(){const active=isActive();tray.hidden=!active;entry.disabled=active;view.querySelector('.library-select-toggle').textContent=parity.selectionMode?'完成':'选择';for(const card of cards){card.classList.toggle('batch-selected',active&&parity.selected.has(card.dataset.id));if(active)card.setAttribute('aria-pressed',String(parity.selected.has(card.dataset.id)));else card.removeAttribute('aria-pressed');}tray.querySelector('strong').textContent='本次选中 '+parity.selected.size+' 个系列';tray.querySelectorAll('button').forEach((b,i)=>{b.disabled=i>0&&!parity.selected.size;if(i===2)b.querySelector('.selection-action-label').textContent=parity.showOnlySelected?'返回筛选':'查看所选';});update();return true;}registerSelectionPresenter(view,sync);
+  if(parity.restoreSeriesScroll)requestAnimationFrame(()=>{
+    window.scrollTo(0,parity.seriesScrollY||0);
+    parity.restoreSeriesScroll=false;
+  });
 }
 function selectedTray(c,selector){
   const {view}=c,tray=document.createElement('div');tray.className='swift-tray manage library-management-tray';

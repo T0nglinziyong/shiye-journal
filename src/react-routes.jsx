@@ -1,6 +1,8 @@
 import React,{useEffect,useState} from 'react';
 import {AI_PROVIDERS,supportsVision} from './ai-settings.js';
 import {seriesContentsModel} from './series-contents.js';
+import {libraryPageData} from './library-page-data.js';
+import {setCatalogDataPage} from './catalog-pagination.js';
 import {paperPresets} from './paper-sizes.js';
 import {candidateDiscoveryOptions,recognitionOptions,recognitionPixelOptions,
   recognitionMethodDetails} from './recognition-profiles.js';
@@ -13,6 +15,8 @@ import {FabricSceneStage} from './fabric-scene-stage.jsx';
 import {FabricEditorToolbar,FabricHeaderMenu} from './fabric-editor-controls.jsx';
 import {FabricPageViewport} from './fabric-page-viewport.jsx';
 import {SceneCover} from './scene-cover.jsx';
+import {WORK_TABS} from './work-collections.js';
+import {pageSize,pageSlice} from './catalog-pagination.js';
 
 function RouteImage({asset,source,priority=false}){
   const src=asset&&(source(asset.blobId)||asset.staticPath);
@@ -29,10 +33,111 @@ function DetailLinkIcon({kind}){
     strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{lines}</svg></span>;
 }
 
-function PageHeading({title}){
+function PageHeading({title,actions=null}){
   return <div className="view-head unified-page-heading"><div className="unified-heading-copy">
     <span className="eyebrow">FROM YOUR DESK TO YOUR PAGES</span><h1>{title}</h1>
-  </div><div className="actions"/></div>;
+  </div><div className="actions">{actions}</div></div>;
+}
+
+function CatalogTabs({tabs,active,onChange}){
+  return <div className="swift-tabs">{tabs.map(([id,label])=><button type="button" key={id}
+    className={id===active?'selected':''} onClick={()=>onChange(id)}>{label}</button>)}</div>;
+}
+
+const materialTabs=[['series','系列'],['all','全部素材'],['pending','待检测'],['trash','最近删除']];
+
+export function RecentlyDeletedPage({kind,state,source,localCover,cloudEnabled,onTabChange,
+  onTrashChange,onError}){
+  const [choosing,setChoosing]=useState(false);
+  const [selected,setSelected]=useState(()=>new Set());
+  const [busy,setBusy]=useState(false);
+  const [page,setPage]=useState(1);
+  const records=state.trash.filter(entry=>entry.kind===kind)
+    .sort((a,b)=>Date.parse(b.date)-Date.parse(a.date));
+  const limit=pageSize(state.preferences.maxPageItems);
+  const range=pageSlice(records.length,limit,page);
+  const visible=records.slice(range.start,range.end);
+  const toggle=id=>setSelected(prior=>{
+    const next=new Set(prior);
+    next.has(id)?next.delete(id):next.add(id);
+    return next;
+  });
+  const act=async(ids,recover)=>{
+    if(busy||!ids.length)return;
+    if(!recover&&!window.confirm(`彻底删除所选 ${ids.length} 项？${kind==='project'?'不再被其他作品引用的已删除素材也会一并移除。':''}此操作不能撤销。`))return;
+    setBusy(true);
+    try{
+      await onTrashChange(ids,recover);
+      setSelected(new Set());
+      setChoosing(false);
+    }catch(error){onError?.(error);
+    }finally{setBusy(false);}
+  };
+  const title=kind==='asset'?'我的素材':'我的作品';
+  const tabs=kind==='asset'?materialTabs:WORK_TABS;
+  return <><div className="catalog-toolbar"><PageHeading title={title} actions={
+    <button type="button" className="btn library-select-toggle" data-trash-select=""
+      onClick={()=>{setChoosing(value=>!value);setSelected(new Set());}}>
+      {choosing?'完成':'选择'}
+    </button>}/>
+    <CatalogTabs tabs={tabs} active="trash" onChange={onTabChange}/>
+    <div className="filters deleted-toolbar"><div className="four-filter-controls">
+      {limit?<div className="catalog-page-controls" data-page-key={`trash:${kind}`}>
+        <input type="number" min="1" max={range.count} aria-label="输入页码"
+          key={range.current} defaultValue={range.current}
+          onChange={event=>setPage(Number(event.currentTarget.value))}/>
+        <button type="button" aria-label="上一页" disabled={range.current===1}
+          onClick={()=>setPage(range.current-1)}>‹</button>
+        <button type="button" aria-label="下一页" disabled={range.current===range.count}
+          onClick={()=>setPage(range.current+1)}>›</button>
+      </div>:null}
+    </div><span className="catalog-total">{records.length} 项</span></div></div>
+    <section className={`grid recently-deleted-grid ${choosing?'selecting':''}`}
+      data-kind={kind} aria-label="最近删除">
+      {visible.length?visible.map(entry=>{
+        const record=entry.item;
+        const draft=record.drafts?.find(item=>item.id===record.activeDraftID)||record.drafts?.[0];
+        const staticCover=record.coverStaticPath&&record.updatedAt===record.coverBaselineUpdatedAt
+          ?record.coverStaticPath:null;
+        const src=record.isSnapshot?source(record.snapshotBlobId):staticCover;
+        return <article key={entry.id} className={`card deleted-row ${choosing&&selected.has(entry.id)?'batch-selected':''}`}
+          data-trash-id={entry.id} aria-label={`${record.title}，${new Date(entry.date).toLocaleDateString()} 删除`}
+          aria-selected={choosing&&selected.has(entry.id)}
+          onClick={()=>{if(choosing)toggle(entry.id);}}>
+          <div className="card-image" data-cover-project-id={kind==='project'?record.id:undefined}>
+            {kind==='asset'?<RouteImage asset={record} source={source}/>:<div className="thumb-sheet"
+              style={{aspectRatio:draft?`${draft.canvas.width}/${draft.canvas.height}`:undefined,
+                background:draft?.paperColor||'#fff'}}>
+              {src?<img className="work-reference" src={src} alt={record.title}/>:<SceneCover
+                draft={draft} asset={id=>state.assets.find(item=>item.id===id)} source={source}
+                snapshotOnly cloudEnabled={cloudEnabled} localCover={()=>localCover?.(record)}
+                projectID={record.id}/>}
+            </div>}
+            {choosing?<span className="batch-check">{selected.has(entry.id)?'☑':'□'}</span>:null}
+          </div>
+          <div className="card-body"><h3>{record.title}</h3>
+            <p>{new Date(entry.date).toLocaleDateString()} 删除</p>
+            <div className="deleted-actions"><button type="button" className="btn"
+              data-recover={entry.id} disabled={busy} onClick={event=>{event.stopPropagation();void act([entry.id],true);}}>恢复</button>
+              <button type="button" className="btn danger" data-remove={entry.id}
+                disabled={busy} onClick={event=>{event.stopPropagation();void act([entry.id],false);}}>彻底删除</button></div>
+          </div>
+        </article>;
+      }):<p className="empty">没有最近删除的{kind==='asset'?'素材':'作品'}。</p>}
+    </section>
+    <p className="deleted-retention-note">最近删除保留 30 天，到期自动移除记录；仍被作品引用的素材图片继续保留。彻底删除最后一份引用它的作品时，隐藏素材记录一并移除；云端孤立文件经隔离备份与复核后延迟回收。</p>
+    <div className="swift-tray manage library-management-tray deleted-selection-tray"
+      hidden={!choosing}><strong>已选 {selected.size} 项</strong>
+      <button type="button" className="btn" data-trash-all disabled={busy}
+        onClick={()=>setSelected(new Set(visible.map(entry=>entry.id)))}><span className="selection-action-label">全选页面</span></button>
+      <button type="button" className="btn" data-trash-clear disabled={busy||!selected.size}
+        onClick={()=>setSelected(new Set())}><span className="selection-action-label">清空选择</span></button>
+      <button type="button" className="btn" data-trash-recover disabled={busy||!selected.size}
+        onClick={()=>void act([...selected],true)}><span className="selection-action-label">恢复所选</span></button>
+      <button type="button" className="btn danger" data-trash-remove disabled={busy||!selected.size}
+        onClick={()=>void act([...selected],false)}><span className="selection-action-label">彻底删除所选</span></button>
+    </div>
+  </>;
 }
 
 function PaperSizeOptions({includeNone=false,includeCustom=true}){
@@ -45,13 +150,29 @@ function PaperSizeOptions({includeNone=false,includeCustom=true}){
     {includeCustom?<option value="custom">自定义尺寸</option>:null}</>;
 }
 
-export function LibraryPage({state,items,source,kindName,format,onAction}){
+export function LibraryPage({state,source,kindName,format,onAction,onPageChange,tab,onTabChange}){
+  const [,setRevision]=useState(0);
+  useEffect(()=>{
+    const refresh=()=>setRevision(revision=>revision+1);
+    window.addEventListener('shiye-library-refresh',refresh);
+    return ()=>window.removeEventListener('shiye-library-refresh',refresh);
+  },[]);
+  const page=libraryPageData(state),items=page.items;
+  useEffect(()=>{
+    document.querySelector('#view')?.assetCardsChanged?.(page.total);
+  },[page.total,items]);
+  const changePage=value=>{
+    setCatalogDataPage('library',value);
+    setRevision(revision=>revision+1);
+    onPageChange?.();
+  };
   const kinds=['sticker','paper','tape','photo','text','reference'];
   const status=[['all','全部状态'],['ready','已整理'],['pendingReview','未整理'],['used','已使用'],
     ['unused','未使用'],['inside','系列中'],['outside','系列外']];
   const sorts=[['newest','添加时间 · 降序'],['oldest','添加时间 · 升序'],
     ['name','名称 · 升序'],['name-desc','名称 · 降序']];
   return <><div className="catalog-toolbar"><PageHeading title="我的素材"/>
+    {state.seriesID==='all'?<CatalogTabs tabs={materialTabs} active={tab} onChange={onTabChange}/>:null}
     <div className="filters">
       <input id="search" type="search" placeholder="搜索名称、标签、颜色或主题"
         defaultValue={state.query} aria-label="搜索素材"/>
@@ -61,10 +182,21 @@ export function LibraryPage({state,items,source,kindName,format,onAction}){
       <select id="series-filter" defaultValue={state.seriesID}><option value="all">全部系列</option><option value="none">系列外</option>
         {state.series.map(entry=><option key={entry.id} value={entry.id}>{entry.title}</option>)}</select>
       <select id="sort-filter" defaultValue={state.sort}>{sorts.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select>
-      <span className="library-count"/>
+      <div className="catalog-page-controls">
+        <input type="number" min="1" max={page.count} aria-label="输入页码"
+          key={page.current} defaultValue={page.current}
+          onChange={event=>changePage(Number(event.currentTarget.value))}/>
+        <button type="button" aria-label="上一页" disabled={page.current===1}
+          onClick={()=>changePage(page.current-1)}>‹</button>
+        <button type="button" aria-label="下一页" disabled={page.current===page.count}
+          onClick={()=>changePage(page.current+1)}>›</button>
+      </div>
+      <span className="library-count catalog-total">{page.total} 项</span>
     </div></div>
     <div className={`grid asset-grid ${state.preferences.display==='list'?'list-grid':''}`}>
-      <button className="card action-card" data-act="import" data-react-action="true" onClick={()=>onAction('import')}>
+      <button className="card action-card" data-act="import" data-react-action="true"
+        hidden={state.seriesID!=='all'||state.status!=='all'||state.kind!=='all'||!!state.query.trim()}
+        onClick={()=>onAction('import')}>
         <div className="card-image">＋</div><div className="card-body"><h3>导入素材</h3><p>添加照片或文件</p></div>
       </button>
       {items.map(asset=>{
@@ -83,7 +215,14 @@ export function LibraryPage({state,items,source,kindName,format,onAction}){
   </>;
 }
 
-export function WorksPage({projects,isUntouchedLegacyExample,assets,localCover,cloudEnabled,source,onAction}){
+export function WorksPage({projects,isUntouchedLegacyExample,assets,localCover,cloudEnabled,source,onAction,onCardsChanged,tab,onTabChange}){
+  const [revision,setRevision]=useState(0);
+  useEffect(()=>{
+    const refresh=()=>setRevision(value=>value+1);
+    window.addEventListener('shiye-works-refresh',refresh);
+    return ()=>window.removeEventListener('shiye-works-refresh',refresh);
+  },[]);
+  useEffect(()=>{onCardsChanged?.();},[revision]);
   const asset=id=>assets.find(entry=>entry.id===id);
   const list=projects.filter(project=>!isUntouchedLegacyExample(project))
     .sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt));
@@ -91,15 +230,37 @@ export function WorksPage({projects,isUntouchedLegacyExample,assets,localCover,c
     ['updated-desc','最近修改 · 降序'],['updated-asc','最近修改 · 升序'],
     ['name-asc','名称 · 升序'],['name-desc','名称 · 降序']];
   return <div className="works-page"><div className="catalog-toolbar"><PageHeading title="我的作品"/>
+    <CatalogTabs tabs={WORK_TABS} active={tab} onChange={onTabChange}/>
     <button hidden data-act="new-project" data-react-action="true" id="work-create" onClick={()=>onAction('new-project')}/>
     <button hidden data-act="import-work" data-react-action="true" id="work-import" onClick={()=>onAction('import-work')}/>
-    <div className="filters"><input type="search" id="work-search" placeholder="搜索作品名称或标签"/>
-      <select id="work-kind"><option value="all">全部类型</option><option value="created">手动创作</option><option value="imported">导入作品</option></select>
-      <select id="work-status"><option value="all">全部状态</option><option value="used">已使用</option><option value="unused">未使用</option></select>
-      <select id="work-sort">{sorts.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select>
+    <div className="filters"><input type="search" id="work-search"
+      placeholder={tab==='templates'?'搜索模板名称或标签':'搜索作品名称或标签'}/>
+      <select id="work-kind">{tab==='templates'?<>
+        <option value="all">全部类型</option><option value="preset">预设模板</option>
+        <option value="user">我的模板</option></>:<>
+        <option value="all">全部类型</option><option value="created">手动创作</option>
+        <option value="imported">导入作品</option></>}</select>
+      <select id="work-status">{tab==='templates'?<>
+        <option value="all">全部状态</option><option value="with-case">有对应案例</option>
+        <option value="without-case">暂无案例</option></>:<>
+        <option value="all">全部状态</option><option value="used">已使用</option>
+        <option value="unused">未使用</option></>}</select>
+      <select id="work-sort">{(tab==='templates'?[['default-desc','默认顺序 · 降序'],
+        ['default-asc','默认顺序 · 升序'],['name-asc','名称 · 升序'],
+        ['name-desc','名称 · 降序']]:sorts).map(([value,label])=><option key={value}
+          value={value}>{label}</option>)}</select>
       <span>{list.length} 项</span>
     </div></div><div className="grid works-grid">
-      {list.map((project,index)=>{
+      {tab==='all'||tab==='snapshot'?<>
+        {tab==='all'?<><button type="button" className="card work-entry" onClick={()=>onAction('import-work')}>
+          <div className="card-image">＋</div><div className="card-body"><h3>导入作品</h3><p>从照片或文件收进作品</p></div>
+        </button><button type="button" className="card work-entry" onClick={()=>onAction('new-project')}>
+          <div className="card-image">＋</div><div className="card-body"><h3>空白创作</h3><p>从一张空白页面开始</p></div>
+        </button></>:<button type="button" className="card work-entry" onClick={()=>onAction('import-snapshot')}>
+          <div className="card-image">＋</div><div className="card-body"><h3>导入画面快照</h3><p>保存独立、不可编辑的图片</p></div>
+        </button>}
+      </>:null}
+      {tab!=='templates'&&list.map((project,index)=>{
         const draft=project.drafts.find(d=>d.id===project.activeDraftID)||project.drafts[0];
         const revision=JSON.stringify([project.title,project.updatedAt,project.lastOpenedAt,
           project.isSnapshot,project.isDraft,project.isUsed,project.isFavorite,
@@ -114,18 +275,27 @@ export function WorksPage({projects,isUntouchedLegacyExample,assets,localCover,c
             {!staticCover?<SceneCover draft={draft} asset={asset} source={source} priority={index<4}
               snapshotOnly cloudEnabled={cloudEnabled} localCover={()=>localCover(project)}
               projectID={project.id}/>:null}
-          </div></div><div className="card-body"><h3>{project.title}</h3><p>⊙　{project.isSnapshot?'画面快照':project.isDraft?'草稿':'可编辑作品'} <span>{new Date(project.updatedAt).toLocaleDateString()}</span></p></div>
+          </div></div><div className="card-body"><h3>{project.title}{project.isSnapshot&&project.isFavorite?<span className="card-favorite" aria-label="已收藏">♥</span>:null}</h3><p>⊙　{project.isSnapshot?'画面快照':project.isDraft?'草稿':'可编辑作品'} <span>{new Date(project.updatedAt).toLocaleDateString()}</span></p></div>
         </button>;
       })}
     </div>
   </div>;
 }
 
-export function SeriesPage({series,assets,display,seriesCovers,source,onAction}){
+export function SeriesPage({series,assets,display,seriesCovers,source,onAction,onTabChange}){
   const sorted=[...series].sort((a,b)=>a.id.startsWith('B700')&&b.id.startsWith('B700')?
     b.id.localeCompare(a.id):a.id.startsWith('B700')?-1:b.id.startsWith('B700')?1:0);
-  return <><div className="catalog-toolbar"><PageHeading title="我的素材"/></div>
+  return <><div className="catalog-toolbar"><PageHeading title="我的素材"/>
+    <CatalogTabs tabs={materialTabs} active="series" onChange={onTabChange}/>
+    <div className="swift-series-controls"><label className="shiye-search"><input type="search"
+      placeholder="搜索系列、素材或标签" aria-label="搜索系列"/></label>
+      <select aria-label="系列排序"><option value="recent">最近更新</option><option value="name">名称</option></select><span/>
+    </div></div>
     <div className={`grid series-grid ${display==='list'?'list-grid':''}`} data-react-page="series">
+      <button type="button" className="series-entry" onClick={()=>onAction('new-series')}>
+        <div className="series-entry-cover">＋</div><strong>新建系列</strong>
+        <small>把喜欢的素材放在一起</small>
+      </button>
       {sorted.map((entry,index)=>{
         const members=assets.filter(asset=>asset.seriesID===entry.id&&!asset.isProjectInternal);
         return <button key={entry.id} className="card" data-act="series-detail" data-id={entry.id} data-react-action="true"

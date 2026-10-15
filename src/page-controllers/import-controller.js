@@ -5,7 +5,6 @@ export function createImportController({
   disposePaper,disposeManual,mountPaper,mountManual,render,actions
 }){
   return {
-    render:renderHTML,
     patch(){
       if(view.dataset.renderedRoute!=='import'||
          view.dataset.renderedImportStep!==state.importStep||

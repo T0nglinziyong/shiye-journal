@@ -12,20 +12,9 @@ export function seriesContentsModel(state){
   return {series,filter,all:state.assets.filter(asset=>asset.seriesID===series.id&&!asset.isProjectInternal),
     members:seriesMembers(series.id,state.assets,filter),covers:seriesCovers(series,state.assets)};
 }
-const kinds=[['sticker','贴纸'],['paper','纸张'],['tape','胶带'],['photo','照片'],['text','文字'],['reference','参考']];
 function button(label,action,kind='') {
   const b=document.createElement('button');b.type='button';b.className='btn '+kind;b.textContent=label;
   b.onclick=async()=>{b.disabled=true;try{await action();}catch(e){const t=document.querySelector('#toast');t.textContent=e.message;t.classList.add('show');}finally{b.disabled=false;}};return b;
-}
-export function renderSeriesContents({state,esc,imgTag,assetCard}) {
-  const s=state.series.find(s=>s.id===state.seriesID);if(!s)return '<p>系列已移走</p>';
-  const f=filters(s.id),members=seriesMembers(s.id,state.assets,f),all=state.assets.filter(a=>a.seriesID===s.id&&!a.isProjectInternal);
-  const options=(list,value)=>list.map(([v,label])=>'<option value="'+v+'" '+(v===value?'selected':'')+'>'+label+'</option>').join('');
-  return '<section class="series-contents"><div class="series-navigation"><button type="button" class="btn" id="series-return">‹ 返回素材库</button><div class="actions" id="series-actions"></div></div>'+
-    '<div class="view-head series-heading"><div class="series-identity"><div class="series-detail-cover">'+seriesCovers(s,state.assets).map(a=>imgTag(a,true)).join('')+'</div><div class="series-copy"><div class="eyebrow">COLLECTION</div><h1><button type="button" id="series-edit-title" aria-label="编辑系列信息与标签">'+esc(s.title)+' <span aria-hidden="true">✎</span></button></h1>'+
-    (s.introduction?'<p>'+esc(s.introduction)+'</p>':'')+'<p class="series-tags">'+esc([...(s.styleTags||[]),...(s.semanticTags||[])].join(' · '))+'</p><p>'+all.length+' 件素材</p></div></div></div>'+
-    '<div class="series-filters filters"><label class="shiye-search"><input type="search" id="series-search" aria-label="在这个系列中搜索" placeholder="搜索系列内素材名称、标签或颜色" value="'+esc(f.query)+'"></label><div class="series-filter-menus"><select id="series-kind" aria-label="系列素材类型">'+options([['all','全部类型'],...kinds],f.kind)+'</select><select id="series-status" aria-label="系列素材状态">'+options([['all','全部状态'],['ready','已整理'],['unready','未整理'],['used','已使用'],['unused','未使用'],['favorite','已收藏'],['inside','系列中'],['outside','系列外']],f.status)+'</select><select id="series-sort" aria-label="系列素材排序">'+options([['recent','最近添加'],['name','名称']],f.sort)+'</select><button class="btn" id="series-order">'+(f.ascending?'升序 ↑':'降序 ↓')+'</button></div></div>'+
-    '<div class="grid asset-grid '+(state.preferences.display==='list'?'list-grid':'')+'"><button type="button" class="card action-card" id="series-add-assets"><div class="card-image">＋</div><div class="card-body"><h3>添加素材</h3><p>从全部素材选择</p></div></button>'+all.map(assetCard).join('')+'</div><p class="series-result-count">'+members.length+' 项</p></section>';
 }
 async function assign(c,ids,to) {
   const revised=c.state.assets.filter(a=>ids.has(a.id)).map(a=>({...a,seriesID:to}));

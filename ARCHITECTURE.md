@@ -7,7 +7,7 @@
 | 素材识别 | `src/recognition-profiles.js` 的候选发现与 Mask 分割两个独立设置 | 默认 `unified + auto`：`paper-analysis.js` 整合旧版连通区域、物理载体和受约束的漏检补全，只在整页阶段决定素材身份；`material-unified-segmentation.js` 在每个候选内共享梯度证据，仲裁实际轮廓、规则形状和透明 Mask。选择 `legacy + morphgac` 可恢复原版候选与原版分割路径；其他显式组合各按所选算法运行。后处理只能修改已有素材的透明边界；`src/image.js` 最终回到高清原图裁切。实测口径和局限见 [识别研究集成](docs/recognition-research-integration.md)。 | `tests/recognition-profiles.test.js`、`tests/unified-material-discovery.test.js`、`tests/recognition-settings-browser.mjs`、`tests/recognition-browser.mjs`、`tests/import-browser-acceptance.mjs` |
 | AI 创作 | `src/creative-delivery.js` 的响应协议 | `src/creative-runner.js` 控制轮次；`src/creative-contract.js` 验证合同；`src/creative.js` 执行可编辑工具。原生工具、JSON 工具和直接页都要转换为同一工具调用格式 | `tests/creative-delivery.test.js`、`tests/runner.test.js`、`tests/matching-browser.mjs` |
 | 数据位置 | `src/storage-router.js` 的 CRUD 路由 | `src/store.js` 保持公开的 `all/get/transaction` 和备份合同；云端特有的后台暂存、缩略图和增量同步留在 `src/cloud-store.js`，自托管请求留在 `src/store.js`，本机 IndexedDB 用同一表名 | `tests/storage-router.test.js`、`tests/cloud-store.test.js`、`tests/server-persistence.test.js`、`tests/cloud-cache-browser.mjs` |
-| 页面组件 | `src/app.js` 的页面路由 | 大交互逐步拆出独立 UI/模型模块；最近删除由 `src/recently-deleted-ui.js` 渲染，仍使用原 `trash` 表 | `tests/recently-deleted.test.js`、`tests/library-canvas-latest-browser.mjs` |
+| 页面组件 | `src/react-routes.jsx` 的 React 路由组件 | 页面及最近删除列表由 React 渲染，仍使用原 `trash` 表；`src/app.js` 负责业务编排和路由 | `tests/react-route-smoke.mjs`、`tests/trash-offline-browser.mjs`、`tests/library-canvas-latest-browser.mjs` |
 | 素材库选择 | `src/library-selection-model.js` 的选择模式 | 系列详情与全部素材共享一份 `parity` 选择状态；结束模式后必须同步并卸载底部栏。卡片短按和长按统一由 `src/long-press.js` 判定 | `tests/library-selection.test.js`、`tests/interaction-controls.test.js`、`tests/library-canvas-latest-browser.mjs` |
 | 画布对象操作 | `src/canvas-selection.js` 的可见对象和移动边界 | `src/canvas-selection-ui.js` 负责圈选；`src/canvas-editor-ui.js` 负责唯一单对象选框，两者调用同一移动函数；`src/canvas-viewport.js` 只管适合页面以上的导航缩放。`app.js` 不再注册另一套对象拖动/画笔事件 | `tests/parity-workflows.test.js`、`tests/library-canvas-latest-browser.mjs` |
 | 云端续传 | `src/project-sync.js` 的账号隔离持久队列 | `src/sync-resumer.js` 在重新打开、回前台与恢复网络时重试 `cloud-store.js` 的两类待同步队列；冲突不得自动覆盖，云端确认才移出队列 | `tests/project-sync.test.js`、`tests/sync-resumer.test.js`、`tests/cloud-store.test.js` |
@@ -43,6 +43,6 @@
 
 素材识别必须遵循“整页候选先于边界分割”：所选候选发现算法只决定一次有几件实体；MorphGAC、统一轮廓、GrabCut、形状规整和打孔恢复只能修改各自候选内的透明边界，不能再创建、删除、拆分或合并素材身份。内部印刷格子、文字框和人物细节不得因为自身闭合而成为新素材。
 
-目前 `src/app.js` 仍集中保留跨页编排和部分事件分发，样式也有历史叠层。页面控制器、Action Store 与 keyed DOM 是扩展接缝，但主脚本尚未按完整路由拆包。后续应在同等端到端测试覆盖下逐页迁出。识别质量与云存储的生产迁移须用真实案例验证，不能从模块化本身推断已经实现。
+目前 `src/app.js` 仍集中保留跨页编排和部分事件分发，样式也有历史叠层。新页面内容应由 React 组件持有，不得在 React 已渲染的容器中用 `innerHTML`、`remove()` 或 `replaceChildren()` 改写页面；旧的 DOM 控件、弹窗、导入流程和默认画布仍须逐项迁移并经过同等端到端验收。识别质量与云存储的生产迁移须用真实案例验证，不能从模块化本身推断已经实现。
 
 素材从库中删除后，素材记录以 `isProjectInternal` 隐藏保留，供已有作品解析；最近删除可恢复原可见记录。彻底删除或到期清理只有在完整作品、手动存档和待同步队列引用检查通过时才删除无引用的隐藏元数据。浏览器本地模式每日空闲时再扫一次。COS 原图仅由服务端受保护定时任务在完整引用扫描、私有隔离备份与延迟复核后回收；浏览器不得直接删除。详见 [服务端孤立图片清理](docs/cos-orphan-gc.md)。

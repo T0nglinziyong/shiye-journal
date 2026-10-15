@@ -1,6 +1,5 @@
-export function createEditorController({renderHTML,patchScene,createEditor,actions,render,view}){
+export function createEditorController({patchScene,createEditor,actions,render,view}){
   return {
-    render:renderHTML,
     patch:patchScene,
     mount(lifetime){
       lifetime.use(actions.subscribe(event=>{

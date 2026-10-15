@@ -88,11 +88,11 @@ test('Editor undo action requests a render only when a history step exists',asyn
 test('Page host mounts once, patches same controller, disposes on remount',()=>{
   const host=createPageControllerHost(),target=new EventTarget();
   let count=0,events=0;
-  host.register('library',{render:()=>'<p>Library</p>',
+  host.register('library',{
     patch:()=>true,
     mount(lifetime){count++;lifetime.on(target,'change',()=>events++);}
   });
-  host.register('works',{render:()=>'<p>Works</p>',
+  host.register('works',{
     patch:()=>false,mount(){count++;}});
   host.mount('library');
   assert.equal(host.patch('library'),true);
@@ -101,6 +101,5 @@ test('Page host mounts once, patches same controller, disposes on remount',()=>{
   target.dispatchEvent(new Event('change'));assert.equal(events,1);
   assert.equal(host.patch('library'),false);
   host.mount('works');assert.equal(count,2);
-  assert.equal(host.render('works'),'<p>Works</p>');
   host.dispose();host.dispose();
 });

@@ -1,15 +1,14 @@
 export function createLibraryController({
-  renderHTML,patchCatalog,view,state,parity,binder,onCatalogChanged,actions
+  view,state,parity,onCatalogChanged,actions
 }){
   return {
-    render:renderHTML,
     patch(){
       if(view.dataset.renderedRoute!=='library'||
          view.dataset.renderedLibraryTab!==parity.libraryTab||
          view.dataset.renderedSeriesID!==(state.seriesID||'all')||
          parity.selectionMode||state.addingToSeries)return false;
-      if(!patchCatalog(view,renderHTML()))return false;
-      binder({partial:true});
+      // React owns the cards and pager. An Action asks that component to
+      // reconcile its current state; no HTML is inserted behind React's back.
       onCatalogChanged();return true;
     },
     mount(lifetime){
