@@ -2,7 +2,7 @@
 // owned by app.js; this module adds the missing screen controls and actions.
 import {reusePagePreviews} from './preview-content-cache.js';
 import {mountSeriesContents,mountSeriesAddition} from './series-contents.js';
-import {toggleSelection,selectionActive} from './library-selection-model.js';
+import {selectionActive} from './library-selection-model.js';
 import {bindLongPress} from './long-press.js';
 import {workInTab} from './work-collections.js';
 import {applyCatalogPage,resetCatalogPage} from './catalog-pagination.js';
@@ -26,12 +26,10 @@ function mountLibrary(c){
   const heading=header?.querySelector('h1');
   if(heading&&heading.textContent!==title)heading.textContent=title;
   if(insideSeries){const back=button('‹ 返回素材库',()=>route('series'));back.classList.add('series-back');header?.prepend(back);}
-  actions?.prepend(button(parity.selectionMode?'完成':'选择',()=>{toggleSelection(parity,'asset');view.selectionRefresh?.();},'library-select-toggle'));
   if(insideSeries){header?.querySelector('.actions')?.append(button('编辑系列',()=>c.openSeriesEditor?.(state.seriesID)));}
 }
-function mountWorks(c){const {state,view}=c,header=view.querySelector('.view-head'),filters=view.querySelector('.filters');
+function mountWorks(c){const {state,view}=c,filters=view.querySelector('.filters');
   if(parity.workTab==='trash')return;
-  const actions=header?.querySelector('.actions');if(actions&&parity.workTab!=='templates'){actions.append(button(parity.selectionMode?'完成':'选择',()=>{toggleSelection(parity,'work');view.selectionRefresh?.();},'library-select-toggle'));}
   if(parity.workTab==='templates')return;
   bindWorksCards(c,view.querySelectorAll('.grid .card[data-act="open-project"]'));
   if(filters){const grid=view.querySelector('.works-grid'),search=filters.querySelector('#work-search'),kind=filters.querySelector('#work-kind'),status=filters.querySelector('#work-status'),sort=filters.querySelector('#work-sort'),count=filters.querySelector('span');

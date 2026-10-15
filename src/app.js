@@ -124,7 +124,7 @@ import {readClipboardText} from './clipboard-text.js';
 import {mountParityControls as mountSwiftParity,bindWorksCards} from './parity-ui.js';
 import {parity} from './parity-ui.js';
 import {journalTemplateRecords,clearJournalTemplateImages} from './journal-template-data.js';
-import {syncSelectionScope,reconcileSelectedRecords,finishSelection} from './library-selection-model.js';
+import {syncSelectionScope,reconcileSelectedRecords,finishSelection,toggleSelection} from './library-selection-model.js';
 import {canApplyBackgroundView,shouldPullCloudForRoute} from './view-update-policy.js';
 import {resetSelectionPresenters} from './selection-presenter.js';
 import {createActionStore} from './ui-action-store.js';
@@ -554,6 +554,11 @@ function render(){
     if(id==='trash'||id==='templates')finishSelection(parity);
     render();
   };
+  const selectionToggle=mode=>{
+    toggleSelection(parity,mode);
+    if(view.selectionRefresh)view.selectionRefresh();
+    else window.dispatchEvent(new Event('shiye-selection-refresh'));
+  };
   const trashPage=kind=>createElement(RecentlyDeletedPage,{kind,state,source:image,
     localCover:p=>localWorkCovers.peek(p),cloudEnabled,
     onTabChange:kind==='asset'?materialTab:workTab,
@@ -570,14 +575,17 @@ function render(){
     ?createElement(JournalTemplatesPage,{state,db,viewState:parity,onTabChange:workTab,
       onToast:toast})
     :state.route==='library'&&state.series.some(s=>s.id===state.seriesID)
-    ?SeriesContentsPage({state,source:image,kindName,format:fmt,onAction:handle})
+    ?SeriesContentsPage({state,source:image,kindName,format:fmt,onAction:handle,
+      selection:parity,onSelectionToggle:selectionToggle})
     :state.route==='library'
       ?createElement(LibraryPage,{state,source:image,kindName,format:fmt,onAction:handle,
-        onPageChange:prewarmOtherPages,tab:parity.libraryTab,onTabChange:materialTab})
+        onPageChange:prewarmOtherPages,tab:parity.libraryTab,onTabChange:materialTab,
+        selection:parity,onSelectionToggle:selectionToggle})
     :state.route==='works'
       ?createElement(WorksPage,{projects:state.projects,isUntouchedLegacyExample,assets:state.assets,
         localCover:p=>localWorkCovers.peek(p),cloudEnabled,source:image,onAction:handle,
         tab:parity.workTab,onTabChange:workTab,
+        selection:parity,onSelectionToggle:selectionToggle,
         onCardsChanged:()=>{
           bindWorksCards({state,view,handle},view.querySelectorAll('.works-grid .card[data-act="open-project"]'));
           view.catalogRefresh?.();
@@ -587,7 +595,8 @@ function render(){
         }})
     :state.route==='series'
     ?SeriesPage({series:state.series,assets:state.assets,display:state.preferences.display,
-      seriesCovers,source:image,onAction:handle,onTabChange:id=>{
+      seriesCovers,source:image,onAction:handle,selection:parity,
+      onSelectionToggle:selectionToggle,onTabChange:id=>{
         if(id==='series')return;
         parity.libraryTab=id;state.status=id==='pending'?'pendingReview':'all';
         state.libraryRecent=false;route('library');

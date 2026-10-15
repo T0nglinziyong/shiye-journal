@@ -1,7 +1,7 @@
 import {togglePopover} from './swift-popover.js';
 import {createSelectionSidePanels,selectionMorePopoverOptions} from './selection-side-panels.js';
 import {zipSync,strToU8} from 'fflate';
-import {finishSelection,toggleSelection,selectionActive} from './library-selection-model.js';
+import {finishSelection,selectionActive} from './library-selection-model.js';
 import {mountAssetSelection} from './library-selection-ui.js';
 import {parity} from './parity-ui.js';
 import {searchableSeries} from './library-model.js';
@@ -244,9 +244,8 @@ function mountCatalogSticky(view,route){
   if(toolbar&&top)toolbar.style.setProperty('--catalog-top',top.getBoundingClientRect().height+'px');
 }
 function mountSeries(c) {
-  const {state,view,render,openSeriesEditor}=c,actions=view.querySelector('.view-head .actions');
+  const {state,view,render,openSeriesEditor}=c;
   const isActive=()=>selectionActive(parity,'series');
-  actions.append(button(parity.selectionMode?'完成':'选择',()=>{toggleSelection(parity,'series');view.selectionRefresh?.();},'library-select-toggle'));
   const controls=view.querySelector('.swift-series-controls'),input=controls.querySelector('input'),sort=controls.querySelector('select'),count=controls.querySelector('span');
   input.value=parity.seriesQuery||'';sort.value=parity.seriesSort||'recent';
   const order=document.createElement('select');order.innerHTML='<option value="desc">降序</option><option value="asc">升序</option>';order.value=parity.seriesAscending?'asc':'desc';order.onchange=()=>{parity.seriesAscending=order.value==='asc';update();};
@@ -287,7 +286,7 @@ function mountSeries(c) {
     selectionAction('查看所选',()=>{parity.showOnlySelected=!parity.showOnlySelected;sync();}),
     more,remove
   );view.append(tray);
-  function sync(){const active=isActive();tray.hidden=!active;entry.disabled=active;view.querySelector('.library-select-toggle').textContent=parity.selectionMode?'完成':'选择';for(const card of cards){card.classList.toggle('batch-selected',active&&parity.selected.has(card.dataset.id));if(active)card.setAttribute('aria-pressed',String(parity.selected.has(card.dataset.id)));else card.removeAttribute('aria-pressed');}tray.querySelector('strong').textContent='本次选中 '+parity.selected.size+' 个系列';tray.querySelectorAll('button').forEach((b,i)=>{b.disabled=i>0&&!parity.selected.size;if(i===2)b.querySelector('.selection-action-label').textContent=parity.showOnlySelected?'返回筛选':'查看所选';});update();return true;}registerSelectionPresenter(view,sync);
+  function sync(){const active=isActive();tray.hidden=!active;entry.disabled=active;for(const card of cards){card.classList.toggle('batch-selected',active&&parity.selected.has(card.dataset.id));if(active)card.setAttribute('aria-pressed',String(parity.selected.has(card.dataset.id)));else card.removeAttribute('aria-pressed');}tray.querySelector('strong').textContent='本次选中 '+parity.selected.size+' 个系列';tray.querySelectorAll('button').forEach((b,i)=>{b.disabled=i>0&&!parity.selected.size;if(i===2)b.querySelector('.selection-action-label').textContent=parity.showOnlySelected?'返回筛选':'查看所选';});update();return true;}registerSelectionPresenter(view,sync);
   if(parity.restoreSeriesScroll)requestAnimationFrame(()=>{
     window.scrollTo(0,parity.seriesScrollY||0);
     parity.restoreSeriesScroll=false;
@@ -323,7 +322,6 @@ function mountProjectBatch(c){
   function sync(){
     const active=selectionActive(parity,'work'),cards=[...c.view.querySelectorAll('[data-act="open-project"]')];
     tray.hidden=!active;
-    c.view.querySelector('.library-select-toggle').textContent=parity.selectionMode?'完成':'选择';
     c.view.querySelectorAll('.work-entry').forEach(b=>b.disabled=active);
     cards.forEach(card=>{
       const selected=active&&parity.selected.has(card.dataset.id);

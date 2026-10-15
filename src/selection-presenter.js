@@ -6,6 +6,10 @@ export function resetSelectionPresenters(view){
 }
 export function registerSelectionPresenter(view,update){
   view.selectionPresenters.push(update);
-  view.selectionRefresh=()=>{for(const presenter of view.selectionPresenters)presenter();return true;};
+  view.selectionRefresh=()=>{
+    for(const presenter of view.selectionPresenters)presenter();
+    window.dispatchEvent(new Event('shiye-selection-refresh'));
+    return true;
+  };
   update();
 }

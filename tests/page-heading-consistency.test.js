@@ -11,8 +11,8 @@ test('Materials, Matching and Works share identical top-left three-line header s
  assert.match(react,/view-head unified-page-heading/);
  assert.match(react,/unified-heading-copy/);
  assert.match(react,/FROM YOUR DESK TO YOUR PAGES/);
- assert.match(react,/<PageHeading title="我的素材"\/>/);
- assert.match(react,/<PageHeading title="我的作品"\/>/);
+ assert.match(react,/<PageHeading title="我的素材" actions=\{/);
+ assert.match(react,/<PageHeading title="我的作品" actions=\{/);
  assert.match(matching,/head\('素材搭配'/);
  assert.match(css,/\.unified-page-heading \.unified-heading-copy h1/);
  assert.match(css,/--shiye-heading-title-size:32px/);

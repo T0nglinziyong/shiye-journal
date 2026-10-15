@@ -1,5 +1,5 @@
 import React,{useEffect,useRef,useState} from 'react';
-import {createPortal} from 'react-dom';
+import {createPortal,flushSync} from 'react-dom';
 import {AI_PROVIDERS,supportsVision} from './ai-settings.js';
 import {seriesContentsModel} from './series-contents.js';
 import {libraryPageData} from './library-page-data.js';
@@ -42,6 +42,19 @@ function PageHeading({title,actions=null}){
   return <div className="view-head unified-page-heading"><div className="unified-heading-copy">
     <span className="eyebrow">FROM YOUR DESK TO YOUR PAGES</span><h1>{title}</h1>
   </div><div className="actions">{actions}</div></div>;
+}
+
+function SelectionToggle({mode,selection,onToggle}){
+  const [,setRevision]=useState(0);
+  useEffect(()=>{
+    const refresh=()=>setRevision(revision=>revision+1);
+    window.addEventListener('shiye-selection-refresh',refresh);
+    return ()=>window.removeEventListener('shiye-selection-refresh',refresh);
+  },[]);
+  const active=Boolean(selection.selectionMode);
+  return <button type="button" className="btn library-select-toggle"
+    data-react-action="true" onClick={()=>flushSync(()=>onToggle(mode))}>
+    {active?'完成':'选择'}</button>;
 }
 
 function CatalogTabs({tabs,active,onChange}){
@@ -361,7 +374,8 @@ function PaperSizeOptions({includeNone=false,includeCustom=true}){
     {includeCustom?<option value="custom">自定义尺寸</option>:null}</>;
 }
 
-export function LibraryPage({state,source,kindName,format,onAction,onPageChange,tab,onTabChange}){
+export function LibraryPage({state,source,kindName,format,onAction,onPageChange,tab,onTabChange,
+  selection,onSelectionToggle}){
   const [,setRevision]=useState(0);
   useEffect(()=>{
     const refresh=()=>setRevision(revision=>revision+1);
@@ -382,7 +396,8 @@ export function LibraryPage({state,source,kindName,format,onAction,onPageChange,
     ['unused','未使用'],['inside','系列中'],['outside','系列外']];
   const sorts=[['newest','添加时间 · 降序'],['oldest','添加时间 · 升序'],
     ['name','名称 · 升序'],['name-desc','名称 · 降序']];
-  return <><div className="catalog-toolbar"><PageHeading title="我的素材"/>
+  return <><div className="catalog-toolbar"><PageHeading title="我的素材" actions={
+    <SelectionToggle mode="asset" selection={selection} onToggle={onSelectionToggle}/>}/>
     {state.seriesID==='all'?<CatalogTabs tabs={materialTabs} active={tab} onChange={onTabChange}/>:null}
     <div className="filters">
       <input id="search" type="search" placeholder="搜索名称、标签、颜色或主题"
@@ -426,7 +441,8 @@ export function LibraryPage({state,source,kindName,format,onAction,onPageChange,
   </>;
 }
 
-export function WorksPage({projects,isUntouchedLegacyExample,assets,localCover,cloudEnabled,source,onAction,onCardsChanged,tab,onTabChange}){
+export function WorksPage({projects,isUntouchedLegacyExample,assets,localCover,cloudEnabled,source,onAction,onCardsChanged,tab,onTabChange,
+  selection,onSelectionToggle}){
   const [revision,setRevision]=useState(0);
   useEffect(()=>{
     const refresh=()=>setRevision(value=>value+1);
@@ -440,7 +456,8 @@ export function WorksPage({projects,isUntouchedLegacyExample,assets,localCover,c
   const sorts=[['access-desc','最近访问 · 降序'],['access-asc','最近访问 · 升序'],
     ['updated-desc','最近修改 · 降序'],['updated-asc','最近修改 · 升序'],
     ['name-asc','名称 · 升序'],['name-desc','名称 · 降序']];
-  return <div className="works-page"><div className="catalog-toolbar"><PageHeading title="我的作品"/>
+  return <div className="works-page"><div className="catalog-toolbar"><PageHeading title="我的作品" actions={
+    <SelectionToggle mode="work" selection={selection} onToggle={onSelectionToggle}/>}/>
     <CatalogTabs tabs={WORK_TABS} active={tab} onChange={onTabChange}/>
     <button hidden data-act="new-project" data-react-action="true" id="work-create" onClick={()=>onAction('new-project')}/>
     <button hidden data-act="import-work" data-react-action="true" id="work-import" onClick={()=>onAction('import-work')}/>
@@ -493,10 +510,12 @@ export function WorksPage({projects,isUntouchedLegacyExample,assets,localCover,c
   </div>;
 }
 
-export function SeriesPage({series,assets,display,seriesCovers,source,onAction,onTabChange}){
+export function SeriesPage({series,assets,display,seriesCovers,source,onAction,onTabChange,
+  selection,onSelectionToggle}){
   const sorted=[...series].sort((a,b)=>a.id.startsWith('B700')&&b.id.startsWith('B700')?
     b.id.localeCompare(a.id):a.id.startsWith('B700')?-1:b.id.startsWith('B700')?1:0);
-  return <><div className="catalog-toolbar"><PageHeading title="我的素材"/>
+  return <><div className="catalog-toolbar"><PageHeading title="我的素材" actions={
+    <SelectionToggle mode="series" selection={selection} onToggle={onSelectionToggle}/>}/>
     <CatalogTabs tabs={materialTabs} active="series" onChange={onTabChange}/>
     <div className="swift-series-controls"><label className="shiye-search"><input type="search"
       placeholder="搜索系列、素材或标签" aria-label="搜索系列"/></label>
@@ -519,7 +538,7 @@ export function SeriesPage({series,assets,display,seriesCovers,source,onAction,o
   </>;
 }
 
-export function SeriesContentsPage({state,source,kindName,format,onAction}){
+export function SeriesContentsPage({state,source,kindName,format,onAction,selection,onSelectionToggle}){
   const model=seriesContentsModel(state);
   if(!model)return <p>系列已移走</p>;
   const {series,filter,all,members,covers}=model;
@@ -531,7 +550,8 @@ export function SeriesContentsPage({state,source,kindName,format,onAction}){
   return <section className="series-contents" data-react-page="seriesContents"><div className="catalog-toolbar">
     <div className="series-navigation"><button type="button" className="btn" id="series-return"
       data-react-action="true" onClick={()=>onAction('series-return')}>‹ 返回素材库</button>
-      <div className="actions" id="series-actions"/></div>
+      <div className="actions" id="series-actions"><SelectionToggle mode="asset"
+        selection={selection} onToggle={onSelectionToggle}/></div></div>
     <div className="view-head series-heading"><div className="series-identity">
       <div className="series-detail-cover">{covers.map(asset=><RouteImage key={asset.id} asset={asset} source={source} priority/>)}</div>
       <div className="series-copy"><div className="eyebrow">COLLECTION</div>
