@@ -5,7 +5,6 @@ import {mountSeriesContents,mountSeriesAddition} from './series-contents.js';
 import {toggleSelection,selectionActive} from './library-selection-model.js';
 import {bindLongPress} from './long-press.js';
 import {workInTab} from './work-collections.js';
-import {mountJournalTemplateGallery} from './journal-template-ui.js';
 import {applyCatalogPage,resetCatalogPage} from './catalog-pagination.js';
 export const parity={libraryTab:'series',selectionMode:null,showOnlySelected:false,selected:new Set(),workTab:'all',route:null,templateID:null,templateSide:'template',seriesScrollY:0,restoreSeriesScroll:false};
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -33,7 +32,7 @@ function mountLibrary(c){
 function mountWorks(c){const {state,view}=c,header=view.querySelector('.view-head'),filters=view.querySelector('.filters');
   if(parity.workTab==='trash')return;
   const actions=header?.querySelector('.actions');if(actions&&parity.workTab!=='templates'){actions.append(button(parity.selectionMode?'完成':'选择',()=>{toggleSelection(parity,'work');view.selectionRefresh?.();},'library-select-toggle'));}
-  if(parity.workTab==='templates'){mountJournalTemplateGallery(c,parity);return;}
+  if(parity.workTab==='templates')return;
   bindWorksCards(c,view.querySelectorAll('.grid .card[data-act="open-project"]'));
   if(filters){const grid=view.querySelector('.works-grid'),search=filters.querySelector('#work-search'),kind=filters.querySelector('#work-kind'),status=filters.querySelector('#work-status'),sort=filters.querySelector('#work-sort'),count=filters.querySelector('span');
     if(!status.querySelector('[value="favorite"]')){const option=document.createElement('option');option.value='favorite';option.textContent='已收藏';status.append(option);}

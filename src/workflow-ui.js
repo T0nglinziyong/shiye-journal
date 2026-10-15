@@ -210,7 +210,7 @@ async function classifySelectedWorks(c,records){
 }
 
 export function mountWorkflowControls(c) {
-  mountFourFilters(c);
+  if(!(c.state.route==='works'&&parity.workTab==='templates'))mountFourFilters(c);
   mountWorkPreviews(c);
   if(c.state.route==='series')mountSeries(c);
   if(c.state.route==='works')mountProjectBatch(c);

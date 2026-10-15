@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {project} from '../src/domain.js';
 import {presetJournalTemplates,normalizeUserTemplate,rankJournalTemplates,USER_TEMPLATE_PREFIX} from '../src/journal-template-catalog.js';
-import {journalTemplateRecords,saveJournalUserTemplate,validateJournalImage} from '../src/journal-template-ui.js';
+import {journalTemplateRecords,saveJournalUserTemplate,validateJournalImage} from '../src/journal-template-data.js';
 import {selectJournalAbstractTemplates,journalAbstractTemplateGuide} from '../src/journal-abstract-templates.js';
 import {selectJournalReferenceCases} from '../src/journal-reference-catalog.js';
 import {workInTab} from '../src/work-collections.js';

@@ -9,6 +9,7 @@
 | 顶栏、主导航、路由主体 | `react-shell.jsx`、`react-routes.jsx` | `test:ui`、`browser-acceptance.mjs` |
 | 素材、系列、作品的标签和入口卡片 | `react-routes.jsx` | `library-selection-browser.mjs`、`react-dom-ownership-browser.mjs` |
 | 素材与作品的最近删除列表、恢复、批量删除 | `RecentlyDeletedPage` | `trash-offline-browser.mjs`、`library-canvas-latest-browser.mjs` |
+| 模板列表、详情、筛选与导入表单 | `JournalTemplatesPage`、`journal-template-data.js` | `route-parity-smoke.mjs`、`browser-acceptance.mjs` |
 | 素材库和作品库的分页卡片 | `LibraryPage`、`WorksPage` | `react-route-smoke.mjs`、`library-selection-browser.mjs` |
 
 ## 仍需迁移的页面结构
@@ -16,7 +17,6 @@
 | 区域 | 当前直接 DOM 入口 | 迁移验收重点 |
 | --- | --- | --- |
 | 素材、系列、作品的选择栏与筛选菜单 | `library-selection-ui.js`、`series-contents.js`、`parity-ui.js`、`workflow-ui.js`、`filter-controls.js`、`catalog-pagination.js` | 跨页选择、全选、更多操作、搜索输入焦点、翻页、返回滚动位置 |
-| 模板库和模板导入弹窗 | `journal-template-ui.js` | 模板与真实案例封面、筛选、导入图片、切换详情、账号隔离 |
 | 素材导入检查与候选操作 | `import-incremental.js`、`import-workspace-ui.js`、`paper-ui.js`、`import-box-editor.js` | 手动框、透明 Mask、设置切换、连续导入、尺寸与图片不丢失 |
 | 素材编辑、抠图、系列编辑和其他弹窗 | `asset-editor.js`、`cutout-editor.js`、`series-editor.js`、`app.js` 等 | 保存、撤销、手势、弹窗关闭和焦点恢复 |
 | 登录与账号管理 | `cloud-auth-ui.js`、`account-management.js` | 首屏无旧页面闪烁、登录切换、私有缓存隔离 |

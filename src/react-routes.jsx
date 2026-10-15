@@ -1,4 +1,5 @@
-import React,{useEffect,useState} from 'react';
+import React,{useEffect,useRef,useState} from 'react';
+import {createPortal} from 'react-dom';
 import {AI_PROVIDERS,supportsVision} from './ai-settings.js';
 import {seriesContentsModel} from './series-contents.js';
 import {libraryPageData} from './library-page-data.js';
@@ -17,6 +18,10 @@ import {FabricPageViewport} from './fabric-page-viewport.jsx';
 import {SceneCover} from './scene-cover.jsx';
 import {WORK_TABS} from './work-collections.js';
 import {pageSize,pageSlice} from './catalog-pagination.js';
+import {presetJournalTemplates,templateIndexText} from './journal-template-catalog.js';
+import {journalTemplateImageURL,saveJournalUserTemplate} from './journal-template-data.js';
+import {journalTemplatePanel} from './journal-source-panels.js';
+import {loadJournalPresetPanel} from './journal-preset-images.js';
 
 function RouteImage({asset,source,priority=false}){
   const src=asset&&(source(asset.blobId)||asset.staticPath);
@@ -138,6 +143,212 @@ export function RecentlyDeletedPage({kind,state,source,localCover,cloudEnabled,o
         onClick={()=>void act([...selected],false)}><span className="selection-action-label">彻底删除所选</span></button>
     </div>
   </>;
+}
+
+const splitTemplateTags=value=>[...new Set(String(value||'').split(/[,，、\n]/)
+  .map(part=>part.trim()).filter(Boolean))];
+
+function JournalTemplateVisual({item,side='template',db,accountId,detail=false}){
+  const host=useRef(null);
+  const [visible,setVisible]=useState(detail);
+  const [attempt,setAttempt]=useState(0);
+  const [url,setURL]=useState('');
+  const [error,setError]=useState('');
+  useEffect(()=>{
+    if(detail){setVisible(true);return;}
+    if(typeof IntersectionObserver!=='function'){setVisible(true);return;}
+    const observer=new IntersectionObserver(entries=>{
+      if(entries.some(entry=>entry.isIntersecting)){setVisible(true);observer.disconnect();}
+    },{rootMargin:'300px'});
+    if(host.current)observer.observe(host.current);
+    return ()=>observer.disconnect();
+  },[detail,item.id,side]);
+  useEffect(()=>{
+    if(!visible)return;
+    let active=true;
+    const id=side==='case'?item.exampleBlobId:item.templateBlobId;
+    const panel=journalTemplatePanel(item,side);
+    if(!id&&!panel){setError('图片暂不可用');return;}
+    setURL('');setError('');
+    void (id?journalTemplateImageURL(db,accountId,id,detail?null:480):
+      loadJournalPresetPanel(panel,{accountId,edge:detail?null:480}))
+      .then(result=>{if(!result)throw Error('图片暂不可用');if(active)setURL(result);})
+      .catch(issue=>{if(active)setError(issue.message||'图片暂不可用');});
+    return ()=>{active=false;};
+  },[visible,attempt,item.id,side,db,accountId,detail]);
+  return <div ref={host} className={detail?'journal-template-detail-image':'card-image'}>
+    {url?<img src={url} alt={`${item.title}${side==='case'?' 真实案例':' 抽象模板'}`}/>:error?
+      <div className="journal-template-fallback"><strong>{item.title}</strong>
+        <p>{item.structure}</p><small>{error}{detail?' · 可重试':' · 点击查看结构'}</small>
+        {detail?<button type="button" className="btn mini"
+          onClick={()=>setAttempt(value=>value+1)}>重新载入图片</button>:null}</div>:
+      item.templateBlobId||side==='case'?<span className="journal-template-loading">
+        {side==='case'?'载入对应案例…':'载入模板…'}</span>:
+        <div className="journal-template-outline">{item.title}</div>}
+  </div>;
+}
+
+function JournalTemplateImport({db,onClose,onSaved,onError}){
+  const [busy,setBusy]=useState(false);
+  const closeRef=useRef(onClose);
+  closeRef.current=onClose;
+  useEffect(()=>{
+    const modal=document.querySelector('#modal');
+    const close=()=>closeRef.current();
+    modal?.addEventListener('close',close);
+    if(modal&&!modal.open)modal.showModal();
+    return ()=>{modal?.removeEventListener('close',close);if(modal?.open)modal.close();};
+  },[]);
+  const host=document.querySelector('#modal-body');
+  if(!host)return null;
+  const save=async event=>{
+    event.preventDefault();
+    if(busy)return;
+    setBusy(true);
+    try{
+      const form=new FormData(event.currentTarget);
+      const record=await saveJournalUserTemplate(db,{
+        title:String(form.get('title')||''),structure:String(form.get('structure')||''),
+        tags:splitTemplateTags(form.get('tags')),
+        styles:splitTemplateTags(form.get('styles')),
+        purposes:splitTemplateTags(form.get('purposes'))
+      },{templateImage:form.get('templateImage'),caseImage:form.get('caseImage')?.size?
+        form.get('caseImage'):null});
+      onSaved(record);
+      onClose();
+    }catch(error){onError(error);}finally{setBusy(false);}
+  };
+  return createPortal(<><div className="dialog-head"><button type="button" className="btn"
+      data-template-import-back onClick={onClose}>‹ 返回模板</button><h2>导入模板与案例</h2></div>
+    <form className="stack journal-template-import" onSubmit={save}>
+      <label>模板名称<input name="title" maxLength="80" required placeholder="例如：双列时间轴"/></label>
+      <label>结构说明<textarea name="structure" required placeholder="简述主图、文字、装饰与阅读顺序"/></label>
+      <label>检索标签（逗号分隔）<input name="tags" required placeholder="例如：时间轴、密集拼贴"/></label>
+      <label>适用风格（逗号分隔）<input name="styles" placeholder="例如：复古旧物"/></label>
+      <label>适用用途（逗号分隔）<input name="purposes" placeholder="例如：日常记录"/></label>
+      <label>抽象模板图片<input name="templateImage" type="file" accept="image/png,image/jpeg,image/webp" required/></label>
+      <label>对应真实案例图片（可选）<input name="caseImage" type="file" accept="image/png,image/jpeg,image/webp"/></label>
+      <p>两张图片仅存于当前账号的私有存储，不会作为可使用素材或作品。</p>
+      <button type="submit" className="btn primary" data-template-save disabled={busy}>
+        {busy?'正在保存…':'保存模板'}</button>
+    </form></>,host);
+}
+
+export function JournalTemplatesPage({state,db,viewState,onTabChange,onToast}){
+  const [filters,setFilters]=useState(viewState.templateFilters||
+    {query:'',type:'all',status:'all',sort:'default-asc'});
+  const [selectedID,setSelectedID]=useState(viewState.templateID||null);
+  const [side,setSide]=useState(viewState.templateSide||'template');
+  const [importOpen,setImportOpen]=useState(false);
+  const [menu,setMenu]=useState(null);
+  const [,forceRefresh]=useState(0);
+  const accountID=state.accountId;
+  const catalog=[...presetJournalTemplates(),...(state.userTemplates||[])];
+  const selected=catalog.find(item=>item.id===selectedID);
+  const change=next=>{
+    const value={...filters,...next};setFilters(value);viewState.templateFilters=value;
+    setSelectedID(null);viewState.templateID=null;
+  };
+  const choose=item=>{setSelectedID(item.id);viewState.templateID=item.id;
+    setSide('template');viewState.templateSide='template';};
+  const found=catalog.filter(item=>{
+    const query=filters.query.trim().toLocaleLowerCase();
+    const typeOK=filters.type==='all'||filters.type==='preset'&&item.origin==='preset'||
+      filters.type==='user'&&item.origin!=='preset';
+    const hasCase=!!(item.exampleBlobId||item.exampleSourceNumbers?.length);
+    const statusOK=filters.status==='all'||filters.status==='with-case'&&hasCase||
+      filters.status==='without-case'&&!hasCase;
+    return typeOK&&statusOK&&(!query||templateIndexText(item).includes(query));
+  }).sort((a,b)=>{
+    const direction=filters.sort.endsWith('asc')?1:-1;
+    return direction*(filters.sort.startsWith('name')?
+      a.title.localeCompare(b.title,'zh-CN'):catalog.indexOf(a)-catalog.indexOf(b));
+  });
+  const basis=filters.sort.startsWith('name')?'name':'default';
+  const order=filters.sort.endsWith('asc')?'asc':'desc';
+  const controls=[
+    ['类型','▦',filters.type,[['all','全部类型'],['preset','预设模板'],['user','我的模板']],
+      value=>change({type:value})],
+    ['状态','☷',filters.status,[['all','全部状态'],['with-case','有对应案例'],
+      ['without-case','暂无案例']],value=>change({status:value})],
+    ['排序依据','≡',basis,[['default','默认顺序'],['name','名称']],
+      value=>change({sort:value+'-'+order})],
+    ['排序顺序',order==='asc'?'↑':'↓',order,[['desc','降序'],['asc','升序']],
+      value=>change({sort:basis+'-'+value})]
+  ];
+  const available=selected&&!!(selected.exampleBlobId||selected.exampleSourceNumbers?.length);
+  const showCase=side==='case'&&available;
+  return <div className="works-page"><div className="catalog-toolbar">
+    <PageHeading title="我的作品"/>
+    <CatalogTabs tabs={WORK_TABS} active="templates" onChange={onTabChange}/>
+    <div className="filters journal-template-filters" data-template-filters="true">
+      <input type="search" id="work-search" placeholder="搜索模板名称或标签"
+        aria-label="搜索模板" value={filters.query}
+        onChange={event=>change({query:event.currentTarget.value})}/>
+      <div className="four-filter-controls">{controls.map(([heading,glyph,value,options,update])=>{
+        const label=options.find(([id])=>id===value)?.[1]||'';
+        const longest=options.map(([,text])=>text).sort((a,b)=>b.length-a.length)[0]||'';
+        return <button type="button" key={heading} className="filter-control"
+          data-filter-heading={heading} title={`${heading}：${label}`}
+          aria-label={`${heading}：${label}${heading==='排序顺序'?'，点击切换':''}`}
+          aria-haspopup={heading==='排序顺序'?undefined:'menu'}
+          onClick={event=>{
+            if(heading==='排序顺序'){update(value==='asc'?'desc':'asc');return;}
+            const bounds=event.currentTarget.getBoundingClientRect();
+            setMenu(menu?.heading===heading?null:{heading,left:Math.max(8,
+              Math.min(bounds.left,window.innerWidth-258)),top:bounds.bottom+6,options,update});
+          }}><i aria-hidden="true">{glyph}</i><span>{label}</span>
+          <span className="filter-width-reserve" aria-hidden="true">{longest}</span>
+        </button>;
+      })}</div>
+      <span className="catalog-total">{selected?`${catalog.length} 个模板`:
+        `${found.length} / ${catalog.length} 个模板`}</span>
+    </div></div>
+    <div className={`grid works-grid journal-template-grid ${selected?'journal-template-detail':''}`}>
+      {selected?<article className="journal-template-detail-card"><div className="journal-template-detail-head">
+        <button type="button" className="btn" data-template-back onClick={()=>{
+          setSelectedID(null);viewState.templateID=null;
+        }}>← 返回模板</button><h2>{selected.title}</h2></div>
+        <div className="journal-template-switch">
+          <button type="button" className={`btn ${showCase?'':'primary'}`}
+            data-template-side="template" onClick={()=>{setSide('template');viewState.templateSide='template';}}>
+            抽象模板</button>
+          <button type="button" className={`btn ${showCase?'primary':''}`}
+            data-template-side="case" disabled={!available}
+            onClick={()=>{setSide('case');viewState.templateSide='case';}}>真实案例</button>
+        </div><JournalTemplateVisual key={`${selected.id}:${side}`} item={selected}
+          side={showCase?'case':'template'} db={db} accountId={state.accountId} detail/>
+        <p>{selected.structure}</p><div className="journal-template-tags">
+          {(selected.tags||[]).map(tag=><span className="chip" key={tag}>{tag}</span>)}
+        </div></article>:<><button type="button" className="card work-entry journal-template-import-card"
+          data-template-import onClick={()=>setImportOpen(true)}><div className="card-image">＋</div>
+          <div className="card-body"><h3>导入模板与案例</h3><p>添加自己的模板图片</p></div>
+        </button>
+        {found.length?found.map(item=><button type="button" key={item.id}
+          className="card journal-template-card" data-template-id={item.id}
+          onClick={()=>choose(item)}>
+          <JournalTemplateVisual item={item} db={db} accountId={state.accountId}/>
+          <div className="card-body"><h3>{item.title}</h3>
+            <p>{item.origin==='preset'?'预设模板':'我的模板'}{' · '}
+              {item.exampleBlobId||item.exampleSourceNumbers?.length?'有对应案例':'暂无案例'}</p>
+            <div className="journal-template-tags">{item.tags.slice(0,3).map(tag=><span
+              className="chip" key={tag}>{tag}</span>)}</div></div>
+        </button>):<p className="empty">没有匹配的模板，试试其他标签。</p>}</>}
+    </div>
+    {menu?createPortal(<div className="swift-popover library-filter-menu" role="menu"
+      style={{position:'fixed',left:menu.left,top:menu.top,zIndex:70}}>
+      {menu.options.map(([value,label])=><button type="button" key={value}
+        role="menuitemradio" aria-checked={String(filters[menu.heading==='类型'?'type':
+          menu.heading==='状态'?'status':'sort']===value)}
+        onClick={()=>{menu.update(value);setMenu(null);}}>{label}</button>)}
+    </div>,document.body):null}
+    {importOpen?<JournalTemplateImport db={db} onClose={()=>setImportOpen(false)}
+      onSaved={record=>{if(state.accountId!==accountID)return;
+        state.userTemplates=[...(state.userTemplates||[]),record];
+        forceRefresh(value=>value+1);choose(record);
+        onToast('模板已在本机暂存，正在后台同步');}}
+      onError={error=>onToast(error.message)}/>:null}
+  </div>;
 }
 
 function PaperSizeOptions({includeNone=false,includeCustom=true}){

@@ -54,8 +54,9 @@ for(const [width,height] of [[320,640],[390,844],[700,1024],[768,1024],[1024,768
   assert.ok($('.project-preview-actions'));
   click('[data-act="preview-back"]');
   click('.swift-tabs button:nth-child(4)');assert.ok($('.journal-template-grid'));
-  click('.journal-template-card');assert.ok($('.journal-template-detail-card'));
-  click('[data-template-back]');click('.swift-tabs button:nth-child(2)');
+  click('.journal-template-card');await waitFor(()=>!!win.document.querySelector('.journal-template-detail-card'));
+  click('[data-template-back]');await waitFor(()=>!!win.document.querySelector('.journal-template-card'));
+  click('.swift-tabs button:nth-child(2)');
   click('#work-import');assert.ok($('.import-nav'));
   assert.ok($('.import-source-actions'));
   click('[data-act="import-exit"]');

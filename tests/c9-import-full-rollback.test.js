@@ -10,8 +10,8 @@ const expected={
   'import-box-editor.js':'196304b571f14f00d02855c6bc08bdb3fd32b533',
   'material-color-restoration.js':'4be602eab1a8d3d1281ba6c455c1ad80055da1c3',
   'import-workspace-ui.js':'8f057fda3ec1c4115b0c8503b5372253c8dc03dc',
-  // Reviewed change: the catalog toolbar and series scroll handoff no longer move React-owned nodes; import controls unchanged.
-  'workflow-ui.js':'4d5df94c12aae97943db9c44ebe234d8017b7abb',
+  // Reviewed change: catalog ownership and template filters move to React; import controls unchanged.
+  'workflow-ui.js':'f0c34664e8bc01c124f1acb9a81a0bbb172f967e',
   'styles.css':'c6b7945ba3ffeb4373dbe38f97bc96dbfd9e5178',
   'responsive.css':'3daab9b366125aeda84ed7e78bf2ac72132c8981',
   'paper-ui.js':'43dcd4f457d72382dadd0a0d8cea82cdd248058f',

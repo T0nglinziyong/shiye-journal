@@ -123,8 +123,7 @@ import {classifyCreationFile} from './creation-methods.js';
 import {readClipboardText} from './clipboard-text.js';
 import {mountParityControls as mountSwiftParity,bindWorksCards} from './parity-ui.js';
 import {parity} from './parity-ui.js';
-import {journalTemplateRecords} from './journal-template-ui.js';
-import {clearJournalTemplateImages} from './journal-template-ui.js';
+import {journalTemplateRecords,clearJournalTemplateImages} from './journal-template-data.js';
 import {syncSelectionScope,reconcileSelectedRecords,finishSelection} from './library-selection-model.js';
 import {canApplyBackgroundView,shouldPullCloudForRoute} from './view-update-policy.js';
 import {resetSelectionPresenters} from './selection-presenter.js';
@@ -138,7 +137,7 @@ import {createSettingsController,registerSettingsActions} from './page-controlle
 import {createMatchingController,registerMatchingActions} from './page-controllers/matching-controller.js';
 import {renderImportHTML} from './page-controllers/import-view.js';
 import {mountReactShell,renderReactPage,unavailableRoute} from './react-shell.jsx';
-import {LibraryPage,SeriesPage,SeriesContentsPage,WorksPage,RecentlyDeletedPage,MatchingPage,EditorPage,AssetDetailPage,ProjectPreviewPage,SettingsHomePage,SettingsDisplayPage,SettingsRecognitionPage,SettingsDataPage,SettingsAIPage,ImportSimplePage,ImportReviewPage,ImportInspectionPage} from './react-routes.jsx';
+import {LibraryPage,SeriesPage,SeriesContentsPage,WorksPage,RecentlyDeletedPage,JournalTemplatesPage,MatchingPage,EditorPage,AssetDetailPage,ProjectPreviewPage,SettingsHomePage,SettingsDisplayPage,SettingsRecognitionPage,SettingsDataPage,SettingsAIPage,ImportSimplePage,ImportReviewPage,ImportInspectionPage} from './react-routes.jsx';
 
 import {installRuntimeDiagnostics,recordRuntimeIssue,runtimeIssueSnapshot} from './runtime-diagnostics.js';
 mountReactShell();
@@ -567,6 +566,9 @@ function render(){
     ?trashPage('asset')
     :state.route==='works'&&parity.workTab==='trash'
     ?trashPage('project')
+    :state.route==='works'&&parity.workTab==='templates'
+    ?createElement(JournalTemplatesPage,{state,db,viewState:parity,onTabChange:workTab,
+      onToast:toast})
     :state.route==='library'&&state.series.some(s=>s.id===state.seriesID)
     ?SeriesContentsPage({state,source:image,kindName,format:fmt,onAction:handle})
     :state.route==='library'
