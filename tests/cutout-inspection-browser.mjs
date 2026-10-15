@@ -31,6 +31,12 @@ try{
   assert.equal(await evaluate('!!document.querySelector("#cutout-post-edge")'),false);
   assert.equal(await evaluate('document.querySelector("#cutout-apply").disabled'),true);
 
+  await b.sleep(150);
+  await click('[data-cut-step="final"]');
+  assert.equal(await evaluate('document.querySelector(".cutout-steps .current")?.getAttribute("data-cut-step")'),'final');
+  await click('[data-cut-step="rough"]');
+  assert.equal(await evaluate('document.querySelector(".cutout-steps .current")?.getAttribute("data-cut-step")'),'rough');
+
   await click('[data-cut-step="recognition"]');
   assert.equal(await evaluate('document.querySelector(".cutout-steps .current")?.textContent.includes("边缘优化")'),true);
   assert.ok(await evaluate('!!document.querySelector("#cutout-strength")'));
