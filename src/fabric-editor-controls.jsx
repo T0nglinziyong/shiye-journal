@@ -1,12 +1,17 @@
-import React,{useEffect,useLayoutEffect,useMemo,useState} from 'react';
+import React,{useEffect,useLayoutEffect,useMemo,useRef,useState} from 'react';
 import {materialKinds} from './material-taxonomy.js';
 import {createPortal} from 'react-dom';
 import {popupPlacement} from './popover-placement.js';
 import {commonShapes,advancedShapes,configureShape,shapeThumbnailSVG} from './editor-tools-model.js';
 import {primitive} from './domain.js';
+import {iconMarkup} from './icons.js';
+import {adjacentFontSize} from './canvas-control-behavior.js';
+import {historyTitle} from './project-history.js';
 
-const glyphs={select:'➤',pen:'✎',eraser:'◇',highlighter:'▱',lasso:'◌',text:'Aa',shape:'▢',material:'▧',layers:'▱',paper:'▦'};
+const toolIcons={select:'cursor',pen:'pen',eraser:'eraser',highlighter:'marker',lasso:'lasso',text:'text',shape:'shape',material:'material',layers:'layers',paper:'paper'};
 const labels={select:'选择',pen:'笔',eraser:'橡皮擦',highlighter:'荧光笔',lasso:'套索选择',text:'文字',shape:'图形',material:'素材',layers:'图层',paper:'画布背景'};
+const palette=['#171717','#555555','#989898','#ffffff','#e33b45','#fb8795','#ff9c21','#e8d432','#159b73','#57bd4b','#167ad9','#264d9c','#853aaf','#955969'];
+const slotDefaults={pen:{width:[.3,.5,1],color:['#171717','#2b5245','#167ad9']},highlighter:{width:[1,2,4],color:['#fb8795','#f5cf45','#57bd4b']},eraser:{width:[2,4,8]}};
 
 function ReactPopover({anchor,title,className='',width=360,height=440,picker=false,onClose,children}){
   const [position,setPosition]=useState(null);
@@ -114,7 +119,79 @@ function MaterialPicker({draft,materials,series,source,onPick}){
     </div>{!rows.length?<p>没有符合条件的素材</p>:rows.length>shown?<small>下滑继续显示 · 共 {rows.length} 件</small>:null}</>;
 }
 
-export function FabricEditorToolbar({state,draft,materials,source,onAction}){
+function LayerTree({draft,state,materials,onAction}){
+  const [expanded,setExpanded]=useState(()=>new Set());
+  const [multi,setMulti]=useState(false);
+  const drag=useRef(null);
+  const names=useMemo(()=>new Map(materials.map(asset=>[asset.id,asset.title])),[materials]);
+  const selected=new Set([...(state.multiSelected||[]),state.selected].filter(Boolean));
+  const label=node=>node.type==='group'?node.name||'未命名组合':
+    node.type==='material'?names.get(node.assetID)||'素材':node.type==='text'?node.content?.slice(0,27)||'文字':
+    node.type==='ink'?'手写笔迹':node.kind||'图形';
+  const visit=(nodes,level=1)=>[...(nodes||[])].sort((a,b)=>(b.zIndex??0)-(a.zIndex??0)).map(node=>{
+    const locked=!!(node.locked||node.isLocked);
+    const hidden=!!(node.hidden||node.isHidden||node.isParked);
+    const open=expanded.has(node.id)||node.type==='group'&&!expanded.has('closed:'+node.id);
+    const toggle=()=>setExpanded(previous=>{
+      const next=new Set(previous);
+      if(open){next.delete(node.id);next.add('closed:'+node.id);}
+      else{next.delete('closed:'+node.id);next.add(node.id);}
+      return next;
+    });
+    const operate=operation=>onAction('fabric-layer-operation',{id:node.id,operation});
+    const glyph=node.type==='group'?'▧':node.type==='material'?'▱':node.type==='text'?'Aa':node.type==='ink'?'✎':'◇';
+    return <div className="scene-layer-branch" key={node.id}>
+      <div className={`canvas-layer-row scene-layer-node ${selected.has(node.id)?'selected':''}`}
+        data-scene-node={node.id} role="treeitem" aria-level={level}
+        aria-expanded={node.type==='group'?open:undefined}>
+        <button className="scene-layer-expand" type="button" disabled={node.type!=='group'}
+          aria-label={open?'折叠组合':'展开组合'} onClick={toggle}>{node.type==='group'?(open?'▾':'▸'):''}</button>
+        <button className="scene-layer-pick" data-layer-pick type="button" aria-current={selected.has(node.id)}
+          onClick={event=>onAction('fabric-layer-select',{id:node.id,add:multi||event.shiftKey||event.ctrlKey||event.metaKey})}>
+          <span className="scene-layer-symbol">{glyph}</span><span>{label(node)}</span></button>
+        <button className="scene-layer-small" type="button" aria-label={locked?'解锁':'锁定'}
+          onClick={()=>operate('lock')} dangerouslySetInnerHTML={{__html:iconMarkup(locked?'lock':'unlock')}}/>
+        <button className="scene-layer-small" type="button" aria-label={hidden?'显示':'隐藏'}
+          disabled={locked} onClick={()=>operate('visibility')}
+          dangerouslySetInnerHTML={{__html:iconMarkup(hidden?'eyeOff':'eye')}}/>
+        <button className="scene-layer-small scene-layer-step" type="button" aria-label="上移一层"
+          disabled={locked} onClick={()=>operate('up')}>↑</button>
+        <button className="scene-layer-small scene-layer-step" type="button" aria-label="下移一层"
+          disabled={locked} onClick={()=>operate('down')}>↓</button>
+        <button className="scene-layer-grip" type="button" aria-label={`拖动图层 ${label(node)}`}
+          disabled={locked} onPointerDown={event=>{
+            if(event.button>0)return;
+            event.preventDefault();event.currentTarget.setPointerCapture(event.pointerId);
+            drag.current={id:node.id,x:event.clientX,y:event.clientY,targetID:null,relation:null};
+          }} onPointerMove={event=>{
+            if(!drag.current||drag.current.id!==node.id)return;
+            const target=document.elementFromPoint(event.clientX,event.clientY)?.closest?.('[data-scene-node]');
+            if(!target||target.dataset.sceneNode===node.id)return;
+            const rect=target.getBoundingClientRect(),fraction=(event.clientY-rect.top)/Math.max(1,rect.height);
+            const relation=target.getAttribute('aria-expanded')!==null&&fraction>.28&&fraction<.72?'inside':fraction<.5?'after':'before';
+            drag.current={...drag.current,targetID:target.dataset.sceneNode,relation};
+          }} onPointerUp={()=>{
+            if(drag.current?.id===node.id&&drag.current.targetID)onAction('fabric-layer-operation',{
+              id:node.id,operation:'move',targetID:drag.current.targetID,relation:drag.current.relation});
+            drag.current=null;
+          }} onPointerCancel={()=>{drag.current=null;}}>≡</button>
+      </div>{node.type==='group'&&open?<div className="scene-layer-children" role="group">{visit(node.children||[],level+1)}</div>:null}
+    </div>;
+  });
+  return <div className="swift-layer-popover scene-layer-tree-popover">
+    <div className="scene-layer-tree-toolbar">
+      <button type="button" className="btn mini" aria-pressed={multi} onClick={()=>setMulti(value=>!value)}>{multi?'✓ 多选中':'多选'}</button>
+      <button type="button" className="btn mini" disabled={selected.size<2}
+        onClick={()=>onAction('fabric-group-selection')}>组合所选</button>
+      <button type="button" className="btn mini" disabled={!draft.layers.some(node=>node.type==='group')}
+        onClick={()=>onAction('fabric-ungroup-selection')}>取消组合</button>
+    </div><div className="canvas-layer-list scene-layer-tree" role="tree" aria-label="可编辑场景递归图层树">
+      {visit(draft.layers)}</div><p className="scene-layer-tree-status" role="status">
+        {draft.layers.length} 个顶层图层 · 拖动 ≡ 改变层级</p>
+  </div>;
+}
+
+export function FabricEditorToolbar({state,draft,materials,source,selected,onInspectorChange,onAction}){
   const [menu,setMenu]=useState(null);
   const close=()=>setMenu(null);
   const open=(kind,event)=>{
@@ -124,35 +201,97 @@ export function FabricEditorToolbar({state,draft,materials,source,onAction}){
   const choose=(action,id)=>{close();onAction(action,id);};
   const tools=state.canvasTools||{};
   const setting=(name,value)=>onAction('fabric-tool-setting',name,value);
+  const slotValue=(mode,kind,index)=>tools[`fabric${mode[0].toUpperCase()+mode.slice(1)}${kind==='width'?'WidthsMM':'Colors'}`]?.[index]??slotDefaults[mode][kind][index];
+  const slotIndex=(mode,kind)=>tools[`fabric${mode[0].toUpperCase()+mode.slice(1)}${kind==='width'?'WidthSlot':'ColorSlot'}`]??1;
+  const selectSlot=(mode,kind,index)=>onAction('fabric-tool-slot',{mode,kind,index});
+  const editSlot=(mode,kind,index,value)=>onAction('fabric-tool-slot',{mode,kind,index,value});
+  const toggleSlot=(mode,kind,index,event)=>{
+    if(slotIndex(mode,kind)===index)
+      setMenu(previous=>previous?.kind===`slot-${kind}`&&previous.mode===mode&&previous.index===index?
+        null:{kind:`slot-${kind}`,mode,index,anchor:event.currentTarget});
+    else {close();selectSlot(mode,kind,index);}
+  };
+  const activeTool=state.tool;
+  const selectedNode=selected?.value;
+  const selectedKind=selected?.kind;
+  const editObject=(id,value)=>onInspectorChange(id,value);
+  const textMode=selectedKind==='text'||activeTool==='text';
+  const text=selectedKind==='text'?selectedNode:state.textDefaults||{style:'serif',fontSize:40,color:'#30463d',alignment:'left'};
+  const textProperty=(key,value)=>onAction('fabric-text-property',key,value);
+  const shapeProperty=(key,value)=>onAction('fabric-shape-property',key,value);
   return <><div className="swift-editor-toolbar" aria-label="创作工具">
-    <div className="editor-tools">{Object.keys(glyphs).map(kind=><button key={kind} type="button"
+    <div className="editor-tools">{Object.keys(toolIcons).map(kind=><button key={kind} type="button"
       className={`btn ${state.tool===kind?'primary':''}`} data-val={kind} data-act="tool"
       data-react-action="true" aria-label={labels[kind]} aria-pressed={state.tool===kind}
       onClick={event=>['shape','material','layers','paper'].includes(kind)?open(kind,event):
         state.tool===kind&&['pen','eraser','highlighter','lasso'].includes(kind)?
           setMenu(previous=>previous?.kind===kind?null:{kind,anchor:event.currentTarget}):
-          (close(),onAction('fabric-tool',null,kind))}>{glyphs[kind]}</button>)}</div>
+          (close(),onAction('fabric-tool',null,kind))} dangerouslySetInnerHTML={{__html:iconMarkup(toolIcons[kind])}}/>)}</div>
     <div className="canvas-context-tools" aria-label="当前工具选项">
       {(state.multiSelected||[]).length>1?<><span>已选 {state.multiSelected.length} 项</span>
         <button type="button" onClick={()=>onAction('fabric-group-selection')}>组合移动</button>
         <button type="button" onClick={()=>onAction('fabric-clear-selection')}>清空选择</button></>:
-      ['pen','highlighter'].includes(state.tool)?<>
-        <label>笔宽 <input type="range" min={state.tool==='pen'?.2:.5} max={state.tool==='pen'?3:8} step="0.1"
-          value={state.tool==='pen'?tools.fabricPenWidthMM??.5:tools.fabricMarkerWidthMM??2}
-          onChange={event=>setting(state.tool==='pen'?'fabricPenWidthMM':'fabricMarkerWidthMM',event.target.value)}/>
-          <span>{Number(state.tool==='pen'?tools.fabricPenWidthMM??.5:tools.fabricMarkerWidthMM??2).toFixed(1)} mm</span></label>
-        <label>颜色 <input type="color" value={state.tool==='pen'?tools.penColor||'#2b5245':tools.fabricMarkerColor||'#f5cf45'}
-          onChange={event=>setting(state.tool==='pen'?'penColor':'fabricMarkerColor',event.target.value)}/></label>
-      </>:state.tool==='eraser'?<label>橡皮擦 <input type="range" min="1" max="12" step="0.5"
-        value={tools.fabricEraserWidthMM??4} onChange={event=>setting('fabricEraserWidthMM',event.target.value)}/>
-        <span>{Number(tools.fabricEraserWidthMM??4).toFixed(1)} mm</span></label>:
-      <span className="swift-editor-hint">{state.tool==='text'?'点画布插入文字；点已有文字直接编辑':'点画布对象选择与调整'}</span>}
+      ['pen','highlighter','eraser'].includes(activeTool)?<>
+        {slotDefaults[activeTool].width.map((_,index)=>{
+          const width=Number(slotValue(activeTool,'width',index));
+          return <button key={'w'+index} type="button" className={`${activeTool==='eraser'?'eraser-size':'stroke-width'} ${slotIndex(activeTool,'width')===index?'active':''}`}
+            aria-label={`${activeTool==='eraser'?'橡皮大小':'笔画粗细'} ${width.toFixed(1)} mm`}
+            title={slotIndex(activeTool,'width')===index?'再次点击可修改粗细':''}
+            onClick={event=>toggleSlot(activeTool,'width',index,event)}>
+            {activeTool==='eraser'?<span style={{fontSize:Math.min(30,14+width*2)}}>○</span>:<span style={{height:Math.max(2,Math.min(20,width*4))}}/>}
+          </button>;
+        })}
+        {activeTool!=='eraser'?slotDefaults[activeTool].color.map((_,index)=><button key={'c'+index}
+          type="button" className={`ink-color ${slotIndex(activeTool,'color')===index?'active':''}`}
+          style={{backgroundColor:slotValue(activeTool,'color',index)}}
+          aria-label={`笔画颜色 ${slotValue(activeTool,'color',index)}`}
+          title={slotIndex(activeTool,'color')===index?'再次点击可修改颜色':''}
+          onClick={event=>toggleSlot(activeTool,'color',index,event)}/>):null}
+      </>:textMode?<>
+        <div className="canvas-text-format"><select aria-label="字体" value={text.style||'serif'} onChange={event=>textProperty('style',event.target.value)}>
+          {['serif','sans','rounded','hand'].map((id,index)=><option key={id} value={id}>{['宋体','黑体','圆体','手写体'][index]}</option>)}
+        </select><div className="canvas-font-size-stepper" aria-label="调整字号">
+          <button type="button" className="font-step" aria-label="减小字号" onClick={()=>textProperty('fontSize',adjacentFontSize(text.fontSize,-1))}>‹</button>
+          <output>{Math.round(text.fontSize||40)}</output>
+          <button type="button" className="font-step" aria-label="增大字号" onClick={()=>textProperty('fontSize',adjacentFontSize(text.fontSize,1))}>›</button>
+        </div></div><button type="button" aria-label="段落设置" onClick={event=>setMenu({kind:'text-paragraph',anchor:event.currentTarget})}>☷</button>
+        <input type="color" aria-label="文字颜色" value={text.color||'#30463d'}
+          onChange={event=>textProperty('color',event.target.value)}/>
+        <button type="button" aria-label="文字样式" onClick={event=>setMenu({kind:'text-style',anchor:event.currentTarget})}>Aa</button>
+
+      </>:selectedKind==='shape'?<>
+        <button type="button" className="shape-add-quick" onClick={event=>open('shape',event)}>＋ 图形</button>
+        {!selectedNode.vectorLayers?<><label className="shape-quick-color">填充<input type="color" aria-label="填充颜色"
+          value={selectedNode.fill||'#ffffff'} onChange={event=>shapeProperty('fill',event.target.value)}/></label>
+        <label className="shape-quick-color">描边<input type="color" aria-label="描边颜色"
+          value={selectedNode.stroke||'#547da4'} onChange={event=>shapeProperty('stroke',event.target.value)}/></label>
+        <select className="shape-quick-select" aria-label="描边粗细" value={selectedNode.lineWidth??2}
+          onChange={event=>shapeProperty('lineWidth',Number(event.target.value))}>
+          {[0,1,2,3,4,6,8,12,16,24,30].map(value=><option key={value} value={value}>线 {value}</option>)}
+        </select></>:null}
+        <select className="shape-quick-select" aria-label="图形整体不透明度"
+          value={Math.round((selectedNode.opacity??1)*100)}
+          onChange={event=>shapeProperty('opacity',Number(event.target.value)/100)}>
+          {[0,25,50,75,100].map(value=><option key={value} value={value}>{value}%</option>)}
+        </select>
+        <button type="button" className="shape-detail-quick" onClick={()=>onAction('fabric-inspector-open')}>更多设置</button>
+      </>:selectedNode?selectedKind==='material'?<button type="button" onClick={()=>onAction('fabric-inspector-open')}>☷ 素材操作</button>:null:
+      activeTool==='shape'?<button type="button" className="shape-add-quick" onClick={event=>open('shape',event)}>＋ 图形</button>:
+      activeTool==='lasso'?<button type="button" onClick={event=>setMenu({kind:'lasso',anchor:event.currentTarget})}>◌ 套索选择</button>:
+      <button type="button" className="canvas-fit-button" onClick={()=>onAction('fabric-fit-view')}>↖ {Math.round(state.zoom*100)}%</button>}
     </div>
   </div>{menu?<ReactPopover anchor={menu.anchor} onClose={close}
     title={{shape:'添加图形',material:'选择素材',paper:'画布背景',layers:'图层',
-      pen:'笔设置',eraser:'橡皮擦设置',highlighter:'荧光笔设置',lasso:'套索选择设置'}[menu.kind]}
-    className={['shape','material'].includes(menu.kind)?`swift-picker-popover swift-${menu.kind}-picker`:'swift-menu'}
-    width={menu.kind==='paper'?260:innerWidth>=900?432:360} height={menu.kind==='shape'?550:440}
+      pen:'笔设置',eraser:'橡皮擦设置',highlighter:'荧光笔设置',lasso:'套索选择设置',
+      'slot-width':'修改粗细','slot-color':'修改当前颜色',
+      'text-paragraph':'段落','text-style':'文字样式'}[menu.kind]}
+    className={['shape','material'].includes(menu.kind)?`swift-picker-popover swift-${menu.kind}-picker`:
+      menu.kind==='layers'?'swift-menu swift-layer-popover':'swift-menu'}
+    width={menu.kind==='paper'?260:menu.kind==='layers'?390:
+      menu.kind==='slot-width'?270:menu.kind==='slot-color'?280:
+      ['pen','eraser','highlighter','lasso'].includes(menu.kind)?290:
+      ['text-paragraph','text-style'].includes(menu.kind)?230:
+      innerWidth>=900?432:360} height={menu.kind==='shape'?550:440}
     picker={['shape','material'].includes(menu.kind)}>
     {menu.kind==='shape'?<ShapePicker draft={draft} onPick={id=>choose('fabric-add-shape',id)}/>:null}
     {menu.kind==='material'?<MaterialPicker draft={draft} materials={materials}
@@ -170,6 +309,26 @@ export function FabricEditorToolbar({state,draft,materials,source,onAction}){
     {menu.kind==='lasso'?<div className="stack">{[['contain','完整包含'],['intersect','只需要相交']]
       .map(([id,label])=><button key={id} type="button" aria-checked={(state.selectionMode||'contain')===id}
         onClick={()=>{onAction('fabric-selection-mode',id);close();}}>{label}</button>)}</div>:null}
+    {menu.kind==='slot-width'?<label className="canvas-setting">粗细 · {Number(slotValue(menu.mode,'width',menu.index)).toFixed(1)} mm
+      <input type="range" min={menu.mode==='pen'?.2:menu.mode==='highlighter'?.5:1}
+        max={menu.mode==='pen'?3:menu.mode==='highlighter'?8:12} step="0.1"
+        value={slotValue(menu.mode,'width',menu.index)}
+        onChange={event=>editSlot(menu.mode,'width',menu.index,event.target.value)}/></label>:null}
+    {menu.kind==='slot-color'?<><div className="canvas-color-grid">{palette.map(color=><button key={color}
+      type="button" className="ink-color" style={{backgroundColor:color}} aria-label={`颜色 ${color}`}
+      onClick={()=>{editSlot(menu.mode,'color',menu.index,color);close();}}/>)}</div>
+      <label>自定义颜色<input type="color" value={slotValue(menu.mode,'color',menu.index)}
+        onChange={event=>editSlot(menu.mode,'color',menu.index,event.target.value)}/></label></>:null}
+    {menu.kind==='text-paragraph'?<div className="stack">{[['left','左对齐'],['center','居中'],['right','右对齐']]
+      .map(([id,label])=><button key={id} type="button" aria-checked={(text.alignment||'left')===id}
+        onClick={()=>{textProperty('alignment',id);close();}}>{(text.alignment||'left')===id?'✓ ':''}{label}</button>)}
+      {selectedKind==='text'?<button type="button" onClick={()=>{close();onAction('fabric-inspector-open');}}>详细文字设置</button>:null}
+    </div>:null}
+    {menu.kind==='text-style'?<div className="stack">{[['bold','粗体'],['italic','斜体'],['underline','下划线'],['strikethrough','删除线']]
+      .map(([id,label])=><button key={id} type="button" aria-checked={!!text[id]}
+        onClick={()=>{textProperty(id,!text[id]);close();}}>{text[id]?'✓ ':''}{label}</button>)}
+      {selectedKind==='text'?<button type="button" onClick={()=>{close();onAction('fabric-inspector-open');}}>详细文字设置</button>:null}
+    </div>:null}
     {menu.kind==='paper'?<>
       {[['plain','纯色'],['grid','方格'],['lines','横线'],['dots','点阵'],['columns','双栏']]
         .map(([id,label])=><button key={id} type="button" role="menuitemradio"
@@ -178,29 +337,50 @@ export function FabricEditorToolbar({state,draft,materials,source,onAction}){
       <label className="canvas-toggle">纸张颜色<input type="color" value={draft.paperColor}
         onChange={event=>{close();onAction('fabric-paper','color',event.target.value);}}/></label>
     </>:null}
-    {menu.kind==='layers'?<div className="canvas-layer-list">
-      {[...draft.layers].reverse().map(node=><button key={node.id} type="button"
-        className="canvas-layer-row" onClick={()=>choose('fabric-select-layer',node.id)}>
-        {node.type==='text'?'文字':node.type==='material'?'素材':node.type==='shape'?'图形':node.type==='ink'?'笔迹':'组合'} · {node.type==='text'?node.content||'空白':node.id.slice(0,8)}
-      </button>)}</div>:null}
+    {menu.kind==='layers'?<LayerTree draft={draft} state={state} materials={materials} onAction={onAction}/>:null}
   </ReactPopover>:null}</>;
 }
 
 export function FabricHeaderMenu({kind,project,onAction,onAIOpen}){
   const [anchor,setAnchor]=useState(null);
   const close=()=>setAnchor(null);
-  const entries=kind==='export'?[['save-snapshot','保存快照'],['export-png','导出 PNG'],
-    ['print','导出 PDF / 打印'],['download-project-json','导出可编辑 JSON'],
-    ['export-scene-json','导出 Scene JSON'],['creative-json','导入创作指令']]:
-    [['new-draft','新方案'],['save-archive','保存手动存档'],
-      ...(project.manualArchives||[]).slice(-5).reverse().map(item=>['restore-archive','恢复 '+new Date(item.date).toLocaleString(),item.id])];
+  const run=(action,id,value)=>{close();onAction(action,id,value);};
+  const entries=[['save-snapshot','保存快照'],['export-png','导出 PNG'],
+    ['export-pdf','导出 PDF'],['download-project-json','导出可编辑 JSON'],
+    ['export-scene-json','导出标准 Scene JSON'],['print','打印'],
+    ['creative-json','导入创作指令']];
+  const historyRow=(title,restore,rename,remove,key)=><div className="canvas-history-row" key={key}>
+    <button type="button" onClick={restore}>{title}</button><div>
+      <button type="button" aria-label={`重命名 ${title}`} onClick={rename}>重命名</button>
+      <button type="button" aria-label={`删除 ${title}`} onClick={remove}>删除</button>
+    </div></div>;
   return <><button type="button" className="btn" aria-label={kind==='export'?'导出作品':'历史记录'}
     onClick={event=>setAnchor(previous=>previous?null:event.currentTarget)}>{kind==='export'?'导出':'◷'}</button>
     {anchor?<ReactPopover anchor={anchor} onClose={close} title={kind==='export'?'导出作品':'历史记录'}
-      width={260} height={360}>
-      <div className="stack">{kind==='history'?<button type="button" data-editor-ai="true"
-        onClick={()=>{close();onAIOpen?.();}}>AI 创作</button>:null}
-        {entries.map(([action,label,id],index)=><button key={index} type="button"
-        onClick={()=>{close();onAction(action,id);}}>{label}</button>)}</div>
+      width={kind==='history'?340:220} height={kind==='history'?520:360}>
+      {kind==='history'?<div className="stack">
+        {project.drafts.map((draft,index)=>historyRow(historyTitle(draft,index),
+          ()=>run('fabric-history-restore-draft',draft.id),
+          ()=>onAction('fabric-history-rename-draft',draft.id),
+          ()=>run('fabric-history-delete-draft',draft.id),draft.id))}
+        {(project.manualArchives||[]).slice().reverse().map(archive=>historyRow(
+          archive.title||'存档 '+new Date(archive.date).toLocaleString(),
+          ()=>run('restore-archive',archive.id),
+          ()=>onAction('fabric-history-rename-archive',archive.id),
+          ()=>run('fabric-history-delete-archive',archive.id),archive.id))}
+        {(project.autoSceneSnapshots||[]).slice(0,20).length?<h3 className="canvas-auto-snapshot-heading">自动恢复点</h3>:null}
+        {(project.autoSceneSnapshots||[]).slice(0,20).map(snapshot=>historyRow(
+          snapshot.title||new Date(snapshot.at).toLocaleString()+' · '+({
+            '30-operations':'累计 30 次操作','5-minutes':'连续编辑 5 分钟',
+            'leave-editor':'退出画布','pagehide':'页面关闭','app-background':'切到后台',
+            completed:'完成创作','pre-conflict':'同步冲突前'}[snapshot.reason]||'自动保存'),
+          ()=>run('fabric-history-restore-auto',snapshot.id),
+          ()=>onAction('fabric-history-rename-auto',snapshot.id),
+          ()=>run('fabric-history-delete-auto',snapshot.id),snapshot.id))}
+        <hr/><button type="button" onClick={()=>run('new-draft')}>新方案</button>
+        <button type="button" onClick={()=>run('save-archive')}>保存手动存档</button>
+        <button type="button" data-editor-ai="true" onClick={()=>{close();onAIOpen?.();}}>AI 创作</button>
+      </div>:<div className="stack">{entries.map(([action,label])=><button key={action} type="button"
+        onClick={()=>run(action)}>{label}</button>)}</div>}
     </ReactPopover>:null}</>;
 }

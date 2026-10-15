@@ -30,9 +30,31 @@ try{
   await click('#blank-create-confirm','#canvas-page');
   await wait('.upper-canvas');
   assert.equal(await evaluate('document.querySelectorAll(".swift-editor-toolbar").length'),1);
+  assert.equal(await evaluate('document.querySelector("[data-val=pen]")?.textContent.trim()'),'','Pen has the approved single SVG icon');
   assert.deepEqual(browser.errors,[]);
+  await command('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:2,mobile:true});
+  await click('[data-val="pen"]');
+  await click('[data-val="pen"]','.swift-popover');
+  const mobileMenu=await evaluate(`(()=>{const rect=document.querySelector('.swift-popover').getBoundingClientRect();
+    return {left:rect.left,right:rect.right,top:rect.top,bottom:rect.bottom}})()`);
+  assert.ok(mobileMenu.left>=0&&mobileMenu.right<=390&&mobileMenu.bottom<=844,
+    'Second tap settings menu must remain visible on phone: '+JSON.stringify(mobileMenu));
+  await click('[data-val="pen"]');
+  await command('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
+  await sleep(200);
+  await click('[data-val="select"]');
   const point=await evaluate(`(()=>{const rect=document.querySelector('.upper-canvas').getBoundingClientRect();
     return {x:rect.left+rect.width*.4,y:rect.top+rect.height*.45}})()`);
+  await click('[data-val="pen"]');
+  assert.equal(await evaluate('document.querySelectorAll(".canvas-context-tools .stroke-width").length'),3);
+  assert.equal(await evaluate('document.querySelectorAll(".canvas-context-tools .ink-color").length'),3);
+  await click('[data-val="pen"]','.swift-popover');
+  assert.ok(await evaluate('document.querySelector(".swift-popover")?.textContent.includes("钢笔")'));
+  await click('[data-val="pen"]');
+  await click('.canvas-context-tools .stroke-width:first-child');
+  assert.equal(await evaluate('document.querySelector(".canvas-context-tools .stroke-width:first-child")?.classList.contains("active")'),true);
+  await click('.canvas-context-tools .stroke-width:first-child','.swift-popover');
+  assert.ok(await evaluate('document.querySelector(".swift-popover")?.textContent.includes("修改粗细")'));
   await click('[data-val="pen"]');
   await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,clickCount:1,...point});
   for(let step=1;step<=8;step++)await command('Input.dispatchMouseEvent',{
@@ -126,12 +148,38 @@ try{
   await click('[data-shape-kind="rectangle"]');
   await sleep(700);
   assert.equal((await projects())[0].drafts[0].layers.filter(layer=>layer.type==='shape').length,1);
+  assert.equal(await evaluate('!!document.querySelector(".show-inspector")'),false,
+    'Selecting a Scene object must retain the canvas selection state');
+  await wait('.fabric-selected-actions');
+  await click('[aria-label="编辑对象"]','.show-inspector');
+  await click('[aria-label="关闭对象设置"]');
+  assert.equal(await evaluate('!!document.querySelector(".show-inspector")'),false);
+  const pagePoints=await evaluate(`(()=>{const rect=document.querySelector('.upper-canvas').getBoundingClientRect();
+    return {blank:{x:rect.left+rect.width*.08,y:rect.top+rect.height*.08},
+      shape:{x:rect.left+rect.width*.5,y:rect.top+rect.height*.5}}})()`);
+  for(const [name,position] of Object.entries(pagePoints)){
+    await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,clickCount:1,...position});
+    await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,clickCount:1,...position});
+    await sleep(120);
+    assert.equal(await evaluate('!!document.querySelector(".show-inspector")'),false,
+      `Clicking ${name} must not open the attribute panel`);
+  }
+  await wait('.fabric-selected-actions');
   await click('[data-val="shape"]','.swift-shape-picker');
   await click('.swift-shape-picker .swift-segments button:first-child');
   await click('[data-shape-kind="used"]');await sleep(700);
   const shapes=(await projects())[0].drafts[0].layers.filter(layer=>layer.type==='shape');
   assert.equal(shapes.length,2);
   assert.notEqual(shapes[0].id,shapes[1].id,'Copied used shape needs a new Scene identity');
+  await click('[data-val="layers"]','.scene-layer-tree');
+  assert.ok(await evaluate('document.querySelectorAll(".scene-layer-tree [role=treeitem]").length')>=2);
+  assert.ok(await evaluate('!!document.querySelector(".scene-layer-tree [aria-label=锁定]")'));
+  await click('.scene-layer-tree [aria-label=锁定]');await sleep(800);
+  assert.ok((await projects())[0].drafts[0].layers.some(layer=>layer.locked),
+    'Layer lock must persist in the current Scene');
+  await click('.scene-layer-tree [aria-label=解锁]');await sleep(800);
+  assert.equal((await projects())[0].drafts[0].layers.filter(layer=>layer.locked).length,0);
+  await click('[data-val="layers"]');
   await click('[data-val="highlighter"]');
   const markerAt=await evaluate(`(()=>{const r=document.querySelector('.upper-canvas').getBoundingClientRect();
     return {x:r.left+r.width*.2,y:r.top+r.height*.15}})()`);
@@ -185,12 +233,12 @@ try{
   await click('[role="menuitemradio"][aria-checked="false"]');
   await sleep(700);
   assert.equal((await projects())[0].drafts[0].paperPattern,'grid');
-  const scale=()=>evaluate('getComputedStyle(document.querySelector("#canvas-page")).transform');
+  const scale=()=>evaluate('new DOMMatrix(getComputedStyle(document.querySelector("#canvas-page")).transform).a');
   const beforeZoom=await scale();
   await click('[data-act="zoom-in"]');await sleep(200);
   assert.notEqual(await scale(),beforeZoom,'Zoom button must change the Fabric paper transform');
   await click('[data-act="zoom-out"]');await sleep(200);
-  assert.equal(await scale(),beforeZoom,'Zoom out must restore the fitted Fabric paper');
+  assert.equal(await scale(),beforeZoom,'Zoom out must restore the fitted Fabric paper scale');
   await click('[data-val="pen"]');
   const inkBeforePinch=(await projects())[0].drafts[0].layers.filter(layer=>layer.type==='ink').length;
   const pinch=await evaluate(`(()=>{const r=document.querySelector('.upper-canvas').getBoundingClientRect();

@@ -4,8 +4,8 @@ import {clampedCanvasOffset} from './canvas-control-behavior.js';
 
 // This adapter changes only the fitted paper's CSS transform. Fabric keeps
 // its own scene coordinates and pointer lifetime, so zoom never edits Scene.
-export function FabricPageViewport({draft,width,height,zoom=1,initialPan,onViewportChange,children}){
-  const pageRef=useRef(null),panRef=useRef(null),changeRef=useRef(onViewportChange);
+export function FabricPageViewport({draft,width,height,zoom=1,initialPan,onViewportChange,resetSignal=0,children}){
+  const pageRef=useRef(null),panRef=useRef(null),changeRef=useRef(onViewportChange),previousZoom=useRef(zoom);
   changeRef.current=onViewportChange;
   useLayoutEffect(()=>{
     const page=pageRef.current,host=page.parentElement;
@@ -90,8 +90,15 @@ export function FabricPageViewport({draft,width,height,zoom=1,initialPan,onViewp
   },[draft.id]);
   useLayoutEffect(()=>{
     const pan=panRef.current;
-    if(pan&&Math.abs(pan.getScale()-zoom)>.001)pan.zoom(zoom,{animate:false});
+    if(pan&&Math.abs(pan.getScale()-zoom)>.001){
+      if(zoom<=1&&previousZoom.current>1)pan.reset({startX:0,startY:0,startScale:1,animate:false});
+      else pan.zoom(zoom,{animate:false});
+    }
+    previousZoom.current=zoom;
   },[zoom]);
+  useLayoutEffect(()=>{
+    if(resetSignal)panRef.current?.reset({startX:0,startY:0,startScale:1,animate:false});
+  },[resetSignal]);
   return <div ref={pageRef} id="canvas-page" className={`canvas-page ${draft.paperPattern}`}
     style={{width,height,backgroundColor:draft.paperColor,flex:'0 0 auto',flexShrink:0}}>{children}</div>;
 }

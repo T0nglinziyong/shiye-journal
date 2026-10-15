@@ -25,10 +25,10 @@ const byID=(nodes,id)=>{
 export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onChange,onIssue,onReady,
   tool='select',pen={widthMM:.5,color:'#2b5245'},marker={widthMM:2,color:'#f5cf45'},
   eraser={widthMM:4},selectionMode='contain',readOnly=false,sceneRevision=0,
-  selectedID=null,selectedIDs=[]}){
+  selectedID=null,selectedIDs=[],textDefaults=null}){
   const canvasRef=useRef(null),sessionRef=useRef(null),reconcileRef=useRef(null),callbacks=useRef(null);
   callbacks.current={draft,assetURL,onSelection,onBeforeChange,onChange,onIssue,onReady,tool,pen,marker,
-    eraser,selectionMode,selectedID,selectedIDs};
+    eraser,selectionMode,selectedID,selectedIDs,textDefaults};
 
   useLayoutEffect(()=>{reconcileRef.current?.();},[draft,sceneRevision]);
 
@@ -243,10 +243,11 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
               return;
             }
             const width=Math.max(60,Math.min(current.canvas.width*.35,current.canvas.width-point.x));
-            const node={...textBlock('',current),
+            const node={...textBlock('',current),...callbacks.current.textDefaults,
               id:globalThis.crypto?.randomUUID?.()||'text-'+Math.random().toString(36).slice(2),
               type:'text',x:point.x+width/2,y:point.y+50,width,height:100,
-              alignment:'left',zIndex:Math.max(1000,...current.layers.map(item=>item.zIndex||0))+1};
+              alignment:callbacks.current.textDefaults?.alignment||'left',
+              zIndex:Math.max(1000,...current.layers.map(item=>item.zIndex||0))+1};
             callbacks.current.onBeforeChange?.('text:new');
             current.layers.push(node);
             uncommittedText.add(node.id);
@@ -376,10 +377,15 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
           upper.removeEventListener('pointercancel',onPointerEnd,true);
         };
         canvas.sceneRemovePointerHandlers=removePointerHandlers;
-        const selection=event=>callbacks.current.onSelection?.([...new Set(event.selected?.map(o=>o.sceneID).filter(Boolean)||[])]);
+        const selection=event=>{
+          const ids=[...new Set(event.selected?.map(o=>o.sceneID).filter(Boolean)||[])];
+          const bounds=ids.length===1?canvas.getActiveObject()?.getBoundingRect():null;
+          callbacks.current.onSelection?.(ids,bounds?{x:bounds.left,y:bounds.top,
+            width:bounds.width,height:bounds.height}:null);
+        };
         canvas.on('selection:created',selection);
         canvas.on('selection:updated',selection);
-        canvas.on('selection:cleared',()=>callbacks.current.onSelection?.([]));
+        canvas.on('selection:cleared',()=>callbacks.current.onSelection?.([],null));
         canvas.on('before:transform',event=>{
           if(event.target?.sceneID)callbacks.current.onBeforeChange?.(event.target.sceneID);
         });
@@ -388,6 +394,11 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
           if(!node)return;
           try{
             bridge.applyObject(node,object);
+            if(object.sceneID===callbacks.current.selectedID){
+              const bounds=object.getBoundingRect();
+              callbacks.current.onSelection?.([object.sceneID],{x:bounds.left,y:bounds.top,
+                width:bounds.width,height:bounds.height});
+            }
             if(node.craftDisplaySlices?.length){
               for(const piece of projected().filter(item=>item.ownerID===node.id))
                 signatures.delete(renderKey(piece));

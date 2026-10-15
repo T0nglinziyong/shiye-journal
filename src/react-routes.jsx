@@ -1100,6 +1100,36 @@ function EditorAIPanel({state,draft,asset,hasReport,onAction,onPromptChange}){
   </section>;
 }
 
+function FabricSelectedActions({bounds,draft,onAction}){
+  const [position,setPosition]=useState(null);
+  useEffect(()=>{
+    if(!bounds){setPosition(null);return;}
+    const canvas=document.querySelector('.upper-canvas');
+    const page=document.querySelector('#canvas-page');
+    if(!canvas||!page)return;
+    const place=()=>{
+      const rect=canvas.getBoundingClientRect();
+      const center=rect.left+(bounds.x+bounds.width/2)*rect.width/draft.canvas.width;
+      const edge=rect.top+(bounds.y+bounds.height)*rect.height/draft.canvas.height;
+      setPosition({left:Math.max(83,Math.min(innerWidth-83,center)),
+        top:Math.max(112,Math.min(innerHeight-52,edge+12))});
+    };
+    place();
+    const observer=new MutationObserver(place);observer.observe(page,{attributes:true,attributeFilter:['style']});
+    const resize=new ResizeObserver(place);resize.observe(canvas);
+    addEventListener('resize',place);addEventListener('scroll',place,true);
+    page.addEventListener('panzoomchange',place);
+    return ()=>{observer.disconnect();resize.disconnect();removeEventListener('resize',place);
+      removeEventListener('scroll',place,true);page.removeEventListener('panzoomchange',place);};
+  },[bounds?.x,bounds?.y,bounds?.width,bounds?.height,draft.id,draft.canvas.width,draft.canvas.height]);
+  if(!position)return null;
+  return createPortal(<div className="fabric-selected-actions" style={position} aria-label="选中对象操作">
+    <button type="button" aria-label="复制对象" onClick={()=>onAction('duplicate')}>⊞</button>
+    <button type="button" aria-label="删除对象" onClick={()=>onAction('delete-object')}>♜</button>
+    <button type="button" aria-label="编辑对象" onClick={()=>onAction('fabric-inspector-open')}>☷</button>
+  </div>,document.body);
+}
+
 // Fabric owns the single editable canvas; React owns its surrounding controls.
 export function EditorPage({state,draft,editorEntry,asset,source,format,
   hasAIReport,onAction,onInspectorChange,onTitleCommit,onDraftSelect,onAIAction,onAIOpen,onAIPromptChange,
@@ -1126,19 +1156,23 @@ export function EditorPage({state,draft,editorEntry,asset,source,format,
         <FabricHeaderMenu kind="export" project={project} onAction={onAction}/>
     </div></div>
     <FabricEditorToolbar state={state} draft={draft} materials={materials} source={source}
-      onAction={onAction}/>
-    <div className={`editor-shell swift-editor-workspace ${selected?'show-inspector':''}`}
+      selected={selected} onInspectorChange={onInspectorChange} onAction={onAction}/>
+    {selected&&state.tool==='select'?<FabricSelectedActions bounds={state.fabricSelectionBounds}
+      draft={draft} onAction={onAction}/>:null}
+    <div className={`editor-shell swift-editor-workspace ${selected&&state.fabricInspectorOpen?'show-inspector':''}`}
       data-react-page="editor"><section className="editor-stage"><div className="object-toolbar">
       <button className="btn mini" data-act="zoom-out">－</button><span>{Math.round(state.zoom*100)}%</span><button className="btn mini" data-act="zoom-in">＋</button>
       <button className="btn mini" data-act="paper-menu">纸张</button>
       <button className="btn mini" data-act="restore-baseline" disabled={selected?.kind!=='material'||!selected.value.generationBaseline}>恢复初稿</button>
       <button className="btn mini" data-act="park" disabled={selected?.kind!=='material'}>放入备选</button>
     </div><div className="page-wrap"><FabricPageViewport draft={draft} width={width} height={height}
-      zoom={state.zoom} initialPan={state.canvasViewports?.get(project.id+':'+draft.id)}
+      zoom={state.zoom} resetSignal={state.fabricFitRevision||0}
+      initialPan={state.canvasViewports?.get(project.id+':'+draft.id)}
       onViewportChange={onFabricViewportChange}><div className="fabric-scene-scale" style={{position:'absolute',left:0,top:0,
         width:draft.canvas.width,height:draft.canvas.height,transform:`scale(${scale})`,transformOrigin:'left top'}}>
         <FabricSceneStage draft={draft} sceneRevision={sceneRevision} tool={state.tool}
           selectedID={state.selected}
+          textDefaults={state.textDefaults||null}
           pen={{widthMM:state.canvasTools?.fabricPenWidthMM??.5,color:state.canvasTools?.penColor||'#2b5245',
             style:state.canvasTools?.fabricPenStyle||'pressure'}}
           marker={{widthMM:state.canvasTools?.fabricMarkerWidthMM??2,color:state.canvasTools?.fabricMarkerColor||'#f5cf45',
@@ -1150,7 +1184,8 @@ export function EditorPage({state,draft,editorEntry,asset,source,format,
       </div></FabricPageViewport></div>
       <div className="shelf"><b>备选</b>{draft.items.filter(item=>item.isParked).map(item=><button key={item.id} className="mini-asset" data-act="unpark" data-id={item.id}>
         <RouteImage asset={asset(item.assetID)} source={source}/></button>)}</div>
-    </section><aside className="editor-inspector"><h2>{selected?`${{material:'素材',text:'文字',shape:'图形'}[selected.kind]} · 图层属性`:'页面设置'}</h2>
+    </section><aside className="editor-inspector"><div className="fabric-inspector-head"><h2>{selected?`${{material:'素材',text:'文字',shape:'图形'}[selected.kind]} · 图层属性`:'页面设置'}</h2>
+      <button type="button" aria-label="关闭对象设置" onClick={()=>onAction('fabric-inspector-close')}>×</button></div>
       <div className="inspector-island" style={{display:'contents'}}><EditorInspector selected={selected}
         draft={draft} asset={asset} format={format} onChange={onInspectorChange} onAction={onAction}/></div>
       <hr/><label>方案<select id="draft-select" defaultValue={draft.id}

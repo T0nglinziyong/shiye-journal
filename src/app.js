@@ -13,7 +13,7 @@ import {renderLoginGate} from './react-cloud-auth.jsx';
 const sceneRuntime=()=>import('./scene-renderer.js');
 const renderSceneCanvas=async(...args)=>(await sceneRuntime()).renderSceneCanvas(...args);
 const decodeSceneImage=async(...args)=>(await sceneRuntime()).decodeSceneImage(...args);
-import {sceneLayerEntries,attachSceneV2,moveSceneNode,groupSceneLayers} from './scene-model.js';
+import {sceneLayerEntries,attachSceneV2,moveSceneNode,groupSceneLayers,ungroupSceneLayers,findSceneNode} from './scene-model.js';
 import './styles.css';
 import './overrides.css';
 import './parity.css';
@@ -42,14 +42,14 @@ import {explainUserError} from './user-facing-error.js';
 import {setCloudProjectPreview} from './cloud-store.js';
 import {snapshotDraft} from './draft-snapshot.js';
 import {saveManualArchive,restoreManualArchive} from './scene-archive.js';
-import {recordSceneOperation,makeAutoSceneSnapshot,currentSceneDraft,copySceneBaseline} from './scene-persistence.js';
+import {recordSceneOperation,makeAutoSceneSnapshot,restoreAutoSceneSnapshot,currentSceneDraft,copySceneBaseline} from './scene-persistence.js';
 import {retireSplitPiece} from './material-split.js';
 import {readAlphaMask,extractAlphaMask} from './alpha-mask-blob.js';
 import {renderHighResolutionCutout} from './cutout-full-resolution.js';
 import {materialStorageBlobs} from './material-storage-resolution.js';
 import {sha256Hex} from './task-fingerprint.js';
 import {checkpointEditorHistory,ensureEditorHistory,resetEditorHistory,takeEditorHistoryStep} from './editor-history-scope.js';
-import {captureHistory} from './project-history.js';
+import {captureHistory,restoreHistoryDraft,renameHistory,deleteDraft,historyTitle} from './project-history.js';
 import {newEditorSession,editorSessionHasEdits} from './editor-session-policy.js';
 import {editorExitDecision} from './editor-exit-policy.js';
 import {closePopover} from './swift-popover.js';
@@ -575,9 +575,13 @@ function render(){
         const pixels=Math.min(4096,Math.max(480,Math.ceil(Math.max(node.width,node.height)*pageScale*(devicePixelRatio||1)*2)));
         return privateImages.load(record.blobId,pixels);
       },
-      onFabricSelection:ids=>{const next=ids.length===1?ids[0]:null;
-        if(state.selected!==next||JSON.stringify(state.multiSelected||[])!==JSON.stringify(ids)){
-          state.selected=next;state.multiSelected=ids;render();}},
+      onFabricSelection:(ids,bounds)=>{const next=ids.length===1?ids[0]:null;
+        const changed=state.selected!==next||JSON.stringify(state.multiSelected||[])!==JSON.stringify(ids);
+        const boundsChanged=JSON.stringify(state.fabricSelectionBounds||null)!==JSON.stringify(bounds||null);
+        if(changed||boundsChanged){
+          state.selected=next;state.multiSelected=ids;state.fabricSelectionBounds=bounds||null;
+          if(changed)state.fabricInspectorOpen=false;
+          render();}},
       onFabricBeforeChange:()=>checkpoint(),
       // Fabric already updates the changed layer in place. Persist its Scene
       // data without rebuilding the route during ink or text input.
@@ -783,6 +787,9 @@ function updateEditorInspector(id,value){
       if(entry.kind==='material')entry.value.userOverrideFlags=[...new Set([...(entry.value.userOverrideFlags||[]),key])];
     }else if(id==='inspector-text')entry.value.content=value;
     else if(id==='inspector-font')entry.value.style=value;
+    else if(id==='inspector-text-color'&&entry.kind==='text'&&/^#[0-9a-f]{6}$/i.test(value))entry.value.color=value;
+    else if(id==='inspector-fill'&&entry.kind==='shape'&&/^#[0-9a-f]{6}$/i.test(value))entry.value.fill=value;
+    else if(id==='inspector-stroke'&&entry.kind==='shape'&&/^#[0-9a-f]{6}$/i.test(value))entry.value.stroke=value;
     else return;
   }else if(id==='paper-color')d.paperColor=value;
   else if(id==='paper-pattern')d.paperPattern=value;
@@ -1034,7 +1041,76 @@ async function runAppAction(action,id,value){try{switch(action){
   case 'fabric-tool':{
     state.tool=value;
     if(!['select','lasso'].includes(value)){state.selected=null;state.multiSelected=[];}
+    state.fabricInspectorOpen=false;
     render();break;
+  }
+  case 'fabric-tool-slot':{
+    const {mode,kind,index,value:slotValue}=id||{};
+    if(!['pen','highlighter','eraser'].includes(mode)||!['width','color'].includes(kind)||
+      !Number.isInteger(index)||index<0||index>2||mode==='eraser'&&kind==='color')break;
+    state.canvasTools||={...defaultTools};
+    const prefix='fabric'+mode[0].toUpperCase()+mode.slice(1);
+    const key=prefix+(kind==='width'?'WidthsMM':'Colors');
+    const active=prefix+(kind==='width'?'WidthSlot':'ColorSlot');
+    const defaults=kind==='width'?mode==='pen'?[.3,.5,1]:mode==='highlighter'?[1,2,4]:[2,4,8]:
+      mode==='pen'?['#171717','#2b5245','#167ad9']:['#fb8795','#f5cf45','#57bd4b'];
+    const values=[...(state.canvasTools[key]||defaults)];
+    if(slotValue!==undefined){
+      if(kind==='color'){
+        if(!/^#[0-9a-f]{6}$/i.test(slotValue))break;
+        values[index]=slotValue;
+      }else{
+        const numeric=Number(slotValue);
+        if(!Number.isFinite(numeric))break;
+        values[index]=Math.max(mode==='pen'?.2:mode==='highlighter'?.5:1,
+          Math.min(mode==='pen'?3:mode==='highlighter'?8:12,numeric));
+      }
+    }
+    state.canvasTools[key]=values;
+    state.canvasTools[active]=index;
+    if(kind==='width')state.canvasTools[mode==='pen'?'fabricPenWidthMM':mode==='highlighter'?'fabricMarkerWidthMM':'fabricEraserWidthMM']=values[index];
+    else state.canvasTools[mode==='pen'?'penColor':'fabricMarkerColor']=values[index];
+    try{localStorage.setItem('shiye-canvas-tools-v1',JSON.stringify(state.canvasTools));}catch{}
+    render();break;
+  }
+  case 'fabric-inspector-open':if(state.selected){state.fabricInspectorOpen=true;render();}break;
+  case 'fabric-inspector-close':state.fabricInspectorOpen=false;render();break;
+  case 'fabric-fit-view':{
+    state.zoom=1;state.fabricFitRevision=(state.fabricFitRevision||0)+1;
+    state.canvasViewports?.set(state.activeProject.id+':'+current().id,{scale:1,x:0,y:0});
+    render();break;
+  }
+  case 'fabric-text-property':{
+    const allowed=['style','fontSize','color','alignment','bold','italic','underline','strikethrough'];
+    if(!allowed.includes(id))break;
+    let next=value;
+    if(id==='style'&&!['serif','sans','rounded','hand'].includes(next))break;
+    if(id==='alignment'&&!['left','center','right'].includes(next))break;
+    if(id==='color'&&!/^#[0-9a-f]{6}$/i.test(next))break;
+    if(id==='fontSize'){next=Number(next);if(!Number.isFinite(next))break;next=Math.max(5,Math.min(400,next));}
+    if(['bold','italic','underline','strikethrough'].includes(id))next=!!next;
+    const entry=editorEntry(current()).find(item=>item.value.id===state.selected);
+    if(entry?.kind==='text'){
+      if(entry.value[id]===next)break;
+      checkpoint();entry.value[id]=next;if(id==='style')entry.value.fontName=null;
+      saveProject();
+    }else{
+      state.textDefaults={style:'serif',fontSize:40,color:'#30463d',alignment:'left',...state.textDefaults,[id]:next};
+      if(id==='style')state.textDefaults.fontName=null;
+    }
+    render();break;
+  }
+  case 'fabric-shape-property':{
+    const entry=editorEntry(current()).find(item=>item.value.id===state.selected);
+    if(entry?.kind!=='shape'||!['fill','stroke','lineWidth','opacity'].includes(id))break;
+    let next=value;
+    if(['fill','stroke'].includes(id)&&!/^#[0-9a-f]{6}$/i.test(next))break;
+    if(['lineWidth','opacity'].includes(id)){
+      next=Number(next);if(!Number.isFinite(next))break;
+      next=id==='lineWidth'?Math.max(0,Math.min(30,next)):Math.max(0,Math.min(1,next));
+    }
+    if(entry.value[id]===next)break;
+    checkpoint();entry.value[id]=next;saveProject();render();break;
   }
   case 'fabric-tool-setting':{
     state.canvasTools||={...defaultTools};
@@ -1052,6 +1128,53 @@ async function runAppAction(action,id,value){try{switch(action){
     render();break;
   }
   case 'fabric-selection-mode':state.selectionMode=id==='intersect'?'intersect':'contain';render();break;
+  case 'fabric-layer-select':{
+    const d=current(),node=findSceneNode(d,id?.id);if(!node)break;
+    const ids=id.add?new Set(state.multiSelected||[]):new Set();
+    if(id.add&&ids.has(node.id))ids.delete(node.id);else ids.add(node.id);
+    state.multiSelected=[...ids];state.selected=ids.size===1?[...ids][0]:null;
+    state.fabricInspectorOpen=false;state.tool='select';render();break;
+  }
+  case 'fabric-layer-operation':{
+    const d=current(),node=findSceneNode(d,id?.id);if(!d||!node)break;
+    const operation=id.operation;
+    if(!['lock','visibility','up','down','move'].includes(operation))break;
+    if((node.locked||node.isLocked)&&operation!=='lock')break;
+    if(operation==='move'&&!findSceneNode(d,id.targetID))break;
+    checkpoint();
+    if(operation==='lock'){node.locked=node.isLocked=!(node.locked||node.isLocked);}
+    else if(operation==='visibility'){
+      const hidden=!!(node.hidden||node.isHidden||node.isParked);
+      if(node.type==='material')node.isParked=!hidden;else node.hidden=!hidden;
+      if(!hidden&&state.selected===node.id){state.selected=null;state.multiSelected=[];}
+    }else{
+      const findParent=(nodes,target,parent=null)=>{
+        for(const entry of nodes){if(entry.id===target)return parent;
+          if(entry.type==='group'){
+            const found=findParent(entry.children||[],target,entry);
+            if(found!==undefined)return found;
+          }}return undefined;
+      };
+      const parent=findParent(d.layers,node.id),siblings=parent?.children||d.layers;
+      if(operation==='move'){
+        const target=findSceneNode(d,id.targetID);
+        const targetParent=id.relation==='inside'&&target.type==='group'?target:findParent(d.layers,target.id);
+        const targetSiblings=targetParent?.children||d.layers;
+        const position=targetSiblings.findIndex(entry=>entry.id===target.id);
+        moveSceneNode(d,node.id,{parentID:targetParent?.id||null,
+          beforeID:id.relation==='inside'?null:id.relation==='after'?targetSiblings[position+1]?.id||null:target.id});
+      }else{
+        const sorted=[...siblings].sort((a,b)=>(a.zIndex??0)-(b.zIndex??0));
+        const index=sorted.findIndex(entry=>entry.id===node.id),target=index+(operation==='up'?1:-1);
+        if(target>=0&&target<sorted.length){
+          const without=sorted.filter(entry=>entry.id!==node.id),neighbor=sorted[target];
+          const beforeID=operation==='up'?without[without.findIndex(entry=>entry.id===neighbor.id)+1]?.id||null:neighbor.id;
+          moveSceneNode(d,node.id,{parentID:parent?.id||null,beforeID});
+        }
+      }
+    }
+    saveProject();render();break;
+  }
   case 'fabric-clear-selection':state.selected=null;state.multiSelected=[];render();break;
   case 'fabric-group-selection':{
     const d=current(),ids=[...new Set(state.multiSelected||[])];
@@ -1059,6 +1182,63 @@ async function runAppAction(action,id,value){try{switch(action){
     checkpoint();
     const groupID=groupSceneLayers(d,ids,{id:'group-'+uid(),name:'手帐组合'});
     state.selected=groupID;state.multiSelected=[groupID];
+    saveProject();render();break;
+  }
+  case 'fabric-ungroup-selection':{
+    const d=current(),target=state.selected||state.multiSelected?.[0];
+    const entry=sceneLayerEntries(d,{hidden:true,ink:true}).find(item=>item.value.id===target);
+    const groupID=entry?.kind==='group'?target:entry?.parents?.at(-1)?.id;
+    if(!groupID)break;
+    checkpoint();ungroupSceneLayers(d,groupID);
+    state.selected=null;state.multiSelected=[];saveProject();render();break;
+  }
+  case 'fabric-history-restore-draft':{
+    const p=state.activeProject,entry=p?.drafts.find(d=>d.id===id);
+    if(!entry||!confirm(`是否回到「${historyTitle(entry,p.drafts.indexOf(entry))}」？当前修改可通过撤销恢复。`))break;
+    if(state.activeDraft===id)checkpoint();else resetEditorHistory(state);
+    restoreHistoryDraft(p,id);state.activeDraft=id;state.selected=null;state.multiSelected=[];
+    state.fabricInspectorOpen=false;saveProject();render();break;
+  }
+  case 'fabric-history-rename-draft':{
+    const p=state.activeProject,entry=p?.drafts.find(d=>d.id===id);if(!entry)break;
+    const name=prompt('历史记录名称',historyTitle(entry,p.drafts.indexOf(entry)));
+    if(name===null)break;renameHistory(entry,name);saveProject();render();break;
+  }
+  case 'fabric-history-delete-draft':{
+    const p=state.activeProject,entry=p?.drafts.find(d=>d.id===id);if(!entry)break;
+    if(!confirm(`删除历史记录「${historyTitle(entry,p.drafts.indexOf(entry))}」？`))break;
+    deleteDraft(p,id);state.activeDraft=p.activeDraftID;state.selected=null;state.multiSelected=[];
+    resetEditorHistory(state);saveProject();render();break;
+  }
+  case 'fabric-history-rename-archive':{
+    const p=state.activeProject,entry=p?.manualArchives?.find(a=>a.id===id);if(!entry)break;
+    const name=prompt('历史记录名称',entry.title||'存档 '+new Date(entry.date).toLocaleString());
+    if(name===null)break;entry.title=String(name).trim().slice(0,80)||entry.title;
+    saveProject();render();break;
+  }
+  case 'fabric-history-delete-archive':{
+    const p=state.activeProject,entry=p?.manualArchives?.find(a=>a.id===id);if(!entry)break;
+    if(!confirm(`删除历史记录「${entry.title||'手动存档'}」？`))break;
+    p.manualArchives=p.manualArchives.filter(a=>a.id!==id);saveProject();render();break;
+  }
+  case 'fabric-history-restore-auto':{
+    const p=state.activeProject;if(!p||!confirm('恢复自动快照会替换当前编辑画面，是否继续？'))break;
+    makeAutoSceneSnapshot(p,{reason:'before-restore',force:true});
+    const restored=restoreAutoSceneSnapshot(p,id);p.drafts=restored.drafts;
+    p.activeDraftID=restored.activeDraftID;state.activeDraft=restored.activeDraftID;
+    state.selected=null;state.multiSelected=[];resetEditorHistory(state);saveProject();render();break;
+  }
+  case 'fabric-history-rename-auto':{
+    const p=state.activeProject,entry=p?.autoSceneSnapshots?.find(s=>s.id===id);if(!entry)break;
+    const name=prompt('历史记录名称',entry.title||new Date(entry.at).toLocaleString());
+    if(name===null)break;entry.title=String(name).trim().slice(0,80)||entry.title;
+    saveProject();render();break;
+  }
+  case 'fabric-history-delete-auto':{
+    const p=state.activeProject,entry=p?.autoSceneSnapshots?.find(s=>s.id===id);if(!entry)break;
+    if(!confirm(`删除历史记录「${entry.title||new Date(entry.at).toLocaleString()}」？`))break;
+    p.autoSceneSnapshots=p.autoSceneSnapshots.filter(s=>s.id!==id);
+    if(!p.autoSceneSnapshots.some(s=>s.hash===entry.hash))delete p.autoSceneSnapshotStore?.[entry.hash];
     saveProject();render();break;
   }
   case 'fabric-add-shape':{

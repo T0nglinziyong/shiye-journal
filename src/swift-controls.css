@@ -474,3 +474,12 @@ body:has(.library-management-tray):not(:has(.library-management-tray:not([hidden
 .recently-deleted-grid[data-kind=project] .deleted-row>.card-image{
   height:auto;aspect-ratio:var(--shiye-catalog-cover-ratio);
 }
+.canvas-context-tools .canvas-fit-button{font-size:13px;color:#52634b}
+.fabric-inspector-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.fabric-inspector-head h2{margin:4px 0 12px}
+.fabric-inspector-head button{border:0;background:#e9eee3;border-radius:20px;width:30px;height:30px;color:#52634b}
+.fabric-selected-actions{position:fixed;z-index:80;transform:translateX(-50%);display:flex;gap:12px;
+  padding:4px 14px;background:#fffefaee;backdrop-filter:blur(12px);border:1px solid #e3e5dc;
+  box-shadow:0 3px 12px #3332;border-radius:24px}
+.fabric-selected-actions button{border:0;background:transparent;color:#52634b;min-width:30px;height:28px;
+  font-size:20px;padding:0}
