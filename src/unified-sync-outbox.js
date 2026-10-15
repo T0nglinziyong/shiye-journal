@@ -3,6 +3,19 @@ import {usableProjectSnapshot} from './project-outbox-recovery.js';
 export const syncEnvelope=(kind,record)=>({
   id:(kind==='project'?'project:':'batch:')+record.id,kind,payload:record
 });
+// Repair a batch whose envelope was accidentally removed by the current
+// reconciliation path. Keep its operation ID and payload bytes unchanged.
+export function repairMiswrappedSyncRows(rows){
+  let changed=false;
+  const repaired=rows.map(row=>{
+    const record=row?.record;
+    if(record?.kind||!Array.isArray(record?.operations)||!Array.isArray(record?.names)||
+      typeof record?.id!=='string'||!record.id)return row;
+    changed=true;
+    return {...row,record:syncEnvelope('batch',record)};
+  });
+  return changed?repaired:null;
+}
 export const unwrapSyncRow=row=>({...row,record:row.record.payload});
 export const projectSyncRows=rows=>rows.filter(row=>row.record?.kind==='project').map(unwrapSyncRow);
 export const importSyncRows=rows=>rows.filter(row=>row.record?.kind==='batch').map(unwrapSyncRow);

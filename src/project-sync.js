@@ -68,6 +68,11 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
     }
   }
   const overlaps=(a,b)=>a.some(left=>b.some(right=>left.store===right.store&&(left.id===right.id||left.id===undefined||right.id===undefined)));
+  const validReplacement=(previous,candidate)=>{
+    if(!candidate?.id||previous.kind&&
+      (candidate.kind!==previous.kind||!candidate.payload))return false;
+    try{return Array.isArray(recordKeys(candidate));}catch{return false;}
+  };
   const orderedRows=()=>[...entries.values()].sort((a,b)=>a.serial-b.serial);
   const replaceRows=rows=>{entries.clear();for(const row of rows.sort((a,b)=>a.serial-b.serial))entries.set(row.record.id,row);};
   async function coalesceReady(windowSerial){
@@ -181,7 +186,8 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
             continue;
           }
           if(resolution?.kind==='replace'){
-            if(!resolution.record)throw Error('同步合并结果不完整');
+            if(!validReplacement(row.record,resolution.record))
+              throw Error('同步合并结果不完整；原始待同步记录已保留');
             if(resolution.record.kind==='batch'&&
               !resolution.record.payload?.operations?.length){
               await acknowledge(row);
@@ -228,6 +234,8 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
           if(resolved==='committed'){await acknowledge(row);diagnose('committed',row);continue;}
           if(resolved==='remote'){await acknowledge(row);diagnose('remote-won',row);onSuperseded(row.record);continue;}
           if(resolved?.kind==='replace'){
+            if(!validReplacement(row.record,resolved.record))
+              throw Error('同步合并结果不完整；原始待同步记录已保留');
             if(resolved.record.kind==='batch'&&
               !resolved.record.payload?.operations?.length){await acknowledge(row);onSuperseded(row.record);continue;}
             row.record=structuredClone(resolved.record);

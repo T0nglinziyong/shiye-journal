@@ -470,6 +470,23 @@ body:has(.library-management-tray):not(:has(.library-management-tray:not([hidden
 .swift-layer-popover .canvas-layer-row [data-layer-move]{
   touch-action:none;
 }
+/* The palette buttons must remain circles despite the shared menu minimum. */
+.swift-popover .canvas-color-grid button.ink-color{
+  display:block;box-sizing:border-box;inline-size:34px;block-size:34px;
+  min-inline-size:34px;min-block-size:34px;max-inline-size:34px;max-block-size:34px;
+  aspect-ratio:1;justify-self:center;align-self:center;padding:0;flex:none;
+}
+.swift-history-popover{overflow:hidden}
+.swift-history-popover h3{padding:10px 12px;font-size:15px}
+.swift-history-popover .popover-content{display:block;max-height:calc(min(62dvh,390px) - 43px);overflow:auto;padding:7px}
+.canvas-history-list{display:grid;gap:3px}
+.canvas-history-row{grid-template-columns:minmax(0,1fr) auto;gap:3px;min-height:34px;border-radius:8px;background:#f7f9f5}
+.canvas-history-row>button.canvas-history-restore{display:block;min-height:34px;padding:6px 8px;text-align:left;font-size:12px;font-weight:600}
+.canvas-history-row>div{display:flex;align-items:center;gap:1px}
+.canvas-history-row>div>button{display:grid;place-items:center;min-width:28px;width:28px;min-height:28px;height:28px;padding:0;font-size:16px}
+.canvas-history-list>.canvas-auto-snapshot-heading{font-size:12px;text-align:left;padding:6px 3px 2px;margin:5px 0 0;border:0;background:transparent;color:#667b69}
+.canvas-history-list>hr{margin:4px 0;border:0;border-top:1px solid #e3e5dc}
+.canvas-history-list>button{min-height:32px;padding:5px 8px;border-radius:8px;text-align:left;font-size:12px}
 /* Recently deleted works use the same card cover ratio as the Works catalog. */
 .recently-deleted-grid[data-kind=project] .deleted-row>.card-image{
   height:auto;aspect-ratio:var(--shiye-catalog-cover-ratio);

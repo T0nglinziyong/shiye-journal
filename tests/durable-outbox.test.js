@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import 'fake-indexeddb/auto';
 import {openDB} from 'idb';
 import {createPrivateCache,mergeOutboxRows} from '../src/private-cache.js';
+import {repairMiswrappedSyncRows,syncEnvelope} from '../src/unified-sync-outbox.js';
 
 const row=(id,serial=1)=>({serial,baseRevision:2,operationID:id+'-'+serial,record:{id,title:'local-'+serial}});
 test('two tabs adding different offline edits preserve both operations',async()=>{
@@ -15,6 +16,26 @@ test('two tabs adding different offline edits preserve both operations',async()=
   // A's successful acknowledgement must not erase B's pending operation.
   await cache.putOutbox(account,kind,first,[]);
   assert.deepEqual((await cache.get(account,kind)).map(r=>r.record.id),['project-B']);
+});
+test('iPhone batch-envelope repair is atomic and leaves another pending work untouched',async()=>{
+  const cache=createPrivateCache({name:'shiye-outbox-envelope-repair'});
+  const account='cloud:account',kind='unified-outbox';
+  const raw={id:'older-edit',names:['assets'],operations:[
+    {action:'put',store:'assets',item:{id:'asset-a',title:'local edit'}}]};
+  const broken={record:raw,serial:1,baseRevision:2048,operationID:'original-operation'};
+  const other={record:syncEnvelope('project',{id:'new-work',title:'other'}),
+    serial:2,baseRevision:2054,operationID:'independent-operation'};
+  await cache.putOutbox(account,kind,[],[broken,other]);
+  const before=await cache.get(account,kind);
+  const repaired=repairMiswrappedSyncRows(before);
+  await cache.repairUnifiedOutbox(account,before,repaired,[]);
+  const after=(await cache.get(account,kind)).sort((a,b)=>a.serial-b.serial);
+  assert.equal(after.length,2);
+  assert.equal(after[0].record.id,'batch:older-edit');
+  assert.deepEqual(after[0].record.payload,raw);
+  assert.equal(after[0].operationID,'original-operation');
+  assert.deepEqual(after[1],other);
+  await cache.close();
 });
 test('stale tab cannot silently replace a pending edit to the same document',async()=>{
   const cache=createPrivateCache({name:'shiye-outbox-same-document'});

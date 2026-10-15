@@ -12,7 +12,8 @@ const PHASES=new Set([
 const PREFIX='shiye-sync-trace-v2:';
 const localTraceStorage=()=>{try{return globalThis.localStorage;}catch{return null;}};
 const count=value=>Number.isSafeInteger(value)&&value>=0?value:null;
-const errorName=value=>['Error','TypeError','SyntaxError','AbortError','QuotaExceededError','NetworkError','NotAllowedError'].includes(value)?value:'OtherError';
+const errorName=value=>['Error','TypeError','SyntaxError','AbortError','QuotaExceededError','NetworkError','NotAllowedError',
+  'NotReadableError','InvalidStateError','DataError','EncodingError','OperationError','SecurityError'].includes(value)?value:'OtherError';
 const hash=value=>{let n=2166136261;for(const char of String(value||'')){n^=char.charCodeAt(0);n=Math.imul(n,16777619);}return (n>>>0).toString(16).padStart(8,'0');};
 const dayOf=value=>{const date=new Date(value);if(!Number.isFinite(date.getTime()))return 'unknown';return [date.getFullYear(),String(date.getMonth()+1).padStart(2,'0'),String(date.getDate()).padStart(2,'0')].join('-');};
 function errorCode(error){
@@ -31,6 +32,7 @@ function category(error){
   if(status===401||status===403||/unauthori[sz]ed|permission|jwt|认证|登录/i.test(message))return 'authorization';
   if(status===429||/rate.limit|too many requests/i.test(message))return 'rate-limit';
   if(status!==null&&status>=500)return 'server';
+  if(error?.syncPhase==='编码与上传 blobs'||error?.name==='NotReadableError')return 'image-upload';
   if(error?.name==='QuotaExceededError'||/quota|disk full|存储空间/i.test(message))return 'local-storage';
   if(/blob|图片上传|object storage|COS/i.test(message))return 'image-upload';
   if(/web.?lock|string did not match|expected pattern/i.test(message))return 'browser-lock';

@@ -1107,20 +1107,28 @@ function FabricSelectedActions({bounds,draft,onAction}){
     const canvas=document.querySelector('.upper-canvas');
     const page=document.querySelector('#canvas-page');
     if(!canvas||!page)return;
+    let currentBounds=bounds,frame=0;
     const place=()=>{
       const rect=canvas.getBoundingClientRect();
-      const center=rect.left+(bounds.x+bounds.width/2)*rect.width/draft.canvas.width;
-      const edge=rect.top+(bounds.y+bounds.height)*rect.height/draft.canvas.height;
+      const center=rect.left+(currentBounds.x+currentBounds.width/2)*rect.width/draft.canvas.width;
+      const edge=rect.top+(currentBounds.y+currentBounds.height)*rect.height/draft.canvas.height;
       setPosition({left:Math.max(83,Math.min(innerWidth-83,center)),
         top:Math.max(112,Math.min(innerHeight-52,edge+12))});
+    };
+    const move=event=>{
+      currentBounds=event.detail.bounds;
+      if(frame)return;
+      frame=requestAnimationFrame(()=>{frame=0;place();});
     };
     place();
     const observer=new MutationObserver(place);observer.observe(page,{attributes:true,attributeFilter:['style']});
     const resize=new ResizeObserver(place);resize.observe(canvas);
     addEventListener('resize',place);addEventListener('scroll',place,true);
+    canvas.addEventListener('shiye:fabric-object-transform',move);
     page.addEventListener('panzoomchange',place);
-    return ()=>{observer.disconnect();resize.disconnect();removeEventListener('resize',place);
-      removeEventListener('scroll',place,true);page.removeEventListener('panzoomchange',place);};
+    return ()=>{cancelAnimationFrame(frame);observer.disconnect();resize.disconnect();removeEventListener('resize',place);
+      removeEventListener('scroll',place,true);canvas.removeEventListener('shiye:fabric-object-transform',move);
+      page.removeEventListener('panzoomchange',place);};
   },[bounds?.x,bounds?.y,bounds?.width,bounds?.height,draft.id,draft.canvas.width,draft.canvas.height]);
   if(!position)return null;
   return createPortal(<div className="fabric-selected-actions" style={position} aria-label="选中对象操作">

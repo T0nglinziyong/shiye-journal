@@ -386,6 +386,18 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
         canvas.on('selection:created',selection);
         canvas.on('selection:updated',selection);
         canvas.on('selection:cleared',()=>callbacks.current.onSelection?.([],null));
+        const movingSelection=event=>{
+          const object=event.target;
+          if(!object?.sceneID||object.sceneID!==callbacks.current.selectedID)return;
+          const bounds=object.getBoundingRect();
+          upper.dispatchEvent(new CustomEvent('shiye:fabric-object-transform',{detail:{
+            id:object.sceneID,bounds:{x:bounds.left,y:bounds.top,
+              width:bounds.width,height:bounds.height}
+          }}));
+        };
+        canvas.on('object:moving',movingSelection);
+        canvas.on('object:scaling',movingSelection);
+        canvas.on('object:rotating',movingSelection);
         canvas.on('before:transform',event=>{
           if(event.target?.sceneID)callbacks.current.onBeforeChange?.(event.target.sceneID);
         });

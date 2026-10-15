@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createProjectSync} from '../src/project-sync.js';
 import {planMetadataBatch,splitMetadataBatch} from '../src/sync-metadata-batch.js';
-import {syncEnvelope,syncAffectedKeys} from '../src/unified-sync-outbox.js';
+import {syncEnvelope,syncAffectedKeys,repairMiswrappedSyncRows} from '../src/unified-sync-outbox.js';
 
 const asset=id=>syncEnvelope('batch',{id:'edit-'+id,names:['assets'],operations:[
   {store:'assets',action:'put',item:{id,title:'updated-'+id}}
@@ -16,6 +16,33 @@ const queue=({commit,reconcile=async()=> 'rebase'}={})=>{
     splitCoalesced:splitMetadataBatch,autoFlushDelayMs:10000});
   return {sync,get disk(){return disk;},get revision(){return revision;}};
 };
+
+test('a previously persisted batch without its envelope is restored without changing its operation ID',()=>{
+  const original=asset('a').payload;
+  const row={record:structuredClone(original),serial:3,baseRevision:2048,operationID:'same-operation'};
+  const repaired=repairMiswrappedSyncRows([row]);
+  assert.deepEqual(repaired[0].record,syncEnvelope('batch',original));
+  assert.equal(repaired[0].operationID,row.operationID);
+  assert.equal(repaired[0].baseRevision,2048);
+  assert.equal(repairMiswrappedSyncRows(repaired),null);
+});
+
+test('malformed reconciliation cannot replace a durable batch or block an unrelated record',async()=>{
+  const calls=[];let disk=[],revision=5;
+  const sync=createProjectSync({load:async()=>structuredClone(disk),reload:async()=>structuredClone(disk),
+    write:async rows=>{disk=structuredClone(rows);},revision:()=>revision,
+    recordKeys:syncAffectedKeys,coalesce:()=>null,autoFlushDelayMs:10000,
+    reconcile:async record=>record.payload.operations[0].item.id==='a'
+      ?{kind:'replace',record:record.payload}:'rebase',
+    commit:async record=>{calls.push(record.payload.operations[0].item.id);revision++;}});
+  await sync.stage(asset('a'),{baseRevision:4});
+  await sync.stage(asset('b'),{baseRevision:4});
+  await assert.rejects(sync.flush(),/同步合并结果不完整/);
+  assert.deepEqual(calls,['b']);
+  assert.equal(disk.length,1);
+  assert.equal(disk[0].record.kind,'batch');
+  assert.equal(disk[0].record.payload.operations[0].item.id,'a');
+});
 
 test('independent asset metadata edits commit in one durable RPC operation',async()=>{
   const calls=[],fixture=queue({commit:async record=>calls.push(record)});

@@ -1,4 +1,4 @@
-import React,{useEffect,useLayoutEffect,useMemo,useRef,useState} from 'react';
+import React,{useCallback,useEffect,useLayoutEffect,useMemo,useRef,useState} from 'react';
 import {materialKinds} from './material-taxonomy.js';
 import {createPortal} from 'react-dom';
 import {popupPlacement} from './popover-placement.js';
@@ -28,9 +28,10 @@ function ReactPopover({anchor,title,className='',width=360,height=440,picker=fal
         return;
       }
       attempts=0;
-      setPosition(popupPlacement({anchor:live.getBoundingClientRect(),
+      const next=popupPlacement({anchor:live.getBoundingClientRect(),
         viewportWidth:innerWidth,viewportHeight:innerHeight,
-        popupWidth:width,popupHeight:height,picker}));
+        popupWidth:width,popupHeight:height,picker});
+      setPosition(previous=>previous&&Object.keys(next).every(key=>previous[key]===next[key])?previous:next);
     };
     place();
     addEventListener('resize',place);
@@ -154,10 +155,6 @@ function LayerTree({draft,state,materials,onAction}){
         <button className="scene-layer-small" type="button" aria-label={hidden?'显示':'隐藏'}
           disabled={locked} onClick={()=>operate('visibility')}
           dangerouslySetInnerHTML={{__html:iconMarkup(hidden?'eyeOff':'eye')}}/>
-        <button className="scene-layer-small scene-layer-step" type="button" aria-label="上移一层"
-          disabled={locked} onClick={()=>operate('up')}>↑</button>
-        <button className="scene-layer-small scene-layer-step" type="button" aria-label="下移一层"
-          disabled={locked} onClick={()=>operate('down')}>↓</button>
         <button className="scene-layer-grip" type="button" aria-label={`拖动图层 ${label(node)}`}
           disabled={locked} onPointerDown={event=>{
             if(event.button>0)return;
@@ -193,9 +190,10 @@ function LayerTree({draft,state,materials,onAction}){
 
 export function FabricEditorToolbar({state,draft,materials,source,selected,onInspectorChange,onAction}){
   const [menu,setMenu]=useState(null);
-  const close=()=>setMenu(null);
+  const close=useCallback(()=>setMenu(null),[]);
   const open=(kind,event)=>{
-    onAction('fabric-tool',null,['paper','layers','material'].includes(kind)?'select':kind);
+    const nextTool=['paper','layers','material'].includes(kind)?'select':kind;
+    if(state.tool!==nextTool)onAction('fabric-tool',null,nextTool);
     setMenu(previous=>previous?.kind===kind?null:{kind,anchor:event.currentTarget});
   };
   const choose=(action,id)=>{close();onAction(action,id);};
@@ -287,11 +285,11 @@ export function FabricEditorToolbar({state,draft,materials,source,selected,onIns
       'text-paragraph':'段落','text-style':'文字样式'}[menu.kind]}
     className={['shape','material'].includes(menu.kind)?`swift-picker-popover swift-${menu.kind}-picker`:
       menu.kind==='layers'?'swift-menu swift-layer-popover':'swift-menu'}
-    width={menu.kind==='paper'?260:menu.kind==='layers'?390:
+    width={menu.kind==='paper'?260:menu.kind==='layers'?330:
       menu.kind==='slot-width'?270:menu.kind==='slot-color'?280:
       ['pen','eraser','highlighter','lasso'].includes(menu.kind)?290:
       ['text-paragraph','text-style'].includes(menu.kind)?230:
-      innerWidth>=900?432:360} height={menu.kind==='shape'?550:440}
+      innerWidth>=900?432:360} height={menu.kind==='layers'?360:menu.kind==='slot-color'?310:menu.kind==='shape'?550:440}
     picker={['shape','material'].includes(menu.kind)}>
     {menu.kind==='shape'?<ShapePicker draft={draft} onPick={id=>choose('fabric-add-shape',id)}/>:null}
     {menu.kind==='material'?<MaterialPicker draft={draft} materials={materials}
@@ -343,22 +341,23 @@ export function FabricEditorToolbar({state,draft,materials,source,selected,onIns
 
 export function FabricHeaderMenu({kind,project,onAction,onAIOpen}){
   const [anchor,setAnchor]=useState(null);
-  const close=()=>setAnchor(null);
+  const close=useCallback(()=>setAnchor(null),[]);
   const run=(action,id,value)=>{close();onAction(action,id,value);};
   const entries=[['save-snapshot','保存快照'],['export-png','导出 PNG'],
     ['export-pdf','导出 PDF'],['download-project-json','导出可编辑 JSON'],
     ['export-scene-json','导出标准 Scene JSON'],['print','打印'],
     ['creative-json','导入创作指令']];
   const historyRow=(title,restore,rename,remove,key)=><div className="canvas-history-row" key={key}>
-    <button type="button" onClick={restore}>{title}</button><div>
-      <button type="button" aria-label={`重命名 ${title}`} onClick={rename}>重命名</button>
-      <button type="button" aria-label={`删除 ${title}`} onClick={remove}>删除</button>
+    <button type="button" className="canvas-history-restore" title={title} onClick={restore}>{title}</button><div>
+      <button type="button" aria-label={`重命名 ${title}`} title="重命名" onClick={rename}>✎</button>
+      <button type="button" aria-label={`删除 ${title}`} title="删除" onClick={remove}>×</button>
     </div></div>;
   return <><button type="button" className="btn" aria-label={kind==='export'?'导出作品':'历史记录'}
     onClick={event=>setAnchor(previous=>previous?null:event.currentTarget)}>{kind==='export'?'导出':'◷'}</button>
     {anchor?<ReactPopover anchor={anchor} onClose={close} title={kind==='export'?'导出作品':'历史记录'}
-      width={kind==='history'?340:220} height={kind==='history'?520:360}>
-      {kind==='history'?<div className="stack">
+      className={kind==='history'?'swift-history-popover':'swift-menu'}
+      width={kind==='history'?320:220} height={kind==='history'?390:360}>
+      {kind==='history'?<div className="canvas-history-list">
         {project.drafts.map((draft,index)=>historyRow(historyTitle(draft,index),
           ()=>run('fabric-history-restore-draft',draft.id),
           ()=>onAction('fabric-history-rename-draft',draft.id),

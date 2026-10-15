@@ -27,6 +27,17 @@ test('unconfirmed response retains its safe root cause category',()=>{
   assert.equal(trace.report().events[0].failure.causeCategory,'revision-conflict');
 });
 
+test('native iPhone image read errors retain a safe name and upload phase',()=>{
+  const trace=createSyncDiagnostics();
+  const error=Object.assign(new Error('private image path'),{
+    name:'NotReadableError',syncPhase:'编码与上传 blobs'});
+  trace.record({action:'failed',kind:'batch',error});
+  const report=trace.report();
+  assert.equal(report.events[0].failure.name,'NotReadableError');
+  assert.equal(report.events[0].failure.category,'image-upload');
+  assert.ok(!JSON.stringify(report).includes('private image path'));
+});
+
 test('active upload report shows elapsed phase and bounded counts without identifiers',()=>{
   const trace=createSyncDiagnostics();
   const report=trace.report({pending:1,uploading:true,active:{phase:'编码与上传',done:6,total:18,elapsedMs:32000,id:'private-id'}});

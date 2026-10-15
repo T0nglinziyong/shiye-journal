@@ -2,7 +2,7 @@ import {cloudClient,requireCloudUser} from './cloud-session.js';
 import {privateCache} from './private-cache.js';
 import {createProjectSync} from './project-sync.js';
 import {runAccountBrowserLock,markSyncPhase} from './sync-browser-compat.js';
-import {syncEnvelope,projectSyncRows,importSyncRows,latestEditedProject,syncAffectedKeys,foldLegacySyncRows} from './unified-sync-outbox.js';
+import {syncEnvelope,projectSyncRows,importSyncRows,latestEditedProject,syncAffectedKeys,foldLegacySyncRows,repairMiswrappedSyncRows} from './unified-sync-outbox.js';
 import {readCloudDelta,canRebaseUnchangedKeys} from './cloud-delta.js';
 import {planMetadataBatch,splitMetadataBatch} from './sync-metadata-batch.js';
 import {compareRecordEdits} from './sync-last-write.js';
@@ -176,6 +176,12 @@ async function loadUnifiedOutbox(recover=false){
       await cache.put(user,'unified-outbox',result.rows);
       if(result.quarantine.length)await cache.put(user,'sync-quarantine',result.quarantine);
     }
+  }
+  const repaired=repairMiswrappedSyncRows(result.rows);
+  if(repaired){
+    if(typeof cache.repairUnifiedOutbox!=='function')
+      throw Error('本机待同步队列暂不能安全修复；原始记录已保留');
+    result=await cache.repairUnifiedOutbox(user,result.rows,repaired,[]);
   }
   if(recover&&result.rows.some(row=>row.record?.kind==='batch')){
     // Reuse the existing crash-recovery gate before the first upload. A
@@ -427,7 +433,7 @@ async function reconcileImport(batch,operationID,baseRevision){
       return 'conflict';
     }
     if(!operations.length)return 'remote';
-    return {kind:'replace',record:{...batch,operations}};
+    return {kind:'replace',record:syncEnvelope('batch',{...batch,operations})};
   }
   const records=['assets','blobs','projects'].flatMap(store=>(batch[store]||[]).map(item=>({store,id:item.id})));
   if(!records.length||!(batch.assets?.length||batch.projects?.length))return 'conflict';
