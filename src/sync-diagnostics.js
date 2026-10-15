@@ -50,7 +50,7 @@ export function createSyncDiagnostics({limit=60,clock=()=>new Date().toISOString
       if(event.failure)lastFailure={...event};
       events.push(event);if(events.length>limit)events.shift();
     },
-    report({pending=0,conflicts=0,uploading=false,revision=null,writesInFlight=0,quarantined=0,online=null}={}){
+    report({pending=0,conflicts=0,uploading=false,revision=null,writesInFlight=0,quarantined=0,online=null,active=null}={}){
       return {format:'shiye-sync-diagnostics',version:1,createdAt:clock(),scope:'当前登录会话；仅安全元数据，不含原始错误或私人资料',
         categoryGuide:{'unconfirmed-response':'云端版本未变化，但上传响应未获确认；数据留在本机待重试',
           'revision-conflict':'云端版本或同一资料发生冲突；该项保留，其他项可继续',
@@ -60,7 +60,10 @@ export function createSyncDiagnostics({limit=60,clock=()=>new Date().toISOString
           unknown:'仅凭安全摘要无法确定原因，需要结合发生阶段和复现步骤排查'},
         state:{pending:count(pending),conflicts:count(conflicts),uploading:!!uploading,
           cloudRevision:count(revision),writesInFlight:count(writesInFlight),quarantined:count(quarantined),
-          online:typeof online==='boolean'?online:null},lastFailure:lastFailure?{...lastFailure}:null,
+          online:typeof online==='boolean'?online:null},
+        active:active&&['准备上传','编码与上传','提交事务'].includes(active.phase)?{phase:active.phase,
+          completed:count(active.done),total:count(active.total),elapsedMs:count(active.elapsedMs)}:null,
+        lastFailure:lastFailure?{...lastFailure}:null,
         events:events.map(event=>({...event}))};
     },
     clear(){events.length=0;lastFailure=null;}

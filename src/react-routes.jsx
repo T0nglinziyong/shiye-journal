@@ -30,6 +30,7 @@ import {ReactSelectionTray} from './react-selection-tray.jsx';
 import {ManualBoxEditor} from './react-manual-box-editor.jsx';
 import {PaperCorrection} from './react-paper-correction.jsx';
 import {OrganizationBadge} from './react-organization.jsx';
+import {materialKinds,materialRoleName} from './material-taxonomy.js';
 
 function RouteImage({asset,source,priority=false}){
   const src=asset&&(source(asset.blobId)||asset.staticPath);
@@ -439,7 +440,7 @@ export function LibraryPage({state,source,kindName,format,onAction,onPageChange,
     setRevision(revision=>revision+1);
     onPageChange?.();
   };
-  const kinds=['sticker','paper','tape','photo','text','reference'];
+  const kinds=materialKinds.map(([id])=>id);
   const status=[['all','全部状态'],['ready','已整理'],['pendingReview','未整理'],['used','已使用'],
     ['unused','未使用'],['inside','系列中'],['outside','系列外'],['favorite','已收藏']];
   const sorts=[['newest','添加时间 · 降序'],['oldest','添加时间 · 升序'],
@@ -778,8 +779,7 @@ export function SeriesContentsPage({state,source,kindName,format,onAction,select
   const change=(key,value)=>{filter[key]=value;setCatalogDataPage('series:'+series.id,1);
     setRevision(revision=>revision+1);};
   const options=(items,value)=>items.map(([id,label])=><option key={id} value={id}>{label}</option>);
-  const kinds=[['sticker','贴纸'],['paper','纸张'],['tape','胶带'],['photo','照片'],
-    ['text','文字'],['reference','参考']];
+  const kinds=materialKinds;
   const statuses=[['all','全部状态'],['ready','已整理'],['unready','未整理'],['used','已使用'],
     ['unused','未使用'],['favorite','已收藏'],['inside','系列中'],['outside','系列外']];
   return <section className="series-contents" data-react-page="seriesContents"><div className="catalog-toolbar">
@@ -972,7 +972,7 @@ export function MatchingPage({state,source,kindName,session,onAction,onMatchingC
     </section>
     <div className="matching-layout"><aside className="basket"><h3>本次素材篮</h3><div className="match-basket-scroll" data-match-scroll="basket">
       {selected.length?selected.map(asset=><div key={asset.id} className="match-basket-item" data-match-asset={asset.id}>
-        <RouteImage asset={asset} source={source}/><div><strong>{asset.title}</strong><small className={`match-priority ${scope.required.includes(asset.id)?'required':'preferred'}`}>{scope.required.includes(asset.id)?'必须使用':'优先使用'}</small>
+        <RouteImage asset={asset} source={source}/><div><strong>{asset.title}</strong>{asset.kind||asset.role?<small className="match-type">{[asset.kind?kindName(asset.kind):null,asset.role?materialRoleName(asset.role):null].filter(Boolean).join(' · ')}</small>:null}
           <div className="match-basket-actions"><button type="button" data-act="match-core" data-id={asset.id} data-react-action="true" onClick={action('match-core',asset.id)} aria-label={state.coreIDs.includes(asset.id)?'取消标星':'标星设为必用'} aria-pressed={state.coreIDs.includes(asset.id)} title={state.aiSettings.requireAllCandidates?'当前设置为全部候选必用；标星会保留单件优先级':'切换此素材是否必用'}>{state.coreIDs.includes(asset.id)?'★':'☆'}</button>
             <button type="button" data-act="basket" data-id={asset.id} data-react-action="true" onClick={action('basket',asset.id)} aria-label="移出素材篮">×</button><button type="button" data-act="match-use" data-id={asset.id} data-react-action="true" onClick={action('match-use',asset.id)} aria-label="设置素材用法">▣ 用法</button></div>
           {state.materialUseHints[asset.id]?<small className="material-use-summary">{state.materialUseRequired[asset.id]?'必做':'偏好'} · {state.materialUseHints[asset.id]}</small>:null}
@@ -1162,8 +1162,8 @@ export function AssetDetailPage({asset,seriesTitle,source,kindName,format,onActi
     .filter((tag,index,list)=>tag&&list.indexOf(tag)===index).sort((a,b)=>a.localeCompare(b,'zh-CN'));
   const act=name=>()=>onAction(name);
   return <div className="detail-page" data-react-page="assetDetail">
-    <button className="detail-back" data-act="detail-back" data-react-action="true" onClick={act('detail-back')}>‹　返回素材库</button>
-    <span className="detail-category">{seriesTitle||'所有系列'}</span>
+    <div className="detail-topline"><button className="detail-back" data-act="detail-back" data-react-action="true" onClick={act('detail-back')}>‹　返回素材库</button>
+    <span className="detail-category">{seriesTitle||'系列外'}</span></div>
     <section className="detail-columns"><div className="detail-picture"><span>▣　透明素材预览</span>
       <RouteImage asset={asset} source={source} priority/>
     </div><div className="detail-copy"><div className="eyebrow">A LITTLE PIECE OF EVERYDAY</div>
@@ -1173,7 +1173,7 @@ export function AssetDetailPage({asset,seriesTitle,source,kindName,format,onActi
         <div><small>真实尺寸</small><span>{format(asset.physicalWidthMM||0)} × {format(asset.physicalHeightMM||0)} mm</span></div>
         <div><small>可用库存</small><span>{asset.supply?.quantity??1} 件</span></div>
         <div><small>素材类型</small><span>{kindName(asset.kind)}</span></div>
-        <div><small>主要作用</small><span>{asset.role==='background'?'背景':asset.role==='connector'?'连接':'陪衬'}</span></div>
+        <div><small>主要作用</small><span>{materialRoleName(asset.role)||'待记录'}</span></div>
         <div><small>材质</small><span>{asset.texture||'待记录'}</span></div>
       </div><div className="detail-tags">{tags.map(tag=><span key={tag}>{tag}</span>)}</div>
       <div className="detail-dots">● ● ● ●</div><hr/><p>实物可用操作</p><p>✓ 整件使用　 ✓ 旋转摆放</p>

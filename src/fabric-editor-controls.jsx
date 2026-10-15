@@ -1,4 +1,5 @@
 import React,{useEffect,useLayoutEffect,useMemo,useState} from 'react';
+import {materialKinds} from './material-taxonomy.js';
 import {createPortal} from 'react-dom';
 import {popupPlacement} from './popover-placement.js';
 import {commonShapes,advancedShapes,configureShape,shapeThumbnailSVG} from './editor-tools-model.js';
@@ -66,7 +67,8 @@ function ShapePicker({draft,onPick}){
 function MaterialPicker({draft,materials,series,source,onPick}){
   const [tab,setTab]=useState(draft.items.some(item=>!item.isParked)?'used':'all');
   const [query,setQuery]=useState(''),[group,setGroup]=useState('all');
-  const [kind,setKind]=useState('all'),[sort,setSort]=useState('newest'),[shown,setShown]=useState(40);
+  const [kind,setKind]=useState('all'),[status,setStatus]=useState('all');
+  const [sortBasis,setSortBasis]=useState('time'),[sortOrder,setSortOrder]=useState('desc'),[shown,setShown]=useState(40);
   const byID=useMemo(()=>new Map(materials.map(asset=>[asset.id,asset])),[materials]);
   const rows=useMemo(()=>{
     if(tab==='used'||tab==='standby')return draft.items.filter(item=>!!item.isParked===(tab==='standby'))
@@ -74,13 +76,15 @@ function MaterialPicker({draft,materials,series,source,onPick}){
     const list=materials.filter(asset=>!asset.isProjectInternal&&
       (group==='all'||(group==='none'?!asset.seriesID:asset.seriesID===group))&&
       (kind==='all'||asset.kind===kind)&&
+      (status==='all'||(status==='ready'?asset.reviewStatus==='ready':status==='pendingReview'?asset.reviewStatus!=='ready':
+        status==='used'?asset.usageStatus==='used':status==='unused'?asset.usageStatus!=='used':
+        status==='inside'?!!asset.seriesID:status==='outside'?!asset.seriesID:status==='favorite'?!!asset.isFavorite:true))&&
       (!query||asset.title?.toLocaleLowerCase().includes(query.toLocaleLowerCase())));
-    list.sort((a,b)=>sort==='name'?a.title.localeCompare(b.title):
-      sort==='name-desc'?b.title.localeCompare(a.title):
-      (Date.parse(b.createdAt||0)-Date.parse(a.createdAt||0))*(sort==='oldest'?-1:1));
+    list.sort((a,b)=>sortBasis==='name'?a.title.localeCompare(b.title,'zh-CN')*(sortOrder==='asc'?1:-1):
+      (Date.parse(a.createdAt||0)-Date.parse(b.createdAt||0))*(sortOrder==='asc'?1:-1));
     return list.map(asset=>({asset}));
-  },[tab,draft.items,materials,byID,group,kind,sort,query]);
-  useEffect(()=>setShown(40),[tab,query,group,kind,sort]);
+  },[tab,draft.items,materials,byID,group,kind,status,sortBasis,sortOrder,query]);
+  useEffect(()=>setShown(40),[tab,query,group,kind,status,sortBasis,sortOrder]);
   return <><div className="swift-segments">
     {[['used','已使用素材'],['standby','备选素材'],['all','所有素材']].map(([id,label])=><button
       key={id} type="button" className={tab===id?'selected':''} onClick={()=>setTab(id)}>{label}</button>)}
@@ -89,11 +93,14 @@ function MaterialPicker({draft,materials,series,source,onPick}){
       <option value="all">全部系列</option><option value="none">系列外</option>
       {series.map(item=><option key={item.id} value={item.id}>{item.title}</option>)}
     </select><select aria-label="过滤素材类型" value={kind} onChange={event=>setKind(event.target.value)}>
-      {[['all','全部类型'],['sticker','贴纸'],['paper','纸张'],['tape','胶带'],
-        ['photo','照片'],['text','文字'],['reference','参考']].map(([id,label])=><option key={id} value={id}>{label}</option>)}
-    </select><select aria-label="素材排序" value={sort} onChange={event=>setSort(event.target.value)}>
-      {[['newest','最新添加'],['oldest','最早添加'],['name','名称升序'],['name-desc','名称降序']]
+      {[['all','全部类型'],...materialKinds].map(([id,label])=><option key={id} value={id}>{label}</option>)}
+    </select><select aria-label="素材状态" value={status} onChange={event=>setStatus(event.target.value)}>
+      {[['all','全部状态'],['ready','已整理'],['pendingReview','未整理'],['used','已使用'],['unused','未使用'],['inside','系列中'],['outside','系列外'],['favorite','已收藏']]
         .map(([id,label])=><option key={id} value={id}>{label}</option>)}
+    </select><select aria-label="排序依据" value={sortBasis} onChange={event=>setSortBasis(event.target.value)}>
+      {[['time','最近添加'],['name','名称']].map(([id,label])=><option key={id} value={id}>{label}</option>)}
+    </select><select aria-label="排序顺序" value={sortOrder} onChange={event=>setSortOrder(event.target.value)}>
+      {[['desc','降序'],['asc','升序']].map(([id,label])=><option key={id} value={id}>{label}</option>)}
     </select><input type="search" value={query} onChange={event=>setQuery(event.target.value)}
       placeholder="搜索素材" aria-label="搜索可用素材"/></div>:null}
     <div className="canvas-picker-grid" onScroll={event=>{

@@ -93,6 +93,7 @@ function decorate(node){
   }
   if(node.id==='top-settings'){putIcon(node,'settings',true);return;}
   if(node.dataset.act==='select-file'){const name={gallery:'material',camera:'camera',files:'file'}[node.dataset.val];if(name)putIcon(node,name);return;}
+  if(node.querySelector('.detail-link-icon svg'))return;
   const label=node.getAttribute('aria-label'),name=labels[label]||actions[node.dataset.act];
   if(name){const only=iconOnly.test(node.textContent);if(only&&!label)node.setAttribute('aria-label',node.title||{'new-project':'新建作品','new-series':'新建系列','new-draft':'新建方案',undo:'撤销',redo:'重做'}[node.dataset.act]||node.dataset.act);putIcon(node,name,only);if(name==='star')node.querySelector('svg.shiye-icon')?.setAttribute('fill',label==='取消必用'?'currentColor':'none');}
 }

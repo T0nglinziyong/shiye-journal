@@ -134,7 +134,7 @@ export async function showCutoutEditor({
   const cutoutRoot=createRoot(body);
   let preview=null,note='';
   flushSync(()=>cutoutRoot.render(createElement(CutoutPanel,{
-    state:{mode:'rough',restore,ratio,history:false,lastStroke:false,busy:false,
+    state:{mode:'rough',restore,ratio,history:false,lastStroke:false,busy:true,
       recognition:recognitionState,post:postState,methods:methodList,pixels:pixelList,
       methodDescription:'',canRerecognize:!!onRerecognize,canPostprocess:!!onPostprocess,
       autoStraighten,rotation,appearance,intensity,note:''},
@@ -288,7 +288,7 @@ export async function showCutoutEditor({
         mask=copyMask(result.mask);recognitionBaseMask=copyMask(result.mask);recognitionStageMask=copyMask(result.mask);
         postprocessBaseMask=copyMask(result.mask);finalStageMask=copyMask(result.mask);
         history.length=0;manualTouched=false;outputPrepared=false;lastStroke=null;
-        lastRecognition={...recognitionState,method:result.method||recognitionState.method};
+        lastRecognition={...recognitionState,method:result.method||recognitionState.method};lastPostprocess=null;
         mode='recognition';note='主识别完成。现在可先手修识别结果，再执行后处理。';draw();
       }catch(error){note=error.message||'重新识别失败，保留当前 rough mask。';}
       finally{busy=false;panel();}
@@ -324,9 +324,18 @@ export async function showCutoutEditor({
       if(mode==='recognition'){recognitionStageMask=copyMask(mask);mode='rough';mask=copyMask(roughStageMask);}
       else if(mode==='final'){finalStageMask=copyMask(mask);mode='recognition';mask=copyMask(recognitionStageMask);}
       comparison=null;history.length=0;lastStroke=null;outputPrepared=false;panel();draw();},
+    step:target=>{
+      if(busy||!steps.some(([id])=>id===target)||mode===target)return;
+      const current=steps.findIndex(([id])=>id===mode);
+      const selected=steps.findIndex(([id])=>id===target);
+      if(selected<current){for(let i=current;i>selected;i--)actions.previous();}
+      else for(let i=current;i<selected;i++)actions.next();
+    },
     next:()=>{if(busy)return;
-      if(mode==='rough'){roughStageMask=copyMask(mask);recognitionBaseMask=copyMask(mask);recognitionStageMask=copyMask(mask);mode='recognition';mask=copyMask(recognitionStageMask);}
-      else if(mode==='recognition'){recognitionStageMask=copyMask(mask);postprocessBaseMask=copyMask(mask);finalStageMask=copyMask(mask);mode='final';mask=copyMask(finalStageMask);outputPrepared=false;prepareOutput();}
+      if(mode==='rough'){roughStageMask=copyMask(mask);recognitionBaseMask=copyMask(mask);recognitionStageMask=copyMask(mask);
+        lastRecognition=null;lastPostprocess=null;mode='recognition';mask=copyMask(recognitionStageMask);}
+      else if(mode==='recognition'){recognitionStageMask=copyMask(mask);postprocessBaseMask=copyMask(mask);finalStageMask=copyMask(mask);
+        lastPostprocess=null;mode='final';mask=copyMask(finalStageMask);outputPrepared=false;prepareOutput();}
       else{void apply();return;}
       comparison=null;history.length=0;lastStroke=null;panel();draw();}
   };

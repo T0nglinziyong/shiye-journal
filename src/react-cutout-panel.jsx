@@ -30,9 +30,9 @@ export function CutoutPanel({state,actions,canvasRef}){
     onPointerUp={()=>actions.compare(null)} onPointerCancel={()=>actions.compare(null)}
     onKeyDown={event=>{if([' ','Enter'].includes(event.key)){event.preventDefault();actions.compare(kind);}}}
     onKeyUp={()=>actions.compare(null)}>{label}</button>)}</div>
-  <div className="material-editor-preview cutout-preview"><canvas id="cutout-canvas" ref={canvasRef} aria-label="素材抠图预览"/></div><div className="cutout-steps">{steps.map(([id,label],at)=><span key={id} data-cut-step={id}
-    className={at===index?'current':at<index?'passed':''}><b>{at+1}</b>{label}</span>)}</div>
-  <p className="cutout-hint">轻按画面修补边缘；长按上方按钮可对比原图。</p>
+  <div className="material-editor-preview cutout-preview"><canvas id="cutout-canvas" ref={canvasRef} aria-label="素材抠图预览"/></div><div className="cutout-steps" role="group" aria-label="抠图步骤">{steps.map(([id,label],at)=><button type="button" key={id} data-cut-step={id}
+    disabled={state.busy} aria-current={at===index?"step":undefined}
+    onClick={()=>actions.step(id)} className={at===index?'current':at<index?'passed':''}><b>{at+1}</b>{label}</button>)}</div>
   <section className="cutout-controls"><div id="cutout-mode-panel">
     {state.mode==='rough'?<div className="stack"><h3>手动修补边缘</h3>
       <MaskTools {...common} note="这里的涂抹只作为重新识别的初始范围；主算法可以继续向真实物理边缘扩张或收缩。"
@@ -70,8 +70,6 @@ export function CutoutPanel({state,actions,canvasRef}){
       <label>增强强度 <b id="appearance-value">{Math.round(state.intensity*100)}%</b><input id="cutout-intensity" type="range" min="0" max="100" value={state.intensity*100} disabled={state.appearance==='original'} onChange={event=>actions.intensity(Number(event.target.value)/100)}/></label>
     </div>}
   </div><p id="cutout-note" role="status">{state.note}</p>
-  <div className="cutout-step-nav"><button type="button" className="btn" id="cutout-prev" disabled={state.busy||index===0} onClick={actions.previous}>上一步</button>
-    <button type="button" className="btn primary" id="cutout-next" disabled={state.busy} onClick={actions.next}>{index===steps.length-1?'应用当前结果':'下一步'}</button></div>
   <details className="cutout-advanced cutout-reset-settings"><summary>更多操作</summary><button type="button" className="btn" id="cutout-reset" disabled={state.busy} onClick={actions.reset}>恢复进入时的状态</button></details>
   </section></div>;
 }

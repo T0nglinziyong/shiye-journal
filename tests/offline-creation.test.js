@@ -48,7 +48,7 @@ test('current editable example imports from JSON with current library assets',as
 
 test('editing material metadata and stock after task export does not block import, but cutout or measured size does',async()=>{
   const output=await make(),files=await filesOf(output),response=strFromU8(files['examples/project.shiyeproject.json']);
-  const edited=assetEditorValue(asset,{title:'重新命名',kind:'sticker',role:'focal',texture:'纸',width:'40',height:'50',quantity:'1',
+  const edited=assetEditorValue(asset,{title:'重新命名',kind:'sticker',role:'focal',texture:'纸张',width:'40',height:'50',quantity:'1',
     tags:'新标签',contentTags:'',styleTags:'',materialTags:'',seriesID:'new-series',reviewStatus:'ready',usageStatus:'unused',
     tapeRoll:false,supplyLength:'',repeatable:false,repeatPeriod:''});
   assert.equal(importEditableWork(response,[edited]).drafts[0].items[0].assetID,asset.id);

@@ -1,5 +1,6 @@
 // Production deployment refresh marker: 2026-10-04
 import {assetSourceRevision} from './material-anatomy.js';
+import {materialKindName} from './material-taxonomy.js';
 import {createElement} from 'react';
 import {BlankProjectDialog,MaterialUseDialog,ManualLayoutDialog,HelpDialog,OfflineImportDialog,MaterialPickerDialog,CreativeJSONDialog} from './react-utility-dialogs.jsx';
 import {SyncDetailsDialog,SyncConflictDialog,SyncErrorDialog,SyncMigrationDialog} from './react-sync-dialogs.jsx';
@@ -168,13 +169,15 @@ function libraryBack(){const previous=libraryHistory.pop();if(!previous){navigat
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const toast=s=>{const el=document.querySelector('#toast');el.textContent=/can't find variable|is not defined|undefined is not an object|blob:|expected magic word/i.test(String(s))?explainUserError(s):s;el.classList.add('show');clearTimeout(toast.timer);toast.timer=setTimeout(()=>el.classList.remove('show'),3500);};
 const saveStatus=s=>{const label=cloudEnabled?({'已保存到本机':'已保存到云端','本机存储':'云端存储'}[s]||s):s;updateShell({saveStatus:label});for(const el of document.querySelectorAll('.swift-auto-saved'))el.textContent=label;};
-const syncDisplay={pending:0,error:null,conflicts:0,uploading:false,checking:true,localPending:false};
+const syncDisplay={pending:0,error:null,conflicts:0,uploading:false,progress:null,checking:true,localPending:false};
 function updateSyncIndicator(){
   if(!cloudEnabled)return;
   const conflict=syncDisplay.conflicts>0||/云端版本已变化|另一设备已更新|conflict/i.test(syncDisplay.error?.message||'');
   const status=conflict?'conflict':navigator.onLine===false&&syncDisplay.pending?'offline':syncDisplay.uploading?'uploading':syncDisplay.error?'error':syncDisplay.checking?'checking':syncDisplay.pending||syncDisplay.localPending?'pending':'synced';
   const label={conflict:'同步冲突',error:'待重试',offline:'待联网',checking:'核对中',uploading:'上传中',pending:'待同步',synced:'已同步'}[status];
-  updateShell({sync:{status,label,title:conflict?'其他设备修改了同一资料；本机待传内容仍保留，请先检查其他设备':status==='error'?'上传未完成；点击重试：'+syncDisplay.error.message:label}});
+  const progress=syncDisplay.progress;
+  updateShell({sync:{status,label,title:conflict?'其他设备修改了同一资料；本机待传内容仍保留，请先检查其他设备':status==='error'?'上传未完成；点击重试：'+syncDisplay.error.message:
+    status==='uploading'&&progress?`上传中 · ${progress.phase} ${progress.done}/${progress.total} 项`:label}});
 }
 function mountPageSyncIndicator(){
   if(!cloudEnabled)return;
@@ -734,7 +737,7 @@ function updateLibraryResults(){
   window.dispatchEvent(new Event('shiye-library-refresh'));
   view.catalogRefresh=updateLibraryResults;
 }
-const kindName=k=>({sticker:'贴纸',paper:'纸张',tape:'胶带',photo:'照片',text:'文字',reference:'参考'})[k]||k;
+const kindName=materialKindName;
 function matchingScope(){return buildMaterialScope({basket:state.basket,coreIDs:state.coreIDs,recommendations:matchingRecommendations(state),excluded:state.excludedAssetIDs,autoIncludeRecommendations:state.aiSettings.autoIncludeRecommendations,requireAllCandidates:state.aiSettings.requireAllCandidates});}
 // Common actions update only affected Matching panes, preserving the entire
 // remaining page, sticky header, textarea selection and decoded thumbnails.
@@ -2602,7 +2605,7 @@ window.addEventListener('shiye-project-conflict-copy',event=>{
   }
   toast('已保留其他设备原稿；当前修改正作为新的独立作品同步，请在作品页查看。');
 });
-window.addEventListener('shiye-project-sync',event=>{const {pending,error,conflicts=0,uploading=false}=event.detail;syncDisplay.pending=pending;syncDisplay.error=error;syncDisplay.conflicts=conflicts;syncDisplay.uploading=uploading;syncDisplay.checking=false;if(!dirtyProjects.size&&!savingProjects)syncDisplay.localPending=false;updateSyncIndicator();if(error&&!uploading){saveStatus('待同步 · 修改已保留在本机');const message=error.name==='AbortError'||/abort|timed? ?out/i.test(error.message||'')?'网络请求中断，本机修改已保留，将自动重试同步':describeSyncError(error);if(lastSyncError!==message)toast(message);lastSyncError=message;}else{if(!error)lastSyncError=null;saveStatus(conflicts?'部分资料有冲突 · 其他资料已继续同步':pending?'修改已暂存 · 后台同步中':'已保存到云端');privateImages.retryMissing();}});
+window.addEventListener('shiye-project-sync',event=>{const {pending,error,conflicts=0,uploading=false,progress=null}=event.detail;syncDisplay.pending=pending;syncDisplay.progress=progress;syncDisplay.error=error;syncDisplay.conflicts=conflicts;syncDisplay.uploading=uploading;syncDisplay.checking=false;if(!dirtyProjects.size&&!savingProjects)syncDisplay.localPending=false;updateSyncIndicator();if(error&&!uploading){saveStatus('待同步 · 修改已保留在本机');const message=error.name==='AbortError'||/abort|timed? ?out/i.test(error.message||'')?'网络请求中断，本机修改已保留，将自动重试同步':describeSyncError(error);if(lastSyncError!==message)toast(message);lastSyncError=message;}else{if(!error)lastSyncError=null;saveStatus(conflicts?'部分资料有冲突 · 其他资料已继续同步':pending?'修改已暂存 · 后台同步中':'已保存到云端');privateImages.retryMissing();}});
 let cloudCheck,cloudCheckAt=0,cloudSessionReady=false,cloudCheckAgain=false;
 const CLOUD_POLL_MS=5000;
 let syncPausedByUser=false,resetWorkflowActive=false;
@@ -2709,7 +2712,8 @@ async function openSyncDetails(){
     const errorFrames=(syncDisplay.error?.stack||'').split('\n')
       .flatMap(line=>line.match(/[a-zA-Z0-9_.-]+\.js:\d+(?::\d+)?/g)||[])
       .slice(0,8).join(' → ');
-    const status=syncPausedByUser?'已暂停 · 本机修改仍保留':syncDisplay.uploading?'上传中':
+    const status=syncPausedByUser?'已暂停 · 本机修改仍保留':syncDisplay.uploading?
+      (syncDisplay.progress?`上传中 · ${syncDisplay.progress.phase} ${syncDisplay.progress.done}/${syncDisplay.progress.total} 项`:'上传中'):
       syncDisplay.error?'待重试':syncDisplay.pending||local.length?'等待上传':'已同步';
     openOverlay(createElement(SyncDetailsDialog,{details,projects,batches,local,quarantined,
       legacyCount:db.legacyProjectInfo?.()?.length||0,
@@ -2762,14 +2766,21 @@ setShellActions({
   }else route(target);
   },
   basket:()=>route('matching'),settings:()=>route('settings'),
-  sync:()=>void openSyncDetails(),save:()=>{if(cloudEnabled)void openSyncDetails();}
+  sync:()=>void openSyncDetails(),save:()=>{if(cloudEnabled)void openSyncDetails();},
+  update:()=>{
+    updateShell({updateStatus:'正在准备更新…'});
+    void Promise.resolve(safeUpdateRegistration).then(registration=>{
+      if(!registration)throw Error('更新服务暂不可用，请稍后重试');
+      return registration.activate();
+    }).catch(error=>{updateShell({updateStatus:''});toast('更新未完成：'+error.message);});
+  }
 });
 let safeUpdateRegistration=null;
 function checkForSafeUpdate(){
   if(!('serviceWorker' in navigator)||location.protocol!=='https:'||safeUpdateRegistration)return;
   safeUpdateRegistration=import('./app-update.js').then(({registerSafeUpdate})=>registerSafeUpdate({
     flushLocal:flushSave,
-    isBusy:()=>!!(state.importProcessing||state.aiBusy||savingProjects||dirtyProjects.size),
+    isBusy:()=>!!(state.importProcessing||state.aiBusy),
     onError:error=>toast('更新未完成，当前页面和资料保持不变：'+error.message),
     onReady:ready=>updateShell({updateReady:ready}),
     onStatus:updateStatus=>updateShell({updateStatus})

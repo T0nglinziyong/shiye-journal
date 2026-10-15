@@ -38,12 +38,12 @@ try {
   assert.ok(await evaluate('!!document.querySelector("#cutout-method")&&!!document.querySelector("#cutout-pixels")'));
   for(const selector of ['[data-repair="erase"]','[data-repair="restore"]']){await click(selector);assert.ok(await evaluate('document.querySelector("#modal").open'));}
   await screenshot('check-rough',2560,1440);
-  await click('#cutout-next','#cutout-post-shapes');
+  await click('[data-cut-step="recognition"]','#cutout-post-shapes');
   assert.equal(await evaluate('!!document.querySelector("#cutout-post-edge")'),false);
   assert.equal(await evaluate('!!document.querySelector("#cutout-post-curves")'),false);
   assert.ok(await evaluate('!!document.querySelector("#cutout-post-shapes")&&!!document.querySelector("#cutout-post-apertures")'));
   await screenshot('check-recognition',2560,1440);
-  await click('#cutout-next','#cutout-auto-straighten');
+  await click('[data-cut-step="final"]','#cutout-auto-straighten');
   for(const selector of ['[data-appearance="natural"]','[data-appearance="vivid"]','[data-appearance="original"]','#cutout-left','#cutout-rotate','#cutout-align','#cutout-original-direction']){
     await click(selector);assert.ok(await evaluate('document.querySelector("#modal").open'),'Editor must stay open after '+selector);
   }

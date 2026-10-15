@@ -1,4 +1,5 @@
 import {mountLiveInkStroke} from './ink-live-svg.js';
+import {materialKinds} from './material-taxonomy.js';
 import {configureInkBacking} from './ink-raster-scale.js';
 import {ensureInkSlots,inkSlot,activeInkSlot,selectInkSlot,editInkSlot} from './ink-tool-slots.js';
 import {openPopover,closePopover} from './swift-popover.js';
@@ -272,25 +273,33 @@ export function mountCanvasEditor(c){
     p.surface.classList.add('swift-material-picker');
     tabs.className='swift-segments';controls.className='canvas-material-filters';grid.className='canvas-picker-grid';
     p.content.append(tabs,controls,grid);
-    let tab=d.items.some(i=>!i.isParked)?'used':'all',series='all',kind='all',sort='newest';
+    let tab=d.items.some(i=>!i.isParked)?'used':'all',series='all',kind='all',status='all',sortBasis='time',sortOrder='desc';
     const seriesSelect=document.createElement('select');seriesSelect.setAttribute('aria-label','选择系列');
     seriesSelect.append(new Option('全部系列','all'),new Option('系列外','none'));
     for(const group of state.series||[])seriesSelect.append(new Option(group.title,group.id));
     const kindSelect=document.createElement('select');kindSelect.setAttribute('aria-label','过滤素材类型');
-    for(const [id,name] of [['all','全部类型'],['sticker','贴纸'],['paper','纸张'],['tape','胶带'],['photo','照片'],['text','文字'],['reference','参考']])kindSelect.append(new Option(name,id));
-    const sortSelect=document.createElement('select');sortSelect.setAttribute('aria-label','素材排序');
-    for(const [id,name] of [['newest','最新添加'],['oldest','最早添加'],['name','名称升序'],['name-desc','名称降序']])sortSelect.append(new Option(name,id));
-    controls.append(seriesSelect,kindSelect,sortSelect);
+    for(const [id,name] of [['all','全部类型'],...materialKinds])kindSelect.append(new Option(name,id));
+    const statusSelect=document.createElement('select');statusSelect.setAttribute('aria-label','素材状态');
+    for(const [id,name] of [['all','全部状态'],['ready','已整理'],['pendingReview','未整理'],['used','已使用'],['unused','未使用'],['inside','系列中'],['outside','系列外'],['favorite','已收藏']])statusSelect.append(new Option(name,id));
+    const basisSelect=document.createElement('select');basisSelect.setAttribute('aria-label','排序依据');
+    for(const [id,name] of [['time','最近添加'],['name','名称']])basisSelect.append(new Option(name,id));
+    const orderSelect=document.createElement('select');orderSelect.setAttribute('aria-label','排序顺序');
+    for(const [id,name] of [['desc','降序'],['asc','升序']])orderSelect.append(new Option(name,id));
+    controls.append(seriesSelect,kindSelect,statusSelect,basisSelect,orderSelect);
     const show=()=>{
       controls.hidden=tab!=='all';
-      const key=JSON.stringify([state.accountId||'',state.activeProject?.id,d.id,tab,series,kind,sort,
+      const key=JSON.stringify([state.accountId||'',state.activeProject?.id,d.id,tab,series,kind,status,sortBasis,sortOrder,
         d.items.map(i=>[i.id,i.assetID,!!i.isParked,i.cropRect,i.materialMask,i.splitPartIndex]),state.assets.map(a=>[a.id,a.blobId,a.updatedAt])]);
       let rows=pickerRows.get(key);
       if(!rows){
         let list=tab==='used'?d.items.filter(i=>!i.isParked).map(item=>({a:asset(item.assetID),item}))
           :tab==='standby'?d.items.filter(i=>i.isParked).map(item=>({a:asset(item.assetID),item}))
-          :state.assets.filter(a=>!a.isProjectInternal&&(series==='all'||(series==='none'?!a.seriesID:a.seriesID===series))&&(kind==='all'||a.kind===kind)).map(a=>({a}));
-        if(tab==='all')list.sort((x,y)=>sort==='name'?x.a.title.localeCompare(y.a.title):sort==='name-desc'?y.a.title.localeCompare(x.a.title):(Date.parse(y.a.createdAt||0)-Date.parse(x.a.createdAt||0))*(sort==='oldest'?-1:1));
+          :state.assets.filter(a=>!a.isProjectInternal&&(series==='all'||(series==='none'?!a.seriesID:a.seriesID===series))&&(kind==='all'||a.kind===kind)&&
+            (status==='all'||(status==='ready'?a.reviewStatus==='ready':status==='pendingReview'?a.reviewStatus!=='ready':
+            status==='used'?a.usageStatus==='used':status==='unused'?a.usageStatus!=='used':
+            status==='inside'?!!a.seriesID:status==='outside'?!a.seriesID:status==='favorite'?!!a.isFavorite:true))).map(a=>({a}));
+        if(tab==='all')list.sort((x,y)=>sortBasis==='name'?x.a.title.localeCompare(y.a.title,'zh-CN')*(sortOrder==='asc'?1:-1):
+          (Date.parse(x.a.createdAt||0)-Date.parse(y.a.createdAt||0))*(sortOrder==='asc'?1:-1));
         rows=list.filter(({a})=>!!a).map(({a,item})=>{
           const b=document.createElement('button');b.type='button';b.dataset.pickerAsset=a.id;b.dataset.assetId=a.id;
           if(item)b.dataset.pickerItem=item.id;
@@ -323,7 +332,9 @@ export function mountCanvasEditor(c){
     };
     seriesSelect.onchange=()=>{series=seriesSelect.value;show();};
     kindSelect.onchange=()=>{kind=kindSelect.value;show();};
-    sortSelect.onchange=()=>{sort=sortSelect.value;show();};
+    statusSelect.onchange=()=>{status=statusSelect.value;show();};
+    basisSelect.onchange=()=>{sortBasis=basisSelect.value;show();};
+    orderSelect.onchange=()=>{sortOrder=orderSelect.value;show();};
     for(const [id,name] of [['used','已使用素材'],['standby','备选素材'],['all','所有素材']]){
       const b=button(name,()=>{tab=id;show();});b.dataset.tab=id;tabs.append(b);
     }

@@ -150,7 +150,7 @@ try{
     await wait('.cutout-modal');
     const result=await painted();
     assertVisible(result,expect);
-    await click('#cutout-next');
+    await click('[data-cut-step="recognition"]');
     assert.ok((await evaluate('document.querySelector(".cutout-steps .current")?.textContent'))
       .includes('边缘优化'),'editor controls must respond after native handoff');
     await click('#cutout-cancel');

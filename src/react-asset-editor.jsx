@@ -1,13 +1,12 @@
 import React,{useState} from 'react';
+import {materialKinds,materialRoles,materialTextures,isMaterialTexture} from './material-taxonomy.js';
 
-const kindChoices=[['sticker','贴纸'],['paper','纸张'],['tape','胶带'],['photo','照片'],['text','文字'],['reference','参考']];
-const roleChoices=[['focal','主角'],['support','陪衬'],['background','背景'],['connector','连接'],['annotation','注释']];
 const tabNames=['基本信息','尺寸与库存','分类与标签'];
 
 export function AssetEditorDialog({asset,series,used,src,onClose,onSave}){
   const [tab,setTab]=useState(0),[busy,setBusy]=useState(false),[error,setError]=useState('');
   const [form,setForm]=useState({title:asset.title,kind:asset.kind,role:asset.role,
-    texture:asset.texture||'',width:asset.physicalWidthMM??'',height:asset.physicalHeightMM??'',
+    texture:isMaterialTexture(asset.texture)?asset.texture:'未确定',width:asset.physicalWidthMM??'',height:asset.physicalHeightMM??'',
     quantity:asset.supply?.quantity??(asset.kind==='tape'?999:1),
     contentTags:(asset.contentTags||[]).join('、'),styleTags:(asset.styleTags||[]).join('、'),
     materialTags:(asset.materialTags||[]).join('、'),tags:(asset.tags||[]).join('、'),
@@ -38,15 +37,14 @@ export function AssetEditorDialog({asset,series,used,src,onClose,onSave}){
       </div>
       <div className="material-editor"><div className="material-editor-preview">
         {src?<img src={src} data-asset-image-id={asset.id} alt={asset.title}/>:<span>无预览</span>}
-      </div><div className="material-editor-controls">
-        <div className="cutout-tabs" role="tablist" aria-label="素材信息分类">
+      </div><div className="cutout-tabs asset-editor-tabs" role="tablist" aria-label="素材信息分类">
           {tabNames.map((name,index)=><button type="button" role="tab" key={name}
             className={tab===index?'selected':''} aria-selected={tab===index}
             onClick={()=>setTab(index)}>{name}</button>)}
-        </div>
+      </div><div className="material-editor-controls">
         <div className="stack material-info-panel" hidden={tab!==0}>
-          {field('名称','title')}{select('类型','kind',kindChoices)}
-          {select('画面作用','role',roleChoices)}{field('材质','texture')}
+          {field('名称','title')}{select('类型','kind',materialKinds)}
+          {select('画面作用','role',materialRoles)}{select('材质','texture',materialTextures.map(value=>[value,value]))}
           {select('使用状态','usageStatus',[['unused','未使用'],['used','已使用']])}
         </div>
         <div className="stack material-info-panel" hidden={tab!==1}>

@@ -25,7 +25,7 @@ const writeProvider=()=>objectStorage?.enabled?'cos':'supabase';
 const usableBlob=value=>value instanceof Blob&&value.size>0;
 async function downloadObject(path,provider){if(provider==='cos'){if(!objectStorage)throw Error('COS 私有读取尚未配置');return objectStorage.download(path);}if(provider==='supabase')return checked(await cloudClient().storage.from(BUCKET).download(path));throw Error('云端对象缺少当前 storageProvider');}
 async function uploadObject(path,blob,type,provider=writeProvider()){if(provider==='cos'){await objectStorage.upload(path,blob,type);return {error:null};}return cloudClient().storage.from(BUCKET).upload(path,blob,{upsert:false,contentType:type});}
-let owner,revision,writesInFlight=0,resetInProgress=false,resetCleanupPending=false,resetEpochId=null;
+let owner,revision,writesInFlight=0,activeDirect=null,resetInProgress=false,resetCleanupPending=false,resetEpochId=null;
 let queue=Promise.resolve();
 const images=new Map();
 const imageSizes=new Map();
@@ -155,7 +155,7 @@ const account=async()=>`${namespace}:${await identity()}`;
 function notifyCloudSuperseded(){
   if(typeof window!=='undefined')window.dispatchEvent(new CustomEvent('shiye-cloud-superseded'));
 }
-function reportSync(){if(typeof window!=='undefined'){const current=unifiedSync.status();window.dispatchEvent(new CustomEvent('shiye-project-sync',{detail:{pending:current.pending+writesInFlight,error:current.error,conflicts:current.conflicts,uploading:current.uploading||writesInFlight>0}}));}}
+function reportSync(){if(typeof window!=='undefined'){const current=unifiedSync.status();window.dispatchEvent(new CustomEvent('shiye-project-sync',{detail:{pending:current.pending+writesInFlight,error:current.error,conflicts:current.conflicts,uploading:current.uploading||writesInFlight>0,progress:activeDirect?{phase:activeDirect.phase,done:activeDirect.done,total:activeDirect.total}:null}}));}}
 // One durable account-scoped queue, one upload scheduler. The project and
 // import accessors below are filtered facades; neither owns a second queue.
 async function loadUnifiedOutbox(recover=false){
@@ -732,18 +732,20 @@ function cloudTransaction(names,fn,operationID=crypto.randomUUID()){
   if(result?.then)throw Error('事务回调必须同步');
   const run=async()=>{
     assertAccountWritable();
-    writesInFlight++;reportSync();
+    writesInFlight++;activeDirect={startedAt:Date.now(),phase:'准备上传',done:0,total:operations.filter(op=>op.action==='put').length};reportSync();
     try{
     await identity();if(revision===undefined)await version();
     const previous=revision;
     operations.push(...recordTombstones(operations).slice(operations.length));
-    const puts=operations.filter(op=>op.action==='put');for(let offset=0;offset<puts.length;offset+=3)try{
+    const puts=operations.filter(op=>op.action==='put');activeDirect.total=puts.length;activeDirect.phase='编码与上传';reportSync();
+    for(let offset=0;offset<puts.length;offset+=3)try{
       await Promise.all(puts.slice(offset,offset+3).map(async op=>{
         try{op.item=await encode(op.store,op.item);}
         catch(error){throw markSyncPhase(error,'编码与上传 '+op.store);}
       }));
+      activeDirect.done=Math.min(puts.length,offset+3);reportSync();
     }catch(error){throw markSyncPhase(error,'编码云端记录');}
-    assertAccountWritable();
+    assertAccountWritable();activeDirect.phase='提交事务';reportSync();
     let data;
     try{data=checked(await cloudClient().rpc('shiye_commit_v2',{
       operations,expected_revision:previous,operation_id:operationID
@@ -779,7 +781,7 @@ function cloudTransaction(names,fn,operationID=crypto.randomUUID()){
     await unifiedSync.advance(previous,revision,operations);
     try{channel()?.postMessage({source:sessionTag,type:'committed',revision});}
     catch(error){console.warn('跨标签页同步通知暂不可用，云端提交仍已完成',error?.message);}
-    }finally{writesInFlight--;reportSync();}
+    }finally{writesInFlight--;activeDirect=null;reportSync();}
   };
   const pending=queue.then(run).catch(error=>{
     syncDiagnostics.record({action:'failed',kind:'direct',baseRevision:revision,pending:unifiedSync.status().pending,
@@ -1107,8 +1109,8 @@ async function cloudPurgeLocalAfterReset(){
 async function cloudPendingDetails(){await identity();const [projects,imports]=await Promise.all([projectSync.pending(),importSync.pending()]);return {projects:projects.map(row=>({id:row.record.id,title:row.record.title||'未命名作品',baseRevision:row.baseRevision})),batches:imports.map(row=>({id:row.record.id,baseRevision:row.baseRevision,items:row.record.operations?.map(op=>({store:op.store,action:op.action,title:op.item?.title||op.item?.name||op.id||'',id:op.item?.id||op.id||''}))||['assets','projects','blobs'].flatMap(store=>(row.record[store]||[]).map(item=>({store,action:'put',title:item.title||'',id:item.id})))})),error:unifiedSync.status().error?.message||null,quarantined:unifiedQuarantine.length};}
 function cloudSyncDiagnosticReport({online=null}={}){
   const status=unifiedSync.status();
-  return syncDiagnostics.report({pending:status.pending,conflicts:status.conflicts,uploading:status.uploading,
-    revision,writesInFlight,quarantined:unifiedQuarantine.length,online});
+  return syncDiagnostics.report({pending:status.pending+writesInFlight,conflicts:status.conflicts,uploading:status.uploading||writesInFlight>0,
+    revision,writesInFlight,quarantined:unifiedQuarantine.length,online,active:activeDirect?{...activeDirect,elapsedMs:Date.now()-activeDirect.startedAt}:null});
 }
 async function cloudDiscardPending(){await identity();if(writesInFlight||!unifiedSync.canDiscard())throw Error('上传正在进行，请等待当前请求结束');const count=await unifiedSync.discard();reportSync();return count;}
 async function cloudFlushProjects({background=false}={}){

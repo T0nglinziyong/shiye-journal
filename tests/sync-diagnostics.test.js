@@ -26,3 +26,10 @@ test('unconfirmed response retains its safe root cause category',()=>{
   assert.equal(trace.report().events[0].failure.category,'unconfirmed-response');
   assert.equal(trace.report().events[0].failure.causeCategory,'revision-conflict');
 });
+
+test('active upload report shows elapsed phase and bounded counts without identifiers',()=>{
+  const trace=createSyncDiagnostics();
+  const report=trace.report({pending:1,uploading:true,active:{phase:'编码与上传',done:6,total:18,elapsedMs:32000,id:'private-id'}});
+  assert.deepEqual(report.active,{phase:'编码与上传',completed:6,total:18,elapsedMs:32000});
+  assert.ok(!JSON.stringify(report).includes('private-id'));
+});

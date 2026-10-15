@@ -1,10 +1,6 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {createPortal} from 'react-dom';
-
-const kinds=[['sticker','贴纸'],['paper','纸张'],['tape','胶带'],['photo','照片'],
-  ['text','文字'],['reference','参考']];
-const roles=[['focal','主角'],['support','陪衬'],['background','背景'],
-  ['connector','连接'],['annotation','注释']];
+import {materialKinds,materialRoles} from './material-taxonomy.js';
 
 export function ImportCandidateDialog({candidate,recordIndex,candidateIndex,onClose,onToggle,
   onSave,onCheck,onError}){
@@ -49,11 +45,11 @@ export function ImportCandidateDialog({candidate,recordIndex,candidateIndex,onCl
       <label>类型<select id="candidate-edit-kind" value={draft.kind}
         onChange={event=>setDraft(previous=>({...previous,kind:event.target.value,
           quantity:event.target.value==='tape'&&Number(previous.quantity)===1?999:previous.quantity}))}>
-        {kinds.map(([value,label])=><option key={value} value={value}>{label}</option>)}
+        {materialKinds.map(([value,label])=><option key={value} value={value}>{label}</option>)}
       </select></label>
       <label>作用<select id="candidate-edit-role" value={draft.role}
         onChange={event=>change('role',event.target.value)}>
-        {roles.map(([value,label])=><option key={value} value={value}>{label}</option>)}
+        {materialRoles.map(([value,label])=><option key={value} value={value}>{label}</option>)}
       </select></label>
       <label>数量<input id="candidate-edit-quantity" type="number" min="1" max="999" step="1"
         value={draft.quantity} onChange={event=>change('quantity',event.target.value)}/></label>

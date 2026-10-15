@@ -1,11 +1,15 @@
 import {parseTags,usedAssetIDs,withUsageStatus} from './library-model.js';
+import {isMaterialKind,isMaterialRole,isMaterialTexture} from './material-taxonomy.js';
 
 export function assetEditorValue(old,values) {
   if(!values.title.trim())throw Error('请填写素材名称');
+  const texture=String(values.texture||'').trim()||'未确定';
+  if(!isMaterialKind(values.kind)||!isMaterialRole(values.role)||!isMaterialTexture(texture))
+    throw Error('素材类型、画面作用或材质不在预设范围内');
   const dimension=value=>{if(value==='')return null;const n=Number(value);if(!Number.isFinite(n)||n<=0)throw Error('实物宽高必须是正数或留空');return n;};
   const quantity=Number(values.quantity);if(!Number.isInteger(quantity)||quantity<0||quantity>999)throw Error('数量需要是 0–999 的整数');
   const width=dimension(values.width),height=dimension(values.height);
-  const next={...old,title:values.title.trim(),kind:values.kind,role:values.role,texture:values.texture.trim(),physicalWidthMM:width,physicalHeightMM:height,
+  const next={...old,title:values.title.trim(),kind:values.kind,role:values.role,texture,physicalWidthMM:width,physicalHeightMM:height,
     tags:parseTags(values.tags),contentTags:parseTags(values.contentTags),styleTags:parseTags(values.styleTags),materialTags:parseTags(values.materialTags),
     seriesID:values.seriesID||null,reviewStatus:values.reviewStatus,supply:{...old.supply,kind:quantity===999?'unlimited':quantity===1?'single':'quantity',quantity},updatedAt:new Date().toISOString()};
   next.tags=[...new Set([...next.tags,...next.contentTags,...next.styleTags,...next.materialTags])];
