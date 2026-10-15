@@ -14,6 +14,22 @@ const ringPath=(points,width,height)=>points.map(([x,y],index)=>
 // Fabric is the interactive projection. Scene v2 remains the persisted source
 // of truth, so an editor change never replaces the physical-data contract.
 export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=>null}={}){
+  const rotateControl=new fabric.Control({x:.5,y:.5,offsetX:20,offsetY:20,
+    actionName:'rotate',actionHandler:fabric.controlsUtils.rotationWithSnapping,
+    cursorStyleHandler:fabric.controlsUtils.rotationStyleHandler,
+    render(ctx,left,top){
+      ctx.save();ctx.translate(left,top);ctx.fillStyle='#fffefa';ctx.strokeStyle='#416c59';
+      ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(0,0,9,0,Math.PI*2);ctx.fill();ctx.stroke();
+      ctx.beginPath();ctx.arc(0,0,4.2,-.9*Math.PI,.38*Math.PI);ctx.stroke();
+      ctx.restore();
+    }});
+  const configureControls=object=>{
+    object.controls={...object.controls,rotateBottomRight:rotateControl};
+    object.setControlsVisibility({tl:false,tr:false,bl:false,br:false,mtr:false,
+      ml:true,mr:true,mt:true,mb:true,rotateBottomRight:true});
+    object.set({cornerSize:14,touchCornerSize:32,transparentCorners:false,
+      cornerColor:'#fffefa',cornerStrokeColor:'#416c59',borderColor:'#416c59'});
+  };
   const maskGeometry=mask=>[[mask.outer,...(mask.holes||[])]];
   const clipPath=(geometry,width,height,{page=false,topOffset=0}={})=>{
     // A compound path keeps openings transparent. Fabric recenters Path data
@@ -97,6 +113,7 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
       const canvasSelectable=!node.autoInkGroup&&!node.locked&&!node.isLocked;
       group.set({lockScalingX:true,lockScalingY:true,
         selectable:canvasSelectable,evented:canvasSelectable});
+      configureControls(group);
       return group;
     }
     let object;
@@ -165,7 +182,7 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
         scaleX:positive(node.width)/(positive(crop.width)*naturalWidth),
         scaleY:positive(node.height)/(positive(crop.height)*naturalHeight),
         originX:'center',originY:'center',left:finite(node.x),top:finite(node.y),
-        flipX:!!node.isFlippedHorizontally,lockScalingX:true,lockScalingY:true,
+        flipX:!!node.isFlippedHorizontally,
         lockSkewingX:true,lockSkewingY:true});
       const material=node.materialMask&&maskGeometry(materialMaskGeometry(node.materialMask));
       const vector=node.vectorMask&&maskGeometry(node.vectorMask);
@@ -178,6 +195,7 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
       selectable:node.type!=='ink'&&!node.locked&&!node.isLocked,
       evented:node.type!=='ink'&&!node.locked&&!node.isLocked,
       globalCompositeOperation:node.blendMode==='multiply'?'multiply':'source-over'});
+    if(node.type!=='ink')configureControls(object);
     object.sceneID=node.ownerID||node.id;
     object.sceneRenderKey=node.renderKey||node.id;
     object.sceneType=node.type;
@@ -213,9 +231,6 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
       });
       object.sceneInkMatrix=after;
     }else{
-      if(node.type==='material'&&(Math.abs(object.scaleX-positive(node.width)/positive(object.width))>1e-5||
-        Math.abs(object.scaleY-positive(node.height)/positive(object.height))>1e-5))
-        throw Error('实物素材不能通过画布控件缩放');
       const textChanged=node.type==='text'&&object.text!==node.content;
       const textFrame=node.type==='text'?
         Math.max(object.sceneTextFrameHeight||node.height,textChanged?object.height:0)*object.scaleY:null;

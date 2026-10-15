@@ -4,11 +4,11 @@ import {localDeviceRecords} from './local-device-records.js';
 // Render a complete 480px scene locally, show the Blob immediately, and cache
 // only that thumbnail by account/project/revision. COS upload is independent.
 export function createLocalWorkCovers({
-  state,loadDocument,renderCover,deviceRecords=localDeviceRecords,
+  state,loadDocument,renderCover,hasUsableCover=()=>true,deviceRecords=localDeviceRecords,
   onReady=()=>{},onError=()=>{},createURL=blob=>URL.createObjectURL(blob),
   revokeURL=url=>URL.revokeObjectURL(url)
 }){
-  const entries=new Map(),jobs=new Map();const maxMemory=24;
+  const entries=new Map(),jobs=new Map(),failures=new Map(),retryTimers=new Map();const maxMemory=24;
   const account=()=>String(state.accountId||'browser');
   const key=p=>JSON.stringify([account(),p.id,p.updatedAt,p.activeDraftID]);
   const missing=p=>!!p&&!p.isSnapshot&&!p.isTemplate&&!!p.drafts?.length&&
@@ -22,6 +22,7 @@ export function createLocalWorkCovers({
     if(prior)return prior;
     const entry={blob,url:createURL(blob)};
     entries.set(token,entry);
+    failures.delete(token);clearTimeout(retryTimers.get(token));retryTimers.delete(token);
     while(entries.size>maxMemory){
       const oldest=entries.keys().next().value;
       if(oldest===token)break;
@@ -54,7 +55,16 @@ export function createLocalWorkCovers({
       void deviceRecords.put(owner,{id:'work-cover:480:'+p.id,updatedAt:revision,blob})
         .catch(error=>onError('封面本地缓存暂不可用',p.id,error));
       return blob;
-    })().catch(error=>{onError('本地封面生成失败',p.id,error);throw error;})
+    })().catch(error=>{
+      onError('本地封面生成失败',p.id,error);
+      const count=(failures.get(token)||0)+1;failures.set(token,count);
+      if(count<=2&&!retryTimers.has(token))retryTimers.set(token,setTimeout(()=>{
+        retryTimers.delete(token);
+        if(owner===account()&&p.updatedAt===revision&&
+          ['works','projectPreview'].includes(state.route))void ensure(p).catch(()=>{});
+      },count*2500));
+      throw error;
+    })
       .finally(()=>jobs.delete(token));
     jobs.set(token,job);
     return job;
@@ -62,13 +72,14 @@ export function createLocalWorkCovers({
   function observe(root,projects=[...(state.projects||[]),...(state.trash||[]).filter(entry=>entry.kind==='project').map(entry=>entry.item)]){
     if(!root)return ()=>{};
     const cards=[...root.querySelectorAll('[data-act="open-project"][data-id],[data-cover-project-id]')]
-      .filter(card=>missing(projects.find(p=>p.id===(card.dataset.coverProjectId||card.dataset.id))));
+      .filter(card=>{const p=projects.find(item=>item.id===(card.dataset.coverProjectId||card.dataset.id));
+        return p&&!p.isSnapshot&&!p.isTemplate&&!peek(p)&&(missing(p)||!hasUsableCover(p));});
     if(!cards.length)return ()=>{};
     let disposed=false;
     const loadCard=card=>{
       if(disposed)return;
       const p=projects.find(project=>project.id===(card.dataset.coverProjectId||card.dataset.id));
-      if(p&&missing(p))void ensure(p).catch(()=>{});
+      if(p&&!peek(p)&&(missing(p)||!hasUsableCover(p)))void ensure(p).catch(()=>{});
     };
     const observer=typeof IntersectionObserver==='function'
       ?new IntersectionObserver(rows=>rows.forEach(row=>{if(row.isIntersecting){loadCard(row.target);observer.unobserve(row.target);}}),{rootMargin:'120px'}):null;
@@ -77,5 +88,6 @@ export function createLocalWorkCovers({
     return ()=>{disposed=true;observer?.disconnect();};
   }
   return {peek,ensure,remember,observe,missing,
-    dispose(){for(const value of entries.values())revokeURL(value.url);entries.clear();jobs.clear();}};
+    dispose(){for(const timer of retryTimers.values())clearTimeout(timer);retryTimers.clear();
+      for(const value of entries.values())revokeURL(value.url);entries.clear();jobs.clear();failures.clear();}};
 }

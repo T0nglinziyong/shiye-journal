@@ -129,14 +129,23 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
             // Decode the replacement before touching the visible object. A
             // slow image cannot leave a blank hole in an already drawn page.
             const old=canvas.getObjects().filter(item=>item.sceneRenderKey===key);
+            const keepSelected=node.type!=='ink'&&callbacks.current.tool==='select'&&
+              callbacks.current.selectedID===node.id;
+            const replacingActive=keepSelected&&old.some(item=>canvas.getActiveObject()===item);
+            if(replacingActive)syncingSelection.current=true;
             for(const item of old)canvas.remove(item);
             if(object){
               object.sceneIndex=sceneIndex;
               if(readOnly)object.set({selectable:false,evented:false});
               const position=canvas.getObjects().filter(item=>item.sceneIndex<sceneIndex).length;
               canvas.insertAt(position,object);
-              if(node.type!=='ink'&&callbacks.current.tool==='select'&&callbacks.current.selectedID===node.id)
-                canvas.setActiveObject(object);
+              if(keepSelected)canvas.setActiveObject(object);
+            }
+            if(replacingActive){
+              syncingSelection.current=false;
+              const bounds=object?.getBoundingRect();
+              if(bounds)callbacks.current.onSelection?.([node.id],{x:bounds.left,y:bounds.top,
+                width:bounds.width,height:bounds.height});
             }
             canvas.requestRenderAll();
             if(object)onAdded?.(object);

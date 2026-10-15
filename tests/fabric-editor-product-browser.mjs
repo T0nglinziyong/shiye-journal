@@ -154,6 +154,10 @@ try{
   await click('[aria-label="编辑对象"]','.show-inspector');
   assert.ok(await evaluate('!!document.querySelector("#inspector-fill")&&!!document.querySelector("#inspector-stroke-dash")&&!!document.querySelector("#inspector-blend-mode")'),
     'Shape inspector exposes the same editable style fields as AI created shapes');
+  assert.equal(await evaluate('!!document.querySelector("#inspector-x,#inspector-y,#inspector-width,#inspector-height")'),false,
+    'Position and dimensions are adjusted on the page, not typed into the inspector');
+  assert.equal(await evaluate('!!document.querySelector(".fabric-selected-actions")'),false,
+    'The inspector must cover the canvas edit controls while open');
   await click('[aria-label="关闭对象设置"]');
   assert.equal(await evaluate('!!document.querySelector(".show-inspector")'),false);
   const pagePoints=await evaluate(`(()=>{const rect=document.querySelector('.upper-canvas').getBoundingClientRect();
@@ -275,6 +279,7 @@ try{
   await click('[data-val="layers"]','.scene-layer-tree');
   assert.ok(await evaluate(`!!document.querySelector('.scene-layer-tree [data-scene-node="${inkGroup.id}"]')`),
     'Grouped ink is selectable in the layer tree');
+  await click('[data-val="layers"]');
   assert.deepEqual(browser.errors,[]);
   console.log('Fabric product editor smoke passed: stroke, marker, lasso, grouping, undo, redo, text, shape, paper, zoom and pinch cancellation');
 }finally{await browser.close();}

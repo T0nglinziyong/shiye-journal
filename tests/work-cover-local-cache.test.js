@@ -7,10 +7,23 @@ const work=(updatedAt='2026-10-09T13:00:00Z')=>({
   id:'work-A',updatedAt,activeDraftID:'page-A',
   drafts:[{id:'page-A',canvas:{width:650,height:1000},items:[{assetID:'p'}],strokes:[]}]
 });
-const factory=({state,device,draw,ready,error})=>createLocalWorkCovers({
+const factory=({state,device,draw,ready,error,hasUsableCover})=>createLocalWorkCovers({
   state,deviceRecords:device,loadDocument:async p=>p,renderCover:draw,
+  hasUsableCover,
   onReady:ready||(()=>{}),onError:error||(()=>{}),
   createURL:()=> 'blob:local-cover',revokeURL:()=>{}
+});
+test('an unreadable remote cover triggers a local scene cover for the visible card',async()=>{
+  const p=work(),state={accountId:'account',route:'works',projects:[p]};
+  p.drafts[0].coverImageID='project-cover:cos:missing-preview480.webp';
+  let resolveReady;const ready=new Promise(resolve=>{resolveReady=resolve;});
+  const covers=factory({state,device:{get:async()=>null,put:async()=>{}},
+    hasUsableCover:()=>false,draw:async()=>new Blob(['local cover']),
+    ready:()=>resolveReady()});
+  const dispose=covers.observe({querySelectorAll:()=>[{dataset:{id:p.id}}]});
+  await ready;
+  assert.equal(covers.peek(p),'blob:local-cover');
+  dispose();covers.dispose();
 });
 test('new blank or imported work shows local 480px snapshot independent of cloud upload',async()=>{
   const original=work(),state={accountId:'account',projects:[original],route:'works'};

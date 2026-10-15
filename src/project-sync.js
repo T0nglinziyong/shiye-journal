@@ -10,7 +10,8 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
   let autoTimer=null,lastNetworkAt=null;
   const cancelAuto=()=>{if(autoTimer!==null){clearTimer(autoTimer);autoTimer=null;}};
   function scheduleAuto(){
-    if(paused||network||rebuilding||autoTimer!==null)return;
+    if(paused||network||rebuilding||autoTimer!==null||
+      entries.size&&![...entries.keys()].some(id=>!conflicts.has(id)))return;
     if(!flushWindow){void kick();return;}
     // First remote upload waits one window to coalesce several small edits.
     // Further uploads cannot start sooner than a window after the previous one.
@@ -162,8 +163,14 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
         ?Math.max(0,...[...entries.values()].map(item=>item.serial))
         :Infinity;
       await coalesceReady(windowSerial);
-      const blocked=new Set(),blockedKeys=[];
-      const conflictIDs=new Set();
+      // Once a row has been confirmed as a real conflict, background retries
+      // must not replay the same stale revision forever. An explicit flush or
+      // queue rebuild can recheck it; independent rows continue normally.
+      const blocked=force?new Set():new Set(conflicts);
+      // Old conflict rows cannot hold unrelated newer records hostage. Each
+      // newer row still runs through its own revision reconciliation/CAS.
+      const blockedKeys=[];
+      const conflictIDs=force?new Set():new Set(conflicts);
       let firstFailure=null;
       while(entries.size&&!paused){
         const row=orderedRows().find(item=>!blocked.has(item.record.id)&&item.serial<=windowSerial&&
@@ -385,5 +392,7 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
     const keys=recordKeys(row.record);
     const touched=operations.some(operation=>keys.some(key=>key.store===operation.store&&(key.id===undefined||operation.action==='clear'||key.id===(operation.item?.id??operation.id))));
     if(row.baseRevision===before&&!touched){row.baseRevision=after;changed=true;}
-  }if(changed)await persist();},resolvePending,cancelPendingFor,discard,rebuild,canDiscard:()=>!network&&!rebuilding,resume:()=>kick({force:true}),status:()=>({pending:entries.size,error,conflicts:conflicts.size,uploading:!!network||rebuilding})};
+    }if(changed)await persist();},resolvePending,cancelPendingFor,discard,rebuild,canDiscard:()=>!network&&!rebuilding,
+    resume:()=>{paused=false;return kick();},
+    status:()=>({pending:entries.size,error,conflicts:conflicts.size,uploading:!!network||rebuilding})};
 }

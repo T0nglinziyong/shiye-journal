@@ -1104,17 +1104,7 @@ function EditorInspector({selected,draft,asset,format,onChange,onAction}){
         {geometryError?<small role="status">{geometryError}</small>:null}
       </details>
     </>:null}
-    <h3>位置与图层</h3>
-    <div className="form-grid">
-      {field('inspector-x','横向位置',format(item.x),'number',{step:.5})}
-      {field('inspector-y','纵向位置',format(item.y),'number',{step:.5})}
-      {field('inspector-width','宽',format(item.width),'number',{
-        min:1,disabled:selected.kind==='material',title:selected.kind==='material'?'实物尺寸来自素材标定':undefined})}
-      {field('inspector-height','高',format(item.height),'number',{
-        min:1,disabled:selected.kind==='material',title:selected.kind==='material'?'实物尺寸来自素材标定':undefined})}
-      {field('inspector-rotation','旋转',format(item.rotation||0))}
-      {field('inspector-z','图层',item.zIndex)}
-    </div>
+    <h3>图层外观</h3>
     <div className="form-grid">{field('inspector-opacity','整体透明度',item.opacity??1,'range',{min:0,max:1,step:.05})}
       {choice('inspector-blend-mode','叠加方式',item.blendMode||'normal',[[ 'normal','正常'],['multiply','正片叠底']])}</div>
     <div className="editor-inspector-mask">{item.vectorMask?<p className="muted">矢量蒙版：{item.vectorMask.outer?.length||0} 个外轮廓点、{item.vectorMask.holes?.length||0} 个镂空区域</p>:null}
@@ -1172,9 +1162,9 @@ function FabricSelectedActions({bounds,draft,onAction}){
     const place=()=>{
       const rect=canvas.getBoundingClientRect();
       const center=rect.left+(currentBounds.x+currentBounds.width/2)*rect.width/draft.canvas.width;
-      const edge=rect.top+(currentBounds.y+currentBounds.height)*rect.height/draft.canvas.height;
+      const edge=rect.top+currentBounds.y*rect.height/draft.canvas.height;
       setPosition({left:Math.max(83,Math.min(innerWidth-83,center)),
-        top:Math.max(112,Math.min(innerHeight-52,edge+12))});
+        top:Math.max(112,Math.min(innerHeight-52,edge-46))});
     };
     const move=event=>{
       currentBounds=event.detail.bounds;
@@ -1228,7 +1218,7 @@ export function EditorPage({state,draft,editorEntry,asset,source,format,
     </div></div>
     <FabricEditorToolbar state={state} draft={draft} materials={materials} source={source}
       selected={selected} onInspectorChange={onInspectorChange} onAction={onAction}/>
-    {selected&&state.tool==='select'?<FabricSelectedActions bounds={state.fabricSelectionBounds}
+    {selected&&state.tool==='select'&&!state.fabricInspectorOpen?<FabricSelectedActions bounds={state.fabricSelectionBounds}
       draft={draft} onAction={onAction}/>:null}
     <div className={`editor-shell swift-editor-workspace ${selected&&state.fabricInspectorOpen?'show-inspector':''}`}
       data-react-page="editor"><section className="editor-stage"><div className="object-toolbar">
@@ -1252,6 +1242,9 @@ export function EditorPage({state,draft,editorEntry,asset,source,format,
         const canvas=editorFabricCanvases.get(draft.id);
         if(!canvas)return false;
         const point=canvas.getScenePoint(event);
+        const active=canvas.getActiveObject();
+        if(active?.sceneID===state.selected&&
+          active.findControl(canvas.getViewportPoint(event),event.pointerType==='touch'))return true;
         return canvas.getObjects().some(object=>object.sceneID===state.selected&&
           object.selectable!==false&&object.visible!==false&&object.containsPoint(point));
       }}

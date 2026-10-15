@@ -70,8 +70,46 @@ try{
   await sleep(700);
   const actionAfter=await evaluate(`document.querySelector('.fabric-selected-actions')?.getBoundingClientRect().left`);
   assert.ok(actionAfter>actionBefore+2,'The selected object and its action frame should follow the next drag: '+JSON.stringify({actionBefore,actionAfter}));
+  const rotationTouch=await evaluate(`(async()=>{const db=await new Promise(resolve=>{const q=indexedDB.open('shiye-pwa-full-v1');q.onsuccess=()=>resolve(q.result)});
+    const project=await new Promise(resolve=>{const q=db.transaction('projects').objectStore('projects').getAll();q.onsuccess=()=>resolve(q.result.at(-1))});db.close();
+    const draft=project.drafts[0],node=draft.layers.findLast(item=>item.type==='shape');
+    const rect=document.querySelector('.upper-canvas').getBoundingClientRect(),page=document.querySelector('#canvas-page').getBoundingClientRect(),scale=rect.width/draft.canvas.width;
+    return {x:rect.left+(node.x+node.width/2+20)*scale,y:rect.top+(node.y+node.height/2+20)*scale,
+      pageLeft:page.left,angle:node.rotation||0};})()`);
+  const touch=(id,x,y)=>({id,x,y,radiusX:1,radiusY:1,force:.5});
+  await command('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[touch(1,rotationTouch.x,rotationTouch.y)]});
+  for(let step=1;step<=4;step++)await command('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[
+    touch(1,rotationTouch.x-step*5,rotationTouch.y+step*3)]});
+  await command('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+  await sleep(700);
+  const rotated=await evaluate(`(async()=>{const db=await new Promise(resolve=>{const q=indexedDB.open('shiye-pwa-full-v1');q.onsuccess=()=>resolve(q.result)});
+    const p=await new Promise(resolve=>{const q=db.transaction('projects').objectStore('projects').getAll();q.onsuccess=()=>resolve(q.result.at(-1))});db.close();
+    return p.drafts[0].layers.findLast(item=>item.type==='shape').rotation||0;})()`);
+  assert.ok(Math.abs(rotated-rotationTouch.angle)>3,'Touching the bottom-right control must rotate the object: '+JSON.stringify({rotated,rotationTouch,pageLeft:await evaluate(`document.querySelector('#canvas-page').getBoundingClientRect().left`)}));
+  assert.ok(Math.abs(await evaluate(`document.querySelector('#canvas-page').getBoundingClientRect().left`)-rotationTouch.pageLeft)<2,
+    'Touch rotation must not move the page');
+  await wait('.fabric-selected-actions');
+  const resize=await evaluate(`(async()=>{const db=await new Promise(resolve=>{const q=indexedDB.open('shiye-pwa-full-v1');q.onsuccess=()=>resolve(q.result)});
+    const p=await new Promise(resolve=>{const q=db.transaction('projects').objectStore('projects').getAll();q.onsuccess=()=>resolve(q.result.at(-1))});db.close();
+    const draft=p.drafts[0],node=draft.layers.findLast(item=>item.type==='shape');
+    const rect=document.querySelector('.upper-canvas').getBoundingClientRect(),scale=rect.width/draft.canvas.width;
+    const angle=(node.rotation||0)*Math.PI/180;
+    return {x:rect.left+(node.x+Math.cos(angle)*node.width/2)*scale,
+      y:rect.top+(node.y+Math.sin(angle)*node.width/2)*scale,
+      dx:Math.cos(angle)*5,dy:Math.sin(angle)*5,width:node.width};})()`);
+  await command('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[touch(3,resize.x,resize.y)]});
+  for(let step=1;step<=5;step++)await command('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[
+    touch(3,resize.x+resize.dx*step,resize.y+resize.dy*step)]});
+  await command('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+  await sleep(700);
+  const resized=await evaluate(`(async()=>{const db=await new Promise(resolve=>{const q=indexedDB.open('shiye-pwa-full-v1');q.onsuccess=()=>resolve(q.result)});
+    const p=await new Promise(resolve=>{const q=db.transaction('projects').objectStore('projects').getAll();q.onsuccess=()=>resolve(q.result.at(-1))});db.close();
+    return p.drafts[0].layers.findLast(item=>item.type==='shape').width;})()`);
+  assert.ok(resized>resize.width+4,'The edge handle should stretch the selected object: '+JSON.stringify({resize,resized}));
+  assert.ok(Math.abs(await evaluate(`document.querySelector('#canvas-page').getBoundingClientRect().left`)-rotationTouch.pageLeft)<2,
+    'Touch resizing must not move the page');
   await click('.shape-add-quick','.swift-shape-picker');
   await click('.shape-add-quick');
   assert.deepEqual(browser.errors,[]);
-  console.log('Mobile Fabric toolbar, palette, compact menus and release-to-select pan passed');
+  console.log('Mobile Fabric toolbar, palette, release-to-select pan and touch rotation passed');
 }finally{await browser.close();}

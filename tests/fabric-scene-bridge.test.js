@@ -131,16 +131,20 @@ test('Fabric group move and rotation write through to absolute Scene child geome
   assert.deepEqual(node.children,snapshot);
 });
 
-test('Fabric material controls cannot resize the physical paper placement',async()=>{
+test('Fabric material edge controls resize its Scene placement and keep the source asset unchanged',async()=>{
   const image=createCanvas(40,20);
   const node={id:'material-locked-size',type:'material',assetID:'asset-1',x:120,y:100,
     width:200,height:80,rotation:0,opacity:1};
   const object=await createFabricSceneBridge(fabric,{assetURL:()=>image.toDataURL()}).fromNode(node);
-  assert.equal(object.lockScalingX,true);
-  assert.equal(object.lockScalingY,true);
+  assert.equal(object.lockScalingX,false);
+  assert.equal(object.lockScalingY,false);
+  assert.equal(object.controls.ml.visible,true);
+  assert.equal(object.controls.mr.visible,true);
+  assert.equal(object.controls.rotateBottomRight.visible,true);
   object.set({scaleX:object.scaleX*1.2});
-  assert.throws(()=>bridge.applyObject(node,object),/不能通过画布控件缩放/);
-  assert.equal(node.width,200);
+  bridge.applyObject(node,object);
+  assert.equal(node.width,240);
+  assert.equal(node.assetID,'asset-1');
 });
 
 test('Fabric leaf and group vector masks match the Scene export at sampled pixels',async()=>{

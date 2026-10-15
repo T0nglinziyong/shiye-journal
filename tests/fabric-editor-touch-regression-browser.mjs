@@ -53,8 +53,8 @@ try{
   const after=await evaluate(`[...document.querySelectorAll('.scene-layer-node')].map(row=>row.dataset.sceneNode)`);
   assert.deepEqual(after,[...before].reverse(),'Dragging the grip reverses the visible order');
   await touch('.scene-layer-tree-toolbar button:first-child');
+  // The second shape remains selected; add the other one in multi-select mode.
   await touch('.scene-layer-branch:first-child .scene-layer-pick');
-  await touch('.scene-layer-branch:nth-child(2) .scene-layer-pick');
   assert.equal(await evaluate(`document.querySelectorAll('.scene-layer-node.selected').length`),2,
     'Layer multi-select preserves both selections');
   assert.equal(await evaluate(`document.querySelector('.scene-layer-tree-toolbar button:nth-child(2)').disabled`),false);

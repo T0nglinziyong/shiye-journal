@@ -274,23 +274,30 @@ const renderLocalCoverBlob=project=>renderWorkCoverSnapshot(project,{
 });
 const localWorkCovers=createLocalWorkCovers({
   state,loadDocument:p=>db.completeProject(p),renderCover:renderLocalCoverBlob,
+  hasUsableCover:p=>{const draft=p.drafts?.find(item=>item.id===p.activeDraftID)||p.drafts?.[0];
+    const id=draft?.coverImageID||draft?.coverBlobId;
+    const src=id?image(id):'';
+    return !!src&&!src.startsWith('data:image/svg+xml,');},
   onReady:(p,url)=>{
     const actual=state.projects.find(item=>item.id===p.id)||
       state.trash.find(entry=>entry.kind==='project'&&entry.item.id===p.id)?.item;
     if(!actual||actual.updatedAt!==p.updatedAt)return;
-    const draft=actual.drafts.find(item=>item.id===actual.activeDraftID)||actual.drafts[0];
     // Once the COS reference is committed, it remains the preferred source.
-    if(draft?.coverImageID||draft?.coverBlobId||!['works','projectPreview'].includes(state.route))return;
+    if(!['works','projectPreview'].includes(state.route))return;
     window.dispatchEvent(new CustomEvent('shiye-react-cover-update',{detail:{projectID:p.id}}));
   },
   onError:(_message,id,error)=>{
     console.warn('本地封面暂不可用',id,error);
     if(['works','projectPreview'].includes(state.route))window.dispatchEvent(new CustomEvent('shiye-react-cover-update',{
-      detail:{projectID:id,error:'封面暂不可用，重新进入后重试'}}));
+      detail:{projectID:id,error:'封面正在重试，请稍候'}}));
   }
 });
 const workCoverBackfill=createWorkCoverBackfill({db,state,cloudEnabled});
 // Cover loading never steals a Works card click: opening a card always edits it.
+window.addEventListener('shiye-work-cover-failed',event=>{
+  const project=state.projects.find(row=>row.id===event.detail?.projectID);
+  if(project)void localWorkCovers.ensure(project).catch(()=>{});
+});
 
 // A successful COS upload is published after its metadata transaction commits.
 // Hydrate the card in place; rebuilding the entire Works grid resets image
@@ -1510,7 +1517,7 @@ async function runAppAction(action,id,value){try{switch(action){
       throw error;
     }finally{
       resetWorkflowActive=false;
-      if(!accepted)closeOverlay();
+      if(!accepted){db.abortExclusiveAccountReset();closeOverlay();void cloudResumer.resume();}
     }
     break;
   }

@@ -43,6 +43,13 @@ test('cloud reads all pages, not just the server default first 1000 records',asy
   const {state,db}=fixture();state.rows=Array.from({length:1001},(_,i)=>({id:String(i)}));
   assert.equal((await db.cloudAll('assets')).length,1001);
 });
+test('account reset entry is callable and an unaccepted reset restores cloud writes',async()=>{
+  const {db,state}=fixture();
+  await assert.rejects(db.cloudRunExclusiveReset(async()=>{throw Error('probe failed');}),/probe failed/);
+  db.cloudAbortExclusiveReset();
+  await db.cloudTransaction(['assets'],tx=>tx.objectStore('assets').put({id:'after-failed-reset'}));
+  assert.equal(state.revision,1);
+});
 test('large collection reads independent pages concurrently after the first page',async()=>{
   const {state,db}=fixture();state.rows=Array.from({length:1001},(_,i)=>({id:String(i)}));
   const started=[];let release;

@@ -12,6 +12,39 @@ test('append-only import retries after an unrelated cloud revision',async()=>{
   const sync=createProjectSync({load:async()=>rows,write:async next=>rows=structuredClone(next),commit:async()=>calls++,revision:()=>5,reconcile:async()=> 'rebase'});
   await sync.flush();assert.equal(calls,1);assert.deepEqual(rows,[]);
 });
+test('a confirmed conflict stays pending without scheduling the same background replay',async()=>{
+  let rows=[{record:{id:'stale'},serial:1,baseRevision:1}],reconciles=0,timers=0;
+  const sync=createProjectSync({load:async()=>rows,write:async next=>rows=next,
+    revision:()=>2,reconcile:async()=>{reconciles++;return 'conflict';},
+    commit:async()=>{throw Error('stale row must not commit');},
+    setTimer:()=>{timers++;return 1;},clearTimer:()=>{}});
+  await sync.flush();
+  assert.equal(sync.status().conflicts,1);
+  await sync.resumeScheduled();
+  await sync.resume();
+  assert.equal(reconciles,1);
+  assert.equal(timers,0);
+  assert.equal((await sync.pending()).length,1);
+});
+test('a stale conflict cannot replay on resume or block a newer row for the same key',async()=>{
+  let revision=9,rows=[
+    {record:{id:'old',key:'same'},serial:1,baseRevision:1,operationID:'old-op'},
+    {record:{id:'new',key:'same'},serial:2,baseRevision:1,operationID:'new-op'}
+  ],oldChecks=0,uploaded=[];
+  const sync=createProjectSync({load:async()=>structuredClone(rows),reload:async()=>structuredClone(rows),
+    write:async next=>{rows=structuredClone(next)},revision:()=>revision,
+    recordKeys:record=>[{store:'projects',id:record.key}],
+    reconcile:async record=>{if(record.id==='old'){oldChecks++;return 'conflict';}return 'rebase';},
+    commit:async record=>{uploaded.push(record.id);revision++;}});
+  await sync.flush();
+  assert.deepEqual(uploaded,[]);
+  await sync.resume();
+  assert.equal(oldChecks,1);
+  assert.deepEqual(uploaded,['new']);
+  assert.deepEqual(rows.map(row=>row.record.id),['old']);
+  await sync.resume();
+  assert.equal(oldChecks,1);
+});
 const defer=()=>{let resolve;const promise=new Promise(r=>resolve=r);return {promise,resolve};};
 test('empty sync reports its idle transition after the network promise settles',async()=>{
   const statuses=[];

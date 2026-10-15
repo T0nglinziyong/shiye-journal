@@ -19,7 +19,7 @@
 .editing .swift-editor-workspace.show-inspector .editor-inspector{display:block;min-width:0;overflow-y:auto;max-height:calc(100dvh - 170px)}
 @media(max-width:899px){
  .editing .swift-editor-workspace.show-inspector{grid-template-columns:minmax(0,1fr)!important}
- .editing .swift-editor-workspace.show-inspector .editor-inspector{position:absolute;z-index:55;top:8px;right:8px;width:min(82vw,310px);height:min(68dvh,490px);max-height:68dvh;box-shadow:0 12px 40px #243b2940;background:#fffefa;border-radius:14px}
+ .editing .swift-editor-workspace.show-inspector .editor-inspector{position:absolute;z-index:100;top:8px;right:8px;width:min(82vw,310px);height:min(68dvh,490px);max-height:68dvh;box-shadow:0 12px 40px #243b2940;background:#fffefa;border-radius:14px}
 }
 .editing #ink{touch-action:none;user-select:none;-webkit-user-select:none}
 

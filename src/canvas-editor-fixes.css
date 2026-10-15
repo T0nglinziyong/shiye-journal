@@ -194,6 +194,7 @@
 .sync-version-card small{color:#657b6a;line-height:1.5;overflow-wrap:anywhere}
 @media(max-width:520px){.sync-version-grid{grid-template-columns:1fr;gap:8px}}
 .editor-inspector-fields{gap:10px;min-width:0}
+.editing .swift-editor-workspace.show-inspector .editor-inspector{z-index:100}
 .editor-inspector-fields h3{font-size:13px;letter-spacing:.04em;margin:10px 0 0;color:#3e5848}
 .editor-inspector-fields .form-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 .editor-inspector-fields label{min-width:0;margin:0;font-size:12px}
