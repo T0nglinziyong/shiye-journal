@@ -2795,7 +2795,8 @@ async function openSyncDetails(){
       onWipe:()=>void handle('reset-all-account-data'),
       onRetry:async()=>{
         syncPausedByUser=false;
-        try{await flushSave();await db.flushProjects();}
+        await flushSave();
+        try{await db.flushProjects();}
         catch(error){
           const current=db.syncDiagnosticReport({online:navigator.onLine})?.state;
           if(!current?.conflicts){toast('同步待重试：'+describeSyncError(error));throw error;}
