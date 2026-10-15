@@ -20,7 +20,7 @@ function fixture(copyToLibrary){
   importMode:'work',importStep:'review',importSaving:false,importRecords:[{
     confirmed:true,file:{name:'upload.jpg'},originalFile:original,
     bitmap:{width:800,height:1200},paperSize:'a4',paperOrientation:'portrait',
-    workTitle:'十月手帐',workPaperPattern:'grid',workPaperColor:'#faf1ea',
+    workTitle:'十月手帐',workPaperPattern:'grid',workPaperColumns:true,workPaperColor:'#faf1ea',
     workSaveAssets:copyToLibrary,seriesID:copyToLibrary?'series-A':'__no_library__',selectedCandidates:[c]
   }],
   importBatchSeriesID:'series-B',importBatchWorkSaveAssets:false,assets:[],projects:[]
@@ -34,7 +34,7 @@ test('imported work saves editable paper metadata instead of inpainted photo bac
  await withCutoutPixels(()=>saveImportBatch({state,db,urls:new Map(),render:()=>{}}));
  assert.equal(batches.length,1);
  const saved=batches[0],p=saved.projects[0],d=p.drafts[0];
- assert.equal(d.paperPattern,'grid');assert.equal(d.paperColor,'#faf1ea');
+ assert.equal(d.paperPattern,'grid');assert.equal(d.paperColumns,true);assert.equal(d.paperColor,'#faf1ea');
  assert.equal(p.seriesID,null);assert.equal(p.isDraft,false);
  assert.equal(p.source,'imported');assert.equal(d.items.length,1);
  assert.equal(saved.assets.length,1,'No internal full-sheet photo may be added');

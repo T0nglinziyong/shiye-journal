@@ -4,5 +4,6 @@ export function drawPaper(ctx,d){const {width:w,height:h}=d.canvas;ctx.save();ct
   else if(d.paperPattern==='dots'){ctx.fillStyle='rgba(0,0,0,.13)';for(let y=42;y<h-42;y+=42)for(let x=42;x<w-42;x+=42){ctx.beginPath();ctx.arc(x,y,1,0,Math.PI*2);ctx.fill();}}
   else if(d.paperPattern==='columns'){for(const x of [.08,.48,.52,.92])segment(w*x,h*.1,w*x,h*.9);}
   else if(['lines','grid'].includes(d.paperPattern)){for(let row=1;row<Math.floor(h/40);row++)segment(0,row*40,w,row*40);if(d.paperPattern==='grid')for(let col=1;col<Math.floor(w/40);col++)segment(col*40,0,col*40,h);}
+  if(d.paperColumns===true)for(const x of [.08,.48,.52,.92])segment(w*x,h*.1,w*x,h*.9);
   if(d.pageMode==='spread'&&d.drawCenterGutter!==false){ctx.fillStyle='rgba(0,0,0,.1)';ctx.fillRect(w/2-1,0,2,h);}ctx.restore();
 }

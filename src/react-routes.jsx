@@ -1692,6 +1692,7 @@ export function ImportReviewPage({state,format,onAction,onSeriesChange,onWorkTit
       {records.map((record,ri)=>{
         const pattern=record.workPaperPattern||state.importBatchWorkPaperPattern||'plain';
         const color=record.workPaperColor||state.importBatchWorkPaperColor||'#fcfaf0';
+        const columns=record.workPaperColumns===true||pattern==='columns';
         const candidates=record.selectedCandidates||[];
         return <div className="review-record" key={ri}>
           <div className="review-record-head"><img src={record.correctedURL||record.url} alt=""/>
@@ -1709,15 +1710,15 @@ export function ImportReviewPage({state,format,onAction,onSeriesChange,onWorkTit
             {snapshot?<div className="review-candidate selected review-snapshot"><div className="review-thumbnail">
               <img src={record.correctedURL||record.url} alt="校正后完整页面"/>
             </div></div>:<>
-              {work?<div className="review-candidate review-background-card"><div className={`review-thumbnail import-work-paper-preview ${pattern}`}
+              {work?<div className="review-candidate review-background-card"><div className={`review-thumbnail import-work-paper-preview ${pattern==='columns'?'plain':pattern} ${columns?'has-columns':''}`}
                 style={{'--review-paper':color,backgroundColor:color}}>
                 <div className="review-paper-controls" aria-label="页面背景">
-                  <button type="button" data-import-paper-columns={ri} aria-pressed={pattern==='columns'}
-                    onClick={()=>{record.workPaperPattern=pattern==='columns'?'plain':'columns';setRevision(value=>value+1);}}>{pattern==='columns'?'双栏':'单栏'}</button>
                   <select id={`review-background-pattern-${ri}`} aria-label="底纸样式" value={pattern==='columns'?'plain':pattern}
                     onChange={event=>{record.workPaperPattern=event.target.value;setRevision(value=>value+1);}}>
                     {[['plain','纯色'],['grid','方格'],['lines','横线'],['dots','点阵']].map(([value,label])=><option key={value} value={value}>{label}</option>)}
                   </select>
+                  <button type="button" data-import-paper-columns={ri} aria-pressed={columns}
+                    onClick={()=>{record.workPaperColumns=!columns;if(pattern==='columns')record.workPaperPattern='plain';setRevision(value=>value+1);}}>{columns?'双栏':'单栏'}</button>
                   <input id={`review-background-color-${ri}`} type="color" aria-label="底纸颜色" value={color}
                     onChange={event=>{record.workPaperColor=event.target.value;setRevision(value=>value+1);}}/>
                 </div>

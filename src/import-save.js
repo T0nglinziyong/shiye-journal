@@ -62,7 +62,9 @@ export async function saveImportBatch({state,db,urls,render,onSaved}) {
       d.pageRatio='custom:'+Math.round(paperWidth/(d.pageMode==='spread'?2:1))+'x'+Math.round(paperHeight);
       // The background is editable paper metadata, NEVER a reconstructed
       // flattened photo. No inpainting and no locked full-page photo layer.
-      d.paperPattern=record.workPaperPattern||state.importBatchWorkPaperPattern||'plain';
+      const paperPattern=record.workPaperPattern||state.importBatchWorkPaperPattern||'plain';
+      d.paperPattern=paperPattern==='columns'?'plain':paperPattern;
+      d.paperColumns=record.workPaperColumns===true||paperPattern==='columns';
       d.paperColor=record.workPaperColor||state.importBatchWorkPaperColor||'#fcfaf0';
       d.items=[];
       p.isDraft=false;p.source='imported';p.isUsed=false;
