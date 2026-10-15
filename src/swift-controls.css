@@ -500,3 +500,4 @@ body:has(.library-management-tray):not(:has(.library-management-tray:not([hidden
   box-shadow:0 3px 12px #3332;border-radius:24px}
 .fabric-selected-actions button{border:0;background:transparent;color:#52634b;min-width:30px;height:28px;
   font-size:20px;padding:0}
+.swift-material-picker .canvas-material-search{flex:none;width:100%;box-sizing:border-box}

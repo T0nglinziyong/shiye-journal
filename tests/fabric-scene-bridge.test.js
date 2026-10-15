@@ -79,6 +79,8 @@ test('Fabric ink projection retains its editable stroke identity',async()=>{
   const object=await bridge.fromNode(node);
   assert.equal(object.sceneID,'ink-1');
   assert.equal(object.stroke,'#123456');
+  assert.equal(object.selectable,false);
+  assert.equal(object.evented,false);
   bridge.applyObject(node,object);
   assert.deepEqual(node.points,[{x:10,y:20,p:.4},{x:20,y:30,p:.8}]);
 });

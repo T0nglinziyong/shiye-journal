@@ -1129,7 +1129,7 @@ async function runAppAction(action,id,value){try{switch(action){
   }
   case 'fabric-selection-mode':state.selectionMode=id==='intersect'?'intersect':'contain';render();break;
   case 'fabric-layer-select':{
-    const d=current(),node=findSceneNode(d,id?.id);if(!node)break;
+    const d=current(),node=findSceneNode(d,id?.id);if(!node||node.type==='ink')break;
     const ids=id.add?new Set(state.multiSelected||[]):new Set();
     if(id.add&&ids.has(node.id))ids.delete(node.id);else ids.add(node.id);
     state.multiSelected=[...ids];state.selected=ids.size===1?[...ids][0]:null;
@@ -1160,9 +1160,10 @@ async function runAppAction(action,id,value){try{switch(action){
         const target=findSceneNode(d,id.targetID);
         const targetParent=id.relation==='inside'&&target.type==='group'?target:findParent(d.layers,target.id);
         const targetSiblings=targetParent?.children||d.layers;
-        const position=targetSiblings.findIndex(entry=>entry.id===target.id);
+        const withoutSource=targetSiblings.filter(entry=>entry.id!==node.id);
+        const position=withoutSource.findIndex(entry=>entry.id===target.id);
         moveSceneNode(d,node.id,{parentID:targetParent?.id||null,
-          beforeID:id.relation==='inside'?null:id.relation==='after'?targetSiblings[position+1]?.id||null:target.id});
+          beforeID:id.relation==='inside'?null:id.relation==='after'?target.id:withoutSource[position+1]?.id||null});
       }else{
         const sorted=[...siblings].sort((a,b)=>(a.zIndex??0)-(b.zIndex??0));
         const index=sorted.findIndex(entry=>entry.id===node.id),target=index+(operation==='up'?1:-1);
@@ -2762,10 +2763,10 @@ async function openSyncConflictChoice(kind,id){
         if(!confirm('确认“'+label+'”？这将改变待同步队列；云端数据变化时会安全拒绝，请重新比较。'))throw Error('已取消处理');
         const {local}=review.overview;
         await db.resolveSyncConflict({kind,id,serial:review.serial,expectedRevision:review.revision,choice});
-        if(choice==='cloud'&&state.activeProject?.id===local?.id){
+        if(review.mode==='project'&&choice==='cloud'&&state.activeProject?.id===local?.id){
           dirtyProjects.delete(local.id);state.activeProject=null;state.activeDraft=null;
         }
-        if(choice==='cloud')route('works');
+        if(review.mode==='project'&&choice==='cloud')route('works');
         else void db.flushProjects().catch(error=>toast('冲突已解决，后续同步待重试：'+error.message));
         void refresh({background:true}).catch(error=>console.warn('冲突解决后更新列表待重试',error));
       }}));
@@ -2797,10 +2798,11 @@ async function openSyncDetails(){
       batches=details.batches||[],local=[...dirtyProjects.values()],quarantined=details.quarantined||0;
     const status=syncPausedByUser?'已暂停 · 本机修改仍保留':syncDisplay.uploading?
       (syncDisplay.progress?`上传中 · ${syncDisplay.progress.phase} ${syncDisplay.progress.done}/${syncDisplay.progress.total} 项`:'上传中'):
+      syncDisplay.conflicts?'需处理冲突 · 其他记录可继续上传':
       syncDisplay.error?'待重试':syncDisplay.pending||local.length?'等待上传':'已同步';
     openOverlay(createElement(SyncDetailsDialog,{details,projects,batches,local,quarantined,
       legacyCount:db.legacyProjectInfo?.()?.length||0,
-      error:syncDisplay.error?describeSyncError(syncDisplay.error):null,status,
+      error:syncDisplay.error?describeSyncError(syncDisplay.error):null,status,conflicts:syncDisplay.conflicts,
       onClose:()=>{closeOverlay();if(!syncPausedByUser&&!resetWorkflowActive)void cloudResumer.resume();},
       onDiagnostics:exportSyncDiagnostics,onConflict:(kind,id)=>void openSyncConflictChoice(kind,id),
       onMigrate:()=>void runAccountStorageMigration(),onBackupLegacy:()=>void handle('backup-legacy-projects'),

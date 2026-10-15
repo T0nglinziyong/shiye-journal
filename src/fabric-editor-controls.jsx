@@ -79,7 +79,8 @@ function MaterialPicker({draft,materials,series,source,onPick}){
   const byID=useMemo(()=>new Map(materials.map(asset=>[asset.id,asset])),[materials]);
   const rows=useMemo(()=>{
     if(tab==='used'||tab==='standby')return draft.items.filter(item=>!!item.isParked===(tab==='standby'))
-      .map(item=>({asset:byID.get(item.assetID),item})).filter(row=>!!row.asset);
+      .map(item=>({asset:byID.get(item.assetID),item}))
+      .filter(row=>!!row.asset&&(!query||row.asset.title?.toLocaleLowerCase().includes(query.toLocaleLowerCase())));
     const list=materials.filter(asset=>!asset.isProjectInternal&&
       (group==='all'||(group==='none'?!asset.seriesID:asset.seriesID===group))&&
       (kind==='all'||asset.kind===kind)&&
@@ -92,7 +93,9 @@ function MaterialPicker({draft,materials,series,source,onPick}){
     return list.map(asset=>({asset}));
   },[tab,draft.items,materials,byID,group,kind,status,sortBasis,sortOrder,query]);
   useEffect(()=>setShown(40),[tab,query,group,kind,status,sortBasis,sortOrder]);
-  return <><div className="swift-segments">
+  return <><input className="canvas-material-search" type="search" value={query}
+    onChange={event=>setQuery(event.target.value)} placeholder="搜索素材" aria-label="搜索可用素材"/>
+    <div className="swift-segments">
     {[['used','已使用素材'],['standby','备选素材'],['all','所有素材']].map(([id,label])=><button
       key={id} type="button" className={tab===id?'selected':''} onClick={()=>setTab(id)}>{label}</button>)}
   </div>{tab==='all'?<div className="canvas-material-filters">
@@ -108,8 +111,7 @@ function MaterialPicker({draft,materials,series,source,onPick}){
       {[['time','最近添加'],['name','名称']].map(([id,label])=><option key={id} value={id}>{label}</option>)}
     </select><select aria-label="排序顺序" value={sortOrder} onChange={event=>setSortOrder(event.target.value)}>
       {[['desc','降序'],['asc','升序']].map(([id,label])=><option key={id} value={id}>{label}</option>)}
-    </select><input type="search" value={query} onChange={event=>setQuery(event.target.value)}
-      placeholder="搜索素材" aria-label="搜索可用素材"/></div>:null}
+    </select></div>:null}
     <div className="canvas-picker-grid" onScroll={event=>{
       const node=event.currentTarget;
       if(node.scrollHeight-node.scrollTop-node.clientHeight<150)setShown(count=>Math.min(rows.length,count+40));
@@ -124,13 +126,19 @@ function MaterialPicker({draft,materials,series,source,onPick}){
 function LayerTree({draft,state,materials,onAction}){
   const [expanded,setExpanded]=useState(()=>new Set());
   const [multi,setMulti]=useState(false);
+  const [draggingID,setDraggingID]=useState(null);
+  const [dropTargetID,setDropTargetID]=useState(null);
   const drag=useRef(null);
   const names=useMemo(()=>new Map(materials.map(asset=>[asset.id,asset.title])),[materials]);
   const selected=new Set([...(state.multiSelected||[]),state.selected].filter(Boolean));
+  const countInk=nodes=>(nodes||[]).reduce((count,node)=>count+(node.type==='ink'?1:0)+
+    (node.type==='group'?countInk(node.children):0),0);
+  const inkCount=countInk(draft.layers);
   const label=node=>node.type==='group'?node.name||'未命名组合':
     node.type==='material'?names.get(node.assetID)||'素材':node.type==='text'?node.content?.slice(0,27)||'文字':
     node.type==='ink'?'手写笔迹':node.kind||'图形';
-  const visit=(nodes,level=1)=>[...(nodes||[])].sort((a,b)=>(b.zIndex??0)-(a.zIndex??0)).map(node=>{
+  const visit=(nodes,level=1)=>[...(nodes||[])].filter(node=>node.type!=='ink')
+    .sort((a,b)=>(b.zIndex??0)-(a.zIndex??0)).map(node=>{
     const locked=!!(node.locked||node.isLocked);
     const hidden=!!(node.hidden||node.isHidden||node.isParked);
     const open=expanded.has(node.id)||node.type==='group'&&!expanded.has('closed:'+node.id);
@@ -143,7 +151,7 @@ function LayerTree({draft,state,materials,onAction}){
     const operate=operation=>onAction('fabric-layer-operation',{id:node.id,operation});
     const glyph=node.type==='group'?'▧':node.type==='material'?'▱':node.type==='text'?'Aa':node.type==='ink'?'✎':'◇';
     return <div className="scene-layer-branch" key={node.id}>
-      <div className={`canvas-layer-row scene-layer-node ${selected.has(node.id)?'selected':''}`}
+      <div className={`canvas-layer-row scene-layer-node ${selected.has(node.id)?'selected':''} ${draggingID===node.id?'dragging':''} ${dropTargetID===node.id?'drop-target':''}`}
         data-scene-node={node.id} role="treeitem" aria-level={level}
         aria-expanded={node.type==='group'?open:undefined}>
         <button className="scene-layer-expand" type="button" disabled={node.type!=='group'}
@@ -161,18 +169,23 @@ function LayerTree({draft,state,materials,onAction}){
             if(event.button>0)return;
             event.preventDefault();event.currentTarget.setPointerCapture(event.pointerId);
             drag.current={id:node.id,x:event.clientX,y:event.clientY,targetID:null,relation:null};
+            setDraggingID(node.id);
           }} onPointerMove={event=>{
             if(!drag.current||drag.current.id!==node.id)return;
             const target=document.elementFromPoint(event.clientX,event.clientY)?.closest?.('[data-scene-node]');
             if(!target||target.dataset.sceneNode===node.id)return;
             const rect=target.getBoundingClientRect(),fraction=(event.clientY-rect.top)/Math.max(1,rect.height);
-            const relation=target.getAttribute('aria-expanded')!==null&&fraction>.28&&fraction<.72?'inside':fraction<.5?'after':'before';
+            const rows=[...document.querySelectorAll('.scene-layer-tree [data-scene-node]')];
+            const direction=rows.indexOf(target)>rows.findIndex(row=>row.dataset.sceneNode===node.id)?'after':'before';
+            const relation=target.getAttribute('aria-expanded')!==null&&fraction>.28&&fraction<.72?'inside':
+              fraction<.28?'before':fraction>.72?'after':direction;
             drag.current={...drag.current,targetID:target.dataset.sceneNode,relation};
+            setDropTargetID(target.dataset.sceneNode);
           }} onPointerUp={()=>{
             if(drag.current?.id===node.id&&drag.current.targetID)onAction('fabric-layer-operation',{
               id:node.id,operation:'move',targetID:drag.current.targetID,relation:drag.current.relation});
-            drag.current=null;
-          }} onPointerCancel={()=>{drag.current=null;}}>≡</button>
+            drag.current=null;setDraggingID(null);setDropTargetID(null);
+          }} onPointerCancel={()=>{drag.current=null;setDraggingID(null);setDropTargetID(null);}}>≡</button>
       </div>{node.type==='group'&&open?<div className="scene-layer-children" role="group">{visit(node.children||[],level+1)}</div>:null}
     </div>;
   });
@@ -185,7 +198,8 @@ function LayerTree({draft,state,materials,onAction}){
         onClick={()=>onAction('fabric-ungroup-selection')}>取消组合</button>
     </div><div className="canvas-layer-list scene-layer-tree" role="tree" aria-label="可编辑场景递归图层树">
       {visit(draft.layers)}</div><p className="scene-layer-tree-status" role="status">
-        {draft.layers.length} 个顶层图层 · 拖动 ≡ 改变层级</p>
+        {draft.layers.filter(node=>node.type!=='ink').length} 个顶层图层 · 拖动 ≡ 改变层级
+        {inkCount?` · 笔迹 ${inkCount} 笔（不可选择）`:''}</p>
   </div>;
 }
 
@@ -193,9 +207,14 @@ export function FabricEditorToolbar({state,draft,materials,source,selected,onIns
   const [menu,setMenu]=useState(null);
   const close=useCallback(()=>setMenu(null),[]);
   const open=(kind,event)=>{
+    const anchor=event.currentTarget;
     const nextTool=['paper','layers','material'].includes(kind)?'select':kind;
     if(state.tool!==nextTool)onAction('fabric-tool',null,nextTool);
-    setMenu(previous=>previous?.kind===kind?null:{kind,anchor:event.currentTarget});
+    setMenu(previous=>previous?.kind===kind?null:{kind,anchor});
+  };
+  const toggleMenu=(kind,event)=>{
+    const anchor=event.currentTarget;
+    setMenu(previous=>previous?.kind===kind?null:{kind,anchor});
   };
   const choose=(action,id)=>{close();onAction(action,id);};
   const tools=state.canvasTools||{};
@@ -205,9 +224,11 @@ export function FabricEditorToolbar({state,draft,materials,source,selected,onIns
   const selectSlot=(mode,kind,index)=>onAction('fabric-tool-slot',{mode,kind,index});
   const editSlot=(mode,kind,index,value)=>onAction('fabric-tool-slot',{mode,kind,index,value});
   const toggleSlot=(mode,kind,index,event)=>{
-    if(slotIndex(mode,kind)===index)
+    if(slotIndex(mode,kind)===index){
+      const anchor=event.currentTarget;
       setMenu(previous=>previous?.kind===`slot-${kind}`&&previous.mode===mode&&previous.index===index?
-        null:{kind:`slot-${kind}`,mode,index,anchor:event.currentTarget});
+        null:{kind:`slot-${kind}`,mode,index,anchor});
+    }
     else {close();selectSlot(mode,kind,index);}
   };
   const activeTool=state.tool;
@@ -224,7 +245,7 @@ export function FabricEditorToolbar({state,draft,materials,source,selected,onIns
       data-react-action="true" aria-label={labels[kind]} aria-pressed={state.tool===kind}
       onClick={event=>['shape','material','layers','paper'].includes(kind)?open(kind,event):
         state.tool===kind&&['pen','eraser','highlighter','lasso'].includes(kind)?
-          setMenu(previous=>previous?.kind===kind?null:{kind,anchor:event.currentTarget}):
+          toggleMenu(kind,event):
           (close(),onAction('fabric-tool',null,kind))} dangerouslySetInnerHTML={{__html:iconMarkup(toolIcons[kind])}}/>)}</div>
     <div className="canvas-context-tools" aria-label="当前工具选项">
       {(state.multiSelected||[]).length>1?<><span>已选 {state.multiSelected.length} 项</span>
@@ -354,7 +375,7 @@ export function FabricHeaderMenu({kind,project,onAction,onAIOpen}){
       <button type="button" aria-label={`删除 ${title}`} title="删除" onClick={remove}>×</button>
     </div></div>;
   return <><button type="button" className="btn" aria-label={kind==='export'?'导出作品':'历史记录'}
-    onClick={event=>setAnchor(previous=>previous?null:event.currentTarget)}>{kind==='export'?'导出':'◷'}</button>
+    onClick={event=>{const target=event.currentTarget;setAnchor(previous=>previous?null:target);}}>{kind==='export'?'导出':'◷'}</button>
     {anchor?<ReactPopover anchor={anchor} onClose={close} title={kind==='export'?'导出作品':'历史记录'}
       className={kind==='history'?'swift-history-popover':'swift-menu'}
       width={kind==='history'?320:220} height={kind==='history'?390:360}>

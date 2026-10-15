@@ -2,12 +2,12 @@ import React,{useState} from 'react';
 import {Dialog} from './react-utility-dialogs.jsx';
 
 export function SyncDetailsDialog({details,projects,batches,local,quarantined,legacyCount,
-  error,status,onClose,onDiagnostics,onConflict,onMigrate,onBackupLegacy,onWipe,
+  error,status,conflicts=0,onClose,onDiagnostics,onConflict,onMigrate,onBackupLegacy,onWipe,
   onRetry,onPause,onEmergency}){
   const [message,setMessage]=useState(`状态：${status}`),[busy,setBusy]=useState(false);
   const retry=async()=>{
     if(busy)return;setBusy(true);setMessage('状态：正在提交本机修改…');
-    try{const remaining=await onRetry();setMessage(remaining?`状态：仍有 ${remaining} 项待同步；请查看最近错误或稍后重试`:'状态：已同步到云端');}
+    try{const remaining=await onRetry();setMessage(remaining?`状态：仍有 ${remaining} 项待同步${conflicts?'，其中有冲突需比较版本':'；请查看最近错误或稍后重试'}`:'状态：已同步到云端');}
     catch(cause){setMessage('状态：待重试 · 本机修改已保留；关闭详情后自动重试');}
     finally{setBusy(false);}
   };
@@ -20,7 +20,7 @@ export function SyncDetailsDialog({details,projects,batches,local,quarantined,le
     <div className="sync-pending-list">{total?<ul>
       {projects.map(row=><li key={`project-${row.id}`}>作品：{row.title} <small>{row.id}</small> <button type="button" className="btn mini" data-conflict-kind="project" data-conflict-id={row.id} onClick={()=>onConflict('project',row.id)}>比较版本</button></li>)}
       {batches.map(row=><li key={`batch-${row.id}`}>待传批次 {row.id}：{row.items.length} 条变更<ul>{row.items.slice(0,12).map((item,index)=><li key={index}>{item.store} · {item.action} · {item.title||item.id}</li>)}</ul>
-        {row.items.length===1&&row.items[0]?.store==='projects'&&row.items[0]?.action==='put'?<button type="button" className="btn mini" data-conflict-kind="batch" data-conflict-id={row.id} onClick={()=>onConflict('batch',row.id)}>比较版本</button>:null}</li>)}
+        {row.items.length===1&&['projects','assets','series'].includes(row.items[0]?.store)&&row.items[0]?.action==='put'?<button type="button" className="btn mini" data-conflict-kind="batch" data-conflict-id={row.id} onClick={()=>onConflict('batch',row.id)}>比较版本</button>:null}</li>)}
       {local.map(row=><li key={row.id}>尚未暂存的作品：{row.title||row.id}</li>)}
     </ul>:<p>没有待同步项目。</p>}</div>
     <div className="actions"><button type="button" className="btn" id="sync-export-diagnostics" onClick={onDiagnostics}>导出详细同步诊断</button>
@@ -36,19 +36,20 @@ export function SyncDetailsDialog({details,projects,batches,local,quarantined,le
 const date=value=>{const result=new Date(value);return Number.isFinite(result.getTime())?result.toLocaleString():'未记录';};
 export function SyncConflictDialog({review,onClose,onBack,onBackup,onResolve}){
   const {local,remote}=review.overview;
+  const metadata=review.mode==='metadata';
   const [saved,setSaved]=useState(false),[busy,setBusy]=useState(false),[status,setStatus]=useState('先备份双方版本，再选择处理方式。');
   const backup=async()=>{setBusy(true);setStatus('正在准备原始版本与 SHA-256…');try{const result=await onBackup();setSaved(true);setStatus(`已发起备份下载（SHA-256：${result.sha256.slice(0,16)}…）。请确认文件已在“文件”中保存。`);}catch(cause){setSaved(false);setStatus('备份未完成：'+cause.message);}finally{setBusy(false);}};
   const resolve=async(choice,label)=>{if(!saved||busy)return;setBusy(true);setStatus('正在核对版本和原子提交…');try{await onResolve(choice,label);onClose();}catch(cause){setStatus('没有覆盖资料：'+cause.message+'。请返回同步详情重新核对版本。');setBusy(false);}};
-  const card=(label,record)=><section className="sync-version-card"><strong>{label}</strong><p>{record?.title||'没有云端版本'}</p><small>修改：{date(record?.updatedAt)} · {record?.drafts??0} 个方案 · {record?.layers??0} 个顶层图层</small></section>;
-  return <Dialog title="手动解决同步冲突" onClose={onClose}><h2>手动解决同步冲突</h2><p>这两份作品来自同一个编号，但内容可能不同。请选择希望保留的版本；不会自动用修改时间覆盖。</p>
+  const card=(label,record)=><section className="sync-version-card"><strong>{label}</strong><p>{record?.title||'没有云端版本'}</p><small>修改：{date(record?.updatedAt)}{metadata?record?.kind?` · ${record.kind}`:'':` · ${record?.drafts??0} 个方案 · ${record?.layers??0} 个顶层图层`}</small></section>;
+  return <Dialog title="手动解决同步冲突" onClose={onClose}><h2>手动解决同步冲突</h2><p>同一编号的本机和云端记录均有修改。请比较版本并选择保留哪份；不会按修改时间自动覆盖。</p>
     <div className="sync-version-grid">{card('本机未同步',local)}{card('当前云端',remote)}</div>
     <p role="status" id="conflict-progress">{status}</p><div className="actions">
       <button type="button" className="btn" id="conflict-backup" disabled={busy} onClick={()=>void backup()}>下载双方原始备份</button>
-      <button type="button" className="btn primary" id="conflict-both" disabled={!saved||busy} onClick={()=>void resolve('both','双方都保留')}>双方都保留（推荐）</button>
+      {!metadata?<button type="button" className="btn primary" id="conflict-both" disabled={!saved||busy} onClick={()=>void resolve('both','双方都保留')}>双方都保留（推荐）</button>:null}
       <button type="button" className="btn" id="conflict-cloud" disabled={!saved||busy||!remote} onClick={()=>void resolve('cloud','保留云端版')}>保留云端版</button>
       <button type="button" className="btn" id="conflict-local" disabled={!saved||busy} onClick={()=>void resolve('local','保留本机版')}>保留本机版</button>
       <button type="button" className="btn" id="conflict-back" onClick={onBack}>返回</button></div>
-    <p className="muted">保留本机版会先把当前云端版另存一份，再以本机版更新原作品；双方都保留会生成新的独立可编辑作品。没有确认备份时不能执行。</p>
+    <p className="muted">{metadata?'素材或系列只能选择一个在线版本；已下载的双方原始备份保留另一份。本机版提交仍受云端版本保护。':'保留本机版会先把当前云端版另存一份，再以本机版更新原作品；双方都保留会生成新的独立可编辑作品。'}没有确认备份时不能执行。</p>
   </Dialog>;
 }
 export function SyncErrorDialog({error,onClose,onBack,onDiagnostics,kind}){

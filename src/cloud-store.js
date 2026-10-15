@@ -1007,31 +1007,37 @@ async function reviewedConflict(kind,id){
  if(!row)throw Error('待同步记录已改变或已完成，请重新打开同步详情');
  if(await wasCommitted(row.operationID,row.baseRevision))
    throw Error('服务器已经确认这次保存，请重新打开同步详情刷新作品');
- let local;
+ let local,store='projects';
  if(kind==='project')local=row.record;
  else{
   const ops=row.record?.operations;
-  if(Array.isArray(ops)&&ops.length===1&&ops[0]?.store==='projects'&&ops[0]?.action==='put')
-    local=ops[0].item;
+  if(Array.isArray(ops)&&ops.length===1&&['projects','assets','series'].includes(ops[0]?.store)&&ops[0]?.action==='put'){
+    local=ops[0].item;store=ops[0].store;
+  }
   else if(!ops&&Array.isArray(row.record?.projects)&&row.record.projects.length===1&&
     !(row.record.assets||[]).length&&!(row.record.blobs||[]).length)
     local=row.record.projects[0];
-  else throw Error('此批次有多条不同操作，请先保留应急备份，不能只选择一个作品的版本');
+  else throw Error('此批次有多条不同操作，请先保留应急备份，不能只选择其中一条的版本');
  }
- if(!usableProjectSnapshot(local))throw Error('本机可编辑作品结构不完整，请先保留应急备份');
+ if(store==='projects'?!usableProjectSnapshot(local):
+   !local||typeof local.id!=='string'||!local.id||typeof local.title!=='string')
+   throw Error('本机待同步记录结构不完整，请先保留应急备份');
  const current=await version();
  if(current<=row.baseRevision)throw Error('云端没有比本机基线更新的版本，可直接尝试同步');
  const untouched=await canRebaseUnchangedKeys({client:cloudClient(),owner:await identity(),
-  before:row.baseRevision,after:current,operations:[{store:'projects',action:'put',item:local}]});
+  before:row.baseRevision,after:current,operations:[{store,action:'put',item:local}]});
  if(untouched)throw Error('云端变化与此作品无关，请先尝试正常同步');
- const stored=await cloudRecord('projects',local.id);
- const remote=stored?(stored.projectDocumentPath?await cloudProjectDocument(stored):stored):null;
+ const stored=await cloudRecord(store,local.id);
+ const remote=stored?(store==='projects'&&stored.projectDocumentPath?await cloudProjectDocument(stored):stored):null;
  const summary=project=>({id:project?.id||null,title:project?.title||'未命名作品',
   updatedAt:project?.updatedAt||null,drafts:project?.drafts?.length||0,
   layers:(project?.drafts||[]).reduce((n,d)=>n+(Array.isArray(d.layers)?d.layers.length:0),0)});
- return {kind,id,serial:row.serial,baseRevision:row.baseRevision,
+ const metadataSummary=record=>({id:record?.id||null,title:record?.title||'未命名',
+  updatedAt:record?.updatedAt||null,kind:record?.kind||null});
+ return {kind,id,store,mode:store==='projects'?'project':'metadata',serial:row.serial,baseRevision:row.baseRevision,
   revision:current,local:structuredClone(local),remote:remote?structuredClone(remote):null,
-  overview:{local:summary(local),remote:remote?summary(remote):null}};
+  overview:{local:store==='projects'?summary(local):metadataSummary(local),
+    remote:remote?(store==='projects'?summary(remote):metadataSummary(remote)):null}};
 }
 // Offline recoveries are never uploaded implicitly: the user selects a
 // copy, which is staged under a NEW project ID so the current cloud scene
@@ -1054,8 +1060,8 @@ async function cloudRestorePreConflictScene(key){
  return {id:copy.id,title:copy.title};
 }
 async function cloudConflictReview(kind,id){
- const {kind:k,id:key,serial,baseRevision,revision,overview}=await reviewedConflict(kind,id);
- return {kind:k,id:key,serial,baseRevision,revision,overview};
+ const {kind:k,id:key,store,mode,serial,baseRevision,revision,overview}=await reviewedConflict(kind,id);
+ return {kind:k,id:key,store,mode,serial,baseRevision,revision,overview};
 }
 async function cloudConflictBackup(kind,id){
  const review=await reviewedConflict(kind,id);
@@ -1082,6 +1088,18 @@ async function cloudResolveProjectConflict({kind,id,serial,expectedRevision,choi
   const {local,remote}=review;
   const pending=(await sync.pending()).find(item=>item.record?.id===id);
   if(!pending||pending.serial!==serial)throw Error('本机作品又被编辑，请重新检查版本');
+  if(review.mode==='metadata'){
+   if(choice==='both')throw Error('素材或系列不能自动复制为两份，请选择一份并保留已下载的双方原始备份');
+   if(choice==='cloud'){
+    if(!remote)throw Error('云端没有这条记录，不能选择保留云端版本');
+    await sync.resolvePending(id,serial);notifyCloudSuperseded();
+    return {choice,originalID:local.id,remoteID:remote.id};
+   }
+   // The downloaded conflict backup preserves the remote record. Rebase the
+   // same local operation; ordinary revision CAS still guards the next upload.
+   await sync.resolvePending(id,serial,{record:pending.record,baseRevision:expectedRevision});
+   return {choice,originalID:local.id};
+  }
   if(choice==='cloud'){
    if(!remote)throw Error('云端没有这份作品，不能选择保留云端版本');
    await sync.resolvePending(id,serial);

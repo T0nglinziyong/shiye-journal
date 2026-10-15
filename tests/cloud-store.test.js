@@ -716,3 +716,27 @@ test('older generic project PUT from the same phone is rescued without overwriti
  assert.equal(reviewed.overview.local.title,'本机未同步的早期版本');
  assert.equal(reviewed.overview.remote.title,'已经上传的较新版本');
 });
+
+test('a conflicting material edit can be reviewed, backed up, and explicitly rebased',async()=>{
+ const {state,db}=fixture(memoryCache());
+ await db.cloudAll('assets');
+ await db.cloudStageMutation(['assets'],tx=>tx.objectStore('assets').put({id:'same-asset',title:'本机修改'}));
+ state.revision=1;
+ state.rows=[{id:'same-asset',title:'另一设备修改'}];
+ state.changes=[{revision:1,keys:[{store:'assets',id:'same-asset',action:'put'}]}];
+ await assert.rejects(db.cloudFlushProjects(),/conflict|云端版本已变化/);
+ const pending=(await db.cloudPendingDetails()).batches[0];
+ const review=await db.cloudConflictReview('batch',pending.id);
+ assert.equal(review.mode,'metadata');
+ assert.equal(review.overview.local.title,'本机修改');
+ assert.equal(review.overview.remote.title,'另一设备修改');
+ const backup=await db.cloudConflictBackup('batch',pending.id);
+ assert.equal(JSON.parse(await backup.blob.text()).remote.title,'另一设备修改');
+ await assert.rejects(db.cloudResolveProjectConflict({kind:'batch',id:pending.id,
+   serial:review.serial,expectedRevision:review.revision,choice:'both'}),/不能自动复制/);
+ await db.cloudResolveProjectConflict({kind:'batch',id:pending.id,
+   serial:review.serial,expectedRevision:review.revision,choice:'local'});
+ await db.cloudFlushProjects();
+ assert.equal((await db.cloudPendingDetails()).batches.length,0);
+ assert.equal(state.calls.at(-1).expected_revision,1);
+});

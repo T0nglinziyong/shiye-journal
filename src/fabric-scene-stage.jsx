@@ -129,7 +129,7 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
               if(readOnly)object.set({selectable:false,evented:false});
               const position=canvas.getObjects().filter(item=>item.sceneIndex<sceneIndex).length;
               canvas.insertAt(position,object);
-              if(callbacks.current.tool==='select'&&callbacks.current.selectedID===node.id)
+              if(node.type!=='ink'&&callbacks.current.tool==='select'&&callbacks.current.selectedID===node.id)
                 canvas.setActiveObject(object);
             }
             canvas.requestRenderAll();

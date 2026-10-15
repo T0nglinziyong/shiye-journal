@@ -174,7 +174,8 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
     if(node.type==='shape'&&node.vectorMask)object.clipPath=clipPath(maskGeometry(node.vectorMask),
       object.sceneFrameWidth,object.sceneFrameHeight);
     object.set({angle:finite(node.rotation),opacity:finite(node.opacity,1),
-      selectable:!node.locked&&!node.isLocked,evented:!node.locked&&!node.isLocked,
+      selectable:node.type!=='ink'&&!node.locked&&!node.isLocked,
+      evented:node.type!=='ink'&&!node.locked&&!node.isLocked,
       globalCompositeOperation:node.blendMode==='multiply'?'multiply':'source-over'});
     object.sceneID=node.ownerID||node.id;
     object.sceneRenderKey=node.renderKey||node.id;
