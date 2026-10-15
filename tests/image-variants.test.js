@@ -4,12 +4,12 @@ import {COVER_EDGE,DISPLAY_TIERS,imagePixelSize,imageTier,imageVariant,cachedTie
 
 test('fixed gallery/cover edge becomes 480; dynamic pixels scale by 2/3 and round UP to discrete tiers',()=>{
  assert.equal(COVER_EDGE,480);
- assert.deepEqual(DISPLAY_TIERS,[256,360,480,600,720,960,1200,1440,1920,2560,3200,3840,5120]);
+ assert.deepEqual(DISPLAY_TIERS,[256,360,480,600,720,960,1200,1440]);
  assert.equal(imagePixelSize(160,2),256);
  assert.equal(imagePixelSize(310,2),480);
  assert.equal(imagePixelSize(560,2),960);
  assert.equal(imagePixelSize(900.2,2),1440);
- assert.equal(imagePixelSize(6000,4),5120);
+ assert.equal(imagePixelSize(6000,4),1440);
  assert.equal(imagePixelSize(0,1),480);
  assert.equal(imageVariant(721),'preview960');
  assert.equal(imageVariant(410),'preview480');
@@ -18,7 +18,7 @@ test('fixed gallery/cover edge becomes 480; dynamic pixels scale by 2/3 and roun
  for(const n of [1,256,300,360,359.999,480,481,600,720,960,1100,1200,1440,1920,2300,2560,3200,3840,4000,5120,9000]){
    const tier=imageTier(n);
    assert.ok(DISPLAY_TIERS.includes(tier));
-   assert.ok(tier>=n||tier===5120);
+   assert.ok(tier>=n||tier===1440);
  }
 });
 test('a cached sufficiently large version prevents requests; otherwise show best smaller cached size immediately',()=>{

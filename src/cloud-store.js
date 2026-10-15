@@ -149,7 +149,7 @@ const account=async()=>`${namespace}:${await identity()}`;
 function notifyCloudSuperseded(){
   if(typeof window!=='undefined')window.dispatchEvent(new CustomEvent('shiye-cloud-superseded'));
 }
-function reportSync(){if(typeof window!=='undefined'){const current=unifiedSync.status();window.dispatchEvent(new CustomEvent('shiye-project-sync',{detail:{pending:current.pending+writesInFlight,error:current.error,conflicts:current.conflicts}}));}}
+function reportSync(){if(typeof window!=='undefined'){const current=unifiedSync.status();window.dispatchEvent(new CustomEvent('shiye-project-sync',{detail:{pending:current.pending+writesInFlight,error:current.error,conflicts:current.conflicts,uploading:current.uploading||writesInFlight>0}}));}}
 // One durable account-scoped queue, one upload scheduler. The project and
 // import accessors below are filtered facades; neither owns a second queue.
 async function loadUnifiedOutbox(recover=false){

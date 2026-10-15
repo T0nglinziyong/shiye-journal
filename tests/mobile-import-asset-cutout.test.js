@@ -30,6 +30,7 @@ test('material editor saves unlimited 999 without decrementing it',()=>{
  assert.equal(edited.supply.kind,'unlimited');
  assert.equal(edited.supply.quantity,999);
  assert.equal(edited.usageStatus,'used');
+ assert.equal(assetEditorValue(edited,values),edited,'an unchanged save must not create another cloud write');
 });
 test('unlimited materials are not rejected by finite-count draft validation',()=>{
  const asset={id:'a',title:'可重复素材',kind:'tape',physicalWidthMM:20,

@@ -2,7 +2,7 @@
 // Dynamic canvas/detail sizes retain finer 256/360 steps when they are
 // genuinely sufficient. Every network request uses a stable discrete tier.
 export const COVER_EDGE=480;
-export const DISPLAY_TIERS=Object.freeze([256,360,480,600,720,960,1200,1440,1920,2560,3200,3840,5120]);
+export const DISPLAY_TIERS=Object.freeze([256,360,480,600,720,960,1200,1440]);
 export const MIN_DISPLAY_EDGE=DISPLAY_TIERS[0];
 export const MAX_DISPLAY_EDGE=DISPLAY_TIERS[DISPLAY_TIERS.length-1];
 export const DISPLAY_SCALE=2/3;

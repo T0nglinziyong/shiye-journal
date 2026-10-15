@@ -19,6 +19,10 @@ export function assetEditorValue(old,values) {
     if(values.repeatable){const period=Number(values.repeatPeriod);if(!Number.isFinite(period)||period<=0||!width||!height||period>Math.max(width,height))throw Error('重复周期需为正数，且不得超过已校准样段长度');next.tapeRepeatPeriodMM=period;}
     else next.tapeRepeatPeriodMM=null;
   }
+  // Saving an unchanged form must not create a new cloud revision or restart
+  // image/works sync. The two timestamps are effects of a real edit only.
+  const content=record=>{const {updatedAt,usageUpdatedAt,...fields}=record;return fields;};
+  if(JSON.stringify(content(next))===JSON.stringify(content(old)))return old;
   return next;
 }
 export function showAssetEditor(c,id) {
@@ -46,6 +50,7 @@ export function showAssetEditor(c,id) {
     try {
       const usage=value('usage');
       const next=assetEditorValue(a,{title:value('title'),kind:value('kind'),role:value('role'),texture:value('texture'),width:value('width'),height:value('height'),quantity:value('quantity'),tags:value('tags'),contentTags:value('content-tags'),styleTags:value('style-tags'),materialTags:value('material-tags'),seriesID:value('series'),reviewStatus:value('status'),usageStatus:usage,tapeRoll:c.body.querySelector('#asset-tape-roll').checked,supplyLength:value('supply-length'),repeatable:c.body.querySelector('#asset-repeatable').checked,repeatPeriod:value('repeat-period')});
+      if(next===a){c.modal.close();c.toast('素材信息未变化');return;}
       await c.db.put('assets',next);Object.assign(a,next);if(next.supply.quantity===0)c.state.basket=c.state.basket.filter(x=>x!==id);c.modal.close();c.render();c.toast('素材信息已保存');
     }catch(error){c.body.querySelector('#asset-save-error').textContent=error.message;button.disabled=false;}
   };

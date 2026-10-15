@@ -8,11 +8,10 @@ export const A4_STORAGE_HEIGHT=1440;
 const A4_WIDTH_MM=210;
 const A4_HEIGHT_MM=297;
 const PIXELS_PER_MM=Math.min(A4_STORAGE_WIDTH/A4_WIDTH_MM,A4_STORAGE_HEIGHT/A4_HEIGHT_MM);
-export const MATERIAL_LONG_EDGE_TIERS=[256,384,512,768,1080,1440,2160,2880,4320,5760];
+export const MATERIAL_LONG_EDGE_TIERS=[256,384,512,768,1080,1440];
 
 function longEdgeTier(target){
-  return MATERIAL_LONG_EDGE_TIERS.find(tier=>tier>=target)||
-    Math.ceil(target/MATERIAL_LONG_EDGE_TIERS.at(-1))*MATERIAL_LONG_EDGE_TIERS.at(-1);
+  return MATERIAL_LONG_EDGE_TIERS.find(tier=>tier>=target)||MATERIAL_LONG_EDGE_TIERS.at(-1);
 }
 
 export function materialStorageSize(width,height,physicalWidthMM,physicalHeightMM){

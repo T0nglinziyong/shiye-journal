@@ -15,7 +15,7 @@ test('material storage preserves raster ratio and never upscales small sources',
 });
 
 test('long edge uses discrete upward tiers across physical sizes',()=>{
-  assert.deepEqual(MATERIAL_LONG_EDGE_TIERS,[256,384,512,768,1080,1440,2160,2880,4320,5760]);
-  assert.deepEqual(materialStorageSize(3000,2000,297,420),{width:2160,height:1440});
+  assert.deepEqual(MATERIAL_LONG_EDGE_TIERS,[256,384,512,768,1080,1440]);
+  assert.deepEqual(materialStorageSize(3000,2000,297,420),{width:1440,height:960});
   assert.deepEqual(materialStorageSize(600,400,30,20),{width:256,height:171});
 });

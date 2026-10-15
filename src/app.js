@@ -174,13 +174,13 @@ function libraryBack(){const previous=libraryHistory.pop();if(!previous){navigat
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const toast=s=>{const el=document.querySelector('#toast');el.textContent=/can't find variable|is not defined|undefined is not an object|blob:|expected magic word/i.test(String(s))?explainUserError(s):s;el.classList.add('show');clearTimeout(toast.timer);toast.timer=setTimeout(()=>el.classList.remove('show'),3500);};
 const saveStatus=s=>{const label=cloudEnabled?({'已保存到本机':'已保存到云端','本机存储':'云端存储'}[s]||s):s;document.querySelector('#save-state').textContent=label;for(const el of document.querySelectorAll('.swift-auto-saved'))el.textContent=label;};
-const syncDisplay={pending:0,error:null,conflicts:0,checking:true,localPending:false};
+const syncDisplay={pending:0,error:null,conflicts:0,uploading:false,checking:true,localPending:false};
 function updateSyncIndicator(){
   if(!cloudEnabled)return;
   const conflict=syncDisplay.conflicts>0||/云端版本已变化|另一设备已更新|conflict/i.test(syncDisplay.error?.message||'');
-  const status=conflict?'conflict':syncDisplay.error?'error':navigator.onLine===false&&syncDisplay.pending?'offline':syncDisplay.checking?'checking':syncDisplay.pending||syncDisplay.localPending?'uploading':'synced';
+  const status=conflict?'conflict':navigator.onLine===false&&syncDisplay.pending?'offline':syncDisplay.uploading?'uploading':syncDisplay.error?'error':syncDisplay.checking?'checking':syncDisplay.pending||syncDisplay.localPending?'uploading':'synced';
   const label={conflict:'同步冲突',error:'待重试',offline:'待联网',checking:'核对中',uploading:'上传中',synced:'已同步'}[status];
-  for(const button of document.querySelectorAll('.sync-indicator')){button.hidden=false;button.dataset.status=status;button.title=conflict?'其他设备修改了同一资料；本机待传内容仍保留，请先检查其他设备':syncDisplay.error?'上传未完成；点击重试：'+syncDisplay.error.message:label;button.setAttribute('aria-label',label);button.querySelector('.sync-indicator-label').textContent=label;}
+  for(const button of document.querySelectorAll('.sync-indicator')){button.hidden=false;button.dataset.status=status;button.title=conflict?'其他设备修改了同一资料；本机待传内容仍保留，请先检查其他设备':status==='error'?'上传未完成；点击重试：'+syncDisplay.error.message:label;button.setAttribute('aria-label',label);button.querySelector('.sync-indicator-label').textContent=label;}
 }
 function mountPageSyncIndicator(){
   if(!cloudEnabled)return;
@@ -2030,11 +2030,16 @@ function openProjectMetadata(){
   body.querySelector('#project-meta-used').onchange=()=>{usageTouched=true;};
   body.querySelector('#project-meta-save').onclick=async()=>{
     const title=body.querySelector('#project-meta-title').value.trim();if(!title){toast('请填写作品名称');return;}
-    const now=new Date().toISOString(),markUsed=body.querySelector('#project-meta-used').value==='used'&&(!p.isUsed||usageTouched);
-    const next={...p,title,styleTags:body.querySelector('#project-meta-tags').value.split(/[,，]/).map(x=>x.trim()).filter(Boolean),isUsed:body.querySelector('#project-meta-used').value==='used',updatedAt:now};delete next.isTemplate;
+    const styleTags=body.querySelector('#project-meta-tags').value.split(/[,，]/).map(x=>x.trim()).filter(Boolean),isUsed=body.querySelector('#project-meta-used').value==='used';
+    const projectChanged=title!==p.title||JSON.stringify(styleTags)!==JSON.stringify(p.styleTags||[])||isUsed!==Boolean(p.isUsed);
+    const markUsed=isUsed&&(!p.isUsed||usageTouched);
+    if(!projectChanged&&!markUsed){modal.close();toast('作品信息未变化');return;}
+    const now=new Date().toISOString(),next=projectChanged?{...p,title,styleTags,isUsed,updatedAt:now}:p;
+    if(projectChanged)delete next.isTemplate;
     const projectWithLayers=markUsed?await db.completeProject(p):p;
     const affected=markUsed?markProjectAssetsUsed(projectWithLayers,state.assets,now):[];
-    await db.transaction(affected.length?['projects','assets']:['projects'],tx=>{tx.objectStore('projects').put(next);for(const a of affected)tx.objectStore('assets').put(a);});
+    if(!projectChanged&&!affected.length){modal.close();toast('作品信息未变化');return;}
+    await db.transaction(affected.length?projectChanged?['projects','assets']:['assets']:['projects'],tx=>{if(projectChanged)tx.objectStore('projects').put(next);for(const a of affected)tx.objectStore('assets').put(a);});
     Object.assign(p,next);for(const a of affected)Object.assign(state.assets.find(x=>x.id===a.id),a);modal.close();render();toast('作品信息已保存');
   };
 }
@@ -2566,7 +2571,7 @@ window.addEventListener('shiye-project-conflict-copy',event=>{
   }
   toast('已保留其他设备原稿；当前修改正作为新的独立作品同步，请在作品页查看。');
 });
-window.addEventListener('shiye-project-sync',event=>{const {pending,error,conflicts=0}=event.detail;syncDisplay.pending=pending;syncDisplay.error=error;syncDisplay.conflicts=conflicts;syncDisplay.checking=false;if(!dirtyProjects.size&&!savingProjects)syncDisplay.localPending=false;updateSyncIndicator();if(error){saveStatus('待同步 · 修改已保留在本机');const message=error.name==='AbortError'||/abort|timed? ?out/i.test(error.message||'')?'网络请求中断，本机修改已保留，将自动重试同步':describeSyncError(error);if(lastSyncError!==message)toast(message);lastSyncError=message;}else{lastSyncError=null;saveStatus(conflicts?'部分资料有冲突 · 其他资料已继续同步':pending?'修改已暂存 · 后台同步中':'已保存到云端');privateImages.retryMissing();}});
+window.addEventListener('shiye-project-sync',event=>{const {pending,error,conflicts=0,uploading=false}=event.detail;syncDisplay.pending=pending;syncDisplay.error=error;syncDisplay.conflicts=conflicts;syncDisplay.uploading=uploading;syncDisplay.checking=false;if(!dirtyProjects.size&&!savingProjects)syncDisplay.localPending=false;updateSyncIndicator();if(error&&!uploading){saveStatus('待同步 · 修改已保留在本机');const message=error.name==='AbortError'||/abort|timed? ?out/i.test(error.message||'')?'网络请求中断，本机修改已保留，将自动重试同步':describeSyncError(error);if(lastSyncError!==message)toast(message);lastSyncError=message;}else{if(!error)lastSyncError=null;saveStatus(conflicts?'部分资料有冲突 · 其他资料已继续同步':pending?'修改已暂存 · 后台同步中':'已保存到云端');privateImages.retryMissing();}});
 let cloudCheck,cloudCheckAt=0,cloudSessionReady=false,cloudCheckAgain=false;
 const CLOUD_POLL_MS=5000;
 let syncPausedByUser=false,resetWorkflowActive=false;
@@ -2727,7 +2732,7 @@ async function openSyncDetails(){if(!cloudEnabled)return;cloudResumer.suspend();
     .flatMap(line=>line.match(/[a-zA-Z0-9_.-]+\.js:\d+(?::\d+)?/g)||[])
     .slice(0,8).join(' → ');
   const rows=[...projects.map(row=>`<li>作品：${esc(row.title)} <small>${esc(row.id)}</small> <button class="btn mini" type="button" data-conflict-kind="project" data-conflict-id="${esc(row.id)}">比较版本</button></li>`),...batches.map(row=>`<li>待传批次 ${esc(row.id)}：${row.items.length} 条变更<ul>${row.items.slice(0,12).map(item=>`<li>${esc(item.store)} · ${esc(item.action)} · ${esc(item.title||item.id)}</li>`).join('')}</ul>${row.items.length===1&&row.items[0]?.store==='projects'&&row.items[0]?.action==='put'?`<button class="btn mini" type="button" data-conflict-kind="batch" data-conflict-id="${esc(row.id)}">比较版本</button>`:''}</li>`),...local.map(row=>`<li>尚未暂存的作品：${esc(row.title||row.id)}</li>`)];
-  body.innerHTML=`<h2>同步详情</h2><p>状态：${syncPausedByUser?'已暂停 · 本机修改仍保留':syncDisplay.error?'待重试':syncDisplay.pending||local.length?'上传中':'已同步'}</p><p>最近错误：${esc(syncDisplay.error?describeSyncError(syncDisplay.error):details.error||'无')}</p>${errorFrames?`<details><summary>查看错误位置（用于排查 Safari）</summary><small>${esc(errorFrames)}</small></details>`:''}<p>本机待同步：${total} 项。未上传作品和草稿将保留在本机待同步队列。</p><p>隔离待同步原始记录：${quarantined} 项（禁止自动上传，原始数据未丢弃）。</p><p>已隔离旧版可编辑作品：${db.legacyProjectInfo?.()?.length||0} 件（未删除）。转换工具会同时扫描账号的素材、系列、作品、元数据、图片引用和最近删除。</p><div class="sync-pending-list">${rows.length?`<ul>${rows.join('')}</ul>`:'<p>没有待同步项目。</p>'}</div><div class="actions"><button type="button" class="btn" id="sync-migrate-account">转换旧数据格式</button><button type="button" class="btn" id="sync-backup-legacy-works" ${db.legacyProjectInfo?.()?.length?'':'disabled'}>导出隔离旧作品备份</button><button type="button" class="btn primary" id="sync-retry-now">立即同步</button><button type="button" class="btn" id="sync-pause-local">${syncPausedByUser?'恢复后台重试':'暂停后台重试'}</button><button type="button" class="btn" id="sync-emergency-copy" ${total?'':'disabled'}>导出待同步数据备份</button><button type="button" class="btn danger" id="sync-wipe-everything">彻底清空本账号本机与云端数据</button></div><p>暂停仅停止自动重试，不清空作品、草稿或待上传图片；页面刷新后仍可恢复同步。为防止误删本机唯一副本，已移除直接丢弃待同步作品的操作。</p>`;
+  body.innerHTML=`<h2>同步详情</h2><p id="sync-detail-status" role="status">状态：${syncPausedByUser?'已暂停 · 本机修改仍保留':syncDisplay.uploading?'上传中':syncDisplay.error?'待重试':syncDisplay.pending||local.length?'等待上传':'已同步'}</p><p>最近错误：${esc(syncDisplay.error?describeSyncError(syncDisplay.error):details.error||'无')}</p>${errorFrames?`<details><summary>查看错误位置（用于排查 Safari）</summary><small>${esc(errorFrames)}</small></details>`:''}<p>本机待同步：${total} 项。未上传作品和草稿将保留在本机待同步队列。</p><p>隔离待同步原始记录：${quarantined} 项（禁止自动上传，原始数据未丢弃）。</p><p>已隔离旧版可编辑作品：${db.legacyProjectInfo?.()?.length||0} 件（未删除）。转换工具会同时扫描账号的素材、系列、作品、元数据、图片引用和最近删除。</p><div class="sync-pending-list">${rows.length?`<ul>${rows.join('')}</ul>`:'<p>没有待同步项目。</p>'}</div><div class="actions"><button type="button" class="btn" id="sync-migrate-account">转换旧数据格式</button><button type="button" class="btn" id="sync-backup-legacy-works" ${db.legacyProjectInfo?.()?.length?'':'disabled'}>导出隔离旧作品备份</button><button type="button" class="btn primary" id="sync-retry-now">立即同步</button><button type="button" class="btn" id="sync-pause-local">${syncPausedByUser?'恢复后台重试':'暂停后台重试'}</button><button type="button" class="btn" id="sync-emergency-copy" ${total?'':'disabled'}>导出待同步数据备份</button><button type="button" class="btn danger" id="sync-wipe-everything">彻底清空本账号本机与云端数据</button></div><p>暂停仅停止自动重试，不清空作品、草稿或待上传图片；页面刷新后仍可恢复同步。为防止误删本机唯一副本，已移除直接丢弃待同步作品的操作。</p>`;
   body.querySelector('.actions')?.insertAdjacentHTML('afterbegin','<button type="button" class="btn" id="sync-export-diagnostics">导出详细同步诊断</button>');
   body.querySelector('#sync-export-diagnostics').onclick=exportSyncDiagnostics;
   modal.showModal();modal.addEventListener('close',()=>{if(!syncPausedByUser&&!resetWorkflowActive)void cloudResumer.resume();},{once:true});
@@ -2737,7 +2742,27 @@ async function openSyncDetails(){if(!cloudEnabled)return;cloudResumer.suspend();
   body.querySelector('#sync-migrate-account').onclick=()=>{void runAccountStorageMigration();};
    body.querySelector('#sync-wipe-everything').onclick=()=>{void handle('reset-all-account-data');};
   body.querySelector('#sync-backup-legacy-works').onclick=()=>{void handle('backup-legacy-projects');};
-  body.querySelector('#sync-retry-now').onclick=()=>{syncPausedByUser=false;modal.close();void flushSave().then(()=>{void cloudResumer.resume();return db.flushProjects();}).catch(error=>toast('同步待重试：'+error.message));};
+  body.querySelector('#sync-retry-now').onclick=async event=>{
+    const button=event.currentTarget,status=body.querySelector('#sync-detail-status');
+    syncPausedByUser=false;
+    button.disabled=true;
+    button.textContent='正在同步…';
+    status.textContent=syncDisplay.uploading?'状态：正在等待当前上传完成…':'状态：正在提交本机修改…';
+    try{
+      await flushSave();
+      await db.flushProjects();
+      const remaining=db.syncDiagnosticReport({online:navigator.onLine})?.state.pending??syncDisplay.pending;
+      status.textContent=remaining?`状态：仍有 ${remaining} 项待同步；请查看最近错误或稍后重试`:'状态：已同步到云端';
+      if(!remaining)toast('已同步到云端');
+    }catch(error){
+      status.textContent='状态：待重试 · 本机修改已保留；关闭详情后自动重试';
+      toast('同步待重试：'+describeSyncError(error));
+    }finally{
+      button.disabled=false;
+      button.textContent='立即同步';
+      if(!modal.open&&!syncPausedByUser&&!resetWorkflowActive)void cloudResumer.resume();
+    }
+  };
   body.querySelector('#sync-pause-local').onclick=()=>{syncPausedByUser=!syncPausedByUser;if(syncPausedByUser){cloudResumer.suspend();saveStatus('已暂停后台重试 · 本机修改保留');}modal.close();if(!syncPausedByUser)void cloudResumer.resume();};
   body.querySelector('#sync-emergency-copy').onclick=async()=>{
     try{await flushSave();const backup=await db.createEmergencyBackup();if(!(backup instanceof Blob)||!backup.size)throw Error('应急备份为空');download(backup,'拾页-待同步应急备份-'+new Date().toISOString().slice(0,10)+'.shiyerecovery');toast('已导出含原始字节的待同步应急备份，请妥善保存');}
