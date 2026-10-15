@@ -45,6 +45,23 @@ test('a stale conflict cannot replay on resume or block a newer row for the same
   await sync.resume();
   assert.equal(oldChecks,1);
 });
+test('background sync excludes confirmed conflict batches from preparation and coalescing',async()=>{
+  let revision=7,rows=[{record:{id:'old',key:'shared'},serial:1,baseRevision:1,operationID:'old-op'}];
+  const prepared=[],uploaded=[];
+  const sync=createProjectSync({load:async()=>structuredClone(rows),reload:async()=>structuredClone(rows),
+    write:async next=>{rows=structuredClone(next)},revision:()=>revision,
+    reconcile:async record=>record.id==='old'?'conflict':'rebase',
+    commit:async record=>{uploaded.push(record.id);revision++;},
+    prepare:async records=>prepared.push(records.map(record=>record.id)),
+    coalesce:records=>{if(records.length>1)throw Error('confirmed conflict entered coalescing');return null;},
+    autoFlushDelayMs:3600000,setTimer:()=>1,clearTimer:()=>{}});
+  await sync.flush();
+  await sync.stage({id:'new',key:'shared'},{baseRevision:1});
+  await sync.resume();
+  assert.deepEqual(prepared,[['old'],['new']]);
+  assert.deepEqual(uploaded,['new']);
+  assert.deepEqual(rows.map(row=>row.record.id),['old']);
+});
 const defer=()=>{let resolve;const promise=new Promise(r=>resolve=r);return {promise,resolve};};
 test('empty sync reports its idle transition after the network promise settles',async()=>{
   const statuses=[];

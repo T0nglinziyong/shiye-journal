@@ -144,10 +144,12 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
     if(rebuilding)return Promise.resolve();
     network=(async()=>{
       await initialize();await staging;await refreshFromDisk();
+      const readyRows=orderedRows().filter(row=>force||!conflicts.has(row.record.id));
+      if(!readyRows.length){error=null;report();return;}
       // Immutable object bytes can transfer before the account revision lock.
       // Only reconciliation and the versioned metadata commit need that lock.
       const prepareAt=clock();diagnose('prepare-start');
-      await prepare(orderedRows().map(row=>row.record));
+      await prepare(readyRows.map(row=>row.record));
       diagnose('prepare-finished',null,null,clock()-prepareAt);
       const lockAt=clock();diagnose('lock-wait');
       return runExclusive(async()=>{
@@ -162,7 +164,9 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
       const windowSerial=flushWindow&&!force
         ?Math.max(0,...[...entries.values()].map(item=>item.serial))
         :Infinity;
-      await coalesceReady(windowSerial);
+      // A confirmed conflict keeps its original identity for manual review.
+      // Never fold it into a newer batch during a background pass.
+      if(force||!conflicts.size)await coalesceReady(windowSerial);
       // Once a row has been confirmed as a real conflict, background retries
       // must not replay the same stale revision forever. An explicit flush or
       // queue rebuild can recheck it; independent rows continue normally.
