@@ -419,7 +419,7 @@ const pageControllers=createPageControllerHost();
 registerLibraryActions(actionStore,{db,state,asset});
 registerWorksActions(actionStore);
 registerImportActions(actionStore,{state,saveActiveImportRecord});
-registerSettingsActions(actionStore,{providers:AI_PROVIDERS});
+registerSettingsActions(actionStore);
 registerEditorActions(actionStore,{historyStep});
 registerMatchingActions(actionStore,{addMatchingFromRecommendation});
 pageControllers.register('library',createLibraryController({
@@ -632,13 +632,7 @@ function render(){
     :state.route==='settings'&&state.settingsSection==='数据与诊断'
       ?createElement(SettingsDataPage,{state,cloudEnabled,storage:db.storageConfig(),onAction:handle})
     :state.route==='settings'&&state.settingsSection==='AI 与创作'
-      ?createElement(SettingsAIPage,{settings:state.aiSettings,modelPanelOpen:aiModelPanelOpen,
-        onAction:handle,onModelPanelToggle:open=>{aiModelPanelOpen=open;},
-        onProviderChange:next=>{
-          const previous={...readAIForm(),provider:state.aiSettings.provider};
-          void actionStore.dispatch({type:'settings/provider',payload:{previous,next}})
-            .catch(error=>toast(error.message));
-        }})
+      ?createElement(SettingsAIPage,{settings:state.aiSettings,onAction:handle})
     :state.route==='import'&&(state.importStep==='done'||!state.importRecords[state.importIndex])
       ?ImportSimplePage({state,onAction:handle})
     :state.route==='import'&&state.importStep==='review'
@@ -819,9 +813,23 @@ function renderSceneDOM(d,scale){
   }).join('');
   return draw(d.layers);
 }
-let aiModelPanelOpen=false;
 // Reuse one compact card language for every settings category.
-function readAIForm(){const q=id=>view.querySelector('#setting-ai-'+id),old=state.aiSettings,provider=q('provider').value,keys={...old.keys,[old.provider]:q('key').value},creationMode=q('delivery').value;return {...old,provider,keys,key:q('key').value,endpoint:q('endpoint').value,model:q('model').value==='__custom__'?q('custom-model').value.trim():q('model').value,imageModel:q('image-model').value,...deliveryProfile(creationMode),includeStructureReference:q('structure-reference').checked,sendPresetReferences:q('send-reference').checked,autoIncludeRecommendations:q('auto-recommendations').checked,requireAllCandidates:q('require-all').checked,finalVisualReview:q('visual-review')?.checked!==false,customVision:q('vision').checked,includeThumbnails:q('thumbnails').checked,temperature:q('temperature').value,maxTokens:q('tokens').value,maxTurns:q('turns').value,requestTimeout:q('timeout').value,transport:q('transport').value,textMode:q('text').value,reasoningMode:q('reasoning').value,sendOutputLimit:q('send-limit').checked,disableThinking:q('disable-thinking').checked,customLayoutPrompt:q('layout-prompt').value};}
+function readAIForm(){
+  const q=id=>view.querySelector('#setting-ai-'+id),old=state.aiSettings;
+  const provider=q('provider').value,model=q('custom-model').value.trim(),endpoint=q('endpoint').value.trim();
+  const key=q('key').value,creationMode=q('delivery').value;
+  let draftKeys={};try{draftKeys=JSON.parse(q('provider-keys')?.value||'{}');}catch{}
+  const keys={...old.keys,...draftKeys,[provider]:key};
+  const vision=supportsVision({provider,endpoint,model});
+  return {...old,provider,keys,key,endpoint,model,...deliveryProfile(creationMode),
+    includeStructureReference:q('structure-reference').checked,
+    sendPresetReferences:q('send-reference').checked,
+    autoIncludeRecommendations:q('auto-recommendations').checked,
+    requireAllCandidates:q('require-all').checked,
+    includeThumbnails:vision,customVision:false,finalVisualReview:false,
+    temperature:q('temperature').value,maxTurns:q('turns').value,
+    requestTimeout:q('timeout').value,customLayoutPrompt:q('layout-prompt').value};
+}
 
 let cloudMatchingDefaults=null,matchingDefaultsTimer=null,matchingDefaultsPending=false,matchingDefaultsLocalEdited=false;
 function queueMatchingDefaultsSync(){
@@ -1627,10 +1635,10 @@ async function startAICreation(){
  const assertRun=()=>{if(controller.signal.aborted||state.accountId!==accountID)throw Error('创作已停止或账号已切换');for(const [id,version] of sourceVersions){const current=state.assets.find(a=>a.id===id);if(!current||assetSourceRevision(current)!==version)throw Error('创作期间素材来源或标定已变化，已停止旧条件下的生成');}};
  checkpoint();aiController=controller;state.aiBusy=true;state.aiProgress='正在准备素材预览…';aiReport={date:new Date().toISOString(),model,parameters:{generationMode:cfg.generationMode,temperature:cfg.temperature,maxTokens:cfg.maxTokens,maxTurns:cfg.maxTurns,materialCount:ids.length},rounds:[],outcome:'started'};render();
  try{
-  recorder=await createAIRecorder({db,model,key,accountId:state.accountId||'browser'});const aliases=materialAliases(ids),vision=cfg.includeThumbnails&&supportsVision(cfg);
+  recorder=await createAIRecorder({db,model,key,accountId:state.accountId||'browser'});const aliases=materialAliases(ids),vision=supportsVision(cfg);
   const images=vision?await prepareMaterialPreviews(ids,{findAsset,createImage:async(...args)=>{assertRun();return modelImage(...args);}}):[];assertRun();
   const p=sourceProject,referenceImages=[];
-  if(cfg.sendPresetReferences&&supportsVision(cfg)){referenceImages.push(...(await loadJournalTemplateReferences({context:{styles:p.styles||[sourceDraft.style],purposes:p.purposes||[p.purpose||fallbackPurpose],materials:assetsSnapshot.filter(asset=>ids.includes(asset.id))},userTemplates:state.userTemplates,db})).referenceImages);}assertRun();
+  if(cfg.sendPresetReferences&&vision){referenceImages.push(...(await loadJournalTemplateReferences({context:{styles:p.styles||[sourceDraft.style],purposes:p.purposes||[p.purpose||fallbackPurpose],materials:assetsSnapshot.filter(asset=>ids.includes(asset.id))},userTemplates:state.userTemplates,db})).referenceImages);}assertRun();
   const output=await runCreativeAgent({...cfg,draft:sourceDraft,assets:assetsSnapshot,aliases,styles:p.styles||[sourceDraft.style],pagePurposes:p.purposes||[p.purpose||fallbackPurpose],contentPolicy:p.contentPolicy||'documentary',textPresentation:p.textPresentation||'mixed',userText:p.userText||'',providedFacts:p.providedFacts||'',requiredAssetIDs:p.requiredAssetIDs||[],materialPriority:p.materialPriority,processing:p.processing,assetProcessing:p.assetProcessing||{},materialUseHints:p.materialUseHints||{},materialUseRequired:p.materialUseRequired||{},prompt,images,referenceImages,userTemplates:state.userTemplates,request:recorder.request,signal:controller.signal,
    onResponse:recorder.response,
    onProgress:progress=>{state.aiProgress='请求 '+progress.budget.totalRequests+'/'+progress.budget.limit+'（创作 '+progress.budget.creationRequests+'、格式修复 '+progress.budget.formatRepairRequests+'） · '+progress.phase+' · '+progress.seconds+' 秒 · 已接收 '+progress.received+' 字符';publishAIStatus();},
@@ -2369,7 +2377,7 @@ async function organizeSavedProjects(projects){
       const complete=await db.get('projects',source.id);
       if(!complete||complete.updatedAt!==source.updatedAt||complete.autoOrganized)return;
       let picture=null;
-      if(complete.isSnapshot&&supportsVision(config)&&config.includeThumbnails){
+      if(complete.isSnapshot&&supportsVision(config)){
         picture=await modelImage({blobId:complete.snapshotBlobId},null,360,false);
       }
       const result=await classifyRecord({kind:'project',record:complete,settings:config,image:picture,assets:state.assets});
@@ -2392,7 +2400,7 @@ async function organizeSavedAssets(records,{projects=[]}={}){
   if(projects.length)void organizeSavedProjects(projects);
   if(state.preferences.autoOrganize&&records.length){
     const cfg=structuredClone(state.aiSettings),accountID=state.accountId;
-    if(cfg.key&&cfg.includeThumbnails&&supportsVision(cfg)){
+    if(cfg.key&&supportsVision(cfg)){
       let warned=false;
       // saveImportBatch has already durably staged the cutouts and metadata.
       // The model can read those pending Blobs locally; a slow cloud ACK must
@@ -2611,8 +2619,10 @@ const CLOUD_POLL_MS=5000;
 let syncPausedByUser=false,resetWorkflowActive=false;
 const cloudResumer=createSyncResumer({flush:()=>db.flushProjects({background:true}),canRun:()=>cloudEnabled&&cloudSessionReady&&navigator.onLine!==false,onError:error=>console.warn('后台同步待重试',error?.message)});
 function backgroundCloudCheck({force=false}={}){
-  if(!cloudEnabled||!shouldPullCloudForRoute(state.route)||
-     document.visibilityState==='hidden')return;
+  if(!cloudEnabled||!shouldPullCloudForRoute(state.route)||document.visibilityState==='hidden')return;
+  // Keep remote reads moving during a long upload, but do not compete with
+  // every image chunk. A forced pull after another device's commit still runs.
+  if(syncDisplay.uploading&&!force&&Date.now()-cloudCheckAt<30000)return;
   if(cloudCheck){if(force)cloudCheckAgain=true;return;}
   if(!force&&Date.now()-cloudCheckAt<CLOUD_POLL_MS)return;
   cloudCheckAt=Date.now();
@@ -2629,9 +2639,18 @@ function backgroundCloudCheck({force=false}={}){
 // Cloud sync is bidirectional: poll lightweight version metadata while the
 // document remains visible, not only when focus/online events happen.
 setInterval(backgroundCloudCheck,CLOUD_POLL_MS);
+// Detect complete UI stalls even when no sync promise rejects. The timer
+// resumes after a main-thread block and records its duration locally.
+let lastMainThreadTick=performance.now();
+setInterval(()=>{
+  const now=performance.now(),lag=Math.round(now-lastMainThreadTick-2000);
+  lastMainThreadTick=now;
+  if(cloudEnabled&&lag>1200)db.recordSyncDiagnostic({action:'main-thread-lag',kind:'queue',
+    cloudRevision:null,pending:syncDisplay.pending,durationMs:lag});
+},2000);
 window.addEventListener('focus',()=>{backgroundCloudCheck();privateImages.retryMissing();void cloudResumer.wake();});
 document.addEventListener('visibilitychange',()=>{backgroundCloudCheck();if(document.visibilityState==='hidden'){view.flushInkCommit?.({renderUI:false,force:true});snapshotEditedScene('app-background');if(dirtyProjects.size||dirtyUsageAssets.size)void flushSave().catch(console.error);}if(document.visibilityState==='visible'){privateImages.retryMissing();void cloudResumer.wake();}});
-window.addEventListener('online',()=>{backgroundCloudCheck();privateImages.retryMissing();void cloudResumer.wake();});
+window.addEventListener('online',()=>{backgroundCloudCheck();privateImages.retryMissing();void cloudResumer.wake({force:true});});
 window.addEventListener('offline',updateSyncIndicator);
 window.addEventListener('online',updateSyncIndicator);
 async function runAccountStorageMigration(){
@@ -2702,22 +2721,19 @@ function exportSyncDiagnostics(){
   if(!report){toast('当前不是云端同步模式');return;}
   download(new Blob([JSON.stringify(report,null,2)],{type:'application/json'}),
     '拾页同步诊断-'+new Date().toISOString().slice(0,10)+'.json');
-  toast('已导出本次会话的同步诊断；不含作品、图片、账号标识或原始报错');
+  toast('已导出本机当天的同步诊断；不含作品、图片、账号标识或原始报错');
 }
 async function openSyncDetails(){
   if(!cloudEnabled)return;cloudResumer.suspend();
   try{
     const details=await db.pendingSyncDetails(),projects=details.projects||[],
       batches=details.batches||[],local=[...dirtyProjects.values()],quarantined=details.quarantined||0;
-    const errorFrames=(syncDisplay.error?.stack||'').split('\n')
-      .flatMap(line=>line.match(/[a-zA-Z0-9_.-]+\.js:\d+(?::\d+)?/g)||[])
-      .slice(0,8).join(' → ');
     const status=syncPausedByUser?'已暂停 · 本机修改仍保留':syncDisplay.uploading?
       (syncDisplay.progress?`上传中 · ${syncDisplay.progress.phase} ${syncDisplay.progress.done}/${syncDisplay.progress.total} 项`:'上传中'):
       syncDisplay.error?'待重试':syncDisplay.pending||local.length?'等待上传':'已同步';
     openOverlay(createElement(SyncDetailsDialog,{details,projects,batches,local,quarantined,
       legacyCount:db.legacyProjectInfo?.()?.length||0,
-      error:syncDisplay.error?describeSyncError(syncDisplay.error):null,errorFrames,status,
+      error:syncDisplay.error?describeSyncError(syncDisplay.error):null,status,
       onClose:()=>{closeOverlay();if(!syncPausedByUser&&!resetWorkflowActive)void cloudResumer.resume();},
       onDiagnostics:exportSyncDiagnostics,onConflict:(kind,id)=>void openSyncConflictChoice(kind,id),
       onMigrate:()=>void runAccountStorageMigration(),onBackupLegacy:()=>void handle('backup-legacy-projects'),

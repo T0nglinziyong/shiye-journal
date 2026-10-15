@@ -38,7 +38,7 @@ export function normalizePreferences(value={}){
     recognitionShapeRegularization:value?.recognitionShapeRegularization!==false,
     recognitionApertures:value?.recognitionApertures!==false,
     autoOrganize:value?.autoOrganize!==false,autoOrganizeWorks:value?.autoOrganizeWorks!==false,
-    maxPageItems:[20,40,80].includes(Number(value?.maxPageItems))?Number(value.maxPageItems):40
+    maxPageItems:[10,20,40,80].includes(Number(value?.maxPageItems))?Number(value.maxPageItems):40
   };
 }
 export function migrateStoredPreferences(value={}){

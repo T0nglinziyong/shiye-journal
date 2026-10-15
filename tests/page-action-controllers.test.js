@@ -65,15 +65,9 @@ test('Import candidate selection publishes one event and preserves source record
   await assert.rejects(actions.dispatch({type:'import/candidate/toggle',payload:{index:99}}),/序号无效/);
   assert.equal(events.length,2);
 });
-test('Settings provider is a state transition independent of DOM',async()=>{
-  const state={aiSettings:{provider:'deepseek',keys:{gpt:'stored'},key:'old'}},
-    actions=createActionStore(state);
-  registerSettingsActions(actions,{providers:{gpt:{endpoint:'https://example.test',models:[['m','M',true]]}}});
-  await actions.dispatch({type:'settings/provider',payload:{previous:state.aiSettings,next:'gpt'}});
-  assert.equal(state.aiSettings.provider,'gpt');
-  assert.equal(state.aiSettings.key,'stored');
-  assert.equal(state.aiSettings.keys.deepseek,'old');
-  assert.equal(state.aiSettings.includeThumbnails,true);
+test('Settings section transition is independent of DOM',async()=>{
+  const state={},actions=createActionStore(state);
+  registerSettingsActions(actions);
   await actions.dispatch({type:'settings/section',payload:{section:'AI 与创作'}});
   assert.equal(state.settingsSection,'AI 与创作');
 });

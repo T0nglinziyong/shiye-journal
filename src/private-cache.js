@@ -87,12 +87,36 @@ export function createPrivateCache({name='shiye-private-read-cache-v2',limit=160
       if(!['project-outbox','import-outbox','unified-outbox'].includes(id))throw Error('不是待同步队列');
       const d=await db(),tx=d.transaction('entries','readwrite');
       try{
+        const entries=tx.objectStore('entries');
+        const aggregate=await entries.get(key(account,id));
+        // Current queues use one IndexedDB row per pending document. Reading
+        // every image Blob merely to acknowledge one completed item made
+        // Safari repeatedly clone the whole batch on its main thread.
+        if(!aggregate?.value?.length){
+          const before=rowsByID(previousRows),after=rowsByID(nextRows);
+          const strict=new Set(options.strictRemoveIds||[]);
+          for(const recordID of new Set([...before.keys(),...after.keys()])){
+            const old=before.get(recordID),current=after.get(recordID);
+            if(outboxStamp(old)===outboxStamp(current))continue;
+            const saved=await entries.get(rowKey(account,id,recordID));
+            const existing=saved?.value?.deleted?undefined:saved?.value;
+            if(outboxStamp(existing)!==outboxStamp(old)){
+              if(strict.has(recordID)||!old||outboxStamp(existing)!==outboxStamp(current))
+                throw Error('其他标签页已修改同一份待同步资料；未覆盖原稿，请刷新页面后解决冲突');
+            }
+            if(current)entries.put({key:rowKey(account,id,recordID),account,
+              time:Date.now(),bytes:0,value:current});
+            else if(outboxStamp(existing)===outboxStamp(old))entries.delete(rowKey(account,id,recordID));
+          }
+          if(!nextRows.length)entries.put({key:key(account,id),account,time:Date.now(),bytes:0,value:[]});
+          await tx.done;
+          return nextRows;
+        }
         const saved=await readOutbox(tx,account,id),
           merged=mergeOutboxRows(saved.rows,previousRows,nextRows,options),
           before=rowsByID(saved.rows),after=rowsByID(merged),
           overlays=new Map(saved.overlays.map(entry=>[JSON.parse(entry.key)[2],entry])),
           baseIDs=new Set(saved.base.map(outboxID));
-        const entries=tx.objectStore('entries');
         for(const recordID of new Set([...before.keys(),...after.keys()])){
           const old=before.get(recordID),current=after.get(recordID);
           if(outboxStamp(old)===outboxStamp(current))continue;

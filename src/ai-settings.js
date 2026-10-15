@@ -44,7 +44,7 @@ export function normalizeAISettings(value={}){
     customLayoutPrompt:typeof value.customLayoutPrompt==='string'?value.customLayoutPrompt:''
   };
 }
-export function supportsVision(settings){return verifiedModelCapabilities(settings)?.vision===true||settings.customVision===true;}
+export function supportsVision(settings){return verifiedModelCapabilities(settings)?.vision===true;}
 export function loadAISettings(storage=globalThis.localStorage){
   try{return normalizeAISettings(JSON.parse(storage.getItem(STORAGE_KEY)||'{}'));}catch{return normalizeAISettings();}
 }

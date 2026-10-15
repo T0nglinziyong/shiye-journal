@@ -2,7 +2,7 @@ import React,{useState} from 'react';
 import {Dialog} from './react-utility-dialogs.jsx';
 
 export function SyncDetailsDialog({details,projects,batches,local,quarantined,legacyCount,
-  error,errorFrames,status,onClose,onDiagnostics,onConflict,onMigrate,onBackupLegacy,onWipe,
+  error,status,onClose,onDiagnostics,onConflict,onMigrate,onBackupLegacy,onWipe,
   onRetry,onPause,onEmergency}){
   const [message,setMessage]=useState(`状态：${status}`),[busy,setBusy]=useState(false);
   const retry=async()=>{
@@ -14,7 +14,6 @@ export function SyncDetailsDialog({details,projects,batches,local,quarantined,le
   const total=projects.length+batches.length+local.length;
   return <Dialog title="同步详情" onClose={onClose}><h2>同步详情</h2>
     <p id="sync-detail-status" role="status">{message}</p><p>最近错误：{error||details.error||'无'}</p>
-    {errorFrames?<details><summary>查看错误位置（用于排查 Safari）</summary><small>{errorFrames}</small></details>:null}
     <p>本机待同步：{total} 项。未上传作品和草稿将保留在本机待同步队列。</p>
     <p>隔离待同步原始记录：{quarantined} 项（禁止自动上传，原始数据未丢弃）。</p>
     <p>已隔离旧版可编辑作品：{legacyCount} 件（未删除）。转换工具会同时扫描账号的素材、系列、作品、元数据、图片引用和最近删除。</p>
@@ -55,7 +54,7 @@ export function SyncConflictDialog({review,onClose,onBack,onBackup,onResolve}){
 export function SyncErrorDialog({error,onClose,onBack,onDiagnostics,kind}){
   return <Dialog title={kind==='details'?'同步详情暂不可用':'无法自动比较版本'} onClose={onClose}>
     <h2>{kind==='details'?'同步详情暂不可用':'无法自动比较版本'}</h2>
-    {kind==='details'?<><p>待同步资料没有被清除。仍可导出本次会话的同步诊断。</p><button type="button" className="btn" id="sync-export-diagnostics" onClick={onDiagnostics}>导出详细同步诊断</button></>:
+    {kind==='details'?<><p>待同步资料没有被清除。仍可导出当天的本机同步诊断。</p><button type="button" className="btn" id="sync-export-diagnostics" onClick={onDiagnostics}>导出详细同步诊断</button></>:
       <><p role="alert">{error}</p><p>本机数据仍保留在待同步队列，可以先导出应急备份。混合操作批次需要单独检查。</p><button type="button" className="btn" id="conflict-back" onClick={onBack}>返回同步详情</button></>}
   </Dialog>;
 }

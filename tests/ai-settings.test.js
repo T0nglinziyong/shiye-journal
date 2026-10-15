@@ -55,10 +55,10 @@ test('automatic organization uses current defaults and persists an explicit off 
   }
 });
 
-test('A-12: image input is scoped to the verified endpoint/model or an explicit user override',()=>{
+test('A-12: image input is scoped to verified endpoint/model combinations',()=>{
  assert.equal(supportsVision(normalizeAISettings({provider:'deepseek',model:'deepseek-flash'})),true);
  assert.equal(supportsVision(normalizeAISettings({provider:'deepseek',endpoint:'https://example.test/chat/completions',model:'deepseek-flash'})),false);
- assert.equal(supportsVision(normalizeAISettings({provider:'deepseek',endpoint:'https://example.test/chat/completions',model:'deepseek-flash',customVision:true})),true);
+ assert.equal(supportsVision(normalizeAISettings({provider:'deepseek',endpoint:'https://example.test/chat/completions',model:'deepseek-flash',customVision:true})),false);
  assert.equal(supportsVision(normalizeAISettings({provider:'siliconflow',model:'Qwen/Qwen2.5-VL-72B-Instruct'})),true);
 });
 

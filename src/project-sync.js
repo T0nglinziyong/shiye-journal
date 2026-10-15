@@ -24,8 +24,17 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
   const rememberPersisted=rows=>{persistedRows=new Map(rows.map(row=>[row.record.id,{stamp:rowStamp(row),row}]));};
   const initialize=()=>initialized??=(async()=>{const rows=await load()||[];for(const row of rows){entries.set(row.record.id,row);serial=Math.max(serial,row.serial);}rememberPersisted(rows);report();})().catch(failure=>{initialized=undefined;throw markSyncPhase(failure,'读取本机待同步队列');});
   const report=()=>onStatus({pending:entries.size,error,conflicts:conflicts.size});
-  const diagnose=(action,row,failure)=>{try{onDiagnostic({action,kind:row?.record?.kind||'queue',baseRevision:row?.baseRevision,
-    cloudRevision:revision(),pending:entries.size,error:failure});}catch{/* Diagnostics must not block a durable sync. */}};
+  const starts=new Map();
+  const diagnose=(action,row,failure,durationMs=null)=>{
+    const id=row?.operationID;
+    if(action==='start'&&id)starts.set(id,clock());
+    if(id&&['committed','failed','conflict','remote-won'].includes(action)){
+      durationMs=Math.max(0,clock()-(starts.get(id)||clock()));starts.delete(id);
+    }
+    try{onDiagnostic({action,kind:row?.record?.kind||'queue',baseRevision:row?.baseRevision,
+      cloudRevision:revision(),pending:entries.size,error:failure,durationMs:Math.round(durationMs||0)});
+    }catch{/* Diagnostics must not block a durable sync. */}
+  };
   const persist=async(options={})=>{
     // IndexedDB already journals changed rows. Clone only those rows here as
     // well: a queued import may carry many large Blobs that did not change.
@@ -129,8 +138,12 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
       await initialize();await staging;await refreshFromDisk();
       // Immutable object bytes can transfer before the account revision lock.
       // Only reconciliation and the versioned metadata commit need that lock.
+      const prepareAt=clock();diagnose('prepare-start');
       await prepare(orderedRows().map(row=>row.record));
+      diagnose('prepare-finished',null,null,clock()-prepareAt);
+      const lockAt=clock();diagnose('lock-wait');
       return runExclusive(async()=>{
+      diagnose('lock-entered',null,null,clock()-lockAt);
       lastNetworkAt=clock();
       if(paused)return;
       await initialize();await refreshFromDisk();

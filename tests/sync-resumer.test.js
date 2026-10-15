@@ -34,3 +34,16 @@ test('a wake during an upload schedules one more flush for newly staged edits',a
   assert.equal(calls,2);
   resumer.stop();
 });
+
+
+test('focus wake respects a scheduled retry after failure',async()=>{
+  let calls=0,timer;
+  const resume=createSyncResumer({flush:async()=>{calls++;if(calls===1)throw Error('upload failed');},
+    setTimer:fn=>{timer=fn;return 1;},clearTimer:()=>{timer=null;}});
+  await resume.wake();
+  await resume.wake();await resume.wake();
+  assert.equal(calls,1);
+  timer();await new Promise(resolve=>setTimeout(resolve,0));
+  assert.equal(calls,2);
+  resume.stop();
+});

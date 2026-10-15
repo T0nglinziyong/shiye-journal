@@ -7,7 +7,6 @@ import {paperPresets} from './paper-sizes.js';
 import {candidateDiscoveryOptions,recognitionOptions,recognitionPixelOptions,
   recognitionMethodDetails} from './recognition-profiles.js';
 import {DELIVERY_OPTIONS} from './ai-delivery.js';
-import {IMAGE_MODELS} from './ai-image-generation.js';
 import {matchingViewModel} from './matching-view.js';
 import {styleGroups,purposeGroups} from './matching-directions.js';
 import {visualStyles} from './creative-style-brief.js';
@@ -1269,7 +1268,7 @@ export function SettingsDisplayPage({preferences,onAction}){
           <option value="transparent">透明</option>
         </select></label>
         <label>每页最多展示<select id="setting-page-items" defaultValue={String(preferences.maxPageItems)}>
-          {[20,40,80].map(count=><option value={count} key={count}>每页 {count} 项</option>)}
+          {[10,20,40,80].map(count=><option value={count} key={count}>每页 {count} 项</option>)}
         </select></label>
         <p>素材库只创建当前页卡片；系列和作品共用此设置。</p>
       </section>
@@ -1339,7 +1338,7 @@ export function SettingsRecognitionPage({preferences,onAction}){
       <SettingsToggle id="setting-preprocess-chroma" label="Lab 色差边缘" checked={p.recognitionChromaEdges!==false}
         help="以颜色差补充灰度边缘，推荐开启。"/>
     </SettingsGroup>
-    <SettingsGroup title="4 · 轮廓后处理" description="控制非统一自动分割的形状与打孔后处理；统一 V5 使用内部形状仲裁，不读取以下两项开关。">
+    <SettingsGroup title="4 · 轮廓后处理" description="控制非统一自动分割的形状与打孔后处理；默认算法使用内部形状仲裁，不读取以下两项开关。">
       <SettingsToggle id="setting-postprocess-shapes" label="规则形状规整" checked={p.recognitionShapeRegularization!==false}
         help="边缘证据充分时校直卡片或拟合圆形。"/>
       <SettingsToggle id="setting-postprocess-apertures" label="重复孔洞恢复" checked={p.recognitionApertures!==false}
@@ -1446,76 +1445,61 @@ function AINumber({id,label,value,min,max,step}){
     step={step} defaultValue={value}/></label>;
 }
 
-export function SettingsAIPage({settings,modelPanelOpen,onAction,onProviderChange,onModelPanelToggle}){
-  const cfg=settings,preset=AI_PROVIDERS[cfg.provider];
-  const known=preset.models.some(([id])=>id===cfg.model);
-  const [modelChoice,setModelChoice]=useState(known?cfg.model:'__custom__');
-  const [thumbnails,setThumbnails]=useState(!!cfg.includeThumbnails);
-  const selectModel=event=>{
+export function SettingsAIPage({settings,onAction}){
+  const cfg=settings;
+  const [provider,setProvider]=useState(cfg.provider);
+  const [endpoint,setEndpoint]=useState(cfg.endpoint);
+  const [modelID,setModelID]=useState(cfg.model);
+  const [modelChoice,setModelChoice]=useState(()=>AI_PROVIDERS[cfg.provider].models.some(([id])=>id===cfg.model)?cfg.model:'__custom__');
+  const [key,setKey]=useState(cfg.key);
+  const [keys,setKeys]=useState({...cfg.keys,[cfg.provider]:cfg.key});
+  const preset=AI_PROVIDERS[provider];
+  const chooseProvider=event=>{
+    const next=event.target.value,entry=AI_PROVIDERS[next];
+    setKeys(current=>({...current,[provider]:key}));
+    setProvider(next);setEndpoint(entry.endpoint);setModelID(entry.models[0]?.[0]||'');
+    setModelChoice(entry.models[0]?.[0]||'__custom__');setKey(keys[next]||'');
+  };
+  const editEndpoint=event=>{
+    setEndpoint(event.target.value);
+    if(provider!=='custom'){setProvider('custom');setModelChoice('__custom__');}
+  };
+  const chooseModel=event=>{
     const next=event.target.value;
     setModelChoice(next);
-    if(next!=='__custom__')setThumbnails(preset.models.find(([id])=>id===next)?.[2]===true);
+    if(next!=='__custom__')setModelID(next);
   };
+  const editModel=event=>{setModelID(event.target.value);setModelChoice('__custom__');};
+  const vision=supportsVision({provider,endpoint,model:modelID});
   return <SettingsDetailShell title="AI 与创作" kind="settingsAI" onAction={onAction}>
-    <details className="ai-settings-group unified-settings-group" open>
-      <summary><strong>创作偏好</strong><small>候选素材、生成方式与样例参考</small></summary>
-      <div><h2>创作方式</h2>
-        <AISelect id="delivery" label="创作方式" value={cfg.deliveryMode} choices={DELIVERY_OPTIONS}/>
-        <AISelect id="image-model" label="GPT 图像模型" value={cfg.imageModel}
-          choices={IMAGE_MODELS.map(id=>[id,id])}/>
-        <p>调用工具和直接排版都会生成可编辑素材、文字、图形及自由笔迹；自由绘画通过图像模型生成整张 PNG 快照，不能独立编辑图层。网页 GPT 的“作品文件／复制文本”在导出任务时选择，不影响创作方式。</p>
-        <p>轮数包含重试；超时后停止，不自动重复收费请求。</p>
-        <h2>候选素材</h2>
-        <AIToggle id="require-all" label="候选素材必须全部使用" checked={cfg.requireAllCandidates}/>
-        <p>默认开启：本次发给 AI 的每件候选素材都必须在作品中出现。关闭后，仍尽量使用；手动标星的素材保持必用。若同时开启“自动加入建议搭配”，建议素材也属于候选。</p>
-        <AIToggle id="auto-recommendations" label="自动把全部建议搭配作为 AI 备选素材" checked={cfg.autoIncludeRecommendations}/>
-        <p>开启后会把未排除的建议素材一并发送给 AI；关闭后只发送素材篮中的素材。最终是否必须使用由上方开关决定。</p>
-        <h2>样例参考</h2>
-        <AIToggle id="structure-reference" label="参考样例的图文结构" checked={cfg.includeStructureReference}/>
-        <AIToggle id="send-reference" label="发送匹配风格与用途的手帐案例" checked={cfg.sendPresetReferences}/>
-        <p>从原创重构的真实风格手帐案例中，按当前风格、用途和素材选最相近的两张；不发送全部案例，也不发送你已有的私人作品。案例只用于构图参考，不属于可使用素材。网页版任务包附图；支持图片的 API 模型也会收到。</p>
-      </div>
-    </details>
-    <details className="ai-settings-group unified-settings-group" id="ai-model-group"
-      open={modelPanelOpen} onToggle={event=>onModelPanelToggle(event.currentTarget.open)}>
-      <summary><strong>模型与连接</strong><small>服务商、密钥、图片与响应参数</small></summary>
-      <div><h2>服务与模型</h2>
-        <AISelect id="provider" label="服务商" value={cfg.provider}
-          choices={Object.entries(AI_PROVIDERS).map(([id,entry])=>[id,entry.label])}
-          onChange={event=>onProviderChange(event.target.value)}/>
-        <label>API 地址<input id="setting-ai-endpoint" type="url" defaultValue={cfg.endpoint}
-          placeholder="https://…/chat/completions"/></label>
-        <AISelect id="model" label="模型" value={modelChoice} onChange={selectModel}
-          choices={[...preset.models.map(([id,name])=>[id,name]),['__custom__','自定义模型 ID']]}/>
-        <label id="setting-ai-custom-model-row" hidden={modelChoice!=='__custom__'}>模型 ID
-          <input id="setting-ai-custom-model" defaultValue={known?'':cfg.model}/></label>
-        <label>API 密钥<input id="setting-ai-key" type="password" autoComplete="off"
-          defaultValue={cfg.key} placeholder="API Key"/></label>
-        <AIToggle id="thumbnails" label="发送全部素材预览" checked={thumbnails}
-          onChange={event=>setThumbnails(event.target.checked)}/>
-        <AIToggle id="visual-review" label="交付前由 GPT 看图复核（计入总请求上限）" checked={cfg.finalVisualReview!==false}/>
-        <AIToggle id="vision" label="自定义模型支持图片" checked={cfg.customVision}/>
-        <p>当前模型{supportsVision(cfg)?'支持图片输入；开启预览时发送所有允许使用的素材图片':'不支持图片输入，仅发送素材文字信息'}。密钥仅保存在本浏览器，不进入备份。</p>
-        <h2>创作与响应</h2>
-        <AINumber id="temperature" label="创意程度 0–2" value={cfg.temperature} min="0" max="2" step="0.05"/>
-        <AINumber id="tokens" label="单轮最大输出 2000–16000" value={cfg.maxTokens} min="2000" max="16000"/>
-        <AINumber id="turns" label="最多创作轮次（所有请求和重试计入上限）" value={cfg.maxTurns} min="1" max="20"/>
-        <AINumber id="timeout" label="连续无响应超时（秒）" value={cfg.requestTimeout} min="20" max="180"/>
-        <p>流式接收期间只计算连续未收到数据的时间；每轮最多 10 分钟，不会自动重试收费请求。</p>
-        <AISelect id="transport" label="工具接口" value={cfg.transport}
-          choices={[["auto","自动适配"],["native","原生工具调用"],["json","兼容 JSON 工具指令"]]}/>
-        <AISelect id="text" label="文字内容" value={cfg.textMode}
-          choices={[["automatic","图文手账 · 自动配文"],["requested","仅明确要求时配文"],["none","不生成文字"],
-            ]}/>
-        <AISelect id="reasoning" label="代理思考策略" value={cfg.reasoningMode}
-          choices={[["automatic","自动 · 优先执行"],["low","轻量思考"],["providerDefault","保持服务设置"]]}/>
-        <AIToggle id="send-limit" label="发送输出上限" checked={cfg.sendOutputLimit}/>
-        <AIToggle id="disable-thinking" label="关闭服务商思考模式" checked={cfg.disableThinking}/>
-        <label>补充版式指导<textarea id="setting-ai-layout-prompt" placeholder="留空使用默认指导"
-          defaultValue={cfg.customLayoutPrompt}/></label>
-        <p>“自动适配”只用于已核对的 API 地址与模型组合；自定义或未核验组合请明确选择原生工具或兼容 JSON。图片输入同理，未核验组合需手动确认支持后才发送预览。</p>
-      </div>
-    </details>
+    <section className="ai-settings-group unified-settings-group"><h2>创作偏好</h2>
+      <AISelect id="delivery" label="创作方式" value={cfg.deliveryMode==='image'?'tools':cfg.deliveryMode}
+        choices={DELIVERY_OPTIONS.filter(([id])=>id!=='image')}/>
+      <p>可让 AI 返回可编辑作品；网页任务包会附上素材预览和创作说明。</p>
+      <AIToggle id="require-all" label="候选素材必须全部使用" checked={cfg.requireAllCandidates}/>
+      <AIToggle id="auto-recommendations" label="把建议搭配加入候选素材" checked={cfg.autoIncludeRecommendations}/>
+      <AIToggle id="structure-reference" label="参考样例的图文结构" checked={cfg.includeStructureReference}/>
+      <AIToggle id="send-reference" label="发送匹配风格与用途的手帐案例" checked={cfg.sendPresetReferences}/>
+      <label>补充版式指导<textarea id="setting-ai-layout-prompt" placeholder="留空使用默认指导"
+        defaultValue={cfg.customLayoutPrompt}/></label>
+    </section>
+    <section className="ai-settings-group unified-settings-group" id="ai-model-group"><h2>模型与连接</h2>
+      <AISelect id="provider" label="服务商" value={provider}
+        choices={Object.entries(AI_PROVIDERS).map(([id,entry])=>[id,entry.label])} onChange={chooseProvider}/>
+      <label>API 地址<input id="setting-ai-endpoint" type="url" value={endpoint}
+        onChange={editEndpoint} placeholder="https://…/chat/completions"/></label>
+      <AISelect id="model" label="模型" value={modelChoice} onChange={chooseModel}
+        choices={[...preset.models.map(([id,name])=>[id,name]),['__custom__','自定义模型 ID']]}/>
+      <label id="setting-ai-custom-model-row">模型 ID
+        <input id="setting-ai-custom-model" value={modelID} onChange={editModel}/></label>
+      <label>API 密钥<input id="setting-ai-key" type="password" autoComplete="off"
+        value={key} onChange={event=>{setKey(event.target.value);setKeys(current=>({...current,[provider]:event.target.value}));}} placeholder="API Key"/></label>
+      <input id="setting-ai-provider-keys" type="hidden" value={JSON.stringify(keys)}/>
+      <p>{vision?'此地址和模型支持图片输入，创作时会自动发送素材预览。':'此地址和模型尚未确认支持图片输入，创作时只发送素材信息。'}密钥仅保存在本浏览器。</p>
+      <AINumber id="temperature" label="创意程度 0–2" value={cfg.temperature} min="0" max="2" step="0.05"/>
+      <AINumber id="turns" label="最多创作轮次" value={cfg.maxTurns} min="1" max="20"/>
+      <AINumber id="timeout" label="连续无响应超时（秒）" value={cfg.requestTimeout} min="20" max="180"/>
+    </section>
   </SettingsDetailShell>;
 }
 

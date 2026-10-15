@@ -28,7 +28,7 @@ export const recognitionStrategies=Object.freeze([
   {
     id:'auto',
     label:'自动 · 推荐',
-    description:'默认使用统一候选与 V5 轮廓仲裁；选择旧版候选发现时使用原版 MorphGAC。',
+    description:'默认使用统一候选与轮廓判断；选择传统候选方式时使用对应的边缘细化方法。',
     refineCandidates:refineAuto
   },
   {

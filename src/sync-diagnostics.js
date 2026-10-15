@@ -1,15 +1,20 @@
-// A bounded, in-memory account-session trace. Never record record IDs, names,
-// payloads, URLs, raw server messages, tokens or complete stack traces.
-const ACTIONS=new Set(['start','reconcile','retry','committed','remote-won','merged','conflict','failed','direct-commit']);
-const KINDS=new Set(['project','batch','direct','queue']);
+// Daily, local-only sync trace. Keep operational metadata; never record IDs,
+// names, payloads, URLs, raw server messages, tokens or complete stack traces.
+const ACTIONS=new Set(['start','reconcile','retry','committed','remote-won','merged','conflict','failed','direct-commit','prepare-start','prepare-finished','lock-wait','lock-entered','lock-ended','main-thread-lag','split']);
+const KINDS=new Set(['project','batch','direct','queue','lock']);
+const CATEGORIES=new Set(['unconfirmed-response','revision-conflict','authorization','rate-limit','server','local-storage','image-upload','browser-lock','interrupted','network','unknown']);
 const PHASES=new Set([
   '读取本机待同步队列','写入本机待同步队列','从 IndexedDB 刷新同步队列',
   '上传当前待同步记录','获取同步锁或执行同步任务','浏览器同步锁参数格式错误',
   '编码云端记录','云端提交事务','编码与上传 assets','编码与上传 blobs',
   '编码与上传 projects','编码与上传 series','编码与上传 trash','编码与上传 meta'
 ]);
+const PREFIX='shiye-sync-trace-v2:';
+const localTraceStorage=()=>{try{return globalThis.localStorage;}catch{return null;}};
 const count=value=>Number.isSafeInteger(value)&&value>=0?value:null;
 const errorName=value=>['Error','TypeError','SyntaxError','AbortError','QuotaExceededError','NetworkError','NotAllowedError'].includes(value)?value:'OtherError';
+const hash=value=>{let n=2166136261;for(const char of String(value||'')){n^=char.charCodeAt(0);n=Math.imul(n,16777619);}return (n>>>0).toString(16).padStart(8,'0');};
+const dayOf=value=>{const date=new Date(value);if(!Number.isFinite(date.getTime()))return 'unknown';return [date.getFullYear(),String(date.getMonth()+1).padStart(2,'0'),String(date.getDate()).padStart(2,'0')].join('-');};
 function errorCode(error){
   const code=String(error?.code||'');
   return /^(?:PGRST\d{3}|[0-9A-Z]{5}|ERR_[A-Z_]{2,24})$/.test(code)?code:null;
@@ -39,33 +44,79 @@ function failure(error){
     phase:PHASES.has(error.syncPhase)?error.syncPhase:null,
     causeCategory:error.cause?category(error.cause):null};
 }
-export function createSyncDiagnostics({limit=60,clock=()=>new Date().toISOString()}={}){
+function safeFrame(error){
+  const matches=String(error?.stack||'').match(/(?:^|[/\\])([A-Za-z0-9_.-]+\.js):(\d+)(?::\d+)?/m);
+  return matches?matches[1]+':'+matches[2]:null;
+}
+function savedEvent(event){
+  if(!event||typeof event!=='object')return null;
+  const at=typeof event.at==='string'&&/^\d{4}-\d\d-\d\dT\d\d:\d\d:/.test(event.at)?event.at:null;
+  if(!at)return null;
+  const detail=event.failure;
+  return {at,action:ACTIONS.has(event.action)?event.action:'failed',kind:KINDS.has(event.kind)?event.kind:'queue',
+    baseRevision:count(event.baseRevision),cloudRevision:count(event.cloudRevision),pending:count(event.pending),
+    failure:detail&&CATEGORIES.has(detail.category)?{
+      category:detail.category,name:errorName(detail.name),status:errorStatus(detail),code:errorCode(detail),
+      phase:PHASES.has(detail.phase)?detail.phase:null,causeCategory:CATEGORIES.has(detail.causeCategory)?detail.causeCategory:null
+    }:null,
+    durationMs:count(event.durationMs),online:typeof event.online==='boolean'?event.online:null,
+    visibility:['visible','hidden','prerender'].includes(event.visibility)?event.visibility:null,
+    fingerprint:/^[0-9a-f]{8}$/.test(event.fingerprint||'')?event.fingerprint:null,
+    frame:/^[A-Za-z0-9_.-]+\.js:\d+$/.test(event.frame||'')?event.frame:null};
+}
+export function createSyncDiagnostics({limit=3000,clock=()=>new Date().toISOString(),storage=localTraceStorage(),setTimer=setTimeout,clearTimer=clearTimeout}={}){
   const events=[];
-  let lastFailure=null;
+  const session=(globalThis.crypto?.randomUUID?.()||Math.random().toString(36).slice(2)).replace(/[^a-z0-9-]/gi,'');
+  let currentDay=dayOf(clock()),timer=null;
+  const key=()=>PREFIX+currentDay+':'+session;
+  const flush=()=>{
+    if(timer!==null){clearTimer(timer);timer=null;}
+    try{storage?.setItem(key(),JSON.stringify(events));}catch{/* Diagnostics never block sync. */}
+  };
+  const schedule=()=>{if(!storage||timer!==null)return;timer=setTimer(flush,500);timer?.unref?.();};
   return {
-    record({action,kind,baseRevision,cloudRevision,pending,error}={}){
-      const event={at:clock(),action:ACTIONS.has(action)?action:'failed',kind:KINDS.has(kind)?kind:'queue',
-        baseRevision:count(baseRevision),cloudRevision:count(cloudRevision),pending:count(pending),
-        failure:failure(error)};
-      if(event.failure)lastFailure={...event};
-      events.push(event);if(events.length>limit)events.shift();
+    record({action,kind,baseRevision,cloudRevision,pending,error,durationMs}={}){
+      const at=clock(),day=dayOf(at);
+      if(day!==currentDay){flush();currentDay=day;events.length=0;}
+      const event=savedEvent({at,action,kind,baseRevision,cloudRevision,pending,
+        failure:failure(error),durationMs,online:globalThis.navigator?.onLine,
+        visibility:globalThis.document?.visibilityState,
+        fingerprint:error?hash(error.name+'|'+error.message):null,frame:safeFrame(error)});
+      events.push(event);if(events.length>limit)events.shift();schedule();
     },
     report({pending=0,conflicts=0,uploading=false,revision=null,writesInFlight=0,quarantined=0,online=null,active=null}={}){
-      return {format:'shiye-sync-diagnostics',version:1,createdAt:clock(),scope:'当前登录会话；仅安全元数据，不含原始错误或私人资料',
+      flush();
+      const day=currentDay,all=[];let sessions=0,currentStored=false;
+      try{if(storage)for(let i=0;i<storage.length;i++){
+        const item=storage.key(i);if(!item?.startsWith(PREFIX+day+':'))continue;
+        sessions++;if(item===key())currentStored=true;
+        for(const entry of JSON.parse(storage.getItem(item)||'[]')){
+          const safe=savedEvent(entry);if(safe&&dayOf(safe.at)===day)all.push(safe);
+        }
+      }}catch{/* Keep the current session when storage is unavailable. */}
+      if(!currentStored)all.push(...events);
+      all.sort((a,b)=>a.at.localeCompare(b.at));
+      const recent=all.slice(-10000),lastFailure=[...recent].reverse().find(event=>event.failure)||null;
+      return {format:'shiye-sync-diagnostics',version:2,createdAt:clock(),day,scope:'本机当天的安全运行元数据；不含作品、图片、账号标识、密钥或原始报错',
         categoryGuide:{'unconfirmed-response':'云端版本未变化，但上传响应未获确认；数据留在本机待重试',
-          'revision-conflict':'云端版本或同一资料发生冲突；该项保留，其他项可继续',
+          'revision-conflict':'同一资料存在冲突；该项保留，其他项可继续',
           authorization:'登录或权限验证失败','rate-limit':'请求频率受限',server:'云端服务返回 5xx',
           'local-storage':'本机持久队列读写失败','image-upload':'图片读取或对象上传失败',
           'browser-lock':'浏览器同步锁异常',interrupted:'请求中断或超时',network:'网络连接失败',
-          unknown:'仅凭安全摘要无法确定原因，需要结合发生阶段和复现步骤排查'},
+          unknown:'需要结合阶段、时间与错误指纹进一步排查'},
         state:{pending:count(pending),conflicts:count(conflicts),uploading:!!uploading,
           cloudRevision:count(revision),writesInFlight:count(writesInFlight),quarantined:count(quarantined),
           online:typeof online==='boolean'?online:null},
         active:active&&['准备上传','编码与上传','提交事务'].includes(active.phase)?{phase:active.phase,
           completed:count(active.done),total:count(active.total),elapsedMs:count(active.elapsedMs)}:null,
-        lastFailure:lastFailure?{...lastFailure}:null,
-        events:events.map(event=>({...event}))};
+        sessionCount:sessions+(currentStored?0:1),eventCount:all.length,lastFailure,events:recent};
     },
-    clear(){events.length=0;lastFailure=null;}
+    clear(){
+      if(timer!==null){clearTimer(timer);timer=null;}
+      try{if(storage)for(let i=storage.length-1;i>=0;i--){
+        const item=storage.key(i);if(item?.startsWith(PREFIX))storage.removeItem(item);
+      }}catch{}
+      events.length=0;
+    }
   };
 }

@@ -142,8 +142,9 @@ function assertAccountWritable(){
 }
 async function withAccountSyncLock(task){
   const id=await account();
-  try{return await runAccountBrowserLock(id,task);}
-  catch(error){throw markSyncPhase(error,'获取同步锁或执行同步任务');}
+  let entered=false;
+  try{return await runAccountBrowserLock(id,async()=>{entered=true;return task();});}
+  catch(error){throw entered?error:markSyncPhase(error,'获取同步锁或执行同步任务');}
 }
 async function persistOutbox(kind,previous,rows,options={}){
   if(!cache||cacheDisabled)throw Error('无法安全保存待同步资料');
@@ -822,6 +823,9 @@ function cloudTransaction(names,fn,operationID=crypto.randomUUID()){
       const next={revision,records:[...records.values()]};snapshots.set(store,next);await remember('records:'+store,next);
     }
     await unifiedSync.advance(previous,revision,operations);
+    syncDiagnostics.record({action:'direct-commit',kind:'direct',baseRevision:previous,
+      cloudRevision:revision,pending:unifiedSync.status().pending,
+      durationMs:Date.now()-activeDirect.startedAt});
     try{channel()?.postMessage({source:sessionTag,type:'committed',revision});}
     catch(error){console.warn('跨标签页同步通知暂不可用，云端提交仍已完成',error?.message);}
     }finally{writesInFlight--;activeDirect=null;reportSync();}
@@ -1150,6 +1154,7 @@ async function cloudPurgeLocalAfterReset(){
   return count;
 }
 async function cloudPendingDetails(){await identity();const [projects,imports]=await Promise.all([projectSync.pending(),importSync.pending()]);return {projects:projects.map(row=>({id:row.record.id,title:row.record.title||'未命名作品',baseRevision:row.baseRevision})),batches:imports.map(row=>({id:row.record.id,baseRevision:row.baseRevision,items:row.record.operations?.map(op=>({store:op.store,action:op.action,title:op.item?.title||op.item?.name||op.id||'',id:op.item?.id||op.id||''}))||['assets','projects','blobs'].flatMap(store=>(row.record[store]||[]).map(item=>({store,action:'put',title:item.title||'',id:item.id})))})),error:unifiedSync.status().error?.message||null,quarantined:unifiedQuarantine.length};}
+function cloudRecordSyncDiagnostic(event){syncDiagnostics.record(event);}
 function cloudSyncDiagnosticReport({online=null}={}){
   const status=unifiedSync.status();
   return syncDiagnostics.report({pending:status.pending+writesInFlight,conflicts:status.conflicts,uploading:status.uploading||writesInFlight>0,
@@ -1174,7 +1179,7 @@ async function cloudRestoreEmergency(snapshot){
   if(typeof cache.restoreUnifiedOutboxes!=='function')throw Error('当前浏览器不支持原子恢复唯一同步队列');
   return cache.restoreUnifiedOutboxes(key,snapshot.projects,snapshot.imports);
 }
-return {cloudListPreConflictScenes,cloudRestorePreConflictScene,cloudReloadBlob,cloudCloseCacheBeforeRemoteReset,cloudSetResetCleanupPending,cloudRunExclusiveReset,cloudPurgeLocalAfterReset,cloudConflictReview,cloudConflictBackup,cloudResolveProjectConflict,cloudMigrationInventory,cloudMigrationOriginalProject,cloudMigrationCommit,cloudLegacyProjectBackup,cloudAll,cloudGet,cloudPreview,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudClearCache,cloudResumeCache,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudPendingLocalSummary,cloudPendingDetails,cloudSyncDiagnosticReport,cloudDiscardPending,cloudFlushProjects,cloudProjectDocument,cloudEmergencySnapshot,cloudRestoreEmergency,cloudBackupBlobIDs};
+return {cloudListPreConflictScenes,cloudRestorePreConflictScene,cloudReloadBlob,cloudCloseCacheBeforeRemoteReset,cloudSetResetCleanupPending,cloudRunExclusiveReset,cloudPurgeLocalAfterReset,cloudConflictReview,cloudConflictBackup,cloudResolveProjectConflict,cloudMigrationInventory,cloudMigrationOriginalProject,cloudMigrationCommit,cloudLegacyProjectBackup,cloudAll,cloudGet,cloudPreview,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudClearCache,cloudResumeCache,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudPendingLocalSummary,cloudPendingDetails,cloudSyncDiagnosticReport,cloudRecordSyncDiagnostic,cloudDiscardPending,cloudFlushProjects,cloudProjectDocument,cloudEmergencySnapshot,cloudRestoreEmergency,cloudBackupBlobIDs};
 }
 let projectPreview=()=>null;
 export const setCloudProjectPreview=producer=>{projectPreview=producer;};
@@ -1209,6 +1214,7 @@ export const cloudPendingProjects=(...args)=>current.cloudPendingProjects(...arg
 export const cloudPendingLocalSummary=(...args)=>current.cloudPendingLocalSummary(...args);
 export const cloudPendingDetails=(...args)=>current.cloudPendingDetails(...args);
 export const cloudSyncDiagnosticReport=(...args)=>current.cloudSyncDiagnosticReport(...args);
+export const cloudRecordSyncDiagnostic=(...args)=>current.cloudRecordSyncDiagnostic(...args);
 export const cloudDiscardPending=(...args)=>current.cloudDiscardPending(...args);
 export const cloudFlushProjects=(...args)=>current.cloudFlushProjects(...args);
 export const cloudProjectDocument=(...args)=>current.cloudProjectDocument(...args);

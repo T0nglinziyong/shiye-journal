@@ -33,3 +33,21 @@ test('active upload report shows elapsed phase and bounded counts without identi
   assert.deepEqual(report.active,{phase:'编码与上传',completed:6,total:18,elapsedMs:32000});
   assert.ok(!JSON.stringify(report).includes('private-id'));
 });
+
+
+test('today trace survives a reopened app and excludes other days and private values',()=>{
+  const rows=new Map(),storage={get length(){return rows.size;},key:i=>[...rows.keys()][i]||null,
+    getItem:key=>rows.get(key)||null,setItem:(key,value)=>rows.set(key,value),removeItem:key=>rows.delete(key)};
+  const first=createSyncDiagnostics({clock:()=> '2026-10-15T10:00:00.000+08:00',storage});
+  first.record({action:'failed',kind:'batch',pending:13,error:Error('private title and api key')});
+  first.report();
+  const earlier=createSyncDiagnostics({clock:()=> '2026-10-14T10:00:00.000+08:00',storage});
+  earlier.record({action:'start',kind:'project',pending:1});earlier.report();
+  const reopened=createSyncDiagnostics({clock:()=> '2026-10-15T11:00:00.000+08:00',storage});
+  reopened.record({action:'main-thread-lag',kind:'queue',durationMs:2430});
+  const report=reopened.report({pending:13});
+  assert.equal(report.events.length,2);
+  assert.equal(report.sessionCount,2);
+  assert.equal(report.events[1].durationMs,2430);
+  assert.ok(!JSON.stringify(report).includes('private title'));
+});
