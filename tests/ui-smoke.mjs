@@ -38,10 +38,12 @@ assert.match(window.document.querySelector('.import-nav').textContent,/检查照
 assert.equal(window.document.querySelectorAll('.import-source-actions button').length,3);
 window.document.querySelector('[data-act="import-exit"]').click();
 window.document.querySelector('#work-create').click();
+await waitFor(()=>!!window.document.querySelector('#blank-create-confirm'));
 assert.ok(window.document.querySelector('#blank-create-confirm'),'New work explicitly chooses single/spread layout');
 window.document.querySelector('#blank-create-confirm').click();
 await waitFor(()=>window.document.body.classList.contains('editing'));
 assert.ok(window.document.body.classList.contains('editing'),window.happyDOM.virtualConsolePrinter.readAsString()+' '+window.document.querySelector('#view').textContent.slice(0,120)+' '+window.document.querySelector('#toast').textContent);
+await waitFor(()=>!!window.document.querySelector('[data-react-page="editor"] #canvas-page'));
 assert.ok(window.document.querySelector('[data-react-page="editor"] #canvas-page'),'React editor keeps the canvas engine mounted');
 assert.match(window.document.querySelector('#view').textContent,/导入创作指令/);
 assert.ok(window.document.body.classList.contains('editing'));

@@ -27,11 +27,6 @@ export function reserveSelectionMenuSpace({left,width,viewportWidth}){
   return {left:right>=minimum||leftAvailable>=minimum
     ?left:MARGIN,shifted:right<minimum&&leftAvailable<minimum};
 }
-export function selectionMorePopoverOptions(){
-  return {title:'更多操作',menu:true,width:selectionMenuWidth,
-    adjustPosition:reserveSelectionMenuSpace};
-}
-
 export function selectionSideGeometry({viewportWidth,viewportHeight,menu,panelHeight=320}){
   const rightAvailable=Math.max(0,viewportWidth-MARGIN-menu.right-GAP);
   const leftAvailable=Math.max(0,menu.left-MARGIN-GAP);
@@ -49,61 +44,4 @@ export function selectionSideGeometry({viewportWidth,viewportHeight,menu,panelHe
   const maxHeight=Math.max(100,viewportHeight-MARGIN-top);
   return {parentLeft:menu.left,parentWidth:menu.width,
     panelLeft,panelWidth,top,maxHeight,side};
-}
-
-export function createSelectionSidePanels(menu,{makeAction,anchor}){
-  if(typeof makeAction!=='function'||!anchor)throw Error('侧拉操作缺少按钮生成器或锚点');
-  let active=null;
-  function close(){
-    if(!active)return;
-    const previous=active;active=null;
-    previous.trigger.setAttribute('aria-expanded','false');
-    previous.trigger.removeAttribute('aria-controls');
-    previous.remove?.();
-    menu.surface.classList.remove('selection-side-open');
-  }
-  function open(trigger,title,options,{pinned=0}={}){
-    if(active?.trigger===trigger){close();return null;}
-    close();
-    const panel=document.createElement('section'),id='shiye-selection-side-'+(++nextSideID);
-    panel.id=id;panel.className='selection-submenu selection-side-panel';
-    panel.setAttribute('role','menu');panel.setAttribute('aria-label',title);
-    const header=document.createElement('div');header.className='selection-side-heading';
-    header.textContent=title;panel.append(header);
-    const pinnedList=document.createElement('div');pinnedList.className='selection-side-pinned';
-    const list=document.createElement('div');list.className='selection-side-list';
-    if(pinned)panel.append(pinnedList);
-    panel.append(list);
-    for(const [index,[label,run]] of options.entries()){
-      const button=makeAction(label,async()=>{await run();});
-      if(index<pinned){button.classList.add('selection-submenu-pinned');pinnedList.append(button);}
-      else list.append(button);
-    }
-    trigger.setAttribute('aria-haspopup','menu');
-    trigger.setAttribute('aria-expanded','true');
-    trigger.setAttribute('aria-controls',id);
-    menu.surface.classList.add('selection-side-open');
-    const current={trigger,panel,remove:null};active=current;
-    const position=()=>{
-      if(active!==current||!menu.surface.isConnected)return;
-      const measured=menu.surface.getBoundingClientRect();
-      const geometry=selectionSideGeometry({
-        viewportWidth:innerWidth,viewportHeight:innerHeight,
-        menu:{left:measured.left,right:measured.right,top:measured.top,
-          width:measured.width,height:measured.height},
-        panelHeight:panel.scrollHeight
-      });
-      const values={left:Math.round(geometry.panelLeft)+'px',
-        top:Math.round(geometry.top)+'px',
-        width:Math.round(geometry.panelWidth)+'px',
-        maxHeight:Math.round(geometry.maxHeight)+'px'};
-      for(const [key,value] of Object.entries(values))
-        if(panel.style[key]!==value)panel.style[key]=value;
-    };
-    current.remove=menu.addSurface(panel,position);
-    queueMicrotask(()=>{if(active===current&&panel.isConnected)
-      panel.querySelector('button:not(:disabled)')?.focus({preventScroll:true});});
-    return panel;
-  }
-  return {open,close};
 }

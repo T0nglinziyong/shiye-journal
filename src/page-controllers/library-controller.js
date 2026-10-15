@@ -12,17 +12,7 @@ export function createLibraryController({
       onCatalogChanged();return true;
     },
     mount(lifetime){
-      // Filtering belongs to this page. Each event changes business state via
-      // an Action; it never directly rebuilds the route or replaces inputs.
-      const map=[['search','query'],['kind-filter','kind'],['status-filter','status'],
-        ['series-filter','seriesID'],['sort-filter','sort']];
-      for(const [id,key] of map){
-        const el=view.querySelector('#'+id);if(!el)continue;
-        lifetime.on(el,id==='search'?'input':'change',()=>{
-          resetCatalogPage('library');
-          void actions.dispatch({type:'library/filter',payload:{key,value:el.value}});
-        });
-      }
+      // React owns the inputs and dispatches the same domain action.
       lifetime.use(actions.subscribe(event=>{
         if(event.scope==='library')onCatalogChanged();
       },{scope:'library'}));
@@ -47,4 +37,3 @@ export function registerLibraryActions(actions,{db,state,asset}){
     return {notify:true,scope:'library',ids:[id],result:next.isFavorite};
   });
 }
-import {resetCatalogPage} from '../catalog-pagination.js';

@@ -43,7 +43,7 @@ try{
     await b.click('[data-route="matching"]','[data-act="match-import-gpt"]');
     await b.click('[data-act="match-import-gpt"]','#offline-gpt-result');
     assert.ok(await b.evaluate('document.documentElement.scrollWidth<=innerWidth+1'));
-    await b.click('.modal-close');
+    await b.click('[role=dialog] [aria-label=关闭]');
   }
   assert.deepEqual(b.errors,[]);
   console.log('JSON import and clipboard browser check passed');

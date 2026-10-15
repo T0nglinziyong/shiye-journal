@@ -1,41 +1,28 @@
-import {syncBusyControls} from '../ui-disabled-state.js';
-
 export function createImportController({
-  renderHTML,patchInspector,view,state,binder,mountControls,
-  disposePaper,disposeManual,mountPaper,mountManual,render,actions
+  view,state,render,actions,refreshReact
 }){
+  let mountedSource=null;
+  let mountedIndex=-1;
+  const photoSource=()=>state.showManualBox?state.correctedURL||state.importURL:
+    state.showCorrectionPreview?state.paperPreviewURL||state.correctedURL:state.importURL;
   return {
     patch(){
       if(view.dataset.renderedRoute!=='import'||
          view.dataset.renderedImportStep!==state.importStep||
          view.dataset.renderedManualBox!==String(!!state.showManualBox)||
-         view.dataset.renderedImportMode!==state.importMode)return false;
-      const result=patchInspector(view,renderHTML());
-      if(!result)return false;
-      binder({partial:true});
-      syncBusyControls(view,'.inspect-columns button,.inspect-columns input,.inspect-columns select',
-        !!state.importProcessing);
-      mountControls();
-      if(result.photoReplaced){disposePaper();disposeManual();}
-      if(state.showManualBox&&!view.querySelector('.manual-box-layer'))mountManual();
-      else if(state.importFile&&!state.importProcessing&&!state.showManualBox&&
-              !state.showCorrectionPreview&&!view.querySelector('.paper-corner-overlay'))
-        mountPaper();
+         view.dataset.renderedImportMode!==state.importMode||
+         state.importStep!=='inspect'||mountedIndex!==state.importIndex||
+         mountedSource!==photoSource())return false;
+      refreshReact();
       return true;
     },
     mount(lifetime){
-      lifetime.use(()=>{disposePaper();disposeManual();});
+      mountedSource=photoSource();
+      mountedIndex=state.importIndex;
       lifetime.use(actions.subscribe(event=>{
         if(event.scope!=='import')return;
-        if(event.type==='import/candidate/toggle'){
-          const id=String(event.payload.index);
-          const selected=state.importCandidateSelection?.has(Number(id));
-          const tile=view.querySelector('[data-act="import-toggle-candidate"][data-id="'+id+'"]');
-          tile?.classList.toggle('selected',!!selected);
-          tile?.setAttribute('aria-pressed',String(!!selected));
-          const label=tile?.querySelectorAll('span')[1];
-          if(label)label.textContent='素材 '+(Number(id)+1)+' '+(selected?'✓':'○');
-        }else render();
+        if(event.type==='import/candidate/toggle')refreshReact();
+        else render();
       },{scope:'import'}));
     }
   };

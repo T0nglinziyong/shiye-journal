@@ -4,9 +4,8 @@ import {readFile} from 'node:fs/promises';
 const source=file=>readFile(new URL('../src/'+file,import.meta.url),'utf8');
 
 test('import navigation keeps back at start and progress/cancel centered in one wrapper',async()=>{
-  const [app,react]=await Promise.all([source('app.js'),source('react-routes.jsx')]);
-  for(const nav of [app.slice(app.indexOf('function importSteps()'),app.indexOf('function renderImport()')),
-    react.slice(react.indexOf('export function ImportSimplePage'))]){
+  const react=await source('react-routes.jsx');
+  for(const nav of [react.slice(react.indexOf('function ImportNavigation('),react.indexOf('export function ImportInspectionPage('))]){
     assert.match(nav,/import-nav/);
     assert.match(nav,/import-back/);
     assert.match(nav,/import-nav-center/);

@@ -34,6 +34,7 @@ try {
   await evaluate('[...document.querySelectorAll("#crop-preview + .import-photo-tools button")].find(b=>b.textContent==="取消标记").click()');
   await evaluate('globalThis.__candidateNode=document.querySelector(".import-candidate-grid");const panel=document.querySelector(".inspector-scroll");panel.scrollTop=panel.scrollHeight;globalThis.__candidateScroll=panel.scrollTop;');await click('[data-act="import-toggle-candidate"]');assert.ok(await evaluate('document.querySelector(".import-candidate-grid")===globalThis.__candidateNode&&document.querySelector(".inspector-scroll").scrollTop===globalThis.__candidateScroll'));await click('[data-act="import-toggle-candidate"]');
   await click('[data-import-check="0"]','#cutout-canvas');
+  await wait('#cutout-method',90000);
   assert.ok(await evaluate('!!document.querySelector("#cutout-method")&&!!document.querySelector("#cutout-pixels")'));
   for(const selector of ['[data-repair="erase"]','[data-repair="restore"]']){await click(selector);assert.ok(await evaluate('document.querySelector("#modal").open'));}
   await screenshot('check-rough',2560,1440);

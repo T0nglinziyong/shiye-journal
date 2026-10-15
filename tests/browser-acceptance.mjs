@@ -24,7 +24,7 @@ async function openSeries(){
     await click('.swift-tabs button:nth-child(1)');
   await wait('.series-grid');
 }
-async function fill(selector,value){await evaluate('(()=>{const e=document.querySelector('+JSON.stringify(selector)+');e.value='+JSON.stringify(value)+';e.dispatchEvent(new Event("input",{bubbles:true}));e.dispatchEvent(new Event("change",{bubbles:true}));})()');}
+async function fill(selector,value){await evaluate('(async()=>{const e=document.querySelector('+JSON.stringify(selector)+');const setter=Object.getOwnPropertyDescriptor(Object.getPrototypeOf(e),"value")?.set;if(setter)setter.call(e,'+JSON.stringify(value)+');else e.value='+JSON.stringify(value)+';e.dispatchEvent(new Event("input",{bubbles:true}));e.dispatchEvent(new Event("change",{bubbles:true}));await new Promise(resolve=>requestAnimationFrame(resolve));})()');}
 async function mouseDrag(start,end){await command('Input.dispatchMouseEvent',{type:'mouseMoved',x:start.x,y:start.y});await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,clickCount:1,x:start.x,y:start.y});await command('Input.dispatchMouseEvent',{type:'mouseMoved',buttons:1,button:'left',x:end.x,y:end.y});await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',clickCount:1,x:end.x,y:end.y});}
 async function touchPath(points){await command('Emulation.setTouchEmulationEnabled',{enabled:true});const touch=p=>[{x:p.x,y:p.y,id:1,radiusX:1,radiusY:1,force:1}];await command('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:touch(points[0])});for(const p of points.slice(1))await command('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:touch(p)});await command('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await command('Emulation.setTouchEmulationEnabled',{enabled:false});}
 async function capture(name,width,height){
@@ -107,7 +107,7 @@ try {
     await click('.journal-template-card','.journal-template-detail-image');
     await wait('.journal-template-detail-image .journal-template-fallback');
     assert.ok(await evaluate('!!document.querySelector(".journal-template-detail-image button")'),'Unavailable template image needs a retry');
-    await click('.swift-tabs button:nth-child(2)','.works-grid');
+    await click('.swift-tabs button:nth-child(3)','.works-grid');
     await evaluate('document.querySelector(".card[data-act=open-project]").dispatchEvent(new MouseEvent("contextmenu",{bubbles:true}))');await click('#project-meta-preview','.project-preview-cover');await capture('work-preview',width,height);
     await click('[data-act="preview-back"]','.works-grid');await click('[data-act="open-project"]','#canvas-page');await sleep(150);await capture('editor',width,height);
     await click('.swift-editor-head [data-act="back-works"]','.works-grid');

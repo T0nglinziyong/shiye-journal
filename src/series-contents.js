@@ -1,7 +1,4 @@
-import {beginSelection,finishSelection,selectionActive} from './library-selection-model.js';
 import {seriesCovers,seriesMembers} from './library-model.js';
-import {bindLongPress} from './long-press.js';
-import {applyCatalogPage,resetCatalogPage} from './catalog-pagination.js';
 
 const filtersByID=new Map();
 const filters=id=>{if(!filtersByID.has(id))filtersByID.set(id,{query:'',kind:'all',status:'all',sort:'recent',ascending:false});return filtersByID.get(id);};
@@ -11,46 +8,4 @@ export function seriesContentsModel(state){
   const filter=filters(series.id);
   return {series,filter,all:state.assets.filter(asset=>asset.seriesID===series.id&&!asset.isProjectInternal),
     members:seriesMembers(series.id,state.assets,filter),covers:seriesCovers(series,state.assets)};
-}
-function button(label,action,kind='') {
-  const b=document.createElement('button');b.type='button';b.className='btn '+kind;b.textContent=label;
-  b.onclick=async()=>{b.disabled=true;try{await action();}catch(e){const t=document.querySelector('#toast');t.textContent=e.message;t.classList.add('show');}finally{b.disabled=false;}};return b;
-}
-async function assign(c,ids,to) {
-  const revised=c.state.assets.filter(a=>ids.has(a.id)).map(a=>({...a,seriesID:to}));
-  await c.db.transaction(['assets'],tx=>{for(const a of revised)tx.objectStore('assets').put(a);});
-  for(const a of revised)Object.assign(c.state.assets.find(x=>x.id===a.id),a);
-}
-export function mountSeriesContents(c,p) {
-  const {state,view,render,route,body,modal}=c,id=state.seriesID,s=state.series.find(s=>s.id===id);if(!s)return;
-  const f=filters(id),cards=[...view.querySelectorAll('[data-act="detail"]')];
-  if(!view.querySelector('[data-react-page="seriesContents"]'))
-    view.querySelector('#series-return').onclick=()=>c.libraryBack();
-  view.querySelector('#series-edit-title').onclick=()=>c.openSeriesEditor(id);
-  const update=()=>{const members=seriesMembers(id,state.assets,f),ids=new Set(members.map(a=>a.id)),order=new Map(members.map((a,index)=>[a.id,index+1]));
-    // React owns these card nodes. Moving them with append() detaches their
-    // Fiber identity and can dispatch a later click to the wrong route.
-    for(const card of cards)card.style.order=String(order.get(card.dataset.id)??cards.length+1);
-    applyCatalogPage({view,key:'series:'+id,cards,matched:card=>ids.has(card.dataset.id),countNode:view.querySelector('.series-result-count'),size:state.preferences.maxPageItems});};view.catalogRefresh=update;
-  // Render every member once, then filter without losing search focus.
-  for(const [selector,key] of [['#series-search','query'],['#series-kind','kind'],['#series-status','status'],['#series-sort','sort']]) {
-    const el=view.querySelector(selector);el.oninput=el.onchange=()=>{f[key]=el.value;resetCatalogPage('series:'+id);update();};
-  }
-  view.querySelector('#series-order').onclick=()=>{f.ascending=!f.ascending;view.querySelector('#series-order').textContent=f.ascending?'升序 ↑':'降序 ↓';update();};
-  const add=()=>{state.addingToSeries=id;state.seriesID='all';state.query='';state.kind='all';state.status='all';state.libraryRecent=false;beginSelection(p,'asset');route('library');};
-  view.querySelector('#series-add-assets').onclick=add;view.querySelector('#series-add-assets').disabled=!!p.selectionMode;
-  for(const card of cards) {
-    bindLongPress(card,()=>c.openAssetEditor(card.dataset.id),()=>!selectionActive(p,'asset'));
-  }
-  update();
-}
-export function mountSeriesAddition(c,p) {
-  const id=c.state.addingToSeries,s=c.state.series.find(s=>s.id===id);if(!s){c.state.addingToSeries=null;return false;}
-  const {view,state,render,route}=c;view.querySelector('.view-head h1').textContent='为「'+s.title+'」添加素材';
-  const done=async()=>{await assign(c,p.selected,id);state.addingToSeries=null;finishSelection(p);state.seriesID=id;render();c.toast('素材已加入系列');};
-  view.querySelector('.view-head .actions').append(button('取消',()=>{state.addingToSeries=null;finishSelection(p);state.seriesID=id;route('library');}));
-  const tray=document.createElement('div');tray.className='swift-tray manage';const n=document.createElement('strong');tray.append(n);
-  const save=button('加入系列并返回',done,'primary');tray.append(save);view.append(tray);const sync=()=>{n.textContent='本次选中 '+p.selected.size+' 件';save.disabled=!p.selected.size;for(const card of view.querySelectorAll('[data-act="detail"]')){card.classList.toggle('batch-selected',p.selected.has(card.dataset.id));card.setAttribute('aria-pressed',String(p.selected.has(card.dataset.id)));}};
-  for(const card of view.querySelectorAll('[data-act="detail"]'))card.addEventListener('click',e=>{e.stopImmediatePropagation();e.preventDefault();p.selected.has(card.dataset.id)?p.selected.delete(card.dataset.id):p.selected.add(card.dataset.id);sync();},true);
-  tray.insertBefore(button('全选当前结果',()=>{view.querySelectorAll('[data-act="detail"]:not([hidden])').forEach(b=>p.selected.add(b.dataset.id));sync();}),save);tray.insertBefore(button('清空选择',()=>{p.selected.clear();sync();}),save);sync();return true;
 }

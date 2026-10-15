@@ -8,7 +8,7 @@
 | AI 创作 | `src/creative-delivery.js` 的响应协议 | `src/creative-runner.js` 控制轮次；`src/creative-contract.js` 验证合同；`src/creative.js` 执行可编辑工具。原生工具、JSON 工具和直接页都要转换为同一工具调用格式 | `tests/creative-delivery.test.js`、`tests/runner.test.js`、`tests/matching-browser.mjs` |
 | 数据位置 | `src/storage-router.js` 的 CRUD 路由 | `src/store.js` 保持公开的 `all/get/transaction` 和备份合同；云端特有的后台暂存、缩略图和增量同步留在 `src/cloud-store.js`，自托管请求留在 `src/store.js`，本机 IndexedDB 用同一表名 | `tests/storage-router.test.js`、`tests/cloud-store.test.js`、`tests/server-persistence.test.js`、`tests/cloud-cache-browser.mjs` |
 | 页面组件 | `src/react-routes.jsx` 的 React 路由组件 | 页面及最近删除列表由 React 渲染，仍使用原 `trash` 表；`src/app.js` 负责业务编排和路由 | `tests/react-route-smoke.mjs`、`tests/trash-offline-browser.mjs`、`tests/library-canvas-latest-browser.mjs` |
-| 素材库选择 | `src/library-selection-model.js` 的选择模式 | 系列详情与全部素材共享一份 `parity` 选择状态；结束模式后必须同步并卸载底部栏。卡片短按和长按统一由 `src/long-press.js` 判定 | `tests/library-selection.test.js`、`tests/interaction-controls.test.js`、`tests/library-canvas-latest-browser.mjs` |
+| 素材库选择 | `src/library-selection-model.js` 的选择模式 | 系列详情与全部素材共享一份 `parity` 选择状态；结束模式后必须同步并卸载底部栏。卡片短按和长按由 `src/react-routes.jsx` 的 `PressCard` 统一判定 | `tests/library-selection.test.js`、`tests/library-selection-browser.mjs`、`tests/library-canvas-latest-browser.mjs` |
 | 画布对象操作 | `src/canvas-selection.js` 的可见对象和移动边界 | `src/canvas-selection-ui.js` 负责圈选；`src/canvas-editor-ui.js` 负责唯一单对象选框，两者调用同一移动函数；`src/canvas-viewport.js` 只管适合页面以上的导航缩放。`app.js` 不再注册另一套对象拖动/画笔事件 | `tests/parity-workflows.test.js`、`tests/library-canvas-latest-browser.mjs` |
 | 云端续传 | `src/project-sync.js` 的账号隔离持久队列 | `src/sync-resumer.js` 在重新打开、回前台与恢复网络时重试 `cloud-store.js` 的两类待同步队列；冲突不得自动覆盖，云端确认才移出队列 | `tests/project-sync.test.js`、`tests/sync-resumer.test.js`、`tests/cloud-store.test.js` |
 
@@ -16,7 +16,7 @@
 
 ## 操作与刷新优先级
 
-选择模式只由 `selectionMode` 表示；不存在可与它分叉的第二个布尔标记。`src/library-selection-model.js` 负责开始、结束、跨页范围与远端删除后的选中 ID 清理；`src/selection-presenter.js` 将同一状态变化广播给当前页所有底栏。系列首页允许带着素材选择进入系列详情，因此系列栏与素材栏可以同时挂载，但只能有一条显示。切页前先决定选择范围，再渲染目标页。设置只是临时覆盖层，不结束选择。
+选择模式只由 `selectionMode` 表示；不存在可与它分叉的第二个布尔标记。`src/library-selection-model.js` 负责开始、结束、跨页范围与远端删除后的选中 ID 清理；`src/react-routes.jsx` 的选择组件响应同一状态变化，更新当前页底栏。系列首页允许带着素材选择进入系列详情，因此系列栏与素材栏可以同时挂载，但只能有一条显示。切页前先决定选择范围，再渲染目标页。设置只是临时覆盖层，不结束选择。
 
 | 操作 | 必须改变 | 不应改变 | 页面更新 |
 | --- | --- | --- | --- |
@@ -43,6 +43,6 @@
 
 素材识别必须遵循“整页候选先于边界分割”：所选候选发现算法只决定一次有几件实体；MorphGAC、统一轮廓、GrabCut、形状规整和打孔恢复只能修改各自候选内的透明边界，不能再创建、删除、拆分或合并素材身份。内部印刷格子、文字框和人物细节不得因为自身闭合而成为新素材。
 
-目前 `src/app.js` 仍集中保留跨页编排和部分事件分发，样式也有历史叠层。新页面内容应由 React 组件持有，不得在 React 已渲染的容器中用 `innerHTML`、`remove()` 或 `replaceChildren()` 改写页面；旧的 DOM 控件、弹窗、导入流程和默认画布仍须逐项迁移并经过同等端到端验收。识别质量与云存储的生产迁移须用真实案例验证，不能从模块化本身推断已经实现。
+目前 `src/app.js` 保留跨页业务编排；素材、系列、搭配、作品、导入、登录、账号、设置、弹窗及抠图控制面板均由 React 持有。创作画布的对象操作和像素引擎仍有独立的原生 DOM 生命周期，是后续单独迁移的边界。非画布路径不得恢复旧 HTML 页面渲染或直接改写 React 子节点；加载中的封面以事件通知 React 原位更新。识别质量与云存储的生产迁移须用真实案例验证，不能从界面迁移本身推断已经实现。
 
 素材从库中删除后，素材记录以 `isProjectInternal` 隐藏保留，供已有作品解析；最近删除可恢复原可见记录。彻底删除或到期清理只有在完整作品、手动存档和待同步队列引用检查通过时才删除无引用的隐藏元数据。浏览器本地模式每日空闲时再扫一次。COS 原图仅由服务端受保护定时任务在完整引用扫描、私有隔离备份与延迟复核后回收；浏览器不得直接删除。详见 [服务端孤立图片清理](docs/cos-orphan-gc.md)。

@@ -3,7 +3,6 @@ import {createPortal,flushSync} from 'react-dom';
 import {AI_PROVIDERS,supportsVision} from './ai-settings.js';
 import {seriesContentsModel} from './series-contents.js';
 import {libraryPageData} from './library-page-data.js';
-import {setCatalogDataPage} from './catalog-pagination.js';
 import {paperPresets} from './paper-sizes.js';
 import {candidateDiscoveryOptions,recognitionOptions,recognitionPixelOptions,
   recognitionMethodDetails} from './recognition-profiles.js';
@@ -16,17 +15,26 @@ import {FabricSceneStage} from './fabric-scene-stage.jsx';
 import {FabricEditorToolbar,FabricHeaderMenu} from './fabric-editor-controls.jsx';
 import {FabricPageViewport} from './fabric-page-viewport.jsx';
 import {SceneCover} from './scene-cover.jsx';
-import {WORK_TABS} from './work-collections.js';
-import {pageSize,pageSlice} from './catalog-pagination.js';
+import {WORK_TABS,workInTab} from './work-collections.js';
+import {catalogDataPage,pageSize,pageSlice,setCatalogDataPage} from './catalog-pagination.js';
+import {searchableSeries} from './library-model.js';
+import {selectionActive,toggleSelected} from './library-selection-model.js';
+import {ReactFilterMenu} from './react-filter-menu.jsx';
 import {presetJournalTemplates,templateIndexText} from './journal-template-catalog.js';
 import {journalTemplateImageURL,saveJournalUserTemplate} from './journal-template-data.js';
 import {journalTemplatePanel} from './journal-source-panels.js';
 import {loadJournalPresetPanel} from './journal-preset-images.js';
+import {ImportCandidateDialog,ImportBackgroundDialog} from './react-import-candidate-dialog.jsx';
+import {SettingsDiagnosticsDialog} from './react-ai-diagnostics.jsx';
+import {ReactSelectionTray} from './react-selection-tray.jsx';
+import {ManualBoxEditor} from './react-manual-box-editor.jsx';
+import {PaperCorrection} from './react-paper-correction.jsx';
+import {OrganizationBadge} from './react-organization.jsx';
 
 function RouteImage({asset,source,priority=false}){
   const src=asset&&(source(asset.blobId)||asset.staticPath);
-  return src?<img data-asset-image-id={asset.id} loading={priority?'eager':'lazy'}
-    fetchPriority={priority?'high':undefined} decoding="async" src={src} alt={asset.title}/>:<span>无预览</span>;
+  return src?<><img data-asset-image-id={asset.id} loading={priority?'eager':'lazy'}
+    fetchPriority={priority?'high':undefined} decoding="async" src={src} alt={asset.title}/><OrganizationBadge id={asset.id}/></>:<span>无预览</span>;
 }
 
 function DetailLinkIcon({kind}){
@@ -36,6 +44,39 @@ function DetailLinkIcon({kind}){
   return <span className="detail-link-icon"><svg className="shiye-icon" viewBox="0 0 24 24"
     width="25" height="25" fill="none" stroke="currentColor" strokeWidth="2"
     strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{lines}</svg></span>;
+}
+
+function PressCard({onActivate,onHold,holdDisabled=false,children,...props}){
+  const press=useRef({timer:null,start:null,consumed:false});
+  useEffect(()=>()=>clearTimeout(press.current.timer),[]);
+  const cancel=()=>{clearTimeout(press.current.timer);press.current.timer=null;};
+  const fire=()=>{cancel();if(!press.current.start||press.current.consumed||holdDisabled)return;
+    press.current.consumed=true;onHold?.();};
+  return <button type="button" {...props}
+    onPointerDown={event=>{cancel();press.current.start=null;press.current.consumed=false;
+      if(holdDisabled||!onHold||event.button>0||event.isPrimary===false)return;
+      press.current.start={x:event.clientX,y:event.clientY,id:event.pointerId,
+        time:performance.now(),slop:event.pointerType==='touch'?28:12};
+      press.current.timer=setTimeout(fire,450);
+    }}
+    onPointerMove={event=>{const start=press.current.start;
+      if(start&&event.pointerId===start.id&&Math.hypot(event.clientX-start.x,event.clientY-start.y)>start.slop){
+        cancel();press.current.start=null;
+      }
+    }}
+    onPointerUp={event=>{const start=press.current.start;
+      if(start&&event.pointerId===start.id&&performance.now()-start.time>=450)fire();
+      cancel();press.current.start=null;
+    }}
+    onPointerCancel={()=>{cancel();press.current.start=null;}}
+    onPointerLeave={()=>{cancel();press.current.start=null;}}
+    onContextMenu={event=>{if(holdDisabled||!onHold)return;event.preventDefault();
+      cancel();press.current.start={};fire();}}
+    onKeyDown={event=>{if(!holdDisabled&&onHold&&
+      (event.key==='ContextMenu'||event.shiftKey&&event.key==='F10')){
+      event.preventDefault();onHold();}}}
+    onClick={event=>{if(press.current.consumed){press.current.consumed=false;
+      event.preventDefault();return;}onActivate?.(event);}}>{children}</button>;
 }
 
 function PageHeading({title,actions=null}){
@@ -375,17 +416,23 @@ function PaperSizeOptions({includeNone=false,includeCustom=true}){
 }
 
 export function LibraryPage({state,source,kindName,format,onAction,onPageChange,tab,onTabChange,
-  selection,onSelectionToggle}){
+  selection,onSelectionToggle,onFilter,onBatchAction,onBatchError,onEditAsset}){
   const [,setRevision]=useState(0);
+  const [query,setQuery]=useState(state.query||'');
   useEffect(()=>{
     const refresh=()=>setRevision(revision=>revision+1);
     window.addEventListener('shiye-library-refresh',refresh);
-    return ()=>window.removeEventListener('shiye-library-refresh',refresh);
+    window.addEventListener('shiye-selection-refresh',refresh);
+    return ()=>{window.removeEventListener('shiye-library-refresh',refresh);
+      window.removeEventListener('shiye-selection-refresh',refresh);};
   },[]);
-  const page=libraryPageData(state),items=page.items;
-  useEffect(()=>{
-    document.querySelector('#view')?.assetCardsChanged?.(page.total);
-  },[page.total,items]);
+  const page=libraryPageData(state),items=selectionActive(selection,'asset')&&
+    selection.showOnlySelected?state.assets.filter(asset=>selection.selected.has(asset.id)&&
+      !asset.isProjectInternal):page.items;
+  const selecting=selectionActive(selection,'asset');
+  const addingSeries=state.addingToSeries?
+    state.series.find(entry=>entry.id===state.addingToSeries):null;
+  const choosing=!!addingSeries;
   const changePage=value=>{
     setCatalogDataPage('library',value);
     setRevision(revision=>revision+1);
@@ -393,22 +440,42 @@ export function LibraryPage({state,source,kindName,format,onAction,onPageChange,
   };
   const kinds=['sticker','paper','tape','photo','text','reference'];
   const status=[['all','全部状态'],['ready','已整理'],['pendingReview','未整理'],['used','已使用'],
-    ['unused','未使用'],['inside','系列中'],['outside','系列外']];
+    ['unused','未使用'],['inside','系列中'],['outside','系列外'],['favorite','已收藏']];
   const sorts=[['newest','添加时间 · 降序'],['oldest','添加时间 · 升序'],
     ['name','名称 · 升序'],['name-desc','名称 · 降序']];
-  return <><div className="catalog-toolbar"><PageHeading title="我的素材" actions={
+  const sortBasis=state.sort.startsWith('name')?'name':'time';
+  const sortOrder=['name','oldest'].includes(state.sort)?'asc':'desc';
+  const change=(key,value)=>{setCatalogDataPage('library',1);void onFilter(key,value);};
+  const changeSort=(basis,order)=>change('sort',basis==='name'?
+    order==='asc'?'name':'name-desc':order==='asc'?'oldest':'newest');
+  return <><div className="catalog-toolbar"><PageHeading
+    title={addingSeries?`为「${addingSeries.title}」添加素材`:'我的素材'} actions={addingSeries?
+    <button type="button" className="btn" onClick={()=>onAction('series-add-cancel')}>取消</button>:
     <SelectionToggle mode="asset" selection={selection} onToggle={onSelectionToggle}/>}/>
     {state.seriesID==='all'?<CatalogTabs tabs={materialTabs} active={tab} onChange={onTabChange}/>:null}
     <div className="filters">
       <input id="search" type="search" placeholder="搜索名称、标签、颜色或主题"
-        defaultValue={state.query} aria-label="搜索素材"/>
-      <select id="kind-filter" defaultValue={state.kind}><option value="all">全部类型</option>
+        value={query} onChange={event=>{setQuery(event.target.value);change('query',event.target.value);}}
+        aria-label="搜索素材"/>
+      <select id="kind-filter" hidden value={state.kind} onChange={event=>change('kind',event.target.value)}><option value="all">全部类型</option>
         {kinds.map(kind=><option key={kind} value={kind}>{kindName(kind)}</option>)}</select>
-      <select id="status-filter" defaultValue={state.status}>{status.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select>
-      <select id="series-filter" defaultValue={state.seriesID}><option value="all">全部系列</option><option value="none">系列外</option>
+      <select id="status-filter" hidden value={state.status} onChange={event=>change('status',event.target.value)}>{status.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select>
+      <select id="series-filter" hidden value={state.seriesID} onChange={event=>change('seriesID',event.target.value)}><option value="all">全部系列</option><option value="none">系列外</option>
         {state.series.map(entry=><option key={entry.id} value={entry.id}>{entry.title}</option>)}</select>
-      <select id="sort-filter" defaultValue={state.sort}>{sorts.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select>
-      <div className="catalog-page-controls">
+      <select id="sort-filter" hidden value={state.sort} onChange={event=>change('sort',event.target.value)}>{sorts.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select>
+      <select id="sort-basis" hidden value={sortBasis} onChange={event=>changeSort(event.target.value,sortOrder)}><option value="time">最近添加</option><option value="name">名称</option></select>
+      <select id="sort-order" hidden value={sortOrder} onChange={event=>changeSort(sortBasis,event.target.value)}><option value="desc">降序</option><option value="asc">升序</option></select>
+      <div className="four-filter-controls">
+        <ReactFilterMenu heading="类型" glyph="▦" options={[["all","全部类型"],...kinds.map(kind=>[kind,kindName(kind)])]}
+          value={state.kind} onChange={value=>change('kind',value)}/>
+        <ReactFilterMenu heading="状态" glyph="☷" options={status} value={state.status}
+          onChange={value=>change('status',value)}/>
+        <ReactFilterMenu heading="排序依据" glyph="≡" options={[["time","最近添加"],["name","名称"]]}
+          value={sortBasis} onChange={value=>changeSort(value,sortOrder)}/>
+        <ReactFilterMenu heading="排序顺序" glyph="↕" toggle
+          options={[["desc","降序"],["asc","升序"]]} value={sortOrder}
+          onChange={value=>changeSort(sortBasis,value)}/>
+      <div className="catalog-page-controls" data-page-key="library">
         <input type="number" min="1" max={page.count} aria-label="输入页码"
           key={page.current} defaultValue={page.current}
           onChange={event=>changePage(Number(event.currentTarget.value))}/>
@@ -416,43 +483,94 @@ export function LibraryPage({state,source,kindName,format,onAction,onPageChange,
           onClick={()=>changePage(page.current-1)}>‹</button>
         <button type="button" aria-label="下一页" disabled={page.current===page.count}
           onClick={()=>changePage(page.current+1)}>›</button>
-      </div>
-      <span className="library-count catalog-total">{page.total} 项</span>
+      </div></div>
+      <span className="library-count catalog-total">{selection.selectionMode==='asset'&&selection.showOnlySelected?
+        selection.selected.size:page.total} 项</span>
     </div></div>
-    <div className={`grid asset-grid ${state.preferences.display==='list'?'list-grid':''}`}>
-      <button className="card action-card" data-act="import" data-react-action="true"
-        hidden={state.seriesID!=='all'||state.status!=='all'||state.kind!=='all'||!!state.query.trim()}
+    <div className={`grid asset-grid ${selection.showOnlySelected&&selecting?'selection-results':''} ${state.preferences.display==='list'?'list-grid':''}`}>
+      {!(selecting&&selection.showOnlySelected)?<button className="card action-card" data-act="import" data-react-action="true"
+        disabled={selecting} hidden={state.seriesID!=='all'||state.status!=='all'||state.kind!=='all'||!!state.query.trim()}
         onClick={()=>onAction('import')}>
         <div className="card-image">＋</div><div className="card-body"><h3>导入素材</h3><p>添加照片或文件</p></div>
-      </button>
+      </button>:null}
       {items.map(asset=>{
         const revision=JSON.stringify([asset.title,asset.kind,asset.physicalWidthMM,asset.physicalHeightMM,
           asset.reviewStatus,asset.isFavorite,asset.blobId]);
-        return <button key={asset.id} className="card" data-card-revision={revision} data-act="detail"
-          data-id={asset.id} data-react-action="true" onClick={()=>onAction('detail',asset.id)}>
-          <div className="card-image"><RouteImage asset={asset} source={source}/></div>
-          <div className="card-body"><h3>{asset.title}{asset.isFavorite?<span className="card-favorite" aria-label="已收藏">♥</span>:null}</h3>
+        return <PressCard key={asset.id} className={`card ${selecting&&selection.selected.has(asset.id)?'batch-selected':''}`}
+          data-card-revision={revision} data-act="detail"
+          data-id={asset.id} data-react-action="true" aria-pressed={selecting?selection.selected.has(asset.id):undefined}
+          holdDisabled={selecting} onHold={()=>onEditAsset?.(asset.id)}
+          onActivate={()=>{if(selecting){toggleSelected(selection,asset.id);
+            window.dispatchEvent(new Event('shiye-selection-refresh'));}
+            else onAction('detail',asset.id);}}>
+          <div className="card-image"><RouteImage asset={asset} source={source}/>
+            {selecting?<span className="batch-check">{selection.selected.has(asset.id)?'☑':'□'}</span>:null}</div>
+          <div className="card-body"><h3 className={state.basket.includes(asset.id)?'in-matching-basket':''}>{asset.title}
+            {state.basket.includes(asset.id)?<span className="basket-card-check" aria-label="已加入搭配素材篮">✓</span>:null}{asset.isFavorite?<span className="card-favorite" aria-label="已收藏">♥</span>:null}</h3>
             <p>{kindName(asset.kind)} · {asset.physicalWidthMM?`${format(asset.physicalWidthMM)} × ${format(asset.physicalHeightMM)} mm`:'尺寸待确认'}</p>
             <span className={`chip ${asset.reviewStatus==='ready'?'':'warn'}`}>{asset.reviewStatus==='ready'?'已整理':'待检查'}</span>
           </div>
-        </button>;
+        </PressCard>;
       })}
     </div>
+    {!addingSeries?<ReactSelectionTray selection={selection} mode="asset"
+      visibleIDs={items.map(asset=>asset.id)} series={state.series}
+      onAction={onBatchAction} onError={onBatchError}/>:null}
+    {addingSeries?<div className="swift-tray manage" data-selection-mode="series-add">
+      <strong>本次选中 {selection.selected.size} 件</strong>
+      <button type="button" className="btn" onClick={()=>{
+        for(const item of items)selection.selected.add(item.id);setRevision(value=>value+1);
+      }}>全选当前结果</button>
+      <button type="button" className="btn" onClick={()=>{
+        selection.selected.clear();setRevision(value=>value+1);
+      }}>清空选择</button>
+      <button type="button" className="btn primary" disabled={!selection.selected.size}
+        onClick={()=>onAction('series-add-confirm')}>加入系列并返回</button>
+    </div>:null}
   </>;
 }
 
 export function WorksPage({projects,isUntouchedLegacyExample,assets,localCover,cloudEnabled,source,onAction,onCardsChanged,tab,onTabChange,
-  selection,onSelectionToggle}){
+  selection,onSelectionToggle,viewState,configuredPageSize,onBatchAction,onBatchError,onEditWork}){
   const [revision,setRevision]=useState(0);
+  const [filters,setFilters]=useState(viewState.workFilters||{
+    query:'',kind:'all',status:'all',sort:'access-desc'
+  });
   useEffect(()=>{
     const refresh=()=>setRevision(value=>value+1);
     window.addEventListener('shiye-works-refresh',refresh);
-    return ()=>window.removeEventListener('shiye-works-refresh',refresh);
+    window.addEventListener('shiye-selection-refresh',refresh);
+    return ()=>{
+      window.removeEventListener('shiye-works-refresh',refresh);
+      window.removeEventListener('shiye-selection-refresh',refresh);
+    };
   },[]);
-  useEffect(()=>{onCardsChanged?.();},[revision]);
   const asset=id=>assets.find(entry=>entry.id===id);
-  const list=projects.filter(project=>!isUntouchedLegacyExample(project))
-    .sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt));
+  const list=projects.filter(project=>!isUntouchedLegacyExample(project)&&workInTab(project,tab))
+    .filter(project=>{
+      if(selection.selectionMode==='work'&&selection.showOnlySelected&&!selection.selected.has(project.id))return false;
+      const query=filters.query.trim().toLocaleLowerCase();
+      if(query&&!`${project.title} ${(project.styleTags||project.tags||[]).join(' ')}`.toLocaleLowerCase().includes(query))return false;
+      if(filters.kind!=='all'&&(filters.kind==='created'?(project.source==='imported'):(project.source!=='imported')))return false;
+      if(filters.status==='favorite')return project.isSnapshot&&!!project.isFavorite;
+      if(filters.status==='used')return !!project.isUsed;
+      if(filters.status==='unused')return !project.isUsed;
+      return true;
+    }).sort((a,b)=>{
+      const key=filters.sort.startsWith('name')?'title':filters.sort.startsWith('updated')?'updatedAt':'lastOpenedAt';
+      const value=key==='title'?a.title.localeCompare(b.title,'zh-CN'):
+        Date.parse(a[key]||a.updatedAt)-Date.parse(b[key]||b.updatedAt);
+      return filters.sort.endsWith('-asc')?value:-value;
+    });
+  const page=catalogDataPage('works',list.length,configuredPageSize);
+  const visible=list.slice(page.start,page.end);
+  const visibleCardKeys=visible.map(project=>project.id).join('\u0000');
+  useEffect(()=>{onCardsChanged?.();},[revision,visibleCardKeys,tab]);
+  const sortBasis=filters.sort.split('-')[0],sortOrder=filters.sort.split('-')[1];
+  const change=(key,value)=>{
+    const next={...filters,[key]:value};viewState.workFilters=next;setFilters(next);
+    setCatalogDataPage('works',1);
+  };
   const sorts=[['access-desc','最近访问 · 降序'],['access-asc','最近访问 · 升序'],
     ['updated-desc','最近修改 · 降序'],['updated-asc','最近修改 · 升序'],
     ['name-asc','名称 · 升序'],['name-desc','名称 · 降序']];
@@ -461,42 +579,80 @@ export function WorksPage({projects,isUntouchedLegacyExample,assets,localCover,c
     <CatalogTabs tabs={WORK_TABS} active={tab} onChange={onTabChange}/>
     <button hidden data-act="new-project" data-react-action="true" id="work-create" onClick={()=>onAction('new-project')}/>
     <button hidden data-act="import-work" data-react-action="true" id="work-import" onClick={()=>onAction('import-work')}/>
-    <div className="filters"><input type="search" id="work-search"
+    <div className="filters"><input type="search" id="work-search" value={filters.query}
+      onChange={event=>change('query',event.target.value)}
       placeholder={tab==='templates'?'搜索模板名称或标签':'搜索作品名称或标签'}/>
-      <select id="work-kind">{tab==='templates'?<>
+      <select id="work-kind" hidden value={filters.kind} onChange={event=>change('kind',event.target.value)}>{tab==='templates'?<>
         <option value="all">全部类型</option><option value="preset">预设模板</option>
         <option value="user">我的模板</option></>:<>
         <option value="all">全部类型</option><option value="created">手动创作</option>
         <option value="imported">导入作品</option></>}</select>
-      <select id="work-status">{tab==='templates'?<>
+      <select id="work-status" hidden value={filters.status} onChange={event=>change('status',event.target.value)}>{tab==='templates'?<>
         <option value="all">全部状态</option><option value="with-case">有对应案例</option>
         <option value="without-case">暂无案例</option></>:<>
         <option value="all">全部状态</option><option value="used">已使用</option>
-        <option value="unused">未使用</option></>}</select>
-      <select id="work-sort">{(tab==='templates'?[['default-desc','默认顺序 · 降序'],
+        <option value="unused">未使用</option><option value="favorite">已收藏</option></>}</select>
+      <select id="work-sort" hidden value={filters.sort} onChange={event=>change('sort',event.target.value)}>{(tab==='templates'?[['default-desc','默认顺序 · 降序'],
         ['default-asc','默认顺序 · 升序'],['name-asc','名称 · 升序'],
         ['name-desc','名称 · 降序']]:sorts).map(([value,label])=><option key={value}
           value={value}>{label}</option>)}</select>
-      <span>{list.length} 项</span>
+      <select id="work-sort-basis" hidden value={sortBasis} onChange={event=>change('sort',event.target.value+'-'+sortOrder)}>
+        <option value="access">最近访问</option><option value="updated">最近修改</option><option value="name">名称</option></select>
+      <select id="work-sort-order" hidden value={sortOrder} onChange={event=>change('sort',sortBasis+'-'+event.target.value)}>
+        <option value="desc">降序</option><option value="asc">升序</option></select>
+      <div className="four-filter-controls">
+        <ReactFilterMenu heading="类型" glyph="▦" value={filters.kind}
+          options={[["all","全部类型"],["created","手动创作"],["imported","导入作品"]]}
+          onChange={value=>change('kind',value)}/>
+        <ReactFilterMenu heading="状态" glyph="☷" value={filters.status}
+          options={[["all","全部状态"],["used","已使用"],["unused","未使用"],["favorite","已收藏"]]}
+          onChange={value=>change('status',value)}/>
+        <ReactFilterMenu heading="排序依据" glyph="≡" value={sortBasis}
+          options={[["access","最近访问"],["updated","最近修改"],["name","名称"]]}
+          onChange={value=>change('sort',value+'-'+sortOrder)}/>
+        <ReactFilterMenu heading="排序顺序" glyph="↕" toggle value={sortOrder}
+          options={[["desc","降序"],["asc","升序"]]}
+          onChange={value=>change('sort',sortBasis+'-'+value)}/>
+        {pageSize(configuredPageSize)?<div className="catalog-page-controls" data-page-key="works">
+          <input type="number" min="1" max={page.count} key={page.current}
+            aria-label="输入页码" defaultValue={page.current}
+            onChange={event=>{setCatalogDataPage('works',Number(event.target.value));setRevision(value=>value+1);}}/>
+          <button type="button" aria-label="上一页" disabled={page.current===1}
+            onClick={()=>{setCatalogDataPage('works',page.current-1);setRevision(value=>value+1);}}>‹</button>
+          <button type="button" aria-label="下一页" disabled={page.current===page.count}
+            onClick={()=>{setCatalogDataPage('works',page.current+1);setRevision(value=>value+1);}}>›</button>
+        </div>:null}
+      </div><span className="catalog-total">{list.length} 项</span>
     </div></div><div className="grid works-grid">
       {tab==='all'||tab==='snapshot'?<>
-        {tab==='all'?<><button type="button" className="card work-entry" onClick={()=>onAction('import-work')}>
+        {tab==='all'?<><button type="button" className="card work-entry" disabled={selectionActive(selection,'work')}
+          onClick={()=>onAction('import-work')}>
           <div className="card-image">＋</div><div className="card-body"><h3>导入作品</h3><p>从照片或文件收进作品</p></div>
-        </button><button type="button" className="card work-entry" onClick={()=>onAction('new-project')}>
+        </button><button type="button" className="card work-entry" disabled={selectionActive(selection,'work')}
+          onClick={()=>onAction('new-project')}>
           <div className="card-image">＋</div><div className="card-body"><h3>空白创作</h3><p>从一张空白页面开始</p></div>
-        </button></>:<button type="button" className="card work-entry" onClick={()=>onAction('import-snapshot')}>
+        </button></>:<button type="button" className="card work-entry" disabled={selectionActive(selection,'work')}
+          onClick={()=>onAction('import-snapshot')}>
           <div className="card-image">＋</div><div className="card-body"><h3>导入画面快照</h3><p>保存独立、不可编辑的图片</p></div>
         </button>}
       </>:null}
-      {tab!=='templates'&&list.map((project,index)=>{
+      {tab!=='templates'&&visible.map((project,index)=>{
         const draft=project.drafts.find(d=>d.id===project.activeDraftID)||project.drafts[0];
         const revision=JSON.stringify([project.title,project.updatedAt,project.lastOpenedAt,
           project.isSnapshot,project.isDraft,project.isUsed,project.isFavorite,
           project.coverStaticPath,project.coverBaselineUpdatedAt,project.snapshotBlobId,project.activeDraftID]);
         const staticCover=project.isSnapshot?source(project.snapshotBlobId):
           project.coverStaticPath&&project.updatedAt===project.coverBaselineUpdatedAt?project.coverStaticPath:null;
-        return <button key={project.id} className="card" data-work-revision={revision}
-          data-act="open-project" data-id={project.id} data-react-action="true" onClick={()=>onAction('open-project',project.id)}>
+        const choosing=selectionActive(selection,'work');
+        return <PressCard key={project.id} className={`card ${choosing&&selection.selected.has(project.id)?'batch-selected':''}`}
+          data-work-revision={revision} aria-pressed={choosing?selection.selected.has(project.id):undefined}
+          data-act="open-project" data-id={project.id} data-react-action="true"
+          holdDisabled={choosing} onHold={()=>onEditWork?.(project.id)}
+          onActivate={()=>{
+            if(choosing){toggleSelected(selection,project.id);
+              window.dispatchEvent(new Event('shiye-selection-refresh'));}
+            else onAction('open-project',project.id);
+          }}>
           <div className="card-image"><div className="thumb-sheet" style={{width:'75%',background:project.drafts[0]?.paperColor||'#fff'}}>
             {staticCover?<img className="work-reference" loading={index<4?'eager':'lazy'} decoding="async"
               src={staticCover} alt={`${project.title} ${project.isSnapshot?'快照':'完整预览'}`}/>:null}
@@ -504,44 +660,123 @@ export function WorksPage({projects,isUntouchedLegacyExample,assets,localCover,c
               snapshotOnly cloudEnabled={cloudEnabled} localCover={()=>localCover(project)}
               projectID={project.id}/>:null}
           </div></div><div className="card-body"><h3>{project.title}{project.isSnapshot&&project.isFavorite?<span className="card-favorite" aria-label="已收藏">♥</span>:null}</h3><p>⊙　{project.isSnapshot?'画面快照':project.isDraft?'草稿':'可编辑作品'} <span>{new Date(project.updatedAt).toLocaleDateString()}</span></p></div>
-        </button>;
+        </PressCard>;
       })}
-    </div>
+    </div><ReactSelectionTray selection={selection} mode="work" projects={projects}
+      workTab={tab} visibleIDs={visible.map(project=>project.id)}
+      onAction={onBatchAction} onError={onBatchError}/>
   </div>;
 }
 
 export function SeriesPage({series,assets,display,seriesCovers,source,onAction,onTabChange,
-  selection,onSelectionToggle}){
-  const sorted=[...series].sort((a,b)=>a.id.startsWith('B700')&&b.id.startsWith('B700')?
-    b.id.localeCompare(a.id):a.id.startsWith('B700')?-1:b.id.startsWith('B700')?1:0);
+  selection,onSelectionToggle,pageSize:configuredPageSize,onBatchAction,onBatchError,onEditSeries}){
+  const [query,setQuery]=useState(selection.seriesQuery||'');
+  const [seriesMenuID,setSeriesMenuID]=useState(null);
+  const [sort,setSort]=useState(selection.seriesSort||'recent');
+  const [ascending,setAscending]=useState(Boolean(selection.seriesAscending));
+  const [,setRevision]=useState(0);
+  useEffect(()=>{
+    const refresh=()=>setRevision(value=>value+1);
+    window.addEventListener('shiye-selection-refresh',refresh);
+    return ()=>window.removeEventListener('shiye-selection-refresh',refresh);
+  },[]);
+  const active=selectionActive(selection,'series');
+  const needle=query.trim().toLocaleLowerCase();
+  const filtered=series.filter(entry=>active&&selection.showOnlySelected?
+    selection.selected.has(entry.id):!needle||searchableSeries(entry,assets).includes(needle));
+  filtered.sort((a,b)=>{
+    const value=sort==='name'?a.title.localeCompare(b.title,'zh-CN'):
+      (a.updatedAt||'').localeCompare(b.updatedAt||'');
+    return (ascending?value:-value)||a.id.localeCompare(b.id);
+  });
+  const limit=pageSize(configuredPageSize);
+  const range=catalogDataPage('series',filtered.length,limit);
+  const visible=filtered.slice(range.start,range.end);
+  const changeFilter=(key,setter)=>value=>{
+    selection[key]=value;setCatalogDataPage('series',1);setter(value);
+  };
+  const selectEntry=(event,entry)=>{
+    if(!active){selection.seriesScrollY=window.scrollY;selection.restoreSeriesScroll=true;
+      onAction('series-detail',entry.id);return;}
+    event.preventDefault();toggleSelected(selection,entry.id);
+    window.dispatchEvent(new Event('shiye-selection-refresh'));
+  };
   return <><div className="catalog-toolbar"><PageHeading title="我的素材" actions={
     <SelectionToggle mode="series" selection={selection} onToggle={onSelectionToggle}/>}/>
     <CatalogTabs tabs={materialTabs} active="series" onChange={onTabChange}/>
     <div className="swift-series-controls"><label className="shiye-search"><input type="search"
-      placeholder="搜索系列、素材或标签" aria-label="搜索系列"/></label>
-      <select aria-label="系列排序"><option value="recent">最近更新</option><option value="name">名称</option></select><span/>
+      placeholder="搜索系列、素材或标签" aria-label="搜索系列" value={query}
+      onChange={event=>changeFilter('seriesQuery',setQuery)(event.target.value)}/></label>
+      <div className="four-filter-controls"><ReactFilterMenu heading="排序依据" glyph="≡"
+        options={[["recent","最近更新"],["name","名称"]]} value={sort}
+        onChange={changeFilter('seriesSort',setSort)}/>
+        <ReactFilterMenu heading="排序顺序" glyph="↕" toggle
+          options={[["desc","降序"],["asc","升序"]]} value={ascending?'asc':'desc'}
+          onChange={value=>changeFilter('seriesAscending',setAscending)(value==='asc')}/>
+        {limit?<div className="catalog-page-controls" data-page-key="series">
+          <input type="number" min="1" max={range.count} key={range.current}
+            aria-label="输入页码" defaultValue={range.current}
+            onChange={event=>{setCatalogDataPage('series',Number(event.target.value));setRevision(value=>value+1);}}/>
+          <button type="button" aria-label="上一页" disabled={range.current===1}
+            onClick={()=>{setCatalogDataPage('series',range.current-1);setRevision(value=>value+1);}}>‹</button>
+          <button type="button" aria-label="下一页" disabled={range.current===range.count}
+            onClick={()=>{setCatalogDataPage('series',range.current+1);setRevision(value=>value+1);}}>›</button>
+        </div>:null}
+      </div><span className="catalog-total">{filtered.length} 项</span>
     </div></div>
     <div className={`grid series-grid ${display==='list'?'list-grid':''}`} data-react-page="series">
-      <button type="button" className="series-entry" onClick={()=>onAction('new-series')}>
+      <button type="button" className="series-entry" disabled={active} onClick={()=>onAction('new-series')}>
         <div className="series-entry-cover">＋</div><strong>新建系列</strong>
         <small>把喜欢的素材放在一起</small>
       </button>
-      {sorted.map((entry,index)=>{
+      {visible.map((entry,index)=>{
         const members=assets.filter(asset=>asset.seriesID===entry.id&&!asset.isProjectInternal);
-        return <button key={entry.id} className="card" data-act="series-detail" data-id={entry.id} data-react-action="true"
-          onClick={()=>onAction('series-detail',entry.id)}>
+        return <PressCard key={entry.id} className={`card ${active&&selection.selected.has(entry.id)?'batch-selected':''}`}
+          data-act="series-detail" data-id={entry.id} data-react-action="true"
+          aria-pressed={active?selection.selected.has(entry.id):undefined}
+          holdDisabled={active} onHold={()=>setSeriesMenuID(entry.id)}
+          onActivate={event=>selectEntry(event,entry)}>
           <div className="series-cover">{seriesCovers(entry,assets).map(asset=><RouteImage key={asset.id} asset={asset} source={source} priority={index<2}/>)}</div>
           <div className="card-body"><h3>{entry.title} <span aria-hidden="true">→</span></h3><p>{members.length} 件素材</p></div>
-        </button>;
+        </PressCard>;
       })}
     </div>
+    {seriesMenuID?createPortal(<div className="cloud-admin-backdrop" onMouseDown={event=>{
+      if(event.target===event.currentTarget)setSeriesMenuID(null);}}>
+      <section className="cloud-admin-panel" role="dialog" aria-modal="true" aria-label="系列操作">
+        <h2>系列操作</h2><div className="stack">
+          <button type="button" className="btn" onClick={()=>{
+            const id=seriesMenuID;setSeriesMenuID(null);onAction('series-detail',id);
+          }}>查看系列详情</button>
+          <button type="button" className="btn" onClick={()=>{
+            const id=seriesMenuID;setSeriesMenuID(null);onEditSeries?.(id);
+          }}>编辑信息与标签</button>
+        </div>
+      </section></div>,document.body):null}
+    <ReactSelectionTray selection={selection} mode={selection.selectionMode||'series'}
+      visibleIDs={selection.selectionMode==='series'?visible.map(entry=>entry.id):[]}
+      series={series} onAction={onBatchAction} onError={onBatchError}/>
   </>;
 }
 
-export function SeriesContentsPage({state,source,kindName,format,onAction,selection,onSelectionToggle}){
+export function SeriesContentsPage({state,source,kindName,format,onAction,selection,onSelectionToggle,
+  onEditSeries,onAddSeries,onBatchAction,onBatchError,onEditAsset}){
+  const [,setRevision]=useState(0);
+  useEffect(()=>{
+    const refresh=()=>setRevision(revision=>revision+1);
+    window.addEventListener('shiye-selection-refresh',refresh);
+    window.addEventListener('shiye-library-refresh',refresh);
+    return ()=>{window.removeEventListener('shiye-selection-refresh',refresh);window.removeEventListener('shiye-library-refresh',refresh);};
+  },[]);
   const model=seriesContentsModel(state);
   if(!model)return <p>系列已移走</p>;
   const {series,filter,all,members,covers}=model;
+  const range=catalogDataPage('series:'+series.id,members.length,state.preferences.maxPageItems);
+  const visible=selectionActive(selection,'asset')&&selection.showOnlySelected?
+    state.assets.filter(asset=>selection.selected.has(asset.id)&&!asset.isProjectInternal):
+    members.slice(range.start,range.end);
+  const change=(key,value)=>{filter[key]=value;setCatalogDataPage('series:'+series.id,1);
+    setRevision(revision=>revision+1);};
   const options=(items,value)=>items.map(([id,label])=><option key={id} value={id}>{label}</option>);
   const kinds=[['sticker','贴纸'],['paper','纸张'],['tape','胶带'],['photo','照片'],
     ['text','文字'],['reference','参考']];
@@ -555,32 +790,75 @@ export function SeriesContentsPage({state,source,kindName,format,onAction,select
     <div className="view-head series-heading"><div className="series-identity">
       <div className="series-detail-cover">{covers.map(asset=><RouteImage key={asset.id} asset={asset} source={source} priority/>)}</div>
       <div className="series-copy"><div className="eyebrow">COLLECTION</div>
-        <h1><button type="button" id="series-edit-title" aria-label="编辑系列信息与标签">{series.title} <span aria-hidden="true">✎</span></button></h1>
+        <h1><button type="button" id="series-edit-title" aria-label="编辑系列信息与标签"
+          onClick={onEditSeries}>{series.title} <span aria-hidden="true">✎</span></button></h1>
         {series.introduction?<p>{series.introduction}</p>:null}
         <p className="series-tags">{[...(series.styleTags||[]),...(series.semanticTags||[])].join(' · ')}</p>
         <p>{all.length} 件素材</p>
       </div></div></div>
     <div className="series-filters filters"><label className="shiye-search">
       <input type="search" id="series-search" aria-label="在这个系列中搜索" placeholder="搜索系列内素材名称、标签或颜色"
-        defaultValue={filter.query}/></label><div className="series-filter-menus">
-      <select id="series-kind" aria-label="系列素材类型" defaultValue={filter.kind}>{options([['all','全部类型'],...kinds])}</select>
-      <select id="series-status" aria-label="系列素材状态" defaultValue={filter.status}>{options(statuses)}</select>
-      <select id="series-sort" aria-label="系列素材排序" defaultValue={filter.sort}>{options([['recent','最近添加'],['name','名称']])}</select>
-      <button className="btn" id="series-order">{filter.ascending?'升序 ↑':'降序 ↓'}</button>
+        value={filter.query} onChange={event=>change('query',event.target.value)}/></label><div className="series-filter-menus">
+      <select id="series-kind" hidden aria-label="系列素材类型" value={filter.kind}
+        onChange={event=>change('kind',event.target.value)}>{options([['all','全部类型'],...kinds])}</select>
+      <select id="series-status" hidden aria-label="系列素材状态" value={filter.status}
+        onChange={event=>change('status',event.target.value)}>{options(statuses)}</select>
+      <select id="series-sort" hidden aria-label="系列素材排序" value={filter.sort}
+        onChange={event=>change('sort',event.target.value)}>{options([['recent','最近添加'],['name','名称']])}</select>
+      <button className="btn" id="series-order" hidden onClick={()=>change('ascending',!filter.ascending)}>
+        {filter.ascending?'升序 ↑':'降序 ↓'}</button>
+      <div className="four-filter-controls">
+        <ReactFilterMenu heading="类型" glyph="▦" value={filter.kind}
+          options={[['all','全部类型'],...kinds]} onChange={value=>change('kind',value)}/>
+        <ReactFilterMenu heading="状态" glyph="☷" value={filter.status}
+          options={statuses} onChange={value=>change('status',value)}/>
+        <ReactFilterMenu heading="排序依据" glyph="≡" value={filter.sort}
+          options={[['recent','最近添加'],['name','名称']]} onChange={value=>change('sort',value)}/>
+        <ReactFilterMenu heading="排序顺序" glyph="↕" toggle
+          value={filter.ascending?'asc':'desc'} options={[['desc','降序'],['asc','升序']]}
+          onChange={value=>change('ascending',value==='asc')}/>
+        {pageSize(state.preferences.maxPageItems)?<div className="catalog-page-controls"
+          data-page-key={'series:'+series.id}>
+          <input type="number" min="1" max={range.count} key={range.current}
+            aria-label="输入页码" defaultValue={range.current}
+            onChange={event=>{setCatalogDataPage('series:'+series.id,Number(event.target.value));
+              setRevision(revision=>revision+1);}}/>
+          <button type="button" aria-label="上一页" disabled={range.current===1}
+            onClick={()=>{setCatalogDataPage('series:'+series.id,range.current-1);
+              setRevision(revision=>revision+1);}}>‹</button>
+          <button type="button" aria-label="下一页" disabled={range.current===range.count}
+            onClick={()=>{setCatalogDataPage('series:'+series.id,range.current+1);
+              setRevision(revision=>revision+1);}}>›</button>
+        </div>:null}
+      </div>
     </div></div></div>
-    <div className={`grid asset-grid ${state.preferences.display==='list'?'list-grid':''}`}>
-      <button type="button" className="card action-card" id="series-add-assets"><div className="card-image">＋</div>
+    <div className={`grid asset-grid ${selection.showOnlySelected&&selectionActive(selection,'asset')?'selection-results':''} ${state.preferences.display==='list'?'list-grid':''}`}>
+      <button type="button" className="card action-card" id="series-add-assets"
+        disabled={Boolean(selection.selectionMode)} onClick={onAddSeries}><div className="card-image">＋</div>
         <div className="card-body"><h3>添加素材</h3><p>从全部素材选择</p></div></button>
-      {all.map(asset=><button key={asset.id} className="card" data-card-revision={JSON.stringify([asset.title,asset.kind,
+      {visible.map(asset=><PressCard key={asset.id}
+        className={`card ${selectionActive(selection,'asset')&&selection.selected.has(asset.id)?'batch-selected':''}`}
+        aria-pressed={selectionActive(selection,'asset')?selection.selected.has(asset.id):undefined}
+        data-card-revision={JSON.stringify([asset.title,asset.kind,
         asset.physicalWidthMM,asset.physicalHeightMM,asset.reviewStatus,asset.isFavorite,asset.blobId])}
-        data-act="detail" data-id={asset.id} data-react-action="true" onClick={()=>onAction('detail',asset.id)}>
-        <div className="card-image"><RouteImage asset={asset} source={source}/></div>
+        data-act="detail" data-id={asset.id} data-react-action="true"
+        holdDisabled={selectionActive(selection,'asset')} onHold={()=>onEditAsset?.(asset.id)}
+        onActivate={()=>{
+          if(selectionActive(selection,'asset')){toggleSelected(selection,asset.id);
+            window.dispatchEvent(new Event('shiye-selection-refresh'));}
+          else onAction('detail',asset.id);}}>
+        <div className="card-image"><RouteImage asset={asset} source={source}/>
+          {selectionActive(selection,'asset')?<span className="batch-check">
+            {selection.selected.has(asset.id)?'☑':'□'}</span>:null}</div>
         <div className="card-body"><h3>{asset.title}{asset.isFavorite?<span className="card-favorite" aria-label="已收藏">♥</span>:null}</h3>
           <p>{kindName(asset.kind)} · {asset.physicalWidthMM?`${format(asset.physicalWidthMM)} × ${format(asset.physicalHeightMM)} mm`:'尺寸待确认'}</p>
           <span className={`chip ${asset.reviewStatus==='ready'?'':'warn'}`}>{asset.reviewStatus==='ready'?'已整理':'待检查'}</span>
         </div>
-      </button>)}
-    </div><p className="series-result-count">{members.length} 项</p>
+      </PressCard>)}
+    </div><p className="series-result-count">{selection.selectionMode==='asset'&&selection.showOnlySelected?
+      selection.selected.size:members.length} 项</p>
+    <ReactSelectionTray selection={selection} mode="asset" visibleIDs={visible.map(asset=>asset.id)}
+      series={state.series} onAction={onBatchAction} onError={onBatchError}/>
   </section>;
 }
 
@@ -825,7 +1103,7 @@ export function EditorPage({state,draft,editorEntry,renderSceneDOM,asset,source,
         <button className="btn primary" data-act="editor-done">完成</button>
         <FabricHeaderMenu kind="export" project={project} onAction={onAction}/>
       </>:<><button className="btn" data-act="back-works">返回作品</button><button className="btn" data-act="new-draft">新方案</button>
-        <button className="btn" data-act="creative-json">导入创作指令</button><button className="btn" data-act="export-png">导出 PNG</button><button className="btn" data-act="print">打印 / PDF</button></>}
+        <button className="btn primary" onClick={onAIOpen}>AI 创作</button><button className="btn" data-act="creative-json">导入创作指令</button><button className="btn" data-act="export-png">导出 PNG</button><button className="btn" data-act="print">打印 / PDF</button><button className="btn" data-act="export-pdf">导出 PDF</button></>}
     </div></div>
     {useFabric?<FabricEditorToolbar state={state} draft={draft} materials={materials} source={source}
       onAction={onAction}/>:null}
@@ -870,7 +1148,16 @@ export function EditorPage({state,draft,editorEntry,renderSceneDOM,asset,source,
   </>;
 }
 
-export function AssetDetailPage({asset,seriesTitle,source,kindName,format,onAction}){
+export function AssetDetailPage({asset,seriesTitle,source,kindName,format,onAction,assets=[],onSelectSimilar,onExportPrint}){
+  const [similarOpen,setSimilarOpen]=useState(false);
+  const [,refresh]=useState(0);
+  useEffect(()=>{const update=()=>refresh(value=>value+1);window.addEventListener('shiye-asset-refresh',update);return ()=>window.removeEventListener('shiye-asset-refresh',update);},[]);
+  const similarTags=new Set([...(asset.tags||[]),...(asset.contentTags||[]),...(asset.styleTags||[])]);
+  const similar=assets.filter(entry=>entry.id!==asset.id&&!entry.isProjectInternal)
+    .map(entry=>({asset:entry,score:(entry.kind===asset.kind?2:0)+
+      (entry.seriesID&&entry.seriesID===asset.seriesID?2:0)+(entry.role===asset.role?1:0)+
+      (entry.tags||[]).filter(tag=>similarTags.has(tag)).length}))
+    .filter(entry=>entry.score>0).sort((left,right)=>right.score-left.score).slice(0,24);
   const tags=[...(asset.tags||[]),...(asset.contentTags||[]),...(asset.styleTags||[]),...(asset.materialTags||[])]
     .filter((tag,index,list)=>tag&&list.indexOf(tag)===index).sort((a,b)=>a.localeCompare(b,'zh-CN'));
   const act=name=>()=>onAction(name);
@@ -893,13 +1180,26 @@ export function AssetDetailPage({asset,seriesTitle,source,kindName,format,onActi
       <button className="btn primary detail-add" data-act="detail-add" data-react-action="true" onClick={act('detail-add')}>＋　加入本次创作</button>
       <div className="detail-links">
         <button className="btn" data-act="detail-series" data-react-action="true" onClick={act('detail-series')}><DetailLinkIcon kind="folder"/><span className="detail-link-label">同系列</span></button>
-        <button className="btn" data-act="detail-similar" data-react-action="true" onClick={act('detail-similar')}><DetailLinkIcon kind="search"/><span className="detail-link-label">找相似</span></button>
+        <button className="btn" data-act="detail-similar" data-react-action="true" onClick={()=>setSimilarOpen(true)}><DetailLinkIcon kind="search"/><span className="detail-link-label">找相似</span></button>
         <button className="btn" data-act="detail-match" data-react-action="true" onClick={act('detail-match')}><DetailLinkIcon kind="sparkles"/><span className="detail-link-label">去搭配</span></button>
       </div><div className="detail-small">
         <button data-act="detail-edit" data-react-action="true" onClick={act('detail-edit')}>✎　编辑素材信息</button>
         <button data-act="detail-check" data-react-action="true" onClick={act('detail-check')}>□　检查抠图</button>
-      </div>
+      </div><button type="button" className="btn" data-act="asset-print-pdf" data-react-action="true"
+        onClick={onExportPrint}>导出打印 PDF</button>
     </div></section>
+    {similarOpen?createPortal(<div className="cloud-admin-backdrop" onMouseDown={event=>{
+      if(event.target===event.currentTarget)setSimilarOpen(false);}}>
+      <section className="cloud-admin-panel" role="dialog" aria-modal="true" aria-label="相似素材">
+        <div className="dialog-head"><h2>相似素材</h2><button type="button" className="btn"
+          onClick={()=>setSimilarOpen(false)}>关闭</button></div>
+        <p>按类型、画面作用、标签和系列检索。像素视觉相似度仍待移植。</p>
+        <div className="mini-assets">{similar.map(({asset:entry})=><button type="button"
+          className="mini-asset" key={entry.id} data-similar={entry.id} onClick={()=>{
+            setSimilarOpen(false);onSelectSimilar(entry.id);}}>
+          <RouteImage asset={entry} source={source}/><span>{entry.title}</span>
+        </button>)}</div>
+      </section></div>,document.body):null}
   </div>;
 }
 
@@ -1059,6 +1359,7 @@ export function SettingsRecognitionPage({preferences,onAction}){
 }
 
 export function SettingsDataPage({state,cloudEnabled,storage,onAction}){
+  const [diagnostics,setDiagnostics]=useState(null);
   const counts=`素材 ${state.assets.length} 件 · 作品 ${state.projects.length} 件 · 最近删除 ${state.trash.length} 项`;
   const button=(name,label,kind='btn')=><button className={kind} data-act={name} data-react-action="true"
     onClick={()=>onAction(name)}>{label}</button>;
@@ -1070,15 +1371,23 @@ export function SettingsDataPage({state,cloudEnabled,storage,onAction}){
   const trash=<SettingsGroup title="最近删除">{state.trash.length?state.trash.map(item=><div className="rec-card" key={item.id}>
     <b>{item.item.title}</b><button className="btn mini" data-act="restore-trash" data-id={item.id}
       data-react-action="true" onClick={()=>onAction('restore-trash',item.id)}>恢复</button>
+    <button className="btn danger mini" data-act="purge-trash-item" data-react-action="true"
+      onClick={()=>onAction('purge-trash-item',item.id)}>彻底删除</button>
   </div>):<p>没有最近删除的项目。</p>}</SettingsGroup>;
   return <SettingsDetailShell title="数据与诊断" kind="settingsData" onAction={onAction}>
     <SettingsGroup title="应用错误诊断" description="导出本次打开拾页以来的运行错误、网络与同步故障的安全摘要，包含发生页面、阶段、错误类别和可判断的原因。不会导出作品、图片、账号、密钥或原始报错文本；关闭应用后不保留。">
       {button('export-app-diagnostics','导出完整错误诊断')}
     </SettingsGroup>
     <SettingsGroup title="图片保留与清理" description="删除素材后，已有作品引用的图片会隐藏保留；从最近删除彻底移除且无作品引用时才清除隐藏素材记录。云端 COS 原图尚不自动物理删除，避免遗漏其他设备、历史存档或备份中的引用。"/>
+    <SettingsGroup title="数据维护"><div className="actions">
+      <button type="button" className="btn" onClick={()=>setDiagnostics('metrics')}>生成诊断</button>
+      <button type="button" className="btn" onClick={()=>setDiagnostics('contexts')}>创作完整上下文</button>
+      {button('clean-unused-images','清理未使用的图片')}
+      {button('purge-all-trash','清空最近删除','btn danger')}
+    </div></SettingsGroup>
     {cloudEnabled?<>
       <SettingsGroup title="私人云端资料">
-        <p id="storage-location">云端元数据与私有图片 · 本机缓存加速</p><p>{counts}</p>
+        <p id="storage-location">{import.meta.env?.VITE_SHIYE_OBJECT_STORAGE==='cos'?'当前数据源：Supabase 登录与元数据 + 腾讯 COS 私有图片；本机仅保留账号隔离缓存与待同步修改':'当前数据源：Supabase 私有云端；本机仅保留账号隔离缓存与待同步修改'}</p><p>{counts}</p>
         <p>登录验证后显示本机缓存，后台检查云端更新。原图和完整作品按需读取；修改先暂存，后台同步。云端失败不会改用另一份资料。</p>
       </SettingsGroup>
       {backup}
@@ -1114,8 +1423,10 @@ export function SettingsDataPage({state,cloudEnabled,storage,onAction}){
         <p>服务器地址需要公网 HTTPS，手机访问 localhost 指的是手机自身；同一台电脑运行的拾页服务可直接打开 http://127.0.0.1:4173。跨数据源转移资料请使用下方“导出完整备份 / 从备份恢复”，不在连接动作中隐式迁移。</p>
       </SettingsGroup>
       {backup}{trash}
-      <SettingsGroup title="离线状态"><p id="offline-state">检测中…</p></SettingsGroup>
+      <SettingsGroup title="离线状态"><p id="offline-state">{navigator.serviceWorker?.controller?"离线程序已就绪":"首次打开时需要联网；请等待离线程序安装后再测试飞行模式"}</p></SettingsGroup>
     </>}
+    {diagnostics?<SettingsDiagnosticsDialog kind={diagnostics}
+      accountID={state.accountId||'browser'} onClose={()=>setDiagnostics(null)}/>:null}
   </SettingsDetailShell>;
 }
 
@@ -1194,7 +1505,7 @@ export function SettingsAIPage({settings,modelPanelOpen,onAction,onProviderChang
           choices={[["auto","自动适配"],["native","原生工具调用"],["json","兼容 JSON 工具指令"]]}/>
         <AISelect id="text" label="文字内容" value={cfg.textMode}
           choices={[["automatic","图文手账 · 自动配文"],["requested","仅明确要求时配文"],["none","不生成文字"],
-            ...(['minimal','rich'].includes(cfg.textMode)?[[cfg.textMode,`旧版：${cfg.textMode==='minimal'?'简洁':'丰富'}`]]:[])]}/>
+            ]}/>
         <AISelect id="reasoning" label="代理思考策略" value={cfg.reasoningMode}
           choices={[["automatic","自动 · 优先执行"],["low","轻量思考"],["providerDefault","保持服务设置"]]}/>
         <AIToggle id="send-limit" label="发送输出上限" checked={cfg.sendOutputLimit}/>
@@ -1252,50 +1563,63 @@ function ImportNavigation({state,onAction}){
   </div>;
 }
 
-export function ImportInspectionPage({state,format,onAction,onSettingChange}){
+export function ImportInspectionPage({state,format,onAction,onSettingChange,
+  onRecognitionSettingChange,onRemoveRecord,onCheckCandidate,onManualCancel,onManualDone,onManualError,onPaperChange}){
+  const [,setRevision]=useState(0);
+  useEffect(()=>{
+    const refresh=()=>setRevision(value=>value+1);
+    window.addEventListener('shiye-import-refresh',refresh);
+    return ()=>window.removeEventListener('shiye-import-refresh',refresh);
+  },[]);
+  const previewRef=useRef(null);
   const snapshot=state.importMode==='snapshot',previewing=!!state.showCorrectionPreview,manual=!!state.showManualBox;
   const source=manual?state.correctedURL||state.importURL:previewing?state.paperPreviewURL||state.correctedURL:state.importURL;
   const candidates=state.importProcessing?[]:state.importCandidates||[];
-  const button=(action,label,disabled=false,kind='btn')=><button className={kind} data-act={action} disabled={disabled}>{label}</button>;
+  const busy=!!state.importProcessing;
+  const button=(action,label,disabled=false,kind='btn')=><button className={kind} data-act={action} data-react-action="true" disabled={busy||disabled} onClick={()=>onAction(action)}>{label}</button>;
   return <><ImportNavigation state={state} onAction={onAction}/>
     <section className={`import-inspect ${snapshot?'import-snapshot-inspect':''}`} data-react-page="importInspection" aria-busy={!!state.importProcessing}>
       {!snapshot?<div className="eyebrow">FROM YOUR DESK TO YOUR PAGES</div>:null}<h1>检查这一批</h1>
       {!snapshot?<p>逐张确认，最后一起归类。</p>:null}<p className="import-processing" role="status">{state.importProcessing||''}</p>
       <div className="import-queue"><div><strong>{state.importRecords.length} 张照片</strong> <small>{state.importRecords.filter(record=>record.confirmed).length} 张已确认</small></div>
-        <button className="btn" data-act="select-file" data-val="gallery" disabled={state.importRecords.length>=12}>＋ 添加照片</button></div>
-      <div className="queue-strip">{state.importRecords.map((record,index)=><button key={index} className={`queue-item ${index===state.importIndex?'active':''}`}
-        data-act="import-switch" data-id={index}><img src={record.url} alt=""/><span>照片 {index+1}<small>{record.confirmed?'已确认':snapshot?'待检查':record.prefetchStatus==='running'?'后台识别中':record.prefetchStatus==='ready'?`${record.candidates.length} 件已预识别`:record.candidates?.length?`${record.candidates.length} 件素材`:'待识别'}</small></span></button>)}</div>
+        <button className="btn" data-act="select-file" data-val="gallery" data-react-action="true" onClick={()=>onAction("select-file",null,"gallery")} disabled={state.importRecords.length>=12}>＋ 添加照片</button></div>
+      <div className="queue-strip">{state.importRecords.map((record,index)=><div key={index} className="queue-card"><button className={`queue-item ${index===state.importIndex?'active':''}`}
+        data-act="import-switch" data-id={index} data-react-action="true" onClick={()=>onAction("import-switch",String(index))}><img src={record.url} alt=""/><span>照片 {index+1}<small>{record.confirmed?'已确认':snapshot?'待检查':record.prefetchStatus==='running'?'后台识别中':record.prefetchStatus==='ready'?`${record.candidates.length} 件已预识别`:record.candidates?.length?`${record.candidates.length} 件素材`:'待识别'}</small></span></button>
+        <button type="button" className="queue-remove" aria-label={`移除照片 ${index+1}`}
+          onClick={()=>onRemoveRecord(index)}>移除</button></div>)}</div>
       <div className="inspect-columns"><section className="panel import-preparation"><h2>照片 {state.importIndex+1}</h2><div className="photo-preparation-content">
         <h3>{previewing?'查看校正结果':snapshot?'调整页面边框':'选择画面范围'}</h3>
         {!snapshot?<p>{previewing?'检查边缘和文字方向，必要时返回调整。':'拖动四角贴合纸张边缘；双页请框住整个跨页。'}</p>:null}
-        <div className="photo-preview" id="crop-preview"><img src={source} alt={snapshot?'页面预览':previewing?'校正结果':'待检查照片'}/><div id="crop-frame" hidden/></div>
-        <div className="import-photo-tools">{manual?null:previewing?<>{button('readjust-paper','重新调整')}{button('apply-paper-preview',state.paperPreviewApplied?'✓ 已应用校正':'✓ 使用校正结果',!!state.paperPreviewApplied)}</>:
+        <div className="photo-preview" id="crop-preview" ref={previewRef}><img src={source} alt={snapshot?'页面预览':previewing?'校正结果':'待检查照片'}/><div id="crop-frame" hidden/>{!manual&&!previewing&&!busy&&state.importFile?<PaperCorrection key={`${state.importIndex}-${state.importURL}`} state={state} previewRef={previewRef} onChange={onPaperChange}/>:null}</div>
+        {manual?<ManualBoxEditor state={state} previewRef={previewRef} onCancel={onManualCancel}
+          onDone={onManualDone} onError={onManualError}/>:<div className="import-photo-tools">{previewing?<>{button('readjust-paper','重新调整')}{button('apply-paper-preview',state.paperPreviewApplied?'✓ 已应用校正':'✓ 使用校正结果',!!state.paperPreviewApplied)}</>:
           <>{button('rotate-photo','↻ 旋转 90°')}{button('preview-crop',snapshot?'□ 预览校正':'□ 预览校正')}</>}
-          {!snapshot&&!manual?button('manual-import-box','手动补框',false,'btn primary'):null}</div>
+          {!snapshot?button('manual-import-box','手动补框',false,'btn primary'):null}</div>}
       </div></section>
       <section className="panel import-inspector"><h2>{snapshot?'页面与颜色校正':state.importMode==='work'?'检查作品图层':'检查识别结果'}</h2>
         {!snapshot?<><p>校正后自动识别；如有漏检，使用左侧的“手动补框”。</p><hr/></>:null}
         <div className="inspector-scroll"><div className="inspector-settings">
-          <label>{snapshot?'页面规格':'当前照片的背景板'}<select id="paper-size" value={state.paperSize?.startsWith('custom:')?'custom':state.paperSize} onChange={event=>onSettingChange('paperSize',event.target.value)}><PaperSizeOptions includeNone/></select></label>
+          <label>{snapshot?'页面规格':'当前照片的背景板'}<select id="paper-size" disabled={busy} value={state.paperSize?.startsWith('custom:')?'custom':state.paperSize} onChange={event=>onSettingChange('paperSize',event.target.value)}><PaperSizeOptions includeNone/></select></label>
           {state.paperSize==='custom'?<div className="import-custom-size"><label>宽 mm<input id="import-paper-width" type="number" min="1" max="10000" defaultValue={state.customImportWidth} onBlur={event=>onSettingChange('customImportWidth',event.target.value)}/></label>
             <label>高 mm<input id="import-paper-height" type="number" min="1" max="10000" defaultValue={state.customImportHeight} onBlur={event=>onSettingChange('customImportHeight',event.target.value)}/></label></div>:null}
-          {(snapshot||state.paperSize!=='none')?<><label>{snapshot?'页面方向':'纸张方向'}<select id="paper-orientation" value={state.paperOrientation||'auto'} onChange={event=>onSettingChange('paperOrientation',event.target.value)}>
+          {(snapshot||state.paperSize!=='none')?<><label>{snapshot?'页面方向':'纸张方向'}<select id="paper-orientation" disabled={busy} value={state.paperOrientation||'auto'} onChange={event=>onSettingChange('paperOrientation',event.target.value)}>
             <option value="auto">自动</option><option value="portrait">竖向</option><option value="landscape">横向</option></select></label>
-            <label className="toggle-row">{snapshot?'校正白纸色偏':'识别前均衡光照'}<input id="balance-light" type="checkbox" defaultChecked={!!state.balanceLight}/></label>
-            {!snapshot?<><label className="toggle-row">规则形状规整<input id="import-shape-regularization" type="checkbox" defaultChecked={state.importShapeRegularization!==false}/></label>
-              <label className="toggle-row">恢复重复孔洞<input id="import-apertures" type="checkbox" defaultChecked={state.importApertures!==false}/></label>
-              <label>最终素材颜色<select id="import-material-color" defaultValue={state.importMaterialColorMode==='original'?'original':'auto'}><option value="auto">A4 光照与颜色还原</option><option value="original">原始照片颜色</option></select><small>仅影响高清输出，不改变数量与分割边缘。</small></label>
-              <label className="toggle-row">未识别时将整张照片视为背景板<input id="whole-paper" type="checkbox" checked={!!state.wholePaper} onChange={event=>onSettingChange('wholePaper',event.target.checked)}/></label></>:null}</>:null}
+            <label className="toggle-row">{snapshot?'校正白纸色偏':'识别前均衡光照'}<input id="balance-light" type="checkbox" disabled={busy} checked={!!state.balanceLight} onChange={event=>onRecognitionSettingChange('balanceLight',event.target.checked)}/></label>
+            {!snapshot?<><label className="toggle-row">规则形状规整<input id="import-shape-regularization" type="checkbox" disabled={busy} checked={state.importShapeRegularization!==false} onChange={event=>onRecognitionSettingChange('importShapeRegularization',event.target.checked)}/></label>
+              <label className="toggle-row">恢复重复孔洞<input id="import-apertures" type="checkbox" disabled={busy} checked={state.importApertures!==false} onChange={event=>onRecognitionSettingChange('importApertures',event.target.checked)}/></label>
+              <label>最终素材颜色<select id="import-material-color" disabled={busy} value={state.importMaterialColorMode==='original'?'original':'auto'} onChange={event=>onRecognitionSettingChange('importMaterialColorMode',event.target.value)}><option value="auto">A4 光照与颜色还原</option><option value="original">原始照片颜色</option></select><small>仅影响高清输出，不改变数量与分割边缘。</small></label>
+              <label className="toggle-row">未识别时将整张照片视为背景板<input id="whole-paper" type="checkbox" disabled={busy} checked={!!state.wholePaper} onChange={event=>onSettingChange('wholePaper',event.target.checked)}/></label></>:null}</>:null}
           {!snapshot?<><small>{state.paperSize==='none'?'当前照片不计算素材尺寸':'尺寸变化仅更新标尺；不重新抠图'}</small>
-            <button className="import-default-action" id="save-import-defaults">将当前参数设为以后导入的默认值</button>
+            <button className="import-default-action" id="save-import-defaults" type="button" onClick={()=>onAction("import-save-defaults")}>将当前参数设为以后导入的默认值</button>
             <small>设为默认值会同步本批后续照片，并用于以后新导入的照片；之前的照片不变。</small></>:null}
         </div>{!snapshot?<><hr/><h3>候选素材 · {state.importProcessing?'识别中':candidates.length}</h3>
           {button('recognition-diagnostics','导出识别诊断',false,'btn mini')}
           <div className="import-candidate-grid">{candidates.map((candidate,index)=><div key={index} className="candidate-choice"><button className={`import-candidate-tile ${state.importCandidateSelection?.has(index)?'selected':''}`}
-            data-act="import-toggle-candidate" data-id={index}><span className="candidate-thumb"><img src={state.importCandidateURLs?.[index]||''} alt=""/></span>
+            data-act="import-toggle-candidate" data-id={index} data-react-action="true"
+            aria-pressed={!!state.importCandidateSelection?.has(index)} onClick={()=>onAction('import-toggle-candidate',String(index))}><span className="candidate-thumb"><img src={state.importCandidateURLs?.[index]||''} alt=""/></span>
             <span>素材 {index+1} {state.importCandidateSelection?.has(index)?'✓':'○'}</span><small>{state.importCandidateData?.[index]?.width?`${format(state.importCandidateData[index].width)} × ${format(state.importCandidateData[index].height)} mm`:'尺寸待检查'}</small></button>
-            <button className="btn mini" data-import-check={index}>检查边缘</button></div>)}</div></>:null}</div>
-        <button className="btn primary confirm-photo" data-act="import-confirm-photo">→ 确认</button>
+            <button className="btn mini" data-import-check={index} disabled={busy} onClick={()=>onCheckCandidate(index)}>检查边缘</button></div>)}</div></>:null}</div>
+        <button className="btn primary confirm-photo" data-act="import-confirm-photo" data-react-action="true" onClick={()=>onAction("import-confirm-photo")} disabled={busy}>→ 确认</button>
       </section></div>
     </section></>;
 }
@@ -1315,7 +1639,27 @@ function ReviewSeriesSelect({value='',recordIndex=null,seriesOptions,onSeriesCha
   </select>;
 }
 
-export function ImportReviewPage({state,format,onAction,onSeriesChange,onWorkTitleChange}){
+export function ImportReviewPage({state,format,onAction,onSeriesChange,onWorkTitleChange,
+  onEditCandidate,onCheckCandidate,onError}){
+  const [dialog,setDialog]=useState(null);
+  const [background,setBackground]=useState(null);
+  const [,setRevision]=useState(0);
+  const press=useRef(null);
+  const suppressClick=useRef(false);
+  const clearPress=()=>{if(press.current?.timer)clearTimeout(press.current.timer);press.current=null;};
+  useEffect(()=>clearPress,[]);
+  const openMenu=(event,ri,ci)=>{event?.preventDefault();clearPress();setDialog({ri,ci});};
+  const pointerDown=(event,ri,ci)=>{
+    if(event.pointerType==='mouse'||event.button>0)return;
+    clearPress();
+    const start={x:event.clientX,y:event.clientY};
+    press.current={...start,timer:setTimeout(()=>{suppressClick.current=true;
+      setDialog({ri,ci});press.current=null;},600)};
+  };
+  const pointerMove=event=>{
+    if(press.current&&Math.hypot(event.clientX-press.current.x,
+      event.clientY-press.current.y)>8)clearPress();
+  };
   const mode=state.importMode,work=mode==='work',snapshot=mode==='snapshot',records=state.importRecords||[];
   const count=records.reduce((total,record)=>total+(record.selectedCandidates||[]).filter(c=>c.selected).length,0);
   const seriesOptions=(record=false)=><>
@@ -1327,6 +1671,17 @@ export function ImportReviewPage({state,format,onAction,onSeriesChange,onWorkTit
   </>;
   const action=(name,id,value)=>()=>onAction(name,id,value);
   return <><ImportNavigation state={state} onAction={onAction}/>
+    {background!==null&&records[background]?<ImportBackgroundDialog
+      pattern={records[background].workPaperPattern||state.importBatchWorkPaperPattern||'plain'}
+      color={records[background].workPaperColor||state.importBatchWorkPaperColor||'#fcfaf0'}
+      onChange={({pattern,color})=>{records[background].workPaperPattern=pattern;
+        records[background].workPaperColor=color;setRevision(value=>value+1);}}
+      onClose={()=>setBackground(null)}/>:null}
+    {dialog&&records[dialog.ri]?.selectedCandidates?.[dialog.ci]?<ImportCandidateDialog
+      key={`${dialog.ri}:${dialog.ci}`} candidate={records[dialog.ri].selectedCandidates[dialog.ci]}
+      recordIndex={dialog.ri} candidateIndex={dialog.ci}
+      onClose={()=>setDialog(null)} onToggle={(ri,ci)=>onAction('review-toggle',String(ri),String(ci))}
+      onSave={onEditCandidate} onCheck={onCheckCandidate} onError={onError}/>:null}
     <section className="import-review" data-react-page="importReview">
       <h1>{snapshot?'确认导入快照':work?'确认导入作品':'确认要保存的素材'}</h1>
       <div className="review-actions">
@@ -1363,10 +1718,15 @@ export function ImportReviewPage({state,format,onAction,onSeriesChange,onWorkTit
               {work?<div className="review-candidate review-background-card"><div className={`review-thumbnail import-work-paper-preview ${pattern}`}
                 style={{'--review-paper':color,backgroundColor:color}}>
                 <button type="button" className="review-paper-control" data-import-paper-options={ri}
-                  aria-label="编辑页面背景">页面背景</button>
+                  aria-label="编辑页面背景" onClick={()=>setBackground(ri)}>页面背景</button>
               </div></div>:null}
               {candidates.map((candidate,ci)=><div className={`review-candidate ${candidate.selected?'selected':''}`}
-                data-index={ri} data-candidate={ci} key={ci}>
+                data-index={ri} data-candidate={ci} key={ci} tabIndex={0}
+                onContextMenu={event=>openMenu(event,ri,ci)}
+                onKeyDown={event=>{if(event.key==='ContextMenu'||event.shiftKey&&event.key==='F10')openMenu(event,ri,ci);}}
+                onPointerDown={event=>pointerDown(event,ri,ci)} onPointerMove={pointerMove}
+                onPointerUp={clearPress} onPointerCancel={clearPress}
+                onClickCapture={event=>{if(suppressClick.current){event.preventDefault();event.stopPropagation();suppressClick.current=false;}}}>
                 <button data-act="review-toggle" data-id={ri} data-val={ci} data-react-action="true"
                   aria-label={`${candidate.title}，${candidate.selected?'已选择':'未选择'}`}
                   onClick={action('review-toggle',String(ri),String(ci))}>

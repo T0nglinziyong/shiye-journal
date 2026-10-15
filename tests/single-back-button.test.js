@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 const source=file=>readFile(new URL('../src/'+file,import.meta.url),'utf8');
 test('import and creative return buttons each have one chevron',async()=>{
- const [app,editor,css]=await Promise.all(['app.js','canvas-editor-ui.js','layout-refinements.css'].map(source));
- const steps=app.slice(app.indexOf('function importSteps(){'),app.indexOf('function renderImport(){'));
+ const [react,editor,css]=await Promise.all(['react-routes.jsx','canvas-editor-ui.js','layout-refinements.css'].map(source));
+ const steps=react.slice(react.indexOf('function ImportNavigation('),react.indexOf('export function ImportInspectionPage('));
  assert.equal((steps.match(/data-act="import-back"/g)||[]).length,1);
  assert.equal((steps.match(/class="shiye-back-glyph"/g)||[]).length,0);
  assert.match(editor,/head\.prepend\(back\)/);

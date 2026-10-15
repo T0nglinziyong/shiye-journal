@@ -7,14 +7,11 @@ const source=name=>readFile(new URL('../src/'+name,import.meta.url));
 const expected={
   'manual-import-recognition.js':'bc83bd2f7e0d572c9fb7c0d3acc724a238385133',
   'perspective.js':'1339e08b3b23603d1a41c779792c6a0327c676a8',
-  'import-box-editor.js':'196304b571f14f00d02855c6bc08bdb3fd32b533',
   'material-color-restoration.js':'4be602eab1a8d3d1281ba6c455c1ad80055da1c3',
-  'import-workspace-ui.js':'8f057fda3ec1c4115b0c8503b5372253c8dc03dc',
-  // Reviewed change: React owns catalog/template views and selection toggles; import controls unchanged.
-  'workflow-ui.js':'c77cb51da44e1a2ebb68af833a977cc35d5351cb',
+  // Reviewed change: React owns catalog controls, import queue, candidate controls and review menus;
+  // recognition and segmentation code remains unchanged.
   'styles.css':'c6b7945ba3ffeb4373dbe38f97bc96dbfd9e5178',
   'responsive.css':'3daab9b366125aeda84ed7e78bf2ac72132c8981',
-  'paper-ui.js':'43dcd4f457d72382dadd0a0d8cea82cdd248058f',
   // Reviewed change: saved cutouts use a proportional A4 pixel budget; detection and segmentation are unchanged.
   'import-save.js':'89239971282c69c9e599f66a0d64e47e1907f88a',
   'vision-runtime.js':'3817687ab32df7fb19c308c83902a6b123aabee1'
@@ -43,7 +40,7 @@ test('research recognizer preserves the explicit classical rollback route',async
 });
 test('import page uses stable automatic paper and manual cutout controls',async()=>{
   const app=(await source('app.js')).toString();
-  const page=(await source('import-workspace-ui.js')).toString();
+  const page=(await source('react-routes.jsx')).toString();
   assert.match(app,/async function switchImportRecord\(index,skipSave=false\)/);
   assert.match(app,/async function previewCorrection\(\)/);
   assert.match(app,/async function applyPaperPreview\(\)/);
@@ -55,7 +52,7 @@ test('import page uses stable automatic paper and manual cutout controls',async(
   assert.match(app,/if\(!candidate\?\.mask\?\.alpha\?\.length\|\|candidate\.segmentationFailed\)/);
   assert.match(app,/await detectPaperCandidates\(source,b,6/);
   assert.match(app,/async function receiveImportPhotos\(files\)\{const images=\[\.\.\.files\]\.filter\(f=>f\.type\.startsWith\('image\/'\)\)/);
-  assert.match(page,/renderImportInspection/);
+  assert.match(page,/export function ImportInspectionPage/);
   assert.match(page,/manual-import-box/);
   assert.match(page,/import-confirm-photo/);
 });
