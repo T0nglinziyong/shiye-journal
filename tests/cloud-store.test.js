@@ -297,6 +297,31 @@ test('original and optional preview upload overlap but metadata waits for the or
     releaseOriginal();await commit;assert.equal(state.calls.length,1);
   }finally{if(oldBitmap===undefined)delete globalThis.createImageBitmap;else globalThis.createImageBitmap=oldBitmap;if(oldDocument===undefined)delete globalThis.document;else globalThis.document=oldDocument;}
 });
+test('an import uploads previews only for visible cutouts, retaining full editing sources',async()=>{
+  const oldBitmap=globalThis.createImageBitmap,oldDocument=globalThis.document;
+  let decoded=0;
+  globalThis.createImageBitmap=async()=>{decoded++;return {width:480,height:480,close(){}};};
+  globalThis.document={createElement:()=>({getContext:()=>({drawImage(){}}),toBlob:callback=>callback(new Blob(['preview'],{type:'image/webp'}))})};
+  try{
+    const paths=[],cos={enabled:true,async upload(path){paths.push(path);}};
+    const {state,db}=fixture(null,cos);
+    await db.cloudTransaction(['assets','blobs','projects'],tx=>{
+      tx.objectStore('assets').put({id:'material',blobId:'cutout',candidateFrameBlobId:'frame',
+        initialMaskBlobId:'mask',finalMaskBlobId:'mask',photoBlobId:'photo'});
+      tx.objectStore('projects').put({id:'work',originalImportPhotoBlobID:'photo'});
+      for(const id of ['cutout','frame','mask','photo'])
+        tx.objectStore('blobs').put({id,data:new Blob([id+'-pixels'],{type:'image/png'})});
+    });
+    assert.equal(paths.filter(path=>path.endsWith('-preview480.webp')).length,1);
+    assert.equal(paths.length,5,'four original blobs and one visible cover');
+    assert.equal(decoded,1,'hidden editing sources must not be decoded for a cover');
+    const blobs=state.calls[0].operations.filter(op=>op.store==='blobs');
+    assert.deepEqual(blobs.map(op=>!!op.item.thumbnailPath),[true,false,false,false]);
+  }finally{
+    if(oldBitmap===undefined)delete globalThis.createImageBitmap;else globalThis.createImageBitmap=oldBitmap;
+    if(oldDocument===undefined)delete globalThis.document;else globalThis.document=oldDocument;
+  }
+});
 test('ordinary cutout updates and deletes are durable and immediately readable without waiting for uploads',async()=>{
   const cache=memoryCache(),a=fixture(cache);let release;a.state.uploadGate=new Promise(r=>release=r);await a.db.cloudAll('assets');
   await a.db.cloudStageMutation(['assets','blobs'],tx=>{tx.objectStore('assets').put({id:'a',title:'edited',blobId:'cut'});tx.objectStore('blobs').put({id:'cut',data:new Blob(['new-cutout'])});});

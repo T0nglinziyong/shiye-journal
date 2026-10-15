@@ -133,6 +133,20 @@ test('saved import announces queued organization before remote upload finishes',
   release();await new Promise(r=>setImmediate(r));assert.ok(organized);for(const url of urls.values())URL.revokeObjectURL(url);
   });
 });
+test('completed import starts its cloud batch shortly after local success renders',async()=>{
+  return withCutoutPixels(async()=>{
+    const blob=new Blob(['synthetic-image-bytes']),urls=new Map();
+    const state={importMode:'material',importStep:'review',assets:[],projects:[],
+      importRecords:[{confirmed:true,file:blob,selectedCandidates:[{selected:true,blob,region:{x:0,y:0,w:1,h:1}}]}]};
+    let rendered=false,uploads=0;
+    await saveImportBatch({state,db:{stageImport:async()=>({pending:true}),
+      flushProjects:async()=>{assert.ok(rendered);uploads++;}},urls,render:()=>{rendered=state.importStep==='done';}});
+    assert.ok(rendered);assert.equal(uploads,0,'success does not wait for remote upload');
+    for(let i=0;i<50&&!uploads;i++)await new Promise(resolve=>setTimeout(resolve,10));
+    assert.equal(uploads,1,'upload starts without the ten-second edit delay');
+    for(const url of urls.values())URL.revokeObjectURL(url);
+  });
+});
 test('AI metrics contain no private body; opt-in context redacts credentials before persistence',async()=>{
   const values=new Map(),db={get:async()=>{throw Error('AI diagnostics must never use cloud DB');}},deviceRecords={get:async(account,id)=>values.get(account+':'+id),put:async(account,value)=>values.set(account+':'+value.id,structuredClone(value)),list:async(account,prefix)=>[...values.entries()].filter(([k])=>k.startsWith(account+':'+prefix)).map(([,v])=>v),delete:async(account,id)=>values.delete(account+':'+id)};
   const response=()=>new Response(JSON.stringify({usage:{prompt_tokens:7,completion_tokens:3},choices:[{message:{content:'private-reply'}}]}));

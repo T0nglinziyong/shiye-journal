@@ -12,8 +12,8 @@ const expected={
   // recognition and segmentation code remains unchanged.
   'styles.css':'c6b7945ba3ffeb4373dbe38f97bc96dbfd9e5178',
   'responsive.css':'3daab9b366125aeda84ed7e78bf2ac72132c8981',
-  // Reviewed change: saved cutouts use a proportional A4 pixel budget; imported paper columns are independent of paper pattern. Detection and segmentation are unchanged.
-  'import-save.js':'219e8714f166184738aa12f2588afe75a3aa8342',
+  // Reviewed change: saved cutouts use a proportional A4 pixel budget; imported paper columns are independent of paper pattern. Completed imports start their cloud upload after local success renders. Detection and segmentation are unchanged.
+  'import-save.js':'73ad515429a92d10e23fe169a47cca4b7b2e507f',
   'vision-runtime.js':'3817687ab32df7fb19c308c83902a6b123aabee1'
 };
 for(const [name,sha] of Object.entries(expected)){

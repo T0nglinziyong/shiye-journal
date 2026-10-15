@@ -135,6 +135,11 @@ export async function saveImportBatch({state,db,urls,render,onSaved}) {
   const result=db.stageImport?await db.stageImport({assets,blobs,projects}):await db.transaction(['assets','blobs','projects'],tx=>{for(const a of assets)tx.objectStore('assets').put(a);for(const b of blobs)tx.objectStore('blobs').put(b);for(const p of projects)tx.objectStore('projects').put(p);});
   state.assets.push(...assets);state.projects.push(...projects);for(const b of blobs)urls.set(b.id,URL.createObjectURL(b.data));
   state.importSavedCount=savedCount;state.importPending=!!result?.pending;state.importStep='done';render();
+  // The import is already durable on this device. Let the completed screen
+  // paint before starting its larger cloud batch, bypassing the edit delay.
+  if(result?.pending&&db.flushProjects)setTimeout(()=>{
+    void db.flushProjects().catch(error=>console.warn('导入上传待自动重试',error));
+  },250);
   // Remote enrichment starts only after the entire batch is safely committed.
   // It must not block the success screen or the next import batch.
   if(onSaved)void Promise.resolve().then(()=>onSaved(

@@ -668,7 +668,26 @@ async function decode(store,record){
   if(!images.has(storagePath)){const pending=(async()=>{const saved=await cached('image:'+storagePath);if(usableBlob(saved))return saved;const data=await downloadObject(storagePath,storageProvider);if(!usableBlob(data))throw Error('云端图片为空');await remember('image:'+storagePath,data);return data;})().catch(error=>{images.delete(storagePath);throw error;});images.set(storagePath,pending);}
   const data=await images.get(storagePath);imageSizes.delete(storagePath);imageSizes.set(storagePath,data.size);let bytes=[...imageSizes.values()].reduce((a,b)=>a+b,0);for(const [path,size] of imageSizes){if(bytes<=64*1024*1024&&imageSizes.size<=48)break;if(path===storagePath)continue;images.delete(path);imageSizes.delete(path);bytes-=size;}return {...metadata,data};
 }
-async function encode(store,record){
+function auxiliaryBlobIDs(operations){
+  const auxiliary=new Set(),display=new Set();
+  const add=(set,id)=>{if(typeof id==='string'&&id)set.add(id);};
+  for(const op of operations){
+    if(op.action!=='put')continue;
+    const item=op.item;
+    if(op.store==='assets'){
+      for(const key of ['candidateFrameBlobId','initialMaskBlobId','finalMaskBlobId','photoBlobId'])add(auxiliary,item[key]);
+      for(const key of ['blobId','originalBlobId','originalCutoutBlobId'])add(display,item[key]);
+    }else if(op.store==='projects'){
+      add(auxiliary,item.originalImportPhotoBlobID);
+      for(const key of ['snapshotBlobId','previewBlobId'])add(display,item[key]);
+    }else if(op.store==='meta'){
+      for(const key of ['templateBlobId','exampleBlobId'])add(display,item[key]);
+    }
+  }
+  for(const id of display)auxiliary.delete(id);
+  return auxiliary;
+}
+async function encode(store,record,{makePreview=true}={}){
   if(store==='projects'){
     if(record.projectDocumentPath)record=await cloudProjectDocument(record);
     const {__cloudBaseRevision,__cloudSessionId,...persisted}=record;record=persisted;
@@ -720,7 +739,7 @@ async function encode(store,record){
   // The optional thumbnail is independent of the original PUT. Start both
   // together, but never commit metadata until the original is acknowledged.
   // This avoids serial upload latency without changing the safety boundary.
-  const thumbnailTask=(async()=>{try{const thumbnail=await makeThumbnail(record.data);if(!thumbnail)return null;const path=storagePath+'-preview480.webp',result=await uploadObject(path,thumbnail,'image/webp',provider);if(result.error&&String(result.error.statusCode)!=='409')return null;await rememberImageVariant(storagePath,COVER_EDGE,thumbnail);return path;}catch{return null;}})();
+  const thumbnailTask=makePreview?(async()=>{try{const thumbnail=await makeThumbnail(record.data);if(!thumbnail)return null;const path=storagePath+'-preview480.webp',result=await uploadObject(path,thumbnail,'image/webp',provider);if(result.error&&String(result.error.statusCode)!=='409')return null;await rememberImageVariant(storagePath,COVER_EDGE,thumbnail);return path;}catch{return null;}})():Promise.resolve(null);
   let thumbnailPath;
   await uploads.get(storagePath);thumbnailPath=await thumbnailTask;
   await remember('image:'+storagePath,record.data);retainImage(storagePath,record.data);
@@ -737,10 +756,10 @@ function cloudTransaction(names,fn,operationID=crypto.randomUUID()){
     await identity();if(revision===undefined)await version();
     const previous=revision;
     operations.push(...recordTombstones(operations).slice(operations.length));
-    const puts=operations.filter(op=>op.action==='put');activeDirect.total=puts.length;activeDirect.phase='编码与上传';reportSync();
+    const puts=operations.filter(op=>op.action==='put'),auxiliary=auxiliaryBlobIDs(operations);activeDirect.total=puts.length;activeDirect.phase='编码与上传';reportSync();
     for(let offset=0;offset<puts.length;offset+=3)try{
       await Promise.all(puts.slice(offset,offset+3).map(async op=>{
-        try{op.item=await encode(op.store,op.item);}
+        try{op.item=await encode(op.store,op.item,{makePreview:op.store!=='blobs'||!auxiliary.has(op.item.id)});}
         catch(error){throw markSyncPhase(error,'编码与上传 '+op.store);}
       }));
       activeDirect.done=Math.min(puts.length,offset+3);reportSync();
