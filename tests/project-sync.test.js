@@ -13,6 +13,16 @@ test('append-only import retries after an unrelated cloud revision',async()=>{
   await sync.flush();assert.equal(calls,1);assert.deepEqual(rows,[]);
 });
 const defer=()=>{let resolve;const promise=new Promise(r=>resolve=r);return {promise,resolve};};
+test('empty sync reports its idle transition after the network promise settles',async()=>{
+  const statuses=[];
+  let sync;
+  sync=createProjectSync({load:async()=>[],write:async()=>{},commit:async()=>{},
+    revision:()=>0,onStatus:()=>statuses.push(sync.status())});
+  await sync.flush();
+  assert.equal(sync.status().uploading,false);
+  assert.equal(statuses.at(-1).uploading,false);
+  assert.equal(statuses.at(-1).pending,0);
+});
 test('targeted pending inspection returns an isolated match without copying unrelated imports',async()=>{
   const rows=[{record:{id:'batch-a',kind:'batch',payload:{operations:[{store:'blobs',action:'put',item:{id:'a',data:new Blob(['a'])}}]}},serial:1,baseRevision:0},
     {record:{id:'batch-b',kind:'batch',payload:{operations:[{store:'blobs',action:'put',item:{id:'b',data:new Blob(['b'])}}]}},serial:2,baseRevision:0}];

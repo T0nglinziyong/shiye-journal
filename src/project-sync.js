@@ -272,6 +272,10 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
       if(firstFailure)throw firstFailure;
     });})().catch(e=>{diagnose('failed',null,e);error=e;report();throw e;}).finally(()=>{
       network=null;
+      // The last acknowledgement reports while this promise is still active.
+      // Publish the idle transition too, or the shell can show “上传中” with an
+      // empty outbox until some unrelated edit causes another status event.
+      report();
       if(entries.size&&!error&&[...entries.keys()].some(id=>!conflicts.has(id)))scheduleAuto();
     });
     network.catch(()=>{});return network;
