@@ -46,6 +46,8 @@ try{
   await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,
     x:from.x+28,y:from.y+20,clickCount:1});
   assert.ok(Math.abs(during-before)>5,'Object actions did not follow the drag: '+JSON.stringify({before,during}));
+  await click('.shape-add-quick','.swift-shape-picker');
+  await click('.shape-add-quick');
   assert.deepEqual(browser.errors,[]);
   console.log('Mobile Fabric toolbar, palette, compact menus and moving actions passed');
 }finally{await browser.close();}

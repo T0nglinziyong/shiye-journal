@@ -44,6 +44,19 @@ test('malformed reconciliation cannot replace a durable batch or block an unrela
   assert.equal(disk[0].record.payload.operations[0].item.id,'a');
 });
 
+test('reconciliation cannot replace one queued batch with another batch ID',async()=>{
+  let disk=[],revision=5;
+  const sync=createProjectSync({load:async()=>structuredClone(disk),reload:async()=>structuredClone(disk),
+    write:async rows=>{disk=structuredClone(rows);},revision:()=>revision,
+    recordKeys:syncAffectedKeys,coalesce:()=>null,autoFlushDelayMs:10000,
+    reconcile:async record=>({kind:'replace',record:{...record,id:'other-queue-id'}}),
+    commit:async()=>{revision++;}});
+  await sync.stage(asset('a'),{baseRevision:4});
+  await assert.rejects(sync.flush(),/同步合并结果不完整/);
+  assert.equal(disk.length,1);
+  assert.equal(disk[0].record.id,asset('a').id);
+});
+
 test('independent asset metadata edits commit in one durable RPC operation',async()=>{
   const calls=[],fixture=queue({commit:async record=>calls.push(record)});
   await fixture.sync.stage(asset('a'));

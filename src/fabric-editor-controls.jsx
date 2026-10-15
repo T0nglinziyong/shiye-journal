@@ -21,7 +21,8 @@ function ReactPopover({anchor,title,className='',width=360,height=440,picker=fal
       // The editor can refresh its tool buttons while the menu is opening.
       // Reanchor to the corresponding live control instead of dropping it.
       const live=anchor?.isConnected?anchor:
-        anchor?.dataset.val?document.querySelector(`.swift-editor-toolbar [data-val="${anchor.dataset.val}"]`):null;
+        anchor?.dataset.val?document.querySelector(`.swift-editor-toolbar [data-val="${anchor.dataset.val}"]`):
+        anchor?.dataset.popoverAnchor?document.querySelector(`.swift-editor-toolbar [data-popover-anchor="${anchor.dataset.popoverAnchor}"]`):null;
       if(!live){
         if(++attempts<10)retry=requestAnimationFrame(place);
         else onClose();
@@ -252,13 +253,13 @@ export function FabricEditorToolbar({state,draft,materials,source,selected,onIns
           <button type="button" className="font-step" aria-label="减小字号" onClick={()=>textProperty('fontSize',adjacentFontSize(text.fontSize,-1))}>‹</button>
           <output>{Math.round(text.fontSize||40)}</output>
           <button type="button" className="font-step" aria-label="增大字号" onClick={()=>textProperty('fontSize',adjacentFontSize(text.fontSize,1))}>›</button>
-        </div></div><button type="button" aria-label="段落设置" onClick={event=>setMenu({kind:'text-paragraph',anchor:event.currentTarget})}>☷</button>
+        </div></div><button type="button" aria-label="段落设置" data-popover-anchor="text-paragraph" onClick={event=>setMenu({kind:'text-paragraph',anchor:event.currentTarget})}>☷</button>
         <input type="color" aria-label="文字颜色" value={text.color||'#30463d'}
           onChange={event=>textProperty('color',event.target.value)}/>
-        <button type="button" aria-label="文字样式" onClick={event=>setMenu({kind:'text-style',anchor:event.currentTarget})}>Aa</button>
+        <button type="button" aria-label="文字样式" data-popover-anchor="text-style" onClick={event=>setMenu({kind:'text-style',anchor:event.currentTarget})}>Aa</button>
 
       </>:selectedKind==='shape'?<>
-        <button type="button" className="shape-add-quick" onClick={event=>open('shape',event)}>＋ 图形</button>
+        <button type="button" className="shape-add-quick" data-popover-anchor="shape-quick" onClick={event=>open('shape',event)}>＋ 图形</button>
         {!selectedNode.vectorLayers?<><label className="shape-quick-color">填充<input type="color" aria-label="填充颜色"
           value={selectedNode.fill||'#ffffff'} onChange={event=>shapeProperty('fill',event.target.value)}/></label>
         <label className="shape-quick-color">描边<input type="color" aria-label="描边颜色"
@@ -274,8 +275,8 @@ export function FabricEditorToolbar({state,draft,materials,source,selected,onIns
         </select>
         <button type="button" className="shape-detail-quick" onClick={()=>onAction('fabric-inspector-open')}>更多设置</button>
       </>:selectedNode?selectedKind==='material'?<button type="button" onClick={()=>onAction('fabric-inspector-open')}>☷ 素材操作</button>:null:
-      activeTool==='shape'?<button type="button" className="shape-add-quick" onClick={event=>open('shape',event)}>＋ 图形</button>:
-      activeTool==='lasso'?<button type="button" onClick={event=>setMenu({kind:'lasso',anchor:event.currentTarget})}>◌ 套索选择</button>:
+      activeTool==='shape'?<button type="button" className="shape-add-quick" data-popover-anchor="shape-quick" onClick={event=>open('shape',event)}>＋ 图形</button>:
+      activeTool==='lasso'?<button type="button" data-popover-anchor="lasso-quick" onClick={event=>setMenu({kind:'lasso',anchor:event.currentTarget})}>◌ 套索选择</button>:
       <button type="button" className="canvas-fit-button" onClick={()=>onAction('fabric-fit-view')}>↖ {Math.round(state.zoom*100)}%</button>}
     </div>
   </div>{menu?<ReactPopover anchor={menu.anchor} onClose={close}

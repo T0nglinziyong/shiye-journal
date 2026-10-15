@@ -69,8 +69,9 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
   }
   const overlaps=(a,b)=>a.some(left=>b.some(right=>left.store===right.store&&(left.id===right.id||left.id===undefined||right.id===undefined)));
   const validReplacement=(previous,candidate)=>{
-    if(!candidate?.id||previous.kind&&
-      (candidate.kind!==previous.kind||!candidate.payload))return false;
+    if(!candidate?.id||candidate.id!==previous.id||previous.kind&&
+      (candidate.kind!==previous.kind||!candidate.payload||
+        candidate.payload.id!==previous.payload?.id))return false;
     try{return Array.isArray(recordKeys(candidate));}catch{return false;}
   };
   const orderedRows=()=>[...entries.values()].sort((a,b)=>a.serial-b.serial);
