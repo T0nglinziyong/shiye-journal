@@ -105,14 +105,11 @@ test('capturing outside matching has no effect; empty or missing states are harm
 test('full render and React matching refresh preserve scroll state',async()=>{
   const {readFile}=await import('node:fs/promises');
   const app=await readFile(new URL('../src/app.js',import.meta.url),'utf8');
-  const session=await readFile(new URL('../src/matching-session.js',import.meta.url),'utf8');
   const markup=await readFile(new URL('../src/react-routes.jsx',import.meta.url),'utf8');
   assert.match(app,/previousMatchingScroll=captureMatchingScroll\(view,window\)/);
   assert.match(app,/restoreMatchingScroll\(view,matchingScrollMemory.scroll,window\)/);
   assert.match(app,/window\.dispatchEvent\(new Event\('shiye-matching-refresh'\)\)/);
   assert.match(markup,/addEventListener\('shiye-matching-refresh',update\)/);
-  assert.match(session,/captureMatchingScroll\(root,globalThis.window\)/);
-  assert.match(session,/restoreMatchingScroll\(root,scroll,globalThis.window\)/);
   for(const key of ['basket','recommendations','chips','intent'])
     assert.ok(markup.includes('data-match-scroll="'+key+'"'),key+' must have a stable scroll identity');
 });

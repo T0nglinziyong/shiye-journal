@@ -1,4 +1,3 @@
-import {reconcileKeyedChildren} from './ui-keyed-dom.js';
 import {localDeviceRecords} from './local-device-records.js';
 import {assetSourceRevision} from './material-anatomy.js';
 import {usableProjectSnapshot} from './project-outbox-recovery.js';
@@ -7,8 +6,6 @@ import {loadJournalTemplateReferences} from './journal-template-references.js';
 import {prepareMaterialPreviews} from './creative-previews.js';
 import {materialAliases} from './material-alias.js';
 import {createMatchingCoverCache} from './matching-cover-cache.js';
-import {reusePagePreviews} from './preview-content-cache.js';
-import {captureMatchingScroll,restoreMatchingScroll} from './matching-scroll.js';
 import {prepareProjectScene} from './scene-v2.js';
 const ID='matching-session-v1';
 const KEYS=['basket','coreIDs','excludedAssetIDs','matchCore','matchRatio','matchMode','matchStyle','matchStyles','matchPurposes','matchIntent','matchContentPolicy','matchTextPresentation','matchPurpose','matchProcessing','materialUseHints','materialUseRequired','assetProcessing','customPaperWidth','customPaperHeight'];
@@ -40,63 +37,13 @@ export function createMatchingSession(c){
  const archiveCompleted=async(variantID)=>{await queue;for(const v of variants.filter(v=>v.id===variantID&&v.status==='completed'&&!v.linkedProjectID)){if(v.linkedProjectID&&c.state.projects.some(p=>p.id===v.linkedProjectID))continue;const p=variantDraftProject(v,null,v.linkedProjectID||c.uid());await (p.isSnapshot?c.db.transaction(['projects'],tx=>tx.objectStore('projects').put(p)):c.db.stageProject(p));v.linkedProjectID=p.id;c.state.projects.push(p);
       try{await device.put(account(),matchingSnapshot(c.state,variants));}
       catch(error){console.warn('完成的作品已存入云端，本机搭配索引暂未保存',error);}}};
- const markup=()=>`<h2>版本方案</h2><p>完成方案自动保存为草稿或快照；“重新搭配”只清空这里的方案，不删除已保存作品。</p><div class="match-variant-grid" data-match-scroll="variants">${variants.map(v=>`<article class="match-variant" data-variant="${c.esc(v.id)}" data-variant-status="${c.esc(v.status)}"><button class="match-result" data-act="match-open-result" data-id="${c.esc(v.id)}" ${v.status==='running'?'disabled':''}><div class="match-cover-preview" data-match-raster="${c.esc(v.id)}">${covers.render(v.project)}</div><strong>${c.esc(v.title)}</strong></button><pre class="match-progress" aria-live="polite">${c.esc(v.progress)}</pre>${v.linkedProjectID&&!c.state.projects.some(p=>p.id===v.linkedProjectID)?`<button class="btn" data-act="match-restore" data-id="${c.esc(v.id)}">恢复已删除作品</button>`:''}${v.status==='running'?'<button class="btn" data-act="match-stop">停止创作</button>':v.project.deliveryMode==='zip'?`<button class="btn" data-act="download-project-json" data-id="${c.esc(v.linkedProjectID||v.project.id)}">下载可编辑 JSON</button>`:''}</article>`).join('')||'<p>尚未生成方案。</p>'}</div>`;
- const update=()=>{
-   if(c.state.route!=='matching')return;
-   const el=document.querySelector('.match-previews');
-   if(!el)return;
-   if(el.dataset.reactSession==='true'){notify();return;}
-   const root=el.closest('#view')||el.closest('.matching-page')?.parentElement;
-   const scroll=root?captureMatchingScroll(root,globalThis.window):null;
-   // Progress often changes many times per model turn. Keep every unchanged
-   // variant preview and its decoded images mounted across those updates.
-   const template=document.createElement('template');template.innerHTML=markup();
-   const oldGrid=el.querySelector('.match-variant-grid'),
-     nextGrid=template.content.querySelector('.match-variant-grid');
-   let structuralChange=false;
-   if(!oldGrid||!nextGrid){
-     el.innerHTML=markup();
-     structuralChange=true;
-   }else{
-     const stats=reconcileKeyedChildren(oldGrid,nextGrid,row=>row.dataset.variant||null,{
-       update(current,next){
-         if(current.dataset.variantStatus!==next.dataset.variantStatus)return false;
-         const actionSignature=node=>[...node.querySelectorAll(':scope > button[data-act]')]
-           .map(b=>[b.dataset.act,b.dataset.id,b.disabled,b.textContent].join(':')).join('|');
-         if(actionSignature(current)!==actionSignature(next))return false;
-         const oldButton=current.querySelector('.match-result'),
-           nextButton=next.querySelector('.match-result');
-         if(!oldButton||!nextButton)return false;
-         oldButton.disabled=nextButton.disabled;
-         const progress=current.querySelector('.match-progress'),
-           nextProgress=next.querySelector('.match-progress');
-         if(progress&&nextProgress&&progress.textContent!==nextProgress.textContent)
-           progress.textContent=nextProgress.textContent;
-         return true;
-       }
-     });
-     structuralChange=stats.inserted>0||stats.removed>0;
-   }
-   if(structuralChange){
-     reusePagePreviews({view:el,state:c.state});
-     covers.hydrate(el,variants);
-   }
-   el.onclick=e=>{
-     const b=e.target.closest('[data-act]');
-     if(b)c.handle(b.dataset.act,b.dataset.id);
-   };
-   c.mountIcons?.(el);
-   if(root)restoreMatchingScroll(root,scroll,globalThis.window);
- };
+ const update=()=>{if(c.state.route==='matching')notify();};
 
  return {
   subscribe(listener){listeners.add(listener);return ()=>listeners.delete(listener);},
   variants:()=>variants,
   coverURL:variant=>covers.rasterize(variant.project),
-  coverMarkup:variant=>covers.render(variant.project),
   async restore(){covers.clear();const record=await device.get(account(),ID);for(const key of KEYS)if(defaults[key]!==undefined)c.state[key]=structuredClone(defaults[key]);variants=restoreMatchingSession(record,c.state);lastSnapshot=JSON.stringify(matchingSnapshot(c.state,variants));ready=true;},
-  render(){return `<section class="panel match-previews" data-match-scroll="previews">${markup()}</section>`;},
-  hydrate(root){if(root?.dataset.reactSession!=='true')covers.hydrate(root,variants);},
   cacheStats:covers.stats,
   persist:save,
   async importProject(p,{alreadyStored=false}={}){
@@ -152,7 +99,7 @@ export function createMatchingSession(c){
     await save();ensureAccount();
     if(cfg.deliveryMode==='image'){
      const referenceImages=cfg.sendPresetReferences?(await loadJournalTemplateReferences({context:{styles:p.styles,purposes:p.purposes,materials:assetsSnapshot.filter(asset=>ids.includes(asset.id))},userTemplates:templatesSnapshot,db:c.db})).referenceImages:[];
-     const blob=await c.generatePageImage({settings:cfg,project:p,draft:p.drafts[0],assets:assetsSnapshot,ids,theme:p.intent||'',createImage:c.modelImage,referenceImages,userTemplates:templatesSnapshot,signal:run.signal,onProgress:message=>{v.progress=message;notify();const el=document.querySelector(`[data-variant="${v.id}"] .match-progress`);if(el&&el.closest('.match-previews')?.dataset.reactSession!=='true')el.textContent=message;}});
+     const blob=await c.generatePageImage({settings:cfg,project:p,draft:p.drafts[0],assets:assetsSnapshot,ids,theme:p.intent||'',createImage:c.modelImage,referenceImages,userTemplates:templatesSnapshot,signal:run.signal,onProgress:message=>{v.progress=message;notify();}});
      ensureAccount();const snapshot=await c.saveGeneratedImageSnapshot(blob,p);v.project=snapshot;v.linkedProjectID=snapshot.id;v.status='completed';v.progress='GPT 直接生成的图片已保存到画面快照；点击查看。';return;
     }
     recorder=await c.createAIRecorder({db:c.db,model:cfg.model,key:cfg.key,accountId:c.state.accountId||'browser'});const vision=cfg.includeThumbnails&&c.supportsVision(cfg);
@@ -164,7 +111,7 @@ export function createMatchingSession(c){
      onScene:vision?async d=>{ensureAccount();return (await c.rasterize(d,.7)).toDataURL('image/jpeg',.8);}:undefined,
      onFinalScene:async d=>{ensureAccount();return (await c.rasterize(d,Math.min(1.6,2000/Math.max(d.canvas.width,d.canvas.height)))).toDataURL('image/jpeg',.88);},
      onInspection:vision?async data=>{ensureAccount();const parts=[];for(const m of data?.materials||[]){const a=findAsset(m.assetID);if(a){const url=await c.modelImage(a,m.cropRect);if(url)parts.push({type:'text',text:m.key+' 的局部预览'},{type:'image_url',image_url:{url}});}}return parts;}:undefined,
-     onProgress:progress=>{v.progress=steps+'请求 '+progress.budget.totalRequests+'/'+progress.budget.limit+'（创作 '+progress.budget.creationRequests+'、格式修复 '+progress.budget.formatRepairRequests+'） · '+progress.phase+' · '+progress.seconds+' 秒 · 已接收 '+progress.received+' 字符';notify();const el=document.querySelector(`[data-variant="${v.id}"] .match-progress`);if(el&&el.closest('.match-previews')?.dataset.reactSession!=='true')el.textContent=v.progress;},
+     onProgress:progress=>{v.progress=steps+'请求 '+progress.budget.totalRequests+'/'+progress.budget.limit+'（创作 '+progress.budget.creationRequests+'、格式修复 '+progress.budget.formatRepairRequests+'） · '+progress.phase+' · '+progress.seconds+' 秒 · 已接收 '+progress.received+' 字符';notify();},
      onTurn:async({turn,results,draft})=>{
       ensureAccount();p.drafts=[structuredClone(draft)];p.activeDraftID=draft.id;
       steps+='第 '+turn+' 轮\n'+results.map(r=>(r.ok?'✓':'×')+' '+r.detail).join('\n')+'\n';v.progress=steps;

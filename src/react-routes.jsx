@@ -631,7 +631,7 @@ function MatchingSessionPanel({session,state,source,onAction}){
   useEffect(()=>session.subscribe(()=>refresh(version=>version+1)),[session]);
   const variants=session.variants();
   const action=(name,id)=>()=>onAction(name,id);
-  return <section className="panel match-previews" data-match-scroll="previews" data-react-session="true">
+  return <section className="panel match-previews" data-match-scroll="previews">
     <h2>版本方案</h2><p>完成方案自动保存为草稿或快照；“重新搭配”只清空这里的方案，不删除已保存作品。</p>
     <div className="match-variant-grid" data-match-scroll="variants">{variants.length?
       variants.map(variant=><article key={variant.id} className="match-variant"

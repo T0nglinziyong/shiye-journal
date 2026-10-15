@@ -2840,6 +2840,9 @@ async function init(user,{resetPending=false,afterAccountReset=false}={}){previe
     createElement('button',{className:'btn',id:'storage-retry',onClick:()=>init()},'重试连接')));
   }saveStatus('存储不可用');}}
 mountIcons(document);
-const matchingSession=createMatchingSession({state,db,uid,esc,asset,modelImage,rasterize,workCover:p=>{const d=p.drafts.find(d=>d.id===p.activeDraftID)||p.drafts[0];return `<div class="thumb-sheet" style="--thumb-ratio:${d.canvas.width/d.canvas.height};background:${esc(d.paperColor||'#fff')}"><div class="thumb-inner" style="position:relative">${p.isSnapshot?`<img src="${image(p.snapshotBlobId)}" alt="${esc(p.title)} 快照">`:workCover(d,false,true,p.id)}</div></div>`;},createProject:()=>createMatchingProject(),saveSnapshotFromDraft:saveProjectSnapshot,saveGeneratedImageSnapshot,generatePageImage,runCreativeAgent,createAIRecorder,supportsVision,flushSave,route,handle,mountIcons,toast});
+const matchingSession=createMatchingSession({state,db,uid,asset,modelImage,rasterize,
+  createProject:()=>createMatchingProject(),saveSnapshotFromDraft:saveProjectSnapshot,
+  saveGeneratedImageSnapshot,generatePageImage,runCreativeAgent,createAIRecorder,
+  supportsVision,flushSave,route,toast});
 startCloudSession(init).catch(error=>{recordRuntimeIssue('handled',error,state.route,{phase:'auth'});document.querySelector('#app').hidden=true;const p=document.createElement('p');p.textContent='无法连接认证服务，请稍后刷新。未打开私人资料。';document.body.append(p);console.warn(error.name);});
 import {createMatchingSession} from './matching-session.js';

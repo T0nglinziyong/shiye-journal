@@ -17,17 +17,17 @@ function environment(){
 const tick=()=>new Promise(resolve=>setTimeout(resolve,0));
 async function until(check){for(let i=0;i<80;i++){if(check())return;await new Promise(resolve=>setTimeout(resolve,10));}assert.ok(check(),'async image state did not settle');}
 
-test('matching cover markup is reused on progress updates and invalidated by mutable content',()=>{
+test('matching cover raster is reused on progress updates and invalidated by mutable content',async()=>{
  let calls=0;const state={accountId:'a',assets:[{id:'m',blobId:'image',title:'paper'}]};
- const cache=createMatchingCoverCache({state,workCover:p=>{calls++;return JSON.stringify(p.drafts);}});
+ const cache=createMatchingCoverCache({state,rasterize:async()=>({toDataURL:()=>`data:image/jpeg;base64,${++calls}`})});
  const d=createDraft();d.id='d';d.items.push({id:'material',assetID:'m',x:100,y:120,width:30,height:30,zIndex:1});d.textBlocks.push({id:'text',content:'old',x:40,y:60,width:120,height:50,color:'#333333',fontSize:20});
  const p={id:'p',title:'work',activeDraftID:'d',drafts:[d]};
  try{
-  const a=cache.render(p);assert.equal(cache.render(p),a);assert.equal(calls,1);
-  p.drafts[0].textBlocks[0].content='new';assert.notEqual(cache.render(p),a);assert.equal(calls,2);
-  state.assets[0].blobId='new-image';cache.render(p);assert.equal(calls,3);
-  state.accountId='b';cache.render(p);assert.equal(calls,4);
-  notifyImageInvalidation(['new-image']);cache.render(p);assert.equal(calls,5);
+  const a=await cache.rasterize(p);assert.equal(await cache.rasterize(p),a);assert.equal(calls,1);
+  p.drafts[0].textBlocks[0].content='new';assert.notEqual(await cache.rasterize(p),a);assert.equal(calls,2);
+  state.assets[0].blobId='new-image';await cache.rasterize(p);assert.equal(calls,3);
+  state.accountId='b';await cache.rasterize(p);assert.equal(calls,4);
+  notifyImageInvalidation(['new-image']);await cache.rasterize(p);assert.equal(calls,5);
  }finally{cache.dispose();}
 });
 test('warm preview lookup is synchronous and switching routes does not fetch again',async()=>{
