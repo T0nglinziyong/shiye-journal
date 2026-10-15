@@ -50,6 +50,53 @@ try{
   assert.ok(parity.material.meanRGBError<.1,JSON.stringify(parity));
   assert.ok(parity.text.meanRGBError<5,JSON.stringify(parity));
   assert.ok(parity.ink.meanRGBError<1,JSON.stringify(parity));
+  const coverParity=await evaluate(`(async()=>{
+    const {renderSceneCanvas}=await import('/src/scene-renderer.js');
+    const {renderWorkCoverSnapshot}=await import('/src/work-cover-snapshot.js');
+    const {draft,image}=window.__fabricFixture;
+    const source=image.toDataURL();
+    const decode=async url=>{const result=new Image();result.src=url;await result.decode();return result;};
+    const cover=await renderWorkCoverSnapshot({id:'parity-work',drafts:[draft],activeDraftID:draft.id},{
+      resolveAsset:async()=>({staticPath:source}),decodeStatic:decode,renderScene:renderSceneCanvas
+    });
+    const bitmap=await createImageBitmap(cover);
+    const expected=(await renderSceneCanvas(draft,{scale:480/800,
+      loadMaterialImage:async()=>image})).canvas;
+    const actual=document.createElement('canvas');actual.width=bitmap.width;actual.height=bitmap.height;
+    actual.getContext('2d').drawImage(bitmap,0,0);bitmap.close();
+    const a=actual.getContext('2d').getImageData(0,0,actual.width,actual.height).data;
+    const b=expected.getContext('2d').getImageData(0,0,expected.width,expected.height).data;
+    let total=0;for(let i=0;i<a.length;i+=4)
+      total+=Math.abs(a[i]-b[i])+Math.abs(a[i+1]-b[i+1])+Math.abs(a[i+2]-b[i+2]);
+    return {width:actual.width,height:actual.height,meanRGBError:total/(a.length/4*3)};
+  })()`);
+  assert.deepEqual([coverParity.width,coverParity.height],[360,480]);
+  assert.ok(coverParity.meanRGBError<7,`Cover differs from PNG renderer: ${JSON.stringify(coverParity)}`);
+  await evaluate(`(()=>{const {draft,refresh}=window.__fabricFixture;
+    draft.layers.push({id:'woven-material',type:'material',assetID:'fabric-sample',
+      x:360,y:400,width:240,height:144,zIndex:1.5,
+      craftDisplaySlices:[{id:'front',kind:'two-hole-weave',targetId:'paper-material',
+        geometryRatio:[[[[0,0],[.5,0],[.5,1],[0,1]]]],zOffset:2}]});
+    refresh();})()`);
+  await sleep(300);
+  const weaveParity=await evaluate(`(async()=>{
+    const {renderSceneCanvas}=await import('/src/scene-renderer.js');
+    const {draft,image}=window.__fabricFixture;
+    const reference=(await renderSceneCanvas(draft,{waitForFonts:false,
+      loadMaterialImage:async()=>image})).canvas;
+    const actual=document.querySelector('.lower-canvas');
+    const a=actual.getContext('2d').getImageData(0,0,600,800).data;
+    const b=reference.getContext('2d').getImageData(0,0,600,800).data;
+    let total=0;for(let i=0;i<a.length;i+=4)
+      total+=Math.abs(a[i]-b[i])+Math.abs(a[i+1]-b[i+1])+Math.abs(a[i+2]-b[i+2]);
+    return {pieces:window.__fabricCanvas.getObjects().filter(item=>item.sceneID==='woven-material').length,
+      meanRGBError:total/(600*800*3)};
+  })()`);
+  assert.equal(weaveParity.pieces,2,'One physical material needs two display projections');
+  assert.ok(weaveParity.meanRGBError<3,`Woven material differs from export: ${JSON.stringify(weaveParity)}`);
+  await evaluate(`(()=>{const {draft,refresh}=window.__fabricFixture;
+    draft.layers=draft.layers.filter(node=>node.id!=='woven-material');refresh();})()`);
+  await sleep(150);
   await evaluate(`(()=>{
     const {draft,refresh}=window.__fabricFixture;
     window.__oldMaterial=window.__fabricCanvas.getObjects().find(object=>object.sceneID==='paper-material');
@@ -142,6 +189,6 @@ try{
   await sleep(150);
   assert.deepEqual(await evaluate('[window.__fabricCanvas.width,window.__fabricCanvas.backgroundImage.getElement().width]'),[620,620]);
   assert.deepEqual(browser.errors,[]);
-  console.log('Fabric stage browser check passed:',JSON.stringify({background,parity,inkParity}),
+  console.log('Fabric stage browser check passed:',JSON.stringify({background,parity,coverParity,weaveParity,inkParity}),
     'screenshots /tmp/shiye-fabric-stage.png and /tmp/shiye-fabric-reference.png');
 }finally{await browser.close();}

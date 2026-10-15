@@ -19,6 +19,7 @@ import {isLegacySceneProject} from './scene-v2.js';
 import {createBlobRevisionProof} from './blob-revision-proof.js';
 import {createSyncDiagnostics} from './sync-diagnostics.js';
 import {decodeImageBlob} from './image-blob-decoder.js';
+import {boundedMap} from './bounded-map.js';
 export function createCloudStore({cloudClient,requireCloudUser,cache=null,namespace='cloud',projectPreview=()=>null,objectStorage=null}){
 const BUCKET='shiye-private';
 const writeProvider=()=>objectStorage?.enabled?'cos':'supabase';
@@ -185,23 +186,23 @@ async function loadUnifiedOutbox(recover=false){
       const copies=checked(await cloudClient().from('shiye_records').select('id,record')
         .eq('user_id',userID).eq('store','blobs').in('id',ids)
         .abortSignal(AbortSignal.timeout(5000)));
-      const available=[];
-      for(const copy of copies){
+      const available=await boundedMap(copies,4,async copy=>{
         const metadata=copy.record;
-        if(!metadata?.storagePath||!['cos','supabase'].includes(metadata.storageProvider))continue;
+        if(!metadata?.storagePath||!['cos','supabase'].includes(metadata.storageProvider))return null;
         if(!metadata.storagePath.startsWith(userID+'/'))throw Error('图片不属于当前账号');
         const localBlob=await cached('image:'+metadata.storagePath);
-        if(usableBlob(localBlob)){available.push(copy.id);continue;}
+        if(usableBlob(localBlob))return copy.id;
         if(metadata.storageProvider==='cos'&&objectStorage?.probe){
-          if(await objectStorage.probe(metadata.storagePath))available.push(copy.id);
+          if(await objectStorage.probe(metadata.storagePath))return copy.id;
           // A definite COS 404 is evidence that metadata alone cannot render
           // the card. Other probe failures throw and keep the outbox intact.
-          continue;
+          return null;
         }
-        try{if(usableBlob(await downloadObject(metadata.storagePath,metadata.storageProvider)))available.push(copy.id);}
+        try{if(usableBlob(await downloadObject(metadata.storagePath,metadata.storageProvider)))return copy.id;}
         catch(error){if(!/\b404\b|NoSuchKey|Object not found/i.test(error?.message||''))throw error;}
-      }
-      return available;
+        return null;
+      });
+      return available.filter(Boolean);
     });
     if(recovered.changed){
       const byOperation=new Map(recovered.rows.map(row=>[row.operationID,row]));

@@ -12,10 +12,15 @@ export async function decodeSceneImage(source){
 }
 export async function prepareSceneFonts(draft){
  const fonts=globalThis.document?.fonts;
- const requested=[...new Set((draft.textBlocks||[]).map(textFontFamily))];
+ const texts=[];
+ const collect=nodes=>{for(const node of nodes||[]){
+   if(node.type==='text')texts.push(node);
+   else if(node.type==='group')collect(node.children);
+ }};
+ collect(draft.layers);
+ const requested=[...new Set(texts.map(textFontFamily))];
  if(!fonts)return {status:'environment-unavailable',families:requested};
- await Promise.all((draft.textBlocks||[]).map(t=>fonts.load(textFont(t),String(t.content||'示例'))));
- await fonts.ready;
+ await Promise.all(texts.map(t=>fonts.load(textFont(t),String(t.content||'示例'))));
  return {status:'environment-fonts-loaded',families:requested,note:'同一字体名称不证明跨设备字体文件一致'};
 }
 export async function renderSceneCanvas(draft,{scale=1,loadMaterialImage,createCanvas=()=>document.createElement('canvas'),loadShapeImage=decodeSceneImage,waitForFonts=true}={}){

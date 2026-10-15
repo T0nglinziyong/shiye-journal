@@ -59,7 +59,7 @@ export function createLocalWorkCovers({
     jobs.set(token,job);
     return job;
   }
-  function observe(root,projects=state.projects){
+  function observe(root,projects=[...(state.projects||[]),...(state.trash||[]).filter(entry=>entry.kind==='project').map(entry=>entry.item)]){
     if(!root)return ()=>{};
     const cards=[...root.querySelectorAll('[data-act="open-project"][data-id],[data-cover-project-id]')]
       .filter(card=>missing(projects.find(p=>p.id===(card.dataset.coverProjectId||card.dataset.id))));

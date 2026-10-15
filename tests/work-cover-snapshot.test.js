@@ -14,7 +14,7 @@ test('COS Works cover renders complete scene using only 480px material blobs',as
     renderScene:async(draft,options)=>{
       scene=draft;
       assert.equal(options.scale,.48);
-      assert.equal(options.waitForFonts,false);
+      assert.equal(options.waitForFonts,true);
       const first=await options.loadMaterialImage('material-1');
       assert.equal(first,await options.loadMaterialImage('material-1'));
       return {canvas:{toBlob:callback=>callback(output)}};

@@ -32,6 +32,17 @@ function replaceKind(d,type,entries){
  for(const old of leafList(d,type))detach(d.layers,old.id);
  for(const entry of entries){const n=entry;if(typeof n.id!=='string'||!n.id)n.id=generatedID();n.type=type;insertNode(d,n,positions.get(n.id)||n.creativeGroupID);}
 }
+function reorderKind(d,type,entries){
+ const slots=allLeaves(d.layers).filter(e=>e.kind===type);
+ if(entries.length!==slots.length)throw Error('图层排序不能增删对象');
+ const parent=e=>e.parents.at(-1)?.id||null;
+ const originalParents=new Map(slots.map(e=>[e.value.id,parent(e)]));
+ if(entries.some((node,index)=>originalParents.get(node.id)!==parent(slots[index])))
+  throw Error('跨组合调整图层顺序请使用图层移动操作');
+ const levels=slots.map(e=>z(e.value));
+ for(let index=0;index<entries.length;index++)entries[index].zIndex=levels[index];
+ replaceKind(d,type,entries);
+}
 function listView(d,type){
  const list=leafList(d,type);
  const add=(...values)=>{for(const n of values){if(!n||typeof n!=='object')throw Error('图层对象无效');n.id||=generatedID();n.type=type;insertNode(d,n,n.creativeGroupID);}return leafList(d,type).length;};
@@ -41,8 +52,8 @@ function listView(d,type){
    for(const n of incoming){n.id||=generatedID();n.type=type;if(around)n.zIndex=around.zIndex??n.zIndex;insertNode(d,n,n.creativeGroupID);}
    return gone;};
  const operations={push:add,pop:()=>splice(-1,1)[0],shift:()=>splice(0,1)[0],unshift:(...values)=>{splice(0,0,...values);return leafList(d,type).length;},splice,
-   reverse:()=>{const value=leafList(d,type).reverse();replaceKind(d,type,value);return list;},
-   sort:(compare)=>{const value=leafList(d,type).sort(compare);replaceKind(d,type,value);return list;}};
+   reverse:()=>{const value=leafList(d,type).reverse();reorderKind(d,type,value);return list;},
+   sort:(compare)=>{const value=leafList(d,type).sort(compare);reorderKind(d,type,value);return list;}};
  // Transitional leaf collection APIs must never silently lose an indexed
  // assignment or a length truncation. Only layers are persisted; every
  // permitted mutation writes through to that canonical tree.

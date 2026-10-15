@@ -30,11 +30,42 @@ import {ManualBoxEditor} from './react-manual-box-editor.jsx';
 import {PaperCorrection} from './react-paper-correction.jsx';
 import {OrganizationBadge} from './react-organization.jsx';
 import {materialKinds,materialRoleName} from './material-taxonomy.js';
+import {loadSeriesCoverSnapshot,seriesCoverSignature} from './series-cover-snapshot.js';
 
 function RouteImage({asset,source,priority=false}){
   const src=asset&&(source(asset.blobId)||asset.staticPath);
   return src?<><img data-asset-image-id={asset.id} loading={priority?'eager':'lazy'}
     fetchPriority={priority?'high':undefined} decoding="async" src={src} alt={asset.title}/><OrganizationBadge id={asset.id}/></>:<span>无预览</span>;
+}
+
+function SeriesCover({series,assets,seriesCovers,source,priority,account}){
+  const coverRef=useRef(null);
+  const [snapshot,setSnapshot]=useState(null);
+  const members=seriesCovers(series,assets);
+  const key=JSON.stringify([account,series.id,seriesCoverSignature(series,assets),
+    members.map(asset=>source(asset.blobId)||asset.staticPath||'')]);
+  useEffect(()=>{
+    const cover=coverRef.current;
+    if(!cover)return;
+    let cancelled=false;
+    const start=()=>void loadSeriesCoverSnapshot({cover,series,assets,account})
+      .then(url=>{if(!cancelled&&url)setSnapshot({key,url});})
+      .catch(()=>{});
+    if(priority||typeof IntersectionObserver!=='function')start();
+    else{
+      const observer=new IntersectionObserver(entries=>{
+        if(entries.some(entry=>entry.isIntersecting)){observer.disconnect();start();}
+      },{rootMargin:'260px'});
+      observer.observe(cover);
+      return ()=>{cancelled=true;observer.disconnect();};
+    }
+    return ()=>{cancelled=true;};
+  },[key]);
+  return <div className="series-cover" ref={coverRef}>
+    {members.map(asset=><RouteImage key={asset.id} asset={asset} source={source} priority={priority}/>)}
+    {snapshot?.key===key?<img className="series-cover-snapshot" alt="" src={snapshot.url}
+      loading={priority?'eager':'lazy'} decoding="async"/>:null}
+  </div>;
 }
 
 function DetailLinkIcon({kind}){
@@ -668,7 +699,7 @@ export function WorksPage({projects,isUntouchedLegacyExample,assets,localCover,c
   </div>;
 }
 
-export function SeriesPage({series,assets,display,seriesCovers,source,onAction,onTabChange,
+export function SeriesPage({series,assets,display,seriesCovers,source,account,onAction,onTabChange,
   selection,onSelectionToggle,pageSize:configuredPageSize,onBatchAction,onBatchError,onEditSeries}){
   const [query,setQuery]=useState(selection.seriesQuery||'');
   const [seriesMenuID,setSeriesMenuID]=useState(null);
@@ -736,7 +767,8 @@ export function SeriesPage({series,assets,display,seriesCovers,source,onAction,o
           aria-pressed={active?selection.selected.has(entry.id):undefined}
           holdDisabled={active} onHold={()=>setSeriesMenuID(entry.id)}
           onActivate={event=>selectEntry(event,entry)}>
-          <div className="series-cover">{seriesCovers(entry,assets).map(asset=><RouteImage key={asset.id} asset={asset} source={source} priority={index<2}/>)}</div>
+          <SeriesCover series={entry} assets={assets} seriesCovers={seriesCovers}
+            source={source} priority={index<2} account={account}/>
           <div className="card-body"><h3>{entry.title} <span aria-hidden="true">→</span></h3><p>{members.length} 件素材</p></div>
         </PressCard>;
       })}
@@ -871,7 +903,7 @@ function DirectionGroup({groups,values,type,onChange}){
     <option value="">不预设</option>{group.options.map(name=><option key={name} value={name}>{name}</option>)}
   </select></label>);
 }
-function MatchingVariantCover({variant,session,source,assets}){
+function MatchingVariantCover({variant,session,source}){
   const host=React.useRef(null),[raster,setRaster]=useState(null);
   useEffect(()=>{
     if(variant.status==='running'||variant.project?.isSnapshot)return;
@@ -890,16 +922,13 @@ function MatchingVariantCover({variant,session,source,assets}){
   const snapshot=variant.project?.isSnapshot?source(variant.project.snapshotBlobId):null;
   const draft=variant.project?.drafts?.find(item=>item.id===variant.project.activeDraftID)||
     variant.project?.drafts?.[0];
-  const asset=id=>assets.find(entry=>entry.id===id);
   return <div ref={host} className="match-cover-preview" data-match-raster={variant.id}>
     {raster||snapshot?<img className="match-raster-preview" src={raster||snapshot}
       alt={variant.title+' 构图预览'}/>:<div className="match-cover-fallback"
       style={{aspectRatio:draft?`${draft.canvas.width}/${draft.canvas.height}`:'3/4',
         background:draft?.paperColor||'#fcfaf0'}}>
       {draft?<div className="thumb-sheet" style={{'--thumb-ratio':draft.canvas.width/draft.canvas.height,
-        background:draft.paperColor||'#fff'}}><div className="thumb-inner" style={{position:'relative'}}>
-        <SceneCover draft={draft} asset={asset} source={source}/>
-      </div></div>:null}
+        background:draft.paperColor||'#fff'}}><span className="work-cover-pending" role="status">正在准备预览…</span></div>:null}
     </div>}
   </div>;
 }
@@ -1071,12 +1100,10 @@ function EditorAIPanel({state,draft,asset,hasReport,onAction,onPromptChange}){
   </section>;
 }
 
-// The editor controls are React nodes. Its paper and scene stay one opaque
-// island so pointer capture, canvas contexts and incremental layer patches
-// remain under the existing canvas engine's lifetime.
-export function EditorPage({state,draft,editorEntry,renderSceneDOM,asset,source,format,
+// Fabric owns the single editable canvas; React owns its surrounding controls.
+export function EditorPage({state,draft,editorEntry,asset,source,format,
   hasAIReport,onAction,onInspectorChange,onTitleCommit,onDraftSelect,onAIAction,onAIOpen,onAIPromptChange,
-  useFabric=false,sceneRevision,onFabricSelection,onFabricBeforeChange,onFabricChange,onFabricIssue,
+  sceneRevision,onFabricSelection,onFabricBeforeChange,onFabricChange,onFabricIssue,
   onFabricViewportChange,loadFabricAsset,materials=[]}){
   const project=state.activeProject;
   if(!project||!draft)return null;
@@ -1086,36 +1113,27 @@ export function EditorPage({state,draft,editorEntry,renderSceneDOM,asset,source,
   const availableHeight=Math.max(180,viewportHeight-(window.innerWidth<700?200:166));
   const width=Math.max(160,Math.min(availableWidth,availableHeight*draft.canvas.width/draft.canvas.height));
   const scale=width/draft.canvas.width,height=draft.canvas.height*scale;
-  const sceneHTML=!useFabric&&renderSceneDOM(draft,scale)+
-    `<canvas class="paper-layer" width="${Math.round(draft.canvas.width)}" height="${Math.round(draft.canvas.height)}" aria-hidden="true"></canvas>`+
-    `<canvas id="ink" class="ink-layer" width="${Math.round(draft.canvas.width)}" height="${Math.round(draft.canvas.height)}"></canvas>`;
-  const toolNames=[['select','选择'],['pen','画笔'],['text','文字'],['shape','图形'],['material','素材']];
-  return <><div className={`view-head ${useFabric?'swift-editor-head':''}`}>
-    {useFabric?<button className="btn" data-act="back-works">返回</button>:null}
+  return <><div className="view-head swift-editor-head">
+    <button className="btn" data-act="back-works">返回</button>
     <div><h1 contentEditable suppressContentEditableWarning id="project-title"
     spellCheck="false" onBlur={event=>onTitleCommit(event.currentTarget.textContent)}>{project.title}</h1>
       <p>编辑只改变作品，不修改素材库里的原始尺寸和数量</p></div><div className="actions">
-      {useFabric?<><span className="swift-auto-saved">{document.querySelector('#save-state')?.textContent||'本机暂存'}</span>
+      <span className="swift-auto-saved">{document.querySelector('#save-state')?.textContent||'本机暂存'}</span>
         <FabricHeaderMenu kind="history" project={project} onAction={onAction} onAIOpen={onAIOpen}/>
         <button className="btn" data-act="undo" aria-label="撤销">↶</button>
         <button className="btn" data-act="redo" aria-label="重做">↷</button>
         <button className="btn primary" data-act="editor-done">完成</button>
         <FabricHeaderMenu kind="export" project={project} onAction={onAction}/>
-      </>:<><button className="btn" data-act="back-works">返回作品</button><button className="btn" data-act="new-draft">新方案</button>
-        <button className="btn primary" onClick={onAIOpen}>AI 创作</button><button className="btn" data-act="creative-json">导入创作指令</button><button className="btn" data-act="export-png">导出 PNG</button><button className="btn" data-act="print">打印 / PDF</button><button className="btn" data-act="export-pdf">导出 PDF</button></>}
     </div></div>
-    {useFabric?<FabricEditorToolbar state={state} draft={draft} materials={materials} source={source}
-      onAction={onAction}/>:null}
-    <div className={`editor-shell ${useFabric?'swift-editor-workspace':''} ${useFabric&&selected?'show-inspector':''}`}
-      data-react-page="editor">{useFabric?null:<div className="editor-tools">
-      {toolNames.map(([id,label])=><button key={id} className={`btn ${state.tool===id?'primary':''}`} data-act="tool" data-val={id}>{label}</button>)}
-      <hr/><button className="btn" data-act="undo">撤销</button><button className="btn" data-act="redo">重做</button>
-    </div>}<section className="editor-stage"><div className="object-toolbar">
+    <FabricEditorToolbar state={state} draft={draft} materials={materials} source={source}
+      onAction={onAction}/>
+    <div className={`editor-shell swift-editor-workspace ${selected?'show-inspector':''}`}
+      data-react-page="editor"><section className="editor-stage"><div className="object-toolbar">
       <button className="btn mini" data-act="zoom-out">－</button><span>{Math.round(state.zoom*100)}%</span><button className="btn mini" data-act="zoom-in">＋</button>
       <button className="btn mini" data-act="paper-menu">纸张</button>
       <button className="btn mini" data-act="restore-baseline" disabled={selected?.kind!=='material'||!selected.value.generationBaseline}>恢复初稿</button>
       <button className="btn mini" data-act="park" disabled={selected?.kind!=='material'}>放入备选</button>
-    </div><div className="page-wrap">{useFabric?<FabricPageViewport draft={draft} width={width} height={height}
+    </div><div className="page-wrap"><FabricPageViewport draft={draft} width={width} height={height}
       zoom={state.zoom} initialPan={state.canvasViewports?.get(project.id+':'+draft.id)}
       onViewportChange={onFabricViewportChange}><div className="fabric-scene-scale" style={{position:'absolute',left:0,top:0,
         width:draft.canvas.width,height:draft.canvas.height,transform:`scale(${scale})`,transformOrigin:'left top'}}>
@@ -1129,8 +1147,7 @@ export function EditorPage({state,draft,editorEntry,renderSceneDOM,asset,source,
           selectionMode={state.selectionMode||'contain'} selectedIDs={state.multiSelected||[]}
           assetURL={loadFabricAsset} onSelection={onFabricSelection}
           onBeforeChange={onFabricBeforeChange} onChange={onFabricChange} onIssue={onFabricIssue}/>
-      </div></FabricPageViewport>:<div id="canvas-page" className={`canvas-page ${draft.paperPattern} ${state.tool==='pen'?'pen':''}`}
-        style={{width,height,backgroundColor:draft.paperColor}} dangerouslySetInnerHTML={{__html:sceneHTML}}/>}</div>
+      </div></FabricPageViewport></div>
       <div className="shelf"><b>备选</b>{draft.items.filter(item=>item.isParked).map(item=><button key={item.id} className="mini-asset" data-act="unpark" data-id={item.id}>
         <RouteImage asset={asset(item.assetID)} source={source}/></button>)}</div>
     </section><aside className="editor-inspector"><h2>{selected?`${{material:'素材',text:'文字',shape:'图形'}[selected.kind]} · 图层属性`:'页面设置'}</h2>
@@ -1219,7 +1236,9 @@ export function ProjectPreviewPage({project,source,assets,localCover,cloudEnable
       aria-pressed={!!project.isFavorite} onClick={action('snapshot-favorite')}>{project.isFavorite?'♥':'♡'}</button>:null}
     {button('preview-back','关闭')}
   </div><div className="project-preview-cover"><div className="preview-paper"
-    style={{background:draft.paperColor||'#fff',aspectRatio:`${draft.canvas.width}/${draft.canvas.height}`}}>
+    style={{background:draft.paperColor||'#fff',aspectRatio:`${draft.canvas.width}/${draft.canvas.height}`,
+      width:`${Math.min(window.innerHeight*.55,500)*draft.canvas.width/draft.canvas.height}px`,
+      maxWidth:'90%',height:'auto',maxHeight:'100%'}}>
     {staticCover?<img className="work-reference" loading="eager" fetchPriority="high" decoding="async"
       src={staticCover} alt={`${project.title} ${project.isSnapshot?'快照':'完整预览'}`}/>:null}
     {!staticCover?<SceneCover draft={draft} asset={asset} source={source} priority

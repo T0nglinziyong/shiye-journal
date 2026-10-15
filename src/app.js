@@ -13,9 +13,7 @@ import {renderLoginGate} from './react-cloud-auth.jsx';
 const sceneRuntime=()=>import('./scene-renderer.js');
 const renderSceneCanvas=async(...args)=>(await sceneRuntime()).renderSceneCanvas(...args);
 const decodeSceneImage=async(...args)=>(await sceneRuntime()).decodeSceneImage(...args);
-import {sceneRenderEntries,projectMaterialViews,sceneDisplaySiblings} from './craft-display.js';
-import {inkScenePaths} from './ink-scene-svg.js';
-import {maskSVG,sceneLayerStyle,sceneLayerEntries,attachSceneV2,moveSceneNode,groupSceneLayers} from './scene-model.js';
+import {sceneLayerEntries,attachSceneV2,moveSceneNode,groupSceneLayers} from './scene-model.js';
 import './styles.css';
 import './overrides.css';
 import './parity.css';
@@ -50,23 +48,17 @@ import {readAlphaMask,extractAlphaMask} from './alpha-mask-blob.js';
 import {renderHighResolutionCutout} from './cutout-full-resolution.js';
 import {materialStorageBlobs} from './material-storage-resolution.js';
 import {sha256Hex} from './task-fingerprint.js';
-import {reconcileCanvasText,textParagraphMarkup} from './canvas-text-content.js';
-import {reconcileEditorScene} from './editor-scene-reconcile.js';
 import {checkpointEditorHistory,ensureEditorHistory,resetEditorHistory,takeEditorHistoryStep} from './editor-history-scope.js';
 import {captureHistory} from './project-history.js';
 import {newEditorSession,editorSessionHasEdits} from './editor-session-policy.js';
-import {mountCanvasEditor} from './canvas-editor-ui.js';
 import {editorExitDecision} from './editor-exit-policy.js';
 import {closePopover} from './swift-popover.js';
-import {drawPaper} from './paper-rendering.js';
-import {shapeSVG,drawInk,textFont,textFontFamily,textLineHeight,textLines,defaultTools,configureShape} from './editor-tools-model.js';
-import {shapeTag} from './shape-preview.js';
+import {defaultTools,configureShape} from './editor-tools-model.js';
 import {createWorkCoverBackfill} from './work-cover-backfill.js';
 import {renderWorkCoverSnapshot} from './work-cover-snapshot.js';
 import {createLocalWorkCovers} from './work-cover-local-cache.js';
 import {imagePlaceholder,mountPrivateImages} from './lazy-private-images.js';
 import {recordImageLoading,imageLoadingSnapshot} from './image-loading-diagnostics.js';
-import {mountSeriesCoverSnapshots} from './series-cover-snapshot.js';
 import {assetEditorValue} from './asset-editor.js';
 import {AssetEditorDialog} from './react-asset-editor.jsx';
 import {createAIRecorder,publicAIDiagnosticReport} from './ai-diagnostics.js';
@@ -84,7 +76,6 @@ import {showCutoutEditor} from './cutout-editor.js';
 import {decodeImageBlob} from './image-blob-decoder.js';
 import {COVER_EDGE} from './image-variants.js';
 import {loadModelImageSource} from './model-image-source.js';
-import {mountCanvasSelection} from './canvas-selection-ui.js';
 import * as db from './store.js';
 import {loadPreferences,savePreferences,migrateStoredPreferences} from './preferences.js';
 import {cloudPreferencesRecord,cloudPreferencesFromMeta} from './cloud-preferences.js';
@@ -121,7 +112,7 @@ import {prepareMaterialPreviews} from './creative-previews.js';
 import {materialAliases} from './material-alias.js';
 import {snapshotRecord,workInTab} from './work-collections.js';
 import {generatePageImage} from './ai-image-generation.js';
-import {materialMaskCSS,clipMaterial} from './material-mask.js';
+import {clipMaterial} from './material-mask.js';
 import {manualLayoutChoices,applyManualLayout} from './manual-layout-templates.js';
 import {exportSceneDocument,importSceneDocument} from './scene-io.js';
 import {resetCatalogPage} from './catalog-pagination.js';
@@ -153,9 +144,6 @@ const fileInput=document.querySelector('#file-input'),workFileInput=document.que
 let offlineSnapshotProject=null;
 installRuntimeDiagnostics(()=>state.route);
 const state={route:'series',assets:[],series:[],projects:[],trash:[],userTemplates:[],basket:[],excludedAssetIDs:[],history:[],selected:null,activeProject:null,activeDraft:null,offlineEditingReturnID:null,detailAssetID:null,previewProjectID:null,settingsSection:null,selfHosted:false,aiSettings:loadAISettings(),preferences:loadPreferences(),aiPanel:false,aiBusy:false,aiPrompt:'',aiProgress:'',tool:'select',zoom:1,sort:'newest',query:'',kind:'all',status:'all',seriesID:'all',matchCore:null,matchRatio:'a4',matchMode:'single',matchStyle:'韩系清新',matchStyles:['韩系清新'],matchPurposes:['日常记录'],matchIntent:'',matchContentPolicy:'documentary',matchTextPresentation:'mixed',matchPurpose:'日常记录',matchProcessing:'不预设',materialUseHints:{},materialUseRequired:{},assetProcessing:{},customPaperWidth:210,customPaperHeight:297,recommendFilter:'全部',coreIDs:[],importStep:'inspect',importRecords:[],importIndex:0,importFile:null,importBitmap:null,importBox:{x:0,y:0,w:1,h:1},importCandidate:null,importRemoveWhite:false,undo:[],redo:[],drawing:false};
-// The actual account-backed editor can be exercised while the remaining
-// controls migrate. This switch is removed before the test-branch cutover.
-const fabricEditorPreview=new URLSearchParams(location.search).has('fabric-editor');
 // Action changes are published independently of their DOM representation.
 const actionStore=createActionStore(state);
 actionStore.register('app/action',async({action,id,value})=>({result:await runAppAction(action,id,value)}));
@@ -292,12 +280,12 @@ const localWorkCovers=createLocalWorkCovers({
     if(!actual||actual.updatedAt!==p.updatedAt)return;
     const draft=actual.drafts.find(item=>item.id===actual.activeDraftID)||actual.drafts[0];
     // Once the COS reference is committed, it remains the preferred source.
-    if(draft?.coverImageID||draft?.coverBlobId||state.route!=='works')return;
+    if(draft?.coverImageID||draft?.coverBlobId||!['works','projectPreview'].includes(state.route))return;
     window.dispatchEvent(new CustomEvent('shiye-react-cover-update',{detail:{projectID:p.id}}));
   },
   onError:(_message,id,error)=>{
     console.warn('本地封面暂不可用',id,error);
-    if(state.route==='works')window.dispatchEvent(new CustomEvent('shiye-react-cover-update',{
+    if(['works','projectPreview'].includes(state.route))window.dispatchEvent(new CustomEvent('shiye-react-cover-update',{
       detail:{projectID:id,error:'封面暂不可用，重新进入后重试'}}));
   }
 });
@@ -436,20 +424,12 @@ pageControllers.register('import',createImportController({
   refreshReact:()=>flushSync(()=>window.dispatchEvent(new Event('shiye-import-refresh'))),
 }));
 pageControllers.register('editor',createEditorController({
-  patchScene:refreshCanvas,actions:actionStore,render,view,
+  actions:actionStore,render,view,
   createEditor:()=>{
-    view.editorDraft=current();view.editorInk=current().strokes;
-    view.editorLayoutKey=editorLayoutKey();
     markSceneTrackingBaseline(state.activeProject);
-    if(fabricEditorPreview){
-      captureHistory(state.activeProject);
-      if(!state.canvasTools){let saved={};try{saved=JSON.parse(localStorage.getItem('shiye-canvas-tools-v1'))||{};}catch{}
-        state.canvasTools={...defaultTools,...saved};}
-      return;
-    }
-    mountCanvasEditor({state,view,body,modal,current,checkpoint,saveProject,render,route,
-      flushSave,toast,esc,imgTag,asset,db,handle,openCutoutCheck,openAICreation});
-    mountCanvasSelection({state,view,current,checkpoint,saveProject,render,toast});
+    captureHistory(state.activeProject);
+    if(!state.canvasTools){let saved={};try{saved=JSON.parse(localStorage.getItem('shiye-canvas-tools-v1'))||{};}catch{}
+      state.canvasTools={...defaultTools,...saved};}
   }
 }));
 pageControllers.register('matching',createMatchingController({
@@ -496,7 +476,6 @@ function render(){
   // and native editor listeners before replacing their DOM hosts.
   view.workCoverDispose=null;view.localWorkCoverDispose=null;
   view.deletedCoverDispose?.();view.deletedCoverDispose=null;
-  view.seriesCoverDispose?.();view.seriesCoverDispose=null;
   view.editorDispose=null;
   view.editorRefresh=null;view.catalogRefresh=null;
   closePopover();
@@ -572,6 +551,7 @@ function render(){
         }})
     :state.route==='series'
     ?createElement(SeriesPage,{series:state.series,assets:state.assets,display:state.preferences.display,
+      account:state.accountId||'browser',
       seriesCovers,source:image,onAction:handle,selection:parity,
       pageSize:state.preferences.maxPageItems,
       onSelectionToggle:selectionToggle,onBatchAction,onBatchError,
@@ -584,8 +564,8 @@ function render(){
     ?createElement(MatchingPage,{state,source:image,kindName,session:matchingSession,
       onAction:handle,onMatchingChange:updateMatchingFromReact})
     :state.route==='editor'&&state.activeProject&&current()
-    ?EditorPage({state,draft:current(),editorEntry,renderSceneDOM,asset,source:image,
-      useFabric:fabricEditorPreview,sceneRevision:state.activeProject.updatedAt,
+    ?EditorPage({state,draft:current(),editorEntry,asset,source:image,
+      sceneRevision:state.activeProject.updatedAt,
       materials:state.assets,
       loadFabricAsset:async(id,node)=>{
         const record=asset(id);
@@ -654,8 +634,16 @@ function render(){
           saveActiveImportRecord();render();toast('已更新素材框，请核对候选预览');
         },onManualError:toast,onPaperChange:saveActiveImportRecord})
       :null;
+  const routeIdentity=[state.route,
+    state.route==='library'?`${parity.libraryTab}:${state.seriesID||'all'}`:'',
+    state.route==='works'?parity.workTab:'',
+    state.route==='import'?`${state.importStep}:${state.importIndex}`:'',
+    state.route==='editor'?state.activeProject?.id||'':'',
+    state.route==='settings'?state.settingsSection||'home':'',
+    state.route==='assetDetail'?state.detailAssetID:'',
+    state.route==='projectPreview'?state.previewProjectID:''].join(':');
   renderReactPage(createElement(AssetOrganizationContext.Provider,{value:assetOrganization},reactPage||unavailableRoute()),
-    {preserveKey:fabricEditorPreview&&state.route==='editor'?'fabric-editor':null});
+    {preserveKey:routeIdentity});
   view.dataset.renderedRoute=state.route;
   view.dataset.renderedImportStep=state.route==='import'?state.importStep:'';
   view.dataset.renderedManualBox=state.route==='import'?String(!!state.showManualBox):'';
@@ -670,13 +658,16 @@ function render(){
     const replacement=view.querySelector('.queue-strip');
     if(replacement)replacement.scrollLeft=importQueueScroll;
   }
-  mountSeriesCoverSnapshots({view,state});
   bindPage();mountWorkflowControls({state,view,body,modal,db,render,route,toast,imgTag,esc,asset,refresh,download,modelImage,rasterize,backup,openSeriesEditor,openAssetEditor:openDetail,openCutoutCheck,switchImportRecord,saveActiveImportRecord,saveProject,flushSave,moveProjectsToTrash,assetOrganization,applyAssetClassification});view.catalogRefresh?.();if(state.route==='works'){
     view.localWorkCoverDispose=localWorkCovers.observe(view);
     view.workCoverDispose=workCoverBackfill.observe(view);
     prewarmVisibleWorkDocuments();
   }
   if(state.route==='library')prewarmOtherPages();
+  if(state.route==='projectPreview'&&state.previewProjectID){
+    const project=state.projects.find(item=>item.id===state.previewProjectID);
+    if(project)void localWorkCovers.ensure(project).catch(()=>{});
+  }
   pageControllers.mount(state.route);
   if(state.route==='matching'&&
      matchingScrollMemory?.account===(state.accountId||'browser')){
@@ -689,42 +680,6 @@ function render(){
     renderInProgress=false;
     if(renderQueued){renderQueued=false;queueMicrotask(render);}
   }
-}
-function editorLayoutKey(){const size=view.editorLayoutSize||{width:window.innerWidth,height:window.innerHeight};return [size.width,size.height,current()?.canvas.width,current()?.canvas.height,!!state.workspacePanel,!!state.aiPanel].join(':');}
-function refreshCanvas(){
-  if(fabricEditorPreview)return false;
-  const d=current(),page=view.querySelector('#canvas-page');
-  // Never unmount the editor simply because it contains groups or pen strokes.
-  // Keep the user's pointer session, composition input, decoded images and
-  // the layer-tree popover alive across ordinary Scene v2 mutations.
-  if(!page||view.editorDraft!==d||view.editorLayoutKey!==editorLayoutKey()||!view.editorRefresh)return false;
-  const scale=page.clientWidth/d.canvas.width;
-  reconcileEditorScene(page,renderSceneDOM(d,scale),{
-    onText:reconcileCanvasText,
-    onImage:(node,next)=>{
-      const current=node.querySelector('img'),fresh=next.querySelector('img');
-      if(current&&fresh){
-        const src=fresh.getAttribute('src');
-        if(src!==current.getAttribute('src'))current.setAttribute('src',src);
-        current.alt=fresh.alt;
-        // The source crop belongs to a physical material. Never overwrite
-        // its decoded image's scale/offset with the bare imgTag styling.
-        const item=d.items.find(i=>i.id===node.dataset.object);
-        const crop=item?.cropRect;
-        current.style.cssText=crop?`position:absolute;max-width:none;width:${100/crop.width}%;height:${100/crop.height}%;left:${-crop.x/crop.width*100}%;top:${-crop.y/crop.height*100}%;object-fit:fill`:'';
-      }else if(!current&&fresh)node.prepend(fresh);
-      else if(current&&!fresh)current.remove();
-    }
-  });
-  const paperKey=JSON.stringify([d.paperColor,d.paperPattern,d.paperRuling,d.drawCenterGutter]);
-  if(page.dataset.paperKey!==paperKey){
-    drawPaper(page.querySelector('.paper-layer').getContext('2d'),d);
-    page.dataset.paperKey=paperKey;
-    page.style.backgroundColor=d.paperColor;
-  }
-  for(const pattern of ['plain','grid','lines','dots','columns'])page.classList.toggle(pattern,d.paperPattern===pattern);
-  publishAIStatus();
-  view.editorRefresh();view.canvasSelectionRefresh?.();return true;
 }
 function updateLibraryResults(){
   if(state.route!=='library'||view.querySelector('.series-contents'))return;
@@ -750,69 +705,8 @@ function updateMatchingRegions(_regions,{persist=true}={}){
     toast('本机搭配状态暂存失败：'+error.message);
   });
 }
-function workInkPreview(d){if(!d.strokes?.length)return '';const paths=d.strokes.map(s=>{const points=(s.points||[]).filter(p=>Number.isFinite(p.x)&&Number.isFinite(p.y));if(!points.length)return '';const color=esc(s.color||'#2b5245'),width=Math.max(.5,Number(s.width)||3),opacity=Math.max(0,Math.min(1,Number(s.opacity??1)));if(points.length===1)return `<circle cx="${points[0].x}" cy="${points[0].y}" r="${width/2}" fill="${color}" opacity="${opacity}"/>`;return `<path d="${points.map((p,n)=>`${n?'L':'M'}${p.x} ${p.y}`).join(' ')}" fill="none" stroke="${color}" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round" opacity="${opacity}"/>`;}).join('');return `<svg class="work-ink-preview" viewBox="0 0 ${d.canvas.width} ${d.canvas.height}" preserveAspectRatio="none" aria-hidden="true">${paths}</svg>`;}
-function workCover(d,priority=false,snapshotOnly=false,projectID=null){
- if(!d)return '';
- if(d.coverImageID||d.coverBlobId)return `<img class="work-reference" loading="${priority?'eager':'lazy'}" ${priority?'fetchpriority="high" ':''}decoding="async" src="${image(d.coverImageID||d.coverBlobId)}" alt="作品完整封面">`;
- // Cloud Works cards must show the pre-rendered COS WebP as ONE image. Do
- // not fall back to mounting every material/shape/text (progressive pop-in).
-  if(snapshotOnly&&cloudEnabled){
-   const project=projectID?state.projects.find(p=>p.id===projectID)||
-     state.trash.find(entry=>entry.kind==='project'&&entry.item.id===projectID)?.item:null;
-   const source=project?localWorkCovers.peek(project):null;
-   return source?`<img class="work-reference" loading="${priority?'eager':'lazy'}" ${priority?'fetchpriority="high" ':''}decoding="async" src="${esc(source)}" alt="本地完整作品封面">`:
-     (d.layers?.length?workCover(d,priority,false):workInkPreview(d)||'<span class="work-cover-pending" role="status">正在准备预览…</span>');
- }
- const position=(i,flip=false)=>`left:${(i.x-i.width/2)/d.canvas.width*100}%;top:${(i.y-i.height/2)/d.canvas.height*100}%;width:${i.width/d.canvas.width*100}%;height:${i.height/d.canvas.height*100}%;transform:rotate(${i.rotation||0}deg) ${flip&&i.isFlippedHorizontally?'scaleX(-1)':''};opacity:${i.opacity??1};z-index:${i.zIndex||0};`;
- const part=node=>{
-   if(node.hidden||node.isHidden||node.isParked||node.parked)return '';
-   if(node.type==='group'){
-     const style=sceneLayerStyle(node),svg=style.mask?'mask-image:url("data:image/svg+xml,'+encodeURIComponent(maskSVG(style.mask))+'");-webkit-mask-image:url("data:image/svg+xml,'+encodeURIComponent(maskSVG(style.mask))+'");mask-size:100% 100%;':'';
-     return '<span class="scene-v2-group" style="z-index:'+(node.zIndex??0)+';opacity:'+(node.opacity??1)+';mix-blend-mode:'+(style.blendMode==='multiply'?'multiply':'normal')+';'+svg+'">'+nodes(node.children||[])+'</span>';
-   }
-   const extra=node.blendMode==='multiply'?'mix-blend-mode:multiply;':'';
-   if(node.type==='material'){
-     const a=asset(node.assetID);if(!a)return '';
-     return [node].map(item=>{const crop=item.cropRect||{x:0,y:0,width:1,height:1};
-       return '<span class="work-material" style="'+position(item,true)+materialMaskCSS(item)+extra+'"><span style="position:absolute;inset:0"><img loading="lazy" decoding="async" src="'+image(a.blobId)+'" style="position:absolute;max-width:none;width:'+(100/crop.width)+'%;height:'+(100/crop.height)+'%;left:'+(-crop.x/crop.width*100)+'%;top:'+(-crop.y/crop.height*100)+'%;object-fit:fill"></span></span>';
-     }).join('');
-   }
-   if(node.type==='shape')return '<span class="work-shape" style="'+position(node)+extra+'">'+shapeTag(node)+'</span>';
-   if(node.type==='text')return '<span class="work-text" style="'+position(node)+extra+'font-size:'+Math.max(.6,node.fontSize/d.canvas.width*100)+'cqw;line-height:'+textLineHeight(node)/d.canvas.width*100+'cqw;color:'+esc(node.color||'#333')+';text-align:'+(node.alignment||'left')+';font-family:'+esc(textFontFamily(node))+'">'+textParagraphMarkup(node,(node.paragraphSpacing||0)/d.canvas.width*100+'cqw')+'</span>';
-   if(node.type==='ink'){
-     return '<svg class="scene-ink-object" viewBox="0 0 '+d.canvas.width+' '+d.canvas.height+'" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;z-index:'+(node.zIndex??2000)+';opacity:'+(node.opacity??1)+';pointer-events:none;'+extra+'">'+inkScenePaths(node)+'</svg>';
-   }
-   return '';
- };
- const nodes=items=>sceneDisplaySiblings(items).map(part).join('');
- return nodes(d.layers||[]);
-
-}
 function current(){const p=state.activeProject,d=p?.drafts.find(d=>d.id===state.activeDraft)||p?.drafts[0];return d?attachSceneV2(d):undefined;}
-function editorEntry(d,rendering=false){return rendering?sceneRenderEntries(d):sceneLayerEntries(d,{ink:false});}
-function renderCanvasObject(e,scale){const i=e.value;
-if(e.kind==='ink'){
-  const d=current(),width=d.canvas.width,height=d.canvas.height;
-  return '<svg class="canvas-object scene-ink-object" data-render-key="'+esc(i.id)+'" aria-hidden="true" viewBox="0 0 '+width+' '+height+'" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;z-index:'+(i.zIndex??2000)+';opacity:'+(i.opacity??1)+';mix-blend-mode:'+(i.blendMode==='multiply'?'multiply':'normal')+';pointer-events:none">'+inkScenePaths(i)+'</svg>';
-}
-const left=(i.x-i.width/2)*scale,top=(i.y-i.height/2)*scale;let inner='';let extra='';if(e.kind==='material'){const crop=i.cropRect||{x:0,y:0,width:1,height:1};inner=`<span class="canvas-material-source" style="position:absolute;inset:0"><span style="position:absolute;display:block;max-width:none;width:${100/crop.width}%;height:${100/crop.height}%;left:${-crop.x/crop.width*100}%;top:${-crop.y/crop.height*100}%">${imgTag(asset(i.assetID))}</span></span>`;extra=`opacity:${i.opacity};${materialMaskCSS(i)}${i.isFlippedHorizontally?'--flip:-1;':''}`;}else if(e.kind==='text'){inner=`<div data-text-content>${textParagraphMarkup(i,(i.paragraphSpacing||0)*scale+'px')}</div>`;extra=`${i.paragraphSpacing?'display:block;':''}opacity:${i.opacity??1};font-size:${i.fontSize*scale}px;line-height:${textLineHeight(i)*scale}px;letter-spacing:${(i.letterSpacing||0)*scale}px;font-style:${i.italic?'italic':'normal'};text-decoration:${[i.underline?'underline':'',i.strikethrough?'line-through':''].filter(Boolean).join(' ')||'none'};color:${esc(i.color)};text-align:${i.alignment||'left'};font-family:${esc(textFontFamily(i))};font-weight:${i.bold?'700':'400'};`; }else{extra=`background:${i.kind==='frame'||i.kind==='line'?'transparent':esc(i.fill||'transparent')};border-color:${esc(i.stroke||'transparent')};border-width:${Math.max(1,i.lineWidth*scale)}px;opacity:${i.opacity};`;}
-if(e.kind==='shape'){inner=shapeTag(i);extra=`opacity:${i.opacity??1};`;}
-const layerStyle=sceneLayerStyle(i);if(layerStyle.blendMode==='multiply')extra+='mix-blend-mode:multiply;';
-if(layerStyle.mask){const encoded=encodeURIComponent(maskSVG(layerStyle.mask));extra+='-webkit-mask-image:url("data:image/svg+xml,'+encoded+'");mask-image:url("data:image/svg+xml,'+encoded+'");-webkit-mask-size:100% 100%;mask-size:100% 100%;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;';}
-return `<div class="canvas-object ${e.kind} ${i.kind||''} ${state.selected===i.id?'selected':''}" data-object="${esc(i.ownerID||i.id)}" data-render-key="${esc(i.renderKey||i.id)}" data-kind="${e.kind}" style="left:${left}px;top:${top}px;width:${i.width*scale}px;height:${i.height*scale}px;transform:rotate(${i.rotation||0}deg) ${i.isFlippedHorizontally?'scaleX(-1)':''};z-index:${i.zIndex};${extra}">${inner}</div>`;}
-function renderSceneDOM(d,scale){
-  attachSceneV2(d);
-  const draw=nodes=>sceneDisplaySiblings(nodes).map(node=>{
-    if(node.hidden||node.isHidden||node.isParked||node.parked)return '';
-    if(node.type!=='group'){
-      if(node.type==='material')return renderCanvasObject({kind:'material',value:node},scale);
-      return renderCanvasObject({kind:node.type,value:node},scale);
-    }
-    const style=sceneLayerStyle(node),mask=style.mask?'mask-image:url("data:image/svg+xml,'+encodeURIComponent(maskSVG(style.mask))+'");-webkit-mask-image:url("data:image/svg+xml,'+encodeURIComponent(maskSVG(style.mask))+'");mask-size:100% 100%;-webkit-mask-size:100% 100%;':'';
-    return '<div class="scene-v2-group" data-scene-group="'+esc(node.id)+'" style="z-index:'+(node.zIndex??0)+';opacity:'+(node.opacity??1)+';mix-blend-mode:'+(style.blendMode==='multiply'?'multiply':'normal')+';'+mask+'">'+draw(node.children||[])+'</div>';
-  }).join('');
-  return draw(d.layers);
-}
+function editorEntry(d){return sceneLayerEntries(d,{ink:false});}
 // Reuse one compact card language for every settings category.
 function readAIForm(){
   const q=id=>view.querySelector('#setting-ai-'+id),old=state.aiSettings;
@@ -872,7 +766,6 @@ function bindPage({partial=false}={}){
     void saveMatching();
   }
   // Catalog search/select listeners are scoped to the Library controller.
-  const page=view.querySelector('#canvas-page');if(page)initializeCanvasSurface(page);
 
 }
 function updateEditorInspector(id,value){
@@ -1014,10 +907,6 @@ function saveAISnapshotInBackground(p){
     toast('可编辑作品已保存，快照待重试：'+error.message);
   }).finally(()=>pendingAISnapshots.delete(p.id));
 }
-function initializeCanvasSurface(page){const d=current();const paper=page.querySelector('.paper-layer');if(paper){drawPaper(paper.getContext('2d'),d);page.dataset.paperKey=JSON.stringify([d.paperColor,d.paperPattern,d.paperRuling,d.drawCenterGutter]);}
-  for(const el of page.querySelectorAll('.canvas-object.material')){const item=d.items.find(i=>i.id===el.dataset.object),crop=item?.cropRect,im=el.querySelector('img');if(!crop||!im)continue;im.style.cssText=`position:absolute;max-width:none;width:${100/crop.width}%;height:${100/crop.height}%;left:${-crop.x/crop.width*100}%;top:${-crop.y/crop.height*100}%;object-fit:fill`;}
-}
-
 function handle(action,id,value){
   return actionStore.dispatch({type:'app/action',payload:{action,id,value}});
 }

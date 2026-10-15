@@ -83,4 +83,7 @@
 .swift-material-picker .canvas-material-filters select{width:100%;min-width:0;max-width:none}
 .swift-material-picker .canvas-material-filters select:first-child,.swift-material-picker .canvas-material-filters input[type=search]{grid-column:1/-1}
 .swift-material-picker .canvas-material-filters input[type=search]{box-sizing:border-box;width:100%;min-width:0}
-@media(max-width:600px){.swift-material-picker{height:min(68dvh,540px)!important}}
+@media(max-width:600px){.swift-material-picker{height:min(60dvh,500px)!important}}
+.project-preview-cover{grid-template-columns:minmax(0,1fr)}
+.project-preview-cover .preview-paper{justify-self:center;min-width:0;max-width:90%}
+.works-grid .card-image>.thumb-sheet{width:94%!important;height:auto;aspect-ratio:1.42!important;max-width:100%;max-height:100%}

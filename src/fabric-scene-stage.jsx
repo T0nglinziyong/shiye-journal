@@ -6,6 +6,8 @@ import {paperWidthPixels,pressureInkOutline,erasePressureStroke} from './pressur
 import {textBlock} from './domain.js';
 import {selectPolygon,polygonContains} from './canvas-selection.js';
 import {attachSceneV2} from './scene-v2.js';
+import {sceneDisplaySiblings} from './craft-display.js';
+import {prepareSceneFonts} from './scene-renderer.js';
 
 const byID=(nodes,id)=>{
   for(const node of nodes||[]){
@@ -34,7 +36,7 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
     const canvas=sessionRef.current;
     if(!canvas||!['select','lasso'].includes(tool))return;
     const ids=selectedIDs.length?selectedIDs:selectedID?[selectedID]:[];
-    const objects=canvas.getObjects().filter(item=>ids.includes(item.sceneID));
+    const objects=ids.map(id=>canvas.getObjects().find(item=>item.sceneID===id)).filter(Boolean);
     const active=canvas.getActiveObjects();
     if(objects.length&&(!active.length||active.length!==objects.length||
       active.some(item=>!objects.includes(item)))){
@@ -65,7 +67,7 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
     const start=async()=>{
       try{
         attachSceneV2(draft);
-        const fabric=await import('fabric');
+        const [fabric]=await Promise.all([import('fabric'),prepareSceneFonts(draft)]);
         if(disposed)return;
         canvas=new fabric.Canvas(canvasRef.current,{
           width:draft.canvas.width,height:draft.canvas.height,
@@ -100,21 +102,27 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
           canvasSize:()=>callbacks.current.draft.canvas
         });
         const sceneVersions=new Map();
+        const projected=()=>sceneDisplaySiblings(callbacks.current.draft.layers||[]);
+        const renderKey=node=>node.renderKey||node.id;
         const snapshot=node=>JSON.stringify([node,node.type==='group'&&node.vectorMask?
           callbacks.current.draft.canvas:null]);
-        const signatures=new Map((draft.layers||[]).map(node=>[node.id,snapshot(node)]));
+        const signatures=new Map(projected().map(node=>[renderKey(node),snapshot(node)]));
         const remember=id=>{
           const node=callbacks.current.draft.layers.find(item=>item.id===id);
-          if(node)signatures.set(id,snapshot(node));
+          if(node){
+            for(const piece of projected().filter(item=>(item.ownerID||item.id)===id))
+              signatures.set(renderKey(piece),snapshot(piece));
+          }
           else signatures.delete(id);
         };
         const addProjected=(node,sceneIndex,version,onAdded)=>{
+          const key=renderKey(node);
           return bridge.fromNode(node).then(object=>{
-            if(disposed||!callbacks.current.draft.layers.includes(node)||
-              (sceneVersions.get(node.id)||0)!==version)return;
+            if(disposed||!projected().some(item=>renderKey(item)===key&&snapshot(item)===snapshot(node))||
+              (sceneVersions.get(key)||0)!==version)return;
             // Decode the replacement before touching the visible object. A
             // slow image cannot leave a blank hole in an already drawn page.
-            const old=canvas.getObjects().filter(item=>item.sceneID===node.id);
+            const old=canvas.getObjects().filter(item=>item.sceneRenderKey===key);
             for(const item of old)canvas.remove(item);
             if(object){
               object.sceneIndex=sceneIndex;
@@ -126,29 +134,30 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
             }
             canvas.requestRenderAll();
             if(object)onAdded?.(object);
-          }).catch(error=>{if(!disposed){signatures.delete(node.id);callbacks.current.onIssue?.(error);}});
+          }).catch(error=>{if(!disposed){signatures.delete(key);callbacks.current.onIssue?.(error);}});
         };
         reconcileRef.current=()=>{
           const current=callbacks.current.draft;
           if(!current||current.id!==draft.id)return;
           paintPaper(current);
-          const sorted=[...(current.layers||[])].sort((a,b)=>(a.zIndex||0)-(b.zIndex||0));
-          const present=new Set(sorted.map(node=>node.id));
-          const positions=new Map(sorted.map((node,index)=>[node.id,index]));
+          const sorted=projected();
+          const present=new Set(sorted.map(renderKey));
+          const positions=new Map(sorted.map((node,index)=>[renderKey(node),index]));
           for(const id of signatures.keys())if(!present.has(id)){
             signatures.delete(id);sceneVersions.set(id,(sceneVersions.get(id)||0)+1);
           }
-          for(const object of canvas.getObjects())if(object.sceneID&&!present.has(object.sceneID))canvas.remove(object);
+          for(const object of canvas.getObjects())if(object.sceneRenderKey&&!present.has(object.sceneRenderKey))canvas.remove(object);
           for(const [sceneIndex,node] of sorted.entries()){
+            const key=renderKey(node);
             const next=snapshot(node);
-            if(signatures.get(node.id)===next)continue;
-            signatures.set(node.id,next);
-            const version=(sceneVersions.get(node.id)||0)+1;
-            sceneVersions.set(node.id,version);
+            if(signatures.get(key)===next)continue;
+            signatures.set(key,next);
+            const version=(sceneVersions.get(key)||0)+1;
+            sceneVersions.set(key,version);
             addProjected(node,sceneIndex,version);
           }
-          const existing=canvas.getObjects().filter(object=>positions.has(object.sceneID));
-          for(const object of existing)object.sceneIndex=positions.get(object.sceneID);
+          const existing=canvas.getObjects().filter(object=>positions.has(object.sceneRenderKey));
+          for(const object of existing)object.sceneIndex=positions.get(object.sceneRenderKey);
           existing.sort((a,b)=>a.sceneIndex-b.sceneIndex);
           existing.forEach((object,index)=>canvas.moveObjectTo(object,index));
           canvas.requestRenderAll();
@@ -299,12 +308,12 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
               const hits=(node.points||[]).map(sample=>polygonContains(sample,finished.points));
               if(hits.length&&(mode==='intersect'?hits.some(Boolean):hits.every(Boolean)))ids.push(node.id);
             }
-            const objects=canvas.getObjects().filter(object=>ids.includes(object.sceneID));
+            const objects=[...new Set(ids)].map(id=>canvas.getObjects().find(object=>object.sceneID===id)).filter(Boolean);
             if(objects.length===1)canvas.setActiveObject(objects[0]);
             else if(objects.length>1)canvas.setActiveObject(new fabric.ActiveSelection(objects,{canvas}));
             else canvas.discardActiveObject();
             canvas.requestRenderAll();
-            callbacks.current.onSelection?.(objects.map(object=>object.sceneID));
+            callbacks.current.onSelection?.([...new Set(objects.map(object=>object.sceneID))]);
           }else if(finished.tool==='pen'||finished.tool==='highlighter'){
             callbacks.current.onBeforeChange?.('ink:new');
             const node={id:globalThis.crypto?.randomUUID?.()||'ink-'+Math.random().toString(36).slice(2),
@@ -367,7 +376,7 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
           upper.removeEventListener('pointercancel',onPointerEnd,true);
         };
         canvas.sceneRemovePointerHandlers=removePointerHandlers;
-        const selection=event=>callbacks.current.onSelection?.(event.selected?.map(o=>o.sceneID).filter(Boolean)||[]);
+        const selection=event=>callbacks.current.onSelection?.([...new Set(event.selected?.map(o=>o.sceneID).filter(Boolean)||[])]);
         canvas.on('selection:created',selection);
         canvas.on('selection:updated',selection);
         canvas.on('selection:cleared',()=>callbacks.current.onSelection?.([]));
@@ -379,7 +388,11 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
           if(!node)return;
           try{
             bridge.applyObject(node,object);
-            remember(object.sceneID);
+            if(node.craftDisplaySlices?.length){
+              for(const piece of projected().filter(item=>item.ownerID===node.id))
+                signatures.delete(renderKey(piece));
+              reconcileRef.current?.();
+            }else remember(object.sceneID);
             callbacks.current.onChange?.(node,'transform');
           }catch(error){callbacks.current.onIssue?.(error);}
         });
@@ -400,11 +413,12 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
         canvas.on('text:editing:exited',event=>{
           discardEmptyText(event.target?.sceneID);
         });
-        const initialVersions=new Map((draft.layers||[]).map(node=>[node.id,sceneVersions.get(node.id)||0]));
-        void projectFabricLayers(canvas,draft.layers,bridge,{readOnly,
+        const initialNodes=projected();
+        const initialVersions=new Map(initialNodes.map(node=>[renderKey(node),sceneVersions.get(renderKey(node))||0]));
+        void projectFabricLayers(canvas,initialNodes,bridge,{readOnly,
           onIssue:error=>callbacks.current.onIssue?.(error),
-          isCurrent:node=>!disposed&&callbacks.current.draft.layers.includes(node)&&
-            (sceneVersions.get(node.id)||0)===initialVersions.get(node.id)});
+          isCurrent:node=>!disposed&&projected().some(item=>renderKey(item)===renderKey(node)&&snapshot(item)===snapshot(node))&&
+            (sceneVersions.get(renderKey(node))||0)===initialVersions.get(renderKey(node))});
         reconcileRef.current?.();
       }catch(error){if(!disposed)callbacks.current.onIssue?.(error);}
     };

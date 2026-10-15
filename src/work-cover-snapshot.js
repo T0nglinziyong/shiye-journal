@@ -13,7 +13,7 @@ export async function renderWorkCoverSnapshot(project,{
   try{
     const result=await renderScene(draft,{
       scale:480/Math.max(draft.canvas.width,draft.canvas.height),
-      waitForFonts:false,
+      waitForFonts:true,
       loadMaterialImage:async id=>{
         if(!bitmaps.has(id))bitmaps.set(id,(async()=>{
           const material=await resolveAsset(id);

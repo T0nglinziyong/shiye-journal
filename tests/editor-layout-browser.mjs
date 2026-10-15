@@ -38,11 +38,11 @@ try{
     assert.equal(header.canvas,true);
     assert.ok(header.overflow<=1,JSON.stringify({width,header}));
     await click('[data-val="material"]','.swift-material-picker');
-    const material=await evaluate('(()=>{const p=document.querySelector(".swift-material-picker"),g=p.querySelector(".canvas-picker-grid"),r=p.getBoundingClientRect(),a=document.querySelector("[data-val=material]").getBoundingClientRect(),cols=getComputedStyle(g).gridTemplateColumns.split(" ").filter(Boolean);return {cols:cols.length,x:r.left,y:r.top,right:r.right,bottom:r.bottom,anchorBottom:a.bottom,scrollable:getComputedStyle(g).overflowY}})()');
+    const material=await evaluate('(()=>{const p=document.querySelector(".swift-material-picker"),g=p.querySelector(".canvas-picker-grid"),r=p.getBoundingClientRect(),a=document.querySelector("[data-val=material]").getBoundingClientRect(),cols=getComputedStyle(g).gridTemplateColumns.split(" ").filter(Boolean);return {cols:cols.length,x:r.left,y:r.top,right:r.right,bottom:r.bottom,anchorBottom:a.bottom,scrollable:getComputedStyle(g).overflowY,cssHeight:getComputedStyle(p).height,cssMinHeight:getComputedStyle(p).minHeight,cssMaxHeight:getComputedStyle(p).maxHeight}})()');
     assert.equal(material.cols,width>=900?3:2,JSON.stringify({width,material}));
     assert.ok(material.x>=10&&material.y>=material.anchorBottom-1&&material.right<=width+1&&material.bottom<=height+1,JSON.stringify({width,material}));
     assert.ok(material.right-material.x<=444,'Picker exceeds compact width: '+JSON.stringify({width,material}));
-    assert.ok(material.bottom-material.y<=Math.min(500,height*.75),'Picker too tall: '+JSON.stringify({height,material}));
+    assert.ok(material.bottom-material.y<=Math.min(500,height*.75),'Picker too tall: '+JSON.stringify({width,height,material}));
     assert.ok(['auto','scroll'].includes(material.scrollable),JSON.stringify(material));
     await screenshot(width<900?'material-original-mobile':'material-wide-three-columns',width,height);
     await closePopup();

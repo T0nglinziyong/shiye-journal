@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {browserHarness} from './browser-harness.mjs';
 
 const base=process.env.SHIYE_TEST_URL||'http://127.0.0.1:5173';
-const browser=await browserHarness('shiye-fabric-product',base+'/?fabric-editor');
+const browser=await browserHarness('shiye-fabric-product',base+'/');
 const {command,evaluate,click,wait,sleep}=browser;
 const paintedPixels=()=>evaluate(`(()=>{const canvas=document.querySelector('.lower-canvas');
   const data=canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data;

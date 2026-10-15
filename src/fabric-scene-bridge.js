@@ -4,6 +4,7 @@ import {geometryIntersection} from './craft-topology.js';
 import {validateVectorMask} from './scene-v2.js';
 import {smoothInkSVG} from './ink-path-geometry.js';
 import {pressureInkPath} from './pressure-ink.js';
+import {sceneDisplaySiblings} from './craft-display.js';
 
 const finite=(value,fallback=0)=>Number.isFinite(value)?value:fallback;
 const positive=(value,fallback=1)=>Number.isFinite(value)&&value>0?value:fallback;
@@ -80,11 +81,11 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
     if(!node||node.hidden||node.isHidden||node.isParked||node.parked)return null;
     if(node.vectorMask)validateVectorMask(node.vectorMask);
     if(node.type==='group'){
-      const children=(await Promise.all((node.children||[]).map(fromNode))).filter(Boolean);
+      const children=(await Promise.all(sceneDisplaySiblings(node.children||[]).map(fromNode))).filter(Boolean);
       if(!children.length)return null;
       const group=new fabric.Group(children,{opacity:finite(node.opacity,1),
         globalCompositeOperation:node.blendMode==='multiply'?'multiply':'source-over'});
-      group.sceneID=node.id;group.sceneType='group';
+      group.sceneID=node.id;group.sceneRenderKey=node.renderKey||node.id;group.sceneType='group';
       if(node.vectorMask){
         const size=typeof canvasSize==='function'?canvasSize():canvasSize;
         if(!(size?.width>0&&size?.height>0))throw Error('图层组蒙版缺少画布尺寸：'+node.id);
@@ -108,6 +109,7 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
         scaleX:positive(node.width)/object.sceneFrameWidth,
         scaleY:positive(node.height)/object.sceneFrameHeight});
     }else if(node.type==='text'){
+      await globalThis.document?.fonts?.load(textFont(node),String(node.content||'示例'));
       const frameHeight=positive(node.height,135),radians=finite(node.rotation)*Math.PI/180;
       object=new SceneTextbox(String(node.content||''),{
         width:positive(node.width),fontSize:positive(node.fontSize,40),
@@ -174,7 +176,9 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
     object.set({angle:finite(node.rotation),opacity:finite(node.opacity,1),
       selectable:!node.locked&&!node.isLocked,evented:!node.locked&&!node.isLocked,
       globalCompositeOperation:node.blendMode==='multiply'?'multiply':'source-over'});
-    object.sceneID=node.id;object.sceneType=node.type;
+    object.sceneID=node.ownerID||node.id;
+    object.sceneRenderKey=node.renderKey||node.id;
+    object.sceneType=node.type;
     if(node.type==='ink')object.sceneInkMatrix=object.calcTransformMatrix();
     return object;
   }

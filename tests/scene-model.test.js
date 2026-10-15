@@ -97,6 +97,17 @@ test('Scene v2 temporary collection view cannot lose indexed, length or deletion
  assert.equal(Object.hasOwn(JSON.parse(JSON.stringify(d)),'items'),false);
 });
 
+test('Scene v2 collection reorder changes persisted sibling stacking order',()=>{
+ const d=draft();
+ for(const [id,zIndex] of [['a',1],['b',2],['c',3]])
+  d.primitives.push({id,kind:'rectangle',x:10,y:10,width:20,height:20,zIndex});
+ d.primitives.reverse();
+ assert.deepEqual(sceneLayerEntries(d).map(entry=>entry.value.id),['c','b','a']);
+ d.primitives.sort((left,right)=>left.id.localeCompare(right.id));
+ assert.deepEqual(sceneLayerEntries(d).map(entry=>entry.value.id),['a','b','c']);
+ assert.deepEqual(JSON.parse(JSON.stringify(d)).layers.map(node=>node.id),['a','b','c']);
+});
+
 test('group identities must not collide with any leaf identity',()=>{
  const d=draft();
  d.primitives.push({id:'shape-a',kind:'rectangle',x:10,y:10,width:40,height:30});

@@ -4,30 +4,11 @@ on:
   pull_request:
     branches: [test]
     paths:
-      - 'src/canvas-selection-ui.js'
-      - 'src/canvas-editor-ui.js'
-      - 'src/swift-popover.js'
-      - 'src/popover-placement.js'
-      - 'tests/editor-layout-browser.mjs'
-      - 'src/journal-template-ui.js'
-      - 'src/swift-controls.css'
-      - 'src/selection-menu.css'
-      - 'src/library-selection-ui.js'
-      - 'src/recently-deleted-ui.js'
-      - 'src/icons.js'
-      - 'src/overrides.css'
-      - 'src/import-workspace-ui.js'
-      - 'src/work-cover-snapshot.js'
-      - 'src/image-variants.js'
-      - 'tests/responsive-visual-browser.mjs'
-      - 'tests/library-selection-browser.mjs'
-      - 'tests/layout-preview-browser.mjs'
-      - 'tests/interaction-browser.mjs'
-      - 'tests/browser-acceptance.mjs'
-      - 'tests/editor-browser-acceptance.mjs'
-      - 'tests/cloud-cache-browser.mjs'
-      - 'src/app.js'
-      - 'src/series-contents.js'
+      - 'src/**'
+      - 'tests/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'index.html'
       - '.github/workflows/interface-browser.yml'
   workflow_dispatch:
 
@@ -72,26 +53,27 @@ jobs:
             if curl -fsS http://127.0.0.1:5193/ >/dev/null; then break; fi
             sleep 1
           done
-          SHIYE_WAIT_MS=30000 SHIYE_TEST_URL=http://127.0.0.1:5193 node tests/browser-acceptance.mjs
-          SHIYE_TEST_URL=http://127.0.0.1:5193 node tests/editor-browser-acceptance.mjs
+          SHIYE_TEST_URL=http://127.0.0.1:5193 node tests/fabric-editor-product-browser.mjs
+          SHIYE_TEST_URL=http://127.0.0.1:5193 node tests/fabric-stage-browser.mjs
+          SHIYE_TEST_URL=http://127.0.0.1:5193 node tests/import-browser-acceptance.mjs
           SHIYE_TEST_URL=http://127.0.0.1:5193 npm run test:editor-layout-browser
           SHIYE_TEST_URL=http://127.0.0.1:5193 node tests/cloud-cache-browser.mjs
           SHIYE_TEST_URL=http://127.0.0.1:5193 npm run test:responsive-browser
           SHIYE_TEST_URL=http://127.0.0.1:5193 npm run test:selection-browser
           SHIYE_TEST_URL=http://127.0.0.1:5193 npm run test:layout-browser
-          SHIYE_TEST_URL=http://127.0.0.1:5193 npm run test:interaction-browser
       - name: Upload viewport screenshots
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: interface-browser-${{ github.run_id }}
           path: |
-            /tmp/shiye-browser-acceptance/
-            /tmp/shiye-editor-browser/
+            /tmp/shiye-fabric-product/
+            /tmp/shiye-fabric-stage.png
+            /tmp/shiye-fabric-reference.png
+            /tmp/shiye-import-browser/
             /tmp/shiye-editor-layout/
             /tmp/shiye-cache-browser/
             /tmp/shiye-responsive-review/
             /tmp/shiye-library-selection/
             /tmp/shiye-layout-preview/
-            /tmp/shiye-interaction-fixes/
           retention-days: 7
