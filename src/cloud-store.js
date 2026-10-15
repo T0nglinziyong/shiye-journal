@@ -30,6 +30,7 @@ let queue=Promise.resolve();
 const images=new Map();
 const imageSizes=new Map();
 const uploads=new Map();
+const thumbnailUploads=new Map();
 const snapshots=new Map();
 const documents=new Map();
 const blobRecordRequests=new Map();
@@ -316,6 +317,23 @@ const unifiedSync=createProjectSync({
   onStatus:reportSync,
   onDiagnostic:event=>syncDiagnostics.record(event),
   runExclusive:withAccountSyncLock,
+  prepare:async envelopes=>{
+    const puts=[];
+    for(const envelope of envelopes){
+      if(envelope.kind!=='batch')continue;
+      const batch=envelope.payload;
+      const operations=batch.operations||['assets','blobs','projects'].flatMap(store=>(batch[store]||[])
+        .map(item=>({action:'put',store,item})));
+      const auxiliary=auxiliaryBlobIDs(operations);
+      for(const op of operations)if(op.action==='put'&&op.store==='blobs')
+        puts.push({item:op.item,makePreview:!auxiliary.has(op.item.id)});
+    }
+    for(let offset=0;offset<puts.length;offset+=3)
+      await Promise.all(puts.slice(offset,offset+3).map(async op=>{
+        try{await encode('blobs',op.item,{makePreview:op.makePreview});}
+        catch(error){throw markSyncPhase(error,'预传素材文件');}
+      }));
+  },
   recordKeys:syncAffectedKeys,
 });
 const selectedRows=async kind=>(await unifiedSync.pending())
@@ -739,7 +757,12 @@ async function encode(store,record,{makePreview=true}={}){
   // The optional thumbnail is independent of the original PUT. Start both
   // together, but never commit metadata until the original is acknowledged.
   // This avoids serial upload latency without changing the safety boundary.
-  const thumbnailTask=makePreview?(async()=>{try{const thumbnail=await makeThumbnail(record.data);if(!thumbnail)return null;const path=storagePath+'-preview480.webp',result=await uploadObject(path,thumbnail,'image/webp',provider);if(result.error&&String(result.error.statusCode)!=='409')return null;await rememberImageVariant(storagePath,COVER_EDGE,thumbnail);return path;}catch{return null;}})():Promise.resolve(null);
+  if(makePreview&&!thumbnailUploads.has(storagePath)){
+    const task=(async()=>{try{const thumbnail=await makeThumbnail(record.data);if(!thumbnail)return null;const path=storagePath+'-preview480.webp',result=await uploadObject(path,thumbnail,'image/webp',provider);if(result.error&&String(result.error.statusCode)!=='409')return null;await rememberImageVariant(storagePath,COVER_EDGE,thumbnail);return path;}catch{return null;}})();
+    thumbnailUploads.set(storagePath,task);
+    void task.then(path=>{if(!path)thumbnailUploads.delete(storagePath);});
+  }
+  const thumbnailTask=makePreview?thumbnailUploads.get(storagePath):Promise.resolve(null);
   let thumbnailPath;
   await uploads.get(storagePath);thumbnailPath=await thumbnailTask;
   await remember('image:'+storagePath,record.data);retainImage(storagePath,record.data);
@@ -1118,7 +1141,7 @@ async function cloudPurgeLocalAfterReset(){
   // durable outbox. Caller has already stopped editing and received reset:true.
   cacheDisabled=true;
   images.clear();imageSizes.clear();documents.clear();snapshots.clear();blobRecords.clear();blobRevisionProof.clear();
-  uploads.clear();editorBases.clear();
+  uploads.clear();thumbnailUploads.clear();editorBases.clear();
   if(typeof cache?.purgeAccount!=='function')throw Error('浏览器不支持完整账号本地清理');
   const count=await cache.purgeAccount(user);
   await cache.close?.();

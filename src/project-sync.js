@@ -1,7 +1,7 @@
 import {markSyncPhase} from './sync-browser-compat.js';
 // Durable edits are an explicit outbox, not a replacement for cloud records.
 // Commit acknowledgement is the only point at which an entry is removed.
-export function createProjectSync({load,write,commit,revision,reconcile=async()=> 'conflict',recordKeys=record=>[{store:'projects',id:record.id}],coalesce=()=>null,splitCoalesced=()=>null,onCommitted=()=>{},onConflict=async()=>null,onSuperseded=()=>{},onStatus=()=>{},onDiagnostic=()=>{},runExclusive=fn=>fn(),reload=load,autoFlushDelayMs=0,setTimer=setTimeout,clearTimer=clearTimeout,clock=()=>Date.now()}){
+export function createProjectSync({load,write,commit,revision,reconcile=async()=> 'conflict',recordKeys=record=>[{store:'projects',id:record.id}],coalesce=()=>null,splitCoalesced=()=>null,onCommitted=()=>{},onConflict=async()=>null,onSuperseded=()=>{},onStatus=()=>{},onDiagnostic=()=>{},runExclusive=fn=>fn(),prepare=async()=>{},reload=load,autoFlushDelayMs=0,setTimer=setTimeout,clearTimer=clearTimeout,clock=()=>Date.now()}){
   let initialized,staging=Promise.resolve(),network,serial=0,error,paused=false;
   let persistedRows=new Map();
   let conflicts=new Set();
@@ -125,7 +125,12 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
     cancelAuto();
     if(paused)return Promise.resolve();
     if(network)return network;
-    network=(async()=>runExclusive(async()=>{
+    network=(async()=>{
+      await initialize();await staging;await refreshFromDisk();
+      // Immutable object bytes can transfer before the account revision lock.
+      // Only reconciliation and the versioned metadata commit need that lock.
+      await prepare(orderedRows().map(row=>row.record));
+      return runExclusive(async()=>{
       lastNetworkAt=clock();
       if(paused)return;
       await initialize();await refreshFromDisk();
@@ -239,7 +244,7 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
       }
       conflicts=blocked;
       error=null;report();
-    }))().catch(e=>{diagnose('failed',null,e);error=e;report();throw e;}).finally(()=>{
+    });})().catch(e=>{diagnose('failed',null,e);error=e;report();throw e;}).finally(()=>{
       network=null;
       if(entries.size&&!error&&[...entries.keys()].some(id=>!conflicts.has(id)))scheduleAuto();
     });

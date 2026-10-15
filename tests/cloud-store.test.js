@@ -107,7 +107,7 @@ test('logout summary reads the shared account outbox without waiting for upload'
 });
 test('failed import uploads retain the entire batch; rejected auth/quota never creates a ghost import',async()=>{
   const cache=memoryCache(),a=fixture(cache);a.state.fail=true;
-  await a.db.cloudStageImport({assets:[{id:'a'}],blobs:[{id:'b',data:new Blob(['image'])}],projects:[]});await assert.rejects(a.db.cloudFlushProjects(),/未获确认/);
+  await a.db.cloudStageImport({assets:[{id:'a'}],blobs:[{id:'b',data:new Blob(['image'])}],projects:[]});await assert.rejects(a.db.cloudFlushProjects(),/图片上传失败|未获确认/);
   assert.equal((await activeRows(cache,'batch')).length,1);assert.equal(a.state.calls.length,0);
   const reopened=fixture(cache);reopened.state.authError=true;await assert.rejects(reopened.db.cloudGet('blobs','b'),/not authorized/);
   const durable=memoryCache();let full=true;
@@ -296,6 +296,27 @@ test('original and optional preview upload overlap but metadata waits for the or
     assert.equal(started.length,2);assert.equal(state.calls.length,0,'cloud metadata must not precede the original');
     releaseOriginal();await commit;assert.equal(state.calls.length,1);
   }finally{if(oldBitmap===undefined)delete globalThis.createImageBitmap;else globalThis.createImageBitmap=oldBitmap;if(oldDocument===undefined)delete globalThis.document;else globalThis.document=oldDocument;}
+});
+test('staged material bytes upload before acquiring the account revision lock',async()=>{
+  const originalNavigator=Object.getOwnPropertyDescriptor(globalThis,'navigator');
+  const events=[];
+  Object.defineProperty(globalThis,'navigator',{configurable:true,value:{locks:{
+    request:async(_name,_options,callback)=>{events.push('lock');return callback();}
+  }}});
+  try{
+    const cos={enabled:true,async upload(path){events.push('upload:'+path);}};
+    const {state,db}=fixture(memoryCache(),cos);
+    await db.cloudStageImport({assets:[{id:'material',blobId:'cutout'}],
+      blobs:[{id:'cutout',data:new Blob(['visible pixels'],{type:'image/png'})}],projects:[]});
+    await db.cloudFlushProjects();
+    assert.ok(events[0].startsWith('upload:'),'independent object transfer precedes account lock');
+    assert.equal(events.filter(event=>event.startsWith('upload:')).length,1,'commit reuses the prepared immutable blob');
+    assert.equal(events.filter(event=>event==='lock').length,1);
+    assert.equal(state.calls.length,1,'the versioned metadata transaction still commits once');
+  }finally{
+    if(originalNavigator)Object.defineProperty(globalThis,'navigator',originalNavigator);
+    else delete globalThis.navigator;
+  }
 });
 test('an import uploads previews only for visible cutouts, retaining full editing sources',async()=>{
   const oldBitmap=globalThis.createImageBitmap,oldDocument=globalThis.document;

@@ -110,7 +110,7 @@ test('transient outbox load failure can recover in the same session',async()=>{
   });
   await assert.rejects(sync.flush(),/temporary IndexedDB read failure/);
   await sync.flush();
-  assert.equal(reads,3,'initial retry plus a fresh durable read before sync');
+  assert.equal(reads,4,'initial retry plus preupload and locked durable refreshes');
   assert.equal(commits,1);
   assert.deepEqual(rows,[]);
 });
@@ -357,4 +357,31 @@ test('manual conflict choices preserve queue bytes until a reviewed serial is co
     assert.equal(actual[0].baseRevision,9);}
   sync.pause();
  }
+});
+
+
+test('independent upload preparation runs before the shared account commit lock',async()=>{
+  let revision=0,lease=Promise.resolve(),held=false,preparing=[];
+  const gates=[];
+  const runExclusive=fn=>{
+    const task=lease.then(async()=>{held=true;try{return await fn();}finally{held=false;}});
+    lease=task.catch(()=>{});return task;
+  };
+  const make=id=>{
+    let rows=[];
+    const gate=new Promise(resolve=>gates.push(resolve));
+    return createProjectSync({load:async()=>structuredClone(rows),reload:async()=>structuredClone(rows),
+      write:async next=>{rows=structuredClone(next);},revision:()=>revision,
+      prepare:async()=>{assert.equal(held,false);preparing.push(id);await gate;},
+      runExclusive,reconcile:async()=> 'rebase',commit:async()=>{assert.equal(held,true);revision++;}});
+  };
+  const a=make('a'),b=make('b');
+  await a.stage({id:'a'});await b.stage({id:'b'});
+  const first=a.flush(),second=b.flush();
+  for(let i=0;i<100&&preparing.length<2;i++)await new Promise(resolve=>setTimeout(resolve,1));
+  assert.deepEqual(preparing.sort(),['a','b']);
+  assert.equal(held,false,'one slow immutable upload must not hold the revision lock');
+  for(const release of gates)release();
+  await Promise.all([first,second]);
+  assert.equal(revision,2,'metadata commits remain serialized and versioned');
 });
