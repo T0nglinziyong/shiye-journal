@@ -22,3 +22,15 @@ test('sync detail inspection pauses scheduled retries and resumes after closing'
   await resume.wake();assert.equal(calls,1);
   await resume.resume();assert.equal(calls,2);assert.equal(resume.status().suspended,false);
 });
+
+test('a wake during an upload schedules one more flush for newly staged edits',async()=>{
+  let release,calls=0;
+  const resumer=createSyncResumer({flush:async()=>{calls++;if(calls===1)await new Promise(resolve=>{release=resolve;});}});
+  const first=resumer.wake();
+  await new Promise(resolve=>setTimeout(resolve,0));
+  resumer.wake();resumer.wake();
+  release();await first;
+  await new Promise(resolve=>setTimeout(resolve,0));
+  assert.equal(calls,2);
+  resumer.stop();
+});

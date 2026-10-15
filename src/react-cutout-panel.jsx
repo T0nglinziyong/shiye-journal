@@ -24,14 +24,14 @@ export function CutoutPanel({state,actions,canvasRef}){
   return <div className="material-editor cutout-modal"><header>
     <button type="button" id="cutout-cancel" disabled={state.busy} onClick={actions.cancel}>取消</button>
     <strong>检查抠图</strong><button type="button" id="cutout-apply" disabled={state.busy||state.mode!=='final'} onClick={actions.apply}>应用</button>
-  </header><div className="cutout-steps">{steps.map(([id,label],at)=><span key={id} data-cut-step={id}
-    className={at===index?'current':at<index?'passed':''}><b>{at+1}</b>{label}</span>)}</div>
+  </header>
   <div className="cutout-compare">{[['original','按住看原图'],['initial','按住看原抠图']].map(([kind,label])=><button type="button" key={kind} id={`compare-${kind}`}
     onPointerDown={event=>{if(state.busy)return;event.preventDefault();event.currentTarget.setPointerCapture(event.pointerId);actions.compare(kind);}}
     onPointerUp={()=>actions.compare(null)} onPointerCancel={()=>actions.compare(null)}
     onKeyDown={event=>{if([' ','Enter'].includes(event.key)){event.preventDefault();actions.compare(kind);}}}
     onKeyUp={()=>actions.compare(null)}>{label}</button>)}</div>
-  <div className="material-editor-preview cutout-preview"><canvas id="cutout-canvas" ref={canvasRef} aria-label="素材抠图预览"/></div>
+  <div className="material-editor-preview cutout-preview"><canvas id="cutout-canvas" ref={canvasRef} aria-label="素材抠图预览"/></div><div className="cutout-steps">{steps.map(([id,label],at)=><span key={id} data-cut-step={id}
+    className={at===index?'current':at<index?'passed':''}><b>{at+1}</b>{label}</span>)}</div>
   <p className="cutout-hint">轻按画面修补边缘；长按上方按钮可对比原图。</p>
   <section className="cutout-controls"><div id="cutout-mode-panel">
     {state.mode==='rough'?<div className="stack"><h3>手动修补边缘</h3>

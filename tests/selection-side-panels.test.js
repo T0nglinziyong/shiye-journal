@@ -17,7 +17,7 @@ test('More initially reserves adequate room; parent geometry never changes on ch
      assert.equal(values.parentWidth,parentWidth);
      assert.ok(values.panelLeft>=11&&values.panelLeft+values.panelWidth<=width-11,
        JSON.stringify({width,naturalLeft,reserved,values}));
-     assert.ok(values.panelWidth>=130,'A readable side drawer must fit without touching More');
+     assert.equal(values.panelWidth,parentWidth,'Nested actions match the More menu width');
      if(values.side==='right')assert.ok(values.panelLeft>=menu.right+7);
      else assert.ok(values.panelLeft+values.panelWidth<=menu.left-7);
    }

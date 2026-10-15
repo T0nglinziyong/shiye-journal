@@ -13,8 +13,7 @@ export function selectionMenuWidth(viewportWidth){
 }
 
 const usableSideMinimum=(viewportWidth,parentWidth)=>
-  Math.min(viewportWidth<600?170:240,
-    Math.max(0,viewportWidth-2*MARGIN-GAP-parentWidth));
+  Math.min(parentWidth,Math.max(0,viewportWidth-2*MARGIN-GAP-parentWidth));
 
 // Called during the parent popover's normal initial placement and resizes,
 // NEVER by a child click. Keep the natural left whenever the right or left
@@ -31,7 +30,7 @@ export function selectionSideGeometry({viewportWidth,viewportHeight,menu,panelHe
   const rightAvailable=Math.max(0,viewportWidth-MARGIN-menu.right-GAP);
   const leftAvailable=Math.max(0,menu.left-MARGIN-GAP);
   const minimum=usableSideMinimum(viewportWidth,menu.width);
-  const desired=Math.min(286,Math.max(0,viewportWidth-2*MARGIN-GAP-menu.width));
+  const desired=menu.width;
   // Right -> left, with no parent translation while the child opens.
   const side=rightAvailable>=minimum||leftAvailable<minimum?'right':'left';
   const space=side==='right'?rightAvailable:leftAvailable;

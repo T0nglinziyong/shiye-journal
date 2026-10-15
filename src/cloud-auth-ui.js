@@ -47,9 +47,10 @@ export async function startCloudSession(onReady){
     const initialReset=await preflight();
     if(initialReset.wiped){location.reload();return;}
     cloudSetResetCleanupPending(initialReset.pending,initialReset.resetId);
-    app.hidden=false;
-    await onReady(user,{afterAccountReset:!!initialReset.resetId});
-    clearLoginGate();
+    let shown=false;
+    const showApp=()=>{if(shown)return;shown=true;clearLoginGate();app.hidden=false;};
+    await onReady(user,{afterAccountReset:!!initialReset.resetId,onFirstView:showApp});
+    showApp();
     if(initialReset.pending&&initialReset.resetId){
       const noticeKey='shiye-gc-notice-v1:'+user.id+':'+initialReset.resetId;
       let previouslyNotified=false;

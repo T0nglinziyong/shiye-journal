@@ -28,8 +28,8 @@ export function SeriesEditorDialog({series,members,assets,source,onClose,onSave,
     if(event.target===event.currentTarget)onClose();}}>
     <section className="cloud-admin-panel series-editor-dialog" role="dialog" aria-modal="true"
       aria-label={series?'编辑系列':'新建系列'}>
-      <div className="dialog-head"><button type="button" className="btn" id="series-cancel"
-        onClick={onClose}>取消</button><h2>{series?'编辑系列':'新建系列'}</h2></div>
+      <div className="dialog-head"><h2>{series?'编辑系列':'新建系列'}</h2>
+        <button type="button" className="btn" id="series-cancel" onClick={onClose}>取消</button></div>
       <div className="stack"><label>系列名称<input id="series-name" value={title}
         onChange={event=>setTitle(event.target.value)}/></label>
         <label>系列介绍<textarea id="series-about" value={about}

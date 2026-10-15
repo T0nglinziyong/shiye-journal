@@ -1,6 +1,6 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {createRoot} from 'react-dom/client';
-import {createPortal} from 'react-dom';
+import {createPortal,flushSync} from 'react-dom';
 import {AdminViewDialog,StorageUsageDialog} from './react-admin-dialog.jsx';
 
 let loginRoot;
@@ -29,7 +29,7 @@ export function renderLoginGate(props){
   loginRoot??=createRoot(document.querySelector('#auth-root'));
   loginRoot.render(<LoginGate {...props}/>);
 }
-export function clearLoginGate(){loginRoot?.render(null);}
+export function clearLoginGate(){if(loginRoot)flushSync(()=>loginRoot.render(null));}
 
 function AuthDialog({title,onClose,children}){
   useEffect(()=>{

@@ -1,11 +1,11 @@
 import React,{useRef,useState} from 'react';
 import {paperPresets} from './paper-sizes.js';
 
-export function Dialog({title,onClose,children,className=''}){
+export function Dialog({title,onClose,children,className='',closeId}){
   return <div className="cloud-admin-backdrop" onMouseDown={event=>{
     if(event.target===event.currentTarget)onClose();}}>
-    <section className={`cloud-admin-panel ${className}`} role="dialog" aria-modal="true" aria-label={title}>
-      <button type="button" className="dialog-close" aria-label="关闭" onClick={onClose} style={{float:"right"}}>×</button>
+    <section className={`cloud-admin-panel utility-dialog ${className}`} role="dialog" aria-modal="true" aria-label={title}>
+      <button type="button" className="dialog-close" id={closeId} aria-label="关闭" onClick={onClose}>×</button>
       {children}
     </section>
   </div>;
@@ -24,8 +24,7 @@ export function BlankProjectDialog({defaultSize,onClose,onCreate}){
     setBusy(true);setError('');
     try{await onCreate({mode,ratio});onClose();}catch(cause){setError(cause.message||'创建草稿失败');setBusy(false);}
   };
-  return <Dialog title="空白创作" onClose={onClose}><div className="dialog-head"><h2>空白创作</h2>
-    <button type="button" className="btn" id="blank-create-cancel" onClick={onClose}>取消</button></div>
+  return <Dialog title="空白创作" onClose={onClose} closeId="blank-create-cancel"><h2>空白创作</h2>
     <div className="stack"><label>页面数<select id="blank-page-count" value={mode} onChange={e=>setMode(e.target.value)}>
       <option value="single">单页</option><option value="spread">双页</option></select></label>
       <label>纸张尺寸<select id="blank-paper-size" value={size} onChange={e=>setSize(e.target.value)}>
@@ -50,8 +49,8 @@ export function MaterialUseDialog({asset,others,useHint,processingHint,required,
 export function ManualLayoutDialog({choices,onClose,onChoose}){
   const [busy,setBusy]=useState(false),[error,setError]=useState('');
   const choose=async id=>{if(busy)return;setBusy(true);setError('');try{await onChoose(id);onClose();}catch(cause){setError('创建草稿失败：'+cause.message);setBusy(false);}};
-  return <Dialog title="手动创作起点" onClose={onClose} className="manual-layout-dialog">
-    <div className="dialog-head"><h2>手动创作从哪里开始？</h2><button type="button" className="btn" id="manual-layout-cancel" onClick={onClose}>取消</button></div>
+  return <Dialog title="手动创作从哪里开始？" onClose={onClose} closeId="manual-layout-cancel" className="manual-layout-dialog">
+    <h2>手动创作从哪里开始？</h2>
     <p>根据本次素材、页面风格和用途推荐起点。仅预排版实物，所有对象仍可独立编辑；不会调用 AI。</p>
     <div className="manual-layout-choices">{choices.map((item,index)=><button type="button" key={item.id} disabled={busy} className="manual-layout-choice" data-manual-template={item.id} onClick={()=>void choose(item.id)}>
       <span className={`manual-layout-sketch sketch-${item.id}`} aria-hidden="true"><i/><i/><i/></span><span><strong>{item.title}{index===0?' · 推荐':''}</strong><small>{item.description}</small><small>{item.reason}</small></span>

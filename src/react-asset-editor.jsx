@@ -30,11 +30,12 @@ export function AssetEditorDialog({asset,series,used,src,onClose,onSave}){
   return <div className="cloud-admin-backdrop" onMouseDown={event=>{
     if(event.target===event.currentTarget)onClose();}}>
     <section className="cloud-admin-panel material-editor-dialog" role="dialog" aria-modal="true" aria-label="编辑素材">
-      <div className="dialog-head asset-edit-head"><h2>编辑素材</h2><div className="asset-edit-actions">
+      <div className="dialog-head asset-edit-head">
         <button type="button" id="asset-dialog-close" aria-label="取消编辑" onClick={onClose}>取消</button>
+        <h2>编辑素材</h2>
         <button type="button" className="btn primary" id="save-asset" disabled={busy}
-          onClick={()=>void submit()}>保存</button>
-      </div></div>
+          onClick={()=>void submit()}>应用</button>
+      </div>
       <div className="material-editor"><div className="material-editor-preview">
         {src?<img src={src} data-asset-image-id={asset.id} alt={asset.title}/>:<span>无预览</span>}
       </div><div className="material-editor-controls">

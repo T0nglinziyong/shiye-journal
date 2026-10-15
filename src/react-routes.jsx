@@ -24,7 +24,7 @@ import {presetJournalTemplates,templateIndexText} from './journal-template-catal
 import {journalTemplateImageURL,saveJournalUserTemplate} from './journal-template-data.js';
 import {journalTemplatePanel} from './journal-source-panels.js';
 import {loadJournalPresetPanel} from './journal-preset-images.js';
-import {ImportCandidateDialog,ImportBackgroundDialog} from './react-import-candidate-dialog.jsx';
+import {ImportCandidateDialog} from './react-import-candidate-dialog.jsx';
 import {SettingsDiagnosticsDialog} from './react-ai-diagnostics.jsx';
 import {ReactSelectionTray} from './react-selection-tray.jsx';
 import {ManualBoxEditor} from './react-manual-box-editor.jsx';
@@ -141,7 +141,7 @@ export function RecentlyDeletedPage({kind,state,source,localCover,cloudEnabled,o
     </button>}/>
     <CatalogTabs tabs={tabs} active="trash" onChange={onTabChange}/>
     <div className="filters deleted-toolbar"><div className="four-filter-controls">
-      {limit?<div className="catalog-page-controls" data-page-key={`trash:${kind}`}>
+      <div className="catalog-page-summary">{limit?<div className="catalog-page-controls" data-page-key={`trash:${kind}`}>
         <input type="number" min="1" max={range.count} aria-label="输入页码"
           key={range.current} defaultValue={range.current}
           onChange={event=>setPage(Number(event.currentTarget.value))}/>
@@ -150,7 +150,8 @@ export function RecentlyDeletedPage({kind,state,source,localCover,cloudEnabled,o
         <button type="button" aria-label="下一页" disabled={range.current===range.count}
           onClick={()=>setPage(range.current+1)}>›</button>
       </div>:null}
-    </div><span className="catalog-total">{records.length} 项</span></div></div>
+      <span className="catalog-total">{records.length} 项</span></div>
+    </div></div></div>
     <section className={`grid recently-deleted-grid ${choosing?'selecting':''}`}
       data-kind={kind} aria-label="最近删除">
       {visible.length?visible.map(entry=>{
@@ -272,8 +273,8 @@ function JournalTemplateImport({db,onClose,onSaved,onError}){
       onClose();
     }catch(error){onError(error);}finally{setBusy(false);}
   };
-  return createPortal(<><div className="dialog-head"><button type="button" className="btn"
-      data-template-import-back onClick={onClose}>‹ 返回模板</button><h2>导入模板与案例</h2></div>
+  return createPortal(<><div className="dialog-head"><h2>导入模板与案例</h2>
+      <button type="button" className="btn" data-template-import-back onClick={onClose}>返回模板</button></div>
     <form className="stack journal-template-import" onSubmit={save}>
       <label>模板名称<input name="title" maxLength="80" required placeholder="例如：双列时间轴"/></label>
       <label>结构说明<textarea name="structure" required placeholder="简述主图、文字、装饰与阅读顺序"/></label>
@@ -475,7 +476,7 @@ export function LibraryPage({state,source,kindName,format,onAction,onPageChange,
         <ReactFilterMenu heading="排序顺序" glyph="↕" toggle
           options={[["desc","降序"],["asc","升序"]]} value={sortOrder}
           onChange={value=>changeSort(sortBasis,value)}/>
-      <div className="catalog-page-controls" data-page-key="library">
+      <div className="catalog-page-summary"><div className="catalog-page-controls" data-page-key="library">
         <input type="number" min="1" max={page.count} aria-label="输入页码"
           key={page.current} defaultValue={page.current}
           onChange={event=>changePage(Number(event.currentTarget.value))}/>
@@ -483,9 +484,8 @@ export function LibraryPage({state,source,kindName,format,onAction,onPageChange,
           onClick={()=>changePage(page.current-1)}>‹</button>
         <button type="button" aria-label="下一页" disabled={page.current===page.count}
           onClick={()=>changePage(page.current+1)}>›</button>
-      </div></div>
-      <span className="library-count catalog-total">{selection.selectionMode==='asset'&&selection.showOnlySelected?
-        selection.selected.size:page.total} 项</span>
+      </div><span className="library-count catalog-total">{selection.selectionMode==='asset'&&selection.showOnlySelected?
+        selection.selected.size:page.total} 项</span></div></div>
     </div></div>
     <div className={`grid asset-grid ${selection.showOnlySelected&&selecting?'selection-results':''} ${state.preferences.display==='list'?'list-grid':''}`}>
       {!(selecting&&selection.showOnlySelected)?<button className="card action-card" data-act="import" data-react-action="true"
@@ -613,7 +613,7 @@ export function WorksPage({projects,isUntouchedLegacyExample,assets,localCover,c
         <ReactFilterMenu heading="排序顺序" glyph="↕" toggle value={sortOrder}
           options={[["desc","降序"],["asc","升序"]]}
           onChange={value=>change('sort',sortBasis+'-'+value)}/>
-        {pageSize(configuredPageSize)?<div className="catalog-page-controls" data-page-key="works">
+        <div className="catalog-page-summary">{pageSize(configuredPageSize)?<div className="catalog-page-controls" data-page-key="works">
           <input type="number" min="1" max={page.count} key={page.current}
             aria-label="输入页码" defaultValue={page.current}
             onChange={event=>{setCatalogDataPage('works',Number(event.target.value));setRevision(value=>value+1);}}/>
@@ -622,8 +622,8 @@ export function WorksPage({projects,isUntouchedLegacyExample,assets,localCover,c
           <button type="button" aria-label="下一页" disabled={page.current===page.count}
             onClick={()=>{setCatalogDataPage('works',page.current+1);setRevision(value=>value+1);}}>›</button>
         </div>:null}
-      </div><span className="catalog-total">{list.length} 项</span>
-    </div></div><div className="grid works-grid">
+        <span className="catalog-total">{list.length} 项</span></div>
+      </div></div></div><div className="grid works-grid">
       {tab==='all'||tab==='snapshot'?<>
         {tab==='all'?<><button type="button" className="card work-entry" disabled={selectionActive(selection,'work')}
           onClick={()=>onAction('import-work')}>
@@ -713,7 +713,7 @@ export function SeriesPage({series,assets,display,seriesCovers,source,onAction,o
         <ReactFilterMenu heading="排序顺序" glyph="↕" toggle
           options={[["desc","降序"],["asc","升序"]]} value={ascending?'asc':'desc'}
           onChange={value=>changeFilter('seriesAscending',setAscending)(value==='asc')}/>
-        {limit?<div className="catalog-page-controls" data-page-key="series">
+        <div className="catalog-page-summary">{limit?<div className="catalog-page-controls" data-page-key="series">
           <input type="number" min="1" max={range.count} key={range.current}
             aria-label="输入页码" defaultValue={range.current}
             onChange={event=>{setCatalogDataPage('series',Number(event.target.value));setRevision(value=>value+1);}}/>
@@ -722,8 +722,8 @@ export function SeriesPage({series,assets,display,seriesCovers,source,onAction,o
           <button type="button" aria-label="下一页" disabled={range.current===range.count}
             onClick={()=>{setCatalogDataPage('series',range.current+1);setRevision(value=>value+1);}}>›</button>
         </div>:null}
-      </div><span className="catalog-total">{filtered.length} 项</span>
-    </div></div>
+        <span className="catalog-total">{filtered.length} 项</span></div>
+      </div></div></div>
     <div className={`grid series-grid ${display==='list'?'list-grid':''}`} data-react-page="series">
       <button type="button" className="series-entry" disabled={active} onClick={()=>onAction('new-series')}>
         <div className="series-entry-cover">＋</div><strong>新建系列</strong>
@@ -1185,8 +1185,9 @@ export function AssetDetailPage({asset,seriesTitle,source,kindName,format,onActi
       </div><div className="detail-small">
         <button data-act="detail-edit" data-react-action="true" onClick={act('detail-edit')}>✎　编辑素材信息</button>
         <button data-act="detail-check" data-react-action="true" onClick={act('detail-check')}>□　检查抠图</button>
-      </div><button type="button" className="btn" data-act="asset-print-pdf" data-react-action="true"
-        onClick={onExportPrint}>导出打印 PDF</button>
+        <button type="button" data-act="asset-print-pdf" data-react-action="true"
+          onClick={onExportPrint}>▤　导出打印 PDF</button>
+      </div>
     </div></section>
     {similarOpen?createPortal(<div className="cloud-admin-backdrop" onMouseDown={event=>{
       if(event.target===event.currentTarget)setSimilarOpen(false);}}>
@@ -1642,7 +1643,6 @@ function ReviewSeriesSelect({value='',recordIndex=null,seriesOptions,onSeriesCha
 export function ImportReviewPage({state,format,onAction,onSeriesChange,onWorkTitleChange,
   onEditCandidate,onCheckCandidate,onError}){
   const [dialog,setDialog]=useState(null);
-  const [background,setBackground]=useState(null);
   const [,setRevision]=useState(0);
   const press=useRef(null);
   const suppressClick=useRef(false);
@@ -1671,12 +1671,6 @@ export function ImportReviewPage({state,format,onAction,onSeriesChange,onWorkTit
   </>;
   const action=(name,id,value)=>()=>onAction(name,id,value);
   return <><ImportNavigation state={state} onAction={onAction}/>
-    {background!==null&&records[background]?<ImportBackgroundDialog
-      pattern={records[background].workPaperPattern||state.importBatchWorkPaperPattern||'plain'}
-      color={records[background].workPaperColor||state.importBatchWorkPaperColor||'#fcfaf0'}
-      onChange={({pattern,color})=>{records[background].workPaperPattern=pattern;
-        records[background].workPaperColor=color;setRevision(value=>value+1);}}
-      onClose={()=>setBackground(null)}/>:null}
     {dialog&&records[dialog.ri]?.selectedCandidates?.[dialog.ci]?<ImportCandidateDialog
       key={`${dialog.ri}:${dialog.ci}`} candidate={records[dialog.ri].selectedCandidates[dialog.ci]}
       recordIndex={dialog.ri} candidateIndex={dialog.ci}
@@ -1717,8 +1711,16 @@ export function ImportReviewPage({state,format,onAction,onSeriesChange,onWorkTit
             </div></div>:<>
               {work?<div className="review-candidate review-background-card"><div className={`review-thumbnail import-work-paper-preview ${pattern}`}
                 style={{'--review-paper':color,backgroundColor:color}}>
-                <button type="button" className="review-paper-control" data-import-paper-options={ri}
-                  aria-label="编辑页面背景" onClick={()=>setBackground(ri)}>页面背景</button>
+                <div className="review-paper-controls" aria-label="页面背景">
+                  <button type="button" data-import-paper-columns={ri} aria-pressed={pattern==='columns'}
+                    onClick={()=>{record.workPaperPattern=pattern==='columns'?'plain':'columns';setRevision(value=>value+1);}}>{pattern==='columns'?'双栏':'单栏'}</button>
+                  <select id={`review-background-pattern-${ri}`} aria-label="底纸样式" value={pattern==='columns'?'plain':pattern}
+                    onChange={event=>{record.workPaperPattern=event.target.value;setRevision(value=>value+1);}}>
+                    {[['plain','纯色'],['grid','方格'],['lines','横线'],['dots','点阵']].map(([value,label])=><option key={value} value={value}>{label}</option>)}
+                  </select>
+                  <input id={`review-background-color-${ri}`} type="color" aria-label="底纸颜色" value={color}
+                    onChange={event=>{record.workPaperColor=event.target.value;setRevision(value=>value+1);}}/>
+                </div>
               </div></div>:null}
               {candidates.map((candidate,ci)=><div className={`review-candidate ${candidate.selected?'selected':''}`}
                 data-index={ri} data-candidate={ci} key={ci} tabIndex={0}
