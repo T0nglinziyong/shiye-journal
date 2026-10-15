@@ -15,7 +15,7 @@ import {FabricEditorToolbar,FabricHeaderMenu} from './fabric-editor-controls.jsx
 import {FabricPageViewport} from './fabric-page-viewport.jsx';
 import {SceneCover} from './scene-cover.jsx';
 import {WORK_TABS,workInTab} from './work-collections.js';
-import {catalogDataPage,pageSize,pageSlice,setCatalogDataPage} from './catalog-pagination.js';
+import {catalogDataPage,catalogVisibleItems,pageSize,pageSlice,setCatalogDataPage} from './catalog-pagination.js';
 import {searchableSeries} from './library-model.js';
 import {selectionActive,toggleSelected} from './library-selection-model.js';
 import {ReactFilterMenu} from './react-filter-menu.jsx';
@@ -427,15 +427,16 @@ export function LibraryPage({state,source,kindName,format,onAction,onPageChange,
     return ()=>{window.removeEventListener('shiye-library-refresh',refresh);
       window.removeEventListener('shiye-selection-refresh',refresh);};
   },[]);
-  const page=libraryPageData(state),items=selectionActive(selection,'asset')&&
-    selection.showOnlySelected?state.assets.filter(asset=>selection.selected.has(asset.id)&&
-      !asset.isProjectInternal):page.items;
+  const selectedOnly=selectionActive(selection,'asset')&&selection.showOnlySelected;
+  const page=selectedOnly?catalogVisibleItems('library:selected',state.assets.filter(asset=>
+    selection.selected.has(asset.id)&&!asset.isProjectInternal),state.preferences.maxPageItems):libraryPageData(state);
+  const items=page.items,pageKey=selectedOnly?'library:selected':'library';
   const selecting=selectionActive(selection,'asset');
   const addingSeries=state.addingToSeries?
     state.series.find(entry=>entry.id===state.addingToSeries):null;
   const choosing=!!addingSeries;
   const changePage=value=>{
-    setCatalogDataPage('library',value);
+    setCatalogDataPage(pageKey,value);
     setRevision(revision=>revision+1);
     onPageChange?.();
   };
@@ -476,7 +477,7 @@ export function LibraryPage({state,source,kindName,format,onAction,onPageChange,
         <ReactFilterMenu heading="排序顺序" glyph="↕" toggle
           options={[["desc","降序"],["asc","升序"]]} value={sortOrder}
           onChange={value=>changeSort(sortBasis,value)}/>
-      <div className="catalog-page-summary"><div className="catalog-page-controls" data-page-key="library">
+      <div className="catalog-page-summary"><div className="catalog-page-controls" data-page-key={pageKey}>
         <input type="number" min="1" max={page.count} aria-label="输入页码"
           key={page.current} defaultValue={page.current}
           onChange={event=>changePage(Number(event.currentTarget.value))}/>
@@ -484,8 +485,7 @@ export function LibraryPage({state,source,kindName,format,onAction,onPageChange,
           onClick={()=>changePage(page.current-1)}>‹</button>
         <button type="button" aria-label="下一页" disabled={page.current===page.count}
           onClick={()=>changePage(page.current+1)}>›</button>
-      </div><span className="library-count catalog-total">{selection.selectionMode==='asset'&&selection.showOnlySelected?
-        selection.selected.size:page.total} 项</span></div></div>
+      </div><span className="library-count catalog-total">{page.total} 项</span></div></div>
     </div></div>
     <div className={`grid asset-grid ${selection.showOnlySelected&&selecting?'selection-results':''} ${state.preferences.display==='list'?'list-grid':''}`}>
       {!(selecting&&selection.showOnlySelected)?<button className="card action-card" data-act="import" data-react-action="true"
@@ -771,10 +771,11 @@ export function SeriesContentsPage({state,source,kindName,format,onAction,select
   const model=seriesContentsModel(state);
   if(!model)return <p>系列已移走</p>;
   const {series,filter,all,members,covers}=model;
-  const range=catalogDataPage('series:'+series.id,members.length,state.preferences.maxPageItems);
-  const visible=selectionActive(selection,'asset')&&selection.showOnlySelected?
-    state.assets.filter(asset=>selection.selected.has(asset.id)&&!asset.isProjectInternal):
-    members.slice(range.start,range.end);
+  const selectedOnly=selectionActive(selection,'asset')&&selection.showOnlySelected;
+  const pageKey='series:'+series.id+(selectedOnly?':selected':'');
+  const sourceItems=selectedOnly?members.filter(asset=>selection.selected.has(asset.id)):members;
+  const range=catalogVisibleItems(pageKey,sourceItems,state.preferences.maxPageItems);
+  const visible=range.items;
   const change=(key,value)=>{filter[key]=value;setCatalogDataPage('series:'+series.id,1);
     setRevision(revision=>revision+1);};
   const options=(items,value)=>items.map(([id,label])=><option key={id} value={id}>{label}</option>);
@@ -817,16 +818,16 @@ export function SeriesContentsPage({state,source,kindName,format,onAction,select
           value={filter.ascending?'asc':'desc'} options={[['desc','降序'],['asc','升序']]}
           onChange={value=>change('ascending',value==='asc')}/>
         {pageSize(state.preferences.maxPageItems)?<div className="catalog-page-controls"
-          data-page-key={'series:'+series.id}>
+          data-page-key={pageKey}>
           <input type="number" min="1" max={range.count} key={range.current}
             aria-label="输入页码" defaultValue={range.current}
-            onChange={event=>{setCatalogDataPage('series:'+series.id,Number(event.target.value));
+            onChange={event=>{setCatalogDataPage(pageKey,Number(event.target.value));
               setRevision(revision=>revision+1);}}/>
           <button type="button" aria-label="上一页" disabled={range.current===1}
-            onClick={()=>{setCatalogDataPage('series:'+series.id,range.current-1);
+            onClick={()=>{setCatalogDataPage(pageKey,range.current-1);
               setRevision(revision=>revision+1);}}>‹</button>
           <button type="button" aria-label="下一页" disabled={range.current===range.count}
-            onClick={()=>{setCatalogDataPage('series:'+series.id,range.current+1);
+            onClick={()=>{setCatalogDataPage(pageKey,range.current+1);
               setRevision(revision=>revision+1);}}>›</button>
         </div>:null}
       </div>
@@ -854,8 +855,7 @@ export function SeriesContentsPage({state,source,kindName,format,onAction,select
           <span className={`chip ${asset.reviewStatus==='ready'?'':'warn'}`}>{asset.reviewStatus==='ready'?'已整理':'待检查'}</span>
         </div>
       </PressCard>)}
-    </div><p className="series-result-count">{selection.selectionMode==='asset'&&selection.showOnlySelected?
-      selection.selected.size:members.length} 项</p>
+    </div><p className="series-result-count">{range.total} 项</p>
     <ReactSelectionTray selection={selection} mode="asset" visibleIDs={visible.map(asset=>asset.id)}
       series={state.series} onAction={onBatchAction} onError={onBatchError}/>
   </section>;
@@ -1268,7 +1268,7 @@ export function SettingsDisplayPage({preferences,onAction}){
           <option value="transparent">透明</option>
         </select></label>
         <label>每页最多展示<select id="setting-page-items" defaultValue={String(preferences.maxPageItems)}>
-          {[10,20,40,80].map(count=><option value={count} key={count}>每页 {count} 项</option>)}
+          {[20,40,80].map(count=><option value={count} key={count}>每页 {count} 项</option>)}
         </select></label>
         <p>素材库只创建当前页卡片；系列和作品共用此设置。</p>
       </section>
@@ -1495,7 +1495,7 @@ export function SettingsAIPage({settings,onAction}){
       <label>API 密钥<input id="setting-ai-key" type="password" autoComplete="off"
         value={key} onChange={event=>{setKey(event.target.value);setKeys(current=>({...current,[provider]:event.target.value}));}} placeholder="API Key"/></label>
       <input id="setting-ai-provider-keys" type="hidden" value={JSON.stringify(keys)}/>
-      <p>{vision?'此地址和模型支持图片输入，创作时会自动发送素材预览。':'此地址和模型尚未确认支持图片输入，创作时只发送素材信息。'}密钥仅保存在本浏览器。</p>
+      <p>{vision?'所选模型支持图片输入，创作时自动发送素材封面。':'所选模型按纯文字输入处理，创作时发送素材信息。'}密钥仅保存在本浏览器。</p>
       <AINumber id="temperature" label="创意程度 0–2" value={cfg.temperature} min="0" max="2" step="0.05"/>
       <AINumber id="turns" label="最多创作轮次" value={cfg.maxTurns} min="1" max="20"/>
       <AINumber id="timeout" label="连续无响应超时（秒）" value={cfg.requestTimeout} min="20" max="180"/>
@@ -1510,7 +1510,7 @@ export function ImportSimplePage({state,onAction}){
   const kind=state.importMode==='work'?'作品':state.importMode==='snapshot'?'快照':'素材';
   const destination=state.importMode==='work'||state.importMode==='snapshot'?'作品':'素材库';
   const needsManualCheck=state.importMode==='material'&&state.preferences.autoOrganize&&
-    !(state.aiSettings?.key&&state.aiSettings.includeThumbnails&&supportsVision(state.aiSettings));
+    !(state.aiSettings?.key&&supportsVision(state.aiSettings));
   return <><ImportNavigation state={state} onAction={onAction}/>{isDone?<section className="import-done" aria-labelledby="import-done-title"><div className="import-done-card">
     <div className="import-done-icon" aria-hidden="true">✓</div><h1 id="import-done-title">导入完成</h1>
     <p className="import-done-count">已导入 <strong>{state.importSavedCount||0}</strong> 个{kind}</p>

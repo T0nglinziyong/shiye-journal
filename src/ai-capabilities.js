@@ -12,6 +12,11 @@ const VERIFIED={
  },
  'https://api.siliconflow.cn/v1/chat/completions':{
   'Qwen/Qwen2.5-VL-72B-Instruct':{nativeTools:false,jsonObject:false,vision:true}
+ },
+ 'https://open.bigmodel.cn/api/paas/v4/chat/completions':{
+  'glm-5v-turbo':{nativeTools:true,jsonObject:false,vision:true},
+  'glm-4.6v':{nativeTools:true,jsonObject:false,vision:true},
+  'glm-5.2':{nativeTools:false,jsonObject:false,vision:false}
  }
 };
 export function verifiedModelCapabilities({endpoint='https://api.openai.com/v1/chat/completions',model='gpt-4.1'}={}){

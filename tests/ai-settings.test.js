@@ -10,7 +10,8 @@ test('creative delivery settings survive save and reload without changing provid
   const settings={deliveryMode:'image',provider:'custom',key:'test-value',endpoint:'https://example.invalid/chat/completions',model:'example-model',temperature:1.25,maxTokens:10000,maxTurns:4,includeThumbnails:false,transport:'json',textMode:'none',reasoningMode:'providerDefault',requestTimeout:120,sendOutputLimit:false,disableThinking:false,includeStructureReference:false,sendPresetReferences:true,autoIncludeRecommendations:true,requireAllCandidates:false,customLayoutPrompt:'保留大块留白'};
   const saved=saveAISettings(settings,storage),restored=loadAISettings(storage);
   assert.deepEqual(restored,saved);
-  for(const [key,value] of Object.entries(settings))assert.deepEqual(restored[key],value,key);
+  for(const [key,value] of Object.entries(settings))if(key!=='includeThumbnails')assert.deepEqual(restored[key],value,key);
+  assert.equal(restored.includeThumbnails,true,'image creation includes source material even when an old toggle was off');
   assert.equal(restored.generationMode,'direct');
 });
 
@@ -60,6 +61,12 @@ test('A-12: image input is scoped to verified endpoint/model combinations',()=>{
  assert.equal(supportsVision(normalizeAISettings({provider:'deepseek',endpoint:'https://example.test/chat/completions',model:'deepseek-flash'})),false);
  assert.equal(supportsVision(normalizeAISettings({provider:'deepseek',endpoint:'https://example.test/chat/completions',model:'deepseek-flash',customVision:true})),false);
  assert.equal(supportsVision(normalizeAISettings({provider:'siliconflow',model:'Qwen/Qwen2.5-VL-72B-Instruct'})),true);
+ assert.equal(supportsVision(normalizeAISettings({provider:'glm',model:'glm-5v-turbo'})),true);
+ assert.equal(supportsVision(normalizeAISettings({provider:'glm',model:'glm-4.6v'})),true);
+ assert.equal(supportsVision(normalizeAISettings({provider:'glm',model:'glm-5.2'})),false);
+ assert.equal(normalizeAISettings({provider:'glm',model:'glm-4.6v',includeThumbnails:false}).includeThumbnails,true);
+ assert.equal(normalizeAISettings({provider:'glm',model:'glm-5.2',includeThumbnails:true}).includeThumbnails,false);
+ assert.equal(normalizeAISettings({provider:'custom',endpoint:'https://example.test/chat/completions',model:'unknown',includeThumbnails:true}).includeThumbnails,false);
 });
 
 test('three creation methods are independent from web file-versus-text return form',()=>{

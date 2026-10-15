@@ -31,7 +31,10 @@ export function normalizeAISettings(value={}){
     temperature:limit(value.temperature,0,2,AI_DEFAULTS.temperature),
     maxTokens:Math.round(limit(value.maxTokens,2000,16000,AI_DEFAULTS.maxTokens)),
     maxTurns:creativeRequestLimit(value.maxTurns),
-    includeThumbnails:value.includeThumbnails!==false,finalVisualReview:value.finalVisualReview!==false,customVision:value.customVision===true,
+    // Image delivery follows the selected model's input capability. The old
+    // persisted thumbnail toggle must not silently disable a vision model.
+    includeThumbnails:creationMode==='image'||verifiedModelCapabilities({endpoint:typeof value.endpoint==='string'&&value.endpoint.trim()?value.endpoint.trim():preset.endpoint,model})?.vision===true,
+    finalVisualReview:value.finalVisualReview!==false,customVision:value.customVision===true,
     requestTimeout:limit(value.requestTimeout,20,180,AI_DEFAULTS.requestTimeout),
     sendOutputLimit:value.sendOutputLimit!==false,disableThinking:value.disableThinking!==false,
     transport:['auto','native','json'].includes(value.transport)?value.transport:AI_DEFAULTS.transport,

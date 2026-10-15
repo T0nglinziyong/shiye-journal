@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {pageSize,pageSlice} from '../src/catalog-pagination.js';
+import {catalogVisibleItems,pageSize,pageSlice,resetCatalogPage,setCatalogDataPage} from '../src/catalog-pagination.js';
 import {WORK_TABS,workInTab,snapshotRecord} from '../src/work-collections.js';
 import {styleGroups,purposeGroups,selectedDirections} from '../src/matching-directions.js';
 import {createNativeProjectPackage,importNativeProjectPackage} from '../src/native-project-package.js';
@@ -18,6 +18,22 @@ test('page controls clamp input while counts remain independent of the page',()=
   assert.deepEqual(pageSlice(85,40,3),{current:3,count:3,start:80,end:120});
   assert.deepEqual(pageSlice(85,40,99),{current:3,count:3,start:80,end:120});
   assert.deepEqual(pageSlice(85,0,1),{current:1,count:1,start:0,end:85});
+});
+test('the configured size limits ordinary and selected catalog results after filtering',()=>{
+  const all=Array.from({length:95},(_,index)=>({id:index}));
+  for(const key of ['library:selected','series:one:selected','works','series']){
+    resetCatalogPage(key);
+    const first=catalogVisibleItems(key,all,20);
+    assert.equal(first.items.length,20,key);
+    assert.equal(first.total,95,key);
+    setCatalogDataPage(key,2);
+    assert.deepEqual(catalogVisibleItems(key,all.filter(item=>item.id%2===0),20).items.map(item=>item.id),
+      all.filter(item=>item.id%2===0).slice(20,40).map(item=>item.id),key);
+    resetCatalogPage(key);
+    assert.equal(catalogVisibleItems(key,all,40).items.length,40,key);
+    assert.equal(catalogVisibleItems(key,all,80).items.length,80,key);
+  }
+  assert.equal(pageSize(10),0,'the setting keeps its existing 20/40/80 choices');
 });
 test('snapshot and editable works never share a tab',()=>{
   const picture=snapshotRecord({title:'一页画面',previewBlobId:'preview',width:800,height:1200});

@@ -18,12 +18,12 @@ test('library creates data for one page and filters before slicing',()=>{
 
 
 test('each selected catalog page size changes the number of rendered material cards',()=>{
-  const assets=Array.from({length:25},(_,index)=>({id:String(index),title:'素材 '+index,kind:'paper',createdAt:new Date(2026,0,index+1).toISOString()}));
-  const state={assets,query:'',kind:'all',status:'all',seriesID:'all',sort:'newest',preferences:{maxPageItems:10}};
+  const assets=Array.from({length:95},(_,index)=>({id:String(index),title:'素材 '+index,kind:'paper',createdAt:new Date(2026,0,index+1).toISOString()}));
+  const state={assets,query:'',kind:'all',status:'all',seriesID:'all',sort:'newest',preferences:{maxPageItems:20}};
   resetCatalogPage('library');
-  assert.equal(libraryPageData(state).items.length,10);
-  state.preferences.maxPageItems=20;resetCatalogPage('library');
   assert.equal(libraryPageData(state).items.length,20);
   state.preferences.maxPageItems=40;resetCatalogPage('library');
-  assert.equal(libraryPageData(state).items.length,25);
+  assert.equal(libraryPageData(state).items.length,40);
+  state.preferences.maxPageItems=80;resetCatalogPage('library');
+  assert.equal(libraryPageData(state).items.length,80);
 });

@@ -1474,8 +1474,7 @@ async function exportOfflineCreation(){
     const all=Object.entries(aliases);report.materials=all.length;
     // The package uses cached 480px covers or fetches that same COS tier.
     // High-resolution display variants are queued only after delivery.
-    const materialWork=measured('materials',()=>cfg.includeThumbnails
-      ?mapOfflineExportLimited(all,3,async([alias,id])=>{
+    const materialWork=measured('materials',()=>mapOfflineExportLimited(all,3,async([alias,id])=>{
         const chosen=assetsSnapshot.find(item=>item.id===id);
         if(!chosen)throw Error('创作素材已变更，请重新导出任务包');
         const row=await prepareOfflineMaterialPreview({
@@ -1487,15 +1486,14 @@ async function exportOfflineCreation(){
         if(row.cacheHit)report.cacheHits++;
         else report.covers++;
         return {alias,bytes:row.bytes};
-      },{signal:controller.signal,onDone:(done,total)=>progress('准备素材图片 '+done+'/'+total+' · 同时处理参考案例…')})
-      :Promise.resolve([]));
+      },{signal:controller.signal,onDone:(done,total)=>progress('准备素材图片 '+done+'/'+total+' · 同时处理参考案例…')}));
     const referenceWork=measured('references',()=>cfg.sendPresetReferences
       ?loadJournalTemplateReferences({context:{accountId:account,styles:p.styles,purposes:p.purposes,materials:assetsSnapshot.filter(asset=>p.candidateAssetIDs.includes(asset.id))},userTemplates:state.userTemplates,db})
       :Promise.resolve({referenceImages:[]}));
     const [materialRows,referenceBundle]=await Promise.all([materialWork,referenceWork]);
     canceled();previews.push(...materialRows);referenceImages.push(...referenceBundle.referenceImages);report.references=referenceImages.length;
     progress('正在校验内容并生成 ZIP 文件…');
-    const result=await measured('package',async()=>{const {createOfflineHandoff}=await import('./offline-creation.js');return createOfflineHandoff({project:p,assets:assetsSnapshot,aliases,previews,referenceImages,settings:cfg,userTemplates:state.userTemplates});});
+    const result=await measured('package',async()=>{const {createOfflineHandoff}=await import('./offline-creation.js');return createOfflineHandoff({project:p,assets:assetsSnapshot,aliases,previews,referenceImages,settings:{...cfg,includeThumbnails:true},userTemplates:state.userTemplates});});
     canceled();
     p.offlineBundleId=result.source.bundleId;
     canceled();

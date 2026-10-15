@@ -151,7 +151,7 @@ async function classifySelectedWorks(c,records){
     if(c.state.accountId!==account)break;
     const source=record.isSnapshot?record:await c.db.completeProject(record);
     let image=null;
-    if(record.isSnapshot&&settings.includeThumbnails){
+    if(record.isSnapshot&&c.supportsVision(settings)){
       image=await c.modelImage({blobId:record.snapshotBlobId},null,360,false);
     }
     const identified=await classifyRecord({kind:'project',record:source,settings,image,assets:c.state.assets});

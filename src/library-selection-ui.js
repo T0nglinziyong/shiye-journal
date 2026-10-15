@@ -51,8 +51,8 @@ export async function runAssetBatchAction(c,selection,action,value){
     case 'classify':{
       const records=selected().map(asset=>structuredClone(asset)),
         settings=structuredClone(state.aiSettings),accountID=state.accountId;
-      if(!settings.key||!settings.includeThumbnails||!supportsVision(settings))
-        throw Error('请先配置可用的视觉模型并开启素材图片');
+      if(!settings.key||!supportsVision(settings))
+        throw Error('请先配置支持图片输入的模型');
       let completed=0,failed=0,firstError=null;
       await c.assetOrganization.run(records,{priority:'foreground',organize:async(record,isCurrent)=>{
         if(state.accountId!==accountID||!isCurrent())return;
