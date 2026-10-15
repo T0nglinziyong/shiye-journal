@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {recommendForDirection,buildMaterialScope} from '../src/matching-materials.js';
-import {matchingRecommendations,renderMatchingPage} from '../src/matching-view.js';
+import {matchingRecommendations,matchingViewModel} from '../src/matching-view.js';
 const make=(id,kind,title,tags=[])=>({id,kind,title,tags,reviewStatus:'ready',physicalWidthMM:30,physicalHeightMM:40,supply:{quantity:1}});
 const assets=[make('paper','paper','浅绿方格纸',['清单']),make('photo','photo','旅途照片',['旅行']),make('ticket','paper','车票',['旅途']),make('flower','sticker','花朵贴纸',['植物']),make('hidden','photo','私人照片')];
 test('recommendations begin with style and purpose before any basket selection',()=>{
@@ -24,19 +24,13 @@ test('all candidates become required by default setting, while off keeps pinned 
  const relaxed=buildMaterialScope({...options,requireAllCandidates:false});
  assert.deepEqual(relaxed.required,['photo']);assert.deepEqual(relaxed.preferred,['paper']);assert.deepEqual(relaxed.available,['ticket']);
 });
-test('matching view places direction above recommendations and explains AI inclusion',()=>{
+test('matching model excludes rejected materials from recommendations and AI input',()=>{
  const state={assets,basket:[],coreIDs:[],excludedAssetIDs:['flower'],matchStyle:'旅行票据',matchStyles:['旅行票据'],matchPurpose:'旅途记录',matchPurposes:['旅途记录'],matchMode:'single',matchRatio:'a4',matchProcessing:'保留完整',matchIntent:'',materialUseHints:{},materialUseRequired:{},recommendFilter:'全部',customPaperWidth:210,customPaperHeight:297,aiSettings:{autoIncludeRecommendations:true}};
  assert.ok(matchingRecommendations(state).length);
- const html=renderMatchingPage({state,head:()=>'<header></header>',imgTag:()=>'<img>',esc:String,kindName:String,session:{render:()=>'<footer></footer>'}});
- assert.ok(html.indexOf('match-direction')<html.indexOf('match-recommendations'));
- assert.doesNotMatch(html,/未发送给 AI/);
- assert.doesNotMatch(html,/花朵贴纸/);
-});
-test('basket star remains clickable with require-all setting and actions share a size class',()=>{
- const state={assets,basket:['paper'],coreIDs:[],excludedAssetIDs:[],matchStyles:[],matchPurposes:[],matchMode:'single',matchRatio:'a4',matchProcessing:'保留完整',matchIntent:'',materialUseHints:{},materialUseRequired:{},recommendFilter:'全部',customPaperWidth:210,customPaperHeight:297,aiSettings:{requireAllCandidates:true,autoIncludeRecommendations:false}};
- const html=renderMatchingPage({state,head:()=>'<header></header>',imgTag:()=>'<img>',esc:String,kindName:String,session:{render:()=>''}});
- assert.match(html,/class="match-basket-actions"/);assert.match(html,/data-act="match-core"/);
- assert.doesNotMatch(html,/data-act="match-core"[^>]*disabled/);
+ const model=matchingViewModel(state);
+ assert.ok(model.filtered.length);
+ assert.ok(!model.filtered.some(item=>item.asset.id==='flower'));
+ assert.ok(!model.scope.candidateAssetIDs.includes('flower'));
 });
 test('recommendations use all semantic tags and selected basket context',()=>{
  const selected=make('base','photo','旅行照片',['旅途']);selected.semanticColorNames=['蓝色'];selected.materialTags=['光面'];

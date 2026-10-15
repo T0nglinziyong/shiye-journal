@@ -67,6 +67,17 @@ await waitFor(()=>heart.getAttribute('aria-pressed')==='false');
 window.document.querySelector('.main-nav [data-route="matching"]').click();
 await waitFor(()=>!!window.document.querySelector('.matching-page'));
 assert.equal(window.document.querySelector('.matching-page').dataset.reactPage,'matching');
+assert.ok(window.document.querySelector('.match-direction').compareDocumentPosition(
+  window.document.querySelector('.match-recommendations'))&window.Node.DOCUMENT_POSITION_FOLLOWING);
+assert.ok(window.document.querySelector('#match-content-policy'));
+assert.ok(window.document.querySelector('#match-text-presentation option[value="handwritten"]'));
+assert.ok(window.document.querySelector('#match-ratio option[value="b5-half"]'));
+window.document.querySelector('.match-rec [data-act="basket"]').click();
+await waitFor(()=>!!window.document.querySelector('.match-basket-actions [data-act="match-core"]'));
+const matchingStar=window.document.querySelector('.match-basket-actions [data-act="match-core"]');
+assert.equal(matchingStar.disabled,false);
+matchingStar.click();
+await waitFor(()=>window.document.querySelector('.match-basket-actions [data-act="match-core"]')?.getAttribute('aria-pressed')==='true');
 window.document.querySelector('.match-direction-choice').value='美式拼贴';
 window.document.querySelector('.match-direction-choice').dispatchEvent(new window.Event('change',{bubbles:true}));
 window.document.querySelector('.main-nav [data-route="works"]').click();

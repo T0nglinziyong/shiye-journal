@@ -12,6 +12,7 @@
 | 素材与作品的最近删除列表、恢复、批量删除 | `RecentlyDeletedPage` | `trash-offline-browser.mjs`、`library-canvas-latest-browser.mjs` |
 | 模板列表、详情、筛选与导入表单 | `JournalTemplatesPage`、`journal-template-data.js` | `route-parity-smoke.mjs`、`browser-acceptance.mjs` |
 | 素材库和作品库的分页卡片 | `LibraryPage`、`WorksPage` | `react-route-smoke.mjs`、`library-selection-browser.mjs` |
+| 搭配页面及素材篮 | `MatchingPage`，数据由 `matchingViewModel` 提供 | `react-route-smoke.mjs`、`browser-acceptance.mjs`；旧字符串 HTML 页面已删除 |
 
 ## 仍需迁移的页面结构
 
