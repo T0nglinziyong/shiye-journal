@@ -4,9 +4,12 @@ import {clampedCanvasOffset} from './canvas-control-behavior.js';
 
 // This adapter changes only the fitted paper's CSS transform. Fabric keeps
 // its own scene coordinates and pointer lifetime, so zoom never edits Scene.
-export function FabricPageViewport({draft,width,height,zoom=1,initialPan,onViewportChange,resetSignal=0,children}){
-  const pageRef=useRef(null),panRef=useRef(null),changeRef=useRef(onViewportChange),previousZoom=useRef(zoom);
+export function FabricPageViewport({draft,width,height,zoom=1,initialPan,onViewportChange,
+  onCanvasTap,canTransform,tool='select',resetSignal=0,children}){
+  const pageRef=useRef(null),panRef=useRef(null),changeRef=useRef(onViewportChange),
+    tapRef=useRef(onCanvasTap),transformRef=useRef(canTransform),toolRef=useRef(tool),previousZoom=useRef(zoom);
   changeRef.current=onViewportChange;
+  tapRef.current=onCanvasTap;transformRef.current=canTransform;toolRef.current=tool;
   useLayoutEffect(()=>{
     const page=pageRef.current,host=page.parentElement;
     const center=()=>{
@@ -20,7 +23,7 @@ export function FabricPageViewport({draft,width,height,zoom=1,initialPan,onViewp
       pinchAndPan:true,canvas:true,
       cursor:'',touchAction:'none',handleStartEvent:event=>event.preventDefault()});
     panRef.current=pan;
-    const active=new Map();let navigating=false,mousePan=false,clampFrame=0;
+    const active=new Map(),starts=new Map();let navigating=false,mousePan=false,clampFrame=0;
     const stop=event=>{event.preventDefault();event.stopImmediatePropagation();};
     const clamp=()=>{
       clampFrame=0;if(!page.isConnected)return;
@@ -34,6 +37,18 @@ export function FabricPageViewport({draft,width,height,zoom=1,initialPan,onViewp
     const scheduleClamp=()=>{if(!clampFrame)clampFrame=requestAnimationFrame(clamp);};
     const changed=()=>{changeRef.current?.(pan.getScale(),pan.getPan());scheduleClamp();};
     const down=event=>{
+      if(toolRef.current==='select'&&(event.pointerType==='touch'||event.button===0)){
+        // The first tap selects only after release. A later gesture starting
+        // on that selected object is handled by Fabric's transform controls.
+        if(transformRef.current?.(event))return;
+        if(event.pointerType==='touch')active.set(event.pointerId,event);
+        if(active.size>1)for(const start of starts.values())start.moved=true;
+        starts.set(event.pointerId,{x:event.clientX,y:event.clientY,moved:active.size>1});
+        navigating=true;mousePan=event.pointerType!=='touch';
+        pan.handleDown(event);
+        try{host.setPointerCapture(event.pointerId);}catch{}
+        stop(event);return;
+      }
       if(event.pointerType==='touch'){
         active.set(event.pointerId,event);
         if(active.size<2)return;
@@ -57,13 +72,18 @@ export function FabricPageViewport({draft,width,height,zoom=1,initialPan,onViewp
     };
     const move=event=>{
       if(active.has(event.pointerId))active.set(event.pointerId,event);
+      const start=starts.get(event.pointerId);
+      if(start&&Math.hypot(event.clientX-start.x,event.clientY-start.y)>5)start.moved=true;
       if(!navigating)return;
       pan.handleMove(event);stop(event);
     };
     const end=event=>{
       active.delete(event.pointerId);
+      const start=starts.get(event.pointerId);starts.delete(event.pointerId);
       if(!navigating)return;
       pan.handleUp(event);stop(event);
+      if(start&&!start.moved&&event.type==='pointerup'&&active.size===0&&
+        Math.hypot(event.clientX-start.x,event.clientY-start.y)<=5)tapRef.current?.(event);
       if(mousePan||active.size===0){mousePan=false;navigating=false;}
     };
     const wheel=event=>{

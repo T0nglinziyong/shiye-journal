@@ -12,14 +12,14 @@ test('account cloud matching defaults retain non-content creative direction only
  const next={matchIntent:'本机新内容',basket:['other'],matchMode:'single'};
  applyMatchingDefaults(next,cloudMatchingSettingsFromMeta([row]));
  assert.equal(next.matchMode,'spread');assert.equal(next.matchRatio,'a5');assert.equal(next.matchTextPresentation,'handwritten');
- assert.deepEqual(next.materialUseHints,{asset_1:'保留完整'});
+ assert.equal(next.materialUseHints,undefined,'逐件用法不再同步');
  assert.equal(next.matchIntent,'本机新内容');assert.deepEqual(next.basket,['other']);
 });
 
 test('cloud matching defaults reject malformed and extra fields',()=>{
  assert.equal(cloudMatchingSettingsFromMeta([{id:CLOUD_MATCHING_SETTINGS_ID,settings:[]}]),null);
  const record=cloudMatchingSettingsRecord({matchRatio:'a4',matchIntent:'never',materialUseRequired:{safe:true,bad:'yes'},customPaperWidth:Infinity,matchStyles:['自然植物',3,'自然植物'],bogus:true});
- assert.deepEqual(record.settings,{matchRatio:'a4',matchStyles:['自然植物'],materialUseRequired:{safe:true}});
+ assert.deepEqual(record.settings,{matchRatio:'a4',matchStyles:['自然植物']});
 });
 
 test('cloud controls override stale device defaults only after local matching restore',()=>{

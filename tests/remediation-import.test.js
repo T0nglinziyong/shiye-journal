@@ -29,12 +29,13 @@ test('I-01: editable JSON rejects prototype keys before processing tools',async(
 
 test('O-01: exported task source does not mutate when matching preferences change later',async()=>{
   const asset={id:'asset-freeze',title:'蓝纸',kind:'sticker',physicalWidthMM:25,physicalHeightMM:25,supply:{quantity:1}};
-  const p=project('冻结任务');p.styles=['韩系清新'];p.requiredAssetIDs=[asset.id];p.assetProcessing={[asset.id]:'少量裁剪'};
+  const p=project('冻结任务');p.styles=['韩系清新'];p.requiredAssetIDs=[asset.id];p.processing='少量裁剪';
   const result=await createOfflineHandoff({project:p,assets:[asset],aliases:{m1:asset.id},settings:{includeThumbnails:false}});
-  p.styles[0]='复古旧物';p.requiredAssetIDs.length=0;p.assetProcessing[asset.id]='自由拆解';
+  p.styles[0]='复古旧物';p.requiredAssetIDs.length=0;p.processing='自由拆解';
   assert.deepEqual(result.source.styles,['韩系清新']);
   assert.deepEqual(result.source.requiredAssetIDs,[asset.id]);
-  assert.equal(result.source.assetProcessing[asset.id],'少量裁剪');
+  assert.equal(result.source.processing,'少量裁剪');
+  assert.equal(result.source.assetProcessing,undefined);
 });
 
 test('I-04: second active draft and immutable history survive ID remapping',async()=>{

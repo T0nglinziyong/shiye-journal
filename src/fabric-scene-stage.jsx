@@ -4,10 +4,11 @@ import {createFabricSceneBridge} from './fabric-scene-bridge.js';
 import {projectFabricLayers} from './fabric-layer-loader.js';
 import {paperWidthPixels,pressureInkOutline,erasePressureStroke} from './pressure-ink.js';
 import {textBlock} from './domain.js';
-import {selectPolygon,polygonContains} from './canvas-selection.js';
+import {selectPolygon} from './canvas-selection.js';
 import {attachSceneV2} from './scene-v2.js';
 import {sceneDisplaySiblings} from './craft-display.js';
 import {prepareSceneFonts} from './scene-renderer.js';
+import {appendInkStroke} from './ink-groups.js';
 
 const byID=(nodes,id)=>{
   for(const node of nodes||[]){
@@ -25,10 +26,11 @@ const byID=(nodes,id)=>{
 export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onChange,onIssue,onReady,
   tool='select',pen={widthMM:.5,color:'#2b5245'},marker={widthMM:2,color:'#f5cf45'},
   eraser={widthMM:4},selectionMode='contain',readOnly=false,sceneRevision=0,
-  selectedID=null,selectedIDs=[],textDefaults=null}){
+  selectedID=null,selectedIDs=[],selectionFilter=null,textDefaults=null}){
   const canvasRef=useRef(null),sessionRef=useRef(null),reconcileRef=useRef(null),callbacks=useRef(null);
+  const syncingSelection=useRef(false);
   callbacks.current={draft,assetURL,onSelection,onBeforeChange,onChange,onIssue,onReady,tool,pen,marker,
-    eraser,selectionMode,selectedID,selectedIDs,textDefaults};
+    eraser,selectionMode,selectionFilter,selectedID,selectedIDs,textDefaults};
 
   useLayoutEffect(()=>{reconcileRef.current?.();},[draft,sceneRevision]);
 
@@ -36,25 +38,29 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
     const canvas=sessionRef.current;
     if(!canvas||!['select','lasso'].includes(tool))return;
     const ids=selectedIDs.length?selectedIDs:selectedID?[selectedID]:[];
-    const objects=ids.map(id=>canvas.getObjects().find(item=>item.sceneID===id)).filter(Boolean);
+    const objects=ids.map(id=>canvas.getObjects().find(item=>item.sceneID===id&&item.selectable!==false)).filter(Boolean);
     const active=canvas.getActiveObjects();
+    syncingSelection.current=true;
     if(objects.length&&(!active.length||active.length!==objects.length||
       active.some(item=>!objects.includes(item)))){
       if(objects.length===1)canvas.setActiveObject(objects[0]);
       else import('fabric').then(({ActiveSelection})=>{
         if(sessionRef.current!==canvas)return;
+        syncingSelection.current=true;
         canvas.setActiveObject(new ActiveSelection(objects,{canvas}));canvas.requestRenderAll();
+        syncingSelection.current=false;
       });
       canvas.requestRenderAll();
-    }else if(!ids.length&&canvas.getActiveObject()){
+    }else if(canvas.getActiveObject()&&(!objects.length||!ids.length)){
       canvas.discardActiveObject();canvas.requestRenderAll();
     }
+    syncingSelection.current=false;
   },[selectedID,selectedIDs,tool,sceneRevision]);
 
   useLayoutEffect(()=>{
     const canvas=sessionRef.current;
     if(!canvas)return;
-    canvas.selection=tool==='select'&&!readOnly;
+    canvas.selection=false;
     canvas.skipTargetFind=tool!=='select'||readOnly;
     canvas.defaultCursor=['pen','highlighter','lasso'].includes(tool)?'crosshair':tool==='eraser'?'cell':'default';
     if(!['select','lasso'].includes(tool)){canvas.getActiveObject()?.exitEditing?.();canvas.discardActiveObject();
@@ -75,7 +81,7 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
           selection:!readOnly,enableRetinaScaling:true,renderOnAddRemove:false
         });
         sessionRef.current=canvas;
-        canvas.selection=callbacks.current.tool==='select'&&!readOnly;
+        canvas.selection=false;
         canvas.skipTargetFind=callbacks.current.tool!=='select'||readOnly;
         const paperKey=current=>JSON.stringify([current.canvas,current.paperColor,
           current.paperPattern,current.paperRuling,current.pageMode,current.drawCenterGutter]);
@@ -303,13 +309,9 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
             if(finished.points.length<3)return;
             const mode=callbacks.current.selectionMode||'contain';
             const ids=selectPolygon(current,finished.points,
-              {material:true,text:true,shape:true},mode);
-            for(const node of current.layers||[]){
-              if(node.type!=='ink'||node.hidden||node.locked)continue;
-              const hits=(node.points||[]).map(sample=>polygonContains(sample,finished.points));
-              if(hits.length&&(mode==='intersect'?hits.some(Boolean):hits.every(Boolean)))ids.push(node.id);
-            }
-            const objects=[...new Set(ids)].map(id=>canvas.getObjects().find(object=>object.sceneID===id)).filter(Boolean);
+              callbacks.current.selectionFilter||{material:true,text:true,shape:true},mode);
+            const objects=[...new Set(ids)].map(id=>canvas.getObjects().find(object=>
+              object.sceneID===id&&object.selectable!==false)).filter(Boolean);
             if(objects.length===1)canvas.setActiveObject(objects[0]);
             else if(objects.length>1)canvas.setActiveObject(new fabric.ActiveSelection(objects,{canvas}));
             else canvas.discardActiveObject();
@@ -324,10 +326,15 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
               color:finished.color,zIndex:Math.max(2000,...(current.layers||[]).map(n=>n.zIndex||0))+1,
               opacity:finished.tool==='highlighter'?.38:1,
               blendMode:finished.tool==='highlighter'?'multiply':undefined};
-            current.layers.push(node);
-            remember(node.id);
-            const index=current.layers.length-1;
-            addProjected(node,index,sceneVersions.get(node.id)||0);
+            const {root,replacedID}=appendInkStroke(current,node,
+              'ink-group-'+(globalThis.crypto?.randomUUID?.()||Math.random().toString(36).slice(2)));
+            if(replacedID){
+              sceneVersions.set(replacedID,(sceneVersions.get(replacedID)||0)+1);
+              for(const object of canvas.getObjects().filter(item=>item.sceneID===replacedID))canvas.remove(object);
+            }
+            remember(root.id);
+            const index=[...current.layers].sort((a,b)=>(a.zIndex??0)-(b.zIndex??0)).indexOf(root);
+            addProjected(root,index,sceneVersions.get(root.id)||0);
             callbacks.current.onChange?.(node,'ink:new');
           }else{
             const changes=[];
@@ -378,6 +385,7 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
         };
         canvas.sceneRemovePointerHandlers=removePointerHandlers;
         const selection=event=>{
+          if(syncingSelection.current)return;
           const ids=[...new Set(event.selected?.map(o=>o.sceneID).filter(Boolean)||[])];
           const bounds=ids.length===1?canvas.getActiveObject()?.getBoundingRect():null;
           callbacks.current.onSelection?.(ids,bounds?{x:bounds.left,y:bounds.top,
@@ -385,7 +393,7 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
         };
         canvas.on('selection:created',selection);
         canvas.on('selection:updated',selection);
-        canvas.on('selection:cleared',()=>callbacks.current.onSelection?.([],null));
+        canvas.on('selection:cleared',()=>{if(!syncingSelection.current)callbacks.current.onSelection?.([],null);});
         const movingSelection=event=>{
           const object=event.target;
           if(!object?.sceneID||object.sceneID!==callbacks.current.selectedID)return;
@@ -446,7 +454,8 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
       }catch(error){if(!disposed)callbacks.current.onIssue?.(error);}
     };
     void start();
-    return ()=>{disposed=true;reconcileRef.current=null;if(canvas){canvas.sceneRemovePointerHandlers?.();void canvas.dispose();}
+    return ()=>{disposed=true;reconcileRef.current=null;if(canvas){callbacks.current.onReady?.(null);
+      canvas.sceneRemovePointerHandlers?.();void canvas.dispose();}
       if(sessionRef.current===canvas)sessionRef.current=null;};
   },[draft.id,readOnly]);
 

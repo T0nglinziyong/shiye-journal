@@ -284,7 +284,7 @@ function inspect(d,assets,aliases,a,options){return {materials:a.keys.map(key=>{
   return {key,piece:item?keyOf(item):null,assetID:asset.id,cropRect:crop,widthMM:crop.width*asset.physicalWidthMM,heightMM:crop.height*asset.physicalHeightMM,sourceWidthMM:asset.physicalWidthMM,sourceHeightMM:asset.physicalHeightMM,visibleBounds:visible.rect,boundsKnown:visible.known,visibleWidthMM:crop.width*asset.physicalWidthMM*visible.rect.width,visibleHeightMM:crop.height*asset.physicalHeightMM*visible.rect.height,sourceDescription:[asset.title,asset.kind,asset.role,asset.texture,...(asset.tags||[])].filter(Boolean).join(' · '),sourceRef:{blobId:asset.blobId||null,staticPath:asset.staticPath||null},operations:structuredClone(item?.materialSteps||[])};
 })};}
 function finish(d,assets,a,options){
-  for(const id of new Set([...(options.requiredAssetIDs||[]),...Object.keys(options.materialUseRequired||{}).filter(id=>options.materialUseRequired[id])])){
+  for(const id of new Set(options.requiredAssetIDs||[])){
     const items=d.items.filter(i=>i.assetID===id&&!i.isParked&&!i.isHidden&&!i.hidden);if(!items.length)throw Error('必用素材尚未放入页面：'+(assets.find(a=>a.id===id)?.title||id));
     if(!items.some(i=>{
       const bounds=dimensions(i),left=Math.max(0,i.x-bounds.width/2),top=Math.max(0,i.y-bounds.height/2),right=Math.min(d.canvas.width,i.x+bounds.width/2),bottom=Math.min(d.canvas.height,i.y+bounds.height/2);
@@ -294,8 +294,6 @@ function finish(d,assets,a,options){
       // remain legal and are not judged by a page-fill quota.
       return !d.primitives.some(p=>p.kind==='rectangle'&&!p.hidden&&(p.opacity??1)===1&&(p.rotation??0)===0&&(p.zIndex??0)>(i.zIndex??0)&&/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(p.fill||'')&&p.x-p.width/2<=left+EPS&&p.y-p.height/2<=top+EPS&&p.x+p.width/2>=right-EPS&&p.y+p.height/2>=bottom-EPS);
     }))throw Error('必用素材在页面中完全不可见：'+(assets.find(a=>a.id===id)?.title||id));
-    const hint=options.materialUseHints?.[id];if(['截段固定','取一块真实区域'].includes(hint)&&!items.some(i=>i.cropRect))throw Error('必做用法尚未裁切：'+hint);
-    if(hint==='完整保留'&&items.some(i=>i.cropRect))throw Error('必做用法要求完整保留：'+(assets.find(a=>a.id===id)?.title||id));
   }checkDraft(d,assets);const review=reviewCreativeDraft(d,{measureText:options.measureText});d.agentRun={...d.agentRun,status:'finished',note:a.summary||'',qualityNotes:review.warnings,visualReview:'最后修改后的画面需由代理另行审阅'};
 }
 function execute(d,assets,aliases,name,a,options){

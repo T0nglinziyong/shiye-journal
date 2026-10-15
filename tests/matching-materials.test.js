@@ -25,7 +25,7 @@ test('all candidates become required by default setting, while off keeps pinned 
  assert.deepEqual(relaxed.required,['photo']);assert.deepEqual(relaxed.preferred,['paper']);assert.deepEqual(relaxed.available,['ticket']);
 });
 test('matching model excludes rejected materials from recommendations and AI input',()=>{
- const state={assets,basket:[],coreIDs:[],excludedAssetIDs:['flower'],matchStyle:'旅行票据',matchStyles:['旅行票据'],matchPurpose:'旅途记录',matchPurposes:['旅途记录'],matchMode:'single',matchRatio:'a4',matchProcessing:'保留完整',matchIntent:'',materialUseHints:{},materialUseRequired:{},recommendFilter:'全部',customPaperWidth:210,customPaperHeight:297,aiSettings:{autoIncludeRecommendations:true}};
+ const state={assets,basket:[],coreIDs:[],excludedAssetIDs:['flower'],matchStyle:'旅行票据',matchStyles:['旅行票据'],matchPurpose:'旅途记录',matchPurposes:['旅途记录'],matchMode:'single',matchRatio:'a4',matchProcessing:'保留完整',matchIntent:'',recommendFilter:'全部',customPaperWidth:210,customPaperHeight:297,aiSettings:{autoIncludeRecommendations:true}};
  assert.ok(matchingRecommendations(state).length);
  const model=matchingViewModel(state);
  assert.ok(model.filtered.length);

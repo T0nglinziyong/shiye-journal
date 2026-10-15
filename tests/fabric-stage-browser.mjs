@@ -144,7 +144,7 @@ try{
   };
   await evaluate('document.querySelector("[data-tool=pen]").click()');
   await stroke({x:100,y:760},{x:300,y:760});
-  assert.equal(await evaluate('window.__fabricFixture.draft.layers.filter(node=>node.penStyle==="pressure").length'),1);
+  assert.equal(await evaluate('window.__fabricFixture.draft.layers.flatMap(node=>node.type==="group"?node.children:[node]).filter(node=>node.penStyle==="pressure").length'),1);
   const inkParity=await evaluate(`(async()=>{
     const {renderSceneCanvas}=await import('/src/scene-renderer.js');
     const {draft,image}=window.__fabricFixture;
@@ -159,7 +159,7 @@ try{
   assert.ok(inkParity<1,`New pressure stroke differs from export: ${inkParity}`);
   await evaluate('document.querySelector("[data-tool=eraser]").click()');
   await stroke({x:200,y:745},{x:200,y:775});
-  assert.equal(await evaluate('window.__fabricFixture.draft.layers.filter(node=>node.penStyle==="pressure").length'),2);
+  assert.equal(await evaluate('window.__fabricFixture.draft.layers.flatMap(node=>node.type==="group"?node.children:[node]).filter(node=>node.penStyle==="pressure").length'),2);
   await evaluate(`(()=>{
     const {draft,refresh}=window.__fabricFixture;
     draft.layers.push({id:'external-layer',type:'shape',kind:'ellipse',x:500,y:80,

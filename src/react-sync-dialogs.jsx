@@ -6,7 +6,7 @@ export function SyncDetailsDialog({details,projects,batches,local,quarantined,le
   onRetry,onPause,onEmergency}){
   const [message,setMessage]=useState(`状态：${status}`),[busy,setBusy]=useState(false);
   const retry=async()=>{
-    if(busy)return;setBusy(true);setMessage('状态：正在提交本机修改…');
+    if(busy)return;setBusy(true);setMessage('状态：正在按本机当前数据重建同步队列…');
     try{const result=await onRetry(),remaining=typeof result==='number'?result:result.remaining,
       currentConflicts=typeof result==='number'?conflicts:result.conflicts;
       setMessage(remaining?`状态：仍有 ${remaining} 项待同步${currentConflicts?'，其中有冲突需比较版本':'；请查看最近错误或稍后重试'}`:'状态：已同步到云端');}
@@ -28,11 +28,11 @@ export function SyncDetailsDialog({details,projects,batches,local,quarantined,le
     <div className="actions"><button type="button" className="btn" id="sync-export-diagnostics" onClick={onDiagnostics}>导出详细同步诊断</button>
       <button type="button" className="btn" id="sync-migrate-account" onClick={onMigrate}>检查并转换旧格式</button>
       <button type="button" className="btn" id="sync-backup-legacy-works" disabled={!legacyCount} onClick={onBackupLegacy}>导出隔离旧作品备份</button>
-      <button type="button" className="btn primary" id="sync-retry-now" disabled={busy} onClick={()=>void retry()}>{busy?'正在同步…':'重新核对并同步'}</button>
+      <button type="button" className="btn primary" id="sync-retry-now" disabled={busy} onClick={()=>void retry()}>{busy?'正在同步…':'重建队列并同步'}</button>
       <button type="button" className="btn" id="sync-pause-local" onClick={onPause}>暂停／恢复后台重试</button>
       <button type="button" className="btn" id="sync-emergency-copy" disabled={!total} onClick={onEmergency}>导出待同步数据备份</button>
       <button type="button" className="btn danger" id="sync-wipe-everything" onClick={onWipe}>彻底清空本账号本机与云端数据</button></div>
-    <p>暂停仅停止自动重试，不清空作品、草稿或待上传图片；页面刷新后仍可恢复同步。为防止误删本机唯一副本，已移除直接丢弃待同步作品的操作。</p>
+    <p>重新同步会一次性替换旧队列，并按本机当前作品和素材重建待传记录；待传图片字节与删除操作继续保留。云端在重建后再次变化时，可以使用“比较版本”手动处理。</p>
   </Dialog>;
 }
 const date=value=>{const result=new Date(value);return Number.isFinite(result.getTime())?result.toLocaleString():'未记录';};

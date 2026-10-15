@@ -2,7 +2,7 @@ import {markSyncPhase} from './sync-browser-compat.js';
 // Durable edits are an explicit outbox, not a replacement for cloud records.
 // Commit acknowledgement is the only point at which an entry is removed.
 export function createProjectSync({load,write,commit,revision,reconcile=async()=> 'conflict',recordKeys=record=>[{store:'projects',id:record.id}],coalesce=()=>null,splitCoalesced=()=>null,onCommitted=()=>{},onConflict=async()=>null,onSuperseded=()=>{},onStatus=()=>{},onDiagnostic=()=>{},runExclusive=fn=>fn(),prepare=async()=>{},reload=load,autoFlushDelayMs=0,setTimer=setTimeout,clearTimer=clearTimeout,clock=()=>Date.now()}){
-  let initialized,staging=Promise.resolve(),network,serial=0,error,paused=false;
+  let initialized,staging=Promise.resolve(),network,serial=0,error,paused=false,rebuilding=false;
   let persistedRows=new Map();
   let conflicts=new Set();
   // Durable local staging is immediate; only the remote commit is batched.
@@ -10,7 +10,7 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
   let autoTimer=null,lastNetworkAt=null;
   const cancelAuto=()=>{if(autoTimer!==null){clearTimer(autoTimer);autoTimer=null;}};
   function scheduleAuto(){
-    if(paused||network||autoTimer!==null)return;
+    if(paused||network||rebuilding||autoTimer!==null)return;
     if(!flushWindow){void kick();return;}
     // First remote upload waits one window to coalesce several small edits.
     // Further uploads cannot start sooner than a window after the previous one.
@@ -140,6 +140,7 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
     cancelAuto();
     if(paused)return Promise.resolve();
     if(network)return network;
+    if(rebuilding)return Promise.resolve();
     network=(async()=>{
       await initialize();await staging;await refreshFromDisk();
       // Immutable object bytes can transfer before the account revision lock.
@@ -328,6 +329,44 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
     return removed.length;
   }
   async function discard(){cancelAuto();await initialize();await staging;if(network)throw Error('上传正在进行，请等待请求结束后再放弃待同步修改');const previous=[...entries.values()];entries.clear();try{await persist();}catch(failure){for(const row of previous)entries.set(row.record.id,row);throw failure;}conflicts.clear();error=null;report();return previous.length;}
+  async function rebuild(factory){
+    if(typeof factory!=='function')throw Error('需要提供本机同步数据重建器');
+    if(rebuilding)throw Error('本机同步队列正在重建，请等待当前操作完成');
+    rebuilding=true;cancelAuto();
+    try{
+      if(network)await network.catch(()=>{});
+      const task=staging.catch(()=>{}).then(()=>runExclusive(async()=>{
+        await initialize();
+        // No staged edit can pass this task. Re-read under the account lock so
+        // another tab's durable row is included in the replacement.
+        const saved=await reload()||[];
+        replaceRows(saved);rememberPersisted(saved);
+        serial=Math.max(serial,...saved.map(row=>row.serial));
+        const before=orderedRows();
+        // The factory receives these rows read-only. Cloning the whole input
+        // would duplicate every queued image Blob before IndexedDB writes it.
+        const result=await factory(before);
+        const records=result?.records,baseRevision=result?.baseRevision;
+        if(!Array.isArray(records)||!Number.isSafeInteger(baseRevision)||baseRevision<0)
+          throw Error('本机同步数据重建结果无效；原队列未修改');
+        const ids=new Set(),next=[];
+        for(const record of records){
+          if(!record?.id||ids.has(record.id))throw Error('重建队列存在重复编号；原队列未修改');
+          ids.add(record.id);
+          next.push({record,serial:++serial,
+            baseRevision,operationID:crypto.randomUUID()});
+        }
+        replaceRows(next);
+        try{await persist({strictRemoveIds:before.map(row=>row.record.id)});}
+        catch(failure){replaceRows(before);throw failure;}
+        conflicts.clear();error=null;report();
+        diagnose('rebuilt',null,null);
+        return {replaced:before.length,pending:next.length};
+      }));
+      staging=task.catch(()=>{});
+      return await task;
+    }finally{rebuilding=false;if(entries.size&&!paused)scheduleAuto();}
+  }
   return {stage,
     pause(){paused=true;cancelAuto();},
     async flush(){
@@ -346,5 +385,5 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
     const keys=recordKeys(row.record);
     const touched=operations.some(operation=>keys.some(key=>key.store===operation.store&&(key.id===undefined||operation.action==='clear'||key.id===(operation.item?.id??operation.id))));
     if(row.baseRevision===before&&!touched){row.baseRevision=after;changed=true;}
-  }if(changed)await persist();},resolvePending,cancelPendingFor,discard,canDiscard:()=>!network,resume:()=>kick({force:true}),status:()=>({pending:entries.size,error,conflicts:conflicts.size,uploading:!!network})};
+  }if(changed)await persist();},resolvePending,cancelPendingFor,discard,rebuild,canDiscard:()=>!network&&!rebuilding,resume:()=>kick({force:true}),status:()=>({pending:entries.size,error,conflicts:conflicts.size,uploading:!!network||rebuilding})};
 }

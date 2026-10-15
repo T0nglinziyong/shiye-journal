@@ -3,6 +3,7 @@ import {privateCache} from './private-cache.js';
 import {createProjectSync} from './project-sync.js';
 import {runAccountBrowserLock,markSyncPhase} from './sync-browser-compat.js';
 import {syncEnvelope,projectSyncRows,importSyncRows,latestEditedProject,syncAffectedKeys,foldLegacySyncRows,repairMiswrappedSyncRows} from './unified-sync-outbox.js';
+import {rebuildSyncRecords} from './sync-rebuild.js';
 import {readCloudDelta,canRebaseUnchangedKeys} from './cloud-delta.js';
 import {planMetadataBatch,splitMetadataBatch} from './sync-metadata-batch.js';
 import {compareRecordEdits} from './sync-last-write.js';
@@ -1222,6 +1223,20 @@ function cloudSyncDiagnosticReport({online=null}={}){
     revision,writesInFlight,quarantined:unifiedQuarantine.length,online,active:activeDirect?{...activeDirect,elapsedMs:Date.now()-activeDirect.startedAt}:null});
 }
 async function cloudDiscardPending(){await identity();if(writesInFlight||!unifiedSync.canDiscard())throw Error('上传正在进行，请等待当前请求结束');const count=await unifiedSync.discard();reportSync();return count;}
+async function cloudRebuildPending(local){
+  assertAccountWritable();await identity();
+  const result=await unifiedSync.rebuild(async rows=>{
+    const confirmed=await boundedMap(rows,6,async row=>
+      row.operationID?await wasCommitted(row.operationID,row.baseRevision):false);
+    const pending=rows.filter((_,index)=>!confirmed[index]);
+    if(pending.length&&await wasResetAfter(Math.min(...pending.map(row=>row.baseRevision))))
+      throw Error('账号曾被清空；旧队列不能直接恢复，请通过旧数据转换入口处理');
+    return {records:rebuildSyncRecords(pending,local),baseRevision:await version()};
+  });
+  syncDiagnostics.record({action:'rebuilt',kind:'queue',pending:result.pending,
+    cloudRevision:revision,removed:result.replaced-result.pending});
+  reportSync();return result;
+}
 async function cloudFlushProjects({background=false}={}){
   await identity();if(revision===undefined)await version();
   if(background)return unifiedSync.resumeScheduled();
@@ -1240,7 +1255,7 @@ async function cloudRestoreEmergency(snapshot){
   if(typeof cache.restoreUnifiedOutboxes!=='function')throw Error('当前浏览器不支持原子恢复唯一同步队列');
   return cache.restoreUnifiedOutboxes(key,snapshot.projects,snapshot.imports);
 }
-return {cloudListPreConflictScenes,cloudRestorePreConflictScene,cloudReloadBlob,cloudCloseCacheBeforeRemoteReset,cloudSetResetCleanupPending,cloudRunExclusiveReset,cloudPurgeLocalAfterReset,cloudConflictReview,cloudConflictBackup,cloudResolveProjectConflict,cloudMigrationInventory,cloudMigrationOriginalProject,cloudMigrationCommit,cloudLegacyProjectBackup,cloudAll,cloudGet,cloudPreview,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudClearCache,cloudResumeCache,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudPendingLocalSummary,cloudPendingDetails,cloudSyncDiagnosticReport,cloudRecordSyncDiagnostic,cloudDiscardPending,cloudFlushProjects,cloudProjectDocument,cloudEmergencySnapshot,cloudRestoreEmergency,cloudBackupBlobIDs};
+return {cloudListPreConflictScenes,cloudRestorePreConflictScene,cloudReloadBlob,cloudCloseCacheBeforeRemoteReset,cloudSetResetCleanupPending,cloudPurgeLocalAfterReset,cloudConflictReview,cloudConflictBackup,cloudResolveProjectConflict,cloudMigrationInventory,cloudMigrationOriginalProject,cloudMigrationCommit,cloudLegacyProjectBackup,cloudAll,cloudGet,cloudPreview,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudClearCache,cloudResumeCache,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudPendingLocalSummary,cloudPendingDetails,cloudSyncDiagnosticReport,cloudRecordSyncDiagnostic,cloudDiscardPending,cloudRebuildPending,cloudFlushProjects,cloudProjectDocument,cloudEmergencySnapshot,cloudRestoreEmergency,cloudBackupBlobIDs};
 }
 let projectPreview=()=>null;
 export const setCloudProjectPreview=producer=>{projectPreview=producer;};
@@ -1277,6 +1292,7 @@ export const cloudPendingDetails=(...args)=>current.cloudPendingDetails(...args)
 export const cloudSyncDiagnosticReport=(...args)=>current.cloudSyncDiagnosticReport(...args);
 export const cloudRecordSyncDiagnostic=(...args)=>current.cloudRecordSyncDiagnostic(...args);
 export const cloudDiscardPending=(...args)=>current.cloudDiscardPending(...args);
+export const cloudRebuildPending=(...args)=>current.cloudRebuildPending(...args);
 export const cloudFlushProjects=(...args)=>current.cloudFlushProjects(...args);
 export const cloudProjectDocument=(...args)=>current.cloudProjectDocument(...args);
 export const cloudEmergencySnapshot=(...args)=>current.cloudEmergencySnapshot(...args);

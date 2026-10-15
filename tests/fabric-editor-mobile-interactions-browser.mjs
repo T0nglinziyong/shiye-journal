@@ -35,19 +35,43 @@ try{
   await click('[aria-label="历史记录"]');
   await click('[data-val="shape"]','.swift-shape-picker');
   await click('[data-shape-kind="rectangle"]','.fabric-selected-actions');
+  const points=await evaluate(`(()=>{const r=document.querySelector('.upper-canvas').getBoundingClientRect();
+    return {shape:{x:r.left+r.width*.5,y:r.top+r.height*.5},
+      blank:{x:r.left+r.width*.08,y:r.top+r.height*.08}}})()`);
+  await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,clickCount:1,...points.blank});
+  await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,clickCount:1,...points.blank});
+  await sleep(100);
+  assert.equal(await evaluate('!!document.querySelector(".fabric-selected-actions")'),false);
+  await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,clickCount:1,...points.shape});
+  assert.equal(await evaluate('!!document.querySelector(".fabric-selected-actions")'),false,
+    'Pressing an object must wait for release before selecting');
+  await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,clickCount:1,...points.shape});
+  await wait('.fabric-selected-actions');
+  await click('[data-act="zoom-in"]');await sleep(150);
   const from=await evaluate(`(()=>{const r=document.querySelector('.upper-canvas').getBoundingClientRect();
-    return {x:r.left+r.width*.5,y:r.top+r.height*.5}})()`);
-  const before=await evaluate(`document.querySelector('.fabric-selected-actions').getBoundingClientRect().left`);
+    return {x:r.left+r.width*.08,y:r.top+r.height*.08}})()`);
+  const before=await evaluate(`document.querySelector('#canvas-page').getBoundingClientRect().left`);
   await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,clickCount:1,...from});
   for(let step=1;step<=4;step++)await command('Input.dispatchMouseEvent',
     {type:'mouseMoved',button:'left',buttons:1,x:from.x+step*7,y:from.y+step*5});
   await sleep(100);
-  const during=await evaluate(`document.querySelector('.fabric-selected-actions').getBoundingClientRect().left`);
+  const during=await evaluate(`document.querySelector('#canvas-page').getBoundingClientRect().left`);
   await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,
     x:from.x+28,y:from.y+20,clickCount:1});
-  assert.ok(Math.abs(during-before)>5,'Object actions did not follow the drag: '+JSON.stringify({before,during}));
+  assert.ok(Math.abs(during-before)>5,'Dragging blank paper did not pan the page: '+JSON.stringify({before,during}));
+  const actionBefore=await evaluate(`document.querySelector('.fabric-selected-actions')?.getBoundingClientRect().left`);
+  const selectedFrom=await evaluate(`(()=>{const r=document.querySelector('.upper-canvas').getBoundingClientRect();
+    return {x:r.left+r.width*.5,y:r.top+r.height*.5}})()`);
+  await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,clickCount:1,...selectedFrom});
+  for(let step=1;step<=4;step++)await command('Input.dispatchMouseEvent',
+    {type:'mouseMoved',button:'left',buttons:1,x:selectedFrom.x+step*6,y:selectedFrom.y+step*2});
+  await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,
+    x:selectedFrom.x+24,y:selectedFrom.y+8,clickCount:1});
+  await sleep(700);
+  const actionAfter=await evaluate(`document.querySelector('.fabric-selected-actions')?.getBoundingClientRect().left`);
+  assert.ok(actionAfter>actionBefore+2,'The selected object and its action frame should follow the next drag: '+JSON.stringify({actionBefore,actionAfter}));
   await click('.shape-add-quick','.swift-shape-picker');
   await click('.shape-add-quick');
   assert.deepEqual(browser.errors,[]);
-  console.log('Mobile Fabric toolbar, palette, compact menus and moving actions passed');
+  console.log('Mobile Fabric toolbar, palette, compact menus and release-to-select pan passed');
 }finally{await browser.close();}

@@ -33,9 +33,9 @@ test('model observations cannot claim user confirmation, missing images, another
   const p=plan(d,a);change(p.observations[0]);const result=run({tools:[{name:'apply_craft_plan',arguments:p}]},d,a);assert.equal(result.committed,false);assert.equal(result.draft.items.length,0);
  }
 });
-test('visual extraction obeys explicit per-asset processing but has no hidden saved-region restriction',()=>{
+test('visual extraction obeys global processing but has no hidden saved-region restriction',()=>{
  const a=asset(),d=project().drafts[0],next=ok(run(plan(d,a),d,a));assert.equal(next.items.length,1);
- const b=asset('whole'),q=plan(d,b);assert.match(run(q,d,b,{assetProcessing:{whole:'保留完整'}}).results[0].detail,/保留完整/);
+ const b=asset('whole'),q=plan(d,b);assert.match(run(q,d,b,{processing:'保留完整'}).results[0].detail,/保留完整/);
 });
 test('current default uses GPT vision and current provider settings only',()=>{
  assert.equal(normalizeAISettings().provider,'openai');assert.equal(normalizeAISettings().model,'gpt-4.1');assert.equal(normalizeAISettings().finalVisualReview,true);

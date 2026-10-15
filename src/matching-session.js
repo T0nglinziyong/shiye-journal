@@ -8,7 +8,7 @@ import {materialAliases} from './material-alias.js';
 import {createMatchingCoverCache} from './matching-cover-cache.js';
 import {prepareProjectScene} from './scene-v2.js';
 const ID='matching-session-v1';
-const KEYS=['basket','coreIDs','excludedAssetIDs','matchCore','matchRatio','matchMode','matchStyle','matchStyles','matchPurposes','matchIntent','matchContentPolicy','matchTextPresentation','matchPurpose','matchProcessing','materialUseHints','materialUseRequired','assetProcessing','customPaperWidth','customPaperHeight'];
+const KEYS=['basket','coreIDs','excludedAssetIDs','matchCore','matchRatio','matchMode','matchStyle','matchStyles','matchPurposes','matchIntent','matchContentPolicy','matchTextPresentation','matchPurpose','matchProcessing','customPaperWidth','customPaperHeight'];
 export function matchingSnapshot(state,variants){return {id:ID,context:Object.fromEntries(KEYS.map(k=>[k,structuredClone(state[k])])),variants:structuredClone(variants)};}
 export function restoreMatchingSession(record,state){
  if(!record)return [];
@@ -106,7 +106,7 @@ export function createMatchingSession(c){
     const images=vision?await prepareMaterialPreviews(ids,{findAsset,createImage:async(...args)=>{ensureAccount();return c.modelImage(...args);}}):[];
     const references=[];if(cfg.sendPresetReferences&&c.supportsVision(cfg))references.push(...(await loadJournalTemplateReferences({context:{styles:p.styles,purposes:p.purposes,materials:assetsSnapshot.filter(asset=>ids.includes(asset.id))},userTemplates:templatesSnapshot,db:c.db})).referenceImages);
     ensureAccount();
-    let steps='';const output=await c.runCreativeAgent({...cfg,draft:p.drafts[0],assets:assetsSnapshot,aliases,styles:p.styles,pagePurposes:p.purposes,contentPolicy:p.contentPolicy||'documentary',userText:p.userText||'',providedFacts:p.providedFacts||'',requiredAssetIDs:p.requiredAssetIDs,materialPriority:p.materialPriority,processing:p.processing,assetProcessing:p.assetProcessing,materialUseHints:p.materialUseHints,materialUseRequired:p.materialUseRequired,prompt:p.intent||'',images,referenceImages:references,userTemplates:templatesSnapshot,request:recorder.request,signal:run.signal,
+    let steps='';const output=await c.runCreativeAgent({...cfg,draft:p.drafts[0],assets:assetsSnapshot,aliases,styles:p.styles,pagePurposes:p.purposes,contentPolicy:p.contentPolicy||'documentary',userText:p.userText||'',providedFacts:p.providedFacts||'',requiredAssetIDs:p.requiredAssetIDs,materialPriority:p.materialPriority,processing:p.processing,prompt:p.intent||'',images,referenceImages:references,userTemplates:templatesSnapshot,request:recorder.request,signal:run.signal,
      onResponse:recorder.response,
      onScene:vision?async d=>{ensureAccount();return (await c.rasterize(d,.7)).toDataURL('image/jpeg',.8);}:undefined,
      onFinalScene:async d=>{ensureAccount();return (await c.rasterize(d,Math.min(1.6,2000/Math.max(d.canvas.width,d.canvas.height)))).toDataURL('image/jpeg',.88);},

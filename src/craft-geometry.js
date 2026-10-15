@@ -29,7 +29,7 @@ function random(seed) {
 }
 
 export function craftPermission(options, asset) {
-  const selected = options.assetProcessing?.[asset.id] || options.processing;
+  const selected = options.processing;
   if (!selected) throw Error('缺少当前素材加工权限');
   if (selected !== '不预设') return selected;
   return '自由拆解';

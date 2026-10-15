@@ -1002,8 +1002,7 @@ export function MatchingPage({state,source,kindName,session,onAction,onMatchingC
       {selected.length?selected.map(asset=><div key={asset.id} className="match-basket-item" data-match-asset={asset.id}>
         <RouteImage asset={asset} source={source}/><div><strong>{asset.title}</strong>{asset.kind||asset.role?<small className="match-type">{[asset.kind?kindName(asset.kind):null,asset.role?materialRoleName(asset.role):null].filter(Boolean).join(' · ')}</small>:null}
           <div className="match-basket-actions"><button type="button" data-act="match-core" data-id={asset.id} data-react-action="true" onClick={action('match-core',asset.id)} aria-label={state.coreIDs.includes(asset.id)?'取消标星':'标星设为必用'} aria-pressed={state.coreIDs.includes(asset.id)} title={state.aiSettings.requireAllCandidates?'当前设置为全部候选必用；标星会保留单件优先级':'切换此素材是否必用'}>{state.coreIDs.includes(asset.id)?'★':'☆'}</button>
-            <button type="button" data-act="basket" data-id={asset.id} data-react-action="true" onClick={action('basket',asset.id)} aria-label="移出素材篮">×</button><button type="button" data-act="match-use" data-id={asset.id} data-react-action="true" onClick={action('match-use',asset.id)} aria-label="设置素材用法">▣ 用法</button></div>
-          {state.materialUseHints[asset.id]?<small className="material-use-summary">{state.materialUseRequired[asset.id]?'必做':'偏好'} · {state.materialUseHints[asset.id]}</small>:null}
+            <button type="button" data-act="basket" data-id={asset.id} data-react-action="true" onClick={action('basket',asset.id)} aria-label="移出素材篮">×</button></div>
         </div></div>):<p>先从右侧建议或素材库选择。点星号可设为每版必用。</p>}
       </div><p className="muted">必须 {scope.required.length} · 优先 {scope.preferred.length} · {state.aiSettings.autoIncludeRecommendations?'AI 备选 '+scope.available.length:'AI 备选未开启'} · 不使用 {excluded.size}</p></aside>
       <section className="panel match-recommendations"><div className="match-panel-head"><h3>✣　按风格与用途推荐</h3><small>{recommendations.length} 件候选 · 已排除 {excluded.size} 件</small></div>
@@ -1023,8 +1022,17 @@ export function MatchingPage({state,source,kindName,session,onAction,onMatchingC
 }
 
 function EditorInspector({selected,draft,asset,format,onChange,onAction}){
+  const geometryInput=useRef(null),maskInput=useRef(null),[geometryError,setGeometryError]=useState('');
+  const applyGeometry=(id,input)=>{
+    try{onChange(id,input.current?.value||'null');setGeometryError('已应用到当前图层');}
+    catch(error){setGeometryError(error.message||'几何数据无效');}
+  };
   const field=(id,label,value,type='number',props={})=><label>{label}<input id={id} type={type}
     defaultValue={value} onChange={event=>onChange(id,event.target.value)} {...props}/></label>;
+  const choice=(id,label,value,options)=><label>{label}<select id={id} value={value}
+    onChange={event=>onChange(id,event.target.value)}>{options.map(([key,title])=><option key={key} value={key}>{title}</option>)}</select></label>;
+  const check=(id,label,value)=><label className="editor-inspector-check"><input id={id} type="checkbox" checked={!!value}
+    onChange={event=>onChange(id,event.target.checked)}/>{label}</label>;
   if(!selected)return <div className="stack">
     {field('paper-color','纸张颜色',draft.paperColor,'color')}
     <label>背景<select id="paper-pattern" defaultValue={draft.paperPattern}
@@ -1046,17 +1054,60 @@ function EditorInspector({selected,draft,asset,format,onChange,onAction}){
   const item=selected.value;
   const button=(name,label,kind='')=><button className={`btn mini ${kind}`} data-act={name}
     data-react-action="true" onClick={()=>onAction(name)}>{label}</button>;
-  return <div className="stack">
+  return <div className="stack editor-inspector-fields">
     {selected.kind==='text'?<>
+      <h3>文字内容与样式</h3>
       <label>文字内容<textarea id="inspector-text" defaultValue={item.content}
         onChange={event=>onChange('inspector-text',event.target.value)}/></label>
-      <label>字体<select id="inspector-font" defaultValue={item.style}
-        onChange={event=>onChange('inspector-font',event.target.value)}>
-        <option value="serif">宋体</option><option value="sans">黑体</option><option value="rounded">圆体</option>
-      </select></label>
-      {field('inspector-font-size','字号',item.fontSize,'number',{min:8,max:200})}
+      <div className="form-grid">
+        {choice('inspector-font','字体',item.style||'serif',[[ 'serif','宋体'],['sans','黑体'],['rounded','圆体'],['hand','手写体']])}
+        {field('inspector-font-size','字号',item.fontSize,'number',{min:5,max:400,step:1})}
+        {choice('inspector-alignment','对齐',item.alignment||'left',[[ 'left','左对齐'],['center','居中'],['right','右对齐']])}
+        {field('inspector-text-color','文字颜色',item.color||'#30463d','color')}
+      </div>
+      {field('inspector-font-name','指定字体',item.fontName||'','text',{placeholder:'留空使用上方字体'})}
+      <div className="editor-inspector-checks">{check('inspector-bold','粗体',item.bold)}{check('inspector-italic','斜体',item.italic)}
+        {check('inspector-underline','下划线',item.underline)}{check('inspector-strikethrough','删除线',item.strikethrough)}</div>
+      <div className="form-grid">
+        {field('inspector-letter-spacing','字距',item.letterSpacing??0,'number',{min:-5,max:30,step:.5})}
+        {field('inspector-line-spacing','行距',item.lineSpacing??0,'number',{min:0,max:80,step:.5})}
+        {field('inspector-paragraph-spacing','段距',item.paragraphSpacing??0,'number',{min:0,max:80,step:.5})}
+        {field('inspector-fixed-line-height','固定行高',item.fixedLineHeight??'','number',{min:5,max:400,step:.5,placeholder:'自动'})}
+      </div>
     </>:null}
+    {selected.kind==='shape'?<>
+      <h3>图形外观</h3>
+      {item.vectorLayers?.length?<div className="editor-inspector-vector"><p className="muted">多色矢量 · {item.vectorLayers.length} 层，路径保持独立</p>
+        {item.vectorLayers.map((layer,index)=><div className="form-grid" key={index}>
+          {field(`inspector-vector-fill-${index}`,`第 ${index+1} 层颜色`,layer.fill||'#ffffff','color')}
+          {field(`inspector-vector-opacity-${index}`,'该层透明度',layer.opacity??1,'range',{min:0,max:1,step:.05})}
+        </div>)}</div>:<div className="form-grid">
+        {field('inspector-fill','填充颜色',item.fill||'#ffffff','color')}
+        {field('inspector-stroke','描边颜色',item.stroke||'#547da4','color')}
+        {field('inspector-line-width','描边粗细',item.lineWidth??0,'number',{min:0,max:30,step:.5})}
+        {choice('inspector-stroke-dash','线型',item.strokeDash||'solid',[[ 'solid','实线'],['dash','虚线'],['dot','点线']])}
+        {field('inspector-fill-opacity','填充透明度',item.fillOpacity??1,'range',{min:0,max:1,step:.05})}
+        {field('inspector-stroke-opacity','描边透明度',item.strokeOpacity??1,'range',{min:0,max:1,step:.05})}
+      </div>}
+    </>:null}
+    {selected.kind==='material'?<><h3>真实素材</h3>
+      <p className="muted">实物 {format(asset(item.assetID)?.physicalWidthMM||0)} × {format(asset(item.assetID)?.physicalHeightMM||0)} mm · 库存单元 {(item.materialUnitIndex??0)+1}</p>
+      {item.cropRect?<p className="muted">已取用原素材的 {Math.round(item.cropRect.width*100)}% × {Math.round(item.cropRect.height*100)}% 区域；移动和旋转不会改变裁片。</p>:null}
+      {item.materialMask?<p className="muted">已保留 AI 创作的裁边或镂空工艺。</p>:null}
+      {check('inspector-flipped','左右镜像',item.isFlippedHorizontally)}
+      <details className="editor-inspector-geometry"><summary>精确编辑裁片与工艺</summary>
+        <p className="muted">范围使用原素材的 0–1 坐标。应用时会校验实物尺寸、库存与裁片是否重叠。</p>
+        <textarea key={item.id+'-geometry'} ref={geometryInput} rows={5} aria-label="素材裁片与工艺数据"
+          defaultValue={JSON.stringify({cropRect:item.cropRect||null,materialMask:item.materialMask||null,
+            craftDisplaySlices:item.craftDisplaySlices||null},null,2)}/>
+        <button type="button" className="btn mini" onClick={()=>applyGeometry('inspector-material-geometry',geometryInput)}>应用裁片与工艺</button>
+        {geometryError?<small role="status">{geometryError}</small>:null}
+      </details>
+    </>:null}
+    <h3>位置与图层</h3>
     <div className="form-grid">
+      {field('inspector-x','横向位置',format(item.x),'number',{step:.5})}
+      {field('inspector-y','纵向位置',format(item.y),'number',{step:.5})}
       {field('inspector-width','宽',format(item.width),'number',{
         min:1,disabled:selected.kind==='material',title:selected.kind==='material'?'实物尺寸来自素材标定':undefined})}
       {field('inspector-height','高',format(item.height),'number',{
@@ -1064,8 +1115,18 @@ function EditorInspector({selected,draft,asset,format,onChange,onAction}){
       {field('inspector-rotation','旋转',format(item.rotation||0))}
       {field('inspector-z','图层',item.zIndex)}
     </div>
-    {field('inspector-opacity','透明度',item.opacity||1,'range',{min:.1,max:1,step:.05})}
-    {selected.kind==='material'?<p className="muted">实物 {format(asset(item.assetID)?.physicalWidthMM||0)} × {format(asset(item.assetID)?.physicalHeightMM||0)} mm</p>:null}
+    <div className="form-grid">{field('inspector-opacity','整体透明度',item.opacity??1,'range',{min:0,max:1,step:.05})}
+      {choice('inspector-blend-mode','叠加方式',item.blendMode||'normal',[[ 'normal','正常'],['multiply','正片叠底']])}</div>
+    <div className="editor-inspector-mask">{item.vectorMask?<p className="muted">矢量蒙版：{item.vectorMask.outer?.length||0} 个外轮廓点、{item.vectorMask.holes?.length||0} 个镂空区域</p>:null}
+      <details className="editor-inspector-geometry"><summary>{item.vectorMask?'编辑':'添加'}矢量蒙版</summary>
+        <p className="muted">轮廓与镂空使用 0–1 坐标。</p>
+        <textarea key={item.id+'-mask'} ref={maskInput} rows={4} aria-label="矢量蒙版数据"
+          defaultValue={JSON.stringify(item.vectorMask||null,null,2)}/>
+        <div className="actions"><button type="button" className="btn mini" onClick={()=>{if(maskInput.current)maskInput.current.value=JSON.stringify({outer:[[.05,.05],[.95,.05],[.95,.95],[.05,.95]],holes:[]});}}>矩形</button>
+          <button type="button" className="btn mini" onClick={()=>{if(maskInput.current)maskInput.current.value=JSON.stringify({outer:Array.from({length:48},(_,index)=>{const angle=index*Math.PI/24;return [.5+.46*Math.cos(angle),.5+.46*Math.sin(angle)];}),holes:[]});}}>椭圆</button></div>
+        <button type="button" className="btn mini" onClick={()=>applyGeometry('inspector-vector-mask',maskInput)}>应用蒙版</button>
+        {geometryError?<small role="status">{geometryError}</small>:null}
+      </details>{item.vectorMask?button('fabric-remove-vector-mask','移除蒙版'):null}</div>
     <div className="actions">{button('duplicate','复制')}{button('flip','镜像')}
       {button('front','置顶')}{button('delete-object','删除','danger')}</div>
   </div>;
@@ -1139,6 +1200,8 @@ function FabricSelectedActions({bounds,draft,onAction}){
 }
 
 // Fabric owns the single editable canvas; React owns its surrounding controls.
+const editorFabricCanvases=new Map();
+
 export function EditorPage({state,draft,editorEntry,asset,source,format,
   hasAIReport,onAction,onInspectorChange,onTitleCommit,onDraftSelect,onAIAction,onAIOpen,onAIPromptChange,
   sceneRevision,onFabricSelection,onFabricBeforeChange,onFabricChange,onFabricIssue,
@@ -1174,6 +1237,24 @@ export function EditorPage({state,draft,editorEntry,asset,source,format,
       <button className="btn mini" data-act="restore-baseline" disabled={selected?.kind!=='material'||!selected.value.generationBaseline}>恢复初稿</button>
       <button className="btn mini" data-act="park" disabled={selected?.kind!=='material'}>放入备选</button>
     </div><div className="page-wrap"><FabricPageViewport draft={draft} width={width} height={height}
+      tool={state.tool} onCanvasTap={event=>{
+        const canvas=editorFabricCanvases.get(draft.id);
+        if(!canvas)return;
+        const point=canvas.getScenePoint(event);
+        const hit=[...canvas.getObjects()].reverse().find(object=>object.visible!==false&&
+          object.evented!==false&&object.selectable!==false&&object.containsPoint(point));
+        if(hit)canvas.setActiveObject(hit);
+        else canvas.discardActiveObject();
+        canvas.requestRenderAll();
+      }}
+      canTransform={event=>{
+        if(!state.selected)return false;
+        const canvas=editorFabricCanvases.get(draft.id);
+        if(!canvas)return false;
+        const point=canvas.getScenePoint(event);
+        return canvas.getObjects().some(object=>object.sceneID===state.selected&&
+          object.selectable!==false&&object.visible!==false&&object.containsPoint(point));
+      }}
       zoom={state.zoom} resetSignal={state.fabricFitRevision||0}
       initialPan={state.canvasViewports?.get(project.id+':'+draft.id)}
       onViewportChange={onFabricViewportChange}><div className="fabric-scene-scale" style={{position:'absolute',left:0,top:0,
@@ -1186,9 +1267,12 @@ export function EditorPage({state,draft,editorEntry,asset,source,format,
           marker={{widthMM:state.canvasTools?.fabricMarkerWidthMM??2,color:state.canvasTools?.fabricMarkerColor||'#f5cf45',
             straight:!!state.canvasTools?.fabricMarkerStraight}}
           eraser={{widthMM:state.canvasTools?.fabricEraserWidthMM??4,style:state.canvasTools?.fabricEraserStyle||'standard'}}
-          selectionMode={state.selectionMode||'contain'} selectedIDs={state.multiSelected||[]}
+          selectionMode={state.selectionMode||'contain'} selectionFilter={state.selectionFilter}
+          selectedIDs={state.multiSelected||[]}
           assetURL={loadFabricAsset} onSelection={onFabricSelection}
-          onBeforeChange={onFabricBeforeChange} onChange={onFabricChange} onIssue={onFabricIssue}/>
+          onBeforeChange={onFabricBeforeChange} onChange={onFabricChange} onIssue={onFabricIssue}
+          onReady={canvas=>{if(canvas)editorFabricCanvases.set(draft.id,canvas);
+            else editorFabricCanvases.delete(draft.id);}}/>
       </div></FabricPageViewport></div>
       <div className="shelf"><b>备选</b>{draft.items.filter(item=>item.isParked).map(item=><button key={item.id} className="mini-asset" data-act="unpark" data-id={item.id}>
         <RouteImage asset={asset(item.assetID)} source={source}/></button>)}</div>

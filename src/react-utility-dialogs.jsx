@@ -34,18 +34,6 @@ export function BlankProjectDialog({defaultSize,onClose,onCreate}){
       {error?<p role="alert">{error}</p>:null}<button type="button" className="btn primary" id="blank-create-confirm" disabled={busy} onClick={()=>void submit()}>开始创作</button></div>
   </Dialog>;
 }
-export function MaterialUseDialog({asset,others,useHint,processingHint,required,onClose,onSave}){
-  const choices=['由生成器选择','完整保留',...(others?['从另一件后露出']:[]),...(asset.kind==='tape'&&others?['截段固定']:[]),...(['paper','photo','tape'].includes(asset.kind)?['取一块真实区域']:[]),'稍后手工剪图案'];
-  const processing=['AI 自主加工','保留完整','少量裁剪','自由拆解'];
-  const [use,setUse]=useState(useHint||'由生成器选择'),[permission,setPermission]=useState(processingHint),[must,setMust]=useState(!!required);
-  return <Dialog title={`${asset.title} · 用法`} onClose={onClose}><h2>{asset.title} · 用法</h2>
-    <p>每件素材可以单独选择用法与加工权限。</p><div className="stack">
-      <label>用法<select id="material-use-choice" value={use} onChange={e=>setUse(e.target.value)}>{choices.map(x=><option key={x}>{x}</option>)}</select></label>
-      <label>加工权限<select id="material-use-processing" value={permission} onChange={e=>setPermission(e.target.value)}>{processing.map(x=><option key={x}>{x}</option>)}</select></label>
-      <label className="toggle-row">要求每个方案做到此用法 <input type="checkbox" id="material-use-required" checked={must} onChange={e=>setMust(e.target.checked)}/></label>
-      <div className="actions"><button type="button" className="btn primary" id="material-use-save" onClick={()=>{onSave({use,permission,required:must});onClose();}}>确定</button><button type="button" className="btn" id="material-use-cancel" onClick={onClose}>取消</button></div>
-    </div></Dialog>;
-}
 export function ManualLayoutDialog({choices,onClose,onChoose}){
   const [busy,setBusy]=useState(false),[error,setError]=useState('');
   const choose=async id=>{if(busy)return;setBusy(true);setError('');try{await onChoose(id);onClose();}catch(cause){setError('创建草稿失败：'+cause.message);setBusy(false);}};

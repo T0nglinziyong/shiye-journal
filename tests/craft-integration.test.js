@@ -33,7 +33,7 @@ test('parameterized cut executes through current edit_materials and replace is r
   assert.deepEqual(original.items[0].materialMask,null);
 });
 test('whole-only and cumulative small-trim rules still block new edge operations',()=>{
-  const denied=execute([piece('cut',[edge])],{processing:'不预设',assetProcessing:{[asset.id]:'保留完整'}});
+  const denied=execute([piece('cut',[edge])],{processing:'保留完整'});
   assert.equal(denied.results[0].ok,false);assert.match(denied.results[0].detail,/保留完整/);assert.equal(denied.draft.items.length,0);
   const reduced=execute([piece('cut',[{op:'crop',box:{unit:'ratio',mode:'keep',values:[0,0,.6,1]}},edge])],{processing:'少量裁剪'});
   assert.equal(reduced.results[0].ok,false);assert.match(reduced.results[0].detail,/60%/);

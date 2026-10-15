@@ -114,7 +114,7 @@ try{
   const scrollBeforeReedit=await evaluate('window.scrollY');
   await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,clickCount:1,...existingTextPoint});
   await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,clickCount:1,...existingTextPoint});
-  await sleep(350);
+  await sleep(850);
   assert.ok(Math.abs((await evaluate('window.scrollY'))-scrollBeforeReedit)<2,
     'Entering existing text must not scroll the paper out of view');
   assert.equal((await projects())[0].drafts[0].layers.length,beforeReedit,
@@ -152,6 +152,8 @@ try{
     'Selecting a Scene object must retain the canvas selection state');
   await wait('.fabric-selected-actions');
   await click('[aria-label="编辑对象"]','.show-inspector');
+  assert.ok(await evaluate('!!document.querySelector("#inspector-fill")&&!!document.querySelector("#inspector-stroke-dash")&&!!document.querySelector("#inspector-blend-mode")'),
+    'Shape inspector exposes the same editable style fields as AI created shapes');
   await click('[aria-label="关闭对象设置"]');
   assert.equal(await evaluate('!!document.querySelector(".show-inspector")'),false);
   const pagePoints=await evaluate(`(()=>{const rect=document.querySelector('.upper-canvas').getBoundingClientRect();
@@ -213,6 +215,14 @@ try{
   await click('.swift-material-picker .swift-segments button:last-child');
   await click('[data-material-id="fabric-product-material"]');await sleep(700);
   assert.equal((await projects())[0].drafts[0].layers.filter(layer=>layer.type==='material').length,1);
+  await click('[aria-label="编辑对象"]','.show-inspector');
+  await click('.editor-inspector-geometry summary','.editor-inspector-geometry textarea');
+  await click('.editor-inspector-geometry button');await sleep(700);
+  assert.ok((await projects())[0].drafts[0].layers.some(layer=>layer.type==='material'&&layer.manualGeometryOverride),
+    'Material craft geometry must be editable through the Scene inspector: '+
+      JSON.stringify({status:await evaluate(`document.querySelector('.editor-inspector-geometry [role=status]')?.textContent`),
+        toast:await evaluate(`document.querySelector('#toast')?.textContent`)}));
+  await click('[aria-label="关闭对象设置"]');
   await click('[data-val="material"]','.swift-material-picker');
   assert.equal(await evaluate('document.querySelectorAll(".swift-material-picker [data-picker-item]").length'),1);
   await click('.swift-material-picker [data-picker-item]');await sleep(300);
@@ -252,6 +262,19 @@ try{
   assert.notEqual(await scale(),beforeZoom,'Two-finger gesture must zoom the Fabric paper');
   assert.equal((await projects())[0].drafts[0].layers.filter(layer=>layer.type==='ink').length,
     inkBeforePinch,'Pinch gesture must cancel the incomplete pen stroke');
+  const drawStroke=async offset=>{
+    const rect=await evaluate(`document.querySelector('.upper-canvas').getBoundingClientRect().toJSON()`);
+    const start={x:rect.left+rect.width*.2,y:rect.top+rect.height*(.72+offset)};
+    await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,clickCount:1,...start});
+    await command('Input.dispatchMouseEvent',{type:'mouseMoved',button:'left',buttons:1,x:start.x+30,y:start.y+5});
+    await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,clickCount:1,x:start.x+40,y:start.y+8});
+  };
+  await drawStroke(0);await drawStroke(.04);await sleep(700);
+  const inkGroup=(await projects())[0].drafts[0].layers.find(layer=>layer.autoInkGroup);
+  assert.equal(inkGroup?.children.length,2,'Consecutive strokes share one Scene layer');
+  await click('[data-val="layers"]','.scene-layer-tree');
+  assert.ok(await evaluate(`!!document.querySelector('.scene-layer-tree [data-scene-node="${inkGroup.id}"]')`),
+    'Grouped ink is selectable in the layer tree');
   assert.deepEqual(browser.errors,[]);
   console.log('Fabric product editor smoke passed: stroke, marker, lasso, grouping, undo, redo, text, shape, paper, zoom and pinch cancellation');
 }finally{await browser.close();}

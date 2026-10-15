@@ -88,18 +88,18 @@ test('manual edits made before an AI request survive full-page replacement',()=>
  const attempt=run({tools:[{name:'upsert_text',arguments:{items:[{key:'copy',content:'overwritten',width:.5}]}}]},initial,a);
  assert.equal(attempt.results[0].code,'MANUAL_EDIT_PROTECTED');assert.equal(attempt.draft.textBlocks[0].content,initial.textBlocks[0].content);
 });
-test('all-whole is legal, while explicit per-material protection still rejects cuts',()=>{
+test('global whole-only processing rejects cuts',()=>{
  const a=material(),d=base();successful(run(plan(d,a),d,a,{processing:'保留完整'}));
  const input=plan(d,a,[plannedPiece(a,'trimmed',{extraction:{type:'rect_crop',boxMM:[0,0,60,80]}})]);
- const result=run(input,d,a,{processing:'不预设',assetProcessing:{[a.id]:'保留完整'}});assert.equal(result.results[0].ok,false);assert.match(result.results[0].detail,/保留完整/);
+ const result=run(input,d,a,{processing:'保留完整'});assert.equal(result.results[0].ok,false);assert.match(result.results[0].detail,/保留完整/);
 });
 test('offline task imports a plan using its original source and full creation brief',async()=>{
- const a=material();const p=project('source',{ratio:'a5'});p.processing='自由拆解';p.contentPolicy='original';p.userText='原文';p.providedFacts='事实';p.assetProcessing={[a.id]:'自由拆解'};
+ const a=material();const p=project('source',{ratio:'a5'});p.processing='自由拆解';p.contentPolicy='original';p.userText='原文';p.providedFacts='事实';
  const handoff=await createOfflineHandoff({project:p,assets:[a],aliases:{m1:a.id},settings:{includeThumbnails:false,generationMode:'direct'}});
  const input=plan(handoff.source.baseDraft,a,[plannedPiece(a,'words',{extraction:{type:'rect_crop',boxMM:[10,8,40,24]}})]);
  const envelope={format:'shiye-editable-project',version:1,source:handoff.source,title:'plan',plan:input};
  const imported=importEditableWork(JSON.stringify(envelope),[a],{trustedSource:handoff.source});
- assert.equal(imported.contentPolicy,'original');assert.equal(imported.userText,'原文');assert.deepEqual(imported.assetProcessing,p.assetProcessing);
+ assert.equal(imported.contentPolicy,'original');assert.equal(imported.userText,'原文');assert.equal(imported.processing,p.processing);assert.equal(handoff.source.assetProcessing,undefined);
  assert.equal(imported.drafts[0].items.length,1);
  const updated={...a,kind:'tape',supply:{quantity:0},title:'新标题',role:'decoration'};
  const afterEdit=importEditableWork(JSON.stringify(envelope),[updated],{trustedSource:handoff.source});

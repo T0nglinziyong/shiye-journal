@@ -94,8 +94,9 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
       group.sceneGroupPose={center:group.getCenterPoint(),angle:group.angle||0};
       // A Scene group contains real materials. Its gesture may move and rotate
       // the children, but resizing would silently change physical inventory.
+      const canvasSelectable=!node.autoInkGroup&&!node.locked&&!node.isLocked;
       group.set({lockScalingX:true,lockScalingY:true,
-        selectable:!node.locked&&!node.isLocked,evented:!node.locked&&!node.isLocked});
+        selectable:canvasSelectable,evented:canvasSelectable});
       return group;
     }
     let object;

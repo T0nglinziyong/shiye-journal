@@ -2,7 +2,7 @@
 import {assetSourceRevision} from './material-anatomy.js';
 import {materialKindName} from './material-taxonomy.js';
 import {createElement} from 'react';
-import {BlankProjectDialog,MaterialUseDialog,ManualLayoutDialog,HelpDialog,OfflineImportDialog,MaterialPickerDialog,CreativeJSONDialog} from './react-utility-dialogs.jsx';
+import {BlankProjectDialog,ManualLayoutDialog,HelpDialog,OfflineImportDialog,MaterialPickerDialog,CreativeJSONDialog} from './react-utility-dialogs.jsx';
 import {SyncDetailsDialog,SyncConflictDialog,SyncErrorDialog,SyncMigrationDialog} from './react-sync-dialogs.jsx';
 import {OfflineHandoffLoading,OfflineHandoffReady,PreConflictDialog} from './react-offline-handoff.jsx';
 import {flushSync} from 'react-dom';
@@ -13,7 +13,7 @@ import {renderLoginGate} from './react-cloud-auth.jsx';
 const sceneRuntime=()=>import('./scene-renderer.js');
 const renderSceneCanvas=async(...args)=>(await sceneRuntime()).renderSceneCanvas(...args);
 const decodeSceneImage=async(...args)=>(await sceneRuntime()).decodeSceneImage(...args);
-import {sceneLayerEntries,attachSceneV2,moveSceneNode,groupSceneLayers,ungroupSceneLayers,findSceneNode} from './scene-model.js';
+import {sceneLayerEntries,attachSceneV2,moveSceneNode,groupSceneLayers,ungroupSceneLayers,findSceneNode,validateVectorMask} from './scene-model.js';
 import './styles.css';
 import './overrides.css';
 import './parity.css';
@@ -112,7 +112,7 @@ import {prepareMaterialPreviews} from './creative-previews.js';
 import {materialAliases} from './material-alias.js';
 import {snapshotRecord,workInTab} from './work-collections.js';
 import {generatePageImage} from './ai-image-generation.js';
-import {clipMaterial} from './material-mask.js';
+import {clipMaterial,materialMaskGeometry} from './material-mask.js';
 import {manualLayoutChoices,applyManualLayout} from './manual-layout-templates.js';
 import {exportSceneDocument,importSceneDocument} from './scene-io.js';
 import {resetCatalogPage} from './catalog-pagination.js';
@@ -143,7 +143,7 @@ modal.querySelector('.modal-close').onclick=()=>modal.close();
 const fileInput=document.querySelector('#file-input'),workFileInput=document.querySelector('#work-file-input'),snapshotFileInput=document.querySelector('#snapshot-file-input'),creationResultInput=document.querySelector('#creation-result-input'),backupInput=document.querySelector('#backup-input'),emergencyInput=document.querySelector('#emergency-input');
 let offlineSnapshotProject=null;
 installRuntimeDiagnostics(()=>state.route);
-const state={route:'series',assets:[],series:[],projects:[],trash:[],userTemplates:[],basket:[],excludedAssetIDs:[],history:[],selected:null,activeProject:null,activeDraft:null,offlineEditingReturnID:null,detailAssetID:null,previewProjectID:null,settingsSection:null,selfHosted:false,aiSettings:loadAISettings(),preferences:loadPreferences(),aiPanel:false,aiBusy:false,aiPrompt:'',aiProgress:'',tool:'select',zoom:1,sort:'newest',query:'',kind:'all',status:'all',seriesID:'all',matchCore:null,matchRatio:'a4',matchMode:'single',matchStyle:'韩系清新',matchStyles:['韩系清新'],matchPurposes:['日常记录'],matchIntent:'',matchContentPolicy:'documentary',matchTextPresentation:'mixed',matchPurpose:'日常记录',matchProcessing:'不预设',materialUseHints:{},materialUseRequired:{},assetProcessing:{},customPaperWidth:210,customPaperHeight:297,recommendFilter:'全部',coreIDs:[],importStep:'inspect',importRecords:[],importIndex:0,importFile:null,importBitmap:null,importBox:{x:0,y:0,w:1,h:1},importCandidate:null,importRemoveWhite:false,undo:[],redo:[],drawing:false};
+const state={route:'series',assets:[],series:[],projects:[],trash:[],userTemplates:[],basket:[],excludedAssetIDs:[],history:[],selected:null,activeProject:null,activeDraft:null,offlineEditingReturnID:null,detailAssetID:null,previewProjectID:null,settingsSection:null,selfHosted:false,aiSettings:loadAISettings(),preferences:loadPreferences(),aiPanel:false,aiBusy:false,aiPrompt:'',aiProgress:'',tool:'select',zoom:1,sort:'newest',query:'',kind:'all',status:'all',seriesID:'all',matchCore:null,matchRatio:'a4',matchMode:'single',matchStyle:'韩系清新',matchStyles:['韩系清新'],matchPurposes:['日常记录'],matchIntent:'',matchContentPolicy:'documentary',matchTextPresentation:'mixed',matchPurpose:'日常记录',matchProcessing:'不预设',customPaperWidth:210,customPaperHeight:297,recommendFilter:'全部',coreIDs:[],importStep:'inspect',importRecords:[],importIndex:0,importFile:null,importBitmap:null,importBox:{x:0,y:0,w:1,h:1},importCandidate:null,importRemoveWhite:false,undo:[],redo:[],drawing:false};
 // Action changes are published independently of their DOM representation.
 const actionStore=createActionStore(state);
 actionStore.register('app/action',async({action,id,value})=>({result:await runAppAction(action,id,value)}));
@@ -775,28 +775,104 @@ function bindPage({partial=false}={}){
 function updateEditorInspector(id,value){
   const d=current(),entry=d&&editorEntry(d).find(item=>item.value.id===state.selected);
   if(!d)return;
-  checkpoint();
-  const numeric={'inspector-width':'width','inspector-height':'height',
+  if(['inspector-material-geometry','inspector-vector-mask'].includes(id)){
+    if(!entry)throw Error('请先选择一个图层');
+    let parsed;try{parsed=JSON.parse(value);}catch{throw Error('请输入合法的 JSON 几何数据');}
+    if(id==='inspector-vector-mask'){
+      if(parsed!==null)validateVectorMask(parsed);
+      checkpoint();if(parsed===null)delete entry.value.vectorMask;
+      else entry.value.vectorMask=parsed;
+      saveProject();render();toast('蒙版已应用');return;
+    }
+    if(entry.kind!=='material'||!parsed||typeof parsed!=='object'||Array.isArray(parsed)||
+      Object.keys(parsed).some(key=>!['cropRect','materialMask','craftDisplaySlices'].includes(key)))
+      throw Error('素材裁片数据格式无效');
+    const record=state.assets.find(asset=>asset.id===entry.value.assetID);
+    if(!record)throw Error('原素材不在素材库中');
+    const crop=(Object.hasOwn(parsed,'cropRect')?parsed.cropRect:entry.value.cropRect)||
+      {x:0,y:0,width:1,height:1};
+    const mask=Object.hasOwn(parsed,'materialMask')?parsed.materialMask:entry.value.materialMask;
+    const displaySlices=Object.hasOwn(parsed,'craftDisplaySlices')?
+      parsed.craftDisplaySlices:entry.value.craftDisplaySlices;
+    if(['x','y','width','height'].some(key=>!Number.isFinite(crop[key]))||
+      crop.x<0||crop.y<0||crop.width<=0||crop.height<=0||
+      crop.x+crop.width>1+1e-9||crop.y+crop.height>1+1e-9||
+      crop.width*record.physicalWidthMM<2||crop.height*record.physicalHeightMM<2)
+      throw Error('裁片必须在原素材内，且短边不少于 2 mm');
+    if(mask!==null&&mask!==undefined)materialMaskGeometry(mask);
+    const next=structuredClone(d),candidate=sceneLayerEntries(next,{hidden:true})
+      .find(item=>item.value.id===entry.value.id)?.value;
+    if(!candidate)throw Error('目标图层已变化');
+    const apply=node=>{
+      node.cropRect=crop.x===0&&crop.y===0&&crop.width===1&&crop.height===1?null:structuredClone(crop);
+      node.materialMask=mask?structuredClone(mask):null;
+      if(displaySlices)node.craftDisplaySlices=structuredClone(displaySlices);
+      else delete node.craftDisplaySlices;
+      const scale=d.canvas.height/(d.physicalPageHeightMM||297);
+      node.width=crop.width*record.physicalWidthMM*scale;
+      node.height=crop.height*record.physicalHeightMM*scale;
+      node.manualGeometryOverride=true;
+      node.userOverrideFlags=[...new Set([...(node.userOverrideFlags||[]),'cropRect','materialMask','craftDisplaySlices'])];
+    };
+    apply(candidate);validateScenePhysical(next,state.assets);
+    checkpoint();apply(entry.value);saveProject();render();toast('裁片与工艺已应用');return;
+  }
+  const numeric={'inspector-x':'x','inspector-y':'y','inspector-width':'width','inspector-height':'height',
     'inspector-rotation':'rotation','inspector-z':'zIndex',
-    'inspector-opacity':'opacity','inspector-font-size':'fontSize'};
+    'inspector-opacity':'opacity','inspector-font-size':'fontSize',
+    'inspector-letter-spacing':'letterSpacing','inspector-line-spacing':'lineSpacing',
+    'inspector-paragraph-spacing':'paragraphSpacing','inspector-fixed-line-height':'fixedLineHeight',
+    'inspector-line-width':'lineWidth','inspector-fill-opacity':'fillOpacity',
+    'inspector-stroke-opacity':'strokeOpacity'};
+  const color=/^#[0-9a-f]{6}$/i;
+  let changed=false;
+  checkpoint();
   if(entry){
     const key=numeric[id];
     if(key){
       if(entry.kind==='material'&&['width','height'].includes(key))return;
-      entry.value[key]=Number(value);
+      if(!['text','shape','material'].includes(entry.kind))return;
+      if(['fontSize','letterSpacing','lineSpacing','paragraphSpacing','fixedLineHeight'].includes(key)&&entry.kind!=='text')return;
+      if(['lineWidth','fillOpacity','strokeOpacity'].includes(key)&&entry.kind!=='shape')return;
+      const next=key==='fixedLineHeight'&&value===''?null:Number(value);
+      if(next!==null&&(!Number.isFinite(next)||
+        ['width','height','fontSize','fixedLineHeight'].includes(key)&&next<=0||
+        ['opacity','fillOpacity','strokeOpacity'].includes(key)&&(next<0||next>1)))return;
+      if(next===null)delete entry.value[key];else entry.value[key]=next;
       if(entry.kind==='material')entry.value.userOverrideFlags=[...new Set([...(entry.value.userOverrideFlags||[]),key])];
-    }else if(id==='inspector-text')entry.value.content=value;
-    else if(id==='inspector-font')entry.value.style=value;
-    else if(id==='inspector-text-color'&&entry.kind==='text'&&/^#[0-9a-f]{6}$/i.test(value))entry.value.color=value;
-    else if(id==='inspector-fill'&&entry.kind==='shape'&&/^#[0-9a-f]{6}$/i.test(value))entry.value.fill=value;
-    else if(id==='inspector-stroke'&&entry.kind==='shape'&&/^#[0-9a-f]{6}$/i.test(value))entry.value.stroke=value;
+      changed=true;
+    }else if(id==='inspector-text'&&entry.kind==='text'){entry.value.content=String(value);changed=true;}
+    else if(id==='inspector-font'&&entry.kind==='text'&&['serif','sans','rounded','hand'].includes(value)){
+      entry.value.style=value;entry.value.fontName=null;changed=true;
+    }else if(id==='inspector-alignment'&&entry.kind==='text'&&['left','center','right'].includes(value)){
+      entry.value.alignment=value;changed=true;
+    }else if(id==='inspector-font-name'&&entry.kind==='text'&&String(value).length<=120){
+      entry.value.fontName=String(value).trim()||null;changed=true;
+    }else if(id==='inspector-text-color'&&entry.kind==='text'&&color.test(value)){entry.value.color=value;changed=true;}
+    else if(['inspector-bold','inspector-italic','inspector-underline','inspector-strikethrough'].includes(id)&&entry.kind==='text'){
+      entry.value[id.slice(10)]=!!value;changed=true;
+    }else if(id==='inspector-fill'&&entry.kind==='shape'&&color.test(value)){entry.value.fill=value;changed=true;}
+    else if(id==='inspector-stroke'&&entry.kind==='shape'&&color.test(value)){entry.value.stroke=value;changed=true;}
+    else if(id==='inspector-stroke-dash'&&entry.kind==='shape'&&['solid','dash','dot'].includes(value)){
+      entry.value.strokeDash=value;changed=true;
+    }else if(id==='inspector-flipped'&&entry.kind==='material'){
+      entry.value.isFlippedHorizontally=!!value;changed=true;
+    }else if(id==='inspector-blend-mode'&&['normal','multiply'].includes(value)){
+      entry.value.blendMode=value;changed=true;
+    }else if(entry.kind==='shape'&&entry.value.vectorLayers&&id.startsWith('inspector-vector-')){
+      const match=/^inspector-vector-(fill|opacity)-(\d+)$/.exec(id),layer=match&&entry.value.vectorLayers[Number(match[2])];
+      if(!layer)return;
+      if(match[1]==='fill'&&color.test(value)){layer.fill=value;changed=true;}
+      if(match[1]==='opacity'&&Number.isFinite(Number(value))&&Number(value)>=0&&Number(value)<=1){layer.opacity=Number(value);changed=true;}
+    }
     else return;
-  }else if(id==='paper-color')d.paperColor=value;
-  else if(id==='paper-pattern')d.paperPattern=value;
+  }else if(id==='paper-color'&&color.test(value)){d.paperColor=value;changed=true;}
+  else if(id==='paper-pattern'&&['plain','grid','lines','dots','columns'].includes(value)){d.paperPattern=value;changed=true;}
   else if(id==='page-ratio'){
-    if(presetPaperDimensions(value))setDraftPaperSize(d,value);
-  }else if(id==='page-mode'){d.pageMode=value;d.canvas=canvasSize(value,d.pageRatio);}
+    if(presetPaperDimensions(value)){setDraftPaperSize(d,value);changed=true;}
+  }else if(id==='page-mode'&&['single','spread'].includes(value)){d.pageMode=value;d.canvas=canvasSize(value,d.pageRatio);changed=true;}
   else return;
+  if(!changed)return;
   saveProject();render();
 }
 async function updateImportReviewSeries(recordIndex,next){
@@ -1001,7 +1077,6 @@ async function runAppAction(action,id,value){try{switch(action){
   case 'match-skip':await actionStore.dispatch({type:'matching/exclude',payload:{id}});break;
   case 'match-allow':await actionStore.dispatch({type:'matching/include',payload:{id}});break;
   case 'match-core':await actionStore.dispatch({type:'matching/priority',payload:{id}});break;
-  case 'match-use':openMaterialUse(id);break;
   case 'match-generate':state.matchPurpose=view.querySelector('#match-purpose')?.value||'日常记录';state.matchProcessing=view.querySelector('#match-processing')?.value||'保留完整';state.matchStyle=view.querySelector('#match-style')?.value||state.matchStyle;state.matchIntent=view.querySelector('#match-intent')?.value||'';captureMatchContent();state.matchMode=view.querySelector('#match-mode')?.value||'single';state.matchRatio=readMatchPaper();state.matchStyles=readMatchSelection('match-style',state.matchStyle);state.matchPurposes=readMatchSelection('match-purpose',state.matchPurpose);queueMatchingDefaultsSync();await matchingSession.generate();break;
   case 'match-export-gpt':await exportOfflineCreation();break;
   case 'match-import-gpt':openOfflineImportDialog();break;
@@ -1075,6 +1150,7 @@ async function runAppAction(action,id,value){try{switch(action){
   }
   case 'fabric-inspector-open':if(state.selected){state.fabricInspectorOpen=true;render();}break;
   case 'fabric-inspector-close':state.fabricInspectorOpen=false;render();break;
+  case 'fabric-remove-vector-mask':editSelected(e=>{if(e?.value?.vectorMask)delete e.value.vectorMask;});break;
   case 'fabric-fit-view':{
     state.zoom=1;state.fabricFitRevision=(state.fabricFitRevision||0)+1;
     state.canvasViewports?.set(state.activeProject.id+':'+current().id,{scale:1,x:0,y:0});
@@ -1128,9 +1204,14 @@ async function runAppAction(action,id,value){try{switch(action){
     render();break;
   }
   case 'fabric-selection-mode':state.selectionMode=id==='intersect'?'intersect':'contain';render();break;
+  case 'fabric-selection-filter':{
+    if(!['material','shape','text'].includes(id))break;
+    state.selectionFilter={material:true,shape:true,text:true,...state.selectionFilter,[id]:!!value};
+    render();break;
+  }
   case 'fabric-layer-select':{
-    const d=current(),node=findSceneNode(d,id?.id);if(!node||node.type==='ink')break;
-    const ids=id.add?new Set(state.multiSelected||[]):new Set();
+    const d=current(),node=findSceneNode(d,id?.id);if(!node)break;
+    const ids=id.add?new Set([...(state.multiSelected||[]),state.selected].filter(Boolean)):new Set();
     if(id.add&&ids.has(node.id))ids.delete(node.id);else ids.add(node.id);
     state.multiSelected=[...ids];state.selected=ids.size===1?[...ids][0]:null;
     state.fabricInspectorOpen=false;state.tool='select';render();break;
@@ -1315,7 +1396,7 @@ async function runAppAction(action,id,value){try{switch(action){
    case 'flip':editSelected(e=>{e.value.isFlippedHorizontally=!e.value.isFlippedHorizontally;});break;
   case 'front':editSelected((e,d)=>{const parent=e.parents?.at(-1);moveSceneNode(d,e.value.id,{parentID:parent?.id||null});});break;
   case 'delete-object':editSelected((e,d)=>{const key=e.kind==='material'?'items':e.kind==='shape'?'primitives':'textBlocks';if(e.kind==='material'&&retireSplitPiece(d,state.selected)){state.selected=null;return;}d[key]=d[key].filter(x=>x.id!==state.selected);state.selected=null;});break;
-  case 'restore-baseline':editSelected(e=>{const b=e.value.generationBaseline;if(b){Object.assign(e.value,structuredClone(b));e.value.userOverrideFlags=[];}});break;
+  case 'restore-baseline':editSelected(e=>{const b=e.value.generationBaseline;if(b){Object.assign(e.value,structuredClone(b));delete e.value.manualGeometryOverride;e.value.userOverrideFlags=[];}});break;
   case 'park':editSelected(e=>{if(e.kind==='material'){e.value.isParked=true;state.selected=null;}});break;
   case 'unpark':editSelected((e,d)=>{const item=d.items.find(x=>x.id===id);if(item)item.isParked=false;});break;
   case 'save-work':{const p=state.activeProject,offline=state.offlineEditingReturnID===p?.id;p.isDraft=false;saveProject();await flushSave();saveAISnapshotInBackground(p);if(offline){await matchingSession.reflectProject(p);state.offlineEditingReturnID=null;navigateBack('matching');}toast(cloudEnabled?'作品已暂存，正在后台同步':'作品已保存');break;}
@@ -1514,19 +1595,7 @@ function editSelected(fn){const d=current(),e=editorEntry(d).find(x=>x.value.id=
 function historyStep(from,to){view.flushInkCommit?.({renderUI:false,force:true});view.endTextEditing?.();const d=current(),snapshot=takeEditorHistoryStep(state,from,to,d);if(!snapshot)return false;for(const key of Object.keys(d))delete d[key];Object.assign(d,snapshot);state.activeDraft=snapshot.id;saveProject();return true;}
 function readMatchPaper(){const ratio=view.querySelector('#match-ratio')?.value||'a4';if(ratio!=='custom')return ratio;const w=Number(view.querySelector('#match-paper-width')?.value),h=Number(view.querySelector('#match-paper-height')?.value);if(!Number.isInteger(w)||!Number.isInteger(h)||w<50||h<50||w>1000||h>1000)throw Error('自定义纸张宽高需要是 50–1000 mm 的整数');state.customPaperWidth=w;state.customPaperHeight=h;return `custom:${w}x${h}`;}
 function captureMatchContent(){state.matchContentPolicy=view.querySelector('#match-content-policy')?.value||state.matchContentPolicy||'documentary';state.matchTextPresentation=view.querySelector('#match-text-presentation')?.value||state.matchTextPresentation||'mixed';}
-function openMaterialUse(id){
-  const a=asset(id);if(!a)return;
-  openOverlay(createElement(MaterialUseDialog,{asset:a,others:state.basket.length>1,
-    useHint:state.materialUseHints[id],processingHint:state.assetProcessing[id]||state.matchProcessing,
-    required:state.materialUseRequired[id],onClose:closeOverlay,onSave:({use,permission,required})=>{
-      state.materialUseHints[id]=use==='由生成器选择'?null:use;
-      state.assetProcessing[id]=permission;
-      state.materialUseRequired[id]=!!state.materialUseHints[id]&&use!=='稍后手工剪图案'&&required;
-      updateMatchingRegions(['.match-basket-scroll','.basket>.muted','.match-action']);
-      void matchingSession.persist();queueMatchingDefaultsSync();
-    }}));
-}
-function createMatchingProject(automatic=true){const scope=matchingScope();if(!scope.candidateAssetIDs.length||!automatic&&!state.basket.length)throw Error('请先选择素材');const p=project('新的手账',{mode:state.matchMode||'single',ratio:state.matchRatio||'a4',style:state.matchStyle||'韩系清新'}),d=p.drafts[0];d.items=automatic?[]:physicalPlacement(d,state.assets,state.basket.slice(0,8));p.candidateAssetIDs=automatic?scope.candidateAssetIDs:[...state.basket];p.materialPriority=automatic?scope:{...scope,available:[],candidateAssetIDs:[...state.basket]};p.purpose=state.matchPurpose;p.intent=state.matchIntent;p.contentPolicy=state.matchContentPolicy;p.textPresentation=state.matchTextPresentation||'mixed';p.userText='';p.providedFacts='';p.styles=readMatchSelection('match-style',state.matchStyle);p.purposes=readMatchSelection('match-purpose',state.matchPurpose);p.requiredAssetIDs=[...scope.required];p.processing=state.matchProcessing;p.materialUseHints=Object.fromEntries(state.basket.filter(id=>state.materialUseHints[id]).map(id=>[id,state.materialUseHints[id]]));p.materialUseRequired=Object.fromEntries(state.basket.filter(id=>state.materialUseRequired[id]).map(id=>[id,true]));p.assetProcessing=Object.fromEntries(state.basket.filter(id=>state.assetProcessing[id]).map(id=>[id,state.assetProcessing[id]]));return p;}
+function createMatchingProject(automatic=true){const scope=matchingScope();if(!scope.candidateAssetIDs.length||!automatic&&!state.basket.length)throw Error('请先选择素材');const p=project('新的手账',{mode:state.matchMode||'single',ratio:state.matchRatio||'a4',style:state.matchStyle||'韩系清新'}),d=p.drafts[0];d.items=automatic?[]:physicalPlacement(d,state.assets,state.basket.slice(0,8));p.candidateAssetIDs=automatic?scope.candidateAssetIDs:[...state.basket];p.materialPriority=automatic?scope:{...scope,available:[],candidateAssetIDs:[...state.basket]};p.purpose=state.matchPurpose;p.intent=state.matchIntent;p.contentPolicy=state.matchContentPolicy;p.textPresentation=state.matchTextPresentation||'mixed';p.userText='';p.providedFacts='';p.styles=readMatchSelection('match-style',state.matchStyle);p.purposes=readMatchSelection('match-purpose',state.matchPurpose);p.requiredAssetIDs=[...scope.required];p.processing=state.matchProcessing;return p;}
 async function exportOfflineCreation(){
   if(!matchingScope().candidateAssetIDs.length){toast('请先选择素材');return;}
   state.matchPurpose=view.querySelector('#match-purpose')?.value||state.matchPurpose;state.matchProcessing=view.querySelector('#match-processing')?.value||state.matchProcessing;state.matchStyle=view.querySelector('#match-style')?.value||state.matchStyle;state.matchIntent=view.querySelector('#match-intent')?.value||'';captureMatchContent();state.matchMode=view.querySelector('#match-mode')?.value||state.matchMode;state.matchRatio=readMatchPaper();state.matchStyles=readMatchSelection('match-style',state.matchStyle);state.matchPurposes=readMatchSelection('match-purpose',state.matchPurpose);
@@ -1707,7 +1776,7 @@ async function startAICreation(){
   const images=vision?await prepareMaterialPreviews(ids,{findAsset,createImage:async(...args)=>{assertRun();return modelImage(...args);}}):[];assertRun();
   const p=sourceProject,referenceImages=[];
   if(cfg.sendPresetReferences&&vision){referenceImages.push(...(await loadJournalTemplateReferences({context:{styles:p.styles||[sourceDraft.style],purposes:p.purposes||[p.purpose||fallbackPurpose],materials:assetsSnapshot.filter(asset=>ids.includes(asset.id))},userTemplates:state.userTemplates,db})).referenceImages);}assertRun();
-  const output=await runCreativeAgent({...cfg,draft:sourceDraft,assets:assetsSnapshot,aliases,styles:p.styles||[sourceDraft.style],pagePurposes:p.purposes||[p.purpose||fallbackPurpose],contentPolicy:p.contentPolicy||'documentary',textPresentation:p.textPresentation||'mixed',userText:p.userText||'',providedFacts:p.providedFacts||'',requiredAssetIDs:p.requiredAssetIDs||[],materialPriority:p.materialPriority,processing:p.processing,assetProcessing:p.assetProcessing||{},materialUseHints:p.materialUseHints||{},materialUseRequired:p.materialUseRequired||{},prompt,images,referenceImages,userTemplates:state.userTemplates,request:recorder.request,signal:controller.signal,
+  const output=await runCreativeAgent({...cfg,draft:sourceDraft,assets:assetsSnapshot,aliases,styles:p.styles||[sourceDraft.style],pagePurposes:p.purposes||[p.purpose||fallbackPurpose],contentPolicy:p.contentPolicy||'documentary',textPresentation:p.textPresentation||'mixed',userText:p.userText||'',providedFacts:p.providedFacts||'',requiredAssetIDs:p.requiredAssetIDs||[],materialPriority:p.materialPriority,processing:p.processing,prompt,images,referenceImages,userTemplates:state.userTemplates,request:recorder.request,signal:controller.signal,
    onResponse:recorder.response,
    onProgress:progress=>{state.aiProgress='请求 '+progress.budget.totalRequests+'/'+progress.budget.limit+'（创作 '+progress.budget.creationRequests+'、格式修复 '+progress.budget.formatRepairRequests+'） · '+progress.phase+' · '+progress.seconds+' 秒 · 已接收 '+progress.received+' 字符';publishAIStatus();},
    onScene:vision?async d=>{assertRun();return (await rasterize(d,.7)).toDataURL('image/jpeg',.8);}:undefined,
@@ -2796,6 +2865,8 @@ async function openSyncDetails(){
       onRetry:async()=>{
         syncPausedByUser=false;
         await flushSave();
+        await db.rebuildPendingSync({projects:state.projects,assets:state.assets,
+          series:state.series,trash:state.trash});
         try{await db.flushProjects();}
         catch(error){
           const current=db.syncDiagnosticReport({online:navigator.onLine})?.state;
