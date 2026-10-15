@@ -87,7 +87,10 @@ function decorate(node){
   if(node.dataset.act==='tool'&&tools[node.dataset.val]){const [name,label]=tools[node.dataset.val];if(!node.getAttribute('aria-label'))node.setAttribute('aria-label',label);putIcon(node,name,iconOnly.test(node.textContent)||node.textContent==='Aa');return;}
   const nav={library:'folder',matching:'sparkles',works:'book'}[node.dataset.route];
   if(nav){const slot=node.querySelector('span[aria-hidden]');if(slot)putIcon(slot,nav,true);else putIcon(node,nav);return;}
-  if(node.id==='top-basket'){putIcon(node,'archive');return;}
+  if(node.id==='top-basket'){
+    if(!node.querySelector('svg[data-shiye-icon="archive"]'))putIcon(node,'archive');
+    return;
+  }
   if(node.id==='top-settings'){putIcon(node,'settings',true);return;}
   if(node.dataset.act==='select-file'){const name={gallery:'material',camera:'camera',files:'file'}[node.dataset.val];if(name)putIcon(node,name);return;}
   const label=node.getAttribute('aria-label'),name=labels[label]||actions[node.dataset.act];

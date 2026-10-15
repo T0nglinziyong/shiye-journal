@@ -11,6 +11,7 @@ import {createSelectionSidePanels,selectionMorePopoverOptions} from './selection
 import {hiddenAssetCopy} from './asset-retention.js';
 import {explainUserError} from './user-facing-error.js';
 import {recordRuntimeIssue} from './runtime-diagnostics.js';
+import {updateShell} from './react-shell.jsx';
 
 const action=(name,fn)=>{
   const b=document.createElement('button');b.type='button';b.className='btn';
@@ -40,7 +41,7 @@ export function mountAssetSelection(c,p){
   view.assetCardsChanged=total=>{for(const row of baseCounts)if(row[0].classList.contains('library-count'))row[1]=total+' 项';baseCards=[...baseGrids.flatMap(grid=>[...grid.querySelectorAll('.card[data-act="detail"]')])];baseCards.forEach(wire);if(!results)cards=baseCards;sync();};
   const tray=document.createElement('div');tray.className='swift-tray manage library-management-tray';tray.dataset.selectionMode='asset';tray.innerHTML='<strong></strong>';
   const require=(name,fn)=>{const b=action(name,fn);b.dataset.selectionRequired='';return b;};
-  tray.append(action('全选页面',()=>{cards.filter(b=>!b.hidden).forEach(b=>p.selected.add(b.dataset.id));sync();}),require('清空选择',()=>{p.selected.clear();p.showOnlySelected=false;sync();}),require(p.showOnlySelected?'返回筛选':'查看所选',()=>{p.showOnlySelected=!p.showOnlySelected;sync();}),require('加入搭配',()=>{addMatchingFromLibrary(state,[...p.selected]);finishSelection(p);sync();document.querySelector('#basket-count').textContent=state.basket.length;void c.matchingSession?.persist?.().catch(console.warn);c.toast('已加入搭配素材篮 · ★ 必须使用');}),require('更多操作',anchor=>moreMenu(c,p,anchor)),require('删除素材',async()=>{
+  tray.append(action('全选页面',()=>{cards.filter(b=>!b.hidden).forEach(b=>p.selected.add(b.dataset.id));sync();}),require('清空选择',()=>{p.selected.clear();p.showOnlySelected=false;sync();}),require(p.showOnlySelected?'返回筛选':'查看所选',()=>{p.showOnlySelected=!p.showOnlySelected;sync();}),require('加入搭配',()=>{addMatchingFromLibrary(state,[...p.selected]);finishSelection(p);sync();updateShell({basketCount:state.basket.length});void c.matchingSession?.persist?.().catch(console.warn);c.toast('已加入搭配素材篮 · ★ 必须使用');}),require('更多操作',anchor=>moreMenu(c,p,anchor)),require('删除素材',async()=>{
     const records=state.assets.filter(a=>p.selected.has(a.id));if(!records.length||!confirm('将所选 '+records.length+' 件素材移到最近删除？'))return;
     const entries=records.map(item=>({id:crypto.randomUUID(),kind:'asset',item:structuredClone(item),date:new Date().toISOString()}));
     const hidden=records.map(item=>hiddenAssetCopy(item));

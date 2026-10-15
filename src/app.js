@@ -136,7 +136,7 @@ import {createEditorController,registerEditorActions} from './page-controllers/e
 import {createSettingsController,registerSettingsActions} from './page-controllers/settings-controller.js';
 import {createMatchingController,registerMatchingActions} from './page-controllers/matching-controller.js';
 import {renderImportHTML} from './page-controllers/import-view.js';
-import {mountReactShell,renderReactPage,unavailableRoute} from './react-shell.jsx';
+import {mountReactShell,renderReactPage,unavailableRoute,setShellActions,updateShell} from './react-shell.jsx';
 import {LibraryPage,SeriesPage,SeriesContentsPage,WorksPage,RecentlyDeletedPage,JournalTemplatesPage,MatchingPage,EditorPage,AssetDetailPage,ProjectPreviewPage,SettingsHomePage,SettingsDisplayPage,SettingsRecognitionPage,SettingsDataPage,SettingsAIPage,ImportSimplePage,ImportReviewPage,ImportInspectionPage} from './react-routes.jsx';
 
 import {installRuntimeDiagnostics,recordRuntimeIssue,runtimeIssueSnapshot} from './runtime-diagnostics.js';
@@ -164,14 +164,14 @@ function openLibraryAsset(id){libraryHistory.push({route:state.route,seriesID:st
 function libraryBack(){const previous=libraryHistory.pop();if(!previous){navigateBack('series');return;}navigationHistory.pop();state.seriesID=previous.seriesID;state.detailAssetID=previous.detailAssetID;route(previous.route,{back:true});}
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const toast=s=>{const el=document.querySelector('#toast');el.textContent=/can't find variable|is not defined|undefined is not an object|blob:|expected magic word/i.test(String(s))?explainUserError(s):s;el.classList.add('show');clearTimeout(toast.timer);toast.timer=setTimeout(()=>el.classList.remove('show'),3500);};
-const saveStatus=s=>{const label=cloudEnabled?({'已保存到本机':'已保存到云端','本机存储':'云端存储'}[s]||s):s;document.querySelector('#save-state').textContent=label;for(const el of document.querySelectorAll('.swift-auto-saved'))el.textContent=label;};
+const saveStatus=s=>{const label=cloudEnabled?({'已保存到本机':'已保存到云端','本机存储':'云端存储'}[s]||s):s;updateShell({saveStatus:label});for(const el of document.querySelectorAll('.swift-auto-saved'))el.textContent=label;};
 const syncDisplay={pending:0,error:null,conflicts:0,uploading:false,checking:true,localPending:false};
 function updateSyncIndicator(){
   if(!cloudEnabled)return;
   const conflict=syncDisplay.conflicts>0||/云端版本已变化|另一设备已更新|conflict/i.test(syncDisplay.error?.message||'');
   const status=conflict?'conflict':navigator.onLine===false&&syncDisplay.pending?'offline':syncDisplay.uploading?'uploading':syncDisplay.error?'error':syncDisplay.checking?'checking':syncDisplay.pending||syncDisplay.localPending?'uploading':'synced';
   const label={conflict:'同步冲突',error:'待重试',offline:'待联网',checking:'核对中',uploading:'上传中',synced:'已同步'}[status];
-  for(const button of document.querySelectorAll('.sync-indicator')){button.hidden=false;button.dataset.status=status;button.title=conflict?'其他设备修改了同一资料；本机待传内容仍保留，请先检查其他设备':status==='error'?'上传未完成；点击重试：'+syncDisplay.error.message:label;button.setAttribute('aria-label',label);button.querySelector('.sync-indicator-label').textContent=label;}
+  updateShell({sync:{status,label,title:conflict?'其他设备修改了同一资料；本机待传内容仍保留，请先检查其他设备':status==='error'?'上传未完成；点击重试：'+syncDisplay.error.message:label}});
 }
 function mountPageSyncIndicator(){
   if(!cloudEnabled)return;
@@ -524,7 +524,7 @@ function render(){
   if(previousMatchingScroll)matchingScrollMemory={
     account:state.accountId||'browser',scroll:previousMatchingScroll
   };
-  document.body.classList.toggle('editing',state.route==='editor');document.body.dataset.backdrop=state.preferences.backdrop;document.querySelectorAll('.main-nav button').forEach(b=>b.classList.toggle('active',b.dataset.route===state.route||(b.dataset.route==='library'&&['series','import'].includes(state.route))));document.querySelector('#basket-count').textContent=state.basket.length;
+  document.body.classList.toggle('editing',state.route==='editor');document.body.dataset.backdrop=state.preferences.backdrop;updateShell({route:state.route,basketCount:state.basket.length});
   // Controller owns the decision to patch. A safe fallback remounts the
   // current route; business actions never manipulate page DOM here.
   if(!forceImportReactRender&&pageControllers.patch(state.route)){backgroundViewPending=false;return;}
@@ -753,7 +753,7 @@ function matchingScope(){return buildMaterialScope({basket:state.basket,coreIDs:
 // remaining page, sticky header, textarea selection and decoded thumbnails.
 function updateMatchingRegions(_regions,{persist=true}={}){
   if(state.route!=='matching')return render();
-  document.querySelector('#basket-count').textContent=state.basket.length;
+  updateShell({basketCount:state.basket.length});
   // React owns the Matching route. Replacing its descendants with HTML
   // removes the delegated click handlers from newly inserted controls.
   window.dispatchEvent(new Event('shiye-matching-refresh'));
@@ -1149,7 +1149,7 @@ async function legacyHandle(action,id,value){try{switch(action){
     if((asset(state.detailAssetID)?.supply?.quantity??1)===0)throw Error('素材可用库存为 0');
     addMatchingFromLibrary(state,[state.detailAssetID]);
     void matchingSession.persist().catch(console.warn);
-    document.querySelector('#basket-count').textContent=state.basket.length;
+    updateShell({basketCount:state.basket.length});
     toast('已加入本次创作');break;case 'detail-match':if((asset(state.detailAssetID)?.supply?.quantity??1)===0)throw Error('素材可用库存为 0');addMatchingFromLibrary(state,[state.detailAssetID]);route('matching');break;case 'detail-series':libraryHistory.push({route:state.route,seriesID:state.seriesID,detailAssetID:state.detailAssetID});state.seriesID=asset(state.detailAssetID)?.seriesID||'all';route('library');break;case 'detail-similar':view.dispatchEvent(new CustomEvent('show-similar'));break;case 'detail-edit':openDetail(state.detailAssetID);break;case 'detail-check':await openCutoutCheck(state.detailAssetID);break;case 'detail-favorite':await actionStore.dispatch({type:'library/favorite',payload:{id:state.detailAssetID}});break;
   case 'new-series':openSeriesEditor();break;case 'series-detail':libraryHistory.push({route:state.route,seriesID:state.seriesID,detailAssetID:state.detailAssetID});state.seriesID=id;route('library');break;
   case 'series-return':libraryBack();break;
@@ -2772,8 +2772,6 @@ async function openSyncDetails(){if(!cloudEnabled)return;cloudResumer.suspend();
    body.querySelector('#sync-export-diagnostics').onclick=exportSyncDiagnostics;
    if(!modal.open)modal.showModal();modal.addEventListener('close',()=>{if(!syncPausedByUser&&!resetWorkflowActive)void cloudResumer.resume();},{once:true});
    toast(explainUserError(error,'同步详情读取'));}}
-document.querySelector('#save-state').addEventListener('click',()=>{if(cloudEnabled)void openSyncDetails();});
-document.querySelector('#sync-indicator').onclick=()=>void openSyncDetails();
 let viewportTimer;
 // Rebuilding the page during an active pointer gesture drops native capture.
 // In particular, delayed viewport events must not interrupt lasso or ink.
@@ -2786,13 +2784,16 @@ window.addEventListener('resize',refitEditor);
 window.visualViewport?.addEventListener('resize',refitEditor);
 // Desktop file drop is equivalent to the regular import path; no drag
 // target overlays the editing canvas or iPad/Pencil UI.
-document.querySelectorAll('.main-nav button').forEach(b=>b.onclick=()=>{
-  if(b.dataset.route==='library'){
+setShellActions({
+  navigate:target=>{
+  if(target==='library'){
     if(['library','series'].includes(state.route))return; // keep current tab
     route(lastMaterialLocation.route||'series',{restoreMaterial:true});
-  }else route(b.dataset.route);
+  }else route(target);
+  },
+  basket:()=>route('matching'),settings:()=>route('settings'),
+  sync:()=>void openSyncDetails(),save:()=>{if(cloudEnabled)void openSyncDetails();}
 });
-document.querySelector('#top-basket').onclick=()=>route('matching');document.querySelector('#top-settings').onclick=()=>route('settings');
 let safeUpdateRegistration=null;
 function checkForSafeUpdate(){
   if(!('serviceWorker' in navigator)||location.protocol!=='https:'||safeUpdateRegistration)return;

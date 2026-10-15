@@ -1,14 +1,33 @@
-import React from 'react';
+import React,{useLayoutEffect,useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {flushSync} from 'react-dom';
+import {iconMarkup} from './icons.js';
 
 // The shell and every route are React roots. The canvas and image loader own
 // only their resource nodes, not a fallback HTML page renderer.
+const initialShellState={route:'series',basketCount:0,saveStatus:'本机存储',sync:null};
+let currentShellState=initialShellState;
+let shellSetter=null;
+let shellActions={};
+
+export function setShellActions(actions){shellActions=actions;}
+export function updateShell(patch){
+  currentShellState={...currentShellState,...patch};
+  shellSetter?.(currentShellState);
+}
+
+function Icon({name}){
+  return <span aria-hidden="true" dangerouslySetInnerHTML={{__html:iconMarkup(name)}}/>;
+}
+
 function AppShell(){
+  const [shell,setShell]=useState(currentShellState);
+  useLayoutEffect(()=>{shellSetter=setShell;return ()=>{shellSetter=null;};},[]);
+  const active=route=>shell.route===route||(route==='library'&&['series','import'].includes(shell.route));
   return <>
-    <header className="topbar"><div className="brand"><b>♧</b><div><strong>拾页</strong><small>COLLECT. COMPOSE.</small></div></div><nav className="main-nav" aria-label="主导航">
-      <button data-route="library"><span aria-hidden="true">▣</span> 素材</button><button data-route="matching"><span aria-hidden="true">✦</span> 搭配</button><button data-route="works"><span aria-hidden="true">▤</span> 作品</button>
-    </nav><div className="top-actions"><button type="button" id="top-basket" aria-label="本次创作">本次创作 <span id="basket-count">0</span></button><button type="button" id="top-settings" aria-label="设置">⚙</button><button type="button" id="sync-indicator" className="sync-indicator" hidden><span className="sync-indicator-symbol" aria-hidden="true"/><span className="sync-indicator-label" aria-live="polite">正在核对</span></button><span id="save-state" className="save-state">本机存储</span></div></header>
+    <header className="topbar"><div className="brand"><b dangerouslySetInnerHTML={{__html:iconMarkup('leaf')}}/><div><strong>拾页</strong><small>COLLECT. COMPOSE.</small></div></div><nav className="main-nav" aria-label="主导航">
+      <button data-route="library" className={active('library')?'active':''} onClick={()=>shellActions.navigate?.('library')}><Icon name="folder"/> 素材</button><button data-route="matching" className={active('matching')?'active':''} onClick={()=>shellActions.navigate?.('matching')}><Icon name="sparkles"/> 搭配</button><button data-route="works" className={active('works')?'active':''} onClick={()=>shellActions.navigate?.('works')}><Icon name="book"/> 作品</button>
+    </nav><div className="top-actions"><button type="button" id="top-basket" aria-label="本次创作" onClick={()=>shellActions.basket?.()}><span dangerouslySetInnerHTML={{__html:iconMarkup('archive')}}/>本次创作 <span id="basket-count">{shell.basketCount}</span></button><button type="button" id="top-settings" aria-label="设置" onClick={()=>shellActions.settings?.()} dangerouslySetInnerHTML={{__html:iconMarkup('settings')}}/><button type="button" id="sync-indicator" className="sync-indicator" hidden={!shell.sync} data-status={shell.sync?.status} title={shell.sync?.title} aria-label={shell.sync?.label} onClick={()=>shellActions.sync?.()}><span className="sync-indicator-symbol" aria-hidden="true"/><span className="sync-indicator-label" aria-live="polite">{shell.sync?.label||'正在核对'}</span></button><span id="save-state" className="save-state" onClick={()=>shellActions.save?.()}>{shell.saveStatus}</span></div></header>
     <main id="view" aria-live="polite"/>
     <div id="toast" role="status" aria-live="polite"/>
     <dialog id="modal"><div className="modal-shell"><button type="button" className="modal-close" aria-label="关闭">×</button><div id="modal-body"/></div></dialog>

@@ -6,7 +6,8 @@
 
 | 区域 | 当前入口 | 验收 |
 | --- | --- | --- |
-| 顶栏、主导航、路由主体 | `react-shell.jsx`、`react-routes.jsx` | `test:ui`、`browser-acceptance.mjs` |
+| 顶栏、主导航、同步状态和素材篮计数 | `react-shell.jsx` 的状态与事件 | `test:ui`、`browser-acceptance.mjs`、`library-selection-browser.mjs` |
+| 路由主体 | `react-shell.jsx`、`react-routes.jsx` | `test:ui`、`browser-acceptance.mjs` |
 | 素材、系列、作品的标签和入口卡片 | `react-routes.jsx` | `library-selection-browser.mjs`、`react-dom-ownership-browser.mjs` |
 | 素材、系列、作品的「选择 / 完成」按钮 | `SelectionToggle` | `library-selection-browser.mjs`，包括跨标签延续素材选择 |
 | 素材与作品的最近删除列表、恢复、批量删除 | `RecentlyDeletedPage` | `trash-offline-browser.mjs`、`library-canvas-latest-browser.mjs` |
