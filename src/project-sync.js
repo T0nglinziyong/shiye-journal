@@ -142,9 +142,12 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
         ?Math.max(0,...[...entries.values()].map(item=>item.serial))
         :Infinity;
       await coalesceReady(windowSerial);
-      const blocked=new Set();
+      const blocked=new Set(),blockedKeys=[];
+      const conflictIDs=new Set();
+      let firstFailure=null;
       while(entries.size&&!paused){
-        const row=orderedRows().find(item=>!blocked.has(item.record.id)&&item.serial<=windowSerial);
+        const row=orderedRows().find(item=>!blocked.has(item.record.id)&&item.serial<=windowSerial&&
+          !blockedKeys.some(keys=>overlaps(keys,recordKeys(item.record))));
         if(!row)break;
         diagnose('start',row);
         try {
@@ -237,13 +240,23 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
         await staging;
         await acknowledge(row,{confirmedHere:true});
         }catch(failure){
-          if(!/云端版本已变化|另一设备已更新|\\bconflict\\b/i.test(failure?.message||'')){diagnose('failed',row,failure);throw failure;}
           blocked.add(row.record.id);
-          diagnose('conflict',row,failure);
+          blockedKeys.push(recordKeys(row.record));
+          if(/云端版本已变化|另一设备已更新|\bconflict\b/i.test(failure?.message||'')){
+            conflictIDs.add(row.record.id);
+            diagnose('conflict',row,failure);
+            // A server-reported conflict must still reach callers that open
+            // the manual review flow. Other queued records can commit first.
+            if(/\bconflict\b/i.test(failure?.message||''))firstFailure??=failure;
+          }else{
+            firstFailure??=failure;
+            diagnose('failed',row,failure);
+          }
         }
       }
-      conflicts=blocked;
+      conflicts=conflictIDs;
       error=null;report();
+      if(firstFailure)throw firstFailure;
     });})().catch(e=>{diagnose('failed',null,e);error=e;report();throw e;}).finally(()=>{
       network=null;
       if(entries.size&&!error&&[...entries.keys()].some(id=>!conflicts.has(id)))scheduleAuto();

@@ -170,6 +170,34 @@ test('unresolved change cannot stop independent later queued changes',async()=>{
   assert.equal(sync.status().error,null);
 });
 
+test('failed upload retains its row while independent queued records commit',async()=>{
+  let revision=0,fail=true;
+  let rows=[
+    {record:{id:'broken',key:'shared'},serial:1,baseRevision:0,operationID:'broken-op'},
+    {record:{id:'dependent',key:'shared'},serial:2,baseRevision:0,operationID:'dependent-op'},
+    {record:{id:'independent',key:'other'},serial:3,baseRevision:0,operationID:'other-op'}
+  ];
+  const committed=[];
+  const sync=createProjectSync({
+    load:async()=>structuredClone(rows),reload:async()=>structuredClone(rows),
+    write:async next=>{rows=structuredClone(next);},revision:()=>revision,
+    recordKeys:record=>[{store:'assets',id:record.key}],
+    reconcile:async()=> 'rebase',
+    commit:async record=>{
+      if(record.id==='broken'&&fail)throw Error('object upload failed');
+      committed.push(record.id);revision++;
+    }
+  });
+  await assert.rejects(sync.flush(),/未获确认/);
+  assert.deepEqual(committed,['independent']);
+  assert.deepEqual(rows.map(row=>row.record.id),['broken','dependent']);
+  assert.equal(sync.status().conflicts,0);
+  fail=false;
+  await sync.flush();
+  assert.deepEqual(committed,['independent','broken','dependent']);
+  assert.deepEqual(rows,[]);
+});
+
 test('unchanged remote revision is an unconfirmed upload, not a conflict',async()=>{
   let rows=[];
   const sync=createProjectSync({load:async()=>rows,reload:async()=>structuredClone(rows),

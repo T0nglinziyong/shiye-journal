@@ -328,11 +328,12 @@ const unifiedSync=createProjectSync({
       for(const op of operations)if(op.action==='put'&&op.store==='blobs')
         puts.push({item:op.item,makePreview:!auxiliary.has(op.item.id)});
     }
+    // Preparation is opportunistic: one failed object must not stop another
+    // record's bytes from uploading. Its own commit retries and reports the
+    // precise error while leaving that record in the durable outbox.
     for(let offset=0;offset<puts.length;offset+=3)
-      await Promise.all(puts.slice(offset,offset+3).map(async op=>{
-        try{await encode('blobs',op.item,{makePreview:op.makePreview});}
-        catch(error){throw markSyncPhase(error,'预传素材文件');}
-      }));
+      await Promise.allSettled(puts.slice(offset,offset+3).map(op=>
+        encode('blobs',op.item,{makePreview:op.makePreview})));
   },
   recordKeys:syncAffectedKeys,
 });

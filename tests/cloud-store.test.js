@@ -115,6 +115,29 @@ test('failed import uploads retain the entire batch; rejected auth/quota never c
   await assert.rejects(quota.db.cloudStageImport({assets:[{id:'ghost'}]}),/quota/);
   full=false;assert.deepEqual(await quota.db.cloudAll('assets'),[]);assert.equal(quota.state.calls.length,0);
 });
+test('one import upload failure does not block a separate import',async()=>{
+  const cache=memoryCache(),uploaded=[];
+  let fail=true;
+  const objectStorage={enabled:true,async upload(path,blob){
+    uploaded.push(path);
+    if(fail&&await blob.text()==='broken-bytes')throw Error('COS upload failed');
+  }};
+  const {db,state}=fixture(cache,objectStorage);
+  await db.cloudStageImport({assets:[{id:'broken',blobId:'broken-image'}],
+    blobs:[{id:'broken-image',data:new Blob(['broken-bytes'])}],projects:[]});
+  await db.cloudStageImport({assets:[{id:'safe',blobId:'safe-image'}],
+    blobs:[{id:'safe-image',data:new Blob(['safe-bytes'])}],projects:[]});
+  await assert.rejects(db.cloudFlushProjects(),/未获确认|图片上传失败|COS upload failed/);
+  assert.equal(state.calls.length,1,'the independent import reaches metadata commit');
+  assert.deepEqual(state.calls[0].operations.filter(op=>op.store==='assets').map(op=>op.item.id),['safe']);
+  assert.equal((await activeRows(cache,'batch')).length,1,'failed import stays durable');
+  fail=false;
+  await db.cloudFlushProjects();
+  assert.equal(state.calls.length,2);
+  assert.deepEqual(await activeRows(cache,'batch'),[]);
+  assert.ok(uploaded.length>=2);
+});
+
 test('trash restore survives AbortError: local stage is immediate and reopen retries the same operation',async()=>{
   const cache=memoryCache(),first=fixture(cache);first.state.rpcAbort=true;
   await first.db.cloudStageMutation(['trash','assets'],tx=>{tx.objectStore('trash').delete('t');tx.objectStore('assets').put({id:'restored',title:'safe'});});
