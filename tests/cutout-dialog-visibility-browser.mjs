@@ -153,6 +153,30 @@ try{
     await click('[data-cut-step="recognition"]');
     assert.ok((await evaluate('document.querySelector(".cutout-steps .current")?.textContent'))
       .includes('边缘优化'),'editor controls must respond after native handoff');
+    await click('.cutout-bounded-slider button:last-child');
+    assert.equal(await evaluate('document.querySelector("#cutout-strength")?.value'),'20',
+      'Cutout brush control reaches its maximum through the end button');
+    await click('.cutout-bounded-slider button:first-child');
+    assert.equal(await evaluate('document.querySelector("#cutout-strength")?.value'),'0.5',
+      'Cutout brush control reaches its minimum through the end button');
+    const slider=await evaluate(`(()=>{const rect=document.querySelector('#cutout-strength').getBoundingClientRect();
+      return {left:rect.left+1,right:rect.right-1,y:rect.top+rect.height/2}})()`);
+    await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,
+      x:slider.left,y:slider.y,clickCount:1});
+    await command('Input.dispatchMouseEvent',{type:'mouseMoved',button:'left',buttons:1,
+      x:slider.right,y:slider.y});
+    await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,
+      x:slider.right,y:slider.y,clickCount:1});
+    assert.equal(await evaluate('document.querySelector("#cutout-strength")?.value'),'20',
+      'Dragging the brush slider reaches the far right endpoint');
+    await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,
+      x:slider.right,y:slider.y,clickCount:1});
+    await command('Input.dispatchMouseEvent',{type:'mouseMoved',button:'left',buttons:1,
+      x:slider.left,y:slider.y});
+    await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,
+      x:slider.left,y:slider.y,clickCount:1});
+    assert.equal(await evaluate('document.querySelector("#cutout-strength")?.value'),'0.5',
+      'Dragging the brush slider reaches the far left endpoint');
     await click('#cutout-cancel');
     assert.equal(await evaluate('document.querySelector("#modal").open'),false);
     await click('[data-act="detail-back"]');

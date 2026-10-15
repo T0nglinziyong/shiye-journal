@@ -16,6 +16,12 @@ const projects=()=>evaluate(`(async()=>{
     const request=transaction.objectStore('projects').getAll();
     request.onsuccess=()=>{db.close();resolve(request.result)};request.onerror=()=>reject(request.error)});
 })()`);
+const waitProjects=async predicate=>{
+  for(let attempt=0;attempt<60;attempt++){
+    const records=await projects();if(predicate(records))return records;await sleep(80);
+  }
+  return projects();
+};
 try{
   await wait('.series-grid');
   await evaluate(`(async()=>{const db=await new Promise(resolve=>{const open=indexedDB.open('shiye-pwa-full-v1');open.onsuccess=()=>resolve(open.result)});
@@ -61,8 +67,7 @@ try{
     type:'mouseMoved',button:'left',buttons:1,x:point.x+step*5,y:point.y+step*2});
   await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,
     x:point.x+40,y:point.y+16,clickCount:1});
-  await sleep(900);
-  const records=await projects();
+  const records=await waitProjects(rows=>rows[0]?.drafts?.[0]?.layers?.some(layer=>layer.type==='ink'));
   assert.equal(records.length,1);
   assert.equal(records[0].drafts[0].layers.filter(layer=>layer.type==='ink').length,1);
   assert.ok(await paintedPixels()>20);
@@ -106,11 +111,21 @@ try{
   await sleep(700);
   assert.equal((await projects())[0].drafts[0].layers.find(layer=>layer.type==='text').content,'拾页文字');
   const beforeReedit=(await projects())[0].drafts[0].layers.length;
-  await click('[data-val="text"]');
   const existingTextPoint=await evaluate(`(()=>{const text=document.querySelector('.upper-canvas');
     const rect=text.getBoundingClientRect();const layer=${JSON.stringify((await projects())[0].drafts[0].layers.find(layer=>layer.type==='text'))};
     return {x:rect.left+(layer.x-layer.width/2+25)/text.width*rect.width,
       y:rect.top+(layer.y-35)/text.height*rect.height}})()`);
+  await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,clickCount:1,...existingTextPoint});
+  await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,clickCount:1,...existingTextPoint});
+  await wait('.canvas-font-size-stepper input[aria-label="字号"]');
+  await evaluate(`(()=>{const input=document.querySelector('.canvas-font-size-stepper input[aria-label="字号"]');
+    input.focus();input.select();})()`);
+  await command('Input.insertText',{text:'54'});
+  await evaluate('document.querySelector(".canvas-font-size-stepper input[aria-label=字号]").blur()');
+  await sleep(900);
+  assert.equal((await projects())[0].drafts[0].layers.find(layer=>layer.type==='text').fontSize,54,
+    'Text size accepts a typed value as well as preset steps');
+  await click('[data-val="text"]');
   const scrollBeforeReedit=await evaluate('window.scrollY');
   await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,clickCount:1,...existingTextPoint});
   await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,clickCount:1,...existingTextPoint});
@@ -220,8 +235,10 @@ try{
   await click('[data-material-id="fabric-product-material"]');await sleep(700);
   assert.equal((await projects())[0].drafts[0].layers.filter(layer=>layer.type==='material').length,1);
   await click('[aria-label="编辑对象"]','.show-inspector');
-  await click('.editor-inspector-geometry summary','.editor-inspector-geometry textarea');
-  await click('.editor-inspector-geometry button');await sleep(700);
+  await click('.editor-inspector-geometry summary','.editor-crop-slider');
+  assert.equal(await evaluate('!!document.querySelector(".editor-inspector-geometry textarea")'),false,
+    'Material cropping should use direct controls instead of JSON');
+  await click('.editor-crop-slider button:first-child');await sleep(700);
   assert.ok((await projects())[0].drafts[0].layers.some(layer=>layer.type==='material'&&layer.manualGeometryOverride),
     'Material craft geometry must be editable through the Scene inspector: '+
       JSON.stringify({status:await evaluate(`document.querySelector('.editor-inspector-geometry [role=status]')?.textContent`),

@@ -1021,13 +1021,40 @@ export function MatchingPage({state,source,kindName,session,onAction,onMatchingC
   </div>;
 }
 
+function MaterialCropControls({item,record,onApply}){
+  const crop=item.cropRect||{x:0,y:0,width:1,height:1};
+  const minW=Math.min(1,2/Math.max(2,record?.physicalWidthMM||2));
+  const minH=Math.min(1,2/Math.max(2,record?.physicalHeightMM||2));
+  const apply=rect=>onApply('inspector-material-geometry',{
+    cropRect:rect,materialMask:item.materialMask||null,craftDisplaySlices:item.craftDisplaySlices||null});
+  const change=(key,value)=>apply({...crop,[key]:Number(value)});
+  return <div className="editor-crop-controls">
+    {[['width','宽度',minW,1-crop.x],['height','高度',minH,1-crop.y],
+      ['x','左右位置',0,1-crop.width],['y','上下位置',0,1-crop.height]]
+      .map(([key,label,min,max])=><label key={key}>{label} · {Math.round(crop[key]*100)}%
+        <div className="editor-crop-slider"><button type="button" onClick={()=>change(key,min)}>最小</button>
+          <input type="range" aria-label={label} min={min} max={Math.max(min,max)} step="0.01"
+            value={crop[key]} onChange={event=>change(key,event.target.value)}/>
+          <button type="button" onClick={()=>change(key,Math.max(min,max))}>最大</button></div>
+      </label>)}
+    <button type="button" className="btn mini" disabled={!item.cropRect}
+      onClick={()=>apply(null)}>恢复完整素材</button>
+  </div>;
+}
+
 function EditorInspector({selected,draft,asset,format,onChange,onAction}){
-  const geometryInput=useRef(null),maskInput=useRef(null),[geometryError,setGeometryError]=useState('');
-  const applyGeometry=(id,input)=>{
-    try{onChange(id,input.current?.value||'null');setGeometryError('已应用到当前图层');}
-    catch(error){setGeometryError(error.message||'几何数据无效');}
+  const [geometryError,setGeometryError]=useState('');
+  useEffect(()=>setGeometryError(''),[selected?.value?.id]);
+  const applyGeometry=(id,value)=>{
+    try{onChange(id,JSON.stringify(value));setGeometryError('');}
+    catch(error){setGeometryError(error.message||'无法应用此调整');}
   };
-  const field=(id,label,value,type='number',props={})=><label>{label}<input id={id} type={type}
+  const field=(id,label,value,type='number',props={})=>type==='range'?<label className="editor-inspector-range">
+    <span>{label} · {Number(props.max)===1?`${Math.round(Number(value)*100)}%`:value}</span><div>
+      <button type="button" aria-label={`${label}最小值`} onClick={()=>onChange(id,String(props.min))}>最小</button>
+      <input id={id} type="range" value={value} onChange={event=>onChange(id,event.target.value)} {...props}/>
+      <button type="button" aria-label={`${label}最大值`} onClick={()=>onChange(id,String(props.max))}>最大</button>
+    </div></label>:<label>{label}<input id={id} type={type}
     defaultValue={value} onChange={event=>onChange(id,event.target.value)} {...props}/></label>;
   const choice=(id,label,value,options)=><label>{label}<select id={id} value={value}
     onChange={event=>onChange(id,event.target.value)}>{options.map(([key,title])=><option key={key} value={key}>{title}</option>)}</select></label>;
@@ -1065,15 +1092,16 @@ function EditorInspector({selected,draft,asset,format,onChange,onAction}){
         {choice('inspector-alignment','对齐',item.alignment||'left',[[ 'left','左对齐'],['center','居中'],['right','右对齐']])}
         {field('inspector-text-color','文字颜色',item.color||'#30463d','color')}
       </div>
-      {field('inspector-font-name','指定字体',item.fontName||'','text',{placeholder:'留空使用上方字体'})}
       <div className="editor-inspector-checks">{check('inspector-bold','粗体',item.bold)}{check('inspector-italic','斜体',item.italic)}
         {check('inspector-underline','下划线',item.underline)}{check('inspector-strikethrough','删除线',item.strikethrough)}</div>
-      <div className="form-grid">
-        {field('inspector-letter-spacing','字距',item.letterSpacing??0,'number',{min:-5,max:30,step:.5})}
-        {field('inspector-line-spacing','行距',item.lineSpacing??0,'number',{min:0,max:80,step:.5})}
-        {field('inspector-paragraph-spacing','段距',item.paragraphSpacing??0,'number',{min:0,max:80,step:.5})}
-        {field('inspector-fixed-line-height','固定行高',item.fixedLineHeight??'','number',{min:5,max:400,step:.5,placeholder:'自动'})}
-      </div>
+      <details className="editor-inspector-geometry"><summary>字距与段落</summary>
+        {field('inspector-letter-spacing','字距',item.letterSpacing??0,'range',{min:-5,max:30,step:.5})}
+        {field('inspector-line-spacing','行距',item.lineSpacing??0,'range',{min:0,max:80,step:.5})}
+        {field('inspector-paragraph-spacing','段距',item.paragraphSpacing??0,'range',{min:0,max:80,step:.5})}
+        {choice('inspector-fixed-line-height','行高',item.fixedLineHeight??'',[
+          ['','自动'],...([1,1.2,1.5,2].map(ratio=>[Math.round((item.fontSize||40)*ratio),`${ratio} 倍`]))])}
+        {field('inspector-font-name','指定字体',item.fontName||'','text',{placeholder:'留空使用上方字体'})}
+      </details>
     </>:null}
     {selected.kind==='shape'?<>
       <h3>图形外观</h3>
@@ -1084,7 +1112,7 @@ function EditorInspector({selected,draft,asset,format,onChange,onAction}){
         </div>)}</div>:<div className="form-grid">
         {field('inspector-fill','填充颜色',item.fill||'#ffffff','color')}
         {field('inspector-stroke','描边颜色',item.stroke||'#547da4','color')}
-        {field('inspector-line-width','描边粗细',item.lineWidth??0,'number',{min:0,max:30,step:.5})}
+        {field('inspector-line-width','描边粗细',item.lineWidth??0,'range',{min:0,max:30,step:.5})}
         {choice('inspector-stroke-dash','线型',item.strokeDash||'solid',[[ 'solid','实线'],['dash','虚线'],['dot','点线']])}
         {field('inspector-fill-opacity','填充透明度',item.fillOpacity??1,'range',{min:0,max:1,step:.05})}
         {field('inspector-stroke-opacity','描边透明度',item.strokeOpacity??1,'range',{min:0,max:1,step:.05})}
@@ -1095,12 +1123,8 @@ function EditorInspector({selected,draft,asset,format,onChange,onAction}){
       {item.cropRect?<p className="muted">已取用原素材的 {Math.round(item.cropRect.width*100)}% × {Math.round(item.cropRect.height*100)}% 区域；移动和旋转不会改变裁片。</p>:null}
       {item.materialMask?<p className="muted">已保留 AI 创作的裁边或镂空工艺。</p>:null}
       {check('inspector-flipped','左右镜像',item.isFlippedHorizontally)}
-      <details className="editor-inspector-geometry"><summary>精确编辑裁片与工艺</summary>
-        <p className="muted">范围使用原素材的 0–1 坐标。应用时会校验实物尺寸、库存与裁片是否重叠。</p>
-        <textarea key={item.id+'-geometry'} ref={geometryInput} rows={5} aria-label="素材裁片与工艺数据"
-          defaultValue={JSON.stringify({cropRect:item.cropRect||null,materialMask:item.materialMask||null,
-            craftDisplaySlices:item.craftDisplaySlices||null},null,2)}/>
-        <button type="button" className="btn mini" onClick={()=>applyGeometry('inspector-material-geometry',geometryInput)}>应用裁片与工艺</button>
+      <details className="editor-inspector-geometry"><summary>调整裁片范围</summary>
+        <MaterialCropControls item={item} record={asset(item.assetID)} onApply={applyGeometry}/>
         {geometryError?<small role="status">{geometryError}</small>:null}
       </details>
     </>:null}
@@ -1108,13 +1132,11 @@ function EditorInspector({selected,draft,asset,format,onChange,onAction}){
     <div className="form-grid">{field('inspector-opacity','整体透明度',item.opacity??1,'range',{min:0,max:1,step:.05})}
       {choice('inspector-blend-mode','叠加方式',item.blendMode||'normal',[[ 'normal','正常'],['multiply','正片叠底']])}</div>
     <div className="editor-inspector-mask">{item.vectorMask?<p className="muted">矢量蒙版：{item.vectorMask.outer?.length||0} 个外轮廓点、{item.vectorMask.holes?.length||0} 个镂空区域</p>:null}
-      <details className="editor-inspector-geometry"><summary>{item.vectorMask?'编辑':'添加'}矢量蒙版</summary>
-        <p className="muted">轮廓与镂空使用 0–1 坐标。</p>
-        <textarea key={item.id+'-mask'} ref={maskInput} rows={4} aria-label="矢量蒙版数据"
-          defaultValue={JSON.stringify(item.vectorMask||null,null,2)}/>
-        <div className="actions"><button type="button" className="btn mini" onClick={()=>{if(maskInput.current)maskInput.current.value=JSON.stringify({outer:[[.05,.05],[.95,.05],[.95,.95],[.05,.95]],holes:[]});}}>矩形</button>
-          <button type="button" className="btn mini" onClick={()=>{if(maskInput.current)maskInput.current.value=JSON.stringify({outer:Array.from({length:48},(_,index)=>{const angle=index*Math.PI/24;return [.5+.46*Math.cos(angle),.5+.46*Math.sin(angle)];}),holes:[]});}}>椭圆</button></div>
-        <button type="button" className="btn mini" onClick={()=>applyGeometry('inspector-vector-mask',maskInput)}>应用蒙版</button>
+      <details className="editor-inspector-geometry"><summary>{item.vectorMask?'更换':'添加'}蒙版形状</summary>
+        <div className="actions"><button type="button" className="btn mini" onClick={()=>applyGeometry('inspector-vector-mask',
+          {outer:[[.05,.05],[.95,.05],[.95,.95],[.05,.95]],holes:[]})}>矩形</button>
+          <button type="button" className="btn mini" onClick={()=>applyGeometry('inspector-vector-mask',
+            {outer:Array.from({length:48},(_,index)=>{const angle=index*Math.PI/24;return [.5+.46*Math.cos(angle),.5+.46*Math.sin(angle)];}),holes:[]})}>椭圆</button></div>
         {geometryError?<small role="status">{geometryError}</small>:null}
       </details>{item.vectorMask?button('fabric-remove-vector-mask','移除蒙版'):null}</div>
     <div className="actions">{button('duplicate','复制')}{button('flip','镜像')}
@@ -1161,10 +1183,14 @@ function FabricSelectedActions({bounds,draft,onAction}){
     let currentBounds=bounds,frame=0;
     const place=()=>{
       const rect=canvas.getBoundingClientRect();
-      const center=rect.left+(currentBounds.x+currentBounds.width/2)*rect.width/draft.canvas.width;
-      const edge=rect.top+currentBounds.y*rect.height/draft.canvas.height;
-      setPosition({left:Math.max(83,Math.min(innerWidth-83,center)),
-        top:Math.max(112,Math.min(innerHeight-52,edge-46))});
+      const selected=editorFabricCanvases.get(draft.id)?.getActiveObject();
+      const corners=selected?.calcACoords?.();
+      const anchor=corners?.tl&&corners?.tr?{x:(corners.tl.x+corners.tr.x)/2,
+        y:(corners.tl.y+corners.tr.y)/2}:{x:currentBounds.x+currentBounds.width/2,y:currentBounds.y};
+      const center=rect.left+anchor.x*rect.width/draft.canvas.width;
+      const edge=rect.top+anchor.y*rect.height/draft.canvas.height;
+      setPosition({left:Math.max(68,Math.min(innerWidth-68,center)),
+        top:Math.max(58,Math.min(innerHeight-50,edge-17))});
     };
     const move=event=>{
       currentBounds=event.detail.bounds;
@@ -1183,9 +1209,9 @@ function FabricSelectedActions({bounds,draft,onAction}){
   },[bounds?.x,bounds?.y,bounds?.width,bounds?.height,draft.id,draft.canvas.width,draft.canvas.height]);
   if(!position)return null;
   return createPortal(<div className="fabric-selected-actions" style={position} aria-label="选中对象操作">
-    <button type="button" aria-label="复制对象" onClick={()=>onAction('duplicate')}>⊞</button>
-    <button type="button" aria-label="删除对象" onClick={()=>onAction('delete-object')}>♜</button>
-    <button type="button" aria-label="编辑对象" onClick={()=>onAction('fabric-inspector-open')}>☷</button>
+    <button type="button" aria-label="复制对象" onClick={()=>onAction('duplicate')}>⧉</button>
+    <button type="button" aria-label="编辑对象" onClick={()=>onAction('fabric-inspector-open')}>✎</button>
+    <button type="button" aria-label="删除对象" onClick={()=>onAction('delete-object')}>×</button>
   </div>,document.body);
 }
 
@@ -1193,7 +1219,7 @@ function FabricSelectedActions({bounds,draft,onAction}){
 const editorFabricCanvases=new Map();
 
 export function EditorPage({state,draft,editorEntry,asset,source,format,
-  hasAIReport,onAction,onInspectorChange,onTitleCommit,onDraftSelect,onAIAction,onAIOpen,onAIPromptChange,
+  hasAIReport,onAction,onInspectorChange,onTitleCommit,onAIAction,onAIOpen,onAIPromptChange,
   sceneRevision,onFabricSelection,onFabricBeforeChange,onFabricChange,onFabricIssue,
   onFabricViewportChange,loadFabricAsset,materials=[]}){
   const project=state.activeProject;
@@ -1273,11 +1299,7 @@ export function EditorPage({state,draft,editorEntry,asset,source,format,
       <button type="button" aria-label="关闭对象设置" onClick={()=>onAction('fabric-inspector-close')}>×</button></div>
       <div className="inspector-island" style={{display:'contents'}}><EditorInspector selected={selected}
         draft={draft} asset={asset} format={format} onChange={onInspectorChange} onAction={onAction}/></div>
-      <hr/><label>方案<select id="draft-select" defaultValue={draft.id}
-        onChange={event=>onDraftSelect(event.target.value)}>{project.drafts.map((entry,index)=><option key={entry.id} value={entry.id}>方案 {index+1} · {entry.style}</option>)}</select></label>
-      <button className="btn mini" data-act="save-archive">保存手动存档</button><div className="stack" style={{marginTop:12}}>
-        {(project.manualArchives||[]).slice(-5).reverse().map(archive=><button key={archive.id} className="btn mini" data-act="restore-archive" data-id={archive.id}>{new Date(archive.date).toLocaleString()}</button>)}
-      </div></aside></div>
+      </aside></div>
     {state.aiPanel?<div className="editor-ai-island" style={{display:'contents'}}>
       <EditorAIPanel state={state} draft={draft} asset={asset} hasReport={hasAIReport}
         onAction={onAIAction} onPromptChange={onAIPromptChange}/></div>:null}

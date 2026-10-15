@@ -6,9 +6,10 @@ import {browserHarness} from './browser-harness.mjs';
 
 const directory=process.env.SHIYE_RESPONSIVE_SCREENSHOTS||'/tmp/shiye-responsive-review';
 await mkdir(directory,{recursive:true});
-const {command,evaluate,click,wait,sleep}=await browserHarness(
+const browser=await browserHarness(
   'shiye-responsive-review',process.env.SHIYE_TEST_URL||'http://127.0.0.1:5173'
 );
+const {command,evaluate,click,wait,sleep}=browser;
 const sizes=[[320,640],[390,844],[430,932],[700,1024],[768,1024],[1024,768],[1440,900],[2560,1440]];
 const report=[];
 const choose=(scope,label)=>evaluate(
@@ -160,4 +161,6 @@ try{
   console.error('Responsive visual regression failed:',error);
   console.error('Page state:',await evaluate('({route:document.querySelector("#view")?.dataset.renderedRoute,head:document.querySelector(".view-head")?.textContent?.slice(0,200),body:document.body.textContent.slice(0,300),errors:document.querySelector("#toast")?.textContent})').catch(()=>null));
   throw error;
+}finally{
+  await browser.close();
 }

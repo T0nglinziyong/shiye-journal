@@ -32,9 +32,24 @@ try{
   const history=await evaluate(`({width:document.querySelector('.swift-history-popover').getBoundingClientRect().width,
     height:document.querySelector('.swift-history-popover').getBoundingClientRect().height})`);
   assert.ok(history.width<=332&&history.height<=400,JSON.stringify(history));
+  assert.equal(await evaluate(`(()=>{const text=document.querySelector('.swift-history-popover').textContent;
+    return text.includes('新方案')||text.includes('手动存档')})()`),false,
+    'History no longer offers scheme or manual archive actions');
   await click('[aria-label="历史记录"]');
+  await click('[data-val="text"]');
+  assert.equal(await evaluate(`(()=>{const toolbar=document.querySelector('.canvas-text-format');
+    return getComputedStyle(toolbar).backgroundColor==='rgba(0, 0, 0, 0)'&&
+      !!toolbar.querySelector('input[aria-label="字号"][type=number]')})()`),true,
+    'Mobile text controls expose a direct size input without a pale background');
   await click('[data-val="shape"]','.swift-shape-picker');
   await click('[data-shape-kind="rectangle"]','.fabric-selected-actions');
+  await click('[aria-label="编辑对象"]','.show-inspector');
+  const inspector=await evaluate(`document.querySelector('.editor-inspector').getBoundingClientRect().toJSON()`);
+  assert.ok(inspector.left>=-1&&inspector.right<=391,
+    'Object settings fit the mobile viewport: '+JSON.stringify(inspector));
+  assert.equal(await evaluate('!!document.querySelector("#draft-select,[data-act=save-archive]")'),false,
+    'Object settings no longer show scheme and archive controls');
+  await click('[aria-label="关闭对象设置"]');
   const points=await evaluate(`(()=>{const r=document.querySelector('.upper-canvas').getBoundingClientRect();
     return {shape:{x:r.left+r.width*.5,y:r.top+r.height*.5},
       blank:{x:r.left+r.width*.08,y:r.top+r.height*.08}}})()`);
@@ -74,8 +89,9 @@ try{
     const project=await new Promise(resolve=>{const q=db.transaction('projects').objectStore('projects').getAll();q.onsuccess=()=>resolve(q.result.at(-1))});db.close();
     const draft=project.drafts[0],node=draft.layers.findLast(item=>item.type==='shape');
     const rect=document.querySelector('.upper-canvas').getBoundingClientRect(),page=document.querySelector('#canvas-page').getBoundingClientRect(),scale=rect.width/draft.canvas.width;
-    return {x:rect.left+(node.x+node.width/2+20)*scale,y:rect.top+(node.y+node.height/2+20)*scale,
+    return {x:rect.left+(node.x+node.width/2+30)*scale,y:rect.top+(node.y+node.height/2+30)*scale,
       pageLeft:page.left,angle:node.rotation||0};})()`);
+  const actionBeforeRotate=await evaluate('document.querySelector(".fabric-selected-actions")?.getBoundingClientRect().toJSON()');
   const touch=(id,x,y)=>({id,x,y,radiusX:1,radiusY:1,force:.5});
   await command('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[touch(1,rotationTouch.x,rotationTouch.y)]});
   for(let step=1;step<=4;step++)await command('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[
@@ -86,9 +102,30 @@ try{
     const p=await new Promise(resolve=>{const q=db.transaction('projects').objectStore('projects').getAll();q.onsuccess=()=>resolve(q.result.at(-1))});db.close();
     return p.drafts[0].layers.findLast(item=>item.type==='shape').rotation||0;})()`);
   assert.ok(Math.abs(rotated-rotationTouch.angle)>3,'Touching the bottom-right control must rotate the object: '+JSON.stringify({rotated,rotationTouch,pageLeft:await evaluate(`document.querySelector('#canvas-page').getBoundingClientRect().left`)}));
+  const actionAfterRotate=await evaluate('document.querySelector(".fabric-selected-actions")?.getBoundingClientRect().toJSON()');
+  assert.ok(Math.hypot(actionAfterRotate.left-actionBeforeRotate.left,actionAfterRotate.top-actionBeforeRotate.top)>2,
+    'Action buttons stay attached to the rotated selection edge');
   assert.ok(Math.abs(await evaluate(`document.querySelector('#canvas-page').getBoundingClientRect().left`)-rotationTouch.pageLeft)<2,
     'Touch rotation must not move the page');
   await wait('.fabric-selected-actions');
+  const corner=await evaluate(`(async()=>{const db=await new Promise(resolve=>{const q=indexedDB.open('shiye-pwa-full-v1');q.onsuccess=()=>resolve(q.result)});
+    const p=await new Promise(resolve=>{const q=db.transaction('projects').objectStore('projects').getAll();q.onsuccess=()=>resolve(q.result.at(-1))});db.close();
+    const draft=p.drafts[0],node=draft.layers.findLast(item=>item.type==='shape');
+    const rect=document.querySelector('.upper-canvas').getBoundingClientRect(),scale=rect.width/draft.canvas.width;
+    const angle=(node.rotation||0)*Math.PI/180,dx=Math.cos(angle)*node.width/2-Math.sin(angle)*node.height/2,
+      dy=Math.sin(angle)*node.width/2+Math.cos(angle)*node.height/2;
+    return {x:rect.left+(node.x+dx)*scale,y:rect.top+(node.y+dy)*scale,
+      moveX:dx/Math.hypot(dx,dy)*5,moveY:dy/Math.hypot(dx,dy)*5,width:node.width,height:node.height};})()`);
+  await command('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[touch(4,corner.x,corner.y)]});
+  for(let step=1;step<=5;step++)await command('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[
+    touch(4,corner.x+corner.moveX*step,corner.y+corner.moveY*step)]});
+  await command('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+  await sleep(700);
+  const cornerSize=await evaluate(`(async()=>{const db=await new Promise(resolve=>{const q=indexedDB.open('shiye-pwa-full-v1');q.onsuccess=()=>resolve(q.result)});
+    const p=await new Promise(resolve=>{const q=db.transaction('projects').objectStore('projects').getAll();q.onsuccess=()=>resolve(q.result.at(-1))});db.close();
+    const node=p.drafts[0].layers.findLast(item=>item.type==='shape');return {width:node.width,height:node.height};})()`);
+  assert.ok(cornerSize.width>corner.width+3&&cornerSize.height>corner.height+3,
+    'Bottom-right corner must resize both dimensions: '+JSON.stringify({corner,cornerSize}));
   const resize=await evaluate(`(async()=>{const db=await new Promise(resolve=>{const q=indexedDB.open('shiye-pwa-full-v1');q.onsuccess=()=>resolve(q.result)});
     const p=await new Promise(resolve=>{const q=db.transaction('projects').objectStore('projects').getAll();q.onsuccess=()=>resolve(q.result.at(-1))});db.close();
     const draft=p.drafts[0],node=draft.layers.findLast(item=>item.type==='shape');

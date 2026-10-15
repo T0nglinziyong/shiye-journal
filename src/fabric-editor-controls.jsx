@@ -6,7 +6,6 @@ import {commonShapes,advancedShapes,configureShape,shapeThumbnailSVG} from './ed
 import {primitive} from './domain.js';
 import {iconMarkup} from './icons.js';
 import {adjacentFontSize} from './canvas-control-behavior.js';
-import {historyTitle} from './project-history.js';
 
 const toolIcons={select:'cursor',pen:'pen',eraser:'eraser',highlighter:'marker',lasso:'lasso',text:'text',shape:'shape',material:'material',layers:'layers',paper:'paper'};
 const labels={select:'选择',pen:'笔',eraser:'橡皮擦',highlighter:'荧光笔',lasso:'套索选择',text:'文字',shape:'图形',material:'素材',layers:'图层',paper:'画布背景'};
@@ -74,44 +73,33 @@ function ShapePicker({draft,onPick}){
 function MaterialPicker({draft,materials,series,source,onPick}){
   const [tab,setTab]=useState(draft.items.some(item=>!item.isParked)?'used':'all');
   const [query,setQuery]=useState(''),[group,setGroup]=useState('all');
-  const [kind,setKind]=useState('all'),[status,setStatus]=useState('all');
-  const [sortBasis,setSortBasis]=useState('time'),[sortOrder,setSortOrder]=useState('desc'),[shown,setShown]=useState(40);
+  const [kind,setKind]=useState('all'),[shown,setShown]=useState(40);
   const byID=useMemo(()=>new Map(materials.map(asset=>[asset.id,asset])),[materials]);
+  const matches=asset=>!!asset&&
+    (group==='all'||(group==='none'?!asset.seriesID:asset.seriesID===group))&&
+    (kind==='all'||asset.kind===kind)&&
+    (!query||asset.title?.toLocaleLowerCase().includes(query.toLocaleLowerCase()));
   const rows=useMemo(()=>{
     if(tab==='used'||tab==='standby')return draft.items.filter(item=>!!item.isParked===(tab==='standby'))
       .map(item=>({asset:byID.get(item.assetID),item}))
-      .filter(row=>!!row.asset&&(!query||row.asset.title?.toLocaleLowerCase().includes(query.toLocaleLowerCase())));
-    const list=materials.filter(asset=>!asset.isProjectInternal&&
-      (group==='all'||(group==='none'?!asset.seriesID:asset.seriesID===group))&&
-      (kind==='all'||asset.kind===kind)&&
-      (status==='all'||(status==='ready'?asset.reviewStatus==='ready':status==='pendingReview'?asset.reviewStatus!=='ready':
-        status==='used'?asset.usageStatus==='used':status==='unused'?asset.usageStatus!=='used':
-        status==='inside'?!!asset.seriesID:status==='outside'?!asset.seriesID:status==='favorite'?!!asset.isFavorite:true))&&
-      (!query||asset.title?.toLocaleLowerCase().includes(query.toLocaleLowerCase())));
-    list.sort((a,b)=>sortBasis==='name'?a.title.localeCompare(b.title,'zh-CN')*(sortOrder==='asc'?1:-1):
-      (Date.parse(a.createdAt||0)-Date.parse(b.createdAt||0))*(sortOrder==='asc'?1:-1));
+      .filter(row=>matches(row.asset));
+    const list=materials.filter(asset=>!asset.isProjectInternal&&matches(asset));
+    list.sort((a,b)=>Date.parse(b.createdAt||0)-Date.parse(a.createdAt||0));
     return list.map(asset=>({asset}));
-  },[tab,draft.items,materials,byID,group,kind,status,sortBasis,sortOrder,query]);
-  useEffect(()=>setShown(40),[tab,query,group,kind,status,sortBasis,sortOrder]);
+  },[tab,draft.items,materials,byID,group,kind,query]);
+  useEffect(()=>setShown(40),[tab,query,group,kind]);
   return <><div className="swift-segments">
     {[['used','已使用素材'],['standby','备选素材'],['all','所有素材']].map(([id,label])=><button
       key={id} type="button" className={tab===id?'selected':''} onClick={()=>setTab(id)}>{label}</button>)}
   </div><input className="canvas-material-search" type="search" value={query}
     onChange={event=>setQuery(event.target.value)} placeholder="搜索素材" aria-label="搜索可用素材"/>
-    {tab==='all'?<div className="canvas-material-filters">
+    <div className="canvas-material-filters">
     <select aria-label="选择系列" value={group} onChange={event=>setGroup(event.target.value)}>
       <option value="all">全部系列</option><option value="none">系列外</option>
       {series.map(item=><option key={item.id} value={item.id}>{item.title}</option>)}
     </select><select aria-label="过滤素材类型" value={kind} onChange={event=>setKind(event.target.value)}>
       {[['all','全部类型'],...materialKinds].map(([id,label])=><option key={id} value={id}>{label}</option>)}
-    </select><select aria-label="素材状态" value={status} onChange={event=>setStatus(event.target.value)}>
-      {[['all','全部状态'],['ready','已整理'],['pendingReview','未整理'],['used','已使用'],['unused','未使用'],['inside','系列中'],['outside','系列外'],['favorite','已收藏']]
-        .map(([id,label])=><option key={id} value={id}>{label}</option>)}
-    </select><select aria-label="排序依据" value={sortBasis} onChange={event=>setSortBasis(event.target.value)}>
-      {[['time','最近添加'],['name','名称']].map(([id,label])=><option key={id} value={id}>{label}</option>)}
-    </select><select aria-label="排序顺序" value={sortOrder} onChange={event=>setSortOrder(event.target.value)}>
-      {[['desc','降序'],['asc','升序']].map(([id,label])=><option key={id} value={id}>{label}</option>)}
-    </select></div>:null}
+    </select></div>
     <div className="canvas-picker-grid" onScroll={event=>{
       const node=event.currentTarget;
       if(node.scrollHeight-node.scrollTop-node.clientHeight<150)setShown(count=>Math.min(rows.length,count+40));
@@ -164,7 +152,9 @@ function LayerTree({draft,state,materials,onAction}){
         data-scene-node={node.id} role="treeitem" aria-level={level}
         aria-expanded={node.type==='group'?open:undefined}>
         <button className="scene-layer-expand" type="button" disabled={node.type!=='group'}
-          aria-label={open?'折叠组合':'展开组合'} onClick={toggle}>{node.type==='group'?(open?'▾':'▸'):''}</button>
+          aria-label={open?'折叠组合':'展开组合'} aria-expanded={node.type==='group'?open:undefined}
+          onPointerUp={event=>touchActivate(event,toggle)}
+          onClick={event=>clickActivate(event,toggle)}>{node.type==='group'?(open?'▾':'▸'):''}</button>
         <button className="scene-layer-pick" data-layer-pick type="button" aria-current={selected.has(node.id)}
           onPointerUp={event=>touchActivate(event,()=>onAction('fabric-layer-select',{id:node.id,add:multi}))}
           onClick={event=>clickActivate(event,()=>onAction('fabric-layer-select',{id:node.id,add:multi||event.shiftKey||event.ctrlKey||event.metaKey}))}>
@@ -215,6 +205,19 @@ function LayerTree({draft,state,materials,onAction}){
         {draft.layers.length} 个顶层图层 · 拖动把手改变层级
         {inkCount?` · 笔迹 ${inkCount} 笔（可在此选择）`:''}</p>
   </div>;
+}
+
+function FontSizeInput({value,onCommit}){
+  const [input,setInput]=useState(String(Math.round(value||40)));
+  useEffect(()=>setInput(String(Math.round(value||40))),[value]);
+  const commit=raw=>{
+    const number=Number(raw);
+    if(raw.trim()&&Number.isFinite(number)&&number>=5&&number<=400)onCommit(number);
+    else setInput(String(Math.round(value||40)));
+  };
+  return <input type="number" aria-label="字号" min="5" max="400" step="1" value={input}
+    onChange={event=>setInput(event.target.value)} onBlur={event=>commit(event.currentTarget.value)}
+    onKeyDown={event=>{if(event.key==='Enter')event.currentTarget.blur();}}/>;
 }
 
 export function FabricEditorToolbar({state,draft,materials,source,selected,onInspectorChange,onAction}){
@@ -286,7 +289,8 @@ export function FabricEditorToolbar({state,draft,materials,source,selected,onIns
           {['serif','sans','rounded','hand'].map((id,index)=><option key={id} value={id}>{['宋体','黑体','圆体','手写体'][index]}</option>)}
         </select><div className="canvas-font-size-stepper" aria-label="调整字号">
           <button type="button" className="font-step" aria-label="减小字号" onClick={()=>textProperty('fontSize',adjacentFontSize(text.fontSize,-1))}>‹</button>
-          <output>{Math.round(text.fontSize||40)}</output>
+          <FontSizeInput key={selectedNode?.id||'new-text'} value={text.fontSize||40}
+            onCommit={value=>textProperty('fontSize',value)}/>
           <button type="button" className="font-step" aria-label="增大字号" onClick={()=>textProperty('fontSize',adjacentFontSize(text.fontSize,1))}>›</button>
         </div></div><button type="button" aria-label="段落设置" data-popover-anchor="text-paragraph" onClick={event=>setMenu({kind:'text-paragraph',anchor:event.currentTarget})}>☷</button>
         <input type="color" aria-label="文字颜色" value={text.color||'#30463d'}
@@ -399,17 +403,11 @@ export function FabricHeaderMenu({kind,project,onAction,onAIOpen}){
       className={kind==='history'?'swift-history-popover':'swift-menu'}
       width={kind==='history'?320:220} height={kind==='history'?390:360}>
       {kind==='history'?<div className="canvas-history-list">
-        {project.drafts.map((draft,index)=>historyRow(historyTitle(draft,index),
+        {project.drafts.map((draft,index)=>historyRow(draft.title&&!/^方案\s*\d+$/.test(draft.title)?draft.title:`历史版本 ${index+1}`,
           ()=>run('fabric-history-restore-draft',draft.id),
           ()=>onAction('fabric-history-rename-draft',draft.id),
           ()=>run('fabric-history-delete-draft',draft.id),draft.id))}
-        {(project.manualArchives||[]).slice().reverse().map(archive=>historyRow(
-          archive.title||'存档 '+new Date(archive.date).toLocaleString(),
-          ()=>run('restore-archive',archive.id),
-          ()=>onAction('fabric-history-rename-archive',archive.id),
-          ()=>run('fabric-history-delete-archive',archive.id),archive.id))}
-        <hr/><button type="button" onClick={()=>run('new-draft')}>新方案</button>
-        <button type="button" onClick={()=>run('save-archive')}>保存手动存档</button>
+        <hr/>
         <button type="button" data-editor-ai="true" onClick={()=>{close();onAIOpen?.();}}>AI 创作</button>
       </div>:<div className="stack">{entries.map(([action,label])=><button key={action} type="button"
         onClick={()=>run(action)}>{label}</button>)}</div>}

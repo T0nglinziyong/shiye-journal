@@ -18,10 +18,10 @@ export function restoreHistoryDraft(project,id){
   project.drafts[project.drafts.indexOf(target)]=restored;
   project.activeDraftID=id;return restored;
 }
-export function historyTitle(entry,index=0){return entry.title?.trim()||(index===0?'最初方案':'方案 '+(index+1));}
+export function historyTitle(entry,index=0){return entry.title?.trim()||(index===0?'最初版本':'历史版本 '+(index+1));}
 export function renameHistory(entry,title){const value=String(title??'').trim();if(!value)throw Error('名称不能为空');entry.title=value.slice(0,80);}
 export function deleteDraft(project,id){
-  if(project.drafts.length<=1)throw Error('至少保留一个方案');
+  if(project.drafts.length<=1)throw Error('至少保留一个历史版本');
   const index=project.drafts.findIndex(d=>d.id===id);if(index<0)return;
   project.drafts.splice(index,1);
   if(project.draftHistorySnapshots)delete project.draftHistorySnapshots[id];

@@ -1,26 +1,28 @@
 /* Mobile editor fixes: tight, keyboard-free typography controls. */
 .editing .canvas-context-tools .canvas-text-format{
   display:inline-flex;flex:none;align-items:center;gap:3px;
-  height:40px;padding:0 3px;border-radius:9px;background:#f5f7f2;
+  height:40px;padding:0 3px;background:transparent;
 }
 .editing .canvas-context-tools .canvas-text-format>select{
   width:70px;min-width:66px;max-width:76px;min-height:36px;
-  padding:3px 2px;font-size:14px;background:transparent;
+  padding:3px 2px;font-size:14px;background:transparent;border:0;box-shadow:none;
 }
 .editing .canvas-font-size-stepper{
   display:inline-flex;flex:none;align-items:center;justify-content:center;
-  gap:0;height:36px;border:1px solid #d9e3d8;border-radius:8px;
-  background:#fff;white-space:nowrap;
+  gap:0;height:36px;border:0;background:transparent;white-space:nowrap;
 }
 .editing .canvas-font-size-stepper button.font-step{
   display:grid;place-items:center;width:30px;min-width:30px;
   min-height:34px;padding:0;font-size:25px;font-weight:500;
   touch-action:manipulation;
 }
-.editing .canvas-font-size-stepper output{
-  display:block;min-width:27px;text-align:center;font-size:14px;
-  color:#3b5141;font-variant-numeric:tabular-nums;
+.editing .canvas-font-size-stepper input[type=number]{
+  display:block;width:42px;min-width:42px;min-height:32px;padding:0 2px;
+  text-align:center;font-size:14px;color:#3b5141;font-variant-numeric:tabular-nums;
+  border:0;background:transparent;box-shadow:none;appearance:textfield;
 }
+.editing .canvas-font-size-stepper input::-webkit-inner-spin-button,
+.editing .canvas-font-size-stepper input::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
 .editing .canvas-context-tools .shape-quick-color{
   display:inline-flex;align-items:center;gap:3px;flex:none;
   font-size:12px;color:#47604b;white-space:nowrap;
@@ -146,6 +148,10 @@
  display:flex;gap:5px;align-items:center;text-align:left;overflow:hidden;
  justify-content:flex-start;padding:0 1px;white-space:nowrap;
 }
+.scene-layer-tree-popover .scene-layer-node>button.scene-layer-expand{
+ display:grid;grid-template-columns:1fr;place-items:center;height:30px;overflow:visible;
+ font-size:15px;font-weight:700;line-height:1;
+}
 .scene-layer-tree-popover .scene-layer-pick>span:last-child{
  display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
  font-size:12px;font-weight:600;min-width:0;
@@ -156,10 +162,35 @@
 }
 .scene-layer-tree-popover .scene-layer-node>button.scene-layer-grip{
  touch-action:none;-webkit-user-select:none;user-select:none;
- display:grid;place-items:center;padding:0;background:#e7efe7;border-radius:6px;cursor:grab;
+ display:flex;align-items:center;justify-content:center;padding:0;background:#e7efe7;border-radius:6px;cursor:grab;
 }
-.scene-layer-grip-mark{display:block;width:12px;height:10px;background:linear-gradient(to bottom,
+.scene-layer-grip-mark{display:block;flex:none;width:12px;height:10px;background:linear-gradient(to bottom,
  #52705a 0 1px,transparent 1px 4px,#52705a 4px 5px,transparent 5px 9px,#52705a 9px 10px)}
+.swift-material-picker .popover-content{gap:4px}
+.swift-material-picker .canvas-material-search{height:36px;min-height:36px;margin:1px 0 0}
+.swift-material-picker .canvas-material-filters{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;padding:0 0 3px}
+.swift-material-picker .canvas-material-filters select{min-width:0;width:100%;height:36px;min-height:36px}
+.fabric-selected-actions{
+ transform:translate(-50%,-50%);gap:2px;padding:2px;
+ border:1px solid #416c59;border-radius:9px;background:#fffefa;
+ box-shadow:0 1px 5px #243b2c3d;backdrop-filter:none;
+}
+.fabric-selected-actions button{display:grid;place-items:center;min-width:30px;width:30px;height:28px;
+ border-radius:6px;font-size:19px;line-height:1}
+.fabric-selected-actions button:hover,.fabric-selected-actions button:focus-visible{background:#e6f0e8}
+.editor-inspector-range>div,.editor-crop-slider{display:grid;grid-template-columns:auto minmax(0,1fr) auto;
+ align-items:center;gap:7px;margin-top:5px;min-width:0}
+.editor-inspector-range input[type=range],.editor-crop-slider input[type=range]{
+ width:100%;min-width:0;margin:0;accent-color:#52634b;touch-action:none}
+.editor-inspector-range button,.editor-crop-slider button{min-height:30px;padding:3px 6px;
+ border:1px solid #d5dfd4;border-radius:8px;background:#f8faf5;color:#405849;font-size:12px}
+.editor-crop-controls{display:grid;gap:9px;margin-top:9px}
+.editor-crop-controls>label{min-width:0}
+.cutout-bounded-slider{display:grid;grid-template-columns:auto minmax(0,1fr) auto;
+ align-items:center;gap:8px;min-width:0;margin-top:5px}
+.cutout-bounded-slider input[type=range]{width:100%;min-width:0;margin:0!important;touch-action:none}
+.cutout-bounded-slider button{min-height:30px;padding:3px 7px;border:1px solid #d5dfd4;
+ border-radius:8px;background:#f8faf5;color:#405849;font-size:12px}
 .scene-layer-tree-popover .scene-layer-node.dragging{background:#e2eee3;transform:none;opacity:.84}
 .scene-layer-tree-popover .scene-layer-node.drop-target{box-shadow:inset 0 0 0 2px #59866b}
 .scene-layer-tree-popover .scene-layer-tree-status{font-size:11px;color:#6d806e;margin:6px 2px 0}

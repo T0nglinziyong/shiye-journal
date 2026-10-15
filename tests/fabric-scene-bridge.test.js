@@ -140,6 +140,9 @@ test('Fabric material edge controls resize its Scene placement and keep the sour
   assert.equal(object.lockScalingY,false);
   assert.equal(object.controls.ml.visible,true);
   assert.equal(object.controls.mr.visible,true);
+  assert.equal(object.controls.mt.visible,true);
+  assert.equal(object.controls.mb.visible,true);
+  assert.equal(object.controls.br.visible,true);
   assert.equal(object.controls.rotateBottomRight.visible,true);
   object.set({scaleX:object.scaleX*1.2});
   bridge.applyObject(node,object);

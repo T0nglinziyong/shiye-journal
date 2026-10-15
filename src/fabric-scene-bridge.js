@@ -14,7 +14,21 @@ const ringPath=(points,width,height)=>points.map(([x,y],index)=>
 // Fabric is the interactive projection. Scene v2 remains the persisted source
 // of truth, so an editor change never replaces the physical-data contract.
 export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=>null}={}){
-  const rotateControl=new fabric.Control({x:.5,y:.5,offsetX:20,offsetY:20,
+  const edgeHandle=horizontal=>(ctx,left,top,_style,object)=>{
+    ctx.save();ctx.translate(left,top);ctx.rotate((object.angle||0)*Math.PI/180);
+    ctx.fillStyle='#fffefa';ctx.strokeStyle='#416c59';ctx.lineWidth=1.5;
+    const width=horizontal?20:8,height=horizontal?8:20,radius=4;
+    ctx.beginPath();ctx.roundRect(-width/2,-height/2,width,height,radius);ctx.fill();ctx.stroke();
+    ctx.restore();
+  };
+  const cornerHandle=(ctx,left,top,_style,object)=>{
+    ctx.save();ctx.translate(left,top);ctx.rotate((object.angle||0)*Math.PI/180);
+    ctx.fillStyle='#fffefa';ctx.strokeStyle='#416c59';ctx.lineWidth=1.5;
+    ctx.beginPath();ctx.roundRect(-6,-6,12,12,3);ctx.fill();ctx.stroke();
+    ctx.beginPath();ctx.moveTo(-2,2);ctx.lineTo(3,-3);ctx.moveTo(0,-3);ctx.lineTo(3,-3);ctx.lineTo(3,0);ctx.stroke();
+    ctx.restore();
+  };
+  const rotateControl=new fabric.Control({x:.5,y:.5,offsetX:30,offsetY:30,
     actionName:'rotate',actionHandler:fabric.controlsUtils.rotationWithSnapping,
     cursorStyleHandler:fabric.controlsUtils.rotationStyleHandler,
     render(ctx,left,top){
@@ -24,9 +38,14 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
       ctx.restore();
     }});
   const configureControls=object=>{
-    object.controls={...object.controls,rotateBottomRight:rotateControl};
-    object.setControlsVisibility({tl:false,tr:false,bl:false,br:false,mtr:false,
-      ml:true,mr:true,mt:true,mb:true,rotateBottomRight:true});
+    const canScale=!object.lockScalingX&&!object.lockScalingY;
+    const controls={...object.controls};
+    for(const side of ['ml','mr','mt','mb'])controls[side]=new fabric.Control({
+      ...controls[side],render:edgeHandle(side==='mt'||side==='mb')});
+    controls.br=new fabric.Control({...controls.br,render:cornerHandle});
+    object.controls={...controls,rotateBottomRight:rotateControl};
+    object.setControlsVisibility({tl:false,tr:false,bl:false,br:canScale,mtr:false,
+      ml:canScale,mr:canScale,mt:canScale,mb:canScale,rotateBottomRight:true});
     object.set({cornerSize:14,touchCornerSize:32,transparentCorners:false,
       cornerColor:'#fffefa',cornerStrokeColor:'#416c59',borderColor:'#416c59'});
   };

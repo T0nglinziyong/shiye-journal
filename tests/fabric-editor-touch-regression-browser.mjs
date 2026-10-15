@@ -25,10 +25,17 @@ try{
   await wait('.upper-canvas');
   for(const [tool,title] of [['material','选择素材'],['layers','图层'],['shape','添加图形']]){
     await touch(`[data-val="${tool}"]`);assert.equal(await menu(),title,`${tool} opens at ${viewportWidth}px`);
-    if(tool==='material')assert.equal(await evaluate(`(()=>{const content=document.querySelector('.swift-material-picker .popover-content');
+    if(tool==='material'){
+      assert.equal(await evaluate(`(()=>{const content=document.querySelector('.swift-material-picker .popover-content');
       return content?.children[0]?.classList.contains('swift-segments')&&
         content?.children[1]?.classList.contains('canvas-material-search')})()`),true,
       'Material search follows tabs and precedes filters');
+      for(let index=1;index<=3;index++){
+        await click(`.swift-material-picker .swift-segments button:nth-child(${index})`);
+        assert.equal(await evaluate('document.querySelectorAll(".swift-material-picker .canvas-material-filters select").length'),2,
+          'Every material tab exposes series and type on one row');
+      }
+    }
     await sleep(250);assert.equal(await menu(),title,`${tool} remains open`);
     await touch(`[data-val="${tool}"]`);assert.equal(await menu(),null,`${tool} closes`);
     await touch(`[data-val="${tool}"]`);assert.equal(await menu(),title,`${tool} reopens`);
@@ -61,6 +68,12 @@ try{
   await touch('.scene-layer-tree-toolbar button:nth-child(2)');
   assert.equal(await evaluate(`document.querySelectorAll('.scene-layer-node[aria-expanded]').length`),1,
     'Multi-selected layers can be grouped');
+  await touch('.scene-layer-node[aria-expanded] .scene-layer-expand');
+  assert.equal(await evaluate('document.querySelectorAll(".scene-layer-children .scene-layer-node").length'),0,
+    'Touching the group arrow collapses the nested layers');
+  await touch('.scene-layer-node[aria-expanded] .scene-layer-expand');
+  assert.equal(await evaluate('document.querySelectorAll(".scene-layer-children .scene-layer-node").length'),2,
+    'Touching the group arrow again expands the nested layers');
   assert.deepEqual(browser.errors,[]);
   console.log('Touch toolbar dropdown and layer reorder passed');
 }finally{await browser.close();}

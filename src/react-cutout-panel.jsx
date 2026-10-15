@@ -1,6 +1,14 @@
 import React from 'react';
 
 const steps=[['rough','修补轮廓'],['recognition','边缘优化'],['final','调整外观']];
+function BoundedSlider({id,min,max,step=1,value,disabled=false,onChange}){
+  return <div className="cutout-bounded-slider">
+    <button type="button" aria-label={`${id}最小值`} disabled={disabled} onClick={()=>onChange(Number(min))}>最小</button>
+    <input id={id} type="range" min={min} max={max} step={step} value={value}
+      disabled={disabled} onChange={event=>onChange(Number(event.target.value))}/>
+    <button type="button" aria-label={`${id}最大值`} disabled={disabled} onClick={()=>onChange(Number(max))}>最大</button>
+  </div>;
+}
 function Toggle({id,label,description,checked,onChange}){
   return <label className="toggle-row setting-toggle"><span><b>{label}</b><small className="setting-help">{description}</small></span>
     <input id={id} type="checkbox" checked={!!checked} onChange={event=>onChange(event.target.checked)}/></label>;
@@ -10,8 +18,8 @@ function MaskTools({state,actions,note,extra}){
     <button type="button" data-repair="restore" className={state.restore?'selected':''} onClick={()=>actions.repair(true)}>补回</button>
     <button type="button" data-repair="erase" className={!state.restore?'selected':''} onClick={()=>actions.repair(false)}>擦除</button></div>
     <label>笔宽 · 短边的 <b id="brush-value">{Math.round(state.ratio*100)}%</b>
-      <input id="cutout-strength" type="range" min="0.5" max="20" step="0.5" value={state.ratio*100}
-        onChange={event=>actions.ratio(Number(event.target.value)/100)}/></label>
+      <BoundedSlider id="cutout-strength" min={.5} max={20} step={.5} value={state.ratio*100}
+        onChange={value=>actions.ratio(value/100)}/></label>
     <div className="cutout-brush-actions"><button type="button" id="cutout-undo" disabled={!state.history||state.busy} onClick={actions.undo}>↶ 撤销</button>
       <button type="button" id="cutout-refine" disabled={!state.lastStroke||state.busy} onClick={actions.refine}>细化涂抹</button></div>
     <details className="cutout-advanced cutout-mask-help"><summary>修补说明及恢复选项</summary>
@@ -63,11 +71,11 @@ export function CutoutPanel({state,actions,canvasRef}){
         extra={<button type="button" id="cutout-final-base" onClick={actions.restoreFinalBase}>恢复后处理结果</button>}/>
       <details className="cutout-advanced"><summary>角度与摆正</summary>
         <Toggle id="cutout-auto-straighten" label="自动摆正" description="根据最终 mask 估计素材主方向；只旋转输出，不改变透明边界。" checked={state.autoStraighten} onChange={actions.autoStraighten}/>
-        <label>显示角度 <b id="rotation-value">{state.rotation.toFixed(1)}°</b><input id="cutout-angle" type="range" min="-180" max="180" step=".1" value={state.rotation} onChange={event=>actions.angle(Number(event.target.value))}/></label>
+        <label>显示角度 <b id="rotation-value">{state.rotation.toFixed(1)}°</b><BoundedSlider id="cutout-angle" min={-180} max={180} step={.1} value={state.rotation} onChange={actions.angle}/></label>
         <div className="form-grid"><button type="button" id="cutout-left" onClick={()=>actions.rotate(-90)}>左转90°</button><button type="button" id="cutout-rotate" onClick={()=>actions.rotate(90)}>右转90°</button></div>
         <button type="button" id="cutout-align" onClick={actions.align}>重新按最终边缘摆正</button><button type="button" id="cutout-original-direction" onClick={actions.originalDirection}>恢复原方向</button>
       </details><h3>颜色</h3><div className="cutout-tabs">{[['original','原色'],['natural','自然增强'],['vivid','鲜明展示']].map(([id,label])=><button type="button" key={id} data-appearance={id} className={state.appearance===id?'selected':''} onClick={()=>actions.appearance(id)}>{label}</button>)}</div>
-      <label>增强强度 <b id="appearance-value">{Math.round(state.intensity*100)}%</b><input id="cutout-intensity" type="range" min="0" max="100" value={state.intensity*100} disabled={state.appearance==='original'} onChange={event=>actions.intensity(Number(event.target.value)/100)}/></label>
+      <label>增强强度 <b id="appearance-value">{Math.round(state.intensity*100)}%</b><BoundedSlider id="cutout-intensity" min={0} max={100} value={state.intensity*100} disabled={state.appearance==='original'} onChange={value=>actions.intensity(value/100)}/></label>
     </div>}
   </div><p id="cutout-note" role="status">{state.note}</p>
   <details className="cutout-advanced cutout-reset-settings"><summary>更多操作</summary><button type="button" className="btn" id="cutout-reset" disabled={state.busy} onClick={actions.reset}>恢复进入时的状态</button></details>

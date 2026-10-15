@@ -41,7 +41,6 @@ import {describeSyncError} from './sync-browser-compat.js';
 import {explainUserError} from './user-facing-error.js';
 import {setCloudProjectPreview} from './cloud-store.js';
 import {snapshotDraft} from './draft-snapshot.js';
-import {saveManualArchive,restoreManualArchive} from './scene-archive.js';
 import {recordSceneOperation,makeAutoSceneSnapshot,restoreAutoSceneSnapshot,currentSceneDraft,copySceneBaseline} from './scene-persistence.js';
 import {retireSplitPiece} from './material-split.js';
 import {readAlphaMask,extractAlphaMask} from './alpha-mask-blob.js';
@@ -602,8 +601,6 @@ function render(){
       format:fmt,hasAIReport:!!aiReport,onAction:handle,onInspectorChange:updateEditorInspector,
       onTitleCommit:title=>{const p=state.activeProject,next=title.trim()||'未命名手账';
         if(p&&next!==p.title){p.title=next;saveProject();}},
-      onDraftSelect:id=>{state.activeDraft=id;state.selected=null;state.multiSelected=[];
-        resetEditorHistory(state);render();},
       onAIAction:handleAIPanelAction,onAIOpen:openAICreation,
       onAIPromptChange:value=>{state.aiPrompt=value;}})
     :state.route==='assetDetail'&&asset(state.detailAssetID)
@@ -1299,17 +1296,6 @@ async function runAppAction(action,id,value){try{switch(action){
     deleteDraft(p,id);state.activeDraft=p.activeDraftID;state.selected=null;state.multiSelected=[];
     resetEditorHistory(state);saveProject();render();break;
   }
-  case 'fabric-history-rename-archive':{
-    const p=state.activeProject,entry=p?.manualArchives?.find(a=>a.id===id);if(!entry)break;
-    const name=prompt('历史记录名称',entry.title||'存档 '+new Date(entry.date).toLocaleString());
-    if(name===null)break;entry.title=String(name).trim().slice(0,80)||entry.title;
-    saveProject();render();break;
-  }
-  case 'fabric-history-delete-archive':{
-    const p=state.activeProject,entry=p?.manualArchives?.find(a=>a.id===id);if(!entry)break;
-    if(!confirm(`删除历史记录「${entry.title||'手动存档'}」？`))break;
-    p.manualArchives=p.manualArchives.filter(a=>a.id!==id);saveProject();render();break;
-  }
   case 'fabric-history-restore-auto':{
     const p=state.activeProject;if(!p||!confirm('恢复自动快照会替换当前编辑画面，是否继续？'))break;
     makeAutoSceneSnapshot(p,{reason:'before-restore',force:true});
@@ -1383,7 +1369,6 @@ async function runAppAction(action,id,value){try{switch(action){
   }
   case 'zoom-in':await actionStore.dispatch({type:'editor/zoom',payload:{delta:.15}});break;case 'zoom-out':await actionStore.dispatch({type:'editor/zoom',payload:{delta:-.15}});break;
   case 'paper-menu':state.editorPanel=!state.editorPanel;state.selected=null;render();break;case 'undo':await actionStore.dispatch({type:'editor/undo'});break;case 'redo':await actionStore.dispatch({type:'editor/redo'});break;
-  case 'new-draft':{checkpoint();const d=structuredClone(current());d.id=uid();d.title='方案 '+(state.activeProject.drafts.length+1);state.activeProject.drafts.push(d);state.activeProject.activeDraftID=d.id;state.activeDraft=d.id;resetEditorHistory(state);saveProject();render();break;}
   case 'duplicate':editSelected((e,d)=>{
       if(!e)throw Error('没有选中可复制的图层');
       const copy={...structuredClone(e.value),id:uid(),x:e.value.x+25,y:e.value.y+25};
@@ -1410,8 +1395,6 @@ async function runAppAction(action,id,value){try{switch(action){
   case 'match-open-result':await matchingSession.open(id);break;
   case 'match-restore':{const restored=await matchingSession.restoreDeleted(id);if(restored)toast('作品已按你的选择恢复');break;}
   case 'match-stop':matchingSession.stop();break;
-  case 'save-archive':{const p=state.activeProject;saveManualArchive(p);saveProject();render();toast('手动存档已保存');break;}
-  case 'restore-archive':{const p=state.activeProject,a=p.manualArchives.find(x=>x.id===id);if(!a||!confirm('恢复此存档会替换当前编辑状态，确定吗？'))break;const restored=restoreManualArchive(p,id);p.drafts=restored.drafts;p.activeDraftID=restored.activeDraftID;state.activeDraft=restored.activeDraftID;resetEditorHistory(state);saveProject();render();break;}
   case 'export-png':await exportPNG();break;case 'print':await printPage();break;case 'export-pdf':await exportPDF();break;
   case 'creative-json':openCreativeJSON();break;
   case 'import-save-defaults':{
