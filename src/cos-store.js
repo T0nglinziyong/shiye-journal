@@ -1,9 +1,11 @@
-export function createCOSStore({client,enabled=false,endpoint='/api/cos',fetcher=(...args)=>fetch(...args),sessionTimeoutMs=15000,ticketBatchDelayMs=8}){
+import {uploadCOSObject} from './cos-upload.js';
+const defaultFetch=(...args)=>fetch(...args);
+export function createCOSStore({client,enabled=false,endpoint='/api/cos',fetcher=defaultFetch,uploadRequest=fetcher===defaultFetch&&typeof XMLHttpRequest!=='undefined'?uploadCOSObject:null,sessionTimeoutMs=15000,ticketBatchDelayMs=8}){
   let pending=[],scheduled=false,activeWrites=0,activeReads=0,activePreviews=0;
   let reportOperation=()=>{};
   const waitingWrites=[],waitingPreviews=[];
   const writeLimit=typeof matchMedia==='function'&&matchMedia('(pointer: coarse)').matches?2:3;
-  const report=(action,started,error)=>{try{reportOperation({action,kind:'image',durationMs:Date.now()-started,error});}catch{/* Telemetry cannot stop a transfer. */}};
+  const report=(action,started,error,transfer)=>{try{reportOperation({action,kind:'image',durationMs:Date.now()-started,error,transfer:transfer||error?.transfer});}catch{/* Telemetry cannot stop a transfer. */}};
   // Derived previews are optional. Keep them behind original bytes and allow
   // at most one preview PUT to occupy the mobile upload lanes at a time.
   function pumpWrites(){while(activeWrites<writeLimit&&(!activeReads||activeWrites===0)){
@@ -56,16 +58,20 @@ export function createCOSStore({client,enabled=false,endpoint='/api/cos',fetcher
       for(let attempt=0;attempt<2;attempt++){
         const signed=await ticket(path,'PUT',type),started=Date.now();
         try{
-          const response=await fetcher(signed.url,{method:'PUT',headers:signed.headers,
-            body:blob,signal:AbortSignal.timeout(timeoutMs)});
+          const response=uploadRequest?await uploadRequest(signed.url,{headers:signed.headers,body:blob,
+            idleTimeoutMs:30000,totalTimeoutMs:Math.max(120000,Math.min(600000,timeoutMs*5))}):
+            await fetcher(signed.url,{method:'PUT',headers:signed.headers,body:blob,signal:AbortSignal.timeout(timeoutMs)});
           if(!response.ok&&response.status!==409){
             const failure=Error('COS 上传失败（'+response.status+'）；未保存元数据');
-            failure.status=response.status;throw failure;
+            failure.status=response.status;failure.transfer=response.transfer;throw failure;
           }
-          report('cos-put',started);return;
+          report('cos-put',started,null,response.transfer);return;
         }catch(error){
           report('cos-put-failed',started,error);
           const status=Number(error?.status),retryable=!status||status===429||status>=500;
+          // The PUT may have reached COS while its response was lost. Hash paths
+          // are immutable; an existing object is the same acknowledgement as 409.
+          if(!status){try{if(await probe(path)){report('cos-put-verified',started,null,error.transfer);return;}}catch{/* Preserve the original failure; retry later. */}}
           if(attempt||!retryable)throw error;
         }
       }

@@ -1,6 +1,6 @@
-// Daily, local-only sync trace. Keep operational metadata; never record IDs,
+// Daily, local-only sync trace. Keep operational metadata; never record account/object IDs,
 // names, payloads, URLs, raw server messages, tokens or complete stack traces.
-const ACTIONS=new Set(['start','reconcile','retry','committed','remote-won','merged','conflict','failed','direct-commit','prepare-start','prepare-finished','lock-wait','lock-entered','lock-ended','main-thread-lag','split','cos-ticket','cos-ticket-failed','cos-put','cos-put-failed']);
+const ACTIONS=new Set(['start','reconcile','retry','committed','remote-won','merged','conflict','failed','direct-commit','prepare-start','prepare-finished','lock-wait','lock-entered','lock-ended','main-thread-lag','split','cos-ticket','cos-ticket-failed','cos-put','cos-put-failed','cos-put-verified']);
 const KINDS=new Set(['project','batch','direct','queue','lock','image']);
 const CATEGORIES=new Set(['unconfirmed-response','revision-conflict','authorization','rate-limit','server','local-storage','image-upload','browser-lock','interrupted','network','unknown']);
 const PHASES=new Set([
@@ -13,7 +13,7 @@ const PREFIX='shiye-sync-trace-v2:';
 const localTraceStorage=()=>{try{return globalThis.localStorage;}catch{return null;}};
 const count=value=>Number.isSafeInteger(value)&&value>=0?value:null;
 const errorName=value=>['Error','TypeError','SyntaxError','AbortError','QuotaExceededError','NetworkError','NotAllowedError',
-  'NotReadableError','InvalidStateError','DataError','EncodingError','OperationError','SecurityError'].includes(value)?value:'OtherError';
+  'TimeoutError','NotReadableError','InvalidStateError','DataError','EncodingError','OperationError','SecurityError'].includes(value)?value:'OtherError';
 const hash=value=>{let n=2166136261;for(const char of String(value||'')){n^=char.charCodeAt(0);n=Math.imul(n,16777619);}return (n>>>0).toString(16).padStart(8,'0');};
 const dayOf=value=>{const date=new Date(value);if(!Number.isFinite(date.getTime()))return 'unknown';return [date.getFullYear(),String(date.getMonth()+1).padStart(2,'0'),String(date.getDate()).padStart(2,'0')].join('-');};
 function errorCode(error){
@@ -50,6 +50,12 @@ function safeFrame(error){
   const matches=String(error?.stack||'').match(/(?:^|[/\\])([A-Za-z0-9_.-]+\.js):(\d+)(?::\d+)?/m);
   return matches?matches[1]+':'+matches[2]:null;
 }
+function safeTransfer(value){
+  if(!value||typeof value!=='object')return null;
+  return {bytes:count(value.bytes),loaded:count(value.loaded),
+    phase:['connecting','uploading','response'].includes(value.phase)?value.phase:null,
+    status:errorStatus(value),requestId:/^[a-zA-Z0-9_-]{1,160}$/.test(value.requestId||'')?value.requestId:null};
+}
 function savedEvent(event){
   if(!event||typeof event!=='object')return null;
   const at=typeof event.at==='string'&&/^\d{4}-\d\d-\d\dT\d\d:\d\d:/.test(event.at)?event.at:null;
@@ -61,7 +67,7 @@ function savedEvent(event){
       category:detail.category,name:errorName(detail.name),status:errorStatus(detail),code:errorCode(detail),
       phase:PHASES.has(detail.phase)?detail.phase:null,causeCategory:CATEGORIES.has(detail.causeCategory)?detail.causeCategory:null
     }:null,
-    durationMs:count(event.durationMs),online:typeof event.online==='boolean'?event.online:null,
+    transfer:safeTransfer(event.transfer),durationMs:count(event.durationMs),online:typeof event.online==='boolean'?event.online:null,
     visibility:['visible','hidden','prerender'].includes(event.visibility)?event.visibility:null,
     fingerprint:/^[0-9a-f]{8}$/.test(event.fingerprint||'')?event.fingerprint:null,
     frame:/^[A-Za-z0-9_.-]+\.js:\d+$/.test(event.frame||'')?event.frame:null};
@@ -77,11 +83,11 @@ export function createSyncDiagnostics({limit=3000,clock=()=>new Date().toISOStri
   };
   const schedule=()=>{if(!storage||timer!==null)return;timer=setTimer(flush,500);timer?.unref?.();};
   return {
-    record({action,kind,baseRevision,cloudRevision,pending,error,durationMs}={}){
+    record({action,kind,baseRevision,cloudRevision,pending,error,durationMs,transfer}={}){
       const at=clock(),day=dayOf(at);
       if(day!==currentDay){flush();currentDay=day;events.length=0;}
       const event=savedEvent({at,action,kind,baseRevision,cloudRevision,pending,
-        failure:failure(error),durationMs,online:globalThis.navigator?.onLine,
+        failure:failure(error),durationMs,transfer,online:globalThis.navigator?.onLine,
         visibility:globalThis.document?.visibilityState,
         fingerprint:error?hash(error.name+'|'+error.message):null,frame:safeFrame(error)});
       events.push(event);if(events.length>limit)events.shift();schedule();

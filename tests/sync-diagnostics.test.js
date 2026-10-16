@@ -62,3 +62,14 @@ test('today trace survives a reopened app and excludes other days and private va
   assert.equal(report.events[1].durationMs,2430);
   assert.ok(!JSON.stringify(report).includes('private title'));
 });
+
+test('upload diagnosis retains progress and request ID but discards URL and object identity',()=>{
+  const trace=createSyncDiagnostics({storage:null});
+  trace.record({action:'cos-put-failed',kind:'image',error:Object.assign(Error('secret'),{name:'TimeoutError'}),
+    transfer:{bytes:12000,loaded:8000,phase:'uploading',status:503,requestId:'safe-request-id',url:'signed-secret',path:'private-path'}});
+  const report=trace.report(),event=report.events[0];
+  assert.equal(event.failure.name,'TimeoutError');
+  assert.deepEqual(event.transfer,{bytes:12000,loaded:8000,phase:'uploading',status:503,requestId:'safe-request-id'});
+  assert.ok(!JSON.stringify(report).includes('signed-secret'));
+  assert.ok(!JSON.stringify(report).includes('private-path'));
+});

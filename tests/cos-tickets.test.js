@@ -82,16 +82,17 @@ test('a stalled small-object PUT retries with a fresh ticket, but a forbidden PU
         return {ok:true,json:async()=>({tickets:objects.map(row=>({...row,
           url:'https://example.test/'+row.path,headers:{}}))})};
       }
+      if(options.method!=='PUT')return {ok:false,status:404,body:{cancel:async()=>{}}};
       puts++;
       if(puts===1){assert.ok(options.signal,'PUT is bounded by a timeout');
         throw Object.assign(Error('stalled'),{name:'TimeoutError'});}
       return {ok:status===200,status};
     }});
   await store.upload('owner/'+hash,new Blob(['small']));
-  assert.equal(puts,2);assert.equal(tickets,2);
+  assert.equal(puts,2);assert.equal(tickets,3);
   status=403;
   await assert.rejects(store.upload('owner/'+'b'.repeat(64),new Blob(['small'])),/403/);
-  assert.equal(puts,3);assert.equal(tickets,3);
+  assert.equal(puts,3);assert.equal(tickets,4);
 });
 test('COS object probe distinguishes a missing object from a temporary or forbidden read',async()=>{
   let status=404,readOptions;
@@ -148,4 +149,19 @@ test('COS originals bypass optional previews and upload timing omits object path
   await Promise.all(previews);
   assert.ok(events.some(event=>event.action==='cos-put'));
   assert.ok(events.every(event=>!JSON.stringify(event).includes(originalPath)));
+});
+
+ test('an ambiguous PUT is acknowledged when its immutable object exists, without uploading again',async()=>{
+  let puts=0,probes=0;const events=[];
+  const store=createCOSStore({client:()=>({auth:{getSession:async()=>({data:{session:{access_token:token}}})}}),
+    fetcher:async(url,options)=>{
+      if(url==='/api/cos'){const objects=JSON.parse(options.body).objects;
+        return {ok:true,json:async()=>({tickets:objects.map(row=>({...row,url:'https://example.test/'+row.path,headers:{}}))})};}
+      if(options.method==='PUT'){puts++;throw Object.assign(Error('response lost'),{name:'TimeoutError'});}
+      probes++;return {ok:true,status:206,body:{cancel:async()=>{}}};
+    }});
+  store.setDiagnosticReporter(event=>events.push(event));
+  await store.upload('owner/'+hash,new Blob(['bytes']));
+  assert.equal(puts,1);assert.equal(probes,1);
+  assert.ok(events.some(event=>event.action==='cos-put-verified'));
 });

@@ -1,3 +1,4 @@
+import {prepareUploadJobs} from './upload-preparation.js';
 import {cloudClient,requireCloudUser} from './cloud-session.js';
 import {privateCache,outboxVersionRows} from './private-cache.js';
 import {createProjectSync} from './project-sync.js';
@@ -433,7 +434,7 @@ const unifiedSync=createProjectSync({
     envelope.payload.operations?.some(op=>op.store==='blobs'&&op.action==='put')||
     envelope.payload.blobs?.length>0),
   prepare:async (envelopes,rows)=>{
-    const failures=new Map(),puts=[];
+    const puts=[];
     for(const [index,envelope] of envelopes.entries()){
       if(envelope.kind!=='batch')continue;
       const batch=envelope.payload;
@@ -447,15 +448,10 @@ const unifiedSync=createProjectSync({
     // At most three large Blob reads/hashes may be live on mobile Safari.
     // Failed images are recorded by durable operation ID rather than retried
     // again under the account lock. Other records remain independent.
-    for(let offset=0;offset<puts.length;offset+=3){
-      const chunk=puts.slice(offset,offset+3),results=await Promise.allSettled(chunk.map(op=>
-        encode('blobs',op.item,{makePreview:op.makePreview})));
-      results.forEach((result,index)=>{
-        if(result.status==='rejected'&&!failures.has(chunk[index].operationID))
-          failures.set(chunk[index].operationID,
-            markSyncPhase(result.reason||Error('图片预上传失败'),'预上传图片'));
-      });
-    }
+    const failures=await prepareUploadJobs(puts,op=>
+      encode('blobs',op.item,{makePreview:op.makePreview}));
+    for(const [id,error] of failures)failures.set(id,
+      markSyncPhase(error||Error('图片预上传失败'),'预上传图片'));
     return failures;
   },
   recordKeys:syncAffectedKeys,
