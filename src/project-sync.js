@@ -25,8 +25,10 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
   const cancelAuto=()=>{if(autoTimer!==null){clearTimer(autoTimer);autoTimer=null;}};
   function scheduleAuto(){
     if(paused||network||rebuilding||autoTimer!==null)return;
-    const candidates=[...entries.values()].filter(row=>!conflicts.has(row.record.id)&&
-      row.lastFailureClass!=='invalid');
+    const ordered=[...entries.values()].sort((a,b)=>a.serial-b.serial);
+    const candidates=ordered.filter(row=>!conflicts.has(row.record.id)&&
+      row.lastFailureClass!=='invalid'&&!ordered.some(previous=>
+        previous.serial<row.serial&&overlaps(recordKeys(previous.record),recordKeys(row.record))));
     if(!candidates.length)return;
     // First remote upload waits one window to coalesce several small edits.
     // Further uploads cannot start sooner than a window after the previous one.
@@ -110,8 +112,7 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
       const aRetry=Boolean(a.attempt||a.lastFailureClass),bRetry=Boolean(b.attempt||b.lastFailureClass);
       return aRetry!==bRetry?Number(aRetry)-Number(bRetry):a.serial-b.serial;
     }).filter(candidate=>!ordered.some(previous=>previous.serial<candidate.serial&&
-      entries.has(previous.record.id)&&!conflicts.has(previous.record.id)&&
-      previous.lastFailureClass!=='conflict'&&previous.lastFailureClass!=='invalid'&&
+      entries.has(previous.record.id)&&
       overlaps(recordKeys(previous.record),recordKeys(candidate.record))));
   };
   const clearFailure=row=>{delete row.attempt;delete row.nextAttemptAt;delete row.lastFailureClass;};

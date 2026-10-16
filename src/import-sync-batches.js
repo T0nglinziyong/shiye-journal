@@ -36,19 +36,52 @@ export function splitIndependentAssetImport(batch,{newID=()=>crypto.randomUUID()
 // that row must first follow the normal acknowledgement recovery path.
 export async function splitPendingAssetImportRows(rows,{isCommitted=async()=>false,
   newID=()=>crypto.randomUUID(),newOperationID=()=>crypto.randomUUID()}={}){
-  let changed=false,maxSerial=Math.max(0,...(rows||[]).map(row=>Number(row?.serial)||0));
+  let changed=false,nextSerial=0;
   const output=[];
-  for(const row of rows||[]){
+  for(const row of [...(rows||[])].sort((a,b)=>a.serial-b.serial)){
     const envelope=row?.record,batch=envelope?.kind==='batch'?envelope.payload:null;
     const parts=batch?splitIndependentAssetImport(batch,{newID}):[batch];
-    if(!batch||parts.length<2||await isCommitted(row)){output.push(row);continue;}
+    if(!batch||parts.length<2||await isCommitted(row)){
+      nextSerial=Math.max(nextSerial+1,row.serial);
+      output.push({...row,serial:nextSerial});
+      continue;
+    }
     changed=true;
     parts.forEach((part,index)=>{
-      const next={...row,serial:index?++maxSerial:row.serial,
+      // Keep every child directly before later edits of those assets. The old
+      // maxSerial append let an AI rename reach the cloud before its image
+      // import, leaving the original bytes in a permanent same-key conflict.
+      nextSerial=Math.max(nextSerial+1,index?0:row.serial);
+      const next={...row,serial:nextSerial,
         operationID:newOperationID(),record:{...envelope,id:'batch:'+part.id,payload:part}};
       delete next.attempt;delete next.nextAttemptAt;delete next.lastFailureClass;
       output.push(next);
     });
   }
   return changed?output:null;
+}
+
+// An older client can upload an AI-enriched asset record before the original
+// import's image records. Recover only when the cloud asset still points to
+// exactly the same image IDs; retain its newer descriptive fields and upload
+// the missing bytes from the durable local batch.
+export async function reconcileInterruptedAssetImport(batch,readRemote){
+  if(!Array.isArray(batch?.assets)||!batch.assets.length||
+    !Array.isArray(batch.blobs)||!Array.isArray(batch.projects)||batch.projects.length)
+    return null;
+  const imageFields=['blobId','originalCutoutBlobId','originalBlobId',
+    'candidateFrameBlobId','initialMaskBlobId','finalMaskBlobId','photoBlobId'];
+  const operations=[];
+  for(const asset of batch.assets){
+    const remote=await readRemote('assets',asset.id);
+    if(!remote){operations.push({store:'assets',action:'put',item:asset});continue;}
+    if(imageFields.some(key=>(asset[key]??null)!==(remote[key]??null))||
+      asset.imageHash&&remote.imageHash&&asset.imageHash!==remote.imageHash)
+      return null;
+  }
+  for(const blob of batch.blobs){
+    if(await readRemote('blobs',blob.id))return null;
+    operations.push({store:'blobs',action:'put',item:blob});
+  }
+  return operations;
 }

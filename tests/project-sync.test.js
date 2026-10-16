@@ -90,7 +90,7 @@ test('a confirmed conflict stays pending without scheduling the same background 
   assert.equal(timers,0);
   assert.equal((await sync.pending()).length,1);
 });
-test('a stale conflict cannot replay on resume or block a newer row for the same key',async()=>{
+test('a stale conflict cannot replay on resume and holds only its own later edits',async()=>{
   let revision=9,rows=[
     {record:{id:'old',key:'same'},serial:1,baseRevision:1,operationID:'old-op'},
     {record:{id:'new',key:'same'},serial:2,baseRevision:1,operationID:'new-op'}
@@ -104,8 +104,8 @@ test('a stale conflict cannot replay on resume or block a newer row for the same
   assert.deepEqual(uploaded,[]);
   await sync.resume();
   assert.equal(oldChecks,1);
-  assert.deepEqual(uploaded,['new']);
-  assert.deepEqual(rows.map(row=>row.record.id),['old']);
+  assert.deepEqual(uploaded,[]);
+  assert.deepEqual(rows.map(row=>row.record.id),['old','new']);
   await sync.resume();
   assert.equal(oldChecks,1);
 });

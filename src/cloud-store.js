@@ -24,7 +24,7 @@ import {createBlobRevisionProof} from './blob-revision-proof.js';
 import {createSyncDiagnostics} from './sync-diagnostics.js';
 import {decodeImageBlob} from './image-blob-decoder.js';
 import {boundedMap} from './bounded-map.js';
-import {splitIndependentAssetImport,splitPendingAssetImportRows} from './import-sync-batches.js';
+import {splitIndependentAssetImport,splitPendingAssetImportRows,reconcileInterruptedAssetImport} from './import-sync-batches.js';
 export function createCloudStore({cloudClient,requireCloudUser,cache=null,namespace='cloud',projectPreview=()=>null,objectStorage=null}){
 const BUCKET='shiye-private';
 const writeProvider=()=>objectStorage?.enabled?'cos':'supabase';
@@ -582,6 +582,16 @@ async function reconcileImport(batch,operationID,baseRevision){
     present+=found.filter(Boolean).length;
   }
   if(present===0)return 'rebase';
+  if(batch.assets?.length&&!batch.projects?.length){
+    const operations=await reconcileInterruptedAssetImport(batch,cloudRecord);
+    if(operations){
+      if(!operations.length)return 'remote';
+      const {assets,blobs,projects,...rest}=batch;
+      return {kind:'replace',record:syncEnvelope('batch',{
+        ...rest,names:[...new Set(operations.map(op=>op.store))],operations
+      })};
+    }
+  }
   // Legacy single-project import batches are not acknowledgements. A newer
   // copy may own the same ID; expose a deliberate version choice instead of
   // automatically keeping/overwriting either document.
