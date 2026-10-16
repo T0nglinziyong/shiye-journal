@@ -128,6 +128,8 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
       }
     }
   };
+  const containsLocked=nodes=>(nodes||[]).some(child=>child.locked||child.isLocked||
+    child.type==='group'&&containsLocked(child.children));
   async function fromNode(node){
     if(!node||node.hidden||node.isHidden||node.isParked||node.parked)return null;
     if(node.vectorMask)validateVectorMask(node.vectorMask);
@@ -145,7 +147,8 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
       group.sceneGroupPose={center:group.getCenterPoint(),angle:group.angle||0};
       // A Scene group contains real materials. Its gesture may move and rotate
       // the children, but resizing would silently change physical inventory.
-      const canvasSelectable=!node.autoInkGroup&&!node.locked&&!node.isLocked;
+      const canvasSelectable=!node.autoInkGroup&&!node.locked&&!node.isLocked&&
+        !containsLocked(node.children);
       group.set({lockScalingX:true,lockScalingY:true,
         selectable:canvasSelectable,evented:canvasSelectable});
       configureControls(group);
@@ -227,8 +230,10 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
     if(node.type==='shape'&&node.vectorMask)object.clipPath=clipPath(maskGeometry(node.vectorMask),
       object.sceneFrameWidth,object.sceneFrameHeight);
     object.set({angle:finite(node.rotation),opacity:finite(node.opacity,1),
-      selectable:node.type!=='ink'&&!node.locked&&!node.isLocked,
-      evented:node.type!=='ink'&&!node.locked&&!node.isLocked,
+      selectable:node.type!=='ink'&&!node.locked&&!node.isLocked&&
+        !(node.type==='group'&&containsLocked(node.children)),
+      evented:node.type!=='ink'&&!node.locked&&!node.isLocked&&
+        !(node.type==='group'&&containsLocked(node.children)),
       globalCompositeOperation:node.blendMode==='multiply'?'multiply':'source-over'});
     if(node.type!=='ink')configureControls(object);
     object.sceneID=node.ownerID||node.id;
@@ -241,6 +246,8 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
   function applyObject(node,object){
     if(!node||node.id!==object?.sceneID||node.type!==object?.sceneType)
       throw Error('画布对象与 Scene 图层身份不一致');
+    if(node.locked||node.isLocked||node.type==='group'&&containsLocked(node.children))
+      throw Error('锁定图层或组合不能修改');
     if(node.type==='group'){
       const before=object.sceneGroupPose;
       if(!before)throw Error('组合缺少上一次画布位置');
@@ -280,6 +287,13 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
         (node.type==='shape'?object.sceneFrameHeight:object.height)*object.scaleY;
       node.rotation=object.angle||0;
       if(node.type==='text'){
+        // The bottom-right grip scales the whole text object. Persist its
+        // typography along with its frame; a side grip only changes reflow.
+        const sx=positive(object.scaleX),sy=positive(object.scaleY);
+        if(Math.abs(sx-sy)<.02&&Math.abs(sx-1)>.001)
+          for(const field of ['fontSize','fixedLineHeight','lineHeight','lineSpacing',
+            'additionalLineSpacing','paragraphSpacing','letterSpacing'])
+            if(Number.isFinite(node[field]))node[field]*=sx;
         node.content=object.text;
         object.sceneTextFrameHeight=textFrame/object.scaleY;
         if(node.vectorMask)object.clipPath=clipPath(maskGeometry(node.vectorMask),

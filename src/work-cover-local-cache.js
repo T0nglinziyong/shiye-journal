@@ -102,7 +102,9 @@ export function createLocalWorkCovers({
     const observer=typeof IntersectionObserver==='function'
       ?new IntersectionObserver(rows=>rows.forEach(row=>{if(row.isIntersecting){loadCard(row.target);observer.unobserve(row.target);}}),{rootMargin:'120px'}):null;
     observer?.observe&&cards.forEach(card=>observer.observe(card));
-    if(!observer)cards.slice(0,2).forEach(loadCard);
+    // The first row is useful immediately even if the React commit and the
+    // observer's first visibility notification arrive in different frames.
+    cards.slice(0,4).forEach(loadCard);
     return ()=>{disposed=true;observer?.disconnect();};
   }
   return {peek,ensure,remember,observe,missing,

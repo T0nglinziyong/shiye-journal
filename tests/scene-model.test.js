@@ -55,6 +55,19 @@ test('Scene v2 can nest/reparent groups without changing physical dimensions',()
  assert.equal(Object.hasOwn(JSON.parse(JSON.stringify(d)),'items'),false);
 });
 
+test('an existing group can be combined with a sibling and ungrouped without flattening it',()=>{
+ const d=draft();
+ for(const [id,zIndex] of [['a',1],['b',2],['c',3]])
+  d.primitives.push({id,kind:'rectangle',x:10,y:20,width:20,height:20,zIndex});
+ groupSceneLayers(d,['a','b'],{id:'inner'});
+ groupSceneLayers(d,['inner','c'],{id:'outer'});
+ assert.deepEqual(d.layers.map(node=>node.id),['outer']);
+ assert.deepEqual(d.layers[0].children.map(node=>node.id),['inner','c']);
+ assert.equal(ungroupSceneLayers(d,'outer'),true);
+ assert.deepEqual([...d.layers].sort((a,b)=>a.zIndex-b.zIndex).map(node=>node.id),['inner','c']);
+ assert.deepEqual(d.layers.find(node=>node.id==='inner').children.map(node=>node.id),['a','b']);
+});
+
 test('ungroup outer nesting retains inner group membership and raw source IDs',()=>{
  const d=draft();
  d.items.push({id:'m1',assetID:'real-1',x:10,y:20,width:40,height:60});
@@ -69,6 +82,24 @@ test('ungroup outer nesting retains inner group membership and raw source IDs',(
  assert.equal(d.items.find(x=>x.id==='m1').creativeGroupID,'nested');
  assert.equal(sceneGroups(d).some(g=>g.id==='nested'),true);
  assert.deepEqual(d.items.map(x=>x.assetID).sort(),['real-1','real-2']);
+});
+
+test('ungroup preserves sibling stacking and refuses group effects it cannot preserve',()=>{
+ const d=draft();
+ for(const [id,zIndex] of [['under',1],['a',10],['b',11],['over',20]])
+  d.primitives.push({id,kind:'rectangle',x:20,y:20,width:20,height:20,zIndex});
+ groupSceneLayers(d,['a','b'],{id:'group'});
+ assert.deepEqual([...d.layers].sort((a,b)=>a.zIndex-b.zIndex).map(n=>n.id),
+  ['under','group','over']);
+ const group=d.layers.find(n=>n.id==='group');
+ group.opacity=.4;
+ const before=JSON.stringify(d);
+ assert.throws(()=>ungroupSceneLayers(d,'group'),/改变画面/);
+ assert.equal(JSON.stringify(d),before);
+ group.opacity=1;
+ assert.equal(ungroupSceneLayers(d,'group'),true);
+ assert.deepEqual([...d.layers].sort((a,b)=>a.zIndex-b.zIndex).map(n=>n.id),
+  ['under','a','b','over']);
 });
 
 test('physical vector masks reject crossed polygons, escaped holes and overlaps',()=>{

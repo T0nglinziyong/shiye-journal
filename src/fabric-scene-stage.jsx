@@ -6,7 +6,7 @@ import {paperWidthPixels,pressureInkOutline,erasePressureStroke} from './pressur
 import {textBlock} from './domain.js';
 import {polygonContains,selectionBounds} from './canvas-selection.js';
 import {selectSceneLasso,sceneLassoBounds,moveSceneLasso,transformSceneLasso} from './scene-lasso.js';
-import {attachSceneV2} from './scene-v2.js';
+import {attachSceneV2,assertSceneEditable,sceneLayerEntries} from './scene-v2.js';
 import {sceneDisplaySiblings} from './craft-display.js';
 import {prepareSceneFonts} from './scene-renderer.js';
 import {appendInkStroke,editableInkLayer} from './ink-groups.js';
@@ -21,6 +21,12 @@ const byID=(nodes,id)=>{
   }
   return null;
 };
+const editable=(draft,id)=>{try{assertSceneEditable(draft,id);return true;}catch{return false;}};
+const selectionLeaves=(draft,ids)=>{
+  const selected=new Set(ids);
+  return sceneLayerEntries(draft,{hidden:true}).filter(entry=>selected.has(entry.value.id)||
+    entry.parents.some(parent=>selected.has(parent.id))).map(entry=>entry.value.id);
+};
 
 // Fabric owns this canvas for the whole draft lifetime. React owns the host,
 // tool panels and route lifecycle; a pointer packet never crosses a JSX render.
@@ -29,7 +35,7 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
   eraser={widthMM:4},selectionMode='contain',readOnly=false,sceneRevision=0,
   selectedID=null,selectedIDs=[],selectionFilter=null,textDefaults=null}){
   const canvasRef=useRef(null),sessionRef=useRef(null),reconcileRef=useRef(null),callbacks=useRef(null);
-  const syncingSelection=useRef(false);
+  const syncingSelection=useRef(false),selectionEpoch=useRef(0);
   callbacks.current={draft,assetURL,onSelection,onBeforeChange,onChange,onIssue,onReady,tool,pen,marker,
     eraser,selectionMode,selectionFilter,selectedID,selectedIDs,textDefaults};
 
@@ -43,12 +49,71 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
     const canvas=sessionRef.current;
     if(!canvas||!['select','lasso'].includes(tool))return;
     if(tool==='lasso'){
+      ++selectionEpoch.current;
+      const proxy=canvas.getObjects().find(item=>item.sceneSelectionProxy);
       syncingSelection.current=true;
-      canvas.discardActiveObject();canvas.requestRenderAll();
+      canvas.discardActiveObject();if(proxy)canvas.remove(proxy);canvas.requestRenderAll();
       syncingSelection.current=false;
       return;
     }
     const ids=selectedIDs.length?selectedIDs:selectedID?[selectedID]:[];
+    const epoch=++selectionEpoch.current;
+    const ink=ids.length===1?byID(callbacks.current.draft.layers,ids[0]):null;
+    const oldProxy=canvas.getObjects().find(item=>item.sceneSelectionProxy);
+    if(oldProxy){syncingSelection.current=true;canvas.discardActiveObject();canvas.remove(oldProxy);
+      syncingSelection.current=false;}
+    if(ids.length>1){
+      const current=callbacks.current.draft,leaves=selectionLeaves(current,ids);
+      const bounds=ids.every(id=>editable(current,id))&&leaves.length>1?
+        sceneLassoBounds(current,leaves):null;
+      if(bounds)void import('fabric').then(({Rect,Control})=>{
+        if(selectionEpoch.current!==epoch||sessionRef.current!==canvas||
+          callbacks.current.tool!=='select'||
+          JSON.stringify(callbacks.current.selectedIDs)!==JSON.stringify(ids))return;
+        const proxy=new Rect({left:bounds.x+bounds.width/2,top:bounds.y+bounds.height/2,
+          originX:'center',originY:'center',width:Math.max(2,bounds.width),
+          height:Math.max(2,bounds.height),fill:'rgba(0,0,0,0)',stroke:null,
+          lockScalingX:true,lockScalingY:true,lockSkewingX:true,lockSkewingY:true,
+          cornerSize:20,touchCornerSize:42,borderColor:'#416c59',cornerColor:'#fffefa',
+          cornerStrokeColor:'#416c59',transparentCorners:false});
+        const rotate=proxy.controls.mtr;
+        proxy.controls={br:new Control({x:.5,y:.5,actionName:'rotate',
+          actionHandler:rotate.actionHandler,cursorStyleHandler:rotate.cursorStyleHandler})};
+        proxy.sceneSelectionProxy=true;proxy.sceneMultiIDs=[...ids];
+        proxy.sceneTransformIDs=leaves;
+        proxy.sceneMultiPose={center:proxy.getCenterPoint(),angle:proxy.angle||0};
+        syncingSelection.current=true;canvas.add(proxy);canvas.setActiveObject(proxy);
+        canvas.requestRenderAll();syncingSelection.current=false;
+      }).catch(error=>callbacks.current.onIssue?.(error));
+      return;
+    }
+    if(ink?.type==='ink'&&editable(callbacks.current.draft,ink.id)){
+      const bounds=sceneLassoBounds(callbacks.current.draft,ids);
+      if(bounds)void import('fabric').then(({Rect,Control})=>{
+        if(selectionEpoch.current!==epoch||sessionRef.current!==canvas||
+          callbacks.current.selectedID!==ink.id||callbacks.current.tool!=='select')return;
+        const proxy=new Rect({left:bounds.x+bounds.width/2,top:bounds.y+bounds.height/2,
+          originX:'center',originY:'center',width:Math.max(2,bounds.width),
+          height:Math.max(2,bounds.height),fill:'rgba(0,0,0,0)',stroke:null,
+          lockScalingX:true,lockScalingY:true,lockSkewingX:true,lockSkewingY:true,
+          cornerSize:20,touchCornerSize:42,borderColor:'#416c59',cornerColor:'#fffefa',
+          cornerStrokeColor:'#416c59',transparentCorners:false});
+        const rotate=proxy.controls.mtr;
+        proxy.controls={br:new Control({x:.5,y:.5,actionName:'rotate',
+          actionHandler:rotate.actionHandler,cursorStyleHandler:rotate.cursorStyleHandler,
+          render:(ctx,left,top)=>{ctx.save();ctx.translate(left,top);
+            ctx.fillStyle='#fffefa';ctx.strokeStyle='#416c59';ctx.lineWidth=1.5;
+            ctx.beginPath();ctx.roundRect(-9,-9,18,18,5);ctx.fill();ctx.stroke();
+            ctx.beginPath();ctx.arc(-1,-1,4,-Math.PI*.88,Math.PI*.45);ctx.stroke();
+            ctx.beginPath();ctx.moveTo(1,2);ctx.lineTo(6,6);ctx.moveTo(2,6);
+            ctx.lineTo(6,6);ctx.lineTo(6,2);ctx.stroke();ctx.restore();}})};
+        proxy.sceneID=ink.id;proxy.sceneType='ink';proxy.sceneSelectionProxy=true;
+        proxy.sceneInkMatrix=proxy.calcTransformMatrix();
+        syncingSelection.current=true;canvas.add(proxy);canvas.setActiveObject(proxy);
+        canvas.requestRenderAll();syncingSelection.current=false;
+      }).catch(error=>callbacks.current.onIssue?.(error));
+      return;
+    }
     const objects=ids.map(id=>canvas.getObjects().find(item=>item.sceneID===id&&item.selectable!==false)).filter(Boolean);
     const active=canvas.getActiveObjects();
     syncingSelection.current=true;
@@ -76,6 +141,8 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
     canvas.defaultCursor=['pen','highlighter','lasso'].includes(tool)?'crosshair':tool==='eraser'?'cell':'default';
     if(tool!=='lasso')canvas.sceneClearLasso?.();
     if(!['select','lasso'].includes(tool)){canvas.getActiveObject()?.exitEditing?.();canvas.discardActiveObject();
+      const proxy=canvas.getObjects().find(item=>item.sceneSelectionProxy);
+      if(proxy)canvas.remove(proxy);
       canvas.requestRenderAll();}
     if(tool!=='text')canvas.sceneDiscardEmptyText?.();
   },[tool,readOnly]);
@@ -159,7 +226,9 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
               if(bounds)callbacks.current.onSelection?.([node.id],{x:bounds.left,y:bounds.top,
                 width:bounds.width,height:bounds.height});
             }
-            canvas.requestRenderAll();
+            // A newly selected shape or material must paint at its final
+            // location before the old frame can linger through another rAF.
+            if(keepSelected)canvas.renderAll();else canvas.requestRenderAll();
             if(object)onAdded?.(object);
           }).catch(error=>{if(!disposed){signatures.delete(key);callbacks.current.onIssue?.(error);}});
         };
@@ -189,7 +258,7 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
           existing.forEach((object,index)=>canvas.moveObjectTo(object,index));
           canvas.requestRenderAll();
         };
-        let gesture=null,previewFrame=0,textPointerID=null;
+        let gesture=null,previewFrame=0,textPointerID=null,pendingTouchText=null;
         let lassoSelection=null;
         canvas.sceneClearLasso=()=>{lassoSelection=null;canvas.clearContext(canvas.contextTop);};
         const uncommittedText=new Set();
@@ -232,11 +301,14 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
         const frameHandle=frame=>frameCorners(frame)[2];
         const frameBounds=frame=>selectionBounds(frameCorners(frame));
         const preview=()=>{
+          const lasso=gesture?.tool==='lasso'?gesture.points:null;
+          // Fabric paints its selection border and handles on contextTop.
+          // Clearing that context after every render erased the editing frame
+          // one animation frame after a layer was selected.
+          if(!gesture&&(!lassoSelection||callbacks.current.tool!=='lasso'))return;
           const ctx=canvas.contextTop;
           canvas.clearContext(ctx);ctx.save();
           ctx.transform(...canvas.viewportTransform);
-          const lasso=gesture?.tool==='lasso'?gesture.points:null;
-          if(!gesture&&(!lassoSelection||callbacks.current.tool!=='lasso')){ctx.restore();return;}
           if(gesture?.tool==='pen'||gesture?.tool==='highlighter'){
             const outline=pressureInkOutline({points:gesture.points,width:gesture.width});
             if(outline.length){ctx.globalAlpha=gesture.tool==='highlighter'?.38:1;
@@ -292,8 +364,8 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
             if(hit){
               canvas.setActiveObject(hit);
               if(hit.sceneType==='text'){
-                hit.enterEditing?.();
-                hit.hiddenTextarea?.focus();
+                if(event.pointerType==='touch')pendingTouchText={id:hit.sceneID,object:hit,ended:false};
+                else{hit.enterEditing?.();hit.hiddenTextarea?.focus();}
               }
               canvas.requestRenderAll();
               return;
@@ -309,11 +381,16 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
             uncommittedText.add(node.id);
             remember(node.id);
             const index=current.layers.length-1;
+            if(event.pointerType==='touch')pendingTouchText={id:node.id,object:null,ended:false};
             void addProjected(node,index,sceneVersions.get(node.id)||0,object=>{
-              canvas.setActiveObject(object);
-              object.enterEditing?.();
-              object.hiddenTextarea?.focus();
-              canvas.requestRenderAll();
+              if(event.pointerType==='touch'){
+                if(pendingTouchText?.id!==node.id)return;
+                pendingTouchText.object=object;
+                if(pendingTouchText.ended)requestAnimationFrame(focusTouchText);
+              }else{
+                canvas.setActiveObject(object);object.enterEditing?.();
+                object.hiddenTextarea?.focus();canvas.requestRenderAll();
+              }
             });
             callbacks.current.onChange?.(node,'text:new');
             return;
@@ -393,6 +470,7 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
         const onPointerEnd=event=>{
           if(textPointerID===event.pointerId){
             textPointerID=null;
+            if(event.type==='pointercancel')pendingTouchText=null;
             event.preventDefault();event.stopImmediatePropagation();
             return;
           }
@@ -474,22 +552,39 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
             callbacks.current.onChange?.([...roots],'ink:erase');
           }
         };
+        const focusTouchText=()=>{
+          const pending=pendingTouchText;
+          if(!pending?.object||callbacks.current.tool!=='text'||
+            !byID(callbacks.current.draft.layers,pending.id))return;
+          pendingTouchText=null;
+          canvas.setActiveObject(pending.object);
+          pending.object.enterEditing?.();pending.object.hiddenTextarea?.focus();
+          canvas.requestRenderAll();
+        };
+        const onTouchEnd=event=>{
+          if(!pendingTouchText)return;
+          event.preventDefault();pendingTouchText.ended=true;
+          if(pendingTouchText.object)focusTouchText();
+        };
         const upper=canvas.upperCanvasEl;
         upper.addEventListener('pointerdown',onPointerDown,true);
         upper.addEventListener('pointermove',onPointerMove,true);
         upper.addEventListener('pointerup',onPointerEnd,true);
         upper.addEventListener('pointercancel',onPointerEnd,true);
+        upper.addEventListener('touchend',onTouchEnd,{passive:false});
         const removePointerHandlers=()=>{
           if(previewFrame)cancelAnimationFrame(previewFrame);
           upper.removeEventListener('pointerdown',onPointerDown,true);
           upper.removeEventListener('pointermove',onPointerMove,true);
           upper.removeEventListener('pointerup',onPointerEnd,true);
           upper.removeEventListener('pointercancel',onPointerEnd,true);
+          upper.removeEventListener('touchend',onTouchEnd);
         };
         canvas.sceneRemovePointerHandlers=removePointerHandlers;
         const selection=event=>{
           if(syncingSelection.current)return;
-          const ids=[...new Set(canvas.getActiveObjects().map(o=>o.sceneID).filter(Boolean))];
+          const ids=[...new Set(canvas.getActiveObjects().flatMap(o=>o.sceneMultiIDs||
+            (o.sceneID?[o.sceneID]:[])))];
           const bounds=ids.length===1?canvas.getActiveObject()?.getBoundingRect():null;
           callbacks.current.onSelection?.(ids,bounds?{x:bounds.left,y:bounds.top,
             width:bounds.width,height:bounds.height}:null);
@@ -499,23 +594,63 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
         canvas.on('selection:cleared',()=>{if(!syncingSelection.current)callbacks.current.onSelection?.([],null);});
         const movingSelection=event=>{
           const object=event.target;
-          if(!object?.sceneID||object.sceneID!==callbacks.current.selectedID)return;
+          if(!object?.sceneMultiIDs?.length&&
+            (!object?.sceneID||object.sceneID!==callbacks.current.selectedID))return;
           const bounds=object.getBoundingRect();
           upper.dispatchEvent(new CustomEvent('shiye:fabric-object-transform',{detail:{
-            id:object.sceneID,bounds:{x:bounds.left,y:bounds.top,
+            id:object.sceneID||'multiple',bounds:{x:bounds.left,y:bounds.top,
               width:bounds.width,height:bounds.height}
           }}));
         };
         canvas.on('object:moving',movingSelection);
         canvas.on('object:scaling',movingSelection);
         canvas.on('object:rotating',movingSelection);
+        canvas.on('mouse:down',event=>{
+          const target=event.target;
+          if(callbacks.current.tool==='select'&&(target?.sceneID||target?.sceneMultiIDs))
+            callbacks.current.onBeforeChange?.(target.sceneID||'multiple');
+        });
         canvas.on('before:transform',event=>{
-          if(event.target?.sceneID)callbacks.current.onBeforeChange?.(event.target.sceneID);
+          if(event.target?.sceneID||event.target?.sceneMultiIDs)
+            callbacks.current.onBeforeChange?.(event.target.sceneID||'multiple');
         });
         canvas.on('object:modified',event=>{
+          if(event.target?.sceneMultiIDs){
+            const object=event.target,current=callbacks.current.draft;
+            const ids=object.sceneTransformIDs||[];
+            const before=object.sceneMultiPose,center=object.getCenterPoint();
+            const priorLayers=structuredClone(current.layers);
+            try{
+              for(const id of object.sceneMultiIDs)assertSceneEditable(current,id);
+              if(Math.abs(object.scaleX-1)>1e-5||Math.abs(object.scaleY-1)>1e-5)
+                throw Error('多选不能缩放实物素材');
+              const angle=(object.angle||0)-before.angle;
+              if(Math.abs(angle)>1e-5&&!transformSceneLasso(current,ids,before.center,1,angle))
+                throw Error('所选图层不能旋转');
+              moveSceneLasso(current,ids,center.x-before.center.x,center.y-before.center.y);
+              object.sceneMultiPose={center,angle:object.angle||0};
+              for(const id of ids){const root=current.layers.find(item=>byID([item],id));
+                if(root)signatures.delete(root.id);}
+              reconcileRef.current?.();
+              const bounds=object.getBoundingRect();
+              callbacks.current.onSelection?.(object.sceneMultiIDs,{x:bounds.left,y:bounds.top,
+                width:bounds.width,height:bounds.height});
+              callbacks.current.onChange?.(ids,'transform:multiple');
+            }catch(error){
+              current.layers=priorLayers;
+              for(const id of ids){const root=current.layers.find(item=>byID([item],id));
+                if(root)signatures.delete(root.id);}
+              syncingSelection.current=true;canvas.discardActiveObject();canvas.remove(object);
+              syncingSelection.current=false;reconcileRef.current?.();canvas.requestRenderAll();
+              callbacks.current.onSelection?.([],null);callbacks.current.onIssue?.(error);
+            }
+            return;
+          }
           const object=event.target,node=byID(callbacks.current.draft.layers,object?.sceneID);
           if(!node)return;
+          const before=structuredClone(node);
           try{
+            assertSceneEditable(callbacks.current.draft,node.id);
             bridge.applyObject(node,object);
             if(object.sceneID===callbacks.current.selectedID){
               const bounds=object.getBoundingRect();
@@ -526,9 +661,25 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
               for(const piece of projected().filter(item=>item.ownerID===node.id))
                 signatures.delete(renderKey(piece));
               reconcileRef.current?.();
+            }else if(object.sceneSelectionProxy){
+              const root=callbacks.current.draft.layers.find(item=>byID([item],node.id));
+              if(root){signatures.delete(root.id);reconcileRef.current?.();}
+            }else if(node.type==='text'&&
+              (Math.abs(object.scaleX-1)>.001||Math.abs(object.scaleY-1)>.001)){
+              signatures.delete(renderKey(node));reconcileRef.current?.();
             }else remember(object.sceneID);
             callbacks.current.onChange?.(node,'transform');
-          }catch(error){callbacks.current.onIssue?.(error);}
+          }catch(error){
+            for(const key of Object.keys(node))delete node[key];
+            Object.assign(node,before);
+            const root=callbacks.current.draft.layers.find(item=>byID([item],node.id));
+            if(root)signatures.delete(root.id);
+            const proxy=canvas.getObjects().find(item=>item.sceneSelectionProxy);
+            syncingSelection.current=true;canvas.discardActiveObject();if(proxy)canvas.remove(proxy);
+            syncingSelection.current=false;
+            reconcileRef.current?.();canvas.requestRenderAll();
+            callbacks.current.onSelection?.([],null);callbacks.current.onIssue?.(error);
+          }
         });
         canvas.on('text:editing:entered',event=>{
           if(event.target?.sceneID&&!uncommittedText.has(event.target.sceneID))

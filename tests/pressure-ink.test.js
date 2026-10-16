@@ -26,6 +26,10 @@ test('mouse stroke without pressure still renders and stays editable',()=>{
   assert.ok(pressureInkOutline(stroke).length>6);
   assert.ok(pressureInkPath(stroke).endsWith(' Z'));
   assert.ok(stroke.points.every(point=>!Object.hasOwn(point,'p')));
+  const fragments=erasePressureStroke(stroke,[{x:20,y:-20},{x:20,y:20}],1,()=>crypto.randomUUID());
+  assert.ok(fragments.length>1);
+  assert.ok(fragments.flatMap(part=>part.points).every(point=>!Object.hasOwn(point,'p')),
+    '擦除不能将鼠标笔迹改为显式笔压，导致整条剩余线条变样');
 });
 
 test('physical path eraser splits a long stroke between original samples',()=>{

@@ -6,7 +6,8 @@ export function projectFabricLayers(canvas,nodes,bridge,{readOnly=false,onIssue=
     Promise.resolve().then(()=>bridge.fromNode(node)).then(object=>{
       if(!isCurrent(node)||!object)return;
       const key=object.sceneRenderKey||object.sceneID||node.renderKey||node.id;
-      if(canvas.getObjects().some(item=>(item.sceneRenderKey||item.sceneID)===key))return;
+      if(canvas.getObjects().some(item=>!item.sceneSelectionProxy&&
+        (item.sceneRenderKey||item.sceneID)===key))return;
       object.sceneIndex=sceneIndex;
       if(readOnly)object.set({selectable:false,evented:false});
       const position=canvas.getObjects().filter(item=>item.sceneIndex<sceneIndex).length;

@@ -141,17 +141,23 @@ const assertUnlockedPath=(d,id)=>{
  if(path.some(lockedNode))throw Error('锁定图层或组合不能修改');
  return path;
 };
+export function assertSceneEditable(d,id){
+ attachSceneV2(d);
+ const node=assertUnlockedPath(d,id).at(-1);
+ if(node.type==='group'&&scenePathLocked(node.children||[]))
+  throw Error('组合包含锁定图层，不能整体修改');
+ return node;
+}
 export function sceneGroupMembers(d,id){return sceneLayerEntries(d,{hidden:true}).filter(e=>e.parents.some(g=>g.id===id));}
 export function groupSceneLayers(d,ids,{id='group-'+generatedID(),name='手帐组合'}={}){
  attachSceneV2(d);
  if(!Array.isArray(ids)||ids.length<2||ids.length>80||new Set(ids).size!==ids.length)throw Error('请选择 2–80 个不同图层进行编组');
  if(!/^[a-zA-Z0-9_-]{1,96}$/.test(id)||findSceneNode(d,id))throw Error('图层组编号无效或重复');
- const selected=sceneLayerEntries(d,{hidden:true}).filter(e=>ids.includes(e.value.id));
- if(selected.length!==ids.length||selected.some(e=>e.value.locked||e.value.isLocked))throw Error('编组包含不存在或锁定的图层');
- ids.forEach(id=>assertUnlockedPath(d,id));
- const parent=selected[0].parents.at(-1)||null;
- if(selected.some(e=>(e.parents.at(-1)||null)!==parent))throw Error('请在同一图层组中选择素材');
- const siblings=parent?parent.children:d.layers;
+ const selected=ids.map(key=>scenePath(d.layers,key));
+ if(selected.some(path=>!path))throw Error('编组包含不存在的图层');
+ ids.forEach(key=>assertSceneEditable(d,key));
+ const parent=selected[0].at(-2)||null;
+ if(selected.some(path=>(path.at(-2)||null)!==parent))throw Error('请在同一图层组中选择素材');
  const nodes=ids.map(key=>detach(d.layers,key)).filter(Boolean);
  const group={id,type:'group',name:String(name).slice(0,80),opacity:1,blendMode:'normal',children:nodes,zIndex:Math.min(...nodes.map(z))};
  insertNode(d,group,parent?.id);
@@ -161,10 +167,17 @@ export function groupSceneLayers(d,ids,{id='group-'+generatedID(),name='手帐�
 export function ungroupSceneLayers(d,id){
  attachSceneV2(d);
  const group=lookupGroup(d.layers,id);if(!group)return false;
- assertUnlockedPath(d,id);
+ assertSceneEditable(d,id);
+ if((group.opacity??1)!==1||!['normal','source-over',undefined].includes(group.blendMode)||
+   group.vectorMask||group.materialMask||group.clipPath)
+  throw Error('这个组合有透明、混合或遮罩效果，直接解组会改变画面');
  let parent=null;children(d.layers,(n,arr,g)=>{if(n===group){parent=g;return true;}return false;});
- const target=parent?parent.children:d.layers,index=target.indexOf(group);
- target.splice(index,1,...group.children);
+ const target=parent?parent.children:d.layers;
+ const ordered=[...target].sort((a,b)=>(a.zIndex??0)-(b.zIndex??0));
+ const index=ordered.indexOf(group);
+ ordered.splice(index,1,...[...group.children].sort((a,b)=>(a.zIndex??0)-(b.zIndex??0)));
+ ordered.forEach((node,position)=>{node.zIndex=position+1;});
+ target.splice(0,target.length,...ordered);
  for(const child of group.children)if(child.type!=='group')child.creativeGroupID=parent?.id||undefined; // Nested groups retain their own membership.
  return true;
 }

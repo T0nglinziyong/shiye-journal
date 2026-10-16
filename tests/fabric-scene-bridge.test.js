@@ -35,6 +35,21 @@ test('Fabric text edits round-trip through the existing Scene text record',async
   assert.equal(node.height,95);
 });
 
+test('text corner scaling updates typography while a side resize only reflows',async()=>{
+  const node={id:'text-scale',type:'text',content:'你好 A',x:210,y:105,width:180,height:95,
+    fontSize:40,fixedLineHeight:52,letterSpacing:2,style:'serif',color:'#30463d'};
+  const side=await bridge.fromNode(node);
+  side.set({scaleX:1.5,scaleY:1});bridge.applyObject(node,side);
+  assert.equal(node.width,270);
+  assert.equal(node.fontSize,40);
+  const corner=await bridge.fromNode(node);
+  corner.set({scaleX:2,scaleY:2});bridge.applyObject(node,corner);
+  assert.equal(node.width,540);
+  assert.equal(node.fontSize,80);
+  assert.equal(node.fixedLineHeight,104);
+  assert.equal(node.letterSpacing,4);
+});
+
 test('Fabric text keeps its paper-space frame center after rotation and grows on input',async()=>{
   const node={id:'text-rotate',type:'text',content:'甲',x:200,y:180,width:180,height:95,
     fontSize:40,style:'serif',color:'#30463d',rotation:30};
@@ -129,6 +144,18 @@ test('Fabric group move and rotation write through to absolute Scene child geome
   const snapshot=structuredClone(node.children);
   bridge.applyObject(node,object);
   assert.deepEqual(node.children,snapshot);
+});
+
+test('a group containing a locked child cannot be transformed through Fabric',async()=>{
+  const node={id:'locked-group',type:'group',children:[
+    {id:'locked-child',type:'shape',kind:'rectangle',x:100,y:100,
+      width:40,height:30,locked:true}]};
+  const object=await bridge.fromNode(node);
+  assert.equal(object.selectable,false);
+  assert.equal(object.evented,false);
+  object.set({left:object.left+30});
+  assert.throws(()=>bridge.applyObject(node,object),/锁定/);
+  assert.equal(node.children[0].x,100);
 });
 
 test('Fabric material edge controls resize its Scene placement and keep the source asset unchanged',async()=>{

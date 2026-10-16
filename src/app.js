@@ -13,8 +13,8 @@ import {renderLoginGate} from './react-cloud-auth.jsx';
 const sceneRuntime=()=>import('./scene-renderer.js');
 const renderSceneCanvas=async(...args)=>(await sceneRuntime()).renderSceneCanvas(...args);
 const decodeSceneImage=async(...args)=>(await sceneRuntime()).decodeSceneImage(...args);
-import {sceneLayerEntries,attachSceneV2,moveSceneNode,groupSceneLayers,ungroupSceneLayers,findSceneNode,validateVectorMask} from './scene-model.js';
-import {copySceneLasso,deleteSceneLasso,mergeSceneLasso} from './scene-lasso.js';
+import {sceneLayerEntries,attachSceneV2,moveSceneNode,groupSceneLayers,ungroupSceneLayers,findSceneNode,assertSceneEditable,validateVectorMask} from './scene-model.js';
+import {copySceneLasso,deleteSceneLasso,mergeSceneLasso,sceneLassoBounds} from './scene-lasso.js';
 import './styles.css';
 import './overrides.css';
 import './parity.css';
@@ -619,6 +619,9 @@ function render(){
   const onBatchError=error=>toast(error?.message||'批量操作失败');
   const trashPage=kind=>createElement(RecentlyDeletedPage,{kind,state,source:image,
     localCover:p=>localWorkCovers.peek(p),cloudEnabled,
+    onCardsChanged:()=>{if(kind!=='project')return;
+      view.localWorkCoverDispose?.();
+      view.localWorkCoverDispose=localWorkCovers.observe(view);},
     onTabChange:kind==='asset'?materialTab:workTab,
     onTrashChange:async(ids,recover)=>{
       const count=await changeTrash({db,state,ids,recover,awaitStage:awaitTrashStages});
@@ -1294,6 +1297,7 @@ async function runAppAction(action,id,value){try{switch(action){
     const entry=editorEntry(current()).find(item=>item.value.id===state.selected);
     if(entry?.kind==='text'){
       if(entry.value[id]===next)break;
+      assertSceneEditable(current(),entry.value.id);
       checkpoint();entry.value[id]=next;if(id==='style')entry.value.fontName=null;
       saveProject();
     }else{
@@ -1312,6 +1316,7 @@ async function runAppAction(action,id,value){try{switch(action){
       next=id==='lineWidth'?Math.max(0,Math.min(30,next)):Math.max(0,Math.min(1,next));
     }
     if(entry.value[id]===next)break;
+    assertSceneEditable(current(),entry.value.id);
     checkpoint();entry.value[id]=next;saveProject();render();break;
   }
   case 'fabric-tool-setting':{
@@ -1337,16 +1342,19 @@ async function runAppAction(action,id,value){try{switch(action){
   }
   case 'fabric-lasso-copy':{
     const d=current(),ids=state.multiSelected||[];if(!d||!ids.length)break;
+    ids.forEach(key=>assertSceneEditable(d,key));
     checkpoint();copySceneLasso(d,ids,uid);state.selected=null;state.multiSelected=[];
     saveProject();render();break;
   }
   case 'fabric-lasso-delete':{
     const d=current(),ids=state.multiSelected||[];if(!d||!ids.length)break;
+    ids.forEach(key=>assertSceneEditable(d,key));
     checkpoint();deleteSceneLasso(d,ids);state.selected=null;state.multiSelected=[];
     saveProject();render();break;
   }
   case 'fabric-lasso-merge':{
     const d=current(),ids=state.multiSelected||[];if(!d||ids.length<2)break;
+    ids.forEach(key=>assertSceneEditable(d,key));
     checkpoint();mergeSceneLasso(d,ids,{id:'group-'+uid()});
     state.selected=null;state.multiSelected=[];saveProject();render();break;
   }
@@ -1355,6 +1363,10 @@ async function runAppAction(action,id,value){try{switch(action){
     const ids=id.add?new Set([...(state.multiSelected||[]),state.selected].filter(Boolean)):new Set();
     if(id.add&&ids.has(node.id))ids.delete(node.id);else ids.add(node.id);
     state.multiSelected=[...ids];state.selected=ids.size===1?[...ids][0]:null;
+    const selected=new Set(ids);
+    const leaves=sceneLayerEntries(d,{hidden:true}).filter(entry=>selected.has(entry.value.id)||
+      entry.parents.some(parent=>selected.has(parent.id))).map(entry=>entry.value.id);
+    state.fabricSelectionBounds=leaves.length?sceneLassoBounds(d,leaves):null;
     state.fabricInspectorOpen=false;state.tool='select';render();break;
   }
   case 'fabric-layer-operation':{
@@ -1363,6 +1375,7 @@ async function runAppAction(action,id,value){try{switch(action){
     if(!['lock','visibility','up','down','move'].includes(operation))break;
     if((node.locked||node.isLocked)&&operation!=='lock')break;
     if(operation==='move'&&!findSceneNode(d,id.targetID))break;
+    if(operation==='visibility')assertSceneEditable(d,node.id);
     checkpoint();
     if(operation==='lock'){node.locked=node.isLocked=!(node.locked||node.isLocked);}
     else if(operation==='visibility'){
@@ -1410,8 +1423,9 @@ async function runAppAction(action,id,value){try{switch(action){
   case 'fabric-ungroup-selection':{
     const d=current(),target=state.selected||state.multiSelected?.[0];
     const entry=sceneLayerEntries(d,{hidden:true,ink:true}).find(item=>item.value.id===target);
-    const groupID=entry?.kind==='group'?target:entry?.parents?.at(-1)?.id;
+    const groupID=findSceneNode(d,target)?.type==='group'?target:entry?.parents?.at(-1)?.id;
     if(!groupID)break;
+    assertSceneEditable(d,groupID);
     checkpoint();ungroupSceneLayers(d,groupID);
     state.selected=null;state.multiSelected=[];saveProject();render();break;
   }
@@ -1506,7 +1520,15 @@ async function runAppAction(action,id,value){try{switch(action){
   }
   case 'zoom-in':await actionStore.dispatch({type:'editor/zoom',payload:{delta:.15}});break;case 'zoom-out':await actionStore.dispatch({type:'editor/zoom',payload:{delta:-.15}});break;
   case 'paper-menu':state.editorPanel=!state.editorPanel;state.selected=null;render();break;case 'undo':await actionStore.dispatch({type:'editor/undo'});break;case 'redo':await actionStore.dispatch({type:'editor/redo'});break;
-  case 'duplicate':editSelected((e,d)=>{
+  case 'duplicate':{
+    const d=current(),node=d&&findSceneNode(d,state.selected);
+    if(node?.type==='ink'){
+      assertSceneEditable(d,node.id);
+      checkpoint();const [copy]=copySceneLasso(d,[node.id],uid);
+      state.selected=copy;state.multiSelected=[copy];state.fabricSelectionBounds=sceneLassoBounds(d,[copy]);
+      saveProject();render();break;
+    }
+    editSelected((e,d)=>{
       if(!e)throw Error('没有选中可复制的图层');
       const copy={...structuredClone(e.value),id:uid(),x:e.value.x+25,y:e.value.y+25};
       if(e.kind==='material'){
@@ -1519,9 +1541,18 @@ async function runAppAction(action,id,value){try{switch(action){
         d.items.push(copy);
       }else(e.kind==='shape'?d.primitives:d.textBlocks).push(copy);
     });break;
+  }
    case 'flip':editSelected(e=>{e.value.isFlippedHorizontally=!e.value.isFlippedHorizontally;});break;
   case 'front':editSelected((e,d)=>{const parent=e.parents?.at(-1);moveSceneNode(d,e.value.id,{parentID:parent?.id||null});});break;
-  case 'delete-object':editSelected((e,d)=>{const key=e.kind==='material'?'items':e.kind==='shape'?'primitives':'textBlocks';if(e.kind==='material'&&retireSplitPiece(d,state.selected)){state.selected=null;return;}d[key]=d[key].filter(x=>x.id!==state.selected);state.selected=null;});break;
+  case 'delete-object':{
+    const d=current(),node=d&&findSceneNode(d,state.selected);
+    if(node?.type==='ink'){
+      assertSceneEditable(d,node.id);
+      checkpoint();deleteSceneLasso(d,[node.id]);state.selected=null;state.multiSelected=[];
+      state.fabricSelectionBounds=null;saveProject();render();break;
+    }
+    editSelected((e,d)=>{const key=e.kind==='material'?'items':e.kind==='shape'?'primitives':'textBlocks';if(e.kind==='material'&&retireSplitPiece(d,state.selected)){state.selected=null;return;}d[key]=d[key].filter(x=>x.id!==state.selected);state.selected=null;});break;
+  }
   case 'restore-baseline':editSelected(e=>{const b=e.value.generationBaseline;if(b){Object.assign(e.value,structuredClone(b));delete e.value.manualGeometryOverride;e.value.userOverrideFlags=[];}});break;
   case 'park':editSelected(e=>{if(e.kind==='material'){e.value.isParked=true;state.selected=null;}});break;
   case 'unpark':editSelected((e,d)=>{const item=d.items.find(x=>x.id===id);if(item)item.isParked=false;});break;
@@ -1715,7 +1746,9 @@ async function runAppAction(action,id,value){try{switch(action){
   case 'storage-browser':{if(state.selfHosted)throw Error('自托管网站不允许切换到浏览器资料');await flushSave();db.setStorageConfig(null);state.activeProject=null;state.basket=[];await refresh();toast('已切换为本浏览器资料');break;}
   case 'help':{openOverlay(createElement(HelpDialog,{onClose:closeOverlay,onExport:async()=>{const {runtimeIssueReport}=await import('./runtime-diagnostics.js');download(new Blob([runtimeIssueReport()],{type:'application/json'}),'拾页运行诊断.json');}}));break;}case 'settings-open':captureSettings();await actionStore.dispatch({type:'settings/section',payload:{section:value}});break;case 'settings-back':if(state.settingsSection){captureSettings();await actionStore.dispatch({type:'settings/section',payload:{section:null}});}else navigateBack(settingsSession?.returnRoute||'series');break;case 'settings-save':{captureSettings();const cfg=state.aiSettings;if(!cfg.model.trim())throw Error('请输入模型 ID');const endpoint=new URL(cfg.endpoint);if(endpoint.protocol!=='https:')throw Error('API 地址必须使用 HTTPS');if(cfg.provider!=='custom'&&endpoint.host!==new URL(AI_PROVIDERS[cfg.provider].endpoint).host)throw Error('服务商与 API 地址不一致；自定义地址请选“自定义兼容接口”');const returnRoute=settingsSession?.returnRoute||'series';if(cloudEnabled){await db.transaction(['meta'],tx=>{tx.objectStore('meta').put(cloudPreferencesRecord(state.preferences));tx.objectStore('meta').put(cloudAISettingsRecord(cfg));});}state.aiSettings=saveAISettings(cfg);state.preferences=savePreferences(state.preferences);deferredSyncedPreferences=null;deferredSyncedAISettings=null;settingsSession=null;state.settingsSection=null;navigateBack(returnRoute);toast('设置已保存');break;}
 }}catch(e){console.error(e);recordRuntimeIssue('handled',e,state.route,{phase:'action'});toast(e.message||'操作失败');}}
-function editSelected(fn){const d=current(),e=editorEntry(d).find(x=>x.value.id===state.selected);if(!e&&state.selected)return;checkpoint();fn(e,d);saveProject();render();}
+function editSelected(fn){const d=current(),e=editorEntry(d).find(x=>x.value.id===state.selected);if(!e&&state.selected)return;
+  if(e)assertSceneEditable(d,e.value.id);
+  checkpoint();fn(e,d);saveProject();render();}
 function historyStep(from,to){view.flushInkCommit?.({renderUI:false,force:true});view.endTextEditing?.();const d=current(),snapshot=takeEditorHistoryStep(state,from,to,d);if(!snapshot)return false;for(const key of Object.keys(d))delete d[key];Object.assign(d,snapshot);state.activeDraft=snapshot.id;saveProject();return true;}
 function readMatchPaper(){const ratio=view.querySelector('#match-ratio')?.value||'a4';if(ratio!=='custom')return ratio;const w=Number(view.querySelector('#match-paper-width')?.value),h=Number(view.querySelector('#match-paper-height')?.value);if(!Number.isInteger(w)||!Number.isInteger(h)||w<50||h<50||w>1000||h>1000)throw Error('自定义纸张宽高需要是 50–1000 mm 的整数');state.customPaperWidth=w;state.customPaperHeight=h;return `custom:${w}x${h}`;}
 function captureMatchContent(){state.matchContentPolicy=view.querySelector('#match-content-policy')?.value||state.matchContentPolicy||'documentary';state.matchTextPresentation=view.querySelector('#match-text-presentation')?.value||state.matchTextPresentation||'mixed';}

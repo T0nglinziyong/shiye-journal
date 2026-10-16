@@ -131,6 +131,13 @@ try{
   await sleep(900);
   assert.equal((await projects())[0].drafts[0].layers.find(layer=>layer.type==='text').fontSize,54,
     'Text size accepts a typed value as well as preset steps');
+  assert.ok(await evaluate('!!document.querySelector(".fabric-selected-actions")'),
+    'Changing font size must keep the selected text frame for subsequent edits');
+  await evaluate(`(()=>{const font=document.querySelector('.canvas-text-format select[aria-label="字体"]');
+    font.value='sans';font.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+  await sleep(350);
+  assert.ok(await evaluate('!!document.querySelector(".fabric-selected-actions")'),
+    'Changing font after size must not clear the same text selection');
   await click('[data-val="text"]');
   const scrollBeforeReedit=await evaluate('window.scrollY');
   await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,clickCount:1,...existingTextPoint});
@@ -204,12 +211,98 @@ try{
   assert.notEqual(shapes[0].id,shapes[1].id,'Copied used shape needs a new Scene identity');
   await click('[data-val="layers"]','.scene-layer-tree');
   assert.ok(await evaluate('document.querySelectorAll(".scene-layer-tree [role=treeitem]").length')>=2);
+  await click(`[data-scene-node="${shapes[0].id}"] [data-layer-pick]`);
+  await click('.scene-layer-tree-toolbar button:first-child');
+  await click(`[data-scene-node="${shapes[1].id}"] [data-layer-pick]`);
+  await click('[data-val="layers"]');
+  await wait('.fabric-selected-actions');
+  const beforeMulti=(await projects())[0].drafts[0].layers.filter(layer=>
+    [shapes[0].id,shapes[1].id].includes(layer.id));
+  const multiBounds=sceneLassoBounds((await projects())[0].drafts[0],beforeMulti.map(layer=>layer.id));
+  const multiCenter=await evaluate(`(()=>{const r=document.querySelector('.upper-canvas').getBoundingClientRect();
+    const b=${JSON.stringify(multiBounds)};
+    return {x:r.left+(b.x+b.width/2)*r.width/document.querySelector('.upper-canvas').width,
+      y:r.top+(b.y+b.height/2)*r.height/document.querySelector('.upper-canvas').height}})()`);
+  await sleep(250);
+  await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,clickCount:1,...multiCenter});
+  for(let step=1;step<=4;step++)await command('Input.dispatchMouseEvent',{type:'mouseMoved',button:'left',buttons:1,
+    x:multiCenter.x+step*7,y:multiCenter.y+step*3});
+  await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,clickCount:1,
+    x:multiCenter.x+28,y:multiCenter.y+12});
+  const afterMulti=(await waitProjects(rows=>{
+    const now=rows[0]?.drafts?.[0]?.layers||[];
+    return beforeMulti.every(prior=>now.find(item=>item.id===prior.id)?.x>prior.x+10);
+  }))[0].drafts[0].layers;
+  assert.ok(beforeMulti.every(prior=>afterMulti.find(item=>item.id===prior.id)?.x>prior.x+10),
+    'Dragging the shared selection frame must persist both selected objects');
+  await click('[data-act="undo"]');
+  const afterUndo=(await waitProjects(rows=>beforeMulti.every(prior=>
+    Math.abs((rows[0]?.drafts?.[0]?.layers||[]).find(item=>item.id===prior.id)?.x-prior.x)<1)))[0].drafts[0].layers;
+  assert.ok(beforeMulti.every(prior=>Math.abs(afterUndo.find(item=>item.id===prior.id)?.x-prior.x)<1),
+    'Undo must restore both objects from one multi-selection gesture');
+  await click('[data-act="redo"]');
+  const afterRedo=(await waitProjects(rows=>beforeMulti.every(prior=>
+    (rows[0]?.drafts?.[0]?.layers||[]).find(item=>item.id===prior.id)?.x>prior.x+10)))[0].drafts[0].layers;
+  assert.ok(beforeMulti.every(prior=>afterRedo.find(item=>item.id===prior.id)?.x>prior.x+10),
+    'Redo must reapply both objects from one multi-selection gesture');
+  const turnBounds=sceneLassoBounds((await projects())[0].drafts[0],beforeMulti.map(layer=>layer.id));
+  const turnHandle=await evaluate(`(()=>{const r=document.querySelector('.upper-canvas').getBoundingClientRect();
+    const b=${JSON.stringify(turnBounds)};const c=document.querySelector('.upper-canvas');
+    return {x:r.left+(b.x+b.width)*r.width/c.width,
+      y:r.top+(b.y+b.height)*r.height/c.height}})()`);
+  await sleep(250);
+  await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,clickCount:1,...turnHandle});
+  await command('Input.dispatchMouseEvent',{type:'mouseMoved',button:'left',buttons:1,
+    x:turnHandle.x-25,y:turnHandle.y+20});
+  await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,
+    x:turnHandle.x-25,y:turnHandle.y+20});
+  const turnedMulti=(await waitProjects(rows=>beforeMulti.every(prior=>
+    Math.abs((rows[0]?.drafts?.[0]?.layers||[]).find(item=>item.id===prior.id)?.rotation||0)>3)))[0].drafts[0].layers;
+  assert.ok(beforeMulti.every(prior=>Math.abs(turnedMulti.find(item=>item.id===prior.id)?.rotation||0)>3),
+    'The shared bottom-right control must rotate every selected object');
+  await click('[data-act="undo"]');
+  await waitProjects(rows=>beforeMulti.every(prior=>
+    Math.abs((rows[0]?.drafts?.[0]?.layers||[]).find(item=>item.id===prior.id)?.rotation||0)<1));
+  await click('[data-val="layers"]','.scene-layer-tree');
   assert.ok(await evaluate('!!document.querySelector(".scene-layer-tree [aria-label=锁定]")'));
   await click('.scene-layer-tree [aria-label=锁定]');await sleep(800);
   assert.ok((await projects())[0].drafts[0].layers.some(layer=>layer.locked),
     'Layer lock must persist in the current Scene');
   await click('.scene-layer-tree [aria-label=解锁]');await sleep(800);
   assert.equal((await projects())[0].drafts[0].layers.filter(layer=>layer.locked).length,0);
+  const inkID=(await projects())[0].drafts[0].layers.find(layer=>layer.type==='ink')?.id;
+  assert.ok(inkID);
+  await click(`[data-scene-node="${inkID}"] [data-layer-pick]`);
+  await sleep(350);
+  assert.ok(await evaluate(`(()=>{const selected=document.querySelector(${JSON.stringify(`[data-scene-node="${inkID}"]`)});
+    return selected?.classList.contains('selected')&&!!document.querySelector('.fabric-selected-actions')})()`),
+  'Ink picked in the layer tree must keep a visible editing frame');
+  const dismissPoint=await evaluate(`(()=>{const rect=document.querySelector('.upper-canvas').getBoundingClientRect();
+    return {x:rect.left+rect.width*.9,y:rect.top+rect.height*.9}})()`);
+  await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,clickCount:1,...dismissPoint});
+  await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,clickCount:1,...dismissPoint});
+  await sleep(150);
+  assert.ok(await evaluate('!!document.querySelector(".fabric-selected-actions")'),
+    'Closing the layer tree by tapping the paper must keep its selection');
+  const inkBefore=(await projects())[0].drafts[0].layers.find(layer=>layer.id===inkID);
+  const inkBounds=sceneLassoBounds((await projects())[0].drafts[0],[inkID]);
+  const inkCenter=await evaluate(`(()=>{const r=document.querySelector('.upper-canvas').getBoundingClientRect();
+    const b=${JSON.stringify(inkBounds)};
+    return {x:r.left+(b.x+b.width/2)*r.width/document.querySelector('.upper-canvas').width,
+      y:r.top+(b.y+b.height/2)*r.height/document.querySelector('.upper-canvas').height}})()`);
+  await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,clickCount:1,...inkCenter});
+  await command('Input.dispatchMouseEvent',{type:'mouseMoved',button:'left',buttons:1,
+    x:inkCenter.x+24,y:inkCenter.y+12});
+  await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,clickCount:1,
+    x:inkCenter.x+24,y:inkCenter.y+12});
+  const inkAfter=(await waitProjects(rows=>
+    rows[0]?.drafts?.[0]?.layers?.find(layer=>layer.id===inkID)?.points?.[0]?.x>
+      inkBefore.points[0].x+10))[0].drafts[0].layers.find(layer=>layer.id===inkID);
+  assert.ok(inkAfter.points[0].x>inkBefore.points[0].x+10,
+    'Dragging an ink selection made through layers must move the persisted Scene stroke');
+  await click('[data-val="layers"]','.scene-layer-tree');
+  assert.ok(await evaluate(`document.querySelector(${JSON.stringify(`[data-scene-node="${inkID}"]`)})?.classList.contains('selected')`),
+    'Reopened layer tree must reflect the object selected on the canvas');
   await click('[data-val="layers"]');
   await click('[data-val="highlighter"]');
   const markerAt=await evaluate(`(()=>{const r=document.querySelector('.upper-canvas').getBoundingClientRect();
@@ -225,7 +318,7 @@ try{
     'Highlighter must persist as a transparent multiply stroke');
   await click('[data-val="lasso"]');
   const lasso=await evaluate(`(()=>{const r=document.querySelector('.upper-canvas').getBoundingClientRect();
-    const p=${JSON.stringify(shapes[0])};const sx=r.width/document.querySelector('.upper-canvas').width;
+    const p=${JSON.stringify(afterMulti.find(layer=>layer.id===shapes[0].id))};const sx=r.width/document.querySelector('.upper-canvas').width;
     const sy=r.height/document.querySelector('.upper-canvas').height;
     const w=Math.max(30,p.width*sx/2+20),h=Math.max(30,p.height*sy/2+20);
     return [{x:r.left+p.x*sx-w,y:r.top+p.y*sy-h},{x:r.left+p.x*sx+w,y:r.top+p.y*sy-h},

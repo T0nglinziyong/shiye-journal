@@ -14,6 +14,7 @@ import {FabricSceneStage} from './fabric-scene-stage.jsx';
 import {FabricEditorToolbar,FabricHeaderMenu} from './fabric-editor-controls.jsx';
 import {FabricPageViewport} from './fabric-page-viewport.jsx';
 import {SceneCover} from './scene-cover.jsx';
+import {findSceneNode} from './scene-v2.js';
 import {WORK_TABS,workInTab} from './work-collections.js';
 import {catalogDataPage,catalogVisibleItems,pageSize,pageSlice,setCatalogDataPage} from './catalog-pagination.js';
 import {searchableSeries} from './library-model.js';
@@ -137,7 +138,7 @@ function CatalogTabs({tabs,active,onChange}){
 const materialTabs=[['series','系列'],['all','全部素材'],['pending','待检测'],['trash','最近删除']];
 
 export function RecentlyDeletedPage({kind,state,source,localCover,cloudEnabled,onTabChange,
-  onTrashChange,onError}){
+  onTrashChange,onError,onCardsChanged}){
   const [choosing,setChoosing]=useState(false);
   const [selected,setSelected]=useState(()=>new Set());
   const [busy,setBusy]=useState(false);
@@ -147,6 +148,8 @@ export function RecentlyDeletedPage({kind,state,source,localCover,cloudEnabled,o
   const limit=pageSize(state.preferences.maxPageItems);
   const range=pageSlice(records.length,limit,page);
   const visible=records.slice(range.start,range.end);
+  const visibleCardKeys=visible.map(entry=>`${entry.id}:${entry.item?.updatedAt||''}`).join('|');
+  useEffect(()=>{onCardsChanged?.();},[kind,visibleCardKeys]);
   const toggle=id=>setSelected(prior=>{
     const next=new Set(prior);
     next.has(id)?next.delete(id):next.add(id);
@@ -1081,6 +1084,10 @@ function EditorInspector({selected,draft,asset,format,onChange,onAction}){
   const item=selected.value;
   const button=(name,label,kind='')=><button className={`btn mini ${kind}`} data-act={name}
     data-react-action="true" onClick={()=>onAction(name)}>{label}</button>;
+  if(selected.kind==='ink')return <div className="stack editor-inspector-fields">
+    <h3>手写笔迹</h3><p className="muted">可在画布编辑框中移动或旋转这条笔迹。</p>
+    <div className="actions">{button('duplicate','复制')}{button('delete-object','删除','danger')}</div>
+  </div>;
   return <div className="stack editor-inspector-fields">
     {selected.kind==='text'?<>
       <h3>文字内容与样式</h3>
@@ -1229,7 +1236,9 @@ export function EditorPage({state,draft,editorEntry,asset,source,format,
   onFabricViewportChange,loadFabricAsset,materials=[]}){
   const project=state.activeProject;
   if(!project||!draft)return null;
-  const selected=editorEntry(draft).find(entry=>entry.value.id===state.selected);
+  const selected=editorEntry(draft).find(entry=>entry.value.id===state.selected)||
+    (findSceneNode(draft,state.selected)?.type==='ink'
+      ?{kind:'ink',value:findSceneNode(draft,state.selected)}:null);
   const viewportHeight=window.visualViewport?.height||window.innerHeight;
   const availableWidth=Math.max(180,window.innerWidth-(window.innerWidth<700?24:72));
   const availableHeight=Math.max(180,viewportHeight-(window.innerWidth<700?200:166));
@@ -1251,6 +1260,9 @@ export function EditorPage({state,draft,editorEntry,asset,source,format,
       selected={selected} onInspectorChange={onInspectorChange} onAction={onAction}/>
     {state.tool==='lasso'&&(state.multiSelected||[]).length?<FabricSelectedActions lasso count={state.multiSelected.length}
       bounds={state.fabricSelectionBounds} draft={draft} onAction={onAction}/>:null}
+    {state.tool==='select'&&(state.multiSelected||[]).length>1?<FabricSelectedActions lasso
+      count={state.multiSelected.length} bounds={state.fabricSelectionBounds}
+      draft={draft} onAction={onAction}/>:null}
     {selected&&state.tool==='select'&&!state.fabricInspectorOpen?<FabricSelectedActions bounds={state.fabricSelectionBounds}
       draft={draft} onAction={onAction}/>:null}
     <div className={`editor-shell swift-editor-workspace ${selected&&state.fabricInspectorOpen?'show-inspector':''}`}
@@ -1265,17 +1277,21 @@ export function EditorPage({state,draft,editorEntry,asset,source,format,
         if(!canvas)return;
         const point=canvas.getScenePoint(event);
         const hit=[...canvas.getObjects()].reverse().find(object=>object.visible!==false&&
-          object.evented!==false&&object.selectable!==false&&object.containsPoint(point));
+          !object.sceneSelectionProxy&&object.evented!==false&&object.selectable!==false&&object.containsPoint(point));
         if(hit)canvas.setActiveObject(hit);
         else canvas.discardActiveObject();
         canvas.requestRenderAll();
       }}
       canTransform={event=>{
-        if(!state.selected)return false;
+        if(!state.selected&&(state.multiSelected||[]).length<2)return false;
         const canvas=editorFabricCanvases.get(draft.id);
         if(!canvas)return false;
         const point=canvas.getScenePoint(event);
         const active=canvas.getActiveObject();
+        if((state.multiSelected||[]).length>1&&active?.sceneMultiIDs?.length>1){
+          if(active.findControl(canvas.getViewportPoint(event),event.pointerType==='touch'))return true;
+          return active.containsPoint(point);
+        }
         if(active?.sceneID===state.selected&&
           active.findControl(canvas.getViewportPoint(event),event.pointerType==='touch'))return true;
         return canvas.getObjects().some(object=>object.sceneID===state.selected&&

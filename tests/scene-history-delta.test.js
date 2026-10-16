@@ -38,6 +38,35 @@ test('edit-free checkpoint contributes no undoable action',()=>{
  assert.equal(state.undo.length,0);
 });
 
+test('a no-op checkpoint skips directly to the last real edit and preserves redo',()=>{
+ const d=setup(),state={activeProject:{id:'P'},activeDraft:'D',undo:[],redo:[]};
+ d.textBlocks.push({id:'text',type:'text',content:'原稿',x:20,y:40,width:100,height:50});
+ resetEditorHistory(state);
+ checkpointEditorHistory(state,d);d.textBlocks[0].x=70;
+ checkpointEditorHistory(state,d);
+ let current=takeEditorHistoryStep(state,'undo','redo',d);
+ assert.equal(current.textBlocks[0].x,20,'one undo skips the empty last checkpoint');
+ assert.equal(state.redo.length,1);
+ checkpointEditorHistory(state,current);
+ assert.equal(state.redo.length,1,'opening an edit without changing data keeps redo');
+ current=takeEditorHistoryStep(state,'redo','undo',current);
+ assert.equal(current.textBlocks[0].x,70);
+});
+
+test('a real edit after undo invalidates redo only after the new change',()=>{
+ const d=setup(),state={activeProject:{id:'P'},activeDraft:'D',undo:[],redo:[]};
+ d.textBlocks.push({id:'text',type:'text',content:'原稿',x:20,y:40,width:100,height:50});
+ resetEditorHistory(state);
+ checkpointEditorHistory(state,d);d.textBlocks[0].x=70;
+ let current=takeEditorHistoryStep(state,'undo','redo',d);
+ checkpointEditorHistory(state,current);
+ assert.equal(state.redo.length,1);
+ current.textBlocks[0].x=90;
+ assert.equal(takeEditorHistoryStep(state,'redo','undo',current),null);
+ assert.equal(state.redo.length,0);
+ assert.equal(takeEditorHistoryStep(state,'undo','redo',current).textBlocks[0].x,20);
+});
+
 test('moving a heavy material stores only geometry fields in the history transaction',()=>{
  const before=setup();before.items.push({id:'a',assetID:'paper',x:20,y:60,width:100,height:90,source:'X'.repeat(200000)});
  const after=structuredClone(before);after.layers[0].x=70;

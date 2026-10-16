@@ -10,13 +10,17 @@ try{
   await b.evaluate(`(async()=>{
     const store=await import('/src/store.js');
     const now=new Date().toISOString();
+    const snapshot=new Blob(['<svg xmlns="http://www.w3.org/2000/svg" width="70" height="100"><rect width="70" height="100" fill="#a1ba93"/></svg>'],{type:'image/svg+xml'});
+    await store.put('blobs',{id:'snapshot-delete-cover',data:snapshot});
     for(const [id,title,flags] of [
-      ['snapshot-delete-test','快照删除验收',{isSnapshot:true,isDraft:false}],
+      ['snapshot-delete-test','快照删除验收',{isSnapshot:true,isDraft:false,snapshotBlobId:'snapshot-delete-cover'}],
       ['editable-delete-test','可编辑删除验收',{isDraft:false}],
       ['draft-delete-test','草稿删除验收',{isDraft:true}]]){
       await store.put('projects',{id,title,...flags,createdAt:now,updatedAt:now,
         activeDraftID:'draft',drafts:[{id:'draft',sceneVersion:2,
-          canvas:{width:700,height:1000},physicalPageHeightMM:297,layers:[]}]});
+          canvas:{width:700,height:1000},physicalPageHeightMM:297,layers:[
+            {id:'cover-shape',type:'shape',kind:'rectangle',x:350,y:500,
+              width:350,height:500,fill:'#a1ba93',stroke:'#375d48',lineWidth:2,zIndex:1}]}]});
     }
   })()`);
   await b.command('Page.reload');
@@ -56,6 +60,20 @@ try{
     await b.click('.swift-tabs button:nth-child(5)','.recently-deleted-grid');
     assert.ok(await b.evaluate(`document.body.textContent.includes(${JSON.stringify(title)})`),
       `${title}应立即在最近删除出现`);
+    const deletedCard=`[data-trash-id]:has([data-cover-project-id="${id}"])`;
+    try{await b.wait(`${deletedCard} .work-reference`,5000);}catch(error){
+      throw Error(`${title}封面未生成：`+JSON.stringify({html:await b.evaluate(`document.querySelector(${JSON.stringify(deletedCard)})?.outerHTML`),
+        console:b.consoleMessages.slice(-12),errors:b.errors}));
+    }
+    for(let i=0;i<150;i++){
+      if(await b.evaluate(`(()=>{const image=document.querySelector(${JSON.stringify(`${deletedCard} .work-reference`)});
+        const paper=image?.closest('.thumb-sheet');return image?.naturalWidth>0&&
+        image.getBoundingClientRect().width>20&&paper?.getBoundingClientRect().width>20})()`))break;
+      await b.sleep(20);
+    }
+    assert.ok(await b.evaluate(`(()=>{const image=document.querySelector(${JSON.stringify(`${deletedCard} .work-reference`)});
+      return image?.naturalWidth>0&&image.getBoundingClientRect().width>20})()`),
+    `${title}在最近删除中的封面应立即可见`);
   }
   assert.deepEqual(b.errors,[]);
   console.log('Snapshot, editable and draft deletion update lists without a reload');

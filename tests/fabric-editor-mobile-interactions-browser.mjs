@@ -3,8 +3,9 @@ import {browserHarness} from './browser-harness.mjs';
 
 const url=process.env.SHIYE_TEST_URL||'http://127.0.0.1:5173';
 const browser=await browserHarness('shiye-editor-mobile-interactions',url+'/',
-  async({command})=>command('Emulation.setDeviceMetricsOverride',
-    {width:390,height:844,deviceScaleFactor:3,mobile:true}));
+  async({command})=>{await command('Emulation.setDeviceMetricsOverride',
+    {width:390,height:844,deviceScaleFactor:3,mobile:true});
+    await command('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:2});});
 const {click,command,evaluate,wait,sleep}=browser;
 try{
   await wait('.series-grid');
@@ -41,6 +42,32 @@ try{
     return getComputedStyle(toolbar).backgroundColor==='rgba(0, 0, 0, 0)'&&
       !!toolbar.querySelector('input[aria-label="字号"][type=number]')})()`),true,
     'Mobile text controls expose a direct size input without a pale background');
+  await evaluate('document.querySelector(".upper-canvas").scrollIntoView({block:"center"})');
+  const textSpot=await evaluate(`(()=>{const r=document.querySelector('.upper-canvas').getBoundingClientRect();
+    return {x:r.left+r.width*.45,y:r.top+r.height*.55}})()`);
+  await command('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{...textSpot,id:7,force:.5}]});
+  await command('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+  await sleep(400);
+  assert.ok(await evaluate('document.activeElement?.tagName==="TEXTAREA"'),
+    'Tapping the mobile canvas with the text tool must create and focus a text box');
+  await command('Input.insertText',{text:'触屏文字'});
+  await sleep(600);
+  assert.ok(await evaluate(`(async()=>{const db=await new Promise(resolve=>{const q=indexedDB.open('shiye-pwa-full-v1');q.onsuccess=()=>resolve(q.result)});
+    const rows=await new Promise(resolve=>{const q=db.transaction('projects').objectStore('projects').getAll();q.onsuccess=()=>resolve(q.result)});
+    db.close();return rows.some(p=>p.drafts?.some(d=>d.layers?.some(n=>n.type==='text'&&n.content==='触屏文字')));})()`),
+  'Mobile text must persist to the Scene');
+  await click('[data-val="select"]');
+  await click('[data-val="layers"]','.scene-layer-tree');
+  await click('.scene-layer-node [data-layer-pick]');
+  await click('[data-val="layers"]');
+  await wait('.canvas-font-size-stepper input[aria-label="字号"]');
+  await evaluate(`(()=>{const input=document.querySelector('.canvas-font-size-stepper input[aria-label="字号"]');
+    input.focus();input.select();})()`);
+  await command('Input.insertText',{text:'61'});
+  await evaluate('document.querySelector(".canvas-font-size-stepper input[aria-label=字号]").blur()');
+  await sleep(450);
+  assert.ok(await evaluate('!!document.querySelector(".fabric-selected-actions")'),
+    'Mobile font changes must preserve the selected text frame');
   await click('[data-val="shape"]','.swift-shape-picker');
   await click('[data-shape-kind="rectangle"]','.fabric-selected-actions');
   await click('[aria-label="编辑对象"]','.show-inspector');

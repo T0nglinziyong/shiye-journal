@@ -42,11 +42,18 @@ function ReactPopover({anchor,title,className='',width=360,height=440,picker=fal
     const key=event=>{if(event.key==='Escape'){event.preventDefault();onClose();}};
     const outside=event=>{
       if(!event.target.closest?.('.swift-popover,.swift-editor-toolbar,.swift-editor-head')&&
-        !anchor?.contains(event.target))onClose();
+        !anchor?.contains(event.target)){
+        if(className.includes('swift-layer-popover')&&event.target.closest?.('#canvas-page')){
+          // Dismissing the layer tree must not turn the same tap into a blank
+          // canvas selection event and lose the layer chosen in the tree.
+          event.preventDefault();event.stopImmediatePropagation();
+        }
+        onClose();
+      }
     };
     addEventListener('keydown',key);addEventListener('pointerdown',outside,true);
     return ()=>{removeEventListener('keydown',key);removeEventListener('pointerdown',outside,true);};
-  },[anchor,onClose]);
+  },[anchor,onClose,className]);
   return createPortal(<div className={`swift-popover ${className}`} role={className.includes('swift-menu')?'menu':'dialog'} aria-label={title}
     style={position?{left:position.left,top:position.top,width:position.width,maxHeight:position.maxHeight}:
       {visibility:'hidden',left:0,top:0,width}}>

@@ -39,6 +39,13 @@ export function erasePressureStroke(stroke,eraserPath,radius,newID=()=>crypto.ra
   const edge=radius+stroke.width/2;
   const paths=eraserPath.length===1?[[eraserPath[0],eraserPath[0]]]:
     eraserPath.slice(1).map((end,index)=>[eraserPath[index],end]);
+  // Mouse and touch strokes deliberately omit pressure so perfect-freehand
+  // simulates it. Interpolating a synthetic p during erasure used to switch
+  // every surviving fragment to explicit-pressure rendering, changing the
+  // appearance of the whole stroke far outside the erased area.
+  const hasPressure=stroke.points.some(point=>Number.isFinite(point.p));
+  const sample=(a,b,t)=>({x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t,
+    ...(hasPressure?{p:finite(a.p,.5)+(finite(b.p,.5)-finite(a.p,.5))*t}:{})});
   const inside=point=>paths.some(([start,end])=>distanceToSegment(point,start,end)<=edge);
   const sampled=[];
   for(let i=0;i<stroke.points.length;i++){
@@ -71,13 +78,11 @@ export function erasePressureStroke(stroke,eraserPath,radius,newID=()=>crypto.ra
     for(const t of positions){
       if(t-previous<1e-6)continue;
       previous=t;
-      sampled.push({x:start.x+(end.x-start.x)*t,y:start.y+(end.y-start.y)*t,
-        p:finite(start.p,.5)+(finite(end.p,.5)-finite(start.p,.5))*t});
+      sampled.push(sample(start,end,t));
     }
   }
   if(!sampled.some(inside))return [stroke];
-  const interpolate=(a,b,t)=>({x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t,
-    p:finite(a.p,.5)+(finite(b.p,.5)-finite(a.p,.5))*t});
+  const interpolate=sample;
   const boundary=(a,b,aInside)=>{
     let low=0,high=1;
     for(let step=0;step<18;step++){
