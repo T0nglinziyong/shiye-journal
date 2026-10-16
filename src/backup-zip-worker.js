@@ -122,8 +122,13 @@ async function restore(file){
     for(;;){
       const {value,done}=await reader.read();
       if(done){unzip.push(new Uint8Array(0),true);break;}
-      unzip.push(value,false);
-      if(streamError)throw streamError;
+      // A single Blob stream chunk can contain thousands of empty ZIP files.
+      // fflate invokes each entry callback recursively while parsing that
+      // chunk, so feed bounded slices and enforce our count between slices.
+      for(let offset=0;offset<value.length;offset+=4096){
+        unzip.push(value.subarray(offset,offset+4096),false);
+        if(streamError)throw streamError;
+      }
     }
     if(streamError)throw streamError;
   }finally{reader.releaseLock();}

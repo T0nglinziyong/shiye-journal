@@ -1148,7 +1148,20 @@ async function cloudStageProject(record){
   return projectSync.stage(record,{baseRevision});
 }
 async function cloudStageImport(batch){assertAccountWritable();await identity();if(revision===undefined)await version();await importSync.stage({...batch,id:crypto.randomUUID()});return {pending:true};}
+let metadataMutationTail=Promise.resolve();
 async function cloudStageMutation(names,fn){
+  if(!names.some(store=>store==='assets'||store==='series'))
+    return stageMutationNow(names,fn);
+  // Only local metadata staging is serialized. Network uploads remain
+  // independent, while two rapid edits of the same record keep their order.
+  const before=metadataMutationTail;
+  let release;
+  metadataMutationTail=new Promise(resolve=>{release=resolve;});
+  await before;
+  try{return await stageMutationNow(names,fn);}
+  finally{release();}
+}
+async function stageMutationNow(names,fn){
   assertAccountWritable();
   const operations=[],modifiedAt=new Date().toISOString(),result=fn({objectStore(store){if(!names.includes(store))throw Error('此表未加入事务');return {put:item=>operations.push({action:'put',store,item:structuredClone(item),modifiedAt}),delete:id=>operations.push({action:'delete',store,id,modifiedAt}),clear:()=>operations.push({action:'clear',store,modifiedAt})};}});
   if(result?.then)throw Error('事务回调必须同步');if(!operations.length)return;
@@ -1156,21 +1169,58 @@ async function cloudStageMutation(names,fn){
   operations.push(...recordTombstones(operations).slice(operations.length));
   names=[...new Set([...names,...operations.map(op=>op.store)])];
   await identity();if(revision===undefined)await version();
-  // The authoritative collection snapshot is the edit baseline. Persist it
-  // with a metadata PUT so disjoint fields can be merged after a concurrent
-  // change without guessing from the final two records. A stale snapshot is
-  // not proof, so it is deliberately ignored.
-  await Promise.all([...new Set(operations.filter(op=>op.action==='put'&&
-    ['assets','series'].includes(op.store)).map(op=>op.store))].map(async store=>{
+  const metadataStores=new Set(['assets','series']);
+  const metadataPuts=operations.filter(op=>op.action==='put'&&metadataStores.has(op.store));
+  const metadataKeys=new Set(metadataPuts.map(op=>op.store+'\0'+op.item.id));
+  // A second offline edit must be based on the first pending edit, including
+  // its field stamps. Otherwise both edits get the same counter and a later
+  // revert to the cloud value can disappear during conflict resolution.
+  const pendingBases=metadataKeys.size?await unifiedSync.inspectPending(rows=>{
+    const latest=new Map();
+    for(const row of [...rows].sort((a,b)=>a.serial-b.serial)){
+      if(row.record?.kind!=='batch')continue;
+      const batch=row.record.payload;
+      const prior=batch.operations||[...metadataStores].flatMap(store=>
+        (batch[store]||[]).map(item=>({action:'put',store,item})));
+      for(const op of prior){
+        if(!metadataStores.has(op.store))continue;
+        if(op.action==='clear'){
+          for(const key of metadataKeys)if(key.startsWith(op.store+'\0'))latest.set(key,null);
+          continue;
+        }
+        const key=op.store+'\0'+(op.item?.id??op.id);
+        if(!metadataKeys.has(key))continue;
+        if(op.action==='delete')latest.set(key,null);
+        else if(op.action==='put')latest.set(key,op.item);
+      }
+    }
+    return latest;
+  }):new Map();
+  // Only a snapshot at the current revision proves an authoritative base.
+  // Pending local writes take precedence because they are causally newer.
+  const authoritativeBases=new Map();
+  await Promise.all([...new Set(metadataPuts.map(op=>op.store))].map(async store=>{
     const memory=snapshots.get(store);
     const saved=memory?.revision===revision?memory:await cached('records:'+store);
     if(saved?.revision!==revision)return;
-    const byID=new Map(saved.records.map(item=>[item.id,item]));
-    for(const op of operations)if(op.action==='put'&&op.store===store&&byID.has(op.item.id)){
-      op.baseRecord=structuredClone(byID.get(op.item.id));
+    authoritativeBases.set(store,new Map(saved.records.map(item=>[item.id,item])));
+  }));
+  for(const op of operations){
+    if(!metadataStores.has(op.store))continue;
+    if(op.action==='clear'){
+      for(const key of metadataKeys)if(key.startsWith(op.store+'\0'))pendingBases.set(key,null);
+      continue;
+    }
+    const key=op.store+'\0'+(op.item?.id??op.id);
+    if(op.action==='delete'){pendingBases.set(key,null);continue;}
+    if(op.action!=='put')continue;
+    const base=pendingBases.has(key)?pendingBases.get(key):authoritativeBases.get(op.store)?.get(op.item.id);
+    if(base){
+      op.baseRecord=structuredClone(base);
       op.item=stampMetadataEdit(op.baseRecord,op.item,batchID);
     }
-  }));
+    pendingBases.set(key,op.item);
+  }
   const deletedIDs=operations.filter(op=>op.store==='projects'&&op.action==='delete').map(op=>op.id);
   if(!deletedIDs.length){await importSync.stage({id:batchID,names,operations});return;}
   // Persist the delete + full trash snapshot before touching older pending

@@ -877,6 +877,32 @@ test('same material field competition settles automatically and leaves no pendin
    state.calls[0].operations[0].item.__syncFieldStamps.title);
 });
 
+test('successive offline metadata edits inherit the pending value and preserve a revert',async()=>{
+ const cache=memoryCache(),{state,db}=fixture(cache);
+ state.rows=[{id:'same-asset',title:'原名',tags:['原标签']}];
+ await db.cloudAll('assets');
+ await Promise.all([
+   db.cloudStageMutation(['assets'],tx=>tx.objectStore('assets').put({
+     id:'same-asset',title:'第一次修改',tags:['原标签']
+   })),
+   db.cloudStageMutation(['assets'],tx=>tx.objectStore('assets').put({
+     id:'same-asset',title:'原名',tags:['原标签']
+   }))
+ ]);
+ const [first,second]=(await activeRows(cache,'batch')).map(row=>row.record.operations[0]);
+ assert.equal(first.baseRecord.title,'原名');
+ assert.equal(first.item.__syncFieldStamps.title.counter,1);
+ assert.equal(second.baseRecord.title,'第一次修改');
+ assert.deepEqual(second.baseRecord.__syncFieldStamps.title,first.item.__syncFieldStamps.title);
+ assert.equal(second.item.title,'原名');
+ assert.equal(second.item.__syncFieldStamps.title.counter,2);
+ await db.cloudFlushProjects();
+ assert.equal(state.calls.length,2);
+ assert.equal(state.calls[1].base_revision,1);
+ assert.equal(state.calls[1].operations[0].item.title,'原名');
+ assert.deepEqual(await activeRows(cache,'batch'),[]);
+});
+
 test('a mixed conflicting batch remains pending until a reviewed whole-batch choice',async()=>{
  const {state,db}=fixture(memoryCache());
  await db.cloudAll('assets');

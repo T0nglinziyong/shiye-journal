@@ -3,7 +3,11 @@ import {browserHarness} from '../tests/browser-harness.mjs';
 const url=process.env.SHIYE_TEST_URL||'http://127.0.0.1:5173';
 if(!['127.0.0.1','localhost'].includes(new URL(url).hostname))
   throw Error('页面性能基线只在本机隔离站运行');
-const b=await browserHarness('shiye-page-performance',url);
+const viewport=/^(\d{3,4})x(\d{3,4})$/.exec(process.env.SHIYE_VIEWPORT||'');
+const b=await browserHarness('shiye-page-performance',url,async({command})=>{
+  if(viewport)await command('Emulation.setDeviceMetricsOverride',{
+    width:Number(viewport[1]),height:Number(viewport[2]),deviceScaleFactor:2,mobile:true});
+});
 const median=values=>values.sort((a,b)=>a-b)[Math.floor(values.length/2)];
 const percentile=(values,p)=>values.sort((a,b)=>a-b)[Math.min(values.length-1,Math.ceil(values.length*p)-1)];
 const results=[];
@@ -82,5 +86,6 @@ try{
       heapDeltaFirst50:heapAfter50-heapBefore,heapDeltaSecond50:heap-heapAfter50});
   }
   if(b.errors.length)throw Error('浏览器脚本错误：'+JSON.stringify(b.errors));
-  console.log(JSON.stringify({engine:'Chromium',viewport:'default',build:process.env.SHIYE_BUILD||'local',results},null,2));
+  console.log(JSON.stringify({engine:'Chromium',viewport:viewport?`${viewport[1]}x${viewport[2]}`:'default',
+    build:process.env.SHIYE_BUILD||'local',results},null,2));
 }finally{await b.close();}

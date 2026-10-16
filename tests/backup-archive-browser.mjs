@@ -1,11 +1,27 @@
 import assert from 'node:assert/strict';
 import {browserHarness} from './browser-harness.mjs';
-import {zipSync} from 'fflate';
+import {Zip,ZipPassThrough,zipSync} from 'fflate';
 
 const target=process.env.SHIYE_TEST_URL||'http://127.0.0.1:5192';
 if(!['127.0.0.1','localhost'].includes(new URL(target).hostname))throw Error('备份恢复测试只允许本机隔离站，拒绝对线上资料写入');
 const compressedBase64=Buffer.from(zipSync({'manifest.json':new TextEncoder().encode('X'.repeat(100000))},
   {level:6})).toString('base64');
+const traversalBase64=Buffer.from(zipSync({'../outside.json':new TextEncoder().encode('bad')},
+  {level:0})).toString('base64');
+const duplicateBase64=Buffer.from(await new Promise((resolve,reject)=>{
+  const chunks=[],archive=new Zip((error,chunk,final)=>{
+    if(error){reject(error);return;}chunks.push(chunk);
+    if(final)resolve(Buffer.concat(chunks.map(item=>Buffer.from(item))));
+  });
+  for(let i=0;i<2;i++){
+    const entry=new ZipPassThrough('manifest.json');archive.add(entry);
+    entry.push(new TextEncoder().encode('{}'),true);
+  }
+  archive.end();
+})).toString('base64');
+const tooManyBase64=Buffer.from(zipSync(Object.fromEntries(Array.from({length:20001},(_,i)=>[
+  `blobs/${String(i).padStart(8,'0')}.bin`,new Uint8Array(0)
+])),{level:0})).toString('base64');
 const b=await browserHarness('shiye-backup-archive',target);
 try{
   await b.wait('.series-grid');
@@ -57,22 +73,50 @@ try{
     try{await readZipBackup(new Blob([compressed]));}
     catch(error){compressedRejected=/不受支持的压缩文件/.test(error.message);}
     if(!compressedRejected)throw Error('compressed ZIP was allowed to expand');
+    for(const [name,encoded] of [['path traversal','${traversalBase64}'],
+      ['duplicate entry','${duplicateBase64}']]){
+      const hostile=Uint8Array.from(atob(encoded),char=>char.charCodeAt(0));
+      let rejected=false;
+      try{await readZipBackup(new Blob([hostile]));}
+      catch(error){rejected=/非法、重复或过多/.test(error.message);}
+      if(!rejected)throw Error(name+' ZIP entry was accepted');
+    }
+    const tooMany=Uint8Array.from(atob('${tooManyBase64}'),char=>char.charCodeAt(0));
+    let entryLimitRejected=false;
+    try{await readZipBackup(new Blob([tooMany]));}
+    catch(error){entryLimitRejected=/非法、重复或过多/.test(error.message);
+      if(!entryLimitRejected)throw Error('ZIP entry limit gave '+error.message);}
+    if(!entryLimitRejected)throw Error('ZIP entry limit was not enforced');
     // End-to-end: browser IDB and store.restoreBackup() must preserve exact
     // bytes, then reject a damaged ZIP without clearing the last good copy.
     const store=await import('/src/store.js');
-    const id='zip-browser-test-'+crypto.randomUUID(),blobID='blob-'+id;
-    await store.transaction(['assets','blobs'],tx=>{
+    const id='zip-browser-test-'+crypto.randomUUID(),blobID='blob-'+id,projectID='work-'+id;
+    const work={id:projectID,title:'ZIP 作品验收',activeDraftID:'draft',drafts:[{
+      id:'draft',sceneVersion:2,canvas:{width:300,height:400},pageMode:'single',
+      physicalPageHeightMM:297,layers:[{id:'colored-shape',type:'shape',kind:'rectangle',
+        x:150,y:200,width:100,height:100,fill:'#ff0000'}]
+    }]};
+    await store.transaction(['assets','blobs','projects'],tx=>{
       tx.objectStore('assets').put({id,title:'ZIP acceptance',blobId:blobID});
       tx.objectStore('blobs').put({id:blobID,data:bin});
+      tx.objectStore('projects').put(work);
     });
     const full=await store.createBackup();
-    await store.transaction(['assets','blobs'],tx=>{
+    await store.transaction(['assets','blobs','projects'],tx=>{
       tx.objectStore('assets').delete(id);
       tx.objectStore('blobs').delete(blobID);
+      tx.objectStore('projects').delete(projectID);
     });
     await store.restoreBackup(full);
     const exact=await store.get('blobs',blobID);
     if(!exact||await exact.data.text()!==await bin.text())throw Error('actual IndexedDB ZIP restore failed');
+    const restoredWork=await store.get('projects',projectID);
+    if(!restoredWork?.drafts?.length)throw Error('restored editable work missing');
+    const {renderSceneCanvas}=await import('/src/scene-renderer.js');
+    const rendered=await renderSceneCanvas(restoredWork.drafts[0],{waitForFonts:false});
+    const center=rendered.canvas.getContext('2d').getImageData(150,200,1,1).data;
+    if(center[0]<180||center[1]>100||center[2]>100)
+      throw Error('restored work did not render its editable shape');
     await store.put('assets',{id,title:'latest-owned-record',blobId:blobID});
     const broken=new Uint8Array(await full.arrayBuffer());
     // Invalid ZIP must fail before any full table replacement.
@@ -90,11 +134,26 @@ try{
     });}catch(error){aborted=/injected restore interruption/.test(error.message);}
     if(!aborted||(await store.get('assets',id))?.title!=='latest-owned-record')
       throw Error('aborted restore transaction did not preserve the original library');
-    return {blobSize:output.size,tables:Object.keys(recovered).length,heartbeats};
+    return {blobSize:output.size,tables:Object.keys(recovered).length,heartbeats,id,blobID,projectID};
 
   })()`);
   assert.equal(result.tables,6);
   assert.ok(result.blobSize>100);
+  await b.command('Page.reload');
+  await b.wait('.series-grid');
+  const persisted=await b.evaluate(`(async()=>{
+    const store=await import('/src/store.js');
+    const [asset,blob,work]=await Promise.all([
+      store.get('assets',${JSON.stringify(result.id)}),
+      store.get('blobs',${JSON.stringify(result.blobID)}),
+      store.get('projects',${JSON.stringify(result.projectID)})
+    ]);
+    return {asset:asset?.title,blob:blob?await blob.data.text():null,
+      work:work?.drafts?.[0]?.layers?.[0]?.id};
+  })()`);
+  assert.equal(persisted.asset,'latest-owned-record');
+  assert.equal(persisted.blob,'SYNTHETIC PRIVATE IMAGE BYTES 2026\n');
+  assert.equal(persisted.work,'colored-shape');
   assert.deepEqual(b.errors,[]);
   console.log('PASS: worker ZIP archive, independent bytes, integrity rejection, six stores',result);
 }finally{await b.close();}
