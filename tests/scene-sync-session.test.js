@@ -17,7 +17,7 @@ function fixture(cache=null,objectStorage=null,projectPreview=()=>null){
     async upload(path,data,options){state.uploads.push({path,data,options});await state.uploadGate;return {error:state.fail?{statusCode:500}:null};},
     async download(path){state.downloads++;return {data:state.uploads.find(row=>row.path===path)?.data||new Blob(['private image']),error:state.missingThumbnail&&path.includes('preview480')?{message:'thumbnail missing'}:null};}};}},
     async rpc(name,args){
-      assert.equal(name,'shiye_commit_v3');state.calls.push(args);
+      assert.equal(name,'shiye_commit_v3_guarded');state.calls.push(args);
       if(state.rpcAbort)throw new DOMException('request aborted','AbortError');
       const receipt=revision=>({status:'applied',revision,accountEpoch:'epoch-fixture',syncProtocolVersion:3});
       if(state.commits.has(args.operation_id))return state.loseAck?{error:{message:'network response lost'}}:{data:receipt(state.commits.get(args.operation_id))};

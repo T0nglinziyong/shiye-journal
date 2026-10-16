@@ -977,7 +977,7 @@ function cloudTransaction(names,fn,operationID=crypto.randomUUID(),baseRevisionO
     }catch(error){throw markSyncPhase(error,'编码云端记录');}
     assertAccountWritable();activeDirect.phase='提交事务';reportSync();
     let data;
-    try{data=checked(await cloudClient().rpc('shiye_commit_v3',{
+    try{data=checked(await cloudClient().rpc('shiye_commit_v3_guarded',{
       operations,base_revision:commitBase,operation_id:operationID,
       expected_epoch:accountEpoch,sync_protocol_version:3
     }));}catch(error){throw markSyncPhase(error,'云端提交事务');}
