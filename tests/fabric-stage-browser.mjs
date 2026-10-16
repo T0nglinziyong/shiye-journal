@@ -142,6 +142,11 @@ try{
   }
   assert.equal(await evaluate('window.__fabricCanvas.getActiveObject()?.sceneMultiIDs?.[0]'),
     'paper-shape','Selecting a nested layer must show a movable canvas frame');
+  const shapePixels=()=>evaluate(`(()=>{const ctx=document.querySelector('.lower-canvas').getContext('2d');
+    const pixels=ctx.getImageData(60,105,320,155).data;let hash=2166136261;
+    for(let i=0;i<pixels.length;i+=4)hash=Math.imul(hash^pixels[i]^pixels[i+1]^pixels[i+2],16777619);
+    return hash>>>0;})()`);
+  const shapeBefore=await shapePixels();
   const nestedStart={x:bounds.left+bounds.width*190/600,y:bounds.top+bounds.height*160/800};
   await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,
     clickCount:1,...nestedStart});
@@ -153,6 +158,9 @@ try{
     return {x:child.calcTransformMatrix()[4],y:child.calcTransformMatrix()[5]};})()`);
   assert.ok(nestedPreview.x>205&&nestedPreview.y>165,
     'Nested content must follow its editing frame before pointer release');
+  await sleep(40);
+  assert.notEqual(await shapePixels(),shapeBefore,
+    'Nested content must repaint on the page during the gesture');
   await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,
     clickCount:1,x:nestedStart.x+24,y:nestedStart.y+12});
   assert.ok(Math.abs(await evaluate('window.__fabricFixture.draft.layers[0].children[0].x')-214)<1,
@@ -310,6 +318,11 @@ try{
     ink=c.getObjects().find(item=>item.sceneID==='preview-ink');
     return {x:r.left+point.x*r.width/620,y:r.top+point.y*r.height/800,
       before:ink.calcTransformMatrix()[4]};})()`);
+  const inkPixels=()=>evaluate(`(()=>{const ctx=document.querySelector('.lower-canvas').getContext('2d');
+    const pixels=ctx.getImageData(50,605,190,65).data;let hash=2166136261;
+    for(let i=0;i<pixels.length;i+=4)hash=Math.imul(hash^pixels[i]^pixels[i+1]^pixels[i+2],16777619);
+    return hash>>>0;})()`);
+  const inkBefore=await inkPixels();
   await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,
     clickCount:1,x:inkStart.x,y:inkStart.y});
   await command('Input.dispatchMouseEvent',{type:'mouseMoved',button:'left',buttons:1,
@@ -317,6 +330,8 @@ try{
   const inkLive=await evaluate(`window.__fabricCanvas.getObjects()
     .find(item=>item.sceneID==='preview-ink').calcTransformMatrix()[4]`);
   assert.ok(inkLive>inkStart.before+15,'Ink content follows its shared frame during dragging');
+  await sleep(40);
+  assert.notEqual(await inkPixels(),inkBefore,'Ink pixels repaint during dragging');
   await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,
     clickCount:1,x:inkStart.x+25,y:inkStart.y+10});
   await evaluate(`(()=>{const {draft,refresh}=window.__fabricFixture;
