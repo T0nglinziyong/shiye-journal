@@ -71,6 +71,28 @@ test('COS batches sibling upload tickets that arrive a few milliseconds apart',a
   await Promise.all([first,second]);
   assert.equal(ticketCalls,1);
 });
+test('a stalled small-object PUT retries with a fresh ticket, but a forbidden PUT does not',async()=>{
+  let tickets=0,puts=0,status=200;
+  const store=createCOSStore({enabled:true,ticketBatchDelayMs:1,
+    client:()=>({auth:{getSession:async()=>({data:{session:{access_token:token}}})}}),
+    fetcher:async(url,options)=>{
+      if(url==='/api/cos'){
+        tickets++;
+        const objects=JSON.parse(options.body).objects;
+        return {ok:true,json:async()=>({tickets:objects.map(row=>({...row,
+          url:'https://example.test/'+row.path,headers:{}}))})};
+      }
+      puts++;
+      if(puts===1){assert.ok(options.signal,'PUT is bounded by a timeout');
+        throw Object.assign(Error('stalled'),{name:'TimeoutError'});}
+      return {ok:status===200,status};
+    }});
+  await store.upload('owner/'+hash,new Blob(['small']));
+  assert.equal(puts,2);assert.equal(tickets,2);
+  status=403;
+  await assert.rejects(store.upload('owner/'+'b'.repeat(64),new Blob(['small'])),/403/);
+  assert.equal(puts,3);assert.equal(tickets,3);
+});
 test('COS object probe distinguishes a missing object from a temporary or forbidden read',async()=>{
   let status=404,readOptions;
   const store=createCOSStore({enabled:true,client:()=>({auth:{getSession:async()=>({data:{session:{access_token:token}}})}}),fetcher:async(url,options)=>{

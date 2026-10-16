@@ -49,11 +49,26 @@ export function createCOSStore({client,enabled=false,endpoint='/api/cos',fetcher
     probe,
     preview:(path,variant='preview480')=>read(path,variant),
     upload:(path,blob,type=blob.type||'application/octet-stream')=>scheduleWrite(async()=>{
-      const signed=await ticket(path,'PUT',type),started=Date.now();
-      try{const response=await fetcher(signed.url,{method:'PUT',headers:signed.headers,body:blob,signal:AbortSignal.timeout(120000)});
-        if(!response.ok&&response.status!==409)throw Error('COS 上传失败（'+response.status+'）；未保存元数据');
-        report('cos-put',started);
-      }catch(error){report('cos-put-failed',started,error);throw error;}
+      // Small images should not occupy an upload lane for two minutes when a
+      // TCP route stalls. Larger files keep a size-proportional allowance.
+      const timeoutMs=Math.min(120000,Math.max(30000,
+        Math.ceil((blob.size||0)/32768)*1000));
+      for(let attempt=0;attempt<2;attempt++){
+        const signed=await ticket(path,'PUT',type),started=Date.now();
+        try{
+          const response=await fetcher(signed.url,{method:'PUT',headers:signed.headers,
+            body:blob,signal:AbortSignal.timeout(timeoutMs)});
+          if(!response.ok&&response.status!==409){
+            const failure=Error('COS 上传失败（'+response.status+'）；未保存元数据');
+            failure.status=response.status;throw failure;
+          }
+          report('cos-put',started);return;
+        }catch(error){
+          report('cos-put-failed',started,error);
+          const status=Number(error?.status),retryable=!status||status===429||status>=500;
+          if(attempt||!retryable)throw error;
+        }
+      }
     },{preview:path.endsWith('-preview480.webp')}),
   };
 }
