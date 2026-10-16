@@ -2718,7 +2718,21 @@ async function confirmImportPhoto(){
   }
   const selected=[...(state.importCandidateSelection||[])];if(!selected.length&&state.importMode==='material'){toast('请选择至少一件素材，或使用手动补框');return;}
   const rec=state.importRecords[state.importIndex];rec.selectedCandidates=(state.importCandidateData||[]).map((c,i)=>({...c,selected:state.importCandidateSelection.has(i)}));rec.confirmed=true;saveActiveImportRecord();
-  const next=state.importRecords.findIndex(r=>!r.confirmed);if(next>=0)await switchImportRecord(next);else{state.importStep='review';render();}
+  // Material review/save uses the extracted candidate Blobs, not either full
+  // photo raster. A corrected 4096 px canvas plus its pinned RGBA buffer can
+  // exceed 100 MB; retaining one per confirmed photo exhausts iPad Safari in
+  // a twelve-photo batch. Keep the File and candidate Blobs so revisiting a
+  // photo can decode it again without losing any selection or manual edits.
+  if(state.importMode==='material'){
+    for(const bitmap of new Set([rec.bitmap,rec.correctedBitmap])){
+      bitmap?.close?.();
+      if(bitmap instanceof HTMLCanvasElement){bitmap.width=0;bitmap.height=0;}
+    }
+    if(rec.correctedURL)URL.revokeObjectURL(rec.correctedURL);
+    rec.bitmap=null;rec.correctedBitmap=null;rec.correctedURL=null;
+    state.importBitmap=null;state.correctedBitmap=null;state.correctedURL=null;
+  }
+  const next=state.importRecords.findIndex(r=>!r.confirmed);if(next>=0)await switchImportRecord(next,true);else{state.importStep='review';render();}
 }
 async function organizeSavedProjects(projects){
   if(!state.preferences.autoOrganizeWorks||!projects?.length)return;
