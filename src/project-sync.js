@@ -23,7 +23,7 @@ function retryDelay(attempt,operationID){
 }
 // Durable edits are an explicit outbox, not a replacement for cloud records.
 // Commit acknowledgement is the only point at which an entry is removed.
-export function createProjectSync({load,write,commit,revision,reconcile=async()=> 'conflict',recordKeys=record=>[{store:'projects',id:record.id}],coalesce=()=>null,splitCoalesced=()=>null,onCommitted=()=>{},onConflict=async()=>null,onForked=()=>{},onReplaced=()=>{},onSuperseded=()=>{},onStatus=()=>{},onDiagnostic=()=>{},runExclusive=fn=>fn(),prepare=async()=>{},prepareLimit=Infinity,requiresPrepare=null,reload=load,authoritativeCommit=false,autoFlushDelayMs=0,setTimer=setTimeout,clearTimer=clearTimeout,clock=()=>Date.now()}){
+export function createProjectSync({load,write,commit,revision,reconcile=async()=> 'conflict',recordKeys=record=>[{store:'projects',id:record.id}],coalesce=()=>null,splitCoalesced=()=>null,onCommitted=()=>{},onConflict=async()=>null,onForked=()=>{},onReplaced=()=>{},onSuperseded=()=>{},onStatus=()=>{},onDiagnostic=()=>{},runExclusive=fn=>fn(),prepare=async()=>{},prepareLimit=Infinity,requiresPrepare=null,retryConflicts=()=>false,reload=load,authoritativeCommit=false,autoFlushDelayMs=0,setTimer=setTimeout,clearTimer=clearTimeout,clock=()=>Date.now()}){
   let initialized,staging=Promise.resolve(),writeGate=Promise.resolve(),network,serial=0,error,paused=false,rebuilding=false;
   let persistedRows=new Map();
   let conflicts=new Set();
@@ -44,7 +44,7 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
     const due=Math.min(...candidates.map(row=>Number(row.nextAttemptAt)||0));
     const fresh=candidates.some(row=>!row.nextAttemptAt);
     const wait=Math.max(due-clock(),fresh?Math.max(flushWindow,flushWindow-elapsed):0);
-    autoTimer=setTimer(()=>{autoTimer=null;void kick();},Math.max(0,wait));
+    autoTimer=setTimer(()=>{autoTimer=null;void kick().catch(()=>{});},Math.max(0,wait));
   }
   const entries=new Map();
   // A transient IndexedDB/auth read failure must not poison this instance for
@@ -52,7 +52,7 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
   const rowStamp=row=>JSON.stringify([row.serial,row.baseRevision,row.operationID,
     row.attempt,row.nextAttemptAt,row.lastFailureClass]);
   const rememberPersisted=rows=>{persistedRows=new Map(rows.map(row=>[row.record.id,{stamp:rowStamp(row),row}]));};
-  const initialize=()=>initialized??=(async()=>{const rows=await load()||[];for(const row of rows){entries.set(row.record.id,row);serial=Math.max(serial,row.serial);if(row.lastFailureClass==='conflict'||row.lastFailureClass==='invalid')conflicts.add(row.record.id);}rememberPersisted(rows);report();})().catch(failure=>{initialized=undefined;throw markSyncPhase(failure,'读取本机待同步队列');});
+  const initialize=()=>initialized??=(async()=>{const rows=await load()||[];for(const row of rows){entries.set(row.record.id,row);serial=Math.max(serial,row.serial);if(row.lastFailureClass==='invalid'||row.lastFailureClass==='conflict'&&!retryConflicts(row.record))conflicts.add(row.record.id);}rememberPersisted(rows);report();})().catch(failure=>{initialized=undefined;throw markSyncPhase(failure,'读取本机待同步队列');});
   const report=()=>onStatus({pending:entries.size,error,conflicts:conflicts.size});
   const starts=new Map();
   const diagnose=(action,row,failure,durationMs=null)=>{
@@ -105,7 +105,7 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
       }
       rememberPersisted(saved);
       conflicts=new Set([...entries.values()].filter(row=>
-        row.lastFailureClass==='conflict'||row.lastFailureClass==='invalid')
+        row.lastFailureClass==='invalid'||row.lastFailureClass==='conflict'&&!retryConflicts(row.record))
         .map(row=>row.record.id));
       report();
       return;
@@ -423,11 +423,12 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
           blocked.add(row.record.id);
           blockedKeys.push(recordKeys(row.record));
           const category=failureClass(failure);
-          const manual=category==='conflict'||category==='invalid'||
-            /账号已清空|云端版本已变化|另一设备已更新|\bconflict\b/i.test(failure?.message||'');
+          const manual=category==='invalid'||/账号已清空/.test(failure?.message||'')||
+            !retryConflicts(row.record)&&(category==='conflict'||
+              /云端版本已变化|另一设备已更新|\bconflict\b/i.test(failure?.message||''));
           const current=entries.get(row.record.id);
           if(current?.serial===row.serial){
-            current.lastFailureClass=manual?category==='invalid'?'invalid':'conflict':category;
+            current.lastFailureClass=manual?category==='invalid'?'invalid':'conflict':category==='conflict'?'transient':category;
             if(manual)delete current.nextAttemptAt;
             else{
               current.attempt=(Number.isSafeInteger(current.attempt)?current.attempt:0)+1;
@@ -463,7 +464,7 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
       if(entries.size&&!paused&&unpreparedReady){
         // Continue the bounded image backlog immediately. The lock has been
         // released; the next pair can upload bytes without holding it.
-        autoTimer=setTimer(()=>{autoTimer=null;void kick();},0);
+        autoTimer=setTimer(()=>{autoTimer=null;void kick().catch(()=>{});},0);
       }else if(entries.size)scheduleAuto();
     });
     network.catch(()=>{});return network;

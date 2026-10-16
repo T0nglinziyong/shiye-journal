@@ -3149,17 +3149,22 @@ function exportSyncDiagnostics(){
     '拾页同步诊断-'+new Date().toISOString().slice(0,10)+'.json');
   toast('已导出本机当天的同步诊断；不含作品、图片、账号标识或原始报错');
 }
+async function syncDetailsSnapshot(){
+  const details=await db.pendingSyncDetails(),projects=details.projects||[],
+    batches=details.batches||[],local=[...dirtyProjects.values()],quarantined=details.quarantined||0;
+  const status=syncPausedByUser?'已暂停 · 本机修改仍保留':syncDisplay.uploading?
+    (syncDisplay.progress?`上传中 · ${syncDisplay.progress.phase} ${syncDisplay.progress.done}/${syncDisplay.progress.total} 项`:'上传中'):
+    syncDisplay.conflicts?'正在处理版本差异':syncDisplay.error?'等待自动重试':
+    syncDisplay.pending||local.length?'等待上传':'已同步';
+  return {details,projects,batches,local,quarantined,status,conflicts:syncDisplay.conflicts,
+    error:syncDisplay.error?describeSyncError(syncDisplay.error):null};
+}
 async function openSyncDetails(){
-  if(!cloudEnabled)return;cloudResumer.suspend();
+  if(!cloudEnabled)return;
   try{
-    const details=await db.pendingSyncDetails(),projects=details.projects||[],
-      batches=details.batches||[],local=[...dirtyProjects.values()],quarantined=details.quarantined||0;
-    const status=syncPausedByUser?'已暂停 · 本机修改仍保留':syncDisplay.uploading?
-      (syncDisplay.progress?`上传中 · ${syncDisplay.progress.phase} ${syncDisplay.progress.done}/${syncDisplay.progress.total} 项`:'上传中'):
-      syncDisplay.conflicts?'需处理冲突 · 其他记录可继续上传':
-      syncDisplay.error?'待重试':syncDisplay.pending||local.length?'等待上传':'已同步';
+    const {details,projects,batches,local,quarantined,status}=await syncDetailsSnapshot();
     openOverlay(createElement(SyncDetailsDialog,{details,projects,batches,local,quarantined,
-      legacyCount:db.legacyProjectInfo?.()?.length||0,
+      onRefresh:syncDetailsSnapshot,legacyCount:db.legacyProjectInfo?.()?.length||0,
       error:syncDisplay.error?describeSyncError(syncDisplay.error):null,status,conflicts:syncDisplay.conflicts,
       onClose:()=>{closeOverlay();if(!syncPausedByUser&&!resetWorkflowActive)void cloudResumer.resume();},
       onDiagnostics:exportSyncDiagnostics,onConflict:(kind,id)=>void openSyncConflictChoice(kind,id),
@@ -3174,7 +3179,7 @@ async function openSyncDetails(){
         catch(error){
           const current=db.syncDiagnosticReport({online:navigator.onLine})?.state;
           if(!current?.conflicts){toast('同步待重试：'+describeSyncError(error));throw error;}
-          toast('仍有同步冲突；请在待同步记录中比较版本');
+          toast('正在处理版本差异，本机修改已保留');
         }
         const current=db.syncDiagnosticReport({online:navigator.onLine})?.state;
         const remaining=current?.pending??syncDisplay.pending;

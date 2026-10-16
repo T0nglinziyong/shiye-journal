@@ -867,13 +867,10 @@ test('older generic project PUT from the same phone is rescued without overwriti
  state.rows=[{...structuredClone(work),title:'已经上传的较新版本'}];
  state.changes=[{revision:1,keys:[{store:'projects',id:'same-work',action:'put'}]}];
 
- await assert.rejects(db.cloudFlushProjects(),/conflict|云端版本已变化/);
+ await db.cloudFlushProjects();
  assert.equal(state.rows[0].title,'已经上传的较新版本');
- assert.ok((await activeRows(cache,'batch')).length>0);
- const pending=(await db.cloudPendingDetails()).batches[0];
- const reviewed=await db.cloudConflictReview('batch',pending.id);
- assert.equal(reviewed.overview.local.title,'本机未同步的早期版本');
- assert.equal(reviewed.overview.remote.title,'已经上传的较新版本');
+ assert.deepEqual(await activeRows(cache,'batch'),[]);
+ assert.equal((await db.cloudPendingDetails()).batches.length,0);
 });
 
 test('a concurrent material edit without a comparable timestamp keeps the committed cloud version',async()=>{
@@ -1014,4 +1011,19 @@ test('a stale collection clear keeps newer cloud data automatically',async()=>{
  await db.cloudFlushProjects();
  assert.equal((await db.cloudPendingDetails()).batches.length,0);
  assert.equal(state.rows[0].title,'另一设备新增');
+});
+
+test('a restored editable work in a batch automatically preserves a divergent cloud Scene',async()=>{
+  const cache=memoryCache(),{db,state}=fixture(cache);
+  const local=v2({id:'restored-work',title:'local',updatedAt:'2026-10-16T10:00:00Z',
+    activeDraftID:'d',drafts:[{id:'d',canvas:{width:100,height:100},textBlocks:[{id:'text',text:'local'}]}]});
+  await db.cloudStageMutation(['projects'],tx=>tx.objectStore('projects').put(local));
+  state.rows=[v2({...local,title:'remote',drafts:[{id:'d',canvas:{width:100,height:100},textBlocks:[{id:'text',text:'remote'}]}]})];
+  state.revision=1;state.keyVersions.set('projects:restored-work',1);
+  await db.cloudFlushProjects();
+  const fork=state.calls.at(-1).operations.find(op=>op.store==='projects').item;
+  assert.notEqual(fork.id,local.id);assert.equal(fork.drafts[0].layers[0].text,'local');
+  assert.equal(fork.forkOrigin.projectID,local.id);
+  assert.deepEqual(await activeRows(cache,'batch'),[]);
+  assert.equal((await db.cloudPendingDetails()).batches.length,0);
 });

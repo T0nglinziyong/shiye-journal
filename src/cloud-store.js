@@ -286,6 +286,7 @@ const unifiedSync=createProjectSync({
   // A long backlog must not make a new independent import wait while every
   // older image is hashed and uploaded. Same-key edits still retain order.
   prepareLimit:2,
+  retryConflicts:record=>record.kind==='batch',
   coalesce:planMetadataBatch,
   splitCoalesced:splitMetadataBatch,
   load:()=>loadUnifiedOutbox(true),
@@ -507,6 +508,10 @@ async function reconcileImport(batch,operationID,baseRevision){
   if(latest===baseRevision)return 'rebase';
   // Edits/deletes rebase only over a complete, disjoint change log. An
   // append-only import may instead prove absence by its unique record IDs.
+  if(!batch.operations&&batch.projects?.length)batch={...batch,
+    names:['assets','blobs','projects'],
+    operations:['assets','blobs','projects'].flatMap(store=>(batch[store]||[])
+      .map(item=>({store,action:'put',item})))};
   if(batch.operations){
     const client=cloudClient(),user=await identity();
     const nonoverlap=await canRebaseUnchangedKeys({client,owner:user,before:baseRevision,after:latest,operations:batch.operations});
@@ -563,7 +568,28 @@ async function reconcileImport(batch,operationID,baseRevision){
       // Scene edits still use the separate-work conflict path. Other records
       // settle by the edit timestamp carried with the durable operation; a
       // missing/equal timestamp keeps the already committed cloud version.
-      if(op.store==='projects')return 'conflict';
+      if(op.store==='projects'&&op.action==='put'&&!op.item.isSnapshot){
+        const remote=await cloudRecord('projects',id);
+        if(remote){
+          const full=remote.projectDocumentPath?await cloudProjectDocument(remote):remote;
+          const local=op.item.projectDocumentPath?await cloudProjectDocument(op.item):op.item;
+          const localScene=sceneFingerprint(local),remoteScene=sceneFingerprint(full);
+          if(localScene===remoteScene){
+            if(compareRecordEdits(local,full,{localTimestamp:op.modifiedAt})==='local')operations.push(op);
+            continue;
+          }
+          // Restores/imports may carry editable works in a batch rather than
+          // the editor outbox. Preserve their divergent Scene as a new work
+          // too, instead of leaving the entire batch in manual conflict.
+          const forkID=await forkIDForBranch(accountEpoch,id,
+            batch.id+':'+projectSemanticFingerprint(local));
+          const existing=await cloudRecord('projects',forkID);
+          if(existing)continue;
+          const copy=forkConflictingEditableWork(local,{id:forkID});
+          if(!copy)throw Error('待同步作品数据不完整，已保留原记录');
+          operations.push({...op,item:copy});continue;
+        }
+      }
       if(op.action==='put'){
         const remote=await cloudRecord(op.store,id);
         if(!remote){
