@@ -6,6 +6,24 @@ import {createPrivateCache,mergeOutboxRows} from '../src/private-cache.js';
 import {repairMiswrappedSyncRows,syncEnvelope} from '../src/unified-sync-outbox.js';
 
 const row=(id,serial=1)=>({serial,baseRevision:2,operationID:id+'-'+serial,record:{id,title:'local-'+serial}});
+for(const aggregate of [false,true])test(`retry state survives reopening the ${aggregate?'aggregate':'journal'} outbox`,async()=>{
+  const name='retry-persistence-'+aggregate,cache=createPrivateCache({name});
+  const first=row('retry'),kind='unified-outbox';
+  if(aggregate)await cache.put('a',kind,[first]);
+  else await cache.putOutbox('a',kind,[],[first]);
+  const failed={...first,attempt:3,nextAttemptAt:Date.now()+60000,lastFailureClass:'transient'};
+  await cache.putOutbox('a',kind,[first],[failed]);
+  await cache.close();
+  const reopened=createPrivateCache({name});
+  assert.deepEqual(await reopened.get('a',kind),[failed]);
+  const conflict={...failed,lastFailureClass:'conflict'};
+  delete conflict.nextAttemptAt;
+  await reopened.putOutbox('a',kind,[failed],[conflict]);
+  assert.deepEqual(await reopened.get('a',kind),[conflict]);
+  await reopened.putOutbox('a',kind,[conflict],[first]);
+  assert.deepEqual(await reopened.get('a',kind),[first]);
+  await reopened.close();
+});
 test('two tabs adding different offline edits preserve both operations',async()=>{
   const cache=createPrivateCache({name:'shiye-outbox-two-tabs'});
   const account='cloud:account',kind='project-outbox';

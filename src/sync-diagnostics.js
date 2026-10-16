@@ -28,7 +28,7 @@ function category(error){
   const message=String(error?.message||'');
   const status=errorStatus(error);
   if(/云端版本未变化|unconfirmed/i.test(message))return 'unconfirmed-response';
-  if(/云端版本已变化|另一设备已更新|\bconflict\b/i.test(message)||status===409)return 'revision-conflict';
+  if(/云端版本已变化|另一设备已更新|\bconflict\b/i.test(message)||status===409||['PT409','40001'].includes(errorCode(error)))return 'revision-conflict';
   if(status===401||status===403||/unauthori[sz]ed|permission|jwt|认证|登录/i.test(message))return 'authorization';
   if(status===429||/rate.limit|too many requests/i.test(message))return 'rate-limit';
   if(status!==null&&status>=500)return 'server';

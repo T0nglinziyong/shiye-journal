@@ -68,7 +68,7 @@ begin
     if op->>'action' = 'clear' then
       -- Clear is intentionally account-wide and must see the current head.
       if base_revision <> current_revision then
-        raise exception using errcode = '40001', message = '清空期间云端资料已变化';
+        raise exception using errcode = 'PT409', message = '清空期间云端资料已变化';
       end if;
       continue;
     elsif op->>'action' = 'put' then
@@ -88,7 +88,7 @@ begin
         where user_id = who and store = s and id = '*'),0))
       into last_key_revision;
     if last_key_revision > base_revision then
-      raise exception using errcode = '40001', message = '此记录已由另一设备修改';
+      raise exception using errcode = 'PT409', message = '此记录已由另一设备修改';
     end if;
   end loop;
   -- Retain the current tombstone, owner-path and change-log rules in one

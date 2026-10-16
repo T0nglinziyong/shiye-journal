@@ -2,7 +2,7 @@ import {markSyncPhase} from './sync-browser-compat.js';
 const failureCode=error=>String(error?.code??error?.status??error?.statusCode??error?.cause?.code??'');
 function failureClass(error){
   const code=failureCode(error);
-  if(code==='40001'||code==='409')return 'conflict';
+  if(code==='40001'||code==='PT409'||code==='409')return 'conflict';
   if(code==='401'||code==='403'||code==='28000')return 'auth';
   if(code==='P0001'||code.startsWith('22')||code.startsWith('23')||code==='413'||code==='507')return 'invalid';
   if(code==='429')return 'rate-limit';

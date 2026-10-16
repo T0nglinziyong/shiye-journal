@@ -34,7 +34,7 @@ begin
     perform public.shiye_commit_v3(
       '[{"store":"assets","action":"put","item":{"id":"a","title":"competing"}}]',
       0,'cccccccc-cccc-4ccc-8ccc-cccccccccccc',epoch,3);
-  exception when sqlstate '40001' then blocked:=true; end;
+  exception when sqlstate 'PT409' then blocked:=true; end;
   if not blocked then raise exception 'same-key CAS was not rejected'; end if;
   perform set_config('request.jwt.claim.sub',other::text,true);
   if exists(select 1 from public.shiye_records where user_id=other) then

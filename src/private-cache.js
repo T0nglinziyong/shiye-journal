@@ -7,7 +7,8 @@ import {foldLegacySyncRows} from './unified-sync-outbox.js';
 // Merge a tab's changes, not its whole in-memory snapshot. An unrelated tab's
 // pending edit must survive; edits to the same row must fail, never overwrite.
 const outboxID=row=>row?.record?.id;
-const outboxStamp=row=>row?JSON.stringify([row.serial,row.baseRevision,row.operationID]):null;
+const outboxStamp=row=>row?JSON.stringify([row.serial,row.baseRevision,row.operationID,
+  row.attempt,row.nextAttemptAt,row.lastFailureClass]):null;
 const isDisposablePreviewKey=key=>{
   try{return /^(?:thumbnail:|thumbnail480:|preview\d+:)/.test(JSON.parse(key)[1]);}
   catch{return false;}
