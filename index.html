@@ -4,8 +4,13 @@
   <meta name="theme-color" content="#fffefa"><meta name="apple-mobile-web-app-capable" content="yes">
   <link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/icon-192.png">
   <title>拾页 · 本地创作</title><meta name="description" content="本地保存真实手账素材与可编辑作品">
+  <style>
+    #auth-root:has(.boot-card){min-height:100dvh;display:grid;place-items:center;padding:24px;background:#f7f7f2;color:#263d34;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif}
+    .boot-card{width:min(100%,420px);padding:28px;border:1px solid #dbe3d9;border-radius:18px;background:#fffefa}
+    .boot-card h1{margin:0 0 18px;font-size:28px}.boot-card p{margin:0;color:#617267}
+  </style>
 </head><body>
-  <div id="auth-root"></div>
+  <div id="auth-root"><main class="boot-card" role="status"><h1>拾页</h1><p>正在启动…</p></main></div>
   <div id="app" hidden></div>
   <script type="module" src="/src/app.js"></script>
 </body></html>

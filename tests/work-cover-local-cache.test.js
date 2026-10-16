@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createLocalWorkCovers} from '../src/work-cover-local-cache.js';
 import {needsWorkCover} from '../src/work-cover-backfill.js';
+import {renderWorkCoverSnapshot} from '../src/work-cover-snapshot.js';
 
 const work=(updatedAt='2026-10-09T13:00:00Z')=>({
   id:'work-A',updatedAt,activeDraftID:'page-A',
@@ -65,4 +66,30 @@ test('failed COS upload does not prevent local display and never affects project
   await covers.ensure(p);
   assert.equal(shown,true);
   assert.deepEqual(p,original);
+});
+test('partial cover displays immediately but is not persisted as the final thumbnail',async()=>{
+  const p=work(),state={accountId:'account',route:'works',projects:[p]};
+  const saved=[],events=[];
+  let restored=false;
+  const covers=factory({state,device:{get:async()=>null,put:async(_owner,row)=>saved.push(row)},
+    draw:async()=>renderWorkCoverSnapshot({id:'cover',activeDraftID:'d',drafts:[
+      {id:'d',sceneVersion:2,canvas:{width:600,height:800},layers:[{id:'m',type:'material',assetID:'a'}]}]}, {
+      resolveAsset:async()=>restored?{id:'a',blobId:'b'}:null,
+      previewBlob:async()=>new Blob(['image']),createBitmap:async()=>({width:1,height:1}),
+      createMissingImage:()=>({width:1,height:1}),
+      renderScene:async(_draft,{loadMaterialImage})=>{
+        await loadMaterialImage('a');return {canvas:{toBlob:callback=>callback(new Blob(['cover']))}};
+      }
+    }),ready:(_project,url)=>events.push(url)});
+  try{
+    const first=await covers.ensure(p);
+    assert.equal(first.size>0,true);
+    assert.equal(saved.length,0);
+    restored=true;
+    const full=await covers.ensure(p,{refresh:true});
+    assert.equal(full.size>0,true);
+    await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(saved.length,1);
+    assert.equal(events.length,2);
+  }finally{covers.dispose();}
 });

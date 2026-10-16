@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {renderWorkCoverSnapshot} from '../src/work-cover-snapshot.js';
+import {renderWorkCoverSnapshot,isPartialWorkCover} from '../src/work-cover-snapshot.js';
 
 test('COS Works cover renders complete scene using only 480px material blobs',async()=>{
   const calls=[],closed=[],output=new Blob(['snapshot'],{type:'image/webp'});
@@ -26,13 +26,20 @@ test('COS Works cover renders complete scene using only 480px material blobs',as
   assert.equal(closed.length,1);
 });
 
-test('missing referenced image rejects cover without altering project document',async()=>{
+test('missing referenced image leaves a visible partial cover without altering the Scene',async()=>{
   const project={id:'work-2',activeDraftID:'d',drafts:[{id:'d',sceneVersion:2,canvas:{width:600,height:800},layers:[{id:'m',type:'material',assetID:'missing'}]}]},
     initial=structuredClone(project);
-  await assert.rejects(()=>renderWorkCoverSnapshot(project,{
+  const placeholder={width:160,height:160},output=new Blob(['other scene layers']);
+  const cover=await renderWorkCoverSnapshot(project,{
     resolveAsset:async()=>null,
-    renderScene:async(_draft,{loadMaterialImage})=>{await loadMaterialImage('missing');}
-  }),/素材不存在/);
+    createMissingImage:()=>placeholder,
+    renderScene:async(_draft,{loadMaterialImage})=>{
+      assert.equal(await loadMaterialImage('missing'),placeholder);
+      return {canvas:{toBlob:callback=>callback(output)}};
+    }
+  });
+  assert.equal(cover,output);
+  assert.equal(isPartialWorkCover(cover),true);
   assert.deepEqual(project,initial);
 });
 
