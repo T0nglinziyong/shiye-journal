@@ -431,23 +431,27 @@ const unifiedSync=createProjectSync({
   onStatus:reportSync,
   onDiagnostic:event=>syncDiagnostics.record(event),
   runExclusive:withAccountSyncLock,
-  prepare:async envelopes=>{
-    const puts=[];
-    for(const envelope of envelopes){
-      if(envelope.kind!=='batch')continue;
+  prepare:async (envelopes,rows)=>{
+    const failures=new Map();
+    await Promise.all(envelopes.map(async(envelope,index)=>{
+      if(envelope.kind!=='batch')return;
       const batch=envelope.payload;
       const operations=batch.operations||['assets','blobs','projects'].flatMap(store=>(batch[store]||[])
         .map(item=>({action:'put',store,item})));
       const auxiliary=auxiliaryBlobIDs(operations);
+      const puts=[];
       for(const op of operations)if(op.action==='put'&&op.store==='blobs')
         puts.push({item:op.item,makePreview:!auxiliary.has(op.item.id)});
-    }
-    // Preparation is opportunistic: one failed object must not stop another
-    // record's bytes from uploading. Its own commit retries and reports the
-    // precise error while leaving that record in the durable outbox.
-    for(let offset=0;offset<puts.length;offset+=3)
-      await Promise.allSettled(puts.slice(offset,offset+3).map(op=>
+      // Keep failures scoped to their own durable record. Successful blobs
+      // remain memoized by path and the metadata commit can proceed without
+      // re-uploading them. A failed record is retried in a later sync pass.
+      const results=await Promise.allSettled(puts.map(op=>
         encode('blobs',op.item,{makePreview:op.makePreview})));
+      const failure=results.find(result=>result.status==='rejected');
+      if(failure)failures.set(rows[index].operationID,
+        markSyncPhase(failure.reason||Error('图片预上传失败'),'预上传图片'));
+    }));
+    return failures;
   },
   recordKeys:syncAffectedKeys,
 });

@@ -209,7 +209,7 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
       const prepareAt=clock();diagnose('prepare-start');
       const preparation=prioritizedRows(readyRows).slice(0,
         Number.isFinite(prepareLimit)?Math.max(1,Math.floor(prepareLimit)):readyRows.length);
-      await prepare(preparation.map(row=>row.record),preparation);
+      const preparationFailures=await prepare(preparation.map(row=>row.record),preparation);
       diagnose('prepare-finished',null,null,clock()-prepareAt);
       const lockAt=clock();diagnose('lock-wait');
       return runExclusive(async()=>{
@@ -246,6 +246,29 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
         if(!row)break;
         diagnose('start',row);
         try {
+        // A failed immutable-object upload was already attempted before the
+        // account lock. Retrying those same bytes while holding the lock can
+        // stall every independent record for another full network timeout.
+        // The ordinary row failure path below keeps the bytes in the durable
+        // outbox and gives this row its own retry deadline.
+        const preparationFailure=preparationFailures?.get?.(row.operationID);
+        if(preparationFailure){
+          // A previous request may have committed just before the page
+          // closed. Do not turn its missing local acknowledgement into a
+          // retry merely because today's optional preupload failed.
+          let resolved;
+          try{resolved=await reconcile(row.record,row.operationID,row.baseRevision);}
+          catch{/* The durable row remains available for a later check. */}
+          if(resolved==='committed'){
+            await acknowledge(row);diagnose('committed',row);continue;
+          }
+          if(resolved==='remote'){
+            const removed=await acknowledge(row,{advanceDependents:false});
+            diagnose('remote-won',row);if(removed)onSuperseded(row.record);
+            continue;
+          }
+          throw preparationFailure;
+        }
         const pass=(passes.get(row.record.id)||0)+1;
         passes.set(row.record.id,pass);
         // A bad merge/rebase result must not retry the same durable row in a

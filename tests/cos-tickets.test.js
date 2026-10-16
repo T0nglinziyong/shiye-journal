@@ -45,6 +45,13 @@ test('COS adapter batches authorization, never exposes credentials, and does not
   assert.equal(await (await flaky.download('owner/'+hash)).text(),'recovered');assert.equal(tries,2);
   let deniedTries=0;const authDenied=createCOSStore({client:()=>({auth:{getSession:async()=>({data:{session:{access_token:token}}})}}),fetcher:async()=>{deniedTries++;return {ok:false,status:403};}});await assert.rejects(authDenied.download('owner/'+hash),/403/);assert.equal(deniedTries,1);
 });
+test('COS upload releases its queue when session acquisition stalls',async()=>{
+  const store=createCOSStore({enabled:true,sessionTimeoutMs:10,
+    client:()=>({auth:{getSession:()=>new Promise(()=>{})}}),
+    fetcher:async()=>{throw Error('a signed request must not start without a session');}});
+  await assert.rejects(store.upload('owner/'+hash,new Blob(['bytes'])),/等待登录会话超时/);
+  await assert.rejects(store.upload('owner/'+'b'.repeat(64),new Blob(['bytes'])),/等待登录会话超时/);
+});
 test('COS object probe distinguishes a missing object from a temporary or forbidden read',async()=>{
   let status=404,readOptions;
   const store=createCOSStore({enabled:true,client:()=>({auth:{getSession:async()=>({data:{session:{access_token:token}}})}}),fetcher:async(url,options)=>{

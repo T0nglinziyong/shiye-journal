@@ -598,6 +598,40 @@ test('independent upload preparation runs before the shared account commit lock'
   await Promise.all([first,second]);
   assert.equal(revision,2,'metadata commits remain serialized and versioned');
 });
+test('a failed preupload is not repeated under the account lock and independent rows still commit',async()=>{
+  let revision=0,rows=[
+    {record:{id:'slow',key:'slow'},serial:1,baseRevision:0,operationID:'slow-op'},
+    {record:{id:'ready',key:'ready'},serial:2,baseRevision:0,operationID:'ready-op'}
+  ],held=false;
+  const committed=[];
+  const sync=createProjectSync({load:async()=>structuredClone(rows),reload:async()=>structuredClone(rows),
+    write:async next=>{rows=structuredClone(next);},revision:()=>revision,prepareLimit:2,
+    recordKeys:record=>[{store:'assets',id:record.key}],
+    prepare:async(_records,prepared)=>new Map([[prepared[0].operationID,Error('image upload timed out')]]),
+    runExclusive:async fn=>{held=true;try{return await fn();}finally{held=false;}},
+    reconcile:async()=> 'rebase',
+    commit:async record=>{assert.equal(held,true);committed.push(record.id);revision++;}
+  });
+  try{
+    await assert.rejects(sync.resume(),/image upload timed out/);
+    assert.deepEqual(committed,['ready']);
+    assert.deepEqual(rows.map(row=>row.record.id),['slow']);
+    assert.ok(rows[0].nextAttemptAt>0);
+  }finally{sync.pause();}
+});
+test('a failed preupload still acknowledges an already committed operation',async()=>{
+  let rows=[{record:{id:'saved'},serial:1,baseRevision:0,operationID:'saved-op'}],writes=0;
+  const sync=createProjectSync({load:async()=>structuredClone(rows),reload:async()=>structuredClone(rows),
+    write:async next=>{rows=structuredClone(next);},revision:()=>1,
+    prepare:async()=>new Map([['saved-op',Error('network unavailable')]]),
+    reconcile:async()=> 'committed',commit:async()=>{writes++;}
+  });
+  try{
+    await sync.resume();
+    assert.equal(writes,0);
+    assert.equal(rows.length,0);
+  }finally{sync.pause();}
+});
 test('a fresh independent batch is not queued behind unrelated retries',async()=>{
   let revision=4,rows=[
     {record:{id:'old',key:'old'},serial:1,baseRevision:1,operationID:'old-op',attempt:3,nextAttemptAt:0},
