@@ -6,7 +6,7 @@ const url=process.env.SHIYE_TEST_URL||'http://127.0.0.1:5173';
 const browser=await browserHarness('shiye-fabric-stage',url+'/tests/fixtures/fabric-preview.html',
   async({command})=>command('Emulation.setDeviceMetricsOverride',
     {width:1280,height:1000,deviceScaleFactor:1,mobile:false}));
-const {command,evaluate,wait,sleep}=browser;
+const {command,evaluate,wait,sleep,click}=browser;
 try{
   await wait('.upper-canvas');
   await sleep(800);
@@ -127,6 +127,61 @@ try{
     '选中：paper-material, paper-text',
     'Selection updates must report every active object, not only the newly selected one');
   await evaluate('window.__fabricCanvas.discardActiveObject();window.__fabricCanvas.requestRenderAll()');
+  await evaluate('window.__fabricFixture.select(["paper-shape"])');
+  for(let attempt=0;attempt<40;attempt++){
+    if(await evaluate('window.__fabricCanvas.getActiveObject()?.sceneMultiIDs?.[0]==="paper-shape"'))break;
+    await sleep(25);
+  }
+  assert.equal(await evaluate('window.__fabricCanvas.getActiveObject()?.sceneMultiIDs?.[0]'),
+    'paper-shape','Selecting a nested layer must show a movable canvas frame');
+  const nestedStart={x:bounds.left+bounds.width*190/600,y:bounds.top+bounds.height*160/800};
+  await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,
+    clickCount:1,...nestedStart});
+  await command('Input.dispatchMouseEvent',{type:'mouseMoved',button:'left',buttons:1,
+    x:nestedStart.x+24,y:nestedStart.y+12});
+  await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,
+    clickCount:1,x:nestedStart.x+24,y:nestedStart.y+12});
+  assert.ok(Math.abs(await evaluate('window.__fabricFixture.draft.layers[0].children[0].x')-214)<1,
+    'Dragging a nested selection must persist its Scene position');
+  await evaluate('window.__fabricFixture.select([])');
+  await click('[data-tool="lasso"]');
+  const at=(px,py)=>({x:bounds.left+bounds.width*px/600,
+    y:bounds.top+bounds.height*py/800});
+  const lassoPath=[[80,90],[350,90],[350,235],[80,235],[80,90]];
+  await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,
+    clickCount:1,...at(...lassoPath[0])});
+  for(const point of lassoPath.slice(1))await command('Input.dispatchMouseEvent',{
+    type:'mouseMoved',button:'left',buttons:1,...at(...point)});
+  await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,
+    clickCount:1,...at(...lassoPath.at(-1))});
+  assert.equal(await evaluate('document.querySelector("#events").textContent'),
+    '选中：paper-shape','Lasso must select the nested shape');
+  const beforeCancel=await evaluate('JSON.stringify(window.__fabricFixture.draft.layers[0].children[0])');
+  await evaluate(`document.addEventListener('pointerdown',event=>{
+    window.__cancelPointerID=event.pointerId;
+  },{capture:true,once:true})`);
+  await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,
+    clickCount:1,...at(214,160)});
+  await command('Input.dispatchMouseEvent',{type:'mouseMoved',button:'left',buttons:1,
+    ...at(244,175)});
+  assert.notEqual(await evaluate('JSON.stringify(window.__fabricFixture.draft.layers[0].children[0])'),
+    beforeCancel,'Lasso drag should preview a Scene change');
+  await evaluate(`(()=>{const upper=document.querySelector('.upper-canvas');
+    upper.dispatchEvent(new PointerEvent('pointercancel',{bubbles:true,
+      pointerId:window.__cancelPointerID,pointerType:'mouse'}));})()`);
+  await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,
+    clickCount:1,...at(244,175)});
+  assert.equal(await evaluate('JSON.stringify(window.__fabricFixture.draft.layers[0].children[0])'),
+    beforeCancel,'Cancelled lasso gesture must restore the original Scene node');
+  await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,
+    clickCount:1,...at(214,160)});
+  await command('Input.dispatchMouseEvent',{type:'mouseMoved',button:'left',buttons:1,
+    ...at(234,170)});
+  await click('[data-tool="select"]');
+  await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,
+    clickCount:1,...at(234,170)});
+  assert.equal(await evaluate('JSON.stringify(window.__fabricFixture.draft.layers[0].children[0])'),
+    beforeCancel,'Leaving the lasso tool mid-drag must roll back the preview');
   const textX=bounds.left+bounds.width*270/600,textY=bounds.top+bounds.height*590/800;
   await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,x:textX,y:textY,clickCount:1});
   await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,x:textX,y:textY,clickCount:1});

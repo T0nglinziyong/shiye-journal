@@ -19,6 +19,18 @@ const touch=async selector=>{
   await sleep(120);
 };
 const menu=()=>evaluate(`document.querySelector('.swift-popover')?.getAttribute('aria-label')||null`);
+const projects=()=>evaluate(`(async()=>{
+  const db=await new Promise((resolve,reject)=>{const request=indexedDB.open('shiye-pwa-full-v1',1);
+    request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error)});
+  return new Promise((resolve,reject)=>{const request=db.transaction('projects').objectStore('projects').getAll();
+    request.onsuccess=()=>{db.close();resolve(request.result)};request.onerror=()=>reject(request.error)});
+})()`);
+const waitProjects=async predicate=>{
+  for(let attempt=0;attempt<60;attempt++){
+    const rows=await projects();if(predicate(rows))return rows;await sleep(100);
+  }
+  return projects();
+};
 try{
   await wait('.series-grid');await click('[data-route="works"]','.works-grid');
   await click('#work-create','#blank-create-confirm');await click('#blank-create-confirm','#canvas-page');
@@ -85,6 +97,37 @@ try{
     'Collapsing a group survives closing and reopening the layer menu');
   await touch('.scene-layer-node[aria-expanded] .scene-layer-expand');
   assert.equal(await evaluate('document.querySelectorAll(".scene-layer-children .scene-layer-node").length'),2);
+  const childID=await evaluate('document.querySelector(".scene-layer-children .scene-layer-node")?.dataset.sceneNode');
+  await touch(`[data-scene-node="${childID}"] .scene-layer-pick`);
+  await touch('[data-val="layers"]');
+  assert.ok(await evaluate('!!document.querySelector(".fabric-selected-actions")'),
+    'A nested layer selected by touch must show its canvas actions');
+  const beforeDrag=(await projects())[0].drafts[0],child=beforeDrag.layers
+    .find(node=>node.type==='group').children.find(node=>node.id===childID);
+  await evaluate('document.querySelector(".upper-canvas").scrollIntoView({block:"center"})');
+  const point=await evaluate(`(()=>{const canvas=document.querySelector('.upper-canvas');
+    const r=canvas.getBoundingClientRect();return {x:r.left+${child.x}*r.width/${beforeDrag.canvas.width},
+      y:r.top+${child.y}*r.height/${beforeDrag.canvas.height}}})()`);
+  await command('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{...point,id:3,force:1}]});
+  await command('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:point.x+24,y:point.y+12,id:3,force:1}]});
+  await command('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+  const movedRows=await waitProjects(rows=>rows[0]?.drafts?.[0]?.layers.find(node=>node.type==='group')
+    ?.children.find(node=>node.id===childID)?.x>child.x+10);
+  const moved=movedRows[0].drafts[0].layers.find(node=>node.type==='group')
+    .children.find(node=>node.id===childID);
+  assert.ok(moved.x>child.x+10,'Dragging a nested selection by touch persists its Scene position');
+  await touch('[data-act="undo"]');
+  const undone=await waitProjects(rows=>Math.abs(rows[0]?.drafts?.[0]?.layers
+    .find(node=>node.type==='group')?.children.find(node=>node.id===childID)?.x-child.x)<1);
+  assert.ok(Math.abs(undone[0].drafts[0].layers.find(node=>node.type==='group')
+    .children.find(node=>node.id===childID).x-child.x)<1,
+  'One undo reverses a single touch drag');
+  await touch('[data-act="redo"]');
+  const redone=await waitProjects(rows=>Math.abs(rows[0]?.drafts?.[0]?.layers
+    .find(node=>node.type==='group')?.children.find(node=>node.id===childID)?.x-moved.x)<1);
+  assert.ok(Math.abs(redone[0].drafts[0].layers.find(node=>node.type==='group')
+    .children.find(node=>node.id===childID).x-moved.x)<1,
+  'Redo restores the grouped child position');
   assert.deepEqual(browser.errors,[]);
-  console.log('Touch toolbar dropdown and layer reorder passed');
+  console.log('Touch toolbar, layer reorder and nested selection drag passed');
 }finally{await browser.close();}

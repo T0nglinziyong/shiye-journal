@@ -30,6 +30,18 @@ test('lasso moves and copies selected leaves while preserving source',()=>{
   assert.deepEqual(sceneLayerEntries(draft).map(entry=>entry.value.id),['shape','text','ink']);
 });
 
+test('lasso rejects the whole transform when one selected layer has a locked ancestor',()=>{
+  const draft=fixture(),before=structuredClone(draft.layers);
+  draft.layers[1].locked=true;
+  const locked=structuredClone(draft.layers);
+  assert.equal(moveSceneLasso(draft,['shape','text'],15,5),false);
+  assert.equal(transformSceneLasso(draft,['shape','text'],{x:100,y:90},1.2,30),false);
+  assert.deepEqual(draft.layers,locked);
+  assert.notDeepEqual(draft.layers,before);
+  assert.equal(moveSceneLasso(draft,['left'],10,0),false,
+    'A group ID cannot be treated as a leaf with x/y coordinates');
+});
+
 test('lasso box rotates text, shape and ink together around one center',()=>{
   const draft=fixture(),bounds=sceneLassoBounds(draft,['shape','text','ink']);
   assert.deepEqual(bounds,{x:70,y:70,width:50,height:41.5});

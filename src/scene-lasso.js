@@ -1,5 +1,5 @@
 import {objectCorners,polygonContains,selectionBounds} from './canvas-selection.js';
-import {sceneLayerEntries,findSceneNode,moveSceneNode,removeSceneNode} from './scene-v2.js';
+import {sceneLayerEntries,findSceneNode,moveSceneNode,removeSceneNode,assertSceneEditable} from './scene-v2.js';
 import {pressureInkOutline} from './pressure-ink.js';
 
 const edges=points=>points.map((point,index)=>[point,points[(index+1)%points.length]]);
@@ -26,6 +26,15 @@ const pruneEmptyGroups=nodes=>{
     if(!node.children?.length)nodes.splice(index,1);
   }
 };
+const editableSelection=(draft,ids)=>{
+  const nodes=[];
+  try{for(const id of new Set(ids)){
+    const node=assertSceneEditable(draft,id);
+    if(node.type==='group')return null;
+    nodes.push(node);
+  }}catch{return null;}
+  return nodes;
+};
 
 export function selectSceneLasso(draft,polygon,filter={},mode='contain'){
   if(!validPoints(polygon)||polygon.length<3)return [];
@@ -44,13 +53,14 @@ export function selectSceneLasso(draft,polygon,filter={},mode='contain'){
 }
 
 export function moveSceneLasso(draft,ids,dx,dy){
-  if(!Number.isFinite(dx)||!Number.isFinite(dy))return;
-  for(const id of new Set(ids)){
-    const node=findSceneNode(draft,id);
-    if(!node||node.locked||node.isLocked)continue;
+  if(!Number.isFinite(dx)||!Number.isFinite(dy))return false;
+  const nodes=editableSelection(draft,ids);
+  if(!nodes?.length)return false;
+  for(const node of nodes){
     if(node.type==='ink')node.points=(node.points||[]).map(point=>({...point,x:point.x+dx,y:point.y+dy}));
     else {node.x+=dx;node.y+=dy;if(node.type==='material')node.userOverrideFlags=[...new Set([...(node.userOverrideFlags||[]),'moved'])];}
   }
+  return true;
 }
 
 export function sceneLassoBounds(draft,ids){
@@ -67,13 +77,13 @@ export function sceneLassoBounds(draft,ids){
 export function transformSceneLasso(draft,ids,center,scale,degrees){
   if(!(scale>0)||!Number.isFinite(scale)||!Number.isFinite(degrees)||
     !Number.isFinite(center?.x)||!Number.isFinite(center?.y))return false;
+  const nodes=editableSelection(draft,ids);
+  if(!nodes?.length)return false;
   const radians=degrees*Math.PI/180,c=Math.cos(radians),s=Math.sin(radians);
   const around=point=>({x:center.x+scale*((point.x-center.x)*c-(point.y-center.y)*s),
     y:center.y+scale*((point.x-center.x)*s+(point.y-center.y)*c)});
   const changes=[];
-  for(const id of new Set(ids)){
-    const node=findSceneNode(draft,id);
-    if(!node||node.locked||node.isLocked)return false;
+  for(const node of nodes){
     if(node.type==='ink'){
       const points=(node.points||[]).map(point=>({...point,...around(point)}));
       const width=node.width*scale;

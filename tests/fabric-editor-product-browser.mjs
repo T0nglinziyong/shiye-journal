@@ -356,6 +356,31 @@ try{
   await click('[aria-label=合并套选图层]');await sleep(700);
   assert.equal((await projects())[0].drafts[0].layers.filter(layer=>layer.type==='group').length,1,
     'Merging lasso selected Scene nodes must persist');
+  await click('[data-val="layers"]','.scene-layer-tree');
+  if(!await evaluate('!!document.querySelector(".scene-layer-children .scene-layer-node")'))
+    await click('.scene-layer-node[aria-expanded] .scene-layer-expand');
+  await click(`[data-scene-node="${shapes[0].id}"] .scene-layer-pick`);
+  await click('[data-val="layers"]');
+  assert.ok(await evaluate('!!document.querySelector(".fabric-selected-actions")'),
+    'A shape inside a merged group must remain selected on the canvas');
+  const nestedBefore=(await projects())[0].drafts[0].layers.find(layer=>layer.type==='group')
+    .children.find(child=>child.id===shapes[0].id);
+  const nestedRect=await evaluate('document.querySelector(".upper-canvas").getBoundingClientRect().toJSON()');
+  const nestedDraft=(await projects())[0].drafts[0];
+  const nestedAt={x:nestedRect.left+nestedBefore.x*nestedRect.width/nestedDraft.canvas.width,
+    y:nestedRect.top+nestedBefore.y*nestedRect.height/nestedDraft.canvas.height};
+  await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,
+    clickCount:1,...nestedAt});
+  await command('Input.dispatchMouseEvent',{type:'mouseMoved',button:'left',buttons:1,
+    x:nestedAt.x+24,y:nestedAt.y+8});
+  await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,
+    clickCount:1,x:nestedAt.x+24,y:nestedAt.y+8});
+  const nestedAfter=(await waitProjects(rows=>rows[0]?.drafts?.[0]?.layers
+    ?.find(layer=>layer.type==='group')?.children.find(child=>child.id===shapes[0].id)
+    ?.x>nestedBefore.x+10))[0].drafts[0].layers.find(layer=>layer.type==='group')
+    .children.find(child=>child.id===shapes[0].id);
+  assert.ok(nestedAfter.x>nestedBefore.x+10,
+    'Dragging a nested shape through the real editor must persist its position');
   await click('[data-val="material"]','.swift-material-picker');
   await click('.swift-material-picker .swift-segments button:last-child');
   await click('[data-material-id="fabric-product-material"]');await sleep(700);

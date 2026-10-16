@@ -10,6 +10,7 @@ import {attachSceneV2,assertSceneEditable,sceneLayerEntries} from './scene-v2.js
 import {sceneDisplaySiblings} from './craft-display.js';
 import {prepareSceneFonts} from './scene-renderer.js';
 import {appendInkStroke,editableInkLayer} from './ink-groups.js';
+import {fabricPointer,installFabricPointer} from './fabric-pointer.js';
 
 const byID=(nodes,id)=>{
   for(const node of nodes||[]){
@@ -62,9 +63,11 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
     const oldProxy=canvas.getObjects().find(item=>item.sceneSelectionProxy);
     if(oldProxy){syncingSelection.current=true;canvas.discardActiveObject();canvas.remove(oldProxy);
       syncingSelection.current=false;}
-    if(ids.length>1){
+    const selectedNode=ids.length===1?byID(callbacks.current.draft.layers,ids[0]):null;
+    const nested=selectedNode&&!canvas.getObjects().some(item=>item.sceneID===ids[0]);
+    if(ids.length>1||nested&&selectedNode.type!=='ink'){
       const current=callbacks.current.draft,leaves=selectionLeaves(current,ids);
-      const bounds=ids.every(id=>editable(current,id))&&leaves.length>1?
+      const bounds=ids.every(id=>editable(current,id))&&leaves.length>=1?
         sceneLassoBounds(current,leaves):null;
       if(bounds)void import('fabric').then(({Rect,Control})=>{
         if(selectionEpoch.current!==epoch||sessionRef.current!==canvas||
@@ -160,6 +163,7 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
           selection:!readOnly,enableRetinaScaling:true,renderOnAddRemove:false
         });
         sessionRef.current=canvas;
+        installFabricPointer(canvas,fabric.Point);
         canvas.selection=false;
         canvas.skipTargetFind=callbacks.current.tool!=='select'||readOnly;
         const paperKey=current=>JSON.stringify([current.canvas,current.paperColor,
@@ -260,7 +264,8 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
         };
         let gesture=null,previewFrame=0,textPointerID=null,pendingTouchText=null;
         let lassoSelection=null;
-        canvas.sceneClearLasso=()=>{lassoSelection=null;canvas.clearContext(canvas.contextTop);};
+        canvas.sceneClearLasso=()=>{canvas.sceneCancelGesture?.();lassoSelection=null;
+          canvas.clearContext(canvas.contextTop);};
         const uncommittedText=new Set();
         const discardEmptyText=id=>{
           if(!uncommittedText.delete(id))return;
@@ -276,7 +281,7 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
         };
         canvas.sceneDiscardEmptyText=()=>{for(const id of [...uncommittedText])discardEmptyText(id);};
         const pointer=event=>{
-          const point=canvas.getScenePoint(event);
+          const point=fabricPointer(canvas,event).scene;
           // Mouse and touch have no trustworthy pressure curve. Omitting p
           // lets the shared stroke renderer infer one from movement instead.
           return event.pointerType==='pen'?
@@ -300,6 +305,38 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
         const uiScale=()=>Math.max(.1,canvas.upperCanvasEl.getBoundingClientRect().width/canvas.width);
         const frameHandle=frame=>frameCorners(frame)[2];
         const frameBounds=frame=>selectionBounds(frameCorners(frame));
+        const beginLassoGesture=(tool,event,fields)=>{
+          const current=callbacks.current.draft;
+          try{for(const id of lassoSelection.ids)assertSceneEditable(current,id);}
+          catch(error){callbacks.current.onIssue?.(error);return false;}
+          callbacks.current.onBeforeChange?.('lasso:'+tool);
+          gesture={id:event.pointerId,tool:'lasso-'+tool,moved:false,draft:current,
+            beforeFrame:structuredClone(lassoSelection),
+            beforeNodes:lassoSelection.ids.map(id=>[id,structuredClone(byID(current.layers,id))]),
+            ...fields};
+          canvas.upperCanvasEl.setPointerCapture(event.pointerId);
+          event.preventDefault();event.stopImmediatePropagation();
+          return true;
+        };
+        const rollbackLasso=(finished,notify=true)=>{
+          if(!finished?.beforeNodes)return;
+          for(const [id,before] of finished.beforeNodes){
+            const node=byID(finished.draft.layers,id);
+            if(!node)continue;
+            for(const key of Object.keys(node))delete node[key];
+            Object.assign(node,before);
+          }
+          lassoSelection=finished.beforeFrame;
+          reconcileRef.current?.();canvas.requestRenderAll();
+          if(notify&&callbacks.current.tool==='lasso'){
+            preview();callbacks.current.onSelection?.(lassoSelection.ids,frameBounds(lassoSelection));
+          }
+        };
+        canvas.sceneCancelGesture=(notify=true)=>{
+          const unfinished=gesture;gesture=null;
+          if(unfinished?.tool==='lasso-move'||unfinished?.tool==='lasso-transform')
+            rollbackLasso(unfinished,notify);
+        };
         const preview=()=>{
           const lasso=gesture?.tool==='lasso'?gesture.points:null;
           // Fabric paints its selection border and handles on contextTop.
@@ -399,18 +436,13 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
             const start=pointer(event);
             const handle=frameHandle(lassoSelection);
             if(Math.hypot(start.x-handle.x,start.y-handle.y)<20/uiScale()){
-              callbacks.current.onBeforeChange?.('lasso:transform');
-              gesture={id:event.pointerId,tool:'lasso-transform',moved:false,
+              beginLassoGesture('transform',event,{
                 lastAngle:Math.atan2(start.y-lassoSelection.center.y,start.x-lassoSelection.center.x),
-                lastDistance:Math.hypot(start.x-lassoSelection.center.x,start.y-lassoSelection.center.y)};
-              canvas.upperCanvasEl.setPointerCapture(event.pointerId);
-              event.preventDefault();event.stopImmediatePropagation();return;
+                lastDistance:Math.hypot(start.x-lassoSelection.center.x,start.y-lassoSelection.center.y)});
+              return;
             }
             if(polygonContains(start,frameCorners(lassoSelection))){
-              callbacks.current.onBeforeChange?.('lasso:move');
-              gesture={id:event.pointerId,tool:'lasso-move',last:start,moved:false};
-              canvas.upperCanvasEl.setPointerCapture(event.pointerId);
-              event.preventDefault();event.stopImmediatePropagation();return;
+              beginLassoGesture('move',event,{last:start});return;
             }
           }
           lassoSelection=null;
@@ -431,7 +463,7 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
           if(gesture.tool==='lasso-move'){
             const next=pointer(event),dx=next.x-gesture.last.x,dy=next.y-gesture.last.y;
             if(dx||dy){
-              moveSceneLasso(callbacks.current.draft,lassoSelection.ids,dx,dy);
+              if(!moveSceneLasso(gesture.draft,lassoSelection.ids,dx,dy))return;
               lassoSelection.center.x+=dx;lassoSelection.center.y+=dy;
               gesture.last=next;gesture.moved=true;reconcileRef.current?.();queuePreview();
               canvas.upperCanvasEl.dispatchEvent(new CustomEvent('shiye:fabric-object-transform',
@@ -448,7 +480,7 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
             if(degrees>180)degrees-=360;if(degrees< -180)degrees+=360;
             const ratio=Math.max(.1,Math.min(10,distance/Math.max(1,gesture.lastDistance)));
             if(Math.abs(degrees)>.01||Math.abs(ratio-1)>.001){
-              if(!transformSceneLasso(callbacks.current.draft,lassoSelection.ids,
+              if(!transformSceneLasso(gesture.draft,lassoSelection.ids,
                 lassoSelection.center,ratio,degrees))return;
               lassoSelection.angle+=degrees;lassoSelection.width*=ratio;lassoSelection.height*=ratio;
               gesture.lastAngle=angle;gesture.lastDistance=distance;gesture.moved=true;
@@ -478,6 +510,10 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
           event.preventDefault();event.stopImmediatePropagation();
           const finished=gesture;gesture=null;
           if(finished.tool==='lasso-move'||finished.tool==='lasso-transform'){
+            if(event.type==='pointercancel'){
+              rollbackLasso(finished);
+              return;
+            }
             preview();
             if(finished.moved){callbacks.current.onSelection?.(lassoSelection.ids,frameBounds(lassoSelection));
               callbacks.current.onChange?.(null,finished.tool);}
@@ -627,7 +663,8 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
               const angle=(object.angle||0)-before.angle;
               if(Math.abs(angle)>1e-5&&!transformSceneLasso(current,ids,before.center,1,angle))
                 throw Error('所选图层不能旋转');
-              moveSceneLasso(current,ids,center.x-before.center.x,center.y-before.center.y);
+              if(!moveSceneLasso(current,ids,center.x-before.center.x,center.y-before.center.y))
+                throw Error('所选图层不能移动');
               object.sceneMultiPose={center,angle:object.angle||0};
               for(const id of ids){const root=current.layers.find(item=>byID([item],id));
                 if(root)signatures.delete(root.id);}
@@ -709,7 +746,7 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
     };
     void start();
     return ()=>{disposed=true;reconcileRef.current=null;if(canvas){callbacks.current.onReady?.(null);
-      canvas.sceneRemovePointerHandlers?.();void canvas.dispose();}
+      canvas.sceneCancelGesture?.(false);canvas.sceneRemovePointerHandlers?.();void canvas.dispose();}
       if(sessionRef.current===canvas)sessionRef.current=null;};
   },[draft.id,readOnly]);
 

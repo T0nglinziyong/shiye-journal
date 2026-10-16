@@ -13,6 +13,7 @@ import {visualStyles} from './creative-style-brief.js';
 import {FabricSceneStage} from './fabric-scene-stage.jsx';
 import {FabricEditorToolbar,FabricHeaderMenu} from './fabric-editor-controls.jsx';
 import {FabricPageViewport} from './fabric-page-viewport.jsx';
+import {fabricPointer} from './fabric-pointer.js';
 import {SceneCover} from './scene-cover.jsx';
 import {findSceneNode} from './scene-v2.js';
 import {WORK_TABS,workInTab} from './work-collections.js';
@@ -1275,7 +1276,7 @@ export function EditorPage({state,draft,editorEntry,asset,source,format,
       tool={state.tool} onCanvasTap={event=>{
         const canvas=editorFabricCanvases.get(draft.id);
         if(!canvas)return;
-        const point=canvas.getScenePoint(event);
+        const point=fabricPointer(canvas,event).scene;
         const hit=[...canvas.getObjects()].reverse().find(object=>object.visible!==false&&
           !object.sceneSelectionProxy&&object.evented!==false&&object.selectable!==false&&object.containsPoint(point));
         if(hit)canvas.setActiveObject(hit);
@@ -1286,14 +1287,15 @@ export function EditorPage({state,draft,editorEntry,asset,source,format,
         if(!state.selected&&(state.multiSelected||[]).length<2)return false;
         const canvas=editorFabricCanvases.get(draft.id);
         if(!canvas)return false;
-        const point=canvas.getScenePoint(event);
+        const {scene:point,viewport}=fabricPointer(canvas,event);
         const active=canvas.getActiveObject();
-        if((state.multiSelected||[]).length>1&&active?.sceneMultiIDs?.length>1){
-          if(active.findControl(canvas.getViewportPoint(event),event.pointerType==='touch'))return true;
+        if(active?.sceneMultiIDs?.length&&active.sceneMultiIDs.length===(state.multiSelected||[]).length&&
+          active.sceneMultiIDs.every(id=>state.multiSelected.includes(id))){
+          if(active.findControl(viewport,event.pointerType==='touch'))return true;
           return active.containsPoint(point);
         }
         if(active?.sceneID===state.selected&&
-          active.findControl(canvas.getViewportPoint(event),event.pointerType==='touch'))return true;
+          active.findControl(viewport,event.pointerType==='touch'))return true;
         return canvas.getObjects().some(object=>object.sceneID===state.selected&&
           object.selectable!==false&&object.visible!==false&&object.containsPoint(point));
       }}
