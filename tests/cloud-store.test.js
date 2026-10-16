@@ -903,6 +903,17 @@ test('successive offline metadata edits inherit the pending value and preserve a
  assert.deepEqual(await activeRows(cache,'batch'),[]);
 });
 
+test('a failed local metadata stage releases the next independent edit',async()=>{
+ const cache=memoryCache(),{db}=fixture(cache);
+ const first=db.cloudStageMutation(['assets'],()=>{throw Error('local form failed');});
+ const second=db.cloudStageMutation(['assets'],tx=>tx.objectStore('assets').put({
+   id:'independent',title:'second form'
+ }));
+ await assert.rejects(first,/local form failed/);
+ await second;
+ assert.equal((await activeRows(cache,'batch'))[0].record.operations[0].item.id,'independent');
+});
+
 test('a mixed conflicting batch remains pending until a reviewed whole-batch choice',async()=>{
  const {state,db}=fixture(memoryCache());
  await db.cloudAll('assets');

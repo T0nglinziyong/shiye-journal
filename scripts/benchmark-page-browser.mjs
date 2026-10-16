@@ -59,6 +59,17 @@ try{
       }
       throw Error('跨页搜索未显示尾页素材');
     })()`);
+    const visibleCards=await b.evaluate(`(async()=>{
+      const input=document.querySelector('#search');
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'');
+      input.dispatchEvent(new Event('input',{bubbles:true}));
+      for(let i=0;i<100;i++){
+        await new Promise(requestAnimationFrame);
+        const count=document.querySelectorAll('.asset-grid .card').length;
+        if(count>=40)return count;
+      }
+      throw Error('清除搜索后，完整素材列表未恢复');
+    })()`);
     await b.command('HeapProfiler.collectGarbage');
     const before=await b.command('Performance.getMetrics');
     const heapBefore=before.metrics.find(row=>row.name==='JSHeapUsedSize')?.value??null;
@@ -80,7 +91,7 @@ try{
     await b.command('HeapProfiler.collectGarbage');
     const metrics=await b.command('Performance.getMetrics');
     const heap=metrics.metrics.find(row=>row.name==='JSHeapUsedSize')?.value??null;
-    results.push({assets:count,coldMs,searchMs:Math.round(query),warmRoundTripMedianMs:Math.round(median(warm)),
+    results.push({assets:count,visibleCards,coldMs,searchMs:Math.round(query),warmRoundTripMedianMs:Math.round(median(warm)),
       warmRoundTripP95Ms:Math.round(percentile(warm,.95)),heapBytesBefore:heapBefore,
       heapBytesAfter50:heapAfter50,heapBytesAfter100:heap,
       heapDeltaFirst50:heapAfter50-heapBefore,heapDeltaSecond50:heap-heapAfter50});
