@@ -82,7 +82,12 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
       const checkpoint=staging;
       await checkpoint;
       let saved;
-      try{saved=await reload()||[];}
+      // reload() also updates the optimistic IndexedDB baseline. It must not
+      // race with an acknowledgement or a new stage writing that baseline,
+      // even when all three operations originate in this one tab.
+      const read=writeGate.catch(()=>{}).then(()=>reload());
+      writeGate=read.catch(()=>{});
+      try{saved=await read||[];}
       catch(error){throw markSyncPhase(error,'从 IndexedDB 刷新同步队列');}
       if(checkpoint!==staging)continue;
       entries.clear();

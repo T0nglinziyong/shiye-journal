@@ -433,7 +433,7 @@ test('editor edits are locally staged but cloud commits are coalesced every 10 s
     for(const [id,timer] of [...timers]){
       if(timer.at<=time){timers.delete(id);timer.fn();}
     }
-    for(let i=0;i<20;i++)await Promise.resolve();
+    for(let i=0;i<100;i++)await Promise.resolve();
   };
   const sync=createProjectSync({
     load:async()=>structuredClone(rows),reload:async()=>structuredClone(rows),
@@ -700,4 +700,26 @@ test('an upload acknowledgement and a fresh edit never write the same local outb
     releaseAck();await Promise.all([flush,stage]);
     assert.deepEqual(rows.map(row=>row.record.id),['new']);
   }finally{releaseAck();sync.pause();}
+});
+test('queue refresh and local staging share the IndexedDB baseline gate',async()=>{
+  let rows=[],reloadStarted,releaseReload,activeReads=0,activeWrites=0;
+  const saved=[];
+  const started=new Promise(resolve=>reloadStarted=resolve);
+  const gate=new Promise(resolve=>releaseReload=resolve);
+  const sync=createProjectSync({load:async()=>structuredClone(rows),
+    reload:async()=>{activeReads++;reloadStarted();await gate;activeReads--;
+      return structuredClone(rows);},
+    write:async next=>{activeWrites++;
+      assert.equal(activeReads,0,'a local write cannot overlap queue refresh');
+      rows=structuredClone(next);saved.push(rows.map(row=>row.record.id));activeWrites--;},
+    revision:()=>0,commit:async()=>{},autoFlushDelayMs:10000});
+  try{
+    const resume=sync.resume();await started;
+    const stage=sync.stage({id:'new'});
+    await new Promise(resolve=>setTimeout(resolve,0));
+    assert.equal(activeWrites,0);
+    releaseReload();await Promise.all([resume,stage]);
+    assert.equal(activeReads,0);
+    assert.ok(saved.some(ids=>ids.includes('new')),'the new edit was durably staged');
+  }finally{releaseReload();sync.pause();}
 });
