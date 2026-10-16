@@ -13,7 +13,7 @@ import {appendInkStroke,editableInkLayer} from './ink-groups.js';
 import {fabricPointer,installFabricPointer} from './fabric-pointer.js';
 import {createFabricSelectionPreview} from './fabric-selection-preview.js';
 import {configureFabricEditorFrame} from './fabric-editor-frame.js';
-import {selectableFabricObjectAt} from './fabric-hit-test.js';
+import {selectableFabricObjectAt,installSelectionFramePriority} from './fabric-hit-test.js';
 
 const byID=(nodes,id)=>{
   for(const node of nodes||[]){
@@ -72,7 +72,9 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
     if(oldProxy){oldProxy.scenePreview?.restore();syncingSelection.current=true;canvas.discardActiveObject();canvas.remove(oldProxy);
       syncingSelection.current=false;}
     const selectedNode=ids.length===1?byID(callbacks.current.draft.layers,ids[0]):null;
-    const nested=selectedNode&&!canvas.getObjects().some(item=>item.sceneID===ids[0]);
+    // A top-level image awaiting decode is not a nested object. Derive
+    // ancestry from Scene, or a late proxy can replace its real resize frame.
+    const nested=selectedNode&&!callbacks.current.draft.layers.some(item=>item.id===selectedNode.id);
     if(ids.length>1||nested&&selectedNode.type!=='ink'){
       const current=callbacks.current.draft,leaves=selectionLeaves(current,ids);
       const bounds=ids.every(id=>editable(current,id))&&leaves.length>=1?
@@ -165,6 +167,7 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
         });
         sessionRef.current=canvas;
         installFabricPointer(canvas,fabric.Point);
+        installSelectionFramePriority(canvas);
         canvas.selection=false;
         canvas.skipTargetFind=callbacks.current.tool!=='select'||readOnly;
         const paperKey=current=>JSON.stringify([current.canvas,current.paperColor,
@@ -275,7 +278,7 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
           existing.forEach((object,index)=>canvas.moveObjectTo(object,index));
           canvas.requestRenderAll();
         };
-        let gesture=null,previewFrame=0,textPointerID=null,pendingTouchText=null;
+        let gesture=null,previewFrame=0,textPointerID=null,textTap=null,pendingTouchText=null;
         let lassoSelection=null;
         canvas.sceneClearLasso=()=>{canvas.sceneCancelGesture?.();lassoSelection=null;
           canvas.clearContext(canvas.contextTop);};
@@ -401,16 +404,13 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
           previewFrame=requestAnimationFrame(()=>{previewFrame=0;preview();});
         };
         canvas.on('after:render',queuePreview);
-        const onPointerDown=event=>{
-          const mode=callbacks.current.tool;
-          if(readOnly||!['pen','highlighter','eraser','text','lasso'].includes(mode)||event.button>0)return;
-          event.preventDefault();event.stopImmediatePropagation();
-          if(mode==='text'){
-            textPointerID=event.pointerId;
+        const activateText=event=>{
             const current=callbacks.current.draft,point=pointer(event);
             if(point.x<0||point.y<0||point.x>current.canvas.width||point.y>current.canvas.height)return;
-            const hit=canvas.getObjects().findLast(object=>selectableFabricObjectAt(canvas,object,
-              new fabric.Point(point.x,point.y),fabricPointer(canvas,event).viewport));
+            const scenePoint=new fabric.Point(point.x,point.y),active=canvas.getActiveObject();
+            const hit=active?.visible!==false&&active?.selectable!==false&&active?.containsPoint(scenePoint)?active:
+              canvas.getObjects().findLast(object=>selectableFabricObjectAt(canvas,object,
+                scenePoint,fabricPointer(canvas,event).viewport));
             if(hit){
               canvas.setActiveObject(hit);
               if(hit.sceneType==='text'){
@@ -444,6 +444,16 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
             });
             callbacks.current.onChange?.(node,'text:new');
             return;
+        };
+        const onPointerDown=event=>{
+          const mode=callbacks.current.tool;
+          if(readOnly||!['pen','highlighter','eraser','text','lasso'].includes(mode)||event.button>0)return;
+          event.preventDefault();event.stopImmediatePropagation();
+          if(mode==='text'){
+            textPointerID=event.pointerId;
+            textTap={x:event.clientX,y:event.clientY,moved:false};
+            canvas.upperCanvasEl.setPointerCapture(event.pointerId);
+            return;
           }
           if(mode==='lasso'&&lassoSelection?.ids.length){
             const start=pointer(event);
@@ -471,6 +481,10 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
           preview();
         };
         const onPointerMove=event=>{
+          if(textPointerID===event.pointerId&&textTap){
+            if(Math.hypot(event.clientX-textTap.x,event.clientY-textTap.y)>5)textTap.moved=true;
+            event.preventDefault();event.stopImmediatePropagation();return;
+          }
           if(!gesture||gesture.id!==event.pointerId)return;
           event.preventDefault();event.stopImmediatePropagation();
           if(gesture.tool==='lasso-move'){
@@ -515,7 +529,9 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
         const onPointerEnd=event=>{
           if(textPointerID===event.pointerId){
             textPointerID=null;
-            if(event.type==='pointercancel')pendingTouchText=null;
+            const tap=textTap;textTap=null;
+            if(event.type==='pointerup'&&tap&&!tap.moved)activateText(event);
+            else pendingTouchText=null;
             event.preventDefault();event.stopImmediatePropagation();
             return;
           }

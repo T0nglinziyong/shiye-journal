@@ -122,10 +122,17 @@ try{
   await sleep(700);
   assert.equal((await projects())[0].drafts[0].layers.find(layer=>layer.type==='text').content,'拾页文字');
   const beforeReedit=(await projects())[0].drafts[0].layers.length;
-  const existingTextPoint=await evaluate(`(()=>{const text=document.querySelector('.upper-canvas');
-    const rect=text.getBoundingClientRect();const layer=${JSON.stringify((await projects())[0].drafts[0].layers.find(layer=>layer.type==='text'))};
-    return {x:rect.left+(layer.x-layer.width/2+25)/text.width*rect.width,
-      y:rect.top+(layer.y-35)/text.height*rect.height}})()`);
+  const findTextPixel=async()=>evaluate(`(()=>{const canvas=document.querySelector('.lower-canvas');
+    const rect=canvas.getBoundingClientRect(),draft=${JSON.stringify((await projects())[0].drafts[0])};
+    const layer=draft.layers.find(item=>item.type==='text'),sx=canvas.width/draft.canvas.width,sy=canvas.height/draft.canvas.height;
+    const pixels=canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data;
+    for(let y=Math.ceil((layer.y-layer.height/2)*sy);y<(layer.y+layer.height/2)*sy;y++)
+      for(let x=Math.ceil((layer.x-layer.width/2)*sx);x<(layer.x+layer.width/2)*sx;x++){
+        const i=(y*canvas.width+x)*4;
+        if(pixels[i+3]>240&&pixels[i]<120)return {x:rect.left+(x+.5)/canvas.width*rect.width,y:rect.top+(y+.5)/canvas.height*rect.height};
+      }
+    throw Error('No visible text pixel to click');})()`);
+  let existingTextPoint=await findTextPixel();
   await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,clickCount:1,...existingTextPoint});
   await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,clickCount:1,...existingTextPoint});
   await wait('.canvas-font-size-stepper input[aria-label="字号"]');
@@ -145,6 +152,7 @@ try{
     'Changing font after size must not clear the same text selection');
   await click('[data-val="text"]');
   const scrollBeforeReedit=await evaluate('window.scrollY');
+  existingTextPoint=await findTextPixel();
   await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,clickCount:1,...existingTextPoint});
   await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,clickCount:1,...existingTextPoint});
   await sleep(850);
@@ -260,7 +268,7 @@ try{
     return beforeMulti.every(prior=>now.find(item=>item.id===prior.id)?.x>prior.x+10);
   }))[0].drafts[0].layers;
   assert.ok(beforeMulti.every(prior=>afterMulti.find(item=>item.id===prior.id)?.x>prior.x+10),
-    'Dragging the shared selection frame must persist both selected objects');
+    'Dragging the shared selection frame must persist both selected objects: '+JSON.stringify({beforeMulti,afterMulti,multiCenter,ui:await evaluate(`({toast:document.querySelector('#toast')?.textContent,selection:document.querySelector('.fabric-selected-actions')?.outerHTML,hit:document.elementFromPoint(${multiCenter.x},${multiCenter.y})?.outerHTML.slice(0,150)})`)}));
   await click('[data-act="undo"]');
   const afterUndo=(await waitProjects(rows=>beforeMulti.every(prior=>
     Math.abs((rows[0]?.drafts?.[0]?.layers||[]).find(item=>item.id===prior.id)?.x-prior.x)<1)))[0].drafts[0].layers;
@@ -453,7 +461,7 @@ try{
     ?.find(layer=>layer.id===originalMaterial.id)?.manualVisualResize))[0].drafts[0].layers
     .find(layer=>layer.id===originalMaterial.id);
   assert.ok(resizedMaterial.width>originalMaterial.width&&resizedMaterial.assetID===originalMaterial.assetID,
-    'Manual material resize must persist without changing its source asset');
+    'Manual material resize must persist without changing its source asset: '+JSON.stringify({originalMaterial,resizedMaterial,materialEdge,ui:await evaluate(`({toast:document.querySelector('#toast')?.textContent,selection:document.querySelector('.fabric-selected-actions')?.outerHTML,hit:document.elementFromPoint(${materialEdge.x},${materialEdge.y})?.outerHTML.slice(0,150)})`)}));
   await click('[aria-label="编辑对象"]','.show-inspector');
   await click('.editor-inspector-geometry summary','.editor-crop-slider');
   assert.equal(await evaluate('!!document.querySelector(".editor-inspector-geometry textarea")'),false,

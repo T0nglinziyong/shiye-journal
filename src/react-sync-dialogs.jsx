@@ -46,7 +46,7 @@ export function SyncDetailsDialog({details,projects,batches,local,quarantined,le
       {rows.slice(0,shown).map(row=><li key={row.key}><div><strong>{row.title}</strong><small>{row.kind}</small></div>
         <span>{row.failure==='invalid'?'等待格式修复':row.failure==='local'?'正在暂存':row.failure?'等待重试':'等待上传'}</span></li>)}
     </ul></div>{rows.length>shown?<button type="button" className="btn" onClick={()=>setShown(count=>count+40)}>显示更多（剩余 {rows.length-shown} 项）</button>:null}</section>:null}
-    <details className="sync-maintenance"><summary>数据维护</summary>
+    <section className="sync-maintenance"><h3>数据维护</h3>
       <p>重建队列会根据本机当前数据重新安排上传，保留待传图片和删除操作。</p>
       {quarantined||legacyCount?<p>有 {quarantined+legacyCount} 项旧数据需要检查格式，原始资料仍保留。</p>:null}
       <div className="actions">
@@ -56,7 +56,7 @@ export function SyncDetailsDialog({details,projects,batches,local,quarantined,le
         <button type="button" className="btn" id="sync-emergency-copy" disabled={!total} onClick={onEmergency}>导出待同步数据备份</button>
         <button type="button" className="btn danger" id="sync-wipe-everything" onClick={onWipe}>彻底清空本账号本机与云端数据</button>
       </div>
-    </details></div>
+    </section></div>
   </Dialog>;
 
 }

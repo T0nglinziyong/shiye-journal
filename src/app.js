@@ -128,7 +128,7 @@ import {readClipboardText} from './clipboard-text.js';
 import {parity} from './parity-ui.js';
 import {journalTemplateRecords,clearJournalTemplateImages} from './journal-template-data.js';
 import {syncSelectionScope,reconcileSelectedRecords,finishSelection,toggleSelection,beginSelection} from './library-selection-model.js';
-import {canApplyBackgroundView,shouldPullCloudForRoute} from './view-update-policy.js';
+import {canApplyBackgroundView,shouldPullCloudForRoute,canPollDuringEditing} from './view-update-policy.js';
 import {createActionStore} from './ui-action-store.js';
 import {createPageControllerHost} from './page-controller-host.js';
 import {createLibraryController,registerLibraryActions} from './page-controllers/library-controller.js';
@@ -342,7 +342,8 @@ function captureSettings(){
 const routeScroll=new Map();
 let matchingScrollMemory=null;
 let viewInteractionRevision=0;
-for(const event of ['click','input','pointerdown'])view.addEventListener(event,()=>viewInteractionRevision++,true);
+let lastEditorInputAt=0;
+for(const event of ['click','input','pointerdown'])view.addEventListener(event,()=>{viewInteractionRevision++;if(state.route==='editor')lastEditorInputAt=Date.now();},true);
 let backgroundViewPending=false,backgroundViewTimer=null;
 const activeViewPointers=new Set();
 view.addEventListener('pointerdown',event=>activeViewPointers.add(event.pointerId),true);
@@ -2940,11 +2941,11 @@ emergencyInput.onchange=async()=>{
   catch(error){console.error(error);toast('应急恢复失败（原待同步资料未被覆盖）：'+error.message);}
 };
 backupInput.onchange=async()=>{const file=backupInput.files?.[0];backupInput.value='';if(!file)return;
-  try{const plan=await db.prepareBackupRestore(file),n=plan.counts;
+  let plan;try{plan=await db.prepareBackupRestore(file);const n=plan.counts;
     const repaired=plan.repairs.length?`另有 ${plan.repairs.length} 个不能跨账号使用的派生封面引用将移除；作品正文和素材不变，封面打开时重新生成。`:'';
-    if(!confirm(`备份预检通过：${n.assets} 件素材、${n.series} 个系列、${n.projects} 件作品、${n.blobs} 份图片、${n.trash} 条最近删除。${repaired}恢复会替换当前全部资料。继续吗？`))return;
+    if(!confirm(`备份预检通过：${n.assets} 件素材、${n.series} 个系列、${n.projects} 件作品、${n.blobs} 份图片、${n.trash} 条最近删除。${repaired}恢复会替换当前全部资料。继续吗？`)){await plan.dispose?.();return;}
     await flushSave();await db.flushProjects();await plan.apply();state.activeProject=null;state.basket=[];await refresh();toast('完整备份已恢复');}
-  catch(e){console.error(e);toast('恢复失败：'+e.message);}
+  catch(e){console.error(e);toast('恢复失败：'+e.message);}finally{await plan?.dispose?.();}
 };
 // A long uninterrupted editing session also creates a recovery point,
 // even when the user pauses without making another stroke.
@@ -3047,13 +3048,16 @@ window.addEventListener('shiye-sync-project-committed',event=>{
   current.__cloudBaseSceneFingerprint=sceneFingerprint;
   current.__cloudBaseMetadata=metadata;
 });
-window.addEventListener('shiye-project-sync',event=>{const {pending,error,conflicts=0,uploading=false,progress=null}=event.detail;syncDisplay.pending=pending;syncDisplay.progress=progress;syncDisplay.error=error;syncDisplay.conflicts=conflicts;syncDisplay.uploading=uploading;syncDisplay.checking=false;if(!dirtyProjects.size&&!savingProjects)syncDisplay.localPending=false;updateSyncIndicator();if(error&&!uploading){saveStatus('待同步 · 修改已保留在本机');const message=error.name==='AbortError'||/abort|timed? ?out/i.test(error.message||'')?'网络请求中断，本机修改已保留，将自动重试同步':describeSyncError(error);if(lastSyncError!==message)toast(message);lastSyncError=message;}else{if(!error)lastSyncError=null;saveStatus(conflicts?'部分资料有冲突 · 其他资料已继续同步':pending?'修改已暂存 · 后台同步中':'已保存到云端');privateImages.retryMissing();}});
+window.addEventListener('shiye-project-sync',event=>{const {pending,error,conflicts=0,uploading=false,progress=null}=event.detail;syncDisplay.pending=pending;syncDisplay.progress=progress;syncDisplay.error=error;syncDisplay.conflicts=conflicts;syncDisplay.uploading=uploading;syncDisplay.checking=false;if(!dirtyProjects.size&&!savingProjects)syncDisplay.localPending=false;updateSyncIndicator();if(error&&!uploading){saveStatus('待同步 · 修改已保留在本机');const message=error.name==='AbortError'||/abort|timed? ?out/i.test(error.message||'')?'网络请求中断，本机修改已保留，将自动重试同步':describeSyncError(error);if(lastSyncError!==message)toast(message);lastSyncError=message;}else{const recovered=!!lastSyncError&&!error;if(!error)lastSyncError=null;saveStatus(conflicts?'部分资料有冲突 · 其他资料已继续同步':pending?'修改已暂存 · 后台同步中':'已保存到云端');if(recovered)privateImages.retryMissing();}});
 let cloudCheck,cloudCheckAt=0,cloudSessionReady=false,cloudCheckAgain=false;
 const CLOUD_POLL_MS=5000;
 let syncPausedByUser=false,resetWorkflowActive=false;
 const cloudResumer=createSyncResumer({flush:()=>db.flushProjects({background:true}),canRun:()=>cloudEnabled&&cloudSessionReady&&navigator.onLine!==false,onError:error=>console.warn('后台同步待重试',error?.message)});
 function backgroundCloudCheck({force=false}={}){
   if(!cloudEnabled||!shouldPullCloudForRoute(state.route)||document.visibilityState==='hidden')return;
+  if(!canPollDuringEditing({route:state.route,gestureActive:!!activeViewPointers.size,
+    inputFocused:!!document.activeElement?.matches('input,textarea,[contenteditable="true"]'),
+    idleMS:Date.now()-lastEditorInputAt}))return;
   // Keep remote reads moving during a long upload, but do not compete with
   // every image chunk. A forced pull after another device's commit still runs.
   if(syncDisplay.uploading&&!force&&Date.now()-cloudCheckAt<30000)return;

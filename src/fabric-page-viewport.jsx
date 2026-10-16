@@ -32,8 +32,8 @@ export function FabricPageViewport({draft,width,height,zoom=1,initialPan,onViewp
     const stop=event=>{event.preventDefault();event.stopImmediatePropagation();};
     const iPad=isIPadPointerDevice(navigator);
     const down=event=>{
-      if(event.pointerType==='pen')return;
       const mode=latest.current.tool;
+      if(event.pointerType==='pen'&&mode!=='select')return;
       const navigate=fingerNavigatesCanvas({pointerType:event.pointerType,tool:mode,iPad})||
         mode==='select'&&(event.pointerType==='touch'||event.button===0)||event.button===1;
       if(!navigate&&event.pointerType!=='touch')return;
@@ -70,7 +70,7 @@ export function FabricPageViewport({draft,width,height,zoom=1,initialPan,onViewp
       const next={...old,x:event.clientX,y:event.clientY};active.set(event.pointerId,next);
       if(!old.navigate)return;
       if(active.size===1){
-        if(start?.moved)paint({...pose,x:pose.x+(next.x-old.x)/pose.scale,y:pose.y+(next.y-old.y)/pose.scale});
+        if(start?.moved&&event.pointerType!=='pen')paint({...pose,x:pose.x+(next.x-old.x)/pose.scale,y:pose.y+(next.y-old.y)/pose.scale});
       }else{
         const after=[...active.values()],mid=a=>({x:(a[0].x+a[1].x)/2,y:(a[0].y+a[1].y)/2}),
           distance=a=>Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y),a=mid(before),b=mid(after),

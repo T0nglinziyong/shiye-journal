@@ -90,6 +90,18 @@ try{
     'Pressing an object must wait for release before selecting');
   await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,clickCount:1,...points.shape});
   await wait('.fabric-selected-actions');
+  for(const pointerType of ['mouse','pen']){
+    await command('Input.dispatchMouseEvent',{type:'mousePressed',pointerType,button:'left',buttons:1,clickCount:1,...points.blank});
+    await command('Input.dispatchMouseEvent',{type:'mouseReleased',pointerType,button:'left',buttons:0,clickCount:1,...points.blank});
+    await command('Input.dispatchMouseEvent',{type:'mousePressed',pointerType,button:'left',buttons:1,clickCount:1,...points.shape});
+    assert.equal(await evaluate('!!document.querySelector(".fabric-selected-actions")'),false,pointerType+' waits for release');
+    await command('Input.dispatchMouseEvent',{type:'mouseMoved',pointerType,button:'left',buttons:1,x:points.shape.x+20,y:points.shape.y});
+    await command('Input.dispatchMouseEvent',{type:'mouseReleased',pointerType,button:'left',buttons:0,clickCount:1,x:points.shape.x+20,y:points.shape.y});
+    assert.equal(await evaluate('!!document.querySelector(".fabric-selected-actions")'),false,pointerType+' drag cannot select');
+    await command('Input.dispatchMouseEvent',{type:'mousePressed',pointerType,button:'left',buttons:1,clickCount:1,...points.shape});
+    await command('Input.dispatchMouseEvent',{type:'mouseReleased',pointerType,button:'left',buttons:0,clickCount:1,...points.shape});
+    await wait('.fabric-selected-actions');
+  }
   await click('[data-act="zoom-in"]');await sleep(150);
   const from=await evaluate(`(()=>{const r=document.querySelector('.upper-canvas').getBoundingClientRect();
     return {x:r.left+r.width*.08,y:r.top+r.height*.08}})()`);

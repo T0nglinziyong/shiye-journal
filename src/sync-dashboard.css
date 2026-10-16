@@ -10,6 +10,5 @@
 .sync-dashboard .sync-pending-list strong { overflow-wrap:anywhere; }
 .sync-dashboard .sync-pending-list small,.sync-dashboard .sync-pending-list li>span { color:#70806d; font-size:.85rem; }
 .sync-dashboard .sync-pending-list li>span { flex-shrink:0; }
-.sync-maintenance { border-top:1px solid #e2e7df; padding-top:14px; }
-.sync-maintenance[open] { display:grid; gap:14px; }
+.sync-maintenance { border-top:1px solid #e2e7df; padding-top:14px; display:grid; gap:14px; }
 .sync-error { padding:12px; background:#fff3df; border-radius:12px; }

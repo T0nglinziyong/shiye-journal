@@ -387,6 +387,17 @@ try{
       return [o.left,o.top]})})()`),stableCoordinates,
   'Rejecting a mixed locked selection cannot move unrelated projection objects');
   assert.deepEqual(browser.errors,[]);
+  await evaluate(`(()=>{
+    const f=window.__fabricFixture;
+    f.draft.layers.push({id:'delayed-top-level',type:'material',assetID:'fabric-delayed',x:300,y:400,width:100,height:100});
+    f.refresh();f.select(['delayed-top-level']);
+  })()`);
+  await sleep(100);
+  assert.equal(await evaluate('window.__fabricCanvas.getObjects().some(o=>o.sceneSelectionProxy)'),false,
+    'An undecoded top-level image must never acquire a nested selection proxy');
+  await sleep(600);
+  assert.deepEqual(await evaluate(`(()=>{const o=window.__fabricCanvas.getActiveObject();return {id:o?.sceneID,proxy:!!o?.sceneSelectionProxy,edges:!!o?.controls.mr};})()`),
+    {id:'delayed-top-level',proxy:false,edges:true},'Decoded top-level image keeps its real stretch controls');
   console.log('Fabric stage browser check passed:',JSON.stringify({background,parity,coverParity,weaveParity,inkParity}),
     'screenshots /tmp/shiye-fabric-stage.png and /tmp/shiye-fabric-reference.png');
 }finally{await browser.close();}

@@ -1,3 +1,4 @@
+export * as fabric from 'fabric';
 import React from 'react';
 import {createRoot} from 'react-dom/client';
 import {ActiveSelection} from 'fabric';
@@ -36,7 +37,7 @@ function Preview(){
   return <><nav id="fabric-tools">{['select','pen','eraser','lasso'].map(name=><button key={name}
     type="button" data-tool={name} onClick={()=>setTool(name)}>{name}</button>)}</nav>
     <FabricSceneStage draft={draft} sceneRevision={sceneRevision} tool={tool}
-      selectedIDs={selectedIDs}
+      selectedID={selectedIDs.length===1?selectedIDs[0]:null} selectedIDs={selectedIDs}
       assetURL={id=>id==='fabric-delayed'?new Promise(resolve=>setTimeout(()=>resolve(assetURL),350)):assetURL}
       onReady={canvas=>window.__fabricCanvas=canvas}
       onSelection={ids=>{setSelectedIDs(ids);events.textContent='选中：'+ids.join(', ')}}

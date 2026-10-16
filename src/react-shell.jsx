@@ -1,6 +1,8 @@
 import React,{Component,useLayoutEffect,useState} from 'react';
 import {createRoot} from 'react-dom/client';
-import {flushSync} from 'react-dom';
+import {flushSync,createPortal} from 'react-dom';
+import {observeShellViewport} from './shell-viewport.js';
+import './shell-viewport.css';
 import {iconMarkup} from './icons.js';
 import {CloudAccountMenu} from './react-cloud-auth.jsx';
 import {recordRuntimeIssue} from './runtime-diagnostics.js';
@@ -42,13 +44,22 @@ function Icon({name}){
 function AppShell(){
   const [shell,setShell]=useState(currentShellState);
   const [overlay,setOverlay]=useState(currentOverlay);
+  const [mobile,setMobile]=useState(false);
+  useLayoutEffect(()=>{
+    const media=window.matchMedia('(max-width:699px)');
+    const changed=()=>setMobile(media.matches);changed();
+    media.addEventListener('change',changed);
+    const dispose=observeShellViewport(window,document.documentElement);
+    return ()=>{media.removeEventListener('change',changed);dispose();};
+  },[]);
   useLayoutEffect(()=>{shellSetter=setShell;overlaySetter=setOverlay;
     return ()=>{shellSetter=null;overlaySetter=null;};},[]);
   const active=route=>shell.route===route||(route==='library'&&['series','import'].includes(shell.route));
-  return <>
-    <header className="topbar"><div className="brand"><b dangerouslySetInnerHTML={{__html:iconMarkup('leaf')}}/><div><strong>拾页</strong><small>COLLECT. COMPOSE.</small></div></div><nav className="main-nav" aria-label="主导航">
+  const navigation=<nav className="main-nav" aria-label="主导航">
       <button data-route="library" className={active('library')?'active':''} onClick={()=>shellActions.navigate?.('library')}><Icon name="folder"/> 素材</button><button data-route="matching" className={active('matching')?'active':''} onClick={()=>shellActions.navigate?.('matching')}><Icon name="sparkles"/> 搭配</button><button data-route="works" className={active('works')?'active':''} onClick={()=>shellActions.navigate?.('works')}><Icon name="book"/> 作品</button>
-    </nav><div className="top-actions">{shell.updateReady?<button type="button" className="btn mini shiye-update-ready" onClick={()=>shellActions.update?.()}>{shell.updateStatus||"更新拾页"}</button>:null}<button type="button" id="top-basket" aria-label="本次创作" onClick={()=>shellActions.basket?.()}><span dangerouslySetInnerHTML={{__html:iconMarkup('archive')}}/>本次创作 <span id="basket-count">{shell.basketCount}</span></button><button type="button" id="top-settings" aria-label="设置" onClick={()=>shellActions.settings?.()} dangerouslySetInnerHTML={{__html:iconMarkup('settings')}}/><button type="button" id="sync-indicator" className="sync-indicator" hidden={!shell.sync} data-status={shell.sync?.status} title={shell.sync?.title} aria-label={shell.sync?.label} onClick={()=>shellActions.sync?.()}><span className="sync-indicator-symbol" aria-hidden="true"/><span className="sync-indicator-label" aria-live="polite">{shell.sync?.label||'正在核对'}</span></button><span id="save-state" className="save-state" onClick={()=>shellActions.save?.()}>{shell.saveStatus}</span>{shell.account?<CloudAccountMenu account={shell.account}/>:null}</div></header>
+    </nav>;
+  return <>
+    <header className="topbar"><div className="brand"><b dangerouslySetInnerHTML={{__html:iconMarkup('leaf')}}/><div><strong>拾页</strong><small>COLLECT. COMPOSE.</small></div></div>{mobile?createPortal(navigation,document.body):navigation}<div className="top-actions">{shell.updateReady?<button type="button" className="btn mini shiye-update-ready" onClick={()=>shellActions.update?.()}>{shell.updateStatus||"更新拾页"}</button>:null}<button type="button" id="top-basket" aria-label="本次创作" onClick={()=>shellActions.basket?.()}><span dangerouslySetInnerHTML={{__html:iconMarkup('archive')}}/>本次创作 <span id="basket-count">{shell.basketCount}</span></button><button type="button" id="top-settings" aria-label="设置" onClick={()=>shellActions.settings?.()} dangerouslySetInnerHTML={{__html:iconMarkup('settings')}}/><button type="button" id="sync-indicator" className="sync-indicator" hidden={!shell.sync} data-status={shell.sync?.status} title={shell.sync?.title} aria-label={shell.sync?.label} onClick={()=>shellActions.sync?.()}><span className="sync-indicator-symbol" aria-hidden="true"/><span className="sync-indicator-label" aria-live="polite">{shell.sync?.label||'正在核对'}</span></button><span id="save-state" className="save-state" onClick={()=>shellActions.save?.()}>{shell.saveStatus}</span>{shell.account?<CloudAccountMenu account={shell.account}/>:null}</div></header>
     {shell.resetNotice?<aside role="status" className="cloud-reset-notice" style={{position:'fixed',bottom:78,left:12,right:12,maxWidth:600,margin:'auto',background:'#284234',color:'white',zIndex:2147483500,padding:14,borderRadius:14,boxShadow:'0 6px 25px #0003',fontSize:14,display:'flex',alignItems:'center',gap:12}}>
       <span>{shell.resetNotice.message}</span><button type="button" aria-label="关闭旧图片清理提示"
         style={{flexShrink:0,border:'1px solid #ffffff88',borderRadius:8,background:'transparent',color:'white',padding:'6px 9px'}}

@@ -156,4 +156,4 @@ try{
   assert.equal(persisted.work,'colored-shape');
   assert.deepEqual(b.errors,[]);
   console.log('PASS: worker ZIP archive, independent bytes, integrity rejection, six stores',result);
-}finally{await b.close();}
+}catch(error){console.error('Backup acceptance failed:',error);throw error;}finally{await b.close();}

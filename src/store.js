@@ -156,15 +156,16 @@ export async function prepareBackupRestore(file){
   const header=new Uint8Array(await file.slice(0,4).arrayBuffer());
   const isZip=header.length>=4&&header[0]===0x50&&header[1]===0x4b&&header[2]===0x03&&header[3]===0x04;
   if(!isZip)throw Error('请选择当前 .shiyepwa ZIP 完整备份；旧数据请使用独立转换工具');
-  const {readZipBackup}=await import('./backup-archive.js');
+  const {stageBackup}=await import('./backup-staging.js');
   const {validateRestoredRecords}=await import('./backup-integrity.js');
-  const values=await readZipBackup(file);
+  const staged=await stageBackup(file),values=staged.stores;
   const repairs=[];
-  validateRestoredRecords(values,{repairs});
+  try{validateRestoredRecords(values,{repairs});}catch(error){await staged.dispose();throw error;}
   const counts=Object.fromEntries(STORES.map(name=>[name,values[name].length]));
-  let applied=false,applying=false;
-  return {counts,repairs,apply:async()=>{
-    if(applied||applying)throw Error('此备份恢复任务已经执行或正在执行，请重新选择文件');
+  let applied=false,applying=false,disposed=false;
+  const dispose=async()=>{disposed=true;await staged.dispose();};
+  return {counts,repairs,dispose,apply:async()=>{
+    if(applied||applying||disposed)throw Error('此备份恢复任务已经执行或正在执行，请重新选择文件');
     applying=true;
     try{
     if(cloudEnabled){
@@ -184,7 +185,7 @@ export async function prepareBackupRestore(file){
         for(const item of values[name])tx.objectStore(name).put(item);
       }
     });
-    }finally{applying=false;}
+    }finally{applying=false;await dispose();}
   }};
 }
 export async function restoreBackup(file){return (await prepareBackupRestore(file)).apply();}
