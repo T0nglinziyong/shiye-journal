@@ -12,7 +12,7 @@
     "test": "node --test --test-force-exit --test-concurrency=4 tests/*.test.js",
     "test:browser": "node tests/fabric-editor-product-browser.mjs && node tests/fabric-stage-browser.mjs && node tests/import-browser-acceptance.mjs && node tests/work-delete-browser.mjs",
     "test:cutout-browser": "node tests/cutout-dialog-visibility-browser.mjs",
-    "test:editor-browser": "node tests/fabric-editor-product-browser.mjs && node tests/fabric-editor-mobile-interactions-browser.mjs && node tests/fabric-stage-browser.mjs && node tests/fabric-editor-touch-regression-browser.mjs",
+    "test:editor-browser": "node tests/fabric-editor-product-browser.mjs && node tests/fabric-editor-mobile-interactions-browser.mjs && node tests/fabric-stage-browser.mjs && node tests/fabric-editor-touch-regression-browser.mjs && node tests/fabric-ipad-gestures-browser.mjs",
     "test:selection-browser": "node tests/library-selection-browser.mjs",
     "test:layout-browser": "node tests/layout-preview-browser.mjs",
     "test:layers-browser": "node tests/catalog-layers-browser.mjs",

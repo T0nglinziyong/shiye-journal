@@ -1,16 +1,24 @@
 // Platform-independent decisions used by iPad/phone pointer navigation.
+export function isIPadPointerDevice({userAgent='',platform='',maxTouchPoints=0}={}){
+  return /iPad/i.test(userAgent)||platform==='MacIntel'&&maxTouchPoints>1;
+}
+export function fingerNavigatesCanvas({pointerType,tool,iPad=false}={}){
+  return pointerType==='touch'&&iPad&&['pen','highlighter','eraser','lasso'].includes(tool);
+}
 export function fingerMayPanCanvas({pointerType,tool,background,pencilEnabled}={}){
   if(pointerType!=='touch'||!background)return false;
   // Real Pencil continues to draw. Finger moves the page when Pencil-only ink
   // is enabled; when disabled fingers retain the ability to draw themselves.
   return ['select','text','shape'].includes(tool)||(['pen','highlighter','eraser'].includes(tool)&&pencilEnabled===true);
 }
-export function clampedCanvasOffset(pageStart,pageEnd,hostStart,hostEnd,{slackRatio=.24,maxSlack=130}={}){
+export function clampedCanvasOffset(pageStart,pageEnd,hostStart,hostEnd,{slackRatio=.12,maxSlack=64}={}){
   const content=pageEnd-pageStart,available=hostEnd-hostStart;
   if(!(content>0&&available>0))return 0;
   if(content>available){
-    if(pageStart>hostStart)return hostStart-pageStart;
-    if(pageEnd<hostEnd)return hostEnd-pageEnd;
+    // A zoomed page may expose a narrow margin, but can never leave the view.
+    const margin=Math.min(48,available*.08);
+    if(pageStart>hostStart+margin)return hostStart+margin-pageStart;
+    if(pageEnd<hostEnd-margin)return hostEnd-margin-pageEnd;
     return 0;
   }
   // Let a finger move an already fitted page within a modest bounded range.

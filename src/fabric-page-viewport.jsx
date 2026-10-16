@@ -1,6 +1,6 @@
 import React,{useLayoutEffect,useRef} from 'react';
 import Panzoom from '@panzoom/panzoom';
-import {clampedCanvasOffset} from './canvas-control-behavior.js';
+import {clampedCanvasOffset,fingerNavigatesCanvas,isIPadPointerDevice} from './canvas-control-behavior.js';
 
 // This adapter changes only the fitted paper's CSS transform. Fabric keeps
 // its own scene coordinates and pointer lifetime, so zoom never edits Scene.
@@ -23,28 +23,34 @@ export function FabricPageViewport({draft,width,height,zoom=1,initialPan,onViewp
       pinchAndPan:true,canvas:true,
       cursor:'',touchAction:'none',handleStartEvent:event=>event.preventDefault()});
     panRef.current=pan;
-    const active=new Map(),starts=new Map();let navigating=false,mousePan=false,clampFrame=0;
+    const active=new Map(),starts=new Map();let navigating=false,mousePan=false,clampFrame=0,clamping=false;
+    const iPad=isIPadPointerDevice(navigator);
     const stop=event=>{event.preventDefault();event.stopImmediatePropagation();};
     const clamp=()=>{
-      clampFrame=0;if(!page.isConnected)return;
+      clampFrame=0;if(!page.isConnected||clamping)return;
       const box=page.getBoundingClientRect(),bounds=host.getBoundingClientRect();
       const dx=clampedCanvasOffset(box.left,box.right,bounds.left,bounds.right),
         dy=clampedCanvasOffset(box.top,box.bottom,bounds.top,bounds.bottom);
       if(Math.abs(dx)+Math.abs(dy)<.5)return;
       const offset=pan.getPan(),scale=pan.getScale();
-      pan.pan(offset.x+dx/scale,offset.y+dy/scale,{force:true,animate:false});
+      clamping=true;
+      try{pan.pan(offset.x+dx/scale,offset.y+dy/scale,{force:true,animate:false});}
+      finally{clamping=false;}
     };
     const scheduleClamp=()=>{if(!clampFrame)clampFrame=requestAnimationFrame(clamp);};
-    const changed=()=>{changeRef.current?.(pan.getScale(),pan.getPan());scheduleClamp();};
+    const changed=()=>{clamp();changeRef.current?.(pan.getScale(),pan.getPan());};
     const down=event=>{
-      if(toolRef.current==='select'&&(event.pointerType==='touch'||event.button===0)){
+      const fingerPan=fingerNavigatesCanvas({pointerType:event.pointerType,
+        tool:toolRef.current,iPad});
+      if(fingerPan||toolRef.current==='select'&&
+        (event.pointerType==='touch'||event.pointerType==='mouse'&&event.button===0)){
         // The first tap selects only after release. A later gesture starting
         // on that selected object is handled by Fabric's transform controls.
         if(transformRef.current?.(event))return;
         if(event.pointerType==='touch')active.set(event.pointerId,event);
         if(active.size>1)for(const start of starts.values())start.moved=true;
         starts.set(event.pointerId,{x:event.clientX,y:event.clientY,moved:active.size>1});
-        navigating=true;mousePan=event.pointerType!=='touch';
+        navigating=true;mousePan=event.pointerType==='mouse';
         pan.handleDown(event);
         try{host.setPointerCapture(event.pointerId);}catch{}
         stop(event);return;

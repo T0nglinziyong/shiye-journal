@@ -1293,6 +1293,10 @@ export function EditorPage({state,draft,editorEntry,asset,source,format,
           selectedGroup?.containsPoint(point)?selectedGroup:
           [...canvas.getObjects()].reverse().find(object=>
             selectableFabricObjectAt(canvas,object,point,viewport));
+        if(hit&&event.pointerType==='touch'&&['pen','highlighter','eraser','lasso'].includes(state.tool)){
+          onAction('fabric-select-layer',hit.sceneID);
+          return;
+        }
         if(hit)canvas.setActiveObject(hit);
         else canvas.discardActiveObject();
         canvas.requestRenderAll();
