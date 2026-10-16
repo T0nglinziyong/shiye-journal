@@ -52,6 +52,25 @@ test('COS upload releases its queue when session acquisition stalls',async()=>{
   await assert.rejects(store.upload('owner/'+hash,new Blob(['bytes'])),/等待登录会话超时/);
   await assert.rejects(store.upload('owner/'+'b'.repeat(64),new Blob(['bytes'])),/等待登录会话超时/);
 });
+test('COS batches sibling upload tickets that arrive a few milliseconds apart',async()=>{
+  let ticketCalls=0;
+  const store=createCOSStore({enabled:true,ticketBatchDelayMs:12,
+    client:()=>({auth:{getSession:async()=>({data:{session:{access_token:token}}})}}),
+    fetcher:async(url,options)=>{
+      if(url==='/api/cos'){
+        ticketCalls++;
+        const objects=JSON.parse(options.body).objects;
+        return {ok:true,json:async()=>({tickets:objects.map(row=>({...row,
+          url:'https://example.test/'+row.path,headers:{}}))})};
+      }
+      return {ok:true};
+    }});
+  const first=store.upload('owner/'+hash,new Blob(['a']));
+  await new Promise(resolve=>setTimeout(resolve,2));
+  const second=store.upload('owner/'+'b'.repeat(64),new Blob(['b']));
+  await Promise.all([first,second]);
+  assert.equal(ticketCalls,1);
+});
 test('COS object probe distinguishes a missing object from a temporary or forbidden read',async()=>{
   let status=404,readOptions;
   const store=createCOSStore({enabled:true,client:()=>({auth:{getSession:async()=>({data:{session:{access_token:token}}})}}),fetcher:async(url,options)=>{

@@ -1,4 +1,4 @@
-export function createCOSStore({client,enabled=false,endpoint='/api/cos',fetcher=(...args)=>fetch(...args),sessionTimeoutMs=15000}){
+export function createCOSStore({client,enabled=false,endpoint='/api/cos',fetcher=(...args)=>fetch(...args),sessionTimeoutMs=15000,ticketBatchDelayMs=8}){
   let pending=[],scheduled=false,activeWrites=0,activeReads=0;
   const waitingWrites=[];
   const writeLimit=typeof matchMedia==='function'&&matchMedia('(pointer: coarse)').matches?2:3;
@@ -6,8 +6,13 @@ export function createCOSStore({client,enabled=false,endpoint='/api/cos',fetcher
   const scheduleWrite=run=>new Promise((resolve,reject)=>{waitingWrites.push(()=>Promise.resolve().then(run).then(resolve,reject));pumpWrites();});
   async function read(path,variant){activeReads++;try{const signed=await ticket(path,'GET',undefined,variant),response=await fetcher(signed.url,{signal:AbortSignal.timeout(60000)});if(!response.ok)throw Error('COS '+(variant?'缩略图':'图片')+'读取失败（'+response.status+'）');return response.blob();}finally{activeReads--;pumpWrites();}}
   async function probe(path){activeReads++;try{const signed=await ticket(path,'GET'),response=await fetcher(signed.url,{headers:{Range:'bytes=0-0'},signal:AbortSignal.timeout(15000)});await response.body?.cancel?.();if(response.status===404)return false;if(!response.ok)throw Error('COS 图片核对失败（'+response.status+'）');return true;}finally{activeReads--;pumpWrites();}}
-  const ticket=(path,method,type,variant)=>new Promise((resolve,reject)=>{pending.push({path,method,type,variant,resolve,reject});if(!scheduled){scheduled=true;queueMicrotask(drain);}});
-  async function drain(){scheduled=false;const batch=pending.splice(0,24);if(pending.length){scheduled=true;queueMicrotask(drain);}
+  // Image hashing finishes at slightly different times, so a microtask flush
+  // often signed each sibling blob separately. A few milliseconds of batching
+  // saves repeated session checks and /api/cos calls without signing queued
+  // writes before their upload slot becomes available.
+  const scheduleTickets=()=>{if(scheduled)return;scheduled=true;setTimeout(drain,ticketBatchDelayMs);};
+  const ticket=(path,method,type,variant)=>new Promise((resolve,reject)=>{pending.push({path,method,type,variant,resolve,reject});scheduleTickets();});
+  async function drain(){scheduled=false;const batch=pending.splice(0,24);if(pending.length)scheduleTickets();
     let sessionTimer;
     try{const {data,error}=await Promise.race([client().auth.getSession(),new Promise((_,reject)=>{
       sessionTimer=setTimeout(()=>{const failure=Error('图片上传等待登录会话超时；稍后自动重试');
