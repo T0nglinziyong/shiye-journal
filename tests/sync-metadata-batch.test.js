@@ -69,6 +69,16 @@ test('independent asset metadata edits commit in one durable RPC operation',asyn
   assert.deepEqual(fixture.disk,[]);
 });
 
+test('a large set of independent metadata edits is split into bounded commits',()=>{
+  const rows=Array.from({length:8},(_,index)=>({record:asset(String(index)),
+    serial:index+1,baseRevision:0,operationID:'op-'+index}));
+  const first=planMetadataBatch(rows,0,Infinity);
+  assert.deepEqual(first.record.payload.operations.map(op=>op.item.id),['0','1','2','3']);
+  const remaining=rows.filter(row=>!first.sourceRows.includes(row));
+  const second=planMetadataBatch(remaining,0,Infinity);
+  assert.deepEqual(second.record.payload.operations.map(op=>op.item.id),['4','5','6','7']);
+});
+
 test('a lost acknowledgement of the merged operation is checked before retry',async()=>{
   const calls=[];let revision=0,disk=[];
   const sync=createProjectSync({load:async()=>structuredClone(disk),reload:async()=>structuredClone(disk),

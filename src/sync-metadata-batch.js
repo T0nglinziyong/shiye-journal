@@ -2,7 +2,7 @@ import {syncEnvelope} from './unified-sync-outbox.js';
 
 // Only independent asset metadata PUTs are grouped. Image uploads, deletes,
 // restores and work documents keep their existing ordering and conflict rules.
-export function planMetadataBatch(rows,revision,windowSerial,{maxOperations=12,newID=()=>crypto.randomUUID()}={}){
+export function planMetadataBatch(rows,revision,windowSerial,{maxOperations=4,newID=()=>crypto.randomUUID()}={}){
   let group=[],operations=[],ids=new Set();
   const finish=()=>group.length>=2?{
     sourceRows:group,
