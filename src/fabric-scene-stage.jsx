@@ -75,6 +75,10 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
       const current=callbacks.current.draft,leaves=selectionLeaves(current,ids);
       const bounds=ids.every(id=>editable(current,id))&&leaves.length>=1?
         sceneLassoBounds(current,leaves):null;
+      if(!bounds){
+        syncingSelection.current=true;canvas.discardActiveObject();syncingSelection.current=false;
+        canvas.requestRenderAll();return;
+      }
       if(bounds)void import('fabric').then(fabric=>{
         const {Rect}=fabric;
         if(selectionEpoch.current!==epoch||sessionRef.current!==canvas||
@@ -117,20 +121,14 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
       }).catch(error=>callbacks.current.onIssue?.(error));
       return;
     }
-    const objects=ids.map(id=>canvas.getObjects().find(item=>item.sceneID===id&&item.selectable!==false)).filter(Boolean);
+    const object=ids.length===1?canvas.getObjects().find(item=>
+      item.sceneID===ids[0]&&item.selectable!==false):null;
     const active=canvas.getActiveObjects();
     syncingSelection.current=true;
-    if(objects.length&&(!active.length||active.length!==objects.length||
-      active.some(item=>!objects.includes(item)))){
-      if(objects.length===1)canvas.setActiveObject(objects[0]);
-      else import('fabric').then(({ActiveSelection})=>{
-        if(sessionRef.current!==canvas)return;
-        syncingSelection.current=true;
-        canvas.setActiveObject(new ActiveSelection(objects,{canvas}));canvas.requestRenderAll();
-        syncingSelection.current=false;
-      });
+    if(object&&(!active.length||active.length!==1||active[0]!==object)){
+      canvas.setActiveObject(object);
       canvas.requestRenderAll();
-    }else if(canvas.getActiveObject()&&(!objects.length||!ids.length)){
+    }else if(canvas.getActiveObject()&&(!object||!ids.length)){
       canvas.discardActiveObject();canvas.requestRenderAll();
     }
     syncingSelection.current=false;
@@ -225,6 +223,10 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
               const position=canvas.getObjects().filter(item=>item.sceneIndex<sceneIndex).length;
               canvas.insertAt(position,object);
               if(keepSelected)canvas.setActiveObject(object);
+              const proxy=canvas.getActiveObject();
+              if(proxy?.scenePreview&&proxy.sceneMultiPose)
+                proxy.scenePreview.apply(proxy.sceneMultiPose.center,proxy.getCenterPoint(),
+                  (proxy.angle||0)-proxy.sceneMultiPose.angle);
             }
             if(replacingActive)syncingSelection.current=false;
             if(selectedNode){
@@ -759,6 +761,10 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
         void projectFabricLayers(canvas,initialNodes,bridge,{readOnly,
           onIssue:error=>callbacks.current.onIssue?.(error),
           onAdded:(object,node)=>{
+            const proxy=canvas.getActiveObject();
+            if(proxy?.scenePreview&&proxy.sceneMultiPose)
+              proxy.scenePreview.apply(proxy.sceneMultiPose.center,proxy.getCenterPoint(),
+                (proxy.angle||0)-proxy.sceneMultiPose.angle);
             if(callbacks.current.tool!=='select'||callbacks.current.selectedID!==node.id||
               callbacks.current.selectedIDs?.length>1||object.selectable===false)return;
             syncingSelection.current=true;canvas.setActiveObject(object);syncingSelection.current=false;

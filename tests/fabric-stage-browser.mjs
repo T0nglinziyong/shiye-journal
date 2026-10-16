@@ -373,6 +373,19 @@ try{
     canvas.fire('object:modified',{target:group});})()`);
   assert.ok(await evaluate('window.__fabricFixture.draft.layers[0].children[0].width')>
     groupWidthBefore*1.19,'Resizing the group frame persists its child geometry');
+  const stableCoordinates=await evaluate(`(()=>{const c=window.__fabricCanvas;
+    return ['paper-material','paper-text'].map(id=>{const o=c.getObjects().find(item=>item.sceneID===id);
+      return [o.left,o.top]})})()`);
+  await evaluate(`(()=>{const {draft,refresh}=window.__fabricFixture;
+    draft.layers.find(node=>node.id==='paper-material').locked=true;refresh();
+    window.__fabricFixture.select(['paper-material','paper-text']);})()`);
+  await sleep(120);
+  assert.equal(await evaluate('window.__fabricCanvas.getActiveObject()?.type'),undefined,
+    'An uneditable multi-selection never falls back to a geometry-changing ActiveSelection');
+  assert.deepEqual(await evaluate(`(()=>{const c=window.__fabricCanvas;
+    return ['paper-material','paper-text'].map(id=>{const o=c.getObjects().find(item=>item.sceneID===id);
+      return [o.left,o.top]})})()`),stableCoordinates,
+  'Rejecting a mixed locked selection cannot move unrelated projection objects');
   assert.deepEqual(browser.errors,[]);
   console.log('Fabric stage browser check passed:',JSON.stringify({background,parity,coverParity,weaveParity,inkParity}),
     'screenshots /tmp/shiye-fabric-stage.png and /tmp/shiye-fabric-reference.png');
