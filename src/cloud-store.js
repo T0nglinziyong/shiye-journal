@@ -43,6 +43,7 @@ const blobRecordRequests=new Map();
 const blobRecords=new Map();
 const blobRevisionProof=createBlobRevisionProof();
 const syncDiagnostics=createSyncDiagnostics();
+objectStorage?.setDiagnosticReporter?.(event=>syncDiagnostics.record(event));
 function retainBlobRecord(id,saved){
   blobRecords.delete(id);blobRecords.set(id,saved);
   if(blobRecords.size>256)blobRecords.delete(blobRecords.keys().next().value);
@@ -1507,7 +1508,7 @@ async function cloudPurgeLocalAfterReset(){
   syncDiagnostics.clear();
   return count;
 }
-async function cloudPendingDetails(){await identity();const [projects,imports]=await Promise.all([projectSync.pending(),importSync.pending()]);return {projects:projects.map(row=>({id:row.record.id,title:row.record.title||'未命名作品',baseRevision:row.baseRevision})),batches:imports.map(row=>({id:row.record.id,baseRevision:row.baseRevision,items:row.record.operations?.map(op=>({store:op.store,action:op.action,title:op.item?.title||op.item?.name||op.id||'',id:op.item?.id||op.id||''}))||['assets','projects','blobs'].flatMap(store=>(row.record[store]||[]).map(item=>({store,action:'put',title:item.title||'',id:item.id})))})),error:unifiedSync.status().error?.message||null,quarantined:unifiedQuarantine.length};}
+async function cloudPendingDetails(){await identity();const [projects,imports]=await Promise.all([projectSync.pending(),importSync.pending()]);return {projects:projects.map(row=>({id:row.record.id,title:row.record.title||'未命名作品',baseRevision:row.baseRevision,failureClass:row.lastFailureClass})),batches:imports.map(row=>({id:row.record.id,baseRevision:row.baseRevision,failureClass:row.lastFailureClass,items:row.record.operations?.map(op=>({store:op.store,action:op.action,title:op.item?.title||op.item?.name||op.id||'',id:op.item?.id||op.id||''}))||['assets','projects','blobs'].flatMap(store=>(row.record[store]||[]).map(item=>({store,action:'put',title:item.title||'',id:item.id})))})),error:unifiedSync.status().error?.message||null,quarantined:unifiedQuarantine.length};}
 function cloudRecordSyncDiagnostic(event){syncDiagnostics.record(event);}
 function cloudSyncDiagnosticReport({online=null}={}){
   const status=unifiedSync.status();

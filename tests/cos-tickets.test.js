@@ -96,3 +96,34 @@ test('COS uploads leave read capacity available and do not sign queued PUTs earl
   releaseRead();assert.equal(await (await read).text(),'visible');for(let i=0;i<30&&started<4;i++)await new Promise(resolve=>setTimeout(resolve,1));assert.equal(started,4);
   while(releases.length)releases.shift()();for(let i=0;i<30&&started<5;i++)await new Promise(resolve=>setTimeout(resolve,1));while(releases.length)releases.shift()();await Promise.all(uploads);assert.equal(signedWrites,5);
 });
+test('COS originals bypass optional previews and upload timing omits object paths',async()=>{
+  const started=[],releases=new Map(),events=[];
+  const store=createCOSStore({enabled:true,ticketBatchDelayMs:1,
+    client:()=>({auth:{getSession:async()=>({data:{session:{access_token:token}}})}}),
+    fetcher:async(url,options)=>{
+      if(url==='/api/cos'){
+        const objects=JSON.parse(options.body).objects;
+        return {ok:true,json:async()=>({tickets:objects.map(row=>({...row,url:'https://example.test/'+row.path,headers:{}}))})};
+      }
+      started.push(url);
+      await new Promise(resolve=>releases.set(url,resolve));
+      return {ok:true};
+    }});
+  store.setDiagnosticReporter(event=>events.push(event));
+  const previews=[0,1,2].map(i=>store.upload(`owner/${String(i).repeat(64)}-preview480.webp`,new Blob(['preview'])));
+  for(let i=0;i<40&&started.length<1;i++)await new Promise(resolve=>setTimeout(resolve,1));
+  assert.equal(started.length,1,'only one optional preview occupies a write lane');
+  const originalPath='owner/'+hash,original=store.upload(originalPath,new Blob(['original']));
+  for(let i=0;i<40&&started.length<2;i++)await new Promise(resolve=>setTimeout(resolve,1));
+  assert.equal(started[1],'https://example.test/'+originalPath,'original starts without waiting for preview');
+  releases.get(started[1])();await original;
+  releases.get(started[0])();
+  for(let index=2;index<4;index++){
+    for(let i=0;i<40&&started.length<=index;i++)await new Promise(resolve=>setTimeout(resolve,1));
+    assert.ok(started[index],'next preview eventually starts');
+    releases.get(started[index])();
+  }
+  await Promise.all(previews);
+  assert.ok(events.some(event=>event.action==='cos-put'));
+  assert.ok(events.every(event=>!JSON.stringify(event).includes(originalPath)));
+});

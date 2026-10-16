@@ -16,7 +16,7 @@ function retryDelay(attempt,operationID){
 // Durable edits are an explicit outbox, not a replacement for cloud records.
 // Commit acknowledgement is the only point at which an entry is removed.
 export function createProjectSync({load,write,commit,revision,reconcile=async()=> 'conflict',recordKeys=record=>[{store:'projects',id:record.id}],coalesce=()=>null,splitCoalesced=()=>null,onCommitted=()=>{},onConflict=async()=>null,onForked=()=>{},onReplaced=()=>{},onSuperseded=()=>{},onStatus=()=>{},onDiagnostic=()=>{},runExclusive=fn=>fn(),prepare=async()=>{},prepareLimit=Infinity,requiresPrepare=null,reload=load,authoritativeCommit=false,autoFlushDelayMs=0,setTimer=setTimeout,clearTimer=clearTimeout,clock=()=>Date.now()}){
-  let initialized,staging=Promise.resolve(),network,serial=0,error,paused=false,rebuilding=false;
+  let initialized,staging=Promise.resolve(),writeGate=Promise.resolve(),network,serial=0,error,paused=false,rebuilding=false;
   let persistedRows=new Map();
   let conflicts=new Set();
   // Durable local staging is immediate; only the remote commit is batched.
@@ -55,15 +55,22 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
       cloudRevision:revision(),pending:entries.size,error:failure,durationMs:Math.round(durationMs||0)});
     }catch{/* Diagnostics must not block a durable sync. */}
   };
-  const persist=async(options={})=>{
-    // IndexedDB already journals changed rows. Clone only those rows here as
-    // well: a queued import may carry many large Blobs that did not change.
-    const snapshot=[...entries.values()].map(row=>{
-      const previous=persistedRows.get(row.record.id);
-      return previous?.stamp===rowStamp(row)?previous.row:structuredClone(row);
+  const persist=(options={})=>{
+    // Network acknowledgements and fresh local staging can meet in one tab.
+    // Serializing their IndexedDB writes keeps the optimistic outbox baseline
+    // in the same order as its actual durable changes.
+    const task=writeGate.catch(()=>{}).then(async()=>{
+      // IndexedDB already journals changed rows. Clone only those rows here as
+      // well: a queued import may carry many large Blobs that did not change.
+      const snapshot=[...entries.values()].map(row=>{
+        const previous=persistedRows.get(row.record.id);
+        return previous?.stamp===rowStamp(row)?previous.row:structuredClone(row);
+      });
+      try{await write(snapshot,options);rememberPersisted(snapshot);}
+      catch(error){throw markSyncPhase(error,'写入本机待同步队列');}
     });
-    try{await write(snapshot,options);rememberPersisted(snapshot);}
-    catch(error){throw markSyncPhase(error,'写入本机待同步队列');}
+    writeGate=task.catch(()=>{});
+    return task;
   };
   // The durable queue is shared by tabs. A tab may have opened before another
   // wrote pending edits, so refresh it AFTER acquiring the cross-tab sync lock.

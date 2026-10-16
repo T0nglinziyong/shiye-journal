@@ -1,7 +1,7 @@
 // Daily, local-only sync trace. Keep operational metadata; never record IDs,
 // names, payloads, URLs, raw server messages, tokens or complete stack traces.
-const ACTIONS=new Set(['start','reconcile','retry','committed','remote-won','merged','conflict','failed','direct-commit','prepare-start','prepare-finished','lock-wait','lock-entered','lock-ended','main-thread-lag','split']);
-const KINDS=new Set(['project','batch','direct','queue','lock']);
+const ACTIONS=new Set(['start','reconcile','retry','committed','remote-won','merged','conflict','failed','direct-commit','prepare-start','prepare-finished','lock-wait','lock-entered','lock-ended','main-thread-lag','split','cos-ticket','cos-ticket-failed','cos-put','cos-put-failed']);
+const KINDS=new Set(['project','batch','direct','queue','lock','image']);
 const CATEGORIES=new Set(['unconfirmed-response','revision-conflict','authorization','rate-limit','server','local-storage','image-upload','browser-lock','interrupted','network','unknown']);
 const PHASES=new Set([
   '读取本机待同步队列','写入本机待同步队列','从 IndexedDB 刷新同步队列',

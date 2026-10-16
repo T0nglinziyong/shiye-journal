@@ -16,12 +16,12 @@ export function SyncDetailsDialog({details,projects,batches,local,quarantined,le
   const total=projects.length+batches.length+local.length;
   return <Dialog title="同步详情" onClose={onClose}><h2>同步详情</h2>
     <p id="sync-detail-status" role="status">{message}</p><p>最近错误：{error||details.error||'无'}</p>
-    <p>本机待同步：{total} 项。未上传作品和草稿将保留在本机待同步队列。</p>
+    <p>本机待同步：{total} 项{conflicts?`，其中 ${conflicts} 项需处理冲突`:''}。未上传作品和草稿将保留在本机待同步队列。</p>
     <p>隔离待同步原始记录：{quarantined} 项（禁止自动上传，原始数据未丢弃）。</p>
     <p>已隔离旧版可编辑作品：{legacyCount} 件（未删除）。转换工具会同时扫描账号的素材、系列、作品、元数据、图片引用和最近删除。</p>
     <div className="sync-pending-list">{total?<ul>
-      {projects.map(row=><li key={`project-${row.id}`}>作品：{row.title} <small>{row.id}</small> <button type="button" className="btn mini" data-conflict-kind="project" data-conflict-id={row.id} onClick={()=>onConflict('project',row.id)}>比较版本</button></li>)}
-      {batches.map(row=><li key={`batch-${row.id}`}>待传批次 {row.id}：{row.items.length} 条变更<ul>{row.items.slice(0,12).map((item,index)=><li key={index}>{item.store} · {item.action} · {item.title||item.id}</li>)}</ul>
+      {projects.map(row=><li key={`project-${row.id}`}>作品：{row.title} {row.failureClass==='conflict'||row.failureClass==='invalid'?<strong>需处理冲突</strong>:null} <small>{row.id}</small> <button type="button" className="btn mini" data-conflict-kind="project" data-conflict-id={row.id} onClick={()=>onConflict('project',row.id)}>比较版本</button></li>)}
+      {batches.map(row=><li key={`batch-${row.id}`}>待传批次 {row.id}：{row.items.length} 条变更 {row.failureClass==='conflict'||row.failureClass==='invalid'?<strong>需处理冲突</strong>:null}<ul>{row.items.slice(0,12).map((item,index)=><li key={index}>{item.store} · {item.action} · {item.title||item.id}</li>)}</ul>
         {row.items.length?<button type="button" className="btn mini" data-conflict-kind="batch" data-conflict-id={row.id} onClick={()=>onConflict('batch',row.id)}>比较版本</button>:null}</li>)}
       {local.map(row=><li key={row.id}>尚未暂存的作品：{row.title||row.id}</li>)}
     </ul>:<p>没有待同步项目。</p>}</div>

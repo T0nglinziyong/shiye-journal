@@ -680,3 +680,24 @@ test('staging independent rows persists the whole set atomically',async()=>{
   assert.equal(writes,2);
   assert.deepEqual((await sync.pending()).map(row=>row.record.id),['a','b']);
 });
+test('an upload acknowledgement and a fresh edit never write the same local outbox concurrently',async()=>{
+  let rows=[{record:{id:'old'},serial:1,baseRevision:0,operationID:'old-op'}];
+  let activeWrites=0,maxWrites=0,releaseAck,ackStarted;
+  const sawAck=new Promise(resolve=>ackStarted=resolve);
+  const ackGate=new Promise(resolve=>releaseAck=resolve);
+  let revision=0;
+  const sync=createProjectSync({load:async()=>structuredClone(rows),reload:async()=>structuredClone(rows),
+    write:async next=>{
+      activeWrites++;maxWrites=Math.max(maxWrites,activeWrites);
+      if(!next.some(row=>row.record.id==='old')){ackStarted();await ackGate;}
+      rows=structuredClone(next);activeWrites--;
+    },revision:()=>revision,autoFlushDelayMs:10000,commit:async()=>{revision++;}});
+  try{
+    const flush=sync.resume();await sawAck;
+    const stage=sync.stage({id:'new'});
+    await new Promise(resolve=>setTimeout(resolve,0));
+    assert.equal(maxWrites,1,'a fresh stage waits for the acknowledgement write');
+    releaseAck();await Promise.all([flush,stage]);
+    assert.deepEqual(rows.map(row=>row.record.id),['new']);
+  }finally{releaseAck();sync.pause();}
+});
