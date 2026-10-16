@@ -1,4 +1,4 @@
-const assetBlobIDs=asset=>[asset?.blobId,asset?.originalCutoutBlobId,asset?.originalBlobId,
+export const assetBlobIDs=asset=>[asset?.blobId,asset?.originalCutoutBlobId,asset?.originalBlobId,
   asset?.candidateFrameBlobId,asset?.initialMaskBlobId,asset?.finalMaskBlobId,asset?.photoBlobId]
   .filter(Boolean);
 
@@ -80,7 +80,9 @@ export async function reconcileInterruptedAssetImport(batch,readRemote){
       return null;
   }
   for(const blob of batch.blobs){
-    if(await readRemote('blobs',blob.id))return null;
+    // Blob metadata alone cannot prove that its backing COS object exists.
+    // Re-send the durable original bytes under the same content hash even if
+    // a prior response wrote the metadata before disappearing.
     operations.push({store:'blobs',action:'put',item:blob});
   }
   return operations;

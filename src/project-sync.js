@@ -1,10 +1,18 @@
 import {markSyncPhase} from './sync-browser-compat.js';
-const failureCode=error=>String(error?.code??error?.status??error?.statusCode??error?.cause?.code??'');
+// DOMException uses small numeric codes (TimeoutError is 23). They are not
+// five-character PostgreSQL SQLSTATEs; treating 23 as integrity failure made
+// an interrupted COS PUT a permanent, manual conflict.
+const failureCode=error=>{
+  if(typeof error?.code==='string')return error.code;
+  const status=error?.status??error?.statusCode;
+  if(typeof status==='string'||Number.isSafeInteger(status))return String(status);
+  return typeof error?.cause?.code==='string'?error.cause.code:'';
+};
 function failureClass(error){
   const code=failureCode(error);
   if(code==='40001'||code==='PT409'||code==='409')return 'conflict';
   if(code==='401'||code==='403'||code==='28000')return 'auth';
-  if(code==='P0001'||code.startsWith('22')||code.startsWith('23')||code==='413'||code==='507')return 'invalid';
+  if(code==='P0001'||/^2[23][0-9A-Z]{3}$/.test(code)||code==='413'||code==='507')return 'invalid';
   if(code==='429')return 'rate-limit';
   return 'transient';
 }

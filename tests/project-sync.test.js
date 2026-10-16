@@ -619,6 +619,22 @@ test('a failed preupload is not repeated under the account lock and independent 
     assert.ok(rows[0].nextAttemptAt>0);
   }finally{sync.pause();}
 });
+test('browser TimeoutError from a COS PUT remains an automatic retry, not a manual conflict',async()=>{
+  let rows=[{record:{id:'image'},serial:1,baseRevision:0,operationID:'image-op'}];
+  const timeout=new DOMException('The operation timed out','TimeoutError');
+  assert.equal(timeout.code,23);
+  const sync=createProjectSync({load:async()=>structuredClone(rows),reload:async()=>structuredClone(rows),
+    write:async next=>{rows=structuredClone(next);},revision:()=>0,
+    requiresPrepare:()=>true,
+    prepare:async(_records,prepared)=>new Map([[prepared[0].operationID,timeout]]),
+    reconcile:async()=> 'rebase',commit:async()=>{throw Error('preupload must finish first');},
+    setTimer:()=>1,clearTimer:()=>{}});
+  await assert.rejects(sync.flush(),/timed out/);
+  assert.equal(rows[0].lastFailureClass,'transient');
+  assert.ok(rows[0].nextAttemptAt>0);
+  assert.equal(sync.status().conflicts,0);
+  sync.pause();
+});
 test('a failed preupload still acknowledges an already committed operation',async()=>{
   let rows=[{record:{id:'saved'},serial:1,baseRevision:0,operationID:'saved-op'}],writes=0;
   const sync=createProjectSync({load:async()=>structuredClone(rows),reload:async()=>structuredClone(rows),

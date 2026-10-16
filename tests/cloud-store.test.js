@@ -234,7 +234,7 @@ test('trash restore survives AbortError: local stage is immediate and reopen ret
   assert.deepEqual(await activeRows(cache,'batch'),[]);
   assert.deepEqual(reopened.state.calls[0].operations.map(op=>op.store+':'+op.action),['trash:delete','assets:put']);
 });
-test('aborted delete resumes after another tab edits an unrelated record, but not the same record',async()=>{
+test('aborted delete resumes after unrelated edits and a newer same-record edit wins automatically',async()=>{
   const cache=memoryCache(),first=fixture(cache);first.state.rpcAbort=true;
   await first.db.cloudStageMutation(['trash'],tx=>tx.objectStore('trash').delete('mine'));
   await assert.rejects(first.db.cloudFlushProjects(),/未获确认/);
@@ -249,8 +249,8 @@ test('aborted delete resumes after another tab edits an unrelated record, but no
   await assert.rejects(second.db.cloudFlushProjects(),/未获确认/);
   second.state.rpcAbort=false;second.state.revision=1;
   second.state.changes=[{revision:1,keys:[{store:'trash',action:'put',id:'mine'}]}];
-  await assert.rejects(second.db.cloudFlushProjects(),/conflict/);
-  assert.equal((await activeRows(secondCache,'batch')).length,1);
+  await second.db.cloudFlushProjects();
+  assert.equal((await activeRows(secondCache,'batch')).length,0);
 });
 test('a stale asset metadata save cannot revive a newer cloud tombstone',async()=>{
   const cache=memoryCache(),{db,state}=fixture(cache);
@@ -328,19 +328,19 @@ test('D-04: confirmed edits advance only their own editor session for a second s
   assert.deepEqual(await db.cloudPendingProjects(),[]);
   assert.equal(state.calls[1].operations[0].item.__cloudSessionId,undefined);
 });
-test('reopening after an import commit but before local acknowledgement clears the outbox safely',async()=>{
-  const cache=memoryCache(),first=fixture(cache);
-  first.state.uploadGate=new Promise(()=>{});
-  await first.db.cloudStageImport({assets:[{id:'new-asset',blobId:'new-blob'}],blobs:[{id:'new-blob',data:new Blob(['image'])}],projects:[]});
+test('reopening after partial import metadata reuploads original bytes without manual conflict',async()=>{
+  const cache=memoryCache();
+  await cache.put('cloud:owner-uuid','unified-outbox',[{
+    record:{id:'batch:old-import',kind:'batch',payload:{id:'old-import',
+      assets:[{id:'new-asset',blobId:'new-blob'}],
+      blobs:[{id:'new-blob',data:new Blob(['image'])}],projects:[]}},
+    serial:1,baseRevision:0,operationID:'old-import-op'
+  }]);
   const reopened=fixture(cache);reopened.state.revision=1;reopened.state.rows=[{id:'new-asset',blobId:'new-blob'},{id:'new-blob',storagePath:'owner-uuid/hash',storageProvider:'supabase'}];
-  await assert.rejects(reopened.db.cloudFlushProjects(),/conflict/);
-  assert.equal(reopened.state.calls.length,1);
-  const pending=await activeRows(cache,'batch');
-  assert.equal(pending.length,1,'metadata alone cannot prove the original bytes were committed');
-  reopened.state.commits.set(pending[0].operationID,1);
   await reopened.db.cloudFlushProjects();
-  assert.equal(reopened.state.calls.length,2,'the retry must return the original durable receipt');
-  assert.equal(reopened.state.calls[0].operation_id,reopened.state.calls[1].operation_id);
+  assert.equal(reopened.state.calls.length,2);
+  assert.deepEqual(reopened.state.calls.at(-1).operations.map(op=>op.store),['blobs']);
+  assert.ok(reopened.state.uploads.length>0,'metadata alone cannot prove the original bytes were uploaded');
   assert.deepEqual(await activeRows(cache,'batch'),[]);
 });
 test('lost acknowledgement for a material edit is recognized immediately and again after reopening',async()=>{
@@ -876,28 +876,16 @@ test('older generic project PUT from the same phone is rescued without overwriti
  assert.equal(reviewed.overview.remote.title,'已经上传的较新版本');
 });
 
-test('a conflicting material edit can be reviewed, backed up, and explicitly rebased',async()=>{
+test('a concurrent material edit without a comparable timestamp keeps the committed cloud version',async()=>{
  const {state,db}=fixture(memoryCache());
  await db.cloudAll('assets');
  await db.cloudStageMutation(['assets'],tx=>tx.objectStore('assets').put({id:'same-asset',title:'本机修改'}));
  state.revision=1;
  state.rows=[{id:'same-asset',title:'另一设备修改'}];
  state.changes=[{revision:1,keys:[{store:'assets',id:'same-asset',action:'put'}]}];
- await assert.rejects(db.cloudFlushProjects(),/conflict|云端版本已变化/);
- const pending=(await db.cloudPendingDetails()).batches[0];
- const review=await db.cloudConflictReview('batch',pending.id);
- assert.equal(review.mode,'metadata');
- assert.equal(review.overview.local.title,'本机修改');
- assert.equal(review.overview.remote.title,'另一设备修改');
- const backup=await db.cloudConflictBackup('batch',pending.id);
- assert.equal(JSON.parse(await backup.blob.text()).remote.title,'另一设备修改');
- await assert.rejects(db.cloudResolveProjectConflict({kind:'batch',id:pending.id,
-   serial:review.serial,expectedRevision:review.revision,choice:'both'}),/不能自动复制/);
- await db.cloudResolveProjectConflict({kind:'batch',id:pending.id,
-   serial:review.serial,expectedRevision:review.revision,choice:'local'});
  await db.cloudFlushProjects();
  assert.equal((await db.cloudPendingDetails()).batches.length,0);
- assert.equal(state.calls.at(-1).base_revision,1);
+ assert.equal(state.rows[0].title,'另一设备修改');
 });
 
 test('two devices changing disjoint material fields merge without losing either value',async()=>{
@@ -976,7 +964,7 @@ test('a failed local metadata stage releases the next independent edit',async()=
  assert.equal((await activeRows(cache,'batch'))[0].record.operations[0].item.id,'independent');
 });
 
-test('a mixed conflicting batch remains pending until a reviewed whole-batch choice',async()=>{
+test('a newer cloud image edit discards unreferenced old bytes automatically',async()=>{
  const {state,db}=fixture(memoryCache());
  await db.cloudAll('assets');
  await db.cloudStageMutation(['assets','blobs'],tx=>{
@@ -986,35 +974,24 @@ test('a mixed conflicting batch remains pending until a reviewed whole-batch cho
  state.revision=1;
  state.rows=[{id:'same-asset',title:'云端修改',blobId:'older-image'}];
  state.changes=[{revision:1,keys:[{store:'assets',id:'same-asset',action:'put'}]}];
- await assert.rejects(db.cloudFlushProjects(),/conflict|云端版本已变化/);
- const pending=(await db.cloudPendingDetails()).batches[0];
- const review=await db.cloudConflictReview('batch',pending.id);
- assert.equal(review.mode,'batch');
- assert.equal(review.overview.items[0].remoteTitle,'云端修改');
- assert.equal((await db.cloudPendingDetails()).batches.length,1);
- await db.cloudResolveProjectConflict({kind:'batch',id:pending.id,serial:review.serial,
-  expectedRevision:review.revision,choice:'local'});
  await db.cloudFlushProjects();
  assert.equal((await db.cloudPendingDetails()).batches.length,0);
+ assert.equal(state.rows[0].title,'云端修改');
 });
 
-test('a conflicting delete has a review path and may be explicitly set aside',async()=>{
+test('an older delete loses to a cloud edit without manual conflict',async()=>{
  const {state,db}=fixture(memoryCache());
  await db.cloudAll('assets');
  await db.cloudStageMutation(['assets'],tx=>tx.objectStore('assets').delete('same-asset'));
  state.revision=1;
  state.rows=[{id:'same-asset',title:'云端修改'}];
  state.changes=[{revision:1,keys:[{store:'assets',id:'same-asset',action:'put'}]}];
- await assert.rejects(db.cloudFlushProjects(),/conflict|云端版本已变化/);
- const pending=(await db.cloudPendingDetails()).batches[0];
- const review=await db.cloudConflictReview('batch',pending.id);
- assert.equal(review.mode,'batch');
- await db.cloudResolveProjectConflict({kind:'batch',id:pending.id,serial:review.serial,
-  expectedRevision:review.revision,choice:'cloud'});
+ await db.cloudFlushProjects();
  assert.equal((await db.cloudPendingDetails()).batches.length,0);
+ assert.equal(state.rows[0].title,'云端修改');
 });
 
-test('an older import batch without explicit operations remains reviewable as one unit',async()=>{
+test('an older import loses to a different cloud image without manual conflict',async()=>{
  const {state,db}=fixture(memoryCache());
  await db.cloudAll('assets');
  await db.cloudStageImport({assets:[{id:'same-asset',title:'本机导入',blobId:'new-image'}],
@@ -1022,29 +999,19 @@ test('an older import batch without explicit operations remains reviewable as on
  state.revision=1;
  state.rows=[{id:'same-asset',title:'云端已有素材'}];
  state.changes=[{revision:1,keys:[{store:'assets',id:'same-asset',action:'put'}]}];
- await assert.rejects(db.cloudFlushProjects(),/conflict|云端版本已变化/);
- const pending=(await db.cloudPendingDetails()).batches[0];
- const review=await db.cloudConflictReview('batch',pending.id);
- assert.equal(review.mode,'batch');
- assert.equal(review.overview.items[0].remoteTitle,'云端已有素材');
- assert.equal((await db.cloudPendingDetails()).batches.length,1);
+ await db.cloudFlushProjects();
+ assert.equal((await db.cloudPendingDetails()).batches.length,0);
+ assert.equal(state.rows[0].title,'云端已有素材');
 });
 
-test('a conflicting clear can be reviewed and discarded without replaying an old wipe',async()=>{
+test('a stale collection clear keeps newer cloud data automatically',async()=>{
  const {state,db}=fixture(memoryCache());
  await db.cloudAll('assets');
  await db.cloudStageMutation(['assets'],tx=>tx.objectStore('assets').clear());
  state.revision=1;
  state.rows=[{id:'new-asset',title:'另一设备新增'}];
  state.changes=[{revision:1,keys:[{store:'assets',id:'new-asset',action:'put'}]}];
- await assert.rejects(db.cloudFlushProjects(),/conflict|云端版本已变化/);
- const pending=(await db.cloudPendingDetails()).batches[0];
- const review=await db.cloudConflictReview('batch',pending.id);
- assert.equal(review.mode,'batch');
- assert.equal(review.localAllowed,false);
- await assert.rejects(db.cloudResolveProjectConflict({kind:'batch',id:pending.id,serial:review.serial,
-  expectedRevision:review.revision,choice:'local'}),/不能覆盖另一设备/);
- await db.cloudResolveProjectConflict({kind:'batch',id:pending.id,serial:review.serial,
-  expectedRevision:review.revision,choice:'cloud'});
+ await db.cloudFlushProjects();
  assert.equal((await db.cloudPendingDetails()).batches.length,0);
+ assert.equal(state.rows[0].title,'另一设备新增');
 });

@@ -81,6 +81,7 @@ test('interrupted image import keeps newer cloud description and missing local b
   assert.deepEqual(operations.map(op=>op.item.id),['cutout','frame','mask']);
   assert.equal(await reconcileInterruptedAssetImport(batch,async(store,id)=>
     store==='assets'?{...remoteAsset,blobId:'different'}:null),null);
-  assert.equal(await reconcileInterruptedAssetImport(batch,async(store,id)=>
-    store==='assets'?remoteAsset:id==='frame'?{id}:null),null);
+  assert.deepEqual((await reconcileInterruptedAssetImport(batch,async(store,id)=>
+    store==='assets'?remoteAsset:id==='frame'?{id}:null)).map(op=>op.item.id),
+    ['cutout','frame','mask']);
 });

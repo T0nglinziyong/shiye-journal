@@ -24,7 +24,7 @@ import {createBlobRevisionProof} from './blob-revision-proof.js';
 import {createSyncDiagnostics} from './sync-diagnostics.js';
 import {decodeImageBlob} from './image-blob-decoder.js';
 import {boundedMap} from './bounded-map.js';
-import {splitIndependentAssetImport,splitPendingAssetImportRows,reconcileInterruptedAssetImport} from './import-sync-batches.js';
+import {assetBlobIDs,splitIndependentAssetImport,splitPendingAssetImportRows,reconcileInterruptedAssetImport} from './import-sync-batches.js';
 export function createCloudStore({cloudClient,requireCloudUser,cache=null,namespace='cloud',projectPreview=()=>null,objectStorage=null}){
 const BUCKET='shiye-private';
 const writeProvider=()=>objectStorage?.enabled?'cos':'supabase';
@@ -527,7 +527,10 @@ async function reconcileImport(batch,operationID,baseRevision){
     for(const op of batch.operations){
       const sameKeyFree=await canRebaseUnchangedKeys({client,owner:user,before:baseRevision,after:latest,operations:[op]});
       if(sameKeyFree){operations.push(op);continue;}
-      if(op.action==='clear')return 'conflict';
+      // A store-wide clear cannot erase records added by another device after
+      // its baseline. Treat the newer cloud collection as the winner instead
+      // of sending the user to a whole-batch conflict dialog.
+      if(op.action==='clear')continue;
       const id=op.item?.id??op.id;
       // A paired restore also consumes its Recently Deleted card, regardless
       // of device timestamp skew or the original deletion's write time.
@@ -561,12 +564,84 @@ async function reconcileImport(batch,operationID,baseRevision){
           continue;
         }
       }
-      // Other overlapping records still need a proven field or document
-      // decision. Retain their complete queued bytes until that rule exists.
+      // Scene edits still use the separate-work conflict path. Other records
+      // settle by the edit timestamp carried with the durable operation; a
+      // missing/equal timestamp keeps the already committed cloud version.
+      if(op.store==='projects')return 'conflict';
+      if(op.action==='put'){
+        const remote=await cloudRecord(op.store,id);
+        if(!remote){
+          const marker=['assets','series'].includes(op.store)
+            ?await cloudRecord('meta','tombstone:'+op.store+':'+id):null;
+          if(!marker||compareRecordEdits(op.item,marker,
+            {localTimestamp:op.modifiedAt})==='local')operations.push(op);
+        }else if(op.store!=='blobs'&&compareRecordEdits(op.item,remote,
+          {localTimestamp:op.modifiedAt})==='local')operations.push(op);
+        continue;
+      }
+      if(op.action==='delete'){
+        const remote=await cloudRecord(op.store,id);
+        if(remote&&compareRecordEdits({updatedAt:op.modifiedAt},remote,
+          {localTimestamp:op.modifiedAt})==='local')operations.push(op);
+        continue;
+      }
       return 'conflict';
+    }
+    // A remote image edit may win while this batch also carries its old
+    // candidate bytes. Keep bytes only if the winning asset still references
+    // them; independent blob operations remain untouched.
+    const sourceAssets=batch.operations.filter(op=>op.store==='assets'&&op.action==='put');
+    const winningAssets=new Map();
+    for(const source of sourceAssets){
+      const kept=operations.find(op=>op.store==='assets'&&op.action==='put'&&
+        op.item.id===source.item.id);
+      winningAssets.set(source.item.id,kept?.item||await cloudRecord('assets',source.item.id));
+    }
+    for(let i=operations.length-1;i>=0;i--){
+      const op=operations[i];if(op.store!=='blobs'||op.action!=='put')continue;
+      const sources=sourceAssets.filter(asset=>assetBlobIDs(asset.item).includes(op.item.id));
+      if(sources.length&&!sources.some(asset=>assetBlobIDs(winningAssets.get(asset.item.id))
+        .includes(op.item.id)))operations.splice(i,1);
+    }
+    // A generated tombstone must travel with the delete it describes. If a
+    // newer cloud edit won, suppress its old marker too.
+    const keptDeletes=new Set(operations.filter(op=>op.action==='delete')
+      .map(op=>op.store+':'+op.id));
+    for(let i=operations.length-1;i>=0;i--){
+      const op=operations[i];
+      if(op.store==='meta'&&op.action==='put'&&op.item?.kind==='tombstone'&&
+        batch.operations.some(source=>source.action==='delete'&&
+          op.item.id==='tombstone:'+source.store+':'+source.id)&&
+        !keptDeletes.has(op.item.store+':'+op.item.targetID))operations.splice(i,1);
     }
     if(!operations.length)return 'remote';
     return {kind:'replace',record:syncEnvelope('batch',{...batch,operations})};
+  }
+  if(batch.assets?.length&&!batch.projects?.length){
+    const recovered=await reconcileInterruptedAssetImport(batch,cloudRecord);
+    if(recovered){
+      if(!recovered.length)return 'remote';
+      const {assets,blobs,projects,...rest}=batch;
+      return {kind:'replace',record:syncEnvelope('batch',{
+        ...rest,names:[...new Set(recovered.map(op=>op.store))],operations:recovered
+      })};
+    }
+    const operations=[],neededBlobs=new Set();
+    for(const asset of batch.assets){
+      const remote=await cloudRecord('assets',asset.id);
+      const tombstone=!remote?await cloudRecord('meta','tombstone:assets:'+asset.id):null;
+      const localWins=!remote?(!tombstone||compareRecordEdits(asset,tombstone)==='local'):
+        compareRecordEdits(asset,remote)==='local';
+      if(localWins)operations.push({store:'assets',action:'put',item:asset});
+      for(const id of assetBlobIDs(localWins?asset:remote))neededBlobs.add(id);
+    }
+    for(const blob of batch.blobs)if(neededBlobs.has(blob.id))
+      operations.push({store:'blobs',action:'put',item:blob});
+    if(!operations.length)return 'remote';
+    const {assets,blobs,projects,...rest}=batch;
+    return {kind:'replace',record:syncEnvelope('batch',{
+      ...rest,names:[...new Set(operations.map(op=>op.store))],operations
+    })};
   }
   const records=['assets','blobs','projects'].flatMap(store=>(batch[store]||[]).map(item=>({store,id:item.id})));
   if(!records.length||!(batch.assets?.length||batch.projects?.length))return 'conflict';
@@ -579,16 +654,6 @@ async function reconcileImport(batch,operationID,baseRevision){
     present+=found.filter(Boolean).length;
   }
   if(present===0)return 'rebase';
-  if(batch.assets?.length&&!batch.projects?.length){
-    const operations=await reconcileInterruptedAssetImport(batch,cloudRecord);
-    if(operations){
-      if(!operations.length)return 'remote';
-      const {assets,blobs,projects,...rest}=batch;
-      return {kind:'replace',record:syncEnvelope('batch',{
-        ...rest,names:[...new Set(operations.map(op=>op.store))],operations
-      })};
-    }
-  }
   // Legacy single-project import batches are not acknowledgements. A newer
   // copy may own the same ID; expose a deliberate version choice instead of
   // automatically keeping/overwriting either document.
