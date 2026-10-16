@@ -1,12 +1,10 @@
-export function createWorksController({
-  view,state,parity,render,localCovers,catalogChanged,actions
-}){
+export function createWorksController({view,render,actions}){
   return {
     patch(){
-      if(view.dataset.renderedRoute!=='works'||
-         view.dataset.renderedWorkTab!==parity.workTab||parity.selectionMode||
-         ['trash','templates'].includes(parity.workTab))return false;
-      catalogChanged();return true;
+      // WorksPage owns its card list in React. Cover-only refresh cannot
+      // reconcile a changed projects prop (for example moving a draft to
+      // Recently Deleted), so let the route render update that list.
+      return false;
     },
     mount(lifetime){
       lifetime.use(()=>{

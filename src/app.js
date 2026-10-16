@@ -526,9 +526,7 @@ pageControllers.register('library',createLibraryController({
   onCatalogChanged:updateLibraryResults
 }));
 pageControllers.register('works',createWorksController({
-  view,state,parity,localCovers:localWorkCovers,
-  catalogChanged:()=>window.dispatchEvent(new Event('shiye-works-refresh')),
-  actions:actionStore,render
+  view,actions:actionStore,render
 }));
 pageControllers.register('import',createImportController({
   view,state,actions:actionStore,render,
