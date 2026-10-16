@@ -24,7 +24,7 @@ import {createBlobRevisionProof} from './blob-revision-proof.js';
 import {createSyncDiagnostics} from './sync-diagnostics.js';
 import {decodeImageBlob} from './image-blob-decoder.js';
 import {boundedMap} from './bounded-map.js';
-import {splitIndependentAssetImport} from './import-sync-batches.js';
+import {splitIndependentAssetImport,splitPendingAssetImportRows} from './import-sync-batches.js';
 export function createCloudStore({cloudClient,requireCloudUser,cache=null,namespace='cloud',projectPreview=()=>null,objectStorage=null}){
 const BUCKET='shiye-private';
 const writeProvider=()=>objectStorage?.enabled?'cos':'supabase';
@@ -270,6 +270,11 @@ async function loadUnifiedOutbox(recover=false){
         result={rows:updated,quarantine:[...result.quarantine,...held]};
       }
     }
+  }
+  if(recover&&typeof cache.repairUnifiedOutbox==='function'){
+    const split=await splitPendingAssetImportRows(result.rows,{isCommitted:row=>
+      wasCommitted(row.operationID,row.baseRevision)});
+    if(split)result=await cache.repairUnifiedOutbox(user,result.rows,split,[]);
   }
   unifiedOutboxBefore=outboxStamps(result.rows);
   unifiedQuarantine=structuredClone(result.quarantine);

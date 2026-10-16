@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {splitIndependentAssetImport} from '../src/import-sync-batches.js';
+import {splitIndependentAssetImport,splitPendingAssetImportRows} from '../src/import-sync-batches.js';
 
 test('independent library materials become independent cloud batches',()=>{
   let id=0;
@@ -36,4 +36,20 @@ test('projects and unknown batch bytes preserve the original atomic import',()=>
   assert.deepEqual(splitIndependentAssetImport(projectBatch),[projectBatch]);
   const unknown={...projectBatch,projects:[],blobs:[...projectBatch.blobs,{id:'batch-source'}]};
   assert.deepEqual(splitIndependentAssetImport(unknown),[unknown]);
+});
+
+test('an old pending recognition batch is losslessly converted unless already committed',async()=>{
+  const payload={id:'old-batch',assets:[{id:'a',blobId:'a'},{id:'b',blobId:'b'}],
+    blobs:[{id:'a',data:'a'},{id:'b',data:'b'}],projects:[]};
+  const row={record:{id:'batch:old-batch',kind:'batch',payload},serial:4,baseRevision:9,
+    operationID:'old-operation',attempt:2,lastFailureClass:'transient'};
+  let id=0,operation=0;
+  const split=await splitPendingAssetImportRows([row],{
+    newID:()=>`part-${++id}`,newOperationID:()=>`operation-${++operation}`});
+  assert.equal(split.length,2);
+  assert.deepEqual(split.map(item=>item.record.payload.assets[0].id),['a','b']);
+  assert.deepEqual(split.map(item=>item.serial),[4,5]);
+  assert.deepEqual(split.map(item=>item.operationID),['operation-1','operation-2']);
+  assert.ok(split.every(item=>!('attempt' in item)&&!('lastFailureClass' in item)));
+  assert.equal(await splitPendingAssetImportRows([row],{isCommitted:async()=>true}),null);
 });

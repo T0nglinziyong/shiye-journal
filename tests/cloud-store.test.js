@@ -203,6 +203,27 @@ test('one failed material does not block siblings from the same recognition batc
   assert.deepEqual(await activeRows(cache,'batch'),[]);
 });
 
+test('opening the app converts an older multi-material outbox into independent rows',async()=>{
+  const cache=memoryCache();
+  cache.repairUnifiedOutbox=async(owner,_previous,next,held)=>{
+    await cache.put(owner,'unified-outbox',next);
+    const quarantine=[...(await cache.get(owner,'sync-quarantine')||[]),...held];
+    await cache.put(owner,'sync-quarantine',quarantine);
+    return {rows:next,quarantine};
+  };
+  const payload={id:'old-import',assets:[{id:'a',blobId:'a'},{id:'b',blobId:'b'}],
+    blobs:[{id:'a',data:new Blob(['asset-a'])},{id:'b',data:new Blob(['asset-b'])}],projects:[]};
+  await cache.put('cloud:owner-uuid','unified-outbox',[{
+    record:{id:'batch:old-import',kind:'batch',payload},serial:1,baseRevision:0,
+    operationID:'old-import-operation',attempt:4,lastFailureClass:'transient'
+  }]);
+  const {db}=fixture(cache);
+  const pending=await db.cloudPendingDetails();
+  assert.equal(pending.batches.length,2);
+  assert.deepEqual(pending.batches.map(batch=>batch.items.find(item=>item.store==='assets').id).sort(),['a','b']);
+  assert.equal((await cache.get('cloud:owner-uuid','sync-quarantine')).length,0);
+});
+
 test('trash restore survives AbortError: local stage is immediate and reopen retries the same operation',async()=>{
   const cache=memoryCache(),first=fixture(cache);first.state.rpcAbort=true;
   await first.db.cloudStageMutation(['trash','assets'],tx=>{tx.objectStore('trash').delete('t');tx.objectStore('assets').put({id:'restored',title:'safe'});});

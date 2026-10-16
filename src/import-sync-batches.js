@@ -30,3 +30,25 @@ export function splitIndependentAssetImport(batch,{newID=()=>crypto.randomUUID()
       blobs:blobs.filter(blob=>ids.has(blob.id)),projects:[]};
   });
 }
+
+// Convert durable batches created by an older client without changing any
+// asset/blob payload. A server receipt for the original operation always wins:
+// that row must first follow the normal acknowledgement recovery path.
+export async function splitPendingAssetImportRows(rows,{isCommitted=async()=>false,
+  newID=()=>crypto.randomUUID(),newOperationID=()=>crypto.randomUUID()}={}){
+  let changed=false,maxSerial=Math.max(0,...(rows||[]).map(row=>Number(row?.serial)||0));
+  const output=[];
+  for(const row of rows||[]){
+    const envelope=row?.record,batch=envelope?.kind==='batch'?envelope.payload:null;
+    const parts=batch?splitIndependentAssetImport(batch,{newID}):[batch];
+    if(!batch||parts.length<2||await isCommitted(row)){output.push(row);continue;}
+    changed=true;
+    parts.forEach((part,index)=>{
+      const next={...row,serial:index?++maxSerial:row.serial,
+        operationID:newOperationID(),record:{...envelope,id:'batch:'+part.id,payload:part}};
+      delete next.attempt;delete next.nextAttemptAt;delete next.lastFailureClass;
+      output.push(next);
+    });
+  }
+  return changed?output:null;
+}
