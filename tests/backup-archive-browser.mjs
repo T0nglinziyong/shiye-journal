@@ -41,6 +41,14 @@ try{
     try{await readZipBackup(new Blob([bytes],{type:'application/zip'}));}
     catch{refused=true;}
     if(!refused)throw Error('corrupt independent image accepted');
+    // A desktop streamed export must never produce a backup this app offers
+    // to restore only after clearing the current library. The rejection is
+    // checked in the worker before it reads any of the oversized ZIP body.
+    const oneMiB=new Blob([new Uint8Array(1024*1024)]);
+    const oversized=new Blob(Array(257).fill(oneMiB));
+    let sizeRejected=false;
+    try{await readZipBackup(oversized);}catch(error){sizeRejected=/256 MB/.test(error.message);}
+    if(!sizeRejected)throw Error('oversized ZIP was not rejected before restore');
     // End-to-end: browser IDB and store.restoreBackup() must preserve exact
     // bytes, then reject a damaged ZIP without clearing the last good copy.
     const store=await import('/src/store.js');
