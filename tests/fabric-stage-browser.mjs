@@ -126,8 +126,10 @@ try{
     const canvas=window.__fabricCanvas;
     const material=canvas.getObjects().find(object=>object.sceneID==='paper-material');
     const text=canvas.getObjects().find(object=>object.sceneID==='paper-text');
-    canvas.setActiveObject(new window.__fabricActiveSelection([material,text],{canvas}));
+    const active=canvas.getActiveObjects.bind(canvas);
+    canvas.getActiveObjects=()=>[material,text];
     canvas.fire('selection:updated',{selected:[text]});
+    canvas.getActiveObjects=active;
   })()`);
   assert.equal(await evaluate('document.querySelector("#events").textContent'),
     '选中：paper-material, paper-text',
@@ -145,6 +147,12 @@ try{
     clickCount:1,...nestedStart});
   await command('Input.dispatchMouseEvent',{type:'mouseMoved',button:'left',buttons:1,
     x:nestedStart.x+24,y:nestedStart.y+12});
+  const nestedPreview=await evaluate(`(()=>{
+    const group=window.__fabricCanvas.getObjects().find(item=>item.sceneID==='paper-group');
+    const child=group.getObjects().find(item=>item.sceneID==='paper-shape');
+    return {x:child.calcTransformMatrix()[4],y:child.calcTransformMatrix()[5]};})()`);
+  assert.ok(nestedPreview.x>205&&nestedPreview.y>165,
+    'Nested content must follow its editing frame before pointer release');
   await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,
     clickCount:1,x:nestedStart.x+24,y:nestedStart.y+12});
   assert.ok(Math.abs(await evaluate('window.__fabricFixture.draft.layers[0].children[0].x')-214)<1,
@@ -281,7 +289,43 @@ try{
   })()`);
   await sleep(150);
   assert.deepEqual(await evaluate('[window.__fabricCanvas.width,window.__fabricCanvas.backgroundImage.getElement().width]'),[620,620]);
+  await evaluate(`(()=>{const {draft,refresh}=window.__fabricFixture;
+    draft.layers.push({id:'preview-ink',type:'ink',points:[{x:70,y:625},{x:180,y:645}],
+      width:7,color:'#315647',zIndex:6000});refresh();})()`);
   await click('[data-tool="select"]');
+  await sleep(80);
+  await evaluate('window.__fabricFixture.select(["preview-ink"])');
+  for(let attempt=0;attempt<40;attempt++){
+    if(await evaluate('window.__fabricCanvas.getActiveObject()?.sceneID==="preview-ink"'))break;
+    await sleep(25);
+  }
+  const inkSelection=await evaluate(`({active:window.__fabricCanvas.getActiveObject()?.sceneID,
+    events:document.querySelector('#events').textContent,
+    proxies:window.__fabricCanvas.getObjects().filter(o=>o.sceneSelectionProxy).map(o=>o.sceneID),
+    ink:window.__fabricFixture.draft.layers.find(o=>o.id==='preview-ink')})`);
+  assert.equal(inkSelection.active,'preview-ink',JSON.stringify(inkSelection));
+  const inkStart=await evaluate(`(()=>{const c=window.__fabricCanvas,
+    r=document.querySelector('.upper-canvas').getBoundingClientRect(),
+    point=c.getActiveObject().getCenterPoint(),
+    ink=c.getObjects().find(item=>item.sceneID==='preview-ink');
+    return {x:r.left+point.x*r.width/620,y:r.top+point.y*r.height/800,
+      before:ink.calcTransformMatrix()[4]};})()`);
+  await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,
+    clickCount:1,x:inkStart.x,y:inkStart.y});
+  await command('Input.dispatchMouseEvent',{type:'mouseMoved',button:'left',buttons:1,
+    x:inkStart.x+25,y:inkStart.y+10});
+  const inkLive=await evaluate(`window.__fabricCanvas.getObjects()
+    .find(item=>item.sceneID==='preview-ink').calcTransformMatrix()[4]`);
+  assert.ok(inkLive>inkStart.before+15,'Ink content follows its shared frame during dragging');
+  await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,
+    clickCount:1,x:inkStart.x+25,y:inkStart.y+10});
+  await evaluate(`(()=>{const {draft,refresh}=window.__fabricFixture;
+    draft.layers[0].children.push({id:'grouped-text',type:'text',content:'组合里的文字',
+      x:180,y:218,width:180,height:48,fontSize:24,color:'#30463d',zIndex:2});refresh();})()`);
+  for(let attempt=0;attempt<40;attempt++){
+    if(await evaluate('window.__fabricCanvas.getObjects().find(o=>o.sceneID==="paper-group")?._objects?.some(o=>o.sceneID==="grouped-text")'))break;
+    await sleep(25);
+  }
   await evaluate('window.__fabricFixture.select(["paper-group"])');
   for(let attempt=0;attempt<40;attempt++){
     if(await evaluate('window.__fabricCanvas.getActiveObject()?.sceneID==="paper-group"'))break;
@@ -289,6 +333,25 @@ try{
   }
   assert.deepEqual(await evaluate('Object.keys(window.__fabricCanvas.getActiveObject().controls).sort()'),
     ['br','mb','ml','mr','mt'],'A selected group has the same frame controls as other objects');
+  const groupStart=await evaluate(`(()=>{const rect=document.querySelector('.upper-canvas').getBoundingClientRect();
+    return {x:rect.left+190*rect.width/620,y:rect.top+160*rect.height/800}})()`);
+  const beforeGroupMove=await evaluate(`(()=>{const children=window.__fabricFixture.draft.layers[0].children;
+    return children.map(node=>({id:node.id,x:node.x,y:node.y}))})()`);
+  await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,
+    clickCount:1,...groupStart});
+  await command('Input.dispatchMouseEvent',{type:'mouseMoved',button:'left',buttons:1,
+    x:groupStart.x+25,y:groupStart.y+14});
+  await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,
+    x:groupStart.x+25,y:groupStart.y+14,clickCount:1});
+  const afterGroupMove=await evaluate(`(()=>{const children=window.__fabricFixture.draft.layers[0].children;
+    return {nodes:children.map(node=>({id:node.id,x:node.x,y:node.y})),
+      selected:window.__fabricCanvas.getActiveObject()?.sceneID}})()`);
+  assert.equal(afterGroupMove.selected,'paper-group','Moving a group keeps its editing frame');
+  for(const child of afterGroupMove.nodes){
+    const prior=beforeGroupMove.find(node=>node.id===child.id);
+    assert.ok(child.x>prior.x+10&&child.y>prior.y+5,
+      'Moving a group must carry its '+child.id+' child without moving the paper');
+  }
   const groupWidthBefore=await evaluate('window.__fabricFixture.draft.layers[0].children[0].width');
   await evaluate(`(()=>{const canvas=window.__fabricCanvas,group=canvas.getActiveObject();
     group.set({scaleX:1.2,scaleY:1.2});group.setCoords();

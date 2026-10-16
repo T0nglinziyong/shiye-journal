@@ -5,6 +5,7 @@ import {validateVectorMask} from './scene-v2.js';
 import {smoothInkSVG} from './ink-path-geometry.js';
 import {pressureInkPath} from './pressure-ink.js';
 import {sceneDisplaySiblings} from './craft-display.js';
+import {configureFabricEditorFrame} from './fabric-editor-frame.js';
 
 const finite=(value,fallback=0)=>Number.isFinite(value)?value:fallback;
 const positive=(value,fallback=1)=>Number.isFinite(value)&&value>0?value:fallback;
@@ -14,57 +15,7 @@ const ringPath=(points,width,height)=>points.map(([x,y],index)=>
 // Fabric is the interactive projection. Scene v2 remains the persisted source
 // of truth, so an editor change never replaces the physical-data contract.
 export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=>null}={}){
-  const edgeHandle=horizontal=>(ctx,left,top,_style,object)=>{
-    ctx.save();ctx.translate(left,top);ctx.rotate((object.angle||0)*Math.PI/180);
-    ctx.fillStyle='#fffefa';ctx.strokeStyle='#416c59';ctx.lineWidth=1.5;
-    const width=horizontal?20:8,height=horizontal?8:20,radius=4;
-    ctx.beginPath();ctx.roundRect(-width/2,-height/2,width,height,radius);ctx.fill();ctx.stroke();
-    ctx.restore();
-  };
-  const cornerHandle=(ctx,left,top,_style,object)=>{
-    ctx.save();ctx.translate(left,top);ctx.rotate((object.angle||0)*Math.PI/180);
-    ctx.fillStyle='#fffefa';ctx.strokeStyle='#416c59';ctx.lineWidth=1.5;
-    ctx.beginPath();ctx.roundRect(-9,-9,18,18,5);ctx.fill();ctx.stroke();
-    ctx.beginPath();ctx.arc(-1,-1,4,-Math.PI*.88,Math.PI*.45);ctx.stroke();
-    ctx.beginPath();ctx.moveTo(1,2);ctx.lineTo(6,6);ctx.moveTo(2,6);ctx.lineTo(6,6);ctx.lineTo(6,2);ctx.stroke();
-    ctx.restore();
-  };
-  const scaleAndRotate=(event,transform,x,y)=>{
-    const {target,ex,ey,theta,scaleX,scaleY}=transform;
-    const center=target.getCenterPoint();
-    const startDistance=Math.hypot(ex-center.x,ey-center.y);
-    if(startDistance<1)return false;
-    const distance=Math.hypot(x-center.x,y-center.y);
-    const ratio=Math.max(.1,Math.min(20,distance/startDistance));
-    const angle=(theta+Math.atan2(y-center.y,x-center.x)-
-      Math.atan2(ey-center.y,ex-center.x))*180/Math.PI;
-    const nextX=target.lockScalingX?scaleX:scaleX*ratio;
-    const nextY=target.lockScalingY?scaleY:scaleY*ratio;
-    const changed=Math.abs(target.angle-angle)>1e-3||
-      Math.abs(target.scaleX-nextX)>1e-4||Math.abs(target.scaleY-nextY)>1e-4;
-    if(!changed)return false;
-    target.set({angle,scaleX:nextX,scaleY:nextY});
-    target.setPositionByOrigin(center,'center','center');
-    target.setCoords();
-    target.canvas?.fire('object:rotating',{e:event,target,transform});
-    if(nextX!==scaleX||nextY!==scaleY)
-      target.canvas?.fire('object:scaling',{e:event,target,transform});
-    return true;
-  };
-  const configureControls=object=>{
-    const canScale=!object.lockScalingX&&!object.lockScalingY;
-    const base=object.controls;
-    // Keep only the visible transform grips. Fabric may inherit additional
-    // action controls from a prototype; they duplicate the React action bar.
-    const controls={};
-    if(canScale)for(const side of ['ml','mr','mt','mb'])controls[side]=new fabric.Control({
-      ...base[side],render:edgeHandle(side==='mt'||side==='mb')});
-    controls.br=new fabric.Control({...base.br,actionName:'rotate',
-      actionHandler:scaleAndRotate,cursorStyle:'crosshair',render:cornerHandle});
-    object.controls=controls;
-    object.set({cornerSize:24,touchCornerSize:46,transparentCorners:false,
-      cornerColor:'#fffefa',cornerStrokeColor:'#416c59',borderColor:'#416c59'});
-  };
+  const configureControls=object=>configureFabricEditorFrame(fabric,object);
   const maskGeometry=mask=>[[mask.outer,...(mask.holes||[])]];
   const clipPath=(geometry,width,height,{page=false,topOffset=0}={})=>{
     // A compound path keeps openings transparent. Fabric recenters Path data

@@ -65,8 +65,8 @@ export function moveSceneLasso(draft,ids,dx,dy){
 
 export function sceneLassoBounds(draft,ids){
   const selected=new Set(ids),points=[];
-  for(const {kind,value} of sceneLayerEntries(draft,{hidden:true})){
-    if(!selected.has(value.id))continue;
+  for(const {kind,value,parents} of sceneLayerEntries(draft)){
+    if(!selected.has(value.id)&&!parents.some(parent=>selected.has(parent.id)))continue;
     points.push(...(kind==='ink'?inkFramePoints(value):objectCorners(value)));
   }
   if(!points.length)return null;

@@ -53,6 +53,16 @@ test('lasso box rotates text, shape and ink together around one center',()=>{
     [[80,70],[80,100]]);
 });
 
+test('a saved group keeps the bounds of its visible children, including text and ink',()=>{
+  const draft=fixture();
+  assert.deepEqual(sceneLassoBounds(draft,['left','right','ink-group']),
+    sceneLassoBounds(draft,['shape','text','ink']));
+  draft.layers[1].hidden=true;
+  assert.deepEqual(sceneLassoBounds(draft,['right']),null);
+  assert.deepEqual(sceneLassoBounds(draft,['left','right']),
+    sceneLassoBounds(draft,['shape']));
+});
+
 test('one lasso transform scales and rotates every selected object around the same center',()=>{
   const draft=fixture();
   assert.equal(transformSceneLasso(draft,['shape','text','ink'],{x:100,y:90},2,90),true);

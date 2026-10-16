@@ -368,8 +368,9 @@ try{
   await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,clickCount:1,...turnStart});
   await command('Input.dispatchMouseEvent',{type:'mouseMoved',button:'left',buttons:1,x:turnStart.x-35,y:turnStart.y+8});
   await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,x:turnStart.x-35,y:turnStart.y+8});
-  await sleep(700);
-  const turnedShape=(await projects())[0].drafts[0].layers.find(layer=>layer.id===shapes[0].id);
+  const turnedShape=(await waitProjects(rows=>Math.abs(rows[0]?.drafts?.[0]?.layers
+    ?.find(layer=>layer.id===shapes[0].id)?.rotation||0)>3))[0].drafts[0]
+    .layers.find(layer=>layer.id===shapes[0].id);
   assert.ok(Math.abs(turnedShape.rotation||0)>3,
     'The single bottom-right lasso control rotates selected Scene objects as one unit');
   assert.notEqual(turnedShape.width,shapes[0].width,
@@ -393,6 +394,16 @@ try{
   await click('[aria-label="删除组合"]');await sleep(500);
   assert.equal((await projects())[0].drafts[0].layers.filter(layer=>layer.type==='group').length,1,
     'Deleting the selected copy leaves the original group intact');
+  const savedGroupID=(await projects())[0].drafts[0].layers.find(layer=>layer.type==='group').id;
+  await click('[data-act="back-works"]','.works-grid');
+  await click('[data-act="open-project"]','#canvas-page');
+  await wait('.upper-canvas');
+  await click('[data-val="layers"]','.scene-layer-tree');
+  await click(`[data-scene-node="${savedGroupID}"] .scene-layer-pick`);
+  await click('[data-val="layers"]');
+  await wait('.fabric-selected-actions[aria-label="组合操作"]');
+  assert.ok(await evaluate('!!document.querySelector(".fabric-selected-actions[aria-label=组合操作]")'),
+    'A saved and reopened group must be selectable with its editing frame');
   await click('[data-val="layers"]','.scene-layer-tree');
   if(!await evaluate('!!document.querySelector(".scene-layer-children .scene-layer-node")'))
     await click('.scene-layer-node[aria-expanded] .scene-layer-expand');

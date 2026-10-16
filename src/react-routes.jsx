@@ -1286,8 +1286,13 @@ export function EditorPage({state,draft,editorEntry,asset,source,format,
         const canvas=editorFabricCanvases.get(draft.id);
         if(!canvas)return;
         const {scene:point,viewport}=fabricPointer(canvas,event);
-        const hit=[...canvas.getObjects()].reverse().find(object=>
-          selectableFabricObjectAt(canvas,object,point,viewport));
+        const active=canvas.getActiveObject();
+        const selectedGroup=canvas.getObjects().find(object=>object.sceneID===state.selected&&
+          object.sceneType==='group'&&object.selectable!==false);
+        const hit=active?.sceneType==='group'&&active.containsPoint(point)?active:
+          selectedGroup?.containsPoint(point)?selectedGroup:
+          [...canvas.getObjects()].reverse().find(object=>
+            selectableFabricObjectAt(canvas,object,point,viewport));
         if(hit)canvas.setActiveObject(hit);
         else canvas.discardActiveObject();
         canvas.requestRenderAll();
@@ -1307,6 +1312,16 @@ export function EditorPage({state,draft,editorEntry,asset,source,format,
           active.findControl(viewport,event.pointerType==='touch'))return true;
         if(active?.sceneSelectionProxy&&active.sceneID===state.selected&&
           active.containsPoint(point))return true;
+        // Once selected, the whole group frame is the drag target. A gap
+        // between its children must not start page navigation.
+        if(active?.sceneType==='group'&&active.sceneID===state.selected&&
+          active.containsPoint(point))return true;
+        const selectedGroup=canvas.getObjects().find(object=>object.sceneID===state.selected&&
+          object.sceneType==='group'&&object.selectable!==false);
+        if(selectedGroup?.containsPoint(point)){
+          canvas.setActiveObject(selectedGroup);
+          return true;
+        }
         return canvas.getObjects().some(object=>object.sceneID===state.selected&&
           selectableFabricObjectAt(canvas,object,point,viewport));
       }}

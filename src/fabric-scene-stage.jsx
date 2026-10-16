@@ -11,6 +11,8 @@ import {sceneDisplaySiblings} from './craft-display.js';
 import {prepareSceneFonts} from './scene-renderer.js';
 import {appendInkStroke,editableInkLayer} from './ink-groups.js';
 import {fabricPointer,installFabricPointer} from './fabric-pointer.js';
+import {createFabricSelectionPreview} from './fabric-selection-preview.js';
+import {configureFabricEditorFrame} from './fabric-editor-frame.js';
 
 const byID=(nodes,id)=>{
   for(const node of nodes||[]){
@@ -52,16 +54,20 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
     if(tool==='lasso'){
       ++selectionEpoch.current;
       const proxy=canvas.getObjects().find(item=>item.sceneSelectionProxy);
+      proxy?.scenePreview?.restore();
       syncingSelection.current=true;
       canvas.discardActiveObject();if(proxy)canvas.remove(proxy);canvas.requestRenderAll();
       syncingSelection.current=false;
       return;
     }
     const ids=selectedIDs.length?selectedIDs:selectedID?[selectedID]:[];
+    const stillSelected=()=>JSON.stringify(callbacks.current.selectedIDs?.length?
+      callbacks.current.selectedIDs:callbacks.current.selectedID?[callbacks.current.selectedID]:[])===
+      JSON.stringify(ids);
     const epoch=++selectionEpoch.current;
     const ink=ids.length===1?byID(callbacks.current.draft.layers,ids[0]):null;
     const oldProxy=canvas.getObjects().find(item=>item.sceneSelectionProxy);
-    if(oldProxy){syncingSelection.current=true;canvas.discardActiveObject();canvas.remove(oldProxy);
+    if(oldProxy){oldProxy.scenePreview?.restore();syncingSelection.current=true;canvas.discardActiveObject();canvas.remove(oldProxy);
       syncingSelection.current=false;}
     const selectedNode=ids.length===1?byID(callbacks.current.draft.layers,ids[0]):null;
     const nested=selectedNode&&!canvas.getObjects().some(item=>item.sceneID===ids[0]);
@@ -69,22 +75,21 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
       const current=callbacks.current.draft,leaves=selectionLeaves(current,ids);
       const bounds=ids.every(id=>editable(current,id))&&leaves.length>=1?
         sceneLassoBounds(current,leaves):null;
-      if(bounds)void import('fabric').then(({Rect,Control})=>{
+      if(bounds)void import('fabric').then(fabric=>{
+        const {Rect}=fabric;
         if(selectionEpoch.current!==epoch||sessionRef.current!==canvas||
-          callbacks.current.tool!=='select'||
-          JSON.stringify(callbacks.current.selectedIDs)!==JSON.stringify(ids))return;
+          callbacks.current.tool!=='select'||!stillSelected())return;
         const proxy=new Rect({left:bounds.x+bounds.width/2,top:bounds.y+bounds.height/2,
           originX:'center',originY:'center',width:Math.max(2,bounds.width),
           height:Math.max(2,bounds.height),fill:'rgba(0,0,0,0)',stroke:null,
           lockScalingX:true,lockScalingY:true,lockSkewingX:true,lockSkewingY:true,
           cornerSize:20,touchCornerSize:42,borderColor:'#416c59',cornerColor:'#fffefa',
           cornerStrokeColor:'#416c59',transparentCorners:false});
-        const rotate=proxy.controls.mtr;
-        proxy.controls={br:new Control({x:.5,y:.5,actionName:'rotate',
-          actionHandler:rotate.actionHandler,cursorStyleHandler:rotate.cursorStyleHandler})};
+        configureFabricEditorFrame(fabric,proxy);
         proxy.sceneSelectionProxy=true;proxy.sceneMultiIDs=[...ids];
         proxy.sceneTransformIDs=leaves;
         proxy.sceneMultiPose={center:proxy.getCenterPoint(),angle:proxy.angle||0};
+        proxy.scenePreview=createFabricSelectionPreview(fabric,canvas,leaves);
         syncingSelection.current=true;canvas.add(proxy);canvas.setActiveObject(proxy);
         canvas.requestRenderAll();syncingSelection.current=false;
       }).catch(error=>callbacks.current.onIssue?.(error));
@@ -92,26 +97,21 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
     }
     if(ink?.type==='ink'&&editable(callbacks.current.draft,ink.id)){
       const bounds=sceneLassoBounds(callbacks.current.draft,ids);
-      if(bounds)void import('fabric').then(({Rect,Control})=>{
+      if(bounds)void import('fabric').then(fabric=>{
+        const {Rect}=fabric;
         if(selectionEpoch.current!==epoch||sessionRef.current!==canvas||
-          callbacks.current.selectedID!==ink.id||callbacks.current.tool!=='select')return;
+          !stillSelected()||callbacks.current.tool!=='select')return;
         const proxy=new Rect({left:bounds.x+bounds.width/2,top:bounds.y+bounds.height/2,
           originX:'center',originY:'center',width:Math.max(2,bounds.width),
           height:Math.max(2,bounds.height),fill:'rgba(0,0,0,0)',stroke:null,
           lockScalingX:true,lockScalingY:true,lockSkewingX:true,lockSkewingY:true,
           cornerSize:20,touchCornerSize:42,borderColor:'#416c59',cornerColor:'#fffefa',
           cornerStrokeColor:'#416c59',transparentCorners:false});
-        const rotate=proxy.controls.mtr;
-        proxy.controls={br:new Control({x:.5,y:.5,actionName:'rotate',
-          actionHandler:rotate.actionHandler,cursorStyleHandler:rotate.cursorStyleHandler,
-          render:(ctx,left,top)=>{ctx.save();ctx.translate(left,top);
-            ctx.fillStyle='#fffefa';ctx.strokeStyle='#416c59';ctx.lineWidth=1.5;
-            ctx.beginPath();ctx.roundRect(-9,-9,18,18,5);ctx.fill();ctx.stroke();
-            ctx.beginPath();ctx.arc(-1,-1,4,-Math.PI*.88,Math.PI*.45);ctx.stroke();
-            ctx.beginPath();ctx.moveTo(1,2);ctx.lineTo(6,6);ctx.moveTo(2,6);
-            ctx.lineTo(6,6);ctx.lineTo(6,2);ctx.stroke();ctx.restore();}})};
+        configureFabricEditorFrame(fabric,proxy);
         proxy.sceneID=ink.id;proxy.sceneType='ink';proxy.sceneSelectionProxy=true;
         proxy.sceneInkMatrix=proxy.calcTransformMatrix();
+        proxy.sceneMultiPose={center:proxy.getCenterPoint(),angle:proxy.angle||0};
+        proxy.scenePreview=createFabricSelectionPreview(fabric,canvas,[ink.id]);
         syncingSelection.current=true;canvas.add(proxy);canvas.setActiveObject(proxy);
         canvas.requestRenderAll();syncingSelection.current=false;
       }).catch(error=>callbacks.current.onIssue?.(error));
@@ -145,6 +145,7 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
     if(tool!=='lasso')canvas.sceneClearLasso?.();
     if(!['select','lasso'].includes(tool)){canvas.getActiveObject()?.exitEditing?.();canvas.discardActiveObject();
       const proxy=canvas.getObjects().find(item=>item.sceneSelectionProxy);
+      proxy?.scenePreview?.restore();
       if(proxy)canvas.remove(proxy);
       canvas.requestRenderAll();}
     if(tool!=='text')canvas.sceneDiscardEmptyText?.();
@@ -212,9 +213,10 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
             // Decode the replacement before touching the visible object. A
             // slow image cannot leave a blank hole in an already drawn page.
             const old=canvas.getObjects().filter(item=>item.sceneRenderKey===key);
-            const keepSelected=node.type!=='ink'&&callbacks.current.tool==='select'&&
+            const selectedNode=node.type!=='ink'&&callbacks.current.tool==='select'&&
               callbacks.current.selectedID===node.id;
-            const replacingActive=keepSelected&&old.some(item=>canvas.getActiveObject()===item);
+            const keepSelected=selectedNode&&object?.selectable!==false;
+            const replacingActive=old.some(item=>canvas.getActiveObject()===item);
             if(replacingActive)syncingSelection.current=true;
             for(const item of old)canvas.remove(item);
             if(object){
@@ -224,11 +226,11 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
               canvas.insertAt(position,object);
               if(keepSelected)canvas.setActiveObject(object);
             }
-            if(replacingActive){
-              syncingSelection.current=false;
+            if(replacingActive)syncingSelection.current=false;
+            if(selectedNode){
               const bounds=object?.getBoundingRect();
-              if(bounds)callbacks.current.onSelection?.([node.id],{x:bounds.left,y:bounds.top,
-                width:bounds.width,height:bounds.height});
+              callbacks.current.onSelection?.(keepSelected&&bounds?[node.id]:[],keepSelected&&bounds?{x:bounds.left,y:bounds.top,
+                width:bounds.width,height:bounds.height}:null);
             }
             // A newly selected shape or material must paint at its final
             // location before the old frame can linger through another rAF.
@@ -637,8 +639,12 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
         canvas.on('selection:cleared',()=>{if(!syncingSelection.current)callbacks.current.onSelection?.([],null);});
         const movingSelection=event=>{
           const object=event.target;
-          if(!object?.sceneMultiIDs?.length&&
-            (!object?.sceneID||object.sceneID!==callbacks.current.selectedID))return;
+          if(!object?.sceneMultiIDs?.length&&(!object?.sceneID||
+            ![callbacks.current.selectedID,...(callbacks.current.selectedIDs||[])].includes(object.sceneID)))return;
+          if(object.scenePreview&&object.sceneMultiPose){
+            object.scenePreview.apply(object.sceneMultiPose.center,object.getCenterPoint(),
+              (object.angle||0)-object.sceneMultiPose.angle);
+          }
           const bounds=object.getBoundingRect();
           upper.dispatchEvent(new CustomEvent('shiye:fabric-object-transform',{detail:{
             id:object.sceneID||'multiple',bounds:{x:bounds.left,y:bounds.top,
@@ -672,6 +678,7 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
                 throw Error('所选图层不能旋转');
               if(!moveSceneLasso(current,ids,center.x-before.center.x,center.y-before.center.y))
                 throw Error('所选图层不能移动');
+              object.scenePreview=null;
               object.sceneMultiPose={center,angle:object.angle||0};
               for(const id of ids){const root=current.layers.find(item=>byID([item],id));
                 if(root)signatures.delete(root.id);}
@@ -681,6 +688,7 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
                 width:bounds.width,height:bounds.height});
               callbacks.current.onChange?.(ids,'transform:multiple');
             }catch(error){
+              object.scenePreview?.restore();
               current.layers=priorLayers;
               for(const id of ids){const root=current.layers.find(item=>byID([item],id));
                 if(root)signatures.delete(root.id);}
@@ -696,6 +704,7 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
           try{
             assertSceneEditable(callbacks.current.draft,node.id);
             bridge.applyObject(node,object);
+            if(object.sceneSelectionProxy)object.scenePreview=null;
             if(object.sceneID===callbacks.current.selectedID){
               const bounds=object.getBoundingRect();
               callbacks.current.onSelection?.([object.sceneID],{x:bounds.left,y:bounds.top,
@@ -749,6 +758,15 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
         const initialVersions=new Map(initialNodes.map(node=>[renderKey(node),sceneVersions.get(renderKey(node))||0]));
         void projectFabricLayers(canvas,initialNodes,bridge,{readOnly,
           onIssue:error=>callbacks.current.onIssue?.(error),
+          onAdded:(object,node)=>{
+            if(callbacks.current.tool!=='select'||callbacks.current.selectedID!==node.id||
+              callbacks.current.selectedIDs?.length>1||object.selectable===false)return;
+            syncingSelection.current=true;canvas.setActiveObject(object);syncingSelection.current=false;
+            const bounds=object.getBoundingRect();
+            callbacks.current.onSelection?.([node.id],{x:bounds.left,y:bounds.top,
+              width:bounds.width,height:bounds.height});
+            canvas.requestRenderAll();
+          },
           isCurrent:node=>!disposed&&projected().some(item=>renderKey(item)===renderKey(node)&&snapshot(item)===snapshot(node))&&
             (sceneVersions.get(renderKey(node))||0)===initialVersions.get(renderKey(node))});
         reconcileRef.current?.();

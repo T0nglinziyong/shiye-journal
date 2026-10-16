@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {browserHarness} from './browser-harness.mjs';
+import {sceneLassoBounds} from '../src/scene-lasso.js';
 
 const url=process.env.SHIYE_TEST_URL||'http://127.0.0.1:5173';
 const viewportWidth=Number(process.env.SHIYE_TOUCH_WIDTH)||390;
@@ -32,7 +33,28 @@ const waitProjects=async predicate=>{
   return projects();
 };
 try{
-  await wait('.series-grid');await click('[data-route="works"]','.works-grid');
+  await wait('.series-grid');
+  for(const name of ['canvas-setting','cutout-controls','editor-inspector-range',
+    'editor-crop-slider','cutout-bounded-slider']){
+    const geometry=await evaluate(`(()=>{const host=document.createElement('div');
+      host.className=${JSON.stringify(name)};
+      Object.assign(host.style,{position:'fixed',left:'20px',top:'190px',width:'260px',
+        zIndex:'99999',background:'#fff',padding:'0'});
+      host.innerHTML='<input aria-label="slider-endpoint-test" type="range" min="0" max="100" value="50">';
+      document.body.append(host);const input=host.querySelector('input');
+      input.style.width='100%';const rect=input.getBoundingClientRect(),style=getComputedStyle(input);
+      return {left:rect.left,right:rect.right,y:rect.top+rect.height/2,
+        padding:[style.paddingLeft,style.paddingRight]};})()`);
+    assert.deepEqual(geometry.padding,['0px','0px'],`${name} slider must have no inset`);
+    for(const [x,expected] of [[geometry.left+1,'0'],[geometry.right-1,'100']]){
+      await command('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x,y:geometry.y,id:9,force:1}]});
+      await command('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+      assert.equal(await evaluate('document.querySelector("[aria-label=slider-endpoint-test]").value'),
+        expected,`${name} reaches ${expected} at its track edge`);
+    }
+    await evaluate('document.querySelector("[aria-label=slider-endpoint-test]").parentElement.remove()');
+  }
+  await click('[data-route="works"]','.works-grid');
   await click('#work-create','#blank-create-confirm');await click('#blank-create-confirm','#canvas-page');
   await wait('.upper-canvas');
   for(const [tool,title] of [['material','选择素材'],['layers','图层'],['shape','添加图形']]){
@@ -92,6 +114,35 @@ try{
   await touch('.scene-layer-tree-toolbar button:nth-child(2)');
   assert.equal(await evaluate(`document.querySelectorAll('.scene-layer-node[aria-expanded]').length`),1,
     'Multi-selected layers can be grouped');
+  await touch('[data-val="layers"]');
+  await wait('.fabric-selected-actions[aria-label="组合操作"]');
+  const groupedBefore=(await waitProjects(rows=>rows[0]?.drafts?.[0]?.layers
+    ?.some(node=>node.type==='group')))[0].drafts[0];
+  const selectedGroup=groupedBefore.layers.find(node=>node.type==='group');
+  assert.ok(selectedGroup&&selectedGroup.children.length===2);
+  const groupBounds=sceneLassoBounds(groupedBefore,[selectedGroup.id]);
+  await evaluate('document.querySelector(".upper-canvas").scrollIntoView({block:"center"})');
+  const groupCenter=await evaluate(`(()=>{const canvas=document.querySelector('.upper-canvas');
+    const rect=canvas.getBoundingClientRect();
+    const x=${groupBounds.x+groupBounds.width/2},y=${groupBounds.y+groupBounds.height/2};
+    return {x:rect.left+x*rect.width/${groupedBefore.canvas.width},
+      y:rect.top+y*rect.height/${groupedBefore.canvas.height}}})()`);
+  const pageTransformBefore=await evaluate('document.querySelector("#canvas-page").style.transform');
+  await command('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{...groupCenter,id:4,force:1}]});
+  await command('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:groupCenter.x+24,
+    y:groupCenter.y+12,id:4,force:1}]});
+  await command('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+  const groupedAfter=(await waitProjects(rows=>rows[0]?.drafts?.[0]?.layers
+    .find(node=>node.id===selectedGroup.id)?.children?.some((node,index)=>
+      node.x>selectedGroup.children[index].x+10)))[0].drafts[0]
+    .layers.find(node=>node.id===selectedGroup.id);
+  assert.ok(groupedAfter.children.every((node,index)=>node.x>selectedGroup.children[index].x+10),
+    'Dragging an already selected group moves all its children');
+  assert.equal(await evaluate('document.querySelector("#canvas-page").style.transform'),
+    pageTransformBefore,'Dragging the selected group must not pan the paper');
+  assert.ok(await evaluate('!!document.querySelector(".fabric-selected-actions[aria-label=组合操作]")'),
+    'The group editing frame remains selected after a touch drag');
+  await touch('[data-val="layers"]');
   await touch('.scene-layer-node[aria-expanded] .scene-layer-expand');
   assert.equal(await evaluate('document.querySelectorAll(".scene-layer-children .scene-layer-node").length'),0,
     'Touching the group arrow collapses the nested layers');

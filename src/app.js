@@ -679,7 +679,9 @@ function render(){
       onAction:handle,onMatchingChange:updateMatchingFromReact})
     :state.route==='editor'&&state.activeProject&&current()
     ?EditorPage({state,draft:current(),editorEntry,asset,source:image,
-      sceneRevision:state.activeProject.updatedAt,
+      // A Date string can repeat for two edits in one millisecond. The local
+      // save generation keeps Fabric's Scene projection in step with history.
+      sceneRevision:state.activeProject.updatedAt+':'+(saveVersions.get(state.activeProject.id)||0),
       materials:state.assets,
       loadFabricAsset:async(id,node)=>{
         const record=asset(id);
