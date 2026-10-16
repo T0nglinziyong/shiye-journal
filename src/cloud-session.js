@@ -12,11 +12,18 @@ export function cloudClient(){
     return fetch(input,{...init,signal:init?.signal||AbortSignal.timeout(timeout)});
   }}});
 }
-export async function requireCloudUser(){
+export async function requireCloudUser({withAccount=false}={}){
   const {data,error}=await cloudClient().auth.getUser();
-  if(error||!data.user){const e=Error('请先登录拾页');e.status=401;throw e;}
-  const allowed=await cloudClient().from('shiye_accounts').select('user_id').eq('user_id',data.user.id).maybeSingle();
-  if(allowed.error)throw Error('无法验证账号权限；未切换到本机存储');
+  if(error||!data.user){
+    const signedOut=!error||error.status===401||error.name==='AuthSessionMissingError';
+    const e=Error(signedOut?'请先登录拾页':'登录验证服务暂时不可用，请重试连接');
+    e.status=signedOut?401:error.status||503;e.code=error?.code;e.cause=error;throw e;
+  }
+  const allowed=await cloudClient().from('shiye_accounts').select(withAccount?'user_id,username,is_admin':'user_id').eq('user_id',data.user.id).maybeSingle();
+  if(allowed.error){
+    const e=Error('云端账号核验暂时不可用，请重试连接；已保留登录会话');
+    e.status=allowed.status;e.code=allowed.error.code;e.cause=allowed.error;throw e;
+  }
   if(!allowed.data){const e=Error('此账号未获测试权限');e.status=403;throw e;}
-  return data.user;
+  return withAccount?{user:data.user,account:allowed.data}:data.user;
 }

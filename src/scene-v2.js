@@ -296,7 +296,7 @@ export function validateSceneExtensions(d){
    if(node.zIndex!==undefined&&!num(node.zIndex,-100000,100000))throw Error('图层排序值无效');
    if(node.type==='group'){
      if(!Array.isArray(node.children)||node.children.length>1000||
-       ['scale','scaleX','scaleY','width','height','assetID'].some(key=>node[key]!==undefined))throw Error('物理图层组不能缩放或复制真实素材');
+       ['scale','scaleX','scaleY','width','height','assetID'].some(key=>node[key]!==undefined))throw Error('组合的变形应保存到子对象，不能单独存储组合宽高');
      if(node.name!==undefined&&(typeof node.name!=='string'||node.name.length>100))throw Error('图层组名称无效');
      walk(node.children,depth+1);
    }else if(node.type==='ink'){

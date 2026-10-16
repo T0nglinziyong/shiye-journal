@@ -7,6 +7,7 @@ export const pieceKey=item=>item.creativePieceID||item.agentKey||item.key||item.
 export function buildMaterialLedger(draft,assets){
  const catalog=new Map(assets.map(asset=>[asset.id,asset])),groups=new Map(),rolls=new Map();
  for(const item of draft.items||[]){
+  if(item.manualVisualCopy)continue;
   const asset=catalog.get(item.assetID);craftAssert(asset,'MISSING_SOURCE','源素材不存在',{assetId:item.assetID,pieceId:pieceKey(item)});
   const unit=item.materialUnitIndex??0;
   craftAssert(Number.isInteger(unit)&&unit>=0,'INVALID_SOURCE_INSTANCE','素材来源段编号无效',{assetId:asset.id});

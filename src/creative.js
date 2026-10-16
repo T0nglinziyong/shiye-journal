@@ -48,8 +48,10 @@ function checkDraft(d,assets){
     const crop=cropOf(i);assertRect(crop);
     if(i.materialMask)materialMaskPoints(i.materialMask);validateDisplaySlices(i);
     const expectedW=crop.width*a.physicalWidthMM*scale(d),expectedH=crop.height*a.physicalHeightMM*scale(d);
-    if(!Number.isFinite(expectedW)||!Number.isFinite(expectedH)||Math.abs(i.width-expectedW)>EPS||Math.abs(i.height-expectedH)>EPS)throw Error(a.title+' 实物尺寸与来源不一致');
-    {const group=a.id+':'+unit,used=usage.get(group)||[],region=sourceFootprint(i,a,materialMaskGeometry(i.materialMask));if(used.some(previous=>geometryArea(geometryIntersection(normalizeGeometry([[previous.outer,...previous.holes]]),normalizeGeometry([[region.outer,...region.holes]])))>1e-6))throw Error(a.title+' 同一源素材的裁片重叠或重复使用');used.push(region);usage.set(group,used);} // Intersection tolerance is in source mm².
+    if(!Number.isFinite(expectedW)||!Number.isFinite(expectedH)||
+      !i.manualVisualResize&&(Math.abs(i.width-expectedW)>EPS||Math.abs(i.height-expectedH)>EPS))
+      throw Error(a.title+' 实物尺寸与来源不一致');
+    if(!i.manualVisualCopy){const group=a.id+':'+unit,used=usage.get(group)||[],region=sourceFootprint(i,a,materialMaskGeometry(i.materialMask));if(used.some(previous=>geometryArea(geometryIntersection(normalizeGeometry([[previous.outer,...previous.holes]]),normalizeGeometry([[region.outer,...region.holes]])))>1e-6))throw Error(a.title+' 同一源素材的裁片重叠或重复使用');used.push(region);usage.set(group,used);} // Intersection tolerance is in source mm².
   }
   buildMaterialLedger(d,assets);
 }
@@ -87,6 +89,7 @@ function setPosition(d,i,data){
 function remove(d,keys){for(const key of keys){const target=find(d,key);locked(target);removeSceneNode(d,target.id);}}
 function permission(options,asset){return craftPermission(options,asset);}
 function process(d,item,asset,operations,mode,options){
+  if(item.manualVisualCopy)throw Error('手工复制的素材是视觉副本，不能再次作为实物裁片加工');
   locked(item);let current=mode==='replace'?{x:0,y:0,width:1,height:1}:cropOf(item),mask=mode==='replace'?null:item.materialMask||null;
   const steps=mode==='replace'?[]:structuredClone(item.materialSteps||[]);
   if(steps.length+operations.length>12)throw Error('连续工序不得超过12步');
@@ -147,6 +150,7 @@ function process(d,item,asset,operations,mode,options){
   item.cropRect=current.width===1&&current.height===1&&current.x===0&&current.y===0?null:current;
   item.materialMask=mask;
   item.width=current.width*asset.physicalWidthMM*scale(d);item.height=current.height*asset.physicalHeightMM*scale(d);
+  delete item.manualVisualResize;
   item.materialSteps=steps;item.operation=steps.at(-1)||{op:'whole'};baseline(item);
 }
 function addMaterials(d,assets,aliases,list){
@@ -154,8 +158,9 @@ function addMaterials(d,assets,aliases,list){
   for(const entry of list){
     const asset=materialAsset(assets,aliases,entry.asset),unit=entry.unit??0,piece=entry.piece||'p-'+entry.asset+'-'+unit;
     let item=d.items.find(i=>keyOf(i)===piece);
-    if(!entry.piece&&!item)item=d.items.find(i=>i.assetID===asset.id&&(i.materialUnitIndex??0)===unit&&!i.cropRect);
-    if(item){locked(item);if(item.assetID!==asset.id)throw Error('不能改变已有片段来源：'+piece);if(entry.unit!==undefined&&item.materialUnitIndex!==unit)throw Error('不能改变已有片段来源段');}
+    if(!entry.piece&&!item)item=d.items.find(i=>i.assetID===asset.id&&
+      !i.manualVisualCopy&&(i.materialUnitIndex??0)===unit&&!i.cropRect);
+    if(item){locked(item);if(item.manualVisualCopy)throw Error('视觉副本不能作为新的实物素材');if(item.assetID!==asset.id)throw Error('不能改变已有片段来源：'+piece);if(entry.unit!==undefined&&item.materialUnitIndex!==unit)throw Error('不能改变已有片段来源段');}
     else{if(index(d).has(piece))throw Error('图层编号已被占用：'+piece);item=itemFromAsset(asset,d,0,0,entry.z??10+d.items.length,true);item.creativePieceID=piece;item.materialUnitIndex=unit;d.items.push(item);}
     Object.assign(item,place(d,entry));if(entry.rotation!==undefined)item.rotation=entry.rotation;if(entry.z!==undefined)item.zIndex=entry.z;if(entry.role!==undefined)item.creativeRole=entry.role;if(entry.opacity!==undefined)item.opacity=entry.opacity;if(entry.flip_horizontal!==undefined)item.isFlippedHorizontally=entry.flip_horizontal;if(entry.blend_mode!==undefined)item.blendMode=entry.blend_mode;if(entry.vector_mask!==undefined)item.vectorMask=structuredClone(entry.vector_mask);baseline(item);output.push(item);
   }return output;
@@ -285,7 +290,7 @@ function inspect(d,assets,aliases,a,options){return {materials:a.keys.map(key=>{
 })};}
 function finish(d,assets,a,options){
   for(const id of new Set(options.requiredAssetIDs||[])){
-    const items=d.items.filter(i=>i.assetID===id&&!i.isParked&&!i.isHidden&&!i.hidden);if(!items.length)throw Error('必用素材尚未放入页面：'+(assets.find(a=>a.id===id)?.title||id));
+    const items=d.items.filter(i=>i.assetID===id&&!i.manualVisualCopy&&!i.isParked&&!i.isHidden&&!i.hidden);if(!items.length)throw Error('必用素材尚未放入页面：'+(assets.find(a=>a.id===id)?.title||id));
     if(!items.some(i=>{
       const bounds=dimensions(i),left=Math.max(0,i.x-bounds.width/2),top=Math.max(0,i.y-bounds.height/2),right=Math.min(d.canvas.width,i.x+bounds.width/2),bottom=Math.min(d.canvas.height,i.y+bounds.height/2);
       if((i.opacity??1)<=0||right<=left||bottom<=top)return false;

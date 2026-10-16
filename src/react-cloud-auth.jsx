@@ -4,7 +4,7 @@ import {createPortal,flushSync} from 'react-dom';
 import {AdminViewDialog,StorageUsageDialog} from './react-admin-dialog.jsx';
 
 let loginRoot;
-function LoginGate({status,visible,onLogin}){
+function LoginGate({status,visible,onLogin,onRetry,retryReady=false}){
   const [busy,setBusy]=useState(false);
   const submit=async event=>{
     event.preventDefault();
@@ -17,6 +17,8 @@ function LoginGate({status,visible,onLogin}){
   return <main className="cloud-login" style={{maxWidth:420,margin:'12vh auto',padding:16}}>
     <section className="panel"><h1>登录拾页</h1>
       <p>每位用户的资料独立保存在私人云端。账号由管理员创建；登录后本浏览器会保持会话，直到主动退出。</p>
+      {retryReady&&<button className="btn primary" type="button" disabled={busy}
+        onClick={async()=>{setBusy(true);try{await onRetry();}finally{setBusy(false);}}}>重试连接</button>}
       <form data-login hidden={!visible} onSubmit={submit}>
         <label>用户名<input name="email" type="text" autoComplete="username" required/></label>
         <label>密码<input name="password" type="password" autoComplete="current-password" required/></label>

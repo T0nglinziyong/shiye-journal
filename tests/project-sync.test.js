@@ -154,6 +154,22 @@ test('a structured validation failure remains pending without a background retry
   assert.equal(calls,1);
   assert.equal(reopened.status().conflicts,1);
 });
+test('repeated same-record CAS conflicts stop within one flush instead of flooding the database',async()=>{
+  let rows=[{record:{id:'project:stale',kind:'project',payload:{id:'stale'}},
+    serial:1,baseRevision:1,operationID:'old-op'}],commits=0;
+  const sync=createProjectSync({load:async()=>structuredClone(rows),reload:async()=>structuredClone(rows),
+    write:async next=>{rows=structuredClone(next);},revision:()=>2,
+    authoritativeCommit:true,autoFlushDelayMs:10000,
+    setTimer:()=>{throw Error('confirmed conflict must not schedule a retry');},
+    reconcile:async record=>({kind:'replace',record}),
+    commit:async()=>{commits++;throw Object.assign(Error('此记录已由另一设备修改'),{code:'40001'});}});
+  await assert.rejects(sync.flush(),/连续发生同步冲突/);
+  assert.ok(commits<=3);
+  assert.equal(rows[0].lastFailureClass,'conflict');
+  await sync.resumeScheduled();
+  await sync.resume();
+  assert.ok(commits<=3);
+});
 test('background sync excludes confirmed conflict batches from preparation and coalescing',async()=>{
   let revision=7,rows=[{record:{id:'old',key:'shared'},serial:1,baseRevision:1,operationID:'old-op'}];
   const prepared=[],uploaded=[];

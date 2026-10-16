@@ -135,10 +135,21 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
         const position=move(child.x,child.y);
         child.x=position.x;child.y=position.y;
         if(child.type==='material'){
-          // Physical inventory keeps its real size; resizing the group changes
-          // the arrangement between materials, not the materials themselves.
-          child.rotation=finite(child.rotation)+rotation;
-          child.userOverrideFlags=[...new Set([...(child.userOverrideFlags||[]),'moved'])];
+          // A manual group transform changes visual placement, never the
+          // crop/source geometry used by the physical material ledger.
+          const radians=finite(child.rotation)*Math.PI/180;
+          const widthAxis=vector(Math.cos(radians),Math.sin(radians));
+          const heightAxis=vector(-Math.sin(radians),Math.cos(radians));
+          const widthScale=Math.hypot(widthAxis.x,widthAxis.y);
+          const heightScale=Math.hypot(heightAxis.x,heightAxis.y);
+          if(Math.abs(widthScale-1)>1e-6||Math.abs(heightScale-1)>1e-6){
+            child.width=positive(child.width)*widthScale;
+            child.height=positive(child.height)*heightScale;
+            child.manualVisualResize=true;
+          }
+          child.rotation=Math.atan2(widthAxis.y,widthAxis.x)*180/Math.PI;
+          child.userOverrideFlags=[...new Set([...(child.userOverrideFlags||[]),'moved',
+            ...(child.manualVisualResize?['resized']:[])])];
         }else{
           if(Math.abs(scaleX-1)<1e-9&&Math.abs(scaleY-1)<1e-9){
             child.rotation=finite(child.rotation)+rotation;
@@ -311,10 +322,16 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
         node.x=center.x-Math.sin(angle)*offset;
         node.y=center.y+Math.cos(angle)*offset;
       }else{node.x=center.x;node.y=center.y;}
+      const previousWidth=node.width,previousHeight=node.height;
       node.width=(node.type==='shape'?object.sceneFrameWidth:object.width)*object.scaleX;
       node.height=node.type==='text'?textFrame:
         (node.type==='shape'?object.sceneFrameHeight:object.height)*object.scaleY;
       node.rotation=object.angle||0;
+      if(node.type==='material'&&
+        (Math.abs(node.width-previousWidth)>1e-5||Math.abs(node.height-previousHeight)>1e-5)){
+        node.manualVisualResize=true;
+        node.userOverrideFlags=[...new Set([...(node.userOverrideFlags||[]),'resized'])];
+      }
       if(node.type==='text'){
         // The bottom-right grip scales the whole text object. Persist its
         // typography along with its frame; a side grip only changes reflow.

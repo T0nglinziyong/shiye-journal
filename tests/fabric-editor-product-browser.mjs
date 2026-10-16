@@ -349,8 +349,8 @@ try{
     type:'mouseMoved',button:'left',buttons:1,...point});
   await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,...lasso[0]});
   await sleep(200);
-  assert.ok(await evaluate('!!document.querySelector("[aria-label=复制套选对象]")&&!!document.querySelector("[aria-label=删除套选对象]")&&!!document.querySelector("[aria-label=合并套选图层]")'),
-    'Lasso selection must expose copy, delete and merge controls');
+  assert.ok(await evaluate('!!document.querySelector("[aria-label=复制套选对象]")&&!!document.querySelector("[aria-label=删除套选对象]")&&!!document.querySelector("[aria-label=组合所选对象]")'),
+    'Lasso selection must expose copy, delete and group controls');
   const shapeBeforeMove=(await projects())[0].drafts[0].layers.find(layer=>layer.id===shapes[0].id).x;
   const center={x:(lasso[0].x+lasso[2].x)/2,y:(lasso[0].y+lasso[2].y)/2};
   await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,clickCount:1,...center});
@@ -374,9 +374,25 @@ try{
     'The single bottom-right lasso control rotates selected Scene objects as one unit');
   assert.notEqual(turnedShape.width,shapes[0].width,
     'The same bottom-right lasso control also scales selected Scene objects');
-  await click('[aria-label=合并套选图层]');await sleep(700);
+  await click('[aria-label=组合所选对象]');await sleep(700);
   assert.equal((await projects())[0].drafts[0].layers.filter(layer=>layer.type==='group').length,1,
     'Merging lasso selected Scene nodes must persist');
+  await wait('.fabric-selected-actions [aria-label="解开组合"]');
+  assert.ok(await evaluate('!!document.querySelector("[aria-label=复制组合]")&&!!document.querySelector("[aria-label=删除组合]")'),
+    'A saved group must expose the same three floating actions as a single object');
+  await click('[aria-label="解开组合"]');await sleep(500);
+  assert.equal((await projects())[0].drafts[0].layers.filter(layer=>layer.type==='group').length,0);
+  await wait('.fabric-selected-actions [aria-label="组合所选对象"]');
+  await click('[aria-label="组合所选对象"]');await sleep(500);
+  assert.equal((await projects())[0].drafts[0].layers.filter(layer=>layer.type==='group').length,1,
+    'The selected objects can be regrouped without drawing another lasso');
+  await wait('.fabric-selected-actions [aria-label="复制组合"]');
+  await click('[aria-label="复制组合"]');await sleep(500);
+  assert.equal((await projects())[0].drafts[0].layers.filter(layer=>layer.type==='group').length,2,
+    'Copying the group duplicates its Scene subtree');
+  await click('[aria-label="删除组合"]');await sleep(500);
+  assert.equal((await projects())[0].drafts[0].layers.filter(layer=>layer.type==='group').length,1,
+    'Deleting the selected copy leaves the original group intact');
   await click('[data-val="layers"]','.scene-layer-tree');
   if(!await evaluate('!!document.querySelector(".scene-layer-children .scene-layer-node")'))
     await click('.scene-layer-node[aria-expanded] .scene-layer-expand');
@@ -406,6 +422,22 @@ try{
   await click('.swift-material-picker .swift-segments button:last-child');
   await click('[data-material-id="fabric-product-material"]');await sleep(700);
   assert.equal((await projects())[0].drafts[0].layers.filter(layer=>layer.type==='material').length,1);
+  const beforeMaterial=(await projects())[0].drafts[0];
+  const originalMaterial=beforeMaterial.layers.find(layer=>layer.type==='material');
+  const materialEdge=await evaluate(`(()=>{const r=document.querySelector('.upper-canvas').getBoundingClientRect();
+    const item=${JSON.stringify(originalMaterial)},page=${JSON.stringify(beforeMaterial.canvas)};
+    return {x:r.left+(item.x+item.width/2)*r.width/page.width,
+      y:r.top+item.y*r.height/page.height}})()`);
+  await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,clickCount:1,...materialEdge});
+  await command('Input.dispatchMouseEvent',{type:'mouseMoved',button:'left',buttons:1,
+    x:materialEdge.x+30,y:materialEdge.y});
+  await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,
+    x:materialEdge.x+30,y:materialEdge.y,clickCount:1});
+  const resizedMaterial=(await waitProjects(rows=>rows[0]?.drafts?.[0]?.layers
+    ?.find(layer=>layer.id===originalMaterial.id)?.manualVisualResize))[0].drafts[0].layers
+    .find(layer=>layer.id===originalMaterial.id);
+  assert.ok(resizedMaterial.width>originalMaterial.width&&resizedMaterial.assetID===originalMaterial.assetID,
+    'Manual material resize must persist without changing its source asset');
   await click('[aria-label="编辑对象"]','.show-inspector');
   await click('.editor-inspector-geometry summary','.editor-crop-slider');
   assert.equal(await evaluate('!!document.querySelector(".editor-inspector-geometry textarea")'),false,

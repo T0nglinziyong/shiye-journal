@@ -32,7 +32,8 @@ export function creativeScene(d,aliases={}){
    if(n.type==='group')return {...style,name:n.name,children:walk(n.children)};
    if(n.type==='ink')return {...style,stroke:{points:n.points?.length||0,width:n.width,color:n.color,penStyle:n.penStyle},zIndex:n.zIndex};
    const base={...style,x:norm(n.x,'width'),y:norm(n.y,'height'),width:norm(n.width,'width'),height:norm(n.height,'height'),rotation:n.rotation||0,zIndex:n.zIndex??0};
-   if(n.type==='material')return {...base,asset:map[n.assetID]||'未授权素材',cropRect:n.cropRect||null,materialMask:n.materialMask||null,sourceUnit:n.materialUnitIndex??0};
+   if(n.type==='material')return {...base,asset:map[n.assetID]||'未授权素材',cropRect:n.cropRect||null,materialMask:n.materialMask||null,sourceUnit:n.materialUnitIndex??0,
+     ...(n.manualVisualCopy?{manualVisualCopy:true}:{})};
    if(n.type==='text')return {...base,content:n.content,fontSize:n.fontSize,fontName:n.fontName||null,color:n.color,style:n.style};
    return {...base,kind:n.kind,fill:n.fill,stroke:n.stroke,vectorPaths:n.vectorPaths||null,vectorLayers:n.vectorLayers||null};
  });

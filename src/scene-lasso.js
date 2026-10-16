@@ -101,8 +101,11 @@ export function transformSceneLasso(draft,ids,center,scale,degrees){
           'additionalLineSpacing','paragraphSpacing','letterSpacing'])
           if(Number.isFinite(node[field]))node[field]*=scale;
         if(node.type==='shape'&&Number.isFinite(node.lineWidth))node.lineWidth*=scale;
-        if(node.type==='material')node.userOverrideFlags=[...new Set([...(node.userOverrideFlags||[]),
-          'moved',...(degrees?['rotated']:[]),...(scale!==1?['resized']:[])])];
+        if(node.type==='material'){
+          if(scale!==1)node.manualVisualResize=true;
+          node.userOverrideFlags=[...new Set([...(node.userOverrideFlags||[]),
+            'moved',...(degrees?['rotated']:[]),...(scale!==1?['resized']:[])])];
+        }
       });
     }
   }

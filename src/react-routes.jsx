@@ -17,6 +17,7 @@ import {fabricPointer} from './fabric-pointer.js';
 import {selectableFabricObjectAt} from './fabric-hit-test.js';
 import {SceneCover} from './scene-cover.jsx';
 import {findSceneNode} from './scene-v2.js';
+import {selectionGroupID} from './scene-selection-actions.js';
 import {WORK_TABS,workInTab} from './work-collections.js';
 import {catalogDataPage,catalogVisibleItems,pageSize,pageSlice,setCatalogDataPage} from './catalog-pagination.js';
 import {searchableSeries} from './library-model.js';
@@ -1182,7 +1183,7 @@ function EditorAIPanel({state,draft,asset,hasReport,onAction,onPromptChange}){
   </section>;
 }
 
-function FabricSelectedActions({bounds,draft,onAction,lasso=false,count=0}){
+function FabricSelectedActions({bounds,draft,onAction,mode='object',canUngroup=false,count=0}){
   const [position,setPosition]=useState(null);
   useEffect(()=>{
     if(!bounds){setPosition(null);return;}
@@ -1194,7 +1195,7 @@ function FabricSelectedActions({bounds,draft,onAction,lasso=false,count=0}){
       const rect=canvas.getBoundingClientRect();
       const selected=editorFabricCanvases.get(draft.id)?.getActiveObject();
       const corners=selected?.calcACoords?.();
-      const anchor=!lasso&&corners?.tl&&corners?.tr?{x:(corners.tl.x+corners.tr.x)/2,
+      const anchor=mode!=='selection'&&corners?.tl&&corners?.tr?{x:(corners.tl.x+corners.tr.x)/2,
         y:(corners.tl.y+corners.tr.y)/2}:{x:currentBounds.x+currentBounds.width/2,y:currentBounds.y};
       const center=rect.left+anchor.x*rect.width/draft.canvas.width;
       const edge=rect.top+anchor.y*rect.height/draft.canvas.height;
@@ -1215,17 +1216,19 @@ function FabricSelectedActions({bounds,draft,onAction,lasso=false,count=0}){
     return ()=>{cancelAnimationFrame(frame);observer.disconnect();resize.disconnect();removeEventListener('resize',place);
       removeEventListener('scroll',place,true);canvas.removeEventListener('shiye:fabric-object-transform',move);
       page.removeEventListener('panzoomchange',place);};
-  },[bounds?.x,bounds?.y,bounds?.width,bounds?.height,draft.id,draft.canvas.width,draft.canvas.height,lasso]);
+  },[bounds?.x,bounds?.y,bounds?.width,bounds?.height,draft.id,draft.canvas.width,draft.canvas.height,mode]);
   if(!position)return null;
-  return createPortal(lasso?<div className="fabric-selected-actions" style={position} aria-label="套索选区操作">
-    <button type="button" aria-label="复制套选对象" onClick={()=>onAction('fabric-lasso-copy')}/>
-    <button type="button" aria-label="删除套选对象" onClick={()=>onAction('fabric-lasso-delete')}/>
-    <button type="button" aria-label="合并套选图层" disabled={count<2}
-      onClick={()=>onAction('fabric-lasso-merge')}/>
-  </div>:<div className="fabric-selected-actions" style={position} aria-label="选中对象操作">
-    <button type="button" aria-label="复制对象" onClick={()=>onAction('duplicate')}/>
-    <button type="button" aria-label="编辑对象" onClick={()=>onAction('fabric-inspector-open')}/>
-    <button type="button" aria-label="删除对象" onClick={()=>onAction('delete-object')}/>
+  const collective=mode==='selection',group=mode==='group';
+  return createPortal(<div className="fabric-selected-actions" style={position}
+    aria-label={collective?'选区操作':group?'组合操作':'选中对象操作'}>
+    <button type="button" aria-label={collective?'复制套选对象':group?'复制组合':'复制对象'}
+      onClick={()=>onAction(collective?'fabric-lasso-copy':group?'fabric-group-copy':'duplicate')}/>
+    <button type="button" aria-label={collective||group?
+      canUngroup?'解开组合':'组合所选对象':'编辑对象'}
+      disabled={collective&&!canUngroup&&count<2}
+      onClick={()=>onAction(collective||group?'fabric-selection-toggle-group':'fabric-inspector-open')}/>
+    <button type="button" aria-label={collective?'删除套选对象':group?'删除组合':'删除对象'}
+      onClick={()=>onAction(collective?'fabric-lasso-delete':group?'fabric-group-delete':'delete-object')}/>
   </div>,document.body);
 }
 
@@ -1241,6 +1244,9 @@ export function EditorPage({state,draft,editorEntry,asset,source,format,
   const selected=editorEntry(draft).find(entry=>entry.value.id===state.selected)||
     (findSceneNode(draft,state.selected)?.type==='ink'
       ?{kind:'ink',value:findSceneNode(draft,state.selected)}:null);
+  const selectedGroup=findSceneNode(draft,state.selected)?.type==='group';
+  const selectedIDs=state.multiSelected||[];
+  const canUngroup=!!selectionGroupID(draft,selectedIDs);
   const viewportHeight=window.visualViewport?.height||window.innerHeight;
   const availableWidth=Math.max(180,window.innerWidth-(window.innerWidth<700?24:72));
   const availableHeight=Math.max(180,viewportHeight-(window.innerWidth<700?200:166));
@@ -1260,11 +1266,13 @@ export function EditorPage({state,draft,editorEntry,asset,source,format,
     </div></div>
     <FabricEditorToolbar state={state} draft={draft} materials={materials} source={source}
       selected={selected} onInspectorChange={onInspectorChange} onAction={onAction}/>
-    {state.tool==='lasso'&&(state.multiSelected||[]).length?<FabricSelectedActions lasso count={state.multiSelected.length}
-      bounds={state.fabricSelectionBounds} draft={draft} onAction={onAction}/>:null}
-    {state.tool==='select'&&(state.multiSelected||[]).length>1?<FabricSelectedActions lasso
-      count={state.multiSelected.length} bounds={state.fabricSelectionBounds}
+    {state.tool==='lasso'&&selectedIDs.length?<FabricSelectedActions mode="selection" count={selectedIDs.length}
+      canUngroup={canUngroup} bounds={state.fabricSelectionBounds} draft={draft} onAction={onAction}/>:null}
+    {state.tool==='select'&&selectedIDs.length>1?<FabricSelectedActions mode="selection"
+      count={selectedIDs.length} canUngroup={canUngroup} bounds={state.fabricSelectionBounds}
       draft={draft} onAction={onAction}/>:null}
+    {selectedGroup&&state.tool==='select'&&!state.fabricInspectorOpen?<FabricSelectedActions mode="group"
+      canUngroup bounds={state.fabricSelectionBounds} draft={draft} onAction={onAction}/>:null}
     {selected&&state.tool==='select'&&!state.fabricInspectorOpen?<FabricSelectedActions bounds={state.fabricSelectionBounds}
       draft={draft} onAction={onAction}/>:null}
     <div className={`editor-shell swift-editor-workspace ${selected&&state.fabricInspectorOpen?'show-inspector':''}`}

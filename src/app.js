@@ -15,6 +15,7 @@ const renderSceneCanvas=async(...args)=>(await sceneRuntime()).renderSceneCanvas
 const decodeSceneImage=async(...args)=>(await sceneRuntime()).decodeSceneImage(...args);
 import {sceneLayerEntries,attachSceneV2,moveSceneNode,groupSceneLayers,ungroupSceneLayers,findSceneNode,assertSceneEditable,validateVectorMask} from './scene-model.js';
 import {copySceneLasso,deleteSceneLasso,mergeSceneLasso,sceneLassoBounds} from './scene-lasso.js';
+import {selectionGroupID,duplicateSceneGroup,deleteSceneGroup} from './scene-selection-actions.js';
 import {arrangeSceneSelection} from './scene-arrangement.js';
 import './styles.css';
 import './overrides.css';
@@ -915,13 +916,18 @@ function updateEditorInspector(id,value){
       .find(item=>item.value.id===entry.value.id)?.value;
     if(!candidate)throw Error('目标图层已变化');
     const apply=node=>{
+      const oldCrop=node.cropRect||{width:1,height:1};
       node.cropRect=crop.x===0&&crop.y===0&&crop.width===1&&crop.height===1?null:structuredClone(crop);
       node.materialMask=mask?structuredClone(mask):null;
       if(displaySlices)node.craftDisplaySlices=structuredClone(displaySlices);
       else delete node.craftDisplaySlices;
       const scale=d.canvas.height/(d.physicalPageHeightMM||297);
-      node.width=crop.width*record.physicalWidthMM*scale;
-      node.height=crop.height*record.physicalHeightMM*scale;
+      const oldSourceWidth=oldCrop.width*record.physicalWidthMM*scale;
+      const oldSourceHeight=oldCrop.height*record.physicalHeightMM*scale;
+      const visualScaleX=node.manualVisualResize?node.width/oldSourceWidth:1;
+      const visualScaleY=node.manualVisualResize?node.height/oldSourceHeight:1;
+      node.width=crop.width*record.physicalWidthMM*scale*visualScaleX;
+      node.height=crop.height*record.physicalHeightMM*scale*visualScaleY;
       node.manualGeometryOverride=true;
       node.userOverrideFlags=[...new Set([...(node.userOverrideFlags||[]),'cropRect','materialMask','craftDisplaySlices'])];
     };
@@ -1344,7 +1350,10 @@ async function runAppAction(action,id,value){try{switch(action){
   case 'fabric-lasso-copy':{
     const d=current(),ids=state.multiSelected||[];if(!d||!ids.length)break;
     ids.forEach(key=>assertSceneEditable(d,key));
-    checkpoint();copySceneLasso(d,ids,uid);state.selected=null;state.multiSelected=[];
+    checkpoint();const copies=copySceneLasso(d,ids,uid);
+    state.tool='select';
+    state.selected=copies.length===1?copies[0]:null;state.multiSelected=copies;
+    state.fabricSelectionBounds=sceneLassoBounds(d,copies);
     saveProject();render();break;
   }
   case 'fabric-lasso-delete':{
@@ -1356,8 +1365,51 @@ async function runAppAction(action,id,value){try{switch(action){
   case 'fabric-lasso-merge':{
     const d=current(),ids=state.multiSelected||[];if(!d||ids.length<2)break;
     ids.forEach(key=>assertSceneEditable(d,key));
-    checkpoint();mergeSceneLasso(d,ids,{id:'group-'+uid()});
-    state.selected=null;state.multiSelected=[];saveProject();render();break;
+    checkpoint();const groupID=mergeSceneLasso(d,ids,{id:'group-'+uid()});
+    state.tool='select';state.selected=groupID;state.multiSelected=[groupID];
+    state.fabricSelectionBounds=sceneLassoBounds(d,sceneLayerEntries(d,{hidden:true})
+      .filter(entry=>entry.parents.some(parent=>parent.id===groupID)).map(entry=>entry.value.id));
+    saveProject();render();break;
+  }
+  case 'fabric-selection-toggle-group':{
+    const d=current(),ids=[...new Set(state.multiSelected||[])];if(!d||!ids.length)break;
+    const groupID=selectionGroupID(d,ids);
+    if(groupID){
+      assertSceneEditable(d,groupID);
+      const group=findSceneNode(d,groupID),children=[...(group.children||[])].map(child=>child.id);
+      checkpoint();ungroupSceneLayers(d,groupID);state.tool='select';
+      state.selected=children.length===1?children[0]:null;state.multiSelected=children;
+      state.fabricSelectionBounds=sceneLassoBounds(d,sceneLayerEntries(d,{hidden:true})
+        .filter(entry=>children.includes(entry.value.id)||
+          entry.parents.some(parent=>children.includes(parent.id))).map(entry=>entry.value.id));
+    }else{
+      if(ids.length<2)break;
+      ids.forEach(key=>assertSceneEditable(d,key));
+      checkpoint();const next=ids.some(key=>findSceneNode(d,key)?.type==='group')?
+        groupSceneLayers(d,ids,{id:'group-'+uid(),name:'手帐组合'}):
+        mergeSceneLasso(d,ids,{id:'group-'+uid()});
+      state.tool='select';state.selected=next;state.multiSelected=[next];
+      state.fabricSelectionBounds=sceneLassoBounds(d,sceneLayerEntries(d,{hidden:true})
+        .filter(entry=>entry.parents.some(parent=>parent.id===next)).map(entry=>entry.value.id));
+    }
+    saveProject();render();break;
+  }
+  case 'fabric-group-copy':{
+    const d=current(),groupID=state.selected;if(!d||findSceneNode(d,groupID)?.type!=='group')break;
+    const trial=attachSceneV2(structuredClone(d));
+    duplicateSceneGroup(trial,groupID,()=>uid());
+    validateScenePhysical(trial,state.assets);
+    checkpoint();const next=duplicateSceneGroup(d,groupID,uid);
+    state.selected=next;state.multiSelected=[next];
+    state.fabricSelectionBounds=sceneLassoBounds(d,sceneLayerEntries(d,{hidden:true})
+      .filter(entry=>entry.parents.some(parent=>parent.id===next)).map(entry=>entry.value.id));
+    saveProject();render();break;
+  }
+  case 'fabric-group-delete':{
+    const d=current(),groupID=state.selected;if(!d||findSceneNode(d,groupID)?.type!=='group')break;
+    assertSceneEditable(d,groupID);checkpoint();deleteSceneGroup(d,groupID);
+    state.selected=null;state.multiSelected=[];state.fabricSelectionBounds=null;
+    saveProject();render();break;
   }
   case 'fabric-arrange-selection':{
     const d=current(),ids=[...new Set(state.multiSelected||[])];

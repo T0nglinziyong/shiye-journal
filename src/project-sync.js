@@ -204,6 +204,7 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
       // newer row still runs through its own revision reconciliation/CAS.
       const blockedKeys=[];
       const conflictIDs=force?new Set():new Set(conflicts);
+      const passes=new Map();
       let firstFailure=null;
       while(entries.size&&!paused){
         const row=orderedRows().find(item=>!blocked.has(item.record.id)&&item.serial<=windowSerial&&
@@ -211,6 +212,12 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
         if(!row)break;
         diagnose('start',row);
         try {
+        const pass=(passes.get(row.record.id)||0)+1;
+        passes.set(row.record.id,pass);
+        // A bad merge/rebase result must not retry the same durable row in a
+        // tight loop and saturate the shared account database for every device.
+        if(pass>3){const repeated=Error('同一记录连续发生同步冲突；已暂停自动重试，可在同步详情中处理');
+          repeated.code='40001';throw repeated;}
         // A restarted queue must not overwrite changes made by another device.
         if(!authoritativeCommit&&row.baseRevision!==revision()){
           diagnose('reconcile',row);

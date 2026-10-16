@@ -146,7 +146,7 @@ test('Fabric group move and rotation write through to absolute Scene child geome
   assert.deepEqual(node.children,snapshot);
 });
 
-test('group resize keeps physical material sizes while scaling the arrangement',async()=>{
+test('manual group resize scales material appearance without changing its source identity',async()=>{
   const image=createCanvas(20,20);image.getContext('2d').fillRect(0,0,20,20);
   const grouped=createFabricSceneBridge(fabric,{assetURL:()=>image.toDataURL()});
   const node={id:'arrangement',type:'group',children:[
@@ -156,8 +156,10 @@ test('group resize keeps physical material sizes while scaling the arrangement',
   const object=await grouped.fromNode(node);
   object.set({scaleX:1.5,scaleY:1.5});
   grouped.applyObject(node,object);
-  assert.equal(node.children[0].width,40);
-  assert.equal(node.children[0].height,30);
+  assert.equal(node.children[0].width,60);
+  assert.equal(node.children[0].height,45);
+  assert.equal(node.children[0].manualVisualResize,true);
+  assert.equal(node.children[0].assetID,'a');
   assert.equal(node.children[1].width,120);
   assert.equal(node.children[1].fontSize,30);
   assert.ok(node.children[1].x-node.children[0].x>100);
@@ -195,6 +197,7 @@ test('Fabric material edge controls resize its Scene placement and keep the sour
     'The single bottom-right grip must scale and rotate together');
   bridge.applyObject(node,object);
   assert.ok(node.width>200&&node.rotation>3);
+  assert.equal(node.manualVisualResize,true);
   assert.equal(node.assetID,'asset-1');
 });
 

@@ -246,7 +246,14 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
           for(const id of signatures.keys())if(!present.has(id)){
             signatures.delete(id);sceneVersions.set(id,(sceneVersions.get(id)||0)+1);
           }
-          for(const object of canvas.getObjects())if(object.sceneRenderKey&&!present.has(object.sceneRenderKey))canvas.remove(object);
+          const obsolete=canvas.getObjects().filter(object=>object.sceneRenderKey&&!present.has(object.sceneRenderKey));
+          if(obsolete.length){
+            // Replacing a grouped Scene tree removes its old Fabric object.
+            // That removal is not a user request to clear the new selection.
+            syncingSelection.current=true;
+            for(const object of obsolete)canvas.remove(object);
+            syncingSelection.current=false;
+          }
           for(const [sceneIndex,node] of sorted.entries()){
             const key=renderKey(node);
             const next=snapshot(node);

@@ -15,24 +15,42 @@ export async function startCloudSession(onReady){
   if(!cloudEnabled){document.querySelector('#app').hidden=false;await onReady(null);return;}
   const app=document.querySelector('#app');app.hidden=true;
   const client=cloudClient();
-  const gate={visible:false,status:'正在恢复登录…'};
-  const showGate=patch=>{Object.assign(gate,patch);renderLoginGate({...gate,onLogin:login});};
+  const gate={visible:false,status:'正在恢复登录…',retryReady:false};
+  const showGate=patch=>{Object.assign(gate,patch);renderLoginGate({...gate,onLogin:login,onRetry:retry});};
+  const hasSession=async()=>{
+    let timer;
+    try{return !!(await Promise.race([client.auth.getSession(),new Promise(resolve=>{
+      timer=setTimeout(()=>resolve(null),2500);
+    })]))?.data?.session;}
+    catch{return false;}
+    finally{clearTimeout(timer);}
+  };
+  async function retry(){
+    showGate({visible:false,status:'正在重新核对账号…'});
+    try{await enter();}
+    catch(error){showGate({visible:true,retryReady:true,status:error.message||'连接暂时不可用，请重试'});}
+  }
   async function login(username,password){
     showGate({status:'正在验证账号…'});
+    let signedIn=false;
     try{
       const {error}=await client.auth.signInWithPassword({
         email:emailForLogin(username),password
       });
-      if(error)throw Error('用户名或密码不正确');
+      if(error){
+        if(error.code==='invalid_credentials')throw Error('用户名或密码不正确');
+        throw Error(error.message||'登录服务暂时不可用，请稍后重试');
+      }
+      signedIn=true;
       await enter();
-    }catch(error){showGate({visible:true,status:error.message||'登录失败，请检查网络'});}
+    }catch(error){
+      showGate({visible:true,retryReady:signedIn||await hasSession(),
+        status:error.message||'登录失败，请检查网络'});
+    }
   }
   showGate({});
   async function enter(){
-    const user=await requireCloudUser();
-    const {data:account,error}=await client.from('shiye_accounts').select('username,is_admin')
-      .eq('user_id',user.id).single();
-    if(error||!account)throw Error('无法读取账号资料');
+    const {user,account}=await requireCloudUser({withAccount:true});
     const wipeOldLocalData=async()=>{
       window.dispatchEvent(new Event('shiye-account-reset-detected'));
       await cloudCloseCacheBeforeRemoteReset();
@@ -111,6 +129,8 @@ export async function startCloudSession(onReady){
     });
   }
   try{await enter();}
-  catch(error){showGate({visible:true,status:error.status===401?
-    '登录后，同一浏览器会自动保持登录，直到主动退出。':error.message});}
+  catch(error){
+    showGate({visible:true,retryReady:await hasSession(),status:error.status===401?
+      '登录后，同一浏览器会自动保持登录，直到主动退出。':error.message});
+  }
 }

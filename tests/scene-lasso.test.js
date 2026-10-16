@@ -65,6 +65,15 @@ test('one lasso transform scales and rotates every selected object around the sa
   assert.ok(bounds.width>0&&bounds.height>0);
 });
 
+test('manual lasso scaling marks a material as visually resized',()=>{
+  const draft=fixture();
+  draft.layers.push({id:'material',type:'material',assetID:'source',x:200,y:200,width:40,height:30});
+  assert.equal(transformSceneLasso(draft,['material'],{x:200,y:200},1.5,0),true);
+  const item=draft.layers.at(-1);
+  assert.equal(item.width,60);
+  assert.equal(item.manualVisualResize,true);
+});
+
 test('merge moves selected leaves from different parent subtrees into one group',()=>{
   const draft=fixture();
   const id=mergeSceneLasso(draft,['shape','ink'],{id:'merged'});
