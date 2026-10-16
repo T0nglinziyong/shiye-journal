@@ -1,4 +1,4 @@
-import {Zip,ZipPassThrough,Unzip,UnzipInflate} from 'fflate';
+import {Zip,ZipPassThrough,Unzip} from 'fflate';
 import {sha256} from '@noble/hashes/sha2.js';
 import {supportedSchema,CURRENT_DATA_SCHEMA} from './storage-migrations.js';
 
@@ -96,6 +96,13 @@ async function restore(file){
   const files=new Map();let total=0,count=0,streamError=null;
   const unzip=new Unzip(entry=>{
     if(streamError)return;
+    // Complete backups are emitted with ZIP store (method 0). Rejecting
+    // deflate also prevents a tiny compressed input from consuming the whole
+    // 256 MiB expansion budget before its manifest can be authenticated.
+    if(entry.compression!==0){
+      streamError=Error('ZIP 包含不受支持的压缩文件；请选择拾页导出的完整备份');
+      entry.terminate();return;
+    }
     if(!safeName(entry.name)||files.has(entry.name)||++count>MAX_ENTRIES){
       streamError=Error('ZIP 包含非法、重复或过多的文件');entry.terminate();return;
     }
@@ -110,7 +117,6 @@ async function restore(file){
     };
     entry.start();
   });
-  unzip.register(UnzipInflate);
   const reader=file.stream().getReader();
   try{
     for(;;){

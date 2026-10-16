@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
 import {browserHarness} from './browser-harness.mjs';
+import {zipSync} from 'fflate';
 
 const target=process.env.SHIYE_TEST_URL||'http://127.0.0.1:5192';
 if(!['127.0.0.1','localhost'].includes(new URL(target).hostname))throw Error('备份恢复测试只允许本机隔离站，拒绝对线上资料写入');
+const compressedBase64=Buffer.from(zipSync({'manifest.json':new TextEncoder().encode('X'.repeat(100000))},
+  {level:6})).toString('base64');
 const b=await browserHarness('shiye-backup-archive',target);
 try{
   await b.wait('.series-grid');
@@ -49,6 +52,11 @@ try{
     let sizeRejected=false;
     try{await readZipBackup(oversized);}catch(error){sizeRejected=/256 MB/.test(error.message);}
     if(!sizeRejected)throw Error('oversized ZIP was not rejected before restore');
+    const compressed=Uint8Array.from(atob('${compressedBase64}'),char=>char.charCodeAt(0));
+    let compressedRejected=false;
+    try{await readZipBackup(new Blob([compressed]));}
+    catch(error){compressedRejected=/不受支持的压缩文件/.test(error.message);}
+    if(!compressedRejected)throw Error('compressed ZIP was allowed to expand');
     // End-to-end: browser IDB and store.restoreBackup() must preserve exact
     // bytes, then reject a damaged ZIP without clearing the last good copy.
     const store=await import('/src/store.js');
@@ -73,6 +81,15 @@ try{
     try{await store.restoreBackup(new Blob([broken]));}catch{legacyRejected=true;}
     if(!legacyRejected||(await store.get('assets',id))?.title!=='latest-owned-record')
       throw Error('corrupt ZIP overwrote an existing record');
+    // The same six-store transaction primitive used by restore must roll
+    // back a failure even after its first destructive request was queued.
+    let aborted=false;
+    try{await store.confirmedTransaction(['assets','blobs','series','projects','meta','trash'],tx=>{
+      tx.objectStore('assets').clear();
+      throw Error('injected restore interruption');
+    });}catch(error){aborted=/injected restore interruption/.test(error.message);}
+    if(!aborted||(await store.get('assets',id))?.title!=='latest-owned-record')
+      throw Error('aborted restore transaction did not preserve the original library');
     return {blobSize:output.size,tables:Object.keys(recovered).length,heartbeats};
 
   })()`);
