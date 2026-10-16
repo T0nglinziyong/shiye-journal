@@ -431,26 +431,33 @@ const unifiedSync=createProjectSync({
   onStatus:reportSync,
   onDiagnostic:event=>syncDiagnostics.record(event),
   runExclusive:withAccountSyncLock,
+  requiresPrepare:envelope=>envelope.kind==='batch'&&(
+    envelope.payload.operations?.some(op=>op.store==='blobs'&&op.action==='put')||
+    envelope.payload.blobs?.length>0),
   prepare:async (envelopes,rows)=>{
-    const failures=new Map();
-    await Promise.all(envelopes.map(async(envelope,index)=>{
-      if(envelope.kind!=='batch')return;
+    const failures=new Map(),puts=[];
+    for(const [index,envelope] of envelopes.entries()){
+      if(envelope.kind!=='batch')continue;
       const batch=envelope.payload;
       const operations=batch.operations||['assets','blobs','projects'].flatMap(store=>(batch[store]||[])
         .map(item=>({action:'put',store,item})));
       const auxiliary=auxiliaryBlobIDs(operations);
-      const puts=[];
       for(const op of operations)if(op.action==='put'&&op.store==='blobs')
-        puts.push({item:op.item,makePreview:!auxiliary.has(op.item.id)});
-      // Keep failures scoped to their own durable record. Successful blobs
-      // remain memoized by path and the metadata commit can proceed without
-      // re-uploading them. A failed record is retried in a later sync pass.
-      const results=await Promise.allSettled(puts.map(op=>
+        puts.push({item:op.item,makePreview:!auxiliary.has(op.item.id),
+          operationID:rows[index].operationID});
+    }
+    // At most three large Blob reads/hashes may be live on mobile Safari.
+    // Failed images are recorded by durable operation ID rather than retried
+    // again under the account lock. Other records remain independent.
+    for(let offset=0;offset<puts.length;offset+=3){
+      const chunk=puts.slice(offset,offset+3),results=await Promise.allSettled(chunk.map(op=>
         encode('blobs',op.item,{makePreview:op.makePreview})));
-      const failure=results.find(result=>result.status==='rejected');
-      if(failure)failures.set(rows[index].operationID,
-        markSyncPhase(failure.reason||Error('图片预上传失败'),'预上传图片'));
-    }));
+      results.forEach((result,index)=>{
+        if(result.status==='rejected'&&!failures.has(chunk[index].operationID))
+          failures.set(chunk[index].operationID,
+            markSyncPhase(result.reason||Error('图片预上传失败'),'预上传图片'));
+      });
+    }
     return failures;
   },
   recordKeys:syncAffectedKeys,

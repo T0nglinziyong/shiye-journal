@@ -15,7 +15,7 @@ function retryDelay(attempt,operationID){
 }
 // Durable edits are an explicit outbox, not a replacement for cloud records.
 // Commit acknowledgement is the only point at which an entry is removed.
-export function createProjectSync({load,write,commit,revision,reconcile=async()=> 'conflict',recordKeys=record=>[{store:'projects',id:record.id}],coalesce=()=>null,splitCoalesced=()=>null,onCommitted=()=>{},onConflict=async()=>null,onForked=()=>{},onReplaced=()=>{},onSuperseded=()=>{},onStatus=()=>{},onDiagnostic=()=>{},runExclusive=fn=>fn(),prepare=async()=>{},prepareLimit=Infinity,reload=load,authoritativeCommit=false,autoFlushDelayMs=0,setTimer=setTimeout,clearTimer=clearTimeout,clock=()=>Date.now()}){
+export function createProjectSync({load,write,commit,revision,reconcile=async()=> 'conflict',recordKeys=record=>[{store:'projects',id:record.id}],coalesce=()=>null,splitCoalesced=()=>null,onCommitted=()=>{},onConflict=async()=>null,onForked=()=>{},onReplaced=()=>{},onSuperseded=()=>{},onStatus=()=>{},onDiagnostic=()=>{},runExclusive=fn=>fn(),prepare=async()=>{},prepareLimit=Infinity,requiresPrepare=null,reload=load,authoritativeCommit=false,autoFlushDelayMs=0,setTimer=setTimeout,clearTimer=clearTimeout,clock=()=>Date.now()}){
   let initialized,staging=Promise.resolve(),network,serial=0,error,paused=false,rebuilding=false;
   let persistedRows=new Map();
   let conflicts=new Set();
@@ -198,6 +198,7 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
     if(paused)return Promise.resolve();
     if(network)return network;
     if(rebuilding)return Promise.resolve();
+    let preparedOperations=new Set(),preparedCycleComplete=false;
     network=(async()=>{
       await initialize();await staging;await refreshFromDisk();
       const readyRows=orderedRows().filter(row=>force||
@@ -207,9 +208,12 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
       // Immutable object bytes can transfer before the account revision lock.
       // Only reconciliation and the versioned metadata commit need that lock.
       const prepareAt=clock();diagnose('prepare-start');
-      const preparation=prioritizedRows(readyRows).slice(0,
+      const preparation=prioritizedRows(readyRows).filter(row=>
+        !requiresPrepare||requiresPrepare(row.record)).slice(0,
         Number.isFinite(prepareLimit)?Math.max(1,Math.floor(prepareLimit)):readyRows.length);
+      preparedOperations=new Set(preparation.map(row=>row.operationID));
       const preparationFailures=await prepare(preparation.map(row=>row.record),preparation);
+      preparedCycleComplete=true;
       diagnose('prepare-finished',null,null,clock()-prepareAt);
       const lockAt=clock();diagnose('lock-wait');
       return runExclusive(async()=>{
@@ -242,6 +246,7 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
       while(entries.size&&!paused){
         const row=prioritizedRows(orderedRows().filter(item=>
           !blocked.has(item.record.id)&&item.serial<=windowSerial&&
+          (!requiresPrepare||!requiresPrepare(item.record)||preparedOperations.has(item.operationID))&&
           !blockedKeys.some(keys=>overlaps(keys,recordKeys(item.record)))))[0];
         if(!row)break;
         diagnose('start',row);
@@ -430,7 +435,15 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
       // Publish the idle transition too, or the shell can show “上传中” with an
       // empty outbox until some unrelated edit causes another status event.
       report();
-      if(entries.size)scheduleAuto();
+      const unpreparedReady=preparedCycleComplete&&requiresPrepare&&[...entries.values()].some(row=>
+        !preparedOperations.has(row.operationID)&&requiresPrepare(row.record)&&
+        !conflicts.has(row.record.id)&&row.lastFailureClass!=='invalid'&&
+        (!row.nextAttemptAt||row.nextAttemptAt<=clock()));
+      if(entries.size&&!paused&&unpreparedReady){
+        // Continue the bounded image backlog immediately. The lock has been
+        // released; the next pair can upload bytes without holding it.
+        autoTimer=setTimer(()=>{autoTimer=null;void kick();},0);
+      }else if(entries.size)scheduleAuto();
     });
     network.catch(()=>{});return network;
   }

@@ -632,6 +632,26 @@ test('a failed preupload still acknowledges an already committed operation',asyn
     assert.equal(rows.length,0);
   }finally{sync.pause();}
 });
+test('a bounded preupload pass never uploads a third image while holding the lock',async()=>{
+  let revision=0,rows=['one','two','three'].map((id,index)=>({
+    record:{id,hasImage:true},serial:index+1,baseRevision:0,operationID:id+'-op'
+  }));
+  const prepared=new Set(),committed=[];
+  const sync=createProjectSync({load:async()=>structuredClone(rows),reload:async()=>structuredClone(rows),
+    write:async next=>{rows=structuredClone(next);},revision:()=>revision,prepareLimit:2,
+    requiresPrepare:record=>record.hasImage,
+    prepare:async(_records,batch)=>{for(const row of batch)prepared.add(row.operationID);},
+    reconcile:async()=> 'rebase',commit:async(record,operationID)=>{
+      assert.ok(prepared.has(operationID),'image bytes must be prepared outside the lock');
+      committed.push(record.id);revision++;
+    }
+  });
+  try{
+    await sync.flush();
+    assert.deepEqual(committed,['one','two','three']);
+    assert.equal(rows.length,0);
+  }finally{sync.pause();}
+});
 test('a fresh independent batch is not queued behind unrelated retries',async()=>{
   let revision=4,rows=[
     {record:{id:'old',key:'old'},serial:1,baseRevision:1,operationID:'old-op',attempt:3,nextAttemptAt:0},
