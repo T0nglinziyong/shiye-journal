@@ -8,8 +8,11 @@ export function cloudClient(){
   if(!url||!key)throw Error('云端配置不完整；未切换到本机存储');
   return client??=createClient(url,key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false},global:{fetch:async(input,init)=>{
     const path=input instanceof Request?input.url:String(input),method=(init?.method||(input instanceof Request?input.method:'GET')).toUpperCase();
-    const storage=/\/storage\/v1\/object\//.test(path),timeout=storage?['POST','PUT','PATCH'].includes(method)?180000:90000:30000;
-    return fetch(input,{...init,signal:init?.signal||AbortSignal.timeout(timeout)});
+    const storage=/\/storage\/v1\/object\//.test(path);
+    const authentication=/\/auth\/v1\/|\/rest\/v1\/shiye_accounts(?:\?|$)/.test(path);
+    const timeout=storage?['POST','PUT','PATCH'].includes(method)?180000:90000:authentication?12000:30000;
+    const deadline=AbortSignal.timeout(timeout);
+    return fetch(input,{...init,signal:init?.signal?AbortSignal.any([init.signal,deadline]):deadline});
   }}});
 }
 export async function requireCloudUser({withAccount=false}={}){
