@@ -1318,7 +1318,7 @@ export function EditorPage({state,draft,editorEntry,asset,source,format,
           active.containsPoint(point))return true;
         // Once selected, the whole group frame is the drag target. A gap
         // between its children must not start page navigation.
-        if(active?.sceneType==='group'&&active.sceneID===state.selected&&
+        if(active?.sceneID===state.selected&&
           active.containsPoint(point))return true;
         const selectedGroup=canvas.getObjects().find(object=>object.sceneID===state.selected&&
           object.sceneType==='group'&&object.selectable!==false);

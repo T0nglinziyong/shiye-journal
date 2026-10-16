@@ -111,6 +111,11 @@ try{
   await command('Input.insertText',{text:'拾页文字'});
   await sleep(700);
   assert.equal((await projects())[0].drafts[0].layers.find(layer=>layer.type==='text').content,'拾页文字');
+  await click('[aria-label="增大字号"]');await sleep(250);
+  await click('[aria-label="增大字号"]');await sleep(250);
+  assert.equal((await projects())[0].drafts[0].layers.find(layer=>layer.type==='text').fontSize,48,
+    'Text-tool property replacement keeps the selected text for consecutive edits');
+
   await click('[data-val="select"]');
   await click('[data-act="back-works"]','.works-grid');
   await click('[data-act="open-project"]','#canvas-page');

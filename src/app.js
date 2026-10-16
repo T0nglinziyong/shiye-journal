@@ -3,7 +3,7 @@ import {assetSourceRevision} from './material-anatomy.js';
 import {materialKindName} from './material-taxonomy.js';
 import {createElement} from 'react';
 import {BlankProjectDialog,ManualLayoutDialog,HelpDialog,OfflineImportDialog,MaterialPickerDialog,CreativeJSONDialog} from './react-utility-dialogs.jsx';
-import {SyncDetailsDialog,SyncConflictDialog,SyncErrorDialog,SyncMigrationDialog} from './react-sync-dialogs.jsx';
+import {SyncDetailsDialog,SyncErrorDialog,SyncMigrationDialog} from './react-sync-dialogs.jsx';
 import {OfflineHandoffLoading,OfflineHandoffReady,PreConflictDialog} from './react-offline-handoff.jsx';
 import {flushSync} from 'react-dom';
 import {createRoot} from 'react-dom/client';
@@ -3113,26 +3113,6 @@ async function runAccountStorageMigration(){
       onDiagnostics:exportSyncDiagnostics}));
   }
 }
-async function openSyncConflictChoice(kind,id){
-  if(!cloudEnabled)return;cloudResumer.suspend();
-  try{
-    const review=await db.reviewSyncConflict(kind,id);
-    openOverlay(createElement(SyncConflictDialog,{review,onClose:()=>{closeOverlay();if(!syncPausedByUser&&!resetWorkflowActive)void cloudResumer.resume();},
-      onBack:()=>void openSyncDetails(),onResolve:async(choice)=>{
-        const {local}=review.overview;
-        await db.resolveSyncConflict({kind,id,serial:review.serial,expectedRevision:review.revision,choice});
-        if(review.mode==='project'&&choice==='cloud'&&state.activeProject?.id===local?.id){
-          dirtyProjects.delete(local.id);state.activeProject=null;state.activeDraft=null;
-        }
-        if(review.mode==='project'&&choice==='cloud')route('works');
-        else void db.flushProjects().catch(error=>toast('冲突已解决，后续同步待重试：'+error.message));
-        void refresh({background:true}).catch(error=>console.warn('冲突解决后更新列表待重试',error));
-      }}));
-  }catch(error){
-    openOverlay(createElement(SyncErrorDialog,{kind:'conflict',error:error.message,
-      onClose:closeOverlay,onBack:()=>void openSyncDetails()}));
-  }
-}
 function exportAppDiagnostics(){
   const report={format:'shiye-app-error-diagnostics',version:2,createdAt:new Date().toISOString(),
     scope:'本机最近七天的脱敏运行摘要；仅在主动导出时生成文件',
@@ -3167,7 +3147,7 @@ async function openSyncDetails(){
       onRefresh:syncDetailsSnapshot,legacyCount:db.legacyProjectInfo?.()?.length||0,
       error:syncDisplay.error?describeSyncError(syncDisplay.error):null,status,conflicts:syncDisplay.conflicts,
       onClose:()=>{closeOverlay();if(!syncPausedByUser&&!resetWorkflowActive)void cloudResumer.resume();},
-      onDiagnostics:exportSyncDiagnostics,onConflict:(kind,id)=>void openSyncConflictChoice(kind,id),
+      onDiagnostics:exportSyncDiagnostics,
       onMigrate:()=>void runAccountStorageMigration(),onBackupLegacy:()=>void handle('backup-legacy-projects'),
       onWipe:()=>void handle('reset-all-account-data'),
       onRetry:async()=>{

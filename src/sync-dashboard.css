@@ -1,0 +1,15 @@
+/* Sync is a progress view; maintenance stays secondary. */
+.sync-dashboard { display:grid; gap:16px; }
+.sync-dashboard h2,.sync-dashboard h3,.sync-dashboard p { margin:0; }
+.sync-summary { display:grid; gap:8px; padding:18px; border-radius:16px; background:#edf2eb; }
+.sync-summary>strong { font-size:1.2rem; }
+.sync-dashboard .sync-pending-list { max-height:38vh; overflow:auto; }
+.sync-dashboard .sync-pending-list ul { list-style:none; margin:0; padding:0; }
+.sync-dashboard .sync-pending-list li { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 0; border-bottom:1px solid #e2e7df; }
+.sync-dashboard .sync-pending-list li>div { min-width:0; display:grid; gap:4px; }
+.sync-dashboard .sync-pending-list strong { overflow-wrap:anywhere; }
+.sync-dashboard .sync-pending-list small,.sync-dashboard .sync-pending-list li>span { color:#70806d; font-size:.85rem; }
+.sync-dashboard .sync-pending-list li>span { flex-shrink:0; }
+.sync-maintenance { border-top:1px solid #e2e7df; padding-top:14px; }
+.sync-maintenance[open] { display:grid; gap:14px; }
+.sync-error { padding:12px; background:#fff3df; border-radius:12px; }

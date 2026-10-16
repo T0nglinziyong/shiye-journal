@@ -24,8 +24,14 @@ const rect=()=>evaluate(`(()=>{const page=document.querySelector('#canvas-page')
     scale:new DOMMatrix(getComputedStyle(document.querySelector('#canvas-page')).transform).a}})()`);
 const fingerDrag=async(from,dx,dy,id=1)=>{
   await command('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{...from,id,force:.5}]});
-  for(let step=1;step<=5;step++)await command('Input.dispatchTouchEvent',{type:'touchMove',
-    touchPoints:[{x:from.x+dx*step/5,y:from.y+dy*step/5,id,force:.5}]});
+  for(let step=1;step<=5;step++){
+    await command('Input.dispatchTouchEvent',{type:'touchMove',
+      touchPoints:[{x:from.x+dx*step/5,y:from.y+dy*step/5,id,force:.5}]});
+    const r=await rect();
+    for(const [start,end,lo,hi] of [[r.left,r.right,r.hostLeft,r.hostRight],[r.top,r.bottom,r.hostTop,r.hostBottom]])
+      assert.ok(end-start>hi-lo?start<=lo+14&&end>=hi-14:Math.abs(start+end-lo-hi)<3,
+        'Paper remains bounded during pointermove, before release: '+JSON.stringify(r));
+  }
   await command('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
   await sleep(120);
 };
@@ -43,9 +49,8 @@ try{
   const start=await point(.5,.48),before=await rect();
   await fingerDrag(start,30,20);
   const after=await rect();
-  assert.ok(Math.hypot(after.left-before.left,after.top-before.top)>5,
-    'One finger pans the iPad paper in pen mode: '+JSON.stringify({before,after,
-      platform:await evaluate('({ua:navigator.userAgent,platform:navigator.platform,touches:navigator.maxTouchPoints})')}));
+  assert.ok(Math.abs(after.left-before.left)<2&&Math.abs(after.top-before.top)<2,
+    'Fitted paper stays centered during finger navigation');
   assert.equal((await project()).drafts[0].layers.length,inkBefore,
     'Finger pan must not create ink');
   // A Pencil pointer draws while leaving the viewport in place.
@@ -74,7 +79,7 @@ try{
     const count=(await project()).drafts[0].layers.length;
     const position=await rect();
     await fingerDrag(await point(.5,.5),dx,0);
-    assert.ok(Math.abs((await rect()).left-position.left)>3,`${tool}: finger pans`);
+    assert.ok(Math.abs((await rect()).left-position.left)<2,`${tool}: fitted paper stays centered`);
     assert.equal((await project()).drafts[0].layers.length,count,
       `${tool}: finger cannot paint or erase`);
   }

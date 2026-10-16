@@ -18,7 +18,7 @@ import {imageVariant,DISPLAY_TIERS,COVER_EDGE} from './image-variants.js';
 import {recoverImportOutbox} from './import-outbox-recovery.js';
 import {recoverProjectOutbox,usableProjectSnapshot} from './project-outbox-recovery.js';
 import {migrationPendingConflicts} from './migration-outbox-guard.js';
-import {forkConflictingEditableWork,forkIDForBranch} from './sync-conflict-copy.js';
+import {forkConflictingEditableWork,availableConflictCopy} from './sync-conflict-copy.js';
 import {projectSemanticFingerprint} from './project-semantic.js';
 import {isLegacySceneProject} from './scene-v2.js';
 import {createBlobRevisionProof} from './blob-revision-proof.js';
@@ -286,7 +286,7 @@ const unifiedSync=createProjectSync({
   // A long backlog must not make a new independent import wait while every
   // older image is hashed and uploaded. Same-key edits still retain order.
   prepareLimit:2,
-  retryConflicts:record=>record.kind==='batch',
+  retryConflicts:()=>true,
   coalesce:planMetadataBatch,
   splitCoalesced:splitMetadataBatch,
   load:()=>loadUnifiedOutbox(true),
@@ -327,7 +327,7 @@ const unifiedSync=createProjectSync({
     // A real concurrent edit must keep both complete Scene documents. The
     // local branch is redirected to a new work after the outbox switch commits.
     const remote=await cloudRecord('projects',record.id);
-    if(!remote)return 'conflict';
+    if(!remote)return record.forkOrigin?'rebase':'conflict';
     // Before LWW arbitration, capture both editable variants in the user's
     // private account cache. Even the losing snapshot remains recoverable
     // after the outbox entry is retired. Failure aborts arbitration: do not
@@ -395,15 +395,12 @@ const unifiedSync=createProjectSync({
   },
   onConflict:async(envelope,_baseRevision,operationID)=>{
     if(envelope.kind!=='project')return null;
-    const id=await forkIDForBranch(accountEpoch,envelope.payload.id,
-      envelope.payload.__cloudSessionId||operationID);
-    // A later stale row from this branch must not overwrite a fork already
-    // committed under its stable ID. Retain the queued source for review.
-    const occupied=checked(await cloudClient().from('shiye_records').select('id')
-      .eq('user_id',await identity()).eq('store','projects').eq('id',id).maybeSingle());
-    if(occupied)return null;
-    const copy=forkConflictingEditableWork(envelope.payload,{id});
-    return copy?syncEnvelope('project',copy):null;
+    const {copy}=await availableConflictCopy(envelope.payload,{epoch:accountEpoch,
+      branchID:envelope.payload.__cloudSessionId||operationID,
+      fingerprint:projectSemanticFingerprint,
+      load:async id=>{const row=await cloudRecord('projects',id);
+        return row?.projectDocumentPath?cloudProjectDocument(row):row;}});
+    return syncEnvelope('project',copy);
   },
   onForked:(source,target)=>{
     notifyCloudSuperseded();
@@ -581,13 +578,13 @@ async function reconcileImport(batch,operationID,baseRevision){
           // Restores/imports may carry editable works in a batch rather than
           // the editor outbox. Preserve their divergent Scene as a new work
           // too, instead of leaving the entire batch in manual conflict.
-          const forkID=await forkIDForBranch(accountEpoch,id,
-            batch.id+':'+projectSemanticFingerprint(local));
-          const existing=await cloudRecord('projects',forkID);
-          if(existing)continue;
-          const copy=forkConflictingEditableWork(local,{id:forkID});
-          if(!copy)throw Error('待同步作品数据不完整，已保留原记录');
-          operations.push({...op,item:copy});continue;
+          const {copy,existing}=await availableConflictCopy(local,{epoch:accountEpoch,
+            branchID:batch.id+':'+projectSemanticFingerprint(local),
+            fingerprint:projectSemanticFingerprint,
+            load:async key=>{const row=await cloudRecord('projects',key);
+              return row?.projectDocumentPath?cloudProjectDocument(row):row;}});
+          if(!existing)operations.push({...op,item:copy});
+          continue;
         }
       }
       if(op.action==='put'){

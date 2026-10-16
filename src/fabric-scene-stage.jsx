@@ -13,6 +13,7 @@ import {appendInkStroke,editableInkLayer} from './ink-groups.js';
 import {fabricPointer,installFabricPointer} from './fabric-pointer.js';
 import {createFabricSelectionPreview} from './fabric-selection-preview.js';
 import {configureFabricEditorFrame} from './fabric-editor-frame.js';
+import {selectableFabricObjectAt} from './fabric-hit-test.js';
 
 const byID=(nodes,id)=>{
   for(const node of nodes||[]){
@@ -39,6 +40,7 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
   selectedID=null,selectedIDs=[],selectionFilter=null,textDefaults=null}){
   const canvasRef=useRef(null),sessionRef=useRef(null),reconcileRef=useRef(null),callbacks=useRef(null);
   const syncingSelection=useRef(false),selectionEpoch=useRef(0);
+  const selectionKey=JSON.stringify(selectedIDs.length?selectedIDs:selectedID?[selectedID]:[]);
   callbacks.current={draft,assetURL,onSelection,onBeforeChange,onChange,onIssue,onReady,tool,pen,marker,
     eraser,selectionMode,selectionFilter,selectedID,selectedIDs,textDefaults};
 
@@ -50,7 +52,7 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
 
   useLayoutEffect(()=>{
     const canvas=sessionRef.current;
-    if(!canvas||!['select','lasso'].includes(tool))return;
+    if(!canvas||!['select','lasso','text'].includes(tool))return;
     if(tool==='lasso'){
       ++selectionEpoch.current;
       const proxy=canvas.getObjects().find(item=>item.sceneSelectionProxy);
@@ -132,7 +134,7 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
       canvas.discardActiveObject();canvas.requestRenderAll();
     }
     syncingSelection.current=false;
-  },[selectedID,selectedIDs,tool,sceneRevision]);
+  },[selectionKey,tool,sceneRevision]);
 
   useLayoutEffect(()=>{
     const canvas=sessionRef.current;
@@ -141,7 +143,7 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
     canvas.skipTargetFind=tool!=='select'||readOnly;
     canvas.defaultCursor=['pen','highlighter','lasso'].includes(tool)?'crosshair':tool==='eraser'?'cell':'default';
     if(tool!=='lasso')canvas.sceneClearLasso?.();
-    if(!['select','lasso'].includes(tool)){canvas.getActiveObject()?.exitEditing?.();canvas.discardActiveObject();
+    if(!['select','lasso','text'].includes(tool)){canvas.getActiveObject()?.exitEditing?.();canvas.discardActiveObject();
       const proxy=canvas.getObjects().find(item=>item.sceneSelectionProxy);
       proxy?.scenePreview?.restore();
       if(proxy)canvas.remove(proxy);
@@ -211,7 +213,7 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
             // Decode the replacement before touching the visible object. A
             // slow image cannot leave a blank hole in an already drawn page.
             const old=canvas.getObjects().filter(item=>item.sceneRenderKey===key);
-            const selectedNode=node.type!=='ink'&&callbacks.current.tool==='select'&&
+            const selectedNode=node.type!=='ink'&&['select','text'].includes(callbacks.current.tool)&&
               callbacks.current.selectedID===node.id;
             const keepSelected=selectedNode&&object?.selectable!==false;
             const replacingActive=old.some(item=>canvas.getActiveObject()===item);
@@ -407,8 +409,8 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
             textPointerID=event.pointerId;
             const current=callbacks.current.draft,point=pointer(event);
             if(point.x<0||point.y<0||point.x>current.canvas.width||point.y>current.canvas.height)return;
-            const hit=canvas.getObjects().findLast(object=>object.evented!==false&&
-              object.containsPoint(new fabric.Point(point.x,point.y)));
+            const hit=canvas.getObjects().findLast(object=>selectableFabricObjectAt(canvas,object,
+              new fabric.Point(point.x,point.y),fabricPointer(canvas,event).viewport));
             if(hit){
               canvas.setActiveObject(hit);
               if(hit.sceneType==='text'){

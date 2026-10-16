@@ -44,3 +44,22 @@ test('all saves from one editing branch reuse the same fork target ID',async()=>
  assert.notEqual(one,await forkIDForBranch('epoch-b','work-a','session-a'));
  assert.match(one,/^[a-f0-9]{8}-[a-f0-9]{4}-5[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);
 });
+
+test('occupied conflict destination preserves a changed copy and retries a stable alternate',async()=>{
+ const {availableConflictCopy}=await import('../src/sync-conflict-copy.js');
+ const {projectSemanticFingerprint:fingerprint}=await import('../src/project-semantic.js');
+ const original={id:'source',title:'Work',activeDraftID:'d',__cloudSessionId:'branch',
+  drafts:[{id:'d',sceneVersion:2,canvas:{width:100,height:100},layers:[]}]};
+ const primary=await forkIDForBranch('epoch','source','branch');
+ const occupied=forkConflictingEditableWork(original,{id:primary});occupied.title='Edited elsewhere';
+ const records=new Map([[primary,occupied]]);
+ const options={epoch:'epoch',branchID:'branch',fingerprint,load:async id=>records.get(id)};
+ const first=await availableConflictCopy(original,options);
+ assert.notEqual(first.copy.id,primary);assert.equal(first.existing,false);
+ assert.equal(records.get(primary).title,'Edited elsewhere');
+ const second=await availableConflictCopy(original,options);
+ assert.equal(second.copy.id,first.copy.id,'retry chooses the same alternate');
+ records.set(first.copy.id,first.copy);
+ const confirmed=await availableConflictCopy(original,options);
+ assert.equal(confirmed.existing,true);assert.equal(confirmed.copy.id,first.copy.id);
+});

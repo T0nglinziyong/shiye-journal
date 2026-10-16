@@ -245,3 +245,18 @@ test('Fabric group masks require a real page size and invalid vectors fail visib
     vectorMask:{outer:[[0,0],[2,0],[1,1]]}};
   await assert.rejects(bridge.fromNode(invalid),/蒙版轮廓坐标无效/);
 });
+
+test('group initial selection uses transformed member frames and excludes the empty middle',async()=>{
+  const {selectableFabricObjectAt}=await import('../src/fabric-hit-test.js');
+  const node={id:'hit-group',type:'group',children:[
+    {id:'hit-left',type:'shape',kind:'rectangle',x:50,y:60,width:20,height:20,fill:'#123456'},
+    {id:'hit-right',type:'shape',kind:'rectangle',x:250,y:60,width:20,height:20,fill:'#123456'}]};
+  const group=await bridge.fromNode(node);
+  group.set({angle:35});group.setCoords();
+  const canvas=new fabric.Canvas(null,{width:400,height:300});canvas.add(group);
+  const center=group.getCenterPoint(),member=group.getObjects()[0].getCenterPoint();
+  assert.equal(group.containsPoint(center),true);
+  assert.equal(selectableFabricObjectAt(canvas,group,center,center),false);
+  assert.equal(selectableFabricObjectAt(canvas,group,member,member),true);
+  await canvas.dispose();
+});

@@ -33,3 +33,14 @@ export function adjacentFontSize(current,direction){
   if(direction>0)return FONT_SIZE_PRESETS.find(size=>size>value)||FONT_SIZE_PRESETS.at(-1);
   return FONT_SIZE_PRESETS.slice().reverse().find(size=>size<value)||FONT_SIZE_PRESETS[0];
 }
+
+export function boundedCanvasViewport({scale=1,x=0,y=0},{width,height,hostWidth,hostHeight}){
+  scale=Math.max(1,Math.min(4,Number(scale)||1));
+  const axis=(offset,size,available)=>{
+    const limit=Math.max(0,(size*scale-available)/2+12);
+    // Fitted paper stays centered; larger paper covers the viewport apart
+    // from a small, symmetric edge margin.
+    return size*scale<=available?0:Math.max(-limit,Math.min(limit,(Number(offset)||0)*scale))/scale;
+  };
+  return {scale,x:axis(x,width,hostWidth),y:axis(y,height,hostHeight)};
+}

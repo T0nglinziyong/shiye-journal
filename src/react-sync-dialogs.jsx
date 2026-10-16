@@ -1,11 +1,12 @@
 import React,{useEffect,useState} from 'react';
+import './sync-dashboard.css';
 import {Dialog} from './react-utility-dialogs.jsx';
 
 export function SyncDetailsDialog({details,projects,batches,local,quarantined,legacyCount,
-  error,status,conflicts=0,onClose,onDiagnostics,onConflict,onMigrate,onBackupLegacy,onWipe,
+  error,status,conflicts=0,onClose,onDiagnostics,onMigrate,onBackupLegacy,onWipe,
   onRetry,onPause,onEmergency,onRefresh}){
   const [message,setMessage]=useState(`状态：${status}`),[busy,setBusy]=useState(false);
-  const [live,setLive]=useState(null);
+  const [live,setLive]=useState(null),[shown,setShown]=useState(40);
   useEffect(()=>{
     if(!onRefresh)return;
     let disposed=false,reading=false;
@@ -27,48 +28,41 @@ export function SyncDetailsDialog({details,projects,batches,local,quarantined,le
     finally{setBusy(false);}
   };
   const total=projects.length+batches.length+local.length;
-  return <Dialog title="同步详情" onClose={onClose}><h2>同步详情</h2>
-    <p id="sync-detail-status" role="status">{busy||!live?message:`状态：${status}`}</p><p>最近错误：{error||details.error||'无'}</p>
-    <p>本机待同步：{total} 项{conflicts?`，其中 ${conflicts} 项正在处理版本差异`:''}。未上传作品和草稿将保留在本机待同步队列。</p>
-    <p>隔离待同步原始记录：{quarantined} 项（禁止自动上传，原始数据未丢弃）。</p>
-    <p>已隔离旧版可编辑作品：{legacyCount} 件（未删除）。转换工具会同时扫描账号的素材、系列、作品、元数据、图片引用和最近删除。</p>
-    <div className="sync-pending-list">{total?<ul>
-      {projects.map(row=><li key={`project-${row.id}`}>作品：{row.title} {row.failureClass==='conflict'||row.failureClass==='invalid'?<strong>需处理冲突</strong>:null} <small>{row.id}</small> <button type="button" className="btn mini" data-conflict-kind="project" data-conflict-id={row.id} onClick={()=>onConflict('project',row.id)}>比较版本</button></li>)}
-      {batches.map(row=><li key={`batch-${row.id}`}>待传批次 {row.id}：{row.items.length} 条变更 {row.failureClass==='invalid'?<strong>数据格式需检查</strong>:row.failureClass?<strong>等待自动重试</strong>:null}<ul>{row.items.slice(0,12).map((item,index)=><li key={index}>{item.store} · {item.action} · {item.title||item.id}</li>)}</ul>
-        </li>)}
-      {local.map(row=><li key={row.id}>尚未暂存的作品：{row.title||row.id}</li>)}
-    </ul>:<p>没有待同步项目。</p>}</div>
-    <div className="actions"><button type="button" className="btn" id="sync-export-diagnostics" onClick={onDiagnostics}>导出详细同步诊断</button>
-      <button type="button" className="btn" id="sync-migrate-account" onClick={onMigrate}>检查并转换旧格式</button>
-      <button type="button" className="btn" id="sync-backup-legacy-works" disabled={!legacyCount} onClick={onBackupLegacy}>导出隔离旧作品备份</button>
-      <button type="button" className="btn primary" id="sync-retry-now" disabled={busy} onClick={()=>void retry()}>{busy?'正在同步…':'重建队列并同步'}</button>
-      <button type="button" className="btn" id="sync-pause-local" onClick={onPause}>暂停／恢复后台重试</button>
-      <button type="button" className="btn" id="sync-emergency-copy" disabled={!total} onClick={onEmergency}>导出待同步数据备份</button>
-      <button type="button" className="btn danger" id="sync-wipe-everything" onClick={onWipe}>彻底清空本账号本机与云端数据</button></div>
-    <p>重新同步会一次性替换旧队列，并按本机当前作品和素材重建待传记录；待传图片字节与删除操作继续保留。版本差异会自动处理；不同的作品画面将保留为另一份作品。查看此页面不会暂停上传。</p>
+  const names={assets:'素材',series:'系列',projects:'作品',blobs:'图片',meta:'设置',trash:'最近删除'};
+  const rows=[...projects.map(row=>({key:'p-'+row.id,title:row.title||'未命名作品',kind:'作品',failure:row.failureClass})),
+    ...batches.flatMap(row=>row.items.map((item,index)=>({key:row.id+'-'+index,
+      title:(item.store==='meta'?names[item.store]:item.title)||names[item.store]||'资料',kind:item.action==='delete'?'删除':names[item.store]||'资料',failure:row.failureClass}))),
+    ...local.map(row=>({key:'l-'+row.id,title:row.title||'未命名作品',kind:'保存到本机',failure:'local'}))];
+  return <Dialog title="同步详情" onClose={onClose}><div className="sync-dashboard">
+    <h2>同步</h2><section className="sync-summary" aria-live="polite">
+      <strong id="sync-detail-status" role="status">{busy?message:status}</strong>
+      <p>{total?`${total} 项等待完成，上传会在后台继续。`:quarantined||legacyCount?'旧数据待检查，详情见下方数据维护。':'没有待上传的本机修改。'}</p>
+      <p className="muted">版本差异自动处理；作品画面发生冲突时，双方都会保留。</p>
+    </section>
+    {error||details.error?<p className="sync-error" role="status">{error||details.error}<br/>本机资料已保留，网络恢复后会自动重试。</p>:null}
+    <div className="actions"><button type="button" className="btn primary" id="sync-retry-now" disabled={busy} onClick={()=>void retry()}>{busy?'正在同步…':'重建队列并同步'}</button>
+      <button type="button" className="btn" id="sync-export-diagnostics" onClick={onDiagnostics}>导出详细同步诊断</button></div>
+    {rows.length?<section><h3>待同步内容</h3><div className="sync-pending-list"><ul>
+      {rows.slice(0,shown).map(row=><li key={row.key}><div><strong>{row.title}</strong><small>{row.kind}</small></div>
+        <span>{row.failure==='invalid'?'等待格式修复':row.failure==='local'?'正在暂存':row.failure?'等待重试':'等待上传'}</span></li>)}
+    </ul></div>{rows.length>shown?<button type="button" className="btn" onClick={()=>setShown(count=>count+40)}>显示更多（剩余 {rows.length-shown} 项）</button>:null}</section>:null}
+    <details className="sync-maintenance"><summary>数据维护</summary>
+      <p>重建队列会根据本机当前数据重新安排上传，保留待传图片和删除操作。</p>
+      {quarantined||legacyCount?<p>有 {quarantined+legacyCount} 项旧数据需要检查格式，原始资料仍保留。</p>:null}
+      <div className="actions">
+        <button type="button" className="btn" id="sync-migrate-account" onClick={onMigrate}>检查并转换旧格式</button>
+        {legacyCount?<button type="button" className="btn" id="sync-backup-legacy-works" onClick={onBackupLegacy}>导出旧作品备份</button>:null}
+        <button type="button" className="btn" id="sync-pause-local" onClick={onPause}>暂停／恢复后台重试</button>
+        <button type="button" className="btn" id="sync-emergency-copy" disabled={!total} onClick={onEmergency}>导出待同步数据备份</button>
+        <button type="button" className="btn danger" id="sync-wipe-everything" onClick={onWipe}>彻底清空本账号本机与云端数据</button>
+      </div>
+    </details></div>
   </Dialog>;
-}
-const date=value=>{const result=new Date(value);return Number.isFinite(result.getTime())?result.toLocaleString():'未记录';};
-export function SyncConflictDialog({review,onClose,onBack,onResolve}){
-  const {local,remote}=review.overview;
-  const metadata=review.mode==='metadata',batch=review.mode==='batch';
-  const [busy,setBusy]=useState(false),[status,setStatus]=useState('请选择需要保留的版本。');
-  const resolve=async(choice,label)=>{if(busy)return;setBusy(true);setStatus('正在核对版本并提交…');try{await onResolve(choice,label);onClose();}catch(cause){setStatus('没有覆盖资料：'+cause.message+'。请返回同步详情重新核对版本。');setBusy(false);}};
-  const card=(label,record)=><section className="sync-version-card"><strong>{label}</strong><p>{record?.title||'没有云端版本'}</p><small>{batch?record?.kind||'需整批处理':`修改：${date(record?.updatedAt)}${metadata?record?.kind?` · ${record.kind}`:'':` · ${record?.drafts??0} 个方案 · ${record?.layers??0} 个顶层图层`}`}</small></section>;
-  return <Dialog title="手动解决同步冲突" onClose={onClose}><h2>手动解决同步冲突</h2><p>{batch?'此批次包含多条关联变更，必须整批处理。请核对每条变更后选择保留哪一版。':'同一编号的本机和云端记录均有修改。请比较版本并选择保留哪份；不会按修改时间自动覆盖。'}</p>
-    <div className="sync-version-grid">{card('本机未同步',local)}{card('当前云端',remote)}</div>
-    {batch?<div className="sync-pending-list"><ul>{(review.overview.items||[]).map((item,index)=><li key={index}>{item.store} · {item.action} · {item.id||'整库'}{item.localTitle?` · 本机：${item.localTitle}`:''}{item.remoteTitle?` · 云端：${item.remoteTitle}`:''}</li>)}</ul></div>:null}
-    <p role="status" id="conflict-progress">{status}</p><div className="actions">
-      {!metadata&&!batch?<button type="button" className="btn primary" id="conflict-both" disabled={busy} onClick={()=>void resolve('both','双方都保留')}>双方都保留（推荐）</button>:null}
-      <button type="button" className="btn" id="conflict-cloud" disabled={busy||!remote} onClick={()=>void resolve('cloud','保留云端版')}>保留云端版</button>
-      <button type="button" className="btn" id="conflict-local" disabled={busy||review.localAllowed===false} onClick={()=>void resolve('local','保留本机版')}>保留本机版</button>
-      <button type="button" className="btn" id="conflict-back" onClick={onBack}>返回</button></div>
-    <p className="muted">{batch?review.localAllowed===false?'此批次包含整库清空，不能覆盖另一设备的修改。保留云端版会移除此批次的本机待传记录。':'保留云端版会移除此批次的本机待传记录；保留本机版会整批重试，若图片编号已被云端占用则安全拒绝。':metadata?'素材或系列只能选择一个在线版本；本机版提交仍受云端版本保护。':'保留本机版会先把当前云端版另存一份，再以本机版更新原作品；双方都保留会生成新的独立可编辑作品。'}选择云端版后本机未上传的变更会移出队列。</p>
-  </Dialog>;
+
 }
 export function SyncErrorDialog({error,onClose,onBack,onDiagnostics,kind}){
-  return <Dialog title={kind==='details'?'同步详情暂不可用':'无法自动比较版本'} onClose={onClose}>
-    <h2>{kind==='details'?'同步详情暂不可用':'无法自动比较版本'}</h2>
+  return <Dialog title={kind==='details'?'同步详情暂不可用':'同步暂不可用'} onClose={onClose}>
+    <h2>{kind==='details'?'同步详情暂不可用':'同步暂不可用'}</h2>
     {kind==='details'?<><p>待同步资料没有被清除。仍可导出当天的本机同步诊断。</p><button type="button" className="btn" id="sync-export-diagnostics" onClick={onDiagnostics}>导出详细同步诊断</button></>:
       <><p role="alert">{error}</p><p>本机数据仍保留在待同步队列。请返回同步详情重新核对。</p><button type="button" className="btn" id="conflict-back" onClick={onBack}>返回同步详情</button></>}
   </Dialog>;

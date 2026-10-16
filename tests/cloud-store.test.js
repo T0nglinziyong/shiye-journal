@@ -1027,3 +1027,21 @@ test('a restored editable work in a batch automatically preserves a divergent cl
   assert.deepEqual(await activeRows(cache,'batch'),[]);
   assert.equal((await db.cloudPendingDetails()).batches.length,0);
 });
+
+test('existing edited fork never strands the original project queue or overwrites the fork',async()=>{
+  const {forkIDForBranch,forkConflictingEditableWork}=await import('../src/sync-conflict-copy.js');
+  const {state,db}=fixture(memoryCache());
+  const local=v2({id:'occupied-work',title:'本机作品',__cloudSessionId:'existing-branch',activeDraftID:'d',
+    drafts:[{id:'d',canvas:{width:700,height:1000},textBlocks:[{id:'t',content:'本机正文'}]}]});
+  const target=await forkIDForBranch(state.accountEpoch,local.id,local.__cloudSessionId);
+  const existing=forkConflictingEditableWork(local,{id:target});
+  existing.drafts[0].layers[0].content='副本又被修改';
+  const remote=structuredClone(local);remote.drafts[0].layers[0].content='其他设备正文';
+  state.revision=4;state.rows=[remote,existing];await db.cloudAll('projects');
+  await db.cloudStageProject(local);await db.cloudFlushProjects();
+  assert.equal((await db.cloudPendingProjects()).length,0);
+  const uploaded=state.calls.at(-1).operations.find(op=>op.store==='projects').item;
+  assert.notEqual(uploaded.id,local.id);assert.notEqual(uploaded.id,target);
+  assert.equal(uploaded.drafts[0].layers[0].content,'本机正文');
+  assert.equal(existing.drafts[0].layers[0].content,'副本又被修改');
+});

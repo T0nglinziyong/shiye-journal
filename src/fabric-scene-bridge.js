@@ -173,6 +173,10 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
       });
       object.sceneTextFrameHeight=frameHeight;
       object.sceneTextNode=node;
+      // Use the saved text frame for controls and caching too. Fabric's native
+      // single-line measurement otherwise clips canonical wrapped Chinese text.
+      object.set({height:Math.max(frameHeight,object.height)});
+      object.setCoords();
       if(node.vectorMask)object.clipPath=clipPath(maskGeometry(node.vectorMask),
         object.width,frameHeight,{topOffset:(frameHeight-object.height)/2});
     }else if(node.type==='ink'){

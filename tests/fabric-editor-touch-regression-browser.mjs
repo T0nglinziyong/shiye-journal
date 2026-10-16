@@ -110,7 +110,9 @@ try{
     'Alignment menu stays in the mobile viewport');
   await touch('.canvas-arrange-menu button:first-child');
   await touch('[data-val="layers"]');
-  assert.equal(await evaluate(`document.querySelector('.scene-layer-tree-toolbar button:nth-child(2)').disabled`),false);
+  assert.equal(await evaluate(`document.querySelector('.scene-layer-tree-toolbar button:nth-child(2)')?.disabled`),false,
+    JSON.stringify(await evaluate(`({menu:document.querySelector('.swift-popover')?.outerHTML,
+      toolbar:document.querySelector('.swift-editor-toolbar')?.outerHTML,toast:document.querySelector('#toast')?.textContent})`)));
   await touch('.scene-layer-tree-toolbar button:nth-child(2)');
   assert.equal(await evaluate(`document.querySelectorAll('.scene-layer-node[aria-expanded]').length`),1,
     'Multi-selected layers can be grouped');

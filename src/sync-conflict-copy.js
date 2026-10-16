@@ -25,3 +25,21 @@ export function forkConflictingEditableWork(record,{id=crypto.randomUUID(),now=n
  copy.forkOrigin={projectID:record.id,branchID:record.__cloudSessionId||null};
  return copy;
 }
+
+// An occupied branch destination can be a previously confirmed upload or a
+// genuinely newer edit of that copy. Compare content before reusing it; never
+// drop a pending Scene merely because the deterministic ID already exists.
+export async function availableConflictCopy(record,{epoch,branchID,load,fingerprint}){
+ let anchor=branchID;
+ for(let attempt=0;attempt<8;attempt++){
+  const id=await forkIDForBranch(epoch,record.id,anchor);
+  const copy=forkConflictingEditableWork(record,{id});
+  if(!copy)throw Error('待同步作品数据不完整，已保留原记录');
+  const existing=await load(id);
+  if(!existing)return {copy,existing:false};
+  if(fingerprint(copy)===fingerprint(existing))return {copy:{...existing,
+    __cloudSessionId:copy.__cloudSessionId},existing:true};
+  anchor=branchID+':'+fingerprint(copy)+':'+fingerprint(existing);
+ }
+ throw Error('作品副本在同步期间持续变化，本机内容已保留，将稍后重试');
+}
