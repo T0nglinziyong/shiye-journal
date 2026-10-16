@@ -8,20 +8,31 @@ const b=await browserHarness('shiye-work-delete',url);
 try{
   await b.wait('.series-grid');
   await b.evaluate(`(async()=>{
-    const store=await import('/src/store.js');
+    const db=await new Promise((resolve,reject)=>{
+      const request=indexedDB.open('shiye-pwa-full-v1',1);
+      request.onsuccess=()=>resolve(request.result);
+      request.onerror=()=>reject(request.error);
+    });
+    const put=(name,value)=>new Promise((resolve,reject)=>{
+      const transaction=db.transaction(name,'readwrite');
+      transaction.objectStore(name).put(value);
+      transaction.oncomplete=resolve;
+      transaction.onerror=()=>reject(transaction.error);
+    });
     const now=new Date().toISOString();
     const snapshot=new Blob(['<svg xmlns="http://www.w3.org/2000/svg" width="70" height="100"><rect width="70" height="100" fill="#a1ba93"/></svg>'],{type:'image/svg+xml'});
-    await store.put('blobs',{id:'snapshot-delete-cover',data:snapshot});
+    await put('blobs',{id:'snapshot-delete-cover',data:snapshot});
     for(const [id,title,flags] of [
       ['snapshot-delete-test','快照删除验收',{isSnapshot:true,isDraft:false,snapshotBlobId:'snapshot-delete-cover'}],
       ['editable-delete-test','可编辑删除验收',{isDraft:false}],
       ['draft-delete-test','草稿删除验收',{isDraft:true}]]){
-      await store.put('projects',{id,title,...flags,createdAt:now,updatedAt:now,
+      await put('projects',{id,title,...flags,createdAt:now,updatedAt:now,
         activeDraftID:'draft',drafts:[{id:'draft',sceneVersion:2,
           canvas:{width:700,height:1000},physicalPageHeightMM:297,layers:[
             {id:'cover-shape',type:'shape',kind:'rectangle',x:350,y:500,
               width:350,height:500,fill:'#a1ba93',stroke:'#375d48',lineWidth:2,zIndex:1}]}]});
     }
+    db.close();
   })()`);
   await b.command('Page.reload');
   await b.wait('.series-grid');
@@ -47,10 +58,21 @@ try{
       await b.sleep(20);
     }
     const immediate=await b.evaluate(`(async()=>{
-      const store=await import('/src/store.js');
+      const db=await new Promise((resolve,reject)=>{
+        const request=indexedDB.open('shiye-pwa-full-v1',1);
+        request.onsuccess=()=>resolve(request.result);
+        request.onerror=()=>reject(request.error);
+      });
+      const all=name=>new Promise((resolve,reject)=>{
+        const request=db.transaction(name).objectStore(name).getAll();
+        request.onsuccess=()=>resolve(request.result);
+        request.onerror=()=>reject(request.error);
+      });
+      const projects=(await all('projects')).map(row=>row.id);
+      const trash=(await all('trash')).map(row=>row.item?.id);
+      db.close();
       return {card:!!document.querySelector(${JSON.stringify(card)}),
-        projects:(await store.all('projects')).map(row=>row.id),
-        trash:(await store.all('trash')).map(row=>row.item?.id),
+        projects,trash,
         toast:document.querySelector('#toast')?.textContent,
         tray:document.querySelector('.library-management-tray')?.textContent};
     })()`);
@@ -68,11 +90,14 @@ try{
     for(let i=0;i<150;i++){
       if(await b.evaluate(`(()=>{const image=document.querySelector(${JSON.stringify(`${deletedCard} .work-reference`)});
         const paper=image?.closest('.thumb-sheet');return image?.naturalWidth>0&&
-        image.getBoundingClientRect().width>20&&paper?.getBoundingClientRect().width>20})()`))break;
+        image.getBoundingClientRect().width>20&&image.getBoundingClientRect().height>20&&
+        paper?.getBoundingClientRect().width>20&&paper?.getBoundingClientRect().height>20})()`))break;
       await b.sleep(20);
     }
     assert.ok(await b.evaluate(`(()=>{const image=document.querySelector(${JSON.stringify(`${deletedCard} .work-reference`)});
-      return image?.naturalWidth>0&&image.getBoundingClientRect().width>20})()`),
+      const paper=image?.closest('.thumb-sheet');return image?.naturalWidth>0&&
+        image.getBoundingClientRect().width>20&&image.getBoundingClientRect().height>20&&
+        paper?.getBoundingClientRect().width>20&&paper?.getBoundingClientRect().height>20})()`),
     `${title}在最近删除中的封面应立即可见`);
   }
   assert.deepEqual(b.errors,[]);
