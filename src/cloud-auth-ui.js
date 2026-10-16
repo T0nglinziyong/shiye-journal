@@ -50,6 +50,7 @@ export async function startCloudSession(onReady){
   }
   showGate({});
   async function enter(){
+    showGate({status:'正在核对账号权限…'});
     const {user,account}=await requireCloudUser({withAccount:true});
     const wipeOldLocalData=async()=>{
       window.dispatchEvent(new Event('shiye-account-reset-detected'));
@@ -62,11 +63,13 @@ export async function startCloudSession(onReady){
       client,userId:user.id,storage:localStorage,erase:wipeOldLocalData,
       onProgress:message=>showGate({status:message})
     });
+    showGate({status:'正在检查账号资料…'});
     const initialReset=await preflight();
     if(initialReset.wiped){location.reload();return;}
     cloudSetResetCleanupPending(initialReset.pending,initialReset.resetId);
     let shown=false;
     const showApp=()=>{if(shown)return;shown=true;clearLoginGate();app.hidden=false;};
+    showGate({status:'正在打开本机资料…'});
     await onReady(user,{afterAccountReset:!!initialReset.resetId,onFirstView:showApp});
     showApp();
     if(initialReset.pending&&initialReset.resetId){
