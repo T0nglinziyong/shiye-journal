@@ -56,10 +56,11 @@ try{
     await capture('saved',w,h);
   }
   await click('[data-act=import-continue]','[data-act=select-file]');assert.equal(await evaluate('document.querySelectorAll(".import-candidate-tile").length'),0);
-  await evaluate(`(async()=>{const db=await import('/src/store.js');const a=(await db.all('assets')).find(a=>a.title==='素材 1');if(!a)throw Error('Saved material missing');await db.transaction(['assets','trash'],tx=>{tx.objectStore('assets').delete(a.id);tx.objectStore('trash').put({id:'synthetic-trash',kind:'asset',item:a,date:new Date().toISOString()});});})()`);
+  await evaluate(`(async()=>{const db=await import('/src/store.js'),{hiddenAssetCopy}=await import('/src/asset-retention.js');const a=(await db.all('assets')).find(a=>a.title==='素材 1');if(!a)throw Error('Saved material missing');await db.transaction(['assets','trash'],tx=>{tx.objectStore('assets').put(hiddenAssetCopy(a));tx.objectStore('trash').put({id:'synthetic-trash',kind:'asset',item:a,date:new Date().toISOString()});});})()`);
   await command('Page.reload');await wait('.series-grid');await click('.swift-tabs button:nth-child(4)','.recently-deleted-grid');
   for(const [w,h] of [[390,844],[768,1024],[1024,768],[1440,900]]){
     await command('Emulation.setDeviceMetricsOverride',{width:w,height:h,deviceScaleFactor:1,mobile:w<700});
+    await evaluate('document.querySelector(".recently-deleted-grid img")?.scrollIntoView({block:"center"})');
     await wait('.recently-deleted-grid img[src^="blob:"]');
     const image=await evaluate('(async()=>{const im=document.querySelector(".recently-deleted-grid img");await im.decode();return {loaded:im.naturalWidth>0,height:im.parentElement.getBoundingClientRect().height,imageHeight:im.getBoundingClientRect().height};})()');assert.ok(image.loaded&&image.height>=90&&image.imageHeight>=75,JSON.stringify(image));await capture('deleted-cover',w,h);
   }
