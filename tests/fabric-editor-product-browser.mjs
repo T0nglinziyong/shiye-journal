@@ -27,7 +27,7 @@ try{
   await evaluate(`(async()=>{const db=await new Promise(resolve=>{const open=indexedDB.open('shiye-pwa-full-v1');open.onsuccess=()=>resolve(open.result)});
     await new Promise(resolve=>{const tx=db.transaction('assets','readwrite');tx.objectStore('assets').put({
       id:'fabric-product-material',blobId:'fabric-product-material',title:'画布测试素材',kind:'sticker',
-      physicalWidthMM:25,physicalHeightMM:25,supply:{quantity:2},createdAt:new Date().toISOString(),
+      physicalWidthMM:25,physicalHeightMM:25,createdAt:new Date().toISOString(),
       staticPath:'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2240%22 height=%2240%22%3E%3Crect width=%2240%22 height=%2240%22 fill=%22%2392b87b%22/%3E%3C/svg%3E'
     });tx.oncomplete=resolve;});db.close()})()`);
   await command('Page.reload');await wait('.series-grid');

@@ -1,14 +1,17 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {createPortal} from 'react-dom';
 import {materialKinds,materialRoles} from './material-taxonomy.js';
+import {useUnsavedInput} from './unsaved-inputs.js';
 
 export function ImportCandidateDialog({candidate,recordIndex,candidateIndex,onClose,onToggle,
   onSave,onCheck,onError}){
   const [editing,setEditing]=useState(false);
   const [draft,setDraft]=useState(()=>({title:candidate.title||'',
     width:candidate.width??'',height:candidate.height??'',kind:candidate.kind||'sticker',
-    role:candidate.role||'focal',quantity:candidate.quantity??(candidate.kind==='tape'?999:1),
+    role:candidate.role||'focal',
     reviewStatus:candidate.reviewStatus||'pendingReview'}));
+  const initial=useRef(JSON.stringify(draft));
+  useUnsavedInput('导入素材信息',editing&&JSON.stringify(draft)!==initial.current);
   const closeRef=useRef(onClose);closeRef.current=onClose;
   useEffect(()=>{
     const modal=document.querySelector('#modal');
@@ -24,13 +27,11 @@ export function ImportCandidateDialog({candidate,recordIndex,candidateIndex,onCl
     event.preventDefault();
     const width=String(draft.width).trim()?Number(draft.width):null;
     const height=String(draft.height).trim()?Number(draft.height):null;
-    const quantity=Number(draft.quantity);
     if(width!==null&&(!Number.isFinite(width)||width<=0)||
-       height!==null&&(!Number.isFinite(height)||height<=0)||
-       !Number.isInteger(quantity)||quantity<1||quantity>999){
-      onError('尺寸需为正数，数量须为 1–999');return;
+       height!==null&&(!Number.isFinite(height)||height<=0)){
+      onError('尺寸需为正数');return;
     }
-    onSave(recordIndex,candidateIndex,{...draft,title:draft.title.trim(),width,height,quantity});
+    onSave(recordIndex,candidateIndex,{...draft,title:draft.title.trim(),width,height});
     onClose();
   };
   return createPortal(editing?<><div className="dialog-head"><h2>素材信息</h2>
@@ -43,16 +44,13 @@ export function ImportCandidateDialog({candidate,recordIndex,candidateIndex,onCl
         <label>高 mm<input id="candidate-edit-height" type="number" step="any"
           value={draft.height} onChange={event=>change('height',event.target.value)}/></label></div>
       <label>类型<select id="candidate-edit-kind" value={draft.kind}
-        onChange={event=>setDraft(previous=>({...previous,kind:event.target.value,
-          quantity:event.target.value==='tape'&&Number(previous.quantity)===1?999:previous.quantity}))}>
+        onChange={event=>change('kind',event.target.value)}>
         {materialKinds.map(([value,label])=><option key={value} value={value}>{label}</option>)}
       </select></label>
       <label>作用<select id="candidate-edit-role" value={draft.role}
         onChange={event=>change('role',event.target.value)}>
         {materialRoles.map(([value,label])=><option key={value} value={value}>{label}</option>)}
       </select></label>
-      <label>数量<input id="candidate-edit-quantity" type="number" min="1" max="999" step="1"
-        value={draft.quantity} onChange={event=>change('quantity',event.target.value)}/></label>
       <label>状态<select id="candidate-edit-status" value={draft.reviewStatus}
         onChange={event=>change('reviewStatus',event.target.value)}>
         <option value="pendingReview">待检查</option><option value="ready">已整理</option>

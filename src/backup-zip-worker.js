@@ -9,7 +9,7 @@ const hash=bytes=>hex(sha256(bytes));
 const fail=error=>self.postMessage({type:'failure',error:String(error?.message||error)});
 const MAX_ENTRIES=20000;
 const MAX_UNPACKED=256*1024*1024;
-let zip=null,manifest=null,sequence=0,acknowledged=0,waiters=[],nextImage=0;
+let zip=null,manifest=null,sequence=0,acknowledged=0,waiters=[],nextImage=0,unpackedBytes=0;
 const drain=async()=>{while(acknowledged<sequence)await new Promise(resolve=>waiters.push(resolve));};
 function onZip(error,bytes){
   if(error){fail(error);return;}
@@ -18,6 +18,8 @@ function onZip(error,bytes){
 }
 async function addEntry(path,bytes){
   if(!zip)throw Error('ZIP 尚未初始化');
+  if(unpackedBytes+bytes.length>MAX_UNPACKED)throw Error('完整备份超过当前应用可恢复的 256 MB 解压上限');
+  unpackedBytes+=bytes.length;
   const entry=new ZipPassThrough(path);
   zip.add(entry);entry.push(bytes,true);
   await drain();
@@ -41,6 +43,8 @@ async function begin(records){
 async function image(record){
   const {data,...meta}=record||{};
   if(!(data instanceof Blob)||typeof meta.id!=='string'||!meta.id)throw Error('备份素材图片不完整');
+  if(unpackedBytes+data.size>MAX_UNPACKED)throw Error('完整备份超过当前应用可恢复的 256 MB 解压上限');
+  unpackedBytes+=data.size;
   const path='blobs/'+String(++nextImage).padStart(8,'0')+'.bin';
   const entry=new ZipPassThrough(path);zip.add(entry);
   const hashState=sha256.create(),reader=data.stream().getReader();
@@ -66,6 +70,8 @@ async function finish(){
   await addEntry('data/blobs.jsonl',encoder.encode(text));
   manifest.tables.blobs={path:'data/blobs.jsonl',count:manifest.blobs.length};
   const final=encoder.encode(JSON.stringify(manifest));
+  if(unpackedBytes+final.length>MAX_UNPACKED)throw Error('完整备份超过当前应用可恢复的 256 MB 解压上限');
+  unpackedBytes+=final.length;
   const entry=new ZipPassThrough('manifest.json');zip.add(entry);
   entry.push(final,true);await drain();
   zip.end();await drain();
@@ -86,7 +92,7 @@ function parseLines(bytes){
   return rows;
 }
 async function restore(file){
-  if(file.size>MAX_UNPACKED)throw Error('ZIP 备份大于此设备当前可安全恢复的 256 MB 上限，请使用桌面恢复方案');
+  if(file.size>MAX_UNPACKED)throw Error('ZIP 备份超过当前应用可安全恢复的 256 MB 上限；原有资料未修改');
   const files=new Map();let total=0,count=0,streamError=null;
   const unzip=new Unzip(entry=>{
     if(streamError)return;

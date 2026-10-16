@@ -1,7 +1,21 @@
 import {markSyncPhase} from './sync-browser-compat.js';
+const failureCode=error=>String(error?.code??error?.status??error?.statusCode??error?.cause?.code??'');
+function failureClass(error){
+  const code=failureCode(error);
+  if(code==='40001'||code==='409')return 'conflict';
+  if(code==='401'||code==='403'||code==='28000')return 'auth';
+  if(code==='P0001'||code.startsWith('22')||code.startsWith('23')||code==='413'||code==='507')return 'invalid';
+  if(code==='429')return 'rate-limit';
+  return 'transient';
+}
+function retryDelay(attempt,operationID){
+  let hash=2166136261;
+  for(const character of String(operationID||''))hash=Math.imul(hash^character.charCodeAt(0),16777619);
+  return Math.min(60000,2000*2**Math.min(attempt-1,5))+(hash>>>0)%997;
+}
 // Durable edits are an explicit outbox, not a replacement for cloud records.
 // Commit acknowledgement is the only point at which an entry is removed.
-export function createProjectSync({load,write,commit,revision,reconcile=async()=> 'conflict',recordKeys=record=>[{store:'projects',id:record.id}],coalesce=()=>null,splitCoalesced=()=>null,onCommitted=()=>{},onConflict=async()=>null,onSuperseded=()=>{},onStatus=()=>{},onDiagnostic=()=>{},runExclusive=fn=>fn(),prepare=async()=>{},reload=load,autoFlushDelayMs=0,setTimer=setTimeout,clearTimer=clearTimeout,clock=()=>Date.now()}){
+export function createProjectSync({load,write,commit,revision,reconcile=async()=> 'conflict',recordKeys=record=>[{store:'projects',id:record.id}],coalesce=()=>null,splitCoalesced=()=>null,onCommitted=()=>{},onConflict=async()=>null,onForked=()=>{},onReplaced=()=>{},onSuperseded=()=>{},onStatus=()=>{},onDiagnostic=()=>{},runExclusive=fn=>fn(),prepare=async()=>{},reload=load,authoritativeCommit=false,autoFlushDelayMs=0,setTimer=setTimeout,clearTimer=clearTimeout,clock=()=>Date.now()}){
   let initialized,staging=Promise.resolve(),network,serial=0,error,paused=false,rebuilding=false;
   let persistedRows=new Map();
   let conflicts=new Set();
@@ -10,20 +24,25 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
   let autoTimer=null,lastNetworkAt=null;
   const cancelAuto=()=>{if(autoTimer!==null){clearTimer(autoTimer);autoTimer=null;}};
   function scheduleAuto(){
-    if(paused||network||rebuilding||autoTimer!==null||
-      entries.size&&![...entries.keys()].some(id=>!conflicts.has(id)))return;
-    if(!flushWindow){void kick();return;}
+    if(paused||network||rebuilding||autoTimer!==null)return;
+    const candidates=[...entries.values()].filter(row=>!conflicts.has(row.record.id)&&
+      row.lastFailureClass!=='invalid');
+    if(!candidates.length)return;
     // First remote upload waits one window to coalesce several small edits.
     // Further uploads cannot start sooner than a window after the previous one.
     const elapsed=lastNetworkAt===null?0:Math.max(0,clock()-lastNetworkAt);
-    autoTimer=setTimer(()=>{autoTimer=null;void kick();},Math.max(flushWindow,flushWindow-elapsed));
+    const due=Math.min(...candidates.map(row=>Number(row.nextAttemptAt)||0));
+    const fresh=candidates.some(row=>!row.nextAttemptAt);
+    const wait=Math.max(due-clock(),fresh?Math.max(flushWindow,flushWindow-elapsed):0);
+    autoTimer=setTimer(()=>{autoTimer=null;void kick();},Math.max(0,wait));
   }
   const entries=new Map();
   // A transient IndexedDB/auth read failure must not poison this instance for
   // the rest of the session: the resumer will retry the durable outbox later.
-  const rowStamp=row=>JSON.stringify([row.serial,row.baseRevision,row.operationID]);
+  const rowStamp=row=>JSON.stringify([row.serial,row.baseRevision,row.operationID,
+    row.attempt,row.nextAttemptAt,row.lastFailureClass]);
   const rememberPersisted=rows=>{persistedRows=new Map(rows.map(row=>[row.record.id,{stamp:rowStamp(row),row}]));};
-  const initialize=()=>initialized??=(async()=>{const rows=await load()||[];for(const row of rows){entries.set(row.record.id,row);serial=Math.max(serial,row.serial);}rememberPersisted(rows);report();})().catch(failure=>{initialized=undefined;throw markSyncPhase(failure,'读取本机待同步队列');});
+  const initialize=()=>initialized??=(async()=>{const rows=await load()||[];for(const row of rows){entries.set(row.record.id,row);serial=Math.max(serial,row.serial);if(row.lastFailureClass==='conflict'||row.lastFailureClass==='invalid')conflicts.add(row.record.id);}rememberPersisted(rows);report();})().catch(failure=>{initialized=undefined;throw markSyncPhase(failure,'读取本机待同步队列');});
   const report=()=>onStatus({pending:entries.size,error,conflicts:conflicts.size});
   const starts=new Map();
   const diagnose=(action,row,failure,durationMs=null)=>{
@@ -63,7 +82,9 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
         serial=Math.max(serial,row.serial);
       }
       rememberPersisted(saved);
-      conflicts=new Set([...conflicts].filter(id=>entries.has(id)));
+      conflicts=new Set([...entries.values()].filter(row=>
+        row.lastFailureClass==='conflict'||row.lastFailureClass==='invalid')
+        .map(row=>row.record.id));
       report();
       return;
     }
@@ -76,6 +97,7 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
     try{return Array.isArray(recordKeys(candidate));}catch{return false;}
   };
   const orderedRows=()=>[...entries.values()].sort((a,b)=>a.serial-b.serial);
+  const clearFailure=row=>{delete row.attempt;delete row.nextAttemptAt;delete row.lastFailureClass;};
   const replaceRows=rows=>{entries.clear();for(const row of rows.sort((a,b)=>a.serial-b.serial))entries.set(row.record.id,row);};
   async function coalesceReady(windowSerial){
     const task=staging.catch(()=>{}).then(async()=>{
@@ -120,11 +142,13 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
     staging=task.catch(()=>{});
     return task;
   }
-  async function acknowledge(row,{confirmedHere=false}={}){
+  async function acknowledge(row,{confirmedHere=false,advanceDependents=true}={}){
     // A confirmed operation advanced exactly one revision. Newer local edits
     // based on its old revision can follow it; never jump across an unrelated
     // remote edit (which would silently overwrite another device).
-    if(revision()===row.baseRevision+1)for(const pending of entries.values())if(pending.serial>row.serial&&pending.baseRevision===row.baseRevision&&overlaps(recordKeys(row.record),recordKeys(pending.record)))pending.baseRevision=revision();
+    // A v3 commit may skip account cursor values written by unrelated keys.
+    // Its success proves that this key had no competing write since the base.
+    if(advanceDependents)for(const pending of entries.values())if(pending.serial>row.serial&&pending.baseRevision===row.baseRevision&&overlaps(recordKeys(row.record),recordKeys(pending.record)))pending.baseRevision=revision();
     const current=entries.get(row.record.id);
     const removed=current?.serial===row.serial;
     if(removed)entries.delete(row.record.id);
@@ -132,6 +156,7 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
     catch(e){if(removed&&!entries.has(row.record.id))entries.set(row.record.id,row);throw e;}
     if(confirmedHere){onCommitted(row.record,revision());diagnose('committed',row);}
     report();
+    return removed;
   }
   function stage(record,{baseRevision=revision()}={}){
     const task=staging.catch(()=>{}).then(async()=>{await initialize();if(!Number.isSafeInteger(baseRevision)||baseRevision<0)throw Error('作品编辑基线无效，未上传旧稿');const previous=entries.get(record.id),row={record:structuredClone(record),serial:++serial,baseRevision:previous?Math.min(previous.baseRevision,baseRevision):baseRevision,operationID:crypto.randomUUID()};entries.set(record.id,row);try{await persist();}catch(e){if(previous)entries.set(record.id,previous);else entries.delete(record.id);throw e;}conflicts.delete(record.id);error=null;report();});
@@ -144,8 +169,10 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
     if(rebuilding)return Promise.resolve();
     network=(async()=>{
       await initialize();await staging;await refreshFromDisk();
-      const readyRows=orderedRows().filter(row=>force||!conflicts.has(row.record.id));
-      if(!readyRows.length){error=null;report();return;}
+      const readyRows=orderedRows().filter(row=>force||
+        !conflicts.has(row.record.id)&&row.lastFailureClass!=='invalid'&&
+        (!row.nextAttemptAt||row.nextAttemptAt<=clock()));
+      if(!readyRows.length){report();return;}
       // Immutable object bytes can transfer before the account revision lock.
       // Only reconciliation and the versioned metadata commit need that lock.
       const prepareAt=clock();diagnose('prepare-start');
@@ -170,7 +197,9 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
       // Once a row has been confirmed as a real conflict, background retries
       // must not replay the same stale revision forever. An explicit flush or
       // queue rebuild can recheck it; independent rows continue normally.
-      const blocked=force?new Set():new Set(conflicts);
+      const blocked=force?new Set():new Set(orderedRows().filter(row=>
+        conflicts.has(row.record.id)||row.lastFailureClass==='invalid'||
+        row.nextAttemptAt>clock()).map(row=>row.record.id));
       // Old conflict rows cannot hold unrelated newer records hostage. Each
       // newer row still runs through its own revision reconciliation/CAS.
       const blockedKeys=[];
@@ -183,7 +212,7 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
         diagnose('start',row);
         try {
         // A restarted queue must not overwrite changes made by another device.
-        if(row.baseRevision!==revision()){
+        if(!authoritativeCommit&&row.baseRevision!==revision()){
           diagnose('reconcile',row);
           // The app may have closed after the server committed but before the
           // acknowledgement was removed from IndexedDB. Verify the exact
@@ -193,12 +222,13 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
             await acknowledge(row);diagnose('committed',row);continue;
           }
           if(resolution==='remote'){
-            await acknowledge(row);
+            const removed=await acknowledge(row,{advanceDependents:false});
             diagnose('remote-won',row);
-            onSuperseded(row.record);
+            if(removed)onSuperseded(row.record);
             continue;
           }
           if(resolution?.kind==='replace'){
+            if(entries.get(row.record.id)?.serial!==row.serial)continue;
             if(!validReplacement(row.record,resolution.record))
               throw Error('同步合并结果不完整；原始待同步记录已保留');
             if(resolution.record.kind==='batch'&&
@@ -207,17 +237,20 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
               onSuperseded(row.record);
               continue;
             }
+            const sourceRecord=row.record;
             row.record=structuredClone(resolution.record);
             row.baseRevision=revision();
             row.operationID=crypto.randomUUID();
+            clearFailure(row);
             await persist();
             diagnose('merged',row);
+            try{onReplaced(sourceRecord,row.record);}catch{/* The durable outbox remains authoritative. */}
             onSuperseded(row.record);
             continue;
           }
           // An import batch consists only of new, globally unique IDs. If no
           // ID is present remotely, it can be retried after an unrelated edit.
-          if(resolution==='rebase'){row.baseRevision=revision();await persist();diagnose('retry',row);}
+          if(resolution==='rebase'){row.baseRevision=revision();clearFailure(row);await persist();diagnose('retry',row);}
           else {
             if(await splitConflictingBatch(row))continue;
             // A genuinely conflicting editable project becomes a separate
@@ -225,7 +258,7 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
             // project, and never silently drop locally staged work.
             const current=entries.get(row.record.id);
             if(current&&current.serial!==row.serial)continue;
-            const copy=await onConflict(row.record,row.baseRevision);
+            const copy=await onConflict(row.record,row.baseRevision,row.operationID);
             if(!copy||!copy.id||copy.id===row.record.id)
               throw Error('云端版本已变化；待同步作品已保留，未覆盖其他设备的资料');
             const next={record:structuredClone(copy),serial:++serial,
@@ -234,10 +267,11 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
             entries.set(copy.id,next);
             try{await persist();}
             catch(failure){entries.delete(copy.id);entries.set(row.record.id,row);throw failure;}
+            try{onForked(row.record,copy);}catch{/* UI notification never rolls back a durable fork. */}
             report();continue;
           }
         }
-        try{await commit(row.record,row.operationID);}
+        try{await commit(row.record,row.operationID,row.baseRevision);}
         catch(failure){
           markSyncPhase(failure,'上传当前待同步记录');
           // The server may have committed before its response disappeared.
@@ -245,18 +279,26 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
           let resolved;
           try{resolved=await reconcile(row.record,row.operationID,row.baseRevision);}catch{/* Keep the row if verification is offline. */}
           if(resolved==='committed'){await acknowledge(row);diagnose('committed',row);continue;}
-          if(resolved==='remote'){await acknowledge(row);diagnose('remote-won',row);onSuperseded(row.record);continue;}
+          if(resolved==='remote'){
+            const removed=await acknowledge(row,{advanceDependents:false});diagnose('remote-won',row);
+            if(removed)onSuperseded(row.record);continue;
+          }
           if(resolved?.kind==='replace'){
+            if(entries.get(row.record.id)?.serial!==row.serial)continue;
             if(!validReplacement(row.record,resolved.record))
               throw Error('同步合并结果不完整；原始待同步记录已保留');
             if(resolved.record.kind==='batch'&&
               !resolved.record.payload?.operations?.length){await acknowledge(row);onSuperseded(row.record);continue;}
+            const sourceRecord=row.record;
             row.record=structuredClone(resolved.record);
             row.baseRevision=revision();row.operationID=crypto.randomUUID();
-            await persist();diagnose('merged',row);onSuperseded(row.record);continue;
+            clearFailure(row);
+            await persist();diagnose('merged',row);
+            try{onReplaced(sourceRecord,row.record);}catch{/* The durable outbox remains authoritative. */}
+            onSuperseded(row.record);continue;
           }
           if(resolved==='rebase'){
-            if(revision()>row.baseRevision){row.baseRevision=revision();await persist();diagnose('retry',row);continue;}
+            if(revision()>row.baseRevision){row.baseRevision=revision();clearFailure(row);await persist();diagnose('retry',row);continue;}
             // A PL/pgSQL validation error is a confirmed rejection, even
             // though the revision stayed put. Preserve its code and message
             // instead of misreporting a lost network acknowledgement.
@@ -269,6 +311,20 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
             throw markSyncPhase(new Error('云端版本未变化，本次上传未获确认；本机修改已保留，将自动重试',{cause:failure}),failure.syncPhase||'上传当前待同步记录');
           }
           if(resolved==='conflict'&&await splitConflictingBatch(row))continue;
+          if(resolved==='conflict'&&row.record.kind==='project'){
+            const current=entries.get(row.record.id);
+            if(current&&current.serial!==row.serial)continue;
+            const copy=await onConflict(row.record,row.baseRevision,row.operationID);
+            if(!copy||!copy.id||copy.id===row.record.id)
+              throw Error('云端作品已变化；本机完整作品仍保留在待同步队列');
+            const next={record:structuredClone(copy),serial:++serial,
+              baseRevision:revision(),operationID:crypto.randomUUID()};
+            entries.delete(row.record.id);entries.set(copy.id,next);
+            try{await persist();}
+            catch(error){entries.delete(copy.id);entries.set(row.record.id,row);throw error;}
+            try{onForked(row.record,copy);}catch{/* UI notification does not own the fork. */}
+            report();continue;
+          }
           throw failure;
         }
         await staging;
@@ -276,12 +332,25 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
         }catch(failure){
           blocked.add(row.record.id);
           blockedKeys.push(recordKeys(row.record));
-          if(/云端版本已变化|另一设备已更新|\bconflict\b/i.test(failure?.message||'')){
+          const category=failureClass(failure);
+          const manual=category==='conflict'||category==='invalid'||
+            /账号已清空|云端版本已变化|另一设备已更新|\bconflict\b/i.test(failure?.message||'');
+          const current=entries.get(row.record.id);
+          if(current?.serial===row.serial){
+            current.lastFailureClass=manual?category==='invalid'?'invalid':'conflict':category;
+            if(manual)delete current.nextAttemptAt;
+            else{
+              current.attempt=(Number.isSafeInteger(current.attempt)?current.attempt:0)+1;
+              current.nextAttemptAt=clock()+retryDelay(current.attempt,current.operationID);
+            }
+            try{await persist();}catch(saveFailure){firstFailure??=saveFailure;}
+          }
+          if(manual){
             conflictIDs.add(row.record.id);
             diagnose('conflict',row,failure);
             // A server-reported conflict must still reach callers that open
             // the manual review flow. Other queued records can commit first.
-            if(/\bconflict\b/i.test(failure?.message||''))firstFailure??=failure;
+            if(category==='invalid'||category==='conflict'||/\bconflict\b/i.test(failure?.message||''))firstFailure??=failure;
           }else{
             firstFailure??=failure;
             diagnose('failed',row,failure);
@@ -297,7 +366,7 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
       // Publish the idle transition too, or the shell can show “上传中” with an
       // empty outbox until some unrelated edit causes another status event.
       report();
-      if(entries.size&&!error&&[...entries.keys()].some(id=>!conflicts.has(id)))scheduleAuto();
+      if(entries.size)scheduleAuto();
     });
     network.catch(()=>{});return network;
   }
@@ -357,15 +426,21 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
         // The factory receives these rows read-only. Cloning the whole input
         // would duplicate every queued image Blob before IndexedDB writes it.
         const result=await factory(before);
-        const records=result?.records,baseRevision=result?.baseRevision;
-        if(!Array.isArray(records)||!Number.isSafeInteger(baseRevision)||baseRevision<0)
+        const replacementRows=result?.rows;
+        if(!Array.isArray(replacementRows))
           throw Error('本机同步数据重建结果无效；原队列未修改');
         const ids=new Set(),next=[];
-        for(const record of records){
+        for(const item of replacementRows){
+          const {record}=item;
           if(!record?.id||ids.has(record.id))throw Error('重建队列存在重复编号；原队列未修改');
+          if(!Number.isSafeInteger(item.baseRevision)||item.baseRevision<0)
+            throw Error('重建队列缺少原始编辑基线；原队列未修改');
+          if(typeof item.operationID!=='undefined'&&
+            (typeof item.operationID!=='string'||!item.operationID))
+            throw Error('重建队列操作编号无效；原队列未修改');
           ids.add(record.id);
           next.push({record,serial:++serial,
-            baseRevision,operationID:crypto.randomUUID()});
+            baseRevision:item.baseRevision,operationID:item.operationID||crypto.randomUUID()});
         }
         replaceRows(next);
         try{await persist({strictRemoveIds:before.map(row=>row.record.id)});}
@@ -398,5 +473,12 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
     if(row.baseRevision===before&&!touched){row.baseRevision=after;changed=true;}
     }if(changed)await persist();},resolvePending,cancelPendingFor,discard,rebuild,canDiscard:()=>!network&&!rebuilding,
     resume:()=>{paused=false;return kick();},
-    status:()=>({pending:entries.size,error,conflicts:conflicts.size,uploading:!!network||rebuilding})};
+    status:()=>{
+      const retryRows=[...entries.values()].filter(row=>
+        Number.isFinite(row.nextAttemptAt)&&row.nextAttemptAt>0&&
+        !conflicts.has(row.record.id));
+      return {pending:entries.size,error,conflicts:conflicts.size,
+        uploading:!!network||rebuilding,retrying:retryRows.length,
+        nextAttemptAt:retryRows.length?Math.min(...retryRows.map(row=>row.nextAttemptAt)):null};
+    }};
 }

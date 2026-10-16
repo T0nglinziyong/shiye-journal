@@ -58,7 +58,7 @@ export default async function handler(req,res){
    // capable of completing physical object deletion.
    if(!workerReady)return out(res,503,{error:'服务端自动清理任务尚未正确配置；数据库未改动'});
    const {data:rev,error:versionError}=await cloud.from('shiye_revisions')
-      .select('revision').eq('user_id',user).single();
+      .select('revision,account_epoch').eq('user_id',user).single();
    if(versionError)throw Error('无法读取云端数据版本');
    const revision=Number(rev.revision),resetId=req.body.resetId;
    const record={id:'shiye-reset-barrier',phase:'deleting',resetId,
@@ -66,8 +66,9 @@ export default async function handler(req,res){
    const operations=['assets','blobs','series','projects','meta','trash']
       .map(store=>({store,action:'clear'}));
    operations.push({store:'meta',action:'put',item:record});
-   const {error}=await cloud.rpc('shiye_commit_v2',{
-     operations,expected_revision:revision,operation_id:resetId
+   const {error}=await cloud.rpc('shiye_commit_v3',{
+     operations,base_revision:revision,operation_id:resetId,
+     expected_epoch:rev.account_epoch,sync_protocol_version:3
    });
    if(error)throw Error('其他设备正在修改资料，未清空云端数据：'+error.message);
    // Persisted "deleting" marker is the durable job. The scheduled server

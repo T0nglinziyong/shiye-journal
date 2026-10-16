@@ -21,26 +21,19 @@ export function withUsageStatus(asset, used, at = new Date().toISOString()) {
   return {...asset, usageStatus: used ? 'used' : 'unused', usageUpdatedAt: at, updatedAt: at};
 }
 export function projectAssetIDs(project) {
-  return new Set((project.drafts || []).flatMap(d => (d.items || []).filter(i => !i.isParked).map(i => i.assetID)).filter(Boolean));
+  const current=project?.drafts?.find(d=>d.id===project.activeDraftID)||project?.drafts?.[0];
+  return new Set((current?.items||[]).filter(item=>!item.isParked&&!item.hidden&&!item.isHidden)
+    .map(item=>item.assetID).filter(Boolean));
 }
-export function markProjectAssetsUsed(project, assets, at = new Date().toISOString()) {
+export function markProjectAssetsUsed(project, assets, at = new Date().toISOString(),{includeTape=false}={}) {
   const ids = projectAssetIDs(project);
-  return assets.filter(asset => ids.has(asset.id) && asset.usageStatus !== 'used').map(asset => withUsageStatus(asset, true, at));
+  return assets.filter(asset => ids.has(asset.id) && (includeTape||asset.kind!=='tape') &&
+    asset.usageStatus !== 'used').map(asset => withUsageStatus(asset, true, at));
 }
 export function seriesMembers(seriesID, assets, filters = {}) {
-  const used = usedAssetIDs(assets), q = (filters.query || '').trim().toLocaleLowerCase();
-  return assets.filter(a => {
-    if (a.isProjectInternal || a.seriesID !== seriesID) return false;
-    if (filters.kind && filters.kind !== 'all' && a.kind !== filters.kind) return false;
-    if (filters.status === 'ready' && a.reviewStatus !== 'ready') return false;
-    if (filters.status === 'unready' && a.reviewStatus === 'ready') return false;
-    if (filters.status === 'used' && !used.has(a.id)) return false;
-    if (filters.status === 'unused' && a.usageStatus !== 'unused') return false;
-    if (filters.status === 'favorite' && !a.isFavorite) return false;
-    if (filters.status === 'outside') return false;
-    return !q || [a.title, ...(a.tags || []), ...(a.styleTags || []), ...(a.contentTags || []), ...(a.semanticTags || [])].join(' ').toLocaleLowerCase().includes(q);
-  }).sort((a,b) => {
-    const v = filters.sort === 'name' ? a.title.localeCompare(b.title, 'zh-CN') : String(a.createdAt || '').localeCompare(b.createdAt || '');
-    return (filters.ascending ? v : -v) || a.id.localeCompare(b.id);
-  });
+  const sort=filters.sort==='name'?(filters.ascending?'name':'name-desc'):
+    filters.ascending?'oldest':'newest';
+  return queryAssets(assets,{query:filters.query,kind:filters.kind,status:filters.status,
+    seriesID,sort});
 }
+import {queryAssets} from './asset-query.js';

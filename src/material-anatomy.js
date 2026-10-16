@@ -7,20 +7,13 @@ export function assetVisualDescriptor(asset){
   processingRecord:asset.processingRecord??null,sourceSilhouette:asset.sourceSilhouette??null,
   imageHash:asset.imageHash??asset.contentHash??null,orientation:asset.orientation??null};
 }
-function physicalSupply(asset){
- const supply=asset.supply??{quantity:1},quantity=supply.quantity??1;
- if(supply.kind==='tapeRoll')return {kind:'tapeRoll',quantity,availableLengthMM:supply.availableLengthMM??null};
- if(supply.kind==='unlimited')return {kind:'unlimited',quantity};
- return {kind:'counted',quantity};
-}
-const physicalSource=asset=>({...assetVisualDescriptor(asset),kind:asset.kind??null,supply:physicalSupply(asset),
+const physicalSource=asset=>({...assetVisualDescriptor(asset),kind:asset.kind??null,
  tapeRepeatMode:asset.tapeRepeatMode==='repeatablePattern'?'repeatablePattern':'singleStrip',
  tapeRepeatPeriodMM:asset.tapeRepeatMode==='repeatablePattern'?asset.tapeRepeatPeriodMM??null:null});
 const frozenTaskRevision=Symbol('frozenTaskRevision');
-// Editing a title, label or series updates updatedAt without changing the
-// physical material. Keep that timestamp out of new source revisions.
+// Inventory and catalog metadata never change a source cutout or its size.
 export const assetSourceRevision=asset=>asset[frozenTaskRevision]||craftDigest(physicalSource(asset));
-// A saved work still refers to the library image. Metadata and inventory may
+// A saved work still refers to the library image. Metadata may
 // change while the model is working, but a different cutout or measured size
 // would change the meaning of its placements and physical operations.
 export function sameMaterialCutoutAndSize(exported,current){
@@ -33,7 +26,7 @@ export function sameMaterialCutoutAndSize(exported,current){
 }
 export function materialSourceSnapshot(asset){
  return {assetID:asset.id,sourceRevision:assetSourceRevision(asset),descriptor:assetVisualDescriptor(asset),updatedAt:asset.updatedAt??null,
-  kind:asset.kind,title:asset.title,role:asset.role??null,tags:asset.tags||[],supply:structuredClone(asset.supply??{quantity:1}),
+  kind:asset.kind,title:asset.title,role:asset.role??null,tags:asset.tags||[],
   tapeRepeatMode:asset.tapeRepeatMode??null,tapeRepeatPeriodMM:asset.tapeRepeatPeriodMM??null};
 }
 export function assetFromSourceSnapshot(snapshot,{frozenRevision=false}={}){
@@ -42,7 +35,7 @@ export function assetFromSourceSnapshot(snapshot,{frozenRevision=false}={}){
  const asset={id:snapshot.assetID,title:snapshot.title,kind:snapshot.kind,role:snapshot.role,tags:snapshot.tags,
   blobId:d.blobId,originalBlobId:d.originalBlobId,staticPath:d.staticPath,physicalWidthMM:d.widthMM,physicalHeightMM:d.heightMM,
   imageSize:d.imageSize,processingRecord:d.processingRecord,sourceSilhouette:d.sourceSilhouette,imageHash:d.imageHash,orientation:d.orientation,
-  updatedAt:snapshot.updatedAt,supply:snapshot.supply,tapeRepeatMode:snapshot.tapeRepeatMode,tapeRepeatPeriodMM:snapshot.tapeRepeatPeriodMM};
+  updatedAt:snapshot.updatedAt,tapeRepeatMode:snapshot.tapeRepeatMode,tapeRepeatPeriodMM:snapshot.tapeRepeatPeriodMM};
  if(frozenRevision)Object.defineProperty(asset,frozenTaskRevision,{value:snapshot.sourceRevision});
  return asset;
 }

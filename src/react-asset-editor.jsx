@@ -1,20 +1,21 @@
-import React,{useState} from 'react';
+import React,{useRef,useState} from 'react';
 import {materialKinds,materialRoles,materialTextures,isMaterialTexture} from './material-taxonomy.js';
+import {useUnsavedInput} from './unsaved-inputs.js';
 
-const tabNames=['基本信息','尺寸与库存','分类与标签'];
+const tabNames=['基本信息','尺寸与胶带','分类与标签'];
 
 export function AssetEditorDialog({asset,series,used,src,onClose,onSave}){
   const [tab,setTab]=useState(0),[busy,setBusy]=useState(false),[error,setError]=useState('');
   const [form,setForm]=useState({title:asset.title,kind:asset.kind,role:asset.role,
     texture:isMaterialTexture(asset.texture)?asset.texture:'未确定',width:asset.physicalWidthMM??'',height:asset.physicalHeightMM??'',
-    quantity:asset.supply?.quantity??(asset.kind==='tape'?999:1),
     contentTags:(asset.contentTags||[]).join('、'),styleTags:(asset.styleTags||[]).join('、'),
     materialTags:(asset.materialTags||[]).join('、'),tags:(asset.tags||[]).join('、'),
     seriesID:asset.seriesID||'',reviewStatus:asset.reviewStatus||'pendingReview',
-    usageStatus:used?'used':'unused',tapeRoll:asset.supply?.kind==='tapeRoll',
-    supplyLength:asset.supply?.availableLengthMM??'',repeatable:asset.tapeRepeatMode==='repeatablePattern',
+    usageStatus:used?'used':'unused',repeatable:asset.tapeRepeatMode==='repeatablePattern',
     repeatPeriod:asset.tapeRepeatPeriodMM??''});
-  const set=(key,value)=>setForm(old=>({...old,[key]:value,...(key==='kind'&&value==='tape'&&Number(old.quantity)===1?{quantity:999}:{})}));
+  const initial=useRef(JSON.stringify(form));
+  useUnsavedInput('素材信息',JSON.stringify(form)!==initial.current);
+  const set=(key,value)=>setForm(old=>({...old,[key]:value}));
   const field=(label,key,type='text')=><label key={key}>{label}<input id={`asset-${key}`} type={type}
     value={form[key]} onChange={event=>set(key,event.target.value)}/></label>;
   const select=(label,key,choices)=><label key={key}>{label}<select id={`asset-${key}`}
@@ -50,17 +51,13 @@ export function AssetEditorDialog({asset,series,used,src,onClose,onSave}){
         <div className="stack material-info-panel" hidden={tab!==1}>
           <div className="form-grid">{field('实物宽 mm','width','number')}
             {field('实物高 mm','height','number')}</div>
-          {field('数量（999＝不限使用）','quantity','number')}
-          <section id="tape-stock" hidden={form.kind!=='tape'}><h3>胶带库存</h3>
-            <label className="toggle-row">实际持有整卷<input id="asset-tape-roll" type="checkbox"
-              checked={form.tapeRoll} onChange={event=>set('tapeRoll',event.target.checked)}/></label>
-            {field('整卷剩余长度 mm','supplyLength','number')}
+          <section id="tape-pattern" hidden={form.kind!=='tape'}><h3>胶带图案</h3>
             <label className="toggle-row">已确认重复纹样<input id="asset-repeatable" type="checkbox"
               checked={form.repeatable} onChange={event=>set('repeatable',event.target.checked)}/></label>
             {field('真实重复周期 mm','repeatPeriod','number')}
             <p>未知周期时只能使用照片拍到的一段。</p>
           </section>
-          <p>数量 999 表示无限使用，创作后不会自动减为 998；数量为 0 时不可用于搭配。</p>
+          <p>普通素材在同一创作方案中取用一次，可裁成多片；不同作品独立使用。</p>
         </div>
         <div className="stack material-info-panel" hidden={tab!==2}>
           {field('具体内容','contentTags')}{field('风格','styleTags')}

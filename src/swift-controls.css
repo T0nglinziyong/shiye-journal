@@ -203,7 +203,7 @@ body:has(.library-management-tray):not(:has(.library-management-tray:not([hidden
 #cutout-mode-panel .setting-toggle input[type=checkbox]{width:20px;height:20px;margin:0;flex:none}
 #cutout-mode-panel h3{margin:5px 0 1px}
 #cutout-mode-panel>label{gap:4px}
-.material-info-panel[hidden],#tape-stock[hidden]{display:none!important}
+.material-info-panel[hidden],#tape-pattern[hidden]{display:none!important}
 .material-editor-controls{gap:10px}
 .material-info-panel{gap:10px;padding:12px}
 .material-editor-controls>p{margin:0;font-size:12px;color:#879084}

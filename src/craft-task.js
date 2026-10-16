@@ -54,4 +54,4 @@ export function inheritCreationBrief(project,source){
  project.creationBaseSceneHash=source.baseSceneHash;
  return project;
 }
-export const craftTaskInstructions=`素材工艺计划：用 apply_craft_plan 可一次提交取材、加工、关系和父片拆分。每件素材的 sourceRevision 见 context.json 的 sourceSnapshots；场景基线见 source.baseSceneHash。新建子片使用独立 id，consume 列出父片，parentId 指回父片，默认保留的余料会进入备选。也可以继续使用普通页面或工具格式。GPT 可直接看图提出本次观察轮廓；该观察只服务本次创作，不写回素材库。素材抠图或实物尺寸改变后必须重新导出任务；类型和库存按原任务快照解释本次作品，不修改原 source 蒙混。工艺决策与制作说明不进入正文，完整使用是合法设计选择。`;
+export const craftTaskInstructions=`素材工艺计划：用 apply_craft_plan 可一次提交取材、加工、关系和父片拆分。每件素材的 sourceRevision 见 context.json 的 sourceSnapshots；场景基线见 source.baseSceneHash。新建子片使用独立 id，consume 列出父片，parentId 指回父片，默认保留的余料会进入备选。也可以继续使用普通页面或工具格式。GPT 可直接看图提出本次观察轮廓；该观察只服务本次创作，不写回素材库。素材抠图或实物尺寸改变后必须重新导出任务；类型和来源快照按原任务解释本次作品，不修改原 source 蒙混。工艺决策与制作说明不进入正文，完整使用是合法设计选择。`;

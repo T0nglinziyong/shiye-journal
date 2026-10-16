@@ -25,8 +25,8 @@ test('manual star toggles remain authoritative when a recommended material is se
  assert.deepEqual(state.coreIDs,['a']);
 });
 
-test('unavailable library inventory is not silently promoted to must-use',()=>{
+test('inventory fields no longer prevent explicit material selection',()=>{
  const state={assets:[asset('ok'),{...asset('zero'),supply:{quantity:0}}],basket:[],coreIDs:[],excludedAssetIDs:[]};
- assert.deepEqual(addMatchingFromLibrary(state,['ok','zero']),['ok']);
- assert.deepEqual(state.coreIDs,['ok']);
+ assert.deepEqual(addMatchingFromLibrary(state,['ok','zero']),['ok','zero']);
+ assert.deepEqual(state.coreIDs,['ok','zero']);
 });

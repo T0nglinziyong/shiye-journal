@@ -66,21 +66,21 @@ export const toolContracts={
 const descriptions={
   compose_story_page:'将主题、两段观察与真实素材编成可编辑的日记/拼贴图层；实物尺寸不缩放。失败整体回滚。',
   compose_page:'原子编排材料、图形、文字、纸张；坐标 ratio/pt/mm，relative_to + offset 为目标宽高倍数。crop 为源比例，crop_px 为源像素。失败整体回滚。',
-  place_materials:'放置整件真实素材；尺寸来自素材库，同件已放置时更新位置。piece 与 unit 指定片段及库存单位。',
+  place_materials:'放置整件真实素材；尺寸来自素材库，同件已放置时更新位置。piece 指定片段，unit 指定胶带来源段；普通素材每方案只取用一份。',
   edit_materials:'连续加工现有片段：append 接着当前片加工，replace 从原材料开始。先矩形裁片/胶带截段，再以 mask 设圆角、花边或多边形外轮廓；diagonal 以源片比例坐标 from/to 的直线裁去一侧，keep 为 left/right；window 在片段内部开透明矩形或椭圆孔，box=[x,y,宽,高]。外轮廓、斜裁和多个不重叠开窗可组合，不会变成白色填充；实物尺寸保持原比例。',
-  upsert_materials:'整体替换片段的完整工序；remove 先移走旧片，再核验尺寸、库存单位与裁片不重叠。',
+  upsert_materials:'整体替换片段的完整工序；remove 先移走旧片，再核验尺寸、来源段与裁片不重叠。',
   move_elements:'修改现有图层的位置、旋转、层序；实物大小保持不变。ratio/pt/mm 或 relative_to + offset。',
   arrange_elements:'把图层排成行/列/不等尺寸网格，保留实物大小，以毫米间距和整体中心布局。',
   fit_text_to:'把完整文字放进素材或图形，padding_mm 左上右下；字号可调整，放不下明确失败，不裁字。透明边界需已有扫描数据。',
   upsert_primitives:'写入实际可编辑数字图形；match_size_to + padding_mm 左上右下匹配相框尺寸。',
   upsert_text:'写入可编辑真实段落；宽度必填，高度不足会扩到完整排版高度；支持字号、字色、字重和段落间距。',
-  style_elements:'为已存在的实体素材、文字或图形设置共享 Scene 属性：非破坏性矢量外轮廓／镂空蒙版、透明度和正片叠底。不能改变实物尺寸和库存。',
+  style_elements:'为已存在的实体素材、文字或图形设置共享 Scene 属性：非破坏性矢量外轮廓／镂空蒙版、透明度和正片叠底。不能改变实物尺寸。',
   group_elements:'将两件或更多现有图层创建实体手帐组合，便于一起移动和选择；不额外缩放实物，也不创建新的素材。',
   ungroup_elements:'取消实体手帐组合，仅解除选区关联，不删除任何实体素材或可编辑图层。',
-  delete_elements:'移走作品图层，不修改素材库或实际库存。锁定图层不可移除。',
+  delete_elements:'移走作品图层，不修改素材库。锁定图层不可移除。',
   set_paper:'设置纸色、纸型与构图意图，不创建实物底纸。',
   inspect_materials:'查看最多4个现有素材/裁片的真实尺寸、可见边界和原图来源描述；只接受已知ID。',
-  finish_design:'仅能作为本轮最后调用，且前面全部成功；核验真实素材尺寸、裁片、必用素材和实际库存。文字、留白与构图由创作者决定。'
+  finish_design:'仅能作为本轮最后调用，且前面全部成功；核验真实素材尺寸、裁片、必用素材和单方案取用。文字、留白与构图由创作者决定。'
 };
 export function validateValue(value,schema,path='$'){
   let check=compiled.get(schema);if(!check){check=validator.compile(schema);compiled.set(schema,check);}if(check(value))return;
@@ -103,7 +103,7 @@ const directSceneGroup=object({type:enums(['group']),id:groupID,name:string(80),
   children:array({$ref:'#/$defs/node'},1,100)},['type','id','children']);
 // No duplicate page.items/graphics/ink fields: the whole AI page is one
 // ordered, nestable Scene layer tree. Material transforms remain physically
-// derived from source aliases, crop operations and stock units.
+// derived from source aliases, crop operations and source segments.
 export const directPageContract={
   ...object({version:{type:'integer',enum:[2]},style:enums(['留白叙事','密集拼贴','杂志网格','胶片日记','手作便签','自由构图']),
     intent:nullable(string(240)),paper:object({color,pattern:enums(['plain','lines','grid','dots','columns']),

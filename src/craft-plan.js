@@ -68,10 +68,10 @@ export function applyCraftPlan({draft,plan,assets,aliases,options,api}){
   const existing=(draft.items||[]).find(i=>pieceKey(i)===piece.id||i.id===piece.id);
   craftAssert(!existing,'EXISTING_PIECE','工艺计划的新片段编号已在画布中；修改请明确消费父片',{pieceId:piece.id});
   const asset=lookup(assets,aliases,piece.asset);craftAssert(asset,'MISSING_SOURCE','计划引用的素材不存在',{pieceId:piece.id});
-  craftAssert(piece.sourceRevision===assetSourceRevision(asset),'STALE_SOURCE','素材来源、标定或库存已变化，请重新导出任务',{assetId:asset.id,pieceId:piece.id});
+  craftAssert(piece.sourceRevision===assetSourceRevision(asset),'STALE_SOURCE','素材抠图或实物尺寸已变化，请重新导出任务',{assetId:asset.id,pieceId:piece.id});
   if(piece.parentId){
    const parent=parents.get(piece.parentId);
-   craftAssert(parent&&parent.item.assetID===asset.id&&(parent.item.materialUnitIndex??0)===(piece.unit??0),'INVALID_PARENT_SOURCE','子片必须引用同来源、同库存单位且显式消费的父片',{pieceId:piece.id});
+   craftAssert(parent&&parent.item.assetID===asset.id&&(parent.item.materialUnitIndex??0)===(piece.unit??0),'INVALID_PARENT_SOURCE','子片必须引用同来源段且显式消费的父片',{pieceId:piece.id});
   }
   specs.push({piece,asset,material:plannedMaterial(piece,asset,draft,observations)});
  }
@@ -122,6 +122,6 @@ export function applyCraftPlan({draft,plan,assets,aliases,options,api}){
  const ledger=buildMaterialLedger(draft,assets);api.validate();
  const resultHash=craftSceneHash(draft),receipt={version:1,commandId:plan.commandId,inputHash,baseHash:currentHash,resultHash,pieces:specs.map(s=>s.piece.id),offcuts:offcuts.map(s=>s.piece),lineage,scraps,observations:plan.observations?.length||0};
  draft.craftLedger=compactMaterialLedger(ledger);draft.craftReceipts=[...(draft.craftReceipts||[]),receipt].slice(-32);
- if(plan.finish!==false)api.finish({summary:plan.summary||'工艺计划已通过实体来源与库存约束'});
+ if(plan.finish!==false)api.finish({summary:plan.summary||'工艺计划已通过来源区域与单方案取用校验'});
  return {detail:'工艺计划已原子执行；保留 '+specs.length+' 件片段及 '+offcuts.length+' 件余料',mutation:true,data:receipt};
 }

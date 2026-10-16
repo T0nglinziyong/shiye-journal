@@ -37,3 +37,20 @@ test('logout clears disposable reads but preserves account-scoped pending edits'
   assert.equal(await reopened.get('user-a','records:assets'),undefined);
   assert.deepEqual(await reopened.get('user-b','records:assets'),{revision:3});
 });
+test('preview cleanup reports exact bytes and leaves originals, documents and pending edits',async()=>{
+  const cache=createPrivateCache({name:'private-cache-clean-'+Date.now()});
+  await cache.put('a','thumbnail480:a/cover',new Blob(['1234']));
+  await cache.put('a','preview960:a/photo',new Blob(['123456']));
+  await cache.put('a','image:a/photo',new Blob(['original']));
+  await cache.put('a','project-document:a/work',new Blob(['document']));
+  await cache.put('a','unified-outbox',[{record:{id:'project:w'}}]);
+  await cache.put('b','thumbnail480:b/cover',new Blob(['other']));
+  assert.equal(await cache.previewBytes('a'),10);
+  assert.deepEqual(await cache.clearPreviews('a'),{count:2,bytes:10});
+  assert.equal(await cache.previewBytes('a'),0);
+  assert.equal(await cache.get('a','thumbnail480:a/cover'),undefined);
+  assert.equal((await cache.get('a','image:a/photo')).size,8);
+  assert.equal((await cache.get('a','project-document:a/work')).size,8);
+  assert.deepEqual(await cache.get('a','unified-outbox'),[{record:{id:'project:w'}}]);
+  assert.equal((await cache.get('b','thumbnail480:b/cover')).size,5);
+});

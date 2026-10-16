@@ -7,6 +7,7 @@ const safeFields=new Set([
   'recognitionDenoise','recognitionLocalContrast','recognitionChromaEdges',
   'recognitionShapeRegularization','recognitionApertures',
   'customPaperWidth','customPaperHeight','display','backdrop','maxPageItems',
+  'markTapeUsedWithProject',
   'recognitionDefaultsVersion'
 ]);
 export const cloudPreferencesRecord=(preferences,updatedAt=new Date().toISOString())=>({

@@ -30,7 +30,7 @@ export function validateDisplaySlices(item){
  }
 }
 // Render projections only. A projected fragment has its owner's source crop,
-// physical transform and appearance. It is never added to draft.items/stock.
+// physical transform and appearance. It is never added as a source material.
 export function projectMaterialViews(item){
  if(!item.craftDisplaySlices?.length)return [{...item,renderKey:item.id,ownerID:item.id}];
  validateDisplaySlices(item);
@@ -43,7 +43,7 @@ export function projectMaterialViews(item){
  craftAssert(parts.length<=64,'DISPLAY_FRAGMENT_BUDGET','局部显示碎片过多');return parts;
 }
 // A single source piece may be projected into front/back visibility pieces.
-// These projections never exist in the saved Scene and consume no material stock.
+// These projections never exist in the saved Scene and consume no new source material.
 // Calling surfaces must sort siblings AFTER expansion, so a piece can actually
 // pass both behind and in front of another independent physical layer.
 export function sceneDisplaySiblings(nodes){

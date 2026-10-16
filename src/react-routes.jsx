@@ -1119,7 +1119,7 @@ function EditorInspector({selected,draft,asset,format,onChange,onAction}){
       </div>}
     </>:null}
     {selected.kind==='material'?<><h3>真实素材</h3>
-      <p className="muted">实物 {format(asset(item.assetID)?.physicalWidthMM||0)} × {format(asset(item.assetID)?.physicalHeightMM||0)} mm · 库存单元 {(item.materialUnitIndex??0)+1}</p>
+      <p className="muted">实物 {format(asset(item.assetID)?.physicalWidthMM||0)} × {format(asset(item.assetID)?.physicalHeightMM||0)} mm</p>
       {item.cropRect?<p className="muted">已取用原素材的 {Math.round(item.cropRect.width*100)}% × {Math.round(item.cropRect.height*100)}% 区域；移动和旋转不会改变裁片。</p>:null}
       {item.materialMask?<p className="muted">已保留 AI 创作的裁边或镂空工艺。</p>:null}
       {check('inspector-flipped','左右镜像',item.isFlippedHorizontally)}
@@ -1234,7 +1234,7 @@ export function EditorPage({state,draft,editorEntry,asset,source,format,
     <button className="btn" data-act="back-works">返回</button>
     <div><h1 contentEditable suppressContentEditableWarning id="project-title"
     spellCheck="false" onBlur={event=>onTitleCommit(event.currentTarget.textContent)}>{project.title}</h1>
-      <p>编辑只改变作品，不修改素材库里的原始尺寸和数量</p></div><div className="actions">
+      <p>编辑只改变作品，不修改素材库里的原始图片和尺寸</p></div><div className="actions">
       <span className="swift-auto-saved">{document.querySelector('#save-state')?.textContent||'本机暂存'}</span>
         <FabricHeaderMenu kind="history" project={project} onAction={onAction} onAIOpen={onAIOpen}/>
         <button className="btn" data-act="undo" aria-label="撤销">↶</button>
@@ -1329,7 +1329,6 @@ export function AssetDetailPage({asset,seriesTitle,source,kindName,format,onActi
         aria-pressed={!!asset.isFavorite} onClick={act('detail-favorite')}>{asset.isFavorite?'♥':'♡'}</button>
       <h1>{asset.title}</h1><div className="detail-facts">
         <div><small>真实尺寸</small><span>{format(asset.physicalWidthMM||0)} × {format(asset.physicalHeightMM||0)} mm</span></div>
-        <div><small>可用库存</small><span>{asset.supply?.quantity??1} 件</span></div>
         <div><small>素材类型</small><span>{kindName(asset.kind)}</span></div>
         <div><small>主要作用</small><span>{materialRoleName(asset.role)||'待记录'}</span></div>
         <div><small>材质</small><span>{asset.texture||'待记录'}</span></div>
@@ -1519,6 +1518,48 @@ export function SettingsRecognitionPage({preferences,onAction}){
   </SettingsDetailShell>;
 }
 
+function OfflineStorageStatus({state,cloudEnabled}){
+  const [status,setStatus]=useState({shell:null,usage:null,quota:null,previews:null});
+  const [clearing,setClearing]=useState(false);
+  useEffect(()=>{let live=true;
+    const check=()=>Promise.allSettled([
+      typeof caches==='undefined'?Promise.resolve(false):caches.match('/').then(Boolean),
+      navigator.storage?.estimate?.()||Promise.resolve(null),
+      cloudEnabled?import('./store.js').then(store=>store.previewCacheBytes()):Promise.resolve(null)
+    ]).then(([shell,estimate,previews])=>{
+      if(!live)return;
+      const space=estimate.status==='fulfilled'?estimate.value:null;
+      setStatus({shell:shell.status==='fulfilled'&&!!navigator.serviceWorker?.controller?shell.value:false,
+        usage:Number.isFinite(space?.usage)?space.usage:null,
+        quota:Number.isFinite(space?.quota)?space.quota:null,
+        previews:previews.status==='fulfilled'?previews.value:null});
+    });
+    void check();
+    navigator.serviceWorker?.addEventListener?.('controllerchange',check);
+    return()=>{live=false;navigator.serviceWorker?.removeEventListener?.('controllerchange',check);};
+  },[cloudEnabled]);
+  const format=value=>value===null?'未知':`${(value/1024/1024).toFixed(1)} MB`;
+  const clear=async()=>{
+    if(clearing)return;
+    setClearing(true);
+    try{const store=await import('./store.js'),result=await store.clearPreviewCache();
+      const space=await (navigator.storage?.estimate?.()||Promise.resolve(null)).catch(()=>null);
+      setStatus(previous=>({...previous,previews:0,
+        usage:Number.isFinite(space?.usage)?space.usage:previous.usage,
+        quota:Number.isFinite(space?.quota)?space.quota:previous.quota}));
+      alert(`已清理 ${result.count} 份低清封面缓存，约 ${format(result.bytes)}。联网后会按需重新下载。`);
+    }catch(error){alert('封面缓存暂时无法清理：'+error.message);}
+    finally{setClearing(false);}
+  };
+  return <SettingsGroup title="本机与离线状态">
+    <p id="offline-state">应用页面：{status.shell===null?'正在检查':status.shell?'已缓存，可尝试离线打开':'尚未确认完整缓存，需要联网打开'}</p>
+    <p>当前账号本机索引：素材 {state.assets.length} 件，作品 {state.projects.length} 件。{cloudEnabled?'云端尚未下载的记录和图片，离线时可能不可用。':'此浏览器是当前资料的保存位置。'}</p>
+    <p>本机站点已用空间：{format(status.usage)}；浏览器估计可用额度：{format(status.quota)}。图片是否可离线查看，以打开时的本机缓存为准。</p>
+    {cloudEnabled?<><p>可重新下载的低清封面缓存：{format(status.previews)}。清理后离线时可能暂时看不到这些封面；本机待同步修改和原图不会清除。</p>
+      <button type="button" className="btn" disabled={clearing||!(status.previews>0)} onClick={clear}>清理低清封面缓存</button></>:null}
+  </SettingsGroup>;
+}
+
 export function SettingsDataPage({state,cloudEnabled,storage,onAction}){
   const [diagnostics,setDiagnostics]=useState(null);
   const counts=`素材 ${state.assets.length} 件 · 作品 ${state.projects.length} 件 · 最近删除 ${state.trash.length} 项`;
@@ -1536,7 +1577,7 @@ export function SettingsDataPage({state,cloudEnabled,storage,onAction}){
       onClick={()=>onAction('purge-trash-item',item.id)}>彻底删除</button>
   </div>):<p>没有最近删除的项目。</p>}</SettingsGroup>;
   return <SettingsDetailShell title="数据与诊断" kind="settingsData" onAction={onAction}>
-    <SettingsGroup title="应用错误诊断" description="导出本次打开拾页以来的运行错误、网络与同步故障的安全摘要，包含发生页面、阶段、错误类别和可判断的原因。不会导出作品、图片、账号、密钥或原始报错文本；关闭应用后不保留。">
+    <SettingsGroup title="应用错误诊断" description="导出最近 7 天本机记录的运行错误、网络与同步故障安全摘要，包含发生页面、阶段、错误类别和可判断的原因。不会导出作品、图片、账号、密钥或原始报错文本。">
       {button('export-app-diagnostics','导出完整错误诊断')}
     </SettingsGroup>
     <SettingsGroup title="图片保留与清理" description="删除素材后，已有作品引用的图片会隐藏保留；从最近删除彻底移除且无作品引用时才清除隐藏素材记录。云端 COS 原图尚不自动物理删除，避免遗漏其他设备、历史存档或备份中的引用。"/>
@@ -1584,8 +1625,8 @@ export function SettingsDataPage({state,cloudEnabled,storage,onAction}){
         <p>服务器地址需要公网 HTTPS，手机访问 localhost 指的是手机自身；同一台电脑运行的拾页服务可直接打开 http://127.0.0.1:4173。跨数据源转移资料请使用下方“导出完整备份 / 从备份恢复”，不在连接动作中隐式迁移。</p>
       </SettingsGroup>
       {backup}{trash}
-      <SettingsGroup title="离线状态"><p id="offline-state">{navigator.serviceWorker?.controller?"离线程序已就绪":"首次打开时需要联网；请等待离线程序安装后再测试飞行模式"}</p></SettingsGroup>
     </>}
+    <OfflineStorageStatus state={state} cloudEnabled={cloudEnabled}/>
     {diagnostics?<SettingsDiagnosticsDialog kind={diagnostics}
       accountID={state.accountId||'browser'} onClose={()=>setDiagnostics(null)}/>:null}
   </SettingsDetailShell>;
@@ -1606,7 +1647,7 @@ function AINumber({id,label,value,min,max,step}){
     step={step} defaultValue={value}/></label>;
 }
 
-export function SettingsAIPage({settings,onAction}){
+export function SettingsAIPage({settings,preferences,onAction}){
   const cfg=settings;
   const [provider,setProvider]=useState(cfg.provider);
   const [endpoint,setEndpoint]=useState(cfg.endpoint);
@@ -1639,6 +1680,8 @@ export function SettingsAIPage({settings,onAction}){
       <p>可让 AI 返回可编辑作品；网页任务包会附上素材预览和创作说明。</p>
       <AIToggle id="require-all" label="候选素材必须全部使用" checked={cfg.requireAllCandidates}/>
       <AIToggle id="auto-recommendations" label="把建议搭配加入候选素材" checked={cfg.autoIncludeRecommendations}/>
+      <SettingsToggle id="setting-mark-tape-used" label="标记作品已使用时，同时标记胶带为已使用"
+        checked={preferences?.markTapeUsedWithProject===true}/>
       <AIToggle id="structure-reference" label="参考样例的图文结构" checked={cfg.includeStructureReference}/>
       <AIToggle id="send-reference" label="发送匹配风格与用途的手帐案例" checked={cfg.sendPresetReferences}/>
       <label>补充版式指导<textarea id="setting-ai-layout-prompt" placeholder="留空使用默认指导"

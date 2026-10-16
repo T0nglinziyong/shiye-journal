@@ -1,10 +1,16 @@
 // Recreate pending operations from today's local records. The original queued
 // image bytes and delete/clear intentions remain part of the new outbox.
+import {usableProjectSnapshot} from './project-outbox-recovery.js';
 export function rebuildSyncRecords(rows,local={}){
   const byStore=new Map(['assets','series','projects','trash','meta'].map(store=>
     [store,new Map((local[store]||[]).filter(item=>item?.id).map(item=>[item.id,item]))]));
   const refresh=(store,item)=>{
     const current=byStore.get(store)?.get(item?.id);
+    // The Works list can hold a thin cloud summary with an empty layer array.
+    // It must never replace the full Scene already protected in the outbox.
+    if(store==='projects'&&current&&(current.projectDocumentPath||
+      !current.isSnapshot&&!usableProjectSnapshot(current)))
+      return structuredClone(item);
     return current?structuredClone(current):store==='blobs'?item:structuredClone(item);
   };
   const records=[];

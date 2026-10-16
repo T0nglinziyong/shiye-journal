@@ -1,8 +1,9 @@
-import {supportedSchema} from './storage-migrations.js';
+import {validateNativeDraft,validatePackageValue} from './native-project-package.js';
+import {readArchivePayload,archivePayload,compactManualArchiveStore} from './scene-archive.js';
 // Validation happens before restoring a complete six-store backup. In
 // particular, do not clear a real account because a JSON file parses.
 const STORES=['assets','blobs','series','projects','meta','trash'];
-export function validateRestoredRecords(stores){
+export function validateRestoredRecords(stores,{repairs=[]}={}){
   if(!stores||STORES.some(name=>!Array.isArray(stores[name])))throw Error('ZIP 缺少完整六表，未修改现有资料');
   const keys=new Map();
   for(const store of STORES){
@@ -15,58 +16,89 @@ export function validateRestoredRecords(stores){
     keys.set(store,seen);
   }
   for(const asset of stores.assets){
-    for(const ref of ['blobId','candidateFrameBlobId','initialMaskBlobId','finalMaskBlobId']){
-      if(asset[ref]&&!asset.staticPath&&!keys.get('blobs').has(asset[ref]))
-        throw Error('ZIP 素材缺少必要图片或蒙版：'+asset.id+' / '+ref);
+    validateAsset(asset,keys);
+  }
+  const knownAssets=new Set(keys.get('assets'));
+  for(const entry of stores.trash){
+    if(!['asset','project'].includes(entry.kind)||!entry.item?.id)
+      throw Error('ZIP 最近删除记录不完整：'+entry.id);
+    if(entry.kind==='asset'){
+      validateAsset(entry.item,keys);
+      knownAssets.add(entry.item.id);
     }
   }
+  for(const asset of stores.assets){
+    if(asset.seriesID&&!keys.get('series').has(asset.seriesID))
+      throw Error('ZIP 素材引用了不存在的系列：'+asset.id);
+  }
+  for(const project of stores.projects)validateProject(project,knownAssets,keys.get('blobs'),repairs);
+  for(const entry of stores.trash)if(entry.kind==='project')
+    validateProject(entry.item,knownAssets,keys.get('blobs'),repairs);
   return true;
 }
-const hash=async bytes=>[...new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))].map(b=>b.toString(16).padStart(2,'0')).join('');
-const bytes=blob=>blob.arrayBuffer();
-export async function buildBlobIntegrity(records){
-  const manifest={};
-  for(const row of records){
-    if(typeof row?.id!=='string'||!(row.data instanceof Blob))throw Error('备份图片数据不完整');
-    manifest[row.id]=await hash(await bytes(row.data));
-  }
-  return manifest;
+const assetBlobFields=['blobId','originalBlobId','originalCutoutBlobId','candidateFrameBlobId',
+  'initialMaskBlobId','finalMaskBlobId','photoBlobId'];
+function validateAsset(asset,keys){
+  if(typeof asset.id!=='string'||!asset.id)throw Error('ZIP 素材编号无效');
+  // A bundled static image is portable; an account-private URL or object key
+  // is not a backed-up image and must not survive a cross-account restore.
+  const bundled=typeof asset.staticPath==='string'&&(
+    asset.staticPath.startsWith('/')&&!asset.staticPath.startsWith('//')&&!asset.staticPath.includes('..')||
+    asset.staticPath.length<=2*1024*1024&&/^data:image\/(?:png|jpeg|webp|svg\+xml)[;,]/i.test(asset.staticPath));
+  if(asset.staticPath&&!bundled)throw Error('ZIP 素材含未打包的外部图片：'+asset.id);
+  if(!asset.blobId&&!bundled)throw Error('ZIP 素材缺少可读取的主图：'+asset.id);
+  for(const field of assetBlobFields)if(asset[field]&&!keys.get('blobs').has(asset[field])&&
+    !(field==='blobId'&&bundled))
+    throw Error('ZIP 素材缺少必要图片或蒙版：'+asset.id+' / '+field);
 }
-export async function validateBackupData(data){
-  if(data?.format!=='shiye-pwa'||data.version!==1||!data.stores
-    ||STORES.some(s=>!Array.isArray(data.stores[s])))throw Error('不是拾页 PWA 完整备份');
-  supportedSchema(data.schemaVersion??1);
-  const ids={};
-  for(const store of STORES){
-    const seen=new Set();
-    for(const row of data.stores[store]){
-      if(!row||typeof row!=='object'||Array.isArray(row)||typeof row.id!=='string'||!row.id.trim()||seen.has(row.id))
-        throw Error('完整备份包含无效或重复的 '+store+' 记录');
-      seen.add(row.id);
-    }
-    ids[store]=seen;
+function validateProject(project,knownAssets,blobs,repairs){
+  validatePackageValue(project);
+  if(typeof project.title!=='string'||project.title.length>500||
+    typeof project.id!=='string'||!project.id)throw Error('ZIP 作品基本信息无效');
+  if(project.projectDocumentPath)throw Error('ZIP 作品只有云端摘要，缺少可编辑正文：'+project.id);
+  if(project.isSnapshot){
+    if(!project.snapshotBlobId||!blobs.has(project.snapshotBlobId)||
+      project.snapshotDocumentBlobId&&!blobs.has(project.snapshotDocumentBlobId))
+      throw Error('ZIP 画面快照缺少图片：'+project.id);
+    return;
   }
-  const checksum=data.integrity?.blobs;
-  if(data.integrity&&(data.integrity.algorithm!=='SHA-256'||!checksum||typeof checksum!=='object'||Object.keys(checksum).length!==ids.blobs.size))
-    throw Error('备份哈希清单无效');
-  for(const record of data.stores.blobs){
-    if(typeof record.data!=='string'||!/^data:[^;,]+;base64,[A-Za-z0-9+/]*={0,2}$/.test(record.data))
-      throw Error('备份图片编码格式无效');
-    const encoded=record.data.slice(record.data.indexOf(',')+1);
-    if(encoded.length%4===1)throw Error('备份图片编码已损坏');
-    if(checksum){
-      const actual=Uint8Array.from(atob(encoded),c=>c.charCodeAt(0)),expected=checksum[record.id];
-      if(!/^[a-f0-9]{64}$/.test(expected||'')||await hash(actual)!==expected)
-        throw Error('备份图片 SHA-256 校验失败：'+record.id);
+  if(!Array.isArray(project.drafts)||!project.drafts.length||
+    project.drafts.length>40||!project.drafts.some(d=>d.id===project.activeDraftID)||
+    new Set(project.drafts.map(d=>d.id)).size!==project.drafts.length)
+    throw Error('ZIP 作品缺少可编辑正文或当前方案：'+project.id);
+  if(project.originalImportPhotoBlobID&&!blobs.has(project.originalImportPhotoBlobID))
+    throw Error('ZIP 作品缺少导入原图：'+project.id);
+  const check=draft=>{
+    try{validateNativeDraft(draft,knownAssets);}
+    catch(error){throw Error('ZIP 作品 '+project.id+' 的方案 '+(draft?.id||'未知')+' 无法恢复：'+error.message);}
+    if(draft.coverBlobId&&!blobs.has(draft.coverBlobId))
+      throw Error('ZIP 作品 '+project.id+' 缺少本机封面图片：'+draft.coverBlobId);
+    // Remote cover paths are disposable derivatives. Keeping one from a
+    // different account would make an otherwise complete work appear blank.
+    if(draft.coverImageID&&!blobs.has(draft.coverImageID)||draft.coverStaticPath){
+      delete draft.coverImageID;delete draft.coverSceneHash;
+      delete draft.coverStaticPath;delete draft.coverBaselineUpdatedAt;
+      repairs.push({projectID:project.id,draftID:draft.id,reason:'已移除不能跨账号使用的派生封面'});
     }
-  }
-  // Built-in resources can be referenced by staticPath; otherwise a material
-  // should never be restored with a missing primary cutout Blob.
-  for(const asset of data.stores.assets){
-    for(const ref of ['blobId','candidateFrameBlobId','initialMaskBlobId','finalMaskBlobId']){
-      if(asset[ref]&&!asset.staticPath&&!ids.blobs.has(asset[ref]))
-        throw Error('备份素材缺少图片或蒙版：'+asset.id+' / '+ref);
+  };
+  for(const draft of project.drafts)check(draft);
+  for(const draft of project.initialEditorSnapshot?.drafts||[])check(draft);
+  for(const draft of Object.values(project.draftHistorySnapshots||{}))check(draft);
+  if((project.manualArchives||[]).length>250)throw Error('ZIP 作品存档数量超出限制：'+project.id);
+  for(const archive of project.manualArchives||[]){
+    const payload=project.manualArchiveStore?.[archive.ref];
+    if(!payload)throw Error('ZIP 作品缺少存档正文：'+project.id);
+    try{const drafts=readArchivePayload(payload,archive.ref),before=repairs.length;
+      if(!drafts.some(draft=>draft.id===archive.activeDraftID))
+        throw Error('存档当前方案引用无效');
+      for(const draft of drafts)check(draft);
+      if(repairs.length>before){
+        const encoded=archivePayload(drafts);
+        project.manualArchiveStore[encoded.hash]=encoded.payload;
+        archive.ref=encoded.hash;
+      }
     }
+    catch(error){throw Error('ZIP 作品存档无法恢复：'+project.id+' / '+error.message);}
   }
-  return true;
+  compactManualArchiveStore(project);
 }

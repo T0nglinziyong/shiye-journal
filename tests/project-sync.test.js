@@ -2,6 +2,70 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createProjectSync} from '../src/project-sync.js';
 
+test('a changed work forks durably before the editor is redirected',async()=>{
+  let disk=[{record:{id:'project:old',kind:'project',payload:{id:'old',title:'local'}},
+    serial:1,baseRevision:2,operationID:'source-op'}],revision=3;
+  const events=[],uploads=[];
+  const sync=createProjectSync({load:async()=>structuredClone(disk),reload:async()=>structuredClone(disk),
+    write:async rows=>{disk=structuredClone(rows);events.push('persist');},
+    revision:()=>revision,reconcile:async record=>record.payload.id==='old'?'conflict':'rebase',
+    onConflict:async()=>({id:'project:fork',kind:'project',payload:{id:'fork',title:'local · 另一编辑版本'}}),
+    onForked:()=>events.push('redirect'),
+    commit:async record=>{uploads.push(record.payload.id);revision++;}});
+  await sync.flush();
+  assert.deepEqual(uploads,['fork']);
+  assert.ok(events.indexOf('persist')<events.indexOf('redirect'));
+  assert.deepEqual(disk,[]);
+});
+test('a merged cloud scene is published to the editor only after the replacement is durable',async()=>{
+  let disk=[{record:{id:'project:p',kind:'project',payload:{id:'p',title:'local'}},
+    serial:1,baseRevision:1,operationID:'local-op'}],revision=2;
+  const events=[],sync=createProjectSync({load:async()=>structuredClone(disk),reload:async()=>structuredClone(disk),
+    write:async rows=>{disk=structuredClone(rows);events.push('persist');},revision:()=>revision,
+    reconcile:async()=>({kind:'replace',record:{id:'project:p',kind:'project',payload:{id:'p',title:'merged'}}}),
+    onReplaced:()=>events.push('editor-update'),commit:async()=>{revision++;}});
+  await sync.flush();
+  assert.ok(events.indexOf('persist')<events.indexOf('editor-update'));
+  assert.deepEqual(disk,[]);
+});
+test('a newer local edit cannot be replaced by an older in-flight cloud merge',async()=>{
+  let disk=[{record:{id:'project:p',kind:'project',payload:{id:'p',title:'old'}},
+    serial:1,baseRevision:1,operationID:'old-op'}],revision=2;
+  const gate=defer(),started=defer(),published=[];
+  const sync=createProjectSync({load:async()=>structuredClone(disk),reload:async()=>structuredClone(disk),
+    write:async rows=>{disk=structuredClone(rows);},revision:()=>revision,
+    reconcile:async record=>{
+      if(record.payload.title==='old'){
+        started.resolve();await gate.promise;
+        return {kind:'replace',record:{id:'project:p',kind:'project',payload:{id:'p',title:'merged-old'}}};
+      }
+      return 'conflict';
+    },onReplaced:()=>published.push('old'),commit:async()=>{throw Error('newer draft must reconcile first');}});
+  const upload=sync.flush();await started.promise;
+  await sync.stage({id:'project:p',kind:'project',payload:{id:'p',title:'new'}},{baseRevision:1});
+  gate.resolve();await upload;
+  assert.deepEqual(published,[]);
+  assert.equal(disk[0].record.payload.title,'new');
+  assert.equal(disk[0].baseRevision,1);
+});
+test('remote winner cannot advance or dismiss a newer local draft',async()=>{
+  let disk=[{record:{id:'project:p',kind:'project',payload:{id:'p',title:'old'}},
+    serial:1,baseRevision:1,operationID:'old-op'}];
+  const gate=defer(),started=defer(),superseded=[];
+  const sync=createProjectSync({load:async()=>structuredClone(disk),reload:async()=>structuredClone(disk),
+    write:async rows=>{disk=structuredClone(rows);},revision:()=>2,
+    reconcile:async record=>{if(record.payload.title==='old'){
+      started.resolve();await gate.promise;return 'remote';
+    }return 'conflict';},onSuperseded:()=>superseded.push('old'),
+    commit:async()=>{throw Error('newer draft must reconcile first');}});
+  const upload=sync.flush();await started.promise;
+  await sync.stage({id:'project:p',kind:'project',payload:{id:'p',title:'new'}},{baseRevision:1});
+  gate.resolve();await upload;
+  assert.deepEqual(superseded,[]);
+  assert.equal(disk[0].record.payload.title,'new');
+  assert.equal(disk[0].baseRevision,1);
+});
+
 test('reopened outbox recognizes an acknowledged import instead of replaying it',async()=>{
   let rows=[{record:{id:'batch',assets:[{id:'a'}]},serial:1,baseRevision:4}],calls=0;
   const sync=createProjectSync({load:async()=>rows,write:async next=>rows=structuredClone(next),commit:async()=>calls++,revision:()=>5,reconcile:async batch=>batch.id==='batch'?'committed':'conflict'});
@@ -44,6 +108,51 @@ test('a stale conflict cannot replay on resume or block a newer row for the same
   assert.deepEqual(rows.map(row=>row.record.id),['old']);
   await sync.resume();
   assert.equal(oldChecks,1);
+});
+test('a failed record keeps its retry deadline across reopen while an independent record commits',async()=>{
+  let now=1000,revision=0,failed=true;
+  let rows=[
+    {record:{id:'bad'},serial:1,baseRevision:0,operationID:'bad-op'},
+    {record:{id:'good'},serial:2,baseRevision:0,operationID:'good-op'}
+  ];
+  const calls=[],options={load:async()=>structuredClone(rows),reload:async()=>structuredClone(rows),
+    write:async next=>{rows=structuredClone(next);},revision:()=>revision,
+    authoritativeCommit:true,clock:()=>now,autoFlushDelayMs:10000,
+    setTimer:()=>1,clearTimer:()=>{},reconcile:async()=> 'rebase',
+    commit:async record=>{calls.push(record.id);
+      if(record.id==='bad'&&failed)throw Object.assign(Error('temporary network error'),{code:'503'});
+      revision++;
+    }};
+  const first=createProjectSync(options);
+  await assert.rejects(first.flush(),/未获确认/);
+  assert.deepEqual(calls,['bad','good']);
+  assert.deepEqual(rows.map(row=>row.record.id),['bad']);
+  assert.equal(rows[0].attempt,1);
+  assert.equal(rows[0].lastFailureClass,'transient');
+  const due=rows[0].nextAttemptAt;
+  assert.ok(due>now);
+  failed=false;
+  const reopened=createProjectSync(options);
+  await reopened.resume();
+  assert.deepEqual(calls,['bad','good'],'reopening does not erase the durable retry deadline');
+  now=due+1;
+  await reopened.resume();
+  assert.deepEqual(calls,['bad','good','bad']);
+  assert.deepEqual(rows,[]);
+});
+test('a structured validation failure remains pending without a background retry storm',async()=>{
+  let rows=[{record:{id:'invalid'},serial:1,baseRevision:0,operationID:'invalid-op'}],calls=0;
+  const options={load:async()=>structuredClone(rows),reload:async()=>structuredClone(rows),
+    write:async next=>{rows=structuredClone(next);},revision:()=>0,
+    authoritativeCommit:true,setTimer:()=>{throw Error('invalid row must not schedule a timer');},
+    reconcile:async()=> 'rebase',commit:async()=>{calls++;throw Object.assign(Error('invalid payload'),{code:'P0001'});}};
+  await assert.rejects(createProjectSync(options).flush(),/invalid payload/);
+  assert.equal(rows[0].lastFailureClass,'invalid');
+  const reopened=createProjectSync(options);
+  await reopened.resumeScheduled();
+  await reopened.resume();
+  assert.equal(calls,1);
+  assert.equal(reopened.status().conflicts,1);
 });
 test('background sync excludes confirmed conflict batches from preparation and coalescing',async()=>{
   let revision=7,rows=[{record:{id:'old',key:'shared'},serial:1,baseRevision:1,operationID:'old-op'}];

@@ -35,7 +35,7 @@ test('source snapshots reconstruct exact source identities without private asset
  assert.notEqual(assetSourceRevision({...a,physicalWidthMM:101}),assetSourceRevision(a));
  assert.equal(assetSourceRevision({...a,updatedAt:'new',title:'新名称',tags:['新标签']}),assetSourceRevision(a));
  assert.equal(assetSourceRevision({...a,supply:{kind:'single',quantity:1}}),assetSourceRevision(a));
- assert.notEqual(assetSourceRevision({...a,supply:{quantity:2}}),assetSourceRevision(a));
+ assert.equal(assetSourceRevision({...a,supply:{quantity:2}}),assetSourceRevision(a));
  assert.notEqual(assetSourceRevision({...a,kind:'tape'}),assetSourceRevision(a));
 });
 test('topology rejects self crossing and escaped holes rather than guessing physical intent',()=>{

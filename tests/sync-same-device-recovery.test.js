@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {migrationPendingConflicts} from '../src/migration-outbox-guard.js';
-import {forkConflictingEditableWork} from '../src/sync-conflict-copy.js';
+import {forkConflictingEditableWork,forkIDForBranch} from '../src/sync-conflict-copy.js';
 const target=[{store:'projects',id:'legacy'},{store:'trash',id:'trash-old',original:{item:{id:'trashed-old'}}}];
 const pending=id=>({record:{id},serial:1,baseRevision:1});
 const batch=(id,ops)=>({record:{id,operations:ops}});
@@ -31,7 +31,16 @@ test('same-work conflict copy retains recursive editable payload and never carri
  const copy=forkConflictingEditableWork(original,{id:'new-work',now:'2026-10-12T12:00:00Z'});
  assert.equal(copy.id,'new-work');assert.equal(original.id,'old-work');
  assert.equal(copy.drafts[0].layers[0].content,'保留正文');
- assert.equal(copy.__cloudBaseRevision,undefined);assert.equal(copy.__cloudSessionId,undefined);
+ assert.equal(copy.__cloudBaseRevision,undefined);
+ assert.notEqual(copy.__cloudSessionId,original.__cloudSessionId);
+ assert.equal(copy.forkOrigin.projectID,original.id);
  assert.equal(JSON.stringify(original),frozen);
  assert.equal(forkConflictingEditableWork({...original,drafts:[]},{id:'no'}),null);
+});
+test('all saves from one editing branch reuse the same fork target ID',async()=>{
+ const one=await forkIDForBranch('epoch-a','work-a','session-a');
+ assert.equal(one,await forkIDForBranch('epoch-a','work-a','session-a'));
+ assert.notEqual(one,await forkIDForBranch('epoch-a','work-a','session-b'));
+ assert.notEqual(one,await forkIDForBranch('epoch-b','work-a','session-a'));
+ assert.match(one,/^[a-f0-9]{8}-[a-f0-9]{4}-5[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);
 });

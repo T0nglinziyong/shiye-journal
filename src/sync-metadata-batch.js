@@ -17,7 +17,8 @@ export function planMetadataBatch(rows,revision,windowSerial,{maxOperations=12,n
   for(const row of [...rows].sort((a,b)=>a.serial-b.serial)){
     if(row.serial>windowSerial)break;
     const ops=row.record?.kind==='batch'?row.record.payload?.operations:null;
-    const eligible=row.baseRevision===revision&&!row.record.payload?.coalescedRows&&Array.isArray(ops)&&ops.length>0&&
+    const eligible=row.baseRevision===revision&&!row.attempt&&!row.nextAttemptAt&&!row.lastFailureClass&&
+      !row.record.payload?.coalescedRows&&Array.isArray(ops)&&ops.length>0&&
       ops.every(op=>op.store==='assets'&&op.action==='put'&&typeof op.item?.id==='string'&&op.item.id&&!('data' in op.item))&&
       ops.every(op=>!ids.has(op.item.id))&&operations.length+ops.length<=maxOperations;
     if(!eligible){const result=finish();if(result)return result;group=[];operations=[];ids=new Set();continue;}

@@ -1,10 +1,63 @@
-import React,{useRef,useState} from 'react';
+import React,{useEffect,useRef,useState} from 'react';
 import {paperPresets} from './paper-sizes.js';
+import {useUnsavedInput} from './unsaved-inputs.js';
 
+const dialogStack=[];
+const isolatedNodes=new Map();
+let savedBodyOverflow=null;
+function isolate(node){
+  const entry=isolatedNodes.get(node);
+  if(entry){entry.count++;return;}
+  isolatedNodes.set(node,{count:1,wasInert:node.inert});
+  node.inert=true;
+}
+function release(node){
+  const entry=isolatedNodes.get(node);
+  if(!entry)return;
+  if(--entry.count)return;
+  node.inert=entry.wasInert;
+  isolatedNodes.delete(node);
+}
+const focusable='button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),a[href],[tabindex]:not([tabindex="-1"])';
 export function Dialog({title,onClose,children,className='',closeId}){
+  const panel=useRef(null),close=useRef(onClose);
+  close.current=onClose;
+  useEffect(()=>{
+    const node=panel.current,prior=document.activeElement,isolated=[];
+    if(!node)return;
+    // Isolate siblings along the actual DOM path. This also works when a
+    // dialog is opened from the account menu inside the application header.
+    for(let current=node;current?.parentElement&&current!==document.body;current=current.parentElement){
+      for(const sibling of current.parentElement.children)if(sibling!==current){isolate(sibling);isolated.push(sibling);}
+    }
+    if(!dialogStack.length)savedBodyOverflow=document.body.style.overflow;
+    document.body.style.overflow='hidden';
+    dialogStack.push(node);
+    const choices=()=>[...node.querySelectorAll(focusable)].filter(item=>!item.inert&&item.getClientRects().length);
+    (node.querySelector('input,textarea,select')||choices()[0]||node).focus();
+    const onKey=event=>{
+      if(dialogStack.at(-1)!==node||event.isComposing||event.key==='Process')return;
+      if(event.key==='Escape'){
+        event.preventDefault();event.stopPropagation();close.current?.();return;
+      }
+      if(event.key!=='Tab')return;
+      const items=choices();if(!items.length){event.preventDefault();node.focus();return;}
+      const first=items[0],last=items.at(-1);
+      if(event.shiftKey&&(document.activeElement===first||!node.contains(document.activeElement))){event.preventDefault();last.focus();}
+      else if(!event.shiftKey&&(document.activeElement===last||!node.contains(document.activeElement))){event.preventDefault();first.focus();}
+    };
+    document.addEventListener('keydown',onKey,true);
+    return ()=>{
+      document.removeEventListener('keydown',onKey,true);
+      const at=dialogStack.lastIndexOf(node);if(at>=0)dialogStack.splice(at,1);
+      for(const sibling of isolated)release(sibling);
+      if(!dialogStack.length){document.body.style.overflow=savedBodyOverflow??'';savedBodyOverflow=null;}
+      if(prior?.isConnected&&!prior.inert)queueMicrotask(()=>prior.focus());
+    };
+  },[]);
   return <div className="cloud-admin-backdrop" onMouseDown={event=>{
     if(event.target===event.currentTarget)onClose();}}>
-    <section className={`cloud-admin-panel utility-dialog ${className}`} role="dialog" aria-modal="true" aria-label={title}>
+    <section ref={panel} tabIndex={-1} className={`cloud-admin-panel utility-dialog ${className}`} role="dialog" aria-modal="true" aria-label={title}>
       <button type="button" className="dialog-close" id={closeId} aria-label="关闭" onClick={onClose}>×</button>
       {children}
     </section>
@@ -62,6 +115,7 @@ export function HelpDialog({onClose,onExport}){
 export function OfflineImportDialog({onClose,onImport,onFile,onPaste}){
   const [text,setText]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('');
   const inputRef=useRef(null);
+  useUnsavedInput('待导入的作品 JSON',!!text.trim());
   const paste=async()=>{try{setText(await onPaste());setError('');}catch{inputRef.current?.focus();setError('浏览器未允许读取剪贴板；请在输入框按 Ctrl/⌘+V，或在手机长按选择“粘贴”');}};
   const importText=async()=>{if(busy)return;setBusy(true);setError('');try{await onImport(text);onClose();}catch(cause){setError('导入失败：'+cause.message);setBusy(false);}};
   return <Dialog title="导入网页版 GPT 作品" onClose={onClose}><h2>导入网页版 GPT 作品</h2>

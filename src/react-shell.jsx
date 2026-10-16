@@ -1,8 +1,9 @@
-import React,{useLayoutEffect,useState} from 'react';
+import React,{Component,useLayoutEffect,useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {flushSync} from 'react-dom';
 import {iconMarkup} from './icons.js';
 import {CloudAccountMenu} from './react-cloud-auth.jsx';
+import {recordRuntimeIssue} from './runtime-diagnostics.js';
 
 // The shell and every route are React roots. The canvas and image loader own
 // only their resource nodes, not a fallback HTML page renderer.
@@ -14,6 +15,19 @@ let shellActions={};
 let currentOverlay=null;
 export function openOverlay(content){currentOverlay=content;overlaySetter?.(content);}
 export function closeOverlay(){currentOverlay=null;overlaySetter?.(null);}
+
+class RegionBoundary extends Component{
+  constructor(props){super(props);this.state={error:null};}
+  static getDerivedStateFromError(error){return {error};}
+  componentDidCatch(error){recordRuntimeIssue('handled',error,this.props.route,{phase:'action'});}
+  render(){if(!this.state.error)return this.props.children;
+    return <section className="empty region-recovery" role="alert"><strong>这部分页面暂时无法显示</strong>
+      <p>已保存的资料仍在。可以重试当前区域或返回素材库。</p>
+      <div className="actions"><button type="button" className="btn primary" onClick={()=>this.setState({error:null})}>重试区域</button>
+        <button type="button" className="btn" onClick={()=>{this.setState({error:null});this.props.onBack?.();}}>返回</button>
+        <button type="button" className="btn" onClick={()=>shellActions.diagnostics?.()}>导出诊断</button></div></section>;
+  }
+}
 
 export function setShellActions(actions){shellActions=actions;}
 export function updateShell(patch){
@@ -41,10 +55,11 @@ function AppShell(){
         onClick={()=>updateShell({resetNotice:null})}>关闭</button>
     </aside>:null}
     <main id="view" aria-live="polite"/>
-    {overlay}
+    {overlay?<RegionBoundary key={overlay.type?.name||'overlay'} route={shell.route}
+      onBack={closeOverlay}>{overlay}</RegionBoundary>:null}
     <div id="toast" role="status" aria-live="polite"/>
     <dialog id="modal"><div className="modal-shell"><button type="button" className="modal-close" aria-label="关闭">×</button><div id="modal-body"/></div></dialog>
-    <input id="file-input" type="file" accept="image/*" multiple hidden/><input id="work-file-input" type="file" accept="image/*,.json,.zip" hidden/><input id="creation-result-input" type="file" hidden/><input id="snapshot-file-input" type="file" accept="image/png,image/jpeg,image/webp" hidden/><input id="backup-input" type="file" accept=".shiyepwa,.json" hidden/><input id="emergency-input" type="file" accept=".shiyerecovery,.json" hidden/>
+    <input id="file-input" type="file" accept="image/*" multiple hidden/><input id="work-file-input" type="file" accept="image/*,.json,.zip" hidden/><input id="creation-result-input" type="file" hidden/><input id="snapshot-file-input" type="file" accept="image/png,image/jpeg,image/webp" hidden/><input id="backup-input" type="file" accept=".shiyepwa" hidden/><input id="emergency-input" type="file" accept=".shiyerecovery,.json" hidden/>
   </>;
 }
 
@@ -75,5 +90,6 @@ export function renderReactPage(content,{preserveKey=null}={}){
   }
   const view=document.querySelector('#view');
   if(!routeRoot){view.replaceChildren();routeRoot=createRoot(view);routeRootKey=preserveKey;}
-  flushSync(()=>routeRoot.render(content));
+  flushSync(()=>routeRoot.render(<RegionBoundary key={preserveKey||content.type?.name||'page'}
+    route={currentShellState.route} onBack={()=>shellActions.navigate?.('library')}>{content}</RegionBoundary>));
 }

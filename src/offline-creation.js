@@ -64,7 +64,7 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
   const source=sourceFor(p,aliases);source.taskBinding='local';source.textMode=source.contentPolicy==='visual'?'none':settings.textMode||'automatic';const selected=source.materials.map(({alias,assetID})=>{
     const asset=assets.find(item=>item.id===assetID);
     if(!asset||!validAlias(alias))throw Error('素材篮中有无效素材编号');
-    return {alias,assetID,title:asset.title,kind:asset.kind,role:asset.role,journalRoles:classifyJournalMaterial(asset),physicalWidthMM:asset.physicalWidthMM,physicalHeightMM:asset.physicalHeightMM,quantity:asset.kind==='tape'?null:asset.supply?.quantity??1,continuousTape:asset.kind==='tape',tags:asset.tags||[]};
+    return {alias,assetID,title:asset.title,kind:asset.kind,role:asset.role,journalRoles:classifyJournalMaterial(asset),physicalWidthMM:asset.physicalWidthMM,physicalHeightMM:asset.physicalHeightMM,continuousTape:asset.kind==='tape',tags:asset.tags||[]};
   });
   if(!selected.length)throw Error('请先选择素材');
   const showImages=settings.includeThumbnails!==false;
@@ -111,7 +111,7 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
   const task=[`内容要求：先读 CONTENT_BRIEF.txt；正文按页面用途写，不把创作讲解写入画面。`,`风格：${source.styles.map(name=>`${name}（${visualStyleBrief(name)}）`).join('；')||'不预设，由素材和主题决定'}`,`用途：${source.purposes.join('、')||'不预设，由主题决定'}`,`纸张：${source.ratio.toUpperCase()} · ${source.mode==='spread'?'双页':'单页'}`,`双页构图偏好：${source.mode==='spread'?'画布中线 x=0.5 是装订中缝；尽量让每一件实体素材完整留在左页或右页，避免横跨中缝。不是硬性限制，必要时可以跨页，数字文字与图形可自由跨页。':'单页没有中缝限制。'}`,`加工：${source.processing}`,`文字：${textRule}`].join('\n');
   const densePage=source.purposes[0]!=='主题封面'&&source.styles[0]!=='极简留白';
   const purposeNotes=source.purposes.map(name=>`${name}：${purposeMethod(name)}`).join('；');
-  const modeRules=mode==='direct'?'直接返回 page.version=2 的单棵 layers 图层树，不返回 tools；materials、shape、text、ink 与 group 都是 layers 节点，按树顺序叠放。素材经 operations 裁切、挖窗，实体尺寸、库存由拾页校验；不能输出并列的旧图层数组。':'返回 tools 操作数组，先用 compose_page，最后以 finish_design 结束；线条、边框、色块、多色矢量等放入 graphics 或 upsert_primitives；裁片后可用 edit_materials 的 mask、diagonal 和 window 加工，开窗是透明镂空而非白色覆盖；工具参数见 contract.json。';
+  const modeRules=mode==='direct'?'直接返回 page.version=2 的单棵 layers 图层树，不返回 tools；materials、shape、text、ink 与 group 都是 layers 节点，按树顺序叠放。素材经 operations 裁切、挖窗，实体尺寸、来源区域与单方案取用由拾页校验；不能输出并列的旧图层数组。':'返回 tools 操作数组，先用 compose_page，最后以 finish_design 结束；线条、边框、色块、多色矢量等放入 graphics 或 upsert_primitives；裁片后可用 edit_materials 的 mask、diagonal 和 window 加工，开窗是透明镂空而非白色覆盖；工具参数见 contract.json。';
   const hasPresets=settings.sendPresetReferences===true;
   const selectedCases=selectJournalReferenceCases({styles:source.styles,purposes:source.purposes,materials:selected});
   const selectedTemplates=selectJournalAbstractTemplates(selectedCases,{styles:source.styles,purposes:source.purposes,materials:selected,userTemplates});
@@ -151,7 +151,7 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
   ].join('\n\n');
   const compactStart=`拾页 GPT 创作任务 · 先读这一页
 请创作一幅独立、可编辑的手帐作品，不要把整页烘焙成图片。按以下优先级工作：
-1. 先看 task/context.json 与 materials/ 真实素材。source、尺寸、库存、required 必须保持；素材标题不是图像观察证据。
+1. 先看 task/context.json 与 materials/ 真实素材。source、尺寸、单方案取用、required 必须保持；素材标题不是图像观察证据。
 2. 阅读 task/WORKFLOW.txt 的创作步骤、task/GUIDE.txt 的用户内容边界。${mode==='agent'?'逐件查看 task/CRAFT_GUIDE.txt 的实体工艺与权限说明，再决定完整保留还是加工。':'按 schema/output.json 决定素材的完整使用或合法裁切。'}可参考 task/material-planning.json 的问题，不把它的假设当事实。
 3. 内部比较至少两种素材组合方向，选最自然的一种；有选择地裁切、叠压、穿插和手写，不照抄 references/ 的版式。
 4. 合法输出合同是 schema/output.json。当前模式：${mode==='direct'?'page（直接排版）':'tools（调用工具）'}，不能混用。${mode==='direct'?'高级 observations/weaves 不可混入直接排版。':'只包含本合同的 tools；严禁额外顶层 page。'}examples/project.shiyeproject.json 仅展示字段，不能复制正文或坐标。高级工艺参数仅在 tools 模式阅读 schema/craft-plan.json。
@@ -164,7 +164,7 @@ ${source.intent||'未指定：根据素材自由创作'}
 纸张：${source.ratio} ${source.mode==='spread'?'双页':'单页'}；文字内容：${source.contentPolicy}；表现：${source.textPresentation||'mixed'}。
 ${settings.customLayoutPrompt?'补充要求：'+settings.customLayoutPrompt:''}
 ${showImages?'素材图以 materials/ 为准，保留透明通道。':'本包无素材图片，切勿猜测细节。'}
-${hasPresets?'references/ 只作为灵感来源，不是可用库存。':''}
+${hasPresets?'references/ 只作为灵感来源，不是可用素材。':''}
 `;
   const files={
     'START_HERE.txt':strToU8(compactStart),

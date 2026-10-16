@@ -29,3 +29,19 @@ test('model payment failures retain only status and a safe category',()=>{
  assert.ok(!runtimeIssueReport().includes('private prompt'));
  clearRuntimeIssues();
 });
+test('redacted failure categories survive a simulated refresh without private content',async()=>{
+ const previous=globalThis.localStorage,storage=new Map();
+ globalThis.localStorage={getItem:key=>storage.get(key)||null,setItem:(key,value)=>storage.set(key,value),removeItem:key=>storage.delete(key)};
+ try{
+  clearRuntimeIssues();
+  recordRuntimeIssue('handled',new Error('private scene text sk-secret'),'editor',{phase:'save'});
+  const fresh=await import('../src/runtime-diagnostics.js?refresh-test');
+  const snapshot=fresh.runtimeIssueSnapshot();
+  assert.equal(snapshot.records.length,1);
+  assert.equal(snapshot.records[0].phase,'save');
+  assert.equal(snapshot.dataSchemaVersion,1);
+  assert.ok(!fresh.runtimeIssueReport().includes('private scene text'));
+  assert.ok(![...storage.values()].join('').includes('sk-secret'));
+  fresh.clearRuntimeIssues();clearRuntimeIssues();
+ }finally{globalThis.localStorage=previous;}
+});

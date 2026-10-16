@@ -24,3 +24,19 @@ test('failed save does not call the paid model or leave indefinite busy badges',
   await activity.run([{id:'a'},{id:'b'}],{waitForSave:async()=>{throw Error('upload');},organize:async()=>calls++});
   assert.equal(calls,0);assert.equal(activity.status('a'),'failed');assert.equal(activity.status('b'),'failed');
 });
+test('queued classification is removed on cancellation and frees no network slot',async()=>{
+  const queue=createClassificationQueue(1),first=gate(),controller=new AbortController();let calls=0;
+  const running=queue.schedule(async()=>{await first.promise;});
+  const cancelled=queue.schedule(()=>{calls++;},{signal:controller.signal});
+  controller.abort();
+  await assert.rejects(cancelled,{name:'AbortError'});
+  const next=queue.schedule(()=>{calls++;});
+  first.resolve();await Promise.all([running,next]);
+  assert.equal(calls,1);
+});
+test('clearing organization during save prevents later model requests',async()=>{
+  const activity=createAssetOrganization(),saved=gate();let calls=0;
+  const task=activity.run([{id:'a'}],{waitForSave:()=>saved.promise,organize:async()=>{calls++;}});
+  activity.clear();saved.resolve();await task;
+  assert.equal(calls,0);assert.equal(activity.status('a'),undefined);
+});

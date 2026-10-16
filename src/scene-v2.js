@@ -3,6 +3,7 @@
 // whose supported mutations write through to the same tree.
 export const SCENE_VERSION=2;
 export const SCENE_FORMAT='shiye-scene';
+export const SCENE_MAX_GROUP_DEPTH=12;
 export const PHYSICAL_BLEND_MODES=Object.freeze(['normal','multiply']);
 const types={items:'material',textBlocks:'text',primitives:'shape',strokes:'ink'};
 const fields=Object.keys(types),kinds=new Set([...Object.values(types),'group']);
@@ -225,7 +226,7 @@ export function transformSceneGroup(d,id,{dx=0,dy=0,rotation=0}={}){
   if(kind==='ink'){value.points=value.points.map(pt=>({...pt,...move(pt.x,pt.y)}));continue;}
   const p=move(value.x,value.y);value.x=p.x;value.y=p.y;value.rotation=(value.rotation||0)+rotation;
   // Only locations and angles change; width, height, crops, material source
-  // and stock unit are strictly unchanged.
+  // and source segment are strictly unchanged.
  }
  group.lastTransform={dx,dy,rotation};
  return true;
@@ -275,7 +276,7 @@ export function validateSceneExtensions(d){
  attachSceneV2(d);
  if(!d.canvas||!num(d.canvas.width,1,10000)||!num(d.canvas.height,1,10000))throw Error('场景画布尺寸无效');
  const seen=new Set();let count=0;
- function walk(nodes,depth){if(!Array.isArray(nodes)||depth>12||nodes.length>5000)throw Error('Scene 图层树过深或过大');
+ function walk(nodes,depth){if(!Array.isArray(nodes)||depth>SCENE_MAX_GROUP_DEPTH||nodes.length>5000)throw Error('Scene 图层树过深或过大');
   for(const node of nodes){if(!node||!kinds.has(node.type)||typeof node.id!=='string'||!node.id||seen.has(node.id))throw Error('Scene 图层类型或编号重复');seen.add(node.id);count++;if(count>10000)throw Error('Scene 图层总数超限');
    sceneLayerStyle(node);
    if(node.opacity!==undefined&&!num(node.opacity,0,1))throw Error('图层透明度必须在 0–1 之间');

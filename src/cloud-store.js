@@ -7,6 +7,7 @@ import {rebuildSyncRecords} from './sync-rebuild.js';
 import {readCloudDelta,canRebaseUnchangedKeys} from './cloud-delta.js';
 import {planMetadataBatch,splitMetadataBatch} from './sync-metadata-batch.js';
 import {compareRecordEdits} from './sync-last-write.js';
+import {mergeDisjointMetadata} from './sync-field-merge.js';
 import {recordTombstones} from './sync-tombstones.js';
 import {LARGE_PROJECT_BYTES,projectSummary,mergeProjectSummary,projectBlobText} from './project-document.js';
 import {createCOSStore} from './cos-store.js';
@@ -14,8 +15,8 @@ import {imageVariant,DISPLAY_TIERS,COVER_EDGE} from './image-variants.js';
 import {recoverImportOutbox} from './import-outbox-recovery.js';
 import {recoverProjectOutbox,usableProjectSnapshot} from './project-outbox-recovery.js';
 import {migrationPendingConflicts} from './migration-outbox-guard.js';
-import {forkConflictingEditableWork} from './sync-conflict-copy.js';
-import {mergeEditableSceneProjects} from './scene-field-merge.js';
+import {forkConflictingEditableWork,forkIDForBranch} from './sync-conflict-copy.js';
+import {projectSemanticFingerprint} from './project-semantic.js';
 import {isLegacySceneProject} from './scene-v2.js';
 import {createBlobRevisionProof} from './blob-revision-proof.js';
 import {createSyncDiagnostics} from './sync-diagnostics.js';
@@ -27,7 +28,7 @@ const writeProvider=()=>objectStorage?.enabled?'cos':'supabase';
 const usableBlob=value=>value instanceof Blob&&value.size>0;
 async function downloadObject(path,provider){if(provider==='cos'){if(!objectStorage)throw Error('COS 私有读取尚未配置');return objectStorage.download(path);}if(provider==='supabase')return checked(await cloudClient().storage.from(BUCKET).download(path));throw Error('云端对象缺少当前 storageProvider');}
 async function uploadObject(path,blob,type,provider=writeProvider()){if(provider==='cos'){await objectStorage.upload(path,blob,type);return {error:null};}return cloudClient().storage.from(BUCKET).upload(path,blob,{upsert:false,contentType:type});}
-let owner,revision,writesInFlight=0,activeDirect=null,resetInProgress=false,resetCleanupPending=false,resetEpochId=null;
+let owner,revision,accountEpoch,writesInFlight=0,activeDirect=null,resetInProgress=false,resetCleanupPending=false,resetEpochId=null;
 let queue=Promise.resolve();
 const images=new Map();
 const imageSizes=new Map();
@@ -75,13 +76,39 @@ function batchBlobRecord(id){
   return promise;
 }
 const editorBases=new Map();
+const editorSceneBases=new Map();
+const remoteProjectWinners=new Map();
+const projectMetadataFields=['title','styleTags','isUsed','isDraft','isFavorite'];
+const sceneFingerprint=record=>projectSemanticFingerprint({drafts:record.drafts});
+const sameField=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
+function mergeProjectMetadata(base,local,remote,sceneSource){
+  const winner=latestEditedProject(local,remote);
+  const merged=structuredClone(sceneSource);
+  for(const key of projectMetadataFields){
+    const localChanged=!sameField(local[key],base[key]);
+    const remoteChanged=!sameField(remote[key],base[key]);
+    const value=localChanged&&(!remoteChanged||winner==='local')?local[key]:remote[key];
+    if(value===undefined)delete merged[key];else merged[key]=structuredClone(value);
+  }
+  merged.updatedAt=[local.updatedAt,remote.updatedAt].filter(value=>typeof value==='string').sort().at(-1)||
+    merged.updatedAt;
+  merged.__cloudSessionId=local.__cloudSessionId;
+  merged.__cloudBaseRevision=local.__cloudBaseRevision;
+  merged.__cloudBaseSceneFingerprint=sceneFingerprint(merged);
+  merged.__cloudBaseMetadata=Object.fromEntries(projectMetadataFields.map(key=>[key,merged[key]]));
+  return merged;
+}
 // The editor must carry the revision of the document it actually opened.
 // A later background sync cursor is not its editing baseline.
 const withProjectBase=(store,record,base)=>{
   if(store!=='projects'||!record)return record;
   const session=crypto.randomUUID();editorBases.set(session,base);
-  if(editorBases.size>300)editorBases.delete(editorBases.keys().next().value);
-  return {...record,__cloudBaseRevision:base,__cloudSessionId:session};
+  if(editorBases.size>300){const old=editorBases.keys().next().value;editorBases.delete(old);editorSceneBases.delete(old);}
+  const scene=Array.isArray(record.drafts)?sceneFingerprint(record):null;
+  const metadata=Object.fromEntries(projectMetadataFields.map(key=>[key,record[key]]));
+  editorSceneBases.set(session,{scene,metadata});
+  return {...record,__cloudBaseRevision:base,__cloudSessionId:session,
+    __cloudBaseSceneFingerprint:scene,__cloudBaseMetadata:metadata};
 };
 function retainImage(path,data){images.set(path,Promise.resolve(data));imageSizes.delete(path);imageSizes.set(path,data.size);let bytes=[...imageSizes.values()].reduce((a,b)=>a+b,0);for(const [key,size] of imageSizes){if(bytes<=64*1024*1024&&imageSizes.size<=48)break;if(key===path)continue;images.delete(key);imageSizes.delete(key);bytes-=size;}}
 // Old COS assets without thumbnail metadata are converted into a durable,
@@ -247,6 +274,7 @@ async function loadUnifiedOutbox(recover=false){
   return result.rows;
 }
 const unifiedSync=createProjectSync({
+  authoritativeCommit:true,
   autoFlushDelayMs:10000,
   coalesce:planMetadataBatch,
   splitCoalesced:splitMetadataBatch,
@@ -256,10 +284,10 @@ const unifiedSync=createProjectSync({
     await persistOutbox('unified-outbox',unifiedOutboxBefore,rows,options);
     unifiedOutboxBefore=outboxStamps(rows);
   },
-  commit:(envelope,operationID)=>{
+  commit:(envelope,operationID,baseRevision)=>{
     const payload=envelope.payload;
     if(envelope.kind==='project')
-      return cloudTransaction(['projects'],tx=>tx.objectStore('projects').put(payload),operationID);
+      return cloudTransaction(['projects'],tx=>tx.objectStore('projects').put(payload),operationID,baseRevision);
     if(envelope.kind!=='batch')throw Error('不支持的待同步操作类型');
     return payload.operations?
       cloudTransaction(payload.names,tx=>{for(const op of payload.operations){
@@ -267,11 +295,11 @@ const unifiedSync=createProjectSync({
         if(op.action==='put')store.put(op.item);
         else if(op.action==='delete')store.delete(op.id);
         else store.clear();
-      }},operationID):
+      }},operationID,baseRevision):
       cloudTransaction(['assets','blobs','projects'],tx=>{
         for(const store of ['assets','blobs','projects'])
           for(const item of payload[store]||[])tx.objectStore(store).put(item);
-      },operationID);
+      },operationID,baseRevision);
   },
   revision:()=>revision,
   reconcile:async(envelope,operationID,baseRevision)=>{
@@ -279,13 +307,14 @@ const unifiedSync=createProjectSync({
       return reconcileImport(envelope.payload,operationID,baseRevision);
     if(envelope.kind!=='project')return 'conflict';
     if(await wasCommitted(operationID,baseRevision))return 'committed';
-    if(await wasResetAfter(baseRevision))return 'remote';
+    if(await wasResetAfter(baseRevision))
+      throw Error('账号已清空；本机旧作品已保留，不能自动重新上传');
     const latest=await version(),record=envelope.payload;
     if(latest===baseRevision)return 'rebase';
     if(await canRebaseUnchangedKeys({client:cloudClient(),owner:await identity(),
       before:baseRevision,after:latest,operations:[{store:'projects',action:'put',item:record}]}))return 'rebase';
-    // User-selected policy: genuine simultaneous edits use the last explicit
-    // edit timestamp. Ties keep cloud. Deletes and invalid dates remain safe.
+    // A real concurrent edit must keep both complete Scene documents. The
+    // local branch is redirected to a new work after the outbox switch commits.
     const remote=await cloudRecord('projects',record.id);
     if(!remote)return 'conflict';
     // Before LWW arbitration, capture both editable variants in the user's
@@ -309,20 +338,85 @@ const unifiedSync=createProjectSync({
         {key:safetyKey,id:record.id,title:record.title||'未命名作品',at:savedAt},
         ...savedList
       ].slice(0,20));
-    // Merge only provably replayable Scene v2 deltas. Different layers and
-    // properties commute; same-property edits use their explicit timestamps.
-    // Unsupported transforms fall back to the original guarded LWW decision.
-    const merged=mergeEditableSceneProjects(record,completeRemote);
-    if(merged)return {kind:'replace',record:syncEnvelope('project',merged)};
-    const winner=latestEditedProject(record,remote);
-    return winner==='local'?'rebase':winner==='remote'?'remote':'conflict';
+    if(projectSemanticFingerprint(record)===projectSemanticFingerprint(completeRemote)){
+      remoteProjectWinners.set(envelope.id,structuredClone(completeRemote));return 'remote';
+    }
+    const localScene=sceneFingerprint(record),remoteScene=sceneFingerprint(completeRemote);
+    const baseScene=record.__cloudBaseSceneFingerprint;
+    if(baseScene&&record.__cloudBaseMetadata&&
+      (localScene===baseScene||remoteScene===baseScene)){
+      const merged=mergeProjectMetadata(record.__cloudBaseMetadata,record,completeRemote,
+        localScene===baseScene?completeRemote:record);
+      if(projectSemanticFingerprint(merged)===projectSemanticFingerprint(completeRemote)){
+        remoteProjectWinners.set(envelope.id,structuredClone(completeRemote));return 'remote';
+      }
+      return {kind:'replace',record:syncEnvelope('project',merged)};
+    }
+    if(localScene===remoteScene){
+      // Only project-list metadata differs; keep the latest explicit edit.
+      const winner=latestEditedProject(record,remote);
+      if(winner==='remote')remoteProjectWinners.set(envelope.id,structuredClone(completeRemote));
+      return winner==='local'?'rebase':winner==='remote'?'remote':'conflict';
+    }
+    return 'conflict';
   },
   onCommitted:(envelope,committedRevision)=>{
     const record=envelope.kind==='project'?envelope.payload:null;
-    if(record?.__cloudSessionId)editorBases.set(record.__cloudSessionId,committedRevision);
+    if(record?.__cloudSessionId){
+      editorBases.set(record.__cloudSessionId,committedRevision);
+      editorSceneBases.set(record.__cloudSessionId,{scene:sceneFingerprint(record),
+        metadata:Object.fromEntries(projectMetadataFields.map(key=>[key,record[key]]))});
+      if(typeof window!=='undefined')window.dispatchEvent(new CustomEvent('shiye-sync-project-committed',{
+        detail:{id:record.id,sessionID:record.__cloudSessionId,revision:committedRevision,
+          sceneFingerprint:sceneFingerprint(record),
+          metadata:Object.fromEntries(projectMetadataFields.map(key=>[key,record[key]]))}}));
+    }
   },
-  onConflict:async()=>null,
-  onSuperseded:()=>notifyCloudSuperseded(),
+  onReplaced:(source,target)=>{
+    if(source.kind!=='project'||target.kind!=='project')return;
+    const record=target.payload;
+    if(record.__cloudSessionId)editorSceneBases.set(record.__cloudSessionId,
+      {scene:sceneFingerprint(record),metadata:Object.fromEntries(projectMetadataFields.map(key=>[key,record[key]]))});
+    if(typeof window==='undefined')return;
+    window.dispatchEvent(new CustomEvent('shiye-sync-project-replaced',{
+      detail:{sourceID:source.payload.id,sourceSessionID:source.payload.__cloudSessionId,
+        sourceFingerprint:projectSemanticFingerprint(source.payload),target:structuredClone(target.payload)}}));
+  },
+  onConflict:async(envelope,_baseRevision,operationID)=>{
+    if(envelope.kind!=='project')return null;
+    const id=await forkIDForBranch(accountEpoch,envelope.payload.id,
+      envelope.payload.__cloudSessionId||operationID);
+    // A later stale row from this branch must not overwrite a fork already
+    // committed under its stable ID. Retain the queued source for review.
+    const occupied=checked(await cloudClient().from('shiye_records').select('id')
+      .eq('user_id',await identity()).eq('store','projects').eq('id',id).maybeSingle());
+    if(occupied)return null;
+    const copy=forkConflictingEditableWork(envelope.payload,{id});
+    return copy?syncEnvelope('project',copy):null;
+  },
+  onForked:(source,target)=>{
+    notifyCloudSuperseded();
+    if(typeof window!=='undefined')window.dispatchEvent(new CustomEvent('shiye-sync-forked',{
+      detail:{sourceID:source.payload.id,sourceSessionID:source.payload.__cloudSessionId,
+        target:structuredClone(target.payload)}}));
+  },
+  onSuperseded:envelope=>{
+    const target=remoteProjectWinners.get(envelope.id);
+    remoteProjectWinners.delete(envelope.id);
+    if(target&&envelope.kind==='project'){
+      const session=envelope.payload.__cloudSessionId;
+      if(session){editorBases.set(session,revision);
+        editorSceneBases.set(session,{scene:sceneFingerprint(target),
+          metadata:Object.fromEntries(projectMetadataFields.map(key=>[key,target[key]]))});}
+      if(typeof window!=='undefined')window.dispatchEvent(new CustomEvent('shiye-sync-project-replaced',{
+        detail:{sourceID:envelope.payload.id,sourceSessionID:session,
+          sourceFingerprint:projectSemanticFingerprint(envelope.payload),
+          target:{...target,__cloudSessionId:session,__cloudBaseRevision:revision,
+            __cloudBaseSceneFingerprint:sceneFingerprint(target),
+            __cloudBaseMetadata:Object.fromEntries(projectMetadataFields.map(key=>[key,target[key]]))}}}));
+    }
+    notifyCloudSuperseded();
+  },
   onStatus:reportSync,
   onDiagnostic:event=>syncDiagnostics.record(event),
   runExclusive:withAccountSyncLock,
@@ -381,12 +475,15 @@ async function wasResetAfter(baseRevision){
 async function wasCommitted(operationID,baseRevision){
   if(!operationID)throw Error('待同步记录缺少 operationID');
   const row=checked(await cloudClient().from('shiye_commits').select('revision').eq('user_id',await identity()).eq('operation_id',operationID).maybeSingle());
-  if(row)await version(); // Invalidate stale snapshots after a lost response.
-  return !!row;
+  const durable=row||checked(await cloudClient().from('shiye_commit_receipts_v3')
+    .select('result').eq('user_id',await identity()).eq('operation_id',operationID).maybeSingle());
+  if(durable)await version(); // Invalidate stale snapshots after a lost response.
+  return !!durable;
 }
 async function reconcileImport(batch,operationID,baseRevision){
   if(await wasCommitted(operationID,baseRevision))return 'committed';
-  if(await wasResetAfter(baseRevision))return 'remote';
+  if(await wasResetAfter(baseRevision))
+    throw Error('账号已清空；本机待同步资料已保留，不能自动重新上传');
   const latest=await version();
   // If the server cursor never advanced, an aborted request is unconfirmed,
   // not remotely won. Do not drop a local delete or restore on a 404 lookup.
@@ -427,10 +524,24 @@ async function reconcileImport(batch,operationID,baseRevision){
         const live=await cloudRecord(op.store,id);
         if(marker&&!live){operations.push(op);continue;}
       }
-      // A real conflict is resolved only by the user's explicit selection.
-      // Old generic-queue projects are reviewed with the same three options.
-      // Deletes, malformed documents and other conflicting records must
-      // remain pending for explicit recovery, never be silently dropped.
+      // A newer logical delete is authoritative for an old material/series
+      // metadata save. Keep project documents for the separate-work path and
+      // keep byte-bearing import batches intact for recovery.
+      if(op.action==='put'&&['assets','series'].includes(op.store)&&
+        !batch.operations.some(other=>other.store==='blobs'&&other.action==='put')&&
+        await cloudRecord('meta','tombstone:'+op.store+':'+id)&&
+        !await cloudRecord(op.store,id))continue;
+      if(op.action==='put'&&['assets','series'].includes(op.store)&&op.baseRecord&&
+        !batch.operations.some(other=>other.store==='blobs'&&other.action==='put')){
+        const remote=await cloudRecord(op.store,id);
+        const merged=mergeDisjointMetadata(op.baseRecord,op.item,remote);
+        if(merged){
+          if(merged.changed)operations.push({...op,item:merged.record,baseRecord:remote});
+          continue;
+        }
+      }
+      // Other overlapping records still need a proven field or document
+      // decision. Retain their complete queued bytes until that rule exists.
       return 'conflict';
     }
     if(!operations.length)return 'remote';
@@ -482,7 +593,11 @@ async function version(){
   if(versionRead)return versionRead;
   const task=(async()=>{
     const id=await identity();
-    const row=checked(await cloudClient().from('shiye_revisions').select('revision').eq('user_id',id).single());
+    const row=checked(await cloudClient().from('shiye_revisions').select('revision,account_epoch').eq('user_id',id).single());
+    if(!row.account_epoch)throw Error('云端同步协议尚未升级；本机修改已保留');
+    if(accountEpoch&&accountEpoch!==row.account_epoch)
+      throw Error('账号资料已重新开始；旧草稿已保留，不能自动写入');
+    accountEpoch=row.account_epoch;
     revision=Number(row.revision);
     return revision;
   })();
@@ -552,7 +667,10 @@ async function cloudGet(store,id){
   // termination. A valid cloud copy takes precedence over that broken row.
   if(pending?.record){const remote=await cloudRecord(store,id);return remote?decode(store,remote):undefined;}
   if(store==='blobs'&&id.startsWith('project-cover:'))return {id,data:await cloudPreview(id)};
-  const record=await cloudRecord(store,id);return record?store==='projects'?cloudProjectDocument(withProjectBase(store,record,revision)):decode(store,record):undefined;
+  const record=await cloudRecord(store,id);
+  if(!record)return undefined;
+  if(store==='projects')return withProjectBase(store,await cloudProjectDocument(record),revision);
+  return decode(store,record);
 }
 // A recovery-only export of the exact legacy projects held aside by the v2
 // reader. Never mutate v1 data; private full-size project documents are read
@@ -718,7 +836,7 @@ function auxiliaryBlobIDs(operations){
 async function encode(store,record,{makePreview=true}={}){
   if(store==='projects'){
     if(record.projectDocumentPath)record=await cloudProjectDocument(record);
-    const {__cloudBaseRevision,__cloudSessionId,...persisted}=record;record=persisted;
+    const {__cloudBaseRevision,__cloudSessionId,__cloudBaseSceneFingerprint,__cloudBaseMetadata,...persisted}=record;record=persisted;
     const text=JSON.stringify(record);let blob=new Blob([text],{type:'application/json'}),encoding;
     const inline=blob.size<=LARGE_PROJECT_BYTES,provider=writeProvider();
     let path;
@@ -778,7 +896,7 @@ async function encode(store,record,{makePreview=true}={}){
   await remember('image:'+storagePath,record.data);retainImage(storagePath,record.data);
   const {data,thumbnailPath:_oldThumbnail,...metadata}=record;return {...metadata,storagePath,storageProvider:provider,...(thumbnailPath?{thumbnailPath}:{})};
 }
-function cloudTransaction(names,fn,operationID=crypto.randomUUID()){
+function cloudTransaction(names,fn,operationID=crypto.randomUUID(),baseRevisionOverride=null){
   assertAccountWritable();
   const operations=[];const result=fn({objectStore(store){if(!names.includes(store))throw Error('此表未加入事务');return {put:record=>operations.push({action:'put',store,item:structuredClone(record)}),delete:id=>operations.push({action:'delete',store,id}),clear:()=>operations.push({action:'clear',store})};}});
   if(result?.then)throw Error('事务回调必须同步');
@@ -788,6 +906,7 @@ function cloudTransaction(names,fn,operationID=crypto.randomUUID()){
     try{
     await identity();if(revision===undefined)await version();
     const previous=revision;
+    const commitBase=baseRevisionOverride??previous;
     operations.push(...recordTombstones(operations).slice(operations.length));
     const puts=operations.filter(op=>op.action==='put'),auxiliary=auxiliaryBlobIDs(operations);activeDirect.total=puts.length;activeDirect.phase='编码与上传';reportSync();
     for(let offset=0;offset<puts.length;offset+=3)try{
@@ -799,9 +918,14 @@ function cloudTransaction(names,fn,operationID=crypto.randomUUID()){
     }catch(error){throw markSyncPhase(error,'编码云端记录');}
     assertAccountWritable();activeDirect.phase='提交事务';reportSync();
     let data;
-    try{data=checked(await cloudClient().rpc('shiye_commit_v2',{
-      operations,expected_revision:previous,operation_id:operationID
-    }));}catch(error){throw markSyncPhase(error,'云端提交事务');}revision=Number(data);
+    try{data=checked(await cloudClient().rpc('shiye_commit_v3',{
+      operations,base_revision:commitBase,operation_id:operationID,
+      expected_epoch:accountEpoch,sync_protocol_version:3
+    }));}catch(error){throw markSyncPhase(error,'云端提交事务');}
+    if(data?.status!=='applied'||!Number.isSafeInteger(Number(data.revision))||
+      data.accountEpoch!==accountEpoch)
+      throw Error('云端同步收据不完整；本机修改已保留');
+    revision=Number(data.revision);
     // A WebP cover becomes usable only after both its object PUT and the
     // metadata commit succeed. Update the current Works UI immediately rather
     // than waiting for a full collection reload (which recreated every card).
@@ -825,12 +949,13 @@ function cloudTransaction(names,fn,operationID=crypto.randomUUID()){
     }
     // Patch only cached collections belonging to the committed base revision.
     // Remote conflicts never write to this cache or silently become local edits.
+    if(revision!==previous+1)snapshots.clear();
     for(const store of ['assets','series','projects','trash','meta','blobs']){
+      if(revision!==previous+1)break;
       const saved=snapshots.get(store)||await cached('records:'+store);if(saved?.revision!==previous)continue;
       const records=new Map(saved.records.map(r=>[r.id,r]));for(const op of operations.filter(o=>o.store===store)){if(op.action==='clear')records.clear();else if(op.action==='delete')records.delete(op.id);else records.set(op.item.id,op.item);}
       const next={revision,records:[...records.values()]};snapshots.set(store,next);await remember('records:'+store,next);
     }
-    await unifiedSync.advance(previous,revision,operations);
     syncDiagnostics.record({action:'direct-commit',kind:'direct',baseRevision:previous,
       cloudRevision:revision,pending:unifiedSync.status().pending,
       durationMs:Date.now()-activeDirect.startedAt});
@@ -955,6 +1080,9 @@ async function cloudStageProject(record){
   // Existing untagged documents remain conservative (base revision zero).
   record.__cloudSessionId||=crypto.randomUUID();
   const registered=editorBases.get(record.__cloudSessionId);
+  const sceneBase=editorSceneBases.get(record.__cloudSessionId);
+  if(sceneBase){record.__cloudBaseSceneFingerprint=sceneBase.scene;
+    record.__cloudBaseMetadata=sceneBase.metadata;}
   const baseRevision=registered!==undefined?registered:
     Number.isSafeInteger(record.__cloudBaseRevision)?record.__cloudBaseRevision:known?0:revision;
   if(registered===undefined)editorBases.set(record.__cloudSessionId,baseRevision);
@@ -968,6 +1096,19 @@ async function cloudStageMutation(names,fn){
   operations.push(...recordTombstones(operations).slice(operations.length));
   names=[...new Set([...names,...operations.map(op=>op.store)])];
   await identity();if(revision===undefined)await version();
+  // The authoritative collection snapshot is the edit baseline. Persist it
+  // with a metadata PUT so disjoint fields can be merged after a concurrent
+  // change without guessing from the final two records. A stale snapshot is
+  // not proof, so it is deliberately ignored.
+  await Promise.all([...new Set(operations.filter(op=>op.action==='put'&&
+    ['assets','series'].includes(op.store)).map(op=>op.store))].map(async store=>{
+    const memory=snapshots.get(store);
+    const saved=memory?.revision===revision?memory:await cached('records:'+store);
+    if(saved?.revision!==revision)return;
+    const byID=new Map(saved.records.map(item=>[item.id,item]));
+    for(const op of operations)if(op.action==='put'&&op.store===store&&byID.has(op.item.id))
+      op.baseRecord=structuredClone(byID.get(op.item.id));
+  }));
   const deletedIDs=operations.filter(op=>op.store==='projects'&&op.action==='delete').map(op=>op.id);
   if(!deletedIDs.length){await importSync.stage({id:crypto.randomUUID(),names,operations});return;}
   // Persist the delete + full trash snapshot before touching older pending
@@ -1213,8 +1354,9 @@ async function cloudPurgeLocalAfterReset(){
   // Disable reads and background upload at this instance before erasing the
   // durable outbox. Caller has already stopped editing and received reset:true.
   cacheDisabled=true;
+  accountEpoch=undefined;revision=undefined;
   images.clear();imageSizes.clear();documents.clear();snapshots.clear();blobRecords.clear();blobRevisionProof.clear();
-  uploads.clear();thumbnailUploads.clear();editorBases.clear();
+  uploads.clear();thumbnailUploads.clear();editorBases.clear();editorSceneBases.clear();remoteProjectWinners.clear();
   if(typeof cache?.purgeAccount!=='function')throw Error('浏览器不支持完整账号本地清理');
   const count=await cache.purgeAccount(user);
   await cache.close?.();
@@ -1225,7 +1367,9 @@ async function cloudPendingDetails(){await identity();const [projects,imports]=a
 function cloudRecordSyncDiagnostic(event){syncDiagnostics.record(event);}
 function cloudSyncDiagnosticReport({online=null}={}){
   const status=unifiedSync.status();
-  return syncDiagnostics.report({pending:status.pending+writesInFlight,conflicts:status.conflicts,uploading:status.uploading||writesInFlight>0,
+  return syncDiagnostics.report({pending:status.pending+writesInFlight,conflicts:status.conflicts,
+    retrying:status.retrying,nextAttemptAt:status.nextAttemptAt,
+    uploading:status.uploading||writesInFlight>0,
     revision,writesInFlight,quarantined:unifiedQuarantine.length,online,active:activeDirect?{...activeDirect,elapsedMs:Date.now()-activeDirect.startedAt}:null});
 }
 async function cloudDiscardPending(){await identity();if(writesInFlight||!unifiedSync.canDiscard())throw Error('上传正在进行，请等待当前请求结束');const count=await unifiedSync.discard();reportSync();return count;}
@@ -1237,7 +1381,22 @@ async function cloudRebuildPending(local){
     const pending=rows.filter((_,index)=>!confirmed[index]);
     if(pending.length&&await wasResetAfter(Math.min(...pending.map(row=>row.baseRevision))))
       throw Error('账号曾被清空；旧队列不能直接恢复，请通过旧数据转换入口处理');
-    return {records:rebuildSyncRecords(pending,local),baseRevision:await version()};
+    // Rebuilding an outbox never grants a new edit baseline. A different
+    // account-wide revision may belong to an unrelated entity, while a real
+    // change to this entity must still pass normal reconcile/fork handling.
+    // Keep each row's original proof and receipt identity when its payload is
+    // byte-for-byte unchanged; a refreshed local snapshot gets a new ID.
+    const rebuilt=[];
+    for(const row of pending){
+      const records=rebuildSyncRecords([row],local);
+      for(const record of records)rebuilt.push({record,
+        baseRevision:row.baseRevision,
+        operationID:records.length===1&&
+          !JSON.stringify(record).includes('"blobs"')&&
+          JSON.stringify(record)===JSON.stringify(row.record)
+          ?row.operationID:undefined});
+    }
+    return {rows:rebuilt};
   });
   syncDiagnostics.record({action:'rebuilt',kind:'queue',pending:result.pending,
     cloudRevision:revision,removed:result.replaced-result.pending});
@@ -1248,7 +1407,9 @@ async function cloudFlushProjects({background=false}={}){
   if(background)return unifiedSync.resumeScheduled();
   return unifiedSync.flush();
 }
-async function cloudClearCache(){const id=await account();cacheDisabled=true;try{images.clear();imageSizes.clear();documents.clear();snapshots.clear();blobRecords.clear();blobRevisionProof.clear();editorBases.clear();await cache?.clear(id);syncDiagnostics.clear();}catch(error){cacheDisabled=false;throw error;}}
+async function cloudClearCache(){const id=await account();cacheDisabled=true;try{images.clear();imageSizes.clear();documents.clear();snapshots.clear();blobRecords.clear();blobRevisionProof.clear();editorBases.clear();editorSceneBases.clear();remoteProjectWinners.clear();await cache?.clear(id);syncDiagnostics.clear();}catch(error){cacheDisabled=false;throw error;}}
+async function cloudPreviewCacheBytes(){return cache?.previewBytes(await account())??0;}
+async function cloudClearPreviewCache(){return cache?.clearPreviews(await account())??{count:0,bytes:0};}
 function cloudResumeCache(){cacheDisabled=false;}
 async function cloudEmergencySnapshot(){
   if(!owner||!cache)throw Error('尚无已验证的本机账号缓存，无法离线导出待同步数据');
@@ -1261,7 +1422,7 @@ async function cloudRestoreEmergency(snapshot){
   if(typeof cache.restoreUnifiedOutboxes!=='function')throw Error('当前浏览器不支持原子恢复唯一同步队列');
   return cache.restoreUnifiedOutboxes(key,snapshot.projects,snapshot.imports);
 }
-return {cloudListPreConflictScenes,cloudRestorePreConflictScene,cloudReloadBlob,cloudRunExclusiveReset,cloudAbortExclusiveReset,cloudCloseCacheBeforeRemoteReset,cloudSetResetCleanupPending,cloudPurgeLocalAfterReset,cloudConflictReview,cloudConflictBackup,cloudResolveProjectConflict,cloudMigrationInventory,cloudMigrationOriginalProject,cloudMigrationCommit,cloudLegacyProjectBackup,cloudAll,cloudGet,cloudPreview,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudClearCache,cloudResumeCache,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudPendingLocalSummary,cloudPendingDetails,cloudSyncDiagnosticReport,cloudRecordSyncDiagnostic,cloudDiscardPending,cloudRebuildPending,cloudFlushProjects,cloudProjectDocument,cloudEmergencySnapshot,cloudRestoreEmergency,cloudBackupBlobIDs};
+return {cloudListPreConflictScenes,cloudRestorePreConflictScene,cloudReloadBlob,cloudRunExclusiveReset,cloudAbortExclusiveReset,cloudCloseCacheBeforeRemoteReset,cloudSetResetCleanupPending,cloudPurgeLocalAfterReset,cloudConflictReview,cloudConflictBackup,cloudResolveProjectConflict,cloudMigrationInventory,cloudMigrationOriginalProject,cloudMigrationCommit,cloudLegacyProjectBackup,cloudAll,cloudGet,cloudPreview,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudClearCache,cloudPreviewCacheBytes,cloudClearPreviewCache,cloudResumeCache,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudPendingLocalSummary,cloudPendingDetails,cloudSyncDiagnosticReport,cloudRecordSyncDiagnostic,cloudDiscardPending,cloudRebuildPending,cloudFlushProjects,cloudProjectDocument,cloudEmergencySnapshot,cloudRestoreEmergency,cloudBackupBlobIDs};
 }
 let projectPreview=()=>null;
 export const setCloudProjectPreview=producer=>{projectPreview=producer;};
@@ -1288,6 +1449,8 @@ export const cloudCheckpoint=(...args)=>current.cloudCheckpoint(...args);
 export const cloudCachedCollections=(...args)=>current.cloudCachedCollections(...args);
 export const cloudRefresh=(...args)=>current.cloudRefresh(...args);
 export const cloudClearCache=(...args)=>current.cloudClearCache(...args);
+export const cloudPreviewCacheBytes=(...args)=>current.cloudPreviewCacheBytes(...args);
+export const cloudClearPreviewCache=(...args)=>current.cloudClearPreviewCache(...args);
 export const cloudResumeCache=(...args)=>current.cloudResumeCache(...args);
 export const cloudPreview=(...args)=>current.cloudPreview(...args);
 export const cloudStageProject=(...args)=>current.cloudStageProject(...args);

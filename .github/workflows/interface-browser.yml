@@ -1,8 +1,10 @@
 name: Interface browser regression
 
 on:
+  push:
+    branches: [main, test]
   pull_request:
-    branches: [test]
+    branches: [main, test]
     paths:
       - 'src/**'
       - 'tests/**'
@@ -18,7 +20,7 @@ permissions:
 # Repeated PR pushes must not leave stale browser runners consuming minutes.
 # Preserve the regression gate; cancel superseded attempts, not checks.
 concurrency:
-  group: interface-browser-${{ github.ref }}
+  group: interface-browser-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
 jobs:
@@ -58,6 +60,11 @@ jobs:
           SHIYE_TEST_URL=http://127.0.0.1:5193 node tests/import-browser-acceptance.mjs
           SHIYE_TEST_URL=http://127.0.0.1:5193 npm run test:editor-layout-browser
           SHIYE_TEST_URL=http://127.0.0.1:5193 node tests/cloud-cache-browser.mjs
+          SHIYE_TEST_URL=http://127.0.0.1:5193 node tests/backup-archive-browser.mjs
+          SHIYE_TEST_URL=http://127.0.0.1:5193 node tests/dialog-focus-browser.mjs
+          SHIYE_TEST_URL=http://127.0.0.1:5193 node tests/navigation-history-browser.mjs
+          SHIYE_TEST_URL=http://127.0.0.1:5193 node tests/settings-offline-browser.mjs
+          SHIYE_TEST_URL=http://127.0.0.1:5193 npm run test:sync-browser
           SHIYE_TEST_URL=http://127.0.0.1:5193 npm run test:responsive-browser
           SHIYE_TEST_URL=http://127.0.0.1:5193 npm run test:selection-browser
           SHIYE_TEST_URL=http://127.0.0.1:5193 npm run test:layout-browser
@@ -76,4 +83,11 @@ jobs:
             /tmp/shiye-responsive-review/
             /tmp/shiye-library-selection/
             /tmp/shiye-layout-preview/
+          retention-days: 7
+      - name: Archive private build source maps
+        if: always() && github.event.repository.private
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: source-maps-${{ github.run_id }}
+          path: .build-sourcemaps/
           retention-days: 7

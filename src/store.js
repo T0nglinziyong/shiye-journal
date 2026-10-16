@@ -2,9 +2,8 @@ import {openDB,unwrap} from 'idb';
 import {createStorageRouter} from './storage-router.js';
 import {cloudEnabled} from './cloud-session.js';
 import {prepareProjectScene,partitionProjectList,attachSceneV2} from './scene-v2.js';
-import {cloudRunExclusiveReset,cloudAbortExclusiveReset,cloudPurgeLocalAfterReset,cloudConflictReview,cloudConflictBackup,cloudResolveProjectConflict,cloudListPreConflictScenes,cloudRestorePreConflictScene,cloudMigrationInventory,cloudMigrationOriginalProject,cloudMigrationCommit,cloudLegacyProjectBackup,cloudAll,cloudGet,cloudReloadBlob,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudPreview,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudPendingDetails,cloudSyncDiagnosticReport,cloudRecordSyncDiagnostic,cloudDiscardPending,cloudRebuildPending,cloudFlushProjects,cloudProjectDocument,cloudEmergencySnapshot,cloudRestoreEmergency,cloudBackupBlobIDs} from './cloud-store.js';
+import {cloudRunExclusiveReset,cloudAbortExclusiveReset,cloudPurgeLocalAfterReset,cloudConflictReview,cloudConflictBackup,cloudResolveProjectConflict,cloudListPreConflictScenes,cloudRestorePreConflictScene,cloudMigrationInventory,cloudMigrationOriginalProject,cloudMigrationCommit,cloudLegacyProjectBackup,cloudAll,cloudGet,cloudReloadBlob,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudPreview,cloudPreviewCacheBytes,cloudClearPreviewCache,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudPendingDetails,cloudSyncDiagnosticReport,cloudRecordSyncDiagnostic,cloudDiscardPending,cloudRebuildPending,cloudFlushProjects,cloudProjectDocument,cloudEmergencySnapshot,cloudRestoreEmergency,cloudBackupBlobIDs} from './cloud-store.js';
 import {createPendingRecovery,parsePendingRecovery} from './emergency-backup.js';
-import {validateBackupData,validateRestoredRecords} from './backup-integrity.js';
 // Exceptional destructive imports require an acknowledged atomic cloud commit.
 export async function confirmedTransaction(names,fn){if(cloudEnabled){await cloudFlushProjects();return cloudTransaction(names,fn);}return transaction(names,fn);}
 export async function stageImport(batch){if(cloudEnabled)return cloudStageImport(batch);await transaction(['assets','blobs','projects'],tx=>{for(const store of ['assets','blobs','projects'])for(const record of batch[store]||[])tx.objectStore(store).put(record);});return {pending:false};}
@@ -60,6 +59,8 @@ export async function cachedCollections(){
 }
 export const refreshCloud=()=>cloudEnabled?cloudRefresh():Promise.resolve(null);
 export const previewBlob=(id,pixels=720,options)=>cloudEnabled?cloudPreview(id,pixels,options):get('blobs',id).then(r=>r?.data);
+export const previewCacheBytes=()=>cloudEnabled?cloudPreviewCacheBytes():Promise.resolve(null);
+export const clearPreviewCache=()=>cloudEnabled?cloudClearPreviewCache():Promise.resolve({count:0,bytes:0});
 const DB='shiye-pwa-full-v1';
 const STORES=['assets','blobs','series','projects','meta','trash'];
 let connection;
@@ -150,27 +151,40 @@ export async function createBackup({browserOnly=false,onChunk,onProgress=()=>{}}
     }
   });
 }
-export async function restoreBackup(file){
+export async function prepareBackupRestore(file){
+  const restoreAccountID=cloudEnabled?(await (await import('./cloud-session.js')).requireCloudUser()).id:null;
   const header=new Uint8Array(await file.slice(0,4).arrayBuffer());
   const isZip=header.length>=4&&header[0]===0x50&&header[1]===0x4b&&header[2]===0x03&&header[3]===0x04;
-  let values;
-  if(isZip){
-    const {readZipBackup}=await import('./backup-archive.js');
-    values=await readZipBackup(file);
-    validateRestoredRecords(values);
-  }else{
-    // Legacy JSON .shiyepwa remains importable; all new exports are ZIP.
-    if(file.size>1024*1024*1024)throw Error('旧版 JSON 备份超过 1 GB，请先在桌面端转换');
-    const data=JSON.parse(await file.text());
-    await validateBackupData(data);
-    values={...data.stores,blobs:data.stores.blobs.map(x=>({...x,data:fromBase64(x.data)}))};
-  }
-  // Validation completes BEFORE the first destructive write. The six IDB
-  // stores are replaced in a single transaction; cloud CAS protects conflicts.
-  await confirmedTransaction(STORES,tx=>{
-    for(const name of STORES){
-      tx.objectStore(name).clear();
-      for(const item of values[name])tx.objectStore(name).put(item);
+  if(!isZip)throw Error('请选择当前 .shiyepwa ZIP 完整备份；旧数据请使用独立转换工具');
+  const {readZipBackup}=await import('./backup-archive.js');
+  const {validateRestoredRecords}=await import('./backup-integrity.js');
+  const values=await readZipBackup(file);
+  const repairs=[];
+  validateRestoredRecords(values,{repairs});
+  const counts=Object.fromEntries(STORES.map(name=>[name,values[name].length]));
+  let applied=false,applying=false;
+  return {counts,repairs,apply:async()=>{
+    if(applied||applying)throw Error('此备份恢复任务已经执行或正在执行，请重新选择文件');
+    applying=true;
+    try{
+    if(cloudEnabled){
+      const current=(await (await import('./cloud-session.js')).requireCloudUser()).id;
+      if(current!==restoreAccountID)throw Error('预检后登录账号已变化，请重新选择备份文件');
+      await cloudFlushProjects();
+      const pending=await cloudPendingDetails();
+      if(pending.projects.length||pending.batches.length||pending.quarantined)
+        throw Error('本账号仍有待同步或待检查的本机修改；请先完成同步或导出应急包，再恢复完整备份');
     }
-  });
+    applied=true;
+    // The six IDB stores are replaced in one transaction. A failed request
+    // leaves the prior database intact; preflight itself never writes it.
+    await confirmedTransaction(STORES,tx=>{
+      for(const name of STORES){
+        tx.objectStore(name).clear();
+        for(const item of values[name])tx.objectStore(name).put(item);
+      }
+    });
+    }finally{applying=false;}
+  }};
 }
+export async function restoreBackup(file){return (await prepareBackupRestore(file)).apply();}

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {catalogVisibleItems,pageSize,pageSlice,resetCatalogPage,setCatalogDataPage} from '../src/catalog-pagination.js';
+import {catalogVisibleItems,pageSize,pageSlice,resetCatalogPage,setCatalogDataPage,clearCatalogPages} from '../src/catalog-pagination.js';
 import {WORK_TABS,workInTab,snapshotRecord} from '../src/work-collections.js';
 import {styleGroups,purposeGroups,selectedDirections} from '../src/matching-directions.js';
 import {createNativeProjectPackage,importNativeProjectPackage} from '../src/native-project-package.js';
@@ -34,6 +34,13 @@ test('the configured size limits ordinary and selected catalog results after fil
     assert.equal(catalogVisibleItems(key,all,80).items.length,80,key);
   }
   assert.equal(pageSize(10),0,'the setting keeps its existing 20/40/80 choices');
+});
+test('a different account begins on the first page after cached page state is cleared',()=>{
+  const rows=Array.from({length:60},(_,id)=>({id}));
+  setCatalogDataPage('library',3);
+  assert.equal(catalogVisibleItems('library',rows,20).current,3);
+  clearCatalogPages();
+  assert.equal(catalogVisibleItems('library',rows,20).current,1);
 });
 test('snapshot and editable works never share a tab',()=>{
   const picture=snapshotRecord({title:'一页画面',previewBlobId:'preview',width:800,height:1200});
@@ -107,20 +114,20 @@ test('GPT image delivery uses actual image edits and only accepts returned PNG b
   await assert.rejects(generatePageImage({settings:{keys:{}},project:p,draft,assets:[asset],ids:['a1']}),/OpenAI API 密钥/);
 });
 test('editable mask operations preserve irregular, rounded and scalloped cutouts in ZIP',async()=>{
-  const asset={id:'a1',title:'纸片',kind:'paper',physicalWidthMM:60,physicalHeightMM:80,supply:{quantity:3}};
+  const assets=['a1','a2','a3'].map(id=>({id,title:'纸片',kind:'paper',physicalWidthMM:60,physicalHeightMM:80}));
   const p=project('裁片');const masks=[
     {op:'mask',shape:'polygon',points:[[0,0],[1,0],[.8,.6],[.3,1],[0,.8]]},
     {op:'mask',shape:'rounded',radius:.18},
     {op:'mask',shape:'scallop',depth:.06,waves:7}
   ];
-  const page={version:2,style:'自由构图',intent:null,paper:{color:'#ffffff',pattern:'plain'},layers:[{type:'text',id:'caption',content:'可编辑文字',font_style:'sans',x:.5,y:.8,width:.5,height:.1,font_size:24,color:'#333333'},...masks.map((mask,index)=>({type:'material',id:'piece-'+index,asset:'a1',piece:'piece-'+index,unit:index,role:null,operations:[{op:'whole'},mask],placement:{x:.18+index*.31,y:.4,rotation:0,z:index},relation:null}))]};
-  const result=applyToolCalls(page,p.drafts[0],[asset],{},{processing:'自由拆解'});assert.deepEqual(result.results.map(x=>x.ok),[true]);
+  const page={version:2,style:'自由构图',intent:null,paper:{color:'#ffffff',pattern:'plain'},layers:[{type:'text',id:'caption',content:'可编辑文字',font_style:'sans',x:.5,y:.8,width:.5,height:.1,font_size:24,color:'#333333'},...masks.map((mask,index)=>({type:'material',id:'piece-'+index,asset:assets[index].id,piece:'piece-'+index,unit:0,role:null,operations:[{op:'whole'},mask],placement:{x:.18+index*.31,y:.4,rotation:0,z:index},relation:null}))]};
+  const result=applyToolCalls(page,p.drafts[0],assets,{},{processing:'自由拆解'});assert.deepEqual(result.results.map(x=>x.ok),[true]);
   assert.deepEqual(result.draft.items.map(x=>x.materialMask.shape),['polygon','rounded','scallop']);
   for(const item of result.draft.items){assert.ok(materialMaskPoints(item.materialMask).length>=3);assert.match(materialMaskCSS(item),/clip-path:polygon/);}
-  p.drafts[0]=result.draft;const imported=importNativeProjectPackage(new Uint8Array(await createNativeProjectPackage(p).arrayBuffer()),[asset]);
+  p.drafts[0]=result.draft;const imported=importNativeProjectPackage(new Uint8Array(await createNativeProjectPackage(p).arrayBuffer()),assets);
   assert.deepEqual(imported.drafts[0].items.map(x=>x.materialMask),result.draft.items.map(x=>x.materialMask));
   const invalid=structuredClone(page);invalid.layers.find(n=>n.type==='material').operations[1].points[0]=[-1,0];
-  assert.throws(()=>applyToolCalls(invalid,p.drafts[0],[asset]),/合同不合法|边缘无效|未实现或未知字段/);
+  assert.throws(()=>applyToolCalls(invalid,p.drafts[0],assets),/合同不合法|边缘无效|未实现或未知字段/);
 });
 test('editable JSON maps visual controls to native layers and preserves them in ZIP',async()=>{
   const asset={id:'a1',title:'纸',kind:'paper',physicalWidthMM:35,physicalHeightMM:45,supply:{quantity:1}};

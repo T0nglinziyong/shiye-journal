@@ -1,4 +1,4 @@
-// Planning metadata never modifies the task's authoritative physical/stock source.
+// Planning metadata never modifies the task's authoritative physical source.
 const possibleRoles=item=>{
   const kind=String(item.kind||'');
   if(kind==='tape')return ['连接','压角','包边','路径引导'];
@@ -9,7 +9,7 @@ const possibleRoles=item=>{
 const compactItem=item=>({
   alias:item.alias,assetID:item.assetID,title:item.title,kind:item.kind,
   physicalMM:[item.physicalWidthMM??null,item.physicalHeightMM??null],
-  suppliedRole:item.role??null,tags:item.tags||[],quantity:item.quantity,
+  suppliedRole:item.role??null,tags:item.tags||[],
   inspect:['画面主体与轮廓','透明边缘及可裁区域','有无可读字句/空白','方向与光色'],
   possibleUses:possibleRoles(item),note:'用途仅是候选；图案内容必须由 materials/ 图片观察确认'
 });
@@ -35,7 +35,7 @@ export function offlineCreationPlanningData(source,selected,{mode='agent',hasIma
     ],
     constraints:{
       use:'required 必须出现；preferred 优先考虑但可以舍弃；available 可选；excluded 不发送',
-      stock:'不新增、复制或放大实体素材；数字文字、线条和图形可以自由创作',
+      physicalSource:'不新增、复制或放大实体素材；数字文字、线条和图形可以自由创作',
       note:'视觉问题未确认时标记不确定，不把素材标题当作图像识别证据'
     }
   };
@@ -51,7 +51,7 @@ export function offlineCreationWorkflowText({mode='agent',hasImages=true}={}){
     '【创作步骤】',
     '1. 观察：'+(hasImages?'逐张查看 materials/，识别主体、背景、纹理、轮廓、印刷文字和负空间；不确定就保留未知。':'本包未提供素材图片，只能根据文字元数据谨慎判断，不得猜测图案。')+' task/material-planning.json 是问题清单，不是已证实的视觉识别。',
     '2. 关系：探索至少两种明显不同的内部方案，例如场景叙事／记录拼贴／自由错层；比较前景背景、主次、色彩、主题和阅读路径，只选最适合的一种，不输出多个成品。',
-    '3. 取舍与加工：逐件决定 whole / crop / cut_shape / 叠压 / 半藏 / 不使用；依据视觉关系、物理尺寸和库存，而不是强制使用高级工具。可以少用 preferred，不可漏 required。',
+    '3. 取舍与加工：逐件决定 whole / crop / cut_shape / 叠压 / 半藏 / 不使用；依据视觉关系、物理尺寸和单方案来源约束，而不是强制使用高级工具。可以少用 preferred，不可漏 required。',
     '4. 图文一体：文字承担记录内容，而非解释制作方法。优先使用用户事实；没有事实时写标明原创的观察文字，不编造私人行程、身份或日期。数字线条、笔迹、字级和小装饰服务阅读。',
     '自由字迹：需要真实手绘线条时使用多个独立笔画；直接排版写入 page.layers 下的 ink 节点，调用工具模式可在 apply_craft_plan.ink 中填写。每笔含 0–1 页面坐标的 points（可选 pressure 0–1）、width、color、opacity 和 pen_style。连续笔迹用多个点重建，抬笔必须拆成下一笔；普通印刷正文仍优先采用可编辑 text_blocks，而不是逐笔描绘数百个字。不要把笔迹烘焙为图片。',
     '5. 构图与执行：先定素材之间的联系、大小层级和遮挡，再细化坐标、旋转、字体与图形。数字层保持可编辑，实体尺寸和数量不变。数字点缀可用雨滴、爱心、云朵、花叶、闪光、票根、胶带、波浪线等 schema/output.json 允许的图形，支持分别指定填充颜色/透明度和描边颜色/粗细/透明度/虚线；按表达需要使用，不为填满页面而装饰。',

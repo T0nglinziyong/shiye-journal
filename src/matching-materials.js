@@ -24,7 +24,7 @@ export function recommendForDirection({assets=[],basket=[],styles=[],purposes=[]
   const styleWords=uniq(styles.flatMap(s=>styleTerms[s]||[s])),purposeWords=uniq(purposes.flatMap(p=>purposeTerms[p]||[]));
   const basketTags=new Set(selected.flatMap(descriptors).map(t=>t.toLocaleLowerCase()));
   const basketKinds=new Set(selected.map(a=>a.kind));
-  return assets.filter(a=>a?.id&&!basket.includes(a.id)&&!excludedSet.has(a.id)&&a.reviewStatus==='ready'&&!a.isProjectInternal&&(a.supply?.quantity??1)>0)
+  return assets.filter(a=>a?.id&&!basket.includes(a.id)&&!excludedSet.has(a.id)&&a.reviewStatus==='ready'&&!a.isProjectInternal&&a.usageStatus!=='used')
     .map(a=>{
       const terms=descriptors(a),words=terms.join(' ').toLocaleLowerCase();
       const reasons=[];let score=0;

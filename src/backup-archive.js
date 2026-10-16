@@ -2,6 +2,9 @@
 // Compression, hashing and ZIP parsing run in a module Worker, never the UI thread.
 const MIME='application/zip';
 const BUFFER_LIMIT=192*1024*1024;
+// The restore worker currently has a 256 MiB input and expanded-data limit.
+// Do not offer a streamed export that this application cannot read back.
+const RESTORE_LIMIT=256*1024*1024;
 const makeWorker=()=>new Worker(new URL('./backup-zip-worker.js',import.meta.url),{type:'module'});
 
 export async function createZipBackup({records,blobIDs,loadBlob,onChunk,onProgress=()=>{},beforeFinalize=null,maxBufferedBytes=BUFFER_LIMIT}){
@@ -28,6 +31,7 @@ export async function createZipBackup({records,blobIDs,loadBlob,onChunk,onProgre
       write=write.then(async()=>{
         const bytes=message.bytes;
         state.bytes+=bytes.length;
+        if(state.bytes>RESTORE_LIMIT)throw Error('完整备份超过当前应用可恢复的 256 MB 上限；未生成无法恢复的备份文件');
         if(!onChunk){
           if(state.bytes>maxBufferedBytes)throw Error('备份超过本浏览器内存导出上限，请在支持直接写入文件的桌面浏览器导出');
           parts.push(bytes);

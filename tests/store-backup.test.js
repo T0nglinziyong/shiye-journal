@@ -1,37 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import 'fake-indexeddb/auto';
-import {webcrypto} from 'node:crypto';
-test('full synthetic backup restores six stores and exact Blob bytes; failed restore stays atomic',async()=>{
-  const memory=new Map();globalThis.localStorage={getItem:k=>memory.get(k)||null,setItem:(k,v)=>memory.set(k,v),removeItem:k=>memory.delete(k)};
-  globalThis.document={querySelector:()=>null};globalThis.location={origin:'http://localhost'};globalThis.crypto??=webcrypto;
-  globalThis.FileReader=class{readAsDataURL(blob){blob.arrayBuffer().then(v=>{this.result='data:'+blob.type+';base64,'+Buffer.from(v).toString('base64');this.onload();}).catch(e=>{this.error=e;this.onerror();});}};
-  const previous=globalThis.fetch;globalThis.fetch=async()=>new Response('',{status:404});
+
+test('ordinary restore refuses non-ZIP input without changing the current database',async()=>{
+  const memory=new Map();globalThis.localStorage={getItem:key=>memory.get(key)||null,
+    setItem:(key,value)=>memory.set(key,value),removeItem:key=>memory.delete(key)};
+  globalThis.document={querySelector:()=>null};globalThis.location={origin:'http://localhost'};
+  const oldFetch=globalThis.fetch;globalThis.fetch=async()=>new Response('',{status:404});
   try{
-    const store=await import('../src/store.js?backup-validation');
-    const values={assets:[{id:'a',title:'synthetic',blobId:'b',originalBlobId:'b',supply:{quantity:3}}],blobs:[{id:'b',data:new Blob([new Uint8Array([0,1,127,255])],{type:'image/png'})}],series:[{id:'s',title:'synthetic series'}],projects:[{id:'p',activeDraftID:'d',drafts:[{id:'d',sceneVersion:2,canvas:{width:700,height:1000},physicalPageHeightMM:297,pageMode:'single',layers:[{id:'a-placement',type:'material',assetID:'a',x:50,y:70,width:40,height:50,generationBaseline:{x:50,y:70,width:40,height:50}}]}]}],meta:[{id:'m',value:false}],trash:[{id:'t',original:{id:'deleted'}}]};
-    await store.transaction(Object.keys(values),tx=>{for(const [name,records] of Object.entries(values))for(const record of records)tx.objectStore(name).put(record);});
-    // Legacy JSON archives must continue restoring byte-identically.
-    const encoded=Object.fromEntries(Object.entries(values).map(([name,items])=>[name,items]));
-    encoded.blobs=[{id:'b',data:'data:image/png;base64,AAF//w=='}];
-    const backup=new Blob([JSON.stringify({format:'shiye-pwa',version:1,stores:encoded})]);
-    await store.transaction(Object.keys(values),tx=>{for(const name of Object.keys(values))tx.objectStore(name).clear();});
-    await store.restoreBackup(backup);
-    for(const [name,records] of Object.entries(values)){const actual=await store.all(name);if(name==='blobs'){assert.deepEqual(new Uint8Array(await actual[0].data.arrayBuffer()),new Uint8Array([0,1,127,255]));assert.equal(actual[0].data.type,'image/png');}else assert.deepEqual(actual,records);}
-    const corrupted=JSON.parse(await backup.text());corrupted.stores.assets=[{title:'missing primary key'}];await assert.rejects(store.restoreBackup(new Blob([JSON.stringify(corrupted)])));assert.deepEqual(await store.all('assets'),values.assets);assert.equal((await store.all('projects')).length,1);
-    await assert.rejects(store.restoreBackup(new Blob(['{}'])),/完整备份/);assert.deepEqual(await store.all('assets'),values.assets);
-  }finally{globalThis.fetch=previous;}
-});
-
-
-test('backup manifest rejects altered image bytes before touching existing records',async()=>{
-  // The pure validator is shared by the browser restore entry point.
-  const {validateBackupData,buildBlobIntegrity}=await import('../src/backup-integrity.js');
-  const stored={format:'shiye-pwa',version:1,stores:{
-    assets:[{id:'one',blobId:'img'}],blobs:[{id:'img',data:'data:image/png;base64,YWJj'}],
-    series:[],projects:[],meta:[],trash:[]
-  }};
-  stored.integrity={algorithm:'SHA-256',blobs:await buildBlobIntegrity([{id:'img',data:new Blob(['abc'])}])};
-  stored.stores.blobs[0].data='data:image/png;base64,YWJk';
-  await assert.rejects(validateBackupData(stored),/SHA-256/);
+    const store=await import('../src/store.js?current-zip-only');
+    await store.put('assets',{id:'current',title:'原有素材'});
+    await assert.rejects(store.prepareBackupRestore(new Blob(['{"format":"shiye-pwa"}'])),/当前 .shiyepwa ZIP/);
+    assert.equal((await store.get('assets','current')).title,'原有素材');
+  }finally{globalThis.fetch=oldFetch;}
 });

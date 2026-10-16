@@ -11,9 +11,9 @@ try{
     const {validateRestoredRecords}=await import('/src/backup-integrity.js');
     const bin=new Blob([new TextEncoder().encode('SYNTHETIC PRIVATE IMAGE BYTES 2026\\n')],{type:'image/png'});
     const records={
-      assets:[{id:'asset',title:'测试素材',blobId:'blob',supply:{quantity:1}}],
+      assets:[{id:'asset',title:'测试素材',blobId:'blob'}],
       series:[{id:'series',title:'synthetic'}],
-      projects:[{id:'project',drafts:[{id:'d',items:[{assetID:'asset'}]}]}],
+      projects:[{id:'project',title:'合成作品',activeDraftID:'d',drafts:[{id:'d',sceneVersion:2,canvas:{width:700,height:1000},pageMode:'single',physicalPageHeightMM:297,layers:[{id:'item',type:'material',assetID:'asset',x:30,y:40,width:50,height:60}]}]}],
       meta:[{id:'test',value:1}],
       trash:[]
     };

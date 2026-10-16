@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createCloudStore} from '../src/cloud-store.js';
 import {projectBlobText} from '../src/project-document.js';
+import {projectSemanticFingerprint} from '../src/project-semantic.js';
 // All successfully staged project fixtures use the current-only persisted
 // Scene v2 tree. The malformed-outbox tests intentionally bypass this helper.
 function v2(record){
@@ -22,19 +23,39 @@ function v2(record){
 
 
 function fixture(cache=null,objectStorage=null,projectPreview=()=>null){
-  const state={revision:0,rows:[],calls:[],commits:new Map(),fail:false,authError:false,uploads:[],downloads:0};
+  const state={revision:0,accountEpoch:'epoch-fixture',rows:[],calls:[],commits:new Map(),keyVersions:new Map(),fail:false,authError:false,uploads:[],downloads:0};
   const client={from(table){
     const filters={};const query={select(){return query;},eq(k,v){filters[k]=v;return query;},in(k,v){filters[k]=v;return query;},limit(){return query;},abortSignal(){return query;},order(){return query;},
       then(resolve){state.batchReads=(state.batchReads||0)+1;const rows=filters.store==='blobs'&&Array.isArray(filters.id)?(state.cloudCopies||state.rows.map(record=>({id:record.id,record}))):(state.cloudCopies||[]);return Promise.resolve(resolve({data:rows.filter(row=>!filters.id||(Array.isArray(filters.id)?filters.id.includes(row.id):row.id===filters.id))}));},
       async range(start,end){state.reads=(state.reads||0)+1;const rows=state.rows.slice(start,end+1).map(record=>({record:v2(record)}));await state.onReadPage?.(start,end);return {data:rows};},
-      async single(){state.versionReads=(state.versionReads||0)+1;return {data:{revision:state.revision}};},
-      async maybeSingle(){return {data:table==='shiye_commits'?(state.commits.has(filters.operation_id)?{revision:state.commits.get(filters.operation_id)}:null):state.rows.filter(r=>r.id===filters.id).map(record=>({record:v2(record)}))[0]||null};}};
+      async single(){state.versionReads=(state.versionReads||0)+1;return {data:{revision:state.revision,account_epoch:state.accountEpoch}};},
+      async maybeSingle(){return {data:table==='shiye_commits'?(state.commits.has(filters.operation_id)?{revision:state.commits.get(filters.operation_id)}:null):table==='shiye_commit_receipts_v3'?null:state.rows.filter(r=>r.id===filters.id).map(record=>({record:v2(record)}))[0]||null};}};
     if(table==='shiye_changes')return {select(){return this;},eq(){return this;},gt(){return this;},lte(){return this;},order(){return this;},async range(){return state.changes?{data:state.changes}:{error:{message:'change log not installed'}};}};
-    assert.ok(['shiye_records','shiye_revisions','shiye_commits'].includes(table));return query;
+    assert.ok(['shiye_records','shiye_revisions','shiye_commits','shiye_commit_receipts_v3'].includes(table));return query;
   },storage:{from(bucket){assert.equal(bucket,'shiye-private');return {
     async upload(path,data,options){state.uploads.push({path,data,options});await state.uploadGate;return {error:state.fail?{statusCode:500}:null};},
     async download(path){state.downloads++;return {data:state.uploads.find(row=>row.path===path)?.data||new Blob(['private image']),error:state.missingThumbnail&&path.includes('preview480')?{message:'thumbnail missing'}:null};}};}},
-    async rpc(name,args){assert.equal(name,'shiye_commit_v2');state.calls.push(args);if(state.rpcAbort)throw new DOMException('request aborted','AbortError');if(state.commits.has(args.operation_id))return state.loseAck?{error:{message:'network response lost'}}:{data:state.commits.get(args.operation_id)};if(state.fail||args.expected_revision!==state.revision)return {error:{message:'conflict'}};const revision=++state.revision;state.commits.set(args.operation_id,revision);if(state.loseAck)return {error:{message:'network response lost'}};return {data:revision};}
+    async rpc(name,args){
+      assert.equal(name,'shiye_commit_v3');state.calls.push(args);
+      if(state.rpcAbort)throw new DOMException('request aborted','AbortError');
+      const receipt=revision=>({status:'applied',revision,accountEpoch:state.accountEpoch,syncProtocolVersion:3});
+      if(state.commits.has(args.operation_id))return state.loseAck?{error:{message:'network response lost'}}:{data:receipt(state.commits.get(args.operation_id))};
+      const stale=args.base_revision<state.revision;
+      const changed=stale&&args.operations.some(op=>{
+        if(op.action==='clear')return true;
+        const id=op.item?.id??op.id;
+        if((state.keyVersions.get(op.store+':'+id)||0)>args.base_revision)return true;
+        if(Array.isArray(state.changes))return state.changes.some(row=>row.revision>args.base_revision&&
+          row.keys.some(key=>key.store===op.store&&(key.action==='clear'||key.id===id)));
+        return state.rows.some(row=>row.id===id);
+      });
+      if(state.fail||args.base_revision>state.revision||changed||args.expected_epoch!==state.accountEpoch)
+        return {error:{message:'conflict',code:'40001'}};
+      const revision=++state.revision;state.commits.set(args.operation_id,revision);
+      for(const op of args.operations)state.keyVersions.set(op.store+':'+(op.item?.id??op.id??'*'),revision);
+      if(state.loseAck)return {error:{message:'network response lost'}};
+      return {data:receipt(revision)};
+    }
   };
   const db=createCloudStore({cache,objectStorage,projectPreview,cloudClient:()=>client,requireCloudUser:async()=>{if(state.authError)throw Error('not authorized');return {id:'owner-uuid'};}});
   return {state,db};
@@ -49,6 +70,21 @@ test('account reset entry is callable and an unaccepted reset restores cloud wri
   db.cloudAbortExclusiveReset();
   await db.cloudTransaction(['assets'],tx=>tx.objectStore('assets').put({id:'after-failed-reset'}));
   assert.equal(state.revision,1);
+});
+test('a changed account epoch prevents an old session from uploading its local edits',async()=>{
+  const {state,db}=fixture(memoryCache());
+  await db.cloudAll('assets');
+  state.accountEpoch='new-epoch';state.revision++;
+  await assert.rejects(db.cloudRefresh(),/账号资料已重新开始/);
+  assert.equal(state.calls.length,0);
+});
+test('an old pending edit is retained after account reset instead of silently acknowledged',async()=>{
+  const cache=memoryCache(),{state,db}=fixture(cache);
+  await db.cloudStageMutation(['assets'],tx=>tx.objectStore('assets').put({id:'protected-draft'}));
+  state.revision=2;state.accountEpoch='new-epoch';
+  state.rows=[{id:'shiye-reset-barrier',revision:2,phase:'deleting'}];
+  await assert.rejects(db.cloudFlushProjects(),/账号已清空|conflict/);
+  assert.equal((await activeRows(cache,'batch')).length,1);
 });
 test('large collection reads independent pages concurrently after the first page',async()=>{
   const {state,db}=fixture();state.rows=Array.from({length:1001},(_,i)=>({id:String(i)}));
@@ -162,7 +198,7 @@ test('aborted delete resumes after another tab edits an unrelated record, but no
   first.state.rpcAbort=false;first.state.revision=1;
   first.state.changes=[{revision:1,keys:[{store:'assets',action:'put',id:'other'}]}];
   await first.db.cloudFlushProjects();
-  assert.equal(first.state.calls.at(-1).expected_revision,1);
+  assert.equal(first.state.calls.at(-1).base_revision,0);
   assert.deepEqual(await activeRows(cache,'batch'),[]);
 
   const secondCache=memoryCache(),second=fixture(secondCache);second.state.rpcAbort=true;
@@ -173,6 +209,17 @@ test('aborted delete resumes after another tab edits an unrelated record, but no
   await assert.rejects(second.db.cloudFlushProjects(),/conflict/);
   assert.equal((await activeRows(secondCache,'batch')).length,1);
 });
+test('a stale asset metadata save cannot revive a newer cloud tombstone',async()=>{
+  const cache=memoryCache(),{db,state}=fixture(cache);
+  await db.cloudStageMutation(['assets'],tx=>tx.objectStore('assets').put({id:'gone',title:'old edit'}));
+  state.revision=1;
+  state.rows=[{id:'tombstone:assets:gone',kind:'tombstone',store:'assets',targetID:'gone'}];
+  state.changes=[{revision:1,keys:[{store:'assets',action:'delete',id:'gone'},
+    {store:'meta',action:'put',id:'tombstone:assets:gone'}]}];
+  await db.cloudFlushProjects();
+  assert.deepEqual(await activeRows(cache,'batch'),[]);
+  assert.equal(state.calls.length,1,'the old write is rejected before the tombstone is accepted');
+});
 test('aborted work edit resumes across an unrelated cloud revision without overwriting it',async()=>{
   const cache=memoryCache(),first=fixture(cache);first.state.rpcAbort=true;
   const work={id:'my-work',title:'locally edited',activeDraftID:'d',drafts:[{id:'d',canvas:{width:700,height:1000},items:[],textBlocks:[],primitives:[],strokes:[]}]};
@@ -181,7 +228,7 @@ test('aborted work edit resumes across an unrelated cloud revision without overw
   first.state.rpcAbort=false;first.state.revision=1;
   first.state.changes=[{revision:1,keys:[{store:'assets',action:'put',id:'other'}]}];
   await first.db.cloudFlushProjects();
-  assert.equal(first.state.calls.at(-1).expected_revision,1);
+  assert.equal(first.state.calls.at(-1).base_revision,0);
   assert.deepEqual(await activeRows(cache,'project'),[]);
 });
 test('D-01: background cursor advance cannot relabel a stale opened work as the new document version',async()=>{
@@ -199,11 +246,10 @@ test('D-01: background cursor advance cannot relabel a stale opened work as the 
   await db.cloudFlushProjects();
   assert.equal((await cache.get('cloud:owner-uuid','pre-conflict-scene-index')).length,1,
     'both versions are backed up before conflict handling');
-  assert.equal(state.calls.length,0,'a stale project never overwrites without owner choice');
-  assert.equal((await db.cloudPendingProjects())[0].record.title,'本机改标题');
-  const review=await db.cloudConflictReview('project','diary');
-  assert.equal(review.overview.local.title,'本机改标题');
-  assert.equal(review.overview.remote.drafts,1);
+  assert.equal(state.calls.length,2,'the first server CAS rejects the stale document before metadata reconciliation');
+  assert.equal(state.calls.at(-1).operations[0].item.title,'本机改标题');
+  assert.equal(state.calls.at(-1).operations[0].item.drafts[0].layers.find(layer=>layer.id==='text').content,'另一设备的正文 v2');
+  assert.equal((await db.cloudPendingProjects()).length,0);
 });
 test('D-02: a stale work can rebase only over a complete disjoint change log',async()=>{
   const cache=memoryCache(),{state,db}=fixture(cache);
@@ -213,10 +259,10 @@ test('D-02: a stale work can rebase only over a complete disjoint change log',as
   await db.cloudRefresh();
   await db.cloudStageProject({...opened,title:'本机改标题'});
   await db.cloudFlushProjects();
-  assert.equal(state.calls[0].expected_revision,2);
+  assert.equal(state.calls[0].base_revision,1);
   assert.deepEqual(await db.cloudPendingProjects(),[]);
 });
-test('D-03: an untagged known work is staged locally but cannot claim the newest cursor',async()=>{
+test('D-03: an untagged known work cannot claim the newest cursor and keeps a separate copy',async()=>{
   const cache=memoryCache(),{state,db}=fixture(cache);
   const saved=v2({id:'diary',title:'旧作品',activeDraftID:'d',drafts:[{id:'d',canvas:{width:700,height:1000},items:[],textBlocks:[],primitives:[],strokes:[]}]});
   state.revision=4;state.rows=[saved];await db.cloudAll('projects');
@@ -224,8 +270,10 @@ test('D-03: an untagged known work is staged locally but cannot claim the newest
   assert.equal((await db.cloudPendingProjects())[0].baseRevision,0);
   await db.cloudFlushProjects();
   assert.equal((await cache.get('cloud:owner-uuid','pre-conflict-scene-index')).length,1);
-  assert.equal(state.calls.length,0);
-  assert.equal((await db.cloudPendingProjects())[0].record.title,'本机新标题');
+  assert.equal(state.calls.length,2);
+  assert.equal(state.calls.at(-1).operations[0].item.title,'本机新标题 · 另一编辑版本');
+  assert.notEqual(state.calls.at(-1).operations[0].item.id,'diary');
+  assert.equal((await db.cloudPendingProjects()).length,0);
 });
 test('D-04: confirmed edits advance only their own editor session for a second save',async()=>{
   const {state,db}=fixture(memoryCache());
@@ -233,7 +281,7 @@ test('D-04: confirmed edits advance only their own editor session for a second s
   state.revision=1;state.rows=[saved];const opened=(await db.cloudAll('projects'))[0];
   opened.title='第一次';await db.cloudStageProject(opened);await db.cloudFlushProjects();
   opened.title='第二次';await db.cloudStageProject(opened);await db.cloudFlushProjects();
-  assert.deepEqual(state.calls.map(call=>call.expected_revision),[1,2]);
+  assert.deepEqual(state.calls.map(call=>call.base_revision),[1,2]);
   assert.deepEqual(await db.cloudPendingProjects(),[]);
   assert.equal(state.calls[1].operations[0].item.__cloudSessionId,undefined);
 });
@@ -242,13 +290,15 @@ test('reopening after an import commit but before local acknowledgement clears t
   first.state.uploadGate=new Promise(()=>{});
   await first.db.cloudStageImport({assets:[{id:'new-asset',blobId:'new-blob'}],blobs:[{id:'new-blob',data:new Blob(['image'])}],projects:[]});
   const reopened=fixture(cache);reopened.state.revision=1;reopened.state.rows=[{id:'new-asset',blobId:'new-blob'},{id:'new-blob',storagePath:'owner-uuid/hash',storageProvider:'supabase'}];
-  await reopened.db.cloudFlushProjects();
-  assert.equal(reopened.state.calls.length,0);
+  await assert.rejects(reopened.db.cloudFlushProjects(),/conflict/);
+  assert.equal(reopened.state.calls.length,1);
   const pending=await activeRows(cache,'batch');
   assert.equal(pending.length,1,'metadata alone cannot prove the original bytes were committed');
   reopened.state.commits.set(pending[0].operationID,1);
   await reopened.db.cloudFlushProjects();
-  assert.equal(reopened.state.calls.length,0);assert.deepEqual(await activeRows(cache,'batch'),[]);
+  assert.equal(reopened.state.calls.length,2,'the retry must return the original durable receipt');
+  assert.equal(reopened.state.calls[0].operation_id,reopened.state.calls[1].operation_id);
+  assert.deepEqual(await activeRows(cache,'batch'),[]);
 });
 test('lost acknowledgement for a material edit is recognized immediately and again after reopening',async()=>{
   const cache=memoryCache(),first=fixture(cache);first.state.loseAck=true;
@@ -279,7 +329,7 @@ test('reopening an unfinished import after an unrelated remote update resumes up
   await first.db.cloudStageImport({assets:[{id:'retry-asset',blobId:'retry-blob'}],blobs:[{id:'retry-blob',data:new Blob(['image'])}],projects:[]});
   const reopened=fixture(cache);reopened.state.revision=1;reopened.state.rows=[{id:'other-device',title:'unrelated'}];
   await reopened.db.cloudFlushProjects();assert.equal(reopened.state.calls.length,1);
-  assert.equal(reopened.state.calls[0].expected_revision,1);assert.deepEqual(await activeRows(cache,'batch'),[]);
+  assert.equal(reopened.state.calls[0].base_revision,0);assert.deepEqual(await activeRows(cache,'batch'),[]);
 });
 test('reopening removes only an unrecoverable local import card, not a recoverable neighbor',async()=>{
   const cache=memoryCache(),a=fixture(cache);a.state.uploadGate=new Promise(()=>{});
@@ -471,9 +521,10 @@ test('authorization gates cached reads and explicit logout clears private snapsh
 });
 test('cloud transactions serialize revisions and recover after an error without local fallback',async()=>{
   const {state,db}=fixture();const put=()=>db.cloudTransaction(['assets'],tx=>tx.objectStore('assets').put({id:'a'}));
-  await Promise.all([put(),put()]);assert.deepEqual(state.calls.map(c=>c.expected_revision),[0,1]);
+  await Promise.all([put(),put()]);assert.deepEqual(state.calls.map(c=>c.base_revision),[0,1]);
   state.fail=true;await assert.rejects(put(),/conflict/);state.fail=false;await put();assert.equal(state.revision,3);
-  state.revision++;await assert.rejects(put(),/conflict/);await assert.rejects(db.cloudCheckpoint(),/另一设备/);
+  state.revision++;state.keyVersions.set('assets:a',state.revision);
+  await assert.rejects(put(),/conflict/);await assert.rejects(db.cloudCheckpoint(),/另一设备/);
 });
 test('private images upload before metadata and are never inline or overwritten',async()=>{
   const {state,db}=fixture();await db.cloudTransaction(['blobs'],tx=>tx.objectStore('blobs').put({id:'b',data:new Blob(['image'],{type:'image/png'})}));
@@ -527,6 +578,8 @@ test('large works list only metadata; opening reuses the cached editable documen
   await a.db.cloudTransaction(['projects'],tx=>tx.objectStore('projects').put(v2(full)));const summary=a.state.calls[0].operations[0].item;a.state.rows=[summary];assert.ok(summary.projectDocumentPath);assert.equal(summary.drafts[0].layers.length,0);
   assert.equal((await a.db.cloudAll('projects'))[0].drafts[0].layers.length,0);assert.equal(a.state.downloads,0);
   const opened=await a.db.cloudGet('projects','p');assert.equal(opened.drafts[0].layers.length,4000);assert.equal(a.state.downloads,0);assert.equal('projectDocumentPath' in opened,false);
+  assert.equal(opened.__cloudBaseSceneFingerprint,projectSemanticFingerprint({drafts:opened.drafts}),
+    'the editing baseline must describe the full document, not its thin list summary');
   await a.db.cloudTransaction(['projects'],tx=>tx.objectStore('projects').put({...summary,title:'after'}));const last=a.state.uploads.at(-1),encoded=a.state.calls.at(-1).operations[0].item;const restored=JSON.parse(await projectBlobText(last.data,encoded.projectDocumentEncoding));assert.equal(restored.drafts[0].layers.length,4000);assert.equal(restored.title,'after');assert.ok(last.data.size<JSON.stringify(full).length/10);
   a.state.fail=true;const count=a.state.calls.length;await assert.rejects(a.db.cloudTransaction(['projects'],tx=>tx.objectStore('projects').put({...opened,title:'failed'})),/完整数据上传失败/);assert.equal(a.state.calls.length,count);
   const denied=fixture();denied.state.rows=[{...summary,projectDocumentPath:'other/document'}];await assert.rejects(denied.db.cloudGet('projects','p'),/不属于当前账号/);
@@ -745,7 +798,25 @@ test('a conflicting material edit can be reviewed, backed up, and explicitly reb
    serial:review.serial,expectedRevision:review.revision,choice:'local'});
  await db.cloudFlushProjects();
  assert.equal((await db.cloudPendingDetails()).batches.length,0);
- assert.equal(state.calls.at(-1).expected_revision,1);
+ assert.equal(state.calls.at(-1).base_revision,1);
+});
+
+test('two devices changing disjoint material fields merge without losing either value',async()=>{
+ const {state,db}=fixture(memoryCache());
+ state.rows=[{id:'same-asset',title:'原名',tags:['原标签'],blobId:'same-image'}];
+ await db.cloudAll('assets');
+ await db.cloudStageMutation(['assets'],tx=>tx.objectStore('assets').put({
+   id:'same-asset',title:'手机新名字',tags:['原标签'],blobId:'same-image'
+ }));
+ state.revision=1;
+ state.rows=[{id:'same-asset',title:'原名',tags:['平板新标签'],blobId:'same-image'}];
+ state.changes=[{revision:1,keys:[{store:'assets',id:'same-asset',action:'put'}]}];
+ await db.cloudFlushProjects();
+ assert.equal(state.calls.length,2);
+ assert.deepEqual(state.calls.at(-1).operations[0].item,{
+   id:'same-asset',title:'手机新名字',tags:['平板新标签'],blobId:'same-image'
+ });
+ assert.equal((await db.cloudPendingDetails()).batches.length,0);
 });
 
 test('a mixed conflicting batch remains pending until a reviewed whole-batch choice',async()=>{

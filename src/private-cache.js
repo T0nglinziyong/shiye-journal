@@ -8,6 +8,10 @@ import {foldLegacySyncRows} from './unified-sync-outbox.js';
 // pending edit must survive; edits to the same row must fail, never overwrite.
 const outboxID=row=>row?.record?.id;
 const outboxStamp=row=>row?JSON.stringify([row.serial,row.baseRevision,row.operationID]):null;
+const isDisposablePreviewKey=key=>{
+  try{return /^(?:thumbnail:|thumbnail480:|preview\d+:)/.test(JSON.parse(key)[1]);}
+  catch{return false;}
+};
 const rowsByID=rows=>{
   const map=new Map();
   for(const row of rows||[]){
@@ -251,6 +255,20 @@ export function createPrivateCache({name='shiye-private-read-cache-v2',limit=160
         };
         return priority(a)-priority(b)||a.time-b.time;
       });let size=rows.reduce((n,r)=>n+r.bytes,0);const tx=d.transaction(['entries','sizes'],'readwrite');for(const r of rows){if(size<=limit)break;tx.objectStore('entries').delete(r.key);tx.objectStore('sizes').delete(r.key);size-=r.bytes;}await tx.done;}
+    },
+    async previewBytes(account){
+      const rows=await (await db()).getAll('sizes');
+      return rows.filter(row=>row.account===account&&isDisposablePreviewKey(row.key))
+        .reduce((sum,row)=>sum+(Number(row.bytes)||0),0);
+    },
+    async clearPreviews(account){
+      const d=await db(),rows=(await d.getAll('sizes')).filter(row=>
+        row.account===account&&isDisposablePreviewKey(row.key));
+      if(!rows.length)return {count:0,bytes:0};
+      const tx=d.transaction(['entries','sizes'],'readwrite');
+      for(const row of rows){tx.objectStore('entries').delete(row.key);tx.objectStore('sizes').delete(row.key);}
+      await tx.done;
+      return {count:rows.length,bytes:rows.reduce((sum,row)=>sum+(Number(row.bytes)||0),0)};
     },
     // Logout clears disposable reads, never unacknowledged edits or their Blob
     // payloads. The explicit outbox discard flow owns deletion of these keys.

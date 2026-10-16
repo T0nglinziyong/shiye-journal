@@ -5,30 +5,26 @@ import {assetEditorValue} from '../src/asset-editor.js';
 import {decodeImageBlob} from '../src/image-blob-decoder.js';
 import {validatePhysicalDraft} from '../src/domain.js';
 
-const stock=(kind,quantity)=>candidateMetadata({
+const material=(kind,quantity)=>candidateMetadata({
   id:'c',title:'胶带测试',kind,width:40,height:80,quantity,selected:true
 },{seriesID:null},null);
-test('new tape candidates are unlimited at 999, regardless of recognition default 1',()=>{
- const a=stock('tape',1);
- assert.equal(a.supply.quantity,999);
- assert.equal(a.supply.kind,'unlimited');
- assert.equal(stock('sticker',1).supply.kind,'single');
+test('candidate metadata never creates stock counts for tape or ordinary material',()=>{
+ assert.equal(material('tape',1).supply,undefined);
+ assert.equal(material('sticker',1).supply,undefined);
 });
-test('explicit tape quantity overrides unlimited default',()=>{
+test('old quantity input is ignored when importing current material metadata',()=>{
  const a=candidateMetadata({kind:'tape',quantity:3,quantityManuallySet:true,
    width:40,height:80}, {},null);
- assert.equal(a.supply.quantity,3);
- assert.notEqual(a.supply.kind,'unlimited');
+ assert.equal(a.supply,undefined);
 });
-test('material editor saves unlimited 999 without decrementing it',()=>{
+test('material editor removes stock metadata and no-op stays stable',()=>{
  const old={id:'a',title:'胶带',kind:'tape',supply:{kind:'single',quantity:1}};
  const values={title:'胶带',kind:'tape',role:'support',texture:'',
    width:'40',height:'80',quantity:'999',tags:'',contentTags:'',
    styleTags:'',materialTags:'',seriesID:'',reviewStatus:'ready',
    usageStatus:'used',tapeRoll:false,repeatable:false};
  const edited=assetEditorValue(old,values);
- assert.equal(edited.supply.kind,'unlimited');
- assert.equal(edited.supply.quantity,999);
+ assert.equal(edited.supply,undefined);
  assert.equal(edited.usageStatus,'used');
  assert.equal(assetEditorValue(edited,values),edited,'an unchanged save must not create another cloud write');
 });

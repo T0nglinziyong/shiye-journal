@@ -1,4 +1,14 @@
 const pages=new Map();
+export function clearCatalogPages(){pages.clear();}
+export function snapshotCatalogPages(){return Object.fromEntries([...pages].map(([key,value])=>[key,value.current]));}
+export function restoreCatalogPages(snapshot){
+  pages.clear();
+  if(!snapshot||typeof snapshot!=='object')return;
+  for(const [key,value] of Object.entries(snapshot)){
+    if(key.length>120||!Number.isSafeInteger(value)||value<1)continue;
+    pages.set(key,{current:value});
+  }
+}
 export function pageSize(value){const size=Number(value);return [20,40,80].includes(size)?size:0;}
 export function pageSlice(total,size,page){
   const count=size?Math.max(1,Math.ceil(total/size)):1;

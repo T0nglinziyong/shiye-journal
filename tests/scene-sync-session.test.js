@@ -9,14 +9,29 @@ function fixture(cache=null,objectStorage=null,projectPreview=()=>null){
     const filters={};const query={select(){return query;},eq(k,v){filters[k]=v;return query;},in(k,v){filters[k]=v;return query;},limit(){return query;},abortSignal(){return query;},order(){return query;},
       then(resolve){state.batchReads=(state.batchReads||0)+1;const rows=filters.store==='blobs'&&Array.isArray(filters.id)?(state.cloudCopies||state.rows.map(record=>({id:record.id,record}))):(state.cloudCopies||[]);return Promise.resolve(resolve({data:rows.filter(row=>!filters.id||(Array.isArray(filters.id)?filters.id.includes(row.id):row.id===filters.id))}));},
       async range(start,end){state.reads=(state.reads||0)+1;const rows=state.rows.slice(start,end+1).map(record=>({record}));state.onReadPage?.(start,end);return {data:rows};},
-      async single(){return {data:{revision:state.revision}};},
-      async maybeSingle(){return {data:table==='shiye_commits'?(state.commits.has(filters.operation_id)?{revision:state.commits.get(filters.operation_id)}:null):state.rows.filter(r=>r.id===filters.id).map(record=>({record}))[0]||null};}};
+      async single(){return {data:{revision:state.revision,account_epoch:'epoch-fixture'}};},
+      async maybeSingle(){return {data:table==='shiye_commits'?(state.commits.has(filters.operation_id)?{revision:state.commits.get(filters.operation_id)}:null):table==='shiye_commit_receipts_v3'?null:state.rows.filter(r=>r.id===filters.id).map(record=>({record}))[0]||null};}};
     if(table==='shiye_changes')return {select(){return this;},eq(){return this;},gt(){return this;},lte(){return this;},order(){return this;},async range(){return state.changes?{data:state.changes}:{error:{message:'change log not installed'}};}};
-    assert.ok(['shiye_records','shiye_revisions','shiye_commits'].includes(table));return query;
+    assert.ok(['shiye_records','shiye_revisions','shiye_commits','shiye_commit_receipts_v3'].includes(table));return query;
   },storage:{from(bucket){assert.equal(bucket,'shiye-private');return {
     async upload(path,data,options){state.uploads.push({path,data,options});await state.uploadGate;return {error:state.fail?{statusCode:500}:null};},
     async download(path){state.downloads++;return {data:state.uploads.find(row=>row.path===path)?.data||new Blob(['private image']),error:state.missingThumbnail&&path.includes('preview480')?{message:'thumbnail missing'}:null};}};}},
-    async rpc(name,args){assert.equal(name,'shiye_commit_v2');state.calls.push(args);if(state.rpcAbort)throw new DOMException('request aborted','AbortError');if(state.commits.has(args.operation_id))return state.loseAck?{error:{message:'network response lost'}}:{data:state.commits.get(args.operation_id)};if(state.fail||args.expected_revision!==state.revision)return {error:{message:'conflict'}};const revision=++state.revision;state.commits.set(args.operation_id,revision);if(state.loseAck)return {error:{message:'network response lost'}};return {data:revision};}
+    async rpc(name,args){
+      assert.equal(name,'shiye_commit_v3');state.calls.push(args);
+      if(state.rpcAbort)throw new DOMException('request aborted','AbortError');
+      const receipt=revision=>({status:'applied',revision,accountEpoch:'epoch-fixture',syncProtocolVersion:3});
+      if(state.commits.has(args.operation_id))return state.loseAck?{error:{message:'network response lost'}}:{data:receipt(state.commits.get(args.operation_id))};
+      const changed=args.base_revision<state.revision&&args.operations.some(op=>{
+        const id=op.item?.id??op.id;
+        if(!Array.isArray(state.changes))return state.rows.some(row=>row.id===id);
+        return state.changes.some(row=>row.revision>args.base_revision&&
+          row.keys.some(key=>key.store===op.store&&(key.action==='clear'||key.id===id)));
+      });
+      if(state.fail||args.base_revision>state.revision||changed)return {error:{message:'conflict',code:'40001'}};
+      const revision=++state.revision;state.commits.set(args.operation_id,revision);
+      if(state.loseAck)return {error:{message:'network response lost'}};
+      return {data:receipt(revision)};
+    }
   };
   const db=createCloudStore({cache,objectStorage,projectPreview,cloudClient:()=>client,requireCloudUser:async()=>{if(state.authError)throw Error('not authorized');return {id:'owner-uuid'};}});
   return {state,db};
@@ -33,24 +48,30 @@ test('first and second saves of a new Scene v2 project share an acknowledged bas
  await db.cloudStageProject({...newProject,title:'第二次编辑'});
  assert.equal((await db.cloudPendingProjects())[0].baseRevision,1);
  await db.cloudFlushProjects();
- assert.deepEqual(state.calls.map(c=>c.expected_revision),[0,1]);
+ assert.deepEqual(state.calls.map(c=>c.base_revision),[0,1]);
  assert.deepEqual(await db.cloudPendingProjects(),[]);
 });
-test('a real remote same-work edit preserves both variants and leaves the local upload pending',async()=>{
+test('independent scene edits preserve both complete works and upload a new editable ID',async()=>{
  const cache=memoryCache(),{state,db}=fixture(cache);
  const saved=mkProject('diary','服务器原稿');state.revision=1;state.rows=[saved];
  const opened=(await db.cloudAll('projects'))[0];
- state.revision=2;state.rows=[mkProject('diary','另一台设备已经修改')];
+ const remote=mkProject('diary','另一台设备已经修改');
+ remote.drafts[0].layers.push({id:'remote-ink',type:'ink',color:'#223344',width:2,points:[{x:3,y:4}]});
+ state.revision=2;state.rows=[remote];
  state.changes=[{revision:2,keys:[{store:'projects',action:'put',id:'diary'}]}];
  await db.cloudRefresh();
- await db.cloudStageProject({...opened,title:'本地编辑'});
+ const local=structuredClone(opened);
+ local.title='本地编辑';
+ local.drafts[0].layers.push({id:'local-ink',type:'ink',color:'#223344',width:2,points:[{x:7,y:8}]});
+ await db.cloudStageProject(local);
  await db.cloudFlushProjects();
- assert.equal(state.calls.length,0,'an undated local edit cannot overwrite the newer cloud revision');
+ assert.equal(state.calls.length,2,'the server first rejects the old document, then accepts its separate branch');
+ assert.notEqual(state.calls.at(-1).operations[0].item.id,'diary');
  const retained=await db.cloudListPreConflictScenes();
  assert.equal(retained.length,1);
  const pair=await cache.get('cloud:owner-uuid',retained[0].key);
  assert.equal(pair.local.title,'本地编辑');
  assert.equal(pair.remote.title,'另一台设备已经修改');
  assert.equal(pair.local.drafts[0].sceneVersion,2);
- assert.equal((await db.cloudPendingProjects()).length,1,'the local edit remains recoverable until the user resolves the conflict');
+ assert.equal((await db.cloudPendingProjects()).length,0);
 });

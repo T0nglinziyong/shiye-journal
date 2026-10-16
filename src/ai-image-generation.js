@@ -14,7 +14,7 @@ export function imagePrompt({project,draft,assets,ids,theme='',requireAll=true,i
   const materials=ids.map((id,index)=>{
     const asset=assets.find(item=>item.id===id);
     if(!asset)throw Error('有素材已不在素材库中，请重新选择');
-    return `${includeImages?'参考图':'文字素材'} ${index+1}：${asset.title}；${asset.kind||'素材'}；图文职责 ${classifyJournalMaterial(asset).join('、')}；实物 ${asset.physicalWidthMM}×${asset.physicalHeightMM} mm；${asset.kind==='tape'?'胶带可连续截取':`库存 ${asset.supply?.quantity??1} 件`}；${(asset.tags||[]).join('、')}`;
+    return `${includeImages?'参考图':'文字素材'} ${index+1}：${asset.title}；${asset.kind||'素材'}；图文职责 ${classifyJournalMaterial(asset).join('、')}；实物 ${asset.physicalWidthMM}×${asset.physicalHeightMM} mm；${asset.kind==='tape'?'胶带可取多个独立段':'单方案取用一份，可裁成多片'}；${(asset.tags||[]).join('、')}`;
   });
   const styles=project.styles||[],purposes=project.purposes?.length?project.purposes:[project.purpose||'日常记录'];
   const content=creativeContentBrief({policy:project.contentPolicy||'documentary',userText:project.userText||'',providedFacts:project.providedFacts||'',topic:theme||project.intent||'',purposes});

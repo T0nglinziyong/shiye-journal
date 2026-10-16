@@ -1,9 +1,13 @@
-import React,{useState} from 'react';
+import React,{useRef,useState} from 'react';
+import {useUnsavedInput} from './unsaved-inputs.js';
 
 export function ProjectMetadataDialog({project,onClose,onSave,onSnapshot,onPreview}){
   const [title,setTitle]=useState(project.title),[tags,setTags]=useState((project.styleTags||[]).join(', ')),
     [used,setUsed]=useState(!!project.isUsed),[usageTouched,setUsageTouched]=useState(false),
     [busy,setBusy]=useState(false),[error,setError]=useState('');
+  const formState=JSON.stringify({title,tags,used});
+  const initial=useRef(formState);
+  useUnsavedInput('作品信息',formState!==initial.current);
   const save=async()=>{
     if(busy)return;
     setBusy(true);setError('');

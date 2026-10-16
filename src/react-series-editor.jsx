@@ -1,5 +1,6 @@
-import React,{useState} from 'react';
+import React,{useRef,useState} from 'react';
 import {seriesCovers} from './library-model.js';
+import {useUnsavedInput} from './unsaved-inputs.js';
 
 export function SeriesEditorDialog({series,members,assets,source,onClose,onSave,onError}){
   const [title,setTitle]=useState(series?.title||''),[about,setAbout]=useState(series?.introduction||''),
@@ -8,6 +9,9 @@ export function SeriesEditorDialog({series,members,assets,source,onClose,onSave,
     [automatic,setAutomatic]=useState(series?.coverAssetIDs==null),
     [chosen,setChosen]=useState(()=>series?seriesCovers(series,assets).map(asset=>asset.id):[]),
     [busy,setBusy]=useState(false),[error,setError]=useState('');
+  const formState=JSON.stringify({title,about,styles,semantics,automatic,chosen});
+  const initial=useRef(formState);
+  useUnsavedInput('系列信息',formState!==initial.current);
   const choose=id=>{
     setAutomatic(false);
     if(chosen.includes(id))setChosen(chosen.filter(item=>item!==id));

@@ -4,6 +4,7 @@ import {clipMaterial} from './material-mask.js';
 import {drawPaper} from './paper-rendering.js';
 import {shapeSVG,drawInk,textFont,textLines,textFontFamily} from './editor-tools-model.js';
 import {craftSceneHash} from './craft-fingerprint.js';
+import {SCENE_MAX_GROUP_DEPTH} from './scene-v2.js';
 
 export const SCENE_RENDERER_VERSION='shiye-scene-v2';
 export async function decodeSceneImage(source){
@@ -71,8 +72,8 @@ export async function renderSceneCanvas(draft,{scale=1,loadMaterialImage,createC
  };
  let isolatedGroups=0;
  const drawTree=async(nodes,target,depth=0)=>{
-   if(depth>8)throw Error('图层组嵌套超过渲染预算');
-   // Physical weave display fragments are projections of one stock item.
+   if(depth>SCENE_MAX_GROUP_DEPTH)throw Error('图层组嵌套超过渲染预算');
+   // Physical weave display fragments are projections of one source piece.
    const expanded=sceneDisplaySiblings(nodes).map(node=>({type:node.type,value:node}));
    for(const entry of expanded){
      const node=entry.value;

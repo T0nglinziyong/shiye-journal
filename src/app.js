@@ -42,6 +42,8 @@ import {explainUserError} from './user-facing-error.js';
 import {setCloudProjectPreview} from './cloud-store.js';
 import {snapshotDraft} from './draft-snapshot.js';
 import {recordSceneOperation,makeAutoSceneSnapshot,restoreAutoSceneSnapshot,currentSceneDraft,copySceneBaseline} from './scene-persistence.js';
+import {projectSemanticFingerprint} from './project-semantic.js';
+import {forkConflictingEditableWork} from './sync-conflict-copy.js';
 import {retireSplitPiece} from './material-split.js';
 import {readAlphaMask,extractAlphaMask} from './alpha-mask-blob.js';
 import {renderHighResolutionCutout} from './cutout-full-resolution.js';
@@ -66,6 +68,7 @@ import {paperDimensions as presetPaperDimensions} from './paper-sizes.js';
 import {refineManualBoxes,hasManualForegroundEvidence,manualSegmentationMethod} from './manual-import-recognition.js';
 import {manualPhysicalRegion} from './manual-import-geometry.js';
 import {seriesCovers,markProjectAssetsUsed,usedAssetIDs} from './library-model.js';
+import {clearSeriesContentFilters,snapshotSeriesContentFilters,restoreSeriesContentFilters} from './series-contents.js';
 import {libraryPageData} from './library-page-data.js';
 import {SeriesEditorDialog} from './react-series-editor.jsx';
 import {parseTags} from './library-model.js';
@@ -114,7 +117,7 @@ import {generatePageImage} from './ai-image-generation.js';
 import {clipMaterial,materialMaskGeometry} from './material-mask.js';
 import {manualLayoutChoices,applyManualLayout} from './manual-layout-templates.js';
 import {exportSceneDocument,importSceneDocument} from './scene-io.js';
-import {resetCatalogPage} from './catalog-pagination.js';
+import {resetCatalogPage,clearCatalogPages,snapshotCatalogPages,restoreCatalogPages} from './catalog-pagination.js';
 import {AI_PROVIDERS,supportsVision,loadAISettings,saveAISettings} from './ai-settings.js';
 import {deliveryProfile} from './ai-delivery.js';
 import {classifyCreationFile} from './creation-methods.js';
@@ -136,6 +139,7 @@ import {ProjectMetadataDialog} from './react-project-metadata.jsx';
 import {LibraryPage,SeriesPage,SeriesContentsPage,WorksPage,RecentlyDeletedPage,JournalTemplatesPage,MatchingPage,EditorPage,AssetDetailPage,ProjectPreviewPage,SettingsHomePage,SettingsDisplayPage,SettingsRecognitionPage,SettingsDataPage,SettingsAIPage,ImportSimplePage,ImportReviewPage,ImportInspectionPage} from './react-routes.jsx';
 
 import {installRuntimeDiagnostics,recordRuntimeIssue,runtimeIssueSnapshot} from './runtime-diagnostics.js';
+import {pendingUnsavedInputs} from './unsaved-inputs.js';
 mountReactShell();
 const view=document.querySelector('#view'),modal=document.querySelector('#modal'),body=document.querySelector('#modal-body');
 modal.querySelector('.modal-close').onclick=()=>modal.close();
@@ -150,9 +154,8 @@ actionStore.register('app/action',async({action,id,value})=>({result:await runAp
 for(const type of ['gesturestart','gesturechange'])document.addEventListener(type,event=>event.preventDefault(),{passive:false});
 const urls=new Map(),staticSources=new Map();
 const assetOrganization=createAssetOrganization();
-const libraryHistory=[];
-function openLibraryAsset(id){libraryHistory.push({route:state.route,seriesID:state.seriesID,detailAssetID:state.detailAssetID});state.detailAssetID=id;const selected=asset(id);if(selected?.blobId)privateImages.focus(selected.blobId);route('assetDetail');}
-function libraryBack(){const previous=libraryHistory.pop();if(!previous){navigateBack('series');return;}navigationHistory.pop();state.seriesID=previous.seriesID;state.detailAssetID=previous.detailAssetID;route(previous.route,{back:true});}
+function openLibraryAsset(id){state.detailAssetID=id;const selected=asset(id);if(selected?.blobId)privateImages.focus(selected.blobId);route('assetDetail');}
+function libraryBack(){navigateBack('library');}
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const toast=s=>{const el=document.querySelector('#toast');el.textContent=/can't find variable|is not defined|undefined is not an object|blob:|expected magic word/i.test(String(s))?explainUserError(s):s;el.classList.add('show');clearTimeout(toast.timer);toast.timer=setTimeout(()=>el.classList.remove('show'),3500);};
 const saveStatus=s=>{const label=cloudEnabled?({'已保存到本机':'已保存到云端','本机存储':'云端存储'}[s]||s):s;updateShell({saveStatus:label});for(const el of document.querySelectorAll('.swift-auto-saved'))el.textContent=label;};
@@ -317,11 +320,21 @@ window.addEventListener('shiye-project-cover-ready',event=>{
   }).catch(error=>console.warn('COS 封面显示待重试',error));
 });
 let settingsSession=null,deferredSyncedPreferences=null,deferredSyncedAISettings=null;
+view.addEventListener('input',event=>{
+  if(state.route==='settings'&&settingsSession&&event.target.matches('input,textarea,select'))
+    settingsSession.dirty=true;
+},true);
+view.addEventListener('change',event=>{
+  if(state.route==='settings'&&settingsSession&&event.target.matches('input,textarea,select'))
+    settingsSession.dirty=true;
+},true);
 function captureSettings(){
   if(state.route!=='settings')return;
   if(view.querySelector('#setting-ai-provider'))state.aiSettings=readAIForm();
   if(view.querySelector('#setting-paper-size'))state.preferences={...state.preferences,recognition:view.querySelector('#setting-recognition').value,candidateDiscovery:view.querySelector('#setting-candidate-discovery')?.value||'unified',recognitionPixels:Number(view.querySelector('#setting-recognition-pixels').value),materialColorMode:view.querySelector('#setting-material-color')?.value||'auto',balanceLight:view.querySelector('#setting-preprocess-light').checked,recognitionDenoise:view.querySelector('#setting-preprocess-denoise').checked,recognitionLocalContrast:view.querySelector('#setting-preprocess-contrast').checked,recognitionChromaEdges:view.querySelector('#setting-preprocess-chroma').checked,recognitionShapeRegularization:view.querySelector('#setting-postprocess-shapes').checked,recognitionApertures:view.querySelector('#setting-postprocess-apertures').checked,mergeSharedCarrier:view.querySelector('#setting-merge-carrier').checked,paperSize:view.querySelector('#setting-paper-size').value,orientation:view.querySelector('#setting-orientation').value,wholePaper:view.querySelector('#setting-whole-paper').checked,autoOrganize:view.querySelector('#setting-auto-organize').checked,autoOrganizeWorks:view.querySelector('#setting-auto-organize-works')?.checked!==false};
   if(view.querySelector('#setting-display'))state.preferences={...state.preferences,display:view.querySelector('#setting-display').value,backdrop:view.querySelector('#setting-backdrop').value,maxPageItems:Number(view.querySelector('#setting-page-items').value)};
+  if(view.querySelector('#setting-mark-tape-used'))state.preferences={...state.preferences,
+    markTapeUsedWithProject:view.querySelector('#setting-mark-tape-used').checked};
 }
 const routeScroll=new Map();
 let matchingScrollMemory=null;
@@ -342,18 +355,100 @@ function scheduleBackgroundReconcile(){
 document.addEventListener('click',scheduleBackgroundReconcile);
 document.addEventListener('focusout',scheduleBackgroundReconcile);
 modal.addEventListener('close',scheduleBackgroundReconcile);
-const navigationHistory=[];
+let navigationScope=null;
+const navigationRoutes=new Set(['series','library','assetDetail','matching','works','projectPreview','editor','settings','import','trash','templates']);
+function captureNavigation(scrollY=window.scrollY){return {
+  route:state.route,seriesID:state.seriesID,detailAssetID:state.detailAssetID,
+  previewProjectID:state.previewProjectID,activeProjectID:state.activeProject?.id||null,
+  activeDraftID:state.activeDraft,query:state.query,kind:state.kind,status:state.status,
+  sort:state.sort,libraryRecent:!!state.libraryRecent,libraryTab:parity.libraryTab,
+  workTab:parity.workTab,workFilters:parity.workFilters||null,
+  seriesQuery:parity.seriesQuery||'',seriesSort:parity.seriesSort||'recent',
+  seriesAscending:!!parity.seriesAscending,seriesFilters:snapshotSeriesContentFilters(),
+  selectionMode:parity.selectionMode,selected:[...parity.selected],
+  showOnlySelected:parity.showOnlySelected,pages:snapshotCatalogPages(),scrollY
+};}
+function navigationEntry(snapshot,depth){return {shiyeNavigation:{scope:navigationScope,depth,snapshot}};}
+function rememberNavigation(){
+  const entry=history.state?.shiyeNavigation;
+  if(navigationScope&&entry?.scope===navigationScope)
+    history.replaceState(navigationEntry(captureNavigation(),entry.depth),'');
+}
+let navigationSaveTimer=null;
+function scheduleNavigationSnapshot(){
+  if(navigationSaveTimer)return;
+  navigationSaveTimer=setTimeout(()=>{navigationSaveTimer=null;rememberNavigation();},180);
+}
+for(const event of ['input','change','click'])view.addEventListener(event,scheduleNavigationSnapshot,true);
+window.addEventListener('scroll',scheduleNavigationSnapshot,{passive:true});
+window.addEventListener('pagehide',rememberNavigation);
+function validNavigation(snapshot){
+  if(!snapshot||!navigationRoutes.has(snapshot.route))return false;
+  if(snapshot.route==='assetDetail'&&!asset(snapshot.detailAssetID))return false;
+  if(snapshot.route==='projectPreview'&&!state.projects.some(p=>p.id===snapshot.previewProjectID))return false;
+  if(snapshot.route==='editor'){
+    const project=state.projects.find(p=>p.id===snapshot.activeProjectID);
+    if(!project?.drafts?.length)return false;
+  }
+  if(snapshot.route==='import'&&!state.importRecords.length)return false;
+  if(snapshot.route==='library'&&snapshot.seriesID!=='all'&&snapshot.seriesID!=='none'&&
+    !state.series.some(series=>series.id===snapshot.seriesID))return false;
+  return true;
+}
+function applyNavigation(snapshot){
+  state.seriesID=snapshot.route==='series'?'all':snapshot.seriesID||'all';
+  state.detailAssetID=snapshot.detailAssetID||null;
+  state.previewProjectID=snapshot.previewProjectID||null;
+  state.query=snapshot.query||'';state.kind=snapshot.kind||'all';
+  state.status=snapshot.status||'all';state.sort=snapshot.sort||'newest';
+  state.libraryRecent=!!snapshot.libraryRecent;
+  parity.libraryTab=snapshot.libraryTab||'series';parity.workTab=snapshot.workTab||'all';
+  parity.workFilters=snapshot.workFilters||null;
+  parity.seriesQuery=snapshot.seriesQuery||'';parity.seriesSort=snapshot.seriesSort||'recent';
+  parity.seriesAscending=!!snapshot.seriesAscending;
+  restoreSeriesContentFilters(snapshot.seriesFilters);
+  parity.selectionMode=snapshot.selectionMode||null;
+  parity.selected=new Set(snapshot.selected||[]);
+  parity.showOnlySelected=!!snapshot.showOnlySelected;
+  restoreCatalogPages(snapshot.pages);
+  reconcileSelectedRecords(parity,state);
+  if(snapshot.route==='editor'){
+    state.activeProject=state.projects.find(p=>p.id===snapshot.activeProjectID);
+    state.activeDraft=state.activeProject?.drafts?.some(d=>d.id===snapshot.activeDraftID)
+      ?snapshot.activeDraftID:state.activeProject?.activeDraftID;
+  }
+}
+function activateNavigation(){
+  const scope=(cloudEnabled?'cloud':state.selfHosted?'server':'browser')+':'+state.accountId;
+  if(navigationScope===scope)return;
+  navigationScope=scope;
+  const entry=history.state?.shiyeNavigation;
+  if(entry?.scope===scope&&validNavigation(entry.snapshot))
+    route(entry.snapshot.route,{back:true,restoreSnapshot:entry.snapshot});
+  else history.replaceState(navigationEntry(captureNavigation(),0),'');
+}
+window.addEventListener('popstate',event=>{
+  if(!navigationScope)return;
+  const entry=event.state?.shiyeNavigation;
+  if(entry?.scope===navigationScope&&validNavigation(entry.snapshot))
+    route(entry.snapshot.route,{back:true,restoreSnapshot:entry.snapshot});
+  else{
+    state.seriesID='all';state.detailAssetID=null;state.previewProjectID=null;
+    route('series',{back:true});
+    history.replaceState(navigationEntry(captureNavigation(),0),'');
+  }
+});
 // Material navigation remembers the actual tab/series detail. Opening Works,
 // Matching or Settings must not silently route back to Series.
 const lastMaterialLocation={route:'series',seriesID:'all',libraryTab:'series'};
 function navigateBack(fallback='series'){
-  const previous=navigationHistory.pop();
-  if(!previous){route(fallback,{back:true});return;}
-  Object.assign(state,{seriesID:previous.seriesID,detailAssetID:previous.detailAssetID,previewProjectID:previous.previewProjectID});
-  route(previous.route,{back:true});
+  const entry=history.state?.shiyeNavigation;
+  if(navigationScope&&entry?.scope===navigationScope&&entry.depth>0){rememberNavigation();history.back();return;}
+  route(fallback,{back:true,replaceHistory:true});
 }
 let editorOpenSequence=0,editorSessionBaseline=null;
-function route(name,{back=false,restoreMaterial=false}={}){
+function route(name,{back=false,restoreMaterial=false,restoreSnapshot=null,replaceHistory=false}={}){
+  if(!back&&!replaceHistory&&name!==state.route)rememberNavigation();
   editorOpenSequence++;
   viewInteractionRevision++;
   const fromSettings=state.route==='settings';
@@ -365,7 +460,6 @@ function route(name,{back=false,restoreMaterial=false}={}){
     state.seriesID=state.series.some(row=>row.id===lastMaterialLocation.seriesID)?lastMaterialLocation.seriesID:'all';
     parity.libraryTab=lastMaterialLocation.libraryTab||'series';
   }
-  if(!back&&!fromSettings&&name!=='settings'&&name!==state.route)navigationHistory.push({route:state.route,seriesID:state.seriesID,detailAssetID:state.detailAssetID,previewProjectID:state.previewProjectID});
   if(state.route==='editor'&&name!=='editor'){
     view.flushInkCommit?.({renderUI:false,force:true});
     view.endTextEditing?.();
@@ -382,17 +476,27 @@ function route(name,{back=false,restoreMaterial=false}={}){
   if(state.route==='settings'&&name!=='settings'&&settingsSession){state.aiSettings=settingsSession.ai;state.preferences=settingsSession.preferences;settingsSession=null;state.settingsSection=null;if(cloudEnabled&&deferredSyncedPreferences)state.preferences=savePreferences(migrateStoredPreferences(deferredSyncedPreferences));if(cloudEnabled&&deferredSyncedAISettings)state.aiSettings=saveAISettings(deferredSyncedAISettings);deferredSyncedPreferences=null;deferredSyncedAISettings=null;}
 if(state.route==='editor'&&name!=='editor'&&aiController)aiController.abort(Error('已离开创作页面'));const priorRoute=state.route;if(name==='matching'&&priorRoute!=='matching'&&cloudMatchingDefaults&&!matchingDefaultsPending)applyMatchingDefaults(state,cloudMatchingDefaults);syncSelectionScope(parity,name);state.route=name;
 if(name!=='assetDetail')privateImages.focus(null);
+actionStore.publish('route/change',{scope:'route',keys:['route'],payload:{from:priorRoute,to:name}});if(name==='import'&&state.importMode!=='snapshot'&&typeof Worker!=='undefined')void prewarmVision().catch(()=>{});if(name==='series'){state.seriesID='all';state.addingToSeries=null;}if(name!=='library')state.addingToSeries=null;if(name!=='settings'&&!fromSettings)state.selected=null;if(restoreSnapshot)applyNavigation(restoreSnapshot);
 if(priorRoute!=='editor'&&name==='editor')
   editorSessionBaseline=newEditorSession(state.activeProject,saveVersions);
-actionStore.publish('route/change',{scope:'route',keys:['route'],payload:{from:priorRoute,to:name}});if(name==='import'&&state.importMode!=='snapshot'&&typeof Worker!=='undefined')void prewarmVision().catch(()=>{});if(name==='series'){state.seriesID='all';state.addingToSeries=null;libraryHistory.length=0;}if(name!=='library')state.addingToSeries=null;if(name!=='settings'&&!fromSettings)state.selected=null;render();
+render();
   // A return from Works/Settings must honor the last matching viewport even
   // if the currently selected series ID has since changed. Nested panes are
   // already restored inside render() from the same snapshot.
   const matchingViewport=name==='matching'&&
     matchingScrollMemory?.account===(state.accountId||'browser')
     ?matchingScrollMemory.scroll.viewport:null;
-  window.scrollTo(matchingViewport?.left??0,
-    matchingViewport?.top??(routeScroll.get(name+':'+state.seriesID)||0));
+  const targetScroll=restoreSnapshot?.scrollY??matchingViewport?.top??
+    (routeScroll.get(name+':'+state.seriesID)||0);
+  window.scrollTo(matchingViewport?.left??0,targetScroll);
+  if(restoreSnapshot)requestAnimationFrame(()=>window.scrollTo(0,targetScroll));
+  if(navigationScope){
+    const depth=history.state?.shiyeNavigation?.scope===navigationScope
+      ?history.state.shiyeNavigation.depth:0;
+    if(replaceHistory)history.replaceState(navigationEntry(captureNavigation(targetScroll),depth),'');
+    else if(!back&&name!==priorRoute)history.pushState(
+      navigationEntry(captureNavigation(targetScroll),depth+1),'');
+  }
   // Do not interrupt an unfinished matching/import workspace with a remote
   // repaint. Pull all queued remote deletions immediately on returning to
   // another page, instead of waiting for the next polling window.
@@ -620,7 +724,7 @@ function render(){
     :state.route==='settings'&&state.settingsSection==='数据与诊断'
       ?createElement(SettingsDataPage,{state,cloudEnabled,storage:db.storageConfig(),onAction:handle})
     :state.route==='settings'&&state.settingsSection==='AI 与创作'
-      ?createElement(SettingsAIPage,{settings:state.aiSettings,onAction:handle})
+      ?createElement(SettingsAIPage,{settings:state.aiSettings,preferences:state.preferences,onAction:handle})
     :state.route==='import'&&(state.importStep==='done'||!state.importRecords[state.importIndex])
       ?ImportSimplePage({state,onAction:handle})
     :state.route==='import'&&state.importStep==='review'
@@ -928,6 +1032,17 @@ function snapshotEditedScene(reason){
 let saveTimer,saveChain=Promise.resolve(),savingProjects=0;
 const dirtyProjects=new Map(),dirtyUsageAssets=new Map();
 const saveVersions=new Map();
+const projectSaveFingerprints=new Map(),projectSceneFingerprints=new Map();
+function rememberProjectSaveBaseline(p){
+  if(!p?.drafts?.some(d=>Array.isArray(d.layers)))return;
+  projectSaveFingerprints.set(p.id,projectSemanticFingerprint(p));
+  const active=p.drafts.find(d=>d.id===p.activeDraftID)||p.drafts[0];
+  projectSceneFingerprints.set(p.id,active?projectSemanticFingerprint({drafts:[active]}):null);
+}
+function projectHasSemanticChanges(p){
+  return !projectSaveFingerprints.has(p.id)||
+    projectSaveFingerprints.get(p.id)!==projectSemanticFingerprint(p);
+}
 async function flushSave(){
   clearTimeout(saveTimer);saveTimer=null;
   const batch=[...dirtyProjects.values()].map(p=>({snapshot:structuredClone(p),version:saveVersions.get(p.id)})),usageBatch=[...dirtyUsageAssets.values()].map(asset=>structuredClone(asset));dirtyProjects.clear();dirtyUsageAssets.clear();
@@ -945,12 +1060,18 @@ async function flushSave(){
   });
   try{await saveChain;if(!savingProjects&&!dirtyProjects.size&&!dirtyUsageAssets.size){syncDisplay.localPending=false;updateSyncIndicator();saveStatus(cloudEnabled?'修改已暂存 · 后台同步中':(await db.storageMode())==='server'?'已保存到服务器':'已保存到本机');}}catch(e){console.error(e);recordRuntimeIssue('handled',e,state.route,{phase:'save'});syncDisplay.error=e;updateSyncIndicator();saveStatus('暂存失败 · 修改仍在当前页面');toast('修改暂存失败，暂勿关闭页面：'+e.message);throw e;}
 }
-function saveSpecificProject(p){if(!p)return;delete p.isTemplate;if(cloudEnabled)p.__cloudSessionId||=crypto.randomUUID();
+function saveSpecificProject(p){if(!p)return false;delete p.isTemplate;
+  const fingerprint=projectSemanticFingerprint(p);
+  if(projectSaveFingerprints.get(p.id)===fingerprint)return false;
+  if(cloudEnabled)p.__cloudSessionId||=crypto.randomUUID();
   // Edits invalidate the previous scene's remote snapshot. A new 720px cover
   // can be drawn locally immediately; COS receives the next uploaded version.
   const active=p.drafts?.find(d=>d.id===p.activeDraftID)||p.drafts?.[0];
-  if(active&&!p.isSnapshot){delete active.coverImageID;delete active.coverSceneHash;}
-  const now=new Date().toISOString();trackEditedScene(p,now);p.updatedAt=now;if(p.isUsed)for(const updated of markProjectAssetsUsed(p,state.assets,now)){const live=state.assets.find(asset=>asset.id===updated.id);if(live)Object.assign(live,updated);dirtyUsageAssets.set(updated.id,updated);}saveVersions.set(p.id,(saveVersions.get(p.id)||0)+1);dirtyProjects.set(p.id,p);saveStatus('后台保存中…');syncDisplay.localPending=true;updateSyncIndicator();if(!saveTimer)saveTimer=setTimeout(()=>flushSave().catch(console.error),500);}
+  const sceneFingerprint=active?projectSemanticFingerprint({drafts:[active]}):null;
+  if(active&&!p.isSnapshot&&projectSceneFingerprints.get(p.id)!==sceneFingerprint){delete active.coverImageID;delete active.coverSceneHash;}
+  const now=new Date().toISOString();trackEditedScene(p,now);p.updatedAt=now;
+  projectSaveFingerprints.set(p.id,fingerprint);projectSceneFingerprints.set(p.id,sceneFingerprint);
+  saveVersions.set(p.id,(saveVersions.get(p.id)||0)+1);dirtyProjects.set(p.id,p);saveStatus('后台保存中…');syncDisplay.localPending=true;updateSyncIndicator();if(!saveTimer)saveTimer=setTimeout(()=>flushSave().catch(console.error),500);return true;}
 function saveProject(){saveSpecificProject(state.activeProject);}
 const pendingTrashStages=new Map();
 async function awaitTrashStages(ids){await Promise.all(ids.map(id=>pendingTrashStages.get(id)).filter(Boolean));}
@@ -959,6 +1080,7 @@ async function moveProjectsToTrash(ids){
   if(!projects.length)return 0;
   const entries=projects.map(item=>({id:uid(),kind:'project',item:structuredClone(item),date:new Date().toISOString()}));
   for(const project of projects){dirtyProjects.delete(project.id);saveVersions.set(project.id,(saveVersions.get(project.id)||0)+1);}
+  for(const project of projects){projectSaveFingerprints.delete(project.id);projectSceneFingerprints.delete(project.id);}
   if(!dirtyProjects.size&&!dirtyUsageAssets.size){clearTimeout(saveTimer);saveTimer=null;}
   state.projects=state.projects.filter(p=>!selected.has(p.id));state.trash.push(...entries);
   if(selected.has(state.previewProjectID)){state.previewProjectID=null;route('works');}
@@ -1017,7 +1139,7 @@ async function runAppAction(action,id,value){try{switch(action){
       if(!confirm('这份作品已在其他设备删除。当前页面的修改不会自动恢复已删除作品。若要保留当前编辑，请先取消并导出可编辑 JSON。确定退出到作品库吗？'))break;
       state.activeProject=null;state.activeDraft=null;
       parity.workTab='all';parity.selectionMode=null;parity.selected.clear();parity.showOnlySelected=false;
-      route('works');
+      route('works',{replaceHistory:true});
       break;
     }
     const decision=editorExitDecision(p,action),publish=decision.publish;
@@ -1028,7 +1150,7 @@ async function runAppAction(action,id,value){try{switch(action){
       // Publishing is explicit; Back must not normalize legacy draft flags or
       // change timestamps merely because a user inspected an existing work.
       p.isDraft=decision.isDraft;
-      makeAutoSceneSnapshot(p,{reason:'completed',force:true});
+      if(projectHasSemanticChanges(p))makeAutoSceneSnapshot(p,{reason:'completed'});
       saveProject();
     }
     await flushSave();
@@ -1041,7 +1163,7 @@ async function runAppAction(action,id,value){try{switch(action){
     parity.selectionMode=null;parity.selected.clear();parity.showOnlySelected=false;
     resetCatalogPage('works');
     state.activeProject=null;state.activeDraft=null;
-    route('works');
+    route('works',{replaceHistory:true});
     break;
   }
   case 'select-file':if(value==='files'&&state.importMode==='work'){workFileInput.click();break;}if(value==='camera')fileInput.setAttribute('capture','environment');else fileInput.removeAttribute('capture');fileInput.click();break;case 'preview-crop':await previewCorrection();break;case 'confirm-import':await saveImportBatch({state,db,urls,render,onSaved:organizeSavedAssets});break;
@@ -1055,11 +1177,10 @@ async function runAppAction(action,id,value){try{switch(action){
   case 'review-toggle':await actionStore.dispatch({type:'import/review/toggle',payload:{record:Number(id),index:Number(value)}});break;
   case 'choose-candidate':await chooseCandidate(Number(id));break;
   case 'detail':openLibraryAsset(id);break;case 'detail-back':libraryBack();break;case 'detail-add':
-    if((asset(state.detailAssetID)?.supply?.quantity??1)===0)throw Error('素材可用库存为 0');
     addMatchingFromLibrary(state,[state.detailAssetID]);
     void matchingSession.persist().catch(console.warn);
     updateShell({basketCount:state.basket.length});
-    toast('已加入本次创作');break;case 'detail-match':if((asset(state.detailAssetID)?.supply?.quantity??1)===0)throw Error('素材可用库存为 0');addMatchingFromLibrary(state,[state.detailAssetID]);route('matching');break;case 'detail-series':libraryHistory.push({route:state.route,seriesID:state.seriesID,detailAssetID:state.detailAssetID});state.seriesID=asset(state.detailAssetID)?.seriesID||'all';route('library');break;case 'detail-edit':openDetail(state.detailAssetID);break;case 'detail-check':await openCutoutCheck(state.detailAssetID);break;case 'detail-favorite':await actionStore.dispatch({type:'library/favorite',payload:{id:state.detailAssetID}});break;
+    toast('已加入本次创作');break;case 'detail-match':addMatchingFromLibrary(state,[state.detailAssetID]);route('matching');break;case 'detail-series':state.seriesID=asset(state.detailAssetID)?.seriesID||'all';route('library');break;case 'detail-edit':openDetail(state.detailAssetID);break;case 'detail-check':await openCutoutCheck(state.detailAssetID);break;case 'detail-favorite':await actionStore.dispatch({type:'library/favorite',payload:{id:state.detailAssetID}});break;
   case 'series-add-cancel':{
     const seriesID=state.addingToSeries;
     state.addingToSeries=null;finishSelection(parity);state.seriesID=seriesID;route('library');break;
@@ -1074,7 +1195,7 @@ async function runAppAction(action,id,value){try{switch(action){
     state.addingToSeries=null;finishSelection(parity);state.seriesID=seriesID;
     render();toast('素材已加入系列');break;
   }
-  case 'new-series':openSeriesEditor();break;case 'series-detail':libraryHistory.push({route:state.route,seriesID:state.seriesID,detailAssetID:state.detailAssetID});state.seriesID=id;route('library');break;
+  case 'new-series':openSeriesEditor();break;case 'series-detail':state.seriesID=id;route('library');break;
   case 'series-return':libraryBack();break;
   case 'match-library':route('library');break;case 'match-context':{const scope=matchingScope();toast(`必须 ${scope.required.length} · 优先 ${scope.preferred.length} · 可用 ${scope.available.length} · 不使用 ${scope.excluded.length}`);break;}
   case 'match-filter':await actionStore.dispatch({type:'matching/filter',payload:{value}});break;
@@ -1106,6 +1227,7 @@ async function runAppAction(action,id,value){try{switch(action){
     if(opening!==editorOpenSequence)break;
     if(p.isSnapshot){state.previewProjectID=p.id;route('projectPreview');break;}
     if(p.projectDocumentPath){toast('正在读取完整作品…');p=await db.get('projects',p.id);if(opening!==editorOpenSequence)break;if(!p)throw Error('作品完整数据尚未载入');state.projects=state.projects.map(old=>old.id===p.id?p:old);}
+    rememberProjectSaveBaseline(p);
     state.activeProject=p;state.activeDraft=p.activeDraftID;state.offlineEditingReturnID=null;resetEditorHistory(state);state.tool=state.toolHighlight='select';state.zoom=state.canvasViewports?.get(p.id+':'+state.activeDraft)?.scale||1;route('editor');break;}
   case 'preview-back':navigateBack('works');break;case 'preview-continue':{await handle('open-project',state.previewProjectID);break;}
   case 'snapshot-favorite':{const p=state.projects.find(x=>x.id===state.previewProjectID);if(!p?.isSnapshot)break;const next={...p,isFavorite:!p.isFavorite};await db.put('projects',next);Object.assign(p,next);
@@ -1328,18 +1450,18 @@ async function runAppAction(action,id,value){try{switch(action){
   }
   case 'fabric-add-material':{
     const a=asset(id),d=current();if(!a||!d)break;
-    const occupied=new Set(d.items.filter(item=>item.assetID===a.id)
-      .map(item=>item.materialUnitIndex??0));
-    const available=Array.from({length:Math.min(1000,a.supply?.quantity??1)},(_,index)=>index)
-      .find(index=>!occupied.has(index));
-    if(available===undefined){toast('此页已使用全部实物数量');break;}
+    if(a.kind!=='tape'&&d.items.some(item=>item.assetID===a.id)){
+      toast('此方案已取用这件素材；可以编辑或裁切已有素材');break;
+    }
     if(!(a.physicalWidthMM>0&&a.physicalHeightMM>0)){
       toast('请先确认素材实物尺寸');break;
     }
     checkpoint();
     const item=itemFromAsset(a,d,d.canvas.width/2,d.canvas.height/2,
       Math.max(0,...d.layers.map(node=>node.zIndex||0))+1);
-    item.materialUnitIndex=available;
+    item.materialUnitIndex=a.kind==='tape'
+      ?Math.max(-1,...d.items.filter(existing=>existing.assetID===a.id)
+        .map(existing=>existing.materialUnitIndex??0))+1:0;
     d.items.push(item);
     state.selected=item.id;state.multiSelected=[item.id];state.tool='select';saveProject();render();break;
   }
@@ -1374,12 +1496,9 @@ async function runAppAction(action,id,value){try{switch(action){
       const copy={...structuredClone(e.value),id:uid(),x:e.value.x+25,y:e.value.y+25};
       if(e.kind==='material'){
         const a=asset(e.value.assetID);if(!a)throw Error('原素材不存在');
-        const used=new Set(d.items.filter(item=>item.assetID===a.id).map(item=>item.materialUnitIndex??0));
-        const count=a.supply?.quantity??1;
-        const free=Array.from({length:Math.min(1000,count)},(_,i)=>i).find(i=>!used.has(i));
-        const roll=a.kind==='tape'&&a.supply?.kind==='tapeRoll'&&a.tapeRepeatMode==='repeatablePattern';
-        if(free===undefined&&!roll)throw Error('实物库存不足，不能复制同一贴纸');
-        copy.materialUnitIndex=free??0;
+        if(a.kind!=='tape')throw Error('此方案已取用这件素材；可复制文字或图形，或裁切原素材');
+        copy.materialUnitIndex=Math.max(-1,...d.items.filter(item=>item.assetID===a.id)
+          .map(item=>item.materialUnitIndex??0))+1;
         const trial=attachSceneV2(structuredClone(d));trial.items.push(structuredClone(copy));
         validateScenePhysical(trial,state.assets);
         d.items.push(copy);
@@ -1579,7 +1698,7 @@ async function runAppAction(action,id,value){try{switch(action){
   case 'storage-token':{const token=view.querySelector('#data-server-token')?.value.trim();if(!token)throw Error('请输入新的访问令牌');const old=db.storageConfig();db.setStorageConfig({url:location.origin,token});try{await db.storageMode();toast('令牌已更新');}catch(error){db.setStorageConfig(old);throw error;}break;}
   case 'storage-connect':{await flushSave();const old=db.storageConfig(),url=view.querySelector('#data-server-url')?.value.trim(),token=view.querySelector('#data-server-token')?.value.trim();if(!url)throw Error('请输入拾页数据服务地址');db.setStorageConfig({url,token});try{await db.storageMode();state.activeProject=null;state.basket=[];await refresh();toast('已连接服务器');}catch(error){db.setStorageConfig(old);throw error;}break;}
   case 'storage-browser':{if(state.selfHosted)throw Error('自托管网站不允许切换到浏览器资料');await flushSave();db.setStorageConfig(null);state.activeProject=null;state.basket=[];await refresh();toast('已切换为本浏览器资料');break;}
-  case 'help':{openOverlay(createElement(HelpDialog,{onClose:closeOverlay,onExport:async()=>{const {runtimeIssueReport}=await import('./runtime-diagnostics.js');download(new Blob([runtimeIssueReport()],{type:'application/json'}),'拾页运行诊断.json');}}));break;}case 'settings-open':captureSettings();await actionStore.dispatch({type:'settings/section',payload:{section:value}});break;case 'settings-back':if(state.settingsSection){captureSettings();await actionStore.dispatch({type:'settings/section',payload:{section:null}});}else route(settingsSession?.returnRoute||'series');break;case 'settings-save':{captureSettings();const cfg=state.aiSettings;if(!cfg.model.trim())throw Error('请输入模型 ID');const endpoint=new URL(cfg.endpoint);if(endpoint.protocol!=='https:')throw Error('API 地址必须使用 HTTPS');if(cfg.provider!=='custom'&&endpoint.host!==new URL(AI_PROVIDERS[cfg.provider].endpoint).host)throw Error('服务商与 API 地址不一致；自定义地址请选“自定义兼容接口”');const returnRoute=settingsSession?.returnRoute||'series';if(cloudEnabled){await db.transaction(['meta'],tx=>{tx.objectStore('meta').put(cloudPreferencesRecord(state.preferences));tx.objectStore('meta').put(cloudAISettingsRecord(cfg));});}state.aiSettings=saveAISettings(cfg);state.preferences=savePreferences(state.preferences);deferredSyncedPreferences=null;deferredSyncedAISettings=null;settingsSession=null;state.settingsSection=null;route(returnRoute);toast('设置已保存');break;}
+  case 'help':{openOverlay(createElement(HelpDialog,{onClose:closeOverlay,onExport:async()=>{const {runtimeIssueReport}=await import('./runtime-diagnostics.js');download(new Blob([runtimeIssueReport()],{type:'application/json'}),'拾页运行诊断.json');}}));break;}case 'settings-open':captureSettings();await actionStore.dispatch({type:'settings/section',payload:{section:value}});break;case 'settings-back':if(state.settingsSection){captureSettings();await actionStore.dispatch({type:'settings/section',payload:{section:null}});}else navigateBack(settingsSession?.returnRoute||'series');break;case 'settings-save':{captureSettings();const cfg=state.aiSettings;if(!cfg.model.trim())throw Error('请输入模型 ID');const endpoint=new URL(cfg.endpoint);if(endpoint.protocol!=='https:')throw Error('API 地址必须使用 HTTPS');if(cfg.provider!=='custom'&&endpoint.host!==new URL(AI_PROVIDERS[cfg.provider].endpoint).host)throw Error('服务商与 API 地址不一致；自定义地址请选“自定义兼容接口”');const returnRoute=settingsSession?.returnRoute||'series';if(cloudEnabled){await db.transaction(['meta'],tx=>{tx.objectStore('meta').put(cloudPreferencesRecord(state.preferences));tx.objectStore('meta').put(cloudAISettingsRecord(cfg));});}state.aiSettings=saveAISettings(cfg);state.preferences=savePreferences(state.preferences);deferredSyncedPreferences=null;deferredSyncedAISettings=null;settingsSession=null;state.settingsSection=null;navigateBack(returnRoute);toast('设置已保存');break;}
 }}catch(e){console.error(e);recordRuntimeIssue('handled',e,state.route,{phase:'action'});toast(e.message||'操作失败');}}
 function editSelected(fn){const d=current(),e=editorEntry(d).find(x=>x.value.id===state.selected);if(!e&&state.selected)return;checkpoint();fn(e,d);saveProject();render();}
 function historyStep(from,to){view.flushInkCommit?.({renderUI:false,force:true});view.endTextEditing?.();const d=current(),snapshot=takeEditorHistoryStep(state,from,to,d);if(!snapshot)return false;for(const key of Object.keys(d))delete d[key];Object.assign(d,snapshot);state.activeDraft=snapshot.id;saveProject();return true;}
@@ -1781,7 +1900,7 @@ async function startAICreation(){
 }
 async function flattenGeneratedPage(d,p=state.activeProject,persistProject=true){
  const canvas=await rasterize(d,2),blob=await new Promise((resolve,reject)=>canvas.toBlob(v=>v?resolve(v):reject(Error('整页成图失败')),'image/png')),id=uid(),blobId=uid();
- const a={id,blobId,title:p.title+' · 整页成图',kind:'photo',role:'background',tags:[],reviewStatus:'ready',isProjectInternal:true,physicalWidthMM:d.canvas.width/d.canvas.height*d.physicalPageHeightMM,physicalHeightMM:d.physicalPageHeightMM,supply:{quantity:1},createdAt:new Date().toISOString()};
+ const a={id,blobId,title:p.title+' · 整页成图',kind:'photo',role:'background',tags:[],reviewStatus:'ready',isProjectInternal:true,physicalWidthMM:d.canvas.width/d.canvas.height*d.physicalPageHeightMM,physicalHeightMM:d.physicalPageHeightMM,createdAt:new Date().toISOString()};
  const flattened=structuredClone(d);flattened.items=[itemFromAsset(a,d,d.canvas.width/2,d.canvas.height/2,0,true)];flattened.textBlocks=[];flattened.primitives=[];flattened.strokes=[];flattened.directPageOutput='flattened';
  const updated={...p,directEditableSource:structuredClone(d),drafts:p.drafts.map(x=>x.id===d.id?flattened:x)};
  await db.transaction(['assets','blobs','projects'],tx=>{tx.objectStore('assets').put(a);tx.objectStore('blobs').put({id:blobId,data:blob});if(persistProject)tx.objectStore('projects').put(updated);});state.assets.push(a);urls.set(blobId,URL.createObjectURL(blob));Object.assign(p,updated);
@@ -2099,7 +2218,6 @@ function openDetail(id){
       const next=assetEditorValue(record,values);
       if(next===record){toast('素材信息未变化');return;}
       await db.put('assets',next);Object.assign(record,next);
-      if(next.supply.quantity===0)state.basket=state.basket.filter(item=>item!==id);
       render();toast('素材信息已保存');
     }}));
 }
@@ -2136,7 +2254,8 @@ function openProjectMetadata(){
       const next=changed?{...project,title,styleTags,isUsed,updatedAt:now}:project;
       if(changed)delete next.isTemplate;
       const withLayers=markUsed?await db.completeProject(project):project;
-      const affected=markUsed?markProjectAssetsUsed(withLayers,state.assets,now):[];
+      const affected=markUsed?markProjectAssetsUsed(withLayers,state.assets,now,
+        {includeTape:state.preferences.markTapeUsedWithProject===true}):[];
       if(!changed&&!affected.length){toast('作品信息未变化');return;}
       await db.transaction(affected.length?changed?['projects','assets']:['assets']:['projects'],tx=>{
         if(changed)tx.objectStore('projects').put(next);
@@ -2378,7 +2497,7 @@ async function refreshImportCandidates(regions,{manual=false}={}){
       // choices, and must never cause the segmentation algorithm to rerun.
       const old=previous.find(item=>item.region===region)||
         previous.find(item=>item.region&&Math.abs(item.region.x-region.x)<1e-6&&Math.abs(item.region.y-region.y)<1e-6&&Math.abs(item.region.w-region.w)<1e-6&&Math.abs(item.region.h-region.h)<1e-6);
-      if(old)for(const key of ['title','selected','tags','seriesID','kind','role','quantity','reviewStatus','dimensionSource','width','height']){
+      if(old)for(const key of ['title','selected','tags','seriesID','kind','role','reviewStatus','dimensionSource','width','height']){
         if(old[key]!==undefined)regenerated[key]=structuredClone(old[key]);
       }
       created.push(regenerated);
@@ -2472,7 +2591,7 @@ function editImportReviewCandidate(recordIndex,candidateIndex,changes){
   if(!candidate)throw Error('复核素材不存在');
   if(changes.width!==candidate.width||changes.height!==candidate.height)
     candidate.dimensionSource='manual';
-  Object.assign(candidate,{...changes,quantityManuallySet:true});
+  Object.assign(candidate,changes);
   record.manualEdits=true;
   render();
 }
@@ -2532,10 +2651,11 @@ async function organizeSavedAssets(records,{projects=[]}={}){
       // saveImportBatch has already durably staged the cutouts and metadata.
       // The model can read those pending Blobs locally; a slow cloud ACK must
       // not fail every classification in an otherwise saved import batch.
-      await assetOrganization.run(records,{organize:async(record,isCurrent)=>{
+      await assetOrganization.run(records,{organize:async(record,isCurrent,signal)=>{
         if(state.accountId!==accountID||!isCurrent())return;
         const image=await modelImage(record,null,512,false);if(!image)throw Error('素材图像无法读取');
-        const result=await classifyRecord({kind:'asset',record,settings:cfg,image,assets:[]});
+        if(!isCurrent())return;
+        const result=await classifyRecord({kind:'asset',record,settings:cfg,image,assets:[],signal});
         await applyAssetClassification(record,result,{isCurrent:()=>state.accountId===accountID&&isCurrent()});
       },onError:error=>{recordRuntimeIssue('handled',error,state.route,{phase:'ai'});if(state.accountId===accountID&&!warned){warned=true;toast(explainUserError(error,'素材自动整理'));}}});
     }else if(state.route!=='import'||state.importStep!=='done')toast('未启用视觉整理，素材已保存，可稍后检查或在设置开启');
@@ -2697,8 +2817,10 @@ emergencyInput.onchange=async()=>{
   catch(error){console.error(error);toast('应急恢复失败（原待同步资料未被覆盖）：'+error.message);}
 };
 backupInput.onchange=async()=>{const file=backupInput.files?.[0];backupInput.value='';if(!file)return;
-  if(!confirm('恢复完整备份会替换当前拾页中的全部资料。继续吗？'))return;
-  try{await flushSave();await db.flushProjects();await db.restoreBackup(file);state.activeProject=null;state.basket=[];await refresh();toast('完整备份已恢复');}
+  try{const plan=await db.prepareBackupRestore(file),n=plan.counts;
+    const repaired=plan.repairs.length?`另有 ${plan.repairs.length} 个不能跨账号使用的派生封面引用将移除；作品正文和素材不变，封面打开时重新生成。`:'';
+    if(!confirm(`备份预检通过：${n.assets} 件素材、${n.series} 个系列、${n.projects} 件作品、${n.blobs} 份图片、${n.trash} 条最近删除。${repaired}恢复会替换当前全部资料。继续吗？`))return;
+    await flushSave();await db.flushProjects();await plan.apply();state.activeProject=null;state.basket=[];await refresh();toast('完整备份已恢复');}
   catch(e){console.error(e);toast('恢复失败：'+e.message);}
 };
 // A long uninterrupted editing session also creates a recovery point,
@@ -2711,7 +2833,11 @@ setInterval(()=>{
     snapshotEditedScene('5-minutes');
 },30000);
 window.addEventListener('pagehide',()=>{snapshotEditedScene('pagehide');if(saveTimer)flushSave().catch(console.error);});
-window.addEventListener('beforeunload',event=>{if(saveTimer||savingProjects||dirtyProjects.size){event.preventDefault();event.returnValue='';}});
+window.addEventListener('beforeunload',event=>{
+  if(saveTimer||savingProjects||dirtyProjects.size||pendingUnsavedInputs().length||
+    settingsSession?.dirty||state.route==='import'&&state.importRecords.length||
+    state.editingTextID){event.preventDefault();event.returnValue='';}
+});
 // Logout requires a durable local checkpoint, not a successful network round
 // trip. Unacknowledged edits remain in the account-scoped outbox for re-login.
 window.addEventListener('shiye-flush-before-logout',event=>event.detail.tasks.push(flushSave()));
@@ -2739,6 +2865,64 @@ window.addEventListener('shiye-project-conflict-copy',event=>{
     saveSpecificProject(current);
   }
   toast('已保留其他设备原稿；当前修改正作为新的独立作品同步，请在作品页查看。');
+});
+window.addEventListener('shiye-sync-forked',event=>{
+  const {sourceID,sourceSessionID,target}=event.detail||{};
+  if(!sourceID||!target?.id)return;
+  const current=state.activeProject;
+  // Only redirect the editing session that produced this branch. Another tab
+  // can have an independent draft of the same original work.
+  if(current?.id===sourceID&&current.__cloudSessionId===sourceSessionID){
+    const oldKey=sceneTrackKey(current);
+    dirtyProjects.delete(sourceID);
+    saveVersions.set(sourceID,(saveVersions.get(sourceID)||0)+1);
+    current.id=target.id;
+    current.title=target.title;
+    current.__cloudSessionId=target.__cloudSessionId;
+    current.forkOrigin=target.forkOrigin;
+    delete current.__cloudBaseRevision;
+    if(oldKey&&sceneTrackBases.has(oldKey)){
+      const baseline=sceneTrackBases.get(oldKey);
+      sceneTrackBases.delete(oldKey);
+      const nextKey=sceneTrackKey(current);
+      if(nextKey)sceneTrackBases.set(nextKey,baseline);
+    }
+    state.projects=state.projects.map(project=>project===current||project.id===sourceID?current:project);
+    projectSaveFingerprints.delete(sourceID);
+    projectSceneFingerprints.delete(sourceID);
+    saveSpecificProject(current);
+    render();
+  }else{
+    void backgroundCloudCheck({force:true});
+  }
+  toast('作品发生独立修改，已保留为另一编辑版本。');
+});
+window.addEventListener('shiye-sync-project-replaced',event=>{
+  const {sourceID,sourceSessionID,sourceFingerprint,target}=event.detail||{};
+  const current=state.activeProject;
+  if(!target?.id||current?.id!==sourceID||current.__cloudSessionId!==sourceSessionID)return;
+  const hasLaterEdits=projectSemanticFingerprint(current)!==sourceFingerprint;
+  const next=hasLaterEdits?forkConflictingEditableWork(current):target;
+  if(!next){toast('当前作品仍有本机新修改，已保留待同步任务');return;}
+  dirtyProjects.delete(sourceID);
+  saveVersions.set(sourceID,(saveVersions.get(sourceID)||0)+1);
+  state.activeProject=next;
+  state.activeDraft=next.activeDraftID;
+  state.projects=state.projects.map(project=>project.id===sourceID?next:project);
+  projectSaveFingerprints.delete(sourceID);
+  projectSceneFingerprints.delete(sourceID);
+  if(hasLaterEdits)saveSpecificProject(next);
+  else rememberProjectSaveBaseline(next);
+  render();
+  if(hasLaterEdits)toast('编辑期间又有新修改，已另存为可编辑作品。');
+});
+window.addEventListener('shiye-sync-project-committed',event=>{
+  const {id,sessionID,revision,sceneFingerprint,metadata}=event.detail||{};
+  const current=state.activeProject;
+  if(current?.id!==id||current.__cloudSessionId!==sessionID)return;
+  current.__cloudBaseRevision=revision;
+  current.__cloudBaseSceneFingerprint=sceneFingerprint;
+  current.__cloudBaseMetadata=metadata;
 });
 window.addEventListener('shiye-project-sync',event=>{const {pending,error,conflicts=0,uploading=false,progress=null}=event.detail;syncDisplay.pending=pending;syncDisplay.progress=progress;syncDisplay.error=error;syncDisplay.conflicts=conflicts;syncDisplay.uploading=uploading;syncDisplay.checking=false;if(!dirtyProjects.size&&!savingProjects)syncDisplay.localPending=false;updateSyncIndicator();if(error&&!uploading){saveStatus('待同步 · 修改已保留在本机');const message=error.name==='AbortError'||/abort|timed? ?out/i.test(error.message||'')?'网络请求中断，本机修改已保留，将自动重试同步':describeSyncError(error);if(lastSyncError!==message)toast(message);lastSyncError=message;}else{if(!error)lastSyncError=null;saveStatus(conflicts?'部分资料有冲突 · 其他资料已继续同步':pending?'修改已暂存 · 后台同步中':'已保存到云端');privateImages.retryMissing();}});
 let cloudCheck,cloudCheckAt=0,cloudSessionReady=false,cloudCheckAgain=false;
@@ -2822,7 +3006,7 @@ async function openSyncConflictChoice(kind,id){
 }
 function exportAppDiagnostics(){
   const report={format:'shiye-app-error-diagnostics',version:2,createdAt:new Date().toISOString(),
-    scope:'仅本次打开应用期间的安全摘要；关闭后不保留',
+    scope:'本机最近七天的脱敏运行摘要；仅在主动导出时生成文件',
     environment:{mode:cloudEnabled?'cloud':state.selfHosted?'server':'browser',online:navigator.onLine!==false},
     runtime:runtimeIssueSnapshot(),images:imageLoadingSnapshot(),sync:cloudEnabled?db.syncDiagnosticReport({online:navigator.onLine}):null};
   download(new Blob([JSON.stringify(report,null,2)],{type:'application/json'}),
@@ -2906,6 +3090,8 @@ setShellActions({
   },
   basket:()=>route('matching'),settings:()=>route('settings'),
   sync:()=>void openSyncDetails(),save:()=>{if(cloudEnabled)void openSyncDetails();},
+  diagnostics:()=>{void import('./runtime-diagnostics.js').then(({runtimeIssueReport})=>
+    download(new Blob([runtimeIssueReport()],{type:'application/json'}),'拾页运行诊断.json'));},
   update:()=>{
     updateShell({updateStatus:'正在准备更新…'});
     void Promise.resolve(safeUpdateRegistration).then(registration=>{
@@ -2918,14 +3104,47 @@ let safeUpdateRegistration=null;
 function checkForSafeUpdate(){
   if(!('serviceWorker' in navigator)||location.protocol!=='https:'||safeUpdateRegistration)return;
   safeUpdateRegistration=import('./app-update.js').then(({registerSafeUpdate})=>registerSafeUpdate({
-    flushLocal:flushSave,
-    isBusy:()=>!!(state.importProcessing||state.aiBusy),
+    flushLocal:async()=>{
+      view.flushInkCommit?.({renderUI:false,force:true});
+      view.endTextEditing?.();
+      await flushSave();
+    },
+    isBusy:()=>!!(state.importProcessing||state.aiBusy||state.route==='import'&&state.importRecords.length||
+      settingsSession?.dirty||pendingUnsavedInputs().length||activeViewPointers.size||editorPointers.size||modal.open),
     onError:error=>toast('更新未完成，当前页面和资料保持不变：'+error.message),
     onReady:ready=>updateShell({updateReady:ready}),
     onStatus:updateStatus=>updateShell({updateStatus})
   })).catch(error=>{safeUpdateRegistration=null;console.warn('更新检查暂不可用',error);});
 }
-async function init(user,{resetPending=false,afterAccountReset=false,onFirstView=()=>{}}={}){previewPrewarmEpoch++;let cachedShown=false;cloudSessionReady=!resetPending;if(resetPending)cloudResumer.suspend();const accountId=user?.id||'browser';if(state.accountId&&state.accountId!==accountId){matchingScrollMemory=null;Object.assign(lastMaterialLocation,{route:'series',seriesID:'all',libraryTab:'series'});parity.libraryTab='series';deferredSyncedPreferences=null;deferredSyncedAISettings=null;clearTimeout(matchingDefaultsTimer);matchingDefaultsTimer=null;matchingDefaultsPending=false;matchingDefaultsLocalEdited=false;cloudMatchingDefaults=null;assetOrganization.clear();clearJournalTemplateImages();clearJournalPresetImages();state.userTemplates=[];}state.accountId=accountId;try{
+async function init(user,{resetPending=false,afterAccountReset=false,onFirstView=()=>{}}={}){
+  previewPrewarmEpoch++;
+  let cachedShown=false;
+  cloudSessionReady=!resetPending;
+  if(resetPending)cloudResumer.suspend();
+  const accountId=user?.id||'browser';
+  if(state.accountId&&state.accountId!==accountId){
+    navigationScope=null;
+    matchingScrollMemory=null;
+    Object.assign(lastMaterialLocation,{route:'series',seriesID:'all',libraryTab:'series'});
+    parity.libraryTab='series';parity.workTab='all';parity.workFilters=null;
+    parity.seriesQuery='';parity.seriesSort='recent';parity.seriesAscending=false;
+    parity.selected.clear();parity.selectionMode=null;parity.showOnlySelected=false;
+    clearCatalogPages();clearSeriesContentFilters();routeScroll.clear();
+    state.route='series';state.query='';state.kind='all';state.status='all';state.sort='newest';
+    state.seriesID='all';state.detailAssetID=null;state.previewProjectID=null;
+    state.activeProject=null;state.activeDraft=null;
+    state.assets=[];state.series=[];state.projects=[];state.trash=[];state.basket=[];
+    privateImages.invalidate();staticSources.clear();
+    deferredSyncedPreferences=null;deferredSyncedAISettings=null;
+    clearTimeout(matchingDefaultsTimer);matchingDefaultsTimer=null;
+    matchingDefaultsPending=false;matchingDefaultsLocalEdited=false;cloudMatchingDefaults=null;
+    assetOrganization.clear();clearJournalTemplateImages();clearJournalPresetImages();
+    state.userTemplates=[];
+    renderReactPage(createElement('section',{className:'empty'},
+      createElement('strong',null,'正在读取当前账号资料…')));
+  }
+  state.accountId=accountId;
+  try{
   await db.storageMode();state.selfHosted=db.isSameOriginServer();checkForSafeUpdate();
   // startCloudSession has validated Auth and the allowlist before this runs.
   const cached=await db.cachedCollections();if(cached){
@@ -2941,9 +3160,9 @@ async function init(user,{resetPending=false,afterAccountReset=false,onFirstView
     }
     await restorePendingProjects();
     for(const a of state.assets)if(a.staticPath)staticSources.set(a.blobId,a.staticPath);
-    render();cachedShown=true;onFirstView();saveStatus('本机缓存 · 正在核对云端');
+    render();activateNavigation();cachedShown=true;onFirstView();saveStatus('本机缓存 · 正在核对云端');
   }
-  const initialSync=await db.refreshCloud();if(initialSync?.changed)privateImages.invalidate(initialSync.allBlobs?undefined:initialSync.blobIDs);await refresh({background:cachedShown,skipCloudRefresh:true});onFirstView();if(!resetPending&&!afterAccountReset)void purgeExpiredTrash();await matchingSession.restore();if(cloudMatchingDefaults)applyMatchingDefaults(state,cloudMatchingDefaults);editableImportReady=true;void consumeEditableHandles();saveStatus((await db.storageMode())==='server'?'已连接服务器':'已保存到本机');if(cloudEnabled){syncDisplay.checking=false;updateSyncIndicator();if(!resetPending)void cloudResumer.wake();else saveStatus('云端已清空 · 正在后台清理旧图片（暂只读）');}
+  const initialSync=await db.refreshCloud();if(initialSync?.changed)privateImages.invalidate(initialSync.allBlobs?undefined:initialSync.blobIDs);await refresh({background:cachedShown,skipCloudRefresh:true});activateNavigation();onFirstView();if(!resetPending&&!afterAccountReset)void purgeExpiredTrash();await matchingSession.restore();if(cloudMatchingDefaults)applyMatchingDefaults(state,cloudMatchingDefaults);editableImportReady=true;void consumeEditableHandles();saveStatus((await db.storageMode())==='server'?'已连接服务器':'已保存到本机');if(cloudEnabled){syncDisplay.checking=false;updateSyncIndicator();if(!resetPending)void cloudResumer.wake();else saveStatus('云端已清空 · 正在后台清理旧图片（暂只读）');}
   }catch(e){console.error(e);recordRuntimeIssue('handled',e,state.route,{phase:'auth'});const auth=e.status===401;if(auth)cloudSessionReady=false;
   if(cachedShown&&!auth){saveStatus('云端核对失败 · 缓存仅供查看');toast('云端连接失败，未改为本机保存：'+e.message);if(cloudEnabled)void cloudResumer.wake();return;}
   if(auth){renderReactPage(createElement('div',{className:'empty'},

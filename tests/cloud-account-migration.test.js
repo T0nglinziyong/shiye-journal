@@ -5,7 +5,7 @@ import {prepareStorageMigration} from '../src/data-migrations/registry.js';
 const legacy=()=>({id:'project-old',title:'旧作品',activeDraftID:'d',drafts:[{id:'d',canvas:{width:707,height:1000},pageMode:'single',physicalPageHeightMM:297,paperColor:'#ffffff',items:[],primitives:[],textBlocks:[],strokes:[]}]});
 function server(cache=null){
  const state={revision:3,collections:{assets:[],series:[],projects:[legacy()],blobs:[{id:'source',storagePath:'owner/file',storageProvider:'cos'}],meta:[],trash:[]},calls:[]};
- const client={from(table){const f={};const q={select(){return q;},eq(k,v){f[k]=v;return q;},order(){return q;},async range(start,end){return {data:(state.collections[f.store]||[]).slice(start,end+1).map(record=>({record}))};},async single(){return {data:{revision:state.revision}};},async maybeSingle(){return {data:null}}};return q;},async rpc(name,args){assert.equal(name,'shiye_commit_v2');state.calls.push(args);if(args.expected_revision!==state.revision)return {error:{message:'conflict'}};return {data:++state.revision}}};
+ const client={from(table){const f={};const q={select(){return q;},eq(k,v){f[k]=v;return q;},order(){return q;},async range(start,end){return {data:(state.collections[f.store]||[]).slice(start,end+1).map(record=>({record}))};},async single(){return {data:{revision:state.revision,account_epoch:'epoch-fixture'}};},async maybeSingle(){return {data:null}}};return q;},async rpc(name,args){assert.equal(name,'shiye_commit_v3');state.calls.push(args);if(args.base_revision!==state.revision)return {error:{message:'conflict'}};return {data:{status:'applied',revision:++state.revision,accountEpoch:'epoch-fixture',syncProtocolVersion:3}}}};
  const db=createCloudStore({cloudClient:()=>client,requireCloudUser:async()=>({id:'owner'}),cache});return {db,state};
 }
 test('account migration inspects all six stores, CAS-commits only validated obsolete records',async()=>{
@@ -15,7 +15,7 @@ test('account migration inspects all six stores, CAS-commits only validated obso
  assert.equal(plan.changes.length,1);
  const result=await db.cloudMigrationCommit({expectedRevision:snapshot.revision,changes:plan.changes});
  assert.equal(result.updated,1);
- assert.equal(state.calls.length,1);assert.equal(state.calls[0].expected_revision,3);
+ assert.equal(state.calls.length,1);assert.equal(state.calls[0].base_revision,3);
  assert.deepEqual(state.calls[0].operations.map(op=>op.store),['projects']);
  assert.equal(state.calls[0].operations[0].item.drafts[0].sceneVersion,2);
  assert.equal(state.collections.projects[0].drafts[0].sceneVersion,undefined);

@@ -7,19 +7,23 @@ export function createAssetOrganization() {
   return {
     status:id=>jobs.get(id)?.status,
     subscribe(fn){listeners.add(fn);return()=>listeners.delete(fn);},
-    clear(){jobs.clear();notify();},
+    clear(){for(const job of jobs.values())job.controller.abort();jobs.clear();notify();},
     async run(records,{waitForSave=async()=>{},organize,onError=()=>{},priority='background',queue=classificationQueue}={}) {
       const token=Symbol('batch');
-      const set=(id,status)=>{if(jobs.get(id)?.token!==token)return;if(status)jobs.set(id,{token,status});else jobs.delete(id);notify();};
-      for(const record of records)jobs.set(record.id,{token,status:'queued'});
+      const set=(id,status)=>{const current=jobs.get(id);if(current?.token!==token)return;if(status)jobs.set(id,{...current,status});else jobs.delete(id);notify();};
+      for(const record of records){jobs.get(record.id)?.controller.abort();jobs.set(record.id,{token,status:'queued',controller:new AbortController()});}
       notify();
-      try{await waitForSave();}catch(error){for(const record of records)set(record.id,'failed');onError(error);return;}
-      await Promise.all(records.map(record=>queue.schedule(async()=>{
+      try{await waitForSave();}catch(error){if(!records.some(record=>jobs.get(record.id)?.token===token))return;for(const record of records)set(record.id,'failed');onError(error);return;}
+      await Promise.all(records.map(record=>{
+        const controller=jobs.get(record.id)?.controller;
+        if(!controller)return Promise.resolve();
+        return queue.schedule(async signal=>{
         if(jobs.get(record.id)?.token!==token)return;
         set(record.id,'running');
-        try{await organize(record,()=>jobs.get(record.id)?.token===token);set(record.id,null);}
-        catch(error){set(record.id,'failed');onError(error,record);}
-      },{priority})));
+        try{await organize(record,()=>jobs.get(record.id)?.token===token&&!signal.aborted,signal);set(record.id,null);}
+        catch(error){if(signal.aborted)return;set(record.id,'failed');onError(error,record);}
+      },{priority,signal:controller.signal}).catch(error=>{if(error?.name!=='AbortError')throw error;});
+      }));
     }
   };
 }

@@ -114,7 +114,7 @@ function validateRing(input) {
     if (close(a, b)) throw Error('源区域有重复边点');
     for (let j = i + 1; j < ring.length; j++) {
       if (j === i + 1 || i === 0 && j === ring.length - 1) continue;
-      if (intersects(a, b, ring[j], ring[(j + 1) % ring.length])) throw Error('源区域轮廓自交或相接，不能核验实体库存');
+      if (intersects(a, b, ring[j], ring[(j + 1) % ring.length])) throw Error('源区域轮廓自交或相接，不能核验来源区域');
     }
   }
   return ring;
@@ -128,7 +128,7 @@ function intervals(edges, y) {
   const xs = [];
   for (const [a, b] of edges) if (a[1] <= y && b[1] > y || b[1] <= y && a[1] > y) xs.push(a[0] + (y - a[1]) * (b[0] - a[0]) / (b[1] - a[1]));
   xs.sort((a, b) => a - b);
-  if (xs.length % 2) throw Error('源区域扫描线异常，未放宽库存校验');
+  if (xs.length % 2) throw Error('源区域扫描线异常，未放宽来源校验');
   const result = [];
   for (let i = 0; i < xs.length; i += 2) if (xs[i + 1] - xs[i] > EPS) result.push([xs[i], xs[i + 1]]);
   return result;

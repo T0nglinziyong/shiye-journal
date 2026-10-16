@@ -49,6 +49,16 @@ test('marking a work used explicitly marks its placed materials used and ignores
   const used=withUsageStatus(assets[0],true,'2026-09-30T01:00:00.000Z');
   assert.deepEqual([...usedAssetIDs([used])],['a']);
 });
+test('usage action applies only to the active plan, excludes parked and hidden layers, and can opt into tape',()=>{
+  const work={activeDraftID:'chosen',drafts:[
+    {id:'other',items:[{assetID:'other'}]},
+    {id:'chosen',items:[{assetID:'photo'},{assetID:'tape'},{assetID:'parked',isParked:true},{assetID:'hidden',hidden:true}]}
+  ]};
+  const assets=['other','photo','tape','parked','hidden'].map(id=>({id,kind:id==='tape'?'tape':'sticker',usageStatus:'unused'}));
+  assert.deepEqual([...projectAssetIDs(work)],['photo','tape']);
+  assert.deepEqual(markProjectAssetsUsed(work,assets).map(a=>a.id),['photo']);
+  assert.deepEqual(markProjectAssetsUsed(work,assets,undefined,{includeTape:true}).map(a=>a.id),['photo','tape']);
+});
 test('lasso requires full enclosure of rotated objects and honors type and lock filters',()=>{
   const item={id:'a',x:50,y:50,width:40,height:10,rotation:45};
   const d={canvas:{width:100,height:100},items:[item,{...item,id:'locked',isLocked:true},{...item,id:'parked',isParked:true}],textBlocks:[{...item,id:'text'}],primitives:[{...item,id:'hidden',hidden:true}]};
@@ -84,8 +94,7 @@ test('mature PDF encoder produces parseable pages at exact physical size',async(
 });
 test('import records preserve candidate metadata and explicit unassigned series',()=>{
   const c={title:'票据',width:30.5,height:60,quantity:3,kind:'paper',role:'support',reviewStatus:'ready',seriesID:'__none__'};
-  const a=candidateMetadata(c,{seriesID:'s'},'batch');assert.equal(a.seriesID,null);assert.equal(a.supply.quantity,3);assert.equal(a.kind,'paper');assert.equal(a.physicalWidthMM,30.5);assert.equal(a.usageStatus,'unused');
-  assert.throws(()=>candidateMetadata({...c,quantity:1.5},{},null),/数量须为 1–999/);
+  const a=candidateMetadata(c,{seriesID:'s'},'batch');assert.equal(a.seriesID,null);assert.equal(a.supply,undefined);assert.equal(a.kind,'paper');assert.equal(a.physicalWidthMM,30.5);assert.equal(a.usageStatus,'unused');
   assert.throws(()=>candidateMetadata({...c,width:-1},{},null),/宽高/);
   assert.deepEqual(importPaperDimensions({paperSize:'a5',paperOrientation:'landscape'}),[210,148]);
   assert.deepEqual(importPaperDimensions({paperSize:'custom',customImportWidth:12,customImportHeight:500,paperOrientation:'portrait'}),[12,500]);
@@ -158,10 +167,10 @@ test('AI metrics contain no private body; opt-in context redacts credentials bef
   const context=[...values.values()].find(v=>v.id.startsWith('ai-context-'));assert.equal(context.status,'completed');assert.ok(JSON.stringify(context).includes('private-photo'));assert.ok(!JSON.stringify(context).includes('secret'));
   assert.deepEqual(redact({headers:{Authorization:'Bearer secret'},key:'secret',text:'secret'},'secret'),{text:'[REDACTED]'});
 });
-test('asset metadata accepts zero stock, keeps manual dimensions, excludes unavailable recommendations',()=>{
+test('asset metadata removes stock while preserving dimensions and explicit usage status',()=>{
   const old={id:'a',title:'old',physicalWidthMM:20,physicalHeightMM:30,supply:{quantity:1}};
   const fields={title:'纸品',kind:'paper',role:'support',texture:'牛皮纸',width:'20',height:'30',quantity:'0',tags:'旅行',contentTags:'票据',styleTags:'复古',materialTags:'牛皮纸',seriesID:'s',reviewStatus:'ready',usageStatus:'unused'};
-  const a=assetEditorValue(old,fields);assert.equal(a.supply.quantity,0);assert.deepEqual(a.tags,['旅行','票据','复古','牛皮纸']);assert.equal(a.seriesID,'s');assert.equal(a.usageStatus,'unused');assert.equal(old.supply.quantity,1);
-  assert.deepEqual(physicalPlacement(draft(),[a],['a']),[]);assert.deepEqual(recommend({...a,id:'core'},[a]),[]);
+  const a=assetEditorValue(old,fields);assert.equal(a.supply,undefined);assert.deepEqual(a.tags,['旅行','票据','复古','牛皮纸']);assert.equal(a.seriesID,'s');assert.equal(a.usageStatus,'unused');assert.equal(old.supply.quantity,1);
+  assert.equal(physicalPlacement(draft(),[a],['a']).length,1);assert.equal(recommend({...a,id:'core'},[a]).length,1);
   assert.throws(()=>assetEditorValue(old,{...fields,width:'-2'}),/宽高/);
 });

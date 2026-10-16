@@ -86,7 +86,7 @@ export function createSyncDiagnostics({limit=3000,clock=()=>new Date().toISOStri
         fingerprint:error?hash(error.name+'|'+error.message):null,frame:safeFrame(error)});
       events.push(event);if(events.length>limit)events.shift();schedule();
     },
-    report({pending=0,conflicts=0,uploading=false,revision=null,writesInFlight=0,quarantined=0,online=null,active=null}={}){
+    report({pending=0,conflicts=0,retrying=0,nextAttemptAt=null,uploading=false,revision=null,writesInFlight=0,quarantined=0,online=null,active=null}={}){
       flush();
       const day=currentDay,all=[];let sessions=0,currentStored=false;
       try{if(storage)for(let i=0;i<storage.length;i++){
@@ -99,14 +99,16 @@ export function createSyncDiagnostics({limit=3000,clock=()=>new Date().toISOStri
       if(!currentStored)all.push(...events);
       all.sort((a,b)=>a.at.localeCompare(b.at));
       const recent=all.slice(-10000),lastFailure=[...recent].reverse().find(event=>event.failure)||null;
-      return {format:'shiye-sync-diagnostics',version:2,createdAt:clock(),day,scope:'本机当天的安全运行元数据；不含作品、图片、账号标识、密钥或原始报错',
+      return {format:'shiye-sync-diagnostics',version:2,syncProtocolVersion:3,createdAt:clock(),day,scope:'本机当天的安全运行元数据；不含作品、图片、账号标识、密钥或原始报错',
         categoryGuide:{'unconfirmed-response':'云端版本未变化，但上传响应未获确认；数据留在本机待重试',
           'revision-conflict':'同一资料存在冲突；该项保留，其他项可继续',
           authorization:'登录或权限验证失败','rate-limit':'请求频率受限',server:'云端服务返回 5xx',
           'local-storage':'本机持久队列读写失败','image-upload':'图片读取或对象上传失败',
           'browser-lock':'浏览器同步锁异常',interrupted:'请求中断或超时',network:'网络连接失败',
           unknown:'需要结合阶段、时间与错误指纹进一步排查'},
-        state:{pending:count(pending),conflicts:count(conflicts),uploading:!!uploading,
+        state:{pending:count(pending),conflicts:count(conflicts),retrying:count(retrying),
+          nextAttemptAt:Number.isFinite(nextAttemptAt)&&nextAttemptAt>0?
+            new Date(nextAttemptAt).toISOString():null,uploading:!!uploading,
           cloudRevision:count(revision),writesInFlight:count(writesInFlight),quarantined:count(quarantined),
           online:typeof online==='boolean'?online:null},
         active:active&&['准备上传','编码与上传','提交事务'].includes(active.phase)?{phase:active.phase,

@@ -38,11 +38,12 @@ export default async function handler(req,res){
     resetRecords:async token=>{
       const supabase=authClient(token),account=await supabase.auth.getUser(token);
       if(account.error||!account.data.user)throw Error('登录状态已失效');
-      const revision=await supabase.from('shiye_revisions').select('revision').eq('user_id',account.data.user.id).single();
+      const revision=await supabase.from('shiye_revisions').select('revision,account_epoch').eq('user_id',account.data.user.id).single();
       if(revision.error)throw revision.error;
       const operations=['assets','blobs','series','projects','meta','trash'].map(store=>({store,action:'clear'}));
-      const response=await supabase.rpc('shiye_commit_v2',{operations,
-        expected_revision:Number(revision.data.revision),operation_id:crypto.randomUUID()});
+      const response=await supabase.rpc('shiye_commit_v3',{operations,
+        base_revision:Number(revision.data.revision),operation_id:crypto.randomUUID(),
+        expected_epoch:revision.data.account_epoch,sync_protocol_version:3});
       if(response.error)throw response.error;
     }
   });

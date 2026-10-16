@@ -26,9 +26,9 @@ test('the advertised current tools plus atomic craft plan all execute editable c
   d=success(d,[call('compose_page',{graphics:[{key:'g1',kind:'rectangle',width:.3,height:.25,x:.5,y:.6}],texts:[{key:'t1',content:'写下真实看到的光。',width:.25,x:.5,y:.6,font_size:24}]})]);
   d=success(d,[call('place_materials',{items:[{asset:'m3',piece:'p3',x:.5,y:.6}]}),call('edit_materials',{items:[{piece:'p3',operations:[{op:'tape',unit:'mm',start:20,length:50}]}]})]);
   assert.ok(Math.abs(d.items.find(i=>i.creativePieceID==='p3').width-50/297*1000)<1e-6);
-  d=success(d,[call('upsert_materials',{items:[{asset:'m2',piece:'p4',unit:1,operations:[{op:'whole'}],placement:{x:.8,y:.4,rotation:0,z:20}}],remove:[]})]);
-  d=success(d,[call('move_elements',{items:[{key:'p4',relative_to:'g1',offset:[.7,0]}]}),call('arrange_elements',{keys:['p3','p4'],mode:'row',x:.5,y:.5,gap_mm:4})]);
-  d=success(d,[call('fit_text_to',{key:'t1',target:'g1',padding_mm:[2,2,2,2],color:'#20483D'}),call('upsert_primitives',{items:[{key:'frame',kind:'frame',match_size_to:'p4',padding_mm:[2,2,2,2],fill:null}]}),call('upsert_text',{items:[{key:'t1',content:'纸面留下柔软的影子。',width:.3,x:.5,y:.7,font_size:24}]})]);
+  d=success(d,[call('upsert_materials',{items:[{asset:'m2',piece:'story-p1',unit:0,operations:[{op:'whole'}],placement:{x:.8,y:.4,rotation:0,z:20}}],remove:[]})]);
+  d=success(d,[call('move_elements',{items:[{key:'story-p1',relative_to:'g1',offset:[.7,0]}]}),call('arrange_elements',{keys:['p3','story-p1'],mode:'row',x:.5,y:.5,gap_mm:4})]);
+  d=success(d,[call('fit_text_to',{key:'t1',target:'g1',padding_mm:[2,2,2,2],color:'#20483D'}),call('upsert_primitives',{items:[{key:'frame',kind:'frame',match_size_to:'story-p1',padding_mm:[2,2,2,2],fill:null}]}),call('upsert_text',{items:[{key:'t1',content:'纸面留下柔软的影子。',width:.3,x:.5,y:.7,font_size:24}]})]);
   d=success(d,[call('delete_elements',{keys:['frame']}),call('set_paper',{color:'#F0F5EE',pattern:'grid',intent:'留下连续的阅读空间'})]);
   const inspected=run(d,[call('inspect_materials',{keys:['p3','m1']})]);assert.equal(inspected.committed,false);assert.equal(inspected.results[0].data.materials[0].widthMM,50);assert.equal(inspected.results[0].data.materials[1].sourceRef.blobId,'paper-image');
   d=success(d,[call('finish_design',{summary:'光和纸的对话'})]);assert.equal(d.agentRun.status,'finished');
@@ -77,7 +77,7 @@ test('nonoverlapping source slices share one inventory unit; overlapping copies 
   const over=run(base,[call('place_materials',{items:[{asset:'m2',piece:'p3',unit:2}]})]);assert.equal(over.results[0].ok,false);
 });
 
-test('only an explicitly registered repeatable tape roll can supply repeated segments',()=>{
+test('tape may use independent segments without managing remaining roll length',()=>{
   const roll={...assets[2],supply:{kind:'tapeRoll',quantity:1,availableLengthMM:120},tapeRepeatMode:'repeatablePattern',tapeRepeatPeriodMM:20};
   const strips=[{asset:'m3',piece:'tape-a',unit:0,operations:[crop([0,0,.35,1])],placement:{x:.3,y:.3,rotation:0,z:1}},{asset:'m3',piece:'tape-b',unit:0,operations:[crop([.35,0,.35,1])],placement:{x:.7,y:.3,rotation:0,z:2}}];
   const current=applyToolCalls([call('upsert_materials',{items:strips,remove:[]})],draft(),[roll],aliases,{processing:'自由拆解'});
@@ -85,7 +85,7 @@ test('only an explicitly registered repeatable tape roll can supply repeated seg
   assert.equal(current.draft.items.length,2);
   assert.ok(current.draft.items.every(item=>Math.abs(item.width-35/297*1000)<1e-6));
   const ordinary=run(draft(),[call('upsert_materials',{items:[{asset:'m3',piece:'ordinary-a',unit:0,operations:[crop([0,0,.35,1])],placement:{x:.3,y:.3,rotation:0,z:1}},{asset:'m3',piece:'ordinary-b',unit:1,operations:[crop([.35,0,.35,1])],placement:{x:.7,y:.3,rotation:0,z:2}}],remove:[]})]);
-  assert.equal(ordinary.results[0].ok,false);
+  assert.equal(ordinary.results[0].ok,true);
 });
 
 test('arrange preserves all material dimensions in row, column and unequal grid',()=>{

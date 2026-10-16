@@ -10,7 +10,7 @@
 | 页面组件 | `src/react-routes.jsx` 的 React 路由组件 | 页面及最近删除列表由 React 渲染，仍使用原 `trash` 表；`src/app.js` 负责业务编排和路由 | `tests/react-route-smoke.mjs`、`tests/trash-offline-browser.mjs`、`tests/library-canvas-latest-browser.mjs` |
 | 素材库选择 | `src/library-selection-model.js` 的选择模式 | 系列详情与全部素材共享一份 `parity` 选择状态；结束模式后必须同步并卸载底部栏。卡片短按和长按由 `src/react-routes.jsx` 的 `PressCard` 统一判定 | `tests/library-selection.test.js`、`tests/library-selection-browser.mjs`、`tests/library-canvas-latest-browser.mjs` |
 | 创作画布 | `src/react-routes.jsx` 的 `EditorPage` 与 `src/fabric-scene-stage.jsx` | React 管工具栏及页面生命周期；Fabric 管可编辑对象与选择；Scene v2 是唯一持久作品数据；笔迹由独立压力路径模块采样并存为 Scene 矢量笔迹。`src/scene-renderer.js` 以 Canvas 2D 合成封面和 PNG，PDF 使用同一合成图。编辑画布和导出共用纸张绘制、字体、素材遮罩及显示片段投影 | `tests/fabric-editor-product-browser.mjs`、`tests/fabric-stage-browser.mjs`、`tests/editor-layout-browser.mjs` |
-| 云端续传 | `src/project-sync.js` 的账号隔离持久队列 | `src/sync-resumer.js` 在重新打开、回前台与恢复网络时重试 `cloud-store.js` 的两类待同步队列；冲突不得自动覆盖，云端确认才移出队列 | `tests/project-sync.test.js`、`tests/sync-resumer.test.js`、`tests/cloud-store.test.js` |
+| 云端续传 | `src/project-sync.js` 的账号隔离持久队列 | `src/sync-resumer.js` 在重新打开、回前台与恢复网络时重试；`cloud-store.js` 通过 `shiye_commit_v3` 让服务端按记录核对原始编辑基线，账号修订号只作读取游标。已识别的作品正文冲突保留另一编辑版本，云端确认才移出队列。非作品字段级合并、旧写入闸门与完整故障矩阵仍待完成 | `tests/project-sync.test.js`、`tests/sync-resumer.test.js`、`tests/cloud-store.test.js`、`tests/sql/record-cas-v3.assert.sql` |
 
 同步详情的诊断由 `src/sync-diagnostics.js` 记录当天的阶段、修订号、数量和经过分类的错误，保留在本机并可导出；不写入云端，也不包含待同步记录的原始字节。它不是应急备份。
 

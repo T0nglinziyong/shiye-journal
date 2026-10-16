@@ -16,7 +16,7 @@ export function classificationResult(value, kind) {
   }else result.styleTags=result.tags;
   return result;
 }
-export async function classifyRecord({kind,record,settings,image,assets,request=fetch,onProgress}) {
+export async function classifyRecord({kind,record,settings,image,assets,request=fetch,onProgress,signal}) {
   if(!settings.key)throw Error('请先在设置中填写 API 密钥');
   if(kind==='asset'&&!supportsVision(settings))throw Error('请先选择支持图片输入的模型');
   const used=kind==='project'?assets.filter(a=>record.drafts?.some(d=>d.items?.some(i=>i.assetID===a.id&&!i.isParked))):[];
@@ -31,7 +31,7 @@ export async function classifyRecord({kind,record,settings,image,assets,request=
     '给混合型手账成品整理简短中文标题和 3–5 个检索风格标签。只返回 JSON {"title":"春日拼贴","tags":["春日","柔和","植物"]}。使用的素材：'+used.map(a=>a.title+'（'+(a.tags||[]).join('、')+'）').join('；');
   const content=image&&supportsVision(settings)?[{type:'text',text:prompt},{type:'image_url',image_url:{url:image,detail:'low'}}]:prompt;
   const deepseek=new URL(settings.endpoint).host==='api.deepseek.com',mode=settings.reasoningMode||'automatic',thinking=deepseek?(mode==='automatic'||settings.disableThinking!==false?{type:'disabled'}:mode==='low'?{type:'enabled'}:null):null;
-  const data=await requestChat({endpoint:settings.endpoint,key:settings.key,request,timeout:settings.requestTimeout||75,onProgress,payload:{model:settings.model,temperature:settings.temperature??.2,...(settings.sendOutputLimit!==false?{max_tokens:settings.maxTokens||6000}:{}),...(thinking?{thinking}:{}),...(thinking?.type==='enabled'&&mode==='low'?{reasoning_effort:'low'}:{}),response_format:{type:'json_object'},messages:[{role:'user',content}]}});
+  const data=await requestChat({endpoint:settings.endpoint,key:settings.key,request,signal,timeout:settings.requestTimeout||75,onProgress,payload:{model:settings.model,temperature:settings.temperature??.2,...(settings.sendOutputLimit!==false?{max_tokens:settings.maxTokens||6000}:{}),...(thinking?{thinking}:{}),...(thinking?.type==='enabled'&&mode==='low'?{reasoning_effort:'low'}:{}),response_format:{type:'json_object'},messages:[{role:'user',content}]}});
   const text=data.choices?.[0]?.message?.content;
   if(typeof text!=='string')throw Error('模型没有返回可用的整理结果');
   const start=text.indexOf('{'),end=text.lastIndexOf('}');

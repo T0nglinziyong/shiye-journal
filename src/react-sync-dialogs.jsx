@@ -69,7 +69,7 @@ export function SyncMigrationDialog({plan,onClose,onApply}){
     <p>本次共扫描 {plan.totals.scanned} 条账号记录；找到 {plan.totals.migratable} 条可验证转换的旧记录，{plan.totals.needsReview} 条需要人工检查。已符合现行结构的资料不会被重写。</p>
     <div style={{maxHeight:'50vh',overflow:'auto'}}><table className="migration-audit-table"><thead><tr><th>数据类型</th><th>扫描</th><th>可转换</th><th>待检查</th></tr></thead><tbody>{plan.scans.map(row=><tr key={row.store}><td>{names[row.store]||row.store}</td><td>{row.total}</td><td>{row.migratable}</td><td>{row.needsReview}</td></tr>)}</tbody></table></div>
     {plan.review.length?<details><summary>无法自动转换的记录（未修改）</summary><ul>{plan.review.slice(0,30).map((row,index)=><li key={index}>{row.store} · {row.id||'未知'}：{row.reason}</li>)}</ul></details>:null}
-    <p>只转换有明确转换器、且完成物理尺寸与库存校验的记录。旧 COS 原件不会删除；无法转换的条目仍保留原样。</p>
+    <p>只转换有明确转换器、且完成物理尺寸与来源区域校验的记录。旧 COS 原件不会删除；无法转换的条目仍保留原样。</p>
     <p id="migration-status" role="status">{status}</p><div className="actions">
       <button type="button" className="btn primary" id="migration-apply" disabled={!plan.changes.length||busy} onClick={()=>void apply()}>转换 {plan.changes.length} 条</button>
       <button type="button" className="btn" id="migration-cancel" onClick={onClose}>取消</button></div>
