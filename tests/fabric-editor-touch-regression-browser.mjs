@@ -62,6 +62,8 @@ try{
   const after=await evaluate(`[...document.querySelectorAll('.scene-layer-node')].map(row=>row.dataset.sceneNode)`);
   assert.deepEqual(after,[...before].reverse(),'Dragging the grip reverses the visible order');
   await touch('.scene-layer-tree-toolbar button:first-child');
+  assert.equal(await evaluate('document.querySelector(".scene-layer-tree-toolbar button:first-child").getAttribute("aria-pressed")'),'true',
+    'Touch must enable layer multi-select exactly once');
   // The second shape remains selected; add the other one in multi-select mode.
   await touch('.scene-layer-branch:first-child .scene-layer-pick');
   assert.equal(await evaluate(`document.querySelectorAll('.scene-layer-node.selected').length`),2,
@@ -76,6 +78,13 @@ try{
   await touch('.scene-layer-node[aria-expanded] .scene-layer-expand');
   assert.equal(await evaluate('document.querySelectorAll(".scene-layer-children .scene-layer-node").length'),2,
     'Touching the group arrow again expands the nested layers');
+  await touch('.scene-layer-node[aria-expanded] .scene-layer-expand');
+  await touch('[data-val="layers"]');
+  await touch('[data-val="layers"]');
+  assert.equal(await evaluate('document.querySelectorAll(".scene-layer-children .scene-layer-node").length'),0,
+    'Collapsing a group survives closing and reopening the layer menu');
+  await touch('.scene-layer-node[aria-expanded] .scene-layer-expand');
+  assert.equal(await evaluate('document.querySelectorAll(".scene-layer-children .scene-layer-node").length'),2);
   assert.deepEqual(browser.errors,[]);
   console.log('Touch toolbar dropdown and layer reorder passed');
 }finally{await browser.close();}

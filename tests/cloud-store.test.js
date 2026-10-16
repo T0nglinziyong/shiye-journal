@@ -850,10 +850,31 @@ test('two devices changing disjoint material fields merge without losing either 
  state.changes=[{revision:1,keys:[{store:'assets',id:'same-asset',action:'put'}]}];
  await db.cloudFlushProjects();
  assert.equal(state.calls.length,2);
- assert.deepEqual(state.calls.at(-1).operations[0].item,{
-   id:'same-asset',title:'手机新名字',tags:['平板新标签'],blobId:'same-image'
- });
+ const merged=state.calls.at(-1).operations[0].item;
+ assert.equal(merged.id,'same-asset');
+ assert.equal(merged.title,'手机新名字');
+ assert.deepEqual(merged.tags,['平板新标签']);
+ assert.equal(merged.blobId,'same-image');
+ assert.equal(merged.__syncFieldStamps.title.counter,1);
  assert.equal((await db.cloudPendingDetails()).batches.length,0);
+});
+
+test('same material field competition settles automatically and leaves no pending queue',async()=>{
+ const {state,db}=fixture(memoryCache());
+ state.rows=[{id:'same-asset',title:'原名',tags:['原标签'],updatedAt:'2026-10-15T10:00:00Z'}];
+ await db.cloudAll('assets');
+ await db.cloudStageMutation(['assets'],tx=>tx.objectStore('assets').put({
+   id:'same-asset',title:'手机新名字',tags:['原标签'],updatedAt:'2026-10-15T10:02:00Z'
+ }));
+ state.revision=1;
+ state.rows=[{id:'same-asset',title:'平板新名字',tags:['新标签'],updatedAt:'2026-10-15T10:01:00Z'}];
+ state.changes=[{revision:1,keys:[{store:'assets',id:'same-asset',action:'put'}]}];
+ await db.cloudFlushProjects();
+ assert.equal((await db.cloudPendingDetails()).batches.length,0);
+ assert.equal(state.calls.at(-1).operations[0].item.title,'手机新名字');
+ assert.deepEqual(state.calls.at(-1).operations[0].item.tags,['新标签']);
+ assert.deepEqual(state.calls.at(-1).operations[0].item.__syncFieldStamps.title,
+   state.calls[0].operations[0].item.__syncFieldStamps.title);
 });
 
 test('a mixed conflicting batch remains pending until a reviewed whole-batch choice',async()=>{

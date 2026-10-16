@@ -7,7 +7,7 @@ import {rebuildSyncRecords} from './sync-rebuild.js';
 import {readCloudDelta,canRebaseUnchangedKeys} from './cloud-delta.js';
 import {planMetadataBatch,splitMetadataBatch} from './sync-metadata-batch.js';
 import {compareRecordEdits} from './sync-last-write.js';
-import {mergeDisjointMetadata} from './sync-field-merge.js';
+import {mergeConcurrentMetadata,stampMetadataEdit} from './sync-field-merge.js';
 import {recordTombstones} from './sync-tombstones.js';
 import {LARGE_PROJECT_BYTES,projectSummary,mergeProjectSummary,projectBlobText} from './project-document.js';
 import {hiddenAssetCopy,referencedAssetIDsInProjects} from './asset-retention.js';
@@ -536,7 +536,7 @@ async function reconcileImport(batch,operationID,baseRevision){
       if(op.action==='put'&&['assets','series'].includes(op.store)&&op.baseRecord&&
         !batch.operations.some(other=>other.store==='blobs'&&other.action==='put')){
         const remote=await cloudRecord(op.store,id);
-        const merged=mergeDisjointMetadata(op.baseRecord,op.item,remote);
+        const merged=mergeConcurrentMetadata(op.baseRecord,op.item,remote);
         if(merged){
           if(merged.changed)operations.push({...op,item:merged.record,baseRecord:remote});
           continue;
@@ -1152,6 +1152,7 @@ async function cloudStageMutation(names,fn){
   assertAccountWritable();
   const operations=[],modifiedAt=new Date().toISOString(),result=fn({objectStore(store){if(!names.includes(store))throw Error('此表未加入事务');return {put:item=>operations.push({action:'put',store,item:structuredClone(item),modifiedAt}),delete:id=>operations.push({action:'delete',store,id,modifiedAt}),clear:()=>operations.push({action:'clear',store,modifiedAt})};}});
   if(result?.then)throw Error('事务回调必须同步');if(!operations.length)return;
+  const batchID=crypto.randomUUID();
   operations.push(...recordTombstones(operations).slice(operations.length));
   names=[...new Set([...names,...operations.map(op=>op.store)])];
   await identity();if(revision===undefined)await version();
@@ -1165,16 +1166,18 @@ async function cloudStageMutation(names,fn){
     const saved=memory?.revision===revision?memory:await cached('records:'+store);
     if(saved?.revision!==revision)return;
     const byID=new Map(saved.records.map(item=>[item.id,item]));
-    for(const op of operations)if(op.action==='put'&&op.store===store&&byID.has(op.item.id))
+    for(const op of operations)if(op.action==='put'&&op.store===store&&byID.has(op.item.id)){
       op.baseRecord=structuredClone(byID.get(op.item.id));
+      op.item=stampMetadataEdit(op.baseRecord,op.item,batchID);
+    }
   }));
   const deletedIDs=operations.filter(op=>op.store==='projects'&&op.action==='delete').map(op=>op.id);
-  if(!deletedIDs.length){await importSync.stage({id:crypto.randomUUID(),names,operations});return;}
+  if(!deletedIDs.length){await importSync.stage({id:batchID,names,operations});return;}
   // Persist the delete + full trash snapshot before touching older pending
   // saves. Waiting for the network-held account lock here made Delete appear
   // frozen while an unrelated upload retried. The unified outbox serializes
   // local stages; tombstones prevent an older PUT from reviving a later delete.
-  await importSync.stage({id:crypto.randomUUID(),names,operations});
+  await importSync.stage({id:batchID,names,operations});
   try{await projectSync.cancelPendingFor(deletedIDs);}
   catch(error){console.warn('旧作品保存待后台清理；删除事务已安全暂存',error?.message);}
 }

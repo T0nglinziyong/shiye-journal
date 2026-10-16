@@ -111,8 +111,7 @@ function MaterialPicker({draft,materials,series,source,onPick}){
     </div>{!rows.length?<p>没有符合条件的素材</p>:rows.length>shown?<small>下滑继续显示 · 共 {rows.length} 件</small>:null}</>;
 }
 
-function LayerTree({draft,state,materials,onAction}){
-  const [expanded,setExpanded]=useState(()=>new Set());
+function LayerTree({draft,state,materials,onAction,collapsed,setCollapsed}){
   const [multi,setMulti]=useState(false);
   const [draggingID,setDraggingID]=useState(null);
   const [dropTargetID,setDropTargetID]=useState(null);
@@ -123,7 +122,7 @@ function LayerTree({draft,state,materials,onAction}){
     event.preventDefault();touchTimes.current.set(event.currentTarget,Date.now());action(event);
   };
   const clickActivate=(event,action)=>{
-    if(Date.now()-(touchTimes.current.get(event.currentTarget)||0)<650)return;
+    if(Date.now()-(touchTimes.current.get(event.currentTarget)||0)<1000)return;
     action(event);
   };
   const names=useMemo(()=>new Map(materials.map(asset=>[asset.id,asset.title])),[materials]);
@@ -138,11 +137,11 @@ function LayerTree({draft,state,materials,onAction}){
     .sort((a,b)=>(b.zIndex??0)-(a.zIndex??0)).map(node=>{
     const locked=!!(node.locked||node.isLocked);
     const hidden=!!(node.hidden||node.isHidden||node.isParked);
-    const open=expanded.has(node.id)||node.type==='group'&&!expanded.has('closed:'+node.id);
-    const toggle=()=>setExpanded(previous=>{
+    const open=node.type==='group'&&!collapsed.has(node.id);
+    const toggle=()=>setCollapsed(previous=>{
       const next=new Set(previous);
-      if(open){next.delete(node.id);next.add('closed:'+node.id);}
-      else{next.delete('closed:'+node.id);next.add(node.id);}
+      if(next.has(node.id))next.delete(node.id);
+      else next.add(node.id);
       return next;
     });
     const operate=operation=>onAction('fabric-layer-operation',{id:node.id,operation});
@@ -222,6 +221,7 @@ function FontSizeInput({value,onCommit}){
 
 export function FabricEditorToolbar({state,draft,materials,source,selected,onInspectorChange,onAction}){
   const [menu,setMenu]=useState(null);
+  const [collapsedLayers,setCollapsedLayers]=useState(()=>new Set());
   const close=useCallback(()=>setMenu(null),[]);
   const open=(kind,event)=>{
     const anchor=event.currentTarget;
@@ -385,7 +385,8 @@ export function FabricEditorToolbar({state,draft,materials,source,selected,onIns
       <label className="canvas-toggle">纸张颜色<input type="color" value={draft.paperColor}
         onChange={event=>{close();onAction('fabric-paper','color',event.target.value);}}/></label>
     </>:null}
-    {menu.kind==='layers'?<LayerTree draft={draft} state={state} materials={materials} onAction={onAction}/>:null}
+    {menu.kind==='layers'?<LayerTree draft={draft} state={state} materials={materials} onAction={onAction}
+      collapsed={collapsedLayers} setCollapsed={setCollapsedLayers}/>:null}
   </ReactPopover>:null}</>;
 }
 

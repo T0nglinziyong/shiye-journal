@@ -1,5 +1,6 @@
 import React from 'react';
 import {createRoot} from 'react-dom/client';
+import {ActiveSelection} from 'fabric';
 import {FabricSceneStage} from '../../src/fabric-scene-stage.jsx';
 
 const image=document.createElement('canvas');image.width=200;image.height=120;
@@ -24,6 +25,7 @@ const draft={id:'fabric-preview',sceneVersion:2,canvas:{width:600,height:800},pa
       width:7,color:'#aa6655',zIndex:4}
   ]};
 window.__fabricFixture={draft,image};
+window.__fabricActiveSelection=ActiveSelection;
 const events=document.querySelector('#events');
 function Preview(){
   const [tool,setTool]=React.useState('select');

@@ -1,5 +1,6 @@
 import {objectCorners,polygonContains,selectionBounds} from './canvas-selection.js';
 import {sceneLayerEntries,findSceneNode,moveSceneNode,removeSceneNode} from './scene-v2.js';
+import {pressureInkOutline} from './pressure-ink.js';
 
 const edges=points=>points.map((point,index)=>[point,points[(index+1)%points.length]]);
 const cross=(a,b,c)=>(b.x-a.x)*(c.y-a.y)-(b.y-a.y)*(c.x-a.x);
@@ -9,6 +10,15 @@ const intersect=(a,b,c,d)=>cross(a,b,c)*cross(a,b,d)<=0&&cross(c,d,a)*cross(c,d,
 const polygonHits=(a,b)=>a.some(point=>polygonContains(point,b))||b.some(point=>polygonContains(point,a))||
   edges(a).some(([p,q])=>edges(b).some(([r,s])=>intersect(p,q,r,s)));
 const validPoints=points=>Array.isArray(points)&&points.length>0&&points.every(p=>Number.isFinite(p.x)&&Number.isFinite(p.y));
+const inkFramePoints=node=>{
+  if(node.penStyle==='pressure'){
+    const outline=pressureInkOutline(node);
+    if(outline.length)return outline.map(([x,y])=>({x,y}));
+  }
+  const radius=Math.max(.05,(node.width||3)*(node.penStyle==='brush'?.625:.5));
+  return (node.points||[]).flatMap(({x,y})=>[
+    {x:x-radius,y:y-radius},{x:x+radius,y:y+radius}]);
+};
 const pruneEmptyGroups=nodes=>{
   for(let index=nodes.length-1;index>=0;index--){
     const node=nodes[index];if(node.type!=='group')continue;
@@ -47,25 +57,51 @@ export function sceneLassoBounds(draft,ids){
   const selected=new Set(ids),points=[];
   for(const {kind,value} of sceneLayerEntries(draft,{hidden:true})){
     if(!selected.has(value.id))continue;
-    points.push(...(kind==='ink'?value.points||[]:objectCorners(value)));
+    points.push(...(kind==='ink'?inkFramePoints(value):objectCorners(value)));
   }
   if(!points.length)return null;
   const bounds=selectionBounds(points);
-  return {x:bounds.x,y:bounds.y,width:Math.max(bounds.width,20),height:Math.max(bounds.height,20)};
+  return bounds;
+}
+
+export function transformSceneLasso(draft,ids,center,scale,degrees){
+  if(!(scale>0)||!Number.isFinite(scale)||!Number.isFinite(degrees)||
+    !Number.isFinite(center?.x)||!Number.isFinite(center?.y))return false;
+  const radians=degrees*Math.PI/180,c=Math.cos(radians),s=Math.sin(radians);
+  const around=point=>({x:center.x+scale*((point.x-center.x)*c-(point.y-center.y)*s),
+    y:center.y+scale*((point.x-center.x)*s+(point.y-center.y)*c)});
+  const changes=[];
+  for(const id of new Set(ids)){
+    const node=findSceneNode(draft,id);
+    if(!node||node.locked||node.isLocked)return false;
+    if(node.type==='ink'){
+      const points=(node.points||[]).map(point=>({...point,...around(point)}));
+      const width=node.width*scale;
+      if(!(width>=.1&&width<=1000)||points.some(point=>
+        !Number.isFinite(point.x)||!Number.isFinite(point.y)||Math.abs(point.x)>100000||Math.abs(point.y)>100000))return false;
+      changes.push(()=>{node.points=points;node.width=width;});
+    }else{
+      const position=around(node),width=node.width*scale,height=node.height*scale,
+        rotation=(node.rotation||0)+degrees;
+      if(!(width>0&&width<=100000&&height>0&&height<=100000)||
+        Math.abs(position.x)>100000||Math.abs(position.y)>100000||Math.abs(rotation)>3600)return false;
+      changes.push(()=>{
+        node.x=position.x;node.y=position.y;node.width=width;node.height=height;node.rotation=rotation;
+        if(node.type==='text')for(const field of ['fontSize','fixedLineHeight','lineHeight','lineSpacing',
+          'additionalLineSpacing','paragraphSpacing','letterSpacing'])
+          if(Number.isFinite(node[field]))node[field]*=scale;
+        if(node.type==='shape'&&Number.isFinite(node.lineWidth))node.lineWidth*=scale;
+        if(node.type==='material')node.userOverrideFlags=[...new Set([...(node.userOverrideFlags||[]),
+          'moved',...(degrees?['rotated']:[]),...(scale!==1?['resized']:[])])];
+      });
+    }
+  }
+  changes.forEach(apply=>apply());
+  return changes.length>0;
 }
 
 export function rotateSceneLasso(draft,ids,center,degrees){
-  if(!Number.isFinite(degrees)||!Number.isFinite(center?.x)||!Number.isFinite(center?.y))return;
-  const radians=degrees*Math.PI/180,c=Math.cos(radians),s=Math.sin(radians);
-  const around=point=>({x:center.x+(point.x-center.x)*c-(point.y-center.y)*s,
-    y:center.y+(point.x-center.x)*s+(point.y-center.y)*c});
-  for(const id of new Set(ids)){
-    const node=findSceneNode(draft,id);
-    if(!node||node.locked||node.isLocked)continue;
-    if(node.type==='ink')node.points=(node.points||[]).map(point=>({...point,...around(point)}));
-    else{const next=around(node);node.x=next.x;node.y=next.y;node.rotation=(node.rotation||0)+degrees;
-      if(node.type==='material')node.userOverrideFlags=[...new Set([...(node.userOverrideFlags||[]),'moved','rotated'])];}
-  }
+  return transformSceneLasso(draft,ids,center,1,degrees);
 }
 
 export function copySceneLasso(draft,ids,makeID){

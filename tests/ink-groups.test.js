@@ -20,3 +20,14 @@ test('consecutive strokes form one selectable Scene layer without crossing anoth
   assert.deepEqual(draft.layers.map(layer=>layer.id),['group-one','shape','group-two']);
   assert.deepEqual(draft.layers[2].children.map(stroke=>stroke.id),['four','five']);
 });
+
+test('new handwriting never joins a locked or hidden top ink layer',()=>{
+  for(const flags of [{locked:true},{isLocked:true},{hidden:true},{isHidden:true},{isParked:true},{visible:false}]){
+    const top={id:'old',type:'group',autoInkGroup:true,zIndex:2001,
+      children:[ink('old-stroke',1)],...flags};
+    const draft={layers:[top]};
+    appendInkStroke(draft,ink('fresh',2002),'fresh-group');
+    assert.deepEqual(draft.layers.map(layer=>layer.id),['old','fresh']);
+    assert.deepEqual(top.children.map(layer=>layer.id),['old-stroke']);
+  }
+});

@@ -116,6 +116,17 @@ try{
   assert.deepEqual(await evaluate('Object.keys(window.__fabricCanvas.getActiveObject().controls).sort()'),
     ['br','mb','ml','mr','mt'],
     'One bottom-right control scales and rotates; no second rotate button is drawn');
+  await evaluate(`(()=>{
+    const canvas=window.__fabricCanvas;
+    const material=canvas.getObjects().find(object=>object.sceneID==='paper-material');
+    const text=canvas.getObjects().find(object=>object.sceneID==='paper-text');
+    canvas.setActiveObject(new window.__fabricActiveSelection([material,text],{canvas}));
+    canvas.fire('selection:updated',{selected:[text]});
+  })()`);
+  assert.equal(await evaluate('document.querySelector("#events").textContent'),
+    '选中：paper-material, paper-text',
+    'Selection updates must report every active object, not only the newly selected one');
+  await evaluate('window.__fabricCanvas.discardActiveObject();window.__fabricCanvas.requestRenderAll()');
   const textX=bounds.left+bounds.width*270/600,textY=bounds.top+bounds.height*590/800;
   await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,x:textX,y:textY,clickCount:1});
   await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,x:textX,y:textY,clickCount:1});
@@ -163,6 +174,24 @@ try{
   await evaluate('document.querySelector("[data-tool=eraser]").click()');
   await stroke({x:200,y:745},{x:200,y:775});
   assert.equal(await evaluate('window.__fabricFixture.draft.layers.flatMap(node=>node.type==="group"?node.children:[node]).filter(node=>node.penStyle==="pressure").length'),2);
+  await evaluate(`(()=>{
+    const {draft,refresh}=window.__fabricFixture;
+    const protectedInk=id=>({id,type:'ink',points:[{x:150,y:760},{x:250,y:760}],
+      width:7,color:'#aa6655',zIndex:5000});
+    draft.layers.push({...protectedInk('locked-ink'),locked:true});
+    draft.layers.push({id:'hidden-ink-group',type:'group',zIndex:5001,hidden:true,
+      children:[protectedInk('hidden-ink')]});
+    draft.layers.push({id:'locked-ink-group',type:'group',zIndex:5002,isLocked:true,
+      children:[protectedInk('nested-locked-ink')]});
+    refresh();
+  })()`);
+  await sleep(150);
+  const protectedBefore=await evaluate(`JSON.stringify(window.__fabricFixture.draft.layers
+    .filter(node=>['locked-ink','hidden-ink-group','locked-ink-group'].includes(node.id)))`);
+  await stroke({x:200,y:745},{x:200,y:775});
+  const protectedAfter=await evaluate(`JSON.stringify(window.__fabricFixture.draft.layers
+    .filter(node=>['locked-ink','hidden-ink-group','locked-ink-group'].includes(node.id)))`);
+  assert.equal(protectedAfter,protectedBefore,'Eraser must preserve hidden and locked handwriting');
   await evaluate(`(()=>{
     const {draft,refresh}=window.__fabricFixture;
     draft.layers.push({id:'external-layer',type:'shape',kind:'ellipse',x:500,y:80,

@@ -249,14 +249,17 @@ try{
   const frame=sceneLassoBounds(beforeRotate,selectedShapeIDs);
   const canvasRect=await evaluate('document.querySelector(".upper-canvas").getBoundingClientRect().toJSON()');
   const canvasWidth=beforeRotate.canvas.width,frameScale=canvasRect.width/canvasWidth;
-  const turnStart={x:canvasRect.left+(frame.x+frame.width)*frameScale+24/Math.SQRT2,
-    y:canvasRect.top+(frame.y+frame.height)*frameScale+24/Math.SQRT2};
+  const turnStart={x:canvasRect.left+(frame.x+frame.width)*frameScale,
+    y:canvasRect.top+(frame.y+frame.height)*frameScale};
   await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,clickCount:1,...turnStart});
   await command('Input.dispatchMouseEvent',{type:'mouseMoved',button:'left',buttons:1,x:turnStart.x-35,y:turnStart.y+8});
   await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,x:turnStart.x-35,y:turnStart.y+8});
   await sleep(700);
-  assert.ok(Math.abs((await projects())[0].drafts[0].layers.find(layer=>layer.id===shapes[0].id).rotation||0)>3,
-    'The lasso editing frame rotates selected Scene objects as one unit');
+  const turnedShape=(await projects())[0].drafts[0].layers.find(layer=>layer.id===shapes[0].id);
+  assert.ok(Math.abs(turnedShape.rotation||0)>3,
+    'The single bottom-right lasso control rotates selected Scene objects as one unit');
+  assert.notEqual(turnedShape.width,shapes[0].width,
+    'The same bottom-right lasso control also scales selected Scene objects');
   await click('[aria-label=合并套选图层]');await sleep(700);
   assert.equal((await projects())[0].drafts[0].layers.filter(layer=>layer.type==='group').length,1,
     'Merging lasso selected Scene nodes must persist');

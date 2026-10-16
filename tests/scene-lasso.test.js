@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {selectSceneLasso,sceneLassoBounds,moveSceneLasso,rotateSceneLasso,copySceneLasso,deleteSceneLasso,mergeSceneLasso} from '../src/scene-lasso.js';
+import {selectSceneLasso,sceneLassoBounds,moveSceneLasso,rotateSceneLasso,transformSceneLasso,copySceneLasso,deleteSceneLasso,mergeSceneLasso} from '../src/scene-lasso.js';
 import {sceneLayerEntries} from '../src/scene-v2.js';
 
 const fixture=()=>({sceneVersion:2,canvas:{width:500,height:500},layers:[
   {id:'left',type:'group',zIndex:1,children:[{id:'shape',type:'shape',x:80,y:80,width:20,height:20,zIndex:1}]},
   {id:'right',type:'group',zIndex:2,children:[{id:'text',type:'text',x:110,y:80,width:20,height:20,zIndex:1}]},
-  {id:'ink-group',type:'group',zIndex:3,children:[{id:'ink',type:'ink',points:[{x:80,y:110},{x:110,y:110}],zIndex:1}]}
+  {id:'ink-group',type:'group',zIndex:3,children:[{id:'ink',type:'ink',width:3,points:[{x:80,y:110},{x:110,y:110}],zIndex:1}]}
 ]});
 const polygon=[{x:50,y:50},{x:140,y:50},{x:140,y:140},{x:50,y:140}];
 
@@ -32,13 +32,25 @@ test('lasso moves and copies selected leaves while preserving source',()=>{
 
 test('lasso box rotates text, shape and ink together around one center',()=>{
   const draft=fixture(),bounds=sceneLassoBounds(draft,['shape','text','ink']);
-  assert.deepEqual(bounds,{x:70,y:70,width:50,height:40});
+  assert.deepEqual(bounds,{x:70,y:70,width:50,height:41.5});
   rotateSceneLasso(draft,['shape','text','ink'],{x:100,y:90},90);
   assert.equal(Math.round(draft.layers[0].children[0].x),110);
   assert.equal(Math.round(draft.layers[0].children[0].y),70);
   assert.equal(draft.layers[0].children[0].rotation,90);
   assert.deepEqual(draft.layers[2].children[0].points.map(p=>[Math.round(p.x),Math.round(p.y)]),
     [[80,70],[80,100]]);
+});
+
+test('one lasso transform scales and rotates every selected object around the same center',()=>{
+  const draft=fixture();
+  assert.equal(transformSceneLasso(draft,['shape','text','ink'],{x:100,y:90},2,90),true);
+  const [shape,text,ink]=draft.layers.map(group=>group.children[0]);
+  assert.equal(shape.width,40);assert.equal(shape.height,40);assert.equal(shape.rotation,90);
+  assert.equal(text.width,40);assert.equal(text.rotation,90);
+  assert.equal(ink.width,6);
+  assert.deepEqual(ink.points.map(point=>[Math.round(point.x),Math.round(point.y)]),[[60,50],[60,110]]);
+  const bounds=sceneLassoBounds(draft,['shape','text','ink']);
+  assert.ok(bounds.width>0&&bounds.height>0);
 });
 
 test('merge moves selected leaves from different parent subtrees into one group',()=>{

@@ -5,11 +5,11 @@ import {projectFabricLayers} from './fabric-layer-loader.js';
 import {paperWidthPixels,pressureInkOutline,erasePressureStroke} from './pressure-ink.js';
 import {textBlock} from './domain.js';
 import {polygonContains,selectionBounds} from './canvas-selection.js';
-import {selectSceneLasso,sceneLassoBounds,moveSceneLasso,rotateSceneLasso} from './scene-lasso.js';
+import {selectSceneLasso,sceneLassoBounds,moveSceneLasso,transformSceneLasso} from './scene-lasso.js';
 import {attachSceneV2} from './scene-v2.js';
 import {sceneDisplaySiblings} from './craft-display.js';
 import {prepareSceneFonts} from './scene-renderer.js';
-import {appendInkStroke} from './ink-groups.js';
+import {appendInkStroke,editableInkLayer} from './ink-groups.js';
 
 const byID=(nodes,id)=>{
   for(const node of nodes||[]){
@@ -229,11 +229,7 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
             .map(([x,y])=>({x:frame.center.x+x*c-y*s,y:frame.center.y+x*s+y*c}));
         };
         const uiScale=()=>Math.max(.1,canvas.upperCanvasEl.getBoundingClientRect().width/canvas.width);
-        const frameHandle=frame=>{
-          const corner=frameCorners(frame)[2],a=frame.angle*Math.PI/180;
-          return {x:corner.x+(24/uiScale())*Math.cos(a+Math.PI/4),
-            y:corner.y+(24/uiScale())*Math.sin(a+Math.PI/4)};
-        };
+        const frameHandle=frame=>frameCorners(frame)[2];
         const frameBounds=frame=>selectionBounds(frameCorners(frame));
         const preview=()=>{
           const ctx=canvas.contextTop;
@@ -258,14 +254,15 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
             ctx.setLineDash([7,5]);ctx.beginPath();
             corners.forEach((point,index)=>index?ctx.lineTo(point.x,point.y):ctx.moveTo(point.x,point.y));
             ctx.closePath();ctx.fill();ctx.stroke();ctx.setLineDash([]);
-            for(const point of corners){ctx.fillStyle='#fffefa';ctx.strokeStyle='#2b5245';
+            for(const point of [corners[0],corners[1],corners[3]]){ctx.fillStyle='#fffefa';ctx.strokeStyle='#2b5245';
               ctx.fillRect(point.x-grip,point.y-grip,grip*2,grip*2);
               ctx.strokeRect(point.x-grip,point.y-grip,grip*2,grip*2);}
-            ctx.beginPath();ctx.moveTo(corners[2].x,corners[2].y);ctx.lineTo(handle.x,handle.y);
-            ctx.strokeStyle='#2b5245';ctx.stroke();ctx.beginPath();ctx.arc(handle.x,handle.y,12/scale,0,Math.PI*2);
-            ctx.fillStyle='#fffefa';ctx.fill();ctx.stroke();ctx.fillStyle='#2b5245';
-            ctx.font=`${17/scale}px sans-serif`;ctx.textAlign='center';ctx.textBaseline='middle';
-            ctx.fillText('↻',handle.x,handle.y+1/scale);
+            ctx.save();ctx.translate(handle.x,handle.y);ctx.scale(1/scale,1/scale);
+            ctx.fillStyle='#fffefa';ctx.strokeStyle='#2b5245';ctx.lineWidth=1.5;
+            ctx.beginPath();ctx.roundRect(-10,-10,20,20,5);ctx.fill();ctx.stroke();
+            ctx.beginPath();ctx.arc(-1,-1,4,-Math.PI*.88,Math.PI*.45);ctx.stroke();
+            ctx.beginPath();ctx.moveTo(1,2);ctx.lineTo(6,6);ctx.moveTo(2,6);
+            ctx.lineTo(6,6);ctx.lineTo(6,2);ctx.stroke();ctx.restore();
           }else{
             ctx.strokeStyle='rgba(48,70,61,.4)';ctx.lineWidth=gesture.width;
             ctx.lineCap='round';ctx.lineJoin='round';ctx.beginPath();
@@ -324,11 +321,13 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
           if(mode==='lasso'&&lassoSelection?.ids.length){
             const start=pointer(event);
             const handle=frameHandle(lassoSelection);
-            if(Math.hypot(start.x-handle.x,start.y-handle.y)<18/uiScale()){
-              callbacks.current.onBeforeChange?.('lasso:rotate');
-              gesture={id:event.pointerId,tool:'lasso-rotate',moved:false,
-                lastAngle:Math.atan2(start.y-lassoSelection.center.y,start.x-lassoSelection.center.x)};
-              canvas.upperCanvasEl.setPointerCapture(event.pointerId);return;
+            if(Math.hypot(start.x-handle.x,start.y-handle.y)<20/uiScale()){
+              callbacks.current.onBeforeChange?.('lasso:transform');
+              gesture={id:event.pointerId,tool:'lasso-transform',moved:false,
+                lastAngle:Math.atan2(start.y-lassoSelection.center.y,start.x-lassoSelection.center.x),
+                lastDistance:Math.hypot(start.x-lassoSelection.center.x,start.y-lassoSelection.center.y)};
+              canvas.upperCanvasEl.setPointerCapture(event.pointerId);
+              event.preventDefault();event.stopImmediatePropagation();return;
             }
             if(polygonContains(start,frameCorners(lassoSelection))){
               callbacks.current.onBeforeChange?.('lasso:move');
@@ -363,14 +362,19 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
             }
             return;
           }
-          if(gesture.tool==='lasso-rotate'){
-            const next=pointer(event),angle=Math.atan2(next.y-lassoSelection.center.y,
-              next.x-lassoSelection.center.x);
+          if(gesture.tool==='lasso-transform'){
+            const next=pointer(event),distance=Math.hypot(next.x-lassoSelection.center.x,
+              next.y-lassoSelection.center.y);
+            if(distance<1)return;
+            const angle=Math.atan2(next.y-lassoSelection.center.y,next.x-lassoSelection.center.x);
             let degrees=(angle-gesture.lastAngle)*180/Math.PI;
             if(degrees>180)degrees-=360;if(degrees< -180)degrees+=360;
-            if(Math.abs(degrees)>.01){
-              rotateSceneLasso(callbacks.current.draft,lassoSelection.ids,lassoSelection.center,degrees);
-              lassoSelection.angle+=degrees;gesture.lastAngle=angle;gesture.moved=true;
+            const ratio=Math.max(.1,Math.min(10,distance/Math.max(1,gesture.lastDistance)));
+            if(Math.abs(degrees)>.01||Math.abs(ratio-1)>.001){
+              if(!transformSceneLasso(callbacks.current.draft,lassoSelection.ids,
+                lassoSelection.center,ratio,degrees))return;
+              lassoSelection.angle+=degrees;lassoSelection.width*=ratio;lassoSelection.height*=ratio;
+              gesture.lastAngle=angle;gesture.lastDistance=distance;gesture.moved=true;
               reconcileRef.current?.();queuePreview();
               canvas.upperCanvasEl.dispatchEvent(new CustomEvent('shiye:fabric-object-transform',
                 {detail:{bounds:frameBounds(lassoSelection)}}));
@@ -395,7 +399,7 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
           if(!gesture||gesture.id!==event.pointerId)return;
           event.preventDefault();event.stopImmediatePropagation();
           const finished=gesture;gesture=null;
-          if(finished.tool==='lasso-move'||finished.tool==='lasso-rotate'){
+          if(finished.tool==='lasso-move'||finished.tool==='lasso-transform'){
             preview();
             if(finished.moved){callbacks.current.onSelection?.(lassoSelection.ids,frameBounds(lassoSelection));
               callbacks.current.onChange?.(null,finished.tool);}
@@ -439,6 +443,7 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
             const inspectTree=(nodes,rootID)=>{
               for(let index=nodes.length-1;index>=0;index--){
                 const node=nodes[index];
+                if(!editableInkLayer(node))continue;
                 if(node.type==='group'){inspectTree(node.children,rootID||node.id);continue;}
                 if(node.type!=='ink')continue;
                 const fragments=erasePressureStroke(node,finished.points,finished.width/2);
@@ -484,7 +489,7 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
         canvas.sceneRemovePointerHandlers=removePointerHandlers;
         const selection=event=>{
           if(syncingSelection.current)return;
-          const ids=[...new Set(event.selected?.map(o=>o.sceneID).filter(Boolean)||[])];
+          const ids=[...new Set(canvas.getActiveObjects().map(o=>o.sceneID).filter(Boolean))];
           const bounds=ids.length===1?canvas.getActiveObject()?.getBoundingRect():null;
           callbacks.current.onSelection?.(ids,bounds?{x:bounds.left,y:bounds.top,
             width:bounds.width,height:bounds.height}:null);

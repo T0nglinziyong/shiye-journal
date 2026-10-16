@@ -133,7 +133,7 @@
 .scene-layer-branch{min-width:0}
 .scene-layer-children{margin-left:13px;padding-left:6px;border-left:1px solid #d1dfd3;min-width:0}
 .scene-layer-tree-popover .scene-layer-node{
- display:grid;grid-template-columns:19px minmax(55px,1fr) 27px 27px 28px;
+ display:grid;grid-template-columns:32px minmax(42px,1fr) 27px 27px 28px;
  gap:3px;align-items:center;min-height:34px;height:auto;
  padding:2px 3px;border-radius:8px;margin:1px 0;position:relative;
 }
@@ -149,8 +149,8 @@
  justify-content:flex-start;padding:0 1px;white-space:nowrap;
 }
 .scene-layer-tree-popover .scene-layer-node>button.scene-layer-expand{
- display:grid;grid-template-columns:1fr;place-items:center;height:30px;overflow:visible;
- font-size:15px;font-weight:700;line-height:1;
+ display:grid;grid-template-columns:1fr;place-items:center;height:32px;overflow:visible;
+ font-size:18px;font-weight:700;line-height:1;
 }
 .scene-layer-tree-popover .scene-layer-pick>span:last-child{
  display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
