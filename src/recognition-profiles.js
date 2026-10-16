@@ -4,56 +4,45 @@
 // independent user choices. Legacy+MorphGAC restores the historical flow;
 // physical+physical restores the no-MorphGAC contour flow. 'hybrid' performs
 // confidence-based selection and does not use the old MorphGAC+GrabCut hybrid.
-const refineAuto=async context=>{
-  const {refineCandidatesAuto}=await import('./recognition-refiners.js');
-  return refineCandidatesAuto(context);
-};
-const refineMorphGAC=async context=>{
-  const {refineCandidatesWithMorphGAC}=await import('./recognition-refiners.js');
-  return refineCandidatesWithMorphGAC(context);
-};
-const refinePhysical=async context=>{
-  const {refineCandidatesPhysical}=await import('./recognition-refiners.js');
-  return refineCandidatesPhysical(context);
-};
-const refineAdaptive=async context=>{
-  const {refineCandidatesAdaptive}=await import('./recognition-refiners.js');
-  return refineCandidatesAdaptive(context);
-};
-const refineGrabCut=async context=>{
-  const {refineCandidatesWithGrabCut}=await import('./recognition-refiners.js');
-  return refineCandidatesWithGrabCut(context);
-};
+// These small refiners are needed for every import. Keeping them in the entry
+// avoids a long-open PWA requesting an obsolete lazy chunk after deployment.
+import {
+  refineCandidatesAuto,
+  refineCandidatesWithMorphGAC,
+  refineCandidatesPhysical,
+  refineCandidatesAdaptive,
+  refineCandidatesWithGrabCut
+} from './recognition-refiners.js';
 export const recognitionStrategies=Object.freeze([
   {
     id:'auto',
     label:'自动 · 推荐',
     description:'默认使用统一候选与轮廓判断；选择传统候选方式时使用对应的边缘细化方法。',
-    refineCandidates:refineAuto
+    refineCandidates:refineCandidatesAuto
   },
   {
     id:'morphgac',
     label:'MorphGAC · 原始分割',
     description:'严格使用旧版 MorphGAC 分割，不运行物理轮廓优先选择。',
-    refineCandidates:refineMorphGAC
+    refineCandidates:refineCandidatesWithMorphGAC
   },
   {
     id:'physical',
     label:'物理轮廓 · 不使用 MorphGAC',
     description:'优先保留完整载体的实际外边界，无法获得可信边界时标记待检查。',
-    refineCandidates:refinePhysical
+    refineCandidates:refineCandidatesPhysical
   },
   {
     id:'grabcut',
     label:'OpenCV · GrabCut',
     description:'按候选框用 GrabCut 分割；适合颜色差明显的素材。',
-    refineCandidates:refineGrabCut
+    refineCandidates:refineCandidatesWithGrabCut
   },
   {
     id:'hybrid',
     label:'混合 · Mask 可信度自适应',
     description:'物理轮廓优先，可信度不足才尝试 MorphGAC，并检查明显收缩。',
-    refineCandidates:refineAdaptive
+    refineCandidates:refineCandidatesAdaptive
   }
 ]);
 
