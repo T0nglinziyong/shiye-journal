@@ -24,6 +24,7 @@ import {createBlobRevisionProof} from './blob-revision-proof.js';
 import {createSyncDiagnostics} from './sync-diagnostics.js';
 import {decodeImageBlob} from './image-blob-decoder.js';
 import {boundedMap} from './bounded-map.js';
+import {splitIndependentAssetImport} from './import-sync-batches.js';
 export function createCloudStore({cloudClient,requireCloudUser,cache=null,namespace='cloud',projectPreview=()=>null,objectStorage=null}){
 const BUCKET='shiye-private';
 const writeProvider=()=>objectStorage?.enabled?'cos':'supabase';
@@ -278,6 +279,9 @@ async function loadUnifiedOutbox(recover=false){
 const unifiedSync=createProjectSync({
   authoritativeCommit:true,
   autoFlushDelayMs:10000,
+  // A long backlog must not make a new independent import wait while every
+  // older image is hashed and uploaded. Same-key edits still retain order.
+  prepareLimit:2,
   coalesce:planMetadataBatch,
   splitCoalesced:splitMetadataBatch,
   load:()=>loadUnifiedOutbox(true),
@@ -459,6 +463,7 @@ const projectSync={
 };
 const importSync={
   stage:(record,opts)=>unifiedSync.stage(syncEnvelope('batch',record),opts),
+  stageMany:(records,opts)=>unifiedSync.stageMany(records.map(record=>syncEnvelope('batch',record)),opts),
   pending:()=>selectedRows('batch'),
   resolvePending:(id,serial,opts)=>resolveEnvelope('batch',id,serial,opts),
   status:()=>unifiedSync.status(),
@@ -895,7 +900,13 @@ async function encode(store,record,{makePreview=true}={}){
   }
   const thumbnailTask=makePreview?thumbnailUploads.get(storagePath):Promise.resolve(null);
   let thumbnailPath;
-  await uploads.get(storagePath);thumbnailPath=await thumbnailTask;
+  await uploads.get(storagePath);
+  // COS previews are deterministic derivatives. Their best-effort upload must
+  // not hold the authoritative original or metadata commit open; readers can
+  // use COS image processing until the immutable preview appears. Supabase has
+  // no equivalent derivative endpoint, so keep its confirmed thumbnail path.
+  if(provider==='cos')void thumbnailTask;
+  else thumbnailPath=await thumbnailTask;
   await remember('image:'+storagePath,record.data);retainImage(storagePath,record.data);
   const {data,thumbnailPath:_oldThumbnail,...metadata}=record;return {...metadata,storagePath,storageProvider:provider,...(thumbnailPath?{thumbnailPath}:{})};
 }
@@ -1147,7 +1158,12 @@ async function cloudStageProject(record){
   if(registered===undefined)editorBases.set(record.__cloudSessionId,baseRevision);
   return projectSync.stage(record,{baseRevision});
 }
-async function cloudStageImport(batch){assertAccountWritable();await identity();if(revision===undefined)await version();await importSync.stage({...batch,id:crypto.randomUUID()});return {pending:true};}
+async function cloudStageImport(batch){
+  assertAccountWritable();await identity();if(revision===undefined)await version();
+  const prepared={...batch,id:crypto.randomUUID()};
+  await importSync.stageMany(splitIndependentAssetImport(prepared));
+  return {pending:true};
+}
 let metadataMutationTail=Promise.resolve();
 async function cloudStageMutation(names,fn){
   if(!names.some(store=>store==='assets'||store==='series'))

@@ -18,6 +18,8 @@ export function collectCOSReferencePaths(rows){
     if(!value||depth>24)return;
     if(Array.isArray(value)){for(const element of value)inspect(element,depth+1);return;}
     if(typeof value!=='object')return;
+    if(value.storageProvider==='cos'&&typeof value.storagePath==='string'&&
+      UUID_PREFIX.test(value.storagePath))refs.add(value.storagePath+'-preview480.webp');
     for(const [key,item] of Object.entries(value)){
       if(typeof item==='string'&&['storagePath','thumbnailPath','projectDocumentPath'].includes(key)
         &&UUID_PREFIX.test(item))refs.add(item);

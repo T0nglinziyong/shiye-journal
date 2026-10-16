@@ -26,14 +26,15 @@ test('single-finger page pans while Pencil and direct material editing stay avai
 });
 test('paper always remains visibly anchored in the viewport after panning',()=>{
   assert.equal(clampedCanvasOffset(100,500,0,600),0);
-  assert.equal(clampedCanvasOffset(125,525,0,600),0);
-  assert.equal(clampedCanvasOffset(0,400,0,600),36);
+  assert.equal(clampedCanvasOffset(112,512,0,600),0);
+  assert.equal(clampedCanvasOffset(125,525,0,600),-1);
+  assert.equal(clampedCanvasOffset(0,400,0,600),76);
   assert.ok(clampedCanvasOffset(-160,240,0,600)>0);
   assert.ok(clampedCanvasOffset(260,660,0,600)<0);
   assert.equal(clampedCanvasOffset(25,725,0,600),0);
   assert.equal(clampedCanvasOffset(-125,575,0,600),0);
-  assert.equal(clampedCanvasOffset(200,900,0,600),-152);
-  assert.equal(clampedCanvasOffset(-300,400,0,600),152);
+  assert.equal(clampedCanvasOffset(200,900,0,600),-164);
+  assert.equal(clampedCanvasOffset(-300,400,0,600),164);
   assert.ok(clampedCanvasOffset(500,600,0,600)<0);
 });
 test('font size arrows select discrete print-friendly sizes without opening keyboard',()=>{

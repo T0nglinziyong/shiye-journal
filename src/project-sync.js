@@ -15,7 +15,7 @@ function retryDelay(attempt,operationID){
 }
 // Durable edits are an explicit outbox, not a replacement for cloud records.
 // Commit acknowledgement is the only point at which an entry is removed.
-export function createProjectSync({load,write,commit,revision,reconcile=async()=> 'conflict',recordKeys=record=>[{store:'projects',id:record.id}],coalesce=()=>null,splitCoalesced=()=>null,onCommitted=()=>{},onConflict=async()=>null,onForked=()=>{},onReplaced=()=>{},onSuperseded=()=>{},onStatus=()=>{},onDiagnostic=()=>{},runExclusive=fn=>fn(),prepare=async()=>{},reload=load,authoritativeCommit=false,autoFlushDelayMs=0,setTimer=setTimeout,clearTimer=clearTimeout,clock=()=>Date.now()}){
+export function createProjectSync({load,write,commit,revision,reconcile=async()=> 'conflict',recordKeys=record=>[{store:'projects',id:record.id}],coalesce=()=>null,splitCoalesced=()=>null,onCommitted=()=>{},onConflict=async()=>null,onForked=()=>{},onReplaced=()=>{},onSuperseded=()=>{},onStatus=()=>{},onDiagnostic=()=>{},runExclusive=fn=>fn(),prepare=async()=>{},prepareLimit=Infinity,reload=load,authoritativeCommit=false,autoFlushDelayMs=0,setTimer=setTimeout,clearTimer=clearTimeout,clock=()=>Date.now()}){
   let initialized,staging=Promise.resolve(),network,serial=0,error,paused=false,rebuilding=false;
   let persistedRows=new Map();
   let conflicts=new Set();
@@ -97,6 +97,16 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
     try{return Array.isArray(recordKeys(candidate));}catch{return false;}
   };
   const orderedRows=()=>[...entries.values()].sort((a,b)=>a.serial-b.serial);
+  const prioritizedRows=rows=>{
+    const ordered=orderedRows();
+    return [...rows].sort((a,b)=>{
+      const aRetry=Boolean(a.attempt||a.lastFailureClass),bRetry=Boolean(b.attempt||b.lastFailureClass);
+      return aRetry!==bRetry?Number(aRetry)-Number(bRetry):a.serial-b.serial;
+    }).filter(candidate=>!ordered.some(previous=>previous.serial<candidate.serial&&
+      entries.has(previous.record.id)&&!conflicts.has(previous.record.id)&&
+      previous.lastFailureClass!=='conflict'&&previous.lastFailureClass!=='invalid'&&
+      overlaps(recordKeys(previous.record),recordKeys(candidate.record))));
+  };
   const clearFailure=row=>{delete row.attempt;delete row.nextAttemptAt;delete row.lastFailureClass;};
   const replaceRows=rows=>{entries.clear();for(const row of rows.sort((a,b)=>a.serial-b.serial))entries.set(row.record.id,row);};
   async function coalesceReady(windowSerial){
@@ -158,10 +168,31 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
     report();
     return removed;
   }
-  function stage(record,{baseRevision=revision()}={}){
-    const task=staging.catch(()=>{}).then(async()=>{await initialize();if(!Number.isSafeInteger(baseRevision)||baseRevision<0)throw Error('作品编辑基线无效，未上传旧稿');const previous=entries.get(record.id),row={record:structuredClone(record),serial:++serial,baseRevision:previous?Math.min(previous.baseRevision,baseRevision):baseRevision,operationID:crypto.randomUUID()};entries.set(record.id,row);try{await persist();}catch(e){if(previous)entries.set(record.id,previous);else entries.delete(record.id);throw e;}conflicts.delete(record.id);error=null;report();});
-    staging=task.catch(()=>{});void task.then(()=>scheduleAuto()).catch(failure=>diagnose('failed',{record,baseRevision},failure));return task;
+  function stageMany(records,{baseRevision=revision()}={}){
+    const task=staging.catch(()=>{}).then(async()=>{
+      await initialize();
+      if(!Number.isSafeInteger(baseRevision)||baseRevision<0)throw Error('作品编辑基线无效，未上传旧稿');
+      if(!Array.isArray(records)||!records.length)return;
+      const ids=new Set();
+      for(const record of records)if(!record?.id||ids.has(record.id))throw Error('待同步记录编号无效或重复');else ids.add(record.id);
+      const before=orderedRows(),beforeConflicts=new Set(conflicts);
+      for(const record of records){
+        const previous=entries.get(record.id);
+        entries.set(record.id,{record:structuredClone(record),serial:++serial,
+          baseRevision:previous?Math.min(previous.baseRevision,baseRevision):baseRevision,
+          operationID:crypto.randomUUID()});
+        conflicts.delete(record.id);
+      }
+      try{await persist();}
+      catch(failure){replaceRows(before);conflicts=beforeConflicts;throw failure;}
+      error=null;report();
+    });
+    staging=task.catch(()=>{});
+    void task.then(()=>scheduleAuto()).catch(failure=>diagnose('failed',
+      {record:{kind:records?.[0]?.kind},baseRevision},failure));
+    return task;
   }
+  const stage=(record,options)=>stageMany([record],options);
   function kick({force=false}={}){
     cancelAuto();
     if(paused)return Promise.resolve();
@@ -176,7 +207,9 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
       // Immutable object bytes can transfer before the account revision lock.
       // Only reconciliation and the versioned metadata commit need that lock.
       const prepareAt=clock();diagnose('prepare-start');
-      await prepare(readyRows.map(row=>row.record));
+      const preparation=prioritizedRows(readyRows).slice(0,
+        Number.isFinite(prepareLimit)?Math.max(1,Math.floor(prepareLimit)):readyRows.length);
+      await prepare(preparation.map(row=>row.record),preparation);
       diagnose('prepare-finished',null,null,clock()-prepareAt);
       const lockAt=clock();diagnose('lock-wait');
       return runExclusive(async()=>{
@@ -207,8 +240,9 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
       const passes=new Map();
       let firstFailure=null;
       while(entries.size&&!paused){
-        const row=orderedRows().find(item=>!blocked.has(item.record.id)&&item.serial<=windowSerial&&
-          !blockedKeys.some(keys=>overlaps(keys,recordKeys(item.record))));
+        const row=prioritizedRows(orderedRows().filter(item=>
+          !blocked.has(item.record.id)&&item.serial<=windowSerial&&
+          !blockedKeys.some(keys=>overlaps(keys,recordKeys(item.record)))))[0];
         if(!row)break;
         diagnose('start',row);
         try {
@@ -460,7 +494,7 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
       return await task;
     }finally{rebuilding=false;if(entries.size&&!paused)scheduleAuto();}
   }
-  return {stage,
+  return {stage,stageMany,
     pause(){paused=true;cancelAuto();},
     async flush(){
       await initialize();await staging;

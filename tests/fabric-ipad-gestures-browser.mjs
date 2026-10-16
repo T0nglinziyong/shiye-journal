@@ -106,9 +106,12 @@ try{
   assert.ok((await rect()).scale>zoomBefore+.05,'Two fingers zoom the page');
   await fingerDrag(await point(.5,.5),900,650);
   const bounded=await rect();
-  assert.ok(Math.min(bounded.right,bounded.hostRight)-Math.max(bounded.left,bounded.hostLeft)>48&&
-    Math.min(bounded.bottom,bounded.hostBottom)-Math.max(bounded.top,bounded.hostTop)>48,
-  'Even a large drag keeps paper visible: '+JSON.stringify(bounded));
+  const anchored=(start,end,hostStart,hostEnd)=>end-start>hostEnd-hostStart
+    ?start<=hostStart+38&&end>=hostEnd-38
+    :Math.abs((start+end-hostStart-hostEnd)/2)<=25;
+  assert.ok(anchored(bounded.left,bounded.right,bounded.hostLeft,bounded.hostRight)&&
+    anchored(bounded.top,bounded.bottom,bounded.hostTop,bounded.hostBottom),
+  'Even a large drag keeps the paper anchored to both viewport axes: '+JSON.stringify(bounded));
   await click('[data-val="text"]');
   const textSpot=await point(.55,.42);
   await command('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{...textSpot,id:8,force:.5}]});

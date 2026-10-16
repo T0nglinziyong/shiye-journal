@@ -598,3 +598,31 @@ test('independent upload preparation runs before the shared account commit lock'
   await Promise.all([first,second]);
   assert.equal(revision,2,'metadata commits remain serialized and versioned');
 });
+test('a fresh independent batch is not queued behind unrelated retries',async()=>{
+  let revision=4,rows=[
+    {record:{id:'old',key:'old'},serial:1,baseRevision:1,operationID:'old-op',attempt:3,nextAttemptAt:0},
+    {record:{id:'fresh',key:'fresh'},serial:2,baseRevision:4,operationID:'fresh-op'}
+  ];
+  const prepared=[],committed=[];
+  const sync=createProjectSync({load:async()=>structuredClone(rows),reload:async()=>structuredClone(rows),
+    write:async next=>{rows=structuredClone(next);},revision:()=>revision,prepareLimit:1,
+    recordKeys:record=>[{store:'assets',id:record.key}],
+    prepare:async records=>prepared.push(records.map(record=>record.id)),
+    reconcile:async()=> 'rebase',
+    commit:async record=>{committed.push(record.id);revision++;}});
+  await sync.flush();
+  assert.deepEqual(prepared,[['fresh']]);
+  assert.equal(committed[0],'fresh');
+  assert.deepEqual(committed.sort(),['fresh','old']);
+});
+test('staging independent rows persists the whole set atomically',async()=>{
+  let rows=[],writes=0,fail=true;
+  const sync=createProjectSync({load:async()=>structuredClone(rows),revision:()=>3,
+    write:async next=>{writes++;if(fail)throw Error('quota');rows=structuredClone(next);},
+    commit:async()=>{}});
+  await assert.rejects(sync.stageMany([{id:'a'},{id:'b'}]),/quota/);
+  assert.deepEqual(await sync.pending(),[]);
+  fail=false;await sync.stageMany([{id:'a'},{id:'b'}]);
+  assert.equal(writes,2);
+  assert.deepEqual((await sync.pending()).map(row=>row.record.id),['a','b']);
+});

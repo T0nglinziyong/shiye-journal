@@ -11,12 +11,12 @@ export function fingerMayPanCanvas({pointerType,tool,background,pencilEnabled}={
   // is enabled; when disabled fingers retain the ability to draw themselves.
   return ['select','text','shape'].includes(tool)||(['pen','highlighter','eraser'].includes(tool)&&pencilEnabled===true);
 }
-export function clampedCanvasOffset(pageStart,pageEnd,hostStart,hostEnd,{slackRatio=.12,maxSlack=64}={}){
+export function clampedCanvasOffset(pageStart,pageEnd,hostStart,hostEnd,{slackRatio=.04,maxSlack=24}={}){
   const content=pageEnd-pageStart,available=hostEnd-hostStart;
   if(!(content>0&&available>0))return 0;
   if(content>available){
     // A zoomed page may expose a narrow margin, but can never leave the view.
-    const margin=Math.min(48,available*.08);
+    const margin=Math.min(36,available*.06);
     if(pageStart>hostStart+margin)return hostStart+margin-pageStart;
     if(pageEnd<hostEnd-margin)return hostEnd-margin-pageEnd;
     return 0;

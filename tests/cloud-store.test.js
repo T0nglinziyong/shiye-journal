@@ -181,6 +181,28 @@ test('one import upload failure does not block a separate import',async()=>{
   assert.ok(uploaded.length>=2);
 });
 
+test('one failed material does not block siblings from the same recognition batch',async()=>{
+  const cache=memoryCache();let fail=true;
+  const objectStorage={enabled:true,async upload(path,blob){
+    if(fail&&await blob.text()==='broken-bytes')throw Error('COS upload failed');
+  }};
+  const {db,state}=fixture(cache,objectStorage);
+  await db.cloudStageImport({assets:[
+    {id:'broken',blobId:'broken-image'},
+    {id:'safe',blobId:'safe-image'}
+  ],blobs:[
+    {id:'broken-image',data:new Blob(['broken-bytes'])},
+    {id:'safe-image',data:new Blob(['safe-bytes'])}
+  ],projects:[]});
+  await assert.rejects(db.cloudFlushProjects(),/未获确认|图片上传失败|COS upload failed/);
+  assert.equal(state.calls.length,1);
+  assert.deepEqual(state.calls[0].operations.filter(op=>op.store==='assets').map(op=>op.item.id),['safe']);
+  assert.equal((await activeRows(cache,'batch')).length,1);
+  fail=false;await db.cloudFlushProjects();
+  assert.equal(state.calls.length,2);
+  assert.deepEqual(await activeRows(cache,'batch'),[]);
+});
+
 test('trash restore survives AbortError: local stage is immediate and reopen retries the same operation',async()=>{
   const cache=memoryCache(),first=fixture(cache);first.state.rpcAbort=true;
   await first.db.cloudStageMutation(['trash','assets'],tx=>{tx.objectStore('trash').delete('t');tx.objectStore('assets').put({id:'restored',title:'safe'});});
@@ -377,6 +399,25 @@ test('original and optional preview upload overlap but metadata waits for the or
     releaseOriginal();await commit;assert.equal(state.calls.length,1);
   }finally{if(oldBitmap===undefined)delete globalThis.createImageBitmap;else globalThis.createImageBitmap=oldBitmap;if(oldDocument===undefined)delete globalThis.document;else globalThis.document=oldDocument;}
 });
+test('a slow COS preview does not delay the original metadata commit',async()=>{
+  const oldBitmap=globalThis.createImageBitmap,oldDocument=globalThis.document;
+  globalThis.createImageBitmap=async()=>({width:480,height:480,close(){}});
+  globalThis.document={createElement:()=>({getContext:()=>({drawImage(){}}),
+    toBlob:callback=>callback(new Blob(['preview'],{type:'image/webp'}))})};
+  let releasePreview;const previewGate=new Promise(resolve=>releasePreview=resolve);
+  try{
+    const cos={enabled:true,async upload(path){if(path.endsWith('-preview480.webp'))await previewGate;}};
+    const {state,db}=fixture(null,cos);
+    await db.cloudTransaction(['blobs'],tx=>tx.objectStore('blobs').put({
+      id:'nonblocking-preview',data:new Blob(['original'],{type:'image/png'})}));
+    assert.equal(state.calls.length,1);
+    assert.equal(state.calls[0].operations[0].item.thumbnailPath,undefined);
+  }finally{
+    releasePreview();
+    if(oldBitmap===undefined)delete globalThis.createImageBitmap;else globalThis.createImageBitmap=oldBitmap;
+    if(oldDocument===undefined)delete globalThis.document;else globalThis.document=oldDocument;
+  }
+});
 test('staged material bytes upload before acquiring the account revision lock',async()=>{
   const originalNavigator=Object.getOwnPropertyDescriptor(globalThis,'navigator');
   const events=[];
@@ -417,7 +458,7 @@ test('an import uploads previews only for visible cutouts, retaining full editin
     assert.equal(paths.length,5,'four original blobs and one visible cover');
     assert.equal(decoded,1,'hidden editing sources must not be decoded for a cover');
     const blobs=state.calls[0].operations.filter(op=>op.store==='blobs');
-    assert.deepEqual(blobs.map(op=>!!op.item.thumbnailPath),[true,false,false,false]);
+    assert.deepEqual(blobs.map(op=>!!op.item.thumbnailPath),[false,false,false,false]);
   }finally{
     if(oldBitmap===undefined)delete globalThis.createImageBitmap;else globalThis.createImageBitmap=oldBitmap;
     if(oldDocument===undefined)delete globalThis.document;else globalThis.document=oldDocument;

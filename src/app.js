@@ -3062,12 +3062,18 @@ setInterval(backgroundCloudCheck,CLOUD_POLL_MS);
 // Detect complete UI stalls even when no sync promise rejects. The timer
 // resumes after a main-thread block and records its duration locally.
 let lastMainThreadTick=performance.now();
+let lastMainThreadVisibility=document.visibilityState;
 setInterval(()=>{
   const now=performance.now(),lag=Math.round(now-lastMainThreadTick-2000);
   lastMainThreadTick=now;
-  if(cloudEnabled&&lag>1200)db.recordSyncDiagnostic({action:'main-thread-lag',kind:'queue',
+  const visible=document.visibilityState==='visible'&&lastMainThreadVisibility==='visible';
+  lastMainThreadVisibility=document.visibilityState;
+  if(cloudEnabled&&visible&&lag>1200)db.recordSyncDiagnostic({action:'main-thread-lag',kind:'queue',
     cloudRevision:null,pending:syncDisplay.pending,durationMs:lag});
 },2000);
+document.addEventListener('visibilitychange',()=>{
+  lastMainThreadTick=performance.now();lastMainThreadVisibility=document.visibilityState;
+});
 window.addEventListener('focus',()=>{backgroundCloudCheck();privateImages.retryMissing();void cloudResumer.wake();});
 document.addEventListener('visibilitychange',()=>{backgroundCloudCheck();if(document.visibilityState==='hidden'){view.flushInkCommit?.({renderUI:false,force:true});snapshotEditedScene('app-background');if(dirtyProjects.size||dirtyUsageAssets.size)void flushSave().catch(console.error);}if(document.visibilityState==='visible'){privateImages.retryMissing();void cloudResumer.wake();}});
 window.addEventListener('online',()=>{backgroundCloudCheck();privateImages.retryMissing();void cloudResumer.wake({force:true});});

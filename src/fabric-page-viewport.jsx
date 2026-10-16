@@ -27,18 +27,27 @@ export function FabricPageViewport({draft,width,height,zoom=1,initialPan,onViewp
     const iPad=isIPadPointerDevice(navigator);
     const stop=event=>{event.preventDefault();event.stopImmediatePropagation();};
     const clamp=()=>{
-      clampFrame=0;if(!page.isConnected||clamping)return;
+      if(!page.isConnected||clamping)return false;
       const box=page.getBoundingClientRect(),bounds=host.getBoundingClientRect();
       const dx=clampedCanvasOffset(box.left,box.right,bounds.left,bounds.right),
         dy=clampedCanvasOffset(box.top,box.bottom,bounds.top,bounds.bottom);
-      if(Math.abs(dx)+Math.abs(dy)<.5)return;
+      if(Math.abs(dx)+Math.abs(dy)<.5)return false;
       const offset=pan.getPan(),scale=pan.getScale();
       clamping=true;
       try{pan.pan(offset.x+dx/scale,offset.y+dy/scale,{force:true,animate:false});}
       finally{clamping=false;}
+      return true;
     };
-    const scheduleClamp=()=>{if(!clampFrame)clampFrame=requestAnimationFrame(clamp);};
-    const changed=()=>{clamp();changeRef.current?.(pan.getScale(),pan.getPan());};
+    // Panzoom publishes its event before every browser has painted the new
+    // transform. Recheck on following frames until the paper is actually
+    // inside the viewport, then persist only the settled position.
+    const settleClamp=()=>{
+      clampFrame=0;
+      if(clamp()){scheduleClamp();return;}
+      changeRef.current?.(pan.getScale(),pan.getPan());
+    };
+    const scheduleClamp=()=>{if(!clampFrame)clampFrame=requestAnimationFrame(settleClamp);};
+    const changed=()=>scheduleClamp();
     const down=event=>{
       const fingerPan=fingerNavigatesCanvas({pointerType:event.pointerType,
         tool:toolRef.current,iPad});
@@ -91,6 +100,7 @@ export function FabricPageViewport({draft,width,height,zoom=1,initialPan,onViewp
       if(start&&!start.moved&&event.type==='pointerup'&&active.size===0&&
         Math.hypot(event.clientX-start.x,event.clientY-start.y)<=5)tapRef.current?.(event);
       if(mousePan||active.size===0){mousePan=false;navigating=false;}
+      scheduleClamp();
     };
     const wheel=event=>{
       if(!event.ctrlKey&&!event.metaKey)return;

@@ -15,7 +15,7 @@ test('COS object classification includes immutable derivatives and project docum
 });
 
 test('reference discovery reaches nested historical drafts and recently deleted projects',()=>{
- const records=[{store:'blobs',record:{id:'blob',storagePath:origin,thumbnailPath:origin+'-preview480.webp'}},
+ const records=[{store:'blobs',record:{id:'blob',storagePath:origin,storageProvider:'cos'}},
    {store:'projects',record:{id:'work',projectDocumentPath:second+'-project.json',
      drafts:[{coverImageID:'project-cover:cos:'+second+'-preview480.webp'}],
      manualArchives:[{drafts:[{coverImageID:'project-cover:cos:'+second+'-project.json.gz-preview480.webp'}]}]}},
