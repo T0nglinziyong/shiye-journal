@@ -130,7 +130,7 @@ test('Fabric group move and rotation write through to absolute Scene child geome
     {id:'child-2',type:'shape',kind:'rectangle',x:200,y:100,width:40,height:30,rotation:15}
   ]};
   const object=await bridge.fromNode(node),before=object.getCenterPoint();
-  assert.equal(object.lockScalingX,true);
+  assert.deepEqual(Object.keys(object.controls).sort(),['br','mb','ml','mr','mt']);
   object.set({left:object.left+20,top:object.top+10,angle:90});
   bridge.applyObject(node,object);
   const after=object.getCenterPoint();
@@ -144,6 +144,23 @@ test('Fabric group move and rotation write through to absolute Scene child geome
   const snapshot=structuredClone(node.children);
   bridge.applyObject(node,object);
   assert.deepEqual(node.children,snapshot);
+});
+
+test('group resize keeps physical material sizes while scaling the arrangement',async()=>{
+  const image=createCanvas(20,20);image.getContext('2d').fillRect(0,0,20,20);
+  const grouped=createFabricSceneBridge(fabric,{assetURL:()=>image.toDataURL()});
+  const node={id:'arrangement',type:'group',children:[
+    {id:'physical',type:'material',assetID:'a',x:100,y:120,width:40,height:30},
+    {id:'letter',type:'text',content:'字',x:200,y:120,width:80,height:40,fontSize:20}
+  ]};
+  const object=await grouped.fromNode(node);
+  object.set({scaleX:1.5,scaleY:1.5});
+  grouped.applyObject(node,object);
+  assert.equal(node.children[0].width,40);
+  assert.equal(node.children[0].height,30);
+  assert.equal(node.children[1].width,120);
+  assert.equal(node.children[1].fontSize,30);
+  assert.ok(node.children[1].x-node.children[0].x>100);
 });
 
 test('a group containing a locked child cannot be transformed through Fabric',async()=>{

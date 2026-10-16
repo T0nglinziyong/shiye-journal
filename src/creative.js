@@ -13,6 +13,7 @@ import {textLines,textFont} from './editor-tools-model.js';
 import {reviewCreativeDraft} from './creative-quality.js';
 import {materialMaskPoints,materialMaskArea,materialMaskGeometry,cutMaterialDiagonal,addMaterialWindow} from './material-mask.js';
 import {agentTools,directPageContract,directPageToTools,validateTool,validateValue} from './creative-contract.js';
+import {arrangeSceneSelection} from './scene-arrangement.js';
 export {agentTools,directPageContract,directPageToTools};
 const EPS=1e-6,fields=['items','primitives','textBlocks'];
 const entries=d=>fields.flatMap(f=>(d[f]||[]));
@@ -310,6 +311,13 @@ function execute(d,assets,aliases,name,a,options){
     case 'upsert_materials':upsertMaterials(d,assets,aliases,a,options);break;
     case 'move_elements':for(const e of a.items)setPosition(d,find(d,e.key),e);break;
     case 'arrange_elements':arrange(d,a);break;
+    case 'align_elements':{
+      const objects=a.keys.map(key=>find(d,key));
+      if(!arrangeSceneSelection(d,objects.map(item=>item.id),a.mode))
+        return {detail:'图层已经处于目标位置',mutation:false};
+      for(const item of objects)if(item.assetID)baseline(item);
+      break;
+    }
     case 'fit_text_to':fitText(d,assets,a,options);break;
     case 'upsert_primitives':putGraphics(d,a.items);break;
     case 'upsert_text':putTexts(d,a.items,options);break;

@@ -701,6 +701,9 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
             }else if(object.sceneSelectionProxy){
               const root=callbacks.current.draft.layers.find(item=>byID([item],node.id));
               if(root){signatures.delete(root.id);reconcileRef.current?.();}
+            }else if(node.type==='group'&&
+              (Math.abs(object.scaleX-1)>.001||Math.abs(object.scaleY-1)>.001)){
+              signatures.delete(renderKey(node));reconcileRef.current?.();
             }else if(node.type==='text'&&
               (Math.abs(object.scaleX-1)>.001||Math.abs(object.scaleY-1)>.001)){
               signatures.delete(renderKey(node));reconcileRef.current?.();

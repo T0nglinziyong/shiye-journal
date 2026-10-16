@@ -80,6 +80,14 @@ try{
   await touch('.scene-layer-branch:first-child .scene-layer-pick');
   assert.equal(await evaluate(`document.querySelectorAll('.scene-layer-node.selected').length`),2,
     'Layer multi-select preserves both selections');
+  await touch('[data-val="layers"]');
+  await touch('[data-popover-anchor="arrange"]');
+  assert.equal(await menu(),'排列所选','Alignment controls open on a touch screen');
+  assert.ok(await evaluate(`(()=>{const r=document.querySelector('.swift-popover').getBoundingClientRect();
+    return r.left>=0&&r.right<=innerWidth&&r.bottom<=innerHeight})()`),
+    'Alignment menu stays in the mobile viewport');
+  await touch('.canvas-arrange-menu button:first-child');
+  await touch('[data-val="layers"]');
   assert.equal(await evaluate(`document.querySelector('.scene-layer-tree-toolbar button:nth-child(2)').disabled`),false);
   await touch('.scene-layer-tree-toolbar button:nth-child(2)');
   assert.equal(await evaluate(`document.querySelectorAll('.scene-layer-node[aria-expanded]').length`),1,

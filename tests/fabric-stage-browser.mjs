@@ -113,6 +113,12 @@ try{
   await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,x,y,clickCount:1});
   await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,x,y,clickCount:1});
   assert.equal(await evaluate('document.querySelector("#events").textContent'),'选中：paper-material');
+  const groupHit=await evaluate(`(async()=>{const {selectableFabricObjectAt}=await import('/src/fabric-hit-test.js');
+    const canvas=window.__fabricCanvas,group=canvas.getObjects().find(object=>object.sceneID==='paper-group');
+    return {visible:selectableFabricObjectAt(canvas,group,{x:100,y:160},{x:100,y:160}),
+      masked:selectableFabricObjectAt(canvas,group,{x:300,y:160},{x:300,y:160})};})()`);
+  assert.deepEqual(groupHit,{visible:true,masked:false},
+    'Tapping a transparent part of a group frame must not select the group');
   assert.deepEqual(await evaluate('Object.keys(window.__fabricCanvas.getActiveObject().controls).sort()'),
     ['br','mb','ml','mr','mt'],
     'One bottom-right control scales and rotates; no second rotate button is drawn');
@@ -275,6 +281,20 @@ try{
   })()`);
   await sleep(150);
   assert.deepEqual(await evaluate('[window.__fabricCanvas.width,window.__fabricCanvas.backgroundImage.getElement().width]'),[620,620]);
+  await click('[data-tool="select"]');
+  await evaluate('window.__fabricFixture.select(["paper-group"])');
+  for(let attempt=0;attempt<40;attempt++){
+    if(await evaluate('window.__fabricCanvas.getActiveObject()?.sceneID==="paper-group"'))break;
+    await sleep(25);
+  }
+  assert.deepEqual(await evaluate('Object.keys(window.__fabricCanvas.getActiveObject().controls).sort()'),
+    ['br','mb','ml','mr','mt'],'A selected group has the same frame controls as other objects');
+  const groupWidthBefore=await evaluate('window.__fabricFixture.draft.layers[0].children[0].width');
+  await evaluate(`(()=>{const canvas=window.__fabricCanvas,group=canvas.getActiveObject();
+    group.set({scaleX:1.2,scaleY:1.2});group.setCoords();
+    canvas.fire('object:modified',{target:group});})()`);
+  assert.ok(await evaluate('window.__fabricFixture.draft.layers[0].children[0].width')>
+    groupWidthBefore*1.19,'Resizing the group frame persists its child geometry');
   assert.deepEqual(browser.errors,[]);
   console.log('Fabric stage browser check passed:',JSON.stringify({background,parity,coverParity,weaveParity,inkParity}),
     'screenshots /tmp/shiye-fabric-stage.png and /tmp/shiye-fabric-reference.png');

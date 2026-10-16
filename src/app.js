@@ -15,6 +15,7 @@ const renderSceneCanvas=async(...args)=>(await sceneRuntime()).renderSceneCanvas
 const decodeSceneImage=async(...args)=>(await sceneRuntime()).decodeSceneImage(...args);
 import {sceneLayerEntries,attachSceneV2,moveSceneNode,groupSceneLayers,ungroupSceneLayers,findSceneNode,assertSceneEditable,validateVectorMask} from './scene-model.js';
 import {copySceneLasso,deleteSceneLasso,mergeSceneLasso,sceneLassoBounds} from './scene-lasso.js';
+import {arrangeSceneSelection} from './scene-arrangement.js';
 import './styles.css';
 import './overrides.css';
 import './parity.css';
@@ -1357,6 +1358,18 @@ async function runAppAction(action,id,value){try{switch(action){
     ids.forEach(key=>assertSceneEditable(d,key));
     checkpoint();mergeSceneLasso(d,ids,{id:'group-'+uid()});
     state.selected=null;state.multiSelected=[];saveProject();render();break;
+  }
+  case 'fabric-arrange-selection':{
+    const d=current(),ids=[...new Set(state.multiSelected||[])];
+    if(!d||ids.length<2)break;
+    const candidate=attachSceneV2(structuredClone(d));
+    if(!arrangeSceneSelection(candidate,ids,id))break;
+    checkpoint();arrangeSceneSelection(d,ids,id);
+    const selected=new Set(ids),leaves=sceneLayerEntries(d,{hidden:true}).filter(entry=>
+      selected.has(entry.value.id)||entry.parents.some(parent=>selected.has(parent.id)))
+      .map(entry=>entry.value.id);
+    state.fabricSelectionBounds=sceneLassoBounds(d,leaves);
+    saveProject();render();break;
   }
   case 'fabric-layer-select':{
     const d=current(),node=findSceneNode(d,id?.id);if(!node)break;

@@ -114,17 +114,49 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
       ctx.restore();
     }
   }
-  const transformChildren=(children,from,to,rotation)=>{
+  const transformChildren=(children,from,to,rotation,scaleX=1,scaleY=1,groupAngle=0)=>{
     const theta=rotation*Math.PI/180,cos=Math.cos(theta),sin=Math.sin(theta);
-    const move=(x,y)=>({x:to.x+(x-from.x)*cos-(y-from.y)*sin,
-      y:to.y+(x-from.x)*sin+(y-from.y)*cos});
+    const frame=groupAngle*Math.PI/180,fc=Math.cos(frame),fs=Math.sin(frame);
+    const vector=(x,y)=>{
+      const localX=x*fc+y*fs,localY=-x*fs+y*fc;
+      const scaledX=localX*scaleX,scaledY=localY*scaleY;
+      const pageX=scaledX*fc-scaledY*fs,pageY=scaledX*fs+scaledY*fc;
+      return {x:pageX*cos-pageY*sin,y:pageX*sin+pageY*cos};
+    };
+    const move=(x,y)=>{const delta=vector(x-from.x,y-from.y);
+      return {x:to.x+delta.x,y:to.y+delta.y};};
     for(const child of children||[]){
-      if(child.type==='group')transformChildren(child.children,from,to,rotation);
-      else if(child.type==='ink')child.points=(child.points||[]).map(point=>({...point,...move(point.x,point.y)}));
+      if(child.type==='group')transformChildren(child.children,from,to,rotation,scaleX,scaleY,groupAngle);
+      else if(child.type==='ink'){
+        child.points=(child.points||[]).map(point=>({...point,...move(point.x,point.y)}));
+        child.width=positive(child.width,3)*Math.sqrt(scaleX*scaleY);
+      }
       else{
         const position=move(child.x,child.y);
         child.x=position.x;child.y=position.y;
-        child.rotation=finite(child.rotation)+rotation;
+        if(child.type==='material'){
+          // Physical inventory keeps its real size; resizing the group changes
+          // the arrangement between materials, not the materials themselves.
+          child.rotation=finite(child.rotation)+rotation;
+          child.userOverrideFlags=[...new Set([...(child.userOverrideFlags||[]),'moved'])];
+        }else{
+          if(Math.abs(scaleX-1)<1e-9&&Math.abs(scaleY-1)<1e-9){
+            child.rotation=finite(child.rotation)+rotation;
+            continue;
+          }
+          const radians=finite(child.rotation)*Math.PI/180;
+          const widthAxis=vector(Math.cos(radians),Math.sin(radians));
+          const heightAxis=vector(-Math.sin(radians),Math.cos(radians));
+          const widthScale=Math.hypot(widthAxis.x,widthAxis.y);
+          const heightScale=Math.hypot(heightAxis.x,heightAxis.y);
+          child.width=positive(child.width)*widthScale;
+          child.height=positive(child.height)*heightScale;
+          child.rotation=Math.atan2(widthAxis.y,widthAxis.x)*180/Math.PI;
+          if(child.type==='text'&&Math.abs(scaleX-scaleY)<.02)
+            for(const field of ['fontSize','fixedLineHeight','lineHeight','lineSpacing',
+              'additionalLineSpacing','paragraphSpacing','letterSpacing'])
+              if(Number.isFinite(child[field]))child[field]*=scaleX;
+        }
       }
     }
   };
@@ -145,12 +177,10 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
         group.clipPath=clipPath(maskGeometry(node.vectorMask),size.width,size.height,{page:true});
       }
       group.sceneGroupPose={center:group.getCenterPoint(),angle:group.angle||0};
-      // A Scene group contains real materials. Its gesture may move and rotate
-      // the children, but resizing would silently change physical inventory.
+      // Group resizing preserves the dimensions of physical material children.
       const canvasSelectable=!node.autoInkGroup&&!node.locked&&!node.isLocked&&
         !containsLocked(node.children);
-      group.set({lockScalingX:true,lockScalingY:true,
-        selectable:canvasSelectable,evented:canvasSelectable});
+      group.set({selectable:canvasSelectable,evented:canvasSelectable,lockScalingFlip:true});
       configureControls(group);
       return group;
     }
@@ -251,10 +281,9 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
     if(node.type==='group'){
       const before=object.sceneGroupPose;
       if(!before)throw Error('组合缺少上一次画布位置');
-      if(Math.abs(object.scaleX-1)>1e-5||Math.abs(object.scaleY-1)>1e-5)
-        throw Error('包含实物素材的组合不能缩放');
       const center=object.getCenterPoint(),angle=finite(object.angle),delta=angle-before.angle;
-      transformChildren(node.children,before.center,center,delta);
+      transformChildren(node.children,before.center,center,delta,
+        positive(object.scaleX),positive(object.scaleY),before.angle);
       object.sceneGroupPose={center,angle};
       node.opacity=object.opacity??1;
       return node;

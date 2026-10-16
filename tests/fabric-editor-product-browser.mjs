@@ -216,6 +216,27 @@ try{
   await click(`[data-scene-node="${shapes[1].id}"] [data-layer-pick]`);
   await click('[data-val="layers"]');
   await wait('.fabric-selected-actions');
+  await click('.canvas-context-tools [data-popover-anchor="arrange"]','.canvas-arrange-menu');
+  await click('.canvas-arrange-menu button:first-child');
+  const aligned=(await waitProjects(rows=>{
+    const pair=(rows[0]?.drafts?.[0]?.layers||[]).filter(layer=>
+      [shapes[0].id,shapes[1].id].includes(layer.id));
+    return pair.length===2&&Math.abs((pair[0].x-pair[0].width/2)-(pair[1].x-pair[1].width/2))<.1;
+  }))[0].drafts[0].layers.filter(layer=>[shapes[0].id,shapes[1].id].includes(layer.id));
+  assert.ok(Math.abs((aligned[0].x-aligned[0].width/2)-(aligned[1].x-aligned[1].width/2))<.1,
+    'The visible Align Left control updates both persisted Scene objects');
+  await click('[data-act="undo"]');
+  await waitProjects(rows=>{
+    const pair=(rows[0]?.drafts?.[0]?.layers||[]).filter(layer=>
+      [shapes[0].id,shapes[1].id].includes(layer.id));
+    return pair.length===2&&Math.abs((pair[0].x-pair[0].width/2)-(pair[1].x-pair[1].width/2))>1;
+  });
+  await click('[data-act="redo"]');
+  await waitProjects(rows=>{
+    const pair=(rows[0]?.drafts?.[0]?.layers||[]).filter(layer=>
+      [shapes[0].id,shapes[1].id].includes(layer.id));
+    return pair.length===2&&Math.abs((pair[0].x-pair[0].width/2)-(pair[1].x-pair[1].width/2))<.1;
+  });
   const beforeMulti=(await projects())[0].drafts[0].layers.filter(layer=>
     [shapes[0].id,shapes[1].id].includes(layer.id));
   const multiBounds=sceneLassoBounds((await projects())[0].drafts[0],beforeMulti.map(layer=>layer.id));

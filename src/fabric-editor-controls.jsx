@@ -263,6 +263,8 @@ export function FabricEditorToolbar({state,draft,materials,source,selected,onIns
   const text=selectedKind==='text'?selectedNode:state.textDefaults||{style:'serif',fontSize:40,color:'#30463d',alignment:'left'};
   const textProperty=(key,value)=>onAction('fabric-text-property',key,value);
   const shapeProperty=(key,value)=>onAction('fabric-shape-property',key,value);
+  const arrangeButton=<button type="button" data-popover-anchor="arrange"
+    onClick={event=>setMenu(previous=>previous?.kind==='arrange'?null:{kind:'arrange',anchor:event.currentTarget})}>排列</button>;
   return <><div className="swift-editor-toolbar" aria-label="创作工具">
     <div className="editor-tools">{Object.keys(toolIcons).map(kind=><button key={kind} type="button"
       className={`btn ${state.tool===kind?'primary':''}`} data-val={kind} data-act="tool"
@@ -273,8 +275,10 @@ export function FabricEditorToolbar({state,draft,materials,source,selected,onIns
           (close(),onAction('fabric-tool',null,kind))} dangerouslySetInnerHTML={{__html:iconMarkup(toolIcons[kind])}}/>)}</div>
     <div className="canvas-context-tools" aria-label="当前工具选项">
       {state.tool==='lasso'&&(state.multiSelected||[]).length?<><span>已套选 {state.multiSelected.length} 项</span>
+        {state.multiSelected.length>1?arrangeButton:null}
         <button type="button" onClick={()=>onAction('fabric-clear-selection')}>清空选择</button></>:
       (state.multiSelected||[]).length>1?<><span>已选 {state.multiSelected.length} 项</span>
+        {arrangeButton}
         <button type="button" onClick={()=>onAction('fabric-group-selection')}>组合移动</button>
         <button type="button" onClick={()=>onAction('fabric-clear-selection')}>清空选择</button></>:
       ['pen','highlighter','eraser'].includes(activeTool)?<>
@@ -331,13 +335,13 @@ export function FabricEditorToolbar({state,draft,materials,source,selected,onIns
     title={{shape:'添加图形',material:'选择素材',paper:'画布背景',layers:'图层',
       pen:'笔设置',eraser:'橡皮擦设置',highlighter:'荧光笔设置',lasso:'套索选择设置',
       'slot-width':'修改粗细','slot-color':'修改当前颜色',
-      'text-paragraph':'段落','text-style':'文字样式'}[menu.kind]}
+      'text-paragraph':'段落','text-style':'文字样式',arrange:'排列所选'}[menu.kind]}
     className={['shape','material'].includes(menu.kind)?`swift-picker-popover swift-${menu.kind}-picker`:
       menu.kind==='layers'?'swift-menu swift-layer-popover':'swift-menu'}
     width={menu.kind==='paper'?260:menu.kind==='layers'?310:
       menu.kind==='slot-width'?270:menu.kind==='slot-color'?280:
       ['pen','eraser','highlighter','lasso'].includes(menu.kind)?280:
-      ['text-paragraph','text-style'].includes(menu.kind)?230:
+      ['text-paragraph','text-style','arrange'].includes(menu.kind)?230:
       280} height={menu.kind==='layers'?360:menu.kind==='slot-color'?310:menu.kind==='shape'?550:440}
     picker={['shape','material'].includes(menu.kind)}>
     {menu.kind==='shape'?<ShapePicker draft={draft} onPick={id=>choose('fabric-add-shape',id)}/>:null}
@@ -363,6 +367,15 @@ export function FabricEditorToolbar({state,draft,materials,source,selected,onIns
       <label className="canvas-toggle">锁住字迹
         <input type="checkbox" checked={!!state.selectionFilter?.lockInk}
           onChange={event=>onAction('fabric-selection-filter','lockInk',event.target.checked)}/></label>
+    </div>:null}
+    {menu.kind==='arrange'?<div className="canvas-arrange-menu">
+      <span>对齐所选</span><div>{[['left','左边'],['center','水平居中'],['right','右边'],
+        ['top','上边'],['middle','垂直居中'],['bottom','下边']].map(([mode,label])=><button
+          key={mode} type="button" onClick={()=>choose('fabric-arrange-selection',mode)}>{label}</button>)}</div>
+      <span>均分间距</span><div>{[['space-horizontal','横向均分'],['space-vertical','纵向均分']]
+        .map(([mode,label])=><button key={mode} type="button"
+          disabled={(state.multiSelected||[]).length<3}
+          onClick={()=>choose('fabric-arrange-selection',mode)}>{label}</button>)}</div>
     </div>:null}
     {menu.kind==='slot-width'?<label className="canvas-setting">粗细 · {Number(slotValue(menu.mode,'width',menu.index)).toFixed(1)} mm
       <input type="range" min={menu.mode==='pen'?.2:menu.mode==='highlighter'?.5:1}
