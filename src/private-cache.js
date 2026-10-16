@@ -9,6 +9,15 @@ import {foldLegacySyncRows} from './unified-sync-outbox.js';
 const outboxID=row=>row?.record?.id;
 const outboxStamp=row=>row?JSON.stringify([row.serial,row.baseRevision,row.operationID,
   row.attempt,row.nextAttemptAt,row.lastFailureClass]):null;
+// A lightweight compare baseline must include every field in outboxStamp.
+// Omitting retry metadata makes the same tab's next acknowledgement look like
+// a competing tab while copying full rows would clone every pending image.
+export const outboxVersionRows=rows=>(rows||[]).map(row=>({
+  record:{id:row.record.id},serial:row.serial,
+  baseRevision:row.baseRevision,operationID:row.operationID,
+  attempt:row.attempt,nextAttemptAt:row.nextAttemptAt,
+  lastFailureClass:row.lastFailureClass
+}));
 const isDisposablePreviewKey=key=>{
   try{return /^(?:thumbnail:|thumbnail480:|preview\d+:)/.test(JSON.parse(key)[1]);}
   catch{return false;}

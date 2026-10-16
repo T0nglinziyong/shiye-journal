@@ -1,7 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import 'fake-indexeddb/auto';
-import {createPrivateCache} from '../src/private-cache.js';
+import {createPrivateCache,outboxVersionRows} from '../src/private-cache.js';
+test('retry metadata remains in the lightweight outbox compare baseline',async()=>{
+  const cache=createPrivateCache({name:'private-cache-retry-baseline-'+Date.now()});
+  const row={record:{id:'batch:one',data:new Blob(['image bytes'])},serial:4,
+    baseRevision:9,operationID:'attempt-1',attempt:2,nextAttemptAt:1234,
+    lastFailureClass:'transient'};
+  await cache.putOutbox('user','unified-outbox',[],[row]);
+  const baseline=outboxVersionRows([row]);
+  assert.deepEqual(baseline[0].record,{id:'batch:one'});
+  const updated={...row,baseRevision:10,attempt:undefined,
+    nextAttemptAt:undefined,lastFailureClass:undefined};
+  await cache.putOutbox('user','unified-outbox',baseline,[updated]);
+  assert.equal((await cache.get('user','unified-outbox'))[0].baseRevision,10);
+});
 test('persistent private cache isolates accounts and enforces its byte limit',async()=>{
   const name='private-cache-test-'+Date.now(),a=createPrivateCache({name,limit:8});
   await a.put('user-a','records',{revision:4});await a.put('user-b','records',{revision:5});

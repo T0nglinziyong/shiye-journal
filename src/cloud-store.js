@@ -1,5 +1,5 @@
 import {cloudClient,requireCloudUser} from './cloud-session.js';
-import {privateCache} from './private-cache.js';
+import {privateCache,outboxVersionRows} from './private-cache.js';
 import {createProjectSync} from './project-sync.js';
 import {runAccountBrowserLock,markSyncPhase} from './sync-browser-compat.js';
 import {syncEnvelope,projectSyncRows,importSyncRows,latestEditedProject,syncAffectedKeys,foldLegacySyncRows,repairMiswrappedSyncRows} from './unified-sync-outbox.js';
@@ -132,10 +132,7 @@ let unifiedOutboxBefore=[],projectOutboxQuarantine=[],unifiedQuarantine=[];
 // The merge guard needs only identity/version stamps, never image payloads.
 // Keeping a second structured clone of every pending Blob made each import
 // progressively more expensive on mobile Safari.
-const outboxStamps=rows=>(rows||[]).map(row=>({
-  record:{id:row.record.id},serial:row.serial,
-  baseRevision:row.baseRevision,operationID:row.operationID
-}));
+const outboxStamps=outboxVersionRows;
 const sessionTag=crypto.randomUUID();
 let outboxChannel=null;
 const channel=()=>{
