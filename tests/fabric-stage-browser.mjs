@@ -113,6 +113,9 @@ try{
   await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,x,y,clickCount:1});
   await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,x,y,clickCount:1});
   assert.equal(await evaluate('document.querySelector("#events").textContent'),'选中：paper-material');
+  assert.deepEqual(await evaluate('Object.keys(window.__fabricCanvas.getActiveObject().controls).sort()'),
+    ['br','mb','ml','mr','mt'],
+    'One bottom-right control scales and rotates; no second rotate button is drawn');
   const textX=bounds.left+bounds.width*270/600,textY=bounds.top+bounds.height*590/800;
   await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,x:textX,y:textY,clickCount:1});
   await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,x:textX,y:textY,clickCount:1});

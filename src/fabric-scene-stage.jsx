@@ -4,7 +4,8 @@ import {createFabricSceneBridge} from './fabric-scene-bridge.js';
 import {projectFabricLayers} from './fabric-layer-loader.js';
 import {paperWidthPixels,pressureInkOutline,erasePressureStroke} from './pressure-ink.js';
 import {textBlock} from './domain.js';
-import {selectPolygon} from './canvas-selection.js';
+import {polygonContains,selectionBounds} from './canvas-selection.js';
+import {selectSceneLasso,sceneLassoBounds,moveSceneLasso,rotateSceneLasso} from './scene-lasso.js';
 import {attachSceneV2} from './scene-v2.js';
 import {sceneDisplaySiblings} from './craft-display.js';
 import {prepareSceneFonts} from './scene-renderer.js';
@@ -35,8 +36,18 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
   useLayoutEffect(()=>{reconcileRef.current?.();},[draft,sceneRevision]);
 
   useLayoutEffect(()=>{
+    if(tool==='lasso'&&!selectedIDs.length)sessionRef.current?.sceneClearLasso?.();
+  },[tool,selectedIDs]);
+
+  useLayoutEffect(()=>{
     const canvas=sessionRef.current;
     if(!canvas||!['select','lasso'].includes(tool))return;
+    if(tool==='lasso'){
+      syncingSelection.current=true;
+      canvas.discardActiveObject();canvas.requestRenderAll();
+      syncingSelection.current=false;
+      return;
+    }
     const ids=selectedIDs.length?selectedIDs:selectedID?[selectedID]:[];
     const objects=ids.map(id=>canvas.getObjects().find(item=>item.sceneID===id&&item.selectable!==false)).filter(Boolean);
     const active=canvas.getActiveObjects();
@@ -63,6 +74,7 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
     canvas.selection=false;
     canvas.skipTargetFind=tool!=='select'||readOnly;
     canvas.defaultCursor=['pen','highlighter','lasso'].includes(tool)?'crosshair':tool==='eraser'?'cell':'default';
+    if(tool!=='lasso')canvas.sceneClearLasso?.();
     if(!['select','lasso'].includes(tool)){canvas.getActiveObject()?.exitEditing?.();canvas.discardActiveObject();
       canvas.requestRenderAll();}
     if(tool!=='text')canvas.sceneDiscardEmptyText?.();
@@ -178,6 +190,8 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
           canvas.requestRenderAll();
         };
         let gesture=null,previewFrame=0,textPointerID=null;
+        let lassoSelection=null;
+        canvas.sceneClearLasso=()=>{lassoSelection=null;canvas.clearContext(canvas.contextTop);};
         const uncommittedText=new Set();
         const discardEmptyText=id=>{
           if(!uncommittedText.delete(id))return;
@@ -208,21 +222,50 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
             result.push(last);
           return result;
         };
+        const frameCorners=frame=>{
+          const halfW=frame.width/2,halfH=frame.height/2,a=frame.angle*Math.PI/180,
+            c=Math.cos(a),s=Math.sin(a);
+          return [[-halfW,-halfH],[halfW,-halfH],[halfW,halfH],[-halfW,halfH]]
+            .map(([x,y])=>({x:frame.center.x+x*c-y*s,y:frame.center.y+x*s+y*c}));
+        };
+        const uiScale=()=>Math.max(.1,canvas.upperCanvasEl.getBoundingClientRect().width/canvas.width);
+        const frameHandle=frame=>{
+          const corner=frameCorners(frame)[2],a=frame.angle*Math.PI/180;
+          return {x:corner.x+(24/uiScale())*Math.cos(a+Math.PI/4),
+            y:corner.y+(24/uiScale())*Math.sin(a+Math.PI/4)};
+        };
+        const frameBounds=frame=>selectionBounds(frameCorners(frame));
         const preview=()=>{
-          if(!gesture)return;
           const ctx=canvas.contextTop;
           canvas.clearContext(ctx);ctx.save();
           ctx.transform(...canvas.viewportTransform);
-          if(gesture.tool==='pen'||gesture.tool==='highlighter'){
+          const lasso=gesture?.tool==='lasso'?gesture.points:null;
+          if(!gesture&&(!lassoSelection||callbacks.current.tool!=='lasso')){ctx.restore();return;}
+          if(gesture?.tool==='pen'||gesture?.tool==='highlighter'){
             const outline=pressureInkOutline({points:gesture.points,width:gesture.width});
             if(outline.length){ctx.globalAlpha=gesture.tool==='highlighter'?.38:1;
               ctx.fillStyle=gesture.color;ctx.beginPath();ctx.moveTo(...outline[0]);
               for(const point of outline.slice(1))ctx.lineTo(...point);ctx.closePath();ctx.fill();}
-          }else if(gesture.tool==='lasso'){
+          }else if(lasso){
             ctx.strokeStyle='#2b5245';ctx.lineWidth=2;ctx.setLineDash([7,5]);
             ctx.fillStyle='rgba(80,130,90,.08)';ctx.beginPath();
-            gesture.points.forEach((point,index)=>index?ctx.lineTo(point.x,point.y):ctx.moveTo(point.x,point.y));
-            ctx.stroke();if(gesture.points.length>2){ctx.closePath();ctx.fill();}
+            lasso.forEach((point,index)=>index?ctx.lineTo(point.x,point.y):ctx.moveTo(point.x,point.y));
+            ctx.stroke();if(lasso.length>2){ctx.closePath();ctx.fill();}
+          }else if(lassoSelection){
+            const corners=frameCorners(lassoSelection),handle=frameHandle(lassoSelection);
+            const scale=uiScale(),grip=4/scale;
+            ctx.lineWidth=2/scale;ctx.strokeStyle='#2b5245';ctx.fillStyle='rgba(80,130,90,.045)';
+            ctx.setLineDash([7,5]);ctx.beginPath();
+            corners.forEach((point,index)=>index?ctx.lineTo(point.x,point.y):ctx.moveTo(point.x,point.y));
+            ctx.closePath();ctx.fill();ctx.stroke();ctx.setLineDash([]);
+            for(const point of corners){ctx.fillStyle='#fffefa';ctx.strokeStyle='#2b5245';
+              ctx.fillRect(point.x-grip,point.y-grip,grip*2,grip*2);
+              ctx.strokeRect(point.x-grip,point.y-grip,grip*2,grip*2);}
+            ctx.beginPath();ctx.moveTo(corners[2].x,corners[2].y);ctx.lineTo(handle.x,handle.y);
+            ctx.strokeStyle='#2b5245';ctx.stroke();ctx.beginPath();ctx.arc(handle.x,handle.y,12/scale,0,Math.PI*2);
+            ctx.fillStyle='#fffefa';ctx.fill();ctx.stroke();ctx.fillStyle='#2b5245';
+            ctx.font=`${17/scale}px sans-serif`;ctx.textAlign='center';ctx.textBaseline='middle';
+            ctx.fillText('↻',handle.x,handle.y+1/scale);
           }else{
             ctx.strokeStyle='rgba(48,70,61,.4)';ctx.lineWidth=gesture.width;
             ctx.lineCap='round';ctx.lineJoin='round';ctx.beginPath();
@@ -238,6 +281,7 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
           if(previewFrame)return;
           previewFrame=requestAnimationFrame(()=>{previewFrame=0;preview();});
         };
+        canvas.on('after:render',queuePreview);
         const onPointerDown=event=>{
           const mode=callbacks.current.tool;
           if(readOnly||!['pen','highlighter','eraser','text','lasso'].includes(mode)||event.button>0)return;
@@ -277,6 +321,23 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
             callbacks.current.onChange?.(node,'text:new');
             return;
           }
+          if(mode==='lasso'&&lassoSelection?.ids.length){
+            const start=pointer(event);
+            const handle=frameHandle(lassoSelection);
+            if(Math.hypot(start.x-handle.x,start.y-handle.y)<18/uiScale()){
+              callbacks.current.onBeforeChange?.('lasso:rotate');
+              gesture={id:event.pointerId,tool:'lasso-rotate',moved:false,
+                lastAngle:Math.atan2(start.y-lassoSelection.center.y,start.x-lassoSelection.center.x)};
+              canvas.upperCanvasEl.setPointerCapture(event.pointerId);return;
+            }
+            if(polygonContains(start,frameCorners(lassoSelection))){
+              callbacks.current.onBeforeChange?.('lasso:move');
+              gesture={id:event.pointerId,tool:'lasso-move',last:start,moved:false};
+              canvas.upperCanvasEl.setPointerCapture(event.pointerId);
+              event.preventDefault();event.stopImmediatePropagation();return;
+            }
+          }
+          lassoSelection=null;
           canvas.discardActiveObject();
           const settings=mode==='pen'?callbacks.current.pen:
             mode==='highlighter'?callbacks.current.marker:callbacks.current.eraser;
@@ -291,6 +352,31 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
         const onPointerMove=event=>{
           if(!gesture||gesture.id!==event.pointerId)return;
           event.preventDefault();event.stopImmediatePropagation();
+          if(gesture.tool==='lasso-move'){
+            const next=pointer(event),dx=next.x-gesture.last.x,dy=next.y-gesture.last.y;
+            if(dx||dy){
+              moveSceneLasso(callbacks.current.draft,lassoSelection.ids,dx,dy);
+              lassoSelection.center.x+=dx;lassoSelection.center.y+=dy;
+              gesture.last=next;gesture.moved=true;reconcileRef.current?.();queuePreview();
+              canvas.upperCanvasEl.dispatchEvent(new CustomEvent('shiye:fabric-object-transform',
+                {detail:{bounds:frameBounds(lassoSelection)}}));
+            }
+            return;
+          }
+          if(gesture.tool==='lasso-rotate'){
+            const next=pointer(event),angle=Math.atan2(next.y-lassoSelection.center.y,
+              next.x-lassoSelection.center.x);
+            let degrees=(angle-gesture.lastAngle)*180/Math.PI;
+            if(degrees>180)degrees-=360;if(degrees< -180)degrees+=360;
+            if(Math.abs(degrees)>.01){
+              rotateSceneLasso(callbacks.current.draft,lassoSelection.ids,lassoSelection.center,degrees);
+              lassoSelection.angle+=degrees;gesture.lastAngle=angle;gesture.moved=true;
+              reconcileRef.current?.();queuePreview();
+              canvas.upperCanvasEl.dispatchEvent(new CustomEvent('shiye:fabric-object-transform',
+                {detail:{bounds:frameBounds(lassoSelection)}}));
+            }
+            return;
+          }
           for(const point of samples(event)){
             const previous=gesture.points.at(-1);
             const spacing=gesture.tool==='eraser'?Math.max(.5,gesture.width*.25):
@@ -309,23 +395,26 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
           if(!gesture||gesture.id!==event.pointerId)return;
           event.preventDefault();event.stopImmediatePropagation();
           const finished=gesture;gesture=null;
+          if(finished.tool==='lasso-move'||finished.tool==='lasso-rotate'){
+            preview();
+            if(finished.moved){callbacks.current.onSelection?.(lassoSelection.ids,frameBounds(lassoSelection));
+              callbacks.current.onChange?.(null,finished.tool);}
+            return;
+          }
           canvas.clearContext(canvas.contextTop);
           if(event.type==='pointercancel')return;
           const point=pointer(event),prior=finished.points.at(-1);
           if(prior&&Math.hypot(point.x-prior.x,point.y-prior.y)>.15)finished.points.push(point);
           const current=callbacks.current.draft;
           if(finished.tool==='lasso'){
-            if(finished.points.length<3)return;
+            if(finished.points.length<3){callbacks.current.onSelection?.([]);return;}
             const mode=callbacks.current.selectionMode||'contain';
-            const ids=selectPolygon(current,finished.points,
-              callbacks.current.selectionFilter||{material:true,text:true,shape:true},mode);
-            const objects=[...new Set(ids)].map(id=>canvas.getObjects().find(object=>
-              object.sceneID===id&&object.selectable!==false)).filter(Boolean);
-            if(objects.length===1)canvas.setActiveObject(objects[0]);
-            else if(objects.length>1)canvas.setActiveObject(new fabric.ActiveSelection(objects,{canvas}));
-            else canvas.discardActiveObject();
-            canvas.requestRenderAll();
-            callbacks.current.onSelection?.([...new Set(objects.map(object=>object.sceneID))]);
+            const ids=selectSceneLasso(current,finished.points,
+              callbacks.current.selectionFilter||{material:true,text:true,shape:true,ink:true},mode);
+            const bounds=ids.length?sceneLassoBounds(current,ids):null;
+            lassoSelection=bounds?{ids,center:{x:bounds.x+bounds.width/2,y:bounds.y+bounds.height/2},
+              width:bounds.width,height:bounds.height,angle:0}:null;
+            preview();callbacks.current.onSelection?.(ids,lassoSelection?frameBounds(lassoSelection):null);
           }else if(finished.tool==='pen'||finished.tool==='highlighter'){
             callbacks.current.onBeforeChange?.('ink:new');
             const node={id:globalThis.crypto?.randomUUID?.()||'ink-'+Math.random().toString(36).slice(2),

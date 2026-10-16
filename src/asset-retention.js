@@ -22,38 +22,10 @@ export async function referencedAssetIDsInProjects({db,projects,ids}){
       const {readArchivePayload}=await import('./scene-archive.js');
       for(const archive of project.manualArchives){
         const payload=project.manualArchiveStore?.[archive.ref];
-        if(!payload)throw Error('作品存档不完整，隐藏图片暂不清理');
+        if(!payload)throw Error('作品存档不完整，暂不能删除关联素材');
         containsID(readArchivePayload(payload,archive.ref),ids,found);
       }
     }
   }
   return found;
-}
-
-// Incomplete project documents, pending uploads or damaged archives mean
-// "unknown", never permission to discard a work's source image.
-export async function referencedHiddenAssetIDs({db,assets,trash=[],candidateIDs=null}){
-  const ids=candidateIDs||new Set(assets.filter(a=>a.hiddenFromLibraryAt).map(a=>a.id));
-  if(!ids.size)return new Set();
-  const rows=await db.all('projects');
-  const pending=typeof db.pendingProjects==='function'?await db.pendingProjects():[];
-  const details=typeof db.pendingSyncDetails==='function'?await db.pendingSyncDetails():null;
-  if(details?.batches?.length||details?.quarantined)throw Error('待同步资料尚未核对，隐藏图片暂不清理');
-  const projects=[...rows,...trash.filter(row=>row.kind==='project').map(row=>row.item),
-    ...pending.map(row=>row.record||row)];
-  return referencedAssetIDsInProjects({db,projects,ids});
-}
-
-export async function pruneUnreferencedHiddenAssets({db,state,now=Date.now(),minAgeMs=7*86400000}){
-  const inTrash=new Set(state.trash.filter(row=>row.kind==='asset').map(row=>row.item.id));
-  const candidates=state.assets.filter(asset=>asset.hiddenFromLibraryAt&&!inTrash.has(asset.id)&&
-    Number.isFinite(Date.parse(asset.hiddenFromLibraryAt))&&now-Date.parse(asset.hiddenFromLibraryAt)>=minAgeMs);
-  if(!candidates.length)return 0;
-  const used=await referencedHiddenAssetIDs({db,assets:state.assets,trash:state.trash});
-  const unused=candidates.filter(asset=>!used.has(asset.id));
-  if(!unused.length)return 0;
-  await db.transaction(['assets'],tx=>{for(const asset of unused)tx.objectStore('assets').delete(asset.id);});
-  const removed=new Set(unused.map(asset=>asset.id));
-  state.assets=state.assets.filter(asset=>!removed.has(asset.id));
-  return unused.length;
 }

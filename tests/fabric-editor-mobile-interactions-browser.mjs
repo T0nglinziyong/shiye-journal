@@ -50,6 +50,7 @@ try{
   assert.equal(await evaluate('!!document.querySelector("#draft-select,[data-act=save-archive]")'),false,
     'Object settings no longer show scheme and archive controls');
   await click('[aria-label="关闭对象设置"]');
+  await evaluate('document.querySelector(".upper-canvas").scrollIntoView({block:"center"})');
   const points=await evaluate(`(()=>{const r=document.querySelector('.upper-canvas').getBoundingClientRect();
     return {shape:{x:r.left+r.width*.5,y:r.top+r.height*.5},
       blank:{x:r.left+r.width*.08,y:r.top+r.height*.08}}})()`);
@@ -89,7 +90,7 @@ try{
     const project=await new Promise(resolve=>{const q=db.transaction('projects').objectStore('projects').getAll();q.onsuccess=()=>resolve(q.result.at(-1))});db.close();
     const draft=project.drafts[0],node=draft.layers.findLast(item=>item.type==='shape');
     const rect=document.querySelector('.upper-canvas').getBoundingClientRect(),page=document.querySelector('#canvas-page').getBoundingClientRect(),scale=rect.width/draft.canvas.width;
-    return {x:rect.left+(node.x+node.width/2+30)*scale,y:rect.top+(node.y+node.height/2+30)*scale,
+    return {x:rect.left+(node.x+node.width/2+12)*scale,y:rect.top+(node.y+node.height/2+12)*scale,
       pageLeft:page.left,angle:node.rotation||0};})()`);
   const actionBeforeRotate=await evaluate('document.querySelector(".fabric-selected-actions")?.getBoundingClientRect().toJSON()');
   const touch=(id,x,y)=>({id,x,y,radiusX:1,radiusY:1,force:.5});
@@ -101,7 +102,7 @@ try{
   const rotated=await evaluate(`(async()=>{const db=await new Promise(resolve=>{const q=indexedDB.open('shiye-pwa-full-v1');q.onsuccess=()=>resolve(q.result)});
     const p=await new Promise(resolve=>{const q=db.transaction('projects').objectStore('projects').getAll();q.onsuccess=()=>resolve(q.result.at(-1))});db.close();
     return p.drafts[0].layers.findLast(item=>item.type==='shape').rotation||0;})()`);
-  assert.ok(Math.abs(rotated-rotationTouch.angle)>3,'Touching the bottom-right control must rotate the object: '+JSON.stringify({rotated,rotationTouch,pageLeft:await evaluate(`document.querySelector('#canvas-page').getBoundingClientRect().left`)}));
+  assert.ok(Math.abs(rotated-rotationTouch.angle)>3,'The combined bottom-right control must rotate the object: '+JSON.stringify({rotated,rotationTouch,pageLeft:await evaluate(`document.querySelector('#canvas-page').getBoundingClientRect().left`)}));
   const actionAfterRotate=await evaluate('document.querySelector(".fabric-selected-actions")?.getBoundingClientRect().toJSON()');
   assert.ok(Math.hypot(actionAfterRotate.left-actionBeforeRotate.left,actionAfterRotate.top-actionBeforeRotate.top)>2,
     'Action buttons stay attached to the rotated selection edge');
@@ -147,6 +148,18 @@ try{
     'Touch resizing must not move the page');
   await click('.shape-add-quick','.swift-shape-picker');
   await click('.shape-add-quick');
+  await click('[data-val="material"]','.swift-material-picker');
+  const pickerLayout=await evaluate(`(()=>{const search=document.querySelector('.canvas-material-search').getBoundingClientRect();
+    const [series,type]=[...document.querySelectorAll('.canvas-material-filters select')].map(node=>node.getBoundingClientRect());
+    return {search:search.toJSON(),series:series.toJSON(),type:type.toJSON()};})()`);
+  assert.ok(pickerLayout.search.height<=34&&pickerLayout.series.height<=34&&pickerLayout.type.height<=34&&
+    Math.abs(pickerLayout.series.top-pickerLayout.type.top)<1&&
+    Math.abs(pickerLayout.series.width-pickerLayout.type.width)<2&&
+    pickerLayout.search.bottom<pickerLayout.series.top,
+    'Material search, series and type stay compact with two equal filters: '+JSON.stringify(pickerLayout));
+  await click('.swift-material-picker .swift-segments button:first-child');
+  assert.equal(await evaluate('document.querySelectorAll(".canvas-material-filters select").length'),2,
+    'The same filters remain available on the used-material tab');
   assert.deepEqual(browser.errors,[]);
   console.log('Mobile Fabric toolbar, palette, release-to-select pan and touch rotation passed');
 }finally{await browser.close();}

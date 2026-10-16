@@ -77,12 +77,11 @@
 #modal .cutout-steps button:disabled{opacity:.58;cursor:wait}
 #modal.cutout-dialog .cutout-modal{grid-template-areas:"header header" "compare controls" "preview controls" "steps controls";grid-template-rows:auto auto minmax(0,1fr) auto}
 @media(max-width:699px){#modal.cutout-dialog .cutout-modal{display:flex;flex-direction:column}#modal .cutout-steps button{min-height:31px}}
-/* All materials uses the same independent type, status, basis and direction choices as the library. */
-.swift-material-picker .canvas-material-filters{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px}
+/* The material picker keeps search above two equal, compact filters on every tab. */
+.swift-material-picker .canvas-material-filters{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;padding:0 0 2px}
 .swift-material-picker .canvas-material-filters[hidden]{display:none}
-.swift-material-picker .canvas-material-filters select{width:100%;min-width:0;max-width:none}
-.swift-material-picker .canvas-material-filters select:first-child,.swift-material-picker .canvas-material-filters input[type=search]{grid-column:1/-1}
-.swift-material-picker .canvas-material-filters input[type=search]{box-sizing:border-box;width:100%;min-width:0}
+.swift-material-picker .canvas-material-filters select{width:100%;min-width:0;max-width:none;height:32px;min-height:32px;padding-block:4px}
+.swift-material-picker .canvas-material-search{box-sizing:border-box;width:100%;height:32px;min-height:32px;padding-block:4px}
 @media(max-width:600px){.swift-material-picker{height:min(60dvh,500px)!important}}
 .project-preview-cover{grid-template-columns:minmax(0,1fr)}
 .project-preview-cover .preview-paper{justify-self:center;min-width:0;max-width:90%}

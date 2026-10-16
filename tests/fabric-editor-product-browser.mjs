@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {browserHarness} from './browser-harness.mjs';
+import {sceneLassoBounds} from '../src/scene-lasso.js';
 
 const base=process.env.SHIYE_TEST_URL||'http://127.0.0.1:5173';
 const browser=await browserHarness('shiye-fabric-product',base+'/');
@@ -49,8 +50,6 @@ try{
   await command('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
   await sleep(200);
   await click('[data-val="select"]');
-  const point=await evaluate(`(()=>{const rect=document.querySelector('.upper-canvas').getBoundingClientRect();
-    return {x:rect.left+rect.width*.4,y:rect.top+rect.height*.45}})()`);
   await click('[data-val="pen"]');
   assert.equal(await evaluate('document.querySelectorAll(".canvas-context-tools .stroke-width").length'),3);
   assert.equal(await evaluate('document.querySelectorAll(".canvas-context-tools .ink-color").length'),3);
@@ -62,6 +61,9 @@ try{
   await click('.canvas-context-tools .stroke-width:first-child','.swift-popover');
   assert.ok(await evaluate('document.querySelector(".swift-popover")?.textContent.includes("修改粗细")'));
   await click('[data-val="pen"]');
+  await evaluate('document.querySelector(".upper-canvas").scrollIntoView({block:"center"})');
+  const point=await evaluate(`(()=>{const rect=document.querySelector('.upper-canvas').getBoundingClientRect();
+    return {x:rect.left+rect.width*.4,y:rect.top+rect.height*.45}})()`);
   await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,clickCount:1,...point});
   for(let step=1;step<=8;step++)await command('Input.dispatchMouseEvent',{
     type:'mouseMoved',button:'left',buttons:1,x:point.x+step*5,y:point.y+step*2});
@@ -69,7 +71,11 @@ try{
     x:point.x+40,y:point.y+16,clickCount:1});
   const records=await waitProjects(rows=>rows[0]?.drafts?.[0]?.layers?.some(layer=>layer.type==='ink'));
   assert.equal(records.length,1);
-  assert.equal(records[0].drafts[0].layers.filter(layer=>layer.type==='ink').length,1);
+  assert.equal(records[0].drafts[0].layers.filter(layer=>layer.type==='ink').length,1,
+    JSON.stringify({point,rect:await evaluate('document.querySelector(".upper-canvas")?.getBoundingClientRect().toJSON()'),
+      target:await evaluate(`document.elementFromPoint(${point.x},${point.y})?.outerHTML.slice(0,180)`),
+      tool:await evaluate('document.querySelector("[data-val=pen]")?.className'),
+      toast:await evaluate('document.querySelector("#toast")?.textContent'),layers:records[0].drafts[0].layers}));
   assert.ok(await paintedPixels()>20);
   await click('[data-act="undo"]');
   await sleep(700);
@@ -166,6 +172,10 @@ try{
   assert.equal(await evaluate('!!document.querySelector(".show-inspector")'),false,
     'Selecting a Scene object must retain the canvas selection state');
   await wait('.fabric-selected-actions');
+  assert.equal(await evaluate(`(()=>{const bar=document.querySelector('.fabric-selected-actions');
+    return bar.querySelectorAll('button').length===3&&bar.querySelectorAll('svg.shiye-icon').length===3&&
+      [...bar.querySelectorAll('button')].every(button=>!button.textContent.trim());})()`),true,
+    'The floating copy, edit and delete actions must not leave duplicate glyphs inside the frame');
   await click('[aria-label="编辑对象"]','.show-inspector');
   assert.ok(await evaluate('!!document.querySelector("#inspector-fill")&&!!document.querySelector("#inspector-stroke-dash")&&!!document.querySelector("#inspector-blend-mode")'),
     'Shape inspector exposes the same editable style fields as AI created shapes');
@@ -225,11 +235,31 @@ try{
     type:'mouseMoved',button:'left',buttons:1,...point});
   await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,...lasso[0]});
   await sleep(200);
-  assert.ok(await evaluate('!!document.querySelector(".canvas-context-tools button")?.textContent.includes("组合")'),
-    'Lasso must select the overlapping Scene objects');
-  await click('.canvas-context-tools button');await sleep(700);
+  assert.ok(await evaluate('!!document.querySelector("[aria-label=复制套选对象]")&&!!document.querySelector("[aria-label=删除套选对象]")&&!!document.querySelector("[aria-label=合并套选图层]")'),
+    'Lasso selection must expose copy, delete and merge controls');
+  const shapeBeforeMove=(await projects())[0].drafts[0].layers.find(layer=>layer.id===shapes[0].id).x;
+  const center={x:(lasso[0].x+lasso[2].x)/2,y:(lasso[0].y+lasso[2].y)/2};
+  await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,clickCount:1,...center});
+  await command('Input.dispatchMouseEvent',{type:'mouseMoved',button:'left',buttons:1,x:center.x+15,y:center.y+8});
+  await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,x:center.x+15,y:center.y+8});
+  await sleep(700);
+  assert.ok((await projects())[0].drafts[0].layers.find(layer=>layer.id===shapes[0].id).x>shapeBeforeMove,
+    'Dragging inside the lasso must move its Scene objects');
+  const beforeRotate=(await projects())[0].drafts[0],selectedShapeIDs=shapes.map(shape=>shape.id);
+  const frame=sceneLassoBounds(beforeRotate,selectedShapeIDs);
+  const canvasRect=await evaluate('document.querySelector(".upper-canvas").getBoundingClientRect().toJSON()');
+  const canvasWidth=beforeRotate.canvas.width,frameScale=canvasRect.width/canvasWidth;
+  const turnStart={x:canvasRect.left+(frame.x+frame.width)*frameScale+24/Math.SQRT2,
+    y:canvasRect.top+(frame.y+frame.height)*frameScale+24/Math.SQRT2};
+  await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,clickCount:1,...turnStart});
+  await command('Input.dispatchMouseEvent',{type:'mouseMoved',button:'left',buttons:1,x:turnStart.x-35,y:turnStart.y+8});
+  await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,x:turnStart.x-35,y:turnStart.y+8});
+  await sleep(700);
+  assert.ok(Math.abs((await projects())[0].drafts[0].layers.find(layer=>layer.id===shapes[0].id).rotation||0)>3,
+    'The lasso editing frame rotates selected Scene objects as one unit');
+  await click('[aria-label=合并套选图层]');await sleep(700);
   assert.equal((await projects())[0].drafts[0].layers.filter(layer=>layer.type==='group').length,1,
-    'Grouping selected Scene nodes must persist');
+    'Merging lasso selected Scene nodes must persist');
   await click('[data-val="material"]','.swift-material-picker');
   await click('.swift-material-picker .swift-segments button:last-child');
   await click('[data-material-id="fabric-product-material"]');await sleep(700);

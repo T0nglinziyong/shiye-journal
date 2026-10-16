@@ -613,6 +613,7 @@ test('visible private covers batch metadata by account and reuse previews withou
 test('small editable projects store a standalone cover and reuse it for metadata changes',async()=>{
   let rendered=0;
   const {state,db}=fixture(memoryCache(),null,async()=>{rendered++;return new Blob(['webp'],{type:'image/webp'});});
+  state.cloudCopies=['fixture-paper','new'].map(id=>({id,record:{id,blobId:'fixture-image'}}));
   const project={id:'small',activeDraftID:'draft',drafts:[{id:'draft',canvas:{width:100,height:100},items:[{id:'item'}],primitives:[],textBlocks:[],strokes:[]}]};
   await db.cloudTransaction(['projects'],tx=>tx.objectStore('projects').put(v2(project)));
   const first=state.calls[0].operations[0].item,cover=first.drafts[0].coverImageID;
@@ -675,6 +676,42 @@ test('all user-facing deletes are staged as remote delete plus trash entry and s
     assert.deepEqual(await activeRows(cache,'batch'),[],
       'Committed remote deletion must leave no unsynced tombstones');
   }
+});
+test('an older queued material delete keeps a cloud record when an editable work references it',async()=>{
+  const {state,db}=fixture(memoryCache());
+  const material={id:'referenced-material',blobId:'image'};
+  const work=v2({id:'referencing-work',activeDraftID:'page',drafts:[{
+    id:'page',sceneVersion:2,canvas:{width:400,height:600},layers:[{
+      id:'cutout',type:'material',assetID:material.id,x:50,y:50,width:40,height:40
+    }]
+  }]});
+  state.rows=[material,work];
+  await db.cloudTransaction(['assets'],tx=>tx.objectStore('assets').delete(material.id));
+  const operation=state.calls.at(-1).operations.find(op=>op.store==='assets');
+  assert.equal(operation.action,'put');
+  assert.equal(operation.item.id,material.id);
+  assert.equal(operation.item.isProjectInternal,true);
+  assert.ok(operation.item.hiddenFromLibraryAt);
+  assert.ok(!state.calls.at(-1).operations.some(op=>op.store==='meta'&&op.item?.id==='tombstone:assets:'+material.id));
+});
+test('a new work cannot reach the cloud before its material, while an existing orphan remains editable',async()=>{
+  const {state,db}=fixture(memoryCache());
+  const work={id:'source-check',activeDraftID:'page',drafts:[{
+    id:'page',sceneVersion:2,canvas:{width:400,height:600},layers:[{
+      id:'cutout',type:'material',assetID:'missing-material',x:50,y:50,width:40,height:40
+    }]
+  }]};
+  await assert.rejects(db.cloudTransaction(['projects'],tx=>tx.objectStore('projects').put(work)),
+    /素材尚未同步到云端/);
+  assert.equal(state.calls.length,0);
+  await db.cloudTransaction(['assets','projects'],tx=>{
+    tx.objectStore('assets').put({id:'missing-material',blobId:'image'});
+    tx.objectStore('projects').put(work);
+  });
+  assert.equal(state.calls.length,1);
+  state.rows=[work];
+  await db.cloudTransaction(['projects'],tx=>tx.objectStore('projects').put({...work,title:'metadata edit'}));
+  assert.equal(state.calls.length,2);
 });
 test('rapid delete followed by explicit restore replays the entire recovery after a stale revision',async()=>{
  const cache=memoryCache(),{db,state}=fixture(cache);

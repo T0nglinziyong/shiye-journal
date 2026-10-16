@@ -143,10 +143,14 @@ test('Fabric material edge controls resize its Scene placement and keep the sour
   assert.equal(object.controls.mt.visible,true);
   assert.equal(object.controls.mb.visible,true);
   assert.equal(object.controls.br.visible,true);
-  assert.equal(object.controls.rotateBottomRight.visible,true);
-  object.set({scaleX:object.scaleX*1.2});
+  assert.deepEqual(Object.keys(object.controls).sort(),['br','mb','ml','mr','mt']);
+  const startScale=object.scaleX;
+  assert.equal(object.controls.br.actionHandler({},
+    {target:object,ex:220,ey:140,theta:0,scaleX:object.scaleX,scaleY:object.scaleY},230,170),true);
+  assert.ok(object.scaleX>startScale&&object.angle>3,
+    'The single bottom-right grip must scale and rotate together');
   bridge.applyObject(node,object);
-  assert.equal(node.width,240);
+  assert.ok(node.width>200&&node.rotation>3);
   assert.equal(node.assetID,'asset-1');
 });
 

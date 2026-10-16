@@ -37,7 +37,9 @@ try{
       }
     }
     await sleep(250);assert.equal(await menu(),title,`${tool} remains open`);
-    await touch(`[data-val="${tool}"]`);assert.equal(await menu(),null,`${tool} closes`);
+    const target=await center(`[data-val="${tool}"]`);
+    const hit=await evaluate(`document.elementFromPoint(${target.x},${target.y})?.outerHTML.slice(0,160)`);
+    await touch(`[data-val="${tool}"]`);assert.equal(await menu(),null,`${tool} closes · ${JSON.stringify({target,hit})}`);
     await touch(`[data-val="${tool}"]`);assert.equal(await menu(),title,`${tool} reopens`);
   }
   await touch('[data-val="shape"]');

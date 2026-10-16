@@ -10,6 +10,8 @@ import {compareRecordEdits} from './sync-last-write.js';
 import {mergeDisjointMetadata} from './sync-field-merge.js';
 import {recordTombstones} from './sync-tombstones.js';
 import {LARGE_PROJECT_BYTES,projectSummary,mergeProjectSummary,projectBlobText} from './project-document.js';
+import {hiddenAssetCopy,referencedAssetIDsInProjects} from './asset-retention.js';
+import {sceneMaterialIDs} from './scene-material-references.js';
 import {createCOSStore} from './cos-store.js';
 import {imageVariant,DISPLAY_TIERS,COVER_EDGE} from './image-variants.js';
 import {recoverImportOutbox} from './import-outbox-recovery.js';
@@ -836,7 +838,8 @@ function auxiliaryBlobIDs(operations){
 async function encode(store,record,{makePreview=true}={}){
   if(store==='projects'){
     if(record.projectDocumentPath)record=await cloudProjectDocument(record);
-    const {__cloudBaseRevision,__cloudSessionId,__cloudBaseSceneFingerprint,__cloudBaseMetadata,...persisted}=record;record=persisted;
+    const {__cloudBaseRevision,__cloudSessionId,__cloudBaseSceneFingerprint,__cloudBaseMetadata,...persisted}=record;
+    record={...persisted,sceneAssetIDs:sceneMaterialIDs(persisted)};
     const text=JSON.stringify(record);let blob=new Blob([text],{type:'application/json'}),encoding;
     const inline=blob.size<=LARGE_PROJECT_BYTES,provider=writeProvider();
     let path;
@@ -896,6 +899,60 @@ async function encode(store,record,{makePreview=true}={}){
   await remember('image:'+storagePath,record.data);retainImage(storagePath,record.data);
   const {data,thumbnailPath:_oldThumbnail,...metadata}=record;return {...metadata,storagePath,storageProvider:provider,...(thumbnailPath?{thumbnailPath}:{})};
 }
+async function protectReferencedAssetDeletes(operations){
+  const deletionIDs=new Set(operations.filter(op=>op.store==='assets'&&op.action==='delete').map(op=>op.id));
+  if(!deletionIDs.size)return;
+  // Do not use cloudAll here: it overlays the pending outbox and would wait
+  // for this very transaction to finish.
+  const remote=async store=>{
+    const records=[];
+    for(let offset=0;;offset+=500){
+      const rows=checked(await cloudClient().from('shiye_records').select('record')
+        .eq('user_id',owner).eq('store',store).order('id').range(offset,offset+499));
+      records.push(...rows.map(row=>row.record));
+      if(rows.length<500)break;
+    }
+    return records;
+  };
+  const [projects,trash]=await Promise.all([remote('projects'),remote('trash')]);
+  const sources=[...projects.filter(row=>Array.isArray(row?.drafts)),
+    ...trash.filter(row=>row.kind==='project'&&Array.isArray(row.item?.drafts)).map(row=>row.item),
+    ...operations.filter(op=>op.store==='projects'&&op.action==='put').map(op=>op.item),
+    ...operations.filter(op=>op.store==='trash'&&op.action==='put'&&op.item?.kind==='project').map(op=>op.item.item)];
+  const referenced=await referencedAssetIDsInProjects({
+    db:{completeProject:project=>project.projectDocumentPath?cloudProjectDocument(project):project},
+    projects:sources,ids:deletionIDs
+  });
+  for(const op of operations){
+    if(op.store!=='assets'||op.action!=='delete'||!referenced.has(op.id))continue;
+    const saved=await cloudRecord('assets',op.id);
+    if(!saved)throw Error('作品引用的素材记录尚未恢复，暂不能删除：'+op.id);
+    op.action='put';op.item=hiddenAssetCopy(saved);delete op.id;
+  }
+}
+async function verifyNewProjectSources(operations){
+  const projectPuts=operations.filter(op=>op.store==='projects'&&op.action==='put'&&!op.item?.isSnapshot);
+  if(!projectPuts.length)return;
+  const assetPuts=new Set(operations.filter(op=>op.store==='assets'&&op.action==='put').map(op=>op.item.id));
+  const needed=new Set();
+  for(const op of projectPuts){
+    const current=new Set(sceneMaterialIDs(op.item));
+    if(!current.size)continue;
+    const remote=await cloudRecord('projects',op.item.id);
+    const old=new Set(remote?(Array.isArray(remote.sceneAssetIDs)
+      ?remote.sceneAssetIDs:sceneMaterialIDs(remote.projectDocumentPath?await cloudProjectDocument(remote):remote)):[]);
+    for(const id of current)if(!old.has(id)&&!assetPuts.has(id))needed.add(id);
+  }
+  if(!needed.size)return;
+  const ids=[...needed],found=new Set();
+  for(let offset=0;offset<ids.length;offset+=100){
+    const rows=checked(await cloudClient().from('shiye_records').select('id')
+      .eq('user_id',owner).eq('store','assets').in('id',ids.slice(offset,offset+100)));
+    for(const row of rows)found.add(row.id);
+  }
+  const missing=ids.filter(id=>!found.has(id));
+  if(missing.length)throw Error('作品引用的素材尚未同步到云端；作品保留在本机待重试：'+missing.join('、'));
+}
 function cloudTransaction(names,fn,operationID=crypto.randomUUID(),baseRevisionOverride=null){
   assertAccountWritable();
   const operations=[];const result=fn({objectStore(store){if(!names.includes(store))throw Error('此表未加入事务');return {put:record=>operations.push({action:'put',store,item:structuredClone(record)}),delete:id=>operations.push({action:'delete',store,id}),clear:()=>operations.push({action:'clear',store})};}});
@@ -907,6 +964,8 @@ function cloudTransaction(names,fn,operationID=crypto.randomUUID(),baseRevisionO
     await identity();if(revision===undefined)await version();
     const previous=revision;
     const commitBase=baseRevisionOverride??previous;
+    await protectReferencedAssetDeletes(operations);
+    await verifyNewProjectSources(operations);
     operations.push(...recordTombstones(operations).slice(operations.length));
     const puts=operations.filter(op=>op.action==='put'),auxiliary=auxiliaryBlobIDs(operations);activeDirect.total=puts.length;activeDirect.phase='编码与上传';reportSync();
     for(let offset=0;offset<puts.length;offset+=3)try{

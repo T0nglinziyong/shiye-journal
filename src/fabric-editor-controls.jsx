@@ -265,7 +265,9 @@ export function FabricEditorToolbar({state,draft,materials,source,selected,onIns
           toggleMenu(kind,event):
           (close(),onAction('fabric-tool',null,kind))} dangerouslySetInnerHTML={{__html:iconMarkup(toolIcons[kind])}}/>)}</div>
     <div className="canvas-context-tools" aria-label="当前工具选项">
-      {(state.multiSelected||[]).length>1?<><span>已选 {state.multiSelected.length} 项</span>
+      {state.tool==='lasso'&&(state.multiSelected||[]).length?<><span>已套选 {state.multiSelected.length} 项</span>
+        <button type="button" onClick={()=>onAction('fabric-clear-selection')}>清空选择</button></>:
+      (state.multiSelected||[]).length>1?<><span>已选 {state.multiSelected.length} 项</span>
         <button type="button" onClick={()=>onAction('fabric-group-selection')}>组合移动</button>
         <button type="button" onClick={()=>onAction('fabric-clear-selection')}>清空选择</button></>:
       ['pen','highlighter','eraser'].includes(activeTool)?<>
@@ -351,6 +353,9 @@ export function FabricEditorToolbar({state,draft,materials,source,selected,onIns
         .map(([kind,label])=><label key={kind}><input type="checkbox"
           checked={(state.selectionFilter||{material:true,shape:true,text:true})[kind]!==false}
           onChange={event=>onAction('fabric-selection-filter',kind,event.target.checked)}/>{label}</label>)}</div>
+      <label className="canvas-toggle">锁住字迹
+        <input type="checkbox" checked={!!state.selectionFilter?.lockInk}
+          onChange={event=>onAction('fabric-selection-filter','lockInk',event.target.checked)}/></label>
     </div>:null}
     {menu.kind==='slot-width'?<label className="canvas-setting">粗细 · {Number(slotValue(menu.mode,'width',menu.index)).toFixed(1)} mm
       <input type="range" min={menu.mode==='pen'?.2:menu.mode==='highlighter'?.5:1}

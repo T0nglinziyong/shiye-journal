@@ -14,6 +14,7 @@ const sceneRuntime=()=>import('./scene-renderer.js');
 const renderSceneCanvas=async(...args)=>(await sceneRuntime()).renderSceneCanvas(...args);
 const decodeSceneImage=async(...args)=>(await sceneRuntime()).decodeSceneImage(...args);
 import {sceneLayerEntries,attachSceneV2,moveSceneNode,groupSceneLayers,ungroupSceneLayers,findSceneNode,validateVectorMask} from './scene-model.js';
+import {copySceneLasso,deleteSceneLasso,mergeSceneLasso} from './scene-lasso.js';
 import './styles.css';
 import './overrides.css';
 import './parity.css';
@@ -106,7 +107,7 @@ import {selectJournalReferenceCases,loadJournalReferenceCases} from './journal-r
 import {loadJournalTemplateReferences} from './journal-template-references.js';
 import {clearJournalPresetImages} from './journal-preset-images.js';
 import {changeTrash,expiredTrash} from './trash-actions.js';
-import {visibleMaterials,pruneUnreferencedHiddenAssets} from './asset-retention.js';
+import {visibleMaterials} from './asset-retention.js';
 // AI agent planning and visual review are paid, optional workflows. Load them only on demand.
 const runCreativeAgent=async(...args)=>(await import('./creative-runner.js')).runCreativeAgent(...args);
 import {commitAIDraft} from './ai-run-target.js';
@@ -1240,8 +1241,9 @@ async function runAppAction(action,id,value){try{switch(action){
   case 'project-delete':{const p=state.projects.find(x=>x.id===state.previewProjectID);if(!p||!confirm('将这份作品移到最近删除？'))break;await moveProjectsToTrash([p.id]);break;}
   case 'works-filter':await actionStore.dispatch({type:'works/filter',payload:{value}});break;
   case 'fabric-tool':{
+    const leavingLasso=state.tool==='lasso'&&value!=='lasso';
     state.tool=value;
-    if(!['select','lasso'].includes(value)){state.selected=null;state.multiSelected=[];}
+    if(leavingLasso||!['select','lasso'].includes(value)){state.selected=null;state.multiSelected=[];}
     state.fabricInspectorOpen=false;
     render();break;
   }
@@ -1331,9 +1333,24 @@ async function runAppAction(action,id,value){try{switch(action){
   }
   case 'fabric-selection-mode':state.selectionMode=id==='intersect'?'intersect':'contain';render();break;
   case 'fabric-selection-filter':{
-    if(!['material','shape','text'].includes(id))break;
-    state.selectionFilter={material:true,shape:true,text:true,...state.selectionFilter,[id]:!!value};
+    if(!['material','shape','text','lockInk'].includes(id))break;
+    state.selectionFilter={material:true,shape:true,text:true,ink:true,lockInk:false,...state.selectionFilter,[id]:!!value};
     render();break;
+  }
+  case 'fabric-lasso-copy':{
+    const d=current(),ids=state.multiSelected||[];if(!d||!ids.length)break;
+    checkpoint();copySceneLasso(d,ids,uid);state.selected=null;state.multiSelected=[];
+    saveProject();render();break;
+  }
+  case 'fabric-lasso-delete':{
+    const d=current(),ids=state.multiSelected||[];if(!d||!ids.length)break;
+    checkpoint();deleteSceneLasso(d,ids);state.selected=null;state.multiSelected=[];
+    saveProject();render();break;
+  }
+  case 'fabric-lasso-merge':{
+    const d=current(),ids=state.multiSelected||[];if(!d||ids.length<2)break;
+    checkpoint();mergeSceneLasso(d,ids,{id:'group-'+uid()});
+    state.selected=null;state.multiSelected=[];saveProject();render();break;
   }
   case 'fabric-layer-select':{
     const d=current(),node=findSceneNode(d,id?.id);if(!node)break;
@@ -1964,12 +1981,6 @@ async function refresh({background=false,onlyChanged=false,skipCloudRefresh=fals
 let trashSweepActive=false;
 async function purgeExpiredTrash(){if(trashSweepActive)return;const entries=expiredTrash(state.trash);if(!entries.length)return;trashSweepActive=true;try{await changeTrash({db,state,ids:entries.map(entry=>entry.id)});if(parity.libraryTab==='trash'||parity.workTab==='trash')render();}catch(error){console.warn('最近删除到期清理待重试',error?.name||error?.message);}finally{trashSweepActive=false;}}
 setInterval(()=>void purgeExpiredTrash(),15*60*1000);
-let hiddenSweepActive=false;
-async function sweepHiddenAssets(){if(hiddenSweepActive||cloudEnabled||document.hidden||state.route==='editor'||state.route==='import')return;
-  hiddenSweepActive=true;try{const removed=await pruneUnreferencedHiddenAssets({db,state});if(removed)actionStore.publish('collections/updated',{scope:'collections',keys:['assets']});}
-  catch(error){recordRuntimeIssue('handled',error,state.route,{phase:'background'});}finally{hiddenSweepActive=false;}}
-setInterval(()=>void sweepHiddenAssets(),24*60*60*1000);
-setTimeout(()=>void sweepHiddenAssets(),60*1000);
 async function refineCandidateFrame(candidateFrame,request,{postprocessOnly=false}={}){
   const bitmap=await decodeImageBlob(candidateFrame);
   try{

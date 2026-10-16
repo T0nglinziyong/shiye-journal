@@ -154,7 +154,7 @@ export function RecentlyDeletedPage({kind,state,source,localCover,cloudEnabled,o
   });
   const act=async(ids,recover)=>{
     if(busy||!ids.length)return;
-    if(!recover&&!window.confirm(`彻底删除所选 ${ids.length} 项？${kind==='project'?'不再被其他作品引用的已删除素材也会一并移除。':''}此操作不能撤销。`))return;
+    if(!recover&&!window.confirm(`彻底删除所选 ${ids.length} 项？素材记录会继续隐藏保留，以供已有作品使用。此操作不能撤销。`))return;
     setBusy(true);
     try{
       await onTrashChange(ids,recover);
@@ -216,7 +216,7 @@ export function RecentlyDeletedPage({kind,state,source,localCover,cloudEnabled,o
         </article>;
       }):<p className="empty">没有最近删除的{kind==='asset'?'素材':'作品'}。</p>}
     </section>
-    <p className="deleted-retention-note">最近删除保留 30 天，到期自动移除记录；仍被作品引用的素材图片继续保留。彻底删除最后一份引用它的作品时，隐藏素材记录一并移除；云端孤立文件经隔离备份与复核后延迟回收。</p>
+    <p className="deleted-retention-note">最近删除保留 30 天，到期自动移除恢复入口；从素材库删除的素材继续隐藏保留，已有作品仍可使用。云端孤立文件经隔离备份与复核后延迟回收。</p>
     <div className="swift-tray manage library-management-tray deleted-selection-tray"
       hidden={!choosing}><strong>已选 {selected.size} 项</strong>
       <button type="button" className="btn" data-trash-all disabled={busy}
@@ -1173,7 +1173,7 @@ function EditorAIPanel({state,draft,asset,hasReport,onAction,onPromptChange}){
   </section>;
 }
 
-function FabricSelectedActions({bounds,draft,onAction}){
+function FabricSelectedActions({bounds,draft,onAction,lasso=false,count=0}){
   const [position,setPosition]=useState(null);
   useEffect(()=>{
     if(!bounds){setPosition(null);return;}
@@ -1185,12 +1185,12 @@ function FabricSelectedActions({bounds,draft,onAction}){
       const rect=canvas.getBoundingClientRect();
       const selected=editorFabricCanvases.get(draft.id)?.getActiveObject();
       const corners=selected?.calcACoords?.();
-      const anchor=corners?.tl&&corners?.tr?{x:(corners.tl.x+corners.tr.x)/2,
+      const anchor=!lasso&&corners?.tl&&corners?.tr?{x:(corners.tl.x+corners.tr.x)/2,
         y:(corners.tl.y+corners.tr.y)/2}:{x:currentBounds.x+currentBounds.width/2,y:currentBounds.y};
       const center=rect.left+anchor.x*rect.width/draft.canvas.width;
       const edge=rect.top+anchor.y*rect.height/draft.canvas.height;
       setPosition({left:Math.max(68,Math.min(innerWidth-68,center)),
-        top:Math.max(58,Math.min(innerHeight-50,edge-17))});
+        top:Math.max(58,Math.min(innerHeight-50,edge-30))});
     };
     const move=event=>{
       currentBounds=event.detail.bounds;
@@ -1206,12 +1206,17 @@ function FabricSelectedActions({bounds,draft,onAction}){
     return ()=>{cancelAnimationFrame(frame);observer.disconnect();resize.disconnect();removeEventListener('resize',place);
       removeEventListener('scroll',place,true);canvas.removeEventListener('shiye:fabric-object-transform',move);
       page.removeEventListener('panzoomchange',place);};
-  },[bounds?.x,bounds?.y,bounds?.width,bounds?.height,draft.id,draft.canvas.width,draft.canvas.height]);
+  },[bounds?.x,bounds?.y,bounds?.width,bounds?.height,draft.id,draft.canvas.width,draft.canvas.height,lasso]);
   if(!position)return null;
-  return createPortal(<div className="fabric-selected-actions" style={position} aria-label="选中对象操作">
-    <button type="button" aria-label="复制对象" onClick={()=>onAction('duplicate')}>⧉</button>
-    <button type="button" aria-label="编辑对象" onClick={()=>onAction('fabric-inspector-open')}>✎</button>
-    <button type="button" aria-label="删除对象" onClick={()=>onAction('delete-object')}>×</button>
+  return createPortal(lasso?<div className="fabric-selected-actions" style={position} aria-label="套索选区操作">
+    <button type="button" aria-label="复制套选对象" onClick={()=>onAction('fabric-lasso-copy')}/>
+    <button type="button" aria-label="删除套选对象" onClick={()=>onAction('fabric-lasso-delete')}/>
+    <button type="button" aria-label="合并套选图层" disabled={count<2}
+      onClick={()=>onAction('fabric-lasso-merge')}/>
+  </div>:<div className="fabric-selected-actions" style={position} aria-label="选中对象操作">
+    <button type="button" aria-label="复制对象" onClick={()=>onAction('duplicate')}/>
+    <button type="button" aria-label="编辑对象" onClick={()=>onAction('fabric-inspector-open')}/>
+    <button type="button" aria-label="删除对象" onClick={()=>onAction('delete-object')}/>
   </div>,document.body);
 }
 
@@ -1244,6 +1249,8 @@ export function EditorPage({state,draft,editorEntry,asset,source,format,
     </div></div>
     <FabricEditorToolbar state={state} draft={draft} materials={materials} source={source}
       selected={selected} onInspectorChange={onInspectorChange} onAction={onAction}/>
+    {state.tool==='lasso'&&(state.multiSelected||[]).length?<FabricSelectedActions lasso count={state.multiSelected.length}
+      bounds={state.fabricSelectionBounds} draft={draft} onAction={onAction}/>:null}
     {selected&&state.tool==='select'&&!state.fabricInspectorOpen?<FabricSelectedActions bounds={state.fabricSelectionBounds}
       draft={draft} onAction={onAction}/>:null}
     <div className={`editor-shell swift-editor-workspace ${selected&&state.fabricInspectorOpen?'show-inspector':''}`}
@@ -1580,7 +1587,7 @@ export function SettingsDataPage({state,cloudEnabled,storage,onAction}){
     <SettingsGroup title="应用错误诊断" description="导出最近 7 天本机记录的运行错误、网络与同步故障安全摘要，包含发生页面、阶段、错误类别和可判断的原因。不会导出作品、图片、账号、密钥或原始报错文本。">
       {button('export-app-diagnostics','导出完整错误诊断')}
     </SettingsGroup>
-    <SettingsGroup title="图片保留与清理" description="删除素材后，已有作品引用的图片会隐藏保留；从最近删除彻底移除且无作品引用时才清除隐藏素材记录。云端 COS 原图尚不自动物理删除，避免遗漏其他设备、历史存档或备份中的引用。"/>
+    <SettingsGroup title="图片保留与清理" description="删除素材后，素材记录会从素材库隐藏，已有作品仍可引用；最近删除到期仅移除恢复入口。云端 COS 孤立文件经复核后延迟回收。"/>
     <SettingsGroup title="数据维护"><div className="actions">
       <button type="button" className="btn" onClick={()=>setDiagnostics('metrics')}>生成诊断</button>
       <button type="button" className="btn" onClick={()=>setDiagnostics('contexts')}>创作完整上下文</button>
