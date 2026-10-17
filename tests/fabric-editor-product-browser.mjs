@@ -454,6 +454,15 @@ try{
     'Dragging a nested shape through the real editor must persist its position');
   await click('[data-val="material"]','.swift-material-picker');
   await click('.swift-material-picker .swift-segments button:last-child');
+  await command('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:2,mobile:true});
+  assert.ok(await evaluate(`(()=>{const card=document.querySelector('[data-material-id="fabric-product-material"]');
+    const picture=card.querySelector('.material-piece-image'),caption=card.querySelector('span:last-child');
+    const a=card.getBoundingClientRect(),p=picture.getBoundingClientRect(),c=caption.getBoundingClientRect();
+    const popup=document.querySelector('.swift-material-picker').getBoundingClientRect();
+    return p.bottom<=c.top&&c.bottom<=a.bottom+1&&p.left>=a.left&&p.right<=a.right&&
+      a.right<=popup.right&&a.left>=popup.left})()`),
+    'Phone material picker image and caption must stay within the card');
+  await command('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
   await click('[data-material-id="fabric-product-material"]');await sleep(700);
   assert.equal((await projects())[0].drafts[0].layers.filter(layer=>layer.type==='material').length,1);
   const beforeMaterial=(await projects())[0].drafts[0];
@@ -473,6 +482,17 @@ try{
   assert.ok(resizedMaterial.width>originalMaterial.width&&resizedMaterial.assetID===originalMaterial.assetID,
     'Manual material resize must persist without changing its source asset: '+JSON.stringify({originalMaterial,resizedMaterial,materialEdge,ui:await evaluate(`({toast:document.querySelector('#toast')?.textContent,selection:document.querySelector('.fabric-selected-actions')?.outerHTML,hit:document.elementFromPoint(${materialEdge.x},${materialEdge.y})?.outerHTML.slice(0,150)})`)}));
   await click('[aria-label="编辑对象"]','.floating-editor-inspector');
+  const inspectorGrip=await evaluate('document.querySelector(".floating-editor-inspector .floating-panel-resize").getBoundingClientRect().toJSON()');
+  const inspectorHeight=await evaluate('document.querySelector(".floating-editor-inspector").getBoundingClientRect().height');
+  await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,clickCount:1,
+    x:inspectorGrip.left+inspectorGrip.width/2,y:inspectorGrip.top+inspectorGrip.height/2});
+  await command('Input.dispatchMouseEvent',{type:'mouseMoved',button:'left',buttons:1,
+    x:inspectorGrip.left+inspectorGrip.width/2,y:inspectorGrip.top+inspectorGrip.height/2+55});
+  await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,clickCount:1,
+    x:inspectorGrip.left+inspectorGrip.width/2,y:inspectorGrip.top+inspectorGrip.height/2+55});
+  const inspectorAfter=await evaluate('document.querySelector(".floating-editor-inspector").getBoundingClientRect().toJSON()');
+  assert.ok(inspectorAfter.height>inspectorHeight+25,
+    'Dragging the bottom-right inspector handle must increase panel height: '+JSON.stringify({inspectorHeight,inspectorAfter,inspectorGrip}));
   await click('.editor-inspector-geometry summary','.editor-crop-slider');
   assert.equal(await evaluate('!!document.querySelector(".editor-inspector-geometry textarea")'),false,
     'Material cropping should use direct controls instead of JSON');

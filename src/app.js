@@ -709,7 +709,8 @@ function render(){
       // A Date string can repeat for two edits in one millisecond. The local
       // save generation keeps Fabric's Scene projection in step with history.
       sceneRevision:state.activeProject.updatedAt+':'+(saveVersions.get(state.activeProject.id)||0)+
-        ':'+(state.cutSession?.revision||0)+':'+(state.inspectorSession?.revision||0),
+        ':'+(state.cutSession?.revision||0)+':'+(state.inspectorSession?.revision||0)+
+        ':'+(state.inspectorPreviewRevision||0),
       materials:state.assets,
       retainFabricAssets,
       loadFabricAsset:async(id,node,onUpgrade)=>{
@@ -941,7 +942,7 @@ function updateEditorInspector(id,value){
       if(parsed!==null)validateVectorMask(parsed);
       checkpoint();if(parsed===null){delete entry.value.vectorMask;delete entry.value.vectorMaskHistory;}
       else entry.value.vectorMask=parsed;
-      saveProject();render();toast('蒙版已应用');return;
+      saveProject();if(!state.inspectorSession)render();toast('蒙版已应用');return;
     }
     if(entry.kind!=='material'||!parsed||typeof parsed!=='object'||Array.isArray(parsed)||
       Object.keys(parsed).some(key=>!['cropRect','materialMask','craftDisplaySlices'].includes(key)))
@@ -979,7 +980,7 @@ function updateEditorInspector(id,value){
       node.userOverrideFlags=[...new Set([...(node.userOverrideFlags||[]),'cropRect','materialMask','craftDisplaySlices'])];
     };
     apply(candidate);validateScenePhysical(next,state.assets);
-    checkpoint();apply(entry.value);saveProject();render();toast('裁片与工艺已应用');return;
+    checkpoint();apply(entry.value);saveProject();if(!state.inspectorSession)render();toast('裁片与工艺已应用');return;
   }
   const numeric={'inspector-x':'x','inspector-y':'y','inspector-width':'width','inspector-height':'height',
     'inspector-rotation':'rotation','inspector-z':'zIndex',
@@ -1041,7 +1042,7 @@ function updateEditorInspector(id,value){
   }else if(id==='page-mode'&&['single','spread'].includes(value)){d.pageMode=value;d.canvas=canvasSize(value,d.pageRatio);changed=true;}
   else return;
   if(!changed)return;
-  saveProject();render();
+  saveProject();if(!state.inspectorSession)render();
 }
 async function updateImportReviewSeries(recordIndex,next){
   const record=recordIndex===null?null:state.importRecords[recordIndex];
@@ -1134,10 +1135,31 @@ function saveSpecificProject(p){if(!p)return false;delete p.isTemplate;
   const now=new Date().toISOString();trackEditedScene(p,now);p.updatedAt=now;
   projectSaveFingerprints.set(p.id,fingerprint);projectSceneFingerprints.set(p.id,sceneFingerprint);
   saveVersions.set(p.id,(saveVersions.get(p.id)||0)+1);dirtyProjects.set(p.id,p);saveStatus('后台保存中…');syncDisplay.localPending=true;updateSyncIndicator();if(!saveTimer)saveTimer=setTimeout(()=>flushSave().catch(console.error),500);return true;}
+let inspectorFrame=0,inspectorStepTimer=0,inspectorPendingSession=null;
+function flushInspectorSnapshot(){
+  if(inspectorFrame){cancelAnimationFrame(inspectorFrame);inspectorFrame=0;}
+  if(inspectorStepTimer){clearTimeout(inspectorStepTimer);inspectorStepTimer=0;}
+  const session=state.inspectorSession;
+  if(session&&inspectorPendingSession===session)
+    acceptSceneEditStep(session,session.working,state.selected);
+  inspectorPendingSession=null;
+}
 function saveProject(){
   if(state.cutSession)return;
   if(state.inspectorSession){
-    acceptSceneEditStep(state.inspectorSession,current(),state.selected);
+    // Paint at most once a frame; one continuous slider/text gesture becomes
+    // one undo snapshot after the input settles. This avoids copying a large
+    // Scene on every pointer packet while keeping the canvas preview live.
+    inspectorPendingSession=state.inspectorSession;
+    if(!inspectorFrame)inspectorFrame=requestAnimationFrame(()=>{
+      inspectorFrame=0;
+      if(state.inspectorSession&&state.route==='editor'){
+        state.inspectorPreviewRevision=(state.inspectorPreviewRevision||0)+1;
+        render();
+      }
+    });
+    if(inspectorStepTimer)clearTimeout(inspectorStepTimer);
+    inspectorStepTimer=setTimeout(()=>flushInspectorSnapshot(),220);
     return;
   }
   saveSpecificProject(state.activeProject);
@@ -1529,6 +1551,7 @@ async function runAppAction(action,id,value){try{
   }
   case 'fabric-inspector-save':{
     const session=state.inspectorSession;if(!session)break;
+    flushInspectorSnapshot();
     const saved=state.activeProject?.drafts?.find(d=>d.id===session.draftID);
     if(!saved||session.projectID!==state.activeProject.id||
       session.saveRevision!==(saveVersions.get(state.activeProject.id)||0)){
@@ -1542,6 +1565,9 @@ async function runAppAction(action,id,value){try{
     state.fabricInspectorOpen=false;render();toast('对象修改已保存');break;
   }
   case 'fabric-inspector-close':case 'fabric-inspector-discard':{
+    if(inspectorFrame){cancelAnimationFrame(inspectorFrame);inspectorFrame=0;}
+    if(inspectorStepTimer){clearTimeout(inspectorStepTimer);inspectorStepTimer=0;}
+    inspectorPendingSession=null;
     const selected=state.inspectorSession?.steps[0].selectedID||state.selected;
     state.inspectorSession=null;state.fabricInspectorOpen=false;
     state.selected=selected;state.multiSelected=selected?[selected]:[];
@@ -1708,7 +1734,9 @@ async function runAppAction(action,id,value){try{
     if(operation==='lock'){node.locked=node.isLocked=!(node.locked||node.isLocked);}
     else if(operation==='visibility'){
       const hidden=!!(node.hidden||node.isHidden||node.isParked);
-      if(node.type==='material')node.isParked=!hidden;else node.hidden=!hidden;
+      if(hidden){node.isParked=false;node.hidden=false;node.isHidden=false;}
+      else if(node.type==='material')node.isParked=true;
+      else node.hidden=true;
       if(!hidden&&state.selected===node.id){state.selected=null;state.multiSelected=[];}
     }else{
       const findParent=(nodes,target,parent=null)=>{
@@ -1863,6 +1891,7 @@ async function runAppAction(action,id,value){try{
   case 'undo':case 'redo':{
     const session=state.cutSession||state.inspectorSession;
     if(session){
+      if(state.inspectorSession)flushInspectorSnapshot();
       if(state.cutPreview){state.cutPreview=null;render();break;}
       const selected=stepSceneEditSession(session,action);
       if(selected!==null){state.selected=selected;state.multiSelected=selected?[selected]:[];render();}

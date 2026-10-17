@@ -30,6 +30,16 @@ try{
   await wait('.fabric-selected-actions');
   await click('.fabric-selected-actions [aria-label="剪切选中对象"]','.fabric-cut-panel');
   assert.ok(await evaluate('document.querySelector(".fabric-cut-panel")?.textContent.includes("剪刀")'));
+  const cutPanel=await evaluate('document.querySelector(".fabric-cut-panel").getBoundingClientRect().toJSON()');
+  const cutGrip=await evaluate('document.querySelector(".fabric-cut-panel .floating-panel-resize").getBoundingClientRect().toJSON()');
+  await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,clickCount:1,
+    x:cutGrip.left+cutGrip.width/2,y:cutGrip.top+cutGrip.height/2});
+  await command('Input.dispatchMouseEvent',{type:'mouseMoved',button:'left',buttons:1,
+    x:cutGrip.left+cutGrip.width/2,y:cutGrip.top+cutGrip.height/2-60});
+  await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,clickCount:1,
+    x:cutGrip.left+cutGrip.width/2,y:cutGrip.top+cutGrip.height/2-60});
+  assert.ok(await evaluate('document.querySelector(".fabric-cut-panel").getBoundingClientRect().height')<cutPanel.height-30,
+    'Dragging the bottom-right scissors handle must adjust panel height');
   assert.equal(await evaluate('!!document.querySelector(".swift-editor-toolbar [data-val=scissors]")'),false);
   assert.equal(await evaluate('document.querySelectorAll(".fabric-cut-presets button").length'),3);
   await click('.fabric-cut-presets button:first-child');
@@ -38,14 +48,15 @@ try{
   await click('.fabric-cut-row button.primary');
   await sleep(150);
   assert.ok(await evaluate('!!document.querySelector(".fabric-cut-panel")'));
-  assert.ok(await evaluate('!!document.querySelector(".shelf .mini-asset")'));
+  assert.equal(await evaluate('!!document.querySelector(".shelf")'),false,
+    'Standby pieces should not cover the bottom of the canvas');
   await click('.fabric-cut-session-actions button:first-child');
-  assert.equal(await evaluate('!!document.querySelector(".shelf .mini-asset")'),false,
-    'Undo in a scissors session must restore the original object');
   await click('.fabric-cut-session-actions button:nth-child(2)');
-  assert.ok(await evaluate('!!document.querySelector(".shelf .mini-asset")'));
   await click('.fabric-cut-panel header button');
   await sleep(700);
+  await click('[data-val="layers"]','.scene-layer-parked');
+  assert.equal(await evaluate('document.querySelectorAll("[data-parked-piece-id]").length'),1,
+    'A parked offcut must remain accessible in the layer menu');
   const result=await evaluate(`(async()=>{const open=indexedDB.open('shiye-pwa-full-v1');
     const db=await new Promise(resolve=>open.onsuccess=()=>resolve(open.result));
     const rows=await new Promise(resolve=>{const q=db.transaction('projects').objectStore('projects').getAll();
@@ -76,5 +87,5 @@ try{
   assert.equal(await evaluate('!!document.querySelector(".fabric-cut-panel")'),false,
     'Discard exits scissors without saving its staged fragments');
   assert.deepEqual(browser.errors,[]);
-  console.log('Fabric cut workflow: history, shape toggle, preview, commit, standby passed');
+  console.log('Fabric cut workflow: history, shape toggle, preview, resize, offcut access passed');
 }finally{await browser.close();}

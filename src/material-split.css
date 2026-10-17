@@ -39,7 +39,6 @@
 .material-piece-image{display:grid;place-items:center;width:100%;height:100%;min-height:0;overflow:hidden}
 .material-piece-image img,.material-piece-image canvas{display:block;width:100%;height:100%;object-fit:contain}
 .canvas-picker-grid>button>.material-piece-image{height:80px}
-.shelf .material-piece-image{height:74px}
 @media(max-width:699px){
  #modal.material-split-dialog{width:min(480px,96vw);padding:11px;max-height:93dvh}
  #modal .material-split-editor{gap:9px}

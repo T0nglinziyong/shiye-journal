@@ -1,11 +1,12 @@
-import React,{useLayoutEffect,useRef,useState} from 'react';
+import React from 'react';
 import {createPortal} from 'react-dom';
 import {findSceneNode,sceneLayerEntries} from './scene-v2.js';
+import {useFloatingPanel} from './use-floating-panel.js';
 
 // Only the title bar drags this UI. The canvas transform never changes when
 // the panel opens, moves, or closes.
 export function FabricCutPanel({state,draft,onAction}){
-  const [position,setPosition]=useState(null),drag=useRef(null),panelRef=useRef(null);
+  const floating=useFloatingPanel(190);
   const settings={operation:'split',scope:'object',inset:.18,
     hideRegion:true,...state.cutSettings};
   const preview=state.cutPreview,node=findSceneNode(draft,state.selected);
@@ -26,32 +27,10 @@ export function FabricCutPanel({state,draft,onAction}){
     (entryIndex>=0?` · 图层 ${entryIndex+1}`:''):
     settings.scope==='all'?`已选 ${settings.targetIDs?.length||0} 个图层`:'未选择对象';
   const set=(key,value)=>onAction('fabric-cut-setting',key,value);
-  useLayoutEffect(()=>{
-    if(!position||!panelRef.current)return;
-    const rect=panelRef.current.getBoundingClientRect();
-    const top=Math.max(8,Math.min(position.top,window.innerHeight-rect.height-8));
-    if(top!==position.top)setPosition({...position,top});
-  },[position,preview]);
   if(state.tool!=='scissors')return null;
-  const down=event=>{
-    if(event.button>0)return;
-    const rect=event.currentTarget.parentElement.getBoundingClientRect();
-    drag.current={id:event.pointerId,x:event.clientX,y:event.clientY,left:rect.left,top:rect.top};
-    event.currentTarget.setPointerCapture(event.pointerId);
-    event.preventDefault();event.stopPropagation();
-  };
-  const move=event=>{
-    const start=drag.current;if(!start||start.id!==event.pointerId)return;
-    const width=Math.min(300,window.innerWidth-16),height=event.currentTarget.parentElement.offsetHeight;
-    setPosition({left:Math.max(8,Math.min(window.innerWidth-width-8,
-      start.left+event.clientX-start.x)),top:Math.max(8,Math.min(window.innerHeight-height-8,
-      start.top+event.clientY-start.y))});
-    event.preventDefault();event.stopPropagation();
-  };
-  const end=event=>{if(drag.current?.id===event.pointerId)drag.current=null;};
-  return createPortal(<section ref={panelRef} className="fabric-cut-panel" aria-label="剪刀与局部显示"
-    style={position?{left:position.left,top:position.top,right:'auto',bottom:'auto'}:undefined}>
-    <header onPointerDown={down} onPointerMove={move} onPointerUp={end} onPointerCancel={end}>
+  return createPortal(<section ref={floating.panel} className="fabric-cut-panel" aria-label="剪刀与局部显示"
+    style={floating.style}>
+    <header {...floating.moveProps}>
       <strong>剪刀 · {settings.operation==='mask'?'蒙版':'裁剪'}</strong>
       <button type="button" aria-label="完成剪刀操作" onPointerDown={event=>event.stopPropagation()}
         onClick={()=>onAction('fabric-cut-finish')}>完成</button>
@@ -112,5 +91,7 @@ export function FabricCutPanel({state,draft,onAction}){
         onClick={()=>onAction('fabric-cut-rejoin',rejoinNode.id)}>拼回同源裁片</button>:null}
       <p className="fabric-cut-help">每次应用后可继续操作；完成才保存整次剪刀操作，放弃会恢复进入前的画面。</p>
     </div>
+    <div className="floating-panel-resize" role="separator" tabIndex={0}
+      aria-label="拖动调整剪刀窗口高度" {...floating.resizeProps} aria-orientation="horizontal"/>
   </section>,document.body);
 }

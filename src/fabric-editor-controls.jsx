@@ -7,6 +7,7 @@ import {primitive} from './domain.js';
 import {iconMarkup} from './icons.js';
 import {adjacentFontSize} from './canvas-control-behavior.js';
 import {mountPieceThumbnail} from './material-piece-thumbnail.js';
+import {sceneLayerEntries} from './scene-v2.js';
 
 const toolIcons={select:'cursor',pen:'pen',eraser:'eraser',highlighter:'marker',lasso:'lasso',text:'text',shape:'shape',material:'material',layers:'layers',paper:'paper'};
 const labels={select:'选择',pen:'笔',eraser:'橡皮擦',highlighter:'荧光笔',lasso:'套索选择',text:'文字',shape:'图形',material:'素材',layers:'图层',paper:'画布背景'};
@@ -175,6 +176,8 @@ function LayerTree({draft,state,materials,onAction,collapsed,setCollapsed}){
   const countInk=nodes=>(nodes||[]).reduce((count,node)=>count+(node.type==='ink'?1:0)+
     (node.type==='group'?countInk(node.children):0),0);
   const inkCount=countInk(draft.layers);
+  const parked=sceneLayerEntries(draft,{hidden:true,ink:true})
+    .filter(entry=>entry.value.isParked);
   const label=node=>node.type==='group'?node.name||'未命名组合':
     node.type==='material'?names.get(node.assetID)||'素材':node.type==='text'?node.content?.slice(0,27)||'文字':
     node.type==='ink'?'手写笔迹':node.kind||'图形';
@@ -245,7 +248,13 @@ function LayerTree({draft,state,materials,onAction,collapsed,setCollapsed}){
         onPointerUp={event=>touchActivate(event,()=>onAction('fabric-ungroup-selection'))}
         onClick={event=>clickActivate(event,()=>onAction('fabric-ungroup-selection'))}>取消组合</button>
     </div><div className="canvas-layer-list scene-layer-tree" role="tree" aria-label="可编辑场景递归图层树">
-      {visit(draft.layers)}</div><p className="scene-layer-tree-status" role="status">
+      {visit(draft.layers)}</div>{parked.length?<div className="scene-layer-parked" aria-label="备选裁片">
+      <strong>备选 · {parked.length} 件</strong>
+      {parked.map(entry=><button key={entry.value.id} type="button"
+        data-parked-piece-id={entry.value.id}
+        onClick={()=>onAction('fabric-unpark',entry.value.id)}>
+        放回 {label(entry.value)}</button>)}
+    </div>:null}<p className="scene-layer-tree-status" role="status">
         {draft.layers.length} 个顶层图层 · 拖动把手改变层级
         {inkCount?` · 笔迹 ${inkCount} 笔（可在此选择）`:''}</p>
   </div>;

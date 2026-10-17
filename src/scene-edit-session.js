@@ -16,7 +16,9 @@ export function acceptSceneEditStep(session,draft,selectedID){
   session.steps.push({layers:structuredClone(draft.layers),selectedID});
   if(session.steps.length>41){session.steps.splice(1,session.steps.length-41);}
   session.index=session.steps.length-1;
-  session.working=copy(draft);
+  // Inspector changes already mutate the staged draft. Re-cloning it on
+  // every slider event doubled the cost for large pages.
+  session.working=draft===session.working?draft:copy(draft);
   session.revision++;
   return session;
 }

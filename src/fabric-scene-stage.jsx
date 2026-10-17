@@ -341,8 +341,13 @@ export function FabricSceneStage({draft,assetURL,retainAssets,onSelection,onBefo
           }
           const existing=canvas.getObjects().filter(object=>positions.has(object.sceneRenderKey));
           for(const object of existing)object.sceneIndex=positions.get(object.sceneRenderKey);
-          existing.sort((a,b)=>a.sceneIndex-b.sceneIndex);
-          existing.forEach((object,index)=>canvas.moveObjectTo(object,index));
+          // moveObjectTo rebuilds Fabric's render stack. Most inspector edits
+          // only change geometry or paint, so leave an already sorted stack
+          // alone instead of moving every layer on every slider frame.
+          if(existing.some((object,index)=>index>0&&existing[index-1].sceneIndex>object.sceneIndex)){
+            existing.sort((a,b)=>a.sceneIndex-b.sceneIndex);
+            existing.forEach((object,index)=>canvas.moveObjectTo(object,index));
+          }
           canvas.requestRenderAll();
         };
         let gesture=null,previewFrame=0,textPointerID=null,textTap=null,pendingTouchText=null;

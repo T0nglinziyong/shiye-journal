@@ -11,8 +11,9 @@ import {matchingViewModel} from './matching-view.js';
 import {styleGroups,purposeGroups} from './matching-directions.js';
 import {visualStyles} from './creative-style-brief.js';
 import {FabricSceneStage} from './fabric-scene-stage.jsx';
-import {FabricEditorToolbar,FabricHeaderMenu,MaterialPieceImage} from './fabric-editor-controls.jsx';
+import {FabricEditorToolbar,FabricHeaderMenu} from './fabric-editor-controls.jsx';
 import {FabricCutPanel} from './fabric-cut-panel.jsx';
+import {useFloatingPanel} from './use-floating-panel.js';
 import {FabricPageViewport} from './fabric-page-viewport.jsx';
 import {iconMarkup} from './icons.js';
 import {cutPreviewPieceAt} from './scene-cut-hit.js';
@@ -1164,35 +1165,10 @@ function EditorInspector({selected,draft,asset,format,onChange,onAction,material
 }
 
 function FloatingInspectorPanel({selected,draft,asset,format,materials,onChange,onAction}){
-  const [position,setPosition]=useState(null),drag=useRef(null),panel=useRef(null);
-  useLayoutEffect(()=>{
-    if(!position||!panel.current)return;
-    const rect=panel.current.getBoundingClientRect();
-    const left=Math.max(8,Math.min(position.left,window.innerWidth-rect.width-8));
-    const top=Math.max(8,Math.min(position.top,window.innerHeight-rect.height-8));
-    if(left!==position.left||top!==position.top)setPosition({left,top});
-  },[position,selected?.value?.id]);
-  const start=event=>{
-    if(event.button>0||event.target.closest('button'))return;
-    const rect=panel.current.getBoundingClientRect();
-    drag.current={id:event.pointerId,x:event.clientX,y:event.clientY,left:rect.left,top:rect.top};
-    event.currentTarget.setPointerCapture(event.pointerId);
-    event.preventDefault();event.stopPropagation();
-  };
-  const move=event=>{
-    const origin=drag.current;if(!origin||origin.id!==event.pointerId)return;
-    const rect=panel.current.getBoundingClientRect();
-    setPosition({left:Math.max(8,Math.min(window.innerWidth-rect.width-8,
-      origin.left+event.clientX-origin.x)),
-      top:Math.max(8,Math.min(window.innerHeight-rect.height-8,
-        origin.top+event.clientY-origin.y))});
-    event.preventDefault();event.stopPropagation();
-  };
-  const end=event=>{if(drag.current?.id===event.pointerId)drag.current=null;};
-  return createPortal(<section ref={panel} className="editor-inspector floating-editor-inspector" role="dialog"
-    aria-label="对象编辑" style={position?{left:position.left,top:position.top,right:'auto'}:undefined}>
-    <header className="fabric-inspector-head" onPointerDown={start} onPointerMove={move}
-      onPointerUp={end} onPointerCancel={end}>
+  const floating=useFloatingPanel(210);
+  return createPortal(<section ref={floating.panel} className="editor-inspector floating-editor-inspector" role="dialog"
+    aria-label="对象编辑" style={floating.style}>
+    <header className="fabric-inspector-head" {...floating.moveProps}>
       <h2>{selected?`${{material:'素材',text:'文字',shape:'图形',ink:'笔迹'}[selected.kind]||'对象'} · 图层属性`:'对象已移除'}</h2>
       <span aria-hidden="true">拖动面板</span>
     </header>
@@ -1201,6 +1177,8 @@ function FloatingInspectorPanel({selected,draft,asset,format,materials,onChange,
       onAction={onAction}/>:<p>对象已从本次编辑中移除。保存退出会确认删除，放弃退出会恢复对象。</p>}</div>
     <footer><button type="button" onClick={()=>onAction('fabric-inspector-discard')}>放弃退出</button>
       <button type="button" className="primary" onClick={()=>onAction('fabric-inspector-save')}>保存退出</button></footer>
+    <div className="floating-panel-resize" role="separator" tabIndex={0}
+      aria-label="拖动调整对象编辑窗口高度" aria-orientation="horizontal" {...floating.resizeProps}/>
   </section>,document.body);
 }
 
@@ -1301,8 +1279,6 @@ export function EditorPage({state,draft,editorEntry,asset,source,format,
       ?{kind:'ink',value:findSceneNode(draft,state.selected)}:null);
   const selectedGroup=findSceneNode(draft,state.selected)?.type==='group';
   const selectedIDs=state.multiSelected||[];
-  const parkedPieces=sceneLayerEntries(draft,{hidden:true,ink:true})
-    .filter(entry=>entry.value.isParked).map(entry=>entry.value);
   const canUngroup=!!selectionGroupID(draft,selectedIDs);
   const viewportHeight=window.visualViewport?.height||window.innerHeight;
   const availableWidth=Math.max(180,window.innerWidth-(window.innerWidth<700?24:72));
@@ -1421,10 +1397,6 @@ export function EditorPage({state,draft,editorEntry,asset,source,format,
           onReady={canvas=>{if(canvas)editorFabricCanvases.set(draft.id,canvas);
             else editorFabricCanvases.delete(draft.id);}}/>
       </div></FabricPageViewport></div>
-      {parkedPieces.length?<div className="shelf"><b>备选</b>{parkedPieces.map(item=><button key={item.id}
-        className="mini-asset" data-act="unpark" data-id={item.id} aria-label={`放回${item.type==='material'?'素材':item.type==='text'?'文字':item.type==='shape'?'图形':'笔迹'}裁片`}>
-        {item.type==='material'?<MaterialPieceImage asset={asset(item.assetID)} item={item} source={source}/>:<span>{item.type==='text'?item.content||'文字':item.type==='shape'?'图形裁片':'笔迹裁片'}</span>}
-      </button>)}</div>:null}
     </section></div>
     {state.fabricInspectorOpen?<FloatingInspectorPanel selected={selected} draft={draft}
       asset={asset} format={format} materials={materials} onChange={onInspectorChange}
