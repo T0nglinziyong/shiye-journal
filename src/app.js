@@ -363,8 +363,11 @@ const routeScrollKey=name=>[name,state.seriesID,
   name==='editor'?state.activeProject?.id:''].join(':');
 let matchingScrollMemory=null;
 let viewInteractionRevision=0;
-let lastEditorInputAt=0;
-for(const event of ['click','input','pointerdown'])view.addEventListener(event,()=>{viewInteractionRevision++;if(state.route==='editor')lastEditorInputAt=Date.now();},true);
+let lastViewInputAt=0;
+for(const event of ['click','input','pointerdown'])view.addEventListener(event,()=>{
+  viewInteractionRevision++;lastViewInputAt=Date.now();},true);
+window.addEventListener('scroll',()=>{lastViewInputAt=Date.now();},{passive:true});
+view.addEventListener('scroll',()=>{lastViewInputAt=Date.now();},true);
 let backgroundViewPending=false,backgroundViewTimer=null;
 const activeViewPointers=new Set();
 view.addEventListener('pointerdown',event=>activeViewPointers.add(event.pointerId),true);
@@ -373,8 +376,10 @@ function scheduleBackgroundReconcile(){
   if(!backgroundViewPending||backgroundViewTimer)return;
   backgroundViewTimer=setTimeout(()=>{
     backgroundViewTimer=null;
+    const idleMS=Date.now()-lastViewInputAt;
+    if(idleMS<350){scheduleBackgroundReconcile();return;}
     const inputFocused=view.contains(document.activeElement)&&document.activeElement.matches('input,textarea,select,[contenteditable],[contenteditable="true"]');
-    if(canApplyBackgroundView({route:state.route,selectionMode:parity.selectionMode,modalOpen:modal.open,popoverOpen:!!document.querySelector('.swift-popover'),inputFocused,gestureActive:!!activeViewPointers.size}))render();
+    if(canApplyBackgroundView({route:state.route,selectionMode:parity.selectionMode,modalOpen:modal.open,popoverOpen:!!document.querySelector('.swift-popover'),inputFocused,gestureActive:!!activeViewPointers.size,idleMS}))render();
   },180);
 }
 document.addEventListener('click',scheduleBackgroundReconcile);
@@ -3391,7 +3396,7 @@ function backgroundCloudCheck({force=false}={}){
   if(!cloudEnabled||!shouldPullCloudForRoute(state.route)||document.visibilityState==='hidden')return;
   if(!canPollDuringEditing({route:state.route,gestureActive:!!activeViewPointers.size,
     inputFocused:!!document.activeElement?.matches('input,textarea,[contenteditable="true"]'),
-    idleMS:Date.now()-lastEditorInputAt}))return;
+    idleMS:Date.now()-lastViewInputAt}))return;
   // Keep remote reads moving during a long upload, but do not compete with
   // every image chunk. A forced pull after another device's commit still runs.
   if(syncDisplay.uploading&&!force&&Date.now()-cloudCheckAt<30000)return;

@@ -46,7 +46,7 @@ test('active upload report shows elapsed phase and bounded counts without identi
 });
 
 
-test('today trace survives a reopened app and excludes other days and private values',()=>{
+test('rolling 24-hour trace survives a reopened app and expires older sessions',()=>{
   const rows=new Map(),storage={get length(){return rows.size;},key:i=>[...rows.keys()][i]||null,
     getItem:key=>rows.get(key)||null,setItem:(key,value)=>rows.set(key,value),removeItem:key=>rows.delete(key)};
   const first=createSyncDiagnostics({clock:()=> '2026-10-15T10:00:00.000+08:00',storage});
@@ -54,13 +54,28 @@ test('today trace survives a reopened app and excludes other days and private va
   first.report();
   const earlier=createSyncDiagnostics({clock:()=> '2026-10-14T10:00:00.000+08:00',storage});
   earlier.record({action:'start',kind:'project',pending:1});earlier.report();
+  const yesterday=createSyncDiagnostics({clock:()=> '2026-10-14T12:00:00.000+08:00',storage});
+  yesterday.record({action:'retry',kind:'project',pending:2});yesterday.report();
   const reopened=createSyncDiagnostics({clock:()=> '2026-10-15T11:00:00.000+08:00',storage});
   reopened.record({action:'main-thread-lag',kind:'queue',durationMs:2430});
   const report=reopened.report({pending:13});
-  assert.equal(report.events.length,2);
-  assert.equal(report.sessionCount,2);
-  assert.equal(report.events[1].durationMs,2430);
+  assert.equal(report.events.length,3);
+  assert.equal(report.sessionCount,3);
+  assert.equal(report.events.at(-1).durationMs,2430);
+  assert.ok(report.events.some(event=>event.action==='retry'));
+  assert.ok(!report.events.some(event=>event.action==='start'));
+  assert.equal([...rows.values()].some(value=>value.includes('"action":"start"')),false);
   assert.ok(!JSON.stringify(report).includes('private title'));
+});
+
+test('high-volume trace caps per-session storage and export size',()=>{
+  const rows=new Map(),storage={get length(){return rows.size;},key:i=>[...rows.keys()][i]||null,
+    getItem:key=>rows.get(key)||null,setItem:(key,value)=>rows.set(key,value),removeItem:key=>rows.delete(key)};
+  const trace=createSyncDiagnostics({clock:()=> '2026-10-15T11:00:00.000+08:00',storage});
+  for(let i=0;i<620;i++)trace.record({action:'prepare-start',pending:i});
+  const report=trace.report();
+  assert.equal(report.eventCount,500);
+  assert.equal(JSON.parse([...rows.values()][0]).length,500);
 });
 
 test('upload diagnosis retains progress and request ID but discards URL and object identity',()=>{

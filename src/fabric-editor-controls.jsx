@@ -42,6 +42,7 @@ function ReactPopover({anchor,title,className='',width=360,height=440,picker=fal
   },[anchor,width,height,picker,onClose]);
   useEffect(()=>{
     const key=event=>{if(event.key==='Escape'){event.preventDefault();onClose();}};
+    let closing=false;
     const outside=event=>{
       if(!event.target.closest?.('.swift-popover,.swift-editor-toolbar,.swift-editor-head')&&
         !anchor?.contains(event.target)){
@@ -51,18 +52,33 @@ function ReactPopover({anchor,title,className='',width=360,height=440,picker=fal
           // The page-wrap also includes the gray margin around the paper;
           // its pan/tap handler receives releases there too.
           event.preventDefault();event.stopImmediatePropagation();
+          if(closing)return;
+          closing=true;
           const pointerID=event.pointerId;
-          const dismissPoint={x:event.clientX,y:event.clientY};
+          const firstTouch=event.changedTouches?.[0];
+          const dismissPoint={x:firstTouch?.clientX??event.clientX,y:firstTouch?.clientY??event.clientY};
+          window.dispatchEvent(new CustomEvent('shiye:layer-popover-dismiss',{
+            detail:dismissPoint}));
+          let touchID=firstTouch?.identifier;
           let timer;
           const finish=()=>{clearTimeout(timer);
             removeEventListener('pointerup',swallow,true);
             removeEventListener('pointercancel',swallow,true);
             removeEventListener('pointerdown',nextGesture,true);
+            removeEventListener('touchstart',swallowTouch,true);
+            removeEventListener('touchend',swallowTouch,true);
+            removeEventListener('touchcancel',swallowTouch,true);
             removeEventListener('click',swallowClick,true);};
-          const nextGesture=next=>{if(next.pointerId!==pointerID)finish();};
+          const nextGesture=next=>{if(pointerID!==undefined&&next.pointerId!==pointerID)finish();};
           const swallow=next=>{if(next.pointerId!==pointerID)return;
             next.preventDefault();next.stopImmediatePropagation();
             if(next.type==='pointercancel')finish();};
+          const swallowTouch=next=>{
+            const touch=[...next.changedTouches].find(item=>touchID===undefined||item.identifier===touchID);
+            if(!touch)return;
+            touchID=touch.identifier;
+            next.preventDefault();next.stopImmediatePropagation();
+          };
           const swallowClick=next=>{
             // A touch may never synthesize a click. Do not consume a later
             // toolbar click just because the layer dismissal left this guard.
@@ -73,6 +89,9 @@ function ReactPopover({anchor,title,className='',width=360,height=440,picker=fal
           addEventListener('pointerup',swallow,true);
           addEventListener('pointercancel',swallow,true);
           addEventListener('pointerdown',nextGesture,true);
+          addEventListener('touchstart',swallowTouch,{capture:true,passive:false});
+          addEventListener('touchend',swallowTouch,{capture:true,passive:false});
+          addEventListener('touchcancel',swallowTouch,{capture:true,passive:false});
           addEventListener('click',swallowClick,true);
           timer=setTimeout(finish,700);
         }
@@ -80,7 +99,9 @@ function ReactPopover({anchor,title,className='',width=360,height=440,picker=fal
       }
     };
     addEventListener('keydown',key);addEventListener('pointerdown',outside,true);
-    return ()=>{removeEventListener('keydown',key);removeEventListener('pointerdown',outside,true);};
+    addEventListener('touchstart',outside,{capture:true,passive:false});
+    return ()=>{removeEventListener('keydown',key);removeEventListener('pointerdown',outside,true);
+      removeEventListener('touchstart',outside,true);};
   },[anchor,onClose,className]);
   return createPortal(<div className={`swift-popover ${className}`} role={className.includes('swift-menu')?'menu':'dialog'} aria-label={title}
     style={position?{left:position.left,top:position.top,width:position.width,maxHeight:position.maxHeight}:

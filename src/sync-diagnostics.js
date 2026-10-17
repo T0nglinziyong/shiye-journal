@@ -1,4 +1,4 @@
-// Daily, local-only sync trace. Keep operational metadata; never record account/object IDs,
+// Rolling, local-only sync trace. Keep operational metadata; never record account/object IDs,
 // names, payloads, URLs, raw server messages, tokens or complete stack traces.
 const ACTIONS=new Set(['start','reconcile','retry','committed','remote-won','merged','conflict','failed','direct-commit','prepare-start','prepare-finished','lock-wait','lock-entered','lock-ended','main-thread-lag','split','cos-ticket','cos-ticket-failed','cos-put','cos-put-failed','cos-put-verified']);
 const KINDS=new Set(['project','batch','direct','queue','lock','image']);
@@ -10,6 +10,8 @@ const PHASES=new Set([
   '编码与上传 projects','编码与上传 series','编码与上传 trash','编码与上传 meta'
 ]);
 const PREFIX='shiye-sync-trace-v2:';
+const RETENTION_MS=24*60*60*1000;
+const SWEEP_MS=60*60*1000;
 const localTraceStorage=()=>{try{return globalThis.localStorage;}catch{return null;}};
 const count=value=>Number.isSafeInteger(value)&&value>=0?value:null;
 const errorName=value=>['Error','TypeError','SyntaxError','AbortError','QuotaExceededError','NetworkError','NotAllowedError',
@@ -72,40 +74,67 @@ function savedEvent(event){
     fingerprint:/^[0-9a-f]{8}$/.test(event.fingerprint||'')?event.fingerprint:null,
     frame:/^[A-Za-z0-9_.-]+\.js:\d+$/.test(event.frame||'')?event.frame:null};
 }
-export function createSyncDiagnostics({limit=3000,clock=()=>new Date().toISOString(),storage=localTraceStorage(),setTimer=setTimeout,clearTimer=clearTimeout}={}){
+export function createSyncDiagnostics({limit=500,clock=()=>new Date().toISOString(),storage=localTraceStorage(),setTimer=setTimeout,clearTimer=clearTimeout}={}){
   const events=[];
   const session=(globalThis.crypto?.randomUUID?.()||Math.random().toString(36).slice(2)).replace(/[^a-z0-9-]/gi,'');
-  let currentDay=dayOf(clock()),timer=null;
+  let currentDay=dayOf(clock()),timer=null,sweepTimer=null,lastSweepAt=0,dirty=false;
   const key=()=>PREFIX+currentDay+':'+session;
+  const cutoff=()=>Date.parse(clock())-RETENTION_MS;
+  const recent=(event,minimum)=>Number.isFinite(Date.parse(event?.at))&&Date.parse(event.at)>=minimum;
+  const sweep=()=>{
+    if(!storage)return;
+    const minimum=cutoff();if(!Number.isFinite(minimum))return;
+    lastSweepAt=Date.parse(clock());
+    try{for(let i=storage.length-1;i>=0;i--){
+      const item=storage.key(i);if(!item?.startsWith(PREFIX)||item===key())continue;
+      const rows=JSON.parse(storage.getItem(item)||'[]');
+      if(!Array.isArray(rows)){storage.removeItem(item);continue;}
+      const kept=rows.filter(event=>recent(event,minimum)).slice(-limit);
+      if(!kept.length)storage.removeItem(item);
+      else if(kept.length!==rows.length)storage.setItem(item,JSON.stringify(kept));
+    }}catch{/* Old diagnostics must never interrupt sync. */}
+  };
+  const scheduleSweep=()=>{
+    if(!storage||sweepTimer!==null)return;
+    lastSweepAt=Date.parse(clock());
+    // Expiration is housekeeping, never part of the critical upload path.
+    sweepTimer=setTimer(()=>{sweepTimer=null;sweep();},15000);
+    sweepTimer?.unref?.();
+  };
   const flush=()=>{
     if(timer!==null){clearTimer(timer);timer=null;}
-    try{storage?.setItem(key(),JSON.stringify(events));}catch{/* Diagnostics never block sync. */}
+    if(!dirty)return;
+    const minimum=cutoff();
+    if(Number.isFinite(minimum))while(events.length&&!recent(events[0],minimum))events.shift();
+    try{storage?.setItem(key(),JSON.stringify(events));dirty=false;}
+    catch{/* Diagnostics never block sync. */}
   };
-  const schedule=()=>{if(!storage||timer!==null)return;timer=setTimer(flush,500);timer?.unref?.();};
+  const schedule=()=>{if(!storage||timer!==null)return;timer=setTimer(flush,3000);timer?.unref?.();};
   return {
     record({action,kind,baseRevision,cloudRevision,pending,error,durationMs,transfer}={}){
       const at=clock(),day=dayOf(at);
-      if(day!==currentDay){flush();currentDay=day;events.length=0;}
+      if(day!==currentDay){flush();currentDay=day;events.length=0;scheduleSweep();}
+      else if(Date.parse(at)-lastSweepAt>=SWEEP_MS)scheduleSweep();
       const event=savedEvent({at,action,kind,baseRevision,cloudRevision,pending,
         failure:failure(error),durationMs,transfer,online:globalThis.navigator?.onLine,
         visibility:globalThis.document?.visibilityState,
         fingerprint:error?hash(error.name+'|'+error.message):null,frame:safeFrame(error)});
-      events.push(event);if(events.length>limit)events.shift();schedule();
+      events.push(event);if(events.length>limit)events.shift();dirty=true;schedule();
     },
     report({pending=0,conflicts=0,retrying=0,nextAttemptAt=null,uploading=false,revision=null,writesInFlight=0,quarantined=0,online=null,active=null}={}){
-      flush();
+      flush();sweep();
       const day=currentDay,all=[];let sessions=0,currentStored=false;
       try{if(storage)for(let i=0;i<storage.length;i++){
-        const item=storage.key(i);if(!item?.startsWith(PREFIX+day+':'))continue;
+        const item=storage.key(i);if(!item?.startsWith(PREFIX))continue;
         sessions++;if(item===key())currentStored=true;
         for(const entry of JSON.parse(storage.getItem(item)||'[]')){
-          const safe=savedEvent(entry);if(safe&&dayOf(safe.at)===day)all.push(safe);
+          const safe=savedEvent(entry);if(safe&&recent(safe,cutoff()))all.push(safe);
         }
       }}catch{/* Keep the current session when storage is unavailable. */}
       if(!currentStored)all.push(...events);
       all.sort((a,b)=>a.at.localeCompare(b.at));
-      const recent=all.slice(-10000),lastFailure=[...recent].reverse().find(event=>event.failure)||null;
-      return {format:'shiye-sync-diagnostics',version:2,syncProtocolVersion:3,createdAt:clock(),day,scope:'本机当天的安全运行元数据；不含作品、图片、账号标识、密钥或原始报错',
+      const exported=all.slice(-5000),lastFailure=[...exported].reverse().find(event=>event.failure)||null;
+      return {format:'shiye-sync-diagnostics',version:2,syncProtocolVersion:3,createdAt:clock(),day,scope:'本机最近 24 小时的安全运行元数据；不含作品、图片、账号标识、密钥或原始报错',
         categoryGuide:{'unconfirmed-response':'云端版本未变化，但上传响应未获确认；数据留在本机待重试',
           'revision-conflict':'同一资料存在冲突；该项保留，其他项可继续',
           authorization:'登录或权限验证失败','rate-limit':'请求频率受限',server:'云端服务返回 5xx',
@@ -119,14 +148,16 @@ export function createSyncDiagnostics({limit=3000,clock=()=>new Date().toISOStri
           online:typeof online==='boolean'?online:null},
         active:active&&['准备上传','编码与上传','提交事务'].includes(active.phase)?{phase:active.phase,
           completed:count(active.done),total:count(active.total),elapsedMs:count(active.elapsedMs)}:null,
-        sessionCount:sessions+(currentStored?0:1),eventCount:all.length,lastFailure,events:recent};
+        sessionCount:sessions+(currentStored?0:1),eventCount:all.length,lastFailure,events:exported};
     },
     clear(){
       if(timer!==null){clearTimer(timer);timer=null;}
+      if(sweepTimer!==null){clearTimer(sweepTimer);sweepTimer=null;}
       try{if(storage)for(let i=storage.length-1;i>=0;i--){
         const item=storage.key(i);if(item?.startsWith(PREFIX))storage.removeItem(item);
       }}catch{}
       events.length=0;
+      dirty=false;
     }
   };
 }

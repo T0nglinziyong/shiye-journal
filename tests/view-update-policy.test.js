@@ -19,16 +19,20 @@ test('active editing, dialogs and in-progress gestures still prevent destructive
     assert.equal(canApplyBackgroundView({...context,route}),false,route);
   for(const change of [{modalOpen:true},{popoverOpen:true},{inputFocused:true},{gestureActive:true}])
     assert.equal(canApplyBackgroundView({...context,...change}),false,JSON.stringify(change));
+  assert.equal(canApplyBackgroundView({...context,idleMS:100}),false);
+  assert.equal(canApplyBackgroundView({...context,idleMS:350}),true);
 });
 
-test('collection pulls yield to active editor input but do not block other routes',async()=>{
+test('collection pulls yield to active input and recent navigation on every route',async()=>{
  const {canPollDuringEditing}=await import('../src/view-update-policy.js');
  const idle={route:'editor',gestureActive:false,inputFocused:false,idleMS:2000};
  assert.equal(canPollDuringEditing(idle),true);
  assert.equal(canPollDuringEditing({...idle,gestureActive:true}),false);
  assert.equal(canPollDuringEditing({...idle,inputFocused:true}),false);
  assert.equal(canPollDuringEditing({...idle,idleMS:500}),false);
- assert.equal(canPollDuringEditing({...idle,route:'works',idleMS:0}),true);
+ assert.equal(canPollDuringEditing({...idle,route:'works',idleMS:0}),false);
+ assert.equal(canPollDuringEditing({...idle,route:'works',idleMS:350}),true);
+ assert.equal(canPollDuringEditing({...idle,route:'works',gestureActive:true}),false);
 });
 test('unrelated background commits do not repaint the current catalog',()=>{
   assert.equal(shouldRepaintForCollections('library',['projects']),false);

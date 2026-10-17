@@ -14,6 +14,15 @@ export function FabricPageViewport({draft,width,height,zoom=1,initialPan,onViewp
     const active=new Map(),starts=new Map();
     let cancelingInk=false;
     let completedTouchPan=null;
+    let dismissedLayerTap=null;
+    const layerDismissed=event=>{dismissedLayerTap={...event.detail,until:performance.now()+700};};
+    const canvasTap=event=>{
+      const dismissed=dismissedLayerTap;
+      dismissedLayerTap=null;
+      if(dismissed&&performance.now()<dismissed.until&&
+        Math.hypot(event.clientX-dismissed.x,event.clientY-dismissed.y)<32)return;
+      latest.current.onCanvasTap?.(event);
+    };
     let pose={scale:zoom,x:initialPan?.x||0,y:initialPan?.y||0};
     const paint=next=>{
       const w=host.clientWidth,h=host.clientHeight,pw=page.offsetWidth,ph=page.offsetHeight;
@@ -33,6 +42,9 @@ export function FabricPageViewport({draft,width,height,zoom=1,initialPan,onViewp
     const stop=event=>{event.preventDefault();event.stopImmediatePropagation();};
     const iPad=isIPadPointerDevice(navigator);
     const down=event=>{
+      // The first page gesture after a menu dismissal is a new selection
+      // gesture. The dismissal itself never reaches this handler.
+      dismissedLayerTap=null;
       const mode=latest.current.tool;
       if(event.pointerType==='pen'&&mode!=='select')return;
       const navigate=fingerNavigatesCanvas({pointerType:event.pointerType,tool:mode,iPad})||
@@ -91,7 +103,7 @@ export function FabricPageViewport({draft,width,height,zoom=1,initialPan,onViewp
       if(event.pointerType==='touch'&&start?.moved)
         completedTouchPan={x:event.clientX,y:event.clientY,time:performance.now()};
       if(start&&!start.moved&&event.type==='pointerup'&&!active.size&&event.button!==1)
-        latest.current.onCanvasTap?.(event);
+        canvasTap(event);
     };
     const click=event=>{
       if(completedTouchPan&&performance.now()-completedTouchPan.time<650&&
@@ -107,6 +119,7 @@ export function FabricPageViewport({draft,width,height,zoom=1,initialPan,onViewp
     const fallbackTouches=new Map();let fallbackMoved=false;
     const pointerNavigates=()=>[...active.values()].some(point=>point.navigate);
     const touchStart=event=>{
+      dismissedLayerTap=null;
       // Fabric listens for both pointer and touch events. Suppress its touch
       // path whenever the pointer path owns this page gesture.
       if(active.size){if(pointerNavigates())stop(event);return;}
@@ -147,11 +160,12 @@ export function FabricPageViewport({draft,width,height,zoom=1,initialPan,onViewp
       stop(event);
       if(!fallbackTouches.size){
         if(!fallbackMoved&&event.type==='touchend'&&touch)
-          latest.current.onCanvasTap?.({clientX:touch.clientX,clientY:touch.clientY,pointerType:'touch',button:0});
+          canvasTap({clientX:touch.clientX,clientY:touch.clientY,pointerType:'touch',button:0});
         fallbackMoved=false;
       }
     };
     const observer=new ResizeObserver(()=>paint(pose));observer.observe(host);observer.observe(page);
+    window.addEventListener('shiye:layer-popover-dismiss',layerDismissed);
     host.addEventListener('pointerdown',down,true);host.addEventListener('pointermove',move,true);
     host.addEventListener('pointerup',end,true);host.addEventListener('pointercancel',end,true);
     host.addEventListener('click',click,true);
@@ -161,6 +175,7 @@ export function FabricPageViewport({draft,width,height,zoom=1,initialPan,onViewp
     host.addEventListener('touchcancel',touchEnd,{capture:true,passive:false});
     host.addEventListener('wheel',wheel,{passive:false,capture:true});paint(pose);
     return ()=>{observer.disconnect();controller.current=null;
+      window.removeEventListener('shiye:layer-popover-dismiss',layerDismissed);
       host.removeEventListener('pointerdown',down,true);host.removeEventListener('pointermove',move,true);
       host.removeEventListener('pointerup',end,true);host.removeEventListener('pointercancel',end,true);
       host.removeEventListener('click',click,true);

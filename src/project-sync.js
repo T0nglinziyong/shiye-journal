@@ -226,10 +226,15 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
         !conflicts.has(row.record.id)&&row.lastFailureClass!=='invalid'&&
         (!row.nextAttemptAt||row.nextAttemptAt<=clock()));
       if(!readyRows.length){report();return;}
+      // A newer image can be due while an older edit of the same record is
+      // still backing off. It is not runnable yet; leave it to the older
+      // row's retry timer instead of cycling through empty upload windows.
+      const runnableRows=prioritizedRows(readyRows);
+      if(!runnableRows.length){report();return;}
       // Immutable object bytes can transfer before the account revision lock.
       // Only reconciliation and the versioned metadata commit need that lock.
       const prepareAt=clock();diagnose('prepare-start');
-      const preparation=prioritizedRows(readyRows).filter(row=>
+      const preparation=runnableRows.filter(row=>
         !requiresPrepare||requiresPrepare(row.record)).slice(0,
         Number.isFinite(prepareLimit)?Math.max(1,Math.floor(prepareLimit)):readyRows.length);
       preparedOperations=new Set(preparation.map(row=>row.operationID));
@@ -457,10 +462,10 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
       // Publish the idle transition too, or the shell can show “上传中” with an
       // empty outbox until some unrelated edit causes another status event.
       report();
-      const unpreparedReady=preparedCycleComplete&&requiresPrepare&&[...entries.values()].some(row=>
+      const unpreparedReady=preparedCycleComplete&&requiresPrepare&&prioritizedRows([...entries.values()].filter(row=>
         !preparedOperations.has(row.operationID)&&requiresPrepare(row.record)&&
         !conflicts.has(row.record.id)&&row.lastFailureClass!=='invalid'&&
-        (!row.nextAttemptAt||row.nextAttemptAt<=clock()));
+        (!row.nextAttemptAt||row.nextAttemptAt<=clock()))).length>0;
       if(entries.size&&!paused&&unpreparedReady){
         // Continue the bounded image backlog immediately. The lock has been
         // released; the next pair can upload bytes without holding it.

@@ -77,6 +77,22 @@ try{
   assert.equal(await evaluate('!!document.querySelector(".swift-layer-popover")'),false);
   assert.equal(await evaluate('!!document.querySelector(".fabric-selected-actions")'),true,
     'The first touch only dismisses the layer tree and preserves its frame');
+  await click('[data-val="layers"]','.scene-layer-tree');
+  await evaluate(`(()=>{
+    const target=document.querySelector('.upper-canvas');
+    const point=document.querySelector('.upper-canvas').getBoundingClientRect();
+    const touch=new Touch({identifier:77,target,clientX:point.left+point.width*.08,
+      clientY:point.top+point.height*.08});
+    target.dispatchEvent(new TouchEvent('touchstart',{bubbles:true,cancelable:true,
+      touches:[touch],targetTouches:[touch],changedTouches:[touch]}));
+    target.dispatchEvent(new TouchEvent('touchend',{bubbles:true,cancelable:true,
+      touches:[],targetTouches:[],changedTouches:[touch]}));
+  })()`);
+  await sleep(100);
+  assert.equal(await evaluate('!!document.querySelector(".swift-layer-popover")'),false,
+    'A TouchEvent-only first tap dismisses the layer tree');
+  assert.equal(await evaluate('!!document.querySelector(".fabric-selected-actions")'),true,
+    'A TouchEvent-only first tap cannot clear the layer selection');
   await wait('.canvas-font-size-stepper input[aria-label="字号"]');
   await evaluate(`(()=>{const input=document.querySelector('.canvas-font-size-stepper input[aria-label="字号"]');
     input.focus();input.select();})()`);
@@ -91,6 +107,16 @@ try{
   const inspector=await evaluate(`document.querySelector('.editor-inspector').getBoundingClientRect().toJSON()`);
   assert.ok(inspector.left>=-1&&inspector.right<=391,
     'Object settings fit the mobile viewport: '+JSON.stringify(inspector));
+  const header=await evaluate(`(()=>{
+    const panel=document.querySelector('.floating-editor-inspector');
+    const buttons=[...panel.querySelectorAll('.floating-scene-panel-actions button')];
+    return {widths:buttons.map(button=>button.getBoundingClientRect().width),
+      heights:buttons.map(button=>button.getBoundingClientRect().height),
+      rows:buttons.map(button=>button.getClientRects().length),
+      head:panel.querySelector('.fabric-inspector-head').getBoundingClientRect().toJSON()};
+  })()`);
+  assert.ok(header.widths.every(width=>width>=44)&&header.heights.every(height=>height<=header.head.height),
+    'Inspector header actions remain horizontal and readable: '+JSON.stringify(header));
   assert.equal(await evaluate('!!document.querySelector("#draft-select,[data-act=save-archive]")'),false,
     'Object settings no longer show scheme and archive controls');
   await click('.floating-editor-inspector .floating-scene-panel-actions button:first-child');

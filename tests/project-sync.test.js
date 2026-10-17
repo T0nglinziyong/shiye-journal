@@ -668,6 +668,26 @@ test('a bounded preupload pass never uploads a third image while holding the loc
     assert.equal(rows.length,0);
   }finally{sync.pause();}
 });
+test('a dependent image waits for the older edit retry instead of spinning through empty preparation cycles',async()=>{
+  const rows=[
+    {record:{id:'older',key:'shared',hasImage:true},serial:1,baseRevision:0,
+      operationID:'older-op',attempt:1,nextAttemptAt:5000},
+    {record:{id:'newer',key:'shared',hasImage:true},serial:2,baseRevision:0,
+      operationID:'newer-op'}
+  ];
+  const timers=[],diagnostics=[];
+  const sync=createProjectSync({load:async()=>structuredClone(rows),reload:async()=>structuredClone(rows),
+    write:async()=>{},revision:()=>0,clock:()=>1000,requiresPrepare:record=>record.hasImage,
+    recordKeys:record=>[{store:'assets',id:record.key}],
+    prepare:async()=>{throw Error('a blocked image cannot prepare yet');},
+    commit:async()=>{throw Error('a blocked image cannot commit yet');},
+    onDiagnostic:event=>diagnostics.push(event),
+    setTimer:(_fn,delay)=>{timers.push(delay);return timers.length;},clearTimer:()=>{}});
+  await sync.resume();
+  assert.deepEqual(timers,[4000]);
+  assert.equal(diagnostics.filter(event=>event.action==='prepare-start').length,0);
+  sync.pause();
+});
 test('a fresh independent batch is not queued behind unrelated retries',async()=>{
   let revision=4,rows=[
     {record:{id:'old',key:'old'},serial:1,baseRevision:1,operationID:'old-op',attempt:3,nextAttemptAt:0},
