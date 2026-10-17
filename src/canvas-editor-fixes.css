@@ -246,3 +246,19 @@
 .editor-inspector-geometry summary{cursor:pointer;font-weight:600}
 .editor-inspector-geometry textarea{display:block;max-width:100%;box-sizing:border-box;margin:8px 0;font:12px/1.45 ui-monospace,monospace}
 .editor-inspector-geometry small{display:block;margin-top:6px}
+.floating-editor-inspector{position:fixed;top:clamp(130px,19vh,210px);right:12px;
+  z-index:120;width:min(420px,calc(100vw - 16px));max-height:calc(100dvh - 16px);
+  display:flex;flex-direction:column;background:#fffefa;border:1px solid #d8e1d6;
+  border-radius:20px;box-shadow:0 16px 40px #263c3040;overflow:hidden}
+.floating-editor-inspector .fabric-inspector-head{flex:none;padding:12px 16px;
+  background:#e9f0e8;touch-action:none;cursor:grab;user-select:none}
+.floating-editor-inspector .fabric-inspector-head h2{margin:0;font-size:17px}
+.floating-editor-inspector .fabric-inspector-head span{font-size:12px;color:#607464}
+.floating-editor-inspector-body{min-height:0;overflow:auto;padding:14px 16px;overscroll-behavior:contain}
+.floating-editor-inspector footer{display:flex;gap:9px;justify-content:flex-end;
+  padding:11px 16px;border-top:1px solid #dce5dc;background:#fffefa}
+.floating-editor-inspector footer button{border:1px solid #cbd9ce;background:#fff;
+  border-radius:10px;padding:8px 13px;color:#2b4d3b;font-weight:600}
+.floating-editor-inspector footer button.primary{background:#3b7356;color:#fff;border-color:#3b7356}
+@media(max-width:680px){.floating-editor-inspector{width:min(420px,calc(100vw - 16px));
+  max-height:min(65dvh,620px);right:8px;top:120px}}

@@ -36,16 +36,25 @@ try{
   await wait('.fabric-cut-preview-status');
   assert.ok(await evaluate('document.querySelector(".fabric-cut-preview-status")?.textContent.includes("2 片")'));
   await click('.fabric-cut-row button.primary');
-  await sleep(500);
+  await sleep(150);
   assert.ok(await evaluate('!!document.querySelector(".fabric-cut-panel")'));
+  assert.ok(await evaluate('!!document.querySelector(".shelf .mini-asset")'));
+  await click('.fabric-cut-session-actions button:first-child');
+  assert.equal(await evaluate('!!document.querySelector(".shelf .mini-asset")'),false,
+    'Undo in a scissors session must restore the original object');
+  await click('.fabric-cut-session-actions button:nth-child(2)');
+  assert.ok(await evaluate('!!document.querySelector(".shelf .mini-asset")'));
+  await click('.fabric-cut-panel header button');
+  await sleep(700);
   const result=await evaluate(`(async()=>{const open=indexedDB.open('shiye-pwa-full-v1');
     const db=await new Promise(resolve=>open.onsuccess=()=>resolve(open.result));
     const rows=await new Promise(resolve=>{const q=db.transaction('projects').objectStore('projects').getAll();
       q.onsuccess=()=>resolve(q.result)});db.close();
-    const layers=rows.at(-1).drafts[0].layers;return {shapes:layers.filter(n=>n.type==='shape').length,
+    const leaves=nodes=>nodes.flatMap(n=>n.type==='group'?leaves(n.children):[n]);
+    const layers=leaves(rows.at(-1).drafts[0].layers);
+    return {shapes:layers.filter(n=>n.type==='shape').length,
       parked:layers.filter(n=>n.isParked).length}})()`);
   assert.deepEqual(result,{shapes:2,parked:1});
-  assert.ok(await evaluate('!!document.querySelector(".shelf .mini-asset")'));
   await click('[data-val="shape"]','.canvas-picker-grid');
   await click('.canvas-picker-grid button:first-child');
   await wait('.fabric-selected-actions');
@@ -62,6 +71,10 @@ try{
   await wait('.fabric-cut-preview-status');
   assert.ok(await evaluate('document.querySelector(".fabric-cut-preview-status")?.textContent.includes("2 片")'),
     'A direct canvas line must preview two pieces');
+  await click('.fabric-cut-row button.primary');
+  await click('.fabric-cut-session-actions button:last-child');
+  assert.equal(await evaluate('!!document.querySelector(".fabric-cut-panel")'),false,
+    'Discard exits scissors without saving its staged fragments');
   assert.deepEqual(browser.errors,[]);
   console.log('Fabric cut workflow: history, shape toggle, preview, commit, standby passed');
 }finally{await browser.close();}

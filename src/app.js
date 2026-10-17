@@ -16,7 +16,8 @@ const decodeSceneImage=async(...args)=>(await sceneRuntime()).decodeSceneImage(.
 import {sceneLayerEntries,attachSceneV2,moveSceneNode,groupSceneLayers,ungroupSceneLayers,findSceneNode,assertSceneEditable,validateVectorMask} from './scene-model.js';
 import {copySceneLasso,deleteSceneLasso,mergeSceneLasso,sceneLassoBounds} from './scene-lasso.js';
 import {selectionGroupID,duplicateSceneGroup,deleteSceneGroup} from './scene-selection-actions.js';
-import {planSceneCut,rejoinMaterialPieces} from './scene-cut-ops.js';
+import {planSceneCut,rejoinMaterialPieces,restoreSceneMasks} from './scene-cut-ops.js';
+import {beginSceneEditSession,acceptSceneEditStep,stepSceneEditSession,sceneEditSessionChanged} from './scene-edit-session.js';
 import {pinProjectMaterialImages} from './scene-material-references.js';
 import {arrangeSceneSelection} from './scene-arrangement.js';
 import './styles.css';
@@ -465,6 +466,18 @@ function navigateBack(fallback='series'){
 }
 let editorOpenSequence=0,editorSessionBaseline=null;
 function route(name,{back=false,restoreMaterial=false,restoreSnapshot=null,replaceHistory=false}={}){
+  if(state.route==='editor'&&name!=='editor'&&state.cutSession){
+    if(sceneEditSessionChanged(state.cutSession)){
+      toast('请先在剪刀面板完成或放弃本次操作');return;
+    }
+    state.cutSession=null;state.cutPreview=null;
+  }
+  if(state.route==='editor'&&name!=='editor'&&state.inspectorSession){
+    if(sceneEditSessionChanged(state.inspectorSession)){
+      toast('请先在对象编辑窗口保存或放弃更改');return;
+    }
+    state.inspectorSession=null;state.fabricInspectorOpen=false;
+  }
   cancelRouteScroll();
   if(!back&&!replaceHistory&&name!==state.route)rememberNavigation();
   editorOpenSequence++;
@@ -695,7 +708,8 @@ function render(){
     ?EditorPage({state,draft:current(),editorEntry,asset,source:image,
       // A Date string can repeat for two edits in one millisecond. The local
       // save generation keeps Fabric's Scene projection in step with history.
-      sceneRevision:state.activeProject.updatedAt+':'+(saveVersions.get(state.activeProject.id)||0),
+      sceneRevision:state.activeProject.updatedAt+':'+(saveVersions.get(state.activeProject.id)||0)+
+        ':'+(state.cutSession?.revision||0)+':'+(state.inspectorSession?.revision||0),
       materials:state.assets,
       retainFabricAssets,
       loadFabricAsset:async(id,node,onUpgrade)=>{
@@ -716,11 +730,14 @@ function render(){
         return cover;
       },
       onFabricSelection:(ids,bounds)=>{const next=ids.length===1?ids[0]:null;
+        // The property window edits one staged object. Canvas selection
+        // events must not silently switch or close that transaction.
+        if(state.inspectorSession)return;
         const changed=state.selected!==next||JSON.stringify(state.multiSelected||[])!==JSON.stringify(ids);
         const boundsChanged=JSON.stringify(state.fabricSelectionBounds||null)!==JSON.stringify(bounds||null);
         if(changed||boundsChanged){
           state.selected=next;state.multiSelected=ids;state.fabricSelectionBounds=bounds||null;
-          if(changed)state.fabricInspectorOpen=false;
+          if(changed&&!state.inspectorSession)state.fabricInspectorOpen=false;
           render();}},
       onFabricBeforeChange:()=>checkpoint(),
       // Fabric already updates the changed layer in place. Persist its Scene
@@ -847,7 +864,11 @@ function updateMatchingRegions(_regions,{persist=true}={}){
     toast('本机搭配状态暂存失败：'+error.message);
   });
 }
-function current(){const p=state.activeProject,d=p?.drafts.find(d=>d.id===state.activeDraft)||p?.drafts[0];return d?attachSceneV2(d):undefined;}
+function current(){const p=state.activeProject,d=p?.drafts.find(d=>d.id===state.activeDraft)||p?.drafts[0];
+  const session=state.cutSession||state.inspectorSession;
+  if(d&&session?.projectID===p.id&&session.draftID===d.id)
+    return attachSceneV2(session.working);
+  return d?attachSceneV2(d):undefined;}
 function editorEntry(d){return sceneLayerEntries(d,{ink:false});}
 // Reuse one compact card language for every settings category.
 function readAIForm(){
@@ -918,7 +939,7 @@ function updateEditorInspector(id,value){
     let parsed;try{parsed=JSON.parse(value);}catch{throw Error('请输入合法的 JSON 几何数据');}
     if(id==='inspector-vector-mask'){
       if(parsed!==null)validateVectorMask(parsed);
-      checkpoint();if(parsed===null)delete entry.value.vectorMask;
+      checkpoint();if(parsed===null){delete entry.value.vectorMask;delete entry.value.vectorMaskHistory;}
       else entry.value.vectorMask=parsed;
       saveProject();render();toast('蒙版已应用');return;
     }
@@ -1043,7 +1064,8 @@ async function updateImportReviewSeries(recordIndex,next){
     render();return group.id;
   }catch(error){toast('系列新建失败：'+error.message);return previous;}
 }
-function checkpoint(){const d=current();if(!d)return;ensureEditorHistory(state);captureHistory(state.activeProject);checkpointEditorHistory(state,d);}
+function checkpoint(){const d=current();if(!d||state.cutSession||state.inspectorSession)return;
+  ensureEditorHistory(state);captureHistory(state.activeProject);checkpointEditorHistory(state,d);}
 // Per-editor-draft source baselines let Scene v2 generate property-level
 // patches on each committed user action without duplicating full drafts.
 const sceneTrackBases=new Map();
@@ -1112,7 +1134,14 @@ function saveSpecificProject(p){if(!p)return false;delete p.isTemplate;
   const now=new Date().toISOString();trackEditedScene(p,now);p.updatedAt=now;
   projectSaveFingerprints.set(p.id,fingerprint);projectSceneFingerprints.set(p.id,sceneFingerprint);
   saveVersions.set(p.id,(saveVersions.get(p.id)||0)+1);dirtyProjects.set(p.id,p);saveStatus('后台保存中…');syncDisplay.localPending=true;updateSyncIndicator();if(!saveTimer)saveTimer=setTimeout(()=>flushSave().catch(console.error),500);return true;}
-function saveProject(){saveSpecificProject(state.activeProject);}
+function saveProject(){
+  if(state.cutSession)return;
+  if(state.inspectorSession){
+    acceptSceneEditStep(state.inspectorSession,current(),state.selected);
+    return;
+  }
+  saveSpecificProject(state.activeProject);
+}
 const pendingTrashStages=new Map();
 async function awaitTrashStages(ids){await Promise.all(ids.map(id=>pendingTrashStages.get(id)).filter(Boolean));}
 async function moveProjectsToTrash(ids){
@@ -1159,7 +1188,28 @@ function saveAISnapshotInBackground(p){
 function handle(action,id,value){
   return actionStore.dispatch({type:'app/action',payload:{action,id,value}});
 }
-async function runAppAction(action,id,value){try{switch(action){
+async function runAppAction(action,id,value){try{
+  if(state.route==='editor'&&state.cutSession&&
+    !/^fabric-cut-/.test(action)&&
+    !['fabric-tool','fabric-select-layer','fabric-fit-view','zoom-in','zoom-out',
+      'undo','redo','back-works','editor-done'].includes(action)){
+    toast('请先完成或放弃剪刀操作');return;
+  }
+  if(state.route==='editor'&&state.inspectorSession&&
+    !/^fabric-inspector-/.test(action)&&
+    !['fabric-tool','fabric-text-property','fabric-shape-property',
+      'fabric-remove-vector-mask','fabric-replace-material','duplicate','flip',
+      'front','delete-object','fabric-fit-view','zoom-in','zoom-out','undo','redo',
+      'back-works','editor-done'].includes(action)){
+    toast('请先保存或放弃对象编辑');return;
+  }
+  if(state.route==='editor'&&(state.cutSession||state.inspectorSession)&&
+    (/^fabric-history-/.test(action)||['save-snapshot','export-scene-json',
+      'download-project-json','export-png','export-pdf','print','save-work',
+      'fabric-paper','paper-menu'].includes(action))){
+    toast(state.cutSession?'请先完成或放弃剪刀操作':'请先保存或放弃对象编辑');return;
+  }
+  switch(action){
   case 'backup-legacy-projects':{
     const backup=await db.exportLegacyProjectBackup();
     if(!(backup instanceof Blob)||!backup.size)throw Error('旧版作品备份为空');
@@ -1171,6 +1221,8 @@ async function runAppAction(action,id,value){try{switch(action){
   case 'import-work':openImportGallery('work');break;
   case 'import-snapshot':offlineSnapshotProject=null;openImportGallery('snapshot');break;
   case 'import':openImportGallery('material');break;case 'back-library':navigateBack('library');break;case 'back-works':case 'editor-done':{
+    if(state.cutSession){toast('请先在剪刀面板完成或放弃本次操作');break;}
+    if(state.inspectorSession){toast('请先在对象编辑窗口保存或放弃更改');break;}
     // The ink layer may have a short coalescing timer. Flush its committed
     // strokes BEFORE the explicit export/publish/exit transaction.
     view.flushInkCommit?.({renderUI:false,force:true});
@@ -1280,6 +1332,18 @@ async function runAppAction(action,id,value){try{switch(action){
   case 'project-delete':{const p=state.projects.find(x=>x.id===state.previewProjectID);if(!p||!confirm('将这份作品移到最近删除？'))break;await moveProjectsToTrash([p.id]);break;}
   case 'works-filter':await actionStore.dispatch({type:'works/filter',payload:{value}});break;
   case 'fabric-tool':{
+    if(state.inspectorSession&&value!==state.tool){
+      if(sceneEditSessionChanged(state.inspectorSession)){
+        toast('请先在对象编辑窗口保存或放弃更改');break;
+      }
+      state.inspectorSession=null;state.fabricInspectorOpen=false;
+    }
+    if(state.cutSession&&value!=='scissors'){
+      if(sceneEditSessionChanged(state.cutSession)){
+        toast('请先在剪刀面板完成或放弃本次操作');break;
+      }
+      state.cutSession=null;
+    }
     const leavingLasso=state.tool==='lasso'&&value!=='lasso';
     if(state.tool==='scissors'&&value!=='scissors'){
       state.cutSettings={...state.cutSettings,targetIDs:[]};
@@ -1291,9 +1355,14 @@ async function runAppAction(action,id,value){try{switch(action){
     render();break;
   }
   case 'fabric-cut-open':{
+    if(state.inspectorSession){toast('请先保存或放弃对象编辑');break;}
     const d=current();if(!d)break;
     const ids=[...new Set(state.multiSelected?.length?state.multiSelected:state.selected?[state.selected]:[])];
     if(!ids.length){toast('请先选择对象');break;}
+    if(!state.cutSession)state.cutSession=beginSceneEditSession(d,{
+      projectID:state.activeProject.id,
+      saveRevision:saveVersions.get(state.activeProject.id)||0,
+      selectedID:state.selected});
     state.selected=ids.length===1?ids[0]:null;
     state.multiSelected=ids;
     state.tool=state.toolHighlight='scissors';
@@ -1330,7 +1399,8 @@ async function runAppAction(action,id,value){try{switch(action){
         Math.max(...plan.pieces.filter(other=>other.sourceID===piece.sourceID).map(other=>other.area)))
         .map(piece=>piece.key);
       state.cutPreview={spec,pieces:plan.pieces,keepKeys,
-        sceneRevision:(saveVersions.get(state.activeProject.id)||0),draftID:d.id};
+        sceneRevision:(saveVersions.get(state.activeProject.id)||0),
+        sessionRevision:state.cutSession?.revision||0,draftID:d.id};
       render();
     }catch(error){state.cutPreview=null;toast(error.message||'无法预览剪切');render();}
     break;
@@ -1342,32 +1412,79 @@ async function runAppAction(action,id,value){try{switch(action){
     state.cutPreview={...state.cutPreview,keepKeys:[...keys]};render();break;
   }
   case 'fabric-cut-cancel':state.cutPreview=null;render();break;
+  case 'fabric-cut-step':{
+    const session=state.cutSession;if(!session)break;
+    if(state.cutPreview){state.cutPreview=null;render();break;}
+    const selected=stepSceneEditSession(session,id);
+    if(selected===null)break;
+    state.selected=selected;state.multiSelected=selected?[selected]:[];
+    render();break;
+  }
+  case 'fabric-cut-discard':{
+    const session=state.cutSession;if(!session)break;
+    const selected=session.steps[0].selectedID;
+    state.cutSession=null;state.cutPreview=null;
+    state.selected=selected;state.multiSelected=selected?[selected]:[];
+    state.tool=state.toolHighlight='select';render();toast('已放弃本次剪刀操作');break;
+  }
+  case 'fabric-cut-finish':{
+    const session=state.cutSession;if(!session)break;
+    if(state.cutPreview){toast('请先应用或取消当前预览');break;}
+    const saved=state.activeProject?.drafts?.find(d=>d.id===session.draftID);
+    if(!saved||session.projectID!==state.activeProject.id||
+      session.saveRevision!==(saveVersions.get(state.activeProject.id)||0)){
+      toast('作品已在其他地方变化；本次剪刀操作尚未保存，请先检查');break;
+    }
+    if(sceneEditSessionChanged(session)){
+      validateScenePhysical(session.working,state.assets);
+      state.cutSession=null;
+      checkpoint();saved.layers=structuredClone(session.working.layers);saveProject();
+    }else state.cutSession=null;
+    state.cutPreview=null;state.tool=state.toolHighlight='select';
+    render();toast('剪刀操作已完成');break;
+  }
+  case 'fabric-cut-reset-mask':{
+    const session=state.cutSession,d=current();if(!session||!d||!state.selected)break;
+    try{
+      const trial=restoreSceneMasks(d,state.selected,{last:id==='last'});
+      validateScenePhysical(trial,state.assets);
+      acceptSceneEditStep(session,trial,state.selected);
+      state.cutPreview=null;render();toast(id==='last'?'已撤回上一层蒙版':'已恢复当前裁片完整显示');
+    }catch(error){toast(error.message||'无法恢复蒙版');}
+    break;
+  }
   case 'fabric-cut-confirm':{
-    const d=current(),preview=state.cutPreview;if(!d||!preview)break;
+    const d=current(),preview=state.cutPreview,session=state.cutSession;
+    if(!d||!preview||!session)break;
     if(preview.draftID!==d.id||preview.sceneRevision!==(saveVersions.get(state.activeProject.id)||0)){
       state.cutPreview=null;toast('画面已变化，请重新预览剪切');render();break;
+    }
+    if(preview.sessionRevision!==session.revision){
+      state.cutPreview=null;toast('剪刀步骤已变化，请重新预览');render();break;
     }
     if(preview.spec.operation==='split'&&!preview.keepKeys.length){toast('请至少保留一片在画布上');break;}
     try{
       const plan=planSceneCut(d,{...preview.spec,keepKeys:preview.keepKeys},state.assets);
       validateScenePhysical(plan.draft,state.assets);
-      checkpoint();d.layers=plan.draft.layers;saveProject();
+      const selected=plan.selectionID||plan.pieces.find(piece=>!piece.parked)?.nodeID||plan.affected[0]||null;
+      acceptSceneEditStep(session,plan.draft,selected);
       state.cutPreview=null;
-      state.selected=plan.pieces.find(piece=>!piece.parked)?.nodeID||plan.affected[0]||null;
+      state.selected=selected;
       state.multiSelected=state.selected?[state.selected]:[];
-      render();toast(preview.spec.operation==='mask'?'局部显示已应用':'裁片已生成，其他部分已放入备选');
+      render();toast(preview.spec.operation==='mask'?'蒙版已加入本次操作':'裁片已加入本次操作，可继续剪切');
     }catch(error){toast(error.message||'无法完成剪切');}
     break;
   }
   case 'fabric-cut-rejoin':{
-    const d=current(),node=d&&findSceneNode(d,id||state.selected);if(!node?.splitParentId)break;
+    const d=current(),session=state.cutSession,node=d&&findSceneNode(d,id||state.selected);
+    if(!node?.splitParentId||!session)break;
     const siblings=sceneLayerEntries(d,{hidden:true}).filter(entry=>
       entry.kind==='material'&&entry.value.splitParentId===node.splitParentId&&
       entry.value.assetID===node.assetID).map(entry=>entry.value.id);
     try{
       const plan=rejoinMaterialPieces(d,siblings,state.assets);
       validateScenePhysical(plan.draft,state.assets);
-      checkpoint();d.layers=plan.draft.layers;saveProject();
+      acceptSceneEditStep(session,plan.draft,plan.nodeID);
       state.selected=plan.nodeID;state.multiSelected=[plan.nodeID];render();toast('裁片已拼回');
     }catch(error){toast(error.message||'裁片无法拼回');}
     break;
@@ -1401,9 +1518,38 @@ async function runAppAction(action,id,value){try{switch(action){
     try{localStorage.setItem('shiye-canvas-tools-v1',JSON.stringify(state.canvasTools));}catch{}
     render();break;
   }
-  case 'fabric-inspector-open':if(state.selected){state.fabricInspectorOpen=true;render();}break;
-  case 'fabric-inspector-close':state.fabricInspectorOpen=false;render();break;
-  case 'fabric-remove-vector-mask':editSelected(e=>{if(e?.value?.vectorMask)delete e.value.vectorMask;});break;
+  case 'fabric-inspector-open':{
+    const d=current();
+    if(!d||!state.selected||state.cutSession)break;
+    state.inspectorSession=beginSceneEditSession(d,{
+      projectID:state.activeProject.id,
+      saveRevision:saveVersions.get(state.activeProject.id)||0,
+      selectedID:state.selected});
+    state.fabricInspectorOpen=true;render();break;
+  }
+  case 'fabric-inspector-save':{
+    const session=state.inspectorSession;if(!session)break;
+    const saved=state.activeProject?.drafts?.find(d=>d.id===session.draftID);
+    if(!saved||session.projectID!==state.activeProject.id||
+      session.saveRevision!==(saveVersions.get(state.activeProject.id)||0)){
+      toast('作品已在其他地方变化；对象修改尚未保存，请先检查');break;
+    }
+    if(sceneEditSessionChanged(session)){
+      validateScenePhysical(session.working,state.assets);
+      state.inspectorSession=null;
+      checkpoint();saved.layers=structuredClone(session.working.layers);saveProject();
+    }else state.inspectorSession=null;
+    state.fabricInspectorOpen=false;render();toast('对象修改已保存');break;
+  }
+  case 'fabric-inspector-close':case 'fabric-inspector-discard':{
+    const selected=state.inspectorSession?.steps[0].selectedID||state.selected;
+    state.inspectorSession=null;state.fabricInspectorOpen=false;
+    state.selected=selected;state.multiSelected=selected?[selected]:[];
+    render();break;
+  }
+  case 'fabric-remove-vector-mask':editSelected(e=>{if(e?.value?.vectorMask){
+    delete e.value.vectorMask;delete e.value.vectorMaskHistory;
+  }});break;
   case 'fabric-fit-view':{
     state.zoom=1;state.fabricFitRevision=(state.fabricFitRevision||0)+1;
     state.canvasViewports?.set(state.activeProject.id+':'+current().id,{scale:1,x:0,y:0});
@@ -1692,7 +1838,8 @@ async function runAppAction(action,id,value){try{switch(action){
     if(item.isParked){checkpoint();item.isParked=false;saveProject();}
     state.selected=item.id;state.multiSelected=[item.id];state.tool='select';render();break;
   }
-  case 'fabric-select-layer':state.selected=id;state.multiSelected=[id];state.tool='select';render();break;
+  case 'fabric-select-layer':state.selected=id;state.multiSelected=[id];
+    if(!state.cutSession)state.tool='select';render();break;
   case 'fabric-paper':{
     const d=current();if(!d)break;
     if(id==='pattern'&&['plain','grid','lines','dots','columns'].includes(value)){
@@ -1712,7 +1859,16 @@ async function runAppAction(action,id,value){try{switch(action){
     render();break;
   }
   case 'zoom-in':await actionStore.dispatch({type:'editor/zoom',payload:{delta:.15}});break;case 'zoom-out':await actionStore.dispatch({type:'editor/zoom',payload:{delta:-.15}});break;
-  case 'paper-menu':state.editorPanel=!state.editorPanel;state.selected=null;render();break;case 'undo':await actionStore.dispatch({type:'editor/undo'});break;case 'redo':await actionStore.dispatch({type:'editor/redo'});break;
+  case 'paper-menu':state.editorPanel=!state.editorPanel;state.selected=null;render();break;
+  case 'undo':case 'redo':{
+    const session=state.cutSession||state.inspectorSession;
+    if(session){
+      if(state.cutPreview){state.cutPreview=null;render();break;}
+      const selected=stepSceneEditSession(session,action);
+      if(selected!==null){state.selected=selected;state.multiSelected=selected?[selected]:[];render();}
+    }else await actionStore.dispatch({type:'editor/'+action});
+    break;
+  }
   case 'duplicate':{
     const d=current(),node=d&&findSceneNode(d,state.selected);
     if(node?.type==='ink'){

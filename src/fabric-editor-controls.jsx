@@ -6,6 +6,7 @@ import {commonShapes,advancedShapes,configureShape,shapeThumbnailSVG} from './ed
 import {primitive} from './domain.js';
 import {iconMarkup} from './icons.js';
 import {adjacentFontSize} from './canvas-control-behavior.js';
+import {mountPieceThumbnail} from './material-piece-thumbnail.js';
 
 const toolIcons={select:'cursor',pen:'pen',eraser:'eraser',highlighter:'marker',lasso:'lasso',text:'text',shape:'shape',material:'material',layers:'layers',paper:'paper'};
 const labels={select:'选择',pen:'笔',eraser:'橡皮擦',highlighter:'荧光笔',lasso:'套索选择',text:'文字',shape:'图形',material:'素材',layers:'图层',paper:'画布背景'};
@@ -103,6 +104,18 @@ function ShapePicker({draft,onPick}){
   }):<p>这一页还没有图形。</p>}</div></>;
 }
 
+export function MaterialPieceImage({asset,item,source}){
+  const card=useRef(null),src=asset&&(source(asset.blobId)||asset.staticPath);
+  const geometry=JSON.stringify([item?.cropRect,item?.materialMask]);
+  useEffect(()=>{
+    if(!card.current||!src||!item)return;
+    return mountPieceThumbnail(card.current,item);
+  },[src,item?.id,geometry]);
+  return <div ref={card} className="material-piece-image">
+    {src?<img src={src} loading="lazy" decoding="async" alt=""/>:<span>无预览</span>}
+  </div>;
+}
+
 function MaterialPicker({draft,materials,series,source,onPick}){
   const [tab,setTab]=useState(draft.items.some(item=>!item.isParked)?'used':'all');
   const [query,setQuery]=useState(''),[group,setGroup]=useState('all');
@@ -138,8 +151,7 @@ function MaterialPicker({draft,materials,series,source,onPick}){
       if(node.scrollHeight-node.scrollTop-node.clientHeight<150)setShown(count=>Math.min(rows.length,count+40));
     }}>{rows.slice(0,shown).map(({asset,item})=><button type="button" key={item?.id||asset.id}
       data-material-id={asset.id} data-picker-item={item?.id} onClick={()=>onPick(asset.id,item?.id)}>
-      {source(asset.blobId)||asset.staticPath?<img src={source(asset.blobId)||asset.staticPath}
-        loading="lazy" decoding="async" alt=""/>:<span>无预览</span>}
+      <MaterialPieceImage asset={asset} item={item} source={source}/>
       <span>{asset.title}{item?.splitParentId?' · 裁片 '+((item.splitPartIndex??0)+1):''}</span></button>)}
     </div>{!rows.length?<p>没有符合条件的素材</p>:rows.length>shown?<small>下滑继续显示 · 共 {rows.length} 件</small>:null}</>;
 }

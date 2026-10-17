@@ -9,6 +9,10 @@ export function FabricCutPanel({state,draft,onAction}){
   const settings={operation:'split',scope:'object',inset:.18,
     hideRegion:true,...state.cutSettings};
   const preview=state.cutPreview,node=findSceneNode(draft,state.selected);
+  const leaves=current=>current?.type==='group'?(current.children||[]).flatMap(leaves):current?[current]:[];
+  const masked=leaves(node).filter(child=>child.vectorMask);
+  const rejoinNode=leaves(node).find(child=>child.type==='material'&&child.splitParentId);
+  const session=state.cutSession;
   const cutTargets=sceneLayerEntries(draft,{hidden:true,ink:true}).filter(entry=>
     !entry.value.hidden&&!entry.value.isHidden&&!entry.value.isParked&&!entry.value.locked&&
     !entry.value.isLocked&&entry.parents.every(parent=>!parent.hidden&&!parent.isHidden&&
@@ -49,11 +53,18 @@ export function FabricCutPanel({state,draft,onAction}){
     style={position?{left:position.left,top:position.top,right:'auto',bottom:'auto'}:undefined}>
     <header onPointerDown={down} onPointerMove={move} onPointerUp={end} onPointerCancel={end}>
       <strong>剪刀 · {settings.operation==='mask'?'蒙版':'裁剪'}</strong>
-      <button type="button" aria-label="退出剪刀" onPointerDown={event=>event.stopPropagation()}
-        onClick={()=>onAction('fabric-tool',null,'select')}>退出</button>
+      <button type="button" aria-label="完成剪刀操作" onPointerDown={event=>event.stopPropagation()}
+        onClick={()=>onAction('fabric-cut-finish')}>完成</button>
     </header>
     <div className="fabric-cut-body">
       <div className="fabric-cut-target"><span>当前对象：{label}</span></div>
+      <div className="fabric-cut-row fabric-cut-session-actions">
+        <button type="button" disabled={session?.index===0&&!preview}
+          onClick={()=>onAction('fabric-cut-step','undo')}>撤销一步</button>
+        <button type="button" disabled={!session||session.index>=session.steps.length-1||!!preview}
+          onClick={()=>onAction('fabric-cut-step','redo')}>重做一步</button>
+        <button type="button" onClick={()=>onAction('fabric-cut-discard')}>放弃更改</button>
+      </div>
       <div className="fabric-cut-row" role="group" aria-label="裁剪或蒙版">
         {[['split','裁剪'],['mask','蒙版']].map(([key,title])=><button key={key} type="button"
           disabled={key==='mask'&&!node} aria-pressed={settings.operation===key}
@@ -88,12 +99,18 @@ export function FabricCutPanel({state,draft,onAction}){
         <button type="button" aria-pressed={settings.hideRegion} onClick={()=>set('hideRegion',true)}>隐藏画出的区域</button>
         <button type="button" aria-pressed={!settings.hideRegion} onClick={()=>set('hideRegion',false)}>只显示画出的区域</button>
       </div>:null}
+      {masked.length?<div className="fabric-cut-row" role="group" aria-label="恢复蒙版">
+        <button type="button" disabled={!masked.some(child=>child.vectorMaskHistory?.length)}
+          onClick={()=>onAction('fabric-cut-reset-mask','last')}>撤回上一层蒙版</button>
+        <button type="button" onClick={()=>onAction('fabric-cut-reset-mask','all')}>恢复完整裁片</button>
+      </div>:null}
       {preview?<><p className="fabric-cut-preview-status">{preview.spec.operation==='mask'?'蒙版预览':
         `绿色保留 ${preview.keepKeys.length} / ${preview.pieces.length} 片 · 点击画布上的裁片切换`}</p>
         <div className="fabric-cut-row fabric-cut-actions"><button type="button" onClick={()=>onAction('fabric-cut-cancel')}>取消预览</button>
-        <button type="button" className="primary" onClick={()=>onAction('fabric-cut-confirm')}>应用</button></div></>:null}
-      {node?.type==='material'&&node.splitParentId?<button type="button" className="fabric-cut-rejoin"
-        onClick={()=>onAction('fabric-cut-rejoin',node.id)}>拼回同源裁片</button>:null}
+        <button type="button" className="primary" onClick={()=>onAction('fabric-cut-confirm')}>应用本次</button></div></>:null}
+      {rejoinNode?<button type="button" className="fabric-cut-rejoin"
+        onClick={()=>onAction('fabric-cut-rejoin',rejoinNode.id)}>拼回同源裁片</button>:null}
+      <p className="fabric-cut-help">每次应用后可继续操作；完成才保存整次剪刀操作，放弃会恢复进入前的画面。</p>
     </div>
   </section>,document.body);
 }

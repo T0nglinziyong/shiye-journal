@@ -135,7 +135,7 @@ function pieceOutline(node,geometry){
 }
 function materialParts(node,regions,asset){
   if(!(asset?.physicalWidthMM>0&&asset?.physicalHeightMM>0))throw Error('素材缺少真实尺寸');
-  if(node.vectorMask)throw Error('请先取消此素材的局部显示，再分割并分别设置蒙版');
+  if(node.vectorMask)throw Error('此素材已有蒙版；请先在剪刀面板恢复完整裁片，再进行分割');
   const crop=node.cropRect||{x:0,y:0,width:1,height:1};
   const map=p=>[(crop.x+p[0]*crop.width)*asset.physicalWidthMM,
     (crop.y+p[1]*crop.height)*asset.physicalHeightMM];
@@ -224,7 +224,7 @@ export function planSceneCut(draft,spec,assets,{uid=()=>crypto.randomUUID()}={})
       (node.children||[]).some(containsInk);
     if(containsInk(selected))throw Error('笔迹不能直接设置局部显示；请先将笔迹转换为图形');
   }
-  const pieces=[],affected=[];
+  const pieces=[],affected=[];let selectionID=null;
   for(const original of candidates(trial,spec)){
     const loc=findLocation(trial.layers,original.id);if(!loc)continue;
     const regions=original.type==='ink'?[]:regionFor(original,spec)
@@ -235,7 +235,11 @@ export function planSceneCut(draft,spec,assets,{uid=()=>crypto.randomUUID()}={})
       const current=polygon(original.vectorMask),region=geometryUnion(...regions),next=spec.hideRegion?
         geometryDifference(current,region):geometryIntersection(current,region);
       if(geometryArea(next)<1e-5)throw Error('局部显示不能隐藏整个对象');
-      original.vectorMask=maskFromGeometry(next);affected.push(original.id);
+      const before=original.vectorMask?structuredClone(original.vectorMask):null;
+      original.vectorMask=maskFromGeometry(next);
+      original.vectorMaskHistory=[...(original.vectorMaskHistory||[]),
+        {before,after:structuredClone(original.vectorMask),mode:spec.hideRegion?'hide':'show'}].slice(-32);
+      affected.push(original.id);selectionID||=loc.parent?.cutSourceID?loc.parent.id:original.id;
       pieces.push({key:original.id+':mask',sourceID:original.id,
         outline:pieceOutline(original,next),area:geometryArea(next),type:original.type});
       continue;
@@ -246,6 +250,11 @@ export function planSceneCut(draft,spec,assets,{uid=()=>crypto.randomUUID()}={})
     const group=uid(),nodes=result.map(({next,outline,hitGeometry,area},index)=>{
       const key=original.id+':'+index;
       next.id=uid();next.zIndex=(original.zIndex||0)+index*.0001;
+      // A fragment is a new editable node. Reusing an AI semantic key makes
+      // physical validation mistake two fragments for the same layer.
+      for(const field of ['creativePieceID','agentKey','key','aiManaged',
+        'craftProvenance','renderKey','sceneRenderKey','ownerID',
+        'vectorMaskHistory'])delete next[field];
       next.splitGroupId=original.type==='material'?group:next.splitGroupId;
       next.splitPartIndex=original.type==='material'?index:next.splitPartIndex;
       next.isParked=spec.keepKeys? !spec.keepKeys.includes(key):false;
@@ -253,10 +262,41 @@ export function planSceneCut(draft,spec,assets,{uid=()=>crypto.randomUUID()}={})
         parked:next.isParked});
       return next;
     });
-    loc.nodes.splice(loc.index,1,...nodes);affected.push(original.id);
+    if(loc.parent?.cutSourceID){
+      loc.nodes.splice(loc.index,1,...nodes);
+      selectionID||=loc.parent.id;
+    }else{
+      const groupID='cut-group-'+uid();
+      const container={id:groupID,type:'group',name:'裁片组',opacity:1,
+        blendMode:'normal',zIndex:original.zIndex||0,
+        cutSourceID:original.splitParentId||original.cutParentId||original.id,
+        children:nodes};
+      nodes.forEach(node=>{node.creativeGroupID=groupID;});
+      loc.nodes.splice(loc.index,1,container);
+      selectionID||=groupID;
+    }
+    affected.push(original.id);
   }
   if(!affected.length)throw Error('切线没有把可见对象分成两片；请从对象外画到另一侧');
-  return {draft:trial,pieces,affected};
+  return {draft:trial,pieces,affected,selectionID};
+}
+
+export function restoreSceneMasks(draft,selectedID,{last=false}={}){
+  const trial=attachSceneV2(structuredClone(draft)),target=findSceneNode(trial,selectedID);
+  if(!target)throw Error('请先选择要恢复蒙版的对象');
+  const visit=node=>{
+    if(node.type==='group')return (node.children||[]).reduce((count,child)=>count+visit(child),0);
+    if(!node.vectorMask)return 0;
+    if(last&&!node.vectorMaskHistory?.length)return 0;
+    if(last){
+      const steps=[...node.vectorMaskHistory],step=steps.pop();
+      if(step.before)node.vectorMask=structuredClone(step.before);else delete node.vectorMask;
+      if(steps.length)node.vectorMaskHistory=steps;else delete node.vectorMaskHistory;
+    }else{delete node.vectorMask;delete node.vectorMaskHistory;}
+    return 1;
+  };
+  if(!visit(target))throw Error('当前对象没有可恢复的蒙版');
+  return trial;
 }
 
 export function rejoinMaterialPieces(draft,ids,assets,{uid=()=>crypto.randomUUID()}={}){

@@ -196,15 +196,25 @@ try{
     return bar.querySelectorAll('button').length===4&&bar.querySelectorAll('svg.shiye-icon').length===4&&
       [...bar.querySelectorAll('button')].every(button=>!button.textContent.trim());})()`),true,
     'The floating copy, edit, scissors and delete actions must have one glyph each');
-  await click('[aria-label="编辑对象"]','.show-inspector');
+  await click('[aria-label="编辑对象"]','.floating-editor-inspector');
   assert.ok(await evaluate('!!document.querySelector("#inspector-fill")&&!!document.querySelector("#inspector-stroke-dash")&&!!document.querySelector("#inspector-blend-mode")'),
     'Shape inspector exposes the same editable style fields as AI created shapes');
   assert.equal(await evaluate('!!document.querySelector("#inspector-x,#inspector-y,#inspector-width,#inspector-height")'),false,
     'Position and dimensions are adjusted on the page, not typed into the inspector');
   assert.equal(await evaluate('!!document.querySelector(".fabric-selected-actions")'),false,
     'The inspector must cover the canvas edit controls while open');
-  await click('[aria-label="关闭对象设置"]');
-  assert.equal(await evaluate('!!document.querySelector(".show-inspector")'),false);
+  const savedShapeFill=(await projects())[0].drafts[0].layers.find(layer=>layer.type==='shape').fill;
+  await evaluate(`(()=>{const input=document.querySelector('#inspector-fill');
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'#123456');
+    input.dispatchEvent(new Event('input',{bubbles:true}));
+    input.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+  await sleep(150);
+  assert.equal((await projects())[0].drafts[0].layers.find(layer=>layer.type==='shape').fill,savedShapeFill,
+    'Inspector changes must stay outside the saved document until Save and Exit');
+  await click('.floating-editor-inspector footer button:first-child');
+  assert.equal(await evaluate('!!document.querySelector(".floating-editor-inspector")'),false);
+  assert.equal((await projects())[0].drafts[0].layers.find(layer=>layer.type==='shape').fill,savedShapeFill,
+    'Discard must leave the saved shape unchanged');
   const pagePoints=await evaluate(`(()=>{const rect=document.querySelector('.upper-canvas').getBoundingClientRect();
     return {blank:{x:rect.left+rect.width*.08,y:rect.top+rect.height*.08},
       shape:{x:rect.left+rect.width*.5,y:rect.top+rect.height*.5}}})()`);
@@ -462,7 +472,7 @@ try{
     .find(layer=>layer.id===originalMaterial.id);
   assert.ok(resizedMaterial.width>originalMaterial.width&&resizedMaterial.assetID===originalMaterial.assetID,
     'Manual material resize must persist without changing its source asset: '+JSON.stringify({originalMaterial,resizedMaterial,materialEdge,ui:await evaluate(`({toast:document.querySelector('#toast')?.textContent,selection:document.querySelector('.fabric-selected-actions')?.outerHTML,hit:document.elementFromPoint(${materialEdge.x},${materialEdge.y})?.outerHTML.slice(0,150)})`)}));
-  await click('[aria-label="编辑对象"]','.show-inspector');
+  await click('[aria-label="编辑对象"]','.floating-editor-inspector');
   await click('.editor-inspector-geometry summary','.editor-crop-slider');
   assert.equal(await evaluate('!!document.querySelector(".editor-inspector-geometry textarea")'),false,
     'Material cropping should use direct controls instead of JSON');
@@ -470,11 +480,14 @@ try{
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,input.min);
     input.dispatchEvent(new Event('input',{bubbles:true}));input.dispatchEvent(new Event('change',{bubbles:true}));})()`);
   await sleep(700);
+  assert.equal((await projects())[0].drafts[0].layers.some(layer=>layer.type==='material'&&layer.manualGeometryOverride),false,
+    'Object edits remain staged until Save and Exit');
+  await click('.floating-editor-inspector footer button.primary');
+  await sleep(700);
   assert.ok((await projects())[0].drafts[0].layers.some(layer=>layer.type==='material'&&layer.manualGeometryOverride),
     'Material craft geometry must be editable through the Scene inspector: '+
       JSON.stringify({status:await evaluate(`document.querySelector('.editor-inspector-geometry [role=status]')?.textContent`),
         toast:await evaluate(`document.querySelector('#toast')?.textContent`)}));
-  await click('[aria-label="关闭对象设置"]');
   await click('[data-val="material"]','.swift-material-picker');
   assert.equal(await evaluate('document.querySelectorAll(".swift-material-picker [data-picker-item]").length'),1);
   await click('.swift-material-picker [data-picker-item]');await sleep(300);

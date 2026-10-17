@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {project,primitive,textBlock} from '../src/domain.js';
 import {validateScenePhysical} from '../src/creative.js';
 import {buildMaterialLedger} from '../src/material-ledger.js';
-import {planSceneCut,rejoinMaterialPieces} from '../src/scene-cut-ops.js';
+import {planSceneCut,rejoinMaterialPieces,restoreSceneMasks} from '../src/scene-cut-ops.js';
 
 const asset={id:'cut-source',kind:'paper',title:'裁切源',physicalWidthMM:100,
   physicalHeightMM:80,supply:{kind:'single',quantity:1}};
@@ -32,6 +32,16 @@ test('free line cut conserves one physical source and keeps offcuts recoverable'
   assert.equal(validateScenePhysical(joined.draft,[asset]),true);
 });
 
+test('AI keyed material becomes a grouped set of independent valid fragments',()=>{
+  const draft=scene();draft.layers[0].creativePieceID='butterfly';
+  draft.layers[0].agentKey='butterfly';
+  const plan=planSceneCut(draft,split,[asset],{uid});
+  assert.equal(plan.draft.layers[0].type,'group');
+  assert.equal(plan.draft.layers[0].children.length,2);
+  assert.ok(plan.draft.items.every(item=>!item.creativePieceID&&!item.agentKey));
+  assert.equal(validateScenePhysical(plan.draft,[asset]),true);
+});
+
 test('mask changes visibility without allocating another material source',()=>{
   const draft=scene(),result=planSceneCut(draft,{operation:'mask',scope:'object',
     selectedID:'piece',preset:'window',inset:.2,hideRegion:true},[asset],{uid});
@@ -39,6 +49,21 @@ test('mask changes visibility without allocating another material source',()=>{
   assert.equal(result.draft.items[0].vectorMask.holes.length,1);
   assert.equal(validateScenePhysical(result.draft,[asset]),true);
   assert.ok(Math.abs(buildMaterialLedger(result.draft,[asset]).units[0].usedAreaMM2-8000)<1e-5);
+});
+
+test('mask steps can be continued, undone, and fully restored',()=>{
+  const first=planSceneCut(scene(),{operation:'mask',scope:'object',
+    selectedID:'piece',preset:'window',inset:.2,hideRegion:true},[asset],{uid});
+  const second=planSceneCut(first.draft,{operation:'mask',scope:'object',
+    selectedID:'piece',preset:'edge',inset:.1,hideRegion:true},[asset],{uid});
+  assert.equal(second.draft.items[0].vectorMaskHistory.length,2);
+  const back=restoreSceneMasks(second.draft,'piece',{last:true});
+  assert.deepEqual(back.items[0].vectorMask,first.draft.items[0].vectorMask);
+  const original=restoreSceneMasks(back,'piece');
+  assert.equal(original.items[0].vectorMask,undefined);
+  assert.equal(validateScenePhysical(original,[asset]),true);
+  const splitAgain=planSceneCut(original,split,[asset],{uid});
+  assert.equal(validateScenePhysical(splitAgain.draft,[asset]),true);
 });
 
 test('curved and inset presets keep complementary physical pieces valid',()=>{

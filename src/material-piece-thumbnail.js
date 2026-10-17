@@ -8,7 +8,9 @@ export function mountPieceThumbnail(card,item){
  canvas.className='material-piece-thumbnail';canvas.width=144;canvas.height=112;
  canvas.setAttribute('aria-hidden','true');
  img.after(canvas);
+ let disposed=false;
  const paint=()=>{
+   if(disposed)return;
    const w=img.naturalWidth,h=img.naturalHeight;
    if(!w||!h||!canvas.isConnected)return;
    const crop=item.cropRect||{x:0,y:0,width:1,height:1};
@@ -33,4 +35,5 @@ export function mountPieceThumbnail(card,item){
  };
  if(img.complete&&img.naturalWidth)requestAnimationFrame(paint);
  else{img.addEventListener('load',paint,{once:true});img.addEventListener('error',()=>canvas.remove(),{once:true});}
+ return ()=>{disposed=true;canvas.remove();img.style.display='';};
 }

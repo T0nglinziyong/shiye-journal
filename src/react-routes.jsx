@@ -1,4 +1,4 @@
-import React,{useEffect,useRef,useState} from 'react';
+import React,{useEffect,useLayoutEffect,useRef,useState} from 'react';
 import {createPortal,flushSync} from 'react-dom';
 import {AI_PROVIDERS,supportsVision} from './ai-settings.js';
 import {seriesContentsModel} from './series-contents.js';
@@ -11,7 +11,7 @@ import {matchingViewModel} from './matching-view.js';
 import {styleGroups,purposeGroups} from './matching-directions.js';
 import {visualStyles} from './creative-style-brief.js';
 import {FabricSceneStage} from './fabric-scene-stage.jsx';
-import {FabricEditorToolbar,FabricHeaderMenu} from './fabric-editor-controls.jsx';
+import {FabricEditorToolbar,FabricHeaderMenu,MaterialPieceImage} from './fabric-editor-controls.jsx';
 import {FabricCutPanel} from './fabric-cut-panel.jsx';
 import {FabricPageViewport} from './fabric-page-viewport.jsx';
 import {iconMarkup} from './icons.js';
@@ -1163,6 +1163,47 @@ function EditorInspector({selected,draft,asset,format,onChange,onAction,material
   </div>;
 }
 
+function FloatingInspectorPanel({selected,draft,asset,format,materials,onChange,onAction}){
+  const [position,setPosition]=useState(null),drag=useRef(null),panel=useRef(null);
+  useLayoutEffect(()=>{
+    if(!position||!panel.current)return;
+    const rect=panel.current.getBoundingClientRect();
+    const left=Math.max(8,Math.min(position.left,window.innerWidth-rect.width-8));
+    const top=Math.max(8,Math.min(position.top,window.innerHeight-rect.height-8));
+    if(left!==position.left||top!==position.top)setPosition({left,top});
+  },[position,selected?.value?.id]);
+  const start=event=>{
+    if(event.button>0||event.target.closest('button'))return;
+    const rect=panel.current.getBoundingClientRect();
+    drag.current={id:event.pointerId,x:event.clientX,y:event.clientY,left:rect.left,top:rect.top};
+    event.currentTarget.setPointerCapture(event.pointerId);
+    event.preventDefault();event.stopPropagation();
+  };
+  const move=event=>{
+    const origin=drag.current;if(!origin||origin.id!==event.pointerId)return;
+    const rect=panel.current.getBoundingClientRect();
+    setPosition({left:Math.max(8,Math.min(window.innerWidth-rect.width-8,
+      origin.left+event.clientX-origin.x)),
+      top:Math.max(8,Math.min(window.innerHeight-rect.height-8,
+        origin.top+event.clientY-origin.y))});
+    event.preventDefault();event.stopPropagation();
+  };
+  const end=event=>{if(drag.current?.id===event.pointerId)drag.current=null;};
+  return createPortal(<section ref={panel} className="editor-inspector floating-editor-inspector" role="dialog"
+    aria-label="对象编辑" style={position?{left:position.left,top:position.top,right:'auto'}:undefined}>
+    <header className="fabric-inspector-head" onPointerDown={start} onPointerMove={move}
+      onPointerUp={end} onPointerCancel={end}>
+      <h2>{selected?`${{material:'素材',text:'文字',shape:'图形',ink:'笔迹'}[selected.kind]||'对象'} · 图层属性`:'对象已移除'}</h2>
+      <span aria-hidden="true">拖动面板</span>
+    </header>
+    <div className="floating-editor-inspector-body">{selected?<EditorInspector selected={selected}
+      draft={draft} asset={asset} format={format} materials={materials} onChange={onChange}
+      onAction={onAction}/>:<p>对象已从本次编辑中移除。保存退出会确认删除，放弃退出会恢复对象。</p>}</div>
+    <footer><button type="button" onClick={()=>onAction('fabric-inspector-discard')}>放弃退出</button>
+      <button type="button" className="primary" onClick={()=>onAction('fabric-inspector-save')}>保存退出</button></footer>
+  </section>,document.body);
+}
+
 function EditorAIPanel({state,draft,asset,hasReport,onAction,onPromptChange}){
   const [status,setStatus]=useState({busy:!!state.aiBusy,progress:state.aiProgress||'',hasReport});
   useEffect(()=>{
@@ -1287,7 +1328,7 @@ export function EditorPage({state,draft,editorEntry,asset,source,format,
   };
   return <><div className="view-head swift-editor-head">
     <button className="btn" data-act="back-works">返回</button>
-    <div><h1 contentEditable suppressContentEditableWarning id="project-title"
+    <div><h1 contentEditable={!state.cutSession&&!state.inspectorSession} suppressContentEditableWarning id="project-title"
     spellCheck="false" onBlur={event=>onTitleCommit(event.currentTarget.textContent)}>{project.title}</h1>
       <p>编辑只改变作品，不修改素材库里的原始图片和尺寸</p></div><div className="actions">
       <span className="swift-auto-saved">{document.querySelector('#save-state')?.textContent||'本机暂存'}</span>
@@ -1309,7 +1350,7 @@ export function EditorPage({state,draft,editorEntry,asset,source,format,
       canUngroup bounds={state.fabricSelectionBounds} draft={draft} onAction={onAction}/>:null}
     {selected&&state.tool==='select'&&!state.fabricInspectorOpen?<FabricSelectedActions bounds={state.fabricSelectionBounds}
       draft={draft} onAction={onAction}/>:null}
-    <div className={`editor-shell swift-editor-workspace ${selected&&state.fabricInspectorOpen?'show-inspector':''}`}
+    <div className="editor-shell swift-editor-workspace"
       data-react-page="editor"><section className="editor-stage"><div className="object-toolbar">
       <button className="btn mini" data-act="zoom-out">－</button><span>{Math.round(state.zoom*100)}%</span><button className="btn mini" data-act="zoom-in">＋</button>
       <button className="btn mini" data-act="paper-menu">纸张</button>
@@ -1382,13 +1423,12 @@ export function EditorPage({state,draft,editorEntry,asset,source,format,
       </div></FabricPageViewport></div>
       {parkedPieces.length?<div className="shelf"><b>备选</b>{parkedPieces.map(item=><button key={item.id}
         className="mini-asset" data-act="unpark" data-id={item.id} aria-label={`放回${item.type==='material'?'素材':item.type==='text'?'文字':item.type==='shape'?'图形':'笔迹'}裁片`}>
-        {item.type==='material'?<RouteImage asset={asset(item.assetID)} source={source}/>:<span>{item.type==='text'?item.content||'文字':item.type==='shape'?'图形裁片':'笔迹裁片'}</span>}
+        {item.type==='material'?<MaterialPieceImage asset={asset(item.assetID)} item={item} source={source}/>:<span>{item.type==='text'?item.content||'文字':item.type==='shape'?'图形裁片':'笔迹裁片'}</span>}
       </button>)}</div>:null}
-    </section><aside className="editor-inspector"><div className="fabric-inspector-head"><h2>{selected?`${{material:'素材',text:'文字',shape:'图形'}[selected.kind]} · 图层属性`:'页面设置'}</h2>
-      <button type="button" aria-label="关闭对象设置" onClick={()=>onAction('fabric-inspector-close')}>×</button></div>
-      <div className="inspector-island" style={{display:'contents'}}><EditorInspector selected={selected}
-        draft={draft} asset={asset} format={format} materials={materials} onChange={onInspectorChange} onAction={onAction}/></div>
-      </aside></div>
+    </section></div>
+    {state.fabricInspectorOpen?<FloatingInspectorPanel selected={selected} draft={draft}
+      asset={asset} format={format} materials={materials} onChange={onInspectorChange}
+      onAction={onAction}/>:null}
     {state.aiPanel?<div className="editor-ai-island" style={{display:'contents'}}>
       <EditorAIPanel state={state} draft={draft} asset={asset} hasReport={hasAIReport}
         onAction={onAIAction} onPromptChange={onAIPromptChange}/></div>:null}

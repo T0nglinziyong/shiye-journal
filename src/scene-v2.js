@@ -292,6 +292,15 @@ export function validateSceneExtensions(d){
  function walk(nodes,depth){if(!Array.isArray(nodes)||depth>SCENE_MAX_GROUP_DEPTH||nodes.length>5000)throw Error('Scene 图层树过深或过大');
   for(const node of nodes){if(!node||!kinds.has(node.type)||typeof node.id!=='string'||!node.id||seen.has(node.id))throw Error('Scene 图层类型或编号重复');seen.add(node.id);count++;if(count>10000)throw Error('Scene 图层总数超限');
    sceneLayerStyle(node);
+   if(node.vectorMaskHistory!==undefined){
+    if(!Array.isArray(node.vectorMaskHistory)||node.vectorMaskHistory.length>32||
+      node.vectorMaskHistory.some(step=>!step||!['hide','show'].includes(step.mode)||
+        step.after==null))throw Error('蒙版编辑记录无效');
+    for(const step of node.vectorMaskHistory){
+      if(step.before)validateVectorMask(step.before);
+      validateVectorMask(step.after);
+    }
+   }
    if(node.opacity!==undefined&&!num(node.opacity,0,1))throw Error('图层透明度必须在 0–1 之间');
    if(node.zIndex!==undefined&&!num(node.zIndex,-100000,100000))throw Error('图层排序值无效');
    if(node.type==='group'){

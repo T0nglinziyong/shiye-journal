@@ -87,13 +87,13 @@ try{
     'Mobile font changes must preserve the selected text frame');
   await click('[data-val="shape"]','.swift-shape-picker');
   await click('[data-shape-kind="rectangle"]','.fabric-selected-actions');
-  await click('[aria-label="编辑对象"]','.show-inspector');
+  await click('[aria-label="编辑对象"]','.floating-editor-inspector');
   const inspector=await evaluate(`document.querySelector('.editor-inspector').getBoundingClientRect().toJSON()`);
   assert.ok(inspector.left>=-1&&inspector.right<=391,
     'Object settings fit the mobile viewport: '+JSON.stringify(inspector));
   assert.equal(await evaluate('!!document.querySelector("#draft-select,[data-act=save-archive]")'),false,
     'Object settings no longer show scheme and archive controls');
-  await click('[aria-label="关闭对象设置"]');
+  await click('.floating-editor-inspector footer button:first-child');
   await evaluate('document.querySelector(".upper-canvas").scrollIntoView({block:"center"})');
   const points=await evaluate(`(()=>{const r=document.querySelector('.upper-canvas').getBoundingClientRect();
     return {shape:{x:r.left+r.width*.5,y:r.top+r.height*.5},
