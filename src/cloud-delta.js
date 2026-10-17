@@ -7,9 +7,10 @@ export async function readCloudDelta({client,owner,before,after,snapshots}){
   if(result.error)return null;
   const batches=result.data;
   if(!Array.isArray(batches)||batches.length!==after-before||batches.some((row,i)=>Number(row.revision)!==before+i+1||!Array.isArray(row.keys)))return null;
-  const edits=new Map(),cleared=new Set();
+  const edits=new Map(),cleared=new Set(),changedStores=new Set();
   for(const batch of batches)for(const key of batch.keys){
     if(!['assets','series','projects','trash','blobs','meta'].includes(key.store)||!['put','delete','clear'].includes(key.action))return null;
+    changedStores.add(key.store);
     if(key.action==='clear'){cleared.add(key.store);for(const [id,value] of edits)if(value.store===key.store)edits.delete(id);}
     else{if(typeof key.id!=='string')return null;edits.set(JSON.stringify([key.store,key.id]),key);}
   }
@@ -19,6 +20,10 @@ export async function readCloudDelta({client,owner,before,after,snapshots}){
   const updates=await Promise.all(['assets','series','projects','trash','blobs','meta'].map(async store=>{
     const saved=snapshots.get(store);
     if(saved?.revision!==before)return null;
+    // Advancing the account revision does not mean every collection changed.
+    // Reuse untouched records rather than rebuilding a large Map for every
+    // uploaded image or unrelated metadata edit.
+    if(!changedStores.has(store))return [store,{revision:after,records:saved.records}];
     const records=new Map((cleared.has(store)?[]:saved.records).map(r=>[r.id,r])),puts=[];
     for(const key of edits.values())if(key.store===store){if(key.action==='delete')records.delete(key.id);else puts.push(key.id);}
     for(let offset=0;offset<puts.length;offset+=50){
@@ -34,7 +39,7 @@ export async function readCloudDelta({client,owner,before,after,snapshots}){
   // Reads of changes and changed records must belong to one revision.
   const check=await client.from('shiye_revisions').select('revision').eq('user_id',owner).single();
   if(check.error||Number(check.data?.revision)!==after)return null;
-  return {snapshots:patched,blobIDs,allBlobs:cleared.has('blobs')};
+  return {snapshots:patched,changedStores:[...changedStores],blobIDs,allBlobs:cleared.has('blobs')};
 }
 
 // A pending write may follow another tab's commit only when the complete

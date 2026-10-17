@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {canApplyBackgroundView,shouldPullCloudForRoute} from '../src/view-update-policy.js';
+import {canApplyBackgroundView,shouldPullCloudForRoute,shouldRepaintForCollections} from '../src/view-update-policy.js';
 const context={route:'library',selectionMode:null,modalOpen:false,popoverOpen:false,inputFocused:false,gestureActive:false};
 
 test('all non-workspace routes pull cloud changes, including editor and settings',()=>{
@@ -29,4 +29,11 @@ test('collection pulls yield to active editor input but do not block other route
  assert.equal(canPollDuringEditing({...idle,inputFocused:true}),false);
  assert.equal(canPollDuringEditing({...idle,idleMS:500}),false);
  assert.equal(canPollDuringEditing({...idle,route:'works',idleMS:0}),true);
+});
+test('unrelated background commits do not repaint the current catalog',()=>{
+  assert.equal(shouldRepaintForCollections('library',['projects']),false);
+  assert.equal(shouldRepaintForCollections('works',['series']),false);
+  assert.equal(shouldRepaintForCollections('library',['assets']),true);
+  assert.equal(shouldRepaintForCollections('works',['projects','trash']),true);
+  assert.equal(shouldRepaintForCollections('assetDetail',['meta']),true);
 });

@@ -9,6 +9,9 @@ function fixture({logs,rows,revision=2}){
 test('delta fetches only final changed IDs and preserves unchanged collections',async()=>{
   const f=fixture({logs:[{revision:1,keys:[{store:'assets',id:'a',action:'put'}]},{revision:2,keys:[{store:'assets',id:'a',action:'put'},{store:'assets',id:'b',action:'delete'}]}],rows:{assets:[{id:'a',title:'latest'}]}});
   const result=await readCloudDelta(f);assert.deepEqual(f.reads,[{store:'assets',ids:['a']}]);assert.deepEqual(result.snapshots.get('assets').records,[{id:'a',title:'latest'}]);assert.equal(result.snapshots.get('series').revision,2);assert.deepEqual(result.blobIDs,[]);assert.equal(f.snapshots.get('assets').records[0].title,'old');
+  assert.deepEqual(result.changedStores,['assets']);
+  assert.equal(result.snapshots.get('series').records,f.snapshots.get('series').records,
+    'An unchanged collection should not rebuild its records during an asset upload');
 });
 test('clear followed by put rebuilds just that store',async()=>{
   const f=fixture({logs:[{revision:1,keys:[{store:'assets',action:'clear'}]},{revision:2,keys:[{store:'assets',id:'c',action:'put'}]}],rows:{assets:[{id:'c'}]}});assert.deepEqual((await readCloudDelta(f)).snapshots.get('assets').records,[{id:'c'}]);

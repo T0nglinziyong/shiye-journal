@@ -9,6 +9,20 @@ export const shouldPullCloudForRoute=route=>!noBackgroundPullRoutes.has(route);
 export const canPollDuringEditing=({route,gestureActive,inputFocused,idleMS})=>
   route!=='editor'||!gestureActive&&!inputFocused&&idleMS>=1200;
 
+// A background commit for an unrelated collection must not repaint the page
+// the user is scrolling. Navigation still reads the updated shared state.
+const visibleCollections={
+  series:['assets','series','trash','meta'],
+  library:['assets','series','trash','meta'],
+  assetDetail:['assets','series','meta'],
+  works:['projects','assets','trash','meta'],
+  projectPreview:['projects','assets','meta']
+};
+export const shouldRepaintForCollections=(route,stores)=>{
+  const used=visibleCollections[route];
+  return !used||stores.some(store=>used.includes(store));
+};
+
 // Passive collection/detail pages may repaint while in selection mode. This is
 // essential for remote delete/restore to remove stale cards on another device.
 // Selection IDs are reconciled against fresh cloud data before each repaint.

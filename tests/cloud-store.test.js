@@ -549,11 +549,15 @@ test('verified unrelated cloud revisions reuse blob metadata; changed blobs stil
   await db.cloudPreview('b');
   assert.equal(state.batchReads,1);
   state.revision=1;state.changes=[{revision:1,keys:[{store:'series',id:'other',action:'delete'}]}];
-  assert.equal((await db.cloudRefresh()).incremental,true);
+  const seriesDelta=await db.cloudRefresh();
+  assert.equal(seriesDelta.incremental,true);
+  assert.deepEqual(seriesDelta.changedStores,['series']);
   await db.cloudPreview('b');
   assert.equal(state.batchReads,1,'unrelated edits must not re-fetch each image record');
   state.revision=2;state.changes=[{revision:2,keys:[{store:'blobs',id:'b',action:'put'}]}];
-  assert.equal((await db.cloudRefresh()).incremental,true);
+  const blobDelta=await db.cloudRefresh();
+  assert.equal(blobDelta.incremental,true);
+  assert.deepEqual(blobDelta.changedStores,['blobs']);
   await db.cloudPreview('b');
   assert.equal(state.batchReads,2,'changed image metadata must be verified remotely');
 });

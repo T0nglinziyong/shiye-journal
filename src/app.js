@@ -133,7 +133,7 @@ import {readClipboardText} from './clipboard-text.js';
 import {parity} from './parity-ui.js';
 import {journalTemplateRecords,clearJournalTemplateImages} from './journal-template-data.js';
 import {syncSelectionScope,reconcileSelectedRecords,finishSelection,toggleSelection,beginSelection} from './library-selection-model.js';
-import {canApplyBackgroundView,shouldPullCloudForRoute,canPollDuringEditing} from './view-update-policy.js';
+import {canApplyBackgroundView,shouldPullCloudForRoute,canPollDuringEditing,shouldRepaintForCollections} from './view-update-policy.js';
 import {createActionStore} from './ui-action-store.js';
 import {createPageControllerHost} from './page-controller-host.js';
 import {createLibraryController,registerLibraryActions} from './page-controllers/library-controller.js';
@@ -2360,33 +2360,53 @@ async function saveGeneratedImageSnapshot(blob,source){
 async function restorePendingProjects(){const pending=await db.pendingProjects();
   const deleted=new Set(state.trash.filter(x=>x.kind==='project').map(x=>x.item?.id));
   for(const row of pending){if(deleted.has(row.record.id))continue;const index=state.projects.findIndex(p=>p.id===row.record.id);if(index<0)state.projects.push(row.record);else state.projects[index]=state.activeProject?.id===row.record.id?state.activeProject:row.record;}return pending.length;}
-async function refresh({background=false,onlyChanged=false,skipCloudRefresh=false}={}){const sync=skipCloudRefresh?null:await db.refreshCloud();if(onlyChanged&&!sync?.changed)return;if(sync?.changed)privateImages.invalidate(sync.allBlobs?undefined:sync.blobIDs);const [assets,series,projects,trash,meta]=await Promise.all(['assets','series','projects','trash','meta'].map(db.all));Object.assign(state,{assets,series,projects,trash,userTemplates:journalTemplateRecords(meta)});
+async function refresh({background=false,onlyChanged=false,skipCloudRefresh=false}={}){
+  const sync=skipCloudRefresh?null:await db.refreshCloud();
+  if(onlyChanged&&!sync?.changed)return;
+  if(sync?.changed)privateImages.invalidate(sync.allBlobs?undefined:sync.blobIDs);
+  const allStores=['assets','series','projects','trash','meta'];
+  const changed=background&&onlyChanged&&sync?.incremental&&Array.isArray(sync.changedStores)
+    ?new Set(sync.changedStores):null;
+  const stores=changed?allStores.filter(store=>changed.has(store)):allStores;
+  if(!stores.length)return; // A Blob-only commit has no catalog records to repaint.
+  const values=await Promise.all(stores.map(db.all));
+  const rows=Object.fromEntries(stores.map((store,index)=>[store,values[index]]));
+  for(const store of stores){if(store==='meta')state.userTemplates=journalTemplateRecords(rows.meta);
+    else state[store]=rows[store];}
+  const meta=rows.meta;
   // Authenticated account metadata synchronizes display and all AI settings,
   // including provider-specific keys. Never serialize credentials into task ZIPs.
-  const syncedPreferences=cloudEnabled?cloudPreferencesFromMeta(meta):null;
+  const syncedPreferences=cloudEnabled&&meta?cloudPreferencesFromMeta(meta):null;
   if(syncedPreferences){
     if(settingsSession)deferredSyncedPreferences=structuredClone(syncedPreferences);
     else{state.preferences=savePreferences(migrateStoredPreferences(syncedPreferences));deferredSyncedPreferences=null;}
   }
-  const syncedMatch=cloudEnabled?cloudMatchingSettingsFromMeta(meta):null;
+  const syncedMatch=cloudEnabled&&meta?cloudMatchingSettingsFromMeta(meta):null;
   if(syncedMatch&&!matchingDefaultsPending&&!matchingDefaultsLocalEdited){
     cloudMatchingDefaults=syncedMatch;
     if(state.route!=='matching')applyMatchingDefaults(state,syncedMatch);
   }
-  const syncedAI=cloudEnabled?cloudAISettingsFromMeta(meta):null;
+  const syncedAI=cloudEnabled&&meta?cloudAISettingsFromMeta(meta):null;
   if(syncedAI){
     if(settingsSession)deferredSyncedAISettings=structuredClone(syncedAI);
     else{state.aiSettings=saveAISettings(syncedAI);deferredSyncedAISettings=null;}
   }
-  await restorePendingProjects();
-  if(cloudEnabled&&state.route==='editor'&&state.activeProject){
+  if(stores.includes('projects')||stores.includes('trash'))await restorePendingProjects();
+  if(cloudEnabled&&stores.includes('projects')&&state.route==='editor'&&state.activeProject){
     const stillExists=state.projects.some(project=>project.id===state.activeProject.id);
     if(!stillExists&&!dirtyProjects.has(state.activeProject.id)&&savingProjects===0&&!state.activeProject.__remoteDeleted){
       state.activeProject.__remoteDeleted=true;
       toast('当前作品已在另一台设备删除。需要保留本机修改时，请先导出可编辑 JSON。');
     }else if(stillExists&&state.activeProject.__remoteDeleted)delete state.activeProject.__remoteDeleted;
   }
-  staticSources.clear();for(const a of state.assets)if(a.staticPath)staticSources.set(a.blobId,a.staticPath);if(reconcileSelectedRecords(parity,state))window.dispatchEvent(new Event('shiye-selection-refresh'));if(background){backgroundViewPending=true;scheduleBackgroundReconcile();}else actionStore.publish('collections/updated',{scope:'collections',keys:['assets','series','projects','trash','userTemplates']});}
+  if(stores.includes('assets')){staticSources.clear();for(const a of state.assets)
+    if(a.staticPath)staticSources.set(a.blobId,a.staticPath);}
+  if(stores.some(store=>store!=='meta')&&reconcileSelectedRecords(parity,state))
+    window.dispatchEvent(new Event('shiye-selection-refresh'));
+  if(background){if(shouldRepaintForCollections(state.route,stores)){
+    backgroundViewPending=true;scheduleBackgroundReconcile();}}
+  else actionStore.publish('collections/updated',{scope:'collections',keys:stores});
+}
 let trashSweepActive=false;
 async function purgeExpiredTrash(){if(trashSweepActive)return;const entries=expiredTrash(state.trash);if(!entries.length)return;trashSweepActive=true;try{await changeTrash({db,state,ids:entries.map(entry=>entry.id)});if(parity.libraryTab==='trash'||parity.workTab==='trash')render();}catch(error){console.warn('最近删除到期清理待重试',error?.name||error?.message);}finally{trashSweepActive=false;}}
 setInterval(()=>void purgeExpiredTrash(),15*60*1000);

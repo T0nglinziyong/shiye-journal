@@ -1276,7 +1276,8 @@ async function cloudRefresh(){
   const delta=await readCloudDelta({client:cloudClient(),owner,before:deltaBefore,after:current,snapshots});
   if(delta){blobRevisionProof.accept(deltaBefore,current,delta);for(const [store,snapshot] of delta.snapshots)snapshots.set(store,snapshot);
     await Promise.all([...delta.snapshots].map(([store,snapshot])=>remember('records:'+store,snapshot)));
-    return {revision:current,changed:true,incremental:true,blobIDs:delta.blobIDs,allBlobs:delta.allBlobs};}
+    return {revision:current,changed:true,incremental:true,changedStores:delta.changedStores,
+      blobIDs:delta.blobIDs,allBlobs:delta.allBlobs};}
   blobRevisionProof.clear();blobRecords.clear();
   return {revision:current,changed:true,incremental:false,allBlobs:true};
 }
