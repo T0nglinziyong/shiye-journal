@@ -28,14 +28,16 @@ try{
   await click('[data-val="shape"]','.canvas-picker-grid');
   await click('.canvas-picker-grid button:first-child');
   await wait('.fabric-selected-actions');
-  await click('[data-val="scissors"]','.fabric-cut-panel');
+  await click('.fabric-selected-actions [aria-label="剪切选中对象"]','.fabric-cut-panel');
   assert.ok(await evaluate('document.querySelector(".fabric-cut-panel")?.textContent.includes("剪刀")'));
+  assert.equal(await evaluate('!!document.querySelector(".swift-editor-toolbar [data-val=scissors]")'),false);
+  assert.equal(await evaluate('document.querySelectorAll(".fabric-cut-presets button").length'),3);
   await click('.fabric-cut-presets button:first-child');
-  await wait('.fabric-cut-results');
-  assert.equal(await evaluate('document.querySelectorAll(".fabric-cut-results input[type=checkbox]").length'),2);
+  await wait('.fabric-cut-preview-status');
+  assert.ok(await evaluate('document.querySelector(".fabric-cut-preview-status")?.textContent.includes("2 片")'));
   await click('.fabric-cut-row button.primary');
   await sleep(500);
-  assert.equal(await evaluate('document.querySelector("[data-val=scissors]").getAttribute("aria-pressed")'),'true');
+  assert.ok(await evaluate('!!document.querySelector(".fabric-cut-panel")'));
   const result=await evaluate(`(async()=>{const open=indexedDB.open('shiye-pwa-full-v1');
     const db=await new Promise(resolve=>open.onsuccess=()=>resolve(open.result));
     const rows=await new Promise(resolve=>{const q=db.transaction('projects').objectStore('projects').getAll();
@@ -47,7 +49,7 @@ try{
   await click('[data-val="shape"]','.canvas-picker-grid');
   await click('.canvas-picker-grid button:first-child');
   await wait('.fabric-selected-actions');
-  await click('[data-val="scissors"]','.fabric-cut-panel');
+  await click('.fabric-selected-actions [aria-label="剪切选中对象"]','.fabric-cut-panel');
   const rect=await evaluate('document.querySelector(".upper-canvas").getBoundingClientRect().toJSON()');
   const line={left:rect.left+5,right:rect.right-5,y:rect.top+rect.height/2};
   await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,
@@ -57,8 +59,8 @@ try{
     x:line.left+(line.right-line.left)*step/12,y:line.y});
   await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,
     x:line.right,y:line.y,clickCount:1});
-  await wait('.fabric-cut-results');
-  assert.equal(await evaluate('document.querySelectorAll(".fabric-cut-results input[type=checkbox]").length'),2,
+  await wait('.fabric-cut-preview-status');
+  assert.ok(await evaluate('document.querySelector(".fabric-cut-preview-status")?.textContent.includes("2 片")'),
     'A direct canvas line must preview two pieces');
   assert.deepEqual(browser.errors,[]);
   console.log('Fabric cut workflow: history, shape toggle, preview, commit, standby passed');

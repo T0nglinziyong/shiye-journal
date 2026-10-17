@@ -28,7 +28,7 @@ export function clampedCanvasOffset(pageStart,pageEnd,hostStart,hostEnd,{slackRa
   return Math.abs(delta)>slack?delta-Math.sign(delta)*slack:0;
 }
 export const FONT_SIZE_PRESETS=Object.freeze([14,16,18,20,22,24,28,32,36,40,44,48,56,64,72,84,96,120,144,180,240,320,400]);
-export const MAX_CANVAS_ZOOM=8;
+export const MAX_CANVAS_ZOOM=16;
 export function adjacentFontSize(current,direction){
   const value=Number(current)||40;
   if(direction>0)return FONT_SIZE_PRESETS.find(size=>size>value)||FONT_SIZE_PRESETS.at(-1);

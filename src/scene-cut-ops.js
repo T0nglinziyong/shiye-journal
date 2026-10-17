@@ -103,7 +103,7 @@ function candidates(draft,spec){
   const selected=spec.scope==='object'?findSceneNode(draft,spec.selectedID):null;
   if(spec.scope==='object'&&!selected)throw Error('请先选择要剪切的对象');
   const targets=Array.isArray(spec.targetIDs)?new Set(spec.targetIDs):null;
-  if(spec.scope==='all'&&targets&&!targets.size)throw Error('请在剪刀设置中勾选要剪切的图层');
+  if(spec.scope==='all'&&targets&&!targets.size)throw Error('请在剪刀面板中勾选要剪切的图层');
   const out=[];
   const walk=(nodes,active=false,blocked=false,included=false)=>{
     for(const node of nodes){
@@ -163,14 +163,16 @@ function materialParts(node,regions,asset){
       recipe.crop.x,recipe.crop.y,recipe.crop.width,recipe.crop.height]}}];
     const local=transformGeometry(g,p=>[(p[0]/asset.physicalWidthMM-crop.x)/crop.width,
       (p[1]/asset.physicalHeightMM-crop.y)/crop.height]);
-    return {next,outline:pieceOutline(node,local),area:geometryArea(g)};
+    return {next,outline:pieceOutline(node,local),
+      hitGeometry:transformGeometry(local,p=>localPointToScene(node,p)),area:geometryArea(g)};
   });
 }
 function vectorParts(node,regions){
   const current=polygon(node.vectorMask),pieces=partitionGeometry(current,regions,1e-5);
   if(pieces.length<2)return null;
   return pieces.map(g=>({next:{...structuredClone(node),vectorMask:maskFromGeometry(g),
-    cutParentId:node.cutParentId||node.id},outline:pieceOutline(node,g),area:geometryArea(g)}));
+    cutParentId:node.cutParentId||node.id},outline:pieceOutline(node,g),
+    hitGeometry:transformGeometry(g,p=>localPointToScene(node,p)),area:geometryArea(g)}));
 }
 const intersect=(a,b,c,d)=>{
   [a,b,c,d]=[a,b,c,d].map(p=>Array.isArray(p)?{x:p[0],y:p[1]}:p);
@@ -241,13 +243,13 @@ export function planSceneCut(draft,spec,assets,{uid=()=>crypto.randomUUID()}={})
     const result=original.type==='material'?materialParts(original,regions,records.get(original.assetID)):
       original.type==='ink'?inkParts(original,spec):vectorParts(original,regions);
     if(!result)continue;
-    const group=uid(),nodes=result.map(({next,outline,area},index)=>{
+    const group=uid(),nodes=result.map(({next,outline,hitGeometry,area},index)=>{
       const key=original.id+':'+index;
       next.id=uid();next.zIndex=(original.zIndex||0)+index*.0001;
       next.splitGroupId=original.type==='material'?group:next.splitGroupId;
       next.splitPartIndex=original.type==='material'?index:next.splitPartIndex;
       next.isParked=spec.keepKeys? !spec.keepKeys.includes(key):false;
-      pieces.push({key,sourceID:original.id,nodeID:next.id,outline,area,type:original.type,
+      pieces.push({key,sourceID:original.id,nodeID:next.id,outline,hitGeometry,area,type:original.type,
         parked:next.isParked});
       return next;
     });

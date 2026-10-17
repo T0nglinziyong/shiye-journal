@@ -14,6 +14,8 @@ import {FabricSceneStage} from './fabric-scene-stage.jsx';
 import {FabricEditorToolbar,FabricHeaderMenu} from './fabric-editor-controls.jsx';
 import {FabricCutPanel} from './fabric-cut-panel.jsx';
 import {FabricPageViewport} from './fabric-page-viewport.jsx';
+import {iconMarkup} from './icons.js';
+import {cutPreviewPieceAt} from './scene-cut-hit.js';
 import {fabricPointer} from './fabric-pointer.js';
 import {selectableFabricObjectAt} from './fabric-hit-test.js';
 import {SceneCover} from './scene-cover.jsx';
@@ -1206,7 +1208,7 @@ function FabricSelectedActions({bounds,draft,onAction,mode='object',canUngroup=f
         y:(corners.tl.y+corners.tr.y)/2}:{x:currentBounds.x+currentBounds.width/2,y:currentBounds.y};
       const center=rect.left+anchor.x*rect.width/draft.canvas.width;
       const edge=rect.top+anchor.y*rect.height/draft.canvas.height;
-      setPosition({left:Math.max(68,Math.min(innerWidth-68,center)),
+      setPosition({left:Math.max(88,Math.min(innerWidth-88,center)),
         top:Math.max(58,Math.min(innerHeight-50,edge-30))});
     };
     const move=event=>{
@@ -1229,13 +1231,18 @@ function FabricSelectedActions({bounds,draft,onAction,mode='object',canUngroup=f
   return createPortal(<div className="fabric-selected-actions" style={position}
     aria-label={collective?'选区操作':group?'组合操作':'选中对象操作'}>
     <button type="button" aria-label={collective?'复制套选对象':group?'复制组合':'复制对象'}
-      onClick={()=>onAction(collective?'fabric-lasso-copy':group?'fabric-group-copy':'duplicate')}/>
+      onClick={()=>onAction(collective?'fabric-lasso-copy':group?'fabric-group-copy':'duplicate')}
+      dangerouslySetInnerHTML={{__html:iconMarkup('copy')}}/>
     <button type="button" aria-label={collective||group?
       canUngroup?'解开组合':'组合所选对象':'编辑对象'}
       disabled={collective&&!canUngroup&&count<2}
-      onClick={()=>onAction(collective||group?'fabric-selection-toggle-group':'fabric-inspector-open')}/>
+      onClick={()=>onAction(collective||group?'fabric-selection-toggle-group':'fabric-inspector-open')}
+      dangerouslySetInnerHTML={{__html:iconMarkup(collective||group?canUngroup?'ungroup':'group':'pen')}}/>
+    <button type="button" aria-label="剪切选中对象" onClick={()=>onAction('fabric-cut-open')}
+      dangerouslySetInnerHTML={{__html:iconMarkup('scissors')}}/>
     <button type="button" aria-label={collective?'删除套选对象':group?'删除组合':'删除对象'}
-      onClick={()=>onAction(collective?'fabric-lasso-delete':group?'fabric-group-delete':'delete-object')}/>
+      onClick={()=>onAction(collective?'fabric-lasso-delete':group?'fabric-group-delete':'delete-object')}
+      dangerouslySetInnerHTML={{__html:iconMarkup('trash')}}/>
   </div>,document.body);
 }
 
@@ -1261,13 +1268,22 @@ export function EditorPage({state,draft,editorEntry,asset,source,format,
   const availableHeight=Math.max(180,viewportHeight-(window.innerWidth<700?200:166));
   const width=Math.max(160,Math.min(availableWidth,availableHeight*draft.canvas.width/draft.canvas.height));
   const scale=width/draft.canvas.width,height=draft.canvas.height*scale;
-  const selectCutTarget=event=>{
+  const tapCutPreview=event=>{
+    if(state.cutPreview?.spec.operation!=='split')return;
     const canvas=editorFabricCanvases.get(draft.id);if(!canvas)return;
-    const {scene:point,viewport}=fabricPointer(canvas,event),seen=new Set();
-    const hits=[...canvas.getObjects()].reverse().filter(object=>
-      selectableFabricObjectAt(canvas,object,point,viewport,{includeInk:true})).map(object=>object.sceneID)
-      .filter(id=>id&&!seen.has(id)&&seen.add(id));
-    if(hits.length)onAction('fabric-cut-target',hits,{x:event.clientX,y:event.clientY});
+    const {scene:point,viewport}=fabricPointer(canvas,event);
+    const targets=new Set((state.cutSettings?.scope==='all'?state.cutSettings.targetIDs:
+      state.selected?[state.selected]:[] )||[]);
+    for(const entry of sceneLayerEntries(draft,{hidden:true,ink:true}))
+      if(entry.parents.some(parent=>targets.has(parent.id)))targets.add(entry.value.id);
+    const top=[...canvas.getObjects()].reverse().find(object=>
+      selectableFabricObjectAt(canvas,object,point,viewport,{includeInk:true}));
+    // An unrelated cover is translucent during cutting, so it must not eat
+    // the tap. A sibling inside the selected group stays opaque and does.
+    const topSourceID=top&&targets.has(top.sceneID)&&top.sceneID!==state.selected?
+      top.sceneID:null;
+    const piece=cutPreviewPieceAt(state.cutPreview,point,{topSourceID});
+    if(piece)onAction('fabric-cut-keep',piece.key);
   };
   return <><div className="view-head swift-editor-head">
     <button className="btn" data-act="back-works">返回</button>
@@ -1301,7 +1317,7 @@ export function EditorPage({state,draft,editorEntry,asset,source,format,
       <button className="btn mini" data-act="park" disabled={selected?.kind!=='material'}>放入备选</button>
     </div><div className="page-wrap"><FabricPageViewport draft={draft} width={width} height={height}
       tool={state.tool} onCanvasTap={event=>{
-        if(state.tool==='scissors'){selectCutTarget(event);return;}
+        if(state.tool==='scissors'){tapCutPreview(event);return;}
         const canvas=editorFabricCanvases.get(draft.id);
         if(!canvas)return;
         const {scene:point,viewport}=fabricPointer(canvas,event);
@@ -1350,7 +1366,7 @@ export function EditorPage({state,draft,editorEntry,asset,source,format,
           selectedID={state.selected}
           cutPreview={state.cutPreview}
           onCutPath={(points,closed)=>onAction('fabric-cut-preview',points,closed?'loop':'line')}
-          onCutTap={selectCutTarget}
+          onCutTap={tapCutPreview}
           textDefaults={state.textDefaults||null}
           pen={{widthMM:state.canvasTools?.fabricPenWidthMM??.5,color:state.canvasTools?.penColor||'#2b5245',
             style:state.canvasTools?.fabricPenStyle||'pressure'}}

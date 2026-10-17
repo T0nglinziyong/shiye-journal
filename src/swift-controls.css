@@ -486,20 +486,22 @@ body:has(.library-management-tray):not(:has(.library-management-tray:not([hidden
 .fabric-cut-panel header{display:flex;flex:none;justify-content:space-between;align-items:center;gap:8px;padding:10px 12px;
   background:#eaf1e8;cursor:grab;touch-action:none;user-select:none}
 .fabric-cut-panel header:active{cursor:grabbing}
-.fabric-cut-panel header span{font-size:11px;color:#687e6c}
+.fabric-cut-panel header button{flex:none;border:1px solid #b9cdbb;border-radius:8px;
+  padding:5px 10px;background:#fffefa;color:#30533b;cursor:pointer;touch-action:manipulation}
 .fabric-cut-body{display:flex;flex-direction:column;gap:8px;padding:10px;min-height:0;overflow:auto}
 .fabric-cut-target{display:flex;align-items:center;justify-content:space-between;gap:6px;font-size:12px}
 .fabric-cut-target span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.fabric-cut-target button{flex:none;border:1px solid #b9cdbb;border-radius:8px;background:#eef4eb;color:#30533b;padding:5px;font-size:11px}
-.fabric-cut-target button[aria-pressed="true"]{background:#355e46;color:#fff}
+.fabric-cut-scope{border-top:1px solid #e0e8dc;padding-top:6px;font-size:12px}
+.fabric-cut-scope summary{cursor:pointer;min-height:28px}
+.fabric-cut-scope .fabric-cut-row{margin:4px 0 7px}
+.fabric-cut-preview-status{margin:0;border-top:1px solid #e0e8dc;padding-top:7px;
+  font-size:12px;color:#476953}
 .fabric-cut-row{display:flex;gap:5px}.fabric-cut-row button{flex:1;min-width:0;border:1px solid #cbd8cb;
   border-radius:8px;padding:6px 4px;background:#fffefa;color:#31533c;font-size:12px}
 .fabric-cut-row button[aria-pressed="true"],.fabric-cut-row button.primary{background:#355e46;color:#fff;border-color:#355e46}
 .fabric-cut-help{margin:0;font-size:11px;line-height:1.5;color:#6f7e71}
 .fabric-cut-inset{display:flex;align-items:center;gap:8px;font-size:12px}.fabric-cut-inset input{flex:1;min-width:0;padding:0}
 .fabric-cut-checkbox{display:flex;align-items:center;gap:8px;font-size:12px}
-.fabric-cut-results{display:grid;gap:5px;max-height:120px;overflow:auto;border-top:1px solid #e0e8dc;padding-top:8px;font-size:12px}
-.fabric-cut-results label{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:400}
 .fabric-cut-actions{position:sticky;bottom:-10px;z-index:2;background:#fffefa;padding:7px 0 2px}
 .fabric-cut-rejoin{border:1px solid #b9cdbb;border-radius:8px;background:#eef4eb;color:#30533b;padding:7px;font-size:12px}
 .editing .swift-editor-workspace .editor-stage{position:relative}

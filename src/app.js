@@ -1282,7 +1282,7 @@ async function runAppAction(action,id,value){try{switch(action){
   case 'fabric-tool':{
     const leavingLasso=state.tool==='lasso'&&value!=='lasso';
     if(state.tool==='scissors'&&value!=='scissors'){
-      state.cutSettings={...state.cutSettings,locked:false,targetIDs:[]};state.cutTap=null;
+      state.cutSettings={...state.cutSettings,targetIDs:[]};
     }
     if(state.tool!==value)state.cutPreview=null;
     state.tool=value;
@@ -1290,32 +1290,32 @@ async function runAppAction(action,id,value){try{switch(action){
     state.fabricInspectorOpen=false;
     render();break;
   }
+  case 'fabric-cut-open':{
+    const d=current();if(!d)break;
+    const ids=[...new Set(state.multiSelected?.length?state.multiSelected:state.selected?[state.selected]:[])];
+    if(!ids.length){toast('请先选择对象');break;}
+    state.selected=ids.length===1?ids[0]:null;
+    state.multiSelected=ids;
+    state.tool=state.toolHighlight='scissors';
+    state.fabricInspectorOpen=false;
+    state.cutPreview=null;
+    state.cutSettings={operation:'split',scope:ids.length>1?'all':'object',inset:.18,
+      hideRegion:true,targetIDs:ids};
+    render();break;
+  }
   case 'fabric-cut-setting':{
     const previous=state.cutPreview;
     state.cutSettings={operation:'split',scope:'object',inset:.18,
-      hideRegion:true,targetIDs:[],locked:false,...state.cutSettings,[id]:value};
+      hideRegion:true,targetIDs:[],...state.cutSettings,[id]:value};
     if(id==='operation'&&value==='mask')state.cutSettings.scope='object';
     if(id==='scope'&&value==='all'&&!state.cutSettings.targetIDs.length&&state.selected)
       state.cutSettings.targetIDs=[state.selected];
-    state.cutPreview=id==='locked'?previous:null;
+    state.cutPreview=null;
     if(previous&&id==='inset'&&previous.spec.preset)
       void handle('fabric-cut-preview',previous.spec.preset);
     else if(previous&&id==='hideRegion')
       void handle('fabric-cut-preview',previous.spec.preset||previous.spec.points,previous.spec.pathType);
     else render();break;
-  }
-  case 'fabric-cut-target':{
-    if(state.cutSettings?.locked)break;
-    const hits=Array.isArray(id)?id:[];
-    if(!hits.length)break;
-    const previous=state.cutTap;
-    const same=previous&&Date.now()-previous.at<2200&&
-      Math.hypot((value?.x||0)-previous.x,(value?.y||0)-previous.y)<20&&
-      JSON.stringify(previous.hits)===JSON.stringify(hits);
-    const index=same?Math.max(-1,hits.indexOf(state.selected)):-1;
-    state.selected=hits[(index+1)%hits.length];state.multiSelected=[state.selected];
-    state.cutTap={x:value?.x||0,y:value?.y||0,at:Date.now(),hits};
-    state.cutPreview=null;render();break;
   }
   case 'fabric-cut-preview':{
     const d=current();if(!d)break;
@@ -1323,7 +1323,6 @@ async function runAppAction(action,id,value){try{switch(action){
       hideRegion:true,targetIDs:[],...state.cutSettings};
     const spec={...settings,selectedID:state.selected,
       points:Array.isArray(id)?id:[],preset:typeof id==='string'?id:null};
-    delete spec.locked;
     spec.pathType=Array.isArray(id)&&value==='loop'?'loop':'line';
     try{
       const plan=planSceneCut(d,spec,state.assets);

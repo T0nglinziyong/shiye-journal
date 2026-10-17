@@ -193,9 +193,9 @@ try{
     'Selecting a Scene object must retain the canvas selection state');
   await wait('.fabric-selected-actions');
   assert.equal(await evaluate(`(()=>{const bar=document.querySelector('.fabric-selected-actions');
-    return bar.querySelectorAll('button').length===3&&bar.querySelectorAll('svg.shiye-icon').length===3&&
+    return bar.querySelectorAll('button').length===4&&bar.querySelectorAll('svg.shiye-icon').length===4&&
       [...bar.querySelectorAll('button')].every(button=>!button.textContent.trim());})()`),true,
-    'The floating copy, edit and delete actions must not leave duplicate glyphs inside the frame');
+    'The floating copy, edit, scissors and delete actions must have one glyph each');
   await click('[aria-label="编辑对象"]','.show-inspector');
   assert.ok(await evaluate('!!document.querySelector("#inspector-fill")&&!!document.querySelector("#inspector-stroke-dash")&&!!document.querySelector("#inspector-blend-mode")'),
     'Shape inspector exposes the same editable style fields as AI created shapes');

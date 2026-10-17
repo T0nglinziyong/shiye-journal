@@ -6,10 +6,9 @@ import {commonShapes,advancedShapes,configureShape,shapeThumbnailSVG} from './ed
 import {primitive} from './domain.js';
 import {iconMarkup} from './icons.js';
 import {adjacentFontSize} from './canvas-control-behavior.js';
-import {sceneLayerEntries} from './scene-v2.js';
 
-const toolIcons={select:'cursor',pen:'pen',eraser:'eraser',highlighter:'marker',lasso:'lasso',scissors:'scissors',text:'text',shape:'shape',material:'material',layers:'layers',paper:'paper'};
-const labels={select:'选择',pen:'笔',eraser:'橡皮擦',highlighter:'荧光笔',lasso:'套索选择',scissors:'剪刀',text:'文字',shape:'图形',material:'素材',layers:'图层',paper:'画布背景'};
+const toolIcons={select:'cursor',pen:'pen',eraser:'eraser',highlighter:'marker',lasso:'lasso',text:'text',shape:'shape',material:'material',layers:'layers',paper:'paper'};
+const labels={select:'选择',pen:'笔',eraser:'橡皮擦',highlighter:'荧光笔',lasso:'套索选择',text:'文字',shape:'图形',material:'素材',layers:'图层',paper:'画布背景'};
 const palette=['#171717','#555555','#989898','#ffffff','#e33b45','#fb8795','#ff9c21','#e8d432','#159b73','#57bd4b','#167ad9','#264d9c','#853aaf','#955969'];
 const slotDefaults={pen:{width:[.3,.5,1],color:['#171717','#2b5245','#167ad9']},highlighter:{width:[1,2,4],color:['#fb8795','#f5cf45','#57bd4b']},eraser:{width:[2,4,8]}};
 
@@ -44,9 +43,11 @@ function ReactPopover({anchor,title,className='',width=360,height=440,picker=fal
     const outside=event=>{
       if(!event.target.closest?.('.swift-popover,.swift-editor-toolbar,.swift-editor-head')&&
         !anchor?.contains(event.target)){
-        if(className.includes('swift-layer-popover')&&event.target.closest?.('#canvas-page')){
+        if(className.includes('swift-layer-popover')&&event.target.closest?.('.page-wrap')){
           // Dismissing the layer tree must not turn the same tap into a blank
           // canvas selection event and lose the layer chosen in the tree.
+          // The page-wrap also includes the gray margin around the paper;
+          // its pan/tap handler receives releases there too.
           event.preventDefault();event.stopImmediatePropagation();
           const pointerID=event.pointerId;
           const dismissPoint={x:event.clientX,y:event.clientY};
@@ -289,13 +290,6 @@ export function FabricEditorToolbar({state,draft,materials,source,selected,onIns
   const editObject=(id,value)=>onInspectorChange(id,value);
   const textMode=selectedKind==='text'||activeTool==='text';
   const text=selectedKind==='text'?selectedNode:state.textDefaults||{style:'serif',fontSize:40,color:'#30463d',alignment:'left'};
-  const cutSettings={operation:'split',scope:'object',targetIDs:[],hideRegion:true,...state.cutSettings};
-  const materialTitles=new Map(materials.map(asset=>[asset.id,asset.title]));
-  const cutTargets=sceneLayerEntries(draft,{hidden:true,ink:true}).filter(entry=>
-    !entry.value.hidden&&!entry.value.isHidden&&!entry.value.isParked&&!entry.value.locked&&
-    !entry.value.isLocked&&entry.parents.every(parent=>!parent.hidden&&!parent.isHidden&&
-      !parent.locked&&!parent.isLocked)&&
-    (cutSettings.operation==='split'||entry.kind!=='ink'));
   const textProperty=(key,value)=>onAction('fabric-text-property',key,value);
   const shapeProperty=(key,value)=>onAction('fabric-shape-property',key,value);
   const arrangeButton=<button type="button" data-popover-anchor="arrange"
@@ -305,7 +299,7 @@ export function FabricEditorToolbar({state,draft,materials,source,selected,onIns
       className={`btn ${state.tool===kind?'primary':''}`} data-val={kind} data-act="tool"
       data-react-action="true" aria-label={labels[kind]} aria-pressed={state.tool===kind}
       onClick={event=>['shape','material','layers','paper'].includes(kind)?open(kind,event):
-        state.tool===kind&&['pen','eraser','highlighter','lasso','scissors'].includes(kind)?
+        state.tool===kind&&['pen','eraser','highlighter','lasso'].includes(kind)?
           toggleMenu(kind,event):
           (close(),onAction('fabric-tool',null,kind))} dangerouslySetInnerHTML={{__html:iconMarkup(toolIcons[kind])}}/>)}</div>
     <div className="canvas-context-tools" aria-label="当前工具选项">
@@ -363,19 +357,19 @@ export function FabricEditorToolbar({state,draft,materials,source,selected,onIns
       </>:selectedNode?selectedKind==='material'?<button type="button" onClick={()=>onAction('fabric-inspector-open')}>☷ 素材操作</button>:null:
       activeTool==='shape'?<span className="canvas-tool-hint">选择图形，或再次点击左侧图形退出</span>:
       activeTool==='lasso'?<button type="button" data-popover-anchor="lasso-quick" onClick={event=>setMenu({kind:'lasso',anchor:event.currentTarget})}>◌ 套索选择</button>:
-      activeTool==='scissors'?<span className="canvas-tool-hint">在画布上画切线；设置与预览在浮动面板</span>:
+      activeTool==='scissors'?<span className="canvas-tool-hint">在画布上画切线；点击裁片切换保留</span>:
       <button type="button" className="canvas-fit-button" onClick={()=>onAction('fabric-fit-view')}>↖ {Math.round(state.zoom*100)}%</button>}
     </div>
   </div>{menu?<ReactPopover anchor={menu.anchor} onClose={close}
     title={{shape:'添加图形',material:'选择素材',paper:'画布背景',layers:'图层',
-      pen:'笔设置',eraser:'橡皮擦设置',highlighter:'荧光笔设置',lasso:'套索选择设置',scissors:'剪刀设置',
+      pen:'笔设置',eraser:'橡皮擦设置',highlighter:'荧光笔设置',lasso:'套索选择设置',
       'slot-width':'修改粗细','slot-color':'修改当前颜色',
       'text-paragraph':'段落','text-style':'文字样式',arrange:'排列所选'}[menu.kind]}
     className={['shape','material'].includes(menu.kind)?`swift-picker-popover swift-${menu.kind}-picker`:
       menu.kind==='layers'?'swift-menu swift-layer-popover':'swift-menu'}
     width={menu.kind==='paper'?260:menu.kind==='layers'?310:
       menu.kind==='slot-width'?270:menu.kind==='slot-color'?280:
-      ['pen','eraser','highlighter','lasso','scissors'].includes(menu.kind)?280:
+      ['pen','eraser','highlighter','lasso'].includes(menu.kind)?280:
       ['text-paragraph','text-style','arrange'].includes(menu.kind)?230:
       280} height={menu.kind==='layers'?360:menu.kind==='slot-color'?310:menu.kind==='shape'?550:440}
     picker={['shape','material'].includes(menu.kind)}>
@@ -403,27 +397,6 @@ export function FabricEditorToolbar({state,draft,materials,source,selected,onIns
         <input type="checkbox" checked={!!state.selectionFilter?.lockInk}
           onChange={event=>onAction('fabric-selection-filter','lockInk',event.target.checked)}/></label>
     </div>:null}
-    {menu.kind==='scissors'?<div className="stack canvas-cut-settings">
-      <span>操作</span><div className="fabric-cut-row" role="group" aria-label="操作方式">
-        {[['split','分成多片'],['mask','局部显示']].map(([key,label])=><button key={key}
-          type="button" aria-pressed={cutSettings.operation===key}
-          onClick={()=>onAction('fabric-cut-setting','operation',key)}>{label}</button>)}
-      </div>
-      {cutSettings.operation==='split'?<><span>作用范围</span><div className="fabric-cut-row" role="group" aria-label="剪切范围">
-        {[['object','当前对象'],['all','指定多个图层']].map(([key,label])=><button key={key}
-          type="button" aria-pressed={cutSettings.scope===key}
-          onClick={()=>onAction('fabric-cut-setting','scope',key)}>{label}</button>)}
-      </div></>:null}
-      {cutSettings.scope==='all'&&cutSettings.operation==='split'?<div className="canvas-cut-targets" role="group" aria-label="选择要剪切的图层">
-        {cutTargets.map((entry,index)=><label key={entry.value.id}><input type="checkbox"
-          checked={cutSettings.targetIDs.includes(entry.value.id)}
-          onChange={event=>onAction('fabric-cut-setting','targetIDs',event.target.checked?
-            [...cutSettings.targetIDs,entry.value.id]:cutSettings.targetIDs.filter(id=>id!==entry.value.id))}/>
-          {entry.value.title||entry.value.name||materialTitles.get(entry.value.assetID)||
-            (({material:'素材',shape:'图形',text:'文字',ink:'笔迹'}[entry.kind]||'对象')+' '+(index+1))}</label>)}
-      </div>:null}
-      <p>短按选择对象，再次短按同一位置可切换到被遮挡的对象；拖动时画切线。闭合路径会自动识别为区域。</p>
-      <button type="button" onClick={()=>{close();onAction('fabric-tool',null,'select');}}>退出剪刀</button></div>:null}
     {menu.kind==='arrange'?<div className="canvas-arrange-menu">
       <span>对齐所选</span><div>{[['left','左边'],['center','水平居中'],['right','右边'],
         ['top','上边'],['middle','垂直居中'],['bottom','下边']].map(([mode,label])=><button

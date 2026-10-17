@@ -7,14 +7,20 @@ import {findSceneNode,sceneLayerEntries} from './scene-v2.js';
 export function FabricCutPanel({state,draft,onAction}){
   const [position,setPosition]=useState(null),drag=useRef(null),panelRef=useRef(null);
   const settings={operation:'split',scope:'object',inset:.18,
-    hideRegion:true,locked:false,...state.cutSettings};
+    hideRegion:true,...state.cutSettings};
   const preview=state.cutPreview,node=findSceneNode(draft,state.selected);
+  const cutTargets=sceneLayerEntries(draft,{hidden:true,ink:true}).filter(entry=>
+    !entry.value.hidden&&!entry.value.isHidden&&!entry.value.isParked&&!entry.value.locked&&
+    !entry.value.isLocked&&entry.parents.every(parent=>!parent.hidden&&!parent.isHidden&&
+      !parent.locked&&!parent.isLocked)&&
+    (settings.operation==='split'||entry.kind!=='ink'));
   const entryIndex=sceneLayerEntries(draft,{hidden:true,ink:true})
     .findIndex(entry=>entry.value.id===node?.id);
   const materialTitle=node?.type==='material'?state.assets?.find(asset=>asset.id===node.assetID)?.title:null;
   const label=node?(node.title||node.name||materialTitle||
     ({material:'素材',shape:'图形',text:'文字',ink:'笔迹',group:'组合'}[node.type]||'对象'))+
-    (entryIndex>=0?` · 图层 ${entryIndex+1}`:''):'未选择对象';
+    (entryIndex>=0?` · 图层 ${entryIndex+1}`:''):
+    settings.scope==='all'?`已选 ${settings.targetIDs?.length||0} 个图层`:'未选择对象';
   const set=(key,value)=>onAction('fabric-cut-setting',key,value);
   useLayoutEffect(()=>{
     if(!position||!panelRef.current)return;
@@ -42,15 +48,37 @@ export function FabricCutPanel({state,draft,onAction}){
   return createPortal(<section ref={panelRef} className="fabric-cut-panel" aria-label="剪刀与局部显示"
     style={position?{left:position.left,top:position.top,right:'auto',bottom:'auto'}:undefined}>
     <header onPointerDown={down} onPointerMove={move} onPointerUp={end} onPointerCancel={end}>
-      <strong>剪刀 · {settings.operation==='mask'?'局部显示':'分成多片'}</strong><span>拖动面板</span>
+      <strong>剪刀 · {settings.operation==='mask'?'蒙版':'裁剪'}</strong>
+      <button type="button" aria-label="退出剪刀" onPointerDown={event=>event.stopPropagation()}
+        onClick={()=>onAction('fabric-tool',null,'select')}>退出</button>
     </header>
     <div className="fabric-cut-body">
-      <div className="fabric-cut-target"><span>当前对象：{label}</span><button type="button"
-        disabled={!node} aria-pressed={!!settings.locked} onClick={()=>set('locked',!settings.locked)}>
-        {settings.locked?'已锁定 · 点击解锁':'锁定对象'}</button></div>
-      <p className="fabric-cut-help">短按画布选对象；重复短按可选被遮挡的下层。拖动画路径；闭合则按区域处理。iPad 手指移动画布。</p>
+      <div className="fabric-cut-target"><span>当前对象：{label}</span></div>
+      <div className="fabric-cut-row" role="group" aria-label="裁剪或蒙版">
+        {[['split','裁剪'],['mask','蒙版']].map(([key,title])=><button key={key} type="button"
+          disabled={key==='mask'&&!node} aria-pressed={settings.operation===key}
+          onClick={()=>set('operation',key)}>{title}</button>)}
+      </div>
+      {settings.operation==='split'?<details className="fabric-cut-scope">
+        <summary>作用范围 · {settings.scope==='object'?'当前对象':'选定图层'}</summary>
+        <div className="fabric-cut-row" role="group" aria-label="剪切范围">
+          {[['object','当前对象'],['all','选定图层']].map(([key,title])=><button key={key} type="button"
+            disabled={key==='object'&&!node} aria-pressed={settings.scope===key}
+            onClick={()=>set('scope',key)}>{title}</button>)}
+        </div>
+        {settings.scope==='all'?<div className="canvas-cut-targets" role="group" aria-label="选择要剪切的图层">
+          {cutTargets.map((entry,index)=><label key={entry.value.id}><input type="checkbox"
+            checked={(settings.targetIDs||[]).includes(entry.value.id)}
+            onChange={event=>set('targetIDs',event.target.checked?
+              [...(settings.targetIDs||[]),entry.value.id]:
+              (settings.targetIDs||[]).filter(id=>id!==entry.value.id))}/>
+            {entry.value.title||entry.value.name||state.assets?.find(asset=>asset.id===entry.value.assetID)?.title||
+              (({material:'素材',shape:'图形',text:'文字',ink:'笔迹'}[entry.kind]||'对象')+' '+(index+1))}</label>)}
+        </div>:null}
+      </details>:null}
+      <p className="fabric-cut-help">在画布上画切线；闭合路径自动形成区域。预览后点击裁片切换保留状态：绿色保留，红色放入备选。</p>
       <div className="fabric-cut-row fabric-cut-presets" aria-label="快捷裁切">
-        {[['window','开窗'],['ellipse','椭圆'],['edge','剪边'],['ring','留边框']]
+        {[['window','开窗'],['ellipse','椭圆'],['edge','剪边']]
           .map(([key,label])=><button key={key} type="button"
           onClick={()=>onAction('fabric-cut-preview',key)}>{label}</button>)}
       </div>
@@ -60,12 +88,9 @@ export function FabricCutPanel({state,draft,onAction}){
         <button type="button" aria-pressed={settings.hideRegion} onClick={()=>set('hideRegion',true)}>隐藏画出的区域</button>
         <button type="button" aria-pressed={!settings.hideRegion} onClick={()=>set('hideRegion',false)}>只显示画出的区域</button>
       </div>:null}
-      {preview?<><div className="fabric-cut-results"><b>{preview.spec.operation==='mask'?'局部显示预览':'选择留在画布上的裁片'}</b>
-        {preview.pieces.map((piece,index)=><label key={piece.key}><input type="checkbox"
-          disabled={preview.spec.operation==='mask'} checked={preview.keepKeys.includes(piece.key)}
-          onChange={()=>onAction('fabric-cut-keep',piece.key)}/>
-          {piece.type==='material'?'素材':piece.type==='ink'?'笔迹':piece.type==='text'?'文字':'图形'} {index+1}</label>)}
-      </div><div className="fabric-cut-row fabric-cut-actions"><button type="button" onClick={()=>onAction('fabric-cut-cancel')}>取消预览</button>
+      {preview?<><p className="fabric-cut-preview-status">{preview.spec.operation==='mask'?'蒙版预览':
+        `绿色保留 ${preview.keepKeys.length} / ${preview.pieces.length} 片 · 点击画布上的裁片切换`}</p>
+        <div className="fabric-cut-row fabric-cut-actions"><button type="button" onClick={()=>onAction('fabric-cut-cancel')}>取消预览</button>
         <button type="button" className="primary" onClick={()=>onAction('fabric-cut-confirm')}>应用</button></div></>:null}
       {node?.type==='material'&&node.splitParentId?<button type="button" className="fabric-cut-rejoin"
         onClick={()=>onAction('fabric-cut-rejoin',node.id)}>拼回同源裁片</button>:null}
