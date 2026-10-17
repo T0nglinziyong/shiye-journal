@@ -259,7 +259,11 @@ export function mountPrivateImages({root,db,urls,fullView=()=>false,onError=cons
   // observing them on document.body rescanned the ENTIRE gallery every time
   // navigation changed a CSS class.
   changes.observe(root,{childList:true,subtree:true,attributes:true,attributeFilter:['src']});scan(root);
-  return {load,focus(id){focusedID=id||null;if(id)void load(id,false).catch(onError);pump();},retain(ids){for(const id of ids)retained.set(id,(retained.get(id)||0)+1);let released=false;return()=>{if(released)return;released=true;for(const id of ids){const n=retained.get(id)||0;if(n>1)retained.set(id,n-1);else retained.delete(id);}trim();};},retryMissing(){retryMissing();},
+  return {load,available(id,requested=false){
+    if(urls.has(id))return {url:urls.get(id),sufficient:true,type:'original'};
+    const tier=requested===false?COVER_EDGE:imageTier(requested);
+    return cachedChoice(id,tier)||null;
+  },focus(id){focusedID=id||null;if(id)void load(id,false).catch(onError);pump();},retain(ids){for(const id of ids)retained.set(id,(retained.get(id)||0)+1);let released=false;return()=>{if(released)return;released=true;for(const id of ids){const n=retained.get(id)||0;if(n>1)retained.set(id,n-1);else retained.delete(id);}trim();};},retryMissing(){retryMissing();},
     stats:()=>({originals:sizes.size,previews:previewSizes.size,displayVariants:variantSizes.size,originalBytes:[...sizes.values()].reduce((a,b)=>a+b,0),previewBytes:[...previewSizes.values()].reduce((a,b)=>a+b,0),pending:pending.size}),
     invalidate(ids){
       if(ids&&!ids.length)return;const affected=ids?new Set(ids):null;if(!affected){generation++;pending.clear();}notifyImageInvalidation(affected);

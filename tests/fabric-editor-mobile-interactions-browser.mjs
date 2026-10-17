@@ -59,7 +59,15 @@ try{
   await click('[data-val="select"]');
   await click('[data-val="layers"]','.scene-layer-tree');
   await click('.scene-layer-node [data-layer-pick]');
-  await click('[data-val="layers"]');
+  const dismiss=await evaluate(`(()=>{const r=document.querySelector('.upper-canvas').getBoundingClientRect();
+    return {x:r.left+r.width*.08,y:r.top+r.height*.08}})()`);
+  await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,clickCount:1,...dismiss});
+  await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,clickCount:1,...dismiss});
+  await sleep(100);
+  assert.equal(await evaluate('!!document.querySelector(".swift-layer-popover")'),false,
+    'A canvas tap dismisses the layer tree');
+  assert.equal(await evaluate('!!document.querySelector(".fabric-selected-actions")'),true,
+    'Dismissing the layer tree keeps the chosen canvas frame');
   await wait('.canvas-font-size-stepper input[aria-label="字号"]');
   await evaluate(`(()=>{const input=document.querySelector('.canvas-font-size-stepper input[aria-label="字号"]');
     input.focus();input.select();})()`);

@@ -26,6 +26,13 @@ const byID=(nodes,id)=>{
   return null;
 };
 const editable=(draft,id)=>{try{assertSceneEditable(draft,id);return true;}catch{return false;}};
+const materialAssetIDs=(nodes,found=new Set())=>{
+  for(const node of nodes||[]){
+    if(node.type==='material'&&node.assetID)found.add(node.assetID);
+    if(node.type==='group')materialAssetIDs(node.children,found);
+  }
+  return [...found].sort();
+};
 const selectionLeaves=(draft,ids)=>{
   const selected=new Set(ids);
   return sceneLayerEntries(draft,{hidden:true}).filter(entry=>selected.has(entry.value.id)||
@@ -34,15 +41,19 @@ const selectionLeaves=(draft,ids)=>{
 
 // Fabric owns this canvas for the whole draft lifetime. React owns the host,
 // tool panels and route lifecycle; a pointer packet never crosses a JSX render.
-export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onChange,onIssue,onReady,
+export function FabricSceneStage({draft,assetURL,retainAssets,onSelection,onBeforeChange,onChange,onIssue,onReady,
   tool='select',pen={widthMM:.5,color:'#2b5245'},marker={widthMM:2,color:'#f5cf45'},
   eraser={widthMM:4},selectionMode='contain',readOnly=false,sceneRevision=0,
   selectedID=null,selectedIDs=[],selectionFilter=null,textDefaults=null}){
   const canvasRef=useRef(null),sessionRef=useRef(null),reconcileRef=useRef(null),callbacks=useRef(null);
   const syncingSelection=useRef(false),selectionEpoch=useRef(0);
   const selectionKey=JSON.stringify(selectedIDs.length?selectedIDs:selectedID?[selectedID]:[]);
+  const materialKey=materialAssetIDs(draft.layers).join('\0');
   callbacks.current={draft,assetURL,onSelection,onBeforeChange,onChange,onIssue,onReady,tool,pen,marker,
     eraser,selectionMode,selectionFilter,selectedID,selectedIDs,textDefaults};
+
+  useLayoutEffect(()=>retainAssets?.(materialKey?materialKey.split('\0'):[])||undefined,
+    [materialKey,retainAssets]);
 
   useLayoutEffect(()=>{reconcileRef.current?.();},[draft,sceneRevision]);
 
@@ -192,7 +203,25 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
         canvas.requestRenderAll();
         callbacks.current.onReady?.(canvas);
         const bridge=createFabricSceneBridge(fabric,{
-          assetURL:(id,node)=>callbacks.current.assetURL?.(id,node),
+          assetURL:(id,node)=>callbacks.current.assetURL?.(id,node,()=>{
+            if(disposed||!projected().some(item=>renderKey(item)===renderKey(node)&&
+              snapshot(item)===snapshot(node)))return;
+            if(canvas._currentTransform){
+              canvas.once('mouse:up',()=>{
+                if(disposed)return;
+                const key=renderKey(node),index=projected().findIndex(item=>renderKey(item)===key&&
+                  snapshot(item)===snapshot(node));
+                if(index<0)return;
+                const version=(sceneVersions.get(key)||0)+1;
+                sceneVersions.set(key,version);addProjected(node,index,version);
+              });
+              return;
+            }
+            const key=renderKey(node),index=projected().findIndex(item=>renderKey(item)===key);
+            const version=(sceneVersions.get(key)||0)+1;
+            sceneVersions.set(key,version);
+            addProjected(node,index,version);
+          }),
           canvasSize:()=>callbacks.current.draft.canvas
         });
         const sceneVersions=new Map();

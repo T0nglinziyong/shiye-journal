@@ -105,6 +105,7 @@ import {buildMaterialScope} from './matching-materials.js';
 import {addMatchingFromLibrary,addMatchingFromRecommendation} from './matching-selection.js';
 import {matchingRecommendations} from './matching-view.js';
 import {captureMatchingScroll,restoreMatchingScroll} from './matching-scroll.js';
+import {restoreRouteScroll} from './navigation-scroll.js';
 import {selectJournalReferenceCases,loadJournalReferenceCases} from './journal-reference-catalog.js';
 import {loadJournalTemplateReferences} from './journal-template-references.js';
 import {clearJournalPresetImages} from './journal-preset-images.js';
@@ -144,6 +145,7 @@ import {LibraryPage,SeriesPage,SeriesContentsPage,WorksPage,RecentlyDeletedPage,
 import {installRuntimeDiagnostics,recordRuntimeIssue,runtimeIssueSnapshot} from './runtime-diagnostics.js';
 import {pendingUnsavedInputs} from './unsaved-inputs.js';
 mountReactShell();
+if('scrollRestoration' in history)history.scrollRestoration='manual';
 const view=document.querySelector('#view'),modal=document.querySelector('#modal'),body=document.querySelector('#modal-body');
 modal.querySelector('.modal-close').onclick=()=>modal.close();
 const fileInput=document.querySelector('#file-input'),workFileInput=document.querySelector('#work-file-input'),snapshotFileInput=document.querySelector('#snapshot-file-input'),creationResultInput=document.querySelector('#creation-result-input'),backupInput=document.querySelector('#backup-input'),emergencyInput=document.querySelector('#emergency-input');
@@ -198,6 +200,8 @@ const image=id=>staticSources.get(id)||
 const privateImages=mountPrivateImages({root:document.body,db,urls,fullView:img=>
   (state.route==='editor'&&!!img.closest('#canvas-page .canvas-object.material'))||
   (state.route==='assetDetail'&&!!img.closest('.detail-picture')),onEvent:recordImageLoading});
+const retainFabricAssets=ids=>privateImages.retain(ids.map(id=>asset(id))
+  .filter(row=>row?.blobId&&!row.staticPath).map(row=>row.blobId));
 let previewPrewarmEpoch=0;
 let workDocumentPrewarmEpoch=0;
 function prewarmVisibleWorkDocuments(){
@@ -340,6 +344,12 @@ function captureSettings(){
     markTapeUsedWithProject:view.querySelector('#setting-mark-tape-used').checked};
 }
 const routeScroll=new Map();
+let cancelRouteScroll=()=>{};
+const routeScrollKey=name=>[name,state.seriesID,
+  name==='library'?parity.libraryTab:'',name==='works'?parity.workTab:'',
+  name==='assetDetail'?state.detailAssetID:'',
+  name==='projectPreview'?state.previewProjectID:'',
+  name==='editor'?state.activeProject?.id:''].join(':');
 let matchingScrollMemory=null;
 let viewInteractionRevision=0;
 let lastEditorInputAt=0;
@@ -452,6 +462,7 @@ function navigateBack(fallback='series'){
 }
 let editorOpenSequence=0,editorSessionBaseline=null;
 function route(name,{back=false,restoreMaterial=false,restoreSnapshot=null,replaceHistory=false}={}){
+  cancelRouteScroll();
   if(!back&&!replaceHistory&&name!==state.route)rememberNavigation();
   editorOpenSequence++;
   viewInteractionRevision++;
@@ -475,7 +486,7 @@ function route(name,{back=false,restoreMaterial=false,restoreSnapshot=null,repla
     for(const key of sceneTrackBases.keys())
       if(key.startsWith((state.activeProject?.id||'')+':'))sceneTrackBases.delete(key);
   }
-  routeScroll.set(state.route+':'+state.seriesID,window.scrollY);
+  routeScroll.set(routeScrollKey(state.route),window.scrollY);
   if(name==='settings'&&!settingsSession)settingsSession={ai:structuredClone(state.aiSettings),preferences:structuredClone(state.preferences),returnRoute:state.route};
   if(state.route==='settings'&&name!=='settings'&&settingsSession){state.aiSettings=settingsSession.ai;state.preferences=settingsSession.preferences;settingsSession=null;state.settingsSection=null;if(cloudEnabled&&deferredSyncedPreferences)state.preferences=savePreferences(migrateStoredPreferences(deferredSyncedPreferences));if(cloudEnabled&&deferredSyncedAISettings)state.aiSettings=saveAISettings(deferredSyncedAISettings);deferredSyncedPreferences=null;deferredSyncedAISettings=null;}
 if(state.route==='editor'&&name!=='editor'&&aiController)aiController.abort(Error('已离开创作页面'));const priorRoute=state.route;if(name==='matching'&&priorRoute!=='matching'&&cloudMatchingDefaults&&!matchingDefaultsPending)applyMatchingDefaults(state,cloudMatchingDefaults);syncSelectionScope(parity,name);state.route=name;
@@ -491,9 +502,8 @@ render();
     matchingScrollMemory?.account===(state.accountId||'browser')
     ?matchingScrollMemory.scroll.viewport:null;
   const targetScroll=restoreSnapshot?.scrollY??matchingViewport?.top??
-    (routeScroll.get(name+':'+state.seriesID)||0);
-  window.scrollTo(matchingViewport?.left??0,targetScroll);
-  if(restoreSnapshot)requestAnimationFrame(()=>window.scrollTo(0,targetScroll));
+    (routeScroll.get(routeScrollKey(name))||0);
+  cancelRouteScroll=restoreRouteScroll(view,{left:matchingViewport?.left??0,top:targetScroll});
   if(navigationScope){
     const depth=history.state?.shiyeNavigation?.scope===navigationScope
       ?history.state.shiyeNavigation.depth:0;
@@ -684,13 +694,20 @@ function render(){
       // save generation keeps Fabric's Scene projection in step with history.
       sceneRevision:state.activeProject.updatedAt+':'+(saveVersions.get(state.activeProject.id)||0),
       materials:state.assets,
-      loadFabricAsset:async(id,node)=>{
+      retainFabricAssets,
+      loadFabricAsset:async(id,node,onUpgrade)=>{
         const record=asset(id);
         if(!record)throw Error('素材不在当前资料库：'+id);
         if(record.staticPath)return record.staticPath;
         const pageScale=Math.max(0.1,Math.min(4,(view.clientWidth||window.innerWidth)/current().canvas.width));
         const pixels=Math.min(4096,Math.max(480,Math.ceil(Math.max(node.width,node.height)*pageScale*(devicePixelRatio||1)*2)));
-        return privateImages.load(record.blobId,pixels);
+        const ready=privateImages.available(record.blobId,pixels);
+        if(ready?.sufficient)return ready.url;
+        const cover=ready?.url||await privateImages.load(record.blobId,false);
+        void privateImages.load(record.blobId,pixels,{background:true}).then(url=>{
+          if(url&&url!==cover)onUpgrade?.();
+        }).catch(()=>{/* The cover remains usable while a larger image retries. */});
+        return cover;
       },
       onFabricSelection:(ids,bounds)=>{const next=ids.length===1?ids[0]:null;
         const changed=state.selected!==next||JSON.stringify(state.multiSelected||[])!==JSON.stringify(ids);

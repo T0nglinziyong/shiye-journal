@@ -47,6 +47,23 @@ function ReactPopover({anchor,title,className='',width=360,height=440,picker=fal
           // Dismissing the layer tree must not turn the same tap into a blank
           // canvas selection event and lose the layer chosen in the tree.
           event.preventDefault();event.stopImmediatePropagation();
+          const pointerID=event.pointerId;
+          let timer;
+          const finish=()=>{clearTimeout(timer);
+            removeEventListener('pointerup',swallow,true);
+            removeEventListener('pointercancel',swallow,true);
+            removeEventListener('pointerdown',nextGesture,true);
+            removeEventListener('click',swallowClick,true);};
+          const nextGesture=next=>{if(next.pointerId!==pointerID)finish();};
+          const swallow=next=>{if(next.pointerId!==pointerID)return;
+            next.preventDefault();next.stopImmediatePropagation();
+            if(next.type==='pointercancel')finish();};
+          const swallowClick=next=>{next.preventDefault();next.stopImmediatePropagation();finish();};
+          addEventListener('pointerup',swallow,true);
+          addEventListener('pointercancel',swallow,true);
+          addEventListener('pointerdown',nextGesture,true);
+          addEventListener('click',swallowClick,true);
+          timer=setTimeout(finish,700);
         }
         onClose();
       }

@@ -8,6 +8,11 @@ const image=document.createElement('canvas');image.width=200;image.height=120;
 const ctx=image.getContext('2d');ctx.fillStyle='#83af81';ctx.fillRect(0,0,200,120);
 ctx.fillStyle='#d97769';ctx.fillRect(20,20,160,80);
 const assetURL=image.toDataURL();
+const low=document.createElement('canvas');low.width=16;low.height=16;
+low.getContext('2d').fillStyle='#d97769';low.getContext('2d').fillRect(0,0,16,16);
+const sharp=document.createElement('canvas');sharp.width=512;sharp.height=512;
+sharp.getContext('2d').fillStyle='#337da4';sharp.getContext('2d').fillRect(0,0,512,512);
+let progressiveReady=false;
 const draft={id:'fabric-preview',sceneVersion:2,canvas:{width:600,height:800},paperColor:'#fffdf5',
   paperPattern:'grid',layers:[
     {id:'paper-group',type:'group',zIndex:1,
@@ -38,7 +43,11 @@ function Preview(){
     type="button" data-tool={name} onClick={()=>setTool(name)}>{name}</button>)}</nav>
     <FabricSceneStage draft={draft} sceneRevision={sceneRevision} tool={tool}
       selectedID={selectedIDs.length===1?selectedIDs[0]:null} selectedIDs={selectedIDs}
-      assetURL={id=>id==='fabric-delayed'?new Promise(resolve=>setTimeout(()=>resolve(assetURL),350)):assetURL}
+      assetURL={(id,_node,onUpgrade)=>id==='fabric-progressive'?
+        progressiveReady?sharp.toDataURL():new Promise(resolve=>{
+          setTimeout(()=>{progressiveReady=true;onUpgrade?.();},350);
+          resolve(low.toDataURL());
+        }):id==='fabric-delayed'?new Promise(resolve=>setTimeout(()=>resolve(assetURL),350)):assetURL}
       onReady={canvas=>window.__fabricCanvas=canvas}
       onSelection={ids=>{setSelectedIDs(ids);events.textContent='选中：'+ids.join(', ')}}
       onIssue={error=>events.textContent='错误：'+error.message}/></>;

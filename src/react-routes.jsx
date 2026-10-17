@@ -1238,7 +1238,7 @@ const editorFabricCanvases=new Map();
 export function EditorPage({state,draft,editorEntry,asset,source,format,
   hasAIReport,onAction,onInspectorChange,onTitleCommit,onAIAction,onAIOpen,onAIPromptChange,
   sceneRevision,onFabricSelection,onFabricBeforeChange,onFabricChange,onFabricIssue,
-  onFabricViewportChange,loadFabricAsset,materials=[]}){
+  onFabricViewportChange,loadFabricAsset,retainFabricAssets,materials=[]}){
   const project=state.activeProject;
   if(!project||!draft)return null;
   const selected=editorEntry(draft).find(entry=>entry.value.id===state.selected)||
@@ -1286,13 +1286,11 @@ export function EditorPage({state,draft,editorEntry,asset,source,format,
         const canvas=editorFabricCanvases.get(draft.id);
         if(!canvas)return;
         const {scene:point,viewport}=fabricPointer(canvas,event);
-        const active=canvas.getActiveObject();
-        const selectedGroup=canvas.getObjects().find(object=>object.sceneID===state.selected&&
-          object.sceneType==='group'&&object.selectable!==false);
-        const hit=active?.sceneType==='group'&&active.containsPoint(point)?active:
-          selectedGroup?.containsPoint(point)?selectedGroup:
-          [...canvas.getObjects()].reverse().find(object=>
-            selectableFabricObjectAt(canvas,object,point,viewport));
+        // A new selection is committed only on release over painted pixels.
+        // The active frame's transparent interior is a drag target only after
+        // selection; it must never turn an empty tap into a new selection.
+        const hit=[...canvas.getObjects()].reverse().find(object=>
+          selectableFabricObjectAt(canvas,object,point,viewport));
         if(hit&&event.pointerType==='touch'&&['pen','highlighter','eraser','lasso'].includes(state.tool)){
           onAction('fabric-select-layer',hit.sceneID);
           return;
@@ -1343,7 +1341,7 @@ export function EditorPage({state,draft,editorEntry,asset,source,format,
           eraser={{widthMM:state.canvasTools?.fabricEraserWidthMM??4,style:state.canvasTools?.fabricEraserStyle||'standard'}}
           selectionMode={state.selectionMode||'contain'} selectionFilter={state.selectionFilter}
           selectedIDs={state.multiSelected||[]}
-          assetURL={loadFabricAsset} onSelection={onFabricSelection}
+          assetURL={loadFabricAsset} retainAssets={retainFabricAssets} onSelection={onFabricSelection}
           onBeforeChange={onFabricBeforeChange} onChange={onFabricChange} onIssue={onFabricIssue}
           onReady={canvas=>{if(canvas)editorFabricCanvases.set(draft.id,canvas);
             else editorFabricCanvases.delete(draft.id);}}/>

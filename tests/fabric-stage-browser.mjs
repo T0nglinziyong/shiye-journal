@@ -424,6 +424,23 @@ try{
   await sleep(600);
   assert.deepEqual(await evaluate(`(()=>{const o=window.__fabricCanvas.getActiveObject();return {id:o?.sceneID,proxy:!!o?.sceneSelectionProxy,edges:!!o?.controls.mr};})()`),
     {id:'delayed-top-level',proxy:false,edges:true},'Decoded top-level image keeps its real stretch controls');
+  await evaluate(`(()=>{const f=window.__fabricFixture;
+    f.draft.layers.push({id:'progressive-material',type:'material',assetID:'fabric-progressive',
+      x:430,y:740,width:100,height:100,zIndex:100});f.refresh();f.select(['progressive-material']);})()`);
+  for(let attempt=0;attempt<20;attempt++){
+    if(await evaluate('window.__fabricCanvas.getObjects().find(o=>o.sceneID==="progressive-material")?.getElement()?.width===16'))break;
+    await sleep(10);
+  }
+  assert.equal(await evaluate('window.__fabricCanvas.getObjects().find(o=>o.sceneID==="progressive-material")?.getElement()?.width'),16,
+    'A cover should paint before the sharp material finishes loading');
+  for(let attempt=0;attempt<60;attempt++){
+    if(await evaluate('window.__fabricCanvas.getObjects().find(o=>o.sceneID==="progressive-material")?.getElement()?.width===512'))break;
+    await sleep(25);
+  }
+  assert.deepEqual(await evaluate(`(()=>{const c=window.__fabricCanvas,o=c.getObjects().find(o=>o.sceneID==='progressive-material');
+    return {pixels:o?.getElement()?.width,selected:c.getActiveObject()?.sceneID,
+      x:o?.left,y:o?.top};})()`),{pixels:512,selected:'progressive-material',x:430,y:740},
+    'The sharp image replaces the cover in place without losing selection');
   console.log('Fabric stage browser check passed:',JSON.stringify({background,parity,coverParity,weaveParity,inkParity}),
     'screenshots /tmp/shiye-fabric-stage.png and /tmp/shiye-fabric-reference.png');
 }finally{await browser.close();}
