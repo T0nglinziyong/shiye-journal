@@ -41,36 +41,36 @@ const edgeIndex=p=>Math.abs(p[1])<1e-7?p[0]:Math.abs(p[0]-1)<1e-7?1+p[1]:
   Math.abs(p[1]-1)<1e-7?3-p[0]:Math.abs(p[0])<1e-7?4-p[1]:NaN;
 const corner=t=>[[0,0],[1,0],[1,1],[0,1],[0,0]][((t%4)+4)%4];
 
-// A cut must actually enter and leave the object's box. This avoids the
-// common surprise where an unpainted extension of a short gesture cuts other
-// layers. More than one crossing is rejected rather than guessing a topology.
-export function freeLinePartition(localPoints){
+// Each completed entry/exit through the object produces a partition. Keeping
+// the sections separate lets one continuous gesture create three or more
+// physical pieces without inventing an extension outside the drawn path.
+export function freeLinePartitions(localPoints){
   if(!Array.isArray(localPoints)||localPoints.length<2||localPoints.length>256||
     !localPoints.every(finite))throw Error('请画一条有效的自由切线');
   const inside=p=>p[0]>1e-7&&p[0]<1-1e-7&&p[1]>1e-7&&p[1]<1-1e-7;
-  if(inside(localPoints[0])||inside(localPoints.at(-1)))return null;
-  const path=[];let ended=false;
+  if(inside(localPoints[0])||inside(localPoints.at(-1)))return [];
+  const paths=[];let path=[];
   for(let i=1;i<localPoints.length;i++){
     const clipped=segmentClip(localPoints[i-1],localPoints[i]);
     if(!clipped||samePoint(...clipped))continue;
-    if(ended)throw Error('切线多次穿过对象，请分几次剪切');
-    if(path.length&&!samePoint(path.at(-1),clipped[0]))
-      throw Error('切线多次穿过对象，请分几次剪切');
+    if(path.length&&!samePoint(path.at(-1),clipped[0]))path=[];
     if(!path.length)path.push(clipped[0]);
     path.push(clipped[1]);
-    if(!inside(clipped[1]))ended=true;
+    if(!inside(clipped[1])){if(path.length>=2)paths.push(path);path=[];}
   }
-  if(path.length<2||!Number.isFinite(edgeIndex(path[0]))||
-    !Number.isFinite(edgeIndex(path.at(-1)))||samePoint(path[0],path.at(-1)))return null;
-  let from=edgeIndex(path.at(-1)),to=edgeIndex(path[0]);
-  if(to<=from)to+=4;
-  const boundary=[];
-  for(let edge=Math.floor(from)+1;edge<to-1e-8;edge++)boundary.push(corner(edge));
-  const first=normalizeGeometry([[ [...path,...boundary] ]]);
-  const remainder=geometryDifference(square,first);
-  if(geometryArea(first)<1e-5||geometryArea(remainder)<1e-5)return null;
-  return first;
+  return paths.flatMap(path=>{
+    if(!Number.isFinite(edgeIndex(path[0]))||
+      !Number.isFinite(edgeIndex(path.at(-1)))||samePoint(path[0],path.at(-1)))return [];
+    let from=edgeIndex(path.at(-1)),to=edgeIndex(path[0]);
+    if(to<=from)to+=4;
+    const boundary=[];
+    for(let edge=Math.floor(from)+1;edge<to-1e-8;edge++)boundary.push(corner(edge));
+    const first=normalizeGeometry([[ [...path,...boundary] ]]);
+    const remainder=geometryDifference(square,first);
+    return geometryArea(first)>=1e-5&&geometryArea(remainder)>=1e-5?[first]:[];
+  });
 }
+export const freeLinePartition=localPoints=>freeLinePartitions(localPoints)[0]||null;
 function presetRegion(preset,inset=.18){
   const v=Math.max(.025,Math.min(.45,Number(inset)||.18));
   if(preset==='window')return rectangleGeometry(v,v,1-2*v,1-2*v);
@@ -81,14 +81,14 @@ function presetRegion(preset,inset=.18){
   throw Error('未知的裁切预设');
 }
 function regionFor(node,spec){
-  if(spec.preset)return presetRegion(spec.preset,spec.inset);
+  if(spec.preset)return [presetRegion(spec.preset,spec.inset)];
   const local=(spec.points||[]).map(p=>scenePointToLocal(node,p));
   if(spec.pathType==='loop'){
-    if(local.length<3||local.length>256)return null;
+    if(local.length<3||local.length>256)return [];
     const loop=normalizeGeometry([[local]]);
-    return geometryIntersection(loop,square);
+    return [geometryIntersection(loop,square)];
   }
-  return freeLinePartition(local);
+  return freeLinePartitions(local);
 }
 function findLocation(nodes,id,parent=null){
   for(let index=0;index<nodes.length;index++){
@@ -102,13 +102,17 @@ function findLocation(nodes,id,parent=null){
 function candidates(draft,spec){
   const selected=spec.scope==='object'?findSceneNode(draft,spec.selectedID):null;
   if(spec.scope==='object'&&!selected)throw Error('请先选择要剪切的对象');
+  const targets=Array.isArray(spec.targetIDs)?new Set(spec.targetIDs):null;
+  if(spec.scope==='all'&&targets&&!targets.size)throw Error('请在剪刀设置中勾选要剪切的图层');
   const out=[];
-  const walk=(nodes,active=false,blocked=false)=>{
+  const walk=(nodes,active=false,blocked=false,included=false)=>{
     for(const node of nodes){
       const skip=blocked||node.hidden||node.isHidden||node.isParked||node.locked||node.isLocked;
       const target=active||node.id===selected?.id;
-      if(node.type==='group'){walk(node.children||[],target,skip);continue;}
+      const allowed=included||targets?.has(node.id);
+      if(node.type==='group'){walk(node.children||[],target,skip,allowed);continue;}
       if(skip||spec.scope==='object'&&!target)continue;
+      if(spec.scope==='all'&&targets&&!allowed)continue;
       if(['material','shape','text'].includes(node.type))out.push(node);
       else if(spec.operation==='split'&&node.type==='ink')out.push(node);
     }
@@ -116,19 +120,27 @@ function candidates(draft,spec){
   walk(draft.layers);
   return out;
 }
+function partitionGeometry(current,regions,epsilon){
+  let parts=[current];
+  for(const region of regions){
+    parts=parts.flatMap(part=>[geometryIntersection(part,region),geometryDifference(part,region)]
+      .flatMap(g=>g.map(poly=>[poly])).filter(g=>geometryArea(g)>epsilon));
+    if(parts.length>128)throw Error('一次剪切产生太多裁片，请缩短路径');
+  }
+  return parts;
+}
 function pieceOutline(node,geometry){
   const ring=geometry[0]?.[0]||[];
   return openRing(ring).map(p=>localPointToScene(node,p));
 }
-function materialParts(node,region,asset){
+function materialParts(node,regions,asset){
   if(!(asset?.physicalWidthMM>0&&asset?.physicalHeightMM>0))throw Error('素材缺少真实尺寸');
   if(node.vectorMask)throw Error('请先取消此素材的局部显示，再分割并分别设置蒙版');
   const crop=node.cropRect||{x:0,y:0,width:1,height:1};
   const map=p=>[(crop.x+p[0]*crop.width)*asset.physicalWidthMM,
     (crop.y+p[1]*crop.height)*asset.physicalHeightMM];
-  const current=itemSourceGeometry(node,asset),cut=transformGeometry(region,map);
-  const pieces=[geometryIntersection(current,cut),geometryDifference(current,cut)]
-    .flatMap(g=>g.map(poly=>[poly])).filter(g=>geometryArea(g)>AREA_EPSILON);
+  const current=itemSourceGeometry(node,asset),cuts=regions.map(region=>transformGeometry(region,map));
+  const pieces=partitionGeometry(current,cuts,AREA_EPSILON);
   if(pieces.length<2)return null;
   const area=pieces.reduce((sum,g)=>sum+geometryArea(g),0);
   if(Math.abs(area-geometryArea(current))>AREA_EPSILON)throw Error('裁片面积不守恒');
@@ -154,10 +166,8 @@ function materialParts(node,region,asset){
     return {next,outline:pieceOutline(node,local),area:geometryArea(g)};
   });
 }
-function vectorParts(node,region){
-  const current=polygon(node.vectorMask),pieces=[geometryIntersection(current,region),
-    geometryDifference(current,region)].flatMap(g=>g.map(poly=>[poly]))
-    .filter(g=>geometryArea(g)>1e-5);
+function vectorParts(node,regions){
+  const current=polygon(node.vectorMask),pieces=partitionGeometry(current,regions,1e-5);
   if(pieces.length<2)return null;
   return pieces.map(g=>({next:{...structuredClone(node),vectorMask:maskFromGeometry(g),
     cutParentId:node.cutParentId||node.id},outline:pieceOutline(node,g),area:geometryArea(g)}));
@@ -215,11 +225,12 @@ export function planSceneCut(draft,spec,assets,{uid=()=>crypto.randomUUID()}={})
   const pieces=[],affected=[];
   for(const original of candidates(trial,spec)){
     const loc=findLocation(trial.layers,original.id);if(!loc)continue;
-    const region=original.type==='ink'?null:regionFor(original,spec);
-    if(original.type!=='ink'&&(!region||geometryArea(region)<1e-5))continue;
+    const regions=original.type==='ink'?[]:regionFor(original,spec)
+      .filter(region=>geometryArea(region)>=1e-5);
+    if(original.type!=='ink'&&!regions.length)continue;
     if(spec.operation==='mask'){
       if(original.type==='ink')throw Error('请先将笔迹组合，再在组上设置局部显示');
-      const current=polygon(original.vectorMask),next=spec.hideRegion?
+      const current=polygon(original.vectorMask),region=geometryUnion(...regions),next=spec.hideRegion?
         geometryDifference(current,region):geometryIntersection(current,region);
       if(geometryArea(next)<1e-5)throw Error('局部显示不能隐藏整个对象');
       original.vectorMask=maskFromGeometry(next);affected.push(original.id);
@@ -227,8 +238,8 @@ export function planSceneCut(draft,spec,assets,{uid=()=>crypto.randomUUID()}={})
         outline:pieceOutline(original,next),area:geometryArea(next),type:original.type});
       continue;
     }
-    const result=original.type==='material'?materialParts(original,region,records.get(original.assetID)):
-      original.type==='ink'?inkParts(original,spec):vectorParts(original,region);
+    const result=original.type==='material'?materialParts(original,regions,records.get(original.assetID)):
+      original.type==='ink'?inkParts(original,spec):vectorParts(original,regions);
     if(!result)continue;
     const group=uid(),nodes=result.map(({next,outline,area},index)=>{
       const key=original.id+':'+index;

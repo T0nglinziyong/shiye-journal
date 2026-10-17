@@ -2,54 +2,69 @@ import React,{useEffect,useState} from 'react';
 import './sync-dashboard.css';
 import {Dialog} from './react-utility-dialogs.jsx';
 
-export function SyncDetailsDialog({details,projects,batches,local,quarantined,legacyCount,
+export function SyncDetailsDialog({details,projects,batches,local,quarantined,legacyCount,pendingCount=0,
   error,status,conflicts=0,onClose,onDiagnostics,onMigrate,onBackupLegacy,onWipe,
-  onRetry,onPause,onEmergency,onRefresh}){
+  onRetry,onRebuild,onPause,onEmergency,onRefresh}){
   const [message,setMessage]=useState(`状态：${status}`),[busy,setBusy]=useState(false);
-  const [live,setLive]=useState(null),[shown,setShown]=useState(40);
+  const [live,setLive]=useState(null),[shown,setShown]=useState(40),[showList,setShowList]=useState(false),
+    [listBusy,setListBusy]=useState(false);
   useEffect(()=>{
-    if(!onRefresh)return;
-    let disposed=false,reading=false;
-    const refresh=async()=>{
-      if(reading)return;reading=true;
-      try{const next=await onRefresh();if(!disposed)setLive(next);}catch{/* Keep last known state. */}
-      finally{reading=false;}
-    };
-    const timer=setInterval(()=>void refresh(),2000);
-    return ()=>{disposed=true;clearInterval(timer);};
-  },[onRefresh]);
+    if(!onRefresh||!showList)return;
+    let disposed=false;
+    setListBusy(true);
+    void onRefresh().then(next=>{if(!disposed){setLive(next);setMessage(`状态：${next.status}`);}})
+      .catch(()=>{}).finally(()=>{if(!disposed)setListBusy(false);});
+    return ()=>{disposed=true;};
+  },[onRefresh,showList]);
+  const refreshList=async()=>{
+    if(listBusy||!onRefresh)return;setListBusy(true);
+    try{const next=await onRefresh();setLive(next);setMessage(`状态：${next.status}`);}
+    catch{setMessage('状态：列表暂不可读取，上传仍在后台继续');}
+    finally{setListBusy(false);}
+  };
   if(live)({details,projects,batches,local,quarantined,error,status,conflicts}=live);
   const retry=async()=>{
-    if(busy)return;setBusy(true);setMessage('状态：正在按本机当前数据重建同步队列…');
+    if(busy)return;setBusy(true);setMessage('状态：正在安排上传…');
     try{const result=await onRetry(),remaining=typeof result==='number'?result:result.remaining,
       currentConflicts=typeof result==='number'?conflicts:result.conflicts;
       setMessage(remaining?`状态：仍有 ${remaining} 项待同步${currentConflicts?'，正在自动处理版本差异':'；请查看最近错误或稍后重试'}`:'状态：已同步到云端');}
     catch(cause){setMessage('状态：待重试 · 本机修改已保留；稍后自动重试');}
     finally{setBusy(false);}
   };
-  const total=projects.length+batches.length+local.length;
+  const rebuild=async()=>{
+    if(busy)return;setBusy(true);setMessage('状态：正在重建同步队列…');
+    try{await onRebuild();setMessage('状态：队列已重建，正在后台上传');
+      if(showList)setLive(await onRefresh());}
+    catch(cause){setMessage('状态：队列重建未完成 · 本机修改已保留');}
+    finally{setBusy(false);}
+  };
+  const total=live?projects.length+batches.length+local.length:
+    Math.max(pendingCount,projects.length+batches.length+local.length);
   const names={assets:'素材',series:'系列',projects:'作品',blobs:'图片',meta:'设置',trash:'最近删除'};
-  const rows=[...projects.map(row=>({key:'p-'+row.id,title:row.title||'未命名作品',kind:'作品',failure:row.failureClass})),
+  const rows=!showList?[]:[...projects.map(row=>({key:'p-'+row.id,title:row.title||'未命名作品',kind:'作品',failure:row.failureClass})),
     ...batches.flatMap(row=>row.items.map((item,index)=>({key:row.id+'-'+index,
       title:(item.store==='meta'?names[item.store]:item.title)||names[item.store]||'资料',kind:item.action==='delete'?'删除':names[item.store]||'资料',failure:row.failureClass}))),
     ...local.map(row=>({key:'l-'+row.id,title:row.title||'未命名作品',kind:'保存到本机',failure:'local'}))];
   return <Dialog title="同步详情" onClose={onClose}><div className="sync-dashboard">
     <h2>同步</h2><section className="sync-summary" aria-live="polite">
-      <strong id="sync-detail-status" role="status">{busy?message:status}</strong>
+      <strong id="sync-detail-status" role="status">{message}</strong>
       <p>{total?`${total} 项等待完成，上传会在后台继续。`:quarantined||legacyCount?'旧数据待检查，详情见下方数据维护。':'没有待上传的本机修改。'}</p>
       <p className="muted">版本差异自动处理；作品画面发生冲突时，双方都会保留。</p>
     </section>
     {error||details.error?<p className="sync-error" role="status">{error||details.error}<br/>本机资料已保留，网络恢复后会自动重试。</p>:null}
-    <div className="actions"><button type="button" className="btn primary" id="sync-retry-now" disabled={busy} onClick={()=>void retry()}>{busy?'正在同步…':'重建队列并同步'}</button>
+    <div className="actions"><button type="button" className="btn primary" id="sync-retry-now" disabled={busy} onClick={()=>void retry()}>{busy?'正在安排…':'立即同步'}</button>
       <button type="button" className="btn" id="sync-export-diagnostics" onClick={onDiagnostics}>导出详细同步诊断</button></div>
-    {rows.length?<section><h3>待同步内容</h3><div className="sync-pending-list"><ul>
+    <section><button type="button" className="btn" id="sync-show-pending" onClick={()=>setShowList(value=>!value)}>{showList?'收起待同步内容':'查看待同步内容'}</button>
+    {showList?<button type="button" className="btn" id="sync-refresh-pending" disabled={listBusy} onClick={()=>void refreshList()}>{listBusy?'正在读取…':'刷新列表'}</button>:null}
+    {showList&&rows.length?<><h3>待同步内容</h3><div className="sync-pending-list"><ul>
       {rows.slice(0,shown).map(row=><li key={row.key}><div><strong>{row.title}</strong><small>{row.kind}</small></div>
         <span>{row.failure==='invalid'?'等待格式修复':row.failure==='local'?'正在暂存':row.failure?'等待重试':'等待上传'}</span></li>)}
-    </ul></div>{rows.length>shown?<button type="button" className="btn" onClick={()=>setShown(count=>count+40)}>显示更多（剩余 {rows.length-shown} 项）</button>:null}</section>:null}
+    </ul></div>{rows.length>shown?<button type="button" className="btn" onClick={()=>setShown(count=>count+40)}>显示更多（剩余 {rows.length-shown} 项）</button>:null}</>:null}</section>
     <section className="sync-maintenance"><h3>数据维护</h3>
       <p>重建队列会根据本机当前数据重新安排上传，保留待传图片和删除操作。</p>
       {quarantined||legacyCount?<p>有 {quarantined+legacyCount} 项旧数据需要检查格式，原始资料仍保留。</p>:null}
       <div className="actions">
+        <button type="button" className="btn" id="sync-rebuild-queue" disabled={busy} onClick={()=>void rebuild()}>重建同步队列</button>
         <button type="button" className="btn" id="sync-migrate-account" onClick={onMigrate}>检查并转换旧格式</button>
         {legacyCount?<button type="button" className="btn" id="sync-backup-legacy-works" onClick={onBackupLegacy}>导出旧作品备份</button>:null}
         <button type="button" className="btn" id="sync-pause-local" onClick={onPause}>暂停／恢复后台重试</button>

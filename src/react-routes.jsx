@@ -1039,10 +1039,8 @@ function MaterialCropControls({item,record,onApply}){
     {[['width','宽度',minW,1-crop.x],['height','高度',minH,1-crop.y],
       ['x','左右位置',0,1-crop.width],['y','上下位置',0,1-crop.height]]
       .map(([key,label,min,max])=><label key={key}>{label} · {Math.round(crop[key]*100)}%
-        <div className="editor-crop-slider"><button type="button" onClick={()=>change(key,min)}>最小</button>
-          <input type="range" aria-label={label} min={min} max={Math.max(min,max)} step="0.01"
-            value={crop[key]} onChange={event=>change(key,event.target.value)}/>
-          <button type="button" onClick={()=>change(key,Math.max(min,max))}>最大</button></div>
+        <div className="editor-crop-slider"><input type="range" aria-label={label} min={min} max={Math.max(min,max)} step="any"
+          value={crop[key]} onChange={event=>change(key,event.target.value)}/></div>
       </label>)}
     <button type="button" className="btn mini" disabled={!item.cropRect}
       onClick={()=>apply(null)}>恢复完整素材</button>
@@ -1058,9 +1056,7 @@ function EditorInspector({selected,draft,asset,format,onChange,onAction,material
   };
   const field=(id,label,value,type='number',props={})=>type==='range'?<label className="editor-inspector-range">
     <span>{label} · {Number(props.max)===1?`${Math.round(Number(value)*100)}%`:value}</span><div>
-      <button type="button" aria-label={`${label}最小值`} onClick={()=>onChange(id,String(props.min))}>最小</button>
       <input id={id} type="range" value={value} onChange={event=>onChange(id,event.target.value)} {...props}/>
-      <button type="button" aria-label={`${label}最大值`} onClick={()=>onChange(id,String(props.max))}>最大</button>
     </div></label>:<label>{label}<input id={id} type={type}
     defaultValue={value} onChange={event=>onChange(id,event.target.value)} {...props}/></label>;
   const choice=(id,label,value,options)=><label>{label}<select id={id} value={value}
@@ -1265,6 +1261,14 @@ export function EditorPage({state,draft,editorEntry,asset,source,format,
   const availableHeight=Math.max(180,viewportHeight-(window.innerWidth<700?200:166));
   const width=Math.max(160,Math.min(availableWidth,availableHeight*draft.canvas.width/draft.canvas.height));
   const scale=width/draft.canvas.width,height=draft.canvas.height*scale;
+  const selectCutTarget=event=>{
+    const canvas=editorFabricCanvases.get(draft.id);if(!canvas)return;
+    const {scene:point,viewport}=fabricPointer(canvas,event),seen=new Set();
+    const hits=[...canvas.getObjects()].reverse().filter(object=>
+      selectableFabricObjectAt(canvas,object,point,viewport,{includeInk:true})).map(object=>object.sceneID)
+      .filter(id=>id&&!seen.has(id)&&seen.add(id));
+    if(hits.length)onAction('fabric-cut-target',hits,{x:event.clientX,y:event.clientY});
+  };
   return <><div className="view-head swift-editor-head">
     <button className="btn" data-act="back-works">返回</button>
     <div><h1 contentEditable suppressContentEditableWarning id="project-title"
@@ -1297,7 +1301,7 @@ export function EditorPage({state,draft,editorEntry,asset,source,format,
       <button className="btn mini" data-act="park" disabled={selected?.kind!=='material'}>放入备选</button>
     </div><div className="page-wrap"><FabricPageViewport draft={draft} width={width} height={height}
       tool={state.tool} onCanvasTap={event=>{
-        if(state.tool==='scissors')return;
+        if(state.tool==='scissors'){selectCutTarget(event);return;}
         const canvas=editorFabricCanvases.get(draft.id);
         if(!canvas)return;
         const {scene:point,viewport}=fabricPointer(canvas,event);
@@ -1345,7 +1349,8 @@ export function EditorPage({state,draft,editorEntry,asset,source,format,
         <FabricSceneStage draft={draft} sceneRevision={sceneRevision} tool={state.tool}
           selectedID={state.selected}
           cutPreview={state.cutPreview}
-          onCutPath={points=>onAction('fabric-cut-preview',points)}
+          onCutPath={(points,closed)=>onAction('fabric-cut-preview',points,closed?'loop':'line')}
+          onCutTap={selectCutTarget}
           textDefaults={state.textDefaults||null}
           pen={{widthMM:state.canvasTools?.fabricPenWidthMM??.5,color:state.canvasTools?.penColor||'#2b5245',
             style:state.canvasTools?.fabricPenStyle||'pressure'}}

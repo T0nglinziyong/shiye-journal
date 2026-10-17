@@ -61,6 +61,39 @@ test('all-layer cut skips locked and hidden nodes and invalid cut stays atomic',
   assert.deepEqual(draft,original);
 });
 
+test('one continuous line can split a material into three physical pieces',()=>{
+  const result=planSceneCut(scene(),{...split,points:[[-10,130],[410,130],[410,250],[-10,250]]},[asset],{uid});
+  assert.equal(result.pieces.length,3);
+  assert.equal(validateScenePhysical(result.draft,[asset]),true);
+  assert.ok(Math.abs(buildMaterialLedger(result.draft,[asset]).units[0].usedAreaMM2-8000)<1e-5);
+});
+
+test('explicit all-layer targets leave other intersected layers unchanged',()=>{
+  const draft=scene();draft.layers.push({...structuredClone(source),id:'other',x:200,y:200,
+    assetID:'other-source',zIndex:4});
+  const result=planSceneCut(draft,{...split,scope:'all',targetIDs:['piece']},[asset],{uid});
+  assert.deepEqual(result.affected,['piece']);
+  assert.ok(result.draft.layers.some(node=>node.id==='other'));
+  assert.throws(()=>planSceneCut(draft,{...split,scope:'all',targetIDs:[]},[asset],{uid}));
+});
+
+test('an underlying material can be split although another material covers it',()=>{
+  const draft=scene(),cover={...structuredClone(source),id:'cover',assetID:'cover-source',zIndex:10};
+  draft.layers.push(cover);
+  const result=planSceneCut(draft,split,[asset,{...asset,id:'cover-source'}],{uid});
+  assert.deepEqual(result.affected,['piece']);
+  assert.ok(result.draft.layers.some(node=>node.id==='cover'));
+  assert.equal(result.pieces.length,2);
+  assert.equal(validateScenePhysical(result.draft,[asset,{...asset,id:'cover-source'}]),true);
+});
+
+test('preset width changes the actual cut geometry',()=>{
+  const narrow=planSceneCut(scene(),{...split,preset:'window',inset:.1},[asset],{uid});
+  const wide=planSceneCut(scene(),{...split,preset:'window',inset:.3},[asset],{uid});
+  assert.notDeepEqual(narrow.pieces.map(piece=>Math.round(piece.area)),
+    wide.pieces.map(piece=>Math.round(piece.area)));
+});
+
 test('shape and text split into independent visible regions; ink cuts at intersections',()=>{
   const draft=project('图形').drafts[0],shape={...primitive('rectangle',draft),id:'shape',type:'shape',
     x:200,y:200,width:160,height:100},text={...textBlock('剪切',draft),id:'text',type:'text',

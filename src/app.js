@@ -1281,6 +1281,9 @@ async function runAppAction(action,id,value){try{switch(action){
   case 'works-filter':await actionStore.dispatch({type:'works/filter',payload:{value}});break;
   case 'fabric-tool':{
     const leavingLasso=state.tool==='lasso'&&value!=='lasso';
+    if(state.tool==='scissors'&&value!=='scissors'){
+      state.cutSettings={...state.cutSettings,locked:false,targetIDs:[]};state.cutTap=null;
+    }
     if(state.tool!==value)state.cutPreview=null;
     state.tool=value;
     if(leavingLasso||!['select','lasso','scissors'].includes(value)){state.selected=null;state.multiSelected=[];}
@@ -1288,19 +1291,40 @@ async function runAppAction(action,id,value){try{switch(action){
     render();break;
   }
   case 'fabric-cut-setting':{
-    state.cutSettings={operation:'split',scope:'object',pathType:'line',inset:.18,
-      hideRegion:false,...state.cutSettings,[id]:value};
+    const previous=state.cutPreview;
+    state.cutSettings={operation:'split',scope:'object',inset:.18,
+      hideRegion:true,targetIDs:[],locked:false,...state.cutSettings,[id]:value};
     if(id==='operation'&&value==='mask')state.cutSettings.scope='object';
+    if(id==='scope'&&value==='all'&&!state.cutSettings.targetIDs.length&&state.selected)
+      state.cutSettings.targetIDs=[state.selected];
+    state.cutPreview=id==='locked'?previous:null;
+    if(previous&&id==='inset'&&previous.spec.preset)
+      void handle('fabric-cut-preview',previous.spec.preset);
+    else if(previous&&id==='hideRegion')
+      void handle('fabric-cut-preview',previous.spec.preset||previous.spec.points,previous.spec.pathType);
+    else render();break;
+  }
+  case 'fabric-cut-target':{
+    if(state.cutSettings?.locked)break;
+    const hits=Array.isArray(id)?id:[];
+    if(!hits.length)break;
+    const previous=state.cutTap;
+    const same=previous&&Date.now()-previous.at<2200&&
+      Math.hypot((value?.x||0)-previous.x,(value?.y||0)-previous.y)<20&&
+      JSON.stringify(previous.hits)===JSON.stringify(hits);
+    const index=same?Math.max(-1,hits.indexOf(state.selected)):-1;
+    state.selected=hits[(index+1)%hits.length];state.multiSelected=[state.selected];
+    state.cutTap={x:value?.x||0,y:value?.y||0,at:Date.now(),hits};
     state.cutPreview=null;render();break;
   }
   case 'fabric-cut-preview':{
     const d=current();if(!d)break;
-    const settings={operation:'split',scope:'object',pathType:'line',inset:.18,
-      hideRegion:false,...state.cutSettings};
+    const settings={operation:'split',scope:'object',inset:.18,
+      hideRegion:true,targetIDs:[],...state.cutSettings};
     const spec={...settings,selectedID:state.selected,
       points:Array.isArray(id)?id:[],preset:typeof id==='string'?id:null};
-    if(spec.operation==='mask'&&spec.preset)
-      spec.hideRegion=['window','edge','ring'].includes(spec.preset);
+    delete spec.locked;
+    spec.pathType=Array.isArray(id)&&value==='loop'?'loop':'line';
     try{
       const plan=planSceneCut(d,spec,state.assets);
       const keepKeys=plan.pieces.filter(piece=>piece.area===
@@ -1329,7 +1353,7 @@ async function runAppAction(action,id,value){try{switch(action){
       const plan=planSceneCut(d,{...preview.spec,keepKeys:preview.keepKeys},state.assets);
       validateScenePhysical(plan.draft,state.assets);
       checkpoint();d.layers=plan.draft.layers;saveProject();
-      state.cutPreview=null;state.tool='select';
+      state.cutPreview=null;
       state.selected=plan.pieces.find(piece=>!piece.parked)?.nodeID||plan.affected[0]||null;
       state.multiSelected=state.selected?[state.selected]:[];
       render();toast(preview.spec.operation==='mask'?'局部显示已应用':'裁片已生成，其他部分已放入备选');
@@ -3250,8 +3274,14 @@ async function syncDetailsSnapshot(){
 async function openSyncDetails(){
   if(!cloudEnabled)return;
   try{
-    const {details,projects,batches,local,quarantined,status}=await syncDetailsSnapshot();
+    // Opening the status sheet must not enumerate a potentially huge durable
+    // outbox on the same main thread as the editor.
+    const details={error:null},projects=[],batches=[],local=[...dirtyProjects.values()],
+      quarantined=db.syncDiagnosticReport({online:navigator.onLine})?.state?.quarantined||0,
+      status=syncPausedByUser?'已暂停 · 本机修改仍保留':syncDisplay.uploading?'上传中':
+        syncDisplay.pending||local.length?'等待上传':'已同步';
     openOverlay(createElement(SyncDetailsDialog,{details,projects,batches,local,quarantined,
+      pendingCount:syncDisplay.pending,
       onRefresh:syncDetailsSnapshot,legacyCount:db.legacyProjectInfo?.()?.length||0,
       error:syncDisplay.error?describeSyncError(syncDisplay.error):null,status,conflicts:syncDisplay.conflicts,
       onClose:()=>{closeOverlay();if(!syncPausedByUser&&!resetWorkflowActive)void cloudResumer.resume();},
@@ -3261,14 +3291,16 @@ async function openSyncDetails(){
       onRetry:async()=>{
         syncPausedByUser=false;
         await flushSave();
+        void cloudResumer.resume();
+        const current=db.syncDiagnosticReport({online:navigator.onLine})?.state;
+        return {remaining:current?.pending??syncDisplay.pending,
+          conflicts:current?.conflicts??syncDisplay.conflicts};
+      },onRebuild:async()=>{
+        syncPausedByUser=false;
+        await flushSave();
         await db.rebuildPendingSync({projects:state.projects,assets:state.assets,
           series:state.series,trash:state.trash});
-        try{await db.flushProjects();}
-        catch(error){
-          const current=db.syncDiagnosticReport({online:navigator.onLine})?.state;
-          if(!current?.conflicts){toast('同步待重试：'+describeSyncError(error));throw error;}
-          toast('正在处理版本差异，本机修改已保留');
-        }
+        void cloudResumer.resume();
         const current=db.syncDiagnosticReport({online:navigator.onLine})?.state;
         const remaining=current?.pending??syncDisplay.pending;
         if(!remaining)toast('已同步到云端');

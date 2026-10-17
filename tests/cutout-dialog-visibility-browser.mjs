@@ -153,12 +153,7 @@ try{
     await click('[data-cut-step="recognition"]');
     assert.ok((await evaluate('document.querySelector(".cutout-steps .current")?.textContent'))
       .includes('边缘优化'),'editor controls must respond after native handoff');
-    await click('.cutout-bounded-slider button:last-child');
-    assert.equal(await evaluate('document.querySelector("#cutout-strength")?.value'),'20',
-      'Cutout brush control reaches its maximum through the end button');
-    await click('.cutout-bounded-slider button:first-child');
-    assert.equal(await evaluate('document.querySelector("#cutout-strength")?.value'),'0.5',
-      'Cutout brush control reaches its minimum through the end button');
+    assert.equal(await evaluate('document.querySelectorAll(".cutout-bounded-slider button").length'),0);
     const slider=await evaluate(`(()=>{const rect=document.querySelector('#cutout-strength').getBoundingClientRect();
       return {left:rect.left+1,right:rect.right-1,y:rect.top+rect.height/2}})()`);
     await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,

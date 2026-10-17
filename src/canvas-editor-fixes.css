@@ -184,7 +184,7 @@
 .fabric-selected-actions button{display:grid;place-items:center;min-width:30px;width:30px;height:28px;
  border-radius:6px;font-size:19px;line-height:1}
 .fabric-selected-actions button:hover,.fabric-selected-actions button:focus-visible{background:#e6f0e8}
-.editor-inspector-range>div,.editor-crop-slider{display:grid;grid-template-columns:auto minmax(0,1fr) auto;
+.editor-inspector-range>div,.editor-crop-slider{display:grid;grid-template-columns:minmax(0,1fr);
  align-items:center;gap:7px;margin-top:5px;min-width:0}
 .editor-inspector-range input[type=range],.editor-crop-slider input[type=range]{
  width:100%;min-width:0;margin:0;accent-color:#52634b;touch-action:none}
@@ -192,7 +192,7 @@
  border:1px solid #d5dfd4;border-radius:8px;background:#f8faf5;color:#405849;font-size:12px}
 .editor-crop-controls{display:grid;gap:9px;margin-top:9px}
 .editor-crop-controls>label{min-width:0}
-.cutout-bounded-slider{display:grid;grid-template-columns:auto minmax(0,1fr) auto;
+.cutout-bounded-slider{display:grid;grid-template-columns:minmax(0,1fr);
  align-items:center;gap:8px;min-width:0;margin-top:5px}
 .cutout-bounded-slider input[type=range]{width:100%;min-width:0;margin:0!important;touch-action:none}
 .cutout-bounded-slider button{min-height:30px;padding:3px 7px;border:1px solid #d5dfd4;

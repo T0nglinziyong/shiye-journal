@@ -51,7 +51,7 @@ test('font size arrows select discrete print-friendly sizes without opening keyb
 test('proposed viewport is bounded before painting at every zoom and drag position',async()=>{
   const {boundedCanvasViewport}=await import('../src/canvas-control-behavior.js');
   for(const [width,height,hostWidth,hostHeight] of [[550,389,588,1000],[950,672,1024,600],[400,800,430,700]])
-    for(const scale of [1,1.1,2,4])for(const x of [-10000,-100,0,100,10000])for(const y of [-10000,0,10000]){
+    for(const scale of [1,1.1,2,4,8])for(const x of [-10000,-100,0,100,10000])for(const y of [-10000,0,10000]){
       const pose=boundedCanvasViewport({scale,x,y},{width,height,hostWidth,hostHeight});
       for(const [size,available,offset] of [[width,hostWidth,pose.x],[height,hostHeight,pose.y]]){
         const start=(available-size*scale)/2+offset*scale,end=start+size*scale;
@@ -59,4 +59,5 @@ test('proposed viewport is bounded before painting at every zoom and drag positi
         else {assert.ok(start<=12.001);assert.ok(end>=available-12.001);}
       }
     }
+  assert.equal(boundedCanvasViewport({scale:20},{width:400,height:800,hostWidth:430,hostHeight:700}).scale,8);
 });

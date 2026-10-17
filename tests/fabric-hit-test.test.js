@@ -21,6 +21,20 @@ test('transparent pixels do not select any object kind',()=>{
   }
 });
 
+test('scissors can target painted ink while a normal canvas tap still ignores it',()=>{
+  const ink={sceneType:'ink',selectable:false,evented:false,...rect(10,10,2,40)};
+  assert.equal(selectableFabricObjectAt(canvas,ink,{x:11,y:20},{x:11,y:20}),false);
+  assert.equal(selectableFabricObjectAt(canvas,ink,{x:11,y:20},{x:11,y:20},{includeInk:true}),true);
+});
+
+test('thin shape hit tolerance stops before a distant transparent interior',()=>{
+  const shape={sceneType:'shape',...rect(10,10,2,40)};
+  const painted={isTargetTransparent:(_,x)=>x<10||x>12,
+    upperCanvasEl:{getBoundingClientRect:()=>({width:400})},width:400};
+  assert.equal(selectableFabricObjectAt(painted,shape,{x:5,y:20},{x:5,y:20}),true);
+  assert.equal(selectableFabricObjectAt(painted,shape,{x:30,y:20},{x:30,y:20}),false);
+});
+
 
 test('active frame uses cached event targets without recalculating control corners',()=>{
   const cached={target:{id:'current'}};

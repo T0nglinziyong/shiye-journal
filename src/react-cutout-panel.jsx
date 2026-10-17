@@ -3,10 +3,8 @@ import React from 'react';
 const steps=[['rough','修补轮廓'],['recognition','边缘优化'],['final','调整外观']];
 function BoundedSlider({id,min,max,step=1,value,disabled=false,onChange}){
   return <div className="cutout-bounded-slider">
-    <button type="button" aria-label={`${id}最小值`} disabled={disabled} onClick={()=>onChange(Number(min))}>最小</button>
     <input id={id} type="range" min={min} max={max} step={step} value={value}
       disabled={disabled} onChange={event=>onChange(Number(event.target.value))}/>
-    <button type="button" aria-label={`${id}最大值`} disabled={disabled} onClick={()=>onChange(Number(max))}>最大</button>
   </div>;
 }
 function Toggle({id,label,description,checked,onChange}){

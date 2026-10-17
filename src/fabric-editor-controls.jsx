@@ -6,6 +6,7 @@ import {commonShapes,advancedShapes,configureShape,shapeThumbnailSVG} from './ed
 import {primitive} from './domain.js';
 import {iconMarkup} from './icons.js';
 import {adjacentFontSize} from './canvas-control-behavior.js';
+import {sceneLayerEntries} from './scene-v2.js';
 
 const toolIcons={select:'cursor',pen:'pen',eraser:'eraser',highlighter:'marker',lasso:'lasso',scissors:'scissors',text:'text',shape:'shape',material:'material',layers:'layers',paper:'paper'};
 const labels={select:'选择',pen:'笔',eraser:'橡皮擦',highlighter:'荧光笔',lasso:'套索选择',scissors:'剪刀',text:'文字',shape:'图形',material:'素材',layers:'图层',paper:'画布背景'};
@@ -288,6 +289,13 @@ export function FabricEditorToolbar({state,draft,materials,source,selected,onIns
   const editObject=(id,value)=>onInspectorChange(id,value);
   const textMode=selectedKind==='text'||activeTool==='text';
   const text=selectedKind==='text'?selectedNode:state.textDefaults||{style:'serif',fontSize:40,color:'#30463d',alignment:'left'};
+  const cutSettings={operation:'split',scope:'object',targetIDs:[],hideRegion:true,...state.cutSettings};
+  const materialTitles=new Map(materials.map(asset=>[asset.id,asset.title]));
+  const cutTargets=sceneLayerEntries(draft,{hidden:true,ink:true}).filter(entry=>
+    !entry.value.hidden&&!entry.value.isHidden&&!entry.value.isParked&&!entry.value.locked&&
+    !entry.value.isLocked&&entry.parents.every(parent=>!parent.hidden&&!parent.isHidden&&
+      !parent.locked&&!parent.isLocked)&&
+    (cutSettings.operation==='split'||entry.kind!=='ink'));
   const textProperty=(key,value)=>onAction('fabric-text-property',key,value);
   const shapeProperty=(key,value)=>onAction('fabric-shape-property',key,value);
   const arrangeButton=<button type="button" data-popover-anchor="arrange"
@@ -395,7 +403,26 @@ export function FabricEditorToolbar({state,draft,materials,source,selected,onIns
         <input type="checkbox" checked={!!state.selectionFilter?.lockInk}
           onChange={event=>onAction('fabric-selection-filter','lockInk',event.target.checked)}/></label>
     </div>:null}
-    {menu.kind==='scissors'?<div className="stack"><p>直接在画布上画线，浮动面板可选择当前对象、全部图层或局部显示。</p>
+    {menu.kind==='scissors'?<div className="stack canvas-cut-settings">
+      <span>操作</span><div className="fabric-cut-row" role="group" aria-label="操作方式">
+        {[['split','分成多片'],['mask','局部显示']].map(([key,label])=><button key={key}
+          type="button" aria-pressed={cutSettings.operation===key}
+          onClick={()=>onAction('fabric-cut-setting','operation',key)}>{label}</button>)}
+      </div>
+      {cutSettings.operation==='split'?<><span>作用范围</span><div className="fabric-cut-row" role="group" aria-label="剪切范围">
+        {[['object','当前对象'],['all','指定多个图层']].map(([key,label])=><button key={key}
+          type="button" aria-pressed={cutSettings.scope===key}
+          onClick={()=>onAction('fabric-cut-setting','scope',key)}>{label}</button>)}
+      </div></>:null}
+      {cutSettings.scope==='all'&&cutSettings.operation==='split'?<div className="canvas-cut-targets" role="group" aria-label="选择要剪切的图层">
+        {cutTargets.map((entry,index)=><label key={entry.value.id}><input type="checkbox"
+          checked={cutSettings.targetIDs.includes(entry.value.id)}
+          onChange={event=>onAction('fabric-cut-setting','targetIDs',event.target.checked?
+            [...cutSettings.targetIDs,entry.value.id]:cutSettings.targetIDs.filter(id=>id!==entry.value.id))}/>
+          {entry.value.title||entry.value.name||materialTitles.get(entry.value.assetID)||
+            (({material:'素材',shape:'图形',text:'文字',ink:'笔迹'}[entry.kind]||'对象')+' '+(index+1))}</label>)}
+      </div>:null}
+      <p>短按选择对象，再次短按同一位置可切换到被遮挡的对象；拖动时画切线。闭合路径会自动识别为区域。</p>
       <button type="button" onClick={()=>{close();onAction('fabric-tool',null,'select');}}>退出剪刀</button></div>:null}
     {menu.kind==='arrange'?<div className="canvas-arrange-menu">
       <span>对齐所选</span><div>{[['left','左边'],['center','水平居中'],['right','右边'],

@@ -466,7 +466,10 @@ try{
   await click('.editor-inspector-geometry summary','.editor-crop-slider');
   assert.equal(await evaluate('!!document.querySelector(".editor-inspector-geometry textarea")'),false,
     'Material cropping should use direct controls instead of JSON');
-  await click('.editor-crop-slider button:first-child');await sleep(700);
+  await evaluate(`(()=>{const input=document.querySelector('.editor-crop-slider input[type=range]');
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,input.min);
+    input.dispatchEvent(new Event('input',{bubbles:true}));input.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+  await sleep(700);
   assert.ok((await projects())[0].drafts[0].layers.some(layer=>layer.type==='material'&&layer.manualGeometryOverride),
     'Material craft geometry must be editable through the Scene inspector: '+
       JSON.stringify({status:await evaluate(`document.querySelector('.editor-inspector-geometry [role=status]')?.textContent`),

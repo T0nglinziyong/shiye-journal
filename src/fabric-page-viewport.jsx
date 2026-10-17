@@ -1,5 +1,5 @@
 import React,{useLayoutEffect,useRef} from 'react';
-import {boundedCanvasViewport,fingerNavigatesCanvas,isIPadPointerDevice} from './canvas-control-behavior.js';
+import {boundedCanvasViewport,fingerNavigatesCanvas,isIPadPointerDevice,MAX_CANVAS_ZOOM} from './canvas-control-behavior.js';
 
 // Constrain the proposed transform before painting it. No out-of-bounds frame
 // or delayed correction is ever sent to CSS, including during a pinch.
@@ -25,7 +25,7 @@ export function FabricPageViewport({draft,width,height,zoom=1,initialPan,onViewp
       page.dispatchEvent(new CustomEvent('panzoomchange',{detail:pose}));
     };
     const zoomAt=(scale,cx=host.clientWidth/2,cy=host.clientHeight/2)=>{
-      scale=Math.max(1,Math.min(4,scale));
+      scale=Math.max(1,Math.min(MAX_CANVAS_ZOOM,scale));
       const dx=cx-host.clientWidth/2,dy=cy-host.clientHeight/2;
       paint({scale,x:pose.x+dx/scale-dx/pose.scale,y:pose.y+dy/scale-dy/pose.scale});
     };
@@ -75,7 +75,7 @@ export function FabricPageViewport({draft,width,height,zoom=1,initialPan,onViewp
       }else{
         const after=[...active.values()],mid=a=>({x:(a[0].x+a[1].x)/2,y:(a[0].y+a[1].y)/2}),
           distance=a=>Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y),a=mid(before),b=mid(after),
-          bounds=host.getBoundingClientRect(),scale=Math.max(1,Math.min(4,pose.scale*distance(after)/Math.max(1,distance(before))));
+          bounds=host.getBoundingClientRect(),scale=Math.max(1,Math.min(MAX_CANVAS_ZOOM,pose.scale*distance(after)/Math.max(1,distance(before))));
         const ax=a.x-bounds.left-host.clientWidth/2,ay=a.y-bounds.top-host.clientHeight/2,
           bx=b.x-bounds.left-host.clientWidth/2,by=b.y-bounds.top-host.clientHeight/2;
         paint({scale,x:pose.x+bx/scale-ax/pose.scale,y:pose.y+by/scale-ay/pose.scale});
@@ -131,7 +131,7 @@ export function FabricPageViewport({draft,width,height,zoom=1,initialPan,onViewp
         if(Math.hypot(dx,dy)>0){fallbackMoved=true;paint({...pose,x:pose.x+dx/pose.scale,y:pose.y+dy/pose.scale});}
       }else if(after.length>=2){
         const distance=points=>Math.hypot(points[0].x-points[1].x,points[0].y-points[1].y);
-        const scale=Math.max(1,Math.min(4,pose.scale*distance(after)/Math.max(1,distance(before))));
+        const scale=Math.max(1,Math.min(MAX_CANVAS_ZOOM,pose.scale*distance(after)/Math.max(1,distance(before))));
         const a={x:(before[0].x+before[1].x)/2,y:(before[0].y+before[1].y)/2};
         const b={x:(after[0].x+after[1].x)/2,y:(after[0].y+after[1].y)/2};
         paint({scale,x:pose.x+(b.x-a.x)/scale,y:pose.y+(b.y-a.y)/scale});

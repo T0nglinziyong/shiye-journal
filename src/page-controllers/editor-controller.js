@@ -11,7 +11,7 @@ export function createEditorController({createEditor,actions,render}){
 }
 export function registerEditorActions(actions,{historyStep}){
   actions.register('editor/zoom',({delta},state)=>({
-    changes:{zoom:Math.max(1,Math.min(4,Number(state.zoom||1)+Number(delta||0)))},
+    changes:{zoom:Math.max(1,Math.min(MAX_CANVAS_ZOOM,Number(state.zoom||1)+Number(delta||0)))},
     scope:'editor'
   }));
   for(const type of ['undo','redo'])actions.register('editor/'+type,()=>{
@@ -20,3 +20,4 @@ export function registerEditorActions(actions,{historyStep}){
     return {result:false};
   });
 }
+import {MAX_CANVAS_ZOOM} from '../canvas-control-behavior.js';

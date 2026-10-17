@@ -30,7 +30,9 @@ try{
         root.render(React.createElement(SyncDetailsDialog,{details:{error:null},projects:[],batches:[],local:[],
           quarantined:0,legacyCount:0,status:'待同步',onClose:()=>{},onDiagnostics:()=>{},
           onMigrate:()=>{},onBackupLegacy:()=>{},onWipe:()=>{},onPause:()=>{},onEmergency:()=>{},
-          onRetry:async()=>{choices.push('rebuild');return {remaining:0,conflicts:0};}}));
+          onRetry:async()=>{choices.push('sync');return {remaining:0,conflicts:0};},
+          onRebuild:async()=>{choices.push('rebuild');return {remaining:0,conflicts:0};},
+          onRefresh:async()=>{choices.push('list');return {details:{error:null},projects:[],batches:[],local:[],quarantined:0,status:'已同步'};}}));
       };
       window.__syncTest.showMigration();
     })()`);
@@ -41,10 +43,16 @@ try{
     assert.deepEqual(await evaluate(`window.__syncTest.choices`),['migrate']);
     await evaluate(`window.__syncTest.showDetails()`);
     await wait('#sync-retry-now');
-    assert.equal(await evaluate(`document.querySelector('#sync-retry-now').textContent`),'重建队列并同步');
+    assert.equal(await evaluate(`document.querySelector('#sync-retry-now').textContent`),'立即同步');
     assert.equal(await evaluate(`document.body.textContent.includes('比较版本')`),false);
+    assert.deepEqual(await evaluate(`window.__syncTest.choices`),['migrate'],
+      'Opening sync status must not enumerate the outbox');
     await click('#sync-retry-now');
-    assert.deepEqual(await evaluate(`window.__syncTest.choices`),['migrate','rebuild']);
+    assert.deepEqual(await evaluate(`window.__syncTest.choices`),['migrate','sync']);
+    await click('#sync-show-pending','#sync-refresh-pending');
+    assert.deepEqual(await evaluate(`window.__syncTest.choices`),['migrate','sync','list']);
+    await click('#sync-rebuild-queue');
+    assert.deepEqual(await evaluate(`window.__syncTest.choices`),['migrate','sync','list','rebuild','list']);
     await evaluate(`window.__syncTest.root.unmount();window.__syncTest=undefined`);
   }
   assert.deepEqual(browser.errors,[]);

@@ -35,7 +35,7 @@ try{
   assert.equal(await evaluate('document.querySelectorAll(".fabric-cut-results input[type=checkbox]").length'),2);
   await click('.fabric-cut-row button.primary');
   await sleep(500);
-  assert.equal(await evaluate('document.querySelector("[data-val=select]").getAttribute("aria-pressed")'),'true');
+  assert.equal(await evaluate('document.querySelector("[data-val=scissors]").getAttribute("aria-pressed")'),'true');
   const result=await evaluate(`(async()=>{const open=indexedDB.open('shiye-pwa-full-v1');
     const db=await new Promise(resolve=>open.onsuccess=()=>resolve(open.result));
     const rows=await new Promise(resolve=>{const q=db.transaction('projects').objectStore('projects').getAll();
