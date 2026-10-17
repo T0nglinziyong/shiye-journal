@@ -1,8 +1,7 @@
-/* Preserve desktop layout; mobile header and nav have independent anchors. */
+/* The header occupies its own space in the document. Only page content
+   scrolls beneath it; the mobile navigation is fixed outside that header. */
 @media(max-width:699px){
-  body:not(.editing):not(:has(.import-nav)) #app { padding-top:60px; }
-  #app>.topbar { position:absolute; top:var(--shell-visible-top,0px); left:0; right:0; }
-  body>.main-nav { position:absolute; top:var(--shell-visible-bottom,100dvh); bottom:auto;
-    transform:translateY(-100%); }
+  #app>.topbar { position:sticky; top:0; }
+  body>.main-nav { position:fixed; top:auto; bottom:0; transform:none; }
 }
 body:has(#app[hidden])>.main-nav { display:none; }

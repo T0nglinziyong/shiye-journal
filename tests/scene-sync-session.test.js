@@ -51,6 +51,35 @@ test('first and second saves of a new Scene v2 project share an acknowledged bas
  assert.deepEqual(state.calls.map(c=>c.base_revision),[0,1]);
  assert.deepEqual(await db.cloudPendingProjects(),[]);
 });
+test('reopening before upload shows the durable local project instead of the old cloud draft',async()=>{
+ const cache=memoryCache(),first=fixture(cache),remote=mkProject('diary','云端旧稿');
+ first.state.revision=1;first.state.rows=[remote];
+ const local=(await first.db.cloudAll('projects'))[0];
+ local.title='本机新稿';
+ local.drafts[0].layers.push({id:'new-ink',type:'ink',color:'#335544',width:2,
+   points:[{x:1,y:2},{x:3,y:4}]});
+ await first.db.cloudStageProject(local);
+ const reopened=fixture(cache);reopened.state.revision=1;reopened.state.rows=[remote];
+ const listed=(await reopened.db.cloudAll('projects')).find(row=>row.id==='diary');
+ assert.equal(listed.title,'本机新稿');
+ assert.equal(listed.drafts[0].layers[0].id,'new-ink');
+ assert.equal((await reopened.db.cloudGet('projects','diary')).drafts[0].layers[0].id,'new-ink');
+});
+test('a pending project detail edit keeps the newer pending Scene on reopen',async()=>{
+ const cache=memoryCache(),first=fixture(cache),remote=mkProject('diary','云端旧稿');
+ first.state.revision=1;first.state.rows=[remote];
+ const local=(await first.db.cloudAll('projects'))[0];
+ local.drafts[0].layers.push({id:'new-ink',type:'ink',color:'#335544',width:2,
+   points:[{x:1,y:2},{x:3,y:4}]});
+ await first.db.cloudStageProject(local);
+ await first.db.cloudStageMutation(['projects'],tx=>tx.objectStore('projects').put({
+   ...remote,title:'本机新标题'}));
+ const reopened=fixture(cache);reopened.state.revision=1;reopened.state.rows=[remote];
+ const listed=(await reopened.db.cloudAll('projects'))[0];
+ assert.equal(listed.title,'本机新标题');
+ assert.equal(listed.drafts[0].layers[0].id,'new-ink');
+ assert.equal((await reopened.db.cloudGet('projects','diary')).drafts[0].layers[0].id,'new-ink');
+});
 test('independent scene edits preserve both complete works and upload a new editable ID',async()=>{
  const cache=memoryCache(),{state,db}=fixture(cache);
  const saved=mkProject('diary','服务器原稿');state.revision=1;state.rows=[saved];

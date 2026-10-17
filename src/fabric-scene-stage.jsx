@@ -163,7 +163,8 @@ export function FabricSceneStage({draft,assetURL,onSelection,onBeforeChange,onCh
         canvas=new fabric.Canvas(canvasRef.current,{
           width:draft.canvas.width,height:draft.canvas.height,
           backgroundColor:draft.paperColor,preserveObjectStacking:true,
-          selection:!readOnly,enableRetinaScaling:true,renderOnAddRemove:false
+          selection:!readOnly,perPixelTargetFind:true,
+          enableRetinaScaling:true,renderOnAddRemove:false
         });
         sessionRef.current=canvas;
         installFabricPointer(canvas,fabric.Point);

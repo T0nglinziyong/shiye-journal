@@ -12,7 +12,8 @@ const emailForLogin=value=>{const name=value.trim().toLowerCase();return name===
   name+'@accounts.shiyejournal.invalid':name;};
 
 export async function startCloudSession(onReady){
-  if(!cloudEnabled){document.querySelector('#app').hidden=false;await onReady(null);return;}
+  if(!cloudEnabled){document.querySelector('#auth-root').hidden=true;
+    document.querySelector('#app').hidden=false;await onReady(null);return;}
   const app=document.querySelector('#app');app.hidden=true;
   const client=cloudClient();
   const gate={visible:false,status:'正在恢复登录…',retryReady:false};
@@ -68,7 +69,8 @@ export async function startCloudSession(onReady){
     if(initialReset.wiped){location.reload();return;}
     cloudSetResetCleanupPending(initialReset.pending,initialReset.resetId);
     let shown=false;
-    const showApp=()=>{if(shown)return;shown=true;clearLoginGate();app.hidden=false;};
+    const showApp=()=>{if(shown)return;shown=true;clearLoginGate();
+      document.querySelector('#auth-root').hidden=true;app.hidden=false;};
     showGate({status:'正在打开本机资料…'});
     await onReady(user,{afterAccountReset:!!initialReset.resetId,onFirstView:showApp});
     showApp();

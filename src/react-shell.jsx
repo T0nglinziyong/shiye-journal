@@ -1,7 +1,6 @@
 import React,{Component,useLayoutEffect,useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {flushSync,createPortal} from 'react-dom';
-import {observeShellViewport} from './shell-viewport.js';
 import './shell-viewport.css';
 import {iconMarkup} from './icons.js';
 import {CloudAccountMenu} from './react-cloud-auth.jsx';
@@ -49,8 +48,7 @@ function AppShell(){
     const media=window.matchMedia('(max-width:699px)');
     const changed=()=>setMobile(media.matches);changed();
     media.addEventListener('change',changed);
-    const dispose=observeShellViewport(window,document.documentElement);
-    return ()=>{media.removeEventListener('change',changed);dispose();};
+    return ()=>media.removeEventListener('change',changed);
   },[]);
   useLayoutEffect(()=>{shellSetter=setShell;overlaySetter=setOverlay;
     return ()=>{shellSetter=null;overlaySetter=null;};},[]);

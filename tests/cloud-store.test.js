@@ -647,6 +647,88 @@ test('large works list only metadata; opening reuses the cached editable documen
   const denied=fixture();denied.state.rows=[{...summary,projectDocumentPath:'other/document'}];await assert.rejects(denied.db.cloudGet('projects','p'),/不属于当前账号/);
 });
 
+test('reopening a large work edits its hydrated Scene and keeps the same work ID',async()=>{
+ const {state,db}=fixture(memoryCache());
+ const original=v2({id:'reopened',title:'手帐',activeDraftID:'d',drafts:[{id:'d',
+   canvas:{width:100,height:100},primitives:Array.from({length:3200},(_,i)=>({
+     id:'shape-'+i,kind:'rectangle',x:i%90,y:i%80,width:12,height:12,fill:'#335544'}))}]});
+ await db.cloudTransaction(['projects'],tx=>tx.objectStore('projects').put(original));
+ state.rows=[state.calls.at(-1).operations[0].item];
+ for(const position of [23,47]){
+   const listed=(await db.cloudAll('projects'))[0];
+   assert.equal(listed.__cloudBaseSceneFingerprint,null,
+     'a thin listing cannot claim to be the full editing baseline');
+   const editable=await db.cloudProjectDocument(listed);
+   assert.equal(editable.__cloudBaseSceneFingerprint,
+     projectSemanticFingerprint({drafts:editable.drafts}));
+   editable.drafts[0].layers[0].x=position;
+   await db.cloudStageProject(editable);
+   await db.cloudFlushProjects();
+   const saved=state.calls.at(-1).operations.find(op=>op.store==='projects').item;
+   assert.equal(saved.id,'reopened','ordinary continuation must not create a conflict copy');
+   const upload=state.uploads.find(item=>item.path===saved.projectDocumentPath);
+   const full=JSON.parse(await projectBlobText(upload.data,saved.projectDocumentEncoding));
+   assert.equal(full.drafts[0].layers[0].x,position,
+     'the edited Scene must replace the old document bytes');
+   state.rows=[saved];
+ }
+});
+
+test('a reopened work does not fork when its cloud Scene still matches the opened base',async()=>{
+ const {state,db}=fixture(memoryCache());
+ const full=v2({id:'same-phone',title:'旧标题',activeDraftID:'d',drafts:[{id:'d',
+   canvas:{width:100,height:100},primitives:Array.from({length:3200},(_,i)=>({
+     id:'shape-'+i,kind:'rectangle',x:i%90,y:i%80,width:12,height:12,fill:'#335544'}))}]});
+ await db.cloudTransaction(['projects'],tx=>tx.objectStore('projects').put(full));
+ const summary=state.calls.at(-1).operations[0].item;state.rows=[summary];
+ const opened=await db.cloudProjectDocument((await db.cloudAll('projects'))[0]);
+ opened.drafts[0].layers[0].x=55;
+ state.revision=2;
+ state.rows=[{...summary,title:'云端改过标题'}];
+ state.changes=[{revision:2,keys:[{store:'projects',id:'same-phone',action:'put'}]}];
+ state.keyVersions.set('projects:same-phone',2);
+ await db.cloudStageProject(opened);await db.cloudFlushProjects();
+ const saved=state.calls.at(-1).operations.find(op=>op.store==='projects').item;
+ assert.equal(saved.id,'same-phone');assert.equal(saved.title,'云端改过标题');
+ assert.deepEqual((await db.cloudPendingProjects()),[]);
+});
+
+test('an older queued work with a summary fingerprint recovers its full opening Scene',async()=>{
+ const cache=memoryCache(),first=fixture(cache);
+ const full=v2({id:'older-session',title:'旧标题',activeDraftID:'d',drafts:[{id:'d',
+   canvas:{width:100,height:100},primitives:Array.from({length:3200},(_,i)=>({
+     id:'shape-'+i,kind:'rectangle',x:i%90,y:i%80,width:12,height:12,fill:'#335544'}))}]});
+ await first.db.cloudTransaction(['projects'],tx=>tx.objectStore('projects').put(full));
+ const summary=first.state.calls.at(-1).operations[0].item;first.state.rows=[summary];
+ const older=await first.db.cloudProjectDocument((await first.db.cloudAll('projects'))[0]);
+ assert.ok(summary.projectDocumentPath);
+ older.__cloudBaseSceneFingerprint=projectSemanticFingerprint({drafts:summary.drafts});
+ older.drafts[0].layers[0].x=81;
+ const resumed=fixture(cache);resumed.state.revision=2;
+ resumed.state.rows=[{...summary,title:'云端新标题'}];
+ resumed.state.keyVersions.set('projects:older-session',2);
+ resumed.state.changes=[{revision:2,keys:[{store:'projects',id:'older-session',action:'put'}]}];
+ await resumed.db.cloudStageProject(older);await resumed.db.cloudFlushProjects();
+ const saved=resumed.state.calls.at(-1).operations.find(op=>op.store==='projects').item;
+ assert.equal(saved.id,'older-session');assert.equal(saved.title,'云端新标题');
+});
+
+test('an edited large work that becomes small no longer points to its old cloud document',async()=>{
+ const {state,db}=fixture(memoryCache());
+ const full=v2({id:'reduced',title:'作品',activeDraftID:'d',drafts:[{id:'d',
+   canvas:{width:100,height:100},primitives:Array.from({length:3200},(_,i)=>({
+     id:'shape-'+i,kind:'rectangle',x:i%90,y:i%80,width:12,height:12,fill:'#335544'}))}]});
+ await db.cloudTransaction(['projects'],tx=>tx.objectStore('projects').put(full));
+ const summary=state.calls.at(-1).operations[0].item;state.rows=[summary];
+ const editable=await db.cloudProjectDocument((await db.cloudAll('projects'))[0]);
+ editable.drafts[0].layers.splice(1);
+ await db.cloudStageProject(editable);await db.cloudFlushProjects();
+ const saved=state.calls.at(-1).operations[0].item;
+ assert.equal(saved.id,'reduced');
+ assert.equal(saved.projectDocumentPath,undefined);
+ assert.equal(saved.drafts[0].layers.length,1);
+});
+
 test('cloudAll discards a mixed remote snapshot after concurrent pagination',async()=>{
   const {state,db}=fixture();
   state.rows=Array.from({length:501},(_,i)=>({id:String(i),title:'old'}));
@@ -904,6 +986,51 @@ test('two devices changing disjoint material fields merge without losing either 
  assert.equal(merged.blobId,'same-image');
  assert.equal(merged.__syncFieldStamps.title.counter,1);
  assert.equal((await db.cloudPendingDetails()).batches.length,0);
+});
+
+test('two devices changing different series details retain both edits',async()=>{
+ const {state,db}=fixture(memoryCache());
+ state.rows=[{id:'series-a',title:'原名',introduction:'原介绍'}];
+ await db.cloudAll('series');
+ await db.cloudStageMutation(['series'],tx=>tx.objectStore('series').put({
+   id:'series-a',title:'手机新名',introduction:'原介绍'}));
+ state.revision=1;state.rows=[{id:'series-a',title:'原名',introduction:'平板新介绍'}];
+ state.changes=[{revision:1,keys:[{store:'series',id:'series-a',action:'put'}]}];
+ await db.cloudFlushProjects();
+ const result=state.calls.at(-1).operations[0].item;
+ assert.equal(result.title,'手机新名');
+ assert.equal(result.introduction,'平板新介绍');
+ assert.deepEqual((await db.cloudPendingDetails()).batches,[]);
+});
+
+test('a material edit bundled with image bytes still merges independent cloud metadata',async()=>{
+ const {state,db}=fixture(memoryCache());
+ state.rows=[{id:'material',title:'原名',tags:['旧标签'],blobId:'old-image'}];
+ await db.cloudAll('assets');
+ await db.cloudStageMutation(['assets','blobs'],tx=>{
+   tx.objectStore('assets').put({id:'material',title:'新名字',tags:['旧标签'],blobId:'old-image'});
+   tx.objectStore('blobs').put({id:'unrelated-image',data:new Blob(['bytes'])});
+ });
+ state.revision=1;state.rows=[{id:'material',title:'原名',tags:['新标签'],blobId:'old-image'}];
+ state.changes=[{revision:1,keys:[{store:'assets',id:'material',action:'put'}]}];
+ await db.cloudFlushProjects();
+ const asset=state.calls.at(-1).operations.find(op=>op.store==='assets').item;
+ assert.equal(asset.title,'新名字');assert.deepEqual(asset.tags,['新标签']);
+ assert.deepEqual((await db.cloudPendingDetails()).batches,[]);
+});
+
+test('project details keep independent edits from both devices',async()=>{
+ const {state,db}=fixture(memoryCache());
+ const base=v2({id:'work',title:'旧名',styleTags:['旧标签'],activeDraftID:'d',
+   drafts:[{id:'d',canvas:{width:100,height:100},textBlocks:[{id:'t',text:'正文'}]}]});
+ state.rows=[base];await db.cloudAll('projects');
+ await db.cloudStageMutation(['projects'],tx=>tx.objectStore('projects').put({...base,title:'新名字'}));
+ state.revision=1;state.rows=[{...base,styleTags:['新标签']}];
+ state.changes=[{revision:1,keys:[{store:'projects',id:'work',action:'put'}]}];
+ await db.cloudFlushProjects();
+ const work=state.calls.at(-1).operations.find(op=>op.store==='projects').item;
+ assert.equal(work.title,'新名字');assert.deepEqual(work.styleTags,['新标签']);
+ assert.equal(work.id,'work');
 });
 
 test('same material field competition settles automatically and leaves no pending queue',async()=>{

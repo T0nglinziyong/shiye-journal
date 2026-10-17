@@ -7,11 +7,15 @@ try{
   const {fabric:f}=await import('/tests/fixtures/fabric-preview.jsx');
   const {selectableFabricObjectAt:hit,installSelectionFramePriority}=await import('/src/fabric-hit-test.js');
   const el=document.createElement('canvas');document.body.append(el);
-  const c=new f.Canvas(el,{width:400,height:400,enableRetinaScaling:false});
+  const c=new f.Canvas(el,{width:400,height:400,enableRetinaScaling:false,perPixelTargetFind:true});
   const p=(x,y)=>new f.Point(x,y),results={};
   const check=(name,object,visible,blank)=>{
     object.sceneType=name;c.add(object);object.setCoords();c.renderAll();
-    results[name]=[hit(c,object,p(...visible),p(...visible)),hit(c,object,p(...blank),p(...blank))];
+    const bounds=c.upperCanvasEl.getBoundingClientRect();
+    const nativeAt=([x,y])=>c.findTarget(new PointerEvent('pointerdown',{
+      clientX:bounds.left+x,clientY:bounds.top+y,pointerType:'mouse'}))?.target;
+    results[name]=[hit(c,object,p(...visible),p(...visible)),hit(c,object,p(...blank),p(...blank)),
+      nativeAt(visible)===object,!nativeAt(blank)];
     c.remove(object);
   };
   check('shape',new f.Rect({originX:'left',originY:'top',left:50,top:50,width:100,height:100,fill:'transparent',stroke:'#000',strokeWidth:8}),[52,80],[100,100]);
@@ -33,6 +37,7 @@ try{
   if(found.target!==selected)throw Error('Selected full frame did not own overlapping object hit');
   c.dispose();return results;
  })()`);
- for(const [kind,values] of Object.entries(result))assert.deepEqual(values,[true,false],kind+' must hit painted pixels only');
+ for(const [kind,values] of Object.entries(result))assert.deepEqual(values,[true,false,true,true],
+   kind+' must ignore blank pixels on pointerdown, before any selection frame appears');
  assert.deepEqual(b.errors,[]);console.log('Visible-pixel hit tests passed for hollow shape, transparent material, text and group');
 }finally{await b.close();}

@@ -28,7 +28,8 @@ function LoginGate({status,visible,onLogin,onRetry,retryReady=false}){
   </main>;
 }
 export function renderLoginGate(props){
-  loginRoot??=createRoot(document.querySelector('#auth-root'));
+  const host=document.querySelector('#auth-root');host.hidden=false;
+  loginRoot??=createRoot(host);
   loginRoot.render(<LoginGate {...props}/>);
 }
 export function clearLoginGate(){if(loginRoot)flushSync(()=>loginRoot.render(null));}

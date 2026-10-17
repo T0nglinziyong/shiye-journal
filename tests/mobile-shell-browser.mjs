@@ -7,11 +7,22 @@ try{
  await b.click('#top-settings','.settings-page');
  const check=async label=>{
    await b.sleep(60);
-   const rect=await b.evaluate(`(()=>{const h=document.querySelector('.topbar').getBoundingClientRect(),
-     n=document.querySelector('.main-nav').getBoundingClientRect(),v=visualViewport;
+   const rect=await b.evaluate(`(()=>{const header=document.querySelector('.topbar'),
+     h=header.getBoundingClientRect(),n=document.querySelector('.main-nav').getBoundingClientRect(),v=visualViewport;
      return {head:h.top,nav:n.bottom,top:v.offsetTop,bottom:v.offsetTop+v.height,
+       scrollY,appTop:document.querySelector('#app').getBoundingClientRect().top,
+       appHeight:document.querySelector('#app').getBoundingClientRect().height,
+       appHidden:document.querySelector('#app').hidden,
+       headerPosition:getComputedStyle(header).position,
+       navigationPosition:getComputedStyle(document.querySelector('.main-nav')).position,
+       appPadding:getComputedStyle(document.querySelector('#app')).paddingTop,
+       topmost:document.elementFromPoint(innerWidth/2,Math.max(1,h.top+2))?.closest('.topbar')===header,
        outside:document.querySelector('.main-nav').parentElement===document.body};})()`);
    assert.equal(rect.outside,true,label);
+   assert.equal(rect.headerPosition,'sticky',label);
+   assert.equal(rect.navigationPosition,'fixed',label);
+   assert.equal(rect.appPadding,'0px',label);
+   assert.equal(rect.topmost,true,label+' page content must stay beneath the header '+JSON.stringify(rect));
    assert.ok(Math.abs(rect.head-rect.top)<2&&Math.abs(rect.nav-rect.bottom)<2,label+JSON.stringify(rect));
  };
  await check('initial');

@@ -99,8 +99,10 @@ function mergeProjectMetadata(base,local,remote,sceneSource){
     merged.updatedAt;
   merged.__cloudSessionId=local.__cloudSessionId;
   merged.__cloudBaseRevision=local.__cloudBaseRevision;
-  merged.__cloudBaseSceneFingerprint=sceneFingerprint(merged);
-  merged.__cloudBaseMetadata=Object.fromEntries(projectMetadataFields.map(key=>[key,merged[key]]));
+  // A replacement is still pending. Its new base is the cloud document we
+  // just reconciled against, not the replacement's own uncommitted contents.
+  merged.__cloudBaseSceneFingerprint=sceneFingerprint(remote);
+  merged.__cloudBaseMetadata=Object.fromEntries(projectMetadataFields.map(key=>[key,remote[key]]));
   return merged;
 }
 // The editor must carry the revision of the document it actually opened.
@@ -109,7 +111,10 @@ const withProjectBase=(store,record,base)=>{
   if(store!=='projects'||!record)return record;
   const session=crypto.randomUUID();editorBases.set(session,base);
   if(editorBases.size>300){const old=editorBases.keys().next().value;editorBases.delete(old);editorSceneBases.delete(old);}
-  const scene=Array.isArray(record.drafts)?sceneFingerprint(record):null;
+  // Large works arrive as list summaries without their layers. A summary
+  // fingerprint cannot be used as the base of an editable Scene.
+  const scene=record.projectDocumentPath?null:
+    Array.isArray(record.drafts)?sceneFingerprint(record):null;
   const metadata=Object.fromEntries(projectMetadataFields.map(key=>[key,record[key]]));
   editorSceneBases.set(session,{scene,metadata});
   return {...record,__cloudBaseRevision:base,__cloudSessionId:session,
@@ -353,7 +358,24 @@ const unifiedSync=createProjectSync({
       remoteProjectWinners.set(envelope.id,structuredClone(completeRemote));return 'remote';
     }
     const localScene=sceneFingerprint(record),remoteScene=sceneFingerprint(completeRemote);
-    const baseScene=record.__cloudBaseSceneFingerprint;
+    let baseScene=record.__cloudBaseSceneFingerprint;
+    // Older queued edits may carry the fingerprint of a thin listing. The
+    // immutable document path still identifies the complete Scene they opened.
+    // Recover that base before deciding that a continuation is a new branch.
+    if(baseScene!==remoteScene){
+      try{
+        const memory=snapshots.get('projects');
+        const saved=memory?.revision===baseRevision?memory:await cached('records:projects');
+        const previous=saved?.revision===baseRevision?
+          saved.records.find(item=>item.id===record.id):null;
+        const opening=record.projectDocumentPath?record:previous;
+        if(opening?.projectDocumentPath){
+          const opened=await cloudProjectDocument({...opening,
+            __cloudDocumentHydrated:false,__cloudSessionId:undefined});
+          if(sceneFingerprint(opened)===remoteScene)baseScene=remoteScene;
+        }
+      }catch{/* Keep the queued edit if its old document is unavailable. */}
+    }
     if(baseScene&&record.__cloudBaseMetadata&&
       (localScene===baseScene||remoteScene===baseScene)){
       const merged=mergeProjectMetadata(record.__cloudBaseMetadata,record,completeRemote,
@@ -387,7 +409,9 @@ const unifiedSync=createProjectSync({
     if(source.kind!=='project'||target.kind!=='project')return;
     const record=target.payload;
     if(record.__cloudSessionId)editorSceneBases.set(record.__cloudSessionId,
-      {scene:sceneFingerprint(record),metadata:Object.fromEntries(projectMetadataFields.map(key=>[key,record[key]]))});
+      {scene:record.__cloudBaseSceneFingerprint||sceneFingerprint(record),
+        metadata:record.__cloudBaseMetadata||
+          Object.fromEntries(projectMetadataFields.map(key=>[key,record[key]]))});
     if(typeof window==='undefined')return;
     window.dispatchEvent(new CustomEvent('shiye-sync-project-replaced',{
       detail:{sourceID:source.payload.id,sourceSessionID:source.payload.__cloudSessionId,
@@ -553,8 +577,10 @@ async function reconcileImport(batch,operationID,baseRevision){
         !batch.operations.some(other=>other.store==='blobs'&&other.action==='put')&&
         await cloudRecord('meta','tombstone:'+op.store+':'+id)&&
         !await cloudRecord(op.store,id))continue;
-      if(op.action==='put'&&['assets','series'].includes(op.store)&&op.baseRecord&&
-        !batch.operations.some(other=>other.store==='blobs'&&other.action==='put')){
+      // A byte-bearing import can also contain a later metadata edit. Merge
+      // that edit against its saved base; orphaned losing bytes are pruned
+      // below after the winning asset has been determined.
+      if(op.action==='put'&&['assets','series'].includes(op.store)&&op.baseRecord){
         const remote=await cloudRecord(op.store,id);
         const merged=mergeConcurrentMetadata(op.baseRecord,op.item,remote);
         if(merged){
@@ -570,6 +596,16 @@ async function reconcileImport(batch,operationID,baseRevision){
         if(remote){
           const full=remote.projectDocumentPath?await cloudProjectDocument(remote):remote;
           const local=op.item.projectDocumentPath?await cloudProjectDocument(op.item):op.item;
+          // A details dialog submits a project summary, not an editor Scene.
+          // Preserve the current cloud Scene and merge only the fields changed
+          // from the summary that was actually shown to this device.
+          if(op.baseRecord&&sameField(op.item.drafts,op.baseRecord.drafts)){
+            const merged=mergeConcurrentMetadata(op.baseRecord,op.item,full);
+            if(merged){
+              if(merged.changed)operations.push({...op,item:merged.record,baseRecord:full});
+              continue;
+            }
+          }
           const localScene=sceneFingerprint(local),remoteScene=sceneFingerprint(full);
           if(localScene===remoteScene){
             if(compareRecordEdits(local,full,{localTimestamp:op.modifiedAt})==='local')operations.push(op);
@@ -688,7 +724,37 @@ async function pendingOverride(store,id){await identity();return unifiedSync.ins
   const operations=batch.operations|| (batch[store]||[]).map(item=>({action:'put',store,item}));
   for(const op of operations){if(op.store!==store)continue;if(op.action==='clear'||op.action==='delete'&&op.id===id)result={found:true};else if(op.action==='put'&&op.item.id===id)result={found:true,record:op.item};}
 }return result;});}
-async function overlayImports(store,records){const map=new Map(records.map(r=>[r.id,r]));for(const op of await pendingOperations(store)){if(op.action==='clear')map.clear();else if(op.action==='delete')map.delete(op.id);else map.set(op.item.id,op.item);}return [...map.values()];}
+async function pendingProjectEdits(){
+  return unifiedSync.inspectPending(rows=>[...rows].sort((a,b)=>a.serial-b.serial)
+    .flatMap(row=>row.record?.kind==='project'?
+      [{action:'put',item:row.record.payload}]:row.record?.kind==='batch'?
+      (row.record.payload.operations||
+        (row.record.payload.projects||[]).map(item=>({store:'projects',action:'put',item})))
+        .filter(op=>op.store==='projects'):[]));
+}
+function applyProjectEdits(map,edits){
+  for(const op of edits){
+    if(op.action==='clear'){map.clear();continue;}
+    if(op.action==='delete'){map.delete(op.id);continue;}
+    const previous=map.get(op.item.id);
+    const merged=previous&&op.baseRecord&&sameField(op.item.drafts,op.baseRecord.drafts)
+      ?mergeConcurrentMetadata(op.baseRecord,op.item,previous):null;
+    map.set(op.item.id,merged?.record||op.item);
+  }
+  return map;
+}
+async function overlayImports(store,records){
+  const map=new Map(records.map(r=>[r.id,r]));
+  // Apply every project save, detail edit and delete in durable queue order.
+  // This makes a reopened page match the latest local state before upload.
+  if(store==='projects')return [...applyProjectEdits(map,await pendingProjectEdits()).values()];
+  for(const op of await pendingOperations(store)){
+    if(op.action==='clear')map.clear();
+    else if(op.action==='delete')map.delete(op.id);
+    else map.set(op.item.id,op.item);
+  }
+  return [...map.values()];
+}
 const cached=async key=>{try{const id=await account();return cacheDisabled?undefined:await cache?.get(id,key);}catch{return undefined;}};
 const remember=async(key,value)=>{try{const id=await account();if(!cacheDisabled)await cache?.put(id,key,value);}catch{/* Cache quota/failure cannot fail a cloud operation. */}};
 const checked=result=>{if(result.error){const failure=Error(result.error.message||'云端数据服务不可用');
@@ -776,6 +842,11 @@ async function cloudReloadBlob(id){
   return {id,data:blob};
 }
 async function cloudGet(store,id){
+  if(store==='projects'){
+    const edits=(await pendingProjectEdits()).filter(op=>op.action==='clear'||
+      (op.item?.id??op.id)===id);
+    if(edits.length)return applyProjectEdits(new Map(),edits).get(id);
+  }
   const pending=await pendingOverride(store,id);
   if(pending&&!(store==='blobs'&&pending.record&&!usableBlob(pending.record.data)))return structuredClone(pending.record);
   // Safari can restore an outbox row without its Blob bytes after a forced
@@ -804,12 +875,25 @@ async function cloudLegacyProjectBackup(){
 }
 async function cloudProjectDocument(record){
   const path=record.projectDocumentPath;if(!path)return record;
+  // A hydrated document may still carry the path of the version it opened.
+  // Re-reading that path here would replace the user's edited Scene with its
+  // old bytes immediately before upload.
+  if(record.__cloudDocumentHydrated===true)return record;
   if(!['cos','supabase'].includes(record.projectDocumentProvider))throw Error('作品文档缺少当前存储服务标记');
   if(!path.startsWith((await identity())+'/'))throw Error('作品不属于当前账号');
   if(!documents.has(path)){
     const task=(async()=>{let blob=await cached('project-document:'+path);if(!(blob instanceof Blob)){blob=await downloadObject(path,record.projectDocumentProvider);await remember('project-document:'+path,blob);}const full=JSON.parse(await projectBlobText(blob,record.projectDocumentEncoding));if(full.id!==record.id||!Array.isArray(full.drafts))throw Error('作品完整数据损坏');return full;})().catch(error=>{documents.delete(path);throw error;});documents.set(path,task);if(documents.size>8)documents.delete(documents.keys().next().value);
   }
-  return mergeProjectSummary(structuredClone(await documents.get(path)),record);
+  const full=mergeProjectSummary(structuredClone(await documents.get(path)),record);
+  if(record.__cloudSessionId){
+    const scene=sceneFingerprint(full);
+    const metadata=Object.fromEntries(projectMetadataFields.map(key=>[key,full[key]]));
+    editorSceneBases.set(record.__cloudSessionId,{scene,metadata});
+    full.__cloudBaseSceneFingerprint=scene;
+    full.__cloudBaseMetadata=metadata;
+  }
+  full.__cloudDocumentHydrated=true;
+  return full;
 }
 async function cloudRecord(store,id){
   await identity();if(revision===undefined)await version();
@@ -951,7 +1035,9 @@ function auxiliaryBlobIDs(operations){
 async function encode(store,record,{makePreview=true}={}){
   if(store==='projects'){
     if(record.projectDocumentPath)record=await cloudProjectDocument(record);
-    const {__cloudBaseRevision,__cloudSessionId,__cloudBaseSceneFingerprint,__cloudBaseMetadata,...persisted}=record;
+    const {__cloudBaseRevision,__cloudSessionId,__cloudBaseSceneFingerprint,__cloudBaseMetadata,
+      __cloudDocumentHydrated,projectDocumentPath,projectDocumentProvider,
+      projectDocumentEncoding,...persisted}=record;
     record={...persisted,sceneAssetIDs:sceneMaterialIDs(persisted)};
     const text=JSON.stringify(record);let blob=new Blob([text],{type:'application/json'}),encoding;
     const inline=blob.size<=LARGE_PROJECT_BYTES,provider=writeProvider();
@@ -1274,7 +1360,7 @@ async function cloudStageImport(batch){
 }
 let metadataMutationTail=Promise.resolve();
 async function cloudStageMutation(names,fn){
-  if(!names.some(store=>store==='assets'||store==='series'))
+  if(!names.some(store=>['assets','series','projects'].includes(store)))
     return stageMutationNow(names,fn);
   // Only local metadata staging is serialized. Network uploads remain
   // independent, while two rapid edits of the same record keep their order.
@@ -1293,7 +1379,7 @@ async function stageMutationNow(names,fn){
   operations.push(...recordTombstones(operations).slice(operations.length));
   names=[...new Set([...names,...operations.map(op=>op.store)])];
   await identity();if(revision===undefined)await version();
-  const metadataStores=new Set(['assets','series']);
+  const metadataStores=new Set(['assets','series','projects']);
   const metadataPuts=operations.filter(op=>op.action==='put'&&metadataStores.has(op.store));
   const metadataKeys=new Set(metadataPuts.map(op=>op.store+'\0'+op.item.id));
   // A second offline edit must be based on the first pending edit, including
@@ -1320,13 +1406,15 @@ async function stageMutationNow(names,fn){
     }
     return latest;
   }):new Map();
-  // Only a snapshot at the current revision proves an authoritative base.
-  // Pending local writes take precedence because they are causally newer.
+  // The verified snapshot the user edited is the base, even when a background
+  // pull has since advanced the account cursor. Pending writes are newer.
   const authoritativeBases=new Map();
   await Promise.all([...new Set(metadataPuts.map(op=>op.store))].map(async store=>{
     const memory=snapshots.get(store);
     const saved=memory?.revision===revision?memory:await cached('records:'+store);
-    if(saved?.revision!==revision)return;
+    // A background pull can advance the global revision while the editor is
+    // still showing this verified snapshot. It remains the edit's true base.
+    if(!saved)return;
     authoritativeBases.set(store,new Map(saved.records.map(item=>[item.id,item])));
   }));
   for(const op of operations){

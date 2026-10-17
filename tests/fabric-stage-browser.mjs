@@ -108,8 +108,19 @@ try{
   assert.equal(await evaluate('window.__fabricCanvas.getObjects().find(object=>object.sceneID==="paper-material")===window.__oldMaterial'),true);
   await sleep(300);
   assert.equal(await evaluate('window.__fabricCanvas.getObjects().find(object=>object.sceneID==="paper-material")===window.__oldMaterial'),false);
+  const paintedPoint=await evaluate(`(()=>{const canvas=window.__fabricCanvas,
+    r=document.querySelector('.upper-canvas').getBoundingClientRect();
+    for(let y=280;y<490;y+=8)for(let x=170;x<510;x+=8){
+      const clientX=r.left+r.width*x/600,clientY=r.top+r.height*y/800;
+      if(canvas.findTarget(new PointerEvent('pointerdown',{
+        clientX,clientY,pointerType:'mouse'}))?.target?.sceneID==='paper-material')
+        return {x:clientX,y:clientY};
+    }
+    return null;
+  })()`);
+  assert.ok(paintedPoint,'material must expose a painted pixel for selection');
+  const {x,y}=paintedPoint;
   const bounds=await evaluate('(()=>{const r=document.querySelector(".upper-canvas").getBoundingClientRect();return {left:r.left,top:r.top,width:r.width,height:r.height};})()');
-  const x=bounds.left+bounds.width*340/600,y=bounds.top+bounds.height*380/800;
   await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,x,y,clickCount:1});
   await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,x,y,clickCount:1});
   assert.equal(await evaluate('document.querySelector("#events").textContent'),'选中：paper-material');
@@ -204,9 +215,24 @@ try{
     clickCount:1,...at(234,170)});
   assert.equal(await evaluate('JSON.stringify(window.__fabricFixture.draft.layers[0].children[0])'),
     beforeCancel,'Leaving the lasso tool mid-drag must roll back the preview');
-  const textX=bounds.left+bounds.width*270/600,textY=bounds.top+bounds.height*590/800;
+  const textPoint=await evaluate(`(()=>{const canvas=window.__fabricCanvas,
+    r=document.querySelector('.upper-canvas').getBoundingClientRect();
+    for(let y=505;y<675;y+=4)for(let x=60;x<480;x+=4){
+      const clientX=r.left+r.width*x/600,clientY=r.top+r.height*y/800;
+      const painted=(dx,dy)=>canvas.findTarget(new PointerEvent('pointerdown',{
+        clientX:clientX+dx,clientY:clientY+dy,pointerType:'mouse'}))?.target?.sceneID==='paper-text';
+      if([[0,0],[-3,0],[3,0],[0,-3],[0,3]].every(([dx,dy])=>painted(dx,dy)))
+        return {x:clientX,y:clientY};
+    }
+    return null;
+  })()`);
+  assert.ok(textPoint,'text must expose a painted pixel for selection');
+  const textX=textPoint.x,textY=textPoint.y;
   await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,x:textX,y:textY,clickCount:1});
   await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,x:textX,y:textY,clickCount:1});
+  const firstTextSelection=await evaluate(`({active:window.__fabricCanvas.getActiveObject()?.sceneID,
+    events:document.querySelector('#events').textContent})`);
+  assert.equal(firstTextSelection.active,'paper-text',JSON.stringify(firstTextSelection));
   await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,x:textX,y:textY,clickCount:2});
   await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,x:textX,y:textY,clickCount:2});
   assert.equal(await evaluate('window.__fabricCanvas.getActiveObject()?.sceneID'),'paper-text');
