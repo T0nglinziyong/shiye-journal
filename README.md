@@ -126,3 +126,5 @@ npm run start:local
 - 所有改变真实素材用量、尺寸或来源的功能都必须有确定性校验和回归测试。
 
 更具体的代码结构见 `ARCHITECTURE.md`、`DATA_LOADING_ARCHITECTURE.md` 与对应模块源码。
+
+网页版 AI 创作流程与能力边界见 [统一 Scene 工作台](docs/WEB_AI_SCENE_WORKBENCH.md)。

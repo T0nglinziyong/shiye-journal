@@ -2,7 +2,7 @@
 // aesthetic quota and never overrides a task's explicit material permissions.
 export const materialCraftGuide = `【素材工艺 v2：先决定如何用材料，再决定摆在哪里】
 先查看每件真实素材和有效加工权限。对适合加工的图案纸、票据或胶带，比较完整、取局部、边缘加工、开窗/正负形与有目的的组合；完整贴纸或主体需要保护时可以 whole。不要为了凑工艺数量加工，不要求每页都有撕边或开窗。
-权限以逐件设置优先。“保留完整”禁止所有实体加工，包括胶带截段。“少量裁剪”累计保留至少60%原材料面积；“自由拆解”也必须守住尺寸和来源。“AI 自主加工”是用户明确选择的策略：纸张/胶带可自由使用已实现工艺，照片/贴纸等按少量裁剪；不覆盖逐件保留完整。
+统一遵守 source.processing 或本次素材加工方式。“保留完整”禁止所有实体加工，包括胶带截段。“少量裁剪”累计保留至少60%原材料面积；“自由拆解”也必须守住尺寸和来源。“不预设”允许自由拆解，仍受来源和尺寸约束。
 已实现的边缘宏：在 edit_materials 或 upsert_materials/page.items 的 operations 中使用 {op:"edge",style:"torn",edges:["bottom"],depth_mm:1,period_mm:6,seed:42}。style 可为 torn（几何撕边）、ticket_notch（局部票根缺口）、postage（连续齿边）、fringe（有连接背条的流苏）、partial_tear（局部撕口）。edges 为 top/right/bottom/left 的不重复数组。局部缺口可用 position:0.5 表示沿该边的中点。深度不超过裁片短边20%，保留角部，过密轮廓会报错；不要伪称已模拟纸纤维。
 先用 crop/trim/tape 取得真实区域，再做 edge 或已有 mask/diagonal/window。一个片段的 edge 宏先于开窗，不能叠加第二道外轮廓来改写已裁掉的材料；需要修改时用 replace 重放完整工序。
 开窗仍是真实透明孔。现在用实际源轮廓和洞核验同一 unit 的材料占用：可在同一复合 page/upsert_materials 中创建窗框，以及与该窗口准确匹配的窗芯裁片；两件的外接矩形重叠并不等于用料重复。请保持各片 source crop/轮廓不相交；隐藏或放到页面外不能释放已取用的来源区域。

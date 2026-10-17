@@ -26,7 +26,7 @@ export function webResultPrompt(mode,output){
   }
   const instructions='请先读 ZIP 的 START_HERE.txt 与 task/WORKFLOW.txt；观察素材、比较构图，完成唯一一份可编辑手帐。运行校验并展示同一场景的 HTML Canvas 预览，发现问题后修订，不能用另一张画作冒充预览。';
   return output==='file'
-    ?instructions+'最终交付一个可下载的「作品.shiyeproject.json」UTF-8 单文件（含原样 source、title 与 page 或 tools）。拾页只从 JSON 导入可编辑作品，不要交付 ZIP 工程包。'
+    ?instructions+'最终交付一个可下载的「作品.shiyeproject.json」UTF-8 单文件（含原样 source、title 与 page 原生 Scene 图层；不返回 tools 或 plan）。拾页只从 JSON 导入可编辑作品，不要交付 ZIP 工程包。'
     :instructions+'随后只用一个完整的 ```json 代码块返回紧凑单行 JSON，不能分成多个块、不能省略字段、不要生成作品文件。';
 }
 

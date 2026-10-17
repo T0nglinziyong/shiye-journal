@@ -1,22 +1,22 @@
+import {webSceneContract,webSceneCapabilities,webSceneDocument,importWebScene} from './web-scene-workbench.js';
+import {webWorkbenchInstructions,webEditingGuide,webArtDirection} from './web-creation-guide.js';
+import {attachSceneV2} from './scene-v2.js';
+import {itemFromAsset,textBlock} from './domain.js';
 import {previewImageFormat} from './offline-preview.js';
 import {webResultPrompt} from './creation-methods.js';
-import {offlineCreationPlanningData,offlineCreationWorkflowText,offlineVisualReviewChecklist} from './offline-creation-workflow.js';
-import {stabilizeImportedCraftScene} from './craft-import-identity.js';
+import {offlineCreationPlanningData,offlineVisualReviewChecklist} from './offline-creation-workflow.js';
 import {multimodalCraftGuide} from './craft-vision.js';
-import {freezeCraftTask,validateCraftTask,inheritCreationBrief,craftTaskInstructions} from './craft-task.js';
+import {freezeCraftTask,craftTaskInstructions} from './craft-task.js';
 import {materialCraftGuide} from './material-craft-guide.js';
-import {validateNativeDraft} from './native-project-package.js';
 import {zip,unzipSync,strToU8,strFromU8} from 'fflate';
-import {project} from './domain.js';
-import {applyToolCalls} from './creative.js';
-import {toolContracts,offlinePlanContract,directPageContract,directPageToTools,offlineContract,schemaFingerprint,validateValue} from './creative-contract.js';
+import {toolContracts,offlinePlanContract,directPageContract,offlineContract,schemaFingerprint} from './creative-contract.js';
 import {visualStyleBrief} from './creative-style-brief.js';
 import {creativeDesignGuide,purposeMethod,structureReferenceGuide} from './creative-design-guide.js';
 import {validMaterialAlias} from './material-alias.js';
 import {importNativeProjectPackage,validatePackageValue} from './native-project-package.js';
 import {readProjectPackageEntries} from './project-package-archive.js';
 import {canonicalTaskSource} from './task-source.js';
-import {sha256Hex,taskFingerprint,assertTaskFingerprint,assertTaskFingerprintSync} from './task-fingerprint.js';
+import {sha256Hex,taskFingerprint,assertTaskFingerprint} from './task-fingerprint.js';
 import {reviewExternalResultFiles} from './offline-result-review.js';
 import {creativeContentBrief} from './creative-content-brief.js';
 import {creativePageBrief} from './creative-page-brief.js';
@@ -25,8 +25,6 @@ import {classifyJournalMaterial,journalMaterialRoles,relevantJournalFamilies} fr
 import {journalReferenceGuide,selectJournalReferenceCases} from './journal-reference-catalog.js';
 import {journalAbstractTemplateGuide,selectJournalAbstractTemplates} from './journal-abstract-templates.js';
 import {journalSourceAudit,journalVerifiedPairs} from './journal-source-audit.js';
-import {paperDimensions} from './paper-sizes.js';
-import {assetFromSourceSnapshot} from './material-anatomy.js';
 
 export const OFFLINE_PACKAGE_FORMAT='shiye-gpt-creation-package';
 function packagePreviewPath(folder,name,bytes,{transparent=false}={}){
@@ -38,9 +36,7 @@ function packagePreviewPath(folder,name,bytes,{transparent=false}={}){
 
 export const EDITABLE_WORK_FORMAT='shiye-editable-project';
 export const EDITABLE_PACKAGE_ENTRY='project.shiyeproject.json';
-const allowedTools=new Set(['apply_craft_plan','compose_page','place_materials','edit_materials','upsert_materials','move_elements','arrange_elements','fit_text_to','upsert_primitives','upsert_text','style_elements','group_elements','ungroup_elements','delete_elements','set_paper','finish_design']);
 const compositionIdeas=source=>relevantJournalFamilies(source).map(({name,purposes,method,materials})=>({name,use:purposes.join('、'),plan:method,materialRoles:materials}));
-const caseStudies=(source,selected=[])=>({note:'包内仅选与本次风格、用途和素材相关的版式参考：原创重构家族案例及已匹配的私有教程原图（如果可读取）。这些参考图不是可用素材，图中文字不可当正文。模板与成品的配对证据见 abstract-templates.json 和 source-image-audit.json。',families:relevantJournalFamilies(source),selectedCases:selectJournalReferenceCases({styles:source.styles,purposes:source.purposes,materials:selected}).map(({id,title,method,copy})=>({id,title,method,copy})),materialRoles:journalMaterialRoles});
 const validAlias=validMaterialAlias;
 function validateTemplateReferences(selectedCases,selectedTemplates,referenceImages){
   const required=[...selectedCases.map(entry=>entry.id),...selectedTemplates.filter(entry=>entry.templateBlobId).map(entry=>`${entry.id}-template`),...selectedTemplates.filter(entry=>entry.exampleBlobId).map(entry=>`${entry.id}-case`)];
@@ -74,122 +70,74 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
   if(settings.deliveryMode==='image')return createOfflineImageHandoff({source,project:p,assets,selected,chosen,settings,referenceImages,showImages,userTemplates});
   const {offlineValidateSource}=await import('./generated/offline-validate-source.js');
   const {offlineGlyphSource}=await import('./generated/offline-glyph-source.js');
-  const mode=settings.generationMode==='direct'?'direct':'agent';
-  source.capabilities={cropPx:false,craftPlan:mode==='agent',multimodalVision:showImages,twoHoleWeave:mode==='agent',canonicalBrowserPreview:true,validateOffline:true,previewOffline:'approximate-svg'};
+  const mode='scene';
+  source.capabilities={sceneWorkbench:true,cropPx:false,craftPlan:true,multimodalVision:showImages,twoHoleWeave:true,canonicalBrowserPreview:true,validateOffline:true,previewOffline:'canvas'};
   source.packageLayout='compact';
-  const exportedContract=offlineContract(mode,{cropPx:false});
-  source.schemaHash=schemaFingerprint(exportedContract);source.planSchemaHash=schemaFingerprint(toolContracts.apply_craft_plan);
+  source.schemaHash=schemaFingerprint(webSceneContract);source.planSchemaHash=schemaFingerprint(toolContracts.apply_craft_plan);
   freezeCraftTask(source,p.drafts[0],assets);
   source.previewHashes=showImages?Object.fromEntries(await Promise.all(chosen.map(async entry=>[entry.alias,`sha256:${await sha256Hex(entry.bytes)}`]))):null;
   source.taskHash=await taskFingerprint(source);
   const context={format:OFFLINE_PACKAGE_FORMAT,version:2,source,materials:selected.map(item=>({...item,preview:showImages?packagePreviewPath('materials',item.alias,chosen.find(entry=>entry.alias===item.alias)?.bytes,{transparent:true}):null}))};
-  const envelope={format:EDITABLE_WORK_FORMAT,version:1,source,title:'新的手帐'};
-  const directExample={...envelope,page:{version:2,style:'自由构图',intent:null,
-    paper:{color:'#fcfaf0',pattern:'plain'},
-    layers:[
-      {type:'material',id:'hero',asset:selected[0].alias,piece:'hero',unit:0,
-        operations:[{op:'whole'}],placement:{x:.48,y:.42,rotation:-6,z:10}},
-      {type:'text',id:'title',content:'这一页的主题',font_style:'serif',
-        x:.5,y:.14,width:.76,height:.09,font_size:30,color:'#30463d'},
-      {type:'text',id:'body',content:'与这件素材有关的真实观察。',
-        font_style:'sans',x:.5,y:.8,width:.76,height:.11,font_size:19,color:'#30463d'}
-    ]}};
-  const layeredGraphics=[
-    {key:'note-base',kind:'roundedRectangle',x:.53,y:.74,width:.72,height:.19,fill:'#f5eccb',stroke:null,z:40},
-    {key:'marker',kind:'rectangle',x:.5,y:.745,width:.38,height:.022,fill:'#f8df6a',stroke:null,opacity:.68,z:50},
-    {key:'small-star',kind:'star',x:.86,y:.6,width:.035,height:.035,fill:'#e5ac52',stroke:null,z:60}
-  ];
-  const layeredTexts=[
-    {content:'这一页的主题',font_style:'serif',x:.5,y:.13,width:.7,height:.09,font_size:30,color:'#30463d',role:'title',z:900},
-    {content:'和这件素材有关的一句话，\n可放在它的旁边。',font_style:'sans',x:.77,y:.44,width:.26,height:.10,font_size:18,color:'#30463d',role:'caption',line_spacing:3,z:900},
-    {content:'把值得记住的小细节写在这里，\n让这张便签与附近的素材互相回应。',font_style:'sans',x:.53,y:.74,width:.62,height:.14,font_size:19,color:'#30463d',role:'body',line_spacing:4,z:900}
-  ];
-  directExample.page.layers.push(...layeredGraphics.map(shape=>({type:'shape',id:shape.key,...shape})));
-  directExample.page.layers.push({type:'ink',id:'hand-mark',points:[{x:.20,y:.63},{x:.24,y:.62},{x:.29,y:.64},{x:.34,y:.62}],width:3,color:'#5278a7',pen_style:'brush',opacity:.8});
-  const textRule={none:'不生成文字',requested:'仅按明确要求配文',minimal:'少量可编辑文字',rich:'丰富且可读的可编辑文字',automatic:'按用途生成可编辑文字'}[source.textMode]||'按用途生成可编辑文字';
-  const contentBrief=creativeContentBrief({policy:source.contentPolicy,userText:source.userText,providedFacts:source.providedFacts,topic:source.intent,purposes:source.purposes});
-  const task=[`内容要求：先读 CONTENT_BRIEF.txt；正文按页面用途写，不把创作讲解写入画面。`,`风格：${source.styles.map(name=>`${name}（${visualStyleBrief(name)}）`).join('；')||'不预设，由素材和主题决定'}`,`用途：${source.purposes.join('、')||'不预设，由主题决定'}`,`纸张：${source.ratio.toUpperCase()} · ${source.mode==='spread'?'双页':'单页'}`,`双页构图偏好：${source.mode==='spread'?'画布中线 x=0.5 是装订中缝；尽量让每一件实体素材完整留在左页或右页，避免横跨中缝。不是硬性限制，必要时可以跨页，数字文字与图形可自由跨页。':'单页没有中缝限制。'}`,`加工：${source.processing}`,`文字：${textRule}`].join('\n');
-  const densePage=source.purposes[0]!=='主题封面'&&source.styles[0]!=='极简留白';
-  const purposeNotes=source.purposes.map(name=>`${name}：${purposeMethod(name)}`).join('；');
-  const modeRules=mode==='direct'?'直接返回 page.version=2 的单棵 layers 图层树，不返回 tools；materials、shape、text、ink 与 group 都是 layers 节点，按树顺序叠放。素材经 operations 裁切、挖窗，实体尺寸、来源区域与单方案取用由拾页校验；不能输出并列的旧图层数组。':'返回 tools 操作数组，先用 compose_page，最后以 finish_design 结束；线条、边框、色块、多色矢量等放入 graphics 或 upsert_primitives；裁片后可用 edit_materials 的 mask、diagonal 和 window 加工，开窗是透明镂空而非白色覆盖；工具参数见 contract.json。';
   const hasPresets=settings.sendPresetReferences===true;
   const selectedCases=selectJournalReferenceCases({styles:source.styles,purposes:source.purposes,materials:selected});
   const selectedTemplates=selectJournalAbstractTemplates(selectedCases,{styles:source.styles,purposes:source.purposes,materials:selected,userTemplates});
   if(hasPresets)validateTemplateReferences(selectedCases,selectedTemplates,referenceImages);
   if(hasPresets)for(const entry of referenceImages)packagePreviewPath('references',entry.id,entry.bytes);
-  const example=mode==='direct'?directExample:{...envelope,tools:[{name:'compose_page',arguments:{materials:[{asset:selected[0].alias,piece:'主素材',unit:0,x:.5,y:.42}],graphics:[],texts:[{key:'title',content:'这一页的主题',width:.8,x:.5,y:.12,font_size:44,color:'#30463d',alignment:'center',role:'title'},{key:'body-1',content:'第一段可编辑正文。',width:.75,x:.5,y:.7,font_size:24,color:'#30463d',role:'body'},{key:'body-2',content:'第二段可编辑正文。',width:.75,x:.5,y:.82,font_size:24,color:'#30463d',role:'body'}],paper:{color:'#fcfaf0',pattern:'plain'}}},{name:'finish_design',arguments:{summary:'完成可编辑手帐'}}]};
-  if(mode!=='direct'){
-    example.tools[0].arguments.graphics=layeredGraphics;
-    example.tools[0].arguments.texts=layeredTexts.map((item,index)=>({...item,key:'example-text-'+index}));
+  const work=webSceneDocument(source,source.baseDraft,p.title);
+  const exampleDraft=attachSceneV2(structuredClone(source.baseDraft));
+  if(!exampleDraft.layers.length){
+    const ids=new Set([selected[0].assetID,...source.requiredAssetIDs]);
+    for(const [index,id] of [...ids].entries()){
+      const item=itemFromAsset(assets.find(a=>a.id===id),exampleDraft,exampleDraft.canvas.width*(.25+index%3*.25),exampleDraft.canvas.height*(.4+Math.floor(index/3)*.1));
+      item.id='example-material-'+index;item.type='material';item.creativePieceID='piece-'+index;exampleDraft.layers.push(item);
+    }
+    if(source.textMode!=='none'){
+      const title=textBlock('这一页的主题',exampleDraft);title.id='example-title';title.type='text';title.fontName='';title.style='serif';exampleDraft.layers.push(title);
+    }
   }
-  const runtimeCapabilities={schemaHash:source.schemaHash,sourcePixelCoordinates:false,cropPx:false,previewOnly:showImages,runtime:{validate:'node20',render:'browser-html-manual',preview:'approximate-svg',browserRender:'shiye-canvas-v2',pack:'node20',visualReview:'manual-required'},craft:{plan:mode==='agent',observations:mode==='agent'&&showImages,twoHoleWeave:mode==='agent',glyphGeometry:'local-font-required'}};
-  const knowledge={format:'shiye-gpt-task-knowledge',version:3,capabilities:runtimeCapabilities,
-    regions:source.sourceSnapshots.map(snapshot=>({assetID:snapshot.assetID,sourceRevision:snapshot.sourceRevision,anatomy:snapshot.anatomy})),
-    compositionIdeas:compositionIdeas(source).slice(0,3),
-    caseStudies:{families:relevantJournalFamilies({styles:source.styles,purposes:source.purposes}),selectedCases:hasPresets?selectedCases.map(({id,title,method})=>({id,title,method})):[]}
-  };
+  const example=webSceneDocument(source,exampleDraft,'字段示例（请重新创作）');
+  const knowledge={format:'shiye-gpt-task-knowledge',version:3,
+    capabilities:{...webSceneCapabilities,runtime:{validate:'node20',render:'browser-html-manual',preview:'canvas',visualReview:'manual-required'},craft:{plan:true,observations:showImages,twoHoleWeave:true,glyphGeometry:'local-font-required'}},
+    regions:source.sourceSnapshots.map(snapshot=>({assetID:snapshot.assetID,sourceRevision:snapshot.sourceRevision})),
+    compositionIdeas:compositionIdeas(source).slice(0,3),caseStudies:{families:relevantJournalFamilies(source),selectedCases:hasPresets?selectedCases.map(({id,title,method})=>({id,title,method})):[]}};
   if(hasPresets){
-    knowledge.abstractTemplates={note:'只借鉴方法，不能照搬素材或坐标',templates:selectedTemplates};
-    // Do not send the full 70-image tutorial audit when only a few matched
-    // references are in this task. Never claim an unverified cross-image pair.
-    const chosenReferences=new Set(referenceImages.map(entry=>entry.id));
-    knowledge.sourceImageAudit={images:journalSourceAudit.filter(row=>chosenReferences.has(row.id)),verifiedCrossImagePairs:journalVerifiedPairs.filter(row=>chosenReferences.has(row.caseId)&&chosenReferences.has(row.templateId))};
+    knowledge.abstractTemplates={note:'只借鉴方法，不照搬素材或坐标',templates:selectedTemplates};
+    const refs=new Set(referenceImages.map(e=>e.id));knowledge.sourceImageAudit={images:journalSourceAudit.filter(row=>refs.has(row.id))};
   }
-  const workflowText=offlineCreationWorkflowText({mode,hasImages:showImages});
-  const materialPlanning=offlineCreationPlanningData(source,selected,{mode,hasImages:showImages});
-  const pageBrief=creativePageBrief({styles:source.styles,purposes:source.purposes,textMode:source.textMode,
-    contentPolicy:source.contentPolicy,textPresentation:source.textPresentation,userText:source.userText,
-    theme:source.intent,pageMode:source.mode});
-  const compactGuide=[
-    '【内容边界】',contentBrief,
-    '【单双页构图与正文】',pageBrief,
-    '【创作原则】','先观察真实图案与物理尺寸，再建立主次、叠压、局部加工与阅读路径；拒绝把所有素材平铺成网格。标题、正文和手写装饰需要有实际内容；可保留有意义的留白，素材可少用但不可漏掉 required。参考图不是实体材料，也不是必须复刻的模板。',
-    ...(settings.includeStructureReference===false?[]:['【图文结构参考】',structureReferenceGuide]),
-    '【统一 Scene 的实体扩展】','图层可使用 vector_mask 表达 0–1 外轮廓与镂空孔洞；blend_mode=multiply 仅在透明纸、胶带或印色自然叠加时使用。相关文字、矢量和实体片段可以 代理工具 group_elements 或直接模式 page.layers 中的 group 节点 一起移动；编组不能缩放实体。所有编辑仍保存为拾页相同的 Draft 场景，不把真实图像烘焙成不可编辑的效果图。',
-    '【文字方式】',source.textPresentation==='handwritten'?'自由手写优先：用 page.layers 的 ink 图层或工艺计划 ink 绘制短句、标记与线条；长段可用可编辑手写风格文字，避免伪字迹。':source.textPresentation==='type'?'排版文字优先：文字保持独立可编辑，选好字体、行距与层次。':'混合编排：排版正文结合少量可编辑手写笔迹。',
-    '【编辑合同】',mode==='agent'?'只输出 tools；可使用 apply_craft_plan 做复杂取材与穿插；确切参数以 schema/output.json 为准。':'只输出 page.version=2 且仅含递归 page.layers 图层树；material.operations 按物理裁切协议，shape/text/ink 作为独立可编辑叶图层。禁止输出旧版 items/graphics/text_blocks/ink_strokes 并列数组。'
-  ].join('\n\n');
-  const compactStart=`拾页 GPT 创作任务 · 先读这一页
-请创作一幅独立、可编辑的手帐作品，不要把整页烘焙成图片。按以下优先级工作：
-1. 先看 task/context.json 与 materials/ 真实素材。source、尺寸、单方案取用、required 必须保持；素材标题不是图像观察证据。
-2. 阅读 task/WORKFLOW.txt 的创作步骤、task/GUIDE.txt 的用户内容边界。${mode==='agent'?'逐件查看 task/CRAFT_GUIDE.txt 的实体工艺与权限说明，再决定完整保留还是加工。':'按 schema/output.json 决定素材的完整使用或合法裁切。'}可参考 task/material-planning.json 的问题，不把它的假设当事实。
-3. 内部比较至少两种素材组合方向，选最自然的一种；有选择地裁切、叠压、穿插和手写，不照抄 references/ 的版式。
-4. 合法输出合同是 schema/output.json。当前模式：${mode==='direct'?'page（直接排版）':'tools（调用工具）'}，不能混用。${mode==='direct'?'高级 observations/weaves 不可混入直接排版。':'只包含本合同的 tools；严禁额外顶层 page。'}examples/project.shiyeproject.json 仅展示字段，不能复制正文或坐标。高级工艺参数仅在 tools 模式阅读 schema/craft-plan.json。
-5. 将完整结果保存为 project.shiyeproject.json，运行 node runtime/preview.cjs 生成 output/画面预览.html；必须使用实际浏览器打开它、等待 SHIYE_RENDER_READY，再通过页面“下载 PNG”按钮或 Canvas 截图取得同一 Scene 的 PNG，并在聊天中实际展示这张图片，然后交付 JSON。不能用 output/构图预览.svg 或另生成的画作冒充 Canvas 预览；如果浏览器不可用，明确写未能生成真实 Canvas 预览，不要声称已经展示。
-6. 若用户要求看预览，先在聊天中展示同源 Canvas PNG，再按用户指定格式交付完整 JSON（可用 JSON 代码围栏）；若用户明确限定仅有一个 JSON 代码块且不允许附加图，则遵守该限制，并说明无法显示图像时不能冒充已预览。保留 source 原样，只更改 title 与 ${mode==='direct'?'page':'tools'}。
-
-【本次主题、要求和内容】
-${source.intent||'未指定：根据素材自由创作'}
-风格：${source.styles.join('、')||'自由发挥'}；用途：${source.purposes.join('、')||'日常记录'}。
-纸张：${source.ratio} ${source.mode==='spread'?'双页':'单页'}；文字内容：${source.contentPolicy}；表现：${source.textPresentation||'mixed'}。
-${settings.customLayoutPrompt?'补充要求：'+settings.customLayoutPrompt:''}
-${showImages?'素材图以 materials/ 为准，保留透明通道。':'本包无素材图片，切勿猜测细节。'}
-${hasPresets?'references/ 只作为灵感来源，不是可用素材。':''}
-`;
+  const guide=[creativeContentBrief({policy:source.contentPolicy,userText:source.userText,providedFacts:source.providedFacts,topic:source.intent,purposes:source.purposes}),
+    creativePageBrief({styles:source.styles,purposes:source.purposes,textMode:source.textMode,contentPolicy:source.contentPolicy,textPresentation:source.textPresentation,userText:source.userText,theme:source.intent,pageMode:source.mode}),
+    webArtDirection(source),'所有静态对象在 page.layers 中编辑；完整字段与命令见 task/EDITING.txt。',settings.customLayoutPrompt||'',settings.includeStructureReference===false?'':structureReferenceGuide].join('\n\n');
   const files={
-    'START_HERE.txt':strToU8(compactStart),
+    'START_HERE.txt':strToU8(webWorkbenchInstructions),
+    'scene.json':strToU8(JSON.stringify(work,null,2)),
     'task/context.json':strToU8(JSON.stringify(context,null,2)),
-    'task/WORKFLOW.txt':strToU8(workflowText),
-    'task/material-planning.json':strToU8(JSON.stringify(materialPlanning,null,2)),
-    'task/VISUAL_REVIEW.txt':strToU8(offlineVisualReviewChecklist),
-    'task/GUIDE.txt':strToU8(compactGuide),
-    ...(mode==='agent'?{'task/CRAFT_GUIDE.txt':strToU8(`${craftTaskInstructions}\n\n${materialCraftGuide}\n\n【本次取材决策】\n逐件查看 materials/ 中的实际边缘、主体、印刷文字和可裁区域，统一遵守 source.processing 指定的素材加工方式。设置为“不预设”表示没有额外限制，不表示必须加工。至少比较完整、局部取材、边缘加工或与另一素材建立实体关系，选对最终画面有帮助且符合权限的做法。\n\n若使用 apply_craft_plan，请在 decisions 中逐件写明 choice 与具体视觉理由；whole 的理由应说明要保护的主体、外轮廓或完整叙事，不能只写“保持原样”。需要局部图案时，用 observations 给出真实 boundsRatio/outlineRatio，再在 pieces.extraction 引用 observed_region；需要实体边缘、镂空或组合时用 pieces.treatments、pieces.relation、consume/parentId 或 weaves，并按 schema/craft-plan.json 校验。只有图形、手写和遮挡而没有实体加工时，也应如实描述为数字构图，不把它称为裁片、穿插或开窗。完整使用可以是最好的决定，不设工艺数量指标。`) }:{}),
+    'task/WORKFLOW.txt':strToU8(webWorkbenchInstructions),
+    'task/EDITING.txt':strToU8(webEditingGuide),
+    'task/CAPABILITIES.json':strToU8(JSON.stringify(webSceneCapabilities,null,2)),
+    'task/material-planning.json':strToU8(JSON.stringify(offlineCreationPlanningData(source,selected,{mode,hasImages:showImages}),null,2)),
+    'task/VISUAL_REVIEW.txt':strToU8(offlineVisualReviewChecklist+'\n\n'+webArtDirection(source)),
+    'task/GUIDE.txt':strToU8(guide),
+    'task/CRAFT_GUIDE.txt':strToU8(craftTaskInstructions+'\n统一遵守 source.processing；没有逐件用法覆盖。\n'+materialCraftGuide+'\n'+multimodalCraftGuide+'\n逐件查看 materials/ 的实际图案，在 decisions 说明取舍；可用 observed_region 引用本次看图观察。完整使用可以是最佳决定，不设工艺数量指标。'),
     'task/knowledge.json':strToU8(JSON.stringify(knowledge,null,2)),
-    'schema/output.json':strToU8(JSON.stringify(exportedContract,null,2)),
+    'schema/output.json':strToU8(JSON.stringify(webSceneContract,null,2)),
+    'schema/scene.json':strToU8(JSON.stringify(webSceneContract,null,2)),
+    'schema/tools.json':strToU8(JSON.stringify(offlineContract('agent',{cropPx:false}),null,2)),
+    'schema/convenient-page.json':strToU8(JSON.stringify(directPageContract,null,2)),
     'schema/craft-plan.json':strToU8(JSON.stringify(toolContracts.apply_craft_plan,null,2)),
     'examples/project.shiyeproject.json':strToU8(JSON.stringify(example,null,2)),
+    'examples/instructions.json':strToU8(JSON.stringify({tools:[{name:'compose_page',arguments:{materials:[{asset:selected[0].alias,piece:'hero',x:.5,y:.45}],paper:{color:'#fcfaf0',pattern:'plain'}}}]},null,2)),
     'runtime/glyphs.cjs':strToU8(offlineGlyphSource),
     'runtime/validate.cjs':strToU8(offlineValidateSource),
-    'runtime/preview.cjs':strToU8(`process.argv[2]='preview';require('./validate.cjs');
-`),
-    'runtime/README.txt':strToU8('把完整 JSON 保存为任务根目录 project.shiyeproject.json。Node.js 20+：validate.cjs 校验；preview.cjs 生成 output/构图预览.svg 与 output/画面预览.html；用真实浏览器打开 HTML，等待 SHIYE_RENDER_READY，从实际 Canvas 下载 PNG，并把图片展示给用户；如无浏览器须明确说明未验收。最终将 project.shiyeproject.json 单文件交回拾页，不要交付 ZIP 工程包。运行时只读取 task/context.json。glyphs.cjs 只从本地已有字体生成数值轮廓，不携带字体文件。 中文 SVG/HTML 预览依赖系统可用中文字体（例如 Noto/PingFang/微软雅黑）；如果看到方框字，请安装中文字体并重新渲染或在拾页中打开可编辑作品，不能把方框预览视为最终效果。')
+    'runtime/README.txt':strToU8(webWorkbenchInstructions+'\n\n'+webEditingGuide)
   };
+  for(const name of ['inspect','compile','apply','preview','pack','self-test'])files['runtime/'+name+'.cjs']=strToU8(`process.argv.splice(2,0,'${name}');require('./validate.cjs');\n`);
   for(const entry of chosen)if(validAlias(entry.alias)&&source.materials.some(item=>item.alias===entry.alias))files[packagePreviewPath('materials',entry.alias,entry.bytes,{transparent:true})]=entry.bytes;
   if(hasPresets)for(const entry of referenceImages)files[packagePreviewPath('references',entry.id,entry.bytes)]=entry.bytes;
   const bytes=await new Promise((resolve,reject)=>zip(files,{level:4},(error,result)=>error?reject(error):resolve(result)));
   const prompts={file:webResultPrompt(mode,'file'),text:webResultPrompt(mode,'text')};
   return {blob:new Blob([bytes],{type:'application/zip'}),filename:'拾页-GPT创作任务.zip',prompt:prompts.file,prompts,source,mode,previewCount:chosen.length,imageBytes:[...chosen,...(hasPresets?referenceImages:[])].reduce((total,item)=>total+item.bytes.length,0),packageBytes:bytes.length};
 }
+
 async function createOfflineImageHandoff({source,project:p,assets,selected,chosen,settings,referenceImages,showImages,userTemplates=[]}){
   const hasPresets=settings.sendPresetReferences===true;
   const selectedCases=selectJournalReferenceCases({styles:source.styles,purposes:source.purposes,materials:selected});
@@ -231,7 +179,7 @@ async function createOfflineImageHandoff({source,project:p,assets,selected,chose
   return {blob:new Blob([bytes],{type:'application/zip'}),filename:'拾页-AI画面任务.zip',prompt,prompts:{file:prompt,text:null},source,mode:'image',deliveryMode:'image',previewCount:chosen.length,imageBytes:[...chosen,...(hasPresets?referenceImages:[])].reduce((total,item)=>total+item.bytes.length,0),packageBytes:bytes.length};
 }
 export function inspectEditableSource(text){
-  if(text.length>2_000_000)throw Error('可编辑作品文件过大');
+  if(new TextEncoder().encode(text).byteLength>8_000_000)throw Error('可编辑作品文件过大');
   const blocks=[...text.matchAll(/```(?:json|shiyeproject)?\s*([\s\S]*?)```/gi)].map(match=>match[1].trim()).filter(block=>block.includes(EDITABLE_WORK_FORMAT));
   if(blocks.length>1)throw Error('检测到多个可编辑数据块，请只复制其中一个');
   let input;try{input=JSON.parse(blocks[0]||text.trim());}catch{throw Error('可编辑作品不是有效 JSON');}
@@ -242,47 +190,8 @@ export function importEditableWork(text,assets,{trustedSource=null}={}){
   const input=inspectEditableSource(text);
   if(input?.format!==EDITABLE_WORK_FORMAT||input.version!==1)throw Error('不是拾页可编辑作品文件');
   const source=input.source;
-  if(!source||typeof source.bundleId!=='string'||!Array.isArray(source.materials)||!source.materials.length||source.materials.length>100)throw Error('创作包来源无效');
-  if(source.taskBinding!=='local'||source.packageLayout!=='compact')throw Error('创作包来源格式无效');
-  assertTaskFingerprintSync(source);
-  if(trustedSource&&canonicalTaskSource(source)!==canonicalTaskSource(trustedSource))throw Error('作品来源与所选原始任务不一致');
-  if(!['single','spread'].includes(source.mode)||!paperDimensions(source.ratio))throw Error('纸张规格无效');
-  const direct=input.page!==undefined,planned=input.plan!==undefined;
-  if([input.page,input.plan,input.tools].filter(value=>value!==undefined).length!==1)throw Error('作品只能包含 page、plan、tools 中的一种入口');
-  const tools=planned?[{name:'apply_craft_plan',arguments:input.plan}]:direct?directPageToTools(input.page):input.tools;
-  const standalonePlan=Array.isArray(tools)&&tools.length===1&&tools[0]?.name==='apply_craft_plan';
-  if(!Array.isArray(tools)||!tools.length||tools.length>12||(direct?tools.length!==1||tools[0].name!=='compose_direct_page':!standalonePlan&&(tools.at(-1)?.name!=='finish_design'||!tools.some(t=>t.name==='compose_page'||t.name==='apply_craft_plan'))))throw Error('作品需要完整页面、完整工艺计划，或包含 compose_page 并以 finish_design 结束的有效工具数组');
-  const baseDraft=validateCraftTask(source,assets);
-  if(!direct&&tools.some(t=>!allowedTools.has(t?.name)))throw Error('作品包含不支持的创作操作');
-  if(planned){
-    if(schemaFingerprint(offlinePlanContract())!==source.planSchemaHash)throw Error('工艺计划合同版本不匹配');
-    validateValue(input.plan,offlinePlanContract(),'$.plan');
-  }else{
-    if(!source.schemaHash)throw Error('创作任务缺少当前输出合同指纹');
-    const contract=offlineContract(direct?'direct':'agent',{cropPx:false});
-    if(schemaFingerprint(contract)!==source.schemaHash)throw Error('创作包合同版本不匹配');
-    if(direct)validateValue(input.page,contract,'$.page');
-    else for(const [index,tool] of tools.entries())validateValue(tool.arguments,contract[tool.name],`$.tools[${index}].arguments`);
-  }
-  const aliases={},seen=new Set();for(const m of source.materials){if(!validAlias(m.alias)||typeof m.assetID!=='string'||seen.has(m.alias)||!assets.some(a=>a.id===m.assetID))throw Error('作品引用了不存在或重复的素材');seen.add(m.alias);aliases[m.alias]=m.assetID;}
-  if(!Array.isArray(source.requiredAssetIDs)||source.requiredAssetIDs.some(id=>!Object.values(aliases).includes(id)))throw Error('必用素材不在创作包中');
-  const sourcePriority=source.materialPriority,allowedIDs=new Set(Object.values(aliases));
-  if(sourcePriority&&['required','preferred','available'].some(key=>!Array.isArray(sourcePriority[key])||sourcePriority[key].some(id=>!allowedIDs.has(id))))throw Error('素材优先级引用了创作包之外的素材');
-  const title=typeof input.title==='string'&&input.title.trim()?input.title.trim().slice(0,80):'导入的可编辑作品';
-  const p=project(title,{mode:source.mode,ratio:source.ratio,style:Array.isArray(source.styles)?source.styles[0]:'韩系清新'});
-  // Execute the AI's plan against the task it actually saw. Current assets
-  // were already checked for matching cutouts and measured dimensions above.
-  const selectedAssets=source.sourceSnapshots.map(snapshot=>assetFromSourceSnapshot(snapshot,{frozenRevision:true}));
-  if(baseDraft){validateNativeDraft(baseDraft,new Set(selectedAssets.map(a=>a.id)));p.drafts[0]=baseDraft;p.activeDraftID=baseDraft.id;}
-  const result=applyToolCalls({tools},p.drafts[0],selectedAssets,aliases,{visualAssetIDs:source.materials.filter(m=>source.previewHashes?.[m.alias]).map(m=>m.assetID),requiredAssetIDs:source.requiredAssetIDs,processing:source.processing||'不预设',textMode:source.textMode||'automatic',pagePurposes:source.purposes||['日常记录'],allowNoText:source.textMode==='none'||source.purposes?.every(x=>x==='主题封面')});
-  const error=result.results.find(x=>!x.ok);if(error)throw Error(`${error.name}：${error.detail}`);
-  if(!result.committed||result.draft.agentRun?.status!=='finished')throw Error('作品没有完成可编辑页面校验');
-  stabilizeImportedCraftScene(result.draft,baseDraft,source.bundleId);
-  p.drafts[0]=result.draft;p.candidateAssetIDs=Object.values(aliases);p.requiredAssetIDs=[...source.requiredAssetIDs];p.materialPriority=sourcePriority?{required:[...sourcePriority.required],preferred:[...sourcePriority.preferred],available:[...sourcePriority.available],excluded:[]}:{required:[...source.requiredAssetIDs],preferred:Object.values(aliases).filter(id=>!source.requiredAssetIDs.includes(id)),available:[],excluded:[]};p.styles=source.styles;p.purposes=source.purposes;p.processing=source.processing;p.offlineBundleId=source.bundleId;inheritCreationBrief(p,source);
-  // An external preview is never evidence that this editable scene rendered
-  // correctly. The app must independently render and review the final draft.
-  p.creationVerification={structure:'passed',physical:'current-rules-passed',preview:'unverified',reading:'pending',sourceTaskId:source.bundleId};
-  return p;
+  if(!source?.capabilities?.sceneWorkbench)throw Error('请使用当前网页版创作包，最终交付原生 Scene 图层');
+  return importWebScene(input,assets,{trustedSource});
 }
 // The ZIP is a versioned, extensible document container. Its scene remains
 // individually editable; material references resolve to this account's
@@ -328,7 +237,7 @@ export function importEditableWorkPackage(bytes,assets,options={}){
   let files;
   try{files=unzipSync(bytes,{filter:file=>{
     if(file.name!==EDITABLE_PACKAGE_ENTRY)return false;
-    if(file.originalSize>2_000_000)throw Error('作品图层数据不能超过 2 MB');
+    if(file.originalSize>8_000_000)throw Error('作品图层数据不能超过 8 MB');
     return true;
   }});}catch(error){throw Error('无法读取可编辑作品包：'+error.message);}
   const scene=files[EDITABLE_PACKAGE_ENTRY];

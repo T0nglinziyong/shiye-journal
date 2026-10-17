@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {unzipSync,strFromU8} from 'fflate';
 import {project} from '../src/domain.js';
 import {createOfflineHandoff,importEditableWork} from '../src/offline-creation.js';
-import {offlineCreationPlanningData,offlineCreationWorkflowText} from '../src/offline-creation-workflow.js';
+import {offlineCreationPlanningData} from '../src/offline-creation-workflow.js';
 import {offlineBrowserPage} from '../src/offline-browser-page.js';
 import {auditOfflineCanvasDraft} from '../src/offline-canvas-audit.js';
 
@@ -32,7 +32,7 @@ test('planning information distinguishes evidence from visual hypotheses',()=>{
  assert.doesNotMatch(JSON.stringify(plan),/山水|蝴蝶|人物/);
 });
 
-test('each task mode is explicitly unique and cannot instruct both page and tools',async()=>{
+test('web exports one Scene protocol regardless of API generation preference',async()=>{
  for(const mode of ['direct','agent']){
    const {task,files}=await unpack({generationMode:mode});
    const start=strFromU8(files['START_HERE.txt']);
@@ -44,16 +44,11 @@ test('each task mode is explicitly unique and cannot instruct both page and tool
    assert.match(start,/画面预览\.html/);
    assert.match(workflow,/观察|关系/);
    assert.match(checklist,/同源|Canvas/);
-   assert.equal(insights.mode,mode);
-   if(mode==='direct'){
-     assert.ok(example.page);assert.equal(example.tools,undefined);
-     assert.match(workflow,/不输出 tools\/plan/);
-     assert.match(start,/高级 observations\/weaves 不可混入/);
-   }else{
-     assert.ok(example.tools);assert.equal(example.page,undefined);
-     assert.match(workflow,/不输出 page 或额外顶层 plan/);
-     assert.match(start,/只包含本合同的 tools/);
-   }
+   assert.equal(insights.mode,'scene');
+   assert.ok(example.page);assert.equal(example.tools,undefined);
+   assert.equal(example.page.sceneVersion,2);
+   assert.match(workflow,/工具和 Craft Plan 都是修改它的输入/);
+   assert.ok(files['schema/tools.json']);
    assert.equal(importEditableWork(JSON.stringify(example),assets,{trustedSource:task.source}).isDraft,true);
  }
 });
@@ -68,12 +63,6 @@ test('HTML renderer accepts same-task WebP and clearly requires visual inspectio
  assert.match(html,/dataset\.renderState/);
  assert.match(html,/渲染失败/);
  assert.doesNotMatch(html,/http:\/\/|https:\/\//);
-});
-
-test('direct and agent notes only claim browser-manual visual review',()=>{
- assert.match(offlineCreationWorkflowText({mode:'direct'}),/高级 plan\.observations.*不属于 direct/);
- assert.match(offlineCreationWorkflowText({mode:'agent'}),/apply_craft_plan/);
- assert.doesNotMatch(offlineCreationWorkflowText({mode:'direct'}),/输出只能是一个含 tools/);
 });
 
 test('same-renderer font wrapping produces useful warnings, not false visual approval',()=>{

@@ -1,3 +1,4 @@
+import {compileAndImport} from './web-scene-fixture.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {webcrypto} from 'node:crypto';
@@ -98,11 +99,11 @@ test('offline task imports a plan using its original source and full creation br
  const handoff=await createOfflineHandoff({project:p,assets:[a],aliases:{m1:a.id},settings:{includeThumbnails:false,generationMode:'direct'}});
  const input=plan(handoff.source.baseDraft,a,[plannedPiece(a,'words',{extraction:{type:'rect_crop',boxMM:[10,8,40,24]}})]);
  const envelope={format:'shiye-editable-project',version:1,source:handoff.source,title:'plan',plan:input};
- const imported=importEditableWork(JSON.stringify(envelope),[a],{trustedSource:handoff.source});
+ const imported=compileAndImport(JSON.stringify(envelope),[a],{trustedSource:handoff.source});
  assert.equal(imported.contentPolicy,'original');assert.equal(imported.userText,'原文');assert.equal(imported.processing,p.processing);assert.equal(handoff.source.assetProcessing,undefined);
  assert.equal(imported.drafts[0].items.length,1);
  const updated={...a,kind:'tape',supply:{quantity:0},title:'新标题',role:'decoration'};
- const afterEdit=importEditableWork(JSON.stringify(envelope),[updated],{trustedSource:handoff.source});
+ const afterEdit=compileAndImport(JSON.stringify(envelope),[updated],{trustedSource:handoff.source});
  assert.equal(afterEdit.drafts[0].items.length,1);
  assert.equal(afterEdit.drafts[0].items[0].craftProvenance.sourceRevision,assetSourceRevision(a));
  const driftedSource=structuredClone(handoff.source),frozen='sha256:'+'f'.repeat(64);
@@ -111,9 +112,9 @@ test('offline task imports a plan using its original source and full creation br
  driftedSource.taskHash=await taskFingerprint(driftedSource);
  const driftedPlan=structuredClone(input);driftedPlan.pieces[0].sourceRevision=frozen;
  const drifted={...envelope,source:driftedSource,plan:driftedPlan};
- const stable=importEditableWork(JSON.stringify(drifted),[updated]);
+ const stable=compileAndImport(JSON.stringify(drifted),[updated]);
  assert.equal(stable.drafts[0].items[0].craftProvenance.sourceRevision,frozen);
- assert.throws(()=>importEditableWork(JSON.stringify(envelope),[{...a,physicalWidthMM:101}],{trustedSource:handoff.source}),/已变化/);
+ assert.throws(()=>compileAndImport(JSON.stringify(envelope),[{...a,physicalWidthMM:101}],{trustedSource:handoff.source}),/已变化/);
 });
 test('native roundtrip preserves current scene and persistent craft geometry while dropping session undo',async()=>{
  const a=material(),p=project('native');const next=successful(run(plan(p.drafts[0],a,[plannedPiece(a,'cut',{treatments:[{op:'cut_shape',shape:'ellipse',mode:'remove',unit:'mm',box:[25,20,40,30]}]})]),p.drafts[0],a));

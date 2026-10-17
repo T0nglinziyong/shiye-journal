@@ -1,3 +1,4 @@
+import {compileAndImport} from './web-scene-fixture.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {zipSync,unzipSync,strFromU8,strToU8} from 'fflate';
@@ -63,7 +64,7 @@ test('one exported task carries images, exact versions, multimodal instructions 
  assert.match(strFromU8(files['START_HERE.txt']),/schema\/craft-plan\.json/);assert.match(strFromU8(files['START_HERE.txt']),/独立、可编辑/);
  assert.ok(files['runtime/glyphs.cjs']);assert.ok(files['schema/craft-plan.json']);assert.ok(files['materials/m1.png']);
  const envelope={format:'shiye-editable-project',version:1,source:handoff.source,plan:plan(handoff.source.baseDraft,a)};
- const imported=importEditableWork(JSON.stringify(envelope),[a],{trustedSource:handoff.source});assert.equal(imported.drafts[0].items.length,1);
+ const imported=compileAndImport(JSON.stringify(envelope),[a],{trustedSource:handoff.source});assert.equal(imported.drafts[0].items.length,1);
  assert.equal(imported.processing,'自由拆解');assert.deepEqual(a.anatomy,undefined);
 });
 const weaveDraft=()=>attachSceneV2({id:'weave',sceneVersion:2,canvas:{width:300,height:200},physicalPageHeightMM:200,pageRatio:'custom:300x200',pageMode:'single',paperColor:'#fff',layers:[

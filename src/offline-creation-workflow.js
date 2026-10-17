@@ -41,28 +41,6 @@ export function offlineCreationPlanningData(source,selected,{mode='agent',hasIma
   };
 }
 
-export function offlineCreationWorkflowText({mode='agent',hasImages=true}={}){
-  const target=mode==='direct'
-    ?'输出只能是一个含 page 的可编辑 JSON；不输出 tools/plan；高级 plan.observations 与 weaves 不属于 direct 合同。page.layers 中 material.operations 可用 schema/output.json 列出的 crop、cut_shape 等操作；其余节点为 type=shape/text/ink/group。'
-    :'输出只能是一个含 tools 的可编辑 JSON；可使用 apply_craft_plan（含 observations/pieces/relations/ink）或 compose_page 等工具，须按 schema/output.json 逐项校验。不输出 page 或额外顶层 plan。';
-  return [
-    '拾页创作方法 · 先设计，再落地（一次任务内部完成，不要求用户多次交互）',
-    '',
-    '【创作步骤】',
-    '1. 观察：'+(hasImages?'逐张查看 materials/，识别主体、背景、纹理、轮廓、印刷文字和负空间；不确定就保留未知。':'本包未提供素材图片，只能根据文字元数据谨慎判断，不得猜测图案。')+' task/material-planning.json 是问题清单，不是已证实的视觉识别。',
-    '2. 关系：探索至少两种明显不同的内部方案，例如场景叙事／记录拼贴／自由错层；比较前景背景、主次、色彩、主题和阅读路径，只选最适合的一种，不输出多个成品。',
-    '3. 取舍与加工：逐件决定 whole / crop / cut_shape / 叠压 / 半藏 / 不使用；依据视觉关系、物理尺寸和单方案来源约束，而不是强制使用高级工具。可以少用 preferred，不可漏 required。',
-    '4. 图文一体：文字承担记录内容，而非解释制作方法。优先使用用户事实；没有事实时写标明原创的观察文字，不编造私人行程、身份或日期。数字线条、笔迹、字级和小装饰服务阅读。',
-    '自由字迹：需要真实手绘线条时使用多个独立笔画；直接排版写入 page.layers 下的 ink 节点，调用工具模式可在 apply_craft_plan.ink 中填写。每笔含 0–1 页面坐标的 points（可选 pressure 0–1）、width、color、opacity 和 pen_style。连续笔迹用多个点重建，抬笔必须拆成下一笔；普通印刷正文仍优先采用可编辑 text_blocks，而不是逐笔描绘数百个字。不要把笔迹烘焙为图片。',
-    '5. 构图与执行：先定素材之间的联系、大小层级和遮挡，再细化坐标、旋转、字体与图形。数字层保持可编辑，实体尺寸和数量不变。数字点缀可用雨滴、爱心、云朵、花叶、闪光、票根、胶带、波浪线等 schema/output.json 允许的图形，支持分别指定填充颜色/透明度和描边颜色/粗细/透明度/虚线；按表达需要使用，不为填满页面而装饰。',
-    '6. 校验与复核：先运行 Node 结构/物理校验，再用真实浏览器打开 output/画面预览.html，等待 SHIYE_RENDER_READY；从该页面的 Canvas 导出 PNG 并在对话中展示给用户，检查透明边缘、遮挡、中文字形、溢出与阅读顺序。修改后必须重新渲染同一 JSON。output/构图预览.svg 是近似图，不能冒充真正 Canvas；浏览器不可用时不得声称已有可展示的 Canvas 预览。',
-    '',
-    '【本次唯一输出协议】',
-    target,
-    '最终可编辑作品以 project.shiyeproject.json 为权威，source 原样不变；需要展示预览时应先展示实际 Canvas PNG，再交付一个最佳可编辑画面。可将其作为独立 .shiyeproject.json 作品文件交付，ZIP 是可选包装形式；复制文本交付同一 JSON。若无法运行 Canvas 或缺少中文字库，明确写“真实视觉/字体未验收”。'
-  ].join('\n');
-}
-
 export const offlineVisualReviewChecklist=[
   '拾页 · 最终预览验收清单',
   '',

@@ -26,14 +26,14 @@ export function readProjectPackageEntries(bytes,{allowTask=false}={}){
       if(name===NATIVE)native=true;
       if(name===EDITABLE)editable=true;
       if(name===TASK_CONTEXT)task=true;
-      if((name===NATIVE||name===EDITABLE)&&entry.originalSize>(name===NATIVE?8_000_000:2_000_000))throw Error('作品图层数据过大');
+      if((name===NATIVE||name===EDITABLE)&&entry.originalSize>8_000_000)throw Error('作品图层数据过大');
       if(ADVISORY_ENTRIES.has(name)&&entry.originalSize>ADVISORY_ENTRIES.get(name))throw Error('作品包预览或报告过大');
-      if(allowTask&&name===TASK_CONTEXT&&entry.originalSize>2_000_000)throw Error('原始任务数据过大');
+      if(allowTask&&name===TASK_CONTEXT&&entry.originalSize>8_000_000)throw Error('原始任务数据过大');
       return name===NATIVE||name===EDITABLE||ADVISORY_ENTRIES.has(name)||allowTask&&name===TASK_CONTEXT;
     }});
   }catch(error){throw Error('无法读取可编辑作品包：'+error.message);}
   if(native&&editable)throw Error('作品包包含两个场景入口，无法确定权威作品');
   if(!native&&!editable&&!(allowTask&&task))throw Error('作品包缺少可编辑场景');
-  for(const [name,data] of Object.entries(files))if(data.byteLength>(ADVISORY_ENTRIES.get(name)??(name===NATIVE?8_000_000:2_000_000)))throw Error('作品图层实际解压数据过大');
+  for(const [name,data] of Object.entries(files))if(data.byteLength>(ADVISORY_ENTRIES.get(name)??8_000_000))throw Error('作品图层实际解压数据过大');
   return {kind:native?'native':editable?'editable':'task',files};
 }

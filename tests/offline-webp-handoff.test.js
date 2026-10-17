@@ -73,11 +73,11 @@ test('PNG transparency fallback shrinks huge previews instead of failing package
  }finally{mock.close();}
 });
 test('offline SVG/HTML/runtime support content-based WebP and PNG MIME',async()=>{
- const names=['offline-preview-svg.js','offline-browser-page.js','offline-runtime-entry.mjs','offline-creation.js'];
+ const names=['offline-preview-svg.js','offline-browser-page.js','web-workbench-runtime.mjs','offline-creation.js'];
  const [svg,html,runtime,creation]=await Promise.all(names.map(name=>readFile(new URL('../src/'+name,import.meta.url),'utf8')));
  assert.match(svg,/previewImageFormat\(bytes\)/);
  assert.match(html,/previewImageFormat\(previews\[m.alias\]\)/);
- assert.ok(runtime.includes('(?:webp|png)'));
+ assert.ok(runtime.includes('(png|webp)'));
  assert.ok(creation.includes('packagePreviewPath'));
  assert.ok(svg.includes('Noto Sans CJK SC'));
 });

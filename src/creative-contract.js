@@ -92,7 +92,7 @@ export function validateValue(value,schema,path='$'){
 export function validateTool(name,args){if(!Object.hasOwn(toolContracts,name))throw Error('未知工具 '+name);validateValue(args,toolContracts[name],'$.'+name);}
 const directText=object({...sceneStyle,content:string(1500),font_style:enums(['serif','sans','rounded','hand']),font_name:string(120),x:num(0,1),y:num(0,1),width:num(.01,1),height:num(.01,1),font_size:num(5,400),color,z:integer(-1000,1000),rotation:num(-180,180),opacity:num(0,1),role:enums(['title','body','caption','label']),alignment:enums(['left','center','right']),bold:{type:'boolean'},italic:{type:'boolean'},underline:{type:'boolean'},strikethrough:{type:'boolean'},line_spacing:num(0,80),fixed_line_height:num(5,400),paragraph_spacing:num(0,80),letter_spacing:num(-5,30)},['content','font_style','x','y','width','height','font_size','color']);
 const inkPoint=object({x:num(0,1),y:num(0,1),pressure:num(0,1)},['x','y']);
-const inkStroke=object({points:array(inkPoint,1,512),width:num(.5,60),color,opacity:num(0,1),pen_style:enums(['fountain','ballpoint','brush','marker'])},['points','width','color','pen_style']);
+const inkStroke=object({points:array(inkPoint,1,512),width:num(.5,60),color,opacity:num(0,1),pen_style:enums(['pressure','fountain','ballpoint','brush','marker'])},['points','width','color','pen_style']);
 const directOperations=operationContract;
 const directMaterial=object({...material.properties,operations:array(directOperations,1,12)},['asset','piece','operations','placement']);
 

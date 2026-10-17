@@ -1,3 +1,4 @@
+import {attachSceneV2,sceneLayerEntries} from './scene-v2.js';
 import {renderSceneCanvas,decodeSceneImage} from './scene-renderer.js';
 import {auditOfflineCanvasDraft} from './offline-canvas-audit.js';
 
@@ -8,9 +9,8 @@ export async function render(payload){
   document.body.dataset.renderState='rendering';
   window.SHIYE_RENDER_REPORT=null;
   const status=document.querySelector('#status'),button=document.querySelector('#save');
-  const sourceIDs=[...new Set((payload.draft.items||[])
-    .filter(item=>!item.hidden&&!item.isHidden&&!item.isParked)
-    .map(item=>item.assetID).filter(Boolean))];
+  attachSceneV2(payload.draft);
+  const sourceIDs=[...new Set(sceneLayerEntries(payload.draft).filter(e=>e.kind==='material').map(e=>e.value.assetID))];
   const seen=new Set();
   const {canvas,report}=await renderSceneCanvas(payload.draft,{
     scale:payload.scale||1,

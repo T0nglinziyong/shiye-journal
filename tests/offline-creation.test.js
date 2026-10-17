@@ -18,12 +18,12 @@ const filesOf=async output=>unzipSync(new Uint8Array(await output.blob.arrayBuff
 
 test('current GPT task package has one root entry and grouped compact folders',async()=>{
   const output=await make(),files=await filesOf(output),context=JSON.parse(strFromU8(files['task/context.json']));
-  assert.deepEqual(Object.keys(files).filter(name=>!name.includes('/')).sort(),['START_HERE.txt']);
+  assert.deepEqual(Object.keys(files).filter(name=>!name.includes('/')).sort(),['START_HERE.txt','scene.json']);
   assert.equal(context.format,'shiye-gpt-creation-package');assert.equal(context.version,2);
   assert.equal(context.source.taskBinding,'local');assert.equal(context.source.packageLayout,'compact');
   assert.equal(context.materials[0].assetID,asset.id);
   for(const path of ['task/GUIDE.txt','task/knowledge.json','schema/output.json','schema/craft-plan.json','examples/project.shiyeproject.json','runtime/validate.cjs','runtime/preview.cjs'])assert.ok(files[path],path);
-  assert.equal(files['runtime/pack.cjs'],undefined);
+  assert.ok(files['runtime/pack.cjs']);
   for(const removed of ['README.txt','context.json','contract.json','CONTENT_BRIEF.txt','CREATIVE_GUIDE.txt','CRAFT_GUIDE.txt','case-studies.json','composition-ideas.json','abstract-templates.json','source-image-audit.json','example-response.json','example-response.shiyeproject.json'])assert.equal(files[removed],undefined,removed);
   assert.match(strFromU8(files['START_HERE.txt']),/task\/context\.json/);assert.match(strFromU8(files['START_HERE.txt']),/schema\/output\.json/);
   const knowledge=JSON.parse(strFromU8(files['task/knowledge.json']));assert.equal(knowledge.format,'shiye-gpt-task-knowledge');assert.ok(knowledge.compositionIdeas.length);
@@ -83,7 +83,7 @@ test('stable and UUID material aliases resolve current library assets',async()=>
 
 test('direct editable scene keeps layered typography and vector geometry',async()=>{
   const output=await make({p:project('分层示例')}),files=await filesOf(output),response=JSON.parse(strFromU8(files['examples/project.shiyeproject.json']));
-  response.page.layers.push({type:'shape',id:'drawn-leaf',key:'drawn-leaf',kind:'vector',x:.2,y:.5,width:.08,height:.12,fill:'#7a9d77',stroke:null,z:70,vector_paths:[[[.5,0],[1,.5],[.5,1],[0,.5]]]});
+  response.page.layers.push({type:'shape',id:'drawn-leaf',key:'drawn-leaf',kind:'vector',x:200,y:500,width:80,height:120,fill:'#7a9d77',stroke:null,zIndex:70,vectorPaths:[[[.5,0],[1,.5],[.5,1],[0,.5]]]});
   const imported=importEditableWork(JSON.stringify(response),[asset],{trustedSource:output.source});
   assert.equal(imported.drafts[0].primitives.find(p=>p.key==='drawn-leaf')?.vectorPaths.length,1);
   assert.match(shapeSVG(imported.drafts[0].primitives.find(p=>p.key==='drawn-leaf')),/<path/);
@@ -104,7 +104,7 @@ test('invalid editable data is rejected before persistence',async()=>{
   const duplicate=JSON.stringify(response);assert.throws(()=>importEditableWork(`\`\`\`json\n${duplicate}\n\`\`\`\n\`\`\`json\n${duplicate}\n\`\`\``,[asset],{trustedSource:output.source}),/多个可编辑数据块/);
 });
 
-test('web handoff exposes mode-specific current schemas and concise instructions',async()=>{
+test('web handoff exposes unified Scene and internal tool schemas and concise instructions',async()=>{
   const p=project('测试创作',{style:'韩系清新'}),args={p};
   const agent=await make({p,settings:{generationMode:'agent',includeThumbnails:false,includeStructureReference:false}}),agentFiles=await filesOf(agent);
   assert.equal(agent.filename,'拾页-GPT创作任务.zip');assert.match(strFromU8(agentFiles['START_HERE.txt']),/runtime\/preview\.cjs/);
@@ -112,11 +112,12 @@ test('web handoff exposes mode-specific current schemas and concise instructions
   const craftGuide=strFromU8(agentFiles['task/CRAFT_GUIDE.txt']);
   assert.match(craftGuide,/逐件查看 materials\//);assert.match(craftGuide,/decisions/);
   assert.match(craftGuide,/observed_region/);assert.match(craftGuide,/不设工艺数量指标/);
-  const agentContract=JSON.parse(strFromU8(agentFiles['schema/output.json']));assert.ok(agentContract.apply_craft_plan&&agentContract.edit_materials);
+  const agentContract=JSON.parse(strFromU8(agentFiles['schema/tools.json']));assert.ok(agentContract.apply_craft_plan&&agentContract.edit_materials);
   const direct=await make({p,settings:{generationMode:'direct',includeThumbnails:false}}),directFiles=await filesOf(direct);
-  assert.equal(directFiles['task/CRAFT_GUIDE.txt'],undefined);
+  assert.ok(directFiles['task/CRAFT_GUIDE.txt']);
   assert.ok(JSON.parse(strFromU8(directFiles['examples/project.shiyeproject.json'])).page);
-  assert.ok(JSON.parse(strFromU8(agentFiles['examples/project.shiyeproject.json'])).tools);
+  assert.ok(JSON.parse(strFromU8(agentFiles['examples/project.shiyeproject.json'])).page);
+  assert.deepEqual(JSON.parse(strFromU8(directFiles['schema/output.json'])),JSON.parse(strFromU8(agentFiles['schema/output.json'])));
   assert.match(agent.prompts.file,/作品.shiyeproject.json/);
   assert.match(agent.prompts.file,/ZIP/);
   assert.match(agent.prompts.text,/展示/);

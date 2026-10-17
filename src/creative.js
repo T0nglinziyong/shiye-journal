@@ -35,7 +35,7 @@ function checkDraft(d,assets){
   for(const i of entries(d)){
     const key=keyOf(i);if(keys.has(key))throw Error('图层编号重复：'+key);keys.add(key);
     for(const k of ['x','y','width','height'])finite(i[k],k,k==='width'||k==='height'?EPS:-20000);
-    finite(i.rotation??0,'旋转',-180,180);finite(i.zIndex??0,'图层',-1000,20000);
+    finite(i.rotation??0,'旋转',-100000,100000);finite(i.zIndex??0,'图层',-1000,20000);
     // The page is a print crop, not a limit on where a real sheet may lie.
     // Intentional bleed/overhang is clipped by the page renderer; dimensions,
     // source crops are still checked below.

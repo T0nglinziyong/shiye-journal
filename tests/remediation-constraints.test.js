@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {project,itemFromAsset} from '../src/domain.js';
 import {createOfflineHandoff,importEditableWork} from '../src/offline-creation.js';
+import {compileAndImport} from './web-scene-fixture.mjs';
 import {applyToolCalls} from '../src/creative.js';
 
 const asset={id:'paper-1',title:'合成条纹纸',kind:'paper',physicalWidthMM:80,physicalHeightMM:100,supply:{quantity:1}};
@@ -13,16 +14,16 @@ async function response({processing='保留完整',contentPolicy='documentary'}=
 }
 
 test('C-01/C-02: current offline import applies global processing',async()=>{
-  const blocked=await response();assert.throws(()=>importEditableWork(JSON.stringify(blocked.envelope),[asset],{trustedSource:blocked.trusted}),/保留完整/);
-  const smallTrim=await response({processing:'少量裁剪'});smallTrim.envelope.page.layers[1].operations[0].box.values=[0,0,.5,.7];assert.throws(()=>importEditableWork(JSON.stringify(smallTrim.envelope),[asset],{trustedSource:smallTrim.trusted}),/60%/);
-  const allowed=await response({processing:'自由拆解'});assert.equal(importEditableWork(JSON.stringify(allowed.envelope),[asset],{trustedSource:allowed.trusted}).drafts[0].items[0].cropRect.width,.7);
+  const blocked=await response();assert.throws(()=>compileAndImport(JSON.stringify(blocked.envelope),[asset],{trustedSource:blocked.trusted}),/保留完整/);
+  const smallTrim=await response({processing:'少量裁剪'});smallTrim.envelope.page.layers[1].operations[0].box.values=[0,0,.5,.7];assert.throws(()=>compileAndImport(JSON.stringify(smallTrim.envelope),[asset],{trustedSource:smallTrim.trusted}),/60%/);
+  const allowed=await response({processing:'自由拆解'});assert.equal(compileAndImport(JSON.stringify(allowed.envelope),[asset],{trustedSource:allowed.trusted}).drafts[0].items[0].cropRect.width,.7);
 });
 
 test('C-07: visual-only task rejects generated text but accepts a material-only page',async()=>{
   const current=await response({processing:'自由拆解',contentPolicy:'visual'});
-  assert.throws(()=>importEditableWork(JSON.stringify(current.envelope),[asset],{trustedSource:current.trusted}),/不新增文字/);
+  assert.throws(()=>compileAndImport(JSON.stringify(current.envelope),[asset],{trustedSource:current.trusted}),/不新增文字|不生成文字/);
   current.envelope.page.layers=current.envelope.page.layers.filter(layer=>layer.type!=='text');
-  assert.equal(importEditableWork(JSON.stringify(current.envelope),[asset],{trustedSource:current.trusted}).drafts[0].items.length,1);
+  assert.equal(compileAndImport(JSON.stringify(current.envelope),[asset],{trustedSource:current.trusted}).drafts[0].items.length,1);
 });
 
 test('C-06: a required material outside the page or fully transparent cannot finish',()=>{

@@ -1,3 +1,5 @@
+import {compileAndImport} from './web-scene-fixture.mjs';
+import {webSceneContract} from '../src/web-scene-contract.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {project} from '../src/domain.js';
@@ -63,9 +65,9 @@ test('current offline package exports the one active contract and imports curren
   const p=project('网页工艺');p.processing='自由拆解';
   const handoff=await createOfflineHandoff({project:p,assets:[asset],aliases:{m1:asset.id},settings:{generationMode:'direct',includeThumbnails:false}});
   const envelope={format:'shiye-editable-project',version:1,source:handoff.source,title:'几何撕边',page:page([piece('paper',[edge])])};
-  assert.equal(schemaFingerprint(offlineContract('direct',{cropPx:false})),handoff.source.schemaHash);
+  assert.equal(schemaFingerprint(webSceneContract),handoff.source.schemaHash);
   validateValue(envelope.page,directPageContract);
-  const imported=importEditableWork(JSON.stringify(envelope),[asset],{trustedSource:handoff.source});
+  const imported=compileAndImport(JSON.stringify(envelope),[asset],{trustedSource:handoff.source});
   assert.equal(imported.drafts[0].items[0].materialMask.shape,'polygon');
 });
 test('new craft survives native ZIP and approximate preview uses the actual cut polygon',async()=>{

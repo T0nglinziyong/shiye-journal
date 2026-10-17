@@ -11,7 +11,11 @@ on:
       - 'src/backup-*.js'
       - 'src/store.js'
       - 'tests/backup-*.mjs'
-      - 'src/offline*.js'
+      - 'src/offline*'
+      - 'src/web-scene-*'
+      - 'src/web-workbench-*'
+      - 'src/web-creation-guide.js'
+      - 'tests/web-workbench-browser.mjs'
       - 'src/*cache*.js'
       - 'src/presentation-resources.js'
       - 'src/lazy-private-images.js'
@@ -77,6 +81,7 @@ jobs:
           node tests/craft-browser.mjs
           node tests/presentation-browser.mjs
           node tests/craft-multimodal-browser.mjs
+          node tests/web-workbench-browser.mjs
           git diff --exit-code -- package.json package-lock.json src/generated/offline-validate-source.js src/generated/offline-browser-source.js src/generated/offline-glyph-source.js
       - name: Retain synthetic screenshots and reports
         if: always()

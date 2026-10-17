@@ -1,3 +1,5 @@
+import {compileAndImport} from './web-scene-fixture.mjs';
+import {webSceneContract} from '../src/web-scene-contract.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import Ajv from 'ajv';
@@ -19,28 +21,28 @@ test('O-07: published schema and runtime agree on normal punctuation and rejecte
   const example=JSON.parse(strFromU8(files['examples/project.shiyeproject.json']));
   const ajv=new Ajv({strict:false});
   assert.equal(context.source.schemaHash,schemaFingerprint(schema));
-  assert.equal(schemaFingerprint(offlineContract('agent',context.source.capabilities)),context.source.schemaHash);
-  example.tools[0].arguments.texts[0].content='A < B 与 <3';
-  const valid=example.tools[0].arguments;
-  assert.equal(ajv.validate(schema.compose_page,valid),true);
-  assert.doesNotThrow(()=>validateValue(valid,schema.compose_page));
+  assert.equal(schemaFingerprint(webSceneContract),context.source.schemaHash);
+  example.page.layers.find(n=>n.type==='text').content='A < B 与 <3';
+  const valid=example.page;
+  assert.equal(ajv.validate(schema,valid),true);
+  assert.doesNotThrow(()=>validateValue(valid,schema));
   assert.equal(importEditableWork(JSON.stringify(example),[asset],{trustedSource:handoff.source}).drafts[0].textBlocks[0].content,'A < B 与 <3');
   valid.unexpected=true;
-  assert.equal(ajv.validate(schema.compose_page,valid),false);
-  assert.throws(()=>validateValue(valid,schema.compose_page),/未知字段/);
+  assert.equal(ajv.validate(schema,valid),false);
+  assert.throws(()=>validateValue(valid,schema),/未知字段/);
 });
 
-test('O-08: preview-only task omits source-pixel crop and rejects it on import',async()=>{
+test('O-08: preview-only task omits source-pixel crop and rejects it during compilation',async()=>{
   const handoff=await make();
   const files=unzipSync(new Uint8Array(await handoff.blob.arrayBuffer()));
-  const schema=JSON.parse(strFromU8(files['schema/output.json']));
+  const schema=JSON.parse(strFromU8(files['schema/tools.json']));
   const capability=JSON.parse(strFromU8(files['task/knowledge.json'])).capabilities;
   assert.equal(capability.sourcePixelCoordinates,false);
   assert.equal(capability.cropPx,false);
   assert.equal(schema.compose_page.properties.materials.items.properties.crop_px,undefined);
-  const response=JSON.parse(strFromU8(files['examples/project.shiyeproject.json']));
+  const response=JSON.parse(strFromU8(files['examples/instructions.json']));
   response.tools[0].arguments.materials[0].crop_px=[0,0,100,100];
-  assert.throws(()=>importEditableWork(JSON.stringify(response),[asset],{trustedSource:handoff.source}),/crop_px|未知字段/);
+  assert.throws(()=>compileAndImport(JSON.stringify({...response,source:handoff.source}),[asset],{trustedSource:handoff.source}),/crop_px|未知字段/);
 });
 
 test('I-01: markup-like text stays inert while legitimate angle brackets survive',()=>{
