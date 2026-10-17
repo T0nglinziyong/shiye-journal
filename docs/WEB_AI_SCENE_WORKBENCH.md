@@ -2,7 +2,7 @@
 
 ## 唯一数据与交付
 
-网页可编辑任务统一导出 `scene.json`。其中 `page` 是应用原生 Scene v2，`layers` 为唯一对象树。工具调用、比例坐标便捷页面和 Craft Plan 都是工作输入，由编译器更新同一份 Scene；最终只返回 `project.shiyeproject.json`，不导入工具日志或计划。旧网页输出入口移除，需重新导出当前任务包。API 设置不决定网页任务格式；纯图片任务仍是独立交付方式。
+网页可编辑任务统一导出 `scene.json`。其中 `page` 是应用原生 Scene v2，`layers` 为唯一对象树。工具调用、比例坐标便捷页面和 Craft Plan 都是工作输入，由编译器更新同一份 Scene；最终返回 `project.shiyeproject.json` 与同一 Scene 的 `preview.png`，不导入工具日志或计划。旧网页输出入口移除，需重新导出当前任务包。API 设置不决定网页任务格式；纯图片任务仍是独立交付方式。
 
 工作文件保留任务原有场景，不用示例覆盖。素材图片绑定导出时的固定版本，source 和纸张物理规格不可改。人类在任务开始前锁定/接管的对象受到保护；本次 AI 直接修改与工具修改可以交替执行。
 
@@ -14,8 +14,9 @@
 4. `compile` 接受便捷输入；`apply` 按 `baseSceneHash` 原子执行工具和精确操作；也可直接编辑 Scene。
 5. `preview`：结构、实物来源和用量校验后生成共用 Canvas HTML。
 6. 在环境允许的真实浏览器中渲染、查看实际 PNG；检查并修订。
-7. `pack` 核对最终 Scene 与生成预览的哈希，输出唯一图层 JSON。
-8. App 使用相同合同独立检查导入结果，再用共享渲染器呈现。
+7. 浏览器调用 `SHIYE_EXPORT_PREVIEW()`，将结果保存为 `output/canvas-capture.json`；`save-preview` 校验场景摘要和 PNG 尺寸，写出 PNG。
+8. `pack` 核对最终 Scene、HTML 与 PNG 摘要，同时交付可编辑 JSON 和 PNG；缺少 PNG 或图像过期时拒绝完成。
+9. App 使用相同合同独立检查导入结果，再用共享渲染器呈现。
 
 任何一次原子编辑失败都保留原工作文件。修改后清除旧交付；直接改文件后，旧预览无法通过 pack。运行时不联网、不使用账号或密钥。JSON 上限 8 MB；组深度、节点和路径点数沿用原生数据预算。
 

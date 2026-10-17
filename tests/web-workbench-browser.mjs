@@ -24,12 +24,17 @@ try{
  {type:'shape',id:'leaf',kind:'vector',x:500,y:400,width:95,height:150,fill:'#789079',stroke:null,vectorLayers:[{fill:'#789079',paths:[[[0,.5],[.5,0],[1,.4],[.5,1]]]},{fill:'#b8c6a1',paths:[[[.2,.5],[.5,.2],[.7,.5],[.5,.8]]]}]},
  {type:'ink',id:'ink',penStyle:'pressure',points:[{x:370,y:740,p:.15},{x:425,y:748,p:.6},{x:520,y:735,p:.25}],width:7,color:'#b69667'}]});
  await writeFile(join(dir,'scene.json'),JSON.stringify(doc));
- for(const name of ['preview','pack']){const r=spawnSync(process.execPath,['runtime/'+name+'.cjs'],{cwd:dir,encoding:'utf8'});assert.equal(r.status,0,r.stderr);}
- const final=JSON.parse(await readFile(join(dir,'output/project.shiyeproject.json'),'utf8'));
+ for(const name of ['preview']){const r=spawnSync(process.execPath,['runtime/'+name+'.cjs'],{cwd:dir,encoding:'utf8'});assert.equal(r.status,0,r.stderr);}
  const html=await readFile(join(dir,'output/画面预览.html'));
  server=createServer((req,res)=>{res.setHeader('Content-Type','text/html; charset=utf-8');res.end(html);});await new Promise(r=>server.listen(0,'127.0.0.1',r));
  await b.command('Page.navigate',{url:`http://127.0.0.1:${server.address().port}/preview`});await b.wait('body[data-render-state="ready"]');
- const preview=await b.evaluate('({report:SHIYE_RENDER_REPORT,png:document.querySelector("canvas").toDataURL()})');
+ const preview=await b.evaluate('({report:SHIYE_RENDER_REPORT,...SHIYE_EXPORT_PREVIEW()})');
+ await writeFile(join(dir,'output/canvas-capture.json'),JSON.stringify(preview));
+ for(const name of ['save-preview','pack']){const r=spawnSync(process.execPath,['runtime/'+name+'.cjs'],{cwd:dir,encoding:'utf8'});assert.equal(r.status,0,r.stderr);}
+ const final=JSON.parse(await readFile(join(dir,'output/project.shiyeproject.json'),'utf8'));
+ assert.deepEqual(await readFile(join(dir,'output/preview.png')),Buffer.from(preview.png.split(',')[1],'base64'));
+ const delivery=JSON.parse(await readFile(join(dir,'output/delivery-manifest.json'),'utf8'));
+ assert.deepEqual(delivery.deliverables,['project.shiyeproject.json','preview.png']);
  assert.equal(preview.report.visibleSourceCount,1);assert.equal(preview.report.decodedSourceCount,1);
  await writeFile(join(dir,'preview.png'),Buffer.from(preview.png.split(',')[1],'base64'));
  await b.command('Page.navigate',{url:url+'/tests/fixtures/fabric-preview.html'});await b.wait('.upper-canvas');

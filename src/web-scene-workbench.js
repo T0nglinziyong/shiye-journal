@@ -21,7 +21,7 @@ import {webSceneContract} from './web-scene-contract.js';
 
 export const webSceneCapabilities={version:1,sourcePixelCoordinates:false,cropPx:false,coordinateSystem:'native Scene units; x/y are centers; ink points are absolute; vector masks are normalized; group children retain page coordinates',
   nodes:['material','text','shape','ink','group'],
-  operations:['inspect','compile','apply','validate','preview','pack','self-test'],
+  operations:['inspect','compile','apply','validate','preview','save-preview','pack','self-test'],
   editing:['all native static Scene fields','atomic tool batches','direct scene editing','nested groups','group transforms','alignment','layer reorder','crop and compound masks','source splits and scraps','physical weave slices','pressure ink','multi-color vectors','text typography','paper styles'],
   excluded:['interactive pockets/flaps/page actions','arbitrary JavaScript','external image URLs','AI resizing/duplicating physical sources'],
   budgets:{documentBytes:8000000,groupDepth:12,sceneNodes:10000,pointsPerStroke:20000,toolCallsPerBatch:12,canvasPixels:32000000,isolatedGroups:8},

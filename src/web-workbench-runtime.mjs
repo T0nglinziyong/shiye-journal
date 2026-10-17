@@ -8,7 +8,7 @@ import {offlineBrowserSource} from './generated/offline-browser-source.js';
 import {renderOfflinePreviewSVG} from './offline-preview-svg.js';
 import {buildMaterialLedger} from './material-ledger.js';
 import {canonicalTaskSource} from './task-source.js';
-const load=file=>{if(statSync(file).size>8_000_000)throw Error('工作数据不能超过 8 MB');return JSON.parse(readFileSync(file,'utf8'));};
+const load=(file,limit=8_000_000)=>{if(statSync(file).size>limit)throw Error('工作数据不能超过 '+limit/1_000_000+' MB');return JSON.parse(readFileSync(file,'utf8'));};
 const save=(file,value)=>writeFileSync(file,JSON.stringify(value,null,2)+'\n');
 const hash=value=>'sha256:'+createHash('sha256').update(value).digest('hex');
 const commit=doc=>{save('scene.json.tmp',doc);renameSync('scene.json.tmp','scene.json');};
@@ -18,6 +18,7 @@ export async function runWebWorkbench(context,command){
   const report={version:1,structure:'failed',physical:'not-run',visual:'unavailable',reading:'pending',command};
   try{
     if(['compile','apply','preview','pack'].includes(command))for(const name of ['project.shiyeproject.json','delivery-manifest.json','画面预览.html','构图预览.svg'].filter(n=>command!=='pack'||!n.endsWith('.html')&&!n.endsWith('.svg')))rmSync('output/'+name,{force:true});
+    if(['compile','apply','preview','save-preview'].includes(command))for(const name of ['preview.png','preview-capture.json'])rmSync('output/'+name,{force:true});
     if(command==='self-test'){
       const result={node:process.version,runtime:'self-contained',browser:'not-tested',font:'not-tested',sceneVersion:2};
       validateWebScene(webSceneDocument(source,source.baseDraft).page,source,assets,{final:false});
@@ -37,7 +38,7 @@ export async function runWebWorkbench(context,command){
       process.stdout.write(JSON.stringify({ok:true,sceneHash:info.sceneHash})+'\n');return;
     }
     if(command==='inspect'){const info=inspectWebScene(doc,assets);save('output/scene-summary.json',info);process.stdout.write(JSON.stringify(info,null,2)+'\n');return;}
-    if(!['preview','validate','pack',undefined].includes(command))throw Error('未知工作台命令');
+    if(!['preview','save-preview','validate','pack',undefined].includes(command))throw Error('未知工作台命令');
     for(const name of ['project.shiyeproject.json','delivery-manifest.json'])rmSync('output/'+name,{force:true});
     if(command==='preview')for(const name of ['画面预览.html','构图预览.svg'])rmSync('output/'+name,{force:true});
     const draft=validateWebScene(doc.page,source,assets),sceneHash=craftSceneHash(draft);
@@ -50,12 +51,24 @@ export async function runWebWorkbench(context,command){
       report.visual='browser-review-required';report.previewSceneHash=sceneHash;
       save('output/preview-manifest.json',{sceneHash,htmlHash:hash(readFileSync('output/画面预览.html')),visualReview:'not-verified'});
     }
+    if(command==='save-preview'){
+      const capture=load(process.argv[3]||'output/canvas-capture.json',24_000_000);
+      if(capture.sceneHash!==sceneHash)throw Error('PNG 来自旧 Scene，请重新渲染并导出');
+      if(typeof capture.png!=='string'||!/^data:image\/png;base64,[A-Za-z0-9+/]+=*$/.test(capture.png))throw Error('预览必须为实际 Canvas 导出的 PNG');
+      const png=Buffer.from(capture.png.split(',')[1],'base64');
+      if(png.length<33||png.length>16_000_000||png.subarray(0,8).toString('hex')!=='89504e470d0a1a0a'||png.toString('ascii',12,16)!=='IHDR')throw Error('PNG 数据无效或超过 16 MB');
+      if(png.readUInt32BE(16)!==Math.round(draft.canvas.width)||png.readUInt32BE(20)!==Math.round(draft.canvas.height))throw Error('PNG 尺寸与当前画布不一致');
+      writeFileSync('output/preview.png',png);
+      save('output/preview-capture.json',{sceneHash,pngHash:hash(png),visualReview:'model-must-inspect-actual-image'});
+    }
     if(command==='pack'){
       const preview=existsSync('output/preview-manifest.json')?load('output/preview-manifest.json'):null;
       if(!preview||preview.sceneHash!==sceneHash||!existsSync('output/画面预览.html')||preview.htmlHash!==hash(readFileSync('output/画面预览.html')))throw Error('最终 Scene 尚未生成对应预览，请运行 preview 后再 pack');
+      const capture=existsSync('output/preview-capture.json')?load('output/preview-capture.json'):null;
+      if(!capture||capture.sceneHash!==sceneHash||!existsSync('output/preview.png')||capture.pngHash!==hash(readFileSync('output/preview.png')))throw Error('缺少最终 Scene 的 PNG 预览，请从真实 Canvas 导出后运行 save-preview');
       const result=webSceneDocument(source,draft,doc.title),bytes=JSON.stringify(result,null,2)+'\n';
       writeFileSync('output/project.shiyeproject.json',bytes);
-      save('output/delivery-manifest.json',{format:'shiye-scene-delivery',version:1,sceneHash,jsonHash:hash(bytes),previewHtmlHash:preview.htmlHash,visualReview:'model-must-inspect-actual-image',fontReview:'device-dependent'});
+      save('output/delivery-manifest.json',{format:'shiye-scene-delivery',version:1,sceneHash,jsonHash:hash(bytes),previewHtmlHash:preview.htmlHash,pngHash:capture.pngHash,deliverables:['project.shiyeproject.json','preview.png'],visualReview:'model-must-inspect-actual-image',fontReview:'device-dependent'});
     }
     save('output/validation-report.json',report);process.stdout.write(JSON.stringify({ok:true,...report})+'\n');
   }catch(error){

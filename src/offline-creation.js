@@ -130,7 +130,7 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
     'runtime/validate.cjs':strToU8(offlineValidateSource),
     'runtime/README.txt':strToU8(webWorkbenchInstructions+'\n\n'+webEditingGuide)
   };
-  for(const name of ['inspect','compile','apply','preview','pack','self-test'])files['runtime/'+name+'.cjs']=strToU8(`process.argv.splice(2,0,'${name}');require('./validate.cjs');\n`);
+  for(const name of ['inspect','compile','apply','preview','save-preview','pack','self-test'])files['runtime/'+name+'.cjs']=strToU8(`process.argv.splice(2,0,'${name}');require('./validate.cjs');\n`);
   for(const entry of chosen)if(validAlias(entry.alias)&&source.materials.some(item=>item.alias===entry.alias))files[packagePreviewPath('materials',entry.alias,entry.bytes,{transparent:true})]=entry.bytes;
   if(hasPresets)for(const entry of referenceImages)files[packagePreviewPath('references',entry.id,entry.bytes)]=entry.bytes;
   const bytes=await new Promise((resolve,reject)=>zip(files,{level:4},(error,result)=>error?reject(error):resolve(result)));

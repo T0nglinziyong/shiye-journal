@@ -6,6 +6,7 @@ const validImage=url=>typeof url==='string'&&/^data:image\/(?:png|webp);base64,[
 
 export async function render(payload){
   window.SHIYE_RENDER_READY=false;
+  window.SHIYE_EXPORT_PREVIEW=null;
   document.body.dataset.renderState='rendering';
   window.SHIYE_RENDER_REPORT=null;
   const status=document.querySelector('#status'),button=document.querySelector('#save');
@@ -40,6 +41,7 @@ export async function render(payload){
     a.href=url;a.download='preview.png';a.click();
     setTimeout(()=>URL.revokeObjectURL(url),10000);
   },'image/png');
+  window.SHIYE_EXPORT_PREVIEW=()=>({sceneHash:fullReport.sceneHash,width:canvas.width,height:canvas.height,png:canvas.toDataURL('image/png')});
   window.SHIYE_RENDER_REPORT=fullReport;
   window.SHIYE_RENDER_READY=true;
   return fullReport;
