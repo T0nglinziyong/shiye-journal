@@ -12,11 +12,12 @@ import {styleGroups,purposeGroups} from './matching-directions.js';
 import {visualStyles} from './creative-style-brief.js';
 import {FabricSceneStage} from './fabric-scene-stage.jsx';
 import {FabricEditorToolbar,FabricHeaderMenu} from './fabric-editor-controls.jsx';
+import {FabricCutPanel} from './fabric-cut-panel.jsx';
 import {FabricPageViewport} from './fabric-page-viewport.jsx';
 import {fabricPointer} from './fabric-pointer.js';
 import {selectableFabricObjectAt} from './fabric-hit-test.js';
 import {SceneCover} from './scene-cover.jsx';
-import {findSceneNode} from './scene-v2.js';
+import {findSceneNode,sceneLayerEntries} from './scene-v2.js';
 import {selectionGroupID} from './scene-selection-actions.js';
 import {WORK_TABS,workInTab} from './work-collections.js';
 import {catalogDataPage,catalogVisibleItems,pageSize,pageSlice,setCatalogDataPage} from './catalog-pagination.js';
@@ -1256,6 +1257,8 @@ export function EditorPage({state,draft,editorEntry,asset,source,format,
       ?{kind:'ink',value:findSceneNode(draft,state.selected)}:null);
   const selectedGroup=findSceneNode(draft,state.selected)?.type==='group';
   const selectedIDs=state.multiSelected||[];
+  const parkedPieces=sceneLayerEntries(draft,{hidden:true,ink:true})
+    .filter(entry=>entry.value.isParked).map(entry=>entry.value);
   const canUngroup=!!selectionGroupID(draft,selectedIDs);
   const viewportHeight=window.visualViewport?.height||window.innerHeight;
   const availableWidth=Math.max(180,window.innerWidth-(window.innerWidth<700?24:72));
@@ -1276,6 +1279,7 @@ export function EditorPage({state,draft,editorEntry,asset,source,format,
     </div></div>
     <FabricEditorToolbar state={state} draft={draft} materials={materials} source={source}
       selected={selected} onInspectorChange={onInspectorChange} onAction={onAction}/>
+    <FabricCutPanel state={state} draft={draft} onAction={onAction}/>
     {state.tool==='lasso'&&selectedIDs.length?<FabricSelectedActions mode="selection" count={selectedIDs.length}
       canUngroup={canUngroup} bounds={state.fabricSelectionBounds} draft={draft} onAction={onAction}/>:null}
     {state.tool==='select'&&selectedIDs.length>1?<FabricSelectedActions mode="selection"
@@ -1293,6 +1297,7 @@ export function EditorPage({state,draft,editorEntry,asset,source,format,
       <button className="btn mini" data-act="park" disabled={selected?.kind!=='material'}>放入备选</button>
     </div><div className="page-wrap"><FabricPageViewport draft={draft} width={width} height={height}
       tool={state.tool} onCanvasTap={event=>{
+        if(state.tool==='scissors')return;
         const canvas=editorFabricCanvases.get(draft.id);
         if(!canvas)return;
         const {scene:point,viewport}=fabricPointer(canvas,event);
@@ -1339,6 +1344,8 @@ export function EditorPage({state,draft,editorEntry,asset,source,format,
         width:draft.canvas.width,height:draft.canvas.height,transform:`scale(${scale})`,transformOrigin:'left top'}}>
         <FabricSceneStage draft={draft} sceneRevision={sceneRevision} tool={state.tool}
           selectedID={state.selected}
+          cutPreview={state.cutPreview}
+          onCutPath={points=>onAction('fabric-cut-preview',points)}
           textDefaults={state.textDefaults||null}
           pen={{widthMM:state.canvasTools?.fabricPenWidthMM??.5,color:state.canvasTools?.penColor||'#2b5245',
             style:state.canvasTools?.fabricPenStyle||'pressure'}}
@@ -1352,8 +1359,10 @@ export function EditorPage({state,draft,editorEntry,asset,source,format,
           onReady={canvas=>{if(canvas)editorFabricCanvases.set(draft.id,canvas);
             else editorFabricCanvases.delete(draft.id);}}/>
       </div></FabricPageViewport></div>
-      <div className="shelf"><b>备选</b>{draft.items.filter(item=>item.isParked).map(item=><button key={item.id} className="mini-asset" data-act="unpark" data-id={item.id}>
-        <RouteImage asset={asset(item.assetID)} source={source}/></button>)}</div>
+      {parkedPieces.length?<div className="shelf"><b>备选</b>{parkedPieces.map(item=><button key={item.id}
+        className="mini-asset" data-act="unpark" data-id={item.id} aria-label={`放回${item.type==='material'?'素材':item.type==='text'?'文字':item.type==='shape'?'图形':'笔迹'}裁片`}>
+        {item.type==='material'?<RouteImage asset={asset(item.assetID)} source={source}/>:<span>{item.type==='text'?item.content||'文字':item.type==='shape'?'图形裁片':'笔迹裁片'}</span>}
+      </button>)}</div>:null}
     </section><aside className="editor-inspector"><div className="fabric-inspector-head"><h2>{selected?`${{material:'素材',text:'文字',shape:'图形'}[selected.kind]} · 图层属性`:'页面设置'}</h2>
       <button type="button" aria-label="关闭对象设置" onClick={()=>onAction('fabric-inspector-close')}>×</button></div>
       <div className="inspector-island" style={{display:'contents'}}><EditorInspector selected={selected}

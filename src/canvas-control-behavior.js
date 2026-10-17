@@ -3,7 +3,7 @@ export function isIPadPointerDevice({userAgent='',platform='',maxTouchPoints=0}=
   return /iPad/i.test(userAgent)||platform==='MacIntel'&&maxTouchPoints>1;
 }
 export function fingerNavigatesCanvas({pointerType,tool,iPad=false}={}){
-  return pointerType==='touch'&&iPad&&['pen','highlighter','eraser','lasso'].includes(tool);
+  return pointerType==='touch'&&iPad&&['pen','highlighter','eraser','lasso','scissors'].includes(tool);
 }
 export function fingerMayPanCanvas({pointerType,tool,background,pencilEnabled}={}){
   if(pointerType!=='touch'||!background)return false;

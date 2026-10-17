@@ -16,6 +16,7 @@ const decodeSceneImage=async(...args)=>(await sceneRuntime()).decodeSceneImage(.
 import {sceneLayerEntries,attachSceneV2,moveSceneNode,groupSceneLayers,ungroupSceneLayers,findSceneNode,assertSceneEditable,validateVectorMask} from './scene-model.js';
 import {copySceneLasso,deleteSceneLasso,mergeSceneLasso,sceneLassoBounds} from './scene-lasso.js';
 import {selectionGroupID,duplicateSceneGroup,deleteSceneGroup} from './scene-selection-actions.js';
+import {planSceneCut,rejoinMaterialPieces} from './scene-cut-ops.js';
 import {pinProjectMaterialImages} from './scene-material-references.js';
 import {arrangeSceneSelection} from './scene-arrangement.js';
 import './styles.css';
@@ -1280,10 +1281,73 @@ async function runAppAction(action,id,value){try{switch(action){
   case 'works-filter':await actionStore.dispatch({type:'works/filter',payload:{value}});break;
   case 'fabric-tool':{
     const leavingLasso=state.tool==='lasso'&&value!=='lasso';
+    if(state.tool!==value)state.cutPreview=null;
     state.tool=value;
-    if(leavingLasso||!['select','lasso'].includes(value)){state.selected=null;state.multiSelected=[];}
+    if(leavingLasso||!['select','lasso','scissors'].includes(value)){state.selected=null;state.multiSelected=[];}
     state.fabricInspectorOpen=false;
     render();break;
+  }
+  case 'fabric-cut-setting':{
+    state.cutSettings={operation:'split',scope:'object',pathType:'line',inset:.18,
+      hideRegion:false,...state.cutSettings,[id]:value};
+    if(id==='operation'&&value==='mask')state.cutSettings.scope='object';
+    state.cutPreview=null;render();break;
+  }
+  case 'fabric-cut-preview':{
+    const d=current();if(!d)break;
+    const settings={operation:'split',scope:'object',pathType:'line',inset:.18,
+      hideRegion:false,...state.cutSettings};
+    const spec={...settings,selectedID:state.selected,
+      points:Array.isArray(id)?id:[],preset:typeof id==='string'?id:null};
+    if(spec.operation==='mask'&&spec.preset)
+      spec.hideRegion=['window','edge','ring'].includes(spec.preset);
+    try{
+      const plan=planSceneCut(d,spec,state.assets);
+      const keepKeys=plan.pieces.filter(piece=>piece.area===
+        Math.max(...plan.pieces.filter(other=>other.sourceID===piece.sourceID).map(other=>other.area)))
+        .map(piece=>piece.key);
+      state.cutPreview={spec,pieces:plan.pieces,keepKeys,
+        sceneRevision:(saveVersions.get(state.activeProject.id)||0),draftID:d.id};
+      render();
+    }catch(error){state.cutPreview=null;toast(error.message||'无法预览剪切');render();}
+    break;
+  }
+  case 'fabric-cut-keep':{
+    if(!state.cutPreview)break;
+    const keys=new Set(state.cutPreview.keepKeys);
+    if(keys.has(id))keys.delete(id);else keys.add(id);
+    state.cutPreview={...state.cutPreview,keepKeys:[...keys]};render();break;
+  }
+  case 'fabric-cut-cancel':state.cutPreview=null;render();break;
+  case 'fabric-cut-confirm':{
+    const d=current(),preview=state.cutPreview;if(!d||!preview)break;
+    if(preview.draftID!==d.id||preview.sceneRevision!==(saveVersions.get(state.activeProject.id)||0)){
+      state.cutPreview=null;toast('画面已变化，请重新预览剪切');render();break;
+    }
+    if(preview.spec.operation==='split'&&!preview.keepKeys.length){toast('请至少保留一片在画布上');break;}
+    try{
+      const plan=planSceneCut(d,{...preview.spec,keepKeys:preview.keepKeys},state.assets);
+      validateScenePhysical(plan.draft,state.assets);
+      checkpoint();d.layers=plan.draft.layers;saveProject();
+      state.cutPreview=null;state.tool='select';
+      state.selected=plan.pieces.find(piece=>!piece.parked)?.nodeID||plan.affected[0]||null;
+      state.multiSelected=state.selected?[state.selected]:[];
+      render();toast(preview.spec.operation==='mask'?'局部显示已应用':'裁片已生成，其他部分已放入备选');
+    }catch(error){toast(error.message||'无法完成剪切');}
+    break;
+  }
+  case 'fabric-cut-rejoin':{
+    const d=current(),node=d&&findSceneNode(d,id||state.selected);if(!node?.splitParentId)break;
+    const siblings=sceneLayerEntries(d,{hidden:true}).filter(entry=>
+      entry.kind==='material'&&entry.value.splitParentId===node.splitParentId&&
+      entry.value.assetID===node.assetID).map(entry=>entry.value.id);
+    try{
+      const plan=rejoinMaterialPieces(d,siblings,state.assets);
+      validateScenePhysical(plan.draft,state.assets);
+      checkpoint();d.layers=plan.draft.layers;saveProject();
+      state.selected=plan.nodeID;state.multiSelected=[plan.nodeID];render();toast('裁片已拼回');
+    }catch(error){toast(error.message||'裁片无法拼回');}
+    break;
   }
   case 'fabric-tool-slot':{
     const {mode,kind,index,value:slotValue}=id||{};
@@ -1601,7 +1665,7 @@ async function runAppAction(action,id,value){try{switch(action){
     break;
   }
   case 'fabric-unpark':{
-    const d=current(),item=d?.items.find(entry=>entry.id===id);if(!item)break;
+    const d=current(),item=d&&findSceneNode(d,id);if(!item)break;
     if(item.isParked){checkpoint();item.isParked=false;saveProject();}
     state.selected=item.id;state.multiSelected=[item.id];state.tool='select';render();break;
   }

@@ -251,8 +251,12 @@ try{
   assert.ok(resized>resize.width+4,'The edge handle should stretch the selected object: '+JSON.stringify({resize,resized}));
   assert.ok(Math.abs(await evaluate(`document.querySelector('#canvas-page').getBoundingClientRect().left`)-rotationTouch.pageLeft)<2,
     'Touch resizing must not move the page');
-  await click('.shape-add-quick','.swift-shape-picker');
-  await click('.shape-add-quick');
+  assert.equal(await evaluate('!!document.querySelector(".shape-add-quick")'),false,
+    'The right toolbar no longer duplicates the shape button');
+  await click('[data-val="shape"]','.swift-shape-picker');
+  await click('[data-val="shape"]');
+  assert.equal(await evaluate('document.querySelector("[data-val=select]")?.getAttribute("aria-pressed")'),'true',
+    'Repeated shape click returns to select mode');
   await click('[data-val="material"]','.swift-material-picker');
   const pickerLayout=await evaluate(`(()=>{const search=document.querySelector('.canvas-material-search').getBoundingClientRect();
     const [series,type]=[...document.querySelectorAll('.canvas-material-filters select')].map(node=>node.getBoundingClientRect());
