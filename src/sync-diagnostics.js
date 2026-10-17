@@ -2,7 +2,7 @@
 // names, payloads, URLs, raw server messages, tokens or complete stack traces.
 const ACTIONS=new Set(['start','reconcile','retry','committed','remote-won','merged','conflict','failed','direct-commit','prepare-start','prepare-finished','lock-wait','lock-entered','lock-ended','main-thread-lag','split','cos-ticket','cos-ticket-failed','cos-put','cos-put-failed','cos-put-verified']);
 const KINDS=new Set(['project','batch','direct','queue','lock','image']);
-const CATEGORIES=new Set(['unconfirmed-response','revision-conflict','authorization','rate-limit','server','local-storage','image-upload','browser-lock','interrupted','network','unknown']);
+const CATEGORIES=new Set(['unconfirmed-response','revision-conflict','authorization','rate-limit','server','database-timeout','local-storage','image-upload','browser-lock','interrupted','network','unknown']);
 const PHASES=new Set([
   '读取本机待同步队列','写入本机待同步队列','从 IndexedDB 刷新同步队列',
   '上传当前待同步记录','获取同步锁或执行同步任务','浏览器同步锁参数格式错误',
@@ -33,6 +33,7 @@ function category(error){
   if(/云端版本已变化|另一设备已更新|\bconflict\b/i.test(message)||status===409||['PT409','40001'].includes(errorCode(error)))return 'revision-conflict';
   if(status===401||status===403||/unauthori[sz]ed|permission|jwt|认证|登录/i.test(message))return 'authorization';
   if(status===429||/rate.limit|too many requests/i.test(message))return 'rate-limit';
+  if(errorCode(error)==='57014')return 'database-timeout';
   if(status!==null&&status>=500)return 'server';
   if(error?.syncPhase==='编码与上传 blobs'||error?.name==='NotReadableError')return 'image-upload';
   if(error?.name==='QuotaExceededError'||/quota|disk full|存储空间/i.test(message))return 'local-storage';
@@ -44,9 +45,12 @@ function category(error){
 }
 function failure(error){
   if(!error)return null;
+  const cause=error.cause;
   return {category:category(error),name:errorName(error.name),status:errorStatus(error),code:errorCode(error),
     phase:PHASES.has(error.syncPhase)?error.syncPhase:null,
-    causeCategory:error.cause?category(error.cause):null};
+    causeCategory:cause?category(cause):null,causeStatus:cause?errorStatus(cause):null,
+    causeCode:cause?errorCode(cause):null,
+    rpcDurationMs:count(error.rpcDurationMs??cause?.rpcDurationMs)};
 }
 function safeFrame(error){
   const matches=String(error?.stack||'').match(/(?:^|[/\\])([A-Za-z0-9_.-]+\.js):(\d+)(?::\d+)?/m);
@@ -67,7 +71,9 @@ function savedEvent(event){
     baseRevision:count(event.baseRevision),cloudRevision:count(event.cloudRevision),pending:count(event.pending),
     failure:detail&&CATEGORIES.has(detail.category)?{
       category:detail.category,name:errorName(detail.name),status:errorStatus(detail),code:errorCode(detail),
-      phase:PHASES.has(detail.phase)?detail.phase:null,causeCategory:CATEGORIES.has(detail.causeCategory)?detail.causeCategory:null
+      phase:PHASES.has(detail.phase)?detail.phase:null,causeCategory:CATEGORIES.has(detail.causeCategory)?detail.causeCategory:null,
+      causeStatus:errorStatus({status:detail.causeStatus}),causeCode:errorCode({code:detail.causeCode}),
+      rpcDurationMs:count(detail.rpcDurationMs)
     }:null,
     transfer:safeTransfer(event.transfer),durationMs:count(event.durationMs),online:typeof event.online==='boolean'?event.online:null,
     visibility:['visible','hidden','prerender'].includes(event.visibility)?event.visibility:null,
@@ -138,6 +144,7 @@ export function createSyncDiagnostics({limit=500,clock=()=>new Date().toISOStrin
         categoryGuide:{'unconfirmed-response':'云端版本未变化，但上传响应未获确认；数据留在本机待重试',
           'revision-conflict':'同一资料存在冲突；该项保留，其他项可继续',
           authorization:'登录或权限验证失败','rate-limit':'请求频率受限',server:'云端服务返回 5xx',
+          'database-timeout':'数据库语句超过服务器执行时限',
           'local-storage':'本机持久队列读写失败','image-upload':'图片读取或对象上传失败',
           'browser-lock':'浏览器同步锁异常',interrupted:'请求中断或超时',network:'网络连接失败',
           unknown:'需要结合阶段、时间与错误指纹进一步排查'},

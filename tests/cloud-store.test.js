@@ -23,13 +23,14 @@ function v2(record){
 
 
 function fixture(cache=null,objectStorage=null,projectPreview=()=>null){
-  const state={revision:0,accountEpoch:'epoch-fixture',rows:[],calls:[],commits:new Map(),keyVersions:new Map(),fail:false,authError:false,uploads:[],downloads:0};
+  const state={revision:0,accountEpoch:'epoch-fixture',rows:[],calls:[],commits:new Map(),receipts:new Map(),receiptReads:[],keyVersions:new Map(),fail:false,authError:false,uploads:[],downloads:0};
   const client={from(table){
     const filters={};const query={select(){return query;},eq(k,v){filters[k]=v;return query;},in(k,v){filters[k]=v;return query;},limit(){return query;},abortSignal(){return query;},order(){return query;},
       then(resolve){state.batchReads=(state.batchReads||0)+1;const rows=filters.store==='blobs'&&Array.isArray(filters.id)?(state.cloudCopies||state.rows.map(record=>({id:record.id,record}))):(state.cloudCopies||[]);return Promise.resolve(resolve({data:rows.filter(row=>!filters.id||(Array.isArray(filters.id)?filters.id.includes(row.id):row.id===filters.id))}));},
       async range(start,end){state.reads=(state.reads||0)+1;const rows=state.rows.slice(start,end+1).map(record=>({record:v2(record)}));await state.onReadPage?.(start,end);return {data:rows};},
       async single(){state.versionReads=(state.versionReads||0)+1;return {data:{revision:state.revision,account_epoch:state.accountEpoch}};},
-      async maybeSingle(){return {data:table==='shiye_commits'?(state.commits.has(filters.operation_id)?{revision:state.commits.get(filters.operation_id)}:null):table==='shiye_commit_receipts_v3'?null:state.rows.filter(r=>r.id===filters.id).map(record=>({record:v2(record)}))[0]||null};}};
+      async maybeSingle(){if(table==='shiye_commits'||table==='shiye_commit_receipts_v3')state.receiptReads.push(table);
+        return {data:table==='shiye_commits'?(state.commits.has(filters.operation_id)?{revision:state.commits.get(filters.operation_id)}:null):table==='shiye_commit_receipts_v3'?(state.receipts.get(filters.operation_id)||null):state.rows.filter(r=>r.id===filters.id).map(record=>({record:v2(record)}))[0]||null};}};
     if(table==='shiye_changes')return {select(){return this;},eq(){return this;},gt(){return this;},lte(){return this;},order(){return this;},async range(){return state.changes?{data:state.changes}:{error:{message:'change log not installed'}};}};
     assert.ok(['shiye_records','shiye_revisions','shiye_commits','shiye_commit_receipts_v3'].includes(table));return query;
   },storage:{from(bucket){assert.equal(bucket,'shiye-private');return {
@@ -38,6 +39,7 @@ function fixture(cache=null,objectStorage=null,projectPreview=()=>null){
     async rpc(name,args){
       assert.equal(name,'shiye_commit_v3_guarded');state.calls.push(args);
       if(state.rpcAbort)throw new DOMException('request aborted','AbortError');
+      if(state.rpcFailure)return state.rpcFailure;
       const receipt=revision=>({status:'applied',revision,accountEpoch:state.accountEpoch,syncProtocolVersion:3});
       if(state.commits.has(args.operation_id))return state.loseAck?{error:{message:'network response lost'}}:{data:receipt(state.commits.get(args.operation_id))};
       const stale=args.base_revision<state.revision;
@@ -52,6 +54,7 @@ function fixture(cache=null,objectStorage=null,projectPreview=()=>null){
       if(state.fail||args.base_revision>state.revision||changed||args.expected_epoch!==state.accountEpoch)
         return {error:{message:'conflict',code:'40001'}};
       const revision=++state.revision;state.commits.set(args.operation_id,revision);
+      state.receipts.set(args.operation_id,{result:receipt(revision)});
       for(const op of args.operations)state.keyVersions.set(op.store+':'+(op.item?.id??op.id??'*'),revision);
       if(state.loseAck)return {error:{message:'network response lost'}};
       return {data:receipt(revision)};
@@ -128,6 +131,18 @@ test('sync diagnostic export reports a failed phase without record content',asyn
   assert.equal(report.lastFailure.failure.category,'revision-conflict');
   assert.equal(report.state.online,true);
   assert.doesNotMatch(JSON.stringify(report),/secret-id|私人标题|owner-uuid/);
+});
+test('Supabase HTTP status and SQLSTATE survive a rejected commit in diagnostics',async()=>{
+  const {state,db}=fixture();
+  state.rpcFailure={data:null,status:504,error:{code:'57014',message:'private SQL text'}};
+  await assert.rejects(db.cloudTransaction(['assets'],tx=>
+    tx.objectStore('assets').put({id:'private-id',title:'私人标题'})));
+  const failure=db.cloudSyncDiagnosticReport().lastFailure.failure;
+  assert.equal(failure.category,'database-timeout');
+  assert.equal(failure.status,504);
+  assert.equal(failure.code,'57014');
+  assert.ok(Number.isInteger(failure.rpcDurationMs));
+  assert.doesNotMatch(JSON.stringify(db.cloudSyncDiagnosticReport()),/private-id|私人标题|private SQL text/);
 });
 test('imports finish durable staging while image uploads are blocked; pending bytes survive reopening',async()=>{
   const cache=memoryCache(),a=fixture(cache);let release;a.state.uploadGate=new Promise(r=>release=r);
@@ -348,6 +363,8 @@ test('lost acknowledgement for a material edit is recognized immediately and aga
   await first.db.cloudStageMutation(['assets'],tx=>tx.objectStore('assets').put({id:'asset',title:'renamed'}));
   await first.db.cloudFlushProjects();
   assert.deepEqual(await activeRows(cache,'batch'),[]);
+  assert.deepEqual(first.state.receiptReads,['shiye_commit_receipts_v3'],
+    'a lost v3 response is confirmed without a legacy receipt request');
   const operationID=first.state.calls[0].operation_id;
   await cache.put('cloud:owner-uuid','import-outbox',[{record:{id:'edit',names:['assets'],operations:[{action:'put',store:'assets',item:{id:'asset',title:'renamed'}}]},serial:1,baseRevision:0,operationID}]);
   const reopened=fixture(cache);reopened.state.revision=first.state.revision;reopened.state.commits=first.state.commits;

@@ -14,7 +14,8 @@ test('sync diagnostic report keeps useful phases and revisions without private p
   const report=trace.report({pending:1,conflicts:0,revision:4,writesInFlight:0,quarantined:0,online:false});
   assert.equal(report.events.length,2);
   assert.deepEqual(report.events[0].failure,{category:'server',name:'TypeError',status:503,
-    code:'PGRST301',phase:'云端提交事务',causeCategory:null});
+    code:'PGRST301',phase:'云端提交事务',causeCategory:null,causeStatus:null,
+    causeCode:null,rpcDurationMs:null});
   assert.equal(report.state.online,false);
   const serialized=JSON.stringify(report);
   for(const privateText of [secret,title,'secret.example','private-id'])assert.ok(!serialized.includes(privateText));
@@ -25,6 +26,20 @@ test('unconfirmed response retains its safe root cause category',()=>{
   trace.record({action:'failed',kind:'project',error:new Error('云端版本未变化',{cause:Error('conflict')})});
   assert.equal(trace.report().events[0].failure.category,'unconfirmed-response');
   assert.equal(trace.report().events[0].failure.causeCategory,'revision-conflict');
+});
+
+test('unconfirmed response preserves safe Supabase timeout details from its cause',()=>{
+  const trace=createSyncDiagnostics({storage:null});
+  const cause=Object.assign(Error('private SQL text'),{
+    code:'57014',status:504,rpcDurationMs:8012});
+  trace.record({action:'failed',kind:'batch',error:new Error('云端版本未变化',{cause})});
+  const detail=trace.report().events[0].failure;
+  assert.equal(detail.category,'unconfirmed-response');
+  assert.equal(detail.causeCategory,'database-timeout');
+  assert.equal(detail.causeStatus,504);
+  assert.equal(detail.causeCode,'57014');
+  assert.equal(detail.rpcDurationMs,8012);
+  assert.ok(!JSON.stringify(trace.report()).includes('private SQL text'));
 });
 
 test('native iPhone image read errors retain a safe name and upload phase',()=>{

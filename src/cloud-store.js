@@ -513,9 +513,13 @@ async function wasResetAfter(baseRevision){
 }
 async function wasCommitted(operationID,baseRevision){
   if(!operationID)throw Error('待同步记录缺少 operationID');
-  const row=checked(await cloudClient().from('shiye_commits').select('revision').eq('user_id',await identity()).eq('operation_id',operationID).maybeSingle());
-  const durable=row||checked(await cloudClient().from('shiye_commit_receipts_v3')
-    .select('result').eq('user_id',await identity()).eq('operation_id',operationID).maybeSingle());
+  const user=await identity();
+  // Current commits write a v3 receipt. Check it before the legacy receipt so
+  // a lost response needs only one network round trip to confirm success.
+  const receipt=checked(await cloudClient().from('shiye_commit_receipts_v3')
+    .select('result').eq('user_id',user).eq('operation_id',operationID).maybeSingle());
+  const durable=receipt||checked(await cloudClient().from('shiye_commits')
+    .select('revision').eq('user_id',user).eq('operation_id',operationID).maybeSingle());
   if(durable)await version(); // Invalidate stale snapshots after a lost response.
   return !!durable;
 }
@@ -771,6 +775,8 @@ async function rememberSnapshots(before,changedStores){
 }
 const checked=result=>{if(result.error){const failure=Error(result.error.message||'云端数据服务不可用');
   for(const key of ['code','status','statusCode'])if(result.error[key]!=null)failure[key]=result.error[key];
+  // PostgREST puts the HTTP status on the response, not necessarily on error.
+  if(failure.status==null&&Number.isInteger(result.status))failure.status=result.status;
   throw failure;}return result.data;};
 async function identity(){
   const id=owner??=(await requireCloudUser()).id;
@@ -1195,10 +1201,14 @@ function cloudTransaction(names,fn,operationID=crypto.randomUUID(),baseRevisionO
     }catch(error){throw markSyncPhase(error,'编码云端记录');}
     assertAccountWritable();activeDirect.phase='提交事务';reportSync();
     let data;
+    const rpcStartedAt=Date.now();
     try{data=checked(await cloudClient().rpc('shiye_commit_v3_guarded',{
       operations,base_revision:commitBase,operation_id:operationID,
       expected_epoch:accountEpoch,sync_protocol_version:3
-    }));}catch(error){throw markSyncPhase(error,'云端提交事务');}
+    }));}catch(error){
+      error.rpcDurationMs=Date.now()-rpcStartedAt;
+      throw markSyncPhase(error,'云端提交事务');
+    }
     if(data?.status!=='applied'||!Number.isSafeInteger(Number(data.revision))||
       data.accountEpoch!==accountEpoch)
       throw Error('云端同步收据不完整；本机修改已保留');
