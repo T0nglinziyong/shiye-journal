@@ -81,3 +81,14 @@ test('a cutout edit missing its local image falls back to the acknowledged cloud
   const result=await recoverImportOutbox(input,async()=>false);
   assert.equal(result.changed,true);assert.deepEqual(result.rows,[]);
 });
+
+test('a validated pending source blob protects its dependent cutouts after reopening',async()=>{
+  const photo={id:'photo',data:new Blob(['source'])};
+  const source={record:{id:'source',names:['blobs'],operations:[
+    {store:'blobs',action:'put',item:photo}]},serial:1,baseRevision:2};
+  const card={record:{id:'card',assets:[{id:'a',blobId:'photo'}],blobs:[],
+    projects:[],dependsOnBlobIDs:['photo']},serial:2,baseRevision:2};
+  const result=await recoverImportOutbox([source,card],async()=>false);
+  assert.equal(result.changed,false);
+  assert.deepEqual(result.rows,[source,card]);
+});

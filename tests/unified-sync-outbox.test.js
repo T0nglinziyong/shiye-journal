@@ -20,6 +20,13 @@ test('one queue accepts project and import envelopes without colliding IDs',()=>
  assert.deepEqual(syncAffectedKeys(folded.rows[1].record),[{store:'series',id:'z'}]);
 });
 
+test('a dependent card reads the shared blob without claiming to modify it',()=>{
+ const card=syncEnvelope('batch',{id:'card',assets:[{id:'a',blobId:'cut'}],
+   blobs:[{id:'cut'}],projects:[],dependsOnBlobIDs:['photo']});
+ assert.deepEqual(syncAffectedKeys(card),[{store:'assets',id:'a'},
+   {store:'blobs',id:'cut'},{store:'blobs',id:'photo',readOnly:true}]);
+});
+
 test('older work wins only when its last actual edit timestamp is newer',()=>{
  const cloud={updatedAt:'2026-10-12T08:00:02Z'};
  assert.equal(latestEditedProject({updatedAt:'2026-10-12T08:00:03Z'},cloud),'local');

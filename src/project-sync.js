@@ -111,7 +111,9 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
       return;
     }
   }
-  const overlaps=(a,b)=>a.some(left=>b.some(right=>left.store===right.store&&(left.id===right.id||left.id===undefined||right.id===undefined)));
+  const overlaps=(a,b)=>a.some(left=>b.some(right=>left.store===right.store&&
+    (left.id===right.id||left.id===undefined||right.id===undefined)&&
+    !(left.readOnly&&right.readOnly)));
   const validReplacement=(previous,candidate)=>{
     if(!candidate?.id||candidate.id!==previous.id||previous.kind&&
       (candidate.kind!==previous.kind||!candidate.payload||

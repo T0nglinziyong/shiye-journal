@@ -25,7 +25,7 @@ import {createBlobRevisionProof} from './blob-revision-proof.js';
 import {createSyncDiagnostics} from './sync-diagnostics.js';
 import {decodeImageBlob} from './image-blob-decoder.js';
 import {boundedMap} from './bounded-map.js';
-import {assetBlobIDs,splitIndependentAssetImport,splitPendingAssetImportRows,reconcileInterruptedAssetImport} from './import-sync-batches.js';
+import {assetBlobIDs,splitIndependentAssetImport,splitWideMetadataMutation,splitPendingAssetImportRows,reconcileInterruptedAssetImport} from './import-sync-batches.js';
 export function createCloudStore({cloudClient,requireCloudUser,cache=null,namespace='cloud',projectPreview=()=>null,objectStorage=null}){
 const BUCKET='shiye-private';
 const writeProvider=()=>objectStorage?.enabled?'cos':'supabase';
@@ -973,7 +973,11 @@ async function cloudPreview(id,pixels=480,{allowRemoteOriginal=true}={}){
   }
   // If this device already holds the full image, derive the small card cover
   // locally. Do not fetch the same bytes again just to request a thumbnail.
-  if(usableBlob(localOriginal)){
+  // A COS original in the local cache can be several megapixels. Do not
+  // decode it on the catalog's main thread merely to create a 480px card;
+  // COS image processing supplies that variant without page CPU work.
+  if(usableBlob(localOriginal)&&(record.storageProvider!=='cos'||
+    globalThis.navigator?.onLine===false)){
     const reduced=await makeThumbnail(localOriginal,edge);
     if(usableBlob(reduced)){await rememberImageVariant(record.storagePath,edge,reduced);return reduced;}
   }
@@ -1106,7 +1110,10 @@ async function encode(store,record,{makePreview=true}={}){
   // The optional thumbnail is independent of the original PUT. Start both
   // together, but never commit metadata until the original is acknowledged.
   // This avoids serial upload latency without changing the safety boundary.
-  if(makePreview&&!thumbnailUploads.has(storagePath)){
+  // COS serves resized image variants on demand. Eagerly decoding every
+  // full-resolution photo here monopolized mobile Safari's main thread while
+  // large recognition imports were still trying to commit their metadata.
+  if(makePreview&&provider!=='cos'&&!thumbnailUploads.has(storagePath)){
     const task=(async()=>{try{const thumbnail=await makeThumbnail(record.data);if(!thumbnail)return null;const path=storagePath+'-preview480.webp',result=await uploadObject(path,thumbnail,'image/webp',provider);if(result.error&&String(result.error.statusCode)!=='409')return null;await rememberImageVariant(storagePath,COVER_EDGE,thumbnail);return path;}catch{return null;}})();
     thumbnailUploads.set(storagePath,task);
     void task.then(path=>{if(!path)thumbnailUploads.delete(storagePath);});
@@ -1462,7 +1469,8 @@ async function stageMutationNow(names,fn){
     pendingBases.set(key,op.item);
   }
   const deletedIDs=operations.filter(op=>op.store==='projects'&&op.action==='delete').map(op=>op.id);
-  if(!deletedIDs.length){await importSync.stage({id:batchID,names,operations});return;}
+  if(!deletedIDs.length){await importSync.stageMany(
+    splitWideMetadataMutation({id:batchID,names,operations}));return;}
   // Persist the delete + full trash snapshot before touching older pending
   // saves. Waiting for the network-held account lock here made Delete appear
   // frozen while an unrelated upload retried. The unified outbox serializes

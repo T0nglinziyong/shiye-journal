@@ -68,9 +68,9 @@ export async function saveImportBatch({state,db,urls,render,onSaved}) {
       d.items=[];
       p.isDraft=false;p.source='imported';p.isUsed=false;
       const elements=chosen.filter(c=>c.region.w<.98||c.region.h<.98);
-      const originalID=uid();
-      blobs.push({id:originalID,data:record.originalFile||record.file});
-      p.originalImportPhotoBlobID=originalID;
+      // Each selected element already carries its aligned candidate RGB frame.
+      // The whole photo is not used when that element is re-cut or re-masked;
+      // keeping it here added a large, shared upload to every work import.
       p.candidateAssetIDs=[];
       const choice=record.seriesID&&record.seriesID!==''?record.seriesID:state.importBatchSeriesID||null;
       const copyToLibrary=choice!=='__no_library__';
@@ -85,7 +85,7 @@ export async function saveImportBatch({state,db,urls,render,onSaved}) {
         });
         assets.push({...candidateMetadata(c,record,state.importBatchSeriesID),id,blobId,imageHash,
           initialMaskBlobId:maskId,finalMaskBlobId:maskId,candidateFrameBlobId,
-          photoBlobId:originalID,isProjectInternal:!copyToLibrary,
+          isProjectInternal:!copyToLibrary,
           usageStatus:copyToLibrary?'used':'unused',usageUpdatedAt:copyToLibrary?now:null,
           seriesID:copyToLibrary?(choice==='__none__'?null:choice||null):null,
           createdAt:now,sourceIdentifier:'imported-work-element'});

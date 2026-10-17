@@ -79,6 +79,32 @@ test('a large set of independent metadata edits is split into bounded commits',(
   assert.deepEqual(second.record.payload.operations.map(op=>op.item.id),['4','5','6','7']);
 });
 
+test('shared image receipt gates dependent cards without making siblings conflict',async()=>{
+  let revision=0,disk=[],failSource=true;const calls=[];
+  const sync=createProjectSync({load:async()=>structuredClone(disk),
+    reload:async()=>structuredClone(disk),write:async rows=>{disk=structuredClone(rows);},
+    revision:()=>revision,recordKeys:syncAffectedKeys,coalesce:()=>null,
+    reconcile:async()=> 'rebase',autoFlushDelayMs:10000,
+    commit:async record=>{
+      calls.push(record.payload.id);
+      if(record.payload.id==='source'&&failSource){failSource=false;throw Error('network response lost');}
+      revision++;
+    }});
+  await sync.stageMany([
+    syncEnvelope('batch',{id:'source',names:['blobs'],operations:[
+      {store:'blobs',action:'put',item:{id:'photo',data:new Blob(['pixels'])}}]}),
+    syncEnvelope('batch',{id:'a',assets:[{id:'a',blobId:'a-cut',photoBlobId:'photo'}],
+      blobs:[{id:'a-cut',data:new Blob(['a'])}],projects:[],dependsOnBlobIDs:['photo']}),
+    syncEnvelope('batch',{id:'b',assets:[{id:'b',blobId:'b-cut',photoBlobId:'photo'}],
+      blobs:[{id:'b-cut',data:new Blob(['b'])}],projects:[],dependsOnBlobIDs:['photo']})
+  ]);
+  await assert.rejects(sync.flush(),/云端版本未变化/);
+  assert.deepEqual(calls,['source']);
+  await sync.flush();
+  assert.deepEqual(calls,['source','source','a','b']);
+  assert.equal(disk.length,0);
+});
+
 test('a lost acknowledgement of the merged operation is checked before retry',async()=>{
   const calls=[];let revision=0,disk=[];
   const sync=createProjectSync({load:async()=>structuredClone(disk),reload:async()=>structuredClone(disk),

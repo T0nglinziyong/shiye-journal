@@ -67,5 +67,8 @@ export function foldLegacySyncRows(unified=[],projects=[],imports=[],quarantine=
 }
 export const syncAffectedKeys=envelope=>envelope.kind==='project'
   ?[{store:'projects',id:envelope.payload.id}]
-  :envelope.payload.operations?.map(op=>({store:op.store,id:op.item?.id??op.id}))||
-    ['assets','blobs','projects'].flatMap(store=>(envelope.payload[store]||[]).map(item=>({store,id:item.id})));
+  :[
+    ...(envelope.payload.operations?.map(op=>({store:op.store,id:op.item?.id??op.id}))||
+      ['assets','blobs','projects'].flatMap(store=>(envelope.payload[store]||[]).map(item=>({store,id:item.id})))),
+    ...(envelope.payload.dependsOnBlobIDs||[]).map(id=>({store:'blobs',id,readOnly:true}))
+  ];

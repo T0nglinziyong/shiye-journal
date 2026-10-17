@@ -218,6 +218,19 @@ test('one failed material does not block siblings from the same recognition batc
   assert.deepEqual(await activeRows(cache,'batch'),[]);
 });
 
+test('a wide material metadata save stages bounded commits without losing any edit',async()=>{
+  const cache=memoryCache(),{state,db}=fixture(cache);
+  await db.cloudStageMutation(['assets'],tx=>{
+    for(let i=0;i<58;i++)tx.objectStore('assets').put({id:'bulk-'+i,title:'updated'});
+  });
+  assert.equal((await activeRows(cache,'batch')).length,8);
+  await db.cloudFlushProjects();
+  assert.equal(state.calls.length,8);
+  assert.deepEqual(state.calls.flatMap(call=>call.operations.map(op=>op.item.id)),
+    Array.from({length:58},(_,i)=>'bulk-'+i));
+  assert.deepEqual(await activeRows(cache,'batch'),[]);
+});
+
 test('opening the app converts an older multi-material outbox into independent rows',async()=>{
   const cache=memoryCache();
   cache.repairUnifiedOutbox=async(owner,_previous,next,held)=>{
@@ -424,7 +437,7 @@ test('cloud objects require explicit current storage provider metadata',async()=
   const invalid=fixture(null,cos);invalid.state.rows=[{id:'missing-provider',storagePath:'owner-uuid/current'}];await assert.rejects(invalid.db.cloudGet('blobs','missing-provider'),/存储服务标记/);
   files.clear();const failed=fixture(null,cos);failed.state.rows=[record];await assert.rejects(failed.db.cloudGet('blobs','cos-image'),/COS offline/);assert.equal(failed.state.downloads,0);
 });
-test('original and optional preview upload overlap but metadata waits for the original',async()=>{
+test('COS metadata waits for the original without decoding an eager preview',async()=>{
   const oldBitmap=globalThis.createImageBitmap,oldDocument=globalThis.document;
   globalThis.createImageBitmap=async()=>({width:480,height:480,close(){}});
   globalThis.document={createElement:()=>({getContext:()=>({drawImage(){}}),toBlob:callback=>callback(new Blob(['preview'],{type:'image/webp'}))})};
@@ -432,8 +445,8 @@ test('original and optional preview upload overlap but metadata waits for the or
     let releaseOriginal;const gate=new Promise(resolve=>releaseOriginal=resolve),started=[];
     const cos={enabled:true,async upload(path){started.push(path);if(!path.endsWith('-preview480.webp'))await gate;}};
     const {state,db}=fixture(null,cos);const commit=db.cloudTransaction(['blobs'],tx=>tx.objectStore('blobs').put({id:'parallel',data:new Blob(['original'],{type:'image/png'})}));
-    for(let i=0;i<100&&started.length<2;i++)await new Promise(resolve=>setTimeout(resolve,1));
-    assert.equal(started.length,2);assert.equal(state.calls.length,0,'cloud metadata must not precede the original');
+    for(let i=0;i<100&&started.length<1;i++)await new Promise(resolve=>setTimeout(resolve,1));
+    assert.equal(started.length,1);assert.equal(state.calls.length,0,'cloud metadata must not precede the original');
     releaseOriginal();await commit;assert.equal(state.calls.length,1);
   }finally{if(oldBitmap===undefined)delete globalThis.createImageBitmap;else globalThis.createImageBitmap=oldBitmap;if(oldDocument===undefined)delete globalThis.document;else globalThis.document=oldDocument;}
 });
@@ -477,7 +490,7 @@ test('staged material bytes upload before acquiring the account revision lock',a
     else delete globalThis.navigator;
   }
 });
-test('an import uploads previews only for visible cutouts, retaining full editing sources',async()=>{
+test('a COS import uploads each original once and defers cover processing',async()=>{
   const oldBitmap=globalThis.createImageBitmap,oldDocument=globalThis.document;
   let decoded=0;
   globalThis.createImageBitmap=async()=>{decoded++;return {width:480,height:480,close(){}};};
@@ -492,9 +505,9 @@ test('an import uploads previews only for visible cutouts, retaining full editin
       for(const id of ['cutout','frame','mask','photo'])
         tx.objectStore('blobs').put({id,data:new Blob([id+'-pixels'],{type:'image/png'})});
     });
-    assert.equal(paths.filter(path=>path.endsWith('-preview480.webp')).length,1);
-    assert.equal(paths.length,5,'four original blobs and one visible cover');
-    assert.equal(decoded,1,'hidden editing sources must not be decoded for a cover');
+    assert.equal(paths.filter(path=>path.endsWith('-preview480.webp')).length,0);
+    assert.equal(paths.length,4,'four original blobs without a main-thread preview pass');
+    assert.equal(decoded,0,'no source image is decoded during the upload commit');
     const blobs=state.calls[0].operations.filter(op=>op.store==='blobs');
     assert.deepEqual(blobs.map(op=>!!op.item.thumbnailPath),[false,false,false,false]);
   }finally{

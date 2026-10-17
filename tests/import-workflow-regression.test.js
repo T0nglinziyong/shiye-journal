@@ -39,7 +39,11 @@ test('imported work saves editable paper metadata instead of inpainted photo bac
  assert.equal(p.source,'imported');assert.equal(d.items.length,1);
  assert.equal(saved.assets.length,1,'No internal full-sheet photo may be added');
  assert.equal(saved.assets[0].isProjectInternal,true);
- assert.equal(saved.blobs.filter(x=>x.data.type==='image/jpeg').length,1);
+ assert.equal(saved.blobs.filter(x=>x.data.type==='image/jpeg').length,0,
+   'Editable work retains each candidate frame, never the full source photo');
+ assert.equal(p.originalImportPhotoBlobID,undefined);
+ assert.equal(saved.assets[0].photoBlobId,undefined);
+ assert.ok(saved.assets[0].candidateFrameBlobId);
  assert.deepEqual(p.initialEditorSnapshot.drafts[0].layers,d.layers);
  assert.equal(state.importStep,'done');
 });

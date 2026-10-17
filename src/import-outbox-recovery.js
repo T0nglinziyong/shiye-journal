@@ -26,6 +26,11 @@ function availableIDs(answer,ids){
 export async function recoverImportOutbox(rows,remoteHas){
   let removed=0,changed=false;
   const recovered=[];
+  const pendingSourceBlobs=new Set((rows||[]).filter(row=>
+    Array.isArray(row?.record?.operations)&&Array.isArray(row.record.names)&&
+    row.record.operations.every(op=>validMutation(op,row.record.names)))
+    .flatMap(row=>row.record.operations.filter(op=>op.store==='blobs'&&
+      op.action==='put').map(op=>op.item.id)));
   for(const row of rows||[]){
     const batch=row?.record;
     if(!batch||typeof batch.id!=='string'||!batch.id||!Number.isSafeInteger(row.serial)||row.serial<1||!Number.isSafeInteger(row.baseRevision)||row.baseRevision<0){changed=true;removed++;continue;}
@@ -38,12 +43,14 @@ export async function recoverImportOutbox(rows,remoteHas){
     if(!Array.isArray(batch.assets)||!Array.isArray(batch.blobs)||!Array.isArray(batch.projects)||!batch.assets.length&&!batch.projects.length){changed=true;removed++;continue;}
     if(batch.projects.some(project=>!usableProjectSnapshot(project))){changed=true;removed++;continue;}
     const blobs=new Map((batch.blobs||[]).map(blob=>[blob.id,blob.data]));
+    const availableDependencies=new Set((batch.dependsOnBlobIDs||[]).filter(id=>
+      pendingSourceBlobs.has(id)));
     let uncertain=false,rowChanged=false,removedInRow=0;
     const assets=await Promise.all(batch.assets.map(async asset=>{
       if(asset.finalMaskBlobId||asset.initialMaskBlobId){
         const required=[...new Set([asset.blobId,asset.candidateFrameBlobId,
           asset.finalMaskBlobId,asset.initialMaskBlobId].filter(Boolean))];
-        const missing=required.filter(id=>!usable(blobs.get(id)));
+        const missing=required.filter(id=>!usable(blobs.get(id))&&!availableDependencies.has(id));
         if(!missing.length)return asset;
         let remote;
         try{remote=availableIDs(await remoteHas(asset,missing),missing);}catch{remote=null;}
@@ -51,7 +58,8 @@ export async function recoverImportOutbox(rows,remoteHas){
         if(missing.every(id=>remote.has(id)))return asset;
         removedInRow++;rowChanged=true;return null;
       }
-      const candidates=displayIDs(asset),local=candidates.find(id=>usable(blobs.get(id)));
+      const candidates=displayIDs(asset),local=candidates.find(id=>
+        usable(blobs.get(id))||availableDependencies.has(id));
       if(local){if(local!==asset.blobId){rowChanged=true;return {...asset,blobId:local};}return asset;}
       let remote;
       try{remote=availableIDs(await remoteHas(asset,imageIDs(asset)),imageIDs(asset));}catch{remote=null;}

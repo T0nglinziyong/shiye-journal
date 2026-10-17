@@ -263,8 +263,10 @@ try {
   const workItems=work.drafts[0].layers.filter(layer=>layer.type==='material');
   assert.equal(workItems.length,2);assert.ok(workItems.every(item=>!item.isParked));
   const importedWorkAssets=await storeRecords('assets'),workAssetIDs=new Set(workItems.map(item=>item.assetID));
-  assert.ok(work.originalImportPhotoBlobID);
-  assert.ok(importedWorkAssets.filter(asset=>workAssetIDs.has(asset.id)).every(asset=>asset.sourceIdentifier==='imported-work-element'));
+  assert.equal(work.originalImportPhotoBlobID,undefined);
+  assert.ok(importedWorkAssets.filter(asset=>workAssetIDs.has(asset.id)).every(asset=>
+    asset.sourceIdentifier==='imported-work-element'&&asset.candidateFrameBlobId&&
+    !asset.photoBlobId));
   // Exercise the deployed UI too: a production bundle has no /src/store.js.
   // Capture only this isolated context's synthetic export, never a user file.
   await click('[data-act="import-exit"]','.works-grid');await click('#top-settings','.settings-list');await click('[data-val="数据与诊断"]','.settings-detail');

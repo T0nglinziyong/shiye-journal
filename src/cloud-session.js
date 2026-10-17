@@ -4,6 +4,31 @@ const url=import.meta.env?.VITE_SHIYE_SUPABASE_URL;
 const key=import.meta.env?.VITE_SHIYE_SUPABASE_PUBLISHABLE_KEY;
 export const cloudEnabled=!!url;
 let client;
+export async function fetchCloudRequest(input,init,{fetcher=fetch,commitTimeoutMs=12000,
+  relayTimeoutMs=25000}={}){
+  const path=input instanceof Request?input.url:String(input);
+  const method=(init?.method||(input instanceof Request?input.method:'GET')).toUpperCase();
+  const storage=/\/storage\/v1\/object\//.test(path);
+  const authentication=/\/auth\/v1\/|\/rest\/v1\/shiye_accounts(?:\?|$)/.test(path);
+  const commit=method==='POST'&&/\/rest\/v1\/rpc\/shiye_commit_v3_guarded(?:\?|$)/.test(path);
+  const timeout=storage?['POST','PUT','PATCH'].includes(method)?180000:90000:
+    authentication?12000:commit?commitTimeoutMs:30000;
+  const deadline=AbortSignal.timeout(timeout);
+  try{return await fetcher(input,{...init,signal:init?.signal?
+    AbortSignal.any([init.signal,deadline]):deadline});}
+  catch(error){
+    const transient=deadline.aborted||error?.name==='TypeError'||error?.name==='NetworkError';
+    const body=init?.body;
+    if(!commit||!transient||init?.signal?.aborted||typeof window==='undefined'||
+      typeof body!=='string'||body.length>1_000_000)throw error;
+    // A lost direct response may already have committed. The operation ID is
+    // unchanged, so the server receipt makes this relay attempt idempotent.
+    const relaySignal=AbortSignal.timeout(relayTimeoutMs);
+    return fetcher('/api/sync-commit',{method:'POST',headers:init?.headers,
+      body,cache:'no-store',signal:init?.signal?
+        AbortSignal.any([init.signal,relaySignal]):relaySignal});
+  }
+}
 async function authStep(promise,message){
   let timer;
   try{return await Promise.race([promise,new Promise((_,reject)=>{
@@ -13,14 +38,7 @@ async function authStep(promise,message){
 }
 export function cloudClient(){
   if(!url||!key)throw Error('云端配置不完整；未切换到本机存储');
-  return client??=createClient(url,key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false},global:{fetch:async(input,init)=>{
-    const path=input instanceof Request?input.url:String(input),method=(init?.method||(input instanceof Request?input.method:'GET')).toUpperCase();
-    const storage=/\/storage\/v1\/object\//.test(path);
-    const authentication=/\/auth\/v1\/|\/rest\/v1\/shiye_accounts(?:\?|$)/.test(path);
-    const timeout=storage?['POST','PUT','PATCH'].includes(method)?180000:90000:authentication?12000:30000;
-    const deadline=AbortSignal.timeout(timeout);
-    return fetch(input,{...init,signal:init?.signal?AbortSignal.any([init.signal,deadline]):deadline});
-  }}});
+  return client??=createClient(url,key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false},global:{fetch:fetchCloudRequest}});
 }
 export async function requireCloudUser({withAccount=false}={}){
   const {data,error}=await authStep(cloudClient().auth.getUser(),

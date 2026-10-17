@@ -2,9 +2,26 @@ export const assetBlobIDs=asset=>[asset?.blobId,asset?.originalCutoutBlobId,asse
   asset?.candidateFrameBlobId,asset?.initialMaskBlobId,asset?.finalMaskBlobId,asset?.photoBlobId]
   .filter(Boolean);
 
-// A library import is locally atomic, but unrelated materials must be able to
-// reach the cloud independently. Keep assets sharing source bytes together so
-// their references are never published without the same blob component.
+// Bulk tag/usage changes do not require one giant JSON/RPC body. Each record
+// has a distinct key, so only pure metadata PUTs may be split this way.
+export function splitWideMetadataMutation(batch,{newID=()=>crypto.randomUUID(),limit=8}={}){
+  const ops=batch?.operations;
+  if(!Array.isArray(ops)||ops.length<=limit||!ops.every(op=>
+    op.action==='put'&&['assets','series'].includes(op.store)&&
+    typeof op.item?.id==='string'&&op.item.id&&!(op.item.data instanceof Blob)))return [batch];
+  const keys=new Set(ops.map(op=>op.store+'\0'+op.item.id));
+  if(keys.size!==ops.length)return [batch];
+  const chunks=[];
+  for(let offset=0;offset<ops.length;offset+=limit){
+    const operations=ops.slice(offset,offset+limit);
+    chunks.push({...batch,id:newID(),operations,
+      names:[...new Set(operations.map(op=>op.store))]});
+  }
+  return chunks;
+}
+
+// A library import is locally atomic. Cloud records can be committed in
+// smaller, durable steps once shared source bytes have their own receipt.
 export function splitIndependentAssetImport(batch,{newID=()=>crypto.randomUUID()}={}){
   const assets=batch?.assets,blobs=batch?.blobs,projects=batch?.projects;
   if(!Array.isArray(assets)||assets.length<2||!Array.isArray(blobs)||
@@ -16,6 +33,31 @@ export function splitIndependentAssetImport(batch,{newID=()=>crypto.randomUUID()
   // Unknown batch-level bytes may carry semantics not represented by an asset
   // field. Preserve the original transaction rather than guessing ownership.
   if(blobs.some(blob=>!referenced.has(blob.id)))return [batch];
+  const referenceCounts=new Map();
+  for(const ids of references)for(const id of ids)
+    referenceCounts.set(id,(referenceCounts.get(id)||0)+1);
+  const shared=new Set([...referenceCounts].filter(([,count])=>count>1).map(([id])=>id));
+  // A shared reference absent from the import may be a pre-existing cloud
+  // object. Keep the original transaction rather than inventing a receipt.
+  if([...shared].some(id=>!blobByID.has(id)))return [batch];
+  if(shared.size){
+    const parts=[];
+    const common=blobs.filter(blob=>shared.has(blob.id));
+    // A source photo can be used by dozens of cutouts. Keep each receipt and
+    // HTTP body bounded; the dependent cards remain behind these rows.
+    for(let offset=0;offset<common.length;offset+=8){
+      const chunk=common.slice(offset,offset+8);
+      parts.push({id:newID(),names:['blobs'],operations:chunk.map(item=>
+        ({store:'blobs',action:'put',item}))});
+    }
+    for(let index=0;index<assets.length;index++){
+      const ids=references[index];
+      parts.push({...batch,id:newID(),assets:[assets[index]],
+        blobs:blobs.filter(blob=>ids.has(blob.id)&&!shared.has(blob.id)),
+        projects:[],dependsOnBlobIDs:[...ids].filter(id=>shared.has(id))});
+    }
+    return parts;
+  }
   const parent=assets.map((_,index)=>index);
   const root=index=>{while(parent[index]!==index){parent[index]=parent[parent[index]];index=parent[index];}return index;};
   const join=(a,b)=>{a=root(a);b=root(b);if(a!==b)parent[b]=a;};
@@ -40,7 +82,8 @@ export async function splitPendingAssetImportRows(rows,{isCommitted=async()=>fal
   const output=[];
   for(const row of [...(rows||[])].sort((a,b)=>a.serial-b.serial)){
     const envelope=row?.record,batch=envelope?.kind==='batch'?envelope.payload:null;
-    const parts=batch?splitIndependentAssetImport(batch,{newID}):[batch];
+    const parts=batch?splitIndependentAssetImport(batch,{newID})
+      .flatMap(part=>splitWideMetadataMutation(part,{newID})):[batch];
     if(!batch||parts.length<2||await isCommitted(row)){
       nextSerial=Math.max(nextSerial+1,row.serial);
       output.push({...row,serial:nextSerial});
