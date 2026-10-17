@@ -91,7 +91,13 @@ export function importNativeProjectDocument(envelope,assets){
   for(const draft of project.initialEditorSnapshot?.drafts||[])reviseReferences(draft);
   for(const draft of Object.values(project.draftHistorySnapshots||{}))reviseReferences(draft);
 
-  project.id=uid();delete project.__cloudBaseRevision;delete project.__cloudSessionId;project.title=project.title.slice(0,80);project.isSnapshot=false;project.isDraft=true;project.projectDocumentPath=null;project.deliveryBlobId=null;project.activeDraftID=mapped(draftMap,source.activeDraftID);project.editHistory={undo:[],redo:[]};project.createdAt=project.updatedAt=new Date().toISOString();return project;
+  project.id=uid();delete project.__cloudBaseRevision;delete project.__cloudSessionId;project.title=project.title.slice(0,80);project.isSnapshot=false;project.isDraft=true;project.projectDocumentPath=null;project.deliveryBlobId=null;project.activeDraftID=mapped(draftMap,source.activeDraftID);project.editHistory={undo:[],redo:[]};
+  // A newly imported project starts at the artwork it contains, regardless of
+  // an earlier blank baseline or history bundled by the exporting device.
+  project.initialEditorSnapshot={drafts:project.drafts.map(draft=>structuredClone(draft)),activeDraftID:project.activeDraftID};
+  project.draftHistorySnapshots={...project.draftHistorySnapshots,
+    [project.drafts[0].id]:structuredClone(project.drafts[0])};
+  project.createdAt=project.updatedAt=new Date().toISOString();return project;
 }
 
 export function validatePackageValue(root){

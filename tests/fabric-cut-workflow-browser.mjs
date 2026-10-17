@@ -52,7 +52,7 @@ try{
     'Standby pieces should not cover the bottom of the canvas');
   await click('.fabric-cut-session-actions button:first-child');
   await click('.fabric-cut-session-actions button:nth-child(2)');
-  await click('.fabric-cut-panel header button');
+  await click('.fabric-cut-panel .floating-scene-panel-actions button.primary');
   await sleep(700);
   await click('[data-val="layers"]','.scene-layer-parked');
   assert.equal(await evaluate('document.querySelectorAll("[data-parked-piece-id]").length'),1,
@@ -83,7 +83,7 @@ try{
   assert.ok(await evaluate('document.querySelector(".fabric-cut-preview-status")?.textContent.includes("2 片")'),
     'A direct canvas line must preview two pieces');
   await click('.fabric-cut-row button.primary');
-  await click('.fabric-cut-session-actions button:last-child');
+  await click('.fabric-cut-panel .floating-scene-panel-actions button:first-child');
   assert.equal(await evaluate('!!document.querySelector(".fabric-cut-panel")'),false,
     'Discard exits scissors without saving its staged fragments');
   assert.deepEqual(browser.errors,[]);

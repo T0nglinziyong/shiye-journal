@@ -109,6 +109,9 @@ export function importWebScene(input,assets,{trustedSource=null}={}){
   d.agentRun={status:'finished',visualReview:'须在 App 复核最终画面'};
   const p=project(String(input.title||'新的手帐').slice(0,80),{mode:s.mode,ratio:s.ratio,style:s.styles?.[0]||'free'});
   d.id=p.drafts[0].id;p.drafts=[d];p.activeDraftID=d.id;p.offlineBundleId=s.bundleId;
+  // The imported artwork, not project()'s temporary blank draft, is version one.
+  p.initialEditorSnapshot={drafts:[structuredClone(d)],activeDraftID:d.id};
+  p.draftHistorySnapshots={[d.id]:structuredClone(d)};
   p.candidateAssetIDs=s.materials.map(m=>m.assetID);p.requiredAssetIDs=s.requiredAssetIDs||[];p.materialPriority=structuredClone(s.materialPriority);p.styles=s.styles;p.purposes=s.purposes;
   inheritCreationBrief(p,s);p.creationVerification={structure:'passed',physical:'current-rules-passed',preview:'unverified',reading:'pending',sourceTaskId:s.bundleId};
   return p;

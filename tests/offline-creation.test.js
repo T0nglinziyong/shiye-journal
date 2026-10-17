@@ -40,6 +40,8 @@ test('current editable example imports from JSON with current library assets',as
   const imported=importEditableWork(response,[asset],{trustedSource:output.source});
   assert.equal(imported.isDraft,true);assert.equal(imported.drafts[0].items[0].assetID,asset.id);assert.equal(imported.drafts[0].agentRun.status,'finished');
   assert.equal(imported.offlineBundleId,output.source.bundleId);
+  assert.deepEqual(imported.initialEditorSnapshot.drafts[0].layers,imported.drafts[0].layers);
+  assert.deepEqual(imported.draftHistorySnapshots[imported.activeDraftID].layers,imported.drafts[0].layers);
   assert.equal(importEditableWork(response,[asset]).drafts[0].items[0].assetID,asset.id);
   assert.throws(()=>importEditableWork(response,[asset],{trustedSource:{...output.source,bundleId:'other'}}),/来源与所选原始任务不一致/);
   const copied=`预览如下。\n\n\`\`\`json\n${response}\n\`\`\``;

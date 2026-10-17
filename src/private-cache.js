@@ -91,7 +91,48 @@ export function createPrivateCache({name='shiye-private-read-cache-v2',limit=160
         const result=await readOutbox(tx,account,id);await tx.done;
         return result.present?result.rows:undefined;
       }
+      if(id.startsWith('records:')){
+        const tx=d.transaction('entries','readonly'),entries=tx.objectStore('entries');
+        const [row,head]=await Promise.all([
+          entries.get(key(account,id)),entries.get(key(account,'records-head'))
+        ]);
+        await tx.done;
+        const store=id.slice('records:'.length),value=row?.value;
+        // The head proves that this unchanged collection is still valid at a
+        // newer account revision. A torn/foreign write never gains that proof.
+        return value&&head?.value?.stores?.[store]===value.revision
+          ?{revision:head.value.revision,records:value.records}:value;
+      }
       return d.get('entries',key(account,id)).then(row=>row?.value);
+    },
+    // Advance one account cache revision atomically. Unchanged collections
+    // retain their old IndexedDB value; the small head records their proof.
+    // Read caches are disposable, so a concurrent newer head simply wins.
+    async putSnapshotBatch(account,before,after,snapshots,changedStores){
+      const d=await db(),tx=d.transaction(['entries','sizes'],'readwrite');
+      try{
+        const entries=tx.objectStore('entries'),sizes=tx.objectStore('sizes');
+        const prior=(await entries.get(key(account,'records-head')))?.value;
+        if(prior&&prior.revision>before){await tx.done;return false;}
+        // A full cloud reload can jump over the old head. Bootstrap it once
+        // from the verified in-memory snapshots, then return to small deltas.
+        const incremental=prior?.revision===before;
+        const stores=incremental?{...prior.stores}:{},changed=new Set(changedStores);
+        for(const [store,snapshot] of snapshots){
+          if(!snapshot||snapshot.revision!==after)continue;
+          if(incremental&&!changed.has(store)&&stores[store]!==undefined)continue;
+          const cacheKey=key(account,'records:'+store);
+          const row={key:cacheKey,account,time:Date.now(),bytes:0,
+            value:{revision:after,records:snapshot.records}};
+          entries.put(row);const {value,...size}=row;sizes.put(size);
+          stores[store]=after;
+        }
+        const headKey=key(account,'records-head');
+        const head={key:headKey,account,time:Date.now(),bytes:0,
+          value:{revision:after,stores}};
+        entries.put(head);const {value,...size}=head;sizes.put(size);
+        await tx.done;return true;
+      }catch(error){try{tx.abort();}catch{}await tx.done.catch(()=>{});throw error;}
     },
     // The logical queue is merged atomically across tabs. Only changed rows
     // are written; the pre-existing aggregate remains read-only until its

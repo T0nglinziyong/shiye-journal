@@ -33,7 +33,14 @@ test('collection pulls yield to active editor input but do not block other route
 test('unrelated background commits do not repaint the current catalog',()=>{
   assert.equal(shouldRepaintForCollections('library',['projects']),false);
   assert.equal(shouldRepaintForCollections('works',['series']),false);
+  assert.equal(shouldRepaintForCollections('works',['assets','blobs']),false);
   assert.equal(shouldRepaintForCollections('library',['assets']),true);
   assert.equal(shouldRepaintForCollections('works',['projects','trash']),true);
   assert.equal(shouldRepaintForCollections('assetDetail',['meta']),true);
+  assert.equal(shouldRepaintForCollections('works',['meta'],[
+    {store:'meta',id:'app-matching-defaults',action:'put'}]),false);
+  assert.equal(shouldRepaintForCollections('library',['meta'],[
+    {store:'meta',id:'app-ai-settings',action:'put'}]),false);
+  assert.equal(shouldRepaintForCollections('works',['meta'],[
+    {store:'meta',id:'app-ui-preferences',action:'put'}]),true);
 });

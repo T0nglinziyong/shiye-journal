@@ -107,10 +107,13 @@ function ShapePicker({draft,onPick}){
 
 export function MaterialPieceImage({asset,item,source}){
   const card=useRef(null),src=asset&&(source(asset.blobId)||asset.staticPath);
-  const geometry=JSON.stringify([item?.cropRect,item?.materialMask]);
+  // AI layout may use a cropped view of the original. The picker represents
+  // the library asset; only an actual scissors fragment gets a piece preview.
+  const piece=item?.splitParentId?item:null;
+  const geometry=JSON.stringify([piece?.cropRect,piece?.materialMask]);
   useEffect(()=>{
-    if(!card.current||!src||!item)return;
-    return mountPieceThumbnail(card.current,item);
+    if(!card.current||!src||!piece)return;
+    return mountPieceThumbnail(card.current,piece);
   },[src,item?.id,geometry]);
   return <div ref={card} className="material-piece-image">
     {src?<img src={src} loading="lazy" decoding="async" alt=""/>:<span>无预览</span>}

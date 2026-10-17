@@ -1,10 +1,12 @@
-export function createWorksController({view,render,actions}){
+export function createWorksController({view,parity,render,actions,onCatalogChanged}){
   return {
     patch(){
-      // WorksPage owns its card list in React. Cover-only refresh cannot
-      // reconcile a changed projects prop (for example moving a draft to
-      // Recently Deleted), so let the route render update that list.
-      return false;
+      if(view.dataset.renderedRoute!=='works'||
+         view.dataset.renderedWorkTab!==parity.workTab||
+         !view.querySelector('.works-page'))return false;
+      // The mounted page reads the latest shared state. Preserve its cards,
+      // scroll position and image observers while reconciling the list.
+      onCatalogChanged();return true;
     },
     mount(lifetime){
       lifetime.use(()=>{

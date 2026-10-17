@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import 'fake-indexeddb/auto';
+import {openDB} from 'idb';
 import {createPrivateCache,outboxVersionRows} from '../src/private-cache.js';
 test('retry metadata remains in the lightweight outbox compare baseline',async()=>{
   const cache=createPrivateCache({name:'private-cache-retry-baseline-'+Date.now()});
@@ -21,6 +22,31 @@ test('persistent private cache isolates accounts and enforces its byte limit',as
   await a.put('user-a','image:first',new Blob(['123456']));await a.put('user-a','image:second',new Blob(['abcdef']));
   assert.equal(await a.get('user-a','image:first'),undefined);assert.equal(await (await a.get('user-a','image:second')).text(),'abcdef');
   const reopened=createPrivateCache({name});assert.deepEqual(await reopened.get('user-a','records'),{revision:4});await reopened.clear('user-a');assert.equal(await a.get('user-a','records'),undefined);assert.deepEqual(await a.get('user-b','records'),{revision:5});
+});
+test('collection revision head advances without rewriting unchanged catalog rows',async()=>{
+  const name='private-cache-snapshot-head-'+Date.now();
+  const cache=createPrivateCache({name});
+  const first=new Map(['assets','series','projects','trash','meta','blobs'].map(store=>
+    [store,{revision:1,records:[{id:store}]}]));
+  assert.equal(await cache.putSnapshotBatch('a',0,1,first,['assets']),true);
+  const next=new Map([...first].map(([store,snapshot])=>[store,
+    {revision:2,records:store==='projects'?[{id:'updated'}]:snapshot.records}]));
+  assert.equal(await cache.putSnapshotBatch('a',1,2,next,['projects']),true);
+  const raw=await openDB(name,1);
+  assert.equal((await raw.get('entries',JSON.stringify(['a','records:assets']))).value.revision,1,
+    'the unchanged asset catalog is not cloned into IndexedDB again');
+  raw.close();
+  assert.deepEqual(await cache.get('a','records:projects'),next.get('projects'));
+  assert.deepEqual(await cache.get('a','records:assets'),next.get('assets'));
+  assert.equal(await cache.putSnapshotBatch('a',1,3,next,['assets']),false,
+    'a stale tab cannot move the read cache backwards');
+  const reopened=createPrivateCache({name});
+  assert.deepEqual(await reopened.get('a','records:assets'),next.get('assets'));
+  assert.deepEqual(await reopened.get('a','records:projects'),next.get('projects'));
+  const jump=new Map([...next].map(([store,snapshot])=>[store,{...snapshot,revision:7}]));
+  assert.equal(await reopened.putSnapshotBatch('a',6,7,jump,['series']),true,
+    'a verified full reload can rebuild an older revision head');
+  assert.deepEqual(await cache.get('a','records:assets'),jump.get('assets'));
 });
 test('a newly cached original evicts originals before already loaded thumbnails',async()=>{
   const name='private-cache-preview-'+Date.now(),cache=createPrivateCache({name,limit:12});

@@ -255,22 +255,17 @@
 .editor-inspector-geometry textarea{display:block;max-width:100%;box-sizing:border-box;margin:8px 0;font:12px/1.45 ui-monospace,monospace}
 .editor-inspector-geometry small{display:block;margin-top:6px}
 .floating-editor-inspector{position:fixed;top:clamp(130px,19vh,210px);right:12px;
-  z-index:230;width:min(340px,calc(100vw - 24px));height:min(44dvh,380px);
-  min-height:210px;max-height:calc(100dvh - 16px);
-  display:flex;flex-direction:column;background:#fffefa;border:1px solid #d8e1d6;
-  border-radius:20px;box-shadow:0 16px 40px #263c3040;overflow:hidden}
-.floating-editor-inspector .fabric-inspector-head{flex:none;padding:12px 16px;
-  background:#e9f0e8;touch-action:none;cursor:grab;user-select:none}
-.floating-editor-inspector .fabric-inspector-head h2{margin:0;font-size:17px}
-.floating-editor-inspector .fabric-inspector-head span{font-size:12px;color:#607464}
-.floating-editor-inspector-body{min-height:0;overflow:auto;padding:14px 16px;overscroll-behavior:contain}
-.floating-editor-inspector footer{display:flex;gap:9px;justify-content:flex-end;
-  padding:9px 38px 9px 12px;border-top:1px solid #dce5dc;background:#fffefa}
-.floating-editor-inspector footer button{border:1px solid #cbd9ce;background:#fff;
-  border-radius:10px;padding:8px 13px;color:#2b4d3b;font-weight:600}
-.floating-editor-inspector footer button.primary{background:#3b7356;color:#fff;border-color:#3b7356}
-@media(max-width:680px){.floating-editor-inspector{width:min(340px,calc(100vw - 24px));
-  height:min(43dvh,350px);right:8px;top:clamp(120px,22dvh,210px)}}
+  z-index:230;width:min(300px,calc(100vw - 16px));height:min(48dvh,430px);
+  min-height:190px;max-height:calc(100dvh - 16px);max-width:none;padding:0;
+  display:flex;flex-direction:column;background:#fffefa;border:1px solid #c9d9ca;
+  border-radius:16px;box-shadow:0 12px 32px #263c3052;overflow:hidden}
+.floating-editor-inspector .fabric-inspector-head{display:flex;flex:none;justify-content:space-between;
+  align-items:center;gap:8px;padding:10px 12px;background:#eaf1e8;
+  touch-action:none;cursor:grab;user-select:none}
+.floating-editor-inspector .fabric-inspector-head h2{margin:0;font-size:14px}
+.floating-editor-inspector-body{min-height:0;overflow:auto;padding:10px 10px 32px;overscroll-behavior:contain}
+@media(max-width:680px){.floating-editor-inspector{right:8px;bottom:calc(10px + env(safe-area-inset-bottom));
+  top:auto;height:min(46dvh,350px)}}
 .floating-panel-resize{position:absolute;right:3px;bottom:3px;z-index:3;
   display:grid;place-items:center;width:32px;height:32px;border-radius:8px;
   color:#55705e;cursor:ns-resize;touch-action:none;user-select:none}

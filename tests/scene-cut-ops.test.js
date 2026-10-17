@@ -32,6 +32,30 @@ test('free line cut conserves one physical source and keeps offcuts recoverable'
   assert.equal(validateScenePhysical(joined.draft,[asset]),true);
 });
 
+test('joining two moved same-source pieces uses the larger piece as transform anchor',()=>{
+  const cut=planSceneCut(scene(),{...split,preset:'edge',inset:.2},[asset],{uid});
+  const group=cut.draft.layers[0],parts=group.children;
+  const larger=parts.reduce((best,part)=>part.width>best.width?part:best,parts[0]);
+  const smaller=parts.find(part=>part!==larger);
+  larger.x+=23;larger.y+=17;larger.rotation=18;
+  smaller.x-=50;smaller.y-=25;
+  const joined=rejoinMaterialPieces(cut.draft,[smaller.id,larger.id],[asset],{uid});
+  assert.equal(joined.draft.items.length,1);
+  assert.equal(joined.draft.items[0].rotation,18);
+  assert.equal(validateScenePhysical(joined.draft,[asset]),true);
+});
+
+test('joining selected same-source pieces works across different layer groups',()=>{
+  const cut=planSceneCut(scene(),{...split,preset:'edge',inset:.2},[asset],{uid});
+  const originalGroup=cut.draft.layers[0],moved=originalGroup.children.pop();
+  cut.draft.layers.push({id:'another-group',type:'group',name:'另一组',opacity:1,
+    children:[moved]});
+  const kept=originalGroup.children[0];
+  const joined=rejoinMaterialPieces(cut.draft,[moved.id,kept.id],[asset],{uid});
+  assert.equal(joined.draft.items.length,1);
+  assert.equal(validateScenePhysical(joined.draft,[asset]),true);
+});
+
 test('AI keyed material becomes a grouped set of independent valid fragments',()=>{
   const draft=scene();draft.layers[0].creativePieceID='butterfly';
   draft.layers[0].agentKey='butterfly';

@@ -571,9 +571,10 @@ export function LibraryPage({state,source,kindName,format,onAction,onPageChange,
   </>;
 }
 
-export function WorksPage({projects,isUntouchedLegacyExample,assets,localCover,cloudEnabled,source,onAction,onCardsChanged,tab,onTabChange,
+export function WorksPage({state,projects:initialProjects,isUntouchedLegacyExample,assets:initialAssets,localCover,cloudEnabled,source,onAction,onCardsChanged,tab,onTabChange,
   selection,onSelectionToggle,viewState,configuredPageSize,onBatchAction,onBatchError,onEditWork}){
   const [revision,setRevision]=useState(0);
+  const projects=state?.projects||initialProjects,assets=state?.assets||initialAssets;
   const [filters,setFilters]=useState(viewState.workFilters||{
     query:'',kind:'all',status:'all',sort:'access-desc'
   });
@@ -1031,32 +1032,7 @@ export function MatchingPage({state,source,kindName,session,onAction,onMatchingC
   </div>;
 }
 
-function MaterialCropControls({item,record,onApply}){
-  const crop=item.cropRect||{x:0,y:0,width:1,height:1};
-  const minW=Math.min(1,2/Math.max(2,record?.physicalWidthMM||2));
-  const minH=Math.min(1,2/Math.max(2,record?.physicalHeightMM||2));
-  const apply=rect=>onApply('inspector-material-geometry',{
-    cropRect:rect,materialMask:item.materialMask||null,craftDisplaySlices:item.craftDisplaySlices||null});
-  const change=(key,value)=>apply({...crop,[key]:Number(value)});
-  return <div className="editor-crop-controls">
-    {[['width','宽度',minW,1-crop.x],['height','高度',minH,1-crop.y],
-      ['x','左右位置',0,1-crop.width],['y','上下位置',0,1-crop.height]]
-      .map(([key,label,min,max])=><label key={key}>{label} · {Math.round(crop[key]*100)}%
-        <div className="editor-crop-slider"><input type="range" aria-label={label} min={min} max={Math.max(min,max)} step="any"
-          value={crop[key]} onChange={event=>change(key,event.target.value)}/></div>
-      </label>)}
-    <button type="button" className="btn mini" disabled={!item.cropRect}
-      onClick={()=>apply(null)}>恢复完整素材</button>
-  </div>;
-}
-
 function EditorInspector({selected,draft,asset,format,onChange,onAction,materials=[]}){
-  const [geometryError,setGeometryError]=useState('');
-  useEffect(()=>setGeometryError(''),[selected?.value?.id]);
-  const applyGeometry=(id,value)=>{
-    try{onChange(id,JSON.stringify(value));setGeometryError('');}
-    catch(error){setGeometryError(error.message||'无法应用此调整');}
-  };
   const field=(id,label,value,type='number',props={})=>type==='range'?<label className="editor-inspector-range">
     <span>{label} · {Number(props.max)===1?`${Math.round(Number(value)*100)}%`:value}</span><div>
       <input id={id} type="range" value={value} onChange={event=>onChange(id,event.target.value)} {...props}/>
@@ -1085,11 +1061,9 @@ function EditorInspector({selected,draft,asset,format,onChange,onAction,material
     </select></label>
   </div>;
   const item=selected.value;
-  const button=(name,label,kind='')=><button className={`btn mini ${kind}`} data-act={name}
-    data-react-action="true" onClick={()=>onAction(name)}>{label}</button>;
   if(selected.kind==='ink')return <div className="stack editor-inspector-fields">
-    <h3>手写笔迹</h3><p className="muted">可在画布编辑框中移动或旋转这条笔迹。</p>
-    <div className="actions">{button('duplicate','复制')}{button('delete-object','删除','danger')}</div>
+    <h3>手写笔迹</h3><p className="muted">在画布编辑框中移动、缩放或旋转笔迹。</p>
+    {field('inspector-opacity','整体透明度',item.opacity??1,'range',{min:0,max:1,step:.05})}
   </div>;
   return <div className="stack editor-inspector-fields">
     {selected.kind==='text'?<>
@@ -1104,7 +1078,7 @@ function EditorInspector({selected,draft,asset,format,onChange,onAction,material
       </div>
       <div className="editor-inspector-checks">{check('inspector-bold','粗体',item.bold)}{check('inspector-italic','斜体',item.italic)}
         {check('inspector-underline','下划线',item.underline)}{check('inspector-strikethrough','删除线',item.strikethrough)}</div>
-      <details className="editor-inspector-geometry"><summary>字距与段落</summary>
+      <div className="editor-inspector-geometry">
         {field('inspector-curve-height','文字弧度',item.curveHeight??0,'range',{min:-120,max:120,step:2})}
         {field('inspector-letter-spacing','字距',item.letterSpacing??0,'range',{min:-5,max:30,step:.5})}
         {field('inspector-line-spacing','行距',item.lineSpacing??0,'range',{min:0,max:80,step:.5})}
@@ -1112,7 +1086,7 @@ function EditorInspector({selected,draft,asset,format,onChange,onAction,material
         {choice('inspector-fixed-line-height','行高',item.fixedLineHeight??'',[
           ['','自动'],...([1,1.2,1.5,2].map(ratio=>[Math.round((item.fontSize||40)*ratio),`${ratio} 倍`]))])}
         {field('inspector-font-name','指定字体',item.fontName||'','text',{placeholder:'留空使用上方字体'})}
-      </details>
+      </div>
     </>:null}
     {selected.kind==='shape'?<>
       <h3>图形外观</h3>
@@ -1131,52 +1105,40 @@ function EditorInspector({selected,draft,asset,format,onChange,onAction,material
     </>:null}
     {selected.kind==='material'?<><h3>真实素材</h3>
       <p className="muted">实物 {format(asset(item.assetID)?.physicalWidthMM||0)} × {format(asset(item.assetID)?.physicalHeightMM||0)} mm</p>
-      <details className="editor-inspector-geometry"><summary>保留排版位置更换素材</summary>
-        <p className="muted">保留中心、旋转与图层位置；新素材按自己的实物尺寸显示。可撤销。</p>
+      <div className="editor-inspector-geometry"><label>更换素材
         <select aria-label="选择替换素材" value="" onChange={event=>{
           if(event.target.value)onAction('fabric-replace-material',event.target.value);
         }}><option value="">选择素材</option>{materials.filter(record=>
           record.id!==item.assetID&&!record.isProjectInternal&&record.physicalWidthMM>0&&record.physicalHeightMM>0&&
           !draft.items.some(used=>used.id!==item.id&&used.assetID===record.id&&!used.manualVisualCopy))
-          .map(record=><option key={record.id} value={record.id}>{record.title}</option>)}</select>
-      </details>
+          .map(record=><option key={record.id} value={record.id}>{record.title}</option>)}</select></label>
+      </div>
       {item.cropRect?<p className="muted">已取用原素材的 {Math.round(item.cropRect.width*100)}% × {Math.round(item.cropRect.height*100)}% 区域；移动和旋转不会改变裁片。</p>:null}
       {item.materialMask?<p className="muted">已保留 AI 创作的裁边或镂空工艺。</p>:null}
       {check('inspector-flipped','左右镜像',item.isFlippedHorizontally)}
-      <details className="editor-inspector-geometry"><summary>调整裁片范围</summary>
-        <MaterialCropControls item={item} record={asset(item.assetID)} onApply={applyGeometry}/>
-        {geometryError?<small role="status">{geometryError}</small>:null}
-      </details>
     </>:null}
     <h3>图层外观</h3>
     <div className="form-grid">{field('inspector-opacity','整体透明度',item.opacity??1,'range',{min:0,max:1,step:.05})}
       {choice('inspector-blend-mode','叠加方式',item.blendMode||'normal',[[ 'normal','正常'],['multiply','正片叠底']])}</div>
-    <div className="editor-inspector-mask">{item.vectorMask?<p className="muted">矢量蒙版：{item.vectorMask.outer?.length||0} 个外轮廓点、{item.vectorMask.holes?.length||0} 个镂空区域</p>:null}
-      <details className="editor-inspector-geometry"><summary>{item.vectorMask?'更换':'添加'}蒙版形状</summary>
-        <div className="actions"><button type="button" className="btn mini" onClick={()=>applyGeometry('inspector-vector-mask',
-          {outer:[[.05,.05],[.95,.05],[.95,.95],[.05,.95]],holes:[]})}>矩形</button>
-          <button type="button" className="btn mini" onClick={()=>applyGeometry('inspector-vector-mask',
-            {outer:Array.from({length:48},(_,index)=>{const angle=index*Math.PI/24;return [.5+.46*Math.cos(angle),.5+.46*Math.sin(angle)];}),holes:[]})}>椭圆</button></div>
-        {geometryError?<small role="status">{geometryError}</small>:null}
-      </details>{item.vectorMask?button('fabric-remove-vector-mask','移除蒙版'):null}</div>
-    <div className="actions">{button('duplicate','复制')}{button('flip','镜像')}
-      {button('front','置顶')}{button('delete-object','删除','danger')}</div>
   </div>;
 }
 
 function FloatingInspectorPanel({selected,draft,asset,format,materials,onChange,onAction}){
   const floating=useFloatingPanel(210);
-  return createPortal(<section ref={floating.panel} className="editor-inspector floating-editor-inspector" role="dialog"
+  return createPortal(<section ref={floating.panel} className="editor-inspector floating-editor-inspector floating-scene-panel" role="dialog"
     aria-label="对象编辑" style={floating.style}>
     <header className="fabric-inspector-head" {...floating.moveProps}>
       <h2>{selected?`${{material:'素材',text:'文字',shape:'图形',ink:'笔迹'}[selected.kind]||'对象'} · 图层属性`:'对象已移除'}</h2>
-      <span aria-hidden="true">拖动面板</span>
+      <div className="floating-scene-panel-actions">
+        <button type="button" onPointerDown={event=>event.stopPropagation()}
+          onClick={()=>onAction('fabric-inspector-discard')}>放弃</button>
+        <button type="button" className="primary" onPointerDown={event=>event.stopPropagation()}
+          onClick={()=>onAction('fabric-inspector-save')}>完成</button>
+      </div>
     </header>
     <div className="floating-editor-inspector-body">{selected?<EditorInspector selected={selected}
       draft={draft} asset={asset} format={format} materials={materials} onChange={onChange}
-      onAction={onAction}/>:<p>对象已从本次编辑中移除。保存退出会确认删除，放弃退出会恢复对象。</p>}</div>
-    <footer><button type="button" onClick={()=>onAction('fabric-inspector-discard')}>放弃退出</button>
-      <button type="button" className="primary" onClick={()=>onAction('fabric-inspector-save')}>保存退出</button></footer>
+      onAction={onAction}/>:<p>对象已从本次编辑中移除。</p>}</div>
     <div className="floating-panel-resize" role="separator" tabIndex={0}
       aria-label="拖动调整对象编辑窗口高度" aria-orientation="horizontal" {...floating.resizeProps}/>
   </section>,document.body);
@@ -1289,8 +1251,7 @@ export function EditorPage({state,draft,editorEntry,asset,source,format,
     if(state.cutPreview?.spec.operation!=='split')return;
     const canvas=editorFabricCanvases.get(draft.id);if(!canvas)return;
     const {scene:point,viewport}=fabricPointer(canvas,event);
-    const targets=new Set((state.cutSettings?.scope==='all'?state.cutSettings.targetIDs:
-      state.selected?[state.selected]:[] )||[]);
+    const targets=new Set(state.selected?[state.selected]:[]);
     for(const entry of sceneLayerEntries(draft,{hidden:true,ink:true}))
       if(entry.parents.some(parent=>targets.has(parent.id)))targets.add(entry.value.id);
     const top=[...canvas.getObjects()].reverse().find(object=>

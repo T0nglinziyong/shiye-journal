@@ -6,6 +6,7 @@ import {registerLibraryActions} from '../src/page-controllers/library-controller
 import {registerImportActions} from '../src/page-controllers/import-controller.js';
 import {registerSettingsActions} from '../src/page-controllers/settings-controller.js';
 import {registerEditorActions} from '../src/page-controllers/editor-controller.js';
+import {createWorksController} from '../src/page-controllers/works-controller.js';
 
 test('Action/State publishes explicit changes with scoped subscriptions',async()=>{
   const state={query:'',sort:'newest'},actions=createActionStore(state);
@@ -96,4 +97,13 @@ test('Page host mounts once, patches same controller, disposes on remount',()=>{
   assert.equal(host.patch('library'),false);
   host.mount('works');assert.equal(count,2);
   host.dispose();host.dispose();
+});
+test('works background updates keep the mounted list but a tab switch remounts',()=>{
+  const parity={workTab:'all'},view={dataset:{renderedRoute:'works',renderedWorkTab:'all'},
+    querySelector:selector=>selector==='.works-page'?{}:null};
+  let updates=0;
+  const controller=createWorksController({view,parity,onCatalogChanged:()=>updates++});
+  assert.equal(controller.patch(),true);assert.equal(updates,1);
+  parity.workTab='templates';
+  assert.equal(controller.patch(),false);assert.equal(updates,1);
 });

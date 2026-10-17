@@ -36,9 +36,8 @@ try{
   await tap();
   assert.ok(await evaluate('document.querySelector(".fabric-cut-preview-status")?.textContent.includes("绿色保留 1 / 2")'),
     'A second tap reverses the choice');
-  await evaluate('document.querySelector(".fabric-cut-scope").open=true');
-  await click('.fabric-cut-scope [aria-label="剪切范围"] button:last-child');
-  assert.equal(await evaluate('document.querySelectorAll(".canvas-cut-targets input:checked").length'),1);
+  assert.equal(await evaluate('!!document.querySelector(".fabric-cut-scope")'),false,
+    'Scissors always acts on the selected object');
   await click('.fabric-cut-presets button:first-child','.fabric-cut-preview-status');
   await evaluate(`(()=>{const slider=document.querySelector('.fabric-cut-inset input');
     const setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;
@@ -62,7 +61,8 @@ try{
       clientY:host.getBoundingClientRect().top+host.clientHeight/2,bubbles:true,cancelable:true}));
     return page.style.transform})()`);
   assert.match(zoom,/scale\(16\)/);
-  await click('.fabric-cut-panel header button');
+  await click('.fabric-cut-actions button:first-child');
+  await click('.fabric-cut-panel .floating-scene-panel-actions button.primary');
   assert.equal(await evaluate('!!document.querySelector(".fabric-cut-panel")'),false);
   await wait('.fabric-selected-actions');
   assert.ok(await evaluate('!!document.querySelector(".fabric-selected-actions")'),

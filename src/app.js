@@ -167,16 +167,22 @@ function openLibraryAsset(id){state.detailAssetID=id;const selected=asset(id);if
 function libraryBack(){navigateBack('library');}
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const toast=s=>{const el=document.querySelector('#toast');el.textContent=/can't find variable|is not defined|undefined is not an object|blob:|expected magic word/i.test(String(s))?explainUserError(s):s;el.classList.add('show');clearTimeout(toast.timer);toast.timer=setTimeout(()=>el.classList.remove('show'),3500);};
-const saveStatus=s=>{const label=cloudEnabled?({'已保存到本机':'已保存到云端','本机存储':'云端存储'}[s]||s):s;updateShell({saveStatus:label});for(const el of document.querySelectorAll('.swift-auto-saved'))el.textContent=label;};
+let lastSaveStatus;
+const saveStatus=s=>{const label=cloudEnabled?({'已保存到本机':'已保存到云端','本机存储':'云端存储'}[s]||s):s;
+  if(label===lastSaveStatus)return;lastSaveStatus=label;
+  updateShell({saveStatus:label});for(const el of document.querySelectorAll('.swift-auto-saved'))el.textContent=label;};
 const syncDisplay={pending:0,error:null,conflicts:0,uploading:false,progress:null,checking:true,localPending:false};
+let lastSyncView;
 function updateSyncIndicator(){
   if(!cloudEnabled)return;
   const conflict=syncDisplay.conflicts>0||/云端版本已变化|另一设备已更新|conflict/i.test(syncDisplay.error?.message||'');
   const status=conflict?'conflict':navigator.onLine===false&&syncDisplay.pending?'offline':syncDisplay.uploading?'uploading':syncDisplay.error?'error':syncDisplay.checking?'checking':syncDisplay.pending||syncDisplay.localPending?'pending':'synced';
   const label={conflict:'同步冲突',error:'待重试',offline:'待联网',checking:'核对中',uploading:'上传中',pending:'待同步',synced:'已同步'}[status];
   const progress=syncDisplay.progress;
-  updateShell({sync:{status,label,title:conflict?'其他设备修改了同一资料；本机待传内容仍保留，请先检查其他设备':status==='error'?'上传未完成；点击重试：'+syncDisplay.error.message:
-    status==='uploading'&&progress?`上传中 · ${progress.phase} ${progress.done}/${progress.total} 项`:label}});
+  const sync={status,label,title:conflict?'其他设备修改了同一资料；本机待传内容仍保留，请先检查其他设备':status==='error'?'上传未完成；点击重试：'+syncDisplay.error.message:
+    status==='uploading'&&progress?`上传中 · ${progress.phase} ${progress.done}/${progress.total} 项`:label};
+  const signature=JSON.stringify(sync);if(signature===lastSyncView)return;
+  lastSyncView=signature;updateShell({sync});
 }
 function mountPageSyncIndicator(){
   if(!cloudEnabled)return;
@@ -210,13 +216,14 @@ let previewPrewarmEpoch=0;
 let workDocumentPrewarmEpoch=0;
 function prewarmVisibleWorkDocuments(){
   const epoch=++workDocumentPrewarmEpoch;
-  if(!cloudEnabled||navigator.connection?.saveData)return;
+  if(!cloudEnabled||navigator.connection?.saveData||syncDisplay.uploading||syncDisplay.pending)return;
   let waits=0;
   const ids=[...view.querySelectorAll('.works-grid [data-act="open-project"][data-id]')]
     .filter(card=>{const box=card.getBoundingClientRect();return box.width>0&&box.height>0&&box.top<innerHeight&&box.bottom>0;})
     .map(card=>card.dataset.id).slice(0,2);
   const warm=async()=>{
-    if(epoch!==workDocumentPrewarmEpoch||state.route!=='works'||document.visibilityState==='hidden')return;
+    if(epoch!==workDocumentPrewarmEpoch||state.route!=='works'||document.visibilityState==='hidden'||
+      syncDisplay.uploading||syncDisplay.pending)return;
     // Full project documents share the user's network with cover downloads.
     // Keep that connection available until the visible covers have painted.
     if(!visibleCoversReady()){if(++waits<25)setTimeout(()=>void warm(),400);return;}
@@ -555,7 +562,8 @@ pageControllers.register('library',createLibraryController({
   onCatalogChanged:updateLibraryResults
 }));
 pageControllers.register('works',createWorksController({
-  view,actions:actionStore,render
+  view,parity,actions:actionStore,render,
+  onCatalogChanged:()=>window.dispatchEvent(new Event('shiye-works-refresh'))
 }));
 pageControllers.register('import',createImportController({
   view,state,actions:actionStore,render,
@@ -678,7 +686,7 @@ function render(){
         selection:parity,onSelectionToggle:selectionToggle,onBatchAction,onBatchError,
         onEditAsset:openDetail,onFilter:(key,value)=>actionStore.dispatch({type:'library/filter',payload:{key,value}})})
     :state.route==='works'
-      ?createElement(WorksPage,{projects:state.projects,isUntouchedLegacyExample,assets:state.assets,
+      ?createElement(WorksPage,{state,projects:state.projects,isUntouchedLegacyExample,assets:state.assets,
         localCover:p=>localWorkCovers.peek(p),cloudEnabled,source:image,onAction:handle,
         tab:parity.workTab,onTabChange:workTab,
         selection:parity,onSelectionToggle:selectionToggle,onBatchAction,onBatchError,
@@ -1385,22 +1393,19 @@ async function runAppAction(action,id,value){try{
       projectID:state.activeProject.id,
       saveRevision:saveVersions.get(state.activeProject.id)||0,
       selectedID:state.selected});
-    state.selected=ids.length===1?ids[0]:null;
-    state.multiSelected=ids;
+    state.selected=ids[0];
+    state.multiSelected=[ids[0]];
     state.tool=state.toolHighlight='scissors';
     state.fabricInspectorOpen=false;
     state.cutPreview=null;
-    state.cutSettings={operation:'split',scope:ids.length>1?'all':'object',inset:.18,
-      hideRegion:true,targetIDs:ids};
+    state.cutSettings={operation:'split',scope:'object',inset:.18,hideRegion:true};
     render();break;
   }
   case 'fabric-cut-setting':{
     const previous=state.cutPreview;
+    if(!['operation','inset','hideRegion'].includes(id))break;
     state.cutSettings={operation:'split',scope:'object',inset:.18,
-      hideRegion:true,targetIDs:[],...state.cutSettings,[id]:value};
-    if(id==='operation'&&value==='mask')state.cutSettings.scope='object';
-    if(id==='scope'&&value==='all'&&!state.cutSettings.targetIDs.length&&state.selected)
-      state.cutSettings.targetIDs=[state.selected];
+      hideRegion:true,...state.cutSettings,[id]:value,scope:'object'};
     state.cutPreview=null;
     if(previous&&id==='inset'&&previous.spec.preset)
       void handle('fabric-cut-preview',previous.spec.preset);
@@ -1412,7 +1417,7 @@ async function runAppAction(action,id,value){try{
     const d=current();if(!d)break;
     const settings={operation:'split',scope:'object',inset:.18,
       hideRegion:true,targetIDs:[],...state.cutSettings};
-    const spec={...settings,selectedID:state.selected,
+    const spec={...settings,scope:'object',selectedID:state.selected,
       points:Array.isArray(id)?id:[],preset:typeof id==='string'?id:null};
     spec.pathType=Array.isArray(id)&&value==='loop'?'loop':'line';
     try{
@@ -1498,13 +1503,10 @@ async function runAppAction(action,id,value){try{
     break;
   }
   case 'fabric-cut-rejoin':{
-    const d=current(),session=state.cutSession,node=d&&findSceneNode(d,id||state.selected);
-    if(!node?.splitParentId||!session)break;
-    const siblings=sceneLayerEntries(d,{hidden:true}).filter(entry=>
-      entry.kind==='material'&&entry.value.splitParentId===node.splitParentId&&
-      entry.value.assetID===node.assetID).map(entry=>entry.value.id);
+    const d=current(),session=state.cutSession,ids=Array.isArray(id)?id:[state.selected,id].filter(Boolean);
+    if(!session||ids.length!==2)break;
     try{
-      const plan=rejoinMaterialPieces(d,siblings,state.assets);
+      const plan=rejoinMaterialPieces(d,ids,state.assets);
       validateScenePhysical(plan.draft,state.assets);
       acceptSceneEditStep(session,plan.draft,plan.nodeID);
       state.selected=plan.nodeID;state.multiSelected=[plan.nodeID];render();toast('裁片已拼回');
@@ -2403,7 +2405,7 @@ async function refresh({background=false,onlyChanged=false,skipCloudRefresh=fals
     if(a.staticPath)staticSources.set(a.blobId,a.staticPath);}
   if(stores.some(store=>store!=='meta')&&reconcileSelectedRecords(parity,state))
     window.dispatchEvent(new Event('shiye-selection-refresh'));
-  if(background){if(shouldRepaintForCollections(state.route,stores)){
+  if(background){if(shouldRepaintForCollections(state.route,stores,sync?.changedKeys)){
     backgroundViewPending=true;scheduleBackgroundReconcile();}}
   else actionStore.publish('collections/updated',{scope:'collections',keys:stores});
 }

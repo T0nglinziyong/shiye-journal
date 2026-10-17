@@ -757,6 +757,18 @@ async function overlayImports(store,records){
 }
 const cached=async key=>{try{const id=await account();return cacheDisabled?undefined:await cache?.get(id,key);}catch{return undefined;}};
 const remember=async(key,value)=>{try{const id=await account();if(!cacheDisabled)await cache?.put(id,key,value);}catch{/* Cache quota/failure cannot fail a cloud operation. */}};
+async function rememberSnapshots(before,changedStores){
+  if(cacheDisabled)return;
+  const saved=[...snapshots].filter(([,snapshot])=>snapshot?.revision===revision);
+  if(typeof cache?.putSnapshotBatch==='function'){
+    try{await cache.putSnapshotBatch(await account(),before,revision,saved,changedStores);}
+    catch{/* A disposable read cache must not fail a confirmed cloud commit. */}
+    return;
+  }
+  // Cache adapters without an atomic revision head retain the original full
+  // snapshot contract, including the small in-memory test adapter.
+  await Promise.all(saved.map(([store,snapshot])=>remember('records:'+store,snapshot)));
+}
 const checked=result=>{if(result.error){const failure=Error(result.error.message||'云端数据服务不可用');
   for(const key of ['code','status','statusCode'])if(result.error[key]!=null)failure[key]=result.error[key];
   throw failure;}return result.data;};
@@ -1215,12 +1227,15 @@ function cloudTransaction(names,fn,operationID=crypto.randomUUID(),baseRevisionO
     // Patch only cached collections belonging to the committed base revision.
     // Remote conflicts never write to this cache or silently become local edits.
     if(revision!==previous+1)snapshots.clear();
+    const changedStores=new Set(operations.map(op=>op.store));
     for(const store of ['assets','series','projects','trash','meta','blobs']){
       if(revision!==previous+1)break;
       const saved=snapshots.get(store)||await cached('records:'+store);if(saved?.revision!==previous)continue;
+      if(!changedStores.has(store)){snapshots.set(store,{revision,records:saved.records});continue;}
       const records=new Map(saved.records.map(r=>[r.id,r]));for(const op of operations.filter(o=>o.store===store)){if(op.action==='clear')records.clear();else if(op.action==='delete')records.delete(op.id);else records.set(op.item.id,op.item);}
-      const next={revision,records:[...records.values()]};snapshots.set(store,next);await remember('records:'+store,next);
+      snapshots.set(store,{revision,records:[...records.values()]});
     }
+    if(revision===previous+1)await rememberSnapshots(previous,changedStores);
     syncDiagnostics.record({action:'direct-commit',kind:'direct',baseRevision:previous,
       cloudRevision:revision,pending:unifiedSync.status().pending,
       durationMs:Date.now()-activeDirect.startedAt});
@@ -1275,8 +1290,9 @@ async function cloudRefresh(){
   const deltaBefore=snapshots.get('projects')?.revision??snapshots.get('assets')?.revision??before;
   const delta=await readCloudDelta({client:cloudClient(),owner,before:deltaBefore,after:current,snapshots});
   if(delta){blobRevisionProof.accept(deltaBefore,current,delta);for(const [store,snapshot] of delta.snapshots)snapshots.set(store,snapshot);
-    await Promise.all([...delta.snapshots].map(([store,snapshot])=>remember('records:'+store,snapshot)));
+    await rememberSnapshots(deltaBefore,delta.changedStores);
     return {revision:current,changed:true,incremental:true,changedStores:delta.changedStores,
+      changedKeys:delta.changedKeys,
       blobIDs:delta.blobIDs,allBlobs:delta.allBlobs};}
   blobRevisionProof.clear();blobRecords.clear();
   return {revision:current,changed:true,incremental:false,allBlobs:true};

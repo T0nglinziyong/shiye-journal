@@ -40,7 +40,7 @@ try{
   await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,clickCount:1,...center});
   assert.notEqual(await evaluate('document.querySelector(".fabric-cut-preview-status").textContent'),before,
     'A covered lower piece remains tappable through the translucent unrelated cover');
-  await click('.fabric-cut-panel header button');
+  await click('.fabric-cut-panel .floating-scene-panel-actions button:first-child');
   await sleep(100);
   assert.deepEqual(await pixel(),covered,'The upper layer returns to full opacity after exit');
   await click('[data-val="layers"]','.scene-layer-tree');

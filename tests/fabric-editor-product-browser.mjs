@@ -197,6 +197,9 @@ try{
       [...bar.querySelectorAll('button')].every(button=>!button.textContent.trim());})()`),true,
     'The floating copy, edit, scissors and delete actions must have one glyph each');
   await click('[aria-label="编辑对象"]','.floating-editor-inspector');
+  assert.ok(await evaluate('document.querySelector(".floating-editor-inspector").getBoundingClientRect().width<=301'),
+    'Object inspector uses the compact scissors panel width');
+  assert.equal(await evaluate('document.querySelectorAll(".floating-editor-inspector .floating-scene-panel-actions button").length'),2);
   assert.ok(await evaluate('!!document.querySelector("#inspector-fill")&&!!document.querySelector("#inspector-stroke-dash")&&!!document.querySelector("#inspector-blend-mode")'),
     'Shape inspector exposes the same editable style fields as AI created shapes');
   assert.equal(await evaluate('!!document.querySelector("#inspector-x,#inspector-y,#inspector-width,#inspector-height")'),false,
@@ -211,7 +214,7 @@ try{
   await sleep(150);
   assert.equal((await projects())[0].drafts[0].layers.find(layer=>layer.type==='shape').fill,savedShapeFill,
     'Inspector changes must stay outside the saved document until Save and Exit');
-  await click('.floating-editor-inspector footer button:first-child');
+  await click('.floating-editor-inspector .floating-scene-panel-actions button:first-child');
   assert.equal(await evaluate('!!document.querySelector(".floating-editor-inspector")'),false);
   assert.equal((await projects())[0].drafts[0].layers.find(layer=>layer.type==='shape').fill,savedShapeFill,
     'Discard must leave the saved shape unchanged');
@@ -490,24 +493,22 @@ try{
     x:inspectorGrip.left+inspectorGrip.width/2,y:inspectorGrip.top+inspectorGrip.height/2+55});
   await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,clickCount:1,
     x:inspectorGrip.left+inspectorGrip.width/2,y:inspectorGrip.top+inspectorGrip.height/2+55});
+  await sleep(100);
   const inspectorAfter=await evaluate('document.querySelector(".floating-editor-inspector").getBoundingClientRect().toJSON()');
   assert.ok(inspectorAfter.height>inspectorHeight+25,
     'Dragging the bottom-right inspector handle must increase panel height: '+JSON.stringify({inspectorHeight,inspectorAfter,inspectorGrip}));
-  await click('.editor-inspector-geometry summary','.editor-crop-slider');
-  assert.equal(await evaluate('!!document.querySelector(".editor-inspector-geometry textarea")'),false,
-    'Material cropping should use direct controls instead of JSON');
-  await evaluate(`(()=>{const input=document.querySelector('.editor-crop-slider input[type=range]');
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,input.min);
+  assert.equal(await evaluate('!!document.querySelector(".editor-crop-slider")'),false,
+    'Crop range editing belongs to scissors, not the object inspector');
+  await evaluate(`(()=>{const input=document.querySelector('#inspector-opacity');
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'0.5');
     input.dispatchEvent(new Event('input',{bubbles:true}));input.dispatchEvent(new Event('change',{bubbles:true}));})()`);
   await sleep(700);
-  assert.equal((await projects())[0].drafts[0].layers.some(layer=>layer.type==='material'&&layer.manualGeometryOverride),false,
-    'Object edits remain staged until Save and Exit');
-  await click('.floating-editor-inspector footer button.primary');
+  assert.equal((await projects())[0].drafts[0].layers.find(layer=>layer.type==='material').opacity,1,
+    'Object edits remain staged until Complete');
+  await click('.floating-editor-inspector .floating-scene-panel-actions button.primary');
   await sleep(700);
-  assert.ok((await projects())[0].drafts[0].layers.some(layer=>layer.type==='material'&&layer.manualGeometryOverride),
-    'Material craft geometry must be editable through the Scene inspector: '+
-      JSON.stringify({status:await evaluate(`document.querySelector('.editor-inspector-geometry [role=status]')?.textContent`),
-        toast:await evaluate(`document.querySelector('#toast')?.textContent`)}));
+  assert.equal((await projects())[0].drafts[0].layers.find(layer=>layer.type==='material').opacity,.5,
+    'Complete commits the staged overall opacity');
   await click('[data-val="material"]','.swift-material-picker');
   assert.equal(await evaluate('document.querySelectorAll(".swift-material-picker [data-picker-item]").length'),1);
   await click('.swift-material-picker [data-picker-item]');await sleep(300);

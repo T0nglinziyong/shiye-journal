@@ -19,3 +19,14 @@ test('JSON work import checks referenced library assets',()=>{
   const document=createNativeProjectDocument(source);
   assert.throws(()=>importNativeProjectDocument(document,[]),/不存在的素材/);
 });
+
+test('imported project starts its own history at the imported artwork',()=>{
+  const source=project('外部作品');
+  source.drafts[0].layers.push({id:'title',type:'text',content:'导入后',color:'#334455',fontSize:22,
+    x:70,y:90,width:200,height:50});
+  const imported=importNativeProjectDocument(createNativeProjectDocument(source),[]);
+  assert.equal(source.initialEditorSnapshot.drafts[0].textBlocks.length,0);
+  assert.equal(imported.initialEditorSnapshot.drafts[0].layers[0].content,'导入后');
+  assert.deepEqual(imported.draftHistorySnapshots[imported.activeDraftID].layers,
+    imported.drafts[0].layers);
+});

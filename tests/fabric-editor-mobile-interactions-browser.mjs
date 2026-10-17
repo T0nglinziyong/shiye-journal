@@ -93,7 +93,7 @@ try{
     'Object settings fit the mobile viewport: '+JSON.stringify(inspector));
   assert.equal(await evaluate('!!document.querySelector("#draft-select,[data-act=save-archive]")'),false,
     'Object settings no longer show scheme and archive controls');
-  await click('.floating-editor-inspector footer button:first-child');
+  await click('.floating-editor-inspector .floating-scene-panel-actions button:first-child');
   await evaluate('document.querySelector(".upper-canvas").scrollIntoView({block:"center"})');
   const points=await evaluate(`(()=>{const r=document.querySelector('.upper-canvas').getBoundingClientRect();
     return {shape:{x:r.left+r.width*.5,y:r.top+r.height*.5},

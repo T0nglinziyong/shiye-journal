@@ -15,12 +15,21 @@ const visibleCollections={
   series:['assets','series','trash','meta'],
   library:['assets','series','trash','meta'],
   assetDetail:['assets','series','meta'],
-  works:['projects','assets','trash','meta'],
+  // Imported asset metadata does not change the Works cards. Their cover
+  // images hydrate independently through the image loader.
+  works:['projects','trash','meta'],
   projectPreview:['projects','assets','meta']
 };
-export const shouldRepaintForCollections=(route,stores)=>{
+export const shouldRepaintForCollections=(route,stores,changedKeys)=>{
   const used=visibleCollections[route];
-  return !used||stores.some(store=>used.includes(store));
+  if(!used)return true;
+  if(stores.some(store=>store!=='meta'&&used.includes(store)))return true;
+  if(!stores.includes('meta')||!used.includes('meta'))return false;
+  // Matching and AI settings are account data, but changing them cannot
+  // alter a visible catalog card. Unknown metadata stays conservative.
+  if(!Array.isArray(changedKeys))return true;
+  return changedKeys.some(key=>key.store==='meta'&&
+    !['app-matching-defaults','app-ai-settings'].includes(key.id));
 };
 
 // Passive collection/detail pages may repaint while in selection mode. This is

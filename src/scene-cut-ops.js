@@ -306,42 +306,43 @@ export function rejoinMaterialPieces(draft,ids,assets,{uid=()=>crypto.randomUUID
   if(locations.some(loc=>!loc||loc.node.type!=='material'))throw Error('只能拼合同源实体裁片');
   const first=locations[0].node,asset=records.get(first.assetID);
   if(!asset||!first.splitParentId||locations.some(loc=>loc.node.assetID!==first.assetID||
-    loc.node.splitParentId!==first.splitParentId||loc.nodes!==locations[0].nodes||
-    loc.node.rotation!==first.rotation||loc.node.isFlippedHorizontally!==first.isFlippedHorizontally||
-    loc.node.opacity!==first.opacity||loc.node.vectorMask))
-    throw Error('裁片需来自同一素材、同一图层组，且保持相同外观与方向');
+    loc.node.splitParentId!==first.splitParentId||
+    loc.node.materialUnitIndex!==first.materialUnitIndex||loc.node.vectorMask))
+    throw Error('请选择同一实物素材的两片裁片');
   const geometries=locations.map(loc=>itemSourceGeometry(loc.node,asset));
-  const sum=geometries.reduce((n,g)=>n+geometryArea(g),0),joined=geometryUnion(...geometries);
-  if(Math.abs(sum-geometryArea(joined))>AREA_EPSILON)throw Error('裁片的原图区域重叠，无法拼合');
+  const joined=geometryUnion(...geometries);
   const recipe=geometryMaterialRecipe(joined,asset);
-  const crop=first.cropRect||{x:0,y:0,width:1,height:1},box=recipe.box;
-  const sx=first.width/(crop.width*asset.physicalWidthMM),
-    sy=first.height/(crop.height*asset.physicalHeightMM),
+  // The larger selected piece determines position, rotation, scale and style.
+  // The other piece contributes its source region even after it was moved.
+  const anchorIndex=geometries.reduce((best,g,index)=>
+    geometryArea(g)>geometryArea(geometries[best])?index:best,0);
+  const anchor=locations[anchorIndex].node;
+  const crop=anchor.cropRect||{x:0,y:0,width:1,height:1},box=recipe.box;
+  const sx=anchor.width/(crop.width*asset.physicalWidthMM),
+    sy=anchor.height/(crop.height*asset.physicalHeightMM),
     firstCenter=[(crop.x+crop.width/2)*asset.physicalWidthMM,
-      (crop.y+crop.height/2)*asset.physicalHeightMM],rad=(first.rotation||0)*Math.PI/180,
+      (crop.y+crop.height/2)*asset.physicalHeightMM],rad=(anchor.rotation||0)*Math.PI/180,
     c=Math.cos(rad),s=Math.sin(rad);
-  const sourceOrigin={x:first.x-(firstCenter[0]*sx*c-firstCenter[1]*sy*s),
-    y:first.y-(firstCenter[0]*sx*s+firstCenter[1]*sy*c)};
-  for(const loc of locations.slice(1)){
-    const part=loc.node,r=part.cropRect||{x:0,y:0,width:1,height:1},
-      center=[(r.x+r.width/2)*asset.physicalWidthMM,
-        (r.y+r.height/2)*asset.physicalHeightMM];
-    if(Math.abs(part.width-r.width*asset.physicalWidthMM*sx)>1e-3||
-      Math.abs(part.height-r.height*asset.physicalHeightMM*sy)>1e-3||
-      Math.hypot(part.x-sourceOrigin.x-(center[0]*sx*c-center[1]*sy*s),
-        part.y-sourceOrigin.y-(center[0]*sx*s+center[1]*sy*c))>1e-3)
-      throw Error('裁片已错位；可以组合移动，拼回原片需先对齐');
-  }
+  const sourceOrigin={x:anchor.x-(firstCenter[0]*sx*c-firstCenter[1]*sy*s),
+    y:anchor.y-(firstCenter[0]*sx*s+firstCenter[1]*sy*c)};
   const center=[(box.x+box.width/2)*sx,(box.y+box.height/2)*sy],
-    joinedNode={...structuredClone(first),id:uid(),cropRect:recipe.crop,
+    joinedNode={...structuredClone(anchor),id:uid(),cropRect:recipe.crop,
       materialMask:recipe.mask,width:box.width*sx,height:box.height*sy,
       x:sourceOrigin.x+center[0]*c-center[1]*s,
       y:sourceOrigin.y+center[0]*s+center[1]*c,
       isParked:locations.every(loc=>loc.node.isParked),
       materialSteps:[{op:'crop',box:{unit:'ratio',mode:'keep',values:[
         recipe.crop.x,recipe.crop.y,recipe.crop.width,recipe.crop.height]}}]};
-  const siblings=locations[0].nodes,at=Math.min(...locations.map(loc=>loc.index));
-  for(const loc of [...locations].sort((a,b)=>b.index-a.index))siblings.splice(loc.index,1);
-  siblings.splice(at,0,joinedNode);
+  for(const loc of locations)loc.nodes.splice(loc.nodes.indexOf(loc.node),1);
+  const siblings=locations[anchorIndex].nodes;
+  siblings.splice(Math.min(locations[anchorIndex].index,siblings.length),0,joinedNode);
+  const removeEmptyCutGroups=nodes=>{
+    for(let index=nodes.length-1;index>=0;index--){
+      const node=nodes[index];if(node.type!=='group')continue;
+      removeEmptyCutGroups(node.children||[]);
+      if(node.cutSourceID&&!node.children?.length)nodes.splice(index,1);
+    }
+  };
+  removeEmptyCutGroups(trial.layers);
   return {draft:trial,nodeID:joinedNode.id};
 }
