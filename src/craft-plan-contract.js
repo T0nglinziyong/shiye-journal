@@ -27,9 +27,11 @@ export function craftPlanContract({operation,relation,paper,text,primitive,ink})
   observations:array(object({id:str(96),asset:key,sourceRevision:hash,kind:enums(['pattern','text','texture','blank','focal','edge']),label:str(120),
     boundsRatio:array(num(0,1),4,4),outlineRatio:array(ratioPoint,3,128)},['id','asset','sourceRevision','kind','label','boundsRatio']),0,64),
   decisions:array(object({asset:key,choice:enums(['whole','extract','treat','split','reuse','relate']),purpose:str(160)},['asset','choice','purpose']),0,100),
-  pieces:array(piece,1,24),consume:array(key,0,24),keepRemainders:{type:'boolean'},
+  pieces:array(piece,1,24),consume:array(key,0,24),
+  sourcePartitions:array(object({asset:key,unit:{type:'integer',minimum:0,maximum:10000}},['asset']),0,12),
+  keepRemainders:{type:'boolean'},
   weaves:array(object({piece:key,target:key,holes:array({type:'integer',minimum:0,maximum:63},2,2),front:enums(['between','outside'])},['piece','target','holes']),0,8),
   paper,texts:array(text,0,24),graphics:array(primitive,0,48),ink:array(ink,0,128),finish:{type:'boolean'},summary:str(240)
  },['format','version','commandId','baseSceneHash','pieces']);
 }
-export const craftPlanDescription='原子执行当前素材工艺计划：支持 GPT 图片观察选区、几何取材、父片拆分、真实余料、两孔穿插与组合。centerMM 是页面毫米中心；sourceRevision 必须来自本次任务。consume 列出父片，子片用 parentId 关联，keepRemainders 默认 true。任何错误回滚整个计划；同 commandId 重放不重复物料。whole 可以是正确选择，不按加工数量评分。';
+export const craftPlanDescription='原子执行当前素材工艺计划：支持 GPT 图片观察轮廓、毫米几何取材、父片拆分、原素材一次分片、真实余料、两孔穿插与组合。一个来源要分别剪出多人时，在 pieces 中逐人写 observed_region/outline 或 geometry，并在 sourcePartitions 列出该素材；未剪部分默认成为可再次使用的备选余料。centerMM 是页面毫米中心；sourceRevision 必须来自本次任务。consume 列出画布已有父片，子片用 parentId 关联；sourcePartitions 只用于尚未取用的原素材。keepRemainders 默认 true。任何错误回滚整个计划；同 commandId 重放不重复物料。whole 可以是正确选择，不按加工数量评分。';

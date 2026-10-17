@@ -1048,7 +1048,7 @@ function MaterialCropControls({item,record,onApply}){
   </div>;
 }
 
-function EditorInspector({selected,draft,asset,format,onChange,onAction}){
+function EditorInspector({selected,draft,asset,format,onChange,onAction,materials=[]}){
   const [geometryError,setGeometryError]=useState('');
   useEffect(()=>setGeometryError(''),[selected?.value?.id]);
   const applyGeometry=(id,value)=>{
@@ -1105,6 +1105,7 @@ function EditorInspector({selected,draft,asset,format,onChange,onAction}){
       <div className="editor-inspector-checks">{check('inspector-bold','粗体',item.bold)}{check('inspector-italic','斜体',item.italic)}
         {check('inspector-underline','下划线',item.underline)}{check('inspector-strikethrough','删除线',item.strikethrough)}</div>
       <details className="editor-inspector-geometry"><summary>字距与段落</summary>
+        {field('inspector-curve-height','文字弧度',item.curveHeight??0,'range',{min:-120,max:120,step:2})}
         {field('inspector-letter-spacing','字距',item.letterSpacing??0,'range',{min:-5,max:30,step:.5})}
         {field('inspector-line-spacing','行距',item.lineSpacing??0,'range',{min:0,max:80,step:.5})}
         {field('inspector-paragraph-spacing','段距',item.paragraphSpacing??0,'range',{min:0,max:80,step:.5})}
@@ -1130,6 +1131,15 @@ function EditorInspector({selected,draft,asset,format,onChange,onAction}){
     </>:null}
     {selected.kind==='material'?<><h3>真实素材</h3>
       <p className="muted">实物 {format(asset(item.assetID)?.physicalWidthMM||0)} × {format(asset(item.assetID)?.physicalHeightMM||0)} mm</p>
+      <details className="editor-inspector-geometry"><summary>保留排版位置更换素材</summary>
+        <p className="muted">保留中心、旋转与图层位置；新素材按自己的实物尺寸显示。可撤销。</p>
+        <select aria-label="选择替换素材" value="" onChange={event=>{
+          if(event.target.value)onAction('fabric-replace-material',event.target.value);
+        }}><option value="">选择素材</option>{materials.filter(record=>
+          record.id!==item.assetID&&!record.isProjectInternal&&record.physicalWidthMM>0&&record.physicalHeightMM>0&&
+          !draft.items.some(used=>used.id!==item.id&&used.assetID===record.id&&!used.manualVisualCopy))
+          .map(record=><option key={record.id} value={record.id}>{record.title}</option>)}</select>
+      </details>
       {item.cropRect?<p className="muted">已取用原素材的 {Math.round(item.cropRect.width*100)}% × {Math.round(item.cropRect.height*100)}% 区域；移动和旋转不会改变裁片。</p>:null}
       {item.materialMask?<p className="muted">已保留 AI 创作的裁边或镂空工艺。</p>:null}
       {check('inspector-flipped','左右镜像',item.isFlippedHorizontally)}
@@ -1347,7 +1357,7 @@ export function EditorPage({state,draft,editorEntry,asset,source,format,
     </section><aside className="editor-inspector"><div className="fabric-inspector-head"><h2>{selected?`${{material:'素材',text:'文字',shape:'图形'}[selected.kind]} · 图层属性`:'页面设置'}</h2>
       <button type="button" aria-label="关闭对象设置" onClick={()=>onAction('fabric-inspector-close')}>×</button></div>
       <div className="inspector-island" style={{display:'contents'}}><EditorInspector selected={selected}
-        draft={draft} asset={asset} format={format} onChange={onInspectorChange} onAction={onAction}/></div>
+        draft={draft} asset={asset} format={format} materials={materials} onChange={onInspectorChange} onAction={onAction}/></div>
       </aside></div>
     {state.aiPanel?<div className="editor-ai-island" style={{display:'contents'}}>
       <EditorAIPanel state={state} draft={draft} asset={asset} hasReport={hasAIReport}

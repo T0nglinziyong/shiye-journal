@@ -18,11 +18,14 @@ try{
  for(const [name,data] of Object.entries(files)){await mkdir(dirname(join(dir,name)),{recursive:true});await writeFile(join(dir,name),data);}
  const doc=JSON.parse(strFromU8(files['examples/project.shiyeproject.json']));
  const mat=doc.page.layers.find(n=>n.type==='material');Object.assign(mat,{x:245,y:380,rotation:-6});
- const title=doc.page.layers.find(n=>n.type==='text');Object.assign(title,{content:'春日片刻',x:380,y:190,width:440,height:65,fontSize:42,style:'serif',color:'#30463d'});
+ const title=doc.page.layers.find(n=>n.type==='text');Object.assign(title,{content:'春日片刻',x:380,y:190,width:440,height:100,fontSize:42,curveHeight:-20,style:'serif',color:'#30463d'});
  doc.page.paperColor='#fbf7eb';doc.page.layers.push({type:'group',id:'notes',autoInkGroup:false,opacity:.9,children:[
  {type:'text',id:'body',content:'留一点空白，\n记下今天看见的颜色。',fontName:null,fixedLineHeight:null,fontSize:25,style:'sans',color:'#4f5f54',x:430,y:615,width:350,height:130},
  {type:'shape',id:'leaf',kind:'vector',x:500,y:400,width:95,height:150,fill:'#789079',stroke:null,vectorLayers:[{fill:'#789079',paths:[[[0,.5],[.5,0],[1,.4],[.5,1]]]},{fill:'#b8c6a1',paths:[[[.2,.5],[.5,.2],[.7,.5],[.5,.8]]]}]},
  {type:'ink',id:'ink',penStyle:'pressure',points:[{x:370,y:740,p:.15},{x:425,y:748,p:.6},{x:520,y:735,p:.25}],width:7,color:'#b69667'}]});
+ doc.page.layers.push({type:'shape',id:'stamp-1',kind:'vector',x:115,y:190,width:38,height:38,
+   fill:'#b36f67',stroke:null,vectorPaths:[[[.5,0],[1,.5],[.5,1],[0,.5]]]});
+ doc.page.layers.push({...structuredClone(doc.page.layers.at(-1)),id:'stamp-2',x:150,rotation:25});
  await writeFile(join(dir,'scene.json'),JSON.stringify(doc));
  for(const name of ['preview']){const r=spawnSync(process.execPath,['runtime/'+name+'.cjs'],{cwd:dir,encoding:'utf8'});assert.equal(r.status,0,r.stderr);}
  const html=await readFile(join(dir,'output/画面预览.html'));

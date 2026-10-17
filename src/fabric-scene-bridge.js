@@ -1,4 +1,4 @@
-import {shapeSVG,textFont,textFontFamily,textLineHeight,textLines} from './editor-tools-model.js';
+import {shapeSVG,textFont,textFontFamily,textLineHeight,drawSceneText} from './editor-tools-model.js';
 import {materialMaskGeometry} from './material-mask.js';
 import {geometryIntersection} from './craft-topology.js';
 import {validateVectorMask} from './scene-v2.js';
@@ -43,26 +43,7 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
       // The canonical renderer and the interactive view share one text layout.
       // Fabric's native text metrics still power cursor movement while editing.
       const node={...this.sceneTextNode,content:this.text};
-      ctx.save();
-      ctx.fillStyle=node.color||'#30463d';
-      ctx.font=textFont(node);
-      ctx.letterSpacing=(node.letterSpacing||0)+'px';
-      ctx.textAlign=node.alignment||'left';
-      ctx.textBaseline='alphabetic';
-      const left=ctx.textAlign==='center'?0:ctx.textAlign==='right'?node.width/2:-node.width/2;
-      for(const line of textLines(node,value=>ctx.measureText(value).width).lines){
-        const y=-this.height/2+node.fontSize+line.y;
-        ctx.fillText(line.text,left,y);
-        if(node.underline||node.strikethrough){
-          const length=ctx.measureText(line.text).width;
-          const x=ctx.textAlign==='center'?-length/2:ctx.textAlign==='right'?node.width/2-length:-node.width/2;
-          ctx.strokeStyle=node.color;ctx.lineWidth=Math.max(1,node.fontSize/18);
-          for(const offset of [node.underline?2:null,node.strikethrough?-node.fontSize*.35:null].filter(value=>value!==null)){
-            ctx.beginPath();ctx.moveTo(x,y+offset);ctx.lineTo(x+length,y+offset);ctx.stroke();
-          }
-        }
-      }
-      ctx.restore();
+      drawSceneText(ctx,node,this.height);
     }
   }
   const transformChildren=(children,from,to,rotation,scaleX=1,scaleY=1,groupAngle=0)=>{
@@ -116,7 +97,7 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
           child.rotation=Math.atan2(widthAxis.y,widthAxis.x)*180/Math.PI;
           if(child.type==='text'&&Math.abs(scaleX-scaleY)<.02)
             for(const field of ['fontSize','fixedLineHeight','lineHeight','lineSpacing',
-              'additionalLineSpacing','paragraphSpacing','letterSpacing'])
+              'additionalLineSpacing','paragraphSpacing','letterSpacing','curveHeight'])
               if(Number.isFinite(child[field]))child[field]*=scaleX;
         }
       }
@@ -293,7 +274,7 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
         const sx=positive(object.scaleX),sy=positive(object.scaleY);
         if(Math.abs(sx-sy)<.02&&Math.abs(sx-1)>.001)
           for(const field of ['fontSize','fixedLineHeight','lineHeight','lineSpacing',
-            'additionalLineSpacing','paragraphSpacing','letterSpacing'])
+            'additionalLineSpacing','paragraphSpacing','letterSpacing','curveHeight'])
             if(Number.isFinite(node[field]))node[field]*=sx;
         node.content=object.text;
         object.sceneTextFrameHeight=textFrame/object.scaleY;

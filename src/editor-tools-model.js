@@ -57,5 +57,52 @@ export function textLineHeight(t){return (typeof t.fixedLineHeight==='number'?t.
 export function textFontFamily(t){const fallback=t.style==='hand'?'"Kaiti SC",STKaiti,cursive':t.style==='serif'?'"Songti SC",serif':t.style==='rounded'?'"Arial Rounded MT Bold",sans-serif':'sans-serif';return (t.fontName?JSON.stringify(t.fontName)+',':'')+fallback;}
 export function textFont(t){return `${t.italic?'italic ':''}${t.bold?'bold ':''}${t.fontSize}px ${textFontFamily(t)}`;}
 export function textLines(t,measure){const lines=[];let y=0;for(const paragraph of String(t.content).split('\n')){let line='';for(const ch of Array.from(paragraph)){if(line&&measure(line+ch)>t.width){lines.push({text:line,y});y+=textLineHeight(t);line='';}line+=ch;}lines.push({text:line,y});y+=textLineHeight(t)+(t.paragraphSpacing||0);}return {lines,height:y};}
+// Shared by the Scene exporter and the Fabric projection. Curved type stays a
+// single editable text node; each glyph is placed on the same quadratic arc.
+export function drawSceneText(ctx,node,frameHeight=node.height){
+  ctx.save();
+  try{
+    ctx.fillStyle=node.color||'#30463d';ctx.font=textFont(node);
+    ctx.letterSpacing=(node.letterSpacing||0)+'px';ctx.textBaseline='alphabetic';
+    const curve=node.curveHeight||0;
+    if(curve){
+      const chars=Array.from(String(node.content||''));
+      if(chars.includes('\n'))throw Error('曲线文字只支持单行；请拆成两个文字图层');
+      const widths=chars.map(ch=>ctx.measureText(ch).width+(node.letterSpacing||0));
+      const length=widths.reduce((sum,w)=>sum+w,0);
+      if(length>node.width+1e-6)throw Error('曲线文字超出编辑框；请加宽或缩小字号');
+      const start=node.alignment==='right'?node.width/2-length:
+        node.alignment==='center'?-length/2:-node.width/2;
+      const baseline=(node.fontSize-curve)/2;let advance=0;
+      for(let i=0;i<chars.length;i++){
+        const x=advance+widths[i]/2,u=length?2*x/length-1:0;
+        const y=baseline+curve*(1-u*u);
+        const angle=length?-4*curve*u/length:0;
+        ctx.save();ctx.translate(start+x,y);ctx.rotate(Math.atan(angle));
+        ctx.textAlign='center';ctx.fillText(chars[i],0,0);
+        if(node.underline||node.strikethrough){
+          ctx.strokeStyle=node.color||'#30463d';ctx.lineWidth=Math.max(1,node.fontSize/18);
+          for(const offset of [node.underline?2:null,node.strikethrough?-node.fontSize*.35:null].filter(v=>v!==null)){
+            ctx.beginPath();ctx.moveTo(-widths[i]/2,offset);ctx.lineTo(widths[i]/2,offset);ctx.stroke();
+          }
+        }
+        ctx.restore();advance+=widths[i];
+      }
+      return;
+    }
+    ctx.textAlign=node.alignment||'left';
+    const left=ctx.textAlign==='center'?0:ctx.textAlign==='right'?node.width/2:-node.width/2;
+    for(const line of textLines(node,value=>ctx.measureText(value).width).lines){
+      const y=-frameHeight/2+node.fontSize+line.y;ctx.fillText(line.text,left,y);
+      if(node.underline||node.strikethrough){
+        const length=ctx.measureText(line.text).width,x=ctx.textAlign==='center'?-length/2:ctx.textAlign==='right'?node.width/2-length:-node.width/2;
+        ctx.strokeStyle=node.color;ctx.lineWidth=Math.max(1,node.fontSize/18);
+        for(const offset of [node.underline?2:null,node.strikethrough?-node.fontSize*.35:null].filter(v=>v!==null)){
+          ctx.beginPath();ctx.moveTo(x,y+offset);ctx.lineTo(x+length,y+offset);ctx.stroke();
+        }
+      }
+    }
+  }finally{ctx.restore();}
+}
 export function eraseStrokes(strokes,point,radius,whole=true,onlyHighlighter=false){return strokes.flatMap(line=>{if(onlyHighlighter&&line.penStyle!=='marker')return [line];const pts=line.points||[],hit=(p,i)=>Math.hypot(p.x-point.x,p.y-point.y)<=radius+(line.width||3)/2||(i>0&&segmentDistance(point,pts[i-1],p)<=radius+(line.width||3)/2);if(!pts.some(hit))return [line];if(whole)return [];const chunks=[];let run=[];pts.forEach((p,i)=>{if(hit(p,i)){if(run.length)chunks.push({...line,id:globalThis.crypto?.randomUUID?.()||'ink-'+Math.random().toString(36).slice(2),points:run});run=[];}else run.push(p);});if(run.length)chunks.push({...line,id:globalThis.crypto?.randomUUID?.()||'ink-'+Math.random().toString(36).slice(2),points:run});return chunks;});}
 export function drawInk(ctx,strokes){ctx.save();ctx.lineCap='round';ctx.lineJoin='round';for(const s of strokes){if(!s.points?.length)continue;ctx.globalCompositeOperation=s.blendMode==='multiply'?'multiply':'source-over';ctx.globalAlpha=s.opacity??1;ctx.strokeStyle=ctx.fillStyle=s.color||'#2b5245';ctx.lineWidth=s.width||3;if(s.penStyle==='pressure'){const outline=pressureInkOutline(s);if(!outline.length)continue;ctx.beginPath();ctx.moveTo(...outline[0]);for(const point of outline.slice(1))ctx.lineTo(...point);ctx.closePath();ctx.fill();continue;}if(s.points.length===1){ctx.beginPath();ctx.arc(s.points[0].x,s.points[0].y,ctx.lineWidth/2,0,Math.PI*2);ctx.fill();continue;}if(s.penStyle==='brush'){for(let i=1;i<s.points.length;i++){const a=s.points[i-1],b=s.points[i];ctx.lineWidth=(s.width||3)*(.35+.9*Math.max(0,Math.min(1,((a.p??.5)+(b.p??.5))/2)));ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();}}else{ctx.beginPath();traceSmoothInk(ctx,s.points);ctx.stroke();}}ctx.restore();}

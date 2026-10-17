@@ -310,6 +310,11 @@ export function validateSceneExtensions(d){
        !(node.width>0&&node.height>0)||node.width>100000||node.height>100000||
        Math.abs(node.x)>100000||Math.abs(node.y)>100000||
        (node.rotation!==undefined&&!num(node.rotation,-3600,3600)))throw Error('图层尺寸、位置或旋转无效');
+     if(node.type==='text'&&node.curveHeight!==undefined&&(!num(node.curveHeight,-500,500)||
+       node.curveHeight!==0&&String(node.content||'').includes('\n')))
+       throw Error('曲线文字须为单行，弧度范围为 -500 至 500');
+     if(node.type==='text'&&node.curveHeight&&node.height<node.fontSize*1.6+Math.abs(node.curveHeight))
+       throw Error('曲线文字编辑框高度不足');
      if(node.type==='material'){
        if(typeof node.assetID!=='string'||!node.assetID)throw Error('缺少真实素材引用');
        if(node.sourceBlobId!==undefined&&(typeof node.sourceBlobId!=='string'||!node.sourceBlobId))

@@ -9,4 +9,5 @@ export const materialCraftGuide = `【素材工艺 v2：先决定如何用材料
 新的组合 relation 可用 {kind:"peek",target:"main-photo",edge:"right",exposed_mm:8,along_mm:0,rotation_offset:0}；目标旋转时按目标局部方向求解。underlay 使用 target、offset_mm:[0,0]、rotation_offset；bridge 使用 target、target2、anchor_from/anchor_to（目标局部0–1锚点）及 contact_mm。搭桥仅移动/旋转现有真实片段，长度不足会失败，不会拉长纹理。关系 target 填已创建的 piece/key，不填素材 alias；关系不能成环。
 可以一次用 upsert_materials 或直接 page 提交完整工序和关系，无需为每条工艺额外请求一轮。compose_page 仍只提供基础放置/crop；之后可批量 edit_materials。物理边缘、数字手绘、最终正文分别建层。
 已接入复合工艺计划 apply_craft_plan：可引用用户确认区域，也可在同一计划提出看图选区 observations；后者只在本次任务使用，不伪称用户确认。任意合法正负形用 cut_shape，分离裁片在 plan.pieces 中分别描述。父片拆分默认保留余料，过小碎屑明确记录。两孔平面穿插使用 plan.weaves，只投影显示片段，不额外消耗材料。文字镂空可以将本地字体生成的数值路径作为 cut_shape，保留字腔连接，不用白字遮盖冒充挖孔。目前没有三维折叠仿真，不能把平面穿插称为任意可制作折叠。
+从一张尚未放入画布的原素材剪出多个对象时，plan.pieces 可分别指定看图轮廓、毫米几何路径或矩形范围，并在 sourcePartitions 声明该素材。默认把未剪区域生成备选余料；它们与人物仍共用同一个来源，不能相互重叠。若素材已在画布上，使用 consume + parentId 从现有父片拆分，不重新取用原图。
 复核实际画面时检查加工是否服务主题、是否保住主体/文字、是否只是换一种机械套路。全是 whole 可以是合理选择；工艺说明、决策理由与错误信息不能写入最终正文。`;

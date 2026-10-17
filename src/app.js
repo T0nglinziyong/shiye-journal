@@ -59,6 +59,7 @@ import {newEditorSession,editorSessionHasEdits} from './editor-session-policy.js
 import {editorExitDecision} from './editor-exit-policy.js';
 import {closePopover} from './swift-popover.js';
 import {defaultTools,configureShape} from './editor-tools-model.js';
+import {replaceSceneMaterial} from './scene-advanced-ops.js';
 import {createWorkCoverBackfill} from './work-cover-backfill.js';
 import {renderWorkCoverSnapshot} from './work-cover-snapshot.js';
 import {createLocalWorkCovers} from './work-cover-local-cache.js';
@@ -961,6 +962,7 @@ function updateEditorInspector(id,value){
   const numeric={'inspector-x':'x','inspector-y':'y','inspector-width':'width','inspector-height':'height',
     'inspector-rotation':'rotation','inspector-z':'zIndex',
     'inspector-opacity':'opacity','inspector-font-size':'fontSize',
+    'inspector-curve-height':'curveHeight',
     'inspector-letter-spacing':'letterSpacing','inspector-line-spacing':'lineSpacing',
     'inspector-paragraph-spacing':'paragraphSpacing','inspector-fixed-line-height':'fixedLineHeight',
     'inspector-line-width':'lineWidth','inspector-fill-opacity':'fillOpacity',
@@ -973,13 +975,16 @@ function updateEditorInspector(id,value){
     if(key){
       if(entry.kind==='material'&&['width','height'].includes(key))return;
       if(!['text','shape','material'].includes(entry.kind))return;
-      if(['fontSize','letterSpacing','lineSpacing','paragraphSpacing','fixedLineHeight'].includes(key)&&entry.kind!=='text')return;
+      if(['fontSize','curveHeight','letterSpacing','lineSpacing','paragraphSpacing','fixedLineHeight'].includes(key)&&entry.kind!=='text')return;
       if(['lineWidth','fillOpacity','strokeOpacity'].includes(key)&&entry.kind!=='shape')return;
       const next=key==='fixedLineHeight'&&value===''?null:Number(value);
       if(next!==null&&(!Number.isFinite(next)||
         ['width','height','fontSize','fixedLineHeight'].includes(key)&&next<=0||
         ['opacity','fillOpacity','strokeOpacity'].includes(key)&&(next<0||next>1)))return;
+      if(key==='curveHeight'&&(next<-500||next>500||next&&entry.value.content?.includes('\n')))return;
       if(next===null)delete entry.value[key];else entry.value[key]=next;
+      if(key==='curveHeight')entry.value.height=Math.max(entry.value.height,
+        entry.value.fontSize*1.6+Math.abs(next));
       if(entry.kind==='material')entry.value.userOverrideFlags=[...new Set([...(entry.value.userOverrideFlags||[]),key])];
       changed=true;
     }else if(id==='inspector-text'&&entry.kind==='text'){entry.value.content=String(value);changed=true;}
@@ -1583,6 +1588,17 @@ async function runAppAction(action,id,value){try{switch(action){
         .map(existing=>existing.materialUnitIndex??0))+1:0;
     d.items.push(item);
     state.selected=item.id;state.multiSelected=[item.id];state.tool='select';saveProject();render();break;
+  }
+  case 'fabric-replace-material':{
+    const d=current(),selectedID=state.selected;if(!d||!selectedID)break;
+    try{
+      const trial=attachSceneV2(structuredClone(d));
+      replaceSceneMaterial(trial,selectedID,id,state.assets);
+      validateScenePhysical(trial,state.assets);
+      checkpoint();replaceSceneMaterial(d,selectedID,id,state.assets);
+      saveProject();render();toast('素材已更换，位置与层级已保留');
+    }catch(error){toast(error.message||'无法更换素材');}
+    break;
   }
   case 'fabric-unpark':{
     const d=current(),item=d?.items.find(entry=>entry.id===id);if(!item)break;

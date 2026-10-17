@@ -22,10 +22,15 @@ insert: {node,parent?} 插入完整原生节点；实体素材优先由工具建
 delete: {id}；group: {ids,id,name?}；ungroup: {id}。
 move: {id,parent:null或组ID,before:同级节点ID或null} 移动图层到子树并调整叠放。
 transform-group: {id,transform:{dx,dy,rotation}} 按现有组合变换中心刚性变换，素材不缩放。
+replace-material: {id,assetID} 把现有真实素材图层换为本次任务素材，保留中心、旋转、层级与整体样式；裁片/孔洞重置，新框按新素材真实毫米尺寸计算，绝不拉伸实物。先看实际预览，再微调周围布局。
+repeat-stamp: {id,placements:[{x,y,rotation?,scale?,fill?,zIndex?}]} 以一个数字图形作为印章母版，盖出独立可编辑图形；仅复制数字图形，不复制真实素材。
+reuse-layout: {layout:完整 Scene v2,prefix,materialMap:{旧素材ID:本任务素材ID}} 将另一页的可编辑图层树按画布比例带入当前页；数字图形、文字、笔迹保持结构，真实素材只在明确映射后放入，且按新素材实物尺寸生成。没有映射的素材留空，供重新构思；新层追加到当前页，若要替换旧排版须显式删除旧层。
+glyph-knockout: {id,geometryMM,originMM:[x,y]} 把 runtime/glyphs.cjs 输出的 geometryMM 作为真实负形切除，originMM 是当前素材裁片左上角起算的毫米偏移。只保存数值路径，不保存字体文件；会拒绝切断成多个不相连纸片的结果。
+曲线文字：text 节点设置 curveHeight（画布单位，正值向下弯、负值向上弯），保持单行和完整编辑框；普通文字为 0。曲线字与普通字由同一 Scene 绘制函数供编辑画布和导出使用。
 整页替换：{baseSceneHash,page:完整原生Scene}，与 tools/edits 互斥；适合直接改数据后的原子提交。
 inspect 提供每个节点完整字段，不止摘要。所有编辑共享锁定、用户接管、固定素材版本、加工权限、尺寸/来源用量校验。无效命令返回结构化错误且不覆盖工作文件。
 原生路径示例：vectorPaths=[[[0,0],[1,0],[0.5,1]]]；多色图形 vectorLayers=[{fill:"#8fa88d",paths:[[[0,0],[1,0],[0.5,1]]]}]。vectorMask={outer:[[0,0],[1,0],[1,1],[0,1]],holes:[[[0.2,0.2],[0.4,0.2],[0.4,0.4],[0.2,0.4]]]}；轮廓不可自交。高级裁片 materialMask / craftDisplaySlices 由工艺工具生成，改动后须通过来源几何与物理校验。
-字体镂空：node runtime/glyphs.cjs 本地有权使用的字体文件 文字 字号毫米；输出 output/glyph-geometry.json。可用于 cut_shape/remove/geometry，实际预览中检查字腔连接。
+字体镂空：node runtime/glyphs.cjs 本地有权使用的字体文件 文字 字号毫米；输出 output/glyph-geometry.json。把 geometryMM 传给 glyph-knockout 或 cut_shape/remove/geometry，实际预览中检查字腔连接。
 静态层类型 material/text/shape/ink/group 全部可用；素材支持原始比例裁切、复合负形、撕边/齿边、窗口、余料与穿插；数字图形可任意尺寸、多色矢量路径；文字保持可编辑；每个 ink 含一笔压感路径，抬笔后建下一 ink，组合可任意嵌套至预算上限。暂不支持翻片、口袋和页面动作。
 AI 不可添加 manualVisualResize/manualVisualCopy 来逃避实物约束；基线已有手工变形可以保持。不得更改 source、纸张物理单位或私自换素材图片引用。`;
 export function webArtDirection(source){return [
@@ -33,6 +38,7 @@ export function webArtDirection(source){return [
   '服从用户明确要求和素材本身。审美建议不是模板：自由手帐不必套标题—插图—正文三段布局，不必统一做旧，也不必放满素材。',
   '先提出两种不同的内部构图草案，比较叙事与视觉关系后择优；可以用图文错层、主体/陪衬、留白与密度对比形成阅读路线。不要把所有素材当商品目录等距陈列，除非用户明确需要标本/收藏网格。',
   '从实际素材提取主色与少量强调色；保留纸张、透明边缘、票据、胶带和照片之间的触感差异。旋转和叠压要有固定、遮挡或叙事理由，不给所有元素随机角度。完整使用与复杂加工都可以优秀。',
+  '数字印章、曲线文字、镂空和旧布局都按主题需要使用：重复印章应有节奏与停顿，不能铺满页面；曲线文字先保证阅读顺序；替换素材后重新看新轮廓与空白的关系；复用布局时重新选择主次，不照搬旧作品。',
   '图文相互回应：用户事实与原文优先，正文像真正记录，不是设计说明；没有事实不编造私人经历。标题、正文、小注有清楚主次，避免所有层都争抢注意力。数字装饰支持主题，不伪装成额外实物库存。',
   creativeTypographyGuide(source.baseDraft),
   '【最终看图自评】逐项给出具体画面证据和需要修改的对象 ID：主题/内容是否满足；主视觉是否明确；阅读顺序是否自然；文字是否可读；叠压是否有意；留白是否有作用；手帐材质与风格是否一致。不要仅回复“美观、通过”。评分只供自我比较，不把主观分数写成程序保证。',

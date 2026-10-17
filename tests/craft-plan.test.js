@@ -76,6 +76,49 @@ test('parent split consumes the parent, preserves descendants and parks the real
  const ledger=buildMaterialLedger(next,[a]);assert.equal(ledger.units[0].usedAreaMM2,8000);assert.equal(ledger.units[0].remainingAreaMM2,0);
  assert.equal(next.craftReceipts.at(-1).lineage[0].sourceAreaMM2,8000);
 });
+test('AI partitions one original image into two independent subjects and a reusable offcut in one plan',()=>{
+ const a=material(),d=base(),revision=assetSourceRevision(a);
+ const subjects=[
+  {id:'person-left',boundsRatio:[.1,.1,.2,.5],outlineRatio:[[.1,.1],[.3,.1],[.3,.6],[.1,.6]],centerMM:[35,60]},
+  {id:'person-right',boundsRatio:[.6,.1,.2,.5],outlineRatio:[[.6,.1],[.8,.1],[.8,.6],[.6,.6]],centerMM:[90,60]}
+ ];
+ const input=plan(d,a,subjects.map(({id,centerMM})=>plannedPiece(a,id,{centerMM,
+  extraction:{type:'observed_region',observationId:id,mode:'outline'}})),{
+  sourcePartitions:[{asset:'m1'}],observations:subjects.map(({id,boundsRatio,outlineRatio})=>({
+   id,asset:'m1',sourceRevision:revision,kind:'focal',label:id,boundsRatio,outlineRatio
+  }))
+ });
+ const next=successful(run(input,d,a,{visualAssetIDs:[a.id]}));
+ assert.equal(next.items.length,3);
+ assert.equal(next.items.filter(i=>!i.isParked).length,2);
+ const leftover=next.items.find(i=>i.isParked);assert.ok(leftover);
+ assert.equal(next.craftReceipts.at(-1).offcuts.length,1);
+ assert.equal(next.craftReceipts.at(-1).lineage[0].parentId,null);
+ assert.equal(next.craftReceipts.at(-1).lineage[0].remainingAreaMM2,6400);
+ assert.equal(buildMaterialLedger(next,[a]).units[0].usedAreaMM2,8000);
+ const reused=successful(run(plan(next,a,[plannedPiece(a,'new-label',{
+  parentId:leftover.creativePieceID,extraction:{type:'rect_crop',boxMM:[0,0,8,80]}
+ })],{commandId:'use-leftover',consume:[leftover.creativePieceID]}),next,a));
+ assert.ok(reused.items.some(item=>item.creativePieceID==='new-label'));
+ assert.equal(buildMaterialLedger(reused,[a]).units[0].usedAreaMM2,8000);
+ leftover.isParked=false;leftover.x+=10;
+ assert.equal(buildMaterialLedger(next,[a]).units[0].usedAreaMM2,8000);
+});
+test('source partition rejects overlapping subjects and already allocated source without changing the draft',()=>{
+ const a=material(),d=base(),pieces=[
+  plannedPiece(a,'first',{extraction:{type:'rect_crop',boxMM:[10,10,40,40]}}),
+  plannedPiece(a,'second',{extraction:{type:'rect_crop',boxMM:[30,10,40,40]}})
+ ];
+ const input=plan(d,a,pieces,{sourcePartitions:[{asset:'m1'}]});
+ const overlap=run(input,d,a);assert.equal(overlap.committed,false);
+ assert.equal(overlap.results[0].code,'SOURCE_REGION_OVERLAP');
+ assert.equal(d.items.length,0);
+ const occupied=successful(run(plan(d,a,[plannedPiece(a,'existing')]),d,a));
+ const retry=plan(occupied,a,[pieces[0]],{sourcePartitions:[{asset:'m1'}],commandId:'new-partition'});
+ const rejected=run(retry,occupied,a);assert.equal(rejected.committed,false);
+ assert.equal(rejected.results[0].code,'SOURCE_ALREADY_ALLOCATED');
+ assert.equal(occupied.items.length,1);
+});
 test('window plan returns its exact core as a parked offcut instead of duplicating the source',()=>{
  const a=material(),d=base();const parent=successful(run(plan(d,a,[plannedPiece(a,'parent')]),d,a));
  const next=successful(run(plan(parent,a,[plannedPiece(a,'frame',{parentId:'parent',treatments:[{op:'window',shape:'rectangle',box:[.3,.25,.4,.375]}]})],{commandId:'window',consume:['parent']}),parent,a));

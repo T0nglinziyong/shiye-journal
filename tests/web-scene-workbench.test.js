@@ -7,10 +7,11 @@ import {createOfflineHandoff,importEditableWork} from '../src/offline-creation.j
 import {project} from '../src/domain.js';
 import {attachSceneV2} from '../src/scene-v2.js';
 import {craftSceneHash} from '../src/craft-fingerprint.js';
+import {assetSourceRevision} from '../src/material-anatomy.js';
 import {applyWebSceneCommands,compileWebSceneInput,validateWebScene,webSceneDocument} from '../src/web-scene-workbench.js';
 const assets=[{id:'a',title:'小纸片',kind:'sticker',blobId:'fixed-a',physicalWidthMM:30,physicalHeightMM:40}];
-const fixture=async(p=project('图层测试'))=>{
- const task=await createOfflineHandoff({project:p,assets,aliases:{m1:'a'},settings:{includeThumbnails:false}});
+const fixture=async(p=project('图层测试'),sourceAssets=assets)=>{
+ const task=await createOfflineHandoff({project:p,assets:sourceAssets,aliases:{m1:'a',...(sourceAssets.some(row=>row.id==='b')?{m2:'b'}:{})},settings:{includeThumbnails:false}});
  const files=unzipSync(new Uint8Array(await task.blob.arrayBuffer()));
  return {task,files,doc:JSON.parse(strFromU8(files['examples/project.shiyeproject.json']))};
 };
@@ -55,6 +56,54 @@ test('tool/precise batches are atomic, reject stale baselines, and never mutate 
  assert.throws(()=>applyWebSceneCommands(doc,{...commands,baseSceneHash:'sha256:stale'},assets),/已变化/);
  assert.throws(()=>importEditableWork(JSON.stringify({...doc,tools:[]}),assets),/最终仅交付/);
 });
+test('curved text, repeatable stamps, material replacement, layout reuse and glyph knockout remain native Scene',async()=>{
+ const extra={id:'b',title:'另一张纸',kind:'sticker',blobId:'fixed-b',physicalWidthMM:20,physicalHeightMM:25};
+ const sourceAssets=[...assets,extra],{doc}=await fixture(project('高级创作'),sourceAssets);
+ const original=structuredClone(doc),hash=()=>craftSceneHash(attachSceneV2(doc.page));
+ const text=doc.page.layers.find(node=>node.type==='text');
+ let next=applyWebSceneCommands(doc,{baseSceneHash:hash(),edits:[{op:'patch',id:text.id,values:{curveHeight:-18,content:'弧线标题'}}]},sourceAssets);
+ assert.equal(next.page.layers.find(node=>node.id===text.id).curveHeight,-18);
+ assert.throws(()=>applyWebSceneCommands(next,{baseSceneHash:craftSceneHash(attachSceneV2(next.page)),edits:[{op:'patch',id:text.id,values:{content:'两行\n标题'}}]},sourceAssets),/曲线文字/);
+ const shape={id:'stamp-master',type:'shape',kind:'vector',x:100,y:100,width:40,height:40,
+  fill:'#d06b66',stroke:null,vectorPaths:[[[.5,0],[1,.5],[.5,1],[0,.5]]]};
+ next.page.layers.push(shape);
+ next=applyWebSceneCommands(next,{baseSceneHash:craftSceneHash(attachSceneV2(next.page)),edits:[
+  {op:'repeat-stamp',id:shape.id,placements:[{x:180,y:110,rotation:12},{x:240,y:110,scale:.8}]}
+ ]},sourceAssets);
+ assert.equal(next.page.layers.filter(node=>node.id.startsWith('stamp-master-stamp')).length,2);
+ const material=next.page.layers.find(node=>node.type==='material'),before={x:material.x,y:material.y,rotation:material.rotation,zIndex:material.zIndex};
+ assert.throws(()=>applyWebSceneCommands(next,{baseSceneHash:craftSceneHash(attachSceneV2(next.page)),edits:[
+  {op:'repeat-stamp',id:material.id,placements:[{x:10,y:10}]}
+ ]},sourceAssets),/数字印章来源/);
+ next=applyWebSceneCommands(next,{baseSceneHash:craftSceneHash(attachSceneV2(next.page)),edits:[
+  {op:'replace-material',id:material.id,assetID:'b'}
+ ]},sourceAssets);
+ const replaced=next.page.layers.find(node=>node.id===material.id);
+ assert.equal(replaced.assetID,'b');assert.equal(replaced.sourceBlobId,'fixed-b');
+ assert.deepEqual({x:replaced.x,y:replaced.y,rotation:replaced.rotation,zIndex:replaced.zIndex},before);
+ assert.ok(replaced.width<material.width);
+ const layout=structuredClone(original.page);layout.layers=layout.layers.filter(node=>node.type==='text');
+ next=applyWebSceneCommands(next,{baseSceneHash:craftSceneHash(attachSceneV2(next.page)),edits:[
+  {op:'reuse-layout',layout,prefix:'reuse',materialMap:{}}
+ ]},sourceAssets);
+ assert.ok(next.page.layers.some(node=>node.id==='reuse-'+text.id));
+ const glyph=[[[[1,1],[5,1],[5,5],[1,5]]]];
+ assert.throws(()=>applyWebSceneCommands(next,{baseSceneHash:craftSceneHash(attachSceneV2(next.page)),edits:[
+  {op:'glyph-knockout',id:material.id,geometryMM:glyph,originMM:[30,30]}
+ ]},sourceAssets),/裁片|镂空|区域|移除|几何|材料/);
+ next=applyWebSceneCommands(next,{baseSceneHash:craftSceneHash(attachSceneV2(next.page)),edits:[
+  {op:'glyph-knockout',id:material.id,geometryMM:glyph,originMM:[4,4]}
+ ]},sourceAssets);
+ assert.equal(next.page.layers.find(node=>node.id===material.id).materialMask.shape,'region');
+ assert.equal(importEditableWork(JSON.stringify(next),sourceAssets).drafts[0].items[0].assetID,'b');
+ const clean=await fixture(project('布局复用'),sourceAssets);
+ const mapped=applyWebSceneCommands(clean.doc,{baseSceneHash:craftSceneHash(attachSceneV2(clean.doc.page)),edits:[
+  {op:'reuse-layout',layout:clean.doc.page,prefix:'layout2',materialMap:{a:'b'}}
+ ]},sourceAssets);
+ const mappedMaterial=mapped.page.layers.find(node=>node.id.startsWith('layout2-')&&node.type==='material');
+ assert.equal(mappedMaterial.assetID,'b');assert.equal(mappedMaterial.sourceBlobId,'fixed-b');
+ assert.equal(importEditableWork(JSON.stringify(mapped),sourceAssets).drafts[0].items.length,2);
+});
 test('self-contained runtime compiles, revises, inspects, renders input and exports one hash-bound snapshot',async()=>{
  const {files,task}=await fixture(),dir=await mkdtemp(join(tmpdir(),'shiye-workbench-'));
  try{
@@ -78,6 +127,28 @@ test('self-contained runtime compiles, revises, inspects, renders input and expo
   doc.page.layers.at(-1).content='改变之后';await writeFile(join(dir,'scene.json'),JSON.stringify(doc));
   assert.equal(run('pack').status,1,'stale preview cannot validate a changed scene');
   await assert.rejects(readFile(join(dir,'output/project.shiyeproject.json')),{code:'ENOENT'});
+ }finally{await rm(dir,{recursive:true,force:true});}
+});
+
+test('exported workbench compiles two source cutouts and preserves their reusable remainder',async()=>{
+ const {files,task}=await fixture(),dir=await mkdtemp(join(tmpdir(),'shiye-partition-'));
+ try{
+  for(const [name,data] of Object.entries(files)){await mkdir(dirname(join(dir,name)),{recursive:true});await writeFile(join(dir,name),data);}
+  const revision=assetSourceRevision(assets[0]);
+  const geometryMM=box=>[[[[box[0],box[1]],[box[2],box[1]],[box[2],box[3]],[box[0],box[3]]]]];
+  const input={plan:{format:'shiye-craft-plan',version:2,commandId:'two-subjects',
+   baseSceneHash:craftSceneHash(task.source.baseDraft),sourcePartitions:[{asset:'m1'}],
+   pieces:[
+    {id:'person-a',asset:'m1',sourceRevision:revision,extraction:{type:'geometry',geometryMM:geometryMM([3,4,10,30])}},
+    {id:'person-b',asset:'m1',sourceRevision:revision,extraction:{type:'geometry',geometryMM:geometryMM([18,4,26,30])}}
+   ]}};
+  await writeFile(join(dir,'instructions.json'),JSON.stringify(input));
+  const compile=spawnSync(process.execPath,['runtime/compile.cjs','instructions.json'],{cwd:dir,encoding:'utf8',timeout:15000});
+  assert.equal(compile.status,0,compile.stderr);
+  const scene=JSON.parse(await readFile(join(dir,'scene.json'),'utf8'));
+  const imported=importEditableWork(JSON.stringify(scene),assets,{trustedSource:task.source});
+  assert.equal(imported.drafts[0].items.filter(item=>!item.isParked).length,2);
+  assert.equal(imported.drafts[0].items.filter(item=>item.isParked).length,1);
  }finally{await rm(dir,{recursive:true,force:true});}
 });
 

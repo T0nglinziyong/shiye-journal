@@ -63,6 +63,25 @@ test('Fabric text keeps its paper-space frame center after rotation and grows on
   assert.ok(node.height>=95);
   assert.equal(node.content,'甲\n乙\n丙\n丁\n戊');
 });
+test('curved text projects the same visible arc in Fabric and the Scene exporter',async()=>{
+  const node={id:'arc-title',type:'text',content:'HELLO',x:160,y:90,width:240,height:95,
+    fontSize:34,curveHeight:-28,style:'sans',color:'#254637',alignment:'center',rotation:0};
+  const draft={sceneVersion:2,canvas:{width:320,height:180},paperColor:'#ffffff',
+    paperPattern:'plain',layers:[node]};
+  const display=new fabric.StaticCanvas(null,{width:320,height:180,backgroundColor:'#ffffff'});
+  try{
+    display.add(await bridge.fromNode(node));display.renderAll();
+    const exported=(await renderSceneCanvas(draft,{waitForFonts:false,
+      createCanvas:()=>createCanvas(1,1)})).canvas;
+    const imageA=display.getContext().getImageData(0,0,320,180).data;
+    const imageB=exported.getContext('2d').getImageData(0,0,320,180).data;
+    const bounds=data=>{const xs=[],ys=[];for(let y=0;y<180;y++)for(let x=0;x<320;x++){
+      const i=(y*320+x)*4;if(data[i]<180&&data[i+1]<180&&data[i+2]<180){xs.push(x);ys.push(y);}
+    }return [Math.min(...xs),Math.min(...ys),Math.max(...xs),Math.max(...ys)];};
+    const a=bounds(imageA),b=bounds(imageB);
+    for(let i=0;i<4;i++)assert.ok(Math.abs(a[i]-b[i])<=3,`arc bound ${i}: ${a[i]} vs ${b[i]}`);
+  }finally{await display.dispose();}
+});
 
 test('Fabric material projection preserves crop and a compound physical mask',async()=>{
   const image=createCanvas(40,20);

@@ -2,7 +2,7 @@ import {sceneDisplaySiblings} from './craft-display.js';
 import {validateSceneExtensions,sceneLayerStyle,applyVectorMask} from './scene-model.js';
 import {clipMaterial} from './material-mask.js';
 import {drawPaper} from './paper-rendering.js';
-import {shapeSVG,drawInk,textFont,textLines,textFontFamily} from './editor-tools-model.js';
+import {shapeSVG,drawInk,textFont,textFontFamily,drawSceneText} from './editor-tools-model.js';
 import {craftSceneHash} from './craft-fingerprint.js';
 import {SCENE_MAX_GROUP_DEPTH} from './scene-v2.js';
 
@@ -57,18 +57,7 @@ export async function renderSceneCanvas(draft,{scale=1,loadMaterialImage,createC
        const svg=shapeSVG(item);
        if(!shapes.has(svg))shapes.set(svg,loadShapeImage('data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg)));
        target.drawImage(await shapes.get(svg),-item.width/2,-item.height/2,item.width,item.height);
-     }else if(kind==='text'){
-       target.fillStyle=item.color;target.font=textFont(item);target.letterSpacing=(item.letterSpacing||0)+'px';target.textAlign=item.alignment||'left';target.textBaseline='alphabetic';
-       const left=target.textAlign==='center'?0:target.textAlign==='right'?item.width/2:-item.width/2;
-       for(const line of textLines(item,text=>target.measureText(text).width).lines){
-         const y=-item.height/2+item.fontSize+line.y;target.fillText(line.text,left,y);
-         if(item.underline||item.strikethrough){
-           const length=target.measureText(line.text).width,x=target.textAlign==='center'?-length/2:target.textAlign==='right'?item.width/2-length:-item.width/2;
-           target.strokeStyle=item.color;target.lineWidth=Math.max(1,item.fontSize/18);
-           for(const offset of [item.underline?2:null,item.strikethrough?-item.fontSize*.35:null].filter(v=>v!==null)){target.beginPath();target.moveTo(x,y+offset);target.lineTo(x+length,y+offset);target.stroke();}
-         }
-       }
-     }
+     }else if(kind==='text')drawSceneText(target,item);
    }finally{target.restore();}
  };
  let isolatedGroups=0;

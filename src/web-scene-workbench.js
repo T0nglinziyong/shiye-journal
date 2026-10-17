@@ -15,17 +15,18 @@ import {normalizeGeometry,geometryIntersection,geometryArea} from './craft-topol
 import {project} from './domain.js';
 import {commonShapes,advancedShapes} from './editor-tools-model.js';
 import {reviewCreativeDraft} from './creative-quality.js';
+import {replaceSceneMaterial,repeatSceneStamp,reuseSceneLayout,knockoutSceneGlyphs} from './scene-advanced-ops.js';
 
 export {webSceneContract} from './web-scene-contract.js';
 import {webSceneContract} from './web-scene-contract.js';
 
-export const webSceneCapabilities={version:1,sourcePixelCoordinates:false,cropPx:false,coordinateSystem:'native Scene units; x/y are centers; ink points are absolute; vector masks are normalized; group children retain page coordinates',
+export const webSceneCapabilities={version:2,sourcePixelCoordinates:false,cropPx:false,coordinateSystem:'native Scene units; x/y are centers; ink points are absolute; vector masks are normalized; group children retain page coordinates',
   nodes:['material','text','shape','ink','group'],
   operations:['inspect','compile','apply','validate','preview','save-preview','pack','self-test'],
-  editing:['all native static Scene fields','atomic tool batches','direct scene editing','nested groups','group transforms','alignment','layer reorder','crop and compound masks','source splits and scraps','physical weave slices','pressure ink','multi-color vectors','text typography','paper styles'],
+  editing:['all native static Scene fields','atomic tool batches','direct scene editing','nested groups','group transforms','alignment','layer reorder','crop and compound masks','source splits and scraps','physical weave slices','pressure ink','multi-color vectors','curved editable text','repeatable digital stamps','physical material replacement preserving center and stacking','editable layout reuse','local-font glyph knockout','paper styles'],
   excluded:['interactive pockets/flaps/page actions','arbitrary JavaScript','external image URLs','AI resizing/duplicating physical sources'],
   budgets:{documentBytes:8000000,groupDepth:12,sceneNodes:10000,pointsPerStroke:20000,toolCallsPerBatch:12,canvasPixels:32000000,isolatedGroups:8},
-  fields:{common:'id,type,x,y,width,height,rotation,zIndex,opacity,blendMode,vectorMask,hidden,isLocked',material:'assetID,sourceBlobId,sourceStaticPath,cropRect,materialMask,materialSteps,materialUnitIndex,creativePieceID,generationBaseline,isFlippedHorizontally,craftDisplaySlices,materialRelation',text:'content,fontSize,fontName,style,color,alignment,bold,italic,underline,strikethrough,lineSpacing,fixedLineHeight,paragraphSpacing,letterSpacing',shape:'kind,fill,stroke,lineWidth,fillOpacity,strokeOpacity,strokeDash,cornerRadius,vectorPaths,vectorLayers',ink:'points:[{x,y,p}],width,color,penStyle,opacity; use pressure for pressure outline',group:'children,name,opacity,blendMode,vectorMask; group mask uses whole page normalized coordinates'},
+  fields:{common:'id,type,x,y,width,height,rotation,zIndex,opacity,blendMode,vectorMask,hidden,isLocked',material:'assetID,sourceBlobId,sourceStaticPath,cropRect,materialMask,materialSteps,materialUnitIndex,creativePieceID,generationBaseline,isFlippedHorizontally,craftDisplaySlices,materialRelation',text:'content,fontSize,fontName,style,color,alignment,bold,italic,underline,strikethrough,lineSpacing,fixedLineHeight,paragraphSpacing,letterSpacing,curveHeight',shape:'kind,fill,stroke,lineWidth,fillOpacity,strokeOpacity,strokeDash,cornerRadius,vectorPaths,vectorLayers',ink:'points:[{x,y,p}],width,color,penStyle,opacity; use pressure for pressure outline',group:'children,name,opacity,blendMode,vectorMask; group mask uses whole page normalized coordinates'},
   provenance:'Create physical pieces with tools first; source geometry and manual provenance are checked even when editing JSON directly.'};
 const same=(a,b)=>canonicalTaskSource(a)===canonicalTaskSource(b);
 const pageFields=new Set(['sceneVersion','canvas','pageMode','pageRatio','physicalPageHeightMM','style','paperColor','paperPattern','paperColumns','paperRuling','drawCenterGutter','layers','craftScraps']);
@@ -146,6 +147,10 @@ export function applyWebSceneCommands(document,commands,assets){
       else if(edit.op==='ungroup'){if(!ungroupSceneLayers(draft,edit.id))throw Error('没有找到组合');}
       else if(edit.op==='move')moveSceneNode(draft,edit.id,{parentID:edit.parent??null,beforeID:edit.before??null});
       else if(edit.op==='transform-group')transformSceneGroup(draft,edit.id,edit.transform);
+      else if(edit.op==='replace-material')replaceSceneMaterial(draft,edit.id,edit.assetID,frozen);
+      else if(edit.op==='repeat-stamp')repeatSceneStamp(draft,edit.id,edit.placements);
+      else if(edit.op==='reuse-layout')reuseSceneLayout(draft,edit.layout,edit.materialMap||{},frozen,edit.prefix);
+      else if(edit.op==='glyph-knockout')knockoutSceneGlyphs(draft,edit.id,edit.geometryMM,edit.originMM,frozen,source.processing||'不预设');
       else throw Error('未知精确编辑操作：'+edit.op);
     }
   }
