@@ -47,3 +47,20 @@ test('already existing flat snapshots need no scene render',async()=>{
   const raw=new Blob(['image']),p={isSnapshot:true,snapshotBlobId:'existing'};
   assert.equal(await renderWorkCoverSnapshot(p,{getSnapshot:async id=>id==='existing'?raw:null}),raw);
 });
+
+test('cover uses the image version pinned by the work after the library image changes',async()=>{
+ const node={id:'m',type:'material',assetID:'a',sourceBlobId:'image-original'};
+ const project={id:'p',activeDraftID:'d',drafts:[{id:'d',sceneVersion:2,
+   canvas:{width:400,height:500},layers:[node]}]};
+ const seen=[];
+ await renderWorkCoverSnapshot(project,{
+   resolveAsset:async()=>({id:'a',blobId:'image-replacement'}),
+   previewBlob:async id=>{seen.push(id);return new Blob(['image']);},
+   createBitmap:async()=>({width:10,height:10}),
+   renderScene:async(_draft,{loadMaterialImage})=>{
+     await loadMaterialImage('a',node);
+     return {canvas:{toBlob:done=>done(new Blob(['cover']))}};
+   }
+ });
+ assert.deepEqual(seen,['image-original']);
+});

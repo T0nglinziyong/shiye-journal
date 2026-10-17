@@ -68,6 +68,15 @@ try{
     'A canvas tap dismisses the layer tree');
   assert.equal(await evaluate('!!document.querySelector(".fabric-selected-actions")'),true,
     'Dismissing the layer tree keeps the chosen canvas frame');
+  await click('[data-val="layers"]','.scene-layer-tree');
+  await command('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{...dismiss,id:17,force:.5}]});
+  assert.equal(await evaluate('!!document.querySelector(".fabric-selected-actions")'),true,
+    'Touch-down outside the layer tree cannot clear its selected canvas object');
+  await command('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+  await sleep(100);
+  assert.equal(await evaluate('!!document.querySelector(".swift-layer-popover")'),false);
+  assert.equal(await evaluate('!!document.querySelector(".fabric-selected-actions")'),true,
+    'The first touch only dismisses the layer tree and preserves its frame');
   await wait('.canvas-font-size-stepper input[aria-label="字号"]');
   await evaluate(`(()=>{const input=document.querySelector('.canvas-font-size-stepper input[aria-label="字号"]');
     input.focus();input.select();})()`);
@@ -122,6 +131,55 @@ try{
   await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,
     x:from.x+28,y:from.y+20,clickCount:1});
   assert.ok(Math.abs(during-before)>5,'Dragging blank paper did not pan the page: '+JSON.stringify({before,during}));
+  const clearAt=await evaluate(`(()=>{const r=document.querySelector('.upper-canvas').getBoundingClientRect();
+    return {x:r.left+r.width*.08,y:r.top+r.height*.08}})()`);
+  await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,clickCount:1,...clearAt});
+  await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,clickCount:1,...clearAt});
+  await sleep(80);
+  assert.equal(await evaluate('!!document.querySelector(".fabric-selected-actions")'),false);
+  const unselected=await evaluate(`(async()=>{const db=await new Promise(resolve=>{const q=indexedDB.open('shiye-pwa-full-v1');q.onsuccess=()=>resolve(q.result)});
+    const p=await new Promise(resolve=>{const q=db.transaction('projects').objectStore('projects').getAll();q.onsuccess=()=>resolve(q.result.at(-1))});db.close();
+    const node=p.drafts[0].layers.findLast(item=>item.type==='shape'),rect=document.querySelector('.upper-canvas').getBoundingClientRect();
+    return {x:rect.left+node.x*rect.width/p.drafts[0].canvas.width,
+      y:rect.top+node.y*rect.height/p.drafts[0].canvas.height,nodeX:node.x,nodeY:node.y};})()`);
+  const pageBeforeObjectDrag=await evaluate('document.querySelector("#canvas-page").getBoundingClientRect().left');
+  await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,clickCount:1,
+    x:unselected.x,y:unselected.y});
+  assert.equal(await evaluate('!!document.querySelector(".fabric-selected-actions")'),false,
+    'Pressing an unselected object cannot enter selection');
+  for(let step=1;step<=4;step++)await command('Input.dispatchMouseEvent',
+    {type:'mouseMoved',button:'left',buttons:1,x:unselected.x+step*7,y:unselected.y+step*2});
+  const pageDuringObjectDrag=await evaluate('document.querySelector("#canvas-page").getBoundingClientRect().left');
+  await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,
+    x:unselected.x+28,y:unselected.y+8,clickCount:1});
+  assert.ok(Math.abs(pageDuringObjectDrag-pageBeforeObjectDrag)>2,
+    'Dragging an unselected object must move the page immediately');
+  assert.equal(await evaluate('!!document.querySelector(".fabric-selected-actions")'),false,
+    'Releasing an unselected object drag cannot select it');
+  const still=await evaluate(`(async()=>{const db=await new Promise(resolve=>{const q=indexedDB.open('shiye-pwa-full-v1');q.onsuccess=()=>resolve(q.result)});
+    const p=await new Promise(resolve=>{const q=db.transaction('projects').objectStore('projects').getAll();q.onsuccess=()=>resolve(q.result.at(-1))});db.close();
+    const n=p.drafts[0].layers.findLast(item=>item.type==='shape');return {x:n.x,y:n.y};})()`);
+  assert.equal(still.x,unselected.nodeX);assert.equal(still.y,unselected.nodeY);
+  const touchTarget=await evaluate(`(()=>{const r=document.querySelector('.upper-canvas').getBoundingClientRect();
+    return {x:r.left+r.width*.5,y:r.top+r.height*.5}})()`);
+  const beforeFingerDrag=await evaluate('document.querySelector("#canvas-page").getBoundingClientRect().left');
+  await command('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{...touchTarget,id:19,force:.5}]});
+  assert.equal(await evaluate('!!document.querySelector(".fabric-selected-actions")'),false,
+    'Touching an unselected object cannot select it before release');
+  for(let step=1;step<=4;step++)await command('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[
+    {x:touchTarget.x-step*7,y:touchTarget.y,id:19,force:.5}]});
+  const duringFingerDrag=await evaluate('document.querySelector("#canvas-page").getBoundingClientRect().left');
+  assert.equal(await evaluate('!!document.querySelector(".fabric-selected-actions")'),false,
+    'Moving a finger over an unselected object cannot select it before release');
+  await command('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+  assert.ok(Math.abs(duringFingerDrag-beforeFingerDrag)>2,'Dragging an unselected object with a finger pans the page');
+  assert.equal(await evaluate('!!document.querySelector(".fabric-selected-actions")'),false,
+    'A finger drag over an unselected object cannot select it');
+  const shapeTap=await evaluate(`(()=>{const r=document.querySelector('.upper-canvas').getBoundingClientRect();
+    return {x:r.left+r.width*.5,y:r.top+r.height*.5}})()`);
+  await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,clickCount:1,...shapeTap});
+  await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,clickCount:1,...shapeTap});
+  await wait('.fabric-selected-actions');
   const actionBefore=await evaluate(`document.querySelector('.fabric-selected-actions')?.getBoundingClientRect().left`);
   const selectedFrom=await evaluate(`(()=>{const r=document.querySelector('.upper-canvas').getBoundingClientRect();
     return {x:r.left+r.width*.5,y:r.top+r.height*.5}})()`);

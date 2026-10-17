@@ -12,7 +12,7 @@ import {mergeConcurrentMetadata,stampMetadataEdit} from './sync-field-merge.js';
 import {recordTombstones} from './sync-tombstones.js';
 import {LARGE_PROJECT_BYTES,projectSummary,mergeProjectSummary,projectBlobText} from './project-document.js';
 import {hiddenAssetCopy,referencedAssetIDsInProjects} from './asset-retention.js';
-import {sceneMaterialIDs} from './scene-material-references.js';
+import {sceneMaterialIDs,sceneMaterialBlobIDs} from './scene-material-references.js';
 import {createCOSStore} from './cos-store.js';
 import {imageVariant,DISPLAY_TIERS,COVER_EDGE} from './image-variants.js';
 import {recoverImportOutbox} from './import-outbox-recovery.js';
@@ -1038,7 +1038,8 @@ async function encode(store,record,{makePreview=true}={}){
     const {__cloudBaseRevision,__cloudSessionId,__cloudBaseSceneFingerprint,__cloudBaseMetadata,
       __cloudDocumentHydrated,projectDocumentPath,projectDocumentProvider,
       projectDocumentEncoding,...persisted}=record;
-    record={...persisted,sceneAssetIDs:sceneMaterialIDs(persisted)};
+    record={...persisted,sceneAssetIDs:sceneMaterialIDs(persisted),
+      sceneBlobIDs:sceneMaterialBlobIDs(persisted)};
     const text=JSON.stringify(record);let blob=new Blob([text],{type:'application/json'}),encoding;
     const inline=blob.size<=LARGE_PROJECT_BYTES,provider=writeProvider();
     let path;

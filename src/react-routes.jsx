@@ -1318,14 +1318,10 @@ export function EditorPage({state,draft,editorEntry,asset,source,format,
         // between its children must not start page navigation.
         if(active?.sceneID===state.selected&&
           active.containsPoint(point))return true;
-        const selectedGroup=canvas.getObjects().find(object=>object.sceneID===state.selected&&
-          object.sceneType==='group'&&object.selectable!==false);
-        if(selectedGroup?.containsPoint(point)){
-          canvas.setActiveObject(selectedGroup);
-          return true;
-        }
-        return canvas.getObjects().some(object=>object.sceneID===state.selected&&
-          selectableFabricObjectAt(canvas,object,point,viewport));
+        // Only Fabric's currently active object may be dragged. React's
+        // selected ID can lag behind a canvas tap and must not revive an old
+        // selection when a finger starts panning over its former position.
+        return false;
       }}
       zoom={state.zoom} resetSignal={state.fabricFitRevision||0}
       initialPan={state.canvasViewports?.get(project.id+':'+draft.id)}

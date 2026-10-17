@@ -310,7 +310,13 @@ export function validateSceneExtensions(d){
        !(node.width>0&&node.height>0)||node.width>100000||node.height>100000||
        Math.abs(node.x)>100000||Math.abs(node.y)>100000||
        (node.rotation!==undefined&&!num(node.rotation,-3600,3600)))throw Error('图层尺寸、位置或旋转无效');
-     if(node.type==='material'&&(typeof node.assetID!=='string'||!node.assetID))throw Error('缺少真实素材引用');
+     if(node.type==='material'){
+       if(typeof node.assetID!=='string'||!node.assetID)throw Error('缺少真实素材引用');
+       if(node.sourceBlobId!==undefined&&(typeof node.sourceBlobId!=='string'||!node.sourceBlobId))
+         throw Error('作品素材图片版本无效');
+       if(node.sourceStaticPath!==undefined&&(typeof node.sourceStaticPath!=='string'||!node.sourceStaticPath))
+         throw Error('作品素材静态图片引用无效');
+     }
    }
   }
  }

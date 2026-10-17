@@ -28,7 +28,7 @@ const byID=(nodes,id)=>{
 const editable=(draft,id)=>{try{assertSceneEditable(draft,id);return true;}catch{return false;}};
 const materialAssetIDs=(nodes,found=new Set())=>{
   for(const node of nodes||[]){
-    if(node.type==='material'&&node.assetID)found.add(node.assetID);
+    if(node.type==='material'&&node.assetID)found.add(node.sourceBlobId||node.assetID);
     if(node.type==='group')materialAssetIDs(node.children,found);
   }
   return [...found].sort();

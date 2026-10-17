@@ -48,6 +48,7 @@ function ReactPopover({anchor,title,className='',width=360,height=440,picker=fal
           // canvas selection event and lose the layer chosen in the tree.
           event.preventDefault();event.stopImmediatePropagation();
           const pointerID=event.pointerId;
+          const dismissPoint={x:event.clientX,y:event.clientY};
           let timer;
           const finish=()=>{clearTimeout(timer);
             removeEventListener('pointerup',swallow,true);
@@ -58,7 +59,13 @@ function ReactPopover({anchor,title,className='',width=360,height=440,picker=fal
           const swallow=next=>{if(next.pointerId!==pointerID)return;
             next.preventDefault();next.stopImmediatePropagation();
             if(next.type==='pointercancel')finish();};
-          const swallowClick=next=>{next.preventDefault();next.stopImmediatePropagation();finish();};
+          const swallowClick=next=>{
+            // A touch may never synthesize a click. Do not consume a later
+            // toolbar click just because the layer dismissal left this guard.
+            const sameTap=Math.hypot(next.clientX-dismissPoint.x,next.clientY-dismissPoint.y)<24;
+            if(sameTap){next.preventDefault();next.stopImmediatePropagation();}
+            finish();
+          };
           addEventListener('pointerup',swallow,true);
           addEventListener('pointercancel',swallow,true);
           addEventListener('pointerdown',nextGesture,true);

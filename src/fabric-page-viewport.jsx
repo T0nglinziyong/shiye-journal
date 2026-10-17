@@ -13,6 +13,7 @@ export function FabricPageViewport({draft,width,height,zoom=1,initialPan,onViewp
     page.style.transformOrigin='center center';page.style.touchAction='none';
     const active=new Map(),starts=new Map();
     let cancelingInk=false;
+    let completedTouchPan=null;
     let pose={scale:zoom,x:initialPan?.x||0,y:initialPan?.y||0};
     const paint=next=>{
       const w=host.clientWidth,h=host.clientHeight,pw=page.offsetWidth,ph=page.offsetHeight;
@@ -87,18 +88,84 @@ export function FabricPageViewport({draft,width,height,zoom=1,initialPan,onViewp
       active.delete(event.pointerId);starts.delete(event.pointerId);
       if(!p?.navigate)return;
       stop(event);
+      if(event.pointerType==='touch'&&start?.moved)
+        completedTouchPan={x:event.clientX,y:event.clientY,time:performance.now()};
       if(start&&!start.moved&&event.type==='pointerup'&&!active.size&&event.button!==1)
         latest.current.onCanvasTap?.(event);
     };
+    const click=event=>{
+      if(completedTouchPan&&performance.now()-completedTouchPan.time<650&&
+        Math.hypot(event.clientX-completedTouchPan.x,event.clientY-completedTouchPan.y)<30){
+        stop(event);completedTouchPan=null;
+      }
+    };
     const wheel=event=>{if(!event.ctrlKey&&!event.metaKey)return;stop(event);
       const bounds=host.getBoundingClientRect();zoomAt(pose.scale*Math.exp(-event.deltaY*.002),event.clientX-bounds.left,event.clientY-bounds.top);};
+    // Some WebKit and embedded browsers dispatch TouchEvents without the
+    // corresponding PointerEvents. Keep the release-to-select contract there
+    // instead of letting Fabric select and move an unselected object on touch.
+    const fallbackTouches=new Map();let fallbackMoved=false;
+    const pointerNavigates=()=>[...active.values()].some(point=>point.navigate);
+    const touchStart=event=>{
+      // Fabric listens for both pointer and touch events. Suppress its touch
+      // path whenever the pointer path owns this page gesture.
+      if(active.size){if(pointerNavigates())stop(event);return;}
+      if(latest.current.tool!=='select')return;
+      const first=event.changedTouches[0];if(!first)return;
+      if(!fallbackTouches.size&&latest.current.canTransform?.({
+        clientX:first.clientX,clientY:first.clientY,pointerType:'touch',button:0}))return;
+      for(const touch of event.changedTouches)
+        fallbackTouches.set(touch.identifier,{x:touch.clientX,y:touch.clientY});
+      if(fallbackTouches.size>1)fallbackMoved=true;
+      stop(event);
+    };
+    const touchMove=event=>{
+      if(active.size){if(pointerNavigates())stop(event);return;}
+      if(!fallbackTouches.size)return;
+      const before=[...fallbackTouches.values()];
+      for(const touch of event.changedTouches)if(fallbackTouches.has(touch.identifier))
+        fallbackTouches.set(touch.identifier,{x:touch.clientX,y:touch.clientY});
+      const after=[...fallbackTouches.values()];
+      if(after.length===1){
+        const dx=after[0].x-before[0].x,dy=after[0].y-before[0].y;
+        if(Math.hypot(dx,dy)>0){fallbackMoved=true;paint({...pose,x:pose.x+dx/pose.scale,y:pose.y+dy/pose.scale});}
+      }else if(after.length>=2){
+        const distance=points=>Math.hypot(points[0].x-points[1].x,points[0].y-points[1].y);
+        const scale=Math.max(1,Math.min(4,pose.scale*distance(after)/Math.max(1,distance(before))));
+        const a={x:(before[0].x+before[1].x)/2,y:(before[0].y+before[1].y)/2};
+        const b={x:(after[0].x+after[1].x)/2,y:(after[0].y+after[1].y)/2};
+        paint({scale,x:pose.x+(b.x-a.x)/scale,y:pose.y+(b.y-a.y)/scale});
+        fallbackMoved=true;
+      }
+      stop(event);
+    };
+    const touchEnd=event=>{
+      if(active.size){if(pointerNavigates())stop(event);return;}
+      if(!fallbackTouches.size)return;
+      const touch=event.changedTouches[0];
+      for(const item of event.changedTouches)fallbackTouches.delete(item.identifier);
+      stop(event);
+      if(!fallbackTouches.size){
+        if(!fallbackMoved&&event.type==='touchend'&&touch)
+          latest.current.onCanvasTap?.({clientX:touch.clientX,clientY:touch.clientY,pointerType:'touch',button:0});
+        fallbackMoved=false;
+      }
+    };
     const observer=new ResizeObserver(()=>paint(pose));observer.observe(host);observer.observe(page);
     host.addEventListener('pointerdown',down,true);host.addEventListener('pointermove',move,true);
     host.addEventListener('pointerup',end,true);host.addEventListener('pointercancel',end,true);
+    host.addEventListener('click',click,true);
+    host.addEventListener('touchstart',touchStart,{capture:true,passive:false});
+    host.addEventListener('touchmove',touchMove,{capture:true,passive:false});
+    host.addEventListener('touchend',touchEnd,{capture:true,passive:false});
+    host.addEventListener('touchcancel',touchEnd,{capture:true,passive:false});
     host.addEventListener('wheel',wheel,{passive:false,capture:true});paint(pose);
     return ()=>{observer.disconnect();controller.current=null;
       host.removeEventListener('pointerdown',down,true);host.removeEventListener('pointermove',move,true);
       host.removeEventListener('pointerup',end,true);host.removeEventListener('pointercancel',end,true);
+      host.removeEventListener('click',click,true);
+      host.removeEventListener('touchstart',touchStart,true);host.removeEventListener('touchmove',touchMove,true);
+      host.removeEventListener('touchend',touchEnd,true);host.removeEventListener('touchcancel',touchEnd,true);
       host.removeEventListener('wheel',wheel,true);};
   },[draft.id]);
   useLayoutEffect(()=>{controller.current?.zoom(zoom);},[zoom]);

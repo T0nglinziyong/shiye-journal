@@ -145,6 +145,7 @@ try{
   assert.ok(await evaluate('!!document.querySelector(".fabric-selected-actions[aria-label=组合操作]")'),
     'The group editing frame remains selected after a touch drag');
   await touch('[data-val="layers"]');
+  await wait('.scene-layer-node[aria-expanded] .scene-layer-expand');
   await touch('.scene-layer-node[aria-expanded] .scene-layer-expand');
   assert.equal(await evaluate('document.querySelectorAll(".scene-layer-children .scene-layer-node").length'),0,
     'Touching the group arrow collapses the nested layers');

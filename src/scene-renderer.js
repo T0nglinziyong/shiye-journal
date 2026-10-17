@@ -33,8 +33,9 @@ export async function renderSceneCanvas(draft,{scale=1,loadMaterialImage,createC
  const canvas=createCanvas();canvas.width=width;canvas.height=height;
  const ctx=canvas.getContext('2d');if(!ctx)throw Error('无法创建画布');ctx.scale(scale,scale);drawPaper(ctx,draft);
  const decoded=new Map(),shapes=new Map(),drawMaterial=async(item,target)=>{
-   if(!decoded.has(item.assetID))decoded.set(item.assetID,Promise.resolve(loadMaterialImage?.(item.assetID,item)));
-   const image=await decoded.get(item.assetID);if(!image)throw Error('缺少素材图像：'+item.assetID);
+   const sourceKey=item.sourceBlobId||item.sourceStaticPath||item.assetID;
+   if(!decoded.has(sourceKey))decoded.set(sourceKey,Promise.resolve(loadMaterialImage?.(item.assetID,item)));
+   const image=await decoded.get(sourceKey);if(!image)throw Error('缺少素材图像：'+item.assetID);
    const w=image.naturalWidth||image.width,h=image.naturalHeight||image.height;if(!(w>0&&h>0))throw Error('素材图像尺寸无效');
    target.scale(item.isFlippedHorizontally?-1:1,1);
    const style=sceneLayerStyle(item);if(style.mask)applyVectorMask(target,style.mask,item.width,item.height);

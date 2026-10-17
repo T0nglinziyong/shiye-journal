@@ -26,14 +26,18 @@ export async function renderWorkCoverSnapshot(project,{
     const result=await renderScene(draft,{
       scale:480/Math.max(draft.canvas.width,draft.canvas.height),
       waitForFonts:true,
-      loadMaterialImage:async id=>{
-        if(!bitmaps.has(id))bitmaps.set(id,(async()=>{
+      loadMaterialImage:async(id,node)=>{
+        const key=node?.sourceBlobId||node?.sourceStaticPath||id;
+        if(!bitmaps.has(key))bitmaps.set(key,(async()=>{
           try{
             const material=await resolveAsset(id);
-            if(!material)throw Error('作品引用的素材不存在：'+id);
-            if(material.staticPath)return decodeStatic(material.staticPath);
-            if(!material.blobId)throw Error('作品素材缺少可读取图片：'+id);
-            const small=await previewBlob(material.blobId,480);
+            if(!material&&!node?.sourceBlobId&&!node?.sourceStaticPath)
+              throw Error('作品引用的素材不存在：'+id);
+            if(node?.sourceStaticPath||material?.staticPath&&!node?.sourceBlobId)
+              return decodeStatic(node?.sourceStaticPath||material.staticPath);
+            const blobId=node?.sourceBlobId||material?.blobId;
+            if(!blobId)throw Error('作品素材缺少可读取图片：'+id);
+            const small=await previewBlob(blobId,480);
             if(!(small instanceof Blob)||!small.size)throw Error('480px 素材封面尚未同步：'+id);
             return createBitmap(small);
           }catch{
@@ -42,7 +46,7 @@ export async function renderWorkCoverSnapshot(project,{
             degraded=true;return createMissingImage(id);
           }
         })());
-        return bitmaps.get(id);
+        return bitmaps.get(key);
       }
     });
     const blob=await new Promise((resolve,reject)=>result.canvas.toBlob(
