@@ -46,3 +46,13 @@ test('Vercel uploads every server module imported by the COS function',()=>{
     assert.ok(readFileSync(new URL('../'+path,import.meta.url)).length>0,path+' must exist');
   }
 });
+
+test('Vercel uploads the sync commit relay and its server dependencies',()=>{
+  const ignore=readFileSync(new URL('../.vercelignore',import.meta.url),'utf8');
+  const allow=new Set(ignore.split(/\r?\n/).map(line=>line.trim()).filter(line=>line.startsWith('!')));
+  for(const path of ['api/sync-commit.js','server/sync-commit-relay.mjs',
+    'server/trusted-origins.mjs']){
+    assert.ok(allow.has('!'+path),path+' must be uploaded for Vercel');
+    assert.ok(readFileSync(new URL('../'+path,import.meta.url)).length>0);
+  }
+});

@@ -11,10 +11,12 @@
 !api
 api/*
 !api/cos.js
+!api/sync-commit.js
 !server
 server/*
 !server/cos-tickets.mjs
 !server/trusted-origins.mjs
+!server/sync-commit-relay.mjs
 !public
 !public/**
 !scripts
