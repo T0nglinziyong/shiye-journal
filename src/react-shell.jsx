@@ -74,7 +74,27 @@ function AppShell(){
 
 let root;
 let routeRoot;
-let routeRootKey=null;
+let retainedWorksRoot=null;
+let retainedWorksHost=null;
+let retainedWorksParking=null;
+let retainedWorksScope=null;
+let retainedWorksContent=null;
+let retainedWorksKey=null;
+
+function retainedWorksTree(mode){return <React.Activity mode={mode}>
+  <RegionBoundary key={retainedWorksKey} route="works"
+    onBack={()=>shellActions.navigate?.('library')}>{retainedWorksContent}</RegionBoundary>
+</React.Activity>;}
+
+function ensureRetainedWorks(){
+  if(retainedWorksRoot)return;
+  retainedWorksHost=document.createElement('div');
+  retainedWorksHost.className='shiye-retained-works-host';
+  retainedWorksHost.style.display='contents';
+  retainedWorksParking=document.createDocumentFragment();
+  retainedWorksParking.append(retainedWorksHost);
+  retainedWorksRoot=createRoot(retainedWorksHost);
+}
 
 export const unavailableRoute=()=>
   <section className="empty" role="alert"><strong>页面暂不可用</strong><p>请返回素材库后重试。</p></section>;
@@ -91,14 +111,33 @@ export function mountReactShell(){
   </section>));
 }
 
-export function renderReactPage(content,{preserveKey=null}={}){
+export function renderReactPage(content,{preserveKey=null,retainWorks=false,accountScope=null}={}){
   if(!root)mountReactShell();
   if(!React.isValidElement(content))throw Error('页面必须由 React 组件渲染');
-  if(routeRoot&&(!preserveKey||routeRootKey!==preserveKey)){
-    flushSync(()=>routeRoot.unmount());routeRoot=null;routeRootKey=null;
-  }
   const view=document.querySelector('#view');
-  if(!routeRoot){view.replaceChildren();routeRoot=createRoot(view);routeRootKey=preserveKey;}
+  // The route root owns ordinary pages. Works owns a second root whose host
+  // moves into a detached fragment while another page is active. This keeps
+  // its decoded cards alive without exposing hidden controls to #view queries.
+  if(retainedWorksScope!==accountScope){
+    if(retainedWorksRoot){
+      retainedWorksParking.append(retainedWorksHost);
+      flushSync(()=>retainedWorksRoot.render(null));
+    }
+    retainedWorksContent=null;retainedWorksKey=null;
+    retainedWorksScope=accountScope;
+  }
+  if(retainWorks){
+    ensureRetainedWorks();
+    flushSync(()=>routeRoot.render(null));
+    view.append(retainedWorksHost);
+    retainedWorksContent=content;retainedWorksKey=preserveKey;
+    flushSync(()=>retainedWorksRoot.render(retainedWorksTree('visible')));
+    return;
+  }
+  if(retainedWorksRoot){
+    if(retainedWorksContent)flushSync(()=>retainedWorksRoot.render(retainedWorksTree('hidden')));
+    retainedWorksParking.append(retainedWorksHost);
+  }
   flushSync(()=>routeRoot.render(<RegionBoundary key={preserveKey||content.type?.name||'page'}
     route={currentShellState.route} onBack={()=>shellActions.navigate?.('library')}>{content}</RegionBoundary>));
 }

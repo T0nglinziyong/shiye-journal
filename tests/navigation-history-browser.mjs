@@ -59,6 +59,13 @@ try{
   assert.ok(Math.abs(await browser.evaluate('scrollY')-seriesPosition)<12,
     'Returning from series detail restores the previous series list position');
   await browser.click('[data-route="works"]','.works-grid');
+  await browser.evaluate('window.__retainedWorkCard=document.querySelector("[data-id=navigation-work-0][data-act=open-project]")');
+  await browser.click('[data-route="library"]','.series-grid');
+  assert.equal(await browser.evaluate('document.querySelector(".works-page")'),null,
+    'parked Works controls must not remain in the active page');
+  await browser.click('[data-route="works"]','.works-grid');
+  assert.equal(await browser.evaluate('document.querySelector("[data-id=navigation-work-0][data-act=open-project]")===window.__retainedWorkCard'),true,
+    'returning to Works must reuse the same card node');
   await browser.evaluate(`(()=>{const input=document.querySelector('#work-search');
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'');
     input.dispatchEvent(new Event('input',{bubbles:true}));})()`);

@@ -4,6 +4,7 @@ import {readFile} from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import {stubCanvas} from './dom-canvas-stub.mjs';
 import {builtApp,waitFor} from './built-app.mjs';
+import {project} from '../src/domain.js';
 
 const root=new URL('../dist/',import.meta.url);
 const html=await readFile(new URL('index.html',root),'utf8');
@@ -22,9 +23,14 @@ opened.onupgradeneeded=()=>{
   for(const store of ['assets','blobs','series','projects','meta','trash'])opened.result.createObjectStore(store,{keyPath:'id'});
 };
 const database=await new Promise((resolve,reject)=>{opened.onsuccess=()=>resolve(opened.result);opened.onerror=()=>reject(opened.error);});
-const tx=database.transaction(['assets','series'],'readwrite');
+const tx=database.transaction(['assets','series','projects'],'readwrite');
 tx.objectStore('series').put({id:'series-1',title:'测试系列'});
 const image='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"/>';
+const work=project('缓存作品');
+work.isDraft=false;
+work.coverStaticPath=image;
+work.coverBaselineUpdatedAt=work.updatedAt;
+tx.objectStore('projects').put(work);
 for(let index=1;index<=45;index++)tx.objectStore('assets').put({
   id:`asset-${index}`,blobId:`image-${index}`,title:`素材 ${index}`,
   staticPath:image,seriesID:'series-1',kind:'sticker',reviewStatus:'ready',
@@ -86,6 +92,14 @@ window.document.querySelector('.match-direction-choice').value='美式拼贴';
 window.document.querySelector('.match-direction-choice').dispatchEvent(new window.Event('change',{bubbles:true}));
 window.document.querySelector('.main-nav [data-route="works"]').click();
 await waitFor(()=>!!window.document.querySelector('.works-page'));
+const retainedWorkCard=window.document.querySelector(`.works-grid [data-id="${work.id}"]`);
+assert.ok(retainedWorkCard);
+window.document.querySelector('.main-nav [data-route="library"]').click();
+await waitFor(()=>!!window.document.querySelector('.asset-grid'));
+window.document.querySelector('.main-nav [data-route="works"]').click();
+await waitFor(()=>!!window.document.querySelector('.works-page'));
+assert.equal(window.document.querySelector(`.works-grid [data-id="${work.id}"]`),retainedWorkCard,
+  'returning to Works must retain existing card and decoded cover nodes');
 window.document.querySelector('.main-nav [data-route="library"]').click();
 await waitFor(()=>!!window.document.querySelector('.asset-grid'));
 assert.equal(window.document.querySelector('#view > .catalog-toolbar')?.parentElement?.id,'view');

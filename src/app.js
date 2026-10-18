@@ -816,7 +816,8 @@ function render(){
     state.route==='assetDetail'?state.detailAssetID:'',
     state.route==='projectPreview'?state.previewProjectID:''].join(':');
   renderReactPage(createElement(AssetOrganizationContext.Provider,{value:assetOrganization},reactPage||unavailableRoute()),
-    {preserveKey:routeIdentity});
+    {preserveKey:routeIdentity,retainWorks:state.route==='works'&&
+      !['trash','templates'].includes(parity.workTab),accountScope:state.accountId||'browser'});
   view.dataset.renderedRoute=state.route;
   view.dataset.renderedImportStep=state.route==='import'?state.importStep:'';
   view.dataset.renderedManualBox=state.route==='import'?String(!!state.showManualBox):'';
