@@ -10,6 +10,8 @@ const constantTimeEqual=(a,b)=>{
 };
 export default async function handler(req,res){
  const env=process.env;
+ if(env.VITE_SHIYE_CLOUDBASE_ENV_ID)
+   return reply(res,200,{checked:0,results:[],skipped:'cloudbase-migration'});
  if(env.VERCEL_GIT_COMMIT_REF!=='test'&&env.SHIYE_ACCOUNT_GC_ENABLED!=='true')
    return reply(res,403,{error:'该部署未启用后台垃圾回收'});
  if(!['GET','POST'].includes(req.method))return reply(res,405,{error:'method not allowed'});

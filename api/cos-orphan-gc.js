@@ -15,6 +15,8 @@ const send=(res,status,body)=>{res.setHeader('Cache-Control','private, no-store'
 export default async function handler(req,res){
   if(req.method!=='GET')return send(res,405,{error:'仅支持定时任务'});
   const env=process.env;
+  if(env.VITE_SHIYE_CLOUDBASE_ENV_ID)
+    return send(res,200,{scannedAccounts:0,actions:0,skipped:'cloudbase-migration'});
   if(!env.CRON_SECRET||!safeEqual(req.headers.authorization,'Bearer '+env.CRON_SECRET))
     return send(res,401,{error:'定时任务未授权'});
   if(env.VERCEL_GIT_COMMIT_REF!=='test'&&env.SHIYE_COS_ORPHAN_GC_PRODUCTION!=='true')

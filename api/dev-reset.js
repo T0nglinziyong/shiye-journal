@@ -6,6 +6,8 @@ export default async function handler(req,res){
   res.setHeader('Cache-Control','private, no-store');
   if(req.method!=='POST')return res.status(405).json({error:'只允许 POST'});
   const env=process.env;
+  if(env.VITE_SHIYE_CLOUDBASE_ENV_ID)
+    return res.status(503).json({error:'CloudBase 开发清理尚未配置，未改动任何数据'});
   const enabled=env.SHIYE_DEV_CLEANUP_ENABLED==='true'&&
     env.VERCEL_ENV==='preview'&&
     !!(env.SHIYE_COS_SECRET_ID&&env.SHIYE_COS_SECRET_KEY&&env.SHIYE_COS_BUCKET&&env.SHIYE_COS_REGION);

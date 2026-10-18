@@ -1,5 +1,6 @@
 import React,{useEffect,useLayoutEffect,useRef,useState} from 'react';
 import {createPortal,flushSync} from 'react-dom';
+import {cloudbaseEnabled} from './cloud-session.js';
 import {AI_PROVIDERS,supportsVision} from './ai-settings.js';
 import {seriesContentsModel} from './series-contents.js';
 import {libraryPageData} from './library-page-data.js';
@@ -1668,7 +1669,7 @@ export function SettingsDataPage({state,cloudEnabled,storage,onAction}){
     </div></SettingsGroup>
     {cloudEnabled?<>
       <SettingsGroup title="私人云端资料">
-        <p id="storage-location">{import.meta.env?.VITE_SHIYE_OBJECT_STORAGE==='cos'?'当前数据源：Supabase 登录与元数据 + 腾讯 COS 私有图片；本机仅保留账号隔离缓存与待同步修改':'当前数据源：Supabase 私有云端；本机仅保留账号隔离缓存与待同步修改'}</p><p>{counts}</p>
+        <p id="storage-location">{import.meta.env?.VITE_SHIYE_CLOUDBASE_ENV_ID?'当前数据源：腾讯云 CloudBase 登录与元数据 + 腾讯 COS 私有图片；本机保留账号隔离缓存与待同步修改':import.meta.env?.VITE_SHIYE_OBJECT_STORAGE==='cos'?'当前数据源：Supabase 登录与元数据 + 腾讯 COS 私有图片；本机仅保留账号隔离缓存与待同步修改':'当前数据源：Supabase 私有云端；本机仅保留账号隔离缓存与待同步修改'}</p><p>{counts}</p>
         <p>登录验证后显示本机缓存，后台检查云端更新。原图和完整作品按需读取；修改先暂存，后台同步。云端失败不会改用另一份资料。</p>
       </SettingsGroup>
       {backup}
@@ -1681,10 +1682,10 @@ export function SettingsDataPage({state,cloudEnabled,storage,onAction}){
         <p>同一画布在两台设备同时修改时，会在应用最后编辑时间规则之前保留双方原稿。本机留有记录时可将旧版本另存为新作品。</p>
         {button('recover-pre-conflict','查看与恢复冲突前画布')}
       </SettingsGroup>
-      <SettingsGroup title="危险操作 · 清除所有数据">
+      {!cloudbaseEnabled?<SettingsGroup title="危险操作 · 清除所有数据">
         <p>同时永久删除当前账号的云端作品、素材、系列、私有图片和最近删除，并删除此设备的本地缓存、待同步队列和设置。保留登录账号本身；其他设备原有的离线缓存须在升级后重新检查。无法恢复。</p>
         {button('reset-all-account-data','彻底清空本账号本机与云端数据','btn danger')}
-      </SettingsGroup>
+      </SettingsGroup>:null}
     </>:state.selfHosted?<>
       <SettingsGroup title="唯一数据源 · 4090 服务器">
         <p id="storage-location">{location.origin}</p><p>{counts}</p>

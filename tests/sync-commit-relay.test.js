@@ -27,6 +27,22 @@ test('relay forwards only a v3 commit with the user JWT and public key',async()=
   assert.equal(JSON.parse(calls[0].init.body).operation_id,payload.operation_id);
 });
 
+test('CloudBase relay uses the PG RPC endpoint with the user JWT',async()=>{
+  const calls=[],handler=createSyncCommitRelay({env:{
+    VITE_SHIYE_CLOUDBASE_ENV_ID:'shiye-pg-test-d1gg723f7fb356ccc',
+    VITE_SHIYE_CLOUDBASE_PUBLISHABLE_KEY:'public-key'},
+  fetcher:async(url,init)=>{calls.push({url,init});return {status:200,text:async()=>
+    '{"status":"applied","revision":1}'};}});
+  const res=response();await handler({method:'POST',headers:{
+    origin:'https://shiye-journal-test.vercel.app',
+    authorization:'Bearer user.jwt.token'},body:payload},res);
+  assert.equal(res.code,200);
+  assert.equal(calls[0].url.toString(),
+    'https://shiye-pg-test-d1gg723f7fb356ccc.api.tcloudbasegateway.com/v1/rdb/rest/rpc/shiye_commit_v3_guarded');
+  assert.equal(calls[0].init.headers.Authorization,'Bearer user.jwt.token');
+  assert.equal(calls[0].init.headers.apikey,undefined);
+});
+
 test('relay rejects foreign origins and malformed commits without forwarding',async()=>{
   let calls=0,handler=createSyncCommitRelay({fetcher:async()=>{calls++;}});
   for(const [origin,body,code] of [

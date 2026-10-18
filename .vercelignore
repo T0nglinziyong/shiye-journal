@@ -15,6 +15,7 @@ api/*
 !server
 server/*
 !server/cos-tickets.mjs
+!server/cloudbase-user.mjs
 !server/trusted-origins.mjs
 !server/sync-commit-relay.mjs
 !public

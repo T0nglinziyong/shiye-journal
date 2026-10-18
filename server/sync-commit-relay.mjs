@@ -22,14 +22,19 @@ export function createSyncCommitRelay({env=process.env,fetcher=fetch}={}){
       body.sync_protocol_version!==3)return reply(400,{message:'Invalid sync commit'});
     const payload=JSON.stringify(body);
     if(Buffer.byteLength(payload)>3_500_000)return reply(413,{message:'Sync commit too large'});
-    const url=env.VITE_SHIYE_SUPABASE_URL,key=env.VITE_SHIYE_SUPABASE_PUBLISHABLE_KEY;
+    const cloudbaseEnv=env.VITE_SHIYE_CLOUDBASE_ENV_ID;
+    const url=cloudbaseEnv?`https://${cloudbaseEnv}.api.tcloudbasegateway.com`:
+      env.VITE_SHIYE_SUPABASE_URL;
+    const key=cloudbaseEnv?env.VITE_SHIYE_CLOUDBASE_PUBLISHABLE_KEY:
+      env.VITE_SHIYE_SUPABASE_PUBLISHABLE_KEY;
     if(!url||!key)return reply(503,{message:'Sync relay unavailable'});
-    let target;try{target=new URL('/rest/v1/rpc/shiye_commit_v3_guarded',url);
+    let target;try{target=new URL(cloudbaseEnv?'/v1/rdb/rest/rpc/shiye_commit_v3_guarded':
+      '/rest/v1/rpc/shiye_commit_v3_guarded',url);
       if(target.protocol!=='https:')throw Error('invalid target');
     }catch{return reply(503,{message:'Sync relay unavailable'});}
     try{
       const upstream=await fetcher(target,{method:'POST',headers:{
-        apikey:key,Authorization:authorization,'Content-Type':'application/json',
+        ...(cloudbaseEnv?{}:{apikey:key}),Authorization:authorization,'Content-Type':'application/json',
         Prefer:'return=representation'
       },body:payload,signal:AbortSignal.timeout(25000)});
       const text=await upstream.text();

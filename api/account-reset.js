@@ -8,6 +8,8 @@ const out=(res,code,body)=>{res.setHeader('Cache-Control','private, no-store');r
 export default async function handler(req,res){
  if(req.method!=='POST')return out(res,405,{error:'只允许 POST'});
  const env=process.env;
+ if(env.VITE_SHIYE_CLOUDBASE_ENV_ID)
+   return out(res,503,{error:'CloudBase 账号清理尚未配置，未改动任何数据'});
  if(env.VERCEL_GIT_COMMIT_REF!=='test'&&env.SHIYE_ACCOUNT_RESET_ENABLED!=='true')
    return out(res,403,{error:'当前部署未启用账号清理'});
  const token=/^Bearer ([A-Za-z0-9._-]{20,4096})$/.exec(req.headers.authorization||'')?.[1];

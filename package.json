@@ -32,6 +32,7 @@
     "vite": "^6.3.5"
   },
   "dependencies": {
+    "@cloudbase/js-sdk": "3.10.2",
     "@fontsource/ma-shan-zheng": "5.3.1",
     "@jsquash/jpeg": "^1.6.0",
     "@noble/hashes": "2.0.1",

@@ -2,6 +2,7 @@ import React,{useEffect,useRef,useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {createPortal,flushSync} from 'react-dom';
 import {AdminViewDialog,StorageUsageDialog} from './react-admin-dialog.jsx';
+import {cloudbaseEnabled} from './cloud-session.js';
 
 let loginRoot;
 function LoginGate({status,visible,onLogin,onRetry,retryReady=false}){
@@ -57,7 +58,9 @@ function PasswordDialog({client,onClose}){
     if(next===old){setStatus('新密码不能与当前密码相同');return;}
     setBusy(true);setStatus('正在核对当前密码…');
     try{
-      const changed=await client.auth.updateUser({password:next,currentPassword:old});
+      const changed=cloudbaseEnabled?
+        await client.auth.resetPasswordForOld({old_password:old,new_password:next}):
+        await client.auth.updateUser({password:next,currentPassword:old});
       if(changed.error)throw changed.error;
       form.reset();setStatus('密码已更新');setTimeout(onClose,900);
     }catch(error){setStatus(error.message||'修改失败，请稍后重试');}
@@ -130,7 +133,7 @@ export function CloudAccountMenu({account}){
       aria-controls="cloud-account-menu" onClick={()=>setOpen(value=>!value)}>账号</button>
     <div id="cloud-account-menu" className="cloud-account-menu" hidden={!open}>
       <small data-account-name="">{account.username} · 私人云端资料</small>
-      {account.isAdmin?<><button type="button" className="btn" data-create-account
+      {account.isAdmin&&!cloudbaseEnabled?<><button type="button" className="btn" data-create-account
         onClick={()=>choose(()=>setDialog('manage'))}>新建账号</button>
         <button type="button" className="btn" data-admin-view
           onClick={()=>choose(()=>setDialog('admin'))}>查看其他用户（只读）</button>

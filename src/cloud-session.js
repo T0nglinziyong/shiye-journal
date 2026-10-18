@@ -2,8 +2,28 @@ import {createClient} from '@supabase/supabase-js';
 
 const url=import.meta.env?.VITE_SHIYE_SUPABASE_URL;
 const key=import.meta.env?.VITE_SHIYE_SUPABASE_PUBLISHABLE_KEY;
-export const cloudEnabled=!!url;
+const cloudbaseEnv=import.meta.env?.VITE_SHIYE_CLOUDBASE_ENV_ID;
+const cloudbaseKey=import.meta.env?.VITE_SHIYE_CLOUDBASE_PUBLISHABLE_KEY;
+export const cloudbaseEnabled=!!cloudbaseEnv;
+export const cloudEnabled=cloudbaseEnabled||!!url;
 let client;
+let preparing;
+export async function prepareCloudClient(){
+  if(!cloudbaseEnabled||client)return;
+  if(!cloudbaseKey)throw Error('CloudBase 浏览器公钥未配置；未切换到本机存储');
+  preparing??=(async()=>{
+    const [{default:cloudbase},{registerAuth},{registerMySQL}]=await Promise.all([
+      import('@cloudbase/js-sdk/app'),import('@cloudbase/js-sdk/auth'),
+      import('@cloudbase/js-sdk/mysql')]);
+    registerAuth(cloudbase);
+    registerMySQL(cloudbase);
+    const app=cloudbase.init({env:cloudbaseEnv,accessKey:cloudbaseKey});
+    const db=app.rdb();
+    const auth=typeof app.auth==='function'?app.auth():app.auth;
+    client={auth,from:table=>db.from(table),rpc:(name,args)=>db.rpc(name,args)};
+  })();
+  try{await preparing;}finally{preparing=null;}
+}
 export async function fetchCloudRequest(input,init,{fetcher=fetch,commitTimeoutMs=20000,
   relayTimeoutMs=25000}={}){
   const path=input instanceof Request?input.url:String(input);
@@ -37,6 +57,10 @@ async function authStep(promise,message){
   finally{clearTimeout(timer);}
 }
 export function cloudClient(){
+  if(cloudbaseEnabled){
+    if(!client)throw Error('CloudBase 尚未初始化；请重试登录');
+    return client;
+  }
   if(!url||!key)throw Error('云端配置不完整；未切换到本机存储');
   return client??=createClient(url,key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false},global:{fetch:fetchCloudRequest}});
 }

@@ -17,6 +17,8 @@ export default async function handler(req,res){
   const send=(status,body)=>{res.setHeader('Cache-Control','private, no-store');res.setHeader('Vary','Origin');return res.status(status).json(body);};
   if(req.method!=='GET')return send(405,{error:'仅支持查询'});
   const env=process.env;
+  if(env.VITE_SHIYE_CLOUDBASE_ENV_ID)
+    return send(503,{error:'CloudBase 容量统计尚未配置'});
   const origins=trustedOrigins(env);
   if(req.headers.origin&&!origins.includes(req.headers.origin))return send(403,{error:'来源不允许'});
   const token=/^Bearer ([A-Za-z0-9._-]{20,4096})$/.exec(req.headers.authorization||'')?.[1];
