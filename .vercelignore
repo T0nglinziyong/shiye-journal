@@ -11,6 +11,7 @@
 !api
 api/*
 !api/cos.js
+!api/cos-cors-once.js
 !api/sync-commit.js
 !server
 server/*
