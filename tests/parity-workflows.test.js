@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {seriesCovers,parseTags,searchableSeries,seriesMembers,usedAssetIDs,withUsageStatus,projectAssetIDs,markProjectAssetsUsed} from '../src/library-model.js';
+import {queryAssets} from '../src/asset-query.js';
 import {canvasObjects,objectCorners,selectPolygon,moveSelection,clampCanvasPosition} from '../src/canvas-selection.js';
 import {materialPrintPlacements,pagePDF} from '../src/pdf-export.js';
 import {candidateMetadata,importPaperDimensions,saveImportBatch} from '../src/import-save.js';
@@ -32,7 +33,7 @@ test('series contents independently filter tags, organization and explicit usage
   assert.deepEqual(seriesMembers('s',assets,{query:'植物'}).map(a=>a.id),['a']);
   assert.deepEqual(seriesMembers('s',assets,{status:'unready'}).map(a=>a.id),['b']);
   assert.deepEqual(seriesMembers('s',assets,{status:'used'}).map(a=>a.id),['a']);
-  assert.deepEqual(seriesMembers('s',assets,{status:'unused'}).map(a=>a.id),['b']);
+  assert.deepEqual(seriesMembers('s',assets,{status:'unused'}).map(a=>a.id),[]);
   assert.deepEqual(seriesMembers('s',assets,{status:'favorite'}).map(a=>a.id),['a']);
   assert.deepEqual(seriesMembers('s',assets,{sort:'name',ascending:true}).map(a=>a.id),['a','b']);
   assert.equal(seriesMembers('s',assets,{status:'outside'}).length,0);
@@ -49,7 +50,7 @@ test('marking a work used explicitly marks its placed materials used and ignores
   const used=withUsageStatus(assets[0],true,'2026-09-30T01:00:00.000Z');
   assert.deepEqual([...usedAssetIDs([used])],['a']);
 });
-test('usage action applies only to the active plan, excludes parked and hidden layers, and can opt into tape',()=>{
+test('usage action applies only to the active plan and never classifies reusable tape',()=>{
   const work={activeDraftID:'chosen',drafts:[
     {id:'other',items:[{assetID:'other'}]},
     {id:'chosen',items:[{assetID:'photo'},{assetID:'tape'},{assetID:'parked',isParked:true},{assetID:'hidden',hidden:true}]}
@@ -57,7 +58,9 @@ test('usage action applies only to the active plan, excludes parked and hidden l
   const assets=['other','photo','tape','parked','hidden'].map(id=>({id,kind:id==='tape'?'tape':'sticker',usageStatus:'unused'}));
   assert.deepEqual([...projectAssetIDs(work)],['photo','tape']);
   assert.deepEqual(markProjectAssetsUsed(work,assets).map(a=>a.id),['photo']);
-  assert.deepEqual(markProjectAssetsUsed(work,assets,undefined,{includeTape:true}).map(a=>a.id),['photo','tape']);
+  assert.equal(withUsageStatus(assets[2],true),assets[2]);
+  assert.equal(queryAssets(assets,{status:'unused'}).some(a=>a.id==='tape'),false);
+  assert.deepEqual(queryAssets([{...assets[2],usageStatus:'used'}],{status:'used'}),[]);
 });
 test('lasso requires full enclosure of rotated objects and honors type and lock filters',()=>{
   const item={id:'a',x:50,y:50,width:40,height:10,rotation:45};

@@ -20,8 +20,8 @@ export function queryAssets(assets,{query='',kind='all',status='all',seriesID='a
     switch(status){
       case 'ready':return asset.reviewStatus==='ready';
       case 'pendingReview':case 'unready':return asset.reviewStatus!=='ready';
-      case 'used':return asset.usageStatus==='used';
-      case 'unused':return asset.usageStatus!=='used';
+      case 'used':return asset.kind!=='tape'&&asset.usageStatus==='used';
+      case 'unused':return asset.kind!=='tape'&&asset.usageStatus!=='used';
       case 'favorite':return !!asset.isFavorite;
       case 'inside':return !!asset.seriesID;
       case 'outside':return !asset.seriesID;

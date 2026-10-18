@@ -15,9 +15,10 @@ export function searchableSeries(series, assets) {
 }
 
 export function usedAssetIDs(assets = []) {
-  return new Set(assets.filter(asset => asset.usageStatus === 'used').map(asset => asset.id));
+  return new Set(assets.filter(asset => asset.kind!=='tape'&&asset.usageStatus === 'used').map(asset => asset.id));
 }
 export function withUsageStatus(asset, used, at = new Date().toISOString()) {
+  if(asset.kind==='tape')return asset;
   return {...asset, usageStatus: used ? 'used' : 'unused', usageUpdatedAt: at, updatedAt: at};
 }
 export function projectAssetIDs(project) {
@@ -25,9 +26,9 @@ export function projectAssetIDs(project) {
   return new Set((current?.items||[]).filter(item=>!item.isParked&&!item.hidden&&!item.isHidden)
     .map(item=>item.assetID).filter(Boolean));
 }
-export function markProjectAssetsUsed(project, assets, at = new Date().toISOString(),{includeTape=false}={}) {
+export function markProjectAssetsUsed(project, assets, at = new Date().toISOString()) {
   const ids = projectAssetIDs(project);
-  return assets.filter(asset => ids.has(asset.id) && (includeTape||asset.kind!=='tape') &&
+  return assets.filter(asset => ids.has(asset.id) && asset.kind!=='tape' &&
     asset.usageStatus !== 'used').map(asset => withUsageStatus(asset, true, at));
 }
 export function seriesMembers(seriesID, assets, filters = {}) {

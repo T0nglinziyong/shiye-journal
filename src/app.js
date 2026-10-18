@@ -381,8 +381,6 @@ function captureSettings(){
   if(view.querySelector('#setting-ai-provider'))state.aiSettings=readAIForm();
   if(view.querySelector('#setting-paper-size'))state.preferences={...state.preferences,recognition:view.querySelector('#setting-recognition').value,candidateDiscovery:view.querySelector('#setting-candidate-discovery')?.value||'unified',recognitionPixels:Number(view.querySelector('#setting-recognition-pixels').value),materialColorMode:view.querySelector('#setting-material-color')?.value||'auto',balanceLight:view.querySelector('#setting-preprocess-light').checked,recognitionDenoise:view.querySelector('#setting-preprocess-denoise').checked,recognitionLocalContrast:view.querySelector('#setting-preprocess-contrast').checked,recognitionChromaEdges:view.querySelector('#setting-preprocess-chroma').checked,recognitionShapeRegularization:view.querySelector('#setting-postprocess-shapes').checked,recognitionApertures:view.querySelector('#setting-postprocess-apertures').checked,mergeSharedCarrier:view.querySelector('#setting-merge-carrier').checked,paperSize:view.querySelector('#setting-paper-size').value,orientation:view.querySelector('#setting-orientation').value,wholePaper:view.querySelector('#setting-whole-paper').checked,autoOrganize:view.querySelector('#setting-auto-organize').checked,autoOrganizeWorks:view.querySelector('#setting-auto-organize-works')?.checked!==false};
   if(view.querySelector('#setting-display'))state.preferences={...state.preferences,display:view.querySelector('#setting-display').value,backdrop:view.querySelector('#setting-backdrop').value,maxPageItems:Number(view.querySelector('#setting-page-items').value)};
-  if(view.querySelector('#setting-mark-tape-used'))state.preferences={...state.preferences,
-    markTapeUsedWithProject:view.querySelector('#setting-mark-tape-used').checked};
 }
 const routeScroll=new Map();
 let cancelRouteScroll=()=>{};
@@ -2808,8 +2806,7 @@ function openProjectMetadata(){
       const next=changed?{...project,title,styleTags,isUsed,updatedAt:now}:project;
       if(changed)delete next.isTemplate;
       const withLayers=markUsed?await db.completeProject(project):project;
-      const affected=markUsed?markProjectAssetsUsed(withLayers,state.assets,now,
-        {includeTape:state.preferences.markTapeUsedWithProject===true}):[];
+      const affected=markUsed?markProjectAssetsUsed(withLayers,state.assets,now):[];
       if(!changed&&!affected.length){toast('作品信息未变化');return;}
       await db.transaction(affected.length?changed?['projects','assets']:['assets']:['projects'],tx=>{
         if(changed)tx.objectStore('projects').put(next);

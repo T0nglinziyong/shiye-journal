@@ -25,7 +25,7 @@ test('material editor removes stock metadata and no-op stays stable',()=>{
    usageStatus:'used',tapeRoll:false,repeatable:false};
  const edited=assetEditorValue(old,values);
  assert.equal(edited.supply,undefined);
- assert.equal(edited.usageStatus,'used');
+ assert.equal(edited.usageStatus,undefined,'reusable tape has no usage state');
  assert.equal(assetEditorValue(edited,values),edited,'an unchanged save must not create another cloud write');
 });
 test('material editor keeps tape orientation and validates period along that axis',()=>{

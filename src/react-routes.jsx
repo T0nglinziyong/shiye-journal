@@ -1758,8 +1758,6 @@ export function SettingsAIPage({settings,preferences,onAction}){
       <p>可让 AI 返回可编辑作品；网页任务包会附上素材预览和创作说明。</p>
       <AIToggle id="require-all" label="候选素材必须全部使用" checked={cfg.requireAllCandidates}/>
       <AIToggle id="auto-recommendations" label="把建议搭配加入候选素材" checked={cfg.autoIncludeRecommendations}/>
-      <SettingsToggle id="setting-mark-tape-used" label="标记作品已使用时，同时标记胶带为已使用"
-        checked={preferences?.markTapeUsedWithProject===true}/>
       <AIToggle id="structure-reference" label="参考样例的图文结构" checked={cfg.includeStructureReference}/>
       <AIToggle id="send-reference" label="发送匹配风格与用途的手帐案例" checked={cfg.sendPresetReferences}/>
       <label>补充版式指导<textarea id="setting-ai-layout-prompt" placeholder="留空使用默认指导"
