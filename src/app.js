@@ -19,7 +19,6 @@ import {selectionGroupID,duplicateSceneGroup,deleteSceneGroup} from './scene-sel
 import {planSceneCut,rejoinMaterialPieces,restoreSceneMasks} from './scene-cut-ops.js';
 import {silhouetteFromImage} from './raster-silhouette.js';
 import {createTapeStrip} from './tape-strip.js';
-import {TapeProcessingDialog} from './react-tape-processing.jsx';
 import {beginSceneEditSession,acceptSceneEditStep,stepSceneEditSession,sceneEditSessionChanged} from './scene-edit-session.js';
 import {pinProjectMaterialImages} from './scene-material-references.js';
 import {arrangeSceneSelection} from './scene-arrangement.js';
@@ -148,7 +147,7 @@ import {createSettingsController,registerSettingsActions} from './page-controlle
 import {createMatchingController,registerMatchingActions} from './page-controllers/matching-controller.js';
 import {mountReactShell,renderReactPage,unavailableRoute,setShellActions,updateShell,openOverlay,closeOverlay} from './react-shell.jsx';
 import {ProjectMetadataDialog} from './react-project-metadata.jsx';
-import {LibraryPage,SeriesPage,SeriesContentsPage,WorksPage,RecentlyDeletedPage,JournalTemplatesPage,MatchingPage,EditorPage,AssetDetailPage,ProjectPreviewPage,SettingsHomePage,SettingsDisplayPage,SettingsRecognitionPage,SettingsDataPage,SettingsAIPage,ImportSimplePage,ImportReviewPage,ImportInspectionPage} from './react-routes.jsx';
+import {LibraryPage,SeriesPage,SeriesContentsPage,WorksPage,RecentlyDeletedPage,JournalTemplatesPage,MatchingPage,EditorPage,AssetDetailPage,ProjectPreviewPage,SettingsHomePage,SettingsDisplayPage,SettingsRecognitionPage,SettingsDataPage,SettingsAIPage,ImportSimplePage,ImportReviewPage,ImportInspectionPage,getEditorFabricCanvas} from './react-routes.jsx';
 
 import {installRuntimeDiagnostics,recordRuntimeIssue,runtimeIssueSnapshot} from './runtime-diagnostics.js';
 import {pendingUnsavedInputs} from './unsaved-inputs.js';
@@ -166,28 +165,18 @@ actionStore.register('app/action',async({action,id,value})=>({result:await runAp
 // Safari's native page pinch must not compete with the editor's bounded canvas zoom.
 for(const type of ['gesturestart','gesturechange'])document.addEventListener(type,event=>event.preventDefault(),{passive:false});
 const urls=new Map(),staticSources=new Map();
-const cutSilhouettes=new WeakMap();
 function cutGeometryOnCanvas(draft){
-  const canvas=editorFabricCanvases.get(draft.id),objects=new Map();
+  const canvas=getEditorFabricCanvas(draft.id),objects=new Map();
   const visit=object=>{if(['material','shape'].includes(object.sceneType))
     objects.set(object.sceneID,object);
     for(const child of object.getObjects?.()||[])visit(child);
   };
   for(const object of canvas?.getObjects()||[])visit(object);
   const entries=sceneLayerEntries(draft,{hidden:true});
-  const assets=state.assets.map(record=>{
-    const node=entries.find(entry=>
-      entry.value.type==='material'&&entry.value.assetID===record.id)?.value;
-    const image=node&&objects.get(node.id)?.getElement?.();
-    if(!image)return record;
-    let outline=cutSilhouettes.get(image);
-    if(outline===undefined){
-      try{outline=silhouetteFromImage(image);}
-      catch(error){console.warn('素材透明轮廓待解码',record.id,error);outline=null;}
-      cutSilhouettes.set(image,outline);
-    }
-    return outline?{...record,sourceSilhouette:outline}:record;
-  });
+  // Keep the cutting source rectangular. A screen-sized alpha thumbnail is
+  // unsuitable as a physical source contour: JPEG edges, holes and scaling
+  // can create thousands of tiny polygons and fail on mobile Safari.
+  const assets=state.assets;
   const shapeOutlines={};
   for(const entry of entries){
     const node=entry.value,object=objects.get(node.id);
@@ -1349,7 +1338,7 @@ async function runAppAction(action,id,value){try{
     addMatchingFromLibrary(state,[state.detailAssetID]);
     void matchingSession.persist().catch(console.warn);
     updateShell({basketCount:state.basket.length});
-    toast('已加入本次创作');break;case 'detail-match':addMatchingFromLibrary(state,[state.detailAssetID]);route('matching');break;case 'detail-series':state.seriesID=asset(state.detailAssetID)?.seriesID||'all';route('library');break;case 'detail-edit':openDetail(state.detailAssetID);break;case 'detail-check':await openCutoutCheck(state.detailAssetID);break;case 'detail-tape':openTapeProcessing(state.detailAssetID);break;case 'detail-favorite':await actionStore.dispatch({type:'library/favorite',payload:{id:state.detailAssetID}});break;
+    toast('已加入本次创作');break;case 'detail-match':addMatchingFromLibrary(state,[state.detailAssetID]);route('matching');break;case 'detail-series':state.seriesID=asset(state.detailAssetID)?.seriesID||'all';route('library');break;case 'detail-edit':openDetail(state.detailAssetID);break;case 'detail-check':await openCutoutCheck(state.detailAssetID);break;case 'detail-favorite':await actionStore.dispatch({type:'library/favorite',payload:{id:state.detailAssetID}});break;
   case 'series-add-cancel':{
     const seriesID=state.addingToSeries;
     state.addingToSeries=null;finishSelection(parity);state.seriesID=seriesID;route('library');break;
@@ -1476,12 +1465,12 @@ async function runAppAction(action,id,value){try{
         Math.max(...plan.pieces.filter(other=>other.sourceID===piece.sourceID).map(other=>other.area)))
         .map(piece=>piece.key);
       state.cutPreview={spec,pieces:plan.pieces,keepKeys,
-        silhouettes:cutAssets.filter(record=>record.sourceSilhouette?.length)
-          .map(record=>[record.id,record.sourceSilhouette]),
         sceneRevision:(saveVersions.get(state.activeProject.id)||0),
         sessionRevision:state.cutSession?.revision||0,draftID:d.id};
       render();
-    }catch(error){state.cutPreview=null;toast(error.message||'无法预览剪切');render();}
+    }catch(error){console.error('剪切预览失败',error);
+      recordRuntimeIssue('handled',error,state.route,{phase:'canvas-cut-preview'});
+      state.cutPreview=null;toast(error.message||'无法预览剪切');render();}
     break;
   }
   case 'fabric-cut-keep':{
@@ -1543,10 +1532,7 @@ async function runAppAction(action,id,value){try{
     }
     if(preview.spec.operation==='split'&&!preview.keepKeys.length){toast('请至少保留一片在画布上');break;}
     try{
-      const silhouettes=new Map(preview.silhouettes||[]);
-      const cutAssets=state.assets.map(record=>silhouettes.has(record.id)?
-        {...record,sourceSilhouette:silhouettes.get(record.id)}:record);
-      const plan=planSceneCut(d,{...preview.spec,keepKeys:preview.keepKeys},cutAssets);
+      const plan=planSceneCut(d,{...preview.spec,keepKeys:preview.keepKeys},state.assets);
       validateScenePhysical(plan.draft,state.assets);
       const selected=plan.selectionID||plan.pieces.find(piece=>!piece.parked)?.nodeID||plan.affected[0]||null;
       acceptSceneEditStep(session,plan.draft,selected);
@@ -1554,7 +1540,9 @@ async function runAppAction(action,id,value){try{
       state.selected=selected;
       state.multiSelected=state.selected?[state.selected]:[];
       render();toast(preview.spec.operation==='mask'?'蒙版已加入本次操作':'裁片已加入本次操作，可继续剪切');
-    }catch(error){toast(error.message||'无法完成剪切');}
+    }catch(error){console.error('剪切应用失败',error);
+      recordRuntimeIssue('handled',error,state.route,{phase:'canvas-cut-confirm'});
+      toast(error.message||'无法完成剪切');}
     break;
   }
   case 'fabric-cut-rejoin':{
@@ -2737,15 +2725,6 @@ function openDetail(id){
       if(next===record){toast('素材信息未变化');return;}
       await db.put('assets',next);Object.assign(record,next);
       render();toast('素材信息已保存');
-    }}));
-}
-function openTapeProcessing(id){
-  const record=asset(id);if(record?.kind!=='tape')return;
-  const src=record.blobId?privateImages.available(record.blobId,480)?.url||image(record.blobId):record.staticPath;
-  openOverlay(createElement(TapeProcessingDialog,{asset:record,src,onClose:closeOverlay,
-    onSave:async next=>{
-      await db.put('assets',next);Object.assign(record,next);
-      render();toast('胶带设置已保存');
     }}));
 }
 function openSeriesEditor(id){

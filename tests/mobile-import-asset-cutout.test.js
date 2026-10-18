@@ -28,6 +28,18 @@ test('material editor removes stock metadata and no-op stays stable',()=>{
  assert.equal(edited.usageStatus,'used');
  assert.equal(assetEditorValue(edited,values),edited,'an unchanged save must not create another cloud write');
 });
+test('material editor keeps tape orientation and validates period along that axis',()=>{
+ const old={id:'vertical-tape',title:'竖向胶带',kind:'tape',
+   physicalWidthMM:20,physicalHeightMM:80};
+ const values={title:old.title,kind:'tape',role:'support',texture:'未确定',
+   width:'20',height:'80',tags:'',contentTags:'',styleTags:'',materialTags:'',
+   seriesID:'',reviewStatus:'ready',usageStatus:'unused',tapeAxis:'y',
+   repeatable:true,repeatPeriod:'30'};
+ const edited=assetEditorValue(old,values);
+ assert.equal(edited.tapeAxis,'y');
+ assert.equal(edited.tapeRepeatPeriodMM,30);
+ assert.throws(()=>assetEditorValue(old,{...values,tapeAxis:'x'}),/胶带长度方向/);
+});
 test('unlimited materials are not rejected by finite-count draft validation',()=>{
  const asset={id:'a',title:'可重复素材',kind:'tape',physicalWidthMM:20,
    physicalHeightMM:30,supply:{kind:'unlimited',quantity:999}};

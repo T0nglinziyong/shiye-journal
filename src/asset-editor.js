@@ -17,8 +17,10 @@ export function assetEditorValue(old,values) {
   Object.assign(next,withUsageStatus(next,values.usageStatus==='used',next.updatedAt));
   if(width!==old.physicalWidthMM||height!==old.physicalHeightMM)next.dimensionSource=width&&height?'manual':null;
   if(values.kind==='tape') {
+    next.tapeAxis=values.tapeAxis==='y'?'y':'x';
     next.tapeRepeatMode=values.repeatable?'repeatablePattern':'singleStrip';
-    if(values.repeatable){const period=Number(values.repeatPeriod);if(!Number.isFinite(period)||period<=0||!width||!height||period>Math.max(width,height))throw Error('重复周期需为正数，且不得超过已校准样段长度');next.tapeRepeatPeriodMM=period;}
+    if(values.repeatable){const period=Number(values.repeatPeriod),length=next.tapeAxis==='x'?width:height;
+      if(!Number.isFinite(period)||period<=0||!length||period>length)throw Error('重复周期需为正数，且不得超过胶带长度方向的已校准样段');next.tapeRepeatPeriodMM=period;}
     else next.tapeRepeatPeriodMM=null;
   }
   // Saving an unchanged form must not create a new cloud revision or restart

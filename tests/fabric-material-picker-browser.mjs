@@ -42,14 +42,16 @@ try{
   })()`);
   assert.deepEqual(preview.natural,[100,300],JSON.stringify(preview));
   assert.equal(preview.fit,'contain');
+  assert.ok(Math.abs(preview.image.width/preview.image.height-1/3)<.015,
+    'The picker image box must preserve the same intrinsic ratio as the asset cover: '+JSON.stringify(preview));
   assert.ok(preview.frame.height>=120&&preview.image.top>=preview.card.top&&
     preview.image.bottom<=preview.card.bottom,
     'The full tall cover needs a large, contained preview: '+JSON.stringify(preview));
   await click('[data-material-id="picker-used"]','.fabric-selected-actions');
   await click('[data-val="material"]','.swift-material-picker');
   await click('.swift-material-picker .swift-segments button:last-child');
-  assert.equal(await evaluate('!!document.querySelector("[data-material-id=picker-used]")'),false,
-    'All materials must exclude assets already used in the draft');
+  assert.equal(await evaluate('!!document.querySelector("[data-material-id=picker-used]")'),true,
+    'All materials must include assets already used in the draft');
   assert.equal(await evaluate('!!document.querySelector("[data-material-id=picker-tall]")'),true);
   await click('[data-val="material"]');
   await click('[data-act="park"]');
@@ -65,8 +67,8 @@ try{
   assert.equal(await evaluate('!!document.querySelector("[data-material-id=picker-used]")'),true,
     'The standby tab must still make parked materials recoverable');
   await click('.swift-material-picker .swift-segments button:last-child');
-  assert.equal(await evaluate('!!document.querySelector("[data-material-id=picker-used]")'),false,
-    'All materials must also exclude standby assets');
+  assert.equal(await evaluate('!!document.querySelector("[data-material-id=picker-used]")'),true,
+    'All materials must also include standby assets');
   assert.deepEqual(browser.errors,[]);
   console.log('Material picker: full tall cover, exclusive tabs, parked layer omission passed');
 }finally{await browser.close();}

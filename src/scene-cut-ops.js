@@ -4,7 +4,6 @@ import {normalizeGeometry,rectangleGeometry,geometryArea,geometryBounds,
   geometryIntersection,geometryDifference,geometryUnion,transformGeometry,AREA_EPSILON} from './craft-topology.js';
 import {shapePaths} from './editor-tools-model.js';
 import {cutFaces} from './planar-cut.js';
-import {materialMaskGeometry} from './material-mask.js';
 
 const square=rectangleGeometry(0,0,1,1);
 const point=p=>Array.isArray(p)?p:[p.x,p.y];
@@ -51,12 +50,10 @@ function presetRegion(preset,inset=.18){
 }
 export function sourceOutline(node,asset,override=null){
   if(node.type==='material'){
-    const crop=node.cropRect||{x:0,y:0,width:1,height:1};
-    const silhouette=asset?.sourceSilhouette;
-    const local=silhouette?.length?geometryIntersection(transformGeometry(silhouette,p=>
-      [(p[0]-crop.x)/crop.width,(p[1]-crop.y)/crop.height]),square):square;
-    const material=materialMaskGeometry(node.materialMask);
-    return material?geometryIntersection(local,[[material.outer,...material.holes]]):local;
+    // The source bitmap (including prior cuts and masks) is still rendered by
+    // the material node. Use its stable local bounds for the cutting guide;
+    // its physical materialMask is applied when the pieces are calculated.
+    return square;
   }
   if(node.type==='shape'){
     if(override?.length)return override;

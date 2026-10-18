@@ -31,10 +31,13 @@ export function createTapeStrip(asset,draft,rawPoints,zIndex=10){
   if(path.length<2)throw Error('请拖出一段胶带');
   if(path.length>512){const stride=Math.ceil(path.length/512);const sampled=path.filter((_,i)=>i%stride===0);
     if(sampled.at(-1)!==path.at(-1))sampled.push(path.at(-1));path.splice(0,path.length,...sampled);}
+  // Store the same smoothed centerline used for rendering, so physical tape
+  // length and the visible ribbon agree even with noisy touch samples.
+  path.splice(0,path.length,...renderPath(path,widthMM*scale));
   const lengthPx=path.slice(1).reduce((sum,p,i)=>sum+distance(path[i],p),0),pathLengthMM=lengthPx/scale;
   if(pathLengthMM<2)throw Error('胶带段至少要有 2 mm');
   const repeatable=asset.tapeRepeatMode==='repeatablePattern'&&Number(asset.tapeRepeatPeriodMM)>0;
-  if(!repeatable&&pathLengthMM>lengthMM+.1)throw Error(`这张胶带只拍到 ${lengthMM.toFixed(1)} mm；请在“处理胶带”确认纹样周期后再画更长`);
+  if(!repeatable&&pathLengthMM>lengthMM+.1)throw Error(`这张胶带只拍到 ${lengthMM.toFixed(1)} mm；请在“编辑素材信息 → 尺寸与胶带”确认纹样周期后再画更长`);
   const bandWidthScene=widthMM*scale,half=bandWidthScene/2,
     xs=path.map(p=>p[0]),ys=path.map(p=>p[1]),
     left=Math.min(...xs)-half,top=Math.min(...ys)-half,
@@ -64,6 +67,24 @@ export function validateTapeStrip(strip,asset){
   return widthMM;
 }
 const preparedImages=new WeakMap();
+// Pointer events are much denser than the pixels in a photographed tape.
+// Rendering each event as its own image slice makes the browser repeatedly
+// sample a subpixel-wide source column, which appears as vertical slats.
+function renderPath(points,band){
+  const tolerance=Math.max(.8,band*.08);
+  const simplify=(start,end)=>{
+    const a=points[start],b=points[end],dx=b[0]-a[0],dy=b[1]-a[1],
+      length=Math.hypot(dx,dy)||1;
+    let far=0,index=-1;
+    for(let i=start+1;i<end;i++){
+      const p=points[i],distance=Math.abs(dx*(a[1]-p[1])-dy*(a[0]-p[0]))/length;
+      if(distance>far){far=distance;index=i;}
+    }
+    if(far<=tolerance)return [a,b];
+    return [...simplify(start,index).slice(0,-1),...simplify(index,end)];
+  };
+  return points.length>2?simplify(0,points.length-1):points;
+}
 function orientedImage(image,axis){
   const w=image.naturalWidth||image.width,h=image.naturalHeight||image.height;
   let prepared=preparedImages.get(image);if(!prepared){
@@ -105,8 +126,8 @@ export function paintTapeStrip(ctx,node,image){
   const strip=node.tapeStrip;if(!strip)return false;
   const texture=orientedImage(image,strip.axis),w=texture.width,h=texture.height;
   const sx=node.width/strip.baseWidth,sy=node.height/strip.baseHeight,
-    band=strip.bandWidthScene*Math.sqrt(sx*sy),points=strip.points.map(([u,v])=>
-      [(u-.5)*node.width,(v-.5)*node.height]);
+    band=strip.bandWidthScene*Math.sqrt(sx*sy),points=renderPath(strip.points.map(([u,v])=>
+      [(u-.5)*node.width,(v-.5)*node.height]),band);
   const lengths=points.slice(1).map((p,i)=>distance(points[i],p)),
     total=lengths.reduce((sum,n)=>sum+n,0);
   if(!(total>0))return true;

@@ -465,20 +465,17 @@ export function FabricSceneStage({draft,assetURL,retainAssets,onSelection,onBefo
             const node=ids.length===1?byID(callbacks.current.draft.layers,ids[0]):null;
             if(node&&['material','shape','text'].includes(node.type)){
               let silhouette=null;
-              const key=node.type==='material'?object?.getElement?.():
-                node.type==='shape'?object:null;
+              const key=node.type==='shape'?object:null;
               if(key){silhouette=alphaOutlines.current.get(key);
                 if(silhouette===undefined){try{
-                  if(node.type==='material')silhouette=silhouetteFromImage(key);
-                  else{const clip=object.clipPath;object.clipPath=null;
-                    try{silhouette=silhouetteFromImage(object.toCanvasElement({multiplier:Math.min(1,
-                      128/Math.max(node.width,node.height))}));}
-                    finally{object.clipPath=clip;}}
+                  const clip=object.clipPath;object.clipPath=null;
+                  try{silhouette=silhouetteFromImage(object.toCanvasElement({multiplier:Math.min(1,
+                    128/Math.max(node.width,node.height))}));}
+                  finally{object.clipPath=clip;}
                 }catch{silhouette=null;}
                 alphaOutlines.current.set(key,silhouette);}}
               try{
-                const outline=sourceOutline(node,node.type==='material'&&silhouette?
-                  {sourceSilhouette:silhouette}:null,node.type==='shape'?silhouette:null);
+                const outline=sourceOutline(node,null,node.type==='shape'?silhouette:null);
                 if(outline.length){const scale=uiScale();ctx.strokeStyle='#b65736';
                   ctx.lineWidth=2/scale;ctx.setLineDash([6/scale,4/scale]);ctx.beginPath();
                   for(const polygon of outline)for(const ring of polygon){

@@ -146,7 +146,6 @@ function MaterialPicker({draft,materials,series,source,onPick}){
   const [query,setQuery]=useState(''),[group,setGroup]=useState('all');
   const [kind,setKind]=useState('all'),[shown,setShown]=useState(40);
   const byID=useMemo(()=>new Map(materials.map(asset=>[asset.id,asset])),[materials]);
-  const placedAssetIDs=useMemo(()=>new Set(draft.items.map(item=>item.assetID)),[draft.items]);
   const matches=asset=>!!asset&&
     (group==='all'||(group==='none'?!asset.seriesID:asset.seriesID===group))&&
     (kind==='all'||asset.kind===kind)&&
@@ -155,11 +154,10 @@ function MaterialPicker({draft,materials,series,source,onPick}){
     if(tab==='used'||tab==='standby')return draft.items.filter(item=>!!item.isParked===(tab==='standby'))
       .map(item=>({asset:byID.get(item.assetID),item}))
       .filter(row=>matches(row.asset));
-    const list=materials.filter(asset=>!asset.isProjectInternal&&
-      !placedAssetIDs.has(asset.id)&&matches(asset));
+    const list=materials.filter(asset=>!asset.isProjectInternal&&matches(asset));
     list.sort((a,b)=>Date.parse(b.createdAt||0)-Date.parse(a.createdAt||0));
     return list.map(asset=>({asset}));
-  },[tab,draft.items,materials,byID,placedAssetIDs,group,kind,query]);
+  },[tab,draft.items,materials,byID,group,kind,query]);
   useEffect(()=>setShown(40),[tab,query,group,kind]);
   return <><div className="swift-segments">
     {[['used','已使用素材'],['standby','备选素材'],['all','所有素材']].map(([id,label])=><button

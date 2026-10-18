@@ -11,7 +11,9 @@ export function AssetEditorDialog({asset,series,used,src,onClose,onSave}){
     contentTags:(asset.contentTags||[]).join('、'),styleTags:(asset.styleTags||[]).join('、'),
     materialTags:(asset.materialTags||[]).join('、'),tags:(asset.tags||[]).join('、'),
     seriesID:asset.seriesID||'',reviewStatus:asset.reviewStatus||'pendingReview',
-    usageStatus:used?'used':'unused',repeatable:asset.tapeRepeatMode==='repeatablePattern',
+    usageStatus:used?'used':'unused',tapeAxis:asset.tapeAxis||
+      (Number(asset.physicalWidthMM)>=Number(asset.physicalHeightMM)?'x':'y'),
+    repeatable:asset.tapeRepeatMode==='repeatablePattern',
     repeatPeriod:asset.tapeRepeatPeriodMM??''});
   const initial=useRef(JSON.stringify(form));
   useUnsavedInput('素材信息',JSON.stringify(form)!==initial.current);
@@ -52,12 +54,11 @@ export function AssetEditorDialog({asset,series,used,src,onClose,onSave}){
           <div className="form-grid">{field('实物宽 mm','width','number')}
             {field('实物高 mm','height','number')}</div>
           <section id="tape-pattern" hidden={form.kind!=='tape'}><h3>胶带图案</h3>
+            {select('胶带长度方向','tapeAxis',[['x','图片横向'],['y','图片纵向']])}
             <label className="toggle-row">已确认重复纹样<input id="asset-repeatable" type="checkbox"
               checked={form.repeatable} onChange={event=>set('repeatable',event.target.checked)}/></label>
             {field('真实重复周期 mm','repeatPeriod','number')}
-            <p>未知周期时只能使用照片拍到的一段。</p>
           </section>
-          <p>普通素材在同一创作方案中取用一次，可裁成多片；不同作品独立使用。</p>
         </div>
         <div className="stack material-info-panel" hidden={tab!==2}>
           {field('具体内容','contentTags')}{field('风格','styleTags')}

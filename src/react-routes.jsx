@@ -1229,6 +1229,7 @@ function FabricSelectedActions({bounds,draft,onAction,mode='object',canUngroup=f
 
 // Fabric owns the single editable canvas; React owns its surrounding controls.
 const editorFabricCanvases=new Map();
+export function getEditorFabricCanvas(draftID){return editorFabricCanvases.get(draftID);}
 
 export function EditorPage({state,draft,editorEntry,asset,source,format,
   hasAIReport,onAction,onInspectorChange,onTitleCommit,onAIAction,onAIOpen,onAIPromptChange,
@@ -1408,8 +1409,6 @@ export function AssetDetailPage({asset,seriesTitle,source,kindName,format,onActi
         <button data-act="detail-check" data-react-action="true" onClick={act('detail-check')}>□　检查抠图</button>
         <button type="button" data-act="asset-print-pdf" data-react-action="true"
           onClick={onExportPrint}>▤　导出打印 PDF</button>
-        {asset.kind==='tape'?<button type="button" data-act="detail-tape" data-react-action="true"
-          onClick={act('detail-tape')}>〰　处理胶带</button>:null}
       </div>
     </div></section>
     {similarOpen?createPortal(<div className="cloud-admin-backdrop" onMouseDown={event=>{

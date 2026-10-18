@@ -19,6 +19,18 @@ try{
   })()`);
   assert.ok(croppedTexture[1]>60&&croppedTexture[3]>100,
     'The first repeat must use the tape pattern, not transparent photo padding');
+  const denseStroke=await evaluate(`(async()=>{
+    const {paintTapeStrip}=await import('/src/tape-strip.js');
+    const image=new Image();image.src='/samples/demo-repeat-tape.png';await image.decode();
+    const output=document.createElement('canvas');output.width=480;output.height=64;
+    const ctx=output.getContext('2d');ctx.translate(240,32);
+    const points=Array.from({length:441},(_,i)=>[i/440,.5+.0006*Math.sin(i)]);
+    paintTapeStrip(ctx,{width:440,height:40,tapeStrip:{axis:'x',baseWidth:440,baseHeight:40,
+      bandWidthScene:24,points,pathLengthMM:110,sourceLengthMM:120,sourcePeriodMM:20}},image);
+    const pixels=output.getContext('2d').getImageData(25,32,430,1).data;
+    return Array.from({length:430},(_,i)=>pixels[i*4+3]).filter(alpha=>alpha<100).length;
+  })()`);
+  assert.ok(denseStroke<4,`A dense touch path must render continuous tape, not ${denseStroke} transparent slats`);
   await evaluate(`(async()=>{
     const image=await (await fetch('/samples/demo-repeat-tape.png')).blob();
     const db=await new Promise(resolve=>{const request=indexedDB.open('shiye-pwa-full-v1');
@@ -33,6 +45,15 @@ try{
     });db.close();
   })()`);
   await command('Page.reload');await wait('.series-grid');
+  await click('[data-route="library"]','.swift-tabs');
+  await click('.swift-tabs button:nth-child(2)','.asset-grid');
+  await click('[data-id="demo-repeat-tape"][data-act="detail"]','.detail-page');
+  assert.equal(await evaluate('!!document.querySelector("[data-act=detail-tape]")'),false);
+  await click('[data-act="detail-edit"]','[aria-label="编辑素材"]');
+  await click('.asset-editor-tabs button:nth-child(2)');
+  assert.equal(await evaluate('document.querySelector("#asset-tapeAxis")?.value'),'x');
+  assert.equal(await evaluate('document.querySelector(".material-info-panel:not([hidden])")?.textContent.includes("普通素材在同一创作方案")'),false);
+  await click('#asset-dialog-close');
   await click('[data-route="works"]','.works-grid');
   await click('#work-create','#blank-create-confirm');
   await click('#blank-create-confirm','#canvas-page');
