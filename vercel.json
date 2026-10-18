@@ -5,6 +5,7 @@
   "outputDirectory": "dist",
   "rewrites": [
     {"source": "/auth/v1/:path*", "destination": "/api/cloudbase-proxy?path=auth/v1/:path*"},
+    {"source": "/rdb/:path*", "destination": "/api/cloudbase-proxy?path=v1/rdb/:path*"},
     {"source": "/v1/rdb/:path*", "destination": "/api/cloudbase-proxy?path=v1/rdb/:path*"},
     {"source": "/api/cloudbase-proxy/:path*", "destination": "/api/cloudbase-proxy?path=:path*"}
   ],
