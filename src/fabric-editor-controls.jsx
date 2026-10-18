@@ -410,6 +410,7 @@ export function FabricEditorToolbar({state,draft,materials,source,selected,onIns
       activeTool==='shape'?<span className="canvas-tool-hint">选择图形，或再次点击左侧图形退出</span>:
       activeTool==='lasso'?<button type="button" data-popover-anchor="lasso-quick" onClick={event=>setMenu({kind:'lasso',anchor:event.currentTarget})}>◌ 套索选择</button>:
       activeTool==='scissors'?<span className="canvas-tool-hint">在画布上画切线；点击裁片切换保留</span>:
+      activeTool==='tape'?<span className="canvas-tool-hint">用笔拖出胶带段 · 选择工具可结束</span>:
       <button type="button" className="canvas-fit-button" onClick={()=>onAction('fabric-fit-view')}>↖ {Math.round(state.zoom*100)}%</button>}
     </div>
   </div>{menu?<ReactPopover anchor={menu.anchor} onClose={close}
@@ -428,7 +429,9 @@ export function FabricEditorToolbar({state,draft,materials,source,selected,onIns
     {menu.kind==='shape'?<ShapePicker draft={draft} onPick={id=>choose('fabric-add-shape',id)}/>:null}
     {menu.kind==='material'?<MaterialPicker draft={draft} materials={materials}
       series={state.series||[]} source={source}
-      onPick={(id,itemID)=>choose(itemID?'fabric-unpark':'fabric-add-material',itemID||id)}/>:null}
+      onPick={(id,itemID)=>choose(itemID?'fabric-unpark':
+        materials.find(asset=>asset.id===id)?.kind==='tape'?'fabric-start-tape':'fabric-add-material',
+      itemID||id)}/>:null}
     {menu.kind==='pen'?<div className="stack">{[['pressure','钢笔'],['ballpoint','圆珠笔'],['brush','画笔']]
       .map(([id,label])=><button key={id} type="button" aria-checked={(tools.fabricPenStyle||'pressure')===id}
         onClick={()=>{setting('fabricPenStyle',id);close();}}>{label}</button>)}</div>:null}

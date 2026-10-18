@@ -16,7 +16,8 @@ export function buildMaterialLedger(draft,assets){
   assertSubset(geometry,source,{assetId:asset.id,pieceId:pieceKey(item)});
   if(asset.kind==='tape'){
    const crop=item.cropRect||{width:1,height:1};
-   const length=asset.physicalWidthMM>=asset.physicalHeightMM?crop.width*asset.physicalWidthMM:crop.height*asset.physicalHeightMM;
+   const length=item.tapeStrip?.pathLengthMM??
+     (asset.physicalWidthMM>=asset.physicalHeightMM?crop.width*asset.physicalWidthMM:crop.height*asset.physicalHeightMM);
    const roll=rolls.get(asset.id)||{assetId:asset.id,sourceRevision:assetSourceRevision(asset),pieces:[]};
    roll.pieces.push({pieceId:pieceKey(item),unit,lengthMM:length});rolls.set(asset.id,roll);
   }

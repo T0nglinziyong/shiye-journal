@@ -8,6 +8,7 @@ export function assetVisualDescriptor(asset){
   imageHash:asset.imageHash??asset.contentHash??null,orientation:asset.orientation??null};
 }
 const physicalSource=asset=>({...assetVisualDescriptor(asset),kind:asset.kind??null,
+ tapeAxis:asset.tapeAxis??null,
  tapeRepeatMode:asset.tapeRepeatMode==='repeatablePattern'?'repeatablePattern':'singleStrip',
  tapeRepeatPeriodMM:asset.tapeRepeatMode==='repeatablePattern'?asset.tapeRepeatPeriodMM??null:null});
 const frozenTaskRevision=Symbol('frozenTaskRevision');
@@ -27,7 +28,7 @@ export function sameMaterialCutoutAndSize(exported,current){
 export function materialSourceSnapshot(asset){
  return {assetID:asset.id,sourceRevision:assetSourceRevision(asset),descriptor:assetVisualDescriptor(asset),updatedAt:asset.updatedAt??null,
   kind:asset.kind,title:asset.title,role:asset.role??null,tags:asset.tags||[],
-  tapeRepeatMode:asset.tapeRepeatMode??null,tapeRepeatPeriodMM:asset.tapeRepeatPeriodMM??null};
+  tapeAxis:asset.tapeAxis??null,tapeRepeatMode:asset.tapeRepeatMode??null,tapeRepeatPeriodMM:asset.tapeRepeatPeriodMM??null};
 }
 export function assetFromSourceSnapshot(snapshot,{frozenRevision=false}={}){
  const d=snapshot.descriptor;
@@ -35,7 +36,7 @@ export function assetFromSourceSnapshot(snapshot,{frozenRevision=false}={}){
  const asset={id:snapshot.assetID,title:snapshot.title,kind:snapshot.kind,role:snapshot.role,tags:snapshot.tags,
   blobId:d.blobId,originalBlobId:d.originalBlobId,staticPath:d.staticPath,physicalWidthMM:d.widthMM,physicalHeightMM:d.heightMM,
   imageSize:d.imageSize,processingRecord:d.processingRecord,sourceSilhouette:d.sourceSilhouette,imageHash:d.imageHash,orientation:d.orientation,
-  updatedAt:snapshot.updatedAt,tapeRepeatMode:snapshot.tapeRepeatMode,tapeRepeatPeriodMM:snapshot.tapeRepeatPeriodMM};
+  updatedAt:snapshot.updatedAt,tapeAxis:snapshot.tapeAxis,tapeRepeatMode:snapshot.tapeRepeatMode,tapeRepeatPeriodMM:snapshot.tapeRepeatPeriodMM};
  if(frozenRevision)Object.defineProperty(asset,frozenTaskRevision,{value:snapshot.sourceRevision});
  return asset;
 }

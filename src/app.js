@@ -17,6 +17,9 @@ import {sceneLayerEntries,attachSceneV2,moveSceneNode,groupSceneLayers,ungroupSc
 import {copySceneLasso,deleteSceneLasso,mergeSceneLasso,sceneLassoBounds} from './scene-lasso.js';
 import {selectionGroupID,duplicateSceneGroup,deleteSceneGroup} from './scene-selection-actions.js';
 import {planSceneCut,rejoinMaterialPieces,restoreSceneMasks} from './scene-cut-ops.js';
+import {silhouetteFromImage} from './raster-silhouette.js';
+import {createTapeStrip} from './tape-strip.js';
+import {TapeProcessingDialog} from './react-tape-processing.jsx';
 import {beginSceneEditSession,acceptSceneEditStep,stepSceneEditSession,sceneEditSessionChanged} from './scene-edit-session.js';
 import {pinProjectMaterialImages} from './scene-material-references.js';
 import {arrangeSceneSelection} from './scene-arrangement.js';
@@ -34,6 +37,7 @@ import './matching-view.css';
 import './page-heading.css';
 import './layout-refinements.css';
 import './canvas-editor-fixes.css';
+import './tape-ui.css';
 import './mobile-material-ui.css';
 import './ui-consistency.css';
 import {createAssetOrganization} from './asset-organization.js';
@@ -162,6 +166,43 @@ actionStore.register('app/action',async({action,id,value})=>({result:await runAp
 // Safari's native page pinch must not compete with the editor's bounded canvas zoom.
 for(const type of ['gesturestart','gesturechange'])document.addEventListener(type,event=>event.preventDefault(),{passive:false});
 const urls=new Map(),staticSources=new Map();
+const cutSilhouettes=new WeakMap();
+function cutGeometryOnCanvas(draft){
+  const canvas=editorFabricCanvases.get(draft.id),objects=new Map();
+  const visit=object=>{if(['material','shape'].includes(object.sceneType))
+    objects.set(object.sceneID,object);
+    for(const child of object.getObjects?.()||[])visit(child);
+  };
+  for(const object of canvas?.getObjects()||[])visit(object);
+  const entries=sceneLayerEntries(draft,{hidden:true});
+  const assets=state.assets.map(record=>{
+    const node=entries.find(entry=>
+      entry.value.type==='material'&&entry.value.assetID===record.id)?.value;
+    const image=node&&objects.get(node.id)?.getElement?.();
+    if(!image)return record;
+    let outline=cutSilhouettes.get(image);
+    if(outline===undefined){
+      try{outline=silhouetteFromImage(image);}
+      catch(error){console.warn('素材透明轮廓待解码',record.id,error);outline=null;}
+      cutSilhouettes.set(image,outline);
+    }
+    return outline?{...record,sourceSilhouette:outline}:record;
+  });
+  const shapeOutlines={};
+  for(const entry of entries){
+    const node=entry.value,object=objects.get(node.id);
+    if(node.type!=='shape'||!(node.id===state.selected||
+      entry.parents.some(parent=>parent.id===state.selected))||!object?.toCanvasElement)continue;
+    try{
+      const clip=object.clipPath;object.clipPath=null;
+      let bitmap;try{bitmap=object.toCanvasElement({multiplier:Math.min(1,
+        192/Math.max(node.width,node.height))});}finally{object.clipPath=clip;}
+      const outline=silhouetteFromImage(bitmap);
+      if(outline?.length&&outline.flat(2).length<800)shapeOutlines[node.id]=outline;
+    }catch(error){console.warn('图形轮廓使用矢量路径',node.id,error);}
+  }
+  return {assets,shapeOutlines};
+}
 const assetOrganization=createAssetOrganization();
 function openLibraryAsset(id){state.detailAssetID=id;const selected=asset(id);if(selected?.blobId)privateImages.focus(selected.blobId);route('assetDetail');}
 function libraryBack(){navigateBack('library');}
@@ -1308,7 +1349,7 @@ async function runAppAction(action,id,value){try{
     addMatchingFromLibrary(state,[state.detailAssetID]);
     void matchingSession.persist().catch(console.warn);
     updateShell({basketCount:state.basket.length});
-    toast('已加入本次创作');break;case 'detail-match':addMatchingFromLibrary(state,[state.detailAssetID]);route('matching');break;case 'detail-series':state.seriesID=asset(state.detailAssetID)?.seriesID||'all';route('library');break;case 'detail-edit':openDetail(state.detailAssetID);break;case 'detail-check':await openCutoutCheck(state.detailAssetID);break;case 'detail-favorite':await actionStore.dispatch({type:'library/favorite',payload:{id:state.detailAssetID}});break;
+    toast('已加入本次创作');break;case 'detail-match':addMatchingFromLibrary(state,[state.detailAssetID]);route('matching');break;case 'detail-series':state.seriesID=asset(state.detailAssetID)?.seriesID||'all';route('library');break;case 'detail-edit':openDetail(state.detailAssetID);break;case 'detail-check':await openCutoutCheck(state.detailAssetID);break;case 'detail-tape':openTapeProcessing(state.detailAssetID);break;case 'detail-favorite':await actionStore.dispatch({type:'library/favorite',payload:{id:state.detailAssetID}});break;
   case 'series-add-cancel':{
     const seriesID=state.addingToSeries;
     state.addingToSeries=null;finishSelection(parity);state.seriesID=seriesID;route('library');break;
@@ -1385,6 +1426,7 @@ async function runAppAction(action,id,value){try{
       state.cutSettings={...state.cutSettings,targetIDs:[]};
     }
     if(state.tool!==value)state.cutPreview=null;
+    if(value!=='tape')state.tapeAssetID=null;
     state.tool=value;
     if(leavingLasso||!['select','lasso','scissors'].includes(value)){state.selected=null;state.multiSelected=[];}
     state.fabricInspectorOpen=false;
@@ -1427,11 +1469,15 @@ async function runAppAction(action,id,value){try{
       points:Array.isArray(id)?id:[],preset:typeof id==='string'?id:null};
     spec.pathType=Array.isArray(id)&&value==='loop'?'loop':'line';
     try{
-      const plan=planSceneCut(d,spec,state.assets);
+      const {assets:cutAssets,shapeOutlines}=cutGeometryOnCanvas(d);
+      spec.shapeOutlines=shapeOutlines;
+      const plan=planSceneCut(d,spec,cutAssets);
       const keepKeys=plan.pieces.filter(piece=>piece.area===
         Math.max(...plan.pieces.filter(other=>other.sourceID===piece.sourceID).map(other=>other.area)))
         .map(piece=>piece.key);
       state.cutPreview={spec,pieces:plan.pieces,keepKeys,
+        silhouettes:cutAssets.filter(record=>record.sourceSilhouette?.length)
+          .map(record=>[record.id,record.sourceSilhouette]),
         sceneRevision:(saveVersions.get(state.activeProject.id)||0),
         sessionRevision:state.cutSession?.revision||0,draftID:d.id};
       render();
@@ -1497,7 +1543,10 @@ async function runAppAction(action,id,value){try{
     }
     if(preview.spec.operation==='split'&&!preview.keepKeys.length){toast('请至少保留一片在画布上');break;}
     try{
-      const plan=planSceneCut(d,{...preview.spec,keepKeys:preview.keepKeys},state.assets);
+      const silhouettes=new Map(preview.silhouettes||[]);
+      const cutAssets=state.assets.map(record=>silhouettes.has(record.id)?
+        {...record,sourceSilhouette:silhouettes.get(record.id)}:record);
+      const plan=planSceneCut(d,{...preview.spec,keepKeys:preview.keepKeys},cutAssets);
       validateScenePhysical(plan.draft,state.assets);
       const selected=plan.selectionID||plan.pieces.find(piece=>!piece.parked)?.nodeID||plan.affected[0]||null;
       acceptSceneEditStep(session,plan.draft,selected);
@@ -1857,6 +1906,27 @@ async function runAppAction(action,id,value){try{
         .map(existing=>existing.materialUnitIndex??0))+1:0;
     d.items.push(item);
     state.selected=item.id;state.multiSelected=[item.id];state.tool='select';saveProject();render();break;
+  }
+  case 'fabric-start-tape':{
+    const a=asset(id);if(a?.kind!=='tape'||!current())break;
+    if(!(a.physicalWidthMM>0&&a.physicalHeightMM>0)){
+      toast('请先在素材详情确认胶带的真实宽度和样段长度');break;
+    }
+    state.tapeAssetID=a.id;state.tool=state.toolHighlight='tape';
+    state.selected=null;state.multiSelected=[];render();
+    toast('用笔或鼠标在画布上拖出胶带段；iPad 手指可移动画布');break;
+  }
+  case 'fabric-place-tape':{
+    const a=asset(state.tapeAssetID),d=current();if(!a||!d)break;
+    try{
+      const item=createTapeStrip(a,d,id,Math.max(0,...d.layers.map(node=>node.zIndex||0))+1);
+      item.materialUnitIndex=Math.max(-1,...d.items.filter(existing=>existing.assetID===a.id)
+        .map(existing=>existing.materialUnitIndex??0))+1;
+      const trial=attachSceneV2(structuredClone(d));trial.items.push(structuredClone(item));
+      validateScenePhysical(trial,state.assets);
+      checkpoint();d.items.push(item);saveProject();render();
+    }catch(error){toast(error.message||'胶带段未生成');}
+    break;
   }
   case 'fabric-replace-material':{
     const d=current(),selectedID=state.selected;if(!d||!selectedID)break;
@@ -2667,6 +2737,15 @@ function openDetail(id){
       if(next===record){toast('素材信息未变化');return;}
       await db.put('assets',next);Object.assign(record,next);
       render();toast('素材信息已保存');
+    }}));
+}
+function openTapeProcessing(id){
+  const record=asset(id);if(record?.kind!=='tape')return;
+  const src=record.blobId?privateImages.available(record.blobId,480)?.url||image(record.blobId):record.staticPath;
+  openOverlay(createElement(TapeProcessingDialog,{asset:record,src,onClose:closeOverlay,
+    onSave:async next=>{
+      await db.put('assets',next);Object.assign(record,next);
+      render();toast('胶带设置已保存');
     }}));
 }
 function openSeriesEditor(id){

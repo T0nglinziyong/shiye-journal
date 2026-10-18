@@ -14,6 +14,9 @@ import {fabricPointer,installFabricPointer} from './fabric-pointer.js';
 import {createFabricSelectionPreview} from './fabric-selection-preview.js';
 import {configureFabricEditorFrame} from './fabric-editor-frame.js';
 import {selectableFabricObjectAt,installSelectionFramePriority} from './fabric-hit-test.js';
+import {createTapeStrip,paintTapeStrip,tapeDimensions} from './tape-strip.js';
+import {sourceOutline,localPointToScene} from './scene-cut-ops.js';
+import {silhouetteFromImage} from './raster-silhouette.js';
 
 const byID=(nodes,id)=>{
   for(const node of nodes||[]){
@@ -68,13 +71,31 @@ function showCoveredCutTarget(canvas,draft,tool,ids){
 export function FabricSceneStage({draft,assetURL,retainAssets,onSelection,onBeforeChange,onChange,onIssue,onReady,
   tool='select',pen={widthMM:.5,color:'#2b5245'},marker={widthMM:2,color:'#f5cf45'},
   eraser={widthMM:4},selectionMode='contain',readOnly=false,sceneRevision=0,
-  selectedID=null,selectedIDs=[],selectionFilter=null,textDefaults=null,cutPreview=null,onCutPath=null,onCutTap=null}){
+  selectedID=null,selectedIDs=[],selectionFilter=null,textDefaults=null,cutPreview=null,onCutPath=null,onCutTap=null,
+  tapeAsset=null,onTapePath=null}){
   const canvasRef=useRef(null),sessionRef=useRef(null),reconcileRef=useRef(null),callbacks=useRef(null);
+  const tapeImage=useRef(null);
+  const alphaOutlines=useRef(new WeakMap());
   const syncingSelection=useRef(false),selectionEpoch=useRef(0);
   const selectionKey=JSON.stringify(selectedIDs.length?selectedIDs:selectedID?[selectedID]:[]);
   const materialKey=materialAssetIDs(draft.layers).join('\0');
   callbacks.current={draft,assetURL,onSelection,onBeforeChange,onChange,onIssue,onReady,tool,pen,marker,
-    eraser,selectionMode,selectionFilter,selectedID,selectedIDs,textDefaults,cutPreview,onCutPath,onCutTap};
+    eraser,selectionMode,selectionFilter,selectedID,selectedIDs,textDefaults,cutPreview,onCutPath,onCutTap,
+    tapeAsset,onTapePath};
+
+  useLayoutEffect(()=>{
+    let cancelled=false;tapeImage.current=null;
+    if(tool!=='tape'||!tapeAsset)return;
+    void Promise.resolve(callbacks.current.assetURL(tapeAsset.id,{assetID:tapeAsset.id,
+      sourceBlobId:tapeAsset.blobId,sourceStaticPath:tapeAsset.staticPath,
+      width:draft.canvas.width,height:draft.canvas.height})).then(url=>{
+      if(!url||cancelled)return;
+      const image=new Image();image.crossOrigin='anonymous';image.src=url;
+      return image.decode().then(()=>{if(!cancelled){tapeImage.current=image;
+        sessionRef.current?.requestRenderAll();}});
+    }).catch(error=>onIssue?.(error));
+    return ()=>{cancelled=true;};
+  },[tool,tapeAsset?.id,tapeAsset?.blobId]);
 
   useLayoutEffect(()=>retainAssets?.(materialKey?materialKey.split('\0'):[])||undefined,
     [materialKey,retainAssets]);
@@ -186,7 +207,7 @@ export function FabricSceneStage({draft,assetURL,retainAssets,onSelection,onBefo
     if(!canvas)return;
     canvas.selection=false;
     canvas.skipTargetFind=tool!=='select'||readOnly;
-    canvas.defaultCursor=['pen','highlighter','lasso','scissors'].includes(tool)?'crosshair':tool==='eraser'?'cell':'default';
+    canvas.defaultCursor=['pen','highlighter','lasso','scissors','tape'].includes(tool)?'crosshair':tool==='eraser'?'cell':'default';
     if(tool!=='lasso')canvas.sceneClearLasso?.();
     if(!['select','lasso','text'].includes(tool)){canvas.getActiveObject()?.exitEditing?.();
       syncingSelection.current=true;canvas.discardActiveObject();syncingSelection.current=false;
@@ -441,6 +462,32 @@ export function FabricSceneStage({draft,assetURL,retainAssets,onSelection,onBefo
             const ids=callbacks.current.selectedIDs?.length?callbacks.current.selectedIDs:
               callbacks.current.selectedID?[callbacks.current.selectedID]:[];
             const object=ids.length===1?canvas.getObjects().find(item=>item.sceneID===ids[0]):null;
+            const node=ids.length===1?byID(callbacks.current.draft.layers,ids[0]):null;
+            if(node&&['material','shape','text'].includes(node.type)){
+              let silhouette=null;
+              const key=node.type==='material'?object?.getElement?.():
+                node.type==='shape'?object:null;
+              if(key){silhouette=alphaOutlines.current.get(key);
+                if(silhouette===undefined){try{
+                  if(node.type==='material')silhouette=silhouetteFromImage(key);
+                  else{const clip=object.clipPath;object.clipPath=null;
+                    try{silhouette=silhouetteFromImage(object.toCanvasElement({multiplier:Math.min(1,
+                      128/Math.max(node.width,node.height))}));}
+                    finally{object.clipPath=clip;}}
+                }catch{silhouette=null;}
+                alphaOutlines.current.set(key,silhouette);}}
+              try{
+                const outline=sourceOutline(node,node.type==='material'&&silhouette?
+                  {sourceSilhouette:silhouette}:null,node.type==='shape'?silhouette:null);
+                if(outline.length){const scale=uiScale();ctx.strokeStyle='#b65736';
+                  ctx.lineWidth=2/scale;ctx.setLineDash([6/scale,4/scale]);ctx.beginPath();
+                  for(const polygon of outline)for(const ring of polygon){
+                    ring.forEach((p,i)=>{const [x,y]=localPointToScene(node,p);
+                      i?ctx.lineTo(x,y):ctx.moveTo(x,y);});ctx.closePath();}
+                  ctx.stroke();ctx.setLineDash([]);return;
+                }
+              }catch{/* A still-decoding image uses its edit frame until ready. */}
+            }
             const box=object?.getBoundingRect()||
               (ids.length?sceneLassoBounds(callbacks.current.draft,
                 selectionLeaves(callbacks.current.draft,ids)):null);
@@ -477,6 +524,21 @@ export function FabricSceneStage({draft,assetURL,retainAssets,onSelection,onBefo
           }else if(callbacks.current.tool==='scissors'&&
             (callbacks.current.selectedID||callbacks.current.selectedIDs?.length)){
             cutFrame();
+          }else if(gesture?.tool==='tape'){
+            const tape=callbacks.current.tapeAsset;
+            if(tape&&gesture.points.length>=2){
+              ctx.save();ctx.globalAlpha=.78;
+              try{const node=createTapeStrip(tape,callbacks.current.draft,gesture.points);
+                ctx.translate(node.x,node.y);
+                if(tapeImage.current)paintTapeStrip(ctx,node,tapeImage.current);
+                else{ctx.strokeStyle='#9cc3aa';ctx.lineWidth=gesture.width;
+                  ctx.lineCap='square';ctx.lineJoin='round';ctx.beginPath();
+                  gesture.points.forEach((p,i)=>i?ctx.lineTo(p.x-node.x,p.y-node.y):
+                    ctx.moveTo(p.x-node.x,p.y-node.y));ctx.stroke();}
+              }catch{ctx.strokeStyle='#c26942';ctx.lineWidth=gesture.width;
+                ctx.beginPath();gesture.points.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));ctx.stroke();}
+              ctx.restore();
+            }
           }else if(gesture?.tool==='pen'||gesture?.tool==='highlighter'){
             const outline=pressureInkOutline({points:gesture.points,width:gesture.width});
             if(outline.length){ctx.globalAlpha=gesture.tool==='highlighter'?.38:1;
@@ -562,7 +624,8 @@ export function FabricSceneStage({draft,assetURL,retainAssets,onSelection,onBefo
         };
         const onPointerDown=event=>{
           const mode=callbacks.current.tool;
-          if(readOnly||!['pen','highlighter','eraser','text','lasso','scissors'].includes(mode)||event.button>0)return;
+          if(readOnly||!['pen','highlighter','eraser','text','lasso','scissors','tape'].includes(mode)||event.button>0)return;
+          if(mode==='tape'&&!callbacks.current.tapeAsset)return;
           event.preventDefault();event.stopImmediatePropagation();
           if(mode==='text'){
             textPointerID=event.pointerId;
@@ -590,7 +653,8 @@ export function FabricSceneStage({draft,assetURL,retainAssets,onSelection,onBefo
           gesture={id:event.pointerId,tool:mode,points:samples(event),
             startX:event.clientX,startY:event.clientY,moved:false,
             width:['lasso','scissors'].includes(mode)?2:paperWidthPixels(callbacks.current.draft,
-              settings?.widthMM??(mode==='pen'?.5:mode==='highlighter'?2:4)),
+              mode==='tape'?tapeDimensions(callbacks.current.tapeAsset).widthMM:
+                settings?.widthMM??(mode==='pen'?.5:mode==='highlighter'?2:4)),
             color:settings?.color||'#2b5245',style:settings?.style,
             straight:settings?.straight};
           canvas.upperCanvasEl.setPointerCapture(event.pointerId);
@@ -637,7 +701,7 @@ export function FabricSceneStage({draft,assetURL,retainAssets,onSelection,onBefo
           for(const point of samples(event)){
             const previous=gesture.points.at(-1);
             const spacing=gesture.tool==='eraser'?Math.max(.5,gesture.width*.25):
-              ['lasso','scissors'].includes(gesture.tool)?1:.15;
+              ['lasso','scissors','tape'].includes(gesture.tool)?1:.15;
             if(!previous||Math.hypot(point.x-previous.x,point.y-previous.y)>spacing)
               gesture.points.push(point);
           }
@@ -670,7 +734,10 @@ export function FabricSceneStage({draft,assetURL,retainAssets,onSelection,onBefo
           const point=pointer(event),prior=finished.points.at(-1);
           if(prior&&Math.hypot(point.x-prior.x,point.y-prior.y)>.15)finished.points.push(point);
           const current=callbacks.current.draft;
-          if(finished.tool==='scissors'){
+          if(finished.tool==='tape'){
+            preview();if(finished.moved&&finished.points.length>=2)
+              callbacks.current.onTapePath?.(finished.points);
+          }else if(finished.tool==='scissors'){
             preview();
             if(!finished.moved)callbacks.current.onCutTap?.(event);
             else if(finished.points.length>=2){

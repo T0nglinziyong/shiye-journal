@@ -5,6 +5,7 @@ import {validateVectorMask} from './scene-v2.js';
 import {smoothInkSVG} from './ink-path-geometry.js';
 import {pressureInkPath} from './pressure-ink.js';
 import {sceneDisplaySiblings} from './craft-display.js';
+import {paintTapeStrip} from './tape-strip.js';
 import {configureFabricEditorFrame} from './fabric-editor-frame.js';
 
 const finite=(value,fallback=0)=>Number.isFinite(value)?value:fallback;
@@ -190,6 +191,23 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
       const url=await assetURL(node.assetID,node);
       if(!url)throw Error('素材图片尚未准备好：'+node.assetID);
       object=await fabric.FabricImage.fromURL(url,{crossOrigin:'anonymous'});
+      if(node.tapeStrip){
+        const source=object.getElement(),resolution=Math.min(2,4096/Math.max(node.width,node.height)),
+          bitmap=document.createElement('canvas');
+        bitmap.width=Math.max(1,Math.round(node.width*resolution));
+        bitmap.height=Math.max(1,Math.round(node.height*resolution));
+        const context=bitmap.getContext('2d');
+        context.scale(resolution,resolution);
+        context.translate(node.width/2,node.height/2);
+        paintTapeStrip(context,node,source);
+        object=new fabric.FabricImage(bitmap,{originX:'center',originY:'center',
+          left:finite(node.x),top:finite(node.y),
+          scaleX:node.width/bitmap.width,scaleY:node.height/bitmap.height,
+          flipX:!!node.isFlippedHorizontally,
+          lockSkewingX:true,lockSkewingY:true});
+        if(node.vectorMask)object.clipPath=clipPath(maskGeometry(node.vectorMask),
+          object.width,object.height);
+      }else{
       const naturalWidth=positive(object.width),naturalHeight=positive(object.height);
       const crop=node.cropRect||{x:0,y:0,width:1,height:1};
       object.set({cropX:finite(crop.x)*naturalWidth,cropY:finite(crop.y)*naturalHeight,
@@ -203,6 +221,7 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
       const vector=node.vectorMask&&maskGeometry(node.vectorMask);
       if(material||vector)object.clipPath=clipPath(material&&vector?
         geometryIntersection(material,vector):material||vector,object.width,object.height);
+      }
     }else throw Error('不支持的 Scene 图层：'+node.type);
     if(node.type==='shape'&&node.vectorMask)object.clipPath=clipPath(maskGeometry(node.vectorMask),
       object.sceneFrameWidth,object.sceneFrameHeight);

@@ -13,6 +13,7 @@ import {textLines,textFont} from './editor-tools-model.js';
 import {reviewCreativeDraft} from './creative-quality.js';
 import {materialMaskPoints,materialMaskArea,materialMaskGeometry,cutMaterialDiagonal,addMaterialWindow} from './material-mask.js';
 import {agentTools,directPageContract,directPageToTools,validateTool,validateValue} from './creative-contract.js';
+import {validateTapeStrip} from './tape-strip.js';
 import {arrangeSceneSelection} from './scene-arrangement.js';
 export {agentTools,directPageContract,directPageToTools};
 const EPS=1e-6,fields=['items','primitives','textBlocks'];
@@ -47,6 +48,10 @@ function checkDraft(d,assets){
     if(a.kind!=='tape'&&unit!==0)throw Error(a.title+' 每个方案只能取用一份源素材');
     const crop=cropOf(i);assertRect(crop);
     if(i.materialMask)materialMaskPoints(i.materialMask);validateDisplaySlices(i);
+    if(i.tapeStrip){
+      if(a.kind!=='tape')throw Error('胶带段必须引用胶带素材');
+      validateTapeStrip(i.tapeStrip,a);
+    }
     const expectedW=crop.width*a.physicalWidthMM*scale(d),expectedH=crop.height*a.physicalHeightMM*scale(d);
     if(!Number.isFinite(expectedW)||!Number.isFinite(expectedH)||
       !i.manualVisualResize&&(Math.abs(i.width-expectedW)>EPS||Math.abs(i.height-expectedH)>EPS))
