@@ -6,6 +6,19 @@ const browser=await browserHarness('shiye-tape',base+'/');
 const {click,command,evaluate,wait,sleep}=browser;
 try{
   await wait('.series-grid');
+  const croppedTexture=await evaluate(`(async()=>{
+    const {paintTapeStrip}=await import('/src/tape-strip.js');
+    const source=document.createElement('canvas');source.width=100;source.height=40;
+    source.getContext('2d').fillStyle='#217a40';source.getContext('2d').fillRect(20,10,60,20);
+    const output=document.createElement('canvas');output.width=200;output.height=40;
+    const ctx=output.getContext('2d');ctx.translate(100,20);
+    paintTapeStrip(ctx,{width:200,height:40,tapeStrip:{axis:'x',baseWidth:200,baseHeight:40,
+      bandWidthScene:20,points:[[.1,.5],[.9,.5]],pathLengthMM:80,
+      sourceLengthMM:100,sourcePeriodMM:20}},source);
+    return [...output.getContext('2d').getImageData(25,20,1,1).data];
+  })()`);
+  assert.ok(croppedTexture[1]>60&&croppedTexture[3]>100,
+    'The first repeat must use the tape pattern, not transparent photo padding');
   await evaluate(`(async()=>{
     const image=await (await fetch('/samples/demo-repeat-tape.png')).blob();
     const db=await new Promise(resolve=>{const request=indexedDB.open('shiye-pwa-full-v1');

@@ -63,14 +63,43 @@ export function validateTapeStrip(strip,asset){
   if(Math.abs(measured-strip.pathLengthMM)>.15)throw Error('胶带轨迹长度与真实尺寸不一致');
   return widthMM;
 }
-const rotatedImages=new WeakMap();
+const preparedImages=new WeakMap();
 function orientedImage(image,axis){
-  if(axis==='x')return image;
-  let rotated=rotatedImages.get(image);if(rotated)return rotated;
   const w=image.naturalWidth||image.width,h=image.naturalHeight||image.height;
-  rotated=document.createElement('canvas');rotated.width=h;rotated.height=w;
-  const ctx=rotated.getContext('2d');ctx.translate(0,w);ctx.rotate(-Math.PI/2);ctx.drawImage(image,0,0,w,h);
-  rotatedImages.set(image,rotated);return rotated;
+  let prepared=preparedImages.get(image);if(!prepared){
+    const scale=Math.min(1,2048/Math.max(w,h)),raw=document.createElement('canvas');
+    raw.width=Math.max(1,Math.round(w*scale));raw.height=Math.max(1,Math.round(h*scale));
+    const ctx=raw.getContext('2d',{willReadFrequently:true});
+    ctx.drawImage(image,0,0,raw.width,raw.height);
+    let left=0,right=raw.width,top=0,bottom=raw.height;
+    try{
+      const {data}=ctx.getImageData(0,0,raw.width,raw.height),
+        columns=new Uint32Array(raw.width),rows=new Uint32Array(raw.height);
+      for(let y=0;y<raw.height;y++)for(let x=0;x<raw.width;x++)
+        if(data[(y*raw.width+x)*4+3]>=24){columns[x]++;rows[y]++;}
+      // Ignore isolated segmentation hairs. The physical width belongs to the
+      // actual tape, even when a photographed/cutout PNG has empty padding.
+      const xThreshold=Math.max(2,Math.ceil(raw.height*.08)),
+        yThreshold=Math.max(2,Math.ceil(raw.width*.02));
+      while(left<right-1&&columns[left]<xThreshold)left++;
+      while(right>left+1&&columns[right-1]<xThreshold)right--;
+      while(top<bottom-1&&rows[top]<yThreshold)top++;
+      while(bottom>top+1&&rows[bottom-1]<yThreshold)bottom--;
+      left=Math.max(0,left-1);right=Math.min(raw.width,right+1);
+      top=Math.max(0,top-1);bottom=Math.min(raw.height,bottom+1);
+    }catch{/* An unreadable external image still renders without trimming. */}
+    const trimmed=document.createElement('canvas');trimmed.width=right-left;trimmed.height=bottom-top;
+    trimmed.getContext('2d').drawImage(raw,left,top,trimmed.width,trimmed.height,
+      0,0,trimmed.width,trimmed.height);
+    prepared={x:trimmed};preparedImages.set(image,prepared);
+  }
+  if(axis==='x')return prepared.x;
+  if(!prepared.y){const source=prepared.x,rotated=document.createElement('canvas');
+    rotated.width=source.height;rotated.height=source.width;
+    const ctx=rotated.getContext('2d');ctx.translate(0,source.width);
+    ctx.rotate(-Math.PI/2);ctx.drawImage(source,0,0);
+    prepared.y=rotated;}
+  return prepared.y;
 }
 export function paintTapeStrip(ctx,node,image){
   const strip=node.tapeStrip;if(!strip)return false;
