@@ -25,8 +25,14 @@ export default async function handler(req,res){
     if(FORWARD_HEADERS.has(name)&&typeof value==='string')headers[name]=value;
   let body;
   if(!['GET','HEAD'].includes(req.method)){
-    body=typeof req.body==='string'?req.body:req.body==null?undefined:JSON.stringify(req.body);
-    if(body&&Buffer.byteLength(body)>4_000_000)return res.status(413).json({error:'Payload too large'});
+    // Vercel's lazy req.body parser rejects the SDK's RPC media type before
+    // the handler can forward it. Stream the original bytes unchanged.
+    const parts=[];let size=0;
+    try{for await(const chunk of req){size+=chunk.length;
+      if(size>4_000_000)return res.status(413).json({error:'Payload too large'});
+      parts.push(chunk);
+    }}catch{return res.status(400).json({error:'Invalid request body'});}
+    body=Buffer.concat(parts);
   }
   try{
     const upstream=await fetch(target,{method:req.method,headers,body,
