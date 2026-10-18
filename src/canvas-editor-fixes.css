@@ -42,18 +42,19 @@
    Earlier min-height + fixed grid rows clipped the caption on iPhone. */
 .swift-picker-popover.swift-material-picker .canvas-picker-grid>button{
   box-sizing:border-box;display:grid;
-  grid-template-rows:74px minmax(34px,auto);
+  grid-template-rows:132px minmax(34px,auto);
   align-content:start;justify-items:center;gap:7px;
-  min-height:132px;height:auto;overflow:hidden;
+  min-height:190px;height:auto;overflow:hidden;
   padding:6px 5px 9px;
 }
 .swift-picker-popover.swift-material-picker .canvas-picker-grid>button>.material-piece-image{
   grid-row:1;display:grid;place-items:center;box-sizing:border-box;
-  width:100%;height:74px;max-height:74px;min-width:0;min-height:0;overflow:hidden;
+  width:100%;height:132px;min-width:0;min-height:0;overflow:hidden;
 }
 .swift-picker-popover.swift-material-picker .material-piece-image :is(img,canvas){
-  display:block;position:static;max-width:100%;max-height:100%;
-  width:100%;height:100%;object-fit:contain;
+  display:block;position:static;box-sizing:border-box;
+  width:100%;height:132px;min-width:0;min-height:0;
+  max-width:100%;max-height:132px;object-fit:contain;object-position:center;
 }
 .swift-picker-popover.swift-material-picker .canvas-picker-grid>button>img{
   display:block;position:static;width:100%;height:74px;min-height:0;

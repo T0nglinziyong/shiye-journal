@@ -146,6 +146,7 @@ function MaterialPicker({draft,materials,series,source,onPick}){
   const [query,setQuery]=useState(''),[group,setGroup]=useState('all');
   const [kind,setKind]=useState('all'),[shown,setShown]=useState(40);
   const byID=useMemo(()=>new Map(materials.map(asset=>[asset.id,asset])),[materials]);
+  const placedAssetIDs=useMemo(()=>new Set(draft.items.map(item=>item.assetID)),[draft.items]);
   const matches=asset=>!!asset&&
     (group==='all'||(group==='none'?!asset.seriesID:asset.seriesID===group))&&
     (kind==='all'||asset.kind===kind)&&
@@ -154,10 +155,11 @@ function MaterialPicker({draft,materials,series,source,onPick}){
     if(tab==='used'||tab==='standby')return draft.items.filter(item=>!!item.isParked===(tab==='standby'))
       .map(item=>({asset:byID.get(item.assetID),item}))
       .filter(row=>matches(row.asset));
-    const list=materials.filter(asset=>!asset.isProjectInternal&&matches(asset));
+    const list=materials.filter(asset=>!asset.isProjectInternal&&
+      !placedAssetIDs.has(asset.id)&&matches(asset));
     list.sort((a,b)=>Date.parse(b.createdAt||0)-Date.parse(a.createdAt||0));
     return list.map(asset=>({asset}));
-  },[tab,draft.items,materials,byID,group,kind,query]);
+  },[tab,draft.items,materials,byID,placedAssetIDs,group,kind,query]);
   useEffect(()=>setShown(40),[tab,query,group,kind]);
   return <><div className="swift-segments">
     {[['used','已使用素材'],['standby','备选素材'],['all','所有素材']].map(([id,label])=><button
@@ -199,13 +201,18 @@ function LayerTree({draft,state,materials,onAction,collapsed,setCollapsed}){
   const selected=new Set([...(state.multiSelected||[]),state.selected].filter(Boolean));
   const countInk=nodes=>(nodes||[]).reduce((count,node)=>count+(node.type==='ink'?1:0)+
     (node.type==='group'?countInk(node.children):0),0);
-  const inkCount=countInk(draft.layers);
-  const parked=sceneLayerEntries(draft,{hidden:true,ink:true})
-    .filter(entry=>entry.value.isParked);
+  const listed=node=>!node.isParked&&
+    (node.type!=='group'||(node.children||[]).some(listed));
+  const listedLayers=draft.layers.filter(listed);
+  const inkCount=countInk(listedLayers);
+  // Non-material offcuts still need a recovery entry; material offcuts live in
+  // the standby tab of the material picker, outside the editable layer tree.
+  const parkedOther=sceneLayerEntries(draft,{hidden:true,ink:true})
+    .filter(entry=>entry.value.isParked&&entry.kind!=='material');
   const label=node=>node.type==='group'?node.name||'未命名组合':
     node.type==='material'?names.get(node.assetID)||'素材':node.type==='text'?node.content?.slice(0,27)||'文字':
     node.type==='ink'?'手写笔迹':node.kind||'图形';
-  const visit=(nodes,level=1)=>[...(nodes||[])]
+  const visit=(nodes,level=1)=>[...(nodes||[])].filter(listed)
     .sort((a,b)=>(b.zIndex??0)-(a.zIndex??0)).map(node=>{
     const locked=!!(node.locked||node.isLocked);
     const hidden=!!(node.hidden||node.isHidden||node.isParked);
@@ -268,18 +275,18 @@ function LayerTree({draft,state,materials,onAction,collapsed,setCollapsed}){
       <button type="button" className="btn mini" disabled={selected.size<2}
         onPointerUp={event=>touchActivate(event,()=>onAction('fabric-group-selection'))}
         onClick={event=>clickActivate(event,()=>onAction('fabric-group-selection'))}>组合所选</button>
-      <button type="button" className="btn mini" disabled={!draft.layers.some(node=>node.type==='group')}
+      <button type="button" className="btn mini" disabled={!listedLayers.some(node=>node.type==='group')}
         onPointerUp={event=>touchActivate(event,()=>onAction('fabric-ungroup-selection'))}
         onClick={event=>clickActivate(event,()=>onAction('fabric-ungroup-selection'))}>取消组合</button>
     </div><div className="canvas-layer-list scene-layer-tree" role="tree" aria-label="可编辑场景递归图层树">
-      {visit(draft.layers)}</div>{parked.length?<div className="scene-layer-parked" aria-label="备选裁片">
-      <strong>备选 · {parked.length} 件</strong>
-      {parked.map(entry=><button key={entry.value.id} type="button"
+      {visit(listedLayers)}</div>{parkedOther.length?<div className="scene-layer-parked" aria-label="备选非素材对象">
+      <strong>备选对象 · {parkedOther.length} 件</strong>
+      {parkedOther.map(entry=><button key={entry.value.id} type="button"
         data-parked-piece-id={entry.value.id}
         onClick={()=>onAction('fabric-unpark',entry.value.id)}>
         放回 {label(entry.value)}</button>)}
     </div>:null}<p className="scene-layer-tree-status" role="status">
-        {draft.layers.length} 个顶层图层 · 拖动把手改变层级
+        {listedLayers.length} 个顶层图层 · 拖动把手改变层级
         {inkCount?` · 笔迹 ${inkCount} 笔（可在此选择）`:''}</p>
   </div>;
 }
