@@ -844,7 +844,7 @@ async function cloudAll(store){
     const rows=await readCloudPages(async(offset,size)=>checked(await cloudClient()
       .from('shiye_records').select('record').eq('user_id',owner).eq('store',store)
       .order('id').range(offset,offset+size-1)),
-    {initialSize:store==='assets'?32:500});
+    {initialSize:store==='assets'?8:500});
     const verified=Number(checked(await cloudClient().from('shiye_revisions').select('revision').eq('user_id',owner).single()).revision);
     if(verified!==readRevision){revision=verified;continue;}
     const snapshot={revision:readRevision,records:rows.map(row=>row.record)};
