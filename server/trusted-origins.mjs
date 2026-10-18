@@ -1,4 +1,5 @@
-const BASE=['https://shiye-journal-test.vercel.app','https://shiyejournal.vip'];
+const BASE=['https://shiye-journal-test.vercel.app','https://shiyejournal.vip',
+  'https://shiye-pg-test-d1gg723f7fb356ccc-1498303035.tcloudbaseapp.com'];
 export function trustedOrigins(env={}){
   const origins=new Set(BASE);
   for(const token of String(env.SHIYE_APP_ORIGINS||'').split(',')){

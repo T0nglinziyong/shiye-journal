@@ -8,7 +8,19 @@ const payload={operations:[{store:'assets',action:'put',item:{id:'a'}}],
   expected_epoch:'epoch',sync_protocol_version:3};
 function response(){return {code:0,headers:{},body:null,setHeader(key,value){this.headers[key]=value;},
   status(code){this.code=code;return this;},json(body){this.body=body;return this;},
-  send(body){this.body=body;return this;}};}
+  send(body){this.body=body;return this;},end(){return this;}};}
+
+test('CloudBase hosting can preflight its Vercel commit fallback',async()=>{
+  const handler=createSyncCommitRelay();
+  const allowed=response();await handler({method:'OPTIONS',headers:{
+    origin:'https://shiye-pg-test-d1gg723f7fb356ccc-1498303035.tcloudbaseapp.com'}},allowed);
+  assert.equal(allowed.code,204);
+  assert.equal(allowed.headers['Access-Control-Allow-Origin'],
+    'https://shiye-pg-test-d1gg723f7fb356ccc-1498303035.tcloudbaseapp.com');
+  const denied=response();await handler({method:'OPTIONS',headers:{origin:'https://evil.example'}},denied);
+  assert.equal(denied.code,403);
+  assert.equal(denied.headers['Access-Control-Allow-Origin'],undefined);
+});
 
 test('relay forwards only a v3 commit with the user JWT and public key',async()=>{
   const calls=[],handler=createSyncCommitRelay({env:{

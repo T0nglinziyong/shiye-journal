@@ -6,6 +6,13 @@ import {trustedOrigins} from '../server/trusted-origins.mjs';
 export const config={maxDuration:30};
 export default async function handler(req,res){
   const env=process.env;
+  const origin=req.headers.origin;
+  if(origin&&trustedOrigins(env).includes(origin)){
+    res.setHeader('Access-Control-Allow-Origin',origin);
+    res.setHeader('Access-Control-Allow-Headers','Authorization, Content-Type');
+    res.setHeader('Access-Control-Allow-Methods','POST, OPTIONS');
+  }
+  if(req.method==='OPTIONS')return res.status(origin&&trustedOrigins(env).includes(origin)?204:403).end();
   const ready=!!(env.SHIYE_COS_SECRET_ID&&env.SHIYE_COS_SECRET_KEY&&env.SHIYE_COS_BUCKET&&env.SHIYE_COS_REGION);
   const run=createTicketHandler({ready,origins:trustedOrigins(env),
     authenticate:async token=>{

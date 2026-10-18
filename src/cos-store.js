@@ -1,6 +1,7 @@
 import {uploadCOSObject} from './cos-upload.js';
+import {cloudApiUrl} from './cloud-api-origin.js';
 const defaultFetch=(...args)=>fetch(...args);
-export function createCOSStore({client,enabled=false,endpoint='/api/cos',fetcher=defaultFetch,uploadRequest=fetcher===defaultFetch&&typeof XMLHttpRequest!=='undefined'?uploadCOSObject:null,sessionTimeoutMs=15000,ticketBatchDelayMs=8}){
+export function createCOSStore({client,enabled=false,endpoint=cloudApiUrl('/api/cos'),fetcher=defaultFetch,uploadRequest=fetcher===defaultFetch&&typeof XMLHttpRequest!=='undefined'?uploadCOSObject:null,sessionTimeoutMs=15000,ticketBatchDelayMs=8}){
   let pending=[],scheduled=false,activeWrites=0,activeReads=0,activePreviews=0;
   let reportOperation=()=>{};
   const waitingWrites=[],waitingPreviews=[];

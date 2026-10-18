@@ -1,4 +1,5 @@
 import {createClient} from '@supabase/supabase-js';
+import {cloudApiUrl} from './cloud-api-origin.js';
 
 const url=import.meta.env?.VITE_SHIYE_SUPABASE_URL;
 const key=import.meta.env?.VITE_SHIYE_SUPABASE_PUBLISHABLE_KEY;
@@ -44,7 +45,7 @@ export async function fetchCloudRequest(input,init,{fetcher=fetch,commitTimeoutM
     // A lost direct response may already have committed. The operation ID is
     // unchanged, so the server receipt makes this relay attempt idempotent.
     const relaySignal=AbortSignal.timeout(relayTimeoutMs);
-    return fetcher('/api/sync-commit',{method:'POST',headers:init?.headers,
+    return fetcher(cloudApiUrl('/api/sync-commit'),{method:'POST',headers:init?.headers,
       body,cache:'no-store',signal:init?.signal?
         AbortSignal.any([init.signal,relaySignal]):relaySignal});
   }

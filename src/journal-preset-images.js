@@ -1,4 +1,5 @@
 import {cloudEnabled,cloudClient} from './cloud-session.js';
+import {cloudApiUrl} from './cloud-api-origin.js';
 import {validateJournalPanel} from './journal-source-panels.js';
 
 const cache=new Map(),pending=new Map(),panelCache=new Map(),panelPending=new Map();let owner=null,epoch=0,active=0;const waiters=[];
@@ -14,7 +15,7 @@ export async function loadJournalPresetImage(number,{accountId,request=fetch}={}
   const work=readLane(async()=>{
   const {data,error}=await cloudClient().auth.getSession();if(error||!data.session?.access_token)throw Error('请先登录后查看预设图片');
   const path=`journal-presets/source/${number}.jpg`;
-  const ticket=await request('/api/cos',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+data.session.access_token},body:JSON.stringify({objects:[{path,method:'GET'}]}),signal:AbortSignal.timeout(15000)});
+  const ticket=await request(cloudApiUrl('/api/cos'),{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+data.session.access_token},body:JSON.stringify({objects:[{path,method:'GET'}]}),signal:AbortSignal.timeout(15000)});
   if(!ticket.ok)throw Error('预设图片授权失败（'+ticket.status+'）');
   const signed=(await ticket.json()).tickets?.[0]?.url;if(!signed?.startsWith('https://'))throw Error('预设图片签名无效');
   const response=await request(signed,{signal:AbortSignal.timeout(30000)});

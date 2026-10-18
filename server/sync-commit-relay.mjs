@@ -7,6 +7,12 @@ export function createSyncCommitRelay({env=process.env,fetcher=fetch}={}){
     const reply=(status,body)=>res.status(status).json(body);
     res.setHeader('Cache-Control','private, no-store');
     res.setHeader('Vary','Origin');
+    if(req.headers.origin&&trustedOrigins(env).includes(req.headers.origin)){
+      res.setHeader('Access-Control-Allow-Origin',req.headers.origin);
+      res.setHeader('Access-Control-Allow-Headers','Authorization, Content-Type');
+      res.setHeader('Access-Control-Allow-Methods','POST, OPTIONS');
+    }
+    if(req.method==='OPTIONS')return res.status(req.headers.origin&&trustedOrigins(env).includes(req.headers.origin)?204:403).end();
     if(req.method!=='POST')return reply(405,{message:'Method not allowed'});
     if(req.headers.origin&&!trustedOrigins(env).includes(req.headers.origin))
       return reply(403,{message:'Origin not allowed'});
