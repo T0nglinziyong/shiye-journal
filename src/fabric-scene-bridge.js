@@ -78,7 +78,18 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
           if(Math.abs(widthScale-1)>1e-6||Math.abs(heightScale-1)>1e-6){
             child.width=positive(child.width)*widthScale;
             child.height=positive(child.height)*heightScale;
-            child.manualVisualResize=true;
+            if(child.tapeStrip?.version===2){
+              const strip=child.tapeStrip,pageScale=strip.bandWidthScene/strip.physicalWidthMM;
+              const widthRatio=Math.sqrt(widthScale*heightScale);
+              strip.physicalWidthMM*=widthRatio;strip.bandWidthScene*=widthRatio;
+              strip.baseWidth=child.width;strip.baseHeight=child.height;
+              const points=strip.points.map(([u,v])=>[u*child.width,v*child.height]);
+              strip.pathLengthMM=points.slice(1).reduce((sum,p,i)=>
+                sum+Math.hypot(p[0]-points[i][0],p[1]-points[i][1]),0)/pageScale;
+              if((strip.textureMode||'sample')==='sample'&&
+                strip.sourceOffsetMM+strip.pathLengthMM>strip.sourceLengthMM)
+                strip.textureMode='stretch';
+            }else child.manualVisualResize=true;
           }
           child.rotation=Math.atan2(widthAxis.y,widthAxis.x)*180/Math.PI;
           child.userOverrideFlags=[...new Set([...(child.userOverrideFlags||[]),'moved',
@@ -204,7 +215,8 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
           left:finite(node.x),top:finite(node.y),
           scaleX:node.width/bitmap.width,scaleY:node.height/bitmap.height,
           flipX:!!node.isFlippedHorizontally,
-          lockSkewingX:true,lockSkewingY:true});
+          lockSkewingX:true,lockSkewingY:true,
+          lockScalingX:true,lockScalingY:true});
         if(node.vectorMask)object.clipPath=clipPath(maskGeometry(node.vectorMask),
           object.width,object.height);
       }else{

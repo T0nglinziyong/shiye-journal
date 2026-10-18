@@ -42,6 +42,34 @@ test('direct edits cannot forge manual privileges, image source, physical units 
  const unchanged=webSceneDocument(locked.task.source,locked.task.source.baseDraft);
  assert.equal(importEditableWork(JSON.stringify(unchanged),assets).drafts[0].items.length,1);
 });
+test('AI tools and direct Scene share editable tape ribbons while all other Scene nodes remain editable',async()=>{
+ const tape={id:'b',title:'花纹胶带',kind:'tape',blobId:'fixed-tape',
+  physicalWidthMM:120,physicalHeightMM:16,tapeAxis:'x',tapeRepeatMode:'repeatablePattern',
+  tapeRepeatStartMM:12,tapeRepeatEndMM:32,tapeRepeatPeriodMM:20};
+ const sourceAssets=[...assets,tape],{doc,files}=await fixture(project('胶带与图层'),sourceAssets);
+ const context=JSON.parse(strFromU8(files['task/context.json']));
+ assert.deepEqual(context.materials.find(item=>item.assetID==='b').tape.repeatRangeMM,[12,32]);
+ const result=applyWebSceneCommands(doc,{baseSceneHash:craftSceneHash(attachSceneV2(doc.page)),tools:[
+  {name:'draw_tape_strips',arguments:{items:[
+   {asset:'m2',piece:'ribbon-a',points:[[.1,.2],[.5,.23],[.9,.2]],width_mm:18,
+    texture_mode:'repeat',start_cap:'angled',end_cap:'torn'},
+   {asset:'m2',piece:'ribbon-b',points:[[.15,.8],[.85,.8]],texture_mode:'stretch',
+    width_mm:9,source_offset_mm:5,source_window_mm:50}
+  ]}}
+ ]},sourceAssets);
+ const strips=result.page.layers.filter(node=>node.tapeStrip);
+ assert.equal(strips.length,2);
+ assert.deepEqual(strips.map(node=>node.materialUnitIndex),[0,1]);
+ assert.deepEqual(strips.map(node=>node.tapeStrip.textureMode),['repeat','stretch']);
+ assert.equal(strips[0].tapeStrip.physicalWidthMM,18);
+ assert.equal(importEditableWork(JSON.stringify(result),sourceAssets).drafts[0].items.length,3);
+ const direct=structuredClone(result);
+ direct.page.layers.find(node=>node.id===strips[0].id).tapeStrip.reverseTexture=true;
+ assert.equal(importEditableWork(JSON.stringify(direct),sourceAssets).drafts[0].items.length,3);
+ const invalid=structuredClone(direct);
+ invalid.page.layers.find(node=>node.id===strips[0].id).tapeStrip.bandWidthScene*=2;
+ assert.throws(()=>importEditableWork(JSON.stringify(invalid),sourceAssets),/胶带路径|宽度|尺寸/);
+});
 test('source overlap, native masks and hidden required ancestors share material rules',async()=>{
  const p=project('保留素材');p.processing='保留完整';p.requiredAssetIDs=['a'];const {doc}=await fixture(p);
  const dup=structuredClone(doc),copy=structuredClone(doc.page.layers[0]);copy.id='duplicate';copy.creativePieceID='duplicate';dup.page.layers.push(copy);

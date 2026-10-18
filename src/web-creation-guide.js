@@ -32,6 +32,7 @@ inspect 提供每个节点完整字段，不止摘要。所有编辑共享锁定
 原生路径示例：vectorPaths=[[[0,0],[1,0],[0.5,1]]]；多色图形 vectorLayers=[{fill:"#8fa88d",paths:[[[0,0],[1,0],[0.5,1]]]}]。vectorMask={outer:[[0,0],[1,0],[1,1],[0,1]],holes:[[[0.2,0.2],[0.4,0.2],[0.4,0.4],[0.2,0.4]]]}；轮廓不可自交。高级裁片 materialMask / craftDisplaySlices 由工艺工具生成，改动后须通过来源几何与物理校验。
 字体镂空：node runtime/glyphs.cjs 本地有权使用的字体文件 文字 字号毫米；输出 output/glyph-geometry.json。把 geometryMM 传给 glyph-knockout 或 cut_shape/remove/geometry，实际预览中检查字腔连接。
 静态层类型 material/text/shape/ink/group 全部可用；素材支持原始比例裁切、复合负形、撕边/齿边、窗口、余料与穿插；数字图形可任意尺寸、多色矢量路径；文字保持可编辑；每个 ink 含一笔压感路径，抬笔后建下一 ink，组合可任意嵌套至预算上限。暂不支持翻片、口袋和页面动作。
+胶带是一类 material 专用图层，不占用普通素材的「一件只能用一次」规则。先看 task/context.json 中 tape 的真实宽度、长度、原图方向和已确认重复纹样区间。便捷工具 draw_tape_strips 可在一批中画多段：points 为可编辑中心线；width_mm 可调；texture_mode=sample 只用有限原图，repeat 仅能用已确认的区间，stretch 可沿路径拉伸原图；端头为 square/angled/torn。也可以直接编辑原生 tapeStrip v2，但 x/y/width/height、baseWidth/baseHeight、bandWidthScene、pathLengthMM、points 与物理页比例必须一致，且素材引用必须是任务固定的原图版本。沿路径拉伸只改变纹样采样，不擅自裁去原图或篡改其他实物素材的尺寸。
 AI 不可添加 manualVisualResize/manualVisualCopy 来逃避实物约束；基线已有手工变形可以保持。不得更改 source、纸张物理单位或私自换素材图片引用。`;
 export function webArtDirection(source){return [
   '【本次审美方向】',source.styles.map(s=>s+'：'+visualStyleBrief(s)).join('；'),

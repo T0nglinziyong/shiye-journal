@@ -5,7 +5,7 @@ import {normalizeGeometry,rectangleGeometry,geometryArea,geometryUnion,geometryI
 
 export const pieceKey=item=>item.creativePieceID||item.agentKey||item.key||item.id;
 export function buildMaterialLedger(draft,assets){
- const catalog=new Map(assets.map(asset=>[asset.id,asset])),groups=new Map(),rolls=new Map();
+ const catalog=new Map(assets.map(asset=>[asset.id,asset])),groups=new Map(),rolls=new Map(),tapeUnits=new Map();
  for(const item of draft.items||[]){
   if(item.manualVisualCopy)continue;
   const asset=catalog.get(item.assetID);craftAssert(asset,'MISSING_SOURCE','源素材不存在',{assetId:item.assetID,pieceId:pieceKey(item)});
@@ -19,7 +19,16 @@ export function buildMaterialLedger(draft,assets){
    const length=item.tapeStrip?.pathLengthMM??
      (asset.physicalWidthMM>=asset.physicalHeightMM?crop.width*asset.physicalWidthMM:crop.height*asset.physicalHeightMM);
    const roll=rolls.get(asset.id)||{assetId:asset.id,sourceRevision:assetSourceRevision(asset),pieces:[]};
-   roll.pieces.push({pieceId:pieceKey(item),unit,lengthMM:length});rolls.set(asset.id,roll);
+   const tapeKey=asset.id+':'+unit,origin=item.splitParentId||item.cutParentId||item.id;
+   if(item.tapeStrip){
+    const prior=tapeUnits.get(tapeKey);
+    craftAssert(!prior||prior===origin,'MULTIPLE_TAPE_SEGMENTS','同一胶带来源段编号不能用于不同带段');
+    tapeUnits.set(tapeKey,origin);
+   }
+   if(!item.tapeStrip||!roll.pieces.some(piece=>piece.unit===unit))
+    roll.pieces.push({pieceId:origin,unit,lengthMM:length});
+   rolls.set(asset.id,roll);
+   if(item.tapeStrip)continue;
   }
   const groupId=JSON.stringify([asset.id,unit]);
   const group=groups.get(groupId)||{assetId:asset.id,unit,sourceRevision:assetSourceRevision(asset),sourceAreaMM2:geometryArea(source),source,allocations:[]};

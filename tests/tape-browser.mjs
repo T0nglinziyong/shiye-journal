@@ -31,6 +31,25 @@ try{
     return Array.from({length:430},(_,i)=>pixels[i*4+3]).filter(alpha=>alpha<100).length;
   })()`);
   assert.ok(denseStroke<4,`A dense touch path must render continuous tape, not ${denseStroke} transparent slats`);
+  const ribbon=await evaluate(`(async()=>{
+    const {createTapeStrip,paintTapeStrip}=await import('/src/tape-strip.js');
+    const {project}=await import('/src/domain.js');
+    const asset={id:'render-tape',title:'胶带',kind:'tape',physicalWidthMM:100,
+      physicalHeightMM:16,tapeAxis:'x',tapeRepeatMode:'repeatablePattern',
+      tapeRepeatStartMM:0,tapeRepeatEndMM:20};
+    const draft=project('渲染').drafts[0];
+    const node=createTapeStrip(asset,draft,[[20,100],[180,100],[280,150]],1,
+      {textureMode:'repeat',widthMM:18,startCap:'angled',endCap:'torn'});
+    const image=document.createElement('canvas');image.width=100;image.height=16;
+    const ic=image.getContext('2d');ic.fillStyle='#5a8b63';ic.fillRect(0,0,100,16);
+    const output=document.createElement('canvas');output.width=320;output.height=220;
+    const ctx=output.getContext('2d');ctx.translate(node.x,node.y);
+    paintTapeStrip(ctx,node,image);
+    const row=output.getContext('2d').getImageData(30,100,135,1).data;
+    return {holes:Array.from({length:135},(_,i)=>row[i*4+3]).filter(a=>a<100).length,
+      endAlpha:output.getContext('2d').getImageData(275,147,1,1).data[3]};
+  })()`);
+  assert.ok(ribbon.holes<3&&ribbon.endAlpha>50,JSON.stringify(ribbon));
   await evaluate(`(async()=>{
     const image=await (await fetch('/samples/demo-repeat-tape.png')).blob();
     const db=await new Promise(resolve=>{const request=indexedDB.open('shiye-pwa-full-v1');
@@ -58,10 +77,13 @@ try{
   await click('#work-create','#blank-create-confirm');
   await click('#blank-create-confirm','#canvas-page');
   await wait('.upper-canvas');
+  await click('[data-val="tape"]','.canvas-tape-settings');
+  assert.ok(await evaluate('document.querySelector(".canvas-tape-settings")?.textContent.includes("胶带素材")'));
+  await click('[data-val="tape"]');
   await click('[data-val="material"]','.swift-material-picker');
   await click('[data-material-id="demo-repeat-tape"]');
-  await wait('.canvas-tool-hint');
-  assert.ok(await evaluate('document.querySelector(".canvas-tool-hint")?.textContent.includes("胶带")'));
+  await wait('.canvas-context-tools button');
+  assert.ok(await evaluate('document.querySelector(".canvas-context-tools")?.textContent.includes("胶带")'));
   const rect=await evaluate('document.querySelector(".upper-canvas").getBoundingClientRect().toJSON()');
   const before=await evaluate('document.querySelector(".upper-canvas").toDataURL()');
   const drag=async(y)=>{
@@ -90,6 +112,10 @@ try{
   assert.equal(scene.length,2,JSON.stringify(scene));
   assert.deepEqual(scene.map(item=>item.unit),[0,1]);
   assert.ok(scene.every(item=>item.points>=2&&item.width>0));
+  await click('[data-val="material"]','.swift-material-picker');
+  await click('.swift-segments button:first-child');
+  assert.equal(await evaluate('document.querySelectorAll(".swift-material-picker [data-material-id=demo-repeat-tape]").length'),0,
+    'Tape roll has no used/unused classification in the material picker');
   assert.deepEqual(browser.errors,[]);
   console.log('Tape picker, live gesture, two independent editable strips and saved Scene passed');
 }finally{await browser.close();}

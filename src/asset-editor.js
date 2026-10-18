@@ -19,9 +19,13 @@ export function assetEditorValue(old,values) {
   if(values.kind==='tape') {
     next.tapeAxis=values.tapeAxis==='y'?'y':'x';
     next.tapeRepeatMode=values.repeatable?'repeatablePattern':'singleStrip';
-    if(values.repeatable){const period=Number(values.repeatPeriod),length=next.tapeAxis==='x'?width:height;
-      if(!Number.isFinite(period)||period<=0||!length||period>length)throw Error('重复周期需为正数，且不得超过胶带长度方向的已校准样段');next.tapeRepeatPeriodMM=period;}
-    else next.tapeRepeatPeriodMM=null;
+    if(values.repeatable){const start=Number(values.repeatStart??0),
+      end=Number(values.repeatEnd??(start+Number(values.repeatPeriod))),
+      length=next.tapeAxis==='x'?width:height;
+      if(!Number.isFinite(start)||!Number.isFinite(end)||start<0||end<=start||!length||end>length)
+        throw Error('重复纹样起点和终点必须位于胶带长度方向的实拍样段内');
+      next.tapeRepeatStartMM=start;next.tapeRepeatEndMM=end;next.tapeRepeatPeriodMM=end-start;
+    }else{next.tapeRepeatStartMM=null;next.tapeRepeatEndMM=null;next.tapeRepeatPeriodMM=null;}
   }
   // Saving an unchanged form must not create a new cloud revision or restart
   // image/works sync. The two timestamps are effects of a real edit only.

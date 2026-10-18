@@ -13,7 +13,7 @@ import {textLines,textFont} from './editor-tools-model.js';
 import {reviewCreativeDraft} from './creative-quality.js';
 import {materialMaskPoints,materialMaskArea,materialMaskGeometry,cutMaterialDiagonal,addMaterialWindow} from './material-mask.js';
 import {agentTools,directPageContract,directPageToTools,validateTool,validateValue} from './creative-contract.js';
-import {validateTapeStrip} from './tape-strip.js';
+import {createTapeStrip,validateTapeStrip} from './tape-strip.js';
 import {arrangeSceneSelection} from './scene-arrangement.js';
 export {agentTools,directPageContract,directPageToTools};
 const EPS=1e-6,fields=['items','primitives','textBlocks'];
@@ -51,12 +51,20 @@ function checkDraft(d,assets){
     if(i.tapeStrip){
       if(a.kind!=='tape')throw Error('胶带段必须引用胶带素材');
       validateTapeStrip(i.tapeStrip,a);
+      if(i.tapeStrip.version===2){
+        if(Math.abs(i.tapeStrip.bandWidthScene-i.tapeStrip.physicalWidthMM*scale(d))>.1||
+          Math.abs(i.width-i.tapeStrip.baseWidth)>.1||
+          Math.abs(i.height-i.tapeStrip.baseHeight)>.1||
+          (i.cropRect&&JSON.stringify(i.cropRect)!==JSON.stringify({x:0,y:0,width:1,height:1}))||
+          i.materialMask)
+          throw Error(a.title+' 胶带路径应保持真实宽度；裁剪请使用剪刀蒙版');
+      }
     }
     const expectedW=crop.width*a.physicalWidthMM*scale(d),expectedH=crop.height*a.physicalHeightMM*scale(d);
     if(!Number.isFinite(expectedW)||!Number.isFinite(expectedH)||
-      !i.manualVisualResize&&(Math.abs(i.width-expectedW)>EPS||Math.abs(i.height-expectedH)>EPS))
+      !i.tapeStrip&&!i.manualVisualResize&&(Math.abs(i.width-expectedW)>EPS||Math.abs(i.height-expectedH)>EPS))
       throw Error(a.title+' 实物尺寸与来源不一致');
-    if(!i.manualVisualCopy){const group=a.id+':'+unit,used=usage.get(group)||[],region=sourceFootprint(i,a,materialMaskGeometry(i.materialMask));if(used.some(previous=>geometryArea(geometryIntersection(normalizeGeometry([[previous.outer,...previous.holes]]),normalizeGeometry([[region.outer,...region.holes]])))>1e-6))throw Error(a.title+' 同一源素材的裁片重叠或重复使用');used.push(region);usage.set(group,used);} // Intersection tolerance is in source mm².
+    if(!i.manualVisualCopy&&!i.tapeStrip){const group=a.id+':'+unit,used=usage.get(group)||[],region=sourceFootprint(i,a,materialMaskGeometry(i.materialMask));if(used.some(previous=>geometryArea(geometryIntersection(normalizeGeometry([[previous.outer,...previous.holes]]),normalizeGeometry([[region.outer,...region.holes]])))>1e-6))throw Error(a.title+' 同一源素材的裁片重叠或重复使用');used.push(region);usage.set(group,used);} // Intersection tolerance is in source mm².
   }
   buildMaterialLedger(d,assets);
 }
@@ -259,6 +267,27 @@ function compose(d,assets,aliases,a,options){
     if(crop)process(d,i,assets.find(a=>a.id===i.assetID),[{op:'crop',box:{unit:'ratio',mode:'keep',values:crop}}],'replace',options);
   }putGraphics(d,a.graphics||[]);putTexts(d,a.texts||[],options);
 }
+function drawTapeStrips(d,assets,aliases,items){
+  const used=new Set(d.items.map(item=>item.creativePieceID).filter(Boolean));
+  for(const command of items){
+    const asset=materialAsset(assets,aliases,command.asset);
+    if(asset.kind!=='tape')throw Error(asset.title+' 不是胶带素材');
+    if(used.has(command.piece))throw Error('胶带段编号已使用：'+command.piece);
+    const points=command.points.map(([x,y])=>[
+      converted(x,command.coordinate_unit||'ratio',d,'width'),
+      converted(y,command.coordinate_unit||'ratio',d,'height')]);
+    const options={widthMM:command.width_mm,textureMode:command.texture_mode,
+      sourceOffsetMM:command.source_offset_mm,sourceWindowMM:command.source_window_mm,
+      reverseTexture:command.reverse_texture,startCap:command.start_cap,
+      endCap:command.end_cap,capDepthMM:command.cap_depth_mm};
+    if(command.repeat_range_mm)options.repeatRangeMM=command.repeat_range_mm;
+    const node=createTapeStrip(asset,d,points,command.z??Math.max(0,...d.layers.map(layer=>layer.zIndex||0))+1,options);
+    node.creativePieceID=command.piece;
+    node.materialUnitIndex=command.unit??Math.max(-1,...d.items.filter(item=>item.assetID===asset.id)
+      .map(item=>item.materialUnitIndex??0))+1;
+    d.items.push(node);used.add(command.piece);
+  }
+}
 function story(d,assets,aliases,a,options){
   const materialIDs=[a.focal,a.support,a.tape,a.ticket,a.illustration].filter(Boolean),unique=[...new Set(materialIDs)];
   const materials=unique.map((asset,n)=>({asset,piece:'story-p'+(n+1),x:n===0?.30:n===1?.69:n===2?.50:n===3?.20:.81,y:n<2?.41:n===2?.58:.62,rotation:0,z:n+10}));
@@ -320,6 +349,7 @@ function execute(d,assets,aliases,name,a,options){
     case 'compose_page':compose(d,assets,aliases,a,options);break;
     case 'compose_direct_page':composeDirectSceneV2(d,assets,aliases,a,options);return {detail:'Scene v2 直接排版已完成真实素材与图层校验',mutation:true};
     case 'place_materials':addMaterials(d,assets,aliases,a.items);break;
+    case 'draw_tape_strips':drawTapeStrips(d,assets,aliases,a.items);break;
     case 'edit_materials':for(const e of a.items){const item=find(d,e.piece);if(!d.items.includes(item))throw Error('加工目标必须是实物');process(d,item,assets.find(a=>a.id===item.assetID),e.operations,e.mode||'append',options);}break;
     case 'upsert_materials':upsertMaterials(d,assets,aliases,a,options);break;
     case 'move_elements':for(const e of a.items)setPosition(d,find(d,e.key),e);break;

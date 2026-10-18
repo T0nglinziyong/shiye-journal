@@ -18,7 +18,7 @@ import {copySceneLasso,deleteSceneLasso,mergeSceneLasso,sceneLassoBounds} from '
 import {selectionGroupID,duplicateSceneGroup,deleteSceneGroup} from './scene-selection-actions.js';
 import {planSceneCut,rejoinMaterialPieces,restoreSceneMasks} from './scene-cut-ops.js';
 import {silhouetteFromImage} from './raster-silhouette.js';
-import {createTapeStrip} from './tape-strip.js';
+import {createTapeStrip,reshapeTapeStrip,tapeDimensions} from './tape-strip.js';
 import {beginSceneEditSession,acceptSceneEditStep,stepSceneEditSession,sceneEditSessionChanged} from './scene-edit-session.js';
 import {pinProjectMaterialImages} from './scene-material-references.js';
 import {arrangeSceneSelection} from './scene-arrangement.js';
@@ -979,6 +979,24 @@ function bindPage({partial=false}={}){
 function updateEditorInspector(id,value){
   const d=current(),entry=d&&editorEntry(d).find(item=>item.value.id===state.selected);
   if(!d)return;
+  if(id.startsWith('inspector-tape-')){
+    if(entry?.kind!=='material'||!entry.value.tapeStrip)throw Error('请先选择胶带段');
+    const record=asset(entry.value.assetID),node=entry.value,strip=node.tapeStrip;
+    const angle=(node.rotation||0)*Math.PI/180,cos=Math.cos(angle),sin=Math.sin(angle);
+    const points=strip.points.map(([u,v])=>{const x=(u-.5)*node.width,y=(v-.5)*node.height;
+      return [node.x+x*cos-y*sin,node.y+x*sin+y*cos];});
+    const options={...strip,widthMM:strip.physicalWidthMM};
+    const key={'inspector-tape-width':'widthMM','inspector-tape-mode':'textureMode',
+      'inspector-tape-start-cap':'startCap','inspector-tape-end-cap':'endCap'}[id];
+    if(!key)return;
+    options[key]=key==='widthMM'?Number(value):value;
+    const changed=reshapeTapeStrip(node,record,d,points,options);
+    const trial=attachSceneV2(structuredClone(d));
+    Object.assign(trial.items.find(item=>item.id===node.id),structuredClone(changed));
+    validateScenePhysical(trial,state.assets);
+    checkpoint();Object.assign(node,changed);saveProject();
+    if(!state.inspectorSession)render();return;
+  }
   if(['inspector-material-geometry','inspector-vector-mask'].includes(id)){
     if(!entry)throw Error('请先选择一个图层');
     let parsed;try{parsed=JSON.parse(value);}catch{throw Error('请输入合法的 JSON 几何数据');}
@@ -1415,7 +1433,7 @@ async function runAppAction(action,id,value){try{
       state.cutSettings={...state.cutSettings,targetIDs:[]};
     }
     if(state.tool!==value)state.cutPreview=null;
-    if(value!=='tape')state.tapeAssetID=null;
+    if(value!=='tape'){state.tapeAssetID=null;state.tapeEditID=null;}
     state.tool=value;
     if(leavingLasso||!['select','lasso','scissors'].includes(value)){state.selected=null;state.multiSelected=[];}
     state.fabricInspectorOpen=false;
@@ -1900,21 +1918,51 @@ async function runAppAction(action,id,value){try{
     if(!(a.physicalWidthMM>0&&a.physicalHeightMM>0)){
       toast('请先在素材详情确认胶带的真实宽度和样段长度');break;
     }
-    state.tapeAssetID=a.id;state.tool=state.toolHighlight='tape';
+    state.tapeAssetID=a.id;state.tapeEditID=null;
+    state.tapeOptions={widthMM:tapeDimensions(a).widthMM,
+      textureMode:a.tapeRepeatMode==='repeatablePattern'?'repeat':'sample',
+      startCap:'square',endCap:'square'};
+    state.tool=state.toolHighlight='tape';
     state.selected=null;state.multiSelected=[];render();
     toast('用笔或鼠标在画布上拖出胶带段；iPad 手指可移动画布');break;
   }
   case 'fabric-place-tape':{
     const a=asset(state.tapeAssetID),d=current();if(!a||!d)break;
     try{
-      const item=createTapeStrip(a,d,id,Math.max(0,...d.layers.map(node=>node.zIndex||0))+1);
-      item.materialUnitIndex=Math.max(-1,...d.items.filter(existing=>existing.assetID===a.id)
+      const original=state.tapeEditID?d.items.find(item=>item.id===state.tapeEditID):null;
+      const item=original?reshapeTapeStrip(original,a,d,id,state.tapeOptions):
+        createTapeStrip(a,d,id,Math.max(0,...d.layers.map(node=>node.zIndex||0))+1,state.tapeOptions);
+      if(!original)item.materialUnitIndex=Math.max(-1,...d.items.filter(existing=>existing.assetID===a.id)
         .map(existing=>existing.materialUnitIndex??0))+1;
-      const trial=attachSceneV2(structuredClone(d));trial.items.push(structuredClone(item));
+      const trial=attachSceneV2(structuredClone(d));
+      if(original)Object.assign(trial.items.find(node=>node.id===original.id),structuredClone(item));
+      else trial.items.push(structuredClone(item));
       validateScenePhysical(trial,state.assets);
-      checkpoint();d.items.push(item);saveProject();render();
+      checkpoint();if(original){Object.assign(original,item);state.tapeEditID=null;state.tool='select';
+        state.selected=original.id;state.multiSelected=[original.id];}
+      else d.items.push(item);
+      saveProject();render();
     }catch(error){toast(error.message||'胶带段未生成');}
     break;
+  }
+  case 'fabric-tape-option':{
+    const a=asset(state.tapeAssetID);if(!a)break;
+    const next={...(state.tapeOptions||{})};
+    if(id==='widthMM'||id==='sourceOffsetMM'||id==='sourceWindowMM'||id==='capDepthMM'){
+      const number=Number(value);if(!Number.isFinite(number))break;next[id]=number;
+      if(id==='widthMM'&&(number<.5||number>200))break;
+    }else if(['textureMode','startCap','endCap'].includes(id))next[id]=value;
+    else if(id==='reverseTexture')next[id]=!!value;
+    else break;
+    state.tapeOptions=next;render();break;
+  }
+  case 'fabric-tape-redraw':{
+    const d=current(),node=d?.items.find(item=>item.id===state.selected);
+    const a=node&&asset(node.assetID);if(!node?.tapeStrip||!a)break;
+    state.tapeAssetID=a.id;state.tapeEditID=node.id;
+    state.tapeOptions={...node.tapeStrip,widthMM:node.tapeStrip.physicalWidthMM};
+    state.tool=state.toolHighlight='tape';render();
+    toast('在画布上重画胶带中心线；完成后更新同一胶带段');break;
   }
   case 'fabric-replace-material':{
     const d=current(),selectedID=state.selected;if(!d||!selectedID)break;

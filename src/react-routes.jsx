@@ -1115,6 +1115,18 @@ function EditorInspector({selected,draft,asset,format,onChange,onAction,material
       </div>
       {item.cropRect?<p className="muted">已取用原素材的 {Math.round(item.cropRect.width*100)}% × {Math.round(item.cropRect.height*100)}% 区域；移动和旋转不会改变裁片。</p>:null}
       {item.materialMask?<p className="muted">已保留 AI 创作的裁边或镂空工艺。</p>:null}
+      {item.tapeStrip?<div className="stack"><h3>胶带段</h3>
+        <p className="muted">完成此窗口后，可在画布工具栏重画中心线。</p>
+        {field('inspector-tape-width','宽度 mm',item.tapeStrip.physicalWidthMM,'number',{min:.5,max:200,step:.5})}
+        {choice('inspector-tape-mode','纹样方式',item.tapeStrip.textureMode||'repeat',
+          [['sample','原图长度'],['repeat','重复纹样'],['stretch','沿路径拉伸']])}
+        <div className="form-grid">
+          {choice('inspector-tape-start-cap','起始端头',item.tapeStrip.startCap||'square',
+            [['square','平切'],['angled','斜切'],['torn','手撕']])}
+          {choice('inspector-tape-end-cap','结束端头',item.tapeStrip.endCap||'square',
+            [['square','平切'],['angled','斜切'],['torn','手撕']])}
+        </div>
+      </div>:null}
       {check('inspector-flipped','左右镜像',item.isFlippedHorizontally)}
     </>:null}
     <h3>图层外观</h3>
@@ -1344,6 +1356,7 @@ export function EditorPage({state,draft,editorEntry,asset,source,format,
         <FabricSceneStage draft={draft} sceneRevision={sceneRevision} tool={state.tool}
           selectedID={state.selected}
           tapeAsset={materials.find(asset=>asset.id===state.tapeAssetID)||null}
+          tapeOptions={state.tapeOptions||null}
           onTapePath={points=>onAction('fabric-place-tape',points)}
           cutPreview={state.cutPreview}
           onCutPath={(points,closed)=>onAction('fabric-cut-preview',points,closed?'loop':'line')}

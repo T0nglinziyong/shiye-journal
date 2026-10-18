@@ -14,7 +14,8 @@ export function AssetEditorDialog({asset,series,used,src,onClose,onSave}){
     usageStatus:used?'used':'unused',tapeAxis:asset.tapeAxis||
       (Number(asset.physicalWidthMM)>=Number(asset.physicalHeightMM)?'x':'y'),
     repeatable:asset.tapeRepeatMode==='repeatablePattern',
-    repeatPeriod:asset.tapeRepeatPeriodMM??''});
+    repeatStart:asset.tapeRepeatStartMM??0,
+    repeatEnd:asset.tapeRepeatEndMM??asset.tapeRepeatPeriodMM??''});
   const initial=useRef(JSON.stringify(form));
   useUnsavedInput('素材信息',JSON.stringify(form)!==initial.current);
   const set=(key,value)=>setForm(old=>({...old,[key]:value}));
@@ -48,7 +49,7 @@ export function AssetEditorDialog({asset,series,used,src,onClose,onSave}){
         <div className="stack material-info-panel" hidden={tab!==0}>
           {field('名称','title')}{select('类型','kind',materialKinds)}
           {select('画面作用','role',materialRoles)}{select('材质','texture',materialTextures.map(value=>[value,value]))}
-          {select('使用状态','usageStatus',[['unused','未使用'],['used','已使用']])}
+          {form.kind!=='tape'?select('使用状态','usageStatus',[['unused','未使用'],['used','已使用']]):null}
         </div>
         <div className="stack material-info-panel" hidden={tab!==1}>
           <div className="form-grid">{field('实物宽 mm','width','number')}
@@ -57,7 +58,10 @@ export function AssetEditorDialog({asset,series,used,src,onClose,onSave}){
             {select('胶带长度方向','tapeAxis',[['x','图片横向'],['y','图片纵向']])}
             <label className="toggle-row">已确认重复纹样<input id="asset-repeatable" type="checkbox"
               checked={form.repeatable} onChange={event=>set('repeatable',event.target.checked)}/></label>
-            {field('真实重复周期 mm','repeatPeriod','number')}
+            {form.repeatable?<div className="form-grid">
+              {field('纹样起点 mm','repeatStart','number')}
+              {field('纹样终点 mm','repeatEnd','number')}
+            </div>:null}
           </section>
         </div>
         <div className="stack material-info-panel" hidden={tab!==2}>

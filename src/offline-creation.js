@@ -25,6 +25,7 @@ import {classifyJournalMaterial,journalMaterialRoles,relevantJournalFamilies} fr
 import {journalReferenceGuide,selectJournalReferenceCases} from './journal-reference-catalog.js';
 import {journalAbstractTemplateGuide,selectJournalAbstractTemplates} from './journal-abstract-templates.js';
 import {journalSourceAudit,journalVerifiedPairs} from './journal-source-audit.js';
+import {tapeDimensions,tapeRepeatRange} from './tape-strip.js';
 
 export const OFFLINE_PACKAGE_FORMAT='shiye-gpt-creation-package';
 function packagePreviewPath(folder,name,bytes,{transparent=false}={}){
@@ -60,7 +61,11 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
   const source=sourceFor(p,aliases);source.taskBinding='local';source.textMode=source.contentPolicy==='visual'?'none':settings.textMode||'automatic';const selected=source.materials.map(({alias,assetID})=>{
     const asset=assets.find(item=>item.id===assetID);
     if(!asset||!validAlias(alias))throw Error('素材篮中有无效素材编号');
-    return {alias,assetID,title:asset.title,kind:asset.kind,role:asset.role,journalRoles:classifyJournalMaterial(asset),physicalWidthMM:asset.physicalWidthMM,physicalHeightMM:asset.physicalHeightMM,continuousTape:asset.kind==='tape',tags:asset.tags||[]};
+    return {alias,assetID,title:asset.title,kind:asset.kind,role:asset.role,journalRoles:classifyJournalMaterial(asset),physicalWidthMM:asset.physicalWidthMM,physicalHeightMM:asset.physicalHeightMM,continuousTape:asset.kind==='tape',tape:asset.kind==='tape'?{
+      axis:tapeDimensions(asset).axis,widthMM:tapeDimensions(asset).widthMM,
+      sourceLengthMM:tapeDimensions(asset).lengthMM,repeatRangeMM:tapeRepeatRange(asset),
+      textureModes:['sample',...(tapeRepeatRange(asset)?['repeat']:[]),'stretch'],
+      capStyles:['square','angled','torn']}:null,tags:asset.tags||[]};
   });
   if(!selected.length)throw Error('请先选择素材');
   const showImages=settings.includeThumbnails!==false;
@@ -71,7 +76,7 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
   const {offlineValidateSource}=await import('./generated/offline-validate-source.js');
   const {offlineGlyphSource}=await import('./generated/offline-glyph-source.js');
   const mode='scene';
-  source.capabilities={sceneWorkbench:true,cropPx:false,craftPlan:true,multimodalVision:showImages,twoHoleWeave:true,canonicalBrowserPreview:true,validateOffline:true,previewOffline:'canvas'};
+  source.capabilities={sceneWorkbench:true,cropPx:false,craftPlan:true,multimodalVision:showImages,twoHoleWeave:true,editableTapeRibbon:true,canonicalBrowserPreview:true,validateOffline:true,previewOffline:'canvas'};
   source.packageLayout='compact';
   source.schemaHash=schemaFingerprint(webSceneContract);source.planSchemaHash=schemaFingerprint(toolContracts.apply_craft_plan);
   freezeCraftTask(source,p.drafts[0],assets);

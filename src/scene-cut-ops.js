@@ -252,7 +252,8 @@ export function planSceneCut(draft,spec,assets,{uid=()=>crypto.randomUUID()}={})
         outline:pieceOutline(original,next),area:geometryArea(next),type:original.type});
       continue;
     }
-    const result=original.type==='material'?materialParts(original,regions,records.get(original.assetID)):
+    const result=original.type==='material'&&!original.tapeStrip?
+      materialParts(original,regions,records.get(original.assetID)):
       original.type==='ink'?inkParts(original,spec):vectorParts(original,regions,
         original.type==='shape'?spec.shapeOutlines?.[original.id]:null);
     if(!result)continue;
@@ -314,6 +315,22 @@ export function rejoinMaterialPieces(draft,ids,assets,{uid=()=>crypto.randomUUID
   const locations=ids.map(id=>findLocation(trial.layers,id));
   if(locations.some(loc=>!loc||loc.node.type!=='material'))throw Error('只能拼合同源实体裁片');
   const first=locations[0].node,asset=records.get(first.assetID);
+  if(first.tapeStrip){
+    const origin=first.splitParentId||first.cutParentId;
+    if(!asset||!origin||locations.some(loc=>loc.node.assetID!==first.assetID||
+      (loc.node.splitParentId||loc.node.cutParentId)!==origin||
+      loc.node.materialUnitIndex!==first.materialUnitIndex||
+      JSON.stringify(loc.node.tapeStrip)!==JSON.stringify(first.tapeStrip)||
+      loc.node.x!==first.x||loc.node.y!==first.y||
+      loc.node.width!==first.width||loc.node.height!==first.height))
+      throw Error('请选择同一胶带段的裁片');
+    const complete=geometryUnion(...locations.map(loc=>polygon(loc.node.vectorMask)));
+    const joinedNode={...structuredClone(first),id:uid(),vectorMask:maskFromGeometry(complete),
+      isParked:locations.every(loc=>loc.node.isParked)};
+    for(const loc of locations)loc.nodes.splice(loc.nodes.indexOf(loc.node),1);
+    locations[0].nodes.push(joinedNode);
+    return {draft:trial,nodeID:joinedNode.id};
+  }
   if(!asset||!first.splitParentId||locations.some(loc=>loc.node.assetID!==first.assetID||
     loc.node.splitParentId!==first.splitParentId||
     loc.node.materialUnitIndex!==first.materialUnitIndex||loc.node.vectorMask))

@@ -72,7 +72,7 @@ export function FabricSceneStage({draft,assetURL,retainAssets,onSelection,onBefo
   tool='select',pen={widthMM:.5,color:'#2b5245'},marker={widthMM:2,color:'#f5cf45'},
   eraser={widthMM:4},selectionMode='contain',readOnly=false,sceneRevision=0,
   selectedID=null,selectedIDs=[],selectionFilter=null,textDefaults=null,cutPreview=null,onCutPath=null,onCutTap=null,
-  tapeAsset=null,onTapePath=null}){
+  tapeAsset=null,tapeOptions=null,onTapePath=null}){
   const canvasRef=useRef(null),sessionRef=useRef(null),reconcileRef=useRef(null),callbacks=useRef(null);
   const tapeImage=useRef(null);
   const alphaOutlines=useRef(new WeakMap());
@@ -81,7 +81,7 @@ export function FabricSceneStage({draft,assetURL,retainAssets,onSelection,onBefo
   const materialKey=materialAssetIDs(draft.layers).join('\0');
   callbacks.current={draft,assetURL,onSelection,onBeforeChange,onChange,onIssue,onReady,tool,pen,marker,
     eraser,selectionMode,selectionFilter,selectedID,selectedIDs,textDefaults,cutPreview,onCutPath,onCutTap,
-    tapeAsset,onTapePath};
+    tapeAsset,tapeOptions,onTapePath};
 
   useLayoutEffect(()=>{
     let cancelled=false;tapeImage.current=null;
@@ -525,7 +525,8 @@ export function FabricSceneStage({draft,assetURL,retainAssets,onSelection,onBefo
             const tape=callbacks.current.tapeAsset;
             if(tape&&gesture.points.length>=2){
               ctx.save();ctx.globalAlpha=.78;
-              try{const node=createTapeStrip(tape,callbacks.current.draft,gesture.points);
+              try{const node=createTapeStrip(tape,callbacks.current.draft,gesture.points,10,
+                callbacks.current.tapeOptions||{});
                 ctx.translate(node.x,node.y);
                 if(tapeImage.current)paintTapeStrip(ctx,node,tapeImage.current);
                 else{ctx.strokeStyle='#9cc3aa';ctx.lineWidth=gesture.width;
@@ -650,7 +651,8 @@ export function FabricSceneStage({draft,assetURL,retainAssets,onSelection,onBefo
           gesture={id:event.pointerId,tool:mode,points:samples(event),
             startX:event.clientX,startY:event.clientY,moved:false,
             width:['lasso','scissors'].includes(mode)?2:paperWidthPixels(callbacks.current.draft,
-              mode==='tape'?tapeDimensions(callbacks.current.tapeAsset).widthMM:
+              mode==='tape'?(callbacks.current.tapeOptions?.widthMM||
+                tapeDimensions(callbacks.current.tapeAsset).widthMM):
                 settings?.widthMM??(mode==='pen'?.5:mode==='highlighter'?2:4)),
             color:settings?.color||'#2b5245',style:settings?.style,
             straight:settings?.straight};

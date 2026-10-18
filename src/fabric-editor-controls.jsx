@@ -9,8 +9,8 @@ import {adjacentFontSize} from './canvas-control-behavior.js';
 import {mountPieceThumbnail} from './material-piece-thumbnail.js';
 import {sceneLayerEntries} from './scene-v2.js';
 
-const toolIcons={select:'cursor',pen:'pen',eraser:'eraser',highlighter:'marker',lasso:'lasso',text:'text',shape:'shape',material:'material',layers:'layers',paper:'paper'};
-const labels={select:'选择',pen:'笔',eraser:'橡皮擦',highlighter:'荧光笔',lasso:'套索选择',text:'文字',shape:'图形',material:'素材',layers:'图层',paper:'画布背景'};
+const toolIcons={select:'cursor',pen:'pen',eraser:'eraser',highlighter:'marker',lasso:'lasso',tape:'tape',text:'text',shape:'shape',material:'material',layers:'layers',paper:'paper'};
+const labels={select:'选择',pen:'笔',eraser:'橡皮擦',highlighter:'荧光笔',lasso:'套索选择',tape:'胶带',text:'文字',shape:'图形',material:'素材',layers:'图层',paper:'画布背景'};
 const palette=['#171717','#555555','#989898','#ffffff','#e33b45','#fb8795','#ff9c21','#e8d432','#159b73','#57bd4b','#167ad9','#264d9c','#853aaf','#955969'];
 const slotDefaults={pen:{width:[.3,.5,1],color:['#171717','#2b5245','#167ad9']},highlighter:{width:[1,2,4],color:['#fb8795','#f5cf45','#57bd4b']},eraser:{width:[2,4,8]}};
 
@@ -142,7 +142,8 @@ export function MaterialPieceImage({asset,item,source}){
 }
 
 function MaterialPicker({draft,materials,series,source,onPick}){
-  const [tab,setTab]=useState(draft.items.some(item=>!item.isParked)?'used':'all');
+  const [tab,setTab]=useState(draft.items.some(item=>!item.isParked&&
+    materials.find(asset=>asset.id===item.assetID)?.kind!=='tape')?'used':'all');
   const [query,setQuery]=useState(''),[group,setGroup]=useState('all');
   const [kind,setKind]=useState('all'),[shown,setShown]=useState(40);
   const byID=useMemo(()=>new Map(materials.map(asset=>[asset.id,asset])),[materials]);
@@ -151,7 +152,9 @@ function MaterialPicker({draft,materials,series,source,onPick}){
     (kind==='all'||asset.kind===kind)&&
     (!query||asset.title?.toLocaleLowerCase().includes(query.toLocaleLowerCase()));
   const rows=useMemo(()=>{
-    if(tab==='used'||tab==='standby')return draft.items.filter(item=>!!item.isParked===(tab==='standby'))
+    if(tab==='used'||tab==='standby')return draft.items.filter(item=>
+      !!item.isParked===(tab==='standby')&&
+      (tab!=='used'||byID.get(item.assetID)?.kind!=='tape'))
       .map(item=>({asset:byID.get(item.assetID),item}))
       .filter(row=>matches(row.asset));
     const list=materials.filter(asset=>!asset.isProjectInternal&&matches(asset));
@@ -348,7 +351,7 @@ export function FabricEditorToolbar({state,draft,materials,source,selected,onIns
     <div className="editor-tools">{Object.keys(toolIcons).map(kind=><button key={kind} type="button"
       className={`btn ${state.tool===kind?'primary':''}`} data-val={kind} data-act="tool"
       data-react-action="true" aria-label={labels[kind]} aria-pressed={state.tool===kind}
-      onClick={event=>['shape','material','layers','paper'].includes(kind)?open(kind,event):
+      onClick={event=>['shape','material','tape','layers','paper'].includes(kind)?open(kind,event):
         state.tool===kind&&['pen','eraser','highlighter','lasso'].includes(kind)?
           toggleMenu(kind,event):
           (close(),onAction('fabric-tool',null,kind))} dangerouslySetInnerHTML={{__html:iconMarkup(toolIcons[kind])}}/>)}</div>
@@ -404,15 +407,19 @@ export function FabricEditorToolbar({state,draft,materials,source,selected,onIns
           {[0,25,50,75,100].map(value=><option key={value} value={value}>{value}%</option>)}
         </select>
         <button type="button" className="shape-detail-quick" onClick={()=>onAction('fabric-inspector-open')}>更多设置</button>
-      </>:selectedNode?selectedKind==='material'?<button type="button" onClick={()=>onAction('fabric-inspector-open')}>☷ 素材操作</button>:null:
+      </>:selectedNode?selectedKind==='material'?<>
+        <button type="button" onClick={()=>onAction('fabric-inspector-open')}>☷ 素材操作</button>
+        {selectedNode.tapeStrip?<button type="button" onClick={()=>onAction('fabric-tape-redraw')}>重画胶带路径</button>:null}
+      </>:null:
       activeTool==='shape'?<span className="canvas-tool-hint">选择图形，或再次点击左侧图形退出</span>:
       activeTool==='lasso'?<button type="button" data-popover-anchor="lasso-quick" onClick={event=>setMenu({kind:'lasso',anchor:event.currentTarget})}>◌ 套索选择</button>:
       activeTool==='scissors'?<span className="canvas-tool-hint">在画布上画切线；点击裁片切换保留</span>:
-      activeTool==='tape'?<span className="canvas-tool-hint">用笔拖出胶带段 · 选择工具可结束</span>:
+      activeTool==='tape'?<button type="button" onClick={event=>setMenu({kind:'tape',anchor:event.currentTarget})}>
+        胶带 · {materials.find(asset=>asset.id===state.tapeAssetID)?.title||'选择胶带'} · {state.tapeOptions?.widthMM||'—'} mm</button>:
       <button type="button" className="canvas-fit-button" onClick={()=>onAction('fabric-fit-view')}>↖ {Math.round(state.zoom*100)}%</button>}
     </div>
   </div>{menu?<ReactPopover anchor={menu.anchor} onClose={close}
-    title={{shape:'添加图形',material:'选择素材',paper:'画布背景',layers:'图层',
+    title={{shape:'添加图形',material:'选择素材',tape:'胶带工具',paper:'画布背景',layers:'图层',
       pen:'笔设置',eraser:'橡皮擦设置',highlighter:'荧光笔设置',lasso:'套索选择设置',
       'slot-width':'修改粗细','slot-color':'修改当前颜色',
       'text-paragraph':'段落','text-style':'文字样式',arrange:'排列所选'}[menu.kind]}
@@ -430,6 +437,32 @@ export function FabricEditorToolbar({state,draft,materials,source,selected,onIns
       onPick={(id,itemID)=>choose(itemID?'fabric-unpark':
         materials.find(asset=>asset.id===id)?.kind==='tape'?'fabric-start-tape':'fabric-add-material',
       itemID||id)}/>:null}
+    {menu.kind==='tape'?<div className="stack canvas-tape-settings">
+      <label>胶带素材<select value={state.tapeAssetID||''}
+        onChange={event=>event.target.value&&onAction('fabric-start-tape',event.target.value)}>
+        <option value="">选择胶带</option>
+        {materials.filter(asset=>asset.kind==='tape'&&asset.physicalWidthMM>0&&asset.physicalHeightMM>0)
+          .map(asset=><option key={asset.id} value={asset.id}>{asset.title}</option>)}
+      </select></label>
+      {state.tapeAssetID?<>
+        <label>宽度 mm<input type="number" min="0.5" max="200" step="0.5"
+          value={state.tapeOptions?.widthMM||''}
+          onChange={event=>onAction('fabric-tape-option','widthMM',event.target.value)}/></label>
+        <label>纹样方式<select value={state.tapeOptions?.textureMode||'sample'}
+          onChange={event=>onAction('fabric-tape-option','textureMode',event.target.value)}>
+          <option value="sample">原图长度</option>
+          {materials.find(asset=>asset.id===state.tapeAssetID)?.tapeRepeatMode==='repeatablePattern'?<option value="repeat">重复纹样</option>:null}
+          <option value="stretch">沿路径拉伸</option>
+        </select></label>
+        <div className="form-grid">
+          {['startCap','endCap'].map((key,index)=><label key={key}>{index?'结束端头':'起始端头'}
+            <select value={state.tapeOptions?.[key]||'square'}
+              onChange={event=>onAction('fabric-tape-option',key,event.target.value)}>
+              <option value="square">平切</option><option value="angled">斜切</option><option value="torn">手撕</option>
+            </select></label>)}
+        </div>
+      </>:<p>先在素材库把胶带设为「胶带」类型并确认实物尺寸。</p>}
+    </div>:null}
     {menu.kind==='pen'?<div className="stack">{[['pressure','钢笔'],['ballpoint','圆珠笔'],['brush','画笔']]
       .map(([id,label])=><button key={id} type="button" aria-checked={(tools.fabricPenStyle||'pressure')===id}
         onClick={()=>{setting('fabricPenStyle',id);close();}}>{label}</button>)}</div>:null}
