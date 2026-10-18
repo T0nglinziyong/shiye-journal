@@ -1,4 +1,5 @@
 import {prepareUploadJobs} from './upload-preparation.js';
+import {readCloudPages} from './cloud-page-read.js';
 import {cloudClient,requireCloudUser} from './cloud-session.js';
 import {privateCache,outboxVersionRows} from './private-cache.js';
 import {createProjectSync} from './project-sync.js';
@@ -839,18 +840,11 @@ async function cloudAll(store){
   // PostgREST pagination consists of several independent HTTP transactions.
   // Do not cache a mixed-revision library when another device edits mid-read.
   for(let attempt=0;attempt<3;attempt++){
-    const readRevision=revision,rows=[];
-    const pageAt=async offset=>checked(await cloudClient().from('shiye_records').select('record').eq('user_id',owner).eq('store',store).order('id').range(offset,offset+499));
-    const first=await pageAt(0);rows.push(...first);
-    // Most collections fit on one page. For larger ones, overlap only two
-    // independent page reads, then verify the global revision below.
-    if(first.length===500)for(let offset=500;;offset+=1000){
-      const pages=await Promise.all([pageAt(offset),pageAt(offset+500)]);
-      rows.push(...pages[0]);
-      if(pages[0].length<500)break;
-      rows.push(...pages[1]);
-      if(pages[1].length<500)break;
-    }
+    const readRevision=revision;
+    const rows=await readCloudPages(async(offset,size)=>checked(await cloudClient()
+      .from('shiye_records').select('record').eq('user_id',owner).eq('store',store)
+      .order('id').range(offset,offset+size-1)),
+    {initialSize:store==='assets'?32:500});
     const verified=Number(checked(await cloudClient().from('shiye_revisions').select('revision').eq('user_id',owner).single()).revision);
     if(verified!==readRevision){revision=verified;continue;}
     const snapshot={revision:readRevision,records:rows.map(row=>row.record)};

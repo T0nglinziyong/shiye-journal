@@ -115,7 +115,7 @@ test('large collection reads independent pages concurrently after the first page
   const started=[];let release;
   const gate=new Promise(resolve=>{release=resolve;});
   state.onReadPage=async start=>{if(start>=500){started.push(start);if(started.length===2)release();await gate;}};
-  assert.equal((await db.cloudAll('assets')).length,1001);
+  assert.equal((await db.cloudAll('projects')).length,1001);
   assert.deepEqual(started,[500,1000]);
 });
 test('cold collection reads share one revision request',async()=>{
