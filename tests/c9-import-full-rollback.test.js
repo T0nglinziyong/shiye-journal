@@ -12,9 +12,10 @@ const expected={
   // recognition and segmentation code remains unchanged.
   'styles.css':'c6b7945ba3ffeb4373dbe38f97bc96dbfd9e5178',
   'responsive.css':'3daab9b366125aeda84ed7e78bf2ac72132c8981',
-  // Reviewed change: editable work keeps candidate frames without the redundant full photo.
+  // Reviewed change: editable work keeps candidate frames without the redundant full photo;
+  // library materials no longer copy an unused, often multi-megabyte sourceRegion into metadata.
   // Recognition and segmentation are unchanged.
-  'import-save.js':'dbd610e10c2a2e8d47a072af38e0fd2d4c1131d5',
+  'import-save.js':'cb785971fe2762ee173da33b486d9665639f90a9',
   'vision-runtime.js':'3817687ab32df7fb19c308c83902a6b123aabee1'
 };
 for(const [name,sha] of Object.entries(expected)){

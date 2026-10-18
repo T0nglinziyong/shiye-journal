@@ -55,6 +55,17 @@ test('per-photo library choice overrides batch default without changing physical
  assert.ok(element.x>0&&element.y>0);
  assert.equal(element.isLocked,false);
 });
+test('material import keeps the candidate frame without embedding unused source pixels in metadata',async()=>{
+ const {state,batches,db}=fixture(true);
+ state.importMode='materials';
+ state.importRecords[0].selectedCandidates[0].region.sourcePixels='x'.repeat(1000);
+ await withCutoutPixels(()=>saveImportBatch({state,db,urls:new Map(),render:()=>{}}));
+ const saved=batches[0];
+ assert.equal(saved.assets.length,1);
+ assert.equal(saved.assets[0].sourceRegion,undefined);
+ assert.ok(saved.assets[0].candidateFrameBlobId);
+ assert.equal(saved.blobs.length,3);
+});
 test('imported work material assigned to library is used, and internal elements remain editable',async()=>{
   const {state,db,batches}=fixture(true);
   await withCutoutPixels(()=>saveImportBatch({state,db,urls:new Map(),render:()=>{}}));

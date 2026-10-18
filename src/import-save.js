@@ -113,10 +113,9 @@ export async function saveImportBatch({state,db,urls,render,onSaved}) {
           maxEdge:[900,1200,1600].includes(Number(state.preferences?.recognitionPixels))
             ?Number(state.preferences.recognitionPixels):900
         });
-        const {mask,...region}=c.region;
         assets.push({...candidateMetadata(c,record,state.importBatchSeriesID),id,blobId,imageHash,
           candidateFrameBlobId,initialMaskBlobId:maskId,finalMaskBlobId:maskId,
-          sourceRegion:structuredClone(region),createdAt:now});
+          createdAt:now});
         blobs.push({id:maskId,data:encodedMask},
           {id:candidateFrameBlobId,data:stored.frame},
           {id:blobId,data:stored.cutout});savedCount++;
