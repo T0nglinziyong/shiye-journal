@@ -2,6 +2,8 @@ import React,{useEffect,useRef,useState} from 'react';
 import {materialKinds,materialRoles,materialTextures,isMaterialTexture} from './material-taxonomy.js';
 import {useUnsavedInput} from './unsaved-inputs.js';
 import {TapeAssetImage} from './tape-asset-image.jsx';
+import {tapeFlatCanvas} from './tape-flat-crop.js';
+import {scheduleForegroundIdle} from './foreground-idle.js';
 
 const tabNames=['基本信息','尺寸与胶带','分类与标签'];
 
@@ -9,7 +11,8 @@ export function AssetEditorDialog({asset,series,used,src,onClose,onSave}){
   const [tab,setTab]=useState(0),[busy,setBusy]=useState(false),[error,setError]=useState('');
   const [autoCrop,setAutoCrop]=useState(null);
   const previewRef=useRef(null),[previewSize,setPreviewSize]=useState({width:0,height:0});
-  const [sourceSize,setSourceSize]=useState(null);
+  const sourceImage=useRef(null),[sourceSize,setSourceSize]=useState(null);
+  const [sourceLoaded,setSourceLoaded]=useState(0);
   const [form,setForm]=useState({title:asset.title,kind:asset.kind,role:asset.role,
     texture:isMaterialTexture(asset.texture)?asset.texture:'未确定',width:asset.physicalWidthMM??'',height:asset.physicalHeightMM??'',
     contentTags:(asset.contentTags||[]).join('、'),styleTags:(asset.styleTags||[]).join('、'),
@@ -30,10 +33,25 @@ export function AssetEditorDialog({asset,series,used,src,onClose,onSave}){
   useUnsavedInput('素材信息',JSON.stringify(form)!==initial.current);
   useEffect(()=>{
     const element=previewRef.current;if(!element)return;
-    const update=()=>setPreviewSize({width:element.clientWidth,height:element.clientHeight});
+    const update=()=>setPreviewSize(old=>old.width===element.clientWidth&&
+      old.height===element.clientHeight?old:
+      {width:element.clientWidth,height:element.clientHeight});
     update();const observer=new ResizeObserver(update);observer.observe(element);
     return ()=>observer.disconnect();
   },[]);
+  useEffect(()=>{
+    if(tab!==1||form.kind!=='tape'||!sourceLoaded)return;
+    const image=sourceImage.current;
+    if(!image?.naturalWidth)return;
+    setAutoCrop(null);
+    // Detect the automatic crop once per source/axis, after input settles.
+    // Slider changes only move DOM guides and never enter this pixel path.
+    return scheduleForegroundIdle(()=>{try{
+      const flat=tapeFlatCanvas(image,form.tapeAxis,null,{maxSize:480});
+      if(flat)setAutoCrop(flat.crop);
+    }catch{/* The visible source and manual guides remain available. */}},
+    {minIdleMs:250});
+  },[tab,src,form.kind,form.tapeAxis,sourceLoaded]);
   const set=(key,value)=>setForm(old=>key==='repeatable'&&value&&old.repeatEnd===''?
     {...old,[key]:value,repeatEnd:old.tapeAxis==='y'?old.height:old.width}:
     key==='flatCropMode'&&value==='manual'&&autoCrop?
@@ -61,7 +79,8 @@ export function AssetEditorDialog({asset,series,used,src,onClose,onSave}){
       value={Math.min(Math.max(number(form[key],max),min),Math.max(min,max))}
       onChange={event=>set(key,event.target.value)}/>
   </label>;
-  const guideCrop=form.flatCropMode==='manual'?previewCrop:autoCrop;
+  const guideCrop=form.flatCropMode==='manual'?previewCrop:
+    autoCrop||{left:0,top:0,right:1,bottom:1};
   const guideBox=sourceSize&&previewSize.width&&previewSize.height?(()=>{
     const scale=Math.min(previewSize.width/sourceSize.width,previewSize.height/sourceSize.height);
     const width=sourceSize.width*scale,height=sourceSize.height*scale;
@@ -84,13 +103,14 @@ export function AssetEditorDialog({asset,series,used,src,onClose,onSave}){
           onClick={()=>void submit()}>应用</button>
       </div>
       <div className="material-editor"><div className="material-editor-preview" ref={previewRef}>
-        {src?<TapeAssetImage asset={previewAsset} src={src} alt={asset.title} priority
+        {src&&!(form.kind==='tape'&&tab===1)?<TapeAssetImage asset={previewAsset} src={src} alt={asset.title} priority
           onFlatCrop={crop=>{if(form.flatCropMode==='auto')setAutoCrop(old=>
-            JSON.stringify(old)===JSON.stringify(crop)?old:crop);}}/>:<span>无预览</span>}
+            JSON.stringify(old)===JSON.stringify(crop)?old:crop);}}/>:!src?<span>无预览</span>:null}
         {src&&form.kind==='tape'&&tab===1?<div className="tape-source-guide" aria-label="原图取样边界预览">
           {guideBox?<div className="tape-guide-image-box" style={guideBox}>
-            <img src={src} alt="" onLoad={event=>setSourceSize({width:event.currentTarget.naturalWidth,
-              height:event.currentTarget.naturalHeight})}/>
+            <img ref={sourceImage} src={src} alt="" onLoad={event=>{
+              setSourceSize({width:event.currentTarget.naturalWidth,
+                height:event.currentTarget.naturalHeight});setSourceLoaded(value=>value+1);}}/>
             {guideCrop?<div className="tape-guide-crop" style={{left:`${guideCrop.left*100}%`,
               top:`${guideCrop.top*100}%`,width:`${(guideCrop.right-guideCrop.left)*100}%`,
               height:`${(guideCrop.bottom-guideCrop.top)*100}%`}}/>:null}
@@ -102,8 +122,9 @@ export function AssetEditorDialog({asset,series,used,src,onClose,onSave}){
                 style={form.tapeAxis==='y'?{top:`${position*100}%`}:{left:`${position*100}%`}}>
                 <b>{index?'终':'起'}</b></span>;
             }):null}
-          </div>:<img src={src} alt="" onLoad={event=>setSourceSize({width:event.currentTarget.naturalWidth,
-            height:event.currentTarget.naturalHeight})}/>}
+          </div>:<img ref={sourceImage} src={src} alt="" onLoad={event=>{
+            setSourceSize({width:event.currentTarget.naturalWidth,
+              height:event.currentTarget.naturalHeight});setSourceLoaded(value=>value+1);}}/>}
         </div>:null}
       </div><div className="cutout-tabs asset-editor-tabs" role="tablist" aria-label="素材信息分类">
           {tabNames.map((name,index)=><button type="button" role="tab" key={name}

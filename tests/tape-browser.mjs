@@ -120,6 +120,8 @@ try{
     'The untrimmed source image must never flash before the flat tape cover is ready');
   await click('.asset-editor-tabs button:nth-child(2)');
   await wait('.tape-source-guide .tape-guide-crop');
+  assert.equal(await evaluate('document.querySelectorAll(".material-editor-preview canvas").length'),0,
+    'Dragging tape settings must not rebuild a pixel canvas on every slider input');
   assert.ok(await evaluate('!!document.querySelector(".tape-source-guide .tape-guide-crop")'),
     'The original-photo guide marks the flat crop with dashed boundaries');
   assert.equal(await evaluate('document.querySelector("#asset-repeatStart")?.type'),'range');
@@ -135,6 +137,7 @@ try{
     input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
   assert.equal(await evaluate('document.querySelector(".tape-guide-crop")?.style.left'),'25%',
     'Moving a crop slider updates the dashed guide without saving the asset');
+  assert.equal(await evaluate('document.querySelectorAll(".material-editor-preview canvas").length'),0);
   await click('.asset-editor-tabs button:nth-child(1)');
   await evaluate(`(()=>{const select=document.querySelector('#asset-kind');
     select.value='sticker';select.dispatchEvent(new Event('change',{bubbles:true}));})()`);

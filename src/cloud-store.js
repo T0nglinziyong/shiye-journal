@@ -524,6 +524,28 @@ async function wasCommitted(operationID,baseRevision){
   if(durable)await version(); // Invalidate stale snapshots after a lost response.
   return !!durable;
 }
+async function committedOperationIDs(operationIDs){
+  const ids=[...new Set(operationIDs.filter(Boolean))],committed=new Set();
+  if(!ids.length)return committed;
+  const user=await identity(),client=cloudClient();
+  // Rebuilding a large queue used to issue one or two receipt requests per
+  // operation. Read only receipt IDs in bounded batches; a failed lookup
+  // still aborts the rebuild and leaves the original durable rows intact.
+  for(let offset=0;offset<ids.length;offset+=100){
+    const batch=ids.slice(offset,offset+100);
+    const current=checked(await client.from('shiye_commit_receipts_v3')
+      .select('operation_id').eq('user_id',user).in('operation_id',batch));
+    for(const row of current)committed.add(row.operation_id);
+    const missing=batch.filter(id=>!committed.has(id));
+    if(missing.length){
+      const legacy=checked(await client.from('shiye_commits')
+        .select('operation_id').eq('user_id',user).in('operation_id',missing));
+      for(const row of legacy)committed.add(row.operation_id);
+    }
+  }
+  if(committed.size)await version();
+  return committed;
+}
 async function reconcileImport(batch,operationID,baseRevision){
   if(await wasCommitted(operationID,baseRevision))return 'committed';
   if(await wasResetAfter(baseRevision))
@@ -1738,9 +1760,8 @@ async function cloudDiscardPending(){await identity();if(writesInFlight||!unifie
 async function cloudRebuildPending(local){
   assertAccountWritable();await identity();
   const result=await unifiedSync.rebuild(async rows=>{
-    const confirmed=await boundedMap(rows,6,async row=>
-      row.operationID?await wasCommitted(row.operationID,row.baseRevision):false);
-    const pending=rows.filter((_,index)=>!confirmed[index]);
+    const confirmed=await committedOperationIDs(rows.map(row=>row.operationID));
+    const pending=rows.filter(row=>!confirmed.has(row.operationID));
     if(pending.length&&await wasResetAfter(Math.min(...pending.map(row=>row.baseRevision))))
       throw Error('账号曾被清空；旧队列不能直接恢复，请通过旧数据转换入口处理');
     // Rebuilding an outbox never grants a new edit baseline. A different

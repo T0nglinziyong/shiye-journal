@@ -26,7 +26,14 @@ function fixture(cache=null,objectStorage=null,projectPreview=()=>null){
   const state={revision:0,accountEpoch:'epoch-fixture',rows:[],calls:[],commits:new Map(),receipts:new Map(),receiptReads:[],keyVersions:new Map(),fail:false,authError:false,uploads:[],downloads:0};
   const client={from(table){
     const filters={};const query={select(){return query;},eq(k,v){filters[k]=v;return query;},in(k,v){filters[k]=v;return query;},limit(){return query;},abortSignal(){return query;},order(){return query;},
-      then(resolve){state.batchReads=(state.batchReads||0)+1;const rows=filters.store==='blobs'&&Array.isArray(filters.id)?(state.cloudCopies||state.rows.map(record=>({id:record.id,record}))):(state.cloudCopies||[]);return Promise.resolve(resolve({data:rows.filter(row=>!filters.id||(Array.isArray(filters.id)?filters.id.includes(row.id):row.id===filters.id))}));},
+      then(resolve){state.batchReads=(state.batchReads||0)+1;
+        if(table==='shiye_commit_receipts_v3'||table==='shiye_commits'){
+          state.receiptReads.push(table);
+          const source=table==='shiye_commit_receipts_v3'?state.receipts:state.commits;
+          return Promise.resolve(resolve({data:[...source.keys()]
+            .filter(id=>filters.operation_id.includes(id)).map(operation_id=>({operation_id}))}));
+        }
+        const rows=filters.store==='blobs'&&Array.isArray(filters.id)?(state.cloudCopies||state.rows.map(record=>({id:record.id,record}))):(state.cloudCopies||[]);return Promise.resolve(resolve({data:rows.filter(row=>!filters.id||(Array.isArray(filters.id)?filters.id.includes(row.id):row.id===filters.id))}));},
       async range(start,end){state.reads=(state.reads||0)+1;const rows=state.rows.slice(start,end+1).map(record=>({record:v2(record)}));await state.onReadPage?.(start,end);return {data:rows};},
       async single(){state.versionReads=(state.versionReads||0)+1;return {data:{revision:state.revision,account_epoch:state.accountEpoch}};},
       async maybeSingle(){if(table==='shiye_commits'||table==='shiye_commit_receipts_v3')state.receiptReads.push(table);
@@ -66,6 +73,20 @@ function fixture(cache=null,objectStorage=null,projectPreview=()=>null){
 test('cloud reads all pages, not just the server default first 1000 records',async()=>{
   const {state,db}=fixture();state.rows=Array.from({length:1001},(_,i)=>({id:String(i)}));
   assert.equal((await db.cloudAll('assets')).length,1001);
+});
+test('queue rebuild batches receipt checks and retains unconfirmed local changes',async()=>{
+  const cache=memoryCache(),{state,db}=fixture(cache);
+  await db.cloudStageMutation(['assets'],tx=>tx.objectStore('assets').put({id:'already',title:'已到云端'}));
+  await db.cloudStageMutation(['assets'],tx=>tx.objectStore('assets').put({id:'waiting',title:'待重传'}));
+  const original=await activeRows(cache,'batch');
+  state.receipts.set(original[0].operationID,{result:{revision:1}});
+  state.revision=1;
+  const result=await db.cloudRebuildPending({assets:[{id:'waiting',title:'当前本机标题'}]});
+  const remaining=await activeRows(cache,'batch');
+  assert.deepEqual(result,{replaced:2,pending:1});
+  assert.equal(remaining.length,1);
+  assert.equal(remaining[0].record.operations[0].item.title,'当前本机标题');
+  assert.deepEqual(state.receiptReads,['shiye_commit_receipts_v3','shiye_commits']);
 });
 test('account reset entry is callable and an unaccepted reset restores cloud writes',async()=>{
   const {db,state}=fixture();
