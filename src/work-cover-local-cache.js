@@ -93,19 +93,38 @@ export function createLocalWorkCovers({
       .filter(card=>{const p=projects.find(item=>item.id===(card.dataset.coverProjectId||card.dataset.id));
         return p&&!p.isSnapshot&&!p.isTemplate&&!peek(p)&&(missing(p)||!hasUsableCover(p));});
     if(!cards.length)return ()=>{};
-    let disposed=false;
+    let disposed=false,scheduled=false,running=false;
+    const queue=[],queued=new Set();
+    const pump=async()=>{
+      scheduled=false;
+      if(disposed||running||!queue.length)return;
+      running=true;
+      const p=queue.shift();queued.delete(p.id);
+      try{if(!peek(p)&&(missing(p)||!hasUsableCover(p)))await ensure(p);}
+      catch{/* ensure reports the failure and retains the original work. */}
+      finally{running=false;if(!disposed&&queue.length)schedule();}
+    };
+    const schedule=()=>{
+      if(disposed||scheduled||running)return;
+      scheduled=true;
+      // Let navigation paint before any full-document read or Canvas cover.
+      if(typeof requestAnimationFrame==='function')requestAnimationFrame(()=>setTimeout(pump,0));
+      else setTimeout(pump,0);
+    };
     const loadCard=card=>{
       if(disposed)return;
       const p=projects.find(project=>project.id===(card.dataset.coverProjectId||card.dataset.id));
-      if(p&&!peek(p)&&(missing(p)||!hasUsableCover(p)))void ensure(p).catch(()=>{});
+      if(p&&!queued.has(p.id)&&!peek(p)&&(missing(p)||!hasUsableCover(p))){
+        queued.add(p.id);queue.push(p);schedule();
+      }
     };
     const observer=typeof IntersectionObserver==='function'
       ?new IntersectionObserver(rows=>rows.forEach(row=>{if(row.isIntersecting){loadCard(row.target);observer.unobserve(row.target);}}),{rootMargin:'120px'}):null;
     observer?.observe&&cards.forEach(card=>observer.observe(card));
-    // The first row is useful immediately even if the React commit and the
-    // observer's first visibility notification arrive in different frames.
+    // Some WebViews delay their first observer callback. Queue the first row
+    // after paint, then process covers one at a time instead of in a burst.
     cards.slice(0,4).forEach(loadCard);
-    return ()=>{disposed=true;observer?.disconnect();};
+    return ()=>{disposed=true;queue.length=0;observer?.disconnect();};
   }
   return {peek,ensure,remember,observe,missing,
     dispose(){for(const timer of retryTimers.values())clearTimeout(timer);retryTimers.clear();
