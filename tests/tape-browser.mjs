@@ -6,6 +6,17 @@ const browser=await browserHarness('shiye-tape',base+'/');
 const {click,command,evaluate,wait,sleep}=browser;
 try{
   await wait('.series-grid');
+  const idlePriority=await evaluate(`(async()=>{
+    const {scheduleForegroundIdle}=await import('/src/foreground-idle.js');
+    let ran=false;
+    window.dispatchEvent(new PointerEvent('pointerdown',{pointerId:908,bubbles:true}));
+    const cancel=scheduleForegroundIdle(()=>{ran=true;},{minIdleMs:100});
+    await new Promise(resolve=>setTimeout(resolve,320));const duringGesture=ran;
+    window.dispatchEvent(new PointerEvent('pointerup',{pointerId:908,bubbles:true}));
+    await new Promise(resolve=>setTimeout(resolve,350));cancel();
+    return {duringGesture,afterRelease:ran};
+  })()`);
+  assert.deepEqual(idlePriority,{duringGesture:false,afterRelease:true});
   const croppedTexture=await evaluate(`(async()=>{
     const {paintTapeStrip}=await import('/src/tape-strip.js');
     const source=document.createElement('canvas');source.width=100;source.height=40;
@@ -50,6 +61,38 @@ try{
       endAlpha:output.getContext('2d').getImageData(275,147,1,1).data[3]};
   })()`);
   assert.ok(ribbon.holes<3&&ribbon.endAlpha>50,JSON.stringify(ribbon));
+  const straight=await evaluate(`(async()=>{
+    const {createTapeStrip,paintTapeStrip}=await import('/src/tape-strip.js');
+    const {project}=await import('/src/domain.js');
+    const asset={id:'opaque-tape',title:'测试胶带',kind:'tape',physicalWidthMM:100,
+      physicalHeightMM:16,tapeAxis:'x',tapeRepeatMode:'repeatablePattern',
+      tapeRepeatStartMM:0,tapeRepeatEndMM:20};
+    const node=createTapeStrip(asset,project('检查').drafts[0],[[20,100],[150,130],[300,100]]);
+    const source=document.createElement('canvas');source.width=100;source.height=16;
+    const sc=source.getContext('2d');sc.fillStyle='#70a376';sc.fillRect(0,0,100,16);
+    sc.fillStyle='#f5df8e';sc.fillRect(8,0,4,16);
+    const output=document.createElement('canvas');output.width=320;output.height=200;
+    const ctx=output.getContext('2d');ctx.translate(node.x,node.y);paintTapeStrip(ctx,node,source);
+    const data=output.getContext('2d').getImageData(22,100,276,1).data;
+    return {points:node.tapeStrip.points.length,
+      gaps:Array.from({length:276},(_,i)=>data[i*4+3]).filter(alpha=>alpha<100).length};
+  })()`);
+  assert.equal(straight.points,2);
+  assert.ok(straight.gaps<2,`Straight ribbon has ${straight.gaps} transparent seams`);
+  const flattened=await evaluate(`(async()=>{
+    const {tapeFlatCanvas}=await import('/src/tape-flat-crop.js');
+    const original=document.createElement('canvas');original.width=100;original.height=30;
+    const ctx=original.getContext('2d');ctx.fillStyle='#6d9a77';ctx.fillRect(15,7,70,16);
+    ctx.fillRect(0,15,100,1);
+    const {canvas,crop}=tapeFlatCanvas(original,'x');
+    const output=canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data;
+    return {crop,corners:[0,canvas.width-1,(canvas.height-1)*canvas.width,
+      canvas.height*canvas.width-1].map(index=>output[index*4+3]),
+      originalWidth:original.width};
+  })()`);
+  assert.ok(flattened.crop.left>.1&&flattened.crop.right<.9,JSON.stringify(flattened));
+  assert.ok(flattened.corners.every(alpha=>alpha>100),JSON.stringify(flattened));
+  assert.equal(flattened.originalWidth,100);
   await evaluate(`(async()=>{
     const image=await (await fetch('/samples/demo-repeat-tape.png')).blob();
     const db=await new Promise(resolve=>{const request=indexedDB.open('shiye-pwa-full-v1');
@@ -69,19 +112,44 @@ try{
   await click('[data-id="demo-repeat-tape"][data-act="detail"]','.detail-page');
   assert.equal(await evaluate('!!document.querySelector("[data-act=detail-tape]")'),false);
   await click('[data-act="detail-edit"]','[aria-label="编辑素材"]');
+  assert.ok(await evaluate('!!document.querySelector("#asset-usageStatus")'),
+    'Tape can be marked used or unused in the ordinary asset editor');
+  assert.ok(await evaluate('!!document.querySelector(".material-editor-preview .tape-flat-preview")'),
+    'Tape detail previews use a disposable flat view of the original PNG');
   await click('.asset-editor-tabs button:nth-child(2)');
   assert.equal(await evaluate('document.querySelector("#asset-tapeAxis")?.value'),'x');
+  assert.equal(await evaluate('document.querySelector("#asset-flatCropMode")?.value'),'auto');
+  await evaluate(`(()=>{const select=document.querySelector('#asset-flatCropMode');
+    select.value='manual';select.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+  assert.ok(await evaluate('!!document.querySelector("#asset-flatLeft")'));
+  await click('.asset-editor-tabs button:nth-child(1)');
+  await evaluate(`(()=>{const select=document.querySelector('#asset-kind');
+    select.value='sticker';select.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+  assert.equal(await evaluate('!!document.querySelector(".material-editor-preview .tape-flat-preview")'),false,
+    'Changing away from tape shows the original PNG');
+  await evaluate(`(()=>{const select=document.querySelector('#asset-kind');
+    select.value='tape';select.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+  assert.ok(await evaluate('!!document.querySelector(".material-editor-preview .tape-flat-preview")'));
   assert.equal(await evaluate('document.querySelector(".material-info-panel:not([hidden])")?.textContent.includes("普通素材在同一创作方案")'),false);
   await click('#asset-dialog-close');
   await click('[data-route="works"]','.works-grid');
   await click('#work-create','#blank-create-confirm');
   await click('#blank-create-confirm','#canvas-page');
   await wait('.upper-canvas');
-  await click('[data-val="tape"]','.canvas-tape-settings');
-  assert.ok(await evaluate('document.querySelector(".canvas-tape-settings")?.textContent.includes("胶带素材")'));
+  await click('[data-val="tape"]','.swift-tape-picker');
+  assert.ok(await evaluate('!!document.querySelector(".swift-tape-picker .canvas-material-search")'));
+  assert.equal(await evaluate('!!document.querySelector(".swift-tape-picker .canvas-material-filters")'),false);
+  assert.ok(await evaluate(`(()=>{const names=[...document.querySelectorAll('.editor-tools [data-val]')]
+    .map(node=>node.dataset.val);return names.indexOf('tape')===names.indexOf('material')+1})()`),
+  'Tape tool follows the material tool');
   await click('[data-val="tape"]');
-  await click('[data-val="material"]','.swift-material-picker');
-  await click('[data-material-id="demo-repeat-tape"]');
+  assert.equal(await evaluate('document.querySelector("[data-val=tape]")?.getAttribute("aria-pressed")'),'false');
+  await click('[data-val="tape"]','.swift-tape-picker');
+  await click('.swift-tape-picker .canvas-material-search');
+  await command('Input.insertText',{text:'连续'});
+  assert.equal(await evaluate('document.querySelectorAll(".swift-tape-picker [data-tape-id]").length'),1);
+  await click('.swift-tape-picker [data-tape-id="demo-repeat-tape"]');
+  assert.equal(await evaluate('!!document.querySelector(".swift-tape-picker")'),false);
   await wait('.canvas-context-tools button');
   assert.ok(await evaluate('document.querySelector(".canvas-context-tools")?.textContent.includes("胶带")'));
   const rect=await evaluate('document.querySelector(".upper-canvas").getBoundingClientRect().toJSON()');
@@ -111,11 +179,11 @@ try{
   })()`);
   assert.equal(scene.length,2,JSON.stringify(scene));
   assert.deepEqual(scene.map(item=>item.unit),[0,1]);
-  assert.ok(scene.every(item=>item.points>=2&&item.width>0));
+  assert.ok(scene.every(item=>item.points===2&&item.width>0));
   await click('[data-val="material"]','.swift-material-picker');
   await click('.swift-segments button:first-child');
   assert.equal(await evaluate('document.querySelectorAll(".swift-material-picker [data-material-id=demo-repeat-tape]").length'),0,
-    'Tape roll has no used/unused classification in the material picker');
+    'A tape roll remains available through its own searchable picker');
   assert.deepEqual(browser.errors,[]);
   console.log('Tape picker, live gesture, two independent editable strips and saved Scene passed');
 }finally{await browser.close();}

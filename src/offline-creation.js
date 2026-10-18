@@ -64,6 +64,7 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
     return {alias,assetID,title:asset.title,kind:asset.kind,role:asset.role,journalRoles:classifyJournalMaterial(asset),physicalWidthMM:asset.physicalWidthMM,physicalHeightMM:asset.physicalHeightMM,continuousTape:asset.kind==='tape',tape:asset.kind==='tape'?{
       axis:tapeDimensions(asset).axis,widthMM:tapeDimensions(asset).widthMM,
       sourceLengthMM:tapeDimensions(asset).lengthMM,repeatRangeMM:tapeRepeatRange(asset),
+      flatCrop:asset.tapeFlatCrop??null,
       textureModes:['sample',...(tapeRepeatRange(asset)?['repeat']:[]),'stretch'],
       capStyles:['square','angled','torn']}:null,tags:asset.tags||[]};
   });

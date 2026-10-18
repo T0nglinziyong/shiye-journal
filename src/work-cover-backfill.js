@@ -3,6 +3,7 @@
 // while the user stays on Works. Never touch pending edits or
 // large-project summaries without recovering the complete document first.
 // Durable stageProject + revision CAS own all actual writes and conflicts.
+import {scheduleForegroundIdle} from './foreground-idle.js';
 export function needsWorkCover(project){
   if(!project||project.isSnapshot||project.isTemplate||!project.drafts?.length)return false;
   const draft=project.drafts.find(row=>row.id===project.activeDraftID)||project.drafts[0];
@@ -69,22 +70,36 @@ export function createWorkCoverBackfill({db,state,cloudEnabled=false,onError=con
     const cards=[...view.querySelectorAll('[data-act="open-project"][data-id]')]
       .filter(card=>needsWorkCover(state.projects.find(p=>p.id===card.dataset.id)));
     if(!cards.length)return ()=>{};
+    let disposed=false;
+    const timers=new Set(),idles=new Set();
+    const schedule=project=>{
+      const timer=setTimeout(()=>{
+        timers.delete(timer);
+        if(disposed||state.route!=='works'||document.visibilityState==='hidden')return;
+        const run=()=>{if(!disposed&&state.route==='works')enqueue(project.id,project.updatedAt);};
+        const cancel=scheduleForegroundIdle(()=>{idles.delete(cancel);run();},
+          {minIdleMs:1800});idles.add(cancel);
+      },3000);
+      timers.add(timer);
+    };
     // Repair only cards that enter the viewport. Historical projects no
     // longer compete with editing, import, or foreground image downloads.
     const observer=typeof IntersectionObserver==='function'
       ?new IntersectionObserver(entries=>{
         for(const row of entries)if(row.isIntersecting){
           const id=row.target.dataset.id,project=state.projects.find(p=>p.id===id);
-          if(project&&document.visibilityState!=='hidden')enqueue(id,project.updatedAt);
+          if(project&&document.visibilityState!=='hidden')schedule(project);
           observer.unobserve(row.target);
         }
       },{rootMargin:'120px'}):null;
     if(observer)cards.forEach(card=>observer.observe(card));
-    else cards.slice(0,6).forEach(card=>{
+    else cards.slice(0,2).forEach(card=>{
       const project=state.projects.find(p=>p.id===card.dataset.id);
-      if(project)enqueue(project.id,project.updatedAt);
+      if(project)schedule(project);
     });
-    return ()=>observer?.disconnect();
+    return ()=>{disposed=true;observer?.disconnect();
+      for(const timer of timers)clearTimeout(timer);
+      for(const cancel of idles)cancel();};
   }
 
   return {observe,enqueue,retry,startBackground:()=>{},needsWorkCover,whenIdle:()=>chain};

@@ -1,5 +1,6 @@
 import {localDeviceRecords} from './local-device-records.js';
 import {isPartialWorkCover} from './work-cover-snapshot.js';
+import {scheduleForegroundIdle} from './foreground-idle.js';
 
 // A missing remote cover must not leave a card blank while its upload waits.
 // Render a complete 480px scene locally, show the Blob immediately, and cache
@@ -93,7 +94,7 @@ export function createLocalWorkCovers({
       .filter(card=>{const p=projects.find(item=>item.id===(card.dataset.coverProjectId||card.dataset.id));
         return p&&!p.isSnapshot&&!p.isTemplate&&!peek(p)&&(missing(p)||!hasUsableCover(p));});
     if(!cards.length)return ()=>{};
-    let disposed=false,scheduled=false,running=false;
+    let disposed=false,scheduled=false,running=false,cancelScheduled=()=>{};
     const queue=[],queued=new Set();
     const pump=async()=>{
       scheduled=false;
@@ -107,9 +108,10 @@ export function createLocalWorkCovers({
     const schedule=()=>{
       if(disposed||scheduled||running)return;
       scheduled=true;
-      // Let navigation paint before any full-document read or Canvas cover.
-      if(typeof requestAnimationFrame==='function')requestAnimationFrame(()=>setTimeout(pump,0));
-      else setTimeout(pump,0);
+      // Cover rendering is main-thread Canvas work. Wait for a genuinely idle
+      // moment after navigation; a card click still loads its document directly.
+      cancelScheduled=scheduleForegroundIdle(()=>{if(!disposed)void pump();},
+        {minIdleMs:1200,delayMs:400});
     };
     const loadCard=card=>{
       if(disposed)return;
@@ -121,10 +123,10 @@ export function createLocalWorkCovers({
     const observer=typeof IntersectionObserver==='function'
       ?new IntersectionObserver(rows=>rows.forEach(row=>{if(row.isIntersecting){loadCard(row.target);observer.unobserve(row.target);}}),{rootMargin:'120px'}):null;
     observer?.observe&&cards.forEach(card=>observer.observe(card));
-    // Some WebViews delay their first observer callback. Queue the first row
-    // after paint, then process covers one at a time instead of in a burst.
-    cards.slice(0,4).forEach(loadCard);
-    return ()=>{disposed=true;queue.length=0;observer?.disconnect();};
+    // Use viewport observation when available. Eagerly rendering four covers
+    // also worked on offscreen cards and caused a visible pause on return.
+    if(!observer)cards.slice(0,2).forEach(loadCard);
+    return ()=>{disposed=true;queue.length=0;cancelScheduled();observer?.disconnect();};
   }
   return {peek,ensure,remember,observe,missing,
     dispose(){for(const timer of retryTimers.values())clearTimeout(timer);retryTimers.clear();

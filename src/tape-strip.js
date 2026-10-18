@@ -1,4 +1,5 @@
 import {itemFromAsset} from './domain.js';
+import {normalizeTapeFlatCrop,tapeFlatCanvas} from './tape-flat-crop.js';
 
 const point=p=>Array.isArray(p)?p:[p.x,p.y];
 const distance=(a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1]);
@@ -36,7 +37,7 @@ function sourceOptions(asset,pathLengthMM,options={}){
   if(repeatRangeMM&&(!Array.isArray(repeatRangeMM)||repeatRangeMM.length!==2||
     !(repeatRangeMM[0]>=0)||!(repeatRangeMM[1]>repeatRangeMM[0])||repeatRangeMM[1]>lengthMM))
     throw Error('胶带重复区间超出实拍样段');
-  const textureMode=options.textureMode|| (repeatRangeMM?'repeat':'sample');
+  const textureMode=options.textureMode|| (repeatRangeMM?'repeat':'stretch');
   if(!['sample','repeat','stretch'].includes(textureMode)||textureMode==='repeat'&&!repeatRangeMM)
     throw Error('胶带纹样模式无效；重复模式需要已确认的纹样区间');
   if(textureMode==='sample'&&pathLengthMM>lengthMM+.1)
@@ -62,17 +63,12 @@ export function createTapeStrip(asset,draft,rawPoints,zIndex=10,options={}){
     widthMM=Number(options.widthMM??options.physicalWidthMM??sourceWidth),
     scale=draft.canvas.height/(draft.physicalPageHeightMM||297);
   if(!Number.isFinite(widthMM)||widthMM<.5||widthMM>200)throw Error('胶带宽度须在 0.5–200 mm 之间');
-  const path=[];
-  for(const raw of rawPoints){const p=point(raw);
-    if(!p.every(Number.isFinite))throw Error('胶带轨迹坐标无效');
-    if(!path.length||distance(path.at(-1),p)>.8)path.push(p);
-  }
-  if(path.length<2)throw Error('请拖出一段胶带');
-  if(path.length>512){const stride=Math.ceil(path.length/512);const sampled=path.filter((_,i)=>i%stride===0);
-    if(sampled.at(-1)!==path.at(-1))sampled.push(path.at(-1));path.splice(0,path.length,...sampled);}
-  // Store the same smoothed centerline used for rendering, so physical tape
-  // length and the visible ribbon agree even with noisy touch samples.
-  path.splice(0,path.length,...smoothCenterline(renderPath(path,widthMM*scale)));
+  // A real strip is pulled between two points. Keeping only the endpoints
+  // avoids thousands of tiny texture meshes and makes the live preview match
+  // the final straight strip on touch devices.
+  const path=[point(rawPoints[0]),point(rawPoints.at(-1))];
+  if(path.some(p=>!p.every(Number.isFinite)))throw Error('胶带轨迹坐标无效');
+  if(distance(path[0],path[1])<.8)throw Error('请拖出一段胶带');
   const lengthPx=path.slice(1).reduce((sum,p,i)=>sum+distance(path[i],p),0),pathLengthMM=lengthPx/scale;
   if(pathLengthMM<2)throw Error('胶带段至少要有 2 mm');
   const source=sourceOptions(asset,pathLengthMM,options);
@@ -85,7 +81,7 @@ export function createTapeStrip(asset,draft,rawPoints,zIndex=10,options={}){
   item.x=x;item.y=y;item.width=width;item.height=height;item.rotation=0;
   item.tapeStrip={version:2,axis,points:path.map(p=>[(p[0]-left)/width,(p[1]-top)/height]),
     physicalWidthMM:widthMM,bandWidthScene,baseWidth:width,baseHeight:height,pathLengthMM,
-    ...source};
+    flatCrop:normalizeTapeFlatCrop(options.flatCrop??asset.tapeFlatCrop),...source};
   item.generationBaseline={...item.generationBaseline,x,y,width,height,rotation:0};
   return item;
 }
@@ -110,6 +106,7 @@ export function validateTapeStrip(strip,asset){
   else{
     if(!(strip.physicalWidthMM>=.5&&strip.physicalWidthMM<=200)||
       typeof strip.reverseTexture!=='boolean')throw Error('胶带段宽度或纹样方向无效');
+    normalizeTapeFlatCrop(strip.flatCrop);
     sourceOptions(asset,strip.pathLengthMM,strip);
     if(![strip.baseWidth,strip.baseHeight,strip.bandWidthScene].every(v=>v>0))
       throw Error('胶带段尺寸无效');
@@ -156,34 +153,13 @@ function renderPath(points,band){
   };
   return points.length>2?simplify(0,points.length-1):points;
 }
-function orientedImage(image,axis){
-  const w=image.naturalWidth||image.width,h=image.naturalHeight||image.height;
-  let prepared=preparedImages.get(image);if(!prepared){
-    const scale=Math.min(1,2048/Math.max(w,h)),raw=document.createElement('canvas');
-    raw.width=Math.max(1,Math.round(w*scale));raw.height=Math.max(1,Math.round(h*scale));
-    const ctx=raw.getContext('2d',{willReadFrequently:true});
-    ctx.drawImage(image,0,0,raw.width,raw.height);
-    let left=0,right=raw.width,top=0,bottom=raw.height;
-    try{
-      const {data}=ctx.getImageData(0,0,raw.width,raw.height),
-        columns=new Uint32Array(raw.width),rows=new Uint32Array(raw.height);
-      for(let y=0;y<raw.height;y++)for(let x=0;x<raw.width;x++)
-        if(data[(y*raw.width+x)*4+3]>=24){columns[x]++;rows[y]++;}
-      // Ignore isolated segmentation hairs. The physical width belongs to the
-      // actual tape, even when a photographed/cutout PNG has empty padding.
-      const xThreshold=Math.max(2,Math.ceil(raw.height*.08)),
-        yThreshold=Math.max(2,Math.ceil(raw.width*.02));
-      while(left<right-1&&columns[left]<xThreshold)left++;
-      while(right>left+1&&columns[right-1]<xThreshold)right--;
-      while(top<bottom-1&&rows[top]<yThreshold)top++;
-      while(bottom>top+1&&rows[bottom-1]<yThreshold)bottom--;
-      left=Math.max(0,left-1);right=Math.min(raw.width,right+1);
-      top=Math.max(0,top-1);bottom=Math.min(raw.height,bottom+1);
-    }catch{/* An unreadable external image still renders without trimming. */}
-    const trimmed=document.createElement('canvas');trimmed.width=right-left;trimmed.height=bottom-top;
-    trimmed.getContext('2d').drawImage(raw,left,top,trimmed.width,trimmed.height,
-      0,0,trimmed.width,trimmed.height);
-    prepared={x:trimmed};preparedImages.set(image,prepared);
+function orientedImage(image,axis,flatCrop=null){
+  const key=JSON.stringify(flatCrop);
+  let variants=preparedImages.get(image);if(!variants){variants=new Map();preparedImages.set(image,variants);}
+  let prepared=variants.get(key);if(!prepared){
+    prepared={x:tapeFlatCanvas(image,axis,flatCrop)?.canvas};
+    if(!prepared.x)return image;
+    variants.set(key,prepared);
   }
   if(axis==='x')return prepared.x;
   if(!prepared.y){const source=prepared.x,rotated=document.createElement('canvas');
@@ -196,7 +172,7 @@ function orientedImage(image,axis){
 export function paintTapeStrip(ctx,node,image){
   const strip=node.tapeStrip;if(!strip)return false;
   if(strip.version===2)return paintRibbon(ctx,node,image);
-  const texture=orientedImage(image,strip.axis),w=texture.width,h=texture.height;
+  const texture=orientedImage(image,strip.axis,strip.flatCrop),w=texture.width,h=texture.height;
   const sx=node.width/strip.baseWidth,sy=node.height/strip.baseHeight,
     band=strip.bandWidthScene*Math.sqrt(sx*sy),points=renderPath(strip.points.map(([u,v])=>
       [(u-.5)*node.width,(v-.5)*node.height]),band);
@@ -257,10 +233,45 @@ function capEdge(point,tangent,normal,band,style,depth,ending){
   }
   return edge;
 }
+function paintStraightRibbon(ctx,strip,texture,start,end){
+  const length=distance(start,end),band=strip.bandWidthScene;
+  if(length<.01)return false;
+  ctx.save();ctx.translate(...start);ctx.rotate(Math.atan2(end[1]-start[1],end[0]-start[0]));
+  const depth=strip.capDepthMM*band/strip.physicalWidthMM,
+    endCap=capEdge([length,0],[1,0],[0,-1],band,strip.endCap,depth,true),
+    startCap=capEdge([0,0],[1,0],[0,-1],band,strip.startCap,depth,false);
+  ctx.beginPath();ctx.moveTo(0,-band/2);ctx.lineTo(length,-band/2);
+  for(const p of endCap.slice(1))ctx.lineTo(...p);
+  ctx.lineTo(0,band/2);
+  for(const p of startCap.slice(0,-1).reverse())ctx.lineTo(...p);
+  ctx.closePath();ctx.clip();
+  const sourceX=mm=>clamp(mm/strip.sourceLengthMM*texture.width,0,texture.width),
+    draw=(from,to,sourceStart,sourceEnd)=>{
+      const sx=sourceX(sourceStart),sw=sourceX(sourceEnd)-sx,
+        dx=from/strip.pathLengthMM*length,dw=(to-from)/strip.pathLengthMM*length;
+      if(sw<=0||dw<=0)return;
+      if(strip.reverseTexture){ctx.save();ctx.translate(dx+dw,0);ctx.scale(-1,1);
+        ctx.drawImage(texture,sx,0,sw,texture.height,0,-band/2,dw+.35,band);ctx.restore();}
+      else ctx.drawImage(texture,sx,0,sw,texture.height,dx,-band/2,dw+.35,band);
+    };
+  const mode=strip.textureMode||(strip.repeatRangeMM?'repeat':'stretch');
+  if(mode==='repeat'){
+    const [rangeStart,rangeEnd]=strip.repeatRangeMM,period=rangeEnd-rangeStart;
+    for(let from=0;from<strip.pathLengthMM-1e-5;){
+      const phase=(from+strip.sourceOffsetMM)%period,
+        to=Math.min(strip.pathLengthMM,from+period-phase);
+      draw(from,to,rangeStart+phase,rangeStart+phase+to-from);
+      if(to<=from+1e-9)break;from=to;
+    }
+  }else draw(0,strip.pathLengthMM,strip.sourceOffsetMM,
+    strip.sourceOffsetMM+(mode==='stretch'?strip.sourceWindowMM:strip.pathLengthMM));
+  ctx.restore();return true;
+}
 function paintRibbon(ctx,node,image){
-  const strip=node.tapeStrip,texture=orientedImage(image,strip.axis);
+  const strip=node.tapeStrip,texture=orientedImage(image,strip.axis,strip.flatCrop);
   const raw=strip.points.map(([u,v])=>[(u-.5)*node.width,(v-.5)*node.height]);
   if(raw.length<2||!texture.width||!texture.height)return false;
+  if(raw.length===2)return paintStraightRibbon(ctx,strip,texture,raw[0],raw[1]);
   const rawLength=raw.slice(1).reduce((sum,p,i)=>sum+distance(raw[i],p),0);
   const band=strip.bandWidthScene,step=Math.max(3,band*.35,rawLength/256);
   const points=[raw[0]];

@@ -15,10 +15,9 @@ export function searchableSeries(series, assets) {
 }
 
 export function usedAssetIDs(assets = []) {
-  return new Set(assets.filter(asset => asset.kind!=='tape'&&asset.usageStatus === 'used').map(asset => asset.id));
+  return new Set(assets.filter(asset => asset.usageStatus === 'used').map(asset => asset.id));
 }
 export function withUsageStatus(asset, used, at = new Date().toISOString()) {
-  if(asset.kind==='tape')return asset;
   return {...asset, usageStatus: used ? 'used' : 'unused', usageUpdatedAt: at, updatedAt: at};
 }
 export function projectAssetIDs(project) {

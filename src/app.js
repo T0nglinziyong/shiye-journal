@@ -68,6 +68,7 @@ import {replaceSceneMaterial} from './scene-advanced-ops.js';
 import {createWorkCoverBackfill} from './work-cover-backfill.js';
 import {renderWorkCoverSnapshot} from './work-cover-snapshot.js';
 import {createLocalWorkCovers} from './work-cover-local-cache.js';
+import {foregroundIsIdle,scheduleForegroundIdle} from './foreground-idle.js';
 import {imagePlaceholder,mountPrivateImages} from './lazy-private-images.js';
 import {recordImageLoading,imageLoadingSnapshot} from './image-loading-diagnostics.js';
 import {assetEditorValue} from './asset-editor.js';
@@ -243,36 +244,6 @@ const privateImages=mountPrivateImages({root:document.body,db,urls,fullView:img=
 const retainFabricAssets=ids=>privateImages.retain(ids.map(id=>asset(id)?.blobId||id)
   .filter(id=>typeof id==='string'&&id&&!id.startsWith('/')));
 let previewPrewarmEpoch=0;
-let workDocumentPrewarmEpoch=0;
-function prewarmVisibleWorkDocuments(){
-  const epoch=++workDocumentPrewarmEpoch;
-  if(!cloudEnabled||navigator.connection?.saveData||syncDisplay.uploading||syncDisplay.pending)return;
-  let waits=0;
-  const ids=[...view.querySelectorAll('.works-grid [data-act="open-project"][data-id]')]
-    .filter(card=>{const box=card.getBoundingClientRect();return box.width>0&&box.height>0&&box.top<innerHeight&&box.bottom>0;})
-    .map(card=>card.dataset.id).slice(0,2);
-  const warm=async()=>{
-    if(epoch!==workDocumentPrewarmEpoch||state.route!=='works'||document.visibilityState==='hidden'||
-      syncDisplay.uploading||syncDisplay.pending)return;
-    // Full project documents share the user's network with cover downloads.
-    // Keep that connection available until the visible covers have painted.
-    if(!visibleCoversReady()){if(++waits<25)setTimeout(()=>void warm(),400);return;}
-    // These two documents are independent immutable objects. Start both
-    // reads together once visible covers have painted; the store deduplicates
-    // a later click on either document against its in-flight read.
-    await Promise.all(ids.map(async id=>{
-      if(epoch!==workDocumentPrewarmEpoch||state.route!=='works')return;
-      const project=state.projects.find(row=>row.id===id);
-      if(project?.projectDocumentPath&&!project.isSnapshot)
-        await db.completeProject(project).catch(error=>console.warn('作品预读待重试',error?.message));
-    }));
-  };
-  setTimeout(()=>{
-    if(epoch!==workDocumentPrewarmEpoch||state.route!=='works')return;
-    if('requestIdleCallback' in window)requestIdleCallback(()=>void warm(),{timeout:1500});
-    else void warm();
-  },650);
-}
 function visibleCoversReady(){
   return [...view.querySelectorAll('img[data-asset-image-id]')].every(img=>{
     const box=img.getBoundingClientRect();
@@ -346,7 +317,9 @@ const workCoverBackfill=createWorkCoverBackfill({db,state,cloudEnabled});
 // Cover loading never steals a Works card click: opening a card always edits it.
 window.addEventListener('shiye-work-cover-failed',event=>{
   const project=state.projects.find(row=>row.id===event.detail?.projectID);
-  if(project)void localWorkCovers.ensure(project).catch(()=>{});
+  if(project)scheduleForegroundIdle(()=>{
+    if(['works','projectPreview'].includes(state.route))void localWorkCovers.ensure(project).catch(()=>{});
+  },{minIdleMs:1200});
 });
 
 // A successful COS upload is published after its metadata transaction commits.
@@ -360,7 +333,7 @@ window.addEventListener('shiye-project-cover-ready',event=>{
   if(!d)return;
   d.coverImageID=coverImageID;
   d.coverSceneHash=coverSceneHash;
-  void privateImages.load(coverImageID,false).then(()=>{
+  void privateImages.load(coverImageID,false,{background:true}).then(()=>{
     if(state.route!=='works'&&state.route!=='projectPreview')return;
     const project=state.projects.find(row=>row.id===projectID);
     if(!project||project.updatedAt!==updatedAt)return;
@@ -405,7 +378,7 @@ function scheduleBackgroundReconcile(){
   backgroundViewTimer=setTimeout(()=>{
     backgroundViewTimer=null;
     const idleMS=Date.now()-lastViewInputAt;
-    if(idleMS<350){scheduleBackgroundReconcile();return;}
+    if(idleMS<900){scheduleBackgroundReconcile();return;}
     const inputFocused=view.contains(document.activeElement)&&document.activeElement.matches('input,textarea,select,[contenteditable],[contenteditable="true"]');
     if(canApplyBackgroundView({route:state.route,selectionMode:parity.selectionMode,modalOpen:modal.open,popoverOpen:!!document.querySelector('.swift-popover'),inputFocused,gestureActive:!!activeViewPointers.size,idleMS}))render();
   },180);
@@ -863,7 +836,6 @@ function render(){
   bindPage();mountWorkflowControls({state,view,body,modal,db,render,route,toast,imgTag,esc,asset,refresh,download,modelImage,rasterize,backup,openSeriesEditor,openAssetEditor:openDetail,openCutoutCheck,switchImportRecord,saveActiveImportRecord,saveProject,flushSave,moveProjectsToTrash,assetOrganization,applyAssetClassification});view.catalogRefresh?.();if(state.route==='works'){
     view.localWorkCoverDispose=localWorkCovers.observe(view);
     view.workCoverDispose=workCoverBackfill.observe(view);
-    prewarmVisibleWorkDocuments();
   }
   if(state.route==='library')prewarmOtherPages();
   if(state.route==='projectPreview'&&state.previewProjectID){
@@ -1432,6 +1404,7 @@ async function runAppAction(action,id,value){try{
     }
     if(state.tool!==value)state.cutPreview=null;
     if(value!=='tape'){state.tapeAssetID=null;state.tapeEditID=null;}
+    else if(state.tool!=='tape')state.tapeAssetID=null;
     state.tool=value;
     if(leavingLasso||!['select','lasso','scissors'].includes(value)){state.selected=null;state.multiSelected=[];}
     state.fabricInspectorOpen=false;
@@ -1918,7 +1891,7 @@ async function runAppAction(action,id,value){try{
     }
     state.tapeAssetID=a.id;state.tapeEditID=null;
     state.tapeOptions={widthMM:tapeDimensions(a).widthMM,
-      textureMode:a.tapeRepeatMode==='repeatablePattern'?'repeat':'sample',
+      textureMode:a.tapeRepeatMode==='repeatablePattern'?'repeat':'stretch',
       startCap:'square',endCap:'square'};
     state.tool=state.toolHighlight='tape';
     state.selected=null;state.multiSelected=[];render();
@@ -3498,6 +3471,7 @@ let syncPausedByUser=false,resetWorkflowActive=false;
 const cloudResumer=createSyncResumer({flush:()=>db.flushProjects({background:true}),canRun:()=>cloudEnabled&&cloudSessionReady&&navigator.onLine!==false,onError:error=>console.warn('后台同步待重试',error?.message)});
 function backgroundCloudCheck({force=false}={}){
   if(!cloudEnabled||!shouldPullCloudForRoute(state.route)||document.visibilityState==='hidden')return;
+  if(!force&&!foregroundIsIdle(state.route==='editor'?1800:1000))return;
   if(!canPollDuringEditing({route:state.route,gestureActive:!!activeViewPointers.size,
     inputFocused:!!document.activeElement?.matches('input,textarea,[contenteditable="true"]'),
     idleMS:Date.now()-lastViewInputAt}))return;

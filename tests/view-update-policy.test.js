@@ -20,7 +20,7 @@ test('active editing, dialogs and in-progress gestures still prevent destructive
   for(const change of [{modalOpen:true},{popoverOpen:true},{inputFocused:true},{gestureActive:true}])
     assert.equal(canApplyBackgroundView({...context,...change}),false,JSON.stringify(change));
   assert.equal(canApplyBackgroundView({...context,idleMS:100}),false);
-  assert.equal(canApplyBackgroundView({...context,idleMS:350}),true);
+  assert.equal(canApplyBackgroundView({...context,idleMS:900}),true);
 });
 
 test('collection pulls yield to active input and recent navigation on every route',async()=>{
@@ -31,7 +31,7 @@ test('collection pulls yield to active input and recent navigation on every rout
  assert.equal(canPollDuringEditing({...idle,inputFocused:true}),false);
  assert.equal(canPollDuringEditing({...idle,idleMS:500}),false);
  assert.equal(canPollDuringEditing({...idle,route:'works',idleMS:0}),false);
- assert.equal(canPollDuringEditing({...idle,route:'works',idleMS:350}),true);
+ assert.equal(canPollDuringEditing({...idle,route:'works',idleMS:1000}),true);
  assert.equal(canPollDuringEditing({...idle,route:'works',gestureActive:true}),false);
 });
 test('unrelated background commits do not repaint the current catalog',()=>{

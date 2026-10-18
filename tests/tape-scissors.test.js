@@ -7,6 +7,8 @@ import {silhouetteFromAlpha} from '../src/raster-silhouette.js';
 import {createTapeStrip,processTapeAsset,reshapeTapeStrip,validateTapeStrip} from '../src/tape-strip.js';
 import {validateScenePhysical} from '../src/creative.js';
 import {buildMaterialLedger} from '../src/material-ledger.js';
+import {detectTapeFlatCrop,normalizeTapeFlatCrop} from '../src/tape-flat-crop.js';
+import {assetEditorValue} from '../src/asset-editor.js';
 
 const source={id:'paper',kind:'paper',title:'纸片',physicalWidthMM:100,physicalHeightMM:80};
 function page(){
@@ -61,10 +63,35 @@ test('confirmed repeating tape creates independent editable strips at real width
   assert.ok(Math.abs(ledger.rolls[0].pieces[0].lengthMM-first.tapeStrip.pathLengthMM)<1e-8);
 });
 
-test('unverified photographic tape cannot stretch beyond its captured sample',()=>{
+test('photographic tape stretches by default but explicit finite sampling stays bounded',()=>{
   const tape={id:'single',title:'实拍胶带',kind:'tape',physicalWidthMM:40,physicalHeightMM:12};
   const draft=project('胶带').drafts[0];
-  assert.throws(()=>createTapeStrip(tape,draft,[[0,0],[400,0]]),/只拍到/);
+  assert.equal(createTapeStrip(tape,draft,[[0,0],[400,0]]).tapeStrip.textureMode,'stretch');
+  assert.throws(()=>createTapeStrip(tape,draft,[[0,0],[400,0]],10,{textureMode:'sample'}),/只拍到/);
+});
+test('tape flattening crops segmentation hairs without replacing the original PNG',()=>{
+  const width=100,height=24,pixels=new Uint8Array(width*height*4);
+  const fill=(x,y)=>{pixels[(y*width+x)*4+3]=255;};
+  for(let y=5;y<19;y++)for(let x=12;x<88;x++)fill(x,y);
+  for(let x=0;x<100;x++)fill(x,12); // a long cutout hair on both ends
+  const crop=detectTapeFlatCrop(pixels,width,height,'x');
+  assert.ok(crop.left>=.11&&crop.right<=.89,JSON.stringify(crop));
+  assert.ok(crop.top>=.2&&crop.bottom<=.8,JSON.stringify(crop));
+  assert.throws(()=>normalizeTapeFlatCrop({left:.8,right:.2,top:0,bottom:1}),/修平边界/);
+  const old={id:'t',title:'花纹',kind:'sticker',role:'support',texture:'未确定',
+    physicalWidthMM:100,physicalHeightMM:16,blobId:'original-png'};
+  const values={title:old.title,kind:'tape',role:old.role,texture:old.texture,
+    width:'100',height:'16',tags:'',contentTags:'',styleTags:'',materialTags:'',
+    seriesID:'',reviewStatus:'ready',usageStatus:'unused',tapeAxis:'x',repeatable:false,
+    flatCropMode:'manual',flatLeft:'12',flatTop:'20',flatRight:'88',flatBottom:'80'};
+  const tape=assetEditorValue(old,values);
+  assert.equal(tape.blobId,old.blobId);
+  assert.deepEqual(tape.tapeFlatCrop,{left:.12,top:.2,right:.88,bottom:.8});
+  const node=createTapeStrip(tape,project('修平').drafts[0],[[10,20],[110,20]]);
+  assert.deepEqual(node.tapeStrip.flatCrop,tape.tapeFlatCrop);
+  const restored=assetEditorValue(tape,{...values,kind:'sticker'});
+  assert.equal(restored.blobId,old.blobId);
+  assert.equal(restored.kind,'sticker');
 });
 test('one roll can make repeat, finite and stretched strips with independent widths and editable centerlines',()=>{
   const tape=processTapeAsset({id:'tape',kind:'tape',title:'花纹',physicalWidthMM:120,

@@ -69,7 +69,7 @@ const descriptions={
   compose_story_page:'将主题、两段观察与真实素材编成可编辑的日记/拼贴图层；实物尺寸不缩放。失败整体回滚。',
   compose_page:'原子编排材料、图形、文字、纸张；坐标 ratio/pt/mm，relative_to + offset 为目标宽高倍数。crop 为源比例，crop_px 为源像素。失败整体回滚。',
   place_materials:'放置整件真实素材；尺寸来自素材库，同件已放置时更新位置。piece 指定片段，unit 指定胶带来源段；普通素材每方案只取用一份。',
-  draw_tape_strips:'用原图沿可编辑中心线生成多段独立胶带。points 用 ratio/pt/mm 指定；width_mm 调整实际展示宽度；texture_mode 为 sample（有限原图）、repeat（经确认纹样区间）或 stretch（拉伸取样区间）；端头可为 square、angled、torn。相同素材可重复使用。',
+  draw_tape_strips:'用原图沿两端点之间的直线生成多段独立胶带，并继承素材的非破坏性修平范围 flatCrop。points 用 ratio/pt/mm 指定；当前取首尾点作为可编辑中心线，勿提交曲线路径；width_mm 调整实际展示宽度；texture_mode 为 sample（有限原图）、repeat（经确认纹样区间）或 stretch（拉伸取样区间）；端头可为 square、angled、torn。相同素材可重复使用。',
   edit_materials:'连续加工现有片段：append 接着当前片加工，replace 从原材料开始。先矩形裁片/胶带截段，再以 mask 设圆角、花边或多边形外轮廓；diagonal 以源片比例坐标 from/to 的直线裁去一侧，keep 为 left/right；window 在片段内部开透明矩形或椭圆孔，box=[x,y,宽,高]。外轮廓、斜裁和多个不重叠开窗可组合，不会变成白色填充；实物尺寸保持原比例。',
   upsert_materials:'整体替换片段的完整工序；remove 先移走旧片，再核验尺寸、来源段与裁片不重叠。',
   move_elements:'修改现有图层的位置、旋转、层序；实物大小保持不变。ratio/pt/mm 或 relative_to + offset。',

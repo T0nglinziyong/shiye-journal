@@ -1,5 +1,6 @@
 import {parseTags,usedAssetIDs,withUsageStatus} from './library-model.js';
 import {isMaterialKind,isMaterialRole,isMaterialTexture} from './material-taxonomy.js';
+import {normalizeTapeFlatCrop} from './tape-flat-crop.js';
 
 export function assetEditorValue(old,values) {
   if(!values.title.trim())throw Error('请填写素材名称');
@@ -18,6 +19,13 @@ export function assetEditorValue(old,values) {
   if(width!==old.physicalWidthMM||height!==old.physicalHeightMM)next.dimensionSource=width&&height?'manual':null;
   if(values.kind==='tape') {
     next.tapeAxis=values.tapeAxis==='y'?'y':'x';
+    if(values.flatCropMode==='manual')next.tapeFlatCrop=normalizeTapeFlatCrop({
+      left:Number(values.flatLeft)/100,top:Number(values.flatTop)/100,
+      right:Number(values.flatRight)/100,bottom:Number(values.flatBottom)/100});
+    else if(values.flatCropMode==='auto'){
+      if(Object.hasOwn(old,'tapeFlatCrop'))next.tapeFlatCrop=null;
+      else delete next.tapeFlatCrop;
+    }
     next.tapeRepeatMode=values.repeatable?'repeatablePattern':'singleStrip';
     if(values.repeatable){const start=Number(values.repeatStart??0),
       end=Number(values.repeatEnd??(start+Number(values.repeatPeriod))),

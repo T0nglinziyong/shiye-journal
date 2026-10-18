@@ -697,6 +697,10 @@ export function FabricSceneStage({draft,assetURL,retainAssets,onSelection,onBefo
             }
             return;
           }
+          if(gesture.tool==='tape'){
+            gesture.points=[gesture.points[0],pointer(event)];
+            queuePreview();return;
+          }
           for(const point of samples(event)){
             const previous=gesture.points.at(-1);
             const spacing=gesture.tool==='eraser'?Math.max(.5,gesture.width*.25):

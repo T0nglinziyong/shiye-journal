@@ -83,6 +83,18 @@
 .swift-material-picker .canvas-material-filters select{width:100%;min-width:0;max-width:none;height:32px;min-height:32px;padding-block:4px}
 .swift-material-picker .canvas-material-search{box-sizing:border-box;width:100%;height:32px;min-height:32px;padding-block:4px}
 @media(max-width:600px){.swift-material-picker{height:min(60dvh,500px)!important}}
+.swift-picker-popover.swift-tape-picker{width:min(280px,calc(100vw - 24px))!important;height:min(52dvh,390px)!important;max-height:calc(100dvh - 24px)!important;box-sizing:border-box;overflow:hidden}
+.swift-tape-picker .popover-content{display:flex;flex-direction:column;min-height:0;height:calc(100% - 38px);gap:7px;overflow:hidden}
+.swift-tape-picker .canvas-material-search{flex:none;box-sizing:border-box;width:100%;height:32px;min-height:32px;padding-block:4px}
+.swift-tape-picker .canvas-picker-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-content:start;gap:6px;min-height:0;max-height:none;flex:1;overflow-y:auto;overscroll-behavior:contain}
+.swift-tape-picker .canvas-picker-grid>button{display:grid;grid-template-rows:64px auto;align-content:start;justify-items:center;gap:4px;min-width:0;min-height:92px;height:auto;padding:5px;overflow:hidden}
+.swift-tape-picker .canvas-picker-grid .material-piece-image{display:grid;place-items:center;width:100%;height:64px;overflow:hidden}
+.swift-tape-picker .canvas-picker-grid .material-piece-image img{display:block;width:auto;height:auto;max-width:100%;max-height:100%;object-fit:contain}
+.tape-flat-preview{display:block;width:100%;height:100%;object-fit:contain}
+.card-image>.tape-flat-preview,.material-editor-preview>.tape-flat-preview{max-width:100%;max-height:100%}
+.series-cover>.tape-flat-preview,.series-detail-cover>.tape-flat-preview{flex:1 1 0;width:0;min-width:0;height:calc(100% - 16px);object-fit:contain}
+.tape-flat-fields{margin-top:8px}
+.swift-tape-picker .canvas-picker-grid>button>span{font-size:12px;line-height:16px;max-width:100%;overflow-wrap:anywhere;text-align:center}
 .project-preview-cover{grid-template-columns:minmax(0,1fr)}
 .project-preview-cover .preview-paper{justify-self:center;min-width:0;max-width:90%}
 .works-grid .card-image>.thumb-sheet{width:94%!important;height:auto;aspect-ratio:1.42!important;max-width:100%;max-height:100%}

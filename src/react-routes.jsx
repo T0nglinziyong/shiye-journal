@@ -38,12 +38,13 @@ import {ManualBoxEditor} from './react-manual-box-editor.jsx';
 import {PaperCorrection} from './react-paper-correction.jsx';
 import {OrganizationBadge} from './react-organization.jsx';
 import {materialKinds,materialRoleName} from './material-taxonomy.js';
+import {TapeAssetImage} from './tape-asset-image.jsx';
 import {loadSeriesCoverSnapshot,seriesCoverSignature} from './series-cover-snapshot.js';
 
 function RouteImage({asset,source,priority=false}){
   const src=asset&&(source(asset.blobId)||asset.staticPath);
-  return src?<><img data-asset-image-id={asset.id} loading={priority?'eager':'lazy'}
-    fetchPriority={priority?'high':undefined} decoding="async" src={src} alt={asset.title}/><OrganizationBadge id={asset.id}/></>:<span>无预览</span>;
+  return src?<><TapeAssetImage asset={asset} src={src} loading={priority?'eager':'lazy'}
+    priority={priority} alt={asset.title}/><OrganizationBadge id={asset.id}/></>:<span>无预览</span>;
 }
 
 function SeriesCover({series,assets,seriesCovers,source,priority,account}){
