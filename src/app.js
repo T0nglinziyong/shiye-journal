@@ -68,7 +68,7 @@ import {replaceSceneMaterial} from './scene-advanced-ops.js';
 import {createWorkCoverBackfill} from './work-cover-backfill.js';
 import {renderWorkCoverSnapshot} from './work-cover-snapshot.js';
 import {createLocalWorkCovers} from './work-cover-local-cache.js';
-import {foregroundIsIdle,scheduleForegroundIdle} from './foreground-idle.js';
+import {foregroundIsIdle,scheduleForegroundIdle,yieldToForeground} from './foreground-idle.js';
 import {imagePlaceholder,mountPrivateImages} from './lazy-private-images.js';
 import {recordImageLoading,imageLoadingSnapshot} from './image-loading-diagnostics.js';
 import {assetEditorValue} from './asset-editor.js';
@@ -290,6 +290,7 @@ const renderLocalCoverBlob=project=>renderWorkCoverSnapshot(project,{
     throw Error('素材图片暂不可读取：'+id);
   },
   decodeStatic:decodeSceneImage,renderScene:renderSceneCanvas,
+  backgroundYield:yieldToForeground,
   createBitmap:blob=>createImageBitmap(blob),
   getSnapshot:async id=>(await db.get('blobs',id))?.data||null
 });

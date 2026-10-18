@@ -13,7 +13,7 @@ function missingMaterialImage(){
   return canvas;
 }
 export async function renderWorkCoverSnapshot(project,{
-  resolveAsset,previewBlob,decodeStatic,renderScene,createBitmap,
+  resolveAsset,previewBlob,decodeStatic,renderScene,createBitmap,backgroundYield,
   getSnapshot=async()=>null,createMissingImage=missingMaterialImage
 }={}){
   if(project.isSnapshot)return getSnapshot(project.snapshotBlobId);
@@ -26,6 +26,7 @@ export async function renderWorkCoverSnapshot(project,{
     const result=await renderScene(draft,{
       scale:480/Math.max(draft.canvas.width,draft.canvas.height),
       waitForFonts:true,
+      backgroundYield,
       loadMaterialImage:async(id,node)=>{
         const key=node?.sourceBlobId||node?.sourceStaticPath||id;
         if(!bitmaps.has(key))bitmaps.set(key,(async()=>{
@@ -49,6 +50,7 @@ export async function renderWorkCoverSnapshot(project,{
         return bitmaps.get(key);
       }
     });
+    await backgroundYield?.();
     const blob=await new Promise((resolve,reject)=>result.canvas.toBlob(
       blob=>blob?.size?resolve(blob):reject(Error('480px 作品封面编码失败')),'image/webp',.85));
     if(degraded)Object.defineProperty(blob,partialCover,{value:true});

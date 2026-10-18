@@ -48,6 +48,20 @@ test('already existing flat snapshots need no scene render',async()=>{
   assert.equal(await renderWorkCoverSnapshot(p,{getSnapshot:async id=>id==='existing'?raw:null}),raw);
 });
 
+test('optional cover rendering yields before encoding and passes its yield hook to the scene',async()=>{
+  const events=[],backgroundYield=async()=>events.push('yield');
+  const project={id:'work-idle',activeDraftID:'d',drafts:[{id:'d',sceneVersion:2,
+    canvas:{width:400,height:500},layers:[]}]};
+  await renderWorkCoverSnapshot(project,{
+    backgroundYield,
+    renderScene:async(_draft,options)=>{
+      assert.equal(options.backgroundYield,backgroundYield);
+      return {canvas:{toBlob:done=>{events.push('encode');done(new Blob(['cover']));}}};
+    }
+  });
+  assert.deepEqual(events,['yield','encode']);
+});
+
 test('cover uses the image version pinned by the work after the library image changes',async()=>{
  const node={id:'m',type:'material',assetID:'a',sourceBlobId:'image-original'};
  const project={id:'p',activeDraftID:'d',drafts:[{id:'d',sceneVersion:2,

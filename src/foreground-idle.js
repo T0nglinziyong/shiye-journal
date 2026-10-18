@@ -34,3 +34,10 @@ export function scheduleForegroundIdle(task,{minIdleMs=700,delayMs=0}={}){
   timer=setTimeout(schedule,delayMs);
   return ()=>{cancelled=true;clearTimeout(timer);if(idle&&typeof cancelIdleCallback==='function')cancelIdleCallback(idle);};
 }
+// Let pending input and paint run between chunks of optional canvas work.
+// If an interaction starts, resume only after the foreground settles again.
+export async function yieldToForeground({minIdleMs=350}={}){
+  await new Promise(resolve=>setTimeout(resolve,0));
+  if(foregroundIsIdle(minIdleMs))return;
+  await new Promise(resolve=>scheduleForegroundIdle(resolve,{minIdleMs}));
+}

@@ -25,7 +25,7 @@ export async function prepareSceneFonts(draft){
  await Promise.all(texts.map(t=>fonts.load(textFont(t),String(t.content||'示例'))));
  return {status:'environment-fonts-loaded',families:requested,note:'同一字体名称不证明跨设备字体文件一致'};
 }
-export async function renderSceneCanvas(draft,{scale=1,loadMaterialImage,createCanvas=()=>document.createElement('canvas'),loadShapeImage=decodeSceneImage,waitForFonts=true}={}){
+export async function renderSceneCanvas(draft,{scale=1,loadMaterialImage,createCanvas=()=>document.createElement('canvas'),loadShapeImage=decodeSceneImage,waitForFonts=true,backgroundYield}={}){
  if(!Number.isFinite(scale)||scale<=0||scale>8)throw Error('画面输出比例无效');
  validateSceneExtensions(draft);
  const width=Math.round(draft.canvas.width*scale),height=Math.round(draft.canvas.height*scale);
@@ -62,12 +62,19 @@ export async function renderSceneCanvas(draft,{scale=1,loadMaterialImage,createC
      }else if(kind==='text')drawSceneText(target,item);
    }finally{target.restore();}
  };
- let isolatedGroups=0;
+ let isolatedGroups=0,lastYield=globalThis.performance?.now?.()??0;
+ const yieldIfNeeded=async()=>{
+   if(!backgroundYield)return;
+   const now=globalThis.performance?.now?.()??Date.now();
+   if(now-lastYield<12&&!globalThis.navigator?.scheduling?.isInputPending?.({includeContinuous:true}))return;
+   await backgroundYield();lastYield=globalThis.performance?.now?.()??Date.now();
+ };
  const drawTree=async(nodes,target,depth=0)=>{
    if(depth>SCENE_MAX_GROUP_DEPTH)throw Error('图层组嵌套超过渲染预算');
    // Physical weave display fragments are projections of one source piece.
    const expanded=sceneDisplaySiblings(nodes).map(node=>({type:node.type,value:node}));
    for(const entry of expanded){
+     await yieldIfNeeded();
      const node=entry.value;
      if(node.hidden||node.isHidden||node.isParked||node.parked)continue;
      if(entry.type!=='group'){await drawLeaf(entry.type,node,target);continue;}
@@ -92,5 +99,6 @@ export async function renderSceneCanvas(draft,{scale=1,loadMaterialImage,createC
    }
  };
  await drawTree(draft.layers,ctx);
+ await yieldIfNeeded();
  return {canvas,report:{rendererVersion:'shiye-scene-v2',sceneHash:craftSceneHash(draft),width,height,fontProfile,resources:'provided-source-images',isolatedGroups}};
 }
