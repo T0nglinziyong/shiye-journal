@@ -116,12 +116,25 @@ try{
     'Tape can be marked used or unused in the ordinary asset editor');
   assert.ok(await evaluate('!!document.querySelector(".material-editor-preview .tape-flat-preview")'),
     'Tape detail previews use a disposable flat view of the original PNG');
+  assert.equal(await evaluate('document.querySelector(".material-editor-preview img[data-asset-image-id]")?.style.opacity'),'0',
+    'The untrimmed source image must never flash before the flat tape cover is ready');
   await click('.asset-editor-tabs button:nth-child(2)');
+  await wait('.tape-source-guide .tape-guide-crop');
+  assert.ok(await evaluate('!!document.querySelector(".tape-source-guide .tape-guide-crop")'),
+    'The original-photo guide marks the flat crop with dashed boundaries');
+  assert.equal(await evaluate('document.querySelector("#asset-repeatStart")?.type'),'range');
+  assert.equal(await evaluate('document.querySelector("#asset-repeatEnd")?.type'),'range');
+  assert.equal(await evaluate('document.querySelectorAll(".tape-guide-repeat").length'),2);
   assert.equal(await evaluate('document.querySelector("#asset-tapeAxis")?.value'),'x');
   assert.equal(await evaluate('document.querySelector("#asset-flatCropMode")?.value'),'auto');
   await evaluate(`(()=>{const select=document.querySelector('#asset-flatCropMode');
     select.value='manual';select.dispatchEvent(new Event('change',{bubbles:true}));})()`);
-  assert.ok(await evaluate('!!document.querySelector("#asset-flatLeft")'));
+  assert.equal(await evaluate('document.querySelector("#asset-flatLeft")?.type'),'range');
+  await evaluate(`(()=>{const input=document.querySelector('#asset-flatLeft');
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'25');
+    input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+  assert.equal(await evaluate('document.querySelector(".tape-guide-crop")?.style.left'),'25%',
+    'Moving a crop slider updates the dashed guide without saving the asset');
   await click('.asset-editor-tabs button:nth-child(1)');
   await evaluate(`(()=>{const select=document.querySelector('#asset-kind');
     select.value='sticker';select.dispatchEvent(new Event('change',{bubbles:true}));})()`);

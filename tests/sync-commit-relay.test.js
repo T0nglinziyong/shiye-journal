@@ -66,3 +66,20 @@ test('ordinary reads never use the commit relay',async()=>{
     {method:'GET'},{fetcher:async()=>{calls++;throw new TypeError('Failed to fetch');}}));
   assert.equal(calls,1);
 });
+
+test('a large valid commit may use the relay after an unconfirmed direct response',async()=>{
+  const priorWindow=globalThis.window;globalThis.window={};
+  try{
+    const body=JSON.stringify({...payload,operations:[{store:'assets',action:'put',
+      item:{id:'a',title:'x'.repeat(1_100_000)}}]});
+    let calls=0;
+    const reply=await fetchCloudRequest(
+      'https://test.supabase.co/rest/v1/rpc/shiye_commit_v3_guarded',
+      {method:'POST',body,headers:{Authorization:'Bearer user.jwt.token'}},{
+        fetcher:async()=>{calls++;if(calls===1)throw new TypeError('Failed to fetch');
+          return {ok:true,status:200};}
+      });
+    assert.equal(reply.status,200);assert.equal(calls,2);
+  }finally{if(priorWindow===undefined)delete globalThis.window;
+    else globalThis.window=priorWindow;}
+});

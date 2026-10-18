@@ -4,7 +4,7 @@ const url=import.meta.env?.VITE_SHIYE_SUPABASE_URL;
 const key=import.meta.env?.VITE_SHIYE_SUPABASE_PUBLISHABLE_KEY;
 export const cloudEnabled=!!url;
 let client;
-export async function fetchCloudRequest(input,init,{fetcher=fetch,commitTimeoutMs=12000,
+export async function fetchCloudRequest(input,init,{fetcher=fetch,commitTimeoutMs=20000,
   relayTimeoutMs=25000}={}){
   const path=input instanceof Request?input.url:String(input);
   const method=(init?.method||(input instanceof Request?input.method:'GET')).toUpperCase();
@@ -20,7 +20,7 @@ export async function fetchCloudRequest(input,init,{fetcher=fetch,commitTimeoutM
     const transient=deadline.aborted||error?.name==='TypeError'||error?.name==='NetworkError';
     const body=init?.body;
     if(!commit||!transient||init?.signal?.aborted||typeof window==='undefined'||
-      typeof body!=='string'||body.length>1_000_000)throw error;
+      typeof body!=='string'||new Blob([body]).size>3_500_000)throw error;
     // A lost direct response may already have committed. The operation ID is
     // unchanged, so the server receipt makes this relay attempt idempotent.
     const relaySignal=AbortSignal.timeout(relayTimeoutMs);

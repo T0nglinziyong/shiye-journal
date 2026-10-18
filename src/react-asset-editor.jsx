@@ -1,4 +1,4 @@
-import React,{useRef,useState} from 'react';
+import React,{useEffect,useRef,useState} from 'react';
 import {materialKinds,materialRoles,materialTextures,isMaterialTexture} from './material-taxonomy.js';
 import {useUnsavedInput} from './unsaved-inputs.js';
 import {TapeAssetImage} from './tape-asset-image.jsx';
@@ -8,6 +8,8 @@ const tabNames=['基本信息','尺寸与胶带','分类与标签'];
 export function AssetEditorDialog({asset,series,used,src,onClose,onSave}){
   const [tab,setTab]=useState(0),[busy,setBusy]=useState(false),[error,setError]=useState('');
   const [autoCrop,setAutoCrop]=useState(null);
+  const previewRef=useRef(null),[previewSize,setPreviewSize]=useState({width:0,height:0});
+  const [sourceSize,setSourceSize]=useState(null);
   const [form,setForm]=useState({title:asset.title,kind:asset.kind,role:asset.role,
     texture:isMaterialTexture(asset.texture)?asset.texture:'未确定',width:asset.physicalWidthMM??'',height:asset.physicalHeightMM??'',
     contentTags:(asset.contentTags||[]).join('、'),styleTags:(asset.styleTags||[]).join('、'),
@@ -17,7 +19,8 @@ export function AssetEditorDialog({asset,series,used,src,onClose,onSave}){
       (Number(asset.physicalWidthMM)>=Number(asset.physicalHeightMM)?'x':'y'),
     repeatable:asset.tapeRepeatMode==='repeatablePattern',
     repeatStart:asset.tapeRepeatStartMM??0,
-    repeatEnd:asset.tapeRepeatEndMM??asset.tapeRepeatPeriodMM??'',
+    repeatEnd:asset.tapeRepeatEndMM??asset.tapeRepeatPeriodMM??
+      (asset.tapeAxis==='y'?asset.physicalHeightMM:asset.physicalWidthMM)??'',
     flatCropMode:asset.tapeFlatCrop?'manual':'auto',
     flatLeft:Math.round((asset.tapeFlatCrop?.left??0)*100),
     flatTop:Math.round((asset.tapeFlatCrop?.top??0)*100),
@@ -25,7 +28,15 @@ export function AssetEditorDialog({asset,series,used,src,onClose,onSave}){
     flatBottom:Math.round((asset.tapeFlatCrop?.bottom??1)*100)});
   const initial=useRef(JSON.stringify(form));
   useUnsavedInput('素材信息',JSON.stringify(form)!==initial.current);
-  const set=(key,value)=>setForm(old=>key==='flatCropMode'&&value==='manual'&&autoCrop?
+  useEffect(()=>{
+    const element=previewRef.current;if(!element)return;
+    const update=()=>setPreviewSize({width:element.clientWidth,height:element.clientHeight});
+    update();const observer=new ResizeObserver(update);observer.observe(element);
+    return ()=>observer.disconnect();
+  },[]);
+  const set=(key,value)=>setForm(old=>key==='repeatable'&&value&&old.repeatEnd===''?
+    {...old,[key]:value,repeatEnd:old.tapeAxis==='y'?old.height:old.width}:
+    key==='flatCropMode'&&value==='manual'&&autoCrop?
     {...old,[key]:value,flatLeft:Math.round(autoCrop.left*100),
       flatTop:Math.round(autoCrop.top*100),flatRight:Math.round(autoCrop.right*100),
       flatBottom:Math.round(autoCrop.bottom*100)}:{...old,[key]:value});
@@ -41,6 +52,22 @@ export function AssetEditorDialog({asset,series,used,src,onClose,onSave}){
   const select=(label,key,choices)=><label key={key}>{label}<select id={`asset-${key}`}
     value={form[key]} onChange={event=>set(key,event.target.value)}>
     {choices.map(([value,name])=><option key={value} value={value}>{name}</option>)}</select></label>;
+  const lengthMM=Number(form.tapeAxis==='y'?form.height:form.width);
+  const number=(value,fallback=0)=>Number.isFinite(Number(value))&&value!==''?Number(value):fallback;
+  const slider=(label,key,{min=0,max=100,step=1,suffix='%' }={})=><label
+    className="tape-range-field" key={key} htmlFor={`asset-${key}`}>
+    <span>{label}<output>{number(form[key],max).toFixed(step<1?1:0)}{suffix}</output></span>
+    <input id={`asset-${key}`} type="range" min={min} max={Math.max(min,max)} step={step}
+      value={Math.min(Math.max(number(form[key],max),min),Math.max(min,max))}
+      onChange={event=>set(key,event.target.value)}/>
+  </label>;
+  const guideCrop=form.flatCropMode==='manual'?previewCrop:autoCrop;
+  const guideBox=sourceSize&&previewSize.width&&previewSize.height?(()=>{
+    const scale=Math.min(previewSize.width/sourceSize.width,previewSize.height/sourceSize.height);
+    const width=sourceSize.width*scale,height=sourceSize.height*scale;
+    return {left:(previewSize.width-width)/2,top:(previewSize.height-height)/2,width,height};
+  })():null;
+  const guideFraction=value=>Math.min(1,Math.max(0,value));
   const submit=async()=>{
     if(busy)return;setBusy(true);setError('');
     try{await onSave(form);onClose();}
@@ -56,9 +83,28 @@ export function AssetEditorDialog({asset,series,used,src,onClose,onSave}){
         <button type="button" className="btn primary" id="save-asset" disabled={busy}
           onClick={()=>void submit()}>应用</button>
       </div>
-      <div className="material-editor"><div className="material-editor-preview">
+      <div className="material-editor"><div className="material-editor-preview" ref={previewRef}>
         {src?<TapeAssetImage asset={previewAsset} src={src} alt={asset.title} priority
-          onFlatCrop={crop=>{if(form.flatCropMode==='auto')setAutoCrop(crop);}}/>:<span>无预览</span>}
+          onFlatCrop={crop=>{if(form.flatCropMode==='auto')setAutoCrop(old=>
+            JSON.stringify(old)===JSON.stringify(crop)?old:crop);}}/>:<span>无预览</span>}
+        {src&&form.kind==='tape'&&tab===1?<div className="tape-source-guide" aria-label="原图取样边界预览">
+          {guideBox?<div className="tape-guide-image-box" style={guideBox}>
+            <img src={src} alt="" onLoad={event=>setSourceSize({width:event.currentTarget.naturalWidth,
+              height:event.currentTarget.naturalHeight})}/>
+            {guideCrop?<div className="tape-guide-crop" style={{left:`${guideCrop.left*100}%`,
+              top:`${guideCrop.top*100}%`,width:`${(guideCrop.right-guideCrop.left)*100}%`,
+              height:`${(guideCrop.bottom-guideCrop.top)*100}%`}}/>:null}
+            {form.repeatable&&lengthMM>0&&guideCrop?['repeatStart','repeatEnd'].map((key,index)=>{
+              const fraction=guideFraction(number(form[key],index?lengthMM:0)/lengthMM);
+              const position=(form.tapeAxis==='y'?guideCrop.top:guideCrop.left)+
+                fraction*(form.tapeAxis==='y'?guideCrop.bottom-guideCrop.top:guideCrop.right-guideCrop.left);
+              return <span key={key} className={`tape-guide-repeat ${form.tapeAxis==='y'?'horizontal':''}`}
+                style={form.tapeAxis==='y'?{top:`${position*100}%`}:{left:`${position*100}%`}}>
+                <b>{index?'终':'起'}</b></span>;
+            }):null}
+          </div>:<img src={src} alt="" onLoad={event=>setSourceSize({width:event.currentTarget.naturalWidth,
+            height:event.currentTarget.naturalHeight})}/>}
+        </div>:null}
       </div><div className="cutout-tabs asset-editor-tabs" role="tablist" aria-label="素材信息分类">
           {tabNames.map((name,index)=><button type="button" role="tab" key={name}
             className={tab===index?'selected':''} aria-selected={tab===index}
@@ -75,16 +121,18 @@ export function AssetEditorDialog({asset,series,used,src,onClose,onSave}){
           <section id="tape-pattern" hidden={form.kind!=='tape'}><h3>胶带图案</h3>
             {select('胶带长度方向','tapeAxis',[['x','图片横向'],['y','图片纵向']])}
             {select('端边修平','flatCropMode',[['auto','根据原图自动修平'],['manual','手动调整原图取样区域']])}
-            {form.flatCropMode==='manual'?<div className="form-grid tape-flat-fields">
-              {field('左边界 %','flatLeft','number')}{field('右边界 %','flatRight','number')}
-              {field('上边界 %','flatTop','number')}{field('下边界 %','flatBottom','number')}
+            {form.flatCropMode==='manual'?<div className="tape-flat-fields">
+              {slider('左边界','flatLeft',{max:Math.max(0,number(form.flatRight,100)-2)})}
+              {slider('右边界','flatRight',{min:Math.min(100,number(form.flatLeft)+2)})}
+              {slider('上边界','flatTop',{max:Math.max(0,number(form.flatBottom,100)-2)})}
+              {slider('下边界','flatBottom',{min:Math.min(100,number(form.flatTop)+2)})}
             </div>:null}
             <small>只调整胶带显示区域，原 PNG 不变；改回其他类型会显示原图。</small>
             <label className="toggle-row">已确认重复纹样<input id="asset-repeatable" type="checkbox"
               checked={form.repeatable} onChange={event=>set('repeatable',event.target.checked)}/></label>
-            {form.repeatable?<div className="form-grid">
-              {field('纹样起点 mm','repeatStart','number')}
-              {field('纹样终点 mm','repeatEnd','number')}
+            {form.repeatable?<div className="tape-flat-fields">
+              {slider('纹样起点','repeatStart',{max:Math.max(0,number(form.repeatEnd,lengthMM)-.1),step:.1,suffix:' mm'})}
+              {slider('纹样终点','repeatEnd',{min:Math.min(lengthMM,number(form.repeatStart)+.1),max:lengthMM,step:.1,suffix:' mm'})}
             </div>:null}
           </section>
         </div>

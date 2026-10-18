@@ -94,6 +94,21 @@
 .card-image>.tape-flat-preview,.material-editor-preview>.tape-flat-preview{max-width:100%;max-height:100%}
 .series-cover>.tape-flat-preview,.series-detail-cover>.tape-flat-preview{flex:1 1 0;width:0;min-width:0;height:calc(100% - 16px);object-fit:contain}
 .tape-flat-fields{margin-top:8px}
+.tape-range-field{display:block;min-width:0;margin:8px 0!important}
+.tape-range-field>span{display:flex;justify-content:space-between;gap:12px;font-size:13px}
+.tape-range-field output{font-variant-numeric:tabular-nums;color:#52634b;white-space:nowrap}
+.tape-range-field input[type=range]{display:block;width:100%;height:32px;margin:3px 0;touch-action:none}
+.tape-source-guide{position:absolute;inset:0;overflow:hidden;background:#f2f4ed}
+.tape-source-guide>img{display:block;width:100%;height:100%;object-fit:contain}
+.tape-guide-image-box{position:absolute;overflow:hidden}
+.tape-guide-image-box>img{display:block;width:100%;height:100%;object-fit:fill}
+.tape-guide-crop{position:absolute;box-sizing:border-box;border:2px dashed #2e7652;
+ box-shadow:0 0 0 1000px #263d3433;pointer-events:none}
+.tape-guide-repeat{position:absolute;top:0;bottom:0;border-left:2px dashed #d7773b;
+ pointer-events:none;color:#7a421f}
+.tape-guide-repeat.horizontal{top:auto;left:0;right:0;bottom:auto;border-left:0;border-top:2px dashed #d7773b}
+.tape-guide-repeat b{position:absolute;top:2px;left:3px;background:#fffefaee;border-radius:4px;
+ padding:1px 3px;font-size:11px;line-height:14px;white-space:nowrap}
 .swift-tape-picker .canvas-picker-grid>button>span{font-size:12px;line-height:16px;max-width:100%;overflow-wrap:anywhere;text-align:center}
 .project-preview-cover{grid-template-columns:minmax(0,1fr)}
 .project-preview-cover .preview-paper{justify-self:center;min-width:0;max-width:90%}

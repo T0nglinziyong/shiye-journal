@@ -24,6 +24,7 @@ import {isLegacySceneProject} from './scene-v2.js';
 import {createBlobRevisionProof} from './blob-revision-proof.js';
 import {createSyncDiagnostics} from './sync-diagnostics.js';
 import {decodeImageBlob} from './image-blob-decoder.js';
+import {yieldToForeground} from './foreground-idle.js';
 import {boundedMap} from './bounded-map.js';
 import {assetBlobIDs,splitIndependentAssetImport,splitWideMetadataMutation,splitPendingAssetImportRows,reconcileInterruptedAssetImport} from './import-sync-batches.js';
 export function createCloudStore({cloudClient,requireCloudUser,cache=null,namespace='cloud',projectPreview=()=>null,objectStorage=null}){
@@ -303,7 +304,7 @@ const unifiedSync=createProjectSync({
   commit:(envelope,operationID,baseRevision)=>{
     const payload=envelope.payload;
     if(envelope.kind==='project')
-      return cloudTransaction(['projects'],tx=>tx.objectStore('projects').put(payload),operationID,baseRevision);
+      return cloudTransaction(['projects'],tx=>tx.objectStore('projects').put(payload),operationID,baseRevision,true);
     if(envelope.kind!=='batch')throw Error('不支持的待同步操作类型');
     return payload.operations?
       cloudTransaction(payload.names,tx=>{for(const op of payload.operations){
@@ -311,11 +312,11 @@ const unifiedSync=createProjectSync({
         if(op.action==='put')store.put(op.item);
         else if(op.action==='delete')store.delete(op.id);
         else store.clear();
-      }},operationID,baseRevision):
+      }},operationID,baseRevision,true):
       cloudTransaction(['assets','blobs','projects'],tx=>{
         for(const store of ['assets','blobs','projects'])
           for(const item of payload[store]||[])tx.objectStore(store).put(item);
-      },operationID,baseRevision);
+      },operationID,baseRevision,true);
   },
   revision:()=>revision,
   reconcile:async(envelope,operationID,baseRevision)=>{
@@ -1184,7 +1185,7 @@ async function verifyNewProjectSources(operations){
   const missing=ids.filter(id=>!found.has(id));
   if(missing.length)throw Error('作品引用的素材尚未同步到云端；作品保留在本机待重试：'+missing.join('、'));
 }
-function cloudTransaction(names,fn,operationID=crypto.randomUUID(),baseRevisionOverride=null){
+function cloudTransaction(names,fn,operationID=crypto.randomUUID(),baseRevisionOverride=null,background=false){
   assertAccountWritable();
   const operations=[];const result=fn({objectStore(store){if(!names.includes(store))throw Error('此表未加入事务');return {put:record=>operations.push({action:'put',store,item:structuredClone(record)}),delete:id=>operations.push({action:'delete',store,id}),clear:()=>operations.push({action:'clear',store})};}});
   if(result?.then)throw Error('事务回调必须同步');
@@ -1200,6 +1201,7 @@ function cloudTransaction(names,fn,operationID=crypto.randomUUID(),baseRevisionO
     operations.push(...recordTombstones(operations).slice(operations.length));
     const puts=operations.filter(op=>op.action==='put'),auxiliary=auxiliaryBlobIDs(operations);activeDirect.total=puts.length;activeDirect.phase='编码与上传';reportSync();
     for(let offset=0;offset<puts.length;offset+=3)try{
+      if(background)await yieldToForeground({minIdleMs:300,allowHidden:true});
       await Promise.all(puts.slice(offset,offset+3).map(async op=>{
         try{op.item=await encode(op.store,op.item,{makePreview:op.store!=='blobs'||!auxiliary.has(op.item.id)});}
         catch(error){throw markSyncPhase(error,'编码与上传 '+op.store);}
