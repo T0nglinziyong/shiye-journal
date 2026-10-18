@@ -33,3 +33,23 @@ test('CloudBase COS authorization rejects an inactive or unlisted user',async()=
       Response.json({sub:'123',status:'ACTIVE'}):Response.json([])});
   assert.equal(unlisted,null);
 });
+
+test('CloudBase account and reset checks start together after identity verification',async()=>{
+  const started=[];let releaseAccount,releaseMarker;
+  const fetcher=url=>{
+    const path=String(url);
+    if(path.endsWith('/auth/v1/user/me'))return Promise.resolve(Response.json({sub:'123',status:'ACTIVE'}));
+    if(path.includes('/shiye_accounts'))return new Promise(resolve=>{
+      started.push('account');releaseAccount=()=>resolve(Response.json([{user_id:'123',is_admin:false}]));
+    });
+    if(path.includes('/shiye_records'))return new Promise(resolve=>{
+      started.push('marker');releaseMarker=()=>resolve(Response.json([]));
+    });
+    throw Error('Unexpected request');
+  };
+  const result=verifyCloudBaseUser('token',{envId:'test-env',fetcher});
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.deepEqual(started,['account','marker']);
+  releaseAccount();releaseMarker();
+  assert.deepEqual(await result,{userID:'123',isAdmin:false,resetId:null});
+});

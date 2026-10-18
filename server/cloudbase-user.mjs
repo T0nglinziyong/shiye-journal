@@ -14,18 +14,22 @@ export async function verifyCloudBaseUser(token,{envId,fetcher=fetch}={}){
   const query=new URL(`${origin}/v1/rdb/rest/shiye_accounts`);
   query.searchParams.set('select','user_id,is_admin');
   query.searchParams.set('user_id',`eq.${userID}`);
-  const account=await fetcher(query,{headers,signal:AbortSignal.timeout(15000),cache:'no-store'});
-  if(!account.ok)throw Error('CloudBase account lookup unavailable');
-  const rows=await account.json();
-  const row=Array.isArray(rows)?rows.find(item=>item.user_id===userID):null;
-  if(!row)return null;
   const markerQuery=new URL(`${origin}/v1/rdb/rest/shiye_records`);
   markerQuery.searchParams.set('select','record');
   markerQuery.searchParams.set('user_id',`eq.${userID}`);
   markerQuery.searchParams.set('store','eq.meta');
   markerQuery.searchParams.set('id','eq.shiye-reset-barrier');
-  const markerResponse=await fetcher(markerQuery,{headers,signal:AbortSignal.timeout(15000),cache:'no-store'});
+  // Both lookups depend on the authenticated user ID, but not on each other.
+  // One round trip instead of two matters for every short-lived COS ticket.
+  const [account,markerResponse]=await Promise.all([
+    fetcher(query,{headers,signal:AbortSignal.timeout(15000),cache:'no-store'}),
+    fetcher(markerQuery,{headers,signal:AbortSignal.timeout(15000),cache:'no-store'})
+  ]);
+  if(!account.ok)throw Error('CloudBase account lookup unavailable');
   if(!markerResponse.ok)throw Error('CloudBase reset marker unavailable');
+  const rows=await account.json();
+  const row=Array.isArray(rows)?rows.find(item=>item.user_id===userID):null;
+  if(!row)return null;
   const markers=await markerResponse.json();
   return {userID,isAdmin:row.is_admin===true,resetId:markers?.[0]?.record?.resetId||null};
 }
