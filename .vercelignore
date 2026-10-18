@@ -11,6 +11,7 @@
 !api
 api/*
 !api/cos.js
+!api/cloudbase-proxy.js
 !api/sync-commit.js
 !server
 server/*
