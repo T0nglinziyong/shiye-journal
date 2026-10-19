@@ -1242,3 +1242,14 @@ test('existing edited fork never strands the original project queue or overwrite
   assert.equal(uploaded.drafts[0].layers[0].content,'本机正文');
   assert.equal(existing.drafts[0].layers[0].content,'副本又被修改');
 });
+
+
+test('CloudBase cache purge has no stale parallel thumbnail worker references',async()=>{
+ const cache=memoryCache();let purged=false;
+ cache.purgeAccount=async()=>{purged=true;return 1;};
+ cache.close=async()=>{};
+ const {db}=fixture(cache);
+ const count=await db.cloudPurgeLocalAfterReset();
+ assert.equal(count,1);
+ assert.equal(purged,true);
+});

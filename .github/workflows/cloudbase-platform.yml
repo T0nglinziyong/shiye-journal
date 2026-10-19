@@ -27,6 +27,12 @@ jobs:
           node-version: '22'
       - name: Built-in Node runtime contracts (no cloud credentials)
         run: node --test --test-concurrency=2 tests/cloudbase-continuation.test.js tests/cloudbase-client-contract.test.js tests/cloudbase-service.test.js tests/cloudbase-transport.test.js tests/cloudbase-user.test.js
+      - name: Enforce CloudBase-only source and deploy paths
+        run: node scripts/audit-cloudbase-platform.mjs
+      - name: Install application dependencies
+        run: npm ci
+      - name: Focused synchronization, COS and storage regression suite
+        run: node --test --test-concurrency=2 tests/cloud-store.test.js tests/project-sync.test.js tests/cos-upload.test.js tests/cloud-record-guard.test.js tests/storage-usage-ui.test.js
       - name: Build explicit function deployment file allowlist
         run: node scripts/build-cloudbase-functions.mjs
 
