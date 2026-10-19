@@ -9,7 +9,7 @@ export const webWorkbenchInstructions=`拾页 · 可编辑手帐创作工作台
 4. 初次整页构思也可以写 instructions.json，内容为 {tools:[...]}、{plan:{...}} 或 {page:比例坐标便捷页面}，执行 node runtime/compile.cjs instructions.json。这些是临时输入，编译后工作文件始终是原生 Scene；直接修改最终 Scene 无需回译成工具。高级 observations、pieces、weaves 见 schema/craft-plan.json，全部编译为独立、可编辑图层。
 5. node runtime/preview.cjs 重新校验并生成 output/画面预览.html、scene-summary.json 和 validation-report.json。用环境允许的真实浏览器加载 HTML，等 SHIYE_RENDER_READY=true，查看 SHIYE_RENDER_REPORT，并调用 window.SHIYE_EXPORT_PREVIEW()，把返回对象保存到 output/canvas-capture.json；执行 node runtime/save-preview.cjs output/canvas-capture.json，生成 output/preview.png。此方法直接读取渲染完成的 Canvas，保留 sceneHash。若环境政策阻止浏览器操作，报告该限制，不绕过策略，不声称已经看图。
 6. 必须实际查看渲染图片，按 task/VISUAL_REVIEW.txt 检查内容、可读性、层次和手帐风格；需要时局部调整并重新渲染。在聊天中实际展示 Canvas PNG（用户允许时）。不能用 output/构图预览.svg 冒充 Canvas。阅读报告不等于看过图。Node 不为你判断好看。
-7. node runtime/pack.cjs 校验并生成 output/project.shiyeproject.json、delivery-manifest.json。清单绑定最终 Scene 与 JSON 哈希；任何再次修改都须重新预览和 pack。最终必须同时交付 output/project.shiyeproject.json 与 output/preview.png 两个可下载文件，并在回复中展示 PNG。HTML/SVG 或仅声明已渲染不能替代 PNG；勿交付工具日志或 ZIP 来代替图层。复制文本时用一个完整 JSON 代码围栏。
+7. node runtime/pack.cjs 校验并生成 output/project.shiyeproject.json、delivery-manifest.json。清单绑定最终 Scene 与 JSON 哈希；任何再次修改都须重新预览和 pack。聊天消息的交付模式拥有最终优先权：文件模式交付 output/project.shiyeproject.json 与 output/preview.png 两个可下载文件；复制文本模式只交付实际 output/preview.png 下载链接和一个完整的紧凑单行 JSON 代码围栏（内容来自 pack 生成的同一 JSON，不能另生成 JSON 文件）。HTML/SVG 或仅声明已渲染不能替代 PNG；勿交付工具日志或 ZIP 来代替图层。成功时不要再添加过程解说、画面自评或其他文字。
 没有可用浏览器、无法导出 PNG 时，说明交付未完成；scene.json 可作为未视觉验收的工作稿保留。若仅字体缺失，仍交付实际 PNG 并指出字体未验收。不得捏造预览或用另画的图片代替。`;
 export const webEditingGuide=`坐标与能力
 page 为 App 原生 Scene。x/y 是画布中的中心坐标；width/height/fontSize/笔宽使用画布单位；毫米换算=毫米*canvas.height/physicalPageHeightMM。ink.points 是画布绝对坐标，p 是压感。vectorMask 是 0–1，组合蒙版参照整页；组合 children 不改成局部坐标。zIndex 在各自兄弟节点中决定叠放。
@@ -42,6 +42,6 @@ export function webArtDirection(source){return [
   '数字印章、曲线文字、镂空和旧布局都按主题需要使用：重复印章应有节奏与停顿，不能铺满页面；曲线文字先保证阅读顺序；替换素材后重新看新轮廓与空白的关系；复用布局时重新选择主次，不照搬旧作品。',
   '图文相互回应：用户事实与原文优先，正文像真正记录，不是设计说明；没有事实不编造私人经历。标题、正文、小注有清楚主次，避免所有层都争抢注意力。数字装饰支持主题，不伪装成额外实物库存。',
   creativeTypographyGuide(source.baseDraft),
-  '【最终看图自评】逐项给出具体画面证据和需要修改的对象 ID：主题/内容是否满足；主视觉是否明确；阅读顺序是否自然；文字是否可读；叠压是否有意；留白是否有作用；手帐材质与风格是否一致。不要仅回复“美观、通过”。评分只供自我比较，不把主观分数写成程序保证。',
+  '【内部看图自评，不要在最终回复中输出】逐项核验实际画面和需要修改的对象 ID：主题/内容是否满足；主视觉是否明确；阅读顺序是否自然；文字是否可读；叠压是否有意；留白是否有作用；手帐材质与风格是否一致。自评只用于内部修订，不附加说明性文字或分数。',
   '若发现问题，修改相应 Scene 节点并重新看图；同一局部无法改善时重排，不用无限缩小正文或拉伸实物来掩盖。交付前核对最后 Scene 哈希，禁止用旧预览验收新图层。'
 ].join('\n\n');}

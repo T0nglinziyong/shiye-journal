@@ -21,7 +21,10 @@ export async function prepareCloudClient(){
     const app=cloudbase.init({env:cloudbaseEnv,accessKey:cloudbaseKey});
     // Keep installed test PWAs on their original origin. CloudBase's trial
     // environment does not accept that origin for direct browser requests.
-    if(location.hostname.endsWith('.vercel.app'))app.registerEndPointWithKey({
+    // Direct browser CloudBase transport is opt-in: CloudBase must authorize
+    // the site's origin before the default Vercel compatibility proxy is removed.
+    if(location.hostname.endsWith('.vercel.app')&&
+      import.meta.env?.VITE_SHIYE_CLOUDBASE_DIRECT!=='true')app.registerEndPointWithKey({
       key:'GATEWAY',url:`//${location.host}`,protocol:location.protocol,
     });
     const db=app.rdb();
