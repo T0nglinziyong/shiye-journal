@@ -759,3 +759,29 @@ test('queue refresh and local staging share the IndexedDB baseline gate',async()
     assert.ok(saved.some(ids=>ids.includes('new')),'the new edit was durably staged');
   }finally{releaseReload();sync.pause();}
 });
+
+test('background processing holds known oversize row but commits unrelated changes',async()=>{
+ let disk=[{record:{id:'blocked',kind:'project'},serial:1,operationID:'oversize-op',baseRevision:7,lastFailureClass:'oversize'},
+  {record:{id:'independent',kind:'project'},serial:2,operationID:'other-op',baseRevision:7}];
+ const committed=[],sync=createProjectSync({load:async()=>structuredClone(disk),reload:async()=>structuredClone(disk),
+  write:async rows=>{disk=structuredClone(rows)},revision:()=>7,authoritativeCommit:true,
+  commit:async record=>{committed.push(record.id)},setTimer:()=>1,clearTimer:()=>{}});
+ await sync.resume();
+ assert.deepEqual(committed,['independent']);assert.equal(disk.length,1);
+ assert.equal(disk[0].operationID,'oversize-op');assert.equal(disk[0].lastFailureClass,'oversize');
+});
+test('403 CloudBase function denial never forks or discards a local pending operation',async()=>{
+ const denial=Object.assign(Error('forbidden'),{status:403,code:'OPERATION_FORBIDDEN'});
+ let disk=[],reconciles=0,forks=0,attempts=0;
+ const sync=createProjectSync({load:async()=>structuredClone(disk),reload:async()=>structuredClone(disk),
+  write:async rows=>{disk=structuredClone(rows)},revision:()=>7,authoritativeCommit:true,
+  commit:async()=>{attempts++;throw denial},reconcile:async()=>{reconciles++;return 'conflict'},
+  onConflict:async()=>{forks++;return {id:'new',kind:'project'}},
+  setTimer:()=>1,clearTimer:()=>{}});
+ await sync.stage({id:'pending',kind:'project'});
+ const before=disk[0].operationID;
+ await assert.rejects(sync.flush(),error=>error.status===403);
+ assert.equal(attempts,1);assert.equal(reconciles,0);assert.equal(forks,0);
+ assert.equal(disk.length,1);assert.equal(disk[0].operationID,before);
+ assert.equal(disk[0].lastFailureClass,'auth');
+});
