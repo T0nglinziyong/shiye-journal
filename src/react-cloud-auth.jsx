@@ -104,7 +104,7 @@ export function CloudAccountMenu({account}){
     {dialog==='password'?<PasswordDialog client={account.client} onClose={()=>setDialog(null)}/>:null}
     
     
-    {dialog==='storage'?<StorageUsageDialog client={account.client}
-      onClose={()=>setDialog(null)}/>:null}
+    {dialog==='storage'?<StorageUsageDialog onClose={()=>setDialog(null)}/>:null}
+    {dialog==='health'?<PlatformHealthDialog onClose={()=>setDialog(null)}/>:null}
   </div>;
 }
