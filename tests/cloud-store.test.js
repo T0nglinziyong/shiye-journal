@@ -675,10 +675,13 @@ test('a missing remote thumbnail is rebuilt from its original instead of showing
   const a=fixture();a.state.missingThumbnail=true;a.state.rows=[{id:'b',storagePath:'owner-uuid/hash',storageProvider:'cos',thumbnailPath:'owner-uuid/hash-preview480.webp'}];
   assert.equal(await (await a.db.cloudPreview('b')).text(),'private image');assert.ok(a.state.downloads>=2);
 });
-test('AI cover reads refuse a remote original when no private derivative exists',async()=>{
-  const a=fixture();a.state.rows=[{id:'b',storagePath:'owner-uuid/hash',storageProvider:'cos'}];
-  await assert.rejects(a.db.cloudPreview('b',480,{allowRemoteOriginal:false}),/未下载云端原图/);
-  assert.equal(a.state.downloads,0);
+test('AI cover uses COS derivative only and never downloads original on error',async()=>{
+  const calls=[],cos={enabled:true,
+    async download(path){calls.push('GET:'+path);throw Error('COS 404');},
+    async preview(path){calls.push('CI:'+path);throw Error('派生图暂不可用');}};
+  const a=fixture(null,cos);a.state.rows=[{id:'b',storagePath:'owner-uuid/hash',storageProvider:'cos'}];
+  await assert.rejects(a.db.cloudPreview('b',480,{allowRemoteOriginal:false}),/派生图暂不可用/);
+  assert.deepEqual(calls,['GET:owner-uuid/hash-preview480.webp','CI:owner-uuid/hash']);
 });
 test('COS thumbnails are materialized once for old images and later read without source processing',async()=>{
   const cache=memoryCache(),calls=[],remote=new Map(),original='owner-uuid/'+'a'.repeat(64),
