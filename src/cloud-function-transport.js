@@ -13,19 +13,26 @@ const failed=(message,status,code)=>Object.assign(Error(message),{status,code});
 const object=value=>value!==null&&typeof value==='object'&&!Array.isArray(value);
 
 export function withRequestDeadline(task,{signal,timeoutMs=30000}={}){
+  if(typeof task!=='function'||!Number.isInteger(timeoutMs)||timeoutMs<1||timeoutMs>180000)
+    return Promise.reject(TypeError('CloudBase 请求时限必须为 1–180000 毫秒'));
   if(signal?.aborted)return Promise.reject(signal.reason||new DOMException('请求已取消','AbortError'));
+  const controller=new AbortController();
   return new Promise((resolve,reject)=>{
     let settled=false,timer;
     const finish=(fn,value)=>{
       if(settled)return;settled=true;clearTimeout(timer);
       signal?.removeEventListener('abort',onAbort);fn(value);
     };
-    const onAbort=()=>finish(reject,signal.reason||new DOMException('请求已取消','AbortError'));
+    const cancel=reason=>{if(settled)return;controller.abort(reason);finish(reject,reason);};
+    const onAbort=()=>cancel(signal.reason||new DOMException('请求已取消','AbortError'));
     signal?.addEventListener('abort',onAbort,{once:true});
-    timer=setTimeout(()=>finish(reject,failed('CloudBase 服务响应超时；本机资料仍保留',504,'SHIYE_API_TIMEOUT')),timeoutMs);
-    // Attach both handlers even when the caller cancels; a function which is
-    // already running can finish later and must not leak an unhandled rejection.
-    Promise.resolve().then(task).then(value=>finish(resolve,value),error=>finish(reject,error));
+    timer=setTimeout(()=>cancel(failed('CloudBase 服务响应超时；本机资料仍保留',504,'SHIYE_API_TIMEOUT')),timeoutMs);
+    // Timeout is cancellation, not just Promise.race. A pending auth read must
+    // not start a remote request after the caller has already abandoned it.
+    // An already invoked function cannot be rolled back; its caller must use
+    // durable operation receipts before retrying a mutation.
+    Promise.resolve().then(()=>{controller.signal.throwIfAborted();return task(controller.signal);})
+      .then(value=>finish(resolve,value),error=>finish(reject,error));
   });
 }
 
@@ -42,8 +49,8 @@ export function createCloudFunctionTransport({invoke,getSession,network=(...args
     const method=String(init.method||inputRequest?.method||'GET').toUpperCase();
     if(method!==CLOUD_API_ROUTES[url])throw failed('此接口不支持该请求方法',405,'SHIYE_API_METHOD');
     const signal=init.signal||inputRequest?.signal;
-    return withRequestDeadline(async()=>{
-      if(signal?.aborted)throw signal.reason||new DOMException('请求已取消','AbortError');
+    return withRequestDeadline(async requestSignal=>{
+      requestSignal.throwIfAborted();
       const headers=new Headers(init.headers||inputRequest?.headers);
       let authorization=headers.get('Authorization');
       if(!authorization){
@@ -62,8 +69,9 @@ export function createCloudFunctionTransport({invoke,getSession,network=(...args
         try{body=JSON.parse(init.body);}catch{throw failed('业务请求不是有效 JSON',400,'SHIYE_API_BODY');}
         if(!object(body))throw failed('业务请求必须是 JSON 对象',400,'SHIYE_API_BODY');
       }
-      if(signal?.aborted)throw signal.reason||new DOMException('请求已取消','AbortError');
+      requestSignal.throwIfAborted();
       const response=await invoke({name:functionName,data:{version:1,route:url,method,authorization,body},parse:true});
+      requestSignal.throwIfAborted();
       if(response?.code)throw failed('CloudBase 云函数调用失败，请检查函数部署和调用权限',503,'SHIYE_FUNCTION_UNAVAILABLE');
       let result=response?.result;
       if(typeof result==='string'){
