@@ -1,3 +1,4 @@
+import {automaticAssetClassification} from './asset-automatic-classification.js';
 // Production deployment refresh marker: 2026-10-04
 import {assetSourceRevision} from './material-anatomy.js';
 import {materialKindName} from './material-taxonomy.js';
@@ -3206,13 +3207,8 @@ async function applyAssetClassification(record,result,{manual=false,isCurrent=()
   // Persist each finished answer independently; a late answer must not
   // overwrite a rename, deletion or series change made during inference.
   const latest=await db.get('assets',record.id);if(!latest||!isCurrent())return false;
-  const update={...latest,autoOrganized:true};
+  const update=manual?{...latest,autoOrganized:true}:automaticAssetClassification(latest,record,result);
   if(manual){for(const [key,value] of Object.entries(result))if(JSON.stringify(latest[key])===JSON.stringify(record[key]))update[key]=value;update.updatedAt=new Date().toISOString();}
-  else {
-    if(latest.title===record.title&&/^素材 \d+$/.test(record.title||''))update.title=result.title;
-    if(JSON.stringify(latest.tags||[])===JSON.stringify(record.tags||[])&&!record.tags?.length)update.tags=result.tags;
-    for(const key of ['contentTags','styleTags','materialTags','placementHints','semanticColorNames'])if(!latest[key]?.length&&!record[key]?.length)update[key]=result[key]||[];
-  }
   if(!isCurrent())return false;
   await db.put('assets',update);
   if(!isCurrent())return false;

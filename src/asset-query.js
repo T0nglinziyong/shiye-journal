@@ -33,7 +33,14 @@ export function queryAssets(assets,{query='',kind='all',status='all',seriesID='a
   matches.sort((a,b)=>{
     const first=byName?normalized(a.title).localeCompare(normalized(b.title),'zh-CN'):
       date(a.createdAt)-date(b.createdAt);
-    return (ascending?first:-first)||String(a.id).localeCompare(String(b.id));
+    if(first)return ascending?first:-first;
+    // Keep materials from one imported photo together regardless of UUID.
+    if(!byName&&a.importBatchID&&a.importBatchID===b.importBatchID){
+      const page=(Number(a.sourcePageIndex)||0)-(Number(b.sourcePageIndex)||0);
+      const item=(Number(a.sourceCandidateIndex)||0)-(Number(b.sourceCandidateIndex)||0);
+      if(page||item)return page||item;
+    }
+    return String(a.id).localeCompare(String(b.id));
   });
   return matches;
 }

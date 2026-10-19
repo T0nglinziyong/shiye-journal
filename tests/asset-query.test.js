@@ -42,3 +42,14 @@ test('series query state can restore a visit but is cleared for a different acco
   assert.equal(seriesContentsModel(state).filter.query,'春天');
   clearSeriesContentFilters();
 });
+
+test('one imported batch preserves physical sheet order despite UUID sort',()=>{
+ const date='2026-10-19T04:00:00Z';
+ const rows=[{id:'z1',sourcePageIndex:0,sourceCandidateIndex:0},
+ {id:'a1',sourcePageIndex:0,sourceCandidateIndex:1},
+ {id:'c2',sourcePageIndex:1,sourceCandidateIndex:0},
+ {id:'b2',sourcePageIndex:1,sourceCandidateIndex:1}]
+ .map(r=>({...r,createdAt:date,importBatchID:'batch',title:'素材'}));
+ for(const sort of ['newest','oldest'])
+   assert.deepEqual(queryAssets([...rows].reverse(),{sort}).map(r=>r.id),['z1','a1','c2','b2']);
+});
