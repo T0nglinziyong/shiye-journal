@@ -68,4 +68,6 @@ test('413 HTTP rejection never invokes conflict reconciliation or project fork',
  await sync.stage({id:'large',kind:'project'});
  await assert.rejects(sync.flush(),/too large/);
  assert.equal(reconciled,0);assert.equal(disk.length,1);
+ assert.equal(sync.status().conflicts,0);
+ assert.equal(disk[0].lastFailureClass,'oversize');
 });

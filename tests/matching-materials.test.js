@@ -54,3 +54,11 @@ test('exclude 30 of 40 ranked assets before applying the 18-card view limit',()=
  const view=matchingViewModel(state);
  assert.equal(view.filtered.length,10);assert.equal(view.recommendations.length,10);
 });
+
+test('older successfully AI-organized pending assets are still eligible for matching',()=>{
+ const legacy={...make('legacy','paper','旧批次'),autoOrganized:true,reviewStatus:'pendingReview'};
+ const unorganized={...make('unorganized','paper','刚导入'),reviewStatus:'pendingReview'};
+ const rejected={...make('rejected','paper','被拒绝'),autoOrganized:true,reviewStatus:'rejected'};
+ const ids=recommendForDirection({assets:[legacy,unorganized,rejected]}).map(row=>row.asset.id);
+ assert.deepEqual(ids,['legacy']);
+});
