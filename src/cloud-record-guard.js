@@ -10,7 +10,7 @@ function checkNoImageData(record){
   const {node,path}=stack.pop();
   if(node==null)continue;
   if(typeof node==='string'){
-   if(/^data:image\\//i.test(node)||/^data:application\\/octet-stream\\;base64,/i.test(node))
+   if(node.startsWith('data:image/')||node.startsWith('data:application/octet-stream;base64,'))
     throw reject('图片 Data URL 应通过 COS Blob 引用保存：'+path);
    continue;
   }
