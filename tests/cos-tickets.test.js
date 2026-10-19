@@ -4,7 +4,7 @@ import {createTicketHandler} from '../server/cos-tickets.mjs';
 import {createCOSStore} from '../src/cos-store.js';
 const hash='a'.repeat(64),token='synthetic-token-for-test-only';
 test('COS authorizes only authenticated owner hash paths and validates a whole batch before signing',async()=>{
-  let signs=0;const run=createTicketHandler({ready:true,origin:'https://shiye-journal-test.vercel.app',authenticate:async t=>t===token?'owner':null,sign:async()=>{signs++;return 'https://example.test/private';}});
+  let signs=0;const run=createTicketHandler({ready:true,origin:'https://shiye-journal-test-shiye-pg-test-d1gg723f7fb356ccc.webapps.tcloudbase.com',authenticate:async t=>t===token?'owner':null,sign:async()=>{signs++;return 'https://example.test/private';}});
   const req={method:'POST',authorization:'Bearer '+token,body:{objects:[{method:'GET',path:'owner/'+hash}]}};
   assert.equal((await run({...req,authorization:''})).status,401);
   assert.equal((await run({...req,origin:'https://attacker.test'})).status,403);
@@ -25,7 +25,7 @@ test('COS authorizes only authenticated owner hash paths and validates a whole b
 test('administrator may read another account in COS but can never write to its prefix',async()=>{
   const other='f217ac42-52ae-4d71-9b95-65e190034815';
   let signed=0;
-  const run=createTicketHandler({ready:true,origin:'https://shiye-journal-test.vercel.app',authenticate:async()=>({userID:'owner',isAdmin:true}),sign:async()=>{signed++;return 'https://example.test/private';}});
+  const run=createTicketHandler({ready:true,origin:'https://shiye-journal-test-shiye-pg-test-d1gg723f7fb356ccc.webapps.tcloudbase.com',authenticate:async()=>({userID:'owner',isAdmin:true}),sign:async()=>{signed++;return 'https://example.test/private';}});
   const req={method:'POST',authorization:'Bearer '+token,body:{objects:[{method:'GET',path:other+'/'+hash}]}};
   assert.equal((await run(req)).status,200);
   assert.equal(signed,1);

@@ -2597,7 +2597,7 @@ async function openCutoutCheck(id,candidate=null){
     await openEditor();
   }catch(error){
     // After an iOS restart, a local Blob may be present but corrupt while
-    // the full original is still recoverable from the private COS/Supabase
+    // the full original is still recoverable from the private COS
     // object. Retry once with VERIFIED server bytes. Never modify metadata
     // or silently replace the user's already saved cutout.
     if(candidate||!cloudEnabled||!/检查抠图暂无法打开|不可解码|图片原始字节|蒙版.*尺寸/.test(error?.message||''))
