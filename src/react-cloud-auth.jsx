@@ -1,8 +1,7 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {createPortal,flushSync} from 'react-dom';
-import {AdminViewDialog,StorageUsageDialog} from './react-admin-dialog.jsx';
-import {cloudbaseEnabled} from './cloud-session.js';
+import {StorageUsageDialog,PlatformHealthDialog} from './react-admin-dialog.jsx';
 
 let loginRoot;
 function LoginGate({status,visible,onLogin,onRetry,retryReady=false}){
@@ -58,9 +57,7 @@ function PasswordDialog({client,onClose}){
     if(next===old){setStatus('新密码不能与当前密码相同');return;}
     setBusy(true);setStatus('正在核对当前密码…');
     try{
-      const changed=cloudbaseEnabled?
-        await client.auth.resetPasswordForOld({old_password:old,new_password:next}):
-        await client.auth.updateUser({password:next,currentPassword:old});
+      const changed=await client.auth.resetPasswordForOld({old_password:old,new_password:next});
       if(changed.error)throw changed.error;
       form.reset();setStatus('密码已更新');setTimeout(onClose,900);
     }catch(error){setStatus(error.message||'修改失败，请稍后重试');}
@@ -75,46 +72,6 @@ function PasswordDialog({client,onClose}){
       <button type="submit" className="btn primary" disabled={busy}>更新密码</button>
     </div>
   </form></AuthDialog>;
-}
-function ManageAccountsDialog({client,onClose}){
-  const [action,setAction]=useState('create'),[status,setStatus]=useState(''),
-    [busy,setBusy]=useState(false);
-  const submit=async event=>{
-    event.preventDefault();const form=event.currentTarget;
-    const username=form.elements.username.value.trim().toLowerCase(),
-      password=form.elements.password.value;
-    if(password!==form.elements.confirm.value){setStatus('两次输入的密码不一致');return;}
-    if(username==='lrx'){setStatus('管理员密码请使用“修改密码”功能');return;}
-    setBusy(true);setStatus(action==='create'?'正在创建账号…':'正在重置密码…');
-    try{
-      const {data,error}=await client.functions.invoke('shiye-account-admin',{
-        body:{action,username,password}
-      });
-      if(error){let message='操作失败';try{message=(await error.context?.json())?.error||message;}catch{}throw Error(message);}
-      if(data?.username!==username)throw Error('服务器未确认操作');
-      form.elements.password.value='';form.elements.confirm.value='';
-      setStatus(action==='create'?`账号 ${username} 已创建。请将用户名和初始密码安全交给本人。`:
-        `${username} 的密码已重置。`);
-    }catch(error){setStatus(error.message||'操作失败，请稍后重试');}
-    finally{setBusy(false);}
-  };
-  return <AuthDialog title="管理用户账号" onClose={onClose}>
-    <p>仅 lrx 可创建普通账号或重置其密码。初始密码请安全地交给本人。</p>
-    <form onSubmit={submit}>
-      <label>操作<select name="action" value={action} onChange={event=>{
-        setAction(event.target.value);setStatus('');
-      }}><option value="create">新建账号</option><option value="reset">重置普通账号密码</option></select></label>
-      <label>用户名<input name="username" autoComplete="off" pattern="[a-z][a-z0-9_]{2,31}" maxLength="32" required autoFocus/></label>
-      <label>初始或新密码（至少 12 位）<input name="password" type="password" autoComplete="new-password" minLength="12" required/></label>
-      <label>再次输入密码<input name="confirm" type="password" autoComplete="new-password" minLength="12" required/></label>
-      <p role="status">{status}</p><div className="cloud-dialog-actions">
-        <button type="button" className="btn" data-close onClick={onClose}>关闭</button>
-        <button type="submit" className="btn primary" disabled={busy}>
-          {action==='create'?'新建账号':'重置密码'}
-        </button>
-      </div>
-    </form>
-  </AuthDialog>;
 }
 export function CloudAccountMenu({account}){
   const [open,setOpen]=useState(false),[dialog,setDialog]=useState(null),host=useRef(null);
@@ -133,12 +90,10 @@ export function CloudAccountMenu({account}){
       aria-controls="cloud-account-menu" onClick={()=>setOpen(value=>!value)}>账号</button>
     <div id="cloud-account-menu" className="cloud-account-menu" hidden={!open}>
       <small data-account-name="">{account.username} · 私人云端资料</small>
-      {account.isAdmin&&!cloudbaseEnabled?<><button type="button" className="btn" data-create-account
-        onClick={()=>choose(()=>setDialog('manage'))}>新建账号</button>
-        <button type="button" className="btn" data-admin-view
-          onClick={()=>choose(()=>setDialog('admin'))}>查看其他用户（只读）</button>
-        <button type="button" className="btn" data-storage-usage
-          onClick={()=>choose(()=>setDialog('storage'))}>存储统计（开发者）</button></>:null}
+      <button type="button" className="btn" data-storage-usage
+        onClick={()=>choose(()=>setDialog('storage'))}>我的存储用量</button>
+      <button type="button" className="btn" data-platform-health
+        onClick={()=>choose(()=>setDialog('health'))}>CloudBase 服务状态</button>
       <button type="button" className="btn" data-change-password
         onClick={()=>choose(()=>setDialog('password'))}>修改密码</button>
       <button type="button" className="btn" data-old-backup
@@ -147,9 +102,8 @@ export function CloudAccountMenu({account}){
         onClick={()=>choose(account.onLogout)}>退出登录</button>
     </div>
     {dialog==='password'?<PasswordDialog client={account.client} onClose={()=>setDialog(null)}/>:null}
-    {dialog==='manage'?<ManageAccountsDialog client={account.client} onClose={()=>setDialog(null)}/>:null}
-    {dialog==='admin'?<AdminViewDialog client={account.client} currentUserID={account.userID}
-      onClose={()=>setDialog(null)}/>:null}
+    
+    
     {dialog==='storage'?<StorageUsageDialog client={account.client}
       onClose={()=>setDialog(null)}/>:null}
   </div>;
