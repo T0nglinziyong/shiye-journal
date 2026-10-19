@@ -207,9 +207,9 @@ test('ZIP internal workflow honors copy-text delivery and internalizes visual se
  const output=await make(),files=await filesOf(output);
  for(const path of ['START_HERE.txt','task/WORKFLOW.txt','runtime/README.txt']){
   const guide=strFromU8(files[path]);
-  assert.match(guide,/复制文本模式只交付实际 output\\/preview.png/);
+  assert.ok(guide.includes('复制文本模式只交付实际 output/preview.png'));
   assert.match(guide,/不能另生成 JSON 文件/);
-  assert.doesNotMatch(guide,/最终必须同时交付 output\\/project/);
+  assert.ok(!guide.includes('最终必须同时交付 output/project'));
  }
  assert.match(strFromU8(files['task/VISUAL_REVIEW.txt']),/内部看图自评，不要在最终回复中输出/);
 });
