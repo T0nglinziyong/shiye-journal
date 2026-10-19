@@ -80,9 +80,8 @@ async function browserTransaction(names,fn){
   await tx.done;
 }
 const storageRouter=createStorageRouter(
- async()=>cloudEnabled?'cloud':'browser',
- {cloud:{all:cloudAll,get:cloudGet,transaction:cloudStageMutation},
-  browser:{all:localAll,get:(name,id)=>localDatabase().then(db=>db.get(name,id)),transaction:browserTransaction}}
+ async()=>{if(!cloudEnabled)throw Error('缺少 CloudBase 配置，停止数据操作；不创建独立浏览器数据源');return 'cloud';},
+ {cloud:{all:cloudAll,get:cloudGet,transaction:cloudStageMutation}}
 );
 export async function all(name){const rows=await storageRouter.all(name);return name==='projects'?selectCurrentProjects(rows):rows;}
 export async function get(name,id){const record=await storageRouter.get(name,id);return name==='projects'&&record?prepareProjectScene(record):record;}
