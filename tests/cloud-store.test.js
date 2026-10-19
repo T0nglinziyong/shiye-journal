@@ -40,9 +40,7 @@ function fixture(cache=null,objectStorage=null,projectPreview=()=>null){
         return {data:table==='shiye_commits'?(state.commits.has(filters.operation_id)?{revision:state.commits.get(filters.operation_id)}:null):table==='shiye_commit_receipts_v3'?(state.receipts.get(filters.operation_id)||null):state.rows.filter(r=>r.id===filters.id).map(record=>({record:v2(record)}))[0]||null};}};
     if(table==='shiye_changes')return {select(){return this;},eq(){return this;},gt(){return this;},lte(){return this;},order(){return this;},async range(){return state.changes?{data:state.changes}:{error:{message:'change log not installed'}};}};
     assert.ok(['shiye_records','shiye_revisions','shiye_commits','shiye_commit_receipts_v3'].includes(table));return query;
-  },storage:{from(bucket){assert.equal(bucket,'shiye-private');return {
-    async upload(path,data,options){state.uploads.push({path,data,options});await state.uploadGate;return {error:state.fail?{statusCode:500}:null};},
-    async download(path){state.downloads++;return {data:state.uploads.find(row=>row.path===path)?.data||new Blob(['private image']),error:state.missingThumbnail&&path.includes('preview480')?{message:'thumbnail missing'}:null};}};}},
+  },
     async rpc(name,args){
       assert.equal(name,'shiye_commit_v3_guarded');state.calls.push(args);
       if(state.rpcAbort)throw new DOMException('request aborted','AbortError');
@@ -164,7 +162,7 @@ test('sync diagnostic export reports a failed phase without record content',asyn
   assert.equal(report.state.online,true);
   assert.doesNotMatch(JSON.stringify(report),/secret-id|私人标题|owner-uuid/);
 });
-test('Supabase HTTP status and SQLSTATE survive a rejected commit in diagnostics',async()=>{
+test('database HTTP status and SQLSTATE survive a rejected commit in diagnostics',async()=>{
   const {state,db}=fixture();
   state.rpcFailure={data:null,status:504,error:{code:'57014',message:'private SQL text'}};
   await assert.rejects(db.cloudTransaction(['assets'],tx=>

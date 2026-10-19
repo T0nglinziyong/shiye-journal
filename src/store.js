@@ -1,4 +1,4 @@
-import {openDB,unwrap} from 'idb';
+import {openDB} from 'idb';
 import {createStorageRouter} from './storage-router.js';
 import {cloudEnabled} from './cloud-session.js';
 import {prepareProjectScene,partitionProjectList,attachSceneV2} from './scene-v2.js';
@@ -71,13 +71,6 @@ async function localDatabase(){
  if(connection)return connection;
  connection=openDB(DB,1,{upgrade(db){for(const name of STORES)if(!db.objectStoreNames.contains(name))db.createObjectStore(name,{keyPath:'id'});}}).catch(error=>{connection=undefined;throw error;});
  return connection;
-}
-async function localAll(name){return (await localDatabase()).getAll(name);}
-async function browserTransaction(names,fn){
-  const tx=(await localDatabase()).transaction(names,'readwrite');
-  try{const result=fn(unwrap(tx));if(result?.then)throw Error('事务回调必须同步，网络及图像处理请在事务外完成');}
-  catch(e){tx.abort();await tx.done.catch(()=>{});throw e;}
-  await tx.done;
 }
 const storageRouter=createStorageRouter(
  async()=>{if(!cloudEnabled)throw Error('缺少 CloudBase 配置，停止数据操作；不创建独立浏览器数据源');return 'cloud';},
