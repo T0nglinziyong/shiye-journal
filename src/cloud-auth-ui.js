@@ -1,4 +1,4 @@
-import {cloudEnabled,cloudbaseEnabled,cloudClient,prepareCloudClient,requireCloudUser} from './cloud-session.js';
+import {cloudEnabled,cloudClient,prepareCloudClient,requireCloudUser} from './cloud-session.js';
 import {createBackup} from './store.js';
 import {checkAccountResetEpoch} from './account-reset-epoch.js';
 import {eraseSiteAppData} from './account-data-wipe.js';
@@ -6,10 +6,6 @@ import {cloudClearCache,cloudPendingLocalSummary,cloudResumeCache,
   cloudSetResetCleanupPending,cloudCloseCacheBeforeRemoteReset} from './cloud-store.js';
 import {renderLoginGate,clearLoginGate} from './react-cloud-auth.jsx';
 import {updateShell} from './react-shell.jsx';
-
-const emailForLogin=value=>{const name=value.trim().toLowerCase();return name==='lrx'?
-  'lrx@shiyejournal.vip':/^[a-z][a-z0-9_]{2,31}$/.test(name)?
-  name+'@accounts.shiyejournal.invalid':name;};
 
 export async function startCloudSession(onReady){
   if(!cloudEnabled){document.querySelector('#auth-root').hidden=true;
@@ -36,9 +32,7 @@ export async function startCloudSession(onReady){
     showGate({status:'正在验证账号…'});
     let signedIn=false;
     try{
-      const {error}=await client.auth.signInWithPassword(cloudbaseEnabled?
-        {username:username.trim().toLowerCase(),password}:
-        {email:emailForLogin(username),password});
+      const {error}=await client.auth.signInWithPassword({username:username.trim().toLowerCase(),password});
       if(error){
         if(error.code==='invalid_credentials')throw Error('用户名或密码不正确');
         throw Error(error.message||'登录服务暂时不可用，请稍后重试');
@@ -113,7 +107,7 @@ export async function startCloudSession(onReady){
       try{await cloudClearCache();}
       catch{alert('本机私人缓存清理失败，请重试退出');return;}
       let result;
-      try{result=await client.auth.signOut(cloudbaseEnabled?undefined:{scope:'local'});}
+      try{result=await client.auth.signOut();}
       catch{cloudResumeCache();alert('退出失败，请检查网络');return;}
       if(result.error){cloudResumeCache();alert('退出失败，请检查网络');return;}
       location.reload();
