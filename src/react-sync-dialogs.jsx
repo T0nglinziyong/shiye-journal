@@ -1,5 +1,6 @@
 import React,{useEffect,useState} from 'react';
 import './sync-dashboard.css';
+import {describeSyncError} from './sync-browser-compat.js';
 import {Dialog} from './react-utility-dialogs.jsx';
 
 export function SyncDetailsDialog({details,projects,batches,local,quarantined,legacyCount,pendingCount=0,
@@ -13,13 +14,14 @@ export function SyncDetailsDialog({details,projects,batches,local,quarantined,le
     let disposed=false;
     setListBusy(true);
     void onRefresh().then(next=>{if(!disposed){setLive(next);setMessage(`状态：${next.status}`);}})
-      .catch(()=>{}).finally(()=>{if(!disposed)setListBusy(false);});
+      .catch(cause=>{if(!disposed)setMessage('状态：列表暂不可读取 · '+describeSyncError(cause));})
+      .finally(()=>{if(!disposed)setListBusy(false);});
     return ()=>{disposed=true;};
   },[onRefresh,showList]);
   const refreshList=async()=>{
     if(listBusy||!onRefresh)return;setListBusy(true);
     try{const next=await onRefresh();setLive(next);setMessage(`状态：${next.status}`);}
-    catch{setMessage('状态：列表暂不可读取，上传仍在后台继续');}
+    catch(cause){setMessage('状态：列表暂不可读取 · '+describeSyncError(cause));}
     finally{setListBusy(false);}
   };
   if(live)({details,projects,batches,local,quarantined,error,status,conflicts}=live);
@@ -28,14 +30,14 @@ export function SyncDetailsDialog({details,projects,batches,local,quarantined,le
     try{const result=await onRetry(),remaining=typeof result==='number'?result:result.remaining,
       currentConflicts=typeof result==='number'?conflicts:result.conflicts;
       setMessage(remaining?`状态：仍有 ${remaining} 项待同步${currentConflicts?'，正在自动处理版本差异':'；请查看最近错误或稍后重试'}`:'状态：已同步到云端');}
-    catch(cause){setMessage('状态：待重试 · 本机修改已保留；稍后自动重试');}
+    catch(cause){setMessage('状态：待重试 · '+describeSyncError(cause));}
     finally{setBusy(false);}
   };
   const rebuild=async()=>{
     if(busy)return;setBusy(true);setMessage('状态：正在重建同步队列…');
     try{await onRebuild();setMessage('状态：队列已重建，正在后台上传');
       if(showList)setLive(await onRefresh());}
-    catch(cause){setMessage('状态：队列重建未完成 · 本机修改已保留');}
+    catch(cause){setMessage('状态：队列重建未完成 · '+describeSyncError(cause));}
     finally{setBusy(false);}
   };
   const total=live?projects.length+batches.length+local.length:
