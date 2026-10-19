@@ -9,7 +9,7 @@ const failureCode=error=>{
   return typeof error?.cause?.code==='string'?error.cause.code:'';
 };
 function failureClass(error){
-  const code=failureCode(error);
+  const code=failureCode(error)||failureCode(error?.cause);
   if(code==='40001'||code==='PT409'||code==='409')return 'conflict';
   if(code==='401'||code==='403'||code==='28000')return 'auth';
   if(code==='P0001'||/^2[23][0-9A-Z]{3}$/.test(code)||code==='413'||code==='507')return 'invalid';
@@ -371,6 +371,9 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
         try{await commit(row.record,row.operationID,row.baseRevision);}
         catch(failure){
           markSyncPhase(failure,'上传当前待同步记录');
+          // A 413 is a confirmed gateway rejection, never a competing edit.
+          // In particular it must not cause an editable project to be forked.
+          if(failureCode(failure)==='413'||failureCode(failure?.cause)==='413')throw failure;
           // The server may have committed before its response disappeared.
           // Confirm the exact durable operation ID before surfacing an error.
           let resolved;
