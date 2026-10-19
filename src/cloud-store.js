@@ -1714,7 +1714,7 @@ async function cloudPurgeLocalAfterReset(){
   cacheDisabled=true;
   accountEpoch=undefined;revision=undefined;
   images.clear();imageSizes.clear();documents.clear();snapshots.clear();blobRecords.clear();blobRevisionProof.clear();
-  uploads.clear();thumbnailUploads.clear();editorBases.clear();editorSceneBases.clear();remoteProjectWinners.clear();
+  uploads.clear();editorBases.clear();editorSceneBases.clear();remoteProjectWinners.clear();
   if(typeof cache?.purgeAccount!=='function')throw Error('浏览器不支持完整账号本地清理');
   const count=await cache.purgeAccount(user);
   await cache.close?.();
