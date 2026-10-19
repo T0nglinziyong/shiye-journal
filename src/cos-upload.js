@@ -21,11 +21,19 @@ export function uploadCOSObject(url,{headers,body,idleTimeoutMs=30000,totalTimeo
     };
     xhr.upload.onload=()=>{transfer.loaded=body.size;transfer.phase='response';progress();};
     xhr.onload=()=>{
+      if(xhr.status===0){xhr.onerror();return;}
       transfer.status=xhr.status;
       transfer.requestId=xhr.getResponseHeader('x-cos-request-id');
       finish(null,{ok:xhr.status>=200&&xhr.status<300,status:xhr.status,transfer:{...transfer}});
     };
-    xhr.onerror=()=>finish(Object.assign(Error('图片传输连接失败'),{name:'NetworkError'}));
+    xhr.onerror=()=>{
+      // Full PUT bytes + no readable HTTP status means an ambiguous result:
+      // CORS/preflight/response or network failure. Never acknowledge writes.
+      const sent=transfer.loaded>=body.size&&transfer.phase==='response';
+      finish(Object.assign(Error(sent?'COS 上传已发送但未收到有效响应，请检查 PUT 跨域、签名及网络':'图片传输连接失败'),{
+        name:'NetworkError',code:sent?'SHIYE_COS_NO_RESPONSE':'SHIYE_COS_NETWORK',responseUnknown:sent
+      }));
+    };
     xhr.onabort=()=>finish(Object.assign(Error('图片传输中断'),{name:'AbortError'}));
     progress();totalTimer=setTimer(timeout,totalTimeoutMs);
     try{xhr.send(body);}catch(error){finish(error);}

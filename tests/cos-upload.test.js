@@ -38,3 +38,12 @@ test('network failure and HTTP failure retain safe transport details',async()=>{
   const second=fixture();second.xhr.status=403;second.xhr.onload();
   const response=await second.task;assert.equal(response.ok,false);assert.equal(response.status,403);
 });
+
+test('full byte PUT with unreadable status is ambiguous and retains a safe diagnostic code',async()=>{
+ const {xhr,task}=fixture();xhr.upload.onload();xhr.onerror();
+ await assert.rejects(task,error=>error.code==='SHIYE_COS_NO_RESPONSE'&&error.responseUnknown===true&&error.transfer.loaded===10);
+});
+test('XHR load status zero is treated as an unconfirmed upload, not a successful PUT',async()=>{
+ const {xhr,task}=fixture();xhr.upload.onload();xhr.status=0;xhr.onload();
+ await assert.rejects(task,error=>error.code==='SHIYE_COS_NO_RESPONSE'&&error.transfer.phase==='response');
+});

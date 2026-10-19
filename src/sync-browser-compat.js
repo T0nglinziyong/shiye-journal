@@ -56,5 +56,6 @@ export function describeSyncError(error){
  if(isWebKitPatternError(error))
    return 'iPhone/iPad Safari 返回参数格式错误'+(error.syncPhase?'（'+error.syncPhase+'）':'')+'；待同步数据仍保留。';
  const msg=explainUserError(error,'同步');
+ try{globalThis.dispatchEvent?.(new CustomEvent('shiye-sync-error-displayed',{detail:{error}}));}catch{/* Error diagnostics cannot block UI. */}
  return error?.syncPhase?'['+error.syncPhase+'] '+msg:msg;
 }

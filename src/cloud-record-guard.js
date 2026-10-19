@@ -4,6 +4,8 @@
 const forbiddenPixelKeys=new Set(['sourcePixels','rawPixels','pixelData','rgbaPixels','imageData','maskPixels','originalPixels','base64Image','base64Pixels']);
 function reject(message){const error=Error(message);error.status=413;error.code='SHIYE_METADATA_INVALID';return error;}
 const bytes=value=>new TextEncoder().encode(JSON.stringify(value)).byteLength;
+// Only trim redundant historical recognition pixels from the wire copy.
+const withoutPixelCache=value=>{const {sourceRegion,sourcePixels,...metadata}=value;return metadata;};
 function checkNoImageData(record){
  const stack=[{node:record,path:'record'}],visited=new WeakSet();
  while(stack.length){
@@ -29,10 +31,12 @@ function checkNoImageData(record){
 export function cloudMetadataRecord(store,record){
  if(store==='blobs')return record;
  if(!record||typeof record!=='object')throw reject('CloudBase 元数据格式无效');
- const safe=store==='assets'?(()=>{const {sourceRegion,sourcePixels,...rest}=record;return rest;})():record;
+ const safe=store==='assets'?withoutPixelCache(record):
+   store==='trash'&&record.kind==='asset'&&record.item&&typeof record.item==='object'&&
+   !Array.isArray(record.item)?{...record,item:withoutPixelCache(record.item)}:record;
  checkNoImageData(safe);
  const limit=store==='assets'?96_000:store==='projects'?Infinity:512_000;
- if(bytes(safe)>limit)throw reject('单条 '+store+' 元数据超限；本地待同步记录已保留');
+ if(bytes(safe)>limit)throw reject('单条 '+store+' 元数据超限；本地待同步记录已保留，不能删除回收站原稿');
  return safe;
 }
 export function assertCloudCommitSize(operations,{limit=3_200_000}={}){

@@ -103,3 +103,27 @@ test('upload diagnosis retains progress and request ID but discards URL and obje
   assert.ok(!JSON.stringify(report).includes('signed-secret'));
   assert.ok(!JSON.stringify(report).includes('private-path'));
 });
+
+
+test('CloudBase and COS response codes and request IDs survive a safe v3 export',()=>{
+ const trace=createSyncDiagnostics({storage:null});
+ trace.record({action:'failed',kind:'batch',error:Object.assign(Error('private url with signed token'),{
+  status:413,code:'SHIYE_METADATA_INVALID',syncPhase:'编码与上传 trash',requestId:'api-123'})});
+ trace.record({action:'cos-put-failed',kind:'image',error:Object.assign(Error('https://private.example?token=secret'),{
+  code:'SHIYE_COS_NO_RESPONSE',name:'NetworkError',requestId:'cos-321'})});
+ const report=trace.report();
+ assert.equal(report.version,3);assert.equal(report.diagnosticBuild,'cloudbase-error-evidence-v3');
+ assert.equal(report.events[0].failure.category,'oversize');
+ assert.equal(report.events[0].failure.requestId,'api-123');
+ assert.equal(report.events[1].failure.category,'image-upload');
+ assert.equal(report.events[1].failure.code,'SHIYE_COS_NO_RESPONSE');
+ assert.ok(!JSON.stringify(report).includes('private.example'));trace.dispose();
+});
+
+test('recent visible sync error is listed separately in diagnostic report',()=>{
+ const trace=createSyncDiagnostics({storage:null});
+ trace.record({action:'displayed',kind:'queue',error:Object.assign(Error('secret title'),{status:403,code:'OPERATION_FORBIDDEN',requestId:'sdk-123'})});
+ const report=trace.report();assert.equal(report.lastDisplayedFailure.failure.requestId,'sdk-123');
+ assert.equal(report.lastDisplayedFailure.failure.category,'authorization');
+ assert.ok(!JSON.stringify(report).includes('secret title'));trace.dispose();
+});
