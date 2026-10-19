@@ -1648,7 +1648,7 @@ export function SettingsDataPage({state,cloudEnabled,storage,onAction}){
   const backup=<SettingsGroup title="完整备份"><div className="actions">
     {button('backup','导出完整备份','btn primary')}{button('restore','从备份恢复')}
   </div>{cloudEnabled?<p>只接受拾页现行完整备份格式；恢复会替换当前资料。</p>:null}
-    {state.selfHosted&&!cloudEnabled?<p>恢复会替换服务器当前全部数据；执行前请先导出一份当前完整备份。</p>:null}
+    
   </SettingsGroup>;
   const trash=<SettingsGroup title="最近删除">{state.trash.length?state.trash.map(item=><div className="rec-card" key={item.id}>
     <b>{item.item.title}</b><button className="btn mini" data-act="restore-trash" data-id={item.id}
@@ -1669,7 +1669,7 @@ export function SettingsDataPage({state,cloudEnabled,storage,onAction}){
     </div></SettingsGroup>
     {cloudEnabled?<>
       <SettingsGroup title="私人云端资料">
-        <p id="storage-location">{import.meta.env?.VITE_SHIYE_CLOUDBASE_ENV_ID?'当前数据源：腾讯云 CloudBase 登录与元数据 + 腾讯 COS 私有图片；本机保留账号隔离缓存与待同步修改':import.meta.env?.VITE_SHIYE_OBJECT_STORAGE==='cos'?'当前数据源：Supabase 登录与元数据 + 腾讯 COS 私有图片；本机仅保留账号隔离缓存与待同步修改':'当前数据源：Supabase 私有云端；本机仅保留账号隔离缓存与待同步修改'}</p><p>{counts}</p>
+        <p id="storage-location">{'当前数据源：CloudBase 身份认证、PostgreSQL 元数据、腾讯 COS 私有图片；本机保留离线缓存和未同步修改'}</p><p>{counts}</p>
         <p>登录验证后显示本机缓存，后台检查云端更新。原图和完整作品按需读取；修改先暂存，后台同步。云端失败不会改用另一份资料。</p>
       </SettingsGroup>
       {backup}
@@ -1682,28 +1682,10 @@ export function SettingsDataPage({state,cloudEnabled,storage,onAction}){
         <p>同一画布在两台设备同时修改时，会在应用最后编辑时间规则之前保留双方原稿。本机留有记录时可将旧版本另存为新作品。</p>
         {button('recover-pre-conflict','查看与恢复冲突前画布')}
       </SettingsGroup>
-      {!cloudbaseEnabled?<SettingsGroup title="危险操作 · 清除所有数据">
-        <p>同时永久删除当前账号的云端作品、素材、系列、私有图片和最近删除，并删除此设备的本地缓存、待同步队列和设置。保留登录账号本身；其他设备原有的离线缓存须在升级后重新检查。无法恢复。</p>
-        {button('reset-all-account-data','彻底清空本账号本机与云端数据','btn danger')}
-      </SettingsGroup>:null}
-    </>:state.selfHosted?<>
-      <SettingsGroup title="唯一数据源 · 4090 服务器">
-        <p id="storage-location">{location.origin}</p><p>{counts}</p>
-        <p>此网址的素材、作品与图片都写入服务器。浏览器只保存访问令牌和 AI 设置；服务器无法连接时不会写入另一份资料。</p>
-        <label>更新访问令牌<input id="data-server-token" type="password" autoComplete="off" placeholder="保持不变则留空"/></label>
-        {button('storage-token','验证并更新令牌')}
-      </SettingsGroup>
-      {backup}{trash}
+      <SettingsGroup title="账号安全清空"><p>CloudBase 清空与 COS 后台回收仍在安全验收；目前暂不可操作，避免误删未同步资料。</p></SettingsGroup>
+      <SettingsGroup title="语义检索 · pgvector（预留）"><p>等待接入 Embedding 模型及索引。当前不会上传素材内容至模型或产生向量费用。</p><button type="button" className="btn" disabled aria-disabled="true">语义检索 · 尚未启用</button></SettingsGroup>
     </>:<>
-      <SettingsGroup title="数据位置">
-        <p id="storage-location">{storage?.url?`已配置服务器：${storage.url}`:'此网址当前使用浏览器本机存储；访问其他网址不会自动同步。'}</p>
-        <p>{counts}</p>
-        <label>4090 数据服务地址<input id="data-server-url" type="url" placeholder="https://你的数据域名" defaultValue={storage?.url||''}/></label>
-        <label>访问令牌<input id="data-server-token" type="password" autoComplete="off" defaultValue={storage?.token||''}/></label>
-        <div className="actions">{button('storage-connect','连接服务器','btn primary')}
-          {button('storage-browser','改用此浏览器资料')}</div>
-        <p>服务器地址需要公网 HTTPS，手机访问 localhost 指的是手机自身；同一台电脑运行的拾页服务可直接打开 http://127.0.0.1:4173。跨数据源转移资料请使用下方“导出完整备份 / 从备份恢复”，不在连接动作中隐式迁移。</p>
-      </SettingsGroup>
+      <SettingsGroup title="离线资料"><p id="storage-location">未配置 CloudBase 时仅提供本浏览器的本地资料；不会连接其他服务器。</p><p>{counts}</p></SettingsGroup>
       {backup}{trash}
     </>}
     <OfflineStorageStatus state={state} cloudEnabled={cloudEnabled}/>

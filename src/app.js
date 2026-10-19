@@ -452,7 +452,7 @@ function applyNavigation(snapshot){
   }
 }
 function activateNavigation(){
-  const scope=(cloudEnabled?'cloud':state.selfHosted?'server':'browser')+':'+state.accountId;
+  const scope=(cloudEnabled?'cloud':'browser')+':'+state.accountId;
   if(navigationScope===scope)return;
   navigationScope=scope;
   const entry=history.state?.shiyeNavigation;
@@ -786,7 +786,7 @@ function render(){
     :state.route==='settings'&&state.settingsSection==='导入与识别'
       ?createElement(SettingsRecognitionPage,{preferences:state.preferences,onAction:handle})
     :state.route==='settings'&&state.settingsSection==='数据与诊断'
-      ?createElement(SettingsDataPage,{state,cloudEnabled,storage:db.storageConfig(),onAction:handle})
+      ?createElement(SettingsDataPage,{state,cloudEnabled,onAction:handle})
     :state.route==='settings'&&state.settingsSection==='AI 与创作'
       ?createElement(SettingsAIPage,{settings:state.aiSettings,preferences:state.preferences,onAction:handle})
     :state.route==='import'&&(state.importStep==='done'||!state.importRecords[state.importIndex])
@@ -2074,103 +2074,8 @@ async function runAppAction(action,id,value){try{
       '拾页素材框诊断.json');
     toast('已导出不含照片的素材框诊断');break;
   }
-  case 'reset-all-account-data':{
-    if(!cloudEnabled)throw Error('彻底清空仅适用于云端账号');
-    if(resetWorkflowActive){toast('账号清理已经提交，请勿重复操作');break;}
-    if(!confirm('将永久删除本账号所有作品、素材、草稿和历史待同步内容。其他设备登录后也会清理旧 IndexedDB。继续？'))break;
-    if(prompt('不可撤销。请输入「清空所有数据」确认')!=='清空所有数据')break;
-    resetWorkflowActive=true;
-    cloudResumer.suspend();
-    const show=phase=>{openOverlay(createElement(AccountResetProgress,{phase}));saveStatus(phase);};
-    if(modal.open)modal.close();
-    show('正在暂停旧数据写入…');
-    let accepted=false;
-    try{
-      clearTimeout(saveTimer);saveTimer=null;
-      dirtyProjects.clear();dirtyUsageAssets.clear();
-      const {data,error}=await cloudClient().auth.getSession();
-      if(error||!data.session?.access_token)throw Error('请先登录');
-      const headers={'Content-Type':'application/json',
-        Authorization:'Bearer '+data.session.access_token};
-      const request=async(mode,resetId)=>{
-        const response=await fetch('/api/account-reset',{method:'POST',headers,cache:'no-store',
-          body:JSON.stringify({mode,resetId,confirm:'RESET_MY_DATA'}),
-          signal:AbortSignal.timeout(35000)});
-        const result=await response.json();
-        if(!response.ok)throw Error(result.error||'云端重置失败');
-        return result;
-      };
-      await db.runExclusiveAccountReset(async()=>{
-        await saveChain.catch(()=>{});
-        show('正在清空云端作品和素材索引…');
-        const probe=await request('probe');
-        let resetId=probe.phase==='deleting'&&probe.resetId
-          ?probe.resetId:crypto.randomUUID();
-        const outcome=await request('start',resetId);
-        resetId=outcome.resetId||resetId;
-        if(!outcome.accepted||!outcome.databaseCleared)
-          throw Error('云端未确认索引清理，请重试');
-        accepted=true;
-        // This is an opportunistic one-shot server trigger, NOT the worker
-        // lifecycle. A daily authenticated Vercel Cron is the durable retry.
-        void fetch('/api/account-gc',{method:'POST',headers,cache:'no-store',
-          body:JSON.stringify({kick:true})}).catch(()=>{});
-        show('云端索引已清空，正在删除本机旧缓存…');
-        await db.purgeLocalAfterCloudReset();
-      });
-      const {eraseSiteAppData}=await import('./account-data-wipe.js');
-      const wiped=await eraseSiteAppData({preserveAuthentication:true});
-      if(wiped.errors.length)
-        alert('云端业务数据已清空。本设备尚有未删除的缓存，请关闭其他拾页标签页后重新打开：'+wiped.errors.join('；'));
-      show('账号已重置，旧图片交由服务端清理。正在进入空白账户…');
-      location.reload();
-    }catch(error){
-      show(accepted?'云端资料已经清空，本地清理待重试：'+error.message
-        :'重置暂未成功：'+error.message);
-      throw error;
-    }finally{
-      resetWorkflowActive=false;
-      if(!accepted){db.abortExclusiveAccountReset();closeOverlay();void cloudResumer.resume();}
-    }
-    break;
-  }
-  case 'dev-reset-cloud':{
-    if(!cloudEnabled)throw Error('开发清理只支持已登录的云端测试账号');
-    if(!confirm('彻底删除当前账号 COS 私有图片、云端素材、系列、作品、快照？操作不可撤销。'))break;
-    if(prompt('请输入 RESET 确认清空当前账号测试数据')!=='RESET')break;
-    cloudResumer.suspend();
-    try{
-      const {data,error}=await cloudClient().auth.getSession();
-      if(error||!data.session?.access_token)throw Error('请先登录');
-      const headers={'Content-Type':'application/json',Authorization:'Bearer '+data.session.access_token};
-      const probe=await fetch('/api/dev-reset',{method:'POST',headers,
-        body:JSON.stringify({confirm:'RESET_DEV_DATA',mode:'probe'})});
-      const check=await probe.json();
-      if(!probe.ok||!check.ready)throw Error(check.error||'当前预览环境尚未授权开发清理');
-      if(saveTimer){clearTimeout(saveTimer);saveTimer=null;}
-      dirtyProjects.clear();dirtyUsageAssets.clear();
-      await db.discardPendingSync();
-      let deleted=0,complete=false;
-      for(let page=0;page<300;page++){
-        const response=await fetch('/api/dev-reset',{method:'POST',
-          headers:{'Content-Type':'application/json',Authorization:'Bearer '+data.session.access_token},
-          body:JSON.stringify({confirm:'RESET_DEV_DATA'})});
-        const payload=await response.json();
-        if(!response.ok)throw Error(payload.error||'开发数据清理失败');
-        deleted+=payload.deleted||0;
-        saveStatus('正在清理 COS · '+deleted+' 个文件');
-        if(payload.reset){complete=true;break;}
-        if(!payload.more)throw Error('清理结果不完整');
-      }
-      if(!complete)throw Error('本次清理达到安全上限，请重新运行');
-      toast('已删除 '+deleted+' 个 COS 文件，云端记录已重置');
-      location.reload();
-    }catch(error){
-      cloudResumer.resume();
-      throw error;
-    }
-    break;
-  }
+  case 'reset-all-account-data':case 'dev-reset-cloud':
+    throw Error('CloudBase 账号安全清空尚未通过完整验收；未删除任何本机或云端资料。');
   case 'backup':await backup();break;case 'restore':backupInput.click();break;case 'export-app-diagnostics':exportAppDiagnostics();break;case 'backup-emergency':{await flushSave();const blob=await db.createEmergencyBackup();download(blob,'拾页待同步应急包-'+new Date().toISOString().slice(0,10)+'.shiyerecovery');toast('应急包已导出，请妥善保存，包含私人图片和文字');break;}case 'restore-emergency':emergencyInput.click();break;
   case 'recover-pre-conflict':{
     const entries=await db.listPreConflictScenes();
@@ -2206,9 +2111,6 @@ async function runAppAction(action,id,value){try{
     await db.transaction(['blobs'],tx=>{for(const blob of orphans)tx.objectStore('blobs').delete(blob.id);});
     await refresh();toast('已清理 '+orphans.length+' 张未使用图片');break;
   }
-  case 'storage-token':{const token=view.querySelector('#data-server-token')?.value.trim();if(!token)throw Error('请输入新的访问令牌');const old=db.storageConfig();db.setStorageConfig({url:location.origin,token});try{await db.storageMode();toast('令牌已更新');}catch(error){db.setStorageConfig(old);throw error;}break;}
-  case 'storage-connect':{await flushSave();const old=db.storageConfig(),url=view.querySelector('#data-server-url')?.value.trim(),token=view.querySelector('#data-server-token')?.value.trim();if(!url)throw Error('请输入拾页数据服务地址');db.setStorageConfig({url,token});try{await db.storageMode();state.activeProject=null;state.basket=[];await refresh();toast('已连接服务器');}catch(error){db.setStorageConfig(old);throw error;}break;}
-  case 'storage-browser':{if(state.selfHosted)throw Error('自托管网站不允许切换到浏览器资料');await flushSave();db.setStorageConfig(null);state.activeProject=null;state.basket=[];await refresh();toast('已切换为本浏览器资料');break;}
   case 'help':{openOverlay(createElement(HelpDialog,{onClose:closeOverlay,onExport:async()=>{const {runtimeIssueReport}=await import('./runtime-diagnostics.js');download(new Blob([runtimeIssueReport()],{type:'application/json'}),'拾页运行诊断.json');}}));break;}case 'settings-open':captureSettings();await actionStore.dispatch({type:'settings/section',payload:{section:value}});break;case 'settings-back':if(state.settingsSection){captureSettings();await actionStore.dispatch({type:'settings/section',payload:{section:null}});}else navigateBack(settingsSession?.returnRoute||'series');break;case 'settings-save':{captureSettings();const cfg=state.aiSettings;if(!cfg.model.trim())throw Error('请输入模型 ID');const endpoint=new URL(cfg.endpoint);if(endpoint.protocol!=='https:')throw Error('API 地址必须使用 HTTPS');if(cfg.provider!=='custom'&&endpoint.host!==new URL(AI_PROVIDERS[cfg.provider].endpoint).host)throw Error('服务商与 API 地址不一致；自定义地址请选“自定义兼容接口”');const returnRoute=settingsSession?.returnRoute||'series';if(cloudEnabled){await db.transaction(['meta'],tx=>{tx.objectStore('meta').put(cloudPreferencesRecord(state.preferences));tx.objectStore('meta').put(cloudAISettingsRecord(cfg));});}state.aiSettings=saveAISettings(cfg);state.preferences=savePreferences(state.preferences);deferredSyncedPreferences=null;deferredSyncedAISettings=null;settingsSession=null;state.settingsSection=null;navigateBack(returnRoute);toast('设置已保存');break;}
 }}catch(e){console.error(e);recordRuntimeIssue('handled',e,state.route,{phase:'action'});toast(e.message||'操作失败');}}
 function editSelected(fn){const d=current(),e=editorEntry(d).find(x=>x.value.id===state.selected);if(!e&&state.selected)return;
@@ -3534,7 +3436,7 @@ async function runAccountStorageMigration(){
 function exportAppDiagnostics(){
   const report={format:'shiye-app-error-diagnostics',version:2,createdAt:new Date().toISOString(),
     scope:'本机最近七天的脱敏运行摘要；仅在主动导出时生成文件',
-    environment:{mode:cloudEnabled?'cloud':state.selfHosted?'server':'browser',online:navigator.onLine!==false},
+    environment:{mode:cloudEnabled?'cloud':'browser',online:navigator.onLine!==false},
     runtime:runtimeIssueSnapshot(),images:imageLoadingSnapshot(),sync:cloudEnabled?db.syncDiagnosticReport({online:navigator.onLine}):null};
   download(new Blob([JSON.stringify(report,null,2)],{type:'application/json'}),
     '拾页应用错误诊断-'+new Date().toISOString().slice(0,10)+'.json');
@@ -3685,7 +3587,7 @@ async function init(user,{resetPending=false,afterAccountReset=false,onFirstView
   }
   state.accountId=accountId;
   try{
-  await db.storageMode();state.selfHosted=db.isSameOriginServer();checkForSafeUpdate();
+  await db.storageMode();state.selfHosted=false;checkForSafeUpdate();
   // startCloudSession has validated Auth and the allowlist before this runs.
   const cached=await db.cachedCollections();if(cached){
     const {meta:cachedMeta,...collections}=cached;
@@ -3702,19 +3604,13 @@ async function init(user,{resetPending=false,afterAccountReset=false,onFirstView
     for(const a of state.assets)if(a.staticPath)staticSources.set(a.blobId,a.staticPath);
     render();activateNavigation();cachedShown=true;onFirstView();saveStatus('本机缓存 · 正在核对云端');
   }
-  const initialSync=await db.refreshCloud();if(initialSync?.changed)privateImages.invalidate(initialSync.allBlobs?undefined:initialSync.blobIDs);await refresh({background:cachedShown,skipCloudRefresh:true});activateNavigation();onFirstView();if(!resetPending&&!afterAccountReset)void purgeExpiredTrash();await matchingSession.restore();if(cloudMatchingDefaults)applyMatchingDefaults(state,cloudMatchingDefaults);editableImportReady=true;void consumeEditableHandles();saveStatus((await db.storageMode())==='server'?'已连接服务器':'已保存到本机');if(cloudEnabled){syncDisplay.checking=false;updateSyncIndicator();if(!resetPending)void cloudResumer.wake();else saveStatus('云端已清空 · 正在后台清理旧图片（暂只读）');}
+  const initialSync=await db.refreshCloud();if(initialSync?.changed)privateImages.invalidate(initialSync.allBlobs?undefined:initialSync.blobIDs);await refresh({background:cachedShown,skipCloudRefresh:true});activateNavigation();onFirstView();if(!resetPending&&!afterAccountReset)void purgeExpiredTrash();await matchingSession.restore();if(cloudMatchingDefaults)applyMatchingDefaults(state,cloudMatchingDefaults);editableImportReady=true;void consumeEditableHandles();saveStatus(cloudEnabled?'已连接 CloudBase':'已保存到本机');if(cloudEnabled){syncDisplay.checking=false;updateSyncIndicator();if(!resetPending)void cloudResumer.wake();else saveStatus('云端已清空 · 正在后台清理旧图片（暂只读）');}
   }catch(e){console.error(e);recordRuntimeIssue('handled',e,state.route,{phase:'auth'});const auth=e.status===401;if(auth)cloudSessionReady=false;
   if(cachedShown&&!auth){saveStatus('云端核对失败 · 缓存仅供查看');toast('云端连接失败，未改为本机保存：'+e.message);if(cloudEnabled)void cloudResumer.wake();return;}
   if(auth){renderReactPage(createElement('div',{className:'empty'},
-    createElement('strong',null,'连接拾页数据服务器'),
-    createElement('p',null,'请输入服务器访问令牌；连接失败时不会另存到浏览器。'),
-    createElement('form',{id:'server-login',onSubmit:event=>{
-      event.preventDefault();db.setStorageConfig({url:db.storageConfig()?.url||location.origin,
-        token:event.currentTarget.elements.token.value.trim()});init();
-    }},createElement('input',{type:'password',name:'token',required:true,autoComplete:'off',
-      placeholder:'服务器访问令牌','aria-label':'服务器访问令牌'}),
-    createElement('button',{className:'btn primary',type:'submit'},'连接')),
-    createElement('p',{id:'server-login-error'},e.message)));
+    createElement('strong',null,'登录状态失效'),
+    createElement('p',null,'请重新登录 CloudBase；本机待同步资料仍然保留。'),
+    createElement('button',{className:'btn',onClick:()=>location.reload()},'重新登录')));
   }else{renderReactPage(createElement('div',{className:'empty'},
     createElement('strong',null,'无法读取资料'),
     createElement('p',null,e.message||'请检查设备剩余空间和数据服务连接。'),
