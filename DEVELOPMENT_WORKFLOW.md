@@ -1,86 +1,26 @@
-# 拾页开发与发布流程
+# 拾页分支与发布规则（CloudBase）
 
-本文件是仓库的正式分支与发布规则。与旧部署记录冲突时，以本文件和当前 CI / Vercel 配置为准。
-
-## 分支职责
-
-| 分支 | 用途 | 自动部署 |
+| 分支 | 用途 | 发布 |
 | --- | --- | --- |
-| `main` | 已验收、可对正式用户使用的当前稳定版本 | Vercel `shiye-journal` |
-| `test` | 下一版本的集成、真机体验和发布前验收 | Vercel `shiye-journal-test` |
-| `feature/*`、`fix/*`、`experiment/*` 等 | 独立功能、修复和实验开发 | 不自动部署 |
+| `test` | 开发和真机验收 | CloudBase 测试静态网站 |
+| `main` | 已验收稳定版本 | 需单独配置 CloudBase 正式发布项目后才部署 |
+| `feat/*`、`fix/*` | 独立开发、PR 检查 | 不自动替代测试站 |
 
-`main` 与 `test` 都是长期分支。其他开发分支应短期存在，完成后合入 `test`。
+## 代码工作流
+所有修改从 `test` 建分支，经 PR 合回 `test`。未经完整验证不宣称上线；不要将 `test` 自动合入 `main`。提交前保留用户数据与待同步队列，不自动迁移 COS 路径、账号或删除对象。
 
-## 正常开发路径
+## CloudBase 平台
+- 只有 CloudBase Auth、PostgreSQL、事件云函数 `shiye-api` 和腾讯 COS 是远端服务依赖。
+- 不再启用其他部署提供方及其后台代理。不要用另一套服务接收云端写入。
+- 客户端首屏可读缓存，离线编辑先进入账号隔离的 IndexedDB 唯一待同步队列；服务端依旧以数据库事务和操作收据确认提交。
+- COS 原图、候选框、Mask 和大型作品不放到数据库里。
+- 服务端密钥仅存在 CloudBase 云函数受保护配置，前端不可持有；启用新增数据库迁移前先备份并隔离测试。
+- `pgvector` 暂不启用；用户 UI 仅显示预留入口。
 
-```text
-feature/* / fix/* / experiment/*
-              ↓
-             test
-              ↓
-      CI + 测试站实际验收
-              ↓
-       Pull Request
-         test → main
-              ↓
-             main
-              ↓
-          正式环境
-```
+## 验收
+每次完整迁移必须执行 `npm test`、`npm run build`、`npm run test:ui` 和 `node scripts/audit-cloudbase-platform.mjs`。测试失败或 CI 没有执行步骤都不是成功。图片和编辑器回归须检查实际设备，尤其 iOS Safari。结果分别注明“代码已提交、函数已部署、SQL 已执行、真机已验收”，不可混为一谈。
 
-1. 新功能和普通修复不得直接以 `main` 作为开发分支。
-2. 小修改可直接提交到 `test`；较大或并行任务使用 `feature/*`、`fix/*` 或 `experiment/*`，完成后先合并到 `test`。
-3. `test` 每次更新后在 `shiye-journal-test` 验收。至少要求相关 CI 通过；涉及 iPad / Safari / Pencil / 图像识别 / 大文件时还需按功能做真机或专项验收。
-4. 只有确认要发布时，才通过 Pull Request 将 `test` 合并到 `main`。
-5. `main` 的每次变化都视为一次正式发布候选，必须能追溯到已验收的 `test` 版本。
+## 同步与数据安全
+403/413 应明确诊断并保留原始队列；结果不明的网络请求必须先核验幂等收据/私有对象再决定重试；明确冲突时保留两份可恢复的作品。账号清空和 COS GC 仅在 CloudBase 服务端独立实现、权限校验、审计及备份恢复验证后开放，任何未完成的危险操作不应出现在可执行 UI 中。
 
-## 紧急修复
-
-若正式站必须立即修复，可以从 `main` 建立 `hotfix/*`：
-
-```text
-main → hotfix/* → main
-                  ↓
-               test 回灌
-```
-
-正式修复合入 `main` 后，必须立即把同一修复合回 `test`，避免长期分叉。禁止只修 `main` 而让 `test` 丢失该修复。
-
-## 自动部署合同
-
-仓库 `vercel.json` 只允许 Git 分支 `main` 和 `test` 触发 Vercel；其他分支默认关闭自动部署。
-
-项目级职责：
-
-- `shiye-journal`：Production Branch = `main`，Preview 自动部署关闭，只接受 `main` 的正式构建。
-- `shiye-journal-test`：Production Branch = `test`，Preview 自动部署关闭，只接受 `test` 的测试构建。
-- 其他历史 Vercel Project 不作为发布目标，应保持禁用或删除。
-
-如果需要临时查看其他分支，使用明确的手动部署；不得通过修改长期分支规则来获得一次临时预览。
-
-## CI 合同
-
-- `Verify Shiye`：对 `main`、`test` 的 push，以及目标为 `main` 或 `test` 的 PR 运行。
-- 浏览器专项回归：对进入 `main` 或 `test` 的相关 PR 运行；也允许手动触发。
-- CI 失败不得被解释为“部署成功即可发布”。测试状态和 Vercel 构建状态是两个独立门槛。
-- 自动化规则由 `tests/vercel-build-inputs.test.js` 等测试保护，避免误开其他分支自动部署。
-
-## Codex / 自动化代理规则
-
-开始修改前先确认当前分支：
-
-- 普通开发：默认在 `test` 或从 `test` 新建短期分支。
-- 不得为了方便直接在 `main` 开发普通功能。
-- 未经用户明确要求，不得将未验收的 `test` 自动合入 `main`。
-- 不得使用强推覆盖 `main` / `test`。
-- 合并前先检查远端新提交、测试结果、私人数据和凭据。
-- 发布后核对准确 Git SHA 与对应 Vercel Project；不能只凭“push 成功”判断网页已更新。
-
-## 发布判断
-
-`test` 表示“下一版”，`main` 表示“当前正式版”。
-
-因此任何时候都应满足：
-
-> `main` 可以落后于 `test`，但不应包含尚未回灌到 `test` 的长期独立功能；`test` 可以继续开发，但只有经过验收的状态才允许进入 `main`。
+参考：`DEPLOYMENT.md`、`docs/CLOUDBASE_TEST_ROLLOUT.md`。

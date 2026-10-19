@@ -71,7 +71,7 @@ export function SyncDetailsDialog({details,projects,batches,local,quarantined,le
         {legacyCount?<button type="button" className="btn" id="sync-backup-legacy-works" onClick={onBackupLegacy}>导出旧作品备份</button>:null}
         <button type="button" className="btn" id="sync-pause-local" onClick={onPause}>暂停／恢复后台重试</button>
         <button type="button" className="btn" id="sync-emergency-copy" disabled={!total} onClick={onEmergency}>导出待同步数据备份</button>
-        <button type="button" className="btn danger" id="sync-wipe-everything" onClick={onWipe}>彻底清空本账号本机与云端数据</button>
+        <p className="muted">账号彻底清空待 CloudBase 安全回收流程完成验收后开放；原始待同步资料不会被自动删除。</p>
       </div>
     </section></div>
   </Dialog>;

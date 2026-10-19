@@ -6,8 +6,7 @@ export const CLOUD_API_ROUTES=Object.freeze({
   '/api/storage-usage':'GET',
   '/api/search':'POST',
   '/api/search-index':'POST',
-  '/api/telemetry':'POST',
-  '/api/account-reset':'POST'
+  '/api/telemetry':'POST'
 });
 const failed=(message,status,code)=>Object.assign(Error(message),{status,code});
 const object=value=>value!==null&&typeof value==='object'&&!Array.isArray(value);

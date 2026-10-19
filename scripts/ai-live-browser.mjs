@@ -6,7 +6,7 @@ import {browserHarness} from '../tests/browser-harness.mjs';
 console.log('Awaiting live test credential on stdin (not logged).');
 let key;const input=createInterface({input:process.stdin,terminal:false});for await(const line of input){key=line.trim();break;}input.close();if(!key)throw Error('Missing credential');
 const endpoint='https://api.deepseek.com/chat/completions',out='/tmp/shiye-ai-live';await mkdir(out,{recursive:true});
-let mode='agent';const report={url:process.env.SHIYE_TEST_URL||'https://shiye-journal-test.vercel.app',model:'deepseek-flash',timeout:75,maxTokens:6000,maxTurns:5,phases:[]};
+let mode='agent';const report={url:process.env.SHIYE_TEST_URL||'https://shiye-journal-test-shiye-pg-test-d1gg723f7fb356ccc.webapps.tcloudbase.com',model:'deepseek-flash',timeout:75,maxTokens:6000,maxTurns:5,phases:[]};
 const phases=(process.env.SHIYE_LIVE_PHASES||'recognition,agent,direct').split(',');
 const b=await browserHarness('shiye-ai-live',report.url,async({command})=>{
  await command('Page.addScriptToEvaluateOnNewDocument',{source:`

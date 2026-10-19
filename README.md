@@ -6,8 +6,8 @@
 
 正式开发规则见 [DEVELOPMENT_WORKFLOW.md](DEVELOPMENT_WORKFLOW.md)。长期只维护两个发布分支：
 
-- `test`：下一版本与集成测试；自动部署到 Vercel `shiye-journal-test`。
-- `main`：已经验收的正式版本；自动部署到 Vercel `shiye-journal`。
+- `test`：下一版本与集成测试；由 CloudBase 静态托管自动部署至测试站。
+- `main`：已经验收的正式版本；只在独立 CloudBase 正式部署配置后发布。
 
 普通开发遵循 `feature/* → test → main`；其他分支不自动部署。除紧急 hotfix 外，不直接在 `main` 开发功能；hotfix 合入 `main` 后必须回灌 `test`。
 

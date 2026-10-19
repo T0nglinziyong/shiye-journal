@@ -1,51 +1,28 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createStorageUsageController,formatStorageBytes} from '../src/storage-usage-ui.js';
-
-function fixture({admin=true,confirm=true,eligible=8}={}){
- const calls=[],session={access_token:'session-token'};
- const client={
-  auth:{async getSession(){return {data:{session}};}},
-  async rpc(name,args){
-   calls.push({name,args});
-   if(!admin)return {data:null,error:{message:'仅开发者管理员'}};
-   return name==='shiye_storage_admin_stats'
-    ?{data:{commits:{eligibleAfter90Days:eligible},tombstones:5},error:null}
-    :{data:Math.min(eligible,5000),error:null};
-  }
- };
- const fetchCalls=[];
- const fetcher=async(path,opts)=>{
-   fetchCalls.push({path,opts});
-   return {ok:true,async json(){return {totalBytes:256,inventoryComplete:true,groups:{}};}};
- };
- return {controller:createStorageUsageController({client,fetcher,confirmAction:()=>confirm}),calls,fetchCalls};
-}
-test('storage figures distinguish row bytes and full object bytes',()=>{
+test('storage values are only logical sizes and unknown inventory is not zero',()=>{
  assert.equal(formatStorageBytes(1024),'1.0 KB');
  assert.equal(formatStorageBytes(1024**3),'1.00 GB');
- assert.equal(formatStorageBytes(null),'0 B');
+ assert.equal(formatStorageBytes(null),'未知');
 });
-test('only authenticated administrator RPCs can load full statistics',async()=>{
- const {controller}=fixture({admin:false});
- await assert.rejects(controller.getDB(),/仅开发者管理员/);
+test('CloudBase returns current-account JSON stats through one function route',async()=>{
+ const calls=[];const controller=createStorageUsageController({fetcher:async(path,opts)=>{
+   calls.push({path,method:opts.method});
+   return {ok:true,json:async()=>({scope:'current-account',
+     database:{recordCount:12,metadataJSONBytes:8192},cos:{inventoryComplete:false}})};
+ }});
+ const data=await controller.getUsage();
+ assert.equal(data.database.recordCount,12);
+ assert.deepEqual(calls,[{path:'/api/storage-usage',method:'GET'}]);
 });
-test('COS inventory uses bearer token but no mutation or delete method',async()=>{
- const {controller,fetchCalls}=fixture();
- assert.equal((await controller.getCOS()).totalBytes,256);
- assert.equal(fetchCalls.length,1);
- assert.equal(fetchCalls[0].path,'/api/storage-usage');
- assert.equal(fetchCalls[0].opts.method,'GET');
- assert.equal(fetchCalls[0].opts.headers.Authorization,'Bearer session-token');
+test('does not accept another account statistics or malformed server response',async()=>{
+ const controller=createStorageUsageController({fetcher:async()=>({
+   ok:true,json:async()=>({scope:'all-accounts',database:{recordCount:200}})})});
+ await assert.rejects(controller.getUsage(),/协议不匹配/);
 });
-test('old receipts are pruned only after explicit confirmation and minimum 90-day server policy',async()=>{
- const declined=fixture({confirm:false});
- assert.equal(await declined.controller.prune({eligible:5}),null);
- assert.equal(declined.calls.length,0);
- const accepted=fixture({confirm:true,eligible:8});
- assert.equal(await accepted.controller.prune({eligible:8}),8);
- assert.deepEqual(accepted.calls[0],{name:'shiye_storage_prune_commits',
-   args:{retention_days:90,batch_limit:5000}});
- assert.equal(await accepted.controller.prune({eligible:0}),0);
- assert.equal(accepted.calls.length,1);
+test('does not offer a browser-side delete or prune endpoint',()=>{
+ const controller=createStorageUsageController({fetcher:async()=>{}});
+ assert.equal(controller.prune,undefined);
+ assert.equal(controller.getCOS,undefined);
 });

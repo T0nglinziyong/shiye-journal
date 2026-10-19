@@ -6,7 +6,7 @@
 
 - `node --test tests/cloudbase-continuation.test.js tests/cloudbase-client-contract.test.js`：本地 Node 22 内置运行时测试，无真实用户、COS 或付费模型请求。
 - `.github/workflows/cloudbase-platform.yml`：运行时、函数打包和独立 PostgreSQL + pgvector 集成测试。SQL 服务仅绑定临时 CI 本机，未使用线上密钥。
-- `node scripts/audit-cloudbase-platform.mjs`：完整仓库旧平台残留审计。它仍应把未完成的旧接口/依赖清理报告为失败，不能静默跳过。
+- `node scripts/audit-cloudbase-platform.mjs`：完整仓库旧平台残留审计。此阶段应通过；出现旧路径、旧 SDK、旧部署变量时失败并阻止宣称纯 CloudBase。
 - 原有完整应用构建与浏览器测试仍需通过。已移除只验证旧中继回退的测试，替换为 CloudBase 唯一客户端合同测试；没有恢复已移除的中继导出以讨好旧测试。
 
 ## 先恢复图片服务
@@ -28,4 +28,4 @@
 
 ## 尚不能标为完成的项目
 
-完整旧平台源码/锁文件清理、账号清空和安全后台 GC、前端可见检索/自动索引入口、监控告警配置及真实线上验收，必须逐项完成。不要因为 GitHub 合并成功就声称这些能力已经上线。
+旧平台路径与 SDK 代码清理已在 PR #167 进行。账号清空和安全后台 GC、前端云搜索/自动索引、监控告警配置及真实线上验收仍待逐项完成。旧引用若仍存在，应根据数据实际来源导出并核验，而不是删除原始记录。不要因为 GitHub 合并成功就声称这些能力已经上线。
