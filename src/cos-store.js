@@ -1,7 +1,11 @@
 import {uploadCOSObject} from './cos-upload.js';
-import {cloudApiUrl} from './cloud-api-origin.js';
-const defaultFetch=(...args)=>fetch(...args);
+import {cloudApiUrl,cloudApiRequest} from './cloud-api-origin.js';
+import {cloudEnabled} from './cloud-session.js';
+const defaultFetch=(...args)=>cloudApiRequest(...args);
 export function createCOSStore({client,enabled=false,endpoint=cloudApiUrl('/api/cos'),fetcher=defaultFetch,uploadRequest=fetcher===defaultFetch&&typeof XMLHttpRequest!=='undefined'?uploadCOSObject:null,sessionTimeoutMs=15000,ticketBatchDelayMs=8}){
+  // CloudBase always uses the existing private COS bucket. A forgotten old
+  // OBJECT_STORAGE toggle must not send image bytes to another provider.
+  enabled=cloudEnabled||enabled;
   let pending=[],scheduled=false,activeWrites=0,activeReads=0,activePreviews=0;
   let reportOperation=()=>{};
   const waitingWrites=[],waitingPreviews=[];
@@ -35,8 +39,8 @@ export function createCOSStore({client,enabled=false,endpoint=cloudApiUrl('/api/
         failure.status=503;reject(failure);},sessionTimeoutMs);
     })]);if(error||!data.session?.access_token)throw Error('请先登录');
       let result,lastError;for(let attempt=0;attempt<2;attempt++){
-        try{const response=await fetcher(endpoint,{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+data.session.access_token},body:JSON.stringify({objects:batch.map(({path,method,type,variant})=>({path,method,type,variant}))}),signal:AbortSignal.timeout(attempt?22000:8000)});
-          if(!response.ok){const failure=Error('COS 授权失败（'+response.status+'）；资料未改存到其他位置');if(response.status<500&&response.status!==429)throw Object.assign(failure,{nonRetryable:true});throw failure;}
+        try{const response=await fetcher(endpoint,{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+data.session.access_token},body:JSON.stringify({objects:batch.map(({path,method,type,variant})=>({path,method,type,variant}))}),signal:AbortSignal.timeout(attempt?30000:22000)});
+          if(!response.ok){const failure=Object.assign(Error('COS 授权失败（'+response.status+'）；资料未改存到其他位置'),{status:response.status,requestId:response.headers?.get?.('X-Shiye-Request-Id')});if(response.status<500&&response.status!==429)throw Object.assign(failure,{nonRetryable:true});throw failure;}
           result=await response.json();break;
         }catch(failure){lastError=failure;if(failure.nonRetryable||attempt)throw failure;}
       }
