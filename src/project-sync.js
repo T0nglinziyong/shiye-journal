@@ -12,7 +12,7 @@ function failureClass(error){
   const code=failureCode(error)||failureCode(error?.cause);
   if(error?.status===413||error?.cause?.status===413||code==='SHIYE_METADATA_INVALID'||code==='413')return 'oversize';
   if(code==='40001'||code==='PT409'||code==='409')return 'conflict';
-  if(code==='401'||code==='403'||code==='28000')return 'auth';
+  if(code==='401'||code==='403'||code==='28000'||code==='42501'||code==='OPERATION_FORBIDDEN')return 'auth';
   if(code==='P0001'||/^2[23][0-9A-Z]{3}$/.test(code)||code==='413'||code==='507')return 'invalid';
   if(code==='429')return 'rate-limit';
   return 'transient';
@@ -265,7 +265,7 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
       // queue rebuild can recheck it; independent rows continue normally.
       const blocked=force?new Set():new Set(orderedRows().filter(row=>
         conflicts.has(row.record.id)||row.lastFailureClass==='invalid'||
-        row.nextAttemptAt>clock()).map(row=>row.record.id));
+        row.lastFailureClass==='oversize'||row.nextAttemptAt>clock()).map(row=>row.record.id));
       // Old conflict rows cannot hold unrelated newer records hostage. Each
       // newer row still runs through its own revision reconciliation/CAS.
       const blockedKeys=[];
@@ -374,8 +374,9 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
           markSyncPhase(failure,'上传当前待同步记录');
           // A 413 is a confirmed gateway rejection, never a competing edit.
           // In particular it must not cause an editable project to be forked.
-          if(failure?.status===413||failure?.cause?.status===413||
-            ['413','SHIYE_METADATA_INVALID'].includes(failureCode(failure))||failureCode(failure?.cause)==='413')throw failure;
+          if([400,401,403,404,413,422,429].includes(Number(failure?.status??failure?.cause?.status))||
+            ['413','SHIYE_METADATA_INVALID','OPERATION_FORBIDDEN','42501'].includes(failureCode(failure))||
+            failureCode(failure?.cause)==='413')throw failure;
           // The server may have committed before its response disappeared.
           // Confirm the exact durable operation ID before surfacing an error.
           let resolved;

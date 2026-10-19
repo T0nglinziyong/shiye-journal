@@ -72,7 +72,16 @@ export function createCloudFunctionTransport({invoke,getSession,network=(...args
       requestSignal.throwIfAborted();
       const response=await invoke({name:functionName,data:{version:1,route:url,method,authorization,body},parse:true});
       requestSignal.throwIfAborted();
-      if(response?.code)throw failed('CloudBase 云函数调用失败，请检查函数部署和调用权限',503,'SHIYE_FUNCTION_UNAVAILABLE');
+      if(response?.code!=null&&response.code!==0&&response.code!=='0'){
+        const rawCode=String(response.code);
+        const code=/^[A-Z][A-Z0-9_]{2,80}$/.test(rawCode)?rawCode:'SHIYE_FUNCTION_UNAVAILABLE';
+        const rawStatus=Number(response.status);
+        const status=Number.isInteger(rawStatus)&&rawStatus>=400&&rawStatus<=599?rawStatus:
+          code==='OPERATION_FORBIDDEN'?403:code==='FUNCTION_NOT_FOUND'?404:503;
+        const failure=failed('CloudBase 云函数调用失败，请检查函数部署和调用权限',status,code);
+        if(/^[A-Za-z0-9_-]{1,120}$/.test(response.requestId||''))failure.requestId=response.requestId;
+        throw failure;
+      }
       let result=response?.result;
       if(typeof result==='string'){
         try{result=JSON.parse(result);}catch{throw failed('CloudBase 返回内容无法解析',502,'SHIYE_API_RESPONSE');}

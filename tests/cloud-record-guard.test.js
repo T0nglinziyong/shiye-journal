@@ -19,3 +19,17 @@ test('rejects RGBA arrays, image Data URLs, nested binary fields in metadata',()
 test('rejects oversized transactions before sending HTTP',()=>{
  assert.throws(()=>assertCloudCommitSize([{action:'put',store:'assets',item:{id:'a',title:'x'.repeat(100)}}],{limit:50}),/超|字节/);
 });
+
+test('recently deleted asset strips redundant recognition RGB only from upload copy',()=>{
+ const original={id:'card',kind:'asset',date:'2026-10-19',item:{id:'a',blobId:'cutout',title:'preserved',sourceRegion:{sourcePixels:Array(200000).fill(0)},sourcePixels:[1]}};
+ const safe=cloudMetadataRecord('trash',original);
+ assert.equal(safe.item.blobId,'cutout');assert.equal(safe.item.title,'preserved');
+ assert.equal(safe.item.sourceRegion,undefined);assert.equal(safe.item.sourcePixels,undefined);
+ assert.ok(original.item.sourceRegion.sourcePixels.length===200000);
+ assertCloudCommitSize([{store:'trash',action:'put',item:safe}]);
+});
+test('oversized deleted projects are held safely rather than truncated',()=>{
+ const item={id:'p',text:'x'.repeat(520000)};
+ assert.throws(()=>cloudMetadataRecord('trash',{id:'card',kind:'project',item}),{status:413});
+ assert.equal(item.text.length,520000);
+});
