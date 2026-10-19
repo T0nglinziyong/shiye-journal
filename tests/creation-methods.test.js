@@ -49,3 +49,8 @@ test('size budget protects text and package imports even with false MIME extensi
   const zip=new Blob([bytes(80,75,3,4),new Uint8Array(20_000_001)]);
   await assert.rejects(classifyCreationFile(zip),/20 MB/);
 });
+
+test('both editable handoff prompts exclude explanation and extra commentary',()=>{
+ assert.match(webResultPrompt('tools','file'),/无需另加解释/);
+ assert.match(webResultPrompt('tools','text'),/不要附加过程说明/);
+});

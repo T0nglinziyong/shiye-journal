@@ -1,4 +1,5 @@
 import {prepareUploadJobs} from './upload-preparation.js';
+import {cloudMetadataRecord,assertCloudCommitSize} from './cloud-record-guard.js';
 import {readCloudPages} from './cloud-page-read.js';
 import {cloudClient,requireCloudUser} from './cloud-session.js';
 import {privateCache,outboxVersionRows} from './private-cache.js';
@@ -1072,6 +1073,9 @@ function auxiliaryBlobIDs(operations){
   return auxiliary;
 }
 async function encode(store,record,{makePreview=true}={}){
+  // Sanitize the CloudBase RPC representation without touching its durable
+  // IndexedDB original; new and historical cutout pixels remain in COS.
+  if(store!=='blobs')record=cloudMetadataRecord(store,record);
   if(store==='projects'){
     if(record.projectDocumentPath)record=await cloudProjectDocument(record);
     const {__cloudBaseRevision,__cloudSessionId,__cloudBaseSceneFingerprint,__cloudBaseMetadata,
@@ -1224,6 +1228,8 @@ function cloudTransaction(names,fn,operationID=crypto.randomUUID(),baseRevisionO
       }));
       activeDirect.done=Math.min(puts.length,offset+3);reportSync();
     }catch(error){throw markSyncPhase(error,'编码云端记录');}
+    // Metadata operation count alone does not bound request body size.
+    assertCloudCommitSize(operations);
     assertAccountWritable();activeDirect.phase='提交事务';reportSync();
     let data;
     const rpcStartedAt=Date.now();

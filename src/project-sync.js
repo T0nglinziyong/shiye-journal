@@ -9,7 +9,8 @@ const failureCode=error=>{
   return typeof error?.cause?.code==='string'?error.cause.code:'';
 };
 function failureClass(error){
-  const code=failureCode(error);
+  const code=failureCode(error)||failureCode(error?.cause);
+  if(error?.status===413||error?.cause?.status===413||code==='SHIYE_METADATA_INVALID'||code==='413')return 'oversize';
   if(code==='40001'||code==='PT409'||code==='409')return 'conflict';
   if(code==='401'||code==='403'||code==='28000')return 'auth';
   if(code==='P0001'||/^2[23][0-9A-Z]{3}$/.test(code)||code==='413'||code==='507')return 'invalid';
@@ -35,7 +36,7 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
     if(paused||network||rebuilding||autoTimer!==null)return;
     const ordered=[...entries.values()].sort((a,b)=>a.serial-b.serial);
     const candidates=ordered.filter(row=>!conflicts.has(row.record.id)&&
-      row.lastFailureClass!=='invalid'&&!ordered.some(previous=>
+      row.lastFailureClass!=='invalid'&&row.lastFailureClass!=='oversize'&&!ordered.some(previous=>
         previous.serial<row.serial&&overlaps(recordKeys(previous.record),recordKeys(row.record))));
     if(!candidates.length)return;
     // First remote upload waits one window to coalesce several small edits.
@@ -225,7 +226,7 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
     network=(async()=>{
       await initialize();await staging;await refreshFromDisk();
       const readyRows=orderedRows().filter(row=>force||
-        !conflicts.has(row.record.id)&&row.lastFailureClass!=='invalid'&&
+        !conflicts.has(row.record.id)&&row.lastFailureClass!=='invalid'&&row.lastFailureClass!=='oversize'&&
         (!row.nextAttemptAt||row.nextAttemptAt<=clock()));
       if(!readyRows.length){report();return;}
       // A newer image can be due while an older edit of the same record is
@@ -371,6 +372,10 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
         try{await commit(row.record,row.operationID,row.baseRevision);}
         catch(failure){
           markSyncPhase(failure,'上传当前待同步记录');
+          // A 413 is a confirmed gateway rejection, never a competing edit.
+          // In particular it must not cause an editable project to be forked.
+          if(failure?.status===413||failure?.cause?.status===413||
+            ['413','SHIYE_METADATA_INVALID'].includes(failureCode(failure))||failureCode(failure?.cause)==='413')throw failure;
           // The server may have committed before its response disappeared.
           // Confirm the exact durable operation ID before surfacing an error.
           let resolved;
@@ -430,12 +435,12 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
           blocked.add(row.record.id);
           blockedKeys.push(recordKeys(row.record));
           const category=failureClass(failure);
-          const manual=category==='invalid'||/账号已清空/.test(failure?.message||'')||
+          const manual=category==='invalid'||category==='oversize'||/账号已清空/.test(failure?.message||'')||
             !retryConflicts(row.record)&&(category==='conflict'||
               /云端版本已变化|另一设备已更新|\bconflict\b/i.test(failure?.message||''));
           const current=entries.get(row.record.id);
           if(current?.serial===row.serial){
-            current.lastFailureClass=manual?category==='invalid'?'invalid':'conflict':category==='conflict'?'transient':category;
+            current.lastFailureClass=manual?(category==='invalid'?'invalid':category==='oversize'?'oversize':'conflict'):category==='conflict'?'transient':category;
             if(manual)delete current.nextAttemptAt;
             else{
               current.attempt=(Number.isSafeInteger(current.attempt)?current.attempt:0)+1;
@@ -444,11 +449,11 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
             try{await persist();}catch(saveFailure){firstFailure??=saveFailure;}
           }
           if(manual){
-            conflictIDs.add(row.record.id);
-            diagnose('conflict',row,failure);
+            if(category!=='oversize')conflictIDs.add(row.record.id);
+            diagnose(category==='oversize'?'failed':'conflict',row,failure);
             // A server-reported conflict must still reach callers that open
             // the manual review flow. Other queued records can commit first.
-            if(category==='invalid'||category==='conflict'||/\bconflict\b/i.test(failure?.message||''))firstFailure??=failure;
+            if(category==='invalid'||category==='oversize'||category==='conflict'||/\bconflict\b/i.test(failure?.message||''))firstFailure??=failure;
           }else{
             firstFailure??=failure;
             diagnose('failed',row,failure);
@@ -466,7 +471,7 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
       report();
       const unpreparedReady=preparedCycleComplete&&requiresPrepare&&prioritizedRows([...entries.values()].filter(row=>
         !preparedOperations.has(row.operationID)&&requiresPrepare(row.record)&&
-        !conflicts.has(row.record.id)&&row.lastFailureClass!=='invalid'&&
+        !conflicts.has(row.record.id)&&row.lastFailureClass!=='invalid'&&row.lastFailureClass!=='oversize'&&
         (!row.nextAttemptAt||row.nextAttemptAt<=clock()))).length>0;
       if(entries.size&&!paused&&unpreparedReady){
         // Continue the bounded image backlog immediately. The lock has been

@@ -136,7 +136,10 @@ export async function startCloudSession(onReady){
   }
   try{await enter();}
   catch(error){
-    showGate({visible:true,retryReady:await hasSession(),status:error.status===401?
-      '登录后，同一浏览器会自动保持登录，直到主动退出。':error.message});
+    const persisted=await hasSession();
+    showGate({visible:true,retryReady:persisted||error.status!==401,
+      status:error.status===401?(persisted?
+        '登录验证暂时未通过，会话仍在本机；请先重试连接。':
+        '登录会话不存在或已经过期，请重新登录。'):(error.message||'连接暂时不可用，请重试')});
   }
 }

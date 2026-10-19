@@ -202,3 +202,14 @@ test('sync-enabled API keys are never embedded in a model-facing task package',a
   const combined=Object.values(entries).filter(Boolean).map(bytes=>strFromU8(bytes)).join(' ');
   assert.ok(!combined.includes(secret),'Exported GPT task must not include private API keys');
 });
+
+test('ZIP internal workflow honors copy-text delivery and internalizes visual self-review',async()=>{
+ const output=await make(),files=await filesOf(output);
+ for(const path of ['START_HERE.txt','task/WORKFLOW.txt','runtime/README.txt']){
+  const guide=strFromU8(files[path]);
+  assert.ok(guide.includes('复制文本模式只交付实际 output/preview.png'));
+  assert.match(guide,/不能另生成 JSON 文件/);
+  assert.ok(!guide.includes('最终必须同时交付 output/project'));
+ }
+ assert.match(strFromU8(files['task/VISUAL_REVIEW.txt']),/内部看图自评，不要在最终回复中输出/);
+});

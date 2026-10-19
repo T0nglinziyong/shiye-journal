@@ -28,8 +28,9 @@ export async function saveImportBatch({state,db,urls,render,onSaved}) {
   if(state.importSaving||state.importStep==='done')return;
   state.importSaving=true;
   try {
-  const assets=[],blobs=[],projects=[],now=new Date().toISOString();let savedCount=0;
-  for(const record of state.importRecords) {
+  const assets=[],blobs=[],projects=[],now=new Date().toISOString(),importBatchID=uid();let savedCount=0;
+  for(const [sourcePageIndex,record] of state.importRecords.entries()) {
+    const sourcePageID=uid();
     if(!record.confirmed)throw Error('请先检查所有照片');
     const chosen=(record.selectedCandidates||[]).filter(c=>c.selected);
     if(state.importMode==='snapshot') {
@@ -75,7 +76,7 @@ export async function saveImportBatch({state,db,urls,render,onSaved}) {
       const choice=record.seriesID&&record.seriesID!==''?record.seriesID:state.importBatchSeriesID||null;
       const copyToLibrary=choice!=='__no_library__';
       p.seriesID=choice==='__none__'||choice==='__no_library__'?null:choice||null;
-      for(const c of elements) {
+      for(const [sourceCandidateIndex,c] of elements.entries()) {
         const id=uid(),blobId=uid(),maskId=uid(),candidateFrameBlobId=uid(),region=c.region;
         const stored=await materialStorageBlobs(c.blob,c.candidateFrameBlob||c.originalBlob||c.blob,c.width,c.height);
         const imageHash='sha256:'+await sha256Hex(await stored.cutout.arrayBuffer());
@@ -88,7 +89,8 @@ export async function saveImportBatch({state,db,urls,render,onSaved}) {
           isProjectInternal:!copyToLibrary,
           usageStatus:copyToLibrary?'used':'unused',usageUpdatedAt:copyToLibrary?now:null,
           seriesID:copyToLibrary?(choice==='__none__'?null:choice||null):null,
-          createdAt:now,sourceIdentifier:'imported-work-element'});
+          createdAt:now,importBatchID,sourcePageID,sourcePageIndex,sourceCandidateIndex,
+          sourceIdentifier:'imported-work-element'});
         blobs.push({id:maskId,data:encodedMask},
           {id:candidateFrameBlobId,data:stored.frame},
           {id:blobId,data:stored.cutout});p.candidateAssetIDs.push(id);
@@ -105,7 +107,7 @@ export async function saveImportBatch({state,db,urls,render,onSaved}) {
       // Material editing/re-recognition needs only the candidate frame, not the
       // whole imported photograph. Keep the aligned source pixels plus the full
       // candidate-box frame so storage stays local and compact.
-      for(const c of chosen) {
+      for(const [sourceCandidateIndex,c] of chosen.entries()) {
         const id=uid(),blobId=uid(),maskId=uid(),candidateFrameBlobId=uid();
         const stored=await materialStorageBlobs(c.blob,c.candidateFrameBlob||c.originalBlob||c.blob,c.width,c.height);
         const imageHash='sha256:'+await sha256Hex(await stored.cutout.arrayBuffer());
@@ -115,7 +117,7 @@ export async function saveImportBatch({state,db,urls,render,onSaved}) {
         });
         assets.push({...candidateMetadata(c,record,state.importBatchSeriesID),id,blobId,imageHash,
           candidateFrameBlobId,initialMaskBlobId:maskId,finalMaskBlobId:maskId,
-          createdAt:now});
+          createdAt:now,importBatchID,sourcePageID,sourcePageIndex,sourceCandidateIndex});
         blobs.push({id:maskId,data:encodedMask},
           {id:candidateFrameBlobId,data:stored.frame},
           {id:blobId,data:stored.cutout});savedCount++;

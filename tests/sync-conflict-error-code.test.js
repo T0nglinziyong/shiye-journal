@@ -57,3 +57,17 @@ test('a failed automatic retry stays in queue without an unhandled promise rejec
   assert.equal(sync.status().pending,1);assert.equal(sync.status().conflicts,0);
   assert.equal(disk[0].lastFailureClass,'transient');
 });
+
+test('413 HTTP rejection never invokes conflict reconciliation or project fork',async()=>{
+ let disk=[],reconciled=0;
+ const tooLarge=Object.assign(Error('request entity too large'),{status:413});
+ const sync=createProjectSync({load:async()=>structuredClone(disk),write:async rows=>{disk=structuredClone(rows);},
+  revision:()=>10,authoritativeCommit:true,
+  commit:async()=>{throw tooLarge;},reconcile:async()=>{reconciled++;return 'conflict';},
+  onConflict:async()=>{throw Error('must not fork');}});
+ await sync.stage({id:'large',kind:'project'});
+ await assert.rejects(sync.flush(),/too large/);
+ assert.equal(reconciled,0);assert.equal(disk.length,1);
+ assert.equal(sync.status().conflicts,0);
+ assert.equal(disk[0].lastFailureClass,'oversize');
+});
