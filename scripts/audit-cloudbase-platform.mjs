@@ -26,6 +26,15 @@ export async function auditCloudBase(root){
   }
  }
  for(const directory of ['src','server','api','cloudfunctions'])await walk(join(root,directory));
+ // Retired deployment trees must not silently reappear. This does not check
+ // historical markdown references: only executable/deployable source.
+ for(const path of ['api','supabase','deploy/self-host','deploy/supabase',
+   'server/server.mjs','server/account-gc-worker.mjs','server/cos-orphan-gc-worker.mjs',
+   'server/sync-commit-relay.mjs','server/trusted-origins.mjs']){
+   try{await lstat(join(root,path));findings.push({path,category:'retired-platform-path'});}
+   catch(error){if(error.code!=='ENOENT')throw error;}
+ }
+
  for(const filename of ['package.json','package-lock.json','vercel.json','.vercelignore']){
   try{
    await lstat(join(root,filename));

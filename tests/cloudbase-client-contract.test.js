@@ -22,3 +22,12 @@ test('business API routes use registered event functions rather than a commit re
  assert.throws(()=>cloudApiUrl('/api/sync-commit'),/未登记/);
  await assert.rejects(cloudApiRequest('/api/sync-commit',{method:'POST',body:'{}'}),{code:'SHIYE_API_ROUTE'});
 });
+
+test('hosted application uses only CloudBase with no retired deployment/config dependencies',async()=>{
+ const {auditCloudBase}=await import('../scripts/audit-cloudbase-platform.mjs');
+ const {dirname,resolve}=await import('node:path');
+ const {fileURLToPath}=await import('node:url');
+ const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
+ const report=await auditCloudBase(root);
+ assert.deepEqual(report.findings,[],JSON.stringify(report.findings,null,2));
+});
