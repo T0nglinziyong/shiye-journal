@@ -1490,7 +1490,7 @@ export function SettingsHomePage({onAction}){
       data-react-action="true" onClick={()=>onAction('settings-open',null,name)}>
       <span className="settings-icon">{icon}</span><span><strong>{name}</strong><small>{description}</small></span><b>›</b>
     </button>)}
-  </section><p className="settings-note">设置按使用场景归为四类。AI 设置保存在这台设备的当前浏览器中；作品和素材可在“数据与诊断”中导出备份。</p>
+  </section><p className="settings-note">设置按使用场景归为四类。登录账号的 AI 设置会同步到云端；作品和素材可在“数据与诊断”中导出备份。</p>
     <div className="actions"><button type="button" className="btn" data-act="help" data-react-action="true"
       onClick={()=>onAction('help')}>使用说明与故障排查</button></div>
   </div>;
