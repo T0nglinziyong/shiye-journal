@@ -11,8 +11,8 @@
 1. 阅读四项方向与补充想法，查看素材和已选参考。新搭配任务默认自由加工、混合编排；文字策略可为灵感随写、日常记录或纯粹拼贴。
 2. 先读 `task/BRIEF.txt`，再查看素材图片。按素材真实形状、书写面、印刷字与主次职责构思图文关系：正文、图形、圈点和荧光笔同素材一起安排。完整来源保存在 `task/context.json`，仅在需要精确字段时查阅。knowledge 中的参考不是固定坐标模板。
 3. 在短的 `instructions.json` 中写 `page.layers` 的素材别名、比例位置、文字、图形和笔迹，以及逐件 `materialDecisions`。参考 `examples/instructions.json`；示例圆形只是图形 `kind` 的一种，预设还包含星形、标签、箭头、票券、方格等，自由矢量可写数值路径。图层 `id`、素材 `piece` 和未加工的 `whole` 操作可省略；需要跨图层引用时才显式命名。每项只需设计字段，编译器补齐实物尺寸、来源、节点 ID 和原生 Scene 属性。避免把几句占位文字围在大片无意留白之间；预览应呈现可以交付的成品。
-4. `node runtime/compile.cjs instructions.json` 生成完整 `scene.json`；不用手写或反复输出长 Scene JSON。需要局部命令时运行 `inspect` 获取当前摘要；`apply` 按 `baseSceneHash` 原子修改问题图层，也可直接编辑 Scene。Node Canvas 缺失时才执行一次 `npm install`，环境排查可用 `self-test`。完整 schema 按需阅读。
-5. `preview`：结构、实物来源和用量校验后由 Node Canvas 直接生成 `output/preview.png` 和渲染报告，无需打开 HTML。
+4. `node runtime/preview.cjs instructions.json` 一次完成简版指令编译和预览：写入完整 `scene.json`，再由 Node Canvas 生成 `output/preview.png` 和渲染报告，无需打开 HTML。只需生成 Scene 时可运行 `node runtime/compile.cjs instructions.json`。不必手写或反复输出长 Scene JSON。
+5. 已对 Scene 做局部精修后，运行无参数的 `node runtime/preview.cjs` 保留精修结果；重新传入旧 `instructions.json` 会重新编译整页。需要局部命令时运行 `inspect` 获取当前摘要；`apply` 按 `baseSceneHash` 原子修改问题图层，也可直接编辑 Scene。Node Canvas 缺失时才执行一次 `npm install`，环境排查可用 `self-test`。完整 schema 按需阅读。
 6. 实际查看 PNG，指出与本页素材和表达有关的具体问题，再有针对性地修订；首版已解决问题时不用为凑次数修改。改动后重新运行 `preview`。`validation-report.json` 包含运行耗时，便于区分渲染与创作时间。
 7. `pack` 核对每件素材的取舍与实际图层、最终 Scene 与 PNG 摘要，同时交付可编辑 JSON 和 PNG；缺少逐件决定、PNG 或图像过期时拒绝完成。完整使用可以是最佳选择，不按工艺数量评分。
 8. App 使用相同合同独立检查导入结果，再用共享渲染器呈现。

@@ -165,6 +165,11 @@ test('Node Canvas runtime renders PNG and refuses a stale or changed snapshot',a
   await linkTestCanvas(dir);
   const run=(name,...args)=>{const r=spawnSync(process.execPath,['runtime/'+name+'.cjs',...args],{cwd:dir,encoding:'utf8',timeout:15000});return r;};
   assert.equal(run('self-test').status,0);
+  const directPreview=run('preview','examples/instructions.json');
+  assert.equal(directPreview.status,0,directPreview.stderr||directPreview.stdout);
+  const directlyCompiled=JSON.parse(await readFile(join(dir,'scene.json'),'utf8'));
+  const directCapture=JSON.parse(await readFile(join(dir,'output/preview-capture.json'),'utf8'));
+  assert.equal(directCapture.sceneHash,craftSceneHash(attachSceneV2(directlyCompiled.page)));
   const compiledExample=run('compile','examples/instructions.json');
   assert.equal(compiledExample.status,0,compiledExample.stderr||compiledExample.stdout);
   let doc=JSON.parse(await readFile(join(dir,'scene.json'),'utf8'));

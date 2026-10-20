@@ -42,6 +42,14 @@ export async function runWebWorkbench(context,command){
       const info=inspectWebScene(doc,assets);save('output/scene-summary.json',info);
       process.stdout.write(JSON.stringify({ok:true,sceneHash:info.sceneHash})+'\n');return;
     }
+    // A compact design can be compiled and rendered in one invocation. Commit the
+    // generated Scene before rendering so the preview and subsequent pack use
+    // the same editable snapshot. Without an input path, preview keeps the
+    // existing Scene (including any precise edits made with apply).
+    if(command==='preview'&&process.argv[3]){
+      doc=compileWebSceneInput(doc,load(process.argv[3]),assets);
+      commit(doc);
+    }
     if(command==='inspect'){const info=inspectWebScene(doc,assets);save('output/scene-summary.json',info);process.stdout.write(JSON.stringify(info,null,2)+'\n');return;}
     if(!['preview','validate','pack',undefined].includes(command))throw Error('未知工作台命令');
     for(const name of ['project.shiyeproject.json','delivery-manifest.json'])rmSync('output/'+name,{force:true});
