@@ -49,22 +49,15 @@ test('both creation modes receive role sizes converted to the actual paper, not 
    assert.match(text,/荧光笔色带/);
  }
 });
-test('API receives only matching journal studies without treating their objects as available materials',()=>{
+test('API does not send visual case references',()=>{
  const messages=buildCreativeMessages({draft:createDraft({style:'复古旧物'}),assets:[],aliases:{},styles:['复古旧物'],pagePurposes:['旅途记录'],referenceImages:['data:image/png;base64,one','data:image/png;base64,two']});
- assert.match(messages[0].content,/匹配的真实风格手帐案例/);
- assert.match(messages[0].content,/来自用户教程的抽象模板/);
- assert.match(messages[0].content,/模板原图/);
- assert.match(messages[0].content,/尚无可确认对应成品/);
- assert.match(messages[0].content,/实物路线与纸片/);
- assert.equal(messages[1].content.filter(part=>part.type==='image_url').length,2);
- assert.match(messages[1].content.filter(part=>part.type==='text').at(-1).text,/不能当成本次可用素材/);
- assert.doesNotMatch(messages[0].content,/私人日记原图|已保存作品/);
+ assert.doesNotMatch(messages[0].content,/匹配的真实风格手帐案例|来自用户教程的抽象模板|模板原图/);
+ assert.equal(messages[1].content.filter(part=>part.type==='image_url').length,0);
 });
-test('text-only API receives relevant case methods without image payloads',()=>{
+test('text-only API keeps composition guidance without visual cases',()=>{
  const messages=buildCreativeMessages({draft:createDraft({style:'韩系清新'}),assets:[],aliases:{},styles:['韩系清新'],pagePurposes:['清单计划'],sendPresetReferences:true});
- assert.match(messages[0].content,/浅色清单与书写卡/);
- assert.match(messages[0].content,/抽象模板/);
- assert.match(messages[0].content,/写可执行计划/);
+ assert.match(messages[1].content[0].text,/图文/);
+ assert.doesNotMatch(messages[0].content,/抽象模板|匹配案例/);
  assert.equal(messages[1].content.filter(part=>part.type==='image_url').length,0);
 });
 test('API labels material priorities and has a meaningful-content rule for sparse non-cover pages',()=>{
@@ -78,14 +71,12 @@ test('API labels material priorities and has a meaningful-content rule for spars
  assert.match(messages[1].content[0].text,/完整使用可以是最佳选择，不按工艺或素材数量评分/);
  assert.doesNotMatch(messages[1].content[0].text,/至少\d+字|覆盖约 \d+%/);
 });
-test('image API sends a few source templates only when preset references are enabled',()=>{
+test('image API ignores old visual-reference preference',()=>{
  const project={styles:['旅行票据'],purposes:['旅途记录'],contentPolicy:'documentary'};
  const input={project,draft:{...draft(14),pageMode:'single'},assets:[],ids:[],includeImages:false};
  const without=imagePrompt(input),withReferences=imagePrompt({...input,includeReferences:true});
  assert.doesNotMatch(without,/模板原图|尚无可确认对应成品/);
- assert.match(withReferences,/模板原图/);
- assert.match(withReferences,/尚无可确认对应成品/);
- assert.ok((withReferences.match(/模板原图/g)||[]).length<=3);
+ assert.equal(withReferences,without);
 });
 
 test('reading evidence reports authored text without claiming aesthetic acceptance',()=>{

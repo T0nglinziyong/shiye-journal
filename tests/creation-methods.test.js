@@ -54,5 +54,7 @@ test('editable handoff prompts remain concise without a final-response gag',()=>
    const prompt=webResultPrompt('tools',output);
    assert.ok(prompt.length<260);
    assert.doesNotMatch(prompt,/不要附加过程说明|无需另加解释|自评/);
+   assert.match(prompt,/runtime\/preview\.cjs/);
+   assert.doesNotMatch(prompt,/并排构图预览|选择有明确图文关系的一案/);
  }
 });

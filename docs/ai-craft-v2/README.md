@@ -4,7 +4,7 @@
 
 ## 当前协议
 
-- GPT 任务包只使用 compact 目录：`START_HERE.txt`、`task/`、`schema/`、`examples/`、`materials/`、可选 `references/`、`runtime/`。
+- GPT 任务包只使用 compact 目录：`START_HERE.txt`、`task/`、`schema/`、`examples/`、`materials/`、`runtime/`；不再发送案例参考图。
 - 任务必须具有当前 `taskHash`、`schemaHash`、`sourceSnapshots`、`baseSceneHash` 和 `taskBinding=local`。
 - Craft Plan 只有当前一个合同：`shiye-craft-plan` version 2。
 - material relation 只使用 `peek`、`underlay`、`bridge`；不接受旧 relation 名称。

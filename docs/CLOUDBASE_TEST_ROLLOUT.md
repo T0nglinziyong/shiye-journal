@@ -7,7 +7,9 @@
 - `node --test tests/cloudbase-continuation.test.js tests/cloudbase-client-contract.test.js`：本地 Node 22 内置运行时测试，无真实用户、COS 或付费模型请求。
 - `.github/workflows/cloudbase-platform.yml`：运行时、函数打包和独立 PostgreSQL + pgvector 集成测试。SQL 服务仅绑定临时 CI 本机，未使用线上密钥。
 - `node scripts/audit-cloudbase-platform.mjs`：完整仓库旧平台残留审计。此阶段应通过；出现旧路径、旧 SDK、旧部署变量时失败并阻止宣称纯 CloudBase。
-- `npm test` 与 `npm run test:ui`：后者在测试模式注入内存 CloudBase 夹具，验证首屏、路由与多视口交互。它的 `dist` 不能发布；上线前必须重新执行 `npm run build`。旧浏览器脚本中直接写本地 IndexedDB、假设无登录资料库的场景还需逐项改造成 CloudBase 夹具，不能把它们的启动失败算成真实服务验收。
+- `npm test` 与 `npm run test:ui`：后者在测试模式注入内存 CloudBase 夹具，验证首屏、路由与多视口交互。
+- Craft、Interface、Recognition、Storage 四组 Chromium 工作流使用 `--mode browser-test`，在隔离的浏览器上下文和合成 IndexedDB 中检查当前界面，不连接真实账号。这些检查必须通过；它们不能代替登录、上传与多设备同步的测试站验收。
+- `ui-test` 和 `browser-test` 构建产物都不能发布。部署前重新执行 `npm run build`，以生产模式连接 CloudBase。
 
 ## 网站与图片服务
 

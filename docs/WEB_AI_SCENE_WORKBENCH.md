@@ -9,15 +9,23 @@
 ## 一次交付中的内部循环
 
 1. 阅读四项方向与补充想法，查看素材和已选参考。新搭配任务默认自由加工、混合编排；文字策略可为灵感随写、日常记录或纯粹拼贴。
-2. 按素材真实形状、书写面、印刷字与主次职责，在 `composition-options.json` 写 2–3 个短方案，只列素材别名与比例位置、必要短文字和书写空间。`compare` 用现有 Scene 编译与 Node Canvas 一次生成并排预览，不修改工作 Scene。真实查看并比较焦点、双页重量、阅读路线和素材关系；`select` 只能采用同一 Scene 基线下已预览的方案。不是通过换色、旋转或元素数量凑不同方案。knowledge 中的参考不是固定坐标模板。
-3. 选中方案后再写完整文案和需要的加工。需要局部命令时运行 `inspect` 获取完整 Scene、来源和当前摘要；Node Canvas 缺失时才执行一次 `npm install`，环境排查可用 `self-test`。四份完整 schema 按需阅读，主流程只读短合同。
-4. `compile` 接受便捷输入；`apply` 按 `baseSceneHash` 原子执行工具和精确操作；也可直接编辑 Scene。
-5. `preview`：结构、实物来源和用量校验后由 Node Canvas 直接生成 `output/preview.png` 和渲染报告，无需打开 HTML。
+2. 先读 `task/BRIEF.txt`，再查看素材图片。按素材真实形状、书写面、印刷字与主次职责构思图文关系：正文、图形、圈点和荧光笔同素材一起安排。完整来源保存在 `task/context.json`，仅在需要精确字段时查阅。任务包不发送额外的案例参考图，也不生成 `knowledge.json` 或仅凭素材元数据猜测用途的 `material-planning.json`。
+3. 在短的 `instructions.json` 中写 `page.layers` 的素材别名、比例位置、文字、图形和笔迹，以及逐件 `materialDecisions`。参考 `examples/instructions.json`；示例圆形只是图形 `kind` 的一种，预设还包含星形、标签、箭头、票券、方格等，自由矢量可写数值路径。图层 `id`、素材 `piece` 和未加工的 `whole` 操作可省略；需要跨图层引用时才显式命名。每项只需设计字段，编译器补齐实物尺寸、来源、节点 ID 和原生 Scene 属性。避免把几句占位文字围在大片无意留白之间；预览应呈现可以交付的成品。
+4. `node runtime/preview.cjs instructions.json` 一次完成简版指令编译和预览：写入完整 `scene.json`，再由 Node Canvas 生成 `output/preview.png` 和渲染报告，无需打开 HTML。只需生成 Scene 时可运行 `node runtime/compile.cjs instructions.json`。不必手写或反复输出长 Scene JSON。
+5. 已对 Scene 做局部精修后，运行无参数的 `node runtime/preview.cjs` 保留精修结果；重新传入旧 `instructions.json` 会重新编译整页。需要局部命令时运行 `inspect` 获取当前摘要；`apply` 按 `baseSceneHash` 原子修改问题图层，也可直接编辑 Scene。Node Canvas 缺失时才执行一次 `npm install`，环境排查可用 `self-test`。完整 schema 按需阅读。
 6. 实际查看 PNG，指出与本页素材和表达有关的具体问题，再有针对性地修订；首版已解决问题时不用为凑次数修改。改动后重新运行 `preview`。`validation-report.json` 包含运行耗时，便于区分渲染与创作时间。
 7. `pack` 核对每件素材的取舍与实际图层、最终 Scene 与 PNG 摘要，同时交付可编辑 JSON 和 PNG；缺少逐件决定、PNG 或图像过期时拒绝完成。完整使用可以是最佳选择，不按工艺数量评分。
 8. App 使用相同合同独立检查导入结果，再用共享渲染器呈现。
 
 任何一次原子编辑失败都保留原工作文件。修改后清除旧交付；直接改文件后，旧预览无法通过 pack。运行时不联网、不使用账号或密钥。JSON 上限 8 MB；组深度、节点和路径点数沿用原生数据预算。
+
+## 简版指令与高级加工的衔接
+
+`page.layers` 是初稿输入，不是另一种作品格式。它已经能在 material 的 `operations` 中表达单件裁切、蒙版、开窗和边缘工艺，也能用嵌套 `group.children` 编组。编译后，`scene.json` 是唯一工作场景；高级操作继续修改这份场景，不需要复制素材、重建任务或手写完整 Scene。
+
+一张原素材分成多片、保留余料或进行物理穿插时，在初稿之后使用 `{ "plan": { ... } }` 作为下一次编译输入；计划须引用当前 `inspect` 的 `sceneHash`，处理画布上已有素材时按计划合同写 `consume` 和 `parentId`。位置、分组、层序、文字和细节则用 `commands.json` 的 `tools` 或 `edits`，同样引用当前 `sceneHash`。加工改变素材状态时，可在同一批 `commands.json` 中更新 `materialDecisions`；校验会核对这些说明与可见图层。每次成功操作后取得新的 hash，再用无参数的 `preview` 查看同一场景。
+
+`compile` 或带输入的 `preview` 每次只接收 `page`、`plan`、`tools` 中一种。初稿之后不要再次提交旧的完整 `page`：它会重新生成 AI 图层，可能覆盖随后的加工与局部精修。最终 `pack` 只读取当前 `scene.json` 与其最新 PNG，输出完整可编辑 JSON 和 PNG。
 
 ## 静态能力
 

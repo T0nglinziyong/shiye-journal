@@ -31,8 +31,7 @@ test('API, editable ZIP and image routes use the same material-dependent and exp
     assert.match(text,/图文对话/);assert.match(text,/window 开窗/);assert.match(text,/不无限缩小字号/);
     assert.doesNotMatch(text,/只能写客观观察/);
   }
-  const knowledge=JSON.parse(strFromU8(files['task/knowledge.json']));
-  assert.equal(knowledge.caseStudies.families[0].id,'dialogue');
+  assert.equal(files['task/knowledge.json'],undefined);
   assert.equal(bundle.source.processing,'自由拆解');
   assert.equal(bundle.source.contentPolicy,'original');
   assert.equal(bundle.source.capabilities.previewOffline,'node-canvas');

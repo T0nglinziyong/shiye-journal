@@ -194,7 +194,8 @@ function putGraphics(d,list){for(const g of list){
   const data={key:g.key,kind:g.kind,...place(d,g,old),width:converted(g.width??.2,g.size_unit||'ratio',d,'width'),height:converted(g.height??.1,g.size_unit||'ratio',d,'height'),rotation:g.rotation??old?.rotation??0,zIndex:g.z??old?.zIndex??500,fill:Object.hasOwn(g,'fill')?g.fill:(g.kind==='frame'?null:'#e7eef7'),stroke:Object.hasOwn(g,'stroke')?g.stroke:'#547da4',lineWidth:g.line_width??old?.lineWidth??3,fillOpacity:g.fill_opacity??old?.fillOpacity??1,strokeOpacity:g.stroke_opacity??old?.strokeOpacity??1,strokeDash:g.stroke_dash??old?.strokeDash??'solid',cornerRadius:g.corner_radius??old?.cornerRadius??.1,opacity:g.opacity??old?.opacity??1,blendMode:g.blend_mode??old?.blendMode??'normal',vectorMask:g.vector_mask===undefined?old?.vectorMask:structuredClone(g.vector_mask),vectorPaths:g.kind==='vector'&&g.vector_paths?structuredClone(g.vector_paths):undefined,vectorLayers:g.vector_layers?structuredClone(g.vector_layers):undefined,vectorSize:g.vector_layers?[1,1]:undefined};
   if(g.match_size_to){const target=find(d,g.match_size_to),[l,t,r,b]=g.padding_mm||[0,0,0,0],s=scale(d),angle=(target.rotation||0)*Math.PI/180,dx=(r-l)*s/2,dy=(b-t)*s/2;data.width=target.width+(l+r)*s;data.height=target.height+(t+b)*s;data.x=target.x+dx*Math.cos(angle)-dy*Math.sin(angle);data.y=target.y+dx*Math.sin(angle)+dy*Math.cos(angle);data.rotation=target.rotation||0;}
   else if(g.padding_mm)throw Error('padding_mm 需要 match_size_to');
-  if(old)Object.assign(old,data);else d.primitives.push({id:uid(),...data});
+  if(old){Object.assign(old,data);for(const field of ['vectorPaths','vectorLayers','vectorSize','vectorMask'])if(old[field]===undefined)delete old[field];}
+  else d.primitives.push({id:uid(),...Object.fromEntries(Object.entries(data).filter(([,value])=>value!==undefined))});
 }}
 function putInk(d,list){for(const stroke of list){
   d.strokes||=[];
@@ -202,6 +203,19 @@ function putInk(d,list){for(const stroke of list){
 }}
 function composeDirectSceneV2(d,assets,aliases,page,options){
   validateValue(page,directPageContract);
+  const reserved=new Set();
+  const collect=nodes=>{for(const node of nodes){for(const value of [node.id,node.key,node.piece,node.creativePieceID,node.agentKey])if(value)reserved.add(value);if(node.type==='group')collect(node.children||[]);}};
+  collect(d.layers);collect(page.layers);
+  let serial=0;
+  const nextID=()=>{let id;do{id='ai-layer-'+(++serial);}while(reserved.has(id));reserved.add(id);return id;};
+  const expand=nodes=>nodes.map(node=>{
+    const id=node.id||nextID();
+    if(node.type==='group')return {...node,id,children:expand(node.children)};
+    if(node.type==='material')return {...node,id,piece:node.piece||id,operations:node.operations||[{op:'whole'}],placement:{rotation:0,z:10,...node.placement}};
+    if(node.type==='shape')return {...node,id,key:node.key||id};
+    return {...node,id};
+  });
+  const layers=expand(page.layers);
   clearGeneratedScene(d);
   const items=[],graphics=[],texts=[],ink=[],wanted=new Map(),groups=[];
   const visit=nodes=>{for(const node of nodes){
@@ -214,7 +228,7 @@ function composeDirectSceneV2(d,assets,aliases,page,options){
     else if(type==='text')texts.push({...props,key:id});
     else if(type==='ink')ink.push({...props,key:id});
   }};
-  visit(page.layers);
+  visit(layers);
   d.style=({'留白叙事':'airy','密集拼贴':'layered','杂志网格':'editorial','手作便签':'memo','胶片日记':'film','自由构图':'free'})[page.style]||'free';
   setPaper(d,{...page.paper,intent:page.intent});
   upsertMaterials(d,assets,aliases,{items},options);
@@ -236,7 +250,7 @@ function composeDirectSceneV2(d,assets,aliases,page,options){
   // Keep manually edited content intact. The only storage is the tree; the
   // model must never overwrite an unmentioned existing leaf or duplicate a physical source.
   const preserve=nodes=>nodes.flatMap(node=>{if(node.type==='group'){const children=preserve(node.children||[]);return children.length?[{...node,children}]:[];}return used.has(node.id)?[]:[node];});
-  const generated=build(page.layers);
+  const generated=build(layers);
   const original=preserve(d.layers);
   d.layers=[...original,...generated];
   validateSceneExtensions(d);

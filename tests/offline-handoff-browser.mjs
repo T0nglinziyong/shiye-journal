@@ -59,21 +59,20 @@ try{
     assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1'));
   }
   await click('#top-settings','.settings-list');
-  await click('[data-act="settings-open"][data-val="AI 与创作"]','#setting-ai-send-reference');
+  await click('[data-act="settings-open"][data-val="AI 与创作"]','#setting-ai-final-visual-review');
   assert.equal(await evaluate('document.querySelector("#setting-ai-final-visual-review").checked'),true);
   assert.ok(await evaluate('!document.querySelector("#setting-ai-images")'));
   assert.ok(await evaluate('!document.querySelector("#setting-ai-reference-page")'));
-  assert.ok(await evaluate('document.querySelector("#setting-ai-send-reference").closest("label").textContent.includes("手帐案例")'));
+  assert.ok(await evaluate('!document.querySelector("#setting-ai-send-reference")'));
   await command('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
-  await evaluate('document.querySelector("#setting-ai-send-reference").scrollIntoView({block:"center"})');
-  const settingsShot=await command('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});await writeFile(`${directory}/390x844-preset-setting.png`,Buffer.from(settingsShot.data,'base64'));
-  await click('#setting-ai-send-reference');
+  await evaluate('document.querySelector("#setting-ai-final-visual-review").scrollIntoView({block:"center"})');
+  const settingsShot=await command('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});await writeFile(`${directory}/390x844-ai-setting.png`,Buffer.from(settingsShot.data,'base64'));
   await click('[data-act="settings-save"]','.matching-page');
   await click('[data-act="match-export-gpt"]','#offline-gpt-prompt');
   assert.ok(await evaluate('document.querySelector(".offline-handoff-intro").textContent.includes("任务包")'));
   for(const [width,height] of [[390,844],[768,1024],[1024,768],[1440,900]]){
     await command('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:width<700});
-    const shot=await command('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});await writeFile(`${directory}/${width}x${height}-preset-enabled.png`,Buffer.from(shot.data,'base64'));
+    const shot=await command('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});await writeFile(`${directory}/${width}x${height}-task-package.png`,Buffer.from(shot.data,'base64'));
     assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1'));
   }
   await click('.dialog-close');

@@ -13,5 +13,11 @@ export async function browserHarness(name,url,beforeNavigate=async()=>{}){
   const wait=async(selector,timeoutMS=30000)=>{const started=Date.now();while(Date.now()-started<timeoutMS){const state=await evaluate('({found:!!document.querySelector('+JSON.stringify(selector)+'),navigationFailed:location.href.startsWith("chrome-error:")})');if(state.navigationFailed)throw Error('Browser navigation failed before app load');if(state.found)return;await sleep(20);}throw Error('Missing '+selector);};
   const click=async(selector,next)=>{await wait(selector);await evaluate('document.querySelector('+JSON.stringify(selector)+').click()');if(next)await wait(next);};
   context=(await command('Target.createBrowserContext',{},null)).browserContextId;const target=(await command('Target.createTarget',{url:'about:blank',browserContextId:context},null)).targetId;session=(await command('Target.attachToTarget',{targetId:target,flatten:true},null)).sessionId;await command('Target.activateTarget',{targetId:target},null);await command('Page.enable');await command('Runtime.enable');await beforeNavigate({command});await command('Page.navigate',{url});
-  return {command,evaluate,wait,click,sleep,errors,consoleMessages,fileChoosers,pausedRequests,networkRequests,close:async()=>{await command('Target.disposeBrowserContext',{browserContextId:context},null);ws.close();cli(['close']);}};
+  return {command,evaluate,wait,click,sleep,errors,consoleMessages,fileChoosers,pausedRequests,networkRequests,close:async()=>{
+    let timer;
+    try{await Promise.race([command('Target.disposeBrowserContext',{browserContextId:context},null),
+      new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('Browser context cleanup timed out')),5000);})]);}
+    catch{}finally{clearTimeout(timer);}
+    ws.close();try{cli(['close']);}catch{}
+  }};
 }

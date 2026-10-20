@@ -8,8 +8,6 @@ import {renderOfflinePreviewSVG} from './offline-preview-svg.js';
 import {buildMaterialLedger} from './material-ledger.js';
 import {canonicalTaskSource} from './task-source.js';
 import {validateMaterialDecisions} from './creation-material-decisions.js';
-import {compileCompositionSketch,validateCompositionOptions} from './web-composition-sketch.js';
-import {sceneLayerEntries} from './scene-v2.js';
 const load=(file,limit=8_000_000)=>{if(statSync(file).size>limit)throw Error('工作数据不能超过 '+limit/1_000_000+' MB');return JSON.parse(readFileSync(file,'utf8'));};
 const save=(file,value)=>writeFileSync(file,JSON.stringify(value,null,2)+'\n');
 const hash=value=>'sha256:'+createHash('sha256').update(value).digest('hex');
@@ -24,52 +22,6 @@ export async function runWebWorkbench(context,command){
   const source=context.source,assets=source.sourceSnapshots.map(s=>assetFromSourceSnapshot(s,{frozenRevision:true}));
   const report={version:1,structure:'failed',physical:'not-run',visual:'unavailable',reading:'pending',command};
   try{
-    if(command==='compare'){
-      for(const name of ['composition-options.png','composition-options.json'])rmSync('output/'+name,{force:true});
-      const base=load('scene.json'),options=validateCompositionOptions(load(process.argv[3]||'composition-options.json',250_000));
-      if(canonicalTaskSource(base.source)!==canonicalTaskSource(source))throw Error('候选构图的 source 与原始任务不一致');
-      const baseHash=craftSceneHash(validateWebScene(base.page,source,assets,{final:false}));
-      const canvas=await loadOfflineCanvas(),previews=Object.fromEntries(context.materials.map(m=>[m.alias,m.preview&&/^materials\/[A-Za-z0-9_-]+\.(png|webp)$/.test(m.preview)&&existsSync(m.preview)?readFileSync(m.preview):null]));
-      const width=640,pad=18,label=72,thumbHeight=Math.round(width*base.page.canvas.height/base.page.canvas.width),cardHeight=label+thumbHeight+pad;
-      const sheet=canvas.createCanvas(width*options.length+pad*(options.length+1),cardHeight+pad*2),ctx=sheet.getContext('2d');
-      ctx.fillStyle='#f5f5f0';ctx.fillRect(0,0,sheet.width,sheet.height);
-      const results=[],decodedCache=new Map();
-      for(const [index,option] of options.entries()){
-        const optionStarted=performance.now(),{doc,writingAreas}=compileCompositionSketch(base,option,assets);
-        const draft=validateWebScene(doc.page,source,assets,{final:false}),sceneHash=craftSceneHash(draft);
-        const {png}=await renderOfflinePNG(draft,source,previews,canvas,{decodedCache}),preview=await canvas.loadImage(png);
-        const left=pad+index*(width+pad),top=pad+label;
-        ctx.fillStyle='#ffffff';ctx.fillRect(left-pad/2,pad/2,width+pad,cardHeight+pad);
-        ctx.drawImage(preview,left,top,width,thumbHeight);
-        // Blue frames mark proposed writing space; they are comparison guides,
-        // never persisted as fake paper or physical material layers.
-        for(const area of writingAreas){
-          ctx.strokeStyle='#246d9a';ctx.lineWidth=2;ctx.setLineDash([7,5]);
-          ctx.strokeRect(left+area.x*width,top+area.y*thumbHeight,area.width*width,area.height*thumbHeight);
-          ctx.setLineDash([]);
-        }
-        ctx.fillStyle='#30463d';ctx.font='bold 25px sans-serif';ctx.fillText(option.id.toUpperCase(),left+8,pad+30);
-        ctx.font='18px sans-serif';ctx.fillText(option.idea.slice(0,25),left+8,pad+58);
-        const visible=new Set(sceneLayerEntries(draft).filter(entry=>entry.kind==='material'&&!entry.value.isParked&&!entry.value.hidden&&(entry.value.opacity??1)>0&&entry.parents.every(parent=>!parent.hidden&&(parent.opacity??1)>0)).map(entry=>entry.value.assetID));
-        results.push({id:option.id,idea:option.idea,sceneHash,materialCount:visible.size,textCount:draft.textBlocks.length,writingAreas:writingAreas.length,missingRequired:source.materials.filter(m=>(source.requiredAssetIDs||[]).includes(m.assetID)&&!visible.has(m.assetID)).map(m=>m.alias),renderMs:Math.round(performance.now()-optionStarted)});
-      }
-      const image=sheet.toBuffer('image/png');writeFileSync('output/composition-options.png',image);
-      const comparison={version:1,baseSceneHash:baseHash,optionsHash:hash(readFileSync(process.argv[3]||'composition-options.json')),imageHash:hash(image),options:results,durationMs:Math.round(performance.now()-started),visualReview:'manual-required'};
-      save('output/composition-options.json',comparison);process.stdout.write(JSON.stringify({ok:true,...comparison})+'\n');return;
-    }
-    if(command==='select'){
-      const id=process.argv[3],base=load('scene.json'),comparison=load('output/composition-options.json'),path=process.argv[4]||'composition-options.json';
-      if(canonicalTaskSource(base.source)!==canonicalTaskSource(source))throw Error('工作文件 source 与原始任务不一致');
-      if(comparison.baseSceneHash!==craftSceneHash(validateWebScene(base.page,source,assets,{final:false}))||comparison.optionsHash!==hash(readFileSync(path)))throw Error('候选构图或工作场景已变化，请重新运行 compare');
-      const option=validateCompositionOptions(load(path,250_000)).find(item=>item.id===id),record=comparison.options.find(item=>item.id===id);
-      if(!option||!record)throw Error('找不到已预览的候选构图：'+id);
-      const {doc}=compileCompositionSketch(base,option,assets);
-      if(craftSceneHash(validateWebScene(doc.page,source,assets,{final:false}))!==record.sceneHash)throw Error('候选画面摘要已变化，请重新运行 compare');
-      commit(doc);
-      for(const name of ['构图预览.svg','preview.png','preview-capture.json','project.shiyeproject.json','delivery-manifest.json'])rmSync('output/'+name,{force:true});
-      save('output/composition-selection.json',{optionId:id,sceneHash:record.sceneHash,idea:record.idea,selectedAt:new Date().toISOString()});
-      process.stdout.write(JSON.stringify({ok:true,selected:id,sceneHash:record.sceneHash,durationMs:Math.round(performance.now()-started)})+'\n');return;
-    }
     if(['compile','apply','preview'].includes(command))for(const name of ['project.shiyeproject.json','delivery-manifest.json','构图预览.svg','preview.png','preview-capture.json'])rmSync('output/'+name,{force:true});
     if(command==='self-test'){
       await loadOfflineCanvas();
@@ -89,6 +41,14 @@ export async function runWebWorkbench(context,command){
       for(const name of ['构图预览.svg','preview.png','preview-capture.json','project.shiyeproject.json','delivery-manifest.json'])rmSync('output/'+name,{force:true});
       const info=inspectWebScene(doc,assets);save('output/scene-summary.json',info);
       process.stdout.write(JSON.stringify({ok:true,sceneHash:info.sceneHash})+'\n');return;
+    }
+    // A compact design can be compiled and rendered in one invocation. Commit the
+    // generated Scene before rendering so the preview and subsequent pack use
+    // the same editable snapshot. Without an input path, preview keeps the
+    // existing Scene (including any precise edits made with apply).
+    if(command==='preview'&&process.argv[3]){
+      doc=compileWebSceneInput(doc,load(process.argv[3]),assets);
+      commit(doc);
     }
     if(command==='inspect'){const info=inspectWebScene(doc,assets);save('output/scene-summary.json',info);process.stdout.write(JSON.stringify(info,null,2)+'\n');return;}
     if(!['preview','validate','pack',undefined].includes(command))throw Error('未知工作台命令');

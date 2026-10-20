@@ -98,13 +98,14 @@ const inkStroke=object({points:array(inkPoint,1,512),width:num(.5,60),color,opac
 const directOperations=operationContract;
 const directMaterial=object({...material.properties,operations:array(directOperations,1,12)},['asset','piece','operations','placement']);
 
-const directSceneMaterial=object({type:enums(['material']),id:key,...directMaterial.properties},['type','id','asset','piece','operations','placement']);
-const directSceneShape=object({type:enums(['shape']),id:key,...primitive.properties},['type','id','key','kind']);
-const directSceneText=object({type:enums(['text']),id:key,...directText.properties},['type','id','content','font_style','x','y','width','height','font_size','color']);
-const directSceneInk=object({type:enums(['ink']),id:key,...inkStroke.properties},['type','id','points','width','color','pen_style']);
+const directSceneMaterial=object({type:enums(['material']),id:key,...directMaterial.properties,
+  placement:object({x:num(-2,3),y:num(-2,3),rotation:num(-180,180),z:integer(-1000,1000)},['x','y'])},['type','asset','placement']);
+const directSceneShape=object({type:enums(['shape']),id:key,...primitive.properties},['type','kind']);
+const directSceneText=object({type:enums(['text']),id:key,...directText.properties},['type','content','font_style','x','y','width','font_size','color']);
+const directSceneInk=object({type:enums(['ink']),id:key,...inkStroke.properties},['type','points','width','color','pen_style']);
 const directSceneGroup=object({type:enums(['group']),id:groupID,name:string(80),z:integer(-1000,1000),
   blend_mode:enums(['normal','multiply']),opacity:num(0,1),vector_mask:nullable(layerMask),
-  children:array({$ref:'#/$defs/node'},1,100)},['type','id','children']);
+  children:array({$ref:'#/$defs/node'},1,100)},['type','children']);
 // No duplicate page.items/graphics/ink fields: the whole AI page is one
 // ordered, nestable Scene layer tree. Material transforms remain physically
 // derived from source aliases, crop operations and source segments.

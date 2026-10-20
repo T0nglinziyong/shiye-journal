@@ -23,7 +23,7 @@ import {webSceneContract} from './web-scene-contract.js';
 
 export const webSceneCapabilities={version:2,sourcePixelCoordinates:false,cropPx:false,coordinateSystem:'native Scene units; x/y are centers; ink points are absolute; vector masks are normalized; group children retain page coordinates',
   nodes:['material','text','shape','ink','group'],
-  operations:['inspect','compile','apply','compare','select','validate','preview','pack','self-test'],
+  operations:['inspect','compile','apply','validate','preview','pack','self-test'],
   editing:['all native static Scene fields','atomic tool batches','direct scene editing','nested groups','group transforms','alignment','layer reorder','crop and compound masks','source splits and scraps','physical weave slices','pressure ink','multi-color vectors','curved editable text','repeatable digital stamps','editable tape ribbon: original image, repeat range, physical width, centerline, caps, sample/repeat/stretch','physical material replacement preserving center and stacking','editable layout reuse','local-font glyph knockout','paper styles'],
   excluded:['interactive pockets/flaps/page actions','arbitrary JavaScript','external image URLs','AI resizing/duplicating ordinary physical sources; dedicated tape width and texture modes are supported'],
   budgets:{documentBytes:8000000,groupDepth:12,sceneNodes:10000,pointsPerStroke:20000,toolCallsPerBatch:12,canvasPixels:32000000,isolatedGroups:8},
@@ -160,7 +160,9 @@ export function applyWebSceneCommands(document,commands,assets){
       else throw Error('未知精确编辑操作：'+edit.op);
     }
   }
-  const next=webSceneDocument(source,draft,commands.title??document.title,document.materialDecisions);
+  const decisions=commands.materialDecisions??document.materialDecisions;
+  if(commands.materialDecisions!==undefined)validateMaterialDecisions(decisions,draft,source);
+  const next=webSceneDocument(source,draft,commands.title??document.title,decisions);
   validateWebScene(next.page,source,assets,{final:false});
   return next;
 }
@@ -180,7 +182,9 @@ export function compileWebSceneInput(document,input,assets){
   const result=applyToolCalls({tools},base,frozen,Object.fromEntries(source.materials.map(m=>[m.alias,m.assetID])),{processing:source.processing||'不预设',requiredAssetIDs:source.requiredAssetIDs,visualAssetIDs:source.previewHashes?source.materials.map(m=>m.assetID):[],textMode:source.textMode,allowNoText:source.textMode==='none',deterministicTextLayout:true});
   const error=result.results.find(r=>!r.ok);if(error)throw Object.assign(Error(error.detail),{code:error.code});
   stabilizeImportedCraftScene(result.draft,base,source.bundleId);
-  const doc=webSceneDocument(source,result.draft,input.title??document.title,document.materialDecisions);
+  const decisions=input.materialDecisions??document.materialDecisions;
+  if(input.materialDecisions!==undefined||decisions?.length)validateMaterialDecisions(decisions,result.draft,source);
+  const doc=webSceneDocument(source,result.draft,input.title??document.title,decisions);
   validateWebScene(doc.page,source,assets,{final:false});return doc;
 }
 

@@ -11,7 +11,7 @@ test('matching and editor derive one set of AI inputs from the same project',asy
   assert.deepEqual(options.pagePurposes,['旅行记录']);assert.deepEqual(options.requiredAssetIDs,['a']);
   const guard=createCreativeRunGuard({accountID:'owner',ids:['a'],assets,getAccount:()=> 'owner',getAsset:id=>assets.find(a=>a.id===id),signal:new AbortController().signal});
   const inputs=await prepareCreativeRunInputs({project:p,draft:p.drafts[0],assets,ids:['a'],settings,createImage:()=>{throw Error('no vision');},loadReferences:()=>{throw Error('no vision');},guard});
-  assert.deepEqual(inputs,{images:[],referenceImages:[]});
+  assert.deepEqual(inputs,{images:[]});
   assert.equal(hasCreativeSceneChange([{ok:true,name:'inspect_materials'}]),false);
   assert.equal(hasCreativeSceneChange([{ok:true,name:'upsert_text'}]),true);
   assets[0].blobId='photo-v2';assert.throws(guard,/素材来源/);

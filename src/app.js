@@ -122,7 +122,6 @@ import {captureMatchingScroll,restoreMatchingScroll} from './matching-scroll.js'
 import {restoreRouteScroll} from './navigation-scroll.js';
 import {createMainNavigation,mainSection} from './main-navigation.js';
 import {selectJournalReferenceCases,loadJournalReferenceCases} from './journal-reference-catalog.js';
-import {loadJournalTemplateReferences} from './journal-template-references.js';
 import {clearJournalPresetImages} from './journal-preset-images.js';
 import {changeTrash,expiredTrash} from './trash-actions.js';
 import {visibleMaterials} from './asset-retention.js';
@@ -493,7 +492,15 @@ function navigateBack(fallback='series'){
   const section=mainRoute(state.route);
   if(section&&section===mainRoute(fallback)){
     const snapshot=mainNavigation.back(section,validNavigation);
-    if(snapshot){route(snapshot.route,{restoreSnapshot:snapshot,replaceHistory:true});return;}
+    if(snapshot){
+      // Going back from a series or material detail restores its filters and
+      // scroll position, but must not roll back selections made in that detail.
+      const currentSelection=parity.selectionMode===snapshot.selectionMode&&
+        parity.selectionMode?{selectionMode:parity.selectionMode,selected:[...parity.selected],
+          showOnlySelected:parity.showOnlySelected}:null;
+      route(snapshot.route,{restoreSnapshot:currentSelection?{...snapshot,...currentSelection}:snapshot,
+        replaceHistory:true});return;
+    }
     route(section==='library'?'series':section,{replaceHistory:true});
     return;
   }
@@ -914,7 +921,6 @@ function readAIForm(){
   const vision=supportsVision({provider,endpoint,model});
   return {...old,provider,keys,key,endpoint,model,
     includeStructureReference:q('structure-reference').checked,
-    sendPresetReferences:q('send-reference').checked,
     autoIncludeRecommendations:q('auto-recommendations').checked,
     requireAllCandidates:q('require-all').checked,
     includeThumbnails:vision,customVision:false,finalVisualReview:q('final-visual-review').checked,
@@ -2198,7 +2204,7 @@ async function exportOfflineCreation(){
   if(!matchingScope().candidateAssetIDs.length){toast('请先选择素材');return;}
   captureMatchingDirection();
   const button=view.querySelector('[data-act="match-export-gpt"]'),controller=new AbortController(),started=performance.now();
-  const timing={},report={cacheHits:0,covers:0,materials:0,references:0};
+  const timing={},report={cacheHits:0,covers:0,materials:0};
   if(button){button.disabled=true;button.textContent='正在准备 AI 参考…';}
   const cancelExport=()=>{controller.abort(Error('已取消导出'));closeOverlay();};
   const progress=text=>openOverlay(createElement(OfflineHandoffLoading,{progress:text,onClose:cancelExport}));
@@ -2206,7 +2212,7 @@ async function exportOfflineCreation(){
   const canceled=()=>{if(controller.signal.aborted)throw controller.signal.reason||Error('已取消导出');};
   const measured=async(name,task)=>{const now=performance.now();try{return await task();}finally{timing[name]=Math.round(performance.now()-now);}};
   try{
-    const p=createMatchingProject(),assetsSnapshot=structuredClone(state.assets),aliases=materialAliases(p.candidateAssetIDs),previews=[],referenceImages=[],cfg=structuredClone(state.aiSettings);
+    const p=createMatchingProject(),assetsSnapshot=structuredClone(state.assets),aliases=materialAliases(p.candidateAssetIDs),previews=[],cfg=structuredClone(state.aiSettings);
     const account=await offlineTaskAccount();canceled();
     const all=Object.entries(aliases);report.materials=all.length;
     // The package uses cached 480px covers or fetches that same COS tier.
@@ -2226,20 +2232,17 @@ async function exportOfflineCreation(){
         if(row.cacheHit)report.cacheHits++;
         else report.covers++;
         return {alias,bytes:row.bytes};
-      },{signal:controller.signal,onDone:(done,total)=>progress('准备素材图片 '+done+'/'+total+' · 同时处理参考案例…')}));
-    const referenceWork=measured('references',()=>cfg.sendPresetReferences
-      ?loadJournalTemplateReferences({context:{accountId:account,styles:p.styles,purposes:p.purposes,materials:assetsSnapshot.filter(asset=>p.candidateAssetIDs.includes(asset.id))},userTemplates:state.userTemplates,db})
-      :Promise.resolve({referenceImages:[]}));
-    const [materialRows,referenceBundle]=await Promise.all([materialWork,referenceWork]);
-    canceled();previews.push(...materialRows);referenceImages.push(...referenceBundle.referenceImages);report.references=referenceImages.length;
+      },{signal:controller.signal,onDone:(done,total)=>progress('准备素材图片 '+done+'/'+total)}));
+    const materialRows=await materialWork;
+    canceled();previews.push(...materialRows);
     progress('正在校验内容并生成 ZIP 文件…');
-    const result=await measured('package',async()=>{const {createOfflineHandoff}=await import('./offline-creation.js');return createOfflineHandoff({project:p,assets:assetsSnapshot,aliases,previews,referenceImages,settings:{...cfg,includeThumbnails:true},userTemplates:state.userTemplates});});
+    const result=await measured('package',async()=>{const {createOfflineHandoff}=await import('./offline-creation.js');return createOfflineHandoff({project:p,assets:assetsSnapshot,aliases,previews,settings:{...cfg,includeThumbnails:true}});});
     canceled();
     p.offlineBundleId=result.source.bundleId;
     canceled();
     timing.total=Math.round(performance.now()-started);
     console.info('[shiye offline export timing]',{...timing,...report,packageBytes:result.packageBytes,imageBytes:result.imageBytes});
-    const diagnostics='总耗时 '+timing.total+' ms · 素材 '+timing.materials+' ms · 参考图 '+timing.references+' ms · 打包 '+timing.package+' ms · 缓存命中 '+report.cacheHits+'/'+report.materials+' · 封面读取 '+report.covers;
+    const diagnostics='总耗时 '+timing.total+' ms · 素材 '+timing.materials+' ms · 打包 '+timing.package+' ms · 缓存命中 '+report.cacheHits+'/'+report.materials+' · 封面读取 '+report.covers;
     let prefetchStarted=false;
     const prefetchForImport=()=>{
       if(prefetchStarted||!cloudEnabled)return;
@@ -2266,7 +2269,7 @@ async function exportOfflineCreation(){
       try{await navigator.share({files:[file]});prefetchForImport();}
       catch(error){if(error?.name!=='AbortError'){openPackage();toast('分享未完成，已打开任务包');}}
     };
-    openOverlay(createElement(OfflineHandoffReady,{result,project:p,referenceCount:referenceImages.length,diagnostics,
+    openOverlay(createElement(OfflineHandoffReady,{result,project:p,diagnostics,
       onClose:closeOverlay,onCopy:copyPrompt,onShare:sharePackage,
       onDownload:()=>{download(result.blob,result.filename);prefetchForImport();},
       onImportFile:()=>{offlineSnapshotProject=p;creationResultInput.click();},
@@ -2360,7 +2363,7 @@ async function startAICreation(){
  if(cfg.deliveryMode==='image'){
   if(!ids.length){state.aiProgress='请先在素材搭配中选择素材。';render();return;}
   const controller=new AbortController();aiController=controller;state.aiBusy=true;state.aiProgress='正在准备图像生成…';render();
-  try{const referenceImages=cfg.sendPresetReferences?(await loadJournalTemplateReferences({context:{styles:sourceProject.styles,purposes:sourceProject.purposes,materials:assetsSnapshot.filter(asset=>ids.includes(asset.id))},userTemplates:state.userTemplates,db})).referenceImages:[];const blob=await generatePageImage({settings:cfg,project:sourceProject,draft:sourceDraft,assets:assetsSnapshot,ids,theme:prompt,createImage:modelImage,referenceImages,userTemplates:state.userTemplates,signal:controller.signal,onProgress:message=>{state.aiProgress=message;publishAIStatus();}});if(controller.signal.aborted||state.accountId!==accountID)throw Error('创作已停止或账号已切换');await saveGeneratedImageSnapshot(blob,sourceProject);state.aiProgress='图片已由 GPT 图像模型直接生成，并保存到「画面快照」。当前可编辑画布未改变。';}
+  try{const blob=await generatePageImage({settings:cfg,project:sourceProject,draft:sourceDraft,assets:assetsSnapshot,ids,theme:prompt,createImage:modelImage,signal:controller.signal,onProgress:message=>{state.aiProgress=message;publishAIStatus();}});if(controller.signal.aborted||state.accountId!==accountID)throw Error('创作已停止或账号已切换');await saveGeneratedImageSnapshot(blob,sourceProject);state.aiProgress='图片已由 GPT 图像模型直接生成，并保存到「画面快照」。当前可编辑画布未改变。';}
   catch(error){console.error(error);recordRuntimeIssue('handled',error,state.route,{phase:'ai'});state.aiProgress='图像生成失败：'+explainUserError(error,'图像创作');}
   finally{if(aiController===controller)aiController=null;state.aiBusy=false;if(state.route==='editor')render();}
   return;
@@ -2373,9 +2376,8 @@ async function startAICreation(){
  checkpoint();aiController=controller;state.aiBusy=true;state.aiProgress='正在准备素材预览…';aiReport={date:new Date().toISOString(),model,parameters:{generationMode:cfg.generationMode,temperature:cfg.temperature,maxTokens:cfg.maxTokens,materialCount:ids.length},rounds:[],outcome:'started'};render();
  try{
   recorder=await createAIRecorder({db,model,key,accountId:state.accountId||'browser'});const vision=supportsVision(cfg);
-  const {images,referenceImages}=await prepareCreativeRunInputs({project:sourceProject,draft:sourceDraft,assets:assetsSnapshot,ids,settings:{...cfg,supportsVision:vision},createImage:modelImage,
-    loadReferences:context=>loadJournalTemplateReferences({context,userTemplates:state.userTemplates,db}),guard:assertRun});
-  const output=await runCreativeAgent({...creativeRunParameters({project:sourceProject,draft:sourceDraft,assets:assetsSnapshot,ids,settings:cfg,prompt,userTemplates:state.userTemplates}),images,referenceImages,request:recorder.request,signal:controller.signal,
+  const {images}=await prepareCreativeRunInputs({project:sourceProject,draft:sourceDraft,assets:assetsSnapshot,ids,settings:{...cfg,supportsVision:vision},createImage:modelImage,guard:assertRun});
+  const output=await runCreativeAgent({...creativeRunParameters({project:sourceProject,draft:sourceDraft,assets:assetsSnapshot,ids,settings:cfg,prompt}),images,request:recorder.request,signal:controller.signal,
    onResponse:recorder.response,
    onProgress:progress=>{state.aiProgress=creativeProgressText(progress);publishAIStatus();},
    onScene:vision?async d=>{assertRun();return (await rasterize(d,.7)).toDataURL('image/jpeg',.8);}:undefined,

@@ -34,26 +34,28 @@
 
 ```text
 START_HERE.txt
+scene.json            # 唯一工作场景，运行时自动更新
+package.json          # Node Canvas 预览依赖
 task/
+  BRIEF.txt            # 本次方向、素材别名与尺寸
   context.json
   GUIDE.txt
-  COMPOSITION_GUIDE.txt # 短方案合同，先比较构图再细化图层
   SCENE_REFERENCE.txt   # 按需查阅的图层字段与精确操作
   CRAFT_CATALOG.txt     # 按需查阅的素材工艺
-  knowledge.json
 schema/
+  convenient-page.json
   output.json
   tools.json
   craft-plan.json
 examples/
+  instructions.json
   project.shiyeproject.json
 materials/
   <素材预览>.png
-references/          # 仅在启用参考时存在
 runtime/
   validate.cjs
-  compare.cjs
-  select.cjs
+  compile.cjs
+  apply.cjs
   preview.cjs
   pack.cjs
   glyphs.cjs
@@ -62,14 +64,14 @@ runtime/
 职责：
 
 - `START_HERE.txt`：唯一入口和执行顺序。
+- `task/BRIEF.txt` + `task/GUIDE.txt` + 素材图片：AI 的默认阅读范围；参照 `examples/instructions.json` 写简短指令并直接预览。高级工艺和完整合同只在实际使用时查阅。
 - `task/context.json`：任务事实、纸张、素材映射、物理尺寸、权限、来源快照和任务指纹。
-- `task/GUIDE.txt`：本次内容边界与构图方向。
 - `task/SCENE_REFERENCE.txt` 和 `task/CRAFT_CATALOG.txt`：分别供精确编辑与高级工艺按需查阅，主流程只在 `START_HERE.txt` 写一次。
-- `task/COMPOSITION_GUIDE.txt`：只用素材别名、比例位置、短文字和书写空间描述 2–3 个候选；`compare` 一次生成并排 PNG，`select` 才将选中方案写入 Scene。候选不需手写完整来源元数据。
-- `task/knowledge.json`：能力声明、素材区域、构图灵感、案例和可选参考审计。
-- `schema/output.json`：当前输出合同。
+- 创作时直接完成素材、正文、图形和笔迹的可编辑 Scene，并查看真实 PNG 修改到完成状态；不以粗排缩略图作为成品依据。
+- 任务包不再导出案例参考图、`knowledge.json` 或纯元数据猜测的 `material-planning.json`；模型直接观察本次素材。
+- `schema/convenient-page.json`：简短指令格式；`schema/output.json`：完整 Scene 合同；两者均按需查阅。
 - `schema/craft-plan.json`：当前原子工艺计划合同。
-- `examples/project.shiyeproject.json`：只示意合法字段结构，不是成品模板。
+- `examples/project.shiyeproject.json`：完整 Scene 字段示例，仅用于参考，不是成品模板。
 - `materials/`：本次真实素材预览。
 - `runtime/`：离线校验、预览、打包与字形轮廓工具。
 
@@ -120,6 +122,7 @@ npm run dev -- --port 5173 --strictPort
 
 - `.github/workflows/verify.yml`：构建、单元测试、UI / 路由 / HTTP 冒烟。
 - `.github/workflows/craft-browser.yml`：真实 Chromium 下的素材工艺、选择菜单、缓存、多模态 Craft Plan、穿插、便携 Canvas 预览回归。
+- `.github/workflows/interface-browser.yml`、`recognition-browser.yml`、`storage-integration.yml`：隔离合成数据下的界面、识别与备份浏览器回归；三组检查与 Craft 浏览器检查都通过后再部署。
 
 浏览器回归使用合成数据，不代表实体 iPad Safari、Apple Pencil 或真实付费模型审美验收。
 
