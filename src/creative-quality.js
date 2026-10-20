@@ -47,5 +47,6 @@ export function reviewCreativeDraft(d,{measureText}={}){
   const a=texts[i],b=texts[j],w=Math.min(a.x+a.width/2,b.x+b.width/2)-Math.max(a.x-a.width/2,b.x-b.width/2),h=Math.min(a.y+a.height/2,b.y+b.height/2)-Math.max(a.y-a.height/2,b.y-b.height/2);
   if(w>2&&h>2)warnings.push('文字框相互遮挡：'+(a.agentKey||a.id)+' / '+(b.agentKey||b.id));
  }
- return {materials:(d.items||[]).filter(x=>!x.isParked&&!x.isHidden&&!x.hidden).length,textBlocks:texts.length,graphics:(d.primitives||[]).length,warnings:[...new Set(warnings)],craft:craftUsage(d)};
+ const reading={characters:texts.reduce((sum,t)=>sum+[...String(t.content||'').replace(/\s/g,'')].length,0),excerpts:texts.filter(t=>String(t.content||'').trim()).map(t=>({id:t.id||t.agentKey,text:String(t.content).slice(0,160)}))};
+ return {reading,materials:(d.items||[]).filter(x=>!x.isParked&&!x.isHidden&&!x.hidden).length,textBlocks:texts.length,graphics:(d.primitives||[]).length,warnings:[...new Set(warnings)],craft:craftUsage(d)};
 }

@@ -9,6 +9,7 @@ import {unzipSync,strFromU8} from 'fflate';
 
 test('Q-01/Q-02: content policies distinguish documentary facts, originals and no-text work',()=>{
   const empty=creativeContentBrief();
+  assert.match(empty,/轻松不等于只写金句/);assert.match(empty,/可以顺着读/);assert.match(empty,/不是用户已经经历的事实/);
   assert.match(empty,/灵感随写/);assert.match(empty,/没有可核实的个人事实/);
   assert.match(empty,/不冒充用户曾发生的经历/);
   assert.match(empty,/设计说明写到纸上/);
