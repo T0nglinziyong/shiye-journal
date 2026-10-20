@@ -36,3 +36,20 @@ export async function verifyLoginOtp(verifyOtp,code){
   const {error}=await verifyOtp({token});
   if(error)throw Error(error.message||'验证码错误或已过期');
 }
+
+export async function requestIdentityBinding(auth,kind,value){
+  const identifier=otpIdentifier(kind,value);
+  const {data,error}=await auth.updateUser(identifier);
+  if(error)throw Error(error.message||'发送绑定验证码失败');
+  if(typeof data?.verifyOtp==='function')return {identifier,verifyOtp:data.verifyOtp};
+  if(data?.user)return {identifier,complete:true};
+  throw Error('登录服务未返回绑定验证码，请稍后重试');
+}
+
+export async function confirmIdentityBinding(challenge,code){
+  if(typeof challenge?.verifyOtp!=='function')throw Error('请先发送绑定验证码');
+  const token=String(code||'').trim();
+  if(!/^\d{4,8}$/.test(token))throw Error('请输入收到的验证码');
+  const {error}=await challenge.verifyOtp({...challenge.identifier,token});
+  if(error)throw Error(error.message||'验证码错误或已过期');
+}

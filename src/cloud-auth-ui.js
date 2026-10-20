@@ -197,7 +197,7 @@ export async function startCloudSession(onReady){
       }catch(error){alert('旧资料导出失败：'+error.message);}
     };
     updateShell({account:{username:account.username,isAdmin:account.is_admin===true,
-      userID:user.id,client,onLogout:logout,onOldBackup:backup}});
+      userID:user.id,client,oauthProviders,onLogout:logout,onOldBackup:backup}});
     client.auth.onAuthStateChange(event=>{
       if(event==='SIGNED_OUT'){
         app.hidden=true;void cloudClearCache().catch(console.warn).finally(()=>location.reload());
