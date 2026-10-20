@@ -22,3 +22,19 @@ test('cloud work cover mounts a private image while its preview is pending',()=>
   assert.match(html,/<img[^>]+class="work-reference"[^>]+src="data:image\/svg\+xml/);
   assert.match(html,/正在准备预览/);
 });
+test('an available local work cover takes priority over a loaded cloud cover',()=>{
+  const html=renderToStaticMarkup(React.createElement(SceneCover,{
+    draft:{coverImageID:'project-cover:cloudbase:a'},source:()=> 'blob:cloud-cover',
+    localCover:()=> 'blob:local-cover',projectID:'work-a'
+  }));
+  assert.match(html,/src="blob:local-cover"/);
+  assert.doesNotMatch(html,/src="blob:cloud-cover"/);
+});
+test('the cloud cover waits for a local IndexedDB lookup',()=>{
+  const html=renderToStaticMarkup(React.createElement(SceneCover,{
+    draft:{coverImageID:'project-cover:cloudbase:a'},source:()=> 'blob:cloud-cover',
+    localCover:()=> '',loadLocalCover:async()=>null,projectID:'work-a'
+  }));
+  assert.match(html,/正在准备预览/);
+  assert.doesNotMatch(html,/src="blob:cloud-cover"/);
+});

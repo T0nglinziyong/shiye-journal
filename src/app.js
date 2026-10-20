@@ -679,7 +679,7 @@ function render(){
   };
   const onBatchError=error=>toast(error?.message||'批量操作失败');
   const trashPage=kind=>createElement(RecentlyDeletedPage,{kind,state,source:image,
-    localCover:p=>localWorkCovers.peek(p),cloudEnabled,
+    localCover:p=>localWorkCovers.peek(p),loadLocalCover:p=>localWorkCovers.cached(p),cloudEnabled,
     onCardsChanged:()=>{if(kind!=='project')return;
       view.localWorkCoverDispose?.();
       view.localWorkCoverDispose=localWorkCovers.observe(view);},
@@ -711,7 +711,7 @@ function render(){
         onEditAsset:openDetail,onFilter:(key,value)=>actionStore.dispatch({type:'library/filter',payload:{key,value}})})
     :state.route==='works'
       ?createElement(WorksPage,{state,projects:state.projects,isUntouchedLegacyExample,assets:state.assets,
-        localCover:p=>localWorkCovers.peek(p),cloudEnabled,source:image,onAction:handle,
+        localCover:p=>localWorkCovers.peek(p),loadLocalCover:p=>localWorkCovers.cached(p),cloudEnabled,source:image,onAction:handle,
         tab:parity.workTab,onTabChange:workTab,
         selection:parity,onSelectionToggle:selectionToggle,onBatchAction,onBatchError,
         onEditWork:id=>{state.previewProjectID=id;openProjectMetadata();},viewState:parity,
@@ -794,7 +794,8 @@ function render(){
         onExportPrint:()=>exportMaterials({db,asset,download},[state.detailAssetID])})
     :state.route==='projectPreview'&&state.projects.find(p=>p.id===state.previewProjectID)
       ?ProjectPreviewPage({project:state.projects.find(p=>p.id===state.previewProjectID),source:image,
-        assets:state.assets,localCover:p=>localWorkCovers.peek(p),cloudEnabled,onAction:handle})
+        assets:state.assets,localCover:p=>localWorkCovers.peek(p),
+        loadLocalCover:p=>localWorkCovers.cached(p),cloudEnabled,onAction:handle})
     :state.route==='settings'&&!state.settingsSection
       ?SettingsHomePage({onAction:handle})
     :state.route==='settings'&&state.settingsSection==='界面与素材库'
