@@ -4,6 +4,7 @@ import {builtApp,waitFor} from './built-app.mjs';
 import {indexedDB,IDBKeyRange} from 'fake-indexeddb';
 import {readFile} from 'node:fs/promises';
 import assert from 'node:assert/strict';
+import {installUiCloudBase} from './fixtures/ui-cloudbase-harness.mjs';
 
 const root=new URL('../dist/',import.meta.url);
 const html=await readFile(new URL('index.html',root),'utf8');
@@ -13,7 +14,7 @@ stubCanvas(win);
 Object.defineProperty(win.document,'fonts',{value:{load:async()=>[]},configurable:true});
 win.indexedDB=indexedDB;win.IDBKeyRange=IDBKeyRange;
 win.structuredClone=structuredClone;
-win.fetch=async()=>({ok:true,blob:async()=>new Blob(['image'],{type:'image/png'}),json:async()=>({})});
+installUiCloudBase(win);
 win.URL.createObjectURL=()=>`blob:test-${Math.random()}`;win.URL.revokeObjectURL=()=>{};
 win.eval(await builtApp(root,html,win));
 await new Promise(resolve=>setTimeout(resolve,500));

@@ -33,29 +33,3 @@ export async function checkAccountResetEpoch({client,userId,storage,erase,onProg
  return {wiped,resetId:token,phase:marker?.phase||'complete',
    pending:marker?.phase==='deleting'};
 }
-
-/** Resume an already-authorized deletion after a browser closed mid-cleanup.
- * Only an existing server marker is accepted; this CANNOT start a new reset. */
-export async function finishPendingAccountReset({client,resetId,fetchRequest=fetch,
-  onProgress=()=>{}}){
- if(typeof resetId!=='string'||!resetId)throw Error('没有可恢复的清空任务');
- const {data,error}=await client.auth.getSession();
- if(error||!data.session?.access_token)throw Error('登录已失效，请重新登录');
- let removed=0;
- for(let page=0;page<1000;page++){
-   const response=await fetchRequest('/api/account-reset',{
-     method:'POST',cache:'no-store',
-     headers:{'Content-Type':'application/json',
-       Authorization:'Bearer '+data.session.access_token},
-     body:JSON.stringify({mode:'delete',resetId,confirm:'RESET_MY_DATA'}),
-     signal:AbortSignal.timeout(35000)
-   });
-   const payload=await response.json();
-   if(!response.ok)throw Error(payload.error||'未能继续清空云端文件');
-   removed+=(payload.cosDeleted||0)+(payload.supabaseDeleted||0);
-   onProgress('正在继续删除账号原有私有文件 · 已清理 '+removed+' 个');
-   if(payload.reset)return {deleted:removed,complete:true};
-   if(!payload.more)throw Error('云端清理状态不完整');
- }
- throw Error('待删除文件超过安全上限；下次登录会继续清理');
-}
