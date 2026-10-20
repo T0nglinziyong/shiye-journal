@@ -10,11 +10,11 @@
 
 1. 阅读主题、正文事实、素材加工方式，查看素材和已选参考。
 2. 构思不同的内部构图，选择适合主题和素材的一种。
-3. 在任务包目录运行 `self-test` / `inspect`：创作前检查 Node Canvas、完整 Scene、来源和当前摘要。若缺少渲染器，执行一次 `npm install` 后重试。
+3. 需要局部命令时运行 `inspect` 获取完整 Scene、来源和当前摘要；Node Canvas 会在 `preview` 时检查，缺少渲染器才执行一次 `npm install`，环境排查可用 `self-test`。
 4. `compile` 接受便捷输入；`apply` 按 `baseSceneHash` 原子执行工具和精确操作；也可直接编辑 Scene。
 5. `preview`：结构、实物来源和用量校验后由 Node Canvas 直接生成 `output/preview.png` 和渲染报告，无需打开 HTML。
 6. 实际查看 PNG，检查并修订；改动后重新运行 `preview`。
-7. `pack` 核对最终 Scene 与 PNG 摘要，同时交付可编辑 JSON 和 PNG；缺少 PNG 或图像过期时拒绝完成。
+7. `pack` 核对每件素材的取舍与实际图层、最终 Scene 与 PNG 摘要，同时交付可编辑 JSON 和 PNG；缺少逐件决定、PNG 或图像过期时拒绝完成。完整使用可以是最佳选择，不按工艺数量评分。
 8. App 使用相同合同独立检查导入结果，再用共享渲染器呈现。
 
 任何一次原子编辑失败都保留原工作文件。修改后清除旧交付；直接改文件后，旧预览无法通过 pack。运行时不联网、不使用账号或密钥。JSON 上限 8 MB；组深度、节点和路径点数沿用原生数据预算。
@@ -35,7 +35,7 @@
 
 从一张尚未使用的原素材剪出多个对象时，Craft Plan 的 `pieces` 分别描述看图轮廓（`observed_region` + `outlineRatio`）、毫米几何路径（`geometryMM`）或矩形裁片，并用 `sourcePartitions` 声明同一来源。默认将未使用的连通区域生成为隐藏备选余料；余料与可见裁片共享固定原图引用和来源面积账本，之后能单独放回画布或继续拆分。已有画布父片沿用 `consume` + `parentId`，不能从原图重复取材。视觉轮廓由 AI 从预览图估计，不等同自动高精度人像分割；发丝等边界须实际看图复核。
 
-`runtime/apply.cjs` 的精确操作新增 `repeat-stamp`、`replace-material`、`reuse-layout` 与 `glyph-knockout`；参数及边界见导出包的 `task/EDITING.txt`。四者都先作用于临时 Scene，整批通过相同来源、物理尺寸及结构校验后才写回。曲线文字存于普通 text 节点的 `curveHeight`，编辑画布与导出共用绘制函数。字体镂空只读取创作者本机授权字体，作品中仅留数值路径。
+`runtime/apply.cjs` 的精确操作新增 `repeat-stamp`、`replace-material`、`reuse-layout` 与 `glyph-knockout`；参数及边界见导出包的 `task/SCENE_REFERENCE.txt`。四者都先作用于临时 Scene，整批通过相同来源、物理尺寸及结构校验后才写回。曲线文字存于普通 text 节点的 `curveHeight`，编辑画布与导出共用绘制函数。字体镂空只读取创作者本机授权字体，作品中仅留数值路径。
 
 ## 审美与证据
 

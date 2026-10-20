@@ -60,6 +60,7 @@ try{
   }
   await click('#top-settings','.settings-list');
   await click('[data-act="settings-open"][data-val="AI 与创作"]','#setting-ai-send-reference');
+  assert.equal(await evaluate('document.querySelector("#setting-ai-final-visual-review").checked'),true);
   assert.ok(await evaluate('!document.querySelector("#setting-ai-images")'));
   assert.ok(await evaluate('!document.querySelector("#setting-ai-reference-page")'));
   assert.ok(await evaluate('document.querySelector("#setting-ai-send-reference").closest("label").textContent.includes("手帐案例")'));
@@ -78,6 +79,7 @@ try{
   await click('.dialog-close');
   await click('#top-settings','.settings-list');
   await click('[data-act="settings-open"][data-val="AI 与创作"]','#setting-ai-delivery');
+  assert.equal(await evaluate('document.querySelector("#setting-ai-final-visual-review").checked'),true,'saving AI settings must preserve final visual review');
   await evaluate('(()=>{const select=document.querySelector("#setting-ai-delivery");select.value="image";select.dispatchEvent(new Event("change",{bubbles:true}));})()');
   await click('[data-act="settings-save"]','.matching-page');
   await click('[data-act="match-export-gpt"]','#offline-gpt-prompt');

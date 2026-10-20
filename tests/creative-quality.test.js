@@ -75,7 +75,7 @@ test('API labels material priorities and has a meaningful-content rule for spars
  assert.match(text,/优先级 必须使用/);assert.match(text,/优先级 优先使用/);assert.match(text,/优先级 可以使用（仅备选）/);
  assert.doesNotMatch(text,/excluded/);
  assert.match(messages[0].content,/留白是否服务于主题/);
- assert.match(messages[1].content[0].text,/不按数量或覆盖率评分/);
+ assert.match(messages[1].content[0].text,/完整使用可以是最佳选择，不按工艺或素材数量评分/);
  assert.doesNotMatch(messages[1].content[0].text,/至少\d+字|覆盖约 \d+%/);
 });
 test('image API sends a few source templates only when preset references are enabled',()=>{

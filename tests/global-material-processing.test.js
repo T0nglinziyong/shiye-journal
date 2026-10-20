@@ -24,6 +24,6 @@ test('API prompt and both creation packages use only the shared material process
     assert.equal(source.materialUseHints,undefined);
     assert.equal(source.materialUseRequired,undefined);
     assert.match(decode(files['START_HERE.txt']),/保留 source 原样/);
-    if(generationMode==='agent')assert.match(decode(files['task/CRAFT_GUIDE.txt']),/统一遵守 source\.processing/);
+    if(generationMode==='agent')assert.match(decode(files['task/CRAFT_CATALOG.txt']),/统一遵守 source\.processing/);
   }
 });

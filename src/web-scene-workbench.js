@@ -16,6 +16,7 @@ import {project} from './domain.js';
 import {commonShapes,advancedShapes} from './editor-tools-model.js';
 import {reviewCreativeDraft} from './creative-quality.js';
 import {replaceSceneMaterial,repeatSceneStamp,reuseSceneLayout,knockoutSceneGlyphs} from './scene-advanced-ops.js';
+import {validateMaterialDecisions} from './creation-material-decisions.js';
 
 export {webSceneContract} from './web-scene-contract.js';
 import {webSceneContract} from './web-scene-contract.js';
@@ -96,8 +97,8 @@ export function validateWebScene(page,source,assets,{final=true}={}){
   }
   return d;
 }
-export function webSceneDocument(source,page,title='新的手帐'){
-  return {format:'shiye-editable-project',version:1,source:structuredClone(source),title:String(title).slice(0,80),page:Object.fromEntries(Object.entries(structuredClone(page)).filter(([key])=>pageFields.has(key)))};
+export function webSceneDocument(source,page,title='新的手帐',materialDecisions=[]){
+  return {format:'shiye-editable-project',version:1,source:structuredClone(source),title:String(title).slice(0,80),materialDecisions:structuredClone(materialDecisions),page:Object.fromEntries(Object.entries(structuredClone(page)).filter(([key])=>pageFields.has(key)))};
 }
 export function importWebScene(input,assets,{trustedSource=null}={}){
   if(input.tools!==undefined||input.plan!==undefined||!input.page)throw Error('网页版最终仅交付 page Scene 快照，工具与计划请先 compile');
@@ -105,6 +106,7 @@ export function importWebScene(input,assets,{trustedSource=null}={}){
   assertTaskFingerprintSync(input.source);
   if(trustedSource&&!same(input.source,trustedSource))throw Error('作品来源与所选原始任务不一致');
   const d=validateWebScene(input.page,input.source,assets),s=input.source;
+  if(input.materialDecisions?.length)validateMaterialDecisions(input.materialDecisions,d,s);
   recordManagedChanges(attachSceneV2(structuredClone(input.source.baseDraft)),d);
   d.agentRun={status:'finished',visualReview:'须在 App 复核最终画面'};
   const p=project(String(input.title||'新的手帐').slice(0,80),{mode:s.mode,ratio:s.ratio,style:s.styles?.[0]||'free'});
@@ -114,6 +116,7 @@ export function importWebScene(input,assets,{trustedSource=null}={}){
   p.draftHistorySnapshots={[d.id]:structuredClone(d)};
   p.candidateAssetIDs=s.materials.map(m=>m.assetID);p.requiredAssetIDs=s.requiredAssetIDs||[];p.materialPriority=structuredClone(s.materialPriority);p.styles=s.styles;p.purposes=s.purposes;
   inheritCreationBrief(p,s);p.creationVerification={structure:'passed',physical:'current-rules-passed',preview:'unverified',reading:'pending',sourceTaskId:s.bundleId};
+  if(input.materialDecisions?.length)p.creationMaterialDecisions=structuredClone(input.materialDecisions);
   return p;
 }
 export function applyWebSceneCommands(document,commands,assets){
@@ -157,7 +160,7 @@ export function applyWebSceneCommands(document,commands,assets){
       else throw Error('未知精确编辑操作：'+edit.op);
     }
   }
-  const next=webSceneDocument(source,draft,commands.title??document.title);
+  const next=webSceneDocument(source,draft,commands.title??document.title,document.materialDecisions);
   validateWebScene(next.page,source,assets,{final:false});
   return next;
 }
@@ -177,7 +180,7 @@ export function compileWebSceneInput(document,input,assets){
   const result=applyToolCalls({tools},base,frozen,Object.fromEntries(source.materials.map(m=>[m.alias,m.assetID])),{processing:source.processing||'不预设',requiredAssetIDs:source.requiredAssetIDs,visualAssetIDs:source.previewHashes?source.materials.map(m=>m.assetID):[],textMode:source.textMode,allowNoText:source.textMode==='none',deterministicTextLayout:true});
   const error=result.results.find(r=>!r.ok);if(error)throw Object.assign(Error(error.detail),{code:error.code});
   stabilizeImportedCraftScene(result.draft,base,source.bundleId);
-  const doc=webSceneDocument(source,result.draft,input.title??document.title);
+  const doc=webSceneDocument(source,result.draft,input.title??document.title,document.materialDecisions);
   validateWebScene(doc.page,source,assets,{final:false});return doc;
 }
 

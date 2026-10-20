@@ -61,7 +61,7 @@ test('one exported task carries images, exact versions, multimodal instructions 
  const png=Uint8Array.from([137,80,78,71,13,10,26,10]);
  const handoff=await createOfflineHandoff({project:p,assets:[a],aliases:{m1:a.id},previews:[{alias:'m1',bytes:png}],settings:{generationMode:'agent'}});
  const files=unzipSync(new Uint8Array(await handoff.blob.arrayBuffer()));
- assert.match(strFromU8(files['START_HERE.txt']),/schema\/craft-plan\.json/);assert.match(strFromU8(files['START_HERE.txt']),/独立、可编辑/);
+ assert.match(strFromU8(files['START_HERE.txt']),/schema\/craft-plan\.json/);assert.match(strFromU8(files['START_HERE.txt']),/可编辑/);
  assert.ok(files['runtime/glyphs.cjs']);assert.ok(files['schema/craft-plan.json']);assert.ok(files['materials/m1.png']);
  const envelope={format:'shiye-editable-project',version:1,source:handoff.source,plan:plan(handoff.source.baseDraft,a)};
  const imported=compileAndImport(JSON.stringify(envelope),[a],{trustedSource:handoff.source});assert.equal(imported.drafts[0].items.length,1);

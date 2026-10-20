@@ -1748,6 +1748,8 @@ export function SettingsAIPage({settings,preferences,onAction}){
       <AIToggle id="auto-recommendations" label="把建议搭配加入候选素材" checked={cfg.autoIncludeRecommendations}/>
       <AIToggle id="structure-reference" label="参考样例的图文结构" checked={cfg.includeStructureReference}/>
       <AIToggle id="send-reference" label="发送匹配风格与用途的手帐案例" checked={cfg.sendPresetReferences}/>
+      <AIToggle id="final-visual-review" label="完成前让视觉模型检查最终画面" checked={cfg.finalVisualReview}/>
+      <p>支持图片输入的模型会在最终渲染后检查画面；无图片能力或请求预算不足时，会如实标记未完成复核。</p>
       <label>补充版式指导<textarea id="setting-ai-layout-prompt" placeholder="留空使用默认指导"
         defaultValue={cfg.customLayoutPrompt}/></label>
     </section>

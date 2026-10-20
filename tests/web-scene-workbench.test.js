@@ -9,6 +9,7 @@ import {attachSceneV2} from '../src/scene-v2.js';
 import {craftSceneHash} from '../src/craft-fingerprint.js';
 import {assetSourceRevision} from '../src/material-anatomy.js';
 import {applyWebSceneCommands,compileWebSceneInput,validateWebScene,webSceneDocument} from '../src/web-scene-workbench.js';
+import {validateMaterialDecisions} from '../src/creation-material-decisions.js';
 import {linkTestCanvas,tinyPNG} from './offline-canvas-test-support.mjs';
 const assets=[{id:'a',title:'小纸片',kind:'sticker',blobId:'fixed-a',physicalWidthMM:30,physicalHeightMM:40}];
 const fixture=async(p=project('图层测试'),sourceAssets=assets,withImages=false)=>{
@@ -18,6 +19,18 @@ const fixture=async(p=project('图层测试'),sourceAssets=assets,withImages=fal
  return {task,files,doc:JSON.parse(strFromU8(files['examples/project.shiyeproject.json']))};
 };
 const mask={outer:[[0,0],[1,0],[1,1],[0,1]],holes:[[[.2,.2],[.3,.2],[.3,.3],[.2,.3]]]};
+test('material decisions agree with visible use and real processing, without a craft quota',async()=>{
+ const {doc}=await fixture();
+ const intact=[{asset:'m1',choice:'intact',reason:'保留纸片的完整边界，以真实尺寸作为主体'}];
+ assert.deepEqual(validateMaterialDecisions(intact,doc.page,doc.source),intact);
+ assert.throws(()=>validateMaterialDecisions([{...intact[0],choice:'crafted'}],doc.page,doc.source),/加工声明/);
+ const cropped=structuredClone(doc.page);cropped.layers.find(n=>n.type==='material').cropRect={x:0,y:0,width:.8,height:1};
+ assert.deepEqual(validateMaterialDecisions([{...intact[0],choice:'crafted'}],cropped,doc.source)[0].choice,'crafted');
+ assert.throws(()=>validateMaterialDecisions(intact,cropped,doc.source),/加工声明/);
+ const hidden=structuredClone(doc.page);hidden.layers.find(n=>n.type==='material').hidden=true;
+ assert.deepEqual(validateMaterialDecisions([{...intact[0],choice:'omitted'}],hidden,doc.source)[0].choice,'omitted');
+ assert.throws(()=>validateMaterialDecisions(intact,hidden,doc.source),/可见图层/);
+});
 test('native snapshot preserves pressure ink, nested groups, typography, masks and multi-color vectors',async()=>{
  const {doc,task}=await fixture();
  doc.page.layers.push({id:'group',type:'group',name:'组合',opacity:.8,blendMode:'multiply',vectorMask:mask,children:[
@@ -153,10 +166,16 @@ test('Node Canvas runtime renders PNG and refuses a stale or changed snapshot',a
   const capture=JSON.parse(await readFile(join(dir,'output/preview-capture.json'),'utf8'));
   assert.equal(craftSceneHash(importEditableWork(JSON.stringify(doc),assets,{trustedSource:task.source}).drafts[0]),capture.sceneHash);
   assert.deepEqual([...await readFile(join(dir,'output/preview.png'))].slice(0,8),[137,80,78,71,13,10,26,10]);
+  const undecided=run('pack');assert.equal(undecided.status,1,'pack requires a decision for each material');
+  assert.match((await readFile(join(dir,'output/validation-report.json'),'utf8')),/materialDecisions/);
+  doc.materialDecisions=[{asset:'m1',choice:'intact',reason:'保留纸片的完整轮廓，作为本页视觉主体'}];
+  await writeFile(join(dir,'scene.json'),JSON.stringify(doc));
   const packed=run('pack');assert.equal(packed.status,0,packed.error?.message||packed.stderr||packed.stdout);
   const manifest=JSON.parse(await readFile(join(dir,'output/delivery-manifest.json'),'utf8'));
   assert.deepEqual(manifest.deliverables,['project.shiyeproject.json','preview.png']);
   assert.equal(manifest.sceneHash,capture.sceneHash);
+  const delivered=JSON.parse(await readFile(join(dir,'output/project.shiyeproject.json'),'utf8'));
+  assert.deepEqual(delivered.materialDecisions,doc.materialDecisions);
   doc.page.layers.at(-1).content='改变之后';await writeFile(join(dir,'scene.json'),JSON.stringify(doc));
   assert.equal(run('pack').status,1,'stale preview cannot validate a changed scene');
   await assert.rejects(readFile(join(dir,'output/project.shiyeproject.json')),{code:'ENOENT'});

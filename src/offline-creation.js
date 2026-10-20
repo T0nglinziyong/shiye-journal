@@ -4,7 +4,7 @@ import {attachSceneV2} from './scene-v2.js';
 import {itemFromAsset,textBlock} from './domain.js';
 import {previewImageFormat} from './offline-preview.js';
 import {webResultPrompt} from './creation-methods.js';
-import {offlineCreationPlanningData,offlineVisualReviewChecklist} from './offline-creation-workflow.js';
+import {offlineCreationPlanningData} from './offline-creation-workflow.js';
 import {multimodalCraftGuide} from './craft-vision.js';
 import {freezeCraftTask,craftTaskInstructions} from './craft-task.js';
 import {materialCraftGuide} from './material-craft-guide.js';
@@ -112,30 +112,25 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
   }
   const guide=[creativeContentBrief({policy:source.contentPolicy,userText:source.userText,providedFacts:source.providedFacts,topic:source.intent,purposes:source.purposes}),
     creativePageBrief({styles:source.styles,purposes:source.purposes,textMode:source.textMode,contentPolicy:source.contentPolicy,textPresentation:source.textPresentation,userText:source.userText,theme:source.intent,pageMode:source.mode}),
-    webArtDirection(source),'所有静态对象在 page.layers 中编辑；完整字段与命令见 task/EDITING.txt。',settings.customLayoutPrompt||'',settings.includeStructureReference===false?'':structureReferenceGuide].join('\n\n');
+    webArtDirection(source),'所有静态对象在 page.layers 中编辑；需要精确字段与命令时读 task/SCENE_REFERENCE.txt。',settings.customLayoutPrompt||'',settings.includeStructureReference===false?'':structureReferenceGuide].join('\n\n');
   const files={
     'START_HERE.txt':strToU8(webWorkbenchInstructions),
     'scene.json':strToU8(JSON.stringify(work,null,2)),
     'package.json':strToU8(JSON.stringify({private:true,type:'commonjs',dependencies:{canvas:'3.2.3'}},null,2)),
     'task/context.json':strToU8(JSON.stringify(context,null,2)),
-    'task/WORKFLOW.txt':strToU8(webWorkbenchInstructions),
-    'task/EDITING.txt':strToU8(webEditingGuide),
-    'task/CAPABILITIES.json':strToU8(JSON.stringify(webSceneCapabilities,null,2)),
+    'task/SCENE_REFERENCE.txt':strToU8(webEditingGuide),
     'task/material-planning.json':strToU8(JSON.stringify(offlineCreationPlanningData(source,selected,{mode,hasImages:showImages}),null,2)),
-    'task/VISUAL_REVIEW.txt':strToU8(offlineVisualReviewChecklist+'\n\n'+webArtDirection(source)),
     'task/GUIDE.txt':strToU8(guide),
-    'task/CRAFT_GUIDE.txt':strToU8(craftTaskInstructions+'\n统一遵守 source.processing；没有逐件用法覆盖。\n'+materialCraftGuide+'\n'+multimodalCraftGuide+'\n逐件查看 materials/ 的实际图案，在 decisions 说明取舍；可用 observed_region 引用本次看图观察。完整使用可以是最佳决定，不设工艺数量指标。'),
+    'task/CRAFT_CATALOG.txt':strToU8('按需选用素材工艺。先观察实际预览并考虑完整使用、取局部、边缘或蒙版加工、拆分、叠压关系；只执行有理由的处理，不设工艺数量指标。\nscene.json 的 materialDecisions 对每个 alias 记录 {"asset":"m1","choice":"intact|crafted|omitted","reason":"观察到的图案或轮廓，以及采用或舍弃该处理的理由"}。intact 表示可见且没有加工，crafted 表示可见且有真实裁切、蒙版、胶带或其他可检查的加工，omitted 表示未在可见画面使用。必须与最终图层一致；说明不写入正文。\n统一遵守 source.processing；没有逐件用法覆盖。\n'+craftTaskInstructions+'\n'+materialCraftGuide+'\n'+multimodalCraftGuide),
     'task/knowledge.json':strToU8(JSON.stringify(knowledge,null,2)),
     'schema/output.json':strToU8(JSON.stringify(webSceneContract,null,2)),
-    'schema/scene.json':strToU8(JSON.stringify(webSceneContract,null,2)),
     'schema/tools.json':strToU8(JSON.stringify(offlineContract('agent',{cropPx:false}),null,2)),
     'schema/convenient-page.json':strToU8(JSON.stringify(directPageContract,null,2)),
     'schema/craft-plan.json':strToU8(JSON.stringify(toolContracts.apply_craft_plan,null,2)),
     'examples/project.shiyeproject.json':strToU8(JSON.stringify(example,null,2)),
     'examples/instructions.json':strToU8(JSON.stringify({tools:[{name:'compose_page',arguments:{materials:[{asset:selected[0].alias,piece:'hero',x:.5,y:.45}],paper:{color:'#fcfaf0',pattern:'plain'}}}]},null,2)),
     'runtime/glyphs.cjs':strToU8(offlineGlyphSource),
-    'runtime/validate.cjs':strToU8(offlineValidateSource),
-    'runtime/README.txt':strToU8(webWorkbenchInstructions+'\n\n'+webEditingGuide)
+    'runtime/validate.cjs':strToU8(offlineValidateSource)
   };
   for(const name of ['inspect','compile','apply','preview','pack','self-test'])files['runtime/'+name+'.cjs']=strToU8(`process.argv.splice(2,0,'${name}');require('./validate.cjs');\n`);
   for(const entry of chosen)if(validAlias(entry.alias)&&source.materials.some(item=>item.alias===entry.alias))files[packagePreviewPath('materials',entry.alias,entry.bytes,{transparent:true})]=entry.bytes;

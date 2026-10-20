@@ -1,15 +1,13 @@
 import {creativeTypographyGuide} from './creative-typography.js';
 import {visualStyleBrief} from './creative-style-brief.js';
 export const webWorkbenchInstructions=`拾页 · 可编辑手帐创作工作台
-保留 source 原样；仅修改 title 和工作 Scene。
-唯一权威：scene.json 的 page 是 App 原生 Scene v2（sceneVersion=2）。最终返回这个完整图层 JSON 和对应 PNG 预览图；工具和 Craft Plan 都是修改它的输入，不是另外两种交付格式。
-1. 先读 task/WORKFLOW.txt 与 task/context.json、task/GUIDE.txt（本次主题、要求和内容）、task/CRAFT_GUIDE.txt、task/CAPABILITIES.json、schema/output.json（同 schema/scene.json）。观察 materials/ 所有候选图，区分真实图像内容、元数据与推测。references/ 仅供审美参考，不是可用素材。
-2. 在任务包目录运行 node runtime/self-test.cjs 检查 Node Canvas 是否可用；如果缺少渲染器，执行一次 npm install 后重试，勿先花时间构图。node runtime/inspect.cjs 输出完整图层、来源、当前 sceneHash 和质量提示。工作文件预先包含当前作品，不能以示例替换用户已有画面。
-3. 可以直接编辑 page.layers（原生画布单位，非比例），也可写 commands.json 后 node runtime/apply.cjs commands.json。命令必须含 inspect 得到的 baseSceneHash；tools 使用 schema/tools.json 的便捷工具，edits 使用 task/EDITING.txt 的精确操作。两者写回同一工作文件，整批失败不改文件。
-4. 初次整页构思也可以写 instructions.json，内容为 {tools:[...]}、{plan:{...}} 或 {page:比例坐标便捷页面}，执行 node runtime/compile.cjs instructions.json。这些是临时输入，编译后工作文件始终是原生 Scene；直接修改最终 Scene 无需回译成工具。高级 observations、pieces、weaves 见 schema/craft-plan.json，全部编译为独立、可编辑图层。
-5. node runtime/preview.cjs 重新校验并用同一 Scene 渲染器直接生成 output/preview.png、preview-capture.json、scene-summary.json 和 validation-report.json；无需打开 HTML。构图预览.svg 只是粗略辅助图，不得当成最终 PNG。
-6. 必须实际查看 output/preview.png，按 task/VISUAL_REVIEW.txt 检查内容、可读性、层次和手帐风格；需要时局部调整并重新运行 preview。在聊天中展示 PNG（用户允许时）。报告或文件存在不等于看过图；Node 不为你判断好看。
-7. node runtime/pack.cjs 校验最终 Scene 与 PNG 摘要，生成 output/project.shiyeproject.json、delivery-manifest.json。任何再次修改都须重新 preview 和 pack。文件模式交付 output/project.shiyeproject.json 与 output/preview.png 两个可下载文件；复制文本模式交付 output/preview.png 下载链接和一个完整的紧凑单行 JSON 代码围栏（内容来自 pack 生成的同一 JSON），不能另生成 JSON 文件。勿交付工具日志或 ZIP 来代替图层。
+保留 source 原样；scene.json 的 page 是唯一权威的原生 Scene v2，工具和 Craft Plan 只是编辑它的输入。最终同时交付这一场景的完整 JSON 和 PNG。
+1. 先读 task/context.json、task/GUIDE.txt（本次主题、要求和内容），逐件观察 materials/ 的图案、轮廓与文字。references/ 只供审美参考，不是可用素材。已有 scene.json 是当前作品，不用 examples/ 覆盖。
+2. 比较两种内部构图后选择一种。逐件决定完整使用、真实加工或舍弃；在 scene.json 的 materialDecisions 写 alias、choice 和具体 reason。choice 为 intact / crafted / omitted；不能仅凭素材标题推断图案，也不按加工数量评分。交付时会将决定与实际图层核对。加工适用条件与做法见 task/CRAFT_CATALOG.txt，需精确编辑时再读 task/SCENE_REFERENCE.txt。
+3. 默认直接编辑 scene.json 的 page.layers。也可写 instructions.json 并运行 node runtime/compile.cjs instructions.json；输入可为 {tools:[...]}、{plan:{...}} 或 {page:比例坐标便捷页面}。局部操作可运行 node runtime/inspect.cjs 取 baseSceneHash，再写 commands.json 并运行 node runtime/apply.cjs commands.json。合同分别见 schema/output.json、schema/tools.json、schema/craft-plan.json；所有路径都写回同一 Scene。
+4. 运行 node runtime/preview.cjs 校验并直接生成 output/preview.png，不需 HTML。若缺少 Node Canvas，执行一次 npm install 后重试；需要排查环境时可运行 node runtime/self-test.cjs。构图预览.svg 仅供粗略参考。
+5. 必须实际查看 output/preview.png，检查素材是否显示、主体与阅读路线、文字可读性、裁切边缘及层次；发现问题就改对应 Scene 节点并重新 preview。生成文件不等于看过图片；不得伪造视觉验收。
+6. 运行 node runtime/pack.cjs 核对逐件取舍、最终 Scene 与 PNG 摘要，生成 output/project.shiyeproject.json、delivery-manifest.json。改动后必须重新 preview 和 pack。文件模式交付 output/project.shiyeproject.json 与 output/preview.png 两个可下载文件；复制文本模式交付 output/preview.png 下载链接和一个完整的紧凑单行 JSON 代码围栏（来自 pack 的同一 JSON），不能另生成 JSON 文件。勿用工具日志或 ZIP 代替图层。
 无法生成 PNG 时说明交付未完成；scene.json 可作为未视觉验收的工作稿保留。字体随运行环境变化，最终字体仍须在拾页应用内核对。不得捏造预览或用另画的图片代替。`;
 export const webEditingGuide=`坐标与能力
 page 为 App 原生 Scene。x/y 是画布中的中心坐标；width/height/fontSize/笔宽使用画布单位；毫米换算=毫米*canvas.height/physicalPageHeightMM。ink.points 是画布绝对坐标，p 是压感。vectorMask 是 0–1，组合蒙版参照整页；组合 children 不改成局部坐标。zIndex 在各自兄弟节点中决定叠放。

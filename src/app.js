@@ -903,7 +903,7 @@ function readAIForm(){
     sendPresetReferences:q('send-reference').checked,
     autoIncludeRecommendations:q('auto-recommendations').checked,
     requireAllCandidates:q('require-all').checked,
-    includeThumbnails:vision,customVision:false,finalVisualReview:false,
+    includeThumbnails:vision,customVision:false,finalVisualReview:q('final-visual-review').checked,
     temperature:q('temperature').value,
     requestTimeout:q('timeout').value,customLayoutPrompt:q('layout-prompt').value};
 }

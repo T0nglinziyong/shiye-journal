@@ -40,27 +40,3 @@ export function offlineCreationPlanningData(source,selected,{mode='agent',hasIma
     }
   };
 }
-
-export const offlineVisualReviewChecklist=[
-  '拾页 · 最终预览验收清单',
-  '',
-  '结构与物理：',
-  '[ ] runtime/validate.cjs 通过；任务 source 与资产身份不变',
-  '[ ] required 全部落实；preferred 可以取舍；没有凭空新增/放大/复制实体',
-  '[ ] 裁切和负形边缘正确，未误裁主要图案与可读印刷文字',
-  '',
-  '实际画面（不能只看 output/构图预览.svg）：',
-  '[ ] 运行 runtime/preview.cjs 得到同一 Scene 的 output/preview.png，实际打开并检查图片；在聊天中展示（如果用户允许）',
-  '[ ] 使用的素材都真正解码显示，透明处无意外白边，层次和旋转合乎预期',
-  '[ ] 文字无重叠、裁断、不可读或方框；字体缺失时明确记为未验收',
-  '[ ] 检查双页节奏、主体关系、正文是否像真实记录而非装饰图注',
-  '[ ] 不机械排方格，也不为复杂而强制加工',
-  '[ ] 预览与最终 JSON 同一版，改动后重新预览',
-  '',
-  '证据等级：',
-  'Node 校验：仅表明结构与物理规则合法',
-  '构图预览.svg：近似辅助参考，不构成 Canvas 视觉验收',
-  'Node Canvas PNG 已生成：仅说明当前场景可以渲染，仍需检查画面与文字',
-  'PNG 经检查：才能称当前预览环境完成视觉复核；最终高清与设备字体仍以拾页应用为准',
-  '不得伪造已审核截图、验证状态或“同源渲染通过”的断言'
-].join('\n');

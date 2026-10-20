@@ -110,13 +110,15 @@ test('web handoff exposes unified Scene and internal tool schemas and concise in
   const p=project('测试创作',{style:'韩系清新'}),args={p};
   const agent=await make({p,settings:{generationMode:'agent',includeThumbnails:false,includeStructureReference:false}}),agentFiles=await filesOf(agent);
   assert.equal(agent.filename,'拾页-GPT创作任务.zip');assert.match(strFromU8(agentFiles['START_HERE.txt']),/runtime\/preview\.cjs/);
-  assert.match(strFromU8(agentFiles['START_HERE.txt']),/task\/CRAFT_GUIDE\.txt/);
-  const craftGuide=strFromU8(agentFiles['task/CRAFT_GUIDE.txt']);
-  assert.match(craftGuide,/逐件查看 materials\//);assert.match(craftGuide,/decisions/);
+  assert.match(strFromU8(agentFiles['START_HERE.txt']),/task\/CRAFT_CATALOG\.txt/);
+  const craftGuide=strFromU8(agentFiles['task/CRAFT_CATALOG.txt']);
+  assert.match(craftGuide,/观察实际预览/);assert.match(craftGuide,/materialDecisions/);
   assert.match(craftGuide,/observed_region/);assert.match(craftGuide,/不设工艺数量指标/);
   const agentContract=JSON.parse(strFromU8(agentFiles['schema/tools.json']));assert.ok(agentContract.apply_craft_plan&&agentContract.edit_materials);
   const direct=await make({p,settings:{generationMode:'direct',includeThumbnails:false}}),directFiles=await filesOf(direct);
-  assert.ok(directFiles['task/CRAFT_GUIDE.txt']);
+  assert.ok(directFiles['task/CRAFT_CATALOG.txt']);
+  assert.ok(directFiles['task/SCENE_REFERENCE.txt']);
+  for(const duplicate of ['task/WORKFLOW.txt','task/EDITING.txt','task/CAPABILITIES.json','task/VISUAL_REVIEW.txt','schema/scene.json','runtime/README.txt'])assert.equal(agentFiles[duplicate],undefined,duplicate);
   assert.ok(JSON.parse(strFromU8(directFiles['examples/project.shiyeproject.json'])).page);
   assert.ok(JSON.parse(strFromU8(agentFiles['examples/project.shiyeproject.json'])).page);
   assert.deepEqual(JSON.parse(strFromU8(directFiles['schema/output.json'])),JSON.parse(strFromU8(agentFiles['schema/output.json'])));
@@ -205,11 +207,11 @@ test('sync-enabled API keys are never embedded in a model-facing task package',a
 
 test('ZIP internal workflow honors copy-text delivery and internalizes visual self-review',async()=>{
  const output=await make(),files=await filesOf(output);
- for(const path of ['START_HERE.txt','task/WORKFLOW.txt','runtime/README.txt']){
+ for(const path of ['START_HERE.txt']){
   const guide=strFromU8(files[path]);
   assert.ok(guide.includes('复制文本模式交付 output/preview.png'));
   assert.match(guide,/不能另生成 JSON 文件/);
   assert.ok(!guide.includes('最终必须同时交付 output/project'));
  }
- assert.match(strFromU8(files['task/VISUAL_REVIEW.txt']),/内部看图自评，不要在最终回复中输出/);
+ assert.match(strFromU8(files['task/GUIDE.txt']),/内部看图自评，不要在最终回复中输出/);
 });

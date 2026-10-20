@@ -31,10 +31,12 @@ START_HERE.txt
 task/
   context.json
   GUIDE.txt
-  CRAFT_GUIDE.txt       # 工具模式：逐件取材、加工权限与工艺参数
+  SCENE_REFERENCE.txt   # 按需查阅的图层字段与精确操作
+  CRAFT_CATALOG.txt     # 按需查阅的素材工艺
   knowledge.json
 schema/
   output.json
+  tools.json
   craft-plan.json
 examples/
   project.shiyeproject.json
@@ -46,20 +48,22 @@ runtime/
   preview.cjs
   pack.cjs
   glyphs.cjs
-  README.txt
 ```
 
 职责：
 
 - `START_HERE.txt`：唯一入口和执行顺序。
 - `task/context.json`：任务事实、纸张、素材映射、物理尺寸、权限、来源快照和任务指纹。
-- `task/GUIDE.txt`：内容边界、构图方法和素材工艺。
+- `task/GUIDE.txt`：本次内容边界与构图方向。
+- `task/SCENE_REFERENCE.txt` 和 `task/CRAFT_CATALOG.txt`：分别供精确编辑与高级工艺按需查阅，主流程只在 `START_HERE.txt` 写一次。
 - `task/knowledge.json`：能力声明、素材区域、构图灵感、案例和可选参考审计。
 - `schema/output.json`：当前输出合同。
 - `schema/craft-plan.json`：当前原子工艺计划合同。
 - `examples/project.shiyeproject.json`：只示意合法字段结构，不是成品模板。
 - `materials/`：本次真实素材预览。
 - `runtime/`：离线校验、预览、打包与字形轮廓工具。
+
+交付前须在 `scene.json` 的 `materialDecisions` 中逐件说明完整使用、真实加工或舍弃，并写出基于图像观察的理由。`pack` 会核对声明与实际可见图层及加工字段，不要求工艺件数；最终 JSON 保留这些取舍，PNG 仍须来自同一 Scene 并经过实际看图。
 
 运行时只读取 `task/context.json`，缺少当前任务指纹、来源快照、schema 指纹或当前目录标记时直接拒绝，不猜测旧格式。
 
