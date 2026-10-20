@@ -1,11 +1,11 @@
 import {cloudEnabled,cloudClient} from './cloud-session.js';
-import {cloudApiUrl} from './cloud-api-origin.js';
+import {cloudApiUrl,cloudApiRequest} from './cloud-api-origin.js';
 import {validateJournalPanel} from './journal-source-panels.js';
 
 const cache=new Map(),pending=new Map(),panelCache=new Map(),panelPending=new Map();let owner=null,epoch=0,active=0;const waiters=[];
 async function readLane(task){if(active>=4)await new Promise(resolve=>waiters.push(resolve));active++;try{return await task();}finally{active--;waiters.shift()?.();}}
 export function clearJournalPresetImages(){epoch++;for(const url of [...cache.values(),...panelCache.values()])URL.revokeObjectURL(url);cache.clear();pending.clear();panelCache.clear();panelPending.clear();owner=null;}
-export async function loadJournalPresetImage(number,{accountId,request=fetch}={}){
+export async function loadJournalPresetImage(number,{accountId,request=cloudApiRequest}={}){
   if(!Number.isInteger(number)||number<1||number>70)throw Error('预设图编号无效');
   if(!cloudEnabled)return null;
   if(accountId&&owner!==accountId){clearJournalPresetImages();owner=accountId;}
