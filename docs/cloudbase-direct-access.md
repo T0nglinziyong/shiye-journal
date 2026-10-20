@@ -1,15 +1,19 @@
-# CloudBase-only 浏览器与 COS 接入
+# CloudBase 直连与同步
 
-浏览器通过 `@cloudbase/js-sdk` 直连 CloudBase Auth/RDB，并使用 `app.callFunction({name:'shiye-api'})` 获取 COS 签名与服务能力。不存在托管平台同源 HTTP 代理。
+浏览器通过 `@cloudbase/js-sdk` 直连 CloudBase Auth、PostgreSQL 和云存储。`shiye-api` 云函数只承担仍需服务端执行的业务能力；图片读写不经过它，也不使用独立 COS 的签名接口。
 
-## 配置
-浏览器仅使用 `VITE_SHIYE_CLOUDBASE_ENV_ID`、`VITE_SHIYE_CLOUDBASE_PUBLISHABLE_KEY`。COS 桶与地域、执行角色权限和私有签名全部位于 `shiye-api` 云函数；使用既有桶，不能把明文密钥提交到 GitHub。
+## 配置与存储
 
-## 读写安全
-数据库存业务记录、修订、操作收据、检索元数据；COS 存原图、Mask、派生图和大型完整作品。上传先确认图片 PUT、再提交 PostgreSQL 元数据，未确认对象的原稿留在 IndexedDB。本机队列以账号和 origin 隔离；换域名不会共享 IndexedDB。浏览器不得在 CloudBase 异常时写入另一个远端服务。
+浏览器配置 `VITE_SHIYE_CLOUDBASE_ENV_ID` 和 `VITE_SHIYE_CLOUDBASE_PUBLISHABLE_KEY`。`shiye-presets` 存放 70 张预设模板图片；已登录用户只能读取指定的 `journal-presets/source/` 路径。`shiye-private` 存放用户原图、派生图和作品图片；浏览器只能读取和写入自己账号编号前缀下的对象。权限脚本是 `deploy/cloudbase/004-private-storage.sql`。
 
-## 未启用能力
-`/api/platform-health` 展示实际后端可用性；`/api/storage-usage` 只读当前账号。语义检索 UI 预留，但 Embedding 模型未接入，不能按已启用展示。账号清空/后台 GC/跨账号管理在服务端安全实现和验收前禁用。
+上传先等待云存储确认，再提交 PostgreSQL 图片引用。对象路径按内容哈希固定；失败的原稿和待同步修改仍保存在本机队列中。`storageProvider` 必须是 `cloudbase`；旧 COS 引用已一次性转换，日常读取没有旧存储回退。换网站域名不会共享浏览器 IndexedDB。
 
-## 故障诊断
-看同步诊断 v3 的 `lastDisplayedFailure`、413 类别、请求编号和 COS PUT 阶段。POST 签名调用成功并不证明 COS PUT 成功；收到 HTTP 0 或浏览器 NetworkError 时，先查桶 CORS（GET/HEAD/PUT、所需请求头）与签名，再验证 COS 对象是否存在。不能删除待同步队列来掩盖故障。
+## PostgreSQL Realtime
+
+客户端已经能订阅 `public.shiye_revisions` 的账号修订通知；消息只提示版本变化，实际数据仍通过版本化增量读取。当前环境须由 CloudBase 服务端先开通 PostgreSQL Realtime，确认 `realtime` schema 和服务端创建的 `cloudbase_realtime_admin` 连接角色存在，然后运行 `deploy/cloudbase/003-realtime-revisions.sql`，最后设置 `VITE_SHIYE_REALTIME_ENABLED=true` 并重新构建部署。
+
+未收到订阅成功状态时，客户端保留 5 秒增量检查；订阅成功后以实时通知为主，并每 60 秒兜底核对。不要手工创建同名 schema 或角色来代替服务端开通，否则逻辑复制服务仍不会运行。
+
+## 排障
+
+模板卡片应能从 `shiye-presets` 解码为图像。新素材或作品的数据库记录应出现 `storageProvider: cloudbase`，其 `storagePath` 对应 `shiye-private` 中的对象。先看应用的详细同步诊断，再分别核对浏览器上传结果、云存储对象和 PostgreSQL 事务；不能清空待同步队列来掩盖故障。
