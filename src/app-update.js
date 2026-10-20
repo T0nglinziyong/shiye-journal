@@ -4,6 +4,16 @@ export async function registerSafeUpdate({flushLocal,isBusy=()=>false,onError=co
   if(!('serviceWorker' in navigator)||location.protocol!=='https:')return {activate:async()=>{}};
   const registration=await navigator.serviceWorker.register('/sw.js',{updateViaCache:'none'});
   let requested=false,busy=false,watchdog=null;
+  let lastUpdateCheck=Date.now();
+  const checkOnReturn=()=>{
+    if(document.visibilityState!=='visible'||Date.now()-lastUpdateCheck<5*60*1000)return;
+    lastUpdateCheck=Date.now();
+    // A static service-worker check helps already-open tabs discover a newer
+    // build. Activation still waits for the user's safe-save action below.
+    void registration.update().catch(error=>console.warn('版本检查稍后重试',error?.message));
+  };
+  window.addEventListener('focus',checkOnReturn);
+  document.addEventListener('visibilitychange',checkOnReturn);
   const clearWatchdog=()=>{if(watchdog){clearTimeout(watchdog);watchdog=null;}};
   const show=()=>{if(registration.waiting&&!requested)onReady(true);};
   const activate=async()=>{

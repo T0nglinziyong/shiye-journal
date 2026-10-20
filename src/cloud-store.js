@@ -29,7 +29,8 @@ import {decodeImageBlob} from './image-blob-decoder.js';
 import {yieldToForeground,scheduleForegroundIdle} from './foreground-idle.js';
 import {boundedMap} from './bounded-map.js';
 import {assetBlobIDs,splitIndependentAssetImport,splitWideMetadataMutation,splitPendingAssetImportRows,reconcileInterruptedAssetImport} from './import-sync-batches.js';
-export function createCloudStore({cloudClient,requireCloudUser,cache=null,namespace='cloud',projectPreview=()=>null,objectStorage=null}){
+export function createCloudStore({cloudClient,requireCloudUser,cache=null,namespace='cloud',projectPreview=()=>null,objectStorage=null,
+  onAccountEpochChanged=()=>{if(typeof window!=='undefined')window.dispatchEvent(new Event('shiye-account-epoch-changed'));}}){
 const writeProvider=()=>{if(!objectStorage?.enabled)throw Error('CloudBase 云存储不可用；待同步资料仍留在本机');return 'cloudbase';};
 const usableBlob=value=>value instanceof Blob&&value.size>0;
 const supportedProvider=provider=>{if(provider!=='cloudbase')throw Error('旧存储图片尚未迁移到 CloudBase；请完成迁移后重试');};
@@ -142,7 +143,7 @@ const channel=()=>{
   // Outbox and committed-revision signals are tab-local optimizations:
   // Web Locks and versioned server CAS remain the source of truth. A successful
   // delete should become visible in another open tab immediately, not only on
-  // the next remote poll (other physical devices still poll every 15 seconds).
+  // the next remote poll (other physical devices use the foreground revision check).
   outboxChannel.onmessage=event=>{
     const msg=event.data;
     if(!msg||msg.source===sessionTag)return;
@@ -808,8 +809,15 @@ async function version(){
     const id=await identity();
     const row=checked(await cloudClient().from('shiye_revisions').select('revision,account_epoch').eq('user_id',id).single());
     if(!row.account_epoch)throw Error('云端同步协议尚未升级；本机修改已保留');
-    if(accountEpoch&&accountEpoch!==row.account_epoch)
-      throw Error('账号资料已重新开始；旧草稿已保留，不能自动写入');
+    if(accountEpoch&&accountEpoch!==row.account_epoch){
+      // Account reset rotates the epoch in the same transaction as its marker.
+      // Reuse this revision read to detect it; fetch the marker only on change.
+      resetInProgress=true;
+      unifiedSync.pause();
+      try{onAccountEpochChanged();}catch{}
+      throw Object.assign(Error('账号资料已重新开始；旧草稿已保留，不能自动写入'),
+        {code:'ACCOUNT_EPOCH_CHANGED'});
+    }
     accountEpoch=row.account_epoch;
     revision=Number(row.revision);
     return revision;
@@ -1307,6 +1315,7 @@ async function cloudRefresh(){
   blobRevisionProof.clear();blobRecords.clear();
   return {revision:current,changed:true,incremental:false,allBlobs:true};
 }
+async function cloudCheckVersion(){return version();}
 // Migration is an explicit user action. Scan raw account records rather than
 // cloudAll('blobs'), which would needlessly download every original image.
 // Only known converters may produce write operations; unknown formats stay put.
@@ -1759,8 +1768,16 @@ async function cloudRebuildPending(local){
   reportSync();return result;
 }
 async function cloudFlushProjects({background=false}={}){
-  await identity();if(revision===undefined)await version();
-  if(background)return unifiedSync.resumeScheduled();
+  await identity();
+  if(background){
+    // A focus/online wake with an empty local outbox needs no PostgreSQL read.
+    // If a saved upload exists after a cold start, establish its epoch and
+    // revision before the scheduled commit can begin.
+    const pending=await unifiedSync.resumeScheduled();
+    if(pending&&revision===undefined)await version();
+    return;
+  }
+  if(revision===undefined)await version();
   return unifiedSync.flush();
 }
 async function cloudClearCache(){const id=await account();cacheDisabled=true;try{images.clear();imageSizes.clear();documents.clear();snapshots.clear();blobRecords.clear();blobRevisionProof.clear();editorBases.clear();editorSceneBases.clear();remoteProjectWinners.clear();await cache?.clear(id);syncDiagnostics.clear();}catch(error){cacheDisabled=false;throw error;}}
@@ -1778,7 +1795,7 @@ async function cloudRestoreEmergency(snapshot){
   if(typeof cache.restoreUnifiedOutboxes!=='function')throw Error('当前浏览器不支持原子恢复唯一同步队列');
   return cache.restoreUnifiedOutboxes(key,snapshot.projects,snapshot.imports);
 }
-return {cloudListPreConflictScenes,cloudRestorePreConflictScene,cloudReloadBlob,cloudRunExclusiveReset,cloudResetBaseline,cloudAbortExclusiveReset,cloudCloseCacheBeforeRemoteReset,cloudSetResetCleanupPending,cloudPurgeLocalAfterReset,cloudConflictReview,cloudConflictBackup,cloudResolveProjectConflict,cloudMigrationInventory,cloudMigrationOriginalProject,cloudMigrationCommit,cloudLegacyProjectBackup,cloudAll,cloudGet,cloudPreview,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudClearCache,cloudPreviewCacheBytes,cloudClearPreviewCache,cloudResumeCache,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudPendingLocalSummary,cloudPendingDetails,cloudSyncDiagnosticReport,cloudRecordSyncDiagnostic,cloudDiscardPending,cloudRebuildPending,cloudFlushProjects,cloudProjectDocument,cloudEmergencySnapshot,cloudRestoreEmergency,cloudBackupBlobIDs};
+return {cloudListPreConflictScenes,cloudRestorePreConflictScene,cloudReloadBlob,cloudRunExclusiveReset,cloudResetBaseline,cloudAbortExclusiveReset,cloudCloseCacheBeforeRemoteReset,cloudSetResetCleanupPending,cloudPurgeLocalAfterReset,cloudConflictReview,cloudConflictBackup,cloudResolveProjectConflict,cloudMigrationInventory,cloudMigrationOriginalProject,cloudMigrationCommit,cloudLegacyProjectBackup,cloudAll,cloudGet,cloudPreview,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudCheckVersion,cloudClearCache,cloudPreviewCacheBytes,cloudClearPreviewCache,cloudResumeCache,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudPendingLocalSummary,cloudPendingDetails,cloudSyncDiagnosticReport,cloudRecordSyncDiagnostic,cloudDiscardPending,cloudRebuildPending,cloudFlushProjects,cloudProjectDocument,cloudEmergencySnapshot,cloudRestoreEmergency,cloudBackupBlobIDs};
 }
 let projectPreview=()=>null;
 export const setCloudProjectPreview=producer=>{projectPreview=producer;};
@@ -1805,6 +1822,7 @@ export const cloudTransaction=(...args)=>current.cloudTransaction(...args);
 export const cloudCheckpoint=(...args)=>current.cloudCheckpoint(...args);
 export const cloudCachedCollections=(...args)=>current.cloudCachedCollections(...args);
 export const cloudRefresh=(...args)=>current.cloudRefresh(...args);
+export const cloudCheckVersion=()=>current.cloudCheckVersion();
 export const cloudClearCache=(...args)=>current.cloudClearCache(...args);
 export const cloudPreviewCacheBytes=(...args)=>current.cloudPreviewCacheBytes(...args);
 export const cloudClearPreviewCache=(...args)=>current.cloudClearPreviewCache(...args);

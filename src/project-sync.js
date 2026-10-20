@@ -574,7 +574,7 @@ export function createProjectSync({load,write,commit,revision,reconcile=async()=
       await kick({force:true});
       if(entries.size&&!conflicts.size)await kick({force:true});
     },
-    async resumeScheduled(){await initialize();await staging;if(entries.size)scheduleAuto();},
+    async resumeScheduled(){await initialize();await staging;if(entries.size)scheduleAuto();return entries.size>0;},
     async pending(){await initialize();await staging;return structuredClone([...entries.values()]);},
     // Image reads need one pending override, not a clone of every queued
     // import (which may contain many original image Blobs).
