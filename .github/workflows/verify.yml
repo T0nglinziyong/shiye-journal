@@ -37,7 +37,7 @@ jobs:
         run: npm run pretest
       - name: First half of unit tests
         if: matrix.shard == 'unit-a-m'
-        run: node --test --test-concurrency=2 tests/[a-m]*.test.js
+        run: node --test --test-force-exit --test-concurrency=2 tests/[a-m]*.test.js
       - name: Second half of unit tests
         if: matrix.shard == 'unit-n-z'
         shell: bash
@@ -48,7 +48,7 @@ jobs:
               files+=("$file")
             fi
           done
-          node --test --test-concurrency=2 "${files[@]}"
+          node --test --test-force-exit --test-concurrency=2 "${files[@]}"
       - name: Isolated presentation resource and browser-cache contracts
         if: matrix.shard == 'unit-presentation'
         run: node --test --test-concurrency=1 tests/presentation-cache*.test.js
