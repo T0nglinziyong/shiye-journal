@@ -1,5 +1,5 @@
 import {webSceneContract,webSceneCapabilities,webSceneDocument,importWebScene} from './web-scene-workbench.js';
-import {webWorkbenchInstructions,webEditingGuide,webArtDirection} from './web-creation-guide.js';
+import {webWorkbenchInstructions,webCompositionGuide,webEditingGuide,webArtDirection} from './web-creation-guide.js';
 import {attachSceneV2} from './scene-v2.js';
 import {itemFromAsset,textBlock} from './domain.js';
 import {previewImageFormat} from './offline-preview.js';
@@ -115,6 +115,7 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
     webArtDirection(source),'所有静态对象在 page.layers 中编辑；需要精确字段与命令时读 task/SCENE_REFERENCE.txt。',settings.customLayoutPrompt||'',settings.includeStructureReference===false?'':structureReferenceGuide].join('\n\n');
   const files={
     'START_HERE.txt':strToU8(webWorkbenchInstructions),
+    'task/COMPOSITION_GUIDE.txt':strToU8(webCompositionGuide+'\n本次候选速记别名（只在 composition-options.json 使用，最终 Scene 仍引用原始素材）：\n'+selected.map((m,index)=>`m${index+1} = ${m.alias}（${m.title}）`).join('\n')+'\n'),
     'scene.json':strToU8(JSON.stringify(work,null,2)),
     'package.json':strToU8(JSON.stringify({private:true,type:'commonjs',dependencies:{canvas:'3.2.3'}},null,2)),
     'task/context.json':strToU8(JSON.stringify(context,null,2)),
@@ -132,7 +133,7 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
     'runtime/glyphs.cjs':strToU8(offlineGlyphSource),
     'runtime/validate.cjs':strToU8(offlineValidateSource)
   };
-  for(const name of ['inspect','compile','apply','preview','pack','self-test'])files['runtime/'+name+'.cjs']=strToU8(`process.argv.splice(2,0,'${name}');require('./validate.cjs');\n`);
+  for(const name of ['inspect','compile','apply','compare','select','preview','pack','self-test'])files['runtime/'+name+'.cjs']=strToU8(`process.argv.splice(2,0,'${name}');require('./validate.cjs');\n`);
   for(const entry of chosen)if(validAlias(entry.alias)&&source.materials.some(item=>item.alias===entry.alias))files[packagePreviewPath('materials',entry.alias,entry.bytes,{transparent:true})]=entry.bytes;
   if(hasPresets)for(const entry of referenceImages)files[packagePreviewPath('references',entry.id,entry.bytes)]=entry.bytes;
   const bytes=await new Promise((resolve,reject)=>zip(files,{level:4},(error,result)=>error?reject(error):resolve(result)));

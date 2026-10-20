@@ -13,12 +13,12 @@ export async function loadOfflineCanvas(){
   }
 }
 
-export async function renderOfflinePNG(draft,source,previews,canvasModule){
+export async function renderOfflinePNG(draft,source,previews,canvasModule,{decodedCache}={}){
   const {createCanvas,loadImage}=canvasModule;
   const sources=new Map(source.materials.map(m=>[m.assetID,previews[m.alias]]));
   const used=[...new Set(sceneLayerEntries(draft).filter(e=>e.kind==='material'&&!e.value.isParked).map(e=>e.value.assetID))];
   for(const id of used)if(!previewImageFormat(sources.get(id)))throw Error('缺少本次素材 PNG/WebP 预览：'+id);
-  const decoded=new Map();
+  const decoded=decodedCache||new Map();
   const result=await renderSceneCanvas(draft,{waitForFonts:false,createCanvas:()=>createCanvas(1,1),
     // node-canvas accepts SVG bytes here, but its data: URL decoder rejects
     // the charset form emitted by the shared browser renderer.
