@@ -13,7 +13,7 @@
 
 前端已经直接通过 CloudBase SDK 的 `callFunction` 调用 `shiye-api`。静态部署不包含云函数，不能把静态站点下 `/api/cos` 的 HTTP 成功与否当作新事件函数健康检查。
 
-1. 合入 `test` 后核对 CloudBase App `shiye-journal-test` 的新 Git 构建及实站 `/version.json`。`commit` 必须与 GitHub `test` HEAD 一致，且网站实际可打开。
+1. 合入 `test` 后在现有 CloudBase App `shiye-journal-test` 上手动触发 Git 构建，保留 `test` 分支、安装/构建命令及原前端公开变量，并设置本次 `SHIYE_BUILD_SHA`。核对新构建及实站 `/version.json`；`commit` 必须与 GitHub `test` HEAD 一致，且网站实际可打开。
 2. 函数代码发生变更时运行 `node scripts/build-cloudbase-functions.mjs`。
 3. 按 `cloudbaserc.json` 部署 `.cloudbase-build/functions/shiye-api`。入口 `index.main`、事件函数、Node.js 20.19；不要只上传仓库中未打包的 index.js。
 4. 在函数的服务端配置 `SHIYE_CLOUDBASE_ENV_ID=shiye-pg-test-d1gg723f7fb356ccc`，以及原来的 `SHIYE_COS_BUCKET`、`SHIYE_COS_REGION`。前端的 `VITE_` 环境变量不会自动成为函数配置。
