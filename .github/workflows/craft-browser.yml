@@ -69,7 +69,7 @@ jobs:
           SHIYE_CRAFT_SCREENSHOTS: /tmp/shiye-craft-browser
         run: |
           set -euo pipefail
-          npm run dev -- --mode ui-test --port 5192 --strictPort > /tmp/shiye-craft-server.log 2>&1 &
+          npm run dev -- --port 5192 --strictPort > /tmp/shiye-craft-server.log 2>&1 &
           SERVER_PID=$!
           trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
           for i in $(seq 1 60); do

@@ -46,7 +46,7 @@ jobs:
           SHIYE_TEST_URL: http://127.0.0.1:5193
         run: |
           set -euo pipefail
-          npm run dev -- --mode ui-test --port 5193 --strictPort > /tmp/shiye-storage-test.log 2>&1 &
+          npm run dev -- --port 5193 --strictPort > /tmp/shiye-storage-test.log 2>&1 &
           SERVER_PID=$!
           trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
           for i in $(seq 1 80); do
