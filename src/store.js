@@ -2,7 +2,7 @@ import {openDB} from 'idb';
 import {createStorageRouter} from './storage-router.js';
 import {cloudEnabled} from './cloud-session.js';
 import {prepareProjectScene,partitionProjectList,attachSceneV2} from './scene-v2.js';
-import {cloudRunExclusiveReset,cloudResetBaseline,cloudAbortExclusiveReset,cloudPurgeLocalAfterReset,cloudConflictReview,cloudConflictBackup,cloudResolveProjectConflict,cloudListPreConflictScenes,cloudRestorePreConflictScene,cloudMigrationInventory,cloudMigrationOriginalProject,cloudMigrationCommit,cloudLegacyProjectBackup,cloudAll,cloudGet,cloudReloadBlob,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudPreview,cloudPreviewCacheBytes,cloudClearPreviewCache,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudPendingDetails,cloudSyncDiagnosticReport,cloudRecordSyncDiagnostic,cloudDiscardPending,cloudRebuildPending,cloudFlushProjects,cloudProjectDocument,cloudEmergencySnapshot,cloudRestoreEmergency,cloudBackupBlobIDs} from './cloud-store.js';
+import {cloudRunExclusiveReset,cloudResetBaseline,cloudAbortExclusiveReset,cloudPurgeLocalAfterReset,cloudConflictReview,cloudConflictBackup,cloudResolveProjectConflict,cloudListPreConflictScenes,cloudRestorePreConflictScene,cloudMigrationInventory,cloudMigrationOriginalProject,cloudMigrationCommit,cloudLegacyProjectBackup,cloudAll,cloudGet,cloudReloadBlob,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudCheckVersion,cloudPreview,cloudPreviewCacheBytes,cloudClearPreviewCache,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudPendingDetails,cloudSyncDiagnosticReport,cloudRecordSyncDiagnostic,cloudDiscardPending,cloudRebuildPending,cloudFlushProjects,cloudProjectDocument,cloudEmergencySnapshot,cloudRestoreEmergency,cloudBackupBlobIDs} from './cloud-store.js';
 import {createPendingRecovery,parsePendingRecovery} from './emergency-backup.js';
 // Exceptional destructive imports require an acknowledged atomic cloud commit.
 export async function confirmedTransaction(names,fn){if(cloudEnabled){await cloudFlushProjects();return cloudTransaction(names,fn);}return transaction(names,fn);}
@@ -59,6 +59,7 @@ export async function cachedCollections(){
  return cached?{...cached,projects:selectCurrentProjects(cached.projects)}:null;
 }
 export const refreshCloud=()=>cloudEnabled?cloudRefresh():Promise.resolve(null);
+export const checkCloudVersion=()=>cloudEnabled?cloudCheckVersion():Promise.resolve(null);
 export const previewBlob=(id,pixels=720,options)=>cloudEnabled?cloudPreview(id,pixels,options):get('blobs',id).then(r=>r?.data);
 export const previewCacheBytes=()=>cloudEnabled?cloudPreviewCacheBytes():Promise.resolve(null);
 export const clearPreviewCache=()=>cloudEnabled?cloudClearPreviewCache():Promise.resolve({count:0,bytes:0});

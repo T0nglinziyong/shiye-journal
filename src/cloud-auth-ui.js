@@ -27,6 +27,7 @@ export async function startCloudSession(onReady){
   const client=cloudClient();
   const gate={visible:false,status:'正在恢复登录…',retryReady:false};
   let otpChallenge=null,resetChallenge=null;
+  let stopResetWatch=()=>{};
   const showGate=patch=>{Object.assign(gate,patch);renderLoginGate({...gate,
     onLogin:login,onSendOtp:sendOtp,onVerifyOtp:verifyOtp,onResetPassword:resetPassword,
     onConfirmReset:confirmReset,
@@ -124,6 +125,7 @@ export async function startCloudSession(onReady){
   }
   showGate({});
   async function enter(){
+    stopResetWatch();
     showGate({status:'正在核对账号权限…'});
     const {user,account}=await requireCloudUser({withAccount:true});
     const wipeOldLocalData=async()=>{
@@ -141,6 +143,19 @@ export async function startCloudSession(onReady){
     const initialReset=await preflight();
     if(initialReset.wiped){location.reload();return;}
     cloudSetResetCleanupPending(initialReset.pending,initialReset.resetId);
+    let checkingReset=false;
+    const checkChangedEpoch=async()=>{
+      if(checkingReset)return;
+      checkingReset=true;
+      try{
+        const outcome=await preflight();
+        if(outcome.wiped){location.reload();return;}
+        cloudSetResetCleanupPending(outcome.pending,outcome.resetId);
+      }catch(error){console.warn('跨设备清空核查未完成；旧同步仍已暂停',error?.message);}
+      finally{checkingReset=false;}
+    };
+    window.addEventListener('shiye-account-epoch-changed',checkChangedEpoch);
+    stopResetWatch=()=>window.removeEventListener('shiye-account-epoch-changed',checkChangedEpoch);
     let shown=false;
     const showApp=()=>{if(shown)return;shown=true;clearLoginGate();
       document.querySelector('#auth-root').hidden=true;app.hidden=false;};
@@ -160,48 +175,57 @@ export async function startCloudSession(onReady){
     // One bounded batch per idle window. The server chooses paths and Storage
     // RLS rechecks them; no large object scan runs on the browser main thread.
     const gcStamp='shiye-last-gc-check:'+user.id;
+    const dayMs=24*60*60*1000;
     let gcBusy=false,gcTimer,gcResetPending=initialReset.pending;
+    let lastGC=0;try{lastGC=Number(localStorage.getItem(gcStamp))||0;}catch{}
+    let nextGCAt=gcResetPending?0:lastGC+dayMs;
+    const queueGC=(delay=3000)=>{
+      if(gcBusy||gcTimer)return;
+      gcTimer=setTimeout(()=>{gcTimer=null;void runGC()},
+        Math.max(delay,nextGCAt-Date.now()));
+    };
     const runGC=async()=>{
-      if(gcBusy)return;
-      if(document.visibilityState==='hidden'||!foregroundIsIdle(1800)){
-        gcTimer=setTimeout(()=>void runGC(),10000);return;
-      }
+      if(gcBusy||!foregroundRecentlyActive())return;
+      if(!foregroundIsIdle(1800)){queueGC(10000);return;}
       gcBusy=true;
+      let retryMs=dayMs;
       try{
         const response=await cloudApiRequest('/api/account-gc',{method:'POST',body:'{}'});
-        if(!response.ok)return;
+        if(!response.ok)throw Error('云端图片回收服务暂不可用');
         const result=await response.json();
         lastGC=Date.now();
         try{localStorage.setItem(gcStamp,String(lastGC));}catch{}
-        if(result.resetComplete)gcResetPending=false;
-        if(result.more||gcResetPending)
-          gcTimer=setTimeout(()=>void runGC(),10000);
-      }catch(error){console.warn('云端图片回收待下次访问重试',error?.message);}
-      finally{gcBusy=false;}
+        gcResetPending=!result.resetComplete&&gcResetPending;
+        cloudSetResetCleanupPending(gcResetPending,initialReset.resetId);
+        // Continue only when this batch was full. A pending reset alone must
+        // not cause a database request every ten seconds for days.
+        retryMs=result.more?10000:dayMs;
+      }catch(error){retryMs=60000;console.warn('云端图片回收待下次访问重试',error?.message);}
+      finally{gcBusy=false;nextGCAt=Date.now()+retryMs;
+        if(retryMs<dayMs)queueGC(retryMs);}
     };
-    let lastGC=0;try{lastGC=Number(localStorage.getItem(gcStamp))||0;}catch{}
-    if(gcResetPending||Date.now()-lastGC>=24*60*60*1000)
-      gcTimer=setTimeout(()=>void runGC(),5000);
-    window.addEventListener('focus',()=>{
-      if(gcResetPending||Date.now()-lastGC>=24*60*60*1000){
-        clearTimeout(gcTimer);gcTimer=setTimeout(()=>void runGC(),3000);
-      }
-    });
-    window.addEventListener('pagehide',()=>clearTimeout(gcTimer),{once:true});
-    let watching=false;
-    const watch=async()=>{
-      if(watching||!foregroundRecentlyActive())return;
-      watching=true;
-      try{
-        const outcome=await preflight();
-        if(outcome.wiped){location.reload();return;}
-        if(initialReset.pending&&!outcome.pending){location.reload();return;}
-      }catch(error){console.warn('跨设备重置检查未完成',error?.message);}
-      finally{watching=false;}
+    if(nextGCAt<=Date.now())queueGC(5000);
+    const onActivity=()=>queueGC();
+    window.addEventListener('focus',onActivity);
+    document.addEventListener('visibilitychange',onActivity);
+    for(const event of ['pointerup','keydown','scroll'])
+      document.addEventListener(event,onActivity,{capture:true,passive:true});
+    const onPageHide=()=>{clearTimeout(gcTimer);gcTimer=null;};
+    const stopGC=()=>{
+      clearTimeout(gcTimer);gcTimer=null;
+      window.removeEventListener('focus',onActivity);
+      document.removeEventListener('visibilitychange',onActivity);
+      for(const event of ['pointerup','keydown','scroll'])
+        document.removeEventListener(event,onActivity,true);
+      window.removeEventListener('pageshow',onActivity);
+      window.removeEventListener('pagehide',onPageHide);
     };
-    const timer=setInterval(()=>void watch(),15000);
-    window.addEventListener('focus',()=>void watch());
-    window.addEventListener('pagehide',()=>clearInterval(timer),{once:true});
+    window.addEventListener('pageshow',onActivity);
+    // A page restored from Safari's back-forward cache must keep its account
+    // reset listener and resume the GC clock. Only release the pending timer.
+    window.addEventListener('pagehide',onPageHide);
+    const priorStop=stopResetWatch;
+    stopResetWatch=()=>{priorStop();stopGC();};
     const logout=async()=>{
       try{
         const detail={tasks:[]};

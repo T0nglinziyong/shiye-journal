@@ -2446,7 +2446,7 @@ async function refresh({background=false,onlyChanged=false,skipCloudRefresh=fals
 }
 let trashSweepActive=false;
 async function purgeExpiredTrash(){if(trashSweepActive)return;const entries=expiredTrash(state.trash);if(!entries.length)return;trashSweepActive=true;try{await changeTrash({db,state,ids:entries.map(entry=>entry.id)});if(parity.libraryTab==='trash'||parity.workTab==='trash')render();}catch(error){console.warn('最近删除到期清理待重试',error?.name||error?.message);}finally{trashSweepActive=false;}}
-setInterval(()=>void purgeExpiredTrash(),15*60*1000);
+setInterval(()=>{if(foregroundRecentlyActive())void purgeExpiredTrash();},15*60*1000);
 async function refineCandidateFrame(candidateFrame,request,{postprocessOnly=false}={}){
   const bitmap=await decodeImageBlob(candidateFrame);
   try{
@@ -3429,7 +3429,7 @@ function subscribeAccountRevision(userID){
 let syncPausedByUser=false,resetWorkflowActive=false;
 const cloudResumer=createSyncResumer({flush:()=>db.flushProjects({background:true}),canRun:()=>cloudEnabled&&cloudSessionReady&&navigator.onLine!==false,onError:error=>console.warn('后台同步待重试',error?.message)});
 function backgroundCloudCheck({force=false}={}){
-  if(!cloudEnabled||!shouldPullCloudForRoute(state.route)||document.visibilityState==='hidden'||
+  if(!cloudEnabled||!cloudSessionReady||document.visibilityState==='hidden'||
     !force&&!foregroundRecentlyActive())return;
   if(!force&&!foregroundIsIdle(state.route==='editor'?1800:1000))return;
   if(!canPollDuringEditing({route:state.route,gestureActive:!!activeViewPointers.size,
@@ -3441,8 +3441,12 @@ function backgroundCloudCheck({force=false}={}){
   if(cloudCheck){if(force)cloudCheckAgain=true;return;}
   if(!force&&Date.now()-cloudCheckAt<(revisionRealtimeReady?REALTIME_FALLBACK_MS:CLOUD_POLL_MS))return;
   cloudCheckAt=Date.now();
-  cloudCheck=refresh({background:true,onlyChanged:true})
-    .catch(error=>{recordRuntimeIssue('handled',error,state.route,{phase:'background'});console.warn('后台版本检查失败；保留已验证缓存',error);})
+  // Matching and Import keep their local workspace, but still read the same
+  // revision/epoch row so a reset on another device is not missed there.
+  cloudCheck=(shouldPullCloudForRoute(state.route)
+    ?refresh({background:true,onlyChanged:true}):db.checkCloudVersion())
+    .catch(error=>{if(error.code==='ACCOUNT_EPOCH_CHANGED')return;
+      recordRuntimeIssue('handled',error,state.route,{phase:'background'});console.warn('后台版本检查失败；保留已验证缓存',error);})
     .finally(()=>{
       cloudCheck=null;
       if(cloudCheckAgain){

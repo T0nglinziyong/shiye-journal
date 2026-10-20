@@ -22,7 +22,7 @@ function v2(record){
 }
 
 
-function fixture(cache=null,objectStorage=null,projectPreview=()=>null){
+function fixture(cache=null,objectStorage=null,projectPreview=()=>null,onAccountEpochChanged=()=>{}){
   const state={revision:0,accountEpoch:'epoch-fixture',rows:[],calls:[],commits:new Map(),receipts:new Map(),receiptReads:[],keyVersions:new Map(),fail:false,authError:false,uploads:[],downloads:0};
   const client={from(table){
     const filters={};const query={select(){return query;},eq(k,v){filters[k]=v;return query;},in(k,v){filters[k]=v;return query;},limit(){return query;},abortSignal(){return query;},order(){return query;},
@@ -76,7 +76,8 @@ function fixture(cache=null,objectStorage=null,projectPreview=()=>null){
     async preview(path){state.downloads++;return new Blob(['private image'],{type:'image/webp'});},
     async probe(){return true;}
   };
-  const db=createCloudStore({cache,objectStorage:cos,projectPreview,cloudClient:()=>client,requireCloudUser:async()=>{if(state.authError)throw Error('not authorized');return {id:'owner-uuid'};}});
+  const db=createCloudStore({cache,objectStorage:cos,projectPreview,onAccountEpochChanged,
+    cloudClient:()=>client,requireCloudUser:async()=>{if(state.authError)throw Error('not authorized');return {id:'owner-uuid'};}});
   return {state,db};
 }
 test('cloud reads all pages, not just the server default first 1000 records',async()=>{
@@ -110,6 +111,35 @@ test('a changed account epoch prevents an old session from uploading its local e
   state.accountEpoch='new-epoch';state.revision++;
   await assert.rejects(db.cloudRefresh(),/账号资料已重新开始/);
   assert.equal(state.calls.length,0);
+});
+test('one version query detects remote reset without a second periodic marker query',async()=>{
+  let detected=0;
+  const {state,db}=fixture(memoryCache(),null,()=>null,()=>{detected++;});
+  await db.cloudAll('assets');
+  const readPages=state.reads||0,versionReads=state.versionReads;
+  await db.cloudCheckVersion();
+  assert.equal(state.versionReads,versionReads+1);
+  assert.equal(state.reads||0,readPages);
+  assert.equal(detected,0);
+  state.accountEpoch='new-epoch';state.revision++;
+  await assert.rejects(db.cloudCheckVersion(),error=>error.code==='ACCOUNT_EPOCH_CHANGED');
+  assert.equal(detected,1);
+  assert.equal(state.calls.length,0);
+});
+test('focus wake with an empty outbox does not read PostgreSQL',async()=>{
+  const {state,db}=fixture(memoryCache());
+  await db.cloudFlushProjects({background:true});
+  await db.cloudFlushProjects({background:true});
+  assert.equal(state.versionReads||0,0);
+  assert.equal(state.calls.length,0);
+});
+test('a restored outbox still checks account epoch before its background retry',async()=>{
+  const cache=memoryCache(),first=fixture(cache);
+  await first.db.cloudStageMutation(['assets'],tx=>tx.objectStore('assets').put({id:'draft'}));
+  const reopened=fixture(cache);
+  await reopened.db.cloudFlushProjects({background:true});
+  assert.equal(reopened.state.versionReads,1);
+  assert.equal(reopened.state.calls.length,0,'background retry keeps the upload window');
 });
 test('an old pending edit is retained after account reset instead of silently acknowledged',async()=>{
   const cache=memoryCache(),{state,db}=fixture(cache);
