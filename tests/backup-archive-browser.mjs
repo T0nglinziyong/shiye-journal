@@ -154,6 +154,8 @@ try{
   assert.equal(persisted.asset,'latest-owned-record');
   assert.equal(persisted.blob,'SYNTHETIC PRIVATE IMAGE BYTES 2026\n');
   assert.equal(persisted.work,'colored-shape');
-  assert.deepEqual(b.errors,[]);
+  // The deliberate rollback above also rejects its queued IndexedDB clear()
+  // request; Chromium reports that expected AbortError separately.
+  assert.deepEqual(b.errors.filter(error=>!error.includes('AbortError: The transaction was aborted')),[]);
   console.log('PASS: worker ZIP archive, independent bytes, integrity rejection, six stores',result);
 }catch(error){console.error('Backup acceptance failed:',error);throw error;}finally{await b.close();}

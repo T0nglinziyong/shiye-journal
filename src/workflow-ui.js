@@ -26,7 +26,16 @@ function mountWorkPreviews(c){
     for(const host of waiting){
       const target=targets.get(host);if(!target||!host.isConnected)continue;
       const {frame,width,height}=target,
-        box=containBox(width,height,host.clientWidth,host.clientHeight,16);
+        box=containBox(width,height,host.clientWidth,host.clientHeight,16),
+        maxWidth=getComputedStyle(frame).maxWidth;
+      // CSS percentage caps apply after containBox's fixed height is chosen.
+      // Clamp both dimensions together so narrow mobile previews keep their
+      // actual paper ratio instead of squeezing only the width.
+      const cap=maxWidth.endsWith('%')?host.clientWidth*parseFloat(maxWidth)/100:
+        maxWidth.endsWith('px')?parseFloat(maxWidth):Infinity;
+      if(Number.isFinite(cap)&&cap>=0&&box.width>cap){
+        box.height*=cap/box.width;box.width=cap;
+      }
       if(frame.style.width!==box.width+'px')frame.style.setProperty('width',box.width+'px','important');
       if(frame.style.height!==box.height+'px')frame.style.height=box.height+'px';
       const ratio=width+'/'+height;

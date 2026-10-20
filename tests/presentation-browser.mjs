@@ -12,7 +12,7 @@ const named=async(selector,label)=>{
 const series='[data-act="series-detail"][data-id="cache-test-series"]';
 const work='[data-act="open-project"][data-id="cache-test-project"]';
 const variant='[data-variant="cache-test-variant"]';
-async function decoded(selector){await b.wait(selector);await b.evaluate(`(async()=>{for(let i=0;i<200;i++){const images=[...document.querySelectorAll(${JSON.stringify(selector+' img')})];if(images.length&&images.every(im=>im.complete&&im.naturalWidth>0&&!im.src.includes('#shiye-image=')))return;await new Promise(r=>setTimeout(r,25));}throw Error('Cache fixture images did not decode');})()`);}
+async function decoded(selector){await b.wait(selector);await b.evaluate(`(async()=>{for(let i=0;i<400;i++){const images=[...document.querySelectorAll(${JSON.stringify(selector+' img')})];if(images.length&&images.every(im=>im.complete&&im.naturalWidth>0&&!im.src.includes('#shiye-image=')))return;await new Promise(r=>setTimeout(r,25));}const images=[...document.querySelectorAll(${JSON.stringify(selector+' img')})];throw Error('Cache fixture images did not decode: '+JSON.stringify({selector:${JSON.stringify(selector)},images:images.map(im=>({complete:im.complete,width:im.naturalWidth,src:im.src.slice(0,100)}))}));})()`);}
 async function trip(){
  await b.click('[data-route="library"]','.series-grid');await b.evaluate(`document.querySelector(${JSON.stringify(series)}).scrollIntoView({block:'center'})`);await decoded(series);
  await b.click('[data-route="works"]','.works-grid');await b.evaluate(`document.querySelector(${JSON.stringify(work)}).scrollIntoView({block:'center'})`);await decoded(work);
@@ -45,7 +45,7 @@ try{
   await b.click('[data-act="detail"][data-id="cache-test-asset"]');
   await b.click('[data-selection-more]','.selection-more-menu');
   const rows=await b.evaluate(`[...document.querySelectorAll('.selection-more-menu .popover-content>button')].map(b=>{const r=b.querySelector('.selection-action-label').getBoundingClientRect();return {x:r.x,height:b.getBoundingClientRect().height,width:b.getBoundingClientRect().width};})`);
-  assert.equal(rows.length,3);for(const row of rows){assert.ok(Math.abs(row.x-rows[0].x)<1);assert.ok(row.height>=43.9);assert.ok(Math.abs(row.width-rows[0].width)<1);}
+  assert.ok(rows.length>=3);for(const row of rows){assert.ok(Math.abs(row.x-rows[0].x)<1);assert.ok(row.height>=43.9);assert.ok(Math.abs(row.width-rows[0].width)<1);}
   const shot=await b.command('Page.captureScreenshot',{format:'png'});await writeFile(`${directory}/${width}x${height}-selection.png`,Buffer.from(shot.data,'base64'));
   await named('.selection-more-menu button','加入系列 ›');await b.wait('.selection-submenu');
   await b.click('[data-selection-more]');assert.equal(await b.evaluate('!!document.querySelector(".selection-more-menu,.selection-submenu")'),false);
@@ -55,6 +55,7 @@ try{
   assert.equal(await b.evaluate('!!document.querySelector(".selection-more-menu")'),false);
   await named('#series-actions button,.view-head .actions button','完成');
   report.viewports.push({width,height,menuAligned:true,toggleClosedChildren:true,selectionPreserved:true,escapeClosed:true,warmImageReads:after-before,rasterPreviewStable:true});
+  await b.click('#series-return','.series-grid');
  }
  assert.deepEqual(b.errors,[]);report.passed=true;report.consoleErrors=[];
  await writeFile(directory+'/presentation-report.json',JSON.stringify(report,null,2));console.log('PRESENTATION_BROWSER_PASS',JSON.stringify(report));

@@ -492,7 +492,15 @@ function navigateBack(fallback='series'){
   const section=mainRoute(state.route);
   if(section&&section===mainRoute(fallback)){
     const snapshot=mainNavigation.back(section,validNavigation);
-    if(snapshot){route(snapshot.route,{restoreSnapshot:snapshot,replaceHistory:true});return;}
+    if(snapshot){
+      // Going back from a series or material detail restores its filters and
+      // scroll position, but must not roll back selections made in that detail.
+      const currentSelection=parity.selectionMode===snapshot.selectionMode&&
+        parity.selectionMode?{selectionMode:parity.selectionMode,selected:[...parity.selected],
+          showOnlySelected:parity.showOnlySelected}:null;
+      route(snapshot.route,{restoreSnapshot:currentSelection?{...snapshot,...currentSelection}:snapshot,
+        replaceHistory:true});return;
+    }
     route(section==='library'?'series':section,{replaceHistory:true});
     return;
   }

@@ -122,6 +122,7 @@ npm run dev -- --port 5173 --strictPort
 
 - `.github/workflows/verify.yml`：构建、单元测试、UI / 路由 / HTTP 冒烟。
 - `.github/workflows/craft-browser.yml`：真实 Chromium 下的素材工艺、选择菜单、缓存、多模态 Craft Plan、穿插、便携 Canvas 预览回归。
+- `.github/workflows/interface-browser.yml`、`recognition-browser.yml`、`storage-integration.yml`：隔离合成数据下的界面、识别与备份浏览器回归；三组检查与 Craft 浏览器检查都通过后再部署。
 
 浏览器回归使用合成数据，不代表实体 iPad Safari、Apple Pencil 或真实付费模型审美验收。
 

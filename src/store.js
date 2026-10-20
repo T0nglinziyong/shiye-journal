@@ -65,6 +65,7 @@ export const previewCacheBytes=()=>cloudEnabled?cloudPreviewCacheBytes():Promise
 export const clearPreviewCache=()=>cloudEnabled?cloudClearPreviewCache():Promise.resolve({count:0,bytes:0});
 const DB='shiye-pwa-full-v1';
 const STORES=['assets','blobs','series','projects','meta','trash'];
+const browserRegression=import.meta.env?.MODE==='browser-test';
 let connection;
 // CloudBase is the sole remote backend. IndexedDB remains available for
 // private offline caches, recoverable backups and pending write queues.
@@ -75,8 +76,15 @@ async function localDatabase(){
  return connection;
 }
 const storageRouter=createStorageRouter(
- async()=>{if(!cloudEnabled)throw Error('缺少 CloudBase 配置，停止数据操作；不创建独立浏览器数据源');return 'cloud';},
- {cloud:{all:cloudAll,get:cloudGet,transaction:cloudStageMutation}}
+ async()=>{if(browserRegression)return 'browser';if(!cloudEnabled)throw Error('缺少 CloudBase 配置，停止数据操作；不创建独立浏览器数据源');return 'cloud';},
+ {cloud:{all:cloudAll,get:cloudGet,transaction:cloudStageMutation},
+  browser:{
+   all:async name=>(await localDatabase()).getAll(name),
+   get:async(name,id)=>(await localDatabase()).get(name,id),
+   transaction:async(names,fn)=>{const tx=(await localDatabase()).transaction(names,'readwrite');
+    try{const result=await fn(tx);await tx.done;return result;}
+    catch(error){try{tx.abort();await tx.done;}catch{}throw error;}}
+  }}
 );
 export async function all(name){const rows=await storageRouter.all(name);return name==='projects'?selectCurrentProjects(rows):rows;}
 export async function get(name,id){const record=await storageRouter.get(name,id);return name==='projects'&&record?prepareProjectScene(record):record;}
