@@ -37,7 +37,6 @@ START_HERE.txt
 task/
   context.json
   GUIDE.txt
-  COMPOSITION_GUIDE.txt # 短方案合同，先比较构图再细化图层
   SCENE_REFERENCE.txt   # 按需查阅的图层字段与精确操作
   CRAFT_CATALOG.txt     # 按需查阅的素材工艺
   knowledge.json
@@ -52,8 +51,6 @@ materials/
 references/          # 仅在启用参考时存在
 runtime/
   validate.cjs
-  compare.cjs
-  select.cjs
   preview.cjs
   pack.cjs
   glyphs.cjs
@@ -65,7 +62,7 @@ runtime/
 - `task/context.json`：任务事实、纸张、素材映射、物理尺寸、权限、来源快照和任务指纹。
 - `task/GUIDE.txt`：本次内容边界与构图方向。
 - `task/SCENE_REFERENCE.txt` 和 `task/CRAFT_CATALOG.txt`：分别供精确编辑与高级工艺按需查阅，主流程只在 `START_HERE.txt` 写一次。
-- `task/COMPOSITION_GUIDE.txt`：只用素材别名、比例位置、短文字和书写空间描述 2–3 个候选；`compare` 一次生成并排 PNG，`select` 才将选中方案写入 Scene。候选不需手写完整来源元数据。
+- 创作时直接完成素材、正文、图形和笔迹的可编辑 Scene，并查看真实 PNG 修改到完成状态；不以粗排缩略图作为成品依据。
 - `task/knowledge.json`：能力声明、素材区域、构图灵感、案例和可选参考审计。
 - `schema/output.json`：当前输出合同。
 - `schema/craft-plan.json`：当前原子工艺计划合同。

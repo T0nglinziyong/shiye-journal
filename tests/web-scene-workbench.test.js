@@ -10,7 +10,6 @@ import {craftSceneHash} from '../src/craft-fingerprint.js';
 import {assetSourceRevision} from '../src/material-anatomy.js';
 import {applyWebSceneCommands,compileWebSceneInput,validateWebScene,webSceneDocument} from '../src/web-scene-workbench.js';
 import {validateMaterialDecisions} from '../src/creation-material-decisions.js';
-import {compileCompositionSketch,validateCompositionOptions} from '../src/web-composition-sketch.js';
 import {linkTestCanvas,tinyPNG} from './offline-canvas-test-support.mjs';
 const assets=[{id:'a',title:'小纸片',kind:'sticker',blobId:'fixed-a',physicalWidthMM:30,physicalHeightMM:40}];
 const fixture=async(p=project('图层测试'),sourceAssets=assets,withImages=false)=>{
@@ -187,52 +186,6 @@ test('Node Canvas runtime renders PNG and refuses a stale or changed snapshot',a
   assert.equal(run('pack').status,1,'stale preview cannot validate a changed scene');
   await assert.rejects(readFile(join(dir,'output/project.shiyeproject.json')),{code:'ENOENT'});
  }finally{await rm(dir,{recursive:true,force:true});}
-});
-
-test('compact composition options compare visually without changing Scene, then select the exact previewed choice',async()=>{
- const {files}=await fixture(project('候选构图'),assets,true),dir=await mkdtemp(join(tmpdir(),'shiye-composition-'));
- try{
-  for(const [name,data] of Object.entries(files)){await mkdir(dirname(join(dir,name)),{recursive:true});await writeFile(join(dir,name),data);}
-  await linkTestCanvas(dir);
-  const options={options:[
-   {id:'left',idea:'纸片靠左，右侧留一段文字',materials:[{asset:'m1',x:.25,y:.42}],texts:[{content:'左侧短句',x:.68,y:.4,width:.25,role:'body'}],writingAreas:[{x:.55,y:.52,width:.3,height:.18,purpose:'后续正文'}]},
-   {id:'right',idea:'纸片靠右，左侧文字回应',materials:[{asset:'m1',x:.75,y:.57,rotation:-8}],texts:[{content:'右侧短句',x:.25,y:.28,width:.26,role:'title'}],writingAreas:[]}
-  ]};
-  await writeFile(join(dir,'composition-options.json'),JSON.stringify(options));
-  const before=await readFile(join(dir,'scene.json'),'utf8');
-  const run=(name,...args)=>spawnSync(process.execPath,['runtime/'+name+'.cjs',...args],{cwd:dir,encoding:'utf8',timeout:15000});
-  let result=run('compare');assert.equal(result.status,0,result.stderr||result.stdout);
-  assert.equal(await readFile(join(dir,'scene.json'),'utf8'),before);
-  const summary=JSON.parse(await readFile(join(dir,'output/composition-options.json'),'utf8'));
-  assert.equal(summary.options.length,2);assert.equal(summary.options[0].writingAreas,1);
-  assert.equal(summary.options[1].missingRequired.length,0);
-  assert.deepEqual([...await readFile(join(dir,'output/composition-options.png'))].slice(0,8),[137,80,78,71,13,10,26,10]);
-  result=run('select','right');assert.equal(result.status,0,result.stderr||result.stdout);
-  const selected=JSON.parse(await readFile(join(dir,'scene.json'),'utf8'));
-  assert.equal(craftSceneHash(attachSceneV2(selected.page)),summary.options[1].sceneHash);
-  assert.ok(selected.page.layers.some(layer=>layer.type==='text'&&layer.content==='右侧短句'));
-  assert.equal(run('preview').status,0);
-  assert.equal(run('select','left').status,1,'selection is stale after first choice changes Scene');
- }finally{await rm(dir,{recursive:true,force:true});}
-});
-
-test('composition sketches reject forged assets and invalid crop before touching Scene',async()=>{
- const {files}=await fixture(),base=JSON.parse(strFromU8(files['scene.json']));
- const option={id:'a',idea:'主件偏左',materials:[{asset:'m1',x:.2,y:.4}],texts:[]};
- assert.equal(validateCompositionOptions({options:[option,{...option,id:'b'}]}).length,2);
- assert.throws(()=>validateCompositionOptions({options:[option,option]}),/重复/);
- assert.throws(()=>compileCompositionSketch(base,{...option,materials:[{asset:'unknown',x:.2,y:.4}]},assets),/未知素材/);
- assert.throws(()=>compileCompositionSketch(base,{...option,materials:[{asset:'m1',x:.2,y:.4,crop:[.9,0,.4,1]}]},assets),/crop/);
- const compiled=compileCompositionSketch(base,option,assets);
- assert.equal(compiled.doc.source.taskHash,base.source.taskHash);
- assert.equal(compiled.doc.page.layers.filter(layer=>layer.type==='material').length,1);
- const longAlias='asset_MjBhY2FjYWItMWMyOS00OWFjLWEwYTEtNWNjOTBlNDlhY2Nm';
- const packageWithLongAlias=await createOfflineHandoff({project:project('短别名'),assets,aliases:{[longAlias]:'a'},settings:{includeThumbnails:false}});
- const longFiles=unzipSync(new Uint8Array(await packageWithLongAlias.blob.arrayBuffer()));
- assert.match(strFromU8(longFiles['task/COMPOSITION_GUIDE.txt']),new RegExp('m1 = '+longAlias));
- const longBase=JSON.parse(strFromU8(longFiles['scene.json']));
- const shortCompiled=compileCompositionSketch(longBase,option,assets);
- assert.equal(shortCompiled.doc.page.layers[0].assetID,'a');
 });
 
 test('exported workbench compiles two source cutouts and preserves their reusable remainder',async()=>{
