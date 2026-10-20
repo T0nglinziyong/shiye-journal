@@ -5,7 +5,7 @@ import {createHash,randomUUID} from 'node:crypto';
 
 export const FUNCTION_FILES=Object.freeze([
  'server/cloudbase-user.mjs','server/cos-tickets.mjs',
- ...['app','credentials','errors','postgres','embeddings','search','service'].map(name=>'server/cloudbase/'+name+'.mjs')
+ ...['app','credentials','errors','postgres','embeddings','search','service','storage-gc'].map(name=>'server/cloudbase/'+name+'.mjs')
 ]);
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 export async function buildCloudBaseFunctions({root=resolve(dirname(fileURLToPath(import.meta.url)),'..'),output=join(root,'.cloudbase-build')}={}){

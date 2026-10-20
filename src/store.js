@@ -2,7 +2,7 @@ import {openDB} from 'idb';
 import {createStorageRouter} from './storage-router.js';
 import {cloudEnabled} from './cloud-session.js';
 import {prepareProjectScene,partitionProjectList,attachSceneV2} from './scene-v2.js';
-import {cloudRunExclusiveReset,cloudAbortExclusiveReset,cloudPurgeLocalAfterReset,cloudConflictReview,cloudConflictBackup,cloudResolveProjectConflict,cloudListPreConflictScenes,cloudRestorePreConflictScene,cloudMigrationInventory,cloudMigrationOriginalProject,cloudMigrationCommit,cloudLegacyProjectBackup,cloudAll,cloudGet,cloudReloadBlob,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudPreview,cloudPreviewCacheBytes,cloudClearPreviewCache,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudPendingDetails,cloudSyncDiagnosticReport,cloudRecordSyncDiagnostic,cloudDiscardPending,cloudRebuildPending,cloudFlushProjects,cloudProjectDocument,cloudEmergencySnapshot,cloudRestoreEmergency,cloudBackupBlobIDs} from './cloud-store.js';
+import {cloudRunExclusiveReset,cloudResetBaseline,cloudAbortExclusiveReset,cloudPurgeLocalAfterReset,cloudConflictReview,cloudConflictBackup,cloudResolveProjectConflict,cloudListPreConflictScenes,cloudRestorePreConflictScene,cloudMigrationInventory,cloudMigrationOriginalProject,cloudMigrationCommit,cloudLegacyProjectBackup,cloudAll,cloudGet,cloudReloadBlob,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudPreview,cloudPreviewCacheBytes,cloudClearPreviewCache,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudPendingDetails,cloudSyncDiagnosticReport,cloudRecordSyncDiagnostic,cloudDiscardPending,cloudRebuildPending,cloudFlushProjects,cloudProjectDocument,cloudEmergencySnapshot,cloudRestoreEmergency,cloudBackupBlobIDs} from './cloud-store.js';
 import {createPendingRecovery,parsePendingRecovery} from './emergency-backup.js';
 // Exceptional destructive imports require an acknowledged atomic cloud commit.
 export async function confirmedTransaction(names,fn){if(cloudEnabled){await cloudFlushProjects();return cloudTransaction(names,fn);}return transaction(names,fn);}
@@ -35,6 +35,7 @@ export const reloadCloudBlob=id=>cloudEnabled?cloudReloadBlob(id):get('blobs',id
 export const discardPendingSync=()=>cloudEnabled?cloudDiscardPending():Promise.resolve(0);
 export const rebuildPendingSync=local=>cloudEnabled?cloudRebuildPending(local):Promise.resolve({replaced:0,pending:0});
 export const runExclusiveAccountReset=task=>cloudEnabled?cloudRunExclusiveReset(task):Promise.reject(Error('此模式不支持云端清理'));
+export const accountResetBaseline=()=>cloudEnabled?cloudResetBaseline():Promise.reject(Error('此模式不支持云端清理'));
 export const abortExclusiveAccountReset=()=>{if(cloudEnabled)cloudAbortExclusiveReset();};
 export async function purgeLocalAfterCloudReset(){
   if(!cloudEnabled)throw Error('只有已登录云端账号可以执行云端清空');

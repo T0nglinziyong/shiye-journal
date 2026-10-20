@@ -2,11 +2,13 @@ import {cloudEnabled,cloudClient,prepareCloudClient,requireCloudUser} from './cl
 import {createBackup} from './store.js';
 import {checkAccountResetEpoch} from './account-reset-epoch.js';
 import {eraseSiteAppData} from './account-data-wipe.js';
+import {cloudApiRequest} from './cloud-api-origin.js';
 import {cloudClearCache,cloudPendingLocalSummary,cloudResumeCache,
   cloudSetResetCleanupPending,cloudCloseCacheBeforeRemoteReset} from './cloud-store.js';
 import {renderLoginGate,clearLoginGate} from './react-cloud-auth.jsx';
 import {updateShell} from './react-shell.jsx';
 import {passwordIdentifier,requestLoginOtp,verifyLoginOtp,configuredOAuthProviders} from './cloud-auth-methods.js';
+import {foregroundIsIdle,foregroundRecentlyActive} from './foreground-idle.js';
 
 const oauthProviders=configuredOAuthProviders(import.meta.env?.VITE_SHIYE_OAUTH_PROVIDERS);
 
@@ -150,14 +152,45 @@ export async function startCloudSession(onReady){
       let previouslyNotified=false;
       try{previouslyNotified=localStorage.getItem(noticeKey)==='1';}catch{}
       if(!previouslyNotified){
-        updateShell({resetNotice:{message:'账号已重置，可正常使用。旧 COS 文件仍在服务器后台清理，不影响新作品。'}});
+        updateShell({resetNotice:{message:'账号已重置，可正常使用。旧图片会在后台逐批回收，不影响新作品。'}});
         setTimeout(()=>updateShell({resetNotice:null}),6500);
         try{localStorage.setItem(noticeKey,'1');}catch{}
       }
     }
+    // One bounded batch per idle window. The server chooses paths and Storage
+    // RLS rechecks them; no large object scan runs on the browser main thread.
+    const gcStamp='shiye-last-gc-check:'+user.id;
+    let gcBusy=false,gcTimer,gcResetPending=initialReset.pending;
+    const runGC=async()=>{
+      if(gcBusy)return;
+      if(document.visibilityState==='hidden'||!foregroundIsIdle(1800)){
+        gcTimer=setTimeout(()=>void runGC(),10000);return;
+      }
+      gcBusy=true;
+      try{
+        const response=await cloudApiRequest('/api/account-gc',{method:'POST',body:'{}'});
+        if(!response.ok)return;
+        const result=await response.json();
+        lastGC=Date.now();
+        try{localStorage.setItem(gcStamp,String(lastGC));}catch{}
+        if(result.resetComplete)gcResetPending=false;
+        if(result.more||gcResetPending)
+          gcTimer=setTimeout(()=>void runGC(),10000);
+      }catch(error){console.warn('云端图片回收待下次访问重试',error?.message);}
+      finally{gcBusy=false;}
+    };
+    let lastGC=0;try{lastGC=Number(localStorage.getItem(gcStamp))||0;}catch{}
+    if(gcResetPending||Date.now()-lastGC>=24*60*60*1000)
+      gcTimer=setTimeout(()=>void runGC(),5000);
+    window.addEventListener('focus',()=>{
+      if(gcResetPending||Date.now()-lastGC>=24*60*60*1000){
+        clearTimeout(gcTimer);gcTimer=setTimeout(()=>void runGC(),3000);
+      }
+    });
+    window.addEventListener('pagehide',()=>clearTimeout(gcTimer),{once:true});
     let watching=false;
     const watch=async()=>{
-      if(watching||document.visibilityState==='hidden')return;
+      if(watching||!foregroundRecentlyActive())return;
       watching=true;
       try{
         const outcome=await preflight();

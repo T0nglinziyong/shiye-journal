@@ -166,7 +166,7 @@ export function RecentlyDeletedPage({kind,state,source,localCover,cloudEnabled,o
   });
   const act=async(ids,recover)=>{
     if(busy||!ids.length)return;
-    if(!recover&&!window.confirm(`彻底删除所选 ${ids.length} 项？素材记录会继续隐藏保留，以供已有作品使用。此操作不能撤销。`))return;
+    if(!recover&&!window.confirm(`移除所选 ${ids.length} 项的恢复记录？素材仍可能被已有作品引用。此操作不能撤销。`))return;
     setBusy(true);
     try{
       await onTrashChange(ids,recover);
@@ -223,12 +223,12 @@ export function RecentlyDeletedPage({kind,state,source,localCover,cloudEnabled,o
             <div className="deleted-actions"><button type="button" className="btn"
               data-recover={entry.id} disabled={busy} onClick={event=>{event.stopPropagation();void act([entry.id],true);}}>恢复</button>
               <button type="button" className="btn danger" data-remove={entry.id}
-                disabled={busy} onClick={event=>{event.stopPropagation();void act([entry.id],false);}}>彻底删除</button></div>
+                disabled={busy} onClick={event=>{event.stopPropagation();void act([entry.id],false);}}>移除恢复记录</button></div>
           </div>
         </article>;
       }):<p className="empty">没有最近删除的{kind==='asset'?'素材':'作品'}。</p>}
     </section>
-    <p className="deleted-retention-note">最近删除保留 30 天，到期自动移除恢复入口；从素材库删除的素材继续隐藏保留，已有作品仍可使用。云端孤立文件经隔离备份与复核后延迟回收。</p>
+    <p className="deleted-retention-note">最近删除保留 30 天，到期自动移除恢复入口；已有作品仍可使用隐藏素材。云端无引用文件满 30 天并经再次核对后回收。</p>
     <div className="swift-tray manage library-management-tray deleted-selection-tray"
       hidden={!choosing}><strong>已选 {selected.size} 项</strong>
       <button type="button" className="btn" data-trash-all disabled={busy}
@@ -238,7 +238,7 @@ export function RecentlyDeletedPage({kind,state,source,localCover,cloudEnabled,o
       <button type="button" className="btn" data-trash-recover disabled={busy||!selected.size}
         onClick={()=>void act([...selected],true)}><span className="selection-action-label">恢复所选</span></button>
       <button type="button" className="btn danger" data-trash-remove disabled={busy||!selected.size}
-        onClick={()=>void act([...selected],false)}><span className="selection-action-label">彻底删除所选</span></button>
+        onClick={()=>void act([...selected],false)}><span className="selection-action-label">移除恢复记录</span></button>
     </div>
   </>;
 }
@@ -1654,17 +1654,17 @@ export function SettingsDataPage({state,cloudEnabled,storage,onAction}){
     <b>{item.item.title}</b><button className="btn mini" data-act="restore-trash" data-id={item.id}
       data-react-action="true" onClick={()=>onAction('restore-trash',item.id)}>恢复</button>
     <button className="btn danger mini" data-act="purge-trash-item" data-react-action="true"
-      onClick={()=>onAction('purge-trash-item',item.id)}>彻底删除</button>
+      onClick={()=>onAction('purge-trash-item',item.id)}>移除恢复记录</button>
   </div>):<p>没有最近删除的项目。</p>}</SettingsGroup>;
   return <SettingsDetailShell title="数据与诊断" kind="settingsData" onAction={onAction}>
     <SettingsGroup title="应用错误诊断" description="导出最近 7 天本机记录的运行错误、网络与同步故障安全摘要，包含发生页面、阶段、错误类别和可判断的原因。不会导出作品、图片、账号、密钥或原始报错文本。">
       {button('export-app-diagnostics','导出完整错误诊断')}
     </SettingsGroup>
-    <SettingsGroup title="图片保留与清理" description="删除素材后，素材记录会从素材库隐藏，已有作品仍可引用；最近删除到期仅移除恢复入口。云端孤立文件经复核后延迟回收。"/>
+    <SettingsGroup title="图片保留与清理" description="删除素材后，已有作品仍可引用；最近删除到期仅移除恢复入口。没有业务引用的云端文件满 30 天、二次核对通过后回收。"/>
     <SettingsGroup title="数据维护"><div className="actions">
       <button type="button" className="btn" onClick={()=>setDiagnostics('metrics')}>生成诊断</button>
       <button type="button" className="btn" onClick={()=>setDiagnostics('contexts')}>创作完整上下文</button>
-      {button('clean-unused-images','清理未使用的图片')}
+      {cloudEnabled?button('clean-unused-images','核查云端可回收图片'):null}
       {button('purge-all-trash','清空最近删除','btn danger')}
     </div></SettingsGroup>
     {cloudEnabled?<>
@@ -1682,7 +1682,8 @@ export function SettingsDataPage({state,cloudEnabled,storage,onAction}){
         <p>同一画布在两台设备同时修改时，会在应用最后编辑时间规则之前保留双方原稿。本机留有记录时可将旧版本另存为新作品。</p>
         {button('recover-pre-conflict','查看与恢复冲突前画布')}
       </SettingsGroup>
-      <SettingsGroup title="账号安全清空"><p>CloudBase 清空与云端文件回收仍在安全验收；目前暂不可操作，避免误删未同步资料。</p></SettingsGroup>
+      <SettingsGroup title="账号安全清空"><p>清空当前账号的素材、作品、设置、最近删除与本机待同步修改；登录身份保留。旧云端图片会在独立存储代际中逐批回收；此操作无法撤销。</p>
+        {button('reset-all-account-data','清空账号资料','btn danger')}</SettingsGroup>
       <SettingsGroup title="语义检索 · pgvector（预留）"><p>等待接入 Embedding 模型及索引。当前不会上传素材内容至模型或产生向量费用。</p><button type="button" className="btn" disabled aria-disabled="true">语义检索 · 尚未启用</button></SettingsGroup>
     </>:<>
       <SettingsGroup title="离线资料"><p id="storage-location">未配置 CloudBase 时仅提供本浏览器的本地资料；不会连接其他服务器。</p><p>{counts}</p></SettingsGroup>

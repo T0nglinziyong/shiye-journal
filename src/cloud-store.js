@@ -1674,6 +1674,10 @@ async function cloudResolveProjectConflict({kind,id,serial,expectedRevision,choi
   return {choice,originalID:local.id,remoteBackupID:retained.id};
  });
 }
+async function cloudResetBaseline(){
+  await version();
+  return {expected_revision:revision,expected_epoch:accountEpoch};
+}
 async function cloudRunExclusiveReset(task){
   if(typeof task!=='function')throw Error('账号清理任务无效');
   await identity();
@@ -1774,7 +1778,7 @@ async function cloudRestoreEmergency(snapshot){
   if(typeof cache.restoreUnifiedOutboxes!=='function')throw Error('当前浏览器不支持原子恢复唯一同步队列');
   return cache.restoreUnifiedOutboxes(key,snapshot.projects,snapshot.imports);
 }
-return {cloudListPreConflictScenes,cloudRestorePreConflictScene,cloudReloadBlob,cloudRunExclusiveReset,cloudAbortExclusiveReset,cloudCloseCacheBeforeRemoteReset,cloudSetResetCleanupPending,cloudPurgeLocalAfterReset,cloudConflictReview,cloudConflictBackup,cloudResolveProjectConflict,cloudMigrationInventory,cloudMigrationOriginalProject,cloudMigrationCommit,cloudLegacyProjectBackup,cloudAll,cloudGet,cloudPreview,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudClearCache,cloudPreviewCacheBytes,cloudClearPreviewCache,cloudResumeCache,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudPendingLocalSummary,cloudPendingDetails,cloudSyncDiagnosticReport,cloudRecordSyncDiagnostic,cloudDiscardPending,cloudRebuildPending,cloudFlushProjects,cloudProjectDocument,cloudEmergencySnapshot,cloudRestoreEmergency,cloudBackupBlobIDs};
+return {cloudListPreConflictScenes,cloudRestorePreConflictScene,cloudReloadBlob,cloudRunExclusiveReset,cloudResetBaseline,cloudAbortExclusiveReset,cloudCloseCacheBeforeRemoteReset,cloudSetResetCleanupPending,cloudPurgeLocalAfterReset,cloudConflictReview,cloudConflictBackup,cloudResolveProjectConflict,cloudMigrationInventory,cloudMigrationOriginalProject,cloudMigrationCommit,cloudLegacyProjectBackup,cloudAll,cloudGet,cloudPreview,cloudTransaction,cloudStageMutation,cloudCheckpoint,cloudCachedCollections,cloudRefresh,cloudClearCache,cloudPreviewCacheBytes,cloudClearPreviewCache,cloudResumeCache,cloudStageProject,cloudStageImport,cloudPendingProjects,cloudPendingLocalSummary,cloudPendingDetails,cloudSyncDiagnosticReport,cloudRecordSyncDiagnostic,cloudDiscardPending,cloudRebuildPending,cloudFlushProjects,cloudProjectDocument,cloudEmergencySnapshot,cloudRestoreEmergency,cloudBackupBlobIDs};
 }
 let projectPreview=()=>null;
 export const setCloudProjectPreview=producer=>{projectPreview=producer;};
@@ -1782,6 +1786,7 @@ const current=createCloudStore({cloudClient,requireCloudUser,cache:privateCache,
 export const cloudCloseCacheBeforeRemoteReset=()=>current.cloudCloseCacheBeforeRemoteReset();
 export const cloudSetResetCleanupPending=(...args)=>current.cloudSetResetCleanupPending(...args);
 export const cloudRunExclusiveReset=(...args)=>current.cloudRunExclusiveReset(...args);
+export const cloudResetBaseline=()=>current.cloudResetBaseline();
 export const cloudAbortExclusiveReset=()=>current.cloudAbortExclusiveReset();
 export const cloudPurgeLocalAfterReset=(...args)=>current.cloudPurgeLocalAfterReset(...args);
 export const cloudConflictReview=(...args)=>current.cloudConflictReview(...args);

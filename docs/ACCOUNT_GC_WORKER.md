@@ -1,31 +1,27 @@
-# 拾页账号重置：独立服务端 COS 垃圾回收
+# CloudBase 账号清空与私有文件回收
 
-## 协议
-- 用户主动二次确认后，`POST /api/account-reset`、`mode=start` 仅执行 **一笔原子业务重置**，写入私有 `shiye-reset-barrier`，返回 HTTP 202，**不逐张删除 COS**。
-- 服务端任务始终从经过验证的 Supabase `shiye_records` 读取目标 user_id/resetId，严禁调用方自定义文件路径、桶或任意账号。
-- 所有新文件保存至 `<user_id>/reset-<resetId>/...`。 COS 签名端拒绝旧客户端继续 PUT 旧版目录，GC 跳过当前 Reset ID 目录；浏览器无需等物理删除完成即可创建新作品。
-- `POST /api/account-gc` 用当前登录账户触发一轮**服务端**限时清理（非长时间前端轮询）；`GET /api/account-gc` 是定时任务，用 Vercel `CRON_SECRET` 且服务端 service-role 客户端查询数据库中所有待完成标记。
-- 每轮最多若干批次，COS 每批最多 400 个，Supabase Storage 经 Storage API 删除（不能 SQL DELETE 文件元信息）。
-- 进度持久写入同一账号的元数据标记（`gcCursor/gcCosDone/gcCosDeleted/gcStorageDeleted`）；旧手机、电脑的 IndexedDB 在登录前按 Reset ID 清理。
-- 完成后标记 `phase=complete`，保留 Reset ID 不删除。失败后 cron 会重新处理，不要求用户在前台等待。
-- 原有 `lrx` 重置任务如果仍是 `deleting`，配置好服务端密钥并触发 Cron 后，也会被自动扫描。
+## 数据协议
 
-## 测试站部署前必需的环境变量
-只在 Vercel 服务端项目环境设置，不要放入 `VITE_*` 或浏览器源码：
-- `SHIYE_SUPABASE_SERVICE_ROLE_KEY`：Supabase 后台 Secret/service_role key，用于枚举待清理用户及安全更新服务端进度。仅服务端使用，切勿公开。
-- `CRON_SECRET`：随机不可猜测的 Cron Bearer token（建议不少于 32 个字符），由 Vercel Cron 自动携带。
-- 现有的 `SHIYE_COS_SECRET_ID`、`SHIYE_COS_SECRET_KEY`、`SHIYE_COS_BUCKET`、`SHIYE_COS_REGION`。
-- `VITE_SHIYE_SUPABASE_URL` 与 `VITE_SHIYE_SUPABASE_PUBLISHABLE_KEY` 已有。切勿把 service-role key 写进它们。
-可选：在非 test 发布之前，单独审核设置 `SHIYE_ACCOUNT_GC_ENABLED=true` 与 `SHIYE_ACCOUNT_RESET_ENABLED=true`。
+`deploy/cloudbase/007-account-reset-gc.sql` 在账号自身身份下提供 `shiye_reset_account_v1`、`shiye_gc_plan_v1` 和 `shiye_gc_finish_v1`。首次调用清空接口时，客户端需二次确认并输入“清空账号”。服务端核对账号代际和修订号，在**一个 PostgreSQL 事务**中清空六类业务记录、旧提交收据与版本索引，写入 `shiye-reset-barrier`，轮换 `account_epoch`。带同一操作 ID 的重试返回原收据。旧设备的同步提交因代际不符而被拒绝；登录前会根据标记清除该设备的旧 IndexedDB。新上传使用 `<uid>/reset-<resetId>/...`，不会被旧文件回收误删。
 
-## Vercel Cron
-`vercel.json` 的 `0 3 * * *` 是 **UTC 每天一次**，兼容 Vercel Hobby 免费版。 Pro 计划可以缩短周期（例如每 5 分钟），需核实项目所属套餐后调整。Cron 精度和本次任务实际时长取决于 Vercel。
-如果未配置 service-role key 或 Cron token，接口会拒绝执行，**不会宣称 COS 已清空**。UI 登录与业务重置依然可以正常访问已经清空的账户，之前启动的任务标记仍持续存在直到得到确认。
+前端随后删除当前站点的本机数据并重新进入。若提交结果不明，旧同步保持暂停，必须重新打开页面核对服务端标记；绝不能猜测失败后恢复旧队列。`shiye-reset-barrier` 在可安全删除的旧对象清理完毕后改为 `complete`；若仍有业务记录引用旧路径，该对象会保留并可由后续普通孤立文件检查处理。新一代上传不必等待这一步。
 
-## 手工验收
-1. 记录测试账户中的 2 个旧 COS 文件，再执行一次确认重置；
-2. 验证 reset API 立即返回、作品/素材数据库为空、`phase=deleting`；
-3. 关闭手机网页，等待 Cron 触发；检查旧 COS 文件消失、新版本目录文件未删除，元数据变为 `complete`；
-4. 另一设备登录应先清理 IndexedDB；此时新设备可以正常创建新的作品和上传新目录图片；
-5. 人为使 COS 一批删除失败，验证 `phase` 仍为 `deleting`，下次 Cron 继续处理；
-6. 不应对旧目录外的其他用户文件发出任何 DELETE。
+## 文件回收
+
+`/api/account-gc` 只接收当前账号的有效登录凭据，**不接收客户端提供的对象名或桶名**。`shiye_gc_plan_v1` 从 `shiye-private` 枚举该账号对象，每轮最多返回 20 个名字：
+
+- 完成账号清空后，旧代目录可立即回收；新 `resetId` 目录始终排除在这组候选之外。
+- 普通孤立对象至少保存 30 天。第一次核查写入候选时间；至少 24 小时后再次核查，且服务端没有任何业务记录引用其路径时才可删除。
+- CloudBase Storage 的 `DELETE` RLS 策略在每个对象的删除请求中重新验证账号、代际、时间和业务引用。云函数只用用户 JWT 调用 Storage API；无需 service-role 密钥，也不会通过 SQL 删除 `storage.objects` 元数据。数据库不允许浏览器写入候选表。
+
+网页打开后在空闲时调用一轮 GC，通常每天一次；账号清空尚有旧文件时每 10 秒继续一个限量批次。网页关闭后**不会继续运行**；下一次打开会续跑。没有配置独立定时云函数前，不应把它描述成全天候后台任务。最近删除只管理恢复入口；移除它不会立刻删除隐藏素材或云文件。
+
+## 部署与验收
+
+1. 在隔离 CloudBase PG 环境执行并审核 `007-account-reset-gc.sql`，确认已有 `schema.sql` 和 `004-private-storage.sql`。随后运行 `tests/sql/cloudbase-account-reset.assert.sql`，它在一个回滚事务中检查幂等重置、旧代阻断和标记保护。静态构建不会自动运行 SQL。
+2. 部署包含 `server/cloudbase/storage-gc.mjs` 的新版 `shiye-api` 事件函数，再部署同一提交的网页。旧函数版本收到新路由会返回 404，因此部署顺序必须先函数、后网页。
+3. 用**专门的测试账号**验证：上传两个对象，记录其 Storage 元数据；清空账号后确认业务记录为空、旧设备不能同步旧事务、新目录仍可保存；多轮 GC 后旧对象消失而新对象保留。真实使用账号不要为了验收而清空。
+4. 创建一个无引用且达到时间门槛的测试对象，先确认候选等待期不删，再确认重新核查后删除。保持被作品引用的素材、作品文档与共享预设图不受影响。
+5. 人为让 Storage API 删除失败，确认清空标记保持 `deleting`，稍后重试；核查函数日志只含请求 ID、状态和耗时，不含文件名、JWT 或私人内容。
+
+云存储物理回收后，其 CDN/备份系统的最终保留期取决于 CloudBase 服务本身；应用只声明已从当前 Bucket 删除，不能声称云服务备份立即不可恢复。
