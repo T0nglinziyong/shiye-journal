@@ -136,6 +136,21 @@ test('already-stored snapshots add only local matching reference, no second clou
  assert.match(JSON.stringify(await device.get('test-user','matching-session-v1')),/snap/);
 });
 
+test('matching AI receives the selected text presentation for its editable Scene',async()=>{
+ const device=memoryDevice(),db=memoryProjects();
+ const c=context({aiSettings:{key:'test-key',model:'test-model',deliveryMode:'editable'},
+   assets:[],userTemplates:[]},device,db);
+ const p={...structuredClone(work),textPresentation:'handwritten',candidateAssetIDs:[],
+   styles:['airy'],purposes:['日常记录'],title:'AI 方案',isDraft:true};
+ let received;
+ Object.assign(c,{createProject:()=>p,createAIRecorder:async()=>({request:()=>{},
+   response:()=>{},finish:async()=>{}}),supportsVision:()=>false,
+ runCreativeAgent:async options=>{received=options;return {draft:options.draft};}});
+ const session=createMatchingSession(c);await session.restore();await session.generate();
+ assert.equal(received?.textPresentation,'handwritten');
+ assert.equal(c.state.projects[0]?.drafts[0]?.sceneVersion,2);
+});
+
 test('editable matching imports and newly opened variants use one durable project outbox',async()=>{
  const device=memoryDevice(),db=memoryProjects(),c=context({},device,db),session=createMatchingSession(c);
  await session.restore();
