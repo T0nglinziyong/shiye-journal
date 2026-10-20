@@ -1,6 +1,9 @@
 /* Shared utility dialogs leave their full width to the content. */
 #app[hidden]{display:none!important}
 .utility-dialog{position:relative;min-width:0}
+.utility-dialog :is(p,li,small,code,pre){overflow-wrap:anywhere}
+#modal [role="alert"],#view [role="alert"],#toast{max-width:100%;overflow-wrap:anywhere}
+#toast{max-width:calc(100vw - 36px);white-space:normal}
 .utility-dialog>.dialog-close{position:absolute;top:24px;right:24px;float:none;z-index:1;display:grid;place-items:center;width:44px;height:36px;padding:0;border:0;border-radius:999px;background:#e9eae9;color:#23342b;font-size:28px;font-weight:400;line-height:1}
 .utility-dialog>h2:first-of-type,.utility-dialog>.stack>h2:first-child,.utility-dialog>.offline-handoff>h2:first-child{margin-top:0;padding-right:60px;min-height:36px;display:flex;align-items:center}
 .utility-dialog .offline-handoff-heading{padding-right:60px}

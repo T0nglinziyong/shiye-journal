@@ -53,6 +53,15 @@ test('native iPhone image read errors retain a safe name and upload phase',()=>{
   assert.ok(!JSON.stringify(report).includes('private image path'));
 });
 
+test('CloudBase duplicate image errors are not mislabeled as revision conflicts',()=>{
+  const trace=createSyncDiagnostics();
+  trace.record({action:'failed',kind:'image',error:Object.assign(Error('The resource already exists'),{
+    code:'STORAGE_KEY_ALREADY_EXISTS',status:409})});
+  const failure=trace.report().events[0].failure;
+  assert.equal(failure.category,'image-upload');
+  assert.equal(failure.code,'STORAGE_KEY_ALREADY_EXISTS');
+});
+
 test('active upload report shows elapsed phase and bounded counts without identifiers',()=>{
   const trace=createSyncDiagnostics();
   const report=trace.report({pending:1,uploading:true,active:{phase:'编码与上传',done:6,total:18,elapsedMs:32000,id:'private-id'}});
