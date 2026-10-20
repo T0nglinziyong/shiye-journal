@@ -61,7 +61,7 @@ export function createCloudBaseService({verifyUser,cosReady=false,sign,rpc,searc
         }catch(error){if(error.code!=='MIGRATION_REQUIRED')throw error;}
         status=200;code='OK';body={platform:'cloudbase',apiVersion:1,build:safeBuild(build),
           authentication:'verified',cos:{configured:cosReady},capabilities,
-          images:'cos-direct',logging:'structured-redacted',accountReset:false};
+          images:'cloudbase-private-storage',logging:'structured-redacted',accountReset:false};
       }else if(route==='/api/storage-usage'){
         const database=await rpc('shiye_account_storage_v1',token,{});
         const cos=inventory?await inventory(identity):{inventoryComplete:false,reason:'未配置 COS 枚举'};

@@ -8,23 +8,25 @@ import {unzipSync,strFromU8,strToU8} from 'fflate';
 import {project} from '../src/domain.js';
 import {createOfflineHandoff} from '../src/offline-creation.js';
 import {importEditableWork} from '../src/offline-creation.js';
+import {linkTestCanvas,tinyPNG} from './offline-canvas-test-support.mjs';
 
-test('O-12/O-13: bundled validator runs from the ZIP without node_modules or cloud credentials',async()=>{
+test('O-12/O-13: bundled validator and Node Canvas render without cloud credentials or HTML',async()=>{
   const asset={id:'offline-runtime-asset',title:'蓝纸',kind:'sticker',physicalWidthMM:30,physicalHeightMM:40,supply:{quantity:1}};
-  const task=await createOfflineHandoff({project:project('断网验证'),assets:[asset],aliases:{m1:asset.id},settings:{includeThumbnails:false}});
+  const task=await createOfflineHandoff({project:project('断网验证'),assets:[asset],aliases:{m1:asset.id},previews:[{alias:'m1',bytes:tinyPNG}],settings:{includeThumbnails:true}});
   const entries=unzipSync(new Uint8Array(await task.blob.arrayBuffer()));
   const capabilities=JSON.parse(strFromU8(entries['task/knowledge.json'])).capabilities;
-  assert.equal(capabilities.runtime.render,'browser-html-manual');
+  assert.equal(capabilities.runtime.render,'node-canvas');
   assert.equal(capabilities.runtime.visualReview,'manual-required');
-  assert.equal(capabilities.runtime.preview,'canvas');
+  assert.equal(capabilities.runtime.preview,'png');
   assert.ok(entries['runtime/preview.cjs']);
   assert.ok(entries['runtime/pack.cjs']);
   const directory=await mkdtemp(join(tmpdir(),'shiye-offline-runtime-'));
   try{
-    await mkdir(join(directory,'runtime'));await mkdir(join(directory,'task'));
+    await mkdir(join(directory,'runtime'));await mkdir(join(directory,'task'));await mkdir(join(directory,'materials'));await linkTestCanvas(directory);
     await writeFile(join(directory,'runtime/validate.cjs'),entries['runtime/validate.cjs']);
     await writeFile(join(directory,'runtime/preview.cjs'),entries['runtime/preview.cjs']);
     await writeFile(join(directory,'task/context.json'),entries['task/context.json']);
+    await writeFile(join(directory,'materials/m1.png'),entries['materials/m1.png']);
     await writeFile(join(directory,'scene.json'),entries['examples/project.shiyeproject.json']);
     const run=()=>spawnSync(process.execPath,['runtime/validate.cjs'],{cwd:directory,encoding:'utf8',env:{PATH:process.env.PATH||''},timeout:10000});
     const valid=run();
@@ -34,6 +36,8 @@ test('O-12/O-13: bundled validator runs from the ZIP without node_modules or clo
     assert.equal(report.visual,'unavailable');assert.equal(report.reading,'pending');
     const previewRun=spawnSync(process.execPath,['runtime/preview.cjs'],{cwd:directory,encoding:'utf8',env:{PATH:process.env.PATH||''},timeout:10000});
     assert.equal(previewRun.status,0,previewRun.stderr||previewRun.stdout);
+    assert.deepEqual([...await readFile(join(directory,'output/preview.png'))].slice(0,8),[137,80,78,71,13,10,26,10]);
+    await assert.rejects(stat(join(directory,'output/画面预览.html')),{code:'ENOENT'});
     const previewText=await readFile(join(directory,'output/构图预览.svg'),'utf8');
     assert.match(previewText,/<svg/);
     assert.match(previewText,/构图预览/);
@@ -53,12 +57,12 @@ test('O-12/O-13: bundled validator runs from the ZIP without node_modules or clo
 
 test('direct-page preview embeds the supplied transparent material and editable scene layers',async()=>{
   const asset={id:'preview-asset',title:'纸片',kind:'sticker',physicalWidthMM:30,physicalHeightMM:40,supply:{quantity:1}};
-  const image=Uint8Array.from(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/5uoAAAAASUVORK5CYII=','base64'));
+  const image=tinyPNG;
   const task=await createOfflineHandoff({project:project('可预览直接页'),assets:[asset],aliases:{m1:asset.id},previews:[{alias:'m1',bytes:image}],settings:{includeThumbnails:true,generationMode:'direct'}});
   const entries=unzipSync(new Uint8Array(await task.blob.arrayBuffer()));
   const directory=await mkdtemp(join(tmpdir(),'shiye-direct-preview-'));
   try{
-    await mkdir(join(directory,'runtime'));await mkdir(join(directory,'materials'));await mkdir(join(directory,'task'));
+    await mkdir(join(directory,'runtime'));await mkdir(join(directory,'materials'));await mkdir(join(directory,'task'));await linkTestCanvas(directory);
     for(const name of ['task/context.json','runtime/validate.cjs','runtime/preview.cjs','materials/m1.png'])await writeFile(join(directory,name),entries[name]);
     await writeFile(join(directory,'scene.json'),entries['examples/project.shiyeproject.json']);
     const result=spawnSync(process.execPath,['runtime/preview.cjs'],{cwd:directory,encoding:'utf8',env:{PATH:process.env.PATH||''},timeout:10000});

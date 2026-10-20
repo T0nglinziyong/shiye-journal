@@ -1,6 +1,5 @@
 import {automaticAssetClassification} from './asset-automatic-classification.js';
 // Production deployment refresh marker: 2026-10-04
-import {assetSourceRevision} from './material-anatomy.js';
 import {materialKindName} from './material-taxonomy.js';
 import {createElement} from 'react';
 import {BlankProjectDialog,ManualLayoutDialog,HelpDialog,OfflineImportDialog,MaterialPickerDialog,CreativeJSONDialog} from './react-utility-dialogs.jsx';
@@ -123,8 +122,7 @@ import {changeTrash,expiredTrash} from './trash-actions.js';
 import {visibleMaterials} from './asset-retention.js';
 // AI agent planning and visual review are paid, optional workflows. Load them only on demand.
 const runCreativeAgent=async(...args)=>(await import('./creative-runner.js')).runCreativeAgent(...args);
-import {commitAIDraft} from './ai-run-target.js';
-import {prepareMaterialPreviews} from './creative-previews.js';
+import {creativeRunParameters,createCreativeRunGuard,prepareCreativeRunInputs,creativeProgressText,hasCreativeSceneChange,createCreativeCheckpoint} from './ai-creation-session.js';
 import {materialAliases} from './material-alias.js';
 import {snapshotRecord,workInTab} from './work-collections.js';
 import {generatePageImage} from './ai-image-generation.js';
@@ -2280,7 +2278,7 @@ function handleAIPanelAction(action){
 async function startAICreation(){
  if(state.aiBusy)return;
  const targetProject=state.activeProject,targetDraft=current();if(!targetProject||!targetDraft)return;
- const accountID=state.accountId,sourceProject=structuredClone(targetProject),sourceDraft=structuredClone(targetDraft),assetsSnapshot=structuredClone(state.assets),prompt=state.aiPrompt,fallbackPurpose=state.matchPurpose,cfg=structuredClone(state.aiSettings),{key,model}=cfg;
+ const accountID=state.accountId,sourceProject=structuredClone(targetProject),sourceDraft=structuredClone(targetDraft),assetsSnapshot=structuredClone(state.assets),prompt=state.aiPrompt,cfg=structuredClone(state.aiSettings),{key,model}=cfg;
  const findAsset=id=>assetsSnapshot.find(a=>a.id===id),pscope=targetProject.materialPriority;
  const ids=[...new Set([...(targetProject.candidateAssetIDs||[]),...(pscope?[]:state.basket),...(sourceDraft.items||[]).map(x=>x.assetID)])].filter(id=>findAsset(id)&&!pscope?.excluded?.includes(id));
  if(cfg.deliveryMode==='image'){
@@ -2292,25 +2290,25 @@ async function startAICreation(){
   return;
  }
  if(!key){state.aiProgress='请先在设置 → AI 与创作保存所选服务的 API 密钥。';render();return;}if(!ids.length){state.aiProgress='请先在素材搭配中选择素材。';render();return;}
- let recorder;const projectID=targetProject.id,draftID=sourceDraft.id,controller=new AbortController();let commitTargetID=draftID,expectedDraft=structuredClone(sourceDraft),candidateCreated=false;
- const sourceVersions=new Map(ids.map(id=>[id,assetSourceRevision(findAsset(id))]));
- const assertRun=()=>{if(controller.signal.aborted||state.accountId!==accountID)throw Error('创作已停止或账号已切换');for(const [id,version] of sourceVersions){const current=state.assets.find(a=>a.id===id);if(!current||assetSourceRevision(current)!==version)throw Error('创作期间素材来源或标定已变化，已停止旧条件下的生成');}};
+ let recorder;const projectID=targetProject.id,controller=new AbortController();
+ const assertRun=createCreativeRunGuard({accountID,ids,assets:assetsSnapshot,getAccount:()=>state.accountId,getAsset:id=>state.assets.find(a=>a.id===id),signal:controller.signal});
+ const checkpoints=createCreativeCheckpoint({getProject:()=>state.projects.find(item=>item.id===projectID),targetDraftID:sourceDraft.id,expectedDraft:sourceDraft,newDraftID:uid,
+  persist:async active=>{saveSpecificProject(active);await flushSave();}});
  checkpoint();aiController=controller;state.aiBusy=true;state.aiProgress='正在准备素材预览…';aiReport={date:new Date().toISOString(),model,parameters:{generationMode:cfg.generationMode,temperature:cfg.temperature,maxTokens:cfg.maxTokens,materialCount:ids.length},rounds:[],outcome:'started'};render();
  try{
-  recorder=await createAIRecorder({db,model,key,accountId:state.accountId||'browser'});const aliases=materialAliases(ids),vision=supportsVision(cfg);
-  const images=vision?await prepareMaterialPreviews(ids,{findAsset,createImage:async(...args)=>{assertRun();return modelImage(...args);}}):[];assertRun();
-  const p=sourceProject,referenceImages=[];
-  if(cfg.sendPresetReferences&&vision){referenceImages.push(...(await loadJournalTemplateReferences({context:{styles:p.styles||[sourceDraft.style],purposes:p.purposes||[p.purpose||fallbackPurpose],materials:assetsSnapshot.filter(asset=>ids.includes(asset.id))},userTemplates:state.userTemplates,db})).referenceImages);}assertRun();
-  const output=await runCreativeAgent({...cfg,draft:sourceDraft,assets:assetsSnapshot,aliases,styles:p.styles||[sourceDraft.style],pagePurposes:p.purposes||[p.purpose||fallbackPurpose],contentPolicy:p.contentPolicy||'documentary',textPresentation:p.textPresentation||'mixed',userText:p.userText||'',providedFacts:p.providedFacts||'',requiredAssetIDs:p.requiredAssetIDs||[],materialPriority:p.materialPriority,processing:p.processing,prompt,images,referenceImages,userTemplates:state.userTemplates,request:recorder.request,signal:controller.signal,
+  recorder=await createAIRecorder({db,model,key,accountId:state.accountId||'browser'});const vision=supportsVision(cfg);
+  const {images,referenceImages}=await prepareCreativeRunInputs({project:sourceProject,draft:sourceDraft,assets:assetsSnapshot,ids,settings:{...cfg,supportsVision:vision},createImage:modelImage,
+    loadReferences:context=>loadJournalTemplateReferences({context,userTemplates:state.userTemplates,db}),guard:assertRun});
+  const output=await runCreativeAgent({...creativeRunParameters({project:sourceProject,draft:sourceDraft,assets:assetsSnapshot,ids,settings:cfg,prompt,userTemplates:state.userTemplates}),images,referenceImages,request:recorder.request,signal:controller.signal,
    onResponse:recorder.response,
-   onProgress:progress=>{state.aiProgress='请求 '+progress.budget.totalRequests+'/'+progress.budget.limit+'（创作 '+progress.budget.creationRequests+'、格式修复 '+progress.budget.formatRepairRequests+'） · '+progress.phase+' · '+progress.seconds+' 秒 · 已接收 '+progress.received+' 字符';publishAIStatus();},
+   onProgress:progress=>{state.aiProgress=creativeProgressText(progress);publishAIStatus();},
    onScene:vision?async d=>{assertRun();return (await rasterize(d,.7)).toDataURL('image/jpeg',.8);}:undefined,
    onFinalScene:async d=>{assertRun();return (await rasterize(d,Math.min(1.5,2000/Math.max(d.canvas.width,d.canvas.height)))).toDataURL('image/jpeg',.8);},
    onInspection:vision?async data=>{const parts=[];for(const m of data?.materials||[]){assertRun();const a=findAsset(m.assetID);if(a){const url=await modelImage(a,m.cropRect);if(url)parts.push({type:'text',text:m.key+' 的当前局部预览'},{type:'image_url',image_url:{url}});}}return parts;}:undefined,
-   onTurn:async({turn,results,draft,text,review})=>{assertRun();aiReport.rounds.push({turn,tools:results.map(x=>({name:x.name,ok:x.ok,detail:x.detail})),review});state.aiProgress='第 '+turn+' 轮\n'+results.map(x=>(x.ok?'✓':'×')+' '+x.name+'：'+x.detail).join('\n')+(text&&cfg.generationMode!=='direct'?'\n'+text:'');if(results.some(x=>x.ok&&x.name!=='inspect_materials')){const active=state.projects.find(item=>item.id===projectID);if(!active)throw Error('原创作作品已不存在；结果未覆盖其他作品');const committed=commitAIDraft(active,{targetDraftID:commitTargetID,expectedDraft,generatedDraft:draft,newDraftID:uid()});commitTargetID=committed.targetDraftID;expectedDraft=committed.expectedDraft;if(committed.candidate){candidateCreated=true;state.aiProgress+='\n检测到原稿已手动修改，AI 结果另存为候选方案。';}saveSpecificProject(active);await flushSave();}assertRun();await recorder.turn(turn,results,draft).catch(()=>{state.aiProgress+='\n诊断记录暂不可用；已提交的画布检查点不受影响。';});if(state.route==='editor')render();}
+   onTurn:async({turn,results,draft,text,review})=>{assertRun();aiReport.rounds.push({turn,tools:results.map(x=>({name:x.name,ok:x.ok,detail:x.detail})),review});state.aiProgress='第 '+turn+' 轮\n'+results.map(x=>(x.ok?'✓':'×')+' '+x.name+'：'+x.detail).join('\n')+(text&&cfg.generationMode!=='direct'?'\n'+text:'');if(hasCreativeSceneChange(results)){const committed=await checkpoints.commit(draft);if(committed.candidate)state.aiProgress+='\n检测到原稿已手动修改，AI 结果另存为候选方案。';}assertRun();await recorder.turn(turn,results,draft).catch(()=>{state.aiProgress+='\n诊断记录暂不可用；已提交的画布检查点不受影响。';});if(state.route==='editor')render();}
   });
-  assertRun();const completed=state.projects.find(item=>item.id===projectID);if(!completed)throw Error('原创作作品已不存在；结果未覆盖其他作品');const finalized=commitAIDraft(completed,{targetDraftID:commitTargetID,expectedDraft,generatedDraft:output.draft,newDraftID:uid()});commitTargetID=finalized.targetDraftID;candidateCreated||=finalized.candidate;completed.aiGenerated=true;completed.deliveryMode=cfg.deliveryMode;saveSpecificProject(completed);await flushSave();if(['image','pdf'].includes(cfg.deliveryMode)){await saveProjectSnapshot({...completed,projectDocumentPath:null,activeDraftID:commitTargetID},{format:cfg.deliveryMode==='pdf'?'application/pdf':'image/png'});completed.aiSnapshotCreated=true;saveSpecificProject(completed);}
-  aiReport.outcome='completed';aiReport.budget=output.budget;state.aiProgress+=candidateCreated?'\n结构已完成并另存 AI 候选；原稿手改未被覆盖。':'\n结构已完成，草稿已保存。';state.aiProgress+=output.draft.agentRun?.visualReview==='model-reviewed'?' GPT 已检查最终画面，仍可继续手改。':' 最终视觉请核对。';
+  assertRun();await checkpoints.commit(output.draft);const completed=state.projects.find(item=>item.id===projectID);completed.aiGenerated=true;completed.deliveryMode=cfg.deliveryMode;saveSpecificProject(completed);await flushSave();if(['image','pdf'].includes(cfg.deliveryMode)){await saveProjectSnapshot({...completed,projectDocumentPath:null,activeDraftID:checkpoints.targetDraftID},{format:cfg.deliveryMode==='pdf'?'application/pdf':'image/png'});completed.aiSnapshotCreated=true;saveSpecificProject(completed);}
+  aiReport.outcome='completed';aiReport.budget=output.budget;state.aiProgress+=checkpoints.candidateCreated?'\n结构已完成并另存 AI 候选；原稿手改未被覆盖。':'\n结构已完成，草稿已保存。';state.aiProgress+=output.draft.agentRun?.visualReview==='model-reviewed'?' GPT 已检查最终画面，仍可继续手改。':' 最终视觉请核对。';
  }catch(error){console.error(error);recordRuntimeIssue('handled',error,state.route,{phase:'ai'});aiReport.outcome=controller.signal.aborted?'stopped':'failed';aiReport.stopReason=error.code||aiReport.outcome;aiReport.budget=error.budget||null;aiReport.error=explainUserError(error,'创作');state.aiProgress+='\n'+aiReport.error+'。已保留成功的步骤。';}
  finally{await recorder?.finish(aiReport.outcome).catch(()=>{});if(aiController===controller)aiController=null;state.aiBusy=false;if(state.route==='editor')render();}
 }

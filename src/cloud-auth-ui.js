@@ -6,6 +6,9 @@ import {cloudClearCache,cloudPendingLocalSummary,cloudResumeCache,
   cloudSetResetCleanupPending,cloudCloseCacheBeforeRemoteReset} from './cloud-store.js';
 import {renderLoginGate,clearLoginGate} from './react-cloud-auth.jsx';
 import {updateShell} from './react-shell.jsx';
+import {passwordIdentifier,requestLoginOtp,verifyLoginOtp,configuredOAuthProviders} from './cloud-auth-methods.js';
+
+const oauthProviders=configuredOAuthProviders(import.meta.env?.VITE_SHIYE_OAUTH_PROVIDERS);
 
 export async function startCloudSession(onReady){
   if(!cloudEnabled){
@@ -21,7 +24,11 @@ export async function startCloudSession(onReady){
   }
   const client=cloudClient();
   const gate={visible:false,status:'正在恢复登录…',retryReady:false};
-  const showGate=patch=>{Object.assign(gate,patch);renderLoginGate({...gate,onLogin:login,onRetry:retry});};
+  let otpChallenge=null,resetChallenge=null;
+  const showGate=patch=>{Object.assign(gate,patch);renderLoginGate({...gate,
+    onLogin:login,onSendOtp:sendOtp,onVerifyOtp:verifyOtp,onResetPassword:resetPassword,
+    onConfirmReset:confirmReset,
+    onOAuth:oauthLogin,onSwitchAccount:switchAccount,oauthProviders,onRetry:retry});};
   const hasSession=async()=>{
     let timer;
     try{return !!(await Promise.race([client.auth.getSession(),new Promise(resolve=>{
@@ -35,11 +42,19 @@ export async function startCloudSession(onReady){
     try{await enter();}
     catch(error){showGate({visible:true,retryReady:true,status:error.message||'连接暂时不可用，请重试'});}
   }
+  async function switchAccount(){
+    try{
+      const result=await client.auth.signOut();
+      if(result?.error)throw result.error;
+      otpChallenge=null;
+      showGate({visible:true,retryReady:false,status:'已退出当前身份，请使用受邀账号登录。'});
+    }catch(error){showGate({visible:true,status:error.message||'切换账号失败，请重试'});}
+  }
   async function login(username,password){
     showGate({status:'正在验证账号…'});
     let signedIn=false;
     try{
-      const {error}=await client.auth.signInWithPassword({username:username.trim().toLowerCase(),password});
+      const {error}=await client.auth.signInWithPassword({...passwordIdentifier(username),password});
       if(error){
         if(error.code==='invalid_credentials')throw Error('用户名或密码不正确');
         throw Error(error.message||'登录服务暂时不可用，请稍后重试');
@@ -50,6 +65,60 @@ export async function startCloudSession(onReady){
       showGate({visible:true,retryReady:signedIn||await hasSession(),
         status:error.message||'登录失败，请检查网络'});
     }
+  }
+  async function sendOtp(kind,value){
+    otpChallenge=null;
+    showGate({status:'正在发送验证码…'});
+    try{
+      const verify=await requestLoginOtp(client.auth,kind,value);
+      otpChallenge={kind,value:value.trim(),verify};
+      showGate({status:'验证码已发送，请输入收到的验证码。'});
+      return true;
+    }catch(error){showGate({status:error.message||'验证码发送失败'});return false;}
+  }
+  async function verifyOtp(kind,value,code){
+    showGate({status:'正在验证验证码…'});
+    let signedIn=false;
+    try{
+      if(!otpChallenge||otpChallenge.kind!==kind||otpChallenge.value!==value.trim())
+        throw Error('登录信息已变化，请重新发送验证码');
+      await verifyLoginOtp(otpChallenge.verify,code);
+      otpChallenge=null;signedIn=true;
+      await enter();
+    }catch(error){showGate({visible:true,retryReady:signedIn,
+      status:error.message||'验证码登录失败'});}
+  }
+  async function resetPassword(email){
+    resetChallenge=null;
+    showGate({status:'正在发送密码重置邮件…'});
+    try{
+      const {data,error}=await client.auth.resetPasswordForEmail(email.trim());
+      if(error)throw error;
+      if(typeof data?.updateUser!=='function')throw Error('登录服务未返回密码重置方法');
+      resetChallenge={email:email.trim(),update:data.updateUser};
+      showGate({status:'重置验证码已发送，请输入验证码和新密码。'});
+      return true;
+    }catch(error){showGate({status:error.message||'重置邮件发送失败'});return false;}
+  }
+  async function confirmReset(email,nonce,password){
+    showGate({status:'正在更新密码…'});
+    try{
+      if(!resetChallenge||resetChallenge.email!==email.trim())throw Error('请重新发送重置验证码');
+      const {error}=await resetChallenge.update({nonce:nonce.trim(),password});
+      if(error)throw error;
+      resetChallenge=null;
+      showGate({status:'密码已更新，正在打开资料…'});
+      await enter();
+    }catch(error){showGate({visible:true,status:error.message||'密码重置失败'});}
+  }
+  async function oauthLogin(provider){
+    if(!oauthProviders.some(item=>item.id===provider))return;
+    showGate({status:'正在前往第三方登录…'});
+    try{
+      const {error}=await client.auth.signInWithOAuth({provider,
+        options:{redirectTo:location.origin+location.pathname}});
+      if(error)throw error;
+    }catch(error){showGate({visible:true,status:error.message||'第三方登录暂不可用'});}
   }
   showGate({});
   async function enter(){
@@ -116,7 +185,7 @@ export async function startCloudSession(onReady){
       let result;
       try{result=await client.auth.signOut();}
       catch{cloudResumeCache();alert('退出失败，请检查网络');return;}
-      if(result.error){cloudResumeCache();alert('退出失败，请检查网络');return;}
+      if(result?.error){cloudResumeCache();alert('退出失败，请检查网络');return;}
       location.reload();
     };
     const backup=async()=>{

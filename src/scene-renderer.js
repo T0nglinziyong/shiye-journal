@@ -57,8 +57,9 @@ export async function renderSceneCanvas(draft,{scale=1,loadMaterialImage,createC
      if(kind==='material')await drawMaterial(item,target);
      else if(kind==='shape'){
        const svg=shapeSVG(item);
-       if(!shapes.has(svg))shapes.set(svg,loadShapeImage('data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg)));
-       target.drawImage(await shapes.get(svg),-item.width/2,-item.height/2,item.width,item.height);
+       const key=svg+'@'+item.width+'x'+item.height;
+       if(!shapes.has(key))shapes.set(key,loadShapeImage('data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg),item));
+       target.drawImage(await shapes.get(key),-item.width/2,-item.height/2,item.width,item.height);
      }else if(kind==='text')drawSceneText(target,item);
    }finally{target.restore();}
  };

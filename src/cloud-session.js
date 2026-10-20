@@ -18,7 +18,8 @@ export async function prepareCloudClient(){
     registerAuth(cloudbase);registerMySQL(cloudbase);registerFunctions(cloudbase);
     if(cloudRealtimeEnabled){const {registerRealtimeJs}=await import('@cloudbase/js-sdk/realtime-js');registerRealtimeJs(cloudbase);}
     registerStorage(cloudbase);
-    const instance=cloudbase.init({env:envId,accessKey:publishableKey,timeout:30000});
+    const instance=cloudbase.init({env:envId,accessKey:publishableKey,region:'ap-shanghai',
+      timeout:30000,auth:{detectSessionInUrl:true}});
     const db=instance.rdb(),auth=typeof instance.auth==='function'?instance.auth():instance.auth;
     // Do not override GATEWAY with the website origin. Localhost, the testing
     // site and the custom domain all connect directly to the same environment.

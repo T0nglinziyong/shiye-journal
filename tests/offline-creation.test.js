@@ -18,7 +18,7 @@ const filesOf=async output=>unzipSync(new Uint8Array(await output.blob.arrayBuff
 
 test('current GPT task package has one root entry and grouped compact folders',async()=>{
   const output=await make(),files=await filesOf(output),context=JSON.parse(strFromU8(files['task/context.json']));
-  assert.deepEqual(Object.keys(files).filter(name=>!name.includes('/')).sort(),['START_HERE.txt','scene.json']);
+  assert.deepEqual(Object.keys(files).filter(name=>!name.includes('/')).sort(),['START_HERE.txt','package.json','scene.json']);
   assert.equal(context.format,'shiye-gpt-creation-package');assert.equal(context.version,2);
   assert.equal(context.source.taskBinding,'local');assert.equal(context.source.packageLayout,'compact');
   assert.equal(context.materials[0].assetID,asset.id);
@@ -120,7 +120,7 @@ test('web handoff exposes unified Scene and internal tool schemas and concise in
   assert.ok(JSON.parse(strFromU8(directFiles['examples/project.shiyeproject.json'])).page);
   assert.ok(JSON.parse(strFromU8(agentFiles['examples/project.shiyeproject.json'])).page);
   assert.deepEqual(JSON.parse(strFromU8(directFiles['schema/output.json'])),JSON.parse(strFromU8(agentFiles['schema/output.json'])));
-  assert.match(agent.prompts.file,/作品.shiyeproject.json/);
+  assert.match(agent.prompts.file,/project.shiyeproject.json/);
   assert.match(agent.prompts.file,/ZIP/);
   assert.match(agent.prompts.text,/展示/);
   assert.match(agent.prompts.text,/一个完整的/);
@@ -207,7 +207,7 @@ test('ZIP internal workflow honors copy-text delivery and internalizes visual se
  const output=await make(),files=await filesOf(output);
  for(const path of ['START_HERE.txt','task/WORKFLOW.txt','runtime/README.txt']){
   const guide=strFromU8(files[path]);
-  assert.ok(guide.includes('复制文本模式只交付实际 output/preview.png'));
+  assert.ok(guide.includes('复制文本模式交付 output/preview.png'));
   assert.match(guide,/不能另生成 JSON 文件/);
   assert.ok(!guide.includes('最终必须同时交付 output/project'));
  }

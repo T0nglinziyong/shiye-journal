@@ -1,10 +1,8 @@
 import {localDeviceRecords} from './local-device-records.js';
-import {assetSourceRevision} from './material-anatomy.js';
 import {usableProjectSnapshot} from './project-outbox-recovery.js';
 import {selectJournalReferenceCases,loadJournalReferenceCases} from './journal-reference-catalog.js';
 import {loadJournalTemplateReferences} from './journal-template-references.js';
-import {prepareMaterialPreviews} from './creative-previews.js';
-import {materialAliases} from './material-alias.js';
+import {creativeRunParameters,createCreativeRunGuard,prepareCreativeRunInputs,creativeProgressText,hasCreativeSceneChange,createCreativeCheckpoint} from './ai-creation-session.js';
 import {createMatchingCoverCache} from './matching-cover-cache.js';
 import {prepareProjectScene} from './scene-v2.js';
 const ID='matching-session-v1';
@@ -89,11 +87,11 @@ export function createMatchingSession(c){
   async generate(){
    if(controller){c.toast('已有方案正在创作，请先停止或等待完成');return;}
    const cfg=structuredClone(c.state.aiSettings);if(cfg.deliveryMode!=='image'&&!cfg.key)throw Error('请先在设置 → AI 与创作中保存 API 密钥');
-   const p=c.createProject(),ids=[...p.candidateAssetIDs],aliases=materialAliases(ids),assetsSnapshot=structuredClone(c.state.assets),templatesSnapshot=structuredClone(c.state.userTemplates||[]),findAsset=id=>assetsSnapshot.find(a=>a.id===id);
-   const sourceVersions=new Map(ids.map(id=>[id,assetSourceRevision(findAsset(id))]));
+   const p=c.createProject(),ids=[...p.candidateAssetIDs],assetsSnapshot=structuredClone(c.state.assets),templatesSnapshot=structuredClone(c.state.userTemplates||[]),findAsset=id=>assetsSnapshot.find(a=>a.id===id);
    const v={id:c.uid(),title:'方案 '+(variants.length+1),createdAt:new Date().toISOString(),status:'running',progress:'正在准备素材预览…',project:p};variants.unshift(v);const run=new AbortController();controller=run;let recorder,checkpointFailed=false;
    const accountID=c.state.accountId;
-   const ensureAccount=()=>{if(run.signal.aborted)throw run.signal.reason||Error('创作已停止');if(c.state.accountId!==accountID)throw Error('账号已变化，未把生成内容保存到另一个账号');for(const [id,version] of sourceVersions){const current=c.state.assets.find(a=>a.id===id);if(!current||assetSourceRevision(current)!==version)throw Error('创作期间素材来源或标定已变化；已停止提交旧条件的结果');}};
+   const ensureAccount=createCreativeRunGuard({accountID,ids,assets:assetsSnapshot,getAccount:()=>c.state.accountId,getAsset:id=>c.state.assets.find(a=>a.id===id),signal:run.signal});
+   const checkpoints=createCreativeCheckpoint({getProject:()=>p,targetDraftID:p.activeDraftID,expectedDraft:p.drafts[0],newDraftID:c.uid,persist:async()=>save()});
    update();
    try {
     await save();ensureAccount();
@@ -103,26 +101,25 @@ export function createMatchingSession(c){
      ensureAccount();const snapshot=await c.saveGeneratedImageSnapshot(blob,p);v.project=snapshot;v.linkedProjectID=snapshot.id;v.status='completed';v.progress='GPT 直接生成的图片已保存到画面快照；点击查看。';return;
     }
     recorder=await c.createAIRecorder({db:c.db,model:cfg.model,key:cfg.key,accountId:c.state.accountId||'browser'});const vision=c.supportsVision(cfg);
-    const images=vision?await prepareMaterialPreviews(ids,{findAsset,createImage:async(...args)=>{ensureAccount();return c.modelImage(...args);}}):[];
-    const references=[];if(cfg.sendPresetReferences&&c.supportsVision(cfg))references.push(...(await loadJournalTemplateReferences({context:{styles:p.styles,purposes:p.purposes,materials:assetsSnapshot.filter(asset=>ids.includes(asset.id))},userTemplates:templatesSnapshot,db:c.db})).referenceImages);
-    ensureAccount();
-    let steps='';const output=await c.runCreativeAgent({...cfg,draft:p.drafts[0],assets:assetsSnapshot,aliases,styles:p.styles,pagePurposes:p.purposes,contentPolicy:p.contentPolicy||'documentary',textPresentation:p.textPresentation||'mixed',userText:p.userText||'',providedFacts:p.providedFacts||'',requiredAssetIDs:p.requiredAssetIDs,materialPriority:p.materialPriority,processing:p.processing,prompt:p.intent||'',images,referenceImages:references,userTemplates:templatesSnapshot,request:recorder.request,signal:run.signal,
+    const {images,referenceImages}=await prepareCreativeRunInputs({project:p,draft:p.drafts[0],assets:assetsSnapshot,ids,settings:{...cfg,supportsVision:vision},createImage:c.modelImage,
+      loadReferences:context=>loadJournalTemplateReferences({context,userTemplates:templatesSnapshot,db:c.db}),guard:ensureAccount});
+    let steps='';const output=await c.runCreativeAgent({...creativeRunParameters({project:p,draft:p.drafts[0],assets:assetsSnapshot,ids,settings:cfg,prompt:p.intent||'',userTemplates:templatesSnapshot}),images,referenceImages,request:recorder.request,signal:run.signal,
      onResponse:recorder.response,
      onScene:vision?async d=>{ensureAccount();return (await c.rasterize(d,.7)).toDataURL('image/jpeg',.8);}:undefined,
      onFinalScene:async d=>{ensureAccount();return (await c.rasterize(d,Math.min(1.6,2000/Math.max(d.canvas.width,d.canvas.height)))).toDataURL('image/jpeg',.88);},
      onInspection:vision?async data=>{ensureAccount();const parts=[];for(const m of data?.materials||[]){const a=findAsset(m.assetID);if(a){const url=await c.modelImage(a,m.cropRect);if(url)parts.push({type:'text',text:m.key+' 的局部预览'},{type:'image_url',image_url:{url}});}}return parts;}:undefined,
-     onProgress:progress=>{v.progress=steps+'请求 '+progress.budget.totalRequests+'/'+progress.budget.limit+'（创作 '+progress.budget.creationRequests+'、格式修复 '+progress.budget.formatRepairRequests+'） · '+progress.phase+' · '+progress.seconds+' 秒 · 已接收 '+progress.received+' 字符';notify();},
+     onProgress:progress=>{v.progress=steps+creativeProgressText(progress);notify();},
      onTurn:async({turn,results,draft})=>{
-      ensureAccount();p.drafts=[structuredClone(draft)];p.activeDraftID=draft.id;
+      ensureAccount();
       steps+='第 '+turn+' 轮\n'+results.map(r=>(r.ok?'✓':'×')+' '+r.detail).join('\n')+'\n';v.progress=steps;
-      try{await save();}catch(error){checkpointFailed=true;throw error;}
+      try{if(hasCreativeSceneChange(results))await checkpoints.commit(draft);else await save();}catch(error){checkpointFailed=true;throw error;}
       update();
       // Diagnostics are optional. A failed log must not discard a successful
       // scene or trigger a replay of already committed material operations.
       try{await recorder.turn(turn,results,draft);}catch{v.progress+='\n诊断记录未保存；本轮画面已可靠暂存。';update();}
      }
     });
-    ensureAccount();p.drafts=[output.draft];p.activeDraftID=output.draft.id;p.aiGenerated=true;p.deliveryMode=cfg.deliveryMode;
+    ensureAccount();await checkpoints.commit(output.draft);p.aiGenerated=true;p.deliveryMode=cfg.deliveryMode;
     if(['image','pdf'].includes(cfg.deliveryMode)){const snapshot=await c.saveSnapshotFromDraft(p,{format:cfg.deliveryMode==='pdf'?'application/pdf':'image/png'});v.project=snapshot;v.linkedProjectID=snapshot.id;v.progress+='\n创作完成，已保存为不可编辑快照；点击查看。';}
     else{v.status='completed';await archiveCompleted(v.id);v.progress+='\n结构已完成，已自动保存到草稿。'+(output.draft.agentRun?.visualReview==='model-reviewed'?'GPT 已看过最终画面；这不是人工审美验收。':'最终视觉尚未完成复核。')+'点击方案继续编辑。';}
     v.status='completed';

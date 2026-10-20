@@ -41,6 +41,7 @@
     "@techstark/opencv-js": "5.0.0-release.1",
     "@zip.js/zip.js": "2.23.0",
     "ajv": "8.20.0",
+    "canvas": "3.2.3",
     "cos-nodejs-sdk-v5": "3.0.0",
     "eventsource-parser": "4.1.1",
     "fabric": "^7.4.0",
