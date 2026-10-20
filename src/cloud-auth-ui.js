@@ -50,7 +50,7 @@ export async function startCloudSession(onReady){
       const result=await client.auth.signOut();
       if(result?.error)throw result.error;
       otpChallenge=null;
-      showGate({visible:true,retryReady:false,status:'已退出当前身份，请使用受邀账号登录。'});
+      showGate({visible:true,retryReady:false,status:'已退出当前身份，请使用 CloudBase 账号登录。'});
     }catch(error){showGate({visible:true,status:error.message||'切换账号失败，请重试'});}
   }
   async function login(username,password){
