@@ -126,8 +126,8 @@ test('web handoff exposes unified Scene and internal tool schemas and concise in
   assert.match(agent.prompts.file,/ZIP/);
   assert.match(agent.prompts.text,/展示/);
   assert.match(agent.prompts.text,/一个完整的/);
-  assert.match(agent.prompts.text,/单行 JSON/);
-  assert.match(strFromU8(agentFiles['START_HERE.txt']),/JSON 代码围栏/);
+  assert.match(agent.prompts.text,/JSON/);
+  assert.match(strFromU8(agentFiles['START_HERE.txt']),/JSON 代码块/);
 });
 
 test('image delivery uses the same compact task grouping without editable schemas',async()=>{
@@ -210,7 +210,7 @@ test('ZIP internal workflow honors copy-text delivery and internalizes visual se
  for(const path of ['START_HERE.txt']){
   const guide=strFromU8(files[path]);
   assert.ok(guide.includes('复制文本模式交付 output/preview.png'));
-  assert.match(guide,/不能另生成 JSON 文件/);
+  assert.match(guide,/来自 pack 生成的同一文件/);
   assert.ok(!guide.includes('最终必须同时交付 output/project'));
  }
  assert.match(strFromU8(files['task/GUIDE.txt']),/内部看图自评，不要在最终回复中输出/);

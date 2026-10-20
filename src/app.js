@@ -113,12 +113,13 @@ import {rectifyA4Frame,suggestPaperCorners} from './perspective.js';
 import {analysisPixels,decodeRecognitionImage,sourcePixels} from './recognition-raster.js';
 import {isUntouchedLegacyExample} from './legacy-builtins.js';
 import {applyToolCalls,validateScenePhysical} from './creative.js';
-import {mapOfflineExportLimited,prepareOfflineMaterialPreview,prefetchOfflineImportImages} from './offline-export-assets.js';
+import {loadOfflineMaterialCover,mapOfflineExportLimited,prepareOfflineMaterialPreview,prefetchOfflineImportImages} from './offline-export-assets.js';
 import {buildMaterialScope} from './matching-materials.js';
 import {addMatchingFromLibrary,addMatchingFromRecommendation} from './matching-selection.js';
 import {matchingRecommendations} from './matching-view.js';
 import {captureMatchingScroll,restoreMatchingScroll} from './matching-scroll.js';
 import {restoreRouteScroll} from './navigation-scroll.js';
+import {createMainNavigation,mainSection} from './main-navigation.js';
 import {selectJournalReferenceCases,loadJournalReferenceCases} from './journal-reference-catalog.js';
 import {loadJournalTemplateReferences} from './journal-template-references.js';
 import {clearJournalPresetImages} from './journal-preset-images.js';
@@ -361,6 +362,20 @@ function captureSettings(){
   if(view.querySelector('#setting-display'))state.preferences={...state.preferences,display:view.querySelector('#setting-display').value,backdrop:view.querySelector('#setting-backdrop').value,maxPageItems:Number(view.querySelector('#setting-page-items').value)};
 }
 const routeScroll=new Map();
+const mainNavigation=createMainNavigation();
+const mainRoute=name=>mainSection(name,state.importMode);
+function navigateMain(target){
+  if(target==='library'&&['series','library'].includes(state.route))return;
+  if(target===state.route)return;
+  if(mainRoute(state.route)===target){
+    if(target==='library')navigateBack('library');
+    else route(target);
+    return;
+  }
+  const snapshot=mainNavigation.last(target,validNavigation);
+  if(snapshot)route(snapshot.route,{restoreSnapshot:snapshot});
+  else route(target==='library'?'series':target);
+}
 let cancelRouteScroll=()=>{};
 const routeScrollKey=name=>[name,state.seriesID,
   name==='library'?parity.libraryTab:'',name==='works'?parity.workTab:'',
@@ -474,16 +489,20 @@ window.addEventListener('popstate',event=>{
     history.replaceState(navigationEntry(captureNavigation(),0),'');
   }
 });
-// Material navigation remembers the actual tab/series detail. Opening Works,
-// Matching or Settings must not silently route back to Series.
-const lastMaterialLocation={route:'series',seriesID:'all',libraryTab:'series'};
 function navigateBack(fallback='series'){
+  const section=mainRoute(state.route);
+  if(section&&section===mainRoute(fallback)){
+    const snapshot=mainNavigation.back(section,validNavigation);
+    if(snapshot){route(snapshot.route,{restoreSnapshot:snapshot,replaceHistory:true});return;}
+    route(section==='library'?'series':section,{replaceHistory:true});
+    return;
+  }
   const entry=history.state?.shiyeNavigation;
   if(navigationScope&&entry?.scope===navigationScope&&entry.depth>0){rememberNavigation();history.back();return;}
   route(fallback,{back:true,replaceHistory:true});
 }
 let editorOpenSequence=0,editorSessionBaseline=null;
-function route(name,{back=false,restoreMaterial=false,restoreSnapshot=null,replaceHistory=false}={}){
+function route(name,{back=false,restoreSnapshot=null,replaceHistory=false}={}){
   if(state.route==='editor'&&name!=='editor'&&state.cutSession){
     if(sceneEditSessionChanged(state.cutSession)){
       toast('请先在剪刀面板完成或放弃本次操作');return;
@@ -497,18 +516,11 @@ function route(name,{back=false,restoreMaterial=false,restoreSnapshot=null,repla
     state.inspectorSession=null;state.fabricInspectorOpen=false;
   }
   cancelRouteScroll();
+  mainNavigation.visit(captureNavigation(),name,{back,replaceHistory,importMode:state.importMode});
   if(!back&&!replaceHistory&&name!==state.route)rememberNavigation();
   editorOpenSequence++;
   viewInteractionRevision++;
   const fromSettings=state.route==='settings';
-  if(['series','library'].includes(state.route)&&!['series','library'].includes(name)){
-    Object.assign(lastMaterialLocation,{route:state.route,
-      seriesID:state.seriesID,libraryTab:parity.libraryTab});
-  }
-  if(restoreMaterial&&['series','library'].includes(name)){
-    state.seriesID=state.series.some(row=>row.id===lastMaterialLocation.seriesID)?lastMaterialLocation.seriesID:'all';
-    parity.libraryTab=lastMaterialLocation.libraryTab||'series';
-  }
   if(state.route==='editor'&&name!=='editor'){
     view.flushInkCommit?.({renderUI:false,force:true});
     view.endTextEditing?.();
@@ -545,6 +557,7 @@ render();
     else if(!back&&name!==priorRoute)history.pushState(
       navigationEntry(captureNavigation(targetScroll),depth+1),'');
   }
+  mainNavigation.record(captureNavigation(targetScroll),state.importMode);
   // Do not interrupt an unfinished matching/import workspace with a remote
   // repaint. Pull all queued remote deletions immediately on returning to
   // another page, instead of waiting for the next polling window.
@@ -2197,7 +2210,10 @@ async function exportOfflineCreation(){
           asset:chosen,account,signal:controller.signal,
           loadVariant:(asset,edge)=>asset.staticPath
             ?fetch(asset.staticPath).then(response=>{if(!response.ok)throw Error('内置素材封面无法读取');return response.blob();})
-            :db.previewBlob(asset.blobId,edge,{allowRemoteOriginal:false})
+          :loadOfflineMaterialCover(asset,edge,{
+            preview:(id,pixels)=>db.previewBlob(id,pixels,{allowRemoteOriginal:false}),
+            original:id=>db.get('blobs',id)
+          })
         });
         if(row.cacheHit)report.cacheHits++;
         else report.covers++;
@@ -3594,12 +3610,7 @@ window.visualViewport?.addEventListener('resize',refitEditor);
 // Desktop file drop is equivalent to the regular import path; no drag
 // target overlays the editing canvas or iPad/Pencil UI.
 setShellActions({
-  navigate:target=>{
-  if(target==='library'){
-    if(['library','series'].includes(state.route))return; // keep current tab
-    route(lastMaterialLocation.route||'series',{restoreMaterial:true});
-  }else route(target);
-  },
+  navigate:target=>navigateMain(target),
   basket:()=>route('matching'),settings:()=>route('settings'),
   sync:()=>void openSyncDetails(),save:()=>{if(cloudEnabled)void openSyncDetails();},
   diagnostics:()=>{void import('./runtime-diagnostics.js').then(({runtimeIssueReport})=>
@@ -3637,8 +3648,8 @@ async function init(user,{resetPending=false,afterAccountReset=false,onFirstView
   const accountId=user?.id||'browser';
   if(state.accountId&&state.accountId!==accountId){
     navigationScope=null;
+    mainNavigation.reset();
     matchingScrollMemory=null;
-    Object.assign(lastMaterialLocation,{route:'series',seriesID:'all',libraryTab:'series'});
     parity.libraryTab='series';parity.workTab='all';parity.workFilters=null;
     parity.seriesQuery='';parity.seriesSort='recent';parity.seriesAscending=false;
     parity.selected.clear();parity.selectionMode=null;parity.showOnlySelected=false;
