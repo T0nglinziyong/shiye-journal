@@ -36,7 +36,7 @@
 @media(max-width:600px){.recognition-settings-group{padding:10px 12px;margin-bottom:9px;gap:7px}}
 
 /* Import confirmation: the first card is editable paper, never a flattened image. */
-.import-work-paper-preview{position:relative;display:grid;place-items:center;min-height:120px;background:var(--review-paper,#fcfaf0)!important;border-radius:10px;overflow:hidden}
+.import-work-paper-preview{position:relative;display:grid;place-items:center;min-height:120px;background-color:var(--review-paper,#fcfaf0)!important;border-radius:10px;overflow:hidden}
 .import-work-paper-preview.grid{background-image:linear-gradient(to right,#82978b45 1px,transparent 1px),linear-gradient(to bottom,#82978b45 1px,transparent 1px)!important;background-size:20px 20px}
 .import-work-paper-preview.lines{background-image:repeating-linear-gradient(to bottom,transparent 0 22px,#82978b65 23px,transparent 24px)!important}
 .import-work-paper-preview.dots{background-image:radial-gradient(#82978b77 1px,transparent 1px)!important;background-size:14px 14px}

@@ -1,8 +1,9 @@
 // Apply only AI fields which the user did not change during inference.
+import {isGeneratedImportAssetTitle} from './import-default-names.js';
 const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 export function automaticAssetClassification(latest,original,result){
   const update={...latest,autoOrganized:true};
-  if(latest.title===original.title&&/^素材 \d+$/.test(original.title||'')&&result.title)update.title=result.title;
+  if(latest.title===original.title&&isGeneratedImportAssetTitle(original.title)&&result.title)update.title=result.title;
   if(same(latest.tags||[],original.tags||[])&&!original.tags?.length&&Array.isArray(result.tags))update.tags=result.tags;
   for(const key of ['contentTags','styleTags','materialTags','placementHints','semanticColorNames'])
     if(!latest[key]?.length&&!original[key]?.length&&Array.isArray(result[key]))update[key]=result[key];

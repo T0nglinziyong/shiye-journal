@@ -1,4 +1,5 @@
 import {automaticAssetClassification} from './asset-automatic-classification.js';
+import {importDefaultTitle} from './import-default-names.js';
 // Production deployment refresh marker: 2026-10-04
 import {materialKindName} from './material-taxonomy.js';
 import {createElement} from 'react';
@@ -1073,6 +1074,7 @@ function updateEditorInspector(id,value){
     else return;
   }else if(id==='paper-color'&&color.test(value)){d.paperColor=value;changed=true;}
   else if(id==='paper-pattern'&&['plain','grid','lines','dots','columns'].includes(value)){d.paperPattern=value;changed=true;}
+  else if(id==='paper-columns'&&typeof value==='boolean'){d.paperColumns=value;changed=true;}
   else if(id==='page-ratio'){
     if(presetPaperDimensions(value)){setDraftPaperSize(d,value);changed=true;}
   }else if(id==='page-mode'&&['single','spread'].includes(value)){d.pageMode=value;d.canvas=canvasSize(value,d.pageRatio);changed=true;}
@@ -1959,9 +1961,12 @@ async function runAppAction(action,id,value){try{
     if(!state.cutSession)state.tool='select';render();break;
   case 'fabric-paper':{
     const d=current();if(!d)break;
-    if(id==='pattern'&&['plain','grid','lines','dots','columns'].includes(value)){
+    if(id==='pattern'&&['plain','grid','lines','dots'].includes(value)){
       if(d.paperPattern===value)break;
       checkpoint();d.paperPattern=value;
+    }else if(id==='columns'&&typeof value==='boolean'){
+      if(d.paperColumns===value)break;
+      checkpoint();d.paperColumns=value;
     }else if(id==='color'&&/^#[0-9a-f]{6}$/i.test(value)){
       if(d.paperColor===value)break;
       checkpoint();d.paperColor=value;
@@ -2750,7 +2755,7 @@ function saveActiveImportRecord(){
 }
 const importPrefetchJobs=new WeakMap();
 let importBatchRevision=0;
-async function extractImportCandidate(source,box,region,{mode,widthMM,heightMM,calibrated,index,lighting=null}){
+async function extractImportCandidate(source,box,region,{mode,widthMM,heightMM,calibrated,index,sourceName='',sourceIndex=0,lighting=null}){
   // Geometry/mask discovery uses the unchanged rectified photo. Both the
   // visible cutout AND the unmasked editing frame use the same output-only RGB
   // correction. Otherwise hand-restoring masked pixels reverts their colours.
@@ -2763,7 +2768,7 @@ async function extractImportCandidate(source,box,region,{mode,widthMM,heightMM,c
   const width=calibrated?Math.round(((region.orientedBox?.autoDeskew?region.orientedBox.width:region.w))*widthMM*10)/10:null,
     height=calibrated?Math.round(((region.orientedBox?.autoDeskew?region.orientedBox.height:region.h))*heightMM*10)/10:null;
   return {blob:aligned.blob,originalBlob:aligned.originalBlob,candidateFrameBlob:aligned.candidateFrameBlob||aligned.originalBlob,
-    url:URL.createObjectURL(aligned.blob),title:'素材 '+(index+1),width,height,alignment:aligned.degrees,
+    url:URL.createObjectURL(aligned.blob),title:importDefaultTitle(sourceName,'material',{sourceIndex,candidateIndex:index}),width,height,alignment:aligned.degrees,
     widthRatio:aligned.widthRatio,heightRatio:aligned.heightRatio,
     processingRecord:{automaticCorrectionDegrees:aligned.degrees,sourceWidthMM:width,sourceHeightMM:height,
       recognitionPixels:[900,1200,1600].includes(Number(state.preferences.recognitionPixels))
@@ -2807,7 +2812,7 @@ async function prefetchImportRecord(rec,settings,revision){
       ?await estimatePageLighting(source,candidates):null;
     const candidateData=await boundedMap(candidates,2,async(region,index)=>{
       if(!valid())return null;
-      const candidate=await extractImportCandidate(source,box,region,{mode:settings.mode,widthMM:pw,heightMM:ph,calibrated,index,lighting});
+      const candidate=await extractImportCandidate(source,box,region,{mode:settings.mode,widthMM:pw,heightMM:ph,calibrated,index,sourceName:rec.file.name,sourceIndex:state.importRecords.indexOf(rec),lighting});
       candidateURLs[index]=candidate.url;
       return candidate;
     });
@@ -2968,7 +2973,7 @@ async function refreshImportCandidates(regions,{manual=false}={}){
   try{
     next.push(...await boundedMap(plans,2,async({region,original},index)=>{
       if(original)return original;
-      const regenerated=await extractImportCandidate(source,b,region,{mode:state.importMode,widthMM:pw,heightMM:ph,calibrated,index,lighting});
+      const regenerated=await extractImportCandidate(source,b,region,{mode:state.importMode,widthMM:pw,heightMM:ph,calibrated,index,sourceName:record.file.name,sourceIndex:state.importIndex,lighting});
       // Changing only colour must not reset manual names, tags, dimensions or
       // choices, and must never cause the segmentation algorithm to rerun.
       const old=previous.find(item=>item.region===region)||
@@ -3237,7 +3242,7 @@ async function saveOfflineSnapshotFile(file,matchingProject,mimeType){
   if(!['image/png','image/jpeg','image/webp'].includes(mimeType))throw Error('请选择 PNG、JPEG 或 WebP 图片');
   const bitmap=await createImageBitmap(file);
   try{
-    const blobId=uid(),snapshot=snapshotRecord({title:file.name.replace(/\.[^.]+$/,'')||'导入的画面',previewBlobId:blobId,format:mimeType,width:bitmap.width,height:bitmap.height});
+    const blobId=uid(),snapshot=snapshotRecord({title:importDefaultTitle(file.name,'snapshot'),previewBlobId:blobId,format:mimeType,width:bitmap.width,height:bitmap.height});
     if(matchingProject){
       snapshot.styles=matchingProject.styles;snapshot.purposes=matchingProject.purposes;snapshot.intent=matchingProject.intent;
       snapshot.aiGenerated=true;snapshot.offlineBundleId=matchingProject.offlineBundleId||null;

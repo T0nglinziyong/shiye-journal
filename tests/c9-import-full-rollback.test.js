@@ -14,8 +14,9 @@ const expected={
   'responsive.css':'3daab9b366125aeda84ed7e78bf2ac72132c8981',
   // Reviewed change: editable work keeps candidate frames without the redundant full photo;
   // library materials no longer copy sourceRegion; import sheets keep explicit batch/page/item ordering.
-  // Recognition and segmentation are unchanged.
-  'import-save.js':'3c8ce9cad9233147b00fe9a3f674a522de566667',
+  // Recognition and segmentation are unchanged. Imported work and snapshot
+  // titles now use the shared readable-name helper before metadata is saved.
+  'import-save.js':'979f80b1e99afe179d0a32c106755a9874583b1c',
   'vision-runtime.js':'3817687ab32df7fb19c308c83902a6b123aabee1'
 };
 for(const [name,sha] of Object.entries(expected)){

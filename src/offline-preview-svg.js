@@ -2,6 +2,7 @@ import {previewImageFormat} from './offline-preview.js';
 import {sceneRenderEntries} from './craft-display.js';
 import {materialMaskGeometry} from './material-mask.js';
 import {shapeSVG,textLines} from './editor-tools-model.js';
+import {paperColumnPositions} from './paper-rendering.js';
 
 const xml=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[char]));
 const number=value=>Number.isFinite(value)?Number(value.toFixed(3)):0;
@@ -61,8 +62,9 @@ export function renderOfflinePreviewSVG(draft,source,previewFiles={}){
     if(draft.paperPattern==='grid')for(let x=40;x<width;x+=40)paper.push(`<path d="M${x} 0V${number(height)}"/>`);
   }else if(draft.paperPattern==='dots'){
     for(let y=42;y<height-42;y+=42)for(let x=42;x<width-42;x+=42)paper.push(`<circle cx="${x}" cy="${y}" r="1"/>`);
-  }else if(draft.paperPattern==='columns')for(const x of [.08,.48,.52,.92])paper.push(`<path d="M${number(width*x)} ${number(height*.1)}V${number(height*.9)}"/>`);
-  if(draft.paperColumns===true)for(const x of [.08,.48,.52,.92])paper.push(`<path d="M${number(width*x)} ${number(height*.1)}V${number(height*.9)}"/>`);
+  }
+  if(draft.paperColumns===true||draft.paperPattern==='columns')
+    for(const x of paperColumnPositions(draft.pageMode))paper.push(`<path d="M${number(width*x)} ${number(height*.1)}V${number(height*.9)}"/>`);
   if(draft.pageMode==='spread'&&draft.drawCenterGutter!==false)paper.push(`<path d="M${number(width/2)} 0V${number(height)}" stroke="#b9bbb4" stroke-width="2"/>`);
   return `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${number(width)}" height="${number(height+42)}" viewBox="0 0 ${number(width)} ${number(height+42)}"><defs>${defs.join('')}<clipPath id="page"><rect width="${number(width)}" height="${number(height)}"/></clipPath></defs><g clip-path="url(#page)"><rect width="${number(width)}" height="${number(height)}" fill="${paperColor}"/><g stroke="#d5d6cc" fill="none" opacity=".72">${paper.join('')}</g>${layers.join('')}</g><rect y="${number(height)}" width="${number(width)}" height="42" fill="#e9ede7"/><text x="16" y="${number(height+28)}" font-size="17" font-family="Noto Sans CJK SC, PingFang SC, Microsoft YaHei, sans-serif" fill="#415748">构图预览 · 基于可编辑图层与任务包缩略图；字体、抠图边缘及最终效果以拾页为准</text></svg>\n`;
 }

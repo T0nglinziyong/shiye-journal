@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {drawPaper} from '../src/paper-rendering.js';
+import {drawPaper,paperColumnPositions} from '../src/paper-rendering.js';
 import {draft as createDraft} from '../src/domain.js';
 import {renderOfflinePreviewSVG} from '../src/offline-preview-svg.js';
 
@@ -16,4 +16,7 @@ test('column ruling and grid paper render together in canvas and offline preview
   const svg=renderOfflinePreviewSVG(draft,{materials:[]});
   assert.match(svg,/M0 40H500/);
   assert.match(svg,/M40 70V630/);
+});
+test('a spread has independent column guides on each page',()=>{
+  assert.deepEqual(paperColumnPositions('spread'),[.04,.24,.26,.46,.54,.74,.76,.96]);
 });
