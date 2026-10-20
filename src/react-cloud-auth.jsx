@@ -2,6 +2,7 @@ import React,{useEffect,useRef,useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {createPortal,flushSync} from 'react-dom';
 import {StorageUsageDialog,PlatformHealthDialog} from './react-admin-dialog.jsx';
+import {requestIdentityBinding,confirmIdentityBinding} from './cloud-auth-methods.js';
 
 let loginRoot;
 function LoginGate({status,visible,onLogin,onSendOtp,onVerifyOtp,onResetPassword,
@@ -115,22 +116,75 @@ function PasswordDialog({client,onClose}){
 }
 function AccountIdentityDialog({account,onClose}){
   const [user,setUser]=useState(null),[status,setStatus]=useState('正在读取登录身份…');
+  const [mode,setMode]=useState(null),[challenge,setChallenge]=useState(null);
+  const [busy,setBusy]=useState(false);
+  const auth=account.client.auth;
+  const refresh=async()=>{
+    const {data,error}=await auth.getUser();
+    if(error)throw error;
+    setUser(data?.user||null);
+  };
   useEffect(()=>{let alive=true;
-    void account.client.auth.getUser().then(({data,error})=>{
+    void auth.getUser().then(({data,error})=>{
       if(!alive)return;
       if(error)throw error;
       setUser(data?.user||null);setStatus('');
     }).catch(error=>{if(alive)setStatus(error.message||'身份资料暂不可用');});
     return ()=>{alive=false;};
-  },[account.client]);
-  const providers=Array.isArray(user?.app_metadata?.providers)?user.app_metadata.providers:[];
+  },[auth]);
+  const providers=(Array.isArray(user?.app_metadata?.providers)?user.app_metadata.providers:[])
+    .filter(provider=>!['cloudbase','email','phone','password'].includes(provider));
+  const chooseMode=next=>{setMode(next);setChallenge(null);setStatus('');};
+  const bind=async event=>{
+    event.preventDefault();
+    const form=event.currentTarget;
+    setBusy(true);setStatus(challenge?'正在验证…':'正在发送验证码…');
+    try{
+      if(challenge){
+        await confirmIdentityBinding(challenge,form.elements.code.value);
+        await refresh();setChallenge(null);setMode(null);setStatus('绑定成功，可以使用此方式登录。');
+      }else{
+        const next=await requestIdentityBinding(auth,mode,form.elements.identifier.value);
+        if(next.complete){
+          await refresh();setMode(null);setStatus('绑定成功，可以使用此方式登录。');
+        }else{setChallenge(next);setStatus('验证码已发送，请输入收到的验证码。');}
+      }
+    }catch(error){setStatus(error.message||'绑定失败，请稍后重试');}
+    finally{setBusy(false);}
+  };
+  const link=async provider=>{
+    setBusy(true);setStatus('正在连接第三方身份…');
+    try{
+      const {error}=await auth.linkIdentity({provider});
+      if(error)throw error;
+      await refresh();setStatus('第三方身份已绑定。');
+    }catch(error){setStatus(error.message||'第三方身份绑定失败');}
+    finally{setBusy(false);}
+  };
   return <AuthDialog title="账号与登录方式" onClose={onClose}>
     <p>受邀账号：{account.username}</p>
-    {status?<p role="status">{status}</p>:<>
-      <p>邮箱：{user?.email||'未绑定'}</p><p>手机号：{user?.phone||'未绑定'}</p>
+    {user?<>
+      <div className="cloud-identity-row"><span>邮箱：{user.email||'未绑定'}</span>
+        <button className="btn" type="button" disabled={busy} onClick={()=>chooseMode('email')}>{user.email?'更换':'绑定'}</button></div>
+      <div className="cloud-identity-row"><span>手机号：{user.phone||'未绑定'}</span>
+        <button className="btn" type="button" disabled={busy} onClick={()=>chooseMode('phone')}>{user.phone?'更换':'绑定'}</button></div>
       <p>第三方身份：{providers.length?providers.join('、'):'未绑定'}</p>
+      {account.oauthProviders?.filter(provider=>!providers.includes(provider.id)).map(provider=><button
+        key={provider.id} className="btn" type="button" disabled={busy}
+        onClick={()=>void link(provider.id)}>绑定{provider.label}</button>)}
       <p>验证码和第三方登录只有与当前受邀身份绑定时，才能打开这个账号的资料。</p>
-    </>}
+    </>:null}
+    {mode?<form className="cloud-identity-form" onSubmit={bind}>
+      <label>{mode==='email'?'新邮箱':'新手机号'}<input name="identifier"
+        type={mode==='email'?'email':'tel'} autoComplete={mode==='email'?'email':'tel'}
+        disabled={busy||!!challenge} required onChange={()=>setChallenge(null)}/></label>
+      {challenge?<label>验证码<input name="code" inputMode="numeric"
+        autoComplete="one-time-code" disabled={busy} required/></label>:null}
+      <div className="cloud-dialog-actions"><button className="btn" type="button"
+        disabled={busy} onClick={()=>chooseMode(null)}>取消</button>
+        <button className="btn primary" type="submit" disabled={busy}>{challenge?'验证并绑定':'发送验证码'}</button></div>
+    </form>:null}
+    <p role="status">{status}</p>
     <div className="cloud-dialog-actions"><button className="btn" type="button" onClick={onClose}>关闭</button></div>
   </AuthDialog>;
 }
