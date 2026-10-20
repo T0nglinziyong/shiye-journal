@@ -4,26 +4,66 @@ import {createPortal,flushSync} from 'react-dom';
 import {StorageUsageDialog,PlatformHealthDialog} from './react-admin-dialog.jsx';
 
 let loginRoot;
-function LoginGate({status,visible,onLogin,onRetry,retryReady=false}){
+function LoginGate({status,visible,onLogin,onSendOtp,onVerifyOtp,onResetPassword,
+  onConfirmReset,onOAuth,onSwitchAccount,oauthProviders=[],onRetry,retryReady=false}){
   const [busy,setBusy]=useState(false);
+  const [mode,setMode]=useState('password');
+  const [codeSent,setCodeSent]=useState(false);
+  const [resetSent,setResetSent]=useState(false);
+  const selectMode=next=>{setMode(next);setCodeSent(false);setResetSent(false);};
   const submit=async event=>{
     event.preventDefault();
     const form=event.currentTarget;
     setBusy(true);
-    try{await onLogin(form.elements.email.value,form.elements.password.value);
-      form.elements.password.value='';
+    try{
+      if(mode==='password'){
+        await onLogin(form.elements.identifier.value,form.elements.password.value);
+        form.elements.password.value='';
+      }else if(mode==='reset'){
+        if(resetSent)await onConfirmReset(form.elements.identifier.value,
+          form.elements.code.value,form.elements.password.value);
+        else setResetSent(await onResetPassword(form.elements.identifier.value));
+      }
+      else if(codeSent)await onVerifyOtp(mode,form.elements.identifier.value,form.elements.code.value);
+      else setCodeSent(await onSendOtp(mode,form.elements.identifier.value));
     }finally{setBusy(false);}
   };
-  return <main className="cloud-login" style={{maxWidth:420,margin:'12vh auto',padding:16}}>
+  return <main className="cloud-login">
     <section className="panel"><h1>登录拾页</h1>
-      <p>每位用户的资料独立保存在私人云端。账号由管理员创建；登录后本浏览器会保持会话，直到主动退出。</p>
+      <p>账号采用邀请制。请使用已授权的用户名、邮箱或手机号登录。</p>
       {retryReady&&<button className="btn primary" type="button" disabled={busy}
         onClick={async()=>{setBusy(true);try{await onRetry();}finally{setBusy(false);}}}>重试连接</button>}
       <form data-login hidden={!visible} onSubmit={submit}>
-        <label>用户名<input name="email" type="text" autoComplete="username" required/></label>
-        <label>密码<input name="password" type="password" autoComplete="current-password" required/></label>
-        <button className="btn primary" type="submit" disabled={busy}>登录</button>
+        <div className="cloud-login-modes" role="tablist" aria-label="登录方式">
+          {[['password','密码'],['email','邮箱验证码'],['phone','短信验证码']].map(([id,label])=><button
+            key={id} type="button" role="tab" aria-selected={mode===id} disabled={busy}
+            onClick={()=>selectMode(id)}>{label}</button>)}
+        </div>
+        <label>{mode==='email'||mode==='reset'?'邮箱':mode==='phone'?'手机号':'用户名 / 邮箱 / 手机号'}
+          <input name="identifier" type={mode==='email'||mode==='reset'?'email':mode==='phone'?'tel':'text'}
+            autoComplete={mode==='phone'?'tel':mode==='email'||mode==='reset'?'email':'username'} required
+            onChange={()=>{setCodeSent(false);setResetSent(false);}}/></label>
+        {mode==='password'?<label>密码<input name="password" type="password"
+          autoComplete="current-password" required/></label>:null}
+        {(mode==='email'||mode==='phone')&&codeSent?<label>验证码<input name="code"
+          inputMode="numeric" autoComplete="one-time-code" required/></label>:null}
+        {mode==='reset'&&resetSent?<><label>邮件验证码<input name="code" inputMode="numeric"
+          autoComplete="one-time-code" required/></label><label>新密码（至少 12 位）
+          <input name="password" type="password" minLength="12" autoComplete="new-password" required/></label></>:null}
+        <button className="btn primary" type="submit" disabled={busy}>
+          {busy?'请稍候…':mode==='reset'?(resetSent?'重置密码':'发送重置验证码'):
+            mode==='password'?'登录':codeSent?'验证并登录':'发送验证码'}</button>
+        {(mode==='email'||mode==='phone')&&codeSent?<button className="btn" type="button"
+          disabled={busy} onClick={()=>setCodeSent(false)}>重新发送</button>:null}
+        {mode==='password'?<button className="cloud-login-link" type="button" onClick={()=>selectMode('reset')}>忘记密码？</button>:null}
+        {mode==='reset'?<button className="cloud-login-link" type="button" onClick={()=>selectMode('password')}>返回登录</button>:null}
       </form><p role="status">{status}</p>
+      {visible&&retryReady?<button className="cloud-login-link" type="button"
+        onClick={onSwitchAccount}>切换账号</button>:null}
+      {visible&&oauthProviders.length?<div className="cloud-login-oauth"><p>其他已绑定的登录方式</p>
+        {oauthProviders.map(provider=><button className="btn" type="button" key={provider.id}
+          disabled={busy} onClick={()=>onOAuth(provider.id)}>{provider.label}登录</button>)}
+      </div>:null}
     </section>
   </main>;
 }
@@ -73,6 +113,27 @@ function PasswordDialog({client,onClose}){
     </div>
   </form></AuthDialog>;
 }
+function AccountIdentityDialog({account,onClose}){
+  const [user,setUser]=useState(null),[status,setStatus]=useState('正在读取登录身份…');
+  useEffect(()=>{let alive=true;
+    void account.client.auth.getUser().then(({data,error})=>{
+      if(!alive)return;
+      if(error)throw error;
+      setUser(data?.user||null);setStatus('');
+    }).catch(error=>{if(alive)setStatus(error.message||'身份资料暂不可用');});
+    return ()=>{alive=false;};
+  },[account.client]);
+  const providers=Array.isArray(user?.app_metadata?.providers)?user.app_metadata.providers:[];
+  return <AuthDialog title="账号与登录方式" onClose={onClose}>
+    <p>受邀账号：{account.username}</p>
+    {status?<p role="status">{status}</p>:<>
+      <p>邮箱：{user?.email||'未绑定'}</p><p>手机号：{user?.phone||'未绑定'}</p>
+      <p>第三方身份：{providers.length?providers.join('、'):'未绑定'}</p>
+      <p>验证码和第三方登录只有与当前受邀身份绑定时，才能打开这个账号的资料。</p>
+    </>}
+    <div className="cloud-dialog-actions"><button className="btn" type="button" onClick={onClose}>关闭</button></div>
+  </AuthDialog>;
+}
 export function CloudAccountMenu({account}){
   const [open,setOpen]=useState(false),[dialog,setDialog]=useState(null),host=useRef(null);
   useEffect(()=>{
@@ -90,6 +151,7 @@ export function CloudAccountMenu({account}){
       aria-controls="cloud-account-menu" onClick={()=>setOpen(value=>!value)}>账号</button>
     <div id="cloud-account-menu" className="cloud-account-menu" hidden={!open}>
       <small data-account-name="">{account.username} · 私人云端资料</small>
+      <button type="button" className="btn" onClick={()=>choose(()=>setDialog('identity'))}>账号与登录方式</button>
       <button type="button" className="btn" data-storage-usage
         onClick={()=>choose(()=>setDialog('storage'))}>我的存储用量</button>
       <button type="button" className="btn" data-platform-health
@@ -102,6 +164,7 @@ export function CloudAccountMenu({account}){
         onClick={()=>choose(account.onLogout)}>退出登录</button>
     </div>
     {dialog==='password'?<PasswordDialog client={account.client} onClose={()=>setDialog(null)}/>:null}
+    {dialog==='identity'?<AccountIdentityDialog account={account} onClose={()=>setDialog(null)}/>:null}
     
     
     {dialog==='storage'?<StorageUsageDialog onClose={()=>setDialog(null)}/>:null}

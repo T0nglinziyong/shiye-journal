@@ -23,7 +23,9 @@ export function StorageUsageDialog({onClose}){
    if(busy)return;
    setBusy(true);setError('');
    try{setReport(await controller.getUsage());}
-   catch(cause){setError(cause.message||'CloudBase 存储统计暂不可用');}
+   catch(cause){setError(cause.code==='MIGRATION_REQUIRED'?
+     '账号容量统计尚未启用：管理员需执行 deploy/cloudbase/006-account-usage.sql。':
+     cause.message||'CloudBase 存储统计暂不可用');}
    finally{setBusy(false);}
  };
  useEffect(()=>{void load();},[]);

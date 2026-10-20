@@ -5,7 +5,7 @@ import {project} from '../src/domain.js';
 import {createOfflineHandoff} from '../src/offline-creation.js';
 
 const asset={id:'real-asset',title:'纸质贴纸',kind:'sticker',physicalWidthMM:35,physicalHeightMM:42,supply:{quantity:1}};
-test('GPT ZIP requires showing a real same-scene Canvas image, not merely producing HTML/SVG',async()=>{
+test('GPT ZIP requires a real same-scene Node Canvas PNG and editable JSON',async()=>{
  const p=project('预览交付',{style:'自由构图'});p.candidateAssetIDs=[asset.id];
  const bundle=await createOfflineHandoff({project:p,assets:[asset],aliases:{m1:asset.id},
    settings:{generationMode:'direct',includeThumbnails:false}});
@@ -16,8 +16,8 @@ test('GPT ZIP requires showing a real same-scene Canvas image, not merely produc
   assert.match(text,/PNG/,'document must request a user-visible PNG: '+path);
  }
  const start=strFromU8(zip['START_HERE.txt']);
- assert.match(start,/聊天中实际展示/);
- assert.match(start,/SHIYE_RENDER_READY/);
- assert.match(start,/不能用.*\.svg/);
+ assert.match(start,/实际查看 output\/preview\.png/);
+ assert.match(start,/project\.shiyeproject\.json/);
+ assert.doesNotMatch(start,/SHIYE_RENDER_READY|画面预览\.html/);
  assert.ok(zip['runtime/preview.cjs']);
 });

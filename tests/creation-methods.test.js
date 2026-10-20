@@ -14,7 +14,7 @@ test('creative method and web return method are independent choices',()=>{
 test('editable delivery requires PNG plus JSON for both file and text outputs',()=>{
   for(const mode of ['tools','json']){
     const file=webResultPrompt(mode,'file');
-    assert.match(file,/作品.shiyeproject.json/);
+    assert.match(file,/project.shiyeproject.json/);
     assert.match(file,/ZIP/);
     assert.match(file,/Canvas/);assert.match(file,/两个可下载文件/);assert.match(file,/preview.png/);
     const text=webResultPrompt(mode,'text');

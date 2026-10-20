@@ -9,9 +9,11 @@ import {attachSceneV2} from '../src/scene-v2.js';
 import {craftSceneHash} from '../src/craft-fingerprint.js';
 import {assetSourceRevision} from '../src/material-anatomy.js';
 import {applyWebSceneCommands,compileWebSceneInput,validateWebScene,webSceneDocument} from '../src/web-scene-workbench.js';
+import {linkTestCanvas,tinyPNG} from './offline-canvas-test-support.mjs';
 const assets=[{id:'a',title:'小纸片',kind:'sticker',blobId:'fixed-a',physicalWidthMM:30,physicalHeightMM:40}];
-const fixture=async(p=project('图层测试'),sourceAssets=assets)=>{
- const task=await createOfflineHandoff({project:p,assets:sourceAssets,aliases:{m1:'a',...(sourceAssets.some(row=>row.id==='b')?{m2:'b'}:{})},settings:{includeThumbnails:false}});
+const fixture=async(p=project('图层测试'),sourceAssets=assets,withImages=false)=>{
+ const aliases={m1:'a',...(sourceAssets.some(row=>row.id==='b')?{m2:'b'}:{})};
+ const task=await createOfflineHandoff({project:p,assets:sourceAssets,aliases,previews:withImages?Object.keys(aliases).map(alias=>({alias,bytes:tinyPNG})):[],settings:{includeThumbnails:withImages}});
  const files=unzipSync(new Uint8Array(await task.blob.arrayBuffer()));
  return {task,files,doc:JSON.parse(strFromU8(files['examples/project.shiyeproject.json']))};
 };
@@ -132,10 +134,11 @@ test('curved text, repeatable stamps, material replacement, layout reuse and gly
  assert.equal(mappedMaterial.assetID,'b');assert.equal(mappedMaterial.sourceBlobId,'fixed-b');
  assert.equal(importEditableWork(JSON.stringify(mapped),sourceAssets).drafts[0].items.length,2);
 });
-test('self-contained runtime compiles, revises, inspects, renders input and exports one hash-bound snapshot',async()=>{
- const {files,task}=await fixture(),dir=await mkdtemp(join(tmpdir(),'shiye-workbench-'));
+test('Node Canvas runtime renders PNG and refuses a stale or changed snapshot',async()=>{
+ const {files,task}=await fixture(project('图层测试'),assets,true),dir=await mkdtemp(join(tmpdir(),'shiye-workbench-'));
  try{
   for(const [name,data] of Object.entries(files)){await mkdir(dirname(join(dir,name)),{recursive:true});await writeFile(join(dir,name),data);}
+  await linkTestCanvas(dir);
   const run=(name,...args)=>{const r=spawnSync(process.execPath,['runtime/'+name+'.cjs',...args],{cwd:dir,encoding:'utf8',timeout:15000});return r;};
   assert.equal(run('self-test').status,0);
   assert.equal(run('compile','examples/instructions.json').status,0);
@@ -146,16 +149,14 @@ test('self-contained runtime compiles, revises, inspects, renders input and expo
   assert.equal(run('apply').status,1);assert.equal(await readFile(join(dir,'scene.json'),'utf8'),original);
   doc.page.layers.push({id:'note',type:'text',content:'春日记录',fontSize:32,style:'sans',color:'#223344',x:200,y:180,width:300,height:60});
   await writeFile(join(dir,'scene.json'),JSON.stringify(doc));
-  assert.equal(run('preview').status,0);
-  const missing=run('pack');assert.equal(missing.status,1);
-  const missingReport=JSON.parse(await readFile(join(dir,'output/validation-report.json'),'utf8'));
-  assert.match(missingReport.issue,/PNG/);
-  const manifest=JSON.parse(await readFile(join(dir,'output/preview-manifest.json'),'utf8'));
-  assert.equal(craftSceneHash(importEditableWork(JSON.stringify(doc),assets,{trustedSource:task.source}).drafts[0]),manifest.sceneHash);
-  await writeFile(join(dir,'output/canvas-capture.json'),JSON.stringify({sceneHash:'sha256:old',png:'data:image/png;base64,AAAA'}));
-  const stale=run('save-preview');assert.equal(stale.status,1);
-  const staleReport=JSON.parse(await readFile(join(dir,'output/validation-report.json'),'utf8'));
-  assert.match(staleReport.issue,/旧 Scene/);
+  const preview=run('preview');assert.equal(preview.status,0,preview.stderr||preview.stdout);
+  const capture=JSON.parse(await readFile(join(dir,'output/preview-capture.json'),'utf8'));
+  assert.equal(craftSceneHash(importEditableWork(JSON.stringify(doc),assets,{trustedSource:task.source}).drafts[0]),capture.sceneHash);
+  assert.deepEqual([...await readFile(join(dir,'output/preview.png'))].slice(0,8),[137,80,78,71,13,10,26,10]);
+  const packed=run('pack');assert.equal(packed.status,0,packed.error?.message||packed.stderr||packed.stdout);
+  const manifest=JSON.parse(await readFile(join(dir,'output/delivery-manifest.json'),'utf8'));
+  assert.deepEqual(manifest.deliverables,['project.shiyeproject.json','preview.png']);
+  assert.equal(manifest.sceneHash,capture.sceneHash);
   doc.page.layers.at(-1).content='改变之后';await writeFile(join(dir,'scene.json'),JSON.stringify(doc));
   assert.equal(run('pack').status,1,'stale preview cannot validate a changed scene');
   await assert.rejects(readFile(join(dir,'output/project.shiyeproject.json')),{code:'ENOENT'});

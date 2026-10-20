@@ -77,7 +77,7 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
   const {offlineValidateSource}=await import('./generated/offline-validate-source.js');
   const {offlineGlyphSource}=await import('./generated/offline-glyph-source.js');
   const mode='scene';
-  source.capabilities={sceneWorkbench:true,cropPx:false,craftPlan:true,multimodalVision:showImages,twoHoleWeave:true,editableTapeRibbon:true,canonicalBrowserPreview:true,validateOffline:true,previewOffline:'canvas'};
+  source.capabilities={sceneWorkbench:true,cropPx:false,craftPlan:true,multimodalVision:showImages,twoHoleWeave:true,editableTapeRibbon:true,canonicalNodePreview:true,validateOffline:true,previewOffline:'node-canvas'};
   source.packageLayout='compact';
   source.schemaHash=schemaFingerprint(webSceneContract);source.planSchemaHash=schemaFingerprint(toolContracts.apply_craft_plan);
   freezeCraftTask(source,p.drafts[0],assets);
@@ -103,7 +103,7 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
   }
   const example=webSceneDocument(source,exampleDraft,'字段示例（请重新创作）');
   const knowledge={format:'shiye-gpt-task-knowledge',version:3,
-    capabilities:{...webSceneCapabilities,runtime:{validate:'node20',render:'browser-html-manual',preview:'canvas',visualReview:'manual-required'},craft:{plan:true,observations:showImages,twoHoleWeave:true,glyphGeometry:'local-font-required'}},
+    capabilities:{...webSceneCapabilities,runtime:{validate:'node20',render:'node-canvas',preview:'png',visualReview:'manual-required'},craft:{plan:true,observations:showImages,twoHoleWeave:true,glyphGeometry:'local-font-required'}},
     regions:source.sourceSnapshots.map(snapshot=>({assetID:snapshot.assetID,sourceRevision:snapshot.sourceRevision})),
     compositionIdeas:compositionIdeas(source).slice(0,3),caseStudies:{families:relevantJournalFamilies(source),selectedCases:hasPresets?selectedCases.map(({id,title,method})=>({id,title,method})):[]}};
   if(hasPresets){
@@ -116,6 +116,7 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
   const files={
     'START_HERE.txt':strToU8(webWorkbenchInstructions),
     'scene.json':strToU8(JSON.stringify(work,null,2)),
+    'package.json':strToU8(JSON.stringify({private:true,type:'commonjs',dependencies:{canvas:'3.2.3'}},null,2)),
     'task/context.json':strToU8(JSON.stringify(context,null,2)),
     'task/WORKFLOW.txt':strToU8(webWorkbenchInstructions),
     'task/EDITING.txt':strToU8(webEditingGuide),
@@ -136,7 +137,7 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
     'runtime/validate.cjs':strToU8(offlineValidateSource),
     'runtime/README.txt':strToU8(webWorkbenchInstructions+'\n\n'+webEditingGuide)
   };
-  for(const name of ['inspect','compile','apply','preview','save-preview','pack','self-test'])files['runtime/'+name+'.cjs']=strToU8(`process.argv.splice(2,0,'${name}');require('./validate.cjs');\n`);
+  for(const name of ['inspect','compile','apply','preview','pack','self-test'])files['runtime/'+name+'.cjs']=strToU8(`process.argv.splice(2,0,'${name}');require('./validate.cjs');\n`);
   for(const entry of chosen)if(validAlias(entry.alias)&&source.materials.some(item=>item.alias===entry.alias))files[packagePreviewPath('materials',entry.alias,entry.bytes,{transparent:true})]=entry.bytes;
   if(hasPresets)for(const entry of referenceImages)files[packagePreviewPath('references',entry.id,entry.bytes)]=entry.bytes;
   const bytes=await new Promise((resolve,reject)=>zip(files,{level:4},(error,result)=>error?reject(error):resolve(result)));

@@ -7,6 +7,7 @@
 - 网页：`https://shiye-journal-test-shiye-pg-test-d1gg723f7fb356ccc.webapps.tcloudbase.com`
 - 静态前端：`npm ci`，`npm run build`，目录 `dist`，网站根目录 `/`，GitHub `test`。
 - 前端公开配置：`VITE_SHIYE_CLOUDBASE_ENV_ID`、`VITE_SHIYE_CLOUDBASE_PUBLISHABLE_KEY`。
+- 认证：维持邀请制，CloudBase 控制台关闭自助注册；受邀身份先在 Auth 创建，再以同一 Auth user ID 写入 `shiye_accounts`。网站支持用户名/邮箱/手机号加密码、邮箱验证码和中国大陆短信验证码；验证码请求均使用 `shouldCreateUser:false`，最终仍须通过 `shiye_accounts` 核验。邮箱/手机号必须先绑定到受邀 Auth 身份；仅在控制台开通并完成回调域名配置的第三方提供商可写入前端公开变量 `VITE_SHIYE_OAUTH_PROVIDERS`（例如 `wechat,github`），未配置不显示。不要用不同 Auth user ID 自动合并资料。
 - 实时通知：现有个人版 PostgreSQL 环境缺少 `realtime` schema 和 `cloudbase_realtime_admin`，不能执行 `deploy/cloudbase/003-realtime-revisions.sql`。腾讯云文档要求该环境由服务端先开通；公开 API 名称 `EnablePGRealtime` 在当前 CloudBase API 版本返回 `InvalidAction`，不可自行创建空 schema/角色冒充已开通。待腾讯云实际开启 PG CDC 后再应用迁移并设置 `VITE_SHIYE_REALTIME_ENABLED=true`；订阅成功时改为每 60 秒兜底核对，订阅故障时恢复 5 秒轮询。当前不能宣称实时通知已上线。
 - 云存储：先执行 `deploy/cloudbase/004-private-storage.sql` 创建 `shiye-private` 和 `shiye-presets` 两个私有桶及 RLS 策略。将 70 张预设图迁入 `shiye-presets/journal-presets/source/`，将账号对象迁入 `shiye-private/<user-id>/`，逐件下载核对 SHA-256，再改数据库引用。旧 COS 对象在新站和各设备完成验收前保留，不作为新站读取回退。
 - 引用切换：完成对象复制核对后执行 `deploy/cloudbase/005-switch-object-references.sql`；该事务更新 blob provider 和同步修订，并阻止旧客户端重新提交 COS blob 引用。执行后分别核对 70 个预设、全部私有对象及 `shiye_records` 中没有 COS blob 引用。
@@ -22,8 +23,9 @@ CloudBase Auth 管理身份，PostgreSQL/RLS/事务 RPC 管理元数据和同步
 1. 从短期分支经 PR 合入 `test`，在现有 CloudBase App 上触发 Git 构建，确认成功，并核对该网站 `/version.json` 的 `commit` 与 `test` 的准确 SHA 一致。CloudBase Git 构建工作区未提供 `.git`，本项目实测不能靠 `git rev-parse` 自动取得 SHA；每次构建须把该次 `test` 的完整 SHA 配为 `SHIYE_BUILD_SHA`，并设 `SHIYE_BUILD_BRANCH=test`。本地/其他 CI 仍可由构建脚本读取 `GITHUB_SHA` 或 Git HEAD。若部署版 `commit` 为 `null` 或旧 SHA，不得宣称已核对版本。
 2. `npm ci && npm test && npm run build && npm run test:ui`，且 `node scripts/audit-cloudbase-platform.mjs` 通过。CI 若失败、被阻断或没有执行步骤，不能标记全量已验收。
 3. 真机：登录恢复、迁移后的原图及预设图读取、新图片上传、原图/缩略图、离线队列、跨设备修改、413 与 403，以及应用诊断报告 v3。
-4. 数据库增量迁移 `deploy/cloudbase/001-platform-search.sql` 和可选 `002-platform-vector.sql` 必须先在隔离库测试并备份线上资料后才执行；静态站构建不会自动运行 SQL。
+4. 账号容量菜单依赖只读迁移 `deploy/cloudbase/006-account-usage.sql`；它可独立于搜索迁移执行。数据库增量迁移 `001-platform-search.sql`、可选 `002-platform-vector.sql` 及 `006-account-usage.sql` 必须先在隔离库测试并备份线上资料后才执行；静态站构建不会自动运行 SQL。未执行 `006` 时账号容量会明确提示缺少迁移。
 5. `pgvector` 当前只保留禁用入口。没有 Embedding 模型和索引，不调用付费模型；关键词检索部署与启用也要单独验收。
+6. 登录验收：受邀账号密码登录、邮箱和短信收码及验证、密码找回四步流程、未受邀身份拒绝、退出后重登、多个设备分别登录。第三方登录逐个核实控制台启用、回调域名和受邀身份绑定；只有实际验收通过后才设置 `VITE_SHIYE_OAUTH_PROVIDERS`。账号菜单逐项检查容量、服务状态、改密、旧资料导出和退出。短信验证码区域仅支持上海配置。
 
 ## 暂停的高风险能力
 账号彻底清空、自动云存储清理、跨账号用户管理在 CloudBase 专用服务和审计通过前不开放；浏览器不得偷偷使用旧 HTTP 接口完成删除。可从用户菜单查看**当前账号**元数据统计和平台健康，云存储用量以 CloudBase 套餐用量为准。

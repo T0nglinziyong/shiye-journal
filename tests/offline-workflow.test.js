@@ -41,7 +41,8 @@ test('web exports one Scene protocol regardless of API generation preference',as
    const checklist=strFromU8(files['task/VISUAL_REVIEW.txt']);
    const example=JSON.parse(strFromU8(files['examples/project.shiyeproject.json']));
    assert.match(start,/task\/WORKFLOW\.txt/);
-   assert.match(start,/画面预览\.html/);
+   assert.match(start,/output\/preview\.png/);
+   assert.doesNotMatch(start,/画面预览\.html|SHIYE_EXPORT_PREVIEW/);
    assert.match(workflow,/观察|关系/);
    assert.match(checklist,/同源|Canvas/);
    assert.equal(insights.mode,'scene');

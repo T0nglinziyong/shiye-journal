@@ -4,13 +4,13 @@ export const webWorkbenchInstructions=`拾页 · 可编辑手帐创作工作台
 保留 source 原样；仅修改 title 和工作 Scene。
 唯一权威：scene.json 的 page 是 App 原生 Scene v2（sceneVersion=2）。最终返回这个完整图层 JSON 和对应 PNG 预览图；工具和 Craft Plan 都是修改它的输入，不是另外两种交付格式。
 1. 先读 task/WORKFLOW.txt 与 task/context.json、task/GUIDE.txt（本次主题、要求和内容）、task/CRAFT_GUIDE.txt、task/CAPABILITIES.json、schema/output.json（同 schema/scene.json）。观察 materials/ 所有候选图，区分真实图像内容、元数据与推测。references/ 仅供审美参考，不是可用素材。
-2. node runtime/self-test.cjs 检查运行环境；node runtime/inspect.cjs 输出完整图层、来源、当前 sceneHash 和质量提示。工作文件预先包含当前作品，不能以示例替换用户已有画面。
+2. 在任务包目录运行 node runtime/self-test.cjs 检查 Node Canvas 是否可用；如果缺少渲染器，执行一次 npm install 后重试，勿先花时间构图。node runtime/inspect.cjs 输出完整图层、来源、当前 sceneHash 和质量提示。工作文件预先包含当前作品，不能以示例替换用户已有画面。
 3. 可以直接编辑 page.layers（原生画布单位，非比例），也可写 commands.json 后 node runtime/apply.cjs commands.json。命令必须含 inspect 得到的 baseSceneHash；tools 使用 schema/tools.json 的便捷工具，edits 使用 task/EDITING.txt 的精确操作。两者写回同一工作文件，整批失败不改文件。
 4. 初次整页构思也可以写 instructions.json，内容为 {tools:[...]}、{plan:{...}} 或 {page:比例坐标便捷页面}，执行 node runtime/compile.cjs instructions.json。这些是临时输入，编译后工作文件始终是原生 Scene；直接修改最终 Scene 无需回译成工具。高级 observations、pieces、weaves 见 schema/craft-plan.json，全部编译为独立、可编辑图层。
-5. node runtime/preview.cjs 重新校验并生成 output/画面预览.html、scene-summary.json 和 validation-report.json。用环境允许的真实浏览器加载 HTML，等 SHIYE_RENDER_READY=true，查看 SHIYE_RENDER_REPORT，并调用 window.SHIYE_EXPORT_PREVIEW()，把返回对象保存到 output/canvas-capture.json；执行 node runtime/save-preview.cjs output/canvas-capture.json，生成 output/preview.png。此方法直接读取渲染完成的 Canvas，保留 sceneHash。若环境政策阻止浏览器操作，报告该限制，不绕过策略，不声称已经看图。
-6. 必须实际查看渲染图片，按 task/VISUAL_REVIEW.txt 检查内容、可读性、层次和手帐风格；需要时局部调整并重新渲染。在聊天中实际展示 Canvas PNG（用户允许时）。不能用 output/构图预览.svg 冒充 Canvas。阅读报告不等于看过图。Node 不为你判断好看。
-7. node runtime/pack.cjs 校验并生成 output/project.shiyeproject.json、delivery-manifest.json。清单绑定最终 Scene 与 JSON 哈希；任何再次修改都须重新预览和 pack。聊天消息的交付模式拥有最终优先权：文件模式交付 output/project.shiyeproject.json 与 output/preview.png 两个可下载文件；复制文本模式只交付实际 output/preview.png 下载链接和一个完整的紧凑单行 JSON 代码围栏（内容来自 pack 生成的同一 JSON，不能另生成 JSON 文件）。HTML/SVG 或仅声明已渲染不能替代 PNG；勿交付工具日志或 ZIP 来代替图层。成功时不要再添加过程解说、画面自评或其他文字。
-没有可用浏览器、无法导出 PNG 时，说明交付未完成；scene.json 可作为未视觉验收的工作稿保留。若仅字体缺失，仍交付实际 PNG 并指出字体未验收。不得捏造预览或用另画的图片代替。`;
+5. node runtime/preview.cjs 重新校验并用同一 Scene 渲染器直接生成 output/preview.png、preview-capture.json、scene-summary.json 和 validation-report.json；无需打开 HTML。构图预览.svg 只是粗略辅助图，不得当成最终 PNG。
+6. 必须实际查看 output/preview.png，按 task/VISUAL_REVIEW.txt 检查内容、可读性、层次和手帐风格；需要时局部调整并重新运行 preview。在聊天中展示 PNG（用户允许时）。报告或文件存在不等于看过图；Node 不为你判断好看。
+7. node runtime/pack.cjs 校验最终 Scene 与 PNG 摘要，生成 output/project.shiyeproject.json、delivery-manifest.json。任何再次修改都须重新 preview 和 pack。文件模式交付 output/project.shiyeproject.json 与 output/preview.png 两个可下载文件；复制文本模式交付 output/preview.png 下载链接和一个完整的紧凑单行 JSON 代码围栏（内容来自 pack 生成的同一 JSON），不能另生成 JSON 文件。勿交付工具日志或 ZIP 来代替图层。
+无法生成 PNG 时说明交付未完成；scene.json 可作为未视觉验收的工作稿保留。字体随运行环境变化，最终字体仍须在拾页应用内核对。不得捏造预览或用另画的图片代替。`;
 export const webEditingGuide=`坐标与能力
 page 为 App 原生 Scene。x/y 是画布中的中心坐标；width/height/fontSize/笔宽使用画布单位；毫米换算=毫米*canvas.height/physicalPageHeightMM。ink.points 是画布绝对坐标，p 是压感。vectorMask 是 0–1，组合蒙版参照整页；组合 children 不改成局部坐标。zIndex 在各自兄弟节点中决定叠放。
 commands.json:
