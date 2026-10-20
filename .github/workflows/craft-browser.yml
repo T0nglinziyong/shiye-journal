@@ -66,6 +66,7 @@ jobs:
         shell: bash
         env:
           SHIYE_TEST_URL: http://127.0.0.1:5192
+          SHIYE_TEST_UI_CLOUD: '1'
           SHIYE_CRAFT_SCREENSHOTS: /tmp/shiye-craft-browser
         run: |
           set -euo pipefail

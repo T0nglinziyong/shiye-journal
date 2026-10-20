@@ -43,6 +43,7 @@ jobs:
       - name: Serve real app and test edit responsiveness with synthetic data
         shell: bash
         env:
+          SHIYE_TEST_UI_CLOUD: '1'
           SHIYE_TEST_URL: http://127.0.0.1:5193
         run: |
           set -euo pipefail

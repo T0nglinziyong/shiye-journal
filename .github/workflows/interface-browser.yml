@@ -46,6 +46,8 @@ jobs:
       - run: npm run build
       - name: Check screens and editor in Chromium viewports
         shell: bash
+        env:
+          SHIYE_TEST_UI_CLOUD: '1'
         run: |
           set -euo pipefail
           npm run dev -- --mode ui-test --port 5193 --strictPort > /tmp/shiye-interface-server.log 2>&1 &
