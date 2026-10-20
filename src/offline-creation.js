@@ -55,6 +55,17 @@ function sourceFor(p,aliases){
   const priority=p.materialPriority||{required:p.requiredAssetIDs||[],preferred:Object.values(aliases).filter(id=>!(p.requiredAssetIDs||[]).includes(id)),available:[]};
   return structuredClone({bundleId:crypto.randomUUID(),title:p.title,mode:d.pageMode,ratio:d.pageRatio,styles:p.styles||[d.style],purposes:p.purposes||[p.purpose||'自由创作'],intent:p.intent||'',contentPolicy:p.contentPolicy||'original',textPresentation:p.textPresentation||'mixed',userText:p.userText||'',providedFacts:p.providedFacts||'',processing:p.processing||'自由拆解',requiredAssetIDs:p.requiredAssetIDs||[],materialPriority:{required:priority.required||[],preferred:priority.preferred||[],available:priority.available||[]},materials:Object.entries(aliases).map(([alias,assetID])=>({alias,assetID}))});
 }
+function fastTaskBrief(source,selected){
+  const line=(label,value)=>`${label}：${JSON.stringify(value)}`;
+  return [
+    '拾页创作速览；完整来源由 task/context.json 和 scene.json 的 source 保管，勿改动。',
+    line('标题',source.title),line('页面',`${source.mode} / ${source.ratio}`),
+    line('风格',source.styles),line('用途',source.purposes),line('内容策略',source.contentPolicy),
+    line('补充想法',source.intent),line('用户原文',source.userText),line('已知事实',source.providedFacts),
+    '素材（别名可直接写进 instructions.json；尺寸为真实毫米，不得随意缩放）：',
+    ...selected.map(item=>`${item.alias}｜${JSON.stringify(item.title)}｜${item.kind||'素材'}｜${item.physicalWidthMM}×${item.physicalHeightMM} mm｜${source.requiredAssetIDs.includes(item.assetID)?'必用':'可选'}｜${(item.tags||[]).slice(0,5).join('、')}`)
+  ].join('\n')+'\n';
+}
 // The upload is a task package, not a source archive. Keep the chat prompt
 // short and put exact context, contracts, examples and separate images inside.
 export async function createOfflineHandoff({project:p,assets,aliases,previews=[],settings={},referenceImages=[],userTemplates=[]}){
@@ -117,18 +128,24 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
     'START_HERE.txt':strToU8(webWorkbenchInstructions),
     'scene.json':strToU8(JSON.stringify(work,null,2)),
     'package.json':strToU8(JSON.stringify({private:true,type:'commonjs',dependencies:{canvas:'3.2.3'}},null,2)),
+    'task/BRIEF.txt':strToU8(fastTaskBrief(source,selected)),
     'task/context.json':strToU8(JSON.stringify(context,null,2)),
     'task/SCENE_REFERENCE.txt':strToU8(webEditingGuide),
     'task/material-planning.json':strToU8(JSON.stringify(offlineCreationPlanningData(source,selected,{mode,hasImages:showImages}),null,2)),
     'task/GUIDE.txt':strToU8(guide),
-    'task/CRAFT_CATALOG.txt':strToU8('按需选用素材工艺。先观察实际预览并考虑完整使用、取局部、边缘或蒙版加工、拆分、叠压关系；只执行有理由的处理，不设工艺数量指标。\nscene.json 的 materialDecisions 对每个 alias 记录 {"asset":"m1","choice":"intact|crafted|omitted","reason":"观察到的图案或轮廓，以及采用或舍弃该处理的理由"}。intact 表示可见且没有加工，crafted 表示可见且有真实裁切、蒙版、胶带或其他可检查的加工，omitted 表示未在可见画面使用。必须与最终图层一致；说明不写入正文。\n统一遵守 source.processing；没有逐件用法覆盖。\n'+craftTaskInstructions+'\n'+materialCraftGuide+'\n'+multimodalCraftGuide),
+    'task/CRAFT_CATALOG.txt':strToU8('按需选用素材工艺。先观察实际预览并考虑完整使用、取局部、边缘或蒙版加工、拆分、叠压关系；只执行有理由的处理，不设工艺数量指标。\ninstructions.json 的 materialDecisions 对每个 alias 记录 {"asset":"m1","choice":"intact|crafted|omitted","reason":"观察到的图案或轮廓，以及采用或舍弃该处理的理由"}，编译后写入 scene.json。intact 表示可见且没有加工，crafted 表示可见且有真实裁切、蒙版、胶带或其他可检查的加工，omitted 表示未在可见画面使用。必须与最终图层一致；说明不写入正文。\n统一遵守 source.processing；没有逐件用法覆盖。\n'+craftTaskInstructions+'\n'+materialCraftGuide+'\n'+multimodalCraftGuide),
     'task/knowledge.json':strToU8(JSON.stringify(knowledge,null,2)),
     'schema/output.json':strToU8(JSON.stringify(webSceneContract,null,2)),
     'schema/tools.json':strToU8(JSON.stringify(offlineContract('agent',{cropPx:false}),null,2)),
     'schema/convenient-page.json':strToU8(JSON.stringify(directPageContract,null,2)),
     'schema/craft-plan.json':strToU8(JSON.stringify(toolContracts.apply_craft_plan,null,2)),
     'examples/project.shiyeproject.json':strToU8(JSON.stringify(example,null,2)),
-    'examples/instructions.json':strToU8(JSON.stringify({tools:[{name:'compose_page',arguments:{materials:[{asset:selected[0].alias,piece:'hero',x:.5,y:.45}],paper:{color:'#fcfaf0',pattern:'plain'}}}]},null,2)),
+    'examples/instructions.json':strToU8(JSON.stringify({page:{version:2,style:'自由构图',paper:{color:'#fcfaf0',pattern:'plain'},layers:[
+      {type:'material',asset:selected[0].alias,placement:{x:.34,y:.50,rotation:-3,z:10}},
+      {type:'shape',kind:'ellipse',x:.82,y:.76,width:.06,height:.06,fill:'#d5e2d6',fill_opacity:.65},
+      {type:'ink',points:[{x:.54,y:.45,pressure:.5},{x:.78,y:.45,pressure:.5}],width:18,color:'#e8d66b',pen_style:'marker',opacity:.45},
+      {type:'text',content:'这里写本次素材引出的具体想法。',font_style:'hand',x:.66,y:.50,width:.34,font_size:24,color:'#334d4a'}
+    ]}},null,2)),
     'runtime/glyphs.cjs':strToU8(offlineGlyphSource),
     'runtime/validate.cjs':strToU8(offlineValidateSource)
   };

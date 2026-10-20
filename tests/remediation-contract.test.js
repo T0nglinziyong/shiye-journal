@@ -6,7 +6,7 @@ import Ajv from 'ajv';
 import {unzipSync,strFromU8} from 'fflate';
 import {project} from '../src/domain.js';
 import {createOfflineHandoff,importEditableWork} from '../src/offline-creation.js';
-import {offlineContract,schemaFingerprint,validateValue} from '../src/creative-contract.js';
+import {schemaFingerprint,validateValue} from '../src/creative-contract.js';
 import {textParagraphMarkup} from '../src/canvas-text-content.js';
 import {Window} from 'happy-dom';
 
@@ -40,8 +40,10 @@ test('O-08: preview-only task omits source-pixel crop and rejects it during comp
   assert.equal(capability.sourcePixelCoordinates,false);
   assert.equal(capability.cropPx,false);
   assert.equal(schema.compose_page.properties.materials.items.properties.crop_px,undefined);
+  const directSchema=JSON.parse(strFromU8(files['schema/convenient-page.json']));
+  assert.equal(JSON.stringify(directSchema).includes('crop_px'),false);
   const response=JSON.parse(strFromU8(files['examples/instructions.json']));
-  response.tools[0].arguments.materials[0].crop_px=[0,0,100,100];
+  response.page.layers.find(layer=>layer.type==='material').crop_px=[0,0,100,100];
   assert.throws(()=>compileAndImport(JSON.stringify({...response,source:handoff.source}),[asset],{trustedSource:handoff.source}),/crop_px|未知字段/);
 });
 

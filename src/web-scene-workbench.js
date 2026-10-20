@@ -180,7 +180,9 @@ export function compileWebSceneInput(document,input,assets){
   const result=applyToolCalls({tools},base,frozen,Object.fromEntries(source.materials.map(m=>[m.alias,m.assetID])),{processing:source.processing||'不预设',requiredAssetIDs:source.requiredAssetIDs,visualAssetIDs:source.previewHashes?source.materials.map(m=>m.assetID):[],textMode:source.textMode,allowNoText:source.textMode==='none',deterministicTextLayout:true});
   const error=result.results.find(r=>!r.ok);if(error)throw Object.assign(Error(error.detail),{code:error.code});
   stabilizeImportedCraftScene(result.draft,base,source.bundleId);
-  const doc=webSceneDocument(source,result.draft,input.title??document.title,document.materialDecisions);
+  const decisions=input.materialDecisions??document.materialDecisions;
+  if(input.materialDecisions!==undefined||decisions?.length)validateMaterialDecisions(decisions,result.draft,source);
+  const doc=webSceneDocument(source,result.draft,input.title??document.title,decisions);
   validateWebScene(doc.page,source,assets,{final:false});return doc;
 }
 

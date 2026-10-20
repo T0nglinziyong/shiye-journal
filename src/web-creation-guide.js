@@ -2,10 +2,10 @@ import {creativeTypographyGuide} from './creative-typography.js';
 import {visualStyleBrief} from './creative-style-brief.js';
 export const webWorkbenchInstructions=`拾页 · 可编辑手帐创作工作台
 保留 source 原样；scene.json 的 page 是唯一权威的原生 Scene v2，工具和 Craft Plan 只是编辑它的输入。最终同时交付这一场景的完整 JSON 和 PNG。
-1. 只读 task/context.json、task/GUIDE.txt 和逐件查看 materials/ 图片；references/ 仅供审美参考。已有 scene.json 是当前作品，不用 examples/ 覆盖。schema/ 四份完整合同和 task/SCENE_REFERENCE.txt 按需查阅，不要为熟悉任务全文读取。
+1. 先读 task/BRIEF.txt、task/GUIDE.txt 并逐件查看 materials/ 图片；task/context.json 保留完整任务来源，只有需要精确来源字段时才读。references/ 仅供审美参考。已有 scene.json 是当前作品，不用 examples/ 覆盖。schema/ 与 task/SCENE_REFERENCE.txt 按需查阅，不要为熟悉任务全文读取。
 2. 先根据素材印刷字、轮廓和可写面确定本页真正要表达的内容，并同时安排主体、文字段落、图形、圆形与荧光笔等笔迹。文字内容不是最后填进剩余空隙的占位符；灵感随写也应把想法展开，避免几句口号加大块未完成的留白。不要为了增加数量而添加无作用的装饰。可以在脑中比较不同图文关系，但不必制作粗排候选图；完整场景的真实预览才决定成品质量。
-3. 按需阅读 task/CRAFT_CATALOG.txt，决定素材怎样与文字、数字图形和笔迹发生关系；完整使用也可以是最佳选择，不按加工数量评分。逐件在 scene.json 的 materialDecisions 写 alias、choice（intact / crafted / omitted）和具体理由。直接编辑 page.layers，或用 instructions.json 运行 node runtime/compile.cjs；局部操作可运行 node runtime/inspect.cjs 后用 commands.json 与 node runtime/apply.cjs。精确操作才查 schema/output.json、schema/tools.json、schema/craft-plan.json 或 task/SCENE_REFERENCE.txt。
-4. 运行 node runtime/preview.cjs 生成 output/preview.png；不需 HTML。缺少 Node Canvas 时执行一次 npm install 后重试。实际查看 output/preview.png 的整幅与两页局部，并对照 output/scene-summary.json 的 quality.reading：文字是否足够表达本页、纸面是否像最终完成状态、留白是否有意、图形与荧光笔是否真正参与叙事、素材与文字是否互相遮挡。指出具体问题及相关图层，修改后重新 preview；构图预览.svg 仅供粗略参考，不得伪造视觉验收。
+3. 优先在简短的 instructions.json 里一次写齐图层意图、书写内容及每件素材的 materialDecisions，再运行 node runtime/compile.cjs；参考 examples/instructions.json。图层 id、素材 piece、完整使用操作和未指定的默认位置属性由编译器补齐，只有需要跨图层引用时才显式编号。图形 kind 不限于示例圆形，矩形、星形、标签、箭头、方格和自由矢量等见 schema/convenient-page.json。编译器负责展开素材真实尺寸、来源字段和原生 Scene，不要手写这些冗长字段。materialDecisions 为 [{"asset":"m1","choice":"intact|crafted|omitted","reason":"与实际画面一致的具体理由"}]，每个 alias 一条；漏写时 pack 会拒绝。已有 scene.json 的局部修订直接改对应节点，或用 commands.json 与 node runtime/apply.cjs。按需阅读 task/CRAFT_CATALOG.txt；完整使用也可以是最佳选择，不按加工数量评分。需要多片裁剪时查 schema/craft-plan.json；精确操作查 task/SCENE_REFERENCE.txt。
+4. 运行 node runtime/preview.cjs 生成 output/preview.png；不需 HTML。缺少 Node Canvas 时执行一次 npm install 后重试。实际查看 output/preview.png 的整幅和存在问题的局部，对照 output/scene-summary.json 的 quality.reading：文字是否足够表达本页、纸面是否像最终状态、留白是否有意、图形与荧光笔是否真正参与叙事、素材与文字是否互相遮挡。只修改发现问题的图层并重新 preview；不为凑轮次重复渲染。构图预览.svg 仅供粗略参考，不得伪造视觉验收。
 5. 运行 node runtime/pack.cjs 核对逐件取舍及最终 Scene 与 PNG 摘要，生成单行紧凑的 output/project.shiyeproject.json 和 delivery-manifest.json。文件模式交付 JSON 与 PNG 两个可下载文件；复制文本模式交付 PNG 链接与完整 JSON 代码块。勿用日志、ZIP 或旧预览代替成品。发送前重新打开最终文件，核对标题、正文、素材位置与 PNG 一致；改动后必须重新 preview 和 pack。
 无法生成 PNG 时说明交付未完成；scene.json 可作为未视觉验收的工作稿保留。字体随运行环境变化，最终字体仍须在拾页应用内核对。不得捏造预览或用另画的图片代替。`;
 export const webEditingGuide=`坐标与能力
