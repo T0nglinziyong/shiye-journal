@@ -72,7 +72,7 @@ import {replaceSceneMaterial} from './scene-advanced-ops.js';
 import {createWorkCoverBackfill} from './work-cover-backfill.js';
 import {renderWorkCoverSnapshot} from './work-cover-snapshot.js';
 import {createLocalWorkCovers} from './work-cover-local-cache.js';
-import {foregroundIsIdle,scheduleForegroundIdle,yieldToForeground} from './foreground-idle.js';
+import {foregroundIsIdle,foregroundRecentlyActive,scheduleForegroundIdle,yieldToForeground} from './foreground-idle.js';
 import {imagePlaceholder,mountPrivateImages} from './lazy-private-images.js';
 import {recordImageLoading,imageLoadingSnapshot} from './image-loading-diagnostics.js';
 import {assetEditorValue} from './asset-editor.js';
@@ -3429,7 +3429,8 @@ function subscribeAccountRevision(userID){
 let syncPausedByUser=false,resetWorkflowActive=false;
 const cloudResumer=createSyncResumer({flush:()=>db.flushProjects({background:true}),canRun:()=>cloudEnabled&&cloudSessionReady&&navigator.onLine!==false,onError:error=>console.warn('后台同步待重试',error?.message)});
 function backgroundCloudCheck({force=false}={}){
-  if(!cloudEnabled||!shouldPullCloudForRoute(state.route)||document.visibilityState==='hidden')return;
+  if(!cloudEnabled||!shouldPullCloudForRoute(state.route)||document.visibilityState==='hidden'||
+    !force&&!foregroundRecentlyActive())return;
   if(!force&&!foregroundIsIdle(state.route==='editor'?1800:1000))return;
   if(!canPollDuringEditing({route:state.route,gestureActive:!!activeViewPointers.size,
     inputFocused:!!document.activeElement?.matches('input,textarea,[contenteditable="true"]'),

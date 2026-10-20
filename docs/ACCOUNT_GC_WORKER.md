@@ -4,7 +4,7 @@
 
 `deploy/cloudbase/007-account-reset-gc.sql` 在账号自身身份下提供 `shiye_reset_account_v1`、`shiye_gc_plan_v1` 和 `shiye_gc_finish_v1`。首次调用清空接口时，客户端需二次确认并输入“清空账号”。服务端核对账号代际和修订号，在**一个 PostgreSQL 事务**中清空六类业务记录、旧提交收据与版本索引，写入 `shiye-reset-barrier`，轮换 `account_epoch`。带同一操作 ID 的重试返回原收据。旧设备的同步提交因代际不符而被拒绝；登录前会根据标记清除该设备的旧 IndexedDB。新上传使用 `<uid>/reset-<resetId>/...`，不会被旧文件回收误删。
 
-前端随后删除当前站点的本机数据并重新进入。若提交结果不明，旧同步保持暂停，必须重新打开页面核对服务端标记；绝不能猜测失败后恢复旧队列。`shiye-reset-barrier` 仅在旧对象从 CloudBase Storage 全部消失后改为 `complete`，新一代上传不必等待这一步。
+前端随后删除当前站点的本机数据并重新进入。若提交结果不明，旧同步保持暂停，必须重新打开页面核对服务端标记；绝不能猜测失败后恢复旧队列。`shiye-reset-barrier` 在可安全删除的旧对象清理完毕后改为 `complete`；若仍有业务记录引用旧路径，该对象会保留并可由后续普通孤立文件检查处理。新一代上传不必等待这一步。
 
 ## 文件回收
 

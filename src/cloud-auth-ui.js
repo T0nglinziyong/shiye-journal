@@ -8,7 +8,7 @@ import {cloudClearCache,cloudPendingLocalSummary,cloudResumeCache,
 import {renderLoginGate,clearLoginGate} from './react-cloud-auth.jsx';
 import {updateShell} from './react-shell.jsx';
 import {passwordIdentifier,requestLoginOtp,verifyLoginOtp,configuredOAuthProviders} from './cloud-auth-methods.js';
-import {foregroundIsIdle} from './foreground-idle.js';
+import {foregroundIsIdle,foregroundRecentlyActive} from './foreground-idle.js';
 
 const oauthProviders=configuredOAuthProviders(import.meta.env?.VITE_SHIYE_OAUTH_PROVIDERS);
 
@@ -190,7 +190,7 @@ export async function startCloudSession(onReady){
     window.addEventListener('pagehide',()=>clearTimeout(gcTimer),{once:true});
     let watching=false;
     const watch=async()=>{
-      if(watching||document.visibilityState==='hidden')return;
+      if(watching||!foregroundRecentlyActive())return;
       watching=true;
       try{
         const outcome=await preflight();

@@ -1,13 +1,23 @@
 // Optional CPU work waits for a quiet foreground. Durable saves and user
 // actions do not use this scheduler; they must never be delayed by it.
-let lastInput=0,activePointers=0;
+let lastInput=typeof performance==='undefined'?0:performance.now(),activePointers=0;
 if(typeof window!=='undefined'){
   const mark=()=>{lastInput=performance.now();};
+  window.addEventListener('focus',mark,{passive:true});
+  document.addEventListener('visibilitychange',()=>{
+    if(document.visibilityState==='visible')mark();
+  },{passive:true});
   window.addEventListener('pointerdown',()=>{activePointers++;mark();},{capture:true,passive:true});
   for(const name of ['pointerup','pointercancel'])window.addEventListener(name,()=>{
     activePointers=Math.max(0,activePointers-1);mark();},{capture:true,passive:true});
   for(const name of ['pointermove','touchmove','wheel','scroll','keydown'])
     window.addEventListener(name,mark,{capture:true,passive:true});
+}
+// A visible but abandoned tab must not keep waking the metered database.
+// The next input/focus resumes normal checks without delaying local edits.
+export function foregroundRecentlyActive(maxAgeMs=90000){
+  return typeof document==='undefined'||document.visibilityState==='visible'&&
+    performance.now()-lastInput<=maxAgeMs;
 }
 export function foregroundIsIdle(minIdleMs=700){
   if(typeof document==='undefined')return true;
