@@ -14,7 +14,7 @@ await writeFile(join(root,'version.json'),JSON.stringify({
 // editor, AI, PDF and font chunks are fetched when their feature opens.
 const html=await readFile(join(root,'index.html'),'utf8');
 const entryAssets=[...html.matchAll(/(?:src|href)="(\/assets\/[^"]+)"/g)].map(match=>match[1]);
-const list=[...new Set(['/index.html','/manifest.webmanifest','/icon-192.png','/icon-512.png','/version.json',...entryAssets])];
+const list=[...new Set(['/index.html','/manifest.webmanifest','/favicon-32.png','/apple-touch-icon.png','/icon-192.png','/icon-512.png','/version.json',...entryAssets])];
 const hasher=createHash('sha256');
 for(const asset of list){hasher.update(asset);hasher.update(await readFile(join(root,asset.slice(1))));}
 const hash=hasher.digest('hex').slice(0,12);
