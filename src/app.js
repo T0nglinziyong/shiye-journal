@@ -1,3 +1,4 @@
+import {normalizeMatchingDirection} from './matching-directions.js';
 import {automaticAssetClassification} from './asset-automatic-classification.js';
 import {importDefaultTitle} from './import-default-names.js';
 // Production deployment refresh marker: 2026-10-04
@@ -164,7 +165,7 @@ modal.querySelector('.modal-close').onclick=()=>modal.close();
 const fileInput=document.querySelector('#file-input'),workFileInput=document.querySelector('#work-file-input'),snapshotFileInput=document.querySelector('#snapshot-file-input'),creationResultInput=document.querySelector('#creation-result-input'),backupInput=document.querySelector('#backup-input'),emergencyInput=document.querySelector('#emergency-input');
 let offlineSnapshotProject=null;
 installRuntimeDiagnostics(()=>state.route);
-const state={route:'series',assets:[],series:[],projects:[],trash:[],userTemplates:[],basket:[],excludedAssetIDs:[],history:[],selected:null,activeProject:null,activeDraft:null,offlineEditingReturnID:null,detailAssetID:null,previewProjectID:null,settingsSection:null,selfHosted:false,aiSettings:loadAISettings(),preferences:loadPreferences(),aiPanel:false,aiBusy:false,aiPrompt:'',aiProgress:'',tool:'select',zoom:1,sort:'newest',query:'',kind:'all',status:'all',seriesID:'all',matchCore:null,matchRatio:'a4',matchMode:'single',matchStyle:'韩系清新',matchStyles:['韩系清新'],matchPurposes:['日常记录'],matchIntent:'',matchContentPolicy:'documentary',matchTextPresentation:'mixed',matchPurpose:'日常记录',matchProcessing:'不预设',customPaperWidth:210,customPaperHeight:297,recommendFilter:'全部',coreIDs:[],importStep:'inspect',importRecords:[],importIndex:0,importFile:null,importBitmap:null,importBox:{x:0,y:0,w:1,h:1},importCandidate:null,importRemoveWhite:false,undo:[],redo:[],drawing:false};
+const state={route:'series',assets:[],series:[],projects:[],trash:[],userTemplates:[],basket:[],excludedAssetIDs:[],history:[],selected:null,activeProject:null,activeDraft:null,offlineEditingReturnID:null,detailAssetID:null,previewProjectID:null,settingsSection:null,selfHosted:false,aiSettings:loadAISettings(),preferences:loadPreferences(),aiPanel:false,aiBusy:false,aiPrompt:'',aiProgress:'',tool:'select',zoom:1,sort:'newest',query:'',kind:'all',status:'all',seriesID:'all',matchCore:null,matchRatio:'a4',matchMode:'single',matchStyle:'随材而定',matchStyles:['随材而定','自动安排'],matchPurposes:['自由创作'],matchIntent:'',matchContentPolicy:'original',matchPurpose:'自由创作',customPaperWidth:210,customPaperHeight:297,recommendFilter:'全部',coreIDs:[],importStep:'inspect',importRecords:[],importIndex:0,importFile:null,importBitmap:null,importBox:{x:0,y:0,w:1,h:1},importCandidate:null,importRemoveWhite:false,undo:[],redo:[],drawing:false};
 // Action changes are published independently of their DOM representation.
 const actionStore=createActionStore(state);
 actionStore.register('app/action',async({action,id,value})=>({result:await runAppAction(action,id,value)}));
@@ -941,8 +942,8 @@ function updateMatchingFromReact(key,value,options){
   if(key==='style'||key==='purpose'){
     const list=key==='style'?'matchStyles':'matchPurposes';
     state[list]=[...(state[list]||[]).filter(item=>!options.includes(item)),...(value?[value]:[])];
-    state[key==='style'?'matchStyle':'matchPurpose']=state[list][0]||'';
-  }else if(['matchProcessing','matchContentPolicy','matchTextPresentation','matchMode',
+    normalizeMatchingDirection(state);
+  }else if(['matchContentPolicy','matchMode',
     'matchRatio','customPaperWidth','customPaperHeight','matchIntent'].includes(key))state[key]=value;
   else return;
   void matchingSession.persist().catch(error=>{
@@ -1368,7 +1369,7 @@ async function runAppAction(action,id,value){try{
   case 'match-skip':await actionStore.dispatch({type:'matching/exclude',payload:{id}});break;
   case 'match-allow':await actionStore.dispatch({type:'matching/include',payload:{id}});break;
   case 'match-core':await actionStore.dispatch({type:'matching/priority',payload:{id}});break;
-  case 'match-generate':state.matchPurpose=view.querySelector('#match-purpose')?.value||'日常记录';state.matchProcessing=view.querySelector('#match-processing')?.value||'保留完整';state.matchStyle=view.querySelector('#match-style')?.value||state.matchStyle;state.matchIntent=view.querySelector('#match-intent')?.value||'';captureMatchContent();state.matchMode=view.querySelector('#match-mode')?.value||'single';state.matchRatio=readMatchPaper();state.matchStyles=readMatchSelection('match-style',state.matchStyle);state.matchPurposes=readMatchSelection('match-purpose',state.matchPurpose);queueMatchingDefaultsSync();await matchingSession.generate();break;
+  case 'match-generate':captureMatchingDirection();queueMatchingDefaultsSync();await matchingSession.generate();break;
   case 'match-export-gpt':await exportOfflineCreation();break;
   case 'match-import-gpt':openOfflineImportDialog();break;
   case 'basket':await actionStore.dispatch({type:'matching/basket',payload:{id}});break;
@@ -2185,11 +2186,18 @@ function editSelected(fn){const d=current(),e=editorEntry(d).find(x=>x.value.id=
   checkpoint();fn(e,d);saveProject();render();}
 function historyStep(from,to){view.flushInkCommit?.({renderUI:false,force:true});view.endTextEditing?.();const d=current(),snapshot=takeEditorHistoryStep(state,from,to,d);if(!snapshot)return false;for(const key of Object.keys(d))delete d[key];Object.assign(d,snapshot);state.activeDraft=snapshot.id;saveProject();return true;}
 function readMatchPaper(){const ratio=view.querySelector('#match-ratio')?.value||'a4';if(ratio!=='custom')return ratio;const w=Number(view.querySelector('#match-paper-width')?.value),h=Number(view.querySelector('#match-paper-height')?.value);if(!Number.isInteger(w)||!Number.isInteger(h)||w<50||h<50||w>1000||h>1000)throw Error('自定义纸张宽高需要是 50–1000 mm 的整数');state.customPaperWidth=w;state.customPaperHeight=h;return `custom:${w}x${h}`;}
-function captureMatchContent(){state.matchContentPolicy=view.querySelector('#match-content-policy')?.value||state.matchContentPolicy||'documentary';state.matchTextPresentation=view.querySelector('#match-text-presentation')?.value||state.matchTextPresentation||'mixed';}
-function createMatchingProject(automatic=true){const scope=matchingScope();if(!scope.candidateAssetIDs.length||!automatic&&!state.basket.length)throw Error('请先选择素材');const p=project('新的手账',{mode:state.matchMode||'single',ratio:state.matchRatio||'a4',style:state.matchStyle||'韩系清新'}),d=p.drafts[0];d.items=automatic?[]:physicalPlacement(d,state.assets,state.basket.slice(0,8));p.candidateAssetIDs=automatic?scope.candidateAssetIDs:[...state.basket];p.materialPriority=automatic?scope:{...scope,available:[],candidateAssetIDs:[...state.basket]};p.purpose=state.matchPurpose;p.intent=state.matchIntent;p.contentPolicy=state.matchContentPolicy;p.textPresentation=state.matchTextPresentation||'mixed';p.userText='';p.providedFacts='';p.styles=readMatchSelection('match-style',state.matchStyle);p.purposes=readMatchSelection('match-purpose',state.matchPurpose);p.requiredAssetIDs=[...scope.required];p.processing=state.matchProcessing;return p;}
+function captureMatchingDirection(){
+  state.matchStyles=readMatchSelection('match-style',state.matchStyle);
+  state.matchPurposes=readMatchSelection('match-purpose',state.matchPurpose);
+  state.matchContentPolicy=view.querySelector('#match-content-policy')?.value||state.matchContentPolicy||'original';
+  state.matchIntent=view.querySelector('#match-intent')?.value||'';
+  state.matchMode=view.querySelector('#match-mode')?.value||state.matchMode;
+  state.matchRatio=readMatchPaper();normalizeMatchingDirection(state);
+}
+function createMatchingProject(automatic=true){const scope=matchingScope();if(!scope.candidateAssetIDs.length||!automatic&&!state.basket.length)throw Error('请先选择素材');const p=project('新的手账',{mode:state.matchMode||'single',ratio:state.matchRatio||'a4',style:state.matchStyle||'随材而定'}),d=p.drafts[0];d.items=automatic?[]:physicalPlacement(d,state.assets,state.basket.slice(0,8));p.candidateAssetIDs=automatic?scope.candidateAssetIDs:[...state.basket];p.materialPriority=automatic?scope:{...scope,available:[],candidateAssetIDs:[...state.basket]};p.purpose=state.matchPurpose;p.intent=state.matchIntent;p.contentPolicy=state.matchContentPolicy;p.textPresentation='mixed';p.userText='';p.providedFacts='';p.styles=[...state.matchStyles];p.purposes=[...state.matchPurposes];p.requiredAssetIDs=[...scope.required];p.processing='自由拆解';return p;}
 async function exportOfflineCreation(){
   if(!matchingScope().candidateAssetIDs.length){toast('请先选择素材');return;}
-  state.matchPurpose=view.querySelector('#match-purpose')?.value||state.matchPurpose;state.matchProcessing=view.querySelector('#match-processing')?.value||state.matchProcessing;state.matchStyle=view.querySelector('#match-style')?.value||state.matchStyle;state.matchIntent=view.querySelector('#match-intent')?.value||'';captureMatchContent();state.matchMode=view.querySelector('#match-mode')?.value||state.matchMode;state.matchRatio=readMatchPaper();state.matchStyles=readMatchSelection('match-style',state.matchStyle);state.matchPurposes=readMatchSelection('match-purpose',state.matchPurpose);
+  captureMatchingDirection();
   const button=view.querySelector('[data-act="match-export-gpt"]'),controller=new AbortController(),started=performance.now();
   const timing={},report={cacheHits:0,covers:0,materials:0,references:0};
   if(button){button.disabled=true;button.textContent='正在准备 AI 参考…';}
@@ -2286,9 +2294,7 @@ async function createFromBasket(templateID=null){
   if(result?.remaining)toast(`已预排版 ${result.placed} 件；其余 ${result.remaining} 件可在画布中手动添加`);
 }
 function openManualCreationDialog(){
-  state.matchRatio=readMatchPaper();state.matchStyle=view.querySelector('#match-style')?.value||state.matchStyle;state.matchPurpose=view.querySelector('#match-purpose')?.value||state.matchPurpose;
-  state.matchProcessing=view.querySelector('#match-processing')?.value||state.matchProcessing;
-  state.matchStyles=readMatchSelection('match-style',state.matchStyle);state.matchPurposes=readMatchSelection('match-purpose',state.matchPurpose);
+  captureMatchingDirection();
   const choices=manualLayoutChoices({assets:state.assets,basket:state.basket,styles:state.matchStyles,purposes:state.matchPurposes});
   openOverlay(createElement(ManualLayoutDialog,{choices,onClose:closeOverlay,onChoose:id=>createFromBasket(id)}));
 }

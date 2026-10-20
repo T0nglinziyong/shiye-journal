@@ -93,7 +93,9 @@ assert.equal(window.document.querySelector('.matching-page').dataset.reactPage,'
 assert.ok(window.document.querySelector('.match-direction').compareDocumentPosition(
   window.document.querySelector('.match-recommendations'))&window.Node.DOCUMENT_POSITION_FOLLOWING);
 assert.ok(window.document.querySelector('#match-content-policy'));
-assert.ok(window.document.querySelector('#match-text-presentation option[value="handwritten"]'));
+assert.equal(window.document.querySelector('#match-text-presentation'),null);
+assert.equal(window.document.querySelector('#match-processing'),null);
+assert.equal(window.document.querySelectorAll('.match-creative-controls select').length,4);
 assert.ok(window.document.querySelector('#match-ratio option[value="b5-half"]'));
 window.document.querySelector('.match-rec [data-act="basket"]').click();
 await waitFor(()=>!!window.document.querySelector('.match-basket-actions [data-act="match-core"]'));

@@ -3,7 +3,7 @@ import {visualStyleBrief} from './creative-style-brief.js';
 export const webWorkbenchInstructions=`拾页 · 可编辑手帐创作工作台
 保留 source 原样；scene.json 的 page 是唯一权威的原生 Scene v2，工具和 Craft Plan 只是编辑它的输入。最终同时交付这一场景的完整 JSON 和 PNG。
 1. 先读 task/context.json、task/GUIDE.txt（本次主题、要求和内容），逐件观察 materials/ 的图案、轮廓与文字。references/ 只供审美参考，不是可用素材。已有 scene.json 是当前作品，不用 examples/ 覆盖。
-2. 比较两种内部构图后选择一种。逐件决定完整使用、真实加工或舍弃；在 scene.json 的 materialDecisions 写 alias、choice 和具体 reason。choice 为 intact / crafted / omitted；不能仅凭素材标题推断图案，也不按加工数量评分。交付时会将决定与实际图层核对。加工适用条件与做法见 task/CRAFT_CATALOG.txt，需精确编辑时再读 task/SCENE_REFERENCE.txt。
+2. 依据 GUIDE 中的素材职责比较两种不同的图文关系后选择一种。逐件决定完整使用、真实加工或舍弃；在 scene.json 的 materialDecisions 写 alias、choice 和具体 reason（这件材料承担什么作用、为何保留或裁切，不能只写“更好看”）。choice 为 intact / crafted / omitted；不能仅凭素材标题推断图案，也不按加工数量评分。交付时会将决定与实际图层核对。加工适用条件与做法见 task/CRAFT_CATALOG.txt，需精确编辑时再读 task/SCENE_REFERENCE.txt。
 3. 默认直接编辑 scene.json 的 page.layers。也可写 instructions.json 并运行 node runtime/compile.cjs instructions.json；输入可为 {tools:[...]}、{plan:{...}} 或 {page:比例坐标便捷页面}。局部操作可运行 node runtime/inspect.cjs 取 baseSceneHash，再写 commands.json 并运行 node runtime/apply.cjs commands.json。合同分别见 schema/output.json、schema/tools.json、schema/craft-plan.json；所有路径都写回同一 Scene。
 4. 运行 node runtime/preview.cjs 校验并直接生成 output/preview.png，不需 HTML。若缺少 Node Canvas，执行一次 npm install 后重试；需要排查环境时可运行 node runtime/self-test.cjs。构图预览.svg 仅供粗略参考。
 5. 必须实际查看 output/preview.png，检查素材是否显示、主体与阅读路线、文字可读性、裁切边缘及层次；发现问题就改对应 Scene 节点并重新 preview。生成文件不等于看过图片；不得伪造视觉验收。
@@ -33,13 +33,8 @@ inspect 提供每个节点完整字段，不止摘要。所有编辑共享锁定
 胶带是一类 material 专用图层，不占用普通素材的「一件只能用一次」规则；素材库仍可手动标记已使用或未使用。先看 task/context.json 中 tape 的真实宽度、长度、原图方向、非破坏性修平范围 flatCrop 和已确认重复纹样区间。便捷工具 draw_tape_strips 可在一批中画多段：当前每段用首尾两个点定义直线中心线，避免曲线拼接瑕疵；width_mm 可调；texture_mode=sample 只用有限原图，repeat 仅能用已确认的区间，stretch 可沿直线拉伸原图；端头为 square/angled/torn。也可以直接编辑原生 tapeStrip v2，包括归一化 flatCrop；但 x/y/width/height、baseWidth/baseHeight、bandWidthScene、pathLengthMM、points 与物理页比例必须一致，且素材引用必须是任务固定的原图版本。修平与沿路径拉伸只改变显示取样，不替换原 PNG 或篡改其他实物素材的尺寸。
 AI 不可添加 manualVisualResize/manualVisualCopy 来逃避实物约束；基线已有手工变形可以保持。不得更改 source、纸张物理单位或私自换素材图片引用。`;
 export function webArtDirection(source){return [
-  '【本次审美方向】',source.styles.map(s=>s+'：'+visualStyleBrief(s)).join('；'),
-  '服从用户明确要求和素材本身。审美建议不是模板：自由手帐不必套标题—插图—正文三段布局，不必统一做旧，也不必放满素材。',
-  '先提出两种不同的内部构图草案，比较叙事与视觉关系后择优；可以用图文错层、主体/陪衬、留白与密度对比形成阅读路线。不要把所有素材当商品目录等距陈列，除非用户明确需要标本/收藏网格。',
-  '从实际素材提取主色与少量强调色；保留纸张、透明边缘、票据、胶带和照片之间的触感差异。旋转和叠压要有固定、遮挡或叙事理由，不给所有元素随机角度。完整使用与复杂加工都可以优秀。',
-  '数字印章、曲线文字、镂空和旧布局都按主题需要使用：重复印章应有节奏与停顿，不能铺满页面；曲线文字先保证阅读顺序；替换素材后重新看新轮廓与空白的关系；复用布局时重新选择主次，不照搬旧作品。',
-  '图文相互回应：用户事实与原文优先，正文像真正记录，不是设计说明；没有事实不编造私人经历。标题、正文、小注有清楚主次，避免所有层都争抢注意力。数字装饰支持主题，不伪装成额外实物库存。',
+  '【本次视觉方向】',source.styles.map(s=>s+'：'+visualStyleBrief(s)).join('；'),
+  '具体图文构思沿用本包共用的“构图与内容”指导，不另套模板。复用布局时重新选择主次；印章、曲线文字或镂空按需要使用，不按复杂度评分。',
   creativeTypographyGuide(source.baseDraft),
-  '【内部看图自评，不要在最终回复中输出】逐项核验实际画面和需要修改的对象 ID：主题/内容是否满足；主视觉是否明确；阅读顺序是否自然；文字是否可读；叠压是否有意；留白是否有作用；手帐材质与风格是否一致。自评只用于内部修订，不附加说明性文字或分数。',
-  '若发现问题，修改相应 Scene 节点并重新看图；同一局部无法改善时重排，不用无限缩小正文或拉伸实物来掩盖。交付前核对最后 Scene 哈希，禁止用旧预览验收新图层。'
+  '【内部看图自评，不要在最终回复中输出】检查实际画面，先缩看整页焦点与动线，再放大核对文字、素材边缘、层次和第二处值得看的细节。检查是否只是逐项说明图片、通用鸡汤或空泛标题；按本次文字策略修订。纯粹拼贴不新增文字。若发现问题，修改对应 Scene 节点并重新 preview；最终 Scene 与 PNG 摘要必须一致，不用旧预览验收新图层。'
 ].join('\n\n');}

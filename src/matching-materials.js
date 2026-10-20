@@ -6,6 +6,7 @@ const purposeKinds={
   影像故事:['photo','paper','tape'],主题封面:['photo','sticker','paper','text']
 };
 const styleTerms={
+  随材而定:[],自动安排:[],清新淡雅:['清新','轻盈','淡雅'],童趣可爱:['童趣','可爱','卡通'],杂志排版:['标题','印刷','排版','杂志'],疏朗留白:['素','简'],均衡编排:[],丰富层叠:['拼贴','纸','胶带'],
   韩系清新:['浅','绿','粉','清新','柔和'],美式拼贴:['鲜明','拼贴','色块','贴纸'],
   复古旧物:['复古','旧','票','暖','牛皮'],极简留白:['素','简','单色','白'],
   杂志编辑:['照片','标题','排版','杂志'],日系文具:['文具','方格','便签','纸'],
@@ -22,7 +23,7 @@ const descriptors=a=>uniq([a.title,a.kind,a.role,a.texture,...(a.tags||[]),...(a
 export function recommendForDirection({assets=[],basket=[],styles=[],purposes=[],excluded=[]}={}){
   const selected=assets.filter(a=>basket.includes(a.id)),excludedSet=new Set(excluded),kinds=uniq(purposes.flatMap(p=>purposeKinds[p]||[]));
   const hasPersonal=assets.some(a=>usableForMatching(a)&&!a.isProjectInternal&&!isCurrentBuiltinMaterial(a));
-  const desiredRoles=new Set(relevantJournalFamilies({styles,purposes}).flatMap(family=>family.materials));
+  const desiredRoles=new Set(relevantJournalFamilies({styles,purposes,materials:selected}).flatMap(family=>family.materials));
   const selectedRoles=new Set(selected.flatMap(classifyJournalMaterial));
   const styleWords=uniq(styles.flatMap(s=>styleTerms[s]||[s])),purposeWords=uniq(purposes.flatMap(p=>purposeTerms[p]||[]));
   const basketTags=new Set(selected.flatMap(descriptors).map(t=>t.toLocaleLowerCase()));
