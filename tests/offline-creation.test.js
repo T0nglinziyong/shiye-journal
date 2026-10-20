@@ -22,15 +22,14 @@ test('current GPT task package has one root entry and grouped compact folders',a
   assert.equal(context.format,'shiye-gpt-creation-package');assert.equal(context.version,2);
   assert.equal(context.source.taskBinding,'local');assert.equal(context.source.packageLayout,'compact');
   assert.equal(context.materials[0].assetID,asset.id);
-  for(const path of ['task/BRIEF.txt','task/GUIDE.txt','task/knowledge.json','schema/output.json','schema/craft-plan.json','examples/project.shiyeproject.json','runtime/validate.cjs','runtime/preview.cjs'])assert.ok(files[path],path);
+  for(const path of ['task/BRIEF.txt','task/GUIDE.txt','schema/output.json','schema/craft-plan.json','examples/project.shiyeproject.json','runtime/validate.cjs','runtime/preview.cjs'])assert.ok(files[path],path);
   assert.ok(files['runtime/pack.cjs']);
-  for(const removed of ['README.txt','context.json','contract.json','CONTENT_BRIEF.txt','CREATIVE_GUIDE.txt','CRAFT_GUIDE.txt','case-studies.json','composition-ideas.json','abstract-templates.json','source-image-audit.json','example-response.json','example-response.shiyeproject.json'])assert.equal(files[removed],undefined,removed);
+  for(const removed of ['README.txt','context.json','contract.json','CONTENT_BRIEF.txt','CREATIVE_GUIDE.txt','CRAFT_GUIDE.txt','case-studies.json','composition-ideas.json','abstract-templates.json','source-image-audit.json','example-response.json','example-response.shiyeproject.json','task/knowledge.json','task/material-planning.json'])assert.equal(files[removed],undefined,removed);
   assert.match(strFromU8(files['START_HERE.txt']),/task\/BRIEF\.txt/);assert.match(strFromU8(files['START_HERE.txt']),/schema\//);
   assert.match(strFromU8(files['START_HERE.txt']),/不要逐个通读 schema\//);
   assert.match(strFromU8(files['task/BRIEF.txt']),/m1.*蓝色纸/);
   assert.ok(files['task/BRIEF.txt'].length<files['task/context.json'].length,'The first-read brief should be shorter than the full source');
-  const knowledge=JSON.parse(strFromU8(files['task/knowledge.json']));assert.equal(knowledge.format,'shiye-gpt-task-knowledge');assert.ok(knowledge.compositionIdeas.length);
-  assert.ok(knowledge.compositionIdeas.length<=3);
+  assert.match(strFromU8(files['START_HERE.txt']),/常用能力是素材排版与裁切、可编辑文字、图形和荧光笔/);
   assert.equal(files['task/COMPOSITION_GUIDE.txt'],undefined);
   assert.equal(files['runtime/compare.cjs'],undefined);
   assert.equal(files['runtime/select.cjs'],undefined);

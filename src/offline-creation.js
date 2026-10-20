@@ -1,10 +1,9 @@
-import {webSceneContract,webSceneCapabilities,webSceneDocument,importWebScene} from './web-scene-workbench.js';
+import {webSceneContract,webSceneDocument,importWebScene} from './web-scene-workbench.js';
 import {webWorkbenchInstructions,webEditingGuide,webArtDirection} from './web-creation-guide.js';
 import {attachSceneV2} from './scene-v2.js';
 import {itemFromAsset,textBlock} from './domain.js';
 import {previewImageFormat} from './offline-preview.js';
 import {webResultPrompt} from './creation-methods.js';
-import {offlineCreationPlanningData} from './offline-creation-workflow.js';
 import {multimodalCraftGuide} from './craft-vision.js';
 import {freezeCraftTask,craftTaskInstructions} from './craft-task.js';
 import {materialCraftGuide} from './material-craft-guide.js';
@@ -113,11 +112,11 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
     }
   }
   const example=webSceneDocument(source,exampleDraft,'字段示例（请重新创作）');
-  const knowledge={format:'shiye-gpt-task-knowledge',version:3,
-    capabilities:{...webSceneCapabilities,runtime:{validate:'node20',render:'node-canvas',preview:'png',visualReview:'manual-required'},craft:{plan:true,observations:showImages,twoHoleWeave:true,glyphGeometry:'local-font-required'}},
-    regions:source.sourceSnapshots.map(snapshot=>({assetID:snapshot.assetID,sourceRevision:snapshot.sourceRevision})),
-    compositionIdeas:compositionIdeas({...source,materials:selected}).slice(0,3),caseStudies:{families:relevantJournalFamilies({...source,materials:selected}),selectedCases:hasPresets?selectedCases.map(({id,title,method})=>({id,title,method})):[]}};
+  let knowledge=null;
   if(hasPresets){
+    knowledge={format:'shiye-gpt-task-knowledge',version:3,
+      compositionIdeas:compositionIdeas({...source,materials:selected}).slice(0,3),
+      caseStudies:{families:relevantJournalFamilies({...source,materials:selected}),selectedCases:selectedCases.map(({id,title,method})=>({id,title,method}))}};
     knowledge.abstractTemplates={note:'只借鉴方法，不照搬素材或坐标',templates:selectedTemplates};
     const refs=new Set(referenceImages.map(e=>e.id));knowledge.sourceImageAudit={images:journalSourceAudit.filter(row=>refs.has(row.id))};
   }
@@ -131,10 +130,8 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
     'task/BRIEF.txt':strToU8(fastTaskBrief(source,selected)),
     'task/context.json':strToU8(JSON.stringify(context,null,2)),
     'task/SCENE_REFERENCE.txt':strToU8(webEditingGuide),
-    'task/material-planning.json':strToU8(JSON.stringify(offlineCreationPlanningData(source,selected,{mode,hasImages:showImages}),null,2)),
     'task/GUIDE.txt':strToU8(guide),
     'task/CRAFT_CATALOG.txt':strToU8('按需选用素材工艺。先观察实际预览并考虑完整使用、取局部、边缘或蒙版加工、拆分、叠压关系；只执行有理由的处理，不设工艺数量指标。\ninstructions.json 的 materialDecisions 对每个 alias 记录 {"asset":"m1","choice":"intact|crafted|omitted","reason":"观察到的图案或轮廓，以及采用或舍弃该处理的理由"}，编译后写入 scene.json。intact 表示可见且没有加工，crafted 表示可见且有真实裁切、蒙版、胶带或其他可检查的加工，omitted 表示未在可见画面使用。必须与最终图层一致；说明不写入正文。\n统一遵守 source.processing；没有逐件用法覆盖。\n'+craftTaskInstructions+'\n'+materialCraftGuide+'\n'+multimodalCraftGuide),
-    'task/knowledge.json':strToU8(JSON.stringify(knowledge,null,2)),
     'schema/output.json':strToU8(JSON.stringify(webSceneContract,null,2)),
     'schema/tools.json':strToU8(JSON.stringify(offlineContract('agent',{cropPx:false}),null,2)),
     'schema/convenient-page.json':strToU8(JSON.stringify(directPageContract,null,2)),
@@ -149,6 +146,7 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
     'runtime/glyphs.cjs':strToU8(offlineGlyphSource),
     'runtime/validate.cjs':strToU8(offlineValidateSource)
   };
+  if(knowledge)files['task/knowledge.json']=strToU8(JSON.stringify(knowledge,null,2));
   for(const name of ['inspect','compile','apply','preview','pack','self-test'])files['runtime/'+name+'.cjs']=strToU8(`process.argv.splice(2,0,'${name}');require('./validate.cjs');\n`);
   for(const entry of chosen)if(validAlias(entry.alias)&&source.materials.some(item=>item.alias===entry.alias))files[packagePreviewPath('materials',entry.alias,entry.bytes,{transparent:true})]=entry.bytes;
   if(hasPresets)for(const entry of referenceImages)files[packagePreviewPath('references',entry.id,entry.bytes)]=entry.bytes;

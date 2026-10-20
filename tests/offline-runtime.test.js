@@ -14,10 +14,8 @@ test('O-12/O-13: bundled validator and Node Canvas render without cloud credenti
   const asset={id:'offline-runtime-asset',title:'蓝纸',kind:'sticker',physicalWidthMM:30,physicalHeightMM:40,supply:{quantity:1}};
   const task=await createOfflineHandoff({project:project('断网验证'),assets:[asset],aliases:{m1:asset.id},previews:[{alias:'m1',bytes:tinyPNG}],settings:{includeThumbnails:true}});
   const entries=unzipSync(new Uint8Array(await task.blob.arrayBuffer()));
-  const capabilities=JSON.parse(strFromU8(entries['task/knowledge.json'])).capabilities;
-  assert.equal(capabilities.runtime.render,'node-canvas');
-  assert.equal(capabilities.runtime.visualReview,'manual-required');
-  assert.equal(capabilities.runtime.preview,'png');
+  assert.equal(task.source.capabilities.previewOffline,'node-canvas');
+  assert.equal(task.source.capabilities.canonicalNodePreview,true);
   assert.ok(entries['runtime/preview.cjs']);
   assert.ok(entries['runtime/pack.cjs']);
   const directory=await mkdtemp(join(tmpdir(),'shiye-offline-runtime-'));

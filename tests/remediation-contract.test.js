@@ -36,9 +36,7 @@ test('O-08: preview-only task omits source-pixel crop and rejects it during comp
   const handoff=await make();
   const files=unzipSync(new Uint8Array(await handoff.blob.arrayBuffer()));
   const schema=JSON.parse(strFromU8(files['schema/tools.json']));
-  const capability=JSON.parse(strFromU8(files['task/knowledge.json'])).capabilities;
-  assert.equal(capability.sourcePixelCoordinates,false);
-  assert.equal(capability.cropPx,false);
+  assert.equal(handoff.source.capabilities.cropPx,false);
   assert.equal(schema.compose_page.properties.materials.items.properties.crop_px,undefined);
   const directSchema=JSON.parse(strFromU8(files['schema/convenient-page.json']));
   assert.equal(JSON.stringify(directSchema).includes('crop_px'),false);

@@ -53,7 +53,7 @@ test('API editable, web editable and API/web image handoffs share the same compo
   assert.match(strFromU8(webFiles['task/GUIDE.txt']),/主图与旁注、错层图文/);
   assert.match(api[0].content,/主图与旁注、错层图文/);
   assert.ok(JSON.parse(strFromU8(webFiles['task/context.json'])).materials[0].journalRoles.includes('writing'));
-  assert.equal(JSON.parse(strFromU8(webFiles['task/knowledge.json'])).caseStudies.families[0].id,'paper-collage');
+  assert.equal(webFiles['task/knowledge.json'],undefined);
   const image=imagePrompt({project:p,draft:p.drafts[0],assets:[asset],ids:[asset.id],theme:p.intent,includeImages:false,textMode:'rich'});
   assert.match(image,/自然换行的短段/);
   assert.match(image,/不绘制反斜杠、转义序列/);

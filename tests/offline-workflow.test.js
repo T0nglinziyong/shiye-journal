@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import {unzipSync,strFromU8} from 'fflate';
 import {project} from '../src/domain.js';
 import {createOfflineHandoff,importEditableWork} from '../src/offline-creation.js';
-import {offlineCreationPlanningData} from '../src/offline-creation-workflow.js';
 import {offlineBrowserPage} from '../src/offline-browser-page.js';
 import {auditOfflineCanvasDraft} from '../src/offline-canvas-audit.js';
 
@@ -11,33 +10,19 @@ const assets=[
  {id:'a1',title:'素材 1',kind:'sticker',role:'focal',physicalWidthMM:35,physicalHeightMM:45,supply:{quantity:1}},
  {id:'a2',title:'素材 2',kind:'photo',role:'focal',physicalWidthMM:80,physicalHeightMM:65,supply:{quantity:1}}
 ];
-const data=()=>{
- const selected=assets.map((a,i)=>({alias:'m'+(i+1),assetID:a.id,title:a.title,kind:a.kind,role:a.role,
-   physicalWidthMM:a.physicalWidthMM,physicalHeightMM:a.physicalHeightMM,quantity:1,tags:[]}));
- return offlineCreationPlanningData({},selected,{mode:'agent',hasImages:true});
-};
 const unpack=async settings=>{
  const task=await createOfflineHandoff({project:project('场景测试'),assets,aliases:{m1:'a1',m2:'a2'},
    settings:{includeThumbnails:false,...settings}});
  return {task,files:unzipSync(new Uint8Array(await task.blob.arrayBuffer()))};
 };
 
-test('planning information distinguishes evidence from visual hypotheses',()=>{
- const plan=data();
- assert.equal(plan.cards.length,2);assert.equal(plan.pairings.length,1);
- assert.equal(plan.pairings[0].status,'unverified-visual-hypothesis');
- assert.ok(plan.cards[0].inspect.includes('透明边缘及可裁区域'));
- assert.ok(plan.alternatives.some(item=>item.name==='场景叙事'));
- assert.equal(plan.cards[0].title,'素材 1');
- assert.doesNotMatch(JSON.stringify(plan),/山水|蝴蝶|人物/);
-});
-
 test('web exports one Scene protocol regardless of API generation preference',async()=>{
  for(const mode of ['direct','agent']){
    const {task,files}=await unpack({generationMode:mode});
    const start=strFromU8(files['START_HERE.txt']);
    const workflow=start;
-   const insights=JSON.parse(strFromU8(files['task/material-planning.json']));
+   assert.equal(files['task/material-planning.json'],undefined);
+   assert.equal(files['task/knowledge.json'],undefined);
    const checklist=strFromU8(files['task/GUIDE.txt']);
    const example=JSON.parse(strFromU8(files['examples/project.shiyeproject.json']));
    assert.match(start,/task\/SCENE_REFERENCE\.txt/);
@@ -46,7 +31,6 @@ test('web exports one Scene protocol regardless of API generation preference',as
    assert.match(workflow,/观察|关系/);
    assert.match(start,/同一 Scene|Node Canvas/);
    assert.match(checklist,/实际画面/);
-   assert.equal(insights.mode,'scene');
    assert.ok(example.page);assert.equal(example.tools,undefined);
    assert.equal(example.page.sceneVersion,2);
    assert.match(workflow,/工具和 Craft Plan 只是编辑它的输入/);
