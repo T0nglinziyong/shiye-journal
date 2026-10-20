@@ -36,19 +36,20 @@ test('web exports one Scene protocol regardless of API generation preference',as
  for(const mode of ['direct','agent']){
    const {task,files}=await unpack({generationMode:mode});
    const start=strFromU8(files['START_HERE.txt']);
-   const workflow=strFromU8(files['task/WORKFLOW.txt']);
+   const workflow=start;
    const insights=JSON.parse(strFromU8(files['task/material-planning.json']));
-   const checklist=strFromU8(files['task/VISUAL_REVIEW.txt']);
+   const checklist=strFromU8(files['task/GUIDE.txt']);
    const example=JSON.parse(strFromU8(files['examples/project.shiyeproject.json']));
-   assert.match(start,/task\/WORKFLOW\.txt/);
+   assert.match(start,/task\/SCENE_REFERENCE\.txt/);
    assert.match(start,/output\/preview\.png/);
    assert.doesNotMatch(start,/画面预览\.html|SHIYE_EXPORT_PREVIEW/);
    assert.match(workflow,/观察|关系/);
-   assert.match(checklist,/同源|Canvas/);
+   assert.match(start,/同一 Scene|Node Canvas/);
+   assert.match(checklist,/实际画面/);
    assert.equal(insights.mode,'scene');
    assert.ok(example.page);assert.equal(example.tools,undefined);
    assert.equal(example.page.sceneVersion,2);
-   assert.match(workflow,/工具和 Craft Plan 都是修改它的输入/);
+   assert.match(workflow,/工具和 Craft Plan 只是编辑它的输入/);
    assert.ok(files['schema/tools.json']);
    assert.equal(importEditableWork(JSON.stringify(example),assets,{trustedSource:task.source}).isDraft,true);
  }

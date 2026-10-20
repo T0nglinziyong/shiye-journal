@@ -28,6 +28,7 @@ try{
  doc.page.layers.push({type:'shape',id:'stamp-1',kind:'vector',x:115,y:190,width:38,height:38,
    fill:'#b36f67',stroke:null,vectorPaths:[[[.5,0],[1,.5],[.5,1],[0,.5]]]});
  doc.page.layers.push({...structuredClone(doc.page.layers.at(-1)),id:'stamp-2',x:150,rotation:25});
+ doc.materialDecisions=[{asset:'m1',choice:'intact',reason:'保留纸张的完整边界，用作日记内容载体'}];
  await writeFile(join(dir,'scene.json'),JSON.stringify(doc));
  for(const name of ['preview','pack']){const r=spawnSync(process.execPath,['runtime/'+name+'.cjs'],{cwd:dir,encoding:'utf8'});assert.equal(r.status,0,r.stderr||r.stdout);}
  const preview=JSON.parse(await readFile(join(dir,'output/preview-capture.json'),'utf8'));

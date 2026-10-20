@@ -73,6 +73,7 @@ window.document.querySelector('#setting-ai-temperature').value='1.2';
 window.document.querySelector('[data-act="settings-save"]').click();
 await waitFor(()=>window.document.querySelector('#view').dataset.renderedRoute!=='settings');
 assert.equal(JSON.parse(window.localStorage.getItem('shiye-ai-settings-v2')).temperature,1.2);
+assert.equal(JSON.parse(window.localStorage.getItem('shiye-ai-settings-v2')).finalVisualReview,true,'saving AI settings must not disable final image review');
 window.document.querySelector('[data-route="works"]').click();
 window.document.querySelector('[data-act="open-project"]').click();
 await waitFor(()=>window.document.querySelector('.swift-editor-head [aria-label="历史记录"]'));

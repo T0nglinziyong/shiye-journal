@@ -10,7 +10,7 @@ test('GPT ZIP requires a real same-scene Node Canvas PNG and editable JSON',asyn
  const bundle=await createOfflineHandoff({project:p,assets:[asset],aliases:{m1:asset.id},
    settings:{generationMode:'direct',includeThumbnails:false}});
  const zip=unzipSync(new Uint8Array(await bundle.blob.arrayBuffer()));
- for(const path of ['START_HERE.txt','task/WORKFLOW.txt','task/VISUAL_REVIEW.txt','runtime/README.txt']){
+ for(const path of ['START_HERE.txt']){
   const text=strFromU8(zip[path]);
   assert.match(text,/Canvas/,'document must distinguish real rendering: '+path);
   assert.match(text,/PNG/,'document must request a user-visible PNG: '+path);

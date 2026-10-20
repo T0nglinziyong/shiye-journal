@@ -7,6 +7,7 @@ import {loadOfflineCanvas,renderOfflinePNG} from './offline-node-preview.mjs';
 import {renderOfflinePreviewSVG} from './offline-preview-svg.js';
 import {buildMaterialLedger} from './material-ledger.js';
 import {canonicalTaskSource} from './task-source.js';
+import {validateMaterialDecisions} from './creation-material-decisions.js';
 const load=(file,limit=8_000_000)=>{if(statSync(file).size>limit)throw Error('工作数据不能超过 '+limit/1_000_000+' MB');return JSON.parse(readFileSync(file,'utf8'));};
 const save=(file,value)=>writeFileSync(file,JSON.stringify(value,null,2)+'\n');
 const hash=value=>'sha256:'+createHash('sha256').update(value).digest('hex');
@@ -58,12 +59,13 @@ export async function runWebWorkbench(context,command){
       save('output/preview-capture.json',{sceneHash,pngHash:hash(png),renderer:renderReport.rendererVersion,...dimensions,visualReview:'manual-required',renderReport});
     }
     if(command==='pack'){
+      validateMaterialDecisions(doc.materialDecisions,draft,source);
       const capture=existsSync('output/preview-capture.json')?load('output/preview-capture.json'):null;
       const png=existsSync('output/preview.png')?readFileSync('output/preview.png'):null;
       if(!capture||capture.sceneHash!==sceneHash||!png||capture.pngHash!==hash(png)||capture.renderer!=='shiye-scene-v2')throw Error('缺少最终 Scene 的 PNG 预览，请运行 preview 后再 pack');
       const dimensions=pngSize(png);
       if(dimensions.width!==capture.width||dimensions.height!==capture.height||dimensions.width!==Math.round(draft.canvas.width)||dimensions.height!==Math.round(draft.canvas.height))throw Error('PNG 预览尺寸与最终 Scene 不一致，请重新运行 preview');
-      const result=webSceneDocument(source,draft,doc.title),bytes=JSON.stringify(result,null,2)+'\n';
+      const result=webSceneDocument(source,draft,doc.title,doc.materialDecisions),bytes=JSON.stringify(result,null,2)+'\n';
       writeFileSync('output/project.shiyeproject.json',bytes);
       save('output/delivery-manifest.json',{format:'shiye-scene-delivery',version:1,sceneHash,jsonHash:hash(bytes),pngHash:capture.pngHash,renderer:capture.renderer,deliverables:['project.shiyeproject.json','preview.png'],visualReview:'manual-required',fontReview:'device-dependent'});
     }
