@@ -51,8 +51,10 @@ try{
     assert.deepEqual(await evaluate(`window.__syncTest.choices`),['migrate']);
     await evaluate(`window.__syncTest.showDetails()`);
     await wait('#sync-retry-now');
+    await evaluate(`(()=>{const toast=document.querySelector('#toast')||document.body.appendChild(document.createElement('div'));toast.id='toast';toast.textContent='CloudBase 云存储上传失败：https://docs.cloudbase.net/error-code/service/STORAGE_KEY_ALREADY_EXISTS';toast.classList.add('show');})()`);
     const geometry=await evaluate(`(()=>{const panel=document.querySelector('.utility-dialog'),error=document.querySelector('.sync-error'),r=panel.getBoundingClientRect();return {page:document.documentElement.scrollWidth-innerWidth,panel:r.right-innerWidth,error:error.scrollWidth-error.clientWidth}})()`);
     assert.ok(geometry.page<=1&&geometry.panel<=1&&geometry.error<=1,JSON.stringify({width,...geometry}));
+    await evaluate(`document.querySelector('#toast').classList.remove('show')`);
     assert.equal(await evaluate(`document.querySelector('#sync-retry-now').textContent`),'立即同步');
     assert.equal(await evaluate(`document.body.textContent.includes('比较版本')`),false);
     assert.deepEqual(await evaluate(`window.__syncTest.choices`),['migrate'],
