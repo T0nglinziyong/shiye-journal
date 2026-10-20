@@ -119,14 +119,14 @@ returns boolean language sql immutable set search_path='' as $$
 $$;
 create or replace function shiye_private.check_search(q text,k text,s text,series text,n integer)
 returns text language plpgsql immutable set search_path='' as $$
-declare query text:=lower(normalize(btrim(q),NFKC));
+declare normalized_query text:=lower(normalize(btrim(q),NFKC));
 begin
- if query is null or length(query) not between 1 and 256 or n is null or n not between 1 and 50 or
+ if normalized_query is null or length(normalized_query) not between 1 and 256 or n is null or n not between 1 and 50 or
     k is null or length(k) not between 1 and 30 or series is null or length(series)>200 or
     s is null or s not in ('all','ready','pendingReview','unready','used','unused','favorite','inside','outside') then
    raise exception 'Invalid search input' using errcode='22023';
  end if;
- return query;
+ return normalized_query;
 end$$;
 
 -- Derived documents are part of the same transaction as each asset mutation.
