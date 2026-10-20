@@ -46,11 +46,9 @@ jobs:
       - run: npm run build
       - name: Check screens and editor in Chromium viewports
         shell: bash
-        env:
-          SHIYE_TEST_UI_CLOUD: '1'
         run: |
           set -euo pipefail
-          npm run dev -- --mode ui-test --port 5193 --strictPort > /tmp/shiye-interface-server.log 2>&1 &
+          npm run dev -- --mode browser-test --port 5193 --strictPort > /tmp/shiye-interface-server.log 2>&1 &
           SERVER_PID=$!
           trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
           for i in $(seq 1 60); do
