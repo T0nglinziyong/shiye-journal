@@ -82,7 +82,12 @@ export function installUiCloudBase(window,{assets=[],series=[],projects=[],meta=
     if(data.route==='/api/platform-health')return {code:0,result:{version:1,status:200,body:{platform:'cloudbase',apiVersion:1,authentication:'verified',cos:{configured:true},capabilities:{schema:true,keyword:false,vector:false}}}};
     return {code:0,result:{version:1,status:200,body:{}}};
   };
-  window.__SHIYE_UI_CLOUD__={user,account,client,invoke,state};
+  const storage={from:()=>({
+    upload:async(path,data)=>{if(state.objects.has(path))return {data:null,error:{statusCode:409,message:'exists'}};state.objects.set(path,data);return {data:{path},error:null};},
+    download:async path=>state.objects.has(path)?{data:state.objects.get(path),error:null}:{data:null,error:{statusCode:404,message:'missing'}},
+    exists:async path=>({data:state.objects.has(path),error:null})
+  })};
+  window.__SHIYE_UI_CLOUD__={user,account,client,storage,invoke,state};
   // COS is a signed, direct transfer in production. No network leaves tests.
   window.XMLHttpRequest=undefined;
   window.fetch=async(input,init={})=>{

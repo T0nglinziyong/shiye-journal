@@ -1,11 +1,10 @@
-import {cloudEnabled,cloudClient} from './cloud-session.js';
-import {cloudApiUrl,cloudApiRequest} from './cloud-api-origin.js';
+import {cloudEnabled,cloudClient,cloudStorage} from './cloud-session.js';
 import {validateJournalPanel} from './journal-source-panels.js';
 
 const cache=new Map(),pending=new Map(),panelCache=new Map(),panelPending=new Map();let owner=null,epoch=0,active=0;const waiters=[];
 async function readLane(task){if(active>=4)await new Promise(resolve=>waiters.push(resolve));active++;try{return await task();}finally{active--;waiters.shift()?.();}}
 export function clearJournalPresetImages(){epoch++;for(const url of [...cache.values(),...panelCache.values()])URL.revokeObjectURL(url);cache.clear();pending.clear();panelCache.clear();panelPending.clear();owner=null;}
-export async function loadJournalPresetImage(number,{accountId,request=cloudApiRequest}={}){
+export async function loadJournalPresetImage(number,{accountId}={}){
   if(!Number.isInteger(number)||number<1||number>70)throw Error('预设图编号无效');
   if(!cloudEnabled)return null;
   if(accountId&&owner!==accountId){clearJournalPresetImages();owner=accountId;}
@@ -15,12 +14,10 @@ export async function loadJournalPresetImage(number,{accountId,request=cloudApiR
   const work=readLane(async()=>{
   const {data,error}=await cloudClient().auth.getSession();if(error||!data.session?.access_token)throw Error('请先登录后查看预设图片');
   const path=`journal-presets/source/${number}.jpg`;
-  const ticket=await request(cloudApiUrl('/api/cos'),{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+data.session.access_token},body:JSON.stringify({objects:[{path,method:'GET'}]}),signal:AbortSignal.timeout(15000)});
-  if(!ticket.ok)throw Error('预设图片授权失败（'+ticket.status+'）');
-  const signed=(await ticket.json()).tickets?.[0]?.url;if(!signed?.startsWith('https://'))throw Error('预设图片签名无效');
-  const response=await request(signed,{signal:AbortSignal.timeout(30000)});
-  if(!response.ok)throw Error('预设图片读取失败（'+response.status+'）');
-  const blob=await response.blob();if(blob.type&&!/^image\/jpeg/.test(blob.type))throw Error('预设图片类型无效');
+  const result=await cloudStorage().from('shiye-presets').download(path,undefined,{signal:AbortSignal.timeout(30000)});
+  if(result.error)throw Error('预设图片读取失败：'+result.error.message);
+  const blob=result.data;
+  if(!(blob instanceof Blob)||!blob.size||blob.type&&!/^image\/jpeg/.test(blob.type))throw Error('预设图片类型或内容无效');
   const url=URL.createObjectURL(blob);if(started!==epoch){URL.revokeObjectURL(url);throw Error('账号已切换，停止读取旧账号图片');}cache.set(number,url);return url;
   });pending.set(number,work);try{return await work;}finally{if(pending.get(number)===work)pending.delete(number);}
 }

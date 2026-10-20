@@ -7,13 +7,13 @@ import {join,resolve,sep} from 'node:path';
 const TABLES=['shiye_accounts','shiye_revisions','shiye_records','shiye_changes','shiye_commits'];
 const digest=data=>createHash('sha256').update(data).digest('hex');
 const userPath=(owner,path)=>typeof path==='string'&&path.startsWith(owner+'/')&&!path.includes('..')&&!path.includes('\\');
-const imageLink=/^project-cover:(cos):(.+)$/;
+const imageLink=/^project-cover:(cos|cloudbase):(.+)$/;
 export function cloudObjectReferences(row){
   const refs=new Map(),owner=row?.user_id;
   if(!owner||!row?.record)return [];
   const add=(provider,path)=>{
     if(!provider&&!path)return;
-    if(provider!=='cos'||!userPath(owner,path))
+    if(!['cos','cloudbase'].includes(provider)||!userPath(owner,path))
       throw Error('云端记录包含无效或跨账号的私有对象路径');
     refs.set(provider+':'+path,{provider,path});
   };

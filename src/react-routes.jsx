@@ -1660,7 +1660,7 @@ export function SettingsDataPage({state,cloudEnabled,storage,onAction}){
     <SettingsGroup title="应用错误诊断" description="导出最近 7 天本机记录的运行错误、网络与同步故障安全摘要，包含发生页面、阶段、错误类别和可判断的原因。不会导出作品、图片、账号、密钥或原始报错文本。">
       {button('export-app-diagnostics','导出完整错误诊断')}
     </SettingsGroup>
-    <SettingsGroup title="图片保留与清理" description="删除素材后，素材记录会从素材库隐藏，已有作品仍可引用；最近删除到期仅移除恢复入口。云端 COS 孤立文件经复核后延迟回收。"/>
+    <SettingsGroup title="图片保留与清理" description="删除素材后，素材记录会从素材库隐藏，已有作品仍可引用；最近删除到期仅移除恢复入口。云端孤立文件经复核后延迟回收。"/>
     <SettingsGroup title="数据维护"><div className="actions">
       <button type="button" className="btn" onClick={()=>setDiagnostics('metrics')}>生成诊断</button>
       <button type="button" className="btn" onClick={()=>setDiagnostics('contexts')}>创作完整上下文</button>
@@ -1669,7 +1669,7 @@ export function SettingsDataPage({state,cloudEnabled,storage,onAction}){
     </div></SettingsGroup>
     {cloudEnabled?<>
       <SettingsGroup title="私人云端资料">
-        <p id="storage-location">{'当前数据源：CloudBase 身份认证、PostgreSQL 元数据、腾讯 COS 私有图片；本机保留离线缓存和未同步修改'}</p><p>{counts}</p>
+        <p id="storage-location">{'当前数据源：CloudBase 身份认证、PostgreSQL 元数据与私有云存储；本机保留离线缓存和未同步修改'}</p><p>{counts}</p>
         <p>登录验证后显示本机缓存，后台检查云端更新。原图和完整作品按需读取；修改先暂存，后台同步。云端失败不会改用另一份资料。</p>
       </SettingsGroup>
       {backup}
@@ -1682,7 +1682,7 @@ export function SettingsDataPage({state,cloudEnabled,storage,onAction}){
         <p>同一画布在两台设备同时修改时，会在应用最后编辑时间规则之前保留双方原稿。本机留有记录时可将旧版本另存为新作品。</p>
         {button('recover-pre-conflict','查看与恢复冲突前画布')}
       </SettingsGroup>
-      <SettingsGroup title="账号安全清空"><p>CloudBase 清空与 COS 后台回收仍在安全验收；目前暂不可操作，避免误删未同步资料。</p></SettingsGroup>
+      <SettingsGroup title="账号安全清空"><p>CloudBase 清空与云端文件回收仍在安全验收；目前暂不可操作，避免误删未同步资料。</p></SettingsGroup>
       <SettingsGroup title="语义检索 · pgvector（预留）"><p>等待接入 Embedding 模型及索引。当前不会上传素材内容至模型或产生向量费用。</p><button type="button" className="btn" disabled aria-disabled="true">语义检索 · 尚未启用</button></SettingsGroup>
     </>:<>
       <SettingsGroup title="离线资料"><p id="storage-location">未配置 CloudBase 时仅提供本浏览器的本地资料；不会连接其他服务器。</p><p>{counts}</p></SettingsGroup>

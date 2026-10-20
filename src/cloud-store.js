@@ -1,7 +1,7 @@
 import {prepareUploadJobs} from './upload-preparation.js';
 import {cloudMetadataRecord,assertCloudCommitSize} from './cloud-record-guard.js';
 import {readCloudPages} from './cloud-page-read.js';
-import {cloudClient,requireCloudUser} from './cloud-session.js';
+import {cloudClient,requireCloudUser,cloudStorage} from './cloud-session.js';
 import {privateCache,outboxVersionRows} from './private-cache.js';
 import {createProjectSync} from './project-sync.js';
 import {runAccountBrowserLock,markSyncPhase} from './sync-browser-compat.js';
@@ -15,7 +15,7 @@ import {recordTombstones} from './sync-tombstones.js';
 import {LARGE_PROJECT_BYTES,projectSummary,mergeProjectSummary,projectBlobText} from './project-document.js';
 import {hiddenAssetCopy,referencedAssetIDsInProjects} from './asset-retention.js';
 import {sceneMaterialIDs,sceneMaterialBlobIDs} from './scene-material-references.js';
-import {createCOSStore} from './cos-store.js';
+import {createCloudBaseStorage} from './cloudbase-storage.js';
 import {imageVariant,DISPLAY_TIERS,COVER_EDGE} from './image-variants.js';
 import {recoverImportOutbox} from './import-outbox-recovery.js';
 import {recoverProjectOutbox,usableProjectSnapshot} from './project-outbox-recovery.js';
@@ -26,20 +26,21 @@ import {isLegacySceneProject} from './scene-v2.js';
 import {createBlobRevisionProof} from './blob-revision-proof.js';
 import {createSyncDiagnostics} from './sync-diagnostics.js';
 import {decodeImageBlob} from './image-blob-decoder.js';
-import {yieldToForeground} from './foreground-idle.js';
+import {yieldToForeground,scheduleForegroundIdle} from './foreground-idle.js';
 import {boundedMap} from './bounded-map.js';
 import {assetBlobIDs,splitIndependentAssetImport,splitWideMetadataMutation,splitPendingAssetImportRows,reconcileInterruptedAssetImport} from './import-sync-batches.js';
 export function createCloudStore({cloudClient,requireCloudUser,cache=null,namespace='cloud',projectPreview=()=>null,objectStorage=null}){
-const writeProvider=()=>{if(!objectStorage?.enabled)throw Error('CloudBase 当前 COS 图片服务不可用；待同步资料仍留在本机');return 'cos';};
+const writeProvider=()=>{if(!objectStorage?.enabled)throw Error('CloudBase 云存储不可用；待同步资料仍留在本机');return 'cloudbase';};
 const usableBlob=value=>value instanceof Blob&&value.size>0;
-const cosOnly=provider=>{if(provider!=='cos')throw Error('非 COS 图片引用不属于当前存储架构；请先备份并核对，云端元数据和本机原稿均未修改');};
-async function downloadObject(path,provider){cosOnly(provider);if(!objectStorage?.enabled)throw Error('COS 私有读取尚未配置');return objectStorage.download(path);}
-async function uploadObject(path,blob,type,provider=writeProvider()){cosOnly(provider);writeProvider();await objectStorage.upload(path,blob,type);return {error:null};}
+const supportedProvider=provider=>{if(provider!=='cloudbase')throw Error('旧存储图片尚未迁移到 CloudBase；请完成迁移后重试');};
+async function downloadObject(path,provider){supportedProvider(provider);if(!objectStorage?.enabled)throw Error('云端图片读取尚未配置');return objectStorage.download(path,provider);}
+async function uploadObject(path,blob,type,provider=writeProvider()){supportedProvider(provider);writeProvider();await objectStorage.upload(path,blob,type,provider);return {error:null};}
 let owner,revision,accountEpoch,writesInFlight=0,activeDirect=null,resetInProgress=false,resetCleanupPending=false,resetEpochId=null;
 let queue=Promise.resolve();
 const images=new Map();
 const imageSizes=new Map();
 const uploads=new Map();
+const previewJobs=new Set();
 
 const snapshots=new Map();
 const documents=new Map();
@@ -124,18 +125,6 @@ const withProjectBase=(store,record,base)=>{
     __cloudBaseSceneFingerprint:scene,__cloudBaseMetadata:metadata};
 };
 function retainImage(path,data){images.set(path,Promise.resolve(data));imageSizes.delete(path);imageSizes.set(path,data.size);let bytes=[...imageSizes.values()].reduce((a,b)=>a+b,0);for(const [key,size] of imageSizes){if(bytes<=64*1024*1024&&imageSizes.size<=48)break;if(key===path)continue;images.delete(key);imageSizes.delete(key);bytes-=size;}}
-// Old COS assets without thumbnail metadata are converted into a durable,
-// immutable preview480 object exactly once. There is never a browser-side
-// reconstruction of the original during ordinary catalog browsing.
-const previewMaterialization=new Set();
-function materializePreview480(record,preview){
-  if(record.storageProvider!=='cos'||record.thumbnailPath?.endsWith('-preview480.webp')||!objectStorage?.upload||!usableBlob(preview))return;
-  const path=record.storagePath+'-preview480.webp';
-  if(previewMaterialization.has(path))return;
-  previewMaterialization.add(path);
-  void objectStorage.upload(path,preview,'image/webp')
-    .catch(error=>{previewMaterialization.delete(path);console.warn('旧素材 COS 固定封面待补齐',error);});
-}
 let cacheDisabled=false;
 let unifiedOutboxBefore=[],projectOutboxQuarantine=[],unifiedQuarantine=[];
 // The merge guard needs only identity/version stamps, never image payloads.
@@ -223,7 +212,7 @@ async function loadUnifiedOutbox(recover=false){
   }
   if(recover&&result.rows.some(row=>row.record?.kind==='batch')){
     // Reuse the existing crash-recovery gate before the first upload. A
-    // missing Safari Blob is not evidence that its COS source also vanished.
+    // A missing Safari Blob is not evidence that its cloud source vanished.
     const recovered=await recoverImportOutbox(importSyncRows(result.rows),async(asset,ids)=>{
       const userID=await identity();
       if(!ids.length)return false;
@@ -232,13 +221,13 @@ async function loadUnifiedOutbox(recover=false){
         .abortSignal(AbortSignal.timeout(5000)));
       const available=await boundedMap(copies,4,async copy=>{
         const metadata=copy.record;
-        if(!metadata?.storagePath||metadata.storageProvider!=='cos')return null;
+        if(!metadata?.storagePath||metadata.storageProvider!=='cloudbase')return null;
         if(!metadata.storagePath.startsWith(userID+'/'))throw Error('图片不属于当前账号');
         const localBlob=await cached('image:'+metadata.storagePath);
         if(usableBlob(localBlob))return copy.id;
-        if(metadata.storageProvider==='cos'&&objectStorage?.probe){
-          if(await objectStorage.probe(metadata.storagePath))return copy.id;
-          // A definite COS 404 is evidence that metadata alone cannot render
+        if(objectStorage?.probe){
+          if(await objectStorage.probe(metadata.storagePath,metadata.storageProvider))return copy.id;
+          // A definite storage 404 is evidence that metadata alone cannot render
           // the card. Other probe failures throw and keep the outbox intact.
           return null;
         }
@@ -867,7 +856,7 @@ async function cloudReloadBlob(id){
   if(error)throw Error('无法读取云端原始图片记录：'+error.message);
   const record=data?.record;
   if(!record)return undefined;
-  if(record.storageProvider!=='cos'||
+  if(record.storageProvider!=='cloudbase'||
      !record.storagePath?.startsWith(user+'/'))
      throw Error('云端原始图片路径不属于当前账号');
   const blob=await downloadObject(record.storagePath,record.storageProvider);
@@ -894,9 +883,7 @@ async function cloudGet(store,id){
   if(store==='projects')return withProjectBase(store,await cloudProjectDocument(record),revision);
   return decode(store,record);
 }
-// A recovery-only export of the exact legacy projects held aside by the v2
-// reader. Never mutate v1 data; private full-size project documents are read
-// through the existing account-authenticated COS/old provider download route.
+// A recovery-only export of exact legacy projects held aside by the v2 reader.
 async function cloudLegacyProjectBackup(){
  const legacy=(await cloudAll('projects')).filter(isLegacySceneProject);
  if(!legacy.length)throw Error('当前账号没有待导出的旧版作品');
@@ -915,7 +902,7 @@ async function cloudProjectDocument(record){
   // Re-reading that path here would replace the user's edited Scene with its
   // old bytes immediately before upload.
   if(record.__cloudDocumentHydrated===true)return record;
-  if(record.projectDocumentProvider!=='cos')throw Error('作品文档缺少当前存储服务标记');
+  supportedProvider(record.projectDocumentProvider);
   if(!path.startsWith((await identity())+'/'))throw Error('作品不属于当前账号');
   if(!documents.has(path)){
     const task=(async()=>{let blob=await cached('project-document:'+path);if(!(blob instanceof Blob)){blob=await downloadObject(path,record.projectDocumentProvider);await remember('project-document:'+path,blob);}const full=JSON.parse(await projectBlobText(blob,record.projectDocumentEncoding));if(full.id!==record.id||!Array.isArray(full.drafts))throw Error('作品完整数据损坏');return full;})().catch(error=>{documents.delete(path);throw error;});documents.set(path,task);if(documents.size>8)documents.delete(documents.keys().next().value);
@@ -950,7 +937,7 @@ const variantBlobKey=(path,tier)=>(tier===COVER_EDGE?'thumbnail480':'preview'+ti
 async function rememberImageVariant(path,tier,blob){
   await remember(variantBlobKey(path,tier),blob);
   // A tiny persistent index lets a later browser session reuse a cached 960px
-  // image for a 480px request without probing ten IndexedDB blobs or COS.
+  // image for a 480px request without probing ten IndexedDB blobs or storage.
   const key='cached-image-variants:'+path;
   const old=await cached(key),tiers=[...new Set([
     ...(Array.isArray(old)?old.filter(n=>DISPLAY_TIERS.includes(n)):[]),tier
@@ -969,13 +956,12 @@ async function cachedSufficientVariant(path,required){
 async function cloudPreview(id,pixels=480,{allowRemoteOriginal=true}={}){
   const variant=imageVariant(pixels),edge=Number(variant.slice(7));
   const pending=await pendingOverride('blobs',id);if(pending&&(!pending.record||usableBlob(pending.record.data)))return pending.record?await makeThumbnail(pending.record.data,edge)||pending.record.data:undefined;
-  if(id.startsWith('project-cover:')){const match=/^project-cover:(cos):(.+)$/.exec(id);if(!match)throw Error('作品封面标识不是当前格式');const [,provider,path]=match;if(!path.startsWith((await identity())+'/'))throw Error('作品封面不属于当前账号');const key='thumbnail:'+path,saved=await cached(key);if(usableBlob(saved))return saved;const blob=await downloadObject(path,provider);if(!usableBlob(blob))throw Error('作品封面为空');await remember(key,blob);return blob;}
+  if(id.startsWith('project-cover:')){const match=/^project-cover:(cloudbase):(.+)$/.exec(id);if(!match)throw Error('作品封面标识不是当前格式');const [,provider,path]=match;if(!path.startsWith((await identity())+'/'))throw Error('作品封面不属于当前账号');const key='thumbnail:'+path,saved=await cached(key);if(usableBlob(saved))return saved;const blob=await downloadObject(path,provider);if(!usableBlob(blob))throw Error('作品封面为空');await remember(key,blob);return blob;}
   const record=await cloudRecord('blobs',id);if(!record)return undefined;
-  if(record.storageProvider!=='cos')throw Error('图片缺少当前存储服务标记');
+  supportedProvider(record.storageProvider);
   if(!record.storagePath?.startsWith(owner+'/'))throw Error('图片不属于当前账号');
   const thumbnailKey=variantBlobKey(record.storagePath,edge),saved=await cached(thumbnailKey);
-  // A previously loaded thumb must be a zero-network read. Materialization
-  // happens only on the COS CI miss path, not repeatedly for every tab.
+  // A previously loaded thumb must be a zero-network read.
   if(usableBlob(saved))return saved;
   // On a cold cover miss these independent account-scoped cache lookups used
   // to run one after another for every visible card. Keep the hit-only fast
@@ -991,9 +977,7 @@ async function cloudPreview(id,pixels=480,{allowRemoteOriginal=true}={}){
   }
   // If this device already holds the full image, derive the small card cover
   // locally. Do not fetch the same bytes again just to request a thumbnail.
-  // A COS original in the local cache can be several megapixels. Do not
-  // decode it on the catalog's main thread merely to create a 480px card;
-  // COS image processing supplies that variant without page CPU work.
+  // Avoid decoding a megapixel original on the catalog's main thread.
   if(usableBlob(localOriginal)&&globalThis.navigator?.onLine===false){
     const reduced=await makeThumbnail(localOriginal,edge);
     if(usableBlob(reduced)){await rememberImageVariant(record.storagePath,edge,reduced);return reduced;}
@@ -1003,21 +987,17 @@ async function cloudPreview(id,pixels=480,{allowRemoteOriginal=true}={}){
     try{const thumbnail=await downloadObject(record.thumbnailPath,record.storageProvider);if(!usableBlob(thumbnail))throw Error('缩略图为空');await rememberImageVariant(record.storagePath,edge,thumbnail);return thumbnail;}
     catch(error){console.warn('缩略图暂不可读，尝试从原图恢复',error?.message);}
   }
-  // Legacy COS originals can already have a deterministic immutable WebP
-  // despite their metadata not carrying thumbnailPath. Prefer that file over
-  // another image-processing request.
+  // An interrupted metadata commit can leave a deterministic immutable WebP
+  // without thumbnailPath. Prefer that file if present.
   if(variant==='preview480'&&!record.thumbnailPath?.endsWith('-preview480.webp')){
-    try{const stored=await downloadObject(record.storagePath+'-preview480.webp','cos');
+    try{const stored=await downloadObject(record.storagePath+'-preview480.webp',record.storageProvider);
       if(usableBlob(stored)){await rememberImageVariant(record.storagePath,edge,stored);return stored;}
-    }catch{/* One-time cache miss; COS CI can synthesize the derivative. */}
+    }catch{/* One-time cache miss. */}
   }
-  // Always request display variants from COS image processing.
-  // Do not download the full original on a thumbnail cache miss.
-  if(!objectStorage?.preview)throw Error('COS 派生封面尚不可用，未下载原图');
-  const preview=await objectStorage.preview(record.storagePath,variant);
-  if(!usableBlob(preview))throw Error('COS 派生封面为空，未下载原图');
+  if(!objectStorage?.preview)throw Error('CloudBase 图片封面尚不可用');
+  const preview=await objectStorage.preview(record.storagePath,variant,record.storageProvider);
+  if(!usableBlob(preview))throw Error('CloudBase 图片封面为空');
   await rememberImageVariant(record.storagePath,edge,preview);
-  if(variant==='preview480')materializePreview480(record,preview);
   return preview;
 }
 async function makeThumbnail(data,edge=480){
@@ -1039,7 +1019,7 @@ async function makeThumbnail(data,edge=480){
 async function decode(store,record){
   if(store!=='blobs')return record;
   const {storagePath,storageProvider,...metadata}=record;
-  if(storageProvider!=='cos')throw Error('图片缺少当前存储服务标记');
+  supportedProvider(storageProvider);
   if(!storagePath?.startsWith((await identity())+'/'))throw Error('图片不属于当前账号');
   if(!images.has(storagePath)){const pending=(async()=>{const saved=await cached('image:'+storagePath);if(usableBlob(saved))return saved;const data=await downloadObject(storagePath,storageProvider);if(!usableBlob(data))throw Error('云端图片为空');await remember('image:'+storagePath,data);return data;})().catch(error=>{images.delete(storagePath);throw error;});images.set(storagePath,pending);}
   const data=await images.get(storagePath);imageSizes.delete(storagePath);imageSizes.set(storagePath,data.size);let bytes=[...imageSizes.values()].reduce((a,b)=>a+b,0);for(const [path,size] of imageSizes){if(bytes<=64*1024*1024&&imageSizes.size<=48)break;if(path===storagePath)continue;images.delete(path);imageSizes.delete(path);bytes-=size;}return {...metadata,data};
@@ -1065,7 +1045,7 @@ function auxiliaryBlobIDs(operations){
 }
 async function encode(store,record,{makePreview=true}={}){
   // Sanitize the CloudBase RPC representation without touching its durable
-  // IndexedDB original; new and historical cutout pixels remain in COS.
+  // IndexedDB original.
   if(store!=='blobs')record=cloudMetadataRecord(store,record);
   if(store==='projects'){
     if(record.projectDocumentPath)record=await cloudProjectDocument(record);
@@ -1107,7 +1087,7 @@ async function encode(store,record,{makePreview=true}={}){
               await remember('thumbnail:'+coverPath,preview);
             }
           }
-        }catch(error){console.warn('作品 COS 快照生成或上传失败；保留可编辑正文，下次同步重试',record.id,error);}
+        }catch(error){console.warn('作品云存储快照生成或上传失败；保留可编辑正文，下次同步重试',record.id,error);}
       }
     }
     if(!inline){await remember('project-document:'+path,blob);documents.set(path,Promise.resolve(structuredClone(record)));if(documents.size>8)documents.delete(documents.keys().next().value);}
@@ -1118,12 +1098,27 @@ async function encode(store,record,{makePreview=true}={}){
   const bytes=await record.data.arrayBuffer(),digest=await crypto.subtle.digest('SHA-256',bytes);
   const hash=[...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,'0')).join('');
   const storagePath=`${await objectRoot()}${hash}`,provider=writeProvider();
-  if(!uploads.has(storagePath)){const task=(async()=>{const uploaded=await uploadObject(storagePath,record.data,record.data.type||'application/octet-stream',provider);if(uploaded.error&&uploaded.error.statusCode!=='409'&&uploaded.error.statusCode!==409)throw Error('图片上传失败，未保存元数据');})().catch(error=>{uploads.delete(storagePath);throw error;});uploads.set(storagePath,task);}
-  // COS provides display derivatives; require the original PUT before
-  // saving its metadata. No alternate image service or duplicate thumbnail PUT.
+  if(!uploads.has(storagePath)){const task=(async()=>{
+    await uploadObject(storagePath,record.data,record.data.type||'application/octet-stream',provider);
+  })().catch(error=>{uploads.delete(storagePath);throw error;});uploads.set(storagePath,task);}
   await uploads.get(storagePath);
   await remember('image:'+storagePath,record.data);retainImage(storagePath,record.data);
-  const {data,thumbnailPath:_oldThumbnail,...metadata}=record;return {...metadata,storagePath,storageProvider:'cos'};
+  // Thumbnail decoding and upload are optional idle work. The original is
+  // durable before metadata commit; preview processing never delays the save.
+  if(makePreview&&typeof window!=='undefined'&&!previewJobs.has(storagePath)){
+    previewJobs.add(storagePath);const expectedOwner=owner;
+    scheduleForegroundIdle(()=>{void (async()=>{
+      if(await identity()!==expectedOwner)return;
+      const source=await cached('image:'+storagePath);
+      if(!usableBlob(source))return;
+      const preview=await makeThumbnail(source,480);
+      if(!usableBlob(preview))return;
+      await uploadObject(storagePath+'-preview480.webp',preview,'image/webp',provider);
+      await rememberImageVariant(storagePath,480,preview);
+    })().catch(error=>console.warn('云存储封面待补齐，原图已保留',error?.message))
+      .finally(()=>previewJobs.delete(storagePath));},{minIdleMs:800,delayMs:500});
+  }
+  const {data,thumbnailPath:_oldThumbnail,...metadata}=record;return {...metadata,storagePath,storageProvider:provider};
 }
 async function protectReferencedAssetDeletes(operations){
   const deletionIDs=new Set(operations.filter(op=>op.store==='assets'&&op.action==='delete').map(op=>op.id));
@@ -1336,12 +1331,12 @@ async function cloudMigrationOriginalProject(record){
  await identity();
  if(!record?.projectDocumentPath)return structuredClone(record);
  const path=record.projectDocumentPath;
- if(!path.startsWith(owner+'/')||record.projectDocumentProvider!=='cos')
+  if(!path.startsWith(owner+'/')||record.projectDocumentProvider!=='cloudbase')
   throw Error('完整作品路径或存储服务不合法，不允许迁移');
  const blob=await downloadObject(path,record.projectDocumentProvider);
  const full=JSON.parse(await projectBlobText(blob,record.projectDocumentEncoding));
  if(full?.id!==record.id||!Array.isArray(full.drafts))throw Error('原始作品文档与摘要不一致');
- // Return the unmodified COS/old provider document, NOT a summary merge that can
+ // Return the unmodified cloud document, not a summary merge that can
  // overwrite old leaf arrays with empty metadata placeholders.
  return full;
 }
@@ -1783,7 +1778,7 @@ return {cloudListPreConflictScenes,cloudRestorePreConflictScene,cloudReloadBlob,
 }
 let projectPreview=()=>null;
 export const setCloudProjectPreview=producer=>{projectPreview=producer;};
-const current=createCloudStore({cloudClient,requireCloudUser,cache:privateCache,namespace:import.meta.env?.VITE_SHIYE_CLOUDBASE_ENV_ID||'cloud',projectPreview:record=>projectPreview(record),objectStorage:createCOSStore({client:cloudClient,enabled:import.meta.env?.VITE_SHIYE_OBJECT_STORAGE==='cos'})});
+const current=createCloudStore({cloudClient,requireCloudUser,cache:privateCache,namespace:import.meta.env?.VITE_SHIYE_CLOUDBASE_ENV_ID||'cloud',projectPreview:record=>projectPreview(record),objectStorage:createCloudBaseStorage({storage:cloudStorage,enabled:Boolean(import.meta.env?.VITE_SHIYE_CLOUDBASE_ENV_ID)})});
 export const cloudCloseCacheBeforeRemoteReset=()=>current.cloudCloseCacheBeforeRemoteReset();
 export const cloudSetResetCleanupPending=(...args)=>current.cloudSetResetCleanupPending(...args);
 export const cloudRunExclusiveReset=(...args)=>current.cloudRunExclusiveReset(...args);

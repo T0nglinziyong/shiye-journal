@@ -27,19 +27,15 @@ export function StorageUsageDialog({onClose}){
    finally{setBusy(false);}
  };
  useEffect(()=>{void load();},[]);
- const db=report?.database,cos=report?.cos;
+ const db=report?.database;
  return <AdminFrame title="CloudBase 账号容量" onClose={onClose}>
-  <p>仅统计当前登录账号。数据库数字是 JSON 逻辑字节，不代表实际计费表空间；COS 对象是私有文件。</p>
+  <p>仅统计当前登录账号的数据库元数据；JSON 逻辑字节不代表实际计费表空间。云存储用量请查看 CloudBase 套餐用量。</p>
   <div className="actions"><button type="button" className="btn" disabled={busy} onClick={()=>void load()}>{busy?'核对中…':'刷新统计'}</button></div>
   {error?<p role="alert">{error}</p>:null}
   {db?<section data-db><h3>CloudBase PostgreSQL · 当前账号</h3>
     <p>元数据记录：{Number(db.recordCount||0).toLocaleString()} 条</p>
     <p>素材：{Number(db.assetCount||0).toLocaleString()} · 作品：{Number(db.projectCount||0).toLocaleString()} · 图片引用：{Number(db.blobReferenceCount||0).toLocaleString()}</p>
     <p>JSON 逻辑字节：{bytes(db.metadataJSONBytes)}</p></section>:null}
-  {cos?<section data-cos><h3>腾讯 COS · 当前账号</h3>
-    <p>已扫描对象：{cos.objectCount==null?'未配置':Number(cos.objectCount).toLocaleString()} · 容量：{bytes(cos.totalBytes)}</p>
-    <p>{cos.inventoryComplete?'枚举完整':'当前仅部分枚举，不能作为计费总量'}</p>
-    <p>{cos.warning||cos.reason||'COS 原文件不会被此页面修改。'}</p></section>:null}
   <p>此界面仅只读；不会清理图片、删除记录或修改待同步队列。</p>
  </AdminFrame>;
 }
@@ -61,7 +57,7 @@ export function PlatformHealthDialog({onClose}){
    {busy?<p>正在核验登录、云函数和数据库能力…</p>:null}
    {error?<p role="alert">{error}。请检查 shiye-api 的服务端日志。</p>:null}
    {report?<><p>服务：{report.platform} · 版本：{report.build||'未登记'}</p>
-      <p>COS 签名配置：{report.cos?.configured?'已配置':'未配置，图片不可上传'}</p>
+      <p>图片存储：CloudBase 私有云存储（由浏览器登录会话授权）</p>
       <p>关键词索引：{report.capabilities?.keyword?'已启用':'待应用 SQL 迁移'}</p>
       <p>pgvector 语义检索：{report.capabilities?.vector?'后端已具备条件':'未启用（需 Embedding 模型与数据库索引）'}</p>
       <p>账号自动清空：暂不开放；安全验证后单独启用。</p>

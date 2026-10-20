@@ -2,6 +2,7 @@
 // A missing cloud configuration is never interpreted as a network fallback.
 const envId=import.meta.env?.VITE_SHIYE_CLOUDBASE_ENV_ID;
 const publishableKey=import.meta.env?.VITE_SHIYE_CLOUDBASE_PUBLISHABLE_KEY;
+export const cloudRealtimeEnabled=import.meta.env?.VITE_SHIYE_REALTIME_ENABLED==='true';
 export const cloudEnabled=!!envId;
 export const cloudbaseEnabled=cloudEnabled;
 let client,app,preparing;
@@ -10,10 +11,13 @@ export async function prepareCloudClient(){
   if(!cloudEnabled||client)return;
   if(!publishableKey)throw Error('CloudBase 浏览器公钥未配置；未切换到本机存储');
   preparing??=(async()=>{
-    const [{default:cloudbase},{registerAuth},{registerMySQL},{registerFunctions}]=await Promise.all([
+    const [{default:cloudbase},{registerAuth},{registerMySQL},{registerFunctions},{registerStorage}]=await Promise.all([
       import('@cloudbase/js-sdk/app'),import('@cloudbase/js-sdk/auth'),
-      import('@cloudbase/js-sdk/mysql'),import('@cloudbase/js-sdk/functions')]);
+      import('@cloudbase/js-sdk/mysql'),import('@cloudbase/js-sdk/functions'),
+      import('@cloudbase/js-sdk/storage')]);
     registerAuth(cloudbase);registerMySQL(cloudbase);registerFunctions(cloudbase);
+    if(cloudRealtimeEnabled){const {registerRealtimeJs}=await import('@cloudbase/js-sdk/realtime-js');registerRealtimeJs(cloudbase);}
+    registerStorage(cloudbase);
     const instance=cloudbase.init({env:envId,accessKey:publishableKey,timeout:30000});
     const db=instance.rdb(),auth=typeof instance.auth==='function'?instance.auth():instance.auth;
     // Do not override GATEWAY with the website origin. Localhost, the testing
@@ -26,6 +30,14 @@ export async function prepareCloudClient(){
 export function cloudClient(){
   if(!client)throw Error('CloudBase 尚未初始化；请检查配置并重试登录');
   return client;
+}
+export function cloudRealtime(){
+  if(!app)throw Error('CloudBase 尚未初始化，无法订阅账号修订');
+  return app.realtime();
+}
+export function cloudStorage(){
+  if(!app)throw Error('CloudBase 尚未初始化，无法读取云存储');
+  return app.storage;
 }
 export async function invokeCloudFunction(options){
   await prepareCloudClient();

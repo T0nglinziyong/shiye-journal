@@ -45,7 +45,8 @@ import {AssetOrganizationContext} from './react-organization.jsx';
 import {classificationQueue} from './classification-queue.js';
 import {mountIcons,iconMarkup} from './icons.js';
 import {startCloudSession} from './entry.js';
-import {cloudClient,cloudEnabled,requireCloudUser} from './cloud-session.js';
+import {cloudClient,cloudEnabled,cloudRealtime,cloudRealtimeEnabled,requireCloudUser} from './cloud-session.js';
+import {startCloudRevisionRealtime} from './cloud-revision-realtime.js';
 import {createSyncResumer} from './sync-resumer.js';
 import {describeSyncError} from './sync-browser-compat.js';
 import {explainUserError} from './user-facing-error.js';
@@ -3365,7 +3366,19 @@ window.addEventListener('shiye-sync-project-committed',event=>{
 });
 window.addEventListener('shiye-project-sync',event=>{const {pending,error,conflicts=0,uploading=false,progress=null}=event.detail;syncDisplay.pending=pending;syncDisplay.progress=progress;syncDisplay.error=error;syncDisplay.conflicts=conflicts;syncDisplay.uploading=uploading;syncDisplay.checking=false;if(!dirtyProjects.size&&!savingProjects)syncDisplay.localPending=false;updateSyncIndicator();if(error&&!uploading){saveStatus('待同步 · 修改已保留在本机');const message=error.name==='AbortError'||/abort|timed? ?out/i.test(error.message||'')?'网络请求中断，本机修改已保留，将自动重试同步':describeSyncError(error);if(lastSyncError!==message)toast(message);lastSyncError=message;}else{const recovered=!!lastSyncError&&!error;if(!error)lastSyncError=null;saveStatus(conflicts?'部分资料有冲突 · 其他资料已继续同步':pending?'修改已暂存 · 后台同步中':'已保存到云端');if(recovered)privateImages.retryMissing();}});
 let cloudCheck,cloudCheckAt=0,cloudSessionReady=false,cloudCheckAgain=false;
-const CLOUD_POLL_MS=5000;
+const CLOUD_POLL_MS=5000,REALTIME_FALLBACK_MS=60000;
+let revisionRealtimeReady=false;
+let stopRevisionRealtime=()=>{};
+function subscribeAccountRevision(userID){
+  stopRevisionRealtime();stopRevisionRealtime=()=>{};revisionRealtimeReady=false;
+  if(!cloudEnabled||!cloudRealtimeEnabled)return;
+  try{stopRevisionRealtime=startCloudRevisionRealtime({
+    realtime:cloudRealtime(),userID,
+    onChange:()=>backgroundCloudCheck({force:true}),
+    onReady:()=>{revisionRealtimeReady=true;backgroundCloudCheck({force:true});},
+    onError:error=>{revisionRealtimeReady=false;console.warn('账号实时通知暂不可用；仍会定期核对云端版本',error?.message);}
+  });}catch(error){revisionRealtimeReady=false;console.warn('账号实时通知未建立；仍会定期核对云端版本',error?.message);}
+}
 let syncPausedByUser=false,resetWorkflowActive=false;
 const cloudResumer=createSyncResumer({flush:()=>db.flushProjects({background:true}),canRun:()=>cloudEnabled&&cloudSessionReady&&navigator.onLine!==false,onError:error=>console.warn('后台同步待重试',error?.message)});
 function backgroundCloudCheck({force=false}={}){
@@ -3378,7 +3391,7 @@ function backgroundCloudCheck({force=false}={}){
   // every image chunk. A forced pull after another device's commit still runs.
   if(syncDisplay.uploading&&!force&&Date.now()-cloudCheckAt<30000)return;
   if(cloudCheck){if(force)cloudCheckAgain=true;return;}
-  if(!force&&Date.now()-cloudCheckAt<CLOUD_POLL_MS)return;
+  if(!force&&Date.now()-cloudCheckAt<(revisionRealtimeReady?REALTIME_FALLBACK_MS:CLOUD_POLL_MS))return;
   cloudCheckAt=Date.now();
   cloudCheck=refresh({background:true,onlyChanged:true})
     .catch(error=>{recordRuntimeIssue('handled',error,state.route,{phase:'background'});console.warn('后台版本检查失败；保留已验证缓存',error);})
@@ -3560,6 +3573,7 @@ function checkForSafeUpdate(){
 }
 async function init(user,{resetPending=false,afterAccountReset=false,onFirstView=()=>{}}={}){
   previewPrewarmEpoch++;
+  stopRevisionRealtime();stopRevisionRealtime=()=>{};
   let cachedShown=false;
   cloudSessionReady=!resetPending;
   if(resetPending)cloudResumer.suspend();
@@ -3604,7 +3618,7 @@ async function init(user,{resetPending=false,afterAccountReset=false,onFirstView
     for(const a of state.assets)if(a.staticPath)staticSources.set(a.blobId,a.staticPath);
     render();activateNavigation();cachedShown=true;onFirstView();saveStatus('本机缓存 · 正在核对云端');
   }
-  const initialSync=await db.refreshCloud();if(initialSync?.changed)privateImages.invalidate(initialSync.allBlobs?undefined:initialSync.blobIDs);await refresh({background:cachedShown,skipCloudRefresh:true});activateNavigation();onFirstView();if(!resetPending&&!afterAccountReset)void purgeExpiredTrash();await matchingSession.restore();if(cloudMatchingDefaults)applyMatchingDefaults(state,cloudMatchingDefaults);editableImportReady=true;void consumeEditableHandles();saveStatus(cloudEnabled?'已连接 CloudBase':'已保存到本机');if(cloudEnabled){syncDisplay.checking=false;updateSyncIndicator();if(!resetPending)void cloudResumer.wake();else saveStatus('云端已清空 · 正在后台清理旧图片（暂只读）');}
+  const initialSync=await db.refreshCloud();if(initialSync?.changed)privateImages.invalidate(initialSync.allBlobs?undefined:initialSync.blobIDs);await refresh({background:cachedShown,skipCloudRefresh:true});activateNavigation();onFirstView();if(!resetPending&&!afterAccountReset)void purgeExpiredTrash();await matchingSession.restore();if(cloudMatchingDefaults)applyMatchingDefaults(state,cloudMatchingDefaults);editableImportReady=true;void consumeEditableHandles();saveStatus(cloudEnabled?'已连接 CloudBase':'已保存到本机');if(cloudEnabled){syncDisplay.checking=false;updateSyncIndicator();if(!resetPending){subscribeAccountRevision(accountId);void cloudResumer.wake();}else saveStatus('云端已清空 · 正在后台清理旧图片（暂只读）');}
   }catch(e){console.error(e);recordRuntimeIssue('handled',e,state.route,{phase:'auth'});const auth=e.status===401;if(auth)cloudSessionReady=false;
   if(cachedShown&&!auth){saveStatus('云端核对失败 · 缓存仅供查看');toast('云端连接失败，未改为本机保存：'+e.message);if(cloudEnabled)void cloudResumer.wake();return;}
   if(auth){renderReactPage(createElement('div',{className:'empty'},
