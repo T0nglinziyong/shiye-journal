@@ -65,7 +65,7 @@ test('API editable, web editable and API/web image handoffs share the same compo
   const webImage=await createOfflineHandoff({project:p,assets:[asset],aliases:{m1:asset.id},settings:{deliveryMode:'image',includeThumbnails:false,textMode:'rich'}});
   const imageFiles=unzipSync(new Uint8Array(await webImage.blob.arrayBuffer()));
   assert.ok(strFromU8(imageFiles['task/GUIDE.txt']).includes(image));
-  assert.equal(JSON.parse(strFromU8(imageFiles['task/knowledge.json'])).caseStudies.families[0].id,'paper-collage');
+  assert.equal(imageFiles['task/knowledge.json'],undefined);
 });
 
 test('API and web task honor the same optional structure guidance',async()=>{
@@ -104,12 +104,12 @@ test('image API forwards no-text setting and does not quietly request copy',asyn
   assert.doesNotMatch(sent,/最终图像中的印刷文字/);
 });
 
-test('image API places matched journal references after physical material previews',async()=>{
+test('image API sends only selected material previews',async()=>{
   const p=task(),png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/5uoAAAAASUVORK5CYII=','base64');
   let names=[],sent='',endpoint='';
   const request=async (url,init)=>{endpoint=url;names=init.body.getAll('image[]').map(file=>file.name);sent=init.body.get('prompt');return {ok:true,json:async()=>({data:[{b64_json:png.toString('base64')}]})};};
-  await generatePageImage({settings:{keys:{openai:'test-only'},includeThumbnails:true},project:p,draft:p.drafts[0],assets:[asset],ids:[asset.id],createImage:async()=>`data:image/png;base64,${png.toString('base64')}`,request:async(url,init)=>url.startsWith('data:')?{blob:async()=>new Blob([png],{type:'image/png'})}:request(url,init),referenceImages:[{id:'quiet-day',bytes:png},{id:'handwritten-observation',bytes:png}]});
+  await generatePageImage({settings:{keys:{openai:'test-only'},includeThumbnails:true},project:p,draft:p.drafts[0],assets:[asset],ids:[asset.id],createImage:async()=>`data:image/png;base64,${png.toString('base64')}`,request:async(url,init)=>url.startsWith('data:')?{blob:async()=>new Blob([png],{type:'image/png'})}:request(url,init)});
   assert.match(endpoint,/\/images\/edits$/);
-  assert.deepEqual(names,['material-1.png','layout-case-1.png','layout-case-2.png']);
-  assert.match(sent,/最后 2 张是匹配的抽象模板与真实案例/);
+  assert.deepEqual(names,['material-1.png']);
+  assert.doesNotMatch(sent,/抽象模板与真实案例/);
 });

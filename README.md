@@ -42,7 +42,6 @@ task/
   GUIDE.txt
   SCENE_REFERENCE.txt   # 按需查阅的图层字段与精确操作
   CRAFT_CATALOG.txt     # 按需查阅的素材工艺
-  knowledge.json       # 仅在启用参考图时存在
 schema/
   convenient-page.json
   output.json
@@ -53,7 +52,6 @@ examples/
   project.shiyeproject.json
 materials/
   <素材预览>.png
-references/          # 仅在启用参考时存在
 runtime/
   validate.cjs
   compile.cjs
@@ -70,7 +68,7 @@ runtime/
 - `task/context.json`：任务事实、纸张、素材映射、物理尺寸、权限、来源快照和任务指纹。
 - `task/SCENE_REFERENCE.txt` 和 `task/CRAFT_CATALOG.txt`：分别供精确编辑与高级工艺按需查阅，主流程只在 `START_HERE.txt` 写一次。
 - 创作时直接完成素材、正文、图形和笔迹的可编辑 Scene，并查看真实 PNG 修改到完成状态；不以粗排缩略图作为成品依据。
-- `task/knowledge.json`：只有选择发送参考图时附带的案例与参考信息；默认包不再导出纯元数据猜测的 `material-planning.json`。
+- 任务包不再导出案例参考图、`knowledge.json` 或纯元数据猜测的 `material-planning.json`；模型直接观察本次素材。
 - `schema/convenient-page.json`：简短指令格式；`schema/output.json`：完整 Scene 合同；两者均按需查阅。
 - `schema/craft-plan.json`：当前原子工艺计划合同。
 - `examples/project.shiyeproject.json`：完整 Scene 字段示例，仅用于参考，不是成品模板。

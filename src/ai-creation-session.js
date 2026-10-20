@@ -3,7 +3,7 @@ import {materialAliases} from './material-alias.js';
 import {prepareMaterialPreviews} from './creative-previews.js';
 import {commitAIDraft} from './ai-run-target.js';
 
-export function creativeRunParameters({project,draft,assets,ids,settings,prompt,userTemplates=[]}){
+export function creativeRunParameters({project,draft,assets,ids,settings,prompt}){
   return {...settings,draft,assets,aliases:materialAliases(ids),
     styles:project.styles||[draft.style],
     pagePurposes:project.purposes||[project.purpose||'自由创作'],
@@ -11,7 +11,7 @@ export function creativeRunParameters({project,draft,assets,ids,settings,prompt,
     textPresentation:project.textPresentation||'mixed',
     userText:project.userText||'',providedFacts:project.providedFacts||'',
     requiredAssetIDs:project.requiredAssetIDs||[],materialPriority:project.materialPriority,
-    processing:project.processing||'自由拆解',prompt,userTemplates};
+    processing:project.processing||'自由拆解',prompt};
 }
 
 export function createCreativeRunGuard({accountID,ids,assets,getAccount,getAsset,signal}){
@@ -26,17 +26,14 @@ export function createCreativeRunGuard({accountID,ids,assets,getAccount,getAsset
   };
 }
 
-export async function prepareCreativeRunInputs({project,draft,assets,ids,settings,createImage,loadReferences,guard}){
+export async function prepareCreativeRunInputs({assets,ids,settings,createImage,guard}){
   const vision=settings.supportsVision;
   const findAsset=id=>assets.find(a=>a.id===id);
   const images=vision?await prepareMaterialPreviews(ids,{findAsset,createImage:async(...args)=>{
     guard();return createImage(...args);
   }}):[];
   guard();
-  const referenceImages=settings.sendPresetReferences&&vision
-    ?(await loadReferences({styles:project.styles||[draft.style],purposes:project.purposes||[project.purpose||'自由创作'],materials:assets.filter(a=>ids.includes(a.id))})).referenceImages:[];
-  guard();
-  return {images,referenceImages};
+  return {images};
 }
 
 export const creativeProgressText=progress=>'请求 '+progress.budget.totalRequests+'/'+progress.budget.limit+

@@ -8,7 +8,7 @@ export function OfflineHandoffLoading({progress,onClose}){
   </section></Dialog>;
 }
 const size=n=>n<1048576?`${Math.ceil(n/1024)} KB`:`${(n/1048576).toFixed(1)} MB`;
-export function OfflineHandoffReady({result,project,referenceCount,diagnostics,onClose,onCopy,onShare,onDownload,onImportFile,onImportText,onPaste}){
+export function OfflineHandoffReady({result,project,diagnostics,onClose,onCopy,onShare,onDownload,onImportFile,onImportText,onPaste}){
   const imageDelivery=result.deliveryMode==='image';
   const [delivery,setDelivery]=useState('file'),[status,setStatus]=useState(`准备就绪 · ${result.filename}`),[showPaste,setShowPaste]=useState(false),[input,setInput]=useState(''),[busy,setBusy]=useState(false);
   const promptRef=useRef(null),inputRef=useRef(null),prompt=delivery==='file'?result.prompt:(result.prompts?.text||result.prompt);
@@ -17,7 +17,7 @@ export function OfflineHandoffReady({result,project,referenceCount,diagnostics,o
   const importText=async()=>{if(busy)return;setBusy(true);try{await onImportText(inputRef.current?.value??input);onClose();}catch(error){setStatus('导入失败：'+error.message);setBusy(false);}};
   return <Dialog title="把这一页交给 AI" onClose={onClose} className="offline-handoff-dialog"><section className="offline-handoff">
     <div className="offline-handoff-heading"><span className="offline-handoff-emblem" aria-hidden="true">✦</span><div><small>{imageDelivery?'网页版 AI · 画面创作':'网页版 GPT · 创作交接'}</small><h2>{imageDelivery?'把这一页交给 AI':'把这一页交给 GPT'}</h2></div></div>
-    <p className="offline-handoff-intro">{project.candidateAssetIDs.length} 件可用素材 · {project.styles?.join('、')||'所选风格'} · {project.drafts[0].pageRatio.toUpperCase()}{referenceCount?` · ${referenceCount} 张匹配案例`:''} · 任务包 {size(result.packageBytes)}（图片 {size(result.imageBytes)}）</p>
+    <p className="offline-handoff-intro">{project.candidateAssetIDs.length} 件可用素材 · {project.styles?.join('、')||'所选风格'} · {project.drafts[0].pageRatio.toUpperCase()} · 任务包 {size(result.packageBytes)}（图片 {size(result.imageBytes)}）</p>
     <div className="offline-handoff-delivery" role="group" aria-label="网页版 GPT 返回形式"><button type="button" className={delivery==='file'?'selected':''} data-offline-delivery="file" aria-pressed={delivery==='file'} onClick={()=>setDelivery('file')}>作品文件</button><button type="button" disabled={imageDelivery} className={delivery==='text'?'selected':''} data-offline-delivery={imageDelivery?undefined:'text'} aria-pressed={delivery==='text'} onClick={()=>setDelivery('text')}>{imageDelivery?'复制文本（图片不可用）':'复制文本'}</button></div>
     <div className="offline-handoff-step"><span className="offline-handoff-number">1</span><div><strong>{imageDelivery?'复制要求并发送素材包':'复制创作要求并打开任务包'}</strong><small>{imageDelivery?'这个 ZIP 是输入素材包，不是要求 AI 生成的文件。请让 AI 在回复中展示画面并提供可下载的 PNG。':'复制成功后自动下载；在系统文件页分享给 ChatGPT，或在 ChatGPT 手动附加。'}</small></div></div>
     <textarea id="offline-gpt-prompt" ref={promptRef} readOnly rows="3" aria-label="发送给 ChatGPT 的短提示词" value={prompt}/>

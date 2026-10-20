@@ -163,14 +163,14 @@ test('text-only task explicitly records null preview hashes',async()=>{
   assert.equal(output.source.previewHashes,null);await verifyOfflineTaskPackage(bytes,output.source);
 });
 
-test('reference metadata is merged into task/knowledge.json and images stay under references',async()=>{
+test('web task excludes visual references even with an old enabled preference',async()=>{
   const p=project('参考');p.styles=['韩系清新'];p.purposes=['日常记录'];
   const cases=selectJournalReferenceCases({styles:p.styles,purposes:p.purposes,materials:[asset]});
   const referenceImages=cases.map((entry,i)=>({id:entry.id,bytes:new Uint8Array([82,73,70,70,16,0,0,0,87,69,66,80,86,80,56,32,i+1])}));
-  const output=await make({p,settings:{generationMode:'direct',includeThumbnails:false,sendPresetReferences:true},referenceImages}),files=await filesOf(output),knowledge=JSON.parse(strFromU8(files['task/knowledge.json']));
-  assert.deepEqual(Object.keys(files).filter(name=>name.startsWith('references/')&&name.endsWith('.webp')).sort(),cases.map(entry=>`references/${entry.id}.webp`).sort());
-  assert.deepEqual(knowledge.caseStudies.selectedCases.map(entry=>entry.id),cases.map(entry=>entry.id));assert.ok(knowledge.abstractTemplates.templates.length);assert.ok(knowledge.sourceImageAudit.images.length<=referenceImages.length,'Only matching references should be audited');
-  assert.equal(files['abstract-templates.json'],undefined);assert.equal(files['source-image-audit.json'],undefined);
+  const output=await make({p,settings:{generationMode:'direct',includeThumbnails:false,sendPresetReferences:true},referenceImages}),files=await filesOf(output);
+  assert.equal(files['task/knowledge.json'],undefined);
+  assert.ok(!Object.keys(files).some(name=>name.startsWith('references/')));
+  assert.equal(output.imageBytes,0);
   assert.match(strFromU8(files['task/GUIDE.txt']),/可编辑|内容边界/);
 });
 
@@ -183,18 +183,15 @@ test('preset reference planning remains independent across palette, layout and p
 });
 
 
-test('Safari-compatible package binds PNG materials and JPEG references to actual file paths',async()=>{
+test('Safari-compatible package binds PNG materials without visual references',async()=>{
   const png=Uint8Array.from([137,80,78,71,13,10,26,10,0,0,1,2]);
-  const jpg=Uint8Array.from([255,216,255,224,0,16,0,0,4,5,6]);
   const p=project('手机创作参考');p.styles=['韩系清新'];p.purposes=['日常记录'];
-  const cases=selectJournalReferenceCases({styles:p.styles,purposes:p.purposes,materials:[asset]});
-  const refs=cases.map((entry,i)=>({id:entry.id,bytes:jpg,extension:'jpg',mimeType:'image/jpeg'}));
-  const bundle=await make({p,previews:[{alias:'m1',bytes:png}],referenceImages:refs,
+  const bundle=await make({p,previews:[{alias:'m1',bytes:png}],
     settings:{generationMode:'direct',includeThumbnails:true,sendPresetReferences:true}});
   const bytes=new Uint8Array(await bundle.blob.arrayBuffer()),files=unzipSync(bytes),
     ctx=JSON.parse(strFromU8(files['task/context.json']));
   assert.deepEqual(files['materials/m1.png'],png);
-  assert.deepEqual(files['references/'+cases[0].id+'.jpg'],jpg);
+  assert.ok(!Object.keys(files).some(name=>name.startsWith('references/')));
   assert.equal(ctx.materials[0].preview,'materials/m1.png');
   assert.equal(files['materials/m1.webp'],undefined);
   assert.equal(bundle.source.previewHashes.m1,'sha256:'+createHash('sha256').update(png).digest('hex'));

@@ -2,7 +2,6 @@ import {normalizeMatchingDirection} from './matching-directions.js';
 import {localDeviceRecords} from './local-device-records.js';
 import {usableProjectSnapshot} from './project-outbox-recovery.js';
 import {selectJournalReferenceCases,loadJournalReferenceCases} from './journal-reference-catalog.js';
-import {loadJournalTemplateReferences} from './journal-template-references.js';
 import {creativeRunParameters,createCreativeRunGuard,prepareCreativeRunInputs,creativeProgressText,hasCreativeSceneChange,createCreativeCheckpoint} from './ai-creation-session.js';
 import {createMatchingCoverCache} from './matching-cover-cache.js';
 import {prepareProjectScene} from './scene-v2.js';
@@ -89,7 +88,7 @@ export function createMatchingSession(c){
   async generate(){
    if(controller){c.toast('已有方案正在创作，请先停止或等待完成');return;}
    const cfg=structuredClone(c.state.aiSettings);if(cfg.deliveryMode!=='image'&&!cfg.key)throw Error('请先在设置 → AI 与创作中保存 API 密钥');
-   const p=c.createProject(),ids=[...p.candidateAssetIDs],assetsSnapshot=structuredClone(c.state.assets),templatesSnapshot=structuredClone(c.state.userTemplates||[]),findAsset=id=>assetsSnapshot.find(a=>a.id===id);
+   const p=c.createProject(),ids=[...p.candidateAssetIDs],assetsSnapshot=structuredClone(c.state.assets),findAsset=id=>assetsSnapshot.find(a=>a.id===id);
    const v={id:c.uid(),title:'方案 '+(variants.length+1),createdAt:new Date().toISOString(),status:'running',progress:'正在准备素材预览…',project:p};variants.unshift(v);const run=new AbortController();controller=run;let recorder,checkpointFailed=false;
    const accountID=c.state.accountId;
    const ensureAccount=createCreativeRunGuard({accountID,ids,assets:assetsSnapshot,getAccount:()=>c.state.accountId,getAsset:id=>c.state.assets.find(a=>a.id===id),signal:run.signal});
@@ -98,14 +97,12 @@ export function createMatchingSession(c){
    try {
     await save();ensureAccount();
     if(cfg.deliveryMode==='image'){
-     const referenceImages=cfg.sendPresetReferences?(await loadJournalTemplateReferences({context:{styles:p.styles,purposes:p.purposes,materials:assetsSnapshot.filter(asset=>ids.includes(asset.id))},userTemplates:templatesSnapshot,db:c.db})).referenceImages:[];
-     const blob=await c.generatePageImage({settings:cfg,project:p,draft:p.drafts[0],assets:assetsSnapshot,ids,theme:p.intent||'',createImage:c.modelImage,referenceImages,userTemplates:templatesSnapshot,signal:run.signal,onProgress:message=>{v.progress=message;notify();}});
+     const blob=await c.generatePageImage({settings:cfg,project:p,draft:p.drafts[0],assets:assetsSnapshot,ids,theme:p.intent||'',createImage:c.modelImage,signal:run.signal,onProgress:message=>{v.progress=message;notify();}});
      ensureAccount();const snapshot=await c.saveGeneratedImageSnapshot(blob,p);v.project=snapshot;v.linkedProjectID=snapshot.id;v.status='completed';v.progress='GPT 直接生成的图片已保存到画面快照；点击查看。';return;
     }
     recorder=await c.createAIRecorder({db:c.db,model:cfg.model,key:cfg.key,accountId:c.state.accountId||'browser'});const vision=c.supportsVision(cfg);
-    const {images,referenceImages}=await prepareCreativeRunInputs({project:p,draft:p.drafts[0],assets:assetsSnapshot,ids,settings:{...cfg,supportsVision:vision},createImage:c.modelImage,
-      loadReferences:context=>loadJournalTemplateReferences({context,userTemplates:templatesSnapshot,db:c.db}),guard:ensureAccount});
-    let steps='';const output=await c.runCreativeAgent({...creativeRunParameters({project:p,draft:p.drafts[0],assets:assetsSnapshot,ids,settings:cfg,prompt:p.intent||'',userTemplates:templatesSnapshot}),images,referenceImages,request:recorder.request,signal:run.signal,
+    const {images}=await prepareCreativeRunInputs({assets:assetsSnapshot,ids,settings:{...cfg,supportsVision:vision},createImage:c.modelImage,guard:ensureAccount});
+    let steps='';const output=await c.runCreativeAgent({...creativeRunParameters({project:p,draft:p.drafts[0],assets:assetsSnapshot,ids,settings:cfg,prompt:p.intent||''}),images,request:recorder.request,signal:run.signal,
      onResponse:recorder.response,
      onScene:vision?async d=>{ensureAccount();return (await c.rasterize(d,.7)).toDataURL('image/jpeg',.8);}:undefined,
      onFinalScene:async d=>{ensureAccount();return (await c.rasterize(d,Math.min(1.6,2000/Math.max(d.canvas.width,d.canvas.height)))).toDataURL('image/jpeg',.88);},
