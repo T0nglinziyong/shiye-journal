@@ -29,3 +29,26 @@ test('duplicate immutable upload succeeds only when the object exists',async()=>
   exists=false;
   await assert.rejects(store.upload('owner/hash',new Blob(['missing'])),/上传失败/);
 });
+
+test('CloudBase key-exists code without HTTP status resumes old photo uploads',async()=>{
+  const uploaded=new Set(['owner/old-photo']);
+  const storage=()=>({from:()=>({
+    upload:async()=>({error:{code:'STORAGE_KEY_ALREADY_EXISTS',message:'The resource already exists'}}),
+    exists:async path=>({data:uploaded.has(path),error:null})
+  })});
+  const store=createCloudBaseStorage({storage});
+  await store.upload('owner/old-photo',new Blob(['old-photo']));
+  await assert.rejects(store.upload('owner/missing-photo',new Blob(['missing'])),/上传失败/);
+});
+
+test('a thrown duplicate is verified, while unrelated upload failures remain visible',async()=>{
+  let error=Object.assign(Error('The resource already exists'),{code:'STORAGE_KEY_ALREADY_EXISTS'});
+  const storage=()=>({from:()=>({
+    upload:async()=>{throw error;},
+    exists:async()=>({data:true,error:null})
+  })});
+  const store=createCloudBaseStorage({storage});
+  await store.upload('owner/old-photo',new Blob(['old-photo']));
+  error=Object.assign(Error('permission denied'),{statusCode:403});
+  await assert.rejects(store.upload('owner/old-photo',new Blob(['old-photo'])),/permission denied/);
+});

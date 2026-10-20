@@ -1,7 +1,8 @@
 /* Sync is a progress view; maintenance stays secondary. */
-.sync-dashboard { display:grid; gap:16px; }
+.sync-dashboard { display:grid; grid-template-columns:minmax(0,1fr); gap:16px; min-width:0; }
+.sync-dashboard>* { min-width:0; max-width:100%; }
 .sync-dashboard h2,.sync-dashboard h3,.sync-dashboard p { margin:0; }
-.sync-summary { display:grid; gap:8px; padding:18px; border-radius:16px; background:#edf2eb; }
+.sync-summary { display:grid; grid-template-columns:minmax(0,1fr); gap:8px; padding:18px; border-radius:16px; background:#edf2eb; }
 .sync-summary>strong { font-size:1.2rem; }
 .sync-dashboard .sync-pending-list { max-height:38vh; overflow:auto; }
 .sync-dashboard .sync-pending-list ul { list-style:none; margin:0; padding:0; }
@@ -11,4 +12,6 @@
 .sync-dashboard .sync-pending-list small,.sync-dashboard .sync-pending-list li>span { color:#70806d; font-size:.85rem; }
 .sync-dashboard .sync-pending-list li>span { flex-shrink:0; }
 .sync-maintenance { border-top:1px solid #e2e7df; padding-top:14px; display:grid; gap:14px; }
-.sync-error { padding:12px; background:#fff3df; border-radius:12px; }
+.sync-error { padding:12px; background:#fff3df; border-radius:12px; overflow-wrap:anywhere; }
+.sync-dashboard :is(p,strong,small,li) { overflow-wrap:anywhere; }
+.sync-dashboard .actions>* { max-width:100%; white-space:normal; overflow-wrap:anywhere; }

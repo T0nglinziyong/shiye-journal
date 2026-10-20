@@ -21,7 +21,7 @@ const hash=value=>{let n=2166136261;for(const char of String(value||'')){n^=char
 const dayOf=value=>{const date=new Date(value);if(!Number.isFinite(date.getTime()))return 'unknown';return [date.getFullYear(),String(date.getMonth()+1).padStart(2,'0'),String(date.getDate()).padStart(2,'0')].join('-');};
 function errorCode(error){
   const code=String(error?.code||'');
-  return /^(?:PGRST\d{3}|[0-9A-Z]{5}|ERR_[A-Z_]{2,40}|SHIYE_[A-Z0-9_]{3,80}|OPERATION_FORBIDDEN|FUNCTION_NOT_FOUND)$/.test(code)?code:null;
+  return /^(?:PGRST\d{3}|[0-9A-Z]{5}|ERR_[A-Z_]{2,40}|SHIYE_[A-Z0-9_]{3,80}|STORAGE_KEY_ALREADY_EXISTS|OPERATION_FORBIDDEN|FUNCTION_NOT_FOUND)$/.test(code)?code:null;
 }
 function errorStatus(error){
   const status=Number(error?.status??error?.statusCode);
@@ -31,6 +31,7 @@ function category(error){
   const message=String(error?.message||'');
   const status=errorStatus(error);
   if(/云端版本未变化|unconfirmed/i.test(message))return 'unconfirmed-response';
+  if(errorCode(error)==='STORAGE_KEY_ALREADY_EXISTS'||/STORAGE_KEY_ALREADY_EXISTS|CloudBase 云存储上传失败/i.test(message))return 'image-upload';
   if(/云端版本已变化|另一设备已更新|\bconflict\b/i.test(message)||status===409||['PT409','40001'].includes(errorCode(error)))return 'revision-conflict';
   if(status===401||status===403||/unauthori[sz]ed|permission|jwt|认证|登录/i.test(message))return 'authorization';
   if(status===429||/rate.limit|too many requests/i.test(message))return 'rate-limit';

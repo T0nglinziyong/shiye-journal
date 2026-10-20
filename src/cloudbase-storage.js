@@ -16,7 +16,14 @@ export function createCloudBaseStorage({storage,bucketId=SHIYE_STORAGE_BUCKET,en
     });
     return result?.data;
   };
-  const exists=async path=>Boolean(unwrap(await bucket().exists(path),'核对'));
+  const exists=async path=>unwrap(await bucket().exists(path),'核对')===true;
+  const isExistingKey=error=>{
+    const code=String(error?.code||error?.errorCode||'').toUpperCase();
+    const message=String(error?.message||'');
+    return code==='STORAGE_KEY_ALREADY_EXISTS'||
+      /\bSTORAGE_KEY_ALREADY_EXISTS\b|\bresource already exists\b/i.test(message)||
+      Number(error?.statusCode||error?.status)===409;
+  };
   return {enabled,provider:'cloudbase',defaultProvider:'cloudbase',setDiagnosticReporter:callback=>{report=typeof callback==='function'?callback:()=>{};},
     probe:path=>run('storage-probe',()=>exists(path)),
     download:path=>run('storage-get',async()=>{
@@ -40,13 +47,16 @@ export function createCloudBaseStorage({storage,bucketId=SHIYE_STORAGE_BUCKET,en
       return data;
     }),
     upload:(path,blob,type=blob.type||'application/octet-stream')=>run('storage-put',async()=>{
-      const result=await bucket().upload(path,blob,{contentType:type,upsert:false});
-      if(result?.error){
-        const status=Number(result.error.statusCode||result.error.status||0);
-        // Immutable hash keys may already exist after a lost response. Verify
-        // existence before treating a duplicate as a completed upload.
-        if(status===409&&await exists(path))return;
-        unwrap(result,'上传');
+      try{
+        const result=await bucket().upload(path,blob,{contentType:type,upsert:false});
+        if(result?.error)unwrap(result,'上传');
+      }catch(error){
+        // A retry after a lost response can find the same immutable object.
+        // CloudBase reports this by code/message, often without HTTP status.
+        if(isExistingKey(error)||isExistingKey(error?.cause)){
+          if(await exists(path))return;
+        }
+        throw error;
       }
     })
   };
