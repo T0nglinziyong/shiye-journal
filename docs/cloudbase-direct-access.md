@@ -14,6 +14,8 @@
 
 未收到订阅成功状态时，客户端保留 5 秒增量检查；订阅成功后以实时通知为主，并每 60 秒兜底核对。不要手工创建同名 schema 或角色来代替服务端开通，否则逻辑复制服务仍不会运行。
 
+2026-10-20 已向 CloudBase 官方社区提交[个人版开通咨询](https://cnb.cool/tencent/cloud/cloudbase/community/-/issues/1647)。在平台确认开通前，不能将 Realtime 视为已上线，也不能移除断线时的版本核对。
+
 ## 排障
 
 模板卡片应能从 `shiye-presets` 解码为图像。新素材或作品的数据库记录应出现 `storageProvider: cloudbase`，其 `storagePath` 对应 `shiye-private` 中的对象。先看应用的详细同步诊断，再分别核对浏览器上传结果、云存储对象和 PostgreSQL 事务；不能清空待同步队列来掩盖故障。
