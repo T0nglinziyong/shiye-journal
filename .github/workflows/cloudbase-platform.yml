@@ -32,7 +32,7 @@ jobs:
       - name: Install application dependencies
         run: npm ci
       - name: Focused synchronization, COS and storage regression suite
-        run: node --test --test-concurrency=2 tests/cloud-store.test.js tests/project-sync.test.js tests/cos-upload.test.js tests/cloud-record-guard.test.js tests/storage-usage-ui.test.js
+        run: node --test --test-force-exit --test-concurrency=2 tests/cloud-store.test.js tests/project-sync.test.js tests/cos-upload.test.js tests/cloud-record-guard.test.js tests/storage-usage-ui.test.js
       - name: Build explicit function deployment file allowlist
         run: node scripts/build-cloudbase-functions.mjs
 
