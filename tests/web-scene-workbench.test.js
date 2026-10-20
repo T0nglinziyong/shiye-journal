@@ -30,10 +30,26 @@ test('compact page instructions compile all visual layers and material decisions
  assert.deepEqual(result.materialDecisions,input.materialDecisions);
  assert.throws(()=>compileWebSceneInput(doc,{...input,materialDecisions:[{...input.materialDecisions[0],choice:'crafted'}]},assets),/加工声明/);
 });
+test('compact instructions can crop a material and group it with a digital shape',async()=>{
+ const {doc,files}=await fixture();
+ const input=JSON.parse(strFromU8(files['examples/instructions.json']));
+ const [material,shape,...rest]=input.page.layers;
+ material.operations=[{op:'crop',box:{unit:'ratio',mode:'keep',values:[.1,.1,.8,.8]}}];
+ input.page.layers=[{type:'group',id:'paper-group',children:[material,shape]},...rest];
+ input.materialDecisions=[{asset:'m1',choice:'crafted',reason:'裁取纸片中央图案并与圆形图案组合'}];
+ const result=compileWebSceneInput(doc,input,assets);
+ assert.equal(result.page.layers.at(-3).type,'group');
+ assert.deepEqual(result.page.layers.at(-3).children.map(node=>node.type),['material','shape']);
+ assert.equal(result.page.layers.at(-3).children[0].cropRect.width,.8);
+ assert.deepEqual(result.materialDecisions,input.materialDecisions);
+});
 test('material decisions agree with visible use and real processing, without a craft quota',async()=>{
  const {doc}=await fixture();
  const intact=[{asset:'m1',choice:'intact',reason:'保留纸片的完整边界，以真实尺寸作为主体'}];
  assert.deepEqual(validateMaterialDecisions(intact,doc.page,doc.source),intact);
+ const update={baseSceneHash:craftSceneHash(attachSceneV2(doc.page)),materialDecisions:intact};
+ assert.deepEqual(applyWebSceneCommands(doc,update,assets).materialDecisions,intact);
+ assert.throws(()=>applyWebSceneCommands(doc,{...update,materialDecisions:[{...intact[0],choice:'crafted'}]},assets),/加工声明/);
  assert.throws(()=>validateMaterialDecisions([{...intact[0],choice:'crafted'}],doc.page,doc.source),/加工声明/);
  const cropped=structuredClone(doc.page);cropped.layers.find(n=>n.type==='material').cropRect={x:0,y:0,width:.8,height:1};
  assert.deepEqual(validateMaterialDecisions([{...intact[0],choice:'crafted'}],cropped,doc.source)[0].choice,'crafted');

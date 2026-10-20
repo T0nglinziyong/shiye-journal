@@ -19,6 +19,14 @@
 
 任何一次原子编辑失败都保留原工作文件。修改后清除旧交付；直接改文件后，旧预览无法通过 pack。运行时不联网、不使用账号或密钥。JSON 上限 8 MB；组深度、节点和路径点数沿用原生数据预算。
 
+## 简版指令与高级加工的衔接
+
+`page.layers` 是初稿输入，不是另一种作品格式。它已经能在 material 的 `operations` 中表达单件裁切、蒙版、开窗和边缘工艺，也能用嵌套 `group.children` 编组。编译后，`scene.json` 是唯一工作场景；高级操作继续修改这份场景，不需要复制素材、重建任务或手写完整 Scene。
+
+一张原素材分成多片、保留余料或进行物理穿插时，在初稿之后使用 `{ "plan": { ... } }` 作为下一次编译输入；计划须引用当前 `inspect` 的 `sceneHash`，处理画布上已有素材时按计划合同写 `consume` 和 `parentId`。位置、分组、层序、文字和细节则用 `commands.json` 的 `tools` 或 `edits`，同样引用当前 `sceneHash`。加工改变素材状态时，可在同一批 `commands.json` 中更新 `materialDecisions`；校验会核对这些说明与可见图层。每次成功操作后取得新的 hash，再用无参数的 `preview` 查看同一场景。
+
+`compile` 或带输入的 `preview` 每次只接收 `page`、`plan`、`tools` 中一种。初稿之后不要再次提交旧的完整 `page`：它会重新生成 AI 图层，可能覆盖随后的加工与局部精修。最终 `pack` 只读取当前 `scene.json` 与其最新 PNG，输出完整可编辑 JSON 和 PNG。
+
 ## 静态能力
 
 | 领域 | 能力 |

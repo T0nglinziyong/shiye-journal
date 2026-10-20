@@ -160,7 +160,9 @@ export function applyWebSceneCommands(document,commands,assets){
       else throw Error('未知精确编辑操作：'+edit.op);
     }
   }
-  const next=webSceneDocument(source,draft,commands.title??document.title,document.materialDecisions);
+  const decisions=commands.materialDecisions??document.materialDecisions;
+  if(commands.materialDecisions!==undefined)validateMaterialDecisions(decisions,draft,source);
+  const next=webSceneDocument(source,draft,commands.title??document.title,decisions);
   validateWebScene(next.page,source,assets,{final:false});
   return next;
 }

@@ -11,8 +11,9 @@ export const webWorkbenchInstructions=`拾页 · 可编辑手帐创作工作台
 export const webEditingGuide=`坐标与能力
 page 为 App 原生 Scene。x/y 是画布中的中心坐标；width/height/fontSize/笔宽使用画布单位；毫米换算=毫米*canvas.height/physicalPageHeightMM。ink.points 是画布绝对坐标，p 是压感。vectorMask 是 0–1，组合蒙版参照整页；组合 children 不改成局部坐标。zIndex 在各自兄弟节点中决定叠放。
 commands.json:
-{"baseSceneHash":"inspect 返回的摘要","tools":[{"name":"move_elements","arguments":{"items":[{"key":"对象语义键或ID","x":0.4,"y":0.5}]}}],"edits":[{"op":"patch","id":"图层ID","values":{"opacity":0.8}}]}
+{"baseSceneHash":"inspect 返回的摘要","tools":[{"name":"move_elements","arguments":{"items":[{"key":"对象语义键或ID","x":0.4,"y":0.5}]}}],"edits":[{"op":"patch","id":"图层ID","values":{"opacity":0.8}}],"materialDecisions":[{"asset":"m1","choice":"crafted","reason":"按实际裁片说明处理理由"}]}
 工具参数是 schema/tools.json 里的比例/mm/pt 合同；直接 Scene 的字段是原生单位。不要混用。
+初稿 page、后续 Craft Plan 和 commands 都修改同一 scene.json。每次按当前 inspect 的 sceneHash 编辑；加工改变素材取舍时，在本批 commands 或 plan 输入中同步更新 materialDecisions。初稿以后不要再次编译旧 page，避免清除新生成的加工图层。
 精确操作：
 patch: {id,values} 修改任意已实现静态属性（身份与 children 除外）；可调字体、路径、压感、颜色、透明度、混合、蒙版、形状等。
 insert: {node,parent?} 插入完整原生节点；实体素材优先由工具建立来源和真实尺寸。
