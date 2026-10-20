@@ -62,7 +62,7 @@ export function PlatformHealthDialog({onClose}){
       <p>图片存储：CloudBase 私有云存储（由浏览器登录会话授权）</p>
       <p>关键词索引：{report.capabilities?.keyword?'已启用':'待应用 SQL 迁移'}</p>
       <p>pgvector 语义检索：{report.capabilities?.vector?'后端已具备条件':'未启用（需 Embedding 模型与数据库索引）'}</p>
-      <p>账号自动清空：暂不开放；安全验证后单独启用。</p>
+      <p>账号清空：{report.accountReset?'接口已部署；执行时仍须二次确认和数据库版本核对':'尚未部署'}</p>
       <p>日志：云函数脱敏结构化日志，查看 CloudBase 日志监控。</p></>:null}
  </AdminFrame>;
 }

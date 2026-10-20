@@ -71,7 +71,8 @@ export function SyncDetailsDialog({details,projects,batches,local,quarantined,le
         {legacyCount?<button type="button" className="btn" id="sync-backup-legacy-works" onClick={onBackupLegacy}>导出旧作品备份</button>:null}
         <button type="button" className="btn" id="sync-pause-local" onClick={onPause}>暂停／恢复后台重试</button>
         <button type="button" className="btn" id="sync-emergency-copy" disabled={!total} onClick={onEmergency}>导出待同步数据备份</button>
-        <p className="muted">账号彻底清空待 CloudBase 安全回收流程完成验收后开放；原始待同步资料不会被自动删除。</p>
+        <button type="button" className="btn danger" id="sync-reset-account" disabled={busy} onClick={onWipe}>清空当前账号资料</button>
+        <p className="muted">清空会删除云端素材、作品和本机待同步修改；旧图片按账号目录后台回收。请先导出需要保留的备份。</p>
       </div>
     </section></div>
   </Dialog>;

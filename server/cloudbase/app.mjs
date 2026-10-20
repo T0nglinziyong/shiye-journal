@@ -5,6 +5,7 @@ import {createCloudBaseService} from './service.mjs';
 import {createPostgresRPC} from './postgres.mjs';
 import {embeddingConfiguration,createEmbeddingClient} from './embeddings.mjs';
 import {createSearchService} from './search.mjs';
+import {createStorageGarbageCollector} from './storage-gc.mjs';
 
 const burstWindows=new Map();
 const tiers=new Set([256,360,480,600,720,960,1200,1440,1920,2560,3200,3840,5120]);
@@ -19,11 +20,13 @@ export async function main(event,context){
   let config=null,configurationError=null;
   try{config=embeddingConfiguration(env);}catch(error){configurationError=error;}
   const rpc=createPostgresRPC({envId});
+  const garbageCollect=createStorageGarbageCollector({envId,rpc});
   const search=createSearchService({rpc,modelKey:config?.modelKey,
     embed:async inputs=>{if(configurationError)throw configurationError;return createEmbeddingClient(config)(inputs);}});
   search.vectorEnabled=!!config;
   const handle=createCloudBaseService({
     verifyUser:token=>verifyCloudBaseUser(token,{envId}),cosReady:ready,rpc,searchService:search,
+    garbageCollect,
     build:env.SHIYE_BUILD_SHA,windows:burstWindows,
     sign:async({path,method,headers,variant})=>{
       const edge=variant?Number(/^preview([1-9]\d{0,3})$/.exec(variant)?.[1]):null;

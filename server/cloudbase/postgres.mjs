@@ -1,7 +1,9 @@
 import {ServiceError,object} from './errors.mjs';
 const functions=new Set(['shiye_platform_capabilities_v1','shiye_search_assets_v1',
   'shiye_search_candidates_v1','shiye_search_index_put_v1','shiye_search_vectors_v1',
-  'shiye_account_storage_v1','shiye_search_budget_v1']);
+  'shiye_account_storage_v1','shiye_search_budget_v1',
+  'shiye_reset_account_v1','shiye_gc_plan_v1','shiye_gc_finish_v1',
+  'shiye_account_maintenance_capabilities_v1']);
 const tokenPattern=/^[A-Za-z0-9._~-]{20,8192}$/;
 export function cloudBaseGateway(envId){
   if(typeof envId!=='string'||!/^[-a-z0-9]{1,128}$/.test(envId))

@@ -12,7 +12,8 @@ function setup(options={}){
  const handle=createCloudBaseService({logger:line=>logs.push(JSON.parse(line)),
   verifyUser:async token=>{verified.push(token);return {userID:owner,isAdmin:false,resetId:null};},
   cosReady:true,sign:async request=>{signed.push(request);return 'https://bucket.example/'+request.path+'?signature=secret';},
-  rpc:async()=>({schemaVersion:1,keyword:true,vector:false}),...options});
+  rpc:async name=>name==='shiye_account_maintenance_capabilities_v1'
+    ?{version:1,reset:true,gc:true}:{schemaVersion:1,keyword:true,vector:false},...options});
  return {handle,logs,signed,verified};
 }
 
@@ -47,7 +48,7 @@ test('auth failures, disabled COS and unknown routes never call the signer',asyn
  }
  const {handle,signed}=setup();
  assert.equal((await handle({...envelope({}),authorization:''})).status,401);
- assert.equal((await handle(envelope({},'/api/account-gc'))).status,404);
+ assert.equal((await handle(envelope({},'/api/not-registered'))).status,404);
  assert.equal((await handle({...envelope({}),version:2})).status,400);
  assert.equal(signed.length,0);
 });

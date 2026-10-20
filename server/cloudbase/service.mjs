@@ -4,7 +4,7 @@ import {ServiceError,object} from './errors.mjs';
 
 const routes=new Map([['/api/cos','POST'],['/api/platform-health','GET'],
   ['/api/storage-usage','GET'],['/api/search','POST'],['/api/search-index','POST'],
-  ['/api/telemetry','POST']]);
+  ['/api/telemetry','POST'],['/api/account-reset','POST'],['/api/account-gc','POST']]);
 const eventCodes=new Set(['sync-failed','cos-ticket-failed','cos-put-failed',
   'image-decode-failed','app-start','api-failed']);
 const safeBuild=value=>/^[a-f0-9]{7,40}$/.test(value||'')?value:null;
@@ -21,7 +21,7 @@ export function sanitizeTelemetry(input){
   });
 }
 export function createCloudBaseService({verifyUser,cosReady=false,sign,rpc,searchService,
-  inventory,build=null,logger=console.log,clock=Date.now,windows=new Map()}={}){
+  inventory,garbageCollect,build=null,logger=console.log,clock=Date.now,windows=new Map()}={}){
   if(typeof verifyUser!=='function')throw TypeError('CloudBase 身份验证器未配置');
   // Instance-local limits absorb bursts. Paid embedding limits are additionally
   // enforced in PostgreSQL by createSearchService; these are not a global quota.
@@ -55,13 +55,17 @@ export function createCloudBaseService({verifyUser,cosReady=false,sign,rpc,searc
         status=outcome.status;body=outcome.body;code=status===200?'OK':'COS_TICKET_REJECTED';
       }else if(route==='/api/platform-health'){
         let capabilities={schema:false,keyword:false,vector:false};
+        let maintenance=false;
         try{const declared=await rpc('shiye_platform_capabilities_v1',token,{});
           capabilities={schema:declared?.schemaVersion===1,keyword:declared?.keyword===true,
             vector:declared?.vector===true&&searchService?.vectorEnabled===true};
         }catch(error){if(error.code!=='MIGRATION_REQUIRED')throw error;}
+        try{const declared=await rpc('shiye_account_maintenance_capabilities_v1',token,{});
+          maintenance=declared?.version===1&&declared?.reset===true&&declared?.gc===true;
+        }catch(error){if(error.code!=='MIGRATION_REQUIRED')throw error;}
         status=200;code='OK';body={platform:'cloudbase',apiVersion:1,build:safeBuild(build),
           authentication:'verified',cos:{configured:cosReady},capabilities,
-          images:'cloudbase-private-storage',logging:'structured-redacted',accountReset:false};
+          images:'cloudbase-private-storage',logging:'structured-redacted',accountReset:maintenance};
       }else if(route==='/api/storage-usage'){
         const database=await rpc('shiye_account_storage_v1',token,{});
         const cos=inventory?await inventory(identity):{inventoryComplete:false,reason:'未配置 COS 枚举'};
@@ -70,6 +74,22 @@ export function createCloudBaseService({verifyUser,cosReady=false,sign,rpc,searc
         body=await searchService.search(token,event.body);status=200;code='OK';
       }else if(route==='/api/search-index'){
         body=await searchService.index(token,event.body);status=200;code='OK';
+      }else if(route==='/api/account-reset'){
+        const input=event.body;
+        if(input.confirmation!=='清空账号'||
+          !/^[a-f0-9-]{36}$/i.test(input.operation_id||'')||
+          !/^[a-f0-9-]{36}$/i.test(input.expected_epoch||'')||
+          !Number.isSafeInteger(input.expected_revision)||input.expected_revision<0)
+          throw new ServiceError(400,'RESET_CONFIRMATION','账号清空确认或版本无效');
+        if(typeof garbageCollect!=='function')
+          throw new ServiceError(503,'GC_UNAVAILABLE','云存储回收尚未配置，账号资料未清空');
+        body=await rpc('shiye_reset_account_v1',token,input);
+        status=202;code='OK';
+      }else if(route==='/api/account-gc'){
+        if(typeof garbageCollect!=='function')
+          throw new ServiceError(503,'GC_UNAVAILABLE','云存储回收尚未配置');
+        body=await garbageCollect(token,identity.userID);
+        status=200;code='OK';
       }else{
         const events=sanitizeTelemetry(event.body);
         for(const sample of events)log({type:'shiye_client_metric',requestId,...sample});

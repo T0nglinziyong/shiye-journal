@@ -32,7 +32,7 @@ test('hosted application uses only CloudBase with no retired deployment/config d
  assert.deepEqual(report.findings,[],JSON.stringify(report.findings,null,2));
 });
 
-test('account reset route is unavailable until CloudBase destructive workflow is verified',async()=>{
- assert.throws(()=>cloudApiUrl('/api/account-reset'),/未登记/);
- await assert.rejects(cloudApiRequest('/api/account-reset',{method:'POST',body:'{}'}),{code:'SHIYE_API_ROUTE'});
+test('account reset and bounded GC are registered CloudBase function routes',()=>{
+ assert.equal(cloudApiUrl('/api/account-reset'),'/api/account-reset');
+ assert.equal(cloudApiUrl('/api/account-gc'),'/api/account-gc');
 });

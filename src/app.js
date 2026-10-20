@@ -9,6 +9,9 @@ import {flushSync} from 'react-dom';
 import {createRoot} from 'react-dom/client';
 import {CutoutLoadingPanel,CutoutLoadError} from './react-cutout-loading.jsx';
 import {AccountResetProgress} from './react-account-reset.jsx';
+import {eraseSiteAppData} from './account-data-wipe.js';
+import {observedResetKey} from './account-reset-epoch.js';
+import {cloudApiRequest} from './cloud-api-origin.js';
 import {renderLoginGate} from './react-cloud-auth.jsx';
 const sceneRuntime=()=>import('./scene-renderer.js');
 const renderSceneCanvas=async(...args)=>(await sceneRuntime()).renderSceneCanvas(...args);
@@ -670,7 +673,7 @@ function render(){
     onTrashChange:async(ids,recover)=>{
       const count=await changeTrash({db,state,ids,recover,awaitStage:awaitTrashStages});
       render();
-      toast(recover?`已恢复 ${count} 项`:`已彻底删除 ${count} 项`);
+      toast(recover?`已恢复 ${count} 项`:`已移除 ${count} 项恢复记录`);
     },onError:error=>toast('操作未完成，资料仍在最近删除：'+(error.message||error.name))});
   const reactPage=state.route==='library'&&parity.libraryTab==='trash'&&state.seriesID==='all'
     ?trashPage('asset')
@@ -2073,8 +2076,62 @@ async function runAppAction(action,id,value){try{
       '拾页素材框诊断.json');
     toast('已导出不含照片的素材框诊断');break;
   }
-  case 'reset-all-account-data':case 'dev-reset-cloud':
-    throw Error('CloudBase 账号安全清空尚未通过完整验收；未删除任何本机或云端资料。');
+  case 'reset-all-account-data':case 'dev-reset-cloud':{
+    if(!cloudEnabled)throw Error('请先登录 CloudBase 账号');
+    const healthResponse=await cloudApiRequest('/api/platform-health',{method:'GET'});
+    const health=await healthResponse.json();
+    if(!healthResponse.ok||!health.accountReset)
+      throw Error('CloudBase 账号清空迁移尚未部署，未修改任何资料');
+    if(!confirm('将清空这个账号的所有素材、作品、设置和最近删除，并删除本机待同步资料；登录身份仍保留。此操作无法恢复。继续吗？'))break;
+    if(prompt('再次确认：请输入“清空账号”')!=='清空账号')break;
+    const operationId=crypto.randomUUID();let accepted=null,knownRejected=false,requestStarted=false;
+    resetWorkflowActive=true;
+    openOverlay(createElement(AccountResetProgress,{phase:'正在停止旧同步并核对云端版本…'}));
+    try{
+      await db.runExclusiveAccountReset(async()=>{
+        const baseline=await db.accountResetBaseline();
+        openOverlay(createElement(AccountResetProgress,{phase:'正在提交账号清空事务…'}));
+        try{
+          requestStarted=true;
+          const response=await cloudApiRequest('/api/account-reset',{method:'POST',
+            body:JSON.stringify({...baseline,operation_id:operationId,confirmation:'清空账号'})});
+          const result=await response.json();
+          if(!response.ok)throw Object.assign(Error(result.error||'账号清空未获云端确认'),
+            {status:response.status});
+          if(result.accepted!==true||!result.resetId)throw Error('云端清空结果无效，需重新核对');
+          accepted=result;
+        }catch(error){
+          // A lost response can follow a committed reset. Never resume old
+          // outbox writes until a fresh server read proves nonacceptance.
+          const {data,error:probeError}=await cloudClient().from('shiye_records').select('record')
+            .eq('user_id',state.accountId).eq('store','meta')
+            .eq('id','shiye-reset-barrier').maybeSingle();
+          if(probeError)throw Error('清空结果暂无法确认，请重新打开页面；旧同步已暂停');
+          if(data?.record?.operationId===operationId)
+            accepted={accepted:true,resetId:data.record.resetId};
+          else{
+            // Only a definite validation/conflict response proves the
+            // server rejected the mutation. Timeout/5xx are indeterminate.
+            knownRejected=[400,401,403,409].includes(Number(error.status));
+            throw error;
+          }
+        }
+      });
+      if(!accepted?.resetId)throw Error('账号清空结果尚未确认');
+      openOverlay(createElement(AccountResetProgress,{phase:'云端资料已清空，正在删除本机旧缓存…'}));
+      await db.purgeLocalAfterCloudReset();
+      const result=await eraseSiteAppData({preserveAuthentication:true});
+      if(result.errors.length)throw Error('云端已清空，但本机缓存未能完全删除：'+result.errors.join('；'));
+      localStorage.setItem(observedResetKey(state.accountId),accepted.resetId);
+      location.reload();break;
+    }catch(error){
+      if(knownRejected||!requestStarted&&!String(error.message).includes('账号资料已重新开始')){
+        db.abortExclusiveAccountReset();resetWorkflowActive=false;closeOverlay();
+      }
+      else openOverlay(createElement(AccountResetProgress,{phase:'清空状态仍需核对。请重新打开页面；旧同步保持暂停。'}));
+      throw error;
+    }
+  }
   case 'backup':await backup();break;case 'restore':backupInput.click();break;case 'export-app-diagnostics':exportAppDiagnostics();break;case 'backup-emergency':{await flushSave();const blob=await db.createEmergencyBackup();download(blob,'拾页待同步应急包-'+new Date().toISOString().slice(0,10)+'.shiyerecovery');toast('应急包已导出，请妥善保存，包含私人图片和文字');break;}case 'restore-emergency':emergencyInput.click();break;
   case 'recover-pre-conflict':{
     const entries=await db.listPreConflictScenes();
@@ -2087,28 +2144,20 @@ async function runAppAction(action,id,value){try{
   }
   case 'restore-trash':await restoreTrash(id);break;
   case 'purge-trash-item':{
-    if(!confirm('彻底删除这项内容？此操作无法撤销。'))break;
+    if(!confirm('移除这项恢复记录？素材及云端图片可能仍被已有作品引用。此操作无法撤销。'))break;
     await changeTrash({db,state,ids:[id]});render();break;
   }
   case 'purge-all-trash':{
-    if(!state.trash.length||!confirm('彻底删除最近删除中的所有内容？此操作无法撤销。'))break;
+    if(!state.trash.length||!confirm('移除最近删除中的所有恢复记录？此操作无法撤销。'))break;
     await changeTrash({db,state,ids:state.trash.map(item=>item.id)});render();break;
   }
   case 'clean-unused-images':{
-    const blobs=await db.all('blobs'),referenced=new Set();
-    const visit=value=>{if(typeof value==='string')referenced.add(value);
-      else if(Array.isArray(value))value.forEach(visit);
-      else if(value&&typeof value==='object')Object.values(value).forEach(visit);};
-    for(const store of ['assets','projects','series','trash','meta']){
-      let rows=await db.all(store);
-      if(store==='projects')rows=await Promise.all(rows.map(db.completeProject));
-      if(store==='trash')rows=await Promise.all(rows.map(async row=>row.kind==='project'?
-        {...row,item:await db.completeProject(row.item)}:row));
-      visit(rows);
-    }
-    const orphans=blobs.filter(blob=>!referenced.has(blob.id));
-    await db.transaction(['blobs'],tx=>{for(const blob of orphans)tx.objectStore('blobs').delete(blob.id);});
-    await refresh();toast('已清理 '+orphans.length+' 张未使用图片');break;
+    if(!cloudEnabled)throw Error('请先登录 CloudBase 账号');
+    const response=await cloudApiRequest('/api/account-gc',{method:'POST',body:'{}'});
+    const result=await response.json();
+    if(!response.ok)throw Error(result.error||'云端图片核查暂不可用');
+    toast(result.deleted?`本轮已回收 ${result.deleted} 个云端文件；后台会继续核查`:
+      '云端图片已核查；无达到保留期的可回收文件');break;
   }
   case 'help':{openOverlay(createElement(HelpDialog,{onClose:closeOverlay,onExport:async()=>{const {runtimeIssueReport}=await import('./runtime-diagnostics.js');download(new Blob([runtimeIssueReport()],{type:'application/json'}),'拾页运行诊断.json');}}));break;}case 'settings-open':captureSettings();await actionStore.dispatch({type:'settings/section',payload:{section:value}});break;case 'settings-back':if(state.settingsSection){captureSettings();await actionStore.dispatch({type:'settings/section',payload:{section:null}});}else navigateBack(settingsSession?.returnRoute||'series');break;case 'settings-save':{captureSettings();const cfg=state.aiSettings;if(!cfg.model.trim())throw Error('请输入模型 ID');const endpoint=new URL(cfg.endpoint);if(endpoint.protocol!=='https:')throw Error('API 地址必须使用 HTTPS');if(cfg.provider!=='custom'&&endpoint.host!==new URL(AI_PROVIDERS[cfg.provider].endpoint).host)throw Error('服务商与 API 地址不一致；自定义地址请选“自定义兼容接口”');const returnRoute=settingsSession?.returnRoute||'series';if(cloudEnabled){await db.transaction(['meta'],tx=>{tx.objectStore('meta').put(cloudPreferencesRecord(state.preferences));tx.objectStore('meta').put(cloudAISettingsRecord(cfg));});}state.aiSettings=saveAISettings(cfg);state.preferences=savePreferences(state.preferences);deferredSyncedPreferences=null;deferredSyncedAISettings=null;settingsSession=null;state.settingsSection=null;navigateBack(returnRoute);toast('设置已保存');break;}
 }}catch(e){console.error(e);recordRuntimeIssue('handled',e,state.route,{phase:'action'});toast(e.message||'操作失败');}}
