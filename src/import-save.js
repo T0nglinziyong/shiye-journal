@@ -6,6 +6,7 @@ import {neutralizePaperChroma} from './paper-chroma-preprocess.js';
 import {extractAlphaMask} from './alpha-mask-blob.js';
 import {materialStorageBlobs} from './material-storage-resolution.js';
 import {sha256Hex} from './task-fingerprint.js';
+import {importDefaultTitle} from './import-default-names.js';
 
 export function importPaperDimensions(record) {
   const size=record.paperSize==='custom'?{width:record.customImportWidth,height:record.customImportHeight}:paperDimensions(record.paperSize)||paperDimensions('a4');
@@ -50,14 +51,14 @@ export async function saveImportBatch({state,db,urls,render,onSaved}) {
       }
       const image=await new Promise((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(Error('快照页面导出失败')),'image/png'));
       const blobId=uid(),p=snapshotRecord({
-        title:record.file.name.replace(/\\.[^.]+$/,'')||'导入快照',
+        title:importDefaultTitle(record.file.name,'snapshot',{sourceIndex:sourcePageIndex}),
         previewBlobId:blobId,format:'image/png',width:canvas.width,height:canvas.height
       });
       projects.push(p);blobs.push({id:blobId,data:image});savedCount++;
     } else if(state.importMode==='work') {
       const source=record.correctedBitmap||record.bitmap;
       const [paperWidth,paperHeight]=importPaperDimensions(record),ratio=source.width/source.height;
-      const p=project(record.workTitle?.trim()||record.file.name.replace(/\\.[^.]+$/,'')||'导入作品',{mode:ratio>1.1?'spread':'single',style:'imported'}),d=p.drafts[0];
+      const p=project(record.workTitle?.trim()||importDefaultTitle(record.file.name,'work',{sourceIndex:sourcePageIndex}),{mode:ratio>1.1?'spread':'single',style:'imported'}),d=p.drafts[0];
       d.canvas={width:1000*ratio,height:1000};d.physicalPageHeightMM=paperHeight;
       d.pageRatio='custom:'+Math.round(paperWidth/(d.pageMode==='spread'?2:1))+'x'+Math.round(paperHeight);
       // The background is editable paper metadata, NEVER a reconstructed

@@ -41,6 +41,7 @@ import {OrganizationBadge} from './react-organization.jsx';
 import {materialKinds,materialRoleName} from './material-taxonomy.js';
 import {TapeAssetImage} from './tape-asset-image.jsx';
 import {loadSeriesCoverSnapshot,seriesCoverSignature} from './series-cover-snapshot.js';
+import {importDefaultTitle} from './import-default-names.js';
 
 function RouteImage({asset,source,priority=false}){
   const src=asset&&(source(asset.blobId)||asset.staticPath);
@@ -1051,6 +1052,8 @@ function EditorInspector({selected,draft,asset,format,onChange,onAction,material
       {Object.entries({plain:'纯色',grid:'方格',lines:'横线',dots:'点阵'}).map(([id,name])=>
         <option key={id} value={id}>{name}</option>)}
     </select></label>
+    <label className="editor-inspector-check"><input id="paper-columns" type="checkbox"
+      checked={draft.paperColumns===true} onChange={event=>onChange('paper-columns',event.target.checked)}/>双栏线</label>
     <label>纸张规格<select id="page-ratio" defaultValue={draft.pageRatio}
       onChange={event=>onChange('page-ratio',event.target.value)}>
       <PaperSizeOptions includeCustom={false}/>
@@ -1948,7 +1951,7 @@ export function ImportReviewPage({state,format,onAction,onSeriesChange,onWorkTit
             <span>✓ 已确认</span>
           </div>
           {work?<label>作品名称<input className="record-work-title" data-index={ri}
-            defaultValue={record.workTitle||record.file.name.replace(/\.[^.]+$/,'')}
+            defaultValue={record.workTitle||importDefaultTitle(record.file.name,'work',{sourceIndex:ri})}
             onInput={event=>onWorkTitleChange(ri,event.currentTarget.value)}/></label>:null}
           {!snapshot?<label className="record-series-label">所属系列
             <ReviewSeriesSelect value={record.seriesID??''} recordIndex={ri}

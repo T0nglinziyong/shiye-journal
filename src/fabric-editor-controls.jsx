@@ -511,10 +511,14 @@ export function FabricEditorToolbar({state,draft,materials,source,selected,onIns
       {selectedKind==='text'?<button type="button" onClick={()=>{close();onAction('fabric-inspector-open');}}>详细文字设置</button>:null}
     </div>:null}
     {menu.kind==='paper'?<>
-      {[['plain','纯色'],['grid','方格'],['lines','横线'],['dots','点阵'],['columns','双栏']]
+      {[['plain','纯色'],['grid','方格'],['lines','横线'],['dots','点阵']]
         .map(([id,label])=><button key={id} type="button" role="menuitemradio"
           aria-checked={draft.paperPattern===id} onClick={()=>{close();onAction('fabric-paper','pattern',id);}}>
           {label}</button>)}
+      <button type="button" role="menuitemcheckbox" aria-checked={draft.paperColumns===true}
+        onClick={()=>{close();onAction('fabric-paper','columns',draft.paperColumns!==true);}}>
+        {draft.paperColumns===true?'✓ ':''}双栏线
+      </button>
       <label className="canvas-toggle">纸张颜色<input type="color" value={draft.paperColor}
         onChange={event=>{close();onAction('fabric-paper','color',event.target.value);}}/></label>
     </>:null}
