@@ -58,6 +58,22 @@ test('return visits recover local complete cover after reload; new revision inva
   await reboot.ensure(state.projects[0]);
   assert.deepEqual(rendered,['draw'],'changed complete scenes must be rendered again');
 });
+test('a visible card restores its saved cover before scheduling a scene render',async()=>{
+  const p=work(),state={accountId:'account',route:'works',projects:[p]};
+  const cached=new Blob(['saved cover'],{type:'image/webp'}),draws=[];
+  let resolveReady;const ready=new Promise(resolve=>{resolveReady=resolve;});
+  const covers=factory({state,device:{
+    get:async()=>({updatedAt:p.updatedAt,blob:cached}),put:async()=>{}
+  },draw:async()=>{draws.push('render');return new Blob(['rendered']);},
+  ready:()=>resolveReady()});
+  try{
+    const dispose=covers.observe({querySelectorAll:()=>[{dataset:{id:p.id}}]});
+    await ready;
+    assert.equal(covers.peek(p),'blob:local-cover');
+    assert.deepEqual(draws,[]);
+    dispose();
+  }finally{covers.dispose();}
+});
 test('failed COS upload does not prevent local display and never affects project data',async()=>{
   const p=work(),original=structuredClone(p),state={accountId:'account',route:'works',projects:[p]};
   let shown=false;
