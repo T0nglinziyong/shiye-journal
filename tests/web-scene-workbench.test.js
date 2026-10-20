@@ -173,6 +173,9 @@ test('Node Canvas runtime renders PNG and refuses a stale or changed snapshot',a
   const packed=run('pack');assert.equal(packed.status,0,packed.error?.message||packed.stderr||packed.stdout);
   const manifest=JSON.parse(await readFile(join(dir,'output/delivery-manifest.json'),'utf8'));
   assert.deepEqual(manifest.deliverables,['project.shiyeproject.json','preview.png']);
+  const summary=JSON.parse(await readFile(join(dir,'output/scene-summary.json'),'utf8'));
+  assert.deepEqual(manifest.reading,summary.quality.reading);
+  assert.ok(manifest.reading.characters>0);assert.ok(manifest.reading.excerpts.length>0);
   assert.equal(manifest.sceneHash,capture.sceneHash);
   const deliveredBytes=await readFile(join(dir,'output/project.shiyeproject.json'),'utf8');
   assert.equal(deliveredBytes.includes('\n'),false,'final JSON is a single physical line');

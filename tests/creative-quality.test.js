@@ -87,3 +87,11 @@ test('image API sends a few source templates only when preset references are ena
  assert.match(withReferences,/尚无可确认对应成品/);
  assert.ok((withReferences.match(/模板原图/g)||[]).length<=3);
 });
+
+test('reading evidence reports authored text without claiming aesthetic acceptance',()=>{
+ const d=draft(14);d.textBlocks=[{...d.textBlocks[0],content:'念头\n还没结束。'},{...d.textBlocks[0],id:'hidden',hidden:true,content:'不可见'}];
+ const review=reviewCreativeDraft(d);
+ assert.equal(review.reading.characters,7);
+ assert.deepEqual(review.reading.excerpts,[{id:'body',text:'念头\n还没结束。'}]);
+ assert.equal('passed' in review.reading,false);
+});

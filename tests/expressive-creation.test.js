@@ -27,7 +27,7 @@ test('API, editable ZIP and image routes use the same material-dependent and exp
   const guide=strFromU8(files['task/GUIDE.txt']);
   const image=imagePrompt({project:p,draft:p.drafts[0],assets,ids:['letter'],includeImages:false});
   for(const text of [api,guide,image]){
-    assert.match(text,/灵感随写/);assert.match(text,/俏皮态度/);assert.match(text,/长、中、短版本/);
+    assert.match(text,/不要先把大素材排满/);assert.match(text,/素材职责必须拉开/);assert.match(text,/脱离图像通读/);assert.match(text,/灵感随写/);assert.match(text,/俏皮态度/);assert.match(text,/长、中、短版本/);
     assert.match(text,/图文对话/);assert.match(text,/window 开窗/);assert.match(text,/不无限缩小字号/);
     assert.doesNotMatch(text,/只能写客观观察/);
   }
