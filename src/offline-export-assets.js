@@ -14,6 +14,20 @@ const checkCanceled=signal=>{
 export const offlineExportCacheKey=asset=>
   'offline-material:'+OFFLINE_EXPORT_CACHE_VERSION+':'+asset.id+':'+assetSourceRevision(asset);
 
+export async function loadOfflineMaterialCover(asset,edge,{preview,original}){
+  let previewError;
+  try{
+    const cover=await preview(asset.blobId,edge);
+    if(cover instanceof Blob&&cover.size)return cover;
+  }catch(error){previewError=error;}
+  // A fresh import is durable in the local outbox before its cloud thumbnail
+  // exists. Decode its stored cutout instead of making export wait for upload.
+  const saved=await original(asset.blobId);
+  if(saved?.data instanceof Blob&&saved.data.size)return saved.data;
+  if(previewError)throw previewError;
+  return undefined;
+}
+
 export async function mapOfflineExportLimited(entries,limit,task,{signal,onDone=()=>{}}={}){
   if(!Number.isInteger(limit)||limit<1)throw Error('并发上限无效');
   const output=new Array(entries.length);

@@ -58,6 +58,14 @@ try{
   await browser.click('#series-return','.series-grid');await browser.sleep(250);
   assert.ok(Math.abs(await browser.evaluate('scrollY')-seriesPosition)<12,
     'Returning from series detail restores the previous series list position');
+  await browser.click('[data-id="navigation-series-0"][data-act="series-detail"]','.series-contents');
+  await browser.click('[data-route="matching"]','.matching-page');
+  await browser.click('[data-route="library"]','.series-contents');
+  assert.equal(await browser.evaluate('document.querySelector(".series-contents h1")?.textContent.includes("返回位置系列 0")'),true,
+    'The Library tab restores its last series detail after visiting Matching');
+  await browser.click('#series-return','.series-grid');
+  assert.equal(await browser.evaluate('document.querySelector(".matching-page")'),null,
+    'In-app Back from a series detail does not jump to Matching');
   await browser.click('[data-route="works"]','.works-grid');
   await browser.evaluate('window.__retainedWorkCard=document.querySelector("[data-id=navigation-work-0][data-act=open-project]")');
   await browser.click('[data-route="library"]','.series-grid');

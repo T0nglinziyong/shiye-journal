@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mapOfflineExportLimited,offlineExportCacheKey,prepareOfflineMaterialPreview,prefetchOfflineImportImages,OFFLINE_EXPORT_SOURCE_EDGE,OFFLINE_IMPORT_IMAGE_EDGE} from '../src/offline-export-assets.js';
+import {loadOfflineMaterialCover,mapOfflineExportLimited,offlineExportCacheKey,prepareOfflineMaterialPreview,prefetchOfflineImportImages,OFFLINE_EXPORT_SOURCE_EDGE,OFFLINE_IMPORT_IMAGE_EDGE} from '../src/offline-export-assets.js';
 
 const WEBP=new Uint8Array([82,73,70,70,16,0,0,0,87,69,66,80,86,80,56,32]);
 const mkAsset=(extra={})=>({id:'asset-a',blobId:'cutout-01',title:'透明贴纸',kind:'sticker',
@@ -42,6 +42,16 @@ test('missing remote cover stops export without fetching an original',async()=>{
   await assert.rejects(prepareOfflineMaterialPreview({asset,account:'alice',cache,
     loadVariant:async()=>undefined,encode:async()=>WEBP}),/封面不可用/);
   assert.equal(cache.rows.size,0);
+});
+
+test('a newly imported local cutout can be exported before its cloud cover exists',async()=>{
+  const cutout=new Blob([WEBP],{type:'image/webp'}),calls=[];
+  const loaded=await loadOfflineMaterialCover(mkAsset(),480,{
+    preview:async()=>{calls.push('preview');throw Object.assign(Error('封面未上传'),{status:404});},
+    original:async()=>{calls.push('local');return {data:cutout};}
+  });
+  assert.equal(loaded,cutout);
+  assert.deepEqual(calls,['preview','local']);
 });
 
 test('corrupt cached bytes never enter a ZIP',async()=>{

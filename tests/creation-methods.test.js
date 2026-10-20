@@ -16,11 +16,10 @@ test('editable delivery requires PNG plus JSON for both file and text outputs',(
     const file=webResultPrompt(mode,'file');
     assert.match(file,/project.shiyeproject.json/);
     assert.match(file,/ZIP/);
-    assert.match(file,/Canvas/);assert.match(file,/两个可下载文件/);assert.match(file,/preview.png/);
+    assert.match(file,/Canvas/);assert.match(file,/preview.png/);
     const text=webResultPrompt(mode,'text');
     assert.match(text,/json 代码块/);assert.match(text,/preview.png/);
-    assert.match(text,/单行 JSON/);
-    assert.match(text,/不能分成多个块/);
+    assert.match(text,/不省略字段/);
   }
   const png=webResultPrompt('image','file');
   assert.match(png,/PNG/);
@@ -50,7 +49,10 @@ test('size budget protects text and package imports even with false MIME extensi
   await assert.rejects(classifyCreationFile(zip),/20 MB/);
 });
 
-test('both editable handoff prompts exclude explanation and extra commentary',()=>{
- assert.match(webResultPrompt('tools','file'),/无需另加解释/);
- assert.match(webResultPrompt('tools','text'),/不要附加过程说明/);
+test('editable handoff prompts remain concise without a final-response gag',()=>{
+ for(const output of ['file','text']){
+   const prompt=webResultPrompt('tools',output);
+   assert.ok(prompt.length<260);
+   assert.doesNotMatch(prompt,/不要附加过程说明|无需另加解释|自评/);
+ }
 });

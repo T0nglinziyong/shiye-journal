@@ -986,7 +986,7 @@ async function cloudPreview(id,pixels=480,{allowRemoteOriginal=true}={}){
   // If this device already holds the full image, derive the small card cover
   // locally. Do not fetch the same bytes again just to request a thumbnail.
   // Avoid decoding a megapixel original on the catalog's main thread.
-  if(usableBlob(localOriginal)&&globalThis.navigator?.onLine===false){
+  if(usableBlob(localOriginal)&&(!allowRemoteOriginal||globalThis.navigator?.onLine===false)){
     const reduced=await makeThumbnail(localOriginal,edge);
     if(usableBlob(reduced)){await rememberImageVariant(record.storagePath,edge,reduced);return reduced;}
   }
