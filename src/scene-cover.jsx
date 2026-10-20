@@ -3,7 +3,8 @@ import React,{useEffect,useState} from 'react';
 // A work cover is the 480px Canvas 2D rendering of its saved Scene. The
 // editor's interactive Fabric canvas is never used as the thumbnail source.
 export function SceneCover({draft,source,priority=false,localCover='',projectID=null}){
-  const [,refresh]=useState(0),[error,setError]=useState(''),[failedRemote,setFailedRemote]=useState('');
+  const [,refresh]=useState(0),[error,setError]=useState(''),[failedRemote,setFailedRemote]=useState(''),
+    [loadedCover,setLoadedCover]=useState('');
   useEffect(()=>{
     if(!projectID)return;
     const update=event=>{
@@ -25,5 +26,16 @@ export function SceneCover({draft,source,priority=false,localCover='',projectID=
     fetchPriority={priority?'high':undefined} decoding="async" src={cached} alt="作品完整封面"
     onError={()=>{if(cached!==remote)return;setFailedRemote(remote);
       window.dispatchEvent(new CustomEvent('shiye-work-cover-failed',{detail:{projectID}}));}}/>;
+  // Keep the placeholder image mounted: the private-image loader discovers
+  // image nodes, then replaces their SVG source with the saved cloud cover.
+  if(remote&&failedRemote!==remote)return <>
+    <img className="work-reference" loading={priority?'eager':'lazy'}
+      fetchPriority={priority?'high':undefined} decoding="async" src={remote} alt="作品完整封面"
+      onLoad={event=>{const img=event.currentTarget;
+        if(img.naturalWidth>1&&!img.currentSrc.includes('#shiye-image='))setLoadedCover(direct);}}
+      onError={()=>{setFailedRemote(remote);
+        window.dispatchEvent(new CustomEvent('shiye-work-cover-failed',{detail:{projectID}}));}}/>
+    {loadedCover!==direct?<span className="work-cover-pending" role="status">{error||'正在准备预览…'}</span>:null}
+  </>;
   return <span className="work-cover-pending" role="status">{error||'正在准备预览…'}</span>;
 }

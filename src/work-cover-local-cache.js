@@ -47,6 +47,16 @@ export function createLocalWorkCovers({
     },Math.min(600000,30000*2**Math.min(attempt-1,5))));
   }
   function peek(p){return p?entries.get(key(p))?.url||null:null;}
+  async function hydrate(p,owner=account(),revision=p.updatedAt){
+    const existing=entries.get(key(p));
+    if(existing&&!isPartialWorkCover(existing.blob))return existing.blob;
+    const saved=await deviceRecords.get(owner,'work-cover:480:'+p.id).catch(()=>null);
+    if(owner!==account()||p.updatedAt!==revision)return null;
+    if(saved?.updatedAt===revision&&saved?.blob instanceof Blob&&saved.blob.size){
+      remember(p,saved.blob,owner);return saved.blob;
+    }
+    return null;
+  }
   async function ensure(p,{refresh=false}={}){
     if(!p?.id||p.isSnapshot)return null;
     const token=key(p),existing=entries.get(token);
@@ -54,10 +64,8 @@ export function createLocalWorkCovers({
     if(jobs.has(token))return jobs.get(token);
     const owner=account(),revision=p.updatedAt;
     const job=(async()=>{
-      const saved=await deviceRecords.get(owner,'work-cover:480:'+p.id).catch(()=>null);
-      if(saved?.updatedAt===revision&&saved?.blob instanceof Blob&&saved.blob.size){
-        remember(p,saved.blob,owner);return saved.blob;
-      }
+      const saved=await hydrate(p,owner,revision);
+      if(saved)return saved;
       const complete=p.projectDocumentPath?await loadDocument(p):p;
       if(owner!==account()||p.updatedAt!==revision)return null;
       if(!complete?.drafts?.length)throw Error('作品缺少可编辑画布，无法生成本地封面');
@@ -116,9 +124,14 @@ export function createLocalWorkCovers({
     const loadCard=card=>{
       if(disposed)return;
       const p=projects.find(project=>project.id===(card.dataset.coverProjectId||card.dataset.id));
-      if(p&&!queued.has(p.id)&&!peek(p)&&(missing(p)||!hasUsableCover(p))){
+      if(!p||queued.has(p.id)||peek(p)||!missing(p)&&hasUsableCover(p))return;
+      const owner=account(),revision=p.updatedAt;
+      // Reading a finished thumbnail from IndexedDB does no scene work. Do it
+      // as soon as the card is visible; only a true cache miss waits for idle.
+      void hydrate(p,owner,revision).then(saved=>{
+        if(disposed||saved||owner!==account()||p.updatedAt!==revision||queued.has(p.id))return;
         queued.add(p.id);queue.push(p);schedule();
-      }
+      });
     };
     const observer=typeof IntersectionObserver==='function'
       ?new IntersectionObserver(rows=>rows.forEach(row=>{if(row.isIntersecting){loadCard(row.target);observer.unobserve(row.target);}}),{rootMargin:'120px'}):null;
