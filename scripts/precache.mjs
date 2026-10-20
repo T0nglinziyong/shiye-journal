@@ -2,9 +2,9 @@ import {readFile,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
+import {buildSha,buildBranch} from './build-identity.mjs';
 const root=fileURLToPath(new URL('../dist/',import.meta.url));
-const sha=process.env.VERCEL_GIT_COMMIT_SHA||process.env.GITHUB_SHA||null,
-  branch=process.env.VERCEL_GIT_COMMIT_REF||null;
+const sha=buildSha,branch=buildBranch;
 await writeFile(join(root,'version.json'),JSON.stringify({
   app:'shiyejournal',commit:sha&&/^[a-f0-9]{40}$/.test(sha)?sha:null,
   branch,buildAt:new Date().toISOString()

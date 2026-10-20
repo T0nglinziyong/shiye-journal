@@ -1,6 +1,14 @@
 import {defineConfig} from 'vite';
+import {fileURLToPath} from 'node:url';
 
-export default defineConfig({
+export default defineConfig(({mode})=>({
+  plugins:mode==='ui-test'?[{
+    name:'cloudbase-ui-fixture',enforce:'pre',
+    resolveId(source,importer){
+      if(source==='./cloud-session.js'&&importer?.includes('/src/'))
+        return fileURLToPath(new URL('./tests/fixtures/ui-cloud-session.js',import.meta.url));
+    }
+  }]:[],
   build:{sourcemap:'hidden'},
   worker:{
     // The vision worker is intentionally a classic worker so official
@@ -9,4 +17,4 @@ export default defineConfig({
     // an ES chunk format even though the worker entry itself stays classic.
     format:'es'
   }
-});
+}));

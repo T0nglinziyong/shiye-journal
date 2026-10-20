@@ -13,9 +13,7 @@ function fixture(cache=null,objectStorage=null,projectPreview=()=>null){
       async maybeSingle(){return {data:table==='shiye_commits'?(state.commits.has(filters.operation_id)?{revision:state.commits.get(filters.operation_id)}:null):table==='shiye_commit_receipts_v3'?null:state.rows.filter(r=>r.id===filters.id).map(record=>({record}))[0]||null};}};
     if(table==='shiye_changes')return {select(){return this;},eq(){return this;},gt(){return this;},lte(){return this;},order(){return this;},async range(){return state.changes?{data:state.changes}:{error:{message:'change log not installed'}};}};
     assert.ok(['shiye_records','shiye_revisions','shiye_commits','shiye_commit_receipts_v3'].includes(table));return query;
-  },storage:{from(bucket){assert.equal(bucket,'shiye-private');return {
-    async upload(path,data,options){state.uploads.push({path,data,options});await state.uploadGate;return {error:state.fail?{statusCode:500}:null};},
-    async download(path){state.downloads++;return {data:state.uploads.find(row=>row.path===path)?.data||new Blob(['private image']),error:state.missingThumbnail&&path.includes('preview480')?{message:'thumbnail missing'}:null};}};}},
+  },
     async rpc(name,args){
       assert.equal(name,'shiye_commit_v3_guarded');state.calls.push(args);
       if(state.rpcAbort)throw new DOMException('request aborted','AbortError');
@@ -33,7 +31,12 @@ function fixture(cache=null,objectStorage=null,projectPreview=()=>null){
       return {data:receipt(revision)};
     }
   };
-  const db=createCloudStore({cache,objectStorage,projectPreview,cloudClient:()=>client,requireCloudUser:async()=>{if(state.authError)throw Error('not authorized');return {id:'owner-uuid'};}});
+  const cos=objectStorage||{enabled:true,
+    async upload(path,data){state.uploads.push({path,data});await state.uploadGate;if(state.fail)throw Error('COS upload failed');},
+    async download(path){state.downloads++;return state.uploads.find(row=>row.path===path)?.data||new Blob(['private image']);},
+    async probe(){return true;}
+  };
+  const db=createCloudStore({cache,objectStorage:cos,projectPreview,cloudClient:()=>client,requireCloudUser:async()=>{if(state.authError)throw Error('not authorized');return {id:'owner-uuid'};}});
   return {state,db};
 }
 

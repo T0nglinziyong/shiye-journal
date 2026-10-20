@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import {stubCanvas} from './dom-canvas-stub.mjs';
 import {builtApp,waitFor} from './built-app.mjs';
 import {project} from '../src/domain.js';
+import {installUiCloudBase} from './fixtures/ui-cloudbase-harness.mjs';
 
 const root=new URL('../dist/',import.meta.url);
 const html=await readFile(new URL('index.html',root),'utf8');
@@ -14,7 +15,6 @@ stubCanvas(window);
 window.console.warn=window.console.warn.bind(window.console);
 Object.defineProperty(window.document,'fonts',{value:{load:async()=>[]},configurable:true});
 Object.assign(window,{indexedDB,IDBKeyRange,structuredClone});
-window.fetch=async()=>({ok:true,blob:async()=>new Blob(['sample'],{type:'image/png'}),json:async()=>({})});
 window.URL.createObjectURL=()=>`blob:shiye-${Math.random()}`;
 window.URL.revokeObjectURL=()=>{};
 
@@ -38,6 +38,10 @@ for(let index=1;index<=45;index++)tx.objectStore('assets').put({
 });
 await new Promise((resolve,reject)=>{tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);});
 database.close();
+installUiCloudBase(window,{series:[{id:'series-1',title:'测试系列'}],projects:[work],
+  assets:Array.from({length:45},(_,i)=>({id:`asset-${i+1}`,blobId:`image-${i+1}`,
+    title:`素材 ${i+1}`,staticPath:image,seriesID:'series-1',kind:'sticker',
+    reviewStatus:'ready',physicalWidthMM:20,physicalHeightMM:20,tags:[]}))});
 
 window.eval(await builtApp(root,html,window));
 await waitFor(()=>!!window.document.querySelector('[data-act="series-detail"][data-id="series-1"]'));

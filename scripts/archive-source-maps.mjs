@@ -1,8 +1,9 @@
 import {mkdir,readdir,rename} from 'node:fs/promises';
 import {join,relative} from 'node:path';
+import {buildSha} from './build-identity.mjs';
 
 const dist=new URL('../dist/',import.meta.url);
-const commit=process.env.VERCEL_GIT_COMMIT_SHA||process.env.GITHUB_SHA||'local';
+const commit=buildSha||'local';
 const safe=/^[a-f0-9]{40}$/.test(commit)?commit:'local';
 const archive=new URL(`../.build-sourcemaps/${safe}/`,import.meta.url);
 let count=0;

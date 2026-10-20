@@ -8,10 +8,17 @@ import {renderLoginGate,clearLoginGate} from './react-cloud-auth.jsx';
 import {updateShell} from './react-shell.jsx';
 
 export async function startCloudSession(onReady){
-  if(!cloudEnabled){document.querySelector('#auth-root').hidden=true;
-    document.querySelector('#app').hidden=false;await onReady(null);return;}
+  if(!cloudEnabled){
+    document.querySelector('#app').hidden=true;
+    renderLoginGate({visible:false,status:'CloudBase 网站配置缺失；未打开或改写本机私人资料。',onLogin:async()=>{}});
+    return;
+  }
   const app=document.querySelector('#app');app.hidden=true;
-  await prepareCloudClient();
+  try{await prepareCloudClient();}
+  catch(error){
+    renderLoginGate({visible:false,status:error.message||'CloudBase 初始化失败；未打开本机私人资料。',onLogin:async()=>{}});
+    return;
+  }
   const client=cloudClient();
   const gate={visible:false,status:'正在恢复登录…',retryReady:false};
   const showGate=patch=>{Object.assign(gate,patch);renderLoginGate({...gate,onLogin:login,onRetry:retry});};

@@ -4,12 +4,12 @@ import {readFile} from 'node:fs/promises';
 import {createProjectSync} from '../src/project-sync.js';
 import {createSyncDiagnostics} from '../src/sync-diagnostics.js';
 
-test('business CAS conflicts do not invoke PostgREST serialization retries',async()=>{
-  for(const file of ['guarded-v3-commit.sql','record-cas-v3.sql']){
-    const sql=await readFile(new URL('../deploy/supabase/'+file,import.meta.url),'utf8');
-    assert.doesNotMatch(sql,/errcode\s*=\s*'40001'/i);
-    assert.match(sql,/errcode\s*=\s*'PT409'/i);
-  }
+test('CloudBase business CAS conflicts do not invoke serialization retries',async()=>{
+  const sql=await readFile(new URL('../deploy/cloudbase/schema.sql',import.meta.url),'utf8');
+  const guarded=sql.slice(sql.indexOf('create or replace function public.shiye_commit_v3_guarded('));
+  assert.ok(guarded,'guarded CloudBase commit must exist');
+  assert.doesNotMatch(guarded,/errcode\s*=\s*'40001'/i);
+  assert.match(guarded,/errcode\s*=\s*'PT409'/i);
 });
 test('HTTP business conflict is retained once while independent records commit',async()=>{
   let disk=[],revision=1;const calls=[];

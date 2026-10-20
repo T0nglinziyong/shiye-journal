@@ -1,24 +1,25 @@
 # CloudBase test 集成与启用检查
 
-这次集成把 cff2131 的事件云函数/直接 COS 传输与先前 12 文件补丁放到同一 Git 分支。代码合并不代表云函数已部署，更不代表数据库 SQL 已执行。不要将此阶段标为完整平台迁移或生产验收完成。
+测试站使用 CloudBase Auth、PostgreSQL、事件云函数与私有 COS。网站由 CloudBase App `shiye-journal-test` 的 Git 构建发布；`shiye-api` 是独立部署单元。代码合并不等于网站/函数已部署，更不等于增量 SQL 已执行或真机同步已验收。
 
 ## 验证入口
 
 - `node --test tests/cloudbase-continuation.test.js tests/cloudbase-client-contract.test.js`：本地 Node 22 内置运行时测试，无真实用户、COS 或付费模型请求。
 - `.github/workflows/cloudbase-platform.yml`：运行时、函数打包和独立 PostgreSQL + pgvector 集成测试。SQL 服务仅绑定临时 CI 本机，未使用线上密钥。
 - `node scripts/audit-cloudbase-platform.mjs`：完整仓库旧平台残留审计。此阶段应通过；出现旧路径、旧 SDK、旧部署变量时失败并阻止宣称纯 CloudBase。
-- 原有完整应用构建与浏览器测试仍需通过。已移除只验证旧中继回退的测试，替换为 CloudBase 唯一客户端合同测试；没有恢复已移除的中继导出以讨好旧测试。
+- `npm test` 与 `npm run test:ui`：后者在测试模式注入内存 CloudBase 夹具，验证首屏、路由与多视口交互。它的 `dist` 不能发布；上线前必须重新执行 `npm run build`。旧浏览器脚本中直接写本地 IndexedDB、假设无登录资料库的场景还需逐项改造成 CloudBase 夹具，不能把它们的启动失败算成真实服务验收。
 
-## 先恢复图片服务
+## 网站与图片服务
 
 前端已经直接通过 CloudBase SDK 的 `callFunction` 调用 `shiye-api`。静态部署不包含云函数，不能把静态站点下 `/api/cos` 的 HTTP 成功与否当作新事件函数健康检查。
 
-1. 运行 `node scripts/build-cloudbase-functions.mjs`。
-2. 按 `cloudbaserc.json` 部署 `.cloudbase-build/functions/shiye-api`。入口 `index.main`、事件函数、Node.js 20.19；不要只上传仓库中未打包的 index.js。
-3. 在函数的服务端配置 `SHIYE_CLOUDBASE_ENV_ID=shiye-pg-test-d1gg723f7fb356ccc`，以及原来的 `SHIYE_COS_BUCKET`、`SHIYE_COS_REGION`。前端的 `VITE_` 环境变量不会自动成为函数配置。
-4. 配置具有所需 COS 权限的执行角色；代码支持运行时临时凭据。若使用显式 COS 凭据，限定存储桶和所需操作，只放在受保护服务端配置，不发到聊天或提交仓库。不要混合不同来源的临时 Token 和长期 Key。
-5. 检查当前 CloudBase 环境的 FunctionsHttpApiAllow 调用策略允许已登录用户访问该函数。函数内部仍重新核验用户和账号权限；不要仅凭浏览器提交的 owner 字段授权。
-6. 保持原来的 COS 私有权限和已配置 CORS，不搬迁图片、不删除原对象。验证原素材读取、缩略图、原图、一次小批量上传，再进行真实多设备同步验收。
+1. 合入 `test` 后核对 CloudBase App `shiye-journal-test` 的新 Git 构建及实站 `/version.json`。`commit` 必须与 GitHub `test` HEAD 一致，且网站实际可打开。
+2. 函数代码发生变更时运行 `node scripts/build-cloudbase-functions.mjs`。
+3. 按 `cloudbaserc.json` 部署 `.cloudbase-build/functions/shiye-api`。入口 `index.main`、事件函数、Node.js 20.19；不要只上传仓库中未打包的 index.js。
+4. 在函数的服务端配置 `SHIYE_CLOUDBASE_ENV_ID=shiye-pg-test-d1gg723f7fb356ccc`，以及原来的 `SHIYE_COS_BUCKET`、`SHIYE_COS_REGION`。前端的 `VITE_` 环境变量不会自动成为函数配置。
+5. 配置具有所需 COS 权限的执行角色；代码支持运行时临时凭据。若使用显式 COS 凭据，限定存储桶和所需操作，只放在受保护服务端配置，不发到聊天或提交仓库。不要混合不同来源的临时 Token 和长期 Key。
+6. 检查当前 CloudBase 环境的 FunctionsHttpApiAllow 调用策略允许已登录用户访问该函数。函数内部仍重新核验用户和账号权限；不要仅凭浏览器提交的 owner 字段授权。
+7. 保持原来的 COS 私有权限和已配置 CORS，不搬迁图片、不删除原对象。验证原素材读取、缩略图、原图、一次小批量上传，再进行真实多设备同步验收。
 
 ## 检索与向量启用
 
@@ -28,4 +29,4 @@
 
 ## 尚不能标为完成的项目
 
-旧平台路径与 SDK 代码清理已在 PR #167 进行。账号清空和安全后台 GC、前端云搜索/自动索引、监控告警配置及真实线上验收仍待逐项完成。旧引用若仍存在，应根据数据实际来源导出并核验，而不是删除原始记录。不要因为 GitHub 合并成功就声称这些能力已经上线。
+账号清空和安全后台 GC、前端云搜索/自动索引、监控告警配置及真实线上验收仍待逐项完成。不要因为 GitHub 合并成功就声称这些能力已经上线。

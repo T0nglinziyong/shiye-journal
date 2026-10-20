@@ -6,7 +6,8 @@ const legacy=()=>({id:'project-old',title:'旧作品',activeDraftID:'d',drafts:[
 function server(cache=null){
  const state={revision:3,collections:{assets:[],series:[],projects:[legacy()],blobs:[{id:'source',storagePath:'owner/file',storageProvider:'cos'}],meta:[],trash:[]},calls:[]};
  const client={from(table){const f={};const q={select(){return q;},eq(k,v){f[k]=v;return q;},order(){return q;},async range(start,end){return {data:(state.collections[f.store]||[]).slice(start,end+1).map(record=>({record}))};},async single(){return {data:{revision:state.revision,account_epoch:'epoch-fixture'}};},async maybeSingle(){return {data:null}}};return q;},async rpc(name,args){assert.equal(name,'shiye_commit_v3_guarded');state.calls.push(args);if(args.base_revision!==state.revision)return {error:{message:'conflict'}};return {data:{status:'applied',revision:++state.revision,accountEpoch:'epoch-fixture',syncProtocolVersion:3}}}};
- const db=createCloudStore({cloudClient:()=>client,requireCloudUser:async()=>({id:'owner'}),cache});return {db,state};
+ const objectStorage={enabled:true,async upload(){},async download(){return new Blob(['fixture']);}};
+ const db=createCloudStore({cloudClient:()=>client,requireCloudUser:async()=>({id:'owner'}),cache,objectStorage});return {db,state};
 }
 test('account migration inspects all six stores, CAS-commits only validated obsolete records',async()=>{
  const {db,state}=server(),snapshot=await db.cloudMigrationInventory();

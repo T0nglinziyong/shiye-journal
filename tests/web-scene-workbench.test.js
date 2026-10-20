@@ -147,11 +147,15 @@ test('self-contained runtime compiles, revises, inspects, renders input and expo
   doc.page.layers.push({id:'note',type:'text',content:'春日记录',fontSize:32,style:'sans',color:'#223344',x:200,y:180,width:300,height:60});
   await writeFile(join(dir,'scene.json'),JSON.stringify(doc));
   assert.equal(run('preview').status,0);
-  const missing=run('pack');assert.equal(missing.status,1);assert.match(missing.stderr,/PNG/);
+  const missing=run('pack');assert.equal(missing.status,1);
+  const missingReport=JSON.parse(await readFile(join(dir,'output/validation-report.json'),'utf8'));
+  assert.match(missingReport.issue,/PNG/);
   const manifest=JSON.parse(await readFile(join(dir,'output/preview-manifest.json'),'utf8'));
   assert.equal(craftSceneHash(importEditableWork(JSON.stringify(doc),assets,{trustedSource:task.source}).drafts[0]),manifest.sceneHash);
   await writeFile(join(dir,'output/canvas-capture.json'),JSON.stringify({sceneHash:'sha256:old',png:'data:image/png;base64,AAAA'}));
-  const stale=run('save-preview');assert.equal(stale.status,1);assert.match(stale.stderr,/旧 Scene/);
+  const stale=run('save-preview');assert.equal(stale.status,1);
+  const staleReport=JSON.parse(await readFile(join(dir,'output/validation-report.json'),'utf8'));
+  assert.match(staleReport.issue,/旧 Scene/);
   doc.page.layers.at(-1).content='改变之后';await writeFile(join(dir,'scene.json'),JSON.stringify(doc));
   assert.equal(run('pack').status,1,'stale preview cannot validate a changed scene');
   await assert.rejects(readFile(join(dir,'output/project.shiyeproject.json')),{code:'ENOENT'});
