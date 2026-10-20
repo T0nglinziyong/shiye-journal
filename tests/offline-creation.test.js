@@ -22,13 +22,14 @@ test('current GPT task package has one root entry and grouped compact folders',a
   assert.equal(context.format,'shiye-gpt-creation-package');assert.equal(context.version,2);
   assert.equal(context.source.taskBinding,'local');assert.equal(context.source.packageLayout,'compact');
   assert.equal(context.materials[0].assetID,asset.id);
-  for(const path of ['task/GUIDE.txt','task/knowledge.json','schema/output.json','schema/craft-plan.json','examples/project.shiyeproject.json','runtime/validate.cjs','runtime/preview.cjs'])assert.ok(files[path],path);
+  for(const path of ['task/GUIDE.txt','task/COMPOSITION_GUIDE.txt','task/knowledge.json','schema/output.json','schema/craft-plan.json','examples/project.shiyeproject.json','runtime/validate.cjs','runtime/compare.cjs','runtime/select.cjs','runtime/preview.cjs'])assert.ok(files[path],path);
   assert.ok(files['runtime/pack.cjs']);
   for(const removed of ['README.txt','context.json','contract.json','CONTENT_BRIEF.txt','CREATIVE_GUIDE.txt','CRAFT_GUIDE.txt','case-studies.json','composition-ideas.json','abstract-templates.json','source-image-audit.json','example-response.json','example-response.shiyeproject.json'])assert.equal(files[removed],undefined,removed);
   assert.match(strFromU8(files['START_HERE.txt']),/task\/context\.json/);assert.match(strFromU8(files['START_HERE.txt']),/schema\/output\.json/);
   const knowledge=JSON.parse(strFromU8(files['task/knowledge.json']));assert.equal(knowledge.format,'shiye-gpt-task-knowledge');assert.ok(knowledge.compositionIdeas.length);
   assert.ok(knowledge.compositionIdeas.length<=3);
-  assert.match(strFromU8(files['START_HERE.txt']),/本次主题、要求和内容/);
+  assert.match(strFromU8(files['START_HERE.txt']),/composition-options\.json/);
+  assert.match(strFromU8(files['task/COMPOSITION_GUIDE.txt']),/writingAreas/);
   assert.ok(strFromU8(files['task/GUIDE.txt']).length<5500,'The model-facing GUIDE should stay concise');
   const guide=strFromU8(files['task/GUIDE.txt']);
   assert.match(guide,/page\.layers/,'direct mode must advertise recursive Scene v2 layers');
@@ -209,8 +210,8 @@ test('ZIP internal workflow honors copy-text delivery and internalizes visual se
  const output=await make(),files=await filesOf(output);
  for(const path of ['START_HERE.txt']){
   const guide=strFromU8(files[path]);
-  assert.ok(guide.includes('复制文本模式交付 output/preview.png'));
-  assert.match(guide,/来自 pack 生成的同一文件/);
+  assert.ok(guide.includes('复制文本模式交付 PNG 链接与完整 JSON 代码块'));
+  assert.match(guide,/运行 node runtime\/pack\.cjs/);
   assert.ok(!guide.includes('最终必须同时交付 output/project'));
  }
  assert.match(strFromU8(files['task/GUIDE.txt']),/内部看图自评，不要在最终回复中输出/);

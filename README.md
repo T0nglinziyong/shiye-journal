@@ -37,6 +37,7 @@ START_HERE.txt
 task/
   context.json
   GUIDE.txt
+  COMPOSITION_GUIDE.txt # 短方案合同，先比较构图再细化图层
   SCENE_REFERENCE.txt   # 按需查阅的图层字段与精确操作
   CRAFT_CATALOG.txt     # 按需查阅的素材工艺
   knowledge.json
@@ -51,6 +52,8 @@ materials/
 references/          # 仅在启用参考时存在
 runtime/
   validate.cjs
+  compare.cjs
+  select.cjs
   preview.cjs
   pack.cjs
   glyphs.cjs
@@ -62,6 +65,7 @@ runtime/
 - `task/context.json`：任务事实、纸张、素材映射、物理尺寸、权限、来源快照和任务指纹。
 - `task/GUIDE.txt`：本次内容边界与构图方向。
 - `task/SCENE_REFERENCE.txt` 和 `task/CRAFT_CATALOG.txt`：分别供精确编辑与高级工艺按需查阅，主流程只在 `START_HERE.txt` 写一次。
+- `task/COMPOSITION_GUIDE.txt`：只用素材别名、比例位置、短文字和书写空间描述 2–3 个候选；`compare` 一次生成并排 PNG，`select` 才将选中方案写入 Scene。候选不需手写完整来源元数据。
 - `task/knowledge.json`：能力声明、素材区域、构图灵感、案例和可选参考审计。
 - `schema/output.json`：当前输出合同。
 - `schema/craft-plan.json`：当前原子工艺计划合同。
@@ -69,7 +73,7 @@ runtime/
 - `materials/`：本次真实素材预览。
 - `runtime/`：离线校验、预览、打包与字形轮廓工具。
 
-交付前须在 `scene.json` 的 `materialDecisions` 中逐件说明完整使用、真实加工或舍弃，并写出基于图像观察的理由。`pack` 会核对声明与实际可见图层及加工字段，不要求工艺件数；最终 JSON 保留这些取舍，PNG 仍须来自同一 Scene 并经过实际看图。
+选定构图后才进行需要的裁剪、图形和文案细化；最终预览须针对具体画面问题复核，不强制无意义返工。交付前须在 `scene.json` 的 `materialDecisions` 中逐件说明完整使用、真实加工或舍弃，并写出基于图像观察的理由。`pack` 会核对声明与实际可见图层及加工字段，不要求工艺件数；最终 JSON 保留这些取舍，PNG 仍须来自同一 Scene 并经过实际看图。
 
 运行时只读取 `task/context.json`，缺少当前任务指纹、来源快照、schema 指纹或当前目录标记时直接拒绝，不猜测旧格式。
 
