@@ -11,7 +11,7 @@ import {materialCraftGuide} from './material-craft-guide.js';
 import {zip,unzipSync,strToU8,strFromU8} from 'fflate';
 import {toolContracts,offlinePlanContract,directPageContract,offlineContract,schemaFingerprint} from './creative-contract.js';
 import {visualStyleBrief} from './creative-style-brief.js';
-import {creativeDesignGuide,purposeMethod,structureReferenceGuide} from './creative-design-guide.js';
+import {structureReferenceGuide} from './creative-design-guide.js';
 import {validMaterialAlias} from './material-alias.js';
 import {importNativeProjectPackage,validatePackageValue} from './native-project-package.js';
 import {readProjectPackageEntries} from './project-package-archive.js';
@@ -53,7 +53,7 @@ function validateTemplateReferences(selectedCases,selectedTemplates,referenceIma
 function sourceFor(p,aliases){
   const d=p.drafts[0];
   const priority=p.materialPriority||{required:p.requiredAssetIDs||[],preferred:Object.values(aliases).filter(id=>!(p.requiredAssetIDs||[]).includes(id)),available:[]};
-  return structuredClone({bundleId:crypto.randomUUID(),title:p.title,mode:d.pageMode,ratio:d.pageRatio,styles:p.styles||[d.style],purposes:p.purposes||[p.purpose||'日常记录'],intent:p.intent||'',contentPolicy:p.contentPolicy||'documentary',textPresentation:p.textPresentation||'mixed',userText:p.userText||'',providedFacts:p.providedFacts||'',processing:p.processing||'不预设',requiredAssetIDs:p.requiredAssetIDs||[],materialPriority:{required:priority.required||[],preferred:priority.preferred||[],available:priority.available||[]},materials:Object.entries(aliases).map(([alias,assetID])=>({alias,assetID}))});
+  return structuredClone({bundleId:crypto.randomUUID(),title:p.title,mode:d.pageMode,ratio:d.pageRatio,styles:p.styles||[d.style],purposes:p.purposes||[p.purpose||'自由创作'],intent:p.intent||'',contentPolicy:p.contentPolicy||'original',textPresentation:p.textPresentation||'mixed',userText:p.userText||'',providedFacts:p.providedFacts||'',processing:p.processing||'自由拆解',requiredAssetIDs:p.requiredAssetIDs||[],materialPriority:{required:priority.required||[],preferred:priority.preferred||[],available:priority.available||[]},materials:Object.entries(aliases).map(([alias,assetID])=>({alias,assetID}))});
 }
 // The upload is a task package, not a source archive. Keep the chat prompt
 // short and put exact context, contracts, examples and separate images inside.
@@ -105,13 +105,13 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
   const knowledge={format:'shiye-gpt-task-knowledge',version:3,
     capabilities:{...webSceneCapabilities,runtime:{validate:'node20',render:'node-canvas',preview:'png',visualReview:'manual-required'},craft:{plan:true,observations:showImages,twoHoleWeave:true,glyphGeometry:'local-font-required'}},
     regions:source.sourceSnapshots.map(snapshot=>({assetID:snapshot.assetID,sourceRevision:snapshot.sourceRevision})),
-    compositionIdeas:compositionIdeas(source).slice(0,3),caseStudies:{families:relevantJournalFamilies(source),selectedCases:hasPresets?selectedCases.map(({id,title,method})=>({id,title,method})):[]}};
+    compositionIdeas:compositionIdeas({...source,materials:selected}).slice(0,3),caseStudies:{families:relevantJournalFamilies({...source,materials:selected}),selectedCases:hasPresets?selectedCases.map(({id,title,method})=>({id,title,method})):[]}};
   if(hasPresets){
     knowledge.abstractTemplates={note:'只借鉴方法，不照搬素材或坐标',templates:selectedTemplates};
     const refs=new Set(referenceImages.map(e=>e.id));knowledge.sourceImageAudit={images:journalSourceAudit.filter(row=>refs.has(row.id))};
   }
   const guide=[creativeContentBrief({policy:source.contentPolicy,userText:source.userText,providedFacts:source.providedFacts,topic:source.intent,purposes:source.purposes}),
-    creativePageBrief({styles:source.styles,purposes:source.purposes,textMode:source.textMode,contentPolicy:source.contentPolicy,textPresentation:source.textPresentation,userText:source.userText,theme:source.intent,pageMode:source.mode}),
+    creativePageBrief({styles:source.styles,purposes:source.purposes,textMode:source.textMode,contentPolicy:source.contentPolicy,textPresentation:source.textPresentation,userText:source.userText,theme:source.intent,pageMode:source.mode,materials:selected}),
     webArtDirection(source),'所有静态对象在 page.layers 中编辑；需要精确字段与命令时读 task/SCENE_REFERENCE.txt。',settings.customLayoutPrompt||'',settings.includeStructureReference===false?'':structureReferenceGuide].join('\n\n');
   const files={
     'START_HERE.txt':strToU8(webWorkbenchInstructions),
@@ -155,7 +155,7 @@ async function createOfflineImageHandoff({source,project:p,assets,selected,chose
   const brief=imagePrompt({project:p,draft:p.drafts[0],assets,ids:selected.map(item=>item.assetID),theme:p.intent||'',requireAll:settings.requireAllCandidates!==false,includeImages:showImages,includeReferences:hasPresets,textMode:source.textMode});
   const imageOrder=selected.map((item,index)=>`${index+1} = ${item.alias}${showImages?` (${packagePreviewPath('materials',item.alias,chosen.find(entry=>entry.alias===item.alias)?.bytes,{transparent:true})})`:''}`).join('；');
   const instructions=`拾页手帐画面图片任务｜一次完成\n\n你收到的是创作参考 ZIP，不是要返回的作品格式。请先读 task/context.json 与 task/knowledge.json${hasPresets?'、abstract-templates.json':''}，并${showImages?'查看 materials/ 中每件素材的透明图片':'依据素材名称、标签与尺寸'}；素材编号对应：${imageOrder}。${hasPresets?'references/ 中的匹配手帐案例和用户原图可核对的抽象模板只供构图启发；':''}按以下与拾页 API 图像创作一致的要求完成：\n\n${brief}\n\n请在聊天中展示最终画面，并提供可下载的 PNG 图片。图片是不可逐层编辑的画面快照；不要输出可编辑工程包、数据文件或代码。保持纸张比例，导入拾页后存入「画面快照」。`;
-  const imageKnowledge={format:'shiye-gpt-task-knowledge',version:3,caseStudies:{families:relevantJournalFamilies({styles:source.styles,purposes:source.purposes}),selectedCases:hasPresets?selectedCases.map(({id,title,method})=>({id,title,method})):[]}};
+  const imageKnowledge={format:'shiye-gpt-task-knowledge',version:3,caseStudies:{families:relevantJournalFamilies({styles:source.styles,purposes:source.purposes,materials:selected}),selectedCases:hasPresets?selectedCases.map(({id,title,method})=>({id,title,method})):[]}};
   if(hasPresets){
     imageKnowledge.abstractTemplates={note:'参考构图，不得照搬',templates:selectedTemplates};
     const refs=new Set(referenceImages.map(entry=>entry.id));

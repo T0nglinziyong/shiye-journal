@@ -9,7 +9,7 @@ import {candidateDiscoveryOptions,recognitionOptions,recognitionPixelOptions,
   recognitionMethodDetails} from './recognition-profiles.js';
 import {DELIVERY_OPTIONS} from './ai-delivery.js';
 import {matchingViewModel} from './matching-view.js';
-import {styleGroups,purposeGroups} from './matching-directions.js';
+import {styleGroups,purposeGroups,matchingContentOptions,matchingIntentPlaceholder} from './matching-directions.js';
 import {visualStyles} from './creative-style-brief.js';
 import {FabricSceneStage} from './fabric-scene-stage.jsx';
 import {FabricEditorToolbar,FabricHeaderMenu} from './fabric-editor-controls.jsx';
@@ -909,14 +909,14 @@ export function SeriesContentsPage({state,source,kindName,format,onAction,select
   </section>;
 }
 
-const matchingPurposes=['日常记录','旅途记录','图文收藏','清单计划','影像故事','主题封面'];
+const matchingPurposes=purposeGroups.flatMap(group=>group.options);
 const recommendationFilters=['全部','结构补足','配色关系','尺寸层次','内容呼应','材质','同系列','不使用'];
 function DirectionGroup({groups,values,type,onChange}){
   return groups.map(group=><label key={group.id}>{group.label}<select className="match-direction-choice"
     data-direction={type} data-group={group.id} aria-label={group.label}
-    value={values.find(value=>group.options.includes(value))||''}
+    value={values.find(value=>group.options.includes(value))||group.options[0]}
     onChange={event=>onChange(type,event.target.value,group.options)}>
-    <option value="">不预设</option>{group.options.map(name=><option key={name} value={name}>{name}</option>)}
+    {group.options.map(name=><option key={name} value={name}>{name}</option>)}
   </select></label>);
 }
 function MatchingVariantCover({variant,session,source}){
@@ -988,21 +988,19 @@ export function MatchingPage({state,source,kindName,session,onAction,onMatchingC
   return <div className={`matching-page ${custom?'custom-paper':''}`} data-react-page="matching">
     <div className="view-head unified-page-heading"><div className="unified-heading-copy"><span className="eyebrow">FROM YOUR DESK TO YOUR PAGES</span><h1>素材搭配</h1></div>
       <div className="actions"><button className="btn" data-act="reset-match" data-react-action="true" onClick={action('reset-match')}>↶　重新搭配</button></div></div>
-    <section className="panel match-direction"><h2>先定这一页的方向</h2><p>每类可选一个方向，也可选“不预设”；不同类别可以自由组合。</p>
-      <div className="match-direction-groups"><fieldset><legend>页面风格</legend><DirectionGroup groups={styleGroups} values={styles} type="style" onChange={change}/></fieldset>
-        <fieldset><legend>页面用途</legend><DirectionGroup groups={purposeGroups} values={chosenPurposes} type="purpose" onChange={change}/>
-          <label>素材加工方式<select id="match-processing" defaultValue={state.matchProcessing}
-            onChange={event=>change('matchProcessing',event.target.value)}>{['不预设','保留完整','少量裁剪','自由拆解'].map(value=><option key={value}>{value}</option>)}</select></label>
-        </fieldset></div>
+    <section className="panel match-direction"><h2>先定这一页的方向</h2><p>从素材出发，写一点自己的想法。保持默认也可以开始。</p>
+      <div className="match-creative-controls">
+        <DirectionGroup groups={styleGroups} values={styles} type="style" onChange={change}/>
+        <label>文字内容<select id="match-content-policy" value={Object.hasOwn(matchingContentOptions,state.matchContentPolicy)?state.matchContentPolicy:'original'} onChange={event=>change('matchContentPolicy',event.target.value)}>
+          {Object.entries(matchingContentOptions).map(([value,label])=><option key={value} value={value}>{label}</option>)}
+        </select></label>
+        <DirectionGroup groups={purposeGroups} values={chosenPurposes} type="purpose" onChange={change}/>
+      </div>
       <select id="match-style" multiple hidden value={styles} onChange={()=>{}}>{visualStyles.map(([name])=><option key={name} value={name}>{name}</option>)}</select>
       <select id="match-purpose" multiple hidden value={chosenPurposes} onChange={()=>{}}>{matchingPurposes.map(name=><option key={name}>{name}</option>)}</select>
-      <div className="match-options match-setting-row match-content-row"><label>文字内容<select id="match-content-policy" defaultValue={state.matchContentPolicy}
-        onChange={event=>change('matchContentPolicy',event.target.value)}>
-        <option value="documentary">真实记录 · 不编造经历</option><option value="original">原创主题文字</option><option value="collection">素材收藏短评</option><option value="visual">不添加文字</option>
-      </select></label><label>文字表现方式<select id="match-text-presentation" defaultValue={state.matchTextPresentation||'mixed'}
-        onChange={event=>change('matchTextPresentation',event.target.value)}>
-        <option value="type">排版文字</option><option value="handwritten">自由手写</option><option value="mixed">混合编排</option>
-      </select></label></div>
+      <label className="match-intent-label">补充想法<textarea data-match-scroll="intent" id="match-intent" placeholder={matchingIntentPlaceholder(state.matchContentPolicy,chosenPurposes[0])} defaultValue={state.matchIntent}
+        onBlur={event=>change('matchIntent',event.target.value)}/></label>
+      <h3 className="match-paper-heading">纸张设置</h3>
       <div className="match-options match-setting-row match-paper-page"><label>页面模式<select id="match-mode" defaultValue={state.matchMode}
         onChange={event=>change('matchMode',event.target.value)}><option value="single">单页</option><option value="spread">双页</option></select></label>
         <label>纸张规格<select id="match-ratio" defaultValue={state.matchRatio?.startsWith('custom:')?'custom':state.matchRatio}
@@ -1011,8 +1009,7 @@ export function MatchingPage({state,source,kindName,session,onAction,onMatchingC
         onChange={event=>change('customPaperWidth',Number(event.target.value))}/></label>
         <label className="match-custom-paper">纸张高 mm<input id="match-paper-height" type="number" min="50" max="1000" defaultValue={state.customPaperHeight}
           onChange={event=>change('customPaperHeight',Number(event.target.value))}/></label></div>
-      <label>创作要求和内容<textarea data-match-scroll="intent" id="match-intent" placeholder="可写主题、具体内容、想保留的句子或排版要求；未提供的私人事实不会编造" defaultValue={state.matchIntent}
-        onBlur={event=>change('matchIntent',event.target.value)}/></label>
+
     </section>
     <div className="matching-layout"><aside className="basket"><h3>本次素材篮</h3><div className="match-basket-scroll" data-match-scroll="basket">
       {selected.length?selected.map(asset=><div key={asset.id} className="match-basket-item" data-match-asset={asset.id}>

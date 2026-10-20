@@ -51,8 +51,8 @@ test('snapshot and editable works never share a tab',()=>{
 test('style and purpose groups are disjoint and allow no preset',()=>{
   const all=styleGroups.flatMap(group=>group.options);assert.equal(new Set(all).size,all.length);
   const uses=purposeGroups.flatMap(group=>group.options);assert.equal(new Set(uses).size,uses.length);
-  assert.deepEqual(selectedDirections(styleGroups,['韩系清新','极简留白','不存在']),['韩系清新','极简留白']);
-  assert.deepEqual(selectedDirections(purposeGroups,[]),[]);
+  assert.deepEqual(selectedDirections(styleGroups,['清新淡雅','疏朗留白','不存在']),['清新淡雅','疏朗留白']);
+  assert.deepEqual(selectedDirections(purposeGroups,[]),['自由创作']);
 });
 test('ZIP project retains editable layers and rejects missing local assets',async()=>{
   const asset={id:'owned-asset',physicalWidthMM:20,physicalHeightMM:30,supply:{quantity:1}};

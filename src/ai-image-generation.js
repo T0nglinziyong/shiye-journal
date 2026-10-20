@@ -16,10 +16,10 @@ export function imagePrompt({project,draft,assets,ids,theme='',requireAll=true,i
     if(!asset)throw Error('有素材已不在素材库中，请重新选择');
     return `${includeImages?'参考图':'文字素材'} ${index+1}：${asset.title}；${asset.kind||'素材'}；图文职责 ${classifyJournalMaterial(asset).join('、')}；实物 ${asset.physicalWidthMM}×${asset.physicalHeightMM} mm；${asset.kind==='tape'?'胶带可取多个独立段':'单方案取用一份，可裁成多片'}；${(asset.tags||[]).join('、')}`;
   });
-  const styles=project.styles||[],purposes=project.purposes?.length?project.purposes:[project.purpose||'日常记录'];
-  const content=creativeContentBrief({policy:project.contentPolicy||'documentary',userText:project.userText||'',providedFacts:project.providedFacts||'',topic:theme||project.intent||'',purposes});
-  const direction=creativePageBrief({styles,purposes,textMode,contentPolicy:project.contentPolicy,textPresentation:project.textPresentation||'mixed',userText:project.userText,theme:theme||project.intent,delivery:'image',pageMode:draft.pageMode});
-  const imageText=project.contentPolicy==='visual'||textMode==='none'?'':(project.textPresentation==='handwritten'?'请把短标题和笔记画成真实自然、清晰可读的手写字迹，长段优先保证可读，不要生成伪文字。':project.textPresentation==='mixed'?'请混合清晰的排版段落与少量自然手写标题或批注。':'请使用整洁可读的排版文字。')+'这是最终图像中的文字，不是给程序解析的排版指令。默认使用中文，保留用户提供的原文和外文；只绘制真正属于手帐内容的标题、段落和图注。文字要有清楚的字号、对比和自然换行，不把整段话或清单挤成一条横线，也不与素材相互遮挡。换行直接在画面上分行，不绘制反斜杠、转义序列、排版指令或占位编号；不用伪文字、乱码、无关英文口号或重复的微型标签填补空间。不要把配色分析、素材介绍或排版说明印成正文；若长文无法清晰绘制，就保留核心句意并精简，而不是缩小字。';
+  const styles=project.styles||[],purposes=project.purposes?.length?project.purposes:[project.purpose||'自由创作'];
+  const content=creativeContentBrief({policy:project.contentPolicy||'original',userText:project.userText||'',providedFacts:project.providedFacts||'',topic:theme||project.intent||'',purposes});
+  const direction=creativePageBrief({styles,purposes,textMode,contentPolicy:project.contentPolicy,textPresentation:project.textPresentation||'mixed',userText:project.userText,theme:theme||project.intent,delivery:'image',pageMode:draft.pageMode,materials:assets.filter(a=>ids.includes(a.id))});
+  const imageText=project.contentPolicy==='visual'||textMode==='none'?'':(project.textPresentation==='handwritten'?'请把短标题和笔记画成真实自然、清晰可读的手写字迹，长段优先保证可读，不要生成伪文字。':(project.textPresentation||'mixed')==='mixed'?'请混合清晰的排版段落与少量自然手写标题或批注。':'请使用整洁可读的排版文字。')+'这是最终图像中的文字，不是给程序解析的排版指令。默认使用中文，保留用户提供的原文和外文；只绘制真正属于手帐内容的标题、段落和图注。文字要有清楚的字号、对比和自然换行，不把整段话或清单挤成一条横线，也不与素材相互遮挡。换行直接在画面上分行，不绘制反斜杠、转义序列、排版指令或占位编号；不用伪文字、乱码、无关英文口号或重复的微型标签填补空间。不要把配色分析、素材介绍或排版说明印成正文；若长文无法清晰绘制，就保留核心句意并精简，而不是缩小字。';
   const referenceContext={styles,purposes,materials:assets.filter(asset=>ids.includes(asset.id)),userTemplates};
   const cases=includeReferences?selectJournalReferenceCases(referenceContext):[];
   const references=cases.length?`${journalReferenceGuide(cases)}\n${journalAbstractTemplateGuide(selectJournalAbstractTemplates(cases,referenceContext))}\n`:'';

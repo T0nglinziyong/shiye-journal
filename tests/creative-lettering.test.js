@@ -8,14 +8,14 @@ test('lettering mode remains a creative direction, not a numerical art quota',()
  const typed=creativePageBrief({textPresentation:'type'});
  const mixed=creativePageBrief({textPresentation:'mixed'});
  assert.match(handwritten,/可编辑笔画 ink_strokes/);
- assert.match(typed,/可编辑的排版文本图层/);
- assert.match(mixed,/混合可编辑排版正文/);
+ assert.match(typed,/可编辑 text_blocks/);
+ assert.match(mixed,/默认混合编排/);
  assert.doesNotMatch(creativePageBrief({contentPolicy:'visual',textPresentation:'handwritten'}),/可编辑笔画 ink_strokes/);
 });
 test('single combined creative input is respected without a secondary facts field',()=>{
  const brief=creativeContentBrief({topic:'主题是秋天，请在画面里写「慢慢来」；标题在左侧'});
  assert.match(brief,/秋天/);
- assert.match(brief,/明确要求写入画面的句子应优先保留/);
- assert.match(brief,/构图指令、配色说明不是手帐正文/);
- assert.match(brief,/不因缺少第二输入框而忽略文字/);
+ assert.match(brief,/明确要求写入画面的句子优先保留/);
+ assert.match(brief,/构图指令不是正文/);
+ assert.match(brief,/没有额外原文/);
 });

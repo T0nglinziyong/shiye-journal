@@ -11,7 +11,7 @@ test('account cloud matching defaults retain non-content creative direction only
  for(const secret of ['私密的创作要求与内容','"basket"','"coreIDs"','apiKey','secret'])assert.ok(!raw.includes(secret));
  const next={matchIntent:'本机新内容',basket:['other'],matchMode:'single'};
  applyMatchingDefaults(next,cloudMatchingSettingsFromMeta([row]));
- assert.equal(next.matchMode,'spread');assert.equal(next.matchRatio,'a5');assert.equal(next.matchTextPresentation,'handwritten');
+ assert.equal(next.matchMode,'spread');assert.equal(next.matchRatio,'a5');assert.equal(next.matchTextPresentation,undefined);
  assert.equal(next.materialUseHints,undefined,'逐件用法不再同步');
  assert.equal(next.matchIntent,'本机新内容');assert.deepEqual(next.basket,['other']);
 });
@@ -19,7 +19,7 @@ test('account cloud matching defaults retain non-content creative direction only
 test('cloud matching defaults reject malformed and extra fields',()=>{
  assert.equal(cloudMatchingSettingsFromMeta([{id:CLOUD_MATCHING_SETTINGS_ID,settings:[]}]),null);
  const record=cloudMatchingSettingsRecord({matchRatio:'a4',matchIntent:'never',materialUseRequired:{safe:true,bad:'yes'},customPaperWidth:Infinity,matchStyles:['自然植物',3,'自然植物'],bogus:true});
- assert.deepEqual(record.settings,{matchRatio:'a4',matchStyles:['自然植物']});
+ assert.deepEqual(record.settings,{matchRatio:'a4',matchStyles:['随材而定','自动安排']});
 });
 
 test('cloud controls override stale device defaults only after local matching restore',()=>{
@@ -29,6 +29,6 @@ test('cloud controls override stale device defaults only after local matching re
  restoreMatchingSession(oldDevice,fresh);
  applyMatchingDefaults(fresh,cloudMatchingSettingsFromMeta([accountRecord]));
  assert.equal(fresh.matchMode,'spread');assert.equal(fresh.matchRatio,'a5');
- assert.equal(fresh.matchTextPresentation,'handwritten');
+ assert.equal(fresh.matchTextPresentation,undefined);
  assert.equal(fresh.matchIntent,'仅此设备的正文');assert.deepEqual(fresh.basket,['material-1']);
 });

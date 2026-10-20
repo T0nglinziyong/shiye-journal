@@ -168,7 +168,7 @@ test('preset reference planning remains independent across palette, layout and p
   const plans=presetReferencePlans({styles:['复古旧物','杂志编辑'],purposes:['旅途记录','图文收藏']});
   assert.deepEqual(plans.map(plan=>plan.level),['简洁','均衡','丰富','实验']);assert.equal(plans[0].purpose,'旅途记录');
   assert.match(presetReferenceGuide(plans),/简洁、均衡、丰富到实验/);
-  const other=presetReferencePlans({styles:['韩系清新'],purposes:['清单计划']}),mixed=presetReferencePlans({styles:['韩系清新','密集拼贴'],purposes:['清单计划']});
+  const other=presetReferencePlans({styles:['清新淡雅'],purposes:['清单计划']}),mixed=presetReferencePlans({styles:['清新淡雅','丰富层叠'],purposes:['清单计划']});
   assert.deepEqual(mixed[0].palette,other[0].palette);assert.notDeepEqual(mixed[0].zones,other[0].zones);
 });
 

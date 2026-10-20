@@ -43,8 +43,8 @@ test('matching content and handwriting mode persist without obsolete fact fields
  const restored={},snapshot=matchingSnapshot({matchContentPolicy:'original',matchTextPresentation:'handwritten',matchIntent:'给猫咪写日记'},[]);
  snapshot.context.matchProcessing='AI 自主加工';
  restoreMatchingSession(snapshot,restored);
- assert.equal(restored.matchProcessing,'不预设');
- assert.equal(restored.matchTextPresentation,'handwritten');
+ assert.equal(restored.matchProcessing,undefined);
+ assert.equal(restored.matchTextPresentation,undefined);
  assert.equal(restored.matchIntent,'给猫咪写日记');
  assert.equal('matchUserText' in snapshot.context,false);
 });

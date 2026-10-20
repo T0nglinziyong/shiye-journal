@@ -88,3 +88,14 @@ test('additional diagonal cuts on a Boolean region do not fill previously cut ho
  const next=addMaterialWindow(result,{shape:'rectangle',box:[.2,.2,.1,.1]});assert.equal(materialMaskGeometry(next).holes.length,2);
  assert.throws(()=>addMaterialWindow(next,{shape:'rectangle',box:[.55,.55,.05,.05]}),/重叠/);
 });
+
+test('visual repair retains the content policy and cannot add text to a collage-only task',async()=>{
+ const d=finished();let sent='';
+ const output=await reviewFinalCreativeScene({draft:d,options:{model:'gpt-4.1',endpoint:'https://example.invalid/chat',key:'test',finalVisualReview:true,visualAssetIDs:['paper'],contentPolicy:'visual'},assets:[material],aliases:{m1:'paper'},budget:createCreativeBudget(3),render:async()=> 'data:image/png;base64,AAAA',request:async(_url,init)=>{
+  sent=JSON.parse(init.body).messages[1].content[0].text;
+  return response({approved:false,issues:[],tools:[{name:'upsert_text',arguments:{items:[{key:'extra',content:'unwanted',x:.2,y:.2}]}}]});
+ }});
+ assert.match(sent,/内容策略：纯粹拼贴/);
+ assert.equal(craftSceneHash(output),craftSceneHash(d));
+ assert.equal(output.agentRun.visualReview,'review-unavailable');
+});

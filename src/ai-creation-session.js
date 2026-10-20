@@ -6,12 +6,12 @@ import {commitAIDraft} from './ai-run-target.js';
 export function creativeRunParameters({project,draft,assets,ids,settings,prompt,userTemplates=[]}){
   return {...settings,draft,assets,aliases:materialAliases(ids),
     styles:project.styles||[draft.style],
-    pagePurposes:project.purposes||[project.purpose||'日常记录'],
-    contentPolicy:project.contentPolicy||'documentary',
+    pagePurposes:project.purposes||[project.purpose||'自由创作'],
+    contentPolicy:project.contentPolicy||'original',
     textPresentation:project.textPresentation||'mixed',
     userText:project.userText||'',providedFacts:project.providedFacts||'',
     requiredAssetIDs:project.requiredAssetIDs||[],materialPriority:project.materialPriority,
-    processing:project.processing,prompt,userTemplates};
+    processing:project.processing||'自由拆解',prompt,userTemplates};
 }
 
 export function createCreativeRunGuard({accountID,ids,assets,getAccount,getAsset,signal}){
@@ -34,7 +34,7 @@ export async function prepareCreativeRunInputs({project,draft,assets,ids,setting
   }}):[];
   guard();
   const referenceImages=settings.sendPresetReferences&&vision
-    ?(await loadReferences({styles:project.styles||[draft.style],purposes:project.purposes||[project.purpose||'日常记录'],materials:assets.filter(a=>ids.includes(a.id))})).referenceImages:[];
+    ?(await loadReferences({styles:project.styles||[draft.style],purposes:project.purposes||[project.purpose||'自由创作'],materials:assets.filter(a=>ids.includes(a.id))})).referenceImages:[];
   guard();
   return {images,referenceImages};
 }

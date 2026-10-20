@@ -11,7 +11,7 @@ const matched=(item,filter,selected)=>{
   if(filter==='内容呼应')return item.reasons.some(r=>/主题|风格|素材/.test(r));
   return item.reasons.includes('配色关系');
 };
-export function matchingRecommendations(state){return recommendForDirection({assets:state.assets,basket:state.basket,styles:state.matchStyles||[],purposes:state.matchPurposes||[],excluded:state.excludedAssetIDs||[]});}
+export function matchingRecommendations(state){return recommendForDirection({assets:state.assets,basket:state.basket,styles:selectedDirections(styleGroups,state.matchStyles||[]),purposes:selectedDirections(purposeGroups,state.matchPurposes||[]),excluded:state.excludedAssetIDs||[]});}
 export function matchingViewModel(state){
   const selected=state.basket.map(id=>state.assets.find(a=>a.id===id)).filter(Boolean);
   const ranked=matchingRecommendations(state),recommendations=ranked.slice(0,18),excluded=new Set(state.excludedAssetIDs||[]);

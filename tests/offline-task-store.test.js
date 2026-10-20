@@ -22,7 +22,7 @@ test('O-01/O-03: original task store stays account-scoped; valid JSON imports in
   const zip=zipSync({'project.shiyeproject.json':strToU8(JSON.stringify(response))});
   assert.equal(inspectEditablePackageSource(zip).bundleId,handoff.source.bundleId);
   assert.equal(importEditableWorkPackage(zip,[asset],{trustedSource:trusted}).drafts[0].items.length,1);
-  response.source.processing='自由拆解';
+  response.source.processing='保留完整';
   assert.throws(()=>importEditableWork(JSON.stringify(response),[asset],{trustedSource:trusted}),/指纹不匹配/);
   delete response.source.taskBinding;
   assert.throws(()=>importEditableWork(JSON.stringify(response),[asset],{trustedSource:trusted}),/来源格式无效/);
