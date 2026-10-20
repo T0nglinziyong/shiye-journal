@@ -18,20 +18,15 @@ export function normalizeAISettings(value={}){
   const keys={...savedKeys};
   if(typeof value.key==='string')keys[provider]=value.key;
   const model=typeof value.model==='string'&&value.model.trim()?value.model.trim():(provider===AI_DEFAULTS.provider?AI_DEFAULTS.model:preset.models[0]?.[0])||'';
-  const requested=value.creationMode??value.deliveryMode;
-  // The earlier PDF/ZIP choices are transport formats, not creation methods.
-  // Normalize them to direct editable layout instead of resurrecting a
-  // delivery-only creation mode.
-  const creationMode=['tools','json','image'].includes(requested)?requested:
-    ['pdf','zip'].includes(requested)?'json':AI_DEFAULTS.creationMode;
+  // Creation is always editable; provider transport stays independently negotiated.
   return {
     provider,keys,key:String(keys[provider]||'').trim(),endpoint:typeof value.endpoint==='string'&&value.endpoint.trim()?value.endpoint.trim():preset.endpoint,model,
-    ...deliveryProfile(creationMode),imageModel:IMAGE_MODELS.includes(value.imageModel)?value.imageModel:AI_DEFAULTS.imageModel,
+    ...deliveryProfile('tools'),imageModel:IMAGE_MODELS.includes(value.imageModel)?value.imageModel:AI_DEFAULTS.imageModel,
     temperature:limit(value.temperature,0,2,AI_DEFAULTS.temperature),
     maxTokens:Math.round(limit(value.maxTokens,2000,16000,AI_DEFAULTS.maxTokens)),
     // Image delivery follows the selected model's input capability. The old
     // persisted thumbnail toggle must not silently disable a vision model.
-    includeThumbnails:creationMode==='image'||verifiedModelCapabilities({endpoint:typeof value.endpoint==='string'&&value.endpoint.trim()?value.endpoint.trim():preset.endpoint,model})?.vision===true,
+    includeThumbnails:verifiedModelCapabilities({endpoint:typeof value.endpoint==='string'&&value.endpoint.trim()?value.endpoint.trim():preset.endpoint,model})?.vision===true,
     finalVisualReview:value.finalVisualReview!==false,customVision:value.customVision===true,
     requestTimeout:limit(value.requestTimeout,20,180,AI_DEFAULTS.requestTimeout),
     sendOutputLimit:value.sendOutputLimit!==false,disableThinking:value.disableThinking!==false,
@@ -50,5 +45,7 @@ export function loadAISettings(storage=globalThis.localStorage){
   try{return normalizeAISettings(JSON.parse(storage.getItem(STORAGE_KEY)||'{}'));}catch{return normalizeAISettings();}
 }
 export function saveAISettings(settings,storage=globalThis.localStorage){
-  const next=normalizeAISettings(settings);storage.setItem(STORAGE_KEY,JSON.stringify(next));return next;
+  const next=normalizeAISettings(settings);
+  const {creationMode,deliveryMode,generationMode,snapshot,...preferences}=next;
+  storage.setItem(STORAGE_KEY,JSON.stringify(preferences));return next;
 }

@@ -137,7 +137,6 @@ import {manualLayoutChoices,applyManualLayout} from './manual-layout-templates.j
 import {exportSceneDocument,importSceneDocument} from './scene-io.js';
 import {resetCatalogPage,clearCatalogPages,snapshotCatalogPages,restoreCatalogPages} from './catalog-pagination.js';
 import {AI_PROVIDERS,supportsVision,loadAISettings,saveAISettings} from './ai-settings.js';
-import {deliveryProfile} from './ai-delivery.js';
 import {classifyCreationFile} from './creation-methods.js';
 import {readClipboardText} from './clipboard-text.js';
 import {parity} from './parity-ui.js';
@@ -165,7 +164,7 @@ modal.querySelector('.modal-close').onclick=()=>modal.close();
 const fileInput=document.querySelector('#file-input'),workFileInput=document.querySelector('#work-file-input'),snapshotFileInput=document.querySelector('#snapshot-file-input'),creationResultInput=document.querySelector('#creation-result-input'),backupInput=document.querySelector('#backup-input'),emergencyInput=document.querySelector('#emergency-input');
 let offlineSnapshotProject=null;
 installRuntimeDiagnostics(()=>state.route);
-const state={route:'series',assets:[],series:[],projects:[],trash:[],userTemplates:[],basket:[],excludedAssetIDs:[],history:[],selected:null,activeProject:null,activeDraft:null,offlineEditingReturnID:null,detailAssetID:null,previewProjectID:null,settingsSection:null,selfHosted:false,aiSettings:loadAISettings(),preferences:loadPreferences(),aiPanel:false,aiBusy:false,aiPrompt:'',aiProgress:'',tool:'select',zoom:1,sort:'newest',query:'',kind:'all',status:'all',seriesID:'all',matchCore:null,matchRatio:'a4',matchMode:'single',matchStyle:'随材而定',matchStyles:['随材而定','自动安排'],matchPurposes:['自由创作'],matchIntent:'',matchContentPolicy:'original',matchPurpose:'自由创作',customPaperWidth:210,customPaperHeight:297,recommendFilter:'全部',coreIDs:[],importStep:'inspect',importRecords:[],importIndex:0,importFile:null,importBitmap:null,importBox:{x:0,y:0,w:1,h:1},importCandidate:null,importRemoveWhite:false,undo:[],redo:[],drawing:false};
+const state={route:'series',assets:[],series:[],projects:[],trash:[],userTemplates:[],basket:[],excludedAssetIDs:[],history:[],selected:null,activeProject:null,activeDraft:null,offlineEditingReturnID:null,detailAssetID:null,previewProjectID:null,settingsSection:null,selfHosted:false,aiSettings:loadAISettings(),preferences:loadPreferences(),aiPanel:false,aiBusy:false,aiPrompt:'',aiProgress:'',tool:'select',zoom:1,sort:'newest',query:'',kind:'all',status:'all',seriesID:'all',matchCore:null,matchRatio:'a4',matchMode:'single',matchStyle:'随材而定',matchStyles:['随材而定','自动安排'],matchPurposes:['自由创作'],matchIntent:'',matchContentPolicy:'original',matchPurpose:'自由创作',recommendFilter:'全部',coreIDs:[],importStep:'inspect',importRecords:[],importIndex:0,importFile:null,importBitmap:null,importBox:{x:0,y:0,w:1,h:1},importCandidate:null,importRemoveWhite:false,undo:[],redo:[],drawing:false};
 // Action changes are published independently of their DOM representation.
 const actionStore=createActionStore(state);
 actionStore.register('app/action',async({action,id,value})=>({result:await runAppAction(action,id,value)}));
@@ -909,11 +908,11 @@ function editorEntry(d){return sceneLayerEntries(d,{ink:false});}
 function readAIForm(){
   const q=id=>view.querySelector('#setting-ai-'+id),old=state.aiSettings;
   const provider=q('provider').value,model=q('custom-model').value.trim(),endpoint=q('endpoint').value.trim();
-  const key=q('key').value,creationMode=q('delivery').value;
+  const key=q('key').value;
   let draftKeys={};try{draftKeys=JSON.parse(q('provider-keys')?.value||'{}');}catch{}
   const keys={...old.keys,...draftKeys,[provider]:key};
   const vision=supportsVision({provider,endpoint,model});
-  return {...old,provider,keys,key,endpoint,model,...deliveryProfile(creationMode),
+  return {...old,provider,keys,key,endpoint,model,
     includeStructureReference:q('structure-reference').checked,
     sendPresetReferences:q('send-reference').checked,
     autoIncludeRecommendations:q('auto-recommendations').checked,
@@ -944,7 +943,7 @@ function updateMatchingFromReact(key,value,options){
     state[list]=[...(state[list]||[]).filter(item=>!options.includes(item)),...(value?[value]:[])];
     normalizeMatchingDirection(state);
   }else if(['matchContentPolicy','matchMode',
-    'matchRatio','customPaperWidth','customPaperHeight','matchIntent'].includes(key))state[key]=value;
+    'matchRatio','matchIntent'].includes(key))state[key]=value;
   else return;
   void matchingSession.persist().catch(error=>{
     console.warn('本机搭配状态未保存；不影响云端作品同步',error);
@@ -2185,14 +2184,14 @@ function editSelected(fn){const d=current(),e=editorEntry(d).find(x=>x.value.id=
   if(e)assertSceneEditable(d,e.value.id);
   checkpoint();fn(e,d);saveProject();render();}
 function historyStep(from,to){view.flushInkCommit?.({renderUI:false,force:true});view.endTextEditing?.();const d=current(),snapshot=takeEditorHistoryStep(state,from,to,d);if(!snapshot)return false;for(const key of Object.keys(d))delete d[key];Object.assign(d,snapshot);state.activeDraft=snapshot.id;saveProject();return true;}
-function readMatchPaper(){const ratio=view.querySelector('#match-ratio')?.value||'a4';if(ratio!=='custom')return ratio;const w=Number(view.querySelector('#match-paper-width')?.value),h=Number(view.querySelector('#match-paper-height')?.value);if(!Number.isInteger(w)||!Number.isInteger(h)||w<50||h<50||w>1000||h>1000)throw Error('自定义纸张宽高需要是 50–1000 mm 的整数');state.customPaperWidth=w;state.customPaperHeight=h;return `custom:${w}x${h}`;}
+
 function captureMatchingDirection(){
   state.matchStyles=readMatchSelection('match-style',state.matchStyle);
   state.matchPurposes=readMatchSelection('match-purpose',state.matchPurpose);
   state.matchContentPolicy=view.querySelector('#match-content-policy')?.value||state.matchContentPolicy||'original';
   state.matchIntent=view.querySelector('#match-intent')?.value||'';
   state.matchMode=view.querySelector('#match-mode')?.value||state.matchMode;
-  state.matchRatio=readMatchPaper();normalizeMatchingDirection(state);
+  state.matchRatio=view.querySelector('#match-ratio')?.value||'a4';normalizeMatchingDirection(state);
 }
 function createMatchingProject(automatic=true){const scope=matchingScope();if(!scope.candidateAssetIDs.length||!automatic&&!state.basket.length)throw Error('请先选择素材');const p=project('新的手账',{mode:state.matchMode||'single',ratio:state.matchRatio||'a4',style:state.matchStyle||'随材而定'}),d=p.drafts[0];d.items=automatic?[]:physicalPlacement(d,state.assets,state.basket.slice(0,8));p.candidateAssetIDs=automatic?scope.candidateAssetIDs:[...state.basket];p.materialPriority=automatic?scope:{...scope,available:[],candidateAssetIDs:[...state.basket]};p.purpose=state.matchPurpose;p.intent=state.matchIntent;p.contentPolicy=state.matchContentPolicy;p.textPresentation='mixed';p.userText='';p.providedFacts='';p.styles=[...state.matchStyles];p.purposes=[...state.matchPurposes];p.requiredAssetIDs=[...scope.required];p.processing='自由拆解';return p;}
 async function exportOfflineCreation(){

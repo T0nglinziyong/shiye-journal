@@ -7,7 +7,7 @@ export const webWorkbenchInstructions=`拾页 · 可编辑手帐创作工作台
 3. 默认直接编辑 scene.json 的 page.layers。也可写 instructions.json 并运行 node runtime/compile.cjs instructions.json；输入可为 {tools:[...]}、{plan:{...}} 或 {page:比例坐标便捷页面}。局部操作可运行 node runtime/inspect.cjs 取 baseSceneHash，再写 commands.json 并运行 node runtime/apply.cjs commands.json。合同分别见 schema/output.json、schema/tools.json、schema/craft-plan.json；所有路径都写回同一 Scene。
 4. 运行 node runtime/preview.cjs 校验并直接生成 output/preview.png，不需 HTML。若缺少 Node Canvas，执行一次 npm install 后重试；需要排查环境时可运行 node runtime/self-test.cjs。构图预览.svg 仅供粗略参考。
 5. 必须实际查看 output/preview.png，检查素材是否显示、主体与阅读路线、文字可读性、裁切边缘及层次；发现问题就改对应 Scene 节点并重新 preview。生成文件不等于看过图片；不得伪造视觉验收。
-6. 运行 node runtime/pack.cjs 核对逐件取舍、最终 Scene 与 PNG 摘要，生成 output/project.shiyeproject.json、delivery-manifest.json。改动后必须重新 preview 和 pack。文件模式交付 output/project.shiyeproject.json 与 output/preview.png 两个可下载文件；复制文本模式交付 output/preview.png 下载链接和一个完整的 JSON 代码块（内容来自 pack 生成的同一文件）。勿用工具日志或 ZIP 代替图层。
+6. 运行 node runtime/pack.cjs 核对逐件取舍、最终 Scene 与 PNG 摘要，生成单行紧凑的 output/project.shiyeproject.json 和 delivery-manifest.json。改动后必须重新 preview 和 pack。文件模式交付 output/project.shiyeproject.json 与 output/preview.png 两个可下载文件；复制文本模式交付 output/preview.png 下载链接和一个完整的 JSON 代码块（内容来自 pack 生成的同一文件，JSON 正文单行、不缩进，不省略字段；字符串内换行使用 JSON 转义）。勿用工具日志或 ZIP 代替图层。
 无法生成 PNG 时说明交付未完成；scene.json 可作为未视觉验收的工作稿保留。字体随运行环境变化，最终字体仍须在拾页应用内核对。不得捏造预览或用另画的图片代替。`;
 export const webEditingGuide=`坐标与能力
 page 为 App 原生 Scene。x/y 是画布中的中心坐标；width/height/fontSize/笔宽使用画布单位；毫米换算=毫米*canvas.height/physicalPageHeightMM。ink.points 是画布绝对坐标，p 是压感。vectorMask 是 0–1，组合蒙版参照整页；组合 children 不改成局部坐标。zIndex 在各自兄弟节点中决定叠放。

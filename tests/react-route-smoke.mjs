@@ -95,7 +95,7 @@ assert.ok(window.document.querySelector('.match-direction').compareDocumentPosit
 assert.ok(window.document.querySelector('#match-content-policy'));
 assert.equal(window.document.querySelector('#match-text-presentation'),null);
 assert.equal(window.document.querySelector('#match-processing'),null);
-assert.equal(window.document.querySelectorAll('.match-creative-controls select').length,4);
+assert.equal(window.document.querySelectorAll('.match-creative-controls select').length,6);
 assert.ok(window.document.querySelector('#match-ratio option[value="b5-half"]'));
 window.document.querySelector('.match-rec [data-act="basket"]').click();
 await waitFor(()=>!!window.document.querySelector('.match-basket-actions [data-act="match-core"]'));

@@ -26,8 +26,8 @@ export function webResultPrompt(mode,output){
   }
   const instructions='请读 ZIP/START_HERE.txt，观察素材、比较构图并记录逐件取舍，完成一份可编辑手帐。用最终 Scene 运行 Node Canvas 生成并查看 output/preview.png；有问题就修改后重渲染。';
   return output==='file'
-    ?instructions+'交付可下载的 output/preview.png 与 output/project.shiyeproject.json，不要交付 ZIP。'
-    :instructions+'展示并提供可下载的 output/preview.png；将同一最终 JSON 放在一个完整的 ```json 代码块中，不省略字段。';
+    ?instructions+'交付可下载的 output/preview.png 与 output/project.shiyeproject.json，JSON 保持单行紧凑格式，不要交付 ZIP。'
+    :instructions+'展示并提供可下载的 output/preview.png；将同一最终 JSON 放在一个完整的 ```json 代码块中，JSON 正文保持单行、不缩进、不省略字段；字符串换行保留转义。';
 }
 
 const utf8Start=(bytes)=>new TextDecoder('utf-8',{fatal:false}).decode(bytes);

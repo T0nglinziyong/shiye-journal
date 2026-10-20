@@ -10,10 +10,10 @@ test('creative delivery settings survive save and reload without changing provid
   const settings={deliveryMode:'image',provider:'custom',key:'test-value',endpoint:'https://example.invalid/chat/completions',model:'example-model',temperature:1.25,maxTokens:10000,maxTurns:4,includeThumbnails:false,transport:'json',textMode:'none',reasoningMode:'providerDefault',requestTimeout:120,sendOutputLimit:false,disableThinking:false,includeStructureReference:false,sendPresetReferences:true,autoIncludeRecommendations:true,requireAllCandidates:false,customLayoutPrompt:'保留大块留白'};
   const saved=saveAISettings(settings,storage),restored=loadAISettings(storage);
   assert.deepEqual(restored,saved);
-  for(const [key,value] of Object.entries(settings))if(!['includeThumbnails','maxTurns'].includes(key))assert.deepEqual(restored[key],value,key);
-  assert.equal(restored.includeThumbnails,true,'image creation includes source material even when an old toggle was off');
+  for(const [key,value] of Object.entries(settings))if(!['includeThumbnails','maxTurns','deliveryMode'].includes(key))assert.deepEqual(restored[key],value,key);
+  assert.equal(restored.includeThumbnails,false,'unverified custom models do not receive image input');
   assert.equal('maxTurns' in restored,false);
-  assert.equal(restored.generationMode,'direct');
+  assert.equal(restored.generationMode,'agent');
 });
 
 test('invalid current settings normalize to bounded defaults',()=>{
@@ -68,15 +68,16 @@ test('A-12: image input is scoped to verified endpoint/model combinations',()=>{
  assert.equal(normalizeAISettings({provider:'custom',endpoint:'https://example.test/chat/completions',model:'unknown',includeThumbnails:true}).includeThumbnails,false);
 });
 
-test('three creation methods are independent from web file-versus-text return form',()=>{
-  for(const [mode,generation,snapshot] of [['tools','agent',false],['json','direct',false],['image','direct','image/png']]){
-    const actual=normalizeAISettings({creationMode:mode,deliveryMode:'tools'});
-    assert.equal(actual.creationMode,mode);
-    assert.equal(actual.deliveryMode,mode);
-    assert.equal(actual.generationMode,generation);
-    assert.equal(actual.snapshot,snapshot);
+test('settings always use editable creation and cannot revive retired method preferences',()=>{
+  for(const mode of ['tools','json','image','zip','pdf']){
+    const actual=normalizeAISettings({creationMode:mode,deliveryMode:mode,generationMode:'direct'});
+    assert.equal(actual.creationMode,'tools');
+    assert.equal(actual.deliveryMode,'tools');
+    assert.equal(actual.generationMode,'agent');
+    assert.equal(actual.snapshot,false);
   }
-  // Old format-only choices cannot appear as a fourth/fifth method.
-  assert.equal(normalizeAISettings({deliveryMode:'zip'}).creationMode,'json');
-  assert.equal(normalizeAISettings({deliveryMode:'pdf'}).creationMode,'json');
+  const storage=memoryStorage();saveAISettings({creationMode:'json'},storage);
+  const persisted=JSON.parse(storage.getItem('shiye-ai-settings-v2'));
+  for(const key of ['creationMode','deliveryMode','generationMode','snapshot'])assert.equal(key in persisted,false);
+  assert.equal(loadAISettings(storage).generationMode,'agent');
 });
