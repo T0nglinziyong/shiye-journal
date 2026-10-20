@@ -7,7 +7,6 @@ import {libraryPageData} from './library-page-data.js';
 import {paperPresets} from './paper-sizes.js';
 import {candidateDiscoveryOptions,recognitionOptions,recognitionPixelOptions,
   recognitionMethodDetails} from './recognition-profiles.js';
-import {DELIVERY_OPTIONS} from './ai-delivery.js';
 import {matchingViewModel} from './matching-view.js';
 import {styleGroups,purposeGroups,matchingContentOptions,matchingIntentPlaceholder} from './matching-directions.js';
 import {visualStyles} from './creative-style-brief.js';
@@ -984,8 +983,7 @@ export function MatchingPage({state,source,kindName,session,onAction,onMatchingC
   const change=(id,value,options)=>{onMatchingChange(id,value,options);refresh(version=>version+1);};
   const action=(name,id,value)=>()=>onAction(name,id,value);
   const {selected,recommendations,excluded,scope,filtered,styles,chosenPurposes}=matchingViewModel(state);
-  const custom=state.matchRatio==='custom'||state.matchRatio.startsWith('custom:');
-  return <div className={`matching-page ${custom?'custom-paper':''}`} data-react-page="matching">
+  return <div className="matching-page" data-react-page="matching">
     <div className="view-head unified-page-heading"><div className="unified-heading-copy"><span className="eyebrow">FROM YOUR DESK TO YOUR PAGES</span><h1>素材搭配</h1></div>
       <div className="actions"><button className="btn" data-act="reset-match" data-react-action="true" onClick={action('reset-match')}>↶　重新搭配</button></div></div>
     <section className="panel match-direction"><h2>先定这一页的方向</h2><p>从素材出发，写一点自己的想法。保持默认也可以开始。</p>
@@ -995,20 +993,15 @@ export function MatchingPage({state,source,kindName,session,onAction,onMatchingC
           {Object.entries(matchingContentOptions).map(([value,label])=><option key={value} value={value}>{label}</option>)}
         </select></label>
         <DirectionGroup groups={purposeGroups} values={chosenPurposes} type="purpose" onChange={change}/>
+        <label>页面模式<select id="match-mode" defaultValue={state.matchMode}
+        onChange={event=>change('matchMode',event.target.value)}><option value="single">单页</option><option value="spread">双页</option></select></label>
+        <label>纸张规格<select id="match-ratio" value={state.matchRatio}
+          onChange={event=>change('matchRatio',event.target.value)}><PaperSizeOptions includeCustom={false}/></select></label>
       </div>
       <select id="match-style" multiple hidden value={styles} onChange={()=>{}}>{visualStyles.map(([name])=><option key={name} value={name}>{name}</option>)}</select>
       <select id="match-purpose" multiple hidden value={chosenPurposes} onChange={()=>{}}>{matchingPurposes.map(name=><option key={name}>{name}</option>)}</select>
       <label className="match-intent-label">补充想法<textarea data-match-scroll="intent" id="match-intent" placeholder={matchingIntentPlaceholder(state.matchContentPolicy,chosenPurposes[0])} defaultValue={state.matchIntent}
         onBlur={event=>change('matchIntent',event.target.value)}/></label>
-      <h3 className="match-paper-heading">纸张设置</h3>
-      <div className="match-options match-setting-row match-paper-page"><label>页面模式<select id="match-mode" defaultValue={state.matchMode}
-        onChange={event=>change('matchMode',event.target.value)}><option value="single">单页</option><option value="spread">双页</option></select></label>
-        <label>纸张规格<select id="match-ratio" defaultValue={state.matchRatio?.startsWith('custom:')?'custom':state.matchRatio}
-          onChange={event=>change('matchRatio',event.target.value)}><PaperSizeOptions/></select></label></div>
-      <div className="match-options match-setting-row match-paper-dimensions"><label className="match-custom-paper">纸张宽 mm<input id="match-paper-width" type="number" min="50" max="1000" defaultValue={state.customPaperWidth}
-        onChange={event=>change('customPaperWidth',Number(event.target.value))}/></label>
-        <label className="match-custom-paper">纸张高 mm<input id="match-paper-height" type="number" min="50" max="1000" defaultValue={state.customPaperHeight}
-          onChange={event=>change('customPaperHeight',Number(event.target.value))}/></label></div>
 
     </section>
     <div className="matching-layout"><aside className="basket"><h3>本次素材篮</h3><div className="match-basket-scroll" data-match-scroll="basket">
@@ -1741,9 +1734,7 @@ export function SettingsAIPage({settings,preferences,onAction}){
   const vision=supportsVision({provider,endpoint,model:modelID});
   return <SettingsDetailShell title="AI 与创作" kind="settingsAI" onAction={onAction}>
     <section className="ai-settings-group unified-settings-group"><h2>创作偏好</h2>
-      <AISelect id="delivery" label="创作方式" value={cfg.deliveryMode==='image'?'tools':cfg.deliveryMode}
-        choices={DELIVERY_OPTIONS.filter(([id])=>id!=='image')}/>
-      <p>可让 AI 返回可编辑作品；网页任务包会附上素材预览和创作说明。</p>
+      <p>AI 生成可继续编辑的作品；网页任务包同时交付作品数据和预览图片。</p>
       <AIToggle id="require-all" label="候选素材必须全部使用" checked={cfg.requireAllCandidates}/>
       <AIToggle id="auto-recommendations" label="把建议搭配加入候选素材" checked={cfg.autoIncludeRecommendations}/>
       <AIToggle id="structure-reference" label="参考样例的图文结构" checked={cfg.includeStructureReference}/>

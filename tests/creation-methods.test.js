@@ -19,7 +19,7 @@ test('editable delivery requires PNG plus JSON for both file and text outputs',(
     assert.match(file,/Canvas/);assert.match(file,/preview.png/);
     const text=webResultPrompt(mode,'text');
     assert.match(text,/json 代码块/);assert.match(text,/preview.png/);
-    assert.match(text,/不省略字段/);
+    assert.match(text,/不省略字段/);assert.match(text,/单行/);assert.match(file,/单行/);
   }
   const png=webResultPrompt('image','file');
   assert.match(png,/PNG/);

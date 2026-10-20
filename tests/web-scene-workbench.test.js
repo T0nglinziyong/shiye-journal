@@ -174,7 +174,10 @@ test('Node Canvas runtime renders PNG and refuses a stale or changed snapshot',a
   const manifest=JSON.parse(await readFile(join(dir,'output/delivery-manifest.json'),'utf8'));
   assert.deepEqual(manifest.deliverables,['project.shiyeproject.json','preview.png']);
   assert.equal(manifest.sceneHash,capture.sceneHash);
-  const delivered=JSON.parse(await readFile(join(dir,'output/project.shiyeproject.json'),'utf8'));
+  const deliveredBytes=await readFile(join(dir,'output/project.shiyeproject.json'),'utf8');
+  assert.equal(deliveredBytes.includes('\n'),false,'final JSON is a single physical line');
+  assert.equal(deliveredBytes,JSON.stringify(JSON.parse(deliveredBytes)));
+  const delivered=JSON.parse(deliveredBytes);
   assert.deepEqual(delivered.materialDecisions,doc.materialDecisions);
   doc.page.layers.at(-1).content='改变之后';await writeFile(join(dir,'scene.json'),JSON.stringify(doc));
   assert.equal(run('pack').status,1,'stale preview cannot validate a changed scene');

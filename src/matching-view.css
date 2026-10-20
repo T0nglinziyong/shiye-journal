@@ -91,25 +91,24 @@
 .matching-page .match-previews .match-progress{
   font-size:11px;line-height:1.4;max-height:64px;margin:4px 0;
 }
-.matching-page .match-direction .match-content-row,
-.matching-page .match-direction .match-paper-page{
-  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
-  gap:14px;align-items:end;
-}
-.matching-page .match-direction .match-content-row>label,
-.matching-page .match-direction .match-paper-page>label{min-width:0}
-.matching-page .match-direction .match-content-row select,
-.matching-page .match-direction .match-paper-page select{
-  display:block;width:100%;max-width:100%;min-width:0;
-  box-sizing:border-box;
-}
 @media(max-width:680px){
   .matching-page .match-previews .match-variant-grid{
     grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;
   }
   .matching-page .match-previews .match-variant{padding:7px}
-  .matching-page .match-direction .match-content-row,
-  .matching-page .match-direction .match-paper-page{gap:8px}
 }
 
-.match-creative-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:20px 0}.match-creative-controls>label{display:flex;flex-direction:column;gap:8px;min-width:0}.match-creative-controls select{width:100%;min-width:0;min-height:44px}.match-intent-label{display:flex;flex-direction:column;gap:8px}.match-paper-heading{margin:24px 0 12px;padding-top:20px;border-top:1px solid var(--line,#e2e5de)}
+/* Six peer controls share a compact two-row grid on all supported screens. */
+.match-creative-controls{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:14px 0}
+.match-creative-controls>label{display:flex;flex-direction:column;gap:6px;min-width:0}
+.match-creative-controls select{width:100%;max-width:100%;min-width:0;min-height:44px;box-sizing:border-box;text-overflow:ellipsis}
+.match-intent-label{display:flex;flex-direction:column;gap:6px}
+.matching-page .match-intent-label textarea{min-height:64px;height:64px;resize:vertical}
+@media(max-width:680px){
+  .matching-page .match-direction{padding:14px}
+  .matching-page .match-direction>h2{font-size:18px;margin:0 0 6px}
+  .matching-page .match-direction>p{font-size:13px;margin:0 0 10px}
+  .match-creative-controls{gap:12px 8px;margin:12px 0}
+  .match-creative-controls>label,.match-intent-label{font-size:13px}
+  .match-creative-controls select{padding:8px 4px;font-size:14px}
+}

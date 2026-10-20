@@ -32,3 +32,11 @@ test('cloud controls override stale device defaults only after local matching re
  assert.equal(fresh.matchTextPresentation,undefined);
  assert.equal(fresh.matchIntent,'仅此设备的正文');assert.deepEqual(fresh.basket,['material-1']);
 });
+
+test('retired custom matching sizes do not return through local or cloud preferences',()=>{
+ const input={matchRatio:'custom:125x176',customPaperWidth:125,customPaperHeight:176};
+ const row=cloudMatchingSettingsRecord(input);
+ assert.deepEqual(row.settings,{matchRatio:'a4'});
+ const state={};restoreMatchingSession({context:input},state);
+ assert.equal(state.matchRatio,'a4');assert.equal('customPaperWidth' in state,false);
+});

@@ -5,7 +5,7 @@ import {normalizeAISettings} from './ai-settings.js';
 export const CLOUD_AI_SETTINGS_ID='app-ai-settings';
 export function cloudAISettingsRecord(settings,updatedAt=new Date().toISOString()){
   const normalized=normalizeAISettings(settings);
-  const {snapshot,generationMode,deliveryMode,...rest}=normalized;
+  const {snapshot,creationMode,generationMode,deliveryMode,...rest}=normalized;
   return {id:CLOUD_AI_SETTINGS_ID,settings:structuredClone(rest),updatedAt};
 }
 export function cloudAISettingsFromMeta(rows){
