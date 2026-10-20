@@ -47,6 +47,12 @@ export function createLocalWorkCovers({
     },Math.min(600000,30000*2**Math.min(attempt-1,5))));
   }
   function peek(p){return p?entries.get(key(p))?.url||null:null;}
+  async function cached(p){
+    if(!p?.id)return null;
+    if(peek(p))return peek(p);
+    await hydrate(p);
+    return peek(p);
+  }
   async function hydrate(p,owner=account(),revision=p.updatedAt){
     const existing=entries.get(key(p));
     if(existing&&!isPartialWorkCover(existing.blob))return existing.blob;
@@ -141,7 +147,7 @@ export function createLocalWorkCovers({
     if(!observer)cards.slice(0,2).forEach(loadCard);
     return ()=>{disposed=true;queue.length=0;cancelScheduled();observer?.disconnect();};
   }
-  return {peek,ensure,remember,observe,missing,
+  return {peek,cached,ensure,remember,observe,missing,
     dispose(){for(const timer of retryTimers.values())clearTimeout(timer);retryTimers.clear();
       for(const value of entries.values())revokeURL(value.url);entries.clear();jobs.clear();failures.clear();partialAttempts.clear();}};
 }

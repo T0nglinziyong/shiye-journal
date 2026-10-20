@@ -983,12 +983,14 @@ async function cloudPreview(id,pixels=480,{allowRemoteOriginal=true}={}){
     if(usableBlob(reduced)){await rememberImageVariant(record.storagePath,edge,reduced);return reduced;}
     return higher;
   }
-  // If this device already holds the full image, derive the small card cover
-  // locally. Do not fetch the same bytes again just to request a thumbnail.
-  // Avoid decoding a megapixel original on the catalog's main thread.
-  if(usableBlob(localOriginal)&&(!allowRemoteOriginal||globalThis.navigator?.onLine===false)){
-    const reduced=await makeThumbnail(localOriginal,edge);
-    if(usableBlob(reduced)){await rememberImageVariant(record.storagePath,edge,reduced);return reduced;}
+  // A saved original is already on this device. Derive the requested display
+  // size from it before asking CloudBase, including while online. Image decode
+  // is asynchronous; the derived thumbnail is persisted for later visits.
+  if(usableBlob(localOriginal)){
+    try{
+      const reduced=await makeThumbnail(localOriginal,edge);
+      if(usableBlob(reduced)){await rememberImageVariant(record.storagePath,edge,reduced);return reduced;}
+    }catch(error){console.warn('本地图像缩略图暂不可用，尝试云端',error?.message);}
   }
   if(variant==='preview480'&&record.thumbnailPath?.endsWith('-preview480.webp')){
     if(!record.thumbnailPath.startsWith(owner+'/'))throw Error('缩略图不属于当前账号');

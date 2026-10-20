@@ -1,5 +1,6 @@
 import {cloudEnabled,cloudClient,cloudStorage} from './cloud-session.js';
 import {validateJournalPanel} from './journal-source-panels.js';
+import {privateCache} from './private-cache.js';
 
 const cache=new Map(),pending=new Map(),panelCache=new Map(),panelPending=new Map();let owner=null,epoch=0,active=0;const waiters=[];
 async function readLane(task){if(active>=4)await new Promise(resolve=>waiters.push(resolve));active++;try{return await task();}finally{active--;waiters.shift()?.();}}
@@ -14,10 +15,16 @@ export async function loadJournalPresetImage(number,{accountId}={}){
   const work=readLane(async()=>{
   const {data,error}=await cloudClient().auth.getSession();if(error||!data.session?.access_token)throw Error('请先登录后查看预设图片');
   const path=`journal-presets/source/${number}.jpg`;
-  const result=await cloudStorage().from('shiye-presets').download(path,undefined,{signal:AbortSignal.timeout(30000)});
-  if(result.error)throw Error('预设图片读取失败：'+result.error.message);
-  const blob=result.data;
+  const cacheKey='journal-preset:'+path;
+  const saved=accountId?await privateCache.get(accountId,cacheKey).catch(()=>null):null;
+  let blob=saved instanceof Blob&&saved.size&&(!saved.type||/^image\/jpeg/.test(saved.type))?saved:null;
+  if(!blob){
+    const result=await cloudStorage().from('shiye-presets').download(path,undefined,{signal:AbortSignal.timeout(30000)});
+    if(result.error)throw Error('预设图片读取失败：'+result.error.message);
+    blob=result.data;
+  }
   if(!(blob instanceof Blob)||!blob.size||blob.type&&!/^image\/jpeg/.test(blob.type))throw Error('预设图片类型或内容无效');
+  if(blob!==saved&&accountId)void privateCache.put(accountId,cacheKey,blob).catch(()=>{});
   const url=URL.createObjectURL(blob);if(started!==epoch){URL.revokeObjectURL(url);throw Error('账号已切换，停止读取旧账号图片');}cache.set(number,url);return url;
   });pending.set(number,work);try{return await work;}finally{if(pending.get(number)===work)pending.delete(number);}
 }

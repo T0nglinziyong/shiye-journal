@@ -58,6 +58,17 @@ test('return visits recover local complete cover after reload; new revision inva
   await reboot.ensure(state.projects[0]);
   assert.deepEqual(rendered,['draw'],'changed complete scenes must be rendered again');
 });
+test('a saved cover is restored without rerendering even when a cloud cover exists',async()=>{
+  const p=work(),state={accountId:'account',route:'works',projects:[p]},draws=[];
+  p.drafts[0].coverImageID='project-cover:cloudbase:owner/cover';
+  const covers=factory({state,device:{
+    get:async()=>({updatedAt:p.updatedAt,blob:new Blob(['cached cover'])}),put:async()=>{}
+  },draw:async()=>{draws.push(p.id);return new Blob(['rendered']);},hasUsableCover:()=>true});
+  try{
+    assert.equal(await covers.cached(p),'blob:local-cover');
+    assert.deepEqual(draws,[]);
+  }finally{covers.dispose();}
+});
 test('a visible card restores its saved cover before scheduling a scene render',async()=>{
   const p=work(),state={accountId:'account',route:'works',projects:[p]};
   const cached=new Blob(['saved cover'],{type:'image/webp'}),draws=[];

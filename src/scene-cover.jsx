@@ -2,9 +2,10 @@ import React,{useEffect,useState} from 'react';
 
 // A work cover is the 480px Canvas 2D rendering of its saved Scene. The
 // editor's interactive Fabric canvas is never used as the thumbnail source.
-export function SceneCover({draft,source,priority=false,localCover='',projectID=null}){
+export function SceneCover({draft,source,priority=false,localCover='',loadLocalCover,projectID=null,revision=''}){
   const [,refresh]=useState(0),[error,setError]=useState(''),[failedRemote,setFailedRemote]=useState(''),
-    [loadedCover,setLoadedCover]=useState('');
+    [failedLocal,setFailedLocal]=useState(''),[loadedCover,setLoadedCover]=useState(''),
+    [localLookup,setLocalLookup]=useState(null);
   useEffect(()=>{
     if(!projectID)return;
     const update=event=>{
@@ -15,16 +16,33 @@ export function SceneCover({draft,source,priority=false,localCover='',projectID=
     window.addEventListener('shiye-react-cover-update',update);
     return ()=>window.removeEventListener('shiye-react-cover-update',update);
   },[projectID]);
+  const direct=draft?.coverImageID||draft?.coverBlobId;
+  const lookupKey=JSON.stringify([projectID,revision,direct]);
+  useEffect(()=>{
+    if(!loadLocalCover)return;
+    let active=true;
+    Promise.resolve().then(()=>loadLocalCover()).then(url=>{
+      if(active)setLocalLookup({key:lookupKey,url:url||'',checked:true});
+    }).catch(()=>{if(active)setLocalLookup({key:lookupKey,url:'',checked:true});});
+    return ()=>{active=false;};
+  },[lookupKey,!!loadLocalCover]);
   if(!draft)return null;
-  const direct=draft.coverImageID||draft.coverBlobId;
   const remote=direct?source(direct):'';
-  const local=typeof localCover==='function'?localCover():localCover;
+  const local=(typeof localCover==='function'?localCover():localCover)||
+    (localLookup?.key===lookupKey?localLookup.url:'');
+  const preferredLocal=local&&failedLocal!==local?local:'';
+  // Wait for the account-scoped IndexedDB cover check before mounting the
+  // private cloud image. On a cache miss this lasts only one local read.
+  if(loadLocalCover&&!preferredLocal&&localLookup?.key!==lookupKey)
+    return <span className="work-cover-pending" role="status">正在准备预览…</span>;
   // The private-image loader uses a transparent one-pixel SVG while its COS
   // request is pending. It must never hide an already rendered local cover.
-  const cached=remote&&!remote.startsWith('data:image/svg+xml,')&&failedRemote!==remote?remote:local;
+  const cached=preferredLocal||
+    (remote&&!remote.startsWith('data:image/svg+xml,')&&failedRemote!==remote?remote:'');
   if(cached)return <img className="work-reference" loading={priority?'eager':'lazy'}
     fetchPriority={priority?'high':undefined} decoding="async" src={cached} alt="作品完整封面"
-    onError={()=>{if(cached!==remote)return;setFailedRemote(remote);
+    onError={()=>{if(cached===preferredLocal){setFailedLocal(preferredLocal);return;}
+      setFailedRemote(remote);
       window.dispatchEvent(new CustomEvent('shiye-work-cover-failed',{detail:{projectID}}));}}/>;
   // Keep the placeholder image mounted: the private-image loader discovers
   // image nodes, then replaces their SVG source with the saved cloud cover.

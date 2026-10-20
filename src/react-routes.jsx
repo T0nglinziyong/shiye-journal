@@ -147,7 +147,7 @@ function CatalogTabs({tabs,active,onChange}){
 
 const materialTabs=[['series','系列'],['all','全部素材'],['pending','待检测'],['trash','最近删除']];
 
-export function RecentlyDeletedPage({kind,state,source,localCover,cloudEnabled,onTabChange,
+export function RecentlyDeletedPage({kind,state,source,localCover,loadLocalCover,cloudEnabled,onTabChange,
   onTrashChange,onError,onCardsChanged}){
   const [choosing,setChoosing]=useState(false);
   const [selected,setSelected]=useState(()=>new Set());
@@ -215,7 +215,8 @@ export function RecentlyDeletedPage({kind,state,source,localCover,cloudEnabled,o
               {src?<img className="work-reference" src={src} alt={record.title}/>:<SceneCover
                 draft={draft} asset={id=>state.assets.find(item=>item.id===id)} source={source}
                 snapshotOnly cloudEnabled={cloudEnabled} localCover={()=>localCover?.(record)}
-                projectID={record.id}/>}
+                loadLocalCover={loadLocalCover?()=>loadLocalCover(record):undefined}
+                projectID={record.id} revision={record.updatedAt}/>}
             </div>}
             {choosing?<span className="batch-check">{selected.has(entry.id)?'☑':'□'}</span>:null}
           </div>
@@ -574,7 +575,7 @@ export function LibraryPage({state,source,kindName,format,onAction,onPageChange,
   </>;
 }
 
-export function WorksPage({state,projects:initialProjects,isUntouchedLegacyExample,assets:initialAssets,localCover,cloudEnabled,source,onAction,onCardsChanged,tab,onTabChange,
+export function WorksPage({state,projects:initialProjects,isUntouchedLegacyExample,assets:initialAssets,localCover,loadLocalCover,cloudEnabled,source,onAction,onCardsChanged,tab,onTabChange,
   selection,onSelectionToggle,viewState,configuredPageSize,onBatchAction,onBatchError,onEditWork}){
   const [revision,setRevision]=useState(0);
   const projects=state?.projects||initialProjects,assets=state?.assets||initialAssets;
@@ -703,7 +704,8 @@ export function WorksPage({state,projects:initialProjects,isUntouchedLegacyExamp
               src={staticCover} alt={`${project.title} ${project.isSnapshot?'快照':'完整预览'}`}/>:null}
             {!staticCover?<SceneCover draft={draft} asset={asset} source={source} priority={index<4}
               snapshotOnly cloudEnabled={cloudEnabled} localCover={()=>localCover(project)}
-              projectID={project.id}/>:null}
+              loadLocalCover={loadLocalCover?()=>loadLocalCover(project):undefined}
+              projectID={project.id} revision={project.updatedAt}/>:null}
           </div></div><div className="card-body"><h3>{project.title}{project.isSnapshot&&project.isFavorite?<span className="card-favorite" aria-label="已收藏">♥</span>:null}</h3><p>⊙　{project.isSnapshot?'画面快照':project.isDraft?'草稿':'可编辑作品'} <span>{new Date(project.updatedAt).toLocaleDateString()}</span></p></div>
         </PressCard>;
       })}
@@ -1444,7 +1446,7 @@ export function AssetDetailPage({asset,seriesTitle,source,kindName,format,onActi
   </div>;
 }
 
-export function ProjectPreviewPage({project,source,assets,localCover,cloudEnabled,onAction}){
+export function ProjectPreviewPage({project,source,assets,localCover,loadLocalCover,cloudEnabled,onAction}){
   const asset=id=>assets.find(entry=>entry.id===id);
   const draft=project.drafts.find(entry=>entry.id===project.activeDraftID)||project.drafts[0];
   const original=project.coverStaticPath&&project.updatedAt===project.coverBaselineUpdatedAt;
@@ -1467,7 +1469,8 @@ export function ProjectPreviewPage({project,source,assets,localCover,cloudEnable
       src={staticCover} alt={`${project.title} ${project.isSnapshot?'快照':'完整预览'}`}/>:null}
     {!staticCover?<SceneCover draft={draft} asset={asset} source={source} priority
       snapshotOnly cloudEnabled={cloudEnabled} localCover={()=>localCover(project)}
-      projectID={project.id}/>:null}
+      loadLocalCover={loadLocalCover?()=>loadLocalCover(project):undefined}
+      projectID={project.id} revision={project.updatedAt}/>:null}
   </div></div><div className="project-preview-tags">{tags.map(tag=><span key={tag}>{tag}</span>)}</div>
     <p>{project.isSnapshot?'独立保存的画面快照，不能逐层编辑。':'页面上的素材、排版和书写内容都已保存。'}</p>
     <div className="project-preview-actions">

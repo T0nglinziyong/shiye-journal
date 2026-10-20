@@ -701,6 +701,29 @@ test('private thumbnails download without the original and reuse persistent hash
   const b=fixture(cache);b.state.rows=a.state.rows;await b.db.cloudPreview('b');assert.equal(b.state.downloads,0);
   const denied=fixture();denied.state.rows=[{id:'b',storagePath:'owner-uuid/hash',storageProvider:'cloudbase',thumbnailPath:'other/hash-preview480.webp'}];await assert.rejects(denied.db.cloudPreview('b'),/缩略图不属于当前账号/);assert.equal(denied.state.downloads,0);
 });
+test('online cover and display requests derive from the account-local original before CloudBase',async()=>{
+  const previous={document:globalThis.document,createImageBitmap:globalThis.createImageBitmap,
+    OffscreenCanvas:globalThis.OffscreenCanvas};
+  globalThis.document={};
+  globalThis.createImageBitmap=async()=>({width:1200,height:900,close(){}});
+  globalThis.OffscreenCanvas=class{
+    constructor(width,height){this.width=width;this.height=height;}
+    getContext(){return {drawImage(){}};}
+    async convertToBlob(){return new Blob([`local-${this.width}x${this.height}`],{type:'image/webp'});}
+  };
+  try{
+    const cache=memoryCache(),path='owner-uuid/local-original';
+    await cache.put('cloud:owner-uuid','image:'+path,new Blob(['cached original pixels'],{type:'image/png'}));
+    const {db,state}=fixture(cache);state.rows=[{id:'local',storagePath:path,storageProvider:'cloudbase'}];
+    assert.equal(await (await db.cloudPreview('local')).text(),'local-480x360');
+    assert.equal(await (await db.cloudPreview('local',960)).text(),'local-960x720');
+    assert.equal(state.downloads,0);
+  }finally{
+    for(const [key,value] of Object.entries(previous)){
+      if(value===undefined)delete globalThis[key];else globalThis[key]=value;
+    }
+  }
+});
 test('a missing remote thumbnail is rebuilt from its original instead of showing a broken card',async()=>{
   const a=fixture();a.state.missingThumbnail=true;a.state.rows=[{id:'b',storagePath:'owner-uuid/hash',storageProvider:'cloudbase',thumbnailPath:'owner-uuid/hash-preview480.webp'}];
   assert.equal(await (await a.db.cloudPreview('b')).text(),'private image');assert.ok(a.state.downloads>=2);
