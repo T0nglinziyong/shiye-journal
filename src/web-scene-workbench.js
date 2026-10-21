@@ -102,7 +102,7 @@ export function webSceneDocument(source,page,title='新的手帐',materialDecisi
 }
 export function importWebScene(input,assets,{trustedSource=null}={}){
   if(input.tools!==undefined||input.plan!==undefined||!input.page)throw Error('网页版最终仅交付 page Scene 快照，工具与计划请先 compile');
-  if(input.source?.taskBinding!=='local'||input.source?.packageLayout!=='compact')throw Error('创作包来源格式无效');
+  if(input.source?.taskBinding!=='local'||input.source?.packageLayout!=='v3')throw Error('创作包来源格式无效');
   assertTaskFingerprintSync(input.source);
   if(trustedSource&&!same(input.source,trustedSource))throw Error('作品来源与所选原始任务不一致');
   const d=validateWebScene(input.page,input.source,assets),s=input.source;

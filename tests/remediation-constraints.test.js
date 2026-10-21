@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {project,itemFromAsset} from '../src/domain.js';
-import {createOfflineHandoff,importEditableWork} from '../src/offline-creation.js';
+import {createOfflineHandoff,importEditableWork} from './v3-test-handoff.mjs';
 import {compileAndImport} from './web-scene-fixture.mjs';
 import {applyToolCalls} from '../src/creative.js';
 

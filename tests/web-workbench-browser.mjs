@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import {mkdtemp,mkdir,writeFile,readFile,rm} from 'node:fs/promises';
 import {join,dirname} from 'node:path';import {tmpdir} from 'node:os';import {spawnSync} from 'node:child_process';
-import {unzipSync,strFromU8} from 'fflate';
+import {unzipSync} from 'fflate';
 import {project} from '../src/domain.js';import {createOfflineHandoff} from '../src/offline-creation.js';
 import {browserHarness} from './browser-harness.mjs';
 import {linkTestCanvas} from './offline-canvas-test-support.mjs';
@@ -18,29 +18,31 @@ try{
  const files=unzipSync(new Uint8Array(await handoff.blob.arrayBuffer()));
  for(const [name,data] of Object.entries(files)){await mkdir(dirname(join(dir,name)),{recursive:true});await writeFile(join(dir,name),data);}
  await linkTestCanvas(dir);
- const doc=JSON.parse(strFromU8(files['examples/project.shiyeproject.json']));
- const mat=doc.page.layers.find(n=>n.type==='material');Object.assign(mat,{x:245,y:380,rotation:-6});
- const title=doc.page.layers.find(n=>n.type==='text');Object.assign(title,{content:'春日片刻',x:380,y:190,width:440,height:100,fontSize:42,curveHeight:-20,style:'serif',color:'#30463d'});
- doc.page.paperColor='#fbf7eb';doc.page.layers.push({type:'group',id:'notes',autoInkGroup:false,opacity:.9,children:[
- {type:'text',id:'body',content:'留一点空白，\n记下今天看见的颜色。',fontName:null,fixedLineHeight:null,fontSize:25,style:'sans',color:'#4f5f54',x:430,y:615,width:350,height:130},
- {type:'shape',id:'leaf',kind:'vector',x:500,y:400,width:95,height:150,fill:'#789079',stroke:null,vectorLayers:[{fill:'#789079',paths:[[[0,.5],[.5,0],[1,.4],[.5,1]]]},{fill:'#b8c6a1',paths:[[[.2,.5],[.5,.2],[.7,.5],[.5,.8]]]}]},
- {type:'ink',id:'ink',penStyle:'pressure',points:[{x:370,y:740,p:.15},{x:425,y:748,p:.6},{x:520,y:735,p:.25}],width:7,color:'#b69667'}]});
- doc.page.layers.push({type:'shape',id:'stamp-1',kind:'vector',x:115,y:190,width:38,height:38,
-   fill:'#b36f67',stroke:null,vectorPaths:[[[.5,0],[1,.5],[.5,1],[0,.5]]]});
- doc.page.layers.push({...structuredClone(doc.page.layers.at(-1)),id:'stamp-2',x:150,rotation:25});
- doc.materialDecisions=[{asset:'m1',choice:'intact',reason:'保留纸张的完整边界，用作日记内容载体'}];
- await writeFile(join(dir,'scene.json'),JSON.stringify(doc));
- for(const name of ['preview','pack']){const r=spawnSync(process.execPath,['runtime/'+name+'.cjs'],{cwd:dir,encoding:'utf8'});assert.equal(r.status,0,r.stderr||r.stdout);}
+ const run=(name,arg)=>spawnSync(process.execPath,['runtime/shiye.cjs',name,...(arg?[arg]:[])],{cwd:dir,encoding:'utf8'});
+ const revision=JSON.parse(run('info').stdout).sceneRevision;
+ const commands={protocolVersion:1,transactionId:'browser-scene',baseSceneRevision:revision,operations:[
+  {op:'page.update',paperColor:'#fbf7eb'},
+  {op:'material.add',id:'paper',asset:'m1',placement:{xMm:62,yMm:91,rotationDeg:-6}},
+  {op:'text.add',id:'title',content:'春日片刻',xMm:95,yMm:42,widthMm:110,fontSizePt:32,color:'#30463d'},
+  {op:'text.add',id:'body',content:'留一点空白，\n记下今天看见的颜色。',xMm:108,yMm:150,widthMm:88,fontSizePt:18,color:'#4f5f54'},
+  {op:'shape.add',id:'stamp',kind:'ellipse',xMm:29,yMm:45,widthMm:11,heightMm:11,fill:'#b36f67'},
+  {op:'ink.add',id:'highlight',points:[{xMm:93,yMm:176},{xMm:130,yMm:178},{xMm:155,yMm:175}],widthMm:2,color:'#b69667',penStyle:'marker'},
+  {op:'material.decision',asset:'m1',choice:'intact',reason:'保留纸张的完整边界，用作日记内容载体'}
+ ]};
+ await writeFile(join(dir,'work/commands.json'),JSON.stringify(commands));
+ for(const [name,arg] of [['apply','work/commands.json'],['preview'],['pack']]){const r=run(name,arg);assert.equal(r.status,0,r.stderr||r.stdout);}
  const preview=JSON.parse(await readFile(join(dir,'output/preview-capture.json'),'utf8'));
  const final=JSON.parse(await readFile(join(dir,'output/project.shiyeproject.json'),'utf8'));
  assert.deepEqual([...await readFile(join(dir,'output/preview.png'))].slice(0,8),[137,80,78,71,13,10,26,10]);
- const delivery=JSON.parse(await readFile(join(dir,'output/delivery-manifest.json'),'utf8'));
- assert.deepEqual(delivery.deliverables,['project.shiyeproject.json','preview.png']);
- assert.equal(preview.renderReport.visibleSourceCount,1);assert.equal(preview.renderReport.decodedSourceCount,1);
- await b.command('Page.navigate',{url:url+'/tests/fixtures/fabric-preview.html'});await b.wait('.upper-canvas');
+ const delivery=JSON.parse(await readFile(join(dir,'output/manifest.json'),'utf8'));
+ assert.equal(delivery.format,'shiye-v3-delivery');
+ assert.equal(delivery.previewHash,preview.pngHash);
+ assert.equal(preview.renderer,'shiye-scene-v2');
+ assert.ok(preview.assets.m1);
+ await b.wait('.upper-canvas');
  const result=await b.evaluate(`(async()=>{const {importEditableWork}=await import('/src/offline-creation.js');const {renderSceneCanvas,decodeSceneImage}=await import('/src/scene-renderer.js');const {craftSceneHash}=await import('/src/craft-fingerprint.js');const p=importEditableWork(${JSON.stringify(JSON.stringify(final))},${JSON.stringify(assets)});const d=p.drafts[0];const c=(await renderSceneCanvas(d,{loadMaterialImage:async()=>decodeSceneImage('data:image/png;base64,${image}')})).canvas;document.body.replaceChildren(c);c.style.cssText='width:min(100%,707px);height:auto;display:block;margin:auto';return {png:c.toDataURL(),hash:craftSceneHash(d),text:d.textBlocks.map(t=>t.content),layers:d.layers.length};})()`);
  assert.equal(result.hash,preview.sceneHash,'offline preview and app render must use the same Scene');
  for(const [width,height] of [[390,844],[768,1024],[1024,768],[1440,900]]){await b.command('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:width<700});const shot=await b.command('Page.captureScreenshot',{format:'png'});await writeFile(join(dir,`${width}x${height}.png`),Buffer.from(shot.data,'base64'));assert.equal(await b.evaluate('document.documentElement.scrollWidth<=innerWidth'),true);}
- assert.deepEqual(b.errors,[]);await writeFile(join(dir,'report.json'),JSON.stringify({preview:preview.renderReport,sceneHash:result.hash,renderers:'Node Canvas and browser Canvas',viewports:4},null,2));
+ assert.deepEqual(b.errors,[]);await writeFile(join(dir,'report.json'),JSON.stringify({preview,sceneHash:result.hash,renderers:'Node Canvas and browser Canvas',viewports:4},null,2));
  console.log('Web workbench browser passed. Synthetic evidence: '+dir);
 }finally{await b.close();}

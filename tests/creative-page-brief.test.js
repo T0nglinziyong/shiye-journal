@@ -5,7 +5,7 @@ import {project} from '../src/domain.js';
 import {creativePageBrief} from '../src/creative-page-brief.js';
 import {buildCreativeMessages} from '../src/creative-runner.js';
 import {imagePrompt,generatePageImage} from '../src/ai-image-generation.js';
-import {createOfflineHandoff} from '../src/offline-creation.js';
+import {createOfflineHandoff} from './v3-test-handoff.mjs';
 
 const asset={id:'asset-1',title:'浅绿便签',kind:'sticker',physicalWidthMM:40,physicalHeightMM:50,supply:{quantity:1},tags:['可写文字']};
 const task=()=>{const p=project('日常记录');p.styles=['手作便签'];p.purposes=['日常记录'];p.intent='窗边的一杯茶';return p;};
@@ -47,12 +47,12 @@ test('API editable, web editable and API/web image handoffs share the same compo
   assert.match(api[1].content[0].text,/图文职责/);
   const web=await createOfflineHandoff({project:p,assets:[asset],aliases:{m1:asset.id},settings:{includeThumbnails:false,textMode:'rich'}});
   const webFiles=unzipSync(new Uint8Array(await web.blob.arrayBuffer()));
-  assert.match(strFromU8(webFiles['task/GUIDE.txt']),/连贯的多行正文/);
-  assert.match(strFromU8(webFiles['task/GUIDE.txt']),/无意空洞/);
-  assert.match(strFromU8(webFiles['task/GUIDE.txt']),/纸片错层/);
-  assert.match(strFromU8(webFiles['task/GUIDE.txt']),/主图与旁注、错层图文/);
+  assert.match(strFromU8(webFiles['design/GUIDE.md']),/连贯的多行正文/);
+  assert.match(strFromU8(webFiles['design/GUIDE.md']),/无意空洞/);
+  assert.match(strFromU8(webFiles['design/GUIDE.md']),/纸片错层/);
+  assert.match(strFromU8(webFiles['design/GUIDE.md']),/主图与旁注、错层图文/);
   assert.match(api[0].content,/主图与旁注、错层图文/);
-  assert.ok(JSON.parse(strFromU8(webFiles['task/context.json'])).materials[0].journalRoles.includes('writing'));
+  assert.ok(JSON.parse(strFromU8(webFiles['TASK.json'])).materials[0].journalRoles.includes('writing'));
   assert.equal(webFiles['task/knowledge.json'],undefined);
   const image=imagePrompt({project:p,draft:p.drafts[0],assets:[asset],ids:[asset.id],theme:p.intent,includeImages:false,textMode:'rich'});
   assert.match(image,/自然换行的短段/);
@@ -76,7 +76,7 @@ test('API and web task honor the same optional structure guidance',async()=>{
     settings:{includeThumbnails:false,includeStructureReference:false}});
   const files=unzipSync(new Uint8Array(await web.blob.arrayBuffer()));
   assert.doesNotMatch(api[0].content,/主图与旁注、错层图文/);
-  assert.doesNotMatch(strFromU8(files['task/GUIDE.txt']),/主图与旁注、错层图文/);
+  assert.doesNotMatch(strFromU8(files['design/GUIDE.md']),/主图与旁注、错层图文/);
 });
 
 test('both editable and image transports receive the same spread-specific page balance direction',async()=>{
@@ -86,7 +86,7 @@ test('both editable and image transports receive the same spread-specific page b
   assert.match(api[1].content[0].text,marker);
   const web=await createOfflineHandoff({project:p,assets:[asset],aliases:{m1:asset.id},settings:{includeThumbnails:false}});
   const webFiles=unzipSync(new Uint8Array(await web.blob.arrayBuffer()));
-  assert.match(strFromU8(webFiles['task/GUIDE.txt']),marker);
+  assert.match(strFromU8(webFiles['design/GUIDE.md']),marker);
   const image=imagePrompt({project:p,draft,assets:[asset],ids:[asset.id],includeImages:false});
   assert.match(image,marker);
   const webImage=await createOfflineHandoff({project:p,assets:[asset],aliases:{m1:asset.id},settings:{deliveryMode:'image',includeThumbnails:false}});

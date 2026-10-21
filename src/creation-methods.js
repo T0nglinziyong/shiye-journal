@@ -24,7 +24,7 @@ export function webResultPrompt(mode,output){
     if(output==='text')throw Error('自由绘画必须交付 PNG 图片，不能用复制文本表示完整像素');
     return '请读 ZIP 的 START_HERE.txt 和任务说明，观察素材并生成完整手帐画面；直接展示画面并提供单个可下载的 PNG 作品文件，不要返回 JSON、ZIP 或说明性图注。';
   }
-  const instructions='请读 ZIP/START_HERE.txt 和 task/BRIEF.txt，查看素材。用 instructions.json 经 runtime/preview.cjs、Node Canvas 预览 PNG；复杂分片或精修才按需查 schema，使用 plan/commands。看图修正问题，从同一 Scene 交付。';
+  const instructions='请读 ZIP/START_HERE.md 和 TASK.json，查看 assets/overview.jpg 与必要原图。只编写 work/commands.json，经 node runtime/shiye.cjs apply，再运行 preview 看真实 PNG；用下一批命令局部修订，最后 pack 交付。';
   return output==='file'
     ?instructions+'交付可下载的 output/preview.png 与 output/project.shiyeproject.json，JSON 保持单行紧凑格式，不要交付 ZIP。'
     :instructions+'展示并提供可下载的 output/preview.png；将同一最终 JSON 放在一个完整的 ```json 代码块中，JSON 正文保持单行、不缩进、不省略字段；字符串换行保留转义。';

@@ -4,7 +4,7 @@ import {unzipSync,strFromU8} from 'fflate';
 import {project} from '../src/domain.js';
 import {normalizeMatchingDirection,styleGroups,purposeGroups,matchingContentOptions} from '../src/matching-directions.js';
 import {creativeRunParameters} from '../src/ai-creation-session.js';
-import {createOfflineHandoff} from '../src/offline-creation.js';
+import {createOfflineHandoff} from './v3-test-handoff.mjs';
 import {buildCreativeMessages} from '../src/creative-runner.js';
 import {imagePrompt} from '../src/ai-image-generation.js';
 
@@ -24,7 +24,7 @@ test('API, editable ZIP and image routes use the same material-dependent and exp
   const api=buildCreativeMessages(params)[1].content[0].text;
   const bundle=await createOfflineHandoff({project:p,assets,aliases:params.aliases,settings:{includeThumbnails:false}});
   const files=unzipSync(new Uint8Array(await bundle.blob.arrayBuffer()));
-  const guide=strFromU8(files['task/GUIDE.txt']);
+  const guide=strFromU8(files['design/GUIDE.md']);
   const image=imagePrompt({project:p,draft:p.drafts[0],assets,ids:['letter'],includeImages:false});
   for(const text of [api,guide,image]){
     assert.match(text,/结合表达构思书写空间/);assert.match(text,/不要先划固定正文框/);assert.match(text,/可编辑图形与图案/);assert.match(text,/vectorPaths\/vectorLayers/);assert.match(text,/不伪装成用户拥有的实体贴纸/);assert.match(text,/不要先把大素材排满/);assert.match(text,/素材职责必须拉开/);assert.match(text,/脱离图像通读/);assert.match(text,/灵感随写/);assert.match(text,/俏皮态度/);assert.match(text,/长、中、短版本/);
@@ -35,5 +35,5 @@ test('API, editable ZIP and image routes use the same material-dependent and exp
   assert.equal(bundle.source.processing,'自由拆解');
   assert.equal(bundle.source.contentPolicy,'original');
   assert.equal(bundle.source.capabilities.previewOffline,'node-canvas');
-  assert.match(strFromU8(files['START_HERE.txt']),/PNG|preview.png/);
+  assert.match(strFromU8(files['START_HERE.md']),/PNG|preview.png/);
 });

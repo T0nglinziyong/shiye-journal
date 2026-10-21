@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {creativeContentBrief} from '../src/creative-content-brief.js';
 import {buildCreativeMessages} from '../src/creative-runner.js';
 import {project} from '../src/domain.js';
-import {createOfflineHandoff} from '../src/offline-creation.js';
+import {createOfflineHandoff} from './v3-test-handoff.mjs';
 import {imagePrompt} from '../src/ai-image-generation.js';
 import {unzipSync,strFromU8} from 'fflate';
 
@@ -33,11 +33,11 @@ test('online and offline tasks carry the same chosen content boundary',async()=>
   const asset={id:'a1',title:'纸片',kind:'sticker',physicalWidthMM:20,physicalHeightMM:30,supply:{quantity:1}};
   const task=await createOfflineHandoff({project:p,assets:[asset],aliases:{m1:asset.id},settings:{includeThumbnails:false}});
   const files=unzipSync(new Uint8Array(await task.blob.arrayBuffer()));
-  const context=JSON.parse(strFromU8(files['task/context.json']));
-  assert.equal(context.source.contentPolicy,'original');
-  assert.equal(context.source.userText,'保留专名：小白');
-  assert.match(strFromU8(files['START_HERE.txt']),/task\/GUIDE\.txt/);
-  assert.match(strFromU8(files['task/GUIDE.txt']),/不冒充用户曾发生的经历/);
+  const context=JSON.parse(strFromU8(files['TASK.json']));
+  assert.equal(context.sourceContext.contentPolicy,'original');
+  assert.equal(context.sourceContext.userText,'保留专名：小白');
+  assert.match(strFromU8(files['START_HERE.md']),/design\/GUIDE\.md/);
+  assert.match(strFromU8(files['design/GUIDE.md']),/不冒充用户曾发生的经历/);
   p.contentPolicy='visual';
   const visual=await createOfflineHandoff({project:p,assets:[asset],aliases:{m1:asset.id},settings:{includeThumbnails:false}});
   assert.equal(visual.source.textMode,'none');

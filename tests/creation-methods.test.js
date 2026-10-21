@@ -16,9 +16,9 @@ test('editable delivery requires PNG plus JSON for both file and text outputs',(
     const file=webResultPrompt(mode,'file');
     assert.match(file,/project.shiyeproject.json/);
     assert.match(file,/ZIP/);
-    assert.match(file,/Canvas/);assert.match(file,/preview.png/);
+    assert.match(file,/真实 PNG/);assert.match(file,/preview.png/);
     const text=webResultPrompt(mode,'text');
-    assert.match(text,/json 代码块/);assert.match(text,/preview.png/);
+    assert.match(text,/JSON/);assert.match(text,/preview.png/);
     assert.match(text,/不省略字段/);assert.match(text,/单行/);assert.match(file,/单行/);
   }
   const png=webResultPrompt('image','file');
@@ -54,7 +54,7 @@ test('editable handoff prompts remain concise without a final-response gag',()=>
    const prompt=webResultPrompt('tools',output);
    assert.ok(prompt.length<260);
    assert.doesNotMatch(prompt,/不要附加过程说明|无需另加解释|自评/);
-   assert.match(prompt,/runtime\/preview\.cjs/);
+   assert.match(prompt,/runtime\/shiye\.cjs/);
    assert.doesNotMatch(prompt,/并排构图预览|选择有明确图文关系的一案/);
  }
 });

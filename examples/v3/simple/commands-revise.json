@@ -1,0 +1,24 @@
+{
+  "protocolVersion": 1,
+  "transactionId": "simple-revision",
+  "baseSceneRevision": "sha256:e752b34205db1f679b2cf5aa7e02cf03be225419f218b5918727a6fe59ace702",
+  "operations": [
+    {
+      "op": "layer.update",
+      "target": "heading",
+      "set": {
+        "content": "把寻常日子，慢慢记下来。\n从一张蓝纸开始。"
+      }
+    },
+    {
+      "op": "text.add",
+      "id": "simple-note",
+      "content": "纸上的颜色像今天的天气。",
+      "xMm": 130,
+      "yMm": 134,
+      "widthMm": 88,
+      "fontSizePt": 17,
+      "color": "#304638"
+    }
+  ]
+}

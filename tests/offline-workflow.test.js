@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {unzipSync,strFromU8} from 'fflate';
 import {project} from '../src/domain.js';
-import {createOfflineHandoff,importEditableWork} from '../src/offline-creation.js';
+import {createOfflineHandoff,importEditableWork} from './v3-test-handoff.mjs';
 import {offlineBrowserPage} from '../src/offline-browser-page.js';
 import {auditOfflineCanvasDraft} from '../src/offline-canvas-audit.js';
 
@@ -16,26 +16,22 @@ const unpack=async settings=>{
  return {task,files:unzipSync(new Uint8Array(await task.blob.arrayBuffer()))};
 };
 
-test('web exports one Scene protocol regardless of API generation preference',async()=>{
+test('web exports one v3 Scene protocol regardless of API generation preference',async()=>{
  for(const mode of ['direct','agent']){
-   const {task,files}=await unpack({generationMode:mode});
-   const start=strFromU8(files['START_HERE.txt']);
-   const workflow=start;
-   assert.equal(files['task/material-planning.json'],undefined);
-   assert.equal(files['task/knowledge.json'],undefined);
-   const checklist=strFromU8(files['task/GUIDE.txt']);
-   const example=JSON.parse(strFromU8(files['examples/project.shiyeproject.json']));
-   assert.match(start,/task\/SCENE_REFERENCE\.txt/);
-   assert.match(start,/output\/preview\.png/);
-   assert.doesNotMatch(start,/画面预览\.html|SHIYE_EXPORT_PREVIEW/);
-   assert.match(workflow,/观察|关系/);
-   assert.match(start,/同一 Scene|Node Canvas/);
-   assert.match(checklist,/实际画面/);
-   assert.ok(example.page);assert.equal(example.tools,undefined);
-   assert.equal(example.page.sceneVersion,2);
-   assert.match(workflow,/工具和 Craft Plan 只是编辑它的输入/);
-   assert.ok(files['schema/tools.json']);
-   assert.equal(importEditableWork(JSON.stringify(example),assets,{trustedSource:task.source}).isDraft,true);
+  const {task,files}=await unpack({generationMode:mode});
+  const start=strFromU8(files['START_HERE.md']);
+  const guide=strFromU8(files['design/GUIDE.md']);
+  const scene=JSON.parse(strFromU8(files['scene.json']));
+  assert.equal(files['task/material-planning.json'],undefined);
+  assert.equal(files['task/knowledge.json'],undefined);
+  assert.match(start,/TASK\.json/);assert.match(start,/work\/commands\.json/);
+  assert.match(start,/output\/preview\.png/);
+  assert.doesNotMatch(start,/画面预览\.html|SHIYE_EXPORT_PREVIEW/);
+  assert.match(start,/scene\.json 是唯一作品/);
+  assert.match(guide,/实际画面/);
+  assert.equal(scene.page.sceneVersion,2);assert.equal(scene.tools,undefined);
+  assert.ok(files['api/commands.schema.json']);
+  assert.equal(importEditableWork(JSON.stringify(scene),assets,{trustedSource:task.source}).isDraft,true);
  }
 });
 

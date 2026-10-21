@@ -28,56 +28,22 @@
 
 应用内可编辑 AI、图片生成与网页任务包共用内容和构图指导；不会额外增加一次模型调用。真实尺寸、来源用量与 Scene 校验照常执行。详见 [创作指导](docs/EXPRESSIVE_CREATION.md)。
 
-## GPT 创作任务包
+## GPT 创作任务包 v3
 
-新导出的任务包只有一种目录协议：
+网页导出的可编辑 GPT 任务包以 `START_HERE.md` 与 `TASK.json` 为入口。`assets/overview.jpg` 帮助快速看全素材，`assets/mN.*` 保留本次 Scene 实际引用的原始像素，`assets/manifest.json` 记录来源 ID、SHA256、像素与毫米尺寸。`scene.json` 是唯一权威作品；`work/commands.json` 是一次编辑事务。
 
-```text
-START_HERE.txt
-scene.json            # 唯一工作场景，运行时自动更新
-package.json          # Node Canvas 预览依赖
-task/
-  BRIEF.txt            # 本次方向、素材别名与尺寸
-  context.json
-  GUIDE.txt
-  SCENE_REFERENCE.txt   # 按需查阅的图层字段与精确操作
-  CRAFT_CATALOG.txt     # 按需查阅的素材工艺
-schema/
-  convenient-page.json
-  output.json
-  tools.json
-  craft-plan.json
-examples/
-  instructions.json
-  project.shiyeproject.json
-materials/
-  <素材预览>.png
-runtime/
-  validate.cjs
-  compile.cjs
-  apply.cjs
-  preview.cjs
-  pack.cjs
-  glyphs.cjs
+```bash
+node runtime/shiye.cjs self-test
+node runtime/shiye.cjs info
+node runtime/shiye.cjs apply work/commands.json
+node runtime/shiye.cjs preview
+node runtime/shiye.cjs inspect
+node runtime/shiye.cjs pack
 ```
 
-职责：
+`apply` 支持初稿、复杂素材加工与局部修订，成功后原子更新 Scene；同一事务重复运行不会重复取料。`preview` 从当前 Scene 调用共享 Canvas 渲染器得到 PNG；`pack` 校验版本、Scene/PNG/素材哈希，并重新渲染当前 Scene 比对 PNG，再输出单行可编辑 JSON 和清单。复杂命令按需看 `design/RECIPES.md`；完整合同位于 `api/commands.schema.json`。实际 [v3 ZIP 示例](examples/v3/拾页-GPT创作包-v3-示例.zip) 与 [简单](examples/v3/simple/preview.png)、[复杂](examples/v3/complex/preview.png) 结果可直接查看；各目录保留初稿与修订命令、最终单行 JSON 和验证清单。用 `node scripts/generate-v3-example.mjs` 重新生成；能力映射见 [Scene 能力矩阵](docs/scene-capability-matrix.md)。
 
-- `START_HERE.txt`：唯一入口和执行顺序。
-- `task/BRIEF.txt` + `task/GUIDE.txt` + 素材图片：AI 的默认阅读范围；参照 `examples/instructions.json` 写简短指令并直接预览。高级工艺和完整合同只在实际使用时查阅。
-- `task/context.json`：任务事实、纸张、素材映射、物理尺寸、权限、来源快照和任务指纹。
-- `task/SCENE_REFERENCE.txt` 和 `task/CRAFT_CATALOG.txt`：分别供精确编辑与高级工艺按需查阅，主流程只在 `START_HERE.txt` 写一次。
-- 创作时直接完成素材、正文、图形和笔迹的可编辑 Scene，并查看真实 PNG 修改到完成状态；不以粗排缩略图作为成品依据。
-- 任务包不再导出案例参考图、`knowledge.json` 或纯元数据猜测的 `material-planning.json`；模型直接观察本次素材。
-- `schema/convenient-page.json`：简短指令格式；`schema/output.json`：完整 Scene 合同；两者均按需查阅。
-- `schema/craft-plan.json`：当前原子工艺计划合同。
-- `examples/project.shiyeproject.json`：完整 Scene 字段示例，仅用于参考，不是成品模板。
-- `materials/`：本次真实素材预览。
-- `runtime/`：离线校验、预览、打包与字形轮廓工具。
-
-选定构图后才进行需要的裁剪、图形和文案细化；最终预览须针对具体画面问题复核，不强制无意义返工。交付前须在 `scene.json` 的 `materialDecisions` 中逐件说明完整使用、真实加工或舍弃，并写出基于图像观察的理由。`pack` 会核对声明与实际可见图层及加工字段，不要求工艺件数；最终 JSON 保留这些取舍，PNG 仍须来自同一 Scene 并经过实际看图。
-
-运行时只读取 `task/context.json`，缺少当前任务指纹、来源快照、schema 指纹或当前目录标记时直接拒绝，不猜测旧格式。
+导出包不含登录令牌。任务的原始文字、素材来源和纸张物理规格只读；实体裁片、余料、开窗与穿插沿用 App 的 Scene v2 物理校验。当前独立运行环境需要 Node Canvas 3.2.3，缺少渲染依赖时 `self-test` 明确失败，不能把未渲染 Scene 当成完整交付。
 
 ## AI 素材工艺
 

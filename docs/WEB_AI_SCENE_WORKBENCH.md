@@ -1,59 +1,19 @@
-# 网页 AI 统一创作工作台
+# 网页 AI Scene v2 工作台与 GPT 创作包 v3
 
-## 唯一数据与交付
+网页可编辑任务导出统一 ZIP。AI 默认只读 `START_HERE.md`、`TASK.json`、`assets/overview.jpg`，必要时再打开原图与 `design/RECIPES.md`。完整 Scene v2 保存在 `scene.json.page`，与 App 编辑画布和导入格式相同；命令文件只是一批修改，不是另一份作品。
 
-网页可编辑任务统一导出 `scene.json`。其中 `page` 是应用原生 Scene v2，`layers` 为唯一对象树。工具调用、比例坐标便捷页面和 Craft Plan 都是工作输入，由编译器更新同一份 Scene；最终返回 `project.shiyeproject.json` 与同一 Scene 的 `preview.png`，不导入工具日志或计划。旧网页输出入口移除，需重新导出当前任务包。API 设置不决定网页任务格式；纯图片任务仍是独立交付方式。
+## 五步工作流
 
-工作文件保留任务原有场景，不用示例覆盖。素材图片绑定导出时的固定版本，source 和纸张物理规格不可改。人类在任务开始前锁定/接管的对象受到保护；本次 AI 直接修改与工具修改可以交替执行。
+1. `node runtime/shiye.cjs self-test` 检查 Node Canvas；`info` 取得 `sceneRevision`。
+2. 用 `work/commands.json` 的单一 `operations` 数组添加素材、文字、图形、笔迹或复杂工艺。每批有唯一 `transactionId` 和当前 `baseSceneRevision`。
+3. `apply work/commands.json` 原子修改 Scene；同一事务重试直接返回原回执，旧 revision 或复用 ID 改内容会拒绝。
+4. `preview` 从当前 Scene 渲染 `output/preview.png`。打开图片检查整页与细节；修改时取得新 revision，提交下一批命令。复杂分片、余料、开窗与穿插使用 `material.craft.plan`，仍是同一个命令文件。
+5. 每件素材使用 `material.decision` 与真实图层对账，运行 `pack`。输出 `project.shiyeproject.json`、PNG 和 `manifest.json`；Scene 或素材变化后旧 PNG 无法打包。
 
-## 一次交付中的内部循环
+`TASK.json.sourceContext` 保存完整来源快照和任务指纹；`assets/manifest.json` 保存源 UUID、物理尺寸、原图 SHA256 与原文件名。通用 `layer.update` 只允许已支持的视觉属性，不能改来源或假借手工复制来绕过实体尺寸约束。页面单双页与物理尺寸由 App 任务固定，需改变时重新导出。
 
-1. 阅读四项方向与补充想法，查看素材和已选参考。新搭配任务默认自由加工、混合编排；文字策略可为灵感随写、日常记录或纯粹拼贴。
-2. 先读 `task/BRIEF.txt`，再查看素材图片。按素材真实形状、书写面、印刷字与主次职责构思图文关系：正文、图形、圈点和荧光笔同素材一起安排。完整来源保存在 `task/context.json`，仅在需要精确字段时查阅。任务包不发送额外的案例参考图，也不生成 `knowledge.json` 或仅凭素材元数据猜测用途的 `material-planning.json`。
-3. 在短的 `instructions.json` 中写 `page.layers` 的素材别名、比例位置、文字、图形和笔迹，以及逐件 `materialDecisions`。参考 `examples/instructions.json`；示例圆形只是图形 `kind` 的一种，预设还包含星形、标签、箭头、票券、方格等，自由矢量可写数值路径。图层 `id`、素材 `piece` 和未加工的 `whole` 操作可省略；需要跨图层引用时才显式命名。每项只需设计字段，编译器补齐实物尺寸、来源、节点 ID 和原生 Scene 属性。避免把几句占位文字围在大片无意留白之间；预览应呈现可以交付的成品。
-4. `node runtime/preview.cjs instructions.json` 一次完成简版指令编译和预览：写入完整 `scene.json`，再由 Node Canvas 生成 `output/preview.png` 和渲染报告，无需打开 HTML。只需生成 Scene 时可运行 `node runtime/compile.cjs instructions.json`。不必手写或反复输出长 Scene JSON。
-5. 已对 Scene 做局部精修后，运行无参数的 `node runtime/preview.cjs` 保留精修结果；重新传入旧 `instructions.json` 会重新编译整页。需要局部命令时运行 `inspect` 获取当前摘要；`apply` 按 `baseSceneHash` 原子修改问题图层，也可直接编辑 Scene。Node Canvas 缺失时才执行一次 `npm install`，环境排查可用 `self-test`。完整 schema 按需阅读。
-6. 实际查看 PNG，指出与本页素材和表达有关的具体问题，再有针对性地修订；首版已解决问题时不用为凑次数修改。改动后重新运行 `preview`。`validation-report.json` 包含运行耗时，便于区分渲染与创作时间。
-7. `pack` 核对每件素材的取舍与实际图层、最终 Scene 与 PNG 摘要，同时交付可编辑 JSON 和 PNG；缺少逐件决定、PNG 或图像过期时拒绝完成。完整使用可以是最佳选择，不按工艺数量评分。
-8. App 使用相同合同独立检查导入结果，再用共享渲染器呈现。
+## 验证
 
-任何一次原子编辑失败都保留原工作文件。修改后清除旧交付；直接改文件后，旧预览无法通过 pack。运行时不联网、不使用账号或密钥。JSON 上限 8 MB；组深度、节点和路径点数沿用原生数据预算。
+`node --test tests/v3-package.test.js` 覆盖实际 ZIP、初稿命令、真实 PNG、局部失败回滚、幂等、旧 revision、分片余料、撕边、透明窗口、双孔穿插、导入和过期预览拒绝。底层 Scene/拓扑单测继续核查字形、来源面积和组结构。示例由 `node scripts/generate-v3-example.mjs` 生成；仓库的 `examples/v3/` 收录真实 ZIP、两批命令、最终 PNG/Scene/manifest。
 
-## 简版指令与高级加工的衔接
-
-`page.layers` 是初稿输入，不是另一种作品格式。它已经能在 material 的 `operations` 中表达单件裁切、蒙版、开窗和边缘工艺，也能用嵌套 `group.children` 编组。编译后，`scene.json` 是唯一工作场景；高级操作继续修改这份场景，不需要复制素材、重建任务或手写完整 Scene。
-
-一张原素材分成多片、保留余料或进行物理穿插时，在初稿之后使用 `{ "plan": { ... } }` 作为下一次编译输入；计划须引用当前 `inspect` 的 `sceneHash`，处理画布上已有素材时按计划合同写 `consume` 和 `parentId`。位置、分组、层序、文字和细节则用 `commands.json` 的 `tools` 或 `edits`，同样引用当前 `sceneHash`。加工改变素材状态时，可在同一批 `commands.json` 中更新 `materialDecisions`；校验会核对这些说明与可见图层。每次成功操作后取得新的 hash，再用无参数的 `preview` 查看同一场景。
-
-`compile` 或带输入的 `preview` 每次只接收 `page`、`plan`、`tools` 中一种。初稿之后不要再次提交旧的完整 `page`：它会重新生成 AI 图层，可能覆盖随后的加工与局部精修。最终 `pack` 只读取当前 `scene.json` 与其最新 PNG，输出完整可编辑 JSON 和 PNG。
-
-## 静态能力
-
-| 领域 | 能力 |
-| --- | --- |
-| 真实素材 | 固定图片引用、裁片、复合蒙版、窗口、撕边/齿边、视觉选区取材、同一原素材一次分成多片并保留余料、父片继续拆分、平面两孔穿插；替换为任务内另一素材时保留排版锚点，尺寸按新来源毫米标定 |
-| 数字图形 | 预设形状、自定义路径、多色矢量、描边、透明度、混合、蒙版；图形母版可重复盖成独立数字印章 |
-| 文字 | 可编辑正文、字体/字号、粗斜体、对齐、行距、段距、字距、文字装饰与单行曲线文字；本地字体数值路径可直接用于真实素材镂空 |
-| 笔迹 | 独立笔画、压感路径、多种笔型；抬笔拆成下一节点 |
-| 对象树 | 多层嵌套组合、增删、精确属性修改、重排、跨组移动、组合刚性变换 |
-| 页面 | 纸色、底纹、栏线、跨页中线 |
-| 布局 | 从另一个 Scene 复用完整可编辑图层树；数字层按纸面比例转移，实体素材需明确映射且保留实物尺寸 |
-
-底层已支持这些静态数据；此改造扩展网页合同和工作台，使其不再受便捷排版字段限制。未引入交互口袋、翻片、脚本或外链执行。AI 不得通过手工变形/复制标记规避实物尺寸与来源规则。既有手工变形可原样保留。
-
-从一张尚未使用的原素材剪出多个对象时，Craft Plan 的 `pieces` 分别描述看图轮廓（`observed_region` + `outlineRatio`）、毫米几何路径（`geometryMM`）或矩形裁片，并用 `sourcePartitions` 声明同一来源。默认将未使用的连通区域生成为隐藏备选余料；余料与可见裁片共享固定原图引用和来源面积账本，之后能单独放回画布或继续拆分。已有画布父片沿用 `consume` + `parentId`，不能从原图重复取材。视觉轮廓由 AI 从预览图估计，不等同自动高精度人像分割；发丝等边界须实际看图复核。
-
-`runtime/apply.cjs` 的精确操作新增 `repeat-stamp`、`replace-material`、`reuse-layout` 与 `glyph-knockout`；参数及边界见导出包的 `task/SCENE_REFERENCE.txt`。四者都先作用于临时 Scene，整批通过相同来源、物理尺寸及结构校验后才写回。曲线文字存于普通 text 节点的 `curveHeight`，编辑画布与导出共用绘制函数。字体镂空只读取创作者本机授权字体，作品中仅留数值路径。
-
-## 审美与证据
-
-任务包含主次、阅读路径、素材色彩、纸张触感、留白、叠压目的、文字内容真实性和字体层级的指导。参考是方法，不是固定版式；不强制裁切数量、装饰数量或机械网格。每次最终看图需指出具体问题与对象，再局部修订。
-
-结构合法不等于美观；生成 PNG 不等于模型实际看过图片。清单明确保留视觉复核未验证状态，不能伪造审美通过。Node 与设备字体可能不同，原生文字仍可编辑；跨设备完全一致的字体文件不在本次保证范围。新包仍需通过实际模型创作评估主观质量。
-
-## 验收
-
-- 单元：工具/便捷页面/计划→原生快照→App 导入，来源和加工权限、嵌套组/蒙版/多色路径/压感、原子失败、过期预览、直接编辑后继续工具修改。
-- Node Canvas：导出任务包，在无浏览器的 Node 环境中运行 preview/pack，核对 PNG 摘要与最终 Scene；导入同一 JSON 后在应用 Canvas 中核对视觉差异。字体抗锯齿不要求跨渲染后端逐像素一致。
-- Fabric 回归：编辑画布、封面和导出一致性，包括穿插与笔迹。
-- `npm test`、`npm run test:ui` 为合入前门槛。浏览器合成测试不会调用付费模型或修改真实账号。
+`preview` 的 Node Canvas 使用与网页共同的 `renderSceneCanvas` 场景解释。`pack` 独立重渲染并比对预览 PNG，避免图片和清单一同被误替换。字体来自执行环境，`manifest.json` 明确保留字体与视觉复核状态；目前没有经过对照验收的 Chromium 备用渲染后端。没有可用 Canvas 时停止交付，不生成替代 PNG。

@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import {project} from '../src/domain.js';
 import {applyToolCalls} from '../src/creative.js';
 import {offlineContract,schemaFingerprint,validateValue,directPageContract} from '../src/creative-contract.js';
-import {createOfflineHandoff,importEditableWork,importEditableWorkPackage} from '../src/offline-creation.js';
+import {createOfflineHandoff,importEditableWork,importEditableWorkPackage} from './v3-test-handoff.mjs';
 import {createNativeProjectPackage} from '../src/native-project-package.js';
 import {renderOfflinePreviewSVG} from '../src/offline-preview-svg.js';
 import {materialMaskGeometry,materialMaskArea} from '../src/material-mask.js';
