@@ -1,0 +1,104 @@
+{
+  "version": 1,
+  "shape": {
+    "ok": false,
+    "code": "ERROR_CODE",
+    "operationIndex": 0,
+    "path": "/operations/0/place",
+    "message": "原因",
+    "details": {},
+    "help": "describe place"
+  },
+  "errors": [
+    {
+      "code": "UNSUPPORTED_CAPABILITY",
+      "message": "运行时未实现或未验证此能力",
+      "repair": "使用 describe 查询可用能力，不能静默替代。"
+    },
+    {
+      "code": "COMMAND_SCHEMA_INVALID",
+      "message": "命令字段、类型或分支错误",
+      "repair": "返回精确 JSON Pointer 与合法示例。"
+    },
+    {
+      "code": "SCENE_CONFLICT",
+      "message": "Scene 已变化",
+      "repair": "重新 inspect 并按新状态重做事务，不自动改 hash 重放。"
+    },
+    {
+      "code": "TRANSACTION_REUSED",
+      "message": "同一事务 ID 的内容不同",
+      "repair": "为新意图创建新事务。"
+    },
+    {
+      "code": "REFERENCE_NOT_FOUND",
+      "message": "参考对象或区域不存在",
+      "repair": "用 inspect 查找稳定 ID。"
+    },
+    {
+      "code": "LAYOUT_CYCLE",
+      "message": "布局依赖有环",
+      "repair": "返回参与循环的对象与依赖路径。"
+    },
+    {
+      "code": "UNDEFINED_LAYOUT_BOX",
+      "message": "父组比例定位没有稳定尺寸",
+      "repair": "提供 layoutBox 或改用局部毫米。"
+    },
+    {
+      "code": "PHYSICAL_SCALE_LOCKED",
+      "message": "操作会缩放实体素材",
+      "repair": "改为移动、旋转或显式裁切。"
+    },
+    {
+      "code": "SOURCE_OVERLAP",
+      "message": "实体源区域重复消费",
+      "repair": "使用余料或另一个合法库存单元。"
+    },
+    {
+      "code": "OUT_OF_BOUNDS",
+      "message": "几何范围越界",
+      "repair": "修改 region；不自动截断。"
+    },
+    {
+      "code": "STYLE_NOT_APPLICABLE",
+      "message": "样式不适用于此对象",
+      "repair": "移除无效字段，不得静默忽略。"
+    },
+    {
+      "code": "TEXT_OVERFLOW",
+      "message": "文本空间不足",
+      "repair": "改正文长度、宽度或布局。"
+    },
+    {
+      "code": "RENDERER_UNAVAILABLE",
+      "message": "可靠预览后端不可用",
+      "repair": "报告依赖状态，禁止伪造预览。"
+    },
+    {
+      "code": "FONT_PROFILE_UNAVAILABLE",
+      "message": "缺少已声明字体",
+      "repair": "安装批准资源或显式选择新 profile 并重排。"
+    },
+    {
+      "code": "PREVIEW_STALE",
+      "message": "预览与当前 Scene/资源不符",
+      "repair": "从当前 Scene 重新 preview。"
+    },
+    {
+      "code": "REQUIRED_ASSET_MISSING",
+      "message": "必用素材未实际使用",
+      "repair": "完成实际布局；decision 不是证据。"
+    },
+    {
+      "code": "NON_INVERTIBLE_TRANSFORM",
+      "message": "父变换不可逆",
+      "repair": "撤销零缩放或非法变换。"
+    },
+    {
+      "code": "UNGROUP_NOT_LOSSLESS",
+      "message": "解组无法保留组级视觉语义",
+      "repair": "保留 Group 或明确改变设计。"
+    }
+  ]
+}

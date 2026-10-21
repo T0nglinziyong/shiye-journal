@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:shiye:scene-spatial:1",
+  "title": "Scene 空间扩展片段；须合入完整 Scene Schema，不能独立验收作品",
+  "$defs": {
+    "SpatialSemantics": {
+      "const": "local-tree-v1"
+    },
+    "Transform": {
+      "type": "object",
+      "properties": {
+        "matrix": {
+          "$ref": "#/$defs/Matrix2D"
+        }
+      },
+      "required": [
+        "matrix"
+      ],
+      "additionalProperties": false
+    },
+    "Matrix2D": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "minItems": 6,
+      "maxItems": 6
+    },
+    "LayoutBox": {
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "width": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "height": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "width",
+        "height"
+      ],
+      "additionalProperties": false
+    },
+    "ConstraintRecord": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z][A-Za-z0-9._-]*$"
+        },
+        "target": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z][A-Za-z0-9._-]*$"
+        },
+        "kind": {
+          "enum": [
+            "place",
+            "arrange"
+          ]
+        },
+        "spec": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "id",
+        "target",
+        "kind",
+        "spec"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

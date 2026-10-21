@@ -1,6 +1,7 @@
 import {build} from 'esbuild';
 import {readFile,writeFile,mkdir} from 'node:fs/promises';
 import {resolve} from 'node:path';
+import './build-creation-fixed.mjs';
 
 const root=resolve(import.meta.dirname,'..'),output=resolve(root,'src/generated/offline-validate-source.js');
 const browser=await build({entryPoints:[resolve(root,'src/offline-browser-entry.mjs')],bundle:true,platform:'browser',format:'iife',globalName:'ShiyeScene',target:'es2022',write:false,minify:true,legalComments:'none'});

@@ -1,0 +1,22 @@
+PASS identity
+PASS composition-order
+PASS inverse
+PASS singular-rejected
+PASS nan-rejected
+PASS anchor-center
+PASS anchor-bottom-right
+PASS negative-size-rejected
+PASS reparent-preserves-world
+PASS rotated-bounds
+PASS mm-center
+PASS ratio-equivalence
+PASS reference-origin
+PASS relative-gap
+PASS rotated-reference
+PASS page-axis-offset
+PASS rotated-parent
+PASS rotated-target-anchor
+PASS ratio-offset
+PASS mixed-point-anchor-rejected
+PASS nested-three-level-inverse
+{"ok":true,"passed":21,"scope":"pure-affine-and-anchor-only","integrationTested":false}

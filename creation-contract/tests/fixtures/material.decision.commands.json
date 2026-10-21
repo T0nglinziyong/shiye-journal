@@ -1,0 +1,13 @@
+{
+  "protocolVersion": 2,
+  "transactionId": "fixture-material-decision",
+  "baseSceneRevision": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "operations": [
+    {
+      "op": "material.decision",
+      "asset": "m1",
+      "choice": "intact",
+      "reason": "保留主体，与文字形成一个局部组合。"
+    }
+  ]
+}
