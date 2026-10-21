@@ -1,3 +1,4 @@
+import {USER_SCENE_POLICY,confirmSceneCapability} from '../src/scene-edit-policy.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {selectSceneLasso,sceneLassoBounds,moveSceneLasso,rotateSceneLasso,transformSceneLasso,copySceneLasso,deleteSceneLasso,mergeSceneLasso} from '../src/scene-lasso.js';
@@ -5,7 +6,7 @@ import {sceneLayerEntries} from '../src/scene-v2.js';
 
 const fixture=()=>({sceneVersion:2,canvas:{width:500,height:500},layers:[
   {id:'left',type:'group',zIndex:1,children:[{id:'shape',type:'shape',x:80,y:80,width:20,height:20,zIndex:1}]},
-  {id:'right',type:'group',zIndex:2,children:[{id:'text',type:'text',x:110,y:80,width:20,height:20,zIndex:1}]},
+  {id:'right',type:'group',zIndex:2,children:[{id:'text',type:'text',content:'字',fontSize:10,x:110,y:80,width:20,height:20,zIndex:1}]},
   {id:'ink-group',type:'group',zIndex:3,children:[{id:'ink',type:'ink',width:3,points:[{x:80,y:110},{x:110,y:110}],zIndex:1}]}
 ]});
 const polygon=[{x:50,y:50},{x:140,y:50},{x:140,y:140},{x:50,y:140}];
@@ -78,7 +79,7 @@ test('one lasso transform scales and rotates every selected object around the sa
 test('manual lasso scaling marks a material as visually resized',()=>{
   const draft=fixture();
   draft.layers.push({id:'material',type:'material',assetID:'source',x:200,y:200,width:40,height:30});
-  assert.equal(transformSceneLasso(draft,['material'],{x:200,y:200},1.5,0),true);
+  assert.equal(transformSceneLasso(draft,['material'],{x:200,y:200},1.5,0,{policy:USER_SCENE_POLICY,confirmation:confirmSceneCapability([draft.layers.at(-1)],'material.visualResize')}),true);
   const item=draft.layers.at(-1);
   assert.equal(item.width,60);
   assert.equal(item.manualVisualResize,true);

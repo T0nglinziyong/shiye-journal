@@ -1,3 +1,5 @@
+import {USER_SCENE_POLICY} from '../src/scene-edit-policy.js';
+const testPage=node=>({sceneVersion:2,canvas:{width:1000,height:1000},physicalPageHeightMM:297,layers:[node]});
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {createCanvas,loadImage} from 'canvas';
@@ -16,7 +18,7 @@ test('Fabric projects a Scene shape without changing its saved geometry',async()
   assert.equal(object.angle,12);
   assert.equal(object.opacity,.7);
   assert.deepEqual(node,before);
-  bridge.applyObject(node,object);
+  bridge.applyObject(testPage(node),object,{policy:USER_SCENE_POLICY,confirm:()=>true});
   for(const key of ['x','y','width','height','rotation','opacity'])
     assert.ok(Math.abs(node[key]-before[key])<.001,key+' changed');
 });
@@ -27,10 +29,10 @@ test('Fabric text edits round-trip through the existing Scene text record',async
   const object=await bridge.fromNode(node);
   assert.equal(object.text,'原文');
   object.set({text:'新文字',left:250,top:70,scaleX:1.2});
-  bridge.applyObject(node,object);
+  bridge.applyObject(testPage(node),object,{policy:USER_SCENE_POLICY,confirm:()=>true});
   assert.equal(node.content,'新文字');
-  assert.equal(node.x,250);
-  assert.equal(node.y,117.5);
+  assert.ok(Math.abs(node.x-250)<1e-9);
+  assert.ok(Math.abs(node.y-117.5)<1e-9);
   assert.equal(node.width,216);
   assert.equal(node.height,95);
 });
@@ -39,11 +41,11 @@ test('text corner scaling updates typography while a side resize only reflows',a
   const node={id:'text-scale',type:'text',content:'你好 A',x:210,y:105,width:180,height:95,
     fontSize:40,fixedLineHeight:52,letterSpacing:2,style:'serif',color:'#30463d'};
   const side=await bridge.fromNode(node);
-  side.set({scaleX:1.5,scaleY:1});bridge.applyObject(node,side);
+  side.set({scaleX:1.5,scaleY:1});bridge.applyObject(testPage(node),side,{policy:USER_SCENE_POLICY,confirm:()=>true});
   assert.equal(node.width,270);
   assert.equal(node.fontSize,40);
   const corner=await bridge.fromNode(node);
-  corner.set({scaleX:2,scaleY:2});bridge.applyObject(node,corner);
+  corner.set({scaleX:2,scaleY:2});bridge.applyObject(testPage(node),corner,{policy:USER_SCENE_POLICY,confirm:()=>true});
   assert.equal(node.width,540);
   assert.equal(node.fontSize,80);
   assert.equal(node.fixedLineHeight,104);
@@ -54,12 +56,12 @@ test('Fabric text keeps its paper-space frame center after rotation and grows on
   const node={id:'text-rotate',type:'text',content:'甲',x:200,y:180,width:180,height:95,
     fontSize:40,style:'serif',color:'#30463d',rotation:30};
   const object=await bridge.fromNode(node);
-  bridge.applyObject(node,object);
+  bridge.applyObject(testPage(node),object,{policy:USER_SCENE_POLICY,confirm:()=>true});
   assert.ok(Math.abs(node.x-200)<.001);
   assert.ok(Math.abs(node.y-180)<.001);
   assert.equal(node.rotation,30);
   object.set({text:'甲\n乙\n丙\n丁\n戊'});
-  bridge.applyObject(node,object);
+  bridge.applyObject(testPage(node),object,{policy:USER_SCENE_POLICY,confirm:()=>true});
   assert.ok(node.height>=95);
   assert.equal(node.content,'甲\n乙\n丙\n丁\n戊');
 });
@@ -101,7 +103,7 @@ test('Fabric material projection preserves crop and a compound physical mask',as
   assert.equal(object.cropX,10);
   assert.equal(object.cropY,0);
   assert.ok(object.clipPath?.path?.length>10);
-  bridge.applyObject(node,object);
+  bridge.applyObject(testPage(node),object,{policy:USER_SCENE_POLICY,confirm:()=>true});
   assert.deepEqual(node.cropRect,{x:.25,y:0,width:.5,height:1});
   assert.equal(node.width,200);
   assert.equal(node.height,80);
@@ -115,7 +117,7 @@ test('Fabric ink projection retains its editable stroke identity',async()=>{
   assert.equal(object.stroke,'#123456');
   assert.equal(object.selectable,false);
   assert.equal(object.evented,false);
-  bridge.applyObject(node,object);
+  bridge.applyObject(testPage(node),object,{policy:USER_SCENE_POLICY,confirm:()=>true});
   assert.deepEqual(node.points,[{x:10,y:20,p:.4},{x:20,y:30,p:.8}]);
 });
 
@@ -124,7 +126,7 @@ test('Fabric ink rotation writes transformed points without losing pressure',asy
     width:4,color:'#123456'};
   const object=await bridge.fromNode(node),center=object.getCenterPoint();
   object.set({angle:90});
-  bridge.applyObject(node,object);
+  bridge.applyObject(testPage(node),object,{policy:USER_SCENE_POLICY,confirm:()=>true});
   assert.ok(Math.abs(node.points[0].x-center.x)<.001);
   assert.ok(Math.abs(node.points[1].x-center.x)<.001);
   assert.ok(Math.abs(node.points[0].y-(center.y-10))<.001);
@@ -139,7 +141,7 @@ test('new pressure ink projects as one editable filled Fabric object',async()=>{
   assert.equal(object.sceneID,node.id);
   assert.equal(object.fill,node.color);
   assert.equal(object.stroke,null);
-  bridge.applyObject(node,object);
+  bridge.applyObject(testPage(node),object,{policy:USER_SCENE_POLICY,confirm:()=>true});
   assert.deepEqual(node.points,[{x:10,y:20,p:.2},{x:30,y:22,p:.8},{x:50,y:30,p:.4}]);
 });
 
@@ -151,7 +153,7 @@ test('Fabric group move and rotation write through to absolute Scene child geome
   const object=await bridge.fromNode(node),before=object.getCenterPoint();
   assert.deepEqual(Object.keys(object.controls).sort(),['br','mb','ml','mr','mt']);
   object.set({left:object.left+20,top:object.top+10,angle:90});
-  bridge.applyObject(node,object);
+  bridge.applyObject(testPage(node),object,{policy:USER_SCENE_POLICY,confirm:()=>true});
   const after=object.getCenterPoint();
   // The group center is calculated by Fabric; no child gets a new size.
   assert.ok(Math.abs(node.children[0].x-(after.x-(100-before.y)))<.001);
@@ -161,7 +163,7 @@ test('Fabric group move and rotation write through to absolute Scene child geome
   assert.equal(node.children[0].width,40);
   assert.equal(node.children[1].height,30);
   const snapshot=structuredClone(node.children);
-  bridge.applyObject(node,object);
+  bridge.applyObject(testPage(node),object,{policy:USER_SCENE_POLICY,confirm:()=>true});
   assert.deepEqual(node.children,snapshot);
 });
 
@@ -174,7 +176,7 @@ test('manual group resize scales material appearance without changing its source
   ]};
   const object=await grouped.fromNode(node);
   object.set({scaleX:1.5,scaleY:1.5});
-  grouped.applyObject(node,object);
+  grouped.applyObject(testPage(node),object,{policy:USER_SCENE_POLICY,confirm:()=>true});
   assert.equal(node.children[0].width,60);
   assert.equal(node.children[0].height,45);
   assert.equal(node.children[0].manualVisualResize,true);
@@ -192,7 +194,7 @@ test('a group containing a locked child cannot be transformed through Fabric',as
   assert.equal(object.selectable,false);
   assert.equal(object.evented,false);
   object.set({left:object.left+30});
-  assert.throws(()=>bridge.applyObject(node,object),/锁定/);
+  assert.throws(()=>bridge.applyObject(testPage(node),object,{policy:USER_SCENE_POLICY,confirm:()=>true}),/锁定/);
   assert.equal(node.children[0].x,100);
 });
 
@@ -214,7 +216,7 @@ test('Fabric material edge controls resize its Scene placement and keep the sour
     {target:object,ex:220,ey:140,theta:0,scaleX:object.scaleX,scaleY:object.scaleY},230,170),true);
   assert.ok(object.scaleX>startScale&&object.angle>3,
     'The single bottom-right grip must scale and rotate together');
-  bridge.applyObject(node,object);
+  bridge.applyObject(testPage(node),object,{policy:USER_SCENE_POLICY,confirm:()=>true});
   assert.ok(node.width>200&&node.rotation>3);
   assert.equal(node.manualVisualResize,true);
   assert.equal(node.assetID,'asset-1');

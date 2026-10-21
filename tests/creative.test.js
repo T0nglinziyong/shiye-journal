@@ -1,3 +1,4 @@
+import {USER_SCENE_POLICY,confirmSceneCapability} from '../src/scene-edit-policy.js';
 import test from 'node:test';import assert from 'node:assert/strict';
 import {draft,itemFromAsset} from '../src/domain.js';import {applyToolCalls,validateScenePhysical} from '../src/creative.js';
 import {groupSceneLayers} from '../src/scene-v2.js';
@@ -20,7 +21,7 @@ test('manual group copy keeps one source allocation while rendering a second edi
   d.primitives.push({id:'shape',kind:'rectangle',x:140,y:100,width:20,height:20});
   const group=groupSceneLayers(d,[item.id,'shape'],{id:'original'});
   let sequence=0;
-  duplicateSceneGroup(d,group,()=>`copy-${++sequence}`);
+  duplicateSceneGroup(d,group,()=>`copy-${++sequence}`,{policy:USER_SCENE_POLICY,confirmation:confirmSceneCapability([item],'material.visualCopy')});
   assert.equal(d.items.length,2);
   assert.equal(d.items.filter(entry=>entry.manualVisualCopy).length,1);
   assert.equal(validateScenePhysical(d,[asset]),true);

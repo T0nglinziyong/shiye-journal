@@ -1,3 +1,8 @@
+import {commitSceneEditSession} from './scene-edit-session.js';
+import {editMaterialGeometry,restoreMaterialBaseline,replaceEditableMaterial,reshapeEditableTape} from './scene-material-edit.js';
+import {groupEditableScene,ungroupEditableScene,moveEditableScene,removeEditableScene} from './scene-structure-edit.js';
+import {applySceneNodePatch,applySceneWorldPatch,applyScenePagePatch,insertSceneLayer} from './scene-edit-kernel.js';
+import {USER_SCENE_POLICY,confirmSceneCapability} from './scene-edit-policy.js';
 import {normalizeMatchingDirection} from './matching-directions.js';
 import {automaticAssetClassification} from './asset-automatic-classification.js';
 import {importDefaultTitle} from './import-default-names.js';
@@ -986,11 +991,7 @@ function updateEditorInspector(id,value){
       'inspector-tape-start-cap':'startCap','inspector-tape-end-cap':'endCap'}[id];
     if(!key)return;
     options[key]=key==='widthMM'?Number(value):value;
-    const changed=reshapeTapeStrip(node,record,d,points,options);
-    const trial=attachSceneV2(structuredClone(d));
-    Object.assign(trial.items.find(item=>item.id===node.id),structuredClone(changed));
-    validateScenePhysical(trial,state.assets);
-    checkpoint();Object.assign(node,changed);saveProject();
+    checkpoint();reshapeEditableTape(d,node.id,record,points,options,state.assets,{policy:USER_SCENE_POLICY});saveProject();
     if(!state.inspectorSession)render();return;
   }
   if(['inspector-material-geometry','inspector-vector-mask'].includes(id)){
@@ -998,47 +999,14 @@ function updateEditorInspector(id,value){
     let parsed;try{parsed=JSON.parse(value);}catch{throw Error('请输入合法的 JSON 几何数据');}
     if(id==='inspector-vector-mask'){
       if(parsed!==null)validateVectorMask(parsed);
-      checkpoint();if(parsed===null){delete entry.value.vectorMask;delete entry.value.vectorMaskHistory;}
-      else entry.value.vectorMask=parsed;
+      checkpoint();applySceneNodePatch(d,entry.value.id,parsed===null?{vectorMask:undefined,vectorMaskHistory:undefined}:{vectorMask:parsed},{policy:USER_SCENE_POLICY});
       saveProject();if(!state.inspectorSession)render();toast('蒙版已应用');return;
     }
-    if(entry.kind!=='material'||!parsed||typeof parsed!=='object'||Array.isArray(parsed)||
-      Object.keys(parsed).some(key=>!['cropRect','materialMask','craftDisplaySlices'].includes(key)))
-      throw Error('素材裁片数据格式无效');
-    const record=state.assets.find(asset=>asset.id===entry.value.assetID);
-    if(!record)throw Error('原素材不在素材库中');
-    const crop=(Object.hasOwn(parsed,'cropRect')?parsed.cropRect:entry.value.cropRect)||
-      {x:0,y:0,width:1,height:1};
-    const mask=Object.hasOwn(parsed,'materialMask')?parsed.materialMask:entry.value.materialMask;
-    const displaySlices=Object.hasOwn(parsed,'craftDisplaySlices')?
-      parsed.craftDisplaySlices:entry.value.craftDisplaySlices;
-    if(['x','y','width','height'].some(key=>!Number.isFinite(crop[key]))||
-      crop.x<0||crop.y<0||crop.width<=0||crop.height<=0||
-      crop.x+crop.width>1+1e-9||crop.y+crop.height>1+1e-9||
-      crop.width*record.physicalWidthMM<2||crop.height*record.physicalHeightMM<2)
-      throw Error('裁片必须在原素材内，且短边不少于 2 mm');
-    if(mask!==null&&mask!==undefined)materialMaskGeometry(mask);
-    const next=structuredClone(d),candidate=sceneLayerEntries(next,{hidden:true})
-      .find(item=>item.value.id===entry.value.id)?.value;
-    if(!candidate)throw Error('目标图层已变化');
-    const apply=node=>{
-      const oldCrop=node.cropRect||{width:1,height:1};
-      node.cropRect=crop.x===0&&crop.y===0&&crop.width===1&&crop.height===1?null:structuredClone(crop);
-      node.materialMask=mask?structuredClone(mask):null;
-      if(displaySlices)node.craftDisplaySlices=structuredClone(displaySlices);
-      else delete node.craftDisplaySlices;
-      const scale=d.canvas.height/(d.physicalPageHeightMM||297);
-      const oldSourceWidth=oldCrop.width*record.physicalWidthMM*scale;
-      const oldSourceHeight=oldCrop.height*record.physicalHeightMM*scale;
-      const visualScaleX=node.manualVisualResize?node.width/oldSourceWidth:1;
-      const visualScaleY=node.manualVisualResize?node.height/oldSourceHeight:1;
-      node.width=crop.width*record.physicalWidthMM*scale*visualScaleX;
-      node.height=crop.height*record.physicalHeightMM*scale*visualScaleY;
-      node.manualGeometryOverride=true;
-      node.userOverrideFlags=[...new Set([...(node.userOverrideFlags||[]),'cropRect','materialMask','craftDisplaySlices'])];
-    };
-    apply(candidate);validateScenePhysical(next,state.assets);
-    checkpoint();apply(entry.value);saveProject();if(!state.inspectorSession)render();toast('裁片与工艺已应用');return;
+    if(entry.kind!=='material')throw Error('请选择实体素材');
+    if(!confirm('确认修改这件素材的实体裁片几何？操作仍会检查来源范围和材料用量。'))return;
+    const confirmation=confirmSceneCapability([findSceneNode(d,entry.value.id)],'material.geometry');
+    checkpoint();editMaterialGeometry(d,entry.value.id,parsed,state.assets,{policy:USER_SCENE_POLICY,confirmation});
+    saveProject();if(!state.inspectorSession)render();toast('裁片与工艺已应用');return;
   }
   const numeric={'inspector-x':'x','inspector-y':'y','inspector-width':'width','inspector-height':'height',
     'inspector-rotation':'rotation','inspector-z':'zIndex',
@@ -1049,7 +1017,7 @@ function updateEditorInspector(id,value){
     'inspector-line-width':'lineWidth','inspector-fill-opacity':'fillOpacity',
     'inspector-stroke-opacity':'strokeOpacity'};
   const color=/^#[0-9a-f]{6}$/i;
-  let changed=false;
+  let changed=false;const values={};
   checkpoint();
   if(entry){
     const key=numeric[id];
@@ -1063,44 +1031,42 @@ function updateEditorInspector(id,value){
         ['width','height','fontSize','fixedLineHeight'].includes(key)&&next<=0||
         ['opacity','fillOpacity','strokeOpacity'].includes(key)&&(next<0||next>1)))return;
       if(key==='curveHeight'&&(next<-500||next>500||next&&entry.value.content?.includes('\n')))return;
-      if(next===null)delete entry.value[key];else entry.value[key]=next;
-      if(key==='curveHeight')entry.value.height=Math.max(entry.value.height,
-        entry.value.fontSize*1.6+Math.abs(next));
-      if(entry.kind==='material')entry.value.userOverrideFlags=[...new Set([...(entry.value.userOverrideFlags||[]),key])];
+      values[key]=next===null?undefined:next;
       changed=true;
-    }else if(id==='inspector-text'&&entry.kind==='text'){entry.value.content=String(value);changed=true;}
+    }else if(id==='inspector-text'&&entry.kind==='text'){values.content=String(value);changed=true;}
     else if(id==='inspector-font'&&entry.kind==='text'&&['serif','sans','rounded','hand'].includes(value)){
-      entry.value.style=value;entry.value.fontName=null;changed=true;
+      values.style=value;values.fontName=null;changed=true;
     }else if(id==='inspector-alignment'&&entry.kind==='text'&&['left','center','right'].includes(value)){
-      entry.value.alignment=value;changed=true;
+      values.alignment=value;changed=true;
     }else if(id==='inspector-font-name'&&entry.kind==='text'&&String(value).length<=120){
-      entry.value.fontName=String(value).trim()||null;changed=true;
-    }else if(id==='inspector-text-color'&&entry.kind==='text'&&color.test(value)){entry.value.color=value;changed=true;}
+      values.fontName=String(value).trim()||null;changed=true;
+    }else if(id==='inspector-text-color'&&entry.kind==='text'&&color.test(value)){values.color=value;changed=true;}
     else if(['inspector-bold','inspector-italic','inspector-underline','inspector-strikethrough'].includes(id)&&entry.kind==='text'){
-      entry.value[id.slice(10)]=!!value;changed=true;
-    }else if(id==='inspector-fill'&&entry.kind==='shape'&&color.test(value)){entry.value.fill=value;changed=true;}
-    else if(id==='inspector-stroke'&&entry.kind==='shape'&&color.test(value)){entry.value.stroke=value;changed=true;}
+      values[id.slice(10)]=!!value;changed=true;
+    }else if(id==='inspector-fill'&&entry.kind==='shape'&&color.test(value)){values.fill=value;changed=true;}
+    else if(id==='inspector-stroke'&&entry.kind==='shape'&&color.test(value)){values.stroke=value;changed=true;}
     else if(id==='inspector-stroke-dash'&&entry.kind==='shape'&&['solid','dash','dot'].includes(value)){
-      entry.value.strokeDash=value;changed=true;
+      values.strokeDash=value;changed=true;
     }else if(id==='inspector-flipped'&&entry.kind==='material'){
-      entry.value.isFlippedHorizontally=!!value;changed=true;
+      values.isFlippedHorizontally=!!value;changed=true;
     }else if(id==='inspector-blend-mode'&&['normal','multiply'].includes(value)){
-      entry.value.blendMode=value;changed=true;
+      values.blendMode=value;changed=true;
     }else if(entry.kind==='shape'&&entry.value.vectorLayers&&id.startsWith('inspector-vector-')){
-      const match=/^inspector-vector-(fill|opacity)-(\d+)$/.exec(id),layer=match&&entry.value.vectorLayers[Number(match[2])];
+      const match=/^inspector-vector-(fill|opacity)-(\d+)$/.exec(id);values.vectorLayers=structuredClone(entry.value.vectorLayers);const layer=match&&values.vectorLayers[Number(match[2])];
       if(!layer)return;
       if(match[1]==='fill'&&color.test(value)){layer.fill=value;changed=true;}
       if(match[1]==='opacity'&&Number.isFinite(Number(value))&&Number(value)>=0&&Number(value)<=1){layer.opacity=Number(value);changed=true;}
     }
     else return;
-  }else if(id==='paper-color'&&color.test(value)){d.paperColor=value;changed=true;}
-  else if(id==='paper-pattern'&&['plain','grid','lines','dots','columns'].includes(value)){d.paperPattern=value;changed=true;}
-  else if(id==='paper-columns'&&typeof value==='boolean'){d.paperColumns=value;changed=true;}
+  }else if(id==='paper-color'&&color.test(value)){applyScenePagePatch(d,{paperColor:value},{policy:USER_SCENE_POLICY});changed=true;}
+  else if(id==='paper-pattern'&&['plain','grid','lines','dots','columns'].includes(value)){applyScenePagePatch(d,{paperPattern:value},{policy:USER_SCENE_POLICY});changed=true;}
+  else if(id==='paper-columns'&&typeof value==='boolean'){applyScenePagePatch(d,{paperColumns:value},{policy:USER_SCENE_POLICY});changed=true;}
   else if(id==='page-ratio'){
     if(presetPaperDimensions(value)){setDraftPaperSize(d,value);changed=true;}
   }else if(id==='page-mode'&&['single','spread'].includes(value)){d.pageMode=value;d.canvas=canvasSize(value,d.pageRatio);changed=true;}
   else return;
   if(!changed)return;
+  if(entry)applySceneWorldPatch(d,entry.value.id,values,{policy:USER_SCENE_POLICY,linked:'offset'});
   saveProject();if(!state.inspectorSession)render();
 }
 async function updateImportReviewSeries(recordIndex,next){
@@ -1522,7 +1488,9 @@ async function runAppAction(action,id,value){try{
     if(sceneEditSessionChanged(session)){
       validateScenePhysical(session.working,state.assets);
       state.cutSession=null;
-      checkpoint();saved.layers=structuredClone(session.working.layers);saveProject();
+      try{checkpoint();commitSceneEditSession(saved,session,state.assets,{policy:USER_SCENE_POLICY});}
+      catch(error){state.cutSession=session;throw error;}
+      saveProject();
     }else state.cutSession=null;
     state.cutPreview=null;state.tool=state.toolHighlight='select';
     render();toast('剪刀操作已完成');break;
@@ -1621,7 +1589,9 @@ async function runAppAction(action,id,value){try{
     if(sceneEditSessionChanged(session)){
       validateScenePhysical(session.working,state.assets);
       state.inspectorSession=null;
-      checkpoint();saved.layers=structuredClone(session.working.layers);saveProject();
+      try{checkpoint();commitSceneEditSession(saved,session,state.assets,{policy:USER_SCENE_POLICY});}
+      catch(error){state.inspectorSession=session;throw error;}
+      saveProject();
     }else state.inspectorSession=null;
     state.fabricInspectorOpen=false;render();toast('对象修改已保存');break;
   }
@@ -1634,8 +1604,8 @@ async function runAppAction(action,id,value){try{
     state.selected=selected;state.multiSelected=selected?[selected]:[];
     render();break;
   }
-  case 'fabric-remove-vector-mask':editSelected(e=>{if(e?.value?.vectorMask){
-    delete e.value.vectorMask;delete e.value.vectorMaskHistory;
+  case 'fabric-remove-vector-mask':editSelected((e,d)=>{if(e?.value?.vectorMask){
+    applySceneNodePatch(d,e.value.id,{vectorMask:undefined,vectorMaskHistory:undefined},{policy:USER_SCENE_POLICY});
   }});break;
   case 'fabric-fit-view':{
     state.zoom=1;state.fabricFitRevision=(state.fabricFitRevision||0)+1;
@@ -1655,7 +1625,7 @@ async function runAppAction(action,id,value){try{
     if(entry?.kind==='text'){
       if(entry.value[id]===next)break;
       assertSceneEditable(current(),entry.value.id);
-      checkpoint();entry.value[id]=next;if(id==='style')entry.value.fontName=null;
+      checkpoint();applySceneNodePatch(current(),entry.value.id,{[id]:next,...(id==='style'?{fontName:null}:{})},{policy:USER_SCENE_POLICY});
       saveProject();
     }else{
       state.textDefaults={style:'serif',fontSize:40,color:'#30463d',alignment:'left',...state.textDefaults,[id]:next};
@@ -1674,7 +1644,7 @@ async function runAppAction(action,id,value){try{
     }
     if(entry.value[id]===next)break;
     assertSceneEditable(current(),entry.value.id);
-    checkpoint();entry.value[id]=next;saveProject();render();break;
+    checkpoint();applySceneNodePatch(current(),entry.value.id,{[id]:next},{policy:USER_SCENE_POLICY});saveProject();render();break;
   }
   case 'fabric-tool-setting':{
     state.canvasTools||={...defaultTools};
@@ -1700,7 +1670,8 @@ async function runAppAction(action,id,value){try{
   case 'fabric-lasso-copy':{
     const d=current(),ids=state.multiSelected||[];if(!d||!ids.length)break;
     ids.forEach(key=>assertSceneEditable(d,key));
-    checkpoint();const copies=copySceneLasso(d,ids,uid);
+    const context=confirmVisualCopy(d,ids);if(!context)break;
+    checkpoint();const copies=copySceneLasso(d,ids,uid,context);
     state.tool='select';
     state.selected=copies.length===1?copies[0]:null;state.multiSelected=copies;
     state.fabricSelectionBounds=sceneLassoBounds(d,copies);
@@ -1709,13 +1680,13 @@ async function runAppAction(action,id,value){try{
   case 'fabric-lasso-delete':{
     const d=current(),ids=state.multiSelected||[];if(!d||!ids.length)break;
     ids.forEach(key=>assertSceneEditable(d,key));
-    checkpoint();deleteSceneLasso(d,ids);state.selected=null;state.multiSelected=[];
+    checkpoint();deleteSceneLasso(d,ids,{policy:USER_SCENE_POLICY});state.selected=null;state.multiSelected=[];
     saveProject();render();break;
   }
   case 'fabric-lasso-merge':{
     const d=current(),ids=state.multiSelected||[];if(!d||ids.length<2)break;
     ids.forEach(key=>assertSceneEditable(d,key));
-    checkpoint();const groupID=mergeSceneLasso(d,ids,{id:'group-'+uid()});
+    checkpoint();const groupID=mergeSceneLasso(d,ids,{id:'group-'+uid()},{policy:USER_SCENE_POLICY});
     state.tool='select';state.selected=groupID;state.multiSelected=[groupID];
     state.fabricSelectionBounds=sceneLassoBounds(d,sceneLayerEntries(d,{hidden:true})
       .filter(entry=>entry.parents.some(parent=>parent.id===groupID)).map(entry=>entry.value.id));
@@ -1727,7 +1698,7 @@ async function runAppAction(action,id,value){try{
     if(groupID){
       assertSceneEditable(d,groupID);
       const group=findSceneNode(d,groupID),children=[...(group.children||[])].map(child=>child.id);
-      checkpoint();ungroupSceneLayers(d,groupID);state.tool='select';
+      checkpoint();ungroupEditableScene(d,groupID,{policy:USER_SCENE_POLICY});state.tool='select';
       state.selected=children.length===1?children[0]:null;state.multiSelected=children;
       state.fabricSelectionBounds=sceneLassoBounds(d,sceneLayerEntries(d,{hidden:true})
         .filter(entry=>children.includes(entry.value.id)||
@@ -1736,8 +1707,8 @@ async function runAppAction(action,id,value){try{
       if(ids.length<2)break;
       ids.forEach(key=>assertSceneEditable(d,key));
       checkpoint();const next=ids.some(key=>findSceneNode(d,key)?.type==='group')?
-        groupSceneLayers(d,ids,{id:'group-'+uid(),name:'手帐组合'}):
-        mergeSceneLasso(d,ids,{id:'group-'+uid()});
+        groupEditableScene(d,ids,{id:'group-'+uid(),name:'手帐组合'},{policy:USER_SCENE_POLICY}):
+        mergeSceneLasso(d,ids,{id:'group-'+uid()},{policy:USER_SCENE_POLICY});
       state.tool='select';state.selected=next;state.multiSelected=[next];
       state.fabricSelectionBounds=sceneLassoBounds(d,sceneLayerEntries(d,{hidden:true})
         .filter(entry=>entry.parents.some(parent=>parent.id===next)).map(entry=>entry.value.id));
@@ -1746,10 +1717,11 @@ async function runAppAction(action,id,value){try{
   }
   case 'fabric-group-copy':{
     const d=current(),groupID=state.selected;if(!d||findSceneNode(d,groupID)?.type!=='group')break;
+    const context=confirmVisualCopy(d,[groupID]);if(!context)break;
     const trial=attachSceneV2(structuredClone(d));
-    duplicateSceneGroup(trial,groupID,()=>uid());
+    duplicateSceneGroup(trial,groupID,()=>uid(),context);
     validateScenePhysical(trial,state.assets);
-    checkpoint();const next=duplicateSceneGroup(d,groupID,uid);
+    checkpoint();const next=duplicateSceneGroup(d,groupID,uid,context);
     state.selected=next;state.multiSelected=[next];
     state.fabricSelectionBounds=sceneLassoBounds(d,sceneLayerEntries(d,{hidden:true})
       .filter(entry=>entry.parents.some(parent=>parent.id===next)).map(entry=>entry.value.id));
@@ -1757,7 +1729,7 @@ async function runAppAction(action,id,value){try{
   }
   case 'fabric-group-delete':{
     const d=current(),groupID=state.selected;if(!d||findSceneNode(d,groupID)?.type!=='group')break;
-    assertSceneEditable(d,groupID);checkpoint();deleteSceneGroup(d,groupID);
+    assertSceneEditable(d,groupID);checkpoint();deleteSceneGroup(d,groupID,{policy:USER_SCENE_POLICY});
     state.selected=null;state.multiSelected=[];state.fabricSelectionBounds=null;
     saveProject();render();break;
   }
@@ -1765,8 +1737,8 @@ async function runAppAction(action,id,value){try{
     const d=current(),ids=[...new Set(state.multiSelected||[])];
     if(!d||ids.length<2)break;
     const candidate=attachSceneV2(structuredClone(d));
-    if(!arrangeSceneSelection(candidate,ids,id))break;
-    checkpoint();arrangeSceneSelection(d,ids,id);
+    if(!arrangeSceneSelection(candidate,ids,id,{policy:USER_SCENE_POLICY}))break;
+    checkpoint();arrangeSceneSelection(d,ids,id,{policy:USER_SCENE_POLICY});
     const selected=new Set(ids),leaves=sceneLayerEntries(d,{hidden:true}).filter(entry=>
       selected.has(entry.value.id)||entry.parents.some(parent=>selected.has(parent.id)))
       .map(entry=>entry.value.id);
@@ -1792,12 +1764,10 @@ async function runAppAction(action,id,value){try{
     if(operation==='move'&&!findSceneNode(d,id.targetID))break;
     if(operation==='visibility')assertSceneEditable(d,node.id);
     checkpoint();
-    if(operation==='lock'){node.locked=node.isLocked=!(node.locked||node.isLocked);}
+    if(operation==='lock'){const locked=!(node.locked||node.isLocked);applySceneNodePatch(d,node.id,{locked,isLocked:locked},{policy:USER_SCENE_POLICY});}
     else if(operation==='visibility'){
       const hidden=!!(node.hidden||node.isHidden||node.isParked);
-      if(hidden){node.isParked=false;node.hidden=false;node.isHidden=false;}
-      else if(node.type==='material')node.isParked=true;
-      else node.hidden=true;
+      applySceneNodePatch(d,node.id,hidden?{isParked:false,hidden:false,isHidden:false}:node.type==='material'?{isParked:true}:{hidden:true},{policy:USER_SCENE_POLICY});
       if(!hidden&&state.selected===node.id){state.selected=null;state.multiSelected=[];}
     }else{
       const findParent=(nodes,target,parent=null)=>{
@@ -1814,15 +1784,15 @@ async function runAppAction(action,id,value){try{
         const targetSiblings=targetParent?.children||d.layers;
         const withoutSource=targetSiblings.filter(entry=>entry.id!==node.id);
         const position=withoutSource.findIndex(entry=>entry.id===target.id);
-        moveSceneNode(d,node.id,{parentID:targetParent?.id||null,
-          beforeID:id.relation==='inside'?null:id.relation==='after'?target.id:withoutSource[position+1]?.id||null});
+        moveEditableScene(d,node.id,{parentID:targetParent?.id||null,
+          beforeID:id.relation==='inside'?null:id.relation==='after'?target.id:withoutSource[position+1]?.id||null},{policy:USER_SCENE_POLICY});
       }else{
         const sorted=[...siblings].sort((a,b)=>(a.zIndex??0)-(b.zIndex??0));
         const index=sorted.findIndex(entry=>entry.id===node.id),target=index+(operation==='up'?1:-1);
         if(target>=0&&target<sorted.length){
           const without=sorted.filter(entry=>entry.id!==node.id),neighbor=sorted[target];
           const beforeID=operation==='up'?without[without.findIndex(entry=>entry.id===neighbor.id)+1]?.id||null:neighbor.id;
-          moveSceneNode(d,node.id,{parentID:parent?.id||null,beforeID});
+          moveEditableScene(d,node.id,{parentID:parent?.id||null,beforeID},{policy:USER_SCENE_POLICY});
         }
       }
     }
@@ -1833,7 +1803,7 @@ async function runAppAction(action,id,value){try{
     const d=current(),ids=[...new Set(state.multiSelected||[])];
     if(!d||ids.length<2)break;
     checkpoint();
-    const groupID=groupSceneLayers(d,ids,{id:'group-'+uid(),name:'手帐组合'});
+    const groupID=groupEditableScene(d,ids,{id:'group-'+uid(),name:'手帐组合'},{policy:USER_SCENE_POLICY});
     state.selected=groupID;state.multiSelected=[groupID];
     saveProject();render();break;
   }
@@ -1843,7 +1813,7 @@ async function runAppAction(action,id,value){try{
     const groupID=findSceneNode(d,target)?.type==='group'?target:entry?.parents?.at(-1)?.id;
     if(!groupID)break;
     assertSceneEditable(d,groupID);
-    checkpoint();ungroupSceneLayers(d,groupID);
+    checkpoint();ungroupEditableScene(d,groupID,{policy:USER_SCENE_POLICY});
     state.selected=null;state.multiSelected=[];saveProject();render();break;
   }
   case 'fabric-history-restore-draft':{
@@ -1891,7 +1861,7 @@ async function runAppAction(action,id,value){try{
       {...structuredClone(id),id:uid(),locked:false,hidden:false};
     shape.x=d.canvas.width/2;shape.y=d.canvas.height/2;
     shape.type='shape';shape.zIndex=Math.max(0,...d.layers.map(node=>node.zIndex||0))+1;
-    d.primitives.push(shape);
+    insertSceneLayer(d,shape,{policy:USER_SCENE_POLICY});
     state.selected=shape.id;state.multiSelected=[shape.id];state.tool='select';saveProject();render();break;
   }
   case 'fabric-add-material':{
@@ -1908,7 +1878,7 @@ async function runAppAction(action,id,value){try{
     item.materialUnitIndex=a.kind==='tape'
       ?Math.max(-1,...d.items.filter(existing=>existing.assetID===a.id)
         .map(existing=>existing.materialUnitIndex??0))+1:0;
-    d.items.push(item);
+    insertSceneLayer(d,item,{policy:USER_SCENE_POLICY});
     state.selected=item.id;state.multiSelected=[item.id];state.tool='select';saveProject();render();break;
   }
   case 'fabric-start-tape':{
@@ -1936,9 +1906,9 @@ async function runAppAction(action,id,value){try{
       if(original)Object.assign(trial.items.find(node=>node.id===original.id),structuredClone(item));
       else trial.items.push(structuredClone(item));
       validateScenePhysical(trial,state.assets);
-      checkpoint();if(original){Object.assign(original,item);state.tapeEditID=null;state.tool='select';
+      checkpoint();if(original){reshapeEditableTape(d,original.id,a,id,state.tapeOptions,state.assets,{policy:USER_SCENE_POLICY});state.tapeEditID=null;state.tool='select';
         state.selected=original.id;state.multiSelected=[original.id];}
-      else d.items.push(item);
+      else insertSceneLayer(d,item,{policy:USER_SCENE_POLICY});
       saveProject();render();
     }catch(error){toast(error.message||'胶带段未生成');}
     break;
@@ -1966,16 +1936,16 @@ async function runAppAction(action,id,value){try{
     const d=current(),selectedID=state.selected;if(!d||!selectedID)break;
     try{
       const trial=attachSceneV2(structuredClone(d));
-      replaceSceneMaterial(trial,selectedID,id,state.assets);
+      replaceEditableMaterial(trial,selectedID,id,state.assets,{policy:USER_SCENE_POLICY});
       validateScenePhysical(trial,state.assets);
-      checkpoint();replaceSceneMaterial(d,selectedID,id,state.assets);
+      checkpoint();replaceEditableMaterial(d,selectedID,id,state.assets,{policy:USER_SCENE_POLICY});
       saveProject();render();toast('素材已更换，位置与层级已保留');
     }catch(error){toast(error.message||'无法更换素材');}
     break;
   }
   case 'fabric-unpark':{
     const d=current(),item=d&&findSceneNode(d,id);if(!item)break;
-    if(item.isParked){checkpoint();item.isParked=false;saveProject();}
+    if(item.isParked){checkpoint();applySceneNodePatch(d,item.id,{isParked:false},{policy:USER_SCENE_POLICY});saveProject();}
     state.selected=item.id;state.multiSelected=[item.id];state.tool='select';render();break;
   }
   case 'fabric-select-layer':state.selected=id;state.multiSelected=[id];
@@ -1984,13 +1954,13 @@ async function runAppAction(action,id,value){try{
     const d=current();if(!d)break;
     if(id==='pattern'&&['plain','grid','lines','dots'].includes(value)){
       if(d.paperPattern===value)break;
-      checkpoint();d.paperPattern=value;
+      checkpoint();applyScenePagePatch(d,{paperPattern:value},{policy:USER_SCENE_POLICY});
     }else if(id==='columns'&&typeof value==='boolean'){
       if(d.paperColumns===value)break;
-      checkpoint();d.paperColumns=value;
+      checkpoint();applyScenePagePatch(d,{paperColumns:value},{policy:USER_SCENE_POLICY});
     }else if(id==='color'&&/^#[0-9a-f]{6}$/i.test(value)){
       if(d.paperColor===value)break;
-      checkpoint();d.paperColor=value;
+      checkpoint();applyScenePagePatch(d,{paperColor:value},{policy:USER_SCENE_POLICY});
     }else break;
     saveProject();render();break;
   }
@@ -2017,7 +1987,7 @@ async function runAppAction(action,id,value){try{
     const d=current(),node=d&&findSceneNode(d,state.selected);
     if(node?.type==='ink'){
       assertSceneEditable(d,node.id);
-      checkpoint();const [copy]=copySceneLasso(d,[node.id],uid);
+      checkpoint();const [copy]=copySceneLasso(d,[node.id],uid,{policy:USER_SCENE_POLICY});
       state.selected=copy;state.multiSelected=[copy];state.fabricSelectionBounds=sceneLassoBounds(d,[copy]);
       saveProject();render();break;
     }
@@ -2031,24 +2001,24 @@ async function runAppAction(action,id,value){try{
           .map(item=>item.materialUnitIndex??0))+1;
         const trial=attachSceneV2(structuredClone(d));trial.items.push(structuredClone(copy));
         validateScenePhysical(trial,state.assets);
-        d.items.push(copy);
-      }else(e.kind==='shape'?d.primitives:d.textBlocks).push(copy);
+        insertSceneLayer(d,{...copy,type:'material'},{policy:USER_SCENE_POLICY});
+      }else copyEditableScene(d,[e.value.id],uid,{policy:USER_SCENE_POLICY,offset:{x:25,y:25}});
     });break;
   }
-   case 'flip':editSelected(e=>{e.value.isFlippedHorizontally=!e.value.isFlippedHorizontally;});break;
-  case 'front':editSelected((e,d)=>{const parent=e.parents?.at(-1);moveSceneNode(d,e.value.id,{parentID:parent?.id||null});});break;
+   case 'flip':editSelected((e,d)=>{applySceneNodePatch(d,e.value.id,{isFlippedHorizontally:!e.value.isFlippedHorizontally},{policy:USER_SCENE_POLICY});});break;
+  case 'front':editSelected((e,d)=>{const parent=e.parents?.at(-1);moveEditableScene(d,e.value.id,{parentID:parent?.id||null},{policy:USER_SCENE_POLICY});});break;
   case 'delete-object':{
     const d=current(),node=d&&findSceneNode(d,state.selected);
     if(node?.type==='ink'){
       assertSceneEditable(d,node.id);
-      checkpoint();deleteSceneLasso(d,[node.id]);state.selected=null;state.multiSelected=[];
+      checkpoint();deleteSceneLasso(d,[node.id],{policy:USER_SCENE_POLICY});state.selected=null;state.multiSelected=[];
       state.fabricSelectionBounds=null;saveProject();render();break;
     }
-    editSelected((e,d)=>{const key=e.kind==='material'?'items':e.kind==='shape'?'primitives':'textBlocks';if(e.kind==='material'&&retireSplitPiece(d,state.selected)){state.selected=null;return;}d[key]=d[key].filter(x=>x.id!==state.selected);state.selected=null;});break;
+    editSelected((e,d)=>{const key=e.kind==='material'?'items':e.kind==='shape'?'primitives':'textBlocks';if(e.kind==='material'&&retireSplitPiece(d,state.selected)){state.selected=null;return;}removeEditableScene(d,state.selected,{policy:USER_SCENE_POLICY});state.selected=null;});break;
   }
-  case 'restore-baseline':editSelected(e=>{const b=e.value.generationBaseline;if(b){Object.assign(e.value,structuredClone(b));delete e.value.manualGeometryOverride;e.value.userOverrideFlags=[];}});break;
-  case 'park':editSelected(e=>{if(e.kind==='material'){e.value.isParked=true;state.selected=null;}});break;
-  case 'unpark':editSelected((e,d)=>{const item=d.items.find(x=>x.id===id);if(item)item.isParked=false;});break;
+  case 'restore-baseline':editSelected((e,d)=>{restoreMaterialBaseline(d,e.value.id,state.assets,{policy:USER_SCENE_POLICY});});break;
+  case 'park':editSelected((e,d)=>{if(e.kind==='material'){applySceneNodePatch(d,e.value.id,{isParked:true},{policy:USER_SCENE_POLICY});state.selected=null;}});break;
+  case 'unpark':editSelected((e,d)=>{const item=d.items.find(x=>x.id===id);if(item)applySceneNodePatch(d,item.id,{isParked:false},{policy:USER_SCENE_POLICY});});break;
   case 'save-work':{const p=state.activeProject,offline=state.offlineEditingReturnID===p?.id;p.isDraft=false;saveProject();await flushSave();saveAISnapshotInBackground(p);if(offline){await matchingSession.reflectProject(p);state.offlineEditingReturnID=null;navigateBack('matching');}toast(cloudEnabled?'作品已暂存，正在后台同步':'作品已保存');break;}
   case 'match-open-result':await matchingSession.open(id);break;
   case 'match-restore':{const restored=await matchingSession.restoreDeleted(id);if(restored)toast('作品已按你的选择恢复');break;}
@@ -2187,6 +2157,13 @@ async function runAppAction(action,id,value){try{
   }
   case 'help':{openOverlay(createElement(HelpDialog,{onClose:closeOverlay,onExport:async()=>{const {runtimeIssueReport}=await import('./runtime-diagnostics.js');download(new Blob([runtimeIssueReport()],{type:'application/json'}),'拾页运行诊断.json');}}));break;}case 'settings-open':captureSettings();await actionStore.dispatch({type:'settings/section',payload:{section:value}});break;case 'settings-back':if(state.settingsSection){captureSettings();await actionStore.dispatch({type:'settings/section',payload:{section:null}});}else navigateBack(settingsSession?.returnRoute||'series');break;case 'settings-save':{captureSettings();const cfg=state.aiSettings;if(!cfg.model.trim())throw Error('请输入模型 ID');const endpoint=new URL(cfg.endpoint);if(endpoint.protocol!=='https:')throw Error('API 地址必须使用 HTTPS');if(cfg.provider!=='custom'&&endpoint.host!==new URL(AI_PROVIDERS[cfg.provider].endpoint).host)throw Error('服务商与 API 地址不一致；自定义地址请选“自定义兼容接口”');const returnRoute=settingsSession?.returnRoute||'series';if(cloudEnabled){await db.transaction(['meta'],tx=>{tx.objectStore('meta').put(cloudPreferencesRecord(state.preferences));tx.objectStore('meta').put(cloudAISettingsRecord(cfg));});}state.aiSettings=saveAISettings(cfg);state.preferences=savePreferences(state.preferences);deferredSyncedPreferences=null;deferredSyncedAISettings=null;settingsSession=null;state.settingsSection=null;navigateBack(returnRoute);toast('设置已保存');break;}
 }}catch(e){console.error(e);recordRuntimeIssue('handled',e,state.route,{phase:'action'});toast(e.message||'操作失败');}}
+function confirmVisualCopy(draft,ids){
+  const selected=new Set(ids),materials=sceneLayerEntries(draft,{hidden:true})
+    .filter(entry=>entry.kind==='material'&&(selected.has(entry.value.id)||entry.parents.some(parent=>selected.has(parent.id))))
+    .map(entry=>findSceneNode(draft,entry.value.id));
+  if(materials.length&&!confirm('复制的素材仅作为视觉参考，不会增加真实库存。确认复制？'))return null;
+  return {policy:USER_SCENE_POLICY,...(materials.length?{confirmation:confirmSceneCapability(materials,'material.visualCopy')}:{})};
+}
 function editSelected(fn){const d=current(),e=editorEntry(d).find(x=>x.value.id===state.selected);if(!e&&state.selected)return;
   if(e)assertSceneEditable(d,e.value.id);
   checkpoint();fn(e,d);

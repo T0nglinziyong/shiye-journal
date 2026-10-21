@@ -1,3 +1,4 @@
+import {USER_SCENE_POLICY,confirmSceneCapability} from '../src/scene-edit-policy.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {selectionGroupID,duplicateSceneGroup,deleteSceneGroup} from '../src/scene-selection-actions.js';
@@ -40,7 +41,7 @@ test('copying a group with material makes a visual copy, not another physical so
   draft.layers[0]={id:'material',type:'material',assetID:'sheet',x:80,y:90,width:40,height:30,zIndex:1};
   groupSceneLayers(draft,['material','shape-b'],{id:'group'});
   let sequence=0;
-  const copy=duplicateSceneGroup(draft,'group',()=>`copy-${++sequence}`);
+  const copy=duplicateSceneGroup(draft,'group',()=>`copy-${++sequence}`,{policy:USER_SCENE_POLICY,confirmation:confirmSceneCapability([findSceneNode(draft,'material')],'material.visualCopy')});
   const item=findSceneNode(draft,copy).children.find(child=>child.type==='material');
   assert.equal(item.manualVisualCopy,true);
   assert.equal(item.assetID,'sheet');

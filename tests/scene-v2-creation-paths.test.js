@@ -1,3 +1,5 @@
+import {USER_SCENE_POLICY} from '../src/scene-edit-policy.js';
+const testPage=node=>({sceneVersion:2,canvas:{width:1000,height:1000},physicalPageHeightMM:297,layers:[node]});
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as fabric from 'fabric/node';
@@ -29,7 +31,7 @@ test('manual layout, AI creation and Fabric editing round-trip through one Scene
   const bridge=createFabricSceneBridge(fabric);
   const projected=await bridge.fromNode(text);
   projected.set({text:'一页故事，继续编辑'});
-  bridge.applyObject(text,projected);
+  bridge.applyObject(testPage(text),projected,{policy:USER_SCENE_POLICY,confirm:()=>true});
   assert.equal(text.content,'一页故事，继续编辑');
   assert.equal(saved.layers[0].assetID,'paper');
   assert.equal(validateSceneExtensions(saved),true);

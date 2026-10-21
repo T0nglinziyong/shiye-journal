@@ -1,3 +1,5 @@
+import {applyScenePagePatch} from './scene-edit-kernel.js';
+import {AI_SCENE_POLICY} from './scene-edit-policy.js';
 import Ajv2020 from 'ajv/dist/2020.js';
 import {creationV2RuntimeSchema,creationCommandRegistry,describeCreationCommand,selfContainedCreationSchema} from './creation-v2-contract.js';
 import {arrangeCreationNodes} from './creation-arrange.js';
@@ -43,8 +45,7 @@ function reorder(doc,target,order,assets){
  return editScene(doc,[{op:'move',id:at.node.id,parent:at.parent?.id,before}],assets);
 }
 function finishNode(doc,id,change,assets,{created=false}={}){
- doc=updateCreationNode(doc,id,change,assets);
- if(change.place)finishPlacement(doc,id,created?{...change.place,rotationDeg:change.place.rotationDeg??0}:change.place);
+ doc=updateCreationNode(doc,id,created&&change.place?{...change,place:{...change.place,rotationDeg:change.place.rotationDeg??0}}:change,assets);
  if(change.order)doc=reorder(doc,id,change.order,assets);
  solveSceneLayout(doc.page);return doc;
 }
@@ -229,8 +230,11 @@ export function applyCreationV2Batch(document,input,assets,options={}){
   }else if(item.op==='material.decision'){
    assetFor(doc,assets,item.asset);doc.materialDecisions=(doc.materialDecisions||[]).filter(row=>row.asset!==item.asset);doc.materialDecisions.push({asset:item.asset,choice:item.choice,reason:item.reason});
   }else if(item.op==='page.update'){
-   if(item.paperColor!==undefined)doc.page.paperColor=item.paperColor;if(item.paperPattern!==undefined)doc.page.paperPattern=item.paperPattern;
-   if(item.rulingMm!==undefined){if(item.rulingMm<=0)delete doc.page.paperRuling;else {const step=item.rulingMm*s,h=doc.page.canvas.height;if(h/step>2000)throw Error('纸张横线超过预算，请增大 rulingMm');doc.page.paperRuling={rowPositions:Array.from({length:Math.ceil(h/step)-1},(_,i)=>(i+1)*step/h).filter(y=>y<1),spans:[{from:0,to:1}],color:'#d0d2d3',relativeLineWidth:1/h};}}if(item.centerGutter!==undefined)doc.page.drawCenterGutter=item.centerGutter;
+   const values={};
+   if(item.paperColor!==undefined)values.paperColor=item.paperColor;if(item.paperPattern!==undefined)values.paperPattern=item.paperPattern;
+   if(item.rulingMm!==undefined){if(item.rulingMm<=0)values.paperRuling=undefined;else {const step=item.rulingMm*s,h=doc.page.canvas.height;if(h/step>2000)throw Error('纸张横线超过预算，请增大 rulingMm');values.paperRuling={rowPositions:Array.from({length:Math.ceil(h/step)-1},(_,i)=>(i+1)*step/h).filter(y=>y<1),spans:[{from:0,to:1}],color:'#d0d2d3',relativeLineWidth:1/h};}}
+   if(item.centerGutter!==undefined)values.drawCenterGutter=item.centerGutter;
+   applyScenePagePatch(doc.page,values,{policy:AI_SCENE_POLICY});
   }else doc=applyCreationAdvanced(doc,item,assets,{...options,finishNode,processMaterial,assetFor});
   solveSceneLayout(doc.page);validateWebScene(doc.page,doc.source,assets,{final:false});
  }catch(error){throw Object.assign(Error('operations['+index+'] '+item.op+': '+error.message),{code:error.code||'OPERATION_FAILED',operationIndex:index,path:error.path});}

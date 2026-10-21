@@ -9,7 +9,7 @@ const fixture=()=>({sceneVersion:2,canvas:{width:600,height:800},layers:[
     {id:'b',type:'shape',x:240,y:160,width:20,height:30,rotation:0},
     {id:'ink',type:'ink',width:3,points:[{x:250,y:200},{x:270,y:210}]}
   ]},
-  {id:'c',type:'text',x:420,y:260,width:60,height:20,rotation:0}
+  {id:'c',type:'text',content:'caption',fontSize:10,x:420,y:260,width:60,height:20,rotation:0}
 ]});
 
 test('alignment moves a group as one unit and preserves every source size',()=>{
