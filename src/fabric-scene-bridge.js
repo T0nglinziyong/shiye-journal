@@ -7,6 +7,7 @@ import {pressureInkPath} from './pressure-ink.js';
 import {sceneDisplaySiblings} from './craft-display.js';
 import {paintTapeStrip} from './tape-strip.js';
 import {configureFabricEditorFrame} from './fabric-editor-frame.js';
+import {assertRigidMatrix,multiplyMatrix,rigidMatrix,transformPoint,matrixAngle} from './scene-spatial.js';
 
 const finite=(value,fallback=0)=>Number.isFinite(value)?value:fallback;
 const positive=(value,fallback=1)=>Number.isFinite(value)&&value>0?value:fallback;
@@ -125,6 +126,12 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
       if(!children.length)return null;
       const group=new fabric.Group(children,{opacity:finite(node.opacity,1),
         globalCompositeOperation:node.blendMode==='multiply'?'multiply':'source-over'});
+      if(node.localTransform){
+        const original=group.getCenterPoint(),next=transformPoint(node.localTransform,original.x,original.y);
+        group.set({angle:(group.angle||0)+matrixAngle(node.localTransform)});
+        group.setPositionByOrigin(new fabric.Point(next.x,next.y),'center','center');
+        group.setCoords();
+      }
       group.sceneID=node.id;group.sceneRenderKey=node.renderKey||node.id;group.sceneType='group';
       if(node.vectorMask){
         const size=typeof canvasSize==='function'?canvasSize():canvasSize;
@@ -260,7 +267,12 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
       const before=object.sceneGroupPose;
       if(!before)throw Error('组合缺少上一次画布位置');
       const center=object.getCenterPoint(),angle=finite(object.angle),delta=angle-before.angle;
-      transformChildren(node.children,before.center,center,delta,
+      if(node.localTransform){
+        if(Math.abs(positive(object.scaleX)-1)>1e-6||Math.abs(positive(object.scaleY)-1)>1e-6)
+          throw Error('局部组合不能缩放实体素材；请编辑数字子图层');
+        const move=multiplyMatrix(rigidMatrix(center.x,center.y,delta),rigidMatrix(-before.center.x,-before.center.y));
+        node.localTransform=assertRigidMatrix(multiplyMatrix(move,node.localTransform));
+      }else transformChildren(node.children,before.center,center,delta,
         positive(object.scaleX),positive(object.scaleY),before.angle);
       object.sceneGroupPose={center,angle};
       node.opacity=object.opacity??1;

@@ -1,0 +1,54 @@
+{
+  "format": "shiye-v3-delivery",
+  "version": 3,
+  "sceneRevision": "sha256:f7acd9ead25d50574ae9445556a417e483c080c2a303732d7ce38b897aec29b7",
+  "sceneHash": "sha256:4e19fdc91a513bc0d4642f204570cec33d523e6767c8d20dc7f37e411b76a7a9",
+  "sceneJsonHash": "sha256:79cbe5d39384f4703a8c2bcc52dbefef48e47deacd1e9dc0afd48726be8b5ac4",
+  "projectHash": "sha256:f7acd9ead25d50574ae9445556a417e483c080c2a303732d7ce38b897aec29b7",
+  "previewHash": "sha256:dd69bd28e254301ff864e06382332d95dfccafd5a71813c5555fb59af68c189f",
+  "renderer": "shiye-scene-v2",
+  "rendererBackend": "node-canvas@3.2.3",
+  "fonts": "environment-dependent",
+  "assets": {
+    "m1": "sha256:887af291bc17fbae66987bb0309a7e6d76cece51d8f16323285c2dc9770c5269",
+    "m2": "sha256:4f067da33942dfe18aa76846d21939f07a15acfbc1fa037ebc5e308365a52b24",
+    "m3": "sha256:a7ed752ca815863fad0d5f083506bf3f205c49a4b11c78f56fde3f63869289a8"
+  },
+  "physical": "passed",
+  "reading": {
+    "characters": 52,
+    "excerpts": [
+      {
+        "id": "651a7a37-0346-4fa6-a72e-7a583535db29",
+        "text": "窗边的小光，慢慢走。"
+      },
+      {
+        "id": "ce5404f5-71b4-4c34-b1b1-c882c23d0f41",
+        "text": "把今天折成几片"
+      },
+      {
+        "id": "5c855c70-1a52-41e4-8e4d-79a76674b0e4",
+        "text": "蓝色散成两片，浅绿留出两道窗口。暖橙从纸间穿过，像今天稍稍绕了一段路。"
+      }
+    ]
+  },
+  "visualReview": null,
+  "materialDecisions": [
+    {
+      "asset": "m1",
+      "choice": "crafted",
+      "reason": "真实分成两片并保留余料"
+    },
+    {
+      "asset": "m2",
+      "choice": "crafted",
+      "reason": "两道实体开窗构成穿插通道"
+    },
+    {
+      "asset": "m3",
+      "choice": "crafted",
+      "reason": "穿过两个开窗而保持纸条实体"
+    }
+  ],
+  "createdAt": "2026-10-21T09:32:01.635Z"
+}

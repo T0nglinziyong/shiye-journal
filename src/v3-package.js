@@ -6,6 +6,7 @@ import {v3SceneSchema} from './v3-scene-schema.js';
 import {sha256Hex} from './task-fingerprint.js';
 import {previewImageFormat} from './offline-preview.js';
 import {creationFixedFiles,creationFixedReleaseId} from './generated/creation-fixed-source.js';
+import {creationV2RuntimeSchema} from './creation-v2-contract.js';
 const encode=value=>strToU8(typeof value==='string'?value:JSON.stringify(value,null,2));
 const fingerprint=async bytes=>'sha256:'+await sha256Hex(bytes);
 async function overview(selected,chosen){
@@ -63,7 +64,7 @@ export async function createV3PackageFiles({source,selected,chosen,work,guide,ru
   'assets/overview.jpg':overviewBytes,'assets/manifest.json':encode(manifest),
   'design/GUIDE.md':encode(guide),'design/CRAFT_GUIDE.md':encode(creationFixedFiles['design/CRAFT_GUIDE.md']),'design/RECIPES.md':encode(recipes),
   'api/fixed-release.json':encode({releaseId:creationFixedReleaseId,protocolVersion:1,files:Object.keys(creationFixedFiles)}),
-  'api/commands.schema.json':encode(commandsSchema),'api/scene.schema.json':encode(v3SceneSchema),
+  'api/commands.schema.json':encode(commandsSchema),'api/commands.v2-experimental.schema.json':encode(creationV2RuntimeSchema),'api/scene.schema.json':encode(v3SceneSchema),
   'work/commands.json':encode({protocolVersion:1,transactionId:'initial-'+source.bundleId.slice(0,8),baseSceneRevision:revision,operations:[]}),
   'runtime/shiye.cjs':encode(runtime),'runtime/glyphs.cjs':encode(glyph),
   'package.json':encode({name:'shiye-gpt-creation-v3',private:true,version:'3.0.0',dependencies:{canvas:'3.2.3'}}),

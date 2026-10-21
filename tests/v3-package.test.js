@@ -9,6 +9,8 @@ import {unzipSync} from 'fflate';
 import {project} from '../src/domain.js';
 import {createOfflineHandoff,importEditableWork} from '../src/offline-creation.js';
 import {tinyPNG,linkTestCanvas} from './offline-canvas-test-support.mjs';
+import {executableCreationV2Names} from '../src/creation-v2-commands.js';
+import {advancedCreationV2Names} from '../src/creation-v2-contract.js';
 test('v3 ZIP supports one-command Scene creation, preview and pack',async()=>{
  const asset={id:'v3-asset',title:'蓝纸',kind:'sticker',physicalWidthMM:30,physicalHeightMM:40,supply:{quantity:1}};
  const task=await createOfflineHandoff({project:project('v3 测试'),assets:[asset],aliases:{m1:asset.id},previews:[{alias:'m1',bytes:tinyPNG}],settings:{includeThumbnails:true}});
@@ -42,6 +44,103 @@ test('v3 ZIP supports one-command Scene creation, preview and pack',async()=>{
   assert.match(run('pack').stderr,/PREVIEW_STALE/,'forged PNG and matching metadata must not bypass rendering');
   assert.equal(run('preview').status,0);
   const changed=JSON.parse(await readFile(join(dir,'scene.json'),'utf8'));changed.page.paperColor='#eeeeee';await writeFile(join(dir,'scene.json'),JSON.stringify(changed));assert.match(run('pack').stderr,/PREVIEW_STALE/);
+ }finally{await rm(dir,{recursive:true,force:true});}
+});
+test('experimental protocol 2 uses the same Scene, preview and pack path',async()=>{
+ const asset={id:'v2-photo',title:'小照片',kind:'sticker',physicalWidthMM:30,physicalHeightMM:20,supply:{quantity:1}};
+ const task=await createOfflineHandoff({project:project('协议 2 测试'),assets:[asset],aliases:{m1:asset.id},previews:[{alias:'m1',bytes:tinyPNG}],settings:{includeThumbnails:true}});
+ const files=unzipSync(new Uint8Array(await task.blob.arrayBuffer())),dir=await mkdtemp(join(tmpdir(),'shiye-v2-e2e-'));
+ try{
+  for(const [name,bytes] of Object.entries(files)){await mkdir(dirname(join(dir,name)),{recursive:true});await writeFile(join(dir,name),bytes);}await linkTestCanvas(dir);
+  const run=(name,arg)=>spawnSync(process.execPath,['runtime/shiye.cjs',name,...(arg?[arg]:[])],{cwd:dir,encoding:'utf8',timeout:30000});
+  const help=JSON.parse(run('help').stdout);
+  assert.equal(help.experimentalOperations.length,executableCreationV2Names.length+advancedCreationV2Names.length);
+  assert.ok(help.experimentalOperations.some(row=>row.name==='advanced.v1.material.craft'&&row.advanced));
+  assert.ok(new TextDecoder().decode(files['api/commands.v2-experimental.schema.json']).includes('advanced.v1.material.craft'));
+  const begin=spawnSync(process.execPath,['runtime/shiye.cjs','begin','work/v2-next.json','--protocol=2'],{cwd:dir,encoding:'utf8',timeout:30000});
+  assert.equal(begin.status,0,begin.stderr);
+  assert.equal(JSON.parse(await readFile(join(dir,'work/v2-next.json'),'utf8')).protocolVersion,2);
+  const revision=JSON.parse(run('info').stdout).sceneRevision;
+  const command={protocolVersion:2,transactionId:'v2-first',baseSceneRevision:revision,operations:[
+   {op:'material.add',id:'photo',asset:'m1',place:{reference:'page',at:[.5,.4],unit:'ratio'}},
+   {op:'material.crop',target:'photo',region:{shape:'rect',space:'source',unit:'ratio',box:[0,0,.5,1]}},
+   {op:'material.mask',target:'photo',region:{shape:'ellipse',space:'local',unit:'ratio',box:[0,0,1,1]},mode:'replace'},
+   {op:'text.add',id:'caption',content:'这张照片让我想起今天。',place:{reference:'node:photo',referenceAnchor:'bottom-center',anchor:'top-center',offset:{value:[0,5],unit:'mm'}},size:{width:60,unit:'mm'},style:{fontSizePt:12,color:'#334d4a'}},
+   {op:'vector.add',id:'triangle',viewBox:[0,0,10,10],paths:[{d:'M0 10 L5 0 L10 10 Z',style:{fill:'#aabbcc'}}],place:{reference:'page',at:[.2,.2],unit:'ratio'},size:{width:10,height:10,unit:'mm'}},
+   {op:'ink.add',id:'stroke',points:[{x:0,y:0},{x:20,y:0}],unit:'mm',place:{reference:'page',at:[.5,.8],unit:'ratio'},style:{strokeWidthMm:2,color:'#334d4a',penStyle:'marker'}},
+   {op:'material.decision',asset:'m1',choice:'crafted',reason:'使用非破坏性椭圆显示蒙版，实体保持完整'}
+  ]};
+  await writeFile(join(dir,'work/commands.json'),JSON.stringify(command));
+  const applied=run('apply','work/commands.json');assert.equal(applied.status,0,applied.stderr);
+  const preview=run('preview');assert.equal(preview.status,0,preview.stderr);
+  const pack=run('pack');assert.equal(pack.status,0,pack.stderr);
+  const output=JSON.parse(await readFile(join(dir,'output/project.shiyeproject.json'),'utf8'));
+  assert.equal(output.page.layers.filter(node=>node.type==='material').length,1);
+  assert.ok(output.page.layers.find(node=>node.type==='material').vectorMask);
+  assert.equal(output.page.layers.find(node=>node.type==='material').materialMask??null,null);
+  assert.equal(output.page.layers.find(node=>node.type==='material').cropRect.width,.5);
+  assert.equal(output.page.layers.filter(node=>node.type==='text').length,1);
+  assert.equal(output.page.layers.filter(node=>node.type==='shape').length,1);
+  assert.equal(output.page.layers.filter(node=>node.type==='ink').length,1);
+ }finally{await rm(dir,{recursive:true,force:true});}
+});
+test('protocol 2 named physical windows and weave survive PNG and project delivery',async()=>{
+ const assets=[
+  {id:'v2-frame',title:'窗口纸',kind:'paper',physicalWidthMM:140,physicalHeightMM:80,supply:{quantity:1}},
+  {id:'v2-strip',title:'穿插纸条',kind:'paper',physicalWidthMM:160,physicalHeightMM:8,supply:{quantity:1}}
+ ];
+ const p=project('开窗穿插',{mode:'spread',ratio:'a5'});p.processing='自由拆解';
+ const task=await createOfflineHandoff({project:p,assets,aliases:{m1:assets[0].id,m2:assets[1].id},previews:assets.map((_,index)=>({alias:'m'+(index+1),bytes:tinyPNG})),settings:{includeThumbnails:true}});
+ const files=unzipSync(new Uint8Array(await task.blob.arrayBuffer())),dir=await mkdtemp(join(tmpdir(),'shiye-v2-weave-'));
+ try{
+  for(const [name,bytes] of Object.entries(files)){await mkdir(dirname(join(dir,name)),{recursive:true});await writeFile(join(dir,name),bytes);}await linkTestCanvas(dir);
+  const run=(name,arg)=>spawnSync(process.execPath,['runtime/shiye.cjs',name,...(arg?[arg]:[])],{cwd:dir,encoding:'utf8',timeout:30000});
+  const revision=JSON.parse(run('info').stdout).sceneRevision;
+  const at={reference:'page',at:[150,100],unit:'mm'};
+  const commands={protocolVersion:2,transactionId:'v2-weave',baseSceneRevision:revision,operations:[
+   {op:'material.add',id:'frame',asset:'m1',place:at},
+   {op:'material.add',id:'strip',asset:'m2',place:at},
+   {op:'material.window',target:'frame',region:{shape:'rect',space:'local',unit:'ratio',box:[.1,.2,.15,.6]},windowId:'left-window'},
+   {op:'material.window',target:'frame',region:{shape:'rect',space:'local',unit:'ratio',box:[.75,.2,.15,.6]},windowId:'right-window'},
+   {op:'material.weave',strip:'strip',through:[{target:'frame',window:'left-window',sideAfter:'front'},{target:'frame',window:'right-window',sideAfter:'back'}]},
+   {op:'material.decision',asset:'m1',choice:'crafted',reason:'两道真实开窗构成穿插通道'},
+   {op:'material.decision',asset:'m2',choice:'crafted',reason:'纸条穿过两道开口并保留实体宽度'}
+  ]};
+  await writeFile(join(dir,'work/commands.json'),JSON.stringify(commands));
+  const applied=run('apply','work/commands.json');assert.equal(applied.status,0,applied.stderr);
+  const preview=run('preview');assert.equal(preview.status,0,preview.stderr);
+  const pack=run('pack');assert.equal(pack.status,0,pack.stderr);
+  const output=JSON.parse(await readFile(join(dir,'output/project.shiyeproject.json'),'utf8'));
+  const frame=output.page.layers.find(node=>node.creativePieceID==='frame'),strip=output.page.layers.find(node=>node.creativePieceID==='strip');
+  assert.deepEqual(frame.craftWindowIDs,['left-window','right-window']);
+  assert.equal(frame.materialMask.holes.length,2);
+  assert.ok(strip.craftDisplaySlices?.length);
+ }finally{await rm(dir,{recursive:true,force:true});}
+});
+test('protocol 2 physical split and offcut survive real ZIP apply, preview and pack',async()=>{
+ const asset={id:'v2-sheet',title:'分片纸',kind:'paper',physicalWidthMM:100,physicalHeightMM:80,supply:{quantity:1}};
+ const p=project('实体分片',{ratio:'a5'});p.processing='自由拆解';
+ const task=await createOfflineHandoff({project:p,assets:[asset],aliases:{m1:asset.id},previews:[{alias:'m1',bytes:tinyPNG}],settings:{includeThumbnails:true}});
+ const files=unzipSync(new Uint8Array(await task.blob.arrayBuffer())),dir=await mkdtemp(join(tmpdir(),'shiye-v2-split-'));
+ try{
+  for(const [name,bytes] of Object.entries(files)){await mkdir(dirname(join(dir,name)),{recursive:true});await writeFile(join(dir,name),bytes);}await linkTestCanvas(dir);
+  const run=(name,arg)=>spawnSync(process.execPath,['runtime/shiye.cjs',name,...(arg?[arg]:[])],{cwd:dir,encoding:'utf8',timeout:30000});
+  const revision=JSON.parse(run('info').stdout).sceneRevision;
+  const commands={protocolVersion:2,transactionId:'v2-physical-split',baseSceneRevision:revision,operations:[
+   {op:'material.add',id:'parent',asset:'m1',place:{reference:'page',at:[.5,.45],unit:'ratio'}},
+   {op:'material.split',target:'parent',pieces:[
+    {id:'left',region:{shape:'rect',space:'source',unit:'ratio',box:[0,0,.3,1]}},
+    {id:'right',region:{shape:'rect',space:'source',unit:'ratio',box:[.4,0,.3,1]}}
+   ]},
+   {op:'text.add',id:'note',content:'裁成两片，空下一条留给以后。',place:{reference:'page',at:[.5,.85],unit:'ratio'},size:{width:80,unit:'mm'},style:{fontSizePt:12}},
+   {op:'material.decision',asset:'m1',choice:'crafted',reason:'一张纸真实裁成两片，余料保留'}
+  ]};
+  await writeFile(join(dir,'work/commands.json'),JSON.stringify(commands));
+  for(const name of ['check','apply','preview','pack']){const result=run(name,name==='check'||name==='apply'?'work/commands.json':null);assert.equal(result.status,0,name+': '+result.stderr);}
+  const saved=JSON.parse(await readFile(join(dir,'scene.json'),'utf8'));
+  assert.equal(saved.page.layers.filter(n=>n.type==='material'&&!n.isParked).length,2);
+  assert.ok(saved.page.layers.some(n=>n.type==='material'&&n.isParked));
+  assert.equal(importEditableWork(await readFile(join(dir,'output/project.shiyeproject.json'),'utf8'),[asset]).drafts[0].items.length,saved.page.layers.filter(n=>n.type==='material').length);
  }finally{await rm(dir,{recursive:true,force:true});}
 });
 test('v3 transactions reject stale revisions and retain scene on a failed operation',async()=>{

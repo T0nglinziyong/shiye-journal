@@ -1,6 +1,8 @@
 import {statSync,readFileSync,writeFileSync,renameSync,mkdirSync,existsSync,rmSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {applyCommandBatch,validateCommands,executableCommandNames,describeExecutableCommand} from './v3-commands.js';
+import {applyCreationV2Batch,validateCreationV2Commands,executableCreationV2Names,describeCreationV2Command} from './creation-v2-commands.js';
+import {advancedCreationV2Names} from './creation-v2-contract.js';
 import {validateV3SceneDocument} from './v3-scene-schema.js';
 import {validateWebScene,webSceneDocument,inspectWebScene} from './web-scene-workbench.js';
 import {assetFromSourceSnapshot} from './material-anatomy.js';
@@ -21,15 +23,15 @@ function withSceneLock(fn){
 }
 function verifiedImages(task){const images={};for(const m of task.materials){if(!m.image||!/^assets\/[A-Za-z0-9_-]+\.(png|webp|jpg)$/.test(m.image)||!existsSync(m.image))throw fail('ASSET_MISSING','素材图片缺失：'+m.alias);const bytes=readFileSync(m.image);if(sha(bytes)!==m.sha256)throw fail('ASSET_CHANGED','素材图片指纹不一致：'+m.alias);images[m.alias]=bytes;}return images;}
 function pngSize(bytes){if(bytes.length<24||bytes.toString('ascii',12,16)!=='IHDR')throw fail('PNG_INVALID','PNG 预览无效');return {width:bytes.readUInt32BE(16),height:bytes.readUInt32BE(20)};}
-export async function runV3(task,command,arg){
+export async function runV3(task,command,arg,{protocolVersion=1}={}){
  const started=performance.now(),source=task.sourceContext,assets=source.sourceSnapshots.map(s=>assetFromSourceSnapshot(s,{frozenRevision:true}));
  mkdirSync('output',{recursive:true});mkdirSync('work',{recursive:true});
  const doc=validateV3SceneDocument(load('scene.json'));
  if(canonicalTaskSource(doc.source)!==canonicalTaskSource(source))throw fail('SOURCE_CHANGED','scene.json 的只读来源与 TASK.json 不一致');
  const current=revision(doc);
- if(command==='help'){process.stdout.write(JSON.stringify({ok:true,protocolVersion:1,operations:executableCommandNames.map(name=>({name,available:true}))})+'\n');return;}
- if(command==='describe'){process.stdout.write(JSON.stringify({ok:true,...describeExecutableCommand(arg)})+'\n');return;}
- if(command==='info'){const result={ok:true,protocolVersion:1,taskId:source.bundleId,sceneRevision:current,sceneHash:craftSceneHash(doc.page),pageMode:doc.page.pageMode,physicalPageHeightMM:doc.page.physicalPageHeightMM,materials:task.materials.map(m=>({alias:m.alias,title:m.title,physicalWidthMM:m.physicalWidthMM,physicalHeightMM:m.physicalHeightMM})),commands:'node runtime/shiye.cjs apply work/commands.json'};process.stdout.write(JSON.stringify(result)+'\n');return;}
+ if(command==='help'){process.stdout.write(JSON.stringify({ok:true,protocolVersion:1,experimentalProtocolVersion:2,operations:executableCommandNames.map(name=>({name,available:true})),experimentalOperations:[...executableCreationV2Names.map(name=>({name,available:true,advanced:false})),...advancedCreationV2Names.map(name=>({name,available:true,advanced:true}))]})+'\n');return;}
+ if(command==='describe'){process.stdout.write(JSON.stringify({ok:true,...(arg?.startsWith('v2:')?describeCreationV2Command(arg.slice(3)):describeExecutableCommand(arg))})+'\n');return;}
+ if(command==='info'){const result={ok:true,protocolVersion:1,supportedProtocolVersions:[1,2],experimentalProtocolVersion:2,taskId:source.bundleId,sceneRevision:current,sceneHash:craftSceneHash(doc.page),pageMode:doc.page.pageMode,physicalPageHeightMM:doc.page.physicalPageHeightMM,materials:task.materials.map(m=>({alias:m.alias,title:m.title,physicalWidthMM:m.physicalWidthMM,physicalHeightMM:m.physicalHeightMM})),commands:'node runtime/shiye.cjs apply work/commands.json'};process.stdout.write(JSON.stringify(result)+'\n');return;}
  if(command==='self-test'){
   const result={ok:false,node:process.version,renderer:null,fonts:'environment-dependent',hint:null};
   try{const canvas=await loadOfflineCanvas();result.ok=true;result.renderer=canvas.rendererBackend+'/shiye-scene-v2';}
@@ -40,16 +42,18 @@ export async function runV3(task,command,arg){
   const path=arg||'work/commands.json';
   if(!/^work\/[A-Za-z0-9._-]+\.json$/.test(path))throw fail('COMMAND_PATH_INVALID','事务草稿必须写入 work 目录中的 JSON 文件');
   if(existsSync(path))throw fail('DRAFT_EXISTS','草稿已存在；请另选文件名或先处理原草稿');
-  const draft={protocolVersion:1,transactionId:'tx-'+Date.now().toString(36)+'-'+createHash('sha256').update(String(Math.random())).digest('hex').slice(0,8),baseSceneRevision:current,operations:[]};
+  if(![1,2].includes(protocolVersion))throw fail('COMMAND_PROTOCOL_INVALID','只能为协议 1 或实验协议 2 建立草稿');
+  const draft={protocolVersion,transactionId:'tx-'+Date.now().toString(36)+'-'+createHash('sha256').update(String(Math.random())).digest('hex').slice(0,8),baseSceneRevision:current,operations:[]};
   atomic(path,draft);process.stdout.write(JSON.stringify({ok:true,path,...draft})+'\n');return;
  }
  if(command==='check'||command==='apply'){
-  const input=load(arg||'work/commands.json');validateCommands(input);
+  const input=load(arg||'work/commands.json');
+  if(input.protocolVersion===2)validateCreationV2Commands(input);else validateCommands(input);
   const receipts=doc.v3Transactions||{};
   const commandHash=sha(JSON.stringify(input)),prior=receipts[input.transactionId];
   if(prior){if(prior.commandHash!==commandHash)throw fail('TRANSACTION_CONFLICT','同一 transactionId 已用于不同命令');process.stdout.write(JSON.stringify({ok:true,replayed:true,...prior,currentSceneRevision:current})+'\n');return;}
   if(input.baseSceneRevision!==current)throw fail('REVISION_CONFLICT','Scene 已变化；请运行 info 获取当前 sceneRevision',{currentSceneRevision:current});
-  const next=applyCommandBatch(doc,input,assets),nextRevision=revision(next);
+  const next=input.protocolVersion===2?applyCreationV2Batch(doc,input,assets):applyCommandBatch(doc,input,assets),nextRevision=revision(next);
   if(command==='check'){validateV3SceneDocument(next);process.stdout.write(JSON.stringify({ok:true,dryRun:true,baseSceneRevision:current,proposedSceneRevision:nextRevision,operations:input.operations.length})+'\n');return;}
   const updated={...receipts,[input.transactionId]:{transactionId:input.transactionId,commandHash,baseSceneRevision:current,sceneRevision:nextRevision,operations:input.operations.length,appliedAt:new Date().toISOString()}};
   next.v3Transactions=updated;
@@ -76,9 +80,9 @@ export async function runV3(task,command,arg){
  if(command==='preview'){
   if(arg){
    if(!/^work\/[A-Za-z0-9._-]+\.json$/.test(arg))throw fail('COMMAND_PATH_INVALID','试做命令必须位于 work 目录');
-   const input=load(arg);validateCommands(input);
+   const input=load(arg);if(input.protocolVersion===2)validateCreationV2Commands(input);else validateCommands(input);
    if(input.baseSceneRevision!==current)throw fail('REVISION_CONFLICT','试做基准 Scene 已变化',{currentSceneRevision:current});
-   const proposed=applyCommandBatch(doc,input,assets),page=validateWebScene(proposed.page,source,assets),images=verifiedImages(task);
+   const proposed=input.protocolVersion===2?applyCreationV2Batch(doc,input,assets):applyCommandBatch(doc,input,assets),page=validateWebScene(proposed.page,source,assets),images=verifiedImages(task);
    const {png,report}=await renderOfflinePNG(page,source,images,await loadOfflineCanvas());
    mkdirSync('output/proposals',{recursive:true});
    const stem=input.transactionId;

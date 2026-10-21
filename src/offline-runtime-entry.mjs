@@ -7,6 +7,7 @@ async function main(){
   const command=process.argv[2];
   const arg=command==='preview'&&process.argv[3]==='--commands'?process.argv[4]:
     command==='review'&&process.argv[3]==='--result'?process.argv[4]:process.argv[3];
-  await runV3(task,command,arg);
+  const protocolVersion=command==='begin'&&process.argv[4]==='--protocol=2'?2:1;
+  await runV3(task,command,arg,{protocolVersion});
 }
 main().catch(error=>{process.stderr.write(JSON.stringify({ok:false,code:error.code||'RUNTIME_ERROR',issue:error.message,...(error.currentSceneRevision?{currentSceneRevision:error.currentSceneRevision}:{}),...(error.operationIndex!==undefined?{operationIndex:error.operationIndex,path:error.path}:{})})+'\n');process.exitCode=1;});
