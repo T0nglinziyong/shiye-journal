@@ -24,7 +24,7 @@ jobs:
           set -euo pipefail
           mkdir -p /tmp/creation-dev-snapshot
           git rev-parse HEAD > /tmp/creation-dev-snapshot/commit.txt
-          git ls-files -z -- src tests scripts creation-contract docs '*.md' '*.json' '*.js' '*.mjs' '*.cjs' '*.html' .github/workflows | tar --null -T - --exclude='*.woff*' --exclude='*.ttf' --exclude='*.otf' --exclude='*.ttc' -czf /tmp/creation-dev-snapshot/source.tar.gz
+          git ls-files -z -- src tests scripts creation-contract docs '*.md' '*.json' '*.js' '*.mjs' '*.cjs' '*.html' .github/workflows | tar --exclude='*.woff*' --exclude='*.ttf' --exclude='*.otf' --exclude='*.ttc' -czf /tmp/creation-dev-snapshot/source.tar.gz --null -T -
           tar --exclude='*.woff*' --exclude='*.ttf' --exclude='*.otf' --exclude='*.ttc' -czf /tmp/creation-dev-snapshot/deps.tar.gz node_modules
           sha256sum /tmp/creation-dev-snapshot/*.tar.gz > /tmp/creation-dev-snapshot/SHA256SUMS
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
