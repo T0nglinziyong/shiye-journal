@@ -19,6 +19,16 @@ export function configureShape(shape,kind){Object.assign(shape,{kind,fill:['fram
 export function shapeSVG(s){
   const safe=v=>String(v).replace(/["<>&]/g,'');
   const stroke=safe(s.stroke||'none'),fill=safe(s.fill||'none'),sw=Math.max(0,s.lineWidth??2)/Math.max(1,s.width||100,s.height||100),fillOpacity=Math.max(0,Math.min(1,s.fillOpacity??1)),strokeOpacity=Math.max(0,Math.min(1,s.strokeOpacity??1));let geometry='',dash=['dash','dot'].includes(s.strokeDash)?s.strokeDash:null,strokeDashes=dash?(dash==='dot'?`${sw} ${sw*2.5}`:`${sw*5} ${sw*3}`):null;
+  if(Array.isArray(s.svgPaths)){
+    const [x,y,w,h]=s.svgViewBox||[0,0,1,1];
+    if(![x,y,w,h].every(Number.isFinite)||w<=0||h<=0||s.svgPaths.length>64)throw Error('SVG 路径边界无效');
+    const paths=s.svgPaths.map(path=>{
+      if(typeof path.d!=='string'||path.d.length>8192||!/^[MmLlHhVvCcSsQqTtAaZz0-9+eE.,\s-]+$/.test(path.d))throw Error('SVG 路径包含不支持的字符');
+      const pathFill=safe(path.fill??s.fill??'#e7eef7'),pathStroke=safe(path.stroke??s.stroke??'none');
+      return '<path d="'+path.d+'" fill="'+pathFill+'" stroke="'+pathStroke+'" fill-rule="'+(path.fillRule==='evenodd'?'evenodd':'nonzero')+'" opacity="'+Math.max(0,Math.min(1,path.opacity??1))+'"/>';
+    }).join('');
+    return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="'+[x,y,w,h].join(' ')+'" preserveAspectRatio="none" style="width:100%;height:100%">'+paths+'</svg>';
+  }
   if(Array.isArray(s.vectorLayers)){
     const geometry=s.vectorLayers.map(layer=>{const rectangles=(layer.rects||[]).filter(r=>Array.isArray(r)&&r.length===4&&r.every(Number.isFinite)&&r[2]>0&&r[3]>0).map(([x,y,w,h])=>'M'+x+' '+y+'h'+w+'v'+h+'h-'+w+'Z').join(' '),freeform=(layer.paths||[]).filter(Array.isArray).map(path=>{const points=path.filter(p=>Array.isArray(p)&&p.length===2&&p.every(Number.isFinite));return points.length?points.map(([x,y],i)=>(i?'L':'M')+x+' '+y).join(' ')+' Z':'';}).join(' '),data=[rectangles,freeform].filter(Boolean).join(' ');return data?'<path fill-rule="evenodd" fill="'+safe(layer.fill||'none')+'" stroke="none" opacity="'+Math.max(0,Math.min(1,layer.opacity??1))+'" d="'+data+'"/>':'';}).join('');
     const size=Array.isArray(s.vectorSize)&&s.vectorSize.length===2&&s.vectorSize.every(v=>Number.isFinite(v)&&v>0)?s.vectorSize:[1,1];

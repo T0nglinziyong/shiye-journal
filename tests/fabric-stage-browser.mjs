@@ -441,6 +441,40 @@ try{
     return {pixels:o?.getElement()?.width,selected:c.getActiveObject()?.sceneID,
       x:o?.left,y:o?.top};})()`),{pixels:512,selected:'progressive-material',x:430,y:740},
     'The sharp image replaces the cover in place without losing selection');
+  const localGroupParity=await evaluate(`(async()=>{
+    const {renderSceneCanvas}=await import('/src/scene-renderer.js');
+    const f=window.__fabricFixture;
+    f.draft.layers=[{id:'local-group',type:'group',zIndex:1,
+      localTransform:[0.8660254,0.5,-0.5,0.8660254,260,300],
+      layoutBox:{width:180,height:140},children:[
+        {id:'local-shape',type:'shape',kind:'ellipse',x:0,y:0,width:90,height:60,
+          fill:'#ad5142',zIndex:1}]}];
+    f.select([]);f.refresh();
+    await new Promise(resolve=>setTimeout(resolve,250));
+    const reference=(await renderSceneCanvas(f.draft,{waitForFonts:false})).canvas;
+    const actual=document.querySelector('.lower-canvas');
+    const a=actual.getContext('2d').getImageData(0,0,600,800).data;
+    const b=reference.getContext('2d').getImageData(0,0,600,800).data;
+    let total=0;for(let i=0;i<a.length;i+=4)
+      total+=Math.abs(a[i]-b[i])+Math.abs(a[i+1]-b[i+1])+Math.abs(a[i+2]-b[i+2]);
+    const group=window.__fabricCanvas.getObjects().find(o=>o.sceneID==='local-group');
+    return {error:total/(600*800*3),group:!!group,
+      child:group?.getObjects().some(o=>o.sceneID==='local-shape')};
+  })()`);
+  assert.ok(localGroupParity.group&&localGroupParity.child&&localGroupParity.error<2,
+    'Fabric must display group-local Scene coordinates like the export renderer: '+JSON.stringify(localGroupParity));
+  const persistedLocalGroupMove=await evaluate(`(()=>{
+    const canvas=window.__fabricCanvas;
+    const group=canvas.getObjects().find(o=>o.sceneID==='local-group');
+    group.set({left:group.left+34,top:group.top+18});
+    group.setCoords();canvas.fire('object:modified',{target:group});
+    const node=window.__fabricFixture.draft.layers[0];
+    return {matrix:node.localTransform,child:[node.children[0].x,node.children[0].y]};
+  })()`);
+  assert.ok(persistedLocalGroupMove.matrix[4]>290&&persistedLocalGroupMove.matrix[5]>315,
+    'Moving a local group must persist the group transform');
+  assert.deepEqual(persistedLocalGroupMove.child,[0,0],
+    'Moving a local group must not rewrite child-local coordinates');
   console.log('Fabric stage browser check passed:',JSON.stringify({background,parity,coverParity,weaveParity,inkParity}),
     'screenshots /tmp/shiye-fabric-stage.png and /tmp/shiye-fabric-reference.png');
 }finally{await browser.close();}

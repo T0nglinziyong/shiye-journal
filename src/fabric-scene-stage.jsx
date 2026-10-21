@@ -7,6 +7,7 @@ import {textBlock} from './domain.js';
 import {polygonContains,selectionBounds} from './canvas-selection.js';
 import {selectSceneLasso,sceneLassoBounds,moveSceneLasso,transformSceneLasso} from './scene-lasso.js';
 import {attachSceneV2,assertSceneEditable,sceneLayerEntries} from './scene-v2.js';
+import {reconcileManualSceneMove} from './scene-layout.js';
 import {sceneDisplaySiblings} from './craft-display.js';
 import {prepareSceneFonts} from './scene-renderer.js';
 import {appendInkStroke,editableInkLayer} from './ink-groups.js';
@@ -920,6 +921,7 @@ export function FabricSceneStage({draft,assetURL,retainAssets,onSelection,onBefo
           try{
             assertSceneEditable(callbacks.current.draft,node.id);
             bridge.applyObject(node,object);
+            reconcileManualSceneMove(callbacks.current.draft,node.id);
             if(object.sceneSelectionProxy)object.scenePreview=null;
             if(object.sceneID===callbacks.current.selectedID){
               const bounds=object.getBoundingRect();
@@ -962,6 +964,7 @@ export function FabricSceneStage({draft,assetURL,retainAssets,onSelection,onBefo
           if(!node||node.type!=='text')return;
           try{
             bridge.applyObject(node,object);
+            reconcileManualSceneMove(callbacks.current.draft,node.id);
             if(node.content.trim())uncommittedText.delete(node.id);
             remember(object.sceneID);
             callbacks.current.onChange?.(node,'text');

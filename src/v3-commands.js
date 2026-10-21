@@ -33,6 +33,12 @@ const operations=[
  op('scene.compose',{page:directPageContract},['page']),
  ...Object.entries(tools).map(([name,args])=>op('tool.'+name,{arguments:args},['arguments']))
 ];
+export const executableCommandNames=Object.freeze(operations.map(schema=>schema.properties.op.const));
+export function describeExecutableCommand(name){
+ const schema=operations.find(row=>row.properties.op.const===name);
+ if(!schema)throw Object.assign(Error('未知操作：'+name),{code:'UNKNOWN_HELP_TOPIC'});
+ return {name,protocolVersion:1,available:true,required:schema.required.filter(field=>field!=='op'),schema};
+}
 export const commandsSchema={$schema:'https://json-schema.org/draft/2020-12/schema',$defs:directPageContract.$defs,type:'object',additionalProperties:false,
  properties:{protocolVersion:{const:1},transactionId:{type:'string',pattern:'^[A-Za-z0-9_-]{1,96}$'},baseSceneRevision:{type:'string',pattern:'^sha256:[a-f0-9]{64}$'},operations:{type:'array',minItems:1,maxItems:200,items:{oneOf:operations}}},required:['protocolVersion','transactionId','baseSceneRevision','operations']};
 const validator=new Ajv2020({strict:false,allErrors:true});
@@ -52,11 +58,11 @@ export function validateCommands(input){
  throw Object.assign(Error('commands'+path+' '+error.message),{code:'COMMAND_SCHEMA_INVALID',path});
 }
 const allowed={
- material:'x y rotation zIndex opacity blendMode hidden isHidden isLocked vectorMask materialRelation craftDisplaySlices',
- text:'x y width height rotation zIndex opacity blendMode hidden isHidden isLocked content fontSize fontName style color alignment bold italic underline strikethrough lineSpacing fixedLineHeight paragraphSpacing letterSpacing curveHeight vectorMask',
- shape:'x y width height rotation zIndex opacity blendMode hidden isHidden isLocked kind fill stroke lineWidth fillOpacity strokeOpacity strokeDash cornerRadius vectorPaths vectorLayers vectorMask',
- ink:'rotation zIndex opacity blendMode hidden isHidden isLocked points width color penStyle vectorMask',
- group:'rotation zIndex opacity blendMode hidden isHidden isLocked name vectorMask'};
+ material:'x y rotation zIndex opacity blendMode shadow hidden isHidden isLocked vectorMask materialRelation craftDisplaySlices',
+ text:'x y width height xMm yMm widthMm rotation zIndex opacity blendMode shadow hidden isHidden isLocked content fontSize fontSizePt fontName style color alignment bold italic underline strikethrough lineSpacing fixedLineHeight paragraphSpacing letterSpacing curveHeight vectorMask',
+ shape:'x y width height rotation zIndex opacity blendMode shadow hidden isHidden isLocked kind fill stroke lineWidth fillOpacity strokeOpacity strokeDash cornerRadius vectorPaths vectorLayers vectorMask',
+ ink:'rotation zIndex opacity blendMode shadow hidden isHidden isLocked points width color penStyle vectorMask',
+ group:'rotation zIndex opacity blendMode shadow hidden isHidden isLocked name vectorMask'};
 const nodeByID=(nodes,id)=>{for(const node of nodes){if([node.id,node.creativePieceID,node.agentKey,node.key].includes(id))return node;const child=node.children&&nodeByID(node.children,id);if(child)return child;}return null;};
 const edit=(doc,change,assets)=>applyWebSceneCommands(doc,{baseSceneHash:craftSceneHash(doc.page),edits:[change]},assets);
 const tool=(doc,name,args,assets)=>applyWebSceneCommands(doc,{baseSceneHash:craftSceneHash(doc.page),tools:[{name,arguments:args}]},assets);
@@ -67,11 +73,19 @@ export function applyCommandBatch(document,input,assets){
   else if(item.op==='material.process')doc=tool(doc,'edit_materials',{items:[{piece:item.target,mode:item.mode||'append',operations:item.steps}]},assets);
   else if(item.op==='material.craft')doc=tool(doc,'apply_craft_plan',item.plan,assets);
   else if(item.op==='material.tape')doc=tool(doc,'draw_tape_strips',item.arguments,assets);
-  else if(item.op==='text.add')doc=tool(doc,'upsert_text',{items:[{key:item.id,content:item.content,x:item.xMm,y:item.yMm,width:item.widthMm,coordinate_unit:'mm',size_unit:'mm',font_size:item.fontSizePt||24,font_style:'hand',color:item.color||'#334d4a'}]},assets);
+  else if(item.op==='text.add')doc=tool(doc,'upsert_text',{items:[{key:item.id,content:item.content,x:item.xMm,y:item.yMm,width:item.widthMm,coordinate_unit:'mm',size_unit:'mm',font_size:(item.fontSizePt??12)*(25.4/72)*scale,font_style:'hand',color:item.color||'#334d4a'}]},assets);
   else if(item.op==='shape.add')doc=tool(doc,'upsert_primitives',{items:[{key:item.id,kind:item.kind,x:item.xMm,y:item.yMm,width:item.widthMm,height:item.heightMm,coordinate_unit:'mm',size_unit:'mm',fill:item.fill??'#d5e2d6'}]},assets);
   else if(item.op==='ink.add')doc=edit(doc,{op:'insert',node:{id:item.id,type:'ink',points:item.points.map(p=>({x:p.xMm*scale,y:p.yMm*scale,p:p.pressure??.5})),width:item.widthMm*scale,color:item.color,penStyle:item.penStyle}},assets);
   else if(item.op==='page.update'){doc.page={...doc.page,...(item.paperColor?{paperColor:item.paperColor}:{}),...(item.paperPattern?{paperPattern:item.paperPattern}:{}),...(item.centerGutter!==undefined?{drawCenterGutter:item.centerGutter}:{})};validateWebScene(doc.page,doc.source,assets,{final:false});}
-  else if(item.op==='layer.update'){const node=nodeByID(doc.page.layers,item.target);if(!node)throw Error('图层不存在：'+item.target);const permitted=new Set((allowed[node.type]||'').split(' ')),bad=Object.keys(item.set).find(k=>!permitted.has(k));if(bad)throw Error('受保护或不支持的字段：'+bad);doc=edit(doc,{op:'patch',id:node.id,values:item.set},assets);}
+  else if(item.op==='layer.update'){
+   const node=nodeByID(doc.page.layers,item.target);if(!node)throw Error('图层不存在：'+item.target);
+   const permitted=new Set((allowed[node.type]||'').split(' ')),bad=Object.keys(item.set).find(k=>!permitted.has(k));if(bad)throw Error('受保护或不支持的字段：'+bad);
+   if(node.type==='text'&&[['x','xMm'],['y','yMm'],['width','widthMm'],['fontSize','fontSizePt']].some(pair=>pair.every(key=>Object.hasOwn(item.set,key))))throw Error('文字图层不能混用毫米/pt 与场景像素字段');
+   const values={...item.set};
+   if(node.type==='text')for(const key of ['xMm','yMm','widthMm','fontSizePt'])if(Object.hasOwn(values,key)&&(!Number.isFinite(values[key])||(['widthMm','fontSizePt'].includes(key)&&values[key]<=0)))throw Error(key+' 必须是有效的正数或坐标');
+   if(node.type==='text')for(const [input,output,factor] of [['xMm','x',scale],['yMm','y',scale],['widthMm','width',scale],['fontSizePt','fontSize',25.4/72*scale]])if(Object.hasOwn(values,input)){values[output]=values[input]*factor;delete values[input];}
+   doc=edit(doc,{op:'patch',id:node.id,values},assets);
+  }
   else if(item.op==='layer.insert')doc=edit(doc,{op:'insert',node:item.node,parent:item.parent},assets);
   else if(item.op==='layer.replaceMaterial')doc=edit(doc,{op:'replace-material',id:nodeByID(doc.page.layers,item.target)?.id||item.target,assetID:doc.source.materials.find(m=>m.alias===item.asset)?.assetID||item.asset},assets);
   else if(item.op==='layer.repeatStamp')doc=edit(doc,{op:'repeat-stamp',id:nodeByID(doc.page.layers,item.target)?.id||item.target,placements:item.placements},assets);

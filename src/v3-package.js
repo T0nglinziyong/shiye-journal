@@ -1,10 +1,10 @@
 import {strToU8} from 'fflate';
-import {commandsSchema} from './v3-commands.js';
-import {craftSceneHash} from './craft-fingerprint.js';
 import {v3PackageLock} from './v3-package-lock.js';
 import {v3SceneSchema} from './v3-scene-schema.js';
 import {sha256Hex} from './task-fingerprint.js';
 import {previewImageFormat} from './offline-preview.js';
+import {creationFixedFiles,creationFixedReleaseId} from './generated/creation-fixed-source.js';
+import {creationV2RuntimeSchema} from './creation-v2-contract.js';
 const encode=value=>strToU8(typeof value==='string'?value:JSON.stringify(value,null,2));
 const fingerprint=async bytes=>'sha256:'+await sha256Hex(bytes);
 async function overview(selected,chosen){
@@ -36,44 +36,34 @@ export async function createV3PackageFiles({source,selected,chosen,work,guide,ru
   const format=previewImageFormat(original.bytes);if(!format)throw Error('素材图片格式无效：'+item.alias);
   return {...item,image:'assets/'+item.alias+'.'+format.extension,sha256:await fingerprint(original.bytes),pixelWidth:original.width||null,pixelHeight:original.height||null,originalFilename:original.filename||item.title+'.'+format.extension};
  }));
- const task={format:'shiye-gpt-creation-package',version:3,taskId:source.bundleId,title:source.title,intent:source.intent,userText:source.userText,providedFacts:source.providedFacts,styles:source.styles,purposes:source.purposes,contentPolicy:source.contentPolicy,page:{mode:source.mode,ratio:source.ratio,physicalPageHeightMM:work.page.physicalPageHeightMM,canvas:work.page.canvas},processing:source.processing,requiredAssetIDs:source.requiredAssetIDs,assetManifestRef:'assets/manifest.json',materials:entries.map(({alias,assetID,title,kind,journalRoles,physicalWidthMM,physicalHeightMM,image,sha256})=>({alias,assetID,title,kind,journalRoles,physicalWidthMM,physicalHeightMM,image,sha256})),sourceContext:source};
+ const task={format:'shiye-gpt-creation-package',version:3,protocolVersion:2,fixedReleaseId:creationFixedReleaseId,taskId:source.bundleId,title:source.title,intent:source.intent,userText:source.userText,providedFacts:source.providedFacts,styles:source.styles,purposes:source.purposes,contentPolicy:source.contentPolicy,creativeBrief:guide,page:{mode:source.mode,ratio:source.ratio,physicalPageHeightMM:work.page.physicalPageHeightMM,canvas:work.page.canvas},processing:source.processing,requiredAssetIDs:source.requiredAssetIDs,assetManifestRef:'assets/manifest.json',materials:entries.map(({alias,assetID,title,kind,journalRoles,physicalWidthMM,physicalHeightMM,image,sha256})=>({alias,assetID,title,kind,journalRoles,physicalWidthMM,physicalHeightMM,image,sha256})),sourceContext:source};
  const manifest={format:'shiye-v3-assets',version:3,taskId:source.bundleId,assets:entries.map(e=>{const snapshot=source.sourceSnapshots.find(row=>row.assetID===e.assetID);return {alias:e.alias,assetID:e.assetID,originalFilename:e.originalFilename,image:e.image,sha256:e.sha256,pixelWidth:e.pixelWidth,pixelHeight:e.pixelHeight,physicalWidthMM:e.physicalWidthMM,physicalHeightMM:e.physicalHeightMM,kind:e.kind,role:e.role,tags:e.tags,required:source.requiredAssetIDs.includes(e.assetID),sourceUnitIndex:0,processing:source.processing,allowedOperations:source.processing==='保留完整'?['whole','move','rotate']:['whole','crop','edge','window','partition','weave','move','rotate'],sourceRevision:snapshot?.sourceRevision||null,sourceDescriptor:snapshot?.descriptor||null};})};
  const revision=await fingerprint(new TextEncoder().encode(JSON.stringify(work)));
- const start=`# 拾页 GPT 创作包 v3
-读 TASK.json 与 design/GUIDE.md，看 assets/overview.jpg 和必要原图。scene.json 是唯一作品。
-1. 运行 node runtime/shiye.cjs self-test 和 info，复制 sceneRevision。
-2. 在 work/commands.json 中写一个事务，operations 可混合素材、文字、图形和工艺。
-3. 运行 node runtime/shiye.cjs apply work/commands.json，再运行 preview。
-4. 打开 output/preview.png 看整页和局部；下一批用新 transactionId 和 info 的新 revision 只修改问题图层。
-5. 补齐逐件 material.decision，再运行 preview 和 pack。交付 output/project.shiyeproject.json 与 output/preview.png。
-复杂工艺按需查 design/RECIPES.md，字段不清时查 api/commands.schema.json。不要先读完整 Schema，也不要写辅助 Python/JS 修改 Scene。
-预览失败时运行 self-test 并检查 Node Canvas 依赖；失败前不能交付 PNG。pack 不会替你伪造视觉验收。
-`;
- const pageWidthMm=work.page.canvas.width/work.page.canvas.height*work.page.physicalPageHeightMM;
- const simpleExample={protocolVersion:1,transactionId:'recipe-simple-'+source.bundleId.slice(0,8),baseSceneRevision:revision,operations:[
-  {op:'material.add',id:'hero',asset:selected[0].alias,placement:{xMm:Math.round(pageWidthMm/2),yMm:Math.round(work.page.physicalPageHeightMM/2)}},
-  ...(source.textMode==='none'?[]:[{op:'text.add',id:'heading',content:'这一页，从眼前的素材开始。',xMm:Math.round(pageWidthMm*.25),yMm:16,widthMm:Math.round(pageWidthMm*.5),fontSizePt:20}]),
-  {op:'shape.add',id:'dot',kind:'ellipse',xMm:Math.round(pageWidthMm*.72),yMm:28,widthMm:8,heightMm:8,fill:'#d5e2d6'},
-  {op:'ink.add',id:'highlight',points:[{xMm:Math.round(pageWidthMm*.25),yMm:42},{xMm:Math.round(pageWidthMm*.55),yMm:42}],widthMm:3,color:'#e8d66b',penStyle:'marker'},
-  ...selected.map(item=>({op:'material.decision',asset:item.alias,choice:item.alias===selected[0].alias?'intact':'omitted',reason:item.alias===selected[0].alias?'保留原件作为本页视觉主体':'本页暂不使用这一件候选素材'}))
+ const simpleExample={protocolVersion:2,transactionId:'recipe-simple-'+source.bundleId.slice(0,8),baseSceneRevision:revision,operations:[
+  {op:'material.add',id:'hero',asset:selected[0].alias,place:{reference:'page',at:[.5,.5],unit:'ratio'}},
+  ...(source.textMode==='none'?[]:[{op:'text.add',id:'heading',content:'这一页，从眼前的素材开始。',place:{reference:'page',at:[.25,.08],unit:'ratio'},size:{width:.5,unit:'ratio',reference:'page'},style:{fontSizePt:20}}]),
+  {op:'shape.add',id:'dot',kind:'ellipse',place:{reference:'page',at:[.72,.2],unit:'ratio'},size:{width:8,height:8,unit:'mm'},style:{fill:'#d5e2d6'}},
+  {op:'ink.add',id:'highlight',points:[{x:0,y:0},{x:30,y:0}],unit:'mm',place:{reference:'page',at:[.42,.3],unit:'ratio'},style:{strokeWidthMm:3,color:'#e8d66b',penStyle:'marker'}}
  ]};
- const first=selected[0],snapshot=source.sourceSnapshots.find(s=>s.assetID===first.assetID);
- const canCraft=source.processing!=='保留完整'&&first.kind!=='tape';
- const plan={format:'shiye-craft-plan',version:2,commandId:'recipe-craft-'+source.bundleId.slice(0,8),baseSceneHash:craftSceneHash(work.page),pieces:[{id:'recipe-piece',asset:first.alias,sourceRevision:snapshot.sourceRevision,unit:0,extraction:{type:'whole'},centerMM:[Math.round(work.page.canvas.width/work.page.canvas.height*work.page.physicalPageHeightMM/2),Math.round(work.page.physicalPageHeightMM/2)],...(canCraft?{treatments:[{op:'window',shape:'ellipse',box:[.35,.35,.2,.2]}]}:{})}]};
- const example={protocolVersion:1,transactionId:'recipe-'+source.bundleId.slice(0,8),baseSceneRevision:revision,operations:[{op:'material.craft',plan},...selected.map(item=>({op:'material.decision',asset:item.alias,choice:item.alias===first.alias?(canCraft?'crafted':'intact'):'omitted',reason:item.alias===first.alias?'依据素材轮廓创建当前可见裁片':'本页暂不使用这一件候选素材'}))]};
+ const canCraft=source.processing!=='保留完整'&&selected[0].kind!=='tape';
+ const craftedExample={protocolVersion:2,transactionId:'recipe-craft-'+source.bundleId.slice(0,8),baseSceneRevision:revision,operations:[
+  {op:'material.add',id:'source',asset:selected[0].alias,place:{reference:'page',at:[.5,.5],unit:'ratio'}},
+  ...(canCraft?[{op:'material.window',target:'source',windowId:'window-1',region:{shape:'ellipse',space:'local',unit:'ratio',box:[.35,.35,.2,.2]}}]:[])
+ ]};
  const recipes=[
-  '# 可直接执行的 Commands 范例',
-  '每个代码块都是完整事务，均从本 ZIP 初始 sceneRevision 出发；任选其一，复制到 work/commands.json 后运行 apply、preview。它们是替代方案，不要连续执行。实际作品请根据素材与意图修改坐标和文字。若要在本次 apply 后继续修改，先用 info 获取新 baseSceneRevision 并更换 transactionId。',
-  '## 完整素材、可编辑文字、圆形和荧光笔','```json',JSON.stringify(simpleExample,null,2),'```',
-  '## 本任务来源版本的工艺事务','```json',JSON.stringify(example,null,2),'```',
-  '复杂裁切、边缘、余料、窗芯、穿插可在 material.craft.plan 的 pieces/sourcePartitions/consume/weaves 内组合；按需查看 api/commands.schema.json 中对应 op。局部修改统一用下一批 operations，layer.update 只能修改白名单里的 Scene 字段。所有带 Mm/Deg/Pt 后缀的值使用相应单位；Craft Plan 的 boxMM 是源材料毫米，比例 box 值在 0 到 1 之间。'
+  '# Commands 范例',
+  '两个范例都从初始 Scene 开始，任选一个，复制到 work/commands.json 执行。请根据本次素材和文字重新构思；示例只是语法，不是完整作品。每次 apply 后用 info 获取新 revision，并换用新 transactionId。',
+  '## 素材、文字、圆形与荧光笔','```json',JSON.stringify(simpleExample,null,2),'```',
+  '## 实体开窗','```json',JSON.stringify(craftedExample,null,2),'```',
+  '默认只读 api/commands.schema.json 中的简洁操作。复杂来源分片、余料、窗芯、穿插和局部组都在同一份 commands.json 中；原有 39 项能力可用 advanced.v1.* 调用。纸张模式和尺寸由任务固定。layout.arrange 与 visible 锚点暂不提供。'
  ].join('\n\n')+'\n';
  const files={
-  'START_HERE.md':encode(start),'TASK.json':encode(task),'scene.json':encode(work),
+  'START_HERE.md':encode(creationFixedFiles['START_HERE.md']),'TASK.json':encode(task),'scene.json':encode(work),
   'assets/overview.jpg':overviewBytes,'assets/manifest.json':encode(manifest),
-  'design/GUIDE.md':encode(guide),'design/RECIPES.md':encode(recipes),
-  'api/commands.schema.json':encode(commandsSchema),'api/scene.schema.json':encode(v3SceneSchema),
-  'work/commands.json':encode({protocolVersion:1,transactionId:'initial-'+source.bundleId.slice(0,8),baseSceneRevision:revision,operations:[]}),
+  'design/GUIDE.md':encode(guide),'design/CRAFT_GUIDE.md':encode(creationFixedFiles['design/CRAFT_GUIDE.md']),'design/RECIPES.md':encode(recipes),
+  'api/fixed-release.json':encode({releaseId:creationFixedReleaseId,protocolVersion:2,files:Object.keys(creationFixedFiles)}),
+  'api/commands.schema.json':encode(creationV2RuntimeSchema),'api/scene.schema.json':encode(v3SceneSchema),
+  'work/commands.json':encode({protocolVersion:2,transactionId:'initial-'+source.bundleId.slice(0,8),baseSceneRevision:revision,operations:[]}),
   'runtime/shiye.cjs':encode(runtime),'runtime/glyphs.cjs':encode(glyph),
   'package.json':encode({name:'shiye-gpt-creation-v3',private:true,version:'3.0.0',dependencies:{canvas:'3.2.3'}}),
   'package-lock.json':encode(v3PackageLock)

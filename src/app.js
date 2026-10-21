@@ -19,6 +19,7 @@ const sceneRuntime=()=>import('./scene-renderer.js');
 const renderSceneCanvas=async(...args)=>(await sceneRuntime()).renderSceneCanvas(...args);
 const decodeSceneImage=async(...args)=>(await sceneRuntime()).decodeSceneImage(...args);
 import {sceneLayerEntries,attachSceneV2,moveSceneNode,groupSceneLayers,ungroupSceneLayers,findSceneNode,assertSceneEditable,validateVectorMask} from './scene-model.js';
+import {reconcileManualSceneMove,solveSceneLayout} from './scene-layout.js';
 import {copySceneLasso,deleteSceneLasso,mergeSceneLasso,sceneLassoBounds} from './scene-lasso.js';
 import {selectionGroupID,duplicateSceneGroup,deleteSceneGroup} from './scene-selection-actions.js';
 import {planSceneCut,rejoinMaterialPieces,restoreSceneMasks} from './scene-cut-ops.js';
@@ -2022,7 +2023,7 @@ async function runAppAction(action,id,value){try{
     }
     editSelected((e,d)=>{
       if(!e)throw Error('没有选中可复制的图层');
-      const copy={...structuredClone(e.value),id:uid(),x:e.value.x+25,y:e.value.y+25};
+      const copy={...structuredClone({...e.value}),id:uid(),x:e.value.x+25,y:e.value.y+25};
       if(e.kind==='material'){
         const a=asset(e.value.assetID);if(!a)throw Error('原素材不存在');
         if(a.kind!=='tape')throw Error('此方案已取用这件素材；可复制文字或图形，或裁切原素材');
@@ -2188,7 +2189,10 @@ async function runAppAction(action,id,value){try{
 }}catch(e){console.error(e);recordRuntimeIssue('handled',e,state.route,{phase:'action'});toast(e.message||'操作失败');}}
 function editSelected(fn){const d=current(),e=editorEntry(d).find(x=>x.value.id===state.selected);if(!e&&state.selected)return;
   if(e)assertSceneEditable(d,e.value.id);
-  checkpoint();fn(e,d);saveProject();render();}
+  checkpoint();fn(e,d);
+  if(e&&findSceneNode(d,e.value.id)?.layoutConstraint)reconcileManualSceneMove(d,e.value.id);
+  else solveSceneLayout(d);
+  saveProject();render();}
 function historyStep(from,to){view.flushInkCommit?.({renderUI:false,force:true});view.endTextEditing?.();const d=current(),snapshot=takeEditorHistoryStep(state,from,to,d);if(!snapshot)return false;for(const key of Object.keys(d))delete d[key];Object.assign(d,snapshot);state.activeDraft=snapshot.id;saveProject();return true;}
 
 function captureMatchingDirection(){

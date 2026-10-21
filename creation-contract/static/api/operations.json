@@ -1,0 +1,1696 @@
+{
+  "contractVersion": "2.0.0-candidate.1",
+  "protocolVersion": 2,
+  "operations": [
+    {
+      "name": "material.add",
+      "summary": "放置实体素材，保持来源与物理尺寸。",
+      "tier": "standard",
+      "requiresCapabilities": [
+        "material.basic"
+      ],
+      "schema": {
+        "type": "object",
+        "properties": {
+          "op": {
+            "const": "material.add"
+          },
+          "id": {
+            "$ref": "#/$defs/Id"
+          },
+          "parent": {
+            "$ref": "#/$defs/Id"
+          },
+          "place": {
+            "$ref": "#/$defs/Place"
+          },
+          "style": {
+            "$ref": "#/$defs/Style"
+          },
+          "order": {
+            "$ref": "#/$defs/Order"
+          },
+          "asset": {
+            "$ref": "#/$defs/Id"
+          }
+        },
+        "required": [
+          "op",
+          "id",
+          "asset",
+          "place"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "op": "material.add",
+          "id": "photo",
+          "asset": "m1",
+          "place": {
+            "reference": "page",
+            "at": [
+              50,
+              60
+            ],
+            "unit": "mm",
+            "anchor": "center"
+          }
+        }
+      ],
+      "semantics": [
+        "运行时分配真实素材单元；不可默认复制已占用单元。",
+        "asset 是 TASK/manifest 中的短别名，不是图片路径。"
+      ],
+      "status": "contract-only-until-runtime-verified"
+    },
+    {
+      "name": "text.add",
+      "summary": "创建可编辑文字；位置与字号使用公共参数。",
+      "tier": "standard",
+      "requiresCapabilities": [
+        "text.basic"
+      ],
+      "schema": {
+        "type": "object",
+        "properties": {
+          "op": {
+            "const": "text.add"
+          },
+          "id": {
+            "$ref": "#/$defs/Id"
+          },
+          "parent": {
+            "$ref": "#/$defs/Id"
+          },
+          "place": {
+            "$ref": "#/$defs/Place"
+          },
+          "size": {
+            "$ref": "#/$defs/Size"
+          },
+          "style": {
+            "$ref": "#/$defs/Style"
+          },
+          "order": {
+            "$ref": "#/$defs/Order"
+          },
+          "content": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "op",
+          "id",
+          "content",
+          "place",
+          "size"
+        ],
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "properties": {
+              "size": {
+                "required": [
+                  "width"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "examples": [
+        {
+          "op": "text.add",
+          "id": "caption",
+          "content": "今天的想法，写在这里。",
+          "place": {
+            "reference": "node:photo",
+            "referenceAnchor": "bottom-center",
+            "anchor": "top-center",
+            "offset": {
+              "value": [
+                0,
+                4
+              ],
+              "unit": "mm"
+            }
+          },
+          "size": {
+            "width": 60,
+            "unit": "mm"
+          },
+          "style": {
+            "fontSizePt": 11,
+            "color": "#333333"
+          }
+        }
+      ],
+      "semantics": [
+        "默认按 width 换行、自然高度；显式 height 不能偷偷裁掉正文。",
+        "文字排版用经过解析的字体配置，不使用设备像素设定字号。"
+      ],
+      "status": "contract-only-until-runtime-verified"
+    },
+    {
+      "name": "text.update",
+      "summary": "局部修改正文或通用布局/外观。",
+      "tier": "standard",
+      "requiresCapabilities": [
+        "text.basic"
+      ],
+      "schema": {
+        "type": "object",
+        "properties": {
+          "op": {
+            "const": "text.update"
+          },
+          "place": {
+            "$ref": "#/$defs/Place"
+          },
+          "size": {
+            "$ref": "#/$defs/Size"
+          },
+          "style": {
+            "$ref": "#/$defs/Style"
+          },
+          "order": {
+            "$ref": "#/$defs/Order"
+          },
+          "target": {
+            "$ref": "#/$defs/Id"
+          },
+          "content": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "op",
+          "target"
+        ],
+        "additionalProperties": false,
+        "anyOf": [
+          {
+            "required": [
+              "place"
+            ]
+          },
+          {
+            "required": [
+              "size"
+            ]
+          },
+          {
+            "required": [
+              "style"
+            ]
+          },
+          {
+            "required": [
+              "order"
+            ]
+          },
+          {
+            "required": [
+              "content"
+            ]
+          }
+        ]
+      },
+      "examples": [
+        {
+          "op": "text.update",
+          "target": "caption",
+          "style": {
+            "fontSizePt": 12
+          }
+        }
+      ],
+      "semantics": [
+        "只修改给出的字段；未给出的字段保留。"
+      ],
+      "status": "contract-only-until-runtime-verified"
+    },
+    {
+      "name": "shape.add",
+      "summary": "添加独立可编辑几何图形。",
+      "tier": "standard",
+      "requiresCapabilities": [
+        "shape.basic"
+      ],
+      "schema": {
+        "type": "object",
+        "properties": {
+          "op": {
+            "const": "shape.add"
+          },
+          "id": {
+            "$ref": "#/$defs/Id"
+          },
+          "parent": {
+            "$ref": "#/$defs/Id"
+          },
+          "place": {
+            "$ref": "#/$defs/Place"
+          },
+          "size": {
+            "$ref": "#/$defs/Size"
+          },
+          "style": {
+            "$ref": "#/$defs/Style"
+          },
+          "order": {
+            "$ref": "#/$defs/Order"
+          },
+          "kind": {
+            "enum": [
+              "rect",
+              "ellipse",
+              "line"
+            ]
+          }
+        },
+        "required": [
+          "op",
+          "id",
+          "kind",
+          "place",
+          "size"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "op": "shape.add",
+          "id": "dot",
+          "kind": "ellipse",
+          "place": {
+            "reference": "page",
+            "at": [
+              20,
+              20
+            ],
+            "unit": "mm",
+            "anchor": "center"
+          },
+          "size": {
+            "width": 5,
+            "height": 5,
+            "unit": "mm"
+          },
+          "style": {
+            "fill": "#A8BCD5"
+          }
+        }
+      ],
+      "semantics": [
+        "样式中不适用于当前 kind 的字段返回错误，不得忽略。"
+      ],
+      "status": "contract-only-until-runtime-verified"
+    },
+    {
+      "name": "vector.add",
+      "summary": "添加可编辑多路径图案，不栅格化。",
+      "tier": "standard",
+      "requiresCapabilities": [
+        "vector.paths"
+      ],
+      "schema": {
+        "type": "object",
+        "properties": {
+          "op": {
+            "const": "vector.add"
+          },
+          "id": {
+            "$ref": "#/$defs/Id"
+          },
+          "parent": {
+            "$ref": "#/$defs/Id"
+          },
+          "place": {
+            "$ref": "#/$defs/Place"
+          },
+          "size": {
+            "$ref": "#/$defs/Size"
+          },
+          "style": {
+            "$ref": "#/$defs/Style"
+          },
+          "order": {
+            "$ref": "#/$defs/Order"
+          },
+          "paths": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "d": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "fillRule": {
+                  "enum": [
+                    "nonzero",
+                    "evenodd"
+                  ]
+                },
+                "style": {
+                  "$ref": "#/$defs/Style"
+                }
+              },
+              "required": [
+                "d"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 1,
+            "maxItems": 512
+          },
+          "viewBox": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 4,
+            "maxItems": 4
+          }
+        },
+        "required": [
+          "op",
+          "id",
+          "paths",
+          "viewBox",
+          "place",
+          "size"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "op": "vector.add",
+          "id": "triangle",
+          "viewBox": [
+            0,
+            0,
+            10,
+            10
+          ],
+          "paths": [
+            {
+              "d": "M 0 10 L 5 0 L 10 10 Z",
+              "style": {
+                "fill": "#A8BCD5"
+              }
+            }
+          ],
+          "place": {
+            "reference": "page",
+            "at": [
+              20,
+              20
+            ],
+            "unit": "mm",
+            "anchor": "center"
+          },
+          "size": {
+            "width": 10,
+            "height": 10,
+            "unit": "mm"
+          }
+        }
+      ],
+      "semantics": [
+        "路径仅允许已声明的 SVG 路径数据语法；禁止脚本、外部资源引用。",
+        "viewBox 的宽高必须为正，运行时检查。"
+      ],
+      "status": "contract-only-until-runtime-verified"
+    },
+    {
+      "name": "ink.add",
+      "summary": "创建保留笔迹几何的可编辑笔画。",
+      "tier": "standard",
+      "requiresCapabilities": [
+        "ink.strokes"
+      ],
+      "schema": {
+        "type": "object",
+        "properties": {
+          "op": {
+            "const": "ink.add"
+          },
+          "id": {
+            "$ref": "#/$defs/Id"
+          },
+          "parent": {
+            "$ref": "#/$defs/Id"
+          },
+          "place": {
+            "$ref": "#/$defs/Place"
+          },
+          "style": {
+            "$ref": "#/$defs/Style"
+          },
+          "order": {
+            "$ref": "#/$defs/Order"
+          },
+          "points": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "x": {
+                  "type": "number"
+                },
+                "y": {
+                  "type": "number"
+                },
+                "pressure": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                }
+              },
+              "required": [
+                "x",
+                "y"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 2,
+            "maxItems": 10000
+          },
+          "unit": {
+            "const": "mm"
+          }
+        },
+        "required": [
+          "op",
+          "id",
+          "points",
+          "unit",
+          "place",
+          "style"
+        ],
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "properties": {
+              "style": {
+                "required": [
+                  "strokeWidthMm",
+                  "color"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "examples": [
+        {
+          "op": "ink.add",
+          "id": "underline",
+          "points": [
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 30,
+              "y": 1
+            }
+          ],
+          "unit": "mm",
+          "place": {
+            "reference": "page",
+            "at": [
+              50,
+              90
+            ],
+            "unit": "mm",
+            "anchor": "center"
+          },
+          "style": {
+            "penStyle": "marker",
+            "strokeWidthMm": 3,
+            "color": "#E8D66B"
+          }
+        }
+      ],
+      "semantics": [
+        "points 位于笔迹自身局部空间；place 移动整个笔迹。",
+        "style 必须含 strokeWidthMm、color；采用压力算法版本必须入 Scene。"
+      ],
+      "status": "contract-only-until-runtime-verified"
+    },
+    {
+      "name": "layer.place",
+      "summary": "以统一位置协议摆放任何空间节点，包括 Group。",
+      "tier": "standard",
+      "requiresCapabilities": [
+        "layout.place"
+      ],
+      "schema": {
+        "type": "object",
+        "properties": {
+          "op": {
+            "const": "layer.place"
+          },
+          "place": {
+            "$ref": "#/$defs/Place"
+          },
+          "target": {
+            "$ref": "#/$defs/Id"
+          }
+        },
+        "required": [
+          "op",
+          "target",
+          "place"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "op": "layer.place",
+          "target": "caption",
+          "place": {
+            "reference": "node:photo",
+            "referenceAnchor": "bottom-center",
+            "anchor": "top-center",
+            "offset": {
+              "value": [
+                0,
+                4
+              ],
+              "unit": "mm"
+            }
+          }
+        }
+      ],
+      "semantics": [
+        "先完成尺寸与旋转，再对齐锚点。",
+        "默认 once；linked 必须持久化约束并进行循环检测。"
+      ],
+      "status": "contract-only-until-runtime-verified"
+    },
+    {
+      "name": "layer.update",
+      "summary": "局部修改通用属性，不允许透传任意 Scene 字段。",
+      "tier": "standard",
+      "requiresCapabilities": [
+        "layer.edit"
+      ],
+      "schema": {
+        "type": "object",
+        "properties": {
+          "op": {
+            "const": "layer.update"
+          },
+          "place": {
+            "$ref": "#/$defs/Place"
+          },
+          "size": {
+            "$ref": "#/$defs/Size"
+          },
+          "style": {
+            "$ref": "#/$defs/Style"
+          },
+          "order": {
+            "$ref": "#/$defs/Order"
+          },
+          "target": {
+            "$ref": "#/$defs/Id"
+          }
+        },
+        "required": [
+          "op",
+          "target"
+        ],
+        "additionalProperties": false,
+        "anyOf": [
+          {
+            "required": [
+              "place"
+            ]
+          },
+          {
+            "required": [
+              "size"
+            ]
+          },
+          {
+            "required": [
+              "style"
+            ]
+          },
+          {
+            "required": [
+              "order"
+            ]
+          }
+        ]
+      },
+      "examples": [
+        {
+          "op": "layer.update",
+          "target": "caption",
+          "style": {
+            "opacity": 0.9
+          }
+        }
+      ],
+      "semantics": [
+        "无修改字段的空更新拒绝。",
+        "深层部分更新；数组整值替换；null 默认非法，清除约束使用 layout.detach。"
+      ],
+      "status": "contract-only-until-runtime-verified"
+    },
+    {
+      "name": "layer.reparent",
+      "summary": "改变父节点，默认保持世界位置。",
+      "tier": "standard",
+      "requiresCapabilities": [
+        "tree.local"
+      ],
+      "schema": {
+        "type": "object",
+        "properties": {
+          "op": {
+            "const": "layer.reparent"
+          },
+          "order": {
+            "$ref": "#/$defs/Order"
+          },
+          "target": {
+            "$ref": "#/$defs/Id"
+          },
+          "parent": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Id"
+              },
+              {
+                "const": null
+              }
+            ]
+          },
+          "preserveWorld": {
+            "type": "boolean",
+            "const": true
+          }
+        },
+        "required": [
+          "op",
+          "target",
+          "parent"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "op": "layer.reparent",
+          "target": "photo",
+          "parent": "card",
+          "preserveWorld": true
+        }
+      ],
+      "semantics": [
+        "parent:null 表示页面根；禁止自包含与树循环。",
+        "Mlocal_new = inverse(Mparent_new_world) * Mworld_old。"
+      ],
+      "status": "contract-only-until-runtime-verified"
+    },
+    {
+      "name": "layer.reorder",
+      "summary": "调整同一父节点内的绘制顺序。",
+      "tier": "standard",
+      "requiresCapabilities": [
+        "layer.edit"
+      ],
+      "schema": {
+        "type": "object",
+        "properties": {
+          "op": {
+            "const": "layer.reorder"
+          },
+          "order": {
+            "$ref": "#/$defs/Order"
+          },
+          "target": {
+            "$ref": "#/$defs/Id"
+          }
+        },
+        "required": [
+          "op",
+          "target",
+          "order"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "op": "layer.reorder",
+          "target": "caption",
+          "order": {
+            "after": "photo"
+          }
+        }
+      ],
+      "semantics": [
+        "before/after 必须是同级节点；跨组遮挡需重分组或专用穿插结构。"
+      ],
+      "status": "contract-only-until-runtime-verified"
+    },
+    {
+      "name": "layer.delete",
+      "summary": "删除节点；不隐式解除实体裁切消费。",
+      "tier": "standard",
+      "requiresCapabilities": [
+        "layer.edit"
+      ],
+      "schema": {
+        "type": "object",
+        "properties": {
+          "op": {
+            "const": "layer.delete"
+          },
+          "target": {
+            "$ref": "#/$defs/Id"
+          },
+          "cascade": {
+            "type": "boolean"
+          },
+          "dependentLinks": {
+            "enum": [
+              "reject",
+              "detach"
+            ]
+          }
+        },
+        "required": [
+          "op",
+          "target"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "op": "layer.delete",
+          "target": "dot",
+          "dependentLinks": "reject"
+        }
+      ],
+      "semantics": [
+        "默认拒绝非空组删除与仍有 linked 引用的对象。",
+        "删除不等于撤销裁切；恢复材料使用事务 undo。"
+      ],
+      "status": "contract-only-until-runtime-verified"
+    },
+    {
+      "name": "group.create",
+      "summary": "把既有同级节点编为组，保持世界位置。",
+      "tier": "standard",
+      "requiresCapabilities": [
+        "tree.local"
+      ],
+      "schema": {
+        "type": "object",
+        "properties": {
+          "op": {
+            "const": "group.create"
+          },
+          "id": {
+            "$ref": "#/$defs/Id"
+          },
+          "place": {
+            "$ref": "#/$defs/Place"
+          },
+          "style": {
+            "$ref": "#/$defs/Style"
+          },
+          "order": {
+            "$ref": "#/$defs/Order"
+          },
+          "targets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/Id"
+            },
+            "minItems": 2,
+            "maxItems": 200
+          },
+          "layoutBox": {
+            "$ref": "#/$defs/LayoutBox"
+          }
+        },
+        "required": [
+          "op",
+          "id",
+          "targets"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "op": "group.create",
+          "id": "card",
+          "targets": [
+            "photo",
+            "caption"
+          ]
+        }
+      ],
+      "semantics": [
+        "不连续同级节点的打组可能改变遮挡，必须返回诊断；默认拒绝改变既有遮挡关系的重排。",
+        "未指定 place 时，保持所有子节点世界矩阵。"
+      ],
+      "status": "contract-only-until-runtime-verified"
+    },
+    {
+      "name": "group.compose",
+      "summary": "先在局部空间创建组合，再整体摆放。",
+      "tier": "standard",
+      "requiresCapabilities": [
+        "tree.compose"
+      ],
+      "schema": {
+        "type": "object",
+        "properties": {
+          "op": {
+            "const": "group.compose"
+          },
+          "id": {
+            "$ref": "#/$defs/Id"
+          },
+          "parent": {
+            "$ref": "#/$defs/Id"
+          },
+          "place": {
+            "$ref": "#/$defs/Place"
+          },
+          "style": {
+            "$ref": "#/$defs/Style"
+          },
+          "order": {
+            "$ref": "#/$defs/Order"
+          },
+          "children": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/Operation"
+            },
+            "minItems": 1,
+            "maxItems": 200
+          },
+          "layoutBox": {
+            "$ref": "#/$defs/LayoutBox"
+          }
+        },
+        "required": [
+          "op",
+          "id",
+          "children",
+          "place"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "op": "group.compose",
+          "id": "card",
+          "layoutBox": {
+            "width": 90,
+            "height": 100,
+            "unit": "mm"
+          },
+          "children": [
+            {
+              "op": "material.add",
+              "id": "photo",
+              "asset": "m1",
+              "place": {
+                "reference": "parent",
+                "at": [
+                  0.5,
+                  0.45
+                ],
+                "unit": "ratio"
+              }
+            },
+            {
+              "op": "text.add",
+              "id": "caption",
+              "content": "局部组合",
+              "place": {
+                "reference": "node:photo",
+                "referenceAnchor": "bottom-center",
+                "anchor": "top-center",
+                "offset": {
+                  "value": [
+                    0,
+                    4
+                  ],
+                  "unit": "mm"
+                }
+              },
+              "size": {
+                "width": 60,
+                "unit": "mm"
+              }
+            }
+          ],
+          "place": {
+            "reference": "page.right",
+            "at": [
+              0.5,
+              0.5
+            ],
+            "unit": "ratio",
+            "rotationDeg": -4
+          }
+        }
+      ],
+      "semantics": [
+        "children 复用同一 Command 定义，默认 parent 为本组。",
+        "禁止嵌套事务、page.update，以及修改本组外已有对象；不允许用 children 绕过权限。",
+        "组内按 parent 比例定位前必须有稳定 layoutBox；依赖排序和修改顺序规则见协议。"
+      ],
+      "status": "contract-only-until-runtime-verified"
+    },
+    {
+      "name": "group.ungroup",
+      "summary": "解组并保持后代世界变换与绘制顺序。",
+      "tier": "standard",
+      "requiresCapabilities": [
+        "tree.local"
+      ],
+      "schema": {
+        "type": "object",
+        "properties": {
+          "op": {
+            "const": "group.ungroup"
+          },
+          "target": {
+            "$ref": "#/$defs/Id"
+          },
+          "dependentLinks": {
+            "enum": [
+              "reject",
+              "detach"
+            ]
+          }
+        },
+        "required": [
+          "op",
+          "target"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "op": "group.ungroup",
+          "target": "card"
+        }
+      ],
+      "semantics": [
+        "默认有指向本组的约束时拒绝，除非明确 detach。",
+        "应保持分组合成效果；非平凡组 opacity/mask/blend 无法无损展开时拒绝。"
+      ],
+      "status": "contract-only-until-runtime-verified"
+    },
+    {
+      "name": "material.crop",
+      "summary": "裁切可用材料区域，保持来源坐标。",
+      "tier": "standard",
+      "requiresCapabilities": [
+        "material.cut"
+      ],
+      "schema": {
+        "type": "object",
+        "properties": {
+          "op": {
+            "const": "material.crop"
+          },
+          "target": {
+            "$ref": "#/$defs/Id"
+          },
+          "region": {
+            "$ref": "#/$defs/Region"
+          },
+          "keepRemainder": {
+            "type": "boolean"
+          },
+          "resultId": {
+            "$ref": "#/$defs/Id"
+          },
+          "edge": {
+            "$ref": "#/$defs/Edge"
+          }
+        },
+        "required": [
+          "op",
+          "target",
+          "region"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "op": "material.crop",
+          "target": "photo",
+          "region": {
+            "shape": "rect",
+            "space": "source",
+            "unit": "ratio",
+            "box": [
+              0.2,
+              0.2,
+              0.6,
+              0.6
+            ]
+          },
+          "keepRemainder": true
+        }
+      ],
+      "semantics": [
+        "裁切是实体消费，结果和余料共享同一个 source 单元分区账本。",
+        "不改变已有可见区域在世界中的位置；可编辑几何不可仅存合成位图。",
+        "keepRemainder 默认 true；false 表示废弃，不表示源区域重新可用。"
+      ],
+      "status": "contract-only-until-runtime-verified"
+    },
+    {
+      "name": "material.window",
+      "summary": "切除内部区域，并可保留窗芯。",
+      "tier": "standard",
+      "requiresCapabilities": [
+        "material.cut"
+      ],
+      "schema": {
+        "type": "object",
+        "properties": {
+          "op": {
+            "const": "material.window"
+          },
+          "target": {
+            "$ref": "#/$defs/Id"
+          },
+          "region": {
+            "$ref": "#/$defs/Region"
+          },
+          "keepRemainder": {
+            "type": "boolean"
+          },
+          "resultId": {
+            "$ref": "#/$defs/Id"
+          },
+          "edge": {
+            "$ref": "#/$defs/Edge"
+          },
+          "cutoutId": {
+            "$ref": "#/$defs/Id"
+          },
+          "windowId": {
+            "$ref": "#/$defs/Id"
+          }
+        },
+        "required": [
+          "op",
+          "target",
+          "region",
+          "windowId"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "op": "material.window",
+          "target": "photo",
+          "region": {
+            "shape": "ellipse",
+            "space": "source",
+            "unit": "ratio",
+            "box": [
+              0.2,
+              0.2,
+              0.6,
+              0.6
+            ]
+          },
+          "keepRemainder": true,
+          "cutoutId": "window-core",
+          "windowId": "hole-a"
+        }
+      ],
+      "semantics": [
+        "裁切是实体消费，结果和余料共享同一个 source 单元分区账本。",
+        "不改变已有可见区域在世界中的位置；可编辑几何不可仅存合成位图。",
+        "keepRemainder 默认 true；false 表示废弃，不表示源区域重新可用。"
+      ],
+      "status": "contract-only-until-runtime-verified"
+    },
+    {
+      "name": "material.split",
+      "summary": "用源坐标区域分出可寻址裁片。",
+      "tier": "standard",
+      "requiresCapabilities": [
+        "material.cut"
+      ],
+      "schema": {
+        "type": "object",
+        "properties": {
+          "op": {
+            "const": "material.split"
+          },
+          "target": {
+            "$ref": "#/$defs/Id"
+          },
+          "pieces": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "$ref": "#/$defs/Id"
+                },
+                "region": {
+                  "$ref": "#/$defs/Region"
+                },
+                "place": {
+                  "$ref": "#/$defs/Place"
+                }
+              },
+              "required": [
+                "id",
+                "region"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 2,
+            "maxItems": 64
+          },
+          "keepRemainder": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "op",
+          "target",
+          "pieces"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "op": "material.split",
+          "target": "photo",
+          "pieces": [
+            {
+              "id": "strip-a",
+              "region": {
+                "shape": "rect",
+                "space": "source",
+                "unit": "ratio",
+                "box": [
+                  0,
+                  0,
+                  0.5,
+                  1
+                ]
+              }
+            },
+            {
+              "id": "strip-b",
+              "region": {
+                "shape": "rect",
+                "space": "source",
+                "unit": "ratio",
+                "box": [
+                  0.5,
+                  0,
+                  0.5,
+                  1
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "semantics": [
+        "piece.id 是图层稳定 ID，来源单元不能重复分配。",
+        "目标完整形态被消费；剩余部分记录入材料账本；所有面积与交叠检查统一 epsilon。"
+      ],
+      "status": "contract-only-until-runtime-verified"
+    },
+    {
+      "name": "material.mask",
+      "summary": "非破坏性显示遮罩，不产生可复用余料。",
+      "tier": "standard",
+      "requiresCapabilities": [
+        "material.mask"
+      ],
+      "schema": {
+        "type": "object",
+        "properties": {
+          "op": {
+            "const": "material.mask"
+          },
+          "target": {
+            "$ref": "#/$defs/Id"
+          },
+          "region": {
+            "$ref": "#/$defs/Region"
+          },
+          "mode": {
+            "enum": [
+              "intersect",
+              "subtract",
+              "replace"
+            ]
+          }
+        },
+        "required": [
+          "op",
+          "target",
+          "region"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "op": "material.mask",
+          "target": "photo",
+          "region": {
+            "shape": "ellipse",
+            "space": "local",
+            "unit": "ratio",
+            "box": [
+              0,
+              0,
+              1,
+              1
+            ]
+          },
+          "mode": "intersect"
+        }
+      ],
+      "semantics": [
+        "mask 仅改变可见性，整片实体仍占用；不要把遮罩误当裁切。",
+        "严格实体模式是否允许纯数字遮罩，由 TASK.processingPolicy 明确决定。"
+      ],
+      "status": "contract-only-until-runtime-verified"
+    },
+    {
+      "name": "material.weave",
+      "summary": "让一根真实纸条依次通过指定的真实开口。",
+      "tier": "standard",
+      "requiresCapabilities": [
+        "material.weave"
+      ],
+      "schema": {
+        "type": "object",
+        "properties": {
+          "op": {
+            "const": "material.weave"
+          },
+          "strip": {
+            "$ref": "#/$defs/Id"
+          },
+          "through": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "target": {
+                  "$ref": "#/$defs/Id"
+                },
+                "window": {
+                  "$ref": "#/$defs/Id"
+                },
+                "sideAfter": {
+                  "enum": [
+                    "front",
+                    "back"
+                  ]
+                }
+              },
+              "required": [
+                "target",
+                "window",
+                "sideAfter"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 2,
+            "maxItems": 16
+          }
+        },
+        "required": [
+          "op",
+          "strip",
+          "through"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "op": "material.weave",
+          "strip": "strip-a",
+          "through": [
+            {
+              "target": "paper",
+              "window": "hole-a",
+              "sideAfter": "back"
+            },
+            {
+              "target": "paper",
+              "window": "hole-b",
+              "sideAfter": "front"
+            }
+          ]
+        }
+      ],
+      "semantics": [
+        "必须引用有几何与稳定 ID 的真实开口；不由运行时猜测交点或虚构开口。",
+        "渲染分段不等于复制实体材料；共享一份实体身份。",
+        "路径不连通、尺寸不足、语义含糊应报错，不近似伪造穿插。"
+      ],
+      "status": "contract-only-until-runtime-verified"
+    },
+    {
+      "name": "material.tape",
+      "summary": "从校准胶带素材截取一段。",
+      "tier": "standard",
+      "requiresCapabilities": [
+        "material.tape"
+      ],
+      "schema": {
+        "type": "object",
+        "properties": {
+          "op": {
+            "const": "material.tape"
+          },
+          "id": {
+            "$ref": "#/$defs/Id"
+          },
+          "parent": {
+            "$ref": "#/$defs/Id"
+          },
+          "place": {
+            "$ref": "#/$defs/Place"
+          },
+          "style": {
+            "$ref": "#/$defs/Style"
+          },
+          "order": {
+            "$ref": "#/$defs/Order"
+          },
+          "asset": {
+            "$ref": "#/$defs/Id"
+          },
+          "lengthMm": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          }
+        },
+        "required": [
+          "op",
+          "id",
+          "asset",
+          "lengthMm",
+          "place"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "op": "material.tape",
+          "id": "tape",
+          "asset": "m2",
+          "lengthMm": 30,
+          "place": {
+            "reference": "page",
+            "at": [
+              45,
+              30
+            ],
+            "unit": "mm",
+            "anchor": "center"
+          }
+        }
+      ],
+      "semantics": [
+        "宽度取素材校准值；长度消耗卷材库存。",
+        "平铺/抽取模式必须使用素材许可的连续纹理语义。"
+      ],
+      "status": "contract-only-until-runtime-verified"
+    },
+    {
+      "name": "material.edge",
+      "summary": "对实体边缘做确定性的工艺处理。",
+      "tier": "standard",
+      "requiresCapabilities": [
+        "material.edge"
+      ],
+      "schema": {
+        "type": "object",
+        "properties": {
+          "op": {
+            "const": "material.edge"
+          },
+          "target": {
+            "$ref": "#/$defs/Id"
+          },
+          "edge": {
+            "$ref": "#/$defs/Edge"
+          }
+        },
+        "required": [
+          "op",
+          "target",
+          "edge"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "op": "material.edge",
+          "target": "photo",
+          "edge": {
+            "style": "torn",
+            "roughness": 0.2,
+            "seed": 42
+          }
+        }
+      ],
+      "semantics": [
+        "撕边必须改变源区域/材料账本；不能用绘制效果冒充真实裁片。",
+        "仅视觉装饰若需提供，应另设 style 效果，不复用实体 cut 语义。"
+      ],
+      "status": "contract-only-until-runtime-verified"
+    },
+    {
+      "name": "material.decision",
+      "summary": "记录本次素材取舍理由，不替代实际使用检查。",
+      "tier": "standard",
+      "requiresCapabilities": [
+        "material.decisions"
+      ],
+      "schema": {
+        "type": "object",
+        "properties": {
+          "op": {
+            "const": "material.decision"
+          },
+          "asset": {
+            "$ref": "#/$defs/Id"
+          },
+          "choice": {
+            "enum": [
+              "intact",
+              "crafted",
+              "omitted"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "op",
+          "asset",
+          "choice",
+          "reason"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "op": "material.decision",
+          "asset": "m1",
+          "choice": "intact",
+          "reason": "保留主体，与文字形成一个局部组合。"
+        }
+      ],
+      "semantics": [
+        "必用素材不能 omitted；标记 intact 不代表素材确实出现在画面。"
+      ],
+      "status": "contract-only-until-runtime-verified"
+    },
+    {
+      "name": "layout.arrange",
+      "summary": "对一组对象执行水平、垂直或网格布局。",
+      "tier": "standard",
+      "requiresCapabilities": [
+        "layout.arrange"
+      ],
+      "schema": {
+        "type": "object",
+        "properties": {
+          "op": {
+            "const": "layout.arrange"
+          },
+          "targets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/Id"
+            },
+            "minItems": 2,
+            "maxItems": 200
+          },
+          "rule": {
+            "$ref": "#/$defs/LayoutRule"
+          },
+          "container": {
+            "$ref": "#/$defs/Reference"
+          }
+        },
+        "required": [
+          "op",
+          "targets",
+          "rule",
+          "container"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "op": "layout.arrange",
+          "targets": [
+            "photo",
+            "caption"
+          ],
+          "container": "page.left",
+          "rule": {
+            "direction": "vertical",
+            "gapMm": 4,
+            "align": "center",
+            "behavior": "once"
+          }
+        }
+      ],
+      "semantics": [
+        "测量文字和可见边界后排列；不以缩放实体素材解决容器溢出。",
+        "linked 规则保存到 Scene；once 仅保存解算后的坐标。"
+      ],
+      "status": "contract-only-until-runtime-verified"
+    },
+    {
+      "name": "layout.detach",
+      "summary": "解除指定对象的持续布局约束，保持当前位置。",
+      "tier": "standard",
+      "requiresCapabilities": [
+        "layout.linked"
+      ],
+      "schema": {
+        "type": "object",
+        "properties": {
+          "op": {
+            "const": "layout.detach"
+          },
+          "target": {
+            "$ref": "#/$defs/Id"
+          }
+        },
+        "required": [
+          "op",
+          "target"
+        ],
+        "additionalProperties": false
+      },
+      "examples": [
+        {
+          "op": "layout.detach",
+          "target": "caption"
+        }
+      ],
+      "semantics": [
+        "只删除该对象的主动定位/尺寸约束，不删除引用它的其他对象。"
+      ],
+      "status": "contract-only-until-runtime-verified"
+    },
+    {
+      "name": "page.update",
+      "summary": "更新页面视觉配置或尺寸，受任务硬约束限制。",
+      "tier": "standard",
+      "requiresCapabilities": [
+        "page.edit"
+      ],
+      "schema": {
+        "type": "object",
+        "properties": {
+          "op": {
+            "const": "page.update"
+          },
+          "paperColor": {
+            "$ref": "#/$defs/Color"
+          },
+          "physicalSizeMm": {
+            "$ref": "#/$defs/PositiveVec2"
+          },
+          "mode": {
+            "enum": [
+              "single",
+              "spread"
+            ]
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "additionalProperties": false,
+        "anyOf": [
+          {
+            "required": [
+              "paperColor"
+            ]
+          },
+          {
+            "required": [
+              "physicalSizeMm"
+            ]
+          },
+          {
+            "required": [
+              "mode"
+            ]
+          }
+        ]
+      },
+      "examples": [
+        {
+          "op": "page.update",
+          "paperColor": "#FFFDF7"
+        }
+      ],
+      "semantics": [
+        "无字段更新拒绝；任务锁定的纸张尺寸不可覆盖。",
+        "linked 约束重新解算；once 位置不自动变比例。"
+      ],
+      "status": "contract-only-until-runtime-verified"
+    }
+  ]
+}

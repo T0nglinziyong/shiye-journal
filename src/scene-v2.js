@@ -1,6 +1,8 @@
 // Scene v2: THE persisted editable layer tree. No parallel persisted arrays.
 // Existing editor/craft algorithms receive ephemeral leaf collection views,
 // whose supported mutations write through to the same tree.
+import {IDENTITY,assertRigidMatrix,convertNodeFrame,groupMatrix,inverseMatrix,matrixAngle,multiplyMatrix,rigidMatrix,setWorldPosition,spatialPath,transformPoint} from './scene-spatial.js';
+import {assertNoLinkedDependents,validateSceneLayout} from './scene-layout.js';
 export const SCENE_VERSION=2;
 export const SCENE_FORMAT='shiye-scene';
 export const SCENE_MAX_GROUP_DEPTH=12;
@@ -27,6 +29,13 @@ function insertNode(d,node,parentID){
  if(index<0)index=target.length;
  target.splice(index,0,node);
 }
+function insertWorldLeaf(d,node,type){
+ node.id||=generatedID();node.type=type;
+ const parent=node.creativeGroupID&&spatialPath(d.layers,node.creativeGroupID);
+ if(parent?.node.type==='group'&&parent.ancestors.concat(parent.node).some(group=>group.localTransform))
+  convertNodeFrame(node,IDENTITY,parent.world);
+ insertNode(d,node,node.creativeGroupID);
+}
 function leafList(d,type){return allLeaves(d.layers).filter(e=>e.kind===type).map(e=>e.value);}
 function replaceKind(d,type,entries){
  const positions=new Map(allLeaves(d.layers).filter(e=>e.kind===type).map(e=>[e.value.id,e.parents.at(-1)?.id||null]));
@@ -46,11 +55,11 @@ function reorderKind(d,type,entries){
 }
 function listView(d,type){
  const list=leafList(d,type);
- const add=(...values)=>{for(const n of values){if(!n||typeof n!=='object')throw Error('图层对象无效');n.id||=generatedID();n.type=type;insertNode(d,n,n.creativeGroupID);}return leafList(d,type).length;};
+ const add=(...values)=>{for(const n of values){if(!n||typeof n!=='object')throw Error('图层对象无效');insertWorldLeaf(d,n,type);}return leafList(d,type).length;};
  const splice=(start,remove,...incoming)=>{const originals=leafList(d,type),size=originals.length,index=Math.max(0,Math.min(size,start<0?size+start:start)),count=Math.max(0,remove??size-index),gone=originals.slice(index,index+count);
    for(const n of gone)detach(d.layers,n.id);
    const before=originals[index-1],after=originals[index+count];const around=before||after;
-   for(const n of incoming){n.id||=generatedID();n.type=type;if(around)n.zIndex=around.zIndex??n.zIndex;insertNode(d,n,n.creativeGroupID);}
+   for(const n of incoming){if(around)n.zIndex=around.zIndex??n.zIndex;insertWorldLeaf(d,n,type);}
    return gone;};
  const operations={push:add,pop:()=>splice(-1,1)[0],shift:()=>splice(0,1)[0],unshift:(...values)=>{splice(0,0,...values);return leafList(d,type).length;},splice,
    reverse:()=>{const value=leafList(d,type).reverse();reorderKind(d,type,value);return list;},
@@ -117,10 +126,36 @@ export function attachSceneV2(d){
  return d;
 }
 function collectGroups(nodes,out=[]){for(const n of nodes){if(n.type==='group'){out.push(n);collectGroups(n.children||[],out);}}return out;}
+function worldLeafView(d,node,parents){
+ if(!parents.some(group=>group.localTransform))return node;
+ return new Proxy(node,{
+  get(target,key){
+   if(key==='x'||key==='y')return spatialPath(d.layers,target.id).world[key==='x'?4:5];
+   if(key==='rotation'&&target.type!=='ink')return matrixAngle(spatialPath(d.layers,target.id).world);
+   if(key==='points'&&target.type==='ink'){
+    const parent=spatialPath(d.layers,target.id).parentWorld;
+    return target.points.map(p=>({...p,...transformPoint(parent,p.x,p.y)}));
+   }
+   return Reflect.get(target,key);
+  },
+  set(target,key,value){
+   if(['x','y','rotation'].includes(key)&&target.type!=='ink'){
+    const world=spatialPath(d.layers,target.id).world;
+    setWorldPosition(d,target.id,{x:key==='x'?value:world[4],y:key==='y'?value:world[5],rotation:key==='rotation'?value:matrixAngle(world)});
+    return true;
+   }
+   if(key==='points'&&target.type==='ink'){
+    const inverse=inverseMatrix(spatialPath(d.layers,target.id).parentWorld);
+    target.points=value.map(p=>({...p,...transformPoint(inverse,p.x,p.y)}));return true;
+   }
+   return Reflect.set(target,key,value);
+  }
+ });
+}
 export function sceneLayerEntries(d,{hidden=false,ink=true}={}){
  attachSceneV2(d);
  return allLeaves(d.layers).filter(e=>(hidden||e.parents.every(visible)&&visible(e.value))&&(ink||e.kind!=='ink'))
-  .map((e,index)=>({...e,index})); // tree order, including ink; never re-sort by type
+  .map((e,index)=>({...e,value:worldLeafView(d,e.value,e.parents),index})); // world-space editor view writes through to the local Scene tree
 }
 const lockedNode=n=>!!(n?.locked||n?.isLocked);
 const scenePathLocked=nodes=>nodes.some(n=>lockedNode(n)||(n.type==='group'&&scenePathLocked(n.children||[])));
@@ -149,7 +184,7 @@ export function assertSceneEditable(d,id){
  return node;
 }
 export function sceneGroupMembers(d,id){return sceneLayerEntries(d,{hidden:true}).filter(e=>e.parents.some(g=>g.id===id));}
-export function groupSceneLayers(d,ids,{id='group-'+generatedID(),name='手帐组合'}={}){
+export function groupSceneLayers(d,ids,{id='group-'+generatedID(),name='手帐组合',spatial=false,layoutBox}={}){
  attachSceneV2(d);
  if(!Array.isArray(ids)||ids.length<2||ids.length>80||new Set(ids).size!==ids.length)throw Error('请选择 2–80 个不同图层进行编组');
  if(!/^[a-zA-Z0-9_-]{1,96}$/.test(id)||findSceneNode(d,id))throw Error('图层组编号无效或重复');
@@ -158,8 +193,21 @@ export function groupSceneLayers(d,ids,{id='group-'+generatedID(),name='手帐�
  ids.forEach(key=>assertSceneEditable(d,key));
  const parent=selected[0].at(-2)||null;
  if(selected.some(path=>(path.at(-2)||null)!==parent))throw Error('请在同一图层组中选择素材');
+ if(spatial){
+  const siblings=[...(parent?.children||d.layers)].sort((a,b)=>z(a)-z(b)),positions=ids.map(key=>siblings.findIndex(node=>node.id===key)).sort((a,b)=>a-b);
+  if(positions.some((value,index)=>value!==positions[0]+index))throw Error('非连续图层编组会改变原有遮挡顺序');
+ }
+ const parentWorld=parent?spatialPath(d.layers,parent.id).world:IDENTITY;
+ const positions=ids.map(key=>spatialPath(d.layers,key)).filter(path=>path.node.type!=='ink').map(path=>[path.world[4],path.world[5]]);
+ const origin=positions.length?{x:positions.reduce((v,p)=>v+p[0],0)/positions.length,y:positions.reduce((v,p)=>v+p[1],0)/positions.length}:{x:0,y:0};
  const nodes=ids.map(key=>detach(d.layers,key)).filter(Boolean);
  const group={id,type:'group',name:String(name).slice(0,80),opacity:1,blendMode:'normal',children:nodes,zIndex:Math.min(...nodes.map(z))};
+ if(spatial){
+  const local=transformPoint(inverseMatrix(parentWorld),origin.x,origin.y);
+  group.localTransform=rigidMatrix(local.x,local.y);
+  nodes.forEach(node=>convertNodeFrame(node,IDENTITY,group.localTransform));
+  if(layoutBox)group.layoutBox=layoutBox;
+ }
  insertNode(d,group,parent?.id);
  nodes.forEach(n=>n.creativeGroupID=id);
  return id;
@@ -168,9 +216,11 @@ export function ungroupSceneLayers(d,id){
  attachSceneV2(d);
  const group=lookupGroup(d.layers,id);if(!group)return false;
  assertSceneEditable(d,id);
+ assertNoLinkedDependents(d,id);
  if((group.opacity??1)!==1||!['normal','source-over',undefined].includes(group.blendMode)||
    group.vectorMask||group.materialMask||group.clipPath)
   throw Error('这个组合有透明、混合或遮罩效果，直接解组会改变画面');
+ if(group.localTransform)for(const child of group.children)convertNodeFrame(child,group.localTransform,IDENTITY);
  let parent=null;children(d.layers,(n,arr,g)=>{if(n===group){parent=g;return true;}return false;});
  const target=parent?parent.children:d.layers;
  const ordered=[...target].sort((a,b)=>(a.zIndex??0)-(b.zIndex??0));
@@ -194,6 +244,8 @@ export function moveSceneNode(d,id,{parentID=null,beforeID=null}={}){
  if(parent?.locked||parent?.isLocked)throw Error('目标组已锁定');
  const target=parent?parent.children:d.layers;
  if(beforeID&&!target.some(n=>n.id===beforeID&&n!==node))throw Error('目标位置不属于该图层组');
+ const oldPath=spatialPath(d.layers,id),newParentWorld=parent?spatialPath(d.layers,parent.id).world:IDENTITY;
+ convertNodeFrame(node,oldPath.parentWorld,newParentWorld);
  const removed=detach(d.layers,id);
  if(!removed)throw Error('无法从旧图层组取出对象');
  let index=beforeID?target.findIndex(n=>n.id===beforeID):target.length;
@@ -219,6 +271,7 @@ export function removeSceneNode(d,id){
  const node=findSceneNode(d,id);
  if(!node)throw Error('删除的图层不存在');
  assertUnlockedPath(d,id);
+ assertNoLinkedDependents(d,id);
  const lockedDescendant=(node.type==='group'&&scenePathLocked(node.children||[]));
  if(lockedDescendant)throw Error('组合包含锁定图层，不能直接删除');
  return detach(d.layers,id);
@@ -229,6 +282,13 @@ export function transformSceneGroup(d,id,{dx=0,dy=0,rotation=0}={}){
  const group=lookupGroup(d.layers,id);if(!group)throw Error('图层组不存在');
  assertUnlockedPath(d,id);
  if(![dx,dy,rotation].every(Number.isFinite)||Math.abs(dx)>20000||Math.abs(dy)>20000||Math.abs(rotation)>180)throw Error('图层组变换超出纸面范围');
+ if(group.localTransform){
+  const path=spatialPath(d.layers,id),cx=path.world[4],cy=path.world[5];
+  const world=multiplyMatrix(rigidMatrix(cx+dx,cy+dy,rotation),rigidMatrix(-cx,-cy));
+  group.localTransform=multiplyMatrix(inverseMatrix(path.parentWorld),multiplyMatrix(world,path.world));
+  assertRigidMatrix(group.localTransform);
+  return true;
+ }
  const entries=sceneGroupMembers(d,id);
  if(!entries.length||entries.some(e=>e.value.isLocked||e.value.locked))throw Error('组合中包含锁定或空白的图层');
  const center=entries.filter(e=>e.kind!=='ink').reduce((r,e)=>({x:r.x+e.value.x,y:r.y+e.value.y,n:r.n+1}),{x:0,y:0,n:0});
@@ -302,13 +362,18 @@ export function validateSceneExtensions(d){
     }
    }
    if(node.opacity!==undefined&&!num(node.opacity,0,1))throw Error('图层透明度必须在 0–1 之间');
+   if(node.shadow&&(!/^#[0-9a-fA-F]{6}$/.test(node.shadow.color)||!num(node.shadow.blur,0,10000)||
+     !num(node.shadow.offsetX,-100000,100000)||!num(node.shadow.offsetY,-100000,100000)))throw Error('图层阴影参数无效');
    if(node.zIndex!==undefined&&!num(node.zIndex,-100000,100000))throw Error('图层排序值无效');
    if(node.type==='group'){
      if(!Array.isArray(node.children)||node.children.length>1000||
-       ['scale','scaleX','scaleY','width','height','assetID'].some(key=>node[key]!==undefined))throw Error('组合的变形应保存到子对象，不能单独存储组合宽高');
+       ['scale','scaleX','scaleY','width','height','assetID'].some(key=>node[key]!==undefined))throw Error('组合不能单独存储缩放或素材宽高');
+     if(node.localTransform)assertRigidMatrix(node.localTransform);
+     if(node.layoutBox&&(!node.localTransform||!num(node.layoutBox.width,.01,100000)||!num(node.layoutBox.height,.01,100000)))throw Error('组的 layoutBox 需要稳定的局部坐标和有效尺寸');
      if(node.name!==undefined&&(typeof node.name!=='string'||node.name.length>100))throw Error('图层组名称无效');
      walk(node.children,depth+1);
    }else if(node.type==='ink'){
+     if(node.layoutRotation!==undefined&&!num(node.layoutRotation,-3600,3600))throw Error('笔迹布局旋转无效');
      if(node.vectorMask)throw Error('墨迹蒙版需要先将墨迹分组，再在组上添加裁切蒙版');
      if(typeof node.color!=='string'||!/^#[0-9a-fA-F]{6}$/.test(node.color))throw Error('笔迹颜色无效');
      if(!Array.isArray(node.points)||node.points.length<1||node.points.length>20000||
@@ -324,17 +389,25 @@ export function validateSceneExtensions(d){
        throw Error('曲线文字须为单行，弧度范围为 -500 至 500');
      if(node.type==='text'&&node.curveHeight&&node.height<node.fontSize*1.6+Math.abs(node.curveHeight))
        throw Error('曲线文字编辑框高度不足');
+     if(node.type==='shape'&&node.svgPaths){
+       if(node.kind!=='vector'||!Array.isArray(node.svgViewBox)||node.svgViewBox.length!==4||node.svgViewBox[2]<=0||node.svgViewBox[3]<=0||
+         node.svgPaths.some(path=>typeof path.d!=='string'||path.d.length>8192||!/^[MmLlHhVvCcSsQqTtAaZz0-9+eE.,\s-]+$/.test(path.d)))
+         throw Error('矢量路径格式无效');
+     }
      if(node.type==='material'){
        if(typeof node.assetID!=='string'||!node.assetID)throw Error('缺少真实素材引用');
        if(node.sourceBlobId!==undefined&&(typeof node.sourceBlobId!=='string'||!node.sourceBlobId))
          throw Error('作品素材图片版本无效');
        if(node.sourceStaticPath!==undefined&&(typeof node.sourceStaticPath!=='string'||!node.sourceStaticPath))
          throw Error('作品素材静态图片引用无效');
+       if(node.craftWindowIDs!==undefined&&(!Array.isArray(node.craftWindowIDs)||new Set(node.craftWindowIDs).size!==node.craftWindowIDs.length||
+         node.craftWindowIDs.some(id=>typeof id!=='string'||!id)||node.craftWindowIDs.length!==(node.materialMask?.holes?.length||0)))
+         throw Error('实体开窗编号与材料孔洞不一致');
      }
    }
   }
  }
- walk(d.layers,0);return true;
+ walk(d.layers,0);validateSceneLayout(d);return true;
 }
 export function canonicalScene(d){
  validateSceneExtensions(d);

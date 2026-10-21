@@ -1,0 +1,23 @@
+{
+  "protocolVersion": 2,
+  "transactionId": "fixture-layer-place",
+  "baseSceneRevision": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "operations": [
+    {
+      "op": "layer.place",
+      "target": "caption",
+      "place": {
+        "reference": "node:photo",
+        "referenceAnchor": "bottom-center",
+        "anchor": "top-center",
+        "offset": {
+          "value": [
+            0,
+            4
+          ],
+          "unit": "mm"
+        }
+      }
+    }
+  ]
+}

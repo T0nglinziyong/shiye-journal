@@ -445,7 +445,7 @@ export function mountCanvasEditor(c){
     const free=Array.from({length:Math.min(1000,count)},(_,i)=>i).find(i=>!used.has(i));
     const roll=a.kind==='tape'&&a.supply?.kind==='tapeRoll'&&a.tapeRepeatMode==='repeatablePattern';
     if(free===undefined&&!roll){toast('复制会超出本页实物库存');return;}
-    const copy={...structuredClone(entry.value),id:uid(),x:entry.value.x+25,y:entry.value.y+25,
+    const copy={...structuredClone({...entry.value}),id:uid(),x:entry.value.x+25,y:entry.value.y+25,
       materialUnitIndex:free??0};
     try{
       const trial=attachSceneV2(structuredClone(d));trial.items.push(structuredClone(copy));

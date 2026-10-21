@@ -1,0 +1,61 @@
+{
+  "protocolVersion": 2,
+  "transactionId": "fixture-group-compose",
+  "baseSceneRevision": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "operations": [
+    {
+      "op": "group.compose",
+      "id": "card",
+      "layoutBox": {
+        "width": 90,
+        "height": 100,
+        "unit": "mm"
+      },
+      "children": [
+        {
+          "op": "material.add",
+          "id": "photo",
+          "asset": "m1",
+          "place": {
+            "reference": "parent",
+            "at": [
+              0.5,
+              0.45
+            ],
+            "unit": "ratio"
+          }
+        },
+        {
+          "op": "text.add",
+          "id": "caption",
+          "content": "局部组合",
+          "place": {
+            "reference": "node:photo",
+            "referenceAnchor": "bottom-center",
+            "anchor": "top-center",
+            "offset": {
+              "value": [
+                0,
+                4
+              ],
+              "unit": "mm"
+            }
+          },
+          "size": {
+            "width": 60,
+            "unit": "mm"
+          }
+        }
+      ],
+      "place": {
+        "reference": "page.right",
+        "at": [
+          0.5,
+          0.5
+        ],
+        "unit": "ratio",
+        "rotationDeg": -4
+      }
+    }
+  ]
+}

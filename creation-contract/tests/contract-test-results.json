@@ -1,0 +1,437 @@
+{
+  "ok": true,
+  "checks": 84,
+  "scope": [
+    "schema-meta",
+    "command-examples",
+    "negative-schema-tests",
+    "generated-artifact-consistency",
+    "read-only-help",
+    "no-known-task-id-leak"
+  ],
+  "sceneExecutionTested": false,
+  "rendererTested": false,
+  "appIntegrationTested": false,
+  "results": [
+    {
+      "name": "schema-meta:assets.schema.json",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "schema-meta:commands.schema.json",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "schema-meta:common.schema.json",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "schema-meta:scene-spatial.schema.json",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "schema-meta:task.schema.json",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "positive:group.compose.commands.json",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "positive:group.create.commands.json",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "positive:group.ungroup.commands.json",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "positive:ink.add.commands.json",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "positive:layer.delete.commands.json",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "positive:layer.place.commands.json",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "positive:layer.reorder.commands.json",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "positive:layer.reparent.commands.json",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "positive:layer.update.commands.json",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "positive:layout.arrange.commands.json",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "positive:layout.detach.commands.json",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "positive:material.add.commands.json",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "positive:material.crop.commands.json",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "positive:material.decision.commands.json",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "positive:material.edge.commands.json",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "positive:material.mask.commands.json",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "positive:material.split.commands.json",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "positive:material.tape.commands.json",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "positive:material.weave.commands.json",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "positive:material.window.commands.json",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "positive:page.update.commands.json",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "positive:shape.add.commands.json",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "positive:text.add.commands.json",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "positive:text.update.commands.json",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "positive:vector.add.commands.json",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "negative:protocol1",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "negative:empty-operations",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "negative:bad-revision",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "negative:missing-transaction",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "negative:unknown-envelope",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "negative:unknown-op",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "negative:unknown-field",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "negative:missing-target",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "negative:unknown-reference",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "negative:invalid-anchor",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "negative:point-and-anchor",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "negative:anchor-extra-unit",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "negative:string-offset",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "negative:missing-position-branch",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "negative:ratio-missing-unit",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "negative:unknown-bounds",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "negative:empty-update",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "negative:illegal-physical-size-input",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "negative:ratio-size-without-reference",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "negative:opacity-overflow",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "negative:window-without-stable-id",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "negative:negative-crop-width",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "negative:torn-without-seed",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "negative:grid-without-columns",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "negative:two-order-branches",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "negative:null-style",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "negative:compose-nested-transaction",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "generated-files-in-sync",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "describe:place",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "describe:size",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "describe:style",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "describe:region",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "describe:material.window",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "capability-not-falsely-claimed",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "describe:group.compose",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "no-task-leak:static/contract-release.json",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "no-task-leak:static/START_HERE.md",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "no-task-leak:static/design/RECIPES.md",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "no-task-leak:static/design/GUIDE.md",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "no-task-leak:static/api/PROTOCOL.md",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "no-task-leak:static/api/commands.schema.json",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "no-task-leak:static/api/assets.schema.json",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "no-task-leak:static/api/CATALOG.md",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "no-task-leak:static/api/scene-spatial.schema.json",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "no-task-leak:static/api/task.schema.json",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "no-task-leak:static/api/RENDERING.md",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "no-task-leak:static/api/SPATIAL.md",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "no-task-leak:static/api/operations.json",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "no-task-leak:static/api/common.schema.json",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "no-task-leak:static/api/SCENE_INTEGRATION.md",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "no-task-leak:static/api/SOURCES.md",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "no-task-leak:static/api/errors.json",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "no-task-leak:static/runtime/command-help.cjs",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "no-task-leak:static/runtime/placement-math.cjs",
+      "passed": true,
+      "detail": ""
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "protocolVersion": 2,
+  "transactionId": "fixture-material-tape",
+  "baseSceneRevision": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "operations": [
+    {
+      "op": "material.tape",
+      "id": "tape",
+      "asset": "m2",
+      "lengthMm": 30,
+      "place": {
+        "reference": "page",
+        "at": [
+          45,
+          30
+        ],
+        "unit": "mm",
+        "anchor": "center"
+      }
+    }
+  ]
+}

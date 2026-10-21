@@ -1,7 +1,7 @@
 {
   "protocolVersion": 1,
   "transactionId": "simple-initial",
-  "baseSceneRevision": "sha256:d9f716d11b572965a62e5dde649dfdfcb0d7a1dafb77c9abff2eed02c1827007",
+  "baseSceneRevision": "sha256:ee6b63d2babb8a115c8a6d2580fdb3bf208597dab7c0d7c57d31f620aae29f36",
   "operations": [
     {
       "op": "material.add",

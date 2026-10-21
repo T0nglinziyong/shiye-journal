@@ -6,6 +6,7 @@ import {shapeSVG,drawInk,textFont,textFontFamily,drawSceneText} from './editor-t
 import {craftSceneHash} from './craft-fingerprint.js';
 import {SCENE_MAX_GROUP_DEPTH} from './scene-v2.js';
 import {paintTapeStrip} from './tape-strip.js';
+import {groupMatrix,inverseMatrix} from './scene-spatial.js';
 
 export const SCENE_RENDERER_VERSION='shiye-scene-v2';
 export async function decodeSceneImage(source){
@@ -48,6 +49,7 @@ export async function renderSceneCanvas(draft,{scale=1,loadMaterialImage,createC
  const drawLeaf=async(kind,item,target)=>{
    target.save();
    try{
+     if(item.shadow){target.shadowColor=item.shadow.color;target.shadowBlur=item.shadow.blur;target.shadowOffsetX=item.shadow.offsetX;target.shadowOffsetY=item.shadow.offsetY;}
      if(kind==='ink'){target.globalAlpha=item.opacity??1;target.globalCompositeOperation=(item.blendMode==='multiply'?'multiply':'source-over');drawInk(target,[item]);return;}
      target.translate(item.x,item.y);target.rotate((item.rotation||0)*Math.PI/180);
      target.globalAlpha=item.opacity??1;
@@ -80,20 +82,29 @@ export async function renderSceneCanvas(draft,{scale=1,loadMaterialImage,createC
      if(node.hidden||node.isHidden||node.isParked||node.parked)continue;
      if(entry.type!=='group'){await drawLeaf(entry.type,node,target);continue;}
      const style=sceneLayerStyle(node);
-     const isolate=(node.opacity??1)!==1||style.blendMode!=='normal'||!!style.mask;
-     if(!isolate){await drawTree(node.children||[],target,depth+1);continue;}
+     const isolate=(node.opacity??1)!==1||style.blendMode!=='normal'||!!style.mask||!!node.shadow;
+     const matrix=groupMatrix(node);
+     if(!isolate){target.save();try{target.transform(...matrix);await drawTree(node.children||[],target,depth+1);}finally{target.restore();}continue;}
      if(++isolatedGroups>8||width*height*(isolatedGroups+1)>64_000_000)throw Error('复杂图层组合超出内存预算；请降低导出分辨率或减少隔离组');
      const surface=createCanvas();surface.width=width;surface.height=height;
      const inner=surface.getContext('2d');if(!inner)throw Error('无法创建图层组合缓冲');
-     inner.scale(scale,scale);await drawTree(node.children||[],inner,depth+1);
+     inner.scale(scale,scale);inner.transform(...matrix);await drawTree(node.children||[],inner,depth+1);
      target.save();
      try{
        target.globalAlpha=node.opacity??1;
        target.globalCompositeOperation=style.blendMode==='multiply'?'multiply':'source-over';
+       if(node.shadow){target.shadowColor=node.shadow.color;target.shadowBlur=node.shadow.blur;target.shadowOffsetX=node.shadow.offsetX;target.shadowOffsetY=node.shadow.offsetY;}
        if(style.mask){
-         target.translate(draft.canvas.width/2,draft.canvas.height/2);
-         applyVectorMask(target,style.mask,draft.canvas.width,draft.canvas.height);
-         target.translate(-draft.canvas.width/2,-draft.canvas.height/2);
+         if(node.localTransform){
+           if(!node.layoutBox)throw Error('局部组合蒙版需要稳定 layoutBox');
+           target.transform(...matrix);
+           applyVectorMask(target,style.mask,node.layoutBox.width,node.layoutBox.height);
+           target.transform(...inverseMatrix(matrix));
+         }else{
+           target.translate(draft.canvas.width/2,draft.canvas.height/2);
+           applyVectorMask(target,style.mask,draft.canvas.width,draft.canvas.height);
+           target.translate(-draft.canvas.width/2,-draft.canvas.height/2);
+         }
        }
        target.drawImage(surface,0,0,draft.canvas.width,draft.canvas.height);
      }finally{target.restore();}

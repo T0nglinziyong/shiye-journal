@@ -1,0 +1,23 @@
+{
+  "protocolVersion": 2,
+  "transactionId": "fixture-material-weave",
+  "baseSceneRevision": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "operations": [
+    {
+      "op": "material.weave",
+      "strip": "strip-a",
+      "through": [
+        {
+          "target": "paper",
+          "window": "hole-a",
+          "sideAfter": "back"
+        },
+        {
+          "target": "paper",
+          "window": "hole-b",
+          "sideAfter": "front"
+        }
+      ]
+    }
+  ]
+}

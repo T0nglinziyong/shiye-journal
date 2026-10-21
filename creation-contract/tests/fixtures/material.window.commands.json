@@ -1,0 +1,25 @@
+{
+  "protocolVersion": 2,
+  "transactionId": "fixture-material-window",
+  "baseSceneRevision": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "operations": [
+    {
+      "op": "material.window",
+      "target": "photo",
+      "region": {
+        "shape": "ellipse",
+        "space": "source",
+        "unit": "ratio",
+        "box": [
+          0.2,
+          0.2,
+          0.6,
+          0.6
+        ]
+      },
+      "keepRemainder": true,
+      "cutoutId": "window-core",
+      "windowId": "hole-a"
+    }
+  ]
+}

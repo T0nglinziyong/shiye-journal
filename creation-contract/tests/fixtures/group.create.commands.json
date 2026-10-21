@@ -1,0 +1,15 @@
+{
+  "protocolVersion": 2,
+  "transactionId": "fixture-group-create",
+  "baseSceneRevision": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "operations": [
+    {
+      "op": "group.create",
+      "id": "card",
+      "targets": [
+        "photo",
+        "caption"
+      ]
+    }
+  ]
+}

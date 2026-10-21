@@ -60,36 +60,50 @@ export function sceneRenderEntries(draft){
     :[{kind:entry.kind,value:entry.value}]);
 }
 
-// Bounded flat two-hole weave. Both apertures must fit a full strip cross-
-// section; a z-order cycle without physical openings is never called weaving.
+// Each crossing must pass through a real aperture wide enough for the full
+// physical strip. The saved slices are display projections of one source piece.
 export function compileTwoHoleWeaves(draft,weaves=[]){
- craftAssert(Array.isArray(weaves)&&weaves.length<=8,'WEAVE_BUDGET','一次最多 8 组两孔穿插');
+ craftAssert(Array.isArray(weaves)&&weaves.length<=8,'WEAVE_BUDGET','一次最多 8 组穿插');
  const lookup=key=>draft.items.find(i=>keyOf(i)===key||i.id===key),seen=new Set();
  for(const weave of weaves){
-  const strip=lookup(weave.piece),target=lookup(weave.target);
-  craftAssert(strip&&target&&strip!==target&&!seen.has(strip.id),'INVALID_WEAVE','穿插需要两个不同实体，单片一次只能指定一组');seen.add(strip.id);
+  const strip=lookup(weave.piece);
+  const crossings=weave.through||weave.holes?.map((hole,i)=>({target:weave.target,hole,
+   sideAfter:i===0?(weave.front==='outside'?'back':'front'):(weave.front==='outside'?'front':'back')}));
+  craftAssert(strip&&Array.isArray(crossings)&&crossings.length>=2&&crossings.length<=16&&!seen.has(strip.id),
+   'INVALID_WEAVE','穿插需要一件纸条和 2–16 个真实开孔');seen.add(strip.id);
   craftAssert(!strip.isLocked&&!strip.locked,'LAYER_LOCKED','不能对锁定素材制作穿插');
-  craftAssert(!target.craftDisplaySlices?.length,'UNSUPPORTED_WEAVE_GRAPH','不能在已局部穿插的目标上建立循环遮挡');
-  const targetMask=materialMaskGeometry(target.materialMask),holes=targetMask?.holes||[],indexes=weave.holes;
-  craftAssert(Array.isArray(indexes)&&indexes.length===2&&indexes.every(i=>Number.isInteger(i)&&i>=0&&i<holes.length)&&indexes[0]!==indexes[1],'WEAVE_NEEDS_OPENINGS','平面穿插需要两个真实且不同的开孔');
-  const horizontal=strip.width>=strip.height,axis=horizontal?0:1,centers=[];
+  const targets=crossings.map(entry=>lookup(entry.target));
+  craftAssert(targets.every(target=>target&&target!==strip&&!target.craftDisplaySlices?.length),
+   'UNSUPPORTED_WEAVE_GRAPH','穿插目标不存在、与纸条相同或已经局部穿插');
+  const horizontal=strip.width>=strip.height,centers=[],used=new Set();
   const stripGeometry=localMaterialGeometry(strip);
   craftAssert(geometryArea(stripGeometry)>.98,'WEAVE_STRIP_SHAPE','此穿插宏需要接近完整的直条；复杂形状请明确设计独立裁片');
-  for(const index of indexes){
+  for(const [i,entry] of crossings.entries()){
+   const target=targets[i],holes=materialMaskGeometry(target.materialMask)?.holes||[],index=entry.hole;
+   craftAssert(Number.isInteger(index)&&index>=0&&index<holes.length&&!used.has(target.id+':'+index),
+    'WEAVE_NEEDS_OPENINGS','穿插引用的真实开孔不存在或重复');used.add(target.id+':'+index);
    const hole=transformGeometry(normalizeGeometry([[holes[index]]]),p=>fromPage(strip,toPage(target,p))),b=geometryBounds(hole);
    const center=horizontal?b.x+b.width/2:b.y+b.height/2;
-   craftAssert(center>.01&&center<.99,'WEAVE_OUTSIDE_STRIP','两个开孔必须落在纸条的有效长度内');
+   craftAssert(center>.01&&center<.99,'WEAVE_OUTSIDE_STRIP','开孔必须落在纸条的有效长度内');
    // A narrow band on each opening's midpoint must contain the complete width.
    const band=horizontal?rectangleGeometry(center-.00005,0,.0001,1):rectangleGeometry(0,center-.00005,1,.0001);
    craftAssert(geometryArea(geometryDifference(band,hole))<1e-10,'WEAVE_OPENING_TOO_NARROW','开孔无法容纳纸条的实际宽度；不可缩小或拉伸素材');
-   centers.push(center);
+   centers.push({center,sideAfter:entry.sideAfter,target});
   }
-  centers.sort((a,b)=>a-b);craftAssert(centers[1]-centers[0]>.01,'WEAVE_OPENINGS_OVERLAP','穿插开孔之间缺少连接区域');
-  const between=horizontal?rectangleGeometry(centers[0],0,centers[1]-centers[0],1):rectangleGeometry(0,centers[0],1,centers[1]-centers[0]);
-  const front=weave.front||'between';craftAssert(front==='between'||front==='outside','INVALID_WEAVE','穿插显示方式无效');
-  const geometry=front==='between'?between:geometryDifference(rectangle(),between);
-  strip.zIndex=(target.zIndex||0)-1;
-  strip.craftDisplaySlices=[{id:'weave-front',kind:'two-hole-weave',targetId:target.id,geometryRatio:geometry,zOffset:2}];
+  centers.sort((a,b)=>a.center-b.center);
+  for(let i=1;i<centers.length;i++)craftAssert(centers[i].center-centers[i-1].center>.01&&centers[i].sideAfter!==centers[i-1].sideAfter,
+   'WEAVE_OPENINGS_OVERLAP','开孔重叠或穿插正反顺序未交替');
+  const bands=[];let begin=0,side=centers[0].sideAfter==='front'?'back':'front';
+  for(const entry of [...centers,{center:1}]){
+   if(side==='front'&&entry.center-begin>1e-9)
+    bands.push(horizontal?rectangleGeometry(begin,0,entry.center-begin,1):rectangleGeometry(0,begin,1,entry.center-begin));
+   begin=entry.center;side=entry.sideAfter;
+  }
+  const geometry=bands.length?geometryUnion(...bands):[];
+  const targetZ=targets.map(target=>target.zIndex||0);
+  strip.zIndex=Math.min(...targetZ)-1;
+  strip.craftDisplaySlices=geometry.length?[{id:'weave-front',kind:'two-hole-weave',targetId:targets[0].id,
+   geometryRatio:geometry,zOffset:Math.max(...targetZ)-strip.zIndex+1}]:[];
   validateDisplaySlices(strip);
  }
 }

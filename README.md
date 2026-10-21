@@ -35,13 +35,20 @@
 ```bash
 node runtime/shiye.cjs self-test
 node runtime/shiye.cjs info
+node runtime/shiye.cjs help
+node runtime/shiye.cjs describe material.craft
+node runtime/shiye.cjs begin work/next.json
+node runtime/shiye.cjs check work/next.json
 node runtime/shiye.cjs apply work/commands.json
 node runtime/shiye.cjs preview
 node runtime/shiye.cjs inspect
+node runtime/shiye.cjs review --result pass
 node runtime/shiye.cjs pack
 ```
 
 `apply` 支持初稿、复杂素材加工与局部修订，成功后原子更新 Scene；同一事务重复运行不会重复取料。`preview` 从当前 Scene 调用共享 Canvas 渲染器得到 PNG；`pack` 校验版本、Scene/PNG/素材哈希，并重新渲染当前 Scene 比对 PNG，再输出单行可编辑 JSON 和清单。复杂命令按需看 `design/RECIPES.md`；完整合同位于 `api/commands.schema.json`。实际 [v3 ZIP 示例](examples/v3/拾页-GPT创作包-v3-示例.zip) 与 [简单](examples/v3/simple/preview.png)、[复杂](examples/v3/complex/preview.png) 结果可直接查看；各目录保留初稿与修订命令、最终单行 JSON 和验证清单。用 `node scripts/generate-v3-example.mjs` 重新生成；能力映射见 [Scene 能力矩阵](docs/scene-capability-matrix.md)。
+
+`begin` 不覆盖已有草稿，`check` 和 `preview --commands work/next.json` 不修改正式 Scene 或正式预览。固定创作指导见包内 `design/CRAFT_GUIDE.md`，本次任务的动态简报仍在 `TASK.json` 和 `design/GUIDE.md`。`text.add.fontSizePt` 与文字修改时的 `set.fontSizePt` 按印刷 pt 换算为 Scene 单位；`xMm/yMm` 表示文字框中心的页面毫米坐标。预览和交付清单记录实际 Canvas 后端，未验证的适配器会标为 `unverified-canvas-adapter`。`review` 只记录创作者声明，不能替代真实看图。附件的协议 2、统一 `place` 与父级局部空间仍在接入阶段；详见 [39 项命令迁移表](docs/creation-command-migration.md)。
 
 导出包不含登录令牌。任务的原始文字、素材来源和纸张物理规格只读；实体裁片、余料、开窗与穿插沿用 App 的 Scene v2 物理校验。当前独立运行环境需要 Node Canvas 3.2.3，缺少渲染依赖时 `self-test` 明确失败，不能把未渲染 Scene 当成完整交付。
 

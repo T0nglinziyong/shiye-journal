@@ -1,0 +1,32 @@
+{
+  "protocolVersion": 2,
+  "transactionId": "fixture-text-add",
+  "baseSceneRevision": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "operations": [
+    {
+      "op": "text.add",
+      "id": "caption",
+      "content": "今天的想法，写在这里。",
+      "place": {
+        "reference": "node:photo",
+        "referenceAnchor": "bottom-center",
+        "anchor": "top-center",
+        "offset": {
+          "value": [
+            0,
+            4
+          ],
+          "unit": "mm"
+        }
+      },
+      "size": {
+        "width": 60,
+        "unit": "mm"
+      },
+      "style": {
+        "fontSizePt": 11,
+        "color": "#333333"
+      }
+    }
+  ]
+}

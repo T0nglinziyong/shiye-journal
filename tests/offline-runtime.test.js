@@ -20,13 +20,14 @@ test('bundled v3 runtime creates real same-scene PNG offline without HTML',async
  const {dir,files,run}=await setup();try{
   assert.ok(files['runtime/shiye.cjs']);assert.equal(run('self-test').status,0);
   const guide=strFromU8(files['design/RECIPES.md']);const command=JSON.parse(guide.match(/```json\n([\s\S]*?)\n```/)[1]);
+  command.operations.push({op:'material.decision',asset:'m1',choice:'intact',reason:'此测试将唯一素材完整用作画面主体'});
   await writeFile(join(dir,'work/commands.json'),JSON.stringify(command));
   assert.equal(run('apply','work/commands.json').status,0);
   const preview=run('preview');assert.equal(preview.status,0,preview.stderr);
   const png=await readFile(join(dir,'output/preview.png'));assert.deepEqual([...png.subarray(0,8)],[137,80,78,71,13,10,26,10]);
   const capture=JSON.parse(await readFile(join(dir,'output/preview-capture.json'),'utf8'));
   assert.equal(capture.renderer,'shiye-scene-v2');assert.ok(capture.assets.m1);
-  assert.equal(run('pack').status,0);
+  const pack=run('pack');assert.equal(pack.status,0,pack.stderr);
   await assert.rejects(stat(join(dir,'output/画面预览.html')),{code:'ENOENT'});
  }finally{await rm(dir,{recursive:true,force:true});}
 });

@@ -1,6 +1,7 @@
 import {objectCorners,polygonContains,selectionBounds} from './canvas-selection.js';
 import {sceneLayerEntries,findSceneNode,moveSceneNode,removeSceneNode,assertSceneEditable} from './scene-v2.js';
 import {pressureInkOutline} from './pressure-ink.js';
+import {convertNodeFrame,IDENTITY,spatialPath} from './scene-spatial.js';
 
 const edges=points=>points.map((point,index)=>[point,points[(index+1)%points.length]]);
 const cross=(a,b,c)=>(b.x-a.x)*(c.y-a.y)-(b.y-a.y)*(c.x-a.x);
@@ -31,7 +32,7 @@ const editableSelection=(draft,ids)=>{
   try{for(const id of new Set(ids)){
     const node=assertSceneEditable(draft,id);
     if(node.type==='group')return null;
-    nodes.push(node);
+    nodes.push(sceneLayerEntries(draft,{hidden:true}).find(entry=>entry.value.id===node.id)?.value||node);
   }}catch{return null;}
   return nodes;
 };
@@ -121,11 +122,11 @@ export function copySceneLasso(draft,ids,makeID){
   const selected=new Set(ids),copies=[];
   for(const {value,parents} of sceneLayerEntries(draft,{hidden:true})){
     if(!selected.has(value.id))continue;
-    const copy=structuredClone(value);copy.id=makeID();
+    const copy=structuredClone({...value});copy.id=makeID();
     if(copy.type==='ink')copy.points=(copy.points||[]).map(point=>({...point,x:point.x+12,y:point.y+12}));
     else {copy.x+=12;copy.y+=12;}
     const parent=parents.at(-1);
-    if(parent){parent.children.push(copy);copy.creativeGroupID=parent.id;}
+    if(parent){convertNodeFrame(copy,IDENTITY,spatialPath(draft.layers,parent.id).world);parent.children.push(copy);copy.creativeGroupID=parent.id;}
     else {draft.layers.push(copy);delete copy.creativeGroupID;}
     copies.push(copy.id);
   }

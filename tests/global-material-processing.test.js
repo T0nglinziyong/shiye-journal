@@ -24,6 +24,6 @@ test('API prompt and both creation packages use only the shared material process
     assert.equal(source.materialUseHints,undefined);
     assert.equal(source.materialUseRequired,undefined);
     assert.match(decode(files['START_HERE.md']),/scene\.json 是唯一作品/);
-    if(generationMode==='agent')assert.match(decode(files['design/RECIPES.md']),/Craft Plan/);
+    if(generationMode==='agent')assert.match(decode(files['design/RECIPES.md']),/commands\.json/);
   }
 });
