@@ -1,31 +1,32 @@
-# 创作包接入状态（2026-10-21）
+# 创作包接入状态（2026-10-21，PR #196）
 
-## 已进入可执行 v3 包
+## 当前可执行链路
 
-- 附件的固定创作指导经过与现有命令核对后发布为 `design/CRAFT_GUIDE.md`；固定入口与 `api/fixed-release.json` 带同一 release ID。任务特有的内容继续在 `TASK.json` 和动态 `design/GUIDE.md`，避免把用户文字和素材 ID 写入固定说明。
-- 原有 39 种协议 1 命令继续由 `src/v3-commands.js` 注册。`help` 和 `describe` 列出当前可执行的 24 个简洁命令与 39 个高级命令；暂缓项不作为可执行操作列出。
-- `begin`、无副作用的 `check`、`preview --commands`、审阅记录 `review` 已接入。正式 `preview`、`pack` 继续从当前 Scene 渲染并比对 PNG。事务收据与 Scene 存在同一个原子替换的 JSON 中。
-- `text.add.fontSizePt` 与文字 `layer.update.set.fontSizePt` 使用 pt→mm→Scene 单位换算；更新也可用 `xMm/yMm/widthMm`。材料占用仍通过原 Scene v2 实体校验。
-- 真实 Canvas 后端写入预览记录和交付清单。无法核实为原生 node-canvas 的兼容适配器明确标为 `unverified-canvas-adapter`。
-- 动态 RECIPES 只展示局部编辑，不再替必用素材生成 `omitted` 决定。
+网页导出的任务包默认且只接受 commands 协议 2。`scene.json` 是唯一作品状态；25 个简洁 Command 和 39 个 `native.*` 原生操作在同一事务中执行，完整工艺继续使用共享 Scene 编辑与材料账本，不建立另一套场景或渲染器。不再接受协议 1 事务、v1:/v2: 帮助别名或 advanced.v1.* 命令名。
 
-## 统一命令链路
+`help`、`describe <op>`、`describe place/size/style/region/order/layoutBox` 从实际可执行注册表生成；返回自包含 Schema。创建样式按节点类型收紧，错误指向实际操作字段，不静默丢弃参数。`material.decision` 理由长度与最终交付规则一致。
 
-- 网站导出的创作包现在默认协议 2；`api/commands.schema.json` 是实际运行时 Schema，`work/commands.json` 默认协议 2。`help` 列出 24 个简洁命令及 39 个 `advanced.v1.*` 高级命令。
-- 真实 Scene `scene.json` 是唯一写入目标。`check`、`apply`、`preview` 和 `pack` 共用它；事务收据保存在 Scene 内，原子替换与有主机、进程信息的崩溃遗留锁恢复已接入。
-- 组内真实局部坐标、持久 `linked` 约束、相对尺寸与顺序、阴影、非矩形来源裁片、窗芯和多孔穿插已加入简洁命令。实体裁切继续经过来源面积与占用账本验证。
-- `examples/v3-unified/拾页-统一命令创作包-示例.zip` 是默认协议的可运行示例，配套真实 `preview.png`、作品 JSON 与交付清单。示例验证工程链路，不代表人工确认的高质量设计。
-- `layout.arrange`、`visible` 边界定位按本轮要求暂缓。纸张单双页与物理尺寸由任务来源固定，不能用 `page.update` 改写；用户不需要自定义纸张宽高。
+组有真实局部变换、稳定 layoutBox 和递归 children。毫米/比例/九点锚点/相对节点/父组摆放共用一个解算器。linked 绑定时固化旋转空间偏移，反复求解不累积角度；人工平移回写同一旋转空间。笔迹只施加一次旋转并保留可编辑点。
 
-## 验证
+矩形、椭圆、多边形、SVG 路径、实体分片与余料、开窗与窗芯、多孔穿插、胶带、撕边和显示蒙版均有当前协议测试。`layout.arrange` 支持同级对象横向、纵向和网格的一次性排列，检查旋转占位、锁定与容器溢出，不缩放真实素材。
 
-- 统一命令测试覆盖简洁创建/更新、相对尺寸与排序、阴影、局部组和 linked 约束、实体分片/余料、SVG 路径区域、窗芯、胶带、撕边、多孔穿插及同一文件中的高级原生命令。发布 Schema 拒绝本轮暂缓的 `layout.arrange`、`visible` 和纸张尺寸修改。
-- 默认 ZIP 经真实 `check → apply → preview → pack` 生成示例 PNG、作品 JSON 和交付清单；崩溃遗留锁恢复及同事务幂等写入有回归用例。
-- `npm test` 通过 1253 项；`npm run test:ui` 通过；`npm run test:browser` 的编辑器、Fabric 画布、导入 28 屏与作品删除检查通过。
+## 包内容与环境
 
-## 未验证事项
+- 导出前将素材引用规范化为任务内 m1、m2 等短别名，再冻结快照与指纹；持久素材 ID 不变。
+- TASK/素材随任务变化；入口和审美指南固定；RECIPES 从注册表生成 operations 示例，不含任务 ID 或过期 revision。新事务由 begin 建立。
+- src/generated 是由 predev/pretest/build 生成的缓存，不再维护已提交的旧副本；两次清空缓存后的独立构建必须 SHA-256 一致。
+- 预览默认优先 Node Canvas，缺少时检测本机 Chromium；可用 SHIYE_RENDERER 固定后端。浏览器使用私有 CDP 管道和内嵌素材、同一 Scene Canvas 代码，不上传素材、不自动下载程序。
+- check 和试做预览不提交 Scene；apply 原子保存 Scene 和收据；pack 对当前 Scene、素材、实际后端和重新渲染 PNG 进行核对。
 
-- 39 个高级原生操作全部保留执行入口和 Schema，但尚未逐项进行 Scene→PNG→重开编辑人工验收。逐项路径见 [能力映射](creation-command-migration.md)。
-- 跨渲染器的复杂组蒙版/混合像素一致性、Fabric 内逐个子图层交互、真实用户旧任务八张原图重放尚未完成专项验收。当前回归使用合成素材。
-- 字体依赖执行机器；node-canvas、Skia、浏览器之间的字体测量与像素完全一致性未获保证。预览/打包在同一运行环境内重新渲染核对。
-- Scene 使用单文件原子替换与事务收据，没有额外写前 journal；崩溃遗留锁可在确认原进程已退出且锁超过一分钟后恢复。
+## 验收入口
+
+`npm test`、`npm run test:ui` 和 Craft/Interface browser regression 是实际检查。新增 rotation、arrange、unified-audit 测试；导出 ZIP 分别用 Node Canvas 和 Chromium 完成 check/apply/preview/review/pack/重新导入。没有浏览器时本地测试明确跳过，不能算作浏览器通过。
+
+Craft browser CI 额外运行干净构建复现检查和 `scripts/generate-v3-unified-example.mjs`，其 artifact 中的 creation-package 是该提交的实际生成物。仓库中的历史示例不当作当前运行时发布物；请从当前源码重建或读取对应 CI artifact。测试是否通过以 PR 的实际 CI 结果为准，本文不预写测试总数。
+
+## 仍明确不宣称的能力
+
+- visible 精确可见轮廓锚点、自定义 region: 布局区域、持续自动排列尚未发布；公共 Schema 明确拒绝，不默默按 layout 替代。可用明确 layoutBox 和单对象 linked 关系表达已支持的布局。
+- 纸张尺寸/单双页是任务来源硬约束，不能由作品命令覆盖。
+- 字体依赖执行环境；Node Canvas 与 Chromium 不保证逐像素相同，pack 只在相同实际后端重渲染验证。
+- 合成回归不等于真实 iPad Safari/Pencil、全部原生工艺参数和真实用户素材的逐项人工审美验收。
