@@ -17,7 +17,7 @@
 - 素材库：系列、标签、筛选、排序、收藏、使用状态、批量操作、最近删除。
 - 搭配：核心素材、视觉风格 / 画面疏密 / 文字内容 / 页面用途四项方向、补充想法、素材优先级、单页 / 双页与纸张比例。素材默认自由加工，文字默认混合编排。
 - 编辑器：真实尺寸素材、文字、图形、笔迹、纸张、撤销重做、备选栏、图层、PNG / PDF、自动保存。
-- AI 创作：默认 GPT 视觉，可直接查看素材预览；支持原子 Craft Plan、裁片、撕边、票根缺口、邮票齿、流苏、开窗、余料、探出 / 垫底 / 搭桥、有限两孔穿插，以及最终画面视觉复核。
+- AI 创作：默认 GPT 视觉，可直接查看素材预览；支持原子 Craft Plan、裁片、撕边、票根缺口、邮票齿、流苏、开窗、余料、探出 / 垫底 / 搭桥、穿插，以及最终画面视觉复核。
 - 数据：CloudBase Auth 与 PostgreSQL 保存账号和元数据，CloudBase 云存储保存模板、私有图片及作品文件；浏览器 IndexedDB 缓存已验证的账号资料并可靠暂存待同步修改。连接失败不会切换到另一份资料库。
 
 新账号首次进入时，素材库、系列和作品均为空；App 不再自动写入演示素材或示例作品。旧账号已经保存的记录不会因这一变更被删除。
@@ -30,27 +30,37 @@
 
 ## GPT 创作任务包 v3
 
-网页导出的可编辑 GPT 任务包以 `START_HERE.md` 与 `TASK.json` 为入口。`assets/overview.jpg` 帮助快速看全素材，`assets/mN.*` 保留本次 Scene 实际引用的原始像素，`assets/manifest.json` 记录来源 ID、SHA256、像素与毫米尺寸。`scene.json` 是唯一权威作品；`work/commands.json` 是一次编辑事务。
+网页导出的可编辑任务包以 `START_HERE.md` 与 `TASK.json` 为入口。`assets/overview.jpg` 仅供观察，`assets/mN.*` 是本次 Scene 引用的素材像素，`assets/manifest.json` 记录持久来源 ID、SHA256、像素与毫米尺寸。短别名在任务内稳定，来源 ID 不变。`scene.json` 是唯一权威作品，`work/commands.json` 是一次编辑事务。
 
 ```bash
 node runtime/shiye.cjs self-test
 node runtime/shiye.cjs info
 node runtime/shiye.cjs help
-node runtime/shiye.cjs describe material.craft
+node runtime/shiye.cjs describe place
+node runtime/shiye.cjs describe material.window
+node runtime/shiye.cjs describe native.material.craft
 node runtime/shiye.cjs begin work/next.json
+# 仅填写 work/next.json 的 operations
 node runtime/shiye.cjs check work/next.json
-node runtime/shiye.cjs apply work/commands.json
+node runtime/shiye.cjs apply work/next.json
 node runtime/shiye.cjs preview
 node runtime/shiye.cjs inspect
+# 实际打开 PNG 后记录审阅结果
 node runtime/shiye.cjs review --result pass
 node runtime/shiye.cjs pack
 ```
 
-`apply` 支持初稿、复杂素材加工与局部修订，成功后原子更新 Scene；同一事务重复运行不会重复取料。`preview` 从当前 Scene 调用共享 Canvas 渲染器得到 PNG；`pack` 校验版本、Scene/PNG/素材哈希，并重新渲染当前 Scene 比对 PNG，再输出单行可编辑 JSON 和清单。复杂命令按需看 `design/RECIPES.md`；完整合同位于 `api/commands.schema.json`。实际 [v3 ZIP 示例](examples/v3/拾页-GPT创作包-v3-示例.zip) 与 [简单](examples/v3/simple/preview.png)、[复杂](examples/v3/complex/preview.png) 结果可直接查看；各目录保留初稿与修订命令、最终单行 JSON 和验证清单。用 `node scripts/generate-v3-example.mjs` 重新生成；能力映射见 [Scene 能力矩阵](docs/scene-capability-matrix.md)。
+对外只接受统一 commands 协议 2。25 个简洁操作共享 `place/size/style/region/order` 中适用的参数；39 个 `native.*` 原生操作保留完整 Scene 工艺能力，仍经过同一个事务。没有旧协议或旧前缀的兼容入口。Group 是带局部变换的真实树；毫米、比例、相对锚点、linked 跟随使用同一个空间解算器。自动排列支持横向、纵向、网格的一次性排列，不缩放实体素材。
 
-`begin` 不覆盖已有草稿，`check` 和 `preview --commands work/next.json` 不修改正式 Scene 或正式预览。固定创作指导见包内 `design/CRAFT_GUIDE.md`，本次任务的动态简报仍在 `TASK.json` 和 `design/GUIDE.md`。`text.add.fontSizePt` 与文字修改时的 `set.fontSizePt` 按印刷 pt 换算为 Scene 单位；`xMm/yMm` 表示文字框中心的页面毫米坐标。预览和交付清单记录实际 Canvas 后端，未验证的适配器会标为 `unverified-canvas-adapter`。`review` 只记录创作者声明，不能替代真实看图。附件的协议 2、统一 `place` 与父级局部空间仍在接入阶段；详见 [39 项命令迁移表](docs/creation-command-migration.md)。
+`help`、`describe`、公共参数、示例和 Schema 从实际运行时注册表生成。`begin` 建立新事务，不覆盖已有草稿；`check` 与 `preview --commands work/next.json` 不修改正式 Scene。固定配方只含操作片段，不含过期 revision。字号使用 `style.fontSizePt`，位置使用 `place`；创建与更新的单位语义一致。
 
-导出包不含登录令牌。任务的原始文字、素材来源和纸张物理规格只读；实体裁片、余料、开窗与穿插沿用 App 的 Scene v2 物理校验。当前独立运行环境需要 Node Canvas 3.2.3，缺少渲染依赖时 `self-test` 明确失败，不能把未渲染 Scene 当成完整交付。
+`apply` 原子保存 Scene 与事务收据，重复执行不重复取料。`preview` 使用真实素材和共用 Scene Canvas 生成 PNG；`pack` 对当前 Scene、素材、实际渲染后端与重渲染 PNG 核对，输出单行 `output/project.shiyeproject.json`、`output/preview.png` 与 manifest。`review` 仅记录创作者声明，不替代实际看图。
+
+默认优先 Node Canvas 3.2.3，缺少时检测本机 Chromium；用 `SHIYE_RENDERER=node|browser|auto` 固定选择，或 `SHIYE_CHROMIUM_PATH` 指定浏览器。不自动下载程序、不上传素材；两个后端共享 Scene 渲染逻辑，但字体与像素不保证跨机器完全一致。后端不可用时明确失败，不伪造预览。
+
+最新示例用 `node scripts/generate-v3-unified-example.mjs` 在构建后生成，或下载对应提交的 Craft browser CI artifact 中 `creation-package`。历史示例不代表当前协议。完整边界见 [接入状态](docs/creation-integration-status.md)、[能力映射](docs/creation-command-migration.md) 和 [生成物规则](docs/creation-build-artifacts.md)。
+
+导出包不含登录令牌。任务原文、来源和纸张物理规格只读；真实裁片、余料、开窗、穿插沿用 Scene v2 材料校验。精确 visible 轮廓锚点、自定义 region: 布局区域和持续自动排列尚未发布，不能用静默近似代替。
 
 ## AI 素材工艺
 
@@ -94,7 +104,7 @@ npm run dev -- --port 5173 --strictPort
 主要 CI：
 
 - `.github/workflows/verify.yml`：构建、单元测试、UI / 路由 / HTTP 冒烟。
-- `.github/workflows/craft-browser.yml`：真实 Chromium 下的素材工艺、选择菜单、缓存、多模态 Craft Plan、穿插、便携 Canvas 预览回归。
+- `.github/workflows/craft-browser.yml`：真实 Chromium 下的素材工艺、选择菜单、缓存、多模态工艺、穿插、导出与导入；干净构建两次一致性和当前创作 ZIP 产物。
 - `.github/workflows/interface-browser.yml`、`recognition-browser.yml`、`storage-integration.yml`：隔离合成数据下的界面、识别与备份浏览器回归；三组检查与 Craft 浏览器检查都通过后再部署。
 
 浏览器回归使用合成数据，不代表实体 iPad Safari、Apple Pencil 或真实付费模型审美验收。
@@ -103,7 +113,7 @@ npm run dev -- --port 5173 --strictPort
 
 - 不重新引入旧任务包、旧字段别名、旧 relation 名称、旧设置迁移或旧 Swift / Goodnotes 导入路径。
 - 浏览器能力降级、断网恢复、事务重试和同步冲突处理属于运行时鲁棒性，不属于旧版本兼容。
-- 生成源码与 `src/generated/` 运行时必须来自当前源码重新构建，不能手工分叉。
+- `src/generated/` 不提交仓库；predev/pretest/build 必须从当前源码重建，CI 校验可复现性，禁止手工分叉。
 - 不提交 API 密钥、账号凭据、私人图片、字体文件或用户备份。
 - 所有改变真实素材用量、尺寸或来源的功能都必须有确定性校验和回归测试。
 

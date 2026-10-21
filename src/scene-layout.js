@@ -1,10 +1,10 @@
-import {resolveCreationPlace} from './creation-placement.js';
-import {matrixAngle,setWorldPosition,spatialPath,worldBox} from './scene-spatial.js';
+import {resolveCreationPlace,bindCreationRotation,creationRotationFrame} from './creation-placement.js';
+import {setWorldPosition,spatialPath,worldBox} from './scene-spatial.js';
 
 const nodeList=(nodes,out=[])=>{for(const node of nodes||[]){out.push(node);if(node.type==='group')nodeList(node.children,out);}return out;};
 const indexNodes=nodes=>new Map(nodes.flatMap(node=>[node.id,node.key,node.agentKey,node.creativePieceID].filter(Boolean).map(key=>[key,node])));
 const parentID=(page,id)=>spatialPath(page.layers,id)?.ancestors.at(-1)?.id||null;
-const dependency=(node)=>node.layoutConstraint?.place?.reference?.startsWith('node:')?node.layoutConstraint.place.reference.slice(5):null;
+const dependency=node=>node.layoutConstraint?.place?.reference?.startsWith('node:')?node.layoutConstraint.place.reference.slice(5):null;
 export function validateSceneLayout(page){
  const nodes=nodeList(page.layers),byID=indexNodes(nodes);
  if(!nodes.some(node=>node.layoutConstraint))return true;
@@ -16,8 +16,7 @@ export function validateSceneLayout(page){
   if(visiting.has(key))throw Error('持续布局约束存在循环：'+id);
   visiting.add(key);
   const parent=parentID(page,key),reference=dependency(node);
-  if(parent)visit(parent);
-  if(reference)visit(reference);
+  if(parent)visit(parent);if(reference)visit(reference);
   const place=node.layoutConstraint?.place;
   if(place){
    if(place.behavior!=='linked')throw Error('布局约束只支持 linked 的可定位图层');
@@ -45,8 +44,9 @@ export function solveSceneLayout(page){
   if(parent)solve(parent);if(reference)solve(reference);
   if(node.layoutConstraint){
    const current=worldBox(page,key),scale=page.canvas.height/page.physicalPageHeightMM;
-   const place=node.layoutConstraint.place;
-   const position=resolveCreationPlace(page,place,{widthMm:current.w/scale,heightMm:current.h/scale,rotationDeg:current.rotation-(parent?matrixAngle(spatialPath(page.layers,parent).world):0),parentID:parent});
+   const place=bindCreationRotation(page,node.layoutConstraint.place,current.rotation,parent);
+   node.layoutConstraint.place=place;
+   const position=resolveCreationPlace(page,place,{widthMm:current.w/scale,heightMm:current.h/scale,parentID:parent});
    setWorldPosition(page,key,position);
   }
   busy.delete(key);done.add(key);
@@ -57,9 +57,10 @@ export function solveSceneLayout(page){
 export function applyScenePlacement(page,id,place){
  const path=spatialPath(page.layers,id);if(!path)throw Error('定位图层不存在：'+id);
  const node=path.node,parent=parentID(page,id),box=worldBox(page,id),scale=page.canvas.height/page.physicalPageHeightMM;
- const position=resolveCreationPlace(page,place,{widthMm:box.w/scale,heightMm:box.h/scale,rotationDeg:box.rotation-(parent?matrixAngle(spatialPath(page.layers,parent).world):0),parentID:parent});
+ const bound=bindCreationRotation(page,place,box.rotation,parent);
+ const position=resolveCreationPlace(page,bound,{widthMm:box.w/scale,heightMm:box.h/scale,parentID:parent});
  setWorldPosition(page,id,position);
- if(place.behavior==='linked')node.layoutConstraint={place:structuredClone(place)};
+ if(bound.behavior==='linked')node.layoutConstraint={place:structuredClone(bound)};
  else delete node.layoutConstraint;
  solveSceneLayout(page);
  return node;
@@ -72,10 +73,10 @@ export function reconcileManualSceneMove(page,id){
  const path=spatialPath(page.layers,id);if(!path)throw Error('图层不存在：'+id);
  if(path.node.layoutConstraint){
   const place=structuredClone(path.node.layoutConstraint.place),parent=parentID(page,id);
-  place.rotationDeg=worldBox(page,id).rotation-(parent?matrixAngle(spatialPath(page.layers,parent).world):0);
+  place.rotationDeg=worldBox(page,id).rotation-creationRotationFrame(page,place,parent);
   delete place.offset;
   const box=worldBox(page,id),scale=page.canvas.height/page.physicalPageHeightMM;
-  const expected=resolveCreationPlace(page,place,{widthMm:box.w/scale,heightMm:box.h/scale,rotationDeg:matrixAngle(path.world)-(parent?matrixAngle(spatialPath(page.layers,parent).world):0),parentID:parent});
+  const expected=resolveCreationPlace(page,place,{widthMm:box.w/scale,heightMm:box.h/scale,parentID:parent});
   path.node.layoutConstraint.place.rotationDeg=place.rotationDeg;
   path.node.layoutConstraint.place.offset={value:[(box.cx-expected.x)/scale,(box.cy-expected.y)/scale],unit:'mm',space:'page'};
  }
@@ -84,8 +85,7 @@ export function reconcileManualSceneMove(page,id){
 export function assertNoLinkedDependents(page,id){
  const selected=spatialPath(page.layers,id)?.node;
  const affected=new Set([id,selected?.id,selected?.key,selected?.agentKey,selected?.creativePieceID]);
- const descendants=spatialPath(page.layers,id)?.node;
- if(descendants?.type==='group')nodeList(descendants.children).forEach(n=>[n.id,n.key,n.agentKey,n.creativePieceID].forEach(key=>affected.add(key)));
+ if(selected?.type==='group')nodeList(selected.children).forEach(n=>[n.id,n.key,n.agentKey,n.creativePieceID].forEach(key=>affected.add(key)));
  const dependents=nodeList(page.layers).filter(node=>!affected.has(node.id)&&affected.has(dependency(node)));
  if(dependents.length)throw Error('仍有 linked 图层引用此对象：'+dependents.map(n=>n.id).join(', '));
 }

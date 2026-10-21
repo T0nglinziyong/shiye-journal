@@ -1,53 +1,49 @@
-# 创作命令能力映射（截至 2026-10-21）
+# 创作命令能力映射（统一协议 2）
 
-附件列出的 39 项原操作继续由 `src/v3-commands.js` 执行，统一创作包默认协议 2；高级入口为 `advanced.v1.<原操作名>`，仍写在同一 `commands.json`。24 个简洁操作在 `src/creation-v2-commands.js` 执行，另一个候选 `layout.arrange` 暂缓。`visible` 边界定位也暂缓，发布 Schema 不接受这两个参数。纸张尺寸与单双页是任务来源固定值；`page.update` 仅修改纸色，旧页面图案和中缝命令可通过高级入口使用。
+当前入口是 `node runtime/shiye.cjs`。外部只接受协议 2；25 个简洁操作与 39 个 `native.*` 原生操作都写入同一份 commands.json，经同一事务修改唯一 Scene。不存在协议 1 或 advanced.v1.* 的外部兼容分支。底层复用已验证的 Scene 原语，不为了接口改名重写材料几何和账本。
 
-| 简洁操作 | 已接入的能力 |
+## 日常创作
+
+| 操作 | 语义 |
 |---|---|
-| `material.add`, `text.add/update`, `shape.add`, `vector.add`, `ink.add`, `layer.place/update/reparent/reorder/delete`, `group.create/compose/ungroup`, `layout.detach`, `material.decision`, `page.update` | 页面/组/节点相对定位、顺序、样式和阴影；真实组内局部坐标、持久 `linked` 约束及解绑；删除被依赖节点时可选择解绑。 |
-| `material.crop`, `material.window`, `material.split`, `material.mask`, `material.weave`, `material.tape`, `material.edge` | 矩形、椭圆、多边形与 SVG 路径区域；实体分片、余料和窗芯；2–16 个开窗穿插；显示蒙版与实体裁切分开。复杂原生工艺仍可用 `advanced.v1.*`。 |
-| `layout.arrange`, `visible` 锚点 | 按用户本轮要求暂缓；统一运行时的公开 Schema 会拒绝。 |
+| material.add / text.add / shape.add / vector.add / ink.add | 创建对象，统一 place / size / style / parent / order 中适用的参数 |
+| text.update / layer.place / layer.update | 局部更新，与创建相同的参数语义；不重建整页 |
+| layer.reparent / layer.reorder / layer.delete | 父级、同级层序与删除；维护 linked 依赖与世界位置 |
+| group.create / group.compose / group.ungroup | 真正局部组合树；compose 可先创建，再在组内修订 |
+| layout.arrange / layout.detach | 横向、纵向、网格的一次性排列；或解除对象的持续定位 |
+| material.crop / split / window / mask / weave / tape / edge | 实体裁片、余料、窗芯、多孔穿插、胶带、撕边和非破坏性显示蒙版 |
+| material.decision / page.update | 素材取舍与纸张颜色；不绕过任务物理约束 |
 
-下面 39 行是原操作到新统一文件的能力映射。执行入口存在不等于每个参数都完成跨浏览器像素验收；具体限制见接入状态。
+旋转使用 parent/page/reference 三种明确空间。省略角度时，已有节点保持当前世界角度，linked 会存下绑定时的角度偏移。相同 Scene 重复求解必须不变。自动排列不通过缩放真实素材解决溢出。
 
-| 原操作 | 候选目标 | 现有执行路径 | 提及该操作的测试（非逐项验收） | 协议 2 状态 |
-|---|---|---|---|---|
-| `material.add` | material.add | `src/v3-commands.js` → Scene 编辑/工艺执行器 | remediation-contract.test.js, v3-package.test.js | `advanced.v1.*` 可执行；简洁版见上表，逐项验收待补 |
-| `material.process` | material.crop / material.mask / material.edge; preserve all step variants | `src/v3-commands.js` → Scene 编辑/工艺执行器 | remediation-contract.test.js | `advanced.v1.*` 可执行；简洁版见上表，逐项验收待补 |
-| `material.craft` | material.craft advanced registry, Codex must retain full plan semantics | `src/v3-commands.js` → Scene 编辑/工艺执行器 | v3-package.test.js | `advanced.v1.*` 可执行；简洁版见上表，逐项验收待补 |
-| `material.tape` | material.tape + advanced ribbon capabilities | `src/v3-commands.js` → Scene 编辑/工艺执行器 | 未找到直接点名的测试 | `advanced.v1.*` 可执行；简洁版见上表，逐项验收待补 |
-| `text.add` | text.add | `src/v3-commands.js` → Scene 编辑/工艺执行器 | v3-package.test.js | `advanced.v1.*` 可执行；简洁版见上表，逐项验收待补 |
-| `shape.add` | shape.add / vector.add | `src/v3-commands.js` → Scene 编辑/工艺执行器 | v3-package.test.js | `advanced.v1.*` 可执行；简洁版见上表，逐项验收待补 |
-| `ink.add` | ink.add | `src/v3-commands.js` → Scene 编辑/工艺执行器 | v3-package.test.js | `advanced.v1.*` 可执行；简洁版见上表，逐项验收待补 |
-| `page.update` | page.update | `src/v3-commands.js` → Scene 编辑/工艺执行器 | v3-package.test.js | `advanced.v1.*` 可执行；简洁版见上表，逐项验收待补 |
-| `layer.update` | layer.update + typed native property extensions | `src/v3-commands.js` → Scene 编辑/工艺执行器 | v3-package.test.js | `advanced.v1.*` 可执行；简洁版见上表，逐项验收待补 |
-| `layer.delete` | layer.delete | `src/v3-commands.js` → Scene 编辑/工艺执行器 | 未找到直接点名的测试 | `advanced.v1.*` 可执行；简洁版见上表，逐项验收待补 |
-| `layer.move` | layer.reparent / layer.reorder / layer.place | `src/v3-commands.js` → Scene 编辑/工艺执行器 | 未找到直接点名的测试 | `advanced.v1.*` 可执行；简洁版见上表，逐项验收待补 |
-| `layer.insert` | typed native insert, same Command registry; no direct file editing | `src/v3-commands.js` → Scene 编辑/工艺执行器 | 未找到直接点名的测试 | `advanced.v1.*` 可执行；简洁版见上表，逐项验收待补 |
-| `layer.replaceMaterial` | material.replace, add registry and tests | `src/v3-commands.js` → Scene 编辑/工艺执行器 | 未找到直接点名的测试 | `advanced.v1.*` 可执行；简洁版见上表，逐项验收待补 |
-| `layer.repeatStamp` | layer.repeatStamp, digital-only or inventory-aware | `src/v3-commands.js` → Scene 编辑/工艺执行器 | 未找到直接点名的测试 | `advanced.v1.*` 可执行；简洁版见上表，逐项验收待补 |
-| `layer.reuseLayout` | layout.reuse, remap source identities | `src/v3-commands.js` → Scene 编辑/工艺执行器 | 未找到直接点名的测试 | `advanced.v1.*` 可执行；简洁版见上表，逐项验收待补 |
-| `material.glyphKnockout` | material.glyphKnockout, preserve real holes | `src/v3-commands.js` → Scene 编辑/工艺执行器 | 未找到直接点名的测试 | `advanced.v1.*` 可执行；简洁版见上表，逐项验收待补 |
-| `group.transform` | layer.place + explicit transform command | `src/v3-commands.js` → Scene 编辑/工艺执行器 | 未找到直接点名的测试 | `advanced.v1.*` 可执行；简洁版见上表，逐项验收待补 |
-| `group.create` | group.create | `src/v3-commands.js` → Scene 编辑/工艺执行器 | 未找到直接点名的测试 | `advanced.v1.*` 可执行；简洁版见上表，逐项验收待补 |
-| `group.ungroup` | group.ungroup | `src/v3-commands.js` → Scene 编辑/工艺执行器 | 未找到直接点名的测试 | `advanced.v1.*` 可执行；简洁版见上表，逐项验收待补 |
-| `material.decision` | material.decision | `src/v3-commands.js` → Scene 编辑/工艺执行器 | v3-package.test.js | `advanced.v1.*` 可执行；简洁版见上表，逐项验收待补 |
-| `scene.compose` | group.compose / typed scene import, no second authority | `src/v3-commands.js` → Scene 编辑/工艺执行器 | 未找到直接点名的测试 | `advanced.v1.*` 可执行；简洁版见上表，逐项验收待补 |
-| `tool.compose_page` | group.compose / ordered typed create commands; preserve full primitive and writing capabilities | `src/v3-commands.js` → `src/web-scene-workbench.js` | 未找到直接点名的测试 | `advanced.v1.*` 可执行；简洁版见上表，逐项验收待补 |
-| `tool.place_materials` | material.add with common place/parent/order | `src/v3-commands.js` → `src/web-scene-workbench.js` | 未找到直接点名的测试 | `advanced.v1.*` 可执行；简洁版见上表，逐项验收待补 |
-| `tool.draw_tape_strips` | material.tape plus typed advanced ribbon/strip geometry | `src/v3-commands.js` → `src/web-scene-workbench.js` | 未找到直接点名的测试 | `advanced.v1.*` 可执行；简洁版见上表，逐项验收待补 |
-| `tool.edit_materials` | material.crop/mask/edge plus advanced processing registry for every step | `src/v3-commands.js` → `src/web-scene-workbench.js` | 未找到直接点名的测试 | `advanced.v1.*` 可执行；简洁版见上表，逐项验收待补 |
-| `tool.upsert_materials` | material.add / material.replace / typed material update; explicit create-vs-update semantics | `src/v3-commands.js` → `src/web-scene-workbench.js` | 未找到直接点名的测试 | `advanced.v1.*` 可执行；简洁版见上表，逐项验收待补 |
-| `tool.move_elements` | layer.place; preserve ratio/mm and relative reference support | `src/v3-commands.js` → `src/web-scene-workbench.js` | 未找到直接点名的测试 | `advanced.v1.*` 可执行；简洁版见上表，逐项验收待补 |
-| `tool.arrange_elements` | layout.arrange; extend typed rules for every original arrangement | `src/v3-commands.js` → `src/web-scene-workbench.js` | 未找到直接点名的测试 | `advanced.v1.*` 可执行；简洁版见上表，逐项验收待补 |
-| `tool.align_elements` | layout.align to add with common reference/anchor definitions | `src/v3-commands.js` → `src/web-scene-workbench.js` | 未找到直接点名的测试 | `advanced.v1.*` 可执行；简洁版见上表，逐项验收待补 |
-| `tool.fit_text_to` | text.fit to add; explicit fit policy and minimum readable font, no silent overflow | `src/v3-commands.js` → `src/web-scene-workbench.js` | 未找到直接点名的测试 | `advanced.v1.*` 可执行；简洁版见上表，逐项验收待补 |
-| `tool.upsert_primitives` | shape.add/vector.add/ink.add + typed updates, preserve all original shapes | `src/v3-commands.js` → `src/web-scene-workbench.js` | 未找到直接点名的测试 | `advanced.v1.*` 可执行；简洁版见上表，逐项验收待补 |
-| `tool.upsert_text` | text.add/text.update + advanced text properties | `src/v3-commands.js` → `src/web-scene-workbench.js` | 未找到直接点名的测试 | `advanced.v1.*` 可执行；简洁版见上表，逐项验收待补 |
-| `tool.style_elements` | layer.update.style + typed per-node advanced style definitions | `src/v3-commands.js` → `src/web-scene-workbench.js` | 未找到直接点名的测试 | `advanced.v1.*` 可执行；简洁版见上表，逐项验收待补 |
-| `tool.group_elements` | group.create/group.compose | `src/v3-commands.js` → `src/web-scene-workbench.js` | 未找到直接点名的测试 | `advanced.v1.*` 可执行；简洁版见上表，逐项验收待补 |
-| `tool.ungroup_elements` | group.ungroup with world/compositing preservation | `src/v3-commands.js` → `src/web-scene-workbench.js` | 未找到直接点名的测试 | `advanced.v1.*` 可执行；简洁版见上表，逐项验收待补 |
-| `tool.delete_elements` | layer.delete with dependency/material rules | `src/v3-commands.js` → `src/web-scene-workbench.js` | 未找到直接点名的测试 | `advanced.v1.*` 可执行；简洁版见上表，逐项验收待补 |
-| `tool.set_paper` | page.update + typed native paper pattern definition | `src/v3-commands.js` → `src/web-scene-workbench.js` | 未找到直接点名的测试 | `advanced.v1.*` 可执行；简洁版见上表，逐项验收待补 |
-| `tool.finish_design` | material.decision + validation/review/pack, never fake visual approval | `src/v3-commands.js` → `src/web-scene-workbench.js` | 未找到直接点名的测试 | `advanced.v1.*` 可执行；简洁版见上表，逐项验收待补 |
-| `tool.apply_craft_plan` | material.craft advanced typed registry; source metadata auto-resolved | `src/v3-commands.js` → `src/web-scene-workbench.js` | 未找到直接点名的测试 | `advanced.v1.*` 可执行；简洁版见上表，逐项验收待补 |
+## 原生能力（完整保留，同一协议）
+
+下面名称均加 `native.` 前缀调用，准确参数用 `describe native.<名称>` 获取：
+
+```text
+material.add                 material.process             material.craft
+material.tape                material.glyphKnockout       material.decision
+text.add                     shape.add                    ink.add
+page.update                  layer.update                 layer.delete
+layer.move                   layer.insert                 layer.replaceMaterial
+layer.repeatStamp            layer.reuseLayout            group.transform
+group.create                 group.ungroup                scene.compose
+tool.compose_page            tool.place_materials         tool.draw_tape_strips
+tool.edit_materials          tool.upsert_materials        tool.move_elements
+tool.arrange_elements         tool.align_elements          tool.fit_text_to
+tool.upsert_primitives        tool.upsert_text             tool.style_elements
+tool.group_elements          tool.ungroup_elements        tool.delete_elements
+tool.set_paper               tool.finish_design           tool.apply_craft_plan
+```
+
+原生层保持专业加工参数以避免功能退化；普通摆放优先使用简洁层，不需要 AI 构造来源修订号、矩阵或完整 Scene。能执行不等于全部参数组合已逐项完成跨浏览器人工视觉验收。
+
+## 按需参数发现
+
+`describe place/size/style/region/order/layoutBox` 返回公共参数，`describe <op>` 返回自包含的真实执行 Schema 与示例；它们与包内 commands.schema.json 来自同一注册表。RECIPES 固定为操作片段，通过 begin 获取本轮 transactionId/revision，不能复制历史事务。
+
+## 验证与边界
+
+空间14项和排列4项专项回归检查旋转漂移、手动移动、笔迹、重复求解和容器溢出；完整创建/修改、实体工艺、事务一致性和两种后端的导出包链路在项目测试中验证。结果以实际 CI 为准。
+
+visible 精确轮廓锚点、region: 自定义布局区域和 linked 自动排列未发布。纸张几何由 TASK 固定。跨机器字体像素一致性与真机手写体验不可用合成测试代替。详见 creation-integration-status.md 与 creation-build-artifacts.md。

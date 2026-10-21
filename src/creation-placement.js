@@ -1,11 +1,6 @@
-// Public creation commands use millimetres. The existing Scene v2 stores
-// centres and dimensions in canvas units; convert only at this boundary.
+// Public creation coordinates are millimetres; Scene stores canvas units.
 import {spatialPath,worldBox,matrixAngle} from './scene-spatial.js';
-const anchors={
- 'top-left':[0,0],'top-center':[.5,0],'top-right':[1,0],
- 'middle-left':[0,.5],center:[.5,.5],'middle-right':[1,.5],
- 'bottom-left':[0,1],'bottom-center':[.5,1],'bottom-right':[1,1]
-};
+const anchors={'top-left':[0,0],'top-center':[.5,0],'top-right':[1,0],'middle-left':[0,.5],center:[.5,.5],'middle-right':[1,.5],'bottom-left':[0,1],'bottom-center':[.5,1],'bottom-right':[1,1]};
 const rotate=(x,y,degrees)=>{const a=degrees*Math.PI/180,c=Math.cos(a),s=Math.sin(a);return [x*c-y*s,x*s+y*c];};
 export function creationReferenceBox(page,reference,parentID){
  const width=page.canvas.width,height=page.canvas.height;
@@ -15,10 +10,20 @@ export function creationReferenceBox(page,reference,parentID){
   if(page.pageMode!=='spread')throw Error('单页不能引用 page.left/right');
   return {cx:reference==='page.left'?width/4:width*3/4,cy:height/2,w:width/2,h:height,rotation:0};
  }
- if(reference.startsWith('node:')){
-  return worldBox(page,reference.slice(5));
- }
+ if(reference.startsWith('node:'))return worldBox(page,reference.slice(5));
  throw Error('尚未定义的定位参照：'+reference);
+}
+// Use one frame for binding, solving and manual editing. Never feed a solved
+// world angle back as a relative angle on the next layout pass.
+export function creationRotationFrame(page,place,parentID=null){
+ const space=place.rotationSpace||'parent';
+ if(space==='page')return 0;
+ if(space==='reference')return creationReferenceBox(page,place.reference,parentID).rotation;
+ if(space==='parent')return parentID?matrixAngle(spatialPath(page.layers,parentID).world):0;
+ throw Error('旋转空间无效');
+}
+export function bindCreationRotation(page,place,worldRotation,parentID=null){
+ return {...place,rotationDeg:place.rotationDeg??(worldRotation-creationRotationFrame(page,place,parentID))};
 }
 export function resolveCreationPlace(page,place,{widthMm,heightMm,rotationDeg=0,parentID=null}={}){
  if(!place||typeof place!=='object')throw Error('缺少 place');
@@ -51,9 +56,7 @@ export function resolveCreationPlace(page,place,{widthMm,heightMm,rotationDeg=0,
   [rx,ry]=space==='reference'?rotate(ox,oy,ref.rotation):space==='parent'&&parentID?rotate(ox,oy,matrixAngle(spatialPath(page.layers,parentID).world)):[ox,oy];x+=rx;y+=ry;
  }
  const anchor=anchors[place.anchor||'center'];if(!anchor)throw Error('目标锚点无效');
- if(!['parent','page','reference',undefined].includes(place.rotationSpace))throw Error('旋转空间无效');
- const parentRotation=parentID?matrixAngle(spatialPath(page.layers,parentID).world):0;
- const rotation=(place.rotationDeg??rotationDeg)+(place.rotationSpace==='page'?0:place.rotationSpace==='reference'?ref.rotation:parentRotation);
+ const rotation=(place.rotationDeg??rotationDeg)+creationRotationFrame(page,place,parentID);
  if(!Number.isFinite(rotation))throw Error('旋转角度无效');
  const [ax,ay]=rotate((anchor[0]-.5)*widthMm*scale,(anchor[1]-.5)*heightMm*scale,rotation);
  return {x:x-ax,y:y-ay,rotation};
