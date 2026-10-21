@@ -26,12 +26,12 @@ async function fixture(){
 }
 test('describe schemas are standalone current and contain executable examples',()=>{
  for(const row of Object.values(creationCommandRegistry)){
-  const d=describeCreationCommand(row.name),check=new Ajv2020({strict:false}).compile(d.schema);
+  const d=describeCreationCommand(row.name,{full:true}),check=new Ajv2020({strict:false}).compile(d.schema);
   for(const example of d.examples){assert.ok(check(example),row.name+': '+JSON.stringify(check.errors));validateCreationV2Commands(tx([example]));}
  }
- for(const topic of ['place','size','style','order','region','layoutBox'])assert.doesNotThrow(()=>new Ajv2020({strict:false}).compile(describeCreationCommand(topic).schema));
- assert.equal(describeCreationCommand('page.update').schema.properties.physicalSizeMm,undefined);
- assert.deepEqual(describeCreationCommand('place').schema.properties.referenceBounds.enum,['layout']);
+ for(const topic of ['place','size','style','order','region','layoutBox'])assert.doesNotThrow(()=>new Ajv2020({strict:false}).compile(describeCreationCommand(topic,{full:true}).schema));
+ assert.equal(describeCreationCommand('page.update',{full:true}).schema.properties.physicalSizeMm,undefined);
+ assert.deepEqual(describeCreationCommand('place',{full:true}).schema.properties.referenceBounds.enum,['layout']);
  assert.throws(()=>validateCreationV2Commands({...tx([{op:'page.update',paperColor:'#ffffff'}]),protocolVersion:1}),/协议 2/);
  assert.throws(()=>describeCreationCommand('advanced.v1.material.add'),/未知/);
  assert.match(creationRecipes(),/begin/);assert.doesNotMatch(creationRecipes(),/sha256:[a-f0-9]{64}/);
@@ -43,7 +43,7 @@ test('parameter errors point at the requested operation and reject meaningless s
 test('real ink.add rotates once vector stroke and shadow persist and text height is honored',async()=>{
  const {doc,assets}=await fixture();
  const d=applyCreationV2Batch(doc,tx([
-  {op:'ink.add',id:'ink',unit:'mm',points:[{x:0,y:0},{x:20,y:0}],place:{...at,rotationDeg:30},style:{strokeWidthMm:1,color:'#334455',penStyle:'pen'}},
+  {op:'ink.add',id:'ink',unit:'mm',points:[{x:0,y:0},{x:20,y:0}],place:{...at,rotationDeg:30},style:{strokeWidthMm:1,color:'#334455',penStyle:'ballpoint'}},
   {op:'vector.add',id:'vec',viewBox:[0,0,10,10],paths:[{d:'M1 1 L9 9',style:{stroke:'#334455'}}],place:at,size:{width:20,height:20,unit:'mm'},style:{strokeWidthMm:2,shadow:{offsetMm:[1,2],blurMm:1,color:'#222222'}}},
   {op:'text.add',id:'txt',content:'test',place:at,size:{width:30,height:20,unit:'mm'},style:{fontSizePt:10}},
   {op:'layer.update',target:'ink',style:{strokeWidthMm:2,color:'#112233'}}

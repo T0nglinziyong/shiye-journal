@@ -66,7 +66,8 @@ export function createTapeStrip(asset,draft,rawPoints,zIndex=10,options={}){
   // A real strip is pulled between two points. Keeping only the endpoints
   // avoids thousands of tiny texture meshes and makes the live preview match
   // the final straight strip on touch devices.
-  const path=[point(rawPoints[0]),point(rawPoints.at(-1))];
+  if(rawPoints.length>512)throw Error('胶带轨迹超过 512 点');
+  const path=options.pathMode==='polyline'?rawPoints.map(point):[point(rawPoints[0]),point(rawPoints.at(-1))];
   if(path.some(p=>!p.every(Number.isFinite)))throw Error('胶带轨迹坐标无效');
   if(distance(path[0],path[1])<.8)throw Error('请拖出一段胶带');
   const lengthPx=path.slice(1).reduce((sum,p,i)=>sum+distance(path[i],p),0),pathLengthMM=lengthPx/scale;

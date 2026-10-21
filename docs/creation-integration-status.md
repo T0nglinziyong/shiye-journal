@@ -1,32 +1,27 @@
-# 创作包接入状态（2026-10-21，PR #196）
+# 创作包接入状态（统一属性内核）
 
-## 当前可执行链路
+## 唯一执行路径
 
-网页导出的任务包默认且只接受 commands 协议 2。`scene.json` 是唯一作品状态；25 个简洁 Command 和 39 个 `native.*` 原生操作在同一事务中执行，完整工艺继续使用共享 Scene 编辑与材料账本，不建立另一套场景或渲染器。不再接受协议 1 事务、v1:/v2: 帮助别名或 advanced.v1.* 命令名。
+创作包只接受协议 2 的 37 个当前操作。没有 `native.*`、`advanced.v1.*`、协议 1 事务或 xMm/font_size/set 的外部别名。`src/v3-commands.js` 已删除，执行器不再制造协议 1 封套。
 
-`help`、`describe <op>`、`describe place/size/style/region/order/layoutBox` 从实际可执行注册表生成；返回自包含 Schema。创建样式按节点类型收紧，错误指向实际操作字段，不静默丢弃参数。`material.decision` 理由长度与最终交付规则一致。
+`creation-command-spec.js` 是操作签名的唯一来源；公共坐标定义复用 common.schema。注册表生成验证 Schema、默认简明帮助、显式 --full 帮助与固定配方。候选 static/operations.json 是历史设计资料，不在构建或执行链中。
 
-组有真实局部变换、稳定 layoutBox 和递归 children。毫米/比例/九点锚点/相对节点/父组摆放共用一个解算器。linked 绑定时固化旋转空间偏移，反复求解不累积角度；人工平移回写同一旋转空间。笔迹只施加一次旋转并保留可编辑点。
+## 底层与更新语义
 
-矩形、椭圆、多边形、SVG 路径、实体分片与余料、开窗与窗芯、多孔穿插、胶带、撕边和显示蒙版均有当前协议测试。`layout.arrange` 支持同级对象横向、纵向和网格的一次性排列，检查旋转占位、锁定与容器溢出，不缩放真实素材。
+`creation-scene-core.js` 复用受保护的 Scene 编辑、真实素材几何与账本，不发明第二份场景。`creation-node-update.js` 统一属性和单位换算，`scene-text-layout.js` 统一文字重排。
 
-## 包内容与环境
+创建、text.update、layer.update、text.fit 共用文字测量规则。Scene 的 textLayout 保存 minimumHeight 和可选 lineHeightRatio；只改字体、内容、宽度不会遗忘高度意图。文字是完整内容，尺寸不够时增长；text.fit 不够时原子拒绝，不裁字。所有命令在更新尺寸之后计算锚点，随后求解 linked。
 
-- 导出前将素材引用规范化为任务内 m1、m2 等短别名，再冻结快照与指纹；持久素材 ID 不变。
-- TASK/素材随任务变化；入口和审美指南固定；RECIPES 从注册表生成 operations 示例，不含任务 ID 或过期 revision。新事务由 begin 建立。
-- src/generated 是由 predev/pretest/build 生成的缓存，不再维护已提交的旧副本；两次清空缓存后的独立构建必须 SHA-256 一致。
-- 预览默认优先 Node Canvas，缺少时检测本机 Chromium；可用 SHIYE_RENDERER 固定后端。浏览器使用私有 CDP 管道和内嵌素材、同一 Scene Canvas 代码，不上传素材、不自动下载程序。
-- check 和试做预览不提交 Scene；apply 原子保存 Scene 和收据；pack 对当前 Scene、素材、实际后端和重新渲染 PNG 进行核对。
+测量共享 Canvas 的 textLines 换行规则；编辑几何使用确定性估算字宽，最终 Canvas 按实际字体渲染。不能把几何一致性说成所有字体的逐像素一致性。人工 Fabric 输入仍有字体后端测量，不宣称其所有手势已经迁移为 Command。
 
-## 验收入口
+## 高级能力
 
-`npm test`、`npm run test:ui` 和 Craft/Interface browser regression 是实际检查。新增 rotation、arrange、unified-audit 测试；导出 ZIP 分别用 Node Canvas 和 Chromium 完成 check/apply/preview/review/pack/重新导入。没有浏览器时本地测试明确跳过，不能算作浏览器通过。
+曲线文字、格式与段落间距使用 style；矢量与笔迹局部几何使用 layer.update.geometry。material.glyphKnockout 接受 text/style/place 或 region；字形解析器只读本机指定字体，明确拒绝缺字和不支持的字体，不上传或保存字体字节。material.tape 使用同一 place，另有局部毫米 path、texture、caps。独立胶带段分配不同来源段身份。
 
-Craft browser CI 额外运行干净构建复现检查和 `scripts/generate-v3-unified-example.mjs`，其 artifact 中的 creation-package 是该提交的实际生成物。仓库中的历史示例不当作当前运行时发布物；请从当前源码重建或读取对应 CI artifact。测试是否通过以 PR 的实际 CI 结果为准，本文不预写测试总数。
+裁切、分片、余料、窗芯、穿插继续调用既有几何算法。trim、diagonal、contour、edge、restore、replace、relate、layer.mask、layer.repeat、layout.reuse/align 通过同一事务表达。纸张图案、物理行距和中缝使用 page.update。新增原生数据插入仅限类型化节点，不允许 AI 提交任意来源或权限字段。
 
-## 仍明确不宣称的能力
+## 验收与边界
 
-- visible 精确可见轮廓锚点、自定义 region: 布局区域、持续自动排列尚未发布；公共 Schema 明确拒绝，不默默按 layout 替代。可用明确 layoutBox 和单对象 linked 关系表达已支持的布局。
-- 纸张尺寸/单双页是任务来源硬约束，不能由作品命令覆盖。
-- 字体依赖执行环境；Node Canvas 与 Chromium 不保证逐像素相同，pack 只在相同实际后端重渲染验证。
-- 合成回归不等于真实 iPad Safari/Pencil、全部原生工艺参数和真实用户素材的逐项人工审美验收。
+新增 creation-canonical-edit.test.js，比较创建与两种文字更新的完整几何，验证保存重开、最小高度、linked 跟随、曲线适配、实际字体镂空、折线胶带与多个来源段、所有边缘、替换/翻转、关系、盖印/复用和帮助大小。既有 ZIP 测试迁移到当前操作，保留物理账本、回滚幂等、篡改预览拒绝和 Node/Chromium 端到端验收。
+
+发布结果以实际 CI 为准。visible 精确轮廓锚点、region: 布局容器、持续自动排列仍未发布；字体跨机器一致、真机 Safari/Pencil 不由合成测试证明。重新导出任务包，不尝试自动转换旧命令。

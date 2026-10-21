@@ -1,83 +1,52 @@
 import Ajv2020 from 'ajv/dist/2020.js';
-import {applyCommandBatch} from './v3-commands.js';
-import {creationV2RuntimeSchema,nativeCreationCommandNames,creationCommandRegistry,describeCreationCommand,selfContainedCreationSchema} from './creation-v2-contract.js';
+import {creationV2RuntimeSchema,creationCommandRegistry,describeCreationCommand,selfContainedCreationSchema} from './creation-v2-contract.js';
 import {arrangeCreationNodes} from './creation-arrange.js';
 import {creationReferenceBox,resolveCreationPlace,creationRotationFrame} from './creation-placement.js';
-import {textLines} from './editor-tools-model.js';
-import {normalizeGeometry,rectangleGeometry,geometryBounds,geometryArea,geometryIntersection,geometryDifference} from './craft-topology.js';
+import {normalizeGeometry,rectangleGeometry,geometryBounds,geometryArea,geometryIntersection,geometryDifference,transformGeometry} from './craft-topology.js';
 import {geometryToMask,itemSourceGeometry} from './craft-region-ops.js';
 import {creationRegionGeometry} from './creation-region.js';
-import {attachSceneV2,groupSceneLayers,moveSceneNode} from './scene-v2.js';
+import {attachSceneV2,assertSceneEditable,groupSceneLayers,moveSceneNode} from './scene-v2.js';
 import {applyScenePlacement,assertNoLinkedDependents,detachLinkedDependents,detachSceneLayout,solveSceneLayout} from './scene-layout.js';
-import {spatialPath,worldBox} from './scene-spatial.js';
+import {spatialPath,worldBox,setWorldPosition,transformPoint,inverseMatrix,matrixAngle} from './scene-spatial.js';
 import {compileTwoHoleWeaves} from './craft-display.js';
 import {validateWebScene} from './web-scene-workbench.js';
 import {assetSourceRevision} from './material-anatomy.js';
 import {craftDigest,craftSceneHash} from './craft-fingerprint.js';
-import {tapeDimensions} from './tape-strip.js';
+import {tapeDimensions,createTapeStrip} from './tape-strip.js';
+import {runMaterialAlgorithm,editScene,insertSceneNode,patchSceneNode,creationNode,creationLocation,creationNodes,sceneScale} from './creation-scene-core.js';
+import {dimension,dimensions,changedNodeProperties,updateCreationNode} from './creation-node-update.js';
+import {measureSceneText,reflowSceneText} from './scene-text-layout.js';
+import {applyCreationAdvanced} from './creation-advanced.js';
 
 const schema=new Ajv2020({strict:false,allErrors:true}).compile(creationV2RuntimeSchema);
-export const executableCreationV2Names=Object.freeze(Object.keys(creationCommandRegistry).filter(name=>!name.startsWith('native.')));
+export const executableCreationV2Names=Object.freeze(Object.keys(creationCommandRegistry));
 export const describeCreationV2Command=describeCreationCommand;
-const scale=page=>page.canvas.height/page.physicalPageHeightMM;
-const allNodes=(nodes,out=[])=>{for(const node of nodes||[]){out.push(node);if(node.type==='group')allNodes(node.children,out);}return out;};
+const scale=sceneScale,allNodes=creationNodes,requireNode=creationNode,locate=creationLocation;
 const find=(doc,id)=>allNodes(doc.page.layers).find(node=>[node.id,node.key,node.agentKey,node.creativePieceID].includes(id));
-const requireNode=(doc,id)=>{const node=find(doc,id);if(!node)throw Error('图层不存在：'+id);return node;};
-function locate(nodes,id,parent=null){for(const node of nodes){if([node.id,node.key,node.agentKey,node.creativePieceID].includes(id))return {node,parent,siblings:nodes};if(node.type==='group'){const found=locate(node.children,id,node);if(found)return found;}}return null;}
-const assetFor=(doc,assets,alias)=>{
- const id=doc.source.materials.find(row=>row.alias===alias)?.assetID,asset=assets.find(row=>row.id===id);
- if(!asset)throw Error('素材别名不存在：'+alias);return asset;
-};
-function dimension(page,size,key,parentID=null){
- if(!size||!Number.isFinite(size[key])||size[key]<=0)throw Error('size.'+key+' 必须是正数');
- if(size.unit==='mm')return size[key];
- if(size.unit==='ratio'){const box=creationReferenceBox(page,size.reference,parentID);return size[key]*(key==='width'?box.w:box.h)/scale(page);}
- throw Error('尺寸单位无效：'+size.unit);
-}
-function dimensions(page,size,{parentID=null,ratio=1,current=null}={}){
- if(!size)return current;
- let width=size.width===undefined?null:dimension(page,size,'width',parentID),height=size.height===undefined?null:dimension(page,size,'height',parentID);
- if(width===null&&height===null)throw Error('size 需要宽或高');
- if(size.aspect==='preserve'&&width!==null&&height!==null&&Math.abs(width/height-ratio)>1e-6)throw Error('size.aspect=preserve 与指定宽高矛盾；仅给一个维度或明确使用 free');
- if(width===null)width=height*ratio;if(height===null)height=width/ratio;
- if(!(width>0&&height>0))throw Error('size 宽高无效');return {width,height};
-}
-function styleFor(type,style,page,node=null){
- if(!style)return {};
- const mapping={opacity:'opacity',blendMode:'blendMode',shadow:'shadow'};
- if(type==='text')Object.assign(mapping,{color:'color',fontSizePt:'fontSizePt',fontFamily:'fontName',fontWeight:'bold',textAlign:'alignment',letterSpacingMm:'letterSpacing',lineHeight:'fixedLineHeight'});
- if(type==='shape')Object.assign(mapping,{fill:'fill',stroke:'stroke',strokeWidthMm:'lineWidth'});
- if(type==='ink')Object.assign(mapping,{color:'color',strokeWidthMm:'width',penStyle:'penStyle'});
- const result={};
- for(const [key,value] of Object.entries(style)){
-  if(!mapping[key])throw Error(type+' 不支持 style.'+key);
-  result[mapping[key]]=key==='penStyle'?(value==='pen'?'ballpoint':value):key==='fontWeight'?value==='bold':key==='strokeWidthMm'||key==='letterSpacingMm'?value*scale(page):
-   key==='lineHeight'?value*((style.fontSizePt??(Number.isFinite(node?.fontSize)?node.fontSize/scale(page)*72/25.4:12))*25.4/72*scale(page)):
-   key==='shadow'?{offsetX:value.offsetMm[0]*scale(page),offsetY:value.offsetMm[1]*scale(page),blur:value.blurMm*scale(page),color:value.color}:value;
- }
- return result;
-}
-// Internal Scene primitive adapter, never a second public transaction parser.
-function runPrimitive(doc,op,assets){return applyCommandBatch(doc,{protocolVersion:1,transactionId:'compile',baseSceneRevision:'sha256:'+'0'.repeat(64),operations:[op]},assets);}
+const assetFor=(doc,assets,alias)=>{const id=doc.source.materials.find(row=>row.alias===alias)?.assetID,asset=assets.find(row=>row.id===id);if(!asset)throw Error('素材别名不存在：'+alias);return asset;};
+const patch=patchSceneNode;
+const processMaterial=(doc,target,steps,assets,mode='append')=>runMaterialAlgorithm(doc,'edit_materials',{items:[{piece:target,mode,operations:steps}]},assets);
 function placeFor(doc,place,widthMm,heightMm,rotationDeg=0,parentID=null){return resolveCreationPlace(doc.page,place,{widthMm,heightMm,rotationDeg,parentID});}
 function addToParent(doc,id,parent){if(parent){const group=requireNode(doc,parent);if(group.type!=='group')throw Error('父级必须是图层组');moveSceneNode(doc.page,requireNode(doc,id).id,{parentID:group.id});}return doc;}
 function finishPlacement(doc,id,place){if(place)applyScenePlacement(doc.page,id,place);return doc;}
 function groupBox(doc,ids){
  const boxes=ids.map(id=>worldBox(doc.page,id)),cx=boxes.reduce((sum,b)=>sum+b.cx,0)/boxes.length,cy=boxes.reduce((sum,b)=>sum+b.cy,0)/boxes.length;
- return {width:Math.max(1,2*Math.max(...boxes.map(b=>Math.abs(b.cx-cx)+b.w/2))),height:Math.max(1,2*Math.max(...boxes.map(b=>Math.abs(b.cy-cy)+b.h/2)))};
-}
-function patch(doc,target,values,assets){return Object.keys(values).length?runPrimitive(doc,{op:'layer.update',target,set:values},assets):doc;}
-function measuredTextHeight(node){
- const width=text=>Array.from(text).reduce((n,ch)=>n+node.fontSize*(/[\u0000-\u00ff]/u.test(ch)?.65:1)+(node.letterSpacing||0),0),lines=textLines(node,width);
- return Math.max(node.fontSize*1.3,lines.height,node.fontSize*1.6+Math.abs(node.curveHeight||0));
+ const extent=box=>{const a=box.rotation*Math.PI/180;return [Math.abs(Math.cos(a))*box.w+Math.abs(Math.sin(a))*box.h,Math.abs(Math.sin(a))*box.w+Math.abs(Math.cos(a))*box.h];};
+ return {width:Math.max(1,2*Math.max(...boxes.map(b=>Math.abs(b.cx-cx)+extent(b)[0]/2))),height:Math.max(1,2*Math.max(...boxes.map(b=>Math.abs(b.cy-cy)+extent(b)[1]/2)))};
 }
 function reorder(doc,target,order,assets){
  const at=locate(doc.page.layers,target);if(!at)throw Error('图层不存在：'+target);
  const peers=at.siblings.filter(node=>node!==at.node);let before;
- if(order.before){if(!peers.some(node=>node.id===requireNode(doc,order.before).id))throw Error('排序目标必须是同级图层');before=order.before;}
+ if(order.before){before=requireNode(doc,order.before).id;if(!peers.some(node=>node.id===before))throw Error('排序目标必须是同级图层');}
  else if(order.after){const index=peers.findIndex(node=>node.id===requireNode(doc,order.after).id);if(index<0)throw Error('排序目标必须是同级图层');before=peers[index+1]?.id;}
  else if(order.edge==='back')before=peers[0]?.id;
- return runPrimitive(doc,{op:'layer.move',target,parent:at.parent?.id,before},assets);
+ return editScene(doc,[{op:'move',id:at.node.id,parent:at.parent?.id,before}],assets);
+}
+function finishNode(doc,id,change,assets,{created=false}={}){
+ doc=updateCreationNode(doc,id,change,assets);
+ if(change.place)finishPlacement(doc,id,created?{...change.place,rotationDeg:change.place.rotationDeg??0}:change.place);
+ if(change.order)doc=reorder(doc,id,change.order,assets);
+ solveSceneLayout(doc.page);return doc;
 }
 function displayMaskGeometry(node,asset,region,page){
  const s=scale(page),crop=node.cropRect||{x:0,y:0,width:1,height:1};
@@ -110,7 +79,7 @@ function splitPhysicalPiece(doc,item,assets,transactionId,index){
   return {id:part.id,asset:doc.source.materials.find(row=>row.assetID===asset.id)?.alias,sourceRevision:assetSourceRevision(asset),unit:parent.materialUnitIndex||0,parentId:parent.creativePieceID||parent.id,extraction:part.region.shape==='rect'?{type:'rect_crop',boxMM:[bounds.x,bounds.y,bounds.width,bounds.height]}:{type:'geometry',geometryMM:geometry},centerMM:[position.x/factor,position.y/factor],rotationDeg:position.rotation};
  });
  const commandId='v2-'+craftDigest([transactionId,index]).slice(7,31);
- const next=runPrimitive(doc,{op:'material.craft',plan:{format:'shiye-craft-plan',version:2,commandId,baseSceneHash:craftSceneHash(doc.page),pieces,consume:[parent.creativePieceID||parent.id],keepRemainders:item.keepRemainder!==false}},assets);
+ const next=runMaterialAlgorithm(doc,'apply_craft_plan',{format:'shiye-craft-plan',version:2,commandId,baseSceneHash:craftSceneHash(doc.page),pieces,consume:[parent.creativePieceID||parent.id],keepRemainders:item.keepRemainder!==false},assets);
  if(group)for(const piece of pieces)moveSceneNode(next.page,requireNode(next,piece.id).id,{parentID:group.id});
  for(const piece of item.pieces)if(piece.place)finishPlacement(next,piece.id,piece.place);
  return next;
@@ -130,7 +99,7 @@ function physicalCut(doc,{target,regions,keepRemainders=true},assets,transaction
   return {id,asset:alias,sourceRevision:assetSourceRevision(asset),unit:parent.materialUnitIndex||0,parentId:parent.creativePieceID||parent.id,extraction:{type:'geometry',geometryMM:inside},centerMM:[(world.cx+dx*Math.cos(angle)-dy*Math.sin(angle))/factor,(world.cy+dx*Math.sin(angle)+dy*Math.cos(angle))/factor],rotationDeg:world.rotation,z:parent.zIndex||10,...(treatments?.length?{treatments}:{})};
  });
  const commandId='v2-'+craftDigest([transactionId,index,'physical-cut']).slice(7,31);
- const next=runPrimitive(doc,{op:'material.craft',plan:{format:'shiye-craft-plan',version:2,commandId,baseSceneHash:craftSceneHash(doc.page),pieces,consume:[parent.creativePieceID||parent.id],keepRemainders}},assets);
+ const next=runMaterialAlgorithm(doc,'apply_craft_plan',{format:'shiye-craft-plan',version:2,commandId,baseSceneHash:craftSceneHash(doc.page),pieces,consume:[parent.creativePieceID||parent.id],keepRemainders},assets);
  if(group)for(const piece of pieces)moveSceneNode(next.page,requireNode(next,piece.id).id,{parentID:group.id});return next;
 }
 function tornEdgeStep(node,asset,edge){
@@ -141,129 +110,100 @@ const operationValidators=new Map();
 export function validateCreationV2Commands(input){
  if(schema(input))return input;
  let error=schema.errors[0],prefix='';
- if(input?.protocolVersion!==2)throw Object.assign(Error('只接受统一协议 2；请重新导出创作包，不转换旧事务。'),{code:'COMMAND_PROTOCOL_INVALID'});
+ if(input?.protocolVersion!==2)throw Object.assign(Error('只接受当前统一协议 2；请重新导出创作包。'),{code:'COMMAND_PROTOCOL_INVALID'});
  for(const [index,item] of (Array.isArray(input.operations)?input.operations:[]).entries()){
   const entry=creationCommandRegistry[item?.op];
   if(!entry)throw Object.assign(Error('未知操作：'+item?.op),{code:'COMMAND_SCHEMA_INVALID',operationIndex:index,path:'/operations/'+index+'/op'});
   if(!operationValidators.has(item.op))operationValidators.set(item.op,new Ajv2020({strict:false,allErrors:true}).compile(selfContainedCreationSchema(entry.schema)));
-  const check=operationValidators.get(item.op);
-  if(!check(item)){error=check.errors[0];prefix='/operations/'+index;break;}
+  const check=operationValidators.get(item.op);if(!check(item)){error=check.errors[0];prefix='/operations/'+index;break;}
  }
  const field=error.params.missingProperty||error.params.additionalProperty||'',path=prefix+error.instancePath+(field?'/'+field:'');
- throw Object.assign(Error('commands'+path+' '+error.message+'；使用 describe 查询当前实际参数。'),{code:'COMMAND_SCHEMA_INVALID',path,...(prefix?{operationIndex:Number(prefix.split('/')[2])}:{})});
+ throw Object.assign(Error('commands'+path+' '+error.message+'；使用 describe 查询参数。'),{code:'COMMAND_SCHEMA_INVALID',path,...(prefix?{operationIndex:Number(prefix.split('/')[2])}:{})});
 }
-export function applyCreationV2Batch(document,input,assets){
+export function applyCreationV2Batch(document,input,assets,options={}){
  validateCreationV2Commands(input);let doc=structuredClone(document);
+ validateWebScene(doc.page,doc.source,assets,{final:false});
  for(const [index,item] of input.operations.entries())try{
   const s=scale(doc.page);
-  if(nativeCreationCommandNames.includes(item.op))doc=runPrimitive(doc,{...item,op:item.op.slice('native.'.length)},assets);
-  else if(item.op==='material.add'){
+  for(const id of [item.target,item.strip,...(item.targets||[])].filter(Boolean))assertSceneEditable(attachSceneV2(doc.page),requireNode(doc,id).id);
+  if(item.op==='material.add'){
+   if(find(doc,item.id))throw Error('图层编号已经存在：'+item.id);
    const asset=assetFor(doc,assets,item.asset),position=placeFor(doc,item.place,asset.physicalWidthMM,asset.physicalHeightMM,0,item.parent);
-   doc=runPrimitive(doc,{op:'material.add',id:item.id,asset:item.asset,placement:{xMm:position.x/s,yMm:position.y/s,rotationDeg:position.rotation}},assets);
-   addToParent(doc,item.id,item.parent);finishPlacement(doc,item.id,item.place);doc=patch(doc,item.id,styleFor('material',item.style,doc.page),assets);
-   if(item.order)doc=reorder(doc,item.id,item.order,assets);
-  }else if(item.op==='text.add'){
-   const widthMm=dimension(doc.page,item.size,'width',item.parent);
-   doc=runPrimitive(doc,{op:'text.add',id:item.id,content:item.content,xMm:doc.page.canvas.width/2/s,yMm:doc.page.canvas.height/2/s,widthMm,fontSizePt:item.style?.fontSizePt||12,color:item.style?.color||'#334d4a'},assets);
-   const node=requireNode(doc,item.id),position=placeFor(doc,item.place,node.width/s,node.height/s,node.rotation||0,item.parent),style=styleFor('text',item.style,doc.page,node);delete style.fontSizePt;delete style.color;
-   doc=patch(doc,item.id,{x:position.x,y:position.y,rotation:position.rotation,...style},assets);
-   const text=requireNode(doc,item.id),requested=item.size.height===undefined?0:dimension(doc.page,item.size,'height',item.parent)*s;text.height=Math.max(measuredTextHeight(text),requested);
-   addToParent(doc,item.id,item.parent);finishPlacement(doc,item.id,item.place);if(item.order)doc=reorder(doc,item.id,item.order,assets);
-  }else if(item.op==='shape.add'){
-   const {width:widthMm,height:heightMm}=dimensions(doc.page,item.size,{parentID:item.parent}),position=placeFor(doc,item.place,widthMm,heightMm,0,item.parent);
-   doc=runPrimitive(doc,{op:'shape.add',id:item.id,kind:item.kind==='rect'?'rectangle':item.kind,xMm:position.x/s,yMm:position.y/s,widthMm,heightMm,fill:item.style?.fill||null},assets);
-   const style=styleFor('shape',item.style,doc.page);delete style.fill;doc=patch(doc,item.id,{rotation:position.rotation,...style},assets);
-   addToParent(doc,item.id,item.parent);finishPlacement(doc,item.id,item.place);if(item.order)doc=reorder(doc,item.id,item.order,assets);
-  }else if(item.op==='vector.add'){
-   const {width:widthMm,height:heightMm}=dimensions(doc.page,item.size,{parentID:item.parent,ratio:item.viewBox[2]/item.viewBox[3]});
-   if(!(item.viewBox[2]>0&&item.viewBox[3]>0))throw Error('viewBox 宽高必须是正数');
-   const position=placeFor(doc,item.place,widthMm,heightMm,0,item.parent),style=styleFor('shape',item.style,doc.page);
-   const paths=item.paths.map(path=>{const part={d:path.d};if(path.fillRule)part.fillRule=path.fillRule;for(const [key,value] of Object.entries(styleFor('shape',path.style,doc.page)))if(['fill','stroke','opacity'].includes(key))part[key]=value;else throw Error('路径样式尚不支持：'+key);return part;});
-   doc=runPrimitive(doc,{op:'layer.insert',node:{id:item.id,type:'shape',kind:'vector',x:position.x,y:position.y,width:widthMm*s,height:heightMm*s,rotation:position.rotation,zIndex:500,fill:style.fill??null,stroke:style.stroke??null,opacity:style.opacity??1,blendMode:style.blendMode??'normal',...style,svgPaths:paths,svgViewBox:item.viewBox}},assets);
-   addToParent(doc,item.id,item.parent);finishPlacement(doc,item.id,item.place);if(item.order)doc=reorder(doc,item.id,item.order,assets);
-  }else if(item.op==='ink.add'){
-   const style=item.style;if(!style||!Number.isFinite(style.strokeWidthMm)||!style.color)throw Error('笔迹需要 strokeWidthMm 和 color');
-   for(const key of Object.keys(style))if(!['strokeWidthMm','color','opacity','blendMode','penStyle','shadow'].includes(key))throw Error('笔迹不支持 style.'+key);
-   const xs=item.points.map(p=>p.x),ys=item.points.map(p=>p.y),cx=(Math.min(...xs)+Math.max(...xs))/2,cy=(Math.min(...ys)+Math.max(...ys))/2;
-   const widthMm=Math.max(.01,Math.max(...xs)-Math.min(...xs)),heightMm=Math.max(.01,Math.max(...ys)-Math.min(...ys)),position=placeFor(doc,item.place,widthMm,heightMm,0,item.parent);
-   const a=position.rotation*Math.PI/180,c=Math.cos(a),sin=Math.sin(a);
-   const points=item.points.map(p=>({xMm:position.x/s+(p.x-cx)*c-(p.y-cy)*sin,yMm:position.y/s+(p.x-cx)*sin+(p.y-cy)*c,...(p.pressure===undefined?{}:{pressure:p.pressure})}));
-   const pen=style.penStyle==='pen'?'ballpoint':style.penStyle||'ballpoint';
-   doc=runPrimitive(doc,{op:'ink.add',id:item.id,points,widthMm:style.strokeWidthMm,color:style.color,penStyle:pen},assets);
-   // The points already carry the requested rotation. Record it before placement.
-   requireNode(doc,item.id).layoutRotation=position.rotation;
-   addToParent(doc,item.id,item.parent);finishPlacement(doc,item.id,item.place);
-   doc=patch(doc,item.id,{...(style.opacity===undefined?{}:{opacity:style.opacity}),...(style.blendMode===undefined?{}:{blendMode:style.blendMode}),...(style.shadow?{shadow:styleFor('ink',{shadow:style.shadow},doc.page).shadow}:{})},assets);
-   if(item.order)doc=reorder(doc,item.id,item.order,assets);
-  }else if(item.op==='text.update'){
-   const node=requireNode(doc,item.target);if(node.type!=='text')throw Error('text.update 只接受文字图层');
-   const values={...styleFor('text',item.style,doc.page,node)};if(item.content!==undefined)values.content=item.content;
-   const parentID=locate(doc.page.layers,item.target)?.parent?.id;if(item.size?.width!==undefined)values.widthMm=dimension(doc.page,item.size,'width',parentID);
-   doc=patch(doc,item.target,values,assets);const resized=requireNode(doc,item.target),minimum=measuredTextHeight(resized),requested=item.size?.height===undefined?0:dimension(doc.page,item.size,'height',parentID)*s;
-   doc=patch(doc,item.target,{height:Math.max(minimum,requested)},assets);if(item.place)finishPlacement(doc,item.target,item.place);if(item.order)doc=reorder(doc,item.target,item.order,assets);
-  }else if(item.op==='layer.place'){
-   requireNode(doc,item.target);finishPlacement(doc,item.target,item.place);
-  }else if(item.op==='layer.update'){
-   const node=requireNode(doc,item.target);
-   if(node.type==='ink'&&item.size)throw Error('笔迹宽度请使用 style.strokeWidthMm');
-   if(node.type==='group'&&item.size)throw Error('组合尺寸请使用稳定 layoutBox');
-   if(node.type==='material'&&item.size)throw Error('实体素材不能通过 size 改变物理尺寸');
-   const values=styleFor(node.type,item.style,doc.page,node);
-   if(item.size){const parentID=locate(doc.page.layers,item.target)?.parent?.id,measured=dimensions(doc.page,item.size,{parentID,ratio:(node.width||1)/(node.height||1)});if(node.type==='text'&&item.size.height===undefined)values.width=measured.width*s;else {values.width=measured.width*s;values.height=measured.height*s;}}
-   doc=patch(doc,item.target,values,assets);if(item.place)finishPlacement(doc,item.target,item.place);if(item.order)doc=reorder(doc,item.target,item.order,assets);
-  }else if(item.op==='layer.reparent'){
-   requireNode(doc,item.target);if(item.parent!==null){const parent=requireNode(doc,item.parent);if(parent.type!=='group')throw Error('目标父级必须是组');}
-   doc=runPrimitive(doc,{op:'layer.move',target:item.target,...(item.parent===null?{}:{parent:item.parent})},assets);if(item.order)doc=reorder(doc,item.target,item.order,assets);solveSceneLayout(doc.page);
+   doc=runMaterialAlgorithm(doc,'place_materials',{items:[{asset:item.asset,piece:item.id,x:position.x/s,y:position.y/s,rotation:position.rotation,coordinate_unit:'mm'}]},assets);
+   addToParent(doc,item.id,item.parent);doc=finishNode(doc,item.id,item,assets,{created:true});
+  }else if(['text.add','shape.add','vector.add','ink.add'].includes(item.op)){
+   const common={id:item.id,agentKey:item.id,x:doc.page.canvas.width/2,y:doc.page.canvas.height/2,rotation:0,zIndex:500,opacity:1,blendMode:'normal'};
+   let node;
+   if(item.op==='text.add'){
+    if(item.size.width===undefined)throw Error('文字创建需要 size.width');
+    node={...common,type:'text',content:item.content,width:dimension(doc.page,item.size,'width',item.parent)*s,height:1,fontSize:12*25.4/72*s,color:'#334D4A',style:'hand',alignment:'left'};
+   }else if(item.op==='ink.add'){
+    const style=item.style;if(!(style.strokeWidthMm>0)||!style.color)throw Error('笔迹需要正 strokeWidthMm 和 color');
+    node={id:item.id,agentKey:item.id,type:'ink',points:item.points.map(p=>({x:p.x*s,y:p.y*s,p:p.pressure??.5})),width:style.strokeWidthMm*s,color:style.color,penStyle:style.penStyle||'ballpoint',zIndex:500,opacity:1,blendMode:'normal',layoutRotation:0};
+   }else{
+    const result=dimensions(doc.page,item.size,{parentID:item.parent,ratio:item.op==='vector.add'?item.viewBox[2]/item.viewBox[3]:1});
+    node={...common,type:'shape',kind:item.op==='vector.add'?'vector':item.kind==='rect'?'rectangle':item.kind,width:result.width*s,height:result.height*s,fill:null,stroke:null,lineWidth:0};
+    if(item.op==='vector.add')Object.assign(node,{svgPaths:[],svgViewBox:item.viewBox});
+   }
+   const change=item.op==='vector.add'?{...item,geometry:{kind:'vector',paths:item.paths,viewBox:item.viewBox}}:item;
+   Object.assign(node,changedNodeProperties(doc.page,node,change,item.parent));
+   doc=insertSceneNode(doc,node,assets);addToParent(doc,item.id,item.parent);doc=finishNode(doc,item.id,{place:item.place,order:item.order},assets,{created:true});
+  }else if(item.op==='text.update'||item.op==='layer.update'){
+   if(item.op==='text.update'&&requireNode(doc,item.target).type!=='text')throw Error('text.update 只接受文字');
+   doc=finishNode(doc,item.target,item,assets);
+  }else if(item.op==='layer.place')finishPlacement(doc,item.target,item.place);
+  else if(item.op==='layer.reparent'){
+   if(item.parent!==null&&requireNode(doc,item.parent).type!=='group')throw Error('父级必须是组合');
+   doc=editScene(doc,[{op:'move',id:requireNode(doc,item.target).id,parent:item.parent?requireNode(doc,item.parent).id:null}],assets);
+   if(item.order)doc=reorder(doc,item.target,item.order,assets);
   }else if(item.op==='layer.reorder')doc=reorder(doc,item.target,item.order,assets);
   else if(item.op==='layer.delete'){
-   const node=requireNode(doc,item.target);if(node.type==='group'&&item.cascade===false)throw Error('当前组删除只能连同子图层删除');
-   if(item.dependentLinks==='detach')detachLinkedDependents(doc.page,node.id);doc=runPrimitive(doc,{op:'layer.delete',target:item.target},assets);
+   if(item.dependentLinks==='detach')detachLinkedDependents(doc.page,requireNode(doc,item.target).id);
+   doc=editScene(doc,[{op:'delete',id:requireNode(doc,item.target).id}],assets);
   }else if(item.op==='group.create'){
    const targets=item.targets.map(id=>requireNode(doc,id).id),bounds=item.layoutBox?{width:item.layoutBox.width*s,height:item.layoutBox.height*s}:groupBox(doc,targets);
-   groupSceneLayers(doc.page,targets,{id:item.id,name:item.id,spatial:true,layoutBox:bounds});if(item.style)Object.assign(requireNode(doc,item.id),styleFor('group',item.style,doc.page));
-   finishPlacement(doc,item.id,item.place);if(item.order)doc=reorder(doc,item.id,item.order,assets);validateWebScene(doc.page,doc.source,assets,{final:false});
+   groupSceneLayers(doc.page,targets,{id:item.id,name:item.id,spatial:true,layoutBox:bounds});addToParent(doc,item.id,item.parent);doc=finishNode(doc,item.id,item,assets,{created:true});
   }else if(item.op==='group.compose'){
    if(find(doc,item.id))throw Error('组合编号已经存在');
    const group={id:item.id,type:'group',name:item.id,children:[],localTransform:[1,0,0,1,0,0],layoutBox:item.layoutBox?{width:item.layoutBox.width*s,height:item.layoutBox.height*s}:item.parent&&requireNode(doc,item.parent).layoutBox?{...requireNode(doc,item.parent).layoutBox}:{width:doc.page.canvas.width,height:doc.page.canvas.height},opacity:1,blendMode:'normal',zIndex:500};
-   if(item.parent){const parent=requireNode(doc,item.parent);if(parent.type!=='group')throw Error('父级必须是图层组');parent.children.push(group);}else doc.page.layers.push(group);
-   if(item.style)Object.assign(group,styleFor('group',item.style,doc.page));finishPlacement(doc,item.id,item.place);
+   doc=insertSceneNode(doc,group,assets,item.parent);doc=finishNode(doc,item.id,item,assets,{created:true});
    for(const [childIndex,child] of item.children.entries()){
     if(child.parent&&child.parent!==item.id)throw Error('组合子操作不能指向其他父级');
-    if(child.op==='page.update'||child.op==='material.decision'||child.op.startsWith('native.'))throw Error('组合内只允许局部简洁操作');
+    if(['page.update','material.decision','layer.repeat','layout.reuse'].includes(child.op))throw Error('组合内不支持全局或跨实例操作');
     for(const target of [child.target,child.strip,...(child.targets||[])].filter(Boolean))if(!spatialPath(doc.page.layers,requireNode(doc,target).id)?.ancestors.some(group=>group.id===item.id))throw Error('组合内不能修改外部对象：'+target);
     const creates=['material.add','text.add','shape.add','vector.add','ink.add','material.tape','group.compose'].includes(child.op);
-    doc=applyCreationV2Batch(doc,{protocolVersion:2,transactionId:'child-'+craftDigest([input.transactionId,index,childIndex]).slice(7,39),baseSceneRevision:input.baseSceneRevision,operations:[creates?{...child,parent:item.id}:child]},assets);
+    doc=applyCreationV2Batch(doc,{protocolVersion:2,transactionId:'child-'+craftDigest([input.transactionId,index,childIndex]).slice(7,39),baseSceneRevision:input.baseSceneRevision,operations:[creates?{...child,parent:item.id}:child]},assets,options);
    }
-   if(item.order)doc=reorder(doc,item.id,item.order,assets);
   }else if(item.op==='group.ungroup'){
-   if(item.dependentLinks==='detach')detachLinkedDependents(doc.page,requireNode(doc,item.target).id);doc=runPrimitive(doc,{op:'group.ungroup',target:item.target},assets);
+   if(item.dependentLinks==='detach')detachLinkedDependents(doc.page,requireNode(doc,item.target).id);
+   doc=editScene(doc,[{op:'ungroup',id:requireNode(doc,item.target).id}],assets);
   }else if(item.op==='layout.arrange')arrangeCreationNodes(doc.page,item.targets.map(id=>requireNode(doc,id).id),item.rule,item.container);
-  else if(item.op==='layout.detach')detachSceneLayout(doc.page,item.target);
+  else if(item.op==='layout.detach')detachSceneLayout(doc.page,requireNode(doc,item.target).id);
   else if(item.op==='material.crop'){
    const node=requireNode(doc,item.target);if(node.type!=='material'||node.tapeStrip)throw Error('material.crop 需要普通实体素材');
    const asset=assets.find(row=>row.id===node.assetID),crop=node.cropRect||{x:0,y:0,width:1,height:1},geometry=creationRegionGeometry(item.region,{sourceSize:[asset.physicalWidthMM,asset.physicalHeightMM],localSize:[node.width/s,node.height/s],crop});
    if(item.keepRemainder||item.resultId&&item.resultId!==item.target){
     const id=item.resultId&&item.resultId!==item.target?item.resultId:item.target+'-crop-'+craftDigest([input.transactionId,index]).slice(7,15);
     doc=physicalCut(doc,{target:item.target,regions:[{id,geometry}],keepRemainders:item.keepRemainder!==false},assets,input.transactionId,index);
-    if(item.edge?.style==='torn'){const cut=requireNode(doc,id);doc=runPrimitive(doc,{op:'material.process',target:id,mode:'append',steps:[tornEdgeStep(cut,asset,item.edge)]},assets);}
+    if(item.edge&&item.edge.style!=='clean')doc=processMaterial(doc,id,[edgeStep(requireNode(doc,id),asset,item.edge)],assets);
    }else{
     const steps=item.region.shape==='rect'?[{op:'crop',box:{unit:'ratio',mode:'keep',values:cropBoxRatio(node,asset,item.region,doc.page)}}]:[{op:'cut_shape',shape:'geometry',mode:'keep',unit:'ratio',geometry:displayMaskGeometry(node,asset,item.region,doc.page)}];
-    if(item.edge?.style==='torn')steps.push(tornEdgeStep(node,asset,item.edge));doc=runPrimitive(doc,{op:'material.process',target:item.target,mode:'append',steps},assets);
+    if(item.edge&&item.edge.style!=='clean')steps.push(edgeStep(node,asset,item.edge));doc=processMaterial(doc,item.target,steps,assets);
    }
   }else if(item.op==='material.split')doc=splitPhysicalPiece(doc,item,assets,input.transactionId,index);
   else if(item.op==='material.tape'){
    const asset=assetFor(doc,assets,item.asset);if(asset.kind!=='tape')throw Error('material.tape 需要胶带素材');
-   const widthMm=tapeDimensions(asset).widthMM,position=placeFor(doc,item.place,item.lengthMm,widthMm,0,item.parent),angle=position.rotation*Math.PI/180,half=item.lengthMm/2,dx=Math.cos(angle)*half,dy=Math.sin(angle)*half;
-   doc=runPrimitive(doc,{op:'material.tape',arguments:{items:[{asset:item.asset,piece:item.id,coordinate_unit:'mm',points:[[(position.x-dx*s)/s,(position.y-dy*s)/s],[(position.x+dx*s)/s,(position.y+dy*s)/s]]}]}},assets);
-   doc=patch(doc,item.id,styleFor('material',item.style,doc.page),assets);addToParent(doc,item.id,item.parent);finishPlacement(doc,item.id,item.place);if(item.order)doc=reorder(doc,item.id,item.order,assets);
+   const pts=item.path?.points||[[-item.lengthMm/2,0],[item.lengthMm/2,0]],t=item.texture||{},c=item.caps||{};
+   const node=createTapeStrip(asset,doc.page,pts.map(p=>p.map(v=>v*s)),500,{pathMode:'polyline',widthMM:item.widthMm,textureMode:t.mode,sourceOffsetMM:t.offsetMm,sourceWindowMM:t.windowMm,...(t.repeatRangeMm?{repeatRangeMM:t.repeatRangeMm}:{}),reverseTexture:t.reverse,startCap:c.start,endCap:c.end,capDepthMM:c.depthMm});
+   node.id=item.id;node.creativePieceID=item.id;node.materialUnitIndex=Math.max(-1,...allNodes(doc.page.layers).filter(n=>n.type==='material'&&n.assetID===asset.id).map(n=>n.materialUnitIndex||0))+1;node.type='material';doc=insertSceneNode(doc,node,assets);addToParent(doc,item.id,item.parent);doc=finishNode(doc,item.id,item,assets,{created:true});
   }else if(item.op==='material.edge'){
    const node=requireNode(doc,item.target);if(node.type!=='material'||node.tapeStrip)throw Error('material.edge 需要普通实体素材');
-   if(item.edge.style==='clean'){const steps=(node.materialSteps||[]).filter(step=>step.op!=='edge');if(steps.length!==(node.materialSteps||[]).length)doc=runPrimitive(doc,{op:'material.process',target:item.target,mode:'replace',steps:steps.length?steps:[{op:'whole'}]},assets);}
-   else {const asset=assets.find(row=>row.id===node.assetID);if(!asset)throw Error('素材来源不存在');doc=runPrimitive(doc,{op:'material.process',target:item.target,mode:'append',steps:[tornEdgeStep(node,asset,item.edge)]},assets);}
+   const asset=assets.find(row=>row.id===node.assetID);
+   if(item.edge.style==='clean'){const steps=(node.materialSteps||[]).filter(step=>step.op!=='edge');doc=processMaterial(doc,item.target,steps.length?steps:[{op:'whole'}],assets,'replace');}
+   else doc=processMaterial(doc,item.target,[edgeStep(node,asset,item.edge)],assets);
   }else if(item.op==='material.mask'){
-   const node=requireNode(doc,item.target);if(node.type!=='material')throw Error('material.mask 只接受实体素材图层');
-   const asset=assets.find(row=>row.id===node.assetID);if(!asset)throw Error('素材来源不存在');
-   const region=displayMaskGeometry(node,asset,item.region,doc.page),full=rectangleGeometry(0,0,1,1),existing=node.vectorMask?normalizeGeometry([[node.vectorMask.outer,...(node.vectorMask.holes||[])]]):full;
+   const node=requireNode(doc,item.target);if(node.type!=='material')throw Error('material.mask 只接受实体素材');
+   const asset=assets.find(row=>row.id===node.assetID),region=displayMaskGeometry(node,asset,item.region,doc.page),full=rectangleGeometry(0,0,1,1),existing=node.vectorMask?normalizeGeometry([[node.vectorMask.outer,...(node.vectorMask.holes||[])]]):full;
    const next=item.mode==='subtract'?geometryDifference(existing,region):item.mode==='intersect'?geometryIntersection(existing,region):region;
    const {outer,holes}=geometryToMask(next,1,1);doc=patch(doc,item.target,{vectorMask:{outer,holes}},assets);
   }else if(item.op==='material.window'){
@@ -273,27 +213,30 @@ export function applyCreationV2Batch(document,input,assets){
    if(item.keepRemainder||item.cutoutId||item.resultId&&item.resultId!==item.target){
     const source=itemSourceGeometry(node,asset),main=geometryDifference(source,opening),cutout=geometryIntersection(source,opening),resultId=item.resultId&&item.resultId!==item.target?item.resultId:item.target+'-window-'+craftDigest([input.transactionId,index]).slice(7,15),pieces=[{id:resultId,geometry:main}];
     if(item.keepRemainder||item.cutoutId)pieces.push({id:item.cutoutId||item.windowId+'-cutout',geometry:cutout});
-    doc=physicalCut(doc,{target:item.target,regions:pieces,keepRemainders:item.keepRemainder!==false},assets,input.transactionId,index);
-    const mainNode=requireNode(doc,resultId);mainNode.craftWindowIDs=[...(node.craftWindowIDs||[]),item.windowId];
-    if(item.edge?.style==='torn')doc=runPrimitive(doc,{op:'material.process',target:resultId,mode:'append',steps:[tornEdgeStep(mainNode,asset,item.edge)]},assets);
-    validateWebScene(doc.page,doc.source,assets,{final:false});
+    doc=physicalCut(doc,{target:item.target,regions:pieces,keepRemainders:item.keepRemainder!==false},assets,input.transactionId,index);requireNode(doc,resultId).craftWindowIDs=[...(node.craftWindowIDs||[]),item.windowId];
+    if(item.edge&&item.edge.style!=='clean')doc=processMaterial(doc,resultId,[edgeStep(requireNode(doc,resultId),asset,item.edge)],assets);
    }else{
-    const before=node.materialMask?.holes?.length||0;if(before!==(node.craftWindowIDs?.length||0))throw Error('既有孔洞缺少稳定编号，不能追加命名开窗');
-    const previousIDs=[...(node.craftWindowIDs||[])];delete node.craftWindowIDs;
+    const before=node.materialMask?.holes?.length||0;if(before!==(node.craftWindowIDs?.length||0))throw Error('既有孔洞缺少稳定编号');
+    const previous=[...(node.craftWindowIDs||[])];delete node.craftWindowIDs;
     const steps=[{op:'cut_shape',shape:'geometry',mode:'remove',unit:'ratio',geometry:displayMaskGeometry(node,asset,item.region,doc.page)}];
-    if(item.edge?.style==='torn')steps.push(tornEdgeStep(node,asset,item.edge));doc=runPrimitive(doc,{op:'material.process',target:item.target,mode:'append',steps},assets);
-    const updated=requireNode(doc,item.target),after=updated.materialMask?.holes?.length||0;if(after!==before+1)throw Error('实体开窗未产生独立孔洞');
-    updated.craftWindowIDs=[...previousIDs,item.windowId];validateWebScene(doc.page,doc.source,assets,{final:false});
+    if(item.edge&&item.edge.style!=='clean')steps.push(edgeStep(node,asset,item.edge));doc=processMaterial(doc,item.target,steps,assets);
+    const updated=requireNode(doc,item.target);if((updated.materialMask?.holes?.length||0)!==before+1)throw Error('实体开窗未产生独立孔洞');updated.craftWindowIDs=[...previous,item.windowId];
    }
   }else if(item.op==='material.weave'){
-   const strip=requireNode(doc,item.strip);if(strip.type!=='material')throw Error('穿插纸条必须是实体素材');
-   const through=item.through.map(entry=>{const target=requireNode(doc,entry.target);if(target.type!=='material')throw Error('穿插目标必须是实体素材');const hole=target.craftWindowIDs?.indexOf(entry.window)??-1;if(hole<0)throw Error('穿插引用的开窗不存在：'+entry.window);return {target:target.creativePieceID||target.id,hole,sideAfter:entry.sideAfter};});
-   attachSceneV2(doc.page);compileTwoHoleWeaves(doc.page,[{piece:item.strip,through}]);validateWebScene(doc.page,doc.source,assets,{final:false});
+   if(requireNode(doc,item.strip).type!=='material')throw Error('穿插纸条必须是实体素材');
+   const through=item.through.map(entry=>{const target=requireNode(doc,entry.target);if(target.type!=='material')throw Error('穿插目标必须是实体素材');const hole=target.craftWindowIDs?.indexOf(entry.window)??-1;if(hole<0)throw Error('穿插引用的开窗不存在');return {target:target.creativePieceID||target.id,hole,sideAfter:entry.sideAfter};});
+   attachSceneV2(doc.page);compileTwoHoleWeaves(doc.page,[{piece:item.strip,through}]);
+  }else if(item.op==='material.decision'){
+   assetFor(doc,assets,item.asset);doc.materialDecisions=(doc.materialDecisions||[]).filter(row=>row.asset!==item.asset);doc.materialDecisions.push({asset:item.asset,choice:item.choice,reason:item.reason});
   }else if(item.op==='page.update'){
-   if(item.physicalSizeMm||item.mode)throw Error('任务纸张和页面模式不能在作品命令中修改');if(!item.paperColor)throw Error('page.update 没有可执行的修改');doc=runPrimitive(doc,{op:'page.update',paperColor:item.paperColor},assets);
-  }else if(item.op==='material.decision')doc=runPrimitive(doc,item,assets);
-  else throw Error('操作尚未接入 Scene：'+item.op);
-  solveSceneLayout(doc.page);
+   if(item.paperColor!==undefined)doc.page.paperColor=item.paperColor;if(item.paperPattern!==undefined)doc.page.paperPattern=item.paperPattern;
+   if(item.rulingMm!==undefined){if(item.rulingMm<=0)delete doc.page.paperRuling;else {const step=item.rulingMm*s,h=doc.page.canvas.height;if(h/step>2000)throw Error('纸张横线超过预算，请增大 rulingMm');doc.page.paperRuling={rowPositions:Array.from({length:Math.ceil(h/step)-1},(_,i)=>(i+1)*step/h).filter(y=>y<1),spans:[{from:0,to:1}],color:'#d0d2d3',relativeLineWidth:1/h};}}if(item.centerGutter!==undefined)doc.page.drawCenterGutter=item.centerGutter;
+  }else doc=applyCreationAdvanced(doc,item,assets,{...options,finishNode,processMaterial,assetFor});
+  solveSceneLayout(doc.page);validateWebScene(doc.page,doc.source,assets,{final:false});
  }catch(error){throw Object.assign(Error('operations['+index+'] '+item.op+': '+error.message),{code:error.code||'OPERATION_FAILED',operationIndex:index,path:error.path});}
  return doc;
+}
+function edgeStep(node,asset,edge){
+ const crop=node.cropRect||{width:1,height:1},side=Math.min(crop.width*asset.physicalWidthMM,crop.height*asset.physicalHeightMM);
+ return {op:'edge',style:edge.style,edges:edge.edges||['top','right','bottom','left'],depth_mm:edge.depthMm??Math.max(.1,Math.min(side*.08,(edge.roughness??.2)*3)),period_mm:edge.periodMm??Math.max(.5,side*.16),...(edge.seed===undefined?{}:{seed:edge.seed}),...(edge.position===undefined?{}:{position:edge.position})};
 }

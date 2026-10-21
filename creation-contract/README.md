@@ -1,3 +1,9 @@
+# 当前执行规范
+
+实际发布规范由 src/creation-command-spec.js + static/api/common.schema.json 生成，使用 runtime/shiye.cjs describe 查询；--full 才展开 Schema。此目录其余 static/operations.json、static/commands.schema.json、独立 command-help.cjs 及旧测试记录均为初始设计归档，不参加当前发布构建，不可作为当前命令能力来源。固定发行指南位于 release-v3。
+
+---
+
 # 拾页创作包：固定内容、统一协议与 Codex 接入资料
 
 **交付性质：可复用的静态资料与开发模块，不是已经完成接入的新创作运行时。**
