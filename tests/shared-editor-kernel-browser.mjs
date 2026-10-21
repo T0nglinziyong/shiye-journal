@@ -6,11 +6,16 @@ const url=process.env.SHIYE_TEST_URL||'http://127.0.0.1:5193';
 const b=await browserHarness('shiye-shared-editor',url+'/tests/fixtures/fabric-preview.html');
 try{
  await b.wait('.upper-canvas');await b.sleep(500);
+ // Settle the controlled selection before entering editing, as a user does
+ // on the first click. Selection and editing must not race a React commit.
+ await b.evaluate('window.__fabricFixture.select(["paper-text"])');
+ for(let i=0;i<80;i++){if(await b.evaluate('window.__fabricCanvas.getActiveObject()?.sceneID==="paper-text"'))break;await b.sleep(20);}
  // Real browser input must retain the same IME textarea and editing object.
- await b.evaluate(`(()=>{const c=window.__fabricCanvas,o=c.getObjects().find(n=>n.sceneID==='paper-text');c.setActiveObject(o);o.enterEditing();o.selectAll();window.__inputObject=o;window.__inputElement=o.hiddenTextarea;window.__textBefore=structuredClone(window.__fabricFixture.draft.layers.find(n=>n.id==='paper-text'));})()`);
+ await b.evaluate(`(()=>{const c=window.__fabricCanvas,o=c.getActiveObject();if(o?.sceneID!=='paper-text')throw Error('text selection did not settle');o.enterEditing();o.selectAll();window.__inputObject=o;window.__inputElement=o.hiddenTextarea;window.__textBefore=structuredClone(window.__fabricFixture.draft.layers.find(n=>n.id==='paper-text'));window.__editingEvents=[];c.on('text:editing:exited',()=>window.__editingEvents.push('exited'));c.on('object:removed',e=>{if(e.target===o)window.__editingEvents.push('removed');});})()`);
  for(const value of ['统一编辑',' and text','\n第二行']){
   await b.command('Input.insertText',{text:value});
-  assert.equal(await b.evaluate('window.__inputObject.isEditing&&window.__inputObject.hiddenTextarea===window.__inputElement'),true);
+  const state=await b.evaluate('({editing:!!window.__inputObject.isEditing,inputSame:window.__inputObject.hiddenTextarea===window.__inputElement,activeSame:window.__fabricCanvas.getActiveObject()===window.__inputObject,attached:window.__inputElement.isConnected,content:window.__inputObject.text,events:window.__editingEvents,issue:document.querySelector("#events").textContent})');
+  assert.ok(state.editing&&state.inputSame&&state.activeSame&&state.attached,JSON.stringify({chunk:value,...state}));
  }
  const parity=await b.evaluate(`(async()=>{const {applySceneNodePatch}=await import('/src/scene-edit-kernel.js'),{USER_SCENE_POLICY}=await import('/src/scene-edit-policy.js');const actual=window.__fabricFixture.draft.layers.find(n=>n.id==='paper-text');const p={...window.__fabricFixture.draft,layers:[structuredClone(window.__textBefore)]};applySceneNodePatch(p,actual.id,{content:actual.content},{policy:USER_SCENE_POLICY});const expected=p.layers[0];window.__inputObject.exitEditing();return {actual:[actual.width,actual.height,actual.fontSize,actual.content],expected:[expected.width,expected.height,expected.fontSize,expected.content]};})()`);
  assert.deepEqual(parity.actual,parity.expected);
