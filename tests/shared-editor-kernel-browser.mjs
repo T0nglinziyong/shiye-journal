@@ -3,7 +3,8 @@
 import assert from 'node:assert/strict';
 import {browserHarness} from './browser-harness.mjs';
 const url=process.env.SHIYE_TEST_URL||'http://127.0.0.1:5193';
-const b=await browserHarness('shiye-shared-editor',url+'/tests/fixtures/fabric-preview.html');
+const b=await browserHarness('shiye-shared-editor',url+'/tests/fixtures/fabric-preview.html',
+ async({command})=>command('Emulation.setDeviceMetricsOverride',{width:1280,height:1000,deviceScaleFactor:1,mobile:false}));
 try{
  await b.wait('.upper-canvas');await b.sleep(500);
  // Settle the controlled selection before entering editing, as a user does
@@ -19,10 +20,14 @@ try{
  }
  const parity=await b.evaluate(`(async()=>{const {applySceneNodePatch}=await import('/src/scene-edit-kernel.js'),{USER_SCENE_POLICY}=await import('/src/scene-edit-policy.js');const actual=window.__fabricFixture.draft.layers.find(n=>n.id==='paper-text');const p={...window.__fabricFixture.draft,layers:[structuredClone(window.__textBefore)]};applySceneNodePatch(p,actual.id,{content:actual.content},{policy:USER_SCENE_POLICY});const expected=p.layers[0];window.__inputObject.exitEditing();return {actual:[actual.width,actual.height,actual.fontSize,actual.content],expected:[expected.width,expected.height,expected.fontSize,expected.content]};})()`);
  assert.deepEqual(parity.actual,parity.expected);
+ await b.evaluate('window.scrollTo(0,0)');await b.sleep(60);
  // A gesture changes only the projection until release, then one commit.
  await b.evaluate('window.__fabricFixture.select(["paper-shape"])');
  for(let i=0;i<80;i++){if(await b.evaluate('!!window.__fabricCanvas.getActiveObject()?.sceneMultiIDs'))break;await b.sleep(20);}
+ assert.equal(await b.evaluate('window.__fabricCanvas.getActiveObject()?.sceneMultiIDs?.[0]'),'paper-shape');
  const start=await b.evaluate(`(()=>{const r=document.querySelector('.upper-canvas').getBoundingClientRect();return {x:r.left+190*r.width/600,y:r.top+160*r.height/800};})()`);
+ const viewport=await b.evaluate('({width:innerWidth,height:innerHeight,scrollY})');
+ assert.ok(start.x>0&&start.y>0&&start.x+30<viewport.width&&start.y+15<viewport.height,JSON.stringify({start,viewport}));
  const before=await b.evaluate('JSON.stringify(window.__fabricFixture.draft.layers)'),count=await b.evaluate('window.__fabricFixture.commits.length');
  await b.command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,clickCount:1,...start});
  await b.command('Input.dispatchMouseEvent',{type:'mouseMoved',button:'left',buttons:1,x:start.x+30,y:start.y+15});
