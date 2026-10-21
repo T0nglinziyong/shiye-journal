@@ -1,0 +1,64 @@
+name: Apply verified creation refactor
+on:
+  push:
+    branches: [refactor/creation-single-semantics-20261021]
+    paths: ['.creation-transfer.ready']
+permissions:
+  contents: write
+jobs:
+  apply:
+    if: github.ref == 'refs/heads/refactor/creation-single-semantics-20261021'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Verify and apply exact source edits
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64, lzma, hashlib, json
+          from pathlib import Path
+          parts=[Path('.creation-transfer.part'+str(i)) for i in range(1,8)]
+          raw=lzma.decompress(base64.b64decode(''.join(p.read_text().strip() for p in parts),validate=True))
+          assert hashlib.sha256(raw).hexdigest()=='83198a34f35971691d83f3ce9993e7f7d3f3202568e80c4515ef5385c9fa61f2'
+          prepared=[]
+          for change in json.loads(raw):
+              name=change['path']; p=Path(name)
+              assert not p.is_absolute() and '..' not in p.parts
+              assert name=='README.md' or p.parts[0] in ['src','tests','scripts','docs','creation-contract']
+              before=p.read_bytes() if p.exists() else b''
+              assert hashlib.sha256(before).hexdigest()==change['sha256'],name+' changed remotely'
+              if change.get('remove'): prepared.append((p,None)); continue
+              lines=before.decode().splitlines(keepends=True)
+              for start,end,insert in reversed(change['changes']): lines[start:end]=[insert]
+              result=''.join(lines).encode()
+              assert hashlib.sha256(result).hexdigest()==change['resultSha256'],name+' result mismatch'
+              prepared.append((p,result))
+          for p,result in prepared:
+              if result is None: p.unlink()
+              else: p.parent.mkdir(parents=True,exist_ok=True); p.write_bytes(result)
+          PY
+          node creation-contract/tools/build-contract.cjs
+      - run: npm ci
+      - run: npm run pretest
+      - name: Verify shared Scene semantics before committing
+        run: node --test tests/creation-semantic-unification.test.js tests/creation-commands.test.js tests/creation-arrange-regression.test.js tests/creation-rotation-regression.test.js tests/scene-spatial-layout.test.js
+      - name: Commit only this authorized refactor branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = refs/heads/refactor/creation-single-semantics-20261021
+          git add README.md src tests scripts docs creation-contract
+          git rm .creation-transfer.part* .creation-transfer.ready
+          git config user.name 'Shiye verified refactor'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'refactor: unify Scene update semantics and typed creation capabilities'
+          git push origin HEAD:refs/heads/refactor/creation-single-semantics-20261021
