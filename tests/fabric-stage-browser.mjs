@@ -190,6 +190,8 @@ try{
   assert.equal(await evaluate('document.querySelector("#events").textContent'),
     '选中：paper-shape','Lasso must select the nested shape');
   const beforeCancel=await evaluate('JSON.stringify(window.__fabricFixture.draft.layers[0].children[0])');
+  await sleep(40);const beforeCancelPixels=await shapePixels();
+  const beforeCancelCommits=await evaluate('window.__fabricFixture.commits.length');
   await evaluate(`document.addEventListener('pointerdown',event=>{
     window.__cancelPointerID=event.pointerId;
   },{capture:true,once:true})`);
@@ -197,15 +199,18 @@ try{
     clickCount:1,...at(214,160)});
   await command('Input.dispatchMouseEvent',{type:'mouseMoved',button:'left',buttons:1,
     ...at(244,175)});
-  assert.notEqual(await evaluate('JSON.stringify(window.__fabricFixture.draft.layers[0].children[0])'),
-    beforeCancel,'Lasso drag should preview a Scene change');
+  assert.equal(await evaluate('JSON.stringify(window.__fabricFixture.draft.layers[0].children[0])'),
+    beforeCancel,'Lasso drag previews must not modify the authoritative Scene');
+  await sleep(40);assert.notEqual(await shapePixels(),beforeCancelPixels,'Lasso drag must still repaint the moving content');
   await evaluate(`(()=>{const upper=document.querySelector('.upper-canvas');
     upper.dispatchEvent(new PointerEvent('pointercancel',{bubbles:true,
       pointerId:window.__cancelPointerID,pointerType:'mouse'}));})()`);
   await command('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,
     clickCount:1,...at(244,175)});
   assert.equal(await evaluate('JSON.stringify(window.__fabricFixture.draft.layers[0].children[0])'),
-    beforeCancel,'Cancelled lasso gesture must restore the original Scene node');
+    beforeCancel,'Cancelled lasso gesture must preserve the original Scene node');
+  assert.equal(await evaluate('window.__fabricFixture.commits.length'),beforeCancelCommits,'Cancelled preview must not commit a change');
+  await sleep(40);assert.equal(await shapePixels(),beforeCancelPixels,'Cancelled preview must restore visible content');
   await command('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,
     clickCount:1,...at(214,160)});
   await command('Input.dispatchMouseEvent',{type:'mouseMoved',button:'left',buttons:1,
