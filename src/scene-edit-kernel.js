@@ -14,6 +14,7 @@ const typed={text:new Set(['content','fontSize','fontName','style','color','alig
 const copy=value=>structuredClone(value);
 function replace(target,value){for(const key of Object.keys(target))if(!Object.hasOwn(value,key))delete target[key];Object.assign(target,value);}
 function finiteNode(node){
+ if(!Object.hasOwn(typed,node.type))throw Error('图层需要明确且有效的 type');
  for(const key of ['x','y','rotation','width','height','fontSize','lineWidth','opacity'])if(node[key]!==undefined&&(!Number.isFinite(node[key])||Math.abs(node[key])>100000))throw Error('图层数值无效：'+key);
  for(const key of ['width','height','fontSize'])if(node[key]!==undefined&&node[key]<=0)throw Error('图层尺寸必须为正：'+key);
  if(node.opacity!==undefined&&(node.opacity<0||node.opacity>1))throw Error('透明度需在 0–1 范围');

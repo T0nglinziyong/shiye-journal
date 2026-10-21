@@ -15,7 +15,16 @@ export function sceneStructureTransaction(page,change,{policy=AI_SCENE_POLICY}={
  // geometry transaction must not leave a new ledger/receipt on the old scene.
  const metadataKeys=['craftLedger','craftScraps','craftReceipts'];
  const metadata=new Map(metadataKeys.map(key=>[key,{exists:Object.hasOwn(page,key),value:structuredClone(page[key])}]));
- try{const result=change();validateSceneLayout(page);solveSceneLayout(page);return result;}
+ try{const result=change();validateSceneLayout(page);solveSceneLayout(page);
+  // A geometry/structure edit can also move a linked object which was not
+  // explicitly selected. Apply the same ownership and lock rules as patches.
+  const layoutKeys=['x','y','rotation','localTransform','points','layoutRotation','layoutConstraint'];
+  for(const [node,state] of states){
+   const current=findSceneNode(page,node.id);
+   if(!state.layoutConstraint||!current||layoutKeys.every(key=>JSON.stringify(current[key])===JSON.stringify(state[key])))continue;
+   assertSceneEditable(page,current.id);assertPolicyOwnership(state,policy);
+  }
+  return result;}
  catch(error){page.layers=root;for(const [node,state,children] of states){for(const key of Object.keys(node))delete node[key];Object.assign(node,state);if(children)node.children=children;}
   for(const [array,values] of arrays)array.splice(0,array.length,...values);for(const [key,{exists,value}] of metadata)if(exists)page[key]=value;else delete page[key];throw error;}
 }

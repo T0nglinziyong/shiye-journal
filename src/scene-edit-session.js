@@ -6,20 +6,24 @@ import {attachSceneV2} from './scene-v2.js';
 
 const sessions=new WeakSet();
 const copy=draft=>attachSceneV2(structuredClone(draft));
+const materialKeys=['craftLedger','craftScraps','craftReceipts'];
+const materialState=draft=>Object.fromEntries(materialKeys.filter(key=>Object.hasOwn(draft,key)).map(key=>[key,structuredClone(draft[key])]));
+const snapshot=(draft,selectedID)=>({layers:structuredClone(draft.layers),materials:materialState(draft),selectedID});
+const restoreMaterials=(draft,state)=>{for(const key of materialKeys)if(Object.hasOwn(state,key))draft[key]=structuredClone(state[key]);else delete draft[key];};
 
 // Object editing and scissors share one isolated Scene transaction. Only
 // finish copies its layers into the saved project; discard never reaches sync.
 export function beginSceneEditSession(draft,{projectID,saveRevision,selectedID=null}){
   const working=copy(draft);
   const session={projectID,draftID:draft.id,saveRevision,baseSceneHash:craftSceneHash(draft),working,revision:0,
-    steps:[{layers:structuredClone(working.layers),selectedID}],index:0};
+    steps:[snapshot(working,selectedID)],index:0};
   sessions.add(session);return session;
 }
 
 export function acceptSceneEditStep(session,draft,selectedID){
   if(draft.id!==session.draftID)throw Error('剪刀会话的画面已变化');
   session.steps.splice(session.index+1);
-  session.steps.push({layers:structuredClone(draft.layers),selectedID});
+  session.steps.push(snapshot(draft,selectedID));
   if(session.steps.length>41){session.steps.splice(1,session.steps.length-41);}
   session.index=session.steps.length-1;
   // Inspector changes already mutate the staged draft. Re-cloning it on
@@ -34,13 +38,14 @@ export function stepSceneEditSession(session,direction){
   if(next<0||next>=session.steps.length)return null;
   session.index=next;
   session.working.layers=structuredClone(session.steps[next].layers);
+  restoreMaterials(session.working,session.steps[next].materials);
   session.revision++;
   return session.steps[next].selectedID;
 }
 
 export function sceneEditSessionChanged(session){
-  return !!session&&JSON.stringify(session.steps[0].layers)!==
-    JSON.stringify(session.working.layers);
+  return !!session&&(JSON.stringify(session.steps[0].layers)!==JSON.stringify(session.working.layers)||
+    JSON.stringify(session.steps[0].materials)!==JSON.stringify(materialState(session.working)));
 }
 
 // Only a live host-created session may commit. The original hash prevents a
@@ -52,7 +57,7 @@ export function commitSceneEditSession(page,session,assets,{policy=AI_SCENE_POLI
  if(craftSceneHash(page)!==session.baseSceneHash)throw Error('作品已变化，不能提交过期编辑会话');
  validateScenePhysical(session.working,assets);
  const result=sceneStructureTransaction(page,()=>{page.layers=structuredClone(session.working.layers);
-  for(const key of ['craftLedger','craftScraps','craftReceipts'])if(Object.hasOwn(session.working,key))page[key]=structuredClone(session.working[key]);else delete page[key];
+  restoreMaterials(page,materialState(session.working));
   return true;},{policy});
  sessions.delete(session);return result;
 }
