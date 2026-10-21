@@ -67,7 +67,12 @@ export function makeReleaseRequest(version, sha) {
 }
 
 export async function releaseTest({sha, secretId, secretKey, fetchImpl = fetch, wait = sleep}) {
+  secretId = secretId?.trim();
+  secretKey = secretKey?.trim();
   if (!secretId || !secretKey) throw new Error('Missing scoped Tencent CAM deployment credentials.');
+  if (/[^\x21-\x7e]/.test(secretId) || /[^\x21-\x7e]/.test(secretKey)) {
+    throw new Error('Tencent CAM deployment credentials contain invalid characters.');
+  }
   async function api(action, body) {
     const request = signCloudbaseRequest(action, body, secretId, secretKey);
     const response = await fetchImpl(`https://${HOST}/`, {method: 'POST', headers: request.headers, body: request.payload});

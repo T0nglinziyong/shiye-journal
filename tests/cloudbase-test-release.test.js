@@ -37,6 +37,8 @@ test('release verifies live identity before reporting success', async () => {
   const fetchImpl = async (url, options) => {
     if (url.includes('version.json')) return {ok: true, json: async () => ({commit: sha, branch: 'test'})};
     const action = options.headers['X-TC-Action'];
+    assert.match(options.headers.Authorization, /Credential=test-id\//);
+    assert.doesNotMatch(options.headers.Authorization, /[\r\n]/);
     actions.push(action);
     if (action === 'CreateCloudApp') {
       const body = JSON.parse(options.body);
@@ -45,7 +47,7 @@ test('release verifies live identity before reporting success', async () => {
     }
     return {ok: true, json: async () => ({Response: current})};
   };
-  const result = await releaseTest({sha, secretId: 'test-id', secretKey: 'test-key', fetchImpl, wait: async () => {}});
+  const result = await releaseTest({sha, secretId: 'test-id\n', secretKey: 'test-key\n', fetchImpl, wait: async () => {}});
   assert.equal(result.sha, sha);
   assert.deepEqual(actions, ['DescribeCloudAppVersion', 'CreateCloudApp', 'DescribeCloudAppVersion']);
 });
