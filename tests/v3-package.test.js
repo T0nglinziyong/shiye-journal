@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,mkdir,writeFile,readFile,rm} from 'node:fs/promises';
-import {tmpdir} from 'node:os';
+import {mkdtemp,mkdir,writeFile,readFile,rm,utimes} from 'node:fs/promises';
+import {tmpdir,hostname} from 'node:os';
 import {createHash} from 'node:crypto';
 import {join,dirname} from 'node:path';
 import {spawnSync} from 'node:child_process';
@@ -29,6 +29,9 @@ test('v3 ZIP supports one-command Scene creation, preview and pack',async()=>{
    {op:'material.decision',asset:'m1',choice:'intact',reason:'保留蓝纸完整轮廓'}
   ]};
   await writeFile(join(dir,'work/commands.json'),JSON.stringify(commands));
+  const staleLock=join(dir,'work/.scene-write-lock');
+  await mkdir(staleLock);await writeFile(join(staleLock,'owner.json'),JSON.stringify({pid:999999999,host:hostname(),createdAt:Date.now()-120000,token:'stale'}));
+  await utimes(staleLock,new Date(Date.now()-120000),new Date(Date.now()-120000));
   const applied=run('apply','work/commands.json');assert.equal(applied.status,0,applied.stderr);
   assert.equal(run('apply','work/commands.json').status,0,'same transaction must be idempotent');
   const preview=run('preview');assert.equal(preview.status,0,preview.stderr);
@@ -54,9 +57,11 @@ test('experimental protocol 2 uses the same Scene, preview and pack path',async(
   for(const [name,bytes] of Object.entries(files)){await mkdir(dirname(join(dir,name)),{recursive:true});await writeFile(join(dir,name),bytes);}await linkTestCanvas(dir);
   const run=(name,arg)=>spawnSync(process.execPath,['runtime/shiye.cjs',name,...(arg?[arg]:[])],{cwd:dir,encoding:'utf8',timeout:30000});
   const help=JSON.parse(run('help').stdout);
-  assert.equal(help.experimentalOperations.length,executableCreationV2Names.length+advancedCreationV2Names.length);
-  assert.ok(help.experimentalOperations.some(row=>row.name==='advanced.v1.material.craft'&&row.advanced));
-  assert.ok(new TextDecoder().decode(files['api/commands.v2-experimental.schema.json']).includes('advanced.v1.material.craft'));
+  assert.equal(help.protocolVersion,2);
+  assert.equal(help.operations.length,executableCreationV2Names.length+advancedCreationV2Names.length);
+  assert.ok(help.operations.some(row=>row.name==='advanced.v1.material.craft'&&row.advanced));
+  assert.ok(new TextDecoder().decode(files['api/commands.schema.json']).includes('advanced.v1.material.craft'));
+  assert.equal(JSON.parse(new TextDecoder().decode(files['work/commands.json'])).protocolVersion,2);
   const begin=spawnSync(process.execPath,['runtime/shiye.cjs','begin','work/v2-next.json','--protocol=2'],{cwd:dir,encoding:'utf8',timeout:30000});
   assert.equal(begin.status,0,begin.stderr);
   assert.equal(JSON.parse(await readFile(join(dir,'work/v2-next.json'),'utf8')).protocolVersion,2);
@@ -250,10 +255,10 @@ test('fixed guidance is task-independent and check/proposal do not change the au
   const run=(...args)=>spawnSync(process.execPath,['runtime/shiye.cjs',...args],{cwd:dir,encoding:'utf8',timeout:20000});
   const before=await readFile(join(dir,'scene.json'));
   const help=run('help');assert.equal(help.status,0,help.stderr);
-  assert.equal(JSON.parse(help.stdout).operations.length,39);
-  const description=run('describe','material.craft');assert.equal(description.status,0,description.stderr);
-  assert.equal(JSON.parse(description.stdout).name,'material.craft');
-  const begin=run('begin','work/draft.json');assert.equal(begin.status,0,begin.stderr);
+  assert.equal(JSON.parse(help.stdout).operations.length,executableCreationV2Names.length+advancedCreationV2Names.length);
+  const description=run('describe','advanced.v1.material.craft');assert.equal(description.status,0,description.stderr);
+  assert.equal(JSON.parse(description.stdout).name,'advanced.v1.material.craft');
+  const begin=run('begin','work/draft.json','--protocol=1');assert.equal(begin.status,0,begin.stderr);
   assert.match(run('begin','work/draft.json').stderr,/DRAFT_EXISTS/);
   const command=JSON.parse(await readFile(join(dir,'work/draft.json'),'utf8'));
   command.operations=[{op:'material.add',id:'piece',asset:'m1',placement:{xMm:30,yMm:40}},

@@ -58,11 +58,11 @@ export function validateCommands(input){
  throw Object.assign(Error('commands'+path+' '+error.message),{code:'COMMAND_SCHEMA_INVALID',path});
 }
 const allowed={
- material:'x y rotation zIndex opacity blendMode hidden isHidden isLocked vectorMask materialRelation craftDisplaySlices',
- text:'x y width height xMm yMm widthMm rotation zIndex opacity blendMode hidden isHidden isLocked content fontSize fontSizePt fontName style color alignment bold italic underline strikethrough lineSpacing fixedLineHeight paragraphSpacing letterSpacing curveHeight vectorMask',
- shape:'x y width height rotation zIndex opacity blendMode hidden isHidden isLocked kind fill stroke lineWidth fillOpacity strokeOpacity strokeDash cornerRadius vectorPaths vectorLayers vectorMask',
- ink:'rotation zIndex opacity blendMode hidden isHidden isLocked points width color penStyle vectorMask',
- group:'rotation zIndex opacity blendMode hidden isHidden isLocked name vectorMask'};
+ material:'x y rotation zIndex opacity blendMode shadow hidden isHidden isLocked vectorMask materialRelation craftDisplaySlices',
+ text:'x y width height xMm yMm widthMm rotation zIndex opacity blendMode shadow hidden isHidden isLocked content fontSize fontSizePt fontName style color alignment bold italic underline strikethrough lineSpacing fixedLineHeight paragraphSpacing letterSpacing curveHeight vectorMask',
+ shape:'x y width height rotation zIndex opacity blendMode shadow hidden isHidden isLocked kind fill stroke lineWidth fillOpacity strokeOpacity strokeDash cornerRadius vectorPaths vectorLayers vectorMask',
+ ink:'rotation zIndex opacity blendMode shadow hidden isHidden isLocked points width color penStyle vectorMask',
+ group:'rotation zIndex opacity blendMode shadow hidden isHidden isLocked name vectorMask'};
 const nodeByID=(nodes,id)=>{for(const node of nodes){if([node.id,node.creativePieceID,node.agentKey,node.key].includes(id))return node;const child=node.children&&nodeByID(node.children,id);if(child)return child;}return null;};
 const edit=(doc,change,assets)=>applyWebSceneCommands(doc,{baseSceneHash:craftSceneHash(doc.page),edits:[change]},assets);
 const tool=(doc,name,args,assets)=>applyWebSceneCommands(doc,{baseSceneHash:craftSceneHash(doc.page),tools:[{name,arguments:args}]},assets);

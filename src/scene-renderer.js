@@ -49,6 +49,7 @@ export async function renderSceneCanvas(draft,{scale=1,loadMaterialImage,createC
  const drawLeaf=async(kind,item,target)=>{
    target.save();
    try{
+     if(item.shadow){target.shadowColor=item.shadow.color;target.shadowBlur=item.shadow.blur;target.shadowOffsetX=item.shadow.offsetX;target.shadowOffsetY=item.shadow.offsetY;}
      if(kind==='ink'){target.globalAlpha=item.opacity??1;target.globalCompositeOperation=(item.blendMode==='multiply'?'multiply':'source-over');drawInk(target,[item]);return;}
      target.translate(item.x,item.y);target.rotate((item.rotation||0)*Math.PI/180);
      target.globalAlpha=item.opacity??1;
@@ -81,7 +82,7 @@ export async function renderSceneCanvas(draft,{scale=1,loadMaterialImage,createC
      if(node.hidden||node.isHidden||node.isParked||node.parked)continue;
      if(entry.type!=='group'){await drawLeaf(entry.type,node,target);continue;}
      const style=sceneLayerStyle(node);
-     const isolate=(node.opacity??1)!==1||style.blendMode!=='normal'||!!style.mask;
+     const isolate=(node.opacity??1)!==1||style.blendMode!=='normal'||!!style.mask||!!node.shadow;
      const matrix=groupMatrix(node);
      if(!isolate){target.save();try{target.transform(...matrix);await drawTree(node.children||[],target,depth+1);}finally{target.restore();}continue;}
      if(++isolatedGroups>8||width*height*(isolatedGroups+1)>64_000_000)throw Error('复杂图层组合超出内存预算；请降低导出分辨率或减少隔离组');
@@ -92,6 +93,7 @@ export async function renderSceneCanvas(draft,{scale=1,loadMaterialImage,createC
      try{
        target.globalAlpha=node.opacity??1;
        target.globalCompositeOperation=style.blendMode==='multiply'?'multiply':'source-over';
+       if(node.shadow){target.shadowColor=node.shadow.color;target.shadowBlur=node.shadow.blur;target.shadowOffsetX=node.shadow.offsetX;target.shadowOffsetY=node.shadow.offsetY;}
        if(style.mask){
          if(node.localTransform){
            if(!node.layoutBox)throw Error('局部组合蒙版需要稳定 layoutBox');

@@ -362,6 +362,8 @@ export function validateSceneExtensions(d){
     }
    }
    if(node.opacity!==undefined&&!num(node.opacity,0,1))throw Error('图层透明度必须在 0–1 之间');
+   if(node.shadow&&(!/^#[0-9a-fA-F]{6}$/.test(node.shadow.color)||!num(node.shadow.blur,0,10000)||
+     !num(node.shadow.offsetX,-100000,100000)||!num(node.shadow.offsetY,-100000,100000)))throw Error('图层阴影参数无效');
    if(node.zIndex!==undefined&&!num(node.zIndex,-100000,100000))throw Error('图层排序值无效');
    if(node.type==='group'){
      if(!Array.isArray(node.children)||node.children.length>1000||
@@ -371,6 +373,7 @@ export function validateSceneExtensions(d){
      if(node.name!==undefined&&(typeof node.name!=='string'||node.name.length>100))throw Error('图层组名称无效');
      walk(node.children,depth+1);
    }else if(node.type==='ink'){
+     if(node.layoutRotation!==undefined&&!num(node.layoutRotation,-3600,3600))throw Error('笔迹布局旋转无效');
      if(node.vectorMask)throw Error('墨迹蒙版需要先将墨迹分组，再在组上添加裁切蒙版');
      if(typeof node.color!=='string'||!/^#[0-9a-fA-F]{6}$/.test(node.color))throw Error('笔迹颜色无效');
      if(!Array.isArray(node.points)||node.points.length<1||node.points.length>20000||

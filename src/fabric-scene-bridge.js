@@ -126,6 +126,7 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
       if(!children.length)return null;
       const group=new fabric.Group(children,{opacity:finite(node.opacity,1),
         globalCompositeOperation:node.blendMode==='multiply'?'multiply':'source-over'});
+      if(node.shadow)group.set({shadow:new fabric.Shadow({color:node.shadow.color,blur:node.shadow.blur,offsetX:node.shadow.offsetX,offsetY:node.shadow.offsetY})});
       if(node.localTransform){
         const original=group.getCenterPoint(),next=transformPoint(node.localTransform,original.x,original.y);
         group.set({angle:(group.angle||0)+matrixAngle(node.localTransform)});
@@ -250,6 +251,7 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
       evented:node.type!=='ink'&&!node.locked&&!node.isLocked&&
         !(node.type==='group'&&containsLocked(node.children)),
       globalCompositeOperation:node.blendMode==='multiply'?'multiply':'source-over'});
+    if(node.shadow)object.set({shadow:new fabric.Shadow({color:node.shadow.color,blur:node.shadow.blur,offsetX:node.shadow.offsetX,offsetY:node.shadow.offsetY})});
     if(node.type!=='ink')configureControls(object);
     object.sceneID=node.ownerID||node.id;
     object.sceneRenderKey=node.renderKey||node.id;

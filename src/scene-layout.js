@@ -20,7 +20,7 @@ export function validateSceneLayout(page){
   if(reference)visit(reference);
   const place=node.layoutConstraint?.place;
   if(place){
-   if(place.behavior!=='linked'||node.type==='ink')throw Error('布局约束只支持 linked 的可定位图层');
+   if(place.behavior!=='linked')throw Error('布局约束只支持 linked 的可定位图层');
    if(place.reference==='parent'&&parent&&!byID.get(parent)?.layoutBox)throw Error('parent 比例定位需要稳定 layoutBox');
    if(node.type==='group'&&!node.layoutBox)throw Error('组合持续定位需要稳定 layoutBox');
    const box=worldBox(page,key),scale=page.canvas.height/page.physicalPageHeightMM;
@@ -46,7 +46,7 @@ export function solveSceneLayout(page){
   if(node.layoutConstraint){
    const current=worldBox(page,key),scale=page.canvas.height/page.physicalPageHeightMM;
    const place=node.layoutConstraint.place;
-   const position=resolveCreationPlace(page,place,{widthMm:current.w/scale,heightMm:current.h/scale,rotationDeg:matrixAngle(spatialPath(page.layers,key).world)-(parent?matrixAngle(spatialPath(page.layers,parent).world):0),parentID:parent});
+   const position=resolveCreationPlace(page,place,{widthMm:current.w/scale,heightMm:current.h/scale,rotationDeg:current.rotation-(parent?matrixAngle(spatialPath(page.layers,parent).world):0),parentID:parent});
    setWorldPosition(page,key,position);
   }
   busy.delete(key);done.add(key);
@@ -57,7 +57,7 @@ export function solveSceneLayout(page){
 export function applyScenePlacement(page,id,place){
  const path=spatialPath(page.layers,id);if(!path)throw Error('定位图层不存在：'+id);
  const node=path.node,parent=parentID(page,id),box=worldBox(page,id),scale=page.canvas.height/page.physicalPageHeightMM;
- const position=resolveCreationPlace(page,place,{widthMm:box.w/scale,heightMm:box.h/scale,rotationDeg:matrixAngle(path.world)-(parent?matrixAngle(spatialPath(page.layers,parent).world):0),parentID:parent});
+ const position=resolveCreationPlace(page,place,{widthMm:box.w/scale,heightMm:box.h/scale,rotationDeg:box.rotation-(parent?matrixAngle(spatialPath(page.layers,parent).world):0),parentID:parent});
  setWorldPosition(page,id,position);
  if(place.behavior==='linked')node.layoutConstraint={place:structuredClone(place)};
  else delete node.layoutConstraint;
@@ -72,7 +72,7 @@ export function reconcileManualSceneMove(page,id){
  const path=spatialPath(page.layers,id);if(!path)throw Error('图层不存在：'+id);
  if(path.node.layoutConstraint){
   const place=structuredClone(path.node.layoutConstraint.place),parent=parentID(page,id);
-  place.rotationDeg=matrixAngle(path.world)-(parent?matrixAngle(spatialPath(page.layers,parent).world):0);
+  place.rotationDeg=worldBox(page,id).rotation-(parent?matrixAngle(spatialPath(page.layers,parent).world):0);
   delete place.offset;
   const box=worldBox(page,id),scale=page.canvas.height/page.physicalPageHeightMM;
   const expected=resolveCreationPlace(page,place,{widthMm:box.w/scale,heightMm:box.h/scale,rotationDeg:matrixAngle(path.world)-(parent?matrixAngle(spatialPath(page.layers,parent).world):0),parentID:parent});
@@ -88,4 +88,11 @@ export function assertNoLinkedDependents(page,id){
  if(descendants?.type==='group')nodeList(descendants.children).forEach(n=>[n.id,n.key,n.agentKey,n.creativePieceID].forEach(key=>affected.add(key)));
  const dependents=nodeList(page.layers).filter(node=>!affected.has(node.id)&&affected.has(dependency(node)));
  if(dependents.length)throw Error('仍有 linked 图层引用此对象：'+dependents.map(n=>n.id).join(', '));
+}
+export function detachLinkedDependents(page,id){
+ const selected=spatialPath(page.layers,id)?.node;if(!selected)throw Error('图层不存在：'+id);
+ const descendants=nodeList([selected]),affected=new Set(descendants.flatMap(node=>[node.id,node.key,node.agentKey,node.creativePieceID].filter(Boolean)));
+ const dependents=nodeList(page.layers).filter(node=>!affected.has(node.id)&&affected.has(dependency(node)));
+ for(const node of dependents)delete node.layoutConstraint;
+ return dependents.map(node=>node.id);
 }

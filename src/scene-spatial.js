@@ -45,7 +45,9 @@ export function worldBox(page,id){
  if(node.type==='ink'){
   const points=node.points.map(p=>transformPoint(path.parentWorld,p.x,p.y));
   const xs=points.map(p=>p.x),ys=points.map(p=>p.y);
-  return {cx:(Math.min(...xs)+Math.max(...xs))/2,cy:(Math.min(...ys)+Math.max(...ys))/2,w:Math.max(...xs)-Math.min(...xs),h:Math.max(...ys)-Math.min(...ys),rotation:0};
+  return {cx:(Math.min(...xs)+Math.max(...xs))/2,cy:(Math.min(...ys)+Math.max(...ys))/2,
+   w:Math.max(node.width||1,Math.max(...xs)-Math.min(...xs)),h:Math.max(node.width||1,Math.max(...ys)-Math.min(...ys)),
+   rotation:(node.layoutRotation||0)+matrixAngle(path.parentWorld)};
  }
  return {cx:world[4],cy:world[5],w:node.width,h:node.height,rotation:matrixAngle(world)};
 }
@@ -57,7 +59,14 @@ export function setWorldPosition(page,id,{x,y,rotation}){
   node.localTransform=multiplyMatrix(inverseMatrix(parentWorld),rigidMatrix(x,y,angle));
   assertRigidMatrix(node.localTransform);
  }else if(node.type==='ink'){
-  throw Error('笔迹定位需要笔画路径变换');
+  const box=worldBox(page,id),angle=((rotation??box.rotation)-box.rotation)*Math.PI/180,
+   cos=Math.cos(angle),sin=Math.sin(angle),inverse=inverseMatrix(parentWorld);
+  node.points=node.points.map(point=>{
+   const world=transformPoint(parentWorld,point.x,point.y),dx=world.x-box.cx,dy=world.y-box.cy;
+   const local=transformPoint(inverse,x+dx*cos-dy*sin,y+dx*sin+dy*cos);
+   return {...point,x:local.x,y:local.y};
+  });
+  node.layoutRotation=(rotation??box.rotation)-matrixAngle(parentWorld);
  }else{
   const point=transformPoint(inverseMatrix(parentWorld),x,y);
   node.x=point.x;node.y=point.y;
@@ -68,7 +77,10 @@ export function setWorldPosition(page,id,{x,y,rotation}){
 export function convertNodeFrame(node,oldParentWorld,newParentWorld){
  const change=multiplyMatrix(inverseMatrix(newParentWorld),oldParentWorld);
  if(node.type==='group')node.localTransform=multiplyMatrix(change,groupMatrix(node));
- else if(node.type==='ink')node.points=node.points.map(p=>({...p,...transformPoint(change,p.x,p.y)}));
+ else if(node.type==='ink'){
+  node.points=node.points.map(p=>({...p,...transformPoint(change,p.x,p.y)}));
+  node.layoutRotation=(node.layoutRotation||0)+matrixAngle(oldParentWorld)-matrixAngle(newParentWorld);
+ }
  else{
   const matrix=multiplyMatrix(change,rigidMatrix(node.x,node.y,node.rotation||0));
   node.x=matrix[4];node.y=matrix[5];node.rotation=matrixAngle(matrix);

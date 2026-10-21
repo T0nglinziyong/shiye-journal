@@ -7,7 +7,7 @@ const anchors={
  'bottom-left':[0,1],'bottom-center':[.5,1],'bottom-right':[1,1]
 };
 const rotate=(x,y,degrees)=>{const a=degrees*Math.PI/180,c=Math.cos(a),s=Math.sin(a);return [x*c-y*s,x*s+y*c];};
-function referenceBox(page,reference,parentID){
+export function creationReferenceBox(page,reference,parentID){
  const width=page.canvas.width,height=page.canvas.height;
  if(reference==='page'||reference==='parent'&&!parentID)return {cx:width/2,cy:height/2,w:width,h:height,rotation:0};
  if(reference==='parent')return worldBox(page,parentID);
@@ -24,7 +24,7 @@ export function resolveCreationPlace(page,place,{widthMm,heightMm,rotationDeg=0,
  if(!place||typeof place!=='object')throw Error('缺少 place');
  if(place.referenceBounds==='visible'||place.targetBounds==='visible')throw Error('当前 Scene 尚不能解析 visible 锚点');
  if(!Number.isFinite(widthMm)||!Number.isFinite(heightMm)||widthMm<=0||heightMm<=0)throw Error('定位需要已确定的目标尺寸');
- const scale=page.canvas.height/page.physicalPageHeightMM,ref=referenceBox(page,place.reference,parentID);
+ const scale=page.canvas.height/page.physicalPageHeightMM,ref=creationReferenceBox(page,place.reference,parentID);
  if(!(ref.w>0&&ref.h>0))throw Error('定位参照没有有效边界');
  const at=place.at,ra=place.referenceAnchor;
  if((at!==undefined)===(ra!==undefined))throw Error('place.at 与 referenceAnchor 必须且只能选择其一');

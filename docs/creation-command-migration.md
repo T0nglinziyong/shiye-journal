@@ -1,12 +1,14 @@
 # 创作命令能力映射（截至 2026-10-21）
 
-附件列出的 39 项旧公开操作仍在 `src/v3-commands.js` 的协议 1 Schema 与 `applyCommandBatch` 中注册。`tool.*` 会转交 `src/web-scene-workbench.js` 的共享工具执行器；高级图层操作使用 `src/scene-advanced-ops.js` 和 `src/scene-v2.js`。协议 2 实验运行时从该注册表自动生成 `advanced.v1.<原操作名>`，故 39 项均可在同一个协议 2 `commands.json` 中调用。**语法可用不等于每项经过 Scene→PNG→重开编辑验收，也不等于高级参数已统一。** 目前 25 个候选简洁操作中，24 个有处理分支，且部分仅支持受约束的参数子集；正式网站 ZIP 仍默认协议 1。
+附件列出的 39 项原操作继续由 `src/v3-commands.js` 执行，统一创作包默认协议 2；高级入口为 `advanced.v1.<原操作名>`，仍写在同一 `commands.json`。24 个简洁操作在 `src/creation-v2-commands.js` 执行，另一个候选 `layout.arrange` 暂缓。`visible` 边界定位也暂缓，发布 Schema 不接受这两个参数。纸张尺寸与单双页是任务来源固定值；`page.update` 仅修改纸色，旧页面图案和中缝命令可通过高级入口使用。
 
-| 协议 2 简洁操作 | 当前支持范围 |
+| 简洁操作 | 已接入的能力 |
 |---|---|
-| `material.add`, `text.add/update`, `shape.add`, `vector.add`, `ink.add`, `layer.place/update/reparent/reorder/delete`, `group.create/compose/ungroup`, `layout.detach`, `material.decision`, `page.update` | 基本创建与局部修改；新组的子图层是真实局部坐标，组变换与 linked 定位保存到 Scene。部分高级 parent/order/style 参数仍显式拒绝。 |
-| `material.crop`, `material.window`, `material.split`, `material.mask`, `material.weave`, `material.tape`, `material.edge` | 矩形裁切、矩形/椭圆命名开窗、同一父片矩形分片与真实余料、显示蒙版、同实体两孔穿插、直线胶带、带确定种子的撕边。复杂自由轮廓、保留窗芯等由高级入口承接。 |
-| `layout.arrange` | 候选契约有定义；稳定网格/多项联动规则尚未接入，`help` 不将它列为可用。 |
+| `material.add`, `text.add/update`, `shape.add`, `vector.add`, `ink.add`, `layer.place/update/reparent/reorder/delete`, `group.create/compose/ungroup`, `layout.detach`, `material.decision`, `page.update` | 页面/组/节点相对定位、顺序、样式和阴影；真实组内局部坐标、持久 `linked` 约束及解绑；删除被依赖节点时可选择解绑。 |
+| `material.crop`, `material.window`, `material.split`, `material.mask`, `material.weave`, `material.tape`, `material.edge` | 矩形、椭圆、多边形与 SVG 路径区域；实体分片、余料和窗芯；2–16 个开窗穿插；显示蒙版与实体裁切分开。复杂原生工艺仍可用 `advanced.v1.*`。 |
+| `layout.arrange`, `visible` 锚点 | 按用户本轮要求暂缓；统一运行时的公开 Schema 会拒绝。 |
+
+下面 39 行是原操作到新统一文件的能力映射。执行入口存在不等于每个参数都完成跨浏览器像素验收；具体限制见接入状态。
 
 | 原操作 | 候选目标 | 现有执行路径 | 提及该操作的测试（非逐项验收） | 协议 2 状态 |
 |---|---|---|---|---|

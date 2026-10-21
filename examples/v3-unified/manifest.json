@@ -1,10 +1,10 @@
 {
   "format": "shiye-v3-delivery",
   "version": 3,
-  "sceneRevision": "sha256:f7acd9ead25d50574ae9445556a417e483c080c2a303732d7ce38b897aec29b7",
-  "sceneHash": "sha256:4e19fdc91a513bc0d4642f204570cec33d523e6767c8d20dc7f37e411b76a7a9",
-  "sceneJsonHash": "sha256:79cbe5d39384f4703a8c2bcc52dbefef48e47deacd1e9dc0afd48726be8b5ac4",
-  "projectHash": "sha256:f7acd9ead25d50574ae9445556a417e483c080c2a303732d7ce38b897aec29b7",
+  "sceneRevision": "sha256:aa0187d63c65843c96f831746627e55e6a026c22a0fd8e0e9b111f14f440ec7a",
+  "sceneHash": "sha256:d929418a136923e36dcabe106926107ea0e015251f515b3c5e3d67834576118a",
+  "sceneJsonHash": "sha256:1d746fba958d273d4feec5ff86d2d2291b650192011c2e49ca942824370c5732",
+  "projectHash": "sha256:aa0187d63c65843c96f831746627e55e6a026c22a0fd8e0e9b111f14f440ec7a",
   "previewHash": "sha256:dd69bd28e254301ff864e06382332d95dfccafd5a71813c5555fb59af68c189f",
   "renderer": "shiye-scene-v2",
   "rendererBackend": "node-canvas@3.2.3",
@@ -19,15 +19,15 @@
     "characters": 52,
     "excerpts": [
       {
-        "id": "651a7a37-0346-4fa6-a72e-7a583535db29",
+        "id": "c579827d-a3e2-4067-8905-238d7e1e79bb",
         "text": "窗边的小光，慢慢走。"
       },
       {
-        "id": "ce5404f5-71b4-4c34-b1b1-c882c23d0f41",
+        "id": "f58ee7b1-44bf-417f-acb3-e5b1ff0bca17",
         "text": "把今天折成几片"
       },
       {
-        "id": "5c855c70-1a52-41e4-8e4d-79a76674b0e4",
+        "id": "f6795085-e063-4248-bde2-2e6e1635e35b",
         "text": "蓝色散成两片，浅绿留出两道窗口。暖橙从纸间穿过，像今天稍稍绕了一段路。"
       }
     ]
@@ -50,5 +50,5 @@
       "reason": "穿过两个开窗而保持纸条实体"
     }
   ],
-  "createdAt": "2026-10-21T09:32:01.635Z"
+  "createdAt": "2026-10-21T10:21:47.641Z"
 }

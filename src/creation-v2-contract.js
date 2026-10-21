@@ -17,6 +17,16 @@ export const creationV2RuntimeSchema=(()=>{
  const schema=structuredClone(candidateSchema);
  delete schema.$id;
  schema.title='ShiYe executable creation commands v2';
+ schema.$defs.Operation.oneOf=schema.$defs.Operation.oneOf.filter(entry=>entry.$ref!=='#/$defs/Op_layout_arrange');
+ schema.$defs.Place.properties.referenceBounds.enum=['layout'];
+ schema.$defs.Place.properties.targetBounds.enum=['layout'];
+ // The task fixes the paper geometry. Exposing candidate page resizing would
+ // claim a capability that the authoritative Scene/source contract forbids.
+ const pageUpdate=schema.$defs.Op_page_update;
+ delete pageUpdate.properties.physicalSizeMm;
+ delete pageUpdate.properties.mode;
+ pageUpdate.required=['op','paperColor'];
+ delete pageUpdate.anyOf;
  schema.$defs.legacy={$defs:adaptReferences(commandsSchema.$defs)};
  for(const [index,original] of commandsSchema.properties.operations.items.oneOf.entries()){
   const name=executableCommandNames[index];
