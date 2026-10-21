@@ -20,7 +20,7 @@
 ## 验收
 每次完整迁移必须执行 `npm test`、`npm run build`、`npm run test:ui` 和 `node scripts/audit-cloudbase-platform.mjs`。测试失败或 CI 没有执行步骤都不是成功。图片和编辑器回归须检查实际设备，尤其 iOS Safari。结果分别注明“代码已提交、函数已部署、SQL 已执行、真机已验收”，不可混为一谈。
 
-`npm run test:ui` 会产生含模拟 CloudBase 会话的 `dist`，不能用于发布；发布前重新运行生产模式 `npm run build`。测试站是 CloudBase App `shiye-journal-test` 的 Git 构建；当前合并 `test` 不会自动部署，需在现有 App 上触发 Git 构建，设置本次 `SHIYE_BUILD_SHA`，再核对该应用版本状态及实站 `/version.json`。不能只凭 GitHub 合并判断上线。
+`npm run test:ui` 会产生含模拟 CloudBase 会话的 `dist`，不能用于发布。测试站是 CloudBase App `shiye-journal-test` 的 Git 构建；`test` 的 push 检查通过后，`Deploy CloudBase test` 使用仅限测试环境的 CAM 凭证触发生产模式构建，等待版本成功并核对实站 `/version.json`。自动发布依赖 GitHub 环境 `cloudbase-test` 中的两个凭证 Secret；未配置时工作流会失败，不会绕过验证。不能只凭 GitHub 合并判断上线。
 
 ## 同步与数据安全
 403/413 应明确诊断并保留原始队列；结果不明的网络请求必须先核验幂等收据/私有对象再决定重试；明确冲突时保留两份可恢复的作品。账号清空和私有文件回收仅在 CloudBase 服务端独立实现、权限校验、审计及备份恢复验证后开放，任何未完成的危险操作不应出现在可执行 UI 中。

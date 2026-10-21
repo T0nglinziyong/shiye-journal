@@ -12,7 +12,7 @@ permissions:
 
 concurrency:
   group: verify-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   unit-and-ui:
@@ -77,3 +77,30 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: echo 'All unit-test partitions and built UI checks succeeded'
+
+  deploy-cloudbase-test:
+    name: Deploy CloudBase test
+    needs: verify
+    if: github.event_name == 'push' && github.ref == 'refs/heads/test'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: cloudbase-test
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: test
+          persist-credentials: false
+      - name: Only release the tested branch head
+        env:
+          TESTED_SHA: ${{ github.sha }}
+        run: test "$(git rev-parse HEAD)" = "$TESTED_SHA"
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+      - name: Check deployment contract
+        run: node --test tests/cloudbase-test-release.test.js
+      - name: Release existing CloudBase app and verify public version
+        env:
+          TCB_DEPLOY_SECRET_ID: ${{ secrets.TCB_DEPLOY_SECRET_ID }}
+          TCB_DEPLOY_SECRET_KEY: ${{ secrets.TCB_DEPLOY_SECRET_KEY }}
+        run: node scripts/cloudbase-test-release.mjs
