@@ -15,7 +15,7 @@
       "tcb:DescribeCloudAppVersion",
       "tcb:CreateCloudApp"
     ],
-    "resource": ["qcs::tcb:ap-shanghai:uin/100053335354:env/shiye-pg-test-d1gg723f7fb356ccc"]
+    "resource": ["qcs::tcb:ap-shanghai:uin/:env/shiye-pg-test-d1gg723f7fb356ccc"]
   }]
 }
 ```
