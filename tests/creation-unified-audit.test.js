@@ -7,7 +7,8 @@ import {join,dirname} from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {unzipSync} from 'fflate';
 import {project} from '../src/domain.js';
-import {createOfflineHandoff,importEditableWork} from '../src/offline-creation.js';
+import {createOfflineHandoff,importEditableWork,verifyOfflineTaskPackage} from '../src/offline-creation.js';
+import {materialAliases} from '../src/material-alias.js';
 import {webSceneDocument} from '../src/web-scene-workbench.js';
 import {assetFromSourceSnapshot} from '../src/material-anatomy.js';
 import {applyCreationV2Batch,validateCreationV2Commands} from '../src/creation-v2-commands.js';
@@ -37,6 +38,7 @@ test('describe schemas are standalone current and contain executable examples',(
 });
 test('parameter errors point at the requested operation and reject meaningless styles',()=>{
  assert.throws(()=>validateCreationV2Commands(tx([{op:'text.add',id:'note',content:'test',place:at,size:{width:30,unit:'mm'},style:{fill:'#ffffff'}}])),e=>e.path.includes('/operations/0')&&e.message.includes('describe'));
+ assert.throws(()=>validateCreationV2Commands(tx([{op:'material.decision',asset:'m1',choice:'intact',reason:'太短'}])),/reason/);
 });
 test('real ink.add rotates once vector stroke and shadow persist and text height is honored',async()=>{
  const {doc,assets}=await fixture();
@@ -58,6 +60,15 @@ test('group.compose supports local revisions but cannot modify external objects'
  assert.equal(made.page.layers[0].children[0].fill,'#abcdef');
  assert.throws(()=>applyCreationV2Batch(made,tx([{op:'group.compose',id:'bad',place:at,children:[{op:'layer.delete',target:'dot'}]}]),assets),/外部对象/);
 });
+test('exporter shortens aliases before source snapshots and preview hashes are frozen',async()=>{
+ const assets=['persistent-a','persistent-b'].map(id=>({id,title:id,kind:'paper',physicalWidthMM:20,physicalHeightMM:20,supply:{quantity:1}}));
+ const aliases=materialAliases(assets.map(a=>a.id)),previews=Object.keys(aliases).map(alias=>({alias,bytes:tinyPNG}));
+ const task=await createOfflineHandoff({project:project('短别名'),assets,aliases,previews,settings:{includeThumbnails:true}});
+ assert.deepEqual(task.source.materials,[{alias:'m1',assetID:'persistent-a'},{alias:'m2',assetID:'persistent-b'}]);
+ const bytes=new Uint8Array(await task.blob.arrayBuffer()),files=unzipSync(bytes);assert.ok(files['assets/m1.png']&&files['assets/m2.png']);
+ await verifyOfflineTaskPackage(bytes,task.source);
+ const manifest=JSON.parse(new TextDecoder().decode(files['assets/manifest.json']));assert.deepEqual(manifest.assets.map(a=>a.alias),['m1','m2']);
+});
 for(const renderer of ['node','browser'])test(`exported ZIP current protocol check apply preview pack reopen (${renderer})`,async t=>{
  if(renderer==='browser'&&!findOfflineChromium()){t.skip('No Chromium installed; node renderer remains covered.');return;}
  const {task,asset}=await fixture(),files=unzipSync(new Uint8Array(await task.blob.arrayBuffer())),dir=await mkdtemp(join(tmpdir(),'shiye-audit-'));
@@ -66,7 +77,7 @@ for(const renderer of ['node','browser'])test(`exported ZIP current protocol che
   const run=(...args)=>spawnSync(process.execPath,['runtime/shiye.cjs',...args],{cwd:dir,encoding:'utf8',timeout:60000,env:{...process.env,SHIYE_RENDERER:renderer,...(process.env.CI?{SHIYE_CHROMIUM_NO_SANDBOX:'1'}:{})}});
   const info=run('info');assert.equal(info.status,0,info.stderr);assert.deepEqual(JSON.parse(info.stdout).supportedProtocolVersions,[2]);assert.equal(run('describe','place').status,0);
   const draft=run('begin','work/audit.json');assert.equal(draft.status,0,draft.stderr);const batch=JSON.parse(await readFile(join(dir,'work/audit.json'),'utf8'));
-  batch.operations=[{op:'material.add',id:'paper',asset:'m1',place:at},{op:'material.window',target:'paper',windowId:'hole',region:{shape:'ellipse',space:'local',unit:'ratio',box:[.3,.3,.3,.3]}},{op:'material.decision',asset:'m1',choice:'crafted',reason:'合成测试开窗'}];await writeFile(join(dir,'work/audit.json'),JSON.stringify(batch));
+  batch.operations=[{op:'material.add',id:'paper',asset:'m1',place:at},{op:'material.window',target:'paper',windowId:'hole',region:{shape:'ellipse',space:'local',unit:'ratio',box:[.3,.3,.3,.3]}},{op:'material.decision',asset:'m1',choice:'crafted',reason:'在纸张中央开出圆窗，露出下层并保留实体来源。'}];await writeFile(join(dir,'work/audit.json'),JSON.stringify(batch));
   const before=await readFile(join(dir,'scene.json'),'utf8'),check=run('check','work/audit.json');assert.equal(check.status,0,check.stderr);assert.equal(await readFile(join(dir,'scene.json'),'utf8'),before);
   for(const args of [['apply','work/audit.json'],['preview'],['review','--result','pass'],['pack']]){const result=run(...args);assert.equal(result.status,0,args.join(' ')+': '+result.stderr);}
   const manifest=JSON.parse(await readFile(join(dir,'output/manifest.json'),'utf8'));assert.match(manifest.rendererBackend,renderer==='browser'?/^browser-canvas\//:/^node-canvas@/);

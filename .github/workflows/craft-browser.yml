@@ -7,6 +7,14 @@ on:
       - 'src/craft-*.js'
       - 'src/material-*.js'
       - 'src/creative*.js'
+      - 'src/creation-*.js'
+      - 'src/scene-*.js'
+      - 'src/v3-*.js'
+      - 'src/v3-*.mjs'
+      - 'creation-contract/**'
+      - 'scripts/*creation*'
+      - 'scripts/*offline*'
+      - 'scripts/generate-v3-unified-example.mjs'
       - 'src/app.js'
       - 'src/backup-*.js'
       - 'src/store.js'
@@ -82,8 +90,15 @@ jobs:
           node tests/presentation-browser.mjs
           node tests/craft-multimodal-browser.mjs
           node tests/web-workbench-browser.mjs
-          git diff --exit-code -- package.json package-lock.json src/generated/offline-validate-source.js src/generated/offline-browser-source.js src/generated/offline-glyph-source.js
-      - name: Retain synthetic screenshots and reports
+          git diff --exit-code -- package.json package-lock.json
+      - name: Verify clean-build reproducibility and generate current creation example
+        run: |
+          node scripts/verify-offline-build.mjs
+          node scripts/generate-v3-unified-example.mjs
+          mkdir -p /tmp/shiye-craft-browser/creation-package
+          cp -R examples/v3-unified/. /tmp/shiye-craft-browser/creation-package/
+          cp test-results/creation-build.json /tmp/shiye-craft-browser/creation-package/
+      - name: Retain synthetic screenshots, current creation ZIP and build proof
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:

@@ -17,3 +17,6 @@ test-data/private-recognition/
 ShiyeJournalFresh.swiftpm/
 auth.json
 credentials.json
+# Derived bundles are generated from the sole source implementation by predev/pretest/build.
+/src/generated/
+/test-results/
