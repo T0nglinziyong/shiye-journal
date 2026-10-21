@@ -1,0 +1,32 @@
+name: Creation refactor workspace
+on:
+  push:
+    branches: [refactor/creation-single-contract-20261022]
+    paths: [.github/workflows/creation-dev-snapshot.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Pack source and development dependencies without credentials or font binaries
+        run: |
+          mkdir -p /tmp/creation-workspace
+          git archive HEAD | gzip > /tmp/creation-workspace/source.tar.gz
+          tar --exclude='*.woff' --exclude='*.woff2' --exclude='*.ttf' --exclude='*.otf' --exclude='*.ttc' -czf /tmp/creation-workspace/dependencies.tar.gz node_modules
+          git rev-parse HEAD > /tmp/creation-workspace/revision.txt
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: creation-refactor-workspace
+          path: /tmp/creation-workspace/
+          retention-days: 1
