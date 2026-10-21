@@ -1,7 +1,7 @@
 {
   "protocolVersion": 1,
   "transactionId": "simple-revision",
-  "baseSceneRevision": "sha256:e752b34205db1f679b2cf5aa7e02cf03be225419f218b5918727a6fe59ace702",
+  "baseSceneRevision": "sha256:04585c543f5e88fd13037f697b5292d80a6fbfedfa789ba241ffc60dc7e4f392",
   "operations": [
     {
       "op": "layer.update",

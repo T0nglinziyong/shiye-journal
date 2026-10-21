@@ -59,6 +59,11 @@ export async function runV3(task,command,arg){
   withSceneLock(()=>{
    const latest=validateV3SceneDocument(load('scene.json'));
    if(revision(latest)!==current)throw fail('REVISION_CONFLICT','并发操作已修改 Scene',{currentSceneRevision:revision(latest)});
+   // A valid no-op command can leave the content revision unchanged. Merge
+   // receipts read under the lock so a concurrent no-op cannot erase one.
+   const latestReceipts=latest.v3Transactions||{};
+   if(latestReceipts[input.transactionId])throw fail('TRANSACTION_CONFLICT','事务已由并发操作提交；请重新读取 Scene');
+   next.v3Transactions={...latestReceipts,[input.transactionId]:updated[input.transactionId]};
    atomic('scene.json',next);
   });
   for(const name of ['preview.png','preview-capture.json','project.shiyeproject.json','manifest.json'])rmSync('output/'+name,{force:true});

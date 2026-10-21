@@ -61,6 +61,15 @@ test('v3 transactions reject stale revisions and retain scene on a failed operat
   assert.equal(run('apply','work/commands.json').status,0);assert.deepEqual(await readFile(join(dir,'scene.json')),after);
   const changed={...ok,operations:[{op:'page.update',paperColor:'#eeeeee'}]};await writeFile(join(dir,'work/commands.json'),JSON.stringify(changed));assert.match(run('apply','work/commands.json').stderr,/TRANSACTION_CONFLICT/);
   const stale={...changed,transactionId:'stale'};await writeFile(join(dir,'work/commands.json'),JSON.stringify(stale));assert.match(run('apply','work/commands.json').stderr,/REVISION_CONFLICT/);
+  const current=JSON.parse(run('info').stdout).sceneRevision;
+  const currentColor=JSON.parse(await readFile(join(dir,'scene.json'),'utf8')).page.paperColor;
+  for(const transactionId of ['noop-one','noop-two']){
+   await writeFile(join(dir,'work/commands.json'),JSON.stringify({protocolVersion:1,transactionId,baseSceneRevision:current,operations:[{op:'page.update',paperColor:currentColor}]}));
+   const applied=run('apply','work/commands.json');assert.equal(applied.status,0,applied.stderr);
+   assert.equal(JSON.parse(run('info').stdout).sceneRevision,current);
+  }
+  const receipts=JSON.parse(await readFile(join(dir,'scene.json'),'utf8')).v3Transactions;
+  assert.ok(receipts['noop-one']&&receipts['noop-two'],'both no-op transaction receipts must survive the unchanged content revision');
  }finally{await rm(dir,{recursive:true,force:true});}
 });
 test('v3 complex craft keeps partition, offcut, windows, weave and editable text',async()=>{
