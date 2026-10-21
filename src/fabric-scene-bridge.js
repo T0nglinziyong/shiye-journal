@@ -1,3 +1,6 @@
+import {applyScenePatchBatch} from './scene-edit-kernel.js';
+import {USER_SCENE_POLICY,requireScenePolicy,confirmSceneCapability} from './scene-edit-policy.js';
+import {findSceneNode} from './scene-v2.js';
 import {shapeSVG,textFont,textFontFamily,textLineHeight,drawSceneText} from './editor-tools-model.js';
 import {materialMaskGeometry} from './material-mask.js';
 import {geometryIntersection} from './craft-topology.js';
@@ -90,11 +93,10 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
               if((strip.textureMode||'sample')==='sample'&&
                 strip.sourceOffsetMM+strip.pathLengthMM>strip.sourceLengthMM)
                 strip.textureMode='stretch';
-            }else child.manualVisualResize=true;
+            }
           }
           child.rotation=Math.atan2(widthAxis.y,widthAxis.x)*180/Math.PI;
-          child.userOverrideFlags=[...new Set([...(child.userOverrideFlags||[]),'moved',
-            ...(child.manualVisualResize?['resized']:[])])];
+          // The edit policy, not the renderer, grants visual resize.
         }else{
           if(Math.abs(scaleX-1)<1e-9&&Math.abs(scaleY-1)<1e-9){
             child.rotation=finite(child.rotation)+rotation;
@@ -172,7 +174,7 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
         left:finite(node.x)+Math.sin(radians)*frameHeight/2,
         top:finite(node.y)-Math.cos(radians)*frameHeight/2
       });
-      object.sceneTextFrameHeight=frameHeight;
+      object.sceneTextFrameHeight=frameHeight;object.sceneNativeTextWidth=object.width;
       object.sceneTextNode=node;
       // Use the saved text frame for controls and caching too. Fabric's native
       // single-line measurement otherwise clips canonical wrapped Chinese text.
@@ -260,7 +262,7 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
     return object;
   }
 
-  function applyObject(node,object){
+  function proposeObject(node,object){
     if(!node||node.id!==object?.sceneID||node.type!==object?.sceneType)
       throw Error('画布对象与 Scene 图层身份不一致');
     if(node.locked||node.isLocked||node.type==='group'&&containsLocked(node.children))
@@ -276,7 +278,6 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
         node.localTransform=assertRigidMatrix(multiplyMatrix(move,node.localTransform));
       }else transformChildren(node.children,before.center,center,delta,
         positive(object.scaleX),positive(object.scaleY),before.angle);
-      object.sceneGroupPose={center,angle};
       node.opacity=object.opacity??1;
       return node;
     }
@@ -292,11 +293,11 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
         const moved=fabric.util.transformPoint(new fabric.Point(point.x,point.y),delta);
         return {...point,x:moved.x,y:moved.y};
       });
-      object.sceneInkMatrix=after;
+      node.layoutRotation=(node.layoutRotation||0)+matrixAngle(delta);
     }else{
       const textChanged=node.type==='text'&&object.text!==node.content;
       const textFrame=node.type==='text'?
-        Math.max(object.sceneTextFrameHeight||node.height,textChanged?object.height:0)*object.scaleY:null;
+        (object.sceneTextFrameHeight||node.height)*object.scaleY:null;
       if(node.type==='text'){
         const offset=(textFrame-object.height*object.scaleY)/2;
         const angle=finite(object.angle)*Math.PI/180;
@@ -304,14 +305,13 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
         node.y=center.y+Math.cos(angle)*offset;
       }else{node.x=center.x;node.y=center.y;}
       const previousWidth=node.width,previousHeight=node.height;
-      node.width=(node.type==='shape'?object.sceneFrameWidth:object.width)*object.scaleX;
+      node.width=(node.type==='text'?(textChanged?node.width:node.width*object.width/(object.sceneNativeTextWidth||object.width)):node.type==='shape'?object.sceneFrameWidth:object.width)*object.scaleX;
       node.height=node.type==='text'?textFrame:
         (node.type==='shape'?object.sceneFrameHeight:object.height)*object.scaleY;
       node.rotation=object.angle||0;
       if(node.type==='material'&&
         (Math.abs(node.width-previousWidth)>1e-5||Math.abs(node.height-previousHeight)>1e-5)){
-        node.manualVisualResize=true;
-        node.userOverrideFlags=[...new Set([...(node.userOverrideFlags||[]),'resized'])];
+        // Visual permission and provenance are applied by the shared kernel.
       }
       if(node.type==='text'){
         // The bottom-right grip scales the whole text object. Persist its
@@ -322,10 +322,8 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
             'additionalLineSpacing','paragraphSpacing','letterSpacing','curveHeight'])
             if(Number.isFinite(node[field]))node[field]*=sx;
         node.content=object.text;
-        object.sceneTextFrameHeight=textFrame/object.scaleY;
-        if(node.vectorMask)object.clipPath=clipPath(maskGeometry(node.vectorMask),
-          object.width,object.sceneTextFrameHeight,
-          {topOffset:(object.sceneTextFrameHeight-object.height)/2});
+        if(node.textLayout){node.textLayout={...node.textLayout,minimumHeight:node.textLayout.minimumHeight*object.scaleY};}
+        // Keep composition/caret state in Fabric; canonical reflow is committed below.
       }
       if(node.type==='material')node.isFlippedHorizontally=!!object.flipX;
     }
@@ -333,5 +331,45 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
     return node;
   }
 
+
+  function applyObject(page,object,{policy,confirm}={}){
+    requireScenePolicy(policy);
+    const node=findSceneNode(page,object?.sceneID);
+    if(!node)throw Error('画布图层不存在');
+    const proposal=proposeObject(structuredClone(node),object),changes=[],resized=[];
+    const collect=(before,after)=>{
+      const values={};
+      for(const key of new Set([...Object.keys(before),...Object.keys(after)])){
+        if(['children','manualVisualResize','manualVisualCopy','userOverrideFlags'].includes(key))continue;
+        if(JSON.stringify(before[key])!==JSON.stringify(after[key]))values[key]=after[key];
+      }
+      if(before.type==='material'&&(Math.abs(before.width-after.width)>1e-6||Math.abs(before.height-after.height)>1e-6))resized.push(before);
+      if(Object.keys(values).length)changes.push({id:before.id,values});
+      if(before.children)before.children.forEach((child,i)=>collect(child,after.children[i]));
+    };
+    collect(node,proposal);
+    if(node.type==='text'&&changes.some(change=>change.id===node.id)&&page.physicalPageHeightMM>0){
+      const change=changes.find(change=>change.id===node.id),angle=proposal.rotation*Math.PI/180;
+      const top={x:proposal.x+Math.sin(angle)*proposal.height/2,y:proposal.y-Math.cos(angle)*proposal.height/2};
+      const scale=page.canvas.height/page.physicalPageHeightMM;
+      // The visual control explicitly anchors the top of a text frame. Reflow
+      // and positioning still run through the SAME kernel used by AI place.
+      change.place={reference:'page',unit:'mm',at:[top.x/scale,top.y/scale],anchor:'top-center',rotationDeg:proposal.rotation,rotationSpace:'page'};
+    }
+    let confirmation;
+    if(resized.length){
+      if(policy!==USER_SCENE_POLICY||confirm?.({capability:'material.visualResize',targets:resized.map(n=>n.id),message:'改变这些实体素材的显示尺寸？这只调整作品中的视觉大小，不改变真实来源尺寸或库存。'})!==true)throw Object.assign(Error('已取消素材显示尺寸调整'),{code:'EDIT_CONFIRMATION_REQUIRED'});
+      confirmation=confirmSceneCapability(resized,'material.visualResize');
+    }
+    applyScenePatchBatch(page,changes,{policy,confirmation,linked:'offset'});
+    if(node.type==='group')object.sceneGroupPose={center:object.getCenterPoint(),angle:finite(object.angle)};
+    if(node.type==='ink')object.sceneInkMatrix=object.calcTransformMatrix();
+    if(node.type==='text'){
+      object.sceneTextFrameHeight=node.height/positive(object.scaleY);object.sceneNativeTextWidth=object.width;
+      object.sceneTextNode=node;
+      if(node.vectorMask)object.clipPath=clipPath(maskGeometry(node.vectorMask),object.width,object.sceneTextFrameHeight,{topOffset:(object.sceneTextFrameHeight-object.height)/2});
+    }
+    return node;
+  }
   return {fromNode,applyObject};
 }

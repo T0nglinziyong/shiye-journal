@@ -1,7 +1,10 @@
+import {copyEditableScene,editSceneStructure,sceneStructureTransaction} from './scene-structure-edit.js';
+import {applyScenePatchBatch,sceneWorldValues} from './scene-edit-kernel.js';
+import {AI_SCENE_POLICY} from './scene-edit-policy.js';
 import {objectCorners,polygonContains,selectionBounds} from './canvas-selection.js';
 import {sceneLayerEntries,findSceneNode,moveSceneNode,removeSceneNode,assertSceneEditable} from './scene-v2.js';
 import {pressureInkOutline} from './pressure-ink.js';
-import {convertNodeFrame,IDENTITY,spatialPath} from './scene-spatial.js';
+import {convertNodeFrame,IDENTITY,spatialPath,worldBox} from './scene-spatial.js';
 
 const edges=points=>points.map((point,index)=>[point,points[(index+1)%points.length]]);
 const cross=(a,b,c)=>(b.x-a.x)*(c.y-a.y)-(b.y-a.y)*(c.x-a.x);
@@ -53,15 +56,9 @@ export function selectSceneLasso(draft,polygon,filter={},mode='contain'){
   }).map(entry=>entry.value.id);
 }
 
-export function moveSceneLasso(draft,ids,dx,dy){
+export function moveSceneLasso(draft,ids,dx,dy,options={}){
   if(!Number.isFinite(dx)||!Number.isFinite(dy))return false;
-  const nodes=editableSelection(draft,ids);
-  if(!nodes?.length)return false;
-  for(const node of nodes){
-    if(node.type==='ink')node.points=(node.points||[]).map(point=>({...point,x:point.x+dx,y:point.y+dy}));
-    else {node.x+=dx;node.y+=dy;if(node.type==='material')node.userOverrideFlags=[...new Set([...(node.userOverrideFlags||[]),'moved'])];}
-  }
-  return true;
+  return transformSceneLasso(draft,ids,{x:0,y:0},1,0,{...options,to:{x:dx,y:dy}});
 }
 
 export function sceneLassoBounds(draft,ids){
@@ -75,72 +72,45 @@ export function sceneLassoBounds(draft,ids){
   return bounds;
 }
 
-export function transformSceneLasso(draft,ids,center,scale,degrees){
+export function transformSceneLasso(draft,ids,center,scale,degrees,{to=center,policy=AI_SCENE_POLICY,confirmation}={}){
   if(!(scale>0)||!Number.isFinite(scale)||!Number.isFinite(degrees)||
-    !Number.isFinite(center?.x)||!Number.isFinite(center?.y))return false;
-  const nodes=editableSelection(draft,ids);
-  if(!nodes?.length)return false;
+    ![center?.x,center?.y,to?.x,to?.y].every(Number.isFinite))return false;
+  const nodes=editableSelection(draft,ids);if(!nodes?.length)return false;
   const radians=degrees*Math.PI/180,c=Math.cos(radians),s=Math.sin(radians);
-  const around=point=>({x:center.x+scale*((point.x-center.x)*c-(point.y-center.y)*s),
-    y:center.y+scale*((point.x-center.x)*s+(point.y-center.y)*c)});
-  const changes=[];
-  for(const node of nodes){
-    if(node.type==='ink'){
-      const points=(node.points||[]).map(point=>({...point,...around(point)}));
-      const width=node.width*scale;
-      if(!(width>=.1&&width<=1000)||points.some(point=>
-        !Number.isFinite(point.x)||!Number.isFinite(point.y)||Math.abs(point.x)>100000||Math.abs(point.y)>100000))return false;
-      changes.push(()=>{node.points=points;node.width=width;});
-    }else{
-      const position=around(node),width=node.width*scale,height=node.height*scale,
-        rotation=(node.rotation||0)+degrees;
-      if(!(width>0&&width<=100000&&height>0&&height<=100000)||
-        Math.abs(position.x)>100000||Math.abs(position.y)>100000||Math.abs(rotation)>3600)return false;
-      changes.push(()=>{
-        node.x=position.x;node.y=position.y;node.width=width;node.height=height;node.rotation=rotation;
-        if(node.type==='text')for(const field of ['fontSize','fixedLineHeight','lineHeight','lineSpacing',
-          'additionalLineSpacing','paragraphSpacing','letterSpacing'])
-          if(Number.isFinite(node[field]))node[field]*=scale;
-        if(node.type==='shape'&&Number.isFinite(node.lineWidth))node.lineWidth*=scale;
-        if(node.type==='material'){
-          if(scale!==1)node.manualVisualResize=true;
-          node.userOverrideFlags=[...new Set([...(node.userOverrideFlags||[]),
-            'moved',...(degrees?['rotated']:[]),...(scale!==1?['resized']:[])])];
-        }
-      });
+  const around=point=>({x:to.x+scale*((point.x-center.x)*c-(point.y-center.y)*s),
+    y:to.y+scale*((point.x-center.x)*s+(point.y-center.y)*c)});
+  const changes=nodes.map(node=>{
+    let values;
+    if(node.type==='ink')values={points:node.points.map(point=>({...point,...around(point)})),width:node.width*scale,
+      layoutRotation:worldBox(draft,node.id).rotation+degrees};
+    else{
+      values={...around(node),width:node.width*scale,height:node.height*scale,rotation:(node.rotation||0)+degrees};
+      if(node.type==='text'){
+        for(const field of ['fontSize','fixedLineHeight','lineHeight','lineSpacing','additionalLineSpacing','paragraphSpacing','letterSpacing','curveHeight'])if(Number.isFinite(node[field]))values[field]=node[field]*scale;
+        if(node.textLayout)values.textLayout={...node.textLayout,minimumHeight:node.textLayout.minimumHeight*scale};
+      }
+      if(node.type==='shape'&&Number.isFinite(node.lineWidth))values.lineWidth=node.lineWidth*scale;
     }
+    // Drop unchanged fields: a translation must not introduce a text sizing
+    // intent or accumulate layout metadata on every pointer release.
+    values=Object.fromEntries(Object.entries(values).filter(([key,value])=>JSON.stringify(value)!==JSON.stringify(node[key])));
+    return {id:node.id,values:sceneWorldValues(draft,node.id,values)};
+  });
+  try{applyScenePatchBatch(draft,changes,{policy,confirmation,linked:'offset'});return true;}catch(error){
+    if(error.code==='EDIT_CONFIRMATION_REQUIRED'||error.code==='EDIT_POLICY_INVALID')throw error;
+    return false;
   }
-  changes.forEach(apply=>apply());
-  return changes.length>0;
+}
+export function rotateSceneLasso(draft,ids,center,degrees,options){return transformSceneLasso(draft,ids,center,1,degrees,options);}
+
+export function copySceneLasso(draft,ids,makeID,context){return copyEditableScene(draft,ids,makeID,context);}
+export function deleteSceneLasso(draft,ids,context){
+ return sceneStructureTransaction(draft,()=>{editSceneStructure(draft,{kind:'delete',targets:ids},context);pruneEmptyGroups(draft.layers);},context);
 }
 
-export function rotateSceneLasso(draft,ids,center,degrees){
-  return transformSceneLasso(draft,ids,center,1,degrees);
-}
-
-export function copySceneLasso(draft,ids,makeID){
-  const selected=new Set(ids),copies=[];
-  for(const {value,parents} of sceneLayerEntries(draft,{hidden:true})){
-    if(!selected.has(value.id))continue;
-    const copy=structuredClone({...value});copy.id=makeID();
-    if(copy.type==='ink')copy.points=(copy.points||[]).map(point=>({...point,x:point.x+12,y:point.y+12}));
-    else {copy.x+=12;copy.y+=12;}
-    const parent=parents.at(-1);
-    if(parent){convertNodeFrame(copy,IDENTITY,spatialPath(draft.layers,parent.id).world);parent.children.push(copy);copy.creativeGroupID=parent.id;}
-    else {draft.layers.push(copy);delete copy.creativeGroupID;}
-    copies.push(copy.id);
-  }
-  return copies;
-}
-
-export function deleteSceneLasso(draft,ids){
-  const selected=new Set(ids);
-  for(const {value} of sceneLayerEntries(draft,{hidden:true}).filter(entry=>selected.has(entry.value.id)))
-    removeSceneNode(draft,value.id);
-  pruneEmptyGroups(draft.layers);
-}
-
-export function mergeSceneLasso(draft,ids,{id,name='套索组合'}={}){
+export function mergeSceneLasso(draft,ids,{id,name='套索组合'}={},context){
+ return sceneStructureTransaction(draft,()=>{
+ if(!id||findSceneNode(draft,id))throw Error('组合编号重复或无效');
   const selected=new Set(ids);
   const entries=sceneLayerEntries(draft,{hidden:true}).filter(entry=>selected.has(entry.value.id));
   if(entries.length<2||entries.length!==selected.size)throw Error('请选择至少两个可编辑图层');
@@ -157,4 +127,5 @@ export function mergeSceneLasso(draft,ids,{id,name='套索组合'}={}){
   group.zIndex=Math.max(0,...draft.layers.map(node=>node.zIndex||0))+1;
   draft.layers.push(group);
   return id;
+ },context);
 }

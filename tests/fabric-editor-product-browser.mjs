@@ -470,6 +470,7 @@ try{
   assert.equal((await projects())[0].drafts[0].layers.filter(layer=>layer.type==='material').length,1);
   const beforeMaterial=(await projects())[0].drafts[0];
   const originalMaterial=beforeMaterial.layers.find(layer=>layer.type==='material');
+  await evaluate(`(()=>{window.__originalConfirm=window.confirm;window.__resizeConfirmations=[];window.confirm=message=>{window.__resizeConfirmations.push(message);return true;};})()`);
   const materialEdge=await evaluate(`(()=>{const r=document.querySelector('.upper-canvas').getBoundingClientRect();
     const item=${JSON.stringify(originalMaterial)},page=${JSON.stringify(beforeMaterial.canvas)};
     return {x:r.left+(item.x+item.width/2)*r.width/page.width,
@@ -484,6 +485,8 @@ try{
     .find(layer=>layer.id===originalMaterial.id);
   assert.ok(resizedMaterial.width>originalMaterial.width&&resizedMaterial.assetID===originalMaterial.assetID,
     'Manual material resize must persist without changing its source asset: '+JSON.stringify({originalMaterial,resizedMaterial,materialEdge,ui:await evaluate(`({toast:document.querySelector('#toast')?.textContent,selection:document.querySelector('.fabric-selected-actions')?.outerHTML,hit:document.elementFromPoint(${materialEdge.x},${materialEdge.y})?.outerHTML.slice(0,150)})`)}));
+  assert.equal(await evaluate('window.__resizeConfirmations.length'),1,'A visual material resize requires one explicit human confirmation');
+  await evaluate('window.confirm=window.__originalConfirm');
   await click('[aria-label="编辑对象"]','.floating-editor-inspector');
   const inspectorGrip=await evaluate('document.querySelector(".floating-editor-inspector .floating-panel-resize").getBoundingClientRect().toJSON()');
   const inspectorHeight=await evaluate('document.querySelector(".floating-editor-inspector").getBoundingClientRect().height');

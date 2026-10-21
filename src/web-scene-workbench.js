@@ -1,3 +1,7 @@
+import {replaceEditableMaterial} from './scene-material-edit.js';
+import {editSceneStructure} from './scene-structure-edit.js';
+import {applySceneNodeChange,applySceneNodePatch,insertSceneLayer} from './scene-edit-kernel.js';
+import {AI_SCENE_POLICY} from './scene-edit-policy.js';
 import {stabilizeImportedCraftScene} from './craft-import-identity.js';
 // The web creator edits the same native Scene tree used by Fabric and exports.
 // Commands are inputs; only the validated snapshot is an importable result.
@@ -139,21 +143,23 @@ export function applyWebSceneCommands(document,commands,assets){
   if(commands.edits){
     if(!Array.isArray(commands.edits)||commands.edits.length>200)throw Error('每批精确编辑最多 200 项');
     for(const edit of commands.edits){
-      if(edit.op==='patch'){
+      if(edit.op==='properties'){
+        applySceneNodeChange(draft,edit.id,edit.change,{policy:AI_SCENE_POLICY});
+      }else if(edit.op==='patch'){
         const node=assertSceneEditable(draft,edit.id);
         if(!edit.values||typeof edit.values!=='object'||['id','type','children'].some(k=>Object.hasOwn(edit.values,k)))throw Error('patch 不可替换节点身份或子树');
-        validatePackageValue(edit.values);Object.assign(node,structuredClone(edit.values));
+        validatePackageValue(edit.values);applySceneNodePatch(draft,edit.id,edit.values,{policy:AI_SCENE_POLICY});
       }else if(edit.op==='insert'){
         validatePackageValue(edit.node);
         const parent=edit.parent?assertSceneEditable(draft,edit.parent):null;
         if(parent&&parent.type!=='group')throw Error('插入目标必须是组合');
-        (parent?.children||draft.layers).push(structuredClone(edit.node));
-      }else if(edit.op==='delete')removeSceneNode(draft,edit.id);
-      else if(edit.op==='group')groupSceneLayers(draft,edit.ids,{id:edit.id,name:edit.name||'手帐组合'});
-      else if(edit.op==='ungroup'){if(!ungroupSceneLayers(draft,edit.id))throw Error('没有找到组合');}
-      else if(edit.op==='move')moveSceneNode(draft,edit.id,{parentID:edit.parent??null,beforeID:edit.before??null});
+        insertSceneLayer(draft,edit.node,{parent:parent?.id,policy:AI_SCENE_POLICY});
+      }else if(edit.op==='delete')editSceneStructure(draft,{kind:'delete',target:edit.id},{policy:AI_SCENE_POLICY});
+      else if(edit.op==='group')editSceneStructure(draft,{kind:'group',targets:edit.ids,options:{id:edit.id,name:edit.name||'手帐组合'}},{policy:AI_SCENE_POLICY});
+      else if(edit.op==='ungroup'){if(!editSceneStructure(draft,{kind:'ungroup',target:edit.id},{policy:AI_SCENE_POLICY}))throw Error('没有找到组合');}
+      else if(edit.op==='move')editSceneStructure(draft,{kind:'move',target:edit.id,options:{parentID:edit.parent??null,beforeID:edit.before??null}},{policy:AI_SCENE_POLICY});
       else if(edit.op==='transform-group')transformSceneGroup(draft,edit.id,edit.transform);
-      else if(edit.op==='replace-material')replaceSceneMaterial(draft,edit.id,edit.assetID,frozen);
+      else if(edit.op==='replace-material')replaceEditableMaterial(draft,edit.id,edit.assetID,frozen,{policy:AI_SCENE_POLICY});
       else if(edit.op==='repeat-stamp')repeatSceneStamp(draft,edit.id,edit.placements);
       else if(edit.op==='reuse-layout')reuseSceneLayout(draft,edit.layout,edit.materialMap||{},frozen,edit.prefix);
       else if(edit.op==='glyph-knockout')knockoutSceneGlyphs(draft,edit.id,edit.geometryMM,edit.originMM,frozen,source.processing||'不预设');

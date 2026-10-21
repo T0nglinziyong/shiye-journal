@@ -13,7 +13,7 @@ low.getContext('2d').fillStyle='#d97769';low.getContext('2d').fillRect(0,0,16,16
 const sharp=document.createElement('canvas');sharp.width=512;sharp.height=512;
 sharp.getContext('2d').fillStyle='#337da4';sharp.getContext('2d').fillRect(0,0,512,512);
 let progressiveReady=false;
-const draft={id:'fabric-preview',sceneVersion:2,canvas:{width:600,height:800},paperColor:'#fffdf5',
+const draft={id:'fabric-preview',physicalPageHeightMM:297,sceneVersion:2,canvas:{width:600,height:800},paperColor:'#fffdf5',
   paperPattern:'grid',layers:[
     {id:'paper-group',type:'group',zIndex:1,
       vectorMask:{outer:[[0,0],[.45,0],[.45,1],[0,1]],holes:[]},children:[
@@ -30,7 +30,7 @@ const draft={id:'fabric-preview',sceneVersion:2,canvas:{width:600,height:800},pa
     {id:'paper-ink',type:'ink',points:[{x:90,y:710},{x:210,y:680},{x:330,y:720}],
       width:7,color:'#aa6655',zIndex:4}
   ]};
-window.__fabricFixture={draft,image};
+window.__fabricFixture={draft,image,commits:[],checkpoints:[]};
 window.__fabricActiveSelection=ActiveSelection;
 const events=document.querySelector('#events');
 function Preview(){
@@ -48,6 +48,8 @@ function Preview(){
           setTimeout(()=>{progressiveReady=true;onUpgrade?.();},350);
           resolve(low.toDataURL());
         }):id==='fabric-delayed'?new Promise(resolve=>setTimeout(()=>resolve(assetURL),350)):assetURL}
+      onBeforeChange={label=>window.__fabricFixture.checkpoints.push(label)}
+      onChange={(_node,label)=>window.__fabricFixture.commits.push(label)}
       onReady={canvas=>window.__fabricCanvas=canvas}
       onSelection={ids=>{setSelectedIDs(ids);events.textContent='选中：'+ids.join(', ')}}
       onIssue={error=>events.textContent='错误：'+error.message}/></>;

@@ -1,3 +1,5 @@
+import {applyScenePatchBatch,sceneWorldValues} from './scene-edit-kernel.js';
+import {AI_SCENE_POLICY} from './scene-edit-policy.js';
 import {assertSceneEditable,findSceneNode,sceneLayerEntries} from './scene-v2.js';
 import {sceneLassoBounds} from './scene-lasso.js';
 
@@ -7,7 +9,7 @@ export const sceneArrangementModes=[
 
 // Work in page coordinates. A group is one arrangement unit, but every child
 // receives the same translation; this keeps its appearance and source size.
-export function arrangeSceneSelection(draft,ids,mode){
+export function arrangeSceneSelection(draft,ids,mode,{policy=AI_SCENE_POLICY}={}){
   if(!sceneArrangementModes.includes(mode))throw Error('未支持的排列方式');
   const selected=new Set(ids||[]),entries=sceneLayerEntries(draft,{hidden:true});
   const units=[];
@@ -56,10 +58,8 @@ export function arrangeSceneSelection(draft,ids,mode){
     if(!points.every(point=>Number.isFinite(point.x+dx)&&Number.isFinite(point.y+dy)&&
       Math.abs(point.x+dx)<=100000&&Math.abs(point.y+dy)<=100000))throw Error('排列超出允许的画布范围');
   }
-  for(const {node,dx,dy} of planned){
-    if(node.type==='ink')node.points=node.points.map(point=>({...point,x:point.x+dx,y:point.y+dy}));
-    else {node.x+=dx;node.y+=dy;if(node.type==='material')
-      node.userOverrideFlags=[...new Set([...(node.userOverrideFlags||[]),'moved'])];}
-  }
+  const changes=planned.map(({node,dx,dy})=>({id:node.id,values:sceneWorldValues(draft,node.id,node.type==='ink'?
+    {points:node.points.map(point=>({...point,x:point.x+dx,y:point.y+dy}))}:{x:node.x+dx,y:node.y+dy})}));
+  applyScenePatchBatch(draft,changes,{policy,linked:'offset'});
   return true;
 }

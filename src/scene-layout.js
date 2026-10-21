@@ -54,7 +54,7 @@ export function solveSceneLayout(page){
  for(const node of nodes)solve(node.id);
  return true;
 }
-export function applyScenePlacement(page,id,place){
+export function applyScenePlacement(page,id,place,{deferSolve=false}={}){
  const path=spatialPath(page.layers,id);if(!path)throw Error('定位图层不存在：'+id);
  const node=path.node,parent=parentID(page,id),box=worldBox(page,id),scale=page.canvas.height/page.physicalPageHeightMM;
  const bound=bindCreationRotation(page,place,box.rotation,parent);
@@ -62,14 +62,14 @@ export function applyScenePlacement(page,id,place){
  setWorldPosition(page,id,position);
  if(bound.behavior==='linked')node.layoutConstraint={place:structuredClone(bound)};
  else delete node.layoutConstraint;
- solveSceneLayout(page);
+ if(!deferSolve)solveSceneLayout(page);
  return node;
 }
 export function detachSceneLayout(page,id){
  const node=spatialPath(page.layers,id)?.node;if(!node)throw Error('定位图层不存在：'+id);
  delete node.layoutConstraint;return node;
 }
-export function reconcileManualSceneMove(page,id){
+export function reconcileManualSceneMove(page,id,{deferSolve=false}={}){
  const path=spatialPath(page.layers,id);if(!path)throw Error('图层不存在：'+id);
  if(path.node.layoutConstraint){
   const place=structuredClone(path.node.layoutConstraint.place),parent=parentID(page,id);
@@ -80,7 +80,7 @@ export function reconcileManualSceneMove(page,id){
   path.node.layoutConstraint.place.rotationDeg=place.rotationDeg;
   path.node.layoutConstraint.place.offset={value:[(box.cx-expected.x)/scale,(box.cy-expected.y)/scale],unit:'mm',space:'page'};
  }
- solveSceneLayout(page);
+ if(!deferSolve)solveSceneLayout(page);
 }
 export function assertNoLinkedDependents(page,id){
  const selected=spatialPath(page.layers,id)?.node;
