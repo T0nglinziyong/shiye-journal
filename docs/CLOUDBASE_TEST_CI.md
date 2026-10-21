@@ -15,12 +15,12 @@
       "tcb:DescribeCloudAppVersion",
       "tcb:CreateCloudApp"
     ],
-    "resource": ["qcs::tcb:ap-shanghai:uin/:env/shiye-pg-test-d1gg723f7fb356ccc"]
+    "resource": ["qcs::tcb::uin/100053335354:env/shiye-pg-test-d1gg723f7fb356ccc"]
   }]
 }
 ```
 
-若账号实际地域不是上海，先从控制台环境详情确认后替换策略中的地域。此策略限制环境和 API，但 CAM 的资源粒度只有环境，不能进一步限制到单个云应用；发布脚本还会固定服务名、仓库、分支和 `/` 路径。将子账号的 SecretId/SecretKey 仅写入 GitHub 环境 `cloudbase-test` 的 `TCB_DEPLOY_SECRET_ID`、`TCB_DEPLOY_SECRET_KEY` Secret，不写入仓库、CloudBase 前端变量或日志。建议为该环境设置只允许 `test` 分支的部署规则；轮换时先更新 Secret，再禁用旧密钥。
+这个资源字符串是 CAM 控制台接受并已保存的测试环境策略。腾讯云的 [环境隔离示例](https://cloud.tencent.com/document/product/876/47057) 与 [接口资源表](https://cloud.tencent.com/document/product/598/98174) 对地域及主账号字段的写法不一致；因此以实际 API 鉴权和完整发布验证为准，不能只凭策略保存成功就认定权限可用。此策略限制环境和 API，但 CAM 的资源粒度只有环境，不能进一步限制到单个云应用；发布脚本还会固定服务名、仓库、分支和 `/` 路径。将子账号的 SecretId/SecretKey 仅写入 GitHub 环境 `cloudbase-test` 的 `TCB_DEPLOY_SECRET_ID`、`TCB_DEPLOY_SECRET_KEY` Secret，不写入仓库、CloudBase 前端变量或日志。建议为该环境设置只允许 `test` 分支的部署规则；轮换时先更新 Secret，再禁用旧密钥。
 
 ## 触发和失败处理
 
