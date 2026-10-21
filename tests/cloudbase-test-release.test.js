@@ -28,6 +28,7 @@ test('release reuses reviewed static config and pins exact source SHA', () => {
 test('release stops when target or build config differs', () => {
   assert.throws(() => makeReleaseRequest({...current, StaticConfig: {...current.StaticConfig, AppPath: '/other'}}, sha));
   assert.throws(() => makeReleaseRequest({...current, StaticConfig: {...current.StaticConfig, CodeBranch: 'main'}}, sha));
+  assert.throws(() => makeReleaseRequest({...current, StaticConfig: {...current.StaticConfig, CodeRepo: 'attacker/shiye-journal'}}, sha));
   assert.throws(() => makeReleaseRequest(current, 'short'));
 });
 

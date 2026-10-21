@@ -37,7 +37,8 @@ export function makeReleaseRequest(version, sha) {
   if (current.AppPath !== '/' || current.CodeSource !== 'github' || current.CodeBranch !== 'test') {
     throw new Error('Existing app path or GitHub source differs from the reviewed test deployment.');
   }
-  if (!String(current.CodeRepo || '').includes('shiye-journal')) throw new Error('Unexpected source repository.');
+  const repo = String(current.CodeRepo || '').replace(/^https:\/\/github\.com\//i, '').replace(/\.git$/i, '');
+  if (repo !== 'T0nglinziyong/shiye-journal') throw new Error('Unexpected source repository.');
   const config = Object.fromEntries(Object.entries(current).filter(([key]) => RELEASE_KEYS.has(key)));
   if (!['', '.', './', './dist', 'dist', undefined, null].includes(config.BuildPath)) throw new Error('Unexpected build path.');
   if (config.StaticCmd?.InstallCmd !== 'npm ci' || config.StaticCmd?.BuildCmd !== 'npm run build' ||
