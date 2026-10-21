@@ -1,0 +1,34 @@
+name: Creation development snapshot
+on:
+  push:
+    branches: [refactor/creation-single-semantics-20261021]
+    paths: ['.github/workflows/creation-dev-snapshot.yml']
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Archive code and installed dependencies without credentials or fonts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/creation-dev-snapshot
+          git rev-parse HEAD > /tmp/creation-dev-snapshot/commit.txt
+          git ls-files -z -- src tests scripts creation-contract docs '*.md' '*.json' '*.js' '*.mjs' '*.cjs' '*.html' .github/workflows | tar --null -T - --exclude='*.woff*' --exclude='*.ttf' --exclude='*.otf' --exclude='*.ttc' -czf /tmp/creation-dev-snapshot/source.tar.gz
+          tar --exclude='*.woff*' --exclude='*.ttf' --exclude='*.otf' --exclude='*.ttc' -czf /tmp/creation-dev-snapshot/deps.tar.gz node_modules
+          sha256sum /tmp/creation-dev-snapshot/*.tar.gz > /tmp/creation-dev-snapshot/SHA256SUMS
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: creation-dev-snapshot
+          path: /tmp/creation-dev-snapshot/
+          retention-days: 1
