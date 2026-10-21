@@ -1,0 +1,49 @@
+{
+  "format": "shiye-v3-delivery",
+  "version": 3,
+  "sceneRevision": "sha256:d09d241b88d14a5bd2d6c870f019813c1716658650271c82c7a5bd9d3ac66ca9",
+  "sceneHash": "sha256:4139b43e1026ece77932bc25e3fddfbf9a0a81cdbd0bb7d7957e1f01af5d9420",
+  "sceneJsonHash": "sha256:d89e5ac5e5701c2a65bf5044151ea0ea136261562ccb899d6a8b5729c9edaa1d",
+  "projectHash": "sha256:d09d241b88d14a5bd2d6c870f019813c1716658650271c82c7a5bd9d3ac66ca9",
+  "previewHash": "sha256:6537c758fbc41ceea8d5646afdba3915427aa1ef4ed5b2a4f1760ffba1a26aa4",
+  "renderer": "shiye-scene-v2",
+  "fonts": "environment-dependent",
+  "assets": {
+    "m1": "sha256:783d7013fae1fd4ee064f216f0136415ac917884aa0ae1b8a2c357b36efa1015",
+    "m2": "sha256:c448db5eab341561597a2d0cfa124eb65ce13b4a5b3c792e3e57114cc4323ec1",
+    "m3": "sha256:6b8815c3fc0fa046399e8f4fc6d07a3f8d0726a68fbc1ab8db9952e7ec8825e3"
+  },
+  "physical": "passed",
+  "reading": {
+    "characters": 32,
+    "excerpts": [
+      {
+        "id": "7fca1fbc-0945-413d-99f7-3fa196dec1d5",
+        "text": "把寻常日子，慢慢记下来。\n从一张蓝纸开始。"
+      },
+      {
+        "id": "5d068fd9-b8e6-4d9c-a7cf-714703833505",
+        "text": "纸上的颜色像今天的天气。"
+      }
+    ]
+  },
+  "visualReview": "pending",
+  "materialDecisions": [
+    {
+      "asset": "m1",
+      "choice": "intact",
+      "reason": "保留印刷内容完整轮廓"
+    },
+    {
+      "asset": "m2",
+      "choice": "omitted",
+      "reason": "本页主题暂不需要这一件素材"
+    },
+    {
+      "asset": "m3",
+      "choice": "omitted",
+      "reason": "本页主题暂不需要这一件素材"
+    }
+  ],
+  "createdAt": "2026-10-21T05:13:19.310Z"
+}

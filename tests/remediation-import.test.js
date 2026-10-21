@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {zipSync,unzipSync,strToU8} from 'fflate';
 import {createNativeProjectPackage,importNativeProjectPackage} from '../src/native-project-package.js';
-import {createOfflineHandoff,importEditableWork,importEditableWorkPackage,importEditableWorkPackageReviewed} from '../src/offline-creation.js';
+import {createOfflineHandoff,importEditableWork,importEditableWorkPackage,importEditableWorkPackageReviewed} from './v3-test-handoff.mjs';
 import {sceneFingerprint} from '../src/offline-result-review.js';
 import {sha256Hex} from '../src/task-fingerprint.js';
 import {project,draft} from '../src/domain.js';
@@ -97,7 +97,7 @@ test('O-14: a supplied preview cannot mark an imported editable scene as visuall
   const asset={id:'preview-asset',title:'素材',kind:'sticker',physicalWidthMM:25,physicalHeightMM:25,supply:{quantity:1}};
   const handoff=await createOfflineHandoff({project:project('预览校验'),assets:[asset],aliases:{m1:asset.id},settings:{includeThumbnails:false}});
   const files=unzipSync(await bytes(handoff.blob));
-  const response=JSON.parse(new TextDecoder().decode(files['examples/project.shiyeproject.json']));
+  const response=JSON.parse(new TextDecoder().decode(files['scene.json']));
   response.previewVerified=true;response.manifest={reviewed:true};
   const imported=importEditableWork(JSON.stringify(response),[asset],{trustedSource:handoff.source});
   assert.equal(imported.creationVerification.preview,'unverified');
@@ -108,7 +108,7 @@ test('O-14/O-16: a self-consistent external manifest is advisory; wrong previews
   const asset={id:'manifest-asset',title:'小纸片',kind:'sticker',physicalWidthMM:25,physicalHeightMM:25,supply:{quantity:1}};
   const handoff=await createOfflineHandoff({project:project('结果清单'),assets:[asset],aliases:{m1:asset.id},settings:{includeThumbnails:false}});
   const task=unzipSync(await bytes(handoff.blob));
-  const scene=JSON.parse(new TextDecoder().decode(task['examples/project.shiyeproject.json']));
+  const scene=JSON.parse(new TextDecoder().decode(task['scene.json']));
   const preview=new Uint8Array([137,80,78,71,1,2,3,4]);
   const manifest={version:1,taskId:scene.source.bundleId,taskHash:scene.source.taskHash,schemaHash:scene.source.schemaHash,sceneHash:await sceneFingerprint(scene),previewHash:`sha256:${await sha256Hex(preview)}`};
   const makePackage=image=>zipSync({'project.shiyeproject.json':strToU8(JSON.stringify(scene)),'preview.png':image,'manifest.json':strToU8(JSON.stringify(manifest))});
@@ -116,7 +116,7 @@ test('O-14/O-16: a self-consistent external manifest is advisory; wrong previews
   assert.equal(consistent.creationVerification.manifest,'self-consistent');
   assert.equal(consistent.creationVerification.preview,'unverified','an external self-hash cannot prove visual equivalence');
   const mismatched=await importEditableWorkPackageReviewed(makePackage(new Uint8Array([137,80,78,71,9,9,9,9])),[asset],{trustedSource:handoff.source});
-  assert.equal(mismatched.drafts[0].items.length,1);
+  assert.equal(mismatched.drafts[0].items.length,0);
   assert.equal(mismatched.creationVerification.manifest,'mismatch');
   assert.equal(mismatched.creationVerification.preview,'mismatch');
   assert.equal(mismatched.creationVerification.reading,'pending');

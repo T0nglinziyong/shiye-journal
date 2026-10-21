@@ -1,15 +1,11 @@
 import {webSceneContract,webSceneDocument,importWebScene} from './web-scene-workbench.js';
-import {webWorkbenchInstructions,webEditingGuide,webArtDirection} from './web-creation-guide.js';
-import {attachSceneV2} from './scene-v2.js';
-import {itemFromAsset,textBlock} from './domain.js';
+import {createV3PackageFiles} from './v3-package.js';
+import {webArtDirection} from './web-creation-guide.js';
 import {previewImageFormat} from './offline-preview.js';
 import {webResultPrompt} from './creation-methods.js';
-import {multimodalCraftGuide} from './craft-vision.js';
 import {freezeCraftTask,craftTaskInstructions} from './craft-task.js';
-import {materialCraftGuide} from './material-craft-guide.js';
-import {zip,unzipSync,strToU8,strFromU8} from 'fflate';
-import {toolContracts,offlinePlanContract,directPageContract,offlineContract,schemaFingerprint} from './creative-contract.js';
-import {visualStyleBrief} from './creative-style-brief.js';
+import {zip,zipSync,unzipSync,strToU8,strFromU8} from 'fflate';
+import {toolContracts,schemaFingerprint} from './creative-contract.js';
 import {structureReferenceGuide} from './creative-design-guide.js';
 import {validMaterialAlias} from './material-alias.js';
 import {importNativeProjectPackage,validatePackageValue} from './native-project-package.js';
@@ -40,17 +36,6 @@ function sourceFor(p,aliases){
   const priority=p.materialPriority||{required:p.requiredAssetIDs||[],preferred:Object.values(aliases).filter(id=>!(p.requiredAssetIDs||[]).includes(id)),available:[]};
   return structuredClone({bundleId:crypto.randomUUID(),title:p.title,mode:d.pageMode,ratio:d.pageRatio,styles:p.styles||[d.style],purposes:p.purposes||[p.purpose||'自由创作'],intent:p.intent||'',contentPolicy:p.contentPolicy||'original',textPresentation:p.textPresentation||'mixed',userText:p.userText||'',providedFacts:p.providedFacts||'',processing:p.processing||'自由拆解',requiredAssetIDs:p.requiredAssetIDs||[],materialPriority:{required:priority.required||[],preferred:priority.preferred||[],available:priority.available||[]},materials:Object.entries(aliases).map(([alias,assetID])=>({alias,assetID}))});
 }
-function fastTaskBrief(source,selected){
-  const line=(label,value)=>`${label}：${JSON.stringify(value)}`;
-  return [
-    '拾页创作速览；完整来源由 task/context.json 和 scene.json 的 source 保管，勿改动。',
-    line('标题',source.title),line('页面',`${source.mode} / ${source.ratio}`),
-    line('风格',source.styles),line('用途',source.purposes),line('内容策略',source.contentPolicy),
-    line('补充想法',source.intent),line('用户原文',source.userText),line('已知事实',source.providedFacts),
-    '素材（别名可直接写进 instructions.json；尺寸为真实毫米，不得随意缩放）：',
-    ...selected.map(item=>`${item.alias}｜${JSON.stringify(item.title)}｜${item.kind||'素材'}｜${item.physicalWidthMM}×${item.physicalHeightMM} mm｜${source.requiredAssetIDs.includes(item.assetID)?'必用':'可选'}｜${(item.tags||[]).slice(0,5).join('、')}`)
-  ].join('\n')+'\n';
-}
 // The upload is a task package, not a source archive. Keep the chat prompt
 // short and put exact context, contracts, examples and separate images inside.
 export async function createOfflineHandoff({project:p,assets,aliases,previews=[],settings={}}){
@@ -68,60 +53,23 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
   const showImages=settings.includeThumbnails!==false;
   const chosen=showImages?previews:[];
   if(showImages&&selected.some(item=>!chosen.some(preview=>preview.alias===item.alias&&preview.bytes instanceof Uint8Array&&preview.bytes.length)))throw Error('创作包缺少素材预览，未导出不完整文件');
-  for(const entry of chosen)packagePreviewPath('materials',entry.alias,entry.bytes,{transparent:true});
+  if(settings.deliveryMode==='image')for(const entry of chosen)packagePreviewPath('materials',entry.alias,entry.bytes,{transparent:true});
   if(settings.deliveryMode==='image')return createOfflineImageHandoff({source,project:p,assets,selected,chosen,settings,showImages});
   const {offlineValidateSource}=await import('./generated/offline-validate-source.js');
   const {offlineGlyphSource}=await import('./generated/offline-glyph-source.js');
   const mode='scene';
   source.capabilities={sceneWorkbench:true,cropPx:false,craftPlan:true,multimodalVision:showImages,twoHoleWeave:true,editableTapeRibbon:true,canonicalNodePreview:true,validateOffline:true,previewOffline:'node-canvas'};
-  source.packageLayout='compact';
+  source.packageLayout='v3';
   source.schemaHash=schemaFingerprint(webSceneContract);source.planSchemaHash=schemaFingerprint(toolContracts.apply_craft_plan);
   freezeCraftTask(source,p.drafts[0],assets);
   source.previewHashes=showImages?Object.fromEntries(await Promise.all(chosen.map(async entry=>[entry.alias,`sha256:${await sha256Hex(entry.bytes)}`]))):null;
   source.taskHash=await taskFingerprint(source);
-  const context={format:OFFLINE_PACKAGE_FORMAT,version:2,source,materials:selected.map(item=>({...item,preview:showImages?packagePreviewPath('materials',item.alias,chosen.find(entry=>entry.alias===item.alias)?.bytes,{transparent:true}):null}))};
   const work=webSceneDocument(source,source.baseDraft,p.title);
-  const exampleDraft=attachSceneV2(structuredClone(source.baseDraft));
-  if(!exampleDraft.layers.length){
-    const ids=new Set([selected[0].assetID,...source.requiredAssetIDs]);
-    for(const [index,id] of [...ids].entries()){
-      const item=itemFromAsset(assets.find(a=>a.id===id),exampleDraft,exampleDraft.canvas.width*(.25+index%3*.25),exampleDraft.canvas.height*(.4+Math.floor(index/3)*.1));
-      item.id='example-material-'+index;item.type='material';item.creativePieceID='piece-'+index;exampleDraft.layers.push(item);
-    }
-    if(source.textMode!=='none'){
-      const title=textBlock('这一页的主题',exampleDraft);title.id='example-title';title.type='text';title.fontName='';title.style='serif';exampleDraft.layers.push(title);
-    }
-  }
-  const example=webSceneDocument(source,exampleDraft,'字段示例（请重新创作）');
   const guide=[creativeContentBrief({policy:source.contentPolicy,userText:source.userText,providedFacts:source.providedFacts,topic:source.intent,purposes:source.purposes}),
     creativePageBrief({styles:source.styles,purposes:source.purposes,textMode:source.textMode,contentPolicy:source.contentPolicy,textPresentation:source.textPresentation,userText:source.userText,theme:source.intent,pageMode:source.mode,materials:selected}),
-    webArtDirection(source),'所有静态对象在 page.layers 中编辑；需要精确字段与命令时读 task/SCENE_REFERENCE.txt。',settings.customLayoutPrompt||'',settings.includeStructureReference===false?'':structureReferenceGuide].join('\n\n');
-  const files={
-    'START_HERE.txt':strToU8(webWorkbenchInstructions),
-    'scene.json':strToU8(JSON.stringify(work,null,2)),
-    'package.json':strToU8(JSON.stringify({private:true,type:'commonjs',dependencies:{canvas:'3.2.3'}},null,2)),
-    'task/BRIEF.txt':strToU8(fastTaskBrief(source,selected)),
-    'task/context.json':strToU8(JSON.stringify(context,null,2)),
-    'task/SCENE_REFERENCE.txt':strToU8(webEditingGuide),
-    'task/GUIDE.txt':strToU8(guide),
-    'task/CRAFT_CATALOG.txt':strToU8('按需选用素材工艺。先观察实际预览并考虑完整使用、取局部、边缘或蒙版加工、拆分、叠压关系；只执行有理由的处理，不设工艺数量指标。\ninstructions.json 的 materialDecisions 对每个 alias 记录 {"asset":"m1","choice":"intact|crafted|omitted","reason":"观察到的图案或轮廓，以及采用或舍弃该处理的理由"}，编译后写入 scene.json。intact 表示可见且没有加工，crafted 表示可见且有真实裁切、蒙版、胶带或其他可检查的加工，omitted 表示未在可见画面使用。必须与最终图层一致；说明不写入正文。\n统一遵守 source.processing；没有逐件用法覆盖。\n'+craftTaskInstructions+'\n'+materialCraftGuide+'\n'+multimodalCraftGuide),
-    'schema/output.json':strToU8(JSON.stringify(webSceneContract,null,2)),
-    'schema/tools.json':strToU8(JSON.stringify(offlineContract('agent',{cropPx:false}),null,2)),
-    'schema/convenient-page.json':strToU8(JSON.stringify(directPageContract,null,2)),
-    'schema/craft-plan.json':strToU8(JSON.stringify(toolContracts.apply_craft_plan,null,2)),
-    'examples/project.shiyeproject.json':strToU8(JSON.stringify(example,null,2)),
-    'examples/instructions.json':strToU8(JSON.stringify({page:{version:2,style:'自由构图',paper:{color:'#fcfaf0',pattern:'plain'},layers:[
-      {type:'material',asset:selected[0].alias,placement:{x:.34,y:.50,rotation:-3,z:10}},
-      {type:'shape',kind:'ellipse',x:.82,y:.76,width:.06,height:.06,fill:'#d5e2d6',fill_opacity:.65},
-      {type:'ink',points:[{x:.54,y:.45,pressure:.5},{x:.78,y:.45,pressure:.5}],width:18,color:'#e8d66b',pen_style:'marker',opacity:.45},
-      {type:'text',content:'这里写本次素材引出的具体想法。',font_style:'hand',x:.66,y:.50,width:.34,font_size:24,color:'#334d4a'}
-    ]}},null,2)),
-    'runtime/glyphs.cjs':strToU8(offlineGlyphSource),
-    'runtime/validate.cjs':strToU8(offlineValidateSource)
-  };
-  for(const name of ['inspect','compile','apply','preview','pack','self-test'])files['runtime/'+name+'.cjs']=strToU8(`process.argv.splice(2,0,'${name}');require('./validate.cjs');\n`);
-  for(const entry of chosen)if(validAlias(entry.alias)&&source.materials.some(item=>item.alias===entry.alias))files[packagePreviewPath('materials',entry.alias,entry.bytes,{transparent:true})]=entry.bytes;
-  const bytes=await new Promise((resolve,reject)=>zip(files,{level:4},(error,result)=>error?reject(error):resolve(result)));
+    webArtDirection(source),'先观察素材并构思素材之间的关系；只写 work/commands.json，经 apply 修改唯一 scene.json 后看真实预览。复杂工艺可用 material.craft。',settings.customLayoutPrompt||'',settings.includeStructureReference===false?'':structureReferenceGuide].join('\n\n');
+  const files=await createV3PackageFiles({source,selected,chosen,work,guide,runtime:offlineValidateSource,glyph:offlineGlyphSource});
+  const bytes=zipSync(files,{level:4});
   const prompts={file:webResultPrompt(mode,'file'),text:webResultPrompt(mode,'text')};
   return {blob:new Blob([bytes],{type:'application/zip'}),filename:'拾页-GPT创作任务.zip',prompt:prompts.file,prompts,source,mode,previewCount:chosen.length,imageBytes:chosen.reduce((total,item)=>total+item.bytes.length,0),packageBytes:bytes.length};
 }
@@ -178,12 +126,12 @@ export function inspectOfflinePackage(bytes){
   const {kind,files}=readProjectPackageEntries(bytes,{allowTask:true});
   if(kind==='editable')return {kind,source:inspectEditableSource(strFromU8(files[EDITABLE_PACKAGE_ENTRY])).source};
   if(kind==='native')return {kind,source:null};
-  const contextBytes=files['task/context.json'];
-  let context;try{context=JSON.parse(strFromU8(contextBytes));}catch{throw Error('原始任务包的 task/context.json 无效');}
+  const contextBytes=files['TASK.json'];
+  let context;try{context=JSON.parse(strFromU8(contextBytes));}catch{throw Error('原始任务包的 TASK.json 无效');}
   validatePackageValue(context);
-  if(context?.format!==OFFLINE_PACKAGE_FORMAT||context.version!==2||context.source?.taskBinding!=='local'||context.source?.packageLayout!=='compact'||!Array.isArray(context.materials)||!context.source?.materials?.length)throw Error('不是可登记的网页 AI 原始任务包');
-  if(canonicalTaskSource(context.materials.map(({alias,assetID})=>({alias,assetID})))!==canonicalTaskSource(context.source.materials))throw Error('原始任务包素材映射不一致');
-  return {kind,source:context.source};
+  if(context?.format!==OFFLINE_PACKAGE_FORMAT||context.version!==3||context.sourceContext?.taskBinding!=='local'||context.sourceContext?.packageLayout!=='v3'||!Array.isArray(context.materials)||!context.sourceContext?.materials?.length)throw Error('不是可登记的网页 AI 原始任务包');
+  if(canonicalTaskSource(context.materials.map(({alias,assetID})=>({alias,assetID})))!==canonicalTaskSource(context.sourceContext.materials))throw Error('原始任务包素材映射不一致');
+  return {kind,source:context.sourceContext};
 }
 export async function verifyOfflineTaskPackage(bytes,source){
   await assertTaskFingerprint(source);
@@ -193,13 +141,13 @@ export async function verifyOfflineTaskPackage(bytes,source){
   if(!expected||typeof expected!=='object'||Array.isArray(expected)||Object.keys(expected).length!==source.materials.length)throw Error('原始任务的素材预览指纹不完整');
   // The archive has already passed the bounded entry/path inspection.
   readProjectPackageEntries(bytes,{allowTask:true});
-  const previews=unzipSync(bytes,{filter:entry=>entry.name.startsWith('materials/')});
+  const previews=unzipSync(bytes,{filter:entry=>entry.name.startsWith('assets/')});
   for(const item of source.materials){
     const fingerprint=expected[item.alias];
-    const names=['webp','png'].map(ext=>`materials/${item.alias}.${ext}`).filter(path=>previews[path]);
+    const names=['webp','png','jpg'].map(ext=>`assets/${item.alias}.${ext}`).filter(path=>previews[path]);
     if(names.length!==1)throw Error(`原始任务素材 ${item.alias} 的预览文件不唯一或缺失`);
     const image=previews[names[0]],format=previewImageFormat(image);
-    if(!format||names[0]!==`materials/${item.alias}.${format.extension}`)
+    if(!format||names[0]!==`assets/${item.alias}.${format.extension}`)
       throw Error(`原始任务素材 ${item.alias} 的图片内容与格式不一致`);
     if(!/^sha256:[a-f0-9]{64}$/.test(fingerprint||'')||`sha256:${await sha256Hex(image)}`!==fingerprint)
       throw Error(`原始任务素材 ${item.alias} 的预览与指纹不一致`);

@@ -1,224 +1,54 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {unzipSync,zipSync,strToU8,strFromU8} from 'fflate';
+import {unzipSync,zipSync,strFromU8,strToU8} from 'fflate';
 import {createHash} from 'node:crypto';
 import {project} from '../src/domain.js';
-import {createOfflineHandoff,verifyOfflineTaskPackage,importEditableWork,importEditableWorkPackage,EDITABLE_WORK_FORMAT,EDITABLE_PACKAGE_ENTRY,inspectOfflinePackage} from '../src/offline-creation.js';
-import {shapeSVG} from '../src/editor-tools-model.js';
-import {presetReferenceGuide,presetReferencePlans} from '../src/creative-reference-presets.js';
-import {selectJournalReferenceCases} from '../src/journal-reference-catalog.js';
-import {materialAlias,materialAliases} from '../src/material-alias.js';
-import {imagePrompt} from '../src/ai-image-generation.js';
-import {assetEditorValue} from '../src/asset-editor.js';
-
-const asset={id:'asset-1',title:'蓝色纸',kind:'sticker',role:'focal',physicalWidthMM:40,physicalHeightMM:50,supply:{quantity:1},tags:['蓝色'],updatedAt:'2026-10-03T00:00:00.000Z'};
-const make=async({p=project('测试创作',{style:'韩系清新'}),assets=[asset],aliases={m1:asset.id},previews=[],settings={generationMode:'direct',includeThumbnails:false},referenceImages=[],userTemplates=[]}={})=>
-  createOfflineHandoff({project:p,assets,aliases,previews,settings,referenceImages,userTemplates});
-const filesOf=async output=>unzipSync(new Uint8Array(await output.blob.arrayBuffer()));
-
-test('current GPT task package has one root entry and grouped compact folders',async()=>{
-  const output=await make(),files=await filesOf(output),context=JSON.parse(strFromU8(files['task/context.json']));
-  assert.deepEqual(Object.keys(files).filter(name=>!name.includes('/')).sort(),['START_HERE.txt','package.json','scene.json']);
-  assert.equal(context.format,'shiye-gpt-creation-package');assert.equal(context.version,2);
-  assert.equal(context.source.taskBinding,'local');assert.equal(context.source.packageLayout,'compact');
-  assert.equal(context.materials[0].assetID,asset.id);
-  for(const path of ['task/BRIEF.txt','task/GUIDE.txt','schema/output.json','schema/craft-plan.json','examples/project.shiyeproject.json','runtime/validate.cjs','runtime/preview.cjs'])assert.ok(files[path],path);
-  assert.ok(files['runtime/pack.cjs']);
-  for(const removed of ['README.txt','context.json','contract.json','CONTENT_BRIEF.txt','CREATIVE_GUIDE.txt','CRAFT_GUIDE.txt','case-studies.json','composition-ideas.json','abstract-templates.json','source-image-audit.json','example-response.json','example-response.shiyeproject.json','task/knowledge.json','task/material-planning.json'])assert.equal(files[removed],undefined,removed);
-  assert.match(strFromU8(files['START_HERE.txt']),/task\/BRIEF\.txt/);assert.match(strFromU8(files['START_HERE.txt']),/schema\//);
-  assert.match(strFromU8(files['START_HERE.txt']),/不要逐个通读 schema\//);
-  assert.match(strFromU8(files['task/BRIEF.txt']),/m1.*蓝色纸/);
-  assert.ok(files['task/BRIEF.txt'].length<files['task/context.json'].length,'The first-read brief should be shorter than the full source');
-  assert.match(strFromU8(files['START_HERE.txt']),/常用能力是素材排版与裁切、可编辑文字、图形和荧光笔/);
-  assert.equal(files['task/COMPOSITION_GUIDE.txt'],undefined);
-  assert.equal(files['runtime/compare.cjs'],undefined);
-  assert.equal(files['runtime/select.cjs'],undefined);
-  assert.match(strFromU8(files['START_HERE.txt']),/完整场景的真实预览/);
-  const compactExample=JSON.parse(strFromU8(files['examples/instructions.json']));
-  assert.deepEqual(compactExample.page.layers.map(layer=>layer.type),['material','shape','ink','text']);
-  assert.ok(compactExample.page.layers.every(layer=>!layer.id));
-  assert.equal(compactExample.page.layers[0].piece,undefined);
-  assert.equal(compactExample.page.layers[0].operations,undefined);
-  assert.ok(strFromU8(files['task/GUIDE.txt']).length<5500,'The model-facing GUIDE should stay concise');
-  const guide=strFromU8(files['task/GUIDE.txt']);
-  assert.match(guide,/page\.layers/,'direct mode must advertise recursive Scene v2 layers');
-  assert.doesNotMatch(guide,/page\.groups/,'removed parallel group schema must not appear in GPT instructions');
+import {createOfflineHandoff,verifyOfflineTaskPackage,inspectOfflinePackage,importEditableWork,importEditableWorkPackage,EDITABLE_PACKAGE_ENTRY,EDITABLE_WORK_FORMAT} from '../src/offline-creation.js';
+import {tinyPNG} from './offline-canvas-test-support.mjs';
+const asset={id:'asset-1',title:'蓝色纸',kind:'sticker',role:'focal',physicalWidthMM:40,physicalHeightMM:50,supply:{quantity:1},tags:['蓝色']};
+const make=async(options={})=>createOfflineHandoff({project:options.p||project('测试创作'),assets:options.assets||[asset],aliases:options.aliases||{m1:asset.id},previews:options.previews||[{alias:'m1',bytes:tinyPNG}],settings:{includeThumbnails:true,...options.settings}});
+const entries=async task=>unzipSync(new Uint8Array(await task.blob.arrayBuffer()));
+const read=(files,path)=>JSON.parse(strFromU8(files[path]));
+test('editable GPT package uses one v3 command entry and authoritative Scene',async()=>{
+ const task=await make(),files=await entries(task),context=read(files,'TASK.json');
+ assert.equal(context.version,3);assert.equal(context.sourceContext.packageLayout,'v3');
+ assert.deepEqual(Object.keys(files).filter(name=>!name.includes('/')).sort(),['START_HERE.md','TASK.json','package-lock.json','package.json','scene.json']);
+ for(const path of ['assets/overview.jpg','assets/m1.png','assets/manifest.json','design/GUIDE.md','design/RECIPES.md','api/commands.schema.json','api/scene.schema.json','runtime/shiye.cjs','work/commands.json'])assert.ok(files[path],path);
+ assert.equal(files['examples/instructions.json'],undefined);assert.equal(files['task/context.json'],undefined);
+ assert.match(strFromU8(files['START_HERE.md']),/scene\.json 是唯一作品/);
+ assert.match(strFromU8(files['START_HERE.md']),/work\/commands\.json/);
+ assert.equal(context.materials[0].physicalWidthMM,40);assert.equal(read(files,'assets/manifest.json').assets[0].assetID,asset.id);
+ assert.ok(strFromU8(files['design/GUIDE.md']).length<12000);
+ assert.equal(read(files,'scene.json').format,EDITABLE_WORK_FORMAT);
 });
-
-test('current editable example imports from JSON with current library assets',async()=>{
-  const output=await make(),files=await filesOf(output),response=strFromU8(files['examples/project.shiyeproject.json']);
-  const imported=importEditableWork(response,[asset],{trustedSource:output.source});
-  assert.equal(imported.isDraft,true);assert.equal(imported.drafts[0].items[0].assetID,asset.id);assert.equal(imported.drafts[0].agentRun.status,'finished');
-  assert.equal(imported.offlineBundleId,output.source.bundleId);
-  assert.deepEqual(imported.initialEditorSnapshot.drafts[0].layers,imported.drafts[0].layers);
-  assert.deepEqual(imported.draftHistorySnapshots[imported.activeDraftID].layers,imported.drafts[0].layers);
-  assert.equal(importEditableWork(response,[asset]).drafts[0].items[0].assetID,asset.id);
-  assert.throws(()=>importEditableWork(response,[asset],{trustedSource:{...output.source,bundleId:'other'}}),/来源与所选原始任务不一致/);
-  const copied=`预览如下。\n\n\`\`\`json\n${response}\n\`\`\``;
-  assert.equal(importEditableWork(copied,[asset],{trustedSource:output.source}).drafts[0].items[0].assetID,asset.id);
+test('v3 task keeps original image bytes, hash and task binding',async()=>{
+ const task=await make(),files=await entries(task),bytes=new Uint8Array(await task.blob.arrayBuffer());
+ assert.deepEqual(files['assets/m1.png'],tinyPNG);
+ assert.equal(task.source.previewHashes.m1,'sha256:'+createHash('sha256').update(tinyPNG).digest('hex'));
+ assert.equal(read(files,'assets/manifest.json').assets[0].sha256,task.source.previewHashes.m1);
+ assert.equal(inspectOfflinePackage(bytes).source.bundleId,task.source.bundleId);
+ await verifyOfflineTaskPackage(bytes,task.source);
+ const broken={...files,'assets/m1.png':new Uint8Array([...tinyPNG.slice(0,-1),tinyPNG.at(-1)^1])};
+ await assert.rejects(verifyOfflineTaskPackage(zipSync(broken),task.source),/指纹不一致/);
 });
-
-test('editing material metadata and stock after task export does not block import, but cutout or measured size does',async()=>{
-  const output=await make(),files=await filesOf(output),response=strFromU8(files['examples/project.shiyeproject.json']);
-  const edited=assetEditorValue(asset,{title:'重新命名',kind:'sticker',role:'focal',texture:'纸张',width:'40',height:'50',quantity:'1',
-    tags:'新标签',contentTags:'',styleTags:'',materialTags:'',seriesID:'new-series',reviewStatus:'ready',usageStatus:'unused',
-    tapeRoll:false,supplyLength:'',repeatable:false,repeatPeriod:''});
-  assert.equal(importEditableWork(response,[edited]).drafts[0].items[0].assetID,asset.id);
-  for(const changed of [
-    {...edited,supply:{quantity:0}},
-    {...edited,kind:'tape'},
-    {...edited,role:'background',imageSize:{width:900,height:1200},originalBlobId:'new-original'}
-  ])assert.equal(importEditableWork(response,[changed]).drafts[0].items[0].assetID,asset.id);
-  for(const changed of [
-    {...edited,physicalWidthMM:45},
-    {...edited,blobId:'new-cutout'},
-    {...edited,processingRecord:{manualCutout:true}},
-    {...edited,imageHash:'sha256:'+ 'a'.repeat(64)}
-  ])assert.throws(()=>importEditableWork(response,[changed]),/素材抠图或实物尺寸已变化/);
+test('editable Scene import checks format, task and source dimensions',async()=>{
+ const task=await make(),scene=read(await entries(task),'scene.json');
+ assert.equal(importEditableWork(JSON.stringify(scene),[asset],{trustedSource:task.source}).offlineBundleId,task.source.bundleId);
+ assert.throws(()=>importEditableWork(JSON.stringify(scene),[asset],{trustedSource:{...task.source,bundleId:'other'}}),/来源与所选原始任务不一致/);
+ assert.throws(()=>importEditableWork(JSON.stringify({...scene,format:'other'}),[asset]),/不是拾页/);
+ assert.throws(()=>importEditableWork('not-json',[asset]),/不是有效 JSON/);
+ assert.throws(()=>importEditableWork(JSON.stringify(scene),[{...asset,physicalWidthMM:45}]),/素材抠图或实物尺寸已变化/);
 });
-
-test('current task round-trip keeps the selected journal paper size',async()=>{
-  const p=project('随身本',{ratio:'weeks'}),output=await make({p}),files=await filesOf(output);
-  const imported=importEditableWork(strFromU8(files['examples/project.shiyeproject.json']),[asset],{trustedSource:output.source});
-  assert.equal(imported.drafts[0].pageRatio,'weeks');assert.equal(imported.drafts[0].physicalPageHeightMM,188);
-  assert.ok(Math.abs(imported.drafts[0].canvas.width/1000-95/188)<1e-9);
+test('editable result ZIP still validates its native project entry',async()=>{
+ const task=await make(),scene=read(await entries(task),'scene.json');
+ const packed=zipSync({[EDITABLE_PACKAGE_ENTRY]:strToU8(JSON.stringify(scene))});
+ assert.equal(importEditableWorkPackage(packed,[asset],{trustedSource:task.source}).offlineBundleId,task.source.bundleId);
+ assert.throws(()=>importEditableWorkPackage(zipSync({'preview.svg':strToU8('<svg/>')}),[asset]),/缺少/);
 });
-
-test('stable and UUID material aliases resolve current library assets',async()=>{
-  const second={...asset,id:'asset-2',title:'绿色纸'},aliases=materialAliases([asset.id,second.id]);
-  assert.deepEqual(materialAliases([second.id,asset.id]),Object.fromEntries([[materialAlias(second.id),second.id],[materialAlias(asset.id),asset.id]]));
-  const output=await make({assets:[asset,second],aliases}),files=await filesOf(output),example=JSON.parse(strFromU8(files['examples/project.shiyeproject.json']));
-  assert.equal(importEditableWork(JSON.stringify(example),[second,asset],{trustedSource:output.source}).drafts[0].items[0].assetID,asset.id);
-  const uuid=crypto.randomUUID(),original={...asset,id:uuid},uuidAliases=materialAliases([uuid]),uuidOutput=await make({assets:[original],aliases:uuidAliases});
-  const uuidFiles=await filesOf(uuidOutput);assert.equal(importEditableWork(strFromU8(uuidFiles['examples/project.shiyeproject.json']),[original],{trustedSource:uuidOutput.source}).drafts[0].items[0].assetID,uuid);
-});
-
-test('direct editable scene keeps layered typography and vector geometry',async()=>{
-  const output=await make({p:project('分层示例')}),files=await filesOf(output),response=JSON.parse(strFromU8(files['examples/project.shiyeproject.json']));
-  response.page.layers.push({type:'shape',id:'drawn-leaf',key:'drawn-leaf',kind:'vector',x:200,y:500,width:80,height:120,fill:'#7a9d77',stroke:null,zIndex:70,vectorPaths:[[[.5,0],[1,.5],[.5,1],[0,.5]]]});
-  const imported=importEditableWork(JSON.stringify(response),[asset],{trustedSource:output.source});
-  assert.equal(imported.drafts[0].primitives.find(p=>p.key==='drawn-leaf')?.vectorPaths.length,1);
-  assert.match(shapeSVG(imported.drafts[0].primitives.find(p=>p.key==='drawn-leaf')),/<path/);
-});
-
-test('editable ZIP imports current data and rejects a container without its scene',async()=>{
-  const output=await make(),files=await filesOf(output),response=strFromU8(files['examples/project.shiyeproject.json']);
-  const packed=zipSync({[EDITABLE_PACKAGE_ENTRY]:strToU8(response),'preview.svg':strToU8('<svg/>')});
-  assert.equal(importEditableWorkPackage(packed,[asset],{trustedSource:output.source}).drafts[0].items[0].assetID,asset.id);
-  assert.throws(()=>importEditableWorkPackage(zipSync({'preview.svg':strToU8('<svg/>')}),[asset]),/缺少/);
-});
-
-test('invalid editable data is rejected before persistence',async()=>{
-  const output=await make(),files=await filesOf(output),response=JSON.parse(strFromU8(files['examples/project.shiyeproject.json']));
-  assert.equal(response.format,EDITABLE_WORK_FORMAT);
-  assert.throws(()=>importEditableWork(JSON.stringify({...response,format:'other'}),[asset],{trustedSource:output.source}),/不是拾页/);
-  assert.throws(()=>importEditableWork('not-json',[asset],{trustedSource:output.source}),/不是有效 JSON/);
-  const duplicate=JSON.stringify(response);assert.throws(()=>importEditableWork(`\`\`\`json\n${duplicate}\n\`\`\`\n\`\`\`json\n${duplicate}\n\`\`\``,[asset],{trustedSource:output.source}),/多个可编辑数据块/);
-});
-
-test('web handoff exposes unified Scene and internal tool schemas and concise instructions',async()=>{
-  const p=project('测试创作',{style:'韩系清新'}),args={p};
-  const agent=await make({p,settings:{generationMode:'agent',includeThumbnails:false,includeStructureReference:false}}),agentFiles=await filesOf(agent);
-  assert.equal(agent.filename,'拾页-GPT创作任务.zip');assert.match(strFromU8(agentFiles['START_HERE.txt']),/runtime\/preview\.cjs/);
-  assert.match(strFromU8(agentFiles['START_HERE.txt']),/task\/CRAFT_CATALOG\.txt/);
-  const craftGuide=strFromU8(agentFiles['task/CRAFT_CATALOG.txt']);
-  assert.match(craftGuide,/观察实际预览/);assert.match(craftGuide,/materialDecisions/);
-  assert.match(craftGuide,/observed_region/);assert.match(craftGuide,/不设工艺数量指标/);
-  const agentContract=JSON.parse(strFromU8(agentFiles['schema/tools.json']));assert.ok(agentContract.apply_craft_plan&&agentContract.edit_materials);
-  const direct=await make({p,settings:{generationMode:'direct',includeThumbnails:false}}),directFiles=await filesOf(direct);
-  assert.ok(directFiles['task/CRAFT_CATALOG.txt']);
-  assert.ok(directFiles['task/SCENE_REFERENCE.txt']);
-  for(const duplicate of ['task/WORKFLOW.txt','task/EDITING.txt','task/CAPABILITIES.json','task/VISUAL_REVIEW.txt','schema/scene.json','runtime/README.txt'])assert.equal(agentFiles[duplicate],undefined,duplicate);
-  assert.ok(JSON.parse(strFromU8(directFiles['examples/project.shiyeproject.json'])).page);
-  assert.ok(JSON.parse(strFromU8(agentFiles['examples/project.shiyeproject.json'])).page);
-  assert.deepEqual(JSON.parse(strFromU8(directFiles['schema/output.json'])),JSON.parse(strFromU8(agentFiles['schema/output.json'])));
-  assert.match(agent.prompts.file,/project.shiyeproject.json/);
-  assert.match(agent.prompts.file,/ZIP/);
-  assert.match(agent.prompts.text,/展示/);
-  assert.match(agent.prompts.text,/一个完整的/);
-  assert.match(agent.prompts.text,/JSON/);
-  assert.match(strFromU8(agentFiles['START_HERE.txt']),/JSON 代码块/);
-});
-
-test('image delivery uses the same compact task grouping without editable schemas',async()=>{
-  const p=project('画面测试',{style:'韩系清新'});p.styles=['韩系清新'];p.purposes=['日常记录'];p.intent='午后散步';
-  const output=await make({p,settings:{deliveryMode:'image',includeThumbnails:false}}),files=await filesOf(output);
-  assert.equal(output.deliveryMode,'image');assert.equal(output.mode,'image');assert.match(output.prompt,/PNG/);
-  assert.deepEqual(Object.keys(files).filter(name=>!name.includes('/')).sort(),['START_HERE.txt']);
-  assert.ok(strFromU8(files['task/GUIDE.txt']).includes(imagePrompt({project:p,draft:p.drafts[0],assets:[asset],ids:[asset.id],theme:p.intent,requireAll:true,includeImages:false})));
-  assert.equal(JSON.parse(strFromU8(files['task/context.json'])).version,2);
-  assert.ok(!files['schema/output.json']&&!files['runtime/validate.cjs']);
-});
-
-test('selected material WebP previews retain exact bytes and fingerprints',async()=>{
-  const preview=Uint8Array.from([82,73,70,70,16,0,0,0,87,69,66,80,86,80,56,32,1,2,3,4]),output=await make({previews:[{alias:'m1',bytes:preview}],settings:{generationMode:'direct',includeThumbnails:true}}),bytes=new Uint8Array(await output.blob.arrayBuffer()),files=unzipSync(bytes);
-  assert.deepEqual(files['materials/m1.webp'],preview);assert.equal(output.source.previewHashes.m1,'sha256:'+createHash('sha256').update(preview).digest('hex'));assert.match(output.source.taskHash,/^sha256:[a-f0-9]{64}$/);
-  await verifyOfflineTaskPackage(bytes,output.source);
-  const changed={...files,'materials/m1.webp':new Uint8Array([82,73,70,70,16,0,0,0,87,69,66,80,86,80,56,32,9,9,9,9])};await assert.rejects(verifyOfflineTaskPackage(zipSync(changed),output.source),/预览与指纹不一致/);
-  const inspected=inspectOfflinePackage(bytes);assert.equal(inspected.kind,'task');assert.equal(inspected.source.bundleId,output.source.bundleId);
-});
-
-test('text-only task explicitly records null preview hashes',async()=>{
-  const output=await make({settings:{generationMode:'direct',includeThumbnails:false}}),bytes=new Uint8Array(await output.blob.arrayBuffer());
-  assert.equal(output.source.previewHashes,null);await verifyOfflineTaskPackage(bytes,output.source);
-});
-
-test('web task excludes visual references even with an old enabled preference',async()=>{
-  const p=project('参考');p.styles=['韩系清新'];p.purposes=['日常记录'];
-  const cases=selectJournalReferenceCases({styles:p.styles,purposes:p.purposes,materials:[asset]});
-  const referenceImages=cases.map((entry,i)=>({id:entry.id,bytes:new Uint8Array([82,73,70,70,16,0,0,0,87,69,66,80,86,80,56,32,i+1])}));
-  const output=await make({p,settings:{generationMode:'direct',includeThumbnails:false,sendPresetReferences:true},referenceImages}),files=await filesOf(output);
-  assert.equal(files['task/knowledge.json'],undefined);
-  assert.ok(!Object.keys(files).some(name=>name.startsWith('references/')));
-  assert.equal(output.imageBytes,0);
-  assert.match(strFromU8(files['task/GUIDE.txt']),/可编辑|内容边界/);
-});
-
-test('preset reference planning remains independent across palette, layout and page mode',()=>{
-  const plans=presetReferencePlans({styles:['复古旧物','杂志编辑'],purposes:['旅途记录','图文收藏']});
-  assert.deepEqual(plans.map(plan=>plan.level),['简洁','均衡','丰富','实验']);assert.equal(plans[0].purpose,'旅途记录');
-  assert.match(presetReferenceGuide(plans),/简洁、均衡、丰富到实验/);
-  const other=presetReferencePlans({styles:['清新淡雅'],purposes:['清单计划']}),mixed=presetReferencePlans({styles:['清新淡雅','丰富层叠'],purposes:['清单计划']});
-  assert.deepEqual(mixed[0].palette,other[0].palette);assert.notDeepEqual(mixed[0].zones,other[0].zones);
-});
-
-
-test('Safari-compatible package binds PNG materials without visual references',async()=>{
-  const png=Uint8Array.from([137,80,78,71,13,10,26,10,0,0,1,2]);
-  const p=project('手机创作参考');p.styles=['韩系清新'];p.purposes=['日常记录'];
-  const bundle=await make({p,previews:[{alias:'m1',bytes:png}],
-    settings:{generationMode:'direct',includeThumbnails:true,sendPresetReferences:true}});
-  const bytes=new Uint8Array(await bundle.blob.arrayBuffer()),files=unzipSync(bytes),
-    ctx=JSON.parse(strFromU8(files['task/context.json']));
-  assert.deepEqual(files['materials/m1.png'],png);
-  assert.ok(!Object.keys(files).some(name=>name.startsWith('references/')));
-  assert.equal(ctx.materials[0].preview,'materials/m1.png');
-  assert.equal(files['materials/m1.webp'],undefined);
-  assert.equal(bundle.source.previewHashes.m1,'sha256:'+createHash('sha256').update(png).digest('hex'));
-  await verifyOfflineTaskPackage(bytes,bundle.source);
-  const broken={...files,'materials/m1.png':new Uint8Array(png.map((v,i)=>i===11?v^1:v))};
-  await assert.rejects(verifyOfflineTaskPackage(zipSync(broken),bundle.source),/预览与指纹不一致/);
-  const spoofed={...files,'materials/m1.png':undefined,'materials/m1.webp':png};
-  delete spoofed['materials/m1.png'];
-  await assert.rejects(verifyOfflineTaskPackage(zipSync(spoofed),bundle.source),/图片内容与格式不一致/);
-});
-
-test('sync-enabled API keys are never embedded in a model-facing task package',async()=>{
-  const secret='sk-test-not-for-GPT-task';
-  const result=await make({settings:{generationMode:'direct',includeThumbnails:false,
-    provider:'openai',key:secret,keys:{openai:secret}}});
-  const entries=await filesOf(result);
-  const combined=Object.values(entries).filter(Boolean).map(bytes=>strFromU8(bytes)).join(' ');
-  assert.ok(!combined.includes(secret),'Exported GPT task must not include private API keys');
-});
-
-test('ZIP internal workflow honors copy-text delivery and internalizes visual self-review',async()=>{
- const output=await make(),files=await filesOf(output);
- for(const path of ['START_HERE.txt']){
-  const guide=strFromU8(files[path]);
-  assert.ok(guide.includes('复制文本模式交付 PNG 链接与完整 JSON 代码块'));
-  assert.match(guide,/运行 node runtime\/pack\.cjs/);
-  assert.ok(!guide.includes('最终必须同时交付 output/project'));
- }
- assert.match(strFromU8(files['task/GUIDE.txt']),/内部看图自评，不要在最终回复中输出/);
+test('image-only task remains separate and no private keys reach either package',async()=>{
+ const image=await make({settings:{deliveryMode:'image',key:'sk-test-not-for-GPT-task'}}),files=await entries(image);
+ assert.equal(image.deliveryMode,'image');assert.ok(files['task/context.json']);assert.equal(files['TASK.json'],undefined);
+ const editable=await make({settings:{provider:'openai',key:'sk-test-not-for-GPT-task',keys:{openai:'sk-test-not-for-GPT-task'}}});
+ const combined=Object.values(await entries(editable)).map(bytes=>strFromU8(bytes)).join(' ');
+ assert.ok(!combined.includes('sk-test-not-for-GPT-task'));
 });

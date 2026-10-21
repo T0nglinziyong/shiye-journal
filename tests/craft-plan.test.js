@@ -9,7 +9,7 @@ import {craftDigest,craftSceneHash,isManagedUnchanged} from '../src/craft-finger
 import {assetSourceRevision,assetFromSourceSnapshot,materialSourceSnapshot} from '../src/material-anatomy.js';
 import {rectangleGeometry,normalizeGeometry,geometryArea,geometryIntersection,geometryDifference,geometryUnion,expandGeometry} from '../src/craft-topology.js';
 import {buildMaterialLedger} from '../src/material-ledger.js';
-import {createOfflineHandoff,importEditableWork,importEditableWorkPackage} from '../src/offline-creation.js';
+import {createOfflineHandoff,importEditableWork,importEditableWorkPackage} from './v3-test-handoff.mjs';
 import {createNativeProjectPackage} from '../src/native-project-package.js';
 import {taskFingerprint} from '../src/task-fingerprint.js';
 

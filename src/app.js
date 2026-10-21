@@ -2215,23 +2215,27 @@ async function exportOfflineCreation(){
     const p=createMatchingProject(),assetsSnapshot=structuredClone(state.assets),aliases=materialAliases(p.candidateAssetIDs),previews=[],cfg=structuredClone(state.aiSettings);
     const account=await offlineTaskAccount();canceled();
     const all=Object.entries(aliases);report.materials=all.length;
-    // The package uses cached 480px covers or fetches that same COS tier.
-    // High-resolution display variants are queued only after delivery.
+    // Editable task packages include the current full-resolution source image;
+    // image-only requests use a smaller cover for visual prompting.
     const materialWork=measured('materials',()=>mapOfflineExportLimited(all,3,async([alias,id])=>{
         const chosen=assetsSnapshot.find(item=>item.id===id);
         if(!chosen)throw Error('创作素材已变更，请重新导出任务包');
-        const row=await prepareOfflineMaterialPreview({
-          asset:chosen,account,signal:controller.signal,
-          loadVariant:(asset,edge)=>asset.staticPath
-            ?fetch(asset.staticPath).then(response=>{if(!response.ok)throw Error('内置素材封面无法读取');return response.blob();})
-          :loadOfflineMaterialCover(asset,edge,{
-            preview:(id,pixels)=>db.previewBlob(id,pixels,{allowRemoteOriginal:false}),
-            original:id=>db.get('blobs',id)
-          })
-        });
-        if(row.cacheHit)report.cacheHits++;
-        else report.covers++;
-        return {alias,bytes:row.bytes};
+        if(cfg.deliveryMode==='image'){
+          const row=await prepareOfflineMaterialPreview({asset:chosen,account,signal:controller.signal,
+            loadVariant:(asset,edge)=>asset.staticPath
+              ?fetch(asset.staticPath).then(response=>{if(!response.ok)throw Error('内置素材封面无法读取');return response.blob();})
+              :loadOfflineMaterialCover(asset,edge,{preview:(id,pixels)=>db.previewBlob(id,pixels,{allowRemoteOriginal:false}),original:id=>db.get('blobs',id)})});
+          if(row.cacheHit)report.cacheHits++;else report.covers++;
+          return {alias,bytes:row.bytes};
+        }
+        // The editable Scene renders the same source pixels as the App. A
+        // 480px cover cannot support reliable source crops or cut-out windows.
+        let blob=chosen.staticPath?await fetch(chosen.staticPath).then(response=>{if(!response.ok)throw Error('内置素材原图无法读取');return response.blob();}):(await db.get('blobs',chosen.blobId))?.data;
+        if(!blob&&chosen.blobId){const url=await privateImages.load(chosen.blobId,true);blob=await fetch(url).then(response=>response.blob());}
+        if(!(blob instanceof Blob)||!blob.size)throw Error('素材「'+chosen.title+'」的原图不可用');
+        const bytes=new Uint8Array(await blob.arrayBuffer());
+        report.covers++;
+        return {alias,bytes,width:chosen.imageSize?.width||null,height:chosen.imageSize?.height||null,filename:chosen.originalFilename||chosen.title};
       },{signal:controller.signal,onDone:(done,total)=>progress('准备素材图片 '+done+'/'+total)}));
     const materialRows=await materialWork;
     canceled();previews.push(...materialRows);

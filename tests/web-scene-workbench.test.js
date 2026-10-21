@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import {mkdtemp,mkdir,writeFile,readFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';import {join,dirname} from 'node:path';import {spawnSync} from 'node:child_process';
 import {unzipSync,strFromU8} from 'fflate';
-import {createOfflineHandoff,importEditableWork} from '../src/offline-creation.js';
-import {project} from '../src/domain.js';
+import {createOfflineHandoff,importEditableWork} from './v3-test-handoff.mjs';
+import {project,itemFromAsset,textBlock} from '../src/domain.js';
 import {attachSceneV2} from '../src/scene-v2.js';
 import {craftSceneHash} from '../src/craft-fingerprint.js';
 import {assetSourceRevision} from '../src/material-anatomy.js';
@@ -14,9 +14,25 @@ import {linkTestCanvas,tinyPNG} from './offline-canvas-test-support.mjs';
 const assets=[{id:'a',title:'小纸片',kind:'sticker',blobId:'fixed-a',physicalWidthMM:30,physicalHeightMM:40}];
 const fixture=async(p=project('图层测试'),sourceAssets=assets,withImages=false)=>{
  const aliases={m1:'a',...(sourceAssets.some(row=>row.id==='b')?{m2:'b'}:{})};
- const task=await createOfflineHandoff({project:p,assets:sourceAssets,aliases,previews:withImages?Object.keys(aliases).map(alias=>({alias,bytes:tinyPNG})):[],settings:{includeThumbnails:withImages}});
+ const task=await createOfflineHandoff({project:p,assets:sourceAssets,aliases,previews:Object.keys(aliases).map(alias=>({alias,bytes:tinyPNG})),settings:{includeThumbnails:true}});
  const files=unzipSync(new Uint8Array(await task.blob.arrayBuffer()));
- return {task,files,doc:JSON.parse(strFromU8(files['examples/project.shiyeproject.json']))};
+ const draft=attachSceneV2(structuredClone(task.source.baseDraft));
+ if(!draft.layers.some(node=>node.type==='material')){
+  const item=itemFromAsset(sourceAssets[0],draft,draft.canvas.width*.35,draft.canvas.height*.45);
+  item.id='example-material';item.type='material';item.creativePieceID='example-piece';draft.layers.push(item);
+ }
+ if(!draft.layers.some(node=>node.type==='text')){
+  const title=textBlock('一页纸',draft);title.id='example-title';title.type='text';draft.layers.push(title);
+ }
+ const doc=webSceneDocument(task.source,draft,p.title);
+ const instructions={page:{version:2,paper:{color:'#fffaf0',pattern:'plain'},layers:[
+  {type:'material',asset:'m1',placement:{x:.24,y:.4}},
+  {type:'shape',kind:'ellipse',x:.4,y:.3,width:.1,height:.1,fill:'#aabbcc'},
+  {type:'ink',points:[{x:.1,y:.7},{x:.4,y:.7}],width:4,color:'#eebb44',pen_style:'marker'},
+  {type:'text',content:'这一页',font_style:'serif',x:.2,y:.1,width:.4,height:.1,font_size:22,color:'#334433'}
+ ]}};
+ files['examples/instructions.json']=new TextEncoder().encode(JSON.stringify(instructions));
+ return {task,files,doc};
 };
 const mask={outer:[[0,0],[1,0],[1,1],[0,1]],holes:[[[.2,.2],[.3,.2],[.3,.3],[.2,.3]]]};
 test('compact page instructions compile all visual layers and material decisions',async()=>{
@@ -89,8 +105,8 @@ test('AI tools and direct Scene share editable tape ribbons while all other Scen
   physicalWidthMM:120,physicalHeightMM:16,tapeAxis:'x',tapeRepeatMode:'repeatablePattern',
   tapeRepeatStartMM:12,tapeRepeatEndMM:32,tapeRepeatPeriodMM:20};
  const sourceAssets=[...assets,tape],{doc,files}=await fixture(project('胶带与图层'),sourceAssets);
- const context=JSON.parse(strFromU8(files['task/context.json']));
- assert.deepEqual(context.materials.find(item=>item.assetID==='b').tape.repeatRangeMM,[12,32]);
+ const context=JSON.parse(strFromU8(files['TASK.json']));
+ assert.deepEqual(context.materials.find(item=>item.alias==='m2').kind,'tape');
  const result=applyWebSceneCommands(doc,{baseSceneHash:craftSceneHash(attachSceneV2(doc.page)),tools:[
   {name:'draw_tape_strips',arguments:{items:[
    {asset:'m2',piece:'ribbon-a',points:[[.1,.2],[.5,.23],[.9,.2]],width_mm:18,
@@ -174,74 +190,7 @@ test('curved text, repeatable stamps, material replacement, layout reuse and gly
  assert.equal(mappedMaterial.assetID,'b');assert.equal(mappedMaterial.sourceBlobId,'fixed-b');
  assert.equal(importEditableWork(JSON.stringify(mapped),sourceAssets).drafts[0].items.length,2);
 });
-test('Node Canvas runtime renders PNG and refuses a stale or changed snapshot',async()=>{
- const {files,task}=await fixture(project('图层测试'),assets,true),dir=await mkdtemp(join(tmpdir(),'shiye-workbench-'));
- try{
-  for(const [name,data] of Object.entries(files)){await mkdir(dirname(join(dir,name)),{recursive:true});await writeFile(join(dir,name),data);}
-  await linkTestCanvas(dir);
-  const run=(name,...args)=>{const r=spawnSync(process.execPath,['runtime/'+name+'.cjs',...args],{cwd:dir,encoding:'utf8',timeout:15000});return r;};
-  assert.equal(run('self-test').status,0);
-  const directPreview=run('preview','examples/instructions.json');
-  assert.equal(directPreview.status,0,directPreview.stderr||directPreview.stdout);
-  const directlyCompiled=JSON.parse(await readFile(join(dir,'scene.json'),'utf8'));
-  const directCapture=JSON.parse(await readFile(join(dir,'output/preview-capture.json'),'utf8'));
-  assert.equal(directCapture.sceneHash,craftSceneHash(attachSceneV2(directlyCompiled.page)));
-  const compiledExample=run('compile','examples/instructions.json');
-  assert.equal(compiledExample.status,0,compiledExample.stderr||compiledExample.stdout);
-  let doc=JSON.parse(await readFile(join(dir,'scene.json'),'utf8'));
-  assert.ok(doc.page.layers[0].width>1);assert.equal(doc.tools,undefined);
-  const original=await readFile(join(dir,'scene.json'),'utf8');
-  await writeFile(join(dir,'commands.json'),JSON.stringify({baseSceneHash:craftSceneHash(attachSceneV2(doc.page)),edits:[{op:'patch',id:doc.page.layers[0].id,values:{x:200}},{op:'patch',id:'missing',values:{x:2}}]}));
-  assert.equal(run('apply').status,1);assert.equal(await readFile(join(dir,'scene.json'),'utf8'),original);
-  doc.page.layers.push({id:'note',type:'text',content:'春日记录',fontSize:32,style:'sans',color:'#223344',x:200,y:180,width:300,height:60});
-  await writeFile(join(dir,'scene.json'),JSON.stringify(doc));
-  const preview=run('preview');assert.equal(preview.status,0,preview.stderr||preview.stdout);
-  const capture=JSON.parse(await readFile(join(dir,'output/preview-capture.json'),'utf8'));
-  assert.equal(craftSceneHash(importEditableWork(JSON.stringify(doc),assets,{trustedSource:task.source}).drafts[0]),capture.sceneHash);
-  assert.deepEqual([...await readFile(join(dir,'output/preview.png'))].slice(0,8),[137,80,78,71,13,10,26,10]);
-  const undecided=run('pack');assert.equal(undecided.status,1,'pack requires a decision for each material');
-  assert.match((await readFile(join(dir,'output/validation-report.json'),'utf8')),/materialDecisions/);
-  doc.materialDecisions=[{asset:'m1',choice:'intact',reason:'保留纸片的完整轮廓，作为本页视觉主体'}];
-  await writeFile(join(dir,'scene.json'),JSON.stringify(doc));
-  const packed=run('pack');assert.equal(packed.status,0,packed.error?.message||packed.stderr||packed.stdout);
-  const manifest=JSON.parse(await readFile(join(dir,'output/delivery-manifest.json'),'utf8'));
-  assert.deepEqual(manifest.deliverables,['project.shiyeproject.json','preview.png']);
-  const summary=JSON.parse(await readFile(join(dir,'output/scene-summary.json'),'utf8'));
-  assert.deepEqual(manifest.reading,summary.quality.reading);
-  assert.ok(manifest.reading.characters>0);assert.ok(manifest.reading.excerpts.length>0);
-  assert.equal(manifest.sceneHash,capture.sceneHash);
-  const deliveredBytes=await readFile(join(dir,'output/project.shiyeproject.json'),'utf8');
-  assert.equal(deliveredBytes.includes('\n'),false,'final JSON is a single physical line');
-  assert.equal(deliveredBytes,JSON.stringify(JSON.parse(deliveredBytes)));
-  const delivered=JSON.parse(deliveredBytes);
-  assert.deepEqual(delivered.materialDecisions,doc.materialDecisions);
-  doc.page.layers.at(-1).content='改变之后';await writeFile(join(dir,'scene.json'),JSON.stringify(doc));
-  assert.equal(run('pack').status,1,'stale preview cannot validate a changed scene');
-  await assert.rejects(readFile(join(dir,'output/project.shiyeproject.json')),{code:'ENOENT'});
- }finally{await rm(dir,{recursive:true,force:true});}
-});
-
-test('exported workbench compiles two source cutouts and preserves their reusable remainder',async()=>{
- const {files,task}=await fixture(),dir=await mkdtemp(join(tmpdir(),'shiye-partition-'));
- try{
-  for(const [name,data] of Object.entries(files)){await mkdir(dirname(join(dir,name)),{recursive:true});await writeFile(join(dir,name),data);}
-  const revision=assetSourceRevision(assets[0]);
-  const geometryMM=box=>[[[[box[0],box[1]],[box[2],box[1]],[box[2],box[3]],[box[0],box[3]]]]];
-  const input={plan:{format:'shiye-craft-plan',version:2,commandId:'two-subjects',
-   baseSceneHash:craftSceneHash(task.source.baseDraft),sourcePartitions:[{asset:'m1'}],
-   pieces:[
-    {id:'person-a',asset:'m1',sourceRevision:revision,extraction:{type:'geometry',geometryMM:geometryMM([3,4,10,30])}},
-    {id:'person-b',asset:'m1',sourceRevision:revision,extraction:{type:'geometry',geometryMM:geometryMM([18,4,26,30])}}
-   ]}};
-  await writeFile(join(dir,'instructions.json'),JSON.stringify(input));
-  const compile=spawnSync(process.execPath,['runtime/compile.cjs','instructions.json'],{cwd:dir,encoding:'utf8',timeout:15000});
-  assert.equal(compile.status,0,compile.stderr);
-  const scene=JSON.parse(await readFile(join(dir,'scene.json'),'utf8'));
-  const imported=importEditableWork(JSON.stringify(scene),assets,{trustedSource:task.source});
-  assert.equal(imported.drafts[0].items.filter(item=>!item.isParked).length,2);
-  assert.equal(imported.drafts[0].items.filter(item=>item.isParked).length,1);
- }finally{await rm(dir,{recursive:true,force:true});}
-});
+// v3 runtime atomicity, source partition, PNG and stale-pack checks live in v3-package.test.js.
 
 test('direct Scene revision can be followed by tools without treating AI edits as human takeover',async()=>{
  const {doc}=await fixture();const n=doc.page.layers.find(n=>n.type==='text');n.agentKey='heading';n.content='先直接修改';

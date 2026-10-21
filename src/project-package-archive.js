@@ -2,7 +2,7 @@ import {unzipSync} from 'fflate';
 
 const NATIVE='native.shiyeproject.json';
 const EDITABLE='project.shiyeproject.json';
-const TASK_CONTEXT='task/context.json';
+const TASK_CONTEXT='TASK.json';
 const ADVISORY_ENTRIES=new Map([['manifest.json',64_000],['validation-report.json',256_000],['preview.png',16_000_000],['preview.svg',16_000_000]]);
 const ENTRY_LIMIT=128;
 const TOTAL_DECLARED_LIMIT=48_000_000;
@@ -10,7 +10,7 @@ const TOTAL_DECLARED_LIMIT=48_000_000;
 // Inspect every ZIP entry, including entries that are not decompressed. A
 // package must have exactly one authoritative scene; previews never choose it.
 export function readProjectPackageEntries(bytes,{allowTask=false}={}){
-  if(!(bytes instanceof Uint8Array)||bytes.byteLength>20_000_000)throw Error('可编辑作品包不能超过 20 MB');
+  if(!(bytes instanceof Uint8Array)||bytes.byteLength>(allowTask?120_000_000:20_000_000))throw Error('作品包文件过大');
   const seen=new Set();let count=0,total=0,native=false,editable=false,task=false;
   let files;
   try{
@@ -22,7 +22,7 @@ export function readProjectPackageEntries(bytes,{allowTask=false}={}){
       if(seen.has(name))throw Error('作品包存在重复文件名');
       seen.add(name);
       total+=entry.originalSize;
-      if(total>TOTAL_DECLARED_LIMIT)throw Error('作品包解压大小超限');
+      if(total>(allowTask?250_000_000:TOTAL_DECLARED_LIMIT))throw Error('作品包解压大小超限');
       if(name===NATIVE)native=true;
       if(name===EDITABLE)editable=true;
       if(name===TASK_CONTEXT)task=true;
