@@ -384,6 +384,7 @@ export function validateSceneExtensions(d){
        !(node.width>0&&node.height>0)||node.width>100000||node.height>100000||
        Math.abs(node.x)>100000||Math.abs(node.y)>100000||
        (node.rotation!==undefined&&!num(node.rotation,-3600,3600)))throw Error('图层尺寸、位置或旋转无效');
+     if(node.type==='text'&&node.textLayout&&(!num(node.textLayout.minimumHeight,0,100000)||(node.textLayout.lineHeightRatio!==undefined&&!num(node.textLayout.lineHeightRatio,.1,10))))throw Error('文字布局参数无效');
      if(node.type==='text'&&node.curveHeight!==undefined&&(!num(node.curveHeight,-500,500)||
        node.curveHeight!==0&&String(node.content||'').includes('\n')))
        throw Error('曲线文字须为单行，弧度范围为 -500 至 500');

@@ -1,3 +1,7 @@
+# 历史记录：PR #196
+
+以下记录针对当时版本；当前入口与参数以 creation-integration-status.md 和实际 describe 为准。PR #196 中的 native.* 入口已在后续统一内核改造中删除。
+
 # 统一创作包审查修复
 
 基线：test dd485339f233c3d81eeaa2e3bdf78f3d8d942752。本文描述实现与验收范围，不以源代码存在代替 CI 或真机验收。

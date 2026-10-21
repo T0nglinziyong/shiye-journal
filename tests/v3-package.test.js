@@ -54,8 +54,8 @@ test('current ZIP creates editable Scene, recovers stale locks and verifies real
 test('one public protocol exposes executable help and delivers mask vector ink text',async()=>{
  await withPackage([paper('photo',30,20)],async({files,dir,ok,read,apply})=>{
   const help=ok('help');assert.equal(help.protocolVersion,2);assert.equal(help.operations.length,Object.keys(creationCommandRegistry).length);
-  assert.ok(help.operations.some(row=>row.name==='native.material.craft'&&row.advanced));assert.ok(help.topics.includes('place'));
-  assert.match(new TextDecoder().decode(files['api/commands.schema.json']),/native.material.craft/);
+  assert.ok(help.operations.some(row=>row.name==='material.glyphKnockout'));assert.ok(help.operations.every(row=>!row.name.startsWith('native.')));assert.ok(help.topics.includes('place'));
+  assert.doesNotMatch(new TextDecoder().decode(files['api/commands.schema.json']),/native\./);
   assert.equal((await read('work/commands.json')).protocolVersion,2);ok('begin','work/next.json','--protocol=2');assert.equal((await read('work/next.json')).protocolVersion,2);
   await apply([material('photo','m1',ratio(.5,.4)),{op:'material.crop',target:'photo',region:{shape:'rect',space:'source',unit:'ratio',box:[0,0,.5,1]}},{op:'material.mask',target:'photo',region:{shape:'ellipse',space:'local',unit:'ratio',box:[0,0,1,1]},mode:'replace'},
    {op:'text.add',id:'caption',content:'这张照片让我想起今天。',place:{reference:'node:photo',referenceAnchor:'bottom-center',anchor:'top-center',offset:{value:[0,5],unit:'mm'}},size:{width:60,unit:'mm'},style:{fontSizePt:12,color:'#334d4a'}},
@@ -88,8 +88,8 @@ test('physical split keeps its offcut through check apply preview pack and reope
 });
 test('transactions rollback failures, reject stale/conflicting writes and retain no-op receipts',async()=>{
  await withPackage([paper()],async({dir,run,ok,read,write,batch})=>{
-  const bad=batch([material('p','m1',mm(40,50)),{op:'native.layer.update',target:'p',set:{sourceBlobId:'forged'}}]);await write('work/commands.json',bad);
-  const before=await readFile(join(dir,'scene.json')),failed=run('apply','work/commands.json');assert.equal(failed.status,1);assert.match(failed.stderr,/operations\[1\]/);assert.deepEqual(await readFile(join(dir,'scene.json')),before);
+  const bad=batch([material('p','m1',mm(40,50)),{op:'layer.update',target:'p',style:{sourceBlobId:'forged'}}]);await write('work/commands.json',bad);
+  const before=await readFile(join(dir,'scene.json')),failed=run('apply','work/commands.json');assert.equal(failed.status,1);assert.match(failed.stderr,/operations[\[/]1/);assert.deepEqual(await readFile(join(dir,'scene.json')),before);
   const good={...bad,transactionId:'good',operations:bad.operations.slice(0,1)};await write('work/commands.json',good);ok('apply','work/commands.json');const after=await readFile(join(dir,'scene.json'));ok('apply','work/commands.json');assert.deepEqual(await readFile(join(dir,'scene.json')),after);
   const changed={...good,operations:[{op:'page.update',paperColor:'#eeeeee'}]};await write('work/commands.json',changed);assert.match(run('apply','work/commands.json').stderr,/TRANSACTION_CONFLICT/);
   await write('work/commands.json',{...changed,transactionId:'stale'});assert.match(run('apply','work/commands.json').stderr,/REVISION_CONFLICT/);
@@ -99,16 +99,20 @@ test('transactions rollback failures, reject stale/conflicting writes and retain
   await write('work/commands.json',{...good,protocolVersion:1});assert.match(run('apply','work/commands.json').stderr,/COMMAND_PROTOCOL_INVALID/);
  });
 });
-test('native craft keeps partition offcut windows weave and editable text in protocol 2',async()=>{
- const {assetSourceRevision}=await import('../src/material-anatomy.js'),{craftSceneHash}=await import('../src/craft-fingerprint.js');
+test('unified commands keep partition offcut windows weave and editable text without raw plans',async()=>{
  const assets=[paper('paper',100,80),paper('frame',140,80),paper('strip',160,8)],p=project('工艺示例',{mode:'spread',ratio:'a5'});p.processing='自由拆解';
- await withPackage(assets,async({task,dir,ok,read,apply})=>{
-  const piece=(id,alias,asset,extraction,centerMM,treatments=[])=>({id,asset:alias,sourceRevision:assetSourceRevision(asset),unit:0,extraction,centerMM,treatments});
-  const plan={format:'shiye-craft-plan',version:2,commandId:'complex-plan',baseSceneHash:craftSceneHash(task.source.baseDraft),pieces:[
-   piece('left','m1',assets[0],{type:'rect_crop',boxMM:[0,0,40,80]},[35,155],[{op:'edge',style:'torn',edges:['bottom'],depth_mm:1,period_mm:8,seed:42}]),
-   piece('right','m1',assets[0],{type:'rect_crop',boxMM:[40,0,40,80]},[82,155]),
-   piece('frame','m2',assets[1],{type:'whole'},[150,95],[{op:'window',shape:'rectangle',box:[.1,.2,.15,.6]},{op:'window',shape:'rectangle',box:[.75,.2,.15,.6]}]),piece('strip','m3',assets[2],{type:'whole'},[150,95])],sourcePartitions:[{asset:'m1'}],weaves:[{piece:'strip',target:'frame',holes:[0,1]}]};
-  await apply([{op:'native.material.craft',plan},text('caption','几片纸之间，也有今天的小故事。',145,175,95,20),{op:'ink.add',id:'highlight',unit:'mm',place:mm(141,188),points:[{x:0,y:0},{x:68,y:0}],style:{strokeWidthMm:3,color:'#e8d66b',penStyle:'marker'}},...['m1','m2','m3'].map(alias=>decision(alias,'crafted'))]);
+ await withPackage(assets,async({dir,ok,read,apply})=>{
+  await apply([
+   material('sheet','m1',mm(55,155)),
+   {op:'material.split',target:'sheet',pieces:[{id:'left',region:{shape:'rect',space:'source',unit:'ratio',box:[0,0,.4,1]},place:mm(35,155)},{id:'right',region:{shape:'rect',space:'source',unit:'ratio',box:[.4,0,.4,1]},place:mm(82,155)}]},
+   {op:'material.edge',target:'left',edge:{style:'torn',edges:['bottom'],depthMm:1,periodMm:8,seed:42}},
+   material('frame','m2',mm(150,95)),material('strip','m3',mm(150,95)),
+   {op:'material.window',target:'frame',windowId:'a',region:{shape:'rect',space:'local',unit:'ratio',box:[.1,.2,.15,.6]}},
+   {op:'material.window',target:'frame',windowId:'b',region:{shape:'rect',space:'local',unit:'ratio',box:[.75,.2,.15,.6]}},
+   {op:'material.weave',strip:'strip',through:[{target:'frame',window:'a',sideAfter:'front'},{target:'frame',window:'b',sideAfter:'back'}]},
+   text('caption','几片纸之间，也有今天的小故事。',145,175,95,20),
+   {op:'ink.add',id:'highlight',unit:'mm',place:mm(141,188),points:[{x:0,y:0},{x:68,y:0}],style:{strokeWidthMm:3,color:'#e8d66b',penStyle:'marker'}},
+   ...['m1','m2','m3'].map(alias=>decision(alias,'crafted'))]);
   assert.ok((await read('scene.json')).page.layers.some(node=>node.isParked));ok('preview');ok('pack');assert.ok(importEditableWork(await readFile(join(dir,'output/project.shiyeproject.json'),'utf8'),assets).drafts[0].items.length>=4);
  },{p});
 });
@@ -127,7 +131,7 @@ test('forcing an unavailable node backend reports the current self-test command 
 });
 test('check and proposal leave Scene unchanged; unified text update and review deliver exact units',async()=>{
  await withPackage([paper()],async({dir,run,ok,read,write})=>{
-  const before=await readFile(join(dir,'scene.json'));assert.equal(ok('describe','native.material.craft').name,'native.material.craft');ok('begin','work/draft.json');assert.match(run('begin','work/draft.json').stderr,/DRAFT_EXISTS/);
+  const before=await readFile(join(dir,'scene.json'));assert.equal(ok('describe','material.split').name,'material.split');ok('begin','work/draft.json');assert.match(run('begin','work/draft.json').stderr,/DRAFT_EXISTS/);
   const commands=await read('work/draft.json');commands.operations=[material('piece','m1',mm(30,40)),text('caption','真实字号',55,20,40,12),{op:'text.update',target:'caption',style:{fontSizePt:10},place:mm(60,25)},decision('m1')];await write('work/draft.json',commands);
   ok('check','work/draft.json');assert.deepEqual(await readFile(join(dir,'scene.json')),before);ok('preview','--commands','work/draft.json');assert.deepEqual(await readFile(join(dir,'scene.json')),before);await assert.rejects(readFile(join(dir,'output/preview.png')),{code:'ENOENT'});
   ok('apply','work/draft.json');const scene=await read('scene.json'),caption=scene.page.layers.find(n=>n.agentKey==='caption'),scale=scene.page.canvas.height/scene.page.physicalPageHeightMM;
@@ -138,7 +142,7 @@ test('eight required materials survive revisions grouping preview delivery and r
  const assets=Array.from({length:8},(_,i)=>paper('required-'+i,20,24)),p=project('八件素材双页',{mode:'spread',ratio:'b6'});p.requiredAssetIDs=assets.map(a=>a.id);
  await withPackage(assets,async({dir,ok,read,apply})=>{
   await apply([...assets.map((a,i)=>material('piece-'+i,'m'+(i+1),mm(25+(i%4)*44,40+Math.floor(i/4)*43))),...assets.map((a,i)=>decision('m'+(i+1)))]);
-  await apply([text('title','把今天留在纸上',80,16,95,18),text('note','八件小东西有各自的位置，也可以组成同一段记忆。',190,145,80,10),{op:'shape.add',id:'accent',kind:'ellipse',place:mm(145,18),size:{width:7,height:7,unit:'mm'},style:{fill:'#d5e2d6'}},{op:'group.create',id:'heading-group',targets:['title','accent']},{op:'layer.place',target:'heading-group',place:mm(115,20)}]);
+  await apply([text('title','把今天留在纸上',80,16,95,18),text('note','八件小东西有各自的位置，也可以组成同一段记忆。',190,145,80,10),{op:'shape.add',id:'accent',kind:'ellipse',place:mm(145,18),size:{width:7,height:7,unit:'mm'},style:{fill:'#d5e2d6'},order:{after:'title'}},{op:'group.create',id:'heading-group',targets:['title','accent']},{op:'layer.place',target:'heading-group',place:mm(115,20)}]);
   await apply([{op:'text.update',target:'note',style:{fontSizePt:11},place:mm(185,142),content:'八件小东西有各自的位置。\n把它们放在一起，今天就有了形状。'}]);ok('preview');ok('pack');assert.equal((await read('scene.json')).materialDecisions.length,8);assert.equal(importEditableWork(await readFile(join(dir,'output/project.shiyeproject.json'),'utf8'),assets).drafts[0].items.length,8);
  },{p});
 });

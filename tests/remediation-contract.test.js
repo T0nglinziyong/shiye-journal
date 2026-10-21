@@ -33,9 +33,9 @@ test('O-08: v3 command schema rejects unsupported source-pixel crop fields',asyn
  const handoff=await make(),files=unzipSync(new Uint8Array(await handoff.blob.arrayBuffer()));
  const schema=JSON.parse(strFromU8(files['api/commands.schema.json']));
  assert.equal(handoff.source.capabilities.cropPx,false);
- assert.ok(JSON.stringify(schema).includes('material.process'));
- const {validateCommands}=await import('../src/v3-commands.js');
- assert.throws(()=>validateCommands({protocolVersion:1,transactionId:'crop',baseSceneRevision:'sha256:'+'0'.repeat(64),operations:[{op:'material.add',id:'m',asset:'m1',placement:{xMm:10,yMm:20},crop_px:[0,0,10,10]}]}),/commands/);
+ assert.ok(JSON.stringify(schema).includes('material.crop'));
+ const {validateCreationV2Commands:validateCommands}=await import('../src/creation-v2-commands.js');
+ assert.throws(()=>validateCommands({protocolVersion:2,transactionId:'crop',baseSceneRevision:'sha256:'+'0'.repeat(64),operations:[{op:'material.add',id:'m',asset:'m1',place:{reference:'page',at:[10,20],unit:'mm'},crop_px:[0,0,10,10]}]}),/commands/);
 });
 
 test('I-01: markup-like text stays inert while legitimate angle brackets survive',()=>{

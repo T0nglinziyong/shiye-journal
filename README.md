@@ -38,7 +38,8 @@ node runtime/shiye.cjs info
 node runtime/shiye.cjs help
 node runtime/shiye.cjs describe place
 node runtime/shiye.cjs describe material.window
-node runtime/shiye.cjs describe native.material.craft
+node runtime/shiye.cjs describe material.glyphKnockout
+node runtime/shiye.cjs describe group.compose --full
 node runtime/shiye.cjs begin work/next.json
 # 仅填写 work/next.json 的 operations
 node runtime/shiye.cjs check work/next.json
@@ -50,9 +51,9 @@ node runtime/shiye.cjs review --result pass
 node runtime/shiye.cjs pack
 ```
 
-对外只接受统一 commands 协议 2。25 个简洁操作共享 `place/size/style/region/order` 中适用的参数；39 个 `native.*` 原生操作保留完整 Scene 工艺能力，仍经过同一个事务。没有旧协议或旧前缀的兼容入口。Group 是带局部变换的真实树；毫米、比例、相对锚点、linked 跟随使用同一个空间解算器。自动排列支持横向、纵向、网格的一次性排列，不缩放实体素材。
+对外只接受统一 commands 协议 2。37 项当前操作共享 `place/size/style/region/order` 中适用的参数。旧 `native.*` 注册表和协议 1 执行适配器已删除；弯曲文字、字形镂空、复杂胶带、轮廓、关系、盖印和复用均直接使用统一参数，不再要求 raw `set/plan`。Group 是带局部变换的真实树；毫米、比例、相对锚点、linked 跟随使用同一个空间解算器。自动排列支持横向、纵向、网格的一次性排列，不缩放实体素材。
 
-`help`、`describe`、公共参数、示例和 Schema 从实际运行时注册表生成。`begin` 建立新事务，不覆盖已有草稿；`check` 与 `preview --commands work/next.json` 不修改正式 Scene。固定配方只含操作片段，不含过期 revision。字号使用 `style.fontSizePt`，位置使用 `place`；创建与更新的单位语义一致。
+`help`、`describe`、公共参数、示例和 Schema 从实际运行时注册表生成。`begin` 建立新事务，不覆盖已有草稿；`check` 与 `preview --commands work/next.json` 不修改正式 Scene。固定配方只含操作片段，不含过期 revision。字号使用 `style.fontSizePt`，位置使用 `place`；创建与更新共用 `creation-node-update` 和 `scene-text-layout`；持久最小高度和相对行高在 Scene 中保存，先重排，再定位和求解 linked。默认帮助只给摘要，完整 Schema 需要 `--full`。
 
 `apply` 原子保存 Scene 与事务收据，重复执行不重复取料。`preview` 使用真实素材和共用 Scene Canvas 生成 PNG；`pack` 对当前 Scene、素材、实际渲染后端与重渲染 PNG 核对，输出单行 `output/project.shiyeproject.json`、`output/preview.png` 与 manifest。`review` 仅记录创作者声明，不替代实际看图。
 

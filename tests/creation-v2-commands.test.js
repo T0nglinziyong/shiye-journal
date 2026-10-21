@@ -5,7 +5,7 @@ import {createOfflineHandoff} from '../src/offline-creation.js';
 import {assetFromSourceSnapshot} from '../src/material-anatomy.js';
 import {webSceneDocument} from '../src/web-scene-workbench.js';
 import {applyCreationV2Batch,validateCreationV2Commands} from '../src/creation-v2-commands.js';
-import {nativeCreationCommandNames,creationV2RuntimeSchema} from '../src/creation-v2-contract.js';
+import {creationCommandRegistry,creationV2RuntimeSchema} from '../src/creation-v2-contract.js';
 import {tinyPNG} from './offline-canvas-test-support.mjs';
 import {buildMaterialLedger} from '../src/material-ledger.js';
 import {attachSceneV2} from '../src/scene-v2.js';
@@ -33,10 +33,10 @@ test('page and relative commands create editable native Scene nodes',async()=>{
  const result=run([add('photo',{...at,at:[.5,.4]}),{op:'text.add',id:'caption',content:'今天看见的一角',place:{reference:'node:photo',referenceAnchor:'bottom-center',anchor:'top-center',offset:{value:[0,4],unit:'mm'}},size:{width:60,unit:'mm'},style:{fontSizePt:12,color:'#334d4a'}},
   {op:'text.update',target:'caption',content:'今天看见的一角。',style:{fontSizePt:14,lineHeight:1.45}},
   {op:'shape.add',id:'dot',kind:'ellipse',place:{reference:'page',at:[20,20],unit:'mm'},size:{width:5,height:5,unit:'mm'},style:{fill:'#aabbcc',shadow:{offsetMm:[1,2],blurMm:1,color:'#112233'}}}]);
- const nodes=result.page.layers,photo=nodes.find(n=>n.creativePieceID==='photo'),caption=nodes.find(n=>n.agentKey==='caption'),dot=nodes.find(n=>n.key==='dot');
+ const nodes=result.page.layers,photo=nodes.find(n=>n.creativePieceID==='photo'),caption=nodes.find(n=>n.agentKey==='caption'),dot=nodes.find(n=>n.id==='dot');
  assert.ok(photo&&caption&&dot);assert.equal(caption.content,'今天看见的一角。');assert.ok(caption.fixedLineHeight>caption.fontSize);assert.ok(caption.y>photo.y);assert.equal(dot.kind,'ellipse');assert.equal(dot.shadow.color,'#112233');
  const revised=run([{op:'group.create',id:'note-group',targets:['caption','dot']},{op:'layer.reorder',target:'dot',order:{before:'caption'}},{op:'group.ungroup',target:'note-group'},{op:'page.update',paperColor:'#eeeeee'}],result);
- assert.equal(revised.page.paperColor,'#eeeeee');assert.ok(revised.page.layers.some(n=>n.agentKey==='caption'));assert.ok(revised.page.layers.some(n=>n.key==='dot'));assert.doesNotThrow(()=>run([{op:'layout.detach',target:'caption'}],revised));
+ assert.equal(revised.page.paperColor,'#eeeeee');assert.ok(revised.page.layers.some(n=>n.agentKey==='caption'));assert.ok(revised.page.layers.some(n=>n.id==='dot'));assert.doesNotThrow(()=>run([{op:'layout.detach',target:'caption'}],revised));
 });
 test('group.compose creates local children and linked captions survive reopen',async()=>{
  const {run}=await setup(paper('photo-local',30,20));
@@ -51,7 +51,7 @@ test('create update and reparent share parent-relative sizes and sibling order',
   {op:'shape.add',id:'back',kind:'rect',size:{reference:'parent',width:.5,height:.5,unit:'ratio'},place:local},
   {...add('photo',local),order:{edge:'back'}},{op:'text.add',id:'note',content:'记录',size:{width:30,unit:'mm'},place:local,order:{after:'photo'}}
  ]},{op:'text.update',target:'note',content:'重新记录',order:{edge:'front'}},{op:'layer.reparent',target:'back',parent:null,order:{edge:'back'}}]);
- const frame=next.page.layers.find(n=>n.id==='frame');assert.deepEqual(frame.children.map(n=>n.creativePieceID||n.agentKey||n.key),['photo','note']);assert.equal(next.page.layers[0].key,'back');assert.ok(Math.abs(next.page.layers[0].width/next.page.canvas.height*next.page.physicalPageHeightMM-50)<.01);assert.equal(frame.children.at(-1).content,'重新记录');
+ const frame=next.page.layers.find(n=>n.id==='frame');assert.deepEqual(frame.children.map(n=>n.creativePieceID||n.agentKey||n.key),['photo','note']);assert.equal(next.page.layers[0].id,'back');assert.ok(Math.abs(next.page.layers[0].width/next.page.canvas.height*next.page.physicalPageHeightMM-50)<.01);assert.equal(frame.children.at(-1).content,'重新记录');
 });
 test('deleting a referenced layer requires explicit link detachment',async()=>{
  const {run}=await setup(paper('linked-delete',20,20));
@@ -97,8 +97,8 @@ test('torn edge uses stable seed and clean removes the edge treatment',async()=>
  const next=run([add(),{op:'material.edge',target:'paper',edge:{style:'torn',roughness:.2,seed:42}}]);attachSceneV2(next.page);assert.equal(next.page.items[0].materialMask.shape,'polygon');assert.equal(next.page.items[0].materialSteps.at(-1).seed,42);assert.ok(buildMaterialLedger(next.page,assets).units[0].usedAreaMM2<4800);
  const cleaned=run([{op:'material.edge',target:'paper',edge:{style:'clean'}}],next);attachSceneV2(cleaned.page);assert.equal(cleaned.page.items[0].materialSteps.some(step=>step.op==='edge'),false);
 });
-test('all 39 native operations remain reachable in the single current protocol',async()=>{
- assert.equal(nativeCreationCommandNames.length,39);assert.equal(creationV2RuntimeSchema.$defs.Operation.oneOf.length,64);
- const {run}=await setup(paper('native',30,20));const command=[{op:'native.material.add',id:'paper',asset:'m1',placement:{xMm:40,yMm:50}},{op:'text.add',id:'caption',content:'继续创作',place:{reference:'node:paper',referenceAnchor:'bottom-center',anchor:'top-center'},size:{width:60,unit:'mm'}}];
- validateCreationV2Commands(batch(command));const next=run(command);assert.ok(next.page.layers.some(n=>n.creativePieceID==='paper'));assert.ok(next.page.layers.some(n=>n.agentKey==='caption'));
+test('public registry is unified and old native operations are rejected',()=>{
+ assert.equal(creationV2RuntimeSchema.$defs.Operation.oneOf.length,Object.keys(creationCommandRegistry).length);
+ assert.ok(Object.keys(creationCommandRegistry).every(name=>!name.startsWith('native.')));
+ assert.throws(()=>validateCreationV2Commands(batch([{op:'native.material.add',id:'p',asset:'m1',placement:{xMm:40,yMm:50}}])),/未知操作/);
 });

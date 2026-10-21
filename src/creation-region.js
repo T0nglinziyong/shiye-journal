@@ -73,6 +73,12 @@ export function flattenCreationPath(d){
 export function creationRegionGeometry(region,{sourceSize,localSize,crop,output='source'}={}){
  const [sw,sh]=sourceSize,[lw,lh]=localSize;
  const viewport=region.space==='source'?[sw,sh]:[lw,lh];
+ if(region.shape==='geometry'){
+  const convert=p=>{const v=region.unit==='mm'?p:[p[0]*viewport[0],p[1]*viewport[1]];return region.space==='source'?v:[crop.x*sw+v[0],crop.y*sh+v[1]];};
+  const geometry=transformGeometry(normalizeGeometry(region.geometry),convert);
+  if(geometryArea(geometryDifference(geometry,rectangleGeometry(0,0,sw,sh)))>AREA_EPSILON)throw Error('区域超出素材来源');
+  return output==='source'?geometry:transformGeometry(geometry,p=>[(p[0]/sw-crop.x)/crop.width,(p[1]/sh-crop.y)/crop.height]);
+ }
  let rings;
  if(region.shape==='path')rings=flattenCreationPath(region.d);
  else if(region.shape==='polygon')rings=[region.points];
