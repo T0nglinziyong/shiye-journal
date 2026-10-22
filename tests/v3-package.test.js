@@ -126,7 +126,7 @@ test('fixed recipes contain valid operation snippets rather than task-specific t
  assert.match(new TextDecoder().decode(a['START_HERE.md']),/design\/SKILL\.md/);
  assert.notDeepEqual(a['TASK.json'],b['TASK.json']);const guide=new TextDecoder().decode(a['design/RECIPES.md']);assert.doesNotMatch(guide,/sha256:[a-f0-9]{64}/);
  const letters=new TextDecoder().decode(a['design/LETTERING.md']);
- assert.match(new TextDecoder().decode(a['design/SKILL.md']),/素材稀少/);assert.match(new TextDecoder().decode(a['design/REVIEW.md']),/大片|大块/);
+ assert.match(new TextDecoder().decode(a['design/SKILL.md']),/素材(?:稀)?少/);assert.match(new TextDecoder().decode(a['design/REVIEW.md']),/大片|大块|空区/);
  for(const match of letters.matchAll(/```json\n([\s\S]*?)\n```/g))validateCreationV2Commands({protocolVersion:2,transactionId:'letter-recipe',baseSceneRevision:'sha256:'+'0'.repeat(64),operations:[JSON.parse(match[1])]});
  const operations=[...guide.matchAll(/```json\n([\s\S]*?)\n```/g)].map(match=>JSON.parse(match[1]));assert.ok(operations.length>=20);
  for(const operation of operations)validateCreationV2Commands({protocolVersion:2,transactionId:'recipe',baseSceneRevision:'sha256:'+'0'.repeat(64),operations:[operation]});

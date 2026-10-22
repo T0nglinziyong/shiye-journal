@@ -6,7 +6,6 @@ import {webResultPrompt} from './creation-methods.js';
 import {freezeCraftTask} from './craft-task.js';
 import {zip,zipSync,unzipSync,strToU8,strFromU8} from 'fflate';
 import {toolContracts,schemaFingerprint} from './creative-contract.js';
-import {structureReferenceGuide} from './creative-design-guide.js';
 import {validMaterialAlias} from './material-alias.js';
 import {importNativeProjectPackage,validatePackageValue} from './native-project-package.js';
 import {readProjectPackageEntries} from './project-package-archive.js';
@@ -14,7 +13,6 @@ import {canonicalTaskSource} from './task-source.js';
 import {sha256Hex,taskFingerprint,assertTaskFingerprint} from './task-fingerprint.js';
 import {reviewExternalResultFiles} from './offline-result-review.js';
 import {creativeContentBrief} from './creative-content-brief.js';
-import {creativePageBrief} from './creative-page-brief.js';
 import {imagePrompt} from './ai-image-generation.js';
 import {classifyJournalMaterial} from './journal-case-study.js';
 import {tapeDimensions,tapeRepeatRange} from './tape-strip.js';
@@ -59,7 +57,7 @@ export async function createOfflineHandoff({project:p,assets,aliases,previews=[]
  source.previewHashes=showImages?Object.fromEntries(await Promise.all(chosen.map(async entry=>[entry.alias,`sha256:${await sha256Hex(entry.bytes)}`]))):null;
  source.taskHash=await taskFingerprint(source);
  const work=webSceneDocument(source,source.baseDraft,p.title);
- const guide=[creativeContentBrief({policy:source.contentPolicy,userText:source.userText,providedFacts:source.providedFacts,topic:source.intent,purposes:source.purposes}),creativePageBrief({styles:source.styles,purposes:source.purposes,textMode:source.textMode,contentPolicy:source.contentPolicy,textPresentation:source.textPresentation,userText:source.userText,theme:source.intent,pageMode:source.mode,materials:selected}),webArtDirection(source),'先观察素材并构思素材之间的关系；只写 work/commands.json，经 apply 修改唯一 scene.json 后看真实预览。按需 help / describe；使用 material.crop、material.split、material.window、material.weave，曲线文字、胶带路径、字形镂空等同样使用公共参数；默认 describe 返回精简帮助，完整规范加 --full。',settings.customLayoutPrompt||'',settings.includeStructureReference===false?'':structureReferenceGuide].join('\n\n');
+ const guide=[creativeContentBrief({policy:source.textMode==='none'?'visual':source.contentPolicy,userText:source.userText,providedFacts:source.providedFacts,topic:source.intent,purposes:source.purposes}),webArtDirection(source),settings.customLayoutPrompt||''].filter(Boolean).join('\n\n');
  const files=await createV3PackageFiles({source,selected,chosen,work,guide,runtime:offlineValidateSource,glyph:offlineGlyphSource}),bytes=zipSync(files,{level:4}),prompts={file:webResultPrompt(mode,'file'),text:webResultPrompt(mode,'text')};
  return {blob:new Blob([bytes],{type:'application/zip'}),filename:'拾页-GPT创作任务.zip',prompt:prompts.file,prompts,source,mode,previewCount:chosen.length,imageBytes:chosen.reduce((total,item)=>total+item.bytes.length,0),packageBytes:bytes.length};
 }
