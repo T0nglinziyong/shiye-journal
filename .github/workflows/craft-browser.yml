@@ -8,6 +8,9 @@ on:
       - 'src/material-*.js'
       - 'src/creative*.js'
       - 'src/creation-*.js'
+      - 'src/graphic-*.js'
+      - 'tests/unified-graphics-browser.mjs'
+      - 'tests/fixtures/unified-graphics.html'
       - 'src/text-effects.js'
       - 'src/editor-tools-model.js'
       - 'tests/type-effects-browser.mjs'
@@ -96,6 +99,7 @@ jobs:
           node tests/craft-multimodal-browser.mjs
           node tests/web-workbench-browser.mjs
           node tests/type-effects-browser.mjs
+          node tests/unified-graphics-browser.mjs
           git diff --exit-code -- package.json package-lock.json
       - name: Verify clean-build reproducibility and generate current creation example
         run: |
