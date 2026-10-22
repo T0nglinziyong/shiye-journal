@@ -1,3 +1,4 @@
+import {scaleTextEffects} from './text-effects.js';
 import {applyScenePatchBatch} from './scene-edit-kernel.js';
 import {USER_SCENE_POLICY,requireScenePolicy,confirmSceneCapability} from './scene-edit-policy.js';
 import {findSceneNode} from './scene-v2.js';
@@ -110,6 +111,7 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
           child.width=positive(child.width)*widthScale;
           child.height=positive(child.height)*heightScale;
           child.rotation=Math.atan2(widthAxis.y,widthAxis.x)*180/Math.PI;
+          if(child.type==='text'&&Math.abs(scaleX-scaleY)<.02)scaleTextEffects(child,scaleX);
           if(child.type==='text'&&Math.abs(scaleX-scaleY)<.02)
             for(const field of ['fontSize','fixedLineHeight','lineHeight','lineSpacing',
               'additionalLineSpacing','paragraphSpacing','letterSpacing','curveHeight'])
@@ -317,6 +319,7 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
         // The bottom-right grip scales the whole text object. Persist its
         // typography along with its frame; a side grip only changes reflow.
         const sx=positive(object.scaleX),sy=positive(object.scaleY);
+        if(Math.abs(sx-sy)<.02&&Math.abs(sx-1)>.001)scaleTextEffects(node,sx);
         if(Math.abs(sx-sy)<.02&&Math.abs(sx-1)>.001)
           for(const field of ['fontSize','fixedLineHeight','lineHeight','lineSpacing',
             'additionalLineSpacing','paragraphSpacing','letterSpacing','curveHeight'])

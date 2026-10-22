@@ -22,10 +22,13 @@ Object.assign(d.Style.properties,{
  penStyle:en('pressure','fountain','ballpoint','brush','marker'),
  shadow:{anyOf:[d.Style.properties.shadow,{type:'null'}]}
 });
+d.Style.properties.outline={anyOf:[{type:'null'},obj({color:ref('Color'),widthMm:num(.01,8),offsetMm:ref('Vec2')},['color','widthMm'])]};
+d.Style.properties.gradient={anyOf:[{type:'null'},obj({angleDeg:num(-360,360),stops:arr(obj({offset:num(0,1),color:ref('Color')},['offset','color']),2,8)},['angleDeg','stops'])]};
+d.TextOutline=d.Style.properties.outline;d.TextGradient=d.Style.properties.gradient;d.Style.properties.outline=ref('TextOutline');d.Style.properties.gradient=ref('TextGradient');
 const commonStyles=['opacity','blendMode','shadow'];
 const styleNames={
  material:[...commonStyles,'flipHorizontal'],group:commonStyles,
- text:[...commonStyles,'color','fontFamily','fontSizePt','fontPreset','fontWeight','italic','underline','strikethrough','textAlign','lineHeight','letterSpacingMm','paragraphSpacingMm','lineSpacingMm','curveHeightMm'],
+ text:[...commonStyles,'outline','gradient','color','fontFamily','fontSizePt','fontPreset','fontWeight','italic','underline','strikethrough','textAlign','lineHeight','letterSpacingMm','paragraphSpacingMm','lineSpacingMm','curveHeightMm'],
  shape:[...commonStyles,'fill','stroke','strokeWidthMm','fillOpacity','strokeOpacity','strokeDash','cornerRadiusRatio'],
  ink:[...commonStyles,'color','strokeWidthMm','penStyle']
 };
@@ -69,6 +72,8 @@ add('text.update','修改文字，使用与创建相同的属性和重排逻辑�
 add('shape.add','创建基础图形。',create('shape',{kind:d.GeometryUpdate.oneOf[2].properties.shape}),['id','kind','size','place'],{id:'dot',kind:'ellipse',size:{width:8,height:8,unit:'mm'},place:point,style:{fill:'#A8BCD5'}});
 add('vector.add','创建可编辑多路径矢量。',create('shape',{paths:ref('VectorPaths'),viewBox:ref('ViewBox')}),['id','paths','viewBox','size','place'],{id:'triangle',paths:[{d:'M0 10 L5 0 L10 10 Z',style:{fill:'#A8BCD5'}}],viewBox:[0,0,10,10],size:{width:10,unit:'mm'},place:point},['路径局部 viewBox 坐标不是页面坐标；全局样式与基础图形共用。']);
 add('ink.add','创建保留压感点的笔迹。',noSize(create('ink',{points:ref('InkPoints'),unit:{const:'mm'}})),['id','points','unit','place','style'],{id:'underline',points:[{x:0,y:0},{x:30,y:1}],unit:'mm',place:point,style:{color:'#334D4A',strokeWidthMm:1,penStyle:'pressure'}});
+add('text.lettering','一次创建逐字可编辑的艺术标题，每字可用不同字体/颜色/描边/渐变；不栅格化。',{id,parent:id,content:str(128),place:ref('Place'),style:ref('Style_text'),gapMm:num(0,20),letters:arr(obj({index:{type:'integer',minimum:0,maximum:31},style:ref('Style_text'),rotationDeg:num(-45,45),offsetMm:ref('Vec2')},['index']),0,32),order:ref('Order')},['id','content','place'],{id:'title',content:'出发',place:point,style:{fontSizePt:24,color:'#35516A',outline:{color:'#FFFFFF',widthMm:.6}},letters:[{index:1,style:{fontPreset:'serif',gradient:{angleDeg:90,stops:[{offset:0,color:'#D18A5B'},{offset:1,color:'#6B4C8C'}]}},rotationDeg:4}]},['生成 id-g1、id-g2 等独立 text 子节点；后续仍用 text.update/layer.update。适用于短标题，不替代长正文或复杂连写语言的整词排版。字体以当前环境可用者为准；用 fonts 查询。']);
+add('draw.decorate','根据目标尺寸生成可编辑短线、高亮或括号，不再手算每个点。',{id,target:id,kind:en('underline','highlight','bracket'),size:ref('Size'),place:ref('Place'),style:ref('Style_ink'),order:ref('Order'),seed:{type:'integer',minimum:0,maximum:2147483647}},['id','target','kind'],{id:'emphasis',target:'caption',kind:'underline',style:{color:'#B99355',strokeWidthMm:.6},seed:42},['默认位置跟随目标，尺寸按创建时计算；目标文字长度变化后可重新创建或精修 geometry。highlight 目标应是单独的单行关键词文本框；不会识别句内词语。几何点为普通 ink，可继续编辑。']);
 add('layer.place','用通用 place 定位任意空间节点。',{target:id,place:ref('Place')},['target','place'],{target:'caption',place:relative});
 add('layer.update','局部修改公共属性与类型化内容，统一重排和 linked 求解。',change,['target'],{target:'caption',style:{fontSizePt:14}},['content 只用于文字；geometry 用于图形/矢量/笔迹。未提供字段保持不变。'],{anyOf:Object.keys(change).filter(key=>key!=='target').map(key=>({required:[key]}))});
 add('layer.reparent','移入或移出父组，保持世界位置。',{target:id,parent:{anyOf:[id,{type:'null'}]},preserveWorld:{const:true},order:ref('Order')},['target','parent'],{target:'photo',parent:'card',preserveWorld:true});

@@ -40,7 +40,7 @@ export async function createV3PackageFiles({source,selected,chosen,work,guide,ru
  const revision=await fingerprint(new TextEncoder().encode(JSON.stringify(work)));
  const files={
   'START_HERE.md':encode(creationFixedFiles['START_HERE.md']),'TASK.json':encode(task),'scene.json':encode(work),'assets/overview.jpg':overviewBytes,'assets/manifest.json':encode(manifest),
-  'design/GUIDE.md':encode(guide),'design/CRAFT_GUIDE.md':encode(creationFixedFiles['design/CRAFT_GUIDE.md']),'design/SKILL.md':encode(creationFixedFiles['design/SKILL.md']),'design/PLAYBOOK.md':encode(creationFixedFiles['design/PLAYBOOK.md']),'design/REVIEW.md':encode(creationFixedFiles['design/REVIEW.md']),'design/RECIPES.md':encode(creationRecipes()),
+  'design/GUIDE.md':encode(guide),'design/CRAFT_GUIDE.md':encode(creationFixedFiles['design/CRAFT_GUIDE.md']),'design/SKILL.md':encode(creationFixedFiles['design/SKILL.md']),'design/PLAYBOOK.md':encode(creationFixedFiles['design/PLAYBOOK.md']),'design/REVIEW.md':encode(creationFixedFiles['design/REVIEW.md']),'design/LETTERING.md':encode(creationFixedFiles['design/LETTERING.md']),'design/RECIPES.md':encode(creationRecipes()),
   'api/fixed-release.json':encode({releaseId:creationFixedReleaseId,protocolVersion:2,files:Object.keys(creationFixedFiles)}),'api/commands.schema.json':encode(creationV2RuntimeSchema),'api/scene.schema.json':encode(v3SceneSchema),
   'work/commands.json':encode({protocolVersion:2,transactionId:'initial-'+source.bundleId.slice(0,8),baseSceneRevision:revision,operations:[]}),
   'runtime/shiye.cjs':encode(runtime),'runtime/glyphs.cjs':encode(glyph),

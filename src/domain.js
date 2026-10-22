@@ -1,3 +1,4 @@
+import {scaleTextEffects} from './text-effects.js';
 import {paperDimensions,paperPresets} from './paper-sizes.js';
 import {attachSceneV2} from './scene-v2.js';
 export const uid=()=>crypto.randomUUID();
@@ -35,6 +36,7 @@ export function setDraftPaperSize(d,ratio){
       move(node);
       if(node.type==='material'&&node.generationBaseline)move(node.generationBaseline);
       if(node.type==='text'){
+        scaleTextEffects(node,oldScale/newScale);
         for(const key of ['fontSize','letterSpacing','lineSpacing','fixedLineHeight','paragraphSpacing'])
           if(Number.isFinite(node[key]))node[key]*=oldScale/newScale;
       }

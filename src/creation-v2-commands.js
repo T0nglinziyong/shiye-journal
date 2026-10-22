@@ -1,3 +1,4 @@
+import {addLettering,addDecoration} from './creation-design-tools.js';
 import {applyScenePagePatch} from './scene-edit-kernel.js';
 import {AI_SCENE_POLICY} from './scene-edit-policy.js';
 import Ajv2020 from 'ajv/dist/2020.js';
@@ -127,7 +128,9 @@ export function applyCreationV2Batch(document,input,assets,options={}){
  for(const [index,item] of input.operations.entries())try{
   const s=scale(doc.page);
   for(const id of [item.target,item.strip,...(item.targets||[])].filter(Boolean))assertSceneEditable(attachSceneV2(doc.page),requireNode(doc,id).id);
-  if(item.op==='material.add'){
+  if(item.op==='text.lettering')doc=addLettering(doc,item,assets,{finishNode});
+  else if(item.op==='draw.decorate')doc=addDecoration(doc,item,assets,{finishNode});
+  else if(item.op==='material.add'){
    if(find(doc,item.id))throw Error('图层编号已经存在：'+item.id);
    const asset=assetFor(doc,assets,item.asset),position=placeFor(doc,item.place,asset.physicalWidthMM,asset.physicalHeightMM,0,item.parent);
    doc=runMaterialAlgorithm(doc,'place_materials',{items:[{asset:item.asset,piece:item.id,x:position.x/s,y:position.y/s,rotation:position.rotation,coordinate_unit:'mm'}]},assets);
@@ -172,7 +175,7 @@ export function applyCreationV2Batch(document,input,assets,options={}){
     if(child.parent&&child.parent!==item.id)throw Error('组合子操作不能指向其他父级');
     if(['page.update','material.decision','layer.repeat','layout.reuse'].includes(child.op))throw Error('组合内不支持全局或跨实例操作');
     for(const target of [child.target,child.strip,...(child.targets||[])].filter(Boolean))if(!spatialPath(doc.page.layers,requireNode(doc,target).id)?.ancestors.some(group=>group.id===item.id))throw Error('组合内不能修改外部对象：'+target);
-    const creates=['material.add','text.add','shape.add','vector.add','ink.add','material.tape','group.compose'].includes(child.op);
+    const creates=['material.add','text.add','shape.add','vector.add','ink.add','material.tape','text.lettering','group.compose'].includes(child.op);
     doc=applyCreationV2Batch(doc,{protocolVersion:2,transactionId:'child-'+craftDigest([input.transactionId,index,childIndex]).slice(7,39),baseSceneRevision:input.baseSceneRevision,operations:[creates?{...child,parent:item.id}:child]},assets,options);
    }
   }else if(item.op==='group.ungroup'){

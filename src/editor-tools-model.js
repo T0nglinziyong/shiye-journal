@@ -1,3 +1,4 @@
+import {textEffectInsets,textContentWidth,textFillStyle,paintTextGlyphs} from './text-effects.js';
 import {traceSmoothInk} from './ink-path-geometry.js';
 import {pressureInkOutline} from './pressure-ink.js';
 export const defaultTools={penStyle:'fountain',penWidth:4,penColor:'#2b5245',markerWidth:4,markerColor:'#2b5245',markerStraight:false,eraserWidth:20,eraserStyle:'standard',eraserOnlyHighlighter:false,wholeStroke:true,returnToPen:false,pencil:true};
@@ -60,29 +61,33 @@ export function resizeObject(start,cornerX,cornerY,dx,dy){const a=(start.rotatio
 export function textLineHeight(t){return (typeof t.fixedLineHeight==='number'?t.fixedLineHeight:t.lineHeight||t.fontSize*1.3)+(t.lineSpacing??t.additionalLineSpacing??0);}
 export function textFontFamily(t){const fallback=t.style==='hand'?'"Kaiti SC",STKaiti,cursive':t.style==='serif'?'"Songti SC",serif':t.style==='rounded'?'"Arial Rounded MT Bold",sans-serif':'sans-serif';return (t.fontName?JSON.stringify(t.fontName)+',':'')+fallback;}
 export function textFont(t){return `${t.italic?'italic ':''}${t.bold?'bold ':''}${t.fontSize}px ${textFontFamily(t)}`;}
-export function textLines(t,measure){const lines=[];let y=0;for(const paragraph of String(t.content).split('\n')){let line='';for(const ch of Array.from(paragraph)){if(line&&measure(line+ch)>t.width){lines.push({text:line,y});y+=textLineHeight(t);line='';}line+=ch;}lines.push({text:line,y});y+=textLineHeight(t)+(t.paragraphSpacing||0);}return {lines,height:y};}
+export function textLines(t,measure){const lines=[];let y=0;for(const paragraph of String(t.content).split('\n')){let line='';for(const ch of Array.from(paragraph)){if(line&&measure(line+ch)>textContentWidth(t)){lines.push({text:line,y});y+=textLineHeight(t);line='';}line+=ch;}lines.push({text:line,y});y+=textLineHeight(t)+(t.paragraphSpacing||0);}return {lines,height:y};}
 export function drawSceneText(ctx,node,frameHeight=node.height){
  ctx.save();
  try{
   ctx.fillStyle=node.color||'#30463d';ctx.font=textFont(node);ctx.letterSpacing=(node.letterSpacing||0)+'px';ctx.textBaseline='alphabetic';
-  const curve=node.curveHeight||0;
+  const curve=node.curveHeight||0,padding=textEffectInsets(node),contentWidth=textContentWidth(node),centerX=(padding.left-padding.right)/2,centerY=(padding.top-padding.bottom)/2;
   if(curve){
    const chars=Array.from(String(node.content||''));if(chars.includes('\n'))throw Error('曲线文字只支持单行；请拆成两个文字图层');
    const widths=chars.map(ch=>ctx.measureText(ch).width+(node.letterSpacing||0)),length=widths.reduce((sum,w)=>sum+w,0);
-   if(length>node.width+1e-6)throw Error('曲线文字超出编辑框；请加宽或缩小字号');
-   const start=node.alignment==='right'?node.width/2-length:node.alignment==='center'?-length/2:-node.width/2,baseline=(node.fontSize-curve)/2;let advance=0;
+   if(length>contentWidth+1e-6)throw Error('曲线文字超出编辑框；请加宽或缩小字号');
+   const start=node.alignment==='right'?node.width/2-padding.right-length:node.alignment==='center'?centerX-length/2:-node.width/2+padding.left,baseline=centerY+(node.fontSize-curve)/2;let advance=0;
+   ctx.fillStyle=textFillStyle(ctx,node,frameHeight,{x:start,y:centerY-node.fontSize/2-Math.abs(curve),width:length,height:node.fontSize*1.2+2*Math.abs(curve)});
    for(let i=0;i<chars.length;i++){
     const x=advance+widths[i]/2,u=length?2*x/length-1:0,y=baseline+curve*(1-u*u),angle=length?-4*curve*u/length:0;
-    ctx.save();ctx.translate(start+x,y);ctx.rotate(Math.atan(angle));ctx.textAlign='center';ctx.fillText(chars[i],0,0);
+    ctx.save();ctx.translate(start+x,y);ctx.rotate(Math.atan(angle));ctx.textAlign='center';paintTextGlyphs(ctx,node,chars[i],0,0);
     if(node.underline||node.strikethrough){ctx.strokeStyle=node.color||'#30463d';ctx.lineWidth=Math.max(1,node.fontSize/18);for(const offset of [node.underline?2:null,node.strikethrough?-node.fontSize*.35:null].filter(v=>v!==null)){ctx.beginPath();ctx.moveTo(-widths[i]/2,offset);ctx.lineTo(widths[i]/2,offset);ctx.stroke();}}
     ctx.restore();advance+=widths[i];
    }
    return;
   }
-  ctx.textAlign=node.alignment||'left';const left=ctx.textAlign==='center'?0:ctx.textAlign==='right'?node.width/2:-node.width/2;
-  for(const line of textLines(node,value=>ctx.measureText(value).width).lines){
-   const y=-frameHeight/2+node.fontSize+line.y;ctx.fillText(line.text,left,y);
-   if(node.underline||node.strikethrough){const length=ctx.measureText(line.text).width,x=ctx.textAlign==='center'?-length/2:ctx.textAlign==='right'?node.width/2-length:-node.width/2;ctx.strokeStyle=node.color;ctx.lineWidth=Math.max(1,node.fontSize/18);for(const offset of [node.underline?2:null,node.strikethrough?-node.fontSize*.35:null].filter(v=>v!==null)){ctx.beginPath();ctx.moveTo(x,y+offset);ctx.lineTo(x+length,y+offset);ctx.stroke();}}
+  ctx.textAlign=node.alignment||'left';const left=ctx.textAlign==='center'?centerX:ctx.textAlign==='right'?node.width/2-padding.right:-node.width/2+padding.left;
+  const lines=textLines(node,value=>ctx.measureText(value).width).lines;
+  const bounds=lines.filter(line=>line.text.trim()).map(line=>{const m=ctx.measureText(line.text),y=-frameHeight/2+padding.top+node.fontSize+line.y;return {x:left-(m.actualBoundingBoxLeft??(ctx.textAlign==='center'?m.width/2:ctx.textAlign==='right'?m.width:0)),right:left+(m.actualBoundingBoxRight??m.width),y:y-(m.actualBoundingBoxAscent??node.fontSize*.8),bottom:y+(m.actualBoundingBoxDescent??node.fontSize*.2)};});
+  if(bounds.length){const x=Math.min(...bounds.map(b=>b.x)),y=Math.min(...bounds.map(b=>b.y));ctx.fillStyle=textFillStyle(ctx,node,frameHeight,{x,y,width:Math.max(...bounds.map(b=>b.right))-x,height:Math.max(...bounds.map(b=>b.bottom))-y});}
+  for(const line of lines){
+   const y=-frameHeight/2+padding.top+node.fontSize+line.y;paintTextGlyphs(ctx,node,line.text,left,y);
+   if(node.underline||node.strikethrough){const length=ctx.measureText(line.text).width,x=ctx.textAlign==='center'?centerX-length/2:ctx.textAlign==='right'?node.width/2-padding.right-length:-node.width/2+padding.left;ctx.strokeStyle=node.color;ctx.lineWidth=Math.max(1,node.fontSize/18);for(const offset of [node.underline?2:null,node.strikethrough?-node.fontSize*.35:null].filter(v=>v!==null)){ctx.beginPath();ctx.moveTo(x,y+offset);ctx.lineTo(x+length,y+offset);ctx.stroke();}}
   }
  }finally{ctx.restore();}
 }
