@@ -13,18 +13,18 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Verify and save current source without merging or deploying
+      - name: Verify and save second source checkpoint, without merge or deployment
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
           import base64,hashlib,json,lzma,pathlib,shutil
           parts=sorted(pathlib.Path('.material-checkpoint').glob('part-*.b64'))
-          assert len(parts)==3
+          assert len(parts)==2
           payload=base64.b64decode(''.join(p.read_text() for p in parts),validate=True)
-          assert hashlib.sha256(payload).hexdigest()=='f8eab63095fa9289df78b7b9b4a3fbc1996bc64eb4cd4f55fb33c9ecc4e847b0'
+          assert hashlib.sha256(payload).hexdigest()=='457c6a4dcecad2a8adcf71dc38346258b1619498cd42b0a9f749f418853fe021'
           changes=json.loads(lzma.decompress(payload))
-          assert len(changes)==36
+          assert len(changes)==11
           for change in changes:
               path=pathlib.Path(change['path'])
               assert not path.is_absolute() and '..' not in path.parts and not path.is_symlink()
@@ -47,5 +47,5 @@ jobs:
           test -z "$(git diff --cached --name-only -- .github)"
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'wip: checkpoint material covers, processed previews and artistic defaults; validation pending'
+          git commit -m 'test: checkpoint material pixels, font defaults and editable decorations; browser CI pending'
           git push origin HEAD:refs/heads/fix/material-previews-artistic-defaults-20261022
