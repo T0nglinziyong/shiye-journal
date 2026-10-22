@@ -1,0 +1,56 @@
+name: Checkpoint verified taxonomy source
+on:
+  push:
+    branches: [refactor/command-taxonomy-rich-composition-20261022]
+    paths: [.github/workflows/taxonomy-checkpoint.yml]
+permissions:
+  contents: write
+jobs:
+  checkpoint:
+    if: github.ref == 'refs/heads/refactor/command-taxonomy-rich-composition-20261022'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify per-file source hashes and checkpoint implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64,hashlib,json,lzma,pathlib,shutil
+          parts=sorted(pathlib.Path('.taxonomy-transfer').glob('part-*.b64'))
+          assert len(parts)==4
+          payload=base64.b64decode(''.join(p.read_text() for p in parts),validate=True)
+          assert hashlib.sha256(payload).hexdigest()=='1862d1c382e87a9f50f7660de86355f14395e2e6d6d23d41bd7ee182efc592e3'
+          changes=json.loads(lzma.decompress(payload));assert len(changes)==43
+          for change in changes:
+              path=pathlib.Path(change['path'])
+              assert not path.is_absolute() and '..' not in path.parts and not path.is_symlink()
+              assert str(path).startswith(('src/','tests/','scripts/','docs/','creation-contract/')) or str(path)=='README.md'
+              old=path.read_text() if path.exists() else ''
+              assert hashlib.sha256(old.encode()).hexdigest()==change['before'],str(path)
+              new=old
+              for start,end,text in reversed(change['edits']):
+                  assert 0<=start<=end<=len(old)
+                  new=new[:start]+text+new[end:]
+              assert hashlib.sha256(new.encode()).hexdigest()==change['after'],str(path)
+              if change['status']=='D':
+                  assert new==''
+                  path.unlink()
+              else:
+                  path.parent.mkdir(parents=True,exist_ok=True);path.write_text(new)
+          shutil.rmtree('.taxonomy-transfer')
+          PY
+          cp .github/workflows/taxonomy-checkpoint.yml /tmp/taxonomy-checkpoint.yml
+          rm .github/workflows/taxonomy-checkpoint.yml
+          git add -A
+          test "$(git write-tree)" = 58f1a9f15b1197b06de9a5ab2a2f92590af3af45
+          cp /tmp/taxonomy-checkpoint.yml .github/workflows/taxonomy-checkpoint.yml
+          git add .github/workflows/taxonomy-checkpoint.yml
+          test -z "$(git diff --cached --name-only -- .github)"
+          git diff --cached --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'wip: unified edits cuts masks linked sizing duplication title reflow and rich guidance'
+          git push origin HEAD:refs/heads/refactor/command-taxonomy-rich-composition-20261022
