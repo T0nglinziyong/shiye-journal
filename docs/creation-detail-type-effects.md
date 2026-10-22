@@ -12,7 +12,7 @@
 
 ## 文字效果是真实 Scene 数据
 
-公共 style.outline（color、widthMm、offsetMm）编译为 textOutline 的原生长度；style.gradient（angleDeg、递增 stops）保存为 textGradient。创建、text.update、layer.update 和人工共享内核都使用同一数据。null 明确清除。
+公共 style.outline（color、widthMm、offsetMm）编译为 textOutline 的原生长度；style.gradient（angleDeg、递增 stops）保存为 textGradient。创建、layer.update、layer.update 和人工共享内核都使用同一数据。null 明确清除。
 
 完整描边使用 strokeText 后 fillText；偏移轮廓使用同一轮廓的局部偏移；渐变使用 CanvasGradient 填入字形，不是叠两段字。阴影继续使用共同 shadow。颜色停止点从 0 到 1，拒绝无效颜色、未排序或重复 offset。排版为描边预留空间，避免将效果截在文字框外；极端参数会拒绝，而非静默裁掉。
 

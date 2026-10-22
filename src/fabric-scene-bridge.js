@@ -1,3 +1,4 @@
+import {hasGraphicEffects,graphicPaintFrame,inkEffectSVG} from './graphic-effects.js';
 import {prepareJournalFont} from './journal-fonts.js';
 import {scaleTextEffects} from './text-effects.js';
 import {applyScenePatchBatch} from './scene-edit-kernel.js';
@@ -24,7 +25,7 @@ const ringPath=(points,width,height)=>points.map(([x,y],index)=>
 export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=>null}={}){
   const configureControls=object=>configureFabricEditorFrame(fabric,object);
   const maskGeometry=mask=>[[mask.outer,...(mask.holes||[])]];
-  const clipPath=(geometry,width,height,{page=false,topOffset=0}={})=>{
+  const clipPath=(geometry,width,height,{page=false,topOffset=0,leftOffset=0}={})=>{
     // A compound path keeps openings transparent. Fabric recenters Path data
     // around its own bounds, so place that center back in the Scene frame.
     if(!geometry.length)return new fabric.Path('M 0 0',{fill:'black',stroke:null});
@@ -33,7 +34,7 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
     const centerY=(Math.min(...ys)+Math.max(...ys))/2;
     const path=geometry.flatMap(polygon=>polygon.map(ring=>ringPath(ring,width,height))).join(' ');
     return new fabric.Path(path,{originX:'center',originY:'center',
-      left:(centerX-(page?0:.5))*width,
+      left:(centerX-(page?0:.5))*width+leftOffset,
       top:(centerY-(page?0:.5))*height+topOffset,
       fill:'black',stroke:null,fillRule:'evenodd',absolutePositioned:page});
   };
@@ -157,11 +158,14 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
       const {objects,options}=await fabric.loadSVGFromString(shapeSVG(node));
       if(!objects.length)throw Error('图形无法由画布引擎解析：'+node.id);
       object=fabric.util.groupSVGElements(objects,options);
-      object.sceneFrameWidth=positive(options.viewBoxWidth||options.width);
-      object.sceneFrameHeight=positive(options.viewBoxHeight||options.height);
-      object.set({originX:'center',originY:'center',left:finite(node.x),top:finite(node.y),
-        scaleX:positive(node.width)/object.sceneFrameWidth,
-        scaleY:positive(node.height)/object.sceneFrameHeight});
+      if(hasGraphicEffects(node)){
+        const frame=graphicPaintFrame(node),a=(node.rotation||0)*Math.PI/180,dx=(frame.right-frame.left)/2,dy=(frame.bottom-frame.top)/2;
+        object.sceneFrameWidth=node.width;object.sceneFrameHeight=node.height;object.scenePaintInsets=frame;
+        object.set({originX:'center',originY:'center',left:node.x+dx*Math.cos(a)-dy*Math.sin(a),top:node.y+dx*Math.sin(a)+dy*Math.cos(a),scaleX:1,scaleY:1});
+      }else{
+        object.sceneFrameWidth=positive(options.viewBoxWidth||options.width);object.sceneFrameHeight=positive(options.viewBoxHeight||options.height);
+        object.set({originX:'center',originY:'center',left:finite(node.x),top:finite(node.y),scaleX:positive(node.width)/object.sceneFrameWidth,scaleY:positive(node.height)/object.sceneFrameHeight});
+      }
     }else if(node.type==='text'){
       await prepareJournalFont(node);
       const frameHeight=positive(node.height,135),radians=finite(node.rotation)*Math.PI/180;
@@ -189,7 +193,8 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
       if(node.vectorMask)throw Error('墨迹蒙版需要先将墨迹分组，再在组上添加裁切蒙版');
       if(!node.points?.length)return null;
       const color=node.color||'#2b5245',width=positive(node.width,3);
-      if(node.penStyle==='pressure'){
+      if(hasGraphicEffects(node)){const {svg,frame}=inkEffectSVG(node),parsed=await fabric.loadSVGFromString(svg);object=fabric.util.groupSVGElements(parsed.objects,parsed.options);object.set({originX:'center',originY:'center',left:frame.x+frame.width/2,top:frame.y+frame.height/2,scaleX:1,scaleY:1});}
+      else if(node.penStyle==='pressure'){
         object=new fabric.Path(pressureInkPath(node),{fill:color,stroke:null,strokeWidth:0});
       }else if(node.points.length===1){
         const point=node.points[0];
@@ -249,7 +254,7 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
       }
     }else throw Error('不支持的 Scene 图层：'+node.type);
     if(node.type==='shape'&&node.vectorMask)object.clipPath=clipPath(maskGeometry(node.vectorMask),
-      object.sceneFrameWidth,object.sceneFrameHeight);
+      object.sceneFrameWidth,object.sceneFrameHeight,object.scenePaintInsets?{leftOffset:(object.scenePaintInsets.left-object.scenePaintInsets.right)/2,topOffset:(object.scenePaintInsets.top-object.scenePaintInsets.bottom)/2}:{});
     object.set({angle:finite(node.rotation),opacity:finite(node.opacity,1),
       selectable:node.type!=='ink'&&!node.locked&&!node.isLocked&&
         !(node.type==='group'&&containsLocked(node.children)),
@@ -306,7 +311,7 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
         const angle=finite(object.angle)*Math.PI/180;
         node.x=center.x-Math.sin(angle)*offset;
         node.y=center.y+Math.cos(angle)*offset;
-      }else{node.x=center.x;node.y=center.y;}
+      }else{node.x=center.x;node.y=center.y;if(node.type==='shape'&&object.scenePaintInsets){const p=object.scenePaintInsets,a=finite(object.angle)*Math.PI/180,dx=(p.right-p.left)*object.scaleX/2,dy=(p.bottom-p.top)*object.scaleY/2;node.x-=dx*Math.cos(a)-dy*Math.sin(a);node.y-=dx*Math.sin(a)+dy*Math.cos(a);}}
       const previousWidth=node.width,previousHeight=node.height;
       node.width=(node.type==='text'?(textChanged?node.width:node.width*object.width/(object.sceneNativeTextWidth||object.width)):node.type==='shape'?object.sceneFrameWidth:object.width)*object.scaleX;
       node.height=node.type==='text'?textFrame:

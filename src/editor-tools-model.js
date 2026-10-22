@@ -1,3 +1,4 @@
+import {withGraphicEffects,graphicGradientID,graphicPaintFrame,hasGraphicEffects} from './graphic-effects.js';
 import {journalFontFamily} from './journal-fonts.js';
 import {textEffectInsets,textContentWidth,textFillStyle,paintTextGlyphs} from './text-effects.js';
 import {traceSmoothInk} from './ink-path-geometry.js';
@@ -18,7 +19,7 @@ const postageEdge=()=>{
 export function shapePaths(kind){return polygons[kind]?[polygons[kind]]:kind==='star'?[radial(10,i=>i%2?.2:.47)]:kind==='burst'?[radial(32,i=>i%2?.35:.47)]:kind==='sparkle'?[radial(8,i=>i%2?.08:.47,Math.PI/4)]:kind==='sun'?[radial(32,i=>i%2?.36:.48)]:kind==='flower'?[radial(160,(_,a)=>.34+.13*Math.cos(a*6))]:kind==='postage'?[postageEdge()]:kind==='scallop'?[radial(160,(_,a)=>.43+.04*Math.cos(a*10))]:null;}
 export function configureShape(shape,kind){Object.assign(shape,{kind,fill:['frame','line','checkbox','grid','dots','stripes'].includes(kind)?null:'#e7eef7',stroke:'#547da4',lineWidth:2,fillOpacity:1,strokeOpacity:1,strokeDash:'solid',opacity:1,width:150,height:105});const paths=shapePaths(kind);if(paths)shape.vectorPaths=paths;else if(kind==='vector')shape.vectorPaths=[[[.1,.1],[.9,.1],[.8,.9],[.2,.9]]];if(['ellipse','star','heart','raindrop','cloud','sun','moon','flower','leaf','sparkle','checkbox','triangle','diamond','hexagon','burst','postage'].includes(kind))shape.width=shape.height=100;if(kind==='line')shape.height=12;if(['ribbon','tag','chevron','ticket','washi','wave','zigzag','bracket'].includes(kind))shape.height=55;return shape;}
 // Geometry and stroke semantics are shared by thumbnails, Fabric and export.
-export function shapeSVG(s){
+function baseShapeSVG(s){
  const safe=v=>String(v).replace(/["<>&]/g,'');
  const stroke=safe(s.stroke||'none'),fill=safe(s.fill||'none'),sw=Math.max(0,s.lineWidth??2)/Math.max(1,s.width||100,s.height||100),fillOpacity=Math.max(0,Math.min(1,s.fillOpacity??1)),strokeOpacity=Math.max(0,Math.min(1,s.strokeOpacity??1));let geometry='',dash=['dash','dot'].includes(s.strokeDash)?s.strokeDash:null,strokeDashes=dash?(dash==='dot'?`${sw} ${sw*2.5}`:`${sw*5} ${sw*3}`):null;
  if(Array.isArray(s.svgPaths)){
@@ -53,8 +54,9 @@ export function shapeSVG(s){
  else geometry='<rect x=".015" y=".015" width=".97" height=".97" rx="'+(['roundedRectangle','frame','checkbox'].includes(s.kind)?Math.max(0,Math.min(.5,s.cornerRadius??.1)):'0')+'"/>';
  return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1" preserveAspectRatio="none" style="width:100%;height:100%" fill="'+fill+'" fill-opacity="'+fillOpacity+'" stroke="'+stroke+'" stroke-opacity="'+strokeOpacity+'" stroke-dasharray="'+(strokeDashes||'none')+'" stroke-width="'+sw+'">'+geometry+'</svg>';
 }
+export function shapeSVG(node){return withGraphicEffects(baseShapeSVG(node.graphicGradient?{...node,fill:'url(#'+graphicGradientID(node)+')'}:node),node);}
 export function shapeThumbnailSVG(shape){
- const width=Math.max(1,Math.min(4096,Number(shape.width)||100)),height=Math.max(1,Math.min(4096,Number(shape.height)||100));return shapeSVG(shape).replace('<svg ',`<svg width="${width}" height="${height}" `);
+ const frame=hasGraphicEffects(shape)?graphicPaintFrame(shape):shape,width=Math.max(1,Math.min(4096,Number(frame.width)||100)),height=Math.max(1,Math.min(4096,Number(frame.height)||100));return shapeSVG(shape).replace('<svg ',`<svg width="${width}" height="${height}" `);
 }
 export function straightStroke(stroke){if(stroke.points.length<2)return stroke;const a=stroke.points[0],b=stroke.points.at(-1);return {...stroke,points:stroke.points.map((p,i)=>({...p,x:a.x+(b.x-a.x)*i/(stroke.points.length-1),y:a.y+(b.y-a.y)*i/(stroke.points.length-1)}))};}
 export function segmentDistance(p,a,b){const dx=b.x-a.x,dy=b.y-a.y,t=Math.max(0,Math.min(1,((p.x-a.x)*dx+(p.y-a.y)*dy)/(dx*dx+dy*dy||1)));return Math.hypot(p.x-a.x-t*dx,p.y-a.y-t*dy);}

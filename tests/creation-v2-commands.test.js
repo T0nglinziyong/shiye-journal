@@ -31,18 +31,18 @@ test('published schema exposes current capabilities and rejects deferred geometr
 test('page and relative commands create editable native Scene nodes',async()=>{
  const {run}=await setup(paper('photo-1',30,20));
  const result=run([add('photo',{...at,at:[.5,.4]}),{op:'text.add',id:'caption',content:'今天看见的一角',place:{reference:'node:photo',referenceAnchor:'bottom-center',anchor:'top-center',offset:{value:[0,4],unit:'mm'}},size:{width:60,unit:'mm'},style:{fontSizePt:12,color:'#334d4a'}},
-  {op:'text.update',target:'caption',content:'今天看见的一角。',style:{fontSizePt:14,lineHeight:1.45}},
+  {op:'layer.update',target:'caption',content:'今天看见的一角。',style:{fontSizePt:14,lineHeight:1.45}},
   {op:'graphic.add',id:'dot',geometry:{kind:'ellipse'},place:{reference:'page',at:[20,20],unit:'mm'},size:{width:5,height:5,unit:'mm'},style:{fill:'#aabbcc',shadow:{offsetMm:[1,2],blurMm:1,color:'#112233'}}}]);
  const nodes=result.page.layers,photo=nodes.find(n=>n.creativePieceID==='photo'),caption=nodes.find(n=>n.agentKey==='caption'),dot=nodes.find(n=>n.id==='dot');
  assert.ok(photo&&caption&&dot);assert.equal(caption.content,'今天看见的一角。');assert.ok(caption.fixedLineHeight>caption.fontSize);assert.ok(caption.y>photo.y);assert.equal(dot.kind,'ellipse');assert.equal(dot.shadow.color,'#112233');
- const revised=run([{op:'group.create',id:'note-group',targets:['caption','dot']},{op:'layer.reorder',target:'dot',order:{before:'caption'}},{op:'group.ungroup',target:'note-group'},{op:'page.update',paperColor:'#eeeeee'}],result);
+ const revised=run([{op:'group.create',id:'note-group',targets:['caption','dot']},{op:'layer.update',target:'dot',order:{before:'caption'}},{op:'group.ungroup',target:'note-group'},{op:'page.update',paperColor:'#eeeeee'}],result);
  assert.equal(revised.page.paperColor,'#eeeeee');assert.ok(revised.page.layers.some(n=>n.agentKey==='caption'));assert.ok(revised.page.layers.some(n=>n.id==='dot'));assert.doesNotThrow(()=>run([{op:'layout.detach',target:'caption'}],revised));
 });
 test('group.compose creates local children and linked captions survive reopen',async()=>{
  const {run}=await setup(paper('photo-local',30,20));
  const made=run([{op:'group.compose',id:'card',layoutBox:{width:90,height:100,unit:'mm'},place:{...at,rotationDeg:8},children:[add('photo',{...local,at:[.5,.35]}),{op:'text.add',id:'caption',content:'今天的照片',size:{width:45,unit:'mm'},place:{reference:'node:photo',referenceAnchor:'bottom-center',anchor:'top-center',offset:{value:[0,4],unit:'mm'},behavior:'linked'}}]}]);
  const group=made.page.layers.find(n=>n.id==='card');assert.ok(group?.localTransform&&group.children.length===2);assert.notEqual(group.children[0].x,worldBox(made.page,'photo').cx);
- const old=worldBox(made.page,'caption').cy,moved=run([{op:'layer.place',target:'photo',place:local}],structuredClone(made));
+ const old=worldBox(made.page,'caption').cy,moved=run([{op:'layer.update',target:'photo',place:local}],structuredClone(made));
  assert.ok(worldBox(moved.page,'caption').cy>old);assert.ok(moved.page.layers[0].children.some(n=>n.layoutConstraint?.place?.behavior==='linked'));
 });
 test('create update and reparent share parent-relative sizes and sibling order',async()=>{
@@ -50,7 +50,7 @@ test('create update and reparent share parent-relative sizes and sibling order',
  const next=run([{op:'group.compose',id:'frame',layoutBox:{width:100,height:80,unit:'mm'},place:at,children:[
   {op:'graphic.add',id:'back',geometry:{kind:'rect'},size:{reference:'parent',width:.5,height:.5,unit:'ratio'},place:local},
   {...add('photo',local),order:{edge:'back'}},{op:'text.add',id:'note',content:'记录',size:{width:30,unit:'mm'},place:local,order:{after:'photo'}}
- ]},{op:'text.update',target:'note',content:'重新记录',order:{edge:'front'}},{op:'layer.reparent',target:'back',parent:null,order:{edge:'back'}}]);
+ ]},{op:'layer.update',target:'note',content:'重新记录',order:{edge:'front'}},{op:'layer.reparent',target:'back',parent:null,order:{edge:'back'}}]);
  const frame=next.page.layers.find(n=>n.id==='frame');assert.deepEqual(frame.children.map(n=>n.creativePieceID||n.agentKey||n.key),['photo','note']);assert.equal(next.page.layers[0].id,'back');assert.ok(Math.abs(next.page.layers[0].width/next.page.canvas.height*next.page.physicalPageHeightMM-50)<.01);assert.equal(frame.children.at(-1).content,'重新记录');
 });
 test('deleting a referenced layer requires explicit link detachment',async()=>{
@@ -62,7 +62,7 @@ test('deleting a referenced layer requires explicit link detachment',async()=>{
 test('linked ink stays editable while following a moved reference',async()=>{
  const {run}=await setup(paper('ink-anchor',20,20));
  const made=run([add('paper',{...at,at:[.4,.4]}),{op:'graphic.add',id:'mark',geometry:{kind:'stroke',points:[{x:0,y:0},{x:20,y:2}],unit:'mm'},place:{reference:'node:paper',referenceAnchor:'bottom-center',anchor:'top-center',behavior:'linked'},style:{strokeWidthMm:2,stroke:'#ffb344',penStyle:'marker'}}]);
- const old=worldBox(made.page,'mark'),next=run([{op:'layer.place',target:'paper',place:{...at,at:[.6,.6]}}],made);assert.ok(worldBox(next.page,'mark').cx>old.cx+10);assert.ok(next.page.layers.find(n=>n.id==='mark').layoutConstraint);
+ const old=worldBox(made.page,'mark'),next=run([{op:'layer.update',target:'paper',place:{...at,at:[.6,.6]}}],made);assert.ok(worldBox(next.page,'mark').cx>old.cx+10);assert.ok(next.page.layers.find(n=>n.id==='mark').layoutConstraint);
 });
 test('split consumes the real parent and allocates its offcut',async()=>{
  const {run,assets}=await setup();const next=run([add('parent'),{op:'material.split',target:'parent',pieces:[{id:'left',region:rect([0,0,.3,1])},{id:'middle',region:rect([.4,0,.3,1])}]}]);
@@ -79,13 +79,13 @@ test('polygon and SVG split remain disjoint physical source pieces',async()=>{
  attachSceneV2(next.page);assert.equal(next.page.items.filter(n=>!n.isParked).length,2);assert.equal(buildMaterialLedger(next.page,assets).units[0].allocations.filter(n=>!n.parked).length,2);
 });
 test('crop offcut and named window physical core stay in the material ledger',async()=>{
- const {run,assets}=await setup();const cropped=run([add(),{op:'material.crop',target:'paper',resultId:'main',keepRemainder:true,region:rect([.1,.1,.8,.8])}]);
+ const {run,assets}=await setup();const cropped=run([add(),{op:'material.cut',mode:'keep',target:'paper',resultId:'main',keepRemainder:true,region:rect([.1,.1,.8,.8])}]);
  attachSceneV2(cropped.page);assert.ok(cropped.page.items.some(n=>n.creativePieceID==='main'));assert.ok(cropped.page.items.some(n=>n.isParked));
  const next=run([{op:'material.window',target:'main',windowId:'hole-a',resultId:'frame',cutoutId:'core',keepRemainder:true,region:{shape:'ellipse',space:'source',unit:'ratio',box:[.35,.3,.3,.4]}}],cropped);
  attachSceneV2(next.page);assert.ok(next.page.items.some(n=>n.creativePieceID==='frame'&&n.craftWindowIDs?.includes('hole-a')));assert.ok(next.page.items.some(n=>n.creativePieceID==='core'));assert.equal(buildMaterialLedger(next.page,assets).units[0].sourceAreaMM2,8000);
 });
 test('SVG crop polygon window and display mask share the same region parser',async()=>{
- const {run}=await setup();const next=run([add(),{op:'material.crop',target:'paper',region:{shape:'path',space:'source',unit:'ratio',d:'M .1 .1 L .9 .1 L .9 .9 L .1 .9 Z'}},{op:'material.window',target:'paper',windowId:'triangle',region:{shape:'polygon',space:'local',unit:'ratio',points:[[.35,.35],[.65,.35],[.5,.65]]}},{op:'material.mask',target:'paper',mode:'intersect',region:{shape:'path',space:'local',unit:'ratio',d:'M .05 .05 L .95 .05 L .95 .95 L .05 .95 Z'}}]);
+ const {run}=await setup();const next=run([add(),{op:'material.cut',mode:'keep',target:'paper',region:{shape:'path',space:'source',unit:'ratio',d:'M .1 .1 L .9 .1 L .9 .9 L .1 .9 Z'}},{op:'material.window',target:'paper',windowId:'triangle',region:{shape:'polygon',space:'local',unit:'ratio',points:[[.35,.35],[.65,.35],[.5,.65]]}},{op:'layer.mask',target:'paper',mode:'intersect',region:{shape:'path',space:'local',unit:'ratio',d:'M .05 .05 L .95 .05 L .95 .95 L .05 .95 Z'}}]);
  attachSceneV2(next.page);const p=next.page.items.find(n=>n.creativePieceID==='paper');assert.equal(p.materialMask?.holes?.length,1);assert.ok(p.vectorMask?.outer?.length>=4);assert.deepEqual(p.craftWindowIDs,['triangle']);
 });
 test('tape retains physical path length and one roll allocation',async()=>{

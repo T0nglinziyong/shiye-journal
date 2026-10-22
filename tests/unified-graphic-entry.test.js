@@ -34,7 +34,7 @@ async function setup(){
 }
 const node=(d,id='g')=>findSceneNode(d.page,id);
 test('one create entry, no decoration namespace, no old operations or duplicate placement vocabulary',()=>{
- assert.equal(Object.keys(creationCommandRegistry).length,36);assert.ok(creationCommandRegistry['graphic.add']);
+ assert.equal(Object.keys(creationCommandRegistry).length,30);assert.ok(creationCommandRegistry['graphic.add']);
  for(const op of ['shape.add','vector.add','ink.add','draw.decorate','graphic.decorate']){assert.equal(creationCommandRegistry[op],undefined);assert.throws(()=>validateCreationV2Commands(tx([{op}])));assert.throws(()=>describeCreationCommand(op));}
  for(const prop of [{target:'title'},{placement:'top-right'},{kind:'star'},{color:'#123456'}])assert.throws(()=>validateCreationV2Commands(tx([{...graphic(),...prop}])));
  assert.throws(()=>validateCreationV2Commands(tx([graphic({kind:'shape',shape:'star'})])));
@@ -70,7 +70,7 @@ test('reference sizes and positions use the same contract in rotated parents and
   graphic({kind:'ellipse'},{size:{reference:'node:title',width:1.1,height:1.2,unit:'ratio'},place:{reference:'node:title',referenceAnchor:'center',rotationSpace:'reference',rotationDeg:0,behavior:'linked'},order:{after:'title'}})
  ]}]);
  const scale=made.page.canvas.height/made.page.physicalPageHeightMM;near(worldBox(made.page,'g').w,55*scale);near(worldBox(made.page,'g').rotation,27);
- const moved=run([{op:'layer.place',target:'title',place:{reference:'parent',at:[.7,.6],unit:'ratio'}}],made);assert.notEqual(worldBox(made.page,'g').cx,worldBox(moved.page,'g').cx);
+ const moved=run([{op:'layer.update',target:'title',place:{reference:'parent',at:[.7,.6],unit:'ratio'}}],made);assert.notEqual(worldBox(made.page,'g').cx,worldBox(moved.page,'g').cx);
  const snapshot=JSON.stringify(moved.page);for(let i=0;i<20;i++)solveSceneLayout(moved.page);assert.equal(JSON.stringify(moved.page),snapshot);
 });
 test('same star can form the main visual or a small accent solely via size and place',async()=>{
@@ -82,7 +82,7 @@ test('relative ink highlight is ordinary geometry, explicit order and style, wit
  near(worldBox(d.page,'g').w,worldBox(d.page,'title').w*.9);assert.equal(d.page.layers[0].id,'g');assert.equal(node(d).penStyle,'marker');
  // It is not a keyword recognizer: multiple lines or non-text references are
  // permitted as ordinary geometric references, never fabricated text semantics.
- const changed=run([{op:'text.update',target:'title',content:'First\nSecond'}],d);assert.equal(node(changed).type,'ink');
+ const changed=run([{op:'layer.update',target:'title',content:'First\nSecond'}],d);assert.equal(node(changed).type,'ink');
 });
 test('stroke intrinsic pressure and zero-span dimensions survive resizing without scaling nib width',async()=>{
  const {run}=await setup();const d=run([graphic({kind:'stroke',unit:'mm',points:[{x:0,y:0,pressure:.2},{x:1,y:0,pressure:.8}]},{size:{width:45,unit:'mm'},style:{stroke:'#334455',strokeWidthMm:4,penStyle:'pressure'}})]),s=d.page.canvas.height/d.page.physicalPageHeightMM;

@@ -1,3 +1,4 @@
+import {reflowLettering} from './scene-lettering.js';
 import {replaceEditableMaterial} from './scene-material-edit.js';
 import {editSceneStructure} from './scene-structure-edit.js';
 import {applySceneNodeChange,applySceneNodePatch,insertSceneLayer} from './scene-edit-kernel.js';
@@ -126,7 +127,8 @@ export function importWebScene(input,assets,{trustedSource=null}={}){
 export function applyWebSceneCommands(document,commands,assets){
   const source=document.source,base=validateWebScene(document.page,source,assets,{final:false});
   if(!commands||commands.baseSceneHash!==craftSceneHash(base))throw Error('工作 Scene 已变化，请 inspect 后重新生成命令');
-  recordManagedChanges(attachSceneV2(structuredClone(source.baseDraft)),base);
+  // Preserve caller's existing management fingerprints: resetting against
+  // the initial task would erase evidence of a later manual edit.
   let draft=attachSceneV2(structuredClone(base));
   const aliases=Object.fromEntries(source.materials.map(m=>[m.alias,m.assetID]));
   const frozen=source.sourceSnapshots.map(s=>assetFromSourceSnapshot(s,{frozenRevision:true}));
@@ -143,7 +145,9 @@ export function applyWebSceneCommands(document,commands,assets){
   if(commands.edits){
     if(!Array.isArray(commands.edits)||commands.edits.length>200)throw Error('每批精确编辑最多 200 项');
     for(const edit of commands.edits){
-      if(edit.op==='properties'){
+      if(edit.op==='lettering-reflow'){
+        reflowLettering(draft,edit.id,edit.change,{policy:AI_SCENE_POLICY});
+      }else if(edit.op==='properties'){
         applySceneNodeChange(draft,edit.id,edit.change,{policy:AI_SCENE_POLICY});
       }else if(edit.op==='patch'){
         const node=assertSceneEditable(draft,edit.id);
@@ -155,7 +159,7 @@ export function applyWebSceneCommands(document,commands,assets){
         if(parent&&parent.type!=='group')throw Error('插入目标必须是组合');
         insertSceneLayer(draft,edit.node,{parent:parent?.id,policy:AI_SCENE_POLICY});
       }else if(edit.op==='delete')editSceneStructure(draft,{kind:'delete',target:edit.id},{policy:AI_SCENE_POLICY});
-      else if(edit.op==='group')editSceneStructure(draft,{kind:'group',targets:edit.ids,options:{id:edit.id,name:edit.name||'手帐组合'}},{policy:AI_SCENE_POLICY});
+      else if(edit.op==='group')editSceneStructure(draft,{kind:'group',targets:edit.ids,options:{id:edit.id,name:edit.name||'手帐组合',...(edit.spatial?{spatial:true,layoutBox:edit.layoutBox}:{})}},{policy:AI_SCENE_POLICY});
       else if(edit.op==='ungroup'){if(!editSceneStructure(draft,{kind:'ungroup',target:edit.id},{policy:AI_SCENE_POLICY}))throw Error('没有找到组合');}
       else if(edit.op==='move')editSceneStructure(draft,{kind:'move',target:edit.id,options:{parentID:edit.parent??null,beforeID:edit.before??null}},{policy:AI_SCENE_POLICY});
       else if(edit.op==='transform-group')transformSceneGroup(draft,edit.id,edit.transform);
@@ -168,6 +172,7 @@ export function applyWebSceneCommands(document,commands,assets){
   }
   const decisions=commands.materialDecisions??document.materialDecisions;
   if(commands.materialDecisions!==undefined)validateMaterialDecisions(decisions,draft,source);
+  recordManagedChanges(base,draft);
   const next=webSceneDocument(source,draft,commands.title??document.title,decisions);
   validateWebScene(next.page,source,assets,{final:false});
   return next;

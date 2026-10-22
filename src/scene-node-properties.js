@@ -1,29 +1,20 @@
-import {replaceGraphicGeometry,resizeGraphicInk,inkLocalFrame} from './graphic-geometry.js';
+import {validateGraphicEffects} from './graphic-effects.js';
+import {replaceGraphicGeometry} from './graphic-geometry.js';
 import {validateTextEffects} from './text-effects.js';
 // Public property language -> canonical Scene data, followed by ONE reflow.
 // Called by all create/update paths before anchors and linked dependencies.
-import {creationReferenceBox} from './creation-placement.js';
+import {dimension,dimensions,resizeDigitalNode} from './scene-sizing.js';
+export {dimension,dimensions} from './scene-sizing.js';
 import {assertSceneCapability,AI_SCENE_POLICY} from './scene-edit-policy.js';
 const sceneScale=page=>page.canvas.height/page.physicalPageHeightMM;
 import {reflowSceneText} from './scene-text-layout.js';
 
-export function dimension(page,size,key,parentID=null){
- const value=size?.[key];if(!(Number.isFinite(value)&&value>0))throw Error('size.'+key+' 必须是正数');
- if(size.unit==='mm')return value;
- if(size.unit==='ratio'){const ref=creationReferenceBox(page,size.reference,parentID);return value*(key==='width'?ref.w:ref.h)/sceneScale(page);}
- throw Error('尺寸单位无效');
-}
-export function dimensions(page,size,{parentID=null,ratio=1}={}){
- let width=size.width===undefined?null:dimension(page,size,'width',parentID),height=size.height===undefined?null:dimension(page,size,'height',parentID);
- if(width===null&&height===null)throw Error('size 需要宽或高');
- if(size.aspect==='preserve'&&width!==null&&height!==null&&Math.abs(width/height-ratio)>1e-6)throw Error('保持宽高比与指定尺寸矛盾');
- if(width===null)width=height*ratio;if(height===null)height=width/ratio;return {width,height};
-}
 export function styleFor(type,style,page,node={}){
  if(!style)return {};
  const s=sceneScale(page),mapping={opacity:'opacity',blendMode:'blendMode',shadow:'shadow'};
  if(type==='material')mapping.flipHorizontal='isFlippedHorizontally';
  if(type==='text')Object.assign(mapping,{outline:'textOutline',gradient:'textGradient',color:'color',fontSizePt:'fontSize',fontFamily:'fontName',fontPreset:'style',fontWeight:'bold',textAlign:'alignment',italic:'italic',underline:'underline',strikethrough:'strikethrough',letterSpacingMm:'letterSpacing',paragraphSpacingMm:'paragraphSpacing',lineSpacingMm:'lineSpacing',curveHeightMm:'curveHeight',lineHeight:'fixedLineHeight'});
+ if(['shape','ink'].includes(type))Object.assign(mapping,{outline:'graphicOutline',gradient:'graphicGradient'});
  if(type==='shape')Object.assign(mapping,{fill:'fill',stroke:'stroke',strokeWidthMm:'lineWidth',fillOpacity:'fillOpacity',strokeOpacity:'strokeOpacity',strokeDash:'strokeDash',cornerRadiusRatio:'cornerRadius'});
  if(type==='ink')Object.assign(mapping,{stroke:'color',strokeWidthMm:'width',penStyle:'penStyle'});
  const result={};
@@ -49,24 +40,17 @@ export function changedNodeProperties(page,node,change,parentID=null,{policy=AI_
  if(change.kind!==undefined){if(node.type!=='shape'||node.svgPaths)throw Error('kind 只适用于基础图形');next.kind=change.kind==='rect'?'rectangle':change.kind;}
  if(change.geometry)replaceGraphicGeometry(next,change.geometry,s);
  if(change.size&&node.type!=='text'){
-  if(node.type==='material')assertSceneCapability(policy,'material.visualResize',[node],confirmation);
-  else if(!['shape','ink'].includes(node.type))throw Error('组合不能通过 size 隐式缩放');
-  if(node.type==='ink'){
-   const box=inkLocalFrame(next);
-   const result=box.spanX>1e-9&&box.spanY>1e-9?dimensions(page,change.size,{parentID,ratio:box.width/box.height}):null;
-   const width=result?result.width*s:change.size.width===undefined?box.width:dimension(page,change.size,'width',parentID)*s,height=result?result.height*s:change.size.height===undefined?box.height:dimension(page,change.size,'height',parentID)*s;
-   if(change.size.aspect==='preserve'&&Math.abs(width/height-box.width/box.height)>1e-6)throw Error('保持宽高比与笔迹尺寸矛盾');
-   resizeGraphicInk(next,width,height);
-  }else{
-   const ratio=change.geometry?.kind==='path'?change.geometry.viewBox[2]/change.geometry.viewBox[3]:node.width/node.height;
-   const result=dimensions(page,change.size,{parentID,ratio});next.width=result.width*s;next.height=result.height*s;
-  }
+  if(node.type==='material'){
+   assertSceneCapability(policy,'material.visualResize',[node],confirmation);
+   const d=dimensions(page,change.size,{parentID,ratio:node.width/node.height});next.width=d.width*s;next.height=d.height*s;
+  }else resizeDigitalNode(page,next,change.size,parentID,change.geometry?.kind==='path'?change.geometry.viewBox[2]/change.geometry.viewBox[3]:undefined);
  }
  if(node.type==='text'){
   if(change.size?.width!==undefined)next.width=dimension(page,change.size,'width',parentID)*s;
   reflowSceneText(next,{...(change.size?.height===undefined?{}:{minimumHeight:dimension(page,change.size,'height',parentID)*s}),...(change.style?.lineHeight===undefined?{}:{lineHeightRatio:change.style.lineHeight})});
  }
  validateTextEffects(next);
+ validateGraphicEffects(next);
  const values={};for(const key of new Set([...Object.keys(node),...Object.keys(next)]))if(JSON.stringify(node[key])!==JSON.stringify(next[key]))values[key]=next[key];
  return values;
 }

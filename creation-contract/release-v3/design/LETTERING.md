@@ -5,7 +5,7 @@
 先运行 `node runtime/shiye.cjs fonts` 查看当前环境。fontPreset 是 serif/sans/rounded/hand 类别偏好，不保证机器里都有不同字体；fontFamily 是具体名称，必须确认实际可用。字体文件不打包、不上传；没有字体时换可用字体或保留普通文字，不假装生成了该艺术字体。
 
 ## 一字或一段：普通文字上直接做效果
-通过相同 style 用于 text.add / text.update / layer.update。outline=null、gradient=null 清除对应效果，正文仍可改。
+通过相同 style 用于 text.add / layer.update / layer.update。outline=null、gradient=null 清除对应效果，正文仍可改。
 
 ```json
 {"op":"text.add","id":"accent-word","content":"试","place":{"reference":"page","at":[45,40],"unit":"mm"},"size":{"width":24,"unit":"mm"},"style":{"fontSizePt":30,"fontPreset":"serif","fontWeight":"bold","color":"#426076","outline":{"color":"#D8B980","widthMm":0.6,"offsetMm":[0,0]}}}
@@ -17,7 +17,7 @@
 - **真实渐变**：style.gradient 的 stops 从 0 到 1 严格递增；角度 0 为横向，90 为纵向。只改变字形内部颜色，不是把两段文字错位叠加。
 
 ```json
-{"op":"text.update","target":"accent-word","style":{"gradient":{"angleDeg":90,"stops":[{"offset":0,"color":"#C77A58"},{"offset":0.5,"color":"#9A7BA3"},{"offset":1,"color":"#526E9C"}]},"outline":{"color":"#EFE4D1","widthMm":0.5,"offsetMm":[0.5,0.7]}}}
+{"op":"layer.update","target":"accent-word","style":{"gradient":{"angleDeg":90,"stops":[{"offset":0,"color":"#C77A58"},{"offset":0.5,"color":"#9A7BA3"},{"offset":1,"color":"#526E9C"}]},"outline":{"color":"#EFE4D1","widthMm":0.5,"offsetMm":[0.5,0.7]}}}
 ```
 
 ## 逐字变化：不用人工计算所有字的位置
@@ -47,3 +47,10 @@
 
 ## 在编辑器里继续精修
 选中文字后，工具栏“文字样式”或检查器“艺术文字效果”可选择原色、描边、错位轮廓、渐变、渐变描边、投影，并调整颜色与轮廓宽度；仍是同一个可编辑 text 节点，不生成不可编辑的截图。
+
+## 修改整段艺术标题
+text.lettering 创建后，普通字位属性仍用 layer.update；需要改变整段内容、增减字数或重排字距时用 text.reflow。例：
+```json
+{"op":"text.reflow","target":"title","content":"再去看看","gapMm":1.1,"letters":[{"index":1,"style":{"color":"#B46345"},"rotationDeg":5}]}
+```
+已有字位按索引保留身份与未覆盖的样式，新字位获得独立 ID；指定 style 的字段才统一覆盖。普通单字已被用户接管/锁定时，AI 不可借整体重排覆盖。字体能力以 fonts 实际报告为准。

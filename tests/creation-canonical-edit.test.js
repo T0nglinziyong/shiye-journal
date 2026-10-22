@@ -31,7 +31,7 @@ const approx=(a,b)=>assert.ok(Math.abs(a-b)<1e-6,`${a} != ${b}`);
 test('creation, specialized and generic text edits produce exactly the same geometry and retained sizing intent',async()=>{
  const {run}=await fixture(),initial=run([text()]);
  for(const change of [{style:{fontSizePt:20}},{size:{width:20,unit:'mm'}},{content:'新的短句'},{style:{lineHeight:2,letterSpacingMm:.2}},{size:{width:80,height:70,unit:'mm'},style:{fontSizePt:14}}]){
-  const specialized=run([{op:'text.update',target:'text',...change}],initial),generic=run([{op:'layer.update',target:'text',...change}],initial);
+  const specialized=run([{op:'layer.update',target:'text',...change}],initial),generic=run([{op:'layer.update',target:'text',...change}],initial);
   assert.deepEqual(node(specialized),node(generic));
   const original=text(),created=run([text({...change,size:{...original.size,...change.size},style:{...original.style,...change.style}})]);
   for(const key of ['fontSize','width','height','fixedLineHeight','textLayout'])assert.deepEqual(node(created)[key],node(generic)[key],key);
@@ -40,14 +40,14 @@ test('creation, specialized and generic text edits produce exactly the same geom
 });
 test('minimum text height and relative line height persist after serialization and content changes',async()=>{
  const {run,assets}=await fixture();let d=run([text({content:'一行',size:{width:80,height:60,unit:'mm'}})]);
- d=JSON.parse(JSON.stringify(d));d=run([{op:'text.update',target:'text',style:{fontSizePt:20}}],d);
+ d=JSON.parse(JSON.stringify(d));d=run([{op:'layer.update',target:'text',style:{fontSizePt:20}}],d);
  const s=d.page.canvas.height/d.page.physicalPageHeightMM;approx(node(d).fixedLineHeight,node(d).fontSize*1.4);assert.ok(node(d).height>=60*s);
  const imported=importEditableWork(JSON.stringify(d),assets);assert.ok(imported.drafts[0].layers.some(n=>n.textLayout?.minimumHeight===60*s));
 });
 test('reflow precedes anchoring and a linked follower sees the new height in the same transaction',async()=>{
  const {run}=await fixture();const relation={reference:'node:text',referenceAnchor:'bottom-center',anchor:'top-center',offset:{value:[0,4],unit:'mm'},behavior:'linked'};
  const initial=run([text({place:{...at(),rotationDeg:25}}),{op:'graphic.add',id:'follower',geometry:{kind:'ellipse'},size:{width:4,unit:'mm'},place:relation}]);
- const a=run([{op:'text.update',target:'text',style:{fontSizePt:20}}],initial),b=run([{op:'layer.update',target:'text',style:{fontSizePt:20}}],initial);
+ const a=run([{op:'layer.update',target:'text',style:{fontSizePt:20}}],initial),b=run([{op:'layer.update',target:'text',style:{fontSizePt:20}}],initial);
  assert.deepEqual(a.page,b.page);assert.notEqual(worldBox(a.page,'follower').cy,worldBox(initial.page,'follower').cy);
  const stable=JSON.stringify(a.page);for(let i=0;i<5;i++)solveSceneLayout(a.page);assert.equal(JSON.stringify(a.page),stable);
 });
@@ -70,14 +70,14 @@ test('digital geometry update, stroke style and repeat keep editable identities'
  {op:'graphic.add',id:'ink',geometry:{kind:'stroke',points:[{x:0,y:0,pressure:.2},{x:20,y:0,pressure:.8}],unit:'mm'},place:{...at(),rotationDeg:30},style:{stroke:'#334455',strokeWidthMm:1,penStyle:'pressure'}}]);
  d=run([{op:'layer.update',target:'v',geometry:{kind:'path',paths:[{d:'M0 0 L20 0 L10 10 Z',style:{fill:'#FF0000'}}],viewBox:[0,0,20,10]},style:{strokeWidthMm:1}},
  {op:'layer.update',target:'ink',geometry:{kind:'stroke',points:[{x:0,y:0,pressure:.1},{x:30,y:0,pressure:.9}],unit:'mm'}},
- {op:'layer.repeat',target:'v',copies:[{id:'copy',place:at(120,70),style:{opacity:.5}}]}],d);
+ {op:'layer.duplicate',target:'v',id:'copy',place:at(120,70)},{op:'layer.update',target:'copy',style:{opacity:.5}}],d);
  assert.equal(node(d,'copy').svgPaths[0].d,node(d,'v').svgPaths[0].d);assert.equal(node(d,'copy').opacity,.5);approx(worldBox(d.page,'ink').rotation,30);assert.deepEqual(node(d,'ink').points.map(p=>p.p),[.1,.9]);
 });
 for(const style of ['torn','ticket_notch','postage','fringe','partial_tear'])test('edge capability '+style+' remains available without raw plan parameters',async()=>{
  const {run}=await fixture();const d=run([add(),{op:'material.edge',target:'paper',edge:{style,edges:['bottom'],depthMm:1,periodMm:16,seed:42}}]);assert.equal(node(d,'paper').materialSteps.at(-1).style,style);
 });
 test('trim diagonal contour and restore remain bounded by real source ledger',async()=>{
- const {run,assets}=await fixture();let d=run([add(),{op:'material.trim',target:'paper',edge:'left',quantity:{value:5,unit:'mm',mode:'remove'}},{op:'material.contour',target:'paper',shape:'rounded',radiusRatio:.1},{op:'material.diagonal',target:'paper',line:{from:[0,0],to:[1,1],unit:'ratio',space:'local'},keep:'left'}]);
+ const {run,assets}=await fixture();let d=run([add(),{op:'material.contour',target:'paper',shape:'rounded',radiusRatio:.1},{op:'material.cut',target:'paper',region:{shape:'edge',edge:'left',space:'local',amount:5,unit:'mm'},mode:'remove'},{op:'material.cut',target:'paper',region:{shape:'halfPlane',from:[0,0],to:[1,1],unit:'ratio',space:'local',side:'left'},mode:'keep'}]);
  assert.ok(node(d,'paper').materialMask);d=run([{op:'material.restore',target:'paper'}],d);approx(buildMaterialLedger(attachSceneV2(d.page),assets).units[0].usedAreaMM2,4800);
 });
 test('glyph outlines use actual fonts and real transparent cut geometry, unavailable font never changes the input',async()=>{
@@ -93,7 +93,7 @@ test('complex tape path, texture and caps retain all points and one physical str
 });
 test('layout reuse maps distinct physical sources and internal linked references without copying source occupancy',async()=>{
  const {run,assets}=await fixture();const group={op:'group.compose',id:'card',layoutBox:{width:80,height:100,unit:'mm'},place:at(),children:[add('p','m1',{reference:'parent',at:[.5,.4],unit:'ratio'}),text({id:'label',content:'新组合',size:{width:70,unit:'mm'},place:{reference:'node:p',referenceAnchor:'bottom-center',anchor:'top-center',behavior:'linked'}})]};
- const d=run([group,{op:'layout.reuse',target:'card',id:'card2',materialMap:{m1:'m2'},place:at(180,70)}]);
+ const d=run([group,{op:'layer.duplicate',target:'card',id:'card2',materialMap:{p:'m2'},place:at(180,70)}]);
  assert.equal(node(d,'card2-p').assetID,assets[1].id);assert.equal(node(d,'card2-label').layoutConstraint.place.reference,'node:card2-p');assert.equal(buildMaterialLedger(attachSceneV2(d.page),assets).units.length,2);
 });
 test('replacement, flip, layout alignment and material relationship use current public fields',async()=>{

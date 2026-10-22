@@ -57,11 +57,11 @@ test('one public protocol exposes executable help and delivers mask vector ink t
   assert.ok(help.operations.some(row=>row.name==='material.glyphKnockout'));assert.ok(help.operations.every(row=>!row.name.startsWith('native.')));assert.ok(help.topics.includes('place'));
   assert.doesNotMatch(new TextDecoder().decode(files['api/commands.schema.json']),/native\./);
   assert.equal((await read('work/commands.json')).protocolVersion,2);ok('begin','work/next.json','--protocol=2');assert.equal((await read('work/next.json')).protocolVersion,2);
-  await apply([material('photo','m1',ratio(.5,.4)),{op:'material.crop',target:'photo',region:{shape:'rect',space:'source',unit:'ratio',box:[0,0,.5,1]}},{op:'material.mask',target:'photo',region:{shape:'ellipse',space:'local',unit:'ratio',box:[0,0,1,1]},mode:'replace'},
+  await apply([material('photo','m1',ratio(.5,.4)),{op:'material.cut',mode:'keep',target:'photo',region:{shape:'rect',space:'source',unit:'ratio',box:[0,0,.5,1]}},{op:'layer.mask',target:'photo',region:{shape:'ellipse',space:'local',unit:'ratio',box:[0,0,1,1]},mode:'replace'},
    {op:'text.add',id:'caption',content:'这张照片让我想起今天。',place:{reference:'node:photo',referenceAnchor:'bottom-center',anchor:'top-center',offset:{value:[0,5],unit:'mm'}},size:{width:60,unit:'mm'},style:{fontSizePt:12,color:'#334d4a'}},
    {op:'graphic.add',id:'triangle',geometry:{kind:'path',paths:[{d:'M0 10 L5 0 L10 10 Z',style:{fill:'#aabbcc'}}],viewBox:[0,0,10,10]},place:ratio(.2,.2),size:{width:10,height:10,unit:'mm'}},
    {op:'graphic.add',id:'stroke',geometry:{kind:'stroke',points:[{x:0,y:0},{x:20,y:0}],unit:'mm'},place:ratio(.5,.8),style:{strokeWidthMm:2,stroke:'#334d4a',penStyle:'marker'}},decision('m1','crafted')]);
-  ok('preview');ok('pack');const output=await read('output/project.shiyeproject.json'),m=output.page.layers.find(n=>n.type==='material');assert.ok(m.vectorMask);assert.equal(m.materialMask??null,null);assert.equal(m.cropRect.width,.5);
+  ok('preview');ok('pack');const output=await read('output/project.shiyeproject.json'),m=output.page.layers.find(n=>n.type==='material');assert.ok(m.vectorMask);assert.ok(m.materialMask);assert.ok(m.materialMask.outer.every(([x])=>x<=.5+1e-8));assert.equal(m.cropRect?.width??1,1);
   for(const type of ['material','text','shape','ink'])assert.equal(output.page.layers.filter(n=>n.type===type).length,1);
   assert.equal((await readFile(join(dir,'output/project.shiyeproject.json'),'utf8')).includes('\n'),false);
  });
@@ -140,7 +140,7 @@ test('forcing an unavailable node backend reports the current self-test command 
 test('check and proposal leave Scene unchanged; unified text update and review deliver exact units',async()=>{
  await withPackage([paper()],async({dir,run,ok,read,write})=>{
   const before=await readFile(join(dir,'scene.json'));assert.equal(ok('describe','material.split').name,'material.split');ok('begin','work/draft.json');assert.match(run('begin','work/draft.json').stderr,/DRAFT_EXISTS/);
-  const commands=await read('work/draft.json');commands.operations=[material('piece','m1',mm(30,40)),text('caption','真实字号',55,20,40,12),{op:'text.update',target:'caption',style:{fontSizePt:10},place:mm(60,25)},decision('m1')];await write('work/draft.json',commands);
+  const commands=await read('work/draft.json');commands.operations=[material('piece','m1',mm(30,40)),text('caption','真实字号',55,20,40,12),{op:'layer.update',target:'caption',style:{fontSizePt:10},place:mm(60,25)},decision('m1')];await write('work/draft.json',commands);
   ok('check','work/draft.json');assert.deepEqual(await readFile(join(dir,'scene.json')),before);ok('preview','--commands','work/draft.json');assert.deepEqual(await readFile(join(dir,'scene.json')),before);await assert.rejects(readFile(join(dir,'output/preview.png')),{code:'ENOENT'});
   ok('apply','work/draft.json');const scene=await read('scene.json'),caption=scene.page.layers.find(n=>n.agentKey==='caption'),scale=scene.page.canvas.height/scene.page.physicalPageHeightMM;
   assert.ok(Math.abs(caption.fontSize-10*25.4/72*scale)<1e-6);assert.ok(Math.abs(caption.x-60*scale)<1e-6);ok('preview');ok('review','--result','pass');ok('pack');assert.deepEqual((await read('output/manifest.json')).visualReview,{result:'pass',source:'agent-declared'});
@@ -150,7 +150,7 @@ test('eight required materials survive revisions grouping preview delivery and r
  const assets=Array.from({length:8},(_,i)=>paper('required-'+i,20,24)),p=project('八件素材双页',{mode:'spread',ratio:'b6'});p.requiredAssetIDs=assets.map(a=>a.id);
  await withPackage(assets,async({dir,ok,read,apply})=>{
   await apply([...assets.map((a,i)=>material('piece-'+i,'m'+(i+1),mm(25+(i%4)*44,40+Math.floor(i/4)*43))),...assets.map((a,i)=>decision('m'+(i+1)))]);
-  await apply([text('title','把今天留在纸上',80,16,95,18),text('note','八件小东西有各自的位置，也可以组成同一段记忆。',190,145,80,10),{op:'graphic.add',id:'accent',geometry:{kind:'ellipse'},place:mm(145,18),size:{width:7,height:7,unit:'mm'},style:{fill:'#d5e2d6'},order:{after:'title'}},{op:'group.create',id:'heading-group',targets:['title','accent']},{op:'layer.place',target:'heading-group',place:mm(115,20)}]);
-  await apply([{op:'text.update',target:'note',style:{fontSizePt:11},place:mm(185,142),content:'八件小东西有各自的位置。\n把它们放在一起，今天就有了形状。'}]);ok('preview');ok('pack');assert.equal((await read('scene.json')).materialDecisions.length,8);assert.equal(importEditableWork(await readFile(join(dir,'output/project.shiyeproject.json'),'utf8'),assets).drafts[0].items.length,8);
+  await apply([text('title','把今天留在纸上',80,16,95,18),text('note','八件小东西有各自的位置，也可以组成同一段记忆。',190,145,80,10),{op:'graphic.add',id:'accent',geometry:{kind:'ellipse'},place:mm(145,18),size:{width:7,height:7,unit:'mm'},style:{fill:'#d5e2d6'},order:{after:'title'}},{op:'group.create',id:'heading-group',targets:['title','accent']},{op:'layer.update',target:'heading-group',place:mm(115,20)}]);
+  await apply([{op:'layer.update',target:'note',style:{fontSizePt:11},place:mm(185,142),content:'八件小东西有各自的位置。\n把它们放在一起，今天就有了形状。'}]);ok('preview');ok('pack');assert.equal((await read('scene.json')).materialDecisions.length,8);assert.equal(importEditableWork(await readFile(join(dir,'output/project.shiyeproject.json'),'utf8'),assets).drafts[0].items.length,8);
  },{p});
 });

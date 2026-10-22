@@ -1,3 +1,4 @@
+import {hasGraphicEffects,graphicPaintFrame,inkEffectSVG} from './graphic-effects.js';
 import {prepareJournalFont} from './journal-fonts.js';
 import {paintMaterialImage} from './material-paint.js';
 import {sceneDisplaySiblings} from './craft-display.js';
@@ -45,6 +46,7 @@ export async function renderSceneCanvas(draft,{scale=1,loadMaterialImage,createC
    target.save();
    try{
      if(item.shadow){target.shadowColor=item.shadow.color;target.shadowBlur=item.shadow.blur;target.shadowOffsetX=item.shadow.offsetX;target.shadowOffsetY=item.shadow.offsetY;}
+     if(kind==='ink'&&hasGraphicEffects(item)){const {svg,frame}=inkEffectSVG(item),key=svg;if(!shapes.has(key))shapes.set(key,loadShapeImage('data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg),frame));target.globalAlpha=item.opacity??1;target.globalCompositeOperation=item.blendMode==='multiply'?'multiply':'source-over';target.drawImage(await shapes.get(key),frame.x,frame.y,frame.width,frame.height);return;}
      if(kind==='ink'){target.globalAlpha=item.opacity??1;target.globalCompositeOperation=(item.blendMode==='multiply'?'multiply':'source-over');drawInk(target,[item]);return;}
      target.translate(item.x,item.y);target.rotate((item.rotation||0)*Math.PI/180);
      target.globalAlpha=item.opacity??1;
@@ -53,10 +55,10 @@ export async function renderSceneCanvas(draft,{scale=1,loadMaterialImage,createC
      if(style.mask&&kind!=='material')applyVectorMask(target,style.mask,item.width,item.height);
      if(kind==='material')await drawMaterial(item,target);
      else if(kind==='shape'){
-       const svg=shapeSVG(item);
+       const svg=shapeSVG(item),frame=hasGraphicEffects(item)?graphicPaintFrame(item):{width:item.width,height:item.height,left:0,top:0};
        const key=svg+'@'+item.width+'x'+item.height;
-       if(!shapes.has(key))shapes.set(key,loadShapeImage('data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg),item));
-       target.drawImage(await shapes.get(key),-item.width/2,-item.height/2,item.width,item.height);
+       if(!shapes.has(key))shapes.set(key,loadShapeImage('data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg),frame));
+       target.drawImage(await shapes.get(key),-item.width/2-frame.left,-item.height/2-frame.top,frame.width,frame.height);
      }else if(kind==='text')drawSceneText(target,item);
    }finally{target.restore();}
  };

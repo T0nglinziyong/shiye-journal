@@ -6,7 +6,7 @@ Base: e800697110e33526b900ba2268afad0a2edff940 (test). This branch preserves inc
 Avoid both duplicate endpoints and one overly complex universal command. Share property types and units; keep distinct structural and physical-material semantics separate. Reject removed public commands rather than maintaining aliases. Saved Scene projects are not command payloads and must not lose editability.
 
 ## Requested scope
-- P0: layer.update becomes the only ordinary property/position/order update; remove text.update, layer.place, layer.reorder.
+- P0: layer.update becomes the only ordinary property/position/order update; remove layer.update, layer.update, layer.update.
 - P1: a single non-destructive layer.mask with explicit region/mode, including material source/local mapping; real cuts remain separate.
 - P1: unify real keep/remove cutting region/mode in material.cut, replace crop/trim/diagonal public overlaps, preserve splits, named windows, source occupancy and offcuts.
 - P1: graph appearance matches supported shared text outline/gradient style semantics; ensure native Canvas/Fabric/import/export parity.

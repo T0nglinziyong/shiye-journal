@@ -26,7 +26,7 @@
 ```json
 {"op":"graphic.add","id":"ring","geometry":{"kind":"ellipse"},"place":{"reference":"node:caption","referenceAnchor":"center","rotationSpace":"reference","rotationDeg":0,"behavior":"linked"},"size":{"reference":"node:caption","width":1.1,"height":1.15,"unit":"ratio"},"style":{"fill":null,"stroke":"#B38652","strokeWidthMm":0.5}}
 ```
-`size.reference` 在创建或修改时求值；linked 仅跟随位置，不自动缩放圈线。改了正文尺寸后，必要时用同一 size 再更新。当前测量的是布局框，不假装识别关键词或字形像素边缘。
+`size.reference` 默认一次求值；设置 size.behavior="linked" 后，比例尺寸持续跟随参考对象。place.behavior 独立控制位置跟随。尺寸与位置依赖统一进行循环检测；不可用该机制缩放实体材料或整个组。当前测量的是布局框，不假装识别关键词或字形像素边缘。
 
 ## 自由笔迹与高亮：保留真实点与压感
 ```json
@@ -48,3 +48,8 @@ paths 的点位使用自身 viewBox，不是页面坐标；place/size 负责页�
 
 ## 创作判断，而非装饰配额
 先看局部缺什么：联系、强调、方向、重心还是内容。适合小贴纸就使用真实素材，适合短句就写文字，适合图形才用 graphic.add；没有改善就删。点缀阶段是设计判断阶段，不是 API 类别。所有效果用真实 preview 验证；不可用数个小圆填补缺少主块的大片空白。
+
+## 图形也可有艺术外观
+style.outline 与文字同样使用 color、widthMm、offsetMm，style.gradient 使用 angleDeg 和从 0 到 1 的 stops；null 清除。普通图形渐变填在几何内，笔迹渐变沿笔迹图形上色，outline 是外观而非改变来源/路径。自定义 path 的局部显式 fill 优先于全局渐变，需要统一渐变时省略局部 fill。
+
+大小、描边、渐变、透明度与形状可灵活组合。不要因“只是点缀”把所有图形缩成同样小的单色符号；主体图形和较大的图文连接同样有价值。复制后改参数用 layer.duplicate + layer.update，不建立点缀专用接口。
