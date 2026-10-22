@@ -24,7 +24,7 @@ try{
  const missing=await b.evaluate(`(async()=>{
   // Do not remove nodes owned by React. A separate connected fixture also
   // ensures this incomplete cover cannot reuse the normal series cache key.
-  const cover=document.querySelector('#matrix').cloneNode(true);cover.id='missing-cover-fixture';cover.style.cssText='position:absolute;left:-10000px;width:360px;height:300px';document.body.append(cover);
+  const cover=document.querySelector('#matrix').cloneNode(true);cover.id='missing-cover-fixture';cover.style.cssText='position:absolute;left:-10000px;width:360px;height:300px';for(const image of cover.querySelectorAll('img'))image.loading='eager';document.body.append(cover);
   try{
    cover.querySelector('[data-cover-index="0"] img').remove();
    const {loadSeriesCoverSnapshot}=await import('/src/series-cover-snapshot.js');
