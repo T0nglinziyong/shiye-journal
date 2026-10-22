@@ -1,0 +1,33 @@
+name: Unified editing source checkpoint
+on:
+  push:
+    branches: [refactor/creation-unified-editing-20261022]
+    paths: [.github/workflows/unified-editing-source.yml]
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Archive source only for verified local editing
+        run: |
+          mkdir -p /tmp/unified-editing
+          git rev-parse HEAD > /tmp/unified-editing/revision.txt
+          git rev-parse HEAD^{tree} > /tmp/unified-editing/tree.txt
+          git archive HEAD | gzip > /tmp/unified-editing/source.tar.gz
+          cd /tmp/unified-editing && sha256sum source.tar.gz > SHA256SUMS
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: unified-editing-source
+          path: /tmp/unified-editing/
+          retention-days: 1
+# Work checkpoint: P0 remove redundant text.update/layer.place/layer.reorder.
+# P1 unify display mask + physical cut region/mode; add shared graphic effects.
+# P2 linked size graph; safe digital duplicate; editable lettering reflow.
+# No legacy operation aliases; preserve existing Scene data, materials and editor.
+# Final source/tests/help must agree. PR into test only after final CI; existing
+# exact-commit CloudBase release verifies live identity. Remove this workflow
+# before final PR, retain branch and checkpoint history.
