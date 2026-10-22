@@ -58,16 +58,20 @@ test('taxonomy groups cover each existing value exactly once without changing in
   const ids=groups.flatMap(g=>g.options.map(([id])=>id));assert.equal(new Set(ids).size,ids.length);assert.deepEqual(ids.sort(),defs.map(([id])=>id).sort());
  }
 });
-test('series layout chooses fan for 2/3 and matrix for 4/5 while allowing explicit overrides',()=>{
+test('series layout chooses fan, nine-cell grid, then unrestricted pile',()=>{
  assert.equal(seriesCoverLayout(2).kind,'fan');assert.equal(seriesCoverLayout(3).kind,'fan');assert.equal(seriesCoverLayout(4).kind,'grid');assert.equal(seriesCoverLayout(5).kind,'grid');
- assert.equal(seriesCoverLayout(5,'fan').kind,'fan');assert.equal(seriesCoverLayout(2,'grid').kind,'grid');assert.equal(seriesCoverLayout(50).slots.length,5);assert.equal(seriesCoverLayout(0).slots.length,0);
- for(const mode of ['auto','fan','grid'])for(let n=1;n<=5;n++)for(const slot of seriesCoverLayout(n,mode).slots){
+ assert.equal(seriesCoverLayout(5,'fan').kind,'fan');assert.equal(seriesCoverLayout(2,'grid').kind,'grid');assert.equal(seriesCoverLayout(9).slots.length,9);assert.equal(seriesCoverLayout(10).kind,'pile');assert.equal(seriesCoverLayout(50).slots.length,50);assert.equal(seriesCoverLayout(50,'grid').slots.length,9);assert.equal(seriesCoverLayout(0).slots.length,0);
+ for(const mode of ['auto','fan','grid','pile'])for(let n=1;n<=12;n++)for(const slot of seriesCoverLayout(n,mode).slots){
   const a=slot.rotation*Math.PI/180,halfW=(Math.abs(Math.cos(a))*slot.w*360+Math.abs(Math.sin(a))*slot.h*300)/2,halfH=(Math.abs(Math.sin(a))*slot.w*360+Math.abs(Math.cos(a))*slot.h*300)/2;
   assert.ok(slot.x*360-halfW>=0&&slot.x*360+halfW<=360);assert.ok(slot.y*300-halfH>=0&&slot.y*300+halfH<=300);
  }
+ for(const slot of seriesCoverLayout(50,'pile').slots){
+  const a=slot.rotation*Math.PI/180,halfW=(Math.abs(Math.cos(a))*slot.w*360+Math.abs(Math.sin(a))*slot.h*300)/2,halfH=(Math.abs(Math.sin(a))*slot.w*360+Math.abs(Math.cos(a))*slot.h*300)/2;
+  assert.ok(slot.x*360-halfW>=0&&slot.x*360+halfW<=360&&slot.y*300-halfH>=0&&slot.y*300+halfH<=300);
+ }
 });
-test('series matrix keeps all five selected sources in order and produces a bounded 360px image',()=>{
- const series={id:'s'},assets=Array.from({length:7},(_,i)=>({id:'a'+i,seriesID:'s'}));assert.deepEqual(seriesCovers(series,assets).map(a=>a.id),['a0','a1','a2','a3','a4']);
+test('series matrix keeps selected sources in order and produces a bounded 360px image',()=>{
+ const series={id:'s'},assets=Array.from({length:7},(_,i)=>({id:'a'+i,seriesID:'s'}));assert.deepEqual(seriesCovers(series,assets).map(a=>a.id),['a0','a1','a2','a3','a4','a5','a6']);
  assert.deepEqual(seriesCovers({...series,coverAssetIDs:['a6','a1']},assets).map(a=>a.id),['a6','a1']);
  const c=createCanvas(360,300),colors=['#FF0000','#00FF00','#0000FF','#FFFF00','#FF00FF'],images=colors.map(color=>{const i=createCanvas(40,40),x=i.getContext('2d');x.fillStyle=color;x.fillRect(0,0,40,40);return i;});
  const layout=seriesCoverLayout(5);paintSeriesCover(c.getContext('2d'),images,layout,SERIES_COVER_SIZE);

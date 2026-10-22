@@ -1849,16 +1849,18 @@ export function ImportInspectionPage({state,format,onAction,onSettingChange,
       <section className="panel import-inspector"><h2>{snapshot?'页面与颜色校正':state.importMode==='work'?'检查作品图层':'检查识别结果'}</h2>
         {!snapshot?<><p>校正后自动识别；如有漏检，使用左侧的“手动补框”。</p><hr/></>:null}
         <div className="inspector-scroll"><div className="inspector-settings">
-          <label>{snapshot?'页面规格':'当前照片的背景板'}<select id="paper-size" disabled={busy} value={state.paperSize?.startsWith('custom:')?'custom':state.paperSize} onChange={event=>onSettingChange('paperSize',event.target.value)}><PaperSizeOptions includeNone/></select></label>
+          {!snapshot?<h3>纸张矫正</h3>:null}
+          <label>{snapshot?'页面规格':'纸张尺寸'}<select id="paper-size" disabled={busy} value={state.paperSize?.startsWith('custom:')?'custom':state.paperSize} onChange={event=>onSettingChange('paperSize',event.target.value)}><PaperSizeOptions includeNone/></select></label>
           {state.paperSize==='custom'?<div className="import-custom-size"><label>宽 mm<input id="import-paper-width" type="number" min="1" max="10000" defaultValue={state.customImportWidth} onBlur={event=>onSettingChange('customImportWidth',event.target.value)}/></label>
             <label>高 mm<input id="import-paper-height" type="number" min="1" max="10000" defaultValue={state.customImportHeight} onBlur={event=>onSettingChange('customImportHeight',event.target.value)}/></label></div>:null}
           {(snapshot||state.paperSize!=='none')?<><label>{snapshot?'页面方向':'纸张方向'}<select id="paper-orientation" disabled={busy} value={state.paperOrientation||'auto'} onChange={event=>onSettingChange('paperOrientation',event.target.value)}>
             <option value="auto">自动</option><option value="portrait">竖向</option><option value="landscape">横向</option></select></label>
-            <label className="toggle-row">{snapshot?'校正白纸色偏':'识别前均衡光照'}<input id="balance-light" type="checkbox" disabled={busy} checked={!!state.balanceLight} onChange={event=>onRecognitionSettingChange('balanceLight',event.target.checked)}/></label>
-            {!snapshot?<><label className="toggle-row">规则形状规整<input id="import-shape-regularization" type="checkbox" disabled={busy} checked={state.importShapeRegularization!==false} onChange={event=>onRecognitionSettingChange('importShapeRegularization',event.target.checked)}/></label>
-              <label className="toggle-row">恢复重复孔洞<input id="import-apertures" type="checkbox" disabled={busy} checked={state.importApertures!==false} onChange={event=>onRecognitionSettingChange('importApertures',event.target.checked)}/></label>
-              <label>最终素材颜色<select id="import-material-color" disabled={busy} value={state.importMaterialColorMode==='original'?'original':'auto'} onChange={event=>onRecognitionSettingChange('importMaterialColorMode',event.target.value)}><option value="auto">A4 光照与颜色还原</option><option value="original">原始照片颜色</option></select><small>仅影响高清输出，不改变数量与分割边缘。</small></label>
-              <label className="toggle-row">未识别时将整张照片视为背景板<input id="whole-paper" type="checkbox" disabled={busy} checked={!!state.wholePaper} onChange={event=>onSettingChange('wholePaper',event.target.checked)}/></label></>:null}</>:null}
+            {snapshot?<label className="toggle-row">校正白纸色偏<input id="balance-light" type="checkbox" disabled={busy} checked={!!state.balanceLight} onChange={event=>onRecognitionSettingChange('balanceLight',event.target.checked)}/></label>:null}
+            </>:null}
+          {!snapshot?<><label className="toggle-row">未检测到纸张时使用整张照片<input id="whole-paper" type="checkbox" disabled={busy} checked={!!state.wholePaper} onChange={event=>onSettingChange('wholePaper',event.target.checked)}/></label>
+              <h3>合并共同载体</h3><label className="toggle-row">同一纸片上的图案视为一件<input id="import-merge-carrier" type="checkbox" disabled={busy} checked={state.importMergeSharedCarrier!==false} onChange={event=>onRecognitionSettingChange('importMergeSharedCarrier',event.target.checked)}/></label>
+              <h3>轮廓后处理</h3><label className="toggle-row">规则形状规整<input id="import-shape-regularization" type="checkbox" disabled={busy} checked={state.importShapeRegularization!==false} onChange={event=>onRecognitionSettingChange('importShapeRegularization',event.target.checked)}/></label>
+              <label className="toggle-row">恢复重复孔洞<input id="import-apertures" type="checkbox" disabled={busy} checked={state.importApertures!==false} onChange={event=>onRecognitionSettingChange('importApertures',event.target.checked)}/></label></>:null}
           {!snapshot?<><small>{state.paperSize==='none'?'当前照片不计算素材尺寸':'尺寸变化仅更新标尺；不重新抠图'}</small>
             <button className="import-default-action" id="save-import-defaults" type="button" onClick={()=>onAction("import-save-defaults")}>将当前参数设为以后导入的默认值</button>
             <small>设为默认值会同步本批后续照片，并用于以后新导入的照片；之前的照片不变。</small></>:null}

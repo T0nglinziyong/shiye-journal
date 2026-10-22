@@ -28,6 +28,31 @@ export async function loadOfflineMaterialCover(asset,edge,{preview,original}){
   return undefined;
 }
 
+// The cutout is already staged on this device when import reports success.
+// A cloud thumbnail/metadata row may still be uploading, so export must read
+// the durable local bytes before attempting a remote image request.
+export async function loadOfflineMaterialOriginal(asset,{readStored,localURL,loadRemote,signal}={}){
+  checkCanceled(signal);
+  if(!asset?.blobId)throw Error('素材缺少原图标识');
+  let firstError;
+  try{
+    const row=await readStored(asset.blobId);
+    if(row?.data instanceof Blob&&row.data.size)return row.data;
+  }catch(error){firstError=error;}
+  checkCanceled(signal);
+  const url=localURL?.(asset.blobId);
+  if(url){
+    try{const response=await fetch(url,{signal});if(response.ok){const blob=await response.blob();if(blob.size)return blob;}}
+    catch(error){if(signal?.aborted)throw error;firstError||=error;}
+  }
+  checkCanceled(signal);
+  if(loadRemote){
+    try{const blob=await loadRemote(asset.blobId);if(blob instanceof Blob&&blob.size)return blob;}
+    catch(error){firstError||=error;}
+  }
+  throw Error('素材「'+asset.title+'」的原图不可用；本机导入或云端上传尚未完成'+(firstError?.message?'：'+firstError.message:''));
+}
+
 export async function mapOfflineExportLimited(entries,limit,task,{signal,onDone=()=>{}}={}){
   if(!Number.isInteger(limit)||limit<1)throw Error('并发上限无效');
   const output=new Array(entries.length);

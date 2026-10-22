@@ -1,8 +1,10 @@
-// Cover selection never changes membership; at most five source thumbnails.
+// A tidy cover has nine cells; a layered cover may use every selected item.
 export function seriesCovers(series, assets) {
   const members = assets.filter(a => a.seriesID === series.id && !a.isProjectInternal);
-  const chosen = (series.coverAssetIDs || []).filter(id => members.some(a => a.id === id)).slice(0, 5);
-  return (chosen.length ? chosen : members.slice(0, 5).map(a => a.id)).map(id => members.find(a => a.id === id));
+  const byID=new Map(members.map(asset=>[asset.id,asset]));
+  const chosen=[...new Set(series.coverAssetIDs||[])].filter(id=>byID.has(id));
+  const selected=chosen.length?chosen.map(id=>byID.get(id)):members;
+  return series.coverLayout==='grid'?selected.slice(0,9):selected;
 }
 export function parseTags(text) {
   return [...new Set(String(text || '').split(/[,，、]/).map(s => s.trim()).filter(Boolean))];
