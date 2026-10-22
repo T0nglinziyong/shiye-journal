@@ -6,7 +6,8 @@ export const creativeTypeRoles=Object.freeze([
   {label:'正文',points:[9,12]},
   {label:'图片说明／日期／注释',points:[7,9]}
 ]);
-export function creativeTypographyGuide(draft){
+export function creativeTypographyGuide(draft,{publicCommands=false}={}){
+  if(publicCommands)return '当前统一 Command 的 style.fontSizePt 使用印刷 pt（不是画布像素）；size.width 使用 mm 或明确 reference+ratio。构图时先给主要随写预留可读的书写面：可先尝试约 11–15 pt，边注可较小，具体仍按纸张、字体和真实 preview 调整。已有强印刷标题无需再叠同义标题；文字若显得小，先改变框宽、书写面、句子长度和段落层级，必要时使用 text.fit，不要靠不断缩字塞进缝隙。修改 fontsize/内容后重新预览，检查换行与 connected linked 关系。';
   const height=draft.physicalPageHeightMM,canvasHeight=draft.canvas?.height;
   if(!Number.isFinite(height)||height<=0||!Number.isFinite(canvasHeight)||canvasHeight<=0)return '文字应分主标题、次标题、正文和注释层级；标题大于正文，注释略小，不为塞进窄框而无限缩字。';
   const factor=25.4/72*canvasHeight/height;

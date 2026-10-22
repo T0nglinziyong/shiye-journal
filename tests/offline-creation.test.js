@@ -13,7 +13,7 @@ test('editable GPT package uses one v3 command entry and authoritative Scene',as
  const task=await make(),files=await entries(task),context=read(files,'TASK.json');
  assert.equal(context.version,3);assert.equal(context.sourceContext.packageLayout,'v3');
  assert.deepEqual(Object.keys(files).filter(name=>!name.includes('/')).sort(),['START_HERE.md','TASK.json','package-lock.json','package.json','scene.json']);
- for(const path of ['assets/overview.jpg','assets/m1.png','assets/manifest.json','design/GUIDE.md','design/RECIPES.md','api/commands.schema.json','api/scene.schema.json','runtime/shiye.cjs','work/commands.json'])assert.ok(files[path],path);
+ for(const path of ['assets/overview.jpg','assets/m1.png','assets/manifest.json','design/GUIDE.md','design/SKILL.md','design/PLAYBOOK.md','design/REVIEW.md','design/RECIPES.md','api/commands.schema.json','api/scene.schema.json','runtime/shiye.cjs','work/commands.json'])assert.ok(files[path],path);
  assert.equal(files['examples/instructions.json'],undefined);assert.equal(files['task/context.json'],undefined);
  assert.match(strFromU8(files['START_HERE.md']),/scene\.json 是唯一作品/);
  assert.match(strFromU8(files['START_HERE.md']),/work\/commands\.json/);
