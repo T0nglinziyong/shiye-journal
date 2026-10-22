@@ -58,6 +58,7 @@ jobs:
           SHIYE_TEST_URL=http://127.0.0.1:5193 node tests/fabric-editor-product-browser.mjs
           SHIYE_TEST_URL=http://127.0.0.1:5193 node tests/fabric-stage-browser.mjs
           SHIYE_TEST_URL=http://127.0.0.1:5193 node tests/shared-editor-kernel-browser.mjs
+          SHIYE_TEST_URL=http://127.0.0.1:5193 node tests/material-polish-browser.mjs
           SHIYE_TEST_URL=http://127.0.0.1:5193 node tests/import-browser-acceptance.mjs
           SHIYE_TEST_URL=http://127.0.0.1:5193 npm run test:editor-layout-browser
           SHIYE_TEST_URL=http://127.0.0.1:5193 node tests/cloud-cache-browser.mjs
@@ -76,6 +77,7 @@ jobs:
           name: interface-browser-${{ github.run_id }}
           path: |
             /tmp/shiye-fabric-product/
+            /tmp/shiye-material-polish/
             /tmp/shiye-fabric-stage.png
             /tmp/shiye-fabric-reference.png
             /tmp/shiye-import-browser/
