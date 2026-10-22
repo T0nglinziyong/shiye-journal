@@ -8,6 +8,11 @@ on:
       - 'src/material-*.js'
       - 'src/creative*.js'
       - 'src/creation-*.js'
+      - 'src/text-effects.js'
+      - 'src/editor-tools-model.js'
+      - 'tests/type-effects-browser.mjs'
+      - 'tests/fixtures/type-effects.html'
+      - 'scripts/generate-craft-details-example.mjs'
       - 'src/scene-*.js'
       - 'src/v3-*.js'
       - 'src/v3-*.mjs'
@@ -90,11 +95,13 @@ jobs:
           node tests/presentation-browser.mjs
           node tests/craft-multimodal-browser.mjs
           node tests/web-workbench-browser.mjs
+          node tests/type-effects-browser.mjs
           git diff --exit-code -- package.json package-lock.json
       - name: Verify clean-build reproducibility and generate current creation example
         run: |
           node scripts/verify-offline-build.mjs
           node scripts/generate-v3-unified-example.mjs
+          node scripts/generate-craft-details-example.mjs /tmp/shiye-craft-browser/craft-details
           mkdir -p /tmp/shiye-craft-browser/creation-package
           cp -R examples/v3-unified/. /tmp/shiye-craft-browser/creation-package/
           cp test-results/creation-build.json /tmp/shiye-craft-browser/creation-package/
