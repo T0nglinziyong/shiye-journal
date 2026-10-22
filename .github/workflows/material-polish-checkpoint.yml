@@ -1,0 +1,51 @@
+name: Save material polish checkpoint
+on:
+  push:
+    branches: [fix/material-previews-artistic-defaults-20261022]
+    paths: [.github/workflows/material-polish-checkpoint.yml]
+permissions:
+  contents: write
+jobs:
+  checkpoint:
+    if: github.ref == 'refs/heads/fix/material-previews-artistic-defaults-20261022'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify and save current source without merging or deploying
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64,hashlib,json,lzma,pathlib,shutil
+          parts=sorted(pathlib.Path('.material-checkpoint').glob('part-*.b64'))
+          assert len(parts)==3
+          payload=base64.b64decode(''.join(p.read_text() for p in parts),validate=True)
+          assert hashlib.sha256(payload).hexdigest()=='f8eab63095fa9289df78b7b9b4a3fbc1996bc64eb4cd4f55fb33c9ecc4e847b0'
+          changes=json.loads(lzma.decompress(payload))
+          assert len(changes)==36
+          for change in changes:
+              path=pathlib.Path(change['path'])
+              assert not path.is_absolute() and '..' not in path.parts and not path.is_symlink()
+              assert str(path).startswith(('src/','tests/','docs/','creation-contract/'))
+              old=path.read_text() if path.exists() else ''
+              assert hashlib.sha256(old.encode()).hexdigest()==change['before'],str(path)
+              new=old
+              for start,end,text in reversed(change['edits']):
+                  assert 0<=start<=end<=len(old)
+                  new=new[:start]+text+new[end:]
+              assert hashlib.sha256(new.encode()).hexdigest()==change['after'],str(path)
+              if change['status']=='D': path.unlink()
+              else:
+                  path.parent.mkdir(parents=True,exist_ok=True)
+                  path.write_text(new)
+          shutil.rmtree('.material-checkpoint')
+          PY
+          git add -A
+          git diff --cached --check
+          test -z "$(git diff --cached --name-only -- .github)"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'wip: checkpoint material covers, processed previews and artistic defaults; validation pending'
+          git push origin HEAD:refs/heads/fix/material-previews-artistic-defaults-20261022
