@@ -1,0 +1,26 @@
+name: Taxonomy development snapshot
+on:
+  push:
+    branches: [refactor/command-taxonomy-rich-composition-20261022]
+    paths: [.github/workflows/taxonomy-dev-snapshot.yml]
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Archive source without credentials or runtime fonts
+        run: |
+          mkdir -p /tmp/taxonomy-source
+          git rev-parse HEAD > /tmp/taxonomy-source/revision.txt
+          git rev-parse HEAD^{tree} > /tmp/taxonomy-source/tree.txt
+          git archive HEAD | gzip > /tmp/taxonomy-source/source.tar.gz
+          cd /tmp/taxonomy-source && sha256sum source.tar.gz > SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: taxonomy-source
+          path: /tmp/taxonomy-source
+          retention-days: 1
