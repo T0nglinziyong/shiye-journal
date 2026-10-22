@@ -6,7 +6,7 @@ await mkdir(out,{recursive:true});
 const b=await browserHarness('shiye-material-polish',base+'/tests/fixtures/material-polish.html',({command})=>command('Emulation.setDeviceMetricsOverride',{width:1024,height:900,deviceScaleFactor:1,mobile:false}));
 try{
  await b.wait('#processed [data-piece-preview="ready"]');await b.wait('#font-status');
- for(let i=0;i<150;i++){if(await b.evaluate('window.__polish?.fontStatus().faces.some(f=>f.status==="loaded")'))break;await b.sleep(40);}
+ for(let i=0;i<150;i++){if(await b.evaluate('(()=>{const font=window.__polish?.fontStatus();return font?.status==="web-artistic-ready"&&font.faces.some(f=>f.status==="loaded");})()'))break;await b.sleep(40);}
  const font=await b.evaluate('window.__polish.fontStatus()');assert.equal(font.status,'web-artistic-ready');assert.ok(font.faces.some(f=>f.status==='loaded'),JSON.stringify(font));assert.match(font.family,/^"Ma Shan Zheng"/);
  const pixels=await b.evaluate('window.__polish.fontPixels()');assert.notEqual(pixels.hand,pixels.serif,'actual loaded artistic glyphs differ from system serif');
  const pixel=(x,y)=>b.evaluate(`Array.from(document.querySelector('#processed canvas').getContext('2d').getImageData(${x},${y},1,1).data)`);
@@ -56,4 +56,8 @@ try{
   const png=await b.command('Page.captureScreenshot',{format:'png',captureBeyondViewport:true});await writeFile(`${out}/${width}x${height}.png`,Buffer.from(png.data,'base64'));
  }
  assert.deepEqual(b.errors,[]);console.log('MATERIAL_POLISH_BROWSER_PASS: loaded actual artistic font; crop/mask/flip pixels; pinned sources; fan/grid/snapshot; editable effects and undo; four viewports');
-}finally{await b.close();}
+}finally{
+ // Retain real failure pixels as well as the successful viewport captures.
+ try{const png=await b.command('Page.captureScreenshot',{format:'png',captureBeyondViewport:true});await writeFile(`${out}/last-state.png`,Buffer.from(png.data,'base64'));}catch{}
+ await b.close();
+}
