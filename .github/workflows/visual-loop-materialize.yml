@@ -1,0 +1,49 @@
+name: Materialize verified visual guidance
+on:
+  push:
+    branches: [refine/visual-creation-loop-20261022]
+    paths: [.github/workflows/visual-loop-materialize.yml]
+permissions:
+  contents: write
+jobs:
+  source:
+    if: github.ref == 'refs/heads/refine/visual-creation-loop-20261022'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply exactly verified source delta
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64,hashlib,json,lzma,pathlib,shutil
+          parts=sorted(pathlib.Path('.visual-transfer').glob('part-*.b64'))
+          assert len(parts)==2
+          payload=base64.b64decode(''.join(p.read_text() for p in parts),validate=True)
+          assert hashlib.sha256(payload).hexdigest()=='8b8928f7509ac91b786b600169505ad8a6662969bd1d94a051ffc2c7f1f46327'
+          changes=json.loads(lzma.decompress(payload));assert len(changes)==16
+          for change in changes:
+              path=pathlib.Path(change['path'])
+              assert not path.is_absolute() and '..' not in path.parts and not path.is_symlink()
+              assert str(path).startswith(('src/','tests/','docs/','creation-contract/')) or str(path)=='README.md'
+              old=path.read_text() if path.exists() else ''
+              assert hashlib.sha256(old.encode()).hexdigest()==change['before'],str(path)
+              new=old
+              for start,end,text in reversed(change['edits']):
+                  assert 0<=start<=end<=len(old)
+                  new=new[:start]+text+new[end:]
+              assert hashlib.sha256(new.encode()).hexdigest()==change['after'],str(path)
+              if change['status']=='D':
+                  assert new==''
+                  path.unlink()
+              else:
+                  path.parent.mkdir(parents=True,exist_ok=True);path.write_text(new)
+          shutil.rmtree('.visual-transfer')
+          PY
+          git add -A
+          git diff --cached --check
+          test -z "$(git diff --cached --name-only -- .github)"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'refine: compact evidence-driven creation guidance and regression budgets'
+          git push origin HEAD:refs/heads/refine/visual-creation-loop-20261022
