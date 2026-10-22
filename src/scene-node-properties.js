@@ -26,6 +26,7 @@ export function styleFor(type,style,page,node={}){
  if(type==='shape')Object.assign(mapping,{fill:'fill',stroke:'stroke',strokeWidthMm:'lineWidth',fillOpacity:'fillOpacity',strokeOpacity:'strokeOpacity',strokeDash:'strokeDash',cornerRadiusRatio:'cornerRadius'});
  if(type==='ink')Object.assign(mapping,{color:'color',strokeWidthMm:'width',penStyle:'penStyle'});
  const result={};
+ if(type==='text'&&Object.hasOwn(style,'fontPreset')&&!Object.hasOwn(style,'fontFamily'))result.fontName=null;
  for(const [key,value] of Object.entries(style)){
   if(!mapping[key])throw Error(type+' 不支持 style.'+key);
   result[mapping[key]]=key==='outline'?(value===null?null:{color:value.color,width:value.widthMm*s,offsetX:(value.offsetMm?.[0]||0)*s,offsetY:(value.offsetMm?.[1]||0)*s}):key==='gradient'?structuredClone(value):key==='fontSizePt'?value*25.4/72*s:key==='fontWeight'?value==='bold':

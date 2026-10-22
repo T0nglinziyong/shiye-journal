@@ -1,3 +1,6 @@
+import {journalFontPresets} from './journal-fonts.js';
+import {TextEffectsPanel} from './react-text-effects.jsx';
+import {materialPreviewKey} from './material-paint.js';
 import React,{useCallback,useEffect,useLayoutEffect,useMemo,useRef,useState} from 'react';
 import {materialKinds} from './material-taxonomy.js';
 import {createPortal} from 'react-dom';
@@ -128,17 +131,16 @@ function ShapePicker({draft,onPick}){
 }
 
 export function MaterialPieceImage({asset,item,source}){
-  const card=useRef(null),src=asset&&(source(asset.blobId)||asset.staticPath);
-  // AI layout may use a cropped view of the original. The picker represents
-  // the library asset; only an actual scissors fragment gets a piece preview.
-  const piece=item?.splitParentId?item:null;
-  const geometry=JSON.stringify([piece?.cropRect,piece?.materialMask]);
+  const card=useRef(null),sourceID=item?.sourceBlobId||asset?.blobId;
+  const src=item?.sourceBlobId?(source(item.sourceBlobId)||item.sourceStaticPath):item?.sourceStaticPath||(sourceID&&source(sourceID))||asset?.staticPath;
+  const geometry=item?materialPreviewKey(item):'';
   useEffect(()=>{
-    if(!card.current||!src||!piece)return;
-    return mountPieceThumbnail(card.current,piece);
+    if(!card.current||!src||!item)return;
+    return mountPieceThumbnail(card.current,item);
   },[src,item?.id,geometry]);
-  return <div ref={card} className="material-piece-image">
-    {src?<TapeAssetImage asset={asset} src={src} alt=""/>:<span>无预览</span>}
+  return <div ref={card} className="material-piece-image" data-piece-id={item?.id}>
+    {src?(item?<img src={src} data-asset-image-id={asset?.id} loading="lazy" decoding="async" alt="" style={{visibility:'hidden'}}/>:
+      <TapeAssetImage asset={asset} src={src} alt=""/>):<span>无预览</span>}
   </div>;
 }
 
@@ -363,7 +365,7 @@ export function FabricEditorToolbar({state,draft,materials,source,selected,onIns
   const selectedKind=selected?.kind;
   const editObject=(id,value)=>onInspectorChange(id,value);
   const textMode=selectedKind==='text'||activeTool==='text';
-  const text=selectedKind==='text'?selectedNode:state.textDefaults||{style:'serif',fontSize:40,color:'#30463d',alignment:'left'};
+  const text=selectedKind==='text'?selectedNode:state.textDefaults||{style:'hand',fontSize:40,color:'#30463d',alignment:'left'};
   const textProperty=(key,value)=>onAction('fabric-text-property',key,value);
   const shapeProperty=(key,value)=>onAction('fabric-shape-property',key,value);
   const arrangeButton=<button type="button" data-popover-anchor="arrange"
@@ -401,8 +403,8 @@ export function FabricEditorToolbar({state,draft,materials,source,selected,onIns
           title={slotIndex(activeTool,'color')===index?'再次点击可修改颜色':''}
           onClick={event=>toggleSlot(activeTool,'color',index,event)}/>):null}
       </>:textMode?<>
-        <div className="canvas-text-format"><select aria-label="字体" value={text.style||'serif'} onChange={event=>textProperty('style',event.target.value)}>
-          {['serif','sans','rounded','hand'].map((id,index)=><option key={id} value={id}>{['宋体','黑体','圆体','手写体'][index]}</option>)}
+        <div className="canvas-text-format"><select aria-label="字体" value={text.style||'hand'} onChange={event=>textProperty('style',event.target.value)}>
+          {journalFontPresets.map(([id,label])=><option key={id} value={id}>{label}</option>)}
         </select><div className="canvas-font-size-stepper" aria-label="调整字号">
           <button type="button" className="font-step" aria-label="减小字号" onClick={()=>textProperty('fontSize',adjacentFontSize(text.fontSize,-1))}>‹</button>
           <FontSizeInput key={selectedNode?.id||'new-text'} value={text.fontSize||40}
@@ -450,7 +452,7 @@ export function FabricEditorToolbar({state,draft,materials,source,selected,onIns
     width={menu.kind==='paper'?260:menu.kind==='layers'?310:
       menu.kind==='slot-width'?270:menu.kind==='slot-color'?280:
       ['pen','eraser','highlighter','lasso'].includes(menu.kind)?280:
-      ['text-paragraph','text-style','arrange'].includes(menu.kind)?230:
+      menu.kind==='text-style'?320:['text-paragraph','arrange'].includes(menu.kind)?230:
       280} height={menu.kind==='layers'?360:menu.kind==='slot-color'?310:menu.kind==='shape'?550:440}
     picker={['shape','material','tape'].includes(menu.kind)}>
     {menu.kind==='shape'?<ShapePicker draft={draft} onPick={id=>choose('fabric-add-shape',id)}/>:null}
@@ -505,7 +507,7 @@ export function FabricEditorToolbar({state,draft,materials,source,selected,onIns
         onClick={()=>{textProperty('alignment',id);close();}}>{(text.alignment||'left')===id?'✓ ':''}{label}</button>)}
       {selectedKind==='text'?<button type="button" onClick={()=>{close();onAction('fabric-inspector-open');}}>详细文字设置</button>:null}
     </div>:null}
-    {menu.kind==='text-style'?<div className="stack">{[['bold','粗体'],['italic','斜体'],['underline','下划线'],['strikethrough','删除线']]
+    {menu.kind==='text-style'?<div className="stack"><TextEffectsPanel node={text} page={draft} onChange={style=>onAction('fabric-text-effects',style)}/>{[['bold','粗体'],['italic','斜体'],['underline','下划线'],['strikethrough','删除线']]
       .map(([id,label])=><button key={id} type="button" aria-checked={!!text[id]}
         onClick={()=>{textProperty(id,!text[id]);close();}}>{text[id]?'✓ ':''}{label}</button>)}
       {selectedKind==='text'?<button type="button" onClick={()=>{close();onAction('fabric-inspector-open');}}>详细文字设置</button>:null}

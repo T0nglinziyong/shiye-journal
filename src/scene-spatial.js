@@ -47,7 +47,12 @@ export function setWorldPosition(page,id,{x,y,rotation}){
  if(node.type==='group'){
   node.localTransform=multiplyMatrix(inverseMatrix(parentWorld),rigidMatrix(x,y,rotation??matrixAngle(path.world)));assertRigidMatrix(node.localTransform);
  }else if(node.type==='ink'){
-  const box=worldBox(page,id),angle=((rotation??box.rotation)-box.rotation)*Math.PI/180,cos=Math.cos(angle),sin=Math.sin(angle),inverse=inverseMatrix(parentWorld);
+  const box=worldBox(page,id);
+  // A repeated linked solve must not transform the same ink points through
+  // world/local matrices again: floating roundoff would mutate its fingerprint.
+  const degrees=(rotation??box.rotation)-box.rotation;
+  if(Math.abs(x-box.cx)<=1e-9&&Math.abs(y-box.cy)<=1e-9&&Math.abs(degrees)<=1e-9)return node;
+  const angle=degrees*Math.PI/180,cos=Math.cos(angle),sin=Math.sin(angle),inverse=inverseMatrix(parentWorld);
   node.points=node.points.map(point=>{const world=transformPoint(parentWorld,point.x,point.y),dx=world.x-box.cx,dy=world.y-box.cy;const local=transformPoint(inverse,x+dx*cos-dy*sin,y+dx*sin+dy*cos);return {...point,x:local.x,y:local.y};});
   node.layoutRotation=(rotation??box.rotation)-matrixAngle(parentWorld);
  }else{

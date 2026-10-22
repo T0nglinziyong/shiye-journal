@@ -1,3 +1,4 @@
+import {prepareJournalFont} from './journal-fonts.js';
 import {scaleTextEffects} from './text-effects.js';
 import {applyScenePatchBatch} from './scene-edit-kernel.js';
 import {USER_SCENE_POLICY,requireScenePolicy,confirmSceneCapability} from './scene-edit-policy.js';
@@ -162,7 +163,7 @@ export function createFabricSceneBridge(fabric,{assetURL=()=>null,canvasSize=()=
         scaleX:positive(node.width)/object.sceneFrameWidth,
         scaleY:positive(node.height)/object.sceneFrameHeight});
     }else if(node.type==='text'){
-      await globalThis.document?.fonts?.load(textFont(node),String(node.content||'示例'));
+      await prepareJournalFont(node);
       const frameHeight=positive(node.height,135),radians=finite(node.rotation)*Math.PI/180;
       object=new SceneTextbox(String(node.content||''),{
         width:positive(node.width),fontSize:positive(node.fontSize,40),

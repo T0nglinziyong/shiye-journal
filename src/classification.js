@@ -1,7 +1,7 @@
 import {supportsVision} from './ai-settings.js';
 import {parseTags} from './library-model.js';
 import {requestChat} from './chat-transport.js';
-import {materialKinds,materialRoles,materialTextures,isMaterialKind,isMaterialRole,isMaterialTexture} from './material-taxonomy.js';
+import {materialKinds,materialRoles,materialTextures,isMaterialKind,isMaterialRole,isMaterialTexture,materialFieldGuide} from './material-taxonomy.js';
 
 export function classificationResult(value, kind) {
   if(!value||typeof value.title!=='string'||!value.title.trim()||!Array.isArray(value.tags)||value.tags.some(t=>typeof t!=='string'))throw Error('模型返回的整理结果不完整');
@@ -26,7 +26,7 @@ export async function classifyRecord({kind,record,settings,image,assets,request=
     'title 是具体的简短中文名称；kind 只能从以下代码中选一个：'+materialKinds.map(([id,name])=>id+'='+name).join('、')+'。'+
     'role 只能从以下代码中选一个：'+materialRoles.map(([id,name])=>id+'='+name).join('、')+'。'+
     'texture 只能从以下中文材质中选一个：'+materialTextures.filter(value=>value!=='待记录').join('、')+'。'+
-    '按实物形态、画面用途和可见材质分别判断，不要混淆。形态或作用无法确定时选 other；材质无法确定时选 未确定；确有其他材质时选 其他。'+
+    Object.values(materialFieldGuide).join(' ')+'形态或作用无法确定时选 other；材质无法确定时选 未确定；确有其他材质时选 其他。'+
     '各标签数组只记录确实可见的信息，每类 0–8 个；辨认不出时用空数组，不猜测。不要估算十六进制颜色。':
     '给混合型手账成品整理简短中文标题和 3–5 个检索风格标签。只返回 JSON {"title":"春日拼贴","tags":["春日","柔和","植物"]}。使用的素材：'+used.map(a=>a.title+'（'+(a.tags||[]).join('、')+'）').join('；');
   const content=image&&supportsVision(settings)?[{type:'text',text:prompt},{type:'image_url',image_url:{url:image,detail:'low'}}]:prompt;

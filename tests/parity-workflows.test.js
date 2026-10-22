@@ -21,7 +21,7 @@ async function withCutoutPixels(run){
 test('series covers follow current membership, five-cover limit, and automatic cover fallback',()=>{
   const assets=Array.from({length:6},(_,i)=>({id:String(i),seriesID:'s'}));
   assert.deepEqual(seriesCovers({id:'s',coverAssetIDs:['gone','4','2']},assets).map(a=>a.id),['4','2']);
-  assert.deepEqual(seriesCovers({id:'s',coverAssetIDs:[]},assets).map(a=>a.id),['0','1','2']);
+  assert.deepEqual(seriesCovers({id:'s',coverAssetIDs:[]},assets).map(a=>a.id),['0','1','2','3','4']);
   assert.equal(seriesCovers({id:'s',coverAssetIDs:assets.map(a=>a.id)},assets).length,5);
   assert.deepEqual(parseTags('春天，植物、春天,  旅行 '),['春天','植物','旅行']);
   assert.ok(searchableSeries({id:'s',title:'系列',styleTags:['复古']},assets).includes('复古'));

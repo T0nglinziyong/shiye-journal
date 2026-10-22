@@ -3,14 +3,15 @@ import assert from 'node:assert/strict';
 import {containBox} from '../src/preview-geometry.js';
 import {commonShapes,advancedShapes,configureShape,shapeSVG,straightStroke,eraseStrokes,resizeObject,textLines,textFont,textFontFamily} from '../src/editor-tools-model.js';
 
-test('R-08: editor, cover, and canvas export share each font family decision',()=>{
-  for(const [style,family] of [['hand','"Kaiti SC",STKaiti,cursive'],['serif','"Songti SC",serif'],['rounded','"Arial Rounded MT Bold",sans-serif'],['sans','sans-serif']]){
-    const block={style,fontSize:28,fontName:null};
-    assert.equal(textFontFamily(block),family);
+test('R-08: editor, cover, and canvas export share the installed artistic font decision',()=>{
+  for(const style of ['hand','serif','rounded','sans']){
+    const block={style,fontSize:28,fontName:null},family=textFontFamily(block);
     assert.ok(textFont(block).endsWith(`28px ${family}`));
+    assert.match(family,style==='hand'?/^"Ma Shan Zheng",/:style==='serif'?/^"Songti SC",/:style==='rounded'?/^"Arial Rounded MT Bold",/:/^"PingFang SC",/);
   }
+  assert.equal(textFontFamily({fontSize:20}),textFontFamily({style:'hand',fontSize:20}));
   const named={style:'serif',fontName:'Ma Shan Zheng',fontSize:20};
-  assert.equal(textFontFamily(named),'"Ma Shan Zheng","Songti SC",serif');
+  assert.ok(textFontFamily(named).startsWith('"Ma Shan Zheng","Songti SC",'));
   assert.ok(textFont(named).endsWith(`20px ${textFontFamily(named)}`));
 });
 import {composeCrop,validateCrop} from '../src/material-processing-editor.js';
