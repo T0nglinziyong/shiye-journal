@@ -36,6 +36,7 @@ AI 不可添加 manualVisualResize/manualVisualCopy 来逃避实物约束；基�
 export function webArtDirection(source){return [
   '【本次视觉方向】',source.styles.map(s=>s+'：'+visualStyleBrief(s)).join('；'),
   '具体图文构思沿用本包共用的“构图与内容”指导，不另套模板。复用布局时重新选择主次；印章、曲线文字或镂空按需要使用，不按复杂度评分。',
-  creativeTypographyGuide(source.baseDraft),
+  creativeTypographyGuide(source.baseDraft,{publicCommands:true}),
+  '【创作决策提醒】在构图时即预留主要正文的可读位置。先看主视觉、底纸和现有印刷字；若初稿只是完整素材分散陈列或所有新增文字都被挤成小字，不要直接交付，按 design/SKILL.md 与 design/PLAYBOOK.md 找一项最小有效的局部改善。数字笔迹与图形用来回应文字或材料，不机械加装饰；真实预览后依 design/REVIEW.md 复核。',
   '【内部看图自评，不要在最终回复中输出】检查实际画面，先缩看整页焦点与动线，再放大核对文字、素材边缘、层次和第二处值得看的细节。检查是否只是逐项说明图片、通用鸡汤或空泛标题；按本次文字策略修订。纯粹拼贴不新增文字。若发现问题，修改对应 Scene 节点并重新 preview；最终 Scene 与 PNG 摘要必须一致，不用旧预览验收新图层。'
 ].join('\n\n');}

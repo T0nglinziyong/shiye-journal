@@ -1,18 +1,22 @@
-# 拾页 GPT 创作包 v3 · 统一协议 2
+# 拾页 GPT 创作包 · 统一协议 2
 
-先读 TASK.json、任务简报 design/GUIDE.md 和固定创作指导 design/CRAFT_GUIDE.md，再看 assets/overview.jpg 与必要原图。scene.json 是唯一作品；素材别名、尺寸、数量与加工限制以本次 TASK 为准。
+scene.json 是唯一作品；任何预览都必须从同一 Scene 通过真实 Node Canvas 或经过验证的浏览器 Canvas 渲染，不得用示意图替代。字段不清时按需查 api/commands.schema.json，普通参数优先 describe。最终必须实际打开 output/preview.png，并交付 output/project.shiyeproject.json；缺少有效 PNG 不得声称创作完成。
 
-1. 运行 `node runtime/shiye.cjs self-test` 和 `node runtime/shiye.cjs info`。
-2. 不知道有哪些工具，运行 `node runtime/shiye.cjs help`。不知道参数，运行 `describe <op>`；公共参数用 `describe place`、`describe size`、`describe style`、`describe region`、`describe order`、`describe layoutBox`。默认 describe 只返回必要字段和一个示例；完整定义用 describe <op> --full。帮助与验证来自同一份执行规范，不默认通读 api/commands.schema.json。
-3. 第一轮填写 work/commands.json；下一轮用 `node runtime/shiye.cjs begin work/<新文件名>.json` 创建事务。只编辑 operations，保留工具给出的 transactionId 与 baseSceneRevision。design/RECIPES.md 是固定的局部操作示例，不是本任务成品。
-4. 执行 `check <文件>`，然后 `apply <文件>` 和 `preview`。必要时用 `preview --commands <文件>` 在临时副本试做，不修改正式 Scene。
-5. 必须实际打开 output/preview.png。修订时建立新事务，只更新有问题的图层，不重写全页。可用 group.compose 设计局部组合，用统一 place 设置毫米、比例或相对锚点；持续跟随用 behavior=linked。layout.arrange 支持横向、纵向和网格的一次性排列，不缩放实体素材。
-6. 补齐 material.decision。实际看图后运行 `review --result pass|fail`，最后运行 `pack`。展示并提供可下载的 PNG output/preview.png 和单行紧凑的 output/project.shiyeproject.json；只有用户要求时才交付 ZIP。review 是创作者声明，不是自动审美验收。
+**目标：完成一页有个人表达、可继续编辑的手帐，而不是把素材和几段小字摆成展示板。** 本包不要求使用固定数量的素材工艺、画笔或图形。优先解决真实画面问题。
 
-所有动作都通过同一 commands.json 协议 2 执行。全部 37 项操作使用统一公共参数；不接受 native.*、协议 1、旧字段别名或原始 set/plan。曲线文字用 style.curveHeightMm，字形镂空用 material.glyphKnockout，复杂胶带用 material.tape 的 path/texture/caps。不手写 Scene，也不编写辅助 Python/JavaScript 修改作品。
+## 快速路线
+1. 先读 `TASK.json`、本次 `design/GUIDE.md` 和 `design/SKILL.md`；查看 `assets/overview.jpg` 及必要原图。纸张、事实、必用素材和实体加工限制以 TASK 为准。
+2. **构图前就给正文留可读空间**。决定每件素材的角色（焦点、书写面、印刷标题、底纸、连接物、点缀）；比较两种真正不同的图文关系，确定左右页阅读路线。不要先排满实物，再把文字缩进剩余空隙。
+3. 先搭主视觉、书写面与正文，再安排次级素材；查看是否需要局部错层、跨边连接、短笔迹、色带或有目的的裁切。每个动作须能回答“解决什么问题”。必要时才读 `design/PLAYBOOK.md` 的相应诊断卡。
+4. 运行 `node runtime/shiye.cjs self-test` 和 `node runtime/shiye.cjs info`。只在不确定时查询 `help`、`describe <op>` 或 `describe place / size / style / region`；详尽字段才用 `describe <op> --full`。
+5. 使用协议 2 的 `work/commands.json` 通过 `apply` 修改唯一 `scene.json`，再运行 `preview`，**实际打开** `output/preview.png`。无需手写 Scene，也不生成另一套 Python/JS 创作脚本。
+6. 依据 `design/REVIEW.md`，缩看整页、再看正文正常尺寸的可读性和局部连接。若显得平铺、文字过小、缺少阅读路线，必须先判断原因、用新事务局部修正并重新预览；无问题不强制多轮。
+7. 补全真实 `material.decision`，按任务规定进行 `review` 和 `pack`，交付同一 Scene 的 PNG 和可编辑 JSON。视觉审阅不是结构校验的替代，也不得伪造已看图。
 
-预览默认优先 Node Canvas，没有时检测本机 Chromium，均复用拾页 Scene 渲染器。可设置 SHIYE_RENDERER=node|browser|auto；自定义 Chromium 路径用 SHIYE_CHROMIUM_PATH。不自动下载浏览器，不上传任务素材，不把其他图片当成预览；没有后端时明确失败。两种后端的字体与像素可能不同，manifest 如实记录，pack 在同一后端重新渲染核对。
+## 适用时才使用的能力
+- 素材像各自独立的矩形 → 先看 `PLAYBOOK` 中的“层次与跨边”，考虑 `layer.place / layer.reorder / group.compose / material.crop`。
+- 正文像小字图注 → 先重排正文位置与宽度，按文字角色用 `text.add / text.update / text.fit`，字号使用 `style.fontSizePt` **真实 pt**，不是画布像素。
+- 重点与内容之间缺少连接 → 有理由地考虑 `ink.add`（如 marker）、`shape.add`、`vector.add`。不机械撒圆点星星。
+- 实体形状妨碍表达 → 只有许可时才使用 `material.crop / material.split / material.window`；显示遮罩并不产生可用余料。
 
-纸张模式和物理尺寸由 TASK 固定。visible 轮廓锚点、自定义 region: 布局区域、持续自动排列尚未发布，不猜测它们的效果；使用 layout 边界、明确 layoutBox 和单对象 linked 关系。
-
-文字创建、text.update 和 layer.update 共用测量与重排；size.height 是保存到 Scene 的最小高度，不裁掉正文。单位明确：字号 pt，纸张/素材 mm，比例须指定参考。所有变更先重排，再解算 place 与 linked。字形镂空只读取本机指定字体；字体不可用或解析不支持时明确报错，可使用已知 region 轮廓，不伪造字体。
+不要复制配方的假 ID 或旧 revision，不执行 `native.*`、协议 1 或原始 `set/plan`。固定示例来自 `design/RECIPES.md`；实际填写以本次 TASK、Scene 和当前 `describe` 为准。
