@@ -6,16 +6,20 @@ export const textOutlineSchema={anyOf:[{type:'null'},{type:'object',additionalPr
 export const textGradientSchema={anyOf:[{type:'null'},{type:'object',additionalProperties:false,required:['angleDeg','stops'],properties:{angleDeg:num(-360,360),stops:{type:'array',minItems:2,maxItems:8,items:{type:'object',additionalProperties:false,required:['offset','color'],properties:{offset:num(0,1),color}}}}}]};
 const finite=(value,low,high)=>Number.isFinite(value)&&value>=low&&value<=high;
 const validColor=value=>typeof value==='string'&&/^#[0-9a-f]{6}$/i.test(value);
-export function validateTextEffects(node){
- if(node.textOutline!=null){const o=node.textOutline;
-  if(node.type!=='text'||!o||Object.keys(o).some(k=>!['color','width','offsetX','offsetY'].includes(k))||!validColor(o.color)||!finite(o.width,.01,100)||!finite(o.offsetX,-100,100)||!finite(o.offsetY,-100,100))throw Error('文字描边参数无效');
+export function validateEffectValues(outline,gradient,label='文字'){
+ if(outline!=null){const o=outline;
+  if(!o||Object.keys(o).some(k=>!['color','width','offsetX','offsetY'].includes(k))||!validColor(o.color)||!finite(o.width,.01,100)||!finite(o.offsetX,-100,100)||!finite(o.offsetY,-100,100))throw Error(label+'描边参数无效');
  }
- if(node.textGradient!=null){const g=node.textGradient;
-  if(node.type!=='text'||!g||Object.keys(g).some(k=>!['angleDeg','stops'].includes(k))||!finite(g.angleDeg,-360,360)||!Array.isArray(g.stops)||g.stops.length<2||g.stops.length>8)throw Error('文字渐变参数无效');
+ if(gradient!=null){const g=gradient;
+  if(!g||Object.keys(g).some(k=>!['angleDeg','stops'].includes(k))||!finite(g.angleDeg,-360,360)||!Array.isArray(g.stops)||g.stops.length<2||g.stops.length>8)throw Error(label+'渐变参数无效');
   let last=-1;for(const stop of g.stops){if(!stop||Object.keys(stop).some(k=>!['offset','color'].includes(k))||!finite(stop.offset,0,1)||stop.offset<=last||!validColor(stop.color))throw Error('渐变色标须按 offset 严格递增');last=stop.offset;}
   if(g.stops[0].offset!==0||g.stops.at(-1).offset!==1)throw Error('渐变色标必须覆盖 0 和 1');
  }
- return node;
+ return true;
+}
+export function validateTextEffects(node){
+ if((node.textOutline||node.textGradient)&&node.type!=='text')throw Error('文字效果只用于 text');
+ validateEffectValues(node.textOutline,node.textGradient);return node;
 }
 export function textEffectInsets(node){
  const o=node.textOutline;if(!o)return {left:0,right:0,top:0,bottom:0};

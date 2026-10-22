@@ -9,6 +9,10 @@ on:
       - 'src/creative*.js'
       - 'src/creation-*.js'
       - 'src/graphic-*.js'
+      - 'src/svg-paint-geometry.js'
+      - 'src/react-text-effects.jsx'
+      - 'tests/taxonomy-browser.mjs'
+      - 'tests/fixtures/command-taxonomy.*'
       - 'tests/unified-graphics-browser.mjs'
       - 'tests/fixtures/unified-graphics.html'
       - 'src/text-effects.js'
@@ -100,6 +104,7 @@ jobs:
           node tests/web-workbench-browser.mjs
           node tests/type-effects-browser.mjs
           node tests/unified-graphics-browser.mjs
+          node tests/taxonomy-browser.mjs
           git diff --exit-code -- package.json package-lock.json
       - name: Verify clean-build reproducibility and generate current creation example
         run: |

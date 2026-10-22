@@ -1,3 +1,5 @@
+> 当前接口以 `docs/command-taxonomy.md` 及运行时 help 为准：已收敛为 30 项。下面早期更新链路说明中的已移除名称不作为兼容入口。
+
 > 当前绘画入口已统一为 graphic.add，点缀是构图作用；旧绘画命令不再接受。具体字段与边界见 unified-graphics.md 和实际 describe。
 
 # 创作包接入状态（统一属性内核）
@@ -12,7 +14,7 @@
 
 `creation-scene-core.js` 复用受保护的 Scene 编辑、真实素材几何与账本，不发明第二份场景。`creation-node-update.js` 统一属性和单位换算，`scene-text-layout.js` 统一文字重排。
 
-创建、text.update、layer.update、text.fit 共用文字测量规则。Scene 的 textLayout 保存 minimumHeight 和可选 lineHeightRatio；只改字体、内容、宽度不会遗忘高度意图。文字是完整内容，尺寸不够时增长；text.fit 不够时原子拒绝，不裁字。所有命令在更新尺寸之后计算锚点，随后求解 linked。
+创建、layer.update、layer.update、text.fit 共用文字测量规则。Scene 的 textLayout 保存 minimumHeight 和可选 lineHeightRatio；只改字体、内容、宽度不会遗忘高度意图。文字是完整内容，尺寸不够时增长；text.fit 不够时原子拒绝，不裁字。所有命令在更新尺寸之后计算锚点，随后求解 linked。
 
 测量共享 Canvas 的 textLines 换行规则；编辑几何使用确定性估算字宽，最终 Canvas 按实际字体渲染。不能把几何一致性说成所有字体的逐像素一致性。人工 Fabric 的属性写回、文字保存、套索/组合/笔迹及检查器提交已逐步接入共享 Scene 内核；交互预览与输入法保持独立。原生字体/光标测量和纸张规格切换等尚未全面迁移，详见 [共享编辑内核](shared-editor-kernel.md)。
 

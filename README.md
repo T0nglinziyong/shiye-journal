@@ -53,7 +53,7 @@ node runtime/shiye.cjs review --result pass
 node runtime/shiye.cjs pack
 ```
 
-对外只接受统一 commands 协议 2。36 项当前操作共享 `place/size/style/region/order` 中适用的参数。图形和绘画只用 `graphic.add`，创建和更新共享 geometry/place/size/style/order；点缀是构图作用，不是独立命令。旧 `native.*` 注册表和协议 1 执行适配器已删除；弯曲文字、字形镂空、复杂胶带、轮廓、关系、盖印和复用均直接使用统一参数，不再要求 raw `set/plan`。Group 是带局部变换的真实树；毫米、比例、相对锚点、linked 跟随使用同一个空间解算器。自动排列支持横向、纵向、网格的一次性排列，不缩放实体素材。
+对外只接受统一 commands 协议 2。30 项当前操作共享 `place/size/style/region/order` 中适用的参数。图形和绘画只用 `graphic.add`，创建和更新共享 geometry/place/size/style/order；点缀是构图作用，不是独立命令。旧 `native.*` 注册表和协议 1 执行适配器已删除；弯曲文字、字形镂空、复杂胶带、轮廓、关系、盖印和复用均直接使用统一参数，不再要求 raw `set/plan`。Group 是带局部变换的真实树；毫米、比例、相对锚点、linked 跟随使用同一个空间解算器。自动排列支持横向、纵向、网格的一次性排列，不缩放实体素材。
 
 `help`、`describe`、公共参数、示例和 Schema 从实际运行时注册表生成。`begin` 建立新事务，不覆盖已有草稿；`check` 与 `preview --commands work/next.json` 不修改正式 Scene。固定配方只含操作片段，不含过期 revision。字号使用 `style.fontSizePt`，位置使用 `place`；创建与更新共用 `creation-node-update` 和 `scene-text-layout`；持久最小高度和相对行高在 Scene 中保存，先重排，再定位和求解 linked。默认帮助只给摘要，完整 Schema 需要 `--full`。
 
@@ -131,3 +131,7 @@ npm run dev -- --port 5173 --strictPort
 `style.outline` 支持完整或偏移字形描边，`style.gradient` 支持真实字形填充渐变；同一文字节点可改字、改字体、重排、保存并重开。`text.lettering` 创建逐字可编辑的艺术标题，`draw.decorate` 根据目标生成普通笔迹下划线/高亮/括号。`fonts` 只查询字体名，不打包字体；`design-check` 是只读框级建议，不是看图或审美评分。完整例子在导出包的 design/LETTERING.md。
 
 `node scripts/generate-craft-details-example.mjs <目录>` 生成单素材、文字/图形为主的合成两阶段验收例子；CI 保留结构预览、细节预览和最终项目。它不冒充真实模型创作 A/B 结果。更多边界见 docs/creation-detail-type-effects.md。
+
+### Command 分类与丰富构图
+
+当前普通更新统一 `layer.update`，显示遮罩统一 `layer.mask`，真实保留/移除统一 `material.cut`。数字复制用 `layer.duplicate`，艺术标题整体重排用 `text.reflow`。尺寸可显式 linked；图形/笔迹与文字共用描边/渐变样式。创作包默认鼓励丰富、有作用的细节，不新增点缀指令。完整边界见 [command-taxonomy.md](docs/command-taxonomy.md)。

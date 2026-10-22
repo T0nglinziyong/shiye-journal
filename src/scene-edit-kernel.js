@@ -1,9 +1,10 @@
+import {validateGraphicEffects} from './graphic-effects.js';
 import {validateTextEffects} from './text-effects.js';
 // Shared in-memory editing kernel. No file IO, network, React, Fabric or CLI.
 // Only touched nodes are copied on the frequent property-update path.
 import {assertSceneEditable,findSceneNode,validateVectorMask} from './scene-v2.js';
 import {spatialPath,setWorldPosition,assertRigidMatrix,transformPoint,inverseMatrix,matrixAngle} from './scene-spatial.js';
-import {applyScenePlacement,solveSceneLayout,reconcileManualSceneMove} from './scene-layout.js';
+import {applyScenePlacement,solveSceneLayout,reconcileManualSceneMove,bindSceneSize,detachSceneLayout,LAYOUT_GEOMETRY_KEYS} from './scene-layout.js';
 import {changedNodeProperties} from './scene-node-properties.js';
 import {reflowSceneText} from './scene-text-layout.js';
 import {AI_SCENE_POLICY,requireScenePolicy,assertPolicyPatch,assertPolicyOwnership} from './scene-edit-policy.js';
@@ -11,11 +12,11 @@ import {AI_SCENE_POLICY,requireScenePolicy,assertPolicyPatch,assertPolicyOwnersh
 const textFields=new Set(['content','width','height','fontSize','fontName','style','bold','italic','lineSpacing','fixedLineHeight','paragraphSpacing','letterSpacing','curveHeight','textLayout','textOutline','textGradient']);
 const forbidden=new Set(['id','type','children','assetID','sourceBlobId','sourceStaticPath','materialUnitIndex','craftProvenance','generationBaseline','aiManaged','managedFingerprint','manualVisualCopy','manualGeometryOverride']);
 const common=new Set(['x','y','rotation','width','height','opacity','blendMode','shadow','hidden','isHidden','isParked','locked','isLocked','zIndex','vectorMask','vectorMaskHistory','localTransform','layoutBox','layoutRotation']);
-const typed={text:new Set(['content','fontSize','fontName','style','color','alignment','bold','italic','underline','strikethrough','lineSpacing','fixedLineHeight','lineHeight','additionalLineSpacing','paragraphSpacing','letterSpacing','curveHeight','textLayout','textOutline','textGradient']),shape:new Set(['kind','fill','stroke','lineWidth','fillOpacity','strokeOpacity','strokeDash','cornerRadius','vectorPaths','vectorLayers','vectorSize','svgPaths','svgViewBox']),ink:new Set(['points','color','penStyle']),material:new Set(['isFlippedHorizontally','materialRelation','craftDisplaySlices']),group:new Set(['name'])};
+const typed={text:new Set(['content','fontSize','fontName','style','color','alignment','bold','italic','underline','strikethrough','lineSpacing','fixedLineHeight','lineHeight','additionalLineSpacing','paragraphSpacing','letterSpacing','curveHeight','textLayout','textOutline','textGradient']),shape:new Set(['graphicOutline','graphicGradient','kind','fill','stroke','lineWidth','fillOpacity','strokeOpacity','strokeDash','cornerRadius','vectorPaths','vectorLayers','vectorSize','svgPaths','svgViewBox']),ink:new Set(['graphicOutline','graphicGradient','points','color','penStyle']),material:new Set(['isFlippedHorizontally','materialRelation','craftDisplaySlices']),group:new Set(['name'])};
 const copy=value=>structuredClone(value);
 function replace(target,value){for(const key of Object.keys(target))if(!Object.hasOwn(value,key))delete target[key];Object.assign(target,value);}
 function finiteNode(node){
- validateTextEffects(node);
+ validateTextEffects(node);validateGraphicEffects(node);
  if(!Object.hasOwn(typed,node.type))throw Error('图层需要明确且有效的 type');
  for(const key of ['x','y','rotation','width','height','fontSize','lineWidth','opacity'])if(node[key]!==undefined&&(!Number.isFinite(node[key])||Math.abs(node[key])>100000))throw Error('图层数值无效：'+key);
  for(const key of ['width','height','fontSize'])if(node[key]!==undefined&&node[key]<=0)throw Error('图层尺寸必须为正：'+key);
@@ -31,9 +32,9 @@ function finiteNode(node){
 // the full point arrays of unrelated strokes.
 export function sceneLayoutJournal(page){
  const records=[];
- const walk=nodes=>{for(const node of nodes){if(node.layoutConstraint)records.push([node,Object.fromEntries(['x','y','rotation','localTransform','points','layoutRotation','layoutConstraint'].filter(k=>Object.hasOwn(node,k)).map(k=>[k,copy(node[k])]))]);if(node.children)walk(node.children);}};
+ const walk=nodes=>{for(const node of nodes){if(node.layoutConstraint)records.push([node,Object.fromEntries(LAYOUT_GEOMETRY_KEYS.filter(k=>Object.hasOwn(node,k)).map(k=>[k,copy(node[k])]))]);if(node.children)walk(node.children);}};
  walk(page.layers);
- const keys=['x','y','rotation','localTransform','points','layoutRotation','layoutConstraint'];
+ const keys=LAYOUT_GEOMETRY_KEYS;
  const restore=()=>{for(const [node,state] of records){for(const key of keys)if(Object.hasOwn(state,key))node[key]=state[key];else delete node[key];}};
  restore.validate=(policy,explicitTargets=[])=>{
   const explicit=new Set(explicitTargets);
@@ -52,7 +53,7 @@ function editable(page,id,values,policy){
  if(unlocking){if(path.ancestors.some(n=>n.locked||n.isLocked))throw Error('父组合已锁定，不能解锁其子图层');return path.node;}
  return assertSceneEditable(page,id);
 }
-export function applySceneNodePatch(page,id,values,{policy=AI_SCENE_POLICY,confirmation,place,linked='solve',reflow=true,measure,deferLayout=false}={}){
+export function applySceneNodePatch(page,id,values,{policy=AI_SCENE_POLICY,confirmation,place,linked='solve',reflow=true,measure,deferLayout=false,sizeSpec,preserveSize=false}={}){
  requireScenePolicy(policy);
  const node=editable(page,id,values,policy),before=copy(node),next=copy(node);
  for(const [key,value] of Object.entries(values)){
@@ -72,11 +73,13 @@ export function applySceneNodePatch(page,id,values,{policy=AI_SCENE_POLICY,confi
  const restoreLayout=deferLayout?()=>{}:sceneLayoutJournal(page);
  try{
   replace(node,next);
+  if(sizeSpec)bindSceneSize(page,node,sizeSpec);
+  else if(!preserveSize&&policy.actor==='user'&&node.layoutConstraint?.size&&['width','height'].some(k=>Object.hasOwn(values,k)&&values[k]!==before[k]))detachSceneLayout(page,id,'size');
   if(deferLayout)return node;
   if(place){
-   const binding=linked==='offset'&&before.layoutConstraint?copy(before.layoutConstraint):null;
+   const binding=linked==='offset'&&before.layoutConstraint?.place?copy(before.layoutConstraint.place):null;
    applyScenePlacement(page,id,place);
-   if(binding){node.layoutConstraint=binding;reconcileManualSceneMove(page,id);}
+   if(binding){node.layoutConstraint={...node.layoutConstraint,place:binding};reconcileManualSceneMove(page,id);}
   }else if(linked==='offset'&&['x','y','rotation','points','localTransform'].some(k=>Object.hasOwn(values,k)))reconcileManualSceneMove(page,id);
   else solveSceneLayout(page);
   restoreLayout.validate?.(policy,[id]);return node;
@@ -86,7 +89,7 @@ export function applySceneNodeChange(page,id,change,{policy=AI_SCENE_POLICY,conf
  const path=spatialPath(page.layers,id);if(!path)throw Error('图层不存在：'+id);
  const values=changedNodeProperties(page,path.node,change,path.ancestors.at(-1)?.id,{policy,confirmation});
  const place=created&&change.place?{...change.place,rotationDeg:change.place.rotationDeg??0}:change.place;
- return applySceneNodePatch(page,id,values,{policy,confirmation,place,linked,reflow:false,measure});
+ return applySceneNodePatch(page,id,values,{policy,confirmation,place,linked,reflow:false,measure,sizeSpec:change.size,preserveSize:true});
 }
 // Internal application adapter: UI controls already use Scene units. It does
 // not add old external aliases to the Command language.

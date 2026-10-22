@@ -1,3 +1,4 @@
+import {detachSceneLayout} from './scene-layout.js';
 import {creationReferenceBox} from './creation-placement.js';
 import {spatialPath,worldBox,setWorldPosition} from './scene-spatial.js';
 
@@ -33,7 +34,7 @@ export function arrangeCreationNodes(page,ids,rule,container){
  const a=ref.rotation*Math.PI/180,c=Math.cos(a),s=Math.sin(a);
  for(const [i,[px,py]] of positions.entries()){
   const x=-ref.w/2+(ref.w-width)*fraction+px,y=-ref.h/2+(ref.h-height)*fraction+py;
-  delete paths[i].node.layoutConstraint;
+  detachSceneLayout(page,ids[i],'place');
   setWorldPosition(page,ids[i],{x:ref.cx+c*x-s*y,y:ref.cy+s*x+c*y,rotation:boxes[i].rotation});
  }
  return ids;

@@ -7,7 +7,7 @@
 | 原先能力 / 操作组 | 当前等价表达 |
 |---|---|
 | material.add / tool.place_materials / tool.upsert_materials | material.add + 公共 place/style/order；修改用 layer.update，来源替换用 material.replace |
-| text.add / tool.upsert_text / layer.update | text.add / text.update / layer.update；相同 size/style/content 经同一重排 |
+| text.add / tool.upsert_text / layer.update | text.add / layer.update / layer.update；相同 size/style/content 经同一重排 |
 | shape.add / tool.upsert_primitives | shape.add / vector.add / ink.add；几何更新 layer.update.geometry |
 | ink.add | ink.add；压感、笔形、线宽、局部点和世界定位分离 |
 | material.process / tool.edit_materials | crop、trim、diagonal、contour、edge、window、mask、restore；加工步骤不直接暴露内部 snake_case |
@@ -17,7 +17,7 @@
 | layer.replaceMaterial | material.replace，保留中心、层级，使用新来源真实尺寸 |
 | layer.repeatStamp | layer.repeat，copies 使用普通 place/size/style/order；数字图形独立身份 |
 | layer.reuseLayout | layout.reuse 引用已有组并显式 materialMap；外部模板改为 group.compose 的统一子命令，不接受原始 Scene 快照作操作 |
-| group.transform / tool.move_elements | layer.place，用显式旋转空间、参考锚点和偏移表达；不暴露任意矩阵或缩放真实素材 |
+| group.transform / tool.move_elements | layer.update，用显式旋转空间、参考锚点和偏移表达；不暴露任意矩阵或缩放真实素材 |
 | group.create / tool.group_elements | group.create 或 group.compose，真实空间树 |
 | group.ungroup / tool.ungroup_elements | group.ungroup，保持世界位置 |
 | layer.move / tool.align_elements / tool.arrange_elements | layer.reparent/reorder/place + layout.align/arrange |

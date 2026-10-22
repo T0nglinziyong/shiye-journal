@@ -70,11 +70,38 @@ export function flattenCreationPath(d){
  if(!rings.length)throw Error('路径没有可见轮廓');
  return rings;
 }
+// Clip a finite viewport to a directed half-plane. In canvas coordinates the
+// numeric cross-product defines left/right; no infinite geometry is persisted.
+function halfPlaneRing(from,to,side,width,height){
+ const dx=to[0]-from[0],dy=to[1]-from[1];if(Math.hypot(dx,dy)<1e-10)throw Error('半平面需要两个不同端点');
+ const sign=side==='left'?1:-1,value=p=>sign*(dx*(p[1]-from[1])-dy*(p[0]-from[0]));
+ const input=[[0,0],[width,0],[width,height],[0,height]],out=[];
+ for(let i=0;i<input.length;i++){
+  const a=input[i],b=input[(i+1)%input.length],va=value(a),vb=value(b),insideA=va>=-1e-9,insideB=vb>=-1e-9;
+  if(insideA)out.push(a);
+  if(insideA!==insideB){const t=va/(va-vb);out.push([a[0]+t*(b[0]-a[0]),a[1]+t*(b[1]-a[1])]);}
+ }
+ const clean=out.filter((p,i)=>i===0||Math.hypot(p[0]-out[i-1][0],p[1]-out[i-1][1])>1e-8);
+ if(clean.length>1&&Math.hypot(clean[0][0]-clean.at(-1)[0],clean[0][1]-clean.at(-1)[1])<1e-8)clean.pop();
+ if(clean.length<3)throw Error('半平面在素材内没有有效区域');return clean;
+}
 export function creationRegionGeometry(region,{sourceSize,localSize,crop,output='source'}={}){
  const [sw,sh]=sourceSize,[lw,lh]=localSize;
+ if(!region||!['source','local'].includes(region.space)||!['mm','ratio'].includes(region.unit))throw Error('region 必须明确 space 与 unit');
  const viewport=region.space==='source'?[sw,sh]:[lw,lh];
+ if(region.shape==='edge'){
+  const vertical=['left','right'].includes(region.edge),limit=viewport[vertical?0:1],amount=region.unit==='ratio'?region.amount*limit:region.amount;
+  if(!(Number.isFinite(amount)&&amount>0&&amount<=limit))throw Error('边条宽度超出参照区域');
+  const box=vertical?[region.edge==='left'?0:viewport[0]-amount,0,amount,viewport[1]]:[0,region.edge==='top'?0:viewport[1]-amount,viewport[0],amount];
+  return creationRegionGeometry({shape:'rect',space:region.space,unit:'mm',box},{sourceSize,localSize,crop,output});
+ }
+ if(region.shape==='halfPlane'){
+  if(!['left','right'].includes(region.side))throw Error('半平面 side 无效');
+  const mm=p=>region.unit==='ratio'?[p[0]*viewport[0],p[1]*viewport[1]]:p;
+  return creationRegionGeometry({shape:'polygon',space:region.space,unit:'mm',points:halfPlaneRing(mm(region.from),mm(region.to),region.side,...viewport)},{sourceSize,localSize,crop,output});
+ }
  if(region.shape==='geometry'){
-  const convert=p=>{const v=region.unit==='mm'?p:[p[0]*viewport[0],p[1]*viewport[1]];return region.space==='source'?v:[crop.x*sw+v[0],crop.y*sh+v[1]];};
+  const convert=p=>{const v=region.unit==='mm'?p:[p[0]*viewport[0],p[1]*viewport[1]];return region.space==='source'?v:[crop.x*sw+v[0]/lw*crop.width*sw,crop.y*sh+v[1]/lh*crop.height*sh];};
   const geometry=transformGeometry(normalizeGeometry(region.geometry),convert);
   if(geometryArea(geometryDifference(geometry,rectangleGeometry(0,0,sw,sh)))>AREA_EPSILON)throw Error('区域超出素材来源');
   return output==='source'?geometry:transformGeometry(geometry,p=>[(p[0]/sw-crop.x)/crop.width,(p[1]/sh-crop.y)/crop.height]);
@@ -87,7 +114,7 @@ export function creationRegionGeometry(region,{sourceSize,localSize,crop,output=
   rings=[region.shape==='ellipse'?Array.from({length:96},(_,i)=>[x+w/2+w/2*Math.cos(i*2*Math.PI/96),y+h/2+h/2*Math.sin(i*2*Math.PI/96)]):[[x,y],[x+w,y],[x+w,y+h],[x,y+h]]];
  }
  const mm=p=>region.unit==='mm'?p:[p[0]*viewport[0],p[1]*viewport[1]];
- const source=p=>{const v=mm(p);return region.space==='source'?v:[crop.x*sw+v[0],crop.y*sh+v[1]];};
+ const source=p=>{const v=mm(p);return region.space==='source'?v:[crop.x*sw+v[0]/lw*crop.width*sw,crop.y*sh+v[1]/lh*crop.height*sh];};
  const sourceRings=rings.map(ring=>ring.map(source));
  let geometry;
  if(region.shape==='path'&&sourceRings.length>1){
